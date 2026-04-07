@@ -5,6 +5,7 @@
 # Export
 *.exe
 *.pck
+build/
 
 # OS
 .DS_Store
