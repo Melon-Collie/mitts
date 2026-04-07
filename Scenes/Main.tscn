@@ -1,6 +1,6 @@
 [gd_scene load_steps=29 format=3 uid="uid://c545b8jaty5b7"]
 
-[ext_resource type="PhysicsMaterial" uid="uid://bo58ocxbodjpo" path="res://boards.tres" id="1_kln2b"]
+[ext_resource type="PhysicsMaterial" uid="uid://bo58ocxbodjpo" path="res://Physics/boards.tres" id="1_kln2b"]
 [ext_resource type="Script" uid="uid://deik620fbyahb" path="res://Scripts/skater_controller.gd" id="1_r150o"]
 [ext_resource type="Script" uid="uid://d4b57vwvg7weu" path="res://Scripts/puck.gd" id="2_idj7w"]
 [ext_resource type="Script" uid="uid://cnxcchrp4y5jr" path="res://Scripts/game_camera.gd" id="5_pbw6q"]
