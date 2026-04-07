@@ -220,10 +220,13 @@ func _state_wrister_aim(delta: float) -> void:
 	_prev_blade_pos = blade.position
 
 	# Update shot direction from blade position
-	var local_blade: Vector3 = blade.position - shoulder.position
-	local_blade.y = 0.0
-	if local_blade.length() > 0.01:
-		_shot_dir = (global_transform.basis * local_blade).normalized()
+	var blade_world: Vector3 = upper_body.to_global(blade.position)
+	blade_world.y = 0.0
+	var mouse_target: Vector3 = _input.mouse_world_pos
+	mouse_target.y = 0.0
+	var to_target: Vector3 = mouse_target - blade_world
+	if to_target.length() > 0.01:
+		_shot_dir = to_target.normalized()
 
 	if not _input.shoot_held:
 		_release_wrister()
@@ -335,8 +338,11 @@ func _release_wrister() -> void:
 
 func _release_slapper() -> void:
 	if puck.carrier == self:
-		var upper_body_world_angle: float = rotation.y + _upper_body_angle
-		_shot_dir = Vector3(-sin(upper_body_world_angle), 0.0, -cos(upper_body_world_angle))
+		var blade_world: Vector3 = upper_body.to_global(blade.position)
+		blade_world.y = 0.0
+		var mouse_target: Vector3 = _input.mouse_world_pos
+		mouse_target.y = 0.0
+		_shot_dir = (mouse_target - blade_world).normalized()
 		var charge_t: float = clampf(_slapper_charge_timer / max_slapper_charge_time, 0.0, 1.0)
 		var power: float = lerpf(min_slapper_power, max_slapper_power, charge_t)
 		var y_component: float = slapper_elevation if _is_elevated else 0.0
