@@ -65,6 +65,12 @@ func release(direction: Vector3, power: float) -> void:
 	linear_velocity = direction * power
 	_cooldown_timer = reattach_cooldown
 	puck_released.emit()
+	
+func drop() -> void:
+	carrier = null
+	freeze = false
+	linear_velocity = Vector3.ZERO
+	puck_released.emit()
 
 func reset() -> void:
 	carrier = null

@@ -1,61 +1,71 @@
 class_name SkaterController
 extends CharacterBody3D
 
+@export var camera: Camera3D
+
 # ── State Machine ─────────────────────────────────────────────────────────────
 enum State {
 	SKATING_WITHOUT_PUCK,
 	SKATING_WITH_PUCK,
-	SHOOT_IDLE,
 	WRISTER_AIM,
-	SLAPPER_CHARGE,
+	SLAPPER_CHARGE_WITH_PUCK,
+	SLAPPER_CHARGE_WITHOUT_PUCK,
 	FOLLOW_THROUGH,
 }
 
-# ── Movement Tuning ──────────────────────────────────────────────────────────
+# ── Movement Tuning ───────────────────────────────────────────────────────────
 @export var thrust: float = 20.0
 @export var friction: float = 5.0
 @export var max_speed: float = 10.0
 @export var rotation_speed: float = 6.0
 @export var move_deadzone: float = 0.1
-@export var dash_force: float = 10.0
-@export var dash_cooldown: float = 1.0
-@export var dash_duration: float = 0.2
 @export var brake_multiplier: float = 5.0
-@export var shoot_mode_thrust_multiplier: float = 0.2
 
-# ── Blade Tuning ─────────────────────────────────────────────────────────────
+# ── Facing Tuning ─────────────────────────────────────────────────────────────
+@export var facing_drag_speed: float = 3.0
+@export var facing_snap_speed: float = 20.0
+
+# ── Blade Tuning ──────────────────────────────────────────────────────────────
 @export var blade_height: float = 0.0
-@export var blade_move_speed: float = 12.0
-@export var blade_return_speed: float = 8.0
-@export var blade_deadzone: float = 0.1
 @export var plane_reach: float = 1.5
-@export var close_reach: float = 0.4
 @export var shoulder_offset: float = 0.35
-@export var backhand_behind_scale: float = 0.3
-@export var forehand_behind_reach: float = 1.0
 @export var wall_squeeze_threshold: float = 0.3
-@export var world_forehand_limit: float = 135.0   # degrees from forward on forehand side
-@export var world_backhand_limit: float = 90.0     # degrees from forward on backhand side
+@export var blade_forehand_limit: float = 90.0	# degrees
+@export var blade_backhand_limit: float = 80.0	# degrees
 
-# ── Shooting Tuning ──────────────────────────────────────────────────────────
-@export var min_shot_power: float = 15.0
-@export var max_shot_power: float = 30.0
-@export var max_windup_time: float = 1.0
-@export var aim_arrow_length: float = 3.0
-@export var aim_arrow_thickness: float = 0.05
-@export var shot_deadzone: float = 0.1
-@export var wrister_elevate_force: float = 0.3
-@export var slapper_elevate_force: float = 0.1
+# ── Upper Body Tuning ─────────────────────────────────────────────────────────
+@export var upper_body_twist_ratio: float = 0.5
+@export var upper_body_return_speed: float = 10.0
+
+# ── Wrister Tuning ────────────────────────────────────────────────────────────
+@export var min_wrister_power: float = 8.0
+@export var max_wrister_power: float = 25.0
+@export var max_wrister_charge_distance: float = 3.0
+@export var backhand_power_coefficient: float = 0.75
+@export var max_charge_direction_variance: float = 45.0	# degrees
+@export var quick_shot_power: float = 12.0
+@export var quick_shot_threshold: float = 0.1
+@export var wrister_elevation: float = 0.3
+
+# ── Slapper Tuning ────────────────────────────────────────────────────────────
+@export var min_slapper_power: float = 20.0
+@export var max_slapper_power: float = 40.0
+@export var max_slapper_charge_time: float = 1.0
+@export var slapper_blade_x: float = 1.0
+@export var slapper_blade_z: float = -0.5
+@export var slapper_aim_arc: float = 45.0	# degrees either side
+@export var slapper_elevation: float = 0.15
+
+# ── Follow Through Tuning ─────────────────────────────────────────────────────
 @export var follow_through_duration: float = 0.15
-@export var upper_body_aim_speed: float = 10.0
-@export var forehand_wrister_power: float = 15.0
-@export var backhand_wrister_power: float = 10.0
-@export var quick_shot_power: float = 12
 
 # ── Character ─────────────────────────────────────────────────────────────────
 @export var is_left_handed: bool = true
 @export var puck: Puck
-@export var invert_plane: bool = false
+
+# ── Self Pass / Shot ──────────────────────────────────────────────────────────
+@export var self_pass_power: float = 12.0
+@export var self_shot_power: float = 30.0
 
 # ── Node References ───────────────────────────────────────────────────────────
 @onready var lower_body: Node3D = $LowerBody
@@ -65,77 +75,60 @@ enum State {
 @onready var stick_raycast: RayCast3D = $StickRaycast
 @onready var stick_mesh: MeshInstance3D = $UpperBody/StickMesh
 
-# ── State ─────────────────────────────────────────────────────────────────────
+# ── Runtime State ─────────────────────────────────────────────────────────────
 var _input: InputState
 var _gatherer: LocalInputGatherer
 var _state: State = State.SKATING_WITHOUT_PUCK
+
+# Facing
 var _facing: Vector2 = Vector2.DOWN
-var _is_backward: bool = false
-var _dash_timer: float = 0.0
-var _dash_active_timer: float = 0.0
+
+# Blade
+var _blade_relative_angle: float = 0.0
+
+# Upper body
 var _upper_body_angle: float = 0.0
-var _aim_arrow: MeshInstance3D = null
 
-# ── Shooting State ────────────────────────────────────────────────────────────
-var _windup_timer: float = 0.0
-var _last_shot_dir: Vector3 = Vector3.ZERO
+# Shooting
+var _is_elevated: bool = false
+var _shot_dir: Vector3 = Vector3.ZERO
 var _follow_through_timer: float = 0.0
-var _shot_is_forehand: bool = true
-
-# ── Blade State ───────────────────────────────────────────────────────────────
-var _blade_plane_pos: Vector2 = Vector2.ZERO
-var _prev_blade_plane_pos: Vector2 = Vector2.ZERO
-var _world_blade_target: Vector3 = Vector3.ZERO
+var _charge_distance: float = 0.0
+var _prev_blade_pos: Vector3 = Vector3.ZERO
+var _prev_blade_dir: Vector3 = Vector3.ZERO
+var _slapper_charge_timer: float = 0.0
 
 func _ready() -> void:
-	_gatherer = LocalInputGatherer.new()
+	_gatherer = LocalInputGatherer.new(camera)
 	add_child(_gatherer)
-	
-	# Position shoulder based on handedness
-	var hand_sign = -1.0 if is_left_handed else 1.0
-	shoulder.position = Vector3(hand_sign * shoulder_offset, 0, 0)
-	
-	# Initialize world blade target to default forward position
-	_world_blade_target = Vector3(shoulder.position.x, blade_height, -plane_reach * 0.7)
-	
-	# Aim arrow setup
-	_aim_arrow = MeshInstance3D.new()
-	var box = BoxMesh.new()
-	box.size = Vector3(aim_arrow_thickness, 0.01, aim_arrow_length)
-	_aim_arrow.mesh = box
-	var mat = StandardMaterial3D.new()
-	mat.albedo_color = Color(1, 1, 0, 0.7)
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_aim_arrow.material_override = mat
-	_aim_arrow.visible = false
-	add_child(_aim_arrow)
-	
-	# Connect puck signals
+
+	var hand_sign: float = -1.0 if is_left_handed else 1.0
+	shoulder.position = Vector3(hand_sign * shoulder_offset, 0.0, 0.0)
+
 	puck.puck_picked_up.connect(_on_puck_picked_up)
 	puck.puck_released.connect(_on_puck_released)
 
 func _physics_process(delta: float) -> void:
 	_input = _gatherer.gather()
-	
-	if _input.reset:
-		puck.reset()
-	
+
+	# Self pass / shot
 	if _input.self_pass and puck.carrier == null:
-		var dir = (global_position - puck.global_position).normalized()
+		var dir: Vector3 = (global_position - puck.global_position).normalized()
 		dir.y = 0.0
-		puck.linear_velocity = dir * quick_shot_power
-		
+		puck.linear_velocity = dir * self_pass_power
+
 	if _input.self_shot and puck.carrier == null:
-		var dir = (global_position - puck.global_position).normalized()
+		var dir: Vector3 = (global_position - puck.global_position).normalized()
 		dir.y = 0.0
-		puck.linear_velocity = dir * max_shot_power
+		puck.linear_velocity = dir * self_shot_power
 		
-	if _input.ability:
-		invert_plane = !invert_plane
-	
+	if _input.elevation_up:
+		_is_elevated = true
+	if _input.elevation_down:
+		_is_elevated = false
+
 	_apply_movement(delta)
 	_apply_facing(delta)
-	_apply_dash(delta)
 	_apply_state(delta)
 	_apply_upper_body(delta)
 	_update_stick_mesh()
@@ -144,20 +137,19 @@ func _physics_process(delta: float) -> void:
 # ── Puck Signals ──────────────────────────────────────────────────────────────
 func _on_puck_picked_up(carrier: SkaterController) -> void:
 	if carrier == self:
-		_state = State.SKATING_WITH_PUCK
-		# Map current blade position back to plane coordinates
-		# so there's no visual jump
-		var local_blade = blade.position - shoulder.position
-		_blade_plane_pos.x = local_blade.x / plane_reach
-		_blade_plane_pos.y = 0.0  # rough — could be smarter
+		if _input.shoot_held:
+			_enter_wrister_aim()
+		elif _state == State.SLAPPER_CHARGE_WITHOUT_PUCK:
+			_state = State.SLAPPER_CHARGE_WITH_PUCK
+		else:
+			_state = State.SKATING_WITH_PUCK
+		var local_blade: Vector3 = blade.position - shoulder.position
+		_blade_relative_angle = atan2(local_blade.x, -local_blade.z)
 
 func _on_puck_released() -> void:
 	if _state == State.FOLLOW_THROUGH:
-		return  # let follow through finish naturally
-	if _state in [State.SKATING_WITH_PUCK, State.SHOOT_IDLE, State.WRISTER_AIM, State.SLAPPER_CHARGE]:
-		_state = State.SKATING_WITHOUT_PUCK
-		# Seed world blade target from current blade position
-		_world_blade_target = blade.position
+		return
+	_transition_to_skating()
 
 # ── State Machine ─────────────────────────────────────────────────────────────
 func _apply_state(delta: float) -> void:
@@ -166,115 +158,115 @@ func _apply_state(delta: float) -> void:
 			_state_skating_without_puck(delta)
 		State.SKATING_WITH_PUCK:
 			_state_skating_with_puck(delta)
-		State.SHOOT_IDLE:
-			_state_shoot_idle(delta)
 		State.WRISTER_AIM:
 			_state_wrister_aim(delta)
-		State.SLAPPER_CHARGE:
-			_state_slapper_charge(delta)
+		State.SLAPPER_CHARGE_WITH_PUCK:
+			_state_slapper_charge_with_puck(delta)
+		State.SLAPPER_CHARGE_WITHOUT_PUCK:
+			_state_slapper_charge_without_puck(delta)
 		State.FOLLOW_THROUGH:
 			_state_follow_through(delta)
 
-# ── Skating Without Puck ─────────────────────────────────────────────────────
+# ── Skating Without Puck ──────────────────────────────────────────────────────
 func _state_skating_without_puck(delta: float) -> void:
-	_aim_arrow.visible = false
-	_apply_blade_world_relative(delta)
+	_apply_blade_from_mouse(delta)
 
-# ── Skating With Puck ────────────────────────────────────────────────────────
-func _state_skating_with_puck(delta: float) -> void:
-	_aim_arrow.visible = false
-	_apply_blade_player_relative(delta)
-	
-	# Enter shoot mode
 	if _input.shoot_pressed:
-		_state = State.SHOOT_IDLE
-		_windup_timer = 0.0
-		_last_shot_dir = Vector3.ZERO
-		var hand_sign = -1.0 if is_left_handed else 1.0
-		_shot_is_forehand = sign(_blade_plane_pos.x) == sign(hand_sign) or _blade_plane_pos.x == 0.0
+		_state = State.WRISTER_AIM
+		_shot_dir = Vector3.ZERO
 
-# ── Shoot Idle ────────────────────────────────────────────────────────────────
-func _state_shoot_idle(delta: float) -> void:
-	if _input.shot_cancel:
-		_transition_to_skating()
-		return
-	
-	if not _input.shoot_held:
-		_transition_to_skating()
-		return
-	
-	var stick = _input.blade_vector
-	if stick.length() > 0.2:
-		var screen_dir = Vector3(stick.x, 0, stick.y)
-		var local_dir = global_transform.basis.inverse() * screen_dir
-		
-		if local_dir.z > shot_deadzone:
-			_state = State.SLAPPER_CHARGE
-			_shot_is_forehand = true
-			_last_shot_dir = (-screen_dir).normalized()
-		elif local_dir.z < -shot_deadzone:
-			_state = State.WRISTER_AIM
-			_last_shot_dir = screen_dir.normalized()
-	
-	_aim_arrow.visible = false
+	if _input.slap_pressed:
+		_enter_slapper_charge()
+
+# ── Skating With Puck ─────────────────────────────────────────────────────────
+func _state_skating_with_puck(delta: float) -> void:
+	_apply_blade_from_mouse(delta)
+
+	if _input.shoot_pressed:
+		_enter_wrister_aim()
+
+	if _input.slap_pressed:
+		_enter_slapper_charge()
 
 # ── Wrister Aim ───────────────────────────────────────────────────────────────
 func _state_wrister_aim(delta: float) -> void:
-	if _input.shot_cancel:
-		_transition_to_skating()
-		return
-	
-	if not _input.shoot_held:
-		_transition_to_skating()
-		return
-	
-	var stick = _input.blade_vector
-	
-	if stick.length() > 0.2:
-		var screen_dir = Vector3(stick.x, 0, stick.y)
-		var local_dir = global_transform.basis.inverse() * screen_dir
-		if local_dir.z < 0.0:
-			_last_shot_dir = screen_dir.normalized()
-	
-	if stick.length() <= 0.2 and _last_shot_dir != Vector3.ZERO:
-		var power = forehand_wrister_power if _shot_is_forehand else backhand_wrister_power
-		_release_shot(power, wrister_elevate_force)
-		return
-	
-	_update_aim_arrow()
+	_apply_blade_from_mouse(delta)
 
-# ── Slapper Charge ────────────────────────────────────────────────────────────
-func _state_slapper_charge(delta: float) -> void:
-	if _input.shot_cancel:
-		_transition_to_skating()
-		return
-	
+	# Track blade movement for charge
+	if puck.carrier == self:
+		var blade_delta: Vector3 = blade.position - _prev_blade_pos
+		blade_delta.y = 0.0
+		var dist: float = blade_delta.length()
+		if dist > 0.001:
+			var current_dir: Vector3 = blade_delta.normalized()
+			if _prev_blade_dir != Vector3.ZERO:
+				var angle: float = rad_to_deg(_prev_blade_dir.angle_to(current_dir))
+				if angle > max_charge_direction_variance:
+					_charge_distance = 0.0
+			_charge_distance += dist
+			_prev_blade_dir = current_dir
+
+	_prev_blade_pos = blade.position
+
+	# Update shot direction from blade position
+	var local_blade: Vector3 = blade.position - shoulder.position
+	local_blade.y = 0.0
+	if local_blade.length() > 0.01:
+		_shot_dir = (global_transform.basis * local_blade).normalized()
+
 	if not _input.shoot_held:
-		_transition_to_skating()
-		return
-	
-	_windup_timer += delta
-	
-	var stick = _input.blade_vector
-	
-	if stick.length() > 0.2:
-		var screen_dir = Vector3(stick.x, 0, stick.y)
-		var local_dir = global_transform.basis.inverse() * screen_dir
-		if local_dir.z > 0.0:
-			_last_shot_dir = (-screen_dir).normalized()
-	
-	if stick.length() <= 0.2 and _last_shot_dir != Vector3.ZERO:
-		var t = clampf(_windup_timer / max_windup_time, 0.0, 1.0)
-		var power = lerpf(min_shot_power, max_shot_power, t)
-		_release_shot(power, slapper_elevate_force)
-		return
-	
-	_update_aim_arrow()
+		_release_wrister()
+
+# ── Slapper Charge With Puck ──────────────────────────────────────────────────
+func _state_slapper_charge_with_puck(delta: float) -> void:
+	_slapper_charge_timer += delta
+	_apply_slapper_blade_position()
+
+	# Glide on existing momentum, natural friction only
+	var slapper_vel: Vector2 = Vector2(velocity.x, velocity.z)
+	slapper_vel = slapper_vel.move_toward(Vector2.ZERO, friction * delta)
+	velocity.x = slapper_vel.x
+	velocity.z = slapper_vel.y
+
+	# Upper body rotates toward mouse within arc
+	var mouse_world: Vector3 = _input.mouse_world_pos
+	mouse_world.y = 0.0
+	var to_mouse: Vector3 = mouse_world - global_position
+	to_mouse.y = 0.0
+	if to_mouse.length() > move_deadzone:
+		var local_dir: Vector3 = global_transform.basis.inverse() * to_mouse.normalized()
+		var raw_angle: float = atan2(local_dir.x, -local_dir.z)
+		var clamped_angle: float = clampf(raw_angle, -deg_to_rad(slapper_aim_arc), deg_to_rad(slapper_aim_arc))
+		_upper_body_angle = lerp_angle(_upper_body_angle, -clamped_angle, upper_body_return_speed * delta)
+		upper_body.rotation.y = _upper_body_angle
+
+	if not _input.slap_held:
+		_release_slapper()
+
+# ── Slapper Charge Without Puck ───────────────────────────────────────────────
+func _state_slapper_charge_without_puck(delta: float) -> void:
+	_slapper_charge_timer += delta
+	_apply_slapper_blade_position()
+
+	# Full facing toward mouse
+	var mouse_world: Vector3 = _input.mouse_world_pos
+	mouse_world.y = 0.0
+	var to_mouse: Vector2 = Vector2(
+		mouse_world.x - global_position.x,
+		mouse_world.z - global_position.z
+	)
+	if to_mouse.length() > move_deadzone:
+		_facing = _facing.lerp(to_mouse.normalized(), rotation_speed * delta).normalized()
+		rotation.y = atan2(-_facing.x, -_facing.y)
+		lower_body.rotation.y = 0.0
+
+	if not _input.slap_held:
+		_release_slapper()
 
 # ── Follow Through ────────────────────────────────────────────────────────────
 func _state_follow_through(delta: float) -> void:
+	_apply_blade_from_relative_angle()
 	_follow_through_timer -= delta
-	_aim_arrow.visible = false
 	if _follow_through_timer <= 0.0:
 		_transition_to_skating()
 
@@ -284,257 +276,232 @@ func _transition_to_skating() -> void:
 		_state = State.SKATING_WITH_PUCK
 	else:
 		_state = State.SKATING_WITHOUT_PUCK
-		_world_blade_target = blade.position
-	_windup_timer = 0.0
-	_last_shot_dir = Vector3.ZERO
-	_aim_arrow.visible = false
+	_shot_dir = Vector3.ZERO
+	_upper_body_angle = 0.0
 
-func _release_shot(power: float, elevate_force: float) -> void:
+func _enter_wrister_aim() -> void:
+	_state = State.WRISTER_AIM
+	_shot_dir = Vector3.ZERO
+	_charge_distance = 0.0
+	_prev_blade_pos = blade.position
+	_prev_blade_dir = Vector3.ZERO
+
+func _enter_slapper_charge() -> void:
+	_slapper_charge_timer = 0.0
+	_shot_dir = Vector3.ZERO
+	_upper_body_angle = 0.0
+	upper_body.rotation.y = 0.0
 	if puck.carrier == self:
-		var shot_dir = _last_shot_dir
-		if _input.elevate:
-			shot_dir.y = elevate_force
-		puck.release(shot_dir, power)
+		_state = State.SLAPPER_CHARGE_WITH_PUCK
+	else:
+		_state = State.SLAPPER_CHARGE_WITHOUT_PUCK
+
+func _release_wrister() -> void:
+	if puck.carrier == self and _shot_dir != Vector3.ZERO:
+		var charge_t: float = clampf(_charge_distance / max_wrister_charge_distance, 0.0, 1.0)
+
+		if charge_t < quick_shot_threshold:
+			# Quick shot — fire in blade direction at fixed power
+			var local_blade: Vector3 = blade.position - shoulder.position
+			local_blade.y = 0.0
+			var blade_dir: Vector3 = (global_transform.basis * local_blade).normalized()
+			var y_component: float = wrister_elevation if _is_elevated else 0.0
+			var blade_dir_elevated: Vector3 = Vector3(blade_dir.x, y_component, blade_dir.z).normalized()
+			puck.release(blade_dir_elevated, quick_shot_power)
+		else:
+			# Full wrister — use aimed direction and charged power
+			var power: float = lerpf(min_wrister_power, max_wrister_power, charge_t)
+			var hand_sign: float = -1.0 if is_left_handed else 1.0
+			var is_backhand: bool = sign(blade.position.x - shoulder.position.x) != sign(hand_sign)
+			if is_backhand:
+				power *= backhand_power_coefficient
+			var y_component: float = wrister_elevation if _is_elevated else 0.0
+			var shot_dir_elevated: Vector3 = Vector3(_shot_dir.x, y_component, _shot_dir.z).normalized()
+			puck.release(shot_dir_elevated, power)
+
 	_state = State.FOLLOW_THROUGH
 	_follow_through_timer = follow_through_duration
 
-func _is_in_shoot_state() -> bool:
-	return _state in [State.SHOOT_IDLE, State.WRISTER_AIM, State.SLAPPER_CHARGE, State.FOLLOW_THROUGH]
+func _release_slapper() -> void:
+	if puck.carrier == self:
+		var upper_body_world_angle: float = rotation.y + _upper_body_angle
+		_shot_dir = Vector3(-sin(upper_body_world_angle), 0.0, -cos(upper_body_world_angle))
+		var charge_t: float = clampf(_slapper_charge_timer / max_slapper_charge_time, 0.0, 1.0)
+		var power: float = lerpf(min_slapper_power, max_slapper_power, charge_t)
+		var y_component: float = slapper_elevation if _is_elevated else 0.0
+		var shot_dir_elevated: Vector3 = Vector3(_shot_dir.x, y_component, _shot_dir.z).normalized()
+		puck.release(shot_dir_elevated, power)
 
-func _update_aim_arrow() -> void:
-	if _last_shot_dir == Vector3.ZERO:
-		_aim_arrow.visible = false
+	_state = State.FOLLOW_THROUGH
+	_follow_through_timer = follow_through_duration
+
+func _apply_slapper_blade_position() -> void:
+	var hand_sign: float = -1.0 if is_left_handed else 1.0
+	blade.position = shoulder.position + Vector3(hand_sign * slapper_blade_x, blade_height, slapper_blade_z)
+
+func _is_in_slapper_state() -> bool:
+	return _state in [State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK]
+
+# ── Blade: From Mouse ─────────────────────────────────────────────────────────
+func _apply_blade_from_mouse(delta: float) -> void:
+	var mouse_world: Vector3 = _input.mouse_world_pos
+	mouse_world.y = 0.0
+
+	var shoulder_world: Vector3 = upper_body.to_global(shoulder.position)
+	shoulder_world.y = 0.0
+	var to_mouse: Vector3 = mouse_world - shoulder_world
+
+	if to_mouse.length() < 0.01:
 		return
-	_aim_arrow.visible = true
-	var blade_pos = blade.global_position
-	_aim_arrow.global_position = blade_pos + _last_shot_dir * (aim_arrow_length / 2.0)
-	_aim_arrow.global_position.y = 0.1
-	_aim_arrow.global_rotation.y = atan2(_last_shot_dir.x, _last_shot_dir.z)
 
-# ── Blade: Player-Relative (With Puck) ───────────────────────────────────────
-func _apply_blade_player_relative(delta: float) -> void:
-	var stick = _input.blade_vector
-	
-	# Clamp stick to unit circle
-	if stick.length() > 1.0:
-		stick = stick.normalized()
-	
-	if stick.length() > blade_deadzone:
-		_blade_plane_pos = _blade_plane_pos.lerp(stick, blade_move_speed * delta)
-	else:
-		_blade_plane_pos = _blade_plane_pos.lerp(Vector2.ZERO, blade_return_speed * delta)
-	
-	var local_pos = _remap_stick_to_blade(_blade_plane_pos)
-	local_pos = _apply_wall_clamping(local_pos)
-	
-	blade.position = local_pos
-	blade.look_at(upper_body.global_position, Vector3.UP)
-	
-	# Quick shot
-	if _input.quick_shot and puck.carrier == self:
-		var plane_delta = _blade_plane_pos - _prev_blade_plane_pos
-		if plane_delta.length() > 0.001:
-			var local_dir = Vector3(plane_delta.x, 0, plane_delta.y).normalized()
-			var world_dir = global_transform.basis * local_dir
-			world_dir.y = 0.0
-			puck.release(world_dir.normalized(), quick_shot_power)
-	
-	_prev_blade_plane_pos = _blade_plane_pos
+	# Raw angle from shoulder to mouse in upper_body local space
+	var local_to_mouse: Vector3 = upper_body.to_local(shoulder_world + to_mouse.normalized() * minf(to_mouse.length(), plane_reach))
+	local_to_mouse.y = 0.0
+	var raw_angle: float = atan2((local_to_mouse - shoulder.position).x, -(local_to_mouse - shoulder.position).z)
 
-# ── Blade: World-Relative (Without Puck) ─────────────────────────────────────
-func _apply_blade_world_relative(delta: float) -> void:
-	var stick = _input.blade_vector
-	
-	# Clamp stick to unit circle
-	if stick.length() > 1.0:
-		stick = stick.normalized()
-	
-	if stick.length() > blade_deadzone:
-		# Screen-space direction → local-space position
-		var world_dir = Vector3(stick.x, 0, stick.y).normalized()
-		var local_dir = global_transform.basis.inverse() * world_dir
-		local_dir.y = 0.0
-		local_dir = local_dir.normalized()
-		
-		# Clamp to reachable arc
-		var forward = Vector3(0, 0, -1)
-		var angle = forward.signed_angle_to(local_dir, Vector3.UP)
-		var hand_sign = -1.0 if is_left_handed else 1.0
-		
-		var max_angle: float
-		if sign(angle) == sign(hand_sign):
-			max_angle = deg_to_rad(world_backhand_limit)
-		else:
-			max_angle = deg_to_rad(world_forehand_limit)
-		
-		if abs(angle) > max_angle:
-			angle = sign(angle) * max_angle
-			local_dir = forward.rotated(Vector3.UP, angle)
-		
-		var reach = stick.length() * plane_reach
-		var target_pos = local_dir * reach
-		target_pos += shoulder.position
-		target_pos.y = blade_height
-		_world_blade_target = _world_blade_target.lerp(target_pos, blade_move_speed * delta)
-	else:
-		# Return to default forward position relative to shoulder
-		var default_pos = Vector3(shoulder.position.x, blade_height, -plane_reach * 0.7)
-		_world_blade_target = _world_blade_target.lerp(default_pos, blade_return_speed * delta)
-	
-	var local_pos = _apply_wall_clamping(_world_blade_target)
-	
-	blade.position = local_pos
-	blade.look_at(upper_body.global_position, Vector3.UP)
+	# Flip into forehand-positive space, clamp asymmetrically, flip back
+	var hand_sign: float = -1.0 if is_left_handed else 1.0
+	var handed_angle: float = raw_angle * hand_sign
+	var clamped_handed: float = clampf(handed_angle, -deg_to_rad(blade_backhand_limit), deg_to_rad(blade_forehand_limit))
+	var clamped_angle: float = clamped_handed * hand_sign
 
-# ── Blade: Remap & Wall Clamping ─────────────────────────────────────────────
-func _remap_stick_to_blade(stick_pos: Vector2) -> Vector3:
-	var sx = stick_pos.x
-	var sy = stick_pos.y
-	
-	if invert_plane:
-		sx = -sx
-		sy = -sy
-	
-	var hand_sign = -1.0 if is_left_handed else 1.0
-	var is_backhand_side = sign(sx) != sign(hand_sign) and sx != 0.0
-	var is_behind = sy > 0.0
-	
-	# Compress the backhand-behind quadrant
-	if is_backhand_side and is_behind:
-		var backhand_amount = abs(sx)
-		var behind_amount = sy
-		var blend = backhand_amount * behind_amount
-		var blend_scale = lerpf(1.0, backhand_behind_scale, blend)
-		sx *= blend_scale
-		sy *= blend_scale
-	
-	# Lateral position from shoulder
-	var lateral = sx * plane_reach + shoulder.position.x
-	
-	# Depth: forward/back
-	var neutral_depth = plane_reach * 0.7
-	var forward_extra = plane_reach * 0.3
-	
-	var depth: float
-	if sy <= 0.0:
-		depth = neutral_depth + (-sy * forward_extra)
-	else:
-		# Blend between feet (center/backhand) and behind (forehand)
-		var forehand_amount = 0.0
-		if sign(sx) == sign(hand_sign) and sx != 0.0:
-			forehand_amount = abs(sx)
-		
-		var feet_depth = lerpf(neutral_depth, close_reach, sy)
-		var behind_depth = lerpf(neutral_depth, -forehand_behind_reach, sy)
-		depth = lerpf(feet_depth, behind_depth, forehand_amount)
-	
-	return Vector3(lateral, blade_height, -depth)
+	# If past clamp limit, rotate facing to follow
+	if not _is_in_slapper_state() and _state != State.WRISTER_AIM:
+		if abs(handed_angle) > abs(clamped_handed):
+			var excess: float = (handed_angle - clamped_handed) * hand_sign
+			_facing = _facing.rotated(excess * facing_drag_speed * delta).normalized()
+			rotation.y = atan2(-_facing.x, -_facing.y)
+			lower_body.rotation.y = 0.0
 
+	# Reposition blade from clamped angle
+	var clamped_dir: Vector3 = Vector3(sin(clamped_angle), 0.0, -cos(clamped_angle))
+	var clamped_target: Vector3 = shoulder.position + clamped_dir * minf(to_mouse.length(), plane_reach)
+	clamped_target.y = blade_height
+	clamped_target = _apply_wall_clamping(clamped_target)
+	blade.position = clamped_target
+
+	_blade_relative_angle = clamped_angle
+
+# ── Blade: From Stored Relative Angle ────────────────────────────────────────
+func _apply_blade_from_relative_angle() -> void:
+	var local_dir: Vector3 = Vector3(sin(_blade_relative_angle), 0.0, -cos(_blade_relative_angle))
+	var local_target: Vector3 = shoulder.position + local_dir * plane_reach
+	local_target.y = blade_height
+	local_target = _apply_wall_clamping(local_target)
+	blade.position = local_target
+
+# ── Wall Clamping ─────────────────────────────────────────────────────────────
 func _apply_wall_clamping(local_pos: Vector3) -> Vector3:
-	var intended_pos = local_pos
-	var to_blade = local_pos
+	var intended_pos: Vector3 = local_pos
+	var to_blade: Vector3 = local_pos
 	to_blade.y = 0.0
 	stick_raycast.target_position = to_blade
 	stick_raycast.force_raycast_update()
-	
+
 	if stick_raycast.is_colliding():
-		var hit_dist = global_position.distance_to(stick_raycast.get_collision_point())
-		var blade_dist = to_blade.length()
+		var hit_dist: float = global_position.distance_to(stick_raycast.get_collision_point())
+		var blade_dist: float = to_blade.length()
 		if hit_dist < blade_dist:
-			var clamped_dist = max(hit_dist - 0.05, 0.1)
+			var clamped_dist: float = maxf(hit_dist - 0.05, 0.1)
 			local_pos = to_blade.normalized() * clamped_dist
 			local_pos.y = blade_height
-	
-	# Release puck if wall is squeezing the blade significantly
-	if puck.carrier == self:
-		var squeeze = intended_pos.length() - local_pos.length()
-		if squeeze > wall_squeeze_threshold:
-			var wall_normal = stick_raycast.get_collision_normal()
-			if wall_normal.length() > 0.0:
-				puck.release(wall_normal.normalized(), 3.0)
-			else:
-				var nudge = global_transform.basis * (-to_blade.normalized())
-				puck.release(nudge.normalized(), 3.0)
-	
+
+			if puck.carrier == self:
+				var squeeze: float = intended_pos.length() - local_pos.length()
+				if squeeze > wall_squeeze_threshold:
+					var wall_normal: Vector3 = stick_raycast.get_collision_normal()
+					if wall_normal.length() > 0.0:
+						puck.release(wall_normal.normalized(), 3.0)
+					else:
+						var nudge: Vector3 = global_transform.basis * (-to_blade.normalized())
+						puck.release(nudge.normalized(), 3.0)
+
 	return local_pos
 
 # ── Upper Body ────────────────────────────────────────────────────────────────
 func _apply_upper_body(delta: float) -> void:
-	var target_offset = 0.0
-	
-	if _is_in_shoot_state() and _last_shot_dir != Vector3.ZERO:
-		var world_aim_angle = atan2(-_last_shot_dir.x, -_last_shot_dir.z)
-		target_offset = angle_difference(rotation.y, world_aim_angle)
-	
-	_upper_body_angle = lerp_angle(_upper_body_angle, target_offset, upper_body_aim_speed * delta)
+	if _state == State.SLAPPER_CHARGE_WITH_PUCK:
+		return
+
+	var target_angle: float = 0.0
+
+	if _state == State.WRISTER_AIM:
+		# Blade direction drives upper body twist during wrister
+		var local_blade: Vector3 = blade.position - shoulder.position
+		local_blade.y = 0.0
+		if local_blade.length() > 0.01:
+			var blade_angle: float = atan2(local_blade.x, -local_blade.z)
+			target_angle = -blade_angle * upper_body_twist_ratio
+	elif _state not in [State.SLAPPER_CHARGE_WITHOUT_PUCK, State.FOLLOW_THROUGH]:
+		# Normal skating — upper body twists toward blade
+		var local_blade: Vector3 = blade.position - shoulder.position
+		local_blade.y = 0.0
+		if local_blade.length() > 0.01:
+			var blade_angle: float = atan2(local_blade.x, -local_blade.z)
+			target_angle = -blade_angle * upper_body_twist_ratio
+
+	_upper_body_angle = lerp_angle(_upper_body_angle, target_angle, upper_body_return_speed * delta)
 	upper_body.rotation.y = _upper_body_angle
 
 # ── Facing ────────────────────────────────────────────────────────────────────
 func _apply_facing(delta: float) -> void:
-	if _is_in_shoot_state():
+	# Facing locked during these states
+	if _state in [State.WRISTER_AIM, State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK]:
 		return
-	if _dash_active_timer > 0.0:
+
+	var mouse_world: Vector3 = _input.mouse_world_pos
+	var to_mouse: Vector2 = Vector2(
+		mouse_world.x - global_position.x,
+		mouse_world.z - global_position.z
+	)
+
+	if to_mouse.length() <= move_deadzone:
 		return
-	var move = _input.move_vector
-	_is_backward = _input.orientation
-	
-	var target_facing = _facing
-	
-	if move.length() > move_deadzone:
-		target_facing = move.normalized()
-		if _is_backward:
-			target_facing = -target_facing
-	elif _is_backward:
-		target_facing = -_facing
-	
-	if target_facing != _facing:
-		_facing = _facing.lerp(target_facing, rotation_speed * delta).normalized()
-	
-	var facing_angle = atan2(-_facing.x, -_facing.y)
-	rotation.y = facing_angle
+
+	if _input.facing_held:
+		# Continuous facing toward mouse
+		_facing = _facing.lerp(to_mouse.normalized(), rotation_speed * delta).normalized()
+	elif _input.facing_pressed:
+		# Fast lerp snap toward mouse
+		_facing = _facing.lerp(to_mouse.normalized(), facing_snap_speed * delta).normalized()
+
+	rotation.y = atan2(-_facing.x, -_facing.y)
 	lower_body.rotation.y = 0.0
-	_upper_body_angle = 0.0
 
 # ── Movement ──────────────────────────────────────────────────────────────────
 func _apply_movement(delta: float) -> void:
-	var move = _input.move_vector
-	
+	if _state == State.SLAPPER_CHARGE_WITH_PUCK:
+		# Glide handled in state function
+		return
+
+	var move: Vector2 = _input.move_vector
+
 	if move.length() > move_deadzone:
-		var thrust_dir = Vector3(move.x, 0, move.y)
-		var current_thrust = thrust * shoot_mode_thrust_multiplier if _is_in_shoot_state() else thrust
-		velocity += thrust_dir * current_thrust * delta
-		var speed = Vector2(velocity.x, velocity.z).length()
+		var thrust_dir: Vector3 = Vector3(move.x, 0.0, move.y)
+		velocity += thrust_dir * thrust * delta
+
+		var speed: float = Vector2(velocity.x, velocity.z).length()
 		if speed > max_speed:
-			var pre_thrust_speed = Vector2(velocity.x - thrust_dir.x * current_thrust * delta, velocity.z - thrust_dir.z * current_thrust * delta).length()
-			var target_speed = maxf(pre_thrust_speed, max_speed)
+			var pre_thrust_speed: float = Vector2(
+				velocity.x - thrust_dir.x * thrust * delta,
+				velocity.z - thrust_dir.z * thrust * delta
+			).length()
+			var target_speed: float = maxf(pre_thrust_speed, max_speed)
 			if speed > target_speed:
-				var limited = Vector2(velocity.x, velocity.z).normalized() * target_speed
+				var limited: Vector2 = Vector2(velocity.x, velocity.z).normalized() * target_speed
 				velocity.x = limited.x
 				velocity.z = limited.y
-	
-	var horizontal_vel = Vector2(velocity.x, velocity.z)
-	var current_friction = friction * brake_multiplier if _input.brake else friction
+
+	var horizontal_vel: Vector2 = Vector2(velocity.x, velocity.z)
+	var current_friction: float = friction * brake_multiplier if _input.brake else friction
 	horizontal_vel = horizontal_vel.move_toward(Vector2.ZERO, current_friction * delta)
 	velocity.x = horizontal_vel.x
 	velocity.z = horizontal_vel.y
 
-# ── Dash ──────────────────────────────────────────────────────────────────────
-func _apply_dash(delta: float) -> void:
-	_dash_timer -= delta
-	_dash_active_timer -= delta
-	
-	if _input.dash and _dash_timer <= 0.0:
-		var move = _input.move_vector
-		if move.length() > move_deadzone:
-			var dash_dir = Vector3(move.x, 0, move.y).normalized()
-			velocity += dash_dir * dash_force
-			_dash_timer = dash_cooldown
-			_dash_active_timer = dash_duration
-
 # ── Stick Mesh ────────────────────────────────────────────────────────────────
 func _update_stick_mesh() -> void:
-	var stick_origin = shoulder.position
-	var to_blade = blade.position - stick_origin
+	var stick_origin: Vector3 = shoulder.position
+	var to_blade: Vector3 = blade.position - stick_origin
 	stick_mesh.position = stick_origin + to_blade / 2.0
 	stick_mesh.scale.z = to_blade.length()
 	stick_mesh.look_at(upper_body.to_global(blade.position), Vector3.UP)

@@ -68,7 +68,7 @@ func _rebuild() -> void:
 	var r = corner_radius
 	
 	# --- Ice surface ---
-	_add_ice(half_l, half_w)
+	_add_ice(half_l)
 	
 	# --- Walls ---
 	_add_wall(
@@ -93,7 +93,7 @@ func _rebuild() -> void:
 	_add_corner(Vector3(-half_w + r, 0, half_l - r), PI / 2.0, PI)
 	_add_corner(Vector3(-half_w + r, 0, -half_l + r), PI, 3.0 * PI / 2.0)
 
-func _add_ice(half_l: float, half_w: float) -> void:
+func _add_ice(half_l: float) -> void:
 	var img_w = int(rink_width * _px_per_meter)
 	var img_h = int(rink_length * _px_per_meter)
 	
@@ -111,23 +111,23 @@ func _add_ice(half_l: float, half_w: float) -> void:
 	# Center of rink = center of image
 	
 	# Center red line (at Z=0)
-	_draw_h_line(img, img_h / 2, thick_line, red_line_color)
+	_draw_h_line(img, img_h / 2.0, thick_line, red_line_color)
 	
 	# Blue lines (NHL: 7.62m from center, which is 25ft)
 	var blue_z = int(7.62 * _px_per_meter)
-	_draw_h_line(img, img_h / 2 - blue_z, thick_line, blue_line_color)
-	_draw_h_line(img, img_h / 2 + blue_z, thick_line, blue_line_color)
+	_draw_h_line(img, img_h / 2.0 - blue_z, thick_line, blue_line_color)
+	_draw_h_line(img, img_h / 2.0 + blue_z, thick_line, blue_line_color)
 	
 	# Goal lines (3.4m from end boards)
 	var goal_z = int((half_l - 3.4) * _px_per_meter)
-	_draw_h_line(img, img_h / 2 - goal_z, thin_line, red_line_color)
-	_draw_h_line(img, img_h / 2 + goal_z, thin_line, red_line_color)
+	_draw_h_line(img, img_h / 2.0 - goal_z, thin_line, red_line_color)
+	_draw_h_line(img, img_h / 2.0 + goal_z, thin_line, red_line_color)
 	
 	# Center ice circle (radius 4.5m)
-	_draw_circle(img, img_w / 2, img_h / 2, int(4.5 * _px_per_meter), thin_line, blue_line_color)
+	_draw_circle(img, img_w / 2.0, img_h / 2.0, int(4.5 * _px_per_meter), thin_line, blue_line_color)
 	
 	# Center ice dot
-	_draw_filled_circle(img, img_w / 2, img_h / 2, int(0.15 * _px_per_meter), blue_line_color)
+	_draw_filled_circle(img, img_w / 2.0, img_h / 2.0, int(0.15 * _px_per_meter), blue_line_color)
 	
 	# Faceoff dots and circles in end zones
 	# NHL: dots are 6.1m from goal line, 6.7m from center of rink (width)
@@ -138,10 +138,10 @@ func _add_ice(half_l: float, half_w: float) -> void:
 	
 	# End zone faceoff spots (4 total, 2 per end)
 	var end_zone_dots = [
-		[img_w / 2 - dot_offset_x, img_h / 2 - goal_z + dot_offset_z],
-		[img_w / 2 + dot_offset_x, img_h / 2 - goal_z + dot_offset_z],
-		[img_w / 2 - dot_offset_x, img_h / 2 + goal_z - dot_offset_z],
-		[img_w / 2 + dot_offset_x, img_h / 2 + goal_z - dot_offset_z],
+		[img_w / 2.0 - dot_offset_x, img_h / 2.0 - goal_z + dot_offset_z],
+		[img_w / 2.0 + dot_offset_x, img_h / 2.0 - goal_z + dot_offset_z],
+		[img_w / 2.0 - dot_offset_x, img_h / 2.0 + goal_z - dot_offset_z],
+		[img_w / 2.0 + dot_offset_x, img_h / 2.0 + goal_z - dot_offset_z],
 	]
 	
 	for dot in end_zone_dots:
@@ -151,10 +151,10 @@ func _add_ice(half_l: float, half_w: float) -> void:
 	# Neutral zone faceoff dots (4 total)
 	# NHL: just inside blue lines, same X offset
 	var neutral_dots = [
-		[img_w / 2 - dot_offset_x, img_h / 2 - blue_z + int(1.5 * _px_per_meter)],
-		[img_w / 2 + dot_offset_x, img_h / 2 - blue_z + int(1.5 * _px_per_meter)],
-		[img_w / 2 - dot_offset_x, img_h / 2 + blue_z - int(1.5 * _px_per_meter)],
-		[img_w / 2 + dot_offset_x, img_h / 2 + blue_z - int(1.5 * _px_per_meter)],
+		[img_w / 2.0 - dot_offset_x, img_h / 2.0 - blue_z + int(1.5 * _px_per_meter)],
+		[img_w / 2.0 + dot_offset_x, img_h / 2.0 - blue_z + int(1.5 * _px_per_meter)],
+		[img_w / 2.0 - dot_offset_x, img_h / 2.0 + blue_z - int(1.5 * _px_per_meter)],
+		[img_w / 2.0 + dot_offset_x, img_h / 2.0 + blue_z - int(1.5 * _px_per_meter)],
 	]
 	
 	for dot in neutral_dots:
@@ -189,15 +189,15 @@ func _add_ice(half_l: float, half_w: float) -> void:
 	col.set_meta("physics_material_override", phys_mat)
 
 func _draw_h_line(img: Image, y: int, thickness: int, color: Color) -> void:
-	var half_t = thickness / 2
+	var half_t = thickness / 2.0
 	for py in range(y - half_t, y + half_t + 1):
 		if py >= 0 and py < img.get_height():
 			for px in range(img.get_width()):
 				img.set_pixel(px, py, color)
 
 func _draw_circle(img: Image, cx: int, cy: int, radius: int, thickness: int, color: Color) -> void:
-	var r_outer = radius + thickness / 2
-	var r_inner = radius - thickness / 2
+	var r_outer = radius + thickness / 2.0
+	var r_inner = radius - thickness / 2.0
 	for py in range(cy - r_outer - 1, cy + r_outer + 2):
 		for px in range(cx - r_outer - 1, cx + r_outer + 2):
 			if px >= 0 and px < img.get_width() and py >= 0 and py < img.get_height():
