@@ -6,6 +6,8 @@ Context for Claude about the HockeyGame project.
 
 Complex features (AI state machines, new systems, architectural changes) are designed first in Claude.ai chat mode, where the developer can iterate on ideas without implementation pressure. The resulting plan is then handed to Claude Code to implement against the actual codebase. When a session starts with a plan document, treat it as the agreed design — ask clarifying questions before deviating from it.
 
+**Before every commit:** update this file. New files go in the Key Files table. Completed work moves out of Known Issues. New known issues get added.
+
 ## What This Is
 
 A 3v3 arcade hockey game built in Godot 4.4.1 (GDScript, 3D). Online multiplayer — one player per machine, each with their own camera and local simulation. Prioritizes feel over realism: deep stickhandling, multiple shot types, satisfying puck physics.
@@ -52,6 +54,9 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | `skater_controller.gd` | Base class: full state machine, movement, shooting, blade control |
 | `puck.gd` | Physics body: pickup zone, deflection, carrier following (server only) |
 | `skater.gd` | Physics body: blade/facing/upper-body API |
+| `goalie.gd` | Goalie body API: exposes position, rotation, and body part config methods |
+| `goalie_controller.gd` | Goalie AI: state machine (STANDING/BUTTERFLY/RVH_LEFT/RVH_RIGHT), Buckley depth, lateral positioning, shot detection |
+| `goalie_body_config.gd` | Data class holding per-state body part positions and rotations |
 | `constants.gd` | Shared constants: network rates, physics tick, ICE_FRICTION, rink geometry |
 | `buffered_skater_state.gd` | Timestamped SkaterNetworkState for interpolation buffer |
 | `buffered_puck_state.gd` | Timestamped PuckNetworkState for interpolation buffer |
@@ -73,6 +78,5 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 ## Known Issues / Planned Work
 
 - **Ice friction not applied correctly:** `hockey_rink.gd` uses `col.set_meta("physics_material_override", phys_mat)` on a `CollisionShape3D`, which does nothing. The physics material needs to be set on a dedicated child `StaticBody3D` for the ice surface. `Constants.ICE_FRICTION = 0.01` is the intended value and is already used in puck trajectory prediction.
-- **Goalies not networked:** Both clients simulate goalies independently. Planned: server-authoritative goalie AI with state broadcast via world state and client-side interpolation — same pattern as the puck.
-- **Goalie AI rework:** Current goalie is a basic `StaticBody3D` with angle tracking. A full behavioral rework is next up.
+- **Goalies not networked:** Both clients simulate `GoalieController` independently. Planned: host-only AI, goalie state serialized into world state broadcast, client-side interpolation via `BufferedGoalieState` — same pattern as the puck. Design notes in `docs/specs/GOALIE_AI_SPEC.md`.
 - **IP hardcoded:** `Constants.DEFAULT_IP = "127.0.0.1"` — real network play requires changing this.
