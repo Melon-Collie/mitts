@@ -2,9 +2,10 @@ class_name GameCamera
 extends Camera3D
 
 # ── Target References ─────────────────────────────────────────────────────────
-@export var skater: SkaterController
+@export var skater: Skater
 @export var puck: Puck
 @export var attacking_goal: Node3D
+@export var local_controller: LocalController
 
 # ── Anchor Weights ────────────────────────────────────────────────────────────
 @export var puck_weight: float = 1.0
@@ -30,8 +31,12 @@ extends Camera3D
 # ── Runtime ───────────────────────────────────────────────────────────────────
 var _current_height: float = 15.0
 
+func _ready() -> void:
+	make_current()
+
 func _physics_process(delta: float) -> void:
 	if not skater:
+		print("Game Camera: skater is null")
 		return
 
 	var player_pos: Vector3 = skater.global_position
@@ -47,7 +52,7 @@ func _physics_process(delta: float) -> void:
 		weighted_pos += puck_pos * puck_weight
 		total_weight += puck_weight
 
-	var mouse_pos: Vector3 = skater.mouse_world_pos
+	var mouse_pos: Vector3 = local_controller.get_current_input().mouse_world_pos
 	mouse_pos.y = 0.0
 	weighted_pos += mouse_pos * mouse_weight
 	total_weight += mouse_weight

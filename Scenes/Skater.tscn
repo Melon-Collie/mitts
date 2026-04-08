@@ -1,6 +1,6 @@
-[gd_scene load_steps=14 format=3 uid="uid://53nk80p1ukjl"]
+[gd_scene load_steps=13 format=3 uid="uid://53nk80p1ukjl"]
 
-[ext_resource type="Script" uid="uid://deik620fbyahb" path="res://Scripts/skater_controller.gd" id="1_ji0pt"]
+[ext_resource type="Script" uid="uid://c4c2muuy6y6r7" path="res://Scripts/skater.gd" id="1_7f3a6"]
 
 [sub_resource type="CylinderShape3D" id="CylinderShape3D_r0du0"]
 
@@ -9,9 +9,6 @@ albedo_color = Color(0.669084, 0.000593163, 0.721378, 1)
 
 [sub_resource type="BoxMesh" id="BoxMesh_rgh2o"]
 material = SubResource("StandardMaterial3D_kln2b")
-size = Vector3(0.1, 0.2, 0.3)
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_idj7w"]
 size = Vector3(0.1, 0.2, 0.3)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_jw32o"]
@@ -42,12 +39,9 @@ albedo_color = Color(0, 0, 0, 1)
 material = SubResource("StandardMaterial3D_50glp")
 size = Vector3(0.6, 1, 0.4)
 
-[node name="Skater" type="CharacterBody3D" node_paths=PackedStringArray("camera", "puck")]
-script = ExtResource("1_ji0pt")
-camera = NodePath("")
-max_speed = 11.0
+[node name="Skater" type="CharacterBody3D"]
+script = ExtResource("1_7f3a6")
 blade_height = -0.85
-puck = NodePath("")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 shape = SubResource("CylinderShape3D_r0du0")
@@ -61,13 +55,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1.5)
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="UpperBody/Blade"]
 mesh = SubResource("BoxMesh_rgh2o")
-
-[node name="BladeArea" type="Area3D" parent="UpperBody/Blade"]
-collision_layer = 2
-collision_mask = 0
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="UpperBody/Blade/BladeArea"]
-shape = SubResource("BoxShape3D_idj7w")
 
 [node name="UpperBodyMesh" type="MeshInstance3D" parent="UpperBody"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)

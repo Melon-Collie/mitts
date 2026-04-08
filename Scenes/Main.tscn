@@ -1,6 +1,7 @@
-[gd_scene load_steps=5 format=3 uid="uid://c545b8jaty5b7"]
+[gd_scene load_steps=6 format=3 uid="uid://c545b8jaty5b7"]
 
 [ext_resource type="PhysicsMaterial" uid="uid://bo58ocxbodjpo" path="res://Physics/boards.tres" id="1_kln2b"]
+[ext_resource type="PackedScene" uid="uid://i5j5ehpb8hfk" path="res://Scenes/Puck.tscn" id="4_rgh2o"]
 [ext_resource type="Script" uid="uid://c5pf6p0nivh61" path="res://Scripts/hockey_rink.gd" id="5_v1gob"]
 [ext_resource type="Script" uid="uid://xjv72m8sqqv1" path="res://Scripts/hockey_goal.gd" id="7_jw32o"]
 
@@ -36,3 +37,5 @@ ice_friction = 0.01
 
 [node name="Goals" type="StaticBody3D" parent="."]
 script = ExtResource("7_jw32o")
+
+[node name="Puck" parent="." instance=ExtResource("4_rgh2o")]

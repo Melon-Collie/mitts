@@ -17,6 +17,8 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+Constants="*res://Scripts/constants.gd"
+NetworkManager="*res://Scripts/network_manager.gd"
 GameManager="*res://Scripts/game_manager.gd"
 
 [input]

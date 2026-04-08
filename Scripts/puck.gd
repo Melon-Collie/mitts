@@ -1,7 +1,7 @@
 class_name Puck
 extends RigidBody3D
 
-signal puck_picked_up(carrier: SkaterController)
+signal puck_picked_up(carrier: Skater)
 signal puck_released()
 
 @export var max_speed: float = 30.0
@@ -17,7 +17,17 @@ var carrier: Node3D = null
 var _cooldown_timer: float = 0.0
 
 func _ready() -> void:
-	$PickupZone.area_entered.connect(_on_blade_entered)
+	var pickup_zone = Area3D.new()
+	pickup_zone.name = "PickupZone"
+	pickup_zone.collision_layer = 3
+	pickup_zone.collision_mask = 2
+	var pickup_shape = CollisionShape3D.new()
+	var sphere = SphereShape3D.new()
+	sphere.radius = 0.5
+	pickup_shape.shape = sphere
+	pickup_zone.add_child(pickup_shape)
+	add_child(pickup_zone)
+	pickup_zone.area_entered.connect(_on_blade_entered)
 
 func _on_blade_entered(area: Area3D) -> void:
 	if carrier != null:
@@ -26,7 +36,7 @@ func _on_blade_entered(area: Area3D) -> void:
 		return
 	
 	var node = area
-	while node and not node is SkaterController:
+	while node and not node is Skater:
 		node = node.get_parent()
 	if not node:
 		return
@@ -102,3 +112,7 @@ func _physics_process(delta: float) -> void:
 		else:
 			linear_velocity.y = 0.0
 			position.y = ice_height
+
+
+func _on_test_area_3d_area_entered(area: Area3D) -> void:
+	print("TEST AREA DETECTED: ", area.name)

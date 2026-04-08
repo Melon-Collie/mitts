@@ -1,0 +1,79 @@
+class_name RemoteController
+extends SkaterController
+
+@export var interpolation_delay: float = 0.1
+
+var _latest_input: InputState = InputState.new()
+var _input_buffer: Array[InputState] = []
+var _state_buffer: Array = []
+var _current_time: float = 0.0
+var _last_processed_sequence: int = 0
+
+func _physics_process(delta: float) -> void:
+	if skater == null:
+		return
+	if NetworkManager.is_host:
+		_drive_from_input(delta)
+	else:
+		_current_time += delta
+		_interpolate()
+		skater.update_stick_mesh()
+
+func receive_input(state: InputState) -> void:
+	_latest_input = state
+	#_input_buffer.append(state)
+
+func _drive_from_input(delta: float) -> void:
+	_last_processed_sequence = _latest_input.sequence
+	_process_input(_latest_input, delta)
+	#if _input_buffer.size() == 0:
+		#return
+	#var input: InputState = _input_buffer.pop_front()
+	#_process_input(input, delta)
+
+func apply_network_state(data: Array) -> void:
+	if NetworkManager.is_host:
+		return
+	var state := SkaterNetworkState.from_array(data)
+	var buffered := BufferedState.new()
+	buffered.timestamp = _current_time
+	buffered.state = state
+	_state_buffer.append(buffered)
+	if _state_buffer.size() > 10:
+		_state_buffer.pop_front()
+
+func _interpolate() -> void:
+	var render_time: float = _current_time - interpolation_delay
+	if _state_buffer.size() < 2:
+		return
+	var from_state: BufferedState = null
+	var to_state: BufferedState = null
+	for i in range(_state_buffer.size() - 1):
+		var a: BufferedState = _state_buffer[i]
+		var b: BufferedState = _state_buffer[i + 1]
+		if a.timestamp <= render_time and render_time <= b.timestamp:
+			from_state = a
+			to_state = b
+			break
+	if from_state == null or to_state == null:
+		_apply_state_to_skater(_state_buffer.back().state)
+		return
+	var t: float = clampf((render_time - from_state.timestamp) / (to_state.timestamp - from_state.timestamp), 0.0, 1.0)
+	var interpolated := SkaterNetworkState.new()
+	interpolated.position = from_state.state.position.lerp(to_state.state.position, t)
+	interpolated.rotation = from_state.state.rotation.lerp(to_state.state.rotation, t)
+	interpolated.velocity = from_state.state.velocity.lerp(to_state.state.velocity, t)
+	interpolated.blade_position = from_state.state.blade_position.lerp(to_state.state.blade_position, t)
+	interpolated.upper_body_rotation_y = lerpf(from_state.state.upper_body_rotation_y, to_state.state.upper_body_rotation_y, t)
+	interpolated.facing = from_state.state.facing.lerp(to_state.state.facing, t).normalized()
+	_apply_state_to_skater(interpolated)
+	while _state_buffer.size() > 2 and _state_buffer[1].timestamp < render_time:
+		_state_buffer.pop_front()
+
+func _apply_state_to_skater(state: SkaterNetworkState) -> void:
+	skater.global_position = state.position
+	skater.global_rotation = state.rotation
+	skater.velocity = state.velocity
+	skater.set_blade_position(state.blade_position)
+	skater.set_upper_body_rotation(state.upper_body_rotation_y)
+	skater.set_facing(state.facing)
