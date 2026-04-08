@@ -20,7 +20,7 @@ The Rocket League freeplay ceiling is a guiding star: the stickhandling-to-shot 
 - **Puck:** `RigidBody3D` with cylinder collision (radius 0.1m, height 0.05m). PickupZone (`Area3D`, `SphereShape3D` radius 0.5m) for blade proximity detection. Emits `puck_picked_up` and `puck_released` signals. Physics runs server-side only — frozen on clients.
 - **Rink:** `StaticBody3D` with procedurally generated walls, corners, and ice surface via `@tool` script. 60×26m, Z axis is the long axis.
 - **Goals:** `StaticBody3D` with procedurally generated posts, crossbar, and back wall via `@tool` script.
-- **Goalie:** `StaticBody3D` with butterfly-stance collision shapes (two leg pads + body block with five-hole gap).
+- **Goalie:** `Node3D` root (`goalie.gd`) with six `StaticBody3D` body parts (LeftPad, RightPad, Body, Glove, Blocker, Stick). A sibling `GoalieController` node drives positioning. Body part positions and rotations lerp between per-state configs each frame.
 - **Camera:** `Camera3D` per player. Weighted anchor system — player, puck, mouse, attacking goal. Zoom computed after position clamping.
 
 ---
@@ -76,6 +76,12 @@ Authoritative host. The host runs all physics. Clients predict locally and recon
 - Release: client predicts immediately (state machine transitions, trajectory prediction begins) → reliable RPC to server to execute physics
 
 `_carrier_peer_id` on clients is managed exclusively by `notify_local_pickup()` / `notify_local_release()` in `PuckController`. It is intentionally never updated from world state — unreliable packet ordering would cause it to conflict with locally-predicted transitions.
+
+### Goalie Networking
+
+**GoalieController** AI runs on the host only. Clients receive goalie state via the world state broadcast and interpolate with a 100ms delay using a `BufferedGoalieState` buffer — the same pattern as remote skaters.
+
+Serialized per goalie: position (x/z), rotation_y, state enum, five_hole_openness (5 elements). Clients reconstruct body part configs locally from the state enum and five_hole_openness, then snap body parts to the interpolated config each frame.
 
 ### Why Not Predict Pickup?
 
@@ -169,8 +175,6 @@ Player-first guarantee: weighted target is clamped so player never exceeds `play
 
 **Ice friction not applied:** `hockey_rink.gd` calls `col.set_meta("physics_material_override", phys_mat)` on a `CollisionShape3D`, which stores it as metadata rather than applying a physics material. The ice surface needs its own child `StaticBody3D` with `physics_material_override` set to a `PhysicsMaterial` using `Constants.ICE_FRICTION`.
 
-**Goalies not networked:** Both clients simulate goalies independently from the same starting state. Works as long as puck state stays in sync but will diverge under prediction. Planned fix: server-authoritative goalie AI, state packaged into world state broadcast, client interpolation.
-
 ---
 
 ## Build Status
@@ -181,8 +185,8 @@ Player-first guarantee: weighted target is clamped so player never exceeds `play
 | 2 | Stick / puck interaction | Done |
 | 3 | Basic goalie | Done |
 | 4 | Networking (prediction, interpolation, reconciliation) | Done |
-| 5 | Goalie AI rework + networking | Next |
-| 6 | Characters + abilities | Planned |
+| 5 | Goalie AI rework + networking | Done |
+| 6 | Characters + abilities | Next |
 | 7 | Full game flow (goals, faceoffs, score) | Planned |
 
 ---

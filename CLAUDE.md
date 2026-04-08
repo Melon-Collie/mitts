@@ -6,7 +6,7 @@ Context for Claude about the HockeyGame project.
 
 Complex features (AI state machines, new systems, architectural changes) are designed first in Claude.ai chat mode, where the developer can iterate on ideas without implementation pressure. The resulting plan is then handed to Claude Code to implement against the actual codebase. When a session starts with a plan document, treat it as the agreed design — ask clarifying questions before deviating from it.
 
-**Before every commit:** update this file. New files go in the Key Files table. Completed work moves out of Known Issues. New known issues get added.
+**Before every commit:** update this file, `README.md`, and `ARCHITECTURE.md`. New files go in the Key Files table. Completed work moves out of Known Issues (both here and in ARCHITECTURE.md). New known issues get added. README's What's In / Planned sections and ARCHITECTURE's Build Status table should reflect current state.
 
 ## What This Is
 

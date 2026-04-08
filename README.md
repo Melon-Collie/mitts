@@ -49,12 +49,12 @@ Pucks coming in fast deflect off your blade instead of sticking — you can one-
 - Automatic pickup and blade deflection
 - Elevated shots
 - Online multiplayer with client-side prediction
+- Behavioral goalie AI (state machine, Buckley depth system, butterfly, RVH) — server-authoritative with client interpolation
 
 ---
 
 ## Planned
 
-- Smarter goalie AI
 - Characters with unique abilities
 - Proper game flow (goals, faceoffs, score)
 - More platforms
