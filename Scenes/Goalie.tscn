@@ -1,45 +1,114 @@
-[gd_scene load_steps=6 format=3 uid="uid://bu5a1k2dpj8ot"]
+[gd_scene load_steps=20 format=3 uid="uid://bu5a1k2dpj8ot"]
 
 [ext_resource type="Script" uid="uid://hxvqvacak3bm" path="res://Scripts/goalie.gd" id="1_fbmg1"]
 
-[sub_resource type="BoxMesh" id="BoxMesh_v1gob"]
-size = Vector3(0.7, 0.25, 0.5)
+[sub_resource type="BoxShape3D" id="BoxShape3D_fbmg1"]
+size = Vector3(0.28, 0.5, 0.08)
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_jw32o"]
-size = Vector3(0.7, 0.4, 0.5)
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_cdb6r"]
+albedo_color = Color(0.301269, 0.46915, 0.92892, 1)
 
-[sub_resource type="BoxMesh" id="BoxMesh_jw32o"]
-size = Vector3(0.6, 0.6, 0.3)
+[sub_resource type="BoxMesh" id="BoxMesh_168ps"]
+material = SubResource("StandardMaterial3D_cdb6r")
+size = Vector3(0.28, 0.5, 0.08)
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_50glp"]
-size = Vector3(0.6, 0.6, 0.3)
+[sub_resource type="BoxShape3D" id="BoxShape3D_jpvxq"]
+size = Vector3(0.28, 0.5, 0.08)
 
-[node name="Goalie" type="StaticBody3D"]
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_g4lw1"]
+albedo_color = Color(0.0462734, 0.509017, 0.651184, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_0fnhx"]
+material = SubResource("StandardMaterial3D_g4lw1")
+size = Vector3(0.28, 0.5, 0.08)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_e8rcv"]
+size = Vector3(0.48, 0.55, 0.2)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_fpcta"]
+albedo_color = Color(0.276417, 0.60769, 0.408357, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_cwmwh"]
+material = SubResource("StandardMaterial3D_fpcta")
+size = Vector3(0.48, 0.55, 0.2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_8k2b8"]
+size = Vector3(0.25, 0.25, 0.1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_mlftn"]
+albedo_color = Color(0.653846, 0.402607, 0.170112, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_f2adc"]
+material = SubResource("StandardMaterial3D_mlftn")
+size = Vector3(0.25, 0.25, 0.1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_waq38"]
+size = Vector3(0.2, 0.3, 0.1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_u3old"]
+albedo_color = Color(0.806895, 0.160214, 0.779268, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_n2fuc"]
+material = SubResource("StandardMaterial3D_u3old")
+size = Vector3(0.2, 0.3, 0.1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_6gje0"]
+size = Vector3(0.5, 0.04, 0.04)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_udd7f"]
+albedo_color = Color(0.729173, 0.661791, 0.652969, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_6fows"]
+material = SubResource("StandardMaterial3D_udd7f")
+size = Vector3(0.5, 0.04, 0.04)
+
+[node name="Goalie" type="Node3D"]
 script = ExtResource("1_fbmg1")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.475, 0.15, 0)
-mesh = SubResource("BoxMesh_v1gob")
-skeleton = NodePath("")
+[node name="LeftPad" type="StaticBody3D" parent="."]
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.475, 0.15, 0)
-shape = SubResource("BoxShape3D_jw32o")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="LeftPad"]
+shape = SubResource("BoxShape3D_fbmg1")
 
-[node name="MeshInstance3D2" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.475, 0.15, 0)
-mesh = SubResource("BoxMesh_v1gob")
-skeleton = NodePath("")
+[node name="MeshInstance3D" type="MeshInstance3D" parent="LeftPad"]
+mesh = SubResource("BoxMesh_168ps")
 
-[node name="CollisionShape3D2" type="CollisionShape3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.475, 0.15, 0)
-shape = SubResource("BoxShape3D_jw32o")
+[node name="RightPad" type="StaticBody3D" parent="."]
 
-[node name="MeshInstance3D3" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
-mesh = SubResource("BoxMesh_jw32o")
-skeleton = NodePath("")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="RightPad"]
+shape = SubResource("BoxShape3D_jpvxq")
 
-[node name="CollisionShape3D3" type="CollisionShape3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
-shape = SubResource("BoxShape3D_50glp")
+[node name="MeshInstance3D" type="MeshInstance3D" parent="RightPad"]
+mesh = SubResource("BoxMesh_0fnhx")
+
+[node name="Body" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Body"]
+shape = SubResource("BoxShape3D_e8rcv")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Body"]
+mesh = SubResource("BoxMesh_cwmwh")
+
+[node name="Glove" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Glove"]
+shape = SubResource("BoxShape3D_8k2b8")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Glove"]
+mesh = SubResource("BoxMesh_f2adc")
+
+[node name="Blocker" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Blocker"]
+shape = SubResource("BoxShape3D_waq38")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Blocker"]
+mesh = SubResource("BoxMesh_n2fuc")
+
+[node name="Stick" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Stick"]
+shape = SubResource("BoxShape3D_6gje0")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Stick"]
+mesh = SubResource("BoxMesh_6fows")

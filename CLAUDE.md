@@ -2,6 +2,10 @@
 
 Context for Claude about the HockeyGame project.
 
+## Workflow
+
+Complex features (AI state machines, new systems, architectural changes) are designed first in Claude.ai chat mode, where the developer can iterate on ideas without implementation pressure. The resulting plan is then handed to Claude Code to implement against the actual codebase. When a session starts with a plan document, treat it as the agreed design — ask clarifying questions before deviating from it.
+
 ## What This Is
 
 A 3v3 arcade hockey game built in Godot 4.4.1 (GDScript, 3D). Online multiplayer — one player per machine, each with their own camera and local simulation. Prioritizes feel over realism: deep stickhandling, multiple shot types, satisfying puck physics.

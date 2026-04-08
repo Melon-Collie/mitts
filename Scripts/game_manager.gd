@@ -82,15 +82,18 @@ func _spawn_puck() -> void:
 	puck_controller.setup(puck, NetworkManager.is_host)
 
 func _spawn_goalies() -> void:
-	var top := GOALIE_SCENE.instantiate()
-	var bottom := GOALIE_SCENE.instantiate()
-	top.puck = puck
-	bottom.puck = puck
-	top.position = Constants.TOP_GOALIE_POS
-	bottom.position = Constants.BOTTOM_GOALIE_POS
-	bottom.rotation.y = PI
+	var top: Goalie = GOALIE_SCENE.instantiate()
+	var bottom: Goalie = GOALIE_SCENE.instantiate()
 	get_tree().current_scene.add_child(top)
 	get_tree().current_scene.add_child(bottom)
+
+	var top_controller := GoalieController.new()
+	var bottom_controller := GoalieController.new()
+	get_tree().current_scene.add_child(top_controller)
+	get_tree().current_scene.add_child(bottom_controller)
+	top_controller.setup(top, puck, -Constants.GOAL_LINE_Z)
+	bottom_controller.setup(bottom, puck, Constants.GOAL_LINE_Z)
+
 	goalies.append(top)
 	goalies.append(bottom)
 
