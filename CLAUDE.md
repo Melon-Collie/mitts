@@ -10,11 +10,11 @@ Complex features (AI state machines, new systems, architectural changes) are des
 
 ## What This Is
 
-A 3v3 arcade hockey game built in Godot 4.4.1 (GDScript, 3D). Online multiplayer — one player per machine, each with their own camera and local simulation. Prioritizes feel over realism: deep stickhandling, multiple shot types, satisfying puck physics.
+A 3v3 arcade hockey game built in Godot 4.6.2 (GDScript, 3D). Online multiplayer — one player per machine, each with their own camera and local simulation. Prioritizes feel over realism: deep stickhandling, multiple shot types, satisfying puck physics.
 
 ## Tech Stack
 
-- **Engine:** Godot 4.4.1
+- **Engine:** Godot 4.6.2 (Jolt Physics)
 - **Language:** GDScript
 - **Physics tick:** 240 Hz
 - **Deployment:** GitHub Actions → Windows export → GitHub Releases (tag: `latest`, updates on every push to main)

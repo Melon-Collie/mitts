@@ -140,6 +140,7 @@ Wall clamping: blade reach is shortened near boards. If squeeze exceeds `wall_sq
 
 ## Physics
 
+- **Engine:** Godot 4.6.2 with Jolt Physics
 - 240 Hz physics tick (prevents tunneling at high puck speeds)
 - CCD enabled on puck
 - Puck mass 0.17 kg, radius 0.1 m
