@@ -8,7 +8,7 @@ var _remote_controllers: Dictionary = {}  # peer_id -> RemoteController
 # ── Timers ────────────────────────────────────────────────────────────────────
 var _input_timer: float = 0.0
 var _state_timer: float = 0.0
-var _connect_timer: float = 0.0
+var _connect_timer: float = -1.0
 const INPUT_DELTA: float = 1.0 / Constants.INPUT_RATE
 const STATE_DELTA: float = 1.0 / Constants.STATE_RATE
 const CONNECT_TIMEOUT: float = 10.0
