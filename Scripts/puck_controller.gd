@@ -2,7 +2,9 @@ class_name PuckController
 extends Node
 
 @export var interpolation_delay: float = 0.1
-@export var prediction_reconcile_threshold: float = 1.0
+@export var prediction_reconcile_threshold: float = 2.0
+@export var position_correction_blend: float = 0.3
+@export var velocity_correction_blend: float = 0.5
 
 var puck: Puck = null
 var is_server: bool = false
@@ -67,6 +69,19 @@ func _step_prediction(delta: float) -> void:
 	_predicted_velocity.z *= (1.0 - Constants.ICE_FRICTION * delta)
 	puck.set_puck_position(puck.get_puck_position() + _predicted_velocity * delta)
 
+# ── Reconciliation ────────────────────────────────────────────────────────────
+# Mirrors LocalController.reconcile — nudges predicted state toward server truth
+# each broadcast. Hard-snaps only on extreme divergence (teleport, physics glitch).
+func _reconcile(state: PuckNetworkState) -> void:
+	var error := state.position - puck.get_puck_position()
+	if error.length() > prediction_reconcile_threshold:
+		puck.set_puck_position(state.position)
+		_predicted_velocity = state.velocity
+		_state_buffer.clear()
+		return
+	puck.set_puck_position(puck.get_puck_position() + error * position_correction_blend)
+	_predicted_velocity = _predicted_velocity.lerp(state.velocity, velocity_correction_blend)
+
 # ── Server Signals ────────────────────────────────────────────────────────────
 func _on_puck_picked_up(carrier: Skater) -> void:
 	for peer_id in GameManager.players:
@@ -104,13 +119,11 @@ func apply_state(state: PuckNetworkState) -> void:
 	if is_server:
 		return
 	if _predicting_trajectory:
-		var error := puck.get_puck_position().distance_to(state.position)
-		if error > prediction_reconcile_threshold:
+		if state.carrier_peer_id != -1:
+			# Someone picked it up — hand back to buffered interpolation
 			_predicting_trajectory = false
-			puck.set_puck_position(state.position)
-			_state_buffer.clear()
-		elif _state_buffer.size() >= 2:
-			_predicting_trajectory = false
+		else:
+			_reconcile(state)
 	var buffered := BufferedPuckState.new()
 	buffered.timestamp = _current_time
 	buffered.state = state
