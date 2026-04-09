@@ -29,6 +29,7 @@ extends Node
 @export var net_margin: float = 1.0
 
 @export var rvh_depth: float = 0.1
+@export var rvh_early_angle: float = 60.0
 @export var rvh_post_pad_angle: float = 15.0
 
 @export var five_hole_base: float = 0.02
@@ -112,7 +113,7 @@ func _update_state(delta: float) -> void:
 	var puck_local_x: float = (puck.global_position.x - _goal_center_x) * -_direction_sign
 	match _state:
 		State.STANDING:
-			if _is_puck_behind_goal():
+			if _is_puck_in_defensive_zone():
 				_state = State.RVH_LEFT if puck_local_x < 0.0 else State.RVH_RIGHT
 		State.BUTTERFLY:
 			var moving_away: bool = puck.linear_velocity.z * _direction_sign > 0.0
@@ -124,12 +125,12 @@ func _update_state(delta: float) -> void:
 			else:
 				_recovery_timer = 0.0
 		State.RVH_LEFT:
-			if not _is_puck_behind_goal():
+			if not _is_puck_in_defensive_zone():
 				_state = State.STANDING
 			elif puck_local_x >= 0.0:
 				_state = State.RVH_RIGHT
 		State.RVH_RIGHT:
-			if not _is_puck_behind_goal():
+			if not _is_puck_in_defensive_zone():
 				_state = State.STANDING
 			elif puck_local_x < 0.0:
 				_state = State.RVH_LEFT
@@ -369,5 +370,14 @@ func _apply_network_state(s: GoalieNetworkState) -> void:
 	goalie.apply_body_config(config, 1.0)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-func _is_puck_behind_goal() -> bool:
-	return (puck.global_position.z - _goal_line_z) * _direction_sign < 0.0
+func _is_puck_in_defensive_zone() -> bool:
+	var behind_goal: bool = (puck.global_position.z - _goal_line_z) * _direction_sign < 0.0
+	if behind_goal:
+		return true
+	# Also trigger when the puck is within zone_post_z of the goal line at a sharp angle —
+	# matches the "Defensive" corner zones in the Buckley depth chart.
+	var puck_z_dist: float = abs(puck.global_position.z - _goal_line_z)
+	if puck_z_dist > zone_post_z:
+		return false
+	var puck_angle: float = atan2(abs(puck.global_position.x - _goal_center_x), max(puck_z_dist, 0.01))
+	return puck_angle >= deg_to_rad(rvh_early_angle)

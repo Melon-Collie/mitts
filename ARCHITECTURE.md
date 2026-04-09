@@ -19,7 +19,7 @@ The Rocket League freeplay ceiling is a guiding star: the stickhandling-to-shot 
 - **Skater:** `CharacterBody3D` with UpperBody/LowerBody split (`Node3D`). Shoulder (`Marker3D`) under UpperBody, positioned by code based on handedness. Blade (`Marker3D`) and StickMesh under UpperBody. Reusable scene driven by controller.
 - **Puck:** `RigidBody3D` with cylinder collision (radius 0.1m, height 0.05m). PickupZone (`Area3D`, `SphereShape3D` radius 0.5m) for blade proximity detection. Emits `puck_picked_up` and `puck_released` signals. Physics runs server-side only — frozen on clients.
 - **Rink:** `StaticBody3D` with procedurally generated walls, corners, and ice surface via `@tool` script. 60×26m, Z axis is the long axis.
-- **Goals:** `StaticBody3D` with procedurally generated posts, crossbar, and back wall via `@tool` script.
+- **Goals:** `StaticBody3D` with procedurally generated Art Ross net via `@tool` script. Two cubic Bézier curves (base at Y=0, top shelf at Y=1.22m) define the frame shape — the base flares wider than the posts, the top shelf curves inward. Frame tubes are box segments swept along the curves (base = white, top shelf + posts + crossbar = red). Netting is a ruled surface `ArrayMesh` connecting corresponding points on the two curves, with a `ConcavePolygonShape3D` for accurate puck collision. Posts and crossbar use `CylinderMesh` + `CylinderShape3D`.
 - **Goalie:** `Node3D` root (`goalie.gd`) with seven `StaticBody3D` body parts (LeftPad, RightPad, Body, Head, Glove, Blocker, Stick). A sibling `GoalieController` node drives positioning. Body part positions and rotations lerp between per-state configs (`GoalieBodyConfig`) each frame. Part sizes: pads 0.28×0.84×0.15, body 0.40×0.60×0.25, head 0.22×0.22×0.20, glove 0.25×0.25×0.15, blocker 0.20×0.30×0.10, stick 0.50×0.04×0.04. In RVH the goalie root positions so the post pad outer edge is flush with the post (`net_half_width - 0.88`); left/right state selection uses goalie-local X (`direction_sign`) so both goalies behave correctly despite opposite world rotations.
 - **Camera:** `Camera3D` per player. Weighted anchor system — player, puck, mouse, attacking goal. Zoom computed after position clamping.
 
@@ -92,6 +92,8 @@ Authoritative host. The host runs all physics. Clients predict locally and recon
 
 Serialized per goalie: position (x/z), rotation_y, state enum, five_hole_openness (5 elements). Clients reconstruct body part configs locally from the state enum and five_hole_openness, then snap body parts to the interpolated config each frame.
 
+RVH triggers when `_is_puck_in_defensive_zone()` — either the puck is behind the goal line, or it is within `zone_post_z` of the goal line and the horizontal angle to the puck exceeds `rvh_early_angle` (default 60°). This matches the Buckley depth chart's "Defensive" corner zones, which extend slightly in front of the goal line at sharp angles.
+
 ### Why Not Predict Pickup?
 
 Pickup is detected server-side via physics collision. Two players can contest the same puck — the server arbitrates who wins. Predicting pickup locally and rolling it back on a contested play would feel worse than the single round-trip delay. Pickup prediction is explicitly out of scope.
@@ -153,7 +155,7 @@ Wall clamping: blade reach is shortened near boards. If squeeze exceeds `wall_sq
 - 240 Hz physics tick (prevents tunneling at high puck speeds)
 - CCD enabled on puck
 - Puck mass 0.17 kg, radius 0.1 m
-- `Constants.ICE_FRICTION = 0.01` — used in puck trajectory prediction, intended for rink physics material (not yet wired up correctly, see Known Issues)
+- `Constants.ICE_FRICTION = 0.01` — used in puck trajectory prediction. The rink ice surface is a child `StaticBody3D` with `physics_material_override` set directly, so friction applies correctly.
 
 ---
 
@@ -182,8 +184,6 @@ Player-first guarantee: weighted target is clamped so player never exceeds `play
 ---
 
 ## Known Issues
-
-**Ice friction not applied:** `hockey_rink.gd` calls `col.set_meta("physics_material_override", phys_mat)` on a `CollisionShape3D`, which stores it as metadata rather than applying a physics material. The ice surface needs its own child `StaticBody3D` with `physics_material_override` set to a `PhysicsMaterial` using `Constants.ICE_FRICTION`.
 
 **Clients keep stale remote skaters on disconnect:** when a non-host player leaves mid-game, the host cleans up its own simulation but has no mechanism to notify other connected clients. Their remote skater stays in the scene. Low priority for 1v1.
 
