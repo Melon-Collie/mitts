@@ -130,12 +130,12 @@ func receive_world_state(state: Array) -> void:
 	GameManager.apply_world_state(state)
 
 @rpc("authority", "reliable")
-func assign_player_slot(slot: int) -> void:
-	GameManager.on_slot_assigned(slot)
+func assign_player_slot(slot: int, team_id: int) -> void:
+	GameManager.on_slot_assigned(slot, team_id)
 
 @rpc("authority", "reliable")
-func spawn_remote_skater(peer_id: int, slot: int) -> void:
-	GameManager.spawn_remote_skater(peer_id, slot)
+func spawn_remote_skater(peer_id: int, slot: int, team_id: int) -> void:
+	GameManager.spawn_remote_skater(peer_id, slot, team_id)
 
 @rpc("authority", "reliable")
 func sync_existing_players(player_data: Array) -> void:
@@ -155,12 +155,28 @@ func send_puck_release(direction: Vector3, power: float) -> void:
 func release_puck(direction: Vector3, power: float) -> void:
 	GameManager.puck_controller.puck.release(direction, power)
 
-# ── Sending ───────────────────────────────────────────────────────────────────
-func send_slot_assignment(peer_id: int, slot: int) -> void:
-	assign_player_slot.rpc_id(peer_id, slot)
+func notify_goal_to_all(scoring_team_id: int, score0: int, score1: int) -> void:
+	for peer_id in multiplayer.get_peers():
+		notify_goal.rpc_id(peer_id, scoring_team_id, score0, score1)
 
-func send_spawn_remote_skater(peer_id: int, slot: int) -> void:
-	spawn_remote_skater.rpc(peer_id, slot)
+@rpc("authority", "reliable")
+func notify_goal(scoring_team_id: int, score0: int, score1: int) -> void:
+	GameManager.on_goal_scored(scoring_team_id, score0, score1)
+
+func send_faceoff_positions(positions: Array) -> void:
+	for peer_id in multiplayer.get_peers():
+		notify_faceoff_positions.rpc_id(peer_id, positions)
+
+@rpc("authority", "reliable")
+func notify_faceoff_positions(positions: Array) -> void:
+	GameManager.on_faceoff_positions(positions)
+
+# ── Sending ───────────────────────────────────────────────────────────────────
+func send_slot_assignment(peer_id: int, slot: int, team_id: int) -> void:
+	assign_player_slot.rpc_id(peer_id, slot, team_id)
+
+func send_spawn_remote_skater(peer_id: int, slot: int, team_id: int) -> void:
+	spawn_remote_skater.rpc(peer_id, slot, team_id)
 
 func send_sync_existing_players(peer_id: int, player_data: Array) -> void:
 	sync_existing_players.rpc_id(peer_id, player_data)

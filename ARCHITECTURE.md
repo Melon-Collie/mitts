@@ -33,8 +33,9 @@ The Rocket League freeplay ceiling is a guiding star: the stickhandling-to-shot 
 | 2 | Blades |
 | 3 | Puck pickup zone |
 | 4 | Ice surface |
+| 4 (value 8) | Puck body — goal sensor detection only |
 
-The puck has no collision layer (mask = 1). It bounces off everything on layer 1 but doesn't push skaters.
+The puck has `collision_layer = 8` (layer 4) set in `_ready()`. This has no effect on physics (puck mask = 1, so it still only bounces off layer 1 objects) but lets goal `Area3D` sensors (`collision_mask = 8`) detect it via `body_entered`.
 
 ---
 
@@ -178,16 +179,51 @@ Player-first guarantee: weighted target is clamped so player never exceeds `play
 
 ## Game Flow
 
+### Phase FSM
+
+`GamePhase` is host-driven. Clients receive phase via reliable RPC on goal events and as a correction channel in every world state broadcast.
+
+| Phase | Duration | Description |
+|-------|----------|-------------|
+| `PLAYING` | Until goal | Normal gameplay |
+| `GOAL_SCORED` | 2s (`GOAL_PAUSE_DURATION`) | Dead puck, celebration freeze |
+| `FACEOFF_PREP` | 0.5s (`FACEOFF_PREP_DURATION`) | Players teleport to dots, puck resets, goalies reset to crease |
+| `FACEOFF` | Until pickup or 10s timeout | Puck live at center dot, waiting for a player to pick it up |
+
+### Dead-Puck Enforcement
+
+`GameManager.movement_locked()` returns `true` during `GOAL_SCORED` and `FACEOFF_PREP`. Both controllers check this every frame:
+- `LocalController._physics_process`: zeros velocity, drains `_input_history`, skips input gathering and processing
+- `RemoteController._drive_from_input`: still advances `_last_processed_sequence` (keeps reconcile bookkeeping current) but zeros velocity and skips `_process_input`
+- `LocalController.reconcile`: returns early during locked phases — `on_faceoff_positions` (reliable RPC) is the authoritative source of faceoff positions
+
+### Controller API
+
+`GameManager` describes *what* it wants; controllers implement *how*:
+- `controller.teleport_to(pos)` — sets position, zeros velocity. `LocalController` override also clears `_input_history`.
+- `controller.on_puck_released_network()` — idempotent; safe to call without checking `has_puck` first.
+
+### Teams and Goals
+
+Two `Team` objects created at startup. Each owns a `defended_goal` (`HockeyGoal` instance), a `goalie_controller`, and a `score`. Two `HockeyGoal` instances in the scene (`facing=+1` and `facing=-1`). Each has a shallow `Area3D` goal sensor at its mouth; the host connects `goal_scored` signals in `_connect_goal_signals()`.
+
+### Planned
+
 - No stoppages except goals and faceoffs
 - Soft offsides: speed decays past blue line without puck
 - Soft icing: iced puck placed behind net, defensive team only
 - No formal penalty system — mechanical deterrents preferred
+- Score/phase HUD
 
 ---
 
 ## Known Issues
 
 **Clients keep stale remote skaters on disconnect:** when a non-host player leaves mid-game, the host cleans up its own simulation but has no mechanism to notify other connected clients. Their remote skater stays in the scene. Low priority for 1v1.
+
+**Goal phase RPC vs world state race:** if world state delivers `GOAL_SCORED` before the reliable `notify_goal` RPC, the carrier client's puck state won't be cleared until the RPC arrives. `on_puck_released_network` is idempotent so it's safe when the RPC does arrive. Low impact in practice.
+
+**No HUD:** score and phase are tracked and networked but nothing displays them in-game yet.
 
 ---
 
@@ -200,8 +236,8 @@ Player-first guarantee: weighted target is clamped so player never exceeds `play
 | 3 | Basic goalie | Done |
 | 4 | Networking (prediction, interpolation, reconciliation) | Done |
 | 5 | Goalie AI rework + networking | Done |
-| 6 | Characters + abilities | Next |
-| 7 | Full game flow (goals, faceoffs, score) | Planned |
+| 6 | Full game flow (goals, faceoffs, score) | Done |
+| 7 | Characters + abilities | Next |
 
 ---
 

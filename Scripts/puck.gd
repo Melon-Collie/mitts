@@ -14,10 +14,14 @@ signal puck_released()
 @export var deflect_cooldown: float = 0.3
 
 var carrier: Skater = null
+var pickup_locked: bool = false
 var _cooldown_timer: float = 0.0
 var _is_server: bool = false
 
 func _ready() -> void:
+	# Layer 4 (value 8) — no physics effect, but lets goal sensor Area3Ds detect this body.
+	collision_layer = 8
+
 	var pickup_zone = Area3D.new()
 	pickup_zone.name = "PickupZone"
 	pickup_zone.collision_layer = 3
@@ -67,6 +71,8 @@ func _on_blade_entered(area: Area3D) -> void:
 	if carrier != null:
 		return
 	if _cooldown_timer > 0.0:
+		return
+	if pickup_locked:
 		return
 
 	var node = area

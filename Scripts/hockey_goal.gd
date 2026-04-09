@@ -2,6 +2,8 @@
 class_name HockeyGoal
 extends StaticBody3D
 
+signal goal_scored
+
 # NHL regulation Art Ross net. Spec coordinate system:
 #   X = left/right (positive = right facing net)
 #   Vector2.y = depth into net (used as world Z offset from goal line)
@@ -26,6 +28,11 @@ const NET_HEIGHT: float = 1.22        # 48 inches
 const POST_RADIUS: float = 0.03       # 2 3/8" OD = ~0.06m diameter
 const SEGMENTS: int = 16              # per half-curve; 33 total points (2*SEGMENTS + 1)
 
+# +1 for positive-Z end (Team 0 defends), -1 for negative-Z end (Team 1 defends)
+@export var facing: int = 1:
+	set(v):
+		facing = v
+		_rebuild()
 @export var distance_from_end: float = 3.4:
 	set(v):
 		distance_from_end = v
@@ -59,10 +66,10 @@ func _rebuild() -> void:
 
 	var base_pts := _get_curve_points(BASE_P0, BASE_P1, BASE_P2, BASE_P3)
 	var top_pts  := _get_curve_points(TOP_P0,  TOP_P1,  TOP_P2,  TOP_P3)
-	var half_l: float = rink_length / 2.0
+	var goal_z: float = facing * (rink_length / 2.0 - distance_from_end)
 
-	for goal_z: float in [half_l - distance_from_end, -(half_l - distance_from_end)]:
-		_build_goal(goal_z, sign(goal_z), base_pts, top_pts)
+	_build_goal(goal_z, facing, base_pts, top_pts)
+	_build_goal_sensor(goal_z)
 
 func _build_goal(
 	goal_z: float,
@@ -200,6 +207,29 @@ func _build_netting(
 	var net_col := CollisionShape3D.new()
 	net_col.shape = net_shape
 	add_child(net_col)
+
+func _build_goal_sensor(goal_z: float) -> void:
+	var area := Area3D.new()
+	# Collision layer 0: this area doesn't need to be detected by others.
+	# Collision mask 8 (layer 4): matches the detection layer set on Puck in _ready().
+	area.collision_layer = 0
+	area.collision_mask = 8
+	area.monitoring = true
+
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	# Spans the full goal opening; shallow depth so it sits just inside the mouth.
+	box.size = Vector3(POST_HALF_WIDTH * 2.0, NET_HEIGHT, 0.3)
+	shape.shape = box
+	area.add_child(shape)
+	# Centered vertically on the opening, offset half the box depth behind the goal line.
+	area.position = Vector3(0.0, NET_HEIGHT / 2.0, goal_z + facing * 0.15)
+	add_child(area)
+	area.body_entered.connect(_on_goal_area_body_entered)
+
+func _on_goal_area_body_entered(body: Node3D) -> void:
+	if body is Puck:
+		goal_scored.emit()
 
 func _add_tube_segment(p_start: Vector3, p_end: Vector3, diameter: float, color: Color) -> void:
 	var seg := p_end - p_start

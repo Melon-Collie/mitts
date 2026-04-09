@@ -49,24 +49,35 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 - RVH state selection uses goalie-local X (`(puck.x - goal_center_x) * -_direction_sign`) so both goalies pick the correct post despite having opposite world-space rotations. RVH root targets `net_half_width - 0.88` so the post pad outer edge (pad center 0.46 + half-height 0.42) lands flush with the post. RVH triggers via `_is_puck_in_defensive_zone()` — behind goal line OR within `zone_post_z` at angle ≥ `rvh_early_angle`.
 - **Tracking lag:** `_tracked_puck_position` lerps toward the real puck at `tracking_speed` (default 6.0) each frame. All positional logic — depth, lateral target, facing, and state transitions — reads from `_tracked_puck_position`. Shot detection (`_on_puck_released`) reads the real puck position and velocity. `tracking_speed` is the master difficulty knob: lower = more lag, easier to beat.
 
-**World state layout:** `[peer_id, skater_state_array, ..., puck_position, puck_velocity, puck_carrier_peer_id, goalie0_state[5], goalie1_state[5]]`
+**Game flow:**
+- `GamePhase` FSM (host-driven): `PLAYING → GOAL_SCORED → FACEOFF_PREP → FACEOFF → PLAYING`
+- Phase changes travel two ways: reliable RPC (`notify_goal`) for immediate effect + world state as a correction channel. Score and phase are the last three elements of every world state broadcast.
+- Dead-puck phases (`GOAL_SCORED`, `FACEOFF_PREP`) gate all movement via `GameManager.movement_locked()`. Both `LocalController._physics_process` and `RemoteController._drive_from_input` check this every frame — killing velocity and (on local) draining `_input_history` — so no stale input can contaminate server state or replay on phase lift.
+- `LocalController.reconcile` is also blocked during locked phases: `on_faceoff_positions` (reliable RPC) is the authoritative source of faceoff positions; world state snapshots may lag behind and would fight it.
+- Controller API pattern: `GameManager` calls `controller.teleport_to(pos)` and `controller.on_puck_released_network()` — it does not touch `skater` fields or read `has_puck` directly. Add methods to `SkaterController` (override in `LocalController` if needed) rather than poking internals from `GameManager`.
+- `Team` objects (two, created at startup) own `defended_goal`, `goalie_controller`, and `score`. Used by reference everywhere; `team_id: int` only for wire serialization.
+- Two `HockeyGoal` scene instances (`facing=+1` and `facing=-1`). Each has an `Area3D` goal sensor (`collision_mask=8`) that emits `goal_scored` when the puck (`collision_layer=8`) enters. Host only: signals connected in `_connect_goal_signals()`.
+
+**World state layout:** `[peer_id, skater_state_array, ..., puck_position, puck_velocity, puck_carrier_peer_id, goalie0_state[5], goalie1_state[5], score0, score1, phase]`
 
 ## Key Files
 
 | File | Role |
 |------|------|
-| `game_manager.gd` | Spawning, world state serialization/application, puck release handling |
+| `game_manager.gd` | Spawning, world state serialization/application, game phase FSM, puck release handling |
 | `network_manager.gd` | RPC definitions, connection management, state broadcast timing |
 | `local_controller.gd` | Local player: input gathering, prediction, reconciliation |
 | `remote_controller.gd` | Remote players: server-side input driving, client-side interpolation |
 | `puck_controller.gd` | Puck: server signals, state serialization, client prediction and interpolation |
-| `skater_controller.gd` | Base class: full state machine, movement, shooting, blade control |
+| `skater_controller.gd` | Base class: full state machine, movement, shooting, blade control, teleport API |
 | `puck.gd` | Physics body: pickup zone, deflection, carrier following (server only) |
 | `skater.gd` | Physics body: blade/facing/upper-body API |
 | `goalie.gd` | Goalie body API: exposes position, rotation, and body part config methods |
 | `goalie_controller.gd` | Goalie AI: state machine (STANDING/BUTTERFLY/RVH_LEFT/RVH_RIGHT), Buckley depth, lateral positioning, shot detection |
 | `goalie_body_config.gd` | Data class holding per-state body part positions and rotations |
-| `constants.gd` | Shared constants: network rates, physics tick, ICE_FRICTION, rink geometry |
+| `team.gd` | Team object: defended goal, goalie controller, score |
+| `player_record.gd` | Per-player data: peer_id, slot, team, skater, controller, faceoff_position |
+| `constants.gd` | Shared constants: network rates, physics tick, ICE_FRICTION, rink geometry, faceoff positions |
 | `buffered_skater_state.gd` | Timestamped SkaterNetworkState for interpolation buffer |
 | `buffered_puck_state.gd` | Timestamped PuckNetworkState for interpolation buffer |
 | `buffered_goalie_state.gd` | Timestamped GoalieNetworkState for interpolation buffer |
@@ -98,3 +109,5 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 - **RVH early trigger:** `_is_puck_in_defensive_zone()` fires RVH when the puck is within `zone_post_z` of the goal line at a horizontal angle ≥ `rvh_early_angle` (default 60°), matching the Buckley chart's corner zones. Tune `rvh_early_angle` if transition feels too early or late.
 - **Clients keep stale remote skaters on disconnect:** when a non-host player leaves, the host cleans up but has no mechanism to notify other clients. Low priority for 1v1, matters for 3v3.
 - **Goalie reactive saves not yet implemented:** glove saves, shoulder/body saves, and stick poke coverage are all planned. The stick is currently disabled (`stick_enabled = false`) — it can be re-enabled once it has proper positional behavior rather than acting as a static seal.
+- **Goal phase RPC vs world state race:** if world state delivers `GOAL_SCORED` before the reliable `notify_goal` RPC arrives, the carrier client's puck state won't be cleared until the RPC arrives (typically one round-trip later). `on_puck_released_network` is idempotent so it's safe when the RPC does arrive. Low impact in practice.
+- **No HUD for score/phase yet:** score and phase are tracked and networked but nothing displays them in-game.

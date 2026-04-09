@@ -123,10 +123,16 @@ func on_puck_picked_up_network() -> void:
 	_state = State.SKATING_WITH_PUCK
 	var local_blade: Vector3 = skater.get_blade_position() - skater.shoulder.position
 	_blade_relative_angle = atan2(local_blade.x, -local_blade.z)
-	
+
 func on_puck_released_network() -> void:
+	if not has_puck:
+		return
 	has_puck = false
 	_transition_to_skating()
+
+func teleport_to(pos: Vector3) -> void:
+	skater.global_position = pos
+	skater.velocity = Vector3.ZERO
 
 # ── State Machine ─────────────────────────────────────────────────────────────
 func _apply_state(input: InputState, delta: float) -> void:

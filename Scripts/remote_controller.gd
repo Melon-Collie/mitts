@@ -22,7 +22,13 @@ func receive_input(state: InputState) -> void:
 	_latest_input = state
 
 func _drive_from_input(delta: float) -> void:
+	# Always advance sequence so the client's reconcile filter stays current,
+	# but don't process movement during dead-puck phases — stale input would
+	# contaminate server state and cause a velocity burst when the phase lifts.
 	_last_processed_sequence = _latest_input.sequence
+	if GameManager.movement_locked():
+		skater.velocity = Vector3.ZERO
+		return
 	_process_input(_latest_input, delta)
 
 func apply_network_state(state: SkaterNetworkState) -> void:

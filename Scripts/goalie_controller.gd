@@ -83,6 +83,18 @@ func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: f
 	if is_server:
 		puck.puck_released.connect(_on_puck_released)
 
+func reset_to_crease() -> void:
+	_state = State.STANDING
+	_current_depth = depth_defensive
+	_current_x = _goal_center_x
+	_target_x = _goal_center_x
+	_five_hole_openness = 0.0
+	_shot_timer = 0.0
+	_recovery_timer = 0.0
+	_tracked_puck_position = puck.global_position if puck != null else Vector3.ZERO
+	goalie.set_goalie_position(_current_x, _goal_line_z + _direction_sign * _current_depth)
+	goalie.set_goalie_rotation_y(PI if _direction_sign == 1 else 0.0)
+
 # ── Process ───────────────────────────────────────────────────────────────────
 func _physics_process(delta: float) -> void:
 	if goalie == null or puck == null:

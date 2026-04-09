@@ -21,8 +21,19 @@ func setup(assigned_skater: Skater, assigned_puck: Puck) -> void:
 func get_current_input() -> InputState:
 	return _current_input
 
+func teleport_to(pos: Vector3) -> void:
+	super.teleport_to(pos)
+	_input_history.clear()
+
 func _physics_process(delta: float) -> void:
 	if skater == null or puck == null or _gatherer == null:
+		return
+	if GameManager.movement_locked():
+		# Dead-puck phase: kill velocity and drain history every frame so that
+		# move_and_slide() can't drift the skater, and reconcile can't replay stale
+		# inputs when the phase lifts — regardless of packet timing.
+		skater.velocity = Vector3.ZERO
+		_input_history.clear()
 		return
 	_current_input = _gatherer.gather()
 	_input_history.append(_current_input)
@@ -32,6 +43,11 @@ func _physics_process(delta: float) -> void:
 	_process_input(_current_input, delta)
 	
 func reconcile(server_state: SkaterNetworkState) -> void:
+	if GameManager.movement_locked():
+		# Dead-puck phase: don't reconcile. on_faceoff_positions is the reliable
+		# source of truth for teleport positions; world-state snapshots may lag behind
+		# and would fight it if applied here.
+		return
 	_input_history = _input_history.filter(
 		func(i: InputState): return i.sequence > server_state.last_processed_sequence
 	)

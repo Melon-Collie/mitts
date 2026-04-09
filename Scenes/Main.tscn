@@ -34,8 +34,9 @@ red_line_color = Color(1, 0.425788, 0.357085, 1)
 blue_line_color = Color(0.502817, 0.663302, 1, 1)
 ice_friction = 0.01
 
-[node name="Goals" type="StaticBody3D" parent="." unique_id=1648202477]
+[node name="GoalBottom" type="StaticBody3D" parent="." unique_id=1648202477]
 script = ExtResource("7_jw32o")
-post_color = Color(0.8, 0.1, 0.1, 1)
-base_frame_color = null
-net_color = Color(0.15, 0.15, 0.15, 0.4)
+
+[node name="GoalTop" type="StaticBody3D" parent="." unique_id=1374888956]
+script = ExtResource("7_jw32o")
+facing = -1

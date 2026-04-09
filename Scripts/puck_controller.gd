@@ -45,6 +45,13 @@ func notify_local_release(direction: Vector3, power: float) -> void:
 	_predicted_velocity = direction * power
 	_state_buffer.clear()
 
+# Called when the server forcibly ends a carry (e.g. goal scored).
+# Does not start trajectory prediction — just drops back to interpolation.
+func notify_local_puck_dropped() -> void:
+	_carrier_peer_id = -1
+	_predicting_trajectory = false
+	_state_buffer.clear()
+
 func _apply_local_carrier_position() -> void:
 	var record := GameManager.get_local_player()
 	if record == null:
