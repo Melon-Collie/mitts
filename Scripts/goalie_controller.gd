@@ -12,16 +12,16 @@ extends Node
 @export var zone_aggressive_z: float = 8.0
 @export var zone_base_z: float = 12.0
 @export var zone_conservative_z: float = 20.0
-@export var depth_speed: float = 3.0
+@export var depth_speed: float = 2.0
 
-@export var shuffle_speed: float = 2.0
-@export var t_push_speed: float = 5.0
+@export var shuffle_speed: float = 1.3
+@export var t_push_speed: float = 3.0
 @export var lateral_threshold: float = 0.3
 @export var max_facing_angle: float = 70.0
 @export var rotation_speed: float = 8.0
 @export var rvh_transition_speed: float = 6.0
 
-@export var reaction_delay: float = 0.15
+@export var reaction_delay: float = 0.10
 @export var butterfly_recovery_time: float = 0.4
 
 @export var shot_speed_threshold: float = 5.0
@@ -36,7 +36,8 @@ extends Node
 @export var five_hole_shuffle_max: float = 0.06
 @export var five_hole_t_push_max: float = 0.15
 
-@export var part_lerp_speed: float = 12.0
+@export var tracking_speed: float = 6.0
+@export var part_lerp_speed: float = 6.0
 @export var interpolation_delay: float = 0.1
 
 # ── References ────────────────────────────────────────────────────────────────
@@ -58,6 +59,7 @@ var _current_depth: float = 0.1
 var _current_x: float = 0.0
 var _target_x: float = 0.0
 var _five_hole_openness: float = 0.0
+var _tracked_puck_position: Vector3 = Vector3.ZERO
 var _shot_timer: float = 0.0
 var _recovery_timer: float = 0.0
 
@@ -76,6 +78,7 @@ func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: f
 	_current_x = _goal_center_x
 	_target_x = _goal_center_x
 	_current_depth = depth_defensive
+	_tracked_puck_position = puck.global_position
 	goalie.set_goalie_rotation_y(PI if _direction_sign == 1 else 0.0)
 	if is_server:
 		puck.puck_released.connect(_on_puck_released)
@@ -88,12 +91,17 @@ func _physics_process(delta: float) -> void:
 		_current_time += delta
 		_interpolate()
 		return
+	_update_tracking(delta)
 	_update_shot_timer(delta)
 	_update_state(delta)
 	_update_depth(delta)
 	_update_position(delta)
 	_update_facing(delta)
 	_update_body_parts(delta)
+
+# ── Tracking ──────────────────────────────────────────────────────────────────
+func _update_tracking(delta: float) -> void:
+	_tracked_puck_position = _tracked_puck_position.lerp(puck.global_position, tracking_speed * delta)
 
 # ── Shot Timer ────────────────────────────────────────────────────────────────
 func _update_shot_timer(delta: float) -> void:
@@ -110,7 +118,7 @@ func _update_state(delta: float) -> void:
 		_shot_timer = 0.0
 	# Convert puck global X into goalie local X. The -Z goal goalie is rotated PI
 	# so its local +X is global -X; multiplying by -_direction_sign corrects for that.
-	var puck_local_x: float = (puck.global_position.x - _goal_center_x) * -_direction_sign
+	var puck_local_x: float = (_tracked_puck_position.x - _goal_center_x) * -_direction_sign
 	match _state:
 		State.STANDING:
 			if _is_puck_in_defensive_zone():
@@ -142,7 +150,7 @@ func _update_depth(delta: float) -> void:
 		return
 	if _state != State.STANDING:
 		return
-	var puck_z_dist: float = abs(puck.global_position.z - _goal_line_z)
+	var puck_z_dist: float = abs(_tracked_puck_position.z - _goal_line_z)
 	var target_depth: float
 	if puck_z_dist <= zone_post_z:
 		var t: float = puck_z_dist / zone_post_z
@@ -178,9 +186,9 @@ func _update_position(delta: float) -> void:
 	goalie.set_goalie_position(_current_x, _goal_line_z + _direction_sign * _current_depth)
 
 func _update_target_x() -> void:
-	var puck_z_dist: float = abs(puck.global_position.z - _goal_line_z)
+	var puck_z_dist: float = abs(_tracked_puck_position.z - _goal_line_z)
 	if puck_z_dist > 0.01:
-		_target_x = _goal_center_x + (puck.global_position.x - _goal_center_x) * (_current_depth / puck_z_dist)
+		_target_x = _goal_center_x + (_tracked_puck_position.x - _goal_center_x) * (_current_depth / puck_z_dist)
 	else:
 		_target_x = _goal_center_x
 	_target_x = clampf(_target_x, _goal_center_x - net_half_width, _goal_center_x + net_half_width)
@@ -208,8 +216,8 @@ func _update_facing(delta: float) -> void:
 		return
 	if _shot_timer > 0.0 or _state == State.BUTTERFLY:
 		return
-	var dx: float = puck.global_position.x - goalie.global_position.x
-	var dz: float = puck.global_position.z - goalie.global_position.z
+	var dx: float = _tracked_puck_position.x - goalie.global_position.x
+	var dz: float = _tracked_puck_position.z - goalie.global_position.z
 	if Vector2(dx, dz).length() > 0.1:
 		var base_angle: float = PI if _direction_sign == 1 else 0.0
 		var target_y: float = atan2(-dx, -dz)
@@ -371,13 +379,13 @@ func _apply_network_state(s: GoalieNetworkState) -> void:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 func _is_puck_in_defensive_zone() -> bool:
-	var behind_goal: bool = (puck.global_position.z - _goal_line_z) * _direction_sign < 0.0
+	var behind_goal: bool = (_tracked_puck_position.z - _goal_line_z) * _direction_sign < 0.0
 	if behind_goal:
 		return true
 	# Also trigger when the puck is within zone_post_z of the goal line at a sharp angle —
 	# matches the "Defensive" corner zones in the Buckley depth chart.
-	var puck_z_dist: float = abs(puck.global_position.z - _goal_line_z)
+	var puck_z_dist: float = abs(_tracked_puck_position.z - _goal_line_z)
 	if puck_z_dist > zone_post_z:
 		return false
-	var puck_angle: float = atan2(abs(puck.global_position.x - _goal_center_x), max(puck_z_dist, 0.01))
+	var puck_angle: float = atan2(abs(_tracked_puck_position.x - _goal_center_x), max(puck_z_dist, 0.01))
 	return puck_angle >= deg_to_rad(rvh_early_angle)

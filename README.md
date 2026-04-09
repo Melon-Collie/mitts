@@ -59,12 +59,13 @@ Pucks coming in fast deflect off your blade instead of sticking — you can one-
 - Online multiplayer with client-side prediction
 - Regulation rink markings — center line, blue lines, goal lines, faceoff circles, goalie creases
 - Accurate Art Ross hockey nets with Bézier curve frame and translucent ruled-surface netting
-- Behavioral goalie AI (state machine, Buckley depth system, butterfly, RVH) — server-authoritative with client interpolation
+- Behavioral goalie AI (state machine, Buckley depth system, butterfly, RVH) — server-authoritative with client interpolation, tracking lag for beatable positioning
 
 ---
 
 ## Planned
 
+- Reactive goalie saves (glove, shoulder, stick poke)
 - Characters with unique abilities
 - Proper game flow (goals, faceoffs, score)
 - More platforms

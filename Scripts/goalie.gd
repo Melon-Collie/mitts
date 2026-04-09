@@ -1,6 +1,8 @@
 class_name Goalie
 extends Node3D
 
+@export var stick_enabled: bool = false
+
 @onready var _left_pad: StaticBody3D = $LeftPad
 @onready var _right_pad: StaticBody3D = $RightPad
 @onready var _body: StaticBody3D = $Body
@@ -8,6 +10,10 @@ extends Node3D
 @onready var _glove: StaticBody3D = $Glove
 @onready var _blocker: StaticBody3D = $Blocker
 @onready var _stick: StaticBody3D = $Stick
+
+func _ready() -> void:
+	_stick.collision_layer = 1 if stick_enabled else 0
+	_stick.visible = stick_enabled
 
 func apply_body_config(config: GoalieBodyConfig, t: float) -> void:
 	_lerp_part(_left_pad,  config.left_pad_pos,  config.left_pad_rot,  t)
