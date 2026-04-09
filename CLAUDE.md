@@ -85,7 +85,14 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 
 **Don't shy away from complexity when it improves feel.** This project already has full client-side prediction with input replay, buffered interpolation, and puck trajectory prediction with reconciliation. If adding a complex system will make the game feel meaningfully better to play, it's worth doing — think it through carefully first, then implement it properly.
 
+## Launch Modes
+
+`network_manager.gd` `_ready()` branches on command line args:
+- **No args** — offline mode: `is_host = true`, no ENet peer, single player
+- **`--host`** — starts ENet server on `Constants.PORT` (7777 UDP), port must be forwarded for public play
+- **`--connect <ip>`** — connects as client to the given IP; times out after `CONNECT_TIMEOUT` (10s) with `push_error` + quit
+
 ## Known Issues / Planned Work
 
 - **Ice friction not applied correctly:** `hockey_rink.gd` uses `col.set_meta("physics_material_override", phys_mat)` on a `CollisionShape3D`, which does nothing. The physics material needs to be set on a dedicated child `StaticBody3D` for the ice surface. `Constants.ICE_FRICTION = 0.01` is the intended value and is already used in puck trajectory prediction.
-- **IP hardcoded:** `Constants.DEFAULT_IP = "127.0.0.1"` — real network play requires changing this.
+- **Clients keep stale remote skaters on disconnect:** when a non-host player leaves, the host cleans up but has no mechanism to notify other clients. Low priority for 1v1, matters for 3v3.

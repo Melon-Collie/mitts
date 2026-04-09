@@ -40,6 +40,15 @@ The puck has no collision layer (mask = 1). It bounces off everything on layer 1
 
 ## Networking
 
+### Launch Modes
+
+`NetworkManager._ready()` branches on command line args:
+- **No args** — offline mode, no ENet peer, `is_host = true`, single player
+- **`--host`** — ENet server on port 7777 UDP (requires port forward for public play)
+- **`--connect <ip>`** — ENet client connecting to the given IP; times out after 10s
+
+Graceful shutdown: `_exit_tree` closes the ENet peer. Server disconnect on client side also triggers close.
+
 ### Model
 
 Authoritative host. The host runs all physics. Clients predict locally and reconcile against server state. No dedicated server — one player hosts.
@@ -175,6 +184,8 @@ Player-first guarantee: weighted target is clamped so player never exceeds `play
 ## Known Issues
 
 **Ice friction not applied:** `hockey_rink.gd` calls `col.set_meta("physics_material_override", phys_mat)` on a `CollisionShape3D`, which stores it as metadata rather than applying a physics material. The ice surface needs its own child `StaticBody3D` with `physics_material_override` set to a `PhysicsMaterial` using `Constants.ICE_FRICTION`.
+
+**Clients keep stale remote skaters on disconnect:** when a non-host player leaves mid-game, the host cleans up its own simulation but has no mechanism to notify other connected clients. Their remote skater stays in the scene. Low priority for 1v1.
 
 ---
 

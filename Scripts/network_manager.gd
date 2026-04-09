@@ -8,16 +8,30 @@ var _remote_controllers: Dictionary = {}  # peer_id -> RemoteController
 # ── Timers ────────────────────────────────────────────────────────────────────
 var _input_timer: float = 0.0
 var _state_timer: float = 0.0
+var _connect_timer: float = 0.0
 const INPUT_DELTA: float = 1.0 / Constants.INPUT_RATE
 const STATE_DELTA: float = 1.0 / Constants.STATE_RATE
+const CONNECT_TIMEOUT: float = 10.0
 
 func _ready() -> void:
-	if "--host" in OS.get_cmdline_args():
+	var args: PackedStringArray = OS.get_cmdline_args()
+	if "--host" in args:
 		_start_host()
+	elif "--connect" in args:
+		var connect_idx: int = args.find("--connect")
+		if connect_idx + 1 >= args.size():
+			push_error("--connect requires an IP address argument")
+			return
+		_start_client(args[connect_idx + 1])
 	else:
-		_start_client(Constants.DEFAULT_IP)
+		_start_offline()
 
 # ── Connection ────────────────────────────────────────────────────────────────
+func _start_offline() -> void:
+	is_host = true
+	print("Offline mode")
+	GameManager.on_host_started()
+
 func _start_host() -> void:
 	is_host = true
 	var peer = ENetMultiplayerPeer.new()
@@ -39,6 +53,7 @@ func _start_client(ip: String) -> void:
 		push_error("Failed to connect: " + str(error))
 		return
 	multiplayer.multiplayer_peer = peer
+	_connect_timer = 0.0
 	print("Connecting to ", ip, ":", Constants.PORT)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
@@ -54,6 +69,7 @@ func _on_peer_disconnected(id: int) -> void:
 	GameManager.on_player_disconnected(id)
 
 func _on_connected_to_server() -> void:
+	_connect_timer = -1.0
 	print("Connected! My ID: ", multiplayer.get_unique_id())
 	GameManager.on_connected_to_server()
 
@@ -62,9 +78,23 @@ func _on_connection_failed() -> void:
 
 func _on_server_disconnected() -> void:
 	push_error("Server disconnected")
+	_close()
+
+func _exit_tree() -> void:
+	_close()
+
+func _close() -> void:
+	if multiplayer.multiplayer_peer != null and multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_DISCONNECTED:
+		multiplayer.multiplayer_peer.close()
 
 # ── Process ───────────────────────────────────────────────────────────────────
 func _process(delta: float) -> void:
+	if _connect_timer >= 0.0:
+		_connect_timer += delta
+		if _connect_timer >= CONNECT_TIMEOUT:
+			push_error("Connection timed out after %ds" % CONNECT_TIMEOUT)
+			get_tree().quit()
+
 	if not is_host and _local_controller != null:
 		_input_timer += delta
 		if _input_timer >= INPUT_DELTA:

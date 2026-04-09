@@ -10,8 +10,16 @@ An arcade hockey game built in Godot 4.6.2 (Jolt Physics). Online multiplayer �
 
 1. Go to the [latest release](../../releases/tag/latest) and download the zip
 2. Extract and run the `.exe`
-3. To host a game, launch with `--host` as a command line argument (right-click the exe → create shortcut → add `--host` to the target, or run from a terminal: `HockeyGame.exe --host`)
-4. Other players launch normally — they'll connect to the host
+
+**Launch modes (run from a terminal):**
+
+| Command | Mode |
+|---------|------|
+| `HockeyGame.exe` | Offline — single player, no network |
+| `HockeyGame.exe --host` | Host — opens port 7777 UDP for online play |
+| `HockeyGame.exe --connect <ip>` | Client — connects to the host's public IP |
+
+The host needs UDP port **7777** forwarded on their router.
 
 ---
 
