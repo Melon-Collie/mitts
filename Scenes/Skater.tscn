@@ -41,7 +41,7 @@ size = Vector3(0.6, 1, 0.4)
 
 [node name="Skater" type="CharacterBody3D" unique_id=15417559]
 script = ExtResource("1_7f3a6")
-blade_height = -0.85
+blade_height = -0.95
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=76426733]
 shape = SubResource("CylinderShape3D_r0du0")

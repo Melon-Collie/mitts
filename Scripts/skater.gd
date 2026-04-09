@@ -37,7 +37,7 @@ func _ready() -> void:
 	blade.add_child(blade_area)
 	
 	shoulder.position = Vector3(hand_sign * shoulder_offset, 0.0, 0.0)
-	blade_area.position = Vector3(0, -1.0, 0)
+	blade_area.position = Vector3.ZERO
 
 func _physics_process(_delta: float) -> void:
 	move_and_slide()

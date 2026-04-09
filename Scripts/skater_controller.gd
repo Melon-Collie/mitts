@@ -26,7 +26,7 @@ enum State {
 @export var facing_drag_speed: float = 3.0
 
 # ── Blade Tuning ──────────────────────────────────────────────────────────────
-@export var blade_height: float = 0.0
+@export var blade_height: float = -0.95
 @export var plane_reach: float = 1.5
 @export var shoulder_offset: float = 0.35
 @export var blade_forehand_limit: float = 90.0
@@ -83,6 +83,7 @@ var has_puck: bool = false
 func setup(assigned_skater: Skater, assigned_puck: Puck) -> void:
 	skater = assigned_skater
 	puck = assigned_puck
+	process_physics_priority = -1  # Run before Skater.move_and_slide
 
 # ── Entry Point ───────────────────────────────────────────────────────────────
 func _process_input(input: InputState, delta: float) -> void:

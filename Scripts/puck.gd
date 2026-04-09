@@ -21,6 +21,7 @@ var _is_server: bool = false
 func _ready() -> void:
 	# Layer 4 (value 8) — no physics effect, but lets goal sensor Area3Ds detect this body.
 	collision_layer = 8
+	process_physics_priority = 1  # Run after Skater.move_and_slide so blade world pos is current
 
 	var pickup_zone = Area3D.new()
 	pickup_zone.name = "PickupZone"

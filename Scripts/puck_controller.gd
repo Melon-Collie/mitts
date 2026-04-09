@@ -19,6 +19,7 @@ func setup(assigned_puck: Puck, assigned_is_server: bool) -> void:
 	puck = assigned_puck
 	is_server = assigned_is_server
 	puck.set_server_mode(is_server)
+	process_physics_priority = 1  # Run after Skater.move_and_slide so blade world pos is current
 	if is_server:
 		puck.puck_picked_up.connect(_on_puck_picked_up)
 		puck.puck_released.connect(_on_puck_released)
