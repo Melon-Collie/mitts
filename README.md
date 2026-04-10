@@ -15,9 +15,9 @@ An arcade hockey game built in Godot 4.6.2 (Jolt Physics). Online multiplayer �
 
 | Command | Mode |
 |---------|------|
-| `HockeyGame.exe` | Offline — single player, no network |
-| `HockeyGame.exe --host` | Host — opens port 7777 UDP for online play |
-| `HockeyGame.exe --connect <ip>` | Client — connects to the host's public IP |
+| `hockey.exe` | Offline — single player, no network |
+| `hockey.exe --host` | Host — opens port 7777 UDP for online play |
+| `hockey.exe --connect <ip>` | Client — connects to the host's public IP |
 
 The host needs UDP port **7777** forwarded on their router.
 
