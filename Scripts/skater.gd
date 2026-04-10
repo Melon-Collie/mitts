@@ -10,6 +10,11 @@ extends CharacterBody3D
 @export var shoulder_offset: float = 0.35
 @export var wall_squeeze_threshold: float = 0.3
 
+# ── Body Check Tuning ─────────────────────────────────────────────────────────
+@export var weight: float = 1.0                   # dimensionless — scale up for heavy players
+@export var body_check_restitution: float = 0.3   # fraction of approach speed bounced back to self
+@export var body_check_transfer: float = 0.8      # fraction of approach speed pushed to victim (before weight ratio)
+
 # ── Node References ───────────────────────────────────────────────────────────
 @onready var lower_body: Node3D = $LowerBody
 @onready var upper_body: Node3D = $UpperBody
@@ -17,6 +22,8 @@ extends CharacterBody3D
 @onready var shoulder: Marker3D = $UpperBody/Shoulder
 @onready var stick_raycast: RayCast3D = $StickRaycast
 @onready var stick_mesh: MeshInstance3D = $UpperBody/StickMesh
+
+signal body_checked_player(victim: Skater, impact_force: float, hit_direction: Vector3)
 
 # ── Runtime ───────────────────────────────────────────────────────────────────
 var _facing: Vector2 = Vector2.DOWN
@@ -28,10 +35,13 @@ func _ready() -> void:
 	var hand_sign: float = -1.0 if is_left_handed else 1.0
 	shoulder.position = Vector3(hand_sign * shoulder_offset, 0.0, 0.0)
 	_prev_blade_world_pos = upper_body.to_global(blade.position)
-	
+
+	collision_layer = Constants.LAYER_SKATER_BODIES
+	collision_mask  = Constants.MASK_SKATER
+
 	var blade_area = Area3D.new()
 	blade_area.name = "BladeArea"
-	blade_area.collision_layer = 2
+	blade_area.collision_layer = Constants.LAYER_BLADE_AREAS
 	blade_area.collision_mask = 0
 	var blade_shape = CollisionShape3D.new()
 	var sphere = SphereShape3D.new()
@@ -47,7 +57,32 @@ func _physics_process(delta: float) -> void:
 	var blade_world_pos: Vector3 = upper_body.to_global(blade.position)
 	blade_world_velocity = (blade_world_pos - _prev_blade_world_pos) / delta
 	_prev_blade_world_pos = blade_world_pos
+	var vel_before: Vector3 = velocity
 	move_and_slide()
+	_resolve_player_collisions(vel_before)
+
+func _resolve_player_collisions(vel_before: Vector3) -> void:
+	for i: int in get_slide_collision_count():
+		var col := get_slide_collision(i)
+		if not col.get_collider() is Skater:
+			continue
+		var other := col.get_collider() as Skater
+		# Use horizontal normal only — skater collisions are on the XZ plane.
+		var raw_normal: Vector3 = col.get_normal()
+		var normal := Vector3(raw_normal.x, 0.0, raw_normal.z)
+		if normal.length() < 0.001:
+			continue
+		normal = normal.normalized()
+		var vel_horiz := Vector3(vel_before.x, 0.0, vel_before.z)
+		var approach: float = vel_horiz.dot(-normal)
+		if approach <= 0.0:
+			continue
+		# Bounce self back away from other.
+		velocity += normal * approach * body_check_restitution
+		# Push other away; heavier checker transfers more to a lighter victim.
+		other.velocity -= normal * approach * (weight / other.weight) * body_check_transfer
+		# Signal for server-side puck strip check.
+		body_checked_player.emit(other, weight * approach, -normal)
 
 # ── Facing ────────────────────────────────────────────────────────────────────
 func set_facing(facing: Vector2) -> void:

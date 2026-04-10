@@ -1,5 +1,19 @@
 extends Node
 
+# Collision Layers (bit values used in collision_layer / collision_mask)
+# Layer 1  (bit 0, value  1) — walls, ice, goalie bodies
+# Layer 2  (bit 1, value  2) — skater blade Area3Ds
+# Layer 4  (bit 3, value  8) — puck body (goal sensors use mask 8 to detect it)
+# Layer 5  (bit 4, value 16) — skater CharacterBody3D bodies
+const LAYER_WALLS: int          = 1
+const LAYER_BLADE_AREAS: int    = 2
+const LAYER_PUCK: int           = 8
+const LAYER_SKATER_BODIES: int  = 16
+
+# Composed masks
+const MASK_PUCK: int   = LAYER_WALLS                         # bounces off boards + goalie bodies
+const MASK_SKATER: int = LAYER_WALLS | LAYER_SKATER_BODIES   # blocked by boards + other skaters
+
 # Network
 const PORT: int = 7777
 const MAX_PLAYERS: int = 6

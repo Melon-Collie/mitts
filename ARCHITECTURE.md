@@ -27,15 +27,23 @@ The Rocket League freeplay ceiling is a guiding star: the stickhandling-to-shot 
 
 ## Collision Layers
 
-| Layer | Purpose |
-|-------|---------|
-| 1 | General physics (boards, goals, goalies, skaters) |
-| 2 | Blades |
-| 3 | Puck pickup zone |
-| 4 | Ice surface |
-| 4 (value 8) | Puck body — goal sensor detection only |
+All layer/mask values are defined as named constants in `constants.gd`.
 
-The puck has `collision_layer = 8` (layer 4) set in `_ready()`. This has no effect on physics (puck mask = 1, so it still only bounces off layer 1 objects) but lets goal `Area3D` sensors (`collision_mask = 8`) detect it via `body_entered`.
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `LAYER_WALLS` | 1 | Boards, ice surface, goalie body parts |
+| `LAYER_BLADE_AREAS` | 2 | Skater blade `Area3D`s |
+| `LAYER_PUCK` | 8 | Puck `RigidBody3D` — goal sensor `Area3D`s use `collision_mask = 8` to detect it |
+| `LAYER_SKATER_BODIES` | 16 | Skater `CharacterBody3D` bodies |
+
+Composed masks:
+
+| Constant | Value | Used by |
+|----------|-------|---------|
+| `MASK_PUCK` | 1 | Puck bounces off walls + goalie bodies only — not skater bodies |
+| `MASK_SKATER` | 17 | Skaters blocked by walls (1) + other skater bodies (16) |
+
+The puck's pickup zone `Area3D` sits on `LAYER_WALLS \| LAYER_BLADE_AREAS` (3) with `collision_mask = LAYER_BLADE_AREAS` (2) so it detects blade `Area3D`s via `area_entered`.
 
 ---
 
@@ -104,7 +112,8 @@ All puck contact logic runs on the host via `Area3D.area_entered` on the PickupZ
 
 - **Catch vs deflect:** relative velocity `(puck_vel - blade_world_vel).length()` against `deflect_min_speed`. Moving your blade backward with the puck reduces relative velocity → catch. Stationary blade hit by fast puck → deflect. Below `pickup_max_speed` always catches.
 - **Deflect direction:** contact normal = `(puck_pos - blade_world_pos).normalized()` (billiard ball style). Physical reflection blended toward incoming direction via `deflect_blend`. If `skater.is_elevated`, outgoing direction is tilted upward by `deflect_elevation_angle`.
-- **Poke check:** when opposing blade enters PickupZone while `carrier != null` and teams differ, `_poke_check` strips the puck. Strip direction = `checker_blade_vel + carrier_blade_vel * poke_carrier_vel_blend` (or spatial direction as fallback). Ex-carrier gets `reattach_cooldown`; checker gets brief `poke_checker_cooldown` before they can pick up the loose puck.
+- **Poke check:** when any blade enters PickupZone while `carrier != null`, `_poke_check` strips the puck (no team gate — teammates can strip each other). Strip direction = `checker_blade_vel + carrier_blade_vel * poke_carrier_vel_blend` (or spatial direction as fallback). Ex-carrier gets `reattach_cooldown`; checker gets brief `poke_checker_cooldown`.
+- **Body check strip:** `SkaterController._on_body_checked_player` (server only) calls `puck.on_body_check(checker, victim, force, direction)`. If `force = weight × approach_speed ≥ body_check_strip_threshold` and `victim == carrier`, `_body_check_strip` clears the carrier and launches the puck in the hit direction. Emits `puck_stripped` + `puck_released` — same notification path as poke check.
 - **Per-skater cooldowns:** `_cooldown_timers: Dictionary` (Skater → float). Cooldown only applies to loose-puck pickups/deflects, not to poke checks. Lets two players race a loose puck — only the ex-carrier has a disadvantage.
 
 ### Why Not Predict Pickup?
@@ -235,7 +244,7 @@ Two `Team` objects created at startup. Each owns a `defended_goal` (`HockeyGoal`
 
 **No HUD:** score and phase are tracked and networked but nothing displays them in-game yet.
 
-**Client puck collides with skater bodies during prediction:** the puck is unfrozen during trajectory prediction, so Jolt may detect collisions with player bodies (layer 1). Any errant local collision is corrected by reconciliation. Shot blocking will be reworked as a deliberate server-authoritative interaction.
+**Passive shot blocking not yet implemented:** skater bodies are on `LAYER_SKATER_BODIES` (16) and puck mask is `MASK_PUCK` (1), so the puck passes through skater bodies. A deliberate body-block mechanic is planned — detect puck proximity via a body `Area3D` on the skater, apply dampened reflection server-side.
 
 ---
 

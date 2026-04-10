@@ -17,6 +17,8 @@ signal puck_stripped(ex_carrier: Skater)
 @export var poke_strip_speed: float = 6.0
 @export var poke_carrier_vel_blend: float = 0.5
 @export var poke_checker_cooldown: float = 0.1
+@export var body_check_strip_threshold: float = 6.0  # weight × approach_speed needed to strip
+@export var body_check_puck_speed: float = 5.0
 
 var carrier: Skater = null
 var pickup_locked: bool = false
@@ -24,14 +26,16 @@ var _cooldown_timers: Dictionary = {}  # Skater -> float
 var _is_server: bool = false
 
 func _ready() -> void:
-	# Layer 4 (value 8) — no physics effect, but lets goal sensor Area3Ds detect this body.
-	collision_layer = 8
+	# Puck body sits on its own layer so goal sensors can detect it.
+	# Mask = LAYER_WALLS only: bounces off boards + goalie bodies, not skater bodies.
+	collision_layer = Constants.LAYER_PUCK
+	collision_mask  = Constants.MASK_PUCK
 	process_physics_priority = 1  # Run after Skater.move_and_slide so blade world pos is current
 
 	var pickup_zone = Area3D.new()
 	pickup_zone.name = "PickupZone"
-	pickup_zone.collision_layer = 3
-	pickup_zone.collision_mask = 2
+	pickup_zone.collision_layer = Constants.LAYER_WALLS | Constants.LAYER_BLADE_AREAS
+	pickup_zone.collision_mask  = Constants.LAYER_BLADE_AREAS
 	var pickup_shape = CollisionShape3D.new()
 	var sphere = SphereShape3D.new()
 	sphere.radius = 0.5
@@ -163,6 +167,26 @@ func _deflect_off_blade(skater: Skater) -> void:
 
 	linear_velocity = new_dir * speed * deflect_speed_retain
 	_set_cooldown(skater, deflect_cooldown)
+
+func on_body_check(checker: Skater, victim: Skater, impact_force: float, hit_direction: Vector3) -> void:
+	if not _is_server:
+		return
+	if carrier == null or carrier != victim:
+		return
+	if pickup_locked:
+		return
+	if impact_force < body_check_strip_threshold:
+		return
+	_body_check_strip(checker, hit_direction)
+
+func _body_check_strip(checker: Skater, hit_direction: Vector3) -> void:
+	var ex_carrier: Skater = carrier
+	clear_carrier()
+	linear_velocity = hit_direction * body_check_puck_speed
+	_set_cooldown(ex_carrier, reattach_cooldown)
+	_set_cooldown(checker, poke_checker_cooldown)
+	puck_stripped.emit(ex_carrier)
+	puck_released.emit()
 
 func _poke_check(checker_skater: Skater) -> void:
 	var ex_carrier: Skater = carrier  # capture before clear_carrier()

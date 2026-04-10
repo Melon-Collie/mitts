@@ -44,7 +44,7 @@ Your blade follows your mouse at all times. Move it toward the puck to pick it u
 
 Facing follows your movement naturally, like a real skater. Hold **Shift** to lock your facing to the mouse and skate backward while keeping your eyes on the play.
 
-Pucks coming in fast deflect off your blade instead of sticking. Move your stick backward with the puck to absorb a pass and catch it; hold your stick still against a fast puck to deflect it. Opposing blades can poke-check the puck loose — stick battles are momentum-based.
+Pucks coming in fast deflect off your blade instead of sticking. Move your stick backward with the puck to absorb a pass and catch it; hold your stick still against a fast puck to deflect it. Opposing blades can poke-check the puck loose — stick battles are momentum-based. Skate hard into a puck carrier to body check them — a big enough hit knocks the puck loose.
 
 ---
 
@@ -56,6 +56,7 @@ Pucks coming in fast deflect off your blade instead of sticking. Move your stick
 - Quick shots and one-touch finishes
 - Relative-velocity catch vs deflect — move blade with the puck to receive, into the puck to redirect
 - Poke checking — opposing blades strip the puck loose, direction driven by blade velocities
+- Body checking — weight-based momentum transfer; hard hits strip the puck from the carrier
 - Physical deflection off blade contact normal with elevation tipping
 - Elevated shots
 - Online multiplayer with client-side prediction

@@ -12,7 +12,7 @@ extends Node3D
 @onready var _stick: StaticBody3D = $Stick
 
 func _ready() -> void:
-	_stick.collision_layer = 1 if stick_enabled else 0
+	_stick.collision_layer = Constants.LAYER_WALLS if stick_enabled else 0
 	_stick.visible = stick_enabled
 
 func apply_body_config(config: GoalieBodyConfig, t: float) -> void:
