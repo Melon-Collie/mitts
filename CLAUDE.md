@@ -68,7 +68,9 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | `ui/game_camera.gd` | Per-player camera: weighted anchor (player, puck, mouse, attacking goal), zoom, rink clamping |
 | `actors/hockey_goal.gd` | Goal mesh + goal sensor Area3D; emits `goal_scored` signal |
 | `actors/hockey_rink.gd` | Procedural rink geometry (@tool): walls, corners, ice surface, markings |
-| `ui/hud.gd` | Scorebug HUD: connects to `GameManager.score_changed` / `phase_changed`, builds panel programmatically |
+| `ui/hud.gd` | Scorebug HUD: connects to `GameManager.score_changed` / `phase_changed`, builds panel programmatically. Polls `skater.is_elevated` each frame to show/hide elevation indicator. |
+| `ui/main_menu.gd` | Main menu: host/join/offline buttons + IP input, calls `NetworkManager.start_*()`, transitions to `Hockey.tscn` |
+| `game/game_scene.gd` | Hockey scene init: calls `NetworkManager.on_game_scene_ready()` in `_ready()` to trigger world spawn |
 
 ## Code Conventions
 
@@ -86,10 +88,7 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 
 ## Launch Modes
 
-`networking/network_manager.gd` `_ready()` branches on command line args:
-- **No args** — offline mode: `is_host = true`, no ENet peer, single player
-- **`--host`** — starts ENet server on `Constants.PORT` (7777 UDP), port must be forwarded for public play
-- **`--connect <ip>`** — connects as client to the given IP; times out after `CONNECT_TIMEOUT` (10s) with `push_error` + quit
+All start paths go through `MainMenu.tscn`. `NetworkManager._ready()` does nothing — the menu calls `start_offline()`, `start_host()`, or `start_client(ip)` directly. These set up ENet but defer world spawning. `Hockey.tscn`'s root node runs `game_scene.gd`, whose `_ready()` calls `NetworkManager.on_game_scene_ready()`, which triggers `GameManager.on_host_started()` on the host side. Client world spawn is triggered by `_on_connected_to_server()` as before.
 
 ## Known Issues / Planned Work
 

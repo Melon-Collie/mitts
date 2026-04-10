@@ -10,16 +10,9 @@ An arcade hockey game built in Godot 4.6.2 (Jolt Physics). Online multiplayer �
 
 1. Go to the [latest release](../../releases/tag/latest) and download the zip
 2. Extract and run the `.exe`
+3. Pick **Play Offline**, **Host Game**, or **Join** from the main menu
 
-**Launch modes (run from a terminal):**
-
-| Command | Mode |
-|---------|------|
-| `hockey.exe` | Offline — single player, no network |
-| `hockey.exe --host` | Host — opens port 7777 UDP for online play |
-| `hockey.exe --connect <ip>` | Client — connects to the host's public IP |
-
-The host needs UDP port **7777** forwarded on their router.
+For online play the host needs UDP port **7777** forwarded on their router.
 
 ---
 
@@ -67,6 +60,8 @@ Pucks coming in fast deflect off your blade instead of sticking. Move your stick
 - Behavioral goalie AI (state machine, Buckley depth system, butterfly, RVH) — server-authoritative with client interpolation, tracking lag for beatable positioning
 - Goal detection, score tracking, and faceoff sequences — goals pause play, players teleport to faceoff dots, puck goes live on pickup
 - Scorebug HUD — score and phase label (GOAL! / FACEOFF) in top-left corner
+- Elevation indicator — bottom-center HUD badge when elevated shot mode is active
+- Main menu — host, join (with IP input), and offline from the title screen
 
 ---
 

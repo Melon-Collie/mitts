@@ -19,7 +19,7 @@ The Rocket League freeplay ceiling is a guiding star: the stickhandling-to-shot 
 - **Skater:** `CharacterBody3D` with UpperBody/LowerBody split (`Node3D`). Shoulder (`Marker3D`) under UpperBody, positioned by code based on handedness. Blade (`Marker3D`) and StickMesh under UpperBody. `set_blade_position` rotates the Blade node to face along the shaft (horizontal projection of shoulder→blade), so the BladeArea and mesh always track stick angle. `blade_world_velocity` and `is_elevated` are tracked each physics tick for server-side puck interaction queries. Collision layers set in `_ready()`: body on `LAYER_SKATER_BODIES` (16), mask `MASK_SKATER` (17), stick raycast mask `MASK_SKATER` so the blade is blocked by boards, goalie pads, and other skater bodies. A `BodyBlockArea` (sphere, `collision_mask = LAYER_PUCK`) is added as a child and wired to the `body_block_hit` signal.
 - **Puck:** `RigidBody3D` with cylinder collision (radius 0.1m, height 0.05m). PickupZone (`Area3D`, `SphereShape3D` radius 0.5m) for blade proximity detection. Emits `puck_picked_up`, `puck_released`, and `puck_stripped` signals. Physics runs server-side only — frozen on clients. Per-skater cooldown timers (`_cooldown_timers: Dictionary`) replace the old global timer so two players can race a loose puck independently.
 - **Rink:** `StaticBody3D` with procedurally generated walls, corners, and ice surface via `@tool` script. 60×26m, Z axis is the long axis.
-- **Goals:** `StaticBody3D` with procedurally generated Art Ross net via `@tool` script. Two cubic Bézier curves (base at Y=0, top shelf at Y=1.22m) define the frame shape — the base flares wider than the posts, the top shelf curves inward. Frame tubes are box segments swept along the curves (base = white, top shelf + posts + crossbar = red). Netting is a ruled surface `ArrayMesh` connecting corresponding points on the two curves, with a `ConcavePolygonShape3D` for accurate puck collision. Posts and crossbar use `CylinderMesh` + `CylinderShape3D`.
+- **Goals:** `StaticBody3D` with procedurally generated Art Ross net via `@tool` script. Two cubic Bézier curves (base at Y=0, top shelf at Y=1.22m) define the frame shape — the base flares wider than the posts, the top shelf curves inward. Frame tubes are box segments swept along the curves (base = white, top shelf + posts + crossbar = red). Netting is a ruled surface `ArrayMesh` connecting corresponding points on the two curves, with a `ConcavePolygonShape3D` for accurate puck collision. Posts and crossbar use `CylinderMesh` + `CylinderShape3D`. A solid `BoxShape3D` back wall sits at ~1.0m depth to cover seam gaps in the ConcavePolygonShape3D. The goal sensor `Area3D` validates entry direction — `puck.linear_velocity.dot(facing_z) > 0` — so only pucks entering from the rink side can score.
 - **Goalie:** `Node3D` root (`goalie.gd`) with seven `StaticBody3D` body parts (LeftPad, RightPad, Body, Head, Glove, Blocker, Stick). A sibling `GoalieController` node drives positioning. Body part positions and rotations lerp between per-state configs (`GoalieBodyConfig`) each frame. Part sizes: pads 0.28×0.84×0.15, body 0.40×0.60×0.25, head 0.22×0.22×0.20, glove 0.25×0.25×0.15, blocker 0.20×0.30×0.10, stick 0.50×0.04×0.04. The Stick is disabled by default (`@export stick_enabled: bool = false`); `_ready()` zeroes its collision layer and hides it. In RVH the goalie root positions so the post pad outer edge is flush with the post (`net_half_width - 0.88`); left/right state selection uses goalie-local X (`direction_sign`) so both goalies behave correctly despite opposite world rotations.
 - **Camera:** `Camera3D` per player. Weighted anchor system — player, puck, mouse, attacking goal. Zoom computed after position clamping.
 
@@ -51,10 +51,7 @@ The puck's pickup zone `Area3D` sits on `LAYER_WALLS \| LAYER_BLADE_AREAS` (3) w
 
 ### Launch Modes
 
-`NetworkManager._ready()` branches on command line args:
-- **No args** — offline mode, no ENet peer, `is_host = true`, single player
-- **`--host`** — ENet server on port 7777 UDP (requires port forward for public play)
-- **`--connect <ip>`** — ENet client connecting to the given IP; times out after 10s
+All paths go through `MainMenu.tscn`. `NetworkManager._ready()` is a no-op. The menu calls `start_offline()`, `start_host()`, or `start_client(ip)` — these configure ENet and set `is_host` but do not spawn the world. World spawn is deferred: `Hockey.tscn`'s root runs `game_scene.gd`, whose `_ready()` calls `NetworkManager.on_game_scene_ready()` → `GameManager.on_host_started()`. Clients spawn via `_on_connected_to_server()` as before.
 
 Graceful shutdown: `_exit_tree` closes the ENet peer. Server disconnect on client side also triggers close.
 
@@ -75,7 +72,7 @@ Authoritative host. The host runs all physics. Clients predict locally and recon
 **LocalController** (local player on any machine):
 - Runs full physics simulation locally every frame
 - Stores input history (capped at 2 seconds)
-- On world state receipt: filters confirmed inputs by `last_processed_sequence`, checks position/velocity error against threshold, resets to server state and replays unconfirmed inputs if correction is needed
+- On world state receipt: filters confirmed inputs by `last_processed_sequence`, checks position/velocity error against threshold, resets to server state and replays unconfirmed inputs if correction is needed. Reset includes `position`, `velocity`, `facing`, `_facing` (controller copy), `_upper_body_angle`, and `skater.upper_body_rotation` — all must match server state before replay or blade position drifts during the replay.
 
 **RemoteController** (other players):
 - On the host: drives simulation from latest received input at 240 Hz
@@ -179,6 +176,7 @@ Wall clamping: blade reach is shortened near boards. If squeeze exceeds `wall_sq
 - CCD enabled on puck
 - Puck mass 0.17 kg, radius 0.1 m
 - `Constants.ICE_FRICTION = 0.01` — used in puck trajectory prediction. The rink ice surface is a child `StaticBody3D` with `physics_material_override` set directly, so friction applies correctly.
+- Puck velocity is clamped in `_integrate_forces()` (runs on all peers) so CCD always receives a sane speed. The `_physics_process()` cap is kept as a secondary check.
 
 ---
 
