@@ -2,7 +2,7 @@ class_name PuckController
 extends Node
 
 @export var interpolation_delay: float = 0.1
-@export var prediction_reconcile_threshold: float = 2.0
+@export var prediction_reconcile_threshold: float = 3.0
 @export var position_correction_blend: float = 0.3
 @export var velocity_correction_blend: float = 0.5
 
@@ -14,7 +14,6 @@ var _carrier_peer_id: int = -1
 var _current_time: float = 0.0
 var _state_buffer: Array[BufferedPuckState] = []
 var _predicting_trajectory: bool = false
-var _predicted_velocity: Vector3 = Vector3.ZERO
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 func setup(assigned_puck: Puck, assigned_is_server: bool) -> void:
@@ -33,20 +32,21 @@ func _physics_process(delta: float) -> void:
 	_current_time += delta
 	if _carrier_peer_id == multiplayer.get_unique_id():
 		_apply_local_carrier_position()
-	elif _predicting_trajectory:
-		_step_prediction(delta)
-	else:
+	elif not _predicting_trajectory:
 		_interpolate()
+	# During prediction, Jolt runs freely — no manual stepping needed
 
 # ── Local Prediction ──────────────────────────────────────────────────────────
 func notify_local_pickup() -> void:
 	_carrier_peer_id = multiplayer.get_unique_id()
 	_predicting_trajectory = false
+	puck.set_client_prediction_mode(false)
 
 func notify_local_release(direction: Vector3, power: float) -> void:
 	_carrier_peer_id = -1
 	_predicting_trajectory = true
-	_predicted_velocity = direction * power
+	puck.set_client_prediction_mode(true)
+	puck.set_puck_velocity(direction * power)
 	_state_buffer.clear()
 
 # Called when the server forcibly ends a carry (e.g. goal scored).
@@ -54,6 +54,7 @@ func notify_local_release(direction: Vector3, power: float) -> void:
 func notify_local_puck_dropped() -> void:
 	_carrier_peer_id = -1
 	_predicting_trajectory = false
+	puck.set_client_prediction_mode(false)
 	_state_buffer.clear()
 
 func _apply_local_carrier_position() -> void:
@@ -64,23 +65,22 @@ func _apply_local_carrier_position() -> void:
 	blade_world.y = puck.ice_height
 	puck.set_puck_position(blade_world)
 
-func _step_prediction(delta: float) -> void:
-	_predicted_velocity.x *= (1.0 - Constants.ICE_FRICTION * delta)
-	_predicted_velocity.z *= (1.0 - Constants.ICE_FRICTION * delta)
-	puck.set_puck_position(puck.get_puck_position() + _predicted_velocity * delta)
-
 # ── Reconciliation ────────────────────────────────────────────────────────────
-# Mirrors LocalController.reconcile — nudges predicted state toward server truth
-# each broadcast. Hard-snaps only on extreme divergence (teleport, physics glitch).
+# Mirrors LocalController.reconcile — nudges Jolt state toward server truth each
+# broadcast. Hard-snaps only on extreme divergence (teleport, physics glitch).
 func _reconcile(state: PuckNetworkState) -> void:
-	var error := state.position - puck.get_puck_position()
-	if error.length() > prediction_reconcile_threshold:
+	var pos_error := state.position - puck.get_puck_position()
+	if pos_error.length() > prediction_reconcile_threshold:
 		puck.set_puck_position(state.position)
-		_predicted_velocity = state.velocity
+		puck.set_puck_velocity(state.velocity)
 		_state_buffer.clear()
 		return
-	puck.set_puck_position(puck.get_puck_position() + error * position_correction_blend)
-	_predicted_velocity = _predicted_velocity.lerp(state.velocity, velocity_correction_blend)
+	var current_vel := puck.get_puck_velocity()
+	puck.set_puck_velocity(current_vel.lerp(state.velocity, velocity_correction_blend))
+	# Only nudge position when velocities agree — avoids fighting Jolt during
+	# bounces where velocities are briefly opposing.
+	if current_vel.dot(state.velocity) > 0.0:
+		puck.set_puck_position(puck.get_puck_position() + pos_error * position_correction_blend)
 
 # ── Server Signals ────────────────────────────────────────────────────────────
 func _on_puck_picked_up(carrier: Skater) -> void:
@@ -122,6 +122,7 @@ func apply_state(state: PuckNetworkState) -> void:
 		if state.carrier_peer_id != -1:
 			# Someone picked it up — hand back to buffered interpolation
 			_predicting_trajectory = false
+			puck.set_client_prediction_mode(false)
 		else:
 			_reconcile(state)
 	var buffered := BufferedPuckState.new()
@@ -156,5 +157,5 @@ func _interpolate() -> void:
 		_state_buffer.pop_front()
 
 func _apply_state_to_puck(state: PuckNetworkState) -> void:
+	# Position only — puck is frozen during interpolation, Jolt ignores velocity.
 	puck.set_puck_position(state.position)
-	puck.set_puck_velocity(state.velocity)

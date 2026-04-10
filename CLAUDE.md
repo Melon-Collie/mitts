@@ -37,8 +37,8 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 **Puck:**
 - `PuckController` operates in three client-side modes:
   1. **Local carrier** — pin puck to local blade position each frame (no lag)
-  2. **Trajectory prediction** — integrate velocity with `Constants.ICE_FRICTION` after local release, reconcile against server when error exceeds threshold
-  3. **Interpolation** — buffer server snapshots, interpolate (all other cases)
+  2. **Trajectory prediction** — after local release, puck is unfrozen (`freeze = false`) and Jolt runs client-side physics. Board bounces are handled correctly by the engine. Each 20Hz server broadcast: soft-correct velocity toward server state; nudge position only when velocities agree (avoids fighting Jolt during bounces where velocities briefly oppose); hard-snap on extreme divergence. Exit when `carrier_peer_id != -1` in world state, then refreeze and return to interpolation.
+  3. **Interpolation** — buffer server snapshots, interpolate with 100ms delay (all other cases). Position only — velocity is not applied to the frozen body.
 - Carrier transitions via reliable RPCs: pickup is server → specific client; release is predicted immediately on client, then RPC to server; poke check strip is server → victim client (`notify_puck_stolen`)
 - `_carrier_peer_id` on clients is managed exclusively by `notify_local_pickup/release/puck_stolen`, never by world state, to avoid unreliable packet ordering conflicts
 - **Puck interactions (server-side, `puck.gd`):** relative-velocity catch vs deflect — `(puck_vel - blade_world_vel).length()` vs `deflect_min_speed`; deflect direction = contact normal (blade-to-puck, billiard ball style) reflected with `deflect_blend`; elevation tipping via `skater.is_elevated`; poke check strips on any opposing blade contact while carried; per-skater `_cooldown_timers` dict so ex-carrier has a disadvantage but the other player can pick up immediately
@@ -113,3 +113,4 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 - **Goal phase RPC vs world state race:** if world state delivers `GOAL_SCORED` before the reliable `notify_goal` RPC arrives, the carrier client's puck state won't be cleared until the RPC arrives (typically one round-trip later). `on_puck_released_network` is idempotent so it's safe when the RPC does arrive. Low impact in practice.
 - **No HUD for score/phase yet:** score and phase are tracked and networked but nothing displays them in-game.
 - **Poke check / catch vs deflect thresholds need multiplayer tuning:** `deflect_min_speed` (relative velocity), `poke_strip_speed`, `poke_carrier_vel_blend`, and `poke_checker_cooldown` were set from first principles and need tuning under real network conditions with two players.
+- **Client puck collides with skater bodies during prediction:** the puck is unfrozen during trajectory prediction, so Jolt may briefly detect collisions with player bodies (layer 1). Shot blocking will be reworked as a deliberate server-authoritative interaction; for now, any errant local collision is corrected by reconciliation.

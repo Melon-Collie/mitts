@@ -78,8 +78,8 @@ Authoritative host. The host runs all physics. Clients predict locally and recon
 **PuckController** manages three client-side modes:
 
 1. **Local carrier** — when `_carrier_peer_id` matches local peer ID, the puck is pinned to the local blade position each frame. Zero lag, prediction only, no interpolation.
-2. **Trajectory prediction** — immediately after local release, integrate puck position using release direction/power and `Constants.ICE_FRICTION`. Reconcile against server state when it arrives: snap to server if error exceeds `prediction_reconcile_threshold`, otherwise transition smoothly to interpolation once the buffer has enough snapshots.
-3. **Interpolation** — buffer server snapshots and interpolate with the same 100ms delay as skaters.
+2. **Trajectory prediction** — after local release, the puck is unfrozen (`freeze = false`) and Jolt runs client-side physics, matching the server's simulation for static geometry (boards, goals). Each 20Hz server broadcast calls `_reconcile`: soft-corrects velocity toward server state via `velocity_correction_blend`; nudges position toward server only when `current_vel.dot(server_vel) > 0` (avoids fighting Jolt during bounces where velocities briefly oppose); hard-snaps both on extreme divergence (`prediction_reconcile_threshold`). Exits prediction when world state `carrier_peer_id != -1`, then refreezes and returns to interpolation.
+3. **Interpolation** — buffer server snapshots and interpolate with the same 100ms delay as skaters. Position only — velocity is not applied to the frozen body (`_apply_state_to_puck` is position-only).
 
 **Carrier transitions:**
 - Pickup: server detects via physics signal → reliable RPC to the specific client who picked up the puck → `on_puck_picked_up_network()` on their LocalController
@@ -234,6 +234,8 @@ Two `Team` objects created at startup. Each owns a `defended_goal` (`HockeyGoal`
 **Goal phase RPC vs world state race:** if world state delivers `GOAL_SCORED` before the reliable `notify_goal` RPC, the carrier client's puck state won't be cleared until the RPC arrives. `on_puck_released_network` is idempotent so it's safe when the RPC does arrive. Low impact in practice.
 
 **No HUD:** score and phase are tracked and networked but nothing displays them in-game yet.
+
+**Client puck collides with skater bodies during prediction:** the puck is unfrozen during trajectory prediction, so Jolt may detect collisions with player bodies (layer 1). Any errant local collision is corrected by reconciliation. Shot blocking will be reworked as a deliberate server-authoritative interaction.
 
 ---
 

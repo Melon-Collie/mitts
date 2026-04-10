@@ -46,6 +46,13 @@ func set_server_mode(is_server: bool) -> void:
 	if not is_server:
 		freeze = true
 
+func set_client_prediction_mode(active: bool) -> void:
+	if _is_server:
+		return
+	freeze = not active
+	if not active:
+		linear_velocity = Vector3.ZERO
+
 # ── Contract for PuckController ───────────────────────────────────────────────
 func get_puck_position() -> Vector3:
 	return global_position
