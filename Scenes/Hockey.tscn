@@ -1,9 +1,10 @@
 [gd_scene format=3 uid="uid://c545b8jaty5b7"]
 
-[ext_resource type="PhysicsMaterial" uid="uid://bo58ocxbodjpo" path="res://Physics/boards.tres" id="1_kln2b"]
-[ext_resource type="Script" uid="uid://0m52yshmlqpi" path="res://Scripts/actors/hockey_rink.gd" id="2_rgh2o"]
-[ext_resource type="Script" uid="uid://dnmmf3sl24ex4" path="res://Scripts/actors/hockey_goal.gd" id="3_pbw6q"]
-[ext_resource type="PackedScene" uid="uid://cs3u0eyiv7a7r" path="res://Scenes/HUD.tscn" id="4_rgh2o"]
+[ext_resource type="Script" uid="uid://k8h45lg40vfe" path="res://Scripts/game/game_scene.gd" id="1_nc2c6"]
+[ext_resource type="PhysicsMaterial" uid="uid://bo58ocxbodjpo" path="res://Physics/boards.tres" id="2_tdlsr"]
+[ext_resource type="Script" uid="uid://0m52yshmlqpi" path="res://Scripts/actors/hockey_rink.gd" id="3_7grwi"]
+[ext_resource type="Script" uid="uid://dnmmf3sl24ex4" path="res://Scripts/actors/hockey_goal.gd" id="4_2i1fh"]
+[ext_resource type="PackedScene" uid="uid://cs3u0eyiv7a7r" path="res://Scenes/HUD.tscn" id="5_l2d8q"]
 
 [sub_resource type="Environment" id="Environment_rxg2q"]
 background_mode = 1
@@ -11,7 +12,8 @@ background_color = Color(0.154356, 0.226984, 0.325503, 1)
 ambient_light_source = 2
 ambient_light_color = Color(0.784388, 0.846868, 0.878503, 1)
 
-[node name="Main" type="Node3D" unique_id=565254608]
+[node name="Hockey" type="Node3D" unique_id=565254608]
+script = ExtResource("1_nc2c6")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1851327814]
 transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 20, 0)
@@ -25,8 +27,8 @@ sky_mode = 1
 environment = SubResource("Environment_rxg2q")
 
 [node name="Rink" type="StaticBody3D" parent="." unique_id=2100473277]
-physics_material_override = ExtResource("1_kln2b")
-script = ExtResource("2_rgh2o")
+physics_material_override = ExtResource("2_tdlsr")
+script = ExtResource("3_7grwi")
 wall_height = 2.0
 corner_segments = 14
 wall_color = Color(0.93408, 0.93408, 0.93408, 1)
@@ -36,10 +38,10 @@ blue_line_color = Color(0.502817, 0.663302, 1, 1)
 ice_friction = 0.01
 
 [node name="GoalBottom" type="StaticBody3D" parent="." unique_id=1648202477]
-script = ExtResource("3_pbw6q")
+script = ExtResource("4_2i1fh")
 
 [node name="GoalTop" type="StaticBody3D" parent="." unique_id=1374888956]
-script = ExtResource("3_pbw6q")
+script = ExtResource("4_2i1fh")
 facing = -1
 
-[node name="Hud" parent="." unique_id=2076368830 instance=ExtResource("4_rgh2o")]
+[node name="Hud" parent="." unique_id=2076368830 instance=ExtResource("5_l2d8q")]

@@ -2,6 +2,7 @@ extends Node
 
 # ── State ─────────────────────────────────────────────────────────────────────
 var is_host: bool = false
+var game_initiated: bool = false
 var _local_controller: LocalController = null
 var _remote_controllers: Dictionary = {}  # peer_id -> RemoteController
 
@@ -14,28 +15,19 @@ const STATE_DELTA: float = 1.0 / Constants.STATE_RATE
 const CONNECT_TIMEOUT: float = 10.0
 
 func _ready() -> void:
-	var args: PackedStringArray = OS.get_cmdline_args()
-	if "--host" in args:
-		_start_host()
-	elif "--connect" in args:
-		var connect_idx: int = args.find("--connect")
-		if connect_idx + 1 >= args.size():
-			push_error("--connect requires an IP address argument")
-			return
-		_start_client(args[connect_idx + 1])
-	else:
-		_start_offline()
+	pass  # All start paths go through MainMenu.
 
 # ── Connection ────────────────────────────────────────────────────────────────
-func _start_offline() -> void:
+func start_offline() -> void:
 	is_host = true
+	game_initiated = true
 	print("Offline mode")
-	GameManager.on_host_started()
 
-func _start_host() -> void:
+func start_host() -> void:
 	is_host = true
-	var peer = ENetMultiplayerPeer.new()
-	var error = peer.create_server(Constants.PORT, Constants.MAX_PLAYERS)
+	game_initiated = true
+	var peer := ENetMultiplayerPeer.new()
+	var error := peer.create_server(Constants.PORT, Constants.MAX_PLAYERS)
 	if error != OK:
 		push_error("Failed to start server: " + str(error))
 		return
@@ -43,12 +35,12 @@ func _start_host() -> void:
 	print("Server started on port ", Constants.PORT)
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
-	GameManager.on_host_started()
 
-func _start_client(ip: String) -> void:
+func start_client(ip: String) -> void:
 	is_host = false
-	var peer = ENetMultiplayerPeer.new()
-	var error = peer.create_client(ip, Constants.PORT)
+	game_initiated = true
+	var peer := ENetMultiplayerPeer.new()
+	var error := peer.create_client(ip, Constants.PORT)
 	if error != OK:
 		push_error("Failed to connect: " + str(error))
 		return
@@ -58,6 +50,10 @@ func _start_client(ip: String) -> void:
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
+
+func on_game_scene_ready() -> void:
+	if is_host:
+		GameManager.on_host_started()
 
 # ── Network Signals ───────────────────────────────────────────────────────────
 func _on_peer_connected(id: int) -> void:
