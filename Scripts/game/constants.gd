@@ -27,6 +27,10 @@ const PHYSICS_TICK: int = 240
 # Game
 const PUCK_START_POS: Vector3 = Vector3(0, 0.05, 0)
 const GOAL_LINE_Z: float = 26.6  # rink_length / 2 - distance_from_end (30 - 3.4)
+const BLUE_LINE_Z: float = 7.62  # 25ft from center ice (NHL standard)
+
+# Icing
+const ICING_GHOST_DURATION: float = 3.0  # seconds team stays ghosted after icing
 
 # Game flow
 const GOAL_PAUSE_DURATION: float   = 2.0

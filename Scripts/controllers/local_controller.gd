@@ -35,6 +35,8 @@ func _physics_process(delta: float) -> void:
 		skater.velocity = Vector3.ZERO
 		_input_history.clear()
 		return
+	# Predict offsides locally for instant ghost feedback
+	_predict_offside()
 	_current_input = _gatherer.gather()
 	_input_history.append(_current_input)
 	# Cap history size to prevent unbounded growth
@@ -43,6 +45,8 @@ func _physics_process(delta: float) -> void:
 	_process_input(_current_input, delta)
 	
 func reconcile(server_state: SkaterNetworkState) -> void:
+	# Always apply authoritative ghost state from server (covers icing + offsides)
+	skater.set_ghost(server_state.is_ghost)
 	if GameManager.movement_locked():
 		# Dead-puck phase: don't reconcile. on_faceoff_positions is the reliable
 		# source of truth for teleport positions; world-state snapshots may lag behind
@@ -63,3 +67,18 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	skater.set_upper_body_rotation(_upper_body_angle)
 	for input in _input_history:
 		_process_input(input, input.delta)
+
+func _predict_offside() -> void:
+	if NetworkManager.is_host:
+		return  # Host computes authoritatively in GameManager
+	var record: PlayerRecord = GameManager.get_local_player()
+	if record == null:
+		return
+	var offside: bool = GameManager.check_offside(skater, record.team, puck)
+	# Only predict offside→ghost. Icing ghost comes from server via reconcile.
+	if offside and not skater.is_ghost:
+		skater.set_ghost(true)
+	elif not offside and skater.is_ghost:
+		# Don't clear ghost if server says ghost (could be icing).
+		# Server reconcile will correct within one broadcast cycle.
+		pass

@@ -7,6 +7,7 @@ var blade_position: Vector3 = Vector3.ZERO
 var upper_body_rotation_y: float = 0.0
 var facing: Vector2 = Vector2.ZERO
 var last_processed_sequence: int = 0
+var is_ghost: bool = false
 
 func to_array() -> Array:
 	return [
@@ -16,7 +17,8 @@ func to_array() -> Array:
 		blade_position,
 		upper_body_rotation_y,
 		facing,
-		last_processed_sequence	]
+		last_processed_sequence,
+		is_ghost	]
 
 static func from_array(data: Array) -> SkaterNetworkState:
 	var state = SkaterNetworkState.new()
@@ -27,4 +29,5 @@ static func from_array(data: Array) -> SkaterNetworkState:
 	state.upper_body_rotation_y = data[4]
 	state.facing = data[5]
 	state.last_processed_sequence = data[6]
+	state.is_ghost = data[7]
 	return state

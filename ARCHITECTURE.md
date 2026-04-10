@@ -235,12 +235,17 @@ The host generates a unique color per player at spawn time via `_generate_player
 
 `GameManager.reset_game()` (host-only): zeroes both scores, emits `score_changed` on the host, sends a `notify_game_reset` reliable RPC to all clients (they zero scores and emit `score_changed`), then calls `_begin_faceoff_prep()` which handles puck/player/goalie reset and sends faceoff positions via the existing `notify_faceoff_positions` RPC. The HUD builds a "Reset" button in the top-right corner only when `NetworkManager.is_host`.
 
-### Planned
+### Ghost Mechanic (Offsides + Icing)
 
-- No stoppages except goals and faceoffs
-- Soft offsides: speed decays past blue line without puck
-- Soft icing: iced puck placed behind net, defensive team only
-- No formal penalty system — mechanical deterrents preferred
+Instead of stoppages, offsides and icing are enforced via a **ghost mode** — offending players become semi-transparent and lose all puck/player interaction (collision layers zeroed) while retaining full movement. This keeps play flowing without dead time.
+
+**Offsides:** checked every physics tick on the host. A skater is offside if they are in their team's offensive zone (past the attacking blue line at ±7.62m) while the puck has not yet entered that zone. The puck carrier can never be offside. Ghost clears the instant the skater retreats behind the blue line or the puck enters the zone. Blue line constant: `Constants.BLUE_LINE_Z = 7.62`. Team 0 attacks toward -Z (offensive zone: z < -7.62); team 1 attacks toward +Z (offensive zone: z > 7.62).
+
+**Icing:** `GameManager` tracks the last carrier's team and Z position each tick. When the puck is free and crosses the opponent's goal line (|z| > `GOAL_LINE_Z`), and the last carrier released from their own half (own side of center ice), icing triggers. The entire offending team is ghosted for `ICING_GHOST_DURATION` (3s) or until the non-offending team picks up the puck. Icing state resets on faceoff prep.
+
+**Network sync:** `is_ghost` is serialized in `SkaterNetworkState` (index 7). Host computes authoritatively in `GameManager._physics_process`. Clients predict offsides locally in `LocalController._predict_offside()` for instant feedback; icing ghost arrives via the 20Hz world state broadcast. `RemoteController._apply_state_to_skater()` applies ghost visual/collision from network state.
+
+**Ghost implementation on `Skater`:** `set_ghost(bool)` toggles collision layers (blade area, body block area, skater body) and material transparency (alpha 0.3). Collision layer changes prevent all physics interaction — `move_and_slide` won't generate collisions with ghosts, blade areas won't trigger puck pickup, body block areas won't detect pucks. Safety guards in `Puck._on_blade_entered`, `on_body_block`, and `on_body_check` provide defense-in-depth against frame-ordering edge cases.
 
 ---
 

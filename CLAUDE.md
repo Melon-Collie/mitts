@@ -37,6 +37,8 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 
 **Controller API pattern:** `GameManager` calls `controller.teleport_to(pos)` and `controller.on_puck_released_network()` — never touches skater internals directly. Add methods to `SkaterController` rather than poking internals from `GameManager`.
 
+**Ghost mechanic:** Offsides and icing are enforced via a ghost mode rather than stoppages. Ghost skaters go transparent, can't interact with the puck or other players (collision layers zeroed), and can still move freely. Offsides: skater in offensive zone while puck hasn't crossed the blue line → ghost until they retreat or puck enters the zone. Icing: puck shot from own half past opponent goal line → entire team ghosted for `ICING_GHOST_DURATION` (3s) or until the other team picks up the puck. Host computes ghost state in `GameManager._physics_process`; clients predict offsides locally, receive authoritative ghost state (including icing) via world state.
+
 **World state layout:** `[peer_id, skater_state_array, ..., puck_position, puck_velocity, puck_carrier_peer_id, goalie0_state[5], goalie1_state[5], score0, score1, phase]`
 
 ## Key Files
@@ -61,7 +63,7 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | `networking/buffered_puck_state.gd` | Timestamped PuckNetworkState for interpolation buffer |
 | `networking/buffered_goalie_state.gd` | Timestamped GoalieNetworkState for interpolation buffer |
 | `networking/goalie_network_state.gd` | Serializable goalie state: position, rotation, state enum, five_hole_openness |
-| `networking/skater_network_state.gd` | Serializable skater state: position, velocity, facing, blade, input sequence |
+| `networking/skater_network_state.gd` | Serializable skater state: position, velocity, facing, blade, input sequence, is_ghost |
 | `networking/puck_network_state.gd` | Serializable puck state: position, velocity, carrier peer ID |
 | `input/input_state.gd` | InputState data object: all per-tick input fields (move, mouse, shoot, brake, elevation, etc.) |
 | `input/local_input_gatherer.gd` | Populates InputState from local hardware; accumulates just_pressed between ticks |
@@ -97,4 +99,5 @@ All start paths go through `MainMenu.tscn`. `NetworkManager._ready()` does nothi
 - **Goal phase RPC vs world state race:** if world state delivers `GOAL_SCORED` before the reliable `notify_goal` RPC arrives, the carrier client's puck state won't be cleared until the RPC arrives (typically one round-trip later). `on_puck_released_network` is idempotent so it's safe when the RPC does arrive. Low impact in practice.
 - **Poke check / body check / catch vs deflect thresholds need multiplayer tuning:** `deflect_min_speed`, `poke_strip_speed`, `poke_carrier_vel_blend`, `body_check_strip_threshold`, `body_check_transfer`, and related exports were set from first principles and need tuning under real network conditions.
 - **Active shot-block stance not yet implemented:** passive blocking is done (`BodyBlockArea` applies a dampened billiard reflection on loose pucks). The planned input-driven mode would use the same area with lower dampen and a wider stance for deliberate shot-blocking.
-- **Offsides/icing ghost mechanic awaiting multiplayer test:** implementation on `claude/offsides-ghost-mechanic-JUXNE` ghosts offending players (transparent, non-interactive, still moving) instead of triggering stoppages. Host-authoritative, client-predicted. Needs real-network playtest before merge.
+- **Icing ghost duration needs tuning:** `ICING_GHOST_DURATION` (3s) was set as an initial value. May need adjustment based on how punishing icing feels in practice — shorter if too harsh, longer if teams ice with impunity.
+- **Icing only detects shots from own half, not dumps:** the icing check requires the last carrier to have been in their own half (z > 0 for team 0, z < 0 for team 1). Poke checks or strips in the neutral zone that send the puck past the goal line won't trigger icing.

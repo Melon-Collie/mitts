@@ -76,3 +76,4 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	skater.set_blade_position(state.blade_position)
 	skater.set_upper_body_rotation(state.upper_body_rotation_y)
 	skater.set_facing(state.facing)
+	skater.set_ghost(state.is_ghost)

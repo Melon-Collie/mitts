@@ -32,6 +32,12 @@ var _phase_timer: float = 0.0
 
 var puck_controller: PuckController = null
 
+# ── Ghost / Offsides / Icing ─────────────────────────────────────────────
+var _last_carrier_team_id: int = -1
+var _last_carrier_z: float = 0.0
+var _icing_team_id: int = -1
+var _icing_timer: float = 0.0
+
 func _ready() -> void:
 	pass
 
@@ -53,6 +59,75 @@ func _process(delta: float) -> void:
 			if _phase_timer >= Constants.FACEOFF_TIMEOUT:
 				_set_phase(GamePhase.PLAYING)
 				puck.pickup_locked = false
+
+# ── Ghost State (Host) ────────────────────────────────────────────────────────
+func _physics_process(delta: float) -> void:
+	if not NetworkManager.is_host:
+		return
+	if puck == null:
+		return
+	_update_ghost_state(delta)
+
+func _update_ghost_state(delta: float) -> void:
+	# Track carrier info for icing detection
+	if puck.carrier != null:
+		var carrier_team: Team = get_skater_team(puck.carrier)
+		if carrier_team != null:
+			_last_carrier_team_id = carrier_team.team_id
+			_last_carrier_z = puck.carrier.global_position.z
+		# Any pickup clears active icing
+		if _icing_team_id != -1:
+			_icing_team_id = -1
+			_icing_timer = 0.0
+
+	# Check icing during play when puck is free
+	if _phase == GamePhase.PLAYING and puck.carrier == null and _icing_team_id == -1:
+		_check_icing()
+
+	# Tick icing timer
+	if _icing_team_id != -1:
+		_icing_timer -= delta
+		if _icing_timer <= 0.0:
+			_icing_team_id = -1
+
+	# Apply ghost state to all skaters
+	var is_active_play: bool = _phase == GamePhase.PLAYING or _phase == GamePhase.FACEOFF
+	for peer_id: int in players:
+		var record: PlayerRecord = players[peer_id]
+		var should_ghost: bool = false
+		if is_active_play:
+			if check_offside(record.skater, record.team, puck):
+				should_ghost = true
+			elif _icing_team_id == record.team.team_id:
+				should_ghost = true
+		record.skater.set_ghost(should_ghost)
+
+func _check_icing() -> void:
+	if _last_carrier_team_id == -1:
+		return
+	var puck_z: float = puck.global_position.z
+	# Team 0 attacks -Z: icing if released from own half (z > 0) past opponent goal line
+	if _last_carrier_team_id == 0 and _last_carrier_z > 0.0 and puck_z < -Constants.GOAL_LINE_Z:
+		_icing_team_id = 0
+		_icing_timer = Constants.ICING_GHOST_DURATION
+		_last_carrier_team_id = -1
+	# Team 1 attacks +Z: icing if released from own half (z < 0) past opponent goal line
+	elif _last_carrier_team_id == 1 and _last_carrier_z < 0.0 and puck_z > Constants.GOAL_LINE_Z:
+		_icing_team_id = 1
+		_icing_timer = Constants.ICING_GHOST_DURATION
+		_last_carrier_team_id = -1
+
+static func check_offside(skater: Skater, team: Team, p: Puck) -> bool:
+	if p == null or p.carrier == skater:
+		return false
+	var skater_z: float = skater.global_position.z
+	var puck_z: float = p.global_position.z
+	if team.team_id == 0:
+		# Team 0 attacks toward -Z. Offensive zone: z < -BLUE_LINE_Z
+		return skater_z < -Constants.BLUE_LINE_Z and puck_z >= -Constants.BLUE_LINE_Z
+	else:
+		# Team 1 attacks toward +Z. Offensive zone: z > BLUE_LINE_Z
+		return skater_z > Constants.BLUE_LINE_Z and puck_z <= Constants.BLUE_LINE_Z
 
 # ── Network Callbacks ─────────────────────────────────────────────────────────
 func on_host_started() -> void:
@@ -272,6 +347,9 @@ func _on_goal_scored_into(defending_team: Team) -> void:
 # ── Faceoff ───────────────────────────────────────────────────────────────────
 func _begin_faceoff_prep() -> void:
 	_set_phase(GamePhase.FACEOFF_PREP)
+	_icing_team_id = -1
+	_icing_timer = 0.0
+	_last_carrier_team_id = -1
 	puck.reset()
 	puck.pickup_locked = true
 	for gc: GoalieController in goalie_controllers:

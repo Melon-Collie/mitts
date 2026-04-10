@@ -34,9 +34,11 @@ signal body_block_hit(body: Node3D)
 # ── Runtime ───────────────────────────────────────────────────────────────────
 var _facing: Vector2 = Vector2.DOWN
 var is_elevated: bool = false
+var is_ghost: bool = false
 var blade_world_velocity: Vector3 = Vector3.ZERO
 var _prev_blade_world_pos: Vector3 = Vector3.ZERO
 var _body_block_area: Area3D = null
+var _blade_area: Area3D = null
 
 func _ready() -> void:
 	var hand_sign: float = -1.0 if is_left_handed else 1.0
@@ -47,16 +49,16 @@ func _ready() -> void:
 	collision_mask  = Constants.MASK_SKATER
 	stick_raycast.collision_mask = Constants.MASK_SKATER
 
-	var blade_area = Area3D.new()
-	blade_area.name = "BladeArea"
-	blade_area.collision_layer = Constants.LAYER_BLADE_AREAS
-	blade_area.collision_mask = 0
+	_blade_area = Area3D.new()
+	_blade_area.name = "BladeArea"
+	_blade_area.collision_layer = Constants.LAYER_BLADE_AREAS
+	_blade_area.collision_mask = 0
 	var blade_shape = CollisionShape3D.new()
 	var blade_sphere = SphereShape3D.new()
 	blade_sphere.radius = 0.3
 	blade_shape.shape = blade_sphere
-	blade_area.add_child(blade_shape)
-	blade.add_child(blade_area)
+	_blade_area.add_child(blade_shape)
+	blade.add_child(_blade_area)
 
 	_body_block_area = Area3D.new()
 	_body_block_area.name = "BodyBlockArea"
@@ -177,3 +179,36 @@ func upper_body_to_global(local_pos: Vector3) -> Vector3:
 
 func upper_body_to_local(world_pos: Vector3) -> Vector3:
 	return upper_body.to_local(world_pos)
+
+# ── Ghost Mode ────────────────────────────────────────────────────────────
+func set_ghost(ghost: bool) -> void:
+	if is_ghost == ghost:
+		return
+	is_ghost = ghost
+	if ghost:
+		_blade_area.collision_layer = 0
+		_body_block_area.collision_mask = 0
+		collision_layer = 0
+		collision_mask = Constants.LAYER_WALLS
+	else:
+		_blade_area.collision_layer = Constants.LAYER_BLADE_AREAS
+		_body_block_area.collision_mask = Constants.LAYER_PUCK
+		collision_layer = Constants.LAYER_SKATER_BODIES
+		collision_mask = Constants.MASK_SKATER
+	_apply_ghost_visual(ghost)
+
+func _apply_ghost_visual(ghost: bool) -> void:
+	var meshes: Array[MeshInstance3D] = [_upper_body_mesh, _blade_mesh, stick_mesh]
+	for mesh: MeshInstance3D in meshes:
+		if mesh == null:
+			continue
+		var mat: StandardMaterial3D = mesh.material_override as StandardMaterial3D
+		if mat == null:
+			mat = StandardMaterial3D.new()
+			mesh.material_override = mat
+		if ghost:
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			mat.albedo_color.a = 0.3
+		else:
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+			mat.albedo_color.a = 1.0

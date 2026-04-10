@@ -106,6 +106,8 @@ func _on_blade_entered(area: Area3D) -> void:
 	var skater: Skater = _get_skater_from_area(area)
 	if skater == null:
 		return
+	if skater.is_ghost:
+		return
 
 	if carrier != null:
 		# Poke check — cooldown does not gate this; opponents can always attempt
@@ -175,6 +177,8 @@ func on_body_block(blocker: Skater) -> void:
 		return
 	if pickup_locked:
 		return
+	if blocker.is_ghost:
+		return
 	if carrier != null:
 		return  # only deflect loose/airborne pucks, not carried ones
 	var body_world: Vector3 = blocker.global_position
@@ -194,6 +198,8 @@ func on_body_block(blocker: Skater) -> void:
 
 func on_body_check(checker: Skater, victim: Skater, impact_force: float, hit_direction: Vector3) -> void:
 	if not _is_server:
+		return
+	if checker.is_ghost or victim.is_ghost:
 		return
 	if carrier == null or carrier != victim:
 		return

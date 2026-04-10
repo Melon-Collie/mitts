@@ -124,6 +124,7 @@ func get_network_state() -> Array:
 	state.upper_body_rotation_y = skater.get_upper_body_rotation()
 	state.facing = skater.get_facing()
 	state.last_processed_sequence = last_processed_sequence
+	state.is_ghost = skater.is_ghost
 	return state.to_array()
 
 func apply_network_state(state: SkaterNetworkState) -> void:
