@@ -92,7 +92,6 @@ All start paths go through `MainMenu.tscn`. `NetworkManager._ready()` does nothi
 
 ## Known Issues / Planned Work
 
-- **Stale remote skaters on disconnect:** when a non-host player leaves mid-game, the host cleans up its own simulation but has no mechanism to notify other connected clients. Their remote skater stays in the scene. Low priority for 1v1.
 - **RVH early trigger:** `_is_puck_in_defensive_zone()` fires RVH when the puck is within `zone_post_z` of the goal line at a horizontal angle ≥ `rvh_early_angle` (default 60°), matching the Buckley chart's corner zones. Tune `rvh_early_angle` if transition feels too early or late.
 - **Goalie reactive saves not yet implemented:** glove saves, shoulder/body saves, and stick poke coverage are all planned. The stick is currently disabled (`stick_enabled = false`) — it can be re-enabled once it has proper positional behavior rather than acting as a static seal.
 - **Goal phase RPC vs world state race:** if world state delivers `GOAL_SCORED` before the reliable `notify_goal` RPC arrives, the carrier client's puck state won't be cleared until the RPC arrives (typically one round-trip later). `on_puck_released_network` is idempotent so it's safe when the RPC does arrive. Low impact in practice.
