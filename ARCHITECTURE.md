@@ -16,7 +16,7 @@ The Rocket League freeplay ceiling is a guiding star: the stickhandling-to-shot 
 
 ## Scene Structure
 
-- **Skater:** `CharacterBody3D` with UpperBody/LowerBody split (`Node3D`). Shoulder (`Marker3D`) under UpperBody, positioned by code based on handedness. Blade (`Marker3D`) and StickMesh under UpperBody. `set_blade_position` rotates the Blade node to face along the shaft (horizontal projection of shoulder→blade), so the BladeArea and mesh always track stick angle. `blade_world_velocity` and `is_elevated` are tracked each physics tick for server-side puck interaction queries.
+- **Skater:** `CharacterBody3D` with UpperBody/LowerBody split (`Node3D`). Shoulder (`Marker3D`) under UpperBody, positioned by code based on handedness. Blade (`Marker3D`) and StickMesh under UpperBody. `set_blade_position` rotates the Blade node to face along the shaft (horizontal projection of shoulder→blade), so the BladeArea and mesh always track stick angle. `blade_world_velocity` and `is_elevated` are tracked each physics tick for server-side puck interaction queries. Collision layers set in `_ready()`: body on `LAYER_SKATER_BODIES` (16), mask `MASK_SKATER` (17), stick raycast mask `MASK_SKATER` so the blade is blocked by boards, goalie pads, and other skater bodies. A `BodyBlockArea` (sphere, `collision_mask = LAYER_PUCK`) is added as a child and wired to the `body_block_hit` signal.
 - **Puck:** `RigidBody3D` with cylinder collision (radius 0.1m, height 0.05m). PickupZone (`Area3D`, `SphereShape3D` radius 0.5m) for blade proximity detection. Emits `puck_picked_up`, `puck_released`, and `puck_stripped` signals. Physics runs server-side only — frozen on clients. Per-skater cooldown timers (`_cooldown_timers: Dictionary`) replace the old global timer so two players can race a loose puck independently.
 - **Rink:** `StaticBody3D` with procedurally generated walls, corners, and ice surface via `@tool` script. 60×26m, Z axis is the long axis.
 - **Goals:** `StaticBody3D` with procedurally generated Art Ross net via `@tool` script. Two cubic Bézier curves (base at Y=0, top shelf at Y=1.22m) define the frame shape — the base flares wider than the posts, the top shelf curves inward. Frame tubes are box segments swept along the curves (base = white, top shelf + posts + crossbar = red). Netting is a ruled surface `ArrayMesh` connecting corresponding points on the two curves, with a `ConcavePolygonShape3D` for accurate puck collision. Posts and crossbar use `CylinderMesh` + `CylinderShape3D`.
@@ -114,6 +114,7 @@ All puck contact logic runs on the host via `Area3D.area_entered` on the PickupZ
 - **Deflect direction:** contact normal = `(puck_pos - blade_world_pos).normalized()` (billiard ball style). Physical reflection blended toward incoming direction via `deflect_blend`. If `skater.is_elevated`, outgoing direction is tilted upward by `deflect_elevation_angle`.
 - **Poke check:** when any blade enters PickupZone while `carrier != null`, `_poke_check` strips the puck (no team gate — teammates can strip each other). Strip direction = `checker_blade_vel + carrier_blade_vel * poke_carrier_vel_blend` (or spatial direction as fallback). Ex-carrier gets `reattach_cooldown`; checker gets brief `poke_checker_cooldown`.
 - **Body check strip:** `SkaterController._on_body_checked_player` (server only) calls `puck.on_body_check(checker, victim, force, direction)`. If `force = weight × approach_speed ≥ body_check_strip_threshold` and `victim == carrier`, `_body_check_strip` clears the carrier and launches the puck in the hit direction. Emits `puck_stripped` + `puck_released` — same notification path as poke check.
+- **Passive body block:** each `Skater` has a `BodyBlockArea` (`Area3D`, `collision_layer = 0`, `collision_mask = LAYER_PUCK`, sphere radius `body_block_radius`). On `body_entered`, Skater emits `body_block_hit`; `SkaterController._on_body_block_hit` (server only) calls `puck.on_body_block(blocker)`. Only fires on loose pucks (`carrier == null`). Reflects puck off body-center contact normal, multiplies speed by `body_block_dampen`, sets brief pickup cooldown on the blocker.
 - **Per-skater cooldowns:** `_cooldown_timers: Dictionary` (Skater → float). Cooldown only applies to loose-puck pickups/deflects, not to poke checks. Lets two players race a loose puck — only the ex-carrier has a disadvantage.
 
 ### Why Not Predict Pickup?
@@ -244,7 +245,7 @@ Two `Team` objects created at startup. Each owns a `defended_goal` (`HockeyGoal`
 
 **No HUD:** score and phase are tracked and networked but nothing displays them in-game yet.
 
-**Passive shot blocking not yet implemented:** skater bodies are on `LAYER_SKATER_BODIES` (16) and puck mask is `MASK_PUCK` (1), so the puck passes through skater bodies. A deliberate body-block mechanic is planned — detect puck proximity via a body `Area3D` on the skater, apply dampened reflection server-side.
+**Active shot-block stance not yet implemented:** a future input-driven mode will use the same `BodyBlockArea` with lower `body_block_dampen` and a wider stance for deliberate shot-blocking.
 
 ---
 

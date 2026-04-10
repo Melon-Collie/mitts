@@ -15,6 +15,9 @@ extends CharacterBody3D
 @export var body_check_restitution: float = 0.3   # fraction of approach speed bounced back to self
 @export var body_check_transfer: float = 0.8      # fraction of approach speed pushed to victim (before weight ratio)
 
+# ── Body Block Tuning ─────────────────────────────────────────────────────────
+@export var body_block_radius: float = 0.5
+
 # ── Node References ───────────────────────────────────────────────────────────
 @onready var lower_body: Node3D = $LowerBody
 @onready var upper_body: Node3D = $UpperBody
@@ -24,12 +27,14 @@ extends CharacterBody3D
 @onready var stick_mesh: MeshInstance3D = $UpperBody/StickMesh
 
 signal body_checked_player(victim: Skater, impact_force: float, hit_direction: Vector3)
+signal body_block_hit(body: Node3D)
 
 # ── Runtime ───────────────────────────────────────────────────────────────────
 var _facing: Vector2 = Vector2.DOWN
 var is_elevated: bool = false
 var blade_world_velocity: Vector3 = Vector3.ZERO
 var _prev_blade_world_pos: Vector3 = Vector3.ZERO
+var _body_block_area: Area3D = null
 
 func _ready() -> void:
 	var hand_sign: float = -1.0 if is_left_handed else 1.0
@@ -38,17 +43,30 @@ func _ready() -> void:
 
 	collision_layer = Constants.LAYER_SKATER_BODIES
 	collision_mask  = Constants.MASK_SKATER
+	stick_raycast.collision_mask = Constants.MASK_SKATER
 
 	var blade_area = Area3D.new()
 	blade_area.name = "BladeArea"
 	blade_area.collision_layer = Constants.LAYER_BLADE_AREAS
 	blade_area.collision_mask = 0
 	var blade_shape = CollisionShape3D.new()
-	var sphere = SphereShape3D.new()
-	sphere.radius = 0.3
-	blade_shape.shape = sphere
+	var blade_sphere = SphereShape3D.new()
+	blade_sphere.radius = 0.3
+	blade_shape.shape = blade_sphere
 	blade_area.add_child(blade_shape)
 	blade.add_child(blade_area)
+
+	_body_block_area = Area3D.new()
+	_body_block_area.name = "BodyBlockArea"
+	_body_block_area.collision_layer = 0
+	_body_block_area.collision_mask = Constants.LAYER_PUCK
+	var block_shape = CollisionShape3D.new()
+	var block_sphere = SphereShape3D.new()
+	block_sphere.radius = body_block_radius
+	block_shape.shape = block_sphere
+	_body_block_area.add_child(block_shape)
+	add_child(_body_block_area)
+	_body_block_area.body_entered.connect(func(body: Node3D) -> void: body_block_hit.emit(body))
 	
 	shoulder.position = Vector3(hand_sign * shoulder_offset, 0.0, 0.0)
 	blade_area.position = Vector3.ZERO

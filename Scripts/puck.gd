@@ -19,6 +19,8 @@ signal puck_stripped(ex_carrier: Skater)
 @export var poke_checker_cooldown: float = 0.1
 @export var body_check_strip_threshold: float = 6.0  # weight × approach_speed needed to strip
 @export var body_check_puck_speed: float = 5.0
+@export var body_block_dampen: float = 0.5
+@export var body_block_cooldown: float = 0.1
 
 var carrier: Skater = null
 var pickup_locked: bool = false
@@ -167,6 +169,28 @@ func _deflect_off_blade(skater: Skater) -> void:
 
 	linear_velocity = new_dir * speed * deflect_speed_retain
 	_set_cooldown(skater, deflect_cooldown)
+
+func on_body_block(blocker: Skater) -> void:
+	if not _is_server:
+		return
+	if pickup_locked:
+		return
+	if carrier != null:
+		return  # only deflect loose/airborne pucks, not carried ones
+	var body_world: Vector3 = blocker.global_position
+	body_world.y = 0.0
+	var puck_pos: Vector3 = global_position
+	puck_pos.y = 0.0
+	var contact_normal: Vector3 = puck_pos - body_world
+	if contact_normal.length() < 0.001:
+		contact_normal = -blocker.global_transform.basis.z
+	contact_normal = contact_normal.normalized()
+	var horiz_vel := Vector3(linear_velocity.x, 0.0, linear_velocity.z)
+	var reflected: Vector3 = horiz_vel - 2.0 * horiz_vel.dot(contact_normal) * contact_normal
+	if reflected.length() < 0.001:
+		reflected = contact_normal
+	linear_velocity = reflected.normalized() * horiz_vel.length() * body_block_dampen
+	_set_cooldown(blocker, body_block_cooldown)
 
 func on_body_check(checker: Skater, victim: Skater, impact_force: float, hit_direction: Vector3) -> void:
 	if not _is_server:

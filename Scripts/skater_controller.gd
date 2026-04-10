@@ -85,11 +85,19 @@ func setup(assigned_skater: Skater, assigned_puck: Puck) -> void:
 	puck = assigned_puck
 	process_physics_priority = -1  # Run before Skater.move_and_slide
 	skater.body_checked_player.connect(_on_body_checked_player)
+	skater.body_block_hit.connect(_on_body_block_hit)
 
 func _on_body_checked_player(victim: Skater, impact_force: float, hit_direction: Vector3) -> void:
 	if not NetworkManager.is_host:
 		return
 	puck.on_body_check(skater, victim, impact_force, hit_direction)
+
+func _on_body_block_hit(body: Node3D) -> void:
+	if not NetworkManager.is_host:
+		return
+	if not body is Puck:
+		return
+	puck.on_body_block(skater)
 
 # ── Entry Point ───────────────────────────────────────────────────────────────
 func _process_input(input: InputState, delta: float) -> void:
