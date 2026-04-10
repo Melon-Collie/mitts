@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://53nk80p1ukjl"]
 
-[ext_resource type="Script" uid="uid://c4c2muuy6y6r7" path="res://Scripts/skater.gd" id="1_7f3a6"]
+[ext_resource type="Script" uid="uid://m30pgfpufbe7" path="res://Scripts/actors/skater.gd" id="1_7f3a6"]
 
 [sub_resource type="CylinderShape3D" id="CylinderShape3D_r0du0"]
 

@@ -6,7 +6,7 @@ Context for Claude about the HockeyGame project.
 
 Complex features (AI state machines, new systems, architectural changes) are designed first in Claude.ai chat mode, where the developer can iterate on ideas without implementation pressure. The resulting plan is then handed to Claude Code to implement against the actual codebase. When a session starts with a plan document, treat it as the agreed design — ask clarifying questions before deviating from it.
 
-**Before every commit:** update this file, `README.md`, and `ARCHITECTURE.md`. New files go in the Key Files table. Completed work moves out of Known Issues (both here and in ARCHITECTURE.md). New known issues get added. README's What's In / Planned sections and ARCHITECTURE's Build Status table should reflect current state.
+**Before every commit:** update this file, `README.md`, and `ARCHITECTURE.md`. New files go in the Key Files table. Completed work moves out of Known Issues here. New known issues get added. README's What's In / Planned sections and ARCHITECTURE's Build Status table should reflect current state.
 
 **Scene files (`.tscn`) are edited by the user, not Claude.** Godot's scene format is error-prone to edit as text — node unique IDs, sub-resource references, and property ordering can silently break the scene. When a task requires scene changes, describe exactly what to add or modify and let the user make the edits in the Godot editor.
 
@@ -23,41 +23,19 @@ A 3v3 arcade hockey game built in Godot 4.6.2 (GDScript, 3D). Online multiplayer
 
 ## Networking Architecture
 
-Authoritative host model. The host runs all physics. Clients predict locally and reconcile against server state.
+Authoritative host model. The host runs all physics. Clients predict locally and reconcile against server state. See `ARCHITECTURE.md` for full detail.
 
-**Rates:**
-- Input sends (client → host): 60 Hz, unreliable
-- State broadcasts (host → clients): 20 Hz, unreliable
-- Events (pickup notification, release, spawn, sync): reliable RPCs
+**Rates:** inputs 60 Hz unreliable (client → host); world state 20 Hz unreliable (host → clients); events reliable RPCs.
 
-**Skaters:**
-- `LocalController` — runs physics locally every frame, stores input history, reconciles against server state (reset + replay unconfirmed inputs) when position/velocity error exceeds threshold
-- `RemoteController` — on the host: drives simulation from latest received input. On clients: interpolates between buffered `BufferedSkaterState` snapshots with a 100ms delay
+**Skaters:** `LocalController` predicts + reconciles (reset + replay on error). `RemoteController` drives from input on host, interpolates buffered snapshots (100ms delay) on clients.
 
-**Puck:**
-- `PuckController` operates in three client-side modes:
-  1. **Local carrier** — pin puck to local blade position each frame (no lag)
-  2. **Trajectory prediction** — after local release, puck is unfrozen (`freeze = false`) and Jolt runs client-side physics. Board bounces are handled correctly by the engine. Each 20Hz server broadcast: soft-correct velocity toward server state; nudge position only when velocities agree (avoids fighting Jolt during bounces where velocities briefly oppose); hard-snap on extreme divergence. Exit when `carrier_peer_id != -1` in world state, then refreeze and return to interpolation.
-  3. **Interpolation** — buffer server snapshots, interpolate with 100ms delay (all other cases). Position only — velocity is not applied to the frozen body.
-- Carrier transitions via reliable RPCs: pickup is server → specific client; release is predicted immediately on client, then RPC to server; poke check strip is server → victim client (`notify_puck_stolen`)
-- `_carrier_peer_id` on clients is managed exclusively by `notify_local_pickup/release/puck_stolen`, never by world state, to avoid unreliable packet ordering conflicts
-- **Puck interactions (server-side, `puck.gd`):** relative-velocity catch vs deflect — `(puck_vel - blade_world_vel).length()` vs `deflect_min_speed`; deflect direction = contact normal (blade-to-puck, billiard ball style) reflected with `deflect_blend`; elevation tipping via `skater.is_elevated`; poke check strips on any opposing blade contact while carried; body check strips when `weight × approach_speed ≥ body_check_strip_threshold` — puck flies in the hit direction; per-skater `_cooldown_timers` dict so ex-carrier has a disadvantage but the other player can pick up immediately
+**Puck:** three client-side modes — local carrier (pinned to blade), trajectory prediction (Jolt runs client-side after release, soft-reconciled each broadcast), interpolation (100ms buffer, position only). `_carrier_peer_id` is managed exclusively by reliable RPCs, never by world state, to avoid unreliable ordering conflicts.
 
-**Goalies:**
-- `GoalieController` AI runs on host only (gated by `is_server`). Clients receive state via world broadcast and interpolate with a 100ms delay using `BufferedGoalieState` — same pattern as remote skaters.
-- Serialized fields: position (x, z), rotation_y, state enum, five_hole_openness. Clients reconstruct body configs locally from those values.
-- Seven body parts: LeftPad, RightPad, Body, Head, Glove, Blocker, Stick. Sizes: pads 0.28×0.84×0.15m, body 0.40×0.60×0.25m, head 0.22×0.22×0.20m, glove 0.25×0.25×0.15m, blocker 0.20×0.30×0.10m, stick 0.50×0.04×0.04m. The Stick is disabled by default (`@export stick_enabled: bool = false` on `Goalie`; `_ready()` sets collision_layer and visibility accordingly).
-- RVH state selection uses goalie-local X (`(puck.x - goal_center_x) * -_direction_sign`) so both goalies pick the correct post despite having opposite world-space rotations. RVH root targets `net_half_width - 0.88` so the post pad outer edge (pad center 0.46 + half-height 0.42) lands flush with the post. RVH triggers via `_is_puck_in_defensive_zone()` — behind goal line OR within `zone_post_z` at angle ≥ `rvh_early_angle`.
-- **Tracking lag:** `_tracked_puck_position` lerps toward the real puck at `tracking_speed` (default 6.0) each frame. All positional logic — depth, lateral target, facing, and state transitions — reads from `_tracked_puck_position`. Shot detection (`_on_puck_released`) reads the real puck position and velocity. `tracking_speed` is the master difficulty knob: lower = more lag, easier to beat.
+**Goalies:** AI runs on host only. Clients interpolate via `BufferedGoalieState` (100ms delay). `tracking_speed` is the master difficulty knob — lower = more positional lag = easier to beat.
 
-**Game flow:**
-- `GamePhase` FSM (host-driven): `PLAYING → GOAL_SCORED → FACEOFF_PREP → FACEOFF → PLAYING`
-- Phase changes travel two ways: reliable RPC (`notify_goal`) for immediate effect + world state as a correction channel. Score and phase are the last three elements of every world state broadcast.
-- Dead-puck phases (`GOAL_SCORED`, `FACEOFF_PREP`) gate all movement via `GameManager.movement_locked()`. Both `LocalController._physics_process` and `RemoteController._drive_from_input` check this every frame — killing velocity and (on local) draining `_input_history` — so no stale input can contaminate server state or replay on phase lift.
-- `LocalController.reconcile` is also blocked during locked phases: `on_faceoff_positions` (reliable RPC) is the authoritative source of faceoff positions; world state snapshots may lag behind and would fight it.
-- Controller API pattern: `GameManager` calls `controller.teleport_to(pos)` and `controller.on_puck_released_network()` — it does not touch `skater` fields or read `has_puck` directly. Add methods to `SkaterController` (override in `LocalController` if needed) rather than poking internals from `GameManager`.
-- `Team` objects (two, created at startup) own `defended_goal`, `goalie_controller`, and `score`. Used by reference everywhere; `team_id: int` only for wire serialization.
-- Two `HockeyGoal` scene instances (`facing=+1` and `facing=-1`). Each has an `Area3D` goal sensor (`collision_mask = Constants.LAYER_PUCK`) that emits `goal_scored` when the puck enters. Host only: signals connected in `_connect_goal_signals()`.
+**Game flow:** `GamePhase` FSM (host-driven): `PLAYING → GOAL_SCORED → FACEOFF_PREP → FACEOFF → PLAYING`. Dead-puck phases gate all movement via `GameManager.movement_locked()`. `LocalController.reconcile` is blocked during locked phases — `on_faceoff_positions` RPC is authoritative for faceoff positions.
+
+**Controller API pattern:** `GameManager` calls `controller.teleport_to(pos)` and `controller.on_puck_released_network()` — never touches skater internals directly. Add methods to `SkaterController` rather than poking internals from `GameManager`.
 
 **World state layout:** `[peer_id, skater_state_array, ..., puck_position, puck_velocity, puck_carrier_peer_id, goalie0_state[5], goalie1_state[5], score0, score1, phase]`
 
@@ -65,25 +43,32 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 
 | File | Role |
 |------|------|
-| `game_manager.gd` | Spawning, world state serialization/application, game phase FSM, puck release handling |
-| `network_manager.gd` | RPC definitions, connection management, state broadcast timing |
-| `local_controller.gd` | Local player: input gathering, prediction, reconciliation |
-| `remote_controller.gd` | Remote players: server-side input driving, client-side interpolation |
-| `puck_controller.gd` | Puck: server signals, state serialization, client prediction and interpolation |
-| `skater_controller.gd` | Base class: full state machine, movement, shooting, blade control, teleport API |
-| `puck.gd` | Physics body: pickup zone, deflection, carrier following (server only) |
-| `skater.gd` | Physics body: blade/facing/upper-body API |
-| `goalie.gd` | Goalie body API: exposes position, rotation, and body part config methods |
-| `goalie_controller.gd` | Goalie AI: state machine (STANDING/BUTTERFLY/RVH_LEFT/RVH_RIGHT), Buckley depth, lateral positioning, shot detection |
-| `goalie_body_config.gd` | Data class holding per-state body part positions and rotations |
-| `team.gd` | Team object: defended goal, goalie controller, score |
-| `player_record.gd` | Per-player data: peer_id, slot, team, skater, controller, faceoff_position |
-| `constants.gd` | Shared constants: network rates, physics tick, ICE_FRICTION, rink geometry, faceoff positions |
-| `buffered_skater_state.gd` | Timestamped SkaterNetworkState for interpolation buffer |
-| `buffered_puck_state.gd` | Timestamped PuckNetworkState for interpolation buffer |
-| `buffered_goalie_state.gd` | Timestamped GoalieNetworkState for interpolation buffer |
-| `goalie_network_state.gd` | Serializable goalie state: position, rotation, state enum, five_hole_openness |
-| `hud.gd` | Scorebug HUD: connects to `GameManager.score_changed` / `phase_changed`, builds panel programmatically |
+| `game/game_manager.gd` | Spawning, world state serialization/application, game phase FSM, puck release handling |
+| `networking/network_manager.gd` | RPC definitions, connection management, state broadcast timing |
+| `controllers/local_controller.gd` | Local player: input gathering, prediction, reconciliation |
+| `controllers/remote_controller.gd` | Remote players: server-side input driving, client-side interpolation |
+| `controllers/puck_controller.gd` | Puck: server signals, state serialization, client prediction and interpolation |
+| `controllers/skater_controller.gd` | Base class: full state machine, movement, shooting, blade control, teleport API |
+| `actors/puck.gd` | Physics body: pickup zone, deflection, carrier following (server only) |
+| `actors/skater.gd` | Physics body: blade/facing/upper-body API |
+| `actors/goalie.gd` | Goalie body API: exposes position, rotation, and body part config methods |
+| `controllers/goalie_controller.gd` | Goalie AI: state machine (STANDING/BUTTERFLY/RVH_LEFT/RVH_RIGHT), Buckley depth, lateral positioning, shot detection |
+| `controllers/goalie_body_config.gd` | Data class holding per-state body part positions and rotations |
+| `game/team.gd` | Team object: defended goal, goalie controller, score |
+| `game/player_record.gd` | Per-player data: peer_id, slot, team, skater, controller, faceoff_position |
+| `game/constants.gd` | Shared constants: network rates, physics tick, ICE_FRICTION, rink geometry, faceoff positions |
+| `networking/buffered_skater_state.gd` | Timestamped SkaterNetworkState for interpolation buffer |
+| `networking/buffered_puck_state.gd` | Timestamped PuckNetworkState for interpolation buffer |
+| `networking/buffered_goalie_state.gd` | Timestamped GoalieNetworkState for interpolation buffer |
+| `networking/goalie_network_state.gd` | Serializable goalie state: position, rotation, state enum, five_hole_openness |
+| `networking/skater_network_state.gd` | Serializable skater state: position, velocity, facing, blade, input sequence |
+| `networking/puck_network_state.gd` | Serializable puck state: position, velocity, carrier peer ID |
+| `input/input_state.gd` | InputState data object: all per-tick input fields (move, mouse, shoot, brake, elevation, etc.) |
+| `input/local_input_gatherer.gd` | Populates InputState from local hardware; accumulates just_pressed between ticks |
+| `ui/game_camera.gd` | Per-player camera: weighted anchor (player, puck, mouse, attacking goal), zoom, rink clamping |
+| `actors/hockey_goal.gd` | Goal mesh + goal sensor Area3D; emits `goal_scored` signal |
+| `actors/hockey_rink.gd` | Procedural rink geometry (@tool): walls, corners, ice surface, markings |
+| `ui/hud.gd` | Scorebug HUD: connects to `GameManager.score_changed` / `phase_changed`, builds panel programmatically |
 
 ## Code Conventions
 
@@ -101,16 +86,16 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 
 ## Launch Modes
 
-`network_manager.gd` `_ready()` branches on command line args:
+`networking/network_manager.gd` `_ready()` branches on command line args:
 - **No args** — offline mode: `is_host = true`, no ENet peer, single player
 - **`--host`** — starts ENet server on `Constants.PORT` (7777 UDP), port must be forwarded for public play
 - **`--connect <ip>`** — connects as client to the given IP; times out after `CONNECT_TIMEOUT` (10s) with `push_error` + quit
 
 ## Known Issues / Planned Work
 
+- **Stale remote skaters on disconnect:** when a non-host player leaves mid-game, the host cleans up its own simulation but has no mechanism to notify other connected clients. Their remote skater stays in the scene. Low priority for 1v1.
 - **RVH early trigger:** `_is_puck_in_defensive_zone()` fires RVH when the puck is within `zone_post_z` of the goal line at a horizontal angle ≥ `rvh_early_angle` (default 60°), matching the Buckley chart's corner zones. Tune `rvh_early_angle` if transition feels too early or late.
 - **Goalie reactive saves not yet implemented:** glove saves, shoulder/body saves, and stick poke coverage are all planned. The stick is currently disabled (`stick_enabled = false`) — it can be re-enabled once it has proper positional behavior rather than acting as a static seal.
 - **Goal phase RPC vs world state race:** if world state delivers `GOAL_SCORED` before the reliable `notify_goal` RPC arrives, the carrier client's puck state won't be cleared until the RPC arrives (typically one round-trip later). `on_puck_released_network` is idempotent so it's safe when the RPC does arrive. Low impact in practice.
 - **Poke check / body check / catch vs deflect thresholds need multiplayer tuning:** `deflect_min_speed`, `poke_strip_speed`, `poke_carrier_vel_blend`, `body_check_strip_threshold`, `body_check_transfer`, and related exports were set from first principles and need tuning under real network conditions.
-- **Passive shot blocking implemented:** `BodyBlockArea` (`Area3D`, `collision_mask = LAYER_PUCK`) on each skater detects puck entry; server-side `puck.on_body_block()` applies a dampened billiard reflection. Active shot-block stance (lower dampen, steeper angle) is planned as a future input-driven mode using the same area.
-- **Stick clamping extended to player bodies and goalies:** `stick_raycast.collision_mask = MASK_SKATER` (walls + skater bodies) so the blade cannot extend through opponents or goalie pads.
+- **Active shot-block stance not yet implemented:** passive blocking is done (`BodyBlockArea` applies a dampened billiard reflection on loose pucks). The planned input-driven mode would use the same area with lower dampen and a wider stance for deliberate shot-blocking.

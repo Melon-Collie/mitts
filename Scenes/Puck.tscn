@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://i5j5ehpb8hfk"]
 
-[ext_resource type="Script" uid="uid://d4b57vwvg7weu" path="res://Scripts/puck.gd" id="1_5cs87"]
+[ext_resource type="Script" uid="uid://dndlvito5ey17" path="res://Scripts/actors/puck.gd" id="1_5ddw5"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_idj7w"]
 albedo_color = Color(0.201527, 0.201527, 0.201527, 1)
@@ -21,7 +21,7 @@ axis_lock_angular_x = true
 axis_lock_angular_z = true
 mass = 0.17
 continuous_cd = true
-script = ExtResource("1_5cs87")
+script = ExtResource("1_5ddw5")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=834541236]
 mesh = SubResource("CylinderMesh_kln2b")

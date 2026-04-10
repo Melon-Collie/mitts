@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://bu5a1k2dpj8ot"]
 
-[ext_resource type="Script" uid="uid://hxvqvacak3bm" path="res://Scripts/goalie.gd" id="1_fbmg1"]
+[ext_resource type="Script" uid="uid://dhrq0fb8ehjmm" path="res://Scripts/actors/goalie.gd" id="1_fbmg1"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_fbmg1"]
 size = Vector3(0.28, 0.84, 0.15)

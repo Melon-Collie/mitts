@@ -1,48 +1,11 @@
 [gd_scene format=3 uid="uid://2yj4rxbbs5ca"]
 
-[ext_resource type="Script" uid="uid://dvcuf0u7gqme1" path="res://Scripts/local_controller.gd" id="1_j1r6q"]
-[ext_resource type="Script" uid="uid://cnxcchrp4y5jr" path="res://Scripts/game_camera.gd" id="2_f05y6"]
+[ext_resource type="Script" uid="uid://du5i0e0qq01n7" path="res://Scripts/controllers/local_controller.gd" id="1_j1r6q"]
+[ext_resource type="Script" uid="uid://db01xa00086ym" path="res://Scripts/ui/game_camera.gd" id="2_j1r6q"]
 
 [node name="LocalController" type="Node" unique_id=73752857]
 script = ExtResource("1_j1r6q")
-reconcile_position_threshold = null
-reconcile_velocity_threshold = null
-thrust = null
-friction = null
-max_speed = null
-rotation_speed = null
-move_deadzone = null
-brake_multiplier = null
-backward_thrust_multiplier = null
-crossover_thrust_multiplier = null
-facing_lag_speed = null
-facing_drag_speed = null
-blade_height = null
-plane_reach = null
-shoulder_offset = null
-blade_forehand_limit = null
-blade_backhand_limit = null
-max_mouse_distance = null
-min_blade_reach = null
-upper_body_twist_ratio = null
-upper_body_return_speed = null
-min_wrister_power = null
-max_wrister_power = null
-max_wrister_charge_distance = null
-backhand_power_coefficient = null
-max_charge_direction_variance = null
-quick_shot_power = null
-quick_shot_threshold = null
-wrister_elevation = null
-min_slapper_power = null
-max_slapper_power = null
-max_slapper_charge_time = null
-slapper_blade_x = null
-slapper_blade_z = null
-slapper_aim_arc = null
-slapper_elevation = null
-follow_through_duration = null
 
 [node name="Camera3D" type="Camera3D" parent="." unique_id=1935604034]
 transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 20, 0)
-script = ExtResource("2_f05y6")
+script = ExtResource("2_j1r6q")
