@@ -283,7 +283,7 @@ func _spawn_goalies() -> void:
 func _spawn_local_player(peer_id: int, slot: int, team: Team, color: Color) -> void:
 	var record := PlayerRecord.new(peer_id, slot, true, team)
 	record.color = color
-	var faceoff_pos: Vector3 = GameRules.CENTER_FACEOFF_POSITIONS[slot]
+	var faceoff_pos: Vector3 = PlayerRules.faceoff_position_for_slot(slot)
 	record.faceoff_position = faceoff_pos
 
 	var skater: Skater = SKATER_SCENE.instantiate()
@@ -305,7 +305,7 @@ func _spawn_local_player(peer_id: int, slot: int, team: Team, color: Color) -> v
 func _spawn_remote_player(peer_id: int, slot: int, team: Team, color: Color) -> void:
 	var record := PlayerRecord.new(peer_id, slot, false, team)
 	record.color = color
-	var faceoff_pos: Vector3 = GameRules.CENTER_FACEOFF_POSITIONS[slot]
+	var faceoff_pos: Vector3 = PlayerRules.faceoff_position_for_slot(slot)
 	record.faceoff_position = faceoff_pos
 
 	var skater: Skater = SKATER_SCENE.instantiate()
@@ -352,7 +352,7 @@ func _begin_faceoff_prep() -> void:
 	var positions: Array = []
 	for peer_id: int in players:
 		var record: PlayerRecord = players[peer_id]
-		var pos: Vector3 = GameRules.CENTER_FACEOFF_POSITIONS[record.slot]
+		var pos: Vector3 = PlayerRules.faceoff_position_for_slot(record.slot)
 		record.faceoff_position = pos
 		record.controller.teleport_to(pos)
 		positions.append_array([peer_id, pos.x, pos.y, pos.z])
@@ -387,28 +387,17 @@ func on_game_reset() -> void:
 func _assign_team() -> Team:
 	var t0_count: int = players.values().filter(func(r: PlayerRecord) -> bool: return r.team == teams[0]).size()
 	var t1_count: int = players.values().filter(func(r: PlayerRecord) -> bool: return r.team == teams[1]).size()
-	return teams[0] if t0_count <= t1_count else teams[1]
+	return teams[PlayerRules.assign_team(t0_count, t1_count)]
 
 func _other_team(team: Team) -> Team:
 	return teams[1] if team == teams[0] else teams[0]
 
 func _generate_player_color(team_id: int) -> Color:
-	# Team 0 = warm reds (hue 340°–20°), Team 1 = cool blues (hue 200°–260°).
-	# Divide the range into equal slots so same-team players always get
-	# visually distinct shades regardless of RNG.
-	const MAX_PER_TEAM: int = 3
-	var hue_min_deg: float = 340.0 if team_id == 0 else 200.0
-	var hue_max_deg: float = 380.0 if team_id == 0 else 260.0
-
 	var existing: int = 0
 	for pid: int in players:
 		if players[pid].team.team_id == team_id:
 			existing += 1
-
-	var slot_size: float = (hue_max_deg - hue_min_deg) / MAX_PER_TEAM
-	var slot_center: float = hue_min_deg + (existing + 0.5) * slot_size
-	var jitter: float = randf_range(-slot_size * 0.25, slot_size * 0.25)
-	return Color.from_hsv(fmod((slot_center + jitter) / 360.0, 1.0), 0.8, 0.9)
+	return PlayerRules.generate_player_color(team_id, existing, randf_range(-1.0, 1.0))
 
 func _set_phase(new_phase: GamePhase.Phase) -> void:
 	_phase = new_phase
