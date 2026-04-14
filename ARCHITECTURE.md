@@ -113,6 +113,7 @@ Authoritative host. The host runs all physics. Clients predict locally and recon
 - Pickup: server detects via physics signal → reliable RPC to the specific client who picked up the puck → `on_puck_picked_up_network()` on their LocalController
 - Release: client predicts immediately (state machine transitions, trajectory prediction begins) → reliable RPC to server to execute physics
 - Poke check (strip): server detects opposing blade contact while `carrier != null` → clears carrier, launches puck via `_poke_check()` → `puck_stripped` signal → reliable RPC to victim client (`notify_puck_stolen`) → victim calls `on_puck_released_network()` + `notify_local_puck_dropped()` to clear carry state and drop back to interpolation
+- Goal scored: server captures carrier peer_id before `puck.drop()` → sends `notify_goal` (reliable, all peers) and `notify_puck_dropped` (reliable, carrier only) as separate RPCs → carrier client clears state in `on_carrier_puck_dropped()`; other clients are unaffected. Decoupled so `notify_goal` isn't responsible for carrier cleanup.
 
 `_carrier_peer_id` on clients is managed exclusively by `notify_local_pickup()` / `notify_local_release()` in `PuckController`. It is intentionally never updated from world state — unreliable packet ordering would cause it to conflict with locally-predicted transitions.
 

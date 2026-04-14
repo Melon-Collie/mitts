@@ -146,16 +146,15 @@ func on_goal_scored(scoring_team_id: int, score0: int, score1: int) -> void:
 	_state_machine.apply_remote_goal(scoring_team_id, score0, score1)
 	var scoring_team: Team = teams[scoring_team_id]
 	puck.pickup_locked = true
-	# If this client was carrying the puck, clear carrier state.
-	# The host drops it via puck.drop(), but puck.puck_released is only connected
-	# on the host — the scoring client never receives that signal.
+	goal_scored.emit(scoring_team)
+	score_changed.emit(_state_machine.scores[0], _state_machine.scores[1])
+	phase_changed.emit(_state_machine.current_phase)
+
+func on_carrier_puck_dropped() -> void:
 	var local_record := get_local_player()
 	if local_record != null:
 		local_record.controller.on_puck_released_network()
 		puck_controller.notify_local_puck_dropped()
-	goal_scored.emit(scoring_team)
-	score_changed.emit(_state_machine.scores[0], _state_machine.scores[1])
-	phase_changed.emit(_state_machine.current_phase)
 
 func on_faceoff_positions(positions: Array) -> void:
 	var local_peer_id: int = multiplayer.get_unique_id()
@@ -281,7 +280,9 @@ func _on_goal_scored_into(defending_team: Team) -> void:
 	# Drop a carried puck immediately so carrier state and puck physics are clean
 	# before the pause. Without this, puck._physics_process (240Hz) would keep
 	# pinning the puck to the blade while the FSM waits for the pause to end.
+	var carrier_peer_id: int = -1
 	if puck.carrier != null:
+		carrier_peer_id = _resolve_skater_peer_id(puck.carrier)
 		puck.drop()
 	var scoring_team_id: int = _state_machine.on_goal_scored(defending_team.team_id)
 	if scoring_team_id == -1:
@@ -292,6 +293,8 @@ func _on_goal_scored_into(defending_team: Team) -> void:
 	phase_changed.emit(_state_machine.current_phase)
 	NetworkManager.notify_goal_to_all(
 			scoring_team_id, _state_machine.scores[0], _state_machine.scores[1])
+	if carrier_peer_id != -1 and multiplayer.get_peers().has(carrier_peer_id):
+		NetworkManager.notify_puck_dropped_to_carrier(carrier_peer_id)
 
 # ── Phase Entry (host, after tick transition) ─────────────────────────────────
 func _handle_phase_entered() -> void:

@@ -183,6 +183,13 @@ func notify_goal_to_all(scoring_team_id: int, score0: int, score1: int) -> void:
 	for peer_id in multiplayer.get_peers():
 		notify_goal.rpc_id(peer_id, scoring_team_id, score0, score1)
 
+func notify_puck_dropped_to_carrier(carrier_peer_id: int) -> void:
+	notify_puck_dropped.rpc_id(carrier_peer_id)
+
+@rpc("authority", "reliable")
+func notify_puck_dropped() -> void:
+	GameManager.on_carrier_puck_dropped()
+
 @rpc("authority", "reliable")
 func notify_player_disconnected(peer_id: int) -> void:
 	GameManager.on_player_disconnected(peer_id)
