@@ -27,6 +27,7 @@ For online play the host needs UDP port **7777** forwarded on their router.
 | **Right click (hold)** | Slapshot — charge up, release to shoot |
 | **Shift (hold)** | Backward skating — facing locks to mouse |
 | **Space** | Brake |
+| **Ctrl (during wind-up)** | Cancel shot — abort a wrister or slapshot wind-up without firing |
 | **Scroll up / down** | Toggle elevated shot |
 
 ---
@@ -53,6 +54,7 @@ Pucks coming in fast deflect off your blade instead of sticking. Move your stick
 - Puck carry speed penalty — carrier max speed reduced to 88%, encouraging passing
 - Passive shot blocking — puck deflects off skater bodies with dampened momentum
 - Active shot-block stance (Ctrl) — drops to a crouch, widens block area, snaps to face puck, slows movement; puck carries more energy away than passive
+- Shot cancel (Ctrl during wind-up) — abort a wrister or slapshot wind-up at any point without firing; puck stays with the carrier
 - Stick clamping against player bodies and goalie pads — no poking through opponents
 - Physical deflection off blade contact normal with elevation tipping
 - Elevated shots
