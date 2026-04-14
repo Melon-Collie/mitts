@@ -220,6 +220,10 @@ func _state_wrister_aim(input: InputState, delta: float) -> void:
 		_release_wrister(input)
 
 func _state_slapper_charge_with_puck(input: InputState, delta: float) -> void:
+	if input.block_held:
+		_cancel_slapper()
+		return
+
 	_slapper_charge_timer += delta
 	_apply_slapper_blade_position()
 
@@ -243,6 +247,10 @@ func _state_slapper_charge_with_puck(input: InputState, delta: float) -> void:
 		_release_slapper(input)
 
 func _state_slapper_charge_without_puck(input: InputState, delta: float) -> void:
+	if input.block_held:
+		_cancel_slapper()
+		return
+
 	_slapper_charge_timer += delta
 	_apply_slapper_blade_position()
 
@@ -307,6 +315,10 @@ func _enter_wrister_aim() -> void:
 	_charge_distance = 0.0
 	_prev_blade_pos = skater.get_blade_position()
 	_prev_blade_dir = Vector3.ZERO
+
+func _cancel_slapper() -> void:
+	_slapper_charge_timer = 0.0
+	_transition_to_skating()
 
 func _enter_slapper_charge() -> void:
 	_slapper_charge_timer = 0.0
