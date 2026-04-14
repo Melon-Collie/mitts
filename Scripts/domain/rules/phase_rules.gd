@@ -10,5 +10,5 @@ static func is_dead_puck_phase(phase: GamePhase.Phase) -> bool:
 	return phase == GamePhase.Phase.GOAL_SCORED or phase == GamePhase.Phase.FACEOFF_PREP
 
 # Convenience: same as is_dead_puck_phase for the given phase.
-static func movement_locked(phase: GamePhase.Phase) -> bool:
+static func is_movement_locked(phase: GamePhase.Phase) -> bool:
 	return is_dead_puck_phase(phase)

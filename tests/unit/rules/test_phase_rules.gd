@@ -23,6 +23,6 @@ func test_movement_locked_matches_dead_puck() -> void:
 		GamePhase.Phase.FACEOFF,
 	]:
 		assert_eq(
-			PhaseRules.movement_locked(phase),
+			PhaseRules.is_movement_locked(phase),
 			PhaseRules.is_dead_puck_phase(phase),
-			"movement_locked should match is_dead_puck_phase for phase %d" % phase)
+			"is_movement_locked should match is_dead_puck_phase for phase %d" % phase)
