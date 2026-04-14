@@ -101,28 +101,22 @@ func _check_icing() -> void:
 	if _last_carrier_team_id == -1:
 		return
 	var puck_z: float = puck.global_position.z
-	# Team 0 attacks -Z: icing if released from own half (z > 0) past opponent goal line
-	if _last_carrier_team_id == 0 and _last_carrier_z > 0.0 and puck_z < -GameRules.GOAL_LINE_Z:
-		_icing_team_id = 0
-		_icing_timer = GameRules.ICING_GHOST_DURATION
-		_last_carrier_team_id = -1
-	# Team 1 attacks +Z: icing if released from own half (z < 0) past opponent goal line
-	elif _last_carrier_team_id == 1 and _last_carrier_z < 0.0 and puck_z > GameRules.GOAL_LINE_Z:
-		_icing_team_id = 1
+	var offender: int = InfractionRules.check_icing(_last_carrier_team_id, _last_carrier_z, puck_z)
+	if offender != -1:
+		_icing_team_id = offender
 		_icing_timer = GameRules.ICING_GHOST_DURATION
 		_last_carrier_team_id = -1
 
+# Thin wrapper around InfractionRules.is_offside for callers that have Skater/Team/Puck refs.
+# Controllers and GameManager call this; the pure rule lives in InfractionRules.
 static func check_offside(skater: Skater, team: Team, p: Puck) -> bool:
-	if p == null or p.carrier == skater:
+	if p == null:
 		return false
-	var skater_z: float = skater.global_position.z
-	var puck_z: float = p.global_position.z
-	if team.team_id == 0:
-		# Team 0 attacks toward -Z. Offensive zone: z < -BLUE_LINE_Z
-		return skater_z < -GameRules.BLUE_LINE_Z and puck_z >= -GameRules.BLUE_LINE_Z
-	else:
-		# Team 1 attacks toward +Z. Offensive zone: z > BLUE_LINE_Z
-		return skater_z > GameRules.BLUE_LINE_Z and puck_z <= GameRules.BLUE_LINE_Z
+	return InfractionRules.is_offside(
+			skater.global_position.z,
+			team.team_id,
+			p.global_position.z,
+			p.carrier == skater)
 
 # ── Network Callbacks ─────────────────────────────────────────────────────────
 func on_host_started() -> void:
