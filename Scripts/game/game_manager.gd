@@ -50,13 +50,13 @@ func _process(delta: float) -> void:
 	_phase_timer += delta
 	match _phase:
 		GamePhase.GOAL_SCORED:
-			if _phase_timer >= Constants.GOAL_PAUSE_DURATION:
+			if _phase_timer >= GameRules.GOAL_PAUSE_DURATION:
 				_begin_faceoff_prep()
 		GamePhase.FACEOFF_PREP:
-			if _phase_timer >= Constants.FACEOFF_PREP_DURATION:
+			if _phase_timer >= GameRules.FACEOFF_PREP_DURATION:
 				_begin_faceoff()
 		GamePhase.FACEOFF:
-			if _phase_timer >= Constants.FACEOFF_TIMEOUT:
+			if _phase_timer >= GameRules.FACEOFF_TIMEOUT:
 				_set_phase(GamePhase.PLAYING)
 				puck.pickup_locked = false
 
@@ -107,14 +107,14 @@ func _check_icing() -> void:
 		return
 	var puck_z: float = puck.global_position.z
 	# Team 0 attacks -Z: icing if released from own half (z > 0) past opponent goal line
-	if _last_carrier_team_id == 0 and _last_carrier_z > 0.0 and puck_z < -Constants.GOAL_LINE_Z:
+	if _last_carrier_team_id == 0 and _last_carrier_z > 0.0 and puck_z < -GameRules.GOAL_LINE_Z:
 		_icing_team_id = 0
-		_icing_timer = Constants.ICING_GHOST_DURATION
+		_icing_timer = GameRules.ICING_GHOST_DURATION
 		_last_carrier_team_id = -1
 	# Team 1 attacks +Z: icing if released from own half (z < 0) past opponent goal line
-	elif _last_carrier_team_id == 1 and _last_carrier_z < 0.0 and puck_z > Constants.GOAL_LINE_Z:
+	elif _last_carrier_team_id == 1 and _last_carrier_z < 0.0 and puck_z > GameRules.GOAL_LINE_Z:
 		_icing_team_id = 1
-		_icing_timer = Constants.ICING_GHOST_DURATION
+		_icing_timer = GameRules.ICING_GHOST_DURATION
 		_last_carrier_team_id = -1
 
 static func check_offside(skater: Skater, team: Team, p: Puck) -> bool:
@@ -124,10 +124,10 @@ static func check_offside(skater: Skater, team: Team, p: Puck) -> bool:
 	var puck_z: float = p.global_position.z
 	if team.team_id == 0:
 		# Team 0 attacks toward -Z. Offensive zone: z < -BLUE_LINE_Z
-		return skater_z < -Constants.BLUE_LINE_Z and puck_z >= -Constants.BLUE_LINE_Z
+		return skater_z < -GameRules.BLUE_LINE_Z and puck_z >= -GameRules.BLUE_LINE_Z
 	else:
 		# Team 1 attacks toward +Z. Offensive zone: z > BLUE_LINE_Z
-		return skater_z > Constants.BLUE_LINE_Z and puck_z <= Constants.BLUE_LINE_Z
+		return skater_z > GameRules.BLUE_LINE_Z and puck_z <= GameRules.BLUE_LINE_Z
 
 # ── Network Callbacks ─────────────────────────────────────────────────────────
 func on_host_started() -> void:
@@ -257,7 +257,7 @@ func _connect_goal_signals() -> void:
 
 func _spawn_puck() -> void:
 	puck = PUCK_SCENE.instantiate()
-	puck.position = Constants.PUCK_START_POS
+	puck.position = GameRules.PUCK_START_POS
 	get_tree().current_scene.add_child(puck)
 	puck_controller = PuckController.new()
 	get_tree().current_scene.add_child(puck_controller)
@@ -273,8 +273,8 @@ func _spawn_goalies() -> void:
 	var bottom_controller := GoalieController.new()
 	get_tree().current_scene.add_child(top_controller)
 	get_tree().current_scene.add_child(bottom_controller)
-	top_controller.setup(top, puck, -Constants.GOAL_LINE_Z, NetworkManager.is_host)
-	bottom_controller.setup(bottom, puck, Constants.GOAL_LINE_Z, NetworkManager.is_host)
+	top_controller.setup(top, puck, -GameRules.GOAL_LINE_Z, NetworkManager.is_host)
+	bottom_controller.setup(bottom, puck, GameRules.GOAL_LINE_Z, NetworkManager.is_host)
 
 	goalies.append(top)
 	goalies.append(bottom)
@@ -288,7 +288,7 @@ func _spawn_goalies() -> void:
 func _spawn_local_player(peer_id: int, slot: int, team: Team, color: Color) -> void:
 	var record := PlayerRecord.new(peer_id, slot, true, team)
 	record.color = color
-	var faceoff_pos: Vector3 = Constants.CENTER_FACEOFF_POSITIONS[slot]
+	var faceoff_pos: Vector3 = GameRules.CENTER_FACEOFF_POSITIONS[slot]
 	record.faceoff_position = faceoff_pos
 
 	var skater: Skater = SKATER_SCENE.instantiate()
@@ -310,7 +310,7 @@ func _spawn_local_player(peer_id: int, slot: int, team: Team, color: Color) -> v
 func _spawn_remote_player(peer_id: int, slot: int, team: Team, color: Color) -> void:
 	var record := PlayerRecord.new(peer_id, slot, false, team)
 	record.color = color
-	var faceoff_pos: Vector3 = Constants.CENTER_FACEOFF_POSITIONS[slot]
+	var faceoff_pos: Vector3 = GameRules.CENTER_FACEOFF_POSITIONS[slot]
 	record.faceoff_position = faceoff_pos
 
 	var skater: Skater = SKATER_SCENE.instantiate()
@@ -357,7 +357,7 @@ func _begin_faceoff_prep() -> void:
 	var positions: Array = []
 	for peer_id: int in players:
 		var record: PlayerRecord = players[peer_id]
-		var pos: Vector3 = Constants.CENTER_FACEOFF_POSITIONS[record.slot]
+		var pos: Vector3 = GameRules.CENTER_FACEOFF_POSITIONS[record.slot]
 		record.faceoff_position = pos
 		record.controller.teleport_to(pos)
 		positions.append_array([peer_id, pos.x, pos.y, pos.z])

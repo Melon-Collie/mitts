@@ -27,7 +27,7 @@ func start_host() -> void:
 	is_host = true
 	game_initiated = true
 	var peer := ENetMultiplayerPeer.new()
-	var error := peer.create_server(Constants.PORT, Constants.MAX_PLAYERS)
+	var error := peer.create_server(Constants.PORT, GameRules.MAX_PLAYERS)
 	if error != OK:
 		push_error("Failed to start server: " + str(error))
 		return
