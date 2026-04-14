@@ -104,10 +104,10 @@ func _on_score_changed(_team: Team) -> void:
 	_score_label.text = "%d \u2013 %d" % [GameManager.teams[0].score, GameManager.teams[1].score]
 
 func _on_phase_changed(new_phase: int) -> void:
-	if new_phase == GameManager.GamePhase.PLAYING:
+	if new_phase == GamePhase.Phase.PLAYING:
 		_phase_label.visible = false
 		_phase_label.text = ""
-	elif new_phase == GameManager.GamePhase.GOAL_SCORED:
+	elif new_phase == GamePhase.Phase.GOAL_SCORED:
 		_phase_label.text = "GOAL!"
 		_phase_label.visible = true
 	else:

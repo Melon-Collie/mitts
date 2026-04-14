@@ -8,16 +8,11 @@ const LOCAL_CONTROLLER_SCENE: PackedScene = preload("res://Scenes/LocalControlle
 const REMOTE_CONTROLLER_SCENE: PackedScene = preload("res://Scenes/RemoteController.tscn")
 
 # ── Game Phase ────────────────────────────────────────────────────────────────
-enum GamePhase {
-	PLAYING,       # normal gameplay
-	GOAL_SCORED,   # dead puck, celebration freeze
-	FACEOFF_PREP,  # players teleporting, puck resetting
-	FACEOFF,       # puck live at center, waiting for pickup or timeout
-}
+# Enum now lives in Scripts/domain/state/game_phase.gd as GamePhase.Phase.
 
 signal goal_scored(scoring_team: Team)
 signal score_changed(team: Team)
-signal phase_changed(new_phase: GamePhase)
+signal phase_changed(new_phase: GamePhase.Phase)
 
 # ── Game State ────────────────────────────────────────────────────────────────
 var teams: Array[Team] = []
@@ -27,7 +22,7 @@ var goalies: Array = []
 var goalie_controllers: Array[GoalieController] = []
 var players: Dictionary = {}  # peer_id -> PlayerRecord
 var _next_slot: int = 1       # host is always slot 0
-var _phase: GamePhase = GamePhase.PLAYING
+var _phase: GamePhase.Phase = GamePhase.Phase.PLAYING
 var _phase_timer: float = 0.0
 
 var puck_controller: PuckController = null
@@ -45,19 +40,19 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if not NetworkManager.is_host:
 		return
-	if _phase == GamePhase.PLAYING:
+	if _phase == GamePhase.Phase.PLAYING:
 		return
 	_phase_timer += delta
 	match _phase:
-		GamePhase.GOAL_SCORED:
+		GamePhase.Phase.GOAL_SCORED:
 			if _phase_timer >= GameRules.GOAL_PAUSE_DURATION:
 				_begin_faceoff_prep()
-		GamePhase.FACEOFF_PREP:
+		GamePhase.Phase.FACEOFF_PREP:
 			if _phase_timer >= GameRules.FACEOFF_PREP_DURATION:
 				_begin_faceoff()
-		GamePhase.FACEOFF:
+		GamePhase.Phase.FACEOFF:
 			if _phase_timer >= GameRules.FACEOFF_TIMEOUT:
-				_set_phase(GamePhase.PLAYING)
+				_set_phase(GamePhase.Phase.PLAYING)
 				puck.pickup_locked = false
 
 # ── Ghost State (Host) ────────────────────────────────────────────────────────
@@ -81,7 +76,7 @@ func _update_ghost_state(delta: float) -> void:
 			_icing_timer = 0.0
 
 	# Check icing during play when puck is free
-	if _phase == GamePhase.PLAYING and puck.carrier == null and _icing_team_id == -1:
+	if _phase == GamePhase.Phase.PLAYING and puck.carrier == null and _icing_team_id == -1:
 		_check_icing()
 
 	# Tick icing timer
@@ -91,7 +86,7 @@ func _update_ghost_state(delta: float) -> void:
 			_icing_team_id = -1
 
 	# Apply ghost state to all skaters
-	var is_active_play: bool = _phase == GamePhase.PLAYING or _phase == GamePhase.FACEOFF
+	var is_active_play: bool = _phase == GamePhase.Phase.PLAYING or _phase == GamePhase.Phase.FACEOFF
 	for peer_id: int in players:
 		var record: PlayerRecord = players[peer_id]
 		var should_ghost: bool = false
@@ -196,7 +191,7 @@ func on_goal_scored(scoring_team_id: int, score0: int, score1: int) -> void:
 	teams[0].score = score0
 	teams[1].score = score1
 	var scoring_team: Team = teams[scoring_team_id]
-	_set_phase(GamePhase.GOAL_SCORED)
+	_set_phase(GamePhase.Phase.GOAL_SCORED)
 	puck.pickup_locked = true
 	# If this client was carrying the puck, clear carrier state.
 	# The host drops it via puck.drop(), but puck.puck_released is only connected
@@ -329,7 +324,7 @@ func _spawn_remote_player(peer_id: int, slot: int, team: Team, color: Color) -> 
 
 # ── Goal Scoring ──────────────────────────────────────────────────────────────
 func _on_goal_scored_into(defending_team: Team) -> void:
-	if _phase != GamePhase.PLAYING:
+	if _phase != GamePhase.Phase.PLAYING:
 		return
 	# Drop a carried puck immediately so carrier state and puck physics are clean
 	# before the 2-second pause. puck._physics_process runs at 240 Hz and would
@@ -338,7 +333,7 @@ func _on_goal_scored_into(defending_team: Team) -> void:
 		puck.drop()
 	var scoring_team: Team = _other_team(defending_team)
 	scoring_team.score += 1
-	_set_phase(GamePhase.GOAL_SCORED)
+	_set_phase(GamePhase.Phase.GOAL_SCORED)
 	puck.pickup_locked = true
 	goal_scored.emit(scoring_team)
 	score_changed.emit(scoring_team)
@@ -346,7 +341,7 @@ func _on_goal_scored_into(defending_team: Team) -> void:
 
 # ── Faceoff ───────────────────────────────────────────────────────────────────
 func _begin_faceoff_prep() -> void:
-	_set_phase(GamePhase.FACEOFF_PREP)
+	_set_phase(GamePhase.Phase.FACEOFF_PREP)
 	_icing_team_id = -1
 	_icing_timer = 0.0
 	_last_carrier_team_id = -1
@@ -364,14 +359,14 @@ func _begin_faceoff_prep() -> void:
 	NetworkManager.send_faceoff_positions(positions)
 
 func _begin_faceoff() -> void:
-	_set_phase(GamePhase.FACEOFF)
+	_set_phase(GamePhase.Phase.FACEOFF)
 	puck.pickup_locked = false
 	if not puck.puck_picked_up.is_connected(_on_faceoff_puck_picked_up):
 		puck.puck_picked_up.connect(_on_faceoff_puck_picked_up, CONNECT_ONE_SHOT)
 
 func _on_faceoff_puck_picked_up(_carrier: Skater) -> void:
-	if _phase == GamePhase.FACEOFF:
-		_set_phase(GamePhase.PLAYING)
+	if _phase == GamePhase.Phase.FACEOFF:
+		_set_phase(GamePhase.Phase.PLAYING)
 
 # ── Reset ─────────────────────────────────────────────────────────────────────
 func reset_game() -> void:
@@ -415,7 +410,7 @@ func _generate_player_color(team_id: int) -> Color:
 	var jitter: float = randf_range(-slot_size * 0.25, slot_size * 0.25)
 	return Color.from_hsv(fmod((slot_center + jitter) / 360.0, 1.0), 0.8, 0.9)
 
-func _set_phase(new_phase: GamePhase) -> void:
+func _set_phase(new_phase: GamePhase.Phase) -> void:
 	_phase = new_phase
 	_phase_timer = 0.0
 	phase_changed.emit(new_phase)
@@ -477,20 +472,22 @@ func _apply_goalie_states(state: Array, offset: int, stride: int) -> void:
 func _apply_game_state(state: Array, offset: int) -> void:
 	teams[0].score = state[offset]
 	teams[1].score = state[offset + 1]
-	var new_phase: GamePhase = state[offset + 2] as GamePhase
+	var new_phase: GamePhase.Phase = state[offset + 2] as GamePhase.Phase
 	if new_phase != _phase:
 		_phase = new_phase
 		_phase_timer = 0.0
-		puck.pickup_locked = GameManager.is_dead_puck_phase(new_phase)
+		puck.pickup_locked = PhaseRules.is_dead_puck_phase(new_phase)
 		phase_changed.emit(new_phase)
 
-# Returns true during phases where player movement and input are suppressed.
-static func is_dead_puck_phase(phase: GamePhase) -> bool:
-	return phase == GamePhase.GOAL_SCORED or phase == GamePhase.FACEOFF_PREP
+# Delegators kept for backward compatibility with existing controllers/UI. The
+# actual rule lives in PhaseRules (domain layer). Controllers will be updated
+# in a later phase to call PhaseRules directly (or receive a game-state provider
+# via setup() injection).
+static func is_dead_puck_phase(phase: GamePhase.Phase) -> bool:
+	return PhaseRules.is_dead_puck_phase(phase)
 
-# Convenience for controllers — no need to touch _phase directly.
 static func movement_locked() -> bool:
-	return is_dead_puck_phase(GameManager._phase)
+	return PhaseRules.movement_locked(GameManager._phase)
 
 static func get_skater_team(skater: Skater) -> Team:
 	for peer_id: int in GameManager.players:
