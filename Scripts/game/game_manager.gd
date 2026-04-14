@@ -214,9 +214,14 @@ func _spawn_puck() -> void:
 	puck = PUCK_SCENE.instantiate()
 	puck.position = GameRules.PUCK_START_POS
 	get_tree().current_scene.add_child(puck)
+	puck.set_team_resolver(_resolve_skater_team_id)
 	puck_controller = PuckController.new()
 	get_tree().current_scene.add_child(puck_controller)
 	puck_controller.setup(puck, NetworkManager.is_host)
+
+func _resolve_skater_team_id(skater: Skater) -> int:
+	var team: Team = get_skater_team(skater)
+	return team.team_id if team != null else -1
 
 func _spawn_goalies() -> void:
 	var top: Goalie = GOALIE_SCENE.instantiate()

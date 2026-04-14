@@ -26,6 +26,12 @@ var carrier: Skater = null
 var pickup_locked: bool = false
 var _cooldown_timers: Dictionary = {}  # Skater -> float
 var _is_server: bool = false
+# Callable (Skater) -> int team_id, or -1 if the skater isn't registered. Set
+# by GameManager at spawn time so Puck doesn't reach upward for team checks.
+var _team_resolver: Callable = Callable()
+
+func set_team_resolver(resolver: Callable) -> void:
+	_team_resolver = resolver
 
 func _ready() -> void:
 	# Puck body sits on its own layer so goal sensors can detect it.
@@ -113,10 +119,13 @@ func _on_blade_entered(area: Area3D) -> void:
 		# Poke check — cooldown does not gate this; opponents can always attempt
 		if skater == carrier:
 			return
-		var carrier_team: Team = GameManager.get_skater_team(carrier)
-		var checker_team: Team = GameManager.get_skater_team(skater)
-		if carrier_team != null and checker_team != null:
-			if not PuckCollisionRules.can_poke_check(carrier_team.team_id, checker_team.team_id):
+		var carrier_team_id: int = -1
+		var checker_team_id: int = -1
+		if _team_resolver.is_valid():
+			carrier_team_id = _team_resolver.call(carrier)
+			checker_team_id = _team_resolver.call(skater)
+		if carrier_team_id != -1 and checker_team_id != -1:
+			if not PuckCollisionRules.can_poke_check(carrier_team_id, checker_team_id):
 				return
 		_poke_check(skater)
 		return
