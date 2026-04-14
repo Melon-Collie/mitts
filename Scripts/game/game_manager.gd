@@ -259,7 +259,7 @@ func _spawn_local_player(peer_id: int, slot: int, team: Team, color: Color) -> v
 
 	var controller: LocalController = LOCAL_CONTROLLER_SCENE.instantiate()
 	get_tree().current_scene.add_child(controller)
-	controller.setup(skater, puck)
+	controller.setup(skater, puck, self, team.team_id)
 	record.controller = controller
 
 	controller.puck_release_requested.connect(_on_puck_release_requested)
@@ -281,7 +281,7 @@ func _spawn_remote_player(peer_id: int, slot: int, team: Team, color: Color) -> 
 
 	var controller: RemoteController = REMOTE_CONTROLLER_SCENE.instantiate()
 	get_tree().current_scene.add_child(controller)
-	controller.setup(skater, puck)
+	controller.setup(skater, puck, self)
 	record.controller = controller
 
 	players[peer_id] = record
@@ -438,9 +438,19 @@ func _apply_game_state(state: Array, offset: int) -> void:
 		puck.pickup_locked = PhaseRules.is_dead_puck_phase(new_phase)
 		phase_changed.emit(new_phase)
 
-# Static query used by controllers. Falls back to false before the state
-# machine is instantiated (during scene load / main menu). Phase 5 will
-# replace this with setup()-injected game-state providers on controllers.
+# Instance methods consumed by controllers via setup() injection. Controllers
+# take `game_state: Node` (expected to be this GameManager) and call these
+# directly — no more static reach-ins.
+func is_host() -> bool:
+	return NetworkManager.is_host
+
+func is_movement_locked() -> bool:
+	if _state_machine == null:
+		return false
+	return _state_machine.is_movement_locked()
+
+# Legacy static — kept while docs and other non-controller callers transition.
+# No scripts call this anymore; safe to remove in the cleanup phase.
 static func movement_locked() -> bool:
 	if GameManager._state_machine == null:
 		return false

@@ -64,6 +64,11 @@ enum State {
 # ── References ────────────────────────────────────────────────────────────────
 var skater: Skater = null
 var puck: Puck = null
+# Injected at setup. Expected methods:
+#   is_host() -> bool             — changes only per session; cached in _is_host
+#   is_movement_locked() -> bool  — polled per frame
+var _game_state: Node = null
+var _is_host: bool = false
 
 # ── Runtime State ─────────────────────────────────────────────────────────────
 var _state: State = State.SKATING_WITHOUT_PUCK
@@ -81,20 +86,22 @@ var last_processed_sequence: int = 0
 var has_puck: bool = false
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
-func setup(assigned_skater: Skater, assigned_puck: Puck) -> void:
+func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> void:
 	skater = assigned_skater
 	puck = assigned_puck
+	_game_state = game_state
+	_is_host = game_state.is_host()
 	process_physics_priority = -1  # Run before Skater.move_and_slide
 	skater.body_checked_player.connect(_on_body_checked_player)
 	skater.body_block_hit.connect(_on_body_block_hit)
 
 func _on_body_checked_player(victim: Skater, impact_force: float, hit_direction: Vector3) -> void:
-	if not NetworkManager.is_host:
+	if not _is_host:
 		return
 	puck.on_body_check(skater, victim, impact_force, hit_direction)
 
 func _on_body_block_hit(body: Node3D) -> void:
-	if not NetworkManager.is_host:
+	if not _is_host:
 		return
 	if not body is Puck:
 		return
