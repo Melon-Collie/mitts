@@ -20,7 +20,7 @@ The codebase is organized into three layers with downward dependency flow.
 
 **Domain** (`Scripts/domain/`) — pure GDScript, zero engine references. Comprises:
 - Rule classes as `class_name` files with static methods (`PhaseRules`, `PlayerRules`, `InfractionRules`, `PuckCollisionRules`, `SkaterMovementRules`, `ShotMechanics`, `GoalieBehaviorRules`, `ChargeTracking`, `ReconciliationRules`)
-- `GameStateMachine` — a `RefCounted` owning phase/timer, scores, player slot registry, icing state, ghost computation. Lives on both host and client; the host drives it via `tick()`, clients sync via `apply_remote_state()`.
+- `GameStateMachine` — a `RefCounted` owning phase/timer, scores, period number, period clock (`time_remaining`), player slot registry, icing state, ghost computation. Lives on both host and client; the host drives it via `tick()`, clients sync via `apply_remote_state()`.
 - `GameRules` const class for timings/geometry/thresholds
 - `GamePhase` enum
 
@@ -228,14 +228,18 @@ Player-first guarantee: weighted target is clamped so player never exceeds `play
 
 | Phase | Duration | Description |
 |-------|----------|-------------|
-| `PLAYING` | Until goal | Normal gameplay |
+| `PLAYING` | Until goal or clock expires | Normal gameplay; period clock counts down |
 | `GOAL_SCORED` | 2s (`GOAL_PAUSE_DURATION`) | Dead puck, celebration freeze |
 | `FACEOFF_PREP` | 0.5s (`FACEOFF_PREP_DURATION`) | Players teleport to dots, puck resets, goalies reset to crease |
 | `FACEOFF` | Until pickup or 10s timeout | Puck live at center dot, waiting for a player to pick it up |
+| `END_OF_PERIOD` | 3s (`END_OF_PERIOD_PAUSE`) | Period clock hit zero; brief pause before next-period faceoff prep |
+| `GAME_OVER` | Indefinite | All periods exhausted; movement locked until host resets |
+
+Period clock (`GameRules.PERIOD_DURATION = 240s`, `NUM_PERIODS = 3`) ticks down only during `PLAYING`. When it expires: if periods remain → `END_OF_PERIOD` → `FACEOFF_PREP` (period increments, clock resets); if last period → `GAME_OVER`. `END_OF_PERIOD` and `GAME_OVER` are dead-puck phases.
 
 ### Dead-Puck Enforcement
 
-The `GameStateMachine` exposes `is_movement_locked()` — true during `GOAL_SCORED` and `FACEOFF_PREP`. `GameManager` re-exposes this as an instance method and is passed into each controller at `setup()` as the `game_state` dependency. Controllers call `_game_state.is_movement_locked()` every frame:
+The `GameStateMachine` exposes `is_movement_locked()` — true during `GOAL_SCORED`, `FACEOFF_PREP`, `END_OF_PERIOD`, and `GAME_OVER`. `GameManager` re-exposes this as an instance method and is passed into each controller at `setup()` as the `game_state` dependency. Controllers call `_game_state.is_movement_locked()` every frame:
 - `LocalController._physics_process`: zeros velocity, drains `_input_history`, skips input gathering and processing
 - `RemoteController._drive_from_input`: still advances `_last_processed_sequence` (keeps reconcile bookkeeping current) but zeros velocity and skips `_process_input`
 - `LocalController.reconcile`: returns early during locked phases — `on_faceoff_positions` (reliable RPC) is the authoritative source of faceoff positions
@@ -256,7 +260,7 @@ The host generates a unique color per player at spawn time via `_generate_player
 
 ### Host Reset
 
-`GameManager.reset_game()` (host-only): zeroes both scores, emits `score_changed` on the host, sends a `notify_game_reset` reliable RPC to all clients (they zero scores and emit `score_changed`), then calls `_begin_faceoff_prep()` which handles puck/player/goalie reset and sends faceoff positions via the existing `notify_faceoff_positions` RPC. The HUD builds a "Reset" button in the top-right corner only when `NetworkManager.is_host`.
+`GameManager.reset_game()` (host-only): calls `_state_machine.reset_all()` which zeroes both scores, resets `current_period` to 1, and restores `time_remaining` to `PERIOD_DURATION`. Emits `score_changed`, `period_changed`, and `clock_updated` on the host, sends a `notify_game_reset` reliable RPC to all clients (they call `reset_all()` and emit the same signals), then calls `_begin_faceoff_prep()` which handles puck/player/goalie reset and sends faceoff positions via the existing `notify_faceoff_positions` RPC. The HUD builds a "Reset" button in the top-right corner only when `NetworkManager.is_host`.
 
 ### Ghost Mechanic (Offsides + Icing)
 
@@ -283,7 +287,8 @@ Instead of stoppages, offsides and icing are enforced via a **ghost mode** — o
 | 5 | Goalie AI rework + networking | Done |
 | 6 | Full game flow (goals, faceoffs, score) | Done |
 | 7 | Testable domain layer (rules extraction, state machine, GUT tests, CI) | Done |
-| 8 | Characters + abilities | Next |
+| 8 | Period-based game loop (clock, period transitions, game over) | Done |
+| 9 | Characters + abilities | Next |
 
 ---
 

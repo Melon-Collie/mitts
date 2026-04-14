@@ -200,15 +200,15 @@ func test_begin_faceoff_prep_clears_icing() -> void:
 # ── Remote state application ────────────────────────────────────────────────
 
 func test_apply_remote_state_updates_scores_and_phase() -> void:
-	var changed: bool = sm.apply_remote_state(3, 2, GamePhase.Phase.FACEOFF)
+	var changed: bool = sm.apply_remote_state(3, 2, GamePhase.Phase.FACEOFF, 1, 200.0)
 	assert_true(changed)
 	assert_eq(sm.scores[0], 3)
 	assert_eq(sm.scores[1], 2)
 	assert_eq(sm.current_phase, GamePhase.Phase.FACEOFF)
 
 func test_apply_remote_state_returns_false_if_phase_unchanged() -> void:
-	sm.apply_remote_state(0, 0, GamePhase.Phase.PLAYING)
-	var changed: bool = sm.apply_remote_state(1, 0, GamePhase.Phase.PLAYING)
+	sm.apply_remote_state(0, 0, GamePhase.Phase.PLAYING, 1, 240.0)
+	var changed: bool = sm.apply_remote_state(1, 0, GamePhase.Phase.PLAYING, 1, 239.0)
 	assert_false(changed, "same phase even though scores changed")
 
 func test_apply_remote_goal_sets_phase_and_scores() -> void:
@@ -226,3 +226,51 @@ func test_faceoff_positions_per_player_slot() -> void:
 	assert_eq(positions.size(), 2)
 	assert_eq(positions[1], PlayerRules.faceoff_position_for_slot(0))
 	assert_eq(positions[100], PlayerRules.faceoff_position_for_slot(1))
+
+# ── Period / clock ───────────────────────────────────────────────────────────
+
+func test_period_clock_expires_to_end_of_period() -> void:
+	var changed: bool = sm.tick(GameRules.PERIOD_DURATION + 0.01)
+	assert_true(changed)
+	assert_eq(sm.current_phase, GamePhase.Phase.END_OF_PERIOD)
+	assert_eq(sm.current_period, 1, "period should not have advanced yet")
+	assert_eq(sm.time_remaining, 0.0)
+
+func test_period_clock_expires_on_last_period_to_game_over() -> void:
+	sm.current_period = GameRules.NUM_PERIODS
+	sm.tick(GameRules.PERIOD_DURATION + 0.01)
+	assert_eq(sm.current_phase, GamePhase.Phase.GAME_OVER)
+
+func test_advance_period_increments_period_and_resets_clock() -> void:
+	# Expire current period → END_OF_PERIOD
+	sm.tick(GameRules.PERIOD_DURATION + 0.01)
+	assert_eq(sm.current_phase, GamePhase.Phase.END_OF_PERIOD)
+	# Wait out the end-of-period pause → FACEOFF_PREP (period 2)
+	sm.tick(GameRules.END_OF_PERIOD_PAUSE + 0.01)
+	assert_eq(sm.current_phase, GamePhase.Phase.FACEOFF_PREP)
+	assert_eq(sm.current_period, 2)
+	assert_eq(sm.time_remaining, GameRules.PERIOD_DURATION)
+
+func test_game_over_locks_phase_permanently() -> void:
+	sm.current_period = GameRules.NUM_PERIODS
+	sm.tick(GameRules.PERIOD_DURATION + 0.01)
+	assert_eq(sm.current_phase, GamePhase.Phase.GAME_OVER)
+	var changed: bool = sm.tick(999.0)
+	assert_false(changed, "GAME_OVER should not tick out")
+	assert_eq(sm.current_phase, GamePhase.Phase.GAME_OVER)
+
+func test_reset_all_zeros_scores_and_resets_period() -> void:
+	sm.on_goal_scored(1)   # score 1-0
+	sm.current_period = 2
+	sm.time_remaining = 60.0
+	sm.reset_all()
+	assert_eq(sm.scores[0], 0)
+	assert_eq(sm.scores[1], 0)
+	assert_eq(sm.current_period, 1)
+	assert_eq(sm.time_remaining, GameRules.PERIOD_DURATION)
+
+func test_clock_does_not_tick_during_dead_puck_phase() -> void:
+	sm.on_goal_scored(1)  # → GOAL_SCORED
+	var time_before: float = sm.time_remaining
+	sm.tick(GameRules.GOAL_PAUSE_DURATION + 0.01)  # advances to FACEOFF_PREP
+	assert_eq(sm.time_remaining, time_before, "clock must not tick during GOAL_SCORED")

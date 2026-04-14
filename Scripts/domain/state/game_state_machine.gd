@@ -20,6 +20,10 @@ extends RefCounted
 var current_phase: int = GamePhase.Phase.PLAYING
 var _phase_timer: float = 0.0
 
+# ── Period + clock ───────────────────────────────────────────────────────────
+var current_period: int   = 1
+var time_remaining: float = GameRules.PERIOD_DURATION
+
 # ── Scores ───────────────────────────────────────────────────────────────────
 var scores: Array[int] = [0, 0]
 var last_scoring_team_id: int = -1
@@ -173,6 +177,15 @@ func reset_scores() -> void:
 	scores[0] = 0
 	scores[1] = 0
 
+func reset_all() -> void:
+	scores[0] = 0
+	scores[1] = 0
+	current_period = 1
+	time_remaining = GameRules.PERIOD_DURATION
+	icing_team_id = -1
+	_icing_timer = 0.0
+	last_carrier_team_id = -1
+
 # Transitions to FACEOFF_PREP and clears icing state. Used by manual reset and
 # after goals (the goal path is driven automatically by tick timer).
 func begin_faceoff_prep() -> void:
@@ -186,9 +199,13 @@ func begin_faceoff_prep() -> void:
 # World-state broadcasts carry authoritative phase + scores. Returns true if
 # the phase changed (so GameManager can emit phase_changed, lock/unlock puck).
 
-func apply_remote_state(score0: int, score1: int, phase: int) -> bool:
+func apply_remote_state(
+		score0: int, score1: int, phase: int,
+		period: int, t_remaining: float) -> bool:
 	scores[0] = score0
 	scores[1] = score1
+	current_period = period
+	time_remaining = t_remaining
 	if phase == current_phase:
 		return false
 	current_phase = phase
@@ -227,6 +244,13 @@ func _set_phase(phase: int) -> void:
 
 func _tick_phase(delta: float) -> bool:
 	if current_phase == GamePhase.Phase.PLAYING:
+		time_remaining -= delta
+		if time_remaining <= 0.0:
+			time_remaining = 0.0
+			_on_period_clock_expired()
+			return true
+		return false
+	if current_phase == GamePhase.Phase.GAME_OVER:
 		return false
 	_phase_timer += delta
 	match current_phase:
@@ -242,7 +266,25 @@ func _tick_phase(delta: float) -> bool:
 			if _phase_timer >= GameRules.FACEOFF_TIMEOUT:
 				_set_phase(GamePhase.Phase.PLAYING)
 				return true
+		GamePhase.Phase.END_OF_PERIOD:
+			if _phase_timer >= GameRules.END_OF_PERIOD_PAUSE:
+				_advance_period()
+				return true
 	return false
+
+func _on_period_clock_expired() -> void:
+	if current_period >= GameRules.NUM_PERIODS:
+		_set_phase(GamePhase.Phase.GAME_OVER)
+	else:
+		_set_phase(GamePhase.Phase.END_OF_PERIOD)
+
+func _advance_period() -> void:
+	current_period += 1
+	time_remaining = GameRules.PERIOD_DURATION
+	icing_team_id = -1
+	_icing_timer = 0.0
+	last_carrier_team_id = -1
+	_set_phase(GamePhase.Phase.FACEOFF_PREP)
 
 func _tick_icing(delta: float) -> void:
 	if icing_team_id == -1:

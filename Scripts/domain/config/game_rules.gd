@@ -10,6 +10,9 @@ class_name GameRules
 const GOAL_PAUSE_DURATION: float   = 2.0
 const FACEOFF_PREP_DURATION: float = 0.5
 const FACEOFF_TIMEOUT: float       = 10.0
+const PERIOD_DURATION: float       = 4.0 * 60.0   # 240 s per period
+const NUM_PERIODS: int             = 3
+const END_OF_PERIOD_PAUSE: float   = 3.0           # pause before next-period faceoff prep
 
 # ── Rink Geometry ─────────────────────────────────────────────────────────────
 const GOAL_LINE_Z: float = 26.6  # rink_length / 2 - distance_from_end (30 - 3.4)

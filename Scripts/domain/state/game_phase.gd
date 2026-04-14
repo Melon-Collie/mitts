@@ -7,8 +7,10 @@ class_name GamePhase
 # Usage: `GamePhase.Phase.PLAYING` from anywhere in the project.
 
 enum Phase {
-	PLAYING,       # normal gameplay
-	GOAL_SCORED,   # dead puck, celebration freeze
-	FACEOFF_PREP,  # players teleporting, puck resetting
-	FACEOFF,       # puck live at center, waiting for pickup or timeout
+	PLAYING,        # normal gameplay
+	GOAL_SCORED,    # dead puck, celebration freeze
+	FACEOFF_PREP,   # players teleporting, puck resetting
+	FACEOFF,        # puck live at center, waiting for pickup or timeout
+	END_OF_PERIOD,  # clock hit zero; brief pause before next-period faceoff
+	GAME_OVER,      # all periods done; locked until manual reset
 }

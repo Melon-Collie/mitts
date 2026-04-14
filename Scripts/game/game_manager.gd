@@ -8,12 +8,16 @@ extends Node
 signal goal_scored(scoring_team: Team)
 signal score_changed(score_0: int, score_1: int)
 signal phase_changed(new_phase: GamePhase.Phase)
+signal period_changed(new_period: int)
+signal clock_updated(time_remaining: float)
+signal game_over()
 
 # ── Domain state ──────────────────────────────────────────────────────────────
 # GameStateMachine owns phase/timer, scores, player slot registry, icing state,
 # and ghost computation. Exists on both host and client; host drives it via
 # tick(), clients sync it via apply_remote_state().
 var _state_machine: GameStateMachine = null
+var _last_emitted_clock_secs: int = -1
 
 # ── Infrastructure ────────────────────────────────────────────────────────────
 var _spawner: ActorSpawner = null
@@ -34,6 +38,11 @@ func _process(delta: float) -> void:
 		return
 	if _state_machine.tick(delta):
 		_handle_phase_entered()
+	if _state_machine.current_phase == GamePhase.Phase.PLAYING:
+		var secs: int = int(_state_machine.time_remaining)
+		if secs != _last_emitted_clock_secs:
+			_last_emitted_clock_secs = secs
+			clock_updated.emit(_state_machine.time_remaining)
 
 # ── Ghost State (Host) ────────────────────────────────────────────────────────
 func _physics_process(_delta: float) -> void:
@@ -277,7 +286,7 @@ func _on_goal_scored_into(defending_team: Team) -> void:
 	var scoring_team_id: int = _state_machine.on_goal_scored(defending_team.team_id)
 	if scoring_team_id == -1:
 		return  # wrong phase, ignored
-puck.pickup_locked = true
+	puck.pickup_locked = true
 	goal_scored.emit(teams[scoring_team_id])
 	score_changed.emit(_state_machine.scores[0], _state_machine.scores[1])
 	phase_changed.emit(_state_machine.current_phase)
@@ -288,12 +297,20 @@ puck.pickup_locked = true
 func _handle_phase_entered() -> void:
 	match _state_machine.current_phase:
 		GamePhase.Phase.FACEOFF_PREP:
+			period_changed.emit(_state_machine.current_period)
+			_last_emitted_clock_secs = -1
+			clock_updated.emit(_state_machine.time_remaining)
 			_enter_faceoff_prep()
 		GamePhase.Phase.FACEOFF:
 			_enter_faceoff()
 		GamePhase.Phase.PLAYING:
 			# Transition from FACEOFF timeout — unlock puck
 			puck.pickup_locked = false
+		GamePhase.Phase.END_OF_PERIOD:
+			puck.pickup_locked = true
+		GamePhase.Phase.GAME_OVER:
+			puck.pickup_locked = true
+			game_over.emit()
 	phase_changed.emit(_state_machine.current_phase)
 
 func _enter_faceoff_prep() -> void:
@@ -321,8 +338,11 @@ func _on_faceoff_puck_picked_up(_carrier: Skater) -> void:
 
 # ── Reset ─────────────────────────────────────────────────────────────────────
 func reset_game() -> void:
-	_state_machine.reset_scores()
+	_state_machine.reset_all()
+	_last_emitted_clock_secs = -1
 	score_changed.emit(0, 0)
+	period_changed.emit(1)
+	clock_updated.emit(GameRules.PERIOD_DURATION)
 	NetworkManager.notify_reset_to_all()
 	# begin_faceoff_prep() transitions the state machine; _handle_phase_entered()
 	# dispatches to _enter_faceoff_prep() and emits phase_changed.
@@ -330,8 +350,10 @@ func reset_game() -> void:
 	_handle_phase_entered()
 
 func on_game_reset() -> void:
-	_state_machine.reset_scores()
+	_state_machine.reset_all()
 	score_changed.emit(0, 0)
+	period_changed.emit(1)
+	clock_updated.emit(GameRules.PERIOD_DURATION)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 func _generate_player_color(team_id: int) -> Color:
@@ -354,12 +376,14 @@ func get_world_state() -> Array:
 	state.append(_state_machine.scores[0])
 	state.append(_state_machine.scores[1])
 	state.append(_state_machine.current_phase)
+	state.append(_state_machine.current_period)
+	state.append(int(ceil(_state_machine.time_remaining)))
 	return state
 
 func apply_world_state(state: Array) -> void:
 	const GOALIE_STATE_SIZE: int = 5
 	const PUCK_STATE_SIZE: int = 3
-	const GAME_STATE_SIZE: int = 3  # score0, score1, phase
+	const GAME_STATE_SIZE: int = 5  # score0, score1, phase, period, time_remaining
 	var game_state_offset: int = state.size() - GAME_STATE_SIZE
 	var goalie_offset: int = game_state_offset - goalie_controllers.size() * GOALIE_STATE_SIZE
 	var puck_offset: int = goalie_offset - PUCK_STATE_SIZE
@@ -396,13 +420,18 @@ func _apply_goalie_states(state: Array, offset: int, stride: int) -> void:
 		goalie_controllers[gi].apply_state(goalie_net_state)
 
 func _apply_game_state(state: Array, offset: int) -> void:
-	var score0: int = state[offset]
-	var score1: int = state[offset + 1]
+	var score0: int                = state[offset]
+	var score1: int                = state[offset + 1]
 	var new_phase: GamePhase.Phase = state[offset + 2] as GamePhase.Phase
-	var phase_changed_this_tick: bool = _state_machine.apply_remote_state(score0, score1, new_phase)
+	var period: int                = state[offset + 3]
+	var t_remaining: float         = float(state[offset + 4])
+	var phase_changed_this_tick: bool = _state_machine.apply_remote_state(
+			score0, score1, new_phase, period, t_remaining)
 	if phase_changed_this_tick:
 		puck.pickup_locked = PhaseRules.is_dead_puck_phase(new_phase)
 		phase_changed.emit(new_phase)
+	period_changed.emit(period)
+	clock_updated.emit(t_remaining)
 
 # Instance methods consumed by controllers via setup() injection. Controllers
 # take `game_state: Node` (expected to be this GameManager) and call these

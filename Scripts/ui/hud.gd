@@ -8,6 +8,8 @@ extends CanvasLayer
 
 var _score_label: Label
 var _phase_label: Label
+var _period_label: Label
+var _clock_label: Label
 var _elevation_panel: PanelContainer
 var _local_skater: Skater = null
 
@@ -18,8 +20,13 @@ func _ready() -> void:
 		_build_reset_button()
 	_score_label.text = "0 \u2013 0"
 	_phase_label.visible = false
+	_period_label.text = "PERIOD 1"
+	_clock_label.text = _format_clock(GameRules.PERIOD_DURATION)
 	GameManager.score_changed.connect(_on_score_changed)
 	GameManager.phase_changed.connect(_on_phase_changed)
+	GameManager.period_changed.connect(_on_period_changed)
+	GameManager.clock_updated.connect(_on_clock_updated)
+	GameManager.game_over.connect(_on_game_over)
 
 func _process(_delta: float) -> void:
 	if _local_skater == null:
@@ -58,6 +65,18 @@ func _build_scorebug() -> void:
 	_phase_label.add_theme_font_size_override("font_size", phase_font_size)
 	_phase_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2, 1.0))
 	vbox.add_child(_phase_label)
+
+	_period_label = Label.new()
+	_period_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_period_label.add_theme_font_size_override("font_size", phase_font_size)
+	_period_label.add_theme_color_override("font_color", Color.WHITE)
+	vbox.add_child(_period_label)
+
+	_clock_label = Label.new()
+	_clock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_clock_label.add_theme_font_size_override("font_size", score_font_size)
+	_clock_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9, 1.0))
+	vbox.add_child(_clock_label)
 
 func _build_elevation_indicator() -> void:
 	var style := StyleBoxFlat.new()
@@ -104,12 +123,33 @@ func _on_score_changed(score_0: int, score_1: int) -> void:
 	_score_label.text = "%d \u2013 %d" % [score_0, score_1]
 
 func _on_phase_changed(new_phase: int) -> void:
-	if new_phase == GamePhase.Phase.PLAYING:
-		_phase_label.visible = false
-		_phase_label.text = ""
-	elif new_phase == GamePhase.Phase.GOAL_SCORED:
-		_phase_label.text = "GOAL!"
-		_phase_label.visible = true
-	else:
-		_phase_label.text = "FACEOFF"
-		_phase_label.visible = true
+	match new_phase:
+		GamePhase.Phase.PLAYING:
+			_phase_label.visible = false
+			_phase_label.text = ""
+		GamePhase.Phase.GOAL_SCORED:
+			_phase_label.text = "GOAL!"
+			_phase_label.visible = true
+		GamePhase.Phase.END_OF_PERIOD:
+			_phase_label.text = "END OF PERIOD"
+			_phase_label.visible = true
+		GamePhase.Phase.GAME_OVER:
+			_phase_label.text = "GAME OVER"
+			_phase_label.visible = true
+		_:
+			_phase_label.text = "FACEOFF"
+			_phase_label.visible = true
+
+func _on_period_changed(new_period: int) -> void:
+	_period_label.text = "PERIOD %d" % new_period
+
+func _on_clock_updated(t: float) -> void:
+	_clock_label.text = _format_clock(t)
+
+func _on_game_over() -> void:
+	_phase_label.text = "GAME OVER"
+	_phase_label.visible = true
+
+func _format_clock(t: float) -> String:
+	var secs: int = int(ceil(t))
+	return "%d:%02d" % [secs / 60, secs % 60]

@@ -51,7 +51,7 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 
 **Ghost mechanic:** Offsides and icing are enforced via a ghost mode rather than stoppages. Ghost skaters go transparent, can't interact with the puck or other players (collision layers zeroed), and can still move freely. Offsides: skater in offensive zone while puck hasn't crossed the blue line → ghost until they retreat or puck enters the zone. Icing: puck shot from own half past opponent goal line → entire team ghosted for `ICING_GHOST_DURATION` (3s) or until the other team picks up the puck. Host computes ghost state in `GameManager._physics_process`; clients predict offsides locally, receive authoritative ghost state (including icing) via world state.
 
-**World state layout:** `[peer_id, skater_state_array, ..., puck_position, puck_velocity, puck_carrier_peer_id, goalie0_state[5], goalie1_state[5], score0, score1, phase]`
+**World state layout:** `[peer_id, skater_state_array, ..., puck_position, puck_velocity, puck_carrier_peer_id, goalie0_state[5], goalie1_state[5], score0, score1, phase, period, time_remaining_secs]`
 
 ## Key Files
 
@@ -59,8 +59,8 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 
 | File | Role |
 |------|------|
-| `domain/state/game_phase.gd` | `class_name GamePhase`; nested `enum Phase { PLAYING, GOAL_SCORED, FACEOFF_PREP, FACEOFF }` |
-| `domain/state/game_state_machine.gd` | RefCounted FSM. Owns phase/timer, scores, player slot registry, icing state; host drives via `tick(delta)`, clients sync via `apply_remote_state(...)` |
+| `domain/state/game_phase.gd` | `class_name GamePhase`; nested `enum Phase { PLAYING, GOAL_SCORED, FACEOFF_PREP, FACEOFF, END_OF_PERIOD, GAME_OVER }` |
+| `domain/state/game_state_machine.gd` | RefCounted FSM. Owns phase/timer, scores, current_period, time_remaining (period clock), player slot registry, icing state; host drives via `tick(delta)`, clients sync via `apply_remote_state(...)` |
 | `domain/config/game_rules.gd` | Game-rule constants: timings, rink geometry, blue/goal line Z, icing duration, faceoff positions, max players, ice friction |
 | `domain/rules/phase_rules.gd` | `is_dead_puck_phase`, `is_movement_locked` |
 | `domain/rules/player_rules.gd` | Team balancing, HSV color generation, faceoff position lookup |

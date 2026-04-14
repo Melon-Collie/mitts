@@ -7,7 +7,10 @@ class_name PhaseRules
 
 # Phases during which player movement and input are suppressed.
 static func is_dead_puck_phase(phase: GamePhase.Phase) -> bool:
-	return phase == GamePhase.Phase.GOAL_SCORED or phase == GamePhase.Phase.FACEOFF_PREP
+	return (phase == GamePhase.Phase.GOAL_SCORED
+		or phase == GamePhase.Phase.FACEOFF_PREP
+		or phase == GamePhase.Phase.END_OF_PERIOD
+		or phase == GamePhase.Phase.GAME_OVER)
 
 # Convenience: same as is_dead_puck_phase for the given phase.
 static func is_movement_locked(phase: GamePhase.Phase) -> bool:

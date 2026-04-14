@@ -60,7 +60,8 @@ Pucks coming in fast deflect off your blade instead of sticking. Move your stick
 - Accurate Art Ross hockey nets with Bézier curve frame and translucent ruled-surface netting
 - Behavioral goalie AI (state machine, Buckley depth system, butterfly, RVH) — server-authoritative with client interpolation, tracking lag for beatable positioning
 - Goal detection, score tracking, and faceoff sequences — goals pause play, players teleport to faceoff dots, puck goes live on pickup
-- Scorebug HUD — score and phase label (GOAL! / FACEOFF) in top-left corner
+- Period-based game loop — 3 periods × 4 minutes; clock pauses during dead-puck phases; each period opens with a faceoff; game locks after the final period until reset
+- Scorebug HUD — score, period, clock (MM:SS), and phase label (GOAL! / END OF PERIOD / GAME OVER / FACEOFF) in top-left corner
 - Elevation indicator — bottom-center HUD badge when elevated shot mode is active
 - Main menu — host, join (with IP input), and offline from the title screen
 - Player colors — team-hued skater colors; reds for team 0, blues for team 1, each player a distinct shade
