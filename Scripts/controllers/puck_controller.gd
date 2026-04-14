@@ -10,10 +10,20 @@ var puck: Puck = null
 var is_server: bool = false
 
 # ── State ─────────────────────────────────────────────────────────────────────
-var _carrier_peer_id: int = -1
+var _carrier_peer_id: int = -1            # server-side authoritative carrier
+var _local_carrier_skater: Skater = null  # client-side: local skater while carrying
 var _current_time: float = 0.0
 var _state_buffer: Array[BufferedPuckState] = []
 var _predicting_trajectory: bool = false
+
+# Callable (Skater) -> int peer_id, or -1 if not registered. Set by GameManager
+# at spawn time so PuckController doesn't reach into GameManager.players.
+var _peer_id_resolver: Callable = Callable()
+
+# ── Signals (server-side puck events, GameManager listens) ───────────────────
+signal puck_picked_up_by(peer_id: int)
+signal puck_released_by_carrier(peer_id: int)
+signal puck_stripped_from(peer_id: int)
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 func setup(assigned_puck: Puck, assigned_is_server: bool) -> void:
@@ -26,24 +36,27 @@ func setup(assigned_puck: Puck, assigned_is_server: bool) -> void:
 		puck.puck_released.connect(_on_puck_released)
 		puck.puck_stripped.connect(_on_puck_stripped)
 
+func set_peer_id_resolver(resolver: Callable) -> void:
+	_peer_id_resolver = resolver
+
 func _physics_process(delta: float) -> void:
 	if puck == null or is_server:
 		return
 	_current_time += delta
-	if _carrier_peer_id == multiplayer.get_unique_id():
+	if _local_carrier_skater != null:
 		_apply_local_carrier_position()
 	elif not _predicting_trajectory:
 		_interpolate()
 	# During prediction, Jolt runs freely — no manual stepping needed
 
 # ── Local Prediction ──────────────────────────────────────────────────────────
-func notify_local_pickup() -> void:
-	_carrier_peer_id = multiplayer.get_unique_id()
+func notify_local_pickup(local_skater: Skater) -> void:
+	_local_carrier_skater = local_skater
 	_predicting_trajectory = false
 	puck.set_client_prediction_mode(false)
 
 func notify_local_release(direction: Vector3, power: float) -> void:
-	_carrier_peer_id = -1
+	_local_carrier_skater = null
 	_predicting_trajectory = true
 	puck.set_client_prediction_mode(true)
 	puck.set_puck_velocity(direction * power)
@@ -52,16 +65,14 @@ func notify_local_release(direction: Vector3, power: float) -> void:
 # Called when the server forcibly ends a carry (e.g. goal scored).
 # Does not start trajectory prediction — just drops back to interpolation.
 func notify_local_puck_dropped() -> void:
-	_carrier_peer_id = -1
+	_local_carrier_skater = null
 	_predicting_trajectory = false
 	puck.set_client_prediction_mode(false)
 	_state_buffer.clear()
 
 func _apply_local_carrier_position() -> void:
-	var record := GameManager.get_local_player()
-	if record == null:
-		return
-	var blade_world := record.skater.upper_body_to_global(record.skater.get_blade_position())
+	var blade_world: Vector3 = _local_carrier_skater.upper_body_to_global(
+			_local_carrier_skater.get_blade_position())
 	blade_world.y = puck.ice_height
 	puck.set_puck_position(blade_world)
 
@@ -83,29 +94,33 @@ func _reconcile(state: PuckNetworkState) -> void:
 		puck.set_puck_position(puck.get_puck_position() + pos_error * position_correction_blend)
 
 # ── Server Signals ────────────────────────────────────────────────────────────
+# These run on host only (connected in setup() when is_server). Each resolves
+# the affected peer_id via the injected resolver and emits a signal upward.
+# GameManager listens and does the player-registry / RPC work.
 func _on_puck_picked_up(carrier: Skater) -> void:
-	for peer_id in GameManager.players:
-		var record: PlayerRecord = GameManager.players[peer_id]
-		if record.skater == carrier:
-			_carrier_peer_id = peer_id
-			record.controller.on_puck_picked_up_network()
-			if not record.is_local:
-				NetworkManager.send_puck_picked_up(peer_id)
-			return
+	if not _peer_id_resolver.is_valid():
+		return
+	var peer_id: int = _peer_id_resolver.call(carrier)
+	if peer_id == -1:
+		return
+	_carrier_peer_id = peer_id
+	puck_picked_up_by.emit(peer_id)
 
 func _on_puck_released() -> void:
-	if _carrier_peer_id != -1 and GameManager.players.has(_carrier_peer_id):
-		GameManager.players[_carrier_peer_id].controller.on_puck_released_network()
+	var peer_id: int = _carrier_peer_id
 	_carrier_peer_id = -1
+	if peer_id != -1:
+		puck_released_by_carrier.emit(peer_id)
 
 func _on_puck_stripped(ex_carrier: Skater) -> void:
 	if ex_carrier == null:
 		return
-	for peer_id: int in GameManager.players:
-		var record: PlayerRecord = GameManager.players[peer_id]
-		if record.skater == ex_carrier and not record.is_local:
-			NetworkManager.send_puck_stolen(peer_id)
-			return
+	if not _peer_id_resolver.is_valid():
+		return
+	var peer_id: int = _peer_id_resolver.call(ex_carrier)
+	if peer_id == -1:
+		return
+	puck_stripped_from.emit(peer_id)
 
 # ── State Serialization ───────────────────────────────────────────────────────
 func get_state() -> Array:

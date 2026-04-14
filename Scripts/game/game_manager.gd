@@ -218,10 +218,40 @@ func _spawn_puck() -> void:
 	puck_controller = PuckController.new()
 	get_tree().current_scene.add_child(puck_controller)
 	puck_controller.setup(puck, NetworkManager.is_host)
+	puck_controller.set_peer_id_resolver(_resolve_skater_peer_id)
+	puck_controller.puck_picked_up_by.connect(_on_server_puck_picked_up_by)
+	puck_controller.puck_released_by_carrier.connect(_on_server_puck_released_by_carrier)
+	puck_controller.puck_stripped_from.connect(_on_server_puck_stripped_from)
 
 func _resolve_skater_team_id(skater: Skater) -> int:
 	var team: Team = get_skater_team(skater)
 	return team.team_id if team != null else -1
+
+func _resolve_skater_peer_id(skater: Skater) -> int:
+	for peer_id: int in players:
+		if players[peer_id].skater == skater:
+			return peer_id
+	return -1
+
+# ── PuckController server-signal handlers (host only — clients never wire these)
+func _on_server_puck_picked_up_by(peer_id: int) -> void:
+	if not players.has(peer_id):
+		return
+	var record: PlayerRecord = players[peer_id]
+	record.controller.on_puck_picked_up_network()
+	if not record.is_local:
+		NetworkManager.send_puck_picked_up(peer_id)
+
+func _on_server_puck_released_by_carrier(peer_id: int) -> void:
+	if not players.has(peer_id):
+		return
+	players[peer_id].controller.on_puck_released_network()
+
+func _on_server_puck_stripped_from(peer_id: int) -> void:
+	if not players.has(peer_id):
+		return
+	if not players[peer_id].is_local:
+		NetworkManager.send_puck_stolen(peer_id)
 
 func _spawn_goalies() -> void:
 	var top: Goalie = GOALIE_SCENE.instantiate()
@@ -478,7 +508,7 @@ func on_local_player_picked_up_puck() -> void:
 	var record := get_local_player()
 	if record != null:
 		record.controller.on_puck_picked_up_network()
-	puck_controller.notify_local_pickup()
+		puck_controller.notify_local_pickup(record.skater)
 
 func on_local_player_puck_stolen() -> void:
 	var local_record := get_local_player()
