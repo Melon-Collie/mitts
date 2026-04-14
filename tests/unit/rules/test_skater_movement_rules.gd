@@ -1,0 +1,78 @@
+extends GutTest
+
+# SkaterMovementRules — thrust, friction, max speed clamping with carry penalty.
+
+func _default_cfg() -> Dictionary:
+	return {
+		"thrust": 20.0,
+		"friction": 5.0,
+		"max_speed": 10.0,
+		"move_deadzone": 0.1,
+		"brake_multiplier": 5.0,
+		"puck_carry_speed_multiplier": 0.88,
+		"backward_thrust_multiplier": 0.7,
+		"crossover_thrust_multiplier": 0.85,
+	}
+
+func test_no_input_applies_friction() -> void:
+	var result: Vector3 = SkaterMovementRules.apply_movement(
+		Vector3(5, 0, 0), Vector2.ZERO, 0.0, false, false, 0.1, _default_cfg())
+	var speed: float = Vector2(result.x, result.z).length()
+	assert_lt(speed, 5.0, "friction should slow the skater")
+
+func test_brake_slows_faster_than_friction() -> void:
+	var no_brake: Vector3 = SkaterMovementRules.apply_movement(
+		Vector3(5, 0, 0), Vector2.ZERO, 0.0, false, false, 0.1, _default_cfg())
+	var with_brake: Vector3 = SkaterMovementRules.apply_movement(
+		Vector3(5, 0, 0), Vector2.ZERO, 0.0, false, true, 0.1, _default_cfg())
+	assert_lt(with_brake.length(), no_brake.length(), "braking removes more speed than idle friction")
+
+func test_input_applies_thrust() -> void:
+	var result: Vector3 = SkaterMovementRules.apply_movement(
+		Vector3.ZERO, Vector2(1, 0), 0.0, false, false, 0.1, _default_cfg())
+	assert_gt(result.x, 0.0, "thrust in +X direction should increase X velocity")
+
+func test_deadzone_input_treated_as_no_input() -> void:
+	var cfg := _default_cfg()
+	# Input below the 0.1 deadzone should apply only friction, no thrust
+	var result: Vector3 = SkaterMovementRules.apply_movement(
+		Vector3(5, 0, 0), Vector2(0.01, 0), 0.0, false, false, 0.1, cfg)
+	assert_lt(Vector2(result.x, result.z).length(), 5.0)
+
+func test_puck_carry_reduces_max_speed() -> void:
+	# Accelerate for a long time to hit the cap
+	var cfg := _default_cfg()
+	var v_free := Vector3.ZERO
+	var v_carry := Vector3.ZERO
+	for i in range(1000):
+		v_free = SkaterMovementRules.apply_movement(v_free, Vector2(1, 0), 0.0, false, false, 0.01, cfg)
+		v_carry = SkaterMovementRules.apply_movement(v_carry, Vector2(1, 0), 0.0, true, false, 0.01, cfg)
+	var free_speed: float = Vector2(v_free.x, v_free.z).length()
+	var carry_speed: float = Vector2(v_carry.x, v_carry.z).length()
+	assert_lt(carry_speed, free_speed, "carrying the puck caps speed lower than free skating")
+	assert_lt(carry_speed, cfg.max_speed, "carry speed should be below full max_speed")
+
+func test_over_max_preserved_when_no_thrust() -> void:
+	# Skater blasted by a body check to speed 20 — without new thrust input, the
+	# clamp shouldn't yank them back to max_speed. Only friction erodes it.
+	var cfg := _default_cfg()
+	var boosted := Vector3(20, 0, 0)
+	var result: Vector3 = SkaterMovementRules.apply_movement(
+		boosted, Vector2.ZERO, 0.0, false, false, 0.01, cfg)
+	# A single small step of friction should barely reduce 20
+	assert_gt(Vector2(result.x, result.z).length(), cfg.max_speed,
+		"over-max speed from external source should survive a single friction tick")
+
+func test_backward_thrust_scaled_down() -> void:
+	# Facing +Z means facing_dir is (-sin(0), -cos(0)) = (0, -1), so moving
+	# in (0, 1) is aligned with facing — move_dot = -1 is backward.
+	# Moving in (0, -1) is backward from facing. (0, 1) is forward. Let's test
+	# that moving "behind" the skater applies reduced thrust.
+	var cfg := _default_cfg()
+	# With rotation_y = 0, forward is -Z direction; so move (0, 1) is backward
+	var forward: Vector3 = SkaterMovementRules.apply_movement(
+		Vector3.ZERO, Vector2(0, -1), 0.0, false, false, 0.1, cfg)
+	var backward: Vector3 = SkaterMovementRules.apply_movement(
+		Vector3.ZERO, Vector2(0, 1), 0.0, false, false, 0.1, cfg)
+	# Forward thrust full; backward thrust scaled by backward_thrust_multiplier (0.7)
+	assert_gt(forward.length(), backward.length(), "backward thrust should be weaker than forward")

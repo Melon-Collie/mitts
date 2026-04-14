@@ -423,37 +423,23 @@ func _apply_facing(input: InputState, delta: float) -> void:
 func _apply_movement(input: InputState, delta: float) -> void:
 	if _state == State.SLAPPER_CHARGE_WITH_PUCK:
 		return
+	skater.velocity = SkaterMovementRules.apply_movement(
+			skater.velocity,
+			input.move_vector,
+			skater.rotation.y,
+			has_puck,
+			input.brake,
+			delta,
+			_movement_config())
 
-	var move: Vector2 = input.move_vector
-
-	if move.length() > move_deadzone:
-		var thrust_dir: Vector3 = Vector3(move.x, 0.0, move.y)
-		var facing_dir: Vector2 = Vector2(-sin(skater.rotation.y), -cos(skater.rotation.y))
-		var move_dot: float = facing_dir.dot(move.normalized())
-
-		var thrust_scale: float
-		if move_dot >= 0.0:
-			thrust_scale = lerpf(crossover_thrust_multiplier, 1.0, move_dot)
-		else:
-			thrust_scale = lerpf(backward_thrust_multiplier, crossover_thrust_multiplier, move_dot + 1.0)
-
-		skater.velocity += thrust_dir * thrust * thrust_scale * delta
-
-		var effective_max_speed: float = max_speed * puck_carry_speed_multiplier if has_puck else max_speed
-		var speed: float = Vector2(skater.velocity.x, skater.velocity.z).length()
-		if speed > effective_max_speed:
-			var pre_thrust_speed: float = Vector2(
-				skater.velocity.x - thrust_dir.x * thrust * thrust_scale * delta,
-				skater.velocity.z - thrust_dir.z * thrust * thrust_scale * delta
-			).length()
-			var target_speed: float = maxf(pre_thrust_speed, effective_max_speed)
-			if speed > target_speed:
-				var limited: Vector2 = Vector2(skater.velocity.x, skater.velocity.z).normalized() * target_speed
-				skater.velocity.x = limited.x
-				skater.velocity.z = limited.y
-
-	var horizontal_vel: Vector2 = Vector2(skater.velocity.x, skater.velocity.z)
-	var current_friction: float = friction * brake_multiplier if input.brake else friction
-	horizontal_vel = horizontal_vel.move_toward(Vector2.ZERO, current_friction * delta)
-	skater.velocity.x = horizontal_vel.x
-	skater.velocity.z = horizontal_vel.y
+func _movement_config() -> Dictionary:
+	return {
+		"thrust": thrust,
+		"friction": friction,
+		"max_speed": max_speed,
+		"move_deadzone": move_deadzone,
+		"brake_multiplier": brake_multiplier,
+		"puck_carry_speed_multiplier": puck_carry_speed_multiplier,
+		"backward_thrust_multiplier": backward_thrust_multiplier,
+		"crossover_thrust_multiplier": crossover_thrust_multiplier,
+	}
