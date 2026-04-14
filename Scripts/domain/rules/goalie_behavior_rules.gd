@@ -4,9 +4,11 @@ class_name GoalieBehaviorRules
 # functions return classifications and targets. The Buckley-style depth
 # chart and shot detection live here so we can test them without a scene.
 #
-# direction_sign convention:
-#   +1  goalie defends the +Z goal (Team 0)
-#   -1  goalie defends the -Z goal (Team 1)
+# direction_sign convention (matches GoalieController: sign(-goal_line_z)):
+#   -1  goalie defends the +Z goal (goal_line_z = +GOAL_LINE_Z)
+#   +1  goalie defends the -Z goal (goal_line_z = -GOAL_LINE_Z)
+# "Behind goal" therefore means:
+#   (puck_z - goal_line_z) * direction_sign < 0
 
 # Is a released puck on course to hit this goalie's net? If so, return the
 # reaction_delay to arm a butterfly-drop timer. Returns -1.0 if not a shot.

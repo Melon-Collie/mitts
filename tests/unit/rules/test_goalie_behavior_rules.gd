@@ -56,25 +56,33 @@ func test_fast_puck_wide_of_post_not_a_shot() -> void:
 	assert_eq(result, -1.0)
 
 # ── is_puck_in_defensive_zone ────────────────────────────────────────────────
+# direction_sign = sign(-goal_line_z), so for goalie at +Z (goal_line=+26.6)
+# direction_sign = -1. Puck "behind" the goalie means z > goal_line_z.
 
 func test_puck_behind_goal_in_defensive_zone() -> void:
-	# Team 0 goalie (direction_sign=+1) at z=26.6; puck behind means z > 26.6
+	# Goalie defends +Z goal, puck past the goal line at z=28
 	assert_true(GoalieBehaviorRules.is_puck_in_defensive_zone(
-		Vector3(0, 0, 28), 26.6, 0.0, 1, _zone_cfg()))
+		Vector3(0, 0, 28), 26.6, 0.0, -1, _zone_cfg()))
 
 func test_puck_far_from_goal_not_in_defensive_zone() -> void:
 	assert_false(GoalieBehaviorRules.is_puck_in_defensive_zone(
-		Vector3(0, 0, 10), 26.6, 0.0, 1, _zone_cfg()))
+		Vector3(0, 0, 10), 26.6, 0.0, -1, _zone_cfg()))
 
 func test_puck_near_post_sharp_angle_in_defensive_zone() -> void:
-	# Close in z, offset in x → angle >= 60°
+	# Close in z (puck_z_dist = 1.1), offset in x (3) → angle ≈ 70° > 60°
 	assert_true(GoalieBehaviorRules.is_puck_in_defensive_zone(
-		Vector3(3, 0, 25.5), 26.6, 0.0, 1, _zone_cfg()))
+		Vector3(3, 0, 25.5), 26.6, 0.0, -1, _zone_cfg()))
 
 func test_puck_near_post_shallow_angle_not_in_defensive_zone() -> void:
-	# Close in z, small X offset → angle below threshold
+	# Close in z (1.1), small X offset (0.3) → angle ≈ 15° < 60°
 	assert_false(GoalieBehaviorRules.is_puck_in_defensive_zone(
-		Vector3(0.3, 0, 25.5), 26.6, 0.0, 1, _zone_cfg()))
+		Vector3(0.3, 0, 25.5), 26.6, 0.0, -1, _zone_cfg()))
+
+func test_puck_behind_negative_z_goal() -> void:
+	# Opposite-side goalie: defends -Z (goal_line=-26.6), direction_sign=+1.
+	# Puck "behind" means z < -26.6.
+	assert_true(GoalieBehaviorRules.is_puck_in_defensive_zone(
+		Vector3(0, 0, -28), -26.6, 0.0, 1, _zone_cfg()))
 
 # ── target_depth_for_puck_distance ───────────────────────────────────────────
 
