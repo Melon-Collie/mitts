@@ -258,7 +258,7 @@ Body parts lerp from current position/rotation to target config using a lerp rat
 
 ## Goal Assignment
 
-> ℹ️ **Goal assignment changed.** The spec called for `@export var goal_node: Node3D` with geometry read on `_ready()`. In practice, the rink has a single `HockeyGoal` node that generates both goals procedurally — there are no separate goal nodes to reference. Instead, `GoalieController` is spawned by `GameManager` and assigned via `setup(goalie: Goalie, puck: Puck, goal_line_z: float)`. `GameManager` passes `±Constants.GOAL_LINE_Z` directly.
+> ℹ️ **Goal assignment changed.** The spec called for `@export var goal_node: Node3D` with geometry read on `_ready()`. In practice, the rink has a single `HockeyGoal` node that generates both goals procedurally — there are no separate goal nodes to reference. Instead, `GoalieController` is spawned by `ActorSpawner` (called from `GameManager`) and assigned via `setup(goalie: Goalie, puck: Puck, goal_line_z: float, is_server: bool)`. `ActorSpawner` passes `±GameRules.GOAL_LINE_Z` directly.
 
 All depth and lateral math uses `_direction_sign = sign(-goal_line_z)` to handle both ends of the rink with the same code.
 

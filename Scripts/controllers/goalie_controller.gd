@@ -163,21 +163,8 @@ func _update_depth(delta: float) -> void:
 	if _state != State.STANDING:
 		return
 	var puck_z_dist: float = abs(_tracked_puck_position.z - _goal_line_z)
-	var target_depth: float
-	if puck_z_dist <= zone_post_z:
-		var t: float = puck_z_dist / zone_post_z
-		target_depth = lerpf(depth_defensive, depth_aggressive, t)
-	elif puck_z_dist <= zone_aggressive_z:
-		target_depth = depth_aggressive
-	elif puck_z_dist <= zone_base_z:
-		var t: float = (puck_z_dist - zone_aggressive_z) / (zone_base_z - zone_aggressive_z)
-		target_depth = lerpf(depth_aggressive, depth_base, t)
-	elif puck_z_dist <= zone_conservative_z:
-		var t: float = (puck_z_dist - zone_base_z) / (zone_conservative_z - zone_base_z)
-		target_depth = lerpf(depth_base, depth_conservative, t)
-	else:
-		var t: float = clampf((puck_z_dist - zone_conservative_z) / zone_conservative_z, 0.0, 1.0)
-		target_depth = lerpf(depth_conservative, depth_defensive, t)
+	var target_depth: float = GoalieBehaviorRules.target_depth_for_puck_distance(
+			puck_z_dist, _depth_config())
 	_current_depth = lerpf(_current_depth, target_depth, depth_speed * delta)
 
 # ── Position ──────────────────────────────────────────────────────────────────
@@ -198,12 +185,9 @@ func _update_position(delta: float) -> void:
 	goalie.set_goalie_position(_current_x, _goal_line_z + _direction_sign * _current_depth)
 
 func _update_target_x() -> void:
-	var puck_z_dist: float = abs(_tracked_puck_position.z - _goal_line_z)
-	if puck_z_dist > 0.01:
-		_target_x = _goal_center_x + (_tracked_puck_position.x - _goal_center_x) * (_current_depth / puck_z_dist)
-	else:
-		_target_x = _goal_center_x
-	_target_x = clampf(_target_x, _goal_center_x - net_half_width, _goal_center_x + net_half_width)
+	_target_x = GoalieBehaviorRules.target_lateral_x(
+			_tracked_puck_position, _goal_line_z, _goal_center_x,
+			_current_depth, net_half_width)
 
 func _update_lateral_standing(delta: float) -> void:
 	_update_target_x()
@@ -320,18 +304,14 @@ func _get_config(state: State) -> GoalieBodyConfig:
 func _on_puck_released() -> void:
 	if _state != State.STANDING:
 		return
-	var vel: Vector3 = puck.linear_velocity
-	if vel.length() < shot_speed_threshold:
-		return
-	if abs(vel.z) < 0.001:
-		return
-	var t_to_goal: float = (_goal_line_z - puck.global_position.z) / vel.z
-	if t_to_goal <= 0.0:
-		return
-	var projected_x: float = puck.global_position.x + vel.x * t_to_goal
-	if abs(projected_x - _goal_center_x) > net_half_width + net_margin:
-		return
-	_shot_timer = reaction_delay
+	var delay: float = GoalieBehaviorRules.detect_shot(
+			puck.global_position,
+			puck.linear_velocity,
+			_goal_line_z,
+			_goal_center_x,
+			_shot_detection_config())
+	if delay >= 0.0:
+		_shot_timer = delay
 
 # ── State Serialization ───────────────────────────────────────────────────────
 func get_state() -> Array:
@@ -391,13 +371,33 @@ func _apply_network_state(s: GoalieNetworkState) -> void:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 func _is_puck_in_defensive_zone() -> bool:
-	var behind_goal: bool = (_tracked_puck_position.z - _goal_line_z) * _direction_sign < 0.0
-	if behind_goal:
-		return true
-	# Also trigger when the puck is within zone_post_z of the goal line at a sharp angle —
-	# matches the "Defensive" corner zones in the Buckley depth chart.
-	var puck_z_dist: float = abs(_tracked_puck_position.z - _goal_line_z)
-	if puck_z_dist > zone_post_z:
-		return false
-	var puck_angle: float = atan2(abs(_tracked_puck_position.x - _goal_center_x), max(puck_z_dist, 0.01))
-	return puck_angle >= deg_to_rad(rvh_early_angle)
+	return GoalieBehaviorRules.is_puck_in_defensive_zone(
+			_tracked_puck_position, _goal_line_z, _goal_center_x,
+			_direction_sign, _defensive_zone_config())
+
+# ── Rule configs ──────────────────────────────────────────────────────────────
+func _shot_detection_config() -> Dictionary:
+	return {
+		"shot_speed_threshold": shot_speed_threshold,
+		"net_half_width": net_half_width,
+		"net_margin": net_margin,
+		"reaction_delay": reaction_delay,
+	}
+
+func _defensive_zone_config() -> Dictionary:
+	return {
+		"zone_post_z": zone_post_z,
+		"rvh_early_angle": rvh_early_angle,
+	}
+
+func _depth_config() -> Dictionary:
+	return {
+		"zone_post_z": zone_post_z,
+		"zone_aggressive_z": zone_aggressive_z,
+		"zone_base_z": zone_base_z,
+		"zone_conservative_z": zone_conservative_z,
+		"depth_aggressive": depth_aggressive,
+		"depth_base": depth_base,
+		"depth_conservative": depth_conservative,
+		"depth_defensive": depth_defensive,
+	}

@@ -1,0 +1,129 @@
+extends GutTest
+
+# GoalieBehaviorRules — shot detection, defensive zone, Buckley depth chart,
+# lateral X projection.
+
+func _shot_cfg() -> Dictionary:
+	return {
+		"shot_speed_threshold": 5.0,
+		"net_half_width": 0.915,
+		"net_margin": 1.0,
+		"reaction_delay": 0.10,
+	}
+
+func _zone_cfg() -> Dictionary:
+	return {
+		"zone_post_z": 2.0,
+		"rvh_early_angle": 60.0,
+	}
+
+func _depth_cfg() -> Dictionary:
+	return {
+		"zone_post_z": 2.0,
+		"zone_aggressive_z": 8.0,
+		"zone_base_z": 12.0,
+		"zone_conservative_z": 20.0,
+		"depth_aggressive": 1.2,
+		"depth_base": 0.6,
+		"depth_conservative": 0.3,
+		"depth_defensive": 0.1,
+	}
+
+# ── detect_shot ──────────────────────────────────────────────────────────────
+
+func test_slow_puck_not_a_shot() -> void:
+	var result: float = GoalieBehaviorRules.detect_shot(
+		Vector3(0, 0, 10), Vector3(0, 0, -1),   # below threshold
+		26.6, 0.0, _shot_cfg())
+	assert_eq(result, -1.0)
+
+func test_fast_puck_on_target_is_shot() -> void:
+	var result: float = GoalieBehaviorRules.detect_shot(
+		Vector3(0, 0, 10), Vector3(0, 0, 20),   # heading toward +Z goal
+		26.6, 0.0, _shot_cfg())
+	assert_almost_eq(result, 0.10, 0.001)
+
+func test_fast_puck_moving_away_not_a_shot() -> void:
+	var result: float = GoalieBehaviorRules.detect_shot(
+		Vector3(0, 0, 10), Vector3(0, 0, -20),  # away from +Z goal
+		26.6, 0.0, _shot_cfg())
+	assert_eq(result, -1.0)
+
+func test_fast_puck_wide_of_post_not_a_shot() -> void:
+	var result: float = GoalieBehaviorRules.detect_shot(
+		Vector3(10, 0, 10), Vector3(10, 0, 5),  # drifting wider as it travels
+		26.6, 0.0, _shot_cfg())
+	assert_eq(result, -1.0)
+
+# ── is_puck_in_defensive_zone ────────────────────────────────────────────────
+# direction_sign = sign(-goal_line_z), so for goalie at +Z (goal_line=+26.6)
+# direction_sign = -1. Puck "behind" the goalie means z > goal_line_z.
+
+func test_puck_behind_goal_in_defensive_zone() -> void:
+	# Goalie defends +Z goal, puck past the goal line at z=28
+	assert_true(GoalieBehaviorRules.is_puck_in_defensive_zone(
+		Vector3(0, 0, 28), 26.6, 0.0, -1, _zone_cfg()))
+
+func test_puck_far_from_goal_not_in_defensive_zone() -> void:
+	assert_false(GoalieBehaviorRules.is_puck_in_defensive_zone(
+		Vector3(0, 0, 10), 26.6, 0.0, -1, _zone_cfg()))
+
+func test_puck_near_post_sharp_angle_in_defensive_zone() -> void:
+	# Close in z (puck_z_dist = 1.1), offset in x (3) → angle ≈ 70° > 60°
+	assert_true(GoalieBehaviorRules.is_puck_in_defensive_zone(
+		Vector3(3, 0, 25.5), 26.6, 0.0, -1, _zone_cfg()))
+
+func test_puck_near_post_shallow_angle_not_in_defensive_zone() -> void:
+	# Close in z (1.1), small X offset (0.3) → angle ≈ 15° < 60°
+	assert_false(GoalieBehaviorRules.is_puck_in_defensive_zone(
+		Vector3(0.3, 0, 25.5), 26.6, 0.0, -1, _zone_cfg()))
+
+func test_puck_behind_negative_z_goal() -> void:
+	# Opposite-side goalie: defends -Z (goal_line=-26.6), direction_sign=+1.
+	# Puck "behind" means z < -26.6.
+	assert_true(GoalieBehaviorRules.is_puck_in_defensive_zone(
+		Vector3(0, 0, -28), -26.6, 0.0, 1, _zone_cfg()))
+
+# ── target_depth_for_puck_distance ───────────────────────────────────────────
+
+func test_depth_at_zone_post_reaches_aggressive() -> void:
+	var d: float = GoalieBehaviorRules.target_depth_for_puck_distance(
+		_depth_cfg().zone_post_z, _depth_cfg())
+	assert_almost_eq(d, _depth_cfg().depth_aggressive, 0.001)
+
+func test_depth_inside_aggressive_zone_stays_aggressive() -> void:
+	var d: float = GoalieBehaviorRules.target_depth_for_puck_distance(
+		5.0,  # between zone_post_z and zone_aggressive_z
+		_depth_cfg())
+	assert_almost_eq(d, _depth_cfg().depth_aggressive, 0.001)
+
+func test_depth_far_away_is_defensive() -> void:
+	var d: float = GoalieBehaviorRules.target_depth_for_puck_distance(
+		100.0, _depth_cfg())
+	assert_almost_eq(d, _depth_cfg().depth_defensive, 0.001)
+
+func test_depth_at_origin_is_defensive() -> void:
+	# puck_z_dist = 0 → t = 0 → lerp(defensive, aggressive, 0) = defensive
+	var d: float = GoalieBehaviorRules.target_depth_for_puck_distance(
+		0.0, _depth_cfg())
+	assert_almost_eq(d, _depth_cfg().depth_defensive, 0.001)
+
+# ── target_lateral_x ─────────────────────────────────────────────────────────
+
+func test_lateral_x_clamps_to_net_width() -> void:
+	# Extreme X should clamp to net_half_width
+	var x: float = GoalieBehaviorRules.target_lateral_x(
+		Vector3(100, 0, 10), 26.6, 0.0, 0.5, 0.915)
+	assert_true(x <= 0.916, "x=%f should be clamped to net_half_width" % x)
+
+func test_lateral_x_tracks_along_shot_line() -> void:
+	# Puck at x=1, 10 units from goal line, depth 1.0 → target x = 1 * (1.0/10) = 0.1
+	var x: float = GoalieBehaviorRules.target_lateral_x(
+		Vector3(1, 0, 16.6), 26.6, 0.0, 1.0, 0.915)
+	assert_almost_eq(x, 0.1, 0.01)
+
+func test_lateral_x_centers_when_puck_at_goal_line() -> void:
+	# puck_z_dist ~ 0 → target = goal_center_x
+	var x: float = GoalieBehaviorRules.target_lateral_x(
+		Vector3(5, 0, 26.6), 26.6, 0.0, 1.0, 0.915)
+	assert_almost_eq(x, 0.0, 0.01)

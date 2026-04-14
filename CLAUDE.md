@@ -19,7 +19,19 @@ A 3v3 arcade hockey game built in Godot 4.6.2 (GDScript, 3D). Online multiplayer
 - **Engine:** Godot 4.6.2 (Jolt Physics)
 - **Language:** GDScript
 - **Physics tick:** 240 Hz
+- **Testing:** GUT v9.6.0 under `addons/gut/`; tests in `tests/unit/` run via the GUT panel or `godot --headless -s addons/gut/gut_cmdln.gd -gexit`
+- **CI:** `.github/workflows/test.yml` runs GUT on every push and PR; `deploy.yml`'s export job gates on tests passing
 - **Deployment:** GitHub Actions → Windows export → GitHub Releases (tag: `latest`, updates on every push to main)
+
+## Layer Architecture
+
+The codebase is split into three layers; dependencies always flow downward:
+
+- **Domain** (`Scripts/domain/`) — pure GDScript, no engine APIs. Rule classes (static methods), the game state machine (RefCounted), enums, and game-rule constants. Fully unit-testable without Godot.
+- **Application** — `GameManager` (autoload orchestrator), controllers, `ActorSpawner`. Use the domain to make decisions; reach into infrastructure to execute them.
+- **Infrastructure** — actor nodes (Skater, Puck, Goalie), `NetworkManager`, UI. The Godot-side glue.
+
+Lower layers never reach up: actors take their collaborators via `setup()` (e.g. `Puck.set_team_resolver(Callable)`, controllers take a `game_state: Node` exposing `is_host()` / `is_movement_locked()`). Upward communication is by signals that the orchestrator listens to (e.g. `PuckController.puck_picked_up_by(peer_id)`).
 
 ## Networking Architecture
 
@@ -33,7 +45,7 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 
 **Goalies:** AI runs on host only. Clients interpolate via `BufferedGoalieState` (100ms delay). `tracking_speed` is the master difficulty knob — lower = more positional lag = easier to beat.
 
-**Game flow:** `GamePhase` FSM (host-driven): `PLAYING → GOAL_SCORED → FACEOFF_PREP → FACEOFF → PLAYING`. Dead-puck phases gate all movement via `GameManager.movement_locked()`. `LocalController.reconcile` is blocked during locked phases — `on_faceoff_positions` RPC is authoritative for faceoff positions.
+**Game flow:** `GamePhase` FSM lives in `GameStateMachine` (domain `RefCounted`). Host-driven: `PLAYING → GOAL_SCORED → FACEOFF_PREP → FACEOFF → PLAYING`. Dead-puck phases gate all movement via `_game_state.is_movement_locked()` injected into controllers at `setup()` time. `LocalController.reconcile` is blocked during locked phases — `on_faceoff_positions` RPC is authoritative for faceoff positions.
 
 **Controller API pattern:** `GameManager` calls `controller.teleport_to(pos)` and `controller.on_puck_released_network()` — never touches skater internals directly. Add methods to `SkaterController` rather than poking internals from `GameManager`.
 
@@ -43,22 +55,49 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 
 ## Key Files
 
+### Domain (pure GDScript, no engine APIs)
+
 | File | Role |
 |------|------|
-| `game/game_manager.gd` | Spawning, world state serialization/application, game phase FSM, puck release handling |
-| `networking/network_manager.gd` | RPC definitions, connection management, state broadcast timing |
-| `controllers/local_controller.gd` | Local player: input gathering, prediction, reconciliation |
+| `domain/state/game_phase.gd` | `class_name GamePhase`; nested `enum Phase { PLAYING, GOAL_SCORED, FACEOFF_PREP, FACEOFF }` |
+| `domain/state/game_state_machine.gd` | RefCounted FSM. Owns phase/timer, scores, player slot registry, icing state; host drives via `tick(delta)`, clients sync via `apply_remote_state(...)` |
+| `domain/config/game_rules.gd` | Game-rule constants: timings, rink geometry, blue/goal line Z, icing duration, faceoff positions, max players, ice friction |
+| `domain/rules/phase_rules.gd` | `is_dead_puck_phase`, `is_movement_locked` |
+| `domain/rules/player_rules.gd` | Team balancing, HSV color generation, faceoff position lookup |
+| `domain/rules/infraction_rules.gd` | `is_offside`, `check_icing` |
+| `domain/rules/puck_collision_rules.gd` | Deflection reflection, body-check/body-block velocity, poke-strip direction, `can_poke_check` eligibility |
+| `domain/rules/skater_movement_rules.gd` | Thrust scaling, friction, max-speed clamp with puck-carry penalty |
+| `domain/rules/shot_mechanics.gd` | Wrister / slapper power + direction + elevation; `should_release_on_wall_pin` |
+| `domain/rules/goalie_behavior_rules.gd` | Shot detection, defensive zone detection, Buckley depth chart, lateral X target |
+| `domain/rules/charge_tracking.gd` | Wrister aim charge accumulation with direction-variance reset |
+| `domain/rules/reconciliation_rules.gd` | Thresholds for skater reconcile and puck hard-snap |
+
+### Application (orchestration)
+
+| File | Role |
+|------|------|
+| `game/game_manager.gd` | Autoload orchestrator. Owns the GameStateMachine, maintains the runtime player registry, routes infrastructure events into domain calls, executes domain decisions. Exposes `is_host()` / `is_movement_locked()` for controllers via duck typing. |
+| `game/actor_spawner.gd` | Scene instantiation + `add_child` + controller `setup()` calls. Returns raw nodes; GameManager does game-level wiring. |
+| `controllers/local_controller.gd` | Local player: input gathering, prediction, reconciliation. Takes `game_state` via setup; calls `InfractionRules.is_offside` directly for client-side ghost prediction. |
 | `controllers/remote_controller.gd` | Remote players: server-side input driving, client-side interpolation |
-| `controllers/puck_controller.gd` | Puck: server signals, state serialization, client prediction and interpolation |
-| `controllers/skater_controller.gd` | Base class: full state machine, movement, shooting, blade control, teleport API |
-| `actors/puck.gd` | Physics body: pickup zone, deflection, carrier following (server only) |
-| `actors/skater.gd` | Physics body: blade/facing/upper-body API |
-| `actors/goalie.gd` | Goalie body API: exposes position, rotation, and body part config methods |
-| `controllers/goalie_controller.gd` | Goalie AI: state machine (STANDING/BUTTERFLY/RVH_LEFT/RVH_RIGHT), Buckley depth, lateral positioning, shot detection |
+| `controllers/puck_controller.gd` | Puck: emits `puck_picked_up_by` / `puck_released_by_carrier` / `puck_stripped_from` signals (via injected peer_id resolver) for GameManager to consume; handles client prediction + interpolation |
+| `controllers/skater_controller.gd` | Base class: state machine, movement, shooting, blade control. Delegates math to domain rules. |
+| `controllers/goalie_controller.gd` | Goalie AI: state machine (STANDING/BUTTERFLY/RVH_LEFT/RVH_RIGHT) driving positioning via `GoalieBehaviorRules` |
 | `controllers/goalie_body_config.gd` | Data class holding per-state body part positions and rotations |
+
+### Infrastructure (engine integration)
+
+| File | Role |
+|------|------|
+| `networking/network_manager.gd` | Autoload. RPC definitions, connection management, state broadcast timing |
+| `actors/puck.gd` | RigidBody3D: pickup zone, deflection, carrier following (server only). Accepts a `team_resolver: Callable` so it doesn't reach into GameManager for team checks. |
+| `actors/skater.gd` | CharacterBody3D: blade/facing/upper-body API, ghost mode toggling |
+| `actors/goalie.gd` | Goalie body API: exposes position, rotation, body part config methods |
+| `actors/hockey_goal.gd` | Goal mesh + goal sensor Area3D; emits `goal_scored` signal |
+| `actors/hockey_rink.gd` | Procedural rink geometry (@tool): walls, corners, ice surface, markings |
+| `game/constants.gd` | Engine-facing constants only: collision layers/masks, network port, input/state rates, physics tick. Game-rule constants live in `domain/config/game_rules.gd`. |
 | `game/team.gd` | Team object: defended goal, goalie controller, score |
 | `game/player_record.gd` | Per-player data: peer_id, slot, team, skater, controller, faceoff_position |
-| `game/constants.gd` | Shared constants: network rates, physics tick, ICE_FRICTION, rink geometry, faceoff positions |
 | `networking/buffered_skater_state.gd` | Timestamped SkaterNetworkState for interpolation buffer |
 | `networking/buffered_puck_state.gd` | Timestamped PuckNetworkState for interpolation buffer |
 | `networking/buffered_goalie_state.gd` | Timestamped GoalieNetworkState for interpolation buffer |
@@ -68,11 +107,16 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | `input/input_state.gd` | InputState data object: all per-tick input fields (move, mouse, shoot, brake, elevation, etc.) |
 | `input/local_input_gatherer.gd` | Populates InputState from local hardware; accumulates just_pressed between ticks |
 | `ui/game_camera.gd` | Per-player camera: weighted anchor (player, puck, mouse, attacking goal), zoom, rink clamping |
-| `actors/hockey_goal.gd` | Goal mesh + goal sensor Area3D; emits `goal_scored` signal |
-| `actors/hockey_rink.gd` | Procedural rink geometry (@tool): walls, corners, ice surface, markings |
-| `ui/hud.gd` | Scorebug HUD: connects to `GameManager.score_changed` / `phase_changed`, builds panel programmatically. Polls `skater.is_elevated` each frame to show/hide elevation indicator. |
+| `ui/hud.gd` | Scorebug HUD: receives scores via `score_changed(score_0, score_1)` signal payload; polls `skater.is_elevated` each frame |
 | `ui/main_menu.gd` | Main menu: host/join/offline buttons + IP input, calls `NetworkManager.start_*()`, transitions to `Hockey.tscn` |
 | `game/game_scene.gd` | Hockey scene init: calls `NetworkManager.on_game_scene_ready()` in `_ready()` to trigger world spawn |
+
+### Tests
+
+| File | Role |
+|------|------|
+| `tests/unit/rules/` | GUT tests for each rule class — ~130 tests covering domain logic |
+| `tests/unit/state/` | GUT tests for `GameStateMachine` — phase transitions, icing, ghost computation |
 
 ## Code Conventions
 

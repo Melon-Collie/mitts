@@ -44,7 +44,7 @@ Four interaction scenarios, implemented in order of dependency.
 
 ### Poke Check / Strip
 - When an opposing blade enters pickup zone while `carrier != null`:
-  - Team check via `GameManager.get_skater_team()` — no friendly strips
+  - Team check via `PuckCollisionRules.can_poke_check(carrier_team_id, checker_team_id)`, with team ids supplied through `Puck._team_resolver` (injected by `GameManager` at spawn) — no friendly strips
   - `_poke_check(checker_skater)`: compute strip direction, clear carrier, launch puck
 - Strip direction:
   - If `checker_blade_vel.length() > 0.5 m/s`: `strip_dir = checker_vel + carrier_vel * poke_carrier_vel_blend`

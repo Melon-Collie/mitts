@@ -26,6 +26,12 @@ var carrier: Skater = null
 var pickup_locked: bool = false
 var _cooldown_timers: Dictionary = {}  # Skater -> float
 var _is_server: bool = false
+# Callable (Skater) -> int team_id, or -1 if the skater isn't registered. Set
+# by GameManager at spawn time so Puck doesn't reach upward for team checks.
+var _team_resolver: Callable = Callable()
+
+func set_team_resolver(resolver: Callable) -> void:
+	_team_resolver = resolver
 
 func _ready() -> void:
 	# Puck body sits on its own layer so goal sensors can detect it.
@@ -113,10 +119,14 @@ func _on_blade_entered(area: Area3D) -> void:
 		# Poke check — cooldown does not gate this; opponents can always attempt
 		if skater == carrier:
 			return
-		var carrier_team: Team = GameManager.get_skater_team(carrier)
-		var checker_team: Team = GameManager.get_skater_team(skater)
-		if carrier_team != null and checker_team != null and carrier_team == checker_team:
-			return
+		var carrier_team_id: int = -1
+		var checker_team_id: int = -1
+		if _team_resolver.is_valid():
+			carrier_team_id = _team_resolver.call(carrier)
+			checker_team_id = _team_resolver.call(skater)
+		if carrier_team_id != -1 and checker_team_id != -1:
+			if not PuckCollisionRules.can_poke_check(carrier_team_id, checker_team_id):
+				return
 		_poke_check(skater)
 		return
 
@@ -154,22 +164,15 @@ func _deflect_off_blade(skater: Skater) -> void:
 		contact_normal = -skater.global_transform.basis.z  # fallback: bounce forward
 	contact_normal = contact_normal.normalized()
 
-	var horiz_vel: Vector3 = linear_velocity
-	horiz_vel.y = 0.0
-	var speed: float = linear_velocity.length()
-
-	var reflected: Vector3 = horiz_vel - 2.0 * horiz_vel.dot(contact_normal) * contact_normal
-	var new_dir: Vector3 = horiz_vel.normalized().lerp(reflected.normalized(), deflect_blend).normalized()
+	var new_vel: Vector3 = PuckCollisionRules.deflect_velocity(
+			linear_velocity, contact_normal, deflect_blend, deflect_speed_retain)
 
 	if skater.is_elevated:
-		var elev_rad: float = deg_to_rad(deflect_elevation_angle)
-		new_dir = Vector3(
-			new_dir.x * cos(elev_rad),
-			sin(elev_rad),
-			new_dir.z * cos(elev_rad)
-		).normalized()
+		var new_dir: Vector3 = PuckCollisionRules.apply_deflection_elevation(
+				new_vel.normalized(), deflect_elevation_angle)
+		new_vel = new_dir * new_vel.length()
 
-	linear_velocity = new_dir * speed * deflect_speed_retain
+	linear_velocity = new_vel
 	_set_cooldown(skater, deflect_cooldown)
 
 func on_body_block(blocker: Skater) -> void:
@@ -189,11 +192,8 @@ func on_body_block(blocker: Skater) -> void:
 	if contact_normal.length() < 0.001:
 		contact_normal = -blocker.global_transform.basis.z
 	contact_normal = contact_normal.normalized()
-	var horiz_vel := Vector3(linear_velocity.x, 0.0, linear_velocity.z)
-	var reflected: Vector3 = horiz_vel - 2.0 * horiz_vel.dot(contact_normal) * contact_normal
-	if reflected.length() < 0.001:
-		reflected = contact_normal
-	linear_velocity = reflected.normalized() * horiz_vel.length() * body_block_dampen
+	linear_velocity = PuckCollisionRules.body_block_velocity(
+			linear_velocity, contact_normal, body_block_dampen)
 	_set_cooldown(blocker, body_block_cooldown)
 
 func on_body_check(checker: Skater, victim: Skater, impact_force: float, hit_direction: Vector3) -> void:
@@ -212,7 +212,7 @@ func on_body_check(checker: Skater, victim: Skater, impact_force: float, hit_dir
 func _body_check_strip(checker: Skater, hit_direction: Vector3) -> void:
 	var ex_carrier: Skater = carrier
 	clear_carrier()
-	linear_velocity = hit_direction * body_check_puck_speed
+	linear_velocity = PuckCollisionRules.body_check_strip_velocity(hit_direction, body_check_puck_speed)
 	_set_cooldown(ex_carrier, reattach_cooldown)
 	_set_cooldown(checker, poke_checker_cooldown)
 	puck_stripped.emit(ex_carrier)
@@ -220,31 +220,18 @@ func _body_check_strip(checker: Skater, hit_direction: Vector3) -> void:
 
 func _poke_check(checker_skater: Skater) -> void:
 	var ex_carrier: Skater = carrier  # capture before clear_carrier()
-
-	var checker_vel: Vector3 = checker_skater.blade_world_velocity
-	checker_vel.y = 0.0
-	var carrier_vel: Vector3 = ex_carrier.blade_world_velocity
-	carrier_vel.y = 0.0
-
-	var strip_dir: Vector3
-	if checker_vel.length() > 0.5:
-		# Blend checker momentum with carrier momentum contribution
-		strip_dir = checker_vel + carrier_vel * poke_carrier_vel_blend
-	else:
-		# No checker blade momentum — push puck away from checker
-		strip_dir = ex_carrier.global_position - checker_skater.global_position
-
-	strip_dir.y = 0.0
-	if strip_dir.length() > 0.001:
-		strip_dir = strip_dir.normalized()
-	else:
-		strip_dir = Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0)).normalized()
-
+	var fallback_dir := Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0))
 	clear_carrier()
-	linear_velocity = strip_dir * poke_strip_speed
+	linear_velocity = PuckCollisionRules.poke_strip_velocity(
+			checker_skater.blade_world_velocity,
+			ex_carrier.blade_world_velocity,
+			ex_carrier.global_position,
+			checker_skater.global_position,
+			poke_carrier_vel_blend,
+			poke_strip_speed,
+			fallback_dir)
 	_set_cooldown(ex_carrier, reattach_cooldown)
 	_set_cooldown(checker_skater, poke_checker_cooldown)
-
 	puck_stripped.emit(ex_carrier)
 	puck_released.emit()
 

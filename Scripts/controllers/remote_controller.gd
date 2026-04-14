@@ -11,7 +11,7 @@ var _last_processed_sequence: int = 0
 func _physics_process(delta: float) -> void:
 	if skater == null:
 		return
-	if NetworkManager.is_host:
+	if _is_host:
 		_drive_from_input(delta)
 	else:
 		_current_time += delta
@@ -26,13 +26,13 @@ func _drive_from_input(delta: float) -> void:
 	# but don't process movement during dead-puck phases — stale input would
 	# contaminate server state and cause a velocity burst when the phase lifts.
 	_last_processed_sequence = _latest_input.sequence
-	if GameManager.movement_locked():
+	if _game_state.is_movement_locked():
 		skater.velocity = Vector3.ZERO
 		return
 	_process_input(_latest_input, delta)
 
 func apply_network_state(state: SkaterNetworkState) -> void:
-	if NetworkManager.is_host:
+	if _is_host:
 		return
 	var buffered := BufferedSkaterState.new()
 	buffered.timestamp = _current_time

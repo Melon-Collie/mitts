@@ -64,6 +64,11 @@ enum State {
 # ── References ────────────────────────────────────────────────────────────────
 var skater: Skater = null
 var puck: Puck = null
+# Injected at setup. Expected methods:
+#   is_host() -> bool             — changes only per session; cached in _is_host
+#   is_movement_locked() -> bool  — polled per frame
+var _game_state: Node = null
+var _is_host: bool = false
 
 # ── Runtime State ─────────────────────────────────────────────────────────────
 var _state: State = State.SKATING_WITHOUT_PUCK
@@ -81,20 +86,22 @@ var last_processed_sequence: int = 0
 var has_puck: bool = false
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
-func setup(assigned_skater: Skater, assigned_puck: Puck) -> void:
+func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> void:
 	skater = assigned_skater
 	puck = assigned_puck
+	_game_state = game_state
+	_is_host = game_state.is_host()
 	process_physics_priority = -1  # Run before Skater.move_and_slide
 	skater.body_checked_player.connect(_on_body_checked_player)
 	skater.body_block_hit.connect(_on_body_block_hit)
 
 func _on_body_checked_player(victim: Skater, impact_force: float, hit_direction: Vector3) -> void:
-	if not NetworkManager.is_host:
+	if not _is_host:
 		return
 	puck.on_body_check(skater, victim, impact_force, hit_direction)
 
 func _on_body_block_hit(body: Node3D) -> void:
-	if not NetworkManager.is_host:
+	if not _is_host:
 		return
 	if not body is Puck:
 		return
@@ -187,17 +194,14 @@ func _state_wrister_aim(input: InputState, delta: float) -> void:
 	_apply_blade_from_mouse(input, delta)
 
 	if has_puck:
-		var blade_delta: Vector3 = skater.get_blade_position() - _prev_blade_pos
-		blade_delta.y = 0.0
-		var dist: float = blade_delta.length()
-		if dist > 0.001:
-			var current_dir: Vector3 = blade_delta.normalized()
-			if _prev_blade_dir != Vector3.ZERO:
-				var angle: float = rad_to_deg(_prev_blade_dir.angle_to(current_dir))
-				if angle > max_charge_direction_variance:
-					_charge_distance = 0.0
-			_charge_distance += dist
-			_prev_blade_dir = current_dir
+		var result: Dictionary = ChargeTracking.accumulate(
+				_prev_blade_pos,
+				skater.get_blade_position(),
+				_prev_blade_dir,
+				_charge_distance,
+				max_charge_direction_variance)
+		_charge_distance = result.charge
+		_prev_blade_dir = result.direction
 
 	_prev_blade_pos = skater.get_blade_position()
 
@@ -278,43 +282,32 @@ func _enter_slapper_charge() -> void:
 
 func _release_wrister(input: InputState) -> void:
 	if has_puck:
-		var player_pos: Vector3 = skater.global_position
-		player_pos.y = 0.0
-		var mouse_target: Vector3 = input.mouse_world_pos
-		mouse_target.y = 0.0
-		_shot_dir = (mouse_target - player_pos).normalized()
-
-		var charge_t: float = clampf(_charge_distance / max_wrister_charge_distance, 0.0, 1.0)
-
-		if charge_t < quick_shot_threshold:
-			var blade_world: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
-			blade_world.y = 0.0
-			var blade_dir: Vector3 = (mouse_target - blade_world).normalized()
-			var y_component: float = wrister_elevation if _is_elevated else 0.0
-			_do_release(Vector3(blade_dir.x, y_component, blade_dir.z).normalized(), quick_shot_power)
-		else:
-			var power: float = lerpf(min_wrister_power, max_wrister_power, charge_t)
-			var hand_sign: float = -1.0 if skater.is_left_handed else 1.0
-			var is_backhand: bool = sign(skater.get_blade_position().x - skater.shoulder.position.x) != sign(hand_sign)
-			if is_backhand:
-				power *= backhand_power_coefficient
-			var y_component: float = wrister_elevation if _is_elevated else 0.0
-			_do_release(Vector3(_shot_dir.x, y_component, _shot_dir.z).normalized(), power)
+		var result := ShotMechanics.release_wrister(
+				skater.global_position,
+				input.mouse_world_pos,
+				skater.upper_body_to_global(skater.get_blade_position()),
+				skater.get_blade_position(),
+				skater.shoulder.position,
+				skater.is_left_handed,
+				_is_elevated,
+				_charge_distance,
+				_wrister_config())
+		_shot_dir = result.direction
+		_do_release(result.direction, result.power)
 
 	_state = State.FOLLOW_THROUGH
 	_follow_through_timer = follow_through_duration
 
 func _release_slapper(input: InputState) -> void:
 	if has_puck:
-		var blade_world: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
-		blade_world.y = 0.0
-		var mouse_target: Vector3 = input.mouse_world_pos
-		mouse_target.y = 0.0
-		_shot_dir = (mouse_target - blade_world).normalized()
-		var charge_t: float = clampf(_slapper_charge_timer / max_slapper_charge_time, 0.0, 1.0)
-		var power: float = lerpf(min_slapper_power, max_slapper_power, charge_t)
-		var y_component: float = slapper_elevation if _is_elevated else 0.0
-		_do_release(Vector3(_shot_dir.x, y_component, _shot_dir.z).normalized(), power)
+		var result := ShotMechanics.release_slapper(
+				skater.upper_body_to_global(skater.get_blade_position()),
+				input.mouse_world_pos,
+				_is_elevated,
+				_slapper_charge_timer,
+				_slapper_config())
+		_shot_dir = result.direction
+		_do_release(result.direction, result.power)
 
 	_state = State.FOLLOW_THROUGH
 	_follow_through_timer = follow_through_duration
@@ -365,7 +358,7 @@ func _apply_blade_from_mouse(input: InputState, delta: float) -> void:
 
 	if has_puck:
 		var squeeze: float = skater.get_wall_squeeze(intended_pos, clamped_target)
-		if squeeze > skater.wall_squeeze_threshold:
+		if ShotMechanics.should_release_on_wall_pin(squeeze, skater.wall_squeeze_threshold):
 			var wall_normal: Vector3 = skater.get_blade_wall_normal()
 			if wall_normal.length() > 0.0:
 				_do_release(wall_normal.normalized(), 3.0)
@@ -423,37 +416,42 @@ func _apply_facing(input: InputState, delta: float) -> void:
 func _apply_movement(input: InputState, delta: float) -> void:
 	if _state == State.SLAPPER_CHARGE_WITH_PUCK:
 		return
+	skater.velocity = SkaterMovementRules.apply_movement(
+			skater.velocity,
+			input.move_vector,
+			skater.rotation.y,
+			has_puck,
+			input.brake,
+			delta,
+			_movement_config())
 
-	var move: Vector2 = input.move_vector
+func _movement_config() -> Dictionary:
+	return {
+		"thrust": thrust,
+		"friction": friction,
+		"max_speed": max_speed,
+		"move_deadzone": move_deadzone,
+		"brake_multiplier": brake_multiplier,
+		"puck_carry_speed_multiplier": puck_carry_speed_multiplier,
+		"backward_thrust_multiplier": backward_thrust_multiplier,
+		"crossover_thrust_multiplier": crossover_thrust_multiplier,
+	}
 
-	if move.length() > move_deadzone:
-		var thrust_dir: Vector3 = Vector3(move.x, 0.0, move.y)
-		var facing_dir: Vector2 = Vector2(-sin(skater.rotation.y), -cos(skater.rotation.y))
-		var move_dot: float = facing_dir.dot(move.normalized())
+func _wrister_config() -> Dictionary:
+	return {
+		"min_wrister_power": min_wrister_power,
+		"max_wrister_power": max_wrister_power,
+		"max_wrister_charge_distance": max_wrister_charge_distance,
+		"backhand_power_coefficient": backhand_power_coefficient,
+		"quick_shot_power": quick_shot_power,
+		"quick_shot_threshold": quick_shot_threshold,
+		"wrister_elevation": wrister_elevation,
+	}
 
-		var thrust_scale: float
-		if move_dot >= 0.0:
-			thrust_scale = lerpf(crossover_thrust_multiplier, 1.0, move_dot)
-		else:
-			thrust_scale = lerpf(backward_thrust_multiplier, crossover_thrust_multiplier, move_dot + 1.0)
-
-		skater.velocity += thrust_dir * thrust * thrust_scale * delta
-
-		var effective_max_speed: float = max_speed * puck_carry_speed_multiplier if has_puck else max_speed
-		var speed: float = Vector2(skater.velocity.x, skater.velocity.z).length()
-		if speed > effective_max_speed:
-			var pre_thrust_speed: float = Vector2(
-				skater.velocity.x - thrust_dir.x * thrust * thrust_scale * delta,
-				skater.velocity.z - thrust_dir.z * thrust * thrust_scale * delta
-			).length()
-			var target_speed: float = maxf(pre_thrust_speed, effective_max_speed)
-			if speed > target_speed:
-				var limited: Vector2 = Vector2(skater.velocity.x, skater.velocity.z).normalized() * target_speed
-				skater.velocity.x = limited.x
-				skater.velocity.z = limited.y
-
-	var horizontal_vel: Vector2 = Vector2(skater.velocity.x, skater.velocity.z)
-	var current_friction: float = friction * brake_multiplier if input.brake else friction
-	horizontal_vel = horizontal_vel.move_toward(Vector2.ZERO, current_friction * delta)
-	skater.velocity.x = horizontal_vel.x
-	skater.velocity.z = horizontal_vel.y
+func _slapper_config() -> Dictionary:
+	return {
+		"min_slapper_power": min_slapper_power,
+		"max_slapper_power": max_slapper_power,
+		"max_slapper_charge_time": max_slapper_charge_time,
+		"slapper_elevation": slapper_elevation,
+	}

@@ -54,7 +54,7 @@ The puck is a `RigidBody3D` running physics on the server only (frozen on client
 When the local player has the puck, its position is deterministically the blade tip. We know this with certainty, so we apply it directly every frame. No interpolation, no lag, no round-trip.
 
 **2. Trajectory prediction — integrate after release**
-The local player initiates the release, so we know the direction and power at the moment of release. We integrate position forward using `Constants.ICE_FRICTION` while waiting for the server's physics results to arrive. When server state arrives, we reconcile: if the error is within threshold (puck traveled where we expected), we smoothly hand off to interpolation; if not (shot was blocked, deflected, etc.), we snap to server state.
+The local player initiates the release, so we know the direction and power at the moment of release. We integrate position forward using `GameRules.ICE_FRICTION` while waiting for the server's physics results to arrive. When server state arrives, we reconcile: if the error is within threshold (puck traveled where we expected), we smoothly hand off to interpolation; if not (shot was blocked, deflected, etc.), we snap to server state.
 
 **3. Interpolation — everything else**
 When the puck is free or another player is carrying it, we buffer server snapshots and interpolate with a 100ms delay. Same pattern as remote skaters.

@@ -14,6 +14,29 @@ The Rocket League freeplay ceiling is a guiding star: the stickhandling-to-shot 
 
 ---
 
+## Layers
+
+The codebase is organized into three layers with downward dependency flow.
+
+**Domain** (`Scripts/domain/`) — pure GDScript, zero engine references. Comprises:
+- Rule classes as `class_name` files with static methods (`PhaseRules`, `PlayerRules`, `InfractionRules`, `PuckCollisionRules`, `SkaterMovementRules`, `ShotMechanics`, `GoalieBehaviorRules`, `ChargeTracking`, `ReconciliationRules`)
+- `GameStateMachine` — a `RefCounted` owning phase/timer, scores, player slot registry, icing state, ghost computation. Lives on both host and client; the host drives it via `tick()`, clients sync via `apply_remote_state()`.
+- `GameRules` const class for timings/geometry/thresholds
+- `GamePhase` enum
+
+All of this is unit-tested with GUT. ~130 tests under `tests/unit/rules/` and `tests/unit/state/`.
+
+**Application** — `GameManager` (autoload), controllers, `ActorSpawner`. Consumes the domain to make decisions, reaches into infrastructure to execute them. Controllers receive a `game_state: Node` (the GameManager itself, duck-typed) via `setup()` rather than reaching for `GameManager.*` statically.
+
+**Infrastructure** — actor nodes (Skater, Puck, Goalie), `NetworkManager`, UI. Engine integration. Lower layers never reach up:
+- `Puck` accepts a `team_resolver: Callable` via `set_team_resolver()` — used by the poke-check eligibility gate without referencing `GameManager`.
+- `PuckController` accepts a `peer_id_resolver: Callable` and emits `puck_picked_up_by(peer_id)` / `puck_released_by_carrier(peer_id)` / `puck_stripped_from(peer_id)` signals that `GameManager` listens to for player-registry lookups and RPC sends.
+- Controllers take a `game_state: Node` with `is_host() -> bool` and `is_movement_locked() -> bool`.
+
+Adding a new rule: put pure math in a `domain/rules/` file, write a GUT test for it, call it from the controller/GameManager.
+
+---
+
 ## Scene Structure
 
 - **Skater:** `CharacterBody3D` with UpperBody/LowerBody split (`Node3D`). Shoulder (`Marker3D`) under UpperBody, positioned by code based on handedness. Blade (`Marker3D`) and StickMesh under UpperBody. `set_blade_position` rotates the Blade node to face along the shaft (horizontal projection of shoulder→blade), so the BladeArea and mesh always track stick angle. `blade_world_velocity` and `is_elevated` are tracked each physics tick for server-side puck interaction queries. Collision layers set in `_ready()`: body on `LAYER_SKATER_BODIES` (16), mask `MASK_SKATER` (17), stick raycast mask `MASK_SKATER` so the blade is blocked by boards, goalie pads, and other skater bodies. A `BodyBlockArea` (sphere, `collision_mask = LAYER_PUCK`) is added as a child and wired to the `body_block_hit` signal.
@@ -177,7 +200,7 @@ Wall clamping: blade reach is shortened near boards. If squeeze exceeds `wall_sq
 - 240 Hz physics tick (prevents tunneling at high puck speeds)
 - CCD enabled on puck
 - Puck mass 0.17 kg, radius 0.1 m
-- `Constants.ICE_FRICTION = 0.01` — used in puck trajectory prediction. The rink ice surface is a child `StaticBody3D` with `physics_material_override` set directly, so friction applies correctly.
+- `GameRules.ICE_FRICTION = 0.01` — used in puck trajectory prediction. The rink ice surface is a child `StaticBody3D` with `physics_material_override` set directly, so friction applies correctly.
 - Puck velocity is clamped in `_integrate_forces()` (runs on all peers) so CCD always receives a sane speed. The `_physics_process()` cap is kept as a secondary check.
 
 ---
@@ -212,7 +235,7 @@ Player-first guarantee: weighted target is clamped so player never exceeds `play
 
 ### Dead-Puck Enforcement
 
-`GameManager.movement_locked()` returns `true` during `GOAL_SCORED` and `FACEOFF_PREP`. Both controllers check this every frame:
+The `GameStateMachine` exposes `is_movement_locked()` — true during `GOAL_SCORED` and `FACEOFF_PREP`. `GameManager` re-exposes this as an instance method and is passed into each controller at `setup()` as the `game_state` dependency. Controllers call `_game_state.is_movement_locked()` every frame:
 - `LocalController._physics_process`: zeros velocity, drains `_input_history`, skips input gathering and processing
 - `RemoteController._drive_from_input`: still advances `_last_processed_sequence` (keeps reconcile bookkeeping current) but zeros velocity and skips `_process_input`
 - `LocalController.reconcile`: returns early during locked phases — `on_faceoff_positions` (reliable RPC) is the authoritative source of faceoff positions
@@ -239,11 +262,11 @@ The host generates a unique color per player at spawn time via `_generate_player
 
 Instead of stoppages, offsides and icing are enforced via a **ghost mode** — offending players become semi-transparent and lose all puck/player interaction (collision layers zeroed) while retaining full movement. This keeps play flowing without dead time.
 
-**Offsides:** checked every physics tick on the host. A skater is offside if they are in their team's offensive zone (past the attacking blue line at ±7.62m) while the puck has not yet entered that zone. The puck carrier can never be offside. Ghost clears the instant the skater retreats behind the blue line or the puck enters the zone. Blue line constant: `Constants.BLUE_LINE_Z = 7.62`. Team 0 attacks toward -Z (offensive zone: z < -7.62); team 1 attacks toward +Z (offensive zone: z > 7.62).
+**Offsides:** checked every physics tick on the host via `InfractionRules.is_offside(skater_z, team_id, puck_z, is_carrier)`. A skater is offside if they are in their team's offensive zone (past the attacking blue line at ±7.62m) while the puck has not yet entered that zone. The puck carrier can never be offside. Ghost clears the instant the skater retreats behind the blue line or the puck enters the zone. Blue line constant: `GameRules.BLUE_LINE_Z = 7.62`. Team 0 attacks toward -Z (offensive zone: z < -7.62); team 1 attacks toward +Z (offensive zone: z > 7.62).
 
-**Icing:** `GameManager` tracks the last carrier's team and Z position each tick. When the puck is free and crosses the opponent's goal line (|z| > `GOAL_LINE_Z`), and the last carrier released from their own half (own side of center ice), icing triggers. The entire offending team is ghosted for `ICING_GHOST_DURATION` (3s) or until the non-offending team picks up the puck. Icing state resets on faceoff prep.
+**Icing:** `GameStateMachine` tracks the last carrier's team and Z position each tick. When the puck is free and crosses the opponent's goal line (|z| > `GameRules.GOAL_LINE_Z`), and the last carrier released from their own half (own side of center ice), icing triggers via `InfractionRules.check_icing`. The entire offending team is ghosted for `GameRules.ICING_GHOST_DURATION` (3s) or until the non-offending team picks up the puck. Icing state resets on faceoff prep.
 
-**Network sync:** `is_ghost` is serialized in `SkaterNetworkState` (index 7). Host computes authoritatively in `GameManager._physics_process`. Clients predict offsides locally in `LocalController._predict_offside()` for instant feedback; icing ghost arrives via the 20Hz world state broadcast. `RemoteController._apply_state_to_skater()` applies ghost visual/collision from network state.
+**Network sync:** `is_ghost` is serialized in `SkaterNetworkState` (index 7). Host computes authoritatively: `GameStateMachine.compute_ghost_state(positions, carrier_peer_id, puck_position)` returns per-peer ghost flags, applied by `GameManager._apply_ghost_state()`. Clients predict offsides locally in `LocalController._predict_offside()` for instant feedback; icing ghost arrives via the 20Hz world state broadcast. `RemoteController._apply_state_to_skater()` applies ghost visual/collision from network state.
 
 **Ghost implementation on `Skater`:** `set_ghost(bool)` toggles collision layers (blade area, body block area, skater body) and material transparency (alpha 0.3). Collision layer changes prevent all physics interaction — `move_and_slide` won't generate collisions with ghosts, blade areas won't trigger puck pickup, body block areas won't detect pucks. Safety guards in `Puck._on_blade_entered`, `on_body_block`, and `on_body_check` provide defense-in-depth against frame-ordering edge cases.
 
@@ -259,7 +282,8 @@ Instead of stoppages, offsides and icing are enforced via a **ghost mode** — o
 | 4 | Networking (prediction, interpolation, reconciliation) | Done |
 | 5 | Goalie AI rework + networking | Done |
 | 6 | Full game flow (goals, faceoffs, score) | Done |
-| 7 | Characters + abilities | Next |
+| 7 | Testable domain layer (rules extraction, state machine, GUT tests, CI) | Done |
+| 8 | Characters + abilities | Next |
 
 ---
 

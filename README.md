@@ -75,3 +75,29 @@ Pucks coming in fast deflect off your blade instead of sticking. Move your stick
 - Reactive goalie saves (glove, shoulder, stick poke)
 - Characters with unique abilities
 - More platforms
+
+---
+
+## Development
+
+### Running Tests
+
+The project uses [GUT (Godot Unit Test)](https://github.com/bitwes/Gut) v9.6.0, committed under `addons/gut/`. Tests live in `tests/unit/` and cover the domain layer (rule classes + state machine).
+
+**In the editor:** open the **GUT** panel at the bottom of the screen and click **Run All**.
+
+**From the command line:**
+
+```bash
+godot --headless -s addons/gut/gut_cmdln.gd -gexit
+```
+
+Exit code is 0 on pass, non-zero on fail — suitable for CI.
+
+### CI
+
+Every push and PR triggers `.github/workflows/test.yml`, which caches Godot 4.6.2, imports the project, and runs the GUT suite. `deploy.yml` gates the export job on tests passing, so a broken test blocks releases to main.
+
+### Architecture
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full layer model. Summary: pure-GDScript domain layer (`Scripts/domain/`) holds rules and the state machine, the application layer (`GameManager`, controllers, `ActorSpawner`) orchestrates, infrastructure (actors, networking, UI) handles engine integration. Controllers receive their collaborators via `setup()` injection; upward communication is by signals.
