@@ -1,11 +1,8 @@
 extends Node
 
-# ── Scenes ────────────────────────────────────────────────────────────────────
-const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
-const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
-const GOALIE_SCENE: PackedScene = preload("res://Scenes/Goalie.tscn")
-const LOCAL_CONTROLLER_SCENE: PackedScene = preload("res://Scenes/LocalController.tscn")
-const REMOTE_CONTROLLER_SCENE: PackedScene = preload("res://Scenes/RemoteController.tscn")
+# PackedScene constants moved to ActorSpawner. This file now owns only game
+# orchestration: state machine ownership, player registry, network event
+# routing, signal emission.
 
 # ── Signals ───────────────────────────────────────────────────────────────────
 signal goal_scored(scoring_team: Team)
@@ -18,7 +15,8 @@ signal phase_changed(new_phase: GamePhase.Phase)
 # tick(), clients sync it via apply_remote_state().
 var _state_machine: GameStateMachine = null
 
-# ── Infrastructure state ─────────────────────────────────────────────────────
+# ── Infrastructure ────────────────────────────────────────────────────────────
+var _spawner: ActorSpawner = null
 var teams: Array[Team] = []
 var puck: Puck = null
 var goals: Array[HockeyGoal] = []
@@ -162,11 +160,13 @@ func on_faceoff_positions(positions: Array) -> void:
 		if peer_id == local_peer_id and players.has(peer_id):
 			players[peer_id].controller.teleport_to(pos)
 
-# ── Spawning ──────────────────────────────────────────────────────────────────
+# ── World Spawn ───────────────────────────────────────────────────────────────
 func _spawn_world() -> void:
 	_state_machine = GameStateMachine.new()
+	_spawner = ActorSpawner.new()
+	_spawner.setup(get_tree().current_scene)
 	_create_teams()
-	_find_goals()
+	goals = _spawner.find_goals()
 	_assign_goals_to_teams()
 	_spawn_puck()
 	_spawn_goalies()
@@ -180,15 +180,6 @@ func _create_teams() -> void:
 	t1.team_id = 1
 	teams = [t0, t1]
 
-func _find_goals() -> void:
-	goals.clear()
-	for node in get_tree().current_scene.get_children():
-		if node is HockeyGoal:
-			goals.append(node)
-	# Sort so goals[0] is facing=-1 (negative-Z, Team 1 defends)
-	# and goals[1] is facing=+1 (positive-Z, Team 0 defends).
-	goals.sort_custom(func(a: HockeyGoal, b: HockeyGoal) -> bool: return a.facing < b.facing)
-
 func _assign_goals_to_teams() -> void:
 	for goal: HockeyGoal in goals:
 		# facing=+1 → positive-Z end → Team 0 defends it
@@ -201,18 +192,48 @@ func _connect_goal_signals() -> void:
 		team.defended_goal.goal_scored.connect(func(): _on_goal_scored_into(team))
 
 func _spawn_puck() -> void:
-	puck = PUCK_SCENE.instantiate()
-	puck.position = GameRules.PUCK_START_POS
-	get_tree().current_scene.add_child(puck)
+	var result: Dictionary = _spawner.spawn_puck_with_controller(NetworkManager.is_host)
+	puck = result.puck
+	puck_controller = result.controller
+	# Wire resolvers and server signals — game-orchestration concerns.
 	puck.set_team_resolver(_resolve_skater_team_id)
-	puck_controller = PuckController.new()
-	get_tree().current_scene.add_child(puck_controller)
-	puck_controller.setup(puck, NetworkManager.is_host)
 	puck_controller.set_peer_id_resolver(_resolve_skater_peer_id)
 	puck_controller.puck_picked_up_by.connect(_on_server_puck_picked_up_by)
 	puck_controller.puck_released_by_carrier.connect(_on_server_puck_released_by_carrier)
 	puck_controller.puck_stripped_from.connect(_on_server_puck_stripped_from)
 
+func _spawn_goalies() -> void:
+	var result: Dictionary = _spawner.spawn_goalie_pair(puck, NetworkManager.is_host)
+	goalies = [result.top_goalie, result.bottom_goalie]
+	goalie_controllers = [result.top_controller, result.bottom_controller]
+	# top goalie (negative-Z) defends Team 1's end; bottom (positive-Z) defends Team 0's.
+	teams[1].goalie_controller = result.top_controller
+	teams[0].goalie_controller = result.bottom_controller
+
+func _spawn_local_player(peer_id: int, slot: int, team: Team, color: Color) -> void:
+	var record := PlayerRecord.new(peer_id, slot, true, team)
+	record.color = color
+	var faceoff_pos: Vector3 = PlayerRules.faceoff_position_for_slot(slot)
+	record.faceoff_position = faceoff_pos
+	var spawned: Dictionary = _spawner.spawn_local_player(faceoff_pos, color, puck, self, team.team_id)
+	record.skater = spawned.skater
+	record.controller = spawned.controller
+	spawned.controller.puck_release_requested.connect(_on_puck_release_requested)
+	players[peer_id] = record
+	NetworkManager.register_local_controller(spawned.controller)
+
+func _spawn_remote_player(peer_id: int, slot: int, team: Team, color: Color) -> void:
+	var record := PlayerRecord.new(peer_id, slot, false, team)
+	record.color = color
+	var faceoff_pos: Vector3 = PlayerRules.faceoff_position_for_slot(slot)
+	record.faceoff_position = faceoff_pos
+	var spawned: Dictionary = _spawner.spawn_remote_player(faceoff_pos, color, puck, self)
+	record.skater = spawned.skater
+	record.controller = spawned.controller
+	players[peer_id] = record
+	NetworkManager.register_remote_controller(peer_id, spawned.controller)
+
+# ── Resolvers (injected into Puck / PuckController) ──────────────────────────
 func _resolve_skater_team_id(skater: Skater) -> int:
 	var team: Team = get_skater_team(skater)
 	return team.team_id if team != null else -1
@@ -242,71 +263,6 @@ func _on_server_puck_stripped_from(peer_id: int) -> void:
 		return
 	if not players[peer_id].is_local:
 		NetworkManager.send_puck_stolen(peer_id)
-
-func _spawn_goalies() -> void:
-	var top: Goalie = GOALIE_SCENE.instantiate()
-	var bottom: Goalie = GOALIE_SCENE.instantiate()
-	get_tree().current_scene.add_child(top)
-	get_tree().current_scene.add_child(bottom)
-
-	var top_controller := GoalieController.new()
-	var bottom_controller := GoalieController.new()
-	get_tree().current_scene.add_child(top_controller)
-	get_tree().current_scene.add_child(bottom_controller)
-	top_controller.setup(top, puck, -GameRules.GOAL_LINE_Z, NetworkManager.is_host)
-	bottom_controller.setup(bottom, puck, GameRules.GOAL_LINE_Z, NetworkManager.is_host)
-
-	goalies.append(top)
-	goalies.append(bottom)
-	goalie_controllers.append(top_controller)
-	goalie_controllers.append(bottom_controller)
-
-	# top goalie (negative-Z) defends Team 1's end; bottom (positive-Z) defends Team 0's.
-	teams[1].goalie_controller = top_controller
-	teams[0].goalie_controller = bottom_controller
-
-func _spawn_local_player(peer_id: int, slot: int, team: Team, color: Color) -> void:
-	var record := PlayerRecord.new(peer_id, slot, true, team)
-	record.color = color
-	var faceoff_pos: Vector3 = PlayerRules.faceoff_position_for_slot(slot)
-	record.faceoff_position = faceoff_pos
-
-	var skater: Skater = SKATER_SCENE.instantiate()
-	skater.position = faceoff_pos
-	get_tree().current_scene.add_child(skater)
-	skater.set_player_color(color)
-	record.skater = skater
-
-	var controller: LocalController = LOCAL_CONTROLLER_SCENE.instantiate()
-	get_tree().current_scene.add_child(controller)
-	controller.setup(skater, puck, self)
-	controller.set_local_team_id(team.team_id)
-	record.controller = controller
-
-	controller.puck_release_requested.connect(_on_puck_release_requested)
-
-	players[peer_id] = record
-	NetworkManager.register_local_controller(controller)
-
-func _spawn_remote_player(peer_id: int, slot: int, team: Team, color: Color) -> void:
-	var record := PlayerRecord.new(peer_id, slot, false, team)
-	record.color = color
-	var faceoff_pos: Vector3 = PlayerRules.faceoff_position_for_slot(slot)
-	record.faceoff_position = faceoff_pos
-
-	var skater: Skater = SKATER_SCENE.instantiate()
-	skater.position = faceoff_pos
-	get_tree().current_scene.add_child(skater)
-	skater.set_player_color(color)
-	record.skater = skater
-
-	var controller: RemoteController = REMOTE_CONTROLLER_SCENE.instantiate()
-	get_tree().current_scene.add_child(controller)
-	controller.setup(skater, puck, self)
-	record.controller = controller
-
-	players[peer_id] = record
-	NetworkManager.register_remote_controller(peer_id, controller)
 
 # ── Goal Scoring (host) ───────────────────────────────────────────────────────
 func _on_goal_scored_into(defending_team: Team) -> void:

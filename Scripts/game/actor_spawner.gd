@@ -1,0 +1,101 @@
+class_name ActorSpawner
+extends RefCounted
+
+# Infrastructure factory. Owns PackedScene.instantiate() and add_child() — the
+# engine-integration details that GameManager doesn't need to spell out.
+#
+# Returns raw node refs; game-level wiring (resolver injection, signal
+# connections, NetworkManager registration, players-dict population) stays in
+# GameManager, which is where the relevant state lives.
+
+const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
+const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
+const GOALIE_SCENE: PackedScene = preload("res://Scenes/Goalie.tscn")
+const LOCAL_CONTROLLER_SCENE: PackedScene = preload("res://Scenes/LocalController.tscn")
+const REMOTE_CONTROLLER_SCENE: PackedScene = preload("res://Scenes/RemoteController.tscn")
+
+var _scene_root: Node = null
+
+func setup(scene_root: Node) -> void:
+	_scene_root = scene_root
+
+# ── Goals (already placed in the scene by the rink — we just sort them) ──────
+func find_goals() -> Array[HockeyGoal]:
+	var goals: Array[HockeyGoal] = []
+	for node in _scene_root.get_children():
+		if node is HockeyGoal:
+			goals.append(node)
+	# goals[0] is facing=-1 (negative-Z, Team 1 defends)
+	# goals[1] is facing=+1 (positive-Z, Team 0 defends)
+	goals.sort_custom(func(a: HockeyGoal, b: HockeyGoal) -> bool: return a.facing < b.facing)
+	return goals
+
+# ── Puck + PuckController ────────────────────────────────────────────────────
+# Returns { "puck": Puck, "controller": PuckController }.
+func spawn_puck_with_controller(is_server: bool) -> Dictionary:
+	var puck: Puck = PUCK_SCENE.instantiate()
+	puck.position = GameRules.PUCK_START_POS
+	_scene_root.add_child(puck)
+	var controller := PuckController.new()
+	_scene_root.add_child(controller)
+	controller.setup(puck, is_server)
+	return {"puck": puck, "controller": controller}
+
+# ── Goalies (both nets, with controllers) ────────────────────────────────────
+# Returns {
+#   "top_goalie", "bottom_goalie",           # Goalie nodes
+#   "top_controller", "bottom_controller",   # GoalieControllers
+# }
+# Top defends the negative-Z goal (Team 1's end), bottom defends positive-Z
+# (Team 0's end).
+func spawn_goalie_pair(puck: Puck, is_server: bool) -> Dictionary:
+	var top: Goalie = GOALIE_SCENE.instantiate()
+	var bottom: Goalie = GOALIE_SCENE.instantiate()
+	_scene_root.add_child(top)
+	_scene_root.add_child(bottom)
+	var top_controller := GoalieController.new()
+	var bottom_controller := GoalieController.new()
+	_scene_root.add_child(top_controller)
+	_scene_root.add_child(bottom_controller)
+	top_controller.setup(top, puck, -GameRules.GOAL_LINE_Z, is_server)
+	bottom_controller.setup(bottom, puck, GameRules.GOAL_LINE_Z, is_server)
+	return {
+		"top_goalie": top,
+		"bottom_goalie": bottom,
+		"top_controller": top_controller,
+		"bottom_controller": bottom_controller,
+	}
+
+# ── Local player (skater + LocalController, fully set up) ────────────────────
+# Returns { "skater": Skater, "controller": LocalController }.
+func spawn_local_player(
+		position: Vector3,
+		color: Color,
+		puck: Puck,
+		game_state: Node,
+		team_id: int) -> Dictionary:
+	var skater: Skater = SKATER_SCENE.instantiate()
+	skater.position = position
+	_scene_root.add_child(skater)
+	skater.set_player_color(color)
+	var controller: LocalController = LOCAL_CONTROLLER_SCENE.instantiate()
+	_scene_root.add_child(controller)
+	controller.setup(skater, puck, game_state)
+	controller.set_local_team_id(team_id)
+	return {"skater": skater, "controller": controller}
+
+# ── Remote player (skater + RemoteController) ────────────────────────────────
+# Returns { "skater": Skater, "controller": RemoteController }.
+func spawn_remote_player(
+		position: Vector3,
+		color: Color,
+		puck: Puck,
+		game_state: Node) -> Dictionary:
+	var skater: Skater = SKATER_SCENE.instantiate()
+	skater.position = position
+	_scene_root.add_child(skater)
+	skater.set_player_color(color)
+	var controller: RemoteController = REMOTE_CONTROLLER_SCENE.instantiate()
+	_scene_root.add_child(controller)
+	controller.setup(skater, puck, game_state)
+	return {"skater": skater, "controller": controller}
