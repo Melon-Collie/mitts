@@ -17,7 +17,7 @@ extends CharacterBody3D
 # the same Y. With hand_rest_y = 0, a drop of ~0.5 m is natural; too large
 # and the arm may visibly stretch at max backhand reach (see
 # rom_backhand_reach_max interaction).
-@export var shoulder_height: float = 0.5
+@export var shoulder_height: float = 0.35
 # Blade length (heel to toe). The Blade Marker3D represents the heel (where
 # the shaft meets the blade); the blade mesh extends forward by this distance.
 # The puck plays at the contact point, which is blade_length * 0.5 forward
@@ -27,17 +27,18 @@ extends CharacterBody3D
 @export var wall_squeeze_threshold: float = 0.3
 
 # ── Arm Tuning ────────────────────────────────────────────────────────────────
-# Two-bone arm IK: shoulder → elbow → top_hand. Upper + forearm length should
-# sum to ≈ rom_backhand_reach_max (SkaterController) so the hand is always
-# within arm reach.
-@export var upper_arm_length: float = 0.33
-@export var forearm_length: float = 0.37
+# Two-bone arm IK: shoulder → elbow → top_hand. Sum must exceed
+# sqrt(rom_backhand_reach_max² + shoulder_height²) to avoid stretch at full
+# backhand extension. At defaults (0.80m sum, 0.35m drop): max horizontal
+# reach before stretch = sqrt(0.80²−0.35²) ≈ 0.719m > rom_backhand_reach_max.
+@export var upper_arm_length: float = 0.40
+@export var forearm_length: float = 0.44
 # Pole direction for the elbow (upper-body local). Pulled toward the top-hand
 # side of the body (X sign flipped internally by handedness) and downward.
 @export var arm_pole_local: Vector3 = Vector3(0.2, -1.0, 0.0)
 # Base size of the arm bone meshes. scale.z is set per tick to the bone's
 # actual length; X/Y control arm thickness.
-@export var arm_mesh_thickness: float = 0.08
+@export var arm_mesh_thickness: float = 0.10
 
 # ── Body Check Tuning ─────────────────────────────────────────────────────────
 @export var weight: float = 1.0                   # dimensionless — scale up for heavy players
@@ -100,6 +101,12 @@ var _prev_blade_world_pos: Vector3 = Vector3.ZERO
 var _body_block_area: Area3D = null
 var _body_block_sphere: SphereShape3D = null
 var _blade_area: Area3D = null
+# Ground-level pickup zone for slapper one-timers. Activated during
+# SLAPPER_CHARGE_WITHOUT_PUCK so the puck can be detected at ice level even
+# though the blade is lifted. Child of the Skater body (not the blade) so its
+# Y stays fixed at ground level regardless of blade pose.
+var _slapper_zone_area: Area3D = null
+var _slapper_zone_sphere: SphereShape3D = null
 var _default_upper_body_y: float = 0.0
 
 func _ready() -> void:
@@ -160,6 +167,20 @@ func _ready() -> void:
 	blade_shape.shape = blade_sphere
 	_blade_area.add_child(blade_shape)
 	blade.add_child(_blade_area)
+
+	# Slapper one-timer zone: ice-level sphere on the skater body. Activated only
+	# during SLAPPER_CHARGE_WITHOUT_PUCK via set_slapper_zone(). Radius is set at
+	# activation time (controller passes slapper_zone_radius). Starts inactive.
+	_slapper_zone_area = Area3D.new()
+	_slapper_zone_area.name = "SlapperZoneArea"
+	_slapper_zone_area.collision_layer = 0
+	_slapper_zone_area.collision_mask = 0
+	var zone_shape := CollisionShape3D.new()
+	_slapper_zone_sphere = SphereShape3D.new()
+	_slapper_zone_sphere.radius = 1.0
+	zone_shape.shape = _slapper_zone_sphere
+	_slapper_zone_area.add_child(zone_shape)
+	add_child(_slapper_zone_area)
 
 	_body_block_area = Area3D.new()
 	_body_block_area.name = "BodyBlockArea"
@@ -229,7 +250,9 @@ func _resolve_player_collisions(vel_before: Vector3) -> void:
 func set_facing(facing: Vector2) -> void:
 	_facing = facing
 	rotation.y = atan2(-_facing.x, -_facing.y)
-	lower_body.rotation.y = 0.0
+
+func set_lower_body_lag(angle: float) -> void:
+	lower_body.rotation.y = angle
 
 func get_facing() -> Vector2:
 	return _facing
@@ -306,6 +329,30 @@ func get_bottom_hand_position() -> Vector3:
 func set_upper_body_rotation(angle: float) -> void:
 	upper_body.rotation.y = angle
 
+func set_upper_body_lean(lean_x: float, lean_z: float = 0.0) -> void:
+	upper_body.rotation.x = lean_x
+	upper_body.rotation.z = lean_z
+
+func set_lower_body_lean(lean_x: float, lean_z: float) -> void:
+	lower_body.rotation.x = lean_x
+	lower_body.rotation.z = lean_z
+
+func set_head_angle(angle: float) -> void:
+	_direction_indicator.rotation.y = angle
+
+func set_slapper_mode(active: bool) -> void:
+	_blade_area.collision_layer = 0 if active else Constants.LAYER_BLADE_AREAS
+
+func set_slapper_zone(active: bool, radius: float = 0.0, offset_x: float = 0.0) -> void:
+	if active and radius > 0.0:
+		_slapper_zone_sphere.radius = radius
+		# Offset toward the blade side so the zone covers where the puck naturally
+		# arrives for a one-timer (blade side, not center-body). For a left-handed
+		# shooter the blade is on −X; for a righty, +X.
+		var blade_side_sign: float = -1.0 if is_left_handed else 1.0
+		_slapper_zone_area.position = Vector3(blade_side_sign * offset_x, 0.0, 0.0)
+	_slapper_zone_area.collision_layer = Constants.LAYER_BLADE_AREAS if active else 0
+
 func get_upper_body_rotation() -> float:
 	return upper_body.rotation.y
 
@@ -321,8 +368,9 @@ func clamp_blade_to_walls(local_pos: Vector3) -> Vector3:
 		var blade_dist: float = to_blade.length()
 		if hit_dist < blade_dist:
 			var clamped_dist: float = maxf(hit_dist - 0.05, 0.1)
+			var saved_y: float = local_pos.y
 			local_pos = to_blade.normalized() * clamped_dist
-			local_pos.y = blade_height
+			local_pos.y = saved_y
 
 	return local_pos
 
@@ -403,6 +451,7 @@ func set_ghost(ghost: bool) -> void:
 	is_ghost = ghost
 	if ghost:
 		_blade_area.collision_layer = 0
+		_slapper_zone_area.collision_layer = 0
 		_body_block_area.collision_mask = 0
 		collision_layer = 0
 		collision_mask = Constants.LAYER_WALLS

@@ -1,180 +1,108 @@
 extends GutTest
 
-# BottomHandIK — reactive bottom-hand solver. Given a grip target somewhere
-# along the stick shaft (computed by the caller from top_hand + blade), places
-# the bottom hand at the anchor of the OPPOSITE shoulder from the top hand.
+# BottomHandIK — angle-based bottom-hand release.
 #
-# Behaviours:
-#   - Reachable target → hand lands exactly on target.
-#   - Same-side target past reach ROM (toward the blade) → hand clamped short
-#     along the aim line; never blends to rest.
-#   - Cross-body target approaching / past angle ROM (toward top-hand side) →
-#     hand smoothly releases to the bottom shoulder (one-handed backhand).
+# Within release_angle_max        → hand exactly on grip target (on the stick).
+# release_angle_max → +band       → smoothstep blend toward shoulder rest.
+# Beyond release_angle_max + band → hand at shoulder rest (one-handed look).
 
 const HAND_Y: float = 0.0
+const SHOULDER_Y: float = 0.35
 const SHOULDER_OFFSET: float = 0.22
+const RELEASE_DEG: float = 67.0
+const BAND_DEG: float = 15.0
+const RELEASE_RAD: float = RELEASE_DEG * PI / 180.0
+const BAND_RAD: float = BAND_DEG * PI / 180.0
 
-# Release band: 15° smoothstep before the cross-body angle max.
-const RELEASE_BAND: float = deg_to_rad(15.0)
-
-# Tight cross-body ROM, loose same-side ROM (matches the controller defaults).
-const CROSS_ANGLE: float = deg_to_rad(60.0)
-const SAME_ANGLE:  float = deg_to_rad(110.0)
-const CROSS_REACH: float = 0.30
-const SAME_REACH:  float = 0.60
-
-func _cfg() -> Dictionary:
+func _cfg(backhand_angle_deg: float) -> Dictionary:
 	return {
 		"hand_y": HAND_Y,
-		"rom_cross_body_angle_max": CROSS_ANGLE,
-		"rom_same_side_angle_max": SAME_ANGLE,
-		"rom_cross_body_reach_max": CROSS_REACH,
-		"rom_same_side_reach_max": SAME_REACH,
-		"release_angle_band": RELEASE_BAND,
+		"backhand_angle": backhand_angle_deg * PI / 180.0,
+		"release_angle_max": RELEASE_RAD,
+		"release_angle_band": BAND_RAD,
 	}
 
-# Lefty: bottom shoulder on −X (blade side). side_sign = +1: positive angles
-# measured via atan2(dx, −dz) * side_sign map to the cross-body (toward
-# top-hand / +X) direction.
 func _lefty_shoulder() -> Vector3:
-	return Vector3(-SHOULDER_OFFSET, 0.0, 0.0)
+	return Vector3(-SHOULDER_OFFSET, SHOULDER_Y, 0.0)
 
 func _righty_shoulder() -> Vector3:
-	return Vector3(SHOULDER_OFFSET, 0.0, 0.0)
+	return Vector3(SHOULDER_OFFSET, SHOULDER_Y, 0.0)
 
-# ── Reachable targets land on target exactly ──────────────────────────────
+# ── Within angle range: hand on the stick ────────────────────────────────────
 
-func test_reachable_same_side_target_hand_on_target() -> void:
-	# Target 0.3 m to the bottom-hand side (−X for lefty); same-side reach is
-	# 0.60 so comfortably within ROM.
+func test_forehand_hand_on_target() -> void:
 	var shoulder: Vector3 = _lefty_shoulder()
-	var target := Vector2(shoulder.x - 0.3, shoulder.z)
-	var hand: Vector3 = BottomHandIK.solve(shoulder, target, 1.0, _cfg())
-	assert_almost_eq(hand.x, target.x, 0.001, "hand X on target (same-side)")
-	assert_almost_eq(hand.z, target.y, 0.001, "hand Z on target (same-side)")
+	var target := Vector2(shoulder.x - 0.2, shoulder.z - 0.1)
+	var hand: Vector3 = BottomHandIK.solve(shoulder, target, _cfg(0.0))
+	assert_almost_eq(hand.x, target.x, 0.001, "forehand: hand X on target")
+	assert_almost_eq(hand.z, target.y, 0.001, "forehand: hand Z on target")
+	assert_almost_eq(hand.y, HAND_Y, 0.001, "forehand: hand Y at hand_y")
 
-func test_reachable_cross_body_target_hand_on_target() -> void:
-	# Small cross-body displacement (26.6° < 60° ROM, 0.22 m < 0.30 reach).
+func test_moderate_backhand_hand_on_target() -> void:
 	var shoulder: Vector3 = _lefty_shoulder()
 	var target := Vector2(shoulder.x + 0.1, shoulder.z - 0.2)
-	var hand: Vector3 = BottomHandIK.solve(shoulder, target, 1.0, _cfg())
-	assert_almost_eq(hand.x, target.x, 0.001, "hand X on target (cross-body)")
-	assert_almost_eq(hand.z, target.y, 0.001, "hand Z on target (cross-body)")
+	var hand: Vector3 = BottomHandIK.solve(shoulder, target, _cfg(45.0))
+	assert_almost_eq(hand.x, target.x, 0.001, "45 deg backhand: hand X on target")
+	assert_almost_eq(hand.z, target.y, 0.001, "45 deg backhand: hand Z on target")
 
-# ── Same-side past ROM clamps, never releases ─────────────────────────────
-
-func test_same_side_past_rom_hand_clamped_not_released() -> void:
-	# Target far to the blade side. Should clamp to same-side reach and stay
-	# engaged — same-side never triggers the release-to-rest blend.
+func test_at_release_angle_hand_on_target() -> void:
+	# Exactly at the release angle — smoothstep(x, x+b, x) = 0, so hand still on target.
 	var shoulder: Vector3 = _lefty_shoulder()
-	var target := Vector2(shoulder.x - 5.0, shoulder.z - 0.1)
-	var hand: Vector3 = BottomHandIK.solve(shoulder, target, 1.0, _cfg())
+	var target := Vector2(shoulder.x + 0.3, shoulder.z - 0.1)
+	var hand: Vector3 = BottomHandIK.solve(shoulder, target, _cfg(RELEASE_DEG))
+	assert_almost_eq(hand.x, target.x, 0.001, "at release angle: hand X on target")
+	assert_almost_eq(hand.z, target.y, 0.001, "at release angle: hand Z on target")
 
-	var disp := Vector2(hand.x - shoulder.x, hand.z - shoulder.z)
-	assert_almost_eq(
-			disp.length(), SAME_REACH, 0.001,
-			"same-side hand clamped to rom_same_side_reach_max")
-	assert_gt(
-			disp.length(), 0.1,
-			"same-side hand has not collapsed to rest (release should NOT fire)")
+# ── Beyond release + band: hand at shoulder rest ──────────────────────────────
 
-# ── Cross-body past angle ROM releases fully to rest ──────────────────────
-
-func test_cross_body_past_angle_rom_releases_to_rest() -> void:
-	# Target well past the 60° cross-body angle ROM. Release smoothstep = 1,
-	# hand pulls fully back to shoulder XZ (one-handed backhand pose).
+func test_extreme_backhand_hand_at_rest() -> void:
 	var shoulder: Vector3 = _lefty_shoulder()
-	# Construct a target at ≈80° cross-body, any reasonable distance.
-	var angle: float = deg_to_rad(80.0)
-	var dist: float = 0.4
-	var disp := Vector2(sin(angle) * dist, -cos(angle) * dist)
-	var target: Vector2 = Vector2(shoulder.x, shoulder.z) + disp
-	var hand: Vector3 = BottomHandIK.solve(shoulder, target, 1.0, _cfg())
-	assert_almost_eq(hand.x, shoulder.x, 0.001, "released hand at shoulder X")
-	assert_almost_eq(hand.z, shoulder.z, 0.001, "released hand at shoulder Z")
+	var target := Vector2(shoulder.x + 0.5, shoulder.z - 0.1)
+	var hand: Vector3 = BottomHandIK.solve(shoulder, target, _cfg(RELEASE_DEG + BAND_DEG))
+	assert_almost_eq(hand.x, shoulder.x, 0.001, "extreme: hand X at shoulder rest")
+	assert_almost_eq(hand.z, shoulder.z, 0.001, "extreme: hand Z at shoulder rest")
+	assert_almost_eq(hand.y, HAND_Y, 0.001, "extreme: hand Y at hand_y")
 
-func test_cross_body_release_band_partially_blended() -> void:
-	# Angle exactly mid-band (between 45° and 60°) should partially blend.
-	# Hand should be between the ideal clamped position and the shoulder rest.
+func test_well_past_release_hand_at_rest() -> void:
 	var shoulder: Vector3 = _lefty_shoulder()
-	var angle: float = deg_to_rad(55.0)  # inside ROM but inside release band
-	var dist: float = 0.2                # inside cross-body reach ROM
-	var disp := Vector2(sin(angle) * dist, -cos(angle) * dist)
-	var target: Vector2 = Vector2(shoulder.x, shoulder.z) + disp
-	var hand: Vector3 = BottomHandIK.solve(shoulder, target, 1.0, _cfg())
+	var target := Vector2(shoulder.x + 1.0, shoulder.z)
+	var hand: Vector3 = BottomHandIK.solve(shoulder, target, _cfg(120.0))
+	assert_almost_eq(hand.x, shoulder.x, 0.001, "120 deg: hand X at rest")
+	assert_almost_eq(hand.z, shoulder.z, 0.001, "120 deg: hand Z at rest")
 
-	var to_hand := Vector2(hand.x - shoulder.x, hand.z - shoulder.z)
-	# Partially released → hand sits between target and shoulder.
-	assert_gt(to_hand.length(), 0.0, "partial release — hand not at shoulder")
-	assert_lt(to_hand.length(), dist, "partial release — hand moved toward shoulder")
+# ── Transition band: partial blend ────────────────────────────────────────────
 
-# ── Asymmetric reach ──────────────────────────────────────────────────────
-
-func test_same_side_reach_exceeds_cross_body_reach() -> void:
-	# Two targets at ±30° from forward with the same over-reach distance.
-	# Cross-body should clamp to 0.30, same-side to 0.60.
+func test_transition_band_partially_blended() -> void:
 	var shoulder: Vector3 = _lefty_shoulder()
-	var dist: float = 5.0
+	var target := Vector2(shoulder.x + 0.3, shoulder.z - 0.1)
+	var mid_angle_deg: float = RELEASE_DEG + BAND_DEG * 0.5
+	var hand: Vector3 = BottomHandIK.solve(shoulder, target, _cfg(mid_angle_deg))
+	var rest := Vector3(shoulder.x, HAND_Y, shoulder.z)
+	var target_at_y := Vector3(target.x, HAND_Y, target.y)
+	var to_rest: float = (hand - rest).length()
+	var to_target: float = (hand - target_at_y).length()
+	assert_gt(to_rest, 0.001, "partial blend — hand not fully at rest")
+	assert_gt(to_target, 0.001, "partial blend — hand not fully on target")
 
-	var cross_angle: float = deg_to_rad(30.0)
-	var cross_disp := Vector2(sin(cross_angle) * dist, -cos(cross_angle) * dist)
-	var cross_target: Vector2 = Vector2(shoulder.x, shoulder.z) + cross_disp
-	var cross_hand: Vector3 = BottomHandIK.solve(shoulder, cross_target, 1.0, _cfg())
-	var cross_reach: float = Vector2(
-			cross_hand.x - shoulder.x, cross_hand.z - shoulder.z).length()
+# ── Forehand angle is negative — should always stay on target ─────────────────
 
-	var same_angle: float = deg_to_rad(-30.0)
-	var same_disp := Vector2(sin(same_angle) * dist, -cos(same_angle) * dist)
-	var same_target: Vector2 = Vector2(shoulder.x, shoulder.z) + same_disp
-	var same_hand: Vector3 = BottomHandIK.solve(shoulder, same_target, 1.0, _cfg())
-	var same_reach: float = Vector2(
-			same_hand.x - shoulder.x, same_hand.z - shoulder.z).length()
-
-	assert_almost_eq(cross_reach, CROSS_REACH, 0.001, "cross-body clamped to tight reach")
-	assert_almost_eq(same_reach, SAME_REACH, 0.001, "same-side clamped to loose reach")
-	assert_gt(same_reach, cross_reach + 0.1, "same-side reach > cross-body reach")
-
-# ── Hand Y locked ─────────────────────────────────────────────────────────
-
-func test_hand_y_locked() -> void:
+func test_negative_angle_forehand_always_on_target() -> void:
 	var shoulder: Vector3 = _lefty_shoulder()
-	for target: Vector2 in [
-			Vector2(shoulder.x, shoulder.z),                   # at shoulder
-			Vector2(shoulder.x - 0.3, shoulder.z - 0.1),       # same-side reachable
-			Vector2(shoulder.x + 0.1, shoulder.z - 0.2),       # cross-body reachable
-			Vector2(shoulder.x + 2.0, shoulder.z - 0.3),       # cross-body past ROM
-			Vector2(shoulder.x - 5.0, shoulder.z - 0.1),       # same-side past ROM
-		]:
-		var hand: Vector3 = BottomHandIK.solve(shoulder, target, 1.0, _cfg())
-		assert_almost_eq(
-				hand.y, HAND_Y, 0.0001,
-				"hand Y locked at cfg.hand_y for target %s" % target)
+	var target := Vector2(shoulder.x - 0.3, shoulder.z - 0.2)
+	# Large negative angle = deep forehand; release_angle_max is positive so t=0.
+	var hand: Vector3 = BottomHandIK.solve(shoulder, target, _cfg(-90.0))
+	assert_almost_eq(hand.x, target.x, 0.001, "deep forehand: hand X on target")
+	assert_almost_eq(hand.z, target.y, 0.001, "deep forehand: hand Z on target")
 
-# ── Handedness mirror ─────────────────────────────────────────────────────
+# ── Handedness mirror ─────────────────────────────────────────────────────────
 
 func test_righty_mirrors_lefty_in_x() -> void:
-	# Righty: bottom shoulder on +X, side_sign = −1. Mirror target in X;
-	# expect a mirrored hand position.
 	var lefty_shoulder: Vector3 = _lefty_shoulder()
 	var righty_shoulder: Vector3 = _righty_shoulder()
 	var lefty_target := Vector2(lefty_shoulder.x - 0.3, lefty_shoulder.z - 0.2)
 	var righty_target := Vector2(-lefty_target.x, lefty_target.y)
-
-	var lefty_hand: Vector3 = BottomHandIK.solve(lefty_shoulder, lefty_target, 1.0, _cfg())
-	var righty_hand: Vector3 = BottomHandIK.solve(righty_shoulder, righty_target, -1.0, _cfg())
-
+	var lefty_hand: Vector3 = BottomHandIK.solve(lefty_shoulder, lefty_target, _cfg(30.0))
+	var righty_hand: Vector3 = BottomHandIK.solve(righty_shoulder, righty_target, _cfg(30.0))
 	assert_almost_eq(lefty_hand.x, -righty_hand.x, 0.001, "hand X mirrors")
 	assert_almost_eq(lefty_hand.y, righty_hand.y, 0.001, "hand Y matches")
 	assert_almost_eq(lefty_hand.z, righty_hand.z, 0.001, "hand Z matches")
-
-# ── Degenerate: target at shoulder ────────────────────────────────────────
-
-func test_target_at_shoulder_returns_shoulder() -> void:
-	# No meaningful aim direction when target coincides with shoulder; hand
-	# rests at shoulder XZ with hand_y.
-	var shoulder: Vector3 = _lefty_shoulder()
-	var target := Vector2(shoulder.x, shoulder.z)
-	var hand: Vector3 = BottomHandIK.solve(shoulder, target, 1.0, _cfg())
-	assert_almost_eq(hand.x, shoulder.x, 0.0001, "degenerate hand X at shoulder")
-	assert_almost_eq(hand.z, shoulder.z, 0.0001, "degenerate hand Z at shoulder")
-	assert_almost_eq(hand.y, HAND_Y, 0.0001, "degenerate hand Y at cfg.hand_y")
