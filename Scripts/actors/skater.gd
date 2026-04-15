@@ -11,6 +11,12 @@ extends CharacterBody3D
 # (blade on −X) has the top hand on the right shoulder (+X), and vice versa.
 # Baseline ~0.22 m (half of adult shoulder-to-shoulder breadth).
 @export var shoulder_offset: float = 0.22
+# Blade length (heel to toe). The Blade Marker3D represents the heel (where
+# the shaft meets the blade); the blade mesh extends forward by this distance.
+# The puck plays at the contact point, which is blade_length * 0.5 forward
+# of the Marker3D along its local forward axis. Must match the blade mesh Z
+# size in Scenes/Skater.tscn.
+@export var blade_length: float = 0.30
 @export var wall_squeeze_threshold: float = 0.3
 
 # ── Body Check Tuning ─────────────────────────────────────────────────────────
@@ -78,6 +84,10 @@ func _ready() -> void:
 	_blade_area.name = "BladeArea"
 	_blade_area.collision_layer = Constants.LAYER_BLADE_AREAS
 	_blade_area.collision_mask = 0
+	# Offset the pickup sphere forward by half the blade length so it centers
+	# on mid-blade (the contact point) rather than the heel (Marker3D origin).
+	# Forward in the Blade node's local frame is -Z (set by look_at each tick).
+	_blade_area.position = Vector3(0.0, 0.0, -blade_length * 0.5)
 	var blade_shape = CollisionShape3D.new()
 	var blade_sphere = SphereShape3D.new()
 	blade_sphere.radius = 0.3
@@ -158,6 +168,19 @@ func set_blade_position(pos: Vector3) -> void:
 
 func get_blade_position() -> Vector3:
 	return blade.position
+
+# World position where the puck plays on the blade — mid-blade by default.
+# The Blade Marker3D is at the heel (shaft-to-blade joint); the contact point
+# is blade_length * 0.5 forward along the blade's local forward axis (-Z in
+# local, which set_blade_position() orients along the shaft direction each
+# tick via look_at).
+func get_blade_contact_global() -> Vector3:
+	var heel_world: Vector3 = upper_body.to_global(blade.position)
+	var forward: Vector3 = -blade.global_transform.basis.z
+	forward.y = 0.0
+	if forward.length() < 0.001:
+		return heel_world
+	return heel_world + forward.normalized() * (blade_length * 0.5)
 
 # ── Top Hand ──────────────────────────────────────────────────────────────────
 func set_top_hand_position(pos: Vector3) -> void:

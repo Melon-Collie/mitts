@@ -30,8 +30,10 @@ enum State {
 # ── Blade / Stick / Top-Hand IK Tuning ────────────────────────────────────────
 # Blade Y in upper-body-local space. Locked — blade always plays along ice.
 @export var blade_height: float = -0.95
-# Fixed, rigid stick length (hand to blade). Baseline 1.5 m ≈ adult senior.
-@export var stick_length: float = 1.50
+# Fixed, rigid shaft length (hand to blade heel). Baseline 1.30 m ≈ adult
+# senior stick shaft (butt-to-heel). The blade mesh extends forward from the
+# heel; see Skater.blade_length. Total hand-to-toe is stick_length + blade_length.
+@export var stick_length: float = 1.30
 # Hand Y in upper-body-local space. Phase 1 keeps this fixed; horizontal
 # stick projection is sqrt(stick_length² − (hand_rest_y − blade_height)²).
 @export var hand_rest_y: float = 0.0

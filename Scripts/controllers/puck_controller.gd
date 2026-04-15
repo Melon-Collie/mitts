@@ -73,10 +73,10 @@ func notify_local_puck_dropped() -> void:
 	_state_buffer.clear()
 
 func _apply_local_carrier_position() -> void:
-	var blade_world: Vector3 = _local_carrier_skater.upper_body_to_global(
-			_local_carrier_skater.get_blade_position())
-	blade_world.y = puck.ice_height
-	puck.set_puck_position(blade_world)
+	# Pin puck at the blade contact point (mid-blade), not the heel (Marker3D).
+	var contact: Vector3 = _local_carrier_skater.get_blade_contact_global()
+	contact.y = puck.ice_height
+	puck.set_puck_position(contact)
 
 # ── Reconciliation ────────────────────────────────────────────────────────────
 # Mirrors LocalController.reconcile — nudges Jolt state toward server truth each

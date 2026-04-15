@@ -284,8 +284,8 @@ func _physics_process(delta: float) -> void:
 
 	if carrier != null:
 		freeze = true
-		var blade_node = carrier.get_node("UpperBody/Blade")
-		global_position = blade_node.global_position
+		# Pin at the blade contact point (mid-blade), not the heel (Marker3D).
+		global_position = carrier.get_blade_contact_global()
 		global_position.y = ice_height
 	else:
 		if linear_velocity.length() > max_speed:
