@@ -6,8 +6,11 @@ extends CharacterBody3D
 
 # ── Blade Tuning ──────────────────────────────────────────────────────────────
 @export var blade_height: float = 0.0
-@export var plane_reach: float = 1.5
-@export var shoulder_offset: float = 0.35
+# Shoulder anchor offset from body center. The shoulder (top-hand anchor)
+# sits on the OPPOSITE side of the body from the blade: a left-handed shooter
+# (blade on −X) has the top hand on the right shoulder (+X), and vice versa.
+# Baseline ~0.22 m (half of adult shoulder-to-shoulder breadth).
+@export var shoulder_offset: float = 0.22
 @export var wall_squeeze_threshold: float = 0.3
 
 # ── Body Check Tuning ─────────────────────────────────────────────────────────
@@ -30,6 +33,11 @@ extends CharacterBody3D
 @onready var _upper_body_mesh: MeshInstance3D = $UpperBody/UpperBodyMesh
 @onready var _blade_mesh: MeshInstance3D = $UpperBody/Blade/MeshInstance3D
 
+# Top hand: the moving IK output. Positioned by the controller each tick.
+# If the scene file provides a `TopHand` Marker3D under UpperBody, we use it;
+# otherwise we create one programmatically. Created/resolved in _ready.
+var top_hand: Marker3D = null
+
 signal body_checked_player(victim: Skater, impact_force: float, hit_direction: Vector3)
 signal body_block_hit(body: Node3D)
 
@@ -45,8 +53,20 @@ var _blade_area: Area3D = null
 var _default_upper_body_y: float = 0.0
 
 func _ready() -> void:
-	var hand_sign: float = -1.0 if is_left_handed else 1.0
-	shoulder.position = Vector3(hand_sign * shoulder_offset, 0.0, 0.0)
+	# Shoulder anchors the top hand. The top hand lives on the OPPOSITE side
+	# from the blade: a left-handed shooter grips with the right hand on top,
+	# so the shoulder (anchor) is on the right (+X). Flipped for righties.
+	var top_hand_side_sign: float = 1.0 if is_left_handed else -1.0
+	shoulder.position = Vector3(top_hand_side_sign * shoulder_offset, 0.0, 0.0)
+
+	# Resolve or create the TopHand marker. It starts at the shoulder.
+	top_hand = upper_body.get_node_or_null("TopHand") as Marker3D
+	if top_hand == null:
+		top_hand = Marker3D.new()
+		top_hand.name = "TopHand"
+		upper_body.add_child(top_hand)
+	top_hand.position = shoulder.position
+
 	_prev_blade_world_pos = upper_body.to_global(blade.position)
 	_default_upper_body_y = upper_body.position.y
 
@@ -128,15 +148,23 @@ func set_blade_position(pos: Vector3) -> void:
 	blade.position = pos
 	# Rotate blade (and its children: mesh, BladeArea) to face along the shaft.
 	# Use horizontal projection so the blade stays upright despite blade_height offset.
+	# Shaft origin is now the top hand (IK output), not the fixed shoulder.
 	var blade_world: Vector3 = upper_body.to_global(pos)
-	var shoulder_world: Vector3 = upper_body.to_global(shoulder.position)
-	var shaft_horiz: Vector3 = blade_world - shoulder_world
+	var hand_world: Vector3 = upper_body.to_global(top_hand.position)
+	var shaft_horiz: Vector3 = blade_world - hand_world
 	shaft_horiz.y = 0.0
 	if shaft_horiz.length() > 0.001:
 		blade.look_at(blade_world + shaft_horiz.normalized(), Vector3.UP)
 
 func get_blade_position() -> Vector3:
 	return blade.position
+
+# ── Top Hand ──────────────────────────────────────────────────────────────────
+func set_top_hand_position(pos: Vector3) -> void:
+	top_hand.position = pos
+
+func get_top_hand_position() -> Vector3:
+	return top_hand.position
 
 # ── Upper Body ────────────────────────────────────────────────────────────────
 func set_upper_body_rotation(angle: float) -> void:
@@ -172,7 +200,8 @@ func get_blade_wall_normal() -> Vector3:
 
 # ── Stick Mesh ────────────────────────────────────────────────────────────────
 func update_stick_mesh() -> void:
-	var stick_origin: Vector3 = shoulder.position
+	# Stick runs from the top hand (IK output) to the blade.
+	var stick_origin: Vector3 = top_hand.position
 	var to_blade: Vector3 = blade.position - stick_origin
 	stick_mesh.position = stick_origin + to_blade / 2.0
 	stick_mesh.scale.z = to_blade.length()

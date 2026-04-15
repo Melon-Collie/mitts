@@ -71,6 +71,7 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | `domain/rules/goalie_behavior_rules.gd` | Shot detection, defensive zone detection, Buckley depth chart, lateral X target |
 | `domain/rules/charge_tracking.gd` | Wrister aim charge accumulation with direction-variance reset |
 | `domain/rules/reconciliation_rules.gd` | Thresholds for skater reconcile and puck hard-snap |
+| `domain/rules/top_hand_ik.gd` | 1-bone inverse kinematics for the stick's top hand. Given a desired blade target and a fixed stick length, solves (hand, blade) respecting an asymmetric ROM (small forehand / large backhand reach). Blade-first feel: blade lands on target when reachable, clips along aim line when not. |
 
 ### Application (orchestration)
 
@@ -81,7 +82,7 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | `controllers/local_controller.gd` | Local player: input gathering, prediction, reconciliation. Takes `game_state` via setup; calls `InfractionRules.is_offside` directly for client-side ghost prediction. |
 | `controllers/remote_controller.gd` | Remote players: server-side input driving, client-side interpolation |
 | `controllers/puck_controller.gd` | Puck: emits `puck_picked_up_by` / `puck_released_by_carrier` / `puck_stripped_from` signals (via injected peer_id resolver) for GameManager to consume; handles client prediction + interpolation |
-| `controllers/skater_controller.gd` | Base class: state machine, movement, shooting, blade control. Delegates math to domain rules. |
+| `controllers/skater_controller.gd` | Base class: state machine, movement, shooting, blade control. Delegates blade placement to `TopHandIK.solve` with fixed `stick_length` and ROM exports. Delegates other math to domain rules. |
 | `controllers/goalie_controller.gd` | Goalie AI: state machine (STANDING/BUTTERFLY/RVH_LEFT/RVH_RIGHT) driving positioning via `GoalieBehaviorRules` |
 | `controllers/goalie_body_config.gd` | Data class holding per-state body part positions and rotations |
 
@@ -91,7 +92,7 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 |------|------|
 | `networking/network_manager.gd` | Autoload. RPC definitions, connection management, state broadcast timing |
 | `actors/puck.gd` | RigidBody3D: pickup zone, deflection, carrier following (server only). Accepts a `team_resolver: Callable` so it doesn't reach into GameManager for team checks. |
-| `actors/skater.gd` | CharacterBody3D: blade/facing/upper-body API, ghost mode toggling |
+| `actors/skater.gd` | CharacterBody3D: blade/top-hand/facing/upper-body API, ghost mode toggling. `shoulder` Marker3D anchors the top hand on the opposite side from the blade (right-shoulder for a left-handed shooter). `top_hand` Marker3D is the moving IK output; created programmatically on `_ready` if not present in the scene. |
 | `actors/goalie.gd` | Goalie body API: exposes position, rotation, body part config methods |
 | `actors/hockey_goal.gd` | Goal mesh + goal sensor Area3D; emits `goal_scored` signal |
 | `actors/hockey_rink.gd` | Procedural rink geometry (@tool): walls, corners, ice surface, markings |
@@ -102,7 +103,7 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | `networking/buffered_puck_state.gd` | Timestamped PuckNetworkState for interpolation buffer |
 | `networking/buffered_goalie_state.gd` | Timestamped GoalieNetworkState for interpolation buffer |
 | `networking/goalie_network_state.gd` | Serializable goalie state: position, rotation, state enum, five_hole_openness |
-| `networking/skater_network_state.gd` | Serializable skater state: position, velocity, facing, blade, input sequence, is_ghost |
+| `networking/skater_network_state.gd` | Serializable skater state: position, velocity, facing, blade, top_hand, input sequence, is_ghost |
 | `networking/puck_network_state.gd` | Serializable puck state: position, velocity, carrier peer ID |
 | `input/input_state.gd` | InputState data object: all per-tick input fields (move, mouse, shoot, brake, elevation, etc.) |
 | `input/local_input_gatherer.gd` | Populates InputState from local hardware; accumulates just_pressed between ticks |
@@ -143,3 +144,6 @@ All start paths go through `MainMenu.tscn`. `NetworkManager._ready()` does nothi
 - **Poke check / body check / catch vs deflect thresholds need multiplayer tuning:** `deflect_min_speed`, `poke_strip_speed`, `poke_carrier_vel_blend`, `body_check_strip_threshold`, `body_check_transfer`, and related exports were set from first principles and need tuning under real network conditions.
 - **Icing ghost duration needs tuning:** `ICING_GHOST_DURATION` (3s) was set as an initial value. May need adjustment based on how punishing icing feels in practice — shorter if too harsh, longer if teams ice with impunity.
 - **Hybrid icing race uses goal line as reference point:** `check_icing_for_loose_puck` compares each team's closest player's distance to `±GOAL_LINE_Z`. In the real NHL the race ends at the defensive-zone faceoff dot, not the goal line — if the feel is off (too easy or too hard to wave off icing), consider adding a `ZONE_FACEOFF_DOT_Z` constant and using that as the reference instead.
+- **Top-hand IK is Phase 1 only:** `TopHandIK.solve` operates in the horizontal plane with `hand_rest_y` fixed. Fixed stick length means the blade can't come in closer to the body than `stick_horiz` (~1.16 m) without the hand moving vertically. Phase 2: let hand Y rise/dip so the stick can swing through the vertical plane, restoring tight-in blade positions. Also: slapper blade pose uses a fixed offset (`slapper_blade_x`, `slapper_blade_z`) and doesn't respect `stick_length` exactly — tune those values (or route through IK) once the baseline feels right.
+- **Handedness flip untested:** `is_left_handed` exports on Skater switch the shoulder anchor between +X and −X, and the IK uses `blade_side_sign` throughout. Only the lefty pose has been verified in play; a righty skater should mirror correctly per GUT tests, but confirm in scene before setting a mix of handedness. Also: `ShotMechanics.release_wrister`'s backhand detection still uses `shoulder.x` as its threshold, which has moved to the opposite side of the body — if the forehand/backhand boundary feels off, switch detection to body centerline (`blade.x * blade_side_sign < 0`).
+- **Top-hand ROM values are first-principles baselines:** `rom_forehand_angle_max_deg` (45°), `rom_backhand_angle_max_deg` (120°), `rom_forehand_reach_max` (0.20 m), `rom_backhand_reach_max` (0.70 m), `stick_length` (1.50 m), `shoulder_offset` (0.22 m) are anatomical defaults and will need playtest tuning.

@@ -63,6 +63,7 @@ func _interpolate() -> void:
 	interpolated.rotation = from_state.state.rotation.lerp(to_state.state.rotation, t)
 	interpolated.velocity = from_state.state.velocity.lerp(to_state.state.velocity, t)
 	interpolated.blade_position = from_state.state.blade_position.lerp(to_state.state.blade_position, t)
+	interpolated.top_hand_position = from_state.state.top_hand_position.lerp(to_state.state.top_hand_position, t)
 	interpolated.upper_body_rotation_y = lerpf(from_state.state.upper_body_rotation_y, to_state.state.upper_body_rotation_y, t)
 	interpolated.facing = from_state.state.facing.lerp(to_state.state.facing, t).normalized()
 	_apply_state_to_skater(interpolated)
@@ -73,6 +74,9 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	skater.global_position = state.position
 	skater.global_rotation = state.rotation
 	skater.velocity = state.velocity
+	# Set top_hand first so set_blade_position can compute the shaft rotation
+	# using the correct hand pivot.
+	skater.set_top_hand_position(state.top_hand_position)
 	skater.set_blade_position(state.blade_position)
 	skater.set_upper_body_rotation(state.upper_body_rotation_y)
 	skater.set_facing(state.facing)

@@ -169,13 +169,23 @@ All input flows through an `InputState` data object populated by `LocalInputGath
 
 ## Blade Control
 
-The blade originates from the stick-hand shoulder. Mouse distance maps to reach — further away = more extended. Clamped to a forehand/backhand arc in upper-body local space.
+Blade placement goes through a custom top-hand inverse-kinematics solver (`TopHandIK.solve` in `domain/rules/top_hand_ik.gd`). The stick is a rigid rod of fixed length (`stick_length`, baseline 1.50 m). The `shoulder` marker anchors the top hand on the opposite side of the body from the blade (right shoulder for a left-handed shooter). The `top_hand` marker is the moving IK output.
 
-Pushing past the arc limit rotates the player's facing smoothly (`facing_drag_speed`), so extended mouse movement naturally rotates the whole body.
+**Blade-first feel:** The mouse world position is the desired blade target. The solver works backwards from the target: place the hand where it needs to be so the stick reaches, clamp the hand to an asymmetric ROM, then recompute the blade from the clamped hand along the aim line at `stick_horiz`. Whenever the target is reachable, blade lands exactly on it. When not, blade clips along the same aim line — angular aim is preserved, only distance drops.
 
-Upper body rotates independently to express the angle between facing and blade direction (`upper_body_twist_ratio = 0.5`).
+**Asymmetric top-hand ROM (relative to shoulder):**
+- Forehand (cross-body) side: tight — `rom_forehand_reach_max ≈ 0.20 m`, `rom_forehand_angle_max ≈ 45°`. Hand stays near the body.
+- Backhand (same-side as shoulder) side: open — `rom_backhand_reach_max ≈ 0.70 m` (≈ full arm length), `rom_backhand_angle_max ≈ 120°`. Supports one-handed backhand reaches.
 
-Wall clamping: blade reach is shortened near boards. If squeeze exceeds `wall_squeeze_threshold`, the puck releases along the wall normal.
+**Vertical:** Phase 1 pins both the hand (`hand_rest_y`) and blade (`blade_height`) to fixed Y values. Horizontal stick projection is `sqrt(stick_length² − (hand_rest_y − blade_height)²)` ≈ 1.16 m. Phase 2 can let hand Y rise/fall for tight-in blade positions.
+
+**Facing drag:** Aiming past the angular ROM rotates the body's facing (`facing_drag_speed`) to bring the target back in range.
+
+**Upper body twist:** Rotates independently to express the angle between facing and blade direction (`upper_body_twist_ratio = 0.5`).
+
+**Wall clamping:** The solved blade is shortened by `RayCast3D` before being written. If squeeze exceeds `wall_squeeze_threshold`, the puck releases along the wall normal.
+
+**Network:** Both `blade_position` and `top_hand_position` are broadcast per world-state tick and interpolated on clients so remote players show a consistent stick pose.
 
 ---
 
@@ -298,7 +308,7 @@ Instead of stoppages, offsides and icing are enforced via a **ghost mode** — o
 - Slapshot pre/post release buffer window for one-timer timing feel
 - Middle-zone puck reception: blade readiness check
 - Aim assist
-- IK for arm/stick animation
+- Phase 2 IK: variable hand Y (tight-in blade positions), bottom-hand solving, full arm/body rigging
 - Procedural skating animations
 - CharacterStats resource design (universal vs per-character exports)
 - Camera goal anchor flip speed on turnovers
