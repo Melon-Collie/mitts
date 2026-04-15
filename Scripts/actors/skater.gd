@@ -11,6 +11,13 @@ extends CharacterBody3D
 # (blade on −X) has the top hand on the right shoulder (+X), and vice versa.
 # Baseline ~0.22 m (half of adult shoulder-to-shoulder breadth).
 @export var shoulder_offset: float = 0.22
+# Shoulder Y in upper-body-local space. Positions the arm's anchor high on
+# the torso (near the top of the upper body mesh) so the visible arm spans
+# from the shoulder down to the hand rather than both points collapsing to
+# the same Y. With hand_rest_y = 0, a drop of ~0.5 m is natural; too large
+# and the arm may visibly stretch at max backhand reach (see
+# rom_backhand_reach_max interaction).
+@export var shoulder_height: float = 0.5
 # Blade length (heel to toe). The Blade Marker3D represents the heel (where
 # the shaft meets the blade); the blade mesh extends forward by this distance.
 # The puck plays at the contact point, which is blade_length * 0.5 forward
@@ -81,16 +88,20 @@ func _ready() -> void:
 	# Shoulder anchors the top hand. The top hand lives on the OPPOSITE side
 	# from the blade: a left-handed shooter grips with the right hand on top,
 	# so the shoulder (anchor) is on the right (+X). Flipped for righties.
+	# Y is lifted to `shoulder_height` so the shoulder sits up on the torso,
+	# not down at the waist where the hand rests.
 	var top_hand_side_sign: float = 1.0 if is_left_handed else -1.0
-	shoulder.position = Vector3(top_hand_side_sign * shoulder_offset, 0.0, 0.0)
+	shoulder.position = Vector3(top_hand_side_sign * shoulder_offset, shoulder_height, 0.0)
 
-	# Resolve or create the TopHand marker. It starts at the shoulder.
+	# Resolve or create the TopHand marker. It starts at the shoulder's XZ
+	# but at Y=0 (waist level) — the controller writes the IK-solved hand
+	# position every tick, this is just the initial pose before that runs.
 	top_hand = upper_body.get_node_or_null("TopHand") as Marker3D
 	if top_hand == null:
 		top_hand = Marker3D.new()
 		top_hand.name = "TopHand"
 		upper_body.add_child(top_hand)
-	top_hand.position = shoulder.position
+	top_hand.position = Vector3(shoulder.position.x, 0.0, 0.0)
 
 	_prev_blade_world_pos = upper_body.to_global(blade.position)
 	_default_upper_body_y = upper_body.position.y

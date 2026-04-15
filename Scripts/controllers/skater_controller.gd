@@ -395,13 +395,17 @@ func _release_slapper(input: InputState) -> void:
 
 func _apply_slapper_blade_position() -> void:
 	# Slapper has a fixed blade pose offset from the shoulder — separate from
-	# the IK flow (this is a charged pre-shot pose, not player-aimed). Keep
-	# the top hand at the shoulder; the visible stick length may differ
-	# slightly from `stick_length` depending on slapper_blade_x/z tuning.
+	# the IK flow (this is a charged pre-shot pose, not player-aimed). Hand
+	# sits at the shoulder XZ at `hand_rest_y`; blade XZ is offset from the
+	# shoulder by slapper_blade_x/z, but its Y is pinned to `blade_height`
+	# directly (not summed with shoulder.y) so the blade always lands on the
+	# ice regardless of where the shoulder anchor sits vertically.
 	var blade_side_sign: float = -1.0 if skater.is_left_handed else 1.0
-	var pos: Vector3 = skater.shoulder.position + Vector3(blade_side_sign * slapper_blade_x, blade_height, slapper_blade_z)
-	var hand_pos: Vector3 = skater.shoulder.position
-	hand_pos.y = hand_rest_y
+	var pos := Vector3(
+			skater.shoulder.position.x + blade_side_sign * slapper_blade_x,
+			blade_height,
+			skater.shoulder.position.z + slapper_blade_z)
+	var hand_pos := Vector3(skater.shoulder.position.x, hand_rest_y, skater.shoulder.position.z)
 	skater.set_top_hand_position(hand_pos)
 	skater.set_blade_position(pos)
 	skater.update_arm_mesh()
