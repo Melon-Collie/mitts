@@ -177,7 +177,11 @@ Blade placement goes through a custom top-hand inverse-kinematics solver (`TopHa
 - Forehand (cross-body) side: tight — `rom_forehand_reach_max ≈ 0.20 m`, `rom_forehand_angle_max ≈ 45°`. Hand stays near the body.
 - Backhand (same-side as shoulder) side: open — `rom_backhand_reach_max ≈ 0.70 m` (≈ full arm length), `rom_backhand_angle_max ≈ 120°`. Supports one-handed backhand reaches.
 
-**Vertical:** Phase 1 pins both the hand (`hand_rest_y`) and blade (`blade_height`) to fixed Y values. Horizontal stick projection is `sqrt(stick_length² − (hand_rest_y − blade_height)²)` ≈ 1.16 m. Phase 2 can let hand Y rise/fall for tight-in blade positions.
+**Vertical:** Blade Y stays locked at `blade_height`. Hand Y adapts: in the FAR regime (target past rest stick reach) it sits at `hand_rest_y`; in the CLOSE regime (target inside rest stick reach) it rises so `stick_horiz` matches the target distance and the blade lands on the target exactly. Capped by `hand_y_max` — past that the stick's min horizontal projection causes the blade to overshoot along the aim line.
+
+**Arm rendering:** The shoulder and hand drive a 2-bone IK (`TwoBoneIK.solve_elbow`) that places the elbow on the plane perpendicular to the shoulder-hand axis in the pole direction (`arm_pole_local`). Two BoxMesh segments (`UpperArmMesh` / `ForearmMesh`) are scaled per-tick to the bone lengths and `look_at` their endpoints, following the same pattern as `StickMesh`. Arm meshes are auto-created if absent from the scene and included in ghost-mode transparency.
+
+**Wall-clamp hand retraction:** When `clamp_blade_to_walls` pulls the blade back (boards in the way), the controller applies the same horizontal offset to `top_hand` so the stick keeps its rigid length. The arm re-solves on the retracted hand, so the stick looks like it's being pulled back rather than compressing. Wall-pin puck auto-release fires on squeeze magnitude, independent of the retraction.
 
 **Facing drag:** Aiming past the angular ROM rotates the body's facing (`facing_drag_speed`) to bring the target back in range.
 

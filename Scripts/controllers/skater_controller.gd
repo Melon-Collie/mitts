@@ -34,9 +34,16 @@ enum State {
 # senior stick shaft (butt-to-heel). The blade mesh extends forward from the
 # heel; see Skater.blade_length. Total hand-to-toe is stick_length + blade_length.
 @export var stick_length: float = 1.30
-# Hand Y in upper-body-local space. Phase 1 keeps this fixed; horizontal
-# stick projection is sqrt(stick_length² − (hand_rest_y − blade_height)²).
+# Hand Y in upper-body-local space. Baseline resting position (used in the
+# FAR regime). In the CLOSE regime the hand rises toward `hand_y_max` so the
+# stick tilts more vertical and the blade can tuck in close to the body.
 @export var hand_rest_y: float = 0.0
+# Ceiling for hand Y in the CLOSE regime. When aiming very close to the
+# skater, the hand rises to shorten the stick's horizontal projection; this
+# cap keeps the pose anatomical (hand won't climb past chin level). With
+# default stick_length = 1.30 m, hand_y_max = 0.30 → min horizontal stick
+# reach ≈ 0.36 m.
+@export var hand_y_max: float = 0.30
 # Asymmetric ROM for the top hand (measured from shoulder in upper-body-local
 # horizontal plane, expressed in "forehand side = positive angle" convention).
 # Forehand cross-body reach is anatomically limited; backhand same-side reach
@@ -397,6 +404,7 @@ func _apply_slapper_blade_position() -> void:
 	hand_pos.y = hand_rest_y
 	skater.set_top_hand_position(hand_pos)
 	skater.set_blade_position(pos)
+	skater.update_arm_mesh()
 
 func _is_in_slapper_state() -> bool:
 	return _state in [State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK]
@@ -461,8 +469,18 @@ func _apply_blade_from_mouse(input: InputState, delta: float) -> void:
 				var nudge: Vector3 = skater.global_transform.basis * (-wall_clamped.normalized())
 				_do_release(nudge.normalized(), 3.0)
 
+	# When the blade got pulled back by the wall clamp, slide the hand by the
+	# same horizontal offset so |hand − blade| stays at stick_horiz. Prevents
+	# the stick mesh from compressing; reads as "pulling the stick back".
+	var clamp_delta_xz := Vector3(
+			wall_clamped.x - intended_blade.x, 0.0, wall_clamped.z - intended_blade.z)
+	if clamp_delta_xz.length_squared() > 0.0:
+		hand_local.x += clamp_delta_xz.x
+		hand_local.z += clamp_delta_xz.z
+
 	skater.set_top_hand_position(hand_local)
 	skater.set_blade_position(wall_clamped)
+	skater.update_arm_mesh()
 
 	# Store the blade's bearing from the shoulder for follow-through.
 	var bearing: Vector3 = wall_clamped - skater.shoulder.position
@@ -477,11 +495,19 @@ func _apply_blade_from_relative_angle() -> void:
 	var local_dir := Vector3(sin(_blade_relative_angle), 0.0, -cos(_blade_relative_angle))
 	var hand_pos := skater.shoulder.position
 	hand_pos.y = hand_rest_y
-	var local_target: Vector3 = hand_pos + local_dir * stick_horiz
-	local_target.y = blade_height
-	local_target = skater.clamp_blade_to_walls(local_target)
+	var intended_target: Vector3 = hand_pos + local_dir * stick_horiz
+	intended_target.y = blade_height
+	var local_target: Vector3 = skater.clamp_blade_to_walls(intended_target)
+	# Same wall-clamp hand retraction as _apply_blade_from_mouse so follow-
+	# through keeps stick length constant when pinned.
+	var clamp_delta_xz := Vector3(
+			local_target.x - intended_target.x, 0.0, local_target.z - intended_target.z)
+	if clamp_delta_xz.length_squared() > 0.0:
+		hand_pos.x += clamp_delta_xz.x
+		hand_pos.z += clamp_delta_xz.z
 	skater.set_top_hand_position(hand_pos)
 	skater.set_blade_position(local_target)
+	skater.update_arm_mesh()
 
 # ── Upper Body ────────────────────────────────────────────────────────────────
 func _apply_upper_body(delta: float) -> void:
@@ -573,6 +599,7 @@ func _ik_config() -> Dictionary:
 		"stick_length": stick_length,
 		"blade_y": blade_height,
 		"hand_rest_y": hand_rest_y,
+		"hand_y_max": hand_y_max,
 		"rom_forehand_angle_max": deg_to_rad(rom_forehand_angle_max_deg),
 		"rom_backhand_angle_max": deg_to_rad(rom_backhand_angle_max_deg),
 		"rom_forehand_reach_max": rom_forehand_reach_max,

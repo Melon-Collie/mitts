@@ -4,14 +4,26 @@ class_name TopHandIK
 # upper-body-local XZ space and a fixed stick length, produces the hand and
 # blade positions such that:
 #
-#   1. |blade.xz − hand.xz| == stick_horiz (fixed horizontal stick length).
+#   1. |blade − hand| == stick_length in 3D (rigid stick). In the horizontal
+#      plane, |blade.xz − hand.xz| == stick_horiz = sqrt(stick_length² −
+#      (hand.y − blade.y)²). Variable hand.y adjusts stick_horiz on the fly.
 #   2. The hand lies within an asymmetric range-of-motion envelope centered
-#      on the shoulder — small reach on the forehand (cross-body) side, large
-#      reach on the backhand (same side as the top hand) side.
-#   3. When the target is reachable by extending the hand within ROM, the
-#      blade lands exactly on the target. When unreachable, the blade falls
-#      short along the aim line (radial from the hand through the target),
-#      preserving aim direction but clipping distance.
+#      on the shoulder — small reach on the forehand (cross-body) side,
+#      large reach on the backhand (same side as the top hand) side.
+#   3. When the target is reachable, the blade lands exactly on the target.
+#      Unreachable targets fall short (past-ROM) or overshoot (past-hand-Y-
+#      ceiling at close range) **along the aim line**, preserving aim
+#      direction but clipping distance.
+#
+# Two regimes (continuous at the boundary r = stick_horiz_at_rest):
+#   FAR  (r ≥ stick_horiz_at_rest): hand.y = hand_rest_y; hand displaces in
+#         XZ toward target up to ROM; blade sits stick_horiz from clamped
+#         hand along the aim line (Phase 1 behavior).
+#   CLOSE (r < stick_horiz_at_rest): hand.xz stays at shoulder; hand.y rises
+#         so stick_horiz shrinks to exactly r and the blade lands on target.
+#         Clamped by hand_y_max — if the hand can't rise far enough, the
+#         stick's min horizontal projection overshoots the target along the
+#         aim line.
 #
 # Blade-first feel: input is treated as a desired blade position, and the
 # hand is solved as a consequence. No per-frame smoothing here — caller owns
@@ -22,7 +34,8 @@ class_name TopHandIK
 # cfg keys (all floats):
 #   stick_length              — rigid stick length (meters)
 #   blade_y                   — fixed local Y for the blade
-#   hand_rest_y               — fixed local Y for the hand (Phase 1)
+#   hand_rest_y               — hand's resting local Y (used in FAR regime)
+#   hand_y_max                — ceiling the hand may rise to (CLOSE regime)
 #   rom_forehand_angle_max    — radians; angular ROM on forehand side (small)
 #   rom_backhand_angle_max    — radians; angular ROM on backhand side (large)
 #   rom_forehand_reach_max    — meters;  max hand displacement on forehand side
@@ -41,22 +54,35 @@ static func solve(
 	var stick_length: float = cfg.stick_length
 	var blade_y: float = cfg.blade_y
 	var hand_rest_y: float = cfg.hand_rest_y
-	var vertical_drop: float = hand_rest_y - blade_y
-	var stick_horiz_sq: float = stick_length * stick_length - vertical_drop * vertical_drop
-	var stick_horiz: float = sqrt(maxf(stick_horiz_sq, 0.0001))
+	var hand_y_max: float = cfg.hand_y_max
+
+	var stick_horiz_at_rest: float = _stick_horiz_for(stick_length, hand_rest_y, blade_y)
 
 	var shoulder_xz := Vector2(shoulder.x, shoulder.z)
 	var delta: Vector2 = desired_blade_xz - shoulder_xz
 	var r: float = delta.length()
-
-	# Aim direction from shoulder to target. Fallback to straight-forward
-	# (−Z) when target coincides with the shoulder.
 	var aim_dir: Vector2 = delta / r if r > 0.0001 else Vector2(0.0, -1.0)
 
-	# Desired hand displacement from shoulder, before ROM clamp: if target is
-	# farther from shoulder than stick_horiz, the hand must extend toward it
-	# by (r − stick_horiz). Otherwise hand stays at the shoulder.
-	var disp_len: float = maxf(0.0, r - stick_horiz)
+	# CLOSE regime: target is inside the default stick reach. Raise the hand
+	# so the stick tilts more vertically, shortening its horizontal reach to
+	# hit the target exactly. If the hand can't rise far enough (hand_y_max
+	# clamp), the blade overshoots along the aim line at the minimum
+	# achievable stick_horiz.
+	if r < stick_horiz_at_rest:
+		var ideal_drop_sq: float = stick_length * stick_length - r * r
+		var ideal_hand_y: float = blade_y + sqrt(maxf(ideal_drop_sq, 0.0))
+		var hand_y: float = minf(ideal_hand_y, hand_y_max)
+		var stick_horiz: float = _stick_horiz_for(stick_length, hand_y, blade_y)
+		var blade_xz: Vector2 = shoulder_xz + aim_dir * stick_horiz
+		return {
+			"hand": Vector3(shoulder_xz.x, hand_y, shoulder_xz.y),
+			"blade": Vector3(blade_xz.x, blade_y, blade_xz.y),
+		}
+
+	# FAR regime: target is beyond the default stick reach. Hand stays at
+	# rest Y; displaces toward target in XZ, clamped to asymmetric ROM.
+	# Blade sits stick_horiz_at_rest from the clamped hand along the aim line.
+	var disp_len: float = r - stick_horiz_at_rest
 	var disp: Vector2 = aim_dir * disp_len
 
 	# Forehand-signed polar: angle > 0 always means "displaced toward forehand
@@ -93,18 +119,26 @@ static func solve(
 	var hand_disp := Vector2(sin(world_angle) * radius, -cos(world_angle) * radius)
 	var hand_xz: Vector2 = shoulder_xz + hand_disp
 
-	# Blade sits exactly stick_horiz from the hand along the line pointing
-	# at the original target — so when target is reachable, blade == target;
-	# when target is beyond ROM, blade lands short along the same aim line.
+	# Blade sits exactly stick_horiz_at_rest from the hand along the line
+	# pointing at the original target — when target is reachable, blade ==
+	# target; when beyond ROM, blade lands short along the same aim line.
 	var hand_to_target: Vector2 = desired_blade_xz - hand_xz
 	var blade_dir: Vector2
 	if hand_to_target.length_squared() > 0.0001:
 		blade_dir = hand_to_target.normalized()
 	else:
 		blade_dir = aim_dir
-	var blade_xz: Vector2 = hand_xz + blade_dir * stick_horiz
+	var blade_xz: Vector2 = hand_xz + blade_dir * stick_horiz_at_rest
 
 	return {
 		"hand": Vector3(hand_xz.x, hand_rest_y, hand_xz.y),
 		"blade": Vector3(blade_xz.x, blade_y, blade_xz.y),
 	}
+
+# Horizontal stick projection at a given hand Y. Clamped to a tiny positive
+# value so the solver never divides by zero even at edge cases where the
+# stick is nearly vertical.
+static func _stick_horiz_for(stick_length: float, hand_y: float, blade_y: float) -> float:
+	var drop: float = hand_y - blade_y
+	var sq: float = stick_length * stick_length - drop * drop
+	return sqrt(maxf(sq, 0.0001))

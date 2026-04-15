@@ -81,3 +81,5 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	skater.set_upper_body_rotation(state.upper_body_rotation_y)
 	skater.set_facing(state.facing)
 	skater.set_ghost(state.is_ghost)
+	# Arm is derived from shoulder + hand each frame; update after both are set.
+	skater.update_arm_mesh()
