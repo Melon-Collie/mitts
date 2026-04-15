@@ -57,7 +57,10 @@ func _update_host_puck_tracking() -> void:
 		if carrier_team != null:
 			_state_machine.notify_puck_carried(carrier_team.team_id, puck.carrier.global_position.z)
 	elif _state_machine.current_phase == GamePhase.Phase.PLAYING:
-		_state_machine.check_icing_for_loose_puck(puck.global_position.z)
+		var positions: Dictionary = {}
+		for peer_id: int in players:
+			positions[peer_id] = players[peer_id].skater.global_position
+		_state_machine.check_icing_for_loose_puck(puck.global_position.z, positions)
 
 func _apply_ghost_state() -> void:
 	var positions: Dictionary = {}

@@ -85,17 +85,38 @@ func notify_icing_contact() -> void:
 	last_carrier_team_id = -1
 
 # Host-side: called every physics frame when the puck is loose. Detects icing
-# and starts the ghost timer.
-func check_icing_for_loose_puck(puck_z: float) -> void:
+# and applies the hybrid-icing race: compares each team's closest player to the
+# crossed goal line. Icing is confirmed immediately if the defending team wins;
+# waved off if the icing team's player is closer.
+func check_icing_for_loose_puck(
+		puck_z: float, player_positions: Dictionary = {}) -> void:
 	if current_phase != GamePhase.Phase.PLAYING:
 		return
 	if icing_team_id != -1:
 		return
 	var offender: int = InfractionRules.check_icing(last_carrier_team_id, last_carrier_z, puck_z)
-	if offender != -1:
+	if offender == -1:
+		return
+
+	# Hybrid icing race: find each team's closest player to the crossed goal line.
+	var goal_line_z: float = -GameRules.GOAL_LINE_Z if offender == 0 else GameRules.GOAL_LINE_Z
+	var icing_min_dist: float = INF
+	var defending_min_dist: float = INF
+	for peer_id in player_positions:
+		if not players.has(peer_id):
+			continue
+		var team_id: int = players[peer_id].team_id
+		var dist: float = abs(player_positions[peer_id].z - goal_line_z)
+		if team_id == offender:
+			icing_min_dist = min(icing_min_dist, dist)
+		else:
+			defending_min_dist = min(defending_min_dist, dist)
+
+	if InfractionRules.defending_wins_icing_race(icing_min_dist, defending_min_dist):
 		icing_team_id = offender
 		_icing_timer = GameRules.ICING_GHOST_DURATION
-		last_carrier_team_id = -1
+
+	last_carrier_team_id = -1
 
 # Host-side: compute ghost state for all players. Returns {peer_id: should_ghost}.
 func compute_ghost_state(

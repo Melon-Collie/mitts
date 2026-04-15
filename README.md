@@ -70,7 +70,7 @@ Pucks coming in fast deflect off your blade instead of sticking. Move your stick
 - Player colors — team-hued skater colors; reds for team 0, blues for team 1, each player a distinct shade
 - Host reset button — top-right HUD button (host only) that zeroes the score and restarts from faceoff
 - Offsides ghost — skaters past the blue line without the puck become transparent ghosts that can't interact with the puck or other players until they retreat or the puck enters the zone
-- Icing ghost — shooting from your own half past the opponent's goal line ghosts your entire team for 3 seconds or until the other team picks up the puck
+- Hybrid icing — shooting from your own half past the opponent's goal line triggers a race: if the defending team's closest player is nearer the goal line, your entire team is ghosted for 3 seconds; if you beat them back to the puck, icing is waved off
 
 ---
 

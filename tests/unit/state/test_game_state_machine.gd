@@ -143,6 +143,47 @@ func test_icing_not_triggered_from_attacking_half() -> void:
 	sm.check_icing_for_loose_puck(-30.0)
 	assert_eq(sm.icing_team_id, -1)
 
+# ── Hybrid icing race ────────────────────────────────────────────────────────
+
+func test_icing_waved_off_when_icing_team_closer() -> void:
+	sm.register_host(1)         # peer 1 → team 0
+	sm.on_player_connected(100) # peer 100 → team 1
+	sm.notify_puck_carried(0, 5.0)
+	# Team 0 iced it: goal line at z = -26.6
+	# Peer 1 (team 0, icing team) at z = -25 → 1.6 units away
+	# Peer 100 (team 1, defending) at z = 0 → 26.6 units away
+	sm.check_icing_for_loose_puck(-30.0, {1: Vector3(0, 1, -25.0), 100: Vector3(0, 1, 0.0)})
+	assert_eq(sm.icing_team_id, -1, "icing team closer → waved off")
+
+func test_icing_confirmed_when_defending_team_closer() -> void:
+	sm.register_host(1)         # peer 1 → team 0
+	sm.on_player_connected(100) # peer 100 → team 1
+	sm.notify_puck_carried(0, 5.0)
+	# Peer 1 (team 0, icing team) at z = 5 → 31.6 units from -26.6
+	# Peer 100 (team 1, defending) at z = -24 → 2.6 units from -26.6
+	sm.check_icing_for_loose_puck(-30.0, {1: Vector3(0, 1, 5.0), 100: Vector3(0, 1, -24.0)})
+	assert_eq(sm.icing_team_id, 0, "defending team closer → icing confirmed")
+
+func test_icing_confirmed_when_defending_team_slightly_closer() -> void:
+	sm.register_host(1)
+	sm.on_player_connected(100)
+	sm.notify_puck_carried(0, 5.0)
+	# Peer 1 (team 0, icing) at z = -22 → 4.6 from goal line -26.6
+	# Peer 100 (team 1, defending) at z = -24 → 2.6 from goal line → closer
+	sm.check_icing_for_loose_puck(-30.0, {1: Vector3(0, 1, -22.0), 100: Vector3(0, 1, -24.0)})
+	assert_eq(sm.icing_team_id, 0, "defending team slightly closer → icing confirmed")
+
+func test_icing_waved_off_team1_symmetric() -> void:
+	sm.register_host(1)         # team 0
+	sm.on_player_connected(100) # team 1
+	sm.on_player_connected(200) # team 0
+	sm.notify_puck_carried(1, -5.0)
+	# Team 1 iced toward +Z: goal line at z = +26.6
+	# Peer 100 (team 1, icing team) at z = 25 → 1.6 away
+	# Peer 1 (team 0, defending) at z = 0 → 26.6 away
+	sm.check_icing_for_loose_puck(30.0, {1: Vector3(0, 1, 0.0), 100: Vector3(0, 1, 25.0)})
+	assert_eq(sm.icing_team_id, -1, "team 1 icing, waved off — attacker closer")
+
 # ── Ghost computation ────────────────────────────────────────────────────────
 
 func test_ghost_empty_when_no_players() -> void:

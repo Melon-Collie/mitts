@@ -68,3 +68,14 @@ func test_team_1_icing_from_own_half() -> void:
 
 func test_team_1_no_icing_from_attacking_half() -> void:
 	assert_eq(InfractionRules.check_icing(1, 5.0, 30.0), -1)
+
+# ── Hybrid icing race ─────────────────────────────────────────────────────────
+
+func test_defending_wins_when_closer() -> void:
+	assert_true(InfractionRules.defending_wins_icing_race(10.0, 5.0))
+
+func test_icing_waved_off_when_attacker_closer() -> void:
+	assert_false(InfractionRules.defending_wins_icing_race(5.0, 10.0))
+
+func test_defending_wins_on_tie() -> void:
+	assert_true(InfractionRules.defending_wins_icing_race(5.0, 5.0))

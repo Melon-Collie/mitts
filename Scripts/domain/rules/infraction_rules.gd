@@ -23,9 +23,17 @@ static func is_offside(
 		# Team 1 attacking zone: z > BlueLineZ
 		return skater_z > GameRules.BLUE_LINE_Z and puck_z <= GameRules.BLUE_LINE_Z
 
-# Detects icing. Returns the offending team id (0 or 1), or -1 if no icing.
-# Icing fires when a puck released from the offender's own half crosses the
-# opponent's goal line with no touches in between.
+# Hybrid icing race: returns true if the defending team wins (icing confirmed).
+# icing_min_dist:     closest icing-team player's distance to the crossed goal line.
+# defending_min_dist: closest defending-team player's distance to the crossed goal line.
+# Ties go to the defending team (icing called).
+static func defending_wins_icing_race(
+		icing_min_dist: float, defending_min_dist: float) -> bool:
+	return defending_min_dist <= icing_min_dist
+
+# Detects a potential icing crossing. Returns the offending team id (0 or 1),
+# or -1 if no icing condition is present. The caller applies the hybrid-icing
+# race check to decide whether to confirm or wave off.
 static func check_icing(
 		last_carrier_team_id: int,
 		last_carrier_z: float,

@@ -19,7 +19,7 @@ A 3v3 arcade hockey game built in Godot 4.6.2 (GDScript, 3D). Online multiplayer
 - **Engine:** Godot 4.6.2 (Jolt Physics)
 - **Language:** GDScript
 - **Physics tick:** 240 Hz
-- **Testing:** GUT v9.6.0 under `addons/gut/`; tests in `tests/unit/` run via the GUT panel or `godot --headless -s addons/gut/gut_cmdln.gd -gexit`
+- **Testing:** GUT v9.6.0 under `addons/gut/`; tests in `tests/unit/` run via the GUT panel. The headless CLI command (`godot --headless -s addons/gut/gut_cmdln.gd -gexit`) does not work in this environment — always run tests via the GUT panel in the Godot editor.
 - **CI:** `.github/workflows/test.yml` runs GUT on every push and PR; `deploy.yml`'s export job gates on tests passing
 - **Deployment:** GitHub Actions → Windows export → GitHub Releases (tag: `latest`, updates on every push to main)
 
@@ -142,3 +142,4 @@ All start paths go through `MainMenu.tscn`. `NetworkManager._ready()` does nothi
 - **Goalie reactive saves not yet implemented:** glove saves, shoulder/body saves, and stick poke coverage are all planned. The stick is currently disabled (`stick_enabled = false`) — it can be re-enabled once it has proper positional behavior rather than acting as a static seal.
 - **Poke check / body check / catch vs deflect thresholds need multiplayer tuning:** `deflect_min_speed`, `poke_strip_speed`, `poke_carrier_vel_blend`, `body_check_strip_threshold`, `body_check_transfer`, and related exports were set from first principles and need tuning under real network conditions.
 - **Icing ghost duration needs tuning:** `ICING_GHOST_DURATION` (3s) was set as an initial value. May need adjustment based on how punishing icing feels in practice — shorter if too harsh, longer if teams ice with impunity.
+- **Hybrid icing race uses goal line as reference point:** `check_icing_for_loose_puck` compares each team's closest player's distance to `±GOAL_LINE_Z`. In the real NHL the race ends at the defensive-zone faceoff dot, not the goal line — if the feel is off (too easy or too hard to wave off icing), consider adding a `ZONE_FACEOFF_DOT_Z` constant and using that as the reference instead.
