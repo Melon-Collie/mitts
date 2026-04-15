@@ -56,6 +56,30 @@ enum State {
 @export var rom_forehand_reach_max: float = 0.45
 @export var rom_backhand_reach_max: float = 0.70
 
+# ── Bottom-Hand IK Tuning ─────────────────────────────────────────────────────
+# The bottom hand is purely reactive: each tick it targets a point a short way
+# down the stick shaft (from the top hand toward the blade) and solves its
+# own pose against an asymmetric ROM anchored at the opposite shoulder. It
+# never influences blade placement. See domain/rules/bottom_hand_ik.gd.
+# Fraction along the shaft (0 = top hand, 1 = blade heel) that the bottom hand
+# grips. ~0.25 on a 1.30 m shaft ≈ a typical hockey grip width.
+@export var bottom_hand_grip_fraction: float = 0.25
+# Bottom hand resting Y in upper-body-local. Same height as top hand rest — the
+# bottom hand doesn't rise for close-in targets since it has no stick-length
+# constraint to satisfy.
+@export var bh_hand_y: float = 0.0
+# Asymmetric ROM for the bottom hand. "Same-side" = toward the blade (easy,
+# like the top hand's backhand side). "Cross-body" = toward the top hand
+# (tight; the bottom hand can barely reach across the chest).
+@export var bh_rom_same_side_angle_max_deg: float = 110.0
+@export var bh_rom_cross_body_angle_max_deg: float = 60.0
+@export var bh_rom_same_side_reach_max: float = 0.60
+@export var bh_rom_cross_body_reach_max: float = 0.30
+# When the grip target's cross-body angle approaches its ROM max, the hand
+# smoothly releases to a rest pose at the bottom shoulder (one-handed backhand
+# look). This controls how early the release begins relative to the ROM edge.
+@export var bh_release_angle_band_deg: float = 15.0
+
 # ── Upper Body Tuning ─────────────────────────────────────────────────────────
 @export var upper_body_twist_ratio: float = 0.5
 @export var upper_body_return_speed: float = 10.0
@@ -409,6 +433,7 @@ func _apply_slapper_blade_position() -> void:
 	skater.set_top_hand_position(hand_pos)
 	skater.set_blade_position(pos)
 	skater.update_arm_mesh()
+	_update_bottom_hand()
 
 func _is_in_slapper_state() -> bool:
 	return _state in [State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK]
@@ -485,6 +510,7 @@ func _apply_blade_from_mouse(input: InputState, delta: float) -> void:
 	skater.set_top_hand_position(hand_local)
 	skater.set_blade_position(wall_clamped)
 	skater.update_arm_mesh()
+	_update_bottom_hand()
 
 	# Store the blade's bearing from the shoulder for follow-through.
 	var bearing: Vector3 = wall_clamped - skater.shoulder.position
@@ -512,6 +538,7 @@ func _apply_blade_from_relative_angle() -> void:
 	skater.set_top_hand_position(hand_pos)
 	skater.set_blade_position(local_target)
 	skater.update_arm_mesh()
+	_update_bottom_hand()
 
 # ── Upper Body ────────────────────────────────────────────────────────────────
 func _apply_upper_body(delta: float) -> void:
@@ -609,6 +636,38 @@ func _ik_config() -> Dictionary:
 		"rom_forehand_reach_max": rom_forehand_reach_max,
 		"rom_backhand_reach_max": rom_backhand_reach_max,
 	}
+
+func _bottom_hand_ik_config() -> Dictionary:
+	return {
+		"hand_y": bh_hand_y,
+		"rom_cross_body_angle_max": deg_to_rad(bh_rom_cross_body_angle_max_deg),
+		"rom_same_side_angle_max": deg_to_rad(bh_rom_same_side_angle_max_deg),
+		"rom_cross_body_reach_max": bh_rom_cross_body_reach_max,
+		"rom_same_side_reach_max": bh_rom_same_side_reach_max,
+		"release_angle_band": deg_to_rad(bh_release_angle_band_deg),
+	}
+
+# Recompute the bottom hand pose from the current top_hand + blade positions.
+# Purely reactive — does not affect blade or top-hand placement. Caller must
+# have already written the top hand and blade for this tick before calling.
+func _update_bottom_hand() -> void:
+	var blade_local: Vector3 = skater.get_blade_position()
+	var hand_local: Vector3 = skater.get_top_hand_position()
+	var grip_target_xz := Vector2(
+			lerpf(hand_local.x, blade_local.x, bottom_hand_grip_fraction),
+			lerpf(hand_local.z, blade_local.z, bottom_hand_grip_fraction))
+	var blade_side_sign: float = -1.0 if skater.is_left_handed else 1.0
+	# Bottom hand's side_sign is the negation of the top hand's blade_side_sign
+	# because its shoulder and its easy-reach direction sit on the opposite
+	# side of the body from the top hand.
+	var bottom_side_sign: float = -blade_side_sign
+	var bh: Vector3 = BottomHandIK.solve(
+			skater.bottom_shoulder.position,
+			grip_target_xz,
+			bottom_side_sign,
+			_bottom_hand_ik_config())
+	skater.set_bottom_hand_position(bh)
+	skater.update_bottom_arm_mesh()
 
 # Horizontal projection of the stick onto the XZ plane, given the fixed
 # vertical drop from hand to blade. Used by follow-through to keep stick

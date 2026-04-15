@@ -64,11 +64,27 @@ extends CharacterBody3D
 # otherwise we create one programmatically. Created/resolved in _ready.
 var top_hand: Marker3D = null
 
+# Bottom shoulder: anchor for the bottom (off-stick) hand. Sits on the OPPOSITE
+# side from `shoulder` — the blade side. For a lefty (blade on −X), the bottom
+# shoulder sits on −X. Created/resolved in _ready; scene can override by
+# placing `BottomShoulder` as a Marker3D under UpperBody.
+var bottom_shoulder: Marker3D = null
+
+# Bottom hand: the reactive IK output for the bottom grip on the stick shaft.
+# The controller solves its position via `BottomHandIK.solve` each tick based
+# on the current top_hand + blade pose. Created/resolved in _ready like TopHand.
+var bottom_hand: Marker3D = null
+
 # Arm visual meshes (shoulder → elbow → top_hand). Created/resolved in
 # _ready; scene can override by placing `UpperArmMesh` / `ForearmMesh` under
 # UpperBody for custom materials.
 var upper_arm_mesh: MeshInstance3D = null
 var forearm_mesh: MeshInstance3D = null
+
+# Bottom-arm visual meshes (bottom_shoulder → elbow → bottom_hand). Same
+# resolve-or-create pattern as the top arm meshes.
+var bottom_upper_arm_mesh: MeshInstance3D = null
+var bottom_forearm_mesh: MeshInstance3D = null
 
 signal body_checked_player(victim: Skater, impact_force: float, hit_direction: Vector3)
 signal body_block_hit(body: Node3D)
@@ -102,6 +118,24 @@ func _ready() -> void:
 		top_hand.name = "TopHand"
 		upper_body.add_child(top_hand)
 	top_hand.position = Vector3(shoulder.position.x, 0.0, 0.0)
+
+	# Bottom shoulder anchors the bottom hand on the OPPOSITE side — a lefty's
+	# bottom hand lives on the left (−X), where the blade also is. Same Y lift
+	# as the top shoulder so both arms span from the upper torso down.
+	bottom_shoulder = upper_body.get_node_or_null("BottomShoulder") as Marker3D
+	if bottom_shoulder == null:
+		bottom_shoulder = Marker3D.new()
+		bottom_shoulder.name = "BottomShoulder"
+		upper_body.add_child(bottom_shoulder)
+	bottom_shoulder.position = Vector3(-top_hand_side_sign * shoulder_offset, shoulder_height, 0.0)
+
+	# Resolve or create the BottomHand marker. Mirrors TopHand.
+	bottom_hand = upper_body.get_node_or_null("BottomHand") as Marker3D
+	if bottom_hand == null:
+		bottom_hand = Marker3D.new()
+		bottom_hand.name = "BottomHand"
+		upper_body.add_child(bottom_hand)
+	bottom_hand.position = Vector3(bottom_shoulder.position.x, 0.0, 0.0)
 
 	_prev_blade_world_pos = upper_body.to_global(blade.position)
 	_default_upper_body_y = upper_body.position.y
@@ -142,6 +176,8 @@ func _ready() -> void:
 	# thin box meshes whose Z is stretched per tick to match the bone length.
 	upper_arm_mesh = _resolve_or_create_bone_mesh("UpperArmMesh")
 	forearm_mesh = _resolve_or_create_bone_mesh("ForearmMesh")
+	bottom_upper_arm_mesh = _resolve_or_create_bone_mesh("BottomUpperArmMesh")
+	bottom_forearm_mesh = _resolve_or_create_bone_mesh("BottomForearmMesh")
 
 func _resolve_or_create_bone_mesh(node_name: String) -> MeshInstance3D:
 	var existing: MeshInstance3D = upper_body.get_node_or_null(node_name) as MeshInstance3D
@@ -238,6 +274,13 @@ func set_top_hand_position(pos: Vector3) -> void:
 func get_top_hand_position() -> Vector3:
 	return top_hand.position
 
+# ── Bottom Hand ───────────────────────────────────────────────────────────────
+func set_bottom_hand_position(pos: Vector3) -> void:
+	bottom_hand.position = pos
+
+func get_bottom_hand_position() -> Vector3:
+	return bottom_hand.position
+
 # ── Upper Body ────────────────────────────────────────────────────────────────
 func set_upper_body_rotation(angle: float) -> void:
 	upper_body.rotation.y = angle
@@ -297,6 +340,23 @@ func update_arm_mesh() -> void:
 	_update_bone_mesh(upper_arm_mesh, shoulder_w, elbow_w)
 	_update_bone_mesh(forearm_mesh, elbow_w, hand_w)
 
+# ── Bottom Arm Mesh ───────────────────────────────────────────────────────────
+# Renders the two-bone arm for the bottom hand. Same anatomy (upper_arm_length
+# / forearm_length) as the top arm; pole direction is mirrored so the bottom
+# elbow hangs toward its own (blade) side.
+func update_bottom_arm_mesh() -> void:
+	var shoulder_w: Vector3 = upper_body.to_global(bottom_shoulder.position)
+	var hand_w: Vector3 = upper_body.to_global(bottom_hand.position)
+	# Mirror of the top-arm pole flip: bottom elbow leans toward the bottom-hand
+	# side, which is the opposite X sign from the top hand.
+	var pole_local: Vector3 = arm_pole_local
+	pole_local.x *= -1.0 if is_left_handed else 1.0
+	var pole_w: Vector3 = upper_body.global_transform.basis * pole_local
+	var elbow_w: Vector3 = TwoBoneIK.solve_elbow(
+			shoulder_w, hand_w, upper_arm_length, forearm_length, pole_w)
+	_update_bone_mesh(bottom_upper_arm_mesh, shoulder_w, elbow_w)
+	_update_bone_mesh(bottom_forearm_mesh, elbow_w, hand_w)
+
 func _update_bone_mesh(mesh: MeshInstance3D, a_world: Vector3, b_world: Vector3) -> void:
 	if mesh == null:
 		return
@@ -343,6 +403,7 @@ func _apply_ghost_visual(ghost: bool) -> void:
 	var meshes: Array[MeshInstance3D] = [
 			_upper_body_mesh, _blade_mesh, stick_mesh,
 			upper_arm_mesh, forearm_mesh,
+			bottom_upper_arm_mesh, bottom_forearm_mesh,
 		]
 	for mesh: MeshInstance3D in meshes:
 		if mesh == null:

@@ -181,6 +181,8 @@ Blade placement goes through a custom top-hand inverse-kinematics solver (`TopHa
 
 **Arm rendering:** The shoulder and hand drive a 2-bone IK (`TwoBoneIK.solve_elbow`) that places the elbow on the plane perpendicular to the shoulder-hand axis in the pole direction (`arm_pole_local`). Two BoxMesh segments (`UpperArmMesh` / `ForearmMesh`) are scaled per-tick to the bone lengths and `look_at` their endpoints, following the same pattern as `StickMesh`. Arm meshes are auto-created if absent from the scene and included in ghost-mode transparency.
 
+**Bottom hand (reactive):** A second hand grips the shaft a short way below the top hand. It is purely reactive — it never influences blade placement. After each top-hand solve, the controller computes the grip target as `top_hand.lerp(blade, bottom_hand_grip_fraction)` (default 0.25, ≈0.33 m down a 1.30 m shaft) and runs `BottomHandIK.solve` against an anchor at the opposite shoulder (the `bottom_shoulder` marker, on the blade side of the body — the left shoulder for a lefty). The solver uses the same asymmetric-ROM machinery as the top hand but with opposite geometry: the **same-side** direction (toward the blade) is loose (≈0.60 m, 110°), and the **cross-body** direction (toward the top hand) is tight (≈0.30 m, 60°). When the raw cross-body angle approaches its ROM max, a smoothstep release blend pulls the hand back to a rest pose at the bottom shoulder — this mirrors how real players play one-handed on extreme backhand rather than awkwardly over-reaching. Rendered via the same `TwoBoneIK.solve_elbow` path with a mirrored pole. No network state is added — clients recompute the bottom hand locally from the interpolated top-hand + blade positions.
+
 **Wall-clamp hand retraction:** When `clamp_blade_to_walls` pulls the blade back (boards in the way), the controller applies the same horizontal offset to `top_hand` so the stick keeps its rigid length. The arm re-solves on the retracted hand, so the stick looks like it's being pulled back rather than compressing. Wall-pin puck auto-release fires on squeeze magnitude, independent of the retraction.
 
 **Facing drag:** Aiming past the angular ROM rotates the body's facing (`facing_drag_speed`) to bring the target back in range.
@@ -312,7 +314,7 @@ Instead of stoppages, offsides and icing are enforced via a **ghost mode** — o
 - Slapshot pre/post release buffer window for one-timer timing feel
 - Middle-zone puck reception: blade readiness check
 - Aim assist
-- Phase 2 IK: variable hand Y (tight-in blade positions), bottom-hand solving, full arm/body rigging
+- Phase 2 IK: full arm/body rigging (variable hand Y and bottom-hand solving are now live — see Blade Control)
 - Procedural skating animations
 - CharacterStats resource design (universal vs per-character exports)
 - Camera goal anchor flip speed on turnovers

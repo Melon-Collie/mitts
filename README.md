@@ -46,6 +46,7 @@ Pucks coming in fast deflect off your blade instead of sticking. Move your stick
 
 - Skating with momentum, friction, and backward skating
 - Mouse-driven blade control with a custom top-hand IK solver — fixed stick length, asymmetric range-of-motion (tight on forehand, extended backhand for one-handed reaches)
+- Reactive bottom-hand IK — second hand grips the shaft naturally and smoothly releases to a one-handed backhand pose when the stick swings past comfortable reach
 - Wrister and slapshot with charge-based power
 - Quick shots and one-touch finishes
 - Relative-velocity catch vs deflect — move blade with the puck to receive, into the puck to redirect
