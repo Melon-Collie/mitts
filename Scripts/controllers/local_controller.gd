@@ -72,7 +72,9 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	skater.set_facing(server_state.facing)
 	_facing = server_state.facing
 	_upper_body_angle = server_state.upper_body_rotation_y
+	_lower_body_lag = 0.0
 	skater.set_upper_body_rotation(_upper_body_angle)
+	skater.set_lower_body_lag(0.0)
 	for input in _input_history:
 		_process_input(input, input.delta)
 

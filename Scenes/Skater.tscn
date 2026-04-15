@@ -9,7 +9,7 @@ albedo_color = Color(0.669084, 0.000593163, 0.721378, 1)
 
 [sub_resource type="BoxMesh" id="BoxMesh_rgh2o"]
 material = SubResource("StandardMaterial3D_kln2b")
-size = Vector3(0.1, 0.2, 0.3)
+size = Vector3(0.04, 0.06, 0.3)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_jw32o"]
 albedo_color = Color(1, 0.270588, 0.309804, 1)
@@ -30,7 +30,7 @@ albedo_color = Color(0.705182, 0.639858, 0.605365, 1)
 
 [sub_resource type="BoxMesh" id="BoxMesh_bmxlf"]
 material = SubResource("StandardMaterial3D_vy5pj")
-size = Vector3(0.1, 0.15, 1)
+size = Vector3(0.04, 0.05, 1)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_50glp"]
 albedo_color = Color(0, 0, 0, 1)
@@ -58,11 +58,11 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.15)
 mesh = SubResource("BoxMesh_rgh2o")
 
 [node name="UpperBodyMesh" type="MeshInstance3D" parent="UpperBody" unique_id=195925634]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0)
 mesh = SubResource("BoxMesh_50glp")
 
 [node name="DirectionIndicator" type="MeshInstance3D" parent="UpperBody" unique_id=1342161336]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -0.1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, -0.1)
 mesh = SubResource("BoxMesh_r150o")
 skeleton = NodePath("../../..")
 
