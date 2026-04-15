@@ -96,6 +96,7 @@ signal body_block_hit(body: Node3D)
 var _facing: Vector2 = Vector2.DOWN
 var is_elevated: bool = false
 var is_ghost: bool = false
+var shot_charge: float = 0.0
 var blade_world_velocity: Vector3 = Vector3.ZERO
 var _prev_blade_world_pos: Vector3 = Vector3.ZERO
 var _body_block_area: Area3D = null
@@ -201,6 +202,10 @@ func _ready() -> void:
 	forearm_mesh = _resolve_or_create_bone_mesh("ForearmMesh")
 	bottom_upper_arm_mesh = _resolve_or_create_bone_mesh("BottomUpperArmMesh")
 	bottom_forearm_mesh = _resolve_or_create_bone_mesh("BottomForearmMesh")
+
+	var vfx := SkaterVFX.new()
+	vfx.name = "VFX"
+	add_child(vfx)
 
 func _resolve_or_create_bone_mesh(node_name: String) -> MeshInstance3D:
 	var existing: MeshInstance3D = upper_body.get_node_or_null(node_name) as MeshInstance3D

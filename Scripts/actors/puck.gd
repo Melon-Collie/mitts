@@ -53,6 +53,10 @@ func _ready() -> void:
 	add_child(pickup_zone)
 	pickup_zone.area_entered.connect(_on_blade_entered)
 
+	var vfx := PuckVFX.new()
+	vfx.name = "VFX"
+	add_child(vfx)
+
 # ── Server Mode ───────────────────────────────────────────────────────────────
 func set_server_mode(is_server: bool) -> void:
 	_is_server = is_server

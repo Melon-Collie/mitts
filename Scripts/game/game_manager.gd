@@ -151,6 +151,9 @@ func on_goal_scored(scoring_team_id: int, score0: int, score1: int) -> void:
 	var scoring_team: Team = teams[scoring_team_id]
 	puck.pickup_locked = true
 	goal_scored.emit(scoring_team)
+	var defended_goal: HockeyGoal = teams[1 - scoring_team_id].defended_goal
+	if defended_goal != null and defended_goal.vfx != null:
+		defended_goal.vfx.celebrate()
 	score_changed.emit(_state_machine.scores[0], _state_machine.scores[1])
 	phase_changed.emit(_state_machine.current_phase)
 
@@ -294,6 +297,8 @@ func _on_goal_scored_into(defending_team: Team) -> void:
 	if scoring_team_id == -1:
 		return  # wrong phase, ignored
 	puck.pickup_locked = true
+	if defending_team.defended_goal != null and defending_team.defended_goal.vfx != null:
+		defending_team.defended_goal.vfx.celebrate()
 	goal_scored.emit(teams[scoring_team_id])
 	score_changed.emit(_state_machine.scores[0], _state_machine.scores[1])
 	phase_changed.emit(_state_machine.current_phase)

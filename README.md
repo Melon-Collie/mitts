@@ -72,14 +72,25 @@ Pucks coming in fast deflect off your blade instead of sticking. Move your stick
 - Host reset button — top-right HUD button (host only) that zeroes the score and restarts from faceoff
 - Offsides ghost — skaters past the blue line without the puck become transparent ghosts that can't interact with the puck or other players until they retreat or the puck enters the zone
 - Hybrid icing — shooting from your own half past the opponent's goal line triggers a race: if the defending team's closest player is nearer the goal line, your entire team is ghosted for 3 seconds; if you beat them back to the puck, icing is waved off
+- Puck trail — pale-blue ribbon streak behind the puck when moving fast
+- Puck wall impact — small ice burst when the puck sharply reverses direction off the boards
+- Ice spray — burst of ice particles from both skates on hard braking or sharp direction changes
+- Skate trails — faint flat marks left on the ice surface while skating, fading over 2.5s
+- Speed lines — faint particle streaks behind skaters at high speed
+- Body check impact — particle burst at the victim's position on a hard hit
+- Shot charge glow — blue OmniLight at the blade that brightens as wrister or slapshot charges
+- Goal celebration — gold particle burst and flash of light inside the net on every goal
 
 ---
 
 ## Planned
 
 - Reactive goalie saves (glove, shoulder, stick poke)
-- Characters with unique abilities
 - More platforms
+
+## Later
+
+- Characters with unique abilities (deferred until game feel is right)
 
 ---
 

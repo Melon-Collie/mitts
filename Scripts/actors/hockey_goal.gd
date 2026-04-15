@@ -4,6 +4,8 @@ extends StaticBody3D
 
 signal goal_scored
 
+var vfx: GoalVFX = null
+
 # NHL regulation Art Ross net. Spec coordinate system:
 #   X = left/right (positive = right facing net)
 #   Vector2.y = depth into net (used as world Z offset from goal line)
@@ -70,6 +72,12 @@ func _rebuild() -> void:
 
 	_build_goal(goal_z, facing, base_pts, top_pts)
 	_build_goal_sensor(goal_z)
+
+	var goal_vfx := GoalVFX.new()
+	goal_vfx.name = "GoalVFX"
+	goal_vfx.position = Vector3(0.0, NET_HEIGHT / 2.0, goal_z)
+	add_child(goal_vfx)
+	vfx = goal_vfx
 
 func _build_goal(
 	goal_z: float,

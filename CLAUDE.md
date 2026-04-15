@@ -114,6 +114,14 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | `ui/main_menu.gd` | Main menu: host/join/offline buttons + IP input, calls `NetworkManager.start_*()`, transitions to `Hockey.tscn` |
 | `game/game_scene.gd` | Hockey scene init: calls `NetworkManager.on_game_scene_ready()` in `_ready()` to trigger world spawn |
 
+### VFX
+
+| File | Role |
+|------|------|
+| `vfx/puck_vfx.gd` | `PuckVFX` (Node3D child of Puck): GPUParticles3D ribbon trail (pale-blue, `trail_enabled`); position-delta velocity works for free and carrier-pinned states. Detects wall/poke impacts by normalized velocity dot product < −0.25 and triggers a small ice burst. |
+| `vfx/skater_vfx.gd` | `SkaterVFX` (Node3D child of Skater): ice spray (burst on `delta_vel > 8 m/s²`), skate trails (continuous flat marks, 2.5s fade), speed lines (streaks behind skater above 5.5 m/s), body check burst (connected to `body_checked_player` signal — fires at victim position), OmniLight shot charge glow (tracks `skater.shot_charge`, 0–1 normalized, blue light at blade). Teleport guard (1 m threshold) suppresses false effects from reconcile and faceoffs. |
+| `vfx/goal_vfx.gd` | `GoalVFX` (Node3D child of HockeyGoal): gold GPUParticles3D one-shot burst + OmniLight3D flash that Tweens back to zero. Created at the end of `HockeyGoal._rebuild()` (not `_ready()`) since `_rebuild()` frees all children. `celebrate()` is called from `GameManager.on_goal_scored()` on all peers. |
+
 ### Tests
 
 | File | Role |

@@ -307,6 +307,7 @@ func _state_wrister_aim(input: InputState, delta: float) -> void:
 				max_charge_direction_variance)
 		_charge_distance = result.charge
 		_prev_blade_dir = result.direction
+		skater.shot_charge = _charge_distance / max_wrister_charge_distance
 
 	_prev_blade_pos = skater.get_blade_position()
 
@@ -325,6 +326,7 @@ func _state_slapper_charge_with_puck(input: InputState, delta: float) -> void:
 		return
 
 	_slapper_charge_timer += delta
+	skater.shot_charge = minf(_slapper_charge_timer / max_slapper_charge_time, 1.0)
 	_apply_slapper_blade_position()
 
 	var slapper_vel: Vector2 = Vector2(skater.velocity.x, skater.velocity.z)
@@ -352,6 +354,7 @@ func _state_slapper_charge_without_puck(input: InputState, delta: float) -> void
 		return
 
 	_slapper_charge_timer += delta
+	skater.shot_charge = minf(_slapper_charge_timer / max_slapper_charge_time, 1.0)
 	_apply_slapper_blade_position()
 
 	var mouse_world: Vector3 = input.mouse_world_pos
@@ -426,6 +429,7 @@ func _state_shot_blocking(input: InputState, delta: float) -> void:
 
 # ── State Helpers ─────────────────────────────────────────────────────────────
 func _transition_to_skating() -> void:
+	skater.shot_charge = 0.0
 	if has_puck:
 		_state = State.SKATING_WITH_PUCK
 	else:

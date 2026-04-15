@@ -310,7 +310,8 @@ Instead of stoppages, offsides and icing are enforced via a **ghost mode** — o
 | 6 | Full game flow (goals, faceoffs, score) | Done |
 | 7 | Testable domain layer (rules extraction, state machine, GUT tests, CI) | Done |
 | 8 | Period-based game loop (clock, period transitions, game over) | Done |
-| 9 | Characters + abilities | Next |
+| 9 | Visual polish (puck trail, ice spray, skate trails, goal burst, wall impact, body check, shot charge glow, speed lines) | Done |
+| 10 | Characters + abilities | Deferred — revisit when game feel is right |
 
 ---
 
