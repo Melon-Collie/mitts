@@ -273,7 +273,12 @@ Two `Team` objects created at startup. Each owns a `defended_goal` (`HockeyGoal`
 
 ### Player Colors
 
-The host generates a unique color per player at spawn time via `_generate_player_color(team_id)`. Team 0 uses warm reds (hue 340°–20°), team 1 uses cool blues (hue 200°–260°). The range is divided into equal slots — one per player (max 3 per team) — so same-team players always land in distinct thirds of the hue band, with a ±25% jitter within the slot for variety. Color is sent to joining clients via the `assign_player_slot` and `spawn_remote_skater` RPCs, and embedded in the `sync_existing_players` array for players already in the session. Stored in `PlayerRecord.color`; applied via `skater.set_player_color()` which sets `material_override` on the upper-body mesh and blade mesh.
+Each player gets two colors generated at spawn time via `_generate_player_colors(team_id)` on the host. Colors are drawn from fixed team palettes:
+
+- **Team 0 (home):** primary (jersey, arms, blade) = red shades (hue 340°–380°, slot-based); secondary (legs, helmet/DirectionIndicator) = fixed near-black.
+- **Team 1 (away):** primary = fixed white; secondary (legs, helmet) = blue shades (hue 200°–260°, slot-based).
+
+The hue range is divided into equal slots — one per player (max 3 per team) — so same-team players land in distinct thirds of the band, with a ±25% jitter within the slot. Both colors are sent to joining clients via the `assign_player_slot` and `spawn_remote_skater` RPCs, and embedded in the `sync_existing_players` array. Stored in `PlayerRecord.color` (primary) and `PlayerRecord.secondary_color`; applied via `skater.set_player_color(primary, secondary)` which sets a `material_override` on every mesh (jersey, blade, arms, legs, helmet, stick shaft). Explicit overrides on all meshes prevent the ghost-mode gray-override bug — `_apply_ghost_visual` never needs to create a new material, just modifies existing alpha.
 
 ### Host Reset
 

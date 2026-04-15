@@ -70,14 +70,15 @@ func spawn_goalie_pair(puck: Puck, is_server: bool) -> Dictionary:
 # Returns { "skater": Skater, "controller": LocalController }.
 func spawn_local_player(
 		position: Vector3,
-		color: Color,
+		primary_color: Color,
+		secondary_color: Color,
 		puck: Puck,
 		game_state: Node,
 		team_id: int) -> Dictionary:
 	var skater: Skater = SKATER_SCENE.instantiate()
 	skater.position = position
 	_scene_root.add_child(skater)
-	skater.set_player_color(color)
+	skater.set_player_color(primary_color, secondary_color)
 	var controller: LocalController = LOCAL_CONTROLLER_SCENE.instantiate()
 	_scene_root.add_child(controller)
 	controller.setup(skater, puck, game_state)
@@ -88,13 +89,14 @@ func spawn_local_player(
 # Returns { "skater": Skater, "controller": RemoteController }.
 func spawn_remote_player(
 		position: Vector3,
-		color: Color,
+		primary_color: Color,
+		secondary_color: Color,
 		puck: Puck,
 		game_state: Node) -> Dictionary:
 	var skater: Skater = SKATER_SCENE.instantiate()
 	skater.position = position
 	_scene_root.add_child(skater)
-	skater.set_player_color(color)
+	skater.set_player_color(primary_color, secondary_color)
 	var controller: RemoteController = REMOTE_CONTROLLER_SCENE.instantiate()
 	_scene_root.add_child(controller)
 	controller.setup(skater, puck, game_state)

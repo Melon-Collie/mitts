@@ -13,7 +13,7 @@ extends Camera3D
 @export var goal_weight: float = 0.3
 
 # ── Zoom Tuning ───────────────────────────────────────────────────────────────
-@export var min_height: float = 15
+@export var min_height: float = 12
 @export var max_height: float = 40.0
 @export var zoom_speed: float = 3.0
 @export var zoom_padding: float = 2.0		# extra height added on top of what's needed to show puck

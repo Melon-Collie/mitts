@@ -68,7 +68,7 @@ Pucks coming in fast deflect off your blade instead of sticking. Move your stick
 - Scorebug HUD — score, period, clock (MM:SS), and phase label (GOAL! / END OF PERIOD / GAME OVER / FACEOFF) in top-left corner
 - Elevation indicator — bottom-center HUD badge when elevated shot mode is active
 - Main menu — host, join (with IP input), and offline from the title screen
-- Player colors — team-hued skater colors; reds for team 0, blues for team 1, each player a distinct shade
+- Player colors — two-color skaters: home team (0) gets a red jersey/arms with black legs and helmet; away team (1) gets a white jersey/arms with blue legs and helmet (each player a distinct shade within their team's hue band)
 - Host reset button — top-right HUD button (host only) that zeroes the score and restarts from faceoff
 - Offsides ghost — skaters past the blue line without the puck become transparent ghosts that can't interact with the puck or other players until they retreat or the puck enters the zone
 - Hybrid icing — shooting from your own half past the opponent's goal line triggers a race: if the defending team's closest player is nearer the goal line, your entire team is ghosted for 3 seconds; if you beat them back to the puck, icing is waved off

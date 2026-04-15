@@ -17,34 +17,62 @@ func test_balanced_counts_prefer_team_0() -> void:
 func test_lopsided_filled_to_smaller() -> void:
 	assert_eq(PlayerRules.assign_team(3, 1), 1)
 
-# ── generate_player_color ────────────────────────────────────────────────────
+# ── generate_primary_color ───────────────────────────────────────────────────
 
-func test_team_0_color_in_warm_range() -> void:
-	# Team 0 hue 340-380° → normalized 0.944-1.056 (wraps to 0.056).
-	# With jitter=0 and existing=0, center is 340 + (0.5 * 40/3) = 346.66°
-	# → hue ≈ 0.963
-	var c: Color = PlayerRules.generate_player_color(0, 0, 0.0)
-	# Red-dominant — either hue near 1.0 (red) or wrapping into 0.0
+func test_team_0_primary_in_red_range() -> void:
+	# Team 0 hue 340-380° → normalized 0.944-1.056 (wraps). Red-dominant.
+	var c: Color = PlayerRules.generate_primary_color(0, 0, 0.0)
 	assert_true(c.r > 0.5, "red channel should be dominant, got r=%f" % c.r)
 
-func test_team_1_color_in_cool_range() -> void:
-	# Team 1 hue 200-260° → normalized 0.556-0.722. Blue/cyan-dominant.
-	var c: Color = PlayerRules.generate_player_color(1, 0, 0.0)
-	assert_true(c.b > c.r, "blue should exceed red for cool color, got r=%f b=%f" % [c.r, c.b])
+func test_team_1_primary_is_white() -> void:
+	# Team 1 primary is always fixed white regardless of slot or jitter.
+	var c0: Color = PlayerRules.generate_primary_color(1, 0, 0.0)
+	var c1: Color = PlayerRules.generate_primary_color(1, 2, 1.0)
+	assert_eq(c0, Color(0.95, 0.95, 0.95), "team 1 primary should be fixed white")
+	assert_eq(c1, Color(0.95, 0.95, 0.95), "team 1 primary should be fixed white regardless of slot/jitter")
 
-func test_zero_jitter_is_deterministic() -> void:
-	var a: Color = PlayerRules.generate_player_color(0, 1, 0.0)
-	var b: Color = PlayerRules.generate_player_color(0, 1, 0.0)
+func test_team_0_primary_zero_jitter_is_deterministic() -> void:
+	var a: Color = PlayerRules.generate_primary_color(0, 1, 0.0)
+	var b: Color = PlayerRules.generate_primary_color(0, 1, 0.0)
 	assert_eq(a, b, "same inputs should give same output with no jitter")
 
-func test_different_slots_give_different_hues() -> void:
-	var c0: Color = PlayerRules.generate_player_color(0, 0, 0.0)
-	var c1: Color = PlayerRules.generate_player_color(0, 1, 0.0)
+func test_team_0_primary_different_slots_give_different_hues() -> void:
+	var c0: Color = PlayerRules.generate_primary_color(0, 0, 0.0)
+	var c1: Color = PlayerRules.generate_primary_color(0, 1, 0.0)
 	assert_ne(c0.h, c1.h, "different slots should have distinct hues")
 
-func test_jitter_shifts_hue_within_slot() -> void:
-	var center: Color = PlayerRules.generate_player_color(1, 0, 0.0)
-	var jittered: Color = PlayerRules.generate_player_color(1, 0, 1.0)
+func test_team_0_primary_jitter_shifts_hue() -> void:
+	var center: Color = PlayerRules.generate_primary_color(0, 0, 0.0)
+	var jittered: Color = PlayerRules.generate_primary_color(0, 0, 1.0)
+	assert_ne(center.h, jittered.h, "jitter=1.0 should move hue off center")
+
+# ── generate_secondary_color ─────────────────────────────────────────────────
+
+func test_team_0_secondary_is_black() -> void:
+	# Team 0 secondary is always fixed near-black regardless of slot or jitter.
+	var c0: Color = PlayerRules.generate_secondary_color(0, 0, 0.0)
+	var c1: Color = PlayerRules.generate_secondary_color(0, 2, 1.0)
+	assert_eq(c0, Color(0.08, 0.08, 0.08), "team 0 secondary should be fixed near-black")
+	assert_eq(c1, Color(0.08, 0.08, 0.08), "team 0 secondary should be fixed near-black regardless of slot/jitter")
+
+func test_team_1_secondary_in_blue_range() -> void:
+	# Team 1 secondary hue 200-260° → normalized 0.556-0.722. Blue-dominant.
+	var c: Color = PlayerRules.generate_secondary_color(1, 0, 0.0)
+	assert_true(c.b > c.r, "blue should exceed red for cool color, got r=%f b=%f" % [c.r, c.b])
+
+func test_team_1_secondary_zero_jitter_is_deterministic() -> void:
+	var a: Color = PlayerRules.generate_secondary_color(1, 1, 0.0)
+	var b: Color = PlayerRules.generate_secondary_color(1, 1, 0.0)
+	assert_eq(a, b, "same inputs should give same output with no jitter")
+
+func test_team_1_secondary_different_slots_give_different_hues() -> void:
+	var c0: Color = PlayerRules.generate_secondary_color(1, 0, 0.0)
+	var c1: Color = PlayerRules.generate_secondary_color(1, 1, 0.0)
+	assert_ne(c0.h, c1.h, "different slots should have distinct hues")
+
+func test_team_1_secondary_jitter_shifts_hue() -> void:
+	var center: Color = PlayerRules.generate_secondary_color(1, 0, 0.0)
+	var jittered: Color = PlayerRules.generate_secondary_color(1, 0, 1.0)
 	assert_ne(center.h, jittered.h, "jitter=1.0 should move hue off center")
 
 # ── faceoff_position_for_slot ────────────────────────────────────────────────

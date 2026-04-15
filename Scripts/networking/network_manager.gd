@@ -147,12 +147,12 @@ func receive_world_state(state: Array) -> void:
 	GameManager.apply_world_state(state)
 
 @rpc("authority", "reliable")
-func assign_player_slot(slot: int, team_id: int, color: Color) -> void:
-	GameManager.on_slot_assigned(slot, team_id, color)
+func assign_player_slot(slot: int, team_id: int, primary_color: Color, secondary_color: Color) -> void:
+	GameManager.on_slot_assigned(slot, team_id, primary_color, secondary_color)
 
 @rpc("authority", "reliable")
-func spawn_remote_skater(peer_id: int, slot: int, team_id: int, color: Color) -> void:
-	GameManager.spawn_remote_skater(peer_id, slot, team_id, color)
+func spawn_remote_skater(peer_id: int, slot: int, team_id: int, primary_color: Color, secondary_color: Color) -> void:
+	GameManager.spawn_remote_skater(peer_id, slot, team_id, primary_color, secondary_color)
 
 @rpc("authority", "reliable")
 func sync_existing_players(player_data: Array) -> void:
@@ -215,11 +215,11 @@ func notify_game_reset() -> void:
 	GameManager.on_game_reset()
 
 # ── Sending ───────────────────────────────────────────────────────────────────
-func send_slot_assignment(peer_id: int, slot: int, team_id: int, color: Color) -> void:
-	assign_player_slot.rpc_id(peer_id, slot, team_id, color)
+func send_slot_assignment(peer_id: int, slot: int, team_id: int, primary_color: Color, secondary_color: Color) -> void:
+	assign_player_slot.rpc_id(peer_id, slot, team_id, primary_color, secondary_color)
 
-func send_spawn_remote_skater(peer_id: int, slot: int, team_id: int, color: Color) -> void:
-	spawn_remote_skater.rpc(peer_id, slot, team_id, color)
+func send_spawn_remote_skater(peer_id: int, slot: int, team_id: int, primary_color: Color, secondary_color: Color) -> void:
+	spawn_remote_skater.rpc(peer_id, slot, team_id, primary_color, secondary_color)
 
 func send_sync_existing_players(peer_id: int, player_data: Array) -> void:
 	sync_existing_players.rpc_id(peer_id, player_data)

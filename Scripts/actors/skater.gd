@@ -58,6 +58,8 @@ extends CharacterBody3D
 @onready var stick_mesh: MeshInstance3D = $UpperBody/StickMesh
 @onready var _upper_body_mesh: MeshInstance3D = $UpperBody/UpperBodyMesh
 @onready var _blade_mesh: MeshInstance3D = $UpperBody/Blade/MeshInstance3D
+@onready var _lower_body_mesh: MeshInstance3D = $LowerBody/LowerBodyMesh
+@onready var _direction_indicator: MeshInstance3D = $UpperBody/DirectionIndicator
 
 # Top hand: the moving IK output. Positioned by the controller each tick.
 # If the scene file provides a `TopHand` Marker3D under UpperBody, we use it;
@@ -232,11 +234,30 @@ func set_facing(facing: Vector2) -> void:
 func get_facing() -> Vector2:
 	return _facing
 
-func set_player_color(color: Color) -> void:
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	_upper_body_mesh.material_override = mat
-	_blade_mesh.material_override = mat
+func set_player_color(primary_color: Color, secondary_color: Color) -> void:
+	# Primary: jersey, blade, arms
+	var primary_mat := StandardMaterial3D.new()
+	primary_mat.albedo_color = primary_color
+	_upper_body_mesh.material_override = primary_mat
+	_blade_mesh.material_override = primary_mat.duplicate()
+	if upper_arm_mesh != null:
+		upper_arm_mesh.material_override = primary_mat.duplicate()
+	if forearm_mesh != null:
+		forearm_mesh.material_override = primary_mat.duplicate()
+	if bottom_upper_arm_mesh != null:
+		bottom_upper_arm_mesh.material_override = primary_mat.duplicate()
+	if bottom_forearm_mesh != null:
+		bottom_forearm_mesh.material_override = primary_mat.duplicate()
+	# Secondary: legs + helmet
+	var secondary_mat := StandardMaterial3D.new()
+	secondary_mat.albedo_color = secondary_color
+	_lower_body_mesh.material_override = secondary_mat
+	_direction_indicator.material_override = secondary_mat.duplicate()
+	# Fixed stick shaft color — set explicitly so ghost mode never creates a
+	# blank gray override and corrupts the color after ghost ends.
+	var stick_mat := StandardMaterial3D.new()
+	stick_mat.albedo_color = Color(0.705, 0.640, 0.605)
+	stick_mesh.material_override = stick_mat
 
 # ── Blade ─────────────────────────────────────────────────────────────────────
 func set_blade_position(pos: Vector3) -> void:
@@ -404,6 +425,7 @@ func _apply_ghost_visual(ghost: bool) -> void:
 			_upper_body_mesh, _blade_mesh, stick_mesh,
 			upper_arm_mesh, forearm_mesh,
 			bottom_upper_arm_mesh, bottom_forearm_mesh,
+			_lower_body_mesh, _direction_indicator,
 		]
 	for mesh: MeshInstance3D in meshes:
 		if mesh == null:
