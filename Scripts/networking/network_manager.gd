@@ -177,7 +177,7 @@ func send_puck_release(direction: Vector3, power: float) -> void:
 
 @rpc("any_peer", "reliable")
 func release_puck(direction: Vector3, power: float) -> void:
-	GameManager.puck_controller.puck.release(direction, power)
+	GameManager.on_remote_puck_release(direction, power)
 
 func notify_goal_to_all(scoring_team_id: int, score0: int, score1: int) -> void:
 	for peer_id in multiplayer.get_peers():

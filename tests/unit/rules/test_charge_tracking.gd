@@ -62,3 +62,13 @@ func test_y_component_ignored() -> void:
 	var result: Dictionary = ChargeTracking.accumulate(
 		Vector3.ZERO, Vector3(0, 0.5, 0), Vector3.ZERO, 0.0, VARIANCE_DEG)
 	assert_almost_eq(result.charge, 0.0, 0.001, "pure Y movement → no charge")
+
+func test_player_movement_does_not_create_charge() -> void:
+	# When tracking (mouse_world - player_pos): if the player skates east by 1 m
+	# while holding the cursor still, mouse_world also moves east by 1 m, so
+	# the relative position is unchanged and no charge should accumulate.
+	var prev_relative := Vector3(3.0, 0.0, -2.0)  # mouse(3,0,-2) - player(0,0,0)
+	var curr_relative := Vector3(3.0, 0.0, -2.0)  # mouse(4,0,-2) - player(1,0,0)
+	var result: Dictionary = ChargeTracking.accumulate(
+		prev_relative, curr_relative, Vector3.ZERO, 0.0, VARIANCE_DEG)
+	assert_almost_eq(result.charge, 0.0, 0.001, "skating with held cursor adds no charge")

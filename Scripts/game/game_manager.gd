@@ -234,6 +234,8 @@ func _spawn_local_player(peer_id: int, slot: int, team: Team, primary_color: Col
 	record.skater = spawned.skater
 	record.controller = spawned.controller
 	spawned.controller.puck_release_requested.connect(_on_puck_release_requested)
+	spawned.controller.one_timer_release_requested.connect(
+			_on_one_timer_release_requested.bind(spawned.skater))
 	players[peer_id] = record
 	NetworkManager.register_local_controller(spawned.controller)
 
@@ -246,6 +248,8 @@ func _spawn_remote_player(peer_id: int, slot: int, team: Team, primary_color: Co
 	var spawned: Dictionary = _spawner.spawn_remote_player(faceoff_pos, primary_color, secondary_color, puck, self)
 	record.skater = spawned.skater
 	record.controller = spawned.controller
+	spawned.controller.one_timer_release_requested.connect(
+			_on_one_timer_release_requested.bind(spawned.skater))
 	players[peer_id] = record
 	NetworkManager.register_remote_controller(peer_id, spawned.controller)
 
@@ -500,3 +504,14 @@ func _on_puck_release_requested(direction: Vector3, power: float) -> void:
 			record.controller.on_puck_released_network()
 		puck_controller.notify_local_release(direction, power)
 		NetworkManager.send_puck_release(direction, power)
+
+# One-timer leniency: player released slap just before the puck arrived.
+# Acquire the puck onto the skater and immediately fire — host only.
+func _on_one_timer_release_requested(direction: Vector3, power: float, skater: Skater) -> void:
+	if NetworkManager.is_host:
+		puck.set_carrier(skater)
+		puck.release(direction, power)
+
+# Called by NetworkManager when a remote client's puck release RPC arrives.
+func on_remote_puck_release(direction: Vector3, power: float) -> void:
+	puck.release(direction, power)

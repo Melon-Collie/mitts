@@ -66,15 +66,23 @@ static func release_wrister(
 #
 # Config keys: min_slapper_power, max_slapper_power, max_slapper_charge_time,
 #              slapper_elevation
+#
+# shot_direction: when non-zero, used as the shot direction directly (locked
+# at press time); falls back to blade→mouse when zero (backwards compat).
 static func release_slapper(
 		blade_world_pos: Vector3,
 		mouse_world_pos: Vector3,
 		is_elevated: bool,
 		charge_time: float,
-		cfg: Dictionary) -> Dictionary:
-	var blade_xz := Vector3(blade_world_pos.x, 0.0, blade_world_pos.z)
-	var target := Vector3(mouse_world_pos.x, 0.0, mouse_world_pos.z)
-	var shot_dir: Vector3 = (target - blade_xz).normalized()
+		cfg: Dictionary,
+		shot_direction: Vector3 = Vector3.ZERO) -> Dictionary:
+	var shot_dir: Vector3
+	if shot_direction.length_squared() > 0.0001:
+		shot_dir = Vector3(shot_direction.x, 0.0, shot_direction.z).normalized()
+	else:
+		var blade_xz := Vector3(blade_world_pos.x, 0.0, blade_world_pos.z)
+		var target := Vector3(mouse_world_pos.x, 0.0, mouse_world_pos.z)
+		shot_dir = (target - blade_xz).normalized()
 	var charge_t: float = clampf(charge_time / cfg.max_slapper_charge_time, 0.0, 1.0)
 	var power: float = lerpf(cfg.min_slapper_power, cfg.max_slapper_power, charge_t)
 	var y: float = cfg.slapper_elevation if is_elevated else 0.0

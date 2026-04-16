@@ -115,6 +115,8 @@ enum State {
 @export var slapper_blade_z: float = -0.5
 @export var slapper_aim_arc: float = 45.0
 @export var slapper_elevation: float = 0.15
+@export var one_timer_window_duration: float = 0.30  # seconds after puck arrives to release
+@export var one_timer_leniency_radius: float = 1.2   # metres; buffer for early release
 
 # ── Follow Through Tuning ─────────────────────────────────────────────────────
 @export var follow_through_duration: float = 0.15
@@ -145,7 +147,8 @@ var _velocity_lean_z: float = 0.0
 var _lower_body_lag: float = 0.0
 var _head_angle: float = 0.0
 var _follow_through_is_slapper: bool = false
-var _one_timer_acquired: bool = false
+var _one_timer_window_timer: float = 0.0  # > 0 while one-timer window is open
+var _locked_slapper_dir: Vector2 = Vector2.ZERO  # facing direction captured at slap press
 var _is_elevated: bool = false
 var _shot_dir: Vector3 = Vector3.ZERO
 var _follow_through_timer: float = 0.0
@@ -226,6 +229,10 @@ func apply_network_state(state: SkaterNetworkState) -> void:
 	pass  # overridden by RemoteController on client
 	
 signal puck_release_requested(direction: Vector3, power: float)
+# Fired when the player releases slap while the puck is nearby but not yet
+# carried — the leniency one-timer. GameManager acquires + releases the puck;
+# the controller transitions to follow-through immediately.
+signal one_timer_release_requested(direction: Vector3, power: float)
 
 func _do_release(direction: Vector3, power: float) -> void:
 	puck_release_requested.emit(direction, power)
@@ -236,11 +243,12 @@ func on_puck_picked_up_network() -> void:
 	var local_blade: Vector3 = skater.get_blade_position() - skater.shoulder.position
 	_blade_relative_angle = atan2(local_blade.x, -local_blade.z)
 	if _state == State.SLAPPER_CHARGE_WITHOUT_PUCK:
-		# One-timer: puck arrived during a slapper charge. Switch to the
-		# with-puck charge state and flag for immediate auto-release next tick.
+		# One-timer: puck arrived during a slapper charge. Open the timing
+		# window — player must release within one_timer_window_duration or
+		# the shot is cancelled and they keep the puck in carry state.
 		skater.set_slapper_zone(false)
 		skater.set_slapper_mode(true)
-		_one_timer_acquired = true
+		_one_timer_window_timer = one_timer_window_duration
 		_state = State.SLAPPER_CHARGE_WITH_PUCK
 	else:
 		_state = State.SKATING_WITH_PUCK
@@ -282,14 +290,14 @@ func _state_skating_without_puck(input: InputState, delta: float) -> void:
 		_state = State.WRISTER_AIM
 		_shot_dir = Vector3.ZERO
 	if input.slap_pressed:
-		_enter_slapper_charge()
+		_enter_slapper_charge(input)
 
 func _state_skating_with_puck(input: InputState, delta: float) -> void:
 	_apply_blade_from_mouse(input, delta)
 	if input.shoot_pressed:
-		_enter_wrister_aim()
+		_enter_wrister_aim(input)
 	if input.slap_pressed:
-		_enter_slapper_charge()
+		_enter_slapper_charge(input)
 
 func _state_wrister_aim(input: InputState, delta: float) -> void:
 	if input.block_held:
@@ -299,17 +307,24 @@ func _state_wrister_aim(input: InputState, delta: float) -> void:
 	_apply_blade_from_mouse(input, delta)
 
 	if has_puck:
+		# Track mouse position relative to the player to remove skating-velocity
+		# contamination. When the player skates, both mouse_world_pos and
+		# global_position move together, so their difference only changes when
+		# the cursor actually moves.
+		var mouse_relative := Vector3(
+			input.mouse_world_pos.x - skater.global_position.x,
+			0.0,
+			input.mouse_world_pos.z - skater.global_position.z)
 		var result: Dictionary = ChargeTracking.accumulate(
 				_prev_blade_pos,
-				skater.get_blade_position(),
+				mouse_relative,
 				_prev_blade_dir,
 				_charge_distance,
 				max_charge_direction_variance)
 		_charge_distance = result.charge
 		_prev_blade_dir = result.direction
+		_prev_blade_pos = mouse_relative
 		skater.shot_charge = _charge_distance / max_wrister_charge_distance
-
-	_prev_blade_pos = skater.get_blade_position()
 
 	if not input.shoot_held:
 		_release_wrister(input)
@@ -319,11 +334,17 @@ func _state_slapper_charge_with_puck(input: InputState, delta: float) -> void:
 		_cancel_slapper()
 		return
 
-	# One-timer: puck was picked up mid-charge — auto-fire immediately.
-	if _one_timer_acquired:
-		_one_timer_acquired = false
-		_release_slapper(input)
-		return
+	# One-timer window: puck arrived mid-charge. Player must release before
+	# the window expires or the shot is cancelled (they keep the puck).
+	if _one_timer_window_timer > 0.0:
+		_one_timer_window_timer -= delta
+		if _one_timer_window_timer <= 0.0:
+			# Window expired — cancel slapper, keep puck in carry state.
+			_cancel_slapper()
+			return
+		if not input.slap_held:
+			_release_slapper(input, true)
+			return
 
 	_slapper_charge_timer += delta
 	skater.shot_charge = minf(_slapper_charge_timer / max_slapper_charge_time, 1.0)
@@ -334,19 +355,8 @@ func _state_slapper_charge_with_puck(input: InputState, delta: float) -> void:
 	skater.velocity.x = slapper_vel.x
 	skater.velocity.z = slapper_vel.y
 
-	var mouse_world: Vector3 = input.mouse_world_pos
-	mouse_world.y = 0.0
-	var to_mouse: Vector3 = mouse_world - skater.global_position
-	to_mouse.y = 0.0
-	if to_mouse.length() > move_deadzone:
-		var local_dir: Vector3 = skater.global_transform.basis.inverse() * to_mouse.normalized()
-		var raw_angle: float = atan2(local_dir.x, -local_dir.z)
-		var clamped_angle: float = clampf(raw_angle, -deg_to_rad(slapper_aim_arc), deg_to_rad(slapper_aim_arc))
-		_upper_body_angle = lerp_angle(_upper_body_angle, -clamped_angle, upper_body_return_speed * delta)
-		skater.set_upper_body_rotation(_upper_body_angle)
-
 	if not input.slap_held:
-		_release_slapper(input)
+		_release_slapper(input, false)
 
 func _state_slapper_charge_without_puck(input: InputState, delta: float) -> void:
 	if input.block_held:
@@ -357,18 +367,30 @@ func _state_slapper_charge_without_puck(input: InputState, delta: float) -> void
 	skater.shot_charge = minf(_slapper_charge_timer / max_slapper_charge_time, 1.0)
 	_apply_slapper_blade_position()
 
-	var mouse_world: Vector3 = input.mouse_world_pos
-	mouse_world.y = 0.0
-	var to_mouse: Vector2 = Vector2(
-		mouse_world.x - skater.global_position.x,
-		mouse_world.z - skater.global_position.z
-	)
-	if to_mouse.length() > move_deadzone:
-		_facing = _facing.lerp(to_mouse.normalized(), rotation_speed * delta).normalized()
-		skater.set_facing(_facing)
-
 	if not input.slap_held:
-		_release_slapper(input)
+		# Release buffer: check if the puck is close enough to count as a
+		# one-timer even if it hasn't entered the pickup zone yet. This lets
+		# the player release on the beat without having to time it early.
+		var blade_world: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
+		if puck.global_position.distance_to(blade_world) <= one_timer_leniency_radius:
+			# Compute direction/power, then signal up — GameManager acquires
+			# and releases the puck. Controller transitions immediately.
+			var locked_dir_3d := Vector3(_locked_slapper_dir.x, 0.0, _locked_slapper_dir.y)
+			var cfg: Dictionary = _slapper_config()
+			var result := ShotMechanics.release_slapper(
+					blade_world,
+					input.mouse_world_pos,
+					_is_elevated,
+					cfg.max_slapper_charge_time,
+					cfg,
+					locked_dir_3d)
+			_shot_dir = result.direction
+			one_timer_release_requested.emit(result.direction, result.power)
+			_follow_through_is_slapper = true
+			_state = State.FOLLOW_THROUGH
+			_follow_through_timer = follow_through_duration
+		else:
+			_cancel_slapper()
 
 func _state_follow_through(delta: float) -> void:
 	if _follow_through_is_slapper:
@@ -458,20 +480,31 @@ func _exit_shot_block() -> void:
 	skater.set_block_stance(false)
 	_transition_to_skating()
 
-func _enter_wrister_aim() -> void:
+func _enter_wrister_aim(input: InputState) -> void:
 	_state = State.WRISTER_AIM
 	_shot_dir = Vector3.ZERO
 	_charge_distance = 0.0
-	_prev_blade_pos = skater.get_blade_position()
 	_prev_blade_dir = Vector3.ZERO
+	# Seed with current relative-mouse so first-frame delta is zero (no spurious charge).
+	_prev_blade_pos = Vector3(
+		input.mouse_world_pos.x - skater.global_position.x,
+		0.0,
+		input.mouse_world_pos.z - skater.global_position.z)
 
 func _cancel_slapper() -> void:
 	_slapper_charge_timer = 0.0
 	_transition_to_skating()
 
-func _enter_slapper_charge() -> void:
+func _enter_slapper_charge(input: InputState) -> void:
 	_slapper_charge_timer = 0.0
 	_shot_dir = Vector3.ZERO
+	_one_timer_window_timer = 0.0
+	# Lock direction toward mouse at press time. Falls back to facing if the
+	# cursor is on top of the player (below deadzone).
+	var to_mouse := Vector2(
+		input.mouse_world_pos.x - skater.global_position.x,
+		input.mouse_world_pos.z - skater.global_position.z)
+	_locked_slapper_dir = to_mouse.normalized() if to_mouse.length() > move_deadzone else _facing
 	_upper_body_angle = 0.0
 	_upper_body_lean = 0.0
 	_velocity_lean_x = 0.0
@@ -493,10 +526,8 @@ func _enter_slapper_charge() -> void:
 func _release_wrister(input: InputState) -> void:
 	if has_puck:
 		var blade_world: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
-		# Aim along the stick shaft — top_hand (moving IK grip point) to blade.
-		var hand_world: Vector3 = skater.upper_body_to_global(skater.get_top_hand_position())
-		var aim_dir: Vector3 = blade_world - hand_world
-		aim_dir.y = 0.0
+		# _prev_blade_dir is the world-space direction the cursor was dragged
+		# (relative to the player, so skating velocity is already removed).
 		var result := ShotMechanics.release_wrister(
 				skater.global_position,
 				input.mouse_world_pos,
@@ -507,7 +538,7 @@ func _release_wrister(input: InputState) -> void:
 				_is_elevated,
 				_charge_distance,
 				_wrister_config(),
-				aim_dir)
+				_prev_blade_dir)
 		_shot_dir = result.direction
 		_do_release(result.direction, result.power)
 
@@ -515,14 +546,20 @@ func _release_wrister(input: InputState) -> void:
 	_state = State.FOLLOW_THROUGH
 	_follow_through_timer = follow_through_duration
 
-func _release_slapper(input: InputState) -> void:
+func _release_slapper(input: InputState, one_timer: bool = false) -> void:
 	if has_puck:
+		# Direction is locked at the moment slap was pressed — no mid-swing steering.
+		var locked_dir_3d := Vector3(_locked_slapper_dir.x, 0.0, _locked_slapper_dir.y)
+		var cfg: Dictionary = _slapper_config()
+		# One-timers always fire at max power regardless of actual charge built.
+		var charge: float = cfg.max_slapper_charge_time if one_timer else _slapper_charge_timer
 		var result := ShotMechanics.release_slapper(
 				skater.upper_body_to_global(skater.get_blade_position()),
 				input.mouse_world_pos,
 				_is_elevated,
-				_slapper_charge_timer,
-				_slapper_config())
+				charge,
+				cfg,
+				locked_dir_3d)
 		_shot_dir = result.direction
 		_do_release(result.direction, result.power)
 
@@ -651,7 +688,21 @@ func _apply_blade_from_relative_angle() -> void:
 
 # ── Upper Body ────────────────────────────────────────────────────────────────
 func _apply_upper_body(delta: float) -> void:
-	if _state in [State.SLAPPER_CHARGE_WITH_PUCK, State.SHOT_BLOCKING]:
+	if _state == State.SHOT_BLOCKING:
+		return
+
+	if _state in [State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK]:
+		# Hold upper body facing the locked shot direction throughout the wind-up.
+		# Re-computed from world space each frame so the torso stays on target
+		# even if the feet pivot while skating.
+		if _locked_slapper_dir.length_squared() > 0.0001:
+			var locked_world := Vector3(_locked_slapper_dir.x, 0.0, _locked_slapper_dir.y)
+			var local_dir := skater.global_transform.basis.inverse() * locked_world
+			var locked_angle := atan2(local_dir.x, -local_dir.z)
+			var max_twist := deg_to_rad(upper_body_max_twist_deg)
+			var target: float = clampf(-locked_angle * upper_body_twist_ratio, -max_twist, max_twist)
+			_upper_body_angle = lerp_angle(_upper_body_angle, target, upper_body_return_speed * delta)
+			skater.set_upper_body_rotation(_upper_body_angle)
 		return
 
 	var target_angle: float = 0.0

@@ -129,6 +129,22 @@ func test_wrister_charged_falls_back_to_mouse_when_no_drag_direction() -> void:
 
 # ── Slapper ──────────────────────────────────────────────────────────────────
 
+func test_slapper_uses_shot_direction_when_provided() -> void:
+	# Mouse is far to the right (+X), locked dir is straight forward (-Z).
+	# Shot should ignore mouse and go forward.
+	var result: Dictionary = ShotMechanics.release_slapper(
+		Vector3(0.5, 0, 0), Vector3(10, 0, 0), false, 1.0,
+		_slapper_cfg(), Vector3(0, 0, -1))
+	assert_almost_eq(result.direction.z, -1.0, 0.05, "locked dir overrides blade→mouse")
+	assert_almost_eq(result.direction.x, 0.0, 0.05, "no veer toward mouse")
+
+func test_slapper_falls_back_to_blade_mouse_when_no_direction() -> void:
+	# No locked dir provided — falls back to blade → mouse.
+	var result: Dictionary = ShotMechanics.release_slapper(
+		Vector3(0, 0, 0), Vector3(10, 0, 0), false, 1.0,
+		_slapper_cfg(), Vector3.ZERO)
+	assert_gt(result.direction.x, 0.9, "falls back to blade→mouse (+X)")
+
 func test_slapper_power_scales_with_charge_time() -> void:
 	var cfg := _slapper_cfg()
 	var short_result: Dictionary = ShotMechanics.release_slapper(
