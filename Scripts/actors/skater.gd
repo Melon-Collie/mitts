@@ -54,7 +54,7 @@ extends CharacterBody3D
 @onready var upper_body: Node3D = $UpperBody
 @onready var blade: Marker3D = $UpperBody/Blade
 @onready var shoulder: Marker3D = $UpperBody/Shoulder
-@onready var stick_raycast: RayCast3D = $StickRaycast
+@onready var stick_raycast: RayCast3D = $StickRaycast  # kept in scene; wall clamping is now analytic
 @onready var stick_mesh: MeshInstance3D = $UpperBody/StickMesh
 @onready var _upper_body_mesh: MeshInstance3D = $UpperBody/UpperBodyMesh
 @onready var _blade_mesh: MeshInstance3D = $UpperBody/Blade/MeshInstance3D
@@ -99,6 +99,7 @@ var is_ghost: bool = false
 var shot_charge: float = 0.0
 var blade_world_velocity: Vector3 = Vector3.ZERO
 var _prev_blade_world_pos: Vector3 = Vector3.ZERO
+var _last_wall_normal: Vector3 = Vector3.ZERO
 var _body_block_area: Area3D = null
 var _body_block_sphere: SphereShape3D = null
 var _blade_area: Area3D = null
@@ -152,7 +153,6 @@ func _ready() -> void:
 
 	collision_layer = Constants.LAYER_SKATER_BODIES
 	collision_mask  = Constants.MASK_SKATER
-	stick_raycast.collision_mask = Constants.MASK_SKATER
 
 	_blade_area = Area3D.new()
 	_blade_area.name = "BladeArea"
@@ -403,30 +403,30 @@ func get_upper_body_rotation() -> float:
 	return upper_body.rotation.y
 
 # ── Wall Clamping ─────────────────────────────────────────────────────────────
+# Analytic rink boundary check using the rounded-rectangle inner wall surface.
+# Replaces the old RayCast3D approach, which could miss gaps between the
+# segmented corner collision boxes and let the blade clip through curved walls.
 func clamp_blade_to_walls(local_pos: Vector3) -> Vector3:
-	var to_blade: Vector3 = local_pos
-	to_blade.y = 0.0
-	stick_raycast.target_position = to_blade
-	stick_raycast.force_raycast_update()
-
-	if stick_raycast.is_colliding():
-		var hit_dist: float = global_position.distance_to(stick_raycast.get_collision_point())
-		var blade_dist: float = to_blade.length()
-		if hit_dist < blade_dist:
-			var clamped_dist: float = maxf(hit_dist - 0.05, 0.1)
-			var saved_y: float = local_pos.y
-			local_pos = to_blade.normalized() * clamped_dist
-			local_pos.y = saved_y
-
-	return local_pos
+	_last_wall_normal = Vector3.ZERO
+	var blade_world: Vector3 = upper_body.to_global(local_pos)
+	var blade_xz := Vector2(blade_world.x, blade_world.z)
+	var clamped_xz: Vector2 = GameRules.clamp_to_rink_inner(blade_xz)
+	if clamped_xz.distance_squared_to(blade_xz) < 0.0001:
+		return local_pos
+	# Inward-pointing wall normal (direction to push the puck away from the wall).
+	_last_wall_normal = Vector3(
+		clamped_xz.x - blade_xz.x,
+		0.0,
+		clamped_xz.y - blade_xz.y
+	).normalized()
+	var clamped_world := Vector3(clamped_xz.x, blade_world.y, clamped_xz.y)
+	return upper_body.to_local(clamped_world)
 
 func get_wall_squeeze(intended_pos: Vector3, clamped_pos: Vector3) -> float:
 	return intended_pos.length() - clamped_pos.length()
 
 func get_blade_wall_normal() -> Vector3:
-	if stick_raycast.is_colliding():
-		return stick_raycast.get_collision_normal()
-	return Vector3.ZERO
+	return _last_wall_normal
 
 # ── Stick Mesh ────────────────────────────────────────────────────────────────
 func update_stick_mesh() -> void:

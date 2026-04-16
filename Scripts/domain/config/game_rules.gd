@@ -18,6 +18,41 @@ const END_OF_PERIOD_PAUSE: float   = 3.0           # pause before next-period fa
 const GOAL_LINE_Z: float = 26.6  # rink_length / 2 - distance_from_end (30 - 3.4)
 const BLUE_LINE_Z: float = 7.62  # 25 ft from center ice (NHL standard)
 
+# Rink dimensions (must match HockeyRink export values in the scene)
+const RINK_HALF_WIDTH: float     = 13.0   # half of 26 m
+const RINK_HALF_LENGTH: float    = 30.0   # half of 60 m
+const CORNER_RADIUS: float       = 8.5
+const WALL_THICKNESS: float      = 0.3
+# Inner wall boundary — interior face of the boards
+const INNER_HALF_WIDTH: float    = RINK_HALF_WIDTH  - WALL_THICKNESS * 0.5  # 12.85
+const INNER_HALF_LENGTH: float   = RINK_HALF_LENGTH - WALL_THICKNESS * 0.5  # 29.85
+const INNER_CORNER_RADIUS: float = CORNER_RADIUS    - WALL_THICKNESS * 0.5  # 8.35
+const CORNER_CENTER_X: float     = INNER_HALF_WIDTH  - INNER_CORNER_RADIUS  # 4.5
+const CORNER_CENTER_Z: float     = INNER_HALF_LENGTH - INNER_CORNER_RADIUS  # 21.5
+
+# Returns world_xz projected onto the inner rink boundary (rounded rectangle).
+# If the point is already inside, returns it unchanged.
+static func clamp_to_rink_inner(world_xz: Vector2) -> Vector2:
+	var ax: float = absf(world_xz.x)
+	var az: float = absf(world_xz.y)
+	if ax > CORNER_CENTER_X and az > CORNER_CENTER_Z:
+		# Corner quadrant — clamp to the rounded arc
+		var dx: float = ax - CORNER_CENTER_X
+		var dz: float = az - CORNER_CENTER_Z
+		var dist: float = sqrt(dx * dx + dz * dz)
+		if dist > INNER_CORNER_RADIUS:
+			var scale: float = INNER_CORNER_RADIUS / dist
+			return Vector2(
+				sign(world_xz.x) * (CORNER_CENTER_X + dx * scale),
+				sign(world_xz.y) * (CORNER_CENTER_Z + dz * scale)
+			)
+	else:
+		if ax > INNER_HALF_WIDTH:
+			return Vector2(sign(world_xz.x) * INNER_HALF_WIDTH, world_xz.y)
+		if az > INNER_HALF_LENGTH:
+			return Vector2(world_xz.x, sign(world_xz.y) * INNER_HALF_LENGTH)
+	return world_xz
+
 # ── Puck ──────────────────────────────────────────────────────────────────────
 const PUCK_START_POS: Vector3 = Vector3(0, 0.05, 0)
 const ICE_FRICTION: float = 0.01

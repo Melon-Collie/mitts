@@ -439,6 +439,7 @@ func _apply_slapper_follow_through() -> void:
 		skater.shoulder.position.x + blade_side_sign * slapper_blade_x + shot_xz.x * t * 0.4,
 		lerpf(slapper_wind_up_height, _blade_y_local(), smoothstep(0.0, 1.0, t)),
 		skater.shoulder.position.z + slapper_blade_z + shot_xz.y * t * 0.4)
+	blade_pos = skater.clamp_blade_to_walls(blade_pos)
 	var hand_pos := Vector3(
 		skater.shoulder.position.x,
 		hand_rest_y + t * wrister_follow_through_hand_y,
@@ -596,6 +597,7 @@ func _apply_slapper_blade_position() -> void:
 			skater.shoulder.position.x + blade_side_sign * slapper_blade_x,
 			current_blade_y,
 			skater.shoulder.position.z + slapper_blade_z)
+	pos = skater.clamp_blade_to_walls(pos)
 	var hand_pos := Vector3(skater.shoulder.position.x, hand_rest_y, skater.shoulder.position.z)
 	skater.set_top_hand_position(hand_pos)
 	skater.set_blade_position(pos)
