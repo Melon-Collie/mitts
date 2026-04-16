@@ -141,6 +141,7 @@ func _process(delta: float) -> void:
 		_charge_light.visible = false
 		_charge_light.omni_range = 2.0
 
+
 func _on_body_check(victim: Skater, _force: float, hit_dir: Vector3) -> void:
 	# Burst at the victim's position, emitting outward along the hit direction.
 	# direction must be in the emitter's local space — convert the world-space
@@ -239,7 +240,7 @@ func _emit_hockey_stop(skater: Skater, flat_vel: Vector3) -> void:
 	var sides: Array[float] = [-1.0, 1.0]
 	for i: int in 2:
 		var outward: Vector3 = perp * sides[i]
-		var world_dir: Vector3 = (outward + forward * 0.2 + Vector3(0.0, 0.15, 0.0)).normalized()
+		var world_dir: Vector3 = (outward + forward * 0.2 + Vector3(0.0, 0.04, 0.0)).normalized()
 		var world_pos: Vector3 = (
 			skater.global_position
 			+ forward * 0.4
@@ -258,7 +259,7 @@ func _emit_hockey_stop(skater: Skater, flat_vel: Vector3) -> void:
 func _make_stop_marks_emitter() -> CPUParticles3D:
 	var e := CPUParticles3D.new()
 	e.emitting = false
-	e.amount = 30
+	e.amount = 55
 	e.lifetime = 1.5
 	e.one_shot = true
 	e.explosiveness = 0.9
@@ -266,8 +267,8 @@ func _make_stop_marks_emitter() -> CPUParticles3D:
 	e.local_coords = false
 	e.direction = Vector3(1.0, 0.0, 0.0)  # overwritten per burst
 	e.spread = 65.0
-	e.initial_velocity_min = 0.5
-	e.initial_velocity_max = 2.0
+	e.initial_velocity_min = 1.5
+	e.initial_velocity_max = 5.0
 	e.gravity = Vector3.ZERO
 	e.scale_amount_min = 0.03
 	e.scale_amount_max = 0.07
@@ -289,17 +290,17 @@ func _make_stop_marks_emitter() -> CPUParticles3D:
 func _make_stop_spray_emitter() -> CPUParticles3D:
 	var e := CPUParticles3D.new()
 	e.emitting = false
-	e.amount = 15
-	e.lifetime = 0.35
+	e.amount = 35
+	e.lifetime = 0.3
 	e.one_shot = true
 	e.explosiveness = 0.9
 	e.randomness = 0.4
 	e.local_coords = false
 	e.direction = Vector3(1.0, 0.0, 0.0)  # overwritten per burst
-	e.spread = 50.0
-	e.initial_velocity_min = 3.0
-	e.initial_velocity_max = 7.0
-	e.gravity = Vector3(0.0, -10.0, 0.0)
+	e.spread = 45.0
+	e.initial_velocity_min = 6.0
+	e.initial_velocity_max = 14.0
+	e.gravity = Vector3(0.0, -18.0, 0.0)
 	e.scale_amount_min = 0.02
 	e.scale_amount_max = 0.04
 	e.mesh = _make_sphere_mesh(Color(0.95, 0.93, 0.88, 0.85))

@@ -20,7 +20,7 @@ enum State {
 @export var brake_multiplier: float = 5.0
 @export var puck_carry_speed_multiplier: float = 0.92
 @export var backward_thrust_multiplier: float = 0.80
-@export var crossover_thrust_multiplier: float = 0.85
+@export var crossover_thrust_multiplier: float = 0.90
 
 # ── Facing Tuning ─────────────────────────────────────────────────────────────
 # How fast facing drifts toward the cursor during normal play. Lower = more
