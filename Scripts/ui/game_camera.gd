@@ -4,108 +4,135 @@ extends Camera3D
 # ── Target References ─────────────────────────────────────────────────────────
 @export var skater: Skater
 @export var puck: Puck
-@export var attacking_goal: Node3D
 @export var local_controller: LocalController
 
-# ── Anchor Weights ────────────────────────────────────────────────────────────
-@export var puck_weight: float = 1.0
-@export var mouse_weight: float = 0.5
-@export var goal_weight: float = 0.3
+# ── Zone Bias ─────────────────────────────────────────────────────────────────
+# Fraction of available slack to use when shifting toward the attacking zone.
+# 1.0 = push player/puck to the trailing edge of the frame; 0.0 = no bias.
+@export var zone_bias: float = 0.7
+# How fast the bias transitions when possession changes (prevents snapping).
+@export var bias_smooth_speed: float = 1.5
 
 # ── Zoom Tuning ───────────────────────────────────────────────────────────────
-@export var min_height: float = 12
+@export var min_height: float = 10.0
+@export var ozone_min_height: float = 14.0  # min height when local player is in the offensive zone
 @export var max_height: float = 40.0
 @export var zoom_speed: float = 3.0
-@export var zoom_padding: float = 2.0		# extra height added on top of what's needed to show puck
-
-# ── Player Frame Margin ───────────────────────────────────────────────────────
-@export var player_margin: float = 0.8
+@export var zoom_padding: float = 4.0  # extra visible space beyond player+puck span
 
 # ── Rink Bounds ───────────────────────────────────────────────────────────────
 @export var rink_half_width: float = 13.0
 @export var rink_half_length: float = 30.0
 
 # ── Smoothing ─────────────────────────────────────────────────────────────────
-@export var smooth_speed: float = 5.0
+@export var smooth_speed: float = 3.0
+
+# ── Goal Context (set via set_goal_context) ───────────────────────────────────
+var _goal_0: Node3D = null  # Team 0's defended goal
+var _goal_1: Node3D = null  # Team 1's defended goal
+var _carrier_team_resolver: Callable  # Skater → int team_id
 
 # ── Runtime ───────────────────────────────────────────────────────────────────
 var _current_height: float = 15.0
+var _smoothed_attack_dir: float = 0.0    # lerps between -1, 0, +1 on possession change
+var _smoothed_direction_factor: float = 1.0  # lerps movement-direction bias to avoid snapping
+
+func set_goal_context(goal_0: Node3D, goal_1: Node3D, carrier_team_resolver: Callable) -> void:
+	_goal_0 = goal_0
+	_goal_1 = goal_1
+	_carrier_team_resolver = carrier_team_resolver
+
+# Returns +1 or -1 (attacking direction in Z) when someone has the puck, 0 otherwise.
+func _get_attacking_direction() -> int:
+	if not _carrier_team_resolver.is_valid() or puck == null:
+		return 0
+	var carrier: Skater = puck.get_carrier()
+	if carrier == null:
+		return 0
+	var carrier_team: int = _carrier_team_resolver.call(carrier)
+	var attacking_goal: Node3D = null
+	if carrier_team == 0:
+		attacking_goal = _goal_1
+	elif carrier_team == 1:
+		attacking_goal = _goal_0
+	if attacking_goal == null:
+		return 0
+	return 1 if attacking_goal.global_position.z > 0.0 else -1
 
 func _ready() -> void:
 	make_current()
 
 func _physics_process(delta: float) -> void:
-	if not skater:
-		print("Game Camera: skater is null")
+	if not skater or not puck:
 		return
 
 	var player_pos: Vector3 = skater.global_position
 	player_pos.y = 0.0
+	var puck_pos: Vector3 = puck.global_position
+	puck_pos.y = 0.0
 
-	# ── Step 1: Weighted Target Position ─────────────────────────────────────
-	var total_weight: float = 1.0
-	var weighted_pos: Vector3 = player_pos
-
-	if puck:
-		var puck_pos: Vector3 = puck.global_position
-		puck_pos.y = 0.0
-		weighted_pos += puck_pos * puck_weight
-		total_weight += puck_weight
-
-	var mouse_pos: Vector3 = local_controller.get_current_input().mouse_world_pos
-	mouse_pos.y = 0.0
-	weighted_pos += mouse_pos * mouse_weight
-	total_weight += mouse_weight
-
-	if attacking_goal:
-		var goal_pos: Vector3 = attacking_goal.global_position
-		goal_pos.y = 0.0
-		weighted_pos += goal_pos * goal_weight
-		total_weight += goal_weight
-
-	var target_xz: Vector3 = weighted_pos / total_weight
-
-	# ── Step 2: Player-First Clamp ────────────────────────────────────────────
-	# Use current height to compute visible extents for clamping
 	var fov_rad: float = deg_to_rad(fov)
 	var aspect: float = get_viewport().get_visible_rect().size.x / get_viewport().get_visible_rect().size.y
 	var tan_half_fov: float = tan(fov_rad / 2.0)
+
+	# ── Step 1: Base center = midpoint of player and puck ────────────────────
+	var base_center: Vector3 = (player_pos + puck_pos) * 0.5
+
+	# ── Step 2: Zoom to keep both player and puck in frame ───────────────────
+	var half_span_x: float = abs(player_pos.x - puck_pos.x) * 0.5
+	var half_span_z: float = abs(player_pos.z - puck_pos.z) * 0.5
+	var needed_x: float = (half_span_x + zoom_padding) / (tan_half_fov * aspect)
+	var needed_z: float = (half_span_z + zoom_padding) / tan_half_fov
+	# Zoom out when someone has the puck AND the local player is in the zone
+	# being attacked — works for either ozone, either carrier.
+	var attack_dir_now: int = _get_attacking_direction()
+	var in_ozone: bool = attack_dir_now != 0 and \
+		(player_pos.z * float(attack_dir_now)) > GameRules.BLUE_LINE_Z
+	var effective_min: float = ozone_min_height if in_ozone else min_height
+	var target_height: float = clampf(maxf(needed_x, needed_z), effective_min, max_height)
+	_current_height = lerpf(_current_height, target_height, zoom_speed * delta)
+
 	var visible_half_x: float = tan_half_fov * aspect * _current_height
 	var visible_half_z: float = tan_half_fov * _current_height
 
-	var max_offset_x: float = visible_half_x * player_margin
-	var max_offset_z: float = visible_half_z * player_margin
+	# ── Step 3: Attacking zone bias ───────────────────────────────────────────
+	# Lerp the attack direction so possession changes ease in rather than snap.
+	var attack_dir: int = _get_attacking_direction()
+	_smoothed_attack_dir = lerpf(_smoothed_attack_dir, float(attack_dir), bias_smooth_speed * delta)
 
-	target_xz.x = clampf(target_xz.x, player_pos.x - max_offset_x, player_pos.x + max_offset_x)
-	target_xz.z = clampf(target_xz.z, player_pos.z - max_offset_z, player_pos.z + max_offset_z)
+	var target_center: Vector3 = base_center
+	if not is_zero_approx(_smoothed_attack_dir):
+		# Scale bias by how much the player is moving toward the attacking zone.
+		# Moving directly toward ozone = 1.0, sideways = 0.5, backward = 0.0.
+		# Smoothed so a momentary backward step doesn't yank the bias away.
+		var vel_xz: Vector3 = Vector3(skater.velocity.x, 0.0, skater.velocity.z)
+		var raw_direction_factor: float = 1.0
+		if vel_xz.length_squared() > 0.25:  # ignore drift when nearly stationary
+			var vel_dir: Vector3 = vel_xz.normalized()
+			var dot: float = vel_dir.z * float(attack_dir)
+			raw_direction_factor = clampf((dot + 1.0) * 0.5, 0.0, 1.0)
+		_smoothed_direction_factor = lerpf(_smoothed_direction_factor, raw_direction_factor, bias_smooth_speed * delta)
+		var direction_factor: float = _smoothed_direction_factor
 
-	# ── Step 3: Soft Rink Clamp ───────────────────────────────────────────────
+		# Slack = how far we can shift before the trailing subject hits the frame edge.
+		var min_z: float = minf(player_pos.z, puck_pos.z)
+		var max_z: float = maxf(player_pos.z, puck_pos.z)
+		var slack_pos: float = maxf(visible_half_z - (base_center.z - min_z), 0.0)
+		var slack_neg: float = maxf(visible_half_z - (max_z - base_center.z), 0.0)
+		var blended_slack: float = 0.0
+		if _smoothed_attack_dir > 0.0:
+			blended_slack = _smoothed_attack_dir * slack_pos
+		else:
+			blended_slack = _smoothed_attack_dir * slack_neg
+		target_center.z += blended_slack * zone_bias * direction_factor
+
+	# ── Step 4: Rink clamp ────────────────────────────────────────────────────
 	var safe_x: float = maxf(rink_half_width - visible_half_x, 0.0)
 	var safe_z: float = maxf(rink_half_length - visible_half_z, 0.0)
+	target_center.x = clampf(target_center.x, -safe_x, safe_x)
+	target_center.z = clampf(target_center.z, -safe_z, safe_z)
 
-	target_xz.x = clampf(target_xz.x, -safe_x, safe_x)
-	target_xz.z = clampf(target_xz.z, -safe_z, safe_z)
-
-	# ── Step 4: Zoom based on clamped position ────────────────────────────────
-	# Now that we know where the camera will actually be, compute how high
-	# it needs to be to show the puck from that position.
-	var target_height: float = min_height
-
-	if puck:
-		var puck_pos: Vector3 = puck.global_position
-		puck_pos.y = 0.0
-		var puck_offset_x: float = abs(puck_pos.x - target_xz.x)
-		var puck_offset_z: float = abs(puck_pos.z - target_xz.z)
-		# Height needed to fit puck in frame on each axis
-		var needed_x: float = puck_offset_x / (tan_half_fov * aspect)
-		var needed_z: float = puck_offset_z / tan_half_fov
-		target_height = clampf(maxf(needed_x, needed_z) + zoom_padding, min_height, max_height)
-
-	_current_height = lerpf(_current_height, target_height, zoom_speed * delta)
-
-	# ── Step 5: Smooth Movement ───────────────────────────────────────────────
-	var target_pos: Vector3 = Vector3(target_xz.x, _current_height, target_xz.z)
+	# ── Step 5: Smooth movement ───────────────────────────────────────────────
+	var target_pos: Vector3 = Vector3(target_center.x, _current_height, target_center.z)
 	global_position = global_position.lerp(target_pos, smooth_speed * delta)
-
-	# ── Orientation ───────────────────────────────────────────────────────────
 	rotation_degrees = Vector3(-90.0, 0.0, 0.0)

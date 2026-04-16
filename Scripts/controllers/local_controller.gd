@@ -25,6 +25,9 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 func set_local_team_id(team_id: int) -> void:
 	_team_id = team_id
 
+func set_goal_context(goal_0: Node3D, goal_1: Node3D, carrier_team_resolver: Callable) -> void:
+	camera.set_goal_context(goal_0, goal_1, carrier_team_resolver)
+
 func get_current_input() -> InputState:
 	return _current_input
 

@@ -109,7 +109,7 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | `networking/puck_network_state.gd` | Serializable puck state: position, velocity, carrier peer ID |
 | `input/input_state.gd` | InputState data object: all per-tick input fields (move, mouse, shoot, brake, elevation, etc.) |
 | `input/local_input_gatherer.gd` | Populates InputState from local hardware; accumulates just_pressed between ticks |
-| `ui/game_camera.gd` | Per-player camera: weighted anchor (player, puck, mouse, attacking goal), zoom, rink clamping |
+| `ui/game_camera.gd` | Per-player camera: frames player+puck via zoom, then shifts toward attacking zone using available slack. Ozone zoom (min_height→ozone_min_height) when local player is in the attacked zone. Bias smoothed by possession changes and movement direction. Wired via `LocalController.set_goal_context`. |
 | `ui/hud.gd` | Scorebug HUD: horizontal dark panel top-left — period ordinal (1ST/2ND/3RD/OT) stacked above clock on the left, home/away team names (colored to team primaries) + scores stacked on the right. Phase banner (GOAL!, FACEOFF, etc.) is a separate centered panel below. Receives scores/phase/period/clock via GameManager signals; polls `skater.is_elevated` each frame. |
 | `ui/main_menu.gd` | Main menu: shoots left/right toggle + host/join/offline buttons + IP input, calls `NetworkManager.start_*()`, transitions to `Hockey.tscn` |
 | `game/game_scene.gd` | Hockey scene init: calls `NetworkManager.on_game_scene_ready()` in `_ready()` to trigger world spawn |

@@ -236,6 +236,7 @@ func _spawn_local_player(peer_id: int, slot: int, team: Team, primary_color: Col
 	var spawned: Dictionary = _spawner.spawn_local_player(faceoff_pos, primary_color, secondary_color, is_left_handed, puck, self, team.team_id)
 	record.skater = spawned.skater
 	record.controller = spawned.controller
+	spawned.controller.set_goal_context(teams[0].defended_goal, teams[1].defended_goal, _resolve_skater_team_id)
 	spawned.controller.puck_release_requested.connect(_on_puck_release_requested)
 	spawned.controller.one_timer_release_requested.connect(
 			_on_one_timer_release_requested.bind(spawned.skater))
