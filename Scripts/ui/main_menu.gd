@@ -35,6 +35,51 @@ func _build_ui() -> void:
 	spacer.custom_minimum_size = Vector2(0, 20)
 	vbox.add_child(spacer)
 
+	var hand_row := HBoxContainer.new()
+	hand_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	hand_row.add_theme_constant_override("separation", 12)
+	vbox.add_child(hand_row)
+
+	var hand_label := Label.new()
+	hand_label.text = "Shoots:"
+	hand_label.add_theme_font_size_override("font_size", 20)
+	hand_label.add_theme_color_override("font_color", Color.WHITE)
+	hand_row.add_child(hand_label)
+
+	var left_btn := Button.new()
+	left_btn.text = "Left"
+	left_btn.toggle_mode = true
+	left_btn.button_pressed = true
+	left_btn.custom_minimum_size = Vector2(90, 48)
+	left_btn.add_theme_font_size_override("font_size", 18)
+	hand_row.add_child(left_btn)
+
+	var right_btn := Button.new()
+	right_btn.text = "Right"
+	right_btn.toggle_mode = true
+	right_btn.button_pressed = false
+	right_btn.custom_minimum_size = Vector2(90, 48)
+	right_btn.add_theme_font_size_override("font_size", 18)
+	hand_row.add_child(right_btn)
+
+	# Keep the two buttons mutually exclusive
+	left_btn.toggled.connect(func(pressed: bool) -> void:
+		if not pressed and not right_btn.button_pressed:
+			left_btn.button_pressed = true
+			return
+		right_btn.button_pressed = not pressed
+		NetworkManager.local_is_left_handed = pressed)
+	right_btn.toggled.connect(func(pressed: bool) -> void:
+		if not pressed and not left_btn.button_pressed:
+			right_btn.button_pressed = true
+			return
+		left_btn.button_pressed = not pressed
+		NetworkManager.local_is_left_handed = not pressed)
+
+	var spacer2 := Control.new()
+	spacer2.custom_minimum_size = Vector2(0, 8)
+	vbox.add_child(spacer2)
+
 	var offline_btn := _make_button("Play Offline")
 	offline_btn.pressed.connect(_on_offline_pressed)
 	vbox.add_child(offline_btn)

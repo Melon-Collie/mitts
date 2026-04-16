@@ -3,8 +3,10 @@ extends Node
 # ── State ─────────────────────────────────────────────────────────────────────
 var is_host: bool = false
 var game_initiated: bool = false
+var local_is_left_handed: bool = true
 var _local_controller: LocalController = null
 var _remote_controllers: Dictionary = {}  # peer_id -> RemoteController
+var _peer_handedness: Dictionary = {}     # peer_id -> bool (host only)
 
 # ── Timers ────────────────────────────────────────────────────────────────────
 var _input_timer: float = 0.0
@@ -21,11 +23,13 @@ func _ready() -> void:
 func start_offline() -> void:
 	is_host = true
 	game_initiated = true
+	_peer_handedness[1] = local_is_left_handed
 	print("Offline mode")
 
 func start_host() -> void:
 	is_host = true
 	game_initiated = true
+	_peer_handedness[1] = local_is_left_handed
 	var peer := ENetMultiplayerPeer.new()
 	var error := peer.create_server(Constants.PORT, GameRules.MAX_PLAYERS)
 	if error != OK:
@@ -63,10 +67,11 @@ func _on_peer_connected(id: int) -> void:
 	if enet_peer:
 		enet_peer.get_peer(id).set_timeout(0, 10000, 60000)
 	print("Player connected: ", id)
-	GameManager.on_player_connected(id)
+	# Spawn happens when the client sends request_join — not here.
 
 func _on_peer_disconnected(id: int) -> void:
 	print("Player disconnected: ", id)
+	_peer_handedness.erase(id)
 	GameManager.on_player_disconnected(id)
 	# Notify all remaining clients so they remove the stale skater.
 	for peer_id in multiplayer.get_peers():
@@ -75,6 +80,7 @@ func _on_peer_disconnected(id: int) -> void:
 func _on_connected_to_server() -> void:
 	_connect_timer = -1.0
 	print("Connected! My ID: ", multiplayer.get_unique_id())
+	request_join.rpc_id(1, local_is_left_handed)
 	GameManager.on_connected_to_server()
 
 func _on_connection_failed() -> void:
@@ -131,6 +137,15 @@ func _broadcast_state() -> void:
 		receive_world_state.rpc_id(peer_id, state)
 
 # ── RPCs ──────────────────────────────────────────────────────────────────────
+@rpc("any_peer", "reliable")
+func request_join(is_left_handed: bool) -> void:
+	var sender_id: int = multiplayer.get_remote_sender_id()
+	_peer_handedness[sender_id] = is_left_handed
+	GameManager.on_player_connected(sender_id)
+
+func get_peer_handedness(peer_id: int) -> bool:
+	return _peer_handedness.get(peer_id, true)
+
 @rpc("any_peer", "unreliable_ordered")
 func receive_input(data: Array) -> void:
 	var sender_id: int = multiplayer.get_remote_sender_id()
@@ -151,8 +166,8 @@ func assign_player_slot(slot: int, team_id: int, primary_color: Color, secondary
 	GameManager.on_slot_assigned(slot, team_id, primary_color, secondary_color)
 
 @rpc("authority", "reliable")
-func spawn_remote_skater(peer_id: int, slot: int, team_id: int, primary_color: Color, secondary_color: Color) -> void:
-	GameManager.spawn_remote_skater(peer_id, slot, team_id, primary_color, secondary_color)
+func spawn_remote_skater(peer_id: int, slot: int, team_id: int, primary_color: Color, secondary_color: Color, is_left_handed: bool) -> void:
+	GameManager.spawn_remote_skater(peer_id, slot, team_id, primary_color, secondary_color, is_left_handed)
 
 @rpc("authority", "reliable")
 func sync_existing_players(player_data: Array) -> void:
@@ -218,8 +233,8 @@ func notify_game_reset() -> void:
 func send_slot_assignment(peer_id: int, slot: int, team_id: int, primary_color: Color, secondary_color: Color) -> void:
 	assign_player_slot.rpc_id(peer_id, slot, team_id, primary_color, secondary_color)
 
-func send_spawn_remote_skater(peer_id: int, slot: int, team_id: int, primary_color: Color, secondary_color: Color) -> void:
-	spawn_remote_skater.rpc(peer_id, slot, team_id, primary_color, secondary_color)
+func send_spawn_remote_skater(peer_id: int, slot: int, team_id: int, primary_color: Color, secondary_color: Color, is_left_handed: bool) -> void:
+	spawn_remote_skater.rpc(peer_id, slot, team_id, primary_color, secondary_color, is_left_handed)
 
 func send_sync_existing_players(peer_id: int, player_data: Array) -> void:
 	sync_existing_players.rpc_id(peer_id, player_data)

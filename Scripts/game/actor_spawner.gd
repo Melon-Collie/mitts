@@ -72,10 +72,12 @@ func spawn_local_player(
 		position: Vector3,
 		primary_color: Color,
 		secondary_color: Color,
+		is_left_handed: bool,
 		puck: Puck,
 		game_state: Node,
 		team_id: int) -> Dictionary:
 	var skater: Skater = SKATER_SCENE.instantiate()
+	skater.is_left_handed = is_left_handed  # must be set before add_child so _ready sees it
 	skater.position = position
 	_scene_root.add_child(skater)
 	skater.set_player_color(primary_color, secondary_color)
@@ -91,9 +93,11 @@ func spawn_remote_player(
 		position: Vector3,
 		primary_color: Color,
 		secondary_color: Color,
+		is_left_handed: bool,
 		puck: Puck,
 		game_state: Node) -> Dictionary:
 	var skater: Skater = SKATER_SCENE.instantiate()
+	skater.is_left_handed = is_left_handed  # must be set before add_child so _ready sees it
 	skater.position = position
 	_scene_root.add_child(skater)
 	skater.set_player_color(primary_color, secondary_color)

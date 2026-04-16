@@ -13,18 +13,20 @@ enum State {
 }
 
 # ── Movement Tuning ───────────────────────────────────────────────────────────
-@export var thrust: float = 20.0
-@export var friction: float = 5.0
-@export var max_speed: float = 10.0
+@export var thrust: float = 12.0
+@export var friction: float = 4.0
+@export var max_speed: float = 11.0
 @export var rotation_speed: float = 6.0
 @export var move_deadzone: float = 0.1
 @export var brake_multiplier: float = 5.0
-@export var puck_carry_speed_multiplier: float = 0.88
-@export var backward_thrust_multiplier: float = 0.7
+@export var puck_carry_speed_multiplier: float = 0.92
+@export var backward_thrust_multiplier: float = 0.80
 @export var crossover_thrust_multiplier: float = 0.85
-@export var facing_lag_speed: float = 6.0
 
 # ── Facing Tuning ─────────────────────────────────────────────────────────────
+# How fast facing drifts toward the cursor during normal play. Lower = more
+# skating lag before the body re-orients (more backskate/crossover time).
+# Shift snaps at rotation_speed instead. Good range: 1.0 (very lazy) – 3.0 (snappy).
 @export var facing_drag_speed: float = 3.0
 
 # ── Blade / Stick / Top-Hand IK Tuning ────────────────────────────────────────
@@ -100,7 +102,7 @@ enum State {
 @export var wrister_elevation: float = 0.3
 
 # ── Head Tracking Tuning ─────────────────────────────────────────────────────
-@export var head_track_speed: float = 8.0
+@export var head_track_speed: float = 12.0
 @export var head_track_max_deg: float = 60.0
 
 # ── Slapper Tuning ────────────────────────────────────────────────────────────
@@ -608,23 +610,6 @@ func _apply_blade_from_mouse(input: InputState, delta: float) -> void:
 
 	var blade_side_sign: float = -1.0 if skater.is_left_handed else 1.0
 
-	# Facing drag: if the player aims past the hand's angular ROM, rotate the
-	# body so the target comes into range. Skipped during shot-aim states
-	# (wrister aim / slapper charge) where the body shouldn't twist.
-	if not _is_in_slapper_state() and _state != State.WRISTER_AIM:
-		var shoulder_xz := Vector2(skater.shoulder.position.x, skater.shoulder.position.z)
-		var delta_xz: Vector2 = desired_blade_xz - shoulder_xz
-		if delta_xz.length() > 0.001:
-			var angle_raw: float = atan2(delta_xz.x, -delta_xz.y)
-			var angle_to_forehand: float = angle_raw * blade_side_sign
-			var fore_limit: float = deg_to_rad(rom_forehand_angle_max_deg)
-			var back_limit: float = deg_to_rad(rom_backhand_angle_max_deg)
-			var clamped_forehand: float = clampf(angle_to_forehand, -back_limit, fore_limit)
-			if not is_equal_approx(angle_to_forehand, clamped_forehand):
-				var excess: float = (angle_to_forehand - clamped_forehand) * blade_side_sign
-				_facing = _facing.rotated(excess * facing_drag_speed * delta).normalized()
-				skater.set_facing(_facing)
-
 	# Solve IK — returns (hand, blade) in upper-body-local space.
 	var ik: Dictionary = TopHandIK.solve(
 			skater.shoulder.position,
@@ -740,17 +725,14 @@ func _apply_facing(input: InputState, delta: float) -> void:
 	if not _state in [State.WRISTER_AIM, State.SLAPPER_CHARGE_WITH_PUCK,
 			State.SLAPPER_CHARGE_WITHOUT_PUCK, State.SHOT_BLOCKING]:
 		var prev_angle: float = skater.rotation.y
-		if input.facing_held:
-			var mouse_world: Vector3 = input.mouse_world_pos
-			var to_mouse: Vector2 = Vector2(
-				mouse_world.x - skater.global_position.x,
-				mouse_world.z - skater.global_position.z
-			)
-			if to_mouse.length() > move_deadzone:
-				_facing = _facing.lerp(to_mouse.normalized(), rotation_speed * delta).normalized()
-		else:
-			if input.move_vector.length() > move_deadzone:
-				_facing = _facing.lerp(input.move_vector.normalized(), facing_lag_speed * delta).normalized()
+		var mouse_world: Vector3 = input.mouse_world_pos
+		var to_mouse: Vector2 = Vector2(
+			mouse_world.x - skater.global_position.x,
+			mouse_world.z - skater.global_position.z
+		)
+		if to_mouse.length() > move_deadzone:
+			var drift_speed: float = rotation_speed if input.facing_held else facing_drag_speed
+			_facing = _facing.lerp(to_mouse.normalized(), drift_speed * delta).normalized()
 		skater.set_facing(_facing)
 		var turn_delta: float = angle_difference(prev_angle, skater.rotation.y)
 		_lower_body_lag = clampf(
