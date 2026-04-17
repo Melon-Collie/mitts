@@ -7,7 +7,7 @@ class_name ShotMechanics
 #   direction: Vector3 — normalized, includes Y if elevated
 #   power: float       — final shot power after backhand penalty / charge curve
 
-# Wrister release. Quick shots (very short charge) aim from the blade itself at
+# Wrister release. Quick shots (very short charge) aim from the player position at
 # reduced power; full wristers aim from the player position with power scaling
 # to max over the full charge distance. Backhand is detected by comparing blade
 # position to shoulder position in local space and penalised by a coefficient.
@@ -31,9 +31,9 @@ static func release_wrister(
 	var charge_t: float = clampf(charge_distance / cfg.max_wrister_charge_distance, 0.0, 1.0)
 
 	if charge_t < cfg.quick_shot_threshold:
-		# Quick shot — aim from the blade, fixed low power.
-		var blade_xz := Vector3(blade_world_pos.x, 0.0, blade_world_pos.z)
-		var dir: Vector3 = (target - blade_xz).normalized()
+		# Quick shot — aim from player position so blade-ahead-of-cursor can't flip direction.
+		var player_xz := Vector3(player_pos.x, 0.0, player_pos.z)
+		var dir: Vector3 = (target - player_xz).normalized()
 		return {
 			"direction": Vector3(dir.x, cfg.wrister_elevation if is_elevated else 0.0, dir.z).normalized(),
 			"power": cfg.quick_shot_power,
