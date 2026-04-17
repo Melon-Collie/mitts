@@ -3,34 +3,34 @@ extends GutTest
 # GoalieBehaviorRules — shot detection, defensive zone, Buckley depth chart,
 # lateral X projection.
 
-func _shot_cfg() -> Dictionary:
-	return {
-		"shot_speed_threshold": 5.0,
-		"net_half_width": 0.915,
-		"net_margin": 1.0,
-		"reaction_delay": 0.10,
-		"low_shot_threshold": 0.45,
-		"elevated_threshold": 0.45,
-		"fake_threshold": 0.0,
-	}
+func _shot_cfg() -> GoalieBehaviorRules.ShotDetectionConfig:
+	var cfg := GoalieBehaviorRules.ShotDetectionConfig.new()
+	cfg.shot_speed_threshold = 5.0
+	cfg.net_half_width = 0.915
+	cfg.net_margin = 1.0
+	cfg.reaction_delay = 0.10
+	cfg.low_shot_threshold = 0.45
+	cfg.elevated_threshold = 0.45
+	cfg.fake_threshold = 0.0
+	return cfg
 
-func _zone_cfg() -> Dictionary:
-	return {
-		"zone_post_z": 2.0,
-		"rvh_early_angle": 60.0,
-	}
+func _zone_cfg() -> GoalieBehaviorRules.DefensiveZoneConfig:
+	var cfg := GoalieBehaviorRules.DefensiveZoneConfig.new()
+	cfg.zone_post_z = 2.0
+	cfg.rvh_early_angle = 60.0
+	return cfg
 
-func _depth_cfg() -> Dictionary:
-	return {
-		"zone_post_z": 2.0,
-		"zone_aggressive_z": 8.0,
-		"zone_base_z": 12.0,
-		"zone_conservative_z": 20.0,
-		"depth_aggressive": 1.2,
-		"depth_base": 0.6,
-		"depth_conservative": 0.3,
-		"depth_defensive": 0.1,
-	}
+func _depth_cfg() -> GoalieBehaviorRules.DepthConfig:
+	var cfg := GoalieBehaviorRules.DepthConfig.new()
+	cfg.zone_post_z = 2.0
+	cfg.zone_aggressive_z = 8.0
+	cfg.zone_base_z = 12.0
+	cfg.zone_conservative_z = 20.0
+	cfg.depth_aggressive = 1.2
+	cfg.depth_base = 0.6
+	cfg.depth_conservative = 0.3
+	cfg.depth_defensive = 0.1
+	return cfg
 
 # ── detect_shot ──────────────────────────────────────────────────────────────
 
@@ -89,8 +89,8 @@ func test_shot_impact_x_projects_correctly() -> void:
 	assert_almost_eq(result.impact_x, 0.415, 0.01)
 
 func test_fake_threshold_suppresses_reaction() -> void:
-	var cfg: Dictionary = _shot_cfg()
-	cfg["fake_threshold"] = 25.0  # above the shot speed
+	var cfg: GoalieBehaviorRules.ShotDetectionConfig = _shot_cfg()
+	cfg.fake_threshold = 25.0  # above the shot speed
 	var result: GoalieBehaviorRules.ShotResult = GoalieBehaviorRules.detect_shot(
 		Vector3(0, 0, 10), Vector3(0, 0, 20),
 		26.6, 0.0, cfg)

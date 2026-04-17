@@ -18,16 +18,43 @@ class ShotResult:
 	var is_low: bool = false      # impact_y < low_shot_threshold
 	var is_elevated: bool = false # impact_y >= elevated_threshold
 
+class ShotDetectionConfig:
+	var shot_speed_threshold: float = 0.0
+	var fake_threshold: float = 0.0
+	var net_half_width: float = 0.0
+	var net_margin: float = 0.0
+	var reaction_delay: float = 0.0
+	var low_shot_threshold: float = 0.0
+	var elevated_threshold: float = 0.0
+
+class DefensiveZoneConfig:
+	var zone_post_z: float = 0.0
+	var rvh_early_angle: float = 0.0  # degrees
+
+class DepthConfig:
+	var zone_post_z: float = 0.0
+	var zone_aggressive_z: float = 0.0
+	var zone_base_z: float = 0.0
+	var zone_conservative_z: float = 0.0
+	var depth_aggressive: float = 0.0
+	var depth_base: float = 0.0
+	var depth_conservative: float = 0.0
+	var depth_defensive: float = 0.0
+
+class PressureConfig:
+	var pressure_butterfly_distance: float = 0.0
+	var pressure_velocity_threshold: float = 0.0
+	var pressure_lateral_margin: float = 0.0
+	var net_half_width: float = 0.0
+
 # Is a released puck on course to hit this goalie's net? Returns a ShotResult.
 # is_shot == false means not on net or below fake_threshold.
-# Config keys: shot_speed_threshold, fake_threshold, net_half_width, net_margin,
-#              reaction_delay, low_shot_threshold, elevated_threshold
 static func detect_shot(
 		puck_position: Vector3,
 		puck_velocity: Vector3,
 		goal_line_z: float,
 		goal_center_x: float,
-		cfg: Dictionary) -> ShotResult:
+		cfg: ShotDetectionConfig) -> ShotResult:
 	var result := ShotResult.new()
 	if puck_velocity.length() < cfg.shot_speed_threshold:
 		return result
@@ -52,13 +79,12 @@ static func detect_shot(
 
 # Defensive zone — either behind the goal line or within zone_post_z at a
 # sharp horizontal angle. Triggers RVH post-hug.
-# Config keys: zone_post_z, rvh_early_angle (degrees)
 static func is_puck_in_defensive_zone(
 		puck_position: Vector3,
 		goal_line_z: float,
 		goal_center_x: float,
 		direction_sign: int,
-		cfg: Dictionary) -> bool:
+		cfg: DefensiveZoneConfig) -> bool:
 	var behind_goal: bool = (puck_position.z - goal_line_z) * direction_sign < 0.0
 	if behind_goal:
 		return true
@@ -71,9 +97,7 @@ static func is_puck_in_defensive_zone(
 # Buckley-chart target depth given horizontal distance from the goal line.
 # Piecewise-linear interpolation across four zones. Callers smooth toward
 # this target with their own lerp speed.
-# Config keys: zone_post_z, zone_aggressive_z, zone_base_z, zone_conservative_z,
-#              depth_aggressive, depth_base, depth_conservative, depth_defensive
-static func target_depth_for_puck_distance(puck_z_dist: float, cfg: Dictionary) -> float:
+static func target_depth_for_puck_distance(puck_z_dist: float, cfg: DepthConfig) -> float:
 	var t: float
 	if puck_z_dist <= cfg.zone_post_z:
 		t = puck_z_dist / cfg.zone_post_z
@@ -92,14 +116,12 @@ static func target_depth_for_puck_distance(puck_z_dist: float, cfg: Dictionary) 
 # Should the goalie drop to butterfly preemptively? True when puck is close to
 # the net and approaching with enough forward velocity (catches skaters charging
 # in regardless of whether a shot has been released).
-# Config keys: pressure_butterfly_distance, pressure_velocity_threshold,
-#              net_half_width, pressure_lateral_margin
 static func is_under_pressure(
 		puck_position: Vector3,
 		puck_approach_velocity: float,
 		goal_line_z: float,
 		goal_center_x: float,
-		cfg: Dictionary) -> bool:
+		cfg: PressureConfig) -> bool:
 	if abs(puck_position.z - goal_line_z) > cfg.pressure_butterfly_distance:
 		return false
 	if abs(puck_position.x - goal_center_x) > cfg.net_half_width + cfg.pressure_lateral_margin:

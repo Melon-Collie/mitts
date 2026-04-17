@@ -495,44 +495,44 @@ func _is_puck_in_defensive_zone() -> bool:
 			_direction_sign, _defensive_zone_config())
 
 # ── Rule configs ──────────────────────────────────────────────────────────────
-func _shot_detection_config() -> Dictionary:
-	return {
-		"shot_speed_threshold": shot_speed_threshold,
-		"net_half_width": net_half_width,
-		"net_margin": net_margin,
-		"reaction_delay": reaction_delay,
-		"low_shot_threshold": low_shot_threshold,
-		"elevated_threshold": elevated_threshold,
-		"fake_threshold": fake_threshold,
-	}
+func _shot_detection_config() -> GoalieBehaviorRules.ShotDetectionConfig:
+	var cfg := GoalieBehaviorRules.ShotDetectionConfig.new()
+	cfg.shot_speed_threshold = shot_speed_threshold
+	cfg.net_half_width = net_half_width
+	cfg.net_margin = net_margin
+	cfg.reaction_delay = reaction_delay
+	cfg.low_shot_threshold = low_shot_threshold
+	cfg.elevated_threshold = elevated_threshold
+	cfg.fake_threshold = fake_threshold
+	return cfg
 
-func _pressure_config() -> Dictionary:
-	return {
-		"pressure_butterfly_distance": pressure_butterfly_distance,
-		"pressure_velocity_threshold": pressure_velocity_threshold,
-		"pressure_lateral_margin": pressure_lateral_margin,
-		"net_half_width": net_half_width,
-	}
+func _pressure_config() -> GoalieBehaviorRules.PressureConfig:
+	var cfg := GoalieBehaviorRules.PressureConfig.new()
+	cfg.pressure_butterfly_distance = pressure_butterfly_distance
+	cfg.pressure_velocity_threshold = pressure_velocity_threshold
+	cfg.pressure_lateral_margin = pressure_lateral_margin
+	cfg.net_half_width = net_half_width
+	return cfg
 
 func _is_under_pressure() -> bool:
 	return GoalieBehaviorRules.is_under_pressure(
 			puck.global_position, _puck_approach_velocity,
 			_goal_line_z, _goal_center_x, _pressure_config())
 
-func _defensive_zone_config() -> Dictionary:
-	return {
-		"zone_post_z": zone_post_z,
-		"rvh_early_angle": rvh_early_angle,
-	}
+func _defensive_zone_config() -> GoalieBehaviorRules.DefensiveZoneConfig:
+	var cfg := GoalieBehaviorRules.DefensiveZoneConfig.new()
+	cfg.zone_post_z = zone_post_z
+	cfg.rvh_early_angle = rvh_early_angle
+	return cfg
 
-func _depth_config() -> Dictionary:
-	return {
-		"zone_post_z": zone_post_z,
-		"zone_aggressive_z": zone_aggressive_z,
-		"zone_base_z": zone_base_z,
-		"zone_conservative_z": zone_conservative_z,
-		"depth_aggressive": depth_aggressive,
-		"depth_base": depth_base,
-		"depth_conservative": depth_conservative,
-		"depth_defensive": depth_defensive,
-	}
+func _depth_config() -> GoalieBehaviorRules.DepthConfig:
+	var cfg := GoalieBehaviorRules.DepthConfig.new()
+	cfg.zone_post_z = zone_post_z
+	cfg.zone_aggressive_z = zone_aggressive_z
+	cfg.zone_base_z = zone_base_z
+	cfg.zone_conservative_z = zone_conservative_z
+	cfg.depth_aggressive = depth_aggressive
+	cfg.depth_base = depth_base
+	cfg.depth_conservative = depth_conservative
+	cfg.depth_defensive = depth_defensive
+	return cfg
