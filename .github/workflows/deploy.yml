@@ -78,6 +78,7 @@ jobs:
           artifacts: "/home/runner/.local/share/godot/archives/*.zip"
           tag: "latest"
           name: "${{ steps.version.outputs.version }}"
+          body: "3v3 arcade hockey. Windows and Linux builds."
           allowUpdates: true
           removeArtifacts: true
           token: ${{ secrets.GITHUB_TOKEN }}
