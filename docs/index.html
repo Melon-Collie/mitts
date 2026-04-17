@@ -34,8 +34,15 @@
       max-width: 480px;
     }
 
-    .download {
+    .downloads {
       margin-top: 2.5rem;
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .download {
       display: inline-block;
       background: #1f6feb;
       color: #ffffff;
@@ -60,10 +67,16 @@
   <h1>Hockey Game</h1>
   <p class="subtitle">3v3 arcade hockey. Online multiplayer.</p>
 
-  <a class="download"
-     href="https://github.com/Melon-Collie/hockey-game/releases/latest/download/Windows.Desktop.zip">
-    Download Latest Build
-  </a>
+  <div class="downloads">
+    <a class="download"
+       href="https://github.com/Melon-Collie/hockey-game/releases/latest/download/Windows.Desktop.zip">
+      Download for Windows
+    </a>
+    <a class="download"
+       href="https://github.com/Melon-Collie/hockey-game/releases/latest/download/Linux.X11.zip">
+      Download for Linux
+    </a>
+  </div>
 
   <p class="meta">
     <a href="https://github.com/Melon-Collie/hockey-game"

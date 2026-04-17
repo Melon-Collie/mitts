@@ -2,15 +2,16 @@
 
 An arcade hockey game built in Godot 4.6.2 (Jolt Physics). Online multiplayer — each player runs their own client, with their own camera.
 
-> **Early development.** Windows only. Expect rough edges.
+> **Early development.** Expect rough edges.
 
 ---
 
 ## Download & Play
 
-1. Go to the [latest release](../../releases/tag/latest) and download the zip
-2. Extract and run the `.exe`
-3. Pick **Play Offline**, **Host Game**, or **Join** from the main menu
+1. Go to the [latest release](../../releases/tag/latest) and download the zip for your platform
+   - **Windows:** `Windows Desktop.zip` → extract and run `hockey.exe`
+   - **Linux:** `Linux.X11.zip` → extract, `chmod +x hockey.x86_64`, then run it
+2. Pick **Play Offline**, **Host Game**, or **Join** from the main menu
 
 For online play the host needs UDP port **7777** forwarded on their router.
 
