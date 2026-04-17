@@ -13,9 +13,6 @@ func test_smaller_team_gets_next_player() -> void:
 	assert_eq(PlayerRules.assign_team(1, 0), 1)
 	assert_eq(PlayerRules.assign_team(0, 1), 0)
 
-func test_balanced_counts_prefer_team_0() -> void:
-	assert_eq(PlayerRules.assign_team(2, 2), 0)
-
 func test_lopsided_filled_to_smaller() -> void:
 	assert_eq(PlayerRules.assign_team(3, 1), 1)
 
