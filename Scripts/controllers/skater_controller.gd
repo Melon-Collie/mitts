@@ -138,12 +138,20 @@ enum State {
 @export var block_speed_multiplier: float = 0.45   # movement speed while blocking
 @export var active_block_dampen: float = 0.35      # puck energy retention on active block
 
+# ── Goalie Body Block ─────────────────────────────────────────────────────────
+# XZ cylinder radius used to push the blade (and carried puck) away from a
+# goalie's body center. Tunable in the editor — matches roughly the goalie's
+# padded chest width. The hand moves with the blade to keep stick length intact.
+@export var goalie_block_radius: float = 0.50
+@export var goalie_strip_power: float = 1.5
+
 # ── References ────────────────────────────────────────────────────────────────
 var skater: Skater = null
 var puck: Puck = null
 # Injected at setup. Expected methods:
-#   is_host() -> bool             — changes only per session; cached in _is_host
-#   is_movement_locked() -> bool  — polled per frame
+#   is_host() -> bool                              — changes only per session; cached in _is_host
+#   is_movement_locked() -> bool                   — polled per frame
+#   get_goalie_world_positions() -> Array[Vector3] — used by goalie body clamp
 var _game_state: Node = null
 var _is_host: bool = false
 
@@ -429,6 +437,11 @@ func _apply_wrister_follow_through() -> void:
 	if clamp_delta_xz.length_squared() > 0.0:
 		hand_pos.x += clamp_delta_xz.x
 		hand_pos.z += clamp_delta_xz.z
+	var net_world: Vector3 = _clamp_blade_from_net(skater.upper_body_to_global(local_target))
+	var net_local: Vector3 = skater.upper_body_to_local(net_world)
+	hand_pos.x += net_local.x - local_target.x
+	hand_pos.z += net_local.z - local_target.z
+	local_target = net_local
 	skater.set_top_hand_position(hand_pos)
 	skater.set_blade_position(local_target)
 
@@ -443,6 +456,7 @@ func _apply_slapper_follow_through() -> void:
 		lerpf(slapper_wind_up_height, _blade_y_local(), smoothstep(0.0, 1.0, t)),
 		skater.shoulder.position.z + slapper_blade_z + shot_xz.y * t * 0.4)
 	blade_pos = skater.clamp_blade_to_walls(blade_pos)
+	blade_pos = skater.upper_body_to_local(_clamp_blade_from_net(skater.upper_body_to_global(blade_pos)))
 	var hand_pos := Vector3(
 		skater.shoulder.position.x,
 		hand_rest_y + t * wrister_follow_through_hand_y,
@@ -494,7 +508,7 @@ func _exit_shot_block() -> void:
 	skater.set_block_stance(false)
 	_transition_to_skating()
 
-func _enter_wrister_aim(input: InputState) -> void:
+func _enter_wrister_aim(_input: InputState) -> void:
 	_state = State.WRISTER_AIM
 	_shot_dir = Vector3.ZERO
 	_charge_distance = 0.0
@@ -597,12 +611,87 @@ func _apply_slapper_blade_position() -> void:
 			current_blade_y,
 			skater.shoulder.position.z + slapper_blade_z)
 	pos = skater.clamp_blade_to_walls(pos)
+	var blade_world: Vector3 = skater.upper_body_to_global(pos)
+	var clamped_world: Vector3 = blade_world
+	if has_puck:
+		clamped_world = _clamp_blade_from_goalies(clamped_world)
+	clamped_world = _clamp_blade_from_net(clamped_world)
+	if clamped_world != blade_world:
+		pos = skater.upper_body_to_local(clamped_world)
 	var hand_pos := Vector3(skater.shoulder.position.x, hand_rest_y, skater.shoulder.position.z)
 	skater.set_top_hand_position(hand_pos)
 	skater.set_blade_position(pos)
 
 func _is_in_slapper_state() -> bool:
 	return _state in [State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK]
+
+# Prevents the blade from entering either net's interior. Both nets are
+# centered at x=0. The x-boundary widens with depth to match the net's flared
+# shape (0.915 at goal line → 1.12 at max flare depth). When the blade is
+# inside the volume, it escapes through the nearest face — but never through
+# the front face when the skater is already behind the goal line.
+func _clamp_blade_from_net(blade_world: Vector3) -> Vector3:
+	var result: Vector3 = blade_world
+	var gl: float    = GameRules.GOAL_LINE_Z
+	var depth: float = GameRules.NET_DEPTH
+	var skater_z: float = skater.global_position.z
+	# +Z net
+	if result.z > gl and result.z < gl + depth:
+		var local_depth: float = result.z - gl
+		var hw: float = lerpf(GameRules.NET_HALF_WIDTH, GameRules.NET_FLARE_HALF_WIDTH,
+				clampf(local_depth / GameRules.NET_FLARE_DEPTH, 0.0, 1.0))
+		if abs(result.x) < hw:
+			var d_front: float = INF if skater_z >= gl else local_depth
+			var d_back: float  = INF if skater_z < gl  else (depth - local_depth)
+			var d_left: float  = result.x + hw
+			var d_right: float = hw - result.x
+			if d_front <= d_back and d_front <= d_left and d_front <= d_right:
+				result.z = gl
+			elif d_back <= d_left and d_back <= d_right:
+				result.z = gl + depth
+			elif d_left <= d_right:
+				result.x = -hw
+			else:
+				result.x = hw
+	# -Z net
+	elif result.z < -gl and result.z > -gl - depth:
+		var local_depth: float = -gl - result.z
+		var hw: float = lerpf(GameRules.NET_HALF_WIDTH, GameRules.NET_FLARE_HALF_WIDTH,
+				clampf(local_depth / GameRules.NET_FLARE_DEPTH, 0.0, 1.0))
+		if abs(result.x) < hw:
+			var d_front: float = INF if skater_z <= -gl else local_depth
+			var d_back: float  = INF if skater_z > -gl  else (depth - local_depth)
+			var d_left: float  = result.x + hw
+			var d_right: float = hw - result.x
+			if d_front <= d_back and d_front <= d_left and d_front <= d_right:
+				result.z = -gl
+			elif d_back <= d_left and d_back <= d_right:
+				result.z = -gl - depth
+			elif d_left <= d_right:
+				result.x = -hw
+			else:
+				result.x = hw
+	return result
+
+# Pushes blade_world out of every goalie's XZ cylinder. Returns the adjusted
+# world position (unchanged if no overlap). Callers convert back to local and
+# apply the same delta to the hand so stick length is preserved.
+func _clamp_blade_from_goalies(blade_world: Vector3) -> Vector3:
+	if not _game_state.has_method("get_goalie_world_positions"):
+		return blade_world
+	var goalie_positions: Array[Vector3] = _game_state.get_goalie_world_positions()
+	var result: Vector3 = blade_world
+	for gpos: Vector3 in goalie_positions:
+		var to_blade := Vector2(result.x - gpos.x, result.z - gpos.z)
+		var dist: float = to_blade.length()
+		if dist < goalie_block_radius:
+			var push_dir: Vector2 = to_blade.normalized() if dist > 0.001 else Vector2(0.0, -sign(gpos.z) if gpos.z != 0.0 else 1.0)
+			result.x = gpos.x + push_dir.x * goalie_block_radius
+			result.z = gpos.z + push_dir.y * goalie_block_radius
+			if has_puck:
+				_do_release(Vector3(push_dir.x, 0.0, push_dir.y), goalie_strip_power)
+				break  # puck released — no need to check remaining goalies
+	return result
 
 # ── Blade: From Mouse (Top-Hand IK) ───────────────────────────────────────────
 # Input is treated as a desired blade position. The top hand is solved as a
@@ -659,6 +748,19 @@ func _apply_blade_from_mouse(input: InputState, _delta: float) -> void:
 		hand_local.x += clamp_delta_xz.x
 		hand_local.z += clamp_delta_xz.z
 
+	# Goalie body clamp (strips puck on contact) + net volume hard wall.
+	# Single world-space pass so we only convert once.
+	var blade_world: Vector3 = skater.upper_body_to_global(wall_clamped)
+	var clamped_world: Vector3 = blade_world
+	if has_puck:
+		clamped_world = _clamp_blade_from_goalies(clamped_world)
+	clamped_world = _clamp_blade_from_net(clamped_world)
+	if clamped_world != blade_world:
+		var clamped_local: Vector3 = skater.upper_body_to_local(clamped_world)
+		hand_local.x += clamped_local.x - wall_clamped.x
+		hand_local.z += clamped_local.z - wall_clamped.z
+		wall_clamped = clamped_local
+
 	skater.set_top_hand_position(hand_local)
 	skater.set_blade_position(wall_clamped)
 
@@ -666,27 +768,6 @@ func _apply_blade_from_mouse(input: InputState, _delta: float) -> void:
 	var bearing: Vector3 = wall_clamped - skater.shoulder.position
 	if Vector2(bearing.x, bearing.z).length() > 0.001:
 		_blade_relative_angle = atan2(bearing.x, -bearing.z)
-
-# ── Blade: From Stored Relative Angle (follow-through) ───────────────────────
-# Keeps the stick length invariant: hand rests at shoulder, blade sits
-# stick_horiz away along the stored bearing.
-func _apply_blade_from_relative_angle() -> void:
-	var stick_horiz: float = _stick_horiz()
-	var local_dir := Vector3(sin(_blade_relative_angle), 0.0, -cos(_blade_relative_angle))
-	var hand_pos := skater.shoulder.position
-	hand_pos.y = hand_rest_y
-	var intended_target: Vector3 = hand_pos + local_dir * stick_horiz
-	intended_target.y = _blade_y_pitch_corrected(intended_target.z)
-	var local_target: Vector3 = skater.clamp_blade_to_walls(intended_target)
-	# Same wall-clamp hand retraction as _apply_blade_from_mouse so follow-
-	# through keeps stick length constant when pinned.
-	var clamp_delta_xz := Vector3(
-			local_target.x - intended_target.x, 0.0, local_target.z - intended_target.z)
-	if clamp_delta_xz.length_squared() > 0.0:
-		hand_pos.x += clamp_delta_xz.x
-		hand_pos.z += clamp_delta_xz.z
-	skater.set_top_hand_position(hand_pos)
-	skater.set_blade_position(local_target)
 
 # ── Upper Body ────────────────────────────────────────────────────────────────
 func _apply_upper_body(delta: float) -> void:

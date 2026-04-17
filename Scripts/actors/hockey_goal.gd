@@ -235,21 +235,25 @@ func _build_goal_sensor(goal_z: float) -> void:
 
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	# Spans the full goal opening; shallow depth so it sits just inside the mouth.
-	box.size = Vector3(POST_HALF_WIDTH * 2.0, NET_HEIGHT, 0.3)
+	# Sized to the inner opening: excludes the post cylinders (POST_RADIUS each side)
+	# and stops below the crossbar inner face.
+	var inner_hw: float = POST_HALF_WIDTH - POST_RADIUS
+	var inner_height: float = NET_HEIGHT - POST_RADIUS
+	box.size = Vector3(inner_hw * 2.0, inner_height, 0.3)
 	shape.shape = box
 	area.add_child(shape)
-	# Centered vertically on the opening, offset half the box depth behind the goal line.
-	area.position = Vector3(0.0, NET_HEIGHT / 2.0, goal_z + facing * 0.15)
+	# Front face at goal_z + 2*puck_radius (0.2m) so body_entered fires only
+	# when the puck's trailing edge has fully cleared the goal line.
+	area.position = Vector3(0.0, inner_height / 2.0, goal_z + facing * 0.35)
 	add_child(area)
 	area.body_entered.connect(_on_goal_area_body_entered)
 
 func _on_goal_area_body_entered(body: Node3D) -> void:
 	if body is Puck:
-		# Reject pucks entering from behind the net — they must be travelling
-		# inward (in the facing direction) to count.
+		# Puck must be travelling into the net (positive Z component for +Z goal,
+		# negative for -Z goal). Rejects lateral carries and behind-net entry.
 		var vel: Vector3 = (body as Puck).linear_velocity
-		if vel.dot(Vector3(0.0, 0.0, float(facing))) > 0.0:
+		if vel.z * float(facing) > 0.0:
 			goal_scored.emit()
 
 func _add_tube_segment(p_start: Vector3, p_end: Vector3, diameter: float, color: Color) -> void:

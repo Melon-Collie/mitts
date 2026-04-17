@@ -9,6 +9,9 @@ func _shot_cfg() -> Dictionary:
 		"net_half_width": 0.915,
 		"net_margin": 1.0,
 		"reaction_delay": 0.10,
+		"low_shot_threshold": 0.45,
+		"elevated_threshold": 0.45,
+		"fake_threshold": 0.0,
 	}
 
 func _zone_cfg() -> Dictionary:
@@ -32,28 +35,66 @@ func _depth_cfg() -> Dictionary:
 # ── detect_shot ──────────────────────────────────────────────────────────────
 
 func test_slow_puck_not_a_shot() -> void:
-	var result: float = GoalieBehaviorRules.detect_shot(
+	var result: GoalieBehaviorRules.ShotResult = GoalieBehaviorRules.detect_shot(
 		Vector3(0, 0, 10), Vector3(0, 0, -1),   # below threshold
 		26.6, 0.0, _shot_cfg())
-	assert_eq(result, -1.0)
+	assert_false(result.is_shot)
 
 func test_fast_puck_on_target_is_shot() -> void:
-	var result: float = GoalieBehaviorRules.detect_shot(
+	var result: GoalieBehaviorRules.ShotResult = GoalieBehaviorRules.detect_shot(
 		Vector3(0, 0, 10), Vector3(0, 0, 20),   # heading toward +Z goal
 		26.6, 0.0, _shot_cfg())
-	assert_almost_eq(result, 0.10, 0.001)
+	assert_true(result.is_shot)
+	assert_almost_eq(result.reaction_delay, 0.10, 0.001)
 
 func test_fast_puck_moving_away_not_a_shot() -> void:
-	var result: float = GoalieBehaviorRules.detect_shot(
+	var result: GoalieBehaviorRules.ShotResult = GoalieBehaviorRules.detect_shot(
 		Vector3(0, 0, 10), Vector3(0, 0, -20),  # away from +Z goal
 		26.6, 0.0, _shot_cfg())
-	assert_eq(result, -1.0)
+	assert_false(result.is_shot)
 
 func test_fast_puck_wide_of_post_not_a_shot() -> void:
-	var result: float = GoalieBehaviorRules.detect_shot(
+	var result: GoalieBehaviorRules.ShotResult = GoalieBehaviorRules.detect_shot(
 		Vector3(10, 0, 10), Vector3(10, 0, 5),  # drifting wider as it travels
 		26.6, 0.0, _shot_cfg())
-	assert_eq(result, -1.0)
+	assert_false(result.is_shot)
+
+func test_shot_classifies_low() -> void:
+	# Puck at z=10, velocity (0, 0, 20) — no Y component, impact_y ≈ 0
+	var result: GoalieBehaviorRules.ShotResult = GoalieBehaviorRules.detect_shot(
+		Vector3(0, 0, 10), Vector3(0, 0, 20),
+		26.6, 0.0, _shot_cfg())
+	assert_true(result.is_shot)
+	assert_true(result.is_low)
+	assert_false(result.is_elevated)
+
+func test_shot_classifies_elevated() -> void:
+	# Puck with upward velocity — impact_y should be > 0.45
+	var result: GoalieBehaviorRules.ShotResult = GoalieBehaviorRules.detect_shot(
+		Vector3(0, 0.05, 10), Vector3(0, 6.0, 20),
+		26.6, 0.0, _shot_cfg())
+	assert_true(result.is_shot)
+	assert_false(result.is_low)
+	assert_true(result.is_elevated)
+
+func test_shot_impact_x_projects_correctly() -> void:
+	# Puck at x=0, z=10; velocity (5, 0, 20) — drifting right.
+	# t_to_goal = (26.6 - 10) / 20 = 0.83s; impact_x = 0 + 5 * 0.83 = 4.15 → wide, not a shot
+	# Use smaller X drift to stay on net:
+	var result: GoalieBehaviorRules.ShotResult = GoalieBehaviorRules.detect_shot(
+		Vector3(0, 0, 10), Vector3(0.5, 0, 20),
+		26.6, 0.0, _shot_cfg())
+	assert_true(result.is_shot)
+	# impact_x = 0 + 0.5 * (16.6/20) = 0.415
+	assert_almost_eq(result.impact_x, 0.415, 0.01)
+
+func test_fake_threshold_suppresses_reaction() -> void:
+	var cfg: Dictionary = _shot_cfg()
+	cfg["fake_threshold"] = 25.0  # above the shot speed
+	var result: GoalieBehaviorRules.ShotResult = GoalieBehaviorRules.detect_shot(
+		Vector3(0, 0, 10), Vector3(0, 0, 20),
+		26.6, 0.0, cfg)
+	assert_false(result.is_shot)
 
 # ── is_puck_in_defensive_zone ────────────────────────────────────────────────
 # direction_sign = sign(-goal_line_z), so for goalie at +Z (goal_line=+26.6)
@@ -109,21 +150,31 @@ func test_depth_at_origin_is_defensive() -> void:
 	assert_almost_eq(d, _depth_cfg().depth_defensive, 0.001)
 
 # ── target_lateral_x ─────────────────────────────────────────────────────────
+# Goalie defends +Z goal: direction_sign = sign(-26.6) = -1
 
 func test_lateral_x_clamps_to_net_width() -> void:
-	# Extreme X should clamp to net_half_width
 	var x: float = GoalieBehaviorRules.target_lateral_x(
-		Vector3(100, 0, 10), 26.6, 0.0, 0.5, 0.915)
+		Vector3(100, 0, 10), 26.6, 0.0, 0.5, 0.915, -1)
 	assert_true(x <= 0.916, "x=%f should be clamped to net_half_width" % x)
 
-func test_lateral_x_tracks_along_shot_line() -> void:
-	# Puck at x=1, 10 units from goal line, depth 1.0 → target x = 1 * (1.0/10) = 0.1
+func test_lateral_x_centered_puck_returns_center() -> void:
+	# Puck directly in front of goal, centred — bisector is straight ahead, target = 0.
 	var x: float = GoalieBehaviorRules.target_lateral_x(
-		Vector3(1, 0, 16.6), 26.6, 0.0, 1.0, 0.915)
-	assert_almost_eq(x, 0.1, 0.01)
+		Vector3(0, 0, 10), 26.6, 0.0, 1.0, 0.915, -1)
+	assert_almost_eq(x, 0.0, 0.05)
 
-func test_lateral_x_centers_when_puck_at_goal_line() -> void:
-	# puck_z_dist ~ 0 → target = goal_center_x
+func test_lateral_x_bisector_closer_to_near_post_on_angle() -> void:
+	# Puck far to the right at (4, 0, 16) — bisector should place goalie
+	# closer to the right post than simple X-projection would.
+	var bisect_x: float = GoalieBehaviorRules.target_lateral_x(
+		Vector3(4, 0, 16), 26.6, 0.0, 1.0, 0.915, -1)
+	var simple_x: float = 0.0 + (4.0 - 0.0) * (1.0 / absf(16.0 - 26.6))  # old formula
+	# Angle bisector pulls goalie further toward the near post than simple projection.
+	assert_true(bisect_x > simple_x, "bisect=%f should exceed simple=%f on sharp angle" % [bisect_x, simple_x])
+	assert_true(bisect_x <= 0.916)
+
+func test_lateral_x_puck_at_goal_line_clamps_to_post() -> void:
+	# Puck sitting at the goal line far to the right — goalie should hug that post.
 	var x: float = GoalieBehaviorRules.target_lateral_x(
-		Vector3(5, 0, 26.6), 26.6, 0.0, 1.0, 0.915)
-	assert_almost_eq(x, 0.0, 0.01)
+		Vector3(5, 0, 26.6), 26.6, 0.0, 1.0, 0.915, -1)
+	assert_almost_eq(x, 0.915, 0.01)

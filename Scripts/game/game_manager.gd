@@ -530,6 +530,12 @@ func get_skater_team(skater: Skater) -> Team:
 func get_puck() -> Puck:
 	return puck
 
+func get_goalie_world_positions() -> Array[Vector3]:
+	var positions: Array[Vector3] = []
+	for goalie: Node3D in goalies:
+		positions.append(goalie.global_position)
+	return positions
+
 func get_local_player() -> PlayerRecord:
 	for peer_id in players:
 		if players[peer_id].is_local:

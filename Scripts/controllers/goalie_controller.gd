@@ -29,7 +29,7 @@ extends Node
 @export var net_margin: float = 1.0
 
 @export var rvh_depth: float = 0.1
-@export var rvh_early_angle: float = 60.0
+@export var rvh_early_angle: float = 80.0
 @export var rvh_post_pad_angle: float = 15.0
 
 @export var five_hole_base: float = 0.02
@@ -38,7 +38,25 @@ extends Node
 
 @export var tracking_speed: float = 6.0
 @export var part_lerp_speed: float = 6.0
+@export var reaction_lerp_speed: float = 18.0
+@export var recovery_lerp_speed: float = 3.0
 @export var interpolation_delay: float = 0.1
+
+@export var low_shot_threshold: float = 0.45
+@export var elevated_threshold: float = 0.45
+@export var fake_threshold: float = 0.0
+@export var react_hand_y_min: float = 0.50
+@export var react_hand_y_max: float = 1.55
+@export var react_hand_z: float = -0.28
+
+@export var pressure_butterfly_distance: float = 2.5
+@export var pressure_velocity_threshold: float = 1.0
+@export var pressure_lateral_margin: float = 0.5
+
+@export var butterfly_rotation_speed: float = 4.0
+@export var butterfly_max_facing_angle: float = 25.0
+@export var butterfly_slide_speed: float = 3.5
+@export var five_hole_butterfly_move_max: float = 0.18
 
 # ── References ────────────────────────────────────────────────────────────────
 var goalie: Goalie = null
@@ -62,6 +80,13 @@ var _five_hole_openness: float = 0.0
 var _tracked_puck_position: Vector3 = Vector3.ZERO
 var _shot_timer: float = 0.0
 var _recovery_timer: float = 0.0
+var _reacting_to_shot: bool = false
+var _shot_impact_x: float = 0.0
+var _shot_impact_y: float = 0.0
+var _shot_is_elevated: bool = false
+var _recovering_from_butterfly: bool = false
+var _prev_puck_position: Vector3 = Vector3.ZERO
+var _puck_approach_velocity: float = 0.0
 
 # ── Client Interpolation ──────────────────────────────────────────────────────
 var _current_time: float = 0.0
@@ -79,6 +104,7 @@ func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: f
 	_target_x = _goal_center_x
 	_current_depth = depth_defensive
 	_tracked_puck_position = puck.global_position
+	_prev_puck_position = puck.global_position
 	goalie.set_goalie_rotation_y(PI if _direction_sign == 1 else 0.0)
 	if is_server:
 		puck.puck_released.connect(_on_puck_released)
@@ -91,7 +117,14 @@ func reset_to_crease() -> void:
 	_five_hole_openness = 0.0
 	_shot_timer = 0.0
 	_recovery_timer = 0.0
+	_reacting_to_shot = false
+	_shot_impact_x = 0.0
+	_shot_impact_y = 0.0
+	_shot_is_elevated = false
+	_recovering_from_butterfly = false
+	_puck_approach_velocity = 0.0
 	_tracked_puck_position = puck.global_position if puck != null else Vector3.ZERO
+	_prev_puck_position = _tracked_puck_position
 	goalie.set_goalie_position(_current_x, _goal_line_z + _direction_sign * _current_depth)
 	goalie.set_goalie_rotation_y(PI if _direction_sign == 1 else 0.0)
 
@@ -114,6 +147,27 @@ func _physics_process(delta: float) -> void:
 # ── Tracking ──────────────────────────────────────────────────────────────────
 func _update_tracking(delta: float) -> void:
 	_tracked_puck_position = _tracked_puck_position.lerp(puck.global_position, tracking_speed * delta)
+	# Approach velocity from raw position delta — works for carried puck too (linear_velocity is ~0).
+	var dz: float = (puck.global_position.z - _prev_puck_position.z) * -_direction_sign
+	_puck_approach_velocity = dz / maxf(delta, 0.0001)
+	_prev_puck_position = puck.global_position
+	if not _reacting_to_shot:
+		return
+	# Re-project each frame so impact position stays accurate (handles bounces, deflections).
+	# detect_shot returns is_shot=false if puck slowed or moved away from net — clears reaction.
+	var result: GoalieBehaviorRules.ShotResult = GoalieBehaviorRules.detect_shot(
+			puck.global_position, puck.linear_velocity,
+			_goal_line_z, _goal_center_x, _shot_detection_config())
+	if not result.is_shot:
+		_reacting_to_shot = false
+		_shot_is_elevated = false
+		return
+	_shot_impact_x = result.impact_x
+	_shot_impact_y = result.impact_y
+	# If an elevated shot has since hit the ice and is now tracking low, drop butterfly.
+	if _shot_is_elevated and result.is_low and _shot_timer <= 0.0:
+		_shot_is_elevated = false
+		_shot_timer = reaction_delay
 
 # ── Shot Timer ────────────────────────────────────────────────────────────────
 func _update_shot_timer(delta: float) -> void:
@@ -134,14 +188,25 @@ func _update_state(delta: float) -> void:
 	match _state:
 		State.STANDING:
 			if _is_puck_in_defensive_zone():
+				_reacting_to_shot = false
+				_recovering_from_butterfly = false
 				_state = State.RVH_LEFT if puck_local_x < 0.0 else State.RVH_RIGHT
+			elif _is_under_pressure():
+				_recovering_from_butterfly = false
+				_state = State.BUTTERFLY
+				_recovery_timer = 0.0
 		State.BUTTERFLY:
 			var moving_away: bool = puck.linear_velocity.z * _direction_sign > 0.0
-			if puck.linear_velocity.length() < shot_speed_threshold or moving_away:
+			# Don't recover while a player is still charging the net.
+			if _is_under_pressure():
+				_recovery_timer = 0.0
+			elif puck.linear_velocity.length() < shot_speed_threshold or moving_away:
 				_recovery_timer += delta
 				if _recovery_timer >= butterfly_recovery_time:
 					_state = State.STANDING
 					_recovery_timer = 0.0
+					_reacting_to_shot = false
+					_recovering_from_butterfly = true
 			else:
 				_recovery_timer = 0.0
 		State.RVH_LEFT:
@@ -173,24 +238,42 @@ func _update_position(delta: float) -> void:
 		State.STANDING:
 			_update_lateral_standing(delta)
 		State.BUTTERFLY:
-			_update_target_x()
-			_current_x = move_toward(_current_x, _target_x, shuffle_speed * 0.5 * delta)
-			_five_hole_openness = lerpf(_five_hole_openness, 0.0, part_lerp_speed * delta)
+			if _reacting_to_shot:
+				_target_x = clampf(_shot_impact_x, _goal_center_x - net_half_width, _goal_center_x + net_half_width)
+			else:
+				_update_target_x()
+			# Scale slide speed by how saturated the facing angle is — rotation and
+			# lateral movement are coupled in butterfly (you push to turn, not pivot).
+			var base_angle: float = PI if _direction_sign == 1 else 0.0
+			var dx: float = _tracked_puck_position.x - goalie.global_position.x
+			var dz: float = _tracked_puck_position.z - goalie.global_position.z
+			var facing_deviation: float = abs(angle_difference(base_angle, atan2(-dx, -dz)))
+			var butterfly_max_rad: float = deg_to_rad(butterfly_max_facing_angle)
+			var rotation_demand: float = clampf(facing_deviation / maxf(butterfly_max_rad, 0.001), 0.0, 1.0)
+			var slide_speed: float = lerpf(shuffle_speed * 0.5, butterfly_slide_speed, rotation_demand)
+			var remaining_x: float = abs(_target_x - _current_x)
+			_current_x = move_toward(_current_x, _target_x, slide_speed * delta)
+			var five_hole_target: float = five_hole_butterfly_move_max if remaining_x > 0.05 else 0.0
+			_five_hole_openness = lerpf(_five_hole_openness, five_hole_target, part_lerp_speed * delta)
 		State.RVH_LEFT:
-			# 0.88 = post pad local x (0.46) + pad half-height when rotated 90° (0.42)
-			# positions the outer edge of the post pad flush with the post
-			_current_x = move_toward(_current_x, _goal_center_x + (net_half_width - 0.88) * _direction_sign, rvh_transition_speed * delta)
+			# 0.38 = outer pad reach (0.88) - 0.50 body inset toward post.
+			# Body sits 0.535m from center; body parts shift +0.50 in local X to keep
+			# the same world coverage (outer pad edge stays flush with the post).
+			_current_x = move_toward(_current_x, _goal_center_x + (net_half_width - 0.38) * _direction_sign, rvh_transition_speed * delta)
 		State.RVH_RIGHT:
-			_current_x = move_toward(_current_x, _goal_center_x - (net_half_width - 0.88) * _direction_sign, rvh_transition_speed * delta)
+			_current_x = move_toward(_current_x, _goal_center_x - (net_half_width - 0.38) * _direction_sign, rvh_transition_speed * delta)
 	goalie.set_goalie_position(_current_x, _goal_line_z + _direction_sign * _current_depth)
 
 func _update_target_x() -> void:
 	_target_x = GoalieBehaviorRules.target_lateral_x(
 			_tracked_puck_position, _goal_line_z, _goal_center_x,
-			_current_depth, net_half_width)
+			_current_depth, net_half_width, _direction_sign)
 
 func _update_lateral_standing(delta: float) -> void:
-	_update_target_x()
+	if _reacting_to_shot:
+		_target_x = clampf(_shot_impact_x, _goal_center_x - net_half_width, _goal_center_x + net_half_width)
+	else:
+		_update_target_x()
 	var delta_x: float = _target_x - _current_x
 	var five_hole_target: float
 	if abs(delta_x) < 0.01:
@@ -210,23 +293,32 @@ func _update_facing(delta: float) -> void:
 		var target_y: float = PI if _direction_sign == 1 else 0.0
 		goalie.set_goalie_rotation_y(lerp_angle(goalie.get_goalie_rotation_y(), target_y, rotation_speed * delta))
 		return
-	if _shot_timer > 0.0 or _state == State.BUTTERFLY:
+	if _shot_timer > 0.0:
 		return
 	var dx: float = _tracked_puck_position.x - goalie.global_position.x
 	var dz: float = _tracked_puck_position.z - goalie.global_position.z
 	if Vector2(dx, dz).length() > 0.1:
 		var base_angle: float = PI if _direction_sign == 1 else 0.0
 		var target_y: float = atan2(-dx, -dz)
-		var max_rad: float = deg_to_rad(max_facing_angle)
+		var angle_cap: float = butterfly_max_facing_angle if _state == State.BUTTERFLY else max_facing_angle
+		var max_rad: float = deg_to_rad(angle_cap)
 		var deviation: float = clampf(angle_difference(base_angle, target_y), -max_rad, max_rad)
 		target_y = base_angle + deviation
-		var new_y: float = lerp_angle(goalie.get_goalie_rotation_y(), target_y, rotation_speed * delta)
+		var spd: float = butterfly_rotation_speed if _state == State.BUTTERFLY else rotation_speed
+		var new_y: float = lerp_angle(goalie.get_goalie_rotation_y(), target_y, spd * delta)
 		goalie.set_goalie_rotation_y(new_y)
 
 # ── Body Parts ────────────────────────────────────────────────────────────────
 func _update_body_parts(delta: float) -> void:
 	var config: GoalieBodyConfig = _get_config(_state)
-	goalie.apply_body_config(config, part_lerp_speed * delta)
+	var lerp_t: float
+	if _reacting_to_shot or _state == State.BUTTERFLY:
+		lerp_t = reaction_lerp_speed * delta
+	elif _recovering_from_butterfly:
+		lerp_t = recovery_lerp_speed * delta
+	else:
+		lerp_t = part_lerp_speed * delta
+	goalie.apply_body_config(config, lerp_t)
 
 func _get_config(state: State) -> GoalieBodyConfig:
 	var c := GoalieBodyConfig.new()
@@ -246,10 +338,21 @@ func _get_config(state: State) -> GoalieBodyConfig:
 			c.glove_rot     = Vector3.ZERO
 			c.stick_pos     = Vector3(0.0,  0.02,  -0.25)
 			c.stick_rot     = Vector3.ZERO
+			if _reacting_to_shot and _shot_is_elevated:
+				# Move glove or blocker toward projected impact height.
+				# shot_local_x > 0 = goalie's right = blocker side (for catches_left=true).
+				var shot_local_x: float = (_shot_impact_x - _goal_center_x) * -_direction_sign
+				var target_y: float = clampf(_shot_impact_y, react_hand_y_min, react_hand_y_max)
+				if shot_local_x <= 0.0:
+					c.glove_pos = Vector3(c.glove_pos.x, target_y, react_hand_z)
+					c.glove_rot = Vector3(-25.0, 0.0, 0.0)
+				else:
+					c.blocker_pos = Vector3(c.blocker_pos.x, target_y, react_hand_z)
+					c.blocker_rot = Vector3(-25.0, 0.0, 0.0)
 		State.BUTTERFLY:
-			c.left_pad_pos  = Vector3(-0.42, 0.14, -0.20)
+			c.left_pad_pos  = Vector3(-0.42 - _five_hole_openness, 0.14, -0.20)
 			c.left_pad_rot  = Vector3(0.0, 0.0, -90.0)
-			c.right_pad_pos = Vector3( 0.42, 0.14, -0.20)
+			c.right_pad_pos = Vector3( 0.42 + _five_hole_openness, 0.14, -0.20)
 			c.right_pad_rot = Vector3(0.0, 0.0,  90.0)
 			c.body_pos      = Vector3(0.0,  0.46,  0.0)
 			c.body_rot      = Vector3.ZERO
@@ -261,35 +364,44 @@ func _get_config(state: State) -> GoalieBodyConfig:
 			c.glove_rot     = Vector3.ZERO
 			c.stick_pos     = Vector3(0.0,  0.02,  -0.30)
 			c.stick_rot     = Vector3.ZERO
+			if _reacting_to_shot and _shot_is_elevated:
+				var shot_local_x: float = (_shot_impact_x - _goal_center_x) * -_direction_sign
+				var target_y: float = clampf(_shot_impact_y, react_hand_y_min, react_hand_y_max)
+				if shot_local_x <= 0.0:
+					c.glove_pos = Vector3(c.glove_pos.x, target_y, react_hand_z)
+					c.glove_rot = Vector3(-25.0, 0.0, 0.0)
+				else:
+					c.blocker_pos = Vector3(c.blocker_pos.x, target_y, react_hand_z)
+					c.blocker_rot = Vector3(-25.0, 0.0, 0.0)
 		State.RVH_LEFT:
-			c.left_pad_pos  = Vector3(-0.46, 0.14, 0.0)
+			c.left_pad_pos  = Vector3( 0.04, 0.14, 0.0)
 			c.left_pad_rot  = Vector3(0.0, rvh_post_pad_angle, -90.0)
-			c.right_pad_pos = Vector3(-0.05, 0.33, 0.0)
+			c.right_pad_pos = Vector3( 0.45, 0.33, 0.0)
 			c.right_pad_rot = Vector3(0.0, 0.0,  60.0)
-			c.body_pos      = Vector3(-0.52, 0.66,  0.05)
+			c.body_pos      = Vector3(-0.02, 0.66,  0.05)
 			c.body_rot      = Vector3.ZERO
-			c.head_pos      = Vector3(-0.52, 1.19,  0.08)
+			c.head_pos      = Vector3(-0.02, 1.19,  0.08)
 			c.head_rot      = Vector3.ZERO
-			c.glove_pos     = Vector3(-0.62, 0.69, -0.18)
+			c.glove_pos     = Vector3(-0.12, 0.69, -0.18)
 			c.glove_rot     = Vector3.ZERO
-			c.blocker_pos   = Vector3(-0.10, 0.64, -0.18)
+			c.blocker_pos   = Vector3( 0.40, 0.64, -0.18)
 			c.blocker_rot   = Vector3.ZERO
-			c.stick_pos     = Vector3(-0.30, 0.02, -0.20)
+			c.stick_pos     = Vector3( 0.20, 0.02, -0.20)
 			c.stick_rot     = Vector3.ZERO
 		State.RVH_RIGHT:
-			c.right_pad_pos = Vector3( 0.46, 0.14, 0.0)
+			c.right_pad_pos = Vector3(-0.04, 0.14, 0.0)
 			c.right_pad_rot = Vector3(0.0, -rvh_post_pad_angle,  90.0)
-			c.left_pad_pos  = Vector3( 0.05, 0.33, 0.0)
+			c.left_pad_pos  = Vector3(-0.45, 0.33, 0.0)
 			c.left_pad_rot  = Vector3(0.0, 0.0, -60.0)
-			c.body_pos      = Vector3( 0.52, 0.66,  0.05)
+			c.body_pos      = Vector3( 0.02, 0.66,  0.05)
 			c.body_rot      = Vector3.ZERO
-			c.head_pos      = Vector3( 0.52, 1.19,  0.08)
+			c.head_pos      = Vector3( 0.02, 1.19,  0.08)
 			c.head_rot      = Vector3.ZERO
-			c.blocker_pos   = Vector3( 0.62, 0.69, -0.18)
+			c.blocker_pos   = Vector3( 0.12, 0.69, -0.18)
 			c.blocker_rot   = Vector3.ZERO
-			c.glove_pos     = Vector3( 0.10, 0.64, -0.18)
+			c.glove_pos     = Vector3(-0.40, 0.64, -0.18)
 			c.glove_rot     = Vector3.ZERO
-			c.stick_pos     = Vector3( 0.30, 0.02, -0.20)
+			c.stick_pos     = Vector3(-0.20, 0.02, -0.20)
 			c.stick_rot     = Vector3.ZERO
 	if not catches_left:
 		var tmp_pos: Vector3 = c.glove_pos
@@ -304,14 +416,22 @@ func _get_config(state: State) -> GoalieBodyConfig:
 func _on_puck_released() -> void:
 	if _state != State.STANDING:
 		return
-	var delay: float = GoalieBehaviorRules.detect_shot(
+	var result: GoalieBehaviorRules.ShotResult = GoalieBehaviorRules.detect_shot(
 			puck.global_position,
 			puck.linear_velocity,
 			_goal_line_z,
 			_goal_center_x,
 			_shot_detection_config())
-	if delay >= 0.0:
-		_shot_timer = delay
+	if not result.is_shot:
+		return
+	_shot_impact_x = result.impact_x
+	_shot_impact_y = result.impact_y
+	_shot_is_elevated = result.is_elevated
+	_reacting_to_shot = true
+	_recovering_from_butterfly = false  # new shot supersedes recovery mode
+	if result.is_low:
+		_shot_timer = result.reaction_delay
+	# Elevated shot: stay standing, _get_config raises the glove or blocker
 
 # ── State Serialization ───────────────────────────────────────────────────────
 # Returns the typed network state object. Flattening to Array happens at the
@@ -384,7 +504,23 @@ func _shot_detection_config() -> Dictionary:
 		"net_half_width": net_half_width,
 		"net_margin": net_margin,
 		"reaction_delay": reaction_delay,
+		"low_shot_threshold": low_shot_threshold,
+		"elevated_threshold": elevated_threshold,
+		"fake_threshold": fake_threshold,
 	}
+
+func _pressure_config() -> Dictionary:
+	return {
+		"pressure_butterfly_distance": pressure_butterfly_distance,
+		"pressure_velocity_threshold": pressure_velocity_threshold,
+		"pressure_lateral_margin": pressure_lateral_margin,
+		"net_half_width": net_half_width,
+	}
+
+func _is_under_pressure() -> bool:
+	return GoalieBehaviorRules.is_under_pressure(
+			puck.global_position, _puck_approach_velocity,
+			_goal_line_z, _goal_center_x, _pressure_config())
 
 func _defensive_zone_config() -> Dictionary:
 	return {
