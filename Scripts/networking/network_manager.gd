@@ -229,6 +229,14 @@ func notify_reset_to_all() -> void:
 func notify_game_reset() -> void:
 	GameManager.on_game_reset()
 
+func send_stats_to_all(data: Array) -> void:
+	for peer_id in multiplayer.get_peers():
+		receive_stats.rpc_id(peer_id, data)
+
+@rpc("authority", "call_remote", "reliable")
+func receive_stats(data: Array) -> void:
+	GameManager.apply_stats(data)
+
 # ── Sending ───────────────────────────────────────────────────────────────────
 func send_slot_assignment(peer_id: int, slot: int, team_id: int, primary_color: Color, secondary_color: Color) -> void:
 	assign_player_slot.rpc_id(peer_id, slot, team_id, primary_color, secondary_color)

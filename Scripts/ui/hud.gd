@@ -8,6 +8,8 @@ var _away_score_label: Label
 var _phase_panel: PanelContainer
 var _phase_label: Label
 var _elevation_panel: PanelContainer
+var _home_sog_label: Label = null
+var _away_sog_label: Label = null
 var _local_skater: Skater = null
 
 const _DARK_BG    := Color(0.07, 0.07, 0.09, 0.92)
@@ -32,6 +34,7 @@ func _ready() -> void:
 	GameManager.period_changed.connect(_on_period_changed)
 	GameManager.clock_updated.connect(_on_clock_updated)
 	GameManager.game_over.connect(_on_game_over)
+	GameManager.shots_on_goal_changed.connect(_on_shots_on_goal_changed)
 
 func _process(_delta: float) -> void:
 	if _local_skater == null:
@@ -59,49 +62,80 @@ func _build_scorebug() -> void:
 	hbox.add_theme_constant_override("separation", 0)
 	panel.add_child(hbox)
 
-	# Left column: period ordinal stacked above clock
-	var left_cell := _cell(6, 8)
-	hbox.add_child(left_cell)
-	var left_vbox := VBoxContainer.new()
-	left_vbox.add_theme_constant_override("separation", 2)
-	left_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	left_cell.add_child(left_vbox)
+	# Teams + Scores column
+	var teams_cell := _cell(8, 6)
+	hbox.add_child(teams_cell)
+	var teams_vbox := VBoxContainer.new()
+	teams_vbox.add_theme_constant_override("separation", 5)
+	teams_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	teams_cell.add_child(teams_vbox)
 
-	_period_label = _lbl("1ST", 12, _DIM)
-	_period_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	left_vbox.add_child(_period_label)
+	# Away on top, home on bottom (NHL convention)
+	var away_row := HBoxContainer.new()
+	away_row.add_theme_constant_override("separation", 8)
+	away_row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	teams_vbox.add_child(away_row)
+	away_row.add_child(_team_badge("AWAY", PlayerRules.generate_primary_color(1)))
+	_away_score_label = _lbl("0", 20, _WHITE)
+	_away_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_away_score_label.custom_minimum_size = Vector2(22, 0)
+	_away_score_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	away_row.add_child(_away_score_label)
 
-	_clock_label = _lbl("4:00", 24, _WHITE)
-	_clock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_clock_label.custom_minimum_size = Vector2(62, 0)
-	left_vbox.add_child(_clock_label)
+	var home_row := HBoxContainer.new()
+	home_row.add_theme_constant_override("separation", 8)
+	home_row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	teams_vbox.add_child(home_row)
+	home_row.add_child(_team_badge("HOME", PlayerRules.generate_primary_color(0)))
+	_home_score_label = _lbl("0", 20, _WHITE)
+	_home_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_home_score_label.custom_minimum_size = Vector2(22, 0)
+	_home_score_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	home_row.add_child(_home_score_label)
 
 	hbox.add_child(_vsep())
 
-	# Right column: GridContainer so badge column and score column share alignment.
-	var right_cell := _cell(4, 6)
-	hbox.add_child(right_cell)
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 10)
-	grid.add_theme_constant_override("v_separation", 4)
-	right_cell.add_child(grid)
+	# Shots on Goal column: "SHOTS" header + per-team numbers
+	var shots_cell := _cell(8, 4)
+	hbox.add_child(shots_cell)
+	var shots_vbox := VBoxContainer.new()
+	shots_vbox.add_theme_constant_override("separation", 2)
+	shots_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	shots_cell.add_child(shots_vbox)
 
-	grid.add_child(_team_badge("HOME", PlayerRules.generate_primary_color(0)))
-	_home_score_label = _lbl("0", 20, _WHITE)
-	_home_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_home_score_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_home_score_label.custom_minimum_size = Vector2(20, 0)
-	_home_score_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.add_child(_home_score_label)
+	# Away shots top, label middle, home shots bottom — mirrors team row order
+	_away_sog_label = _lbl("0", 14, _WHITE)
+	_away_sog_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_away_sog_label.custom_minimum_size = Vector2(28, 0)
+	shots_vbox.add_child(_away_sog_label)
 
-	grid.add_child(_team_badge("AWAY", PlayerRules.generate_primary_color(1)))
-	_away_score_label = _lbl("0", 20, _WHITE)
-	_away_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_away_score_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_away_score_label.custom_minimum_size = Vector2(20, 0)
-	_away_score_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.add_child(_away_score_label)
+	var shots_header := _lbl("SHOTS", 9, _DIM)
+	shots_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	shots_vbox.add_child(shots_header)
+
+	_home_sog_label = _lbl("0", 14, _WHITE)
+	_home_sog_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_home_sog_label.custom_minimum_size = Vector2(28, 0)
+	shots_vbox.add_child(_home_sog_label)
+
+	hbox.add_child(_vsep())
+
+	# Period + Clock column
+	var time_cell := _cell(8, 6)
+	hbox.add_child(time_cell)
+	var time_vbox := VBoxContainer.new()
+	time_vbox.add_theme_constant_override("separation", 2)
+	time_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	time_cell.add_child(time_vbox)
+
+	_period_label = _lbl("1ST", 12, _DIM)
+	_period_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	time_vbox.add_child(_period_label)
+
+	_clock_label = _lbl("4:00", 22, _WHITE)
+	_clock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_clock_label.custom_minimum_size = Vector2(60, 0)
+	time_vbox.add_child(_clock_label)
 
 func _build_phase_banner() -> void:
 	# Centered below the scorebug
@@ -207,6 +241,12 @@ func _on_clock_updated(t: float) -> void:
 func _on_game_over() -> void:
 	_phase_label.text = "GAME OVER"
 	_phase_panel.visible = true
+
+func _on_shots_on_goal_changed(sog_0: int, sog_1: int) -> void:
+	if _home_sog_label != null:
+		_home_sog_label.text = str(sog_0)
+	if _away_sog_label != null:
+		_away_sog_label.text = str(sog_1)
 
 # ---------------------------------------------------------------------------
 # Utility

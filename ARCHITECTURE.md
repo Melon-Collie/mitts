@@ -89,6 +89,7 @@ Authoritative host. The host runs all physics. Clients predict locally and recon
 | Input (client → host) | 60 Hz | Unreliable |
 | World state (host → clients) | 20 Hz | Unreliable |
 | Events (pickup, spawn, sync) | On event | Reliable |
+| Stats sync (host → clients) | On change | Reliable |
 
 ### Skater Networking
 

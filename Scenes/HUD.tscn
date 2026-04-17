@@ -1,6 +1,10 @@
 [gd_scene format=3 uid="uid://cs3u0eyiv7a7r"]
 
 [ext_resource type="Script" uid="uid://dn8llvbvik573" path="res://Scripts/ui/hud.gd" id="1_sd512"]
+[ext_resource type="Script" uid="uid://ocbmgje55pf6" path="res://Scripts/ui/scoreboard.gd" id="2_jo1ms"]
 
 [node name="Hud" type="CanvasLayer" unique_id=2076368830]
 script = ExtResource("1_sd512")
+
+[node name="Scoreboard" type="CanvasLayer" parent="." unique_id=1954333789]
+script = ExtResource("2_jo1ms")

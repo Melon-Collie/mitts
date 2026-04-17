@@ -27,6 +27,7 @@ var time_remaining: float = GameRules.PERIOD_DURATION
 # ── Scores ───────────────────────────────────────────────────────────────────
 var scores: Array[int] = [0, 0]
 var last_scoring_team_id: int = -1
+var team_shots: Array[int] = [0, 0]
 
 # ── Player registry (domain view) ────────────────────────────────────────────
 # peer_id → { slot: int, team_id: int, faceoff_position: Vector3 }
@@ -201,6 +202,8 @@ func reset_scores() -> void:
 func reset_all() -> void:
 	scores[0] = 0
 	scores[1] = 0
+	team_shots[0] = 0
+	team_shots[1] = 0
 	current_period = 1
 	time_remaining = GameRules.PERIOD_DURATION
 	icing_team_id = -1

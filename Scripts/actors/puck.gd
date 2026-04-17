@@ -5,6 +5,7 @@ signal puck_picked_up(carrier: Skater)
 signal puck_released()
 signal puck_stripped(ex_carrier: Skater)
 signal puck_touched_loose  # any loose-puck touch (deflection, body block) — cancels icing
+signal puck_touched_goalie  # puck contacted a goalie StaticBody3D part while uncarried
 
 @export var max_speed: float = 30.0
 @export var reattach_cooldown: float = 0.5
@@ -27,6 +28,7 @@ var carrier: Skater = null
 var pickup_locked: bool = false
 var _cooldown_timers: Dictionary = {}  # Skater -> float
 var _is_server: bool = false
+var _pending_reset: bool = false
 # Callable (Skater) -> int team_id, or -1 if the skater isn't registered. Set
 # by GameManager at spawn time so Puck doesn't reach upward for team checks.
 var _team_resolver: Callable = Callable()
@@ -40,6 +42,9 @@ func _ready() -> void:
 	collision_layer = Constants.LAYER_PUCK
 	collision_mask  = Constants.MASK_PUCK
 	process_physics_priority = 1  # Run after Skater.move_and_slide so blade world pos is current
+	contact_monitor = true
+	max_contacts_reported = 4
+	body_entered.connect(_on_body_entered)
 
 	var pickup_zone = Area3D.new()
 	pickup_zone.name = "PickupZone"
@@ -262,17 +267,30 @@ func drop() -> void:
 	puck_released.emit()
 
 func reset() -> void:
-	clear_carrier()
+	carrier = null
+	freeze = false  # ensure _integrate_forces is called on the next step
 	_cooldown_timers.clear()
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
-	global_position = Vector3(0, ice_height, 0)
+	_pending_reset = true
 	puck_released.emit()
 
 func is_airborne() -> bool:
 	return position.y > ice_height + 0.05
 
+func _on_body_entered(body: Node3D) -> void:
+	if carrier != null:
+		return
+	if body.get_parent() is Goalie:
+		puck_touched_goalie.emit()
+
 func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
+	if _pending_reset:
+		_pending_reset = false
+		state.transform = Transform3D(Basis(), Vector3(0, ice_height, 0))
+		state.linear_velocity = Vector3.ZERO
+		state.angular_velocity = Vector3.ZERO
+		return
 	if state.linear_velocity.length() > max_speed:
 		state.linear_velocity = state.linear_velocity.normalized() * max_speed
 

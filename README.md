@@ -31,6 +31,7 @@ For online play the host needs UDP port **7777** forwarded on their router.
 | **Ctrl (hold, no puck)** | Shot-block stance — crouch, widen block area, slow movement, face puck |
 | **Ctrl (during wind-up)** | Cancel shot — abort a wrister or slapshot wind-up without firing |
 | **Scroll up / down** | Toggle elevated shot |
+| **Tab** | Toggle scoreboard |
 
 ---
 
@@ -67,7 +68,8 @@ Pucks coming in fast deflect off your blade instead of sticking. Move your stick
 - Behavioral goalie AI (state machine, Buckley depth system, butterfly, RVH) — server-authoritative with client interpolation, tracking lag for beatable positioning
 - Goal detection, score tracking, and faceoff sequences — goals pause play, players teleport to faceoff dots, puck goes live on pickup
 - Period-based game loop — 3 periods × 4 minutes; clock pauses during dead-puck phases; each period opens with a faceoff; game locks after the final period until reset
-- Broadcast-style scorebug — period ordinal, clock, and team scores in a horizontal dark panel (top-left); phase banner (GOAL! / FACEOFF / etc.) appears centered below it
+- NHL-style scorebug — teams + scores (away top, home bottom) | shots on goal | period + clock, in a three-column dark panel (top-left); phase banner (GOAL! / FACEOFF / etc.) appears centered below it
+- Per-player stat tracking — goals, assists, points, shots on goal, hits; Tab-toggle scoreboard overlay with rows colored by team; auto-opens on game over; synced host → clients via reliable RPC
 - Elevation indicator — bottom-center HUD badge when elevated shot mode is active
 - Main menu — host, join (with IP input), and offline from the title screen
 - Team colors — Penguins gold + black (home) vs Leafs blue + white (away); all teammates match

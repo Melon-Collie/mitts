@@ -60,7 +60,8 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | File | Role |
 |------|------|
 | `domain/state/game_phase.gd` | `class_name GamePhase`; nested `enum Phase { PLAYING, GOAL_SCORED, FACEOFF_PREP, FACEOFF, END_OF_PERIOD, GAME_OVER }` |
-| `domain/state/game_state_machine.gd` | RefCounted FSM. Owns phase/timer, scores, current_period, time_remaining (period clock), player slot registry, icing state; host drives via `tick(delta)`, clients sync via `apply_remote_state(...)` |
+| `domain/state/game_state_machine.gd` | RefCounted FSM. Owns phase/timer, scores, current_period, time_remaining (period clock), player slot registry, icing state, `team_shots[2]`; host drives via `tick(delta)`, clients sync via `apply_remote_state(...)` |
+| `domain/state/player_stats.gd` | Per-player stat data object: goals, assists, shots_on_goal, hits. Serializes to/from Array for RPC transport. |
 | `domain/config/game_rules.gd` | Game-rule constants: timings, rink geometry, blue/goal line Z, icing duration, faceoff positions, max players, ice friction |
 | `domain/rules/phase_rules.gd` | `is_dead_puck_phase`, `is_movement_locked` |
 | `domain/rules/player_rules.gd` | Team balancing, fixed team colors (`generate_primary_color` / `generate_secondary_color`), faceoff position lookup. Home team (0): Penguins Vegas Gold primary + black secondary. Away team (1): Leafs Blue primary + white secondary. |
@@ -100,7 +101,7 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | `actors/hockey_rink.gd` | Procedural rink geometry (@tool): walls, corners, ice surface, markings |
 | `game/constants.gd` | Engine-facing constants only: collision layers/masks, network port, input/state rates, physics tick. Game-rule constants live in `domain/config/game_rules.gd`. |
 | `game/team.gd` | Team object: defended goal, goalie controller |
-| `game/player_record.gd` | Per-player data: peer_id, slot, team, skater, controller, faceoff_position, is_left_handed |
+| `game/player_record.gd` | Per-player data: peer_id, slot, team, skater, controller, faceoff_position, is_left_handed, stats (PlayerStats) |
 | `networking/buffered_skater_state.gd` | Timestamped SkaterNetworkState for interpolation buffer |
 | `networking/buffered_puck_state.gd` | Timestamped PuckNetworkState for interpolation buffer |
 | `networking/buffered_goalie_state.gd` | Timestamped GoalieNetworkState for interpolation buffer |
@@ -110,7 +111,8 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | `input/input_state.gd` | InputState data object: all per-tick input fields (move, mouse, shoot, brake, elevation, etc.) |
 | `input/local_input_gatherer.gd` | Populates InputState from local hardware; accumulates just_pressed between ticks |
 | `ui/game_camera.gd` | Per-player camera: frames player+puck via zoom, then shifts toward attacking zone using available slack. Ozone zoom (min_height→ozone_min_height) when local player is in the attacked zone. Bias smoothed by possession changes and movement direction. Wired via `LocalController.set_goal_context`. |
-| `ui/hud.gd` | Scorebug HUD: horizontal dark panel top-left — period ordinal (1ST/2ND/3RD/OT) stacked above clock on the left, home/away team names (colored to team primaries) + scores stacked on the right. Phase banner (GOAL!, FACEOFF, etc.) is a separate centered panel below. Receives scores/phase/period/clock via GameManager signals; polls `skater.is_elevated` each frame. |
+| `ui/hud.gd` | Scorebug HUD: three-column dark panel top-left — teams+scores (away top, home bottom with colored badges) | shots-on-goal (away/SHOTS/home) | period+clock. Phase banner (GOAL!, FACEOFF, etc.) is a separate centered panel below. Receives scores/phase/period/clock/SOG via GameManager signals; polls `skater.is_elevated` each frame. |
+| `ui/scoreboard.gd` | Tab-toggle scoreboard overlay (CanvasLayer). Builds per-player table: Player | G | A | PTS | SOG | HITS, colored by team. Auto-shows on game over. Updates via `GameManager.stats_updated`. |
 | `ui/main_menu.gd` | Main menu: shoots left/right toggle + host/join/offline buttons + IP input, calls `NetworkManager.start_*()`, transitions to `Hockey.tscn` |
 | `game/game_scene.gd` | Hockey scene init: calls `NetworkManager.on_game_scene_ready()` in `_ready()` to trigger world spawn |
 

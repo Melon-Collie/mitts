@@ -10,6 +10,7 @@ var faceoff_position: Vector3 = Vector3.ZERO
 var color: Color = Color.WHITE
 var secondary_color: Color = Color.BLACK
 var is_left_handed: bool = true
+var stats: PlayerStats = PlayerStats.new()
 
 func _init(p_peer_id: int, p_slot: int, p_is_local: bool, p_team: Team) -> void:
 	peer_id = p_peer_id
