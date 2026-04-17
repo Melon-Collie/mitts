@@ -11,7 +11,6 @@ func _shot_cfg() -> GoalieBehaviorRules.ShotDetectionConfig:
 	cfg.reaction_delay = 0.10
 	cfg.low_shot_threshold = 0.45
 	cfg.elevated_threshold = 0.45
-	cfg.fake_threshold = 0.0
 	return cfg
 
 func _zone_cfg() -> GoalieBehaviorRules.DefensiveZoneConfig:
@@ -87,14 +86,6 @@ func test_shot_impact_x_projects_correctly() -> void:
 	assert_true(result.is_shot)
 	# impact_x = 0 + 0.5 * (16.6/20) = 0.415
 	assert_almost_eq(result.impact_x, 0.415, 0.01)
-
-func test_fake_threshold_suppresses_reaction() -> void:
-	var cfg: GoalieBehaviorRules.ShotDetectionConfig = _shot_cfg()
-	cfg.fake_threshold = 25.0  # above the shot speed
-	var result: GoalieBehaviorRules.ShotResult = GoalieBehaviorRules.detect_shot(
-		Vector3(0, 0, 10), Vector3(0, 0, 20),
-		26.6, 0.0, cfg)
-	assert_false(result.is_shot)
 
 # ── is_puck_in_defensive_zone ────────────────────────────────────────────────
 # direction_sign = sign(-goal_line_z), so for goalie at +Z (goal_line=+26.6)
