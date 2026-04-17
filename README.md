@@ -15,6 +15,8 @@ An arcade hockey game built in Godot 4.6.2 (Jolt Physics). Online multiplayer �
 
 For online play the host needs UDP port **7777** forwarded on their router.
 
+The main menu shows an **"Update available"** notice when your build is behind the latest release. It doesn't patch automatically — grab the new zip from the release page when you see it.
+
 ---
 
 ## Controls
@@ -72,6 +74,7 @@ Pucks coming in fast deflect off your blade instead of sticking. Move your stick
 - Per-player stat tracking — goals, assists, points, shots on goal, hits; Tab-toggle scoreboard overlay with rows colored by team; auto-opens on game over; synced host → clients via reliable RPC
 - Elevation indicator — bottom-center HUD badge when elevated shot mode is active
 - Main menu — host, join (with IP input), and offline from the title screen
+- Update-available notice — main menu compares the baked-in build version (auto-generated from commit count at export time) against the latest GitHub Release and prompts the player to re-download when they're stale
 - Team colors — Penguins gold + black (home) vs Leafs blue + white (away); all teammates match
 - Local player ring — gray semi-transparent ring on the ice under your skater only
 - Stadium lighting — 6 overhead SpotLights in a 2×3 grid; warm white, soft falloff, shadows on center pair
@@ -121,6 +124,10 @@ Exit code is 0 on pass, non-zero on fail — suitable for CI.
 ### CI
 
 Every push and PR triggers `.github/workflows/test.yml`, which caches Godot 4.6.2, imports the project, and runs the GUT suite. `deploy.yml` gates the export job on tests passing, so a broken test blocks releases to main.
+
+### Releases
+
+`deploy.yml` computes `VERSION=0.1.<git commit count>` on each run, rewrites the placeholder `"dev"` in `Scripts/game/build_info.gd` to that string before export, and publishes to the `latest` GitHub Release with the version as the release name. The download URL stays stable (`releases/tag/latest`) so the README link never rots. Exported clients compare their baked-in version against the release name to decide whether to show the update notice.
 
 ### Architecture
 

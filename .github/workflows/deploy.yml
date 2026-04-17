@@ -20,6 +20,19 @@ jobs:
         uses: actions/checkout@v4
         with:
           lfs: true
+          fetch-depth: 0  # full history so `git rev-list --count HEAD` is meaningful
+
+      - name: Compute version
+        id: version
+        run: |
+          COMMITS=$(git rev-list --count HEAD)
+          VERSION="0.1.${COMMITS}"
+          echo "Computed VERSION=${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          # Bake version into the exported build so the in-game update
+          # checker can compare against the release name.
+          sed -i "s/^const VERSION: String = \"dev\"$/const VERSION: String = \"${VERSION}\"/" Scripts/game/build_info.gd
+          grep '^const VERSION:' Scripts/game/build_info.gd
 
       - name: Export with Godot
         uses: firebelley/godot-export@v5.2.1
@@ -59,7 +72,7 @@ jobs:
         with:
           artifacts: "/home/runner/.local/share/godot/archives/*.zip"
           tag: "latest"
-          name: "Latest Build"
+          name: "${{ steps.version.outputs.version }}"
           allowUpdates: true
           removeArtifacts: true
           token: ${{ secrets.GITHUB_TOKEN }}

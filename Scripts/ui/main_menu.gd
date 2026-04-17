@@ -104,6 +104,14 @@ func _build_ui() -> void:
 	join_btn.pressed.connect(_on_join_pressed)
 	join_row.add_child(join_btn)
 
+	var spacer3 := Control.new()
+	spacer3.custom_minimum_size = Vector2(0, 16)
+	vbox.add_child(spacer3)
+
+	var update_checker: UpdateChecker = UpdateChecker.new()
+	update_checker.custom_minimum_size = Vector2(380, 0)
+	vbox.add_child(update_checker)
+
 func _make_button(label: String) -> Button:
 	var btn := Button.new()
 	btn.text = label

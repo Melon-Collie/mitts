@@ -100,6 +100,7 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | `actors/hockey_goal.gd` | Goal mesh + goal sensor Area3D; emits `goal_scored` signal |
 | `actors/hockey_rink.gd` | Procedural rink geometry (@tool): walls, corners, ice surface, markings |
 | `game/constants.gd` | Engine-facing constants only: collision layers/masks, network port, input/state rates, physics tick. Game-rule constants live in `domain/config/game_rules.gd`. |
+| `game/build_info.gd` | Autoload. Holds `VERSION` (baked in by `deploy.yml` at export time; stays `"dev"` in the editor), `RELEASE_TAG`, and `REPO` — all read by `UpdateChecker`. |
 | `game/team.gd` | Team object: defended goal, goalie controller |
 | `game/player_record.gd` | Per-player data: peer_id, slot, team, skater, controller, faceoff_position, is_left_handed, stats (PlayerStats) |
 | `networking/buffered_skater_state.gd` | Timestamped SkaterNetworkState for interpolation buffer |
@@ -113,7 +114,8 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | `ui/game_camera.gd` | Per-player camera: frames player+puck via zoom, then shifts toward attacking zone using available slack. Ozone zoom (min_height→ozone_min_height) when local player is in the attacked zone. Bias smoothed by possession changes and movement direction. Wired via `LocalController.set_goal_context`. |
 | `ui/hud.gd` | Scorebug HUD: three-column dark panel top-left — teams+scores (away top, home bottom with colored badges) | shots-on-goal (away/SHOTS/home) | period+clock. Phase banner (GOAL!, FACEOFF, etc.) is a separate centered panel below. Receives scores/phase/period/clock/SOG via GameManager signals; polls `skater.is_elevated` each frame. |
 | `ui/scoreboard.gd` | Tab-toggle scoreboard overlay (CanvasLayer). Builds per-player table: Player | G | A | PTS | SOG | HITS, colored by team. Auto-shows on game over. Updates via `GameManager.stats_updated`. |
-| `ui/main_menu.gd` | Main menu: shoots left/right toggle + host/join/offline buttons + IP input, calls `NetworkManager.start_*()`, transitions to `Hockey.tscn` |
+| `ui/main_menu.gd` | Main menu: shoots left/right toggle + host/join/offline buttons + IP input, calls `NetworkManager.start_*()`, transitions to `Hockey.tscn`. Instantiates an `UpdateChecker` label at the bottom of the vbox. |
+| `ui/update_checker.gd` | `class_name UpdateChecker extends Label`. On `_ready`, if `BuildInfo.VERSION != "dev"`, HTTPRequests the GitHub Releases API (`BuildInfo.REPO`, `BuildInfo.RELEASE_TAG`), compares the release `name` to the local version, and reveals itself with an "Update available" message when stale. Fails silently on network/parse errors. 5 s timeout. |
 | `game/game_scene.gd` | Hockey scene init: calls `NetworkManager.on_game_scene_ready()` in `_ready()` to trigger world spawn |
 
 ### VFX
@@ -148,6 +150,10 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 ## Launch Modes
 
 All start paths go through `MainMenu.tscn`. `NetworkManager._ready()` does nothing — the menu calls `start_offline()`, `start_host()`, or `start_client(ip)` directly. These set up ENet but defer world spawning. `Hockey.tscn`'s root node runs `game_scene.gd`, whose `_ready()` calls `NetworkManager.on_game_scene_ready()`, which triggers `GameManager.on_host_started()` on the host side. Client world spawn is triggered by `_on_connected_to_server()` as before.
+
+## Distribution
+
+Playtester builds ship via GitHub Releases (`latest` tag). `deploy.yml` computes `VERSION=0.1.<git rev-list --count HEAD>`, rewrites the placeholder `"dev"` in `Scripts/game/build_info.gd` to that string before export, and publishes with the version as the release name. The main menu's `UpdateChecker` label polls the GitHub API on startup and prompts re-download when stale. No in-game patching — Steam (SteamPipe binary-delta) is the long-term plan; this plumbing is intentionally small so it can come out when that lands. Don't add an in-game downloader/launcher before Steam.
 
 ## Known Issues / Planned Work
 

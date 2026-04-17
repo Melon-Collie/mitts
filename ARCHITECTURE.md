@@ -315,7 +315,12 @@ Instead of stoppages, offsides and icing are enforced via a **ghost mode** — o
 | 7 | Testable domain layer (rules extraction, state machine, GUT tests, CI) | Done |
 | 8 | Period-based game loop (clock, period transitions, game over) | Done |
 | 9 | Visual polish (puck trail, ice spray, skate trails, goal burst, wall impact, body check, shot charge glow, speed lines) | Done |
-| 10 | Characters + abilities | Deferred — revisit when game feel is right |
+| 10 | Playtester distribution (auto-versioned GitHub Releases + in-game update notifier) | Done |
+| 11 | Characters + abilities | Deferred — revisit when game feel is right |
+
+## Distribution
+
+Playtester builds ship through GitHub Releases (`latest` tag, Windows + Linux zips). `deploy.yml` bakes `VERSION=0.1.<commit count>` into `Scripts/game/build_info.gd` before each export and publishes it as the release name. On startup, the main menu's `UpdateChecker` (`Scripts/ui/update_checker.gd`) fetches the release metadata via the GitHub API and shows an "update available" label when the running build is stale. No in-game downloading — players re-download the zip manually. Editor runs carry `VERSION == "dev"` and skip the network check. When the game moves to Steam, SteamPipe (binary-delta patching) takes over and this plumbing comes out.
 
 ---
 
