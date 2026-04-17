@@ -12,8 +12,8 @@ var _peer_handedness: Dictionary = {}     # peer_id -> bool (host only)
 var _input_timer: float = 0.0
 var _state_timer: float = 0.0
 var _connect_timer: float = -1.0
-const INPUT_DELTA: float = 1.0 / Constants.INPUT_RATE
-const STATE_DELTA: float = 1.0 / Constants.STATE_RATE
+var INPUT_DELTA: float = 1.0 / Constants.INPUT_RATE
+var STATE_DELTA: float = 1.0 / Constants.STATE_RATE
 const CONNECT_TIMEOUT: float = 10.0
 
 func _ready() -> void:
