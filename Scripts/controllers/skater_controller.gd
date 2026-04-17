@@ -14,15 +14,15 @@ enum State {
 
 # ── Movement Tuning ───────────────────────────────────────────────────────────
 @export var thrust: float = 12.0
-@export var friction: float = 4.0
-@export var max_speed: float = 11.0
+@export var friction: float = 3.5
+@export var max_speed: float = 9.0
 @export var move_deadzone: float = 0.1
 @export var brake_multiplier: float = 5.0
-@export var puck_carry_speed_multiplier: float = 0.92
+@export var puck_carry_speed_multiplier: float = 0.85
 @export var backward_thrust_multiplier: float = 0.80
 @export var crossover_thrust_multiplier: float = 0.90
 @export var dash_impulse_magnitude: float = 3.5
-@export var dash_cooldown: float = 0.6
+@export var dash_cooldown: float = 1.0
 
 # ── Facing Tuning ─────────────────────────────────────────────────────────────
 # How fast facing drifts toward the cursor during normal play. Lower = more
@@ -101,11 +101,11 @@ enum State {
 @export var lower_body_lag_speed: float = 5.0
 
 # ── Wrister Tuning ────────────────────────────────────────────────────────────
-@export var min_wrister_power: float = 8.0
-@export var max_wrister_power: float = 25.0
-@export var max_wrister_charge_distance: float = 3.0
+@export var min_wrister_power: float = 12.0
+@export var max_wrister_power: float = 20.0
+@export var max_wrister_charge_distance: float = 1.5
 @export var backhand_power_coefficient: float = 0.75
-@export var max_charge_direction_variance: float = 45.0
+@export var max_charge_direction_variance: float = 55.0
 @export var quick_shot_power: float = 12.0
 @export var quick_shot_threshold: float = 0.1
 @export var wrister_elevation: float = 0.3
@@ -119,8 +119,8 @@ enum State {
 @export var slapper_wind_up_time: float = 0.3
 @export var slapper_zone_radius: float = 0.8
 @export var slapper_zone_offset_x: float = 0.8  # lateral offset toward blade side
-@export var min_slapper_power: float = 20.0
-@export var max_slapper_power: float = 40.0
+@export var min_slapper_power: float = 14.0
+@export var max_slapper_power: float = 28.0
 @export var max_slapper_charge_time: float = 1.0
 @export var slapper_blade_x: float = 1.0
 @export var slapper_blade_z: float = -0.5
