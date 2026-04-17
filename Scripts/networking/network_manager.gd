@@ -21,6 +21,8 @@ signal goal_received(scoring_team_id: int, score0: int, score1: int, scorer_name
 signal faceoff_positions_received(positions: Array)
 signal game_reset_received
 signal stats_received(data: Array)
+signal slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int)
+signal slot_swap_confirmed(peer_id: int, old_team_id: int, old_slot: int, new_team_id: int, new_slot: int, jersey: Color, helmet: Color, pants: Color)
 
 # ── State ─────────────────────────────────────────────────────────────────────
 var is_host: bool = false
@@ -296,6 +298,16 @@ func send_stats_to_all(data: Array) -> void:
 func receive_stats(data: Array) -> void:
 	stats_received.emit(data)
 
+@rpc("any_peer", "reliable")
+func request_slot_swap(new_team_id: int, new_slot: int) -> void:
+	slot_swap_requested.emit(multiplayer.get_remote_sender_id(), new_team_id, new_slot)
+
+@rpc("authority", "reliable")
+func confirm_slot_swap(peer_id: int, old_team_id: int, old_slot: int,
+		new_team_id: int, new_slot: int,
+		jersey: Color, helmet: Color, pants: Color) -> void:
+	slot_swap_confirmed.emit(peer_id, old_team_id, old_slot, new_team_id, new_slot, jersey, helmet, pants)
+
 # ── Sending ───────────────────────────────────────────────────────────────────
 func send_slot_assignment(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color) -> void:
 	assign_player_slot.rpc_id(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color)
@@ -305,6 +317,20 @@ func send_spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey
 
 func send_sync_existing_players(peer_id: int, player_data: Array) -> void:
 	sync_existing_players.rpc_id(peer_id, player_data)
+
+func send_request_slot_swap(new_team_id: int, new_slot: int) -> void:
+	if is_host:
+		slot_swap_requested.emit(multiplayer.get_unique_id(), new_team_id, new_slot)
+	else:
+		request_slot_swap.rpc_id(1, new_team_id, new_slot)
+
+func send_confirm_slot_swap(peer_id: int, old_team_id: int, old_slot: int,
+		new_team_id: int, new_slot: int,
+		jersey: Color, helmet: Color, pants: Color) -> void:
+	for remote_id: int in multiplayer.get_peers():
+		confirm_slot_swap.rpc_id(remote_id, peer_id, old_team_id, old_slot,
+				new_team_id, new_slot, jersey, helmet, pants)
+	slot_swap_confirmed.emit(peer_id, old_team_id, old_slot, new_team_id, new_slot, jersey, helmet, pants)
 
 # ── Registration ──────────────────────────────────────────────────────────────
 func set_world_state_provider(provider: Callable) -> void:

@@ -80,7 +80,7 @@ Pucks coming in fast deflect off your blade instead of sticking. Move your stick
 - Stadium lighting — 6 overhead SpotLights in a 2×3 grid; warm white, soft falloff, shadows on center pair
 - Anti-aliased ice markings — procedural rink texture at 40px/m with sub-pixel smooth circles and lines; mipmapped for clean rendering at all zoom levels
 - MSAA 4x — hardware anti-aliasing for smooth geometry edges
-- Host reset button — top-right HUD button (host only) that zeroes the score and restarts from faceoff
+- Game menu — ESC in-game: Resume, Change Position, Rematch (host), Report Bug, Quit to Menu, Exit Game; "Change Position" opens a slot grid overlay (Away on top, Home on bottom) — click any open slot to swap immediately (teleport, color update, puck dropped if carrying); ESC closes the slot grid first, then the menu
 - Offsides ghost — skaters past the blue line without the puck become transparent ghosts that can't interact with the puck or other players until they retreat or the puck enters the zone
 - Hybrid icing — shooting from your own half past the opponent's goal line triggers a race: if the defending team's closest player is nearer the goal line, your entire team is ghosted for 3 seconds; if you beat them back to the puck, icing is waved off
 - Puck trail — pale-blue ribbon streak behind the puck when moving fast
@@ -96,6 +96,7 @@ Pucks coming in fast deflect off your blade instead of sticking. Move your stick
 
 ## Planned
 
+- Pre-game lobby — slot picking, configurable rules (periods, duration, OT)
 - Reactive goalie saves (glove, shoulder, stick poke)
 - More platforms
 

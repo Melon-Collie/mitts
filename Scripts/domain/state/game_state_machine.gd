@@ -202,6 +202,39 @@ func count_players_on_team(team_id: int) -> int:
 			count += 1
 	return count
 
+# Returns Array of { peer_id, team_id, slot } for all registered players.
+# player_name is not stored here; callers enrich via PlayerRecord if needed.
+func get_slot_roster() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for peer_id: int in players:
+		var slot: Dictionary = players[peer_id]
+		result.append({ "peer_id": peer_id, "team_id": slot.team_id, "slot": slot.team_slot })
+	return result
+
+# Validates and applies a slot swap. Returns { old_team_id, old_slot, new_team_id,
+# new_slot } on success, or an empty Dictionary if the swap is rejected.
+# Does not touch _next_team_slots — swap changes occupancy, not auto-assign counters.
+func try_swap_slot(peer_id: int, new_team_id: int, new_slot: int) -> Dictionary:
+	if not players.has(peer_id):
+		return {}
+	if new_team_id < 0 or new_team_id > 1 or new_slot < 0 or new_slot >= PlayerRules.MAX_PER_TEAM:
+		return {}
+	var current: Dictionary = players[peer_id]
+	if current.team_id == new_team_id and current.team_slot == new_slot:
+		return {}
+	for other_id: int in players:
+		if other_id == peer_id:
+			continue
+		if players[other_id].team_id == new_team_id and players[other_id].team_slot == new_slot:
+			return {}
+	var old_team_id: int = current.team_id
+	var old_slot: int   = current.team_slot
+	players[peer_id].team_id       = new_team_id
+	players[peer_id].team_slot     = new_slot
+	players[peer_id].faceoff_position = PlayerRules.faceoff_position(new_team_id, new_slot)
+	return { "old_team_id": old_team_id, "old_slot": old_slot,
+			 "new_team_id": new_team_id, "new_slot": new_slot }
+
 
 # ── Reset ────────────────────────────────────────────────────────────────────
 

@@ -11,7 +11,9 @@ var _assist_label: Label
 var _phase_style: StyleBoxFlat
 var _elevation_panel: PanelContainer
 var _game_over_popup: CanvasLayer = null
-var _pause_menu: CanvasLayer = null
+var _game_menu: CanvasLayer = null
+var _slot_grid: SlotGridPanel = null
+var _slot_grid_container: Control = null
 var _toast_container: VBoxContainer = null
 var _home_sog_label: Label = null
 var _away_sog_label: Label = null
@@ -31,7 +33,7 @@ func _ready() -> void:
 	_build_elevation_indicator()
 	_build_version_tag()
 	_build_game_over_popup()
-	_build_pause_menu()
+	_build_game_menu()
 	_build_toast_area()
 	_period_label.text = _period_ordinal(1)
 	_clock_label.text = _format_clock(GameRules.PERIOD_DURATION)
@@ -48,17 +50,25 @@ func _ready() -> void:
 	GameManager.shots_on_goal_changed.connect(_on_shots_on_goal_changed)
 	GameManager.player_joined.connect(func(n: String, c: Color) -> void: _show_toast(n + " joined", c))
 	GameManager.player_left.connect(func(n: String, c: Color) -> void: _show_toast(n + " left", c))
+	GameManager.stats_updated.connect(func() -> void:
+		if _game_menu != null and _game_menu.visible and _slot_grid != null:
+			_slot_grid.refresh(GameManager.get_slot_roster(), multiplayer.get_unique_id()))
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		if _game_over_popup.visible:
 			return
-		_set_paused(not _pause_menu.visible)
+		if _game_menu.visible and _slot_grid_container != null and _slot_grid_container.visible:
+			_slot_grid_container.visible = false
+		else:
+			_set_menu_open(not _game_menu.visible)
 		get_viewport().set_input_as_handled()
 
-func _set_paused(paused: bool) -> void:
-	_pause_menu.visible = paused
-	GameManager.set_input_blocked(paused)
+func _set_menu_open(open: bool) -> void:
+	_game_menu.visible = open
+	GameManager.set_input_blocked(open)
+	if not open and _slot_grid_container != null:
+		_slot_grid_container.visible = false
 
 func _process(_delta: float) -> void:
 	if _local_skater == null:
@@ -276,7 +286,7 @@ func _build_game_over_popup() -> void:
 	_game_over_popup.add_child(root)
 	add_child(_game_over_popup)
 
-func _build_pause_menu() -> void:
+func _build_game_menu() -> void:
 	var overlay := ColorRect.new()
 	overlay.color = Color(0.0, 0.0, 0.0, 0.55)
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -299,13 +309,17 @@ func _build_pause_menu() -> void:
 	panel.add_child(vbox)
 
 	var resume_btn := _popup_button("Resume")
-	resume_btn.pressed.connect(func() -> void: _set_paused(false))
+	resume_btn.pressed.connect(func() -> void: _set_menu_open(false))
 	vbox.add_child(resume_btn)
+
+	var change_pos_btn := _popup_button("Change Position")
+	change_pos_btn.pressed.connect(_on_change_position_pressed)
+	vbox.add_child(change_pos_btn)
 
 	if NetworkManager.is_host:
 		var rematch_btn := _popup_button("Rematch")
 		rematch_btn.pressed.connect(func() -> void:
-			_set_paused(false)
+			_set_menu_open(false)
 			GameManager.reset_game())
 		vbox.add_child(rematch_btn)
 
@@ -332,11 +346,40 @@ func _build_pause_menu() -> void:
 	root.add_child(overlay)
 	root.add_child(panel)
 
-	_pause_menu = CanvasLayer.new()
-	_pause_menu.layer = 20
-	_pause_menu.visible = false
-	_pause_menu.add_child(root)
-	add_child(_pause_menu)
+	_game_menu = CanvasLayer.new()
+	_game_menu.layer = 20
+	_game_menu.visible = false
+	_game_menu.add_child(root)
+	add_child(_game_menu)
+
+	var slot_grid_panel_style := StyleBoxFlat.new()
+	slot_grid_panel_style.bg_color = _DARK_BG
+	slot_grid_panel_style.set_corner_radius_all(6)
+	slot_grid_panel_style.set_content_margin_all(32)
+
+	var slot_panel := PanelContainer.new()
+	slot_panel.add_theme_stylebox_override("panel", slot_grid_panel_style)
+	slot_panel.set_anchors_preset(Control.PRESET_CENTER)
+	slot_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	slot_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	slot_panel.custom_minimum_size = Vector2(360, 120)
+
+	_slot_grid = SlotGridPanel.new()
+	_slot_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_slot_grid.slot_selected.connect(_on_pause_slot_selected)
+	slot_panel.add_child(_slot_grid)
+
+	var slot_grid_root := Control.new()
+	slot_grid_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	slot_grid_root.add_child(slot_panel)
+
+	_slot_grid_container = slot_grid_root
+	_slot_grid_container.visible = false
+
+	var slot_grid_layer := CanvasLayer.new()
+	slot_grid_layer.layer = 21
+	slot_grid_layer.add_child(slot_grid_root)
+	add_child(slot_grid_layer)
 
 func _build_toast_area() -> void:
 	_toast_container = VBoxContainer.new()
@@ -476,6 +519,15 @@ func _on_game_over() -> void:
 
 func _on_game_reset() -> void:
 	_game_over_popup.visible = false
+
+func _on_change_position_pressed() -> void:
+	_slot_grid_container.visible = not _slot_grid_container.visible
+	if _slot_grid_container.visible:
+		_slot_grid.refresh(GameManager.get_slot_roster(), multiplayer.get_unique_id())
+
+func _on_pause_slot_selected(team_id: int, slot: int) -> void:
+	NetworkManager.send_request_slot_swap(team_id, slot)
+	_set_menu_open(false)
 
 func _on_bug_report_pressed() -> void:
 	var title: String = "[bug] v%s %s - " % [BuildInfo.VERSION, OS.get_name()]

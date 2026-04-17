@@ -68,6 +68,8 @@ func _wire_network_signals() -> void:
 	NetworkManager.faceoff_positions_received.connect(on_faceoff_positions)
 	NetworkManager.game_reset_received.connect(on_game_reset)
 	NetworkManager.stats_received.connect(apply_stats)
+	NetworkManager.slot_swap_requested.connect(_on_slot_swap_requested)
+	NetworkManager.slot_swap_confirmed.connect(_on_slot_swap_confirmed)
 
 # ── Process ───────────────────────────────────────────────────────────────────
 func _process(delta: float) -> void:
@@ -636,6 +638,62 @@ func get_goalie_data() -> Array[Dictionary]:
 			"is_butterfly": goalie_controllers[i].is_butterfly(),
 		})
 	return data
+
+func get_slot_roster() -> Array[Dictionary]:
+	if _state_machine == null:
+		return []
+	var raw: Array[Dictionary] = _state_machine.get_slot_roster()
+	for entry: Dictionary in raw:
+		var pid: int = entry.peer_id
+		if players.has(pid):
+			entry["player_name"] = players[pid].display_name()
+		else:
+			entry["player_name"] = ""
+	return raw
+
+func _on_slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int) -> void:
+	if not NetworkManager.is_host or _state_machine == null:
+		return
+	var result: Dictionary = _state_machine.try_swap_slot(peer_id, new_team_id, new_slot)
+	if result.is_empty():
+		return
+	if puck != null and puck.carrier != null:
+		var record: PlayerRecord = players.get(peer_id)
+		if record != null and record.skater == puck.carrier:
+			_drop_puck_if_carried()
+	var jersey: Color
+	var helmet: Color
+	var pants: Color
+	if new_team_id != result.old_team_id:
+		jersey = PlayerRules.generate_jersey_color(new_team_id)
+		helmet = PlayerRules.generate_helmet_color(new_team_id)
+		pants  = PlayerRules.generate_pants_color(new_team_id)
+	else:
+		var record: PlayerRecord = players[peer_id]
+		jersey = record.jersey_color
+		helmet = record.helmet_color
+		pants  = record.pants_color
+	NetworkManager.send_confirm_slot_swap(peer_id, result.old_team_id, result.old_slot,
+			new_team_id, new_slot, jersey, helmet, pants)
+
+func _on_slot_swap_confirmed(peer_id: int, _old_team_id: int, _old_slot: int,
+		new_team_id: int, new_slot: int,
+		jersey: Color, helmet: Color, pants: Color) -> void:
+	if not players.has(peer_id):
+		return
+	if not NetworkManager.is_host and _state_machine != null:
+		_state_machine.register_remote_assigned_player(peer_id, new_slot, new_team_id)
+	var record: PlayerRecord = players[peer_id]
+	record.team        = teams[new_team_id]
+	record.team_slot   = new_slot
+	record.jersey_color = jersey
+	record.helmet_color = helmet
+	record.pants_color  = pants
+	record.faceoff_position = PlayerRules.faceoff_position(new_team_id, new_slot)
+	record.skater.set_player_color(jersey, helmet, pants)
+	record.skater.set_ring_color(PlayerRules.slot_color(new_team_id, new_slot))
+	record.controller.teleport_to(record.faceoff_position)
+	stats_updated.emit()
 
 func get_local_player() -> PlayerRecord:
 	for peer_id in players:
