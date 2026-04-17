@@ -6,7 +6,6 @@ extends SkaterController
 var _latest_input: InputState = InputState.new()
 var _state_buffer: Array[BufferedSkaterState] = []
 var _current_time: float = 0.0
-var _last_processed_sequence: int = 0
 
 func _physics_process(delta: float) -> void:
 	if skater == null:
@@ -25,7 +24,10 @@ func _drive_from_input(delta: float) -> void:
 	# Always advance sequence so the client's reconcile filter stays current,
 	# but don't process movement during dead-puck phases — stale input would
 	# contaminate server state and cause a velocity burst when the phase lifts.
-	_last_processed_sequence = _latest_input.sequence
+	# Writes SkaterController.last_processed_sequence (the field serialized into
+	# SkaterNetworkState); the client's LocalController.reconcile reads it to
+	# drop confirmed inputs from its replay history.
+	last_processed_sequence = _latest_input.sequence
 	if _game_state.is_movement_locked():
 		skater.velocity = Vector3.ZERO
 		return

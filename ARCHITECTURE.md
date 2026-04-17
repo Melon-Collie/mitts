@@ -262,7 +262,7 @@ Period clock (`GameRules.PERIOD_DURATION = 240s`, `NUM_PERIODS = 3`) ticks down 
 
 The `GameStateMachine` exposes `is_movement_locked()` — true during `GOAL_SCORED`, `FACEOFF_PREP`, `END_OF_PERIOD`, and `GAME_OVER`. `GameManager` re-exposes this as an instance method and is passed into each controller at `setup()` as the `game_state` dependency. Controllers call `_game_state.is_movement_locked()` every frame:
 - `LocalController._physics_process`: zeros velocity, drains `_input_history`, skips input gathering and processing
-- `RemoteController._drive_from_input`: still advances `_last_processed_sequence` (keeps reconcile bookkeeping current) but zeros velocity and skips `_process_input`
+- `RemoteController._drive_from_input`: still advances `last_processed_sequence` (keeps reconcile bookkeeping current) but zeros velocity and skips `_process_input`
 - `LocalController.reconcile`: returns early during locked phases — `on_faceoff_positions` (reliable RPC) is the authoritative source of faceoff positions
 
 ### Controller API
