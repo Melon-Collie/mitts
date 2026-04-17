@@ -28,11 +28,11 @@ var time_remaining: float = GameRules.PERIOD_DURATION
 var scores: Array[int] = [0, 0]
 var last_scoring_team_id: int = -1
 var team_shots: Array[int] = [0, 0]
-var period_scores: Array = [[0, 0, 0], [0, 0, 0]]  # [team_id][period_index 0-based]
+var period_scores: Array[Array] = [[0, 0, 0], [0, 0, 0]]  # [team_id][period_index 0-based]
 
 # ── Player registry (domain view) ────────────────────────────────────────────
 # peer_id → { slot: int, team_id: int, faceoff_position: Vector3 }
-var players: Dictionary = {}
+var players: Dictionary[int, Dictionary] = {}
 var _next_team_slots: Array[int] = [0, 0]  # next available team_slot per team
 
 # ── Icing ────────────────────────────────────────────────────────────────────

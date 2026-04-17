@@ -115,6 +115,7 @@ func _build_ui() -> void:
 
 	_ip_field = LineEdit.new()
 	_ip_field.placeholder_text = "IP Address"
+	_ip_field.text = "127.0.0.1"
 	_ip_field.custom_minimum_size = Vector2(200, 48)
 	_ip_field.add_theme_font_size_override("font_size", 18)
 	join_row.add_child(_ip_field)

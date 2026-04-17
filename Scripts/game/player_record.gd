@@ -8,8 +8,9 @@ var controller: SkaterController = null
 var is_local: bool = false
 var team: Team = null
 var faceoff_position: Vector3 = Vector3.ZERO
-var color: Color = Color.WHITE
-var secondary_color: Color = Color.BLACK
+var jersey_color: Color = Color.WHITE
+var helmet_color: Color = Color.BLACK
+var pants_color: Color = Color.BLACK
 var is_left_handed: bool = true
 var stats: PlayerStats = PlayerStats.new()
 

@@ -171,12 +171,12 @@ func receive_world_state(state: Array) -> void:
 	GameManager.apply_world_state(state)
 
 @rpc("authority", "reliable")
-func assign_player_slot(team_slot: int, team_id: int, primary_color: Color, secondary_color: Color) -> void:
-	GameManager.on_slot_assigned(team_slot, team_id, primary_color, secondary_color)
+func assign_player_slot(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color) -> void:
+	GameManager.on_slot_assigned(team_slot, team_id, jersey_color, helmet_color, pants_color)
 
 @rpc("authority", "reliable")
-func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, primary_color: Color, secondary_color: Color, is_left_handed: bool, player_name: String) -> void:
-	GameManager.spawn_remote_skater(peer_id, team_slot, team_id, primary_color, secondary_color, is_left_handed, player_name)
+func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String) -> void:
+	GameManager.spawn_remote_skater(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color, is_left_handed, player_name)
 
 @rpc("authority", "reliable")
 func sync_existing_players(player_data: Array) -> void:
@@ -247,11 +247,11 @@ func receive_stats(data: Array) -> void:
 	GameManager.apply_stats(data)
 
 # ── Sending ───────────────────────────────────────────────────────────────────
-func send_slot_assignment(peer_id: int, team_slot: int, team_id: int, primary_color: Color, secondary_color: Color) -> void:
-	assign_player_slot.rpc_id(peer_id, team_slot, team_id, primary_color, secondary_color)
+func send_slot_assignment(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color) -> void:
+	assign_player_slot.rpc_id(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color)
 
-func send_spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, primary_color: Color, secondary_color: Color, is_left_handed: bool, player_name: String) -> void:
-	spawn_remote_skater.rpc(peer_id, team_slot, team_id, primary_color, secondary_color, is_left_handed, player_name)
+func send_spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String) -> void:
+	spawn_remote_skater.rpc(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color, is_left_handed, player_name)
 
 func send_sync_existing_players(peer_id: int, player_data: Array) -> void:
 	sync_existing_players.rpc_id(peer_id, player_data)

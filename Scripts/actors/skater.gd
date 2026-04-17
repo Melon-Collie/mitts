@@ -298,25 +298,25 @@ func set_lower_body_lag(angle: float) -> void:
 func get_facing() -> Vector2:
 	return _facing
 
-func set_player_color(primary_color: Color, secondary_color: Color, is_local: bool = false) -> void:
-	# Primary: jersey, blade, arms
-	var primary_mat := StandardMaterial3D.new()
-	primary_mat.albedo_color = primary_color
-	_upper_body_mesh.material_override = primary_mat
-	_blade_mesh.material_override = primary_mat.duplicate()
+func set_player_color(jersey_color: Color, helmet_color: Color, pants_color: Color) -> void:
+	var jersey_mat := StandardMaterial3D.new()
+	jersey_mat.albedo_color = jersey_color
+	_upper_body_mesh.material_override = jersey_mat
+	_blade_mesh.material_override = jersey_mat.duplicate()
 	if upper_arm_mesh != null:
-		upper_arm_mesh.material_override = primary_mat.duplicate()
+		upper_arm_mesh.material_override = jersey_mat.duplicate()
 	if forearm_mesh != null:
-		forearm_mesh.material_override = primary_mat.duplicate()
+		forearm_mesh.material_override = jersey_mat.duplicate()
 	if bottom_upper_arm_mesh != null:
-		bottom_upper_arm_mesh.material_override = primary_mat.duplicate()
+		bottom_upper_arm_mesh.material_override = jersey_mat.duplicate()
 	if bottom_forearm_mesh != null:
-		bottom_forearm_mesh.material_override = primary_mat.duplicate()
-	# Secondary: legs + helmet
-	var secondary_mat := StandardMaterial3D.new()
-	secondary_mat.albedo_color = secondary_color
-	_lower_body_mesh.material_override = secondary_mat
-	_direction_indicator.material_override = secondary_mat.duplicate()
+		bottom_forearm_mesh.material_override = jersey_mat.duplicate()
+	var helmet_mat := StandardMaterial3D.new()
+	helmet_mat.albedo_color = helmet_color
+	_direction_indicator.material_override = helmet_mat
+	var pants_mat := StandardMaterial3D.new()
+	pants_mat.albedo_color = pants_color
+	_lower_body_mesh.material_override = pants_mat
 	# Fixed stick shaft color — set explicitly so ghost mode never creates a
 	# blank gray override and corrupts the color after ghost ends.
 	var stick_mat := StandardMaterial3D.new()

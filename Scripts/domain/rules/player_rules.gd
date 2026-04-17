@@ -14,18 +14,34 @@ static func assign_team(team0_count: int, team1_count: int) -> int:
 		return 1
 	return randi() % 2
 
-# Primary color: jersey, arms, blade. Fixed per team — all teammates match.
-#   Team 0 (home) = Pittsburgh Penguins Vegas Gold (#FFB81C)
-#   Team 1 (away) = Toronto Maple Leafs Blue (#003E7E)
+# Primary color: used for UI badges/scoreboard. Fixed per team.
+#   Team 0 (home) = Pittsburgh Penguins Gold (#FCB514)
+#   Team 1 (away) = Toronto Maple Leafs Blue (#00205B)
 static func generate_primary_color(team_id: int) -> Color:
 	if team_id == 0:
-		return Color(1.000, 0.722, 0.110)  # Penguins Vegas Gold #FFB81C
-	return Color(0.000, 0.243, 0.494)      # Leafs Blue #003E7E
+		return Color(0.988, 0.710, 0.078)  # Penguins Gold #FCB514
+	return Color(0.000, 0.125, 0.357)      # Leafs Blue #00205B
 
-# Secondary color: legs and helmet (DirectionIndicator). Fixed per team.
+# Secondary color: used for UI. Fixed per team.
 #   Team 0 (home) = Penguins Black
 #   Team 1 (away) = Leafs White
 static func generate_secondary_color(team_id: int) -> Color:
+	if team_id == 0:
+		return Color(0.06, 0.06, 0.06)  # Penguins Black
+	return Color(1.00, 1.00, 1.00)      # Leafs White
+
+# Uniform colors for skater meshes.
+static func generate_jersey_color(team_id: int) -> Color:
+	if team_id == 0:
+		return Color(0.988, 0.710, 0.078)  # Penguins Gold #FCB514
+	return Color(0.000, 0.125, 0.357)      # Leafs Blue #00205B
+
+static func generate_helmet_color(team_id: int) -> Color:
+	if team_id == 0:
+		return Color(0.06, 0.06, 0.06)  # Penguins Black
+	return Color(0.000, 0.125, 0.357)   # Leafs Blue #00205B
+
+static func generate_pants_color(team_id: int) -> Color:
 	if team_id == 0:
 		return Color(0.06, 0.06, 0.06)  # Penguins Black
 	return Color(1.00, 1.00, 1.00)      # Leafs White
