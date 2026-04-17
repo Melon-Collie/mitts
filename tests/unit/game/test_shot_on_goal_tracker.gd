@@ -1,0 +1,211 @@
+extends GutTest
+
+# ShotOnGoalTracker — pending-shot state machine + assist crediting.
+# PlayerRegistry is constructed but its setup() is skipped; we populate
+# the `_players` dict directly since only lookup methods are exercised.
+
+var tracker: ShotOnGoalTracker
+var registry: PlayerRegistry
+var sm: GameStateMachine
+
+
+func before_each() -> void:
+	sm = GameStateMachine.new()
+	registry = PlayerRegistry.new()
+	tracker = ShotOnGoalTracker.new()
+	tracker.setup(registry, sm)
+
+
+func _add_player(peer_id: int, team_id: int, p_name: String = "P") -> PlayerRecord:
+	var team := Team.new()
+	team.team_id = team_id
+	var record := PlayerRecord.new(peer_id, 0, false, team)
+	record.player_name = p_name
+	record.stats = PlayerStats.new()
+	registry._players[peer_id] = record
+	return record
+
+
+# ── Pickup / carrier tracking ────────────────────────────────────────────────
+
+func test_initial_state_has_no_pending_shot() -> void:
+	assert_false(tracker.has_pending_shot())
+	assert_eq(tracker.get_shooter_peer_id(), -1)
+
+
+func test_pickup_records_carrier() -> void:
+	_add_player(10, 0)
+	tracker.on_pickup(10)
+	assert_eq(tracker.find_scorer_on_team(0), 10)
+
+
+func test_pickup_limits_to_three_carriers() -> void:
+	_add_player(10, 0)
+	_add_player(11, 0)
+	_add_player(12, 0)
+	_add_player(13, 0)
+	tracker.on_pickup(10)
+	tracker.on_pickup(11)
+	tracker.on_pickup(12)
+	tracker.on_pickup(13)
+	# Only the 3 most recent carriers are kept; 10 should be dropped.
+	_add_player(20, 1, "Opponent")
+	tracker.on_pickup(20)  # push unique to verify recency
+	# 13 is now 2nd most recent, 10 shouldn't be in the list
+	var scorer_team0: int = tracker.find_scorer_on_team(0)
+	assert_eq(scorer_team0, 13, "most recent team-0 carrier is 13 (10 rotated out)")
+
+
+func test_pickup_dedupes_consecutive_same_peer() -> void:
+	_add_player(10, 0)
+	tracker.on_pickup(10)
+	tracker.on_pickup(10)  # no-op dedupe
+	# Credit assists on a fictitious scorer — should see no double-entry
+	_add_player(11, 0, "Scorer")
+	tracker.on_pickup(11)
+	var assists: Array[String] = tracker.credit_assists(11)
+	assert_eq(assists.size(), 1, "only 10 counts as one assist candidate")
+
+
+# ── Shot timeout ──────────────────────────────────────────────────────────────
+
+func test_shot_started_arms_pending_timer() -> void:
+	_add_player(10, 0)
+	tracker.on_shot_started(10)
+	assert_true(tracker.has_pending_shot())
+	assert_eq(tracker.get_shooter_peer_id(), 10)
+
+
+func test_shot_timeout_clears_pending() -> void:
+	_add_player(10, 0)
+	tracker.on_shot_started(10)
+	tracker.tick(ShotOnGoalTracker.SHOT_ON_GOAL_TIMEOUT + 0.01)
+	assert_false(tracker.has_pending_shot())
+
+
+func test_partial_tick_keeps_pending() -> void:
+	_add_player(10, 0)
+	tracker.on_shot_started(10)
+	tracker.tick(ShotOnGoalTracker.SHOT_ON_GOAL_TIMEOUT / 2.0)
+	assert_true(tracker.has_pending_shot())
+
+
+func test_shot_started_with_invalid_peer_is_noop() -> void:
+	tracker.on_shot_started(-1)
+	assert_false(tracker.has_pending_shot())
+
+
+# ── Goalie save / SOG ────────────────────────────────────────────────────────
+
+func test_goalie_touch_by_defending_team_confirms_sog() -> void:
+	var shooter := _add_player(10, 0)  # attacking team
+	tracker.on_shot_started(10)
+	tracker.on_goalie_touch(1)  # defending team is team 1
+	assert_eq(shooter.stats.shots_on_goal, 1)
+	assert_eq(sm.team_shots[0], 1)
+	assert_eq(sm.team_shots[1], 0)
+
+
+func test_goalie_touch_own_net_does_not_count() -> void:
+	var shooter := _add_player(10, 0)
+	tracker.on_shot_started(10)
+	tracker.on_goalie_touch(0)  # shooter is on defending team — own-goal attempt
+	assert_eq(shooter.stats.shots_on_goal, 0)
+	assert_eq(sm.team_shots[0], 0)
+
+
+func test_goalie_touch_without_pending_is_noop() -> void:
+	var shooter := _add_player(10, 0)
+	tracker.on_goalie_touch(1)
+	assert_eq(shooter.stats.shots_on_goal, 0)
+
+
+func test_sog_counted_once_per_shot() -> void:
+	var shooter := _add_player(10, 0)
+	tracker.on_shot_started(10)
+	tracker.on_goalie_touch(1)
+	tracker.on_goal_confirmed(10)  # same shot registers a goal — should not double-count SOG
+	assert_eq(shooter.stats.shots_on_goal, 1)
+
+
+# ── Loose puck clears pending ────────────────────────────────────────────────
+
+func test_loose_puck_touched_clears_pending() -> void:
+	_add_player(10, 0)
+	tracker.on_shot_started(10)
+	tracker.on_loose_puck_touched()
+	assert_false(tracker.has_pending_shot())
+
+
+func test_pickup_clears_pending() -> void:
+	_add_player(10, 0)
+	tracker.on_shot_started(10)
+	tracker.on_pickup(10)
+	assert_false(tracker.has_pending_shot())
+
+
+# ── Assists ──────────────────────────────────────────────────────────────────
+
+func test_credit_assists_up_to_two_same_team_carriers() -> void:
+	var a1 := _add_player(10, 0, "A1")
+	var a2 := _add_player(11, 0, "A2")
+	var scorer := _add_player(12, 0, "Scorer")
+	tracker.on_pickup(10)
+	tracker.on_pickup(11)
+	tracker.on_pickup(12)
+	var assists: Array[String] = tracker.credit_assists(12)
+	assert_eq(assists.size(), 2)
+	assert_eq(assists[0], "A2")
+	assert_eq(assists[1], "A1")
+	assert_eq(a1.stats.assists, 1)
+	assert_eq(a2.stats.assists, 1)
+	assert_eq(scorer.stats.assists, 0)
+
+
+func test_credit_assists_stops_at_opposing_team() -> void:
+	var team_assist := _add_player(10, 0, "TeamA1")
+	_add_player(11, 1, "Opponent")          # opposing carrier interrupts chain
+	var team_assist_2 := _add_player(12, 0, "TeamA2")
+	var scorer := _add_player(13, 0, "Scorer")
+	tracker.on_pickup(10)
+	tracker.on_pickup(11)
+	tracker.on_pickup(12)
+	tracker.on_pickup(13)
+	var assists: Array[String] = tracker.credit_assists(13)
+	assert_eq(assists.size(), 1)
+	assert_eq(assists[0], "TeamA2")
+	assert_eq(team_assist.stats.assists, 0, "chain stopped at opponent — no credit")
+	assert_eq(team_assist_2.stats.assists, 1)
+	assert_eq(scorer.stats.assists, 0)
+
+
+func test_credit_assists_scorer_without_team_returns_empty() -> void:
+	var assists: Array[String] = tracker.credit_assists(999)  # unregistered
+	assert_eq(assists.size(), 0)
+
+
+# ── Reset ────────────────────────────────────────────────────────────────────
+
+func test_reset_all_clears_state_and_team_shots() -> void:
+	var p := _add_player(10, 0)
+	tracker.on_pickup(10)
+	tracker.on_shot_started(10)
+	tracker.on_goalie_touch(1)
+	assert_eq(sm.team_shots[0], 1)
+	tracker.reset_all()
+	assert_eq(sm.team_shots[0], 0)
+	assert_eq(sm.team_shots[1], 0)
+	assert_false(tracker.has_pending_shot())
+	# Recent carriers cleared — scorer lookup should miss
+	assert_eq(tracker.find_scorer_on_team(0), -1)
+	# Stats were not mutated by reset (registry owns stats lifecycle)
+	assert_eq(p.stats.shots_on_goal, 1,
+			"reset_all doesn't touch player stats — that's PlayerRegistry's job")
+
+
+func test_shots_on_goal_changed_signal_fires() -> void:
+	_add_player(10, 0)
+	watch_signals(tracker)
+	tracker.on_shot_started(10)
+	tracker.on_goalie_touch(1)
+	assert_signal_emitted_with_parameters(tracker, "shots_on_goal_changed", [1, 0])

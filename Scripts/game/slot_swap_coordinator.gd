@@ -1,0 +1,96 @@
+class_name SlotSwapCoordinator
+extends RefCounted
+
+# Validates and applies mid-game slot swaps. Split out of GameManager because
+# the request / confirmation flow is a self-contained feature.
+#
+# Flow:
+#   host: request_swap(peer_id, new_team_id, new_slot, carrier)
+#           → validates via GameStateMachine.try_swap_slot
+#           → returns a confirmation dict (caller broadcasts via NetworkManager)
+#           → signals carrier_swap_needs_drop if the swapping player held the puck
+#   all peers: apply_confirmed_swap(...)  → mutates PlayerRecord + teleports
+
+signal stats_updated
+signal carrier_swap_needs_drop
+
+var _registry: PlayerRegistry = null
+var _state_machine: GameStateMachine = null
+var _teams: Array[Team] = []
+
+
+func setup(
+		registry: PlayerRegistry,
+		state_machine: GameStateMachine,
+		teams: Array[Team]) -> void:
+	_registry = registry
+	_state_machine = state_machine
+	_teams = teams
+
+
+# Host-only: validates a swap request. Returns the confirmation data (to be
+# broadcast via NetworkManager) or an empty dict if the swap is rejected.
+# If the requesting player holds the puck, `carrier_swap_needs_drop` fires so
+# the caller can drop the puck before the swap is finalized.
+func request_swap(
+		peer_id: int,
+		new_team_id: int,
+		new_slot: int,
+		puck_carrier: Skater) -> Dictionary:
+	if _state_machine == null:
+		return {}
+	var result: Dictionary = _state_machine.try_swap_slot(peer_id, new_team_id, new_slot)
+	if result.is_empty():
+		return {}
+	var record: PlayerRecord = _registry.get_record(peer_id)
+	if record != null and puck_carrier != null and record.skater == puck_carrier:
+		carrier_swap_needs_drop.emit()
+	var jersey: Color
+	var helmet: Color
+	var pants: Color
+	if new_team_id != result.old_team_id:
+		jersey = PlayerRules.generate_jersey_color(new_team_id)
+		helmet = PlayerRules.generate_helmet_color(new_team_id)
+		pants  = PlayerRules.generate_pants_color(new_team_id)
+	else:
+		jersey = record.jersey_color
+		helmet = record.helmet_color
+		pants  = record.pants_color
+	return {
+		"old_team_id": result.old_team_id,
+		"old_slot":    result.old_slot,
+		"new_team_id": new_team_id,
+		"new_slot":    new_slot,
+		"jersey":      jersey,
+		"helmet":      helmet,
+		"pants":       pants,
+	}
+
+
+# Applied on all peers when the confirmation RPC arrives (and locally on the
+# host after its own broadcast). Safe to call even if the state_machine is
+# already in sync — register_remote_assigned_player overwrites idempotently.
+func apply_confirmed_swap(
+		peer_id: int,
+		_old_team_id: int,
+		_old_slot: int,
+		new_team_id: int,
+		new_slot: int,
+		jersey: Color,
+		helmet: Color,
+		pants: Color) -> void:
+	if not _registry.has(peer_id):
+		return
+	if _state_machine != null:
+		_state_machine.register_remote_assigned_player(peer_id, new_slot, new_team_id)
+	var record: PlayerRecord = _registry.get_record(peer_id)
+	record.team             = _teams[new_team_id]
+	record.team_slot        = new_slot
+	record.jersey_color     = jersey
+	record.helmet_color     = helmet
+	record.pants_color      = pants
+	record.faceoff_position = PlayerRules.faceoff_position(new_team_id, new_slot)
+	record.skater.set_player_color(jersey, helmet, pants)
+	record.skater.set_ring_color(PlayerRules.slot_color(new_team_id, new_slot))
+	record.controller.teleport_to(record.faceoff_position)
+	stats_updated.emit()

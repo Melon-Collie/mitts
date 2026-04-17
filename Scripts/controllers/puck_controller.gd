@@ -99,13 +99,13 @@ func _reconcile(state: PuckNetworkState) -> void:
 		puck.set_puck_position(puck.get_puck_position() + pos_error * position_correction_blend)
 
 # ── Server Signals ────────────────────────────────────────────────────────────
-# These run on host only (connected in setup() when is_server). Each resolves
-# the affected peer_id via the injected resolver and emits a signal upward.
+# Run on host only (connected in setup() when is_server). Each resolves the
+# affected peer_id via the injected resolver and emits a signal upward — the
+# three variants below differ only in how peer_id is sourced (resolve from
+# the skater argument vs. read the cached carrier) and which signal fires.
 # GameManager listens and does the player-registry / RPC work.
 func _on_puck_picked_up(carrier: Skater) -> void:
-	if not _peer_id_resolver.is_valid():
-		return
-	var peer_id: int = _peer_id_resolver.call(carrier)
+	var peer_id: int = _resolve_peer_id(carrier)
 	if peer_id == -1:
 		return
 	_carrier_peer_id = peer_id
@@ -118,14 +118,15 @@ func _on_puck_released() -> void:
 		puck_released_by_carrier.emit(peer_id)
 
 func _on_puck_stripped(ex_carrier: Skater) -> void:
-	if ex_carrier == null:
-		return
-	if not _peer_id_resolver.is_valid():
-		return
-	var peer_id: int = _peer_id_resolver.call(ex_carrier)
+	var peer_id: int = _resolve_peer_id(ex_carrier)
 	if peer_id == -1:
 		return
 	puck_stripped_from.emit(peer_id)
+
+func _resolve_peer_id(skater: Skater) -> int:
+	if skater == null or not _peer_id_resolver.is_valid():
+		return -1
+	return _peer_id_resolver.call(skater)
 
 # ── State Serialization ───────────────────────────────────────────────────────
 # Returns the typed network state object. Flattening to Array happens at the

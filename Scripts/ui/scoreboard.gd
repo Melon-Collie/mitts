@@ -148,8 +148,9 @@ func _refresh() -> void:
 		child.queue_free()
 
 	var sorted: Array[PlayerRecord] = []
-	for pid: int in GameManager.players:
-		sorted.append(GameManager.players[pid])
+	var all_players := GameManager.get_players()
+	for pid: int in all_players:
+		sorted.append(all_players[pid])
 	sorted.sort_custom(func(a: PlayerRecord, b: PlayerRecord) -> bool:
 		if a.team.team_id != b.team.team_id:
 			return a.team.team_id > b.team.team_id  # team 1 (away) first
