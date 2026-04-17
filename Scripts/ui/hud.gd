@@ -302,6 +302,17 @@ func _build_pause_menu() -> void:
 	resume_btn.pressed.connect(func() -> void: _set_paused(false))
 	vbox.add_child(resume_btn)
 
+	if NetworkManager.is_host:
+		var rematch_btn := _popup_button("Rematch")
+		rematch_btn.pressed.connect(func() -> void:
+			_set_paused(false)
+			GameManager.reset_game())
+		vbox.add_child(rematch_btn)
+
+	var bug_btn := _popup_button("Report Bug")
+	bug_btn.pressed.connect(_on_bug_report_pressed)
+	vbox.add_child(bug_btn)
+
 	var quit_btn := _popup_button("Quit to Menu")
 	quit_btn.pressed.connect(func() -> void:
 		GameManager.on_scene_exit()
@@ -310,7 +321,10 @@ func _build_pause_menu() -> void:
 	vbox.add_child(quit_btn)
 
 	var exit_btn := _popup_button("Exit Game")
-	exit_btn.pressed.connect(func() -> void: get_tree().quit())
+	exit_btn.pressed.connect(func() -> void:
+		GameManager.on_scene_exit()
+		NetworkManager.reset()
+		get_tree().quit())
 	vbox.add_child(exit_btn)
 
 	var root := Control.new()
@@ -462,6 +476,12 @@ func _on_game_over() -> void:
 
 func _on_game_reset() -> void:
 	_game_over_popup.visible = false
+
+func _on_bug_report_pressed() -> void:
+	var title: String = "[bug] v%s %s - " % [BuildInfo.VERSION, OS.get_name()]
+	var body: String = "Version: v%s\nOS: %s\n\nWhat happened:\n\nSteps to reproduce:\n1. \n2. \n3. \n" % [BuildInfo.VERSION, OS.get_name()]
+	var url: String = "https://github.com/%s/issues/new?title=%s&body=%s" % [BuildInfo.REPO, title.uri_encode(), body.uri_encode()]
+	OS.shell_open(url)
 
 func _on_shots_on_goal_changed(sog_0: int, sog_1: int) -> void:
 	if _home_sog_label != null:

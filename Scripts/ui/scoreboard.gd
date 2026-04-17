@@ -74,23 +74,9 @@ func _build_panel() -> void:
 
 	vbox.add_child(_hsep())
 
-	var footer_row := HBoxContainer.new()
-	footer_row.add_theme_constant_override("separation", 4)
-	vbox.add_child(footer_row)
-
-	if NetworkManager.is_host:
-		var reset_btn := _icon_button("res://Assets/Icons/restart_alt.svg")
-		reset_btn.pressed.connect(GameManager.reset_game)
-		footer_row.add_child(reset_btn)
-
 	var footer := _lbl("TAB to toggle", 11, _DIM)
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	footer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	footer_row.add_child(footer)
-
-	var bug_btn := _icon_button("res://Assets/Icons/bug_report.svg")
-	bug_btn.pressed.connect(_on_bug_report_pressed)
-	footer_row.add_child(bug_btn)
+	vbox.add_child(footer)
 
 func _build_period_summary(vbox: VBoxContainer) -> void:
 	var h_wrap := HBoxContainer.new()
@@ -239,19 +225,6 @@ func _team_badge(text: String, color: Color) -> PanelContainer:
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	badge.add_child(lbl)
 	return badge
-
-func _on_bug_report_pressed() -> void:
-	var title: String = "[bug] v%s %s - " % [BuildInfo.VERSION, OS.get_name()]
-	var body: String = "Version: v%s\nOS: %s\n\nWhat happened:\n\nSteps to reproduce:\n1. \n2. \n3. \n" % [BuildInfo.VERSION, OS.get_name()]
-	var url: String = "https://github.com/%s/issues/new?title=%s&body=%s" % [BuildInfo.REPO, title.uri_encode(), body.uri_encode()]
-	OS.shell_open(url)
-
-func _icon_button(icon_path: String) -> Button:
-	var btn := Button.new()
-	btn.icon = load(icon_path)
-	btn.flat = true
-	btn.add_theme_color_override("icon_normal_color", _DIM)
-	return btn
 
 func _hsep() -> HSeparator:
 	var sep := HSeparator.new()
