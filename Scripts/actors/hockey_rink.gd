@@ -34,9 +34,17 @@ extends StaticBody3D
 	set(v):
 		kickplate_color = v
 		_rebuild()
-@export var cap_rail_color: Color = Color(0.784, 0.063, 0.180):
+@export var cap_rail_color: Color = Color(0.0, 0.220, 0.659):
 	set(v):
 		cap_rail_color = v
+		_rebuild()
+@export var board_stripe_z_nudge: float = 0.0:
+	set(v):
+		board_stripe_z_nudge = v
+		_rebuild()
+@export var kickplate_gap_z_nudge: float = 0.084:
+	set(v):
+		kickplate_gap_z_nudge = v
 		_rebuild()
 @export var kickplate_height: float = 0.20:
 	set(v):
@@ -503,24 +511,35 @@ func _add_corner(center: Vector3, angle_start: float, angle_end: float, stripe_z
 		var kp_z: float = mid_xz.z - outward.z * KICKPLATE_PROTRUSION / 2.0
 		var kp_w: float = wall_thickness + KICKPLATE_PROTRUSION
 		var crossing_t: float = -1.0
+		var crossing_sz: float = 0.0
 		for stripe in stripe_zs:
 			var sz: float = stripe["z"]
 			if (p1.z <= sz and sz <= p2.z) or (p2.z <= sz and sz <= p1.z):
 				crossing_t = (sz - p1.z) / (p2.z - p1.z) if absf(p2.z - p1.z) > 0.001 else 0.5
+				crossing_sz = sz
 				break
 		if crossing_t < 0.0:
 			_add_kickplate_rotated(kp_w, seg_length, Vector3(kp_x, kickplate_height / 2.0, kp_z), rot_y)
 		else:
-			var half_gap: float = 0.025  # half of 0.05m goal line width
-			var local_cross: float = (crossing_t - 0.5) * seg_length
-			var len1: float = local_cross - half_gap + seg_length / 2.0
-			var len2: float = seg_length / 2.0 - local_cross - half_gap
+			# Cut at Z = gap_sz ± half_gap (Z-perpendicular) so the gap aligns with
+			# the board stripe and ice goal line rather than being a diagonal tangent cut.
+			var half_gap: float = 0.025
+			var gap_sz := crossing_sz + kickplate_gap_z_nudge * signf(crossing_sz)
+			var dz: float = p2.z - p1.z
+			var t_low  := clampf((gap_sz - half_gap - p1.z) / dz, 0.0, 1.0) if absf(dz) > 0.001 else crossing_t
+			var t_high := clampf((gap_sz + half_gap - p1.z) / dz, 0.0, 1.0) if absf(dz) > 0.001 else crossing_t
+			if t_low > t_high:
+				var tmp := t_low; t_low = t_high; t_high = tmp
+			var local_low  := (t_low  - 0.5) * seg_length
+			var local_high := (t_high - 0.5) * seg_length
+			var len1: float = local_low + seg_length / 2.0
+			var len2: float = seg_length / 2.0 - local_high
 			if len1 > 0.001:
 				var c1: float = -seg_length / 2.0 + len1 / 2.0
 				_add_kickplate_rotated(kp_w, len1,
 					Vector3(kp_x + dir.x * c1, kickplate_height / 2.0, kp_z + dir.z * c1), rot_y)
 			if len2 > 0.001:
-				var c2: float = local_cross + half_gap + len2 / 2.0
+				var c2: float = local_high + len2 / 2.0
 				_add_kickplate_rotated(kp_w, len2,
 					Vector3(kp_x + dir.x * c2, kickplate_height / 2.0, kp_z + dir.z * c2), rot_y)
 
@@ -555,7 +574,7 @@ func _add_corner(center: Vector3, angle_start: float, angle_end: float, stripe_z
 		cap_mi.position = Vector3(mid_xz.x, wall_height + CAP_RAIL_HEIGHT / 2.0, mid_xz.z)
 		cap_mi.rotation.y = rot_y
 		var cap_mat := StandardMaterial3D.new()
-		cap_mat.albedo_color = kickplate_color
+		cap_mat.albedo_color = cap_rail_color
 		cap_mi.material_override = cap_mat
 		add_child(cap_mi)
 
@@ -565,10 +584,14 @@ func _add_corner(center: Vector3, angle_start: float, angle_end: float, stripe_z
 			if (p1.z <= sz and sz <= p2.z) or (p2.z <= sz and sz <= p1.z):
 				var t: float = (sz - p1.z) / (p2.z - p1.z) if absf(p2.z - p1.z) > 0.001 else 0.5
 				var hit := p1 + t * (p2 - p1)
-				# 1 mm inside the inner board face — never coplanar
+				# Z-perpendicular stripe at exact goal-line Z.
+				# The old tangent-aligned approach subtracted outward.z * wall_thickness/2
+				# from hit.z (~9 cm at the 37° corner angle), visually offsetting the stripe
+				# from the ice goal line. Using sz directly for Z and a Z-facing quad fixes that.
 				var inward: float = wall_thickness / 2.0 + 0.001
-				var base := Vector3(hit.x - outward.x * inward, 0.0, hit.z - outward.z * inward)
-				var half_sw: float = 0.025  # half of 0.05m goal line width
+				var x_base := hit.x - inward / outward.x if absf(outward.x) > 0.01 else hit.x - outward.x * inward
+				var base := Vector3(x_base, 0.0, sz + board_stripe_z_nudge * signf(sz))
+				var half_sw: float = 0.025
 				var v0 := base + Vector3(-dir.x * half_sw, 0.0,         -dir.z * half_sw)
 				var v1 := base + Vector3( dir.x * half_sw, 0.0,          dir.z * half_sw)
 				var v2 := base + Vector3( dir.x * half_sw, wall_height,  dir.z * half_sw)
