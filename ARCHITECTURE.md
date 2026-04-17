@@ -74,7 +74,7 @@ The puck's pickup zone `Area3D` sits on `LAYER_WALLS \| LAYER_BLADE_AREAS` (3) w
 
 ### Launch Modes
 
-All paths go through `MainMenu.tscn`. `NetworkManager._ready()` is a no-op. The menu calls `start_offline()`, `start_host()`, or `start_client(ip)` — these configure ENet and set `is_host` but do not spawn the world. World spawn is deferred: `Hockey.tscn`'s root runs `game_scene.gd`, whose `_ready()` calls `NetworkManager.on_game_scene_ready()` → `GameManager.on_host_started()`. Clients spawn via `_on_connected_to_server()` as before.
+All paths go through `MainMenu.tscn`. `NetworkManager._ready()` is a no-op. The menu calls `start_offline()`, `start_host()`, or `start_client(ip)` — these configure ENet and set `is_host` but do not spawn the world. World spawn is deferred: `Hockey.tscn`'s root runs `game_scene.gd`, whose `_ready()` calls `NetworkManager.on_game_scene_ready()` which emits `host_ready` (hosts only); `GameManager` has connected that signal to `on_host_started` in `_ready()` and handles the spawn. Clients spawn via the `client_connected` signal emitted from `_on_connected_to_server()`.
 
 Graceful shutdown: `_exit_tree` closes the ENet peer. Server disconnect on client side also triggers close.
 

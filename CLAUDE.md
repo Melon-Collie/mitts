@@ -151,7 +151,9 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 
 ## Launch Modes
 
-All start paths go through `MainMenu.tscn`. `NetworkManager._ready()` does nothing — the menu calls `start_offline()`, `start_host()`, or `start_client(ip)` directly. These set up ENet but defer world spawning. `Hockey.tscn`'s root node runs `game_scene.gd`, whose `_ready()` calls `NetworkManager.on_game_scene_ready()`, which triggers `GameManager.on_host_started()` on the host side. Client world spawn is triggered by `_on_connected_to_server()` as before.
+All start paths go through `MainMenu.tscn`. `NetworkManager._ready()` does nothing — the menu calls `start_offline()`, `start_host()`, or `start_client(ip)` directly. These set up ENet but defer world spawning. `Hockey.tscn`'s root node runs `game_scene.gd`, whose `_ready()` calls `NetworkManager.on_game_scene_ready()`, which emits the `host_ready` signal on hosts (GameManager listens and calls `on_host_started`). Client world spawn is triggered by the `client_connected` signal from `_on_connected_to_server()`.
+
+NetworkManager → GameManager communication is signal-based: every RPC / ENet callback emits a typed signal, and GameManager wires all connections once in `_ready()` via `_wire_network_signals()`. The only downward data flow is `NetworkManager.set_world_state_provider(Callable)`, which GameManager uses to hand the world-state getter to the broadcast loop — matching the `puck.set_team_resolver` / `puck_controller.set_peer_id_resolver` pattern.
 
 ## Distribution
 

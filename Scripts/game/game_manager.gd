@@ -44,6 +44,30 @@ const SHOT_ON_GOAL_TIMEOUT: float = 5.0
 
 func _ready() -> void:
 	randomize()
+	_wire_network_signals()
+
+# NetworkManager observes ENet + RPC traffic and emits signals; GameManager
+# listens and executes the corresponding orchestration. Keeps the upward
+# call discipline (infrastructure never reaches into application).
+func _wire_network_signals() -> void:
+	NetworkManager.set_world_state_provider(get_world_state)
+	NetworkManager.host_ready.connect(on_host_started)
+	NetworkManager.client_connected.connect(on_connected_to_server)
+	NetworkManager.disconnected_from_server.connect(on_scene_exit)
+	NetworkManager.peer_joined.connect(on_player_connected)
+	NetworkManager.peer_disconnected.connect(on_player_disconnected)
+	NetworkManager.world_state_received.connect(apply_world_state)
+	NetworkManager.slot_assigned.connect(on_slot_assigned)
+	NetworkManager.remote_skater_spawn_requested.connect(spawn_remote_skater)
+	NetworkManager.existing_players_synced.connect(sync_existing_players)
+	NetworkManager.local_puck_pickup_confirmed.connect(on_local_player_picked_up_puck)
+	NetworkManager.local_puck_stolen.connect(on_local_player_puck_stolen)
+	NetworkManager.remote_puck_release_received.connect(on_remote_puck_release)
+	NetworkManager.carrier_puck_dropped.connect(on_carrier_puck_dropped)
+	NetworkManager.goal_received.connect(on_goal_scored)
+	NetworkManager.faceoff_positions_received.connect(on_faceoff_positions)
+	NetworkManager.game_reset_received.connect(on_game_reset)
+	NetworkManager.stats_received.connect(apply_stats)
 
 # ── Process ───────────────────────────────────────────────────────────────────
 func _process(delta: float) -> void:

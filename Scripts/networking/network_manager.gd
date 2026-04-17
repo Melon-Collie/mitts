@@ -1,5 +1,27 @@
 extends Node
 
+# ── Outbound signals (application layer listens) ─────────────────────────────
+# NetworkManager observes ENet + RPC traffic; GameManager connects to these in
+# _ready and executes the corresponding orchestration work. Keeps the upward
+# call discipline — infrastructure never calls into application directly.
+signal host_ready
+signal client_connected
+signal disconnected_from_server
+signal peer_joined(peer_id: int)
+signal peer_disconnected(peer_id: int)
+signal world_state_received(state: Array)
+signal slot_assigned(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color)
+signal remote_skater_spawn_requested(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String)
+signal existing_players_synced(player_data: Array)
+signal local_puck_pickup_confirmed
+signal local_puck_stolen
+signal remote_puck_release_received(direction: Vector3, power: float)
+signal carrier_puck_dropped
+signal goal_received(scoring_team_id: int, score0: int, score1: int, scorer_name: String)
+signal faceoff_positions_received(positions: Array)
+signal game_reset_received
+signal stats_received(data: Array)
+
 # ── State ─────────────────────────────────────────────────────────────────────
 var is_host: bool = false
 var game_initiated: bool = false
@@ -9,6 +31,9 @@ var _local_controller: LocalController = null
 var _remote_controllers: Dictionary = {}  # peer_id -> RemoteController
 var _peer_handedness: Dictionary = {}     # peer_id -> bool (host only)
 var _peer_names: Dictionary = {}          # peer_id -> String (host only)
+# Callable () -> Array. Set by GameManager at startup so the broadcast loop
+# can pull world state without reaching up into the application layer.
+var _world_state_provider: Callable = Callable()
 
 # ── Timers ────────────────────────────────────────────────────────────────────
 var pending_error: String = ""
@@ -63,7 +88,7 @@ func start_client(ip: String) -> void:
 
 func on_game_scene_ready() -> void:
 	if is_host:
-		GameManager.on_host_started()
+		host_ready.emit()
 
 # ── Network Signals ───────────────────────────────────────────────────────────
 func _on_peer_connected(id: int) -> void:
@@ -79,7 +104,7 @@ func _on_peer_disconnected(id: int) -> void:
 	print("Player disconnected: ", id)
 	_peer_handedness.erase(id)
 	_peer_names.erase(id)
-	GameManager.on_player_disconnected(id)
+	peer_disconnected.emit(id)
 	# Notify all remaining clients so they remove the stale skater.
 	for peer_id in multiplayer.get_peers():
 		notify_player_disconnected.rpc_id(peer_id, id)
@@ -88,7 +113,7 @@ func _on_connected_to_server() -> void:
 	_connect_timer = -1.0
 	print("Connected! My ID: ", multiplayer.get_unique_id())
 	request_join.rpc_id(1, local_is_left_handed, local_player_name)
-	GameManager.on_connected_to_server()
+	client_connected.emit()
 
 func _on_connection_failed() -> void:
 	push_error("Connection failed")
@@ -99,7 +124,7 @@ func _on_connection_failed() -> void:
 func _on_server_disconnected() -> void:
 	push_error("Server disconnected")
 	pending_error = "Lost connection to server."
-	GameManager.on_scene_exit()
+	disconnected_from_server.emit()
 	reset()
 	get_tree().change_scene_to_file(Constants.SCENE_MAIN_MENU)
 
@@ -160,7 +185,9 @@ func _process(delta: float) -> void:
 			_broadcast_state()
 
 func _broadcast_state() -> void:
-	var state: Array = GameManager.get_world_state()
+	if not _world_state_provider.is_valid():
+		return
+	var state: Array = _world_state_provider.call()
 	for peer_id in multiplayer.get_peers():
 		receive_world_state.rpc_id(peer_id, state)
 
@@ -170,7 +197,7 @@ func request_join(is_left_handed: bool, player_name: String) -> void:
 	var sender_id: int = multiplayer.get_remote_sender_id()
 	_peer_handedness[sender_id] = is_left_handed
 	_peer_names[sender_id] = player_name.strip_edges().left(16)
-	GameManager.on_player_connected(sender_id)
+	peer_joined.emit(sender_id)
 
 func get_peer_handedness(peer_id: int) -> bool:
 	return _peer_handedness.get(peer_id, true)
@@ -191,40 +218,40 @@ func receive_input(data: Array) -> void:
 func receive_world_state(state: Array) -> void:
 	if is_host:
 		return
-	GameManager.apply_world_state(state)
+	world_state_received.emit(state)
 
 @rpc("authority", "reliable")
 func assign_player_slot(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color) -> void:
-	GameManager.on_slot_assigned(team_slot, team_id, jersey_color, helmet_color, pants_color)
+	slot_assigned.emit(team_slot, team_id, jersey_color, helmet_color, pants_color)
 
 @rpc("authority", "reliable")
 func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String) -> void:
-	GameManager.spawn_remote_skater(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color, is_left_handed, player_name)
+	remote_skater_spawn_requested.emit(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color, is_left_handed, player_name)
 
 @rpc("authority", "reliable")
 func sync_existing_players(player_data: Array) -> void:
-	GameManager.sync_existing_players(player_data)
+	existing_players_synced.emit(player_data)
 	
 func send_puck_picked_up(peer_id: int) -> void:
 	notify_puck_picked_up.rpc_id(peer_id)
 
 @rpc("authority", "reliable")
 func notify_puck_picked_up() -> void:
-	GameManager.on_local_player_picked_up_puck()
+	local_puck_pickup_confirmed.emit()
 
 func send_puck_stolen(victim_peer_id: int) -> void:
 	notify_puck_stolen.rpc_id(victim_peer_id)
 
 @rpc("authority", "reliable")
 func notify_puck_stolen() -> void:
-	GameManager.on_local_player_puck_stolen()
+	local_puck_stolen.emit()
 
 func send_puck_release(direction: Vector3, power: float) -> void:
 	release_puck.rpc_id(1, direction, power)
 
 @rpc("any_peer", "reliable")
 func release_puck(direction: Vector3, power: float) -> void:
-	GameManager.on_remote_puck_release(direction, power)
+	remote_puck_release_received.emit(direction, power)
 
 func notify_goal_to_all(scoring_team_id: int, score0: int, score1: int, scorer_name: String) -> void:
 	for peer_id in multiplayer.get_peers():
@@ -235,15 +262,15 @@ func notify_puck_dropped_to_carrier(carrier_peer_id: int) -> void:
 
 @rpc("authority", "reliable")
 func notify_puck_dropped() -> void:
-	GameManager.on_carrier_puck_dropped()
+	carrier_puck_dropped.emit()
 
 @rpc("authority", "reliable")
 func notify_player_disconnected(peer_id: int) -> void:
-	GameManager.on_player_disconnected(peer_id)
+	peer_disconnected.emit(peer_id)
 
 @rpc("authority", "reliable")
 func notify_goal(scoring_team_id: int, score0: int, score1: int, scorer_name: String) -> void:
-	GameManager.on_goal_scored(scoring_team_id, score0, score1, scorer_name)
+	goal_received.emit(scoring_team_id, score0, score1, scorer_name)
 
 func send_faceoff_positions(positions: Array) -> void:
 	for peer_id in multiplayer.get_peers():
@@ -251,7 +278,7 @@ func send_faceoff_positions(positions: Array) -> void:
 
 @rpc("authority", "reliable")
 func notify_faceoff_positions(positions: Array) -> void:
-	GameManager.on_faceoff_positions(positions)
+	faceoff_positions_received.emit(positions)
 
 func notify_reset_to_all() -> void:
 	for peer_id in multiplayer.get_peers():
@@ -259,7 +286,7 @@ func notify_reset_to_all() -> void:
 
 @rpc("authority", "reliable")
 func notify_game_reset() -> void:
-	GameManager.on_game_reset()
+	game_reset_received.emit()
 
 func send_stats_to_all(data: Array) -> void:
 	for peer_id in multiplayer.get_peers():
@@ -267,7 +294,7 @@ func send_stats_to_all(data: Array) -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func receive_stats(data: Array) -> void:
-	GameManager.apply_stats(data)
+	stats_received.emit(data)
 
 # ── Sending ───────────────────────────────────────────────────────────────────
 func send_slot_assignment(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color) -> void:
@@ -280,6 +307,9 @@ func send_sync_existing_players(peer_id: int, player_data: Array) -> void:
 	sync_existing_players.rpc_id(peer_id, player_data)
 
 # ── Registration ──────────────────────────────────────────────────────────────
+func set_world_state_provider(provider: Callable) -> void:
+	_world_state_provider = provider
+
 func register_local_controller(controller: LocalController) -> void:
 	_local_controller = controller
 
