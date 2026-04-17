@@ -44,7 +44,6 @@ extends Node
 
 @export var low_shot_threshold: float = 0.45
 @export var elevated_threshold: float = 0.45
-@export var fake_threshold: float = 0.0
 @export var react_hand_y_min: float = 0.50
 @export var react_hand_y_max: float = 1.55
 @export var react_hand_z: float = -0.28
@@ -241,9 +240,7 @@ func _update_position(delta: float) -> void:
 		State.STANDING:
 			_update_lateral_standing(delta)
 		State.BUTTERFLY:
-			if _reacting_to_shot:
-				_target_x = clampf(_shot_impact_x, _goal_center_x - net_half_width, _goal_center_x + net_half_width)
-			else:
+			if not _reacting_to_shot:
 				_update_target_x()
 			# Scale slide speed by how saturated the facing angle is — rotation and
 			# lateral movement are coupled in butterfly (you push to turn, not pivot).
@@ -273,9 +270,7 @@ func _update_target_x() -> void:
 			_current_depth, net_half_width, _direction_sign)
 
 func _update_lateral_standing(delta: float) -> void:
-	if _reacting_to_shot:
-		_target_x = clampf(_shot_impact_x, _goal_center_x - net_half_width, _goal_center_x + net_half_width)
-	else:
+	if not _reacting_to_shot:
 		_update_target_x()
 	var delta_x: float = _target_x - _current_x
 	var five_hole_target: float
@@ -495,7 +490,6 @@ func _shot_detection_config() -> GoalieBehaviorRules.ShotDetectionConfig:
 	cfg.reaction_delay = reaction_delay
 	cfg.low_shot_threshold = low_shot_threshold
 	cfg.elevated_threshold = elevated_threshold
-	cfg.fake_threshold = fake_threshold
 	return cfg
 
 func _pressure_config() -> GoalieBehaviorRules.PressureConfig:

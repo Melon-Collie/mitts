@@ -20,7 +20,6 @@ class ShotResult:
 
 class ShotDetectionConfig:
 	var shot_speed_threshold: float = 0.0
-	var fake_threshold: float = 0.0
 	var net_half_width: float = 0.0
 	var net_margin: float = 0.0
 	var reaction_delay: float = 0.0
@@ -57,8 +56,6 @@ static func detect_shot(
 		cfg: ShotDetectionConfig) -> ShotResult:
 	var result := ShotResult.new()
 	if puck_velocity.length() < cfg.shot_speed_threshold:
-		return result
-	if puck_velocity.length() < cfg.fake_threshold:
 		return result
 	if abs(puck_velocity.z) < 0.001:
 		return result
