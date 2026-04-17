@@ -8,7 +8,8 @@ const _HEADER  := Color(0.55, 0.55, 0.62, 1.00)
 const _SEP     := Color(0.28, 0.28, 0.33, 1.00)
 
 var _rows_container: VBoxContainer = null
-var _period_score_labels: Array = []  # [team_id][0-2 period, 3 total]
+var _period_score_labels: Array = []  # [team_id][period_index, then total]
+var _period_summary_grid: GridContainer = null
 
 func _ready() -> void:
 	layer = 10
@@ -92,39 +93,50 @@ func _build_panel() -> void:
 	footer_row.add_child(bug_btn)
 
 func _build_period_summary(vbox: VBoxContainer) -> void:
-	var col_num: int = 32
-
-	var grid := GridContainer.new()
-	grid.columns = 5
-	grid.add_theme_constant_override("h_separation", 0)
-	grid.add_theme_constant_override("v_separation", 5)
-
-	# Header row: blank | 1 | 2 | 3 | T
-	grid.add_child(Control.new())  # spacer — width driven by badge below
-	for header: String in ["1", "2", "3", "T"]:
-		var h := _lbl(header, 12, _HEADER)
-		h.custom_minimum_size = Vector2(col_num, 0)
-		h.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		grid.add_child(h)
-
-	# Away row (team 1) then home row (team 0) — same convention as scorebug
-	for team_id: int in [1, 0]:
-		var label: String = "AWAY" if team_id == 1 else "HOME"
-		grid.add_child(_team_badge(label, PlayerRules.generate_primary_color(team_id)))
-		var row_labels: Array[Label] = []
-		for _i: int in 4:
-			var l := _lbl("0", 13, _WHITE)
-			l.custom_minimum_size = Vector2(col_num, 0)
-			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			grid.add_child(l)
-			row_labels.append(l)
-		_period_score_labels.append(row_labels)
-
 	var h_wrap := HBoxContainer.new()
 	h_wrap.alignment = BoxContainer.ALIGNMENT_CENTER
 	h_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	h_wrap.add_child(grid)
 	vbox.add_child(h_wrap)
+
+	_period_summary_grid = GridContainer.new()
+	_period_summary_grid.add_theme_constant_override("h_separation", 0)
+	_period_summary_grid.add_theme_constant_override("v_separation", 5)
+	h_wrap.add_child(_period_summary_grid)
+
+	_rebuild_period_grid(GameManager.get_period_scores()[0].size())
+
+func _rebuild_period_grid(num_periods: int) -> void:
+	for child in _period_summary_grid.get_children():
+		child.free()
+	_period_score_labels.clear()
+
+	var col_num: int = 32
+	_period_summary_grid.columns = 2 + num_periods  # badge + periods + total
+
+	_period_summary_grid.add_child(Control.new())
+	for p: int in num_periods:
+		var period_num: int = p + 1
+		var header_text: String = "OT%d" % (period_num - GameRules.NUM_PERIODS) if period_num > GameRules.NUM_PERIODS else str(period_num)
+		var h := _lbl(header_text, 12, _HEADER)
+		h.custom_minimum_size = Vector2(col_num, 0)
+		h.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_period_summary_grid.add_child(h)
+	var t_header := _lbl("T", 12, _HEADER)
+	t_header.custom_minimum_size = Vector2(col_num, 0)
+	t_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_period_summary_grid.add_child(t_header)
+
+	for team_id: int in [1, 0]:
+		var label: String = "AWAY" if team_id == 1 else "HOME"
+		_period_summary_grid.add_child(_team_badge(label, PlayerRules.generate_primary_color(team_id)))
+		var row_labels: Array[Label] = []
+		for _i: int in num_periods + 1:  # periods + total
+			var l := _lbl("0", 13, _WHITE)
+			l.custom_minimum_size = Vector2(col_num, 0)
+			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			_period_summary_grid.add_child(l)
+			row_labels.append(l)
+		_period_score_labels.append(row_labels)
 
 func _refresh() -> void:
 	if _rows_container == null:
@@ -132,15 +144,19 @@ func _refresh() -> void:
 
 	if not _period_score_labels.is_empty():
 		var ps: Array = GameManager.get_period_scores()
+		var num_periods: int = ps[0].size()
+		# Rebuild the grid if OT added a period
+		if _period_score_labels[0].size() != num_periods + 1:
+			_rebuild_period_grid(num_periods)
 		# _period_score_labels[0] = away (team 1), [1] = home (team 0)
 		for row: int in 2:
 			var team_id: int = 1 if row == 0 else 0
 			var total: int = 0
-			for p: int in 3:
+			for p: int in num_periods:
 				var goals: int = ps[team_id][p]
 				_period_score_labels[row][p].text = str(goals)
 				total += goals
-			_period_score_labels[row][3].text = str(total)
+			_period_score_labels[row][num_periods].text = str(total)
 
 	for child in _rows_container.get_children():
 		child.queue_free()

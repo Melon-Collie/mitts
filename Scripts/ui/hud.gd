@@ -515,11 +515,13 @@ func _lbl(text: String, size: int, color: Color) -> Label:
 	return l
 
 func _period_ordinal(p: int) -> String:
+	if p > GameRules.NUM_PERIODS:
+		return "OT%d" % (p - GameRules.NUM_PERIODS)
 	match p:
 		1: return "1ST"
 		2: return "2ND"
 		3: return "3RD"
-		_: return "OT"
+		_: return "P%d" % p
 
 func _format_clock(t: float) -> String:
 	var secs: int = int(ceil(t))

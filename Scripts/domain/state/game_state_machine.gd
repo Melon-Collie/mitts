@@ -28,7 +28,7 @@ var time_remaining: float = GameRules.PERIOD_DURATION
 var scores: Array[int] = [0, 0]
 var last_scoring_team_id: int = -1
 var team_shots: Array[int] = [0, 0]
-var period_scores: Array[Array] = [[0, 0, 0], [0, 0, 0]]  # [team_id][period_index 0-based]
+var period_scores: Array[Array] = []  # [team_id][period_index 0-based]; grows dynamically in OT; set in _init
 
 # ── Player registry (domain view) ────────────────────────────────────────────
 # peer_id → { slot: int, team_id: int, faceoff_position: Vector3 }
@@ -40,6 +40,16 @@ var last_carrier_team_id: int = -1
 var last_carrier_z: float = 0.0
 var icing_team_id: int = -1
 var _icing_timer: float = 0.0
+
+
+func _init() -> void:
+	period_scores = _make_period_scores(GameRules.NUM_PERIODS)
+
+static func _make_period_scores(num_periods: int) -> Array[Array]:
+	var arr: Array[int] = []
+	arr.resize(num_periods)
+	arr.fill(0)
+	return [arr.duplicate(), arr.duplicate()]
 
 
 # ── Frame tick (host only) ───────────────────────────────────────────────────
@@ -204,7 +214,7 @@ func reset_all() -> void:
 	scores[1] = 0
 	team_shots[0] = 0
 	team_shots[1] = 0
-	period_scores = [[0, 0, 0], [0, 0, 0]]
+	period_scores = _make_period_scores(GameRules.NUM_PERIODS)
 	current_period = 1
 	time_remaining = GameRules.PERIOD_DURATION
 	icing_team_id = -1
@@ -281,7 +291,10 @@ func _tick_phase(delta: float) -> bool:
 	match current_phase:
 		GamePhase.Phase.GOAL_SCORED:
 			if _phase_timer >= GameRules.GOAL_PAUSE_DURATION:
-				_set_phase(GamePhase.Phase.FACEOFF_PREP)
+				if _is_ot_period():
+					_set_phase(GamePhase.Phase.GAME_OVER)
+				else:
+					_set_phase(GamePhase.Phase.FACEOFF_PREP)
 				return true
 		GamePhase.Phase.FACEOFF_PREP:
 			if _phase_timer >= GameRules.FACEOFF_PREP_DURATION:
@@ -299,13 +312,23 @@ func _tick_phase(delta: float) -> bool:
 
 func _on_period_clock_expired() -> void:
 	if current_period >= GameRules.NUM_PERIODS:
-		_set_phase(GamePhase.Phase.GAME_OVER)
+		if GameRules.OT_ENABLED and scores[0] == scores[1]:
+			_set_phase(GamePhase.Phase.END_OF_PERIOD)
+		else:
+			_set_phase(GamePhase.Phase.GAME_OVER)
 	else:
 		_set_phase(GamePhase.Phase.END_OF_PERIOD)
 
+func _is_ot_period() -> bool:
+	return current_period > GameRules.NUM_PERIODS
+
 func _advance_period() -> void:
 	current_period += 1
-	time_remaining = GameRules.PERIOD_DURATION
+	time_remaining = GameRules.OT_DURATION if _is_ot_period() else GameRules.PERIOD_DURATION
+	# Extend period_scores arrays to cover the new period
+	if period_scores[0].size() < current_period:
+		period_scores[0].append(0)
+		period_scores[1].append(0)
 	icing_team_id = -1
 	_icing_timer = 0.0
 	last_carrier_team_id = -1

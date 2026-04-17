@@ -283,8 +283,16 @@ func test_period_clock_expires_to_end_of_period() -> void:
 
 func test_period_clock_expires_on_last_period_to_game_over() -> void:
 	sm.current_period = GameRules.NUM_PERIODS
+	sm.on_goal_scored(1)  # make score 1-0 so it's not tied
+	sm.current_phase = GamePhase.Phase.PLAYING
+	sm.time_remaining = GameRules.PERIOD_DURATION
 	sm.tick(GameRules.PERIOD_DURATION + 0.01)
 	assert_eq(sm.current_phase, GamePhase.Phase.GAME_OVER)
+
+func test_period_clock_expires_on_last_period_tied_goes_to_ot() -> void:
+	sm.current_period = GameRules.NUM_PERIODS
+	sm.tick(GameRules.PERIOD_DURATION + 0.01)
+	assert_eq(sm.current_phase, GamePhase.Phase.END_OF_PERIOD if GameRules.OT_ENABLED else GamePhase.Phase.GAME_OVER)
 
 func test_advance_period_increments_period_and_resets_clock() -> void:
 	# Expire current period → END_OF_PERIOD
@@ -298,6 +306,9 @@ func test_advance_period_increments_period_and_resets_clock() -> void:
 
 func test_game_over_locks_phase_permanently() -> void:
 	sm.current_period = GameRules.NUM_PERIODS
+	sm.on_goal_scored(1)  # make score 1-0 so it ends rather than going to OT
+	sm.current_phase = GamePhase.Phase.PLAYING
+	sm.time_remaining = GameRules.PERIOD_DURATION
 	sm.tick(GameRules.PERIOD_DURATION + 0.01)
 	assert_eq(sm.current_phase, GamePhase.Phase.GAME_OVER)
 	var changed: bool = sm.tick(999.0)

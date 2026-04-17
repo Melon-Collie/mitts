@@ -418,6 +418,7 @@ func _handle_phase_entered() -> void:
 			period_changed.emit(_state_machine.current_period)
 			_last_emitted_clock_secs = -1
 			clock_updated.emit(_state_machine.time_remaining)
+			_sync_stats_to_clients()
 			_enter_faceoff_prep()
 		GamePhase.Phase.FACEOFF:
 			_enter_faceoff()
@@ -773,21 +774,24 @@ func _sync_stats_to_clients() -> void:
 	data.append(_state_machine.team_shots[1])
 	for team_id: int in 2:
 		data.append_array(_state_machine.period_scores[team_id])
+	data.append(_state_machine.period_scores[0].size())  # num_periods sentinel at tail
 	NetworkManager.send_stats_to_all(data)
 
 func get_period_scores() -> Array:
 	if _state_machine == null:
-		return [[0, 0, 0], [0, 0, 0]]
+		return GameStateMachine._make_period_scores(GameRules.NUM_PERIODS)
 	return _state_machine.period_scores
 
 func apply_stats(data: Array) -> void:
 	# Wire format (must match _sync_stats_to_clients):
 	#   [pid, G, A, SOG, HITS] × N players   (5 ints each)
 	#   team_shots[0], team_shots[1]         (2 ints)
-	#   period_scores[0][0..2], [1][0..2]    (6 ints)
+	#   period_scores[0][0..P-1], [1][0..P-1] (2*P ints)
+	#   num_periods                          (1 int, tail sentinel)
 	const PLAYER_RECORD_SIZE: int = 5
-	const FOOTER_SIZE: int = 2 + 2 * 3  # team_shots + period_scores for 2 teams × 3 periods
-	var players_end: int = data.size() - FOOTER_SIZE
+	var num_periods: int = data[-1]
+	var footer_size: int = 2 + 2 * num_periods + 1  # shots×2 + scores×2P + sentinel
+	var players_end: int = data.size() - footer_size
 	var i: int = 0
 	while i < players_end:
 		var pid: int = data[i]
@@ -797,9 +801,13 @@ func apply_stats(data: Array) -> void:
 	_state_machine.team_shots[0] = data[i]
 	_state_machine.team_shots[1] = data[i + 1]
 	i += 2
+	while _state_machine.period_scores[0].size() < num_periods:
+		_state_machine.period_scores[0].append(0)
+		_state_machine.period_scores[1].append(0)
 	for team_id: int in 2:
-		for p: int in 3:
+		for p: int in num_periods:
 			_state_machine.period_scores[team_id][p] = data[i]
 			i += 1
+	# i now points at the num_periods sentinel — skip it
 	shots_on_goal_changed.emit(_state_machine.team_shots[0], _state_machine.team_shots[1])
 	stats_updated.emit()
