@@ -26,7 +26,15 @@ The codebase is organized into three layers with downward dependency flow.
 
 All of this is unit-tested with GUT. ~130 tests under `tests/unit/rules/` and `tests/unit/state/`.
 
-**Application** — `GameManager` (autoload), controllers, `ActorSpawner`. Consumes the domain to make decisions, reaches into infrastructure to execute them. Controllers receive a `game_state: Node` (the GameManager itself, duck-typed) via `setup()` rather than reaching for `GameManager.*` statically.
+**Application** — `GameManager` (autoload), controllers, `ActorSpawner`, plus five focused collaborators that `GameManager` wires together at world-spawn time:
+
+- `PlayerRegistry` — owns the runtime `players` dict; spawns/despawns via `ActorSpawner`; resolves skater ↔ peer_id ↔ team.
+- `WorldStateCodec` — encodes/decodes the flat RPC wire format for world state and stats. Keeps serialization in one place.
+- `ShotOnGoalTracker` — host-only pending-shot state machine. Confirms SOG on goalie-touch or goal; credits up to two same-team assists from the recent-carrier list.
+- `PhaseCoordinator` — phase-entry side effects (puck lock/unlock, goalie reset, faceoff teleport) and the goal scoring pipeline.
+- `SlotSwapCoordinator` — validates mid-game slot swaps and packages confirmation payloads.
+
+`GameManager` stays as the thin orchestrator: owns the `GameStateMachine`, runs `_process` / `_physics_process`, and re-emits the collaborators' signals to HUD/Camera/Scoreboard so the external API is unchanged. Controllers receive a `game_state: Node` (GameManager itself, duck-typed) via `setup()` rather than reaching for `GameManager.*` statically. The collaborators themselves are plain `RefCounted` classes with dependencies injected through `setup()` — nothing reaches the `NetworkManager` autoload directly; instead `GameManager` wires signals onto `NetworkManager` send methods, so the collaborators stay independently testable.
 
 **Infrastructure** — actor nodes (Skater, Puck, Goalie), `NetworkManager`, UI. Engine integration. Lower layers never reach up:
 - `Puck` accepts a `team_resolver: Callable` via `set_team_resolver()` — used by the poke-check eligibility gate without referencing `GameManager`.

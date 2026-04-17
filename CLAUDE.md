@@ -82,8 +82,13 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 
 | File | Role |
 |------|------|
-| `game/game_manager.gd` | Autoload orchestrator. Owns the GameStateMachine, maintains the runtime player registry, routes infrastructure events into domain calls, executes domain decisions. Exposes `is_host()` / `is_movement_locked()` for controllers via duck typing. |
+| `game/game_manager.gd` | Autoload orchestrator. Owns the GameStateMachine, wires five collaborators (PlayerRegistry / WorldStateCodec / ShotOnGoalTracker / PhaseCoordinator / SlotSwapCoordinator), routes NetworkManager signals to them, and re-exposes their signals for HUD/Camera/Scoreboard. Exposes `is_host()` / `is_movement_locked()` for controllers via duck typing. |
 | `game/actor_spawner.gd` | Scene instantiation + `add_child` + controller `setup()` calls. Returns raw nodes; GameManager does game-level wiring. |
+| `game/player_registry.gd` | RefCounted. Owns `players: Dictionary[int, PlayerRecord]` and the unified local/remote `spawn()`. Provides skater↔peer↔team resolvers used by Puck and PuckController. Emits `player_added` / `player_removed` / `player_joined` / `player_left` for GameManager to relay. |
+| `game/world_state_codec.gd` | RefCounted. Encodes/decodes the flat RPC Array for world state (skater/puck/goalie/game_state sections) and the stats wire format. Emits `phase_changed` / `game_over_triggered` / `period_changed` / `clock_updated` / `shots_on_goal_changed` so GameManager can react to authoritative host updates on clients. |
+| `game/shot_on_goal_tracker.gd` | RefCounted host-side state machine. Exposes `on_pickup` / `on_shot_started` / `on_goalie_touch` / `on_goal_confirmed` / `on_loose_puck_touched` / `credit_assists` / `tick(delta)` / `reset_all`. Owns `_recent_carriers`, pending-shot timer, and SOG dedup. Emits `shots_on_goal_changed`. Unit-tested in `tests/unit/game/`. |
+| `game/phase_coordinator.gd` | RefCounted. Holds phase-entry side effects — puck reset/lock, goalie reset, faceoff teleport — and the host-side goal pipeline (own-goal detection, assist credit, SOG confirmation). Emits `goal_scored` / `score_changed` / `phase_changed` / `period_changed` / `clock_updated` / `game_over` / `stats_need_sync` / `faceoff_positions_ready` / `goal_broadcast_needed`, which GameManager relays to its own signals and to NetworkManager RPCs. |
+| `game/slot_swap_coordinator.gd` | RefCounted. Validates mid-game slot swap requests (`request_swap` returns a confirmation payload or `{}`) and applies confirmations (`apply_confirmed_swap` mutates PlayerRecord + teleports). Emits `carrier_swap_needs_drop` when the requesting player holds the puck so GameManager can drop it before the swap. |
 | `controllers/local_controller.gd` | Local player: input gathering, prediction, reconciliation. Takes `game_state` via setup; calls `InfractionRules.is_offside` directly for client-side ghost prediction. |
 | `controllers/remote_controller.gd` | Remote players: server-side input driving, client-side interpolation |
 | `controllers/puck_controller.gd` | Puck: emits `puck_picked_up_by` / `puck_released_by_carrier` / `puck_stripped_from` signals (via injected peer_id resolver) for GameManager to consume; handles client prediction + interpolation |
@@ -136,6 +141,7 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 |------|------|
 | `tests/unit/rules/` | GUT tests for each rule class — ~130 tests covering domain logic |
 | `tests/unit/state/` | GUT tests for `GameStateMachine` — phase transitions, icing, ghost computation |
+| `tests/unit/game/` | GUT tests for application-layer collaborators: `ShotOnGoalTracker` (pending-shot FSM, assists, SOG dedup), `WorldStateCodec` (stats round-trip), `SlotSwapCoordinator` (request validation). |
 
 ## Code Conventions
 
