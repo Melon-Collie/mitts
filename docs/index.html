@@ -74,7 +74,13 @@
 <body>
   <h1>Hockey Game</h1>
   <p class="subtitle">3v3 arcade hockey. Online multiplayer.</p>
-  <p class="version">dev</p>
+  <p class="version" id="version">dev</p>
+  <script>
+    fetch('https://api.github.com/repos/Melon-Collie/hockey-game/releases/latest')
+      .then(r => r.json())
+      .then(d => { if (d.name) document.getElementById('version').textContent = d.name; })
+      .catch(() => {});
+  </script>
 
   <div class="downloads">
     <a class="download"

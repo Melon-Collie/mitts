@@ -33,8 +33,6 @@ jobs:
           # checker can compare against the release name.
           sed -i "s/^const VERSION: String = \"dev\"$/const VERSION: String = \"${VERSION}\"/" Scripts/game/build_info.gd
           grep '^const VERSION:' Scripts/game/build_info.gd
-          sed -i "s|<p class=\"version\">dev</p>|<p class=\"version\">${VERSION}</p>|" docs/index.html
-          grep 'class="version"' docs/index.html
 
       - name: Export with Godot
         uses: firebelley/godot-export@v5.2.1
