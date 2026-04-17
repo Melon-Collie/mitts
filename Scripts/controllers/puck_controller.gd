@@ -25,7 +25,7 @@ signal puck_picked_up_by(peer_id: int)
 signal puck_released_by_carrier(peer_id: int)
 signal puck_stripped_from(peer_id: int)
 signal puck_touched_while_loose  # deflection or body block — cancels icing
-signal puck_touched_by_goalie    # puck contacted a goalie body while a shot was in flight
+signal puck_touched_by_goalie(goalie: Goalie)  # puck contacted a goalie body while a shot was in flight
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 func setup(assigned_puck: Puck, assigned_is_server: bool) -> void:
@@ -38,7 +38,7 @@ func setup(assigned_puck: Puck, assigned_is_server: bool) -> void:
 		puck.puck_released.connect(_on_puck_released)
 		puck.puck_stripped.connect(_on_puck_stripped)
 		puck.puck_touched_loose.connect(func() -> void: puck_touched_while_loose.emit())
-		puck.puck_touched_goalie.connect(func() -> void: puck_touched_by_goalie.emit())
+		puck.puck_touched_goalie.connect(func(g: Goalie) -> void: puck_touched_by_goalie.emit(g))
 
 func set_peer_id_resolver(resolver: Callable) -> void:
 	_peer_id_resolver = resolver

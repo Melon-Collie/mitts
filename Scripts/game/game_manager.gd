@@ -330,11 +330,21 @@ func _on_goal_scored_into(defending_team: Team) -> void:
 	if scoring_team_id == -1:
 		return  # wrong phase, ignored
 	if NetworkManager.is_host:
-		var scorer_id: int = carrier_peer_id if carrier_peer_id != -1 else _shooter_peer_id
+		var raw_scorer_id: int = carrier_peer_id if carrier_peer_id != -1 else _shooter_peer_id
+		var is_own_goal: bool = raw_scorer_id != -1 and players.has(raw_scorer_id) \
+				and players[raw_scorer_id].team.team_id == defending_team.team_id
+		var scorer_id: int = raw_scorer_id
+		if is_own_goal:
+			scorer_id = -1
+			for pid: int in _recent_carriers:
+				if players.has(pid) and players[pid].team.team_id == scoring_team_id:
+					scorer_id = pid
+					break
 		if scorer_id != -1 and players.has(scorer_id):
 			players[scorer_id].stats.goals += 1
 			_credit_assists(scorer_id)
-			_confirm_shot_on_goal(scorer_id)
+			if not is_own_goal:
+				_confirm_shot_on_goal(scorer_id)
 		_clear_pending_shot()
 		_sync_stats_to_clients()
 	puck.pickup_locked = true
@@ -609,14 +619,24 @@ func _confirm_shot_on_goal(peer_id: int) -> void:
 	_state_machine.team_shots[record.team.team_id] += 1
 	shots_on_goal_changed.emit(_state_machine.team_shots[0], _state_machine.team_shots[1])
 
-func _on_puck_touched_by_goalie() -> void:
+func _on_puck_touched_by_goalie(goalie: Goalie) -> void:
 	if not NetworkManager.is_host:
 		return
 	if _shooter_peer_id == -1:
 		return
+	var defending_team_id: int = _get_goalie_defending_team_id(goalie)
+	if defending_team_id != -1 and players.has(_shooter_peer_id):
+		if players[_shooter_peer_id].team.team_id == defending_team_id:
+			return  # shooter is on the defending team — own-goal attempt, no SOG
 	_confirm_shot_on_goal(_shooter_peer_id)
 	_shot_pending_time = -1.0  # stop timeout; keep _shooter_peer_id for goal attribution
 	_sync_stats_to_clients()
+
+func _get_goalie_defending_team_id(goalie: Goalie) -> int:
+	for team: Team in teams:
+		if team.goalie_controller != null and team.goalie_controller.goalie == goalie:
+			return team.team_id
+	return -1
 
 func _on_hit_landed(hitter_peer_id: int, _victim: Skater) -> void:
 	if not NetworkManager.is_host:
@@ -660,7 +680,14 @@ func _sync_stats_to_clients() -> void:
 		data.append_array(players[pid].stats.to_array())
 	data.append(_state_machine.team_shots[0])
 	data.append(_state_machine.team_shots[1])
+	for team_id: int in 2:
+		data.append_array(_state_machine.period_scores[team_id])
 	NetworkManager.send_stats_to_all(data)
+
+func get_period_scores() -> Array:
+	if _state_machine == null:
+		return [[0, 0, 0], [0, 0, 0]]
+	return _state_machine.period_scores
 
 func apply_stats(data: Array) -> void:
 	var i: int = 0
@@ -672,5 +699,11 @@ func apply_stats(data: Array) -> void:
 	if i + 1 < data.size():
 		_state_machine.team_shots[0] = data[i]
 		_state_machine.team_shots[1] = data[i + 1]
+		i += 2
+	if i + 5 < data.size():
+		for team_id: int in 2:
+			for p: int in 3:
+				_state_machine.period_scores[team_id][p] = data[i]
+				i += 1
 	shots_on_goal_changed.emit(_state_machine.team_shots[0], _state_machine.team_shots[1])
 	stats_updated.emit()

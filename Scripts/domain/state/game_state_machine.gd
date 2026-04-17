@@ -28,6 +28,7 @@ var time_remaining: float = GameRules.PERIOD_DURATION
 var scores: Array[int] = [0, 0]
 var last_scoring_team_id: int = -1
 var team_shots: Array[int] = [0, 0]
+var period_scores: Array = [[0, 0, 0], [0, 0, 0]]  # [team_id][period_index 0-based]
 
 # ── Player registry (domain view) ────────────────────────────────────────────
 # peer_id → { slot: int, team_id: int, faceoff_position: Vector3 }
@@ -57,6 +58,7 @@ func on_goal_scored(defending_team_id: int) -> int:
 		return -1
 	var scoring_team_id: int = 1 - defending_team_id
 	scores[scoring_team_id] += 1
+	period_scores[scoring_team_id][current_period - 1] += 1
 	last_scoring_team_id = scoring_team_id
 	_set_phase(GamePhase.Phase.GOAL_SCORED)
 	return scoring_team_id
@@ -204,6 +206,7 @@ func reset_all() -> void:
 	scores[1] = 0
 	team_shots[0] = 0
 	team_shots[1] = 0
+	period_scores = [[0, 0, 0], [0, 0, 0]]
 	current_period = 1
 	time_remaining = GameRules.PERIOD_DURATION
 	icing_team_id = -1
