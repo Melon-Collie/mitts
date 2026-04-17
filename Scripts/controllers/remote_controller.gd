@@ -60,6 +60,9 @@ func _interpolate() -> void:
 	interpolated.top_hand_position = from_state.top_hand_position.lerp(to_state.top_hand_position, t)
 	interpolated.upper_body_rotation_y = lerpf(from_state.upper_body_rotation_y, to_state.upper_body_rotation_y, t)
 	interpolated.facing = from_state.facing.lerp(to_state.facing, t).normalized()
+	# Boolean fields can't be lerped; take the freshest value so ghost-mode
+	# toggles flow through to remote skaters without a one-broadcast delay.
+	interpolated.is_ghost = to_state.is_ghost
 	_apply_state_to_skater(interpolated)
 	BufferedStateInterpolator.drop_stale(_state_buffer, render_time)
 
