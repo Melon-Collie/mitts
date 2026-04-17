@@ -261,12 +261,14 @@ func test_apply_remote_goal_sets_phase_and_scores() -> void:
 # ── Faceoff positions ───────────────────────────────────────────────────────
 
 func test_faceoff_positions_per_player_slot() -> void:
-	sm.register_host(1)          # slot 0
-	sm.on_player_connected(100)  # slot 1
+	var host_assignment: Dictionary = sm.register_host(1)
+	var peer_assignment: Dictionary = sm.on_player_connected(100)
 	var positions: Dictionary = sm.get_faceoff_positions()
 	assert_eq(positions.size(), 2)
-	assert_eq(positions[1], PlayerRules.faceoff_position_for_slot(0))
-	assert_eq(positions[100], PlayerRules.faceoff_position_for_slot(1))
+	assert_eq(positions[1],
+			PlayerRules.faceoff_position(host_assignment.team_id, host_assignment.team_slot))
+	assert_eq(positions[100],
+			PlayerRules.faceoff_position(peer_assignment.team_id, peer_assignment.team_slot))
 
 # ── Period / clock ───────────────────────────────────────────────────────────
 

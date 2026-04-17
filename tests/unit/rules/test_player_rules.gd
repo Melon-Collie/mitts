@@ -33,14 +33,14 @@ func test_team_0_primary_is_deterministic() -> void:
 func test_team_1_primary_is_deterministic() -> void:
 	assert_eq(PlayerRules.generate_primary_color(1), PlayerRules.generate_primary_color(1))
 
-# ── faceoff_position_for_slot ────────────────────────────────────────────────
+# ── faceoff_position ─────────────────────────────────────────────────────────
 
-func test_faceoff_positions_even_slots_are_team_0_side() -> void:
-	assert_gt(PlayerRules.faceoff_position_for_slot(0).z, 0.0)
-	assert_gt(PlayerRules.faceoff_position_for_slot(2).z, 0.0)
-	assert_gt(PlayerRules.faceoff_position_for_slot(4).z, 0.0)
+func test_team_0_faceoff_positions_are_on_positive_z_side() -> void:
+	assert_gt(PlayerRules.faceoff_position(0, 0).z, 0.0)
+	assert_gt(PlayerRules.faceoff_position(0, 1).z, 0.0)
+	assert_gt(PlayerRules.faceoff_position(0, 2).z, 0.0)
 
-func test_faceoff_positions_odd_slots_are_team_1_side() -> void:
-	assert_lt(PlayerRules.faceoff_position_for_slot(1).z, 0.0)
-	assert_lt(PlayerRules.faceoff_position_for_slot(3).z, 0.0)
-	assert_lt(PlayerRules.faceoff_position_for_slot(5).z, 0.0)
+func test_team_1_faceoff_positions_are_on_negative_z_side() -> void:
+	assert_lt(PlayerRules.faceoff_position(1, 0).z, 0.0)
+	assert_lt(PlayerRules.faceoff_position(1, 1).z, 0.0)
+	assert_lt(PlayerRules.faceoff_position(1, 2).z, 0.0)
