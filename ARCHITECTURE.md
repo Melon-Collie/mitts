@@ -150,7 +150,7 @@ All input flows through an `InputState` data object populated by `LocalInputGath
 
 `LocalInputGatherer` accumulates `just_pressed` events between physics ticks so no inputs are dropped. Mouse world position is computed via ray-plane intersection at y=0.
 
-`InputState` fields: `sequence`, `delta`, `move_vector`, `mouse_world_pos`, `shoot_pressed`, `shoot_held`, `slap_pressed`, `slap_held`, `facing_held`, `brake`, `elevation_up`, `elevation_down`.
+`InputState` fields: `sequence`, `delta`, `move_vector`, `mouse_world_pos`, `shoot_pressed`, `shoot_held`, `slap_pressed`, `slap_held`, `facing_held`, `brake`, `elevation_up`, `elevation_down`, `block_held`.
 
 ---
 
@@ -164,17 +164,18 @@ All input flows through an `InputState` data object populated by `LocalInputGath
 | `SLAPPER_CHARGE_WITH_PUCK` | Fixed forehand | Glide only | Locked (upper body aims) |
 | `SLAPPER_CHARGE_WITHOUT_PUCK` | Fixed forehand | Full | Continuous toward mouse |
 | `FOLLOW_THROUGH` | Stored relative angle | Full | Follows movement |
+| `SHOT_BLOCKING` | Faces puck | Slowed | Continuous toward puck |
 
 ---
 
 ## Blade Control
 
-Blade placement goes through a custom top-hand inverse-kinematics solver (`TopHandIK.solve` in `domain/rules/top_hand_ik.gd`). The stick is a rigid rod of fixed length (`stick_length`, baseline 1.50 m). The `shoulder` marker anchors the top hand on the opposite side of the body from the blade (right shoulder for a left-handed shooter). The `top_hand` marker is the moving IK output.
+Blade placement goes through a custom top-hand inverse-kinematics solver (`TopHandIK.solve` in `domain/rules/top_hand_ik.gd`). The stick is a rigid rod of fixed length (`stick_length`, baseline 1.30 m). The `shoulder` marker anchors the top hand on the opposite side of the body from the blade (right shoulder for a left-handed shooter). The `top_hand` marker is the moving IK output.
 
 **Blade-first feel:** The mouse world position is the desired blade target. The solver works backwards from the target: place the hand where it needs to be so the stick reaches, clamp the hand to an asymmetric ROM, then recompute the blade from the clamped hand along the aim line at `stick_horiz`. Whenever the target is reachable, blade lands exactly on it. When not, blade clips along the same aim line — angular aim is preserved, only distance drops.
 
 **Asymmetric top-hand ROM (relative to shoulder):**
-- Forehand (cross-body) side: tight — `rom_forehand_reach_max ≈ 0.20 m`, `rom_forehand_angle_max ≈ 45°`. Hand stays near the body.
+- Forehand (cross-body) side: tight — `rom_forehand_reach_max ≈ 0.45 m`, `rom_forehand_angle_max ≈ 90°`. Hand stays near the body.
 - Backhand (same-side as shoulder) side: open — `rom_backhand_reach_max ≈ 0.70 m` (≈ full arm length), `rom_backhand_angle_max ≈ 120°`. Supports one-handed backhand reaches.
 
 **Vertical:** Blade Y stays locked at `blade_height`. Hand Y adapts: in the FAR regime (target past rest stick reach) it sits at `hand_rest_y`; in the CLOSE regime (target inside rest stick reach) it rises so `stick_horiz` matches the target distance and the blade lands on the target exactly. Capped by `hand_y_max` — past that the stick's min horizontal projection causes the blade to overshoot along the aim line.
@@ -187,7 +188,7 @@ Blade placement goes through a custom top-hand inverse-kinematics solver (`TopHa
 
 **Facing drag:** Aiming past the angular ROM rotates the body's facing (`facing_drag_speed`) to bring the target back in range.
 
-**Upper body twist:** Rotates independently to express the angle between facing and blade direction (`upper_body_twist_ratio = 1.0`).
+**Upper body twist:** Rotates independently to express the angle between facing and blade direction (`upper_body_twist_ratio = 0.8`).
 
 **Wall clamping:** The solved blade is shortened by `RayCast3D` before being written. If squeeze exceeds `wall_squeeze_threshold`, the puck releases along the wall normal.
 
@@ -275,12 +276,12 @@ Two `Team` objects created at startup. Each owns a `defended_goal` (`HockeyGoal`
 
 ### Player Colors
 
-Each player gets two colors generated at spawn time via `_generate_player_colors(team_id)` on the host. Colors are drawn from fixed team palettes:
+Each player gets two colors via `PlayerRules.generate_primary_color(team_id)` / `generate_secondary_color(team_id)`. Colors are fixed per team — all teammates match:
 
-- **Team 0 (home):** primary (jersey, arms, blade) = red shades (hue 340°–380°, slot-based); secondary (legs, helmet/DirectionIndicator) = fixed near-black.
-- **Team 1 (away):** primary = fixed white; secondary (legs, helmet) = blue shades (hue 200°–260°, slot-based).
+- **Team 0 (home):** primary = Pittsburgh Penguins Vegas Gold (#FFB81C); secondary = Penguins Black.
+- **Team 1 (away):** primary = Toronto Maple Leafs Blue (#003E7E); secondary = Leafs White.
 
-The hue range is divided into equal slots — one per player (max 3 per team) — so same-team players land in distinct thirds of the band, with a ±25% jitter within the slot. Both colors are sent to joining clients via the `assign_player_slot` and `spawn_remote_skater` RPCs, and embedded in the `sync_existing_players` array. Stored in `PlayerRecord.color` (primary) and `PlayerRecord.secondary_color`; applied via `skater.set_player_color(primary, secondary)` which sets a `material_override` on every mesh (jersey, blade, arms, legs, helmet, stick shaft). Explicit overrides on all meshes prevent the ghost-mode gray-override bug — `_apply_ghost_visual` never needs to create a new material, just modifies existing alpha.
+Both colors are sent to joining clients via the `assign_player_slot` and `spawn_remote_skater` RPCs, and embedded in the `sync_existing_players` array. Stored in `PlayerRecord.color` (primary) and `PlayerRecord.secondary_color`; applied via `skater.set_player_color(primary, secondary)` which sets a `material_override` on every mesh (jersey, blade, arms, legs, helmet, stick shaft). Explicit overrides on all meshes prevent the ghost-mode gray-override bug — `_apply_ghost_visual` never needs to create a new material, just modifies existing alpha.
 
 ### Host Reset
 

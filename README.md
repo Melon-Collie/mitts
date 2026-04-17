@@ -25,8 +25,9 @@ For online play the host needs UDP port **7777** forwarded on their router.
 | **Left click (tap)** | Quick shot / pass |
 | **Left click (hold + sweep)** | Wrister — sweep blade to charge, release to shoot |
 | **Right click (hold)** | Slapshot — charge up, release to shoot |
-| **Shift (hold)** | Backward skating — facing locks to mouse |
+| **Shift (hold)** | Freeze facing — body angle locks in place; skate freely while keeping your blade position |
 | **Space** | Brake (no direction) / Pulse dash (hold direction) |
+| **Ctrl (hold, no puck)** | Shot-block stance — crouch, widen block area, slow movement, face puck |
 | **Ctrl (during wind-up)** | Cancel shot — abort a wrister or slapshot wind-up without firing |
 | **Scroll up / down** | Toggle elevated shot |
 
@@ -36,7 +37,7 @@ For online play the host needs UDP port **7777** forwarded on their router.
 
 Your blade follows your mouse at all times. Move it toward the puck to pick it up — the puck attaches automatically when your blade gets close enough. Once you have it, shoot or pass by sweeping your mouse and releasing.
 
-Facing follows your movement naturally, like a real skater. Hold **Shift** to lock your facing to the mouse and skate backward while keeping your eyes on the play.
+Facing follows your movement naturally, like a real skater. Hold **Shift** to freeze your body angle in place — skate in any direction while keeping your blade exactly where it is, useful for backward skating or precise stickhandling.
 
 Pucks coming in fast deflect off your blade instead of sticking. Move your stick backward with the puck to absorb a pass and catch it; hold your stick still against a fast puck to deflect it. Opposing blades can poke-check the puck loose — stick battles are momentum-based. Skate hard into a puck carrier to body check them — a big enough hit knocks the puck loose. Get in the way of a shot and it deflects off your body. Opponents can't poke their stick through you — position your body to shield the puck.
 
