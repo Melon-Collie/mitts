@@ -109,6 +109,9 @@ func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: f
 	if is_server:
 		puck.puck_released.connect(_on_puck_released)
 
+func is_butterfly() -> bool:
+	return _state == State.BUTTERFLY
+
 func reset_to_crease() -> void:
 	_state = State.STANDING
 	_current_depth = depth_defensive

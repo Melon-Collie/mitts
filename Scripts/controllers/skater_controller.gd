@@ -144,6 +144,9 @@ enum State {
 # padded chest width. The hand moves with the blade to keep stick length intact.
 @export var goalie_block_radius: float = 0.50
 @export var goalie_strip_power: float = 1.5
+# Half-extents of the butterfly leg-pad strip box in goalie local XZ space.
+@export var butterfly_pad_half_x: float = 0.84
+@export var butterfly_pad_half_z: float = 0.25
 
 # ── References ────────────────────────────────────────────────────────────────
 var skater: Skater = null
@@ -151,7 +154,7 @@ var puck: Puck = null
 # Injected at setup. Expected methods:
 #   is_host() -> bool                              — changes only per session; cached in _is_host
 #   is_movement_locked() -> bool                   — polled per frame
-#   get_goalie_world_positions() -> Array[Vector3] — used by goalie body clamp
+#   get_goalie_data() -> Array[Dictionary]         — position/rotation_y/is_butterfly per goalie
 var _game_state: Node = null
 var _is_host: bool = false
 
@@ -673,24 +676,62 @@ func _clamp_blade_from_net(blade_world: Vector3) -> Vector3:
 				result.x = hw
 	return result
 
-# Pushes blade_world out of every goalie's XZ cylinder. Returns the adjusted
-# world position (unchanged if no overlap). Callers convert back to local and
-# apply the same delta to the hand so stick length is preserved.
+# Pushes blade_world out of every goalie's collision zone and strips the puck
+# on contact. Standing/RVH use an XZ cylinder; butterfly uses an oriented box
+# around the leg pads. Returns the adjusted world position.
 func _clamp_blade_from_goalies(blade_world: Vector3) -> Vector3:
-	if not _game_state.has_method("get_goalie_world_positions"):
+	if not _game_state.has_method("get_goalie_data"):
 		return blade_world
-	var goalie_positions: Array[Vector3] = _game_state.get_goalie_world_positions()
+	var goalie_data: Array[Dictionary] = _game_state.get_goalie_data()
 	var result: Vector3 = blade_world
-	for gpos: Vector3 in goalie_positions:
-		var to_blade := Vector2(result.x - gpos.x, result.z - gpos.z)
-		var dist: float = to_blade.length()
-		if dist < goalie_block_radius:
-			var push_dir: Vector2 = to_blade.normalized() if dist > 0.001 else Vector2(0.0, -sign(gpos.z) if gpos.z != 0.0 else 1.0)
-			result.x = gpos.x + push_dir.x * goalie_block_radius
-			result.z = gpos.z + push_dir.y * goalie_block_radius
-			if has_puck:
-				_do_release(Vector3(push_dir.x, 0.0, push_dir.y), goalie_strip_power)
-				break  # puck released — no need to check remaining goalies
+	for data: Dictionary in goalie_data:
+		var gpos: Vector3 = data["position"]
+		if data["is_butterfly"]:
+			var prev: Vector3 = result
+			result = _clamp_blade_butterfly_box(result, gpos, data["rotation_y"])
+			if result != prev and has_puck:
+				break
+		else:
+			var to_blade := Vector2(result.x - gpos.x, result.z - gpos.z)
+			var dist: float = to_blade.length()
+			if dist < goalie_block_radius:
+				var push_dir: Vector2 = to_blade.normalized() if dist > 0.001 else Vector2(0.0, -sign(gpos.z) if gpos.z != 0.0 else 1.0)
+				result.x = gpos.x + push_dir.x * goalie_block_radius
+				result.z = gpos.z + push_dir.y * goalie_block_radius
+				if has_puck:
+					_do_release(Vector3(push_dir.x, 0.0, push_dir.y), goalie_strip_power)
+					break
+	return result
+
+# Pushes blade_world out of the goalie's butterfly leg-pad box in goalie local XZ.
+# Strips the puck on contact. Returns the adjusted world position (unchanged if outside).
+func _clamp_blade_butterfly_box(blade_world: Vector3, gpos: Vector3, rot_y: float) -> Vector3:
+	var dx: float = blade_world.x - gpos.x
+	var dz: float = blade_world.z - gpos.z
+	var local_x: float = dx * cos(rot_y) + dz * sin(rot_y)
+	var local_z: float = -dx * sin(rot_y) + dz * cos(rot_y)
+	if abs(local_x) >= butterfly_pad_half_x or abs(local_z) >= butterfly_pad_half_z:
+		return blade_world
+	# Inside box — escape along shortest axis.
+	var ox: float = butterfly_pad_half_x - abs(local_x)
+	var oz: float = butterfly_pad_half_z - abs(local_z)
+	var escaped_local_x: float
+	var escaped_local_z: float
+	if ox < oz:
+		escaped_local_x = butterfly_pad_half_x * signf(local_x) if local_x != 0.0 else butterfly_pad_half_x
+		escaped_local_z = local_z
+	else:
+		escaped_local_x = local_x
+		escaped_local_z = butterfly_pad_half_z * signf(local_z) if local_z != 0.0 else butterfly_pad_half_z
+	var world_dx: float = escaped_local_x * cos(rot_y) - escaped_local_z * sin(rot_y)
+	var world_dz: float = escaped_local_x * sin(rot_y) + escaped_local_z * cos(rot_y)
+	var result: Vector3 = blade_world
+	result.x = gpos.x + world_dx
+	result.z = gpos.z + world_dz
+	if has_puck:
+		var escape := Vector2(world_dx - dx, world_dz - dz)
+		var push_dir: Vector2 = escape.normalized() if escape.length_squared() > 0.0001 else Vector2(world_dx, world_dz).normalized()
+		_do_release(Vector3(push_dir.x, 0.0, push_dir.y), goalie_strip_power)
 	return result
 
 # ── Blade: From Mouse (Top-Hand IK) ───────────────────────────────────────────

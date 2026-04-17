@@ -38,6 +38,11 @@ static func generate_pants_color(team_id: int) -> Color:
 		return Color(0.06, 0.06, 0.06)  # Penguins Black
 	return Color(1.00, 1.00, 1.00)      # Leafs White
 
+static func generate_pads_color(team_id: int) -> Color:
+	if team_id == 0:
+		return Color(1.00, 1.00, 1.00)  # Penguins White pads
+	return Color(1.00, 1.00, 1.00)      # Leafs White pads
+
 # Looks up the faceoff start position for a team and within-team slot.
 static func faceoff_position(team_id: int, team_slot: int) -> Vector3:
 	return GameRules.CENTER_FACEOFF_POSITIONS[team_id][team_slot]

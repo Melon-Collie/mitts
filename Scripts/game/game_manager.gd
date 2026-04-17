@@ -271,6 +271,13 @@ func _spawn_goalies() -> void:
 	# top goalie (negative-Z) defends Team 1's end; bottom (positive-Z) defends Team 0's.
 	teams[1].goalie_controller = result.top_controller
 	teams[0].goalie_controller = result.bottom_controller
+	for team_id: int in [0, 1]:
+		var goalie: Goalie = result.bottom_goalie if team_id == 0 else result.top_goalie
+		goalie.set_goalie_color(
+			PlayerRules.generate_jersey_color(team_id),
+			PlayerRules.generate_helmet_color(team_id),
+			PlayerRules.generate_pads_color(team_id)
+		)
 
 func _spawn_local_player(peer_id: int, team_slot: int, team: Team, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String) -> void:
 	var record := PlayerRecord.new(peer_id, team_slot, true, team)
@@ -612,11 +619,15 @@ func get_skater_team(skater: Skater) -> Team:
 func get_puck() -> Puck:
 	return puck
 
-func get_goalie_world_positions() -> Array[Vector3]:
-	var positions: Array[Vector3] = []
-	for goalie: Goalie in goalies:
-		positions.append(goalie.global_position)
-	return positions
+func get_goalie_data() -> Array[Dictionary]:
+	var data: Array[Dictionary] = []
+	for i: int in range(goalies.size()):
+		data.append({
+			"position": goalies[i].global_position,
+			"rotation_y": goalies[i].get_goalie_rotation_y(),
+			"is_butterfly": goalie_controllers[i].is_butterfly(),
+		})
+	return data
 
 func get_local_player() -> PlayerRecord:
 	for peer_id in players:
