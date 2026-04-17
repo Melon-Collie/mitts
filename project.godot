@@ -18,6 +18,7 @@ run/pause_on_focus_loss=false
 
 [autoload]
 
+PlayerPrefs="*uid://bf25jinpey8td"
 Constants="*uid://dqhdah8fo6h2h"
 BuildInfo="*res://Scripts/game/build_info.gd"
 NetworkManager="*uid://bko4mpa8jb0u2"

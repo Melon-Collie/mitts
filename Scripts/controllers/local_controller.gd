@@ -45,6 +45,8 @@ func _physics_process(delta: float) -> void:
 		skater.velocity = Vector3.ZERO
 		_input_history.clear()
 		return
+	if _game_state.is_input_blocked():
+		return
 	# Predict offsides locally for instant ghost feedback
 	_predict_offside()
 	_current_input = _gatherer.gather()

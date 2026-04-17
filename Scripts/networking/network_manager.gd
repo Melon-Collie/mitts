@@ -11,6 +11,8 @@ var _peer_handedness: Dictionary = {}     # peer_id -> bool (host only)
 var _peer_names: Dictionary = {}          # peer_id -> String (host only)
 
 # ── Timers ────────────────────────────────────────────────────────────────────
+var pending_error: String = ""
+
 var _input_timer: float = 0.0
 var _state_timer: float = 0.0
 var _connect_timer: float = -1.0
@@ -90,10 +92,16 @@ func _on_connected_to_server() -> void:
 
 func _on_connection_failed() -> void:
 	push_error("Connection failed")
+	pending_error = "Connection failed."
+	reset()
+	get_tree().change_scene_to_file(Constants.SCENE_MAIN_MENU)
 
 func _on_server_disconnected() -> void:
 	push_error("Server disconnected")
-	_close()
+	pending_error = "Lost connection to server."
+	GameManager.on_scene_exit()
+	reset()
+	get_tree().change_scene_to_file(Constants.SCENE_MAIN_MENU)
 
 func _exit_tree() -> void:
 	_close()
@@ -101,6 +109,19 @@ func _exit_tree() -> void:
 func _close() -> void:
 	if multiplayer.multiplayer_peer != null and multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_DISCONNECTED:
 		multiplayer.multiplayer_peer.close()
+
+func reset() -> void:
+	_close()
+	multiplayer.multiplayer_peer = null
+	is_host = false
+	game_initiated = false
+	_local_controller = null
+	_remote_controllers.clear()
+	_peer_handedness.clear()
+	_peer_names.clear()
+	_input_timer = 0.0
+	_state_timer = 0.0
+	_connect_timer = -1.0
 
 # ── Process ───────────────────────────────────────────────────────────────────
 func _notification(what: int) -> void:
@@ -121,7 +142,9 @@ func _process(delta: float) -> void:
 		_connect_timer += capped_delta
 		if _connect_timer >= CONNECT_TIMEOUT:
 			push_error("Connection timed out after %ds" % CONNECT_TIMEOUT)
-			get_tree().quit()
+			pending_error = "Connection timed out."
+			reset()
+			get_tree().change_scene_to_file(Constants.SCENE_MAIN_MENU)
 
 	if not is_host and _local_controller != null:
 		_input_timer += capped_delta

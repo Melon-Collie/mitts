@@ -11,6 +11,9 @@ signal phase_changed(new_phase: GamePhase.Phase)
 signal period_changed(new_period: int)
 signal clock_updated(time_remaining: float)
 signal game_over()
+signal game_reset()
+signal player_joined(player_name: String, team_color: Color)
+signal player_left(player_name: String, team_color: Color)
 signal stats_updated
 signal shots_on_goal_changed(sog_0: int, sog_1: int)
 
@@ -20,6 +23,7 @@ signal shots_on_goal_changed(sog_0: int, sog_1: int)
 # tick(), clients sync it via apply_remote_state().
 var _state_machine: GameStateMachine = null
 var _last_emitted_clock_secs: int = -1
+var _input_blocked: bool = false
 
 # ── Infrastructure ────────────────────────────────────────────────────────────
 var _spawner: ActorSpawner = null
@@ -130,6 +134,7 @@ func on_player_disconnected(peer_id: int) -> void:
 	if not players.has(peer_id):
 		return
 	var record: PlayerRecord = players[peer_id]
+	player_left.emit(record.player_name, PlayerRules.generate_primary_color(record.team.team_id))
 	# Drop the puck before freeing the controller so puck_released fires while the
 	# record is still intact (puck_controller._on_puck_released checks players dict).
 	if NetworkManager.is_host and puck != null and puck.carrier == record.skater:
@@ -288,6 +293,7 @@ func _spawn_remote_player(peer_id: int, team_slot: int, team: Team, jersey_color
 		func(v: Skater, _f: float, _d: Vector3): _on_hit_landed(cpid_remote, v)
 	)
 	players[peer_id] = record
+	player_joined.emit(player_name, PlayerRules.generate_primary_color(team.team_id))
 	NetworkManager.register_remote_controller(peer_id, spawned.controller)
 	if NetworkManager.is_host:
 		_sync_stats_to_clients()
@@ -414,6 +420,24 @@ func _on_faceoff_puck_picked_up(_carrier: Skater) -> void:
 	if _state_machine.on_faceoff_puck_picked_up():
 		phase_changed.emit(_state_machine.current_phase)
 
+# ── Scene Exit ────────────────────────────────────────────────────────────────
+func on_scene_exit() -> void:
+	set_input_blocked(false)
+	_state_machine = null
+	_spawner = null
+	teams.clear()
+	puck = null
+	goals.clear()
+	goalies.clear()
+	goalie_controllers.clear()
+	players.clear()
+	puck_controller = null
+	_recent_carriers.clear()
+	_shooter_peer_id = -1
+	_shot_pending_time = -1.0
+	_shot_on_goal_counted = false
+	_last_emitted_clock_secs = -1
+
 # ── Reset ─────────────────────────────────────────────────────────────────────
 func reset_game() -> void:
 	_drop_puck_if_carried()
@@ -421,6 +445,7 @@ func reset_game() -> void:
 	NetworkManager.notify_reset_to_all()
 	_state_machine.begin_faceoff_prep()
 	_handle_phase_entered()
+	game_reset.emit()
 
 func on_game_reset() -> void:
 	_apply_reset()
@@ -429,6 +454,7 @@ func on_game_reset() -> void:
 	if local_record != null and local_record.controller.has_puck:
 		local_record.controller.on_puck_released_network()
 		puck_controller.notify_local_puck_dropped()
+	game_reset.emit()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -544,6 +570,12 @@ func is_movement_locked() -> bool:
 	if _state_machine == null:
 		return false
 	return _state_machine.is_movement_locked()
+
+func is_input_blocked() -> bool:
+	return _input_blocked
+
+func set_input_blocked(blocked: bool) -> void:
+	_input_blocked = blocked
 
 func get_skater_team(skater: Skater) -> Team:
 	for peer_id: int in players:

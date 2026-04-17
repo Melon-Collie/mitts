@@ -1,13 +1,17 @@
 class_name MainMenu
 extends Control
 
-const GAME_SCENE: String = "res://Scenes/Hockey.tscn"
-
 var _ip_field: LineEdit
+var _error_label: Label = null
+var _settings_popup: Control = null
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_ui()
+	if not NetworkManager.pending_error.is_empty():
+		_error_label.text = NetworkManager.pending_error
+		_error_label.visible = true
+		NetworkManager.pending_error = ""
 
 func _build_ui() -> void:
 	var bg := ColorRect.new()
@@ -15,6 +19,7 @@ func _build_ui() -> void:
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
+	# ── Center stack ──────────────────────────────────────────────────────────
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
@@ -35,71 +40,6 @@ func _build_ui() -> void:
 	spacer.custom_minimum_size = Vector2(0, 20)
 	vbox.add_child(spacer)
 
-	var name_row := HBoxContainer.new()
-	name_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	name_row.add_theme_constant_override("separation", 12)
-	vbox.add_child(name_row)
-
-	var name_label := Label.new()
-	name_label.text = "Name:"
-	name_label.add_theme_font_size_override("font_size", 20)
-	name_label.add_theme_color_override("font_color", Color.WHITE)
-	name_row.add_child(name_label)
-
-	var name_field := LineEdit.new()
-	name_field.placeholder_text = "Player"
-	name_field.max_length = 16
-	name_field.custom_minimum_size = Vector2(200, 48)
-	name_field.add_theme_font_size_override("font_size", 18)
-	name_field.text_changed.connect(func(t: String) -> void:
-		NetworkManager.local_player_name = t.strip_edges() if not t.strip_edges().is_empty() else "Player")
-	name_row.add_child(name_field)
-
-	var hand_row := HBoxContainer.new()
-	hand_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	hand_row.add_theme_constant_override("separation", 12)
-	vbox.add_child(hand_row)
-
-	var hand_label := Label.new()
-	hand_label.text = "Shoots:"
-	hand_label.add_theme_font_size_override("font_size", 20)
-	hand_label.add_theme_color_override("font_color", Color.WHITE)
-	hand_row.add_child(hand_label)
-
-	var left_btn := Button.new()
-	left_btn.text = "Left"
-	left_btn.toggle_mode = true
-	left_btn.button_pressed = true
-	left_btn.custom_minimum_size = Vector2(90, 48)
-	left_btn.add_theme_font_size_override("font_size", 18)
-	hand_row.add_child(left_btn)
-
-	var right_btn := Button.new()
-	right_btn.text = "Right"
-	right_btn.toggle_mode = true
-	right_btn.button_pressed = false
-	right_btn.custom_minimum_size = Vector2(90, 48)
-	right_btn.add_theme_font_size_override("font_size", 18)
-	hand_row.add_child(right_btn)
-
-	# Keep the two buttons mutually exclusive
-	left_btn.toggled.connect(func(pressed: bool) -> void:
-		if not pressed and not right_btn.button_pressed:
-			left_btn.button_pressed = true
-			return
-		right_btn.button_pressed = not pressed
-		NetworkManager.local_is_left_handed = pressed)
-	right_btn.toggled.connect(func(pressed: bool) -> void:
-		if not pressed and not left_btn.button_pressed:
-			right_btn.button_pressed = true
-			return
-		left_btn.button_pressed = not pressed
-		NetworkManager.local_is_left_handed = not pressed)
-
-	var spacer2 := Control.new()
-	spacer2.custom_minimum_size = Vector2(0, 8)
-	vbox.add_child(spacer2)
-
 	var offline_btn := _make_button("Play Offline")
 	offline_btn.pressed.connect(_on_offline_pressed)
 	vbox.add_child(offline_btn)
@@ -109,25 +49,38 @@ func _build_ui() -> void:
 	vbox.add_child(host_btn)
 
 	var join_row := HBoxContainer.new()
-	join_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	join_row.custom_minimum_size = Vector2(308, 48)
 	join_row.add_theme_constant_override("separation", 8)
 	vbox.add_child(join_row)
 
 	_ip_field = LineEdit.new()
 	_ip_field.placeholder_text = "IP Address"
-	_ip_field.text = "127.0.0.1"
-	_ip_field.custom_minimum_size = Vector2(200, 48)
+	_ip_field.text = PlayerPrefs.last_ip
+	_ip_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_ip_field.add_theme_font_size_override("font_size", 18)
 	join_row.add_child(_ip_field)
 
-	var join_btn := _make_button("Join")
-	join_btn.custom_minimum_size = Vector2(100, 48)
+	var join_btn := Button.new()
+	join_btn.text = "Join Game"
+	join_btn.custom_minimum_size = Vector2(120, 48)
+	join_btn.add_theme_font_size_override("font_size", 20)
 	join_btn.pressed.connect(_on_join_pressed)
 	join_row.add_child(join_btn)
 
-	var spacer3 := Control.new()
-	spacer3.custom_minimum_size = Vector2(0, 16)
-	vbox.add_child(spacer3)
+	var settings_btn := _make_button("Settings")
+	settings_btn.pressed.connect(_on_settings_pressed)
+	vbox.add_child(settings_btn)
+
+	var exit_btn := _make_button("Exit Game")
+	exit_btn.pressed.connect(func() -> void: get_tree().quit())
+	vbox.add_child(exit_btn)
+
+	_error_label = Label.new()
+	_error_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_error_label.add_theme_font_size_override("font_size", 16)
+	_error_label.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45, 1.0))
+	_error_label.visible = false
+	vbox.add_child(_error_label)
 
 	var version_label := Label.new()
 	version_label.text = "v%s" % BuildInfo.VERSION
@@ -140,6 +93,132 @@ func _build_ui() -> void:
 	update_checker.custom_minimum_size = Vector2(380, 0)
 	vbox.add_child(update_checker)
 
+	_build_settings_popup()
+
+func _build_settings_popup() -> void:
+	var overlay := ColorRect.new()
+	overlay.color = Color(0.0, 0.0, 0.0, 0.6)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.pressed:
+			_settings_popup.visible = false)
+
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.07, 0.07, 0.09, 0.96)
+	panel_style.set_corner_radius_all(6)
+	panel_style.set_content_margin_all(32)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", panel_style)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 16)
+	panel.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "Settings"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", Color.WHITE)
+	vbox.add_child(title)
+
+	var name_row := HBoxContainer.new()
+	name_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	name_row.add_theme_constant_override("separation", 12)
+	vbox.add_child(name_row)
+
+	var name_label := Label.new()
+	name_label.text = "Name:"
+	name_label.add_theme_font_size_override("font_size", 20)
+	name_label.add_theme_color_override("font_color", Color.WHITE)
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_row.add_child(name_label)
+
+	var name_field := LineEdit.new()
+	name_field.placeholder_text = "Player"
+	name_field.max_length = 16
+	name_field.custom_minimum_size = Vector2(200, 48)
+	name_field.add_theme_font_size_override("font_size", 18)
+	name_field.text = PlayerPrefs.player_name
+	NetworkManager.local_player_name = PlayerPrefs.player_name
+	name_field.text_changed.connect(func(t: String) -> void:
+		var trimmed: String = t.strip_edges() if not t.strip_edges().is_empty() else "Player"
+		NetworkManager.local_player_name = trimmed
+		PlayerPrefs.player_name = trimmed
+		PlayerPrefs.save())
+	name_row.add_child(name_field)
+
+	var hand_row := HBoxContainer.new()
+	hand_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	hand_row.add_theme_constant_override("separation", 12)
+	vbox.add_child(hand_row)
+
+	var hand_label := Label.new()
+	hand_label.text = "Shoots:"
+	hand_label.add_theme_font_size_override("font_size", 20)
+	hand_label.add_theme_color_override("font_color", Color.WHITE)
+	hand_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	hand_row.add_child(hand_label)
+
+	var left_btn := Button.new()
+	left_btn.text = "Left"
+	left_btn.toggle_mode = true
+	left_btn.button_pressed = PlayerPrefs.is_left_handed
+	left_btn.custom_minimum_size = Vector2(90, 48)
+	left_btn.add_theme_font_size_override("font_size", 18)
+	hand_row.add_child(left_btn)
+
+	var right_btn := Button.new()
+	right_btn.text = "Right"
+	right_btn.toggle_mode = true
+	right_btn.button_pressed = not PlayerPrefs.is_left_handed
+	right_btn.custom_minimum_size = Vector2(90, 48)
+	right_btn.add_theme_font_size_override("font_size", 18)
+	hand_row.add_child(right_btn)
+
+	NetworkManager.local_is_left_handed = PlayerPrefs.is_left_handed
+
+	left_btn.toggled.connect(func(pressed: bool) -> void:
+		if not pressed and not right_btn.button_pressed:
+			left_btn.button_pressed = true
+			return
+		right_btn.button_pressed = not pressed
+		NetworkManager.local_is_left_handed = pressed
+		PlayerPrefs.is_left_handed = pressed
+		PlayerPrefs.save())
+	right_btn.toggled.connect(func(pressed: bool) -> void:
+		if not pressed and not left_btn.button_pressed:
+			right_btn.button_pressed = true
+			return
+		left_btn.button_pressed = not pressed
+		NetworkManager.local_is_left_handed = not pressed
+		PlayerPrefs.is_left_handed = not pressed
+		PlayerPrefs.save())
+
+	var done_btn := _make_button("Done")
+	done_btn.pressed.connect(func() -> void: _settings_popup.visible = false)
+	vbox.add_child(done_btn)
+
+	_settings_popup = Control.new()
+	_settings_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_settings_popup.visible = false
+	_settings_popup.add_child(overlay)
+	_settings_popup.add_child(panel)
+	add_child(_settings_popup)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel") and _settings_popup.visible:
+		_settings_popup.visible = false
+		get_viewport().set_input_as_handled()
+
+func _on_settings_pressed() -> void:
+	_settings_popup.visible = true
+
 func _make_button(label: String) -> Button:
 	var btn := Button.new()
 	btn.text = label
@@ -149,15 +228,17 @@ func _make_button(label: String) -> Button:
 
 func _on_offline_pressed() -> void:
 	NetworkManager.start_offline()
-	get_tree().change_scene_to_file(GAME_SCENE)
+	get_tree().change_scene_to_file(Constants.SCENE_HOCKEY)
 
 func _on_host_pressed() -> void:
 	NetworkManager.start_host()
-	get_tree().change_scene_to_file(GAME_SCENE)
+	get_tree().change_scene_to_file(Constants.SCENE_HOCKEY)
 
 func _on_join_pressed() -> void:
 	var ip: String = _ip_field.text.strip_edges()
 	if ip.is_empty():
 		return
+	PlayerPrefs.last_ip = ip
+	PlayerPrefs.save()
 	NetworkManager.start_client(ip)
-	get_tree().change_scene_to_file(GAME_SCENE)
+	get_tree().change_scene_to_file(Constants.SCENE_HOCKEY)

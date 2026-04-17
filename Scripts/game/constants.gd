@@ -26,3 +26,7 @@ const STATE_RATE: int = 20
 
 # ── Physics ───────────────────────────────────────────────────────────────────
 const PHYSICS_TICK: int = 240
+
+# ── Scenes ────────────────────────────────────────────────────────────────────
+const SCENE_MAIN_MENU: String = "res://Scenes/MainMenu.tscn"
+const SCENE_HOCKEY: String    = "res://Scenes/Hockey.tscn"

@@ -8,6 +8,9 @@ var _away_score_label: Label
 var _phase_panel: PanelContainer
 var _phase_label: Label
 var _elevation_panel: PanelContainer
+var _game_over_popup: CanvasLayer = null
+var _pause_menu: CanvasLayer = null
+var _toast_container: VBoxContainer = null
 var _home_sog_label: Label = null
 var _away_sog_label: Label = null
 var _local_skater: Skater = null
@@ -25,6 +28,9 @@ func _ready() -> void:
 	_build_phase_banner()
 	_build_elevation_indicator()
 	_build_version_tag()
+	_build_game_over_popup()
+	_build_pause_menu()
+	_build_toast_area()
 	_period_label.text = _period_ordinal(1)
 	_clock_label.text = _format_clock(GameRules.PERIOD_DURATION)
 	_home_score_label.text = "0"
@@ -36,7 +42,21 @@ func _ready() -> void:
 	GameManager.period_changed.connect(_on_period_changed)
 	GameManager.clock_updated.connect(_on_clock_updated)
 	GameManager.game_over.connect(_on_game_over)
+	GameManager.game_reset.connect(_on_game_reset)
 	GameManager.shots_on_goal_changed.connect(_on_shots_on_goal_changed)
+	GameManager.player_joined.connect(func(n: String, c: Color) -> void: _show_toast(n + " joined", c))
+	GameManager.player_left.connect(func(n: String, c: Color) -> void: _show_toast(n + " left", c))
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel"):
+		if _game_over_popup.visible:
+			return
+		_set_paused(not _pause_menu.visible)
+		get_viewport().set_input_as_handled()
+
+func _set_paused(paused: bool) -> void:
+	_pause_menu.visible = paused
+	GameManager.set_input_blocked(paused)
 
 func _process(_delta: float) -> void:
 	if _local_skater == null:
@@ -194,6 +214,156 @@ func _build_elevation_indicator() -> void:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_elevation_panel.add_child(label)
 
+func _build_game_over_popup() -> void:
+	var overlay := ColorRect.new()
+	overlay.color = Color(0.0, 0.0, 0.0, 0.55)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = _DARK_BG
+	panel_style.set_corner_radius_all(6)
+	panel_style.set_content_margin_all(32)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", panel_style)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 16)
+	panel.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "GAME OVER"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", _GOLD)
+	vbox.add_child(title)
+
+	if NetworkManager.is_host:
+		var rematch_btn := _popup_button("Rematch")
+		rematch_btn.pressed.connect(func() -> void: GameManager.reset_game())
+		vbox.add_child(rematch_btn)
+
+	var menu_btn := _popup_button("Main Menu")
+	menu_btn.pressed.connect(func() -> void:
+		GameManager.on_scene_exit()
+		NetworkManager.reset()
+		get_tree().change_scene_to_file(Constants.SCENE_MAIN_MENU))
+	vbox.add_child(menu_btn)
+
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(overlay)
+	root.add_child(panel)
+
+	# Layer 5 keeps the popup above the game world but below the scoreboard (layer 10).
+	_game_over_popup = CanvasLayer.new()
+	_game_over_popup.layer = 5
+	_game_over_popup.visible = false
+	_game_over_popup.add_child(root)
+	add_child(_game_over_popup)
+
+func _build_pause_menu() -> void:
+	var overlay := ColorRect.new()
+	overlay.color = Color(0.0, 0.0, 0.0, 0.55)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = _DARK_BG
+	panel_style.set_corner_radius_all(6)
+	panel_style.set_content_margin_all(32)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", panel_style)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 16)
+	panel.add_child(vbox)
+
+	var resume_btn := _popup_button("Resume")
+	resume_btn.pressed.connect(func() -> void: _set_paused(false))
+	vbox.add_child(resume_btn)
+
+	var quit_btn := _popup_button("Quit to Menu")
+	quit_btn.pressed.connect(func() -> void:
+		GameManager.on_scene_exit()
+		NetworkManager.reset()
+		get_tree().change_scene_to_file(Constants.SCENE_MAIN_MENU))
+	vbox.add_child(quit_btn)
+
+	var exit_btn := _popup_button("Exit Game")
+	exit_btn.pressed.connect(func() -> void: get_tree().quit())
+	vbox.add_child(exit_btn)
+
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(overlay)
+	root.add_child(panel)
+
+	_pause_menu = CanvasLayer.new()
+	_pause_menu.layer = 5
+	_pause_menu.visible = false
+	_pause_menu.add_child(root)
+	add_child(_pause_menu)
+
+func _build_toast_area() -> void:
+	_toast_container = VBoxContainer.new()
+	_toast_container.anchor_left = 1.0
+	_toast_container.anchor_right = 1.0
+	_toast_container.offset_left = -220.0
+	_toast_container.offset_top = 8.0
+	_toast_container.add_theme_constant_override("separation", 4)
+	_toast_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_toast_container)
+
+func _show_toast(text: String, name_color: Color = _WHITE) -> void:
+	var style := StyleBoxFlat.new()
+	style.bg_color = _DARK_BG
+	style.set_corner_radius_all(3)
+	style.set_content_margin(SIDE_LEFT, 12)
+	style.set_content_margin(SIDE_RIGHT, 12)
+	style.set_content_margin(SIDE_TOP, 6)
+	style.set_content_margin(SIDE_BOTTOM, 6)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", style)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_toast_container.add_child(panel)
+
+	var parts := text.split(" ", false, 1)
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 5)
+	hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var name_lbl := _lbl(parts[0], 14, name_color)
+	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hbox.add_child(name_lbl)
+	if parts.size() > 1:
+		var action_lbl := _lbl(parts[1], 14, _DIM)
+		action_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hbox.add_child(action_lbl)
+	panel.add_child(hbox)
+
+	var tween := create_tween()
+	tween.tween_interval(2.5)
+	tween.tween_method(func(a: float) -> void: panel.modulate.a = a, 1.0, 0.0, 0.5)
+	tween.tween_callback(panel.queue_free)
+
+func _popup_button(label: String) -> Button:
+	var btn := Button.new()
+	btn.text = label
+	btn.custom_minimum_size = Vector2(220, 48)
+	btn.add_theme_font_size_override("font_size", 20)
+	return btn
+
 func _build_version_tag() -> void:
 	var label := _lbl("v%s" % BuildInfo.VERSION, 11, _DIM)
 	label.anchor_left = 1.0
@@ -265,6 +435,10 @@ func _on_game_over() -> void:
 		_phase_label.text = "TIE"
 		_phase_label.add_theme_color_override("font_color", _WHITE)
 	_phase_panel.visible = true
+	_game_over_popup.visible = true
+
+func _on_game_reset() -> void:
+	_game_over_popup.visible = false
 
 func _on_shots_on_goal_changed(sog_0: int, sog_1: int) -> void:
 	if _home_sog_label != null:
