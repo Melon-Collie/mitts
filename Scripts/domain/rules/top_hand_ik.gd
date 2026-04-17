@@ -31,26 +31,27 @@ class_name TopHandIK
 #
 # All coordinates are in upper-body-local space.
 #
-# cfg keys (all floats):
-#   stick_length              — rigid stick length (meters)
-#   blade_y                   — fixed local Y for the blade
-#   hand_rest_y               — hand's resting local Y (used in FAR regime)
-#   hand_y_max                — ceiling the hand may rise to (CLOSE regime)
-#   rom_forehand_angle_max    — radians; angular ROM on forehand side (small)
-#   rom_backhand_angle_max    — radians; angular ROM on backhand side (large)
-#   rom_forehand_reach_max    — meters;  max hand displacement on forehand side
-#   rom_backhand_reach_max    — meters;  max hand displacement on backhand side
-#
 # blade_side_sign: −1.0 for a left-handed shooter (blade lives on −X),
 #                  +1.0 for a right-handed shooter (blade lives on +X).
 # The shoulder is expected to live on the opposite (top-hand) side.
 #
 # Returns: { "hand": Vector3, "blade": Vector3 } in upper-body-local space.
+
+class Config:
+	var stick_length: float = 0.0            # rigid stick length (meters)
+	var blade_y: float = 0.0                 # fixed local Y for the blade
+	var hand_rest_y: float = 0.0             # hand's resting local Y (FAR regime)
+	var hand_y_max: float = 0.0              # ceiling the hand may rise to (CLOSE)
+	var rom_forehand_angle_max: float = 0.0  # radians; ROM on forehand side (small)
+	var rom_backhand_angle_max: float = 0.0  # radians; ROM on backhand side (large)
+	var rom_forehand_reach_max: float = 0.0  # meters; max hand displacement forehand
+	var rom_backhand_reach_max: float = 0.0  # meters; max hand displacement backhand
+
 static func solve(
 		shoulder: Vector3,
 		desired_blade_xz: Vector2,
 		blade_side_sign: float,
-		cfg: Dictionary) -> Dictionary:
+		cfg: Config) -> Dictionary:
 	var stick_length: float = cfg.stick_length
 	var blade_y: float = cfg.blade_y
 	var hand_rest_y: float = cfg.hand_rest_y

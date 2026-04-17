@@ -12,17 +12,18 @@ class_name BottomHandIK
 # reach distance, so the hand never gives up during a normal swing — only when the
 # blade is genuinely past what the body can rotate to follow.
 #
-# cfg keys:
-#   hand_y              — target local Y for the hand
-#   backhand_angle      — current blade angle toward backhand side (radians, >=0)
-#   release_angle_max   — angle at which blending begins (radians)
-#   release_angle_band  — blend band width past release_angle_max (radians)
-#
 # Returns: Vector3 hand position in upper-body-local space.
+
+class Config:
+	var hand_y: float = 0.0              # target local Y for the hand
+	var backhand_angle: float = 0.0      # current blade angle toward backhand (rad, >=0)
+	var release_angle_max: float = 0.0   # angle at which blending begins (radians)
+	var release_angle_band: float = 0.0  # blend band width past release_angle_max (rad)
+
 static func solve(
 		shoulder: Vector3,
 		grip_target_xz: Vector2,
-		cfg: Dictionary) -> Vector3:
+		cfg: Config) -> Vector3:
 	var hand_y: float = cfg.hand_y
 	var target := Vector3(grip_target_xz.x, hand_y, grip_target_xz.y)
 	var rest := Vector3(shoulder.x, hand_y, shoulder.z)

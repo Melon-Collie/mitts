@@ -14,13 +14,13 @@ const BAND_DEG: float = 15.0
 const RELEASE_RAD: float = RELEASE_DEG * PI / 180.0
 const BAND_RAD: float = BAND_DEG * PI / 180.0
 
-func _cfg(backhand_angle_deg: float) -> Dictionary:
-	return {
-		"hand_y": HAND_Y,
-		"backhand_angle": backhand_angle_deg * PI / 180.0,
-		"release_angle_max": RELEASE_RAD,
-		"release_angle_band": BAND_RAD,
-	}
+func _cfg(backhand_angle_deg: float) -> BottomHandIK.Config:
+	var cfg := BottomHandIK.Config.new()
+	cfg.hand_y = HAND_Y
+	cfg.backhand_angle = backhand_angle_deg * PI / 180.0
+	cfg.release_angle_max = RELEASE_RAD
+	cfg.release_angle_band = BAND_RAD
+	return cfg
 
 func _lefty_shoulder() -> Vector3:
 	return Vector3(-SHOULDER_OFFSET, SHOULDER_Y, 0.0)

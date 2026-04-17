@@ -29,17 +29,17 @@ const BACK_ANGLE: float = 2.0 * PI / 3.0  # 120°
 const FORE_REACH: float = 0.20
 const BACK_REACH: float = 0.70
 
-func _cfg() -> Dictionary:
-	return {
-		"stick_length": STICK_LENGTH,
-		"blade_y": BLADE_Y,
-		"hand_rest_y": HAND_REST_Y,
-		"hand_y_max": HAND_Y_MAX,
-		"rom_forehand_angle_max": FORE_ANGLE,
-		"rom_backhand_angle_max": BACK_ANGLE,
-		"rom_forehand_reach_max": FORE_REACH,
-		"rom_backhand_reach_max": BACK_REACH,
-	}
+func _cfg() -> TopHandIK.Config:
+	var cfg := TopHandIK.Config.new()
+	cfg.stick_length = STICK_LENGTH
+	cfg.blade_y = BLADE_Y
+	cfg.hand_rest_y = HAND_REST_Y
+	cfg.hand_y_max = HAND_Y_MAX
+	cfg.rom_forehand_angle_max = FORE_ANGLE
+	cfg.rom_backhand_angle_max = BACK_ANGLE
+	cfg.rom_forehand_reach_max = FORE_REACH
+	cfg.rom_backhand_reach_max = BACK_REACH
+	return cfg
 
 # A left-handed skater has blade on −X and shoulder (top hand) on +X.
 func _lefty_shoulder() -> Vector3:

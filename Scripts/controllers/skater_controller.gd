@@ -954,25 +954,25 @@ func _blade_y_pitch_corrected(blade_local_z: float) -> float:
 		base += blade_local_z * sin(pitch)
 	return base
 
-func _ik_config() -> Dictionary:
-	return {
-		"stick_length": stick_length,
-		"blade_y": _blade_y_local(),
-		"hand_rest_y": hand_rest_y,
-		"hand_y_max": hand_y_max,
-		"rom_forehand_angle_max": deg_to_rad(rom_forehand_angle_max_deg),
-		"rom_backhand_angle_max": deg_to_rad(rom_backhand_angle_max_deg),
-		"rom_forehand_reach_max": rom_forehand_reach_max,
-		"rom_backhand_reach_max": rom_backhand_reach_max,
-	}
+func _ik_config() -> TopHandIK.Config:
+	var cfg := TopHandIK.Config.new()
+	cfg.stick_length = stick_length
+	cfg.blade_y = _blade_y_local()
+	cfg.hand_rest_y = hand_rest_y
+	cfg.hand_y_max = hand_y_max
+	cfg.rom_forehand_angle_max = deg_to_rad(rom_forehand_angle_max_deg)
+	cfg.rom_backhand_angle_max = deg_to_rad(rom_backhand_angle_max_deg)
+	cfg.rom_forehand_reach_max = rom_forehand_reach_max
+	cfg.rom_backhand_reach_max = rom_backhand_reach_max
+	return cfg
 
-func _bottom_hand_ik_config() -> Dictionary:
-	return {
-		"hand_y": bh_hand_y,
-		"backhand_angle": _bh_backhand_angle(),
-		"release_angle_max": deg_to_rad(bh_release_angle_deg),
-		"release_angle_band": deg_to_rad(bh_release_angle_band_deg),
-	}
+func _bottom_hand_ik_config() -> BottomHandIK.Config:
+	var cfg := BottomHandIK.Config.new()
+	cfg.hand_y = bh_hand_y
+	cfg.backhand_angle = _bh_backhand_angle()
+	cfg.release_angle_max = deg_to_rad(bh_release_angle_deg)
+	cfg.release_angle_band = deg_to_rad(bh_release_angle_band_deg)
+	return cfg
 
 # Blade world angle toward the backhand side, in the skater's body frame.
 # Returns a positive value when the blade is on the backhand side; 0 on forehand.
@@ -1001,7 +1001,7 @@ func _update_bottom_hand() -> void:
 	# Derive grip Y from the stick shaft so the hand stays on the stick regardless
 	# of pitch lean or reach. bh_hand_y offsets for fine-tuning.
 	var grip_y: float = lerpf(hand_local.y, blade_local.y, bottom_hand_grip_fraction) + bh_hand_y
-	var cfg: Dictionary = _bottom_hand_ik_config()
+	var cfg: BottomHandIK.Config = _bottom_hand_ik_config()
 	cfg.hand_y = grip_y
 	var bh: Vector3 = BottomHandIK.solve(
 			skater.bottom_shoulder.position,
