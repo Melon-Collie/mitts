@@ -11,7 +11,7 @@ signal puck_touched_goalie(goalie: Goalie)  # puck contacted a goalie StaticBody
 @export var reattach_cooldown: float = 0.5
 @export var ice_height: float = 0.05
 @export var pickup_max_speed: float = 8.0
-@export var deflect_min_speed: float = 20.0
+@export var deflect_min_speed: float = 14.0
 @export var deflect_blend: float = 0.5
 @export var deflect_speed_retain: float = 0.7
 @export var deflect_cooldown: float = 0.3
@@ -164,18 +164,20 @@ func _on_blade_entered(area: Area3D) -> void:
 		puck_picked_up.emit(skater)
 
 func _deflect_off_blade(skater: Skater) -> void:
-	# Use the blade-to-puck contact direction as the reflect normal (billiard ball
-	# style). The blade area is a sphere with no orientation, so this is the only
-	# physically meaningful normal — it's where the puck was relative to the blade
-	# center when overlap was detected.
-	var blade_world: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
-	blade_world.y = 0.0
-	var puck_pos: Vector3 = global_position
-	puck_pos.y = 0.0
-	var contact_normal: Vector3 = puck_pos - blade_world
-	if contact_normal.length() < 0.001:
-		contact_normal = -skater.global_transform.basis.z  # fallback: bounce forward
-	contact_normal = contact_normal.normalized()
+	# Use the blade face normal — perpendicular to the stick shaft in the horizontal
+	# plane — as the reflection surface. This makes the deflection angle depend on
+	# how the player has angled their blade, not just where the puck contacted.
+	var top_hand_world: Vector3 = skater.top_hand.global_position
+	var blade_world: Vector3 = skater.get_blade_contact_global()
+	var stick_horiz: Vector3 = blade_world - top_hand_world
+	stick_horiz.y = 0.0
+	if stick_horiz.length() < 0.001:
+		stick_horiz = -skater.global_transform.basis.z
+	stick_horiz = stick_horiz.normalized()
+	# 90° rotation around Y gives the face normal; pick the face opposing the puck.
+	var contact_normal: Vector3 = Vector3(-stick_horiz.z, 0.0, stick_horiz.x)
+	if contact_normal.dot(linear_velocity) > 0.0:
+		contact_normal = -contact_normal
 
 	var new_vel: Vector3 = PuckCollisionRules.deflect_velocity(
 			linear_velocity, contact_normal, deflect_blend, deflect_speed_retain)
