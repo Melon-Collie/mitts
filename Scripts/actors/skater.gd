@@ -99,6 +99,7 @@ var is_elevated: bool = false
 var is_ghost: bool = false
 var is_braking: bool = false
 var shot_charge: float = 0.0
+var slapper_aim_dir: Vector3 = Vector3.ZERO
 var blade_world_velocity: Vector3 = Vector3.ZERO
 var _prev_blade_world_pos: Vector3 = Vector3.ZERO
 var _last_wall_normal: Vector3 = Vector3.ZERO
@@ -395,15 +396,21 @@ func set_head_angle(angle: float) -> void:
 func set_slapper_mode(active: bool) -> void:
 	_blade_area.collision_layer = 0 if active else Constants.LAYER_BLADE_AREAS
 
-func set_slapper_zone(active: bool, radius: float = 0.0, offset_x: float = 0.0) -> void:
+func set_slapper_zone(active: bool, radius: float = 0.0, offset_x: float = 0.0, offset_z: float = 0.0) -> void:
 	if active and radius > 0.0:
 		_slapper_zone_sphere.radius = radius
-		# Offset toward the blade side so the zone covers where the puck naturally
-		# arrives for a one-timer (blade side, not center-body). For a left-handed
-		# shooter the blade is on −X; for a righty, +X.
 		var blade_side_sign: float = -1.0 if is_left_handed else 1.0
-		_slapper_zone_area.position = Vector3(blade_side_sign * offset_x, 0.0, 0.0)
+		_slapper_zone_area.position = Vector3(blade_side_sign * offset_x, 0.0, offset_z)
 	_slapper_zone_area.collision_layer = Constants.LAYER_BLADE_AREAS if active else 0
+
+func is_slapper_zone_active() -> bool:
+	return _slapper_zone_area.collision_layer != 0
+
+func get_slapper_zone_global_position() -> Vector3:
+	return _slapper_zone_area.global_position
+
+func get_slapper_zone_radius() -> float:
+	return _slapper_zone_sphere.radius
 
 func get_upper_body_rotation() -> float:
 	return upper_body.rotation.y

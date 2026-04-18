@@ -117,8 +117,9 @@ enum State {
 # ── Slapper Tuning ────────────────────────────────────────────────────────────
 @export var slapper_wind_up_height: float = 0.4
 @export var slapper_wind_up_time: float = 0.3
-@export var slapper_zone_radius: float = 0.8
+@export var slapper_zone_radius: float = 0.5
 @export var slapper_zone_offset_x: float = 0.8  # lateral offset toward blade side
+@export var slapper_zone_offset_z: float = -1.0  # forward offset (negative = in front of player)
 @export var min_slapper_power: float = 14.0
 @export var max_slapper_power: float = 28.0
 @export var max_slapper_charge_time: float = 1.0
@@ -483,6 +484,7 @@ func _state_shot_blocking(input: InputState, delta: float) -> void:
 # ── State Helpers ─────────────────────────────────────────────────────────────
 func _transition_to_skating() -> void:
 	skater.shot_charge = 0.0
+	skater.slapper_aim_dir = Vector3.ZERO
 	if has_puck:
 		_state = State.SKATING_WITH_PUCK
 	else:
@@ -543,6 +545,7 @@ func _enter_slapper_charge(input: InputState) -> void:
 		input.mouse_world_pos.x - blade_world.x,
 		input.mouse_world_pos.z - blade_world.z)
 	_locked_slapper_dir = to_mouse_from_blade.normalized() if to_mouse_from_blade.length() > move_deadzone else _facing
+	skater.slapper_aim_dir = Vector3(_locked_slapper_dir.x, 0.0, _locked_slapper_dir.y)
 	_upper_body_angle = 0.0
 	_upper_body_lean = 0.0
 	_velocity_lean_x = 0.0
@@ -558,7 +561,7 @@ func _enter_slapper_charge(input: InputState) -> void:
 	else:
 		# Activate the ice-level slapper zone so the puck can be detected at
 		# ground level even though the blade is lifted during wind-up.
-		skater.set_slapper_zone(true, slapper_zone_radius, slapper_zone_offset_x)
+		skater.set_slapper_zone(true, slapper_zone_radius, slapper_zone_offset_x, slapper_zone_offset_z)
 		_state = State.SLAPPER_CHARGE_WITHOUT_PUCK
 
 func _release_wrister(input: InputState) -> void:

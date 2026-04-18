@@ -26,6 +26,9 @@ var _speed_lines: CPUParticles3D = null
 var _body_check_burst: CPUParticles3D = null
 var _dash_push_emitter: CPUParticles3D = null
 var _charge_light: OmniLight3D = null
+var _1t_ring: MeshInstance3D = null
+var _1t_arrow: MeshInstance3D = null
+var _1t_ring_radius: float = -1.0
 var _prev_pos: Vector3 = Vector3.ZERO
 var _prev_vel: Vector3 = Vector3.ZERO
 
@@ -64,6 +67,16 @@ func _ready() -> void:
 
 	_dash_push_emitter = _make_dash_push_emitter()
 	add_child(_dash_push_emitter)
+
+	_1t_ring = MeshInstance3D.new()
+	_1t_ring.mesh = _make_ring_mesh(1.0, 0.03, Color(0.2, 0.6, 1.0, 0.6))
+	_1t_ring.visible = false
+	add_child(_1t_ring)
+
+	_1t_arrow = MeshInstance3D.new()
+	_1t_arrow.mesh = _make_arrow_mesh(1.2, 0.04, Color(0.2, 0.6, 1.0, 0.7))
+	_1t_arrow.visible = false
+	add_child(_1t_arrow)
 
 	var skater: Skater = get_parent() as Skater
 	if skater != null:
@@ -126,17 +139,40 @@ func _process(_delta: float) -> void:
 	else:
 		_speed_lines.emitting = false
 
-	# Shot charge glow: cream → orange, matching the puck trail gradient.
-	if skater.shot_charge > 0.01:
+	# Shot charge glow: cream → orange — wrister only, not slapper.
+	if skater.shot_charge > 0.01 and skater.slapper_aim_dir == Vector3.ZERO:
 		var c: float = skater.shot_charge
 		_charge_light.visible = true
-		_charge_light.global_position = skater.get_blade_contact_global() + Vector3(0.0, 0.12, 0.0)
+		_charge_light.global_position = skater.upper_body_to_global(skater.get_blade_position())
 		_charge_light.light_color = Color(0.95, 0.93, 0.88).lerp(Color(1.0, 0.45, 0.05), c)
 		_charge_light.light_energy = c * 1.5
 		_charge_light.omni_range = lerpf(2.0, 3.5, c)
 	else:
 		_charge_light.visible = false
 		_charge_light.omni_range = 2.0
+
+	# One-timer zone ring + aim arrow — only when charging without puck.
+	if skater.is_slapper_zone_active():
+		var zone_pos: Vector3 = skater.get_slapper_zone_global_position()
+		zone_pos.y = 0.01
+		var r: float = skater.get_slapper_zone_radius()
+		if not is_equal_approx(r, _1t_ring_radius):
+			_1t_ring.mesh = _make_ring_mesh(r, 0.03, Color(0.2, 0.6, 1.0, 0.6))
+			_1t_ring_radius = r
+		_1t_ring.global_position = zone_pos
+		_1t_ring.visible = true
+
+		var aim: Vector3 = skater.slapper_aim_dir
+		if aim.length() > 0.01:
+			aim = aim.normalized()
+			_1t_arrow.global_position = zone_pos + aim * (r + 0.6)
+			_1t_arrow.global_rotation.y = atan2(aim.x, aim.z)
+			_1t_arrow.visible = true
+		else:
+			_1t_arrow.visible = false
+	else:
+		_1t_ring.visible = false
+		_1t_arrow.visible = false
 
 
 func _on_pulse_dashed(dash_direction: Vector3) -> void:
@@ -334,6 +370,54 @@ func _make_body_check_emitter() -> CPUParticles3D:
 	e.scale_amount_max = 0.08
 	e.mesh = _make_sphere_mesh(Color(0.9, 0.95, 1.0, 0.9))
 	return e
+
+func _make_ring_mesh(radius: float, thickness: float, color: Color) -> ArrayMesh:
+	var segments: int = 48
+	var verts := PackedVector3Array()
+	var colors := PackedColorArray()
+	var indices := PackedInt32Array()
+	var inner_r: float = radius - thickness
+	var outer_r: float = radius + thickness
+	for i: int in segments:
+		var a: float = TAU * i / segments
+		var c: float = cos(a)
+		var s: float = sin(a)
+		verts.append(Vector3(c * inner_r, 0.0, s * inner_r))
+		verts.append(Vector3(c * outer_r, 0.0, s * outer_r))
+		colors.append(color)
+		colors.append(color)
+	for i: int in segments:
+		var i0: int = i * 2
+		var i1: int = i * 2 + 1
+		var i2: int = ((i + 1) % segments) * 2
+		var i3: int = ((i + 1) % segments) * 2 + 1
+		indices.append_array([i0, i1, i2, i1, i3, i2])
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_COLOR] = colors
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.vertex_color_use_as_albedo = true
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.surface_set_material(0, mat)
+	return mesh
+
+func _make_arrow_mesh(length: float, width: float, color: Color) -> Mesh:
+	# Thin flat box pointing along +Z, pivoted at center so offset by length/2 positions tip.
+	var box := BoxMesh.new()
+	box.size = Vector3(width, 0.003, length)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color = color
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	box.material = mat
+	return box
 
 func _make_sphere_mesh(color: Color) -> Mesh:
 	var sphere := SphereMesh.new()
