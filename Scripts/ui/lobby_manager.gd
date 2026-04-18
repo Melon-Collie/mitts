@@ -26,7 +26,7 @@ func _ready() -> void:
 	NetworkManager.game_started.connect(_on_game_started)
 
 	if NetworkManager.is_host:
-		_assign_slot(1, 0, 0, NetworkManager.local_player_name, NetworkManager.local_is_left_handed)
+		_assign_slot(1, 0, 0, NetworkManager.local_player_name, NetworkManager.local_is_left_handed, NetworkManager.local_jersey_number)
 		_broadcast_confirm(1, 0, 0)
 	elif not NetworkManager.pending_lobby_roster.is_empty():
 		_on_lobby_roster_synced(NetworkManager.pending_lobby_roster)
@@ -161,7 +161,7 @@ func _btn(text: String) -> Button:
 func _slot_key(team_id: int, slot: int) -> int:
 	return team_id * 3 + slot
 
-func _assign_slot(peer_id: int, team_id: int, slot: int, player_name: String, is_left_handed: bool) -> void:
+func _assign_slot(peer_id: int, team_id: int, slot: int, player_name: String, is_left_handed: bool, jersey_number: int = 10) -> void:
 	# Clear any existing slot for this peer first.
 	for k: int in _lobby_slots.keys():
 		if _lobby_slots[k].peer_id == peer_id:
@@ -171,6 +171,7 @@ func _assign_slot(peer_id: int, team_id: int, slot: int, player_name: String, is
 		"peer_id": peer_id,
 		"player_name": player_name,
 		"is_left_handed": is_left_handed,
+		"jersey_number": jersey_number,
 	}
 
 func _find_balanced_slot(_peer_id: int) -> Array:
@@ -192,7 +193,7 @@ func _build_roster_array() -> Array:
 		var team_id: int = k / 3
 		var slot: int = k % 3
 		var entry: Dictionary = _lobby_slots[k]
-		result.append([entry.peer_id, team_id, slot, entry.player_name, entry.is_left_handed])
+		result.append([entry.peer_id, team_id, slot, entry.player_name, entry.is_left_handed, entry.get("jersey_number", 10)])
 	return result
 
 func _build_slot_grid_roster() -> Array[Dictionary]:
@@ -228,7 +229,8 @@ func _on_peer_joined(peer_id: int) -> void:
 		return
 	var name_val: String = NetworkManager.get_peer_name(peer_id)
 	var is_left: bool = NetworkManager.get_peer_handedness(peer_id)
-	_assign_slot(peer_id, target[0], target[1], name_val, is_left)
+	var num: int = NetworkManager.get_peer_number(peer_id)
+	_assign_slot(peer_id, target[0], target[1], name_val, is_left, num)
 	NetworkManager.send_lobby_roster(peer_id, _build_roster_array())
 	_broadcast_confirm(peer_id, target[0], target[1])
 	_refresh_grid()
@@ -256,12 +258,14 @@ func _on_slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int) -> v
 		return
 	var name_val: String = ""
 	var is_left: bool = true
+	var num: int = 10
 	for k: int in _lobby_slots:
 		if _lobby_slots[k].peer_id == peer_id:
 			name_val = _lobby_slots[k].player_name
 			is_left = _lobby_slots[k].is_left_handed
+			num = _lobby_slots[k].get("jersey_number", 10)
 			break
-	_assign_slot(peer_id, new_team_id, new_slot, name_val, is_left)
+	_assign_slot(peer_id, new_team_id, new_slot, name_val, is_left, num)
 	_broadcast_confirm(peer_id, new_team_id, new_slot)
 	_refresh_grid()
 
@@ -270,12 +274,14 @@ func _on_slot_swap_confirmed(peer_id: int, _old_team_id: int, _old_slot: int,
 		_jersey: Color, _helmet: Color, _pants: Color) -> void:
 	var name_val: String = ""
 	var is_left: bool = true
+	var num: int = 10
 	for k: int in _lobby_slots:
 		if _lobby_slots[k].peer_id == peer_id:
 			name_val = _lobby_slots[k].player_name
 			is_left = _lobby_slots[k].is_left_handed
+			num = _lobby_slots[k].get("jersey_number", 10)
 			break
-	_assign_slot(peer_id, new_team_id, new_slot, name_val, is_left)
+	_assign_slot(peer_id, new_team_id, new_slot, name_val, is_left, num)
 	_refresh_grid()
 
 func _on_lobby_roster_synced(roster: Array) -> void:
@@ -286,10 +292,12 @@ func _on_lobby_roster_synced(roster: Array) -> void:
 		var slot: int    = entry[2]
 		var p_name: String = entry[3] if entry.size() > 3 else "Player"
 		var is_left: bool = entry[4] if entry.size() > 4 else true
+		var p_number: int = entry[5] if entry.size() > 5 else 10
 		_lobby_slots[_slot_key(team_id, slot)] = {
 			"peer_id": peer_id,
 			"player_name": p_name,
 			"is_left_handed": is_left,
+			"jersey_number": p_number,
 		}
 	_refresh_grid()
 
@@ -309,6 +317,7 @@ func _build_pending_slots() -> Dictionary:
 			"team_slot": slot,
 			"player_name": entry.player_name,
 			"is_left_handed": entry.is_left_handed,
+			"jersey_number": entry.get("jersey_number", 10),
 		}
 	return result
 

@@ -11,7 +11,7 @@ signal peer_joined(peer_id: int)
 signal peer_disconnected(peer_id: int)
 signal world_state_received(state: Array)
 signal slot_assigned(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color)
-signal remote_skater_spawn_requested(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String)
+signal remote_skater_spawn_requested(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String, jersey_number: int)
 signal existing_players_synced(player_data: Array)
 signal local_puck_pickup_confirmed
 signal local_puck_stolen
@@ -31,6 +31,7 @@ var is_host: bool = false
 var game_initiated: bool = false
 var local_is_left_handed: bool = true
 var local_player_name: String = "Player"
+var local_jersey_number: int = 10
 var pending_game_config: Dictionary = {}
 var pending_lobby_slots: Dictionary = {}  # peer_id → { team_id, team_slot, player_name, is_left_handed }
 var pending_lobby_roster: Array = []
@@ -40,6 +41,7 @@ var _local_controller: LocalController = null
 var _remote_controllers: Dictionary = {}  # peer_id -> RemoteController
 var _peer_handedness: Dictionary = {}     # peer_id -> bool (host only)
 var _peer_names: Dictionary = {}          # peer_id -> String (host only)
+var _peer_numbers: Dictionary = {}        # peer_id -> int (host only)
 # Callable () -> Array. Set by GameManager at startup so the broadcast loop
 # can pull world state without reaching up into the application layer.
 var _world_state_provider: Callable = Callable()
@@ -67,6 +69,7 @@ func start_offline() -> void:
 	game_initiated = true
 	_peer_handedness[1] = local_is_left_handed
 	_peer_names[1] = local_player_name
+	_peer_numbers[1] = local_jersey_number
 
 
 func start_host() -> void:
@@ -74,6 +77,7 @@ func start_host() -> void:
 	game_initiated = true
 	_peer_handedness[1] = local_is_left_handed
 	_peer_names[1] = local_player_name
+	_peer_numbers[1] = local_jersey_number
 	var peer := ENetMultiplayerPeer.new()
 	var error := peer.create_server(Constants.PORT, GameRules.MAX_PLAYERS)
 	if error != OK:
@@ -108,6 +112,7 @@ func _on_peer_connected(id: int) -> void:
 func _on_peer_disconnected(id: int) -> void:
 	_peer_handedness.erase(id)
 	_peer_names.erase(id)
+	_peer_numbers.erase(id)
 	peer_disconnected.emit(id)
 	# Notify all remaining clients so they remove the stale skater.
 	for peer_id in multiplayer.get_peers():
@@ -115,7 +120,7 @@ func _on_peer_disconnected(id: int) -> void:
 
 func _on_connected_to_server() -> void:
 	_connect_timer = -1.0
-	request_join.rpc_id(1, local_is_left_handed, local_player_name)
+	request_join.rpc_id(1, local_is_left_handed, local_player_name, local_jersey_number)
 	client_connected.emit()
 
 func _on_connection_failed() -> void:
@@ -147,6 +152,7 @@ func reset() -> void:
 	_remote_controllers.clear()
 	_peer_handedness.clear()
 	_peer_names.clear()
+	_peer_numbers.clear()
 	pending_game_config = {}
 	pending_lobby_slots = {}
 	pending_lobby_roster = []
@@ -203,10 +209,11 @@ func _broadcast_state() -> void:
 
 # ── RPCs ──────────────────────────────────────────────────────────────────────
 @rpc("any_peer", "reliable")
-func request_join(is_left_handed: bool, player_name: String) -> void:
+func request_join(is_left_handed: bool, player_name: String, jersey_number: int = 10) -> void:
 	var sender_id: int = multiplayer.get_remote_sender_id()
 	_peer_handedness[sender_id] = is_left_handed
 	_peer_names[sender_id] = player_name.strip_edges().left(16)
+	_peer_numbers[sender_id] = jersey_number
 	peer_joined.emit(sender_id)
 
 func get_peer_handedness(peer_id: int) -> bool:
@@ -214,6 +221,9 @@ func get_peer_handedness(peer_id: int) -> bool:
 
 func get_peer_name(peer_id: int) -> String:
 	return _peer_names.get(peer_id, "Player")
+
+func get_peer_number(peer_id: int) -> int:
+	return _peer_numbers.get(peer_id, 10)
 
 @rpc("any_peer", "unreliable_ordered")
 func receive_input(data: Array) -> void:
@@ -240,8 +250,8 @@ func assign_player_slot(team_slot: int, team_id: int, jersey_color: Color, helme
 	slot_assigned.emit(team_slot, team_id, jersey_color, helmet_color, pants_color)
 
 @rpc("authority", "reliable")
-func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String) -> void:
-	remote_skater_spawn_requested.emit(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color, is_left_handed, player_name)
+func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String, jersey_number: int = 10) -> void:
+	remote_skater_spawn_requested.emit(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color, is_left_handed, player_name, jersey_number)
 
 @rpc("authority", "reliable")
 func sync_existing_players(player_data: Array) -> void:
@@ -329,8 +339,8 @@ func confirm_slot_swap(peer_id: int, old_team_id: int, old_slot: int,
 func send_slot_assignment(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color) -> void:
 	assign_player_slot.rpc_id(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color)
 
-func send_spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String) -> void:
-	spawn_remote_skater.rpc(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color, is_left_handed, player_name)
+func send_spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String, jersey_number: int = 10) -> void:
+	spawn_remote_skater.rpc(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color, is_left_handed, player_name, jersey_number)
 
 func send_sync_existing_players(peer_id: int, player_data: Array) -> void:
 	sync_existing_players.rpc_id(peer_id, player_data)

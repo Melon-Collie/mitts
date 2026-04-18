@@ -60,13 +60,15 @@ func spawn(
 		pants_color: Color,
 		is_left_handed: bool,
 		player_name: String,
-		is_local: bool) -> PlayerRecord:
+		is_local: bool,
+		jersey_number: int = 10) -> PlayerRecord:
 	var record := PlayerRecord.new(peer_id, team_slot, is_local, team)
 	record.jersey_color = jersey_color
 	record.helmet_color = helmet_color
 	record.pants_color  = pants_color
 	record.is_left_handed = is_left_handed
 	record.player_name = player_name
+	record.jersey_number = jersey_number
 	var faceoff_pos: Vector3 = PlayerRules.faceoff_position(team.team_id, team_slot)
 	record.faceoff_position = faceoff_pos
 
@@ -83,6 +85,7 @@ func spawn(
 	record.skater = spawned.skater
 	record.controller = spawned.controller
 	spawned.skater.set_ring_color(PlayerRules.slot_color(team.team_id, team_slot))
+	spawned.skater.set_jersey_info(player_name, jersey_number, pants_color)
 	_players[peer_id] = record
 
 	if _spawn_wireup.is_valid():

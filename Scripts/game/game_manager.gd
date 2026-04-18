@@ -149,7 +149,8 @@ func on_slot_assigned(team_slot: int, team_id: int, jersey_color: Color, helmet_
 	_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
 	_registry.spawn(peer_id, team_slot, teams[team_id],
 			jersey_color, helmet_color, pants_color,
-			NetworkManager.local_is_left_handed, NetworkManager.local_player_name, true)
+			NetworkManager.local_is_left_handed, NetworkManager.local_player_name, true,
+			NetworkManager.local_jersey_number)
 
 
 func on_player_connected(peer_id: int) -> void:
@@ -160,6 +161,7 @@ func on_player_connected(peer_id: int) -> void:
 	var colors: Dictionary = PlayerRegistry.generate_colors(team.team_id)
 	var is_left: bool = NetworkManager.get_peer_handedness(peer_id)
 	var peer_name: String = NetworkManager.get_peer_name(peer_id)
+	var peer_number: int = NetworkManager.get_peer_number(peer_id)
 
 	var config: Dictionary = {
 		"num_periods": _state_machine.num_periods,
@@ -172,9 +174,9 @@ func on_player_connected(peer_id: int) -> void:
 			colors.jersey, colors.helmet, colors.pants)
 	NetworkManager.send_sync_existing_players(peer_id, _collect_existing_player_data())
 	NetworkManager.send_spawn_remote_skater(peer_id, assignment.team_slot, team.team_id,
-			colors.jersey, colors.helmet, colors.pants, is_left, peer_name)
+			colors.jersey, colors.helmet, colors.pants, is_left, peer_name, peer_number)
 	_registry.spawn(peer_id, assignment.team_slot, team,
-			colors.jersey, colors.helmet, colors.pants, is_left, peer_name, false)
+			colors.jersey, colors.helmet, colors.pants, is_left, peer_name, false, peer_number)
 
 
 func on_player_disconnected(peer_id: int) -> void:
@@ -203,20 +205,21 @@ func sync_existing_players(player_data: Array) -> void:
 		var pants_color: Color = entry[5]
 		var is_left: bool = entry[6] if entry.size() > 6 else true
 		var p_name: String = entry[7] if entry.size() > 7 else "Player"
+		var p_number: int = entry[8] if entry.size() > 8 else 10
 		_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
 		_registry.spawn(peer_id, team_slot, teams[team_id],
-				jersey_color, helmet_color, pants_color, is_left, p_name, false)
+				jersey_color, helmet_color, pants_color, is_left, p_name, false, p_number)
 
 
 func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int,
 		jersey_color: Color, helmet_color: Color, pants_color: Color,
-		is_left_handed: bool, player_name: String) -> void:
+		is_left_handed: bool, player_name: String, jersey_number: int = 10) -> void:
 	if peer_id == multiplayer.get_unique_id() or _state_machine == null:
 		return
 	_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
 	_registry.spawn(peer_id, team_slot, teams[team_id],
 			jersey_color, helmet_color, pants_color,
-			is_left_handed, player_name, false)
+			is_left_handed, player_name, false, jersey_number)
 
 
 # ── World Spawn ───────────────────────────────────────────────────────────────
@@ -336,7 +339,8 @@ func _spawn_local(peer_id: int, team_slot: int, team: Team) -> void:
 	var colors: Dictionary = PlayerRegistry.generate_colors(team.team_id)
 	_registry.spawn(peer_id, team_slot, team,
 			colors.jersey, colors.helmet, colors.pants,
-			NetworkManager.local_is_left_handed, NetworkManager.local_player_name, true)
+			NetworkManager.local_is_left_handed, NetworkManager.local_player_name, true,
+			NetworkManager.local_jersey_number)
 
 
 # ── Spawn wire-up (callback invoked by PlayerRegistry after spawn) ───────────
@@ -627,11 +631,12 @@ func _push_lobby_assignments_to_clients() -> void:
 		var colors: Dictionary = PlayerRegistry.generate_colors(team_id)
 		var is_left: bool = entry.get("is_left_handed", true)
 		var p_name: String = entry.get("player_name", "Player")
+		var p_number: int = entry.get("jersey_number", 10)
 		NetworkManager.send_slot_assignment(peer_id, team_slot, team_id, colors.jersey, colors.helmet, colors.pants)
 		NetworkManager.send_sync_existing_players(peer_id, existing)
-		NetworkManager.send_spawn_remote_skater(peer_id, team_slot, team_id, colors.jersey, colors.helmet, colors.pants, is_left, p_name)
-		_registry.spawn(peer_id, team_slot, team, colors.jersey, colors.helmet, colors.pants, is_left, p_name, false)
-		existing.append([peer_id, team_slot, team_id, colors.jersey, colors.helmet, colors.pants, is_left, p_name])
+		NetworkManager.send_spawn_remote_skater(peer_id, team_slot, team_id, colors.jersey, colors.helmet, colors.pants, is_left, p_name, p_number)
+		_registry.spawn(peer_id, team_slot, team, colors.jersey, colors.helmet, colors.pants, is_left, p_name, false, p_number)
+		existing.append([peer_id, team_slot, team_id, colors.jersey, colors.helmet, colors.pants, is_left, p_name, p_number])
 	NetworkManager.pending_lobby_slots = {}
 
 
@@ -641,7 +646,7 @@ func _collect_existing_player_data() -> Array[Array]:
 		var r: PlayerRecord = _registry.get_record(peer_id)
 		existing.append([peer_id, r.team_slot, r.team.team_id,
 				r.jersey_color, r.helmet_color, r.pants_color,
-				r.is_left_handed, r.player_name])
+				r.is_left_handed, r.player_name, r.jersey_number])
 	return existing
 
 

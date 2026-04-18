@@ -3,6 +3,7 @@ class_name PlayerRecord
 var peer_id: int = 0
 var team_slot: int = 0  # within-team index: 0, 1, or 2
 var player_name: String = ""
+var jersey_number: int = 10
 var skater: Skater = null
 var controller: SkaterController = null
 var is_local: bool = false

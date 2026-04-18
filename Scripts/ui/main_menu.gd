@@ -143,7 +143,7 @@ func _build_settings_popup() -> void:
 
 	var name_field := LineEdit.new()
 	name_field.placeholder_text = "Player"
-	name_field.max_length = 16
+	name_field.max_length = 10
 	name_field.custom_minimum_size = Vector2(200, 48)
 	name_field.add_theme_font_size_override("font_size", 18)
 	name_field.text = PlayerPrefs.player_name
@@ -154,6 +154,33 @@ func _build_settings_popup() -> void:
 		PlayerPrefs.player_name = trimmed
 		PlayerPrefs.save())
 	name_row.add_child(name_field)
+
+	var number_row := HBoxContainer.new()
+	number_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	number_row.add_theme_constant_override("separation", 12)
+	vbox.add_child(number_row)
+
+	var number_label := Label.new()
+	number_label.text = "Number:"
+	number_label.add_theme_font_size_override("font_size", 20)
+	number_label.add_theme_color_override("font_color", Color.WHITE)
+	number_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	number_row.add_child(number_label)
+
+	var number_field := LineEdit.new()
+	number_field.placeholder_text = "10"
+	number_field.max_length = 2
+	number_field.custom_minimum_size = Vector2(80, 48)
+	number_field.add_theme_font_size_override("font_size", 18)
+	number_field.text = str(PlayerPrefs.jersey_number)
+	NetworkManager.local_jersey_number = PlayerPrefs.jersey_number
+	number_field.text_changed.connect(func(t: String) -> void:
+		var n: int = t.to_int() if t.is_valid_int() else PlayerPrefs.jersey_number
+		n = clamp(n, 0, 99)
+		NetworkManager.local_jersey_number = n
+		PlayerPrefs.jersey_number = n
+		PlayerPrefs.save())
+	number_row.add_child(number_field)
 
 	var hand_row := HBoxContainer.new()
 	hand_row.alignment = BoxContainer.ALIGNMENT_CENTER
