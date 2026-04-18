@@ -345,7 +345,7 @@ func _state_wrister_aim(input: InputState, delta: float) -> void:
 				_prev_blade_dir,
 				_charge_distance,
 				max_charge_direction_variance)
-		_charge_distance = result.charge
+		_charge_distance = minf(result.charge, max_wrister_charge_distance)
 		_prev_blade_dir = result.direction
 		_prev_mouse_screen_pos = screen_pos
 		skater.shot_charge = _charge_distance / max_wrister_charge_distance
