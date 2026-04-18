@@ -31,6 +31,14 @@ static func defending_wins_icing_race(
 		icing_min_dist: float, defending_min_dist: float) -> bool:
 	return defending_min_dist <= icing_min_dist
 
+# Returns true when a player who was serving an offside has crossed back into
+# the neutral zone or their own zone — i.e. they have "tagged up" at the line.
+static func has_tagged_up(skater_z: float, team_id: int) -> bool:
+	if team_id == 0:
+		return skater_z >= -GameRules.BLUE_LINE_Z
+	else:
+		return skater_z <= GameRules.BLUE_LINE_Z
+
 # Detects a potential icing crossing. Returns the offending team id (0 or 1),
 # or -1 if no icing condition is present. The caller applies the hybrid-icing
 # race check to decide whether to confirm or wave off.

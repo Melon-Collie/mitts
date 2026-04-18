@@ -46,6 +46,11 @@ var last_carrier_z: float = 0.0
 var icing_team_id: int = -1
 var _icing_timer: float = 0.0
 
+# ── Offsides ─────────────────────────────────────────────────────────────────
+# Peer IDs currently serving an offside ghost. Cleared by tagging up (crossing
+# back into neutral zone) or by a dead-puck phase — not by the puck entering.
+var _offside_peer_ids: Dictionary = {}
+
 
 func _init() -> void:
 	period_scores = _make_period_scores(num_periods)
@@ -92,7 +97,7 @@ func on_faceoff_puck_picked_up() -> bool:
 func notify_puck_carried(carrier_team_id: int, carrier_z: float) -> void:
 	last_carrier_team_id = carrier_team_id
 	last_carrier_z = carrier_z
-	if icing_team_id != -1:
+	if icing_team_id != -1 and carrier_team_id != icing_team_id:
 		icing_team_id = -1
 		_icing_timer = 0.0
 
@@ -116,15 +121,15 @@ func check_icing_for_loose_puck(
 	if offender == -1:
 		return
 
-	# Hybrid icing race: find each team's closest player to the crossed goal line.
-	var goal_line_z: float = -GameRules.GOAL_LINE_Z if offender == 0 else GameRules.GOAL_LINE_Z
+	# Hybrid icing race: find each team's closest player to the end-zone faceoff dot.
+	var dot_z: float = -GameRules.ICING_FACEOFF_DOT_Z if offender == 0 else GameRules.ICING_FACEOFF_DOT_Z
 	var icing_min_dist: float = INF
 	var defending_min_dist: float = INF
 	for peer_id in player_positions:
 		if not players.has(peer_id):
 			continue
 		var team_id: int = players[peer_id].team_id
-		var dist: float = abs(player_positions[peer_id].z - goal_line_z)
+		var dist: float = abs(player_positions[peer_id].z - dot_z)
 		if team_id == offender:
 			icing_min_dist = min(icing_min_dist, dist)
 		else:
@@ -144,20 +149,31 @@ func compute_ghost_state(
 	var result: Dictionary = {}
 	var is_active_play: bool = (current_phase == GamePhase.Phase.PLAYING
 			or current_phase == GamePhase.Phase.FACEOFF)
+	if not is_active_play:
+		_offside_peer_ids.clear()
+		for peer_id in player_positions:
+			result[peer_id] = false
+		return result
 	for peer_id in player_positions:
 		if not players.has(peer_id):
 			result[peer_id] = false
 			continue
 		var slot: Dictionary = players[peer_id]
+		var pos_z: float = player_positions[peer_id].z
 		var ghost: bool = false
-		if is_active_play:
+		if _offside_peer_ids.has(peer_id):
+			# Already serving offside — hold until they tag up at the blue line.
+			if InfractionRules.has_tagged_up(pos_z, slot.team_id):
+				_offside_peer_ids.erase(peer_id)
+			else:
+				ghost = true
+		else:
 			var is_carrier: bool = peer_id == puck_carrier_peer_id
-			if InfractionRules.is_offside(
-					player_positions[peer_id].z, slot.team_id,
-					puck_position.z, is_carrier):
+			if InfractionRules.is_offside(pos_z, slot.team_id, puck_position.z, is_carrier):
+				_offside_peer_ids[peer_id] = true
 				ghost = true
-			elif icing_team_id == slot.team_id:
-				ghost = true
+		if icing_team_id == slot.team_id:
+			ghost = true
 		result[peer_id] = ghost
 	return result
 
@@ -207,6 +223,7 @@ func register_remote_assigned_player(peer_id: int, team_slot: int, team_id: int)
 
 func on_player_disconnected(peer_id: int) -> void:
 	players.erase(peer_id)
+	_offside_peer_ids.erase(peer_id)
 
 func count_players_on_team(team_id: int) -> int:
 	var count: int = 0
@@ -265,6 +282,7 @@ func reset_all() -> void:
 	icing_team_id = -1
 	_icing_timer = 0.0
 	last_carrier_team_id = -1
+	_offside_peer_ids.clear()
 
 func apply_config(p_num_periods: int, p_period_duration: float, p_ot_enabled: bool, p_ot_duration: float) -> void:
 	num_periods      = p_num_periods
@@ -280,6 +298,7 @@ func begin_faceoff_prep() -> void:
 	icing_team_id = -1
 	_icing_timer = 0.0
 	last_carrier_team_id = -1
+	_offside_peer_ids.clear()
 	_set_phase(GamePhase.Phase.FACEOFF_PREP)
 
 

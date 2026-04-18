@@ -65,6 +65,9 @@ const ICE_FRICTION: float = 0.01
 
 # ── Infractions ───────────────────────────────────────────────────────────────
 const ICING_GHOST_DURATION: float = 3.0  # seconds team stays ghosted after icing
+# End-zone faceoff dot Z offset from center (≈ 15 ft inside goal line).
+# Hybrid icing race measures which team's player is closer to this dot.
+const ICING_FACEOFF_DOT_Z: float = 22.1
 
 # ── Players ───────────────────────────────────────────────────────────────────
 const MAX_PLAYERS: int = 6  # 3v3
