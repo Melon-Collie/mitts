@@ -128,13 +128,14 @@ func test_sog_counted_once_per_shot() -> void:
 	assert_eq(shooter.stats.shots_on_goal, 1)
 
 
-# ── Loose puck clears pending ────────────────────────────────────────────────
+# ── Deflection keeps pending shot alive ──────────────────────────────────────
 
-func test_loose_puck_touched_clears_pending() -> void:
+func test_deflection_keeps_pending_shot_alive() -> void:
 	_add_player(10, 0)
+	_add_player(11, 0)
 	tracker.on_shot_started(10)
-	tracker.on_loose_puck_touched()
-	assert_false(tracker.has_pending_shot())
+	tracker.on_deflection(11)
+	assert_true(tracker.has_pending_shot())
 
 
 func test_pickup_clears_pending() -> void:
