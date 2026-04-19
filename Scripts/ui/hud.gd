@@ -263,16 +263,11 @@ func _build_game_over_popup() -> void:
 	title.add_theme_color_override("font_color", _GOLD)
 	vbox.add_child(title)
 
-	if NetworkManager.is_host:
-		var rematch_btn := _popup_button("Rematch")
-		rematch_btn.pressed.connect(func() -> void: GameManager.reset_game())
-		vbox.add_child(rematch_btn)
+	_add_host_button(vbox, "Rematch", func() -> void: GameManager.reset_game())
+	_add_host_button(vbox, "Return to Lobby", func() -> void: GameManager.return_to_lobby())
 
 	var menu_btn := _popup_button("Disconnect")
-	menu_btn.pressed.connect(func() -> void:
-		GameManager.on_scene_exit()
-		NetworkManager.reset()
-		get_tree().change_scene_to_file(Constants.SCENE_MAIN_MENU))
+	menu_btn.pressed.connect(func() -> void: GameManager.exit_to_main_menu())
 	vbox.add_child(menu_btn)
 
 	var root := Control.new()
@@ -316,22 +311,19 @@ func _build_game_menu() -> void:
 	change_pos_btn.pressed.connect(_on_change_position_pressed)
 	vbox.add_child(change_pos_btn)
 
-	if NetworkManager.is_host:
-		var rematch_btn := _popup_button("Rematch")
-		rematch_btn.pressed.connect(func() -> void:
-			_set_menu_open(false)
-			GameManager.reset_game())
-		vbox.add_child(rematch_btn)
+	_add_host_button(vbox, "Rematch", func() -> void:
+		_set_menu_open(false)
+		GameManager.reset_game())
+	_add_host_button(vbox, "Return to Lobby", func() -> void:
+		_set_menu_open(false)
+		GameManager.return_to_lobby())
 
 	var bug_btn := _popup_button("Report Bug")
 	bug_btn.pressed.connect(_on_bug_report_pressed)
 	vbox.add_child(bug_btn)
 
 	var quit_btn := _popup_button("Disconnect")
-	quit_btn.pressed.connect(func() -> void:
-		GameManager.on_scene_exit()
-		NetworkManager.reset()
-		get_tree().change_scene_to_file(Constants.SCENE_MAIN_MENU))
+	quit_btn.pressed.connect(func() -> void: GameManager.exit_to_main_menu())
 	vbox.add_child(quit_btn)
 
 	var exit_btn := _popup_button("Exit Game")
@@ -429,6 +421,13 @@ func _popup_button(label: String) -> Button:
 	btn.custom_minimum_size = Vector2(220, 48)
 	btn.add_theme_font_size_override("font_size", 20)
 	return btn
+
+func _add_host_button(vbox: VBoxContainer, text: String, handler: Callable) -> void:
+	if not NetworkManager.is_host:
+		return
+	var b := _popup_button(text)
+	b.pressed.connect(handler)
+	vbox.add_child(b)
 
 func _build_version_tag() -> void:
 	var label := _lbl("v%s" % BuildInfo.VERSION, 11, _DIM)

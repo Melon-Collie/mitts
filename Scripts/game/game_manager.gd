@@ -75,6 +75,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.stats_received.connect(_on_stats_received)
 	NetworkManager.slot_swap_requested.connect(_on_slot_swap_requested)
 	NetworkManager.slot_swap_confirmed.connect(_on_slot_swap_confirmed)
+	NetworkManager.return_to_lobby_received.connect(_on_return_to_lobby)
 
 
 # ── Process ───────────────────────────────────────────────────────────────────
@@ -602,6 +603,37 @@ func _apply_reset() -> void:
 	_registry.reset_all_stats()
 	_shot_tracker.reset_all()
 	stats_updated.emit()
+
+
+# ── Return to Lobby ──────────────────────────────────────────────────────────
+func return_to_lobby() -> void:
+	if not NetworkManager.is_host:
+		return
+	_drop_puck_if_carried()
+	NetworkManager.send_return_to_lobby_to_all(_build_lobby_roster_array())
+
+
+func _on_return_to_lobby(_roster: Array) -> void:
+	on_scene_exit()
+	get_tree().change_scene_to_file(Constants.SCENE_LOBBY)
+
+
+func _build_lobby_roster_array() -> Array:
+	var result: Array = []
+	if _registry == null:
+		return result
+	for peer_id: int in _registry.all():
+		var r: PlayerRecord = _registry.get_record(peer_id)
+		var team_id: int = r.team.team_id if r.team != null else 0
+		result.append([peer_id, team_id, r.team_slot, r.player_name,
+				r.is_left_handed, r.jersey_number])
+	return result
+
+
+func exit_to_main_menu() -> void:
+	on_scene_exit()
+	NetworkManager.reset()
+	get_tree().change_scene_to_file(Constants.SCENE_MAIN_MENU)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

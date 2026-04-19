@@ -80,7 +80,8 @@ Pucks coming in fast deflect off your blade instead of sticking. Move your stick
 - Stadium lighting — 6 overhead SpotLights in a 2×3 grid; warm white, soft falloff, shadows on center pair
 - Anti-aliased ice markings — procedural rink texture at 40px/m with sub-pixel smooth circles and lines; mipmapped for clean rendering at all zoom levels
 - MSAA 4x — hardware anti-aliasing for smooth geometry edges
-- Game menu — ESC in-game: Resume, Change Position, Rematch (host), Report Bug, Quit to Menu, Exit Game; "Change Position" opens a slot grid overlay (Away on top, Home on bottom) — click any open slot to swap immediately (teleport, color update, puck dropped if carrying); ESC closes the slot grid first, then the menu
+- Game menu — ESC in-game: Resume, Change Position, Rematch (host), Return to Lobby (host), Report Bug, Disconnect, Exit Game; "Change Position" opens a slot grid overlay (Away on top, Home on bottom) — click any open slot to swap immediately (teleport, color update, puck dropped if carrying); ESC closes the slot grid first, then the menu. Game-over panel offers the same Rematch / Return to Lobby / Disconnect options for the host.
+- Pre-game lobby — slot picking, configurable rules (periods, duration, OT); host-driven, late joiners sync through roster push. "Return to Lobby" (host, in-game or post-game) brings the whole session back here with team assignments preserved.
 - Offsides ghost — skaters past the blue line without the puck become transparent ghosts that can't interact with the puck or other players until they retreat or the puck enters the zone
 - Hybrid icing — shooting from your own half past the opponent's goal line triggers a race: if the defending team's closest player is nearer the goal line, your entire team is ghosted for 3 seconds; if you beat them back to the puck, icing is waved off
 - Puck trail — pale-blue ribbon streak behind the puck when moving fast
@@ -96,7 +97,6 @@ Pucks coming in fast deflect off your blade instead of sticking. Move your stick
 
 ## Planned
 
-- Pre-game lobby — slot picking, configurable rules (periods, duration, OT)
 - Reactive goalie saves (glove, shoulder, stick poke)
 - More platforms
 

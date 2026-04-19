@@ -325,7 +325,7 @@ Instead of stoppages, offsides and icing are enforced via a **ghost mode** — o
 | 9 | Visual polish (puck trail, ice spray, skate trails, goal burst, wall impact, body check, shot charge glow, speed lines) | Done |
 | 10 | Playtester distribution (auto-versioned GitHub Releases + in-game update notifier) | Done |
 | 11 | In-game team/position swap | Done |
-| 12 | Pre-game lobby (slot picking + rule config) | In progress |
+| 12 | Pre-game lobby (slot picking + rule config) + in-game "Return to Lobby" | Done |
 | 13 | Characters + abilities | Deferred — revisit when game feel is right |
 
 ## Distribution

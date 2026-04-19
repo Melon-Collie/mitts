@@ -25,12 +25,12 @@ func _ready() -> void:
 	NetworkManager.lobby_roster_synced.connect(_on_lobby_roster_synced)
 	NetworkManager.game_started.connect(_on_game_started)
 
-	if NetworkManager.is_host:
-		_assign_slot(1, 0, 0, NetworkManager.local_player_name, NetworkManager.local_is_left_handed, NetworkManager.local_jersey_number)
-		_broadcast_confirm(1, 0, 0)
-	elif not NetworkManager.pending_lobby_roster.is_empty():
+	if not NetworkManager.pending_lobby_roster.is_empty():
 		_on_lobby_roster_synced(NetworkManager.pending_lobby_roster)
 		NetworkManager.pending_lobby_roster = []
+	elif NetworkManager.is_host:
+		_assign_slot(1, 0, 0, NetworkManager.local_player_name, NetworkManager.local_is_left_handed, NetworkManager.local_jersey_number)
+		_broadcast_confirm(1, 0, 0)
 
 # ── UI ────────────────────────────────────────────────────────────────────────
 
@@ -245,6 +245,17 @@ func _on_peer_disconnected(peer_id: int) -> void:
 func _on_slot_selected(team_id: int, slot: int) -> void:
 	NetworkManager.send_request_slot_swap(team_id, slot)
 
+func _find_peer_identity(peer_id: int) -> Dictionary:
+	for k: int in _lobby_slots:
+		if _lobby_slots[k].peer_id == peer_id:
+			var entry: Dictionary = _lobby_slots[k]
+			return {
+				"player_name": entry.player_name,
+				"is_left_handed": entry.is_left_handed,
+				"jersey_number": entry.get("jersey_number", 10),
+			}
+	return { "player_name": "", "is_left_handed": true, "jersey_number": 10 }
+
 func _on_slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int) -> void:
 	if not NetworkManager.is_host:
 		return
@@ -256,32 +267,18 @@ func _on_slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int) -> v
 			count += 1
 	if count >= PlayerRules.MAX_PER_TEAM:
 		return
-	var name_val: String = ""
-	var is_left: bool = true
-	var num: int = 10
-	for k: int in _lobby_slots:
-		if _lobby_slots[k].peer_id == peer_id:
-			name_val = _lobby_slots[k].player_name
-			is_left = _lobby_slots[k].is_left_handed
-			num = _lobby_slots[k].get("jersey_number", 10)
-			break
-	_assign_slot(peer_id, new_team_id, new_slot, name_val, is_left, num)
+	var identity: Dictionary = _find_peer_identity(peer_id)
+	_assign_slot(peer_id, new_team_id, new_slot,
+			identity.player_name, identity.is_left_handed, identity.jersey_number)
 	_broadcast_confirm(peer_id, new_team_id, new_slot)
 	_refresh_grid()
 
 func _on_slot_swap_confirmed(peer_id: int, _old_team_id: int, _old_slot: int,
 		new_team_id: int, new_slot: int,
 		_jersey: Color, _helmet: Color, _pants: Color) -> void:
-	var name_val: String = ""
-	var is_left: bool = true
-	var num: int = 10
-	for k: int in _lobby_slots:
-		if _lobby_slots[k].peer_id == peer_id:
-			name_val = _lobby_slots[k].player_name
-			is_left = _lobby_slots[k].is_left_handed
-			num = _lobby_slots[k].get("jersey_number", 10)
-			break
-	_assign_slot(peer_id, new_team_id, new_slot, name_val, is_left, num)
+	var identity: Dictionary = _find_peer_identity(peer_id)
+	_assign_slot(peer_id, new_team_id, new_slot,
+			identity.player_name, identity.is_left_handed, identity.jersey_number)
 	_refresh_grid()
 
 func _on_lobby_roster_synced(roster: Array) -> void:
@@ -331,6 +328,4 @@ func _on_start_pressed() -> void:
 	NetworkManager.send_game_start(config)
 
 func _on_back_pressed() -> void:
-	GameManager.on_scene_exit()
-	NetworkManager.reset()
-	get_tree().change_scene_to_file(Constants.SCENE_MAIN_MENU)
+	GameManager.exit_to_main_menu()

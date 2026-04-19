@@ -25,6 +25,7 @@ signal slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int)
 signal slot_swap_confirmed(peer_id: int, old_team_id: int, old_slot: int, new_team_id: int, new_slot: int, jersey: Color, helmet: Color, pants: Color)
 signal game_started(config: Dictionary)
 signal lobby_roster_synced(roster: Array)
+signal return_to_lobby_received(roster: Array)
 
 # ── State ─────────────────────────────────────────────────────────────────────
 var is_host: bool = false
@@ -400,6 +401,17 @@ func send_game_start(config: Dictionary) -> void:
 
 func send_lobby_roster(peer_id: int, roster: Array) -> void:
 	sync_lobby_roster.rpc_id(peer_id, roster)
+
+@rpc("authority", "reliable")
+func notify_return_to_lobby(roster: Array) -> void:
+	pending_lobby_roster = roster
+	return_to_lobby_received.emit(roster)
+
+func send_return_to_lobby_to_all(roster: Array) -> void:
+	for peer_id: int in multiplayer.get_peers():
+		notify_return_to_lobby.rpc_id(peer_id, roster)
+	pending_lobby_roster = roster
+	return_to_lobby_received.emit(roster)
 
 # ── Registration ──────────────────────────────────────────────────────────────
 func set_world_state_provider(provider: Callable) -> void:
