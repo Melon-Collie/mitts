@@ -140,6 +140,7 @@ func _interpolate_skater(peer_id: int, ts: float) -> SkaterNetworkState:
 	result.position = from_s.position.lerp(to_s.position, t)
 	result.velocity = from_s.velocity.lerp(to_s.velocity, t)
 	result.blade_position = from_s.blade_position.lerp(to_s.blade_position, t)
+	result.blade_contact_world = from_s.blade_contact_world.lerp(to_s.blade_contact_world, t)
 	result.top_hand_position = from_s.top_hand_position.lerp(to_s.top_hand_position, t)
 	result.upper_body_rotation_y = lerpf(from_s.upper_body_rotation_y, to_s.upper_body_rotation_y, t)
 	result.facing = from_s.facing.lerp(to_s.facing, t).normalized()

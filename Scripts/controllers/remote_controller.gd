@@ -34,6 +34,9 @@ func receive_input_batch(batch: Array) -> void:
 			existing_timestamps[state.host_timestamp] = true
 	_input_queue.sort_custom(func(a: InputState, b: InputState) -> bool:
 		return a.host_timestamp < b.host_timestamp)
+	const MAX_QUEUE_DEPTH: int = 120  # 0.5s at 240 Hz
+	while _input_queue.size() > MAX_QUEUE_DEPTH:
+		_input_queue.pop_front()
 
 func _drive_from_input(delta: float) -> void:
 	# Pop one input per physics tick so every client input gets simulated on the
@@ -86,8 +89,21 @@ func _interpolate() -> void:
 		var newest: SkaterNetworkState = bracket.to_state
 		interpolated.position = newest.position + newest.velocity * dt
 		interpolated.velocity = newest.velocity
-		interpolated.blade_position = newest.blade_position
-		interpolated.top_hand_position = newest.top_hand_position
+		if _state_buffer.size() >= 2:
+			var prev_buf: BufferedSkaterState = _state_buffer[_state_buffer.size() - 2]
+			var newest_buf: BufferedSkaterState = _state_buffer[_state_buffer.size() - 1]
+			var bracket_dt: float = newest_buf.timestamp - prev_buf.timestamp
+			if bracket_dt > 1e-4:
+				var blade_vel: Vector3 = (newest.blade_position - prev_buf.state.blade_position) / bracket_dt
+				var hand_vel: Vector3 = (newest.top_hand_position - prev_buf.state.top_hand_position) / bracket_dt
+				interpolated.blade_position = newest.blade_position + blade_vel * dt
+				interpolated.top_hand_position = newest.top_hand_position + hand_vel * dt
+			else:
+				interpolated.blade_position = newest.blade_position
+				interpolated.top_hand_position = newest.top_hand_position
+		else:
+			interpolated.blade_position = newest.blade_position
+			interpolated.top_hand_position = newest.top_hand_position
 		interpolated.upper_body_rotation_y = newest.upper_body_rotation_y
 		interpolated.facing = newest.facing
 		interpolated.is_ghost = newest.is_ghost

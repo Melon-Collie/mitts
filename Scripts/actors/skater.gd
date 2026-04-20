@@ -102,6 +102,7 @@ var shot_charge: float = 0.0
 var slapper_aim_dir: Vector3 = Vector3.ZERO
 var blade_world_velocity: Vector3 = Vector3.ZERO
 var _prev_blade_world_pos: Vector3 = Vector3.ZERO
+var _prev_blade_contact: Vector3 = Vector3.ZERO
 var _last_wall_normal: Vector3 = Vector3.ZERO
 var _body_block_area: Area3D = null
 var _body_block_sphere: SphereShape3D = null
@@ -362,6 +363,7 @@ func _resolve_or_create_bone_mesh(node_name: String) -> MeshInstance3D:
 	return mesh_instance
 
 func _physics_process(delta: float) -> void:
+	_prev_blade_contact = get_blade_contact_global()
 	var blade_world_pos: Vector3 = upper_body.to_global(blade.position)
 	blade_world_velocity = (blade_world_pos - _prev_blade_world_pos) / delta
 	_prev_blade_world_pos = blade_world_pos
@@ -504,6 +506,9 @@ func get_blade_contact_global() -> Vector3:
 	if forward.length() < 0.001:
 		return heel_world
 	return heel_world + forward.normalized() * (blade_length * 0.5)
+
+func get_prev_blade_contact_global() -> Vector3:
+	return _prev_blade_contact
 
 # ── Top Hand ──────────────────────────────────────────────────────────────────
 func set_top_hand_position(pos: Vector3) -> void:

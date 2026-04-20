@@ -117,8 +117,10 @@ func _check_interactions() -> void:
 				var checker_team: int = _team_id_resolver.call(skater)
 				if not PuckCollisionRules.can_poke_check(carrier_team, checker_team):
 					continue
+				var blade_curr: Vector3 = skater.get_blade_contact_global()
+				var blade_prev: Vector3 = skater.get_prev_blade_contact_global()
 				if PuckInteractionRules.check_poke(_prev_puck_pos, puck_curr,
-						skater.get_blade_contact_global(), POKE_RADIUS):
+						blade_prev, blade_curr, POKE_RADIUS):
 					puck.apply_poke_check(skater)
 					break
 	else:
@@ -126,8 +128,10 @@ func _check_interactions() -> void:
 			for skater: Skater in skaters:
 				if skater.is_ghost or puck.is_on_cooldown(skater):
 					continue
+				var blade_curr: Vector3 = skater.get_blade_contact_global()
+				var blade_prev: Vector3 = skater.get_prev_blade_contact_global()
 				if not PuckInteractionRules.check_pickup(_prev_puck_pos, puck_curr,
-						skater.get_blade_contact_global(), PICKUP_RADIUS):
+						blade_prev, blade_curr, PICKUP_RADIUS):
 					continue
 				var puck_speed: float = puck.get_puck_velocity().length()
 				var rel_speed: float = (puck.get_puck_velocity() - skater.blade_world_velocity).length()

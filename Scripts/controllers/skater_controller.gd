@@ -244,11 +244,14 @@ func get_network_state() -> SkaterNetworkState:
 	state.position = skater.global_position
 	state.velocity = skater.velocity
 	state.blade_position = skater.get_blade_position()
+	state.blade_contact_world = skater.get_blade_contact_global()
 	state.top_hand_position = skater.get_top_hand_position()
 	state.upper_body_rotation_y = skater.get_upper_body_rotation()
 	state.facing = skater.get_facing()
 	state.last_processed_host_timestamp = last_processed_host_timestamp
 	state.is_ghost = skater.is_ghost
+	state.shot_state = _state
+	state.shot_charge = _charge_distance
 	return state
 
 func apply_network_state(_net_state: SkaterNetworkState) -> void:

@@ -81,9 +81,7 @@ func _physics_process(delta: float) -> void:
 				_claim_cooldown = 0.3
 				NetworkManager.send_pickup_claim(
 					NetworkManager.estimated_host_time(),
-					skater.get_blade_contact_global(),
-					skater.blade_world_velocity,
-					NetworkManager.get_rtt_ms())
+					NetworkManager.get_latest_rtt_ms())
 
 func reconcile(server_state: SkaterNetworkState) -> void:
 	var pre_reconcile_blade: Vector3 = skater.get_blade_contact_global()
@@ -105,16 +103,10 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# Save shot/state-machine state — replay can transition through shoot states
 	# (WRISTER_AIM → FOLLOW_THROUGH → SKATING) and leave _state wrong. Restore so
 	# the next _process_input runs the correct handler and blade doesn't teleport.
-	# Charge state is also saved: replay restarts from the oldest unacked input,
-	# not the full aim history, so _prev_mouse_screen_pos delta is wrong on the
-	# first replayed frame and often resets charge to 0 via direction variance.
 	var pre_state: State = _state
 	var pre_follow_through_timer: float = _follow_through_timer
 	var pre_follow_through_is_slapper: bool = _follow_through_is_slapper
 	var pre_one_timer_window_timer: float = _one_timer_window_timer
-	var pre_charge_distance: float = _charge_distance
-	var pre_prev_blade_dir: Vector3 = _prev_blade_dir
-	var pre_prev_mouse_screen_pos: Vector2 = _prev_mouse_screen_pos
 	skater.global_position = server_state.position
 	skater.velocity = server_state.velocity
 	# Snap facing for replay accuracy — facing drives move_and_slide direction,
@@ -123,20 +115,30 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	skater.set_facing(_facing)
 	_lower_body_lag = 0.0
 	skater.set_lower_body_lag(0.0)
+	# Seed mouse pos from the first replayed input so the first frame's
+	# direction-variance delta is zero rather than a large garbage value.
+	if not _input_history.is_empty():
+		_prev_mouse_screen_pos = _input_history[0].mouse_screen_pos
 	is_replaying = true
 	for input in _input_history:
 		_process_input(input, input.delta)
 		skater.global_position += skater.velocity * input.delta
 	is_replaying = false
-	# Restore shot-state fields that replay must not transition past, plus charge
-	# state so the accumulated aim direction survives the reconcile window.
+	# Restore shot-state fields that replay must not transition past.
 	_state = pre_state
 	_follow_through_timer = pre_follow_through_timer
 	_follow_through_is_slapper = pre_follow_through_is_slapper
 	_one_timer_window_timer = pre_one_timer_window_timer
-	_charge_distance = pre_charge_distance
-	_prev_blade_dir = pre_prev_blade_dir
-	_prev_mouse_screen_pos = pre_prev_mouse_screen_pos
+	# Set mouse pos baseline to the end of the replay window so the next real
+	# frame's direction-variance delta is correct.
+	if not _input_history.is_empty():
+		_prev_mouse_screen_pos = _input_history.back().mouse_screen_pos
+	# Server authority on shot state: if the server disagrees with the client's
+	# pre-replay state, server wins — this corrects charge that was wrong before
+	# the reconcile (e.g. from a dropped shoot_pressed input).
+	if server_state.shot_state != pre_state:
+		_state = server_state.shot_state as State
+		_charge_distance = server_state.shot_charge
 	skater.set_facing(_facing)
 	skater.set_upper_body_rotation(_upper_body_angle)
 	skater.set_lower_body_lag(_lower_body_lag)

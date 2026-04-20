@@ -28,7 +28,7 @@ signal game_started(config: Dictionary)
 signal lobby_roster_synced(roster: Array)
 signal return_to_lobby_received(roster: Array)
 signal clock_ready
-signal pickup_claim_received(peer_id: int, host_timestamp: float, blade_pos: Vector3, blade_vel: Vector3, rtt_ms: float)
+signal pickup_claim_received(peer_id: int, host_timestamp: float, rtt_ms: float)
 
 # ── State ─────────────────────────────────────────────────────────────────────
 var is_host: bool = false
@@ -285,18 +285,18 @@ func receive_pong(client_send_time: float, host_time: float) -> void:
 				clock_ready.emit(),
 		[client_send_time, host_time], true)
 
-func send_pickup_claim(host_timestamp: float, blade_pos: Vector3, blade_vel: Vector3, rtt_ms: float) -> void:
+func send_pickup_claim(host_timestamp: float, rtt_ms: float) -> void:
 	NetworkSimManager.send(
-		func(ts: float, bp: Vector3, bv: Vector3, rtt: float) -> void:
-			receive_pickup_claim.rpc_id(1, ts, bp, bv, rtt),
-		[host_timestamp, blade_pos, blade_vel, rtt_ms], true)
+		func(ts: float, rtt: float) -> void:
+			receive_pickup_claim.rpc_id(1, ts, rtt),
+		[host_timestamp, rtt_ms], true)
 
 @rpc("any_peer", "reliable")
-func receive_pickup_claim(host_timestamp: float, blade_pos: Vector3, blade_vel: Vector3, rtt_ms: float) -> void:
+func receive_pickup_claim(host_timestamp: float, rtt_ms: float) -> void:
 	if not is_host:
 		return
 	var peer_id: int = multiplayer.get_remote_sender_id()
-	pickup_claim_received.emit(peer_id, host_timestamp, blade_pos, blade_vel, rtt_ms)
+	pickup_claim_received.emit(peer_id, host_timestamp, rtt_ms)
 
 func estimated_host_time() -> float:
 	if is_host:
@@ -312,6 +312,11 @@ func get_rtt_ms() -> float:
 	if _clock_sync == null:
 		return 0.0
 	return _clock_sync.rtt_ms
+
+func get_latest_rtt_ms() -> float:
+	if _clock_sync == null:
+		return 0.0
+	return _clock_sync.latest_rtt_ms
 
 @rpc("authority", "reliable")
 func assign_player_slot(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color) -> void:

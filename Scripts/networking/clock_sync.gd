@@ -8,6 +8,7 @@ const OUTLIER_DROP: int = 2
 
 var is_ready: bool = false
 var rtt_ms: float = 0.0
+var latest_rtt_ms: float = 0.0
 
 var _offset: float = 0.0
 var _samples: Array = []  # Array of {rtt: float, offset: float}
@@ -24,6 +25,7 @@ func tick(delta: float) -> bool:
 
 func record_pong(client_send_time: float, host_time: float, recv_time: float) -> void:
 	var rtt := recv_time - client_send_time
+	latest_rtt_ms = rtt * 1000.0
 	var offset := (host_time + rtt / 2.0) - recv_time
 	_samples.append({rtt = rtt, offset = offset})
 	if _samples.size() > SAMPLE_WINDOW:
