@@ -38,7 +38,7 @@ These are targeted, self-contained fixes. Each should be reviewed and tested ind
 ### 1d. No extrapolation on interpolation buffer starvation
 
 **Files:** `Scripts/networking/buffered_state_interpolator.gd`, `Scripts/controllers/remote_controller.gd`, `Scripts/controllers/puck_controller.gd`, `Scripts/controllers/goalie_controller.gd`
-**Problem:** When `render_time` overruns the newest snapshot in the buffer (one missed packet is enough), `find_bracket` returns `null` and every caller silently does nothing — the actor freezes until the next packet arrives. In a fast game this is a visible hitch.
+**Problem:** `find_bracket` returns null when the buffer has fewer than 2 entries; callers early-return and hold whatever position was last applied. When render_time merely overshoots the newest snapshot, `find_bracket` already returns `(newest, newest, 1.0)` so callers hold the newest known position. Both cases result in a visible hold for fast-moving actors; extrapolating with the newest state's velocity (up to the cap) makes the hold period seamless.
 **Fix:** When render_time overshoots the newest snapshot, extrapolate using the newest state's velocity for up to a configurable cap (`extrapolation_max_ms`, default 50 ms). Beyond the cap, hold the last known position rather than extrapolating further. Because the state types differ per controller, extrapolation logic lives in each controller (not in `BufferedStateInterpolator`); the shared helper can return a flag or a typed result indicating "past end of buffer" so callers know to extrapolate.
 
 ### 1e. No monotonic timestamp guard on buffer appends
