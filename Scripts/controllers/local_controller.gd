@@ -102,22 +102,13 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			server_state.position, server_state.velocity,
 			reconcile_position_threshold, reconcile_velocity_threshold):
 		return
-	var pre_facing: Vector2 = _facing
-	var pre_upper_body: float = _upper_body_angle
-	var pre_lower_body_lag: float = _lower_body_lag
 	# Save shot/state-machine state — replay can transition through shoot states
 	# (WRISTER_AIM → FOLLOW_THROUGH → SKATING) and leave _state wrong. Restore so
 	# the next _process_input runs the correct handler and blade doesn't teleport.
 	var pre_state: State = _state
-	var pre_shot_dir: Vector3 = _shot_dir
 	var pre_follow_through_timer: float = _follow_through_timer
 	var pre_follow_through_is_slapper: bool = _follow_through_is_slapper
-	var pre_locked_slapper_dir: Vector2 = _locked_slapper_dir
 	var pre_one_timer_window_timer: float = _one_timer_window_timer
-	var pre_charge_distance: float = _charge_distance
-	var pre_slapper_charge_timer: float = _slapper_charge_timer
-	var pre_prev_mouse_screen_pos: Vector2 = _prev_mouse_screen_pos
-	var pre_prev_blade_dir: Vector3 = _prev_blade_dir
 	skater.global_position = server_state.position
 	skater.velocity = server_state.velocity
 	# Snap facing for replay accuracy — facing drives move_and_slide direction,
@@ -128,21 +119,13 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	skater.set_lower_body_lag(0.0)
 	for input in _input_history:
 		_process_input(input, input.delta)
-	# Restore local visual and state-machine state so the blade and controller
-	# stay on the correct trajectory after replay.
-	_facing = pre_facing
-	_upper_body_angle = pre_upper_body
-	_lower_body_lag = pre_lower_body_lag
+		skater.global_position += skater.velocity * input.delta
+	# Restore only the narrow shot-state fields that replay must not transition
+	# past — all other fields (facing, upper body, charge, etc.) use replay output.
 	_state = pre_state
-	_shot_dir = pre_shot_dir
 	_follow_through_timer = pre_follow_through_timer
 	_follow_through_is_slapper = pre_follow_through_is_slapper
-	_locked_slapper_dir = pre_locked_slapper_dir
 	_one_timer_window_timer = pre_one_timer_window_timer
-	_charge_distance = pre_charge_distance
-	_slapper_charge_timer = pre_slapper_charge_timer
-	_prev_mouse_screen_pos = pre_prev_mouse_screen_pos
-	_prev_blade_dir = pre_prev_blade_dir
 	skater.set_facing(_facing)
 	skater.set_upper_body_rotation(_upper_body_angle)
 	skater.set_lower_body_lag(_lower_body_lag)

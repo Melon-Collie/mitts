@@ -138,7 +138,6 @@ func _interpolate_skater(peer_id: int, ts: float) -> SkaterNetworkState:
 		return to_s if to_s != null else SkaterNetworkState.new()
 	var result := SkaterNetworkState.new()
 	result.position = from_s.position.lerp(to_s.position, t)
-	result.rotation = from_s.rotation.lerp(to_s.rotation, t)
 	result.velocity = from_s.velocity.lerp(to_s.velocity, t)
 	result.blade_position = from_s.blade_position.lerp(to_s.blade_position, t)
 	result.top_hand_position = from_s.top_hand_position.lerp(to_s.top_hand_position, t)

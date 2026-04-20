@@ -18,6 +18,7 @@ func test_round_trip_preserves_all_fields() -> void:
 	s.delta            = 1.0 / 240.0
 	s.move_vector      = Vector2(0.5, -0.3)
 	s.mouse_world_pos  = Vector3(1.0, 0.0, -2.5)
+	s.mouse_screen_pos = Vector2(320.0, 240.0)
 	s.shoot_pressed    = true
 	s.shoot_held       = false
 	s.slap_pressed     = false
@@ -36,6 +37,8 @@ func test_round_trip_preserves_all_fields() -> void:
 	assert_almost_eq(r.move_vector.y, s.move_vector.y, 0.00001)
 	assert_almost_eq(r.mouse_world_pos.x, s.mouse_world_pos.x, 0.00001)
 	assert_almost_eq(r.mouse_world_pos.z, s.mouse_world_pos.z, 0.00001)
+	assert_almost_eq(r.mouse_screen_pos.x, s.mouse_screen_pos.x, 0.00001)
+	assert_almost_eq(r.mouse_screen_pos.y, s.mouse_screen_pos.y, 0.00001)
 	assert_eq(r.shoot_pressed,   s.shoot_pressed)
 	assert_eq(r.shoot_held,      s.shoot_held)
 	assert_eq(r.slap_pressed,    s.slap_pressed)
@@ -51,4 +54,4 @@ func test_array_length_is_sixteen() -> void:
 	# Field count sentinel — if someone adds a field without updating
 	# to_array/from_array, this catches the mismatch.
 	var s := InputState.new()
-	assert_eq(s.to_array().size(), 16)
+	assert_eq(s.to_array().size(), 18)

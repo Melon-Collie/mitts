@@ -104,11 +104,11 @@ Authoritative host. The host runs all physics. Clients predict locally and recon
 **LocalController** (local player on any machine):
 - Runs full physics simulation locally every frame
 - Stores input history (capped at 2 seconds)
-- On world state receipt: filters confirmed inputs by `last_processed_sequence`, checks position/velocity error against threshold, resets to server state and replays unconfirmed inputs if correction is needed. Reset includes `position`, `velocity`, `facing`, `_facing` (controller copy), `_upper_body_angle`, and `skater.upper_body_rotation` — all must match server state before replay or blade position drifts during the replay.
+- On world state receipt: filters confirmed inputs by `last_processed_host_timestamp`, checks position/velocity error against threshold, resets to server state (`position`, `velocity`, `facing`) and replays unconfirmed inputs kinematically (`global_position += velocity * delta` per iteration so blade IK and facing evaluate against a moving body). Reconcile saves and restores only the narrow shot-state fields (`_state`, `_follow_through_timer`, `_follow_through_is_slapper`, `_one_timer_window_timer`) — visual and charge fields use replay output directly.
 
 **RemoteController** (other players):
-- On the host: drives simulation from latest received input at 240 Hz
-- On clients: buffers incoming `SkaterNetworkState` snapshots with timestamps, interpolates with a 100ms delay
+- On the host: queues all inputs from each batch sorted by `host_timestamp`, pops and simulates one per physics tick; `last_processed_host_timestamp` advances only for inputs actually simulated so the client's reconcile filter stays accurate. `just_pressed` flags (shoot, slap, elevation) are cleared on the input before it becomes the idle fallback so they don't re-fire.
+- On clients: buffers incoming `SkaterNetworkState` snapshots with timestamps, interpolates with a 100ms delay. `_apply_state_to_skater` sets facing and upper-body rotation before blade position so the shaft mesh orients against the correct body transform each tick.
 
 ### Puck Networking
 

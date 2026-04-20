@@ -241,7 +241,6 @@ func _process_input(input: InputState, delta: float) -> void:
 func get_network_state() -> SkaterNetworkState:
 	var state := SkaterNetworkState.new()
 	state.position = skater.global_position
-	state.rotation = skater.global_rotation
 	state.velocity = skater.velocity
 	state.blade_position = skater.get_blade_position()
 	state.top_hand_position = skater.get_top_hand_position()
@@ -337,7 +336,7 @@ func _state_wrister_aim(input: InputState, delta: float) -> void:
 		# hardware mouse actually moves, immune to camera lag/drift.
 		# Scale by 0.01 so max_wrister_charge_distance stays in intuitive units
 		# (1.5 ≈ 150 px of drag for full charge).
-		var screen_pos: Vector2 = get_viewport().get_mouse_position()
+		var screen_pos: Vector2 = input.mouse_screen_pos
 		var cur := Vector3(screen_pos.x * 0.01, 0.0, screen_pos.y * 0.01)
 		var prev := Vector3(_prev_mouse_screen_pos.x * 0.01, 0.0, _prev_mouse_screen_pos.y * 0.01)
 		var result: Dictionary = ChargeTracking.accumulate(
