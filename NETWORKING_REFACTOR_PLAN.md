@@ -53,7 +53,7 @@ These are targeted, self-contained fixes. Each should be reviewed and tested ind
 
 **Goal:** Before simulating bad network conditions, establish a debug overlay that makes network health observable in real time. This is the instrument panel you will use to verify every subsequent phase.
 
-**Approach:** A toggleable in-game overlay (e.g. F3) rendered on a high-priority `CanvasLayer`. All data is gathered passively — no changes to networking logic.
+**Approach:** A toggleable in-game overlay (e.g. F3) rendered on a high-priority `CanvasLayer`. Data requires minimal instrumentation additions (counters only) to controllers — no changes to networking or movement logic. Telemetry data is aggregated in a lightweight `NetworkTelemetry` autoload (or a `RefCounted` owned by `GameManager`); controllers call into it with narrow methods like `NetworkTelemetry.record_reconcile(delta_m: float)`, keeping observation decoupled from the systems being observed.
 
 **Suggested metrics:**
 
