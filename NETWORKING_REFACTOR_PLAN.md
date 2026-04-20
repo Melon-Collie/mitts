@@ -146,13 +146,17 @@ With `NetworkSimManager.enabled = false`, the only overhead is a single bool che
 **Approach:** NTP-style ongoing RTT sampling.
 
 **Protocol (per client):**
-1. Client sends a ping to host carrying `client_send_time` (client's local monotonic clock).
-2. Host replies with `client_send_time` (echoed) + `host_time_at_receive` + `host_time_at_send`.
-3. Client computes:
+1. On connect, immediately fire N rapid pings (e.g. 3 pings, 0.5s apart) to establish a baseline quickly.
+2. Host replies to each ping with `client_send_time` (echoed) + `host_time_at_receive` + `host_time_at_send`.
+3. Client computes per sample:
    - `rtt = client_receive_time - client_send_time`
    - `host_time_offset = host_time_at_receive + (rtt / 2.0) - client_receive_time`
-4. Repeat at a low cadence (e.g. every 5 seconds). Maintain a small rolling window of samples (e.g. 8), discard the two highest-RTT outliers, average the rest.
-5. Expose `NetworkManager.estimated_host_time() -> float` on all peers.
+4. Once all N initial responses arrive, compute the initial estimate and mark the clock as **ready**. Switch to a slow ongoing cadence (e.g. every 5 seconds) for drift correction. Maintain a small rolling window of samples (e.g. 8), discard the two highest-RTT outliers, average the rest.
+5. Expose `NetworkManager.estimated_host_time() -> float` on all peers. Returns invalid / asserts until clock is ready.
+
+**Bootstrap:** The rapid initial pings run during the lobby phase, so the clock is settled before the game starts. `LocalInputGatherer` does not stamp host timestamps until the clock is marked ready.
+
+**Join-in-progress:** When a client joins a game already in progress there is no lobby phase to absorb the warm-up window. Options include showing a brief loading screen until the initial pings complete (~1.5s), or spawning the player immediately with `_host_time_offset = 0.0` and accepting some reconcile weirdness until the baseline arrives. **Decision deferred to implementation** — evaluate which feels better in practice.
 
 **Input timestamp migration:**
 - `InputState.sequence: int` is replaced with `InputState.host_timestamp: float`.
@@ -160,6 +164,9 @@ With `NetworkSimManager.enabled = false`, the only overhead is a single bool che
 - `SkaterNetworkState.last_processed_sequence` becomes `last_processed_host_timestamp: float`.
 - The reconcile filter in `LocalController` filters by timestamp instead of sequence.
 - `RemoteController` uses timestamp for input ordering on the host.
+- **Monotonic guard (from 1e):** Now that state packets carry host-supplied timestamps, add the one-line guard to buffer appends — if `new_state.host_timestamp ≤ buffer.back().host_timestamp`, discard. This is where 1e becomes meaningful.
+
+**Wire format note:** Replacing `last_processed_sequence: int` with `last_processed_host_timestamp: float` in `SkaterNetworkState` is a breaking wire format change — old and new builds cannot interoperate. Expected for early development; note in release changelog.
 
 **Review gates:**
 - Telemetry overlay shows stable RTT estimate and low variance across samples.
