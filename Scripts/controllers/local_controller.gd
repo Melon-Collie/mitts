@@ -103,6 +103,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	for input in _input_history:
 		_process_input(input, input.delta)
 	var new_error: Vector3 = pre_snap - skater.global_position
+	NetworkTelemetry.record_reconcile(new_error.length())
 	if not new_error.is_zero_approx():
 		_correction_offset += new_error
 		_correction_step = _correction_offset / correction_frames

@@ -168,10 +168,12 @@ func _interpolate() -> void:
 	var render_time: float = _current_time - interpolation_delay
 	var bracket: BufferedStateInterpolator.BracketResult = BufferedStateInterpolator.find_bracket(
 			_state_buffer, render_time)
+	NetworkTelemetry.record_buffer_depth_puck(_state_buffer.size())
 	if bracket == null:
 		return
 	var interpolated := PuckNetworkState.new()
 	if bracket.is_extrapolating:
+		NetworkTelemetry.record_extrapolation()
 		var dt: float = minf(bracket.extrapolation_dt, extrapolation_max_ms / 1000.0)
 		var newest: PuckNetworkState = bracket.to_state
 		interpolated.position = newest.position + newest.velocity * dt

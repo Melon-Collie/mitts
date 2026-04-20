@@ -192,6 +192,7 @@ func _process(delta: float) -> void:
 		if _input_timer >= input_delta:
 			_input_timer -= input_delta
 			var state: InputState = _local_controller.get_current_input()
+			NetworkTelemetry.record_input_sent()
 			receive_input.rpc_id(1, state.to_array())
 
 	if is_host:
@@ -240,6 +241,7 @@ func receive_input(data: Array) -> void:
 func receive_world_state(state: Array) -> void:
 	if is_host:
 		return
+	NetworkTelemetry.record_world_state()
 	world_state_received.emit(state)
 
 @rpc("authority", "reliable")

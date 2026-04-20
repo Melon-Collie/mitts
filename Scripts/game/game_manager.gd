@@ -47,6 +47,8 @@ var _shot_tracker: ShotOnGoalTracker = null
 var _hit_tracker: HitTracker = null
 var _phase_coord: PhaseCoordinator = null
 var _swap_coord: SlotSwapCoordinator = null
+var _telemetry: NetworkTelemetry = null
+var _debug_overlay: NetworkDebugOverlay = null
 
 
 func _ready() -> void:
@@ -81,6 +83,8 @@ func _wire_network_signals() -> void:
 
 # ── Process ───────────────────────────────────────────────────────────────────
 func _process(delta: float) -> void:
+	if _telemetry != null:
+		_telemetry.tick(delta)
 	if not NetworkManager.is_host or _state_machine == null:
 		return
 	if _state_machine.tick(delta):
@@ -336,6 +340,11 @@ func _wire_subsystems() -> void:
 	_swap_coord.stats_updated.connect(stats_updated.emit)
 	_swap_coord.carrier_swap_needs_drop.connect(_drop_puck_if_carried)
 
+	_telemetry = NetworkTelemetry.new()
+	NetworkTelemetry.instance = _telemetry
+	_debug_overlay = NetworkDebugOverlay.new()
+	add_child(_debug_overlay)
+
 
 func _spawn_local(peer_id: int, team_slot: int, team: Team) -> void:
 	var colors: Dictionary = PlayerRegistry.generate_colors(team.team_id)
@@ -580,6 +589,11 @@ func on_scene_exit() -> void:
 	_shot_tracker = null
 	_phase_coord = null
 	_swap_coord = null
+	if _debug_overlay:
+		_debug_overlay.queue_free()
+		_debug_overlay = null
+	_telemetry = null
+	NetworkTelemetry.instance = null
 	_last_emitted_clock_secs = -1
 
 
