@@ -2,6 +2,7 @@ class_name PuckController
 extends Node
 
 @export var interpolation_delay: float = Constants.NETWORK_INTERPOLATION_DELAY
+@export var extrapolation_max_ms: float = 50.0
 @export var prediction_reconcile_threshold: float = 3.0
 @export var position_correction_blend: float = 0.3
 @export var velocity_correction_blend: float = 0.5
@@ -65,6 +66,14 @@ func notify_local_release(direction: Vector3, power: float) -> void:
 	puck.set_client_prediction_mode(true)
 	puck.set_puck_velocity(direction * power)
 	_state_buffer.clear()
+
+func notify_remote_carrier_changed(new_carrier_peer_id: int) -> void:
+	# Guard: don't kill our own trajectory prediction — we initiated the release
+	# locally and are soft-reconciling via world state.
+	if new_carrier_peer_id == -1 and _predicting_trajectory:
+		return
+	_predicting_trajectory = false
+	puck.set_client_prediction_mode(false)
 
 # Called when the server forcibly ends a carry (e.g. goal scored).
 # Does not start trajectory prediction — just drops back to interpolation.
@@ -161,11 +170,15 @@ func _interpolate() -> void:
 			_state_buffer, render_time)
 	if bracket == null:
 		return
-	var from_state: PuckNetworkState = bracket.from_state
-	var to_state: PuckNetworkState = bracket.to_state
 	var interpolated := PuckNetworkState.new()
-	interpolated.position = from_state.position.lerp(to_state.position, bracket.t)
-	interpolated.velocity = from_state.velocity.lerp(to_state.velocity, bracket.t)
+	if bracket.is_extrapolating:
+		var dt: float = minf(bracket.extrapolation_dt, extrapolation_max_ms / 1000.0)
+		var newest: PuckNetworkState = bracket.to_state
+		interpolated.position = newest.position + newest.velocity * dt
+		interpolated.velocity = newest.velocity
+	else:
+		interpolated.position = bracket.from_state.position.lerp(bracket.to_state.position, bracket.t)
+		interpolated.velocity = bracket.from_state.velocity.lerp(bracket.to_state.velocity, bracket.t)
 	_apply_state_to_puck(interpolated)
 	BufferedStateInterpolator.drop_stale(_state_buffer, render_time)
 

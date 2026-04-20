@@ -17,6 +17,7 @@ signal local_puck_pickup_confirmed
 signal local_puck_stolen
 signal remote_puck_release_received(direction: Vector3, power: float)
 signal carrier_puck_dropped
+signal remote_carrier_changed(new_carrier_peer_id: int)
 signal goal_received(scoring_team_id: int, score0: int, score1: int, scorer_name: String, assist1_name: String, assist2_name: String)
 signal faceoff_positions_received(positions: Array)
 signal game_reset_received
@@ -268,6 +269,15 @@ func send_puck_picked_up(peer_id: int) -> void:
 @rpc("authority", "reliable")
 func notify_puck_picked_up() -> void:
 	local_puck_pickup_confirmed.emit()
+
+func send_carrier_changed_to_all(new_carrier_peer_id: int) -> void:
+	for peer_id: int in multiplayer.get_peers():
+		notify_carrier_changed.rpc_id(peer_id, new_carrier_peer_id)
+	remote_carrier_changed.emit(new_carrier_peer_id)
+
+@rpc("authority", "reliable")
+func notify_carrier_changed(new_carrier_peer_id: int) -> void:
+	remote_carrier_changed.emit(new_carrier_peer_id)
 
 func send_puck_stolen(victim_peer_id: int) -> void:
 	notify_puck_stolen.rpc_id(victim_peer_id)

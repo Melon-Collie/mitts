@@ -67,6 +67,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.existing_players_synced.connect(sync_existing_players)
 	NetworkManager.local_puck_pickup_confirmed.connect(on_local_player_picked_up_puck)
 	NetworkManager.local_puck_stolen.connect(on_local_player_puck_stolen)
+	NetworkManager.remote_carrier_changed.connect(_on_remote_carrier_changed)
 	NetworkManager.remote_puck_release_received.connect(on_remote_puck_release)
 	NetworkManager.carrier_puck_dropped.connect(on_carrier_puck_dropped)
 	NetworkManager.goal_received.connect(_on_goal_received)
@@ -386,6 +387,7 @@ func _on_server_puck_picked_up_by(peer_id: int) -> void:
 	record.controller.on_puck_picked_up_network()
 	if not record.is_local:
 		NetworkManager.send_puck_picked_up(peer_id)
+	NetworkManager.send_carrier_changed_to_all(peer_id)
 
 
 func _on_server_puck_released_by_carrier(peer_id: int) -> void:
@@ -393,6 +395,7 @@ func _on_server_puck_released_by_carrier(peer_id: int) -> void:
 	if record == null:
 		return
 	record.controller.on_puck_released_network()
+	NetworkManager.send_carrier_changed_to_all(-1)
 
 
 func _on_server_puck_stripped_from(peer_id: int) -> void:
@@ -459,6 +462,11 @@ func _start_pending_shot_from_carrier() -> void:
 
 
 # ── Puck network events ──────────────────────────────────────────────────────
+func _on_remote_carrier_changed(new_carrier_peer_id: int) -> void:
+	if puck_controller != null:
+		puck_controller.notify_remote_carrier_changed(new_carrier_peer_id)
+
+
 func on_carrier_puck_dropped() -> void:
 	var local_record := _registry.get_local() if _registry != null else null
 	if local_record != null:

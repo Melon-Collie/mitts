@@ -47,6 +47,12 @@ These are targeted, self-contained fixes. Each should be reviewed and tested ind
 **Problem:** Buffer appends do not check that the incoming timestamp is newer than the current tail. `unreliable_ordered` makes out-of-order delivery unlikely but not impossible under driver quirks.
 **Note:** The buffers currently timestamp entries with `_current_time` — a local accumulator that always increases. With local timestamps a late-arriving packet gets a newer timestamp than the one before it, so this guard would never fire. **The actual fix belongs in Phase 4**, once world state packets carry host-supplied timestamps that can genuinely arrive out of order. This entry exists to document the gap; implementation is deferred.
 
+### 1f. Reconcile position smoothing
+
+**File:** `Scripts/controllers/local_controller.gd`
+**Problem:** When a reconcile fires, the position snap is instantaneous — the skater jumps to the replayed position in one frame. With the sequence and delta fixes from 1a and 1c, reconciles are less frequent but each one is more visible as a discrete pop.
+**Fix:** Track `_correction_offset: Vector3` and `_correction_step: Vector3`. On each reconcile, compute `new_error = pre_snap - post_replay`, accumulate it into `_correction_offset`, recompute `_correction_step = _correction_offset / correction_frames`, then immediately add `new_error` back to the physics body so there is no visual jump this frame. Each tick before movement, subtract one step from both the physics body and `_correction_offset` — the body advances toward the true replayed position at a constant rate, reaching it in exactly `correction_frames` ticks. Linear (not exponential) so each frame contributes the same correction and there is no first-frame spike. `@export var correction_frames: float = 48.0` (~200 ms at 240 Hz). The offset is zeroed on teleport and during dead-puck phases so faceoff snaps remain instant.
+
 ---
 
 ## Phase 2 — Telemetry Overlay

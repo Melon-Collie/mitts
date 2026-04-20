@@ -2,6 +2,7 @@ class_name RemoteController
 extends SkaterController
 
 @export var interpolation_delay: float = Constants.NETWORK_INTERPOLATION_DELAY
+@export var extrapolation_max_ms: float = 50.0
 
 var _latest_input: InputState = InputState.new()
 var _state_buffer: Array[BufferedSkaterState] = []
@@ -49,20 +50,32 @@ func _interpolate() -> void:
 			_state_buffer, render_time)
 	if bracket == null:
 		return
-	var from_state: SkaterNetworkState = bracket.from_state
-	var to_state: SkaterNetworkState = bracket.to_state
-	var t: float = bracket.t
 	var interpolated := SkaterNetworkState.new()
-	interpolated.position = from_state.position.lerp(to_state.position, t)
-	interpolated.rotation = from_state.rotation.lerp(to_state.rotation, t)
-	interpolated.velocity = from_state.velocity.lerp(to_state.velocity, t)
-	interpolated.blade_position = from_state.blade_position.lerp(to_state.blade_position, t)
-	interpolated.top_hand_position = from_state.top_hand_position.lerp(to_state.top_hand_position, t)
-	interpolated.upper_body_rotation_y = lerpf(from_state.upper_body_rotation_y, to_state.upper_body_rotation_y, t)
-	interpolated.facing = from_state.facing.lerp(to_state.facing, t).normalized()
-	# Boolean fields can't be lerped; take the freshest value so ghost-mode
-	# toggles flow through to remote skaters without a one-broadcast delay.
-	interpolated.is_ghost = to_state.is_ghost
+	if bracket.is_extrapolating:
+		var dt: float = minf(bracket.extrapolation_dt, extrapolation_max_ms / 1000.0)
+		var newest: SkaterNetworkState = bracket.to_state
+		interpolated.position = newest.position + newest.velocity * dt
+		interpolated.velocity = newest.velocity
+		interpolated.rotation = newest.rotation
+		interpolated.blade_position = newest.blade_position
+		interpolated.top_hand_position = newest.top_hand_position
+		interpolated.upper_body_rotation_y = newest.upper_body_rotation_y
+		interpolated.facing = newest.facing
+		interpolated.is_ghost = newest.is_ghost
+	else:
+		var from_state: SkaterNetworkState = bracket.from_state
+		var to_state: SkaterNetworkState = bracket.to_state
+		var t: float = bracket.t
+		interpolated.position = from_state.position.lerp(to_state.position, t)
+		interpolated.rotation = from_state.rotation.lerp(to_state.rotation, t)
+		interpolated.velocity = from_state.velocity.lerp(to_state.velocity, t)
+		interpolated.blade_position = from_state.blade_position.lerp(to_state.blade_position, t)
+		interpolated.top_hand_position = from_state.top_hand_position.lerp(to_state.top_hand_position, t)
+		interpolated.upper_body_rotation_y = lerpf(from_state.upper_body_rotation_y, to_state.upper_body_rotation_y, t)
+		interpolated.facing = from_state.facing.lerp(to_state.facing, t).normalized()
+		# Boolean fields can't be lerped; take the freshest value so ghost-mode
+		# toggles flow through to remote skaters without a one-broadcast delay.
+		interpolated.is_ghost = to_state.is_ghost
 	_apply_state_to_skater(interpolated)
 	BufferedStateInterpolator.drop_stale(_state_buffer, render_time)
 

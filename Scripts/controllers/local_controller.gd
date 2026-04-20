@@ -2,12 +2,16 @@ class_name LocalController
 extends SkaterController
 
 @export var reconcile_position_threshold: float = 0.05
-@export var reconcile_velocity_threshold: float = 0.1
+@export var reconcile_velocity_threshold: float = 0.4
+@export var correction_frames: float = 48.0
 
 @onready var camera: GameCamera = null
 var _gatherer: LocalInputGatherer = null
 var _current_input: InputState = InputState.new()
 var _input_history: Array[InputState] = []
+var _next_sequence: int = 0
+var _correction_offset: Vector3 = Vector3.ZERO
+var _correction_step: Vector3 = Vector3.ZERO
 var _team_id: int = -1  # set at setup; needed for client-side offside prediction
 
 func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> void:
@@ -34,6 +38,8 @@ func get_current_input() -> InputState:
 func teleport_to(pos: Vector3) -> void:
 	super.teleport_to(pos)
 	_input_history.clear()
+	_correction_offset = Vector3.ZERO
+	_correction_step = Vector3.ZERO
 
 func _physics_process(delta: float) -> void:
 	if skater == null or puck == null or _gatherer == null:
@@ -44,15 +50,28 @@ func _physics_process(delta: float) -> void:
 		# inputs when the phase lifts — regardless of packet timing.
 		skater.velocity = Vector3.ZERO
 		_input_history.clear()
+		_correction_offset = Vector3.ZERO
+		_correction_step = Vector3.ZERO
 		return
 	if _game_state.is_input_blocked():
 		return
 	# Predict offsides locally for instant ghost feedback
 	_predict_offside()
+	if not _correction_offset.is_zero_approx():
+		if _correction_step.length() >= _correction_offset.length():
+			skater.global_position -= _correction_offset
+			_correction_offset = Vector3.ZERO
+			_correction_step = Vector3.ZERO
+		else:
+			skater.global_position -= _correction_step
+			_correction_offset -= _correction_step
 	_current_input = _gatherer.gather()
+	_current_input.sequence = _next_sequence
+	_current_input.delta = delta
+	_next_sequence += 1
 	_input_history.append(_current_input)
 	# Cap history size to prevent unbounded growth
-	if _input_history.size() > 120:  # 2 seconds at 60Hz
+	if _input_history.size() > 480:  # 2 seconds at 240Hz
 		_input_history.pop_front()
 	_process_input(_current_input, delta)
 
@@ -72,6 +91,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			server_state.position, server_state.velocity,
 			reconcile_position_threshold, reconcile_velocity_threshold):
 		return
+	var pre_snap: Vector3 = skater.global_position
 	skater.global_position = server_state.position
 	skater.velocity = server_state.velocity
 	skater.set_facing(server_state.facing)
@@ -82,6 +102,11 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	skater.set_lower_body_lag(0.0)
 	for input in _input_history:
 		_process_input(input, input.delta)
+	var new_error: Vector3 = pre_snap - skater.global_position
+	if not new_error.is_zero_approx():
+		_correction_offset += new_error
+		_correction_step = _correction_offset / correction_frames
+		skater.global_position += new_error
 
 func _predict_offside() -> void:
 	if _is_host:

@@ -36,6 +36,7 @@ extends Node
 @export var five_hole_shuffle_max: float = 0.06
 @export var five_hole_t_push_max: float = 0.15
 
+@export var extrapolation_max_ms: float = 50.0
 @export var tracking_speed: float = 6.0
 @export var part_lerp_speed: float = 6.0
 @export var reaction_lerp_speed: float = 18.0
@@ -456,15 +457,24 @@ func _interpolate() -> void:
 			_state_buffer, render_time)
 	if bracket == null:
 		return
-	var from_state: GoalieNetworkState = bracket.from_state
-	var to_state: GoalieNetworkState = bracket.to_state
-	var t: float = bracket.t
 	var interpolated := GoalieNetworkState.new()
-	interpolated.position_x = lerpf(from_state.position_x, to_state.position_x, t)
-	interpolated.position_z = lerpf(from_state.position_z, to_state.position_z, t)
-	interpolated.rotation_y = lerp_angle(from_state.rotation_y, to_state.rotation_y, t)
-	interpolated.five_hole_openness = lerpf(from_state.five_hole_openness, to_state.five_hole_openness, t)
-	interpolated.state_enum = to_state.state_enum
+	if bracket.is_extrapolating:
+		# GoalieNetworkState has no velocity field — hold the newest known state.
+		var newest: GoalieNetworkState = bracket.to_state
+		interpolated.position_x = newest.position_x
+		interpolated.position_z = newest.position_z
+		interpolated.rotation_y = newest.rotation_y
+		interpolated.five_hole_openness = newest.five_hole_openness
+		interpolated.state_enum = newest.state_enum
+	else:
+		var from_state: GoalieNetworkState = bracket.from_state
+		var to_state: GoalieNetworkState = bracket.to_state
+		var t: float = bracket.t
+		interpolated.position_x = lerpf(from_state.position_x, to_state.position_x, t)
+		interpolated.position_z = lerpf(from_state.position_z, to_state.position_z, t)
+		interpolated.rotation_y = lerp_angle(from_state.rotation_y, to_state.rotation_y, t)
+		interpolated.five_hole_openness = lerpf(from_state.five_hole_openness, to_state.five_hole_openness, t)
+		interpolated.state_enum = to_state.state_enum
 	_apply_network_state(interpolated)
 	BufferedStateInterpolator.drop_stale(_state_buffer, render_time)
 
