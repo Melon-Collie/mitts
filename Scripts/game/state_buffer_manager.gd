@@ -12,26 +12,19 @@ var _skater_buffers: Dictionary = {}   # peer_id -> Array[SkaterNetworkState]
 var _skater_ptrs: Dictionary = {}      # peer_id -> int
 var _puck_buffer: Array = []           # Array[PuckNetworkState], BUFFER_SIZE slots
 var _puck_ptr: int = 0
-var _goalie_buffers: Array = []        # Array of Array[GoalieNetworkState]
-var _goalie_ptrs: Array = []           # Array[int]
+var _goalie_buffers: Dictionary = {}   # team_id -> Array[GoalieNetworkState]
+var _goalie_ptrs: Dictionary = {}      # team_id -> int
 var _capture_count: int = 0
 
 
-func setup(registry: PlayerRegistry, goalie_count: int) -> void:
+func setup(registry: PlayerRegistry, goalie_controllers: Array) -> void:
 	for peer_id: int in registry.all():
 		_alloc_skater(peer_id)
 	_puck_buffer.resize(BUFFER_SIZE)
 	for i: int in BUFFER_SIZE:
 		_puck_buffer[i] = PuckNetworkState.new()
-	_goalie_buffers.resize(goalie_count)
-	_goalie_ptrs.resize(goalie_count)
-	for i: int in goalie_count:
-		var buf: Array = []
-		buf.resize(BUFFER_SIZE)
-		for j: int in BUFFER_SIZE:
-			buf[j] = GoalieNetworkState.new()
-		_goalie_buffers[i] = buf
-		_goalie_ptrs[i] = 0
+	for gc: GoalieController in goalie_controllers:
+		_alloc_goalie(gc.team_id)
 
 
 func add_player(peer_id: int) -> void:
@@ -67,13 +60,15 @@ func capture(registry: PlayerRegistry, puck_controller: PuckController, goalie_c
 	puck_slot.host_timestamp = now
 	_puck_ptr = (_puck_ptr + 1) % BUFFER_SIZE
 
-	for i: int in goalie_controllers.size():
-		var ptr: int = _goalie_ptrs[i]
-		var slot: GoalieNetworkState = _goalie_buffers[i][ptr]
-		var state: GoalieNetworkState = (goalie_controllers[i] as GoalieController).get_state()
+	for gc: GoalieController in goalie_controllers:
+		if not _goalie_buffers.has(gc.team_id):
+			_alloc_goalie(gc.team_id)
+		var ptr: int = _goalie_ptrs[gc.team_id]
+		var slot: GoalieNetworkState = _goalie_buffers[gc.team_id][ptr]
+		var state: GoalieNetworkState = gc.get_state()
 		slot.copy_from(state)
 		slot.host_timestamp = now
-		_goalie_ptrs[i] = (ptr + 1) % BUFFER_SIZE
+		_goalie_ptrs[gc.team_id] = (ptr + 1) % BUFFER_SIZE
 
 	_capture_count += 1
 
@@ -92,11 +87,11 @@ func latest_puck_state() -> PuckNetworkState:
 	return _puck_buffer[ptr]
 
 
-func latest_goalie_state(index: int) -> GoalieNetworkState:
-	if index >= _goalie_buffers.size():
+func latest_goalie_state(team_id: int) -> GoalieNetworkState:
+	if not _goalie_buffers.has(team_id):
 		return GoalieNetworkState.new()
-	var ptr: int = (_goalie_ptrs[index] - 1 + BUFFER_SIZE) % BUFFER_SIZE
-	return _goalie_buffers[index][ptr]
+	var ptr: int = (_goalie_ptrs[team_id] - 1 + BUFFER_SIZE) % BUFFER_SIZE
+	return _goalie_buffers[team_id][ptr]
 
 
 # ── Historical query (used by Phase 7 lag compensation) ──────────────────────
@@ -107,13 +102,21 @@ func get_state_at(host_timestamp: float) -> WorldSnapshot:
 	snap.puck_state = _interpolate_puck(host_timestamp)
 	for peer_id: int in _skater_buffers:
 		snap.skater_states[peer_id] = _interpolate_skater(peer_id, host_timestamp)
-	snap.goalie_states.resize(_goalie_buffers.size())
-	for i: int in _goalie_buffers.size():
-		snap.goalie_states[i] = _interpolate_goalie(i, host_timestamp)
+	for team_id: int in _goalie_buffers:
+		snap.goalie_states[team_id] = _interpolate_goalie(team_id, host_timestamp)
 	return snap
 
 
 # ── Private helpers ───────────────────────────────────────────────────────────
+
+func _alloc_goalie(team_id: int) -> void:
+	var buf: Array = []
+	buf.resize(BUFFER_SIZE)
+	for i: int in BUFFER_SIZE:
+		buf[i] = GoalieNetworkState.new()
+	_goalie_buffers[team_id] = buf
+	_goalie_ptrs[team_id] = 0
+
 
 func _alloc_skater(peer_id: int) -> void:
 	var buf: Array = []
@@ -161,10 +164,10 @@ func _interpolate_puck(ts: float) -> PuckNetworkState:
 	return result
 
 
-func _interpolate_goalie(index: int, ts: float) -> GoalieNetworkState:
+func _interpolate_goalie(team_id: int, ts: float) -> GoalieNetworkState:
 	var from_g: GoalieNetworkState
 	var to_g: GoalieNetworkState
-	var t: float = _find_bracket_goalie(index, ts, from_g, to_g)
+	var t: float = _find_bracket_goalie(team_id, ts, from_g, to_g)
 	if t < 0.0:
 		return to_g if to_g != null else GoalieNetworkState.new()
 	var result := GoalieNetworkState.new()
@@ -229,9 +232,9 @@ func _find_bracket_puck(ts: float, from_p: PuckNetworkState, to_p: PuckNetworkSt
 	return -1.0
 
 
-func _find_bracket_goalie(index: int, ts: float, from_g: GoalieNetworkState, to_g: GoalieNetworkState) -> float:
-	var buf: Array = _goalie_buffers[index]
-	var write_ptr: int = _goalie_ptrs[index]
+func _find_bracket_goalie(team_id: int, ts: float, from_g: GoalieNetworkState, to_g: GoalieNetworkState) -> float:
+	var buf: Array = _goalie_buffers[team_id]
+	var write_ptr: int = _goalie_ptrs[team_id]
 	var newest_ptr: int = (write_ptr - 1 + BUFFER_SIZE) % BUFFER_SIZE
 	var newest: GoalieNetworkState = buf[newest_ptr]
 	if newest.host_timestamp == 0.0:

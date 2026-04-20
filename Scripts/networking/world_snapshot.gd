@@ -7,4 +7,4 @@ extends RefCounted
 var host_timestamp: float = 0.0
 var skater_states: Dictionary = {}       # peer_id -> SkaterNetworkState
 var puck_state: PuckNetworkState = null
-var goalie_states: Array[GoalieNetworkState] = []  # indexed by goalie slot (team id)
+var goalie_states: Dictionary = {}  # team_id -> GoalieNetworkState

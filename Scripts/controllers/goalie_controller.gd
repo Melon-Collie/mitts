@@ -62,6 +62,7 @@ extends Node
 var goalie: Goalie = null
 var puck: Puck = null
 var is_server: bool = false
+var team_id: int = -1
 
 # ── Goal Geometry ─────────────────────────────────────────────────────────────
 var _goal_line_z: float = 0.0

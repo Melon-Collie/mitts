@@ -94,7 +94,7 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | `controllers/remote_controller.gd` | Remote players: server-side input driving, client-side interpolation |
 | `controllers/puck_controller.gd` | Puck: emits `puck_picked_up_by` / `puck_released_by_carrier` / `puck_stripped_from` signals (via injected peer_id resolver) for GameManager to consume; handles client prediction + interpolation |
 | `controllers/skater_controller.gd` | Base class: state machine, movement, shooting, blade control. Delegates blade placement to `TopHandIK.solve` with fixed `stick_length` and ROM exports. After every blade placement, calls `_update_bottom_hand()` → `BottomHandIK.solve` to reactively place the off-stick hand. Delegates other math to domain rules. |
-| `controllers/goalie_controller.gd` | Goalie AI: state machine (STANDING/BUTTERFLY/RVH_LEFT/RVH_RIGHT) driving positioning via `GoalieBehaviorRules` |
+| `controllers/goalie_controller.gd` | Goalie AI: state machine (STANDING/BUTTERFLY/RVH_LEFT/RVH_RIGHT) driving positioning via `GoalieBehaviorRules`. Owns `team_id: int` set by GameManager at spawn so StateBufferManager keys goalie ring buffers by team rather than array index. |
 | `controllers/goalie_body_config.gd` | Data class holding per-state body part positions and rotations |
 
 ### Infrastructure (engine integration)
@@ -112,6 +112,8 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | `game/team.gd` | Team object: defended goal, goalie controller |
 | `game/player_record.gd` | Per-player data: peer_id, slot, team, skater, controller, faceoff_position, is_left_handed, stats (PlayerStats) |
 | `networking/network_telemetry.gd` | `class_name NetworkTelemetry`. RefCounted owned by GameManager. Rolling 1-second window counters for WS recv rate, input rate, reconcile rate/magnitude, extrapolation events, buffer depths. Static call sites (`NetworkTelemetry.record_*`) are null-safe outside a game session. Ticked by `GameManager._process`. |
+| `networking/clock_sync.gd` | NTP-style RTT sampler (no class_name; instantiated inside NetworkManager on client connect). Fires 3 initial pings at 0.5 s then one every 5 s. Sliding window of 8 samples; drops 2 highest-RTT outliers. `estimated_host_time()` = local time + averaged offset. `is_ready` after first 3 samples. |
+| `networking/network_sim.gd` | Autoload (no class_name). Simulates delay/jitter/packet-loss at the receive site. Six presets (Off → ~200 ms Bad) toggled with keys 0–5. Both peers must enable matching presets to simulate a full round-trip RTT. Reliable RPCs and unreliable world-state are both routed through it during a game session. |
 | `networking/buffered_skater_state.gd` | Timestamped SkaterNetworkState for interpolation buffer |
 | `networking/buffered_puck_state.gd` | Timestamped PuckNetworkState for interpolation buffer |
 | `networking/buffered_goalie_state.gd` | Timestamped GoalieNetworkState for interpolation buffer |
@@ -145,7 +147,7 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 |------|------|
 | `tests/unit/rules/` | GUT tests for each rule class — ~130 tests covering domain logic |
 | `tests/unit/state/` | GUT tests for `GameStateMachine` — phase transitions, icing, ghost computation |
-| `tests/unit/game/` | GUT tests for application-layer collaborators: `ShotOnGoalTracker` (pending-shot FSM, assists, SOG dedup), `WorldStateCodec` (stats round-trip), `SlotSwapCoordinator` (request validation). |
+| `tests/unit/game/` | GUT tests for application-layer collaborators: `ShotOnGoalTracker` (pending-shot FSM, assists, SOG dedup), `WorldStateCodec` (stats round-trip), `SlotSwapCoordinator` (request validation), `ClockSync` (RTT math, readiness, outlier dropping), `InputState` (serialization round-trip, field-count sentinel). |
 
 ## Code Conventions
 

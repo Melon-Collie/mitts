@@ -292,6 +292,8 @@ func _spawn_goalies() -> void:
 	var result: Dictionary = _spawner.spawn_goalie_pair(puck, NetworkManager.is_host)
 	goalies = [result.top_goalie as Goalie, result.bottom_goalie as Goalie]
 	goalie_controllers = [result.top_controller, result.bottom_controller]
+	result.top_controller.team_id = 1
+	result.bottom_controller.team_id = 0
 	teams[1].goalie_controller = result.top_controller
 	teams[0].goalie_controller = result.bottom_controller
 	for team_id: int in [0, 1]:
@@ -312,7 +314,7 @@ func _wire_subsystems() -> void:
 	_registry.player_added.connect(_on_registry_player_added)
 
 	_state_buffer_manager = StateBufferManager.new()
-	_state_buffer_manager.setup(_registry, goalie_controllers.size())
+	_state_buffer_manager.setup(_registry, goalie_controllers)
 
 	_codec = WorldStateCodec.new()
 	_codec.setup(_registry, _state_machine,

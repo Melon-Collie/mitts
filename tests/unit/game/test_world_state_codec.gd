@@ -15,7 +15,7 @@ func before_each() -> void:
 	registry = PlayerRegistry.new()
 	codec = WorldStateCodec.new()
 	# Puck / controller / goalie getters aren't needed for stats tests.
-	codec.setup(registry, sm, Callable(), Callable(), Callable())
+	codec.setup(registry, sm, Callable(), Callable(), Callable(), null)
 
 
 func _add_player(peer_id: int, team_id: int, g: int = 0, a: int = 0, sog: int = 0, hits: int = 0) -> PlayerRecord:
