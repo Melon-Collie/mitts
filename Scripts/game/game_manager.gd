@@ -281,6 +281,14 @@ func _spawn_puck() -> void:
 	puck_controller = result.controller
 	puck.set_team_resolver(_resolve_skater_team_id)
 	puck_controller.set_peer_id_resolver(_resolve_skater_peer_id)
+	puck_controller.set_team_id_resolver(_resolve_skater_team_id)
+	puck_controller.set_skater_getter(func() -> Array:
+		if _registry == null:
+			return []
+		var skaters: Array = []
+		for r: PlayerRecord in _registry.all().values():
+			skaters.append(r.skater)
+		return skaters)
 	puck_controller.puck_picked_up_by.connect(_on_server_puck_picked_up_by)
 	puck_controller.puck_released_by_carrier.connect(_on_server_puck_released_by_carrier)
 	puck_controller.puck_stripped_from.connect(_on_server_puck_stripped_from)

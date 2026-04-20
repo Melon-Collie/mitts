@@ -1,6 +1,9 @@
 class_name PuckController
 extends Node
 
+const PICKUP_RADIUS: float = 0.5
+const POKE_RADIUS: float = 0.5
+
 @export var interpolation_delay: float = Constants.NETWORK_INTERPOLATION_DELAY
 @export var extrapolation_max_ms: float = 50.0
 @export var prediction_reconcile_threshold: float = 3.0
@@ -14,6 +17,7 @@ var is_server: bool = false
 var _carrier_peer_id: int = -1            # server-side authoritative carrier
 var _local_carrier_skater: Skater = null  # client-side: local skater while carrying
 var _current_time: float = 0.0
+var _prev_puck_pos: Vector3 = Vector3.ZERO
 var _state_buffer: Array[BufferedPuckState] = []
 var _predicting_trajectory: bool = false
 var is_extrapolating: bool = false
@@ -21,9 +25,12 @@ var is_extrapolating: bool = false
 func get_buffer_depth() -> int:
 	return _state_buffer.size()
 
-# Callable (Skater) -> int peer_id, or -1 if not registered. Set by GameManager
-# at spawn time so PuckController doesn't reach into GameManager.players.
+# Callable (Skater) -> int peer_id, or -1 if not registered.
 var _peer_id_resolver: Callable = Callable()
+# Callable () -> Array[Skater] of all active skaters. Host-only interaction detection.
+var _skater_getter: Callable = Callable()
+# Callable (Skater) -> int team_id. Used by poke-check eligibility.
+var _team_id_resolver: Callable = Callable()
 
 # ── Signals (server-side puck events, GameManager listens) ───────────────────
 signal puck_picked_up_by(peer_id: int)
@@ -39,7 +46,6 @@ func setup(assigned_puck: Puck, assigned_is_server: bool) -> void:
 	puck.set_server_mode(is_server)
 	process_physics_priority = 1  # Run after Skater.move_and_slide so blade world pos is current
 	if is_server:
-		puck.puck_picked_up.connect(_on_puck_picked_up)
 		puck.puck_released.connect(_on_puck_released)
 		puck.puck_stripped.connect(_on_puck_stripped)
 		puck.puck_touched_loose.connect(func(s: Skater) -> void: puck_touched_while_loose.emit(_peer_id_resolver.call(s)))
@@ -48,8 +54,18 @@ func setup(assigned_puck: Puck, assigned_is_server: bool) -> void:
 func set_peer_id_resolver(resolver: Callable) -> void:
 	_peer_id_resolver = resolver
 
+func set_skater_getter(getter: Callable) -> void:
+	_skater_getter = getter
+
+func set_team_id_resolver(resolver: Callable) -> void:
+	_team_id_resolver = resolver
+
 func _physics_process(delta: float) -> void:
-	if puck == null or is_server:
+	if puck == null:
+		return
+	if is_server:
+		_check_interactions()
+		_prev_puck_pos = puck.get_puck_position()
 		return
 	_current_time += delta
 	if _local_carrier_skater != null:
@@ -57,6 +73,44 @@ func _physics_process(delta: float) -> void:
 	elif not _predicting_trajectory:
 		_interpolate()
 	# During prediction, Jolt runs freely — no manual stepping needed
+
+# ── Server Interaction Detection ─────────────────────────────────────────────
+func _check_interactions() -> void:
+	if not _skater_getter.is_valid():
+		return
+	var puck_curr: Vector3 = puck.get_puck_position()
+	var skaters: Array = _skater_getter.call()
+
+	if puck.carrier != null:
+		if not puck.pickup_locked:
+			for skater: Skater in skaters:
+				if skater == puck.carrier or skater.is_ghost:
+					continue
+				var carrier_team: int = _team_id_resolver.call(puck.carrier)
+				var checker_team: int = _team_id_resolver.call(skater)
+				if not PuckCollisionRules.can_poke_check(carrier_team, checker_team):
+					continue
+				if PuckInteractionRules.check_poke(_prev_puck_pos, puck_curr,
+						skater.get_blade_contact_global(), POKE_RADIUS):
+					puck.apply_poke_check(skater)
+					break
+	else:
+		if not puck.pickup_locked:
+			for skater: Skater in skaters:
+				if skater.is_ghost or puck.is_on_cooldown(skater):
+					continue
+				if not PuckInteractionRules.check_pickup(_prev_puck_pos, puck_curr,
+						skater.get_blade_contact_global(), PICKUP_RADIUS):
+					continue
+				var puck_speed: float = puck.get_puck_velocity().length()
+				var rel_speed: float = (puck.get_puck_velocity() - skater.blade_world_velocity).length()
+				if puck_speed <= puck.pickup_max_speed or rel_speed < puck.deflect_min_speed:
+					puck.set_carrier(skater)
+					_on_puck_picked_up(skater)
+				else:
+					puck.apply_blade_deflect(skater)
+				break
+
 
 # ── Local Prediction ──────────────────────────────────────────────────────────
 func notify_local_pickup(local_skater: Skater) -> void:

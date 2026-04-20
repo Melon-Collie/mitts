@@ -46,18 +46,6 @@ func _ready() -> void:
 	max_contacts_reported = 4
 	body_entered.connect(_on_body_entered)
 
-	var pickup_zone = Area3D.new()
-	pickup_zone.name = "PickupZone"
-	pickup_zone.collision_layer = Constants.LAYER_WALLS | Constants.LAYER_BLADE_AREAS
-	pickup_zone.collision_mask  = Constants.LAYER_BLADE_AREAS
-	var pickup_shape = CollisionShape3D.new()
-	var sphere = SphereShape3D.new()
-	sphere.radius = 0.5
-	pickup_shape.shape = sphere
-	pickup_zone.add_child(pickup_shape)
-	add_child(pickup_zone)
-	pickup_zone.area_entered.connect(_on_blade_entered)
-
 	var vfx := PuckVFX.new()
 	vfx.name = "VFX"
 	add_child(vfx)
@@ -100,7 +88,7 @@ func clear_carrier() -> void:
 	freeze = false
 
 # ── Cooldown Helpers ──────────────────────────────────────────────────────────
-func _is_on_cooldown(skater: Skater) -> bool:
+func is_on_cooldown(skater: Skater) -> bool:
 	return _cooldown_timers.get(skater, 0.0) > 0.0
 
 func _set_cooldown(skater: Skater, duration: float) -> void:
@@ -110,60 +98,7 @@ func remove_skater_cooldown(skater: Skater) -> void:
 	_cooldown_timers.erase(skater)
 
 # ── Physics ───────────────────────────────────────────────────────────────────
-func _get_skater_from_area(area: Area3D) -> Skater:
-	var node: Node = area
-	while node and not node is Skater:
-		node = node.get_parent()
-	return node as Skater
-
-func _on_blade_entered(area: Area3D) -> void:
-	if not _is_server:
-		return
-	if pickup_locked:
-		return
-
-	var skater: Skater = _get_skater_from_area(area)
-	if skater == null:
-		return
-	if skater.is_ghost:
-		return
-
-	if carrier != null:
-		# Poke check — cooldown does not gate this; opponents can always attempt
-		if skater == carrier:
-			return
-		var carrier_team_id: int = -1
-		var checker_team_id: int = -1
-		if _team_resolver.is_valid():
-			carrier_team_id = _team_resolver.call(carrier)
-			checker_team_id = _team_resolver.call(skater)
-		if carrier_team_id != -1 and checker_team_id != -1:
-			if not PuckCollisionRules.can_poke_check(carrier_team_id, checker_team_id):
-				return
-		_poke_check(skater)
-		return
-
-	# Loose puck — respect per-skater cooldown
-	if _is_on_cooldown(skater):
-		return
-
-	var puck_speed: float = linear_velocity.length()
-	if puck_speed <= pickup_max_speed:
-		carrier = skater
-		puck_picked_up.emit(skater)
-		return
-
-	# Relative velocity determines catch vs deflect:
-	# moving blade backward with puck = low relative speed = catch
-	# stationary blade hit by fast puck = high relative speed = deflect
-	var relative_speed: float = (linear_velocity - skater.blade_world_velocity).length()
-	if relative_speed >= deflect_min_speed:
-		_deflect_off_blade(skater)
-	else:
-		carrier = skater
-		puck_picked_up.emit(skater)
-
-func _deflect_off_blade(skater: Skater) -> void:
+func apply_blade_deflect(skater: Skater) -> void:
 	# Use the blade face normal — perpendicular to the stick shaft in the horizontal
 	# plane — as the reflection surface. This makes the deflection angle depend on
 	# how the player has angled their blade, not just where the puck contacted.
@@ -236,7 +171,7 @@ func _body_check_strip(checker: Skater, hit_direction: Vector3) -> void:
 	puck_stripped.emit(ex_carrier)
 	puck_released.emit()
 
-func _poke_check(checker_skater: Skater) -> void:
+func apply_poke_check(checker_skater: Skater) -> void:
 	var ex_carrier: Skater = carrier  # capture before clear_carrier()
 	var fallback_dir := Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0))
 	clear_carrier()
