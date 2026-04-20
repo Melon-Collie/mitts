@@ -1,6 +1,6 @@
 class_name InputState
 
-var sequence: int = 0
+var host_timestamp: float = 0.0
 var delta: float = 1.0 / 60.0
 var move_vector: Vector2 = Vector2.ZERO
 var mouse_world_pos: Vector3 = Vector3.ZERO
@@ -16,7 +16,7 @@ var block_held: bool = false
 
 func to_array() -> Array:
 	return [
-		sequence,
+		host_timestamp,
 		delta,
 		move_vector.x,
 		move_vector.y,
@@ -36,7 +36,7 @@ func to_array() -> Array:
 
 static func from_array(data: Array) -> InputState:
 	var state := InputState.new()
-	state.sequence = data[0]
+	state.host_timestamp = data[0]
 	state.delta = data[1]
 	state.move_vector = Vector2(data[2], data[3])
 	state.mouse_world_pos = Vector3(data[4], data[5], data[6])

@@ -34,6 +34,7 @@ func gather() -> InputState:
 	state.elevation_down = _pending_elevation_down
 	state.block_held = Input.is_action_pressed("block")
 	state.mouse_world_pos = _get_mouse_world_pos(_camera)
+	state.host_timestamp = NetworkManager.estimated_host_time()
 	# Clear pending flags after gather
 	_pending_shoot_pressed = false
 	_pending_slap_pressed = false

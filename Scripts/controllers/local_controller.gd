@@ -9,7 +9,6 @@ extends SkaterController
 var _gatherer: LocalInputGatherer = null
 var _current_input: InputState = InputState.new()
 var _input_history: Array[InputState] = []
-var _next_sequence: int = 0
 var _correction_offset: Vector3 = Vector3.ZERO
 var _correction_step: Vector3 = Vector3.ZERO
 var _team_id: int = -1  # set at setup; needed for client-side offside prediction
@@ -67,9 +66,7 @@ func _physics_process(delta: float) -> void:
 			skater.global_position -= _correction_step
 			_correction_offset -= _correction_step
 	_current_input = _gatherer.gather()
-	_current_input.sequence = _next_sequence
 	_current_input.delta = delta
-	_next_sequence += 1
 	_input_history.append(_current_input)
 	# Cap history size to prevent unbounded growth
 	if _input_history.size() > 480:  # 2 seconds at 240Hz
@@ -85,7 +82,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 		# and would fight it if applied here.
 		return
 	_input_history = _input_history.filter(
-		func(i: InputState) -> bool: return i.sequence > server_state.last_processed_sequence
+		func(i: InputState) -> bool: return i.host_timestamp > server_state.last_processed_host_timestamp
 	)
 	if not ReconciliationRules.skater_needs_reconcile(
 			skater.global_position, skater.velocity,

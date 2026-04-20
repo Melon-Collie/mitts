@@ -183,7 +183,7 @@ var _blade_tracked_local: Vector2 = Vector2.ZERO  # rate-limited blade target in
 var _prev_blade_dir: Vector3 = Vector3.ZERO
 var _slapper_charge_timer: float = 0.0
 var _dash_cooldown_timer: float = 0.0
-var last_processed_sequence: int = 0
+var last_processed_host_timestamp: float = 0.0
 var has_puck: bool = false
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
@@ -250,7 +250,7 @@ func get_network_state() -> SkaterNetworkState:
 	state.top_hand_position = skater.get_top_hand_position()
 	state.upper_body_rotation_y = skater.get_upper_body_rotation()
 	state.facing = skater.get_facing()
-	state.last_processed_sequence = last_processed_sequence
+	state.last_processed_host_timestamp = last_processed_host_timestamp
 	state.is_ghost = skater.is_ghost
 	return state
 
