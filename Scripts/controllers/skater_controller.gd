@@ -182,6 +182,7 @@ var _slapper_charge_timer: float = 0.0
 var _dash_cooldown_timer: float = 0.0
 var last_processed_host_timestamp: float = 0.0
 var has_puck: bool = false
+var is_replaying: bool = false
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> void:
@@ -260,6 +261,8 @@ signal puck_release_requested(direction: Vector3, power: float)
 signal one_timer_release_requested(direction: Vector3, power: float)
 
 func _do_release(direction: Vector3, power: float) -> void:
+	if is_replaying:
+		return
 	puck_release_requested.emit(direction, power)
 
 # ── Puck Signals ──────────────────────────────────────────────────────────────

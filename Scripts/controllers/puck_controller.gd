@@ -21,6 +21,7 @@ var _current_time: float = 0.0
 var _prev_puck_pos: Vector3 = Vector3.ZERO
 var _state_buffer: Array[BufferedPuckState] = []
 var _predicting_trajectory: bool = false
+var _pending_local_release: bool = false  # true from local release until host confirms carrier == -1
 var is_extrapolating: bool = false
 
 func get_buffer_depth() -> int:
@@ -148,11 +149,13 @@ func notify_local_pickup(local_skater: Skater) -> void:
 func notify_local_release(direction: Vector3, power: float) -> void:
 	_local_carrier_skater = null
 	_predicting_trajectory = true
+	_pending_local_release = true
 	puck.set_client_prediction_mode(true)
 	puck.set_puck_velocity(direction * power)
 	_state_buffer.clear()
 
 func notify_remote_carrier_changed(new_carrier_peer_id: int) -> void:
+	_pending_local_release = false
 	# Guard: don't kill our own trajectory prediction — we initiated the release
 	# locally and are soft-reconciling via world state.
 	if new_carrier_peer_id == -1 and _predicting_trajectory:
@@ -165,6 +168,7 @@ func notify_remote_carrier_changed(new_carrier_peer_id: int) -> void:
 func notify_local_puck_dropped() -> void:
 	_local_carrier_skater = null
 	_predicting_trajectory = false
+	_pending_local_release = false
 	puck.set_client_prediction_mode(false)
 	_state_buffer.clear()
 
@@ -239,10 +243,16 @@ func apply_state(state: PuckNetworkState) -> void:
 		return  # Puck is pinned to local blade; interpolation isn't running
 	if _predicting_trajectory:
 		if state.carrier_peer_id != -1:
-			# Someone picked it up — hand back to buffered interpolation
+			if _pending_local_release:
+				# Stale world state — host hasn't confirmed our release yet.
+				# Keep predicting; wait for the authoritative carrier_changed RPC.
+				return
+			# A different player picked it up — end trajectory prediction.
 			_predicting_trajectory = false
 			puck.set_client_prediction_mode(false)
 		else:
+			if _pending_local_release:
+				_pending_local_release = false  # Host confirmed the release
 			_reconcile(state)
 			return  # Don't buffer during prediction; interpolation isn't running
 	var buffered := BufferedPuckState.new()
