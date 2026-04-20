@@ -49,6 +49,7 @@ var _phase_coord: PhaseCoordinator = null
 var _swap_coord: SlotSwapCoordinator = null
 var _telemetry: NetworkTelemetry = null
 var _debug_overlay: NetworkDebugOverlay = null
+var _state_buffer_manager: StateBufferManager = null
 
 
 func _ready() -> void:
@@ -100,6 +101,8 @@ func _process(delta: float) -> void:
 func _physics_process(delta: float) -> void:
 	if not NetworkManager.is_host or puck == null or _state_machine == null:
 		return
+	if _state_buffer_manager != null and puck_controller != null:
+		_state_buffer_manager.capture(_registry, puck_controller, goalie_controllers)
 	_update_host_puck_tracking()
 	_apply_ghost_state()
 	_shot_tracker.tick(delta)
@@ -197,6 +200,8 @@ func on_player_disconnected(peer_id: int) -> void:
 	NetworkManager.unregister_remote_controller(peer_id)
 	if puck != null:
 		puck.remove_skater_cooldown(record.skater)
+	if _state_buffer_manager != null:
+		_state_buffer_manager.remove_player(peer_id)
 	_registry.remove(peer_id)
 
 
@@ -306,9 +311,12 @@ func _wire_subsystems() -> void:
 	_registry.player_left.connect(player_left.emit)
 	_registry.player_added.connect(_on_registry_player_added)
 
+	_state_buffer_manager = StateBufferManager.new()
+	_state_buffer_manager.setup(_registry, goalie_controllers.size())
+
 	_codec = WorldStateCodec.new()
 	_codec.setup(_registry, _state_machine,
-			get_puck, _get_puck_controller, _get_goalie_controllers)
+			get_puck, _get_puck_controller, _get_goalie_controllers, _state_buffer_manager)
 	_codec.phase_changed.connect(_on_remote_phase_changed)
 	_codec.game_over_triggered.connect(game_over.emit)
 	_codec.period_changed.connect(period_changed.emit)
@@ -374,10 +382,12 @@ func _on_player_spawned(record: PlayerRecord) -> void:
 	)
 
 
-func _on_registry_player_added(_record: PlayerRecord) -> void:
+func _on_registry_player_added(record: PlayerRecord) -> void:
 	stats_updated.emit()
 	if NetworkManager.is_host:
 		_sync_stats_to_clients()
+	if _state_buffer_manager != null:
+		_state_buffer_manager.add_player(record.peer_id)
 
 
 # ── Puck / Puck controller signal handlers ───────────────────────────────────
@@ -615,6 +625,7 @@ func on_scene_exit() -> void:
 	puck_controller = null
 	_registry = null
 	_codec = null
+	_state_buffer_manager = null
 	_shot_tracker = null
 	_phase_coord = null
 	_swap_coord = null

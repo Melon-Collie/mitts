@@ -36,8 +36,9 @@ const STATS_PLAYER_RECORD_SIZE: int = 5  # peer_id, G, A, SOG, HITS
 var _registry: PlayerRegistry = null
 var _state_machine: GameStateMachine = null
 var _puck_getter: Callable = Callable()
-var _puck_controller_getter: Callable = Callable()
+var _puck_controller_getter: Callable = Callable()  # decode side only
 var _goalie_controllers_getter: Callable = Callable()
+var _state_buffer: StateBufferManager = null
 
 
 func setup(
@@ -45,29 +46,29 @@ func setup(
 		state_machine: GameStateMachine,
 		puck_getter: Callable,
 		puck_controller_getter: Callable,
-		goalie_controllers_getter: Callable) -> void:
+		goalie_controllers_getter: Callable,
+		state_buffer: StateBufferManager) -> void:
 	_registry = registry
 	_state_machine = state_machine
 	_puck_getter = puck_getter
 	_puck_controller_getter = puck_controller_getter
 	_goalie_controllers_getter = goalie_controllers_getter
+	_state_buffer = state_buffer
 
 
 # ── World state ──────────────────────────────────────────────────────────────
 
 func encode_world_state() -> Array:
-	var puck_controller: PuckController = _puck_controller_getter.call() as PuckController
-	if puck_controller == null or _state_machine == null:
+	if _state_buffer == null or not _state_buffer.is_ready() or _state_machine == null:
 		return []
 	var state: Array = []
 	for peer_id: int in _registry.all():
-		var record: PlayerRecord = _registry.get_record(peer_id)
 		state.append(peer_id)
-		state.append(record.controller.get_network_state().to_array())
-	state.append_array(puck_controller.get_state().to_array())
-	var goalie_controllers: Array = _goalie_controllers_getter.call()
-	for gc: GoalieController in goalie_controllers:
-		state.append_array(gc.get_state().to_array())
+		state.append(_state_buffer.latest_skater_state(peer_id).to_array())
+	state.append_array(_state_buffer.latest_puck_state().to_array())
+	var goalie_count: int = _goalie_controllers_getter.call().size()
+	for i: int in goalie_count:
+		state.append_array(_state_buffer.latest_goalie_state(i).to_array())
 	state.append(_state_machine.scores[0])
 	state.append(_state_machine.scores[1])
 	state.append(_state_machine.current_phase)
