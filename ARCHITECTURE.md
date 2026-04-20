@@ -119,10 +119,10 @@ Authoritative host. The host runs all physics. Clients predict locally and recon
 3. **Interpolation** — buffer server snapshots and interpolate with the same 100ms delay as skaters. Position only — velocity is not applied to the frozen body (`_apply_state_to_puck` is position-only).
 
 **Carrier transitions:**
-- Pickup: server detects via physics signal → reliable RPC to the specific client who picked up the puck → `on_puck_picked_up_network()` on their LocalController
-- Release: client predicts immediately (state machine transitions, trajectory prediction begins) → reliable RPC to server to execute physics
-- Poke check (strip): server detects opposing blade contact while `carrier != null` → clears carrier, launches puck via `_poke_check()` → `puck_stripped` signal → reliable RPC to victim client (`notify_puck_stolen`) → victim calls `on_puck_released_network()` + `notify_local_puck_dropped()` to clear carry state and drop back to interpolation
-- Goal scored: server captures carrier peer_id before `puck.drop()` → sends `notify_goal` (reliable, all peers) and `notify_puck_dropped` (reliable, carrier only) as separate RPCs → carrier client clears state in `on_carrier_puck_dropped()`; other clients are unaffected. Decoupled so `notify_goal` isn't responsible for carrier cleanup.
+- Pickup: server detects via physics signal → reliable `notify_puck_picked_up` RPC to the carrier → `on_puck_picked_up_network()` on their LocalController + `notify_local_pickup(skater)` pins puck to blade. Simultaneously, reliable `notify_carrier_changed(peer_id)` broadcast to **all** peers so non-carrier clients exit trajectory-prediction mode regardless of unreliable world-state delivery.
+- Release: client predicts immediately (state machine transitions, trajectory prediction begins) → reliable RPC to server to execute physics. Server fires `notify_carrier_changed(-1)` to all peers; carrier's own handler ignores it (guards against killing its own trajectory prediction).
+- Poke check (strip): server detects opposing blade contact while `carrier != null` → clears carrier, launches puck via `_poke_check()` → `puck_stripped` signal → reliable RPC to victim client (`notify_puck_stolen`) → victim calls `on_puck_released_network()` + `notify_local_puck_dropped()` to clear carry state and drop back to interpolation.
+- Goal scored: server captures carrier peer_id before `puck.drop()` → sends `notify_goal` (reliable, all peers) and `notify_puck_dropped` (reliable, carrier only) as separate RPCs → carrier client clears state in `on_carrier_puck_dropped()`; `puck.drop()` also fires `puck_released` → `notify_carrier_changed(-1)` broadcast. Decoupled so `notify_goal` isn't responsible for carrier cleanup.
 
 `_carrier_peer_id` on clients is managed exclusively by `notify_local_pickup()` / `notify_local_release()` in `PuckController`. It is intentionally never updated from world state — unreliable packet ordering would cause it to conflict with locally-predicted transitions.
 
@@ -327,6 +327,7 @@ Instead of stoppages, offsides and icing are enforced via a **ghost mode** — o
 | 11 | In-game team/position swap | Done |
 | 12 | Pre-game lobby (slot picking + rule config) + in-game "Return to Lobby" | Done |
 | 13 | Characters + abilities | Deferred — revisit when game feel is right |
+| 14 | Networking refactor Phase 1 (bug fixes + reconcile smoothing) | Done |
 
 ## Distribution
 
