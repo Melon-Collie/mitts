@@ -38,17 +38,12 @@ static func record_reconcile(delta_m: float) -> void:
 	instance._reconcile_mag_sum += delta_m
 	instance._reconcile_mag_n += 1
 
-static func record_extrapolation() -> void:
-	if instance: instance._extrapolation_count += 1
-
-static func record_buffer_depth_skater(depth: int) -> void:
-	if instance: instance.buffer_depth_skater = depth
-
-static func record_buffer_depth_puck(depth: int) -> void:
-	if instance: instance.buffer_depth_puck = depth
-
-static func record_buffer_depth_goalie(depth: int) -> void:
-	if instance: instance.buffer_depth_goalie = depth
+func observe_actors(skater_buf: int, puck_buf: int, goalie_buf: int, extrapolating: bool) -> void:
+	buffer_depth_skater = skater_buf
+	buffer_depth_puck = puck_buf
+	buffer_depth_goalie = goalie_buf
+	if extrapolating:
+		_extrapolation_count += 1
 
 # ── Tick — called by GameManager._process each frame ─────────────────────────
 func tick(delta: float) -> void:

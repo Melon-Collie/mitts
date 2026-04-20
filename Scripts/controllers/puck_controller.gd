@@ -16,6 +16,10 @@ var _local_carrier_skater: Skater = null  # client-side: local skater while carr
 var _current_time: float = 0.0
 var _state_buffer: Array[BufferedPuckState] = []
 var _predicting_trajectory: bool = false
+var is_extrapolating: bool = false
+
+func get_buffer_depth() -> int:
+	return _state_buffer.size()
 
 # Callable (Skater) -> int peer_id, or -1 if not registered. Set by GameManager
 # at spawn time so PuckController doesn't reach into GameManager.players.
@@ -168,12 +172,11 @@ func _interpolate() -> void:
 	var render_time: float = _current_time - interpolation_delay
 	var bracket: BufferedStateInterpolator.BracketResult = BufferedStateInterpolator.find_bracket(
 			_state_buffer, render_time)
-	NetworkTelemetry.record_buffer_depth_puck(_state_buffer.size())
+	is_extrapolating = bracket != null and bracket.is_extrapolating
 	if bracket == null:
 		return
 	var interpolated := PuckNetworkState.new()
 	if bracket.is_extrapolating:
-		NetworkTelemetry.record_extrapolation()
 		var dt: float = minf(bracket.extrapolation_dt, extrapolation_max_ms / 1000.0)
 		var newest: PuckNetworkState = bracket.to_state
 		interpolated.position = newest.position + newest.velocity * dt

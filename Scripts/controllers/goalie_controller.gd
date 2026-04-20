@@ -91,6 +91,10 @@ var _puck_approach_velocity: float = 0.0
 # ── Client Interpolation ──────────────────────────────────────────────────────
 var _current_time: float = 0.0
 var _state_buffer: Array[BufferedGoalieState] = []
+var is_extrapolating: bool = false
+
+func get_buffer_depth() -> int:
+	return _state_buffer.size()
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: float, assigned_is_server: bool) -> void:
@@ -455,12 +459,11 @@ func _interpolate() -> void:
 	var render_time: float = _current_time - interpolation_delay
 	var bracket: BufferedStateInterpolator.BracketResult = BufferedStateInterpolator.find_bracket(
 			_state_buffer, render_time)
-	NetworkTelemetry.record_buffer_depth_goalie(_state_buffer.size())
+	is_extrapolating = bracket != null and bracket.is_extrapolating
 	if bracket == null:
 		return
 	var interpolated := GoalieNetworkState.new()
 	if bracket.is_extrapolating:
-		NetworkTelemetry.record_extrapolation()
 		# GoalieNetworkState has no velocity field — hold the newest known state.
 		var newest: GoalieNetworkState = bracket.to_state
 		interpolated.position_x = newest.position_x

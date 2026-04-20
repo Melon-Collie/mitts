@@ -85,6 +85,7 @@ func _wire_network_signals() -> void:
 func _process(delta: float) -> void:
 	if _telemetry != null:
 		_telemetry.tick(delta)
+		_observe_telemetry()
 	if not NetworkManager.is_host or _state_machine == null:
 		return
 	if _state_machine.tick(delta):
@@ -531,6 +532,28 @@ func _on_remote_phase_changed(new_phase: GamePhase.Phase) -> void:
 func _on_clock_updated_externally(t: float) -> void:
 	_last_emitted_clock_secs = -1
 	clock_updated.emit(t)
+
+
+func _observe_telemetry() -> void:
+	var skater_buf: int = 0
+	var extrapolating: bool = false
+	if _registry != null:
+		for peer_id: int in _registry.all():
+			var r: PlayerRecord = _registry.get_record(peer_id)
+			if r == null or r.is_local:
+				continue
+			var rc := r.controller as RemoteController
+			if rc != null:
+				skater_buf = rc.get_buffer_depth()
+				extrapolating = extrapolating or rc.is_extrapolating
+	var puck_buf: int = puck_controller.get_buffer_depth() if puck_controller != null else 0
+	var goalie_buf: int = 0
+	for gc: GoalieController in goalie_controllers:
+		goalie_buf = gc.get_buffer_depth()
+		extrapolating = extrapolating or gc.is_extrapolating
+	if puck_controller != null:
+		extrapolating = extrapolating or puck_controller.is_extrapolating
+	_telemetry.observe_actors(skater_buf, puck_buf, goalie_buf, extrapolating)
 
 
 func _sync_stats_to_clients() -> void:
