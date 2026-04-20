@@ -63,6 +63,7 @@ func notify_local_pickup(local_skater: Skater) -> void:
 	_local_carrier_skater = local_skater
 	_predicting_trajectory = false
 	puck.set_client_prediction_mode(false)
+	_state_buffer.clear()
 
 func notify_local_release(direction: Vector3, power: float) -> void:
 	_local_carrier_skater = null
@@ -154,6 +155,8 @@ func get_state() -> PuckNetworkState:
 func apply_state(state: PuckNetworkState) -> void:
 	if is_server:
 		return
+	if _local_carrier_skater != null:
+		return  # Puck is pinned to local blade; interpolation isn't running
 	if _predicting_trajectory:
 		if state.carrier_peer_id != -1:
 			# Someone picked it up — hand back to buffered interpolation
@@ -161,6 +164,7 @@ func apply_state(state: PuckNetworkState) -> void:
 			puck.set_client_prediction_mode(false)
 		else:
 			_reconcile(state)
+			return  # Don't buffer during prediction; interpolation isn't running
 	var buffered := BufferedPuckState.new()
 	buffered.timestamp = _current_time
 	buffered.state = state

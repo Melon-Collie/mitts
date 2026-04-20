@@ -13,6 +13,7 @@ var _next_sequence: int = 0
 var _correction_offset: Vector3 = Vector3.ZERO
 var _correction_step: Vector3 = Vector3.ZERO
 var _team_id: int = -1  # set at setup; needed for client-side offside prediction
+var last_reconcile_error: float = 0.0
 
 func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> void:
 	camera = $Camera3D
@@ -103,7 +104,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	for input in _input_history:
 		_process_input(input, input.delta)
 	var new_error: Vector3 = pre_snap - skater.global_position
-	NetworkTelemetry.record_reconcile(new_error.length())
+	last_reconcile_error = new_error.length()
 	if not new_error.is_zero_approx():
 		_correction_offset += new_error
 		_correction_step = _correction_offset / correction_frames
