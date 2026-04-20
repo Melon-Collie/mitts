@@ -77,12 +77,63 @@ The exact set of metrics is decided during implementation — this is a starting
 
 **Goal:** Allow the developer to test all subsequent phases locally as if running on real ping, without needing a second machine.
 
-**Approach:** A debug-only shim in `NetworkManager` that intercepts outgoing and incoming packets and holds them in a queue for a configurable delay before processing. Configurable via `@export` vars (not behind a build flag — just set to zero in production use):
+**Approach:** A new autoload singleton `NetworkSimManager` (`Scripts/networking/network_sim.gd`) owns a pending-packet queue and processes it each frame. `NetworkManager` wraps its send sites to route through the sim when enabled. Because the delay is applied independently at each receive site, both directions of the loopback are delayed separately, properly simulating a realistic round-trip.
 
-- `sim_lag_one_way_ms: int = 0` — added delay in each direction (set to 50 for 100ms RTT simulation)
-- `sim_packet_loss_pct: float = 0.0` — probability of silently dropping any given packet (0.0–1.0)
+**New file — `Scripts/networking/network_sim.gd`:**
 
-Because this runs on loopback, the delay must be applied in both directions independently to properly simulate a realistic network round-trip. The telemetry overlay from Phase 2 should visibly reflect the simulated conditions.
+```gdscript
+class_name NetworkSimManager
+extends Node
+# Autoload singleton.
+
+var enabled: bool = false
+var delay_ms: float = 0.0   # one-way; set to 50 for ~100 ms RTT simulation
+var jitter_ms: float = 0.0  # +/- uniform jitter added to each packet
+var loss_pct: float = 0.0   # 0–100; unreliable packets only
+
+class PendingPacket:
+    var fire_time: float
+    var callable: Callable
+    var args: Array
+
+var _pending: Array[PendingPacket] = []
+
+func send(c: Callable, args: Array, reliable: bool) -> void:
+    if not enabled:
+        c.callv(args); return
+    if not reliable and randf() * 100.0 < loss_pct:
+        return  # dropped
+    var jitter := randf_range(-jitter_ms, jitter_ms)
+    var d := maxf((delay_ms + jitter) / 1000.0, 0.0)
+    if d <= 0.0:
+        c.callv(args); return
+    var p := PendingPacket.new()
+    p.fire_time = Time.get_ticks_msec() / 1000.0 + d
+    p.callable = c
+    p.args = args
+    _pending.append(p)
+
+func _process(_delta: float) -> void:
+    if _pending.is_empty(): return
+    _pending.sort_custom(func(a, b): return a.fire_time < b.fire_time)
+    var now := Time.get_ticks_msec() / 1000.0
+    while not _pending.is_empty() and _pending[0].fire_time <= now:
+        var p: PendingPacket = _pending.pop_front()
+        p.callable.callv(p.args)
+```
+
+**`NetworkManager` integration:** At each receive site, wrap the payload dispatch through `NetworkSimManager.send`. Example for world state:
+
+```gdscript
+@rpc("authority", "unreliable_ordered")
+func receive_world_state(state: Array) -> void:
+    if is_host: return
+    NetworkSimManager.send(world_state_received.emit, [state], false)
+```
+
+Same pattern for `receive_input` on the host side (`reliable: false`). Reliable RPCs pass `true` for the `reliable` flag so packet loss is never simulated for them.
+
+With `NetworkSimManager.enabled = false`, the only overhead is a single bool check per RPC — no allocations, no timers.
 
 **Review gate:** Before moving to Phase 4, verify with the telemetry overlay that simulated lag produces the expected degradation in buffer depth, reconcile frequency, and starvation events — and that the Phase 1 fixes hold up under those conditions.
 
