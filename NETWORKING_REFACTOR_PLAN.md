@@ -212,7 +212,7 @@ With `NetworkSimManager.enabled = false`, the only overhead is a single bool che
 
 ## Phase 6 — Interaction Logic Refactor
 
-**Goal:** All interaction detection (puck pickup, poke check, body check, body block, deflection) is moved from Godot physics callbacks (`Area3D` overlaps in `puck.gd`) into the domain layer as pure geometric functions operating on state snapshots. This creates a single code path usable by both real-time host physics and lag-compensated rewind.
+**Goal:** All interaction detection (puck pickup, poke check, body check, body block, deflection, and goalie contact) is moved from Godot physics callbacks (`Area3D` overlaps in `puck.gd`) into the domain layer as pure geometric functions operating on state snapshots. This creates a single consistent code path for all interactions. Player interactions are additionally usable by lag-compensated rewind (Phase 7); goalie contact is host-only AI with no client claims, so it benefits from the consistency and testability but is not lag-compensated.
 
 **Tunneling:** Interaction checks use **swept sphere** geometry (ray-sphere intersection from previous position to current position), not point-in-sphere. This provides tunneling protection equivalent to CCD for interaction zones. Jolt CCD remains enabled on the puck for wall/rink geometry collisions.
 
@@ -222,6 +222,7 @@ New pure static functions, e.g.:
 - `check_pickup(puck_prev: Vector3, puck_curr: Vector3, blade_pos: Vector3, pickup_radius: float) -> bool`
 - `check_poke(puck_prev: Vector3, puck_curr: Vector3, blade_prev: Vector3, blade_curr: Vector3, poke_radius: float) -> bool`
 - `check_body_contact(puck_prev: Vector3, puck_curr: Vector3, skater_pos: Vector3, body_radius: float) -> ContactResult`
+- `check_goalie_contact(puck_prev: Vector3, puck_curr: Vector3, goalie_body_positions: Array[Vector3], contact_radius: float) -> bool`
 
 All take state values (positions, velocities) — no scene node references. All are unit-testable.
 
