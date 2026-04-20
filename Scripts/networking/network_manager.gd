@@ -231,18 +231,24 @@ func get_peer_number(peer_id: int) -> int:
 @rpc("any_peer", "unreliable_ordered")
 func receive_input(data: Array) -> void:
 	var sender_id: int = multiplayer.get_remote_sender_id()
-	var state: InputState = InputState.from_array(data)
-	if _remote_controllers.has(sender_id):
-		_remote_controllers[sender_id].receive_input(state)
-	else:
-		push_warning("no remote controller for peer %d" % sender_id)
+	NetworkSimManager.send(
+		func(d: Array, sid: int) -> void:
+			var state: InputState = InputState.from_array(d)
+			if _remote_controllers.has(sid):
+				_remote_controllers[sid].receive_input(state)
+			else:
+				push_warning("no remote controller for peer %d" % sid),
+		[data, sender_id], false)
 
 @rpc("authority", "unreliable_ordered")
 func receive_world_state(state: Array) -> void:
 	if is_host:
 		return
-	NetworkTelemetry.record_world_state()
-	world_state_received.emit(state)
+	NetworkSimManager.send(
+		func(s: Array) -> void:
+			NetworkTelemetry.record_world_state()
+			world_state_received.emit(s),
+		[state], false)
 
 @rpc("authority", "reliable")
 func assign_player_slot(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color) -> void:
