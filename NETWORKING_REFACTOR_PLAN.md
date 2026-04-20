@@ -19,7 +19,7 @@ These are targeted, self-contained fixes. Each should be reviewed and tested ind
 
 ### 1a. Input sequence never incremented
 
-**File:** `Scripts/input/local_input_gatherer.gd` (or `Scripts/controllers/local_controller.gd`)
+**File:** `Scripts/controllers/local_controller.gd` — add `_next_sequence: int`, stamp `_current_input.sequence` immediately after `_gatherer.gather()` and before storing it in `_input_history`.
 **Problem:** `InputState.sequence` defaults to `0` and is never incremented. Every input is sent with `sequence = 0`. The reconcile filter in `local_controller.gd:68` — `i.sequence > server_state.last_processed_sequence` — uses this to determine which inputs to replay after a reconcile. With all sequences at 0, the filter evaluates `0 > 0` (false) on every reconcile, so the entire input history is discarded and no replay happens.
 **Fix:** Maintain a monotonically incrementing counter (e.g. `_next_sequence: int`) and stamp each `InputState` before it is pushed to the history buffer and sent to the host.
 
