@@ -34,9 +34,20 @@ func _process(_delta: float) -> void:
 	if not _showing or NetworkTelemetry.instance == null:
 		return
 	var t: NetworkTelemetry = NetworkTelemetry.instance
+	var sim_label: String
+	if NetworkSimManager.enabled:
+		sim_label = "preset %d  (%.0fms + ±%.0fms jitter  %.0f%% loss)" % [
+			NetworkSimManager.current_preset,
+			NetworkSimManager.delay_ms,
+			NetworkSimManager.jitter_ms,
+			NetworkSimManager.loss_pct,
+		]
+	else:
+		sim_label = "off  (keys 0–5 to set preset)"
 	_label.text = (
 		"── Net Debug (F3 to close) ──────\n"
 		+ "RTT:           %.0f ms%s\n" % [NetworkManager.get_rtt_ms(), "" if NetworkManager.is_clock_ready() else " (syncing)"]
+		+ "Sim:           %s\n" % sim_label
 		+ "WS recv:       %.1f Hz\n" % t.world_state_hz
 		+ "Input send:    %.1f Hz\n" % t.input_hz
 		+ "Reconcile:     %.1f/s   avg %.3f m\n" % [t.reconcile_per_sec, t.reconcile_magnitude_avg]
