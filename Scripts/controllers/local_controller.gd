@@ -12,6 +12,8 @@ var _team_id: int = -1  # set at setup; needed for client-side offside predictio
 var last_reconcile_error: float = 0.0
 var _claim_cooldown: float = 0.0
 var _last_blade_pos: Vector3 = Vector3.ZERO
+var _body_check_impulse: Vector3 = Vector3.ZERO
+var _body_check_impulse_timestamp: float = 0.0
 const _BLADE_JUMP_THRESHOLD: float = 0.05
 
 func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> void:
@@ -22,6 +24,10 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	camera.skater = assigned_skater
 	camera.puck = assigned_puck
 	camera.local_controller = self
+	skater.body_checked_player.connect(
+		func(_v: Skater, _f: float, _d: Vector3) -> void:
+			_body_check_impulse = -_d * (_f / skater.weight) * skater.body_check_restitution
+			_body_check_impulse_timestamp = _current_input.host_timestamp)
 
 # Called after setup() to provide the local player's team — needed for
 # client-side offside prediction. Separate from setup() because GDScript
@@ -35,14 +41,16 @@ func set_goal_context(goal_0: HockeyGoal, goal_1: HockeyGoal, carrier_team_resol
 func get_current_input() -> InputState:
 	return _current_input
 
-func get_input_batch() -> Array[InputState]:
-	var start: int = maxi(_input_history.size() - 12, 0)
+func get_input_batch(frames: int = 12) -> Array[InputState]:
+	var start: int = maxi(_input_history.size() - frames, 0)
 	return _input_history.slice(start)
 
 func teleport_to(pos: Vector3) -> void:
 	super.teleport_to(pos)
 	_input_history.clear()
 	_last_blade_pos = Vector3.ZERO
+	_body_check_impulse = Vector3.ZERO
+	_body_check_impulse_timestamp = 0.0
 
 func _physics_process(delta: float) -> void:
 	if skater == null or puck == null or _gatherer == null:
@@ -85,8 +93,16 @@ func _physics_process(delta: float) -> void:
 
 func reconcile(server_state: SkaterNetworkState) -> void:
 	var pre_reconcile_blade: Vector3 = skater.get_blade_contact_global()
-	# Always apply authoritative ghost state from server (covers icing + offsides)
-	skater.set_ghost(server_state.is_ghost)
+	# Apply authoritative ghost state. Server ghost=true always wins. Server
+	# ghost=false is held back if the client is still locally predicting offside —
+	# the broadcast was encoded before the host computed the transition and is stale.
+	if server_state.is_ghost:
+		skater.set_ghost(true)
+	elif skater.is_ghost:
+		var is_carrier: bool = puck != null and puck.carrier == skater
+		var puck_z: float = puck.global_position.z if puck != null else 0.0
+		if not InfractionRules.is_offside(skater.global_position.z, _team_id, puck_z, is_carrier):
+			skater.set_ghost(false)
 	if _game_state.is_movement_locked():
 		# Dead-puck phase: don't reconcile. on_faceoff_positions is the reliable
 		# source of truth for teleport positions; world-state snapshots may lag behind
@@ -95,6 +111,10 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	_input_history = _input_history.filter(
 		func(i: InputState) -> bool: return i.host_timestamp > server_state.last_processed_host_timestamp
 	)
+	# Clear captured body check impulse once the server has processed past it.
+	if _body_check_impulse_timestamp > 0.0 and server_state.last_processed_host_timestamp >= _body_check_impulse_timestamp:
+		_body_check_impulse = Vector3.ZERO
+		_body_check_impulse_timestamp = 0.0
 	if not ReconciliationRules.skater_needs_reconcile(
 			skater.global_position, skater.velocity,
 			server_state.position, server_state.velocity,
@@ -120,8 +140,12 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	if not _input_history.is_empty():
 		_prev_mouse_screen_pos = _input_history[0].mouse_screen_pos
 	is_replaying = true
+	var _impulse_applied: bool = false
 	for input in _input_history:
 		_process_input(input, input.delta)
+		if not _impulse_applied and _body_check_impulse_timestamp > 0.0 and input.host_timestamp >= _body_check_impulse_timestamp:
+			skater.velocity += _body_check_impulse
+			_impulse_applied = true
 		skater.global_position += skater.velocity * input.delta
 	is_replaying = false
 	# Restore shot-state fields that replay must not transition past.

@@ -336,6 +336,7 @@ Instead of stoppages, offsides and icing are enforced via a **ghost mode** — o
 | 19 | Networking refactor Phase 6 (swept sphere interaction detection; puck pickup/poke/deflect moved to domain layer) | Done |
 | 20 | Networking refactor Phase 7 (input redundancy, lag-compensated pickup claims, state-machine save/restore in reconcile, blade telemetry, remove gradual correction) | Done |
 | 21 | Netcode fixes (segment-segment pickup/poke detection, blade_contact_world lag-comp path, reconcile mouse-seed + server shot authority, physics-thread contest window, latest_rtt_ms for rewind, blade/hand extrapolation, input queue depth cap) | Done |
+| 22 | Netcode improvements I6–I8 (PackedByteArray quantized world state ~60% bandwidth reduction; rewind-based body check hit crediting + body check impulse replay in reconcile; lag-compensated shot release using latest blade position + kinematic RTT/2 advance) | Done |
 
 ## Distribution
 

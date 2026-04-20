@@ -142,6 +142,8 @@ func _physics_process(delta: float) -> void:
 		return
 	if not is_server:
 		_current_time += delta
+		interpolation_delay = move_toward(
+			interpolation_delay, NetworkManager.get_target_interpolation_delay(), 0.005 * delta)
 		_interpolate()
 		return
 	_update_tracking(delta)

@@ -31,6 +31,9 @@ var buffer_depth_goalie: int = 0
 var blade_jump_per_sec: float = 0.0
 var blade_jump_mag_avg: float = 0.0
 var blade_reconcile_mag_avg: float = 0.0
+var input_queue_depth: int = 0
+var packet_loss_pct: float = 0.0
+var jitter_p95_ms: float = 0.0
 
 # ── Static call sites (no-op when not in a game session) ─────────────────────
 static func record_world_state() -> void:
@@ -38,6 +41,15 @@ static func record_world_state() -> void:
 
 static func record_input_sent() -> void:
 	if instance: instance._input_count += 1
+
+static func record_queue_depth(depth: int) -> void:
+	if instance: instance.input_queue_depth = depth
+
+static func record_packet_loss(pct: float) -> void:
+	if instance: instance.packet_loss_pct = pct
+
+static func record_jitter_p95(ms: float) -> void:
+	if instance: instance.jitter_p95_ms = ms
 
 static func record_reconcile(delta_m: float) -> void:
 	if instance == null:

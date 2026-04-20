@@ -13,6 +13,13 @@ var is_extrapolating: bool = false
 func get_buffer_depth() -> int:
 	return _state_buffer.size()
 
+func get_queue_depth() -> int:
+	return _input_queue.size()
+
+func apply_ghost_rpc(is_ghost: bool) -> void:
+	if skater != null:
+		skater.set_ghost(is_ghost)
+
 func _physics_process(delta: float) -> void:
 	if skater == null:
 		return
@@ -20,6 +27,8 @@ func _physics_process(delta: float) -> void:
 		_drive_from_input(delta)
 	else:
 		_current_time += delta
+		interpolation_delay = move_toward(
+			interpolation_delay, NetworkManager.get_target_interpolation_delay(), 0.005 * delta)
 		_interpolate()
 		skater.update_stick_mesh()
 

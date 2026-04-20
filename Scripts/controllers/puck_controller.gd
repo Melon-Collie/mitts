@@ -70,6 +70,8 @@ func _physics_process(delta: float) -> void:
 		_prev_puck_pos = puck.get_puck_position()
 		return
 	_current_time += delta
+	interpolation_delay = move_toward(
+		interpolation_delay, NetworkManager.get_target_interpolation_delay(), 0.005 * delta)
 	if _local_carrier_skater != null:
 		_apply_local_carrier_position()
 	elif not _predicting_trajectory:

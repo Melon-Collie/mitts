@@ -15,9 +15,10 @@ signal remote_skater_spawn_requested(peer_id: int, team_slot: int, team_id: int,
 signal existing_players_synced(player_data: Array)
 signal local_puck_pickup_confirmed
 signal local_puck_stolen
-signal remote_puck_release_received(direction: Vector3, power: float)
+signal remote_puck_release_received(direction: Vector3, power: float, shooter_peer_id: int, host_timestamp: float, rtt_ms: float)
 signal carrier_puck_dropped
 signal remote_carrier_changed(new_carrier_peer_id: int)
+signal ghost_state_received(peer_id: int, is_ghost: bool)
 signal goal_received(scoring_team_id: int, score0: int, score1: int, scorer_name: String, assist1_name: String, assist2_name: String)
 signal faceoff_positions_received(positions: Array)
 signal game_reset_received
@@ -29,6 +30,7 @@ signal lobby_roster_synced(roster: Array)
 signal return_to_lobby_received(roster: Array)
 signal clock_ready
 signal pickup_claim_received(peer_id: int, host_timestamp: float, rtt_ms: float)
+signal hit_claim_received(hitter_peer_id: int, victim_peer_id: int, host_timestamp: float, rtt_ms: float)
 
 # ── State ─────────────────────────────────────────────────────────────────────
 var is_host: bool = false
@@ -50,6 +52,23 @@ var _peer_numbers: Dictionary = {}        # peer_id -> int (host only)
 # can pull world state without reaching up into the application layer.
 var _world_state_provider: Callable = Callable()
 var _clock_sync: RefCounted = null  # ClockSync instance, client only
+
+# ── Packet-loss tracking ──────────────────────────────────────────────────────
+# Client-side: gap detection from received WS sequence numbers.
+var _last_ws_seq_received: int = -1
+var _ws_drop_window: int = 0
+var _ws_recv_window: int = 0
+var _ws_loss_window_timer: float = 0.0
+var packet_loss_pct: float = 0.0
+# Host-side: per-peer loss via echoed sequence numbers in input batches.
+var _peer_last_echoed: Dictionary = {}
+var _peer_echo_drop_window: Dictionary = {}
+var _peer_echo_recv_window: Dictionary = {}
+var _peer_loss_rates: Dictionary = {}
+var _peer_loss_timer: float = 0.0
+# Jitter measurement (client side)
+var _jitter_samples: Array[float] = []
+var _last_ws_arrival_time: float = -1.0
 
 # ── Timers ────────────────────────────────────────────────────────────────────
 var pending_error: String = ""
@@ -168,6 +187,18 @@ func reset() -> void:
 	_state_timer = 0.0
 	_connect_timer = -1.0
 	_clock_sync = null
+	_last_ws_seq_received = -1
+	_ws_drop_window = 0
+	_ws_recv_window = 0
+	_ws_loss_window_timer = 0.0
+	packet_loss_pct = 0.0
+	_peer_last_echoed.clear()
+	_peer_echo_drop_window.clear()
+	_peer_echo_recv_window.clear()
+	_peer_loss_rates.clear()
+	_peer_loss_timer = 0.0
+	_jitter_samples.clear()
+	_last_ws_arrival_time = -1.0
 	NetworkSimManager._pending.clear()
 
 # ── Process ───────────────────────────────────────────────────────────────────
@@ -201,18 +232,39 @@ func _process(delta: float) -> void:
 		_input_timer += capped_delta
 		if _input_timer >= input_delta:
 			_input_timer -= input_delta
-			var batch: Array[InputState] = _local_controller.get_input_batch()
-			var serialized: Array = []
+			var batch_frames: int = 24 if get_peer_loss_rate() > 10.0 else 12
+			var batch: Array[InputState] = _local_controller.get_input_batch(batch_frames)
+			var serialized: Array = [_last_ws_seq_received]  # echo header
 			for s: InputState in batch:
 				serialized.append(s.to_array())
 			NetworkTelemetry.record_input_sent()
 			receive_input_batch.rpc_id(1, serialized)
+
+	if not is_host:
+		_ws_loss_window_timer += capped_delta
+		if _ws_loss_window_timer >= 1.0:
+			var total: int = _ws_recv_window + _ws_drop_window
+			packet_loss_pct = (float(_ws_drop_window) / float(total) * 100.0) if total > 0 else 0.0
+			NetworkTelemetry.record_packet_loss(packet_loss_pct)
+			_ws_drop_window = 0
+			_ws_recv_window = 0
+			_ws_loss_window_timer = 0.0
 
 	if is_host:
 		_state_timer += capped_delta
 		if _state_timer >= state_delta:
 			_state_timer -= state_delta
 			_broadcast_state()
+		_peer_loss_timer += capped_delta
+		if _peer_loss_timer >= 1.0:
+			for pid: int in _peer_echo_recv_window:
+				var recvd: int = _peer_echo_recv_window[pid]
+				var dropped: int = _peer_echo_drop_window.get(pid, 0)
+				var total: int = recvd + dropped
+				_peer_loss_rates[pid] = (float(dropped) / float(total) * 100.0) if total > 0 else 0.0
+				_peer_echo_drop_window[pid] = 0
+				_peer_echo_recv_window[pid] = 0
+			_peer_loss_timer = 0.0
 
 func _broadcast_state() -> void:
 	if not _world_state_provider.is_valid():
@@ -247,7 +299,8 @@ func receive_input_batch(data: Array) -> void:
 	NetworkSimManager.send(
 		func(d: Array, sid: int) -> void:
 			if _remote_controllers.has(sid):
-				_remote_controllers[sid].receive_input_batch(d)
+				_update_peer_echo(sid, d[0] if d.size() > 0 else -1)
+				_remote_controllers[sid].receive_input_batch(d.slice(1))
 			else:
 				push_warning("no remote controller for peer %d" % sid),
 		[data, sender_id], false)
@@ -258,6 +311,17 @@ func receive_world_state(state: Array) -> void:
 		return
 	NetworkSimManager.send(
 		func(s: Array) -> void:
+			var now: float = Time.get_ticks_msec() / 1000.0
+			if _last_ws_arrival_time > 0.0:
+				const EXPECTED_INTERVAL: float = 1.0 / Constants.STATE_RATE
+				var jitter: float = absf((now - _last_ws_arrival_time) - EXPECTED_INTERVAL)
+				_jitter_samples.append(jitter)
+				if _jitter_samples.size() > 40:
+					_jitter_samples.pop_front()
+				NetworkTelemetry.record_jitter_p95(get_jitter_p95() * 1000.0)
+			_last_ws_arrival_time = now
+			if not s.is_empty():
+				_on_ws_sequence_received(s[0])
 			NetworkTelemetry.record_world_state()
 			world_state_received.emit(s),
 		[state], false)
@@ -298,6 +362,19 @@ func receive_pickup_claim(host_timestamp: float, rtt_ms: float) -> void:
 	var peer_id: int = multiplayer.get_remote_sender_id()
 	pickup_claim_received.emit(peer_id, host_timestamp, rtt_ms)
 
+func send_hit_claim(victim_peer_id: int, host_timestamp: float, rtt_ms: float) -> void:
+	NetworkSimManager.send(
+		func(vpid: int, ts: float, rtt: float) -> void:
+			receive_hit_claim.rpc_id(1, vpid, ts, rtt),
+		[victim_peer_id, host_timestamp, rtt_ms], true)
+
+@rpc("any_peer", "reliable")
+func receive_hit_claim(victim_peer_id: int, host_timestamp: float, rtt_ms: float) -> void:
+	if not is_host:
+		return
+	var hitter_peer_id: int = multiplayer.get_remote_sender_id()
+	hit_claim_received.emit(hitter_peer_id, victim_peer_id, host_timestamp, rtt_ms)
+
 func estimated_host_time() -> float:
 	if is_host:
 		return Time.get_ticks_msec() / 1000.0
@@ -317,6 +394,12 @@ func get_latest_rtt_ms() -> float:
 	if _clock_sync == null:
 		return 0.0
 	return _clock_sync.latest_rtt_ms
+
+func on_queue_depth_received(depth: int) -> void:
+	if is_host or _clock_sync == null or not _clock_sync.is_ready:
+		return
+	_clock_sync.apply_queue_depth_feedback(depth)
+	NetworkTelemetry.record_queue_depth(depth)
 
 @rpc("authority", "reliable")
 func assign_player_slot(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color) -> void:
@@ -346,6 +429,16 @@ func send_puck_picked_up(peer_id: int) -> void:
 func notify_puck_picked_up() -> void:
 	NetworkSimManager.send(func() -> void: local_puck_pickup_confirmed.emit(), [], true)
 
+func send_ghost_state_to_all(peer_id: int, is_ghost: bool) -> void:
+	for remote_id: int in multiplayer.get_peers():
+		notify_ghost_state.rpc_id(remote_id, peer_id, is_ghost)
+
+@rpc("authority", "reliable")
+func notify_ghost_state(peer_id: int, is_ghost: bool) -> void:
+	NetworkSimManager.send(
+		func(pid: int, g: bool) -> void: ghost_state_received.emit(pid, g),
+		[peer_id, is_ghost], true)
+
 func send_carrier_changed_to_all(new_carrier_peer_id: int) -> void:
 	for peer_id: int in multiplayer.get_peers():
 		notify_carrier_changed.rpc_id(peer_id, new_carrier_peer_id)
@@ -363,11 +456,15 @@ func notify_puck_stolen() -> void:
 	NetworkSimManager.send(func() -> void: local_puck_stolen.emit(), [], true)
 
 func send_puck_release(direction: Vector3, power: float) -> void:
-	release_puck.rpc_id(1, direction, power)
+	release_puck.rpc_id(1, direction, power, estimated_host_time(), get_latest_rtt_ms())
 
 @rpc("any_peer", "reliable")
-func release_puck(direction: Vector3, power: float) -> void:
-	NetworkSimManager.send(func(d: Vector3, p: float) -> void: remote_puck_release_received.emit(d, p), [direction, power], true)
+func release_puck(direction: Vector3, power: float, host_timestamp: float, rtt_ms: float) -> void:
+	var sender: int = multiplayer.get_remote_sender_id()
+	NetworkSimManager.send(
+		func(d: Vector3, p: float, ts: float, rtt: float, sid: int) -> void:
+			remote_puck_release_received.emit(d, p, sid, ts, rtt),
+		[direction, power, host_timestamp, rtt_ms, sender], true)
 
 func notify_goal_to_all(scoring_team_id: int, score0: int, score1: int, scorer_name: String, assist1_name: String, assist2_name: String) -> void:
 	for peer_id in multiplayer.get_peers():
@@ -501,6 +598,48 @@ func send_return_to_lobby_to_all(roster: Array) -> void:
 		notify_return_to_lobby.rpc_id(peer_id, roster)
 	pending_lobby_roster = roster
 	return_to_lobby_received.emit(roster)
+
+func get_jitter_p95() -> float:
+	if _jitter_samples.is_empty():
+		return 0.0
+	var sorted: Array = _jitter_samples.duplicate()
+	sorted.sort()
+	return sorted[mini(int(sorted.size() * 0.95), sorted.size() - 1)]
+
+func get_target_interpolation_delay() -> float:
+	if not is_clock_ready():
+		return Constants.NETWORK_INTERPOLATION_DELAY
+	var rtt: float = get_rtt_ms() / 1000.0
+	var target: float = (rtt / 2.0) + (get_jitter_p95() * 1.5)
+	return clampf(target, maxf(rtt / 2.0, 0.016), 0.150)
+
+func get_peer_loss_rate(peer_id: int = -1) -> float:
+	if is_host:
+		return _peer_loss_rates.get(peer_id, 0.0)
+	return packet_loss_pct
+
+func _on_ws_sequence_received(seq: int) -> void:
+	if _last_ws_seq_received >= 0:
+		var gap: int = (seq - _last_ws_seq_received - 1 + 65536) % 65536
+		_ws_drop_window += gap
+	_ws_recv_window += 1
+	_last_ws_seq_received = seq
+
+func _update_peer_echo(peer_id: int, echoed_seq: int) -> void:
+	if echoed_seq < 0:
+		return
+	if not _peer_last_echoed.has(peer_id):
+		_peer_last_echoed[peer_id] = echoed_seq
+		_peer_echo_drop_window[peer_id] = 0
+		_peer_echo_recv_window[peer_id] = 0
+		return
+	var prev: int = _peer_last_echoed[peer_id]
+	if echoed_seq == prev:
+		return  # duplicate echo between WS ticks
+	var gap: int = (echoed_seq - prev - 1 + 65536) % 65536
+	_peer_echo_drop_window[peer_id] += gap
+	_peer_echo_recv_window[peer_id] += 1
+	_peer_last_echoed[peer_id] = echoed_seq
 
 # ── Registration ──────────────────────────────────────────────────────────────
 func set_world_state_provider(provider: Callable) -> void:

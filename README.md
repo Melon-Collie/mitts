@@ -64,7 +64,7 @@ Pucks coming in fast deflect off your blade instead of sticking. Move your stick
 - Stick clamping against player bodies and goalie pads — no poking through opponents
 - Physical deflection off blade contact normal with elevation tipping
 - Elevated shots
-- Online multiplayer with client-side prediction, input redundancy (last 12 inputs per packet), and lag-compensated pickup claims
+- Online multiplayer with client-side prediction, input redundancy (last 12 inputs per packet), lag-compensated pickup claims, quantized world state (~60% bandwidth reduction), rewind-based hit detection, and lag-compensated shot release
 - Regulation rink markings — center line, blue lines, goal lines, faceoff circles, goalie creases
 - Accurate Art Ross hockey nets with Bézier curve frame and translucent ruled-surface netting
 - Behavioral goalie AI (state machine, Buckley depth system, butterfly, RVH) — server-authoritative with client interpolation, tracking lag for beatable positioning

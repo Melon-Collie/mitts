@@ -29,6 +29,7 @@ signal shots_on_goal_changed(sog_0: int, sog_1: int)
 # ── Domain state ──────────────────────────────────────────────────────────────
 var _state_machine: GameStateMachine = null
 var _last_emitted_clock_secs: int = -1
+var _last_ghost_state: Dictionary = {}  # peer_id -> bool, host only
 var _input_blocked: bool = false
 
 # ── Infrastructure ────────────────────────────────────────────────────────────
@@ -56,6 +57,7 @@ const _MAX_CLAIM_AGE_S: float = 0.2
 const _CONTEST_WINDOW_S: float = 0.05
 var _pending_pickup_claim: Dictionary = {}
 var _pending_claim_timer: float = 0.0
+var _last_hit_claim_sent: Dictionary = {}  # "hitter:victim" -> float, client only
 
 
 func _ready() -> void:
@@ -87,6 +89,8 @@ func _wire_network_signals() -> void:
 	NetworkManager.slot_swap_confirmed.connect(_on_slot_swap_confirmed)
 	NetworkManager.return_to_lobby_received.connect(_on_return_to_lobby)
 	NetworkManager.pickup_claim_received.connect(_on_pickup_claim_received)
+	NetworkManager.ghost_state_received.connect(_on_ghost_state_received)
+	NetworkManager.hit_claim_received.connect(_on_hit_claim_received)
 
 
 # ── Process ───────────────────────────────────────────────────────────────────
@@ -144,7 +148,11 @@ func _apply_ghost_state() -> void:
 	for peer_id in ghosts:
 		var r: PlayerRecord = _registry.get_record(peer_id)
 		if r != null:
-			r.skater.set_ghost(ghosts[peer_id])
+			var new_ghost: bool = ghosts[peer_id]
+			r.skater.set_ghost(new_ghost)
+			if new_ghost != _last_ghost_state.get(peer_id, false):
+				_last_ghost_state[peer_id] = new_ghost
+				NetworkManager.send_ghost_state_to_all(peer_id, new_ghost)
 
 
 # ── Network Callbacks ─────────────────────────────────────────────────────────
@@ -345,6 +353,7 @@ func _wire_subsystems() -> void:
 	_codec.period_changed.connect(period_changed.emit)
 	_codec.clock_updated.connect(_on_clock_updated_externally)
 	_codec.shots_on_goal_changed.connect(shots_on_goal_changed.emit)
+	_codec.queue_depth_feedback.connect(NetworkManager.on_queue_depth_received)
 
 	_shot_tracker = ShotOnGoalTracker.new()
 	_shot_tracker.setup(_registry, _state_machine)
@@ -433,6 +442,13 @@ func _on_server_puck_picked_up_by(peer_id: int) -> void:
 	if not record.is_local:
 		NetworkManager.send_puck_picked_up(peer_id)
 	NetworkManager.send_carrier_changed_to_all(peer_id)
+
+
+func _on_ghost_state_received(peer_id: int, is_ghost: bool) -> void:
+	var record: PlayerRecord = _registry.get_record(peer_id)
+	if record == null or record.skater == null or record.is_local:
+		return
+	(record.controller as RemoteController).apply_ghost_rpc(is_ghost)
 
 
 func _on_pickup_claim_received(peer_id: int, host_timestamp: float, rtt_ms: float) -> void:
@@ -532,9 +548,15 @@ func _on_one_timer_release_requested(direction: Vector3, power: float, skater: S
 	puck.release(direction, power)
 
 
-func on_remote_puck_release(direction: Vector3, power: float) -> void:
+func on_remote_puck_release(direction: Vector3, power: float, shooter_peer_id: int, _host_timestamp: float, rtt_ms: float) -> void:
 	if NetworkManager.is_host:
 		_start_pending_shot_from_carrier()
+		if _state_buffer_manager != null and _state_buffer_manager.is_ready() and shooter_peer_id > 0 and rtt_ms > 0.0:
+			var shooter_state: SkaterNetworkState = _state_buffer_manager.latest_skater_state(shooter_peer_id)
+			if shooter_state != null and not shooter_state.blade_contact_world.is_zero_approx():
+				var rtt_half: float = rtt_ms / 2000.0
+				var advanced_pos: Vector3 = shooter_state.blade_contact_world + direction * power * rtt_half
+				puck.set_puck_position(advanced_pos)
 	puck.release(direction, power)
 
 
@@ -665,10 +687,53 @@ func _on_slot_swap_confirmed(peer_id: int, old_team_id: int, old_slot: int,
 
 
 # ── Hit tracking ─────────────────────────────────────────────────────────────
+const _HIT_CLAIM_MAX_RANGE: float = 2.0
+
 func _on_hit_landed(hitter_peer_id: int, victim: Skater) -> void:
+	if NetworkManager.is_host:
+		var victim_peer_id: int = _registry.resolve_peer_id(victim)
+		_hit_tracker.on_hit(hitter_peer_id, victim_peer_id, _registry.resolve_team_id(victim))
+		return
+	# Client: local skater is the only one whose physics fires body_checked_player.
+	# Send a lag-compensated claim to the host for crediting.
+	# Throttle to once per HIT_COOLDOWN_S — body_checked_player fires every physics
+	# tick during sustained contact (240 Hz), and flooding the host with RPCs causes jitter.
+	var victim_peer_id: int = _registry.resolve_peer_id(victim)
+	if victim_peer_id == -1:
+		return
+	var key: String = "%d:%d" % [hitter_peer_id, victim_peer_id]
+	var now: float = Time.get_ticks_msec() / 1000.0
+	if _last_hit_claim_sent.get(key, 0.0) + HitTracker.HIT_COOLDOWN_S > now:
+		return
+	_last_hit_claim_sent[key] = now
+	NetworkManager.send_hit_claim(
+			victim_peer_id,
+			NetworkManager.estimated_host_time(),
+			NetworkManager.get_rtt_ms())
+
+
+func _on_hit_claim_received(hitter_peer_id: int, victim_peer_id: int, host_timestamp: float, rtt_ms: float) -> void:
 	if not NetworkManager.is_host:
 		return
-	_hit_tracker.on_hit(hitter_peer_id, _registry.resolve_team_id(victim))
+	if _state_buffer_manager == null or not _state_buffer_manager.is_ready():
+		return
+	var now: float = Time.get_ticks_msec() / 1000.0
+	if now - host_timestamp > _MAX_CLAIM_AGE_S:
+		return
+	var hitter_rec: PlayerRecord = _registry.get_record(hitter_peer_id)
+	var victim_rec: PlayerRecord = _registry.get_record(victim_peer_id)
+	if hitter_rec == null or victim_rec == null:
+		return
+	var rewind_rtt: float = clampf(rtt_ms, 10.0, 200.0)
+	var rewind_time: float = host_timestamp - rewind_rtt / 2000.0
+	var snapshot: WorldSnapshot = _state_buffer_manager.get_state_at(rewind_time)
+	var hitter_snap: SkaterNetworkState = snapshot.get_skater_state(hitter_peer_id)
+	var victim_snap: SkaterNetworkState = snapshot.get_skater_state(victim_peer_id)
+	if hitter_snap == null or victim_snap == null:
+		return
+	if hitter_snap.position.distance_to(victim_snap.position) > _HIT_CLAIM_MAX_RANGE:
+		return
+	_hit_tracker.on_hit(hitter_peer_id, victim_peer_id, victim_rec.team.team_id)
 
 
 # ── Scene exit & reset ───────────────────────────────────────────────────────
@@ -722,6 +787,8 @@ func on_game_reset() -> void:
 func _apply_reset() -> void:
 	_state_machine.reset_all()
 	_last_emitted_clock_secs = -1
+	_last_ghost_state.clear()
+	_last_hit_claim_sent.clear()
 	score_changed.emit(0, 0)
 	period_changed.emit(1)
 	clock_updated.emit(_state_machine.period_duration)
