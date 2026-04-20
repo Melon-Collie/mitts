@@ -29,8 +29,6 @@ enum State {
 # skating lag before the body re-orients (more backskate/crossover time).
 # Shift freezes facing entirely (see _apply_facing). Good range: 1.0 (very lazy) – 3.0 (snappy).
 @export var facing_drag_speed: float = 3.0
-@export var blade_tracking_speed: float = 5.0  # lerp factor per second toward mouse target; lower = more resistance
-@export var blade_mouse_scale: float = 1.5  # multiplies mouse distance before IK; larger area → full blade range
 
 # ── Blade / Stick / Top-Hand IK Tuning ────────────────────────────────────────
 # Blade world-space Y. 0.0 = ice surface. Converted to upper-body-local via
@@ -179,11 +177,10 @@ var _shot_dir: Vector3 = Vector3.ZERO
 var _follow_through_timer: float = 0.0
 var _charge_distance: float = 0.0
 var _prev_mouse_screen_pos: Vector2 = Vector2.ZERO
-var _blade_tracked_local: Vector2 = Vector2.ZERO  # rate-limited blade target in upper-body local XZ
 var _prev_blade_dir: Vector3 = Vector3.ZERO
 var _slapper_charge_timer: float = 0.0
 var _dash_cooldown_timer: float = 0.0
-var last_processed_sequence: int = 0
+var last_processed_host_timestamp: float = 0.0
 var has_puck: bool = false
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
@@ -244,13 +241,12 @@ func _process_input(input: InputState, delta: float) -> void:
 func get_network_state() -> SkaterNetworkState:
 	var state := SkaterNetworkState.new()
 	state.position = skater.global_position
-	state.rotation = skater.global_rotation
 	state.velocity = skater.velocity
 	state.blade_position = skater.get_blade_position()
 	state.top_hand_position = skater.get_top_hand_position()
 	state.upper_body_rotation_y = skater.get_upper_body_rotation()
 	state.facing = skater.get_facing()
-	state.last_processed_sequence = last_processed_sequence
+	state.last_processed_host_timestamp = last_processed_host_timestamp
 	state.is_ghost = skater.is_ghost
 	return state
 
@@ -340,7 +336,7 @@ func _state_wrister_aim(input: InputState, delta: float) -> void:
 		# hardware mouse actually moves, immune to camera lag/drift.
 		# Scale by 0.01 so max_wrister_charge_distance stays in intuitive units
 		# (1.5 ≈ 150 px of drag for full charge).
-		var screen_pos: Vector2 = get_viewport().get_mouse_position()
+		var screen_pos: Vector2 = input.mouse_screen_pos
 		var cur := Vector3(screen_pos.x * 0.01, 0.0, screen_pos.y * 0.01)
 		var prev := Vector3(_prev_mouse_screen_pos.x * 0.01, 0.0, _prev_mouse_screen_pos.y * 0.01)
 		var result: Dictionary = ChargeTracking.accumulate(
@@ -761,9 +757,7 @@ func _apply_blade_from_mouse(input: InputState, delta: float) -> void:
 
 	# Convert mouse world position into upper-body-local XZ for the solver.
 	var mouse_local: Vector3 = skater.upper_body_to_local(mouse_world)
-	var mouse_target := Vector2(mouse_local.x, mouse_local.z) / blade_mouse_scale
-	_blade_tracked_local = _blade_tracked_local.lerp(mouse_target, minf(blade_tracking_speed * delta, 1.0))
-	var desired_blade_xz := _blade_tracked_local
+	var desired_blade_xz := Vector2(mouse_local.x, mouse_local.z)
 
 	var blade_side_sign: float = -1.0 if skater.is_left_handed else 1.0
 

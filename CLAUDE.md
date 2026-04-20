@@ -39,11 +39,11 @@ Lower layers never reach up: actors take their collaborators via `setup()` (e.g.
 
 Authoritative host model. The host runs all physics. Clients predict locally and reconcile against server state. See `ARCHITECTURE.md` for full detail.
 
-**Rates:** inputs 60 Hz unreliable (client → host); world state 20 Hz unreliable (host → clients); events reliable RPCs.
+**Rates:** inputs 60 Hz unreliable (client → host), batched as last 12 physics frames per packet for redundancy; world state 20 Hz unreliable (host → clients); events reliable RPCs.
 
-**Skaters:** `LocalController` predicts + reconciles (reset + replay on error). `RemoteController` drives from input on host, interpolates buffered snapshots (100ms delay) on clients.
+**Skaters:** `LocalController` predicts + reconciles (snap to server state → replay unacknowledged inputs kinematically → immediate snap, no gradual correction). Each replay iteration advances `global_position += velocity * delta` so blade IK and facing evaluate against a moving body. Reconcile saves and restores only the narrow shot-state fields (`_state`, follow-through timers, one-timer window) — visual and charge fields use replay output directly. `RemoteController` drives from input on host via a queue (all inputs from each batch are sorted by `host_timestamp` and popped one per physics tick; `just_pressed` flags cleared on the fallback so they don't re-fire); interpolates buffered snapshots (100ms delay) on clients. `_apply_state_to_skater` sets facing and upper-body before blade so shaft orientation is correct each tick.
 
-**Puck:** three client-side modes — local carrier (pinned to blade), trajectory prediction (Jolt runs client-side after release, soft-reconciled each broadcast), interpolation (100ms buffer, position only). `_carrier_peer_id` is managed exclusively by reliable RPCs, never by world state, to avoid unreliable ordering conflicts.
+**Puck:** three client-side modes — local carrier (pinned to blade), trajectory prediction (Jolt runs client-side after release, soft-reconciled each broadcast), interpolation (100ms buffer, position only). `_carrier_peer_id` is managed exclusively by reliable RPCs, never by world state, to avoid unreliable ordering conflicts. Pickup claims use lag compensation: client sends a reliable `receive_pickup_claim` RPC with `host_timestamp`, `blade_pos`, `blade_vel`, and `rtt_ms`; host rewinds `StateBufferManager` to `host_timestamp − rtt/2`, checks swept sphere, and either grants the pickup, squirts the puck on a contested claim (two claims within 50ms), or drops it as stale/invalid.
 
 **Goalies:** AI runs on host only. Clients interpolate via `BufferedGoalieState` (100ms delay). `tracking_speed` is the master difficulty knob — lower = more positional lag = easier to beat.
 
@@ -69,6 +69,7 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | `domain/rules/player_rules.gd` | Team balancing, fixed team colors (`generate_primary_color` for UI badges; `generate_jersey_color` / `generate_helmet_color` / `generate_pants_color` for skater meshes), faceoff position lookup. Home team (0): Penguins Vegas Gold primary + black secondary. Away team (1): Leafs Blue primary + white secondary. |
 | `domain/rules/infraction_rules.gd` | `is_offside`, `check_icing` |
 | `domain/rules/puck_collision_rules.gd` | Deflection reflection, body-check/body-block velocity, poke-strip direction, `can_poke_check` eligibility |
+| `domain/rules/puck_interaction_rules.gd` | Swept sphere interaction detection: `check_pickup` and `check_poke` test whether the puck's path (prev→curr) passes within a radius of a blade position. Same capsule-vs-point math, separate functions for call-site clarity. Used by `PuckController` host-side each physics tick. |
 | `domain/rules/skater_movement_rules.gd` | Thrust scaling, friction, max-speed clamp with puck-carry penalty, pulse-dash impulse |
 | `domain/rules/shot_mechanics.gd` | Wrister / slapper power + direction + elevation; `should_release_on_wall_pin` |
 | `domain/rules/goalie_behavior_rules.gd` | Shot detection, defensive zone detection, Buckley depth chart, lateral X target |
@@ -92,9 +93,9 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | `game/slot_swap_coordinator.gd` | RefCounted. Validates mid-game slot swap requests (`request_swap` returns a confirmation payload or `{}`) and applies confirmations (`apply_confirmed_swap` mutates PlayerRecord + teleports). Emits `carrier_swap_needs_drop` when the requesting player holds the puck so GameManager can drop it before the swap. |
 | `controllers/local_controller.gd` | Local player: input gathering, prediction, reconciliation. Takes `game_state` via setup; calls `InfractionRules.is_offside` directly for client-side ghost prediction. |
 | `controllers/remote_controller.gd` | Remote players: server-side input driving, client-side interpolation |
-| `controllers/puck_controller.gd` | Puck: emits `puck_picked_up_by` / `puck_released_by_carrier` / `puck_stripped_from` signals (via injected peer_id resolver) for GameManager to consume; handles client prediction + interpolation |
+| `controllers/puck_controller.gd` | Puck: host-side swept sphere interaction detection (pickup, poke, deflect) each physics tick via `PuckInteractionRules`; emits `puck_picked_up_by` / `puck_released_by_carrier` / `puck_stripped_from` signals for GameManager; handles client prediction + interpolation |
 | `controllers/skater_controller.gd` | Base class: state machine, movement, shooting, blade control. Delegates blade placement to `TopHandIK.solve` with fixed `stick_length` and ROM exports. After every blade placement, calls `_update_bottom_hand()` → `BottomHandIK.solve` to reactively place the off-stick hand. Delegates other math to domain rules. |
-| `controllers/goalie_controller.gd` | Goalie AI: state machine (STANDING/BUTTERFLY/RVH_LEFT/RVH_RIGHT) driving positioning via `GoalieBehaviorRules` |
+| `controllers/goalie_controller.gd` | Goalie AI: state machine (STANDING/BUTTERFLY/RVH_LEFT/RVH_RIGHT) driving positioning via `GoalieBehaviorRules`. Owns `team_id: int` set by GameManager at spawn so StateBufferManager keys goalie ring buffers by team rather than array index. |
 | `controllers/goalie_body_config.gd` | Data class holding per-state body part positions and rotations |
 
 ### Infrastructure (engine integration)
@@ -102,7 +103,7 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | File | Role |
 |------|------|
 | `networking/network_manager.gd` | Autoload. RPC definitions, connection management, state broadcast timing |
-| `actors/puck.gd` | RigidBody3D: pickup zone, deflection, carrier following (server only). Accepts a `team_resolver: Callable` so it doesn't reach into GameManager for team checks. |
+| `actors/puck.gd` | RigidBody3D: carrier following, shot/drop/reset, cooldown tracking, goalie contact signal. No longer owns interaction detection — `PuckController` detects via swept sphere and calls `apply_pickup` / `apply_blade_deflect` / `apply_poke_check`. |
 | `actors/skater.gd` | CharacterBody3D: blade/top-hand/bottom-hand/facing/upper-body API, ghost mode toggling. `shoulder` Marker3D anchors the top hand on the opposite side from the blade (right-shoulder for a left-handed shooter); `bottom_shoulder` mirrors it on the blade side (left-shoulder for a lefty). `top_hand` and `bottom_hand` Marker3Ds are the moving IK outputs; created programmatically on `_ready` if not present in the scene. Four arm meshes (`UpperArmMesh` / `ForearmMesh` / `BottomUpperArmMesh` / `BottomForearmMesh`) are auto-created the same way and positioned each tick by `update_arm_mesh()` / `update_bottom_arm_mesh()` via `TwoBoneIK.solve_elbow` (bottom arm uses a mirrored pole). `set_player_color(primary, secondary, is_local)` sets explicit `material_override` on all meshes: primary → jersey/blade/all four arm meshes; secondary → legs (`LowerBodyMesh`) + helmet (`DirectionIndicator`); fixed brown → stick shaft. All meshes except the ring are included in ghost-mode transparency. A flat procedural ring mesh (gray, 50% alpha) sits at global Y=0.05 under the skater's feet — only visible on the local player (`is_local=true` in `set_player_color`). |
 | `actors/goalie.gd` | Goalie body API: exposes position, rotation, body part config methods |
 | `actors/hockey_goal.gd` | Goal mesh + goal sensor Area3D; emits `goal_scored` signal |
@@ -111,6 +112,9 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | `game/build_info.gd` | Autoload. Holds `VERSION` (baked in by `deploy.yml` at export time; stays `"dev"` in the editor), `RELEASE_TAG`, and `REPO` — all read by `UpdateChecker`. |
 | `game/team.gd` | Team object: defended goal, goalie controller |
 | `game/player_record.gd` | Per-player data: peer_id, slot, team, skater, controller, faceoff_position, is_left_handed, stats (PlayerStats) |
+| `networking/network_telemetry.gd` | `class_name NetworkTelemetry`. RefCounted owned by GameManager. Rolling 1-second window counters for WS recv rate, input rate, reconcile rate/magnitude, blade jump rate/magnitude, blade reconcile magnitude, extrapolation events, buffer depths. Static call sites (`NetworkTelemetry.record_*`) are null-safe outside a game session. Ticked by `GameManager._process`. |
+| `networking/clock_sync.gd` | NTP-style RTT sampler (no class_name; instantiated inside NetworkManager on client connect). Fires 3 initial pings at 0.5 s then one every 5 s. Sliding window of 8 samples; drops 2 highest-RTT outliers. `estimated_host_time()` = local time + averaged offset. `is_ready` after first 3 samples. |
+| `networking/network_sim.gd` | Autoload (no class_name). Simulates delay/jitter/packet-loss at the receive site. Six presets (Off → ~200 ms Bad) toggled with keys 0–5. Both peers must enable matching presets to simulate a full round-trip RTT. Reliable RPCs and unreliable world-state are both routed through it during a game session. |
 | `networking/buffered_skater_state.gd` | Timestamped SkaterNetworkState for interpolation buffer |
 | `networking/buffered_puck_state.gd` | Timestamped PuckNetworkState for interpolation buffer |
 | `networking/buffered_goalie_state.gd` | Timestamped GoalieNetworkState for interpolation buffer |
@@ -118,8 +122,9 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | `networking/goalie_network_state.gd` | Serializable goalie state: position, rotation, state enum, five_hole_openness |
 | `networking/skater_network_state.gd` | Serializable skater state: position, velocity, facing, blade, top_hand, input sequence, is_ghost |
 | `networking/puck_network_state.gd` | Serializable puck state: position, velocity, carrier peer ID |
-| `input/input_state.gd` | InputState data object: all per-tick input fields (move, mouse, shoot, brake, elevation, etc.) |
+| `input/input_state.gd` | InputState data object: all per-tick input fields (move, `mouse_world_pos`, `mouse_screen_pos`, shoot, brake, elevation, etc.). 18-element wire array; `mouse_screen_pos` records screen-space position at gather time so wrister-aim charge replay is deterministic. |
 | `input/local_input_gatherer.gd` | Populates InputState from local hardware; accumulates just_pressed between ticks |
+| `ui/network_debug_overlay.gd` | `class_name NetworkDebugOverlay`. CanvasLayer (priority 100) instantiated by GameManager at world spawn. F3 toggles visibility. Reads from `NetworkTelemetry.instance` each frame and renders a dark monospace panel showing RTT placeholder, WS recv Hz, input Hz, reconcile rate/magnitude, extrapolation rate, and buffer depths. |
 | `ui/game_camera.gd` | Per-player camera: frames player+puck via zoom, then shifts toward attacking zone using available slack. Ozone zoom (min_height→ozone_min_height) when local player is in the attacked zone. Bias smoothed by possession changes and movement direction. Wired via `LocalController.set_goal_context`. |
 | `ui/hud.gd` | Scorebug HUD: three-column dark panel top-left — teams+scores (away top, home bottom with colored badges) | shots-on-goal (away/SHOTS/home) | period+clock. Phase banner (GOAL!, FACEOFF, etc.) is a separate centered panel below. Small dim `v{BuildInfo.VERSION}` tag bottom-right. Game menu (`_game_menu`, CanvasLayer 20) opened with ESC: Resume, Change Position, Rematch (host), Return to Lobby (host), Report Bug, Disconnect, Exit Game. Host-only buttons are built via the `_add_host_button(vbox, text, handler)` helper so game-over and ESC menus stay in sync. "Change Position" toggles a `SlotGridPanel` on a separate CanvasLayer 21 (styled dark panel, centered, above the menu). ESC is layered: closes slot grid first if open, then closes the menu. `_set_menu_open(bool)` controls visibility + input blocking. Receives scores/phase/period/clock/SOG via GameManager signals; polls `skater.is_elevated` each frame. |
 | `ui/slot_grid_panel.gd` | Stateless `Control` subclass. Renders a 2×3 team/slot grid; emits `slot_selected(team_id, slot)`. Away (team 1) on top, Home (team 0) on bottom — matches rink perspective. Refreshed by caller via `refresh(roster, local_peer_id)`. Occupied slots show player name and are disabled; empty slots are enabled. Used by HUD game menu and (future) lobby. |
@@ -143,7 +148,7 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 |------|------|
 | `tests/unit/rules/` | GUT tests for each rule class — ~130 tests covering domain logic |
 | `tests/unit/state/` | GUT tests for `GameStateMachine` — phase transitions, icing, ghost computation |
-| `tests/unit/game/` | GUT tests for application-layer collaborators: `ShotOnGoalTracker` (pending-shot FSM, assists, SOG dedup), `WorldStateCodec` (stats round-trip), `SlotSwapCoordinator` (request validation). |
+| `tests/unit/game/` | GUT tests for application-layer collaborators: `ShotOnGoalTracker` (pending-shot FSM, assists, SOG dedup), `WorldStateCodec` (stats round-trip), `SlotSwapCoordinator` (request validation), `ClockSync` (RTT math, readiness, outlier dropping), `InputState` (serialization round-trip, field-count sentinel). |
 
 ## Code Conventions
 

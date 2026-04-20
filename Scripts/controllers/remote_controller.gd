@@ -4,9 +4,14 @@ extends SkaterController
 @export var interpolation_delay: float = Constants.NETWORK_INTERPOLATION_DELAY
 @export var extrapolation_max_ms: float = 50.0
 
-var _latest_input: InputState = InputState.new()
+var _input_queue: Array[InputState] = []
+var _fallback_input: InputState = InputState.new()
 var _state_buffer: Array[BufferedSkaterState] = []
 var _current_time: float = 0.0
+var is_extrapolating: bool = false
+
+func get_buffer_depth() -> int:
+	return _state_buffer.size()
 
 func _physics_process(delta: float) -> void:
 	if skater == null:
@@ -18,21 +23,45 @@ func _physics_process(delta: float) -> void:
 		_interpolate()
 		skater.update_stick_mesh()
 
-func receive_input(state: InputState) -> void:
-	_latest_input = state
+func receive_input_batch(batch: Array) -> void:
+	var existing_timestamps: Dictionary = {}
+	for queued: InputState in _input_queue:
+		existing_timestamps[queued.host_timestamp] = true
+	for raw: Array in batch:
+		var state: InputState = InputState.from_array(raw)
+		if state.host_timestamp > last_processed_host_timestamp and not existing_timestamps.has(state.host_timestamp):
+			_input_queue.append(state)
+			existing_timestamps[state.host_timestamp] = true
+	_input_queue.sort_custom(func(a: InputState, b: InputState) -> bool:
+		return a.host_timestamp < b.host_timestamp)
 
 func _drive_from_input(delta: float) -> void:
-	# Always advance sequence so the client's reconcile filter stays current,
-	# but don't process movement during dead-puck phases — stale input would
-	# contaminate server state and cause a velocity burst when the phase lifts.
-	# Writes SkaterController.last_processed_sequence (the field serialized into
-	# SkaterNetworkState); the client's LocalController.reconcile reads it to
-	# drop confirmed inputs from its replay history.
-	last_processed_sequence = _latest_input.sequence
-	if _game_state.is_movement_locked():
-		skater.velocity = Vector3.ZERO
-		return
-	_process_input(_latest_input, delta)
+	# Pop one input per physics tick so every client input gets simulated on the
+	# host in order. last_processed_host_timestamp advances only for inputs that
+	# were actually simulated — the client's reconcile filter drops confirmed inputs
+	# from its replay history based on this value.
+	# During locked phases drain the queue (advancing the ack) but don't apply
+	# movement — stale input would contaminate server state and cause a velocity
+	# burst when the phase lifts.
+	if _input_queue.size() > 0:
+		var input: InputState = _input_queue.pop_front()
+		last_processed_host_timestamp = input.host_timestamp
+		if not _game_state.is_movement_locked():
+			_process_input(input, delta)
+		else:
+			skater.velocity = Vector3.ZERO
+		# Clear just_pressed flags before saving as fallback so they don't
+		# re-fire on subsequent ticks while the queue is empty.
+		input.shoot_pressed = false
+		input.slap_pressed = false
+		input.elevation_up = false
+		input.elevation_down = false
+		_fallback_input = input
+	else:
+		if _game_state.is_movement_locked():
+			skater.velocity = Vector3.ZERO
+			return
+		_process_input(_fallback_input, delta)
 
 func apply_network_state(state: SkaterNetworkState) -> void:
 	if _is_host:
@@ -48,6 +77,7 @@ func _interpolate() -> void:
 	var render_time: float = _current_time - interpolation_delay
 	var bracket: BufferedStateInterpolator.BracketResult = BufferedStateInterpolator.find_bracket(
 			_state_buffer, render_time)
+	is_extrapolating = bracket != null and bracket.is_extrapolating
 	if bracket == null:
 		return
 	var interpolated := SkaterNetworkState.new()
@@ -56,7 +86,6 @@ func _interpolate() -> void:
 		var newest: SkaterNetworkState = bracket.to_state
 		interpolated.position = newest.position + newest.velocity * dt
 		interpolated.velocity = newest.velocity
-		interpolated.rotation = newest.rotation
 		interpolated.blade_position = newest.blade_position
 		interpolated.top_hand_position = newest.top_hand_position
 		interpolated.upper_body_rotation_y = newest.upper_body_rotation_y
@@ -67,7 +96,6 @@ func _interpolate() -> void:
 		var to_state: SkaterNetworkState = bracket.to_state
 		var t: float = bracket.t
 		interpolated.position = from_state.position.lerp(to_state.position, t)
-		interpolated.rotation = from_state.rotation.lerp(to_state.rotation, t)
 		interpolated.velocity = from_state.velocity.lerp(to_state.velocity, t)
 		interpolated.blade_position = from_state.blade_position.lerp(to_state.blade_position, t)
 		interpolated.top_hand_position = from_state.top_hand_position.lerp(to_state.top_hand_position, t)
@@ -81,14 +109,14 @@ func _interpolate() -> void:
 
 func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	skater.global_position = state.position
-	skater.global_rotation = state.rotation
 	skater.velocity = state.velocity
-	# Set top_hand first so set_blade_position can compute the shaft rotation
-	# using the correct hand pivot.
+	# Facing and upper-body rotation must be set before blade so the shaft mesh
+	# orients against the correct body transform, not the previous tick's.
+	skater.set_facing(state.facing)
+	skater.set_upper_body_rotation(state.upper_body_rotation_y)
+	# Top hand before blade so set_blade_position has the correct hand pivot.
 	skater.set_top_hand_position(state.top_hand_position)
 	skater.set_blade_position(state.blade_position)
-	skater.set_upper_body_rotation(state.upper_body_rotation_y)
-	skater.set_facing(state.facing)
 	skater.set_ghost(state.is_ghost)
 	# Arms are derived from shoulder + hand each frame; update after both are set.
 	skater.update_arm_mesh()

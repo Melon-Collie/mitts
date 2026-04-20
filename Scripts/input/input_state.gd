@@ -1,9 +1,10 @@
 class_name InputState
 
-var sequence: int = 0
+var host_timestamp: float = 0.0
 var delta: float = 1.0 / 60.0
 var move_vector: Vector2 = Vector2.ZERO
 var mouse_world_pos: Vector3 = Vector3.ZERO
+var mouse_screen_pos: Vector2 = Vector2.ZERO
 var shoot_pressed: bool = false
 var shoot_held: bool = false
 var slap_pressed: bool = false
@@ -16,7 +17,7 @@ var block_held: bool = false
 
 func to_array() -> Array:
 	return [
-		sequence,
+		host_timestamp,
 		delta,
 		move_vector.x,
 		move_vector.y,
@@ -32,11 +33,13 @@ func to_array() -> Array:
 		elevation_up,
 		elevation_down,
 		block_held,
+		mouse_screen_pos.x,
+		mouse_screen_pos.y,
 	]
 
 static func from_array(data: Array) -> InputState:
 	var state := InputState.new()
-	state.sequence = data[0]
+	state.host_timestamp = data[0]
 	state.delta = data[1]
 	state.move_vector = Vector2(data[2], data[3])
 	state.mouse_world_pos = Vector3(data[4], data[5], data[6])
@@ -49,4 +52,5 @@ static func from_array(data: Array) -> InputState:
 	state.elevation_up = data[13]
 	state.elevation_down = data[14]
 	state.block_held = data[15]
+	state.mouse_screen_pos = Vector2(data[16], data[17])
 	return state

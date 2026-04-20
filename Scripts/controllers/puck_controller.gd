@@ -1,6 +1,10 @@
 class_name PuckController
 extends Node
 
+const PICKUP_RADIUS: float = 0.5
+const POKE_RADIUS: float = 0.5
+const CONTEST_SQUIRT_SPEED: float = 3.0
+
 @export var interpolation_delay: float = Constants.NETWORK_INTERPOLATION_DELAY
 @export var extrapolation_max_ms: float = 50.0
 @export var prediction_reconcile_threshold: float = 3.0
@@ -14,12 +18,20 @@ var is_server: bool = false
 var _carrier_peer_id: int = -1            # server-side authoritative carrier
 var _local_carrier_skater: Skater = null  # client-side: local skater while carrying
 var _current_time: float = 0.0
+var _prev_puck_pos: Vector3 = Vector3.ZERO
 var _state_buffer: Array[BufferedPuckState] = []
 var _predicting_trajectory: bool = false
+var is_extrapolating: bool = false
 
-# Callable (Skater) -> int peer_id, or -1 if not registered. Set by GameManager
-# at spawn time so PuckController doesn't reach into GameManager.players.
+func get_buffer_depth() -> int:
+	return _state_buffer.size()
+
+# Callable (Skater) -> int peer_id, or -1 if not registered.
 var _peer_id_resolver: Callable = Callable()
+# Callable () -> Array[Skater] of all active skaters. Host-only interaction detection.
+var _skater_getter: Callable = Callable()
+# Callable (Skater) -> int team_id. Used by poke-check eligibility.
+var _team_id_resolver: Callable = Callable()
 
 # ── Signals (server-side puck events, GameManager listens) ───────────────────
 signal puck_picked_up_by(peer_id: int)
@@ -35,7 +47,6 @@ func setup(assigned_puck: Puck, assigned_is_server: bool) -> void:
 	puck.set_server_mode(is_server)
 	process_physics_priority = 1  # Run after Skater.move_and_slide so blade world pos is current
 	if is_server:
-		puck.puck_picked_up.connect(_on_puck_picked_up)
 		puck.puck_released.connect(_on_puck_released)
 		puck.puck_stripped.connect(_on_puck_stripped)
 		puck.puck_touched_loose.connect(func(s: Skater) -> void: puck_touched_while_loose.emit(_peer_id_resolver.call(s)))
@@ -44,8 +55,18 @@ func setup(assigned_puck: Puck, assigned_is_server: bool) -> void:
 func set_peer_id_resolver(resolver: Callable) -> void:
 	_peer_id_resolver = resolver
 
+func set_skater_getter(getter: Callable) -> void:
+	_skater_getter = getter
+
+func set_team_id_resolver(resolver: Callable) -> void:
+	_team_id_resolver = resolver
+
 func _physics_process(delta: float) -> void:
-	if puck == null or is_server:
+	if puck == null:
+		return
+	if is_server:
+		_check_interactions()
+		_prev_puck_pos = puck.get_puck_position()
 		return
 	_current_time += delta
 	if _local_carrier_skater != null:
@@ -54,11 +75,75 @@ func _physics_process(delta: float) -> void:
 		_interpolate()
 	# During prediction, Jolt runs freely — no manual stepping needed
 
+# ── Lag Compensation ─────────────────────────────────────────────────────────
+# Called by GameManager after validating a client pickup claim against the
+# state buffer. Re-checks carrier == null so a concurrent _check_interactions
+# detection (which needs no validation) is never double-applied.
+func apply_lag_comp_pickup(skater: Skater) -> void:
+	if not is_instance_valid(skater) or puck.carrier != null:
+		return
+	puck.set_carrier(skater)
+	_on_puck_picked_up(skater)
+
+
+# Two valid pickup claims arrived within the contest window. Neither player
+# wins — the puck squirts free perpendicular to the line between them.
+func apply_contested_pickup(skater_a: Skater, skater_b: Skater) -> void:
+	if not is_instance_valid(skater_a) or not is_instance_valid(skater_b):
+		return
+	var dir: Vector3 = skater_a.global_position - skater_b.global_position
+	dir.y = 0.0
+	if dir.length() < 0.001:
+		dir = Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0))
+	puck.set_puck_velocity(dir.normalized() * CONTEST_SQUIRT_SPEED)
+	puck.set_skater_cooldown(skater_a, puck.reattach_cooldown)
+	puck.set_skater_cooldown(skater_b, puck.reattach_cooldown)
+
+
+# ── Server Interaction Detection ─────────────────────────────────────────────
+func _check_interactions() -> void:
+	if not _skater_getter.is_valid():
+		return
+	var puck_curr: Vector3 = puck.get_puck_position()
+	var skaters: Array = _skater_getter.call()
+
+	if puck.carrier != null:
+		if not puck.pickup_locked:
+			for skater: Skater in skaters:
+				if skater == puck.carrier or skater.is_ghost:
+					continue
+				var carrier_team: int = _team_id_resolver.call(puck.carrier)
+				var checker_team: int = _team_id_resolver.call(skater)
+				if not PuckCollisionRules.can_poke_check(carrier_team, checker_team):
+					continue
+				if PuckInteractionRules.check_poke(_prev_puck_pos, puck_curr,
+						skater.get_blade_contact_global(), POKE_RADIUS):
+					puck.apply_poke_check(skater)
+					break
+	else:
+		if not puck.pickup_locked:
+			for skater: Skater in skaters:
+				if skater.is_ghost or puck.is_on_cooldown(skater):
+					continue
+				if not PuckInteractionRules.check_pickup(_prev_puck_pos, puck_curr,
+						skater.get_blade_contact_global(), PICKUP_RADIUS):
+					continue
+				var puck_speed: float = puck.get_puck_velocity().length()
+				var rel_speed: float = (puck.get_puck_velocity() - skater.blade_world_velocity).length()
+				if puck_speed <= puck.pickup_max_speed or rel_speed < puck.deflect_min_speed:
+					puck.set_carrier(skater)
+					_on_puck_picked_up(skater)
+				else:
+					puck.apply_blade_deflect(skater)
+				break
+
+
 # ── Local Prediction ──────────────────────────────────────────────────────────
 func notify_local_pickup(local_skater: Skater) -> void:
 	_local_carrier_skater = local_skater
 	_predicting_trajectory = false
 	puck.set_client_prediction_mode(false)
+	_state_buffer.clear()
 
 func notify_local_release(direction: Vector3, power: float) -> void:
 	_local_carrier_skater = null
@@ -150,6 +235,8 @@ func get_state() -> PuckNetworkState:
 func apply_state(state: PuckNetworkState) -> void:
 	if is_server:
 		return
+	if _local_carrier_skater != null:
+		return  # Puck is pinned to local blade; interpolation isn't running
 	if _predicting_trajectory:
 		if state.carrier_peer_id != -1:
 			# Someone picked it up — hand back to buffered interpolation
@@ -157,6 +244,7 @@ func apply_state(state: PuckNetworkState) -> void:
 			puck.set_client_prediction_mode(false)
 		else:
 			_reconcile(state)
+			return  # Don't buffer during prediction; interpolation isn't running
 	var buffered := BufferedPuckState.new()
 	buffered.timestamp = _current_time
 	buffered.state = state
@@ -168,6 +256,7 @@ func _interpolate() -> void:
 	var render_time: float = _current_time - interpolation_delay
 	var bracket: BufferedStateInterpolator.BracketResult = BufferedStateInterpolator.find_bracket(
 			_state_buffer, render_time)
+	is_extrapolating = bracket != null and bracket.is_extrapolating
 	if bracket == null:
 		return
 	var interpolated := PuckNetworkState.new()

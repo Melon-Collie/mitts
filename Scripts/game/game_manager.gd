@@ -47,6 +47,14 @@ var _shot_tracker: ShotOnGoalTracker = null
 var _hit_tracker: HitTracker = null
 var _phase_coord: PhaseCoordinator = null
 var _swap_coord: SlotSwapCoordinator = null
+var _telemetry: NetworkTelemetry = null
+var _debug_overlay: NetworkDebugOverlay = null
+var _state_buffer_manager: StateBufferManager = null
+
+# ── Lag compensation ──────────────────────────────────────────────────────────
+const _MAX_CLAIM_AGE_S: float = 0.2
+const _CONTEST_WINDOW_S: float = 0.05
+var _pending_pickup_claim: Dictionary = {}
 
 
 func _ready() -> void:
@@ -77,10 +85,19 @@ func _wire_network_signals() -> void:
 	NetworkManager.slot_swap_requested.connect(_on_slot_swap_requested)
 	NetworkManager.slot_swap_confirmed.connect(_on_slot_swap_confirmed)
 	NetworkManager.return_to_lobby_received.connect(_on_return_to_lobby)
+	NetworkManager.pickup_claim_received.connect(_on_pickup_claim_received)
 
 
 # ── Process ───────────────────────────────────────────────────────────────────
 func _process(delta: float) -> void:
+	if _telemetry != null:
+		_telemetry.tick(delta)
+		_observe_telemetry()
+	if not _pending_pickup_claim.is_empty():
+		var age: float = Time.get_ticks_msec() / 1000.0 - _pending_pickup_claim.received_at
+		if age >= _CONTEST_WINDOW_S:
+			puck_controller.apply_lag_comp_pickup(_pending_pickup_claim.skater)
+			_pending_pickup_claim = {}
 	if not NetworkManager.is_host or _state_machine == null:
 		return
 	if _state_machine.tick(delta):
@@ -95,6 +112,8 @@ func _process(delta: float) -> void:
 func _physics_process(delta: float) -> void:
 	if not NetworkManager.is_host or puck == null or _state_machine == null:
 		return
+	if _state_buffer_manager != null and puck_controller != null:
+		_state_buffer_manager.capture(_registry, puck_controller, goalie_controllers)
 	_update_host_puck_tracking()
 	_apply_ghost_state()
 	_shot_tracker.tick(delta)
@@ -192,6 +211,8 @@ func on_player_disconnected(peer_id: int) -> void:
 	NetworkManager.unregister_remote_controller(peer_id)
 	if puck != null:
 		puck.remove_skater_cooldown(record.skater)
+	if _state_buffer_manager != null:
+		_state_buffer_manager.remove_player(peer_id)
 	_registry.remove(peer_id)
 
 
@@ -271,6 +292,14 @@ func _spawn_puck() -> void:
 	puck_controller = result.controller
 	puck.set_team_resolver(_resolve_skater_team_id)
 	puck_controller.set_peer_id_resolver(_resolve_skater_peer_id)
+	puck_controller.set_team_id_resolver(_resolve_skater_team_id)
+	puck_controller.set_skater_getter(func() -> Array:
+		if _registry == null:
+			return []
+		var skaters: Array = []
+		for r: PlayerRecord in _registry.all().values():
+			skaters.append(r.skater)
+		return skaters)
 	puck_controller.puck_picked_up_by.connect(_on_server_puck_picked_up_by)
 	puck_controller.puck_released_by_carrier.connect(_on_server_puck_released_by_carrier)
 	puck_controller.puck_stripped_from.connect(_on_server_puck_stripped_from)
@@ -282,6 +311,8 @@ func _spawn_goalies() -> void:
 	var result: Dictionary = _spawner.spawn_goalie_pair(puck, NetworkManager.is_host)
 	goalies = [result.top_goalie as Goalie, result.bottom_goalie as Goalie]
 	goalie_controllers = [result.top_controller, result.bottom_controller]
+	result.top_controller.team_id = 1
+	result.bottom_controller.team_id = 0
 	teams[1].goalie_controller = result.top_controller
 	teams[0].goalie_controller = result.bottom_controller
 	for team_id: int in [0, 1]:
@@ -301,9 +332,12 @@ func _wire_subsystems() -> void:
 	_registry.player_left.connect(player_left.emit)
 	_registry.player_added.connect(_on_registry_player_added)
 
+	_state_buffer_manager = StateBufferManager.new()
+	_state_buffer_manager.setup(_registry, goalie_controllers)
+
 	_codec = WorldStateCodec.new()
 	_codec.setup(_registry, _state_machine,
-			get_puck, _get_puck_controller, _get_goalie_controllers)
+			get_puck, _get_puck_controller, _get_goalie_controllers, _state_buffer_manager)
 	_codec.phase_changed.connect(_on_remote_phase_changed)
 	_codec.game_over_triggered.connect(game_over.emit)
 	_codec.period_changed.connect(period_changed.emit)
@@ -336,6 +370,11 @@ func _wire_subsystems() -> void:
 	_swap_coord.stats_updated.connect(stats_updated.emit)
 	_swap_coord.carrier_swap_needs_drop.connect(_drop_puck_if_carried)
 
+	_telemetry = NetworkTelemetry.new()
+	NetworkTelemetry.instance = _telemetry
+	_debug_overlay = NetworkDebugOverlay.new()
+	add_child(_debug_overlay)
+
 
 func _spawn_local(peer_id: int, team_slot: int, team: Team) -> void:
 	var colors: Dictionary = PlayerRegistry.generate_colors(team.team_id)
@@ -364,10 +403,12 @@ func _on_player_spawned(record: PlayerRecord) -> void:
 	)
 
 
-func _on_registry_player_added(_record: PlayerRecord) -> void:
+func _on_registry_player_added(record: PlayerRecord) -> void:
 	stats_updated.emit()
 	if NetworkManager.is_host:
 		_sync_stats_to_clients()
+	if _state_buffer_manager != null:
+		_state_buffer_manager.add_player(record.peer_id)
 
 
 # ── Puck / Puck controller signal handlers ───────────────────────────────────
@@ -380,6 +421,7 @@ func _resolve_skater_peer_id(skater: Skater) -> int:
 
 
 func _on_server_puck_picked_up_by(peer_id: int) -> void:
+	_pending_pickup_claim = {}
 	var record: PlayerRecord = _registry.get_record(peer_id)
 	if record == null:
 		return
@@ -388,6 +430,35 @@ func _on_server_puck_picked_up_by(peer_id: int) -> void:
 	if not record.is_local:
 		NetworkManager.send_puck_picked_up(peer_id)
 	NetworkManager.send_carrier_changed_to_all(peer_id)
+
+
+func _on_pickup_claim_received(peer_id: int, host_timestamp: float, blade_pos: Vector3, blade_vel: Vector3, rtt_ms: float) -> void:
+	if not NetworkManager.is_host or puck == null or puck_controller == null:
+		return
+	if puck.carrier != null or puck.pickup_locked:
+		return
+	var now: float = Time.get_ticks_msec() / 1000.0
+	if now - host_timestamp > _MAX_CLAIM_AGE_S:
+		return
+	var record: PlayerRecord = _registry.get_record(peer_id)
+	if record == null or record.skater == null or record.skater.is_ghost:
+		return
+	if _state_buffer_manager == null or not _state_buffer_manager.is_ready():
+		return
+	var rewind_time: float = host_timestamp - rtt_ms / 2000.0
+	var snapshot: WorldSnapshot = _state_buffer_manager.get_state_at(rewind_time)
+	if snapshot.puck_state == null or snapshot.puck_state.carrier_peer_id != -1:
+		return
+	var puck_pos: Vector3 = snapshot.puck_state.position
+	var prev_snap: WorldSnapshot = _state_buffer_manager.get_state_at(rewind_time - 1.0 / 240.0)
+	var puck_prev: Vector3 = prev_snap.puck_state.position if prev_snap.puck_state != null else puck_pos
+	if not PuckInteractionRules.check_pickup(puck_prev, puck_pos, blade_pos, PuckController.PICKUP_RADIUS):
+		return
+	if not _pending_pickup_claim.is_empty():
+		puck_controller.apply_contested_pickup(record.skater, _pending_pickup_claim.skater)
+		_pending_pickup_claim = {}
+	else:
+		_pending_pickup_claim = { skater = record.skater, received_at = now }
 
 
 func _on_server_puck_released_by_carrier(peer_id: int) -> void:
@@ -524,6 +595,34 @@ func _on_clock_updated_externally(t: float) -> void:
 	clock_updated.emit(t)
 
 
+func _observe_telemetry() -> void:
+	var skater_buf: int = 0
+	var extrapolating: bool = false
+	if _registry != null:
+		for peer_id: int in _registry.all():
+			var r: PlayerRecord = _registry.get_record(peer_id)
+			if r == null:
+				continue
+			if r.is_local:
+				var lc := r.controller as LocalController
+				if lc != null and lc.last_reconcile_error > 0.0:
+					NetworkTelemetry.record_reconcile(lc.last_reconcile_error)
+					lc.last_reconcile_error = 0.0
+			else:
+				var rc := r.controller as RemoteController
+				if rc != null:
+					skater_buf = rc.get_buffer_depth()
+					extrapolating = extrapolating or rc.is_extrapolating
+	var puck_buf: int = puck_controller.get_buffer_depth() if puck_controller != null else 0
+	var goalie_buf: int = 0
+	for gc: GoalieController in goalie_controllers:
+		goalie_buf = gc.get_buffer_depth()
+		extrapolating = extrapolating or gc.is_extrapolating
+	if puck_controller != null:
+		extrapolating = extrapolating or puck_controller.is_extrapolating
+	_telemetry.observe_actors(skater_buf, puck_buf, goalie_buf, extrapolating)
+
+
 func _sync_stats_to_clients() -> void:
 	stats_updated.emit()
 	if not NetworkManager.is_host or _codec == null:
@@ -577,9 +676,15 @@ func on_scene_exit() -> void:
 	puck_controller = null
 	_registry = null
 	_codec = null
+	_state_buffer_manager = null
 	_shot_tracker = null
 	_phase_coord = null
 	_swap_coord = null
+	if _debug_overlay:
+		_debug_overlay.queue_free()
+		_debug_overlay = null
+	_telemetry = null
+	NetworkTelemetry.instance = null
 	_last_emitted_clock_secs = -1
 
 
