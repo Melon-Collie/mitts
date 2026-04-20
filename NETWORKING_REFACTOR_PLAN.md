@@ -19,7 +19,7 @@ These are targeted, self-contained fixes. Each should be reviewed and tested ind
 
 ### 1a. Input sequence never incremented
 
-**File:** `Scripts/input/local_input_gatherer.gd` (or `Scripts/controllers/local_controller.gd`)
+**File:** `Scripts/controllers/local_controller.gd` — add `_next_sequence: int`, stamp `_current_input.sequence` immediately after `_gatherer.gather()` and before storing it in `_input_history`.
 **Problem:** `InputState.sequence` defaults to `0` and is never incremented. Every input is sent with `sequence = 0`. The reconcile filter in `local_controller.gd:68` — `i.sequence > server_state.last_processed_sequence` — uses this to determine which inputs to replay after a reconcile. With all sequences at 0, the filter evaluates `0 > 0` (false) on every reconcile, so the entire input history is discarded and no replay happens.
 **Fix:** Maintain a monotonically incrementing counter (e.g. `_next_sequence: int`) and stamp each `InputState` before it is pushed to the history buffer and sent to the host.
 
@@ -27,7 +27,7 @@ These are targeted, self-contained fixes. Each should be reviewed and tested ind
 
 **Files:** `Scripts/networking/network_manager.gd`, `Scripts/game/game_manager.gd`, `Scripts/controllers/puck_controller.gd`
 **Problem:** The carrier's own machine receives a reliable RPC (`notify_puck_picked_up`) when it picks up the puck. All *other* clients only learn the carrier changed via `carrier_peer_id` embedded in the 20 Hz unreliable world state broadcast. A dropped packet means those clients never see the transition and keep the puck in interpolation or trajectory-prediction mode instead of rendering it pinned to a blade.
-**Fix:** Add a reliable RPC broadcast (`notify_carrier_changed(new_carrier_peer_id: int)`) that the host sends to all peers (including non-carriers) whenever the carrier changes. `GameManager._on_server_puck_picked_up_by` and `_on_server_puck_released_by_carrier` are the two callsites. Clients handle the event by calling the appropriate method on `PuckController` (`notify_local_pickup` / the equivalent release path). The world state `carrier_peer_id` field becomes a soft-reconcile fallback rather than the primary notification mechanism.
+**Fix:** Add a reliable RPC broadcast (`notify_carrier_changed(new_carrier_peer_id: int)`) that the host sends to all peers (including non-carriers) whenever the carrier changes. `GameManager._on_server_puck_picked_up_by` and `_on_server_puck_released_by_carrier` are the two callsites. For the **carrier**, the existing `notify_local_pickup` path is unchanged. For **all other clients**, the new RPC handler calls a new `PuckController.notify_remote_carrier_changed(new_carrier_peer_id: int)` method that clears `_predicting_trajectory` and calls `puck.set_client_prediction_mode(false)` — exiting trajectory prediction without pinning to any blade. The world state `carrier_peer_id` field becomes a soft-reconcile fallback rather than the primary notification mechanism.
 
 ### 1c. Velocity reconcile threshold too tight
 
@@ -38,14 +38,14 @@ These are targeted, self-contained fixes. Each should be reviewed and tested ind
 ### 1d. No extrapolation on interpolation buffer starvation
 
 **Files:** `Scripts/networking/buffered_state_interpolator.gd`, `Scripts/controllers/remote_controller.gd`, `Scripts/controllers/puck_controller.gd`, `Scripts/controllers/goalie_controller.gd`
-**Problem:** When `render_time` overruns the newest snapshot in the buffer (one missed packet is enough), `find_bracket` returns `null` and every caller silently does nothing — the actor freezes until the next packet arrives. In a fast game this is a visible hitch.
+**Problem:** `find_bracket` returns null when the buffer has fewer than 2 entries; callers early-return and hold whatever position was last applied. When render_time merely overshoots the newest snapshot, `find_bracket` already returns `(newest, newest, 1.0)` so callers hold the newest known position. Both cases result in a visible hold for fast-moving actors; extrapolating with the newest state's velocity (up to the cap) makes the hold period seamless.
 **Fix:** When render_time overshoots the newest snapshot, extrapolate using the newest state's velocity for up to a configurable cap (`extrapolation_max_ms`, default 50 ms). Beyond the cap, hold the last known position rather than extrapolating further. Because the state types differ per controller, extrapolation logic lives in each controller (not in `BufferedStateInterpolator`); the shared helper can return a flag or a typed result indicating "past end of buffer" so callers know to extrapolate.
 
 ### 1e. No monotonic timestamp guard on buffer appends
 
 **Files:** `Scripts/controllers/remote_controller.gd:39–42`, `Scripts/controllers/puck_controller.gd`, `Scripts/controllers/goalie_controller.gd`
 **Problem:** Buffer appends do not check that the incoming timestamp is newer than the current tail. `unreliable_ordered` makes out-of-order delivery unlikely but not impossible under driver quirks.
-**Fix:** One-line guard before each append: if the new state's timestamp is ≤ the tail's timestamp, discard it. No structural changes needed.
+**Note:** The buffers currently timestamp entries with `_current_time` — a local accumulator that always increases. With local timestamps a late-arriving packet gets a newer timestamp than the one before it, so this guard would never fire. **The actual fix belongs in Phase 4**, once world state packets carry host-supplied timestamps that can genuinely arrive out of order. This entry exists to document the gap; implementation is deferred.
 
 ---
 
@@ -53,7 +53,7 @@ These are targeted, self-contained fixes. Each should be reviewed and tested ind
 
 **Goal:** Before simulating bad network conditions, establish a debug overlay that makes network health observable in real time. This is the instrument panel you will use to verify every subsequent phase.
 
-**Approach:** A toggleable in-game overlay (e.g. F3) rendered on a high-priority `CanvasLayer`. All data is gathered passively — no changes to networking logic.
+**Approach:** A toggleable in-game overlay (e.g. F3) rendered on a high-priority `CanvasLayer`. Data requires minimal instrumentation additions (counters only) to controllers — no changes to networking or movement logic. Telemetry data is aggregated in a lightweight `NetworkTelemetry` autoload (or a `RefCounted` owned by `GameManager`); controllers call into it with narrow methods like `NetworkTelemetry.record_reconcile(delta_m: float)`, keeping observation decoupled from the systems being observed.
 
 **Suggested metrics:**
 
@@ -77,12 +77,63 @@ The exact set of metrics is decided during implementation — this is a starting
 
 **Goal:** Allow the developer to test all subsequent phases locally as if running on real ping, without needing a second machine.
 
-**Approach:** A debug-only shim in `NetworkManager` that intercepts outgoing and incoming packets and holds them in a queue for a configurable delay before processing. Configurable via `@export` vars (not behind a build flag — just set to zero in production use):
+**Approach:** A new autoload singleton `NetworkSimManager` (`Scripts/networking/network_sim.gd`) owns a pending-packet queue and processes it each frame. `NetworkManager` wraps its send sites to route through the sim when enabled. Because the delay is applied independently at each receive site, both directions of the loopback are delayed separately, properly simulating a realistic round-trip.
 
-- `sim_lag_one_way_ms: int = 0` — added delay in each direction (set to 50 for 100ms RTT simulation)
-- `sim_packet_loss_pct: float = 0.0` — probability of silently dropping any given packet (0.0–1.0)
+**New file — `Scripts/networking/network_sim.gd`:**
 
-Because this runs on loopback, the delay must be applied in both directions independently to properly simulate a realistic network round-trip. The telemetry overlay from Phase 2 should visibly reflect the simulated conditions.
+```gdscript
+class_name NetworkSimManager
+extends Node
+# Autoload singleton.
+
+var enabled: bool = false
+var delay_ms: float = 0.0   # one-way; set to 50 for ~100 ms RTT simulation
+var jitter_ms: float = 0.0  # +/- uniform jitter added to each packet
+var loss_pct: float = 0.0   # 0–100; unreliable packets only
+
+class PendingPacket:
+    var fire_time: float
+    var callable: Callable
+    var args: Array
+
+var _pending: Array[PendingPacket] = []
+
+func send(c: Callable, args: Array, reliable: bool) -> void:
+    if not enabled:
+        c.callv(args); return
+    if not reliable and randf() * 100.0 < loss_pct:
+        return  # dropped
+    var jitter := randf_range(-jitter_ms, jitter_ms)
+    var d := maxf((delay_ms + jitter) / 1000.0, 0.0)
+    if d <= 0.0:
+        c.callv(args); return
+    var p := PendingPacket.new()
+    p.fire_time = Time.get_ticks_msec() / 1000.0 + d
+    p.callable = c
+    p.args = args
+    _pending.append(p)
+
+func _process(_delta: float) -> void:
+    if _pending.is_empty(): return
+    _pending.sort_custom(func(a, b): return a.fire_time < b.fire_time)
+    var now := Time.get_ticks_msec() / 1000.0
+    while not _pending.is_empty() and _pending[0].fire_time <= now:
+        var p: PendingPacket = _pending.pop_front()
+        p.callable.callv(p.args)
+```
+
+**`NetworkManager` integration:** At each receive site, wrap the payload dispatch through `NetworkSimManager.send`. Example for world state:
+
+```gdscript
+@rpc("authority", "unreliable_ordered")
+func receive_world_state(state: Array) -> void:
+    if is_host: return
+    NetworkSimManager.send(world_state_received.emit, [state], false)
+```
+
+Same pattern for `receive_input` on the host side (`reliable: false`). Reliable RPCs pass `true` for the `reliable` flag so packet loss is never simulated for them.
+
+With `NetworkSimManager.enabled = false`, the only overhead is a single bool check per RPC — no allocations, no timers.
 
 **Review gate:** Before moving to Phase 4, verify with the telemetry overlay that simulated lag produces the expected degradation in buffer depth, reconcile frequency, and starvation events — and that the Phase 1 fixes hold up under those conditions.
 
@@ -95,13 +146,17 @@ Because this runs on loopback, the delay must be applied in both directions inde
 **Approach:** NTP-style ongoing RTT sampling.
 
 **Protocol (per client):**
-1. Client sends a ping to host carrying `client_send_time` (client's local monotonic clock).
-2. Host replies with `client_send_time` (echoed) + `host_time_at_receive` + `host_time_at_send`.
-3. Client computes:
+1. On connect, immediately fire N rapid pings (e.g. 3 pings, 0.5s apart) to establish a baseline quickly.
+2. Host replies to each ping with `client_send_time` (echoed) + `host_time_at_receive` + `host_time_at_send`.
+3. Client computes per sample:
    - `rtt = client_receive_time - client_send_time`
    - `host_time_offset = host_time_at_receive + (rtt / 2.0) - client_receive_time`
-4. Repeat at a low cadence (e.g. every 5 seconds). Maintain a small rolling window of samples (e.g. 8), discard the two highest-RTT outliers, average the rest.
-5. Expose `NetworkManager.estimated_host_time() -> float` on all peers.
+4. Once all N initial responses arrive, compute the initial estimate and mark the clock as **ready**. Switch to a slow ongoing cadence (e.g. every 5 seconds) for drift correction. Maintain a small rolling window of samples (e.g. 8), discard the two highest-RTT outliers, average the rest.
+5. Expose `NetworkManager.estimated_host_time() -> float` on all peers. Returns invalid / asserts until clock is ready.
+
+**Bootstrap:** The rapid initial pings run during the lobby phase, so the clock is settled before the game starts. `LocalInputGatherer` does not stamp host timestamps until the clock is marked ready.
+
+**Join-in-progress:** When a client joins a game already in progress there is no lobby phase to absorb the warm-up window. Options include showing a brief loading screen until the initial pings complete (~1.5s), or spawning the player immediately with `_host_time_offset = 0.0` and accepting some reconcile weirdness until the baseline arrives. **Decision deferred to implementation** — evaluate which feels better in practice.
 
 **Input timestamp migration:**
 - `InputState.sequence: int` is replaced with `InputState.host_timestamp: float`.
@@ -109,6 +164,9 @@ Because this runs on loopback, the delay must be applied in both directions inde
 - `SkaterNetworkState.last_processed_sequence` becomes `last_processed_host_timestamp: float`.
 - The reconcile filter in `LocalController` filters by timestamp instead of sequence.
 - `RemoteController` uses timestamp for input ordering on the host.
+- **Monotonic guard (from 1e):** Now that state packets carry host-supplied timestamps, add the one-line guard to buffer appends — if `new_state.host_timestamp ≤ buffer.back().host_timestamp`, discard. This is where 1e becomes meaningful.
+
+**Wire format note:** Replacing `last_processed_sequence: int` with `last_processed_host_timestamp: float` in `SkaterNetworkState` is a breaking wire format change — old and new builds cannot interoperate. Expected for early development; note in release changelog.
 
 **Review gates:**
 - Telemetry overlay shows stable RTT estimate and low variance across samples.
@@ -130,6 +188,12 @@ Because this runs on loopback, the delay must be applied in both directions inde
 
 **Memory estimate:** ~155 values × 720 frames (3 s at 240 Hz) ≈ 450 KB. Well within budget.
 
+**Allocation strategy:** Use a pre-allocated ring buffer per actor — a fixed-size Array of state objects created once at startup. Each tick overwrites the current slot and advances a write pointer rather than appending new objects, avoiding per-tick allocation and GC pressure. This is the canonical pattern in game networking: Quake III Arena uses exactly this approach (`PACKET_BACKUP = 32` slots, single `Hunk_Alloc` at startup, writes indexed via `nextSnapshotEntities % numSnapshotEntities` — see `sv_snapshot.c`). References for implementation:
+- Quake III Arena source (`sv_snapshot.c`, MIT): https://github.com/id-Software/Quake-III-Arena/blob/master/code/server/sv_snapshot.c
+- Fabien Sanglard's Quake 3 network model walkthrough: https://fabiensanglard.net/quake3/network.php
+- Glenn Fiedler — Snapshot Interpolation: https://gafferongames.com/post/snapshot_interpolation/
+- Valve — Latency Compensating Methods: https://developer.valvesoftware.com/wiki/Latency_Compensating_Methods_in_Client/Server_In-game_Protocol_Design_and_Optimization
+
 **WorldStateCodec integration:**
 - `WorldStateCodec` currently reads actor state by calling into live scene nodes.
 - After this phase, it reads from `StateBufferManager.latest_state()` instead.
@@ -148,7 +212,7 @@ Because this runs on loopback, the delay must be applied in both directions inde
 
 ## Phase 6 — Interaction Logic Refactor
 
-**Goal:** All interaction detection (puck pickup, poke check, body check, body block, deflection) is moved from Godot physics callbacks (`Area3D` overlaps in `puck.gd`) into the domain layer as pure geometric functions operating on state snapshots. This creates a single code path usable by both real-time host physics and lag-compensated rewind.
+**Goal:** All interaction detection (puck pickup, poke check, body check, body block, deflection, and goalie contact) is moved from Godot physics callbacks (`Area3D` overlaps in `puck.gd`) into the domain layer as pure geometric functions operating on state snapshots. This creates a single consistent code path for all interactions. Player interactions are additionally usable by lag-compensated rewind (Phase 7); goalie contact is host-only AI with no client claims, so it benefits from the consistency and testability but is not lag-compensated.
 
 **Tunneling:** Interaction checks use **swept sphere** geometry (ray-sphere intersection from previous position to current position), not point-in-sphere. This provides tunneling protection equivalent to CCD for interaction zones. Jolt CCD remains enabled on the puck for wall/rink geometry collisions.
 
@@ -158,6 +222,7 @@ New pure static functions, e.g.:
 - `check_pickup(puck_prev: Vector3, puck_curr: Vector3, blade_pos: Vector3, pickup_radius: float) -> bool`
 - `check_poke(puck_prev: Vector3, puck_curr: Vector3, blade_prev: Vector3, blade_curr: Vector3, poke_radius: float) -> bool`
 - `check_body_contact(puck_prev: Vector3, puck_curr: Vector3, skater_pos: Vector3, body_radius: float) -> ContactResult`
+- `check_goalie_contact(puck_prev: Vector3, puck_curr: Vector3, goalie_body_positions: Array[Vector3], contact_radius: float) -> bool`
 
 All take state values (positions, velocities) — no scene node references. All are unit-testable.
 
@@ -189,11 +254,13 @@ All take state values (positions, velocities) — no scene node references. All 
 
 **RTT compensation:** The host adjusts the rewind timestamp by half the measured RTT for that client, so it rewinds to approximately what the client *saw* when they acted.
 
-**Anti-abuse guard:** Claims are only accepted within a configurable time window (`max_claim_age_ms`, default = 200 ms). Claims outside this window are silently dropped.
+**Contested pickup:** If two clients submit valid pickup claims within one broadcast cycle (~50 ms) of each other, neither is awarded the puck. Instead the host applies a deflection using the Phase 6 `check_poke` geometry for both blade positions — the puck squirts free. Both players enter a brief pickup cooldown. First-one-wins applies for claims separated by more than one broadcast cycle.
+
+**Anti-abuse guard:** Claims are only accepted within a configurable time window (`max_claim_age_ms`, default = 200 ms). Claims outside this window are silently dropped. The primary defence against fabricated positions is architectural — the host validates claims against its own `StateBufferManager` state, not the client's snapshot, so position lies are irrelevant. **Known vulnerability:** a malicious client can spam claims at high frequency, causing excessive rewind computation on the host. Per-player rate limiting and broader DDoS hardening are deferred to the dedicated server phase (see Future Work).
 
 **Review gates:**
 - Under simulated lag (Phase 3), pickup and poke check interactions feel responsive at the client without host disagreement.
-- Telemetry shows claim accept/reject rate.
+- Telemetry shows claim accept/reject rate and contested pickup frequency.
 - Stress test: high packet loss + high latency should not allow false claim acceptance.
 
 ---
@@ -211,3 +278,20 @@ Phase 1 (Bug Fixes)
 ```
 
 Each phase gates the next. Do not begin a phase until the previous one has been reviewed, tested under simulated conditions, and explicitly signed off.
+
+---
+
+## Future Work (Out of Scope for This Refactor)
+
+### Dedicated Headless Server
+
+The long-term goal is to run the host as a headless Godot server process, allowing public matchmaking without requiring a player to host. Phases 5 and 6 are designed with this in mind — `StateBufferManager` and the domain interaction functions have no scene node dependencies. Before the headless server ships, the following will need dedicated design passes:
+
+### Anti-Abuse and DDoS Hardening
+
+Running a public server changes the threat model. Known vulnerabilities deferred from Phase 7:
+- **Claim spam:** malicious clients sending interaction claims at high frequency to force excessive rewind computation. Requires per-player claim rate limiting.
+- **Connection flooding:** standard ENet-level concern for any public server. Requires connection rate limiting and IP-level filtering upstream of Godot.
+- **Griefing via disconnect/reconnect:** rapid reconnect cycles that disrupt active games.
+
+A dedicated security review and anti-abuse pass should be completed before any public server deployment.
