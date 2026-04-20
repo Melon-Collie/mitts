@@ -188,6 +188,12 @@ With `NetworkSimManager.enabled = false`, the only overhead is a single bool che
 
 **Memory estimate:** ~155 values × 720 frames (3 s at 240 Hz) ≈ 450 KB. Well within budget.
 
+**Allocation strategy:** Use a pre-allocated ring buffer per actor — a fixed-size Array of state objects created once at startup. Each tick overwrites the current slot and advances a write pointer rather than appending new objects, avoiding per-tick allocation and GC pressure. This is the canonical pattern in game networking: Quake III Arena uses exactly this approach (`PACKET_BACKUP = 32` slots, single `Hunk_Alloc` at startup, writes indexed via `nextSnapshotEntities % numSnapshotEntities` — see `sv_snapshot.c`). References for implementation:
+- Quake III Arena source (`sv_snapshot.c`, MIT): https://github.com/id-Software/Quake-III-Arena/blob/master/code/server/sv_snapshot.c
+- Fabien Sanglard's Quake 3 network model walkthrough: https://fabiensanglard.net/quake3/network.php
+- Glenn Fiedler — Snapshot Interpolation: https://gafferongames.com/post/snapshot_interpolation/
+- Valve — Latency Compensating Methods: https://developer.valvesoftware.com/wiki/Latency_Compensating_Methods_in_Client/Server_In-game_Protocol_Design_and_Optimization
+
 **WorldStateCodec integration:**
 - `WorldStateCodec` currently reads actor state by calling into live scene nodes.
 - After this phase, it reads from `StateBufferManager.latest_state()` instead.
