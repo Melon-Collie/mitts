@@ -36,7 +36,7 @@ func _process(_delta: float) -> void:
 	var t: NetworkTelemetry = NetworkTelemetry.instance
 	_label.text = (
 		"── Net Debug (F3 to close) ──────\n"
-		+ "RTT:           — (Phase 4)\n"
+		+ "RTT:           %.0f ms%s\n" % [NetworkManager.get_rtt_ms(), "" if NetworkManager.is_clock_ready() else " (syncing)"]
 		+ "WS recv:       %.1f Hz\n" % t.world_state_hz
 		+ "Input send:    %.1f Hz\n" % t.input_hz
 		+ "Reconcile:     %.1f/s   avg %.3f m\n" % [t.reconcile_per_sec, t.reconcile_magnitude_avg]
