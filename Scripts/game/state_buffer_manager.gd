@@ -130,9 +130,10 @@ func _alloc_skater(peer_id: int) -> void:
 func _interpolate_skater(peer_id: int, ts: float) -> SkaterNetworkState:
 	var buf: Array = _skater_buffers[peer_id]
 	var ptr: int = _skater_ptrs[peer_id]
-	var from_s: SkaterNetworkState
-	var to_s: SkaterNetworkState
-	var t: float = _find_bracket(buf, ptr, ts, from_s, to_s)
+	var bracket: Array = _find_bracket(buf, ptr, ts)
+	var t: float = bracket[0]
+	var from_s: SkaterNetworkState = bracket[1]
+	var to_s: SkaterNetworkState = bracket[2]
 	if t < 0.0:
 		return to_s if to_s != null else SkaterNetworkState.new()
 	var result := SkaterNetworkState.new()
@@ -149,11 +150,10 @@ func _interpolate_skater(peer_id: int, ts: float) -> SkaterNetworkState:
 
 
 func _interpolate_puck(ts: float) -> PuckNetworkState:
-	var from_s: SkaterNetworkState  # dummy — _find_bracket is generic via index
-	var to_s: SkaterNetworkState
-	var from_p: PuckNetworkState
-	var to_p: PuckNetworkState
-	var t: float = _find_bracket_puck(ts, from_p, to_p)
+	var bracket: Array = _find_bracket_puck(ts)
+	var t: float = bracket[0]
+	var from_p: PuckNetworkState = bracket[1]
+	var to_p: PuckNetworkState = bracket[2]
 	if t < 0.0:
 		return to_p if to_p != null else PuckNetworkState.new()
 	var result := PuckNetworkState.new()
@@ -165,9 +165,10 @@ func _interpolate_puck(ts: float) -> PuckNetworkState:
 
 
 func _interpolate_goalie(team_id: int, ts: float) -> GoalieNetworkState:
-	var from_g: GoalieNetworkState
-	var to_g: GoalieNetworkState
-	var t: float = _find_bracket_goalie(team_id, ts, from_g, to_g)
+	var bracket: Array = _find_bracket_goalie(team_id, ts)
+	var t: float = bracket[0]
+	var from_g: GoalieNetworkState = bracket[1]
+	var to_g: GoalieNetworkState = bracket[2]
 	if t < 0.0:
 		return to_g if to_g != null else GoalieNetworkState.new()
 	var result := GoalieNetworkState.new()
@@ -180,80 +181,73 @@ func _interpolate_goalie(team_id: int, ts: float) -> GoalieNetworkState:
 	return result
 
 
-# Returns t in [0,1] and sets from_s/to_s. Returns -1.0 if no valid bracket.
-func _find_bracket(buf: Array, write_ptr: int, ts: float, from_s: SkaterNetworkState, to_s: SkaterNetworkState) -> float:
-	# Walk backwards from newest to find the two entries bracketing ts.
+# Returns [t, from, to]. t < 0 means no valid bracket; from may be null.
+func _find_bracket(buf: Array, write_ptr: int, ts: float) -> Array:
 	var newest_ptr: int = (write_ptr - 1 + BUFFER_SIZE) % BUFFER_SIZE
 	var newest: SkaterNetworkState = buf[newest_ptr]
 	if newest.host_timestamp == 0.0:
-		return -1.0
+		return [-1.0, null, null]
 	if ts >= newest.host_timestamp:
-		to_s = newest
-		return -1.0
+		return [-1.0, null, newest]
 	var i: int = newest_ptr
 	var prev: int = (i - 1 + BUFFER_SIZE) % BUFFER_SIZE
 	while prev != write_ptr:
 		var s: SkaterNetworkState = buf[prev]
 		if s.host_timestamp == 0.0 or s.host_timestamp <= ts:
-			from_s = buf[prev]
-			to_s = buf[i]
+			var from_s: SkaterNetworkState = buf[prev]
+			var to_s: SkaterNetworkState = buf[i]
 			var dt: float = to_s.host_timestamp - from_s.host_timestamp
 			if dt <= 0.0:
-				return 0.0
-			return clampf((ts - from_s.host_timestamp) / dt, 0.0, 1.0)
+				return [0.0, from_s, to_s]
+			return [clampf((ts - from_s.host_timestamp) / dt, 0.0, 1.0), from_s, to_s]
 		i = prev
 		prev = (prev - 1 + BUFFER_SIZE) % BUFFER_SIZE
-	to_s = newest
-	return -1.0
+	return [-1.0, null, newest]
 
 
-func _find_bracket_puck(ts: float, from_p: PuckNetworkState, to_p: PuckNetworkState) -> float:
+func _find_bracket_puck(ts: float) -> Array:
 	var newest_ptr: int = (_puck_ptr - 1 + BUFFER_SIZE) % BUFFER_SIZE
 	var newest: PuckNetworkState = _puck_buffer[newest_ptr]
 	if newest.host_timestamp == 0.0:
-		return -1.0
+		return [-1.0, null, null]
 	if ts >= newest.host_timestamp:
-		to_p = newest
-		return -1.0
+		return [-1.0, null, newest]
 	var i: int = newest_ptr
 	var prev: int = (i - 1 + BUFFER_SIZE) % BUFFER_SIZE
 	while prev != _puck_ptr:
 		var s: PuckNetworkState = _puck_buffer[prev]
 		if s.host_timestamp == 0.0 or s.host_timestamp <= ts:
-			from_p = _puck_buffer[prev]
-			to_p = _puck_buffer[i]
+			var from_p: PuckNetworkState = _puck_buffer[prev]
+			var to_p: PuckNetworkState = _puck_buffer[i]
 			var dt: float = to_p.host_timestamp - from_p.host_timestamp
 			if dt <= 0.0:
-				return 0.0
-			return clampf((ts - from_p.host_timestamp) / dt, 0.0, 1.0)
+				return [0.0, from_p, to_p]
+			return [clampf((ts - from_p.host_timestamp) / dt, 0.0, 1.0), from_p, to_p]
 		i = prev
 		prev = (prev - 1 + BUFFER_SIZE) % BUFFER_SIZE
-	to_p = newest
-	return -1.0
+	return [-1.0, null, newest]
 
 
-func _find_bracket_goalie(team_id: int, ts: float, from_g: GoalieNetworkState, to_g: GoalieNetworkState) -> float:
+func _find_bracket_goalie(team_id: int, ts: float) -> Array:
 	var buf: Array = _goalie_buffers[team_id]
 	var write_ptr: int = _goalie_ptrs[team_id]
 	var newest_ptr: int = (write_ptr - 1 + BUFFER_SIZE) % BUFFER_SIZE
 	var newest: GoalieNetworkState = buf[newest_ptr]
 	if newest.host_timestamp == 0.0:
-		return -1.0
+		return [-1.0, null, null]
 	if ts >= newest.host_timestamp:
-		to_g = newest
-		return -1.0
+		return [-1.0, null, newest]
 	var i: int = newest_ptr
 	var prev: int = (i - 1 + BUFFER_SIZE) % BUFFER_SIZE
 	while prev != write_ptr:
 		var s: GoalieNetworkState = buf[prev]
 		if s.host_timestamp == 0.0 or s.host_timestamp <= ts:
-			from_g = buf[prev]
-			to_g = buf[i]
+			var from_g: GoalieNetworkState = buf[prev]
+			var to_g: GoalieNetworkState = buf[i]
 			var dt: float = to_g.host_timestamp - from_g.host_timestamp
 			if dt <= 0.0:
-				return 0.0
-			return clampf((ts - from_g.host_timestamp) / dt, 0.0, 1.0)
+				return [0.0, from_g, to_g]
+			return [clampf((ts - from_g.host_timestamp) / dt, 0.0, 1.0), from_g, to_g]
 		i = prev
 		prev = (prev - 1 + BUFFER_SIZE) % BUFFER_SIZE
-	to_g = newest
-	return -1.0
+	return [-1.0, null, newest]

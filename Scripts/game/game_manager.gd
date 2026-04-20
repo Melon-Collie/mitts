@@ -51,6 +51,11 @@ var _telemetry: NetworkTelemetry = null
 var _debug_overlay: NetworkDebugOverlay = null
 var _state_buffer_manager: StateBufferManager = null
 
+# ── Lag compensation ──────────────────────────────────────────────────────────
+const _MAX_CLAIM_AGE_S: float = 0.2
+const _CONTEST_WINDOW_S: float = 0.05
+var _pending_pickup_claim: Dictionary = {}
+
 
 func _ready() -> void:
 	randomize()
@@ -80,6 +85,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.slot_swap_requested.connect(_on_slot_swap_requested)
 	NetworkManager.slot_swap_confirmed.connect(_on_slot_swap_confirmed)
 	NetworkManager.return_to_lobby_received.connect(_on_return_to_lobby)
+	NetworkManager.pickup_claim_received.connect(_on_pickup_claim_received)
 
 
 # ── Process ───────────────────────────────────────────────────────────────────
@@ -87,6 +93,11 @@ func _process(delta: float) -> void:
 	if _telemetry != null:
 		_telemetry.tick(delta)
 		_observe_telemetry()
+	if not _pending_pickup_claim.is_empty():
+		var age: float = Time.get_ticks_msec() / 1000.0 - _pending_pickup_claim.received_at
+		if age >= _CONTEST_WINDOW_S:
+			puck_controller.apply_lag_comp_pickup(_pending_pickup_claim.skater)
+			_pending_pickup_claim = {}
 	if not NetworkManager.is_host or _state_machine == null:
 		return
 	if _state_machine.tick(delta):
@@ -410,6 +421,7 @@ func _resolve_skater_peer_id(skater: Skater) -> int:
 
 
 func _on_server_puck_picked_up_by(peer_id: int) -> void:
+	_pending_pickup_claim = {}
 	var record: PlayerRecord = _registry.get_record(peer_id)
 	if record == null:
 		return
@@ -418,6 +430,35 @@ func _on_server_puck_picked_up_by(peer_id: int) -> void:
 	if not record.is_local:
 		NetworkManager.send_puck_picked_up(peer_id)
 	NetworkManager.send_carrier_changed_to_all(peer_id)
+
+
+func _on_pickup_claim_received(peer_id: int, host_timestamp: float, blade_pos: Vector3, blade_vel: Vector3, rtt_ms: float) -> void:
+	if not NetworkManager.is_host or puck == null or puck_controller == null:
+		return
+	if puck.carrier != null or puck.pickup_locked:
+		return
+	var now: float = Time.get_ticks_msec() / 1000.0
+	if now - host_timestamp > _MAX_CLAIM_AGE_S:
+		return
+	var record: PlayerRecord = _registry.get_record(peer_id)
+	if record == null or record.skater == null or record.skater.is_ghost:
+		return
+	if _state_buffer_manager == null or not _state_buffer_manager.is_ready():
+		return
+	var rewind_time: float = host_timestamp - rtt_ms / 2000.0
+	var snapshot: WorldSnapshot = _state_buffer_manager.get_state_at(rewind_time)
+	if snapshot.puck_state == null or snapshot.puck_state.carrier_peer_id != -1:
+		return
+	var puck_pos: Vector3 = snapshot.puck_state.position
+	var prev_snap: WorldSnapshot = _state_buffer_manager.get_state_at(rewind_time - 1.0 / 240.0)
+	var puck_prev: Vector3 = prev_snap.puck_state.position if prev_snap.puck_state != null else puck_pos
+	if not PuckInteractionRules.check_pickup(puck_prev, puck_pos, blade_pos, PuckController.PICKUP_RADIUS):
+		return
+	if not _pending_pickup_claim.is_empty():
+		puck_controller.apply_contested_pickup(record.skater, _pending_pickup_claim.skater)
+		_pending_pickup_claim = {}
+	else:
+		_pending_pickup_claim = { skater = record.skater, received_at = now }
 
 
 func _on_server_puck_released_by_carrier(peer_id: int) -> void:

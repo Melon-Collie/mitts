@@ -22,8 +22,14 @@ func _physics_process(delta: float) -> void:
 		_interpolate()
 		skater.update_stick_mesh()
 
-func receive_input(state: InputState) -> void:
-	_latest_input = state
+func receive_input_batch(batch: Array) -> void:
+	var newest: InputState = null
+	for raw: Array in batch:
+		var state: InputState = InputState.from_array(raw)
+		if newest == null or state.host_timestamp > newest.host_timestamp:
+			newest = state
+	if newest != null and newest.host_timestamp > _latest_input.host_timestamp:
+		_latest_input = newest
 
 func _drive_from_input(delta: float) -> void:
 	# Always advance timestamp so the client's reconcile filter stays current,

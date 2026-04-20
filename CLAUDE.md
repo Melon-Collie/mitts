@@ -39,11 +39,11 @@ Lower layers never reach up: actors take their collaborators via `setup()` (e.g.
 
 Authoritative host model. The host runs all physics. Clients predict locally and reconcile against server state. See `ARCHITECTURE.md` for full detail.
 
-**Rates:** inputs 60 Hz unreliable (client → host); world state 20 Hz unreliable (host → clients); events reliable RPCs.
+**Rates:** inputs 60 Hz unreliable (client → host), batched as last 12 physics frames per packet for redundancy; world state 20 Hz unreliable (host → clients); events reliable RPCs.
 
-**Skaters:** `LocalController` predicts + reconciles (reset + replay on error). `RemoteController` drives from input on host, interpolates buffered snapshots (100ms delay) on clients.
+**Skaters:** `LocalController` predicts + reconciles (snap to server state → replay unacknowledged inputs → immediate snap, no gradual correction). Reconcile saves and restores all state-machine fields so shot transitions during replay don't corrupt the active state. `RemoteController` drives from input on host (newest-wins dedup across batch), interpolates buffered snapshots (100ms delay) on clients.
 
-**Puck:** three client-side modes — local carrier (pinned to blade), trajectory prediction (Jolt runs client-side after release, soft-reconciled each broadcast), interpolation (100ms buffer, position only). `_carrier_peer_id` is managed exclusively by reliable RPCs, never by world state, to avoid unreliable ordering conflicts.
+**Puck:** three client-side modes — local carrier (pinned to blade), trajectory prediction (Jolt runs client-side after release, soft-reconciled each broadcast), interpolation (100ms buffer, position only). `_carrier_peer_id` is managed exclusively by reliable RPCs, never by world state, to avoid unreliable ordering conflicts. Pickup claims use lag compensation: client sends a reliable `receive_pickup_claim` RPC with `host_timestamp`, `blade_pos`, `blade_vel`, and `rtt_ms`; host rewinds `StateBufferManager` to `host_timestamp − rtt/2`, checks swept sphere, and either grants the pickup, squirts the puck on a contested claim (two claims within 50ms), or drops it as stale/invalid.
 
 **Goalies:** AI runs on host only. Clients interpolate via `BufferedGoalieState` (100ms delay). `tracking_speed` is the master difficulty knob — lower = more positional lag = easier to beat.
 
@@ -112,7 +112,7 @@ Authoritative host model. The host runs all physics. Clients predict locally and
 | `game/build_info.gd` | Autoload. Holds `VERSION` (baked in by `deploy.yml` at export time; stays `"dev"` in the editor), `RELEASE_TAG`, and `REPO` — all read by `UpdateChecker`. |
 | `game/team.gd` | Team object: defended goal, goalie controller |
 | `game/player_record.gd` | Per-player data: peer_id, slot, team, skater, controller, faceoff_position, is_left_handed, stats (PlayerStats) |
-| `networking/network_telemetry.gd` | `class_name NetworkTelemetry`. RefCounted owned by GameManager. Rolling 1-second window counters for WS recv rate, input rate, reconcile rate/magnitude, extrapolation events, buffer depths. Static call sites (`NetworkTelemetry.record_*`) are null-safe outside a game session. Ticked by `GameManager._process`. |
+| `networking/network_telemetry.gd` | `class_name NetworkTelemetry`. RefCounted owned by GameManager. Rolling 1-second window counters for WS recv rate, input rate, reconcile rate/magnitude, blade jump rate/magnitude, blade reconcile magnitude, extrapolation events, buffer depths. Static call sites (`NetworkTelemetry.record_*`) are null-safe outside a game session. Ticked by `GameManager._process`. |
 | `networking/clock_sync.gd` | NTP-style RTT sampler (no class_name; instantiated inside NetworkManager on client connect). Fires 3 initial pings at 0.5 s then one every 5 s. Sliding window of 8 samples; drops 2 highest-RTT outliers. `estimated_host_time()` = local time + averaged offset. `is_ready` after first 3 samples. |
 | `networking/network_sim.gd` | Autoload (no class_name). Simulates delay/jitter/packet-loss at the receive site. Six presets (Off → ~200 ms Bad) toggled with keys 0–5. Both peers must enable matching presets to simulate a full round-trip RTT. Reliable RPCs and unreliable world-state are both routed through it during a game session. |
 | `networking/buffered_skater_state.gd` | Timestamped SkaterNetworkState for interpolation buffer |

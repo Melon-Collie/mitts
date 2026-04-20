@@ -3,16 +3,16 @@ extends SkaterController
 
 @export var reconcile_position_threshold: float = 0.05
 @export var reconcile_velocity_threshold: float = 0.4
-@export var correction_frames: float = 48.0
 
 @onready var camera: GameCamera = null
 var _gatherer: LocalInputGatherer = null
 var _current_input: InputState = InputState.new()
 var _input_history: Array[InputState] = []
-var _correction_offset: Vector3 = Vector3.ZERO
-var _correction_step: Vector3 = Vector3.ZERO
 var _team_id: int = -1  # set at setup; needed for client-side offside prediction
 var last_reconcile_error: float = 0.0
+var _claim_cooldown: float = 0.0
+var _last_blade_pos: Vector3 = Vector3.ZERO
+const _BLADE_JUMP_THRESHOLD: float = 0.05
 
 func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> void:
 	camera = $Camera3D
@@ -35,11 +35,14 @@ func set_goal_context(goal_0: HockeyGoal, goal_1: HockeyGoal, carrier_team_resol
 func get_current_input() -> InputState:
 	return _current_input
 
+func get_input_batch() -> Array[InputState]:
+	var start: int = maxi(_input_history.size() - 12, 0)
+	return _input_history.slice(start)
+
 func teleport_to(pos: Vector3) -> void:
 	super.teleport_to(pos)
 	_input_history.clear()
-	_correction_offset = Vector3.ZERO
-	_correction_step = Vector3.ZERO
+	_last_blade_pos = Vector3.ZERO
 
 func _physics_process(delta: float) -> void:
 	if skater == null or puck == null or _gatherer == null:
@@ -50,30 +53,40 @@ func _physics_process(delta: float) -> void:
 		# inputs when the phase lifts — regardless of packet timing.
 		skater.velocity = Vector3.ZERO
 		_input_history.clear()
-		_correction_offset = Vector3.ZERO
-		_correction_step = Vector3.ZERO
 		return
 	if _game_state.is_input_blocked():
 		return
 	# Predict offsides locally for instant ghost feedback
 	_predict_offside()
-	if not _correction_offset.is_zero_approx():
-		if _correction_step.length() >= _correction_offset.length():
-			skater.global_position -= _correction_offset
-			_correction_offset = Vector3.ZERO
-			_correction_step = Vector3.ZERO
-		else:
-			skater.global_position -= _correction_step
-			_correction_offset -= _correction_step
 	_current_input = _gatherer.gather()
 	_current_input.delta = delta
+	if NetworkManager.is_clock_ready():
+		_current_input.host_timestamp = NetworkManager.estimated_host_time()
 	_input_history.append(_current_input)
 	# Cap history size to prevent unbounded growth
 	if _input_history.size() > 480:  # 2 seconds at 240Hz
 		_input_history.pop_front()
 	_process_input(_current_input, delta)
+	var blade_pos: Vector3 = skater.get_blade_contact_global()
+	if not _last_blade_pos.is_zero_approx():
+		var blade_delta: float = blade_pos.distance_to(_last_blade_pos)
+		if blade_delta > _BLADE_JUMP_THRESHOLD:
+			NetworkTelemetry.record_blade_jump(blade_delta)
+	_last_blade_pos = blade_pos
+	_claim_cooldown = maxf(_claim_cooldown - delta, 0.0)
+	if not _is_host and _claim_cooldown <= 0.0 and NetworkManager.is_clock_ready():
+		if puck.carrier == null and not puck.pickup_locked and not skater.is_ghost:
+			var dist: float = puck.global_position.distance_to(skater.get_blade_contact_global())
+			if dist <= PuckController.PICKUP_RADIUS:
+				_claim_cooldown = 0.3
+				NetworkManager.send_pickup_claim(
+					NetworkManager.estimated_host_time(),
+					skater.get_blade_contact_global(),
+					skater.blade_world_velocity,
+					NetworkManager.get_rtt_ms())
 
 func reconcile(server_state: SkaterNetworkState) -> void:
+	var pre_reconcile_blade: Vector3 = skater.get_blade_contact_global()
 	# Always apply authoritative ghost state from server (covers icing + offsides)
 	skater.set_ghost(server_state.is_ghost)
 	if _game_state.is_movement_locked():
@@ -89,23 +102,63 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			server_state.position, server_state.velocity,
 			reconcile_position_threshold, reconcile_velocity_threshold):
 		return
-	var pre_snap: Vector3 = skater.global_position
+	var pre_facing: Vector2 = _facing
+	var pre_upper_body: float = _upper_body_angle
+	var pre_lower_body_lag: float = _lower_body_lag
+	# Save shot/state-machine state — replay can transition through shoot states
+	# (WRISTER_AIM → FOLLOW_THROUGH → SKATING) and leave _state wrong. Restore so
+	# the next _process_input runs the correct handler and blade doesn't teleport.
+	var pre_state: State = _state
+	var pre_shot_dir: Vector3 = _shot_dir
+	var pre_follow_through_timer: float = _follow_through_timer
+	var pre_follow_through_is_slapper: bool = _follow_through_is_slapper
+	var pre_locked_slapper_dir: Vector2 = _locked_slapper_dir
+	var pre_one_timer_window_timer: float = _one_timer_window_timer
+	var pre_charge_distance: float = _charge_distance
+	var pre_slapper_charge_timer: float = _slapper_charge_timer
+	var pre_prev_mouse_screen_pos: Vector2 = _prev_mouse_screen_pos
+	var pre_prev_blade_dir: Vector3 = _prev_blade_dir
 	skater.global_position = server_state.position
 	skater.velocity = server_state.velocity
-	skater.set_facing(server_state.facing)
+	# Snap facing for replay accuracy — facing drives move_and_slide direction,
+	# so the replay must start from the server's facing to reproduce the trajectory.
 	_facing = server_state.facing
-	_upper_body_angle = server_state.upper_body_rotation_y
+	skater.set_facing(_facing)
 	_lower_body_lag = 0.0
-	skater.set_upper_body_rotation(_upper_body_angle)
 	skater.set_lower_body_lag(0.0)
 	for input in _input_history:
 		_process_input(input, input.delta)
-	var new_error: Vector3 = pre_snap - skater.global_position
-	last_reconcile_error = new_error.length()
-	if not new_error.is_zero_approx():
-		_correction_offset += new_error
-		_correction_step = _correction_offset / correction_frames
-		skater.global_position += new_error
+	# Restore local visual and state-machine state so the blade and controller
+	# stay on the correct trajectory after replay.
+	_facing = pre_facing
+	_upper_body_angle = pre_upper_body
+	_lower_body_lag = pre_lower_body_lag
+	_state = pre_state
+	_shot_dir = pre_shot_dir
+	_follow_through_timer = pre_follow_through_timer
+	_follow_through_is_slapper = pre_follow_through_is_slapper
+	_locked_slapper_dir = pre_locked_slapper_dir
+	_one_timer_window_timer = pre_one_timer_window_timer
+	_charge_distance = pre_charge_distance
+	_slapper_charge_timer = pre_slapper_charge_timer
+	_prev_mouse_screen_pos = pre_prev_mouse_screen_pos
+	_prev_blade_dir = pre_prev_blade_dir
+	skater.set_facing(_facing)
+	skater.set_upper_body_rotation(_upper_body_angle)
+	skater.set_lower_body_lag(_lower_body_lag)
+	last_reconcile_error = (skater.global_position - server_state.position).length()
+	# Blade must be re-applied after position is set — upper_body_to_local()
+	# uses skater.global_position, so it must reflect the final replayed position.
+	_apply_blade_from_mouse(_current_input, 0.0)
+	var blade_reconcile_delta: float = skater.get_blade_contact_global().distance_to(pre_reconcile_blade)
+	NetworkTelemetry.record_blade_reconcile(blade_reconcile_delta)
+	if blade_reconcile_delta > _BLADE_JUMP_THRESHOLD:
+		NetworkTelemetry.record_blade_jump(blade_reconcile_delta)
+
+func on_puck_picked_up_network() -> void:
+	super.on_puck_picked_up_network()
+	_claim_cooldown = 0.0
+
 
 func _predict_offside() -> void:
 	if _is_host:

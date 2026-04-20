@@ -51,6 +51,7 @@ func _process(_delta: float) -> void:
 		+ "WS recv:       %.1f Hz\n" % t.world_state_hz
 		+ "Input send:    %.1f Hz\n" % t.input_hz
 		+ "Reconcile:     %.1f/s   avg %.3f m\n" % [t.reconcile_per_sec, t.reconcile_magnitude_avg]
+		+ "Blade jumps:   %.1f/s   avg %.3f m   reconcile avg %.3f m\n" % [t.blade_jump_per_sec, t.blade_jump_mag_avg, t.blade_reconcile_mag_avg]
 		+ "Extrapolation: %.1f/s\n" % t.extrapolation_per_sec
 		+ "Buf depth:     skater=%d  puck=%d  goalie=%d" % [t.buffer_depth_skater, t.buffer_depth_puck, t.buffer_depth_goalie]
 	)

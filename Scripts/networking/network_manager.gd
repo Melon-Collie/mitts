@@ -28,6 +28,7 @@ signal game_started(config: Dictionary)
 signal lobby_roster_synced(roster: Array)
 signal return_to_lobby_received(roster: Array)
 signal clock_ready
+signal pickup_claim_received(peer_id: int, host_timestamp: float, blade_pos: Vector3, blade_vel: Vector3, rtt_ms: float)
 
 # ── State ─────────────────────────────────────────────────────────────────────
 var is_host: bool = false
@@ -200,9 +201,12 @@ func _process(delta: float) -> void:
 		_input_timer += capped_delta
 		if _input_timer >= input_delta:
 			_input_timer -= input_delta
-			var state: InputState = _local_controller.get_current_input()
+			var batch: Array[InputState] = _local_controller.get_input_batch()
+			var serialized: Array = []
+			for s: InputState in batch:
+				serialized.append(s.to_array())
 			NetworkTelemetry.record_input_sent()
-			receive_input.rpc_id(1, state.to_array())
+			receive_input_batch.rpc_id(1, serialized)
 
 	if is_host:
 		_state_timer += capped_delta
@@ -238,13 +242,12 @@ func get_peer_number(peer_id: int) -> int:
 	return _peer_numbers.get(peer_id, 10)
 
 @rpc("any_peer", "unreliable_ordered")
-func receive_input(data: Array) -> void:
+func receive_input_batch(data: Array) -> void:
 	var sender_id: int = multiplayer.get_remote_sender_id()
 	NetworkSimManager.send(
 		func(d: Array, sid: int) -> void:
-			var state: InputState = InputState.from_array(d)
 			if _remote_controllers.has(sid):
-				_remote_controllers[sid].receive_input(state)
+				_remote_controllers[sid].receive_input_batch(d)
 			else:
 				push_warning("no remote controller for peer %d" % sid),
 		[data, sender_id], false)
@@ -282,13 +285,26 @@ func receive_pong(client_send_time: float, host_time: float) -> void:
 				clock_ready.emit(),
 		[client_send_time, host_time], true)
 
+func send_pickup_claim(host_timestamp: float, blade_pos: Vector3, blade_vel: Vector3, rtt_ms: float) -> void:
+	NetworkSimManager.send(
+		func(ts: float, bp: Vector3, bv: Vector3, rtt: float) -> void:
+			receive_pickup_claim.rpc_id(1, ts, bp, bv, rtt),
+		[host_timestamp, blade_pos, blade_vel, rtt_ms], true)
+
+@rpc("any_peer", "reliable")
+func receive_pickup_claim(host_timestamp: float, blade_pos: Vector3, blade_vel: Vector3, rtt_ms: float) -> void:
+	if not is_host:
+		return
+	var peer_id: int = multiplayer.get_remote_sender_id()
+	pickup_claim_received.emit(peer_id, host_timestamp, blade_pos, blade_vel, rtt_ms)
+
 func estimated_host_time() -> float:
 	if is_host:
 		return Time.get_ticks_msec() / 1000.0
 	if _clock_sync == null or not _clock_sync.is_ready:
 		return 0.0
 	return _clock_sync.estimated_host_time()
-
+	
 func is_clock_ready() -> bool:
 	return is_host or (_clock_sync != null and _clock_sync.is_ready)
 

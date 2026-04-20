@@ -333,6 +333,7 @@ Instead of stoppages, offsides and icing are enforced via a **ghost mode** — o
 | 17 | Networking refactor Phase 4 (host clock sync — NTP-style RTT, input host_timestamp) | Done |
 | 18 | Networking refactor Phase 5 (StateBufferManager host-side ring buffers; goalie keyed by team_id) | Done |
 | 19 | Networking refactor Phase 6 (swept sphere interaction detection; puck pickup/poke/deflect moved to domain layer) | Done |
+| 20 | Networking refactor Phase 7 (input redundancy, lag-compensated pickup claims, state-machine save/restore in reconcile, blade telemetry, remove gradual correction) | Done |
 
 ## Distribution
 

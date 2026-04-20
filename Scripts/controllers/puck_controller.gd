@@ -3,6 +3,7 @@ extends Node
 
 const PICKUP_RADIUS: float = 0.5
 const POKE_RADIUS: float = 0.5
+const CONTEST_SQUIRT_SPEED: float = 3.0
 
 @export var interpolation_delay: float = Constants.NETWORK_INTERPOLATION_DELAY
 @export var extrapolation_max_ms: float = 50.0
@@ -73,6 +74,31 @@ func _physics_process(delta: float) -> void:
 	elif not _predicting_trajectory:
 		_interpolate()
 	# During prediction, Jolt runs freely — no manual stepping needed
+
+# ── Lag Compensation ─────────────────────────────────────────────────────────
+# Called by GameManager after validating a client pickup claim against the
+# state buffer. Re-checks carrier == null so a concurrent _check_interactions
+# detection (which needs no validation) is never double-applied.
+func apply_lag_comp_pickup(skater: Skater) -> void:
+	if not is_instance_valid(skater) or puck.carrier != null:
+		return
+	puck.set_carrier(skater)
+	_on_puck_picked_up(skater)
+
+
+# Two valid pickup claims arrived within the contest window. Neither player
+# wins — the puck squirts free perpendicular to the line between them.
+func apply_contested_pickup(skater_a: Skater, skater_b: Skater) -> void:
+	if not is_instance_valid(skater_a) or not is_instance_valid(skater_b):
+		return
+	var dir: Vector3 = skater_a.global_position - skater_b.global_position
+	dir.y = 0.0
+	if dir.length() < 0.001:
+		dir = Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0))
+	puck.set_puck_velocity(dir.normalized() * CONTEST_SQUIRT_SPEED)
+	puck.set_skater_cooldown(skater_a, puck.reattach_cooldown)
+	puck.set_skater_cooldown(skater_b, puck.reattach_cooldown)
+
 
 # ── Server Interaction Detection ─────────────────────────────────────────────
 func _check_interactions() -> void:

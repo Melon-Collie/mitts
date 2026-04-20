@@ -94,6 +94,9 @@ func is_on_cooldown(skater: Skater) -> bool:
 func _set_cooldown(skater: Skater, duration: float) -> void:
 	_cooldown_timers[skater] = duration
 
+func set_skater_cooldown(skater: Skater, duration: float) -> void:
+	_set_cooldown(skater, duration)
+
 func remove_skater_cooldown(skater: Skater) -> void:
 	_cooldown_timers.erase(skater)
 
