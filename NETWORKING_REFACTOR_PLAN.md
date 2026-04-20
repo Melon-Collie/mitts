@@ -45,7 +45,7 @@ These are targeted, self-contained fixes. Each should be reviewed and tested ind
 
 **Files:** `Scripts/controllers/remote_controller.gd:39–42`, `Scripts/controllers/puck_controller.gd`, `Scripts/controllers/goalie_controller.gd`
 **Problem:** Buffer appends do not check that the incoming timestamp is newer than the current tail. `unreliable_ordered` makes out-of-order delivery unlikely but not impossible under driver quirks.
-**Fix:** One-line guard before each append: if the new state's timestamp is ≤ the tail's timestamp, discard it. No structural changes needed.
+**Note:** The buffers currently timestamp entries with `_current_time` — a local accumulator that always increases. With local timestamps a late-arriving packet gets a newer timestamp than the one before it, so this guard would never fire. **The actual fix belongs in Phase 4**, once world state packets carry host-supplied timestamps that can genuinely arrive out of order. This entry exists to document the gap; implementation is deferred.
 
 ---
 
