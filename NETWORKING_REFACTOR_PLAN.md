@@ -254,11 +254,13 @@ All take state values (positions, velocities) — no scene node references. All 
 
 **RTT compensation:** The host adjusts the rewind timestamp by half the measured RTT for that client, so it rewinds to approximately what the client *saw* when they acted.
 
-**Anti-abuse guard:** Claims are only accepted within a configurable time window (`max_claim_age_ms`, default = 200 ms). Claims outside this window are silently dropped.
+**Contested pickup:** If two clients submit valid pickup claims within one broadcast cycle (~50 ms) of each other, neither is awarded the puck. Instead the host applies a deflection using the Phase 6 `check_poke` geometry for both blade positions — the puck squirts free. Both players enter a brief pickup cooldown. First-one-wins applies for claims separated by more than one broadcast cycle.
+
+**Anti-abuse guard:** Claims are only accepted within a configurable time window (`max_claim_age_ms`, default = 200 ms). Claims outside this window are silently dropped. The primary defence against fabricated positions is architectural — the host validates claims against its own `StateBufferManager` state, not the client's snapshot, so position lies are irrelevant. **Known vulnerability:** a malicious client can spam claims at high frequency, causing excessive rewind computation on the host. Per-player rate limiting and broader DDoS hardening are deferred to the dedicated server phase (see Future Work).
 
 **Review gates:**
 - Under simulated lag (Phase 3), pickup and poke check interactions feel responsive at the client without host disagreement.
-- Telemetry shows claim accept/reject rate.
+- Telemetry shows claim accept/reject rate and contested pickup frequency.
 - Stress test: high packet loss + high latency should not allow false claim acceptance.
 
 ---
@@ -276,3 +278,20 @@ Phase 1 (Bug Fixes)
 ```
 
 Each phase gates the next. Do not begin a phase until the previous one has been reviewed, tested under simulated conditions, and explicitly signed off.
+
+---
+
+## Future Work (Out of Scope for This Refactor)
+
+### Dedicated Headless Server
+
+The long-term goal is to run the host as a headless Godot server process, allowing public matchmaking without requiring a player to host. Phases 5 and 6 are designed with this in mind — `StateBufferManager` and the domain interaction functions have no scene node dependencies. Before the headless server ships, the following will need dedicated design passes:
+
+### Anti-Abuse and DDoS Hardening
+
+Running a public server changes the threat model. Known vulnerabilities deferred from Phase 7:
+- **Claim spam:** malicious clients sending interaction claims at high frequency to force excessive rewind computation. Requires per-player claim rate limiting.
+- **Connection flooding:** standard ENet-level concern for any public server. Requires connection rate limiting and IP-level filtering upstream of Godot.
+- **Griefing via disconnect/reconnect:** rapid reconnect cycles that disrupt active games.
+
+A dedicated security review and anti-abuse pass should be completed before any public server deployment.
