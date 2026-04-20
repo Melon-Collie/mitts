@@ -54,8 +54,7 @@ func tick(delta: float) -> void:
 	input_hz = _input_count / _window_timer
 	reconcile_per_sec = _reconcile_count / _window_timer
 	extrapolation_per_sec = _extrapolation_count / _window_timer
-	if _reconcile_mag_n > 0:
-		reconcile_magnitude_avg = _reconcile_mag_sum / _reconcile_mag_n
+	reconcile_magnitude_avg = _reconcile_mag_sum / _reconcile_mag_n if _reconcile_mag_n > 0 else 0.0
 	_world_state_count = 0
 	_input_count = 0
 	_reconcile_count = 0

@@ -7,7 +7,12 @@ var _showing: bool = false
 func _ready() -> void:
 	layer = 100
 	var panel := PanelContainer.new()
-	panel.position = Vector2(8, 8)
+	panel.anchor_left = 1.0
+	panel.anchor_right = 1.0
+	panel.anchor_top = 0.0
+	panel.anchor_bottom = 0.0
+	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	panel.position = Vector2(-8, 8)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.0, 0.0, 0.0, 0.72)
 	style.set_corner_radius_all(4)
