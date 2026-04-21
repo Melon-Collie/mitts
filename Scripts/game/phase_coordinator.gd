@@ -110,11 +110,9 @@ func _enter_faceoff(puck: Puck) -> void:
 	if puck == null:
 		return
 	puck.pickup_locked = false
-	if not puck.puck_picked_up.is_connected(_on_faceoff_puck_picked_up):
-		puck.puck_picked_up.connect(_on_faceoff_puck_picked_up, CONNECT_ONE_SHOT)
 
 
-func _on_faceoff_puck_picked_up(_carrier: Skater) -> void:
+func on_pickup(_peer_id: int) -> void:
 	if _state_machine.on_faceoff_puck_picked_up():
 		phase_changed.emit(_state_machine.current_phase)
 

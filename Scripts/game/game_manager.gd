@@ -457,6 +457,7 @@ func _on_server_puck_picked_up_by(peer_id: int) -> void:
 	if record == null:
 		return
 	_shot_tracker.on_pickup(peer_id)
+	_phase_coord.on_pickup(peer_id)
 	record.controller.on_puck_picked_up_network()
 	if not record.is_local:
 		NetworkManager.send_puck_picked_up(peer_id)
@@ -763,8 +764,7 @@ const _HIT_CLAIM_MAX_RANGE: float = 2.0
 
 func _on_hit_landed(hitter_peer_id: int, victim: Skater) -> void:
 	if NetworkManager.is_host:
-		var victim_peer_id: int = _registry.resolve_peer_id(victim)
-		_hit_tracker.on_hit(hitter_peer_id, victim_peer_id, _registry.resolve_team_id(victim))
+		_hit_tracker.on_hit(hitter_peer_id, _registry.resolve_peer_id(victim), _registry.resolve_team_id(victim))
 		return
 	# Client: local skater is the only one whose physics fires body_checked_player.
 	# Send a lag-compensated claim to the host for crediting.

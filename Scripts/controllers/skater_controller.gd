@@ -750,7 +750,7 @@ func _clamp_blade_butterfly_box(blade_world: Vector3, gpos: Vector3, rot_y: floa
 # ── Blade: From Mouse (Top-Hand IK) ───────────────────────────────────────────
 # Input is treated as a desired blade position. The top hand is solved as a
 # consequence, clamped to an asymmetric ROM. See domain/rules/top_hand_ik.gd.
-func _apply_blade_from_mouse(input: InputState, delta: float) -> void:
+func _apply_blade_from_mouse(input: InputState, _delta: float) -> void:
 	var mouse_world: Vector3 = input.mouse_world_pos
 	mouse_world.y = 0.0
 

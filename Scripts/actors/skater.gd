@@ -148,16 +148,16 @@ const _JERSEY_FONT: Dictionary = {
 	" ": [0,0,0,0,0,0,0],
 }
 
-func _draw_jersey_glyph(img: Image, ch: String, x: int, y: int, scale: int, color: Color) -> void:
+func _draw_jersey_glyph(img: Image, ch: String, x: int, y: int, glyph_scale: int, color: Color) -> void:
 	var rows: Array = _JERSEY_FONT.get(ch.to_upper(), _JERSEY_FONT[" "])
 	for row: int in rows.size():
 		var bits: int = rows[row]
 		for col: int in 5:
 			if bits & (1 << (4 - col)):
-				for sy: int in scale:
-					for sx: int in scale:
-						var px: int = x + col * scale + sx
-						var py: int = y + row * scale + sy
+				for sy: int in glyph_scale:
+					for sx: int in glyph_scale:
+						var px: int = x + col * glyph_scale + sx
+						var py: int = y + row * glyph_scale + sy
 						if px >= 0 and px < img.get_width() and py >= 0 and py < img.get_height():
 							img.set_pixel(px, py, color)
 
@@ -177,7 +177,7 @@ func _make_jersey_texture(p_name: String, number: int, text_color: Color) -> Ima
 	var char_w_name: int = GLYPH_W * NAME_SCALE
 	var gap_name: int = NAME_SCALE
 	var total_w_name: int = name_upper.length() * char_w_name + (name_upper.length() - 1) * gap_name
-	var name_x: int = (IMG_W - total_w_name) / 2
+	var name_x: int = int((IMG_W - total_w_name) / 2.0)
 	var name_y: int = 2
 	for i: int in name_upper.length():
 		_draw_jersey_glyph(img, name_upper[i], name_x + i * (char_w_name + gap_name), name_y, NAME_SCALE, text_color)
@@ -187,7 +187,7 @@ func _make_jersey_texture(p_name: String, number: int, text_color: Color) -> Ima
 	var char_w_num: int = GLYPH_W * NUM_SCALE
 	var gap_num: int = NUM_SCALE
 	var total_w_num: int = num_str.length() * char_w_num + (num_str.length() - 1) * gap_num
-	var num_x: int = (IMG_W - total_w_num) / 2
+	var num_x: int = int((IMG_W - total_w_num) / 2.0)
 	var num_y: int = name_y + GLYPH_H * NAME_SCALE + 6
 	for i: int in num_str.length():
 		_draw_jersey_glyph(img, num_str[i], num_x + i * (char_w_num + gap_num), num_y, NUM_SCALE, text_color)
@@ -208,8 +208,8 @@ func _make_shoulder_texture(number: int, text_color: Color) -> ImageTexture:
 	var char_w: int = GLYPH_W * NUM_SCALE
 	var gap: int = NUM_SCALE
 	var total_w: int = num_str.length() * char_w + (num_str.length() - 1) * gap
-	var x: int = (IMG_W - total_w) / 2
-	var y: int = (IMG_H - GLYPH_H * NUM_SCALE) / 2
+	var x: int = int((IMG_W - total_w) / 2.0)
+	var y: int = int((IMG_H - GLYPH_H * NUM_SCALE) / 2.0)
 	for i: int in num_str.length():
 		_draw_jersey_glyph(img, num_str[i], x + i * (char_w + gap), y, NUM_SCALE, text_color)
 

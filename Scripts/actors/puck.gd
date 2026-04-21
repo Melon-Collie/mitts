@@ -1,7 +1,6 @@
 class_name Puck
 extends RigidBody3D
 
-signal puck_picked_up(carrier: Skater)
 signal puck_released()
 signal puck_stripped(ex_carrier: Skater)
 signal puck_touched_loose(skater: Skater)  # any loose-puck touch (deflection, body block)
