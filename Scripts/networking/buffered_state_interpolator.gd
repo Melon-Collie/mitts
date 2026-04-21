@@ -14,6 +14,7 @@ class BracketResult:
 	var t: float = 0.0            # clamped [0, 1]; 1.0 when extrapolating
 	var is_extrapolating: bool = false
 	var extrapolation_dt: float = 0.0  # seconds past the newest snapshot
+	var bracket_dt: float = 0.0   # time span between from and to snapshots
 
 # Returns a BracketResult locating render_time within the buffer, or null if
 # the buffer is empty or render_time hasn't reached the oldest entry yet.
@@ -53,4 +54,5 @@ static func _make(a, b, render_time: float) -> BracketResult:
 	r.to_state = b.state
 	var span: float = b.timestamp - a.timestamp
 	r.t = clampf((render_time - a.timestamp) / span, 0.0, 1.0) if span > 0.0 else 0.0
+	r.bracket_dt = span
 	return r

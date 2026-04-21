@@ -116,7 +116,9 @@ func _interpolate() -> void:
 		var from_state: SkaterNetworkState = bracket.from_state
 		var to_state: SkaterNetworkState = bracket.to_state
 		var t: float = bracket.t
-		interpolated.position = from_state.position.lerp(to_state.position, t)
+		var dt: float = bracket.bracket_dt
+		interpolated.position = _hermite(from_state.position, from_state.velocity,
+				to_state.position, to_state.velocity, t, dt)
 		interpolated.velocity = from_state.velocity.lerp(to_state.velocity, t)
 		interpolated.blade_position = from_state.blade_position.lerp(to_state.blade_position, t)
 		interpolated.top_hand_position = from_state.top_hand_position.lerp(to_state.top_hand_position, t)
@@ -140,6 +142,14 @@ func _interpolate() -> void:
 			_rejoin_blend_start_time = -1.0
 	_apply_state_to_skater(interpolated)
 	BufferedStateInterpolator.drop_stale(_state_buffer, render_time)
+
+static func _hermite(p0: Vector3, v0: Vector3, p1: Vector3, v1: Vector3, t: float, dt: float) -> Vector3:
+	var t2: float = t * t
+	var t3: float = t2 * t
+	return (2.0*t3 - 3.0*t2 + 1.0) * p0 \
+		 + (t3 - 2.0*t2 + t) * dt * v0 \
+		 + (-2.0*t3 + 3.0*t2) * p1 \
+		 + (t3 - t2) * dt * v1
 
 func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	skater.global_position = state.position

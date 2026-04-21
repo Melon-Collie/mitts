@@ -30,7 +30,7 @@ func send(c: Callable, args: Array, reliable: bool) -> void:
 		return
 	if not reliable and randf() * 100.0 < loss_pct:
 		return
-	var jitter := randf_range(-jitter_ms, jitter_ms)
+	var jitter := randf_range(0.0, jitter_ms * 2.0)
 	var d := maxf((delay_ms + jitter) / 1000.0, 0.0)
 	if d <= 0.0:
 		c.callv(args)

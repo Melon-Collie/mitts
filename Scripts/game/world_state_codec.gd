@@ -7,7 +7,7 @@ extends RefCounted
 #
 # Two wire formats are defined here:
 #
-# 1. World state  (20 Hz, unreliable_ordered):
+# 1. World state  (40 Hz, unreliable_ordered):
 #      [ws_sequence, peer_id, skater_bytes(35), queue_depth, ...,
 #       puck_bytes(13), goalie0_bytes(10), goalie1_bytes(10),
 #       score0, score1, phase, period, time_remaining]
@@ -37,6 +37,7 @@ signal clock_updated(time_remaining: float)
 signal shots_on_goal_changed(sog_0: int, sog_1: int)
 signal queue_depth_feedback(depth: int)
 
+const SKATER_STRIDE: int = 3       # peer_id + skater_bytes + queue_depth
 const GOALIE_STATE_SIZE: int = 1
 const PUCK_STATE_SIZE: int = 1
 const GAME_STATE_SIZE: int = 5  # score0, score1, phase, period, time_remaining
@@ -98,6 +99,15 @@ func encode_world_state() -> Array:
 
 func decode_world_state(state: Array) -> void:
 	var goalie_controllers: Array = _goalie_controllers_getter.call()
+	var tail_size: int = GAME_STATE_SIZE + goalie_controllers.size() * GOALIE_STATE_SIZE + PUCK_STATE_SIZE
+	var min_size: int = 1 + tail_size  # ws_sequence + tail (0 skaters)
+	if state.size() < min_size:
+		push_warning("WorldStateCodec: packet too small (%d < %d), dropping" % [state.size(), min_size])
+		return
+	var skater_section_size: int = state.size() - 1 - tail_size
+	if skater_section_size % SKATER_STRIDE != 0:
+		push_warning("WorldStateCodec: skater section not a multiple of SKATER_STRIDE, dropping")
+		return
 	var game_state_offset: int = state.size() - GAME_STATE_SIZE
 	var goalie_offset: int = game_state_offset - goalie_controllers.size() * GOALIE_STATE_SIZE
 	var puck_offset: int = goalie_offset - PUCK_STATE_SIZE
