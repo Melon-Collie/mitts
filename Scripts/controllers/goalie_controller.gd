@@ -142,8 +142,6 @@ func _physics_process(delta: float) -> void:
 		return
 	if not is_server:
 		_current_time += delta
-		interpolation_delay = move_toward(
-			interpolation_delay, NetworkManager.get_target_interpolation_delay(), 0.005 * delta)
 		_interpolate()
 		return
 	_update_tracking(delta)
@@ -455,8 +453,14 @@ func apply_state(network_state: GoalieNetworkState) -> void:
 	buffered.timestamp = _current_time
 	buffered.state = network_state
 	_state_buffer.append(buffered)
-	if _state_buffer.size() > 10:
+	if _state_buffer.size() > 30:
 		_state_buffer.pop_front()
+	_adapt_interpolation_delay()
+
+func _adapt_interpolation_delay() -> void:
+	var target: float = NetworkManager.get_target_interpolation_delay()
+	var change: float = lerpf(interpolation_delay, target, 0.15) - interpolation_delay
+	interpolation_delay += clampf(change, -0.001, 0.005)
 
 func _interpolate() -> void:
 	var render_time: float = _current_time - interpolation_delay

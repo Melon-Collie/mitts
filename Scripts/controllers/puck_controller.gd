@@ -32,6 +32,8 @@ var is_extrapolating: bool = false
 var _rejoin_blend_start_time: float = -1.0
 var _rejoin_blend_from_pos: Vector3 = Vector3.ZERO
 
+var _goalies: Array[Goalie] = []
+
 func get_buffer_depth() -> int:
 	return _state_buffer.size()
 
@@ -72,6 +74,9 @@ func set_skater_getter(getter: Callable) -> void:
 
 func set_team_id_resolver(resolver: Callable) -> void:
 	_team_id_resolver = resolver
+
+func set_goalies(goalies: Array[Goalie]) -> void:
+	_goalies = goalies
 
 func _physics_process(delta: float) -> void:
 	if puck == null:
@@ -174,6 +179,7 @@ func notify_local_release(direction: Vector3, power: float, rtt_ms: float) -> vo
 	puck.set_client_prediction_mode(true)
 	puck.set_puck_velocity(direction * power)
 	_state_buffer.clear()
+	_set_goalie_puck_collision(false)
 
 func notify_remote_carrier_changed(new_carrier_peer_id: int) -> void:
 	_pending_local_release = false
@@ -183,6 +189,7 @@ func notify_remote_carrier_changed(new_carrier_peer_id: int) -> void:
 		return
 	_predicting_trajectory = false
 	puck.set_client_prediction_mode(false)
+	_set_goalie_puck_collision(true)
 
 # Called when the server forcibly ends a carry (e.g. goal scored).
 # Does not start trajectory prediction — just drops back to interpolation.
@@ -192,6 +199,7 @@ func notify_local_puck_dropped() -> void:
 	_pending_local_release = false
 	puck.set_client_prediction_mode(false)
 	_state_buffer.clear()
+	_set_goalie_puck_collision(true)
 
 func _apply_local_carrier_position() -> void:
 	# Pin puck at the blade contact point (mid-blade), not the heel (Marker3D).
@@ -246,6 +254,13 @@ func _resolve_peer_id(skater: Skater) -> int:
 		return -1
 	return _peer_id_resolver.call(skater)
 
+func _set_goalie_puck_collision(enabled: bool) -> void:
+	if is_server:
+		return
+	for g: Goalie in _goalies:
+		if is_instance_valid(g):
+			g.set_puck_collision_enabled(enabled)
+
 # ── State Serialization ───────────────────────────────────────────────────────
 # Returns the typed network state object. Flattening to Array happens at the
 # RPC boundary (GameManager.get_world_state), not here.
@@ -270,6 +285,7 @@ func apply_state(state: PuckNetworkState) -> void:
 			# A different player picked it up — end trajectory prediction.
 			_predicting_trajectory = false
 			puck.set_client_prediction_mode(false)
+			_set_goalie_puck_collision(true)
 		else:
 			if _pending_local_release:
 				_pending_local_release = false  # Host confirmed the release

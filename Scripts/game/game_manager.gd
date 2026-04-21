@@ -381,6 +381,8 @@ func _wire_subsystems() -> void:
 	_swap_coord.stats_updated.connect(stats_updated.emit)
 	_swap_coord.carrier_swap_needs_drop.connect(_drop_puck_if_carried)
 
+	puck_controller.set_goalies(goalies)
+
 	_telemetry = NetworkTelemetry.new()
 	NetworkTelemetry.instance = _telemetry
 	_debug_overlay = NetworkDebugOverlay.new()
@@ -581,7 +583,12 @@ func on_remote_puck_release(direction: Vector3, power: float, shooter_peer_id: i
 		# position, but that gave blade_at(shot - rtt) for a moving skater — a full
 		# RTT behind, causing the moving-shot snap.
 		if rtt_ms > 0.0:
-			puck.set_puck_position(puck.get_puck_position() + direction * power * rtt_half)
+			var skater_vel := Vector3.ZERO
+			var shooter_record: PlayerRecord = _registry.get_record(shooter_peer_id)
+			if shooter_record != null and shooter_record.skater != null:
+				skater_vel = shooter_record.skater.velocity
+				skater_vel.y = 0.0
+			puck.set_puck_position(puck.get_puck_position() + (direction * power + skater_vel) * rtt_half)
 		var saved_goalie_positions: Array[Vector3] = []
 		var saved_goalie_rotations: Array[float] = []
 		if _state_buffer_manager != null and _state_buffer_manager.is_ready() and shooter_peer_id > 0 and rtt_ms > 0.0:
