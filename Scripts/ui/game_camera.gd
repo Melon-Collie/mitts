@@ -30,26 +30,25 @@ extends Camera3D
 # ── Goal Context (set via set_goal_context) ───────────────────────────────────
 var _goal_0: HockeyGoal = null  # Team 0's defended goal
 var _goal_1: HockeyGoal = null  # Team 1's defended goal
-var _carrier_team_resolver: Callable  # Skater → int team_id
+var _carrier_team_getter: Callable  # () -> int team_id, or -1 if no carrier
 
 # ── Runtime ───────────────────────────────────────────────────────────────────
 var _current_height: float = 15.0
 var _smoothed_attack_dir: float = 0.0    # lerps between -1, 0, +1 on possession change
 var _smoothed_direction_factor: float = 1.0  # lerps movement-direction bias to avoid snapping
 
-func set_goal_context(goal_0: HockeyGoal, goal_1: HockeyGoal, carrier_team_resolver: Callable) -> void:
+func set_goal_context(goal_0: HockeyGoal, goal_1: HockeyGoal, carrier_team_getter: Callable) -> void:
 	_goal_0 = goal_0
 	_goal_1 = goal_1
-	_carrier_team_resolver = carrier_team_resolver
+	_carrier_team_getter = carrier_team_getter
 
 # Returns +1 or -1 (attacking direction in Z) when someone has the puck, 0 otherwise.
 func _get_attacking_direction() -> int:
-	if not _carrier_team_resolver.is_valid() or puck == null:
+	if not _carrier_team_getter.is_valid():
 		return 0
-	var carrier: Skater = puck.get_carrier()
-	if carrier == null:
+	var carrier_team: int = _carrier_team_getter.call()
+	if carrier_team == -1:
 		return 0
-	var carrier_team: int = _carrier_team_resolver.call(carrier)
 	var attacking_goal: HockeyGoal = _goal_1 if carrier_team == 0 else _goal_0
 	if attacking_goal == null:
 		return 0

@@ -400,7 +400,7 @@ func _on_player_spawned(record: PlayerRecord) -> void:
 	if record.is_local:
 		var local_ctrl: LocalController = record.controller as LocalController
 		local_ctrl.set_goal_context(
-				teams[0].defended_goal, teams[1].defended_goal, _resolve_skater_team_id)
+				teams[0].defended_goal, teams[1].defended_goal, _get_puck_carrier_team_id)
 		local_ctrl.puck_release_requested.connect(_on_puck_release_requested)
 		NetworkManager.register_local_controller(local_ctrl)
 	else:
@@ -425,6 +425,18 @@ func _on_registry_player_added(record: PlayerRecord) -> void:
 # ── Puck / Puck controller signal handlers ───────────────────────────────────
 func _resolve_skater_team_id(skater: Skater) -> int:
 	return _registry.resolve_team_id(skater) if _registry != null else -1
+
+
+func _get_puck_carrier_team_id() -> int:
+	if puck_controller != null:
+		var local_carrier: Skater = puck_controller.get_local_carrier()
+		if local_carrier != null:
+			return _resolve_skater_team_id(local_carrier)
+	if puck != null:
+		var carrier: Skater = puck.get_carrier()
+		if carrier != null:
+			return _resolve_skater_team_id(carrier)
+	return -1
 
 
 func _resolve_skater_peer_id(skater: Skater) -> int:

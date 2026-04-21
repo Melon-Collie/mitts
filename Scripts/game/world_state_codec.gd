@@ -84,9 +84,10 @@ func encode_world_state() -> Array:
 			depth = (record.controller as RemoteController).get_queue_depth()
 		state.append(depth)
 	state.append(_encode_puck_quantized(_state_buffer.latest_puck_state()))
-	var goalie_count: int = _goalie_controllers_getter.call().size()
-	for i: int in goalie_count:
-		state.append(_encode_goalie_quantized(_state_buffer.latest_goalie_state(i)))
+	var goalie_controllers: Array = _goalie_controllers_getter.call()
+	for i: int in goalie_controllers.size():
+		state.append(_encode_goalie_quantized(_state_buffer.latest_goalie_state(
+				(goalie_controllers[i] as GoalieController).team_id)))
 	state.append(_state_machine.scores[0])
 	state.append(_state_machine.scores[1])
 	state.append(_state_machine.current_phase)

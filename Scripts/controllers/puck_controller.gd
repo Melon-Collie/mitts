@@ -31,6 +31,9 @@ var _rejoin_blend_from_pos: Vector3 = Vector3.ZERO
 func get_buffer_depth() -> int:
 	return _state_buffer.size()
 
+func get_local_carrier() -> Skater:
+	return _local_carrier_skater
+
 # Callable (Skater) -> int peer_id, or -1 if not registered.
 var _peer_id_resolver: Callable = Callable()
 # Callable () -> Array[Skater] of all active skaters. Host-only interaction detection.
