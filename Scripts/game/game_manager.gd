@@ -92,6 +92,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.ghost_state_received.connect(_on_ghost_state_received)
 	NetworkManager.hit_claim_received.connect(_on_hit_claim_received)
 	NetworkManager.goalie_state_transition_received.connect(_on_goalie_state_transition_received)
+	NetworkManager.goalie_shot_reaction_received.connect(_on_goalie_shot_reaction_received)
 
 
 # ── Process ───────────────────────────────────────────────────────────────────
@@ -385,6 +386,7 @@ func _wire_subsystems() -> void:
 	if NetworkManager.is_host:
 		for gc: GoalieController in goalie_controllers:
 			gc.state_transitioned.connect(NetworkManager.send_goalie_state_transition_to_all)
+			gc.shot_reaction_started.connect(NetworkManager.send_goalie_shot_reaction_to_all)
 
 	_telemetry = NetworkTelemetry.new()
 	NetworkTelemetry.instance = _telemetry
@@ -540,6 +542,13 @@ func _on_goalie_state_transition_received(team_id: int, new_state: int) -> void:
 	for gc: GoalieController in goalie_controllers:
 		if gc.team_id == team_id:
 			gc.apply_state_transition(new_state)
+			return
+
+
+func _on_goalie_shot_reaction_received(team_id: int, impact_x: float, impact_y: float, is_elevated: bool) -> void:
+	for gc: GoalieController in goalie_controllers:
+		if gc.team_id == team_id:
+			gc.apply_shot_reaction(impact_x, impact_y, is_elevated)
 			return
 
 

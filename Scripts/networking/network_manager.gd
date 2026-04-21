@@ -32,6 +32,7 @@ signal clock_ready
 signal pickup_claim_received(peer_id: int, host_timestamp: float, rtt_ms: float, interp_delay_ms: float)
 signal hit_claim_received(hitter_peer_id: int, victim_peer_id: int, host_timestamp: float, rtt_ms: float)
 signal goalie_state_transition_received(team_id: int, new_state: int)
+signal goalie_shot_reaction_received(team_id: int, impact_x: float, impact_y: float, is_elevated: bool)
 
 # ── State ─────────────────────────────────────────────────────────────────────
 var is_host: bool = false
@@ -474,6 +475,17 @@ func notify_ghost_state(peer_id: int, is_ghost: bool) -> void:
 	NetworkSimManager.send(
 		func(pid: int, g: bool) -> void: ghost_state_received.emit(pid, g),
 		[peer_id, is_ghost], true)
+
+func send_goalie_shot_reaction_to_all(team_id: int, impact_x: float, impact_y: float, is_elevated: bool) -> void:
+	for peer_id: int in multiplayer.get_peers():
+		notify_goalie_shot_reaction.rpc_id(peer_id, team_id, impact_x, impact_y, is_elevated)
+
+@rpc("authority", "reliable")
+func notify_goalie_shot_reaction(team_id: int, impact_x: float, impact_y: float, is_elevated: bool) -> void:
+	NetworkSimManager.send(
+		func(tid: int, ix: float, iy: float, elev: bool) -> void:
+			goalie_shot_reaction_received.emit(tid, ix, iy, elev),
+		[team_id, impact_x, impact_y, is_elevated], true)
 
 func send_goalie_state_transition_to_all(team_id: int, new_state: int) -> void:
 	for peer_id: int in multiplayer.get_peers():

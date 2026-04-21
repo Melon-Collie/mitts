@@ -60,6 +60,7 @@ extends Node
 
 # ── References ────────────────────────────────────────────────────────────────
 signal state_transitioned(team_id: int, new_state: int)
+signal shot_reaction_started(team_id: int, impact_x: float, impact_y: float, is_elevated: bool)
 
 var goalie: Goalie = null
 var puck: Puck = null
@@ -97,6 +98,7 @@ var _state_buffer: Array[BufferedGoalieState] = []
 var is_extrapolating: bool = false
 var _transition_override_state: int = -1
 var _transition_override_until: float = 0.0
+var _client_reaction_timer: float = 0.0
 
 func get_buffer_depth() -> int:
 	return _state_buffer.size()
@@ -146,6 +148,10 @@ func _physics_process(delta: float) -> void:
 		return
 	if not is_server:
 		_current_time += delta
+		if _client_reaction_timer > 0.0:
+			_client_reaction_timer -= delta
+			if _client_reaction_timer <= 0.0:
+				_reacting_to_shot = false
 		_interpolate()
 		return
 	_update_tracking(delta)
@@ -437,6 +443,7 @@ func _on_puck_released() -> void:
 	_shot_is_elevated = result.is_elevated
 	_reacting_to_shot = true
 	_recovering_from_butterfly = false  # new shot supersedes recovery mode
+	shot_reaction_started.emit(team_id, _shot_impact_x, _shot_impact_y, _shot_is_elevated)
 	if result.is_low:
 		_shot_timer = result.reaction_delay
 	# Elevated shot: stay standing, _get_config raises the glove or blocker
@@ -502,6 +509,18 @@ func apply_state_transition(new_state: int) -> void:
 		return
 	_transition_override_state = new_state
 	_transition_override_until = _current_time + 0.15
+	if new_state == State.STANDING as int:
+		_reacting_to_shot = false
+		_client_reaction_timer = 0.0
+
+func apply_shot_reaction(impact_x: float, impact_y: float, is_elevated: bool) -> void:
+	if is_server:
+		return
+	_reacting_to_shot = true
+	_shot_impact_x = impact_x
+	_shot_impact_y = impact_y
+	_shot_is_elevated = is_elevated
+	_client_reaction_timer = 1.5
 
 func _apply_network_state(s: GoalieNetworkState) -> void:
 	goalie.set_goalie_position(s.position_x, s.position_z)
