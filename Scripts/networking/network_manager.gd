@@ -29,7 +29,7 @@ signal game_started(config: Dictionary)
 signal lobby_roster_synced(roster: Array)
 signal return_to_lobby_received(roster: Array)
 signal clock_ready
-signal pickup_claim_received(peer_id: int, host_timestamp: float, rtt_ms: float)
+signal pickup_claim_received(peer_id: int, host_timestamp: float, rtt_ms: float, interp_delay_ms: float)
 signal hit_claim_received(hitter_peer_id: int, victim_peer_id: int, host_timestamp: float, rtt_ms: float)
 
 # ── State ─────────────────────────────────────────────────────────────────────
@@ -360,18 +360,18 @@ func receive_pong(client_send_time: float, host_time: float) -> void:
 				clock_ready.emit(),
 		[client_send_time, host_time], true)
 
-func send_pickup_claim(host_timestamp: float, rtt_ms: float) -> void:
+func send_pickup_claim(host_timestamp: float, rtt_ms: float, interp_delay_ms: float) -> void:
 	NetworkSimManager.send(
-		func(ts: float, rtt: float) -> void:
-			receive_pickup_claim.rpc_id(1, ts, rtt),
-		[host_timestamp, rtt_ms], true)
+		func(ts: float, rtt: float, idms: float) -> void:
+			receive_pickup_claim.rpc_id(1, ts, rtt, idms),
+		[host_timestamp, rtt_ms, interp_delay_ms], true)
 
 @rpc("any_peer", "reliable")
-func receive_pickup_claim(host_timestamp: float, rtt_ms: float) -> void:
+func receive_pickup_claim(host_timestamp: float, rtt_ms: float, interp_delay_ms: float) -> void:
 	if not is_host:
 		return
 	var peer_id: int = multiplayer.get_remote_sender_id()
-	pickup_claim_received.emit(peer_id, host_timestamp, rtt_ms)
+	pickup_claim_received.emit(peer_id, host_timestamp, rtt_ms, interp_delay_ms)
 
 func send_hit_claim(victim_peer_id: int, host_timestamp: float, rtt_ms: float) -> void:
 	NetworkSimManager.send(

@@ -463,7 +463,7 @@ func _on_ghost_state_received(peer_id: int, is_ghost: bool) -> void:
 	(record.controller as RemoteController).apply_ghost_rpc(is_ghost)
 
 
-func _on_pickup_claim_received(peer_id: int, host_timestamp: float, rtt_ms: float) -> void:
+func _on_pickup_claim_received(peer_id: int, host_timestamp: float, rtt_ms: float, interp_delay_ms: float) -> void:
 	if not NetworkManager.is_host or puck == null or puck_controller == null:
 		return
 	if puck.carrier != null or puck.pickup_locked:
@@ -477,15 +477,23 @@ func _on_pickup_claim_received(peer_id: int, host_timestamp: float, rtt_ms: floa
 	if _state_buffer_manager == null or not _state_buffer_manager.is_ready():
 		return
 	var rewind_rtt: float = clampf(rtt_ms, 10.0, 200.0)
-	var rewind_time: float = host_timestamp - rewind_rtt / 2000.0
-	var snapshot: WorldSnapshot = _state_buffer_manager.get_state_at(rewind_time)
-	if snapshot.puck_state == null or snapshot.puck_state.carrier_peer_id != -1:
+	# Blade: the client's blade state from T_client = claim send time arrives in the
+	# state buffer at host time = host_timestamp + rtt/2 (one-way transit). Use that
+	# time so the blade check reflects where the blade actually was at pickup.
+	var blade_rewind_time: float = host_timestamp + rewind_rtt / 2000.0
+	# Puck: the client's interpolated puck is delayed by interp_delay behind host time.
+	# Rewind the puck to the host timestamp the client was actually looking at.
+	var puck_rewind_time: float = host_timestamp - clampf(interp_delay_ms, 0.0, 200.0) / 1000.0
+	var puck_snap: WorldSnapshot = _state_buffer_manager.get_state_at(puck_rewind_time)
+	if puck_snap.puck_state == null or puck_snap.puck_state.carrier_peer_id != -1:
 		return
-	var puck_pos: Vector3 = snapshot.puck_state.position
-	var prev_snap: WorldSnapshot = _state_buffer_manager.get_state_at(rewind_time - 1.0 / 240.0)
-	var puck_prev: Vector3 = prev_snap.puck_state.position if prev_snap.puck_state != null else puck_pos
-	var skater_snap: SkaterNetworkState = snapshot.get_skater_state(peer_id)
-	var skater_prev_snap: SkaterNetworkState = prev_snap.get_skater_state(peer_id)
+	var puck_pos: Vector3 = puck_snap.puck_state.position
+	var puck_prev_snap: WorldSnapshot = _state_buffer_manager.get_state_at(puck_rewind_time - 1.0 / 240.0)
+	var puck_prev: Vector3 = puck_prev_snap.puck_state.position if puck_prev_snap.puck_state != null else puck_pos
+	var blade_snap: WorldSnapshot = _state_buffer_manager.get_state_at(blade_rewind_time)
+	var blade_prev_snap: WorldSnapshot = _state_buffer_manager.get_state_at(blade_rewind_time - 1.0 / 240.0)
+	var skater_snap: SkaterNetworkState = blade_snap.get_skater_state(peer_id)
+	var skater_prev_snap: SkaterNetworkState = blade_prev_snap.get_skater_state(peer_id)
 	if skater_snap == null or skater_prev_snap == null:
 		return
 	var blade_curr: Vector3 = skater_snap.blade_contact_world

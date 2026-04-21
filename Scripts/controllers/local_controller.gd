@@ -96,7 +96,8 @@ func _physics_process(delta: float) -> void:
 				_claim_cooldown = 0.3
 				NetworkManager.send_pickup_claim(
 					NetworkManager.estimated_host_time(),
-					NetworkManager.get_latest_rtt_ms())
+					NetworkManager.get_latest_rtt_ms(),
+					NetworkManager.get_target_interpolation_delay() * 1000.0)
 
 func reconcile(server_state: SkaterNetworkState) -> void:
 	var pre_reconcile_blade: Vector3 = skater.get_blade_contact_global()
