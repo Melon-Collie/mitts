@@ -1,4 +1,4 @@
-# Hockey Game
+# Mitts
 
 An arcade hockey game built in Godot 4.6.2 (Jolt Physics). Online multiplayer — each player runs their own client, with their own camera.
 

@@ -1,6 +1,6 @@
 # Architecture
 
-Technical design document for HockeyGame. See `CLAUDE.md` for conventions and project context.
+Technical design document for Mitts. See `CLAUDE.md` for conventions and project context.
 
 ---
 

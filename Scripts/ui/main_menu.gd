@@ -31,7 +31,7 @@ func _build_ui() -> void:
 	center.add_child(vbox)
 
 	var title := Label.new()
-	title.text = "Hockey Game"
+	title.text = "Mitts"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 64)
 	title.add_theme_color_override("font_color", Color.WHITE)
