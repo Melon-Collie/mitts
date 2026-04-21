@@ -1,6 +1,6 @@
 class_name InputState
 
-static const BYTES_SIZE: int = 23
+const BYTES_SIZE: int = 23
 # Layout: f32 timestamp(0) f32 delta(4) s16 move.x(8) s16 move.y(10)
 #         s16 mwp.x(12) s8 mwp.y(14) s16 mwp.z(15) u16 msp.x(17) u16 msp.y(19)
 #         u16 flags(21)  flags: shoot_pressed[0] shoot_held[1] slap_pressed[2]

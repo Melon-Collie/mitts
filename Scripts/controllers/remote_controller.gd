@@ -36,12 +36,11 @@ func _physics_process(delta: float) -> void:
 		_interpolate()
 		skater.update_stick_mesh()
 
-func receive_input_batch(batch: Array) -> void:
+func receive_input_batch(batch: Array[InputState]) -> void:
 	var existing_timestamps: Dictionary = {}
 	for queued: InputState in _input_queue:
 		existing_timestamps[queued.host_timestamp] = true
-	for raw: Array in batch:
-		var state: InputState = InputState.from_array(raw)
+	for state: InputState in batch:
 		if state.host_timestamp > last_processed_host_timestamp and not existing_timestamps.has(state.host_timestamp):
 			_input_queue.append(state)
 			existing_timestamps[state.host_timestamp] = true
