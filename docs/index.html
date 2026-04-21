@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hockey Game</title>
+  <title>Mitts</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -72,11 +72,11 @@
   </style>
 </head>
 <body>
-  <h1>Hockey Game</h1>
+  <h1>Mitts</h1>
   <p class="subtitle">3v3 arcade hockey. Online multiplayer.</p>
   <p class="version" id="version">dev</p>
   <script>
-    fetch('https://api.github.com/repos/Melon-Collie/hockey-game/releases/latest')
+    fetch('https://api.github.com/repos/Melon-Collie/mitts/releases/latest')
       .then(r => r.json())
       .then(d => { if (d.name) document.getElementById('version').textContent = d.name; })
       .catch(() => {});
@@ -84,17 +84,17 @@
 
   <div class="downloads">
     <a class="download"
-       href="https://github.com/Melon-Collie/hockey-game/releases/latest/download/Windows.Desktop.zip">
+       href="https://github.com/Melon-Collie/mitts/releases/latest/download/Windows.Desktop.zip">
       Download for Windows
     </a>
     <a class="download"
-       href="https://github.com/Melon-Collie/hockey-game/releases/latest/download/LinuxX11.zip">
+       href="https://github.com/Melon-Collie/mitts/releases/latest/download/LinuxX11.zip">
       Download for Linux
     </a>
   </div>
 
   <p class="meta">
-    <a href="https://github.com/Melon-Collie/hockey-game"
+    <a href="https://github.com/Melon-Collie/mitts"
        style="color: #484f58;">Source</a>
   </p>
 </body>
