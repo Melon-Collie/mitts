@@ -564,15 +564,21 @@ func _on_one_timer_release_requested(direction: Vector3, power: float, skater: S
 func on_remote_puck_release(direction: Vector3, power: float, shooter_peer_id: int, host_timestamp: float, rtt_ms: float) -> void:
 	if NetworkManager.is_host:
 		_start_pending_shot_from_carrier()
+		var rtt_half: float = rtt_ms / 2000.0
+		# Puck is still pinned to the host's RemoteController blade. That blade
+		# reflects inputs received ~rtt/2 ago, which by the time the RPC arrives
+		# corresponds to the client's blade at shot time. Advance along the shot
+		# direction by rtt_half so the host starting position matches the client's
+		# Jolt trajectory. Previously this rewound the state buffer for the blade
+		# position, but that gave blade_at(shot - rtt) for a moving skater — a full
+		# RTT behind, causing the moving-shot snap.
+		if rtt_ms > 0.0:
+			puck.set_puck_position(puck.get_puck_position() + direction * power * rtt_half)
+		var saved_goalie_positions: Array[Vector3] = []
+		var saved_goalie_rotations: Array[float] = []
 		if _state_buffer_manager != null and _state_buffer_manager.is_ready() and shooter_peer_id > 0 and rtt_ms > 0.0:
-			var rtt_half: float = rtt_ms / 2000.0
 			var rewind_time: float = host_timestamp - rtt_half
 			var snap: WorldSnapshot = _state_buffer_manager.get_state_at(rewind_time)
-			var shooter_state: SkaterNetworkState = snap.skater_states.get(shooter_peer_id)
-			if shooter_state != null and not shooter_state.blade_contact_world.is_zero_approx():
-				puck.set_puck_position(shooter_state.blade_contact_world + direction * power * rtt_half)
-			var saved_goalie_positions: Array[Vector3] = []
-			var saved_goalie_rotations: Array[float] = []
 			for gc: GoalieController in goalie_controllers:
 				saved_goalie_positions.append(gc.goalie.global_position)
 				saved_goalie_rotations.append(gc.goalie.get_goalie_rotation_y())
@@ -580,11 +586,11 @@ func on_remote_puck_release(direction: Vector3, power: float, shooter_peer_id: i
 				if gs != null:
 					gc.goalie.set_goalie_position(gs.position_x, gs.position_z)
 					gc.goalie.set_goalie_rotation_y(gs.rotation_y)
-			puck.release(direction, power)
-			for i: int in goalie_controllers.size():
-				goalie_controllers[i].goalie.global_position = saved_goalie_positions[i]
-				goalie_controllers[i].goalie.set_goalie_rotation_y(saved_goalie_rotations[i])
-			return
+		puck.release(direction, power)
+		for i: int in goalie_controllers.size():
+			goalie_controllers[i].goalie.global_position = saved_goalie_positions[i]
+			goalie_controllers[i].goalie.set_goalie_rotation_y(saved_goalie_rotations[i])
+		return
 	puck.release(direction, power)
 
 
