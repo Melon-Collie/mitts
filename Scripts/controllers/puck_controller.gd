@@ -77,8 +77,6 @@ func _physics_process(delta: float) -> void:
 		_prev_puck_pos = puck.get_puck_position()
 		return
 	_current_time += delta
-	interpolation_delay = move_toward(
-		interpolation_delay, NetworkManager.get_target_interpolation_delay(), 0.005 * delta)
 	if _local_carrier_skater != null:
 		_apply_local_carrier_position()
 	elif not _predicting_trajectory:
@@ -278,8 +276,9 @@ func apply_state(state: PuckNetworkState) -> void:
 	buffered.timestamp = _current_time
 	buffered.state = state
 	_state_buffer.append(buffered)
-	if _state_buffer.size() > 10:
+	if _state_buffer.size() > 30:
 		_state_buffer.pop_front()
+	_adapt_interpolation_delay()
 
 func _interpolate() -> void:
 	var render_time: float = _current_time - interpolation_delay
@@ -296,8 +295,11 @@ func _interpolate() -> void:
 		interpolated.position = newest.position + newest.velocity * dt
 		interpolated.velocity = newest.velocity
 	else:
-		interpolated.position = bracket.from_state.position.lerp(bracket.to_state.position, bracket.t)
-		interpolated.velocity = bracket.from_state.velocity.lerp(bracket.to_state.velocity, bracket.t)
+		var from_state: PuckNetworkState = bracket.from_state
+		var to_state: PuckNetworkState = bracket.to_state
+		interpolated.position = BufferedStateInterpolator.hermite(from_state.position, from_state.velocity,
+				to_state.position, to_state.velocity, bracket.t, bracket.bracket_dt)
+		interpolated.velocity = from_state.velocity.lerp(to_state.velocity, bracket.t)
 	if prev_extrapolating and not is_extrapolating:
 		_rejoin_blend_from_pos = puck.get_puck_position()
 		_rejoin_blend_start_time = _current_time
@@ -309,6 +311,11 @@ func _interpolate() -> void:
 			_rejoin_blend_start_time = -1.0
 	_apply_state_to_puck(interpolated)
 	BufferedStateInterpolator.drop_stale(_state_buffer, render_time)
+
+func _adapt_interpolation_delay() -> void:
+	var target: float = NetworkManager.get_target_interpolation_delay()
+	var change: float = lerpf(interpolation_delay, target, 0.15) - interpolation_delay
+	interpolation_delay += clampf(change, -0.001, 0.005)
 
 func _apply_state_to_puck(state: PuckNetworkState) -> void:
 	# Position only — puck is frozen during interpolation, Jolt ignores velocity.
