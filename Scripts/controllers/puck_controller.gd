@@ -10,6 +10,10 @@ const CONTEST_SQUIRT_SPEED: float = 3.0
 @export var prediction_reconcile_threshold: float = 3.0
 @export var position_correction_blend: float = 0.1
 @export var rejoin_blend_duration: float = 0.075
+# Extra friction applied during trajectory prediction to compensate for any
+# divergence between client and host Jolt friction. Set to 0 while both run
+# identical physics; tune upward if free-puck trajectories drift apart.
+@export var prediction_extra_friction: float = 0.0
 
 var puck: Puck = null
 var is_server: bool = false
@@ -81,7 +85,8 @@ func _physics_process(delta: float) -> void:
 		_apply_local_carrier_position()
 	elif not _predicting_trajectory:
 		_interpolate()
-	# During prediction, Jolt runs freely — no manual stepping needed
+	elif prediction_extra_friction > 0.0:
+		puck.set_puck_velocity(puck.get_puck_velocity() * pow(1.0 - prediction_extra_friction, delta))
 
 # ── Lag Compensation ─────────────────────────────────────────────────────────
 # Called by GameManager after validating a client pickup claim against the

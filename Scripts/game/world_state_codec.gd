@@ -9,7 +9,7 @@ extends RefCounted
 #
 # 1. World state  (40 Hz, unreliable_ordered):
 #      [ws_sequence, peer_id, skater_bytes(35), queue_depth, ...,
-#       puck_bytes(13), goalie0_bytes(10), goalie1_bytes(10),
+#       puck_bytes(13), goalie0_bytes(8), goalie1_bytes(8),
 #       score0, score1, phase, period, time_remaining]
 #
 #    Quantization layout:
@@ -19,7 +19,7 @@ extends RefCounted
 #                      last_processed_ts f32, flags u8 (shot_state[3:0]+ghost[4]),
 #                      shot_charge u8
 #      Puck    (13 B): pos s16/s8/s16@1cm, vel 3×s16@0.1m/s, carrier_peer_id s16
-#      Goalie  (10 B): pos_x s16@1cm, pos_z s16@1cm, rot_y f32, state u8, fho u8
+#      Goalie   (8 B): pos_x s16@1cm, pos_z s16@1cm, rot_y s16@π/32767, state u8, fho u8
 #
 # 2. Stats  (reliable, event-driven):
 #      [pid, G, A, SOG, HITS] × N players
@@ -300,15 +300,15 @@ static func _decode_puck_quantized(b: PackedByteArray) -> PuckNetworkState:
 	return s
 
 
-# Goalie: 10 bytes
-# Offsets: pos_x(0..1) pos_z(2..3) rot_y(4..7) state(8) fho(9)
+# Goalie: 8 bytes
+# Offsets: pos_x(0..1) pos_z(2..3) rot_y(4..5) state(6) fho(7)
 static func _encode_goalie_quantized(s: GoalieNetworkState) -> PackedByteArray:
 	var b := PackedByteArray()
-	b.resize(10)
+	b.resize(8)
 	var o: int = 0
 	b.encode_s16(o, clampi(roundi(s.position_x * 100.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.position_z * 100.0), -32768, 32767)); o += 2
-	b.encode_float(o, s.rotation_y); o += 4
+	b.encode_s16(o, clampi(roundi(s.rotation_y / PI * 32767.0), -32768, 32767)); o += 2
 	b.encode_u8(o, s.state_enum); o += 1
 	b.encode_u8(o, clampi(roundi(s.five_hole_openness * 255.0), 0, 255))
 	return b
@@ -319,7 +319,7 @@ static func _decode_goalie_quantized(b: PackedByteArray) -> GoalieNetworkState:
 	var o: int = 0
 	s.position_x = b.decode_s16(o) / 100.0; o += 2
 	s.position_z = b.decode_s16(o) / 100.0; o += 2
-	s.rotation_y = b.decode_float(o); o += 4
+	s.rotation_y = b.decode_s16(o) / 32767.0 * PI; o += 2
 	s.state_enum = b.decode_u8(o); o += 1
 	s.five_hole_openness = b.decode_u8(o) / 255.0
 	return s

@@ -155,6 +155,19 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			skater.velocity += _body_check_impulse
 			_impulse_applied = true
 		skater.global_position += skater.velocity * input.delta
+		var unclamped_xz := Vector2(skater.global_position.x, skater.global_position.z)
+		var clamped_xz := GameRules.clamp_to_rink_inner(unclamped_xz)
+		if unclamped_xz.distance_squared_to(clamped_xz) > 1e-6:
+			var push := clamped_xz - unclamped_xz
+			var n := push.normalized()
+			var vel_xz := Vector2(skater.velocity.x, skater.velocity.z)
+			var into_wall: float = vel_xz.dot(n)
+			if into_wall < 0.0:
+				vel_xz -= into_wall * n  # slide along wall, remove inward component
+				skater.velocity.x = vel_xz.x
+				skater.velocity.z = vel_xz.y
+			skater.global_position.x = clamped_xz.x
+			skater.global_position.z = clamped_xz.y
 	is_replaying = false
 	# Restore shot-state fields that replay must not transition past.
 	_state = pre_state
