@@ -58,6 +58,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	apply_preset(preset)
 
+func clear_pending() -> void:
+	_pending.clear()
+
 func apply_preset(preset: int) -> void:
 	current_preset = preset
 	var p: Dictionary = PRESETS[preset]

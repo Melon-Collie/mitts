@@ -464,6 +464,8 @@ func _on_server_puck_picked_up_by(peer_id: int) -> void:
 
 
 func _on_ghost_state_received(peer_id: int, is_ghost: bool) -> void:
+	if _registry == null:
+		return
 	var record: PlayerRecord = _registry.get_record(peer_id)
 	if record == null or record.skater == null or record.is_local:
 		return
@@ -592,6 +594,8 @@ func _on_one_timer_release_requested(direction: Vector3, power: float, skater: S
 
 func on_remote_puck_release(direction: Vector3, power: float, shooter_peer_id: int, host_timestamp: float, rtt_ms: float) -> void:
 	if NetworkManager.is_host:
+		if puck == null or _registry == null:
+			return
 		_start_pending_shot_from_carrier()
 		var rtt_half: float = rtt_ms / 2000.0
 		# Puck is still pinned to the host's RemoteController blade. That blade
@@ -875,6 +879,7 @@ func return_to_lobby() -> void:
 
 func _on_return_to_lobby(_roster: Array) -> void:
 	on_scene_exit()
+	NetworkSimManager.clear_pending()
 	get_tree().change_scene_to_file(Constants.SCENE_LOBBY)
 
 
@@ -892,6 +897,7 @@ func _build_lobby_roster_array() -> Array:
 
 func exit_to_main_menu() -> void:
 	on_scene_exit()
+	NetworkSimManager.clear_pending()
 	NetworkManager.reset()
 	get_tree().change_scene_to_file(Constants.SCENE_MAIN_MENU)
 
