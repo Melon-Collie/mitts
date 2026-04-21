@@ -293,6 +293,7 @@ func apply_state(state: PuckNetworkState) -> void:
 		else:
 			if _pending_local_release:
 				_pending_local_release = false  # Host confirmed the release
+				return  # Skip — host Jolt just started, this state is too stale to reconcile
 			var rtt_half_s: float = _shot_rtt_ms / 2000.0
 			var latency_corrected := PuckNetworkState.new()
 			latency_corrected.position = state.position + state.velocity * rtt_half_s
