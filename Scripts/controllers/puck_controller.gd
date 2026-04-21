@@ -63,6 +63,8 @@ func setup(assigned_puck: Puck, assigned_is_server: bool) -> void:
 		puck.puck_stripped.connect(_on_puck_stripped)
 		puck.puck_touched_loose.connect(func(s: Skater) -> void: puck_touched_while_loose.emit(_peer_id_resolver.call(s)))
 		puck.puck_touched_goalie.connect(func(g: Goalie) -> void: puck_touched_by_goalie.emit(g))
+	else:
+		puck.puck_touched_goalie.connect(_on_client_puck_hit_goalie)
 
 func set_peer_id_resolver(resolver: Callable) -> void:
 	_peer_id_resolver = resolver
@@ -246,6 +248,13 @@ func _resolve_peer_id(skater: Skater) -> int:
 	if skater == null or not _peer_id_resolver.is_valid():
 		return -1
 	return _peer_id_resolver.call(skater)
+
+func _on_client_puck_hit_goalie(_goalie: Goalie) -> void:
+	if not _predicting_trajectory:
+		return
+	_predicting_trajectory = false
+	_pending_local_release = false
+	puck.set_client_prediction_mode(false)
 
 # ── State Serialization ───────────────────────────────────────────────────────
 # Returns the typed network state object. Flattening to Array happens at the
