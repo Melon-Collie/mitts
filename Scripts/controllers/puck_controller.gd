@@ -31,7 +31,6 @@ var is_extrapolating: bool = false
 
 var _rejoin_blend_start_time: float = -1.0
 var _rejoin_blend_from_pos: Vector3 = Vector3.ZERO
-var _board_contact_pending: bool = false  # force instant correction on next post-bounce reconcile
 
 func get_buffer_depth() -> int:
 	return _state_buffer.size()
@@ -67,7 +66,6 @@ func setup(assigned_puck: Puck, assigned_is_server: bool) -> void:
 	else:
 		puck.puck_touched_goalie.connect(_on_client_puck_hit_goalie)
 		puck.puck_touched_post.connect(_on_client_puck_hit_post)
-		puck.puck_touched_board.connect(_on_client_puck_hit_board)
 
 func set_peer_id_resolver(resolver: Callable) -> void:
 	_peer_id_resolver = resolver
@@ -214,18 +212,13 @@ func _reconcile(state: PuckNetworkState) -> void:
 		puck.set_puck_position(state.position)
 		puck.set_puck_velocity(state.velocity)
 		_state_buffer.clear()
-		_board_contact_pending = false
 		return
 	# Jolt owns velocity during trajectory prediction — don't override it.
 	# Only nudge position when velocities agree (avoids fighting Jolt mid-bounce).
-	# After a board contact the flag forces blend=1.0 so the accumulated post-bounce
-	# divergence collapses in one tick rather than drifting for ~350ms.
 	var current_vel := puck.get_puck_velocity()
 	var pos_error := state.position - puck.get_puck_position()
 	if current_vel.dot(state.velocity) > 0.0:
-		var blend: float = 1.0 if _board_contact_pending else position_correction_blend
-		puck.set_puck_position(puck.get_puck_position() + pos_error * blend)
-		_board_contact_pending = false
+		puck.set_puck_position(puck.get_puck_position() + pos_error * position_correction_blend)
 
 # ── Server Signals ────────────────────────────────────────────────────────────
 # Run on host only (connected in setup() when is_server). Each resolves the
@@ -270,11 +263,6 @@ func _on_client_puck_hit_post() -> void:
 	_predicting_trajectory = false
 	_pending_local_release = false
 	puck.set_client_prediction_mode(false)
-
-func _on_client_puck_hit_board() -> void:
-	if not _predicting_trajectory:
-		return
-	_board_contact_pending = true
 
 # ── State Serialization ───────────────────────────────────────────────────────
 # Returns the typed network state object. Flattening to Array happens at the
