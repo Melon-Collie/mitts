@@ -381,8 +381,6 @@ func _wire_subsystems() -> void:
 	_swap_coord.stats_updated.connect(stats_updated.emit)
 	_swap_coord.carrier_swap_needs_drop.connect(_drop_puck_if_carried)
 
-	puck_controller.set_goalies(goalies)
-
 	_telemetry = NetworkTelemetry.new()
 	NetworkTelemetry.instance = _telemetry
 	_debug_overlay = NetworkDebugOverlay.new()

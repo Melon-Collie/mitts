@@ -54,15 +54,6 @@ func set_goalie_rotation_y(y: float) -> void:
 func get_goalie_rotation_y() -> float:
 	return rotation.y
 
-func set_puck_collision_enabled(enabled: bool) -> void:
-	var layer: int = Constants.LAYER_WALLS if enabled else 0
-	_left_pad.collision_layer = layer
-	_right_pad.collision_layer = layer
-	_body.collision_layer = layer
-	_head.collision_layer = layer
-	_glove.collision_layer = layer
-	_blocker.collision_layer = layer
-
 func _lerp_part(part: StaticBody3D, target_pos: Vector3, target_rot_deg: Vector3, t: float) -> void:
 	part.position = part.position.lerp(target_pos, t)
 	part.rotation_degrees = part.rotation_degrees.lerp(target_rot_deg, t)
