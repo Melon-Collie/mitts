@@ -89,6 +89,7 @@ var bottom_upper_arm_mesh: MeshInstance3D = null
 var bottom_forearm_mesh: MeshInstance3D = null
 
 signal body_checked_player(victim: Skater, impact_force: float, hit_direction: Vector3)
+signal body_check_impulse_applied(impulse: Vector3)
 signal body_block_hit(body: Node3D)
 @warning_ignore("unused_signal")
 signal pulse_dashed(dash_direction: Vector3)
@@ -378,7 +379,11 @@ func _physics_process(delta: float) -> void:
 	_prev_blade_world_pos = blade_world_pos
 	var vel_before: Vector3 = velocity
 	move_and_slide()
+	var vel_after_slide: Vector3 = velocity
 	_resolve_player_collisions(vel_before)
+	var body_check_delta: Vector3 = velocity - vel_after_slide
+	if body_check_delta.length_squared() > 0.0001:
+		body_check_impulse_applied.emit(body_check_delta)
 	if _ring_mesh != null:
 		_ring_mesh.global_position.y = 0.05
 

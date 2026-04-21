@@ -36,12 +36,11 @@ func _physics_process(delta: float) -> void:
 		_interpolate()
 		skater.update_stick_mesh()
 
-func receive_input_batch(batch: Array) -> void:
+func receive_input_batch(batch: Array[InputState]) -> void:
 	var existing_timestamps: Dictionary = {}
 	for queued: InputState in _input_queue:
 		existing_timestamps[queued.host_timestamp] = true
-	for raw: Array in batch:
-		var state: InputState = InputState.from_array(raw)
+	for state: InputState in batch:
 		if state.host_timestamp > last_processed_host_timestamp and not existing_timestamps.has(state.host_timestamp):
 			_input_queue.append(state)
 			existing_timestamps[state.host_timestamp] = true
@@ -126,6 +125,13 @@ func _interpolate() -> void:
 		# Boolean fields can't be lerped; take the freshest value so ghost-mode
 		# toggles flow through to remote skaters without a one-broadcast delay.
 		interpolated.is_ghost = to_state.is_ghost
+		# Push position forward from render_time to present using the interpolated
+		# velocity. Capped at extrapolation_max_ms so a large interpolation buffer
+		# on a rough connection doesn't over-predict on direction changes.
+		var forward_dt: float = minf(interpolation_delay, extrapolation_max_ms / 1000.0)
+		interpolated.position += interpolated.velocity * forward_dt
+		interpolated.blade_position += interpolated.velocity * forward_dt
+		interpolated.top_hand_position += interpolated.velocity * forward_dt
 	if prev_extrapolating and not is_extrapolating and skater != null:
 		_rejoin_blend_from_pos = skater.global_position
 		_rejoin_blend_from_blade = skater.get_blade_position()

@@ -577,7 +577,7 @@ func _on_puck_release_requested(direction: Vector3, power: float) -> void:
 		if record != null:
 			record.controller.on_puck_released_network()
 		var shot_rtt_ms: float = NetworkManager.get_latest_rtt_ms()
-		puck_controller.notify_local_release(direction, power, shot_rtt_ms)
+		puck_controller.notify_local_release(direction, power, shot_rtt_ms, record.skater.velocity)
 		NetworkManager.send_puck_release(direction, power)
 
 
@@ -676,9 +676,9 @@ func _on_faceoff_positions_received(positions: Array) -> void:
 
 
 # ── World state & stats RPC forwarding ───────────────────────────────────────
-func _on_world_state_received(state: Array) -> void:
+func _on_world_state_received(data: PackedByteArray) -> void:
 	if _codec != null:
-		_codec.decode_world_state(state)
+		_codec.decode_world_state(data)
 
 
 func _on_stats_received(data: Array) -> void:
@@ -952,8 +952,8 @@ func _get_goalie_controllers() -> Array:
 
 
 # ── World state (NetworkManager provider callback) ───────────────────────────
-func get_world_state() -> Array:
-	return _codec.encode_world_state() if _codec != null else []
+func get_world_state() -> PackedByteArray:
+	return _codec.encode_world_state() if _codec != null else PackedByteArray()
 
 
 # ── Public API consumed by controllers, HUD, camera, scoreboard ──────────────

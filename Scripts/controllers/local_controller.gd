@@ -17,6 +17,11 @@ var _body_check_impulse_timestamp: float = 0.0
 const _BLADE_JUMP_THRESHOLD: float = 0.05
 
 const _RECONCILE_VISUAL_ALPHA: float = 0.12  # exponential decay per physics frame
+# 2 physics frames at 240 Hz = ~8 ms. Inputs are applied this many ticks after
+# gather so they reach the host before their scheduled simulation tick, eliminating
+# fallback-input firing on clean low-latency connections. Imperceptible at 240 Hz.
+const INPUT_DELAY_FRAMES: int = 2
+var _pending_input_queue: Array[InputState] = []
 
 func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> void:
 	camera = $Camera3D
@@ -26,9 +31,9 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	camera.skater = assigned_skater
 	camera.puck = assigned_puck
 	camera.local_controller = self
-	skater.body_checked_player.connect(
-		func(_v: Skater, _f: float, _d: Vector3) -> void:
-			_body_check_impulse = -_d * (_f / skater.weight) * skater.body_check_restitution
+	skater.body_check_impulse_applied.connect(
+		func(impulse: Vector3) -> void:
+			_body_check_impulse = impulse
 			_body_check_impulse_timestamp = _current_input.host_timestamp)
 
 # Called after setup() to provide the local player's team — needed for
@@ -50,6 +55,7 @@ func get_input_batch(frames: int = 12) -> Array[InputState]:
 func teleport_to(pos: Vector3) -> void:
 	super.teleport_to(pos)
 	_input_history.clear()
+	_pending_input_queue.clear()
 	_last_blade_pos = Vector3.ZERO
 	_body_check_impulse = Vector3.ZERO
 	_body_check_impulse_timestamp = 0.0
@@ -68,20 +74,40 @@ func _physics_process(delta: float) -> void:
 		# inputs when the phase lifts — regardless of packet timing.
 		skater.velocity = Vector3.ZERO
 		_input_history.clear()
+		_pending_input_queue.clear()
 		return
 	if _game_state.is_input_blocked():
+		# UI blocking input — clear pending inputs so they don't queue up and
+		# fire all at once when the menu closes.
+		_pending_input_queue.clear()
 		return
 	# Predict offsides locally for instant ghost feedback
 	_predict_offside()
-	_current_input = _gatherer.gather()
-	_current_input.delta = delta
-	if NetworkManager.is_clock_ready():
-		_current_input.host_timestamp = NetworkManager.estimated_host_time()
+	var gathered: InputState = _gatherer.gather()
+	gathered.delta = delta
+	var input: InputState
+	if _is_host:
+		# Host: no delay — local simulation is authoritative, no fallback to compensate for.
+		if NetworkManager.is_clock_ready():
+			gathered.host_timestamp = NetworkManager.estimated_host_time()
+		input = gathered
+	else:
+		# Client: buffer for INPUT_DELAY_FRAMES ticks so inputs arrive at the host
+		# before their scheduled simulation tick, eliminating fallback-input firing.
+		_pending_input_queue.append(gathered)
+		if _pending_input_queue.size() <= INPUT_DELAY_FRAMES:
+			return  # Filling initial delay buffer; nothing to apply yet
+		input = _pending_input_queue.pop_front()
+		# Stamp at apply time — this is what the host reconcile echoes back, and what
+		# the remote controller uses to sort inputs in chronological order.
+		if NetworkManager.is_clock_ready():
+			input.host_timestamp = NetworkManager.estimated_host_time()
+	_current_input = input
 	_input_history.append(_current_input)
 	# Cap history size to prevent unbounded growth
 	if _input_history.size() > 480:  # 2 seconds at 240Hz
 		_input_history.pop_front()
-	_process_input(_current_input, delta)
+	_process_input(_current_input, _current_input.delta)
 	var blade_pos: Vector3 = skater.get_blade_contact_global()
 	if not _last_blade_pos.is_zero_approx():
 		var blade_delta: float = blade_pos.distance_to(_last_blade_pos)
@@ -130,10 +156,10 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			reconcile_position_threshold, reconcile_velocity_threshold):
 		return
 	# Suppress reconcile jitter while pressing against the boards. Wall contact
-	# causes move_and_slide vs. server-physics noise (~3-5 cm each tick) that
-	# repeatedly sets small visual_offsets which compound into visible oscillation.
-	# Errors above 10 cm are real desync and still fire through.
-	if skater.is_on_wall() and skater.global_position.distance_to(server_state.position) < 0.1:
+	# causes move_and_slide vs. server-physics noise that repeatedly sets small
+	# visual_offsets which compound into visible oscillation.
+	# Errors above 5 cm are real desync and still fire through.
+	if skater.is_on_wall() and skater.global_position.distance_to(server_state.position) < 0.05:
 		return
 	# Save shot/state-machine state — replay can transition through shoot states
 	# (WRISTER_AIM → FOLLOW_THROUGH → SKATING) and leave _state wrong. Restore so

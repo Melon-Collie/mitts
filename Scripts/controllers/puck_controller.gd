@@ -8,6 +8,7 @@ const CONTEST_SQUIRT_SPEED: float = 3.0
 @export var interpolation_delay: float = Constants.NETWORK_INTERPOLATION_DELAY
 @export var extrapolation_max_ms: float = 50.0
 @export var prediction_reconcile_threshold: float = 0.5
+@export var trajectory_hard_snap_threshold: float = 1.5
 @export var position_correction_blend: float = 0.1
 @export var rejoin_blend_duration: float = 0.075
 # Extra friction applied during trajectory prediction to compensate for any
@@ -169,13 +170,23 @@ func notify_local_pickup(local_skater: Skater) -> void:
 	puck.set_client_prediction_mode(false)
 	_state_buffer.clear()
 
-func notify_local_release(direction: Vector3, power: float, rtt_ms: float) -> void:
+func notify_local_release(direction: Vector3, power: float, rtt_ms: float, skater_vel: Vector3 = Vector3.ZERO) -> void:
+	# PuckController (priority 1) runs after LocalController (priority 0), so the puck
+	# hasn't been re-pinned to the current blade position yet this frame. Read blade
+	# directly from the carrier so we start from the current-frame position, not last
+	# frame's pin.
+	var release_pos: Vector3 = puck.get_puck_position()
+	if _local_carrier_skater != null:
+		release_pos = _local_carrier_skater.get_blade_contact_global()
+		release_pos.y = puck.ice_height
 	_local_carrier_skater = null
 	_predicting_trajectory = true
 	_pending_local_release = true
 	_shot_rtt_ms = rtt_ms
 	puck.set_client_prediction_mode(true)
 	puck.set_goal_line_clamp(true)
+	var rtt_half: float = rtt_ms / 2000.0
+	puck.set_puck_position(release_pos + (direction * power + skater_vel) * rtt_half)
 	puck.set_puck_velocity(direction * power)
 	_state_buffer.clear()
 
@@ -290,12 +301,20 @@ func apply_state(state: PuckNetworkState) -> void:
 			puck.set_client_prediction_mode(false)
 		else:
 			if _pending_local_release:
-				_pending_local_release = false  # Host confirmed the release
-			var rtt_half_s: float = _shot_rtt_ms / 2000.0
+				_pending_local_release = false
+			var rtt_s: float = _shot_rtt_ms / 1000.0
 			var latency_corrected := PuckNetworkState.new()
-			latency_corrected.position = state.position + state.velocity * rtt_half_s
+			latency_corrected.position = state.position + state.velocity * rtt_s
 			latency_corrected.velocity = state.velocity
-			_reconcile(latency_corrected)
+			# Both client and host Jolt start from the same position (same rtt_ms
+			# used for both advances), so they run identically. Small errors are
+			# RTT jitter — blending toward a noisy target creates visible snapback.
+			# Only hard-snap on genuine physics divergence (wall/goalie bounce
+			# that differed between client and host).
+			if puck.get_puck_position().distance_to(latency_corrected.position) > trajectory_hard_snap_threshold:
+				puck.set_puck_position(latency_corrected.position)
+				puck.set_puck_velocity(latency_corrected.velocity)
+				_state_buffer.clear()
 			return  # Don't buffer during prediction; interpolation isn't running
 	if not _state_buffer.is_empty() and _current_time <= _state_buffer.back().timestamp:
 		return
