@@ -109,7 +109,7 @@ and tuning up).
 
 ---
 
-### 7. Goalie client-side prediction
+### 7. Goalie client-side prediction ✓ done
 
 **Files:** `Scripts/controllers/goalie_controller.gd`, `Scripts/domain/rules/goalie_behavior_rules.gd`
 
