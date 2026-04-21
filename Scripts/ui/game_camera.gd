@@ -61,7 +61,7 @@ func _physics_process(delta: float) -> void:
 	if not skater or not puck:
 		return
 
-	var player_pos: Vector3 = skater.global_position
+	var player_pos: Vector3 = skater.global_position + skater.visual_offset
 	player_pos.y = 0.0
 	var puck_pos: Vector3 = puck.global_position
 	puck_pos.y = 0.0
