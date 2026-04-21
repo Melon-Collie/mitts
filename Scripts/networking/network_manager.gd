@@ -135,7 +135,9 @@ func _on_peer_connected(id: int) -> void:
 	# right-click) block the message pump and silence ENet for several seconds.
 	var enet_peer := multiplayer.multiplayer_peer as ENetMultiplayerPeer
 	if enet_peer:
-		enet_peer.get_peer(id).set_timeout(0, 10000, 60000)
+		var peer := enet_peer.get_peer(id)
+		if peer:
+			peer.set_timeout(0, 10000, 60000)
 	# Spawn happens when the client sends request_join — not here.
 
 func _on_peer_disconnected(id: int) -> void:
