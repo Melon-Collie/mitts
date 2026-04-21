@@ -83,10 +83,14 @@ func _physics_process(delta: float) -> void:
 	_current_time += delta
 	if _local_carrier_skater != null:
 		_apply_local_carrier_position()
+		if NetworkTelemetry.instance: NetworkTelemetry.instance.puck_mode = "pinned"
 	elif not _predicting_trajectory:
 		_interpolate()
-	elif prediction_extra_friction > 0.0:
-		puck.set_puck_velocity(puck.get_puck_velocity() * pow(1.0 - prediction_extra_friction, delta))
+		if NetworkTelemetry.instance: NetworkTelemetry.instance.puck_mode = "interpolating"
+	else:
+		if NetworkTelemetry.instance: NetworkTelemetry.instance.puck_mode = "predicting"
+		if prediction_extra_friction > 0.0:
+			puck.set_puck_velocity(puck.get_puck_velocity() * pow(1.0 - prediction_extra_friction, delta))
 
 # ── Lag Compensation ─────────────────────────────────────────────────────────
 # Called by GameManager after validating a client pickup claim against the

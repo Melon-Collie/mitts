@@ -409,6 +409,11 @@ func get_latest_rtt_ms() -> float:
 func get_peer_ping_ms(peer_id: int) -> int:
 	return _peer_ping_ms.get(peer_id, 0)
 
+func get_clock_offset_ms() -> float:
+	if _clock_sync == null:
+		return 0.0
+	return _clock_sync._offset * 1000.0
+
 @rpc("any_peer", "unreliable")
 func report_ping(rtt_ms: int) -> void:
 	_peer_ping_ms[multiplayer.get_remote_sender_id()] = rtt_ms
