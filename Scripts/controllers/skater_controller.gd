@@ -518,12 +518,12 @@ func _exit_shot_block() -> void:
 	skater.set_block_stance(false)
 	_transition_to_skating()
 
-func _enter_wrister_aim(_input: InputState) -> void:
+func _enter_wrister_aim(input: InputState) -> void:
 	_state = State.WRISTER_AIM
 	_shot_dir = Vector3.ZERO
 	_charge_distance = 0.0
 	_prev_blade_dir = Vector3.ZERO
-	_prev_mouse_screen_pos = get_viewport().get_mouse_position()
+	_prev_mouse_screen_pos = input.mouse_screen_pos
 
 func _cancel_slapper() -> void:
 	_slapper_charge_timer = 0.0
