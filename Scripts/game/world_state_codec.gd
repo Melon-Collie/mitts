@@ -43,6 +43,7 @@ const GAME_STATE_SIZE: int = 5  # score0, score1, phase, period, time_remaining
 const STATS_PLAYER_RECORD_SIZE: int = 5  # peer_id, G, A, SOG, HITS
 
 var _ws_sequence: int = 0
+var _last_period: int = -1
 
 var _registry: PlayerRegistry = null
 var _state_machine: GameStateMachine = null
@@ -152,7 +153,9 @@ func _apply_game_state(state: Array, offset: int) -> void:
 		if new_phase == GamePhase.Phase.GAME_OVER:
 			game_over_triggered.emit()
 		phase_changed.emit(new_phase)
-	period_changed.emit(period)
+	if period != _last_period:
+		_last_period = period
+		period_changed.emit(period)
 	clock_updated.emit(t_remaining)
 
 
