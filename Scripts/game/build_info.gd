@@ -9,4 +9,4 @@ extends Node
 const VERSION: String = "dev"
 
 const RELEASE_TAG: String = "latest"
-const REPO: String = "melon-collie/hockey-game"
+const REPO: String = "Melon-Collie/mitts"
