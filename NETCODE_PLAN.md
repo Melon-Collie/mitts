@@ -132,7 +132,7 @@ snapping occurs.
 
 ---
 
-### 8. Deterministic puck prediction model
+### 8. Deterministic puck prediction model ✓ done (initial condition fix; full kinematic model deferred pending playtest)
 
 **Files:** `Scripts/controllers/puck_controller.gd`, `Scripts/actors/puck.gd`
 

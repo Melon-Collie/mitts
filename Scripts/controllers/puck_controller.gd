@@ -176,6 +176,8 @@ func notify_local_release(direction: Vector3, power: float, rtt_ms: float) -> vo
 	_shot_rtt_ms = rtt_ms
 	puck.set_client_prediction_mode(true)
 	puck.set_goal_line_clamp(true)
+	var rtt_half: float = rtt_ms / 2000.0
+	puck.set_puck_position(puck.get_puck_position() + direction * power * rtt_half)
 	puck.set_puck_velocity(direction * power)
 	_state_buffer.clear()
 
