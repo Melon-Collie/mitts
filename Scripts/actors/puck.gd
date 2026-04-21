@@ -244,7 +244,8 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	if _clamp_at_goal_line:
 		var z: float = state.transform.origin.z
 		var goal_z: float = GameRules.GOAL_LINE_Z
-		if abs(z) >= goal_z and z * state.linear_velocity.z > 0.0:
+		if abs(z) >= goal_z and z * state.linear_velocity.z > 0.0 \
+				and abs(state.transform.origin.x) <= GameRules.NET_HALF_WIDTH:
 			state.transform.origin.z = goal_z * sign(z)
 			state.linear_velocity = Vector3.ZERO
 
