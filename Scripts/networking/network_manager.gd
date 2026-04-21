@@ -9,7 +9,7 @@ signal client_connected
 signal disconnected_from_server
 signal peer_joined(peer_id: int)
 signal peer_disconnected(peer_id: int)
-signal world_state_received(state: Array)
+signal world_state_received(data: PackedByteArray)
 signal slot_assigned(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color)
 signal remote_skater_spawn_requested(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String, jersey_number: int)
 signal existing_players_synced(player_data: Array)
@@ -135,7 +135,9 @@ func _on_peer_connected(id: int) -> void:
 	# right-click) block the message pump and silence ENet for several seconds.
 	var enet_peer := multiplayer.multiplayer_peer as ENetMultiplayerPeer
 	if enet_peer:
-		enet_peer.get_peer(id).set_timeout(0, 10000, 60000)
+		var peer := enet_peer.get_peer(id)
+		if peer:
+			peer.set_timeout(0, 10000, 60000)
 	# Spawn happens when the client sends request_join — not here.
 
 func _on_peer_disconnected(id: int) -> void:
@@ -247,11 +249,14 @@ func _process(delta: float) -> void:
 			_input_timer -= input_delta
 			var batch_frames: int = 24 if get_peer_loss_rate() > 10.0 else 12
 			var batch: Array[InputState] = _local_controller.get_input_batch(batch_frames)
-			var serialized: Array = [_last_ws_seq_received]  # echo header
+			var buf := PackedByteArray(); buf.resize(3)
+			# u16 echo (0xFFFF = no world state received yet), u8 count
+			buf.encode_u16(0, _last_ws_seq_received if _last_ws_seq_received >= 0 else 0xFFFF)
+			buf.encode_u8(2, batch.size())
 			for s: InputState in batch:
-				serialized.append(s.to_array())
+				buf.append_array(s.to_bytes())
 			NetworkTelemetry.record_input_sent()
-			receive_input_batch.rpc_id(1, serialized)
+			receive_input_batch.rpc_id(1, buf)
 
 	if not is_host:
 		_ws_loss_window_timer += capped_delta
@@ -282,7 +287,7 @@ func _process(delta: float) -> void:
 func _broadcast_state() -> void:
 	if not _world_state_provider.is_valid():
 		return
-	var state: Array = _world_state_provider.call()
+	var state: PackedByteArray = _world_state_provider.call()
 	if state.is_empty():
 		return
 	for peer_id in multiplayer.get_peers():
@@ -307,23 +312,33 @@ func get_peer_number(peer_id: int) -> int:
 	return _peer_numbers.get(peer_id, 10)
 
 @rpc("any_peer", "unreliable_ordered")
-func receive_input_batch(data: Array) -> void:
+func receive_input_batch(data: PackedByteArray) -> void:
 	var sender_id: int = multiplayer.get_remote_sender_id()
 	NetworkSimManager.send(
-		func(d: Array, sid: int) -> void:
-			if _remote_controllers.has(sid):
-				_update_peer_echo(sid, d[0] if d.size() > 0 else -1)
-				_remote_controllers[sid].receive_input_batch(d.slice(1))
-			else:
-				push_warning("no remote controller for peer %d" % sid),
+		func(d: PackedByteArray, sid: int) -> void:
+			if not _remote_controllers.has(sid):
+				push_warning("no remote controller for peer %d" % sid)
+				return
+			if d.size() < 3:
+				return
+			var echo_raw: int = d.decode_u16(0)
+			_update_peer_echo(sid, -1 if echo_raw == 0xFFFF else echo_raw)
+			var count: int = d.decode_u8(2)
+			var inputs: Array[InputState] = []
+			for i: int in count:
+				var off: int = 3 + i * InputState.BYTES_SIZE
+				if off + InputState.BYTES_SIZE > d.size():
+					break
+				inputs.append(InputState.from_bytes(d, off))
+			_remote_controllers[sid].receive_input_batch(inputs),
 		[data, sender_id], false)
 
 @rpc("authority", "unreliable_ordered")
-func receive_world_state(state: Array) -> void:
+func receive_world_state(data: PackedByteArray) -> void:
 	if is_host:
 		return
 	NetworkSimManager.send(
-		func(s: Array) -> void:
+		func(s: PackedByteArray) -> void:
 			var now: float = Time.get_ticks_msec() / 1000.0
 			if _last_ws_arrival_time > 0.0:
 				const EXPECTED_INTERVAL: float = 1.0 / Constants.STATE_RATE
@@ -333,11 +348,11 @@ func receive_world_state(state: Array) -> void:
 					_jitter_samples.pop_front()
 				NetworkTelemetry.record_jitter_p95(get_jitter_p95() * 1000.0)
 			_last_ws_arrival_time = now
-			if not s.is_empty():
-				_on_ws_sequence_received(s[0])
+			if s.size() >= 2:
+				_on_ws_sequence_received(s.decode_u16(0))
 			NetworkTelemetry.record_world_state()
 			world_state_received.emit(s),
-		[state], false)
+		[data], false)
 
 # ── Clock Sync ────────────────────────────────────────────────────────────────
 @rpc("any_peer", "reliable")

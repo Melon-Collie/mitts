@@ -534,6 +534,32 @@ func _apply_network_state(s: GoalieNetworkState) -> void:
 			_transition_override_state = -1
 	var config := _get_config(effective_state as State)
 	goalie.apply_body_config(config, 1.0)
+	_forward_predict_position(s, effective_state)
+
+
+func _forward_predict_position(s: GoalieNetworkState, effective_state: int) -> void:
+	if puck == null:
+		return
+	var predicted_x: float = s.position_x
+	match effective_state:
+		State.STANDING:
+			if not _reacting_to_shot:
+				var current_depth: float = (s.position_z - _goal_line_z) * _direction_sign
+				var target_x: float = GoalieBehaviorRules.target_lateral_x(
+						puck.global_position, _goal_line_z, _goal_center_x,
+						current_depth, net_half_width, _direction_sign)
+				var speed: float = t_push_speed if abs(target_x - s.position_x) > lateral_threshold else shuffle_speed
+				predicted_x = move_toward(s.position_x, target_x, speed * interpolation_delay)
+		State.RVH_LEFT:
+			predicted_x = move_toward(s.position_x,
+					_goal_center_x + (net_half_width - 0.38) * _direction_sign,
+					rvh_transition_speed * interpolation_delay)
+		State.RVH_RIGHT:
+			predicted_x = move_toward(s.position_x,
+					_goal_center_x - (net_half_width - 0.38) * _direction_sign,
+					rvh_transition_speed * interpolation_delay)
+	if predicted_x != s.position_x:
+		goalie.set_goalie_position(predicted_x, s.position_z)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 func _is_puck_in_defensive_zone() -> bool:
