@@ -49,10 +49,8 @@ func apply_queue_depth_feedback(depth: int) -> void:
 func _recompute() -> void:
 	var sorted := _samples.duplicate()
 	sorted.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.rtt < b.rtt)
-	var drop_each: int = OUTLIER_DROP / 2
-	var keep_start: int = mini(drop_each, sorted.size() - 1)
-	var keep_end: int = maxi(sorted.size() - drop_each, keep_start + 1)
-	var keep := sorted.slice(keep_start, keep_end)
+	var keep_end: int = maxi(sorted.size() - OUTLIER_DROP, 1)
+	var keep := sorted.slice(0, keep_end)
 	var rtt_sum := 0.0
 	var offset_sum := 0.0
 	for s: Dictionary in keep:
