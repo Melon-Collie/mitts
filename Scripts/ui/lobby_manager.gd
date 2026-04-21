@@ -167,6 +167,7 @@ func _build_settings_panel() -> Control:
 	if is_interactive:
 		_home_color_btn.item_selected.connect(func(idx: int) -> void:
 			_home_color_id = TeamColorRegistry.get_all_ids()[idx]
+			_update_color_exclusion()
 			NetworkManager.send_team_colors(_home_color_id, _away_color_id))
 	else:
 		_home_color_btn.disabled = true
@@ -178,12 +179,14 @@ func _build_settings_panel() -> Control:
 	if is_interactive:
 		_away_color_btn.item_selected.connect(func(idx: int) -> void:
 			_away_color_id = TeamColorRegistry.get_all_ids()[idx]
+			_update_color_exclusion()
 			NetworkManager.send_team_colors(_home_color_id, _away_color_id))
 	else:
 		_away_color_btn.disabled = true
 		_away_color_btn.modulate = Color(1, 1, 1, 0.5)
 	grid.add_child(_away_color_btn)
 
+	_update_color_exclusion()
 	return box
 
 func _setting_label(text: String) -> Label:
@@ -217,6 +220,17 @@ func _sync_option_btn(btn: OptionButton, id: String) -> void:
 		if ids[i] == id:
 			btn.select(i)
 			return
+
+# Disables the opposing team's currently selected preset in each dropdown so
+# the same colors cannot be chosen for both teams simultaneously.
+func _update_color_exclusion() -> void:
+	var ids: Array[String] = TeamColorRegistry.get_all_ids()
+	if _home_color_btn != null:
+		for i: int in ids.size():
+			_home_color_btn.set_item_disabled(i, ids[i] == _away_color_id)
+	if _away_color_btn != null:
+		for i: int in ids.size():
+			_away_color_btn.set_item_disabled(i, ids[i] == _home_color_id)
 
 # ── Slot management ───────────────────────────────────────────────────────────
 
@@ -366,6 +380,7 @@ func _on_team_colors_synced(home_id: String, away_id: String) -> void:
 	_away_color_id = away_id
 	_sync_option_btn(_home_color_btn, home_id)
 	_sync_option_btn(_away_color_btn, away_id)
+	_update_color_exclusion()
 
 func _on_game_started(config: Dictionary) -> void:
 	NetworkManager.pending_game_config = config
