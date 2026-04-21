@@ -10,11 +10,11 @@ var current_preset: int = 0  # 0 = off, 1–5 = increasing degradation
 
 const PRESETS: Array[Dictionary] = [
 	{ delay = 0.0,   jitter = 0.0,  loss = 0.0  },  # 0: Off
-	{ delay = 5.0,   jitter = 2.0,  loss = 0.0  },  # 1: LAN      (~10ms RTT)
-	{ delay = 25.0,  jitter = 8.0,  loss = 1.0  },  # 2: Good     (~50ms RTT)
-	{ delay = 50.0,  jitter = 12.0, loss = 3.0  },  # 3: Average  (~100ms RTT)
-	{ delay = 75.0,  jitter = 18.0, loss = 6.0  },  # 4: Poor     (~150ms RTT)
-	{ delay = 100.0, jitter = 25.0, loss = 12.0 },  # 5: Bad      (~200ms RTT)
+	{ delay = 5.0,   jitter = 2.0,  loss = 0.0  },  # 1: LAN          (~10ms RTT)
+	{ delay = 10.0,  jitter = 3.0,  loss = 0.0  },  # 2: Regional     (~20ms RTT, e.g. Dallas–Houston)
+	{ delay = 50.0,  jitter = 8.0,  loss = 1.0  },  # 3: Average      (~100ms RTT, stable)
+	{ delay = 75.0,  jitter = 20.0, loss = 6.0  },  # 4: Poor         (~150ms RTT, choppy)
+	{ delay = 100.0, jitter = 25.0, loss = 12.0 },  # 5: Bad          (~200ms RTT, rough)
 ]
 
 class PendingPacket:
