@@ -1,0 +1,28 @@
+{
+  "presets": [
+    {
+      "id": "penguins",
+      "name": "Pittsburgh Gold",
+      "primary":      "#FCB514",
+      "secondary":    "#0F0F0F",
+      "helmet":       "#0F0F0F",
+      "jersey":       "#FCB514",
+      "pants":        "#0F0F0F",
+      "goalie_pads":  "#FFFFFF",
+      "text":         "#0F0F0F",
+      "text_outline": "#FCB514"
+    },
+    {
+      "id": "leafs",
+      "name": "Toronto Blue",
+      "primary":      "#00205B",
+      "secondary":    "#FFFFFF",
+      "helmet":       "#00205B",
+      "jersey":       "#00205B",
+      "pants":        "#FFFFFF",
+      "goalie_pads":  "#FFFFFF",
+      "text":         "#FFFFFF",
+      "text_outline": "#00205B"
+    }
+  ]
+}

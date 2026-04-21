@@ -11,12 +11,20 @@ var _lobby_slots: Dictionary = {}
 var _slot_grid: SlotGridPanel = null
 var _start_btn: Button = null
 
-# Settings (host only)
+# Settings (host only editable; all players see them)
 var _num_periods: int = GameRules.NUM_PERIODS
 var _period_duration: float = GameRules.PERIOD_DURATION
 var _ot_enabled: bool = GameRules.OT_ENABLED
 
+# Team color preset selection
+var _home_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID
+var _away_color_id: String = TeamColorRegistry.DEFAULT_AWAY_ID
+var _home_color_btn: OptionButton = null
+var _away_color_btn: OptionButton = null
+
 func _ready() -> void:
+	_home_color_id = NetworkManager.pending_home_color_id
+	_away_color_id = NetworkManager.pending_away_color_id
 	_build_ui()
 	NetworkManager.peer_joined.connect(_on_peer_joined)
 	NetworkManager.peer_disconnected.connect(_on_peer_disconnected)
@@ -24,6 +32,7 @@ func _ready() -> void:
 	NetworkManager.slot_swap_confirmed.connect(_on_slot_swap_confirmed)
 	NetworkManager.lobby_roster_synced.connect(_on_lobby_roster_synced)
 	NetworkManager.game_started.connect(_on_game_started)
+	NetworkManager.team_colors_synced.connect(_on_team_colors_synced)
 
 	if not NetworkManager.pending_lobby_roster.is_empty():
 		_on_lobby_roster_synced(NetworkManager.pending_lobby_roster)
@@ -77,8 +86,7 @@ func _build_ui() -> void:
 	_slot_grid.slot_selected.connect(_on_slot_selected)
 	vbox.add_child(_slot_grid)
 
-	if NetworkManager.is_host:
-		vbox.add_child(_build_settings_panel())
+	vbox.add_child(_build_settings_panel())
 
 	var btn_box := HBoxContainer.new()
 	btn_box.add_theme_constant_override("separation", 12)
@@ -116,13 +124,19 @@ func _build_settings_panel() -> Control:
 	grid.add_theme_constant_override("v_separation", 8)
 	center.add_child(grid)
 
+	var is_interactive: bool = NetworkManager.is_host
+
 	grid.add_child(_setting_label("Periods"))
 	var periods_spin := SpinBox.new()
 	periods_spin.min_value = 1
 	periods_spin.max_value = 5
 	periods_spin.step = 1
 	periods_spin.value = _num_periods
-	periods_spin.value_changed.connect(func(v: float) -> void: _num_periods = int(v))
+	periods_spin.editable = is_interactive
+	if is_interactive:
+		periods_spin.value_changed.connect(func(v: float) -> void: _num_periods = int(v))
+	else:
+		periods_spin.modulate = Color(1, 1, 1, 0.5)
 	grid.add_child(periods_spin)
 
 	grid.add_child(_setting_label("Period length (min)"))
@@ -131,14 +145,44 @@ func _build_settings_panel() -> Control:
 	dur_spin.max_value = 10
 	dur_spin.step = 1
 	dur_spin.value = _period_duration / 60.0
-	dur_spin.value_changed.connect(func(v: float) -> void: _period_duration = v * 60.0)
+	dur_spin.editable = is_interactive
+	if is_interactive:
+		dur_spin.value_changed.connect(func(v: float) -> void: _period_duration = v * 60.0)
+	else:
+		dur_spin.modulate = Color(1, 1, 1, 0.5)
 	grid.add_child(dur_spin)
 
 	grid.add_child(_setting_label("Overtime"))
 	var ot_check := CheckButton.new()
 	ot_check.button_pressed = _ot_enabled
-	ot_check.toggled.connect(func(pressed: bool) -> void: _ot_enabled = pressed)
+	ot_check.disabled = not is_interactive
+	if is_interactive:
+		ot_check.toggled.connect(func(pressed: bool) -> void: _ot_enabled = pressed)
+	else:
+		ot_check.modulate = Color(1, 1, 1, 0.5)
 	grid.add_child(ot_check)
+
+	grid.add_child(_setting_label("Home Colors"))
+	_home_color_btn = _color_option_btn(_home_color_id)
+	if is_interactive:
+		_home_color_btn.item_selected.connect(func(idx: int) -> void:
+			_home_color_id = TeamColorRegistry.get_all_ids()[idx]
+			NetworkManager.send_team_colors(_home_color_id, _away_color_id))
+	else:
+		_home_color_btn.disabled = true
+		_home_color_btn.modulate = Color(1, 1, 1, 0.5)
+	grid.add_child(_home_color_btn)
+
+	grid.add_child(_setting_label("Away Colors"))
+	_away_color_btn = _color_option_btn(_away_color_id)
+	if is_interactive:
+		_away_color_btn.item_selected.connect(func(idx: int) -> void:
+			_away_color_id = TeamColorRegistry.get_all_ids()[idx]
+			NetworkManager.send_team_colors(_home_color_id, _away_color_id))
+	else:
+		_away_color_btn.disabled = true
+		_away_color_btn.modulate = Color(1, 1, 1, 0.5)
+	grid.add_child(_away_color_btn)
 
 	return box
 
@@ -155,6 +199,24 @@ func _btn(text: String) -> Button:
 	b.text = text
 	b.custom_minimum_size = Vector2(140, 40)
 	return b
+
+func _color_option_btn(selected_id: String) -> OptionButton:
+	var btn := OptionButton.new()
+	var ids: Array[String] = TeamColorRegistry.get_all_ids()
+	for i: int in ids.size():
+		btn.add_item(TeamColorRegistry.get_name(ids[i]), i)
+		if ids[i] == selected_id:
+			btn.select(i)
+	return btn
+
+func _sync_option_btn(btn: OptionButton, id: String) -> void:
+	if btn == null:
+		return
+	var ids: Array[String] = TeamColorRegistry.get_all_ids()
+	for i: int in ids.size():
+		if ids[i] == id:
+			btn.select(i)
+			return
 
 # ── Slot management ───────────────────────────────────────────────────────────
 
@@ -214,10 +276,10 @@ func _broadcast_confirm(peer_id: int, team_id: int, slot: int) -> void:
 	var entry: Dictionary = _lobby_slots.get(_slot_key(team_id, slot), {})
 	if entry.is_empty():
 		return
-	var jersey := PlayerRules.generate_jersey_color(team_id)
-	var helmet := PlayerRules.generate_helmet_color(team_id)
-	var pants  := PlayerRules.generate_pants_color(team_id)
-	NetworkManager.send_confirm_slot_swap(peer_id, -1, -1, team_id, slot, jersey, helmet, pants)
+	var color_id: String = _home_color_id if team_id == 0 else _away_color_id
+	var preset: Dictionary = TeamColorRegistry.get_preset(color_id)
+	NetworkManager.send_confirm_slot_swap(peer_id, -1, -1, team_id, slot,
+			preset.jersey, preset.helmet, preset.pants)
 
 # ── Signal handlers ───────────────────────────────────────────────────────────
 
@@ -232,6 +294,7 @@ func _on_peer_joined(peer_id: int) -> void:
 	var num: int = NetworkManager.get_peer_number(peer_id)
 	_assign_slot(peer_id, target[0], target[1], name_val, is_left, num)
 	NetworkManager.send_lobby_roster(peer_id, _build_roster_array())
+	NetworkManager.send_team_colors_to(peer_id, _home_color_id, _away_color_id)
 	_broadcast_confirm(peer_id, target[0], target[1])
 	_refresh_grid()
 
@@ -298,6 +361,12 @@ func _on_lobby_roster_synced(roster: Array) -> void:
 		}
 	_refresh_grid()
 
+func _on_team_colors_synced(home_id: String, away_id: String) -> void:
+	_home_color_id = home_id
+	_away_color_id = away_id
+	_sync_option_btn(_home_color_btn, home_id)
+	_sync_option_btn(_away_color_btn, away_id)
+
 func _on_game_started(config: Dictionary) -> void:
 	NetworkManager.pending_game_config = config
 	NetworkManager.pending_lobby_slots = _build_pending_slots()
@@ -324,6 +393,8 @@ func _on_start_pressed() -> void:
 		"period_duration": _period_duration,
 		"ot_enabled": _ot_enabled,
 		"ot_duration": GameRules.OT_DURATION,
+		"home_color_id": _home_color_id,
+		"away_color_id": _away_color_id,
 	}
 	NetworkManager.send_game_start(config)
 

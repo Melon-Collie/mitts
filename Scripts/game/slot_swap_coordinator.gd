@@ -49,9 +49,10 @@ func request_swap(
 	var helmet: Color
 	var pants: Color
 	if new_team_id != result.old_team_id:
-		jersey = PlayerRules.generate_jersey_color(new_team_id)
-		helmet = PlayerRules.generate_helmet_color(new_team_id)
-		pants  = PlayerRules.generate_pants_color(new_team_id)
+		var preset: Dictionary = TeamColorRegistry.get_preset(_teams[new_team_id].color_id)
+		jersey = preset.jersey
+		helmet = preset.helmet
+		pants  = preset.pants
 	else:
 		jersey = record.jersey_color
 		helmet = record.helmet_color
@@ -84,14 +85,18 @@ func apply_confirmed_swap(
 	if _state_machine != null:
 		_state_machine.register_remote_assigned_player(peer_id, new_slot, new_team_id)
 	var record: PlayerRecord = _registry.get_record(peer_id)
-	record.team             = _teams[new_team_id]
-	record.team_slot        = new_slot
-	record.jersey_color     = jersey
-	record.helmet_color     = helmet
-	record.pants_color      = pants
-	record.faceoff_position = PlayerRules.faceoff_position(new_team_id, new_slot)
+	var preset: Dictionary = TeamColorRegistry.get_preset(_teams[new_team_id].color_id)
+	record.team               = _teams[new_team_id]
+	record.team_slot          = new_slot
+	record.jersey_color       = jersey
+	record.helmet_color       = helmet
+	record.pants_color        = pants
+	record.secondary_color    = preset.secondary
+	record.text_color         = preset.text
+	record.text_outline_color = preset.text_outline
+	record.faceoff_position   = PlayerRules.faceoff_position(new_team_id, new_slot)
 	record.skater.set_player_color(jersey, helmet, pants)
 	record.skater.set_ring_color(PlayerRules.slot_color(new_team_id, new_slot))
-	record.skater.set_jersey_info(record.player_name, record.jersey_number, pants)
+	record.skater.set_jersey_info(record.player_name, record.jersey_number, preset.text)
 	record.controller.teleport_to(record.faceoff_position)
 	stats_updated.emit()

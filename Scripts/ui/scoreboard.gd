@@ -119,7 +119,7 @@ func _rebuild_period_grid(num_periods: int) -> void:
 
 	for team_id: int in [1, 0]:
 		var label: String = "AWAY" if team_id == 1 else "HOME"
-		_period_summary_grid.add_child(_team_badge(label, PlayerRules.generate_primary_color(team_id)))
+		_period_summary_grid.add_child(_team_badge(label, TeamColorRegistry.get_preset(GameManager.teams[team_id].color_id).primary))
 		var row_labels: Array[Label] = []
 		for _i: int in num_periods + 1:  # periods + total
 			var l := _lbl("0", 13, _WHITE)
@@ -181,7 +181,7 @@ func _refresh() -> void:
 
 func _make_team_header(team_id: int) -> PanelContainer:
 	var label: String = "AWAY" if team_id == 1 else "HOME"
-	var color: Color = PlayerRules.generate_primary_color(team_id)
+	var color: Color = TeamColorRegistry.get_preset(GameManager.teams[team_id].color_id).primary
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(color.r, color.g, color.b, 0.18)
 	style.set_corner_radius_all(3)

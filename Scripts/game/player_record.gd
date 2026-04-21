@@ -12,6 +12,9 @@ var faceoff_position: Vector3 = Vector3.ZERO
 var jersey_color: Color = Color.WHITE
 var helmet_color: Color = Color.BLACK
 var pants_color: Color = Color.BLACK
+var secondary_color: Color = Color.WHITE
+var text_color: Color = Color.WHITE
+var text_outline_color: Color = Color.BLACK
 var is_left_handed: bool = true
 var stats: PlayerStats = PlayerStats.new()
 

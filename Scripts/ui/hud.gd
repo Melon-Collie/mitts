@@ -20,6 +20,8 @@ var _away_sog_label: Label = null
 var _local_skater: Skater = null
 var _score_0: int = 0
 var _score_1: int = 0
+var _home_badge_style: StyleBoxFlat = null
+var _away_badge_style: StyleBoxFlat = null
 
 const _DARK_BG    := Color(0.07, 0.07, 0.09, 0.92)
 const _WHITE      := Color(1.00, 1.00, 1.00, 1.00)
@@ -28,6 +30,7 @@ const _GOLD       := Color(1.00, 0.85, 0.20, 1.00)
 const _SEP_COLOR  := Color(0.28, 0.28, 0.33, 1.00)
 
 func _ready() -> void:
+	GameManager.team_colors_ready.connect(_on_team_colors_ready)
 	_build_scorebug()
 	_build_phase_banner()
 	_build_elevation_indicator()
@@ -109,7 +112,9 @@ func _build_scorebug() -> void:
 	away_row.add_theme_constant_override("separation", 8)
 	away_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	teams_vbox.add_child(away_row)
-	away_row.add_child(_team_badge("AWAY", PlayerRules.generate_primary_color(1)))
+	var away_badge := _team_badge("AWAY", PlayerRules.generate_primary_color(1))
+	_away_badge_style = away_badge.get_theme_stylebox("panel") as StyleBoxFlat
+	away_row.add_child(away_badge)
 	_away_score_label = _lbl("0", 20, _WHITE)
 	_away_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_away_score_label.custom_minimum_size = Vector2(22, 0)
@@ -120,7 +125,9 @@ func _build_scorebug() -> void:
 	home_row.add_theme_constant_override("separation", 8)
 	home_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	teams_vbox.add_child(home_row)
-	home_row.add_child(_team_badge("HOME", PlayerRules.generate_primary_color(0)))
+	var home_badge := _team_badge("HOME", PlayerRules.generate_primary_color(0))
+	_home_badge_style = home_badge.get_theme_stylebox("panel") as StyleBoxFlat
+	home_row.add_child(home_badge)
 	_home_score_label = _lbl("0", 20, _WHITE)
 	_home_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_home_score_label.custom_minimum_size = Vector2(22, 0)
@@ -463,7 +470,7 @@ func _on_goal_scored(scoring_team: Team, scorer_name: String, assist1_name: Stri
 		_GOLD, _WHITE, 1.5)
 	_phase_label.text = ("GOAL!  %s" % scorer_name) if not scorer_name.is_empty() else "GOAL!"
 	_phase_label.add_theme_color_override("font_color", _GOLD)
-	var team_color: Color = PlayerRules.generate_primary_color(scoring_team.team_id)
+	var team_color: Color = TeamColorRegistry.get_preset(GameManager.teams[scoring_team.team_id].color_id).primary
 	_phase_style.bg_color = Color(team_color.r * 0.25, team_color.g * 0.25, team_color.b * 0.25, 0.92)
 	if not assist1_name.is_empty():
 		var assist_text: String = assist1_name
@@ -473,6 +480,12 @@ func _on_goal_scored(scoring_team: Team, scorer_name: String, assist1_name: Stri
 		_assist_label.visible = true
 	else:
 		_assist_label.visible = false
+
+func _on_team_colors_ready(home_primary: Color, away_primary: Color) -> void:
+	if _home_badge_style != null:
+		_home_badge_style.bg_color = home_primary
+	if _away_badge_style != null:
+		_away_badge_style.bg_color = away_primary
 
 func _on_phase_changed(new_phase: int) -> void:
 	match new_phase:
