@@ -7,6 +7,7 @@ signal puck_stripped(ex_carrier: Skater)
 signal puck_touched_loose(skater: Skater)  # any loose-puck touch (deflection, body block)
 signal puck_touched_goalie(goalie: Goalie)  # puck contacted a goalie StaticBody3D part while uncarried
 signal puck_touched_post  # puck contacted any HockeyGoal geometry while uncarried
+signal puck_touched_board  # puck contacted rink boards while uncarried
 
 @export var max_speed: float = 30.0
 @export var reattach_cooldown: float = 0.5
@@ -232,8 +233,10 @@ func _on_body_entered(body: Node3D) -> void:
 		return
 	if body.get_parent() is Goalie:
 		puck_touched_goalie.emit(body.get_parent() as Goalie)
-	if body is HockeyGoal:
+	elif body is HockeyGoal:
 		puck_touched_post.emit()
+	elif body is StaticBody3D:
+		puck_touched_board.emit()
 
 func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	if _pending_reset:
