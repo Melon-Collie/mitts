@@ -48,6 +48,7 @@ var _remote_controllers: Dictionary = {}  # peer_id -> RemoteController
 var _peer_handedness: Dictionary = {}     # peer_id -> bool (host only)
 var _peer_names: Dictionary = {}          # peer_id -> String (host only)
 var _peer_numbers: Dictionary = {}        # peer_id -> int (host only)
+var _peer_ping_ms: Dictionary[int, int] = {}  # peer_id -> latest RTT in ms (all peers)
 # Callable () -> Array. Set by GameManager at startup so the broadcast loop
 # can pull world state without reaching up into the application layer.
 var _world_state_provider: Callable = Callable()
@@ -75,6 +76,8 @@ var pending_error: String = ""
 
 var _input_timer: float = 0.0
 var _state_timer: float = 0.0
+var _ping_timer: float = 0.0
+const _PING_INTERVAL: float = 2.0
 var _connect_timer: float = -1.0
 var input_delta: float = 1.0 / Constants.INPUT_RATE
 var state_delta: float = 1.0 / Constants.STATE_RATE
@@ -227,6 +230,14 @@ func _process(delta: float) -> void:
 	if not is_host and _clock_sync != null:
 		if _clock_sync.tick(capped_delta):
 			send_ping.rpc_id(1, Time.get_ticks_msec() / 1000.0)
+
+	_ping_timer += capped_delta
+	if _ping_timer >= _PING_INTERVAL:
+		_ping_timer = 0.0
+		if is_host:
+			_broadcast_all_pings()
+		elif _clock_sync != null and _clock_sync.is_ready:
+			report_ping.rpc_id(1, int(get_rtt_ms()))
 
 	if not is_host and _local_controller != null:
 		_input_timer += capped_delta
@@ -394,6 +405,25 @@ func get_latest_rtt_ms() -> float:
 	if _clock_sync == null:
 		return 0.0
 	return _clock_sync.latest_rtt_ms
+
+func get_peer_ping_ms(peer_id: int) -> int:
+	return _peer_ping_ms.get(peer_id, 0)
+
+@rpc("any_peer", "unreliable")
+func report_ping(rtt_ms: int) -> void:
+	_peer_ping_ms[multiplayer.get_remote_sender_id()] = rtt_ms
+
+func _broadcast_all_pings() -> void:
+	var pings: Dictionary[int, int] = {}
+	for pid: int in _peer_ping_ms:
+		pings[pid] = _peer_ping_ms[pid]
+	for peer_id: int in multiplayer.get_peers():
+		receive_all_pings.rpc_id(peer_id, pings)
+
+@rpc("authority", "unreliable")
+func receive_all_pings(pings: Dictionary) -> void:
+	for pid: int in pings:
+		_peer_ping_ms[pid] = pings[pid]
 
 func on_queue_depth_received(depth: int) -> void:
 	if is_host or _clock_sync == null or not _clock_sync.is_ready:
