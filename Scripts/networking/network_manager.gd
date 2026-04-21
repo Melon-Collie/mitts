@@ -131,6 +131,11 @@ func on_game_scene_ready() -> void:
 
 # ── Network Signals ───────────────────────────────────────────────────────────
 func _on_peer_connected(id: int) -> void:
+	# Defer one frame — peer_connected fires before ENet's internal peer table
+	# is updated, so get_peer(id) would assert even though we null-check the result.
+	call_deferred("_apply_peer_timeout", id)
+
+func _apply_peer_timeout(id: int) -> void:
 	# Give peers a generous disconnect window — brief OS freezes (e.g. title bar
 	# right-click) block the message pump and silence ENet for several seconds.
 	var enet_peer := multiplayer.multiplayer_peer as ENetMultiplayerPeer
@@ -138,7 +143,6 @@ func _on_peer_connected(id: int) -> void:
 		var peer := enet_peer.get_peer(id)
 		if peer:
 			peer.set_timeout(0, 10000, 60000)
-	# Spawn happens when the client sends request_join — not here.
 
 func _on_peer_disconnected(id: int) -> void:
 	_peer_handedness.erase(id)
