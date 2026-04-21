@@ -91,6 +91,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.pickup_claim_received.connect(_on_pickup_claim_received)
 	NetworkManager.ghost_state_received.connect(_on_ghost_state_received)
 	NetworkManager.hit_claim_received.connect(_on_hit_claim_received)
+	NetworkManager.goalie_state_transition_received.connect(_on_goalie_state_transition_received)
 
 
 # ── Process ───────────────────────────────────────────────────────────────────
@@ -381,6 +382,10 @@ func _wire_subsystems() -> void:
 	_swap_coord.stats_updated.connect(stats_updated.emit)
 	_swap_coord.carrier_swap_needs_drop.connect(_drop_puck_if_carried)
 
+	if NetworkManager.is_host:
+		for gc: GoalieController in goalie_controllers:
+			gc.state_transitioned.connect(NetworkManager.send_goalie_state_transition_to_all)
+
 	_telemetry = NetworkTelemetry.new()
 	NetworkTelemetry.instance = _telemetry
 	_debug_overlay = NetworkDebugOverlay.new()
@@ -529,6 +534,13 @@ func _on_server_puck_stripped_from(peer_id: int) -> void:
 func _on_server_puck_touched_while_loose(peer_id: int) -> void:
 	_state_machine.notify_icing_contact()
 	_shot_tracker.on_deflection(peer_id)
+
+
+func _on_goalie_state_transition_received(team_id: int, new_state: int) -> void:
+	for gc: GoalieController in goalie_controllers:
+		if gc.team_id == team_id:
+			gc.apply_state_transition(new_state)
+			return
 
 
 func _on_puck_touched_by_goalie(goalie: Goalie) -> void:

@@ -59,6 +59,8 @@ extends Node
 @export var five_hole_butterfly_move_max: float = 0.18
 
 # ── References ────────────────────────────────────────────────────────────────
+signal state_transitioned(team_id: int, new_state: int)
+
 var goalie: Goalie = null
 var puck: Puck = null
 var is_server: bool = false
@@ -93,6 +95,8 @@ var _puck_approach_velocity: float = 0.0
 var _current_time: float = 0.0
 var _state_buffer: Array[BufferedGoalieState] = []
 var is_extrapolating: bool = false
+var _transition_override_state: int = -1
+var _transition_override_until: float = 0.0
 
 func get_buffer_depth() -> int:
 	return _state_buffer.size()
@@ -188,6 +192,7 @@ func _update_shot_timer(delta: float) -> void:
 
 # ── State Machine ─────────────────────────────────────────────────────────────
 func _update_state(delta: float) -> void:
+	var prev_state := _state
 	if _state != State.STANDING:
 		_shot_timer = 0.0
 	# Convert puck global X into goalie local X. The -Z goal goalie is rotated PI
@@ -227,6 +232,8 @@ func _update_state(delta: float) -> void:
 				_state = State.STANDING
 			elif puck_local_x < 0.0:
 				_state = State.RVH_LEFT
+	if _state != prev_state:
+		state_transitioned.emit(team_id, _state as int)
 
 # ── Depth ─────────────────────────────────────────────────────────────────────
 func _update_depth(delta: float) -> void:
@@ -490,11 +497,23 @@ func _interpolate() -> void:
 	_apply_network_state(interpolated)
 	BufferedStateInterpolator.drop_stale(_state_buffer, render_time)
 
+func apply_state_transition(new_state: int) -> void:
+	if is_server:
+		return
+	_transition_override_state = new_state
+	_transition_override_until = _current_time + 0.15
+
 func _apply_network_state(s: GoalieNetworkState) -> void:
 	goalie.set_goalie_position(s.position_x, s.position_z)
 	goalie.set_goalie_rotation_y(s.rotation_y)
 	_five_hole_openness = s.five_hole_openness
-	var config := _get_config(s.state_enum as State)
+	var effective_state: int = s.state_enum
+	if _transition_override_state >= 0:
+		if _current_time < _transition_override_until:
+			effective_state = _transition_override_state
+		else:
+			_transition_override_state = -1
+	var config := _get_config(effective_state as State)
 	goalie.apply_body_config(config, 1.0)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
