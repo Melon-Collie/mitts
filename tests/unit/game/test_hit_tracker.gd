@@ -28,28 +28,28 @@ func _add_player(peer_id: int, team_id: int) -> PlayerRecord:
 func test_hit_on_opponent_credits_hitter() -> void:
 	var hitter := _add_player(1, 0)
 	_add_player(2, 1)
-	tracker.on_hit(1, 1)  # team 0 hits team 1
+	tracker.on_hit(1, 2, 1)  # team 0 hits team 1
 	assert_eq(hitter.stats.hits, 1)
 
 func test_hit_on_teammate_does_not_credit() -> void:
 	var hitter := _add_player(1, 0)
 	_add_player(2, 0)
-	tracker.on_hit(1, 0)  # team 0 hits team 0
+	tracker.on_hit(1, 2, 0)  # team 0 hits team 0
 	assert_eq(hitter.stats.hits, 0)
 
 func test_hit_emits_signal_on_valid_hit() -> void:
 	_add_player(1, 0)
 	watch_signals(tracker)
-	tracker.on_hit(1, 1)
+	tracker.on_hit(1, 2, 1)
 	assert_signal_emitted(tracker, "hit_credited")
 
 func test_hit_does_not_emit_signal_on_teammate_hit() -> void:
 	_add_player(1, 0)
 	watch_signals(tracker)
-	tracker.on_hit(1, 0)
+	tracker.on_hit(1, 2, 0)
 	assert_signal_not_emitted(tracker, "hit_credited")
 
 func test_hit_unknown_hitter_does_nothing() -> void:
 	watch_signals(tracker)
-	tracker.on_hit(999, 1)  # unregistered peer
+	tracker.on_hit(999, 2, 1)  # unregistered peer
 	assert_signal_not_emitted(tracker, "hit_credited")
