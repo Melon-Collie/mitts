@@ -326,15 +326,15 @@
     },
     {
       "id": "utah",
-      "name": "Utah Hockey Club",
-      "primary":      "#010101",
-      "secondary":    "#FFFFFF",
-      "helmet":       "#010101",
-      "jersey":       "#010101",
-      "pants":        "#010101",
-      "goalie_pads":  "#FFFFFF",
-      "text":         "#FFFFFF",
-      "text_outline": "#010101"
+      "name": "Utah Mammoth",
+      "primary":      "#111111",
+      "secondary":    "#6CACE3",
+      "helmet":       "#111111",
+      "jersey":       "#111111",
+      "pants":        "#111111",
+      "goalie_pads":  "#6CACE3",
+      "text":         "#6CACE3",
+      "text_outline": "#111111"
     },
     {
       "id": "canucks",
