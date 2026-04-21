@@ -15,7 +15,7 @@ extends RefCounted
 #    Quantization layout:
 #      Skater  (35 B): pos s16/s8/s16@1cm, vel 3×s16@0.1m/s,
 #                      blade 3×s16@1cm, top_hand 3×s16@1cm,
-#                      facing u16 (0–TAU→0–65535), upper_body_rot f32,
+#                      facing u16 (0–TAU→0–65535), upper_body_rot s16 (−π–π→−32767–32767),
 #                      last_processed_ts f32, flags u8 (shot_state[3:0]+ghost[4]),
 #                      shot_charge u8
 #      Puck    (13 B): pos s16/s8/s16@1cm, vel 3×s16@0.1m/s, carrier_peer_id s16
@@ -226,7 +226,7 @@ static func _encode_skater_quantized(s: SkaterNetworkState) -> PackedByteArray:
 	if angle < 0.0:
 		angle += TAU
 	b.encode_u16(o, roundi(angle / TAU * 65535.0) & 0xFFFF); o += 2
-	b.encode_float(o, s.upper_body_rotation_y); o += 4
+	b.encode_s16(o, clampi(roundi(s.upper_body_rotation_y / PI * 32767.0), -32768, 32767)); o += 2
 	b.encode_float(o, s.last_processed_host_timestamp); o += 4
 	var flags: int = (s.shot_state & 0x0F) | (0x10 if s.is_ghost else 0)
 	b.encode_u8(o, flags); o += 1
@@ -251,7 +251,7 @@ static func _decode_skater_quantized(b: PackedByteArray) -> SkaterNetworkState:
 	s.top_hand_position.z = b.decode_s16(o) / 100.0; o += 2
 	var angle: float = b.decode_u16(o) / 65535.0 * TAU; o += 2
 	s.facing = Vector2(cos(angle), sin(angle))
-	s.upper_body_rotation_y = b.decode_float(o); o += 4
+	s.upper_body_rotation_y = b.decode_s16(o) / 32767.0 * PI; o += 2
 	s.last_processed_host_timestamp = b.decode_float(o); o += 4
 	var flags: int = b.decode_u8(o); o += 1
 	s.shot_state = flags & 0x0F
