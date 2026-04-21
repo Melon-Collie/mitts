@@ -292,11 +292,10 @@ func apply_state(state: PuckNetworkState) -> void:
 			puck.set_client_prediction_mode(false)
 		else:
 			if _pending_local_release:
-				_pending_local_release = false  # Host confirmed the release
-				return  # Skip — host Jolt just started, this state is too stale to reconcile
-			var rtt_half_s: float = _shot_rtt_ms / 2000.0
+				_pending_local_release = false
+			var rtt_s: float = _shot_rtt_ms / 1000.0
 			var latency_corrected := PuckNetworkState.new()
-			latency_corrected.position = state.position + state.velocity * rtt_half_s
+			latency_corrected.position = state.position + state.velocity * rtt_s
 			latency_corrected.velocity = state.velocity
 			_reconcile(latency_corrected)
 			return  # Don't buffer during prediction; interpolation isn't running

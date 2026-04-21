@@ -9,7 +9,7 @@ signal client_connected
 signal disconnected_from_server
 signal peer_joined(peer_id: int)
 signal peer_disconnected(peer_id: int)
-signal world_state_received(state: Array)
+signal world_state_received(data: PackedByteArray)
 signal slot_assigned(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color)
 signal remote_skater_spawn_requested(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String, jersey_number: int)
 signal existing_players_synced(player_data: Array)
@@ -284,7 +284,7 @@ func _process(delta: float) -> void:
 func _broadcast_state() -> void:
 	if not _world_state_provider.is_valid():
 		return
-	var state: Array = _world_state_provider.call()
+	var state: PackedByteArray = _world_state_provider.call()
 	if state.is_empty():
 		return
 	for peer_id in multiplayer.get_peers():
@@ -321,11 +321,11 @@ func receive_input_batch(data: Array) -> void:
 		[data, sender_id], false)
 
 @rpc("authority", "unreliable_ordered")
-func receive_world_state(state: Array) -> void:
+func receive_world_state(data: PackedByteArray) -> void:
 	if is_host:
 		return
 	NetworkSimManager.send(
-		func(s: Array) -> void:
+		func(s: PackedByteArray) -> void:
 			var now: float = Time.get_ticks_msec() / 1000.0
 			if _last_ws_arrival_time > 0.0:
 				const EXPECTED_INTERVAL: float = 1.0 / Constants.STATE_RATE
@@ -335,11 +335,11 @@ func receive_world_state(state: Array) -> void:
 					_jitter_samples.pop_front()
 				NetworkTelemetry.record_jitter_p95(get_jitter_p95() * 1000.0)
 			_last_ws_arrival_time = now
-			if not s.is_empty():
-				_on_ws_sequence_received(s[0])
+			if s.size() >= 2:
+				_on_ws_sequence_received(s.decode_u16(0))
 			NetworkTelemetry.record_world_state()
 			world_state_received.emit(s),
-		[state], false)
+		[data], false)
 
 # ── Clock Sync ────────────────────────────────────────────────────────────────
 @rpc("any_peer", "reliable")
