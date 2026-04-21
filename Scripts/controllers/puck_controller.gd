@@ -170,6 +170,14 @@ func notify_local_pickup(local_skater: Skater) -> void:
 	_state_buffer.clear()
 
 func notify_local_release(direction: Vector3, power: float, rtt_ms: float, skater_vel: Vector3 = Vector3.ZERO) -> void:
+	# PuckController (priority 1) runs after LocalController (priority 0), so the puck
+	# hasn't been re-pinned to the current blade position yet this frame. Read blade
+	# directly from the carrier so we start from the current-frame position, not last
+	# frame's pin.
+	var release_pos: Vector3 = puck.get_puck_position()
+	if _local_carrier_skater != null:
+		release_pos = _local_carrier_skater.get_blade_contact_global()
+		release_pos.y = puck.ice_height
 	_local_carrier_skater = null
 	_predicting_trajectory = true
 	_pending_local_release = true
@@ -177,7 +185,7 @@ func notify_local_release(direction: Vector3, power: float, rtt_ms: float, skate
 	puck.set_client_prediction_mode(true)
 	puck.set_goal_line_clamp(true)
 	var rtt_half: float = rtt_ms / 2000.0
-	puck.set_puck_position(puck.get_puck_position() + (direction * power + skater_vel) * rtt_half)
+	puck.set_puck_position(release_pos + (direction * power + skater_vel) * rtt_half)
 	puck.set_puck_velocity(direction * power)
 	_state_buffer.clear()
 

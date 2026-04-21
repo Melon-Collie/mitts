@@ -338,6 +338,7 @@ Instead of stoppages, offsides and icing are enforced via a **ghost mode** — o
 | 21 | Netcode fixes (segment-segment pickup/poke detection, blade_contact_world lag-comp path, reconcile mouse-seed + server shot authority, physics-thread contest window, latest_rtt_ms for rewind, blade/hand extrapolation, input queue depth cap) | Done |
 | 22 | Netcode improvements I6–I8 (PackedByteArray quantized world state ~60% bandwidth reduction; rewind-based body check hit crediting + body check impulse replay in reconcile; lag-compensated shot release using latest blade position + kinematic RTT/2 advance) | Done |
 | 23 | Netcode improvements I2–I5 + puck reconcile fix (clock sync 2s interval + symmetric outlier drop; input queue target depth 5; velocity quantization @0.02m/s; wall reconcile dead zone 0.05m; puck reconcile full-RTT correction; world state as single flat PackedByteArray fixing 1940→279 byte MTU issue; ENet peer timeout null-guard) | Done |
+| 24 | MTU fix for input batch (PackedByteArray 23B/input, 279B at 12 inputs vs 1780B; InputState.to_bytes/from_bytes); puck release pos from current blade not stale pin (fixes 1-frame lag in snapback) | Done |
 
 ## Distribution
 

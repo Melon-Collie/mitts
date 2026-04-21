@@ -1,5 +1,12 @@
 class_name InputState
 
+static const BYTES_SIZE: int = 23
+# Layout: f32 timestamp(0) f32 delta(4) s16 move.x(8) s16 move.y(10)
+#         s16 mwp.x(12) s8 mwp.y(14) s16 mwp.z(15) u16 msp.x(17) u16 msp.y(19)
+#         u16 flags(21)  flags: shoot_pressed[0] shoot_held[1] slap_pressed[2]
+#         slap_held[3] facing_held[4] brake[5] elevation_up[6] elevation_down[7]
+#         block_held[8]
+
 var host_timestamp: float = 0.0
 var delta: float = 1.0 / 60.0
 var move_vector: Vector2 = Vector2.ZERO
@@ -36,6 +43,51 @@ func to_array() -> Array:
 		mouse_screen_pos.x,
 		mouse_screen_pos.y,
 	]
+
+func to_bytes() -> PackedByteArray:
+	var b := PackedByteArray(); b.resize(BYTES_SIZE)
+	b.encode_float(0, host_timestamp)
+	b.encode_float(4, delta)
+	b.encode_s16(8,  clampi(roundi(move_vector.x * 1000.0), -32768, 32767))
+	b.encode_s16(10, clampi(roundi(move_vector.y * 1000.0), -32768, 32767))
+	b.encode_s16(12, clampi(roundi(mouse_world_pos.x * 100.0), -32768, 32767))
+	b.encode_s8( 14, clampi(roundi(mouse_world_pos.y * 100.0), -128, 127))
+	b.encode_s16(15, clampi(roundi(mouse_world_pos.z * 100.0), -32768, 32767))
+	b.encode_u16(17, clampi(roundi(mouse_screen_pos.x), 0, 65535))
+	b.encode_u16(19, clampi(roundi(mouse_screen_pos.y), 0, 65535))
+	var flags: int = (
+		(0x001 if shoot_pressed  else 0) | (0x002 if shoot_held     else 0) |
+		(0x004 if slap_pressed   else 0) | (0x008 if slap_held      else 0) |
+		(0x010 if facing_held    else 0) | (0x020 if brake          else 0) |
+		(0x040 if elevation_up   else 0) | (0x080 if elevation_down else 0) |
+		(0x100 if block_held     else 0))
+	b.encode_u16(21, flags)
+	return b
+
+
+static func from_bytes(b: PackedByteArray, offset: int = 0) -> InputState:
+	var s := InputState.new()
+	s.host_timestamp     = b.decode_float(offset)
+	s.delta              = b.decode_float(offset + 4)
+	s.move_vector.x      = b.decode_s16(offset + 8)  / 1000.0
+	s.move_vector.y      = b.decode_s16(offset + 10) / 1000.0
+	s.mouse_world_pos.x  = b.decode_s16(offset + 12) / 100.0
+	s.mouse_world_pos.y  = b.decode_s8( offset + 14) / 100.0
+	s.mouse_world_pos.z  = b.decode_s16(offset + 15) / 100.0
+	s.mouse_screen_pos.x = float(b.decode_u16(offset + 17))
+	s.mouse_screen_pos.y = float(b.decode_u16(offset + 19))
+	var flags: int       = b.decode_u16(offset + 21)
+	s.shoot_pressed      = (flags & 0x001) != 0
+	s.shoot_held         = (flags & 0x002) != 0
+	s.slap_pressed       = (flags & 0x004) != 0
+	s.slap_held          = (flags & 0x008) != 0
+	s.facing_held        = (flags & 0x010) != 0
+	s.brake              = (flags & 0x020) != 0
+	s.elevation_up       = (flags & 0x040) != 0
+	s.elevation_down     = (flags & 0x080) != 0
+	s.block_held         = (flags & 0x100) != 0
+	return s
+
 
 static func from_array(data: Array) -> InputState:
 	var state := InputState.new()
