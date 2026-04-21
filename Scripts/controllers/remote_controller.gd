@@ -127,8 +127,8 @@ func _interpolate() -> void:
 		interpolated.is_ghost = to_state.is_ghost
 	if prev_extrapolating and not is_extrapolating and skater != null:
 		_rejoin_blend_from_pos = skater.global_position
-		_rejoin_blend_from_blade = skater.blade.global_position
-		_rejoin_blend_from_hand = skater.top_hand.global_position
+		_rejoin_blend_from_blade = skater.get_blade_position()
+		_rejoin_blend_from_hand = skater.top_hand.position
 		_rejoin_blend_start_time = _current_time
 	if _rejoin_blend_start_time >= 0.0:
 		var ease_t: float = clampf(
