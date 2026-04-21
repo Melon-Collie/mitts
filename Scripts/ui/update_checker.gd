@@ -29,7 +29,7 @@ func _ready() -> void:
 	_http.request_completed.connect(_on_request_completed)
 
 	var url: String = _API_URL_FMT % [BuildInfo.REPO, BuildInfo.RELEASE_TAG]
-	var headers: PackedStringArray = ["Accept: application/vnd.github+json", "User-Agent: HockeyGame-UpdateChecker"]
+	var headers: PackedStringArray = ["Accept: application/vnd.github+json", "User-Agent: Mitts-UpdateChecker"]
 	var err: int = _http.request(url, headers)
 	if err != OK:
 		push_warning("UpdateChecker: HTTPRequest.request() failed with error %d" % err)

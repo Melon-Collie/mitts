@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Context for Claude about the HockeyGame project.
+Context for Claude about the Mitts project.
 
 ## Workflow
 
