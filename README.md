@@ -57,41 +57,30 @@ Pucks coming in fast deflect off your blade instead of sticking. Move your stick
 - Relative-velocity catch vs deflect — move blade with the puck to receive, into the puck to redirect
 - Poke checking — opposing blades strip the puck loose, direction driven by blade velocities
 - Body checking — weight-based momentum transfer; hard hits strip the puck from the carrier
-- Puck carry speed penalty — carrier max speed reduced to 88%, encouraging passing
+- Puck carry speed penalty — carrier max speed reduced to 85%, encouraging passing
 - Passive shot blocking — puck deflects off skater bodies with dampened momentum
-- Active shot-block stance (Ctrl) — drops to a crouch, widens block area, snaps to face puck, slows movement; puck carries more energy away than passive
-- Shot cancel (Ctrl during wind-up) — abort a wrister or slapshot wind-up at any point without firing; puck stays with the carrier
-- Stick clamping against player bodies and goalie pads — no poking through opponents
+- Active shot-block stance (Ctrl) — drops to a crouch, widens block area, snaps to face puck, slows movement
+- Shot cancel (Ctrl during wind-up) — abort a wrister or slapshot wind-up at any point without firing
 - Physical deflection off blade contact normal with elevation tipping
 - Elevated shots
-- Online multiplayer with client-side prediction, input redundancy (last 12 inputs per packet), lag-compensated pickup claims, quantized world state (~60% bandwidth reduction), rewind-based hit detection, and lag-compensated shot release
+- Online multiplayer with client-side prediction and lag compensation
 - Regulation rink markings — center line, blue lines, goal lines, faceoff circles, goalie creases
-- Accurate Art Ross hockey nets with Bézier curve frame and translucent ruled-surface netting
-- Behavioral goalie AI (state machine, Buckley depth system, butterfly, RVH) — server-authoritative with client interpolation, tracking lag for beatable positioning
-- Goal detection, score tracking, and faceoff sequences — goals pause play, players teleport to faceoff dots, puck goes live on pickup
-- Period-based game loop — 3 periods × 4 minutes; clock pauses during dead-puck phases; each period opens with a faceoff; game locks after the final period until reset
-- NHL-style scorebug — teams + scores (away top, home bottom) | shots on goal | period + clock, in a three-column dark panel (top-left); phase banner (GOAL! / FACEOFF / etc.) appears centered below it
-- Per-player stat tracking — goals, assists, points, shots on goal, hits; Tab-toggle scoreboard overlay with rows colored by team; auto-opens on game over; synced host → clients via reliable RPC
-- Elevation indicator — bottom-center HUD badge when elevated shot mode is active
-- Main menu — host, join (with IP input), and offline from the title screen
-- Update-available notice — main menu compares the baked-in build version (auto-generated from commit count at export time) against the latest GitHub Release and prompts the player to re-download when they're stale
-- Team colors — Penguins gold + black (home) vs Leafs blue + white (away); all teammates match
+- Art Ross hockey nets with translucent ruled-surface netting
+- Behavioral goalie AI (butterfly, RVH) — tracking lag makes positioning beatable
+- Goal detection, score tracking, and faceoff sequences
+- Period-based game loop — 3 periods × 4 minutes; clock pauses during dead-puck phases
+- NHL-style scorebug — teams + scores | shots on goal | period + clock; phase banner (GOAL! / FACEOFF / etc.)
+- Per-player stat tracking — goals, assists, points, shots on goal, hits; Tab-toggle scoreboard; auto-opens on game over
+- Main menu — host, join (with IP input), and offline
+- Update-available notice — main menu compares the baked-in build version against the latest GitHub Release
+- Team colors — Penguins gold + black (home) vs Leafs blue + white (away)
 - Local player ring — gray semi-transparent ring on the ice under your skater only
-- Stadium lighting — 6 overhead SpotLights in a 2×3 grid; warm white, soft falloff, shadows on center pair
-- Anti-aliased ice markings — procedural rink texture at 40px/m with sub-pixel smooth circles and lines; mipmapped for clean rendering at all zoom levels
-- MSAA 4x — hardware anti-aliasing for smooth geometry edges
-- Game menu — ESC in-game: Resume, Change Position, Rematch (host), Return to Lobby (host), Report Bug, Disconnect, Exit Game; "Change Position" opens a slot grid overlay (Away on top, Home on bottom) — click any open slot to swap immediately (teleport, color update, puck dropped if carrying); ESC closes the slot grid first, then the menu. Game-over panel offers the same Rematch / Return to Lobby / Disconnect options for the host.
-- Pre-game lobby — slot picking, configurable rules (periods, duration, OT); host-driven, late joiners sync through roster push. "Return to Lobby" (host, in-game or post-game) brings the whole session back here with team assignments preserved.
-- Offsides ghost — skaters past the blue line without the puck become transparent ghosts that can't interact with the puck or other players until they retreat or the puck enters the zone
-- Hybrid icing — shooting from your own half past the opponent's goal line triggers a race: if the defending team's closest player is nearer the goal line, your entire team is ghosted for 3 seconds; if you beat them back to the puck, icing is waved off
-- Puck trail — pale-blue ribbon streak behind the puck when moving fast
-- Puck wall impact — small ice burst when the puck sharply reverses direction off the boards
-- Ice spray — burst of ice particles from both skates on hard braking or sharp direction changes
-- Skate trails — faint flat marks left on the ice surface while skating, fading over 2.5s
-- Speed lines — faint particle streaks behind skaters at high speed
-- Body check impact — particle burst at the victim's position on a hard hit
-- Shot charge glow — blue OmniLight at the blade that brightens as wrister or slapshot charges
-- Goal celebration — gold particle burst and flash of light inside the net on every goal
+- Stadium lighting and anti-aliased ice markings
+- Puck trail, ice spray, skate trails, speed lines, body check impact burst, shot charge glow, goal celebration
+- Game menu (ESC) — Resume, Change Position, Rematch, Return to Lobby, Disconnect
+- Pre-game lobby — slot picking, configurable rules (periods, duration, OT); "Return to Lobby" brings the session back here with team assignments preserved
+- Offsides ghost — skaters past the blue line without the puck become transparent and can't interact until they retreat or the puck enters the zone
+- Hybrid icing — shooting from your own half past the opponent's goal line ghosts your team for 3 seconds unless beaten back
 
 ---
 
@@ -103,33 +92,3 @@ Pucks coming in fast deflect off your blade instead of sticking. Move your stick
 ## Later
 
 - Characters with unique abilities (deferred until game feel is right)
-
----
-
-## Development
-
-### Running Tests
-
-The project uses [GUT (Godot Unit Test)](https://github.com/bitwes/Gut) v9.6.0, committed under `addons/gut/`. Tests live in `tests/unit/` and cover the domain layer (rule classes + state machine).
-
-**In the editor:** open the **GUT** panel at the bottom of the screen and click **Run All**.
-
-**From the command line:**
-
-```bash
-godot --headless -s addons/gut/gut_cmdln.gd -gexit
-```
-
-Exit code is 0 on pass, non-zero on fail — suitable for CI.
-
-### CI
-
-Every push and PR triggers `.github/workflows/test.yml`, which caches Godot 4.6.2, imports the project, and runs the GUT suite. `deploy.yml` gates the export job on tests passing, so a broken test blocks releases to main.
-
-### Releases
-
-`deploy.yml` computes `VERSION=0.1.<git commit count>` on each run, rewrites the placeholder `"dev"` in `Scripts/game/build_info.gd` to that string before export, and publishes to the `latest` GitHub Release with the version as the release name. The download URL stays stable (`releases/tag/latest`) so the README link never rots. Exported clients compare their baked-in version against the release name to decide whether to show the update notice.
-
-### Architecture
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full layer model. Summary: pure-GDScript domain layer (`Scripts/domain/`) holds rules and the state machine, the application layer (`GameManager`, controllers, `ActorSpawner`) orchestrates, infrastructure (actors, networking, UI) handles engine integration. Controllers receive their collaborators via `setup()` injection; upward communication is by signals.
