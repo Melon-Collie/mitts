@@ -8,6 +8,7 @@ const CONTEST_SQUIRT_SPEED: float = 3.0
 @export var interpolation_delay: float = Constants.NETWORK_INTERPOLATION_DELAY
 @export var extrapolation_max_ms: float = 50.0
 @export var prediction_reconcile_threshold: float = 0.5
+@export var trajectory_hard_snap_threshold: float = 1.5
 @export var position_correction_blend: float = 0.1
 @export var rejoin_blend_duration: float = 0.075
 # Extra friction applied during trajectory prediction to compensate for any
@@ -305,7 +306,15 @@ func apply_state(state: PuckNetworkState) -> void:
 			var latency_corrected := PuckNetworkState.new()
 			latency_corrected.position = state.position + state.velocity * rtt_s
 			latency_corrected.velocity = state.velocity
-			_reconcile(latency_corrected)
+			# Both client and host Jolt start from the same position (same rtt_ms
+			# used for both advances), so they run identically. Small errors are
+			# RTT jitter — blending toward a noisy target creates visible snapback.
+			# Only hard-snap on genuine physics divergence (wall/goalie bounce
+			# that differed between client and host).
+			if puck.get_puck_position().distance_to(latency_corrected.position) > trajectory_hard_snap_threshold:
+				puck.set_puck_position(latency_corrected.position)
+				puck.set_puck_velocity(latency_corrected.velocity)
+				_state_buffer.clear()
 			return  # Don't buffer during prediction; interpolation isn't running
 	if not _state_buffer.is_empty() and _current_time <= _state_buffer.back().timestamp:
 		return
