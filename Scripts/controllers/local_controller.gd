@@ -96,7 +96,8 @@ func _physics_process(delta: float) -> void:
 				_claim_cooldown = 0.3
 				NetworkManager.send_pickup_claim(
 					NetworkManager.estimated_host_time(),
-					NetworkManager.get_latest_rtt_ms())
+					NetworkManager.get_latest_rtt_ms(),
+					NetworkManager.get_target_interpolation_delay() * 1000.0)
 
 func reconcile(server_state: SkaterNetworkState) -> void:
 	var pre_reconcile_blade: Vector3 = skater.get_blade_contact_global()
@@ -128,6 +129,12 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			server_state.position, server_state.velocity,
 			reconcile_position_threshold, reconcile_velocity_threshold):
 		return
+	# Suppress reconcile jitter while pressing against the boards. Wall contact
+	# causes move_and_slide vs. server-physics noise (~3-5 cm each tick) that
+	# repeatedly sets small visual_offsets which compound into visible oscillation.
+	# Errors above 10 cm are real desync and still fire through.
+	if skater.is_on_wall() and skater.global_position.distance_to(server_state.position) < 0.1:
+		return
 	# Save shot/state-machine state — replay can transition through shoot states
 	# (WRISTER_AIM → FOLLOW_THROUGH → SKATING) and leave _state wrong. Restore so
 	# the next _process_input runs the correct handler and blade doesn't teleport.
@@ -155,6 +162,19 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			skater.velocity += _body_check_impulse
 			_impulse_applied = true
 		skater.global_position += skater.velocity * input.delta
+		var unclamped_xz := Vector2(skater.global_position.x, skater.global_position.z)
+		var clamped_xz := GameRules.clamp_to_rink_inner(unclamped_xz)
+		if unclamped_xz.distance_squared_to(clamped_xz) > 1e-6:
+			var push := clamped_xz - unclamped_xz
+			var n := push.normalized()
+			var vel_xz := Vector2(skater.velocity.x, skater.velocity.z)
+			var into_wall: float = vel_xz.dot(n)
+			if into_wall < 0.0:
+				vel_xz -= into_wall * n  # slide along wall, remove inward component
+				skater.velocity.x = vel_xz.x
+				skater.velocity.z = vel_xz.y
+			skater.global_position.x = clamped_xz.x
+			skater.global_position.z = clamped_xz.y
 	is_replaying = false
 	# Restore shot-state fields that replay must not transition past.
 	_state = pre_state

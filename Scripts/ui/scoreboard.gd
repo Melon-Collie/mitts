@@ -17,6 +17,11 @@ func _ready() -> void:
 	_build_panel()
 	GameManager.stats_updated.connect(_refresh)
 	GameManager.game_over.connect(_on_game_over)
+	var ping_timer := Timer.new()
+	ping_timer.wait_time = 2.0
+	ping_timer.autostart = true
+	ping_timer.timeout.connect(_refresh)
+	add_child(ping_timer)
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and event.keycode == KEY_TAB:
@@ -51,7 +56,7 @@ func _build_panel() -> void:
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
-	panel.custom_minimum_size = Vector2(480, 0)
+	panel.custom_minimum_size = Vector2(530, 0)
 	h_centering.add_child(panel)
 
 	var vbox := VBoxContainer.new()
@@ -63,7 +68,7 @@ func _build_panel() -> void:
 	vbox.add_child(_hsep())
 
 	var header_row := _make_row()
-	_fill_row(header_row, ["PLAYER", "G", "A", "PTS", "SOG", "HITS"], _HEADER, true)
+	_fill_row(header_row, ["PLAYER", "G", "A", "PTS", "SOG", "HITS", "PING"], _HEADER, true)
 	vbox.add_child(header_row)
 
 	vbox.add_child(_hsep())
@@ -168,8 +173,9 @@ func _refresh() -> void:
 		var pts := s.goals + s.assists
 		var display_name: String = record.display_name()
 		var name_color: Color = PlayerRules.slot_color(record.team.team_id, record.team_slot)
+		var ping_str: String = _ping_label(record.peer_id)
 		_fill_row(row,
-			[display_name, str(s.goals), str(s.assists), str(pts), str(s.shots_on_goal), str(s.hits)],
+			[display_name, str(s.goals), str(s.assists), str(pts), str(s.shots_on_goal), str(s.hits), ping_str],
 			name_color, false
 		)
 
@@ -196,8 +202,15 @@ func _make_row() -> HBoxContainer:
 	row.add_theme_constant_override("separation", 0)
 	return row
 
+func _ping_label(peer_id: int) -> String:
+	var local_id: int = multiplayer.get_unique_id()
+	if peer_id == local_id:
+		return "—" if NetworkManager.is_host else "%d ms" % int(NetworkManager.get_rtt_ms())
+	var p: int = NetworkManager.get_peer_ping_ms(peer_id)
+	return "%d ms" % p if p > 0 else "—"
+
 func _fill_row(row: HBoxContainer, texts: Array, name_color: Color, is_header: bool) -> void:
-	var widths := [190, 38, 38, 48, 48, 56]
+	var widths := [190, 38, 38, 48, 48, 56, 52]
 	var font_size := 13 if is_header else 14
 	for i in texts.size():
 		var cell := Label.new()

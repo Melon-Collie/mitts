@@ -34,6 +34,7 @@ var blade_reconcile_mag_avg: float = 0.0
 var input_queue_depth: int = 0
 var packet_loss_pct: float = 0.0
 var jitter_p95_ms: float = 0.0
+var puck_mode: String = "—"
 
 # ── Static call sites (no-op when not in a game session) ─────────────────────
 static func record_world_state() -> void:

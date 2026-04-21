@@ -38,11 +38,13 @@ func estimated_host_time() -> float:
 	return Time.get_ticks_msec() / 1000.0 + _offset
 
 const TARGET_DEPTH: int = 2
-const NUDGE_RATE: float = 0.0005  # 0.5ms per correction step; 10ms/s max at 20 Hz
+const NUDGE_RATE: float = 0.0005        # 0.5 ms per step before clamping
+const MAX_WALK_PER_CALL: float = 0.00025  # 0.25 ms/call → 10 ms/s at 40 Hz
 
 func apply_queue_depth_feedback(depth: int) -> void:
 	var error: int = depth - TARGET_DEPTH
-	_offset -= error * NUDGE_RATE
+	var nudge: float = clampf(-error * NUDGE_RATE, -MAX_WALK_PER_CALL, MAX_WALK_PER_CALL)
+	_offset += nudge
 
 func _recompute() -> void:
 	var sorted := _samples.duplicate()

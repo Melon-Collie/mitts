@@ -29,8 +29,10 @@ signal game_started(config: Dictionary)
 signal lobby_roster_synced(roster: Array)
 signal return_to_lobby_received(roster: Array)
 signal clock_ready
-signal pickup_claim_received(peer_id: int, host_timestamp: float, rtt_ms: float)
+signal pickup_claim_received(peer_id: int, host_timestamp: float, rtt_ms: float, interp_delay_ms: float)
 signal hit_claim_received(hitter_peer_id: int, victim_peer_id: int, host_timestamp: float, rtt_ms: float)
+signal goalie_state_transition_received(team_id: int, new_state: int)
+signal goalie_shot_reaction_received(team_id: int, impact_x: float, impact_y: float, is_elevated: bool)
 
 # ── State ─────────────────────────────────────────────────────────────────────
 var is_host: bool = false
@@ -48,6 +50,7 @@ var _remote_controllers: Dictionary = {}  # peer_id -> RemoteController
 var _peer_handedness: Dictionary = {}     # peer_id -> bool (host only)
 var _peer_names: Dictionary = {}          # peer_id -> String (host only)
 var _peer_numbers: Dictionary = {}        # peer_id -> int (host only)
+var _peer_ping_ms: Dictionary[int, int] = {}  # peer_id -> latest RTT in ms (all peers)
 # Callable () -> Array. Set by GameManager at startup so the broadcast loop
 # can pull world state without reaching up into the application layer.
 var _world_state_provider: Callable = Callable()
@@ -75,6 +78,8 @@ var pending_error: String = ""
 
 var _input_timer: float = 0.0
 var _state_timer: float = 0.0
+var _ping_timer: float = 0.0
+const _PING_INTERVAL: float = 2.0
 var _connect_timer: float = -1.0
 var input_delta: float = 1.0 / Constants.INPUT_RATE
 var state_delta: float = 1.0 / Constants.STATE_RATE
@@ -228,6 +233,14 @@ func _process(delta: float) -> void:
 		if _clock_sync.tick(capped_delta):
 			send_ping.rpc_id(1, Time.get_ticks_msec() / 1000.0)
 
+	_ping_timer += capped_delta
+	if _ping_timer >= _PING_INTERVAL:
+		_ping_timer = 0.0
+		if is_host:
+			_broadcast_all_pings()
+		elif _clock_sync != null and _clock_sync.is_ready:
+			report_ping.rpc_id(1, int(get_rtt_ms()))
+
 	if not is_host and _local_controller != null:
 		_input_timer += capped_delta
 		if _input_timer >= input_delta:
@@ -349,18 +362,18 @@ func receive_pong(client_send_time: float, host_time: float) -> void:
 				clock_ready.emit(),
 		[client_send_time, host_time], true)
 
-func send_pickup_claim(host_timestamp: float, rtt_ms: float) -> void:
+func send_pickup_claim(host_timestamp: float, rtt_ms: float, interp_delay_ms: float) -> void:
 	NetworkSimManager.send(
-		func(ts: float, rtt: float) -> void:
-			receive_pickup_claim.rpc_id(1, ts, rtt),
-		[host_timestamp, rtt_ms], true)
+		func(ts: float, rtt: float, idms: float) -> void:
+			receive_pickup_claim.rpc_id(1, ts, rtt, idms),
+		[host_timestamp, rtt_ms, interp_delay_ms], true)
 
 @rpc("any_peer", "reliable")
-func receive_pickup_claim(host_timestamp: float, rtt_ms: float) -> void:
+func receive_pickup_claim(host_timestamp: float, rtt_ms: float, interp_delay_ms: float) -> void:
 	if not is_host:
 		return
 	var peer_id: int = multiplayer.get_remote_sender_id()
-	pickup_claim_received.emit(peer_id, host_timestamp, rtt_ms)
+	pickup_claim_received.emit(peer_id, host_timestamp, rtt_ms, interp_delay_ms)
 
 func send_hit_claim(victim_peer_id: int, host_timestamp: float, rtt_ms: float) -> void:
 	NetworkSimManager.send(
@@ -394,6 +407,30 @@ func get_latest_rtt_ms() -> float:
 	if _clock_sync == null:
 		return 0.0
 	return _clock_sync.latest_rtt_ms
+
+func get_peer_ping_ms(peer_id: int) -> int:
+	return _peer_ping_ms.get(peer_id, 0)
+
+func get_clock_offset_ms() -> float:
+	if _clock_sync == null:
+		return 0.0
+	return _clock_sync._offset * 1000.0
+
+@rpc("any_peer", "unreliable")
+func report_ping(rtt_ms: int) -> void:
+	_peer_ping_ms[multiplayer.get_remote_sender_id()] = rtt_ms
+
+func _broadcast_all_pings() -> void:
+	var pings: Dictionary[int, int] = {}
+	for pid: int in _peer_ping_ms:
+		pings[pid] = _peer_ping_ms[pid]
+	for peer_id: int in multiplayer.get_peers():
+		receive_all_pings.rpc_id(peer_id, pings)
+
+@rpc("authority", "unreliable")
+func receive_all_pings(pings: Dictionary) -> void:
+	for pid: int in pings:
+		_peer_ping_ms[pid] = pings[pid]
 
 func on_queue_depth_received(depth: int) -> void:
 	if is_host or _clock_sync == null or not _clock_sync.is_ready:
@@ -438,6 +475,27 @@ func notify_ghost_state(peer_id: int, is_ghost: bool) -> void:
 	NetworkSimManager.send(
 		func(pid: int, g: bool) -> void: ghost_state_received.emit(pid, g),
 		[peer_id, is_ghost], true)
+
+func send_goalie_shot_reaction_to_all(team_id: int, impact_x: float, impact_y: float, is_elevated: bool) -> void:
+	for peer_id: int in multiplayer.get_peers():
+		notify_goalie_shot_reaction.rpc_id(peer_id, team_id, impact_x, impact_y, is_elevated)
+
+@rpc("authority", "reliable")
+func notify_goalie_shot_reaction(team_id: int, impact_x: float, impact_y: float, is_elevated: bool) -> void:
+	NetworkSimManager.send(
+		func(tid: int, ix: float, iy: float, elev: bool) -> void:
+			goalie_shot_reaction_received.emit(tid, ix, iy, elev),
+		[team_id, impact_x, impact_y, is_elevated], true)
+
+func send_goalie_state_transition_to_all(team_id: int, new_state: int) -> void:
+	for peer_id: int in multiplayer.get_peers():
+		notify_goalie_state_transition.rpc_id(peer_id, team_id, new_state)
+
+@rpc("authority", "reliable")
+func notify_goalie_state_transition(team_id: int, new_state: int) -> void:
+	NetworkSimManager.send(
+		func(tid: int, ns: int) -> void: goalie_state_transition_received.emit(tid, ns),
+		[team_id, new_state], true)
 
 func send_carrier_changed_to_all(new_carrier_peer_id: int) -> void:
 	for peer_id: int in multiplayer.get_peers():

@@ -43,18 +43,19 @@ func _process(_delta: float) -> void:
 			NetworkSimManager.loss_pct,
 		]
 	else:
-		sim_label = "off  (keys 0–5 to set preset)"
+		sim_label = "off  (keys 0–6 to set preset)"
+	var rtt_avg: float = NetworkManager.get_rtt_ms()
+	var rtt_last: float = NetworkManager.get_latest_rtt_ms()
+	var offset_ms: float = NetworkManager.get_clock_offset_ms()
+	var clock_suffix: String = "" if NetworkManager.is_clock_ready() else " (syncing)"
+	var offset_str: String = ("+%.0f ms" % offset_ms) if offset_ms >= 0.0 else ("%.0f ms" % offset_ms)
 	_label.text = (
 		"── Net Debug (F3 to close) ──────\n"
-		+ "RTT:           %.0f ms%s\n" % [NetworkManager.get_rtt_ms(), "" if NetworkManager.is_clock_ready() else " (syncing)"]
-		+ "Sim:           %s\n" % sim_label
-		+ "WS recv:       %.1f Hz\n" % t.world_state_hz
-		+ "Input send:    %.1f Hz\n" % t.input_hz
-		+ "Reconcile:     %.1f/s   avg %.3f m\n" % [t.reconcile_per_sec, t.reconcile_magnitude_avg]
-		+ "Blade jumps:   %.1f/s   avg %.3f m   reconcile avg %.3f m\n" % [t.blade_jump_per_sec, t.blade_jump_mag_avg, t.blade_reconcile_mag_avg]
-		+ "Extrapolation: %.1f/s\n" % t.extrapolation_per_sec
-		+ "Buf depth:     skater=%d  puck=%d  goalie=%d\n" % [t.buffer_depth_skater, t.buffer_depth_puck, t.buffer_depth_goalie]
-		+ "Input queue:   %d  (target 2)\n" % t.input_queue_depth
-		+ "Pkt loss:      %.1f%%\n" % t.packet_loss_pct
-		+ "Jitter P95:    %.1f ms   interp delay: %.0f ms" % [t.jitter_p95_ms, NetworkManager.get_target_interpolation_delay() * 1000.0]
+		+ "RTT:       avg %.0f ms   last %.0f ms   offset: %s%s\n" % [rtt_avg, rtt_last, offset_str, clock_suffix]
+		+ "Sim:       %s\n" % sim_label
+		+ "Reconcile: %.1f/s   avg %.3f m\n" % [t.reconcile_per_sec, t.reconcile_magnitude_avg]
+		+ "Extrap:    %.1f/s   buf: skater=%d  puck=%d  goalie=%d\n" % [t.extrapolation_per_sec, t.buffer_depth_skater, t.buffer_depth_puck, t.buffer_depth_goalie]
+		+ "Puck:      %s\n" % t.puck_mode
+		+ "Queue:     %d  (target 2)   loss: %.1f%%\n" % [t.input_queue_depth, t.packet_loss_pct]
+		+ "Jitter P95: %.1f ms   interp delay: %.0f ms" % [t.jitter_p95_ms, NetworkManager.get_target_interpolation_delay() * 1000.0]
 	)

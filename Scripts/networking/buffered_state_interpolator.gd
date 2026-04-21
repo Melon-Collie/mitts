@@ -48,6 +48,14 @@ static func drop_stale(buffer: Array, render_time: float, min_keep: int = 2) -> 
 	while buffer.size() > min_keep and buffer[1].timestamp < render_time:
 		buffer.pop_front()
 
+static func hermite(p0: Vector3, v0: Vector3, p1: Vector3, v1: Vector3, t: float, dt: float) -> Vector3:
+	var t2: float = t * t
+	var t3: float = t2 * t
+	return (2.0*t3 - 3.0*t2 + 1.0) * p0 \
+		 + (t3 - 2.0*t2 + t) * dt * v0 \
+		 + (-2.0*t3 + 3.0*t2) * p1 \
+		 + (t3 - t2) * dt * v1
+
 static func _make(a, b, render_time: float) -> BracketResult:
 	var r := BracketResult.new()
 	r.from_state = a.state

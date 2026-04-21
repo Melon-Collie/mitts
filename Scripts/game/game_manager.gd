@@ -91,6 +91,8 @@ func _wire_network_signals() -> void:
 	NetworkManager.pickup_claim_received.connect(_on_pickup_claim_received)
 	NetworkManager.ghost_state_received.connect(_on_ghost_state_received)
 	NetworkManager.hit_claim_received.connect(_on_hit_claim_received)
+	NetworkManager.goalie_state_transition_received.connect(_on_goalie_state_transition_received)
+	NetworkManager.goalie_shot_reaction_received.connect(_on_goalie_shot_reaction_received)
 
 
 # ── Process ───────────────────────────────────────────────────────────────────
@@ -381,6 +383,11 @@ func _wire_subsystems() -> void:
 	_swap_coord.stats_updated.connect(stats_updated.emit)
 	_swap_coord.carrier_swap_needs_drop.connect(_drop_puck_if_carried)
 
+	if NetworkManager.is_host:
+		for gc: GoalieController in goalie_controllers:
+			gc.state_transitioned.connect(NetworkManager.send_goalie_state_transition_to_all)
+			gc.shot_reaction_started.connect(NetworkManager.send_goalie_shot_reaction_to_all)
+
 	_telemetry = NetworkTelemetry.new()
 	NetworkTelemetry.instance = _telemetry
 	_debug_overlay = NetworkDebugOverlay.new()
@@ -463,7 +470,7 @@ func _on_ghost_state_received(peer_id: int, is_ghost: bool) -> void:
 	(record.controller as RemoteController).apply_ghost_rpc(is_ghost)
 
 
-func _on_pickup_claim_received(peer_id: int, host_timestamp: float, rtt_ms: float) -> void:
+func _on_pickup_claim_received(peer_id: int, host_timestamp: float, rtt_ms: float, interp_delay_ms: float) -> void:
 	if not NetworkManager.is_host or puck == null or puck_controller == null:
 		return
 	if puck.carrier != null or puck.pickup_locked:
@@ -477,15 +484,23 @@ func _on_pickup_claim_received(peer_id: int, host_timestamp: float, rtt_ms: floa
 	if _state_buffer_manager == null or not _state_buffer_manager.is_ready():
 		return
 	var rewind_rtt: float = clampf(rtt_ms, 10.0, 200.0)
-	var rewind_time: float = host_timestamp - rewind_rtt / 2000.0
-	var snapshot: WorldSnapshot = _state_buffer_manager.get_state_at(rewind_time)
-	if snapshot.puck_state == null or snapshot.puck_state.carrier_peer_id != -1:
+	# Blade: the client's blade state from T_client = claim send time arrives in the
+	# state buffer at host time = host_timestamp + rtt/2 (one-way transit). Use that
+	# time so the blade check reflects where the blade actually was at pickup.
+	var blade_rewind_time: float = host_timestamp + rewind_rtt / 2000.0
+	# Puck: the client's interpolated puck is delayed by interp_delay behind host time.
+	# Rewind the puck to the host timestamp the client was actually looking at.
+	var puck_rewind_time: float = host_timestamp - clampf(interp_delay_ms, 0.0, 200.0) / 1000.0
+	var puck_snap: WorldSnapshot = _state_buffer_manager.get_state_at(puck_rewind_time)
+	if puck_snap.puck_state == null or puck_snap.puck_state.carrier_peer_id != -1:
 		return
-	var puck_pos: Vector3 = snapshot.puck_state.position
-	var prev_snap: WorldSnapshot = _state_buffer_manager.get_state_at(rewind_time - 1.0 / 240.0)
-	var puck_prev: Vector3 = prev_snap.puck_state.position if prev_snap.puck_state != null else puck_pos
-	var skater_snap: SkaterNetworkState = snapshot.get_skater_state(peer_id)
-	var skater_prev_snap: SkaterNetworkState = prev_snap.get_skater_state(peer_id)
+	var puck_pos: Vector3 = puck_snap.puck_state.position
+	var puck_prev_snap: WorldSnapshot = _state_buffer_manager.get_state_at(puck_rewind_time - 1.0 / 240.0)
+	var puck_prev: Vector3 = puck_prev_snap.puck_state.position if puck_prev_snap.puck_state != null else puck_pos
+	var blade_snap: WorldSnapshot = _state_buffer_manager.get_state_at(blade_rewind_time)
+	var blade_prev_snap: WorldSnapshot = _state_buffer_manager.get_state_at(blade_rewind_time - 1.0 / 240.0)
+	var skater_snap: SkaterNetworkState = blade_snap.get_skater_state(peer_id)
+	var skater_prev_snap: SkaterNetworkState = blade_prev_snap.get_skater_state(peer_id)
 	if skater_snap == null or skater_prev_snap == null:
 		return
 	var blade_curr: Vector3 = skater_snap.blade_contact_world
@@ -523,6 +538,20 @@ func _on_server_puck_touched_while_loose(peer_id: int) -> void:
 	_shot_tracker.on_deflection(peer_id)
 
 
+func _on_goalie_state_transition_received(team_id: int, new_state: int) -> void:
+	for gc: GoalieController in goalie_controllers:
+		if gc.team_id == team_id:
+			gc.apply_state_transition(new_state)
+			return
+
+
+func _on_goalie_shot_reaction_received(team_id: int, impact_x: float, impact_y: float, is_elevated: bool) -> void:
+	for gc: GoalieController in goalie_controllers:
+		if gc.team_id == team_id:
+			gc.apply_shot_reaction(impact_x, impact_y, is_elevated)
+			return
+
+
 func _on_puck_touched_by_goalie(goalie: Goalie) -> void:
 	if not NetworkManager.is_host:
 		return
@@ -547,7 +576,8 @@ func _on_puck_release_requested(direction: Vector3, power: float) -> void:
 		var record := _registry.get_local()
 		if record != null:
 			record.controller.on_puck_released_network()
-		puck_controller.notify_local_release(direction, power)
+		var shot_rtt_ms: float = NetworkManager.get_latest_rtt_ms()
+		puck_controller.notify_local_release(direction, power, shot_rtt_ms)
 		NetworkManager.send_puck_release(direction, power)
 
 
@@ -563,15 +593,26 @@ func _on_one_timer_release_requested(direction: Vector3, power: float, skater: S
 func on_remote_puck_release(direction: Vector3, power: float, shooter_peer_id: int, host_timestamp: float, rtt_ms: float) -> void:
 	if NetworkManager.is_host:
 		_start_pending_shot_from_carrier()
+		var rtt_half: float = rtt_ms / 2000.0
+		# Puck is still pinned to the host's RemoteController blade. That blade
+		# reflects inputs received ~rtt/2 ago, which by the time the RPC arrives
+		# corresponds to the client's blade at shot time. Advance along the shot
+		# direction by rtt_half so the host starting position matches the client's
+		# Jolt trajectory. Previously this rewound the state buffer for the blade
+		# position, but that gave blade_at(shot - rtt) for a moving skater — a full
+		# RTT behind, causing the moving-shot snap.
+		if rtt_ms > 0.0:
+			var skater_vel := Vector3.ZERO
+			var shooter_record: PlayerRecord = _registry.get_record(shooter_peer_id)
+			if shooter_record != null and shooter_record.skater != null:
+				skater_vel = shooter_record.skater.velocity
+				skater_vel.y = 0.0
+			puck.set_puck_position(puck.get_puck_position() + (direction * power + skater_vel) * rtt_half)
+		var saved_goalie_positions: Array[Vector3] = []
+		var saved_goalie_rotations: Array[float] = []
 		if _state_buffer_manager != null and _state_buffer_manager.is_ready() and shooter_peer_id > 0 and rtt_ms > 0.0:
-			var rtt_half: float = rtt_ms / 2000.0
 			var rewind_time: float = host_timestamp - rtt_half
 			var snap: WorldSnapshot = _state_buffer_manager.get_state_at(rewind_time)
-			var shooter_state: SkaterNetworkState = snap.skater_states.get(shooter_peer_id)
-			if shooter_state != null and not shooter_state.blade_contact_world.is_zero_approx():
-				puck.set_puck_position(shooter_state.blade_contact_world + direction * power * rtt_half)
-			var saved_goalie_positions: Array[Vector3] = []
-			var saved_goalie_rotations: Array[float] = []
 			for gc: GoalieController in goalie_controllers:
 				saved_goalie_positions.append(gc.goalie.global_position)
 				saved_goalie_rotations.append(gc.goalie.get_goalie_rotation_y())
@@ -579,11 +620,11 @@ func on_remote_puck_release(direction: Vector3, power: float, shooter_peer_id: i
 				if gs != null:
 					gc.goalie.set_goalie_position(gs.position_x, gs.position_z)
 					gc.goalie.set_goalie_rotation_y(gs.rotation_y)
-			puck.release(direction, power)
-			for i: int in goalie_controllers.size():
-				goalie_controllers[i].goalie.global_position = saved_goalie_positions[i]
-				goalie_controllers[i].goalie.set_goalie_rotation_y(saved_goalie_rotations[i])
-			return
+		puck.release(direction, power)
+		for i: int in goalie_controllers.size():
+			goalie_controllers[i].goalie.global_position = saved_goalie_positions[i]
+			goalie_controllers[i].goalie.set_goalie_rotation_y(saved_goalie_rotations[i])
+		return
 	puck.release(direction, power)
 
 

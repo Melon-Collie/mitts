@@ -7,10 +7,13 @@ const CONTEST_SQUIRT_SPEED: float = 3.0
 
 @export var interpolation_delay: float = Constants.NETWORK_INTERPOLATION_DELAY
 @export var extrapolation_max_ms: float = 50.0
-@export var prediction_reconcile_threshold: float = 3.0
-@export var position_correction_blend: float = 0.3
-@export var velocity_correction_blend: float = 0.5
+@export var prediction_reconcile_threshold: float = 0.5
+@export var position_correction_blend: float = 0.1
 @export var rejoin_blend_duration: float = 0.075
+# Extra friction applied during trajectory prediction to compensate for any
+# divergence between client and host Jolt friction. Set to 0 while both run
+# identical physics; tune upward if free-puck trajectories drift apart.
+@export var prediction_extra_friction: float = 0.0
 
 var puck: Puck = null
 var is_server: bool = false
@@ -23,6 +26,7 @@ var _prev_puck_pos: Vector3 = Vector3.ZERO
 var _state_buffer: Array[BufferedPuckState] = []
 var _predicting_trajectory: bool = false
 var _pending_local_release: bool = false  # true from local release until host confirms carrier == -1
+var _shot_rtt_ms: float = 0.0             # RTT captured at release time; used for trajectory reconcile
 var is_extrapolating: bool = false
 
 var _rejoin_blend_start_time: float = -1.0
@@ -59,6 +63,9 @@ func setup(assigned_puck: Puck, assigned_is_server: bool) -> void:
 		puck.puck_stripped.connect(_on_puck_stripped)
 		puck.puck_touched_loose.connect(func(s: Skater) -> void: puck_touched_while_loose.emit(_peer_id_resolver.call(s)))
 		puck.puck_touched_goalie.connect(func(g: Goalie) -> void: puck_touched_by_goalie.emit(g))
+	else:
+		puck.puck_touched_goalie.connect(_on_client_puck_hit_goalie)
+		puck.puck_touched_post.connect(_on_client_puck_hit_post)
 
 func set_peer_id_resolver(resolver: Callable) -> void:
 	_peer_id_resolver = resolver
@@ -77,13 +84,16 @@ func _physics_process(delta: float) -> void:
 		_prev_puck_pos = puck.get_puck_position()
 		return
 	_current_time += delta
-	interpolation_delay = move_toward(
-		interpolation_delay, NetworkManager.get_target_interpolation_delay(), 0.005 * delta)
 	if _local_carrier_skater != null:
 		_apply_local_carrier_position()
+		if NetworkTelemetry.instance: NetworkTelemetry.instance.puck_mode = "pinned"
 	elif not _predicting_trajectory:
 		_interpolate()
-	# During prediction, Jolt runs freely — no manual stepping needed
+		if NetworkTelemetry.instance: NetworkTelemetry.instance.puck_mode = "interpolating"
+	else:
+		if NetworkTelemetry.instance: NetworkTelemetry.instance.puck_mode = "predicting"
+		if prediction_extra_friction > 0.0:
+			puck.set_puck_velocity(puck.get_puck_velocity() * pow(1.0 - prediction_extra_friction, delta))
 
 # ── Lag Compensation ─────────────────────────────────────────────────────────
 # Called by GameManager after validating a client pickup claim against the
@@ -159,11 +169,13 @@ func notify_local_pickup(local_skater: Skater) -> void:
 	puck.set_client_prediction_mode(false)
 	_state_buffer.clear()
 
-func notify_local_release(direction: Vector3, power: float) -> void:
+func notify_local_release(direction: Vector3, power: float, rtt_ms: float) -> void:
 	_local_carrier_skater = null
 	_predicting_trajectory = true
 	_pending_local_release = true
+	_shot_rtt_ms = rtt_ms
 	puck.set_client_prediction_mode(true)
+	puck.set_goal_line_clamp(true)
 	puck.set_puck_velocity(direction * power)
 	_state_buffer.clear()
 
@@ -174,7 +186,7 @@ func notify_remote_carrier_changed(new_carrier_peer_id: int) -> void:
 	if new_carrier_peer_id == -1 and _predicting_trajectory:
 		return
 	_predicting_trajectory = false
-	puck.set_client_prediction_mode(false)
+	puck.set_client_prediction_mode(false)  # also clears _clamp_at_goal_line
 
 # Called when the server forcibly ends a carry (e.g. goal scored).
 # Does not start trajectory prediction — just drops back to interpolation.
@@ -201,11 +213,10 @@ func _reconcile(state: PuckNetworkState) -> void:
 		puck.set_puck_velocity(state.velocity)
 		_state_buffer.clear()
 		return
+	# Jolt owns velocity during trajectory prediction — don't override it.
+	# Only nudge position when velocities agree (avoids fighting Jolt mid-bounce).
 	var current_vel := puck.get_puck_velocity()
 	var pos_error := state.position - puck.get_puck_position()
-	puck.set_puck_velocity(current_vel.lerp(state.velocity, velocity_correction_blend))
-	# Only nudge position when velocities agree — avoids fighting Jolt during
-	# bounces where velocities are briefly opposing.
 	if current_vel.dot(state.velocity) > 0.0:
 		puck.set_puck_position(puck.get_puck_position() + pos_error * position_correction_blend)
 
@@ -239,6 +250,20 @@ func _resolve_peer_id(skater: Skater) -> int:
 		return -1
 	return _peer_id_resolver.call(skater)
 
+func _on_client_puck_hit_goalie(_goalie: Goalie) -> void:
+	if not _predicting_trajectory:
+		return
+	_predicting_trajectory = false
+	_pending_local_release = false
+	puck.set_client_prediction_mode(false)
+
+func _on_client_puck_hit_post() -> void:
+	if not _predicting_trajectory:
+		return
+	_predicting_trajectory = false
+	_pending_local_release = false
+	puck.set_client_prediction_mode(false)
+
 # ── State Serialization ───────────────────────────────────────────────────────
 # Returns the typed network state object. Flattening to Array happens at the
 # RPC boundary (GameManager.get_world_state), not here.
@@ -266,7 +291,7 @@ func apply_state(state: PuckNetworkState) -> void:
 		else:
 			if _pending_local_release:
 				_pending_local_release = false  # Host confirmed the release
-			var rtt_half_s: float = NetworkManager.get_rtt_ms() / 2000.0
+			var rtt_half_s: float = _shot_rtt_ms / 2000.0
 			var latency_corrected := PuckNetworkState.new()
 			latency_corrected.position = state.position + state.velocity * rtt_half_s
 			latency_corrected.velocity = state.velocity
@@ -278,8 +303,9 @@ func apply_state(state: PuckNetworkState) -> void:
 	buffered.timestamp = _current_time
 	buffered.state = state
 	_state_buffer.append(buffered)
-	if _state_buffer.size() > 10:
+	if _state_buffer.size() > 30:
 		_state_buffer.pop_front()
+	_adapt_interpolation_delay()
 
 func _interpolate() -> void:
 	var render_time: float = _current_time - interpolation_delay
@@ -296,8 +322,11 @@ func _interpolate() -> void:
 		interpolated.position = newest.position + newest.velocity * dt
 		interpolated.velocity = newest.velocity
 	else:
-		interpolated.position = bracket.from_state.position.lerp(bracket.to_state.position, bracket.t)
-		interpolated.velocity = bracket.from_state.velocity.lerp(bracket.to_state.velocity, bracket.t)
+		var from_state: PuckNetworkState = bracket.from_state
+		var to_state: PuckNetworkState = bracket.to_state
+		interpolated.position = BufferedStateInterpolator.hermite(from_state.position, from_state.velocity,
+				to_state.position, to_state.velocity, bracket.t, bracket.bracket_dt)
+		interpolated.velocity = from_state.velocity.lerp(to_state.velocity, bracket.t)
 	if prev_extrapolating and not is_extrapolating:
 		_rejoin_blend_from_pos = puck.get_puck_position()
 		_rejoin_blend_start_time = _current_time
@@ -309,6 +338,11 @@ func _interpolate() -> void:
 			_rejoin_blend_start_time = -1.0
 	_apply_state_to_puck(interpolated)
 	BufferedStateInterpolator.drop_stale(_state_buffer, render_time)
+
+func _adapt_interpolation_delay() -> void:
+	var target: float = NetworkManager.get_target_interpolation_delay()
+	var change: float = lerpf(interpolation_delay, target, 0.15) - interpolation_delay
+	interpolation_delay += clampf(change, -0.001, 0.005)
 
 func _apply_state_to_puck(state: PuckNetworkState) -> void:
 	# Position only — puck is frozen during interpolation, Jolt ignores velocity.
