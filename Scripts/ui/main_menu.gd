@@ -7,6 +7,7 @@ var _settings_popup: Control = null
 var _connecting_popup: Control = null
 
 func _ready() -> void:
+	TeamColorRegistry.ensure_loaded()
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_ui()
 	if not NetworkManager.pending_error.is_empty():

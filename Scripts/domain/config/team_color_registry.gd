@@ -1,14 +1,19 @@
 class_name TeamColorRegistry
 
-# Loads team color presets from res://data/team_colors.json on first use.
-# Pure static class — no scene-tree APIs. FileAccess/JSON are acceptable here.
-# If the JSON file is missing or malformed, falls back to hardcoded defaults so
-# the game still boots without the data file.
+# Loads team color presets on first use.
+# Load order: user://team_colors.json (player's editable copy) →
+#             res://data/team_colors.json (bundled defaults) →
+#             hardcoded fallback (if both are missing or malformed).
+#
+# Players who want to customize colors place a team_colors.json in their
+# game data directory (user://) — no other setup is required.
+# Unknown preset IDs return a fallback and log a warning; they never crash.
 
 const DEFAULT_HOME_ID: String = "penguins"
 const DEFAULT_AWAY_ID: String  = "leafs"
 
-const _JSON_PATH: String = "res://data/team_colors.json"
+const _USER_JSON_PATH: String = "user://team_colors.json"
+const _RES_JSON_PATH:  String = "res://data/team_colors.json"
 
 static var _presets: Dictionary = {}
 static var _preset_ids: Array[String] = []
@@ -19,38 +24,12 @@ static func ensure_loaded() -> void:
 	if _loaded:
 		return
 	_loaded = true
-	var file := FileAccess.open(_JSON_PATH, FileAccess.READ)
-	if file == null:
-		push_error("TeamColorRegistry: cannot open %s" % _JSON_PATH)
-		_load_hardcoded_fallback()
-		return
-	var text: String = file.get_as_text()
-	file.close()
-	var data = JSON.parse_string(text)
-	if not data is Dictionary or not data.has("presets"):
-		push_error("TeamColorRegistry: malformed JSON in %s" % _JSON_PATH)
-		_load_hardcoded_fallback()
-		return
-	for entry: Dictionary in data["presets"]:
-		var id: String = entry.get("id", "")
-		if id.is_empty():
-			continue
-		_presets[id] = {
-			"id":           id,
-			"name":         entry.get("name", id),
-			"primary":      _parse_color(entry.get("primary",      "#FFFFFF")),
-			"secondary":    _parse_color(entry.get("secondary",    "#FFFFFF")),
-			"helmet":       _parse_color(entry.get("helmet",       "#FFFFFF")),
-			"jersey":       _parse_color(entry.get("jersey",       "#FFFFFF")),
-			"pants":        _parse_color(entry.get("pants",        "#FFFFFF")),
-			"goalie_pads":  _parse_color(entry.get("goalie_pads",  "#FFFFFF")),
-			"text":         _parse_color(entry.get("text",         "#FFFFFF")),
-			"text_outline": _parse_color(entry.get("text_outline", "#000000")),
-		}
-		_preset_ids.append(id)
-	if _preset_ids.is_empty():
-		push_warning("TeamColorRegistry: JSON contained no valid presets, using fallback")
-		_load_hardcoded_fallback()
+	# Try the player's editable copy first, then the bundled defaults.
+	for path: String in [_USER_JSON_PATH, _RES_JSON_PATH]:
+		if _try_load_from(path):
+			return
+	push_error("TeamColorRegistry: no valid JSON found in user:// or res://")
+	_load_hardcoded_fallback()
 
 
 static func get_preset(id: String) -> Dictionary:
@@ -68,6 +47,42 @@ static func get_all_ids() -> Array[String]:
 
 static func get_name(id: String) -> String:
 	return get_preset(id).get("name", id)
+
+
+static func _try_load_from(path: String) -> bool:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return false
+	var text: String = file.get_as_text()
+	file.close()
+	var data = JSON.parse_string(text)
+	if not data is Dictionary or not data.has("presets"):
+		push_error("TeamColorRegistry: malformed JSON in %s" % path)
+		return false
+	var count: int = 0
+	for entry: Dictionary in data["presets"]:
+		var id: String = entry.get("id", "")
+		if id.is_empty():
+			continue
+		_presets[id] = {
+			"id":           id,
+			"name":         entry.get("name", id),
+			"primary":      _parse_color(entry.get("primary",      "#FFFFFF")),
+			"secondary":    _parse_color(entry.get("secondary",    "#FFFFFF")),
+			"helmet":       _parse_color(entry.get("helmet",       "#FFFFFF")),
+			"jersey":       _parse_color(entry.get("jersey",       "#FFFFFF")),
+			"pants":        _parse_color(entry.get("pants",        "#FFFFFF")),
+			"goalie_pads":  _parse_color(entry.get("goalie_pads",  "#FFFFFF")),
+			"text":         _parse_color(entry.get("text",         "#FFFFFF")),
+			"text_outline": _parse_color(entry.get("text_outline", "#000000")),
+		}
+		if not _preset_ids.has(id):
+			_preset_ids.append(id)
+		count += 1
+	if count == 0:
+		push_warning("TeamColorRegistry: %s contained no valid presets" % path)
+		return false
+	return true
 
 
 static func _parse_color(hex: String) -> Color:
@@ -88,7 +103,7 @@ static func _load_hardcoded_fallback() -> void:
 static func _hardcoded_penguins() -> Dictionary:
 	return {
 		"id":           DEFAULT_HOME_ID,
-		"name":         "Pittsburgh Gold",
+		"name":         "Pittsburgh Penguins",
 		"primary":      Color(0.988, 0.710, 0.078),
 		"secondary":    Color(0.06,  0.06,  0.06),
 		"helmet":       Color(0.06,  0.06,  0.06),
@@ -103,7 +118,7 @@ static func _hardcoded_penguins() -> Dictionary:
 static func _hardcoded_leafs() -> Dictionary:
 	return {
 		"id":           DEFAULT_AWAY_ID,
-		"name":         "Toronto Blue",
+		"name":         "Toronto Maple Leafs",
 		"primary":      Color(0.000, 0.125, 0.357),
 		"secondary":    Color(1.0,   1.0,   1.0),
 		"helmet":       Color(0.000, 0.125, 0.357),
