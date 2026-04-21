@@ -547,7 +547,8 @@ func _on_puck_release_requested(direction: Vector3, power: float) -> void:
 		var record := _registry.get_local()
 		if record != null:
 			record.controller.on_puck_released_network()
-		puck_controller.notify_local_release(direction, power)
+		var shot_rtt_ms: float = NetworkManager.get_latest_rtt_ms()
+		puck_controller.notify_local_release(direction, power, shot_rtt_ms)
 		NetworkManager.send_puck_release(direction, power)
 
 

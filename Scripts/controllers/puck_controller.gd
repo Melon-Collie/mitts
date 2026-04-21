@@ -8,8 +8,7 @@ const CONTEST_SQUIRT_SPEED: float = 3.0
 @export var interpolation_delay: float = Constants.NETWORK_INTERPOLATION_DELAY
 @export var extrapolation_max_ms: float = 50.0
 @export var prediction_reconcile_threshold: float = 3.0
-@export var position_correction_blend: float = 0.3
-@export var velocity_correction_blend: float = 0.5
+@export var position_correction_blend: float = 0.1
 @export var rejoin_blend_duration: float = 0.075
 
 var puck: Puck = null
@@ -23,6 +22,7 @@ var _prev_puck_pos: Vector3 = Vector3.ZERO
 var _state_buffer: Array[BufferedPuckState] = []
 var _predicting_trajectory: bool = false
 var _pending_local_release: bool = false  # true from local release until host confirms carrier == -1
+var _shot_rtt_ms: float = 0.0             # RTT captured at release time; used for trajectory reconcile
 var is_extrapolating: bool = false
 
 var _rejoin_blend_start_time: float = -1.0
@@ -159,10 +159,11 @@ func notify_local_pickup(local_skater: Skater) -> void:
 	puck.set_client_prediction_mode(false)
 	_state_buffer.clear()
 
-func notify_local_release(direction: Vector3, power: float) -> void:
+func notify_local_release(direction: Vector3, power: float, rtt_ms: float) -> void:
 	_local_carrier_skater = null
 	_predicting_trajectory = true
 	_pending_local_release = true
+	_shot_rtt_ms = rtt_ms
 	puck.set_client_prediction_mode(true)
 	puck.set_puck_velocity(direction * power)
 	_state_buffer.clear()
@@ -201,11 +202,10 @@ func _reconcile(state: PuckNetworkState) -> void:
 		puck.set_puck_velocity(state.velocity)
 		_state_buffer.clear()
 		return
+	# Jolt owns velocity during trajectory prediction — don't override it.
+	# Only nudge position when velocities agree (avoids fighting Jolt mid-bounce).
 	var current_vel := puck.get_puck_velocity()
 	var pos_error := state.position - puck.get_puck_position()
-	puck.set_puck_velocity(current_vel.lerp(state.velocity, velocity_correction_blend))
-	# Only nudge position when velocities agree — avoids fighting Jolt during
-	# bounces where velocities are briefly opposing.
 	if current_vel.dot(state.velocity) > 0.0:
 		puck.set_puck_position(puck.get_puck_position() + pos_error * position_correction_blend)
 
@@ -266,7 +266,7 @@ func apply_state(state: PuckNetworkState) -> void:
 		else:
 			if _pending_local_release:
 				_pending_local_release = false  # Host confirmed the release
-			var rtt_half_s: float = NetworkManager.get_rtt_ms() / 2000.0
+			var rtt_half_s: float = _shot_rtt_ms / 2000.0
 			var latency_corrected := PuckNetworkState.new()
 			latency_corrected.position = state.position + state.velocity * rtt_half_s
 			latency_corrected.velocity = state.velocity
