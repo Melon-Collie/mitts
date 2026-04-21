@@ -130,15 +130,8 @@ func on_game_scene_ready() -> void:
 		host_ready.emit()
 
 # ── Network Signals ───────────────────────────────────────────────────────────
-func _on_peer_connected(id: int) -> void:
-	# Give peers a generous disconnect window — brief OS freezes (e.g. title bar
-	# right-click) block the message pump and silence ENet for several seconds.
-	var enet_peer := multiplayer.multiplayer_peer as ENetMultiplayerPeer
-	if enet_peer:
-		var peer := enet_peer.get_peer(id)
-		if peer:
-			peer.set_timeout(0, 10000, 60000)
-	# Spawn happens when the client sends request_join — not here.
+func _on_peer_connected(_id: int) -> void:
+	pass
 
 func _on_peer_disconnected(id: int) -> void:
 	_peer_handedness.erase(id)
@@ -300,6 +293,14 @@ func request_join(is_left_handed: bool, player_name: String, jersey_number: int 
 	_peer_handedness[sender_id] = is_left_handed
 	_peer_names[sender_id] = player_name.strip_edges().left(16)
 	_peer_numbers[sender_id] = jersey_number
+	# Set a generous disconnect window here rather than in _on_peer_connected —
+	# peer_connected fires before ENet registers the peer, so get_peer() asserts.
+	# By the time any RPC arrives the peer is guaranteed to be in the table.
+	var enet_peer := multiplayer.multiplayer_peer as ENetMultiplayerPeer
+	if enet_peer:
+		var peer := enet_peer.get_peer(sender_id)
+		if peer:
+			peer.set_timeout(0, 10000, 60000)
 	peer_joined.emit(sender_id)
 
 func get_peer_handedness(peer_id: int) -> bool:
@@ -318,6 +319,8 @@ func receive_input_batch(data: PackedByteArray) -> void:
 		func(d: PackedByteArray, sid: int) -> void:
 			if not _remote_controllers.has(sid):
 				push_warning("no remote controller for peer %d" % sid)
+				return
+			if not is_instance_valid(_remote_controllers[sid]):
 				return
 			if d.size() < 3:
 				return
