@@ -724,7 +724,7 @@ func _on_hit_landed(hitter_peer_id: int, victim: Skater) -> void:
 	NetworkManager.send_hit_claim(
 			victim_peer_id,
 			NetworkManager.estimated_host_time(),
-			NetworkManager.get_rtt_ms())
+			NetworkManager.get_latest_rtt_ms())
 
 
 func _on_hit_claim_received(hitter_peer_id: int, victim_peer_id: int, host_timestamp: float, rtt_ms: float) -> void:
