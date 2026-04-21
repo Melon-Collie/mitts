@@ -29,6 +29,7 @@ var pickup_locked: bool = false
 var _cooldown_timers: Dictionary = {}  # Skater -> float
 var _is_server: bool = false
 var _pending_reset: bool = false
+var _clamp_at_goal_line: bool = false
 # Callable (Skater) -> int team_id, or -1 if the skater isn't registered. Set
 # by GameManager at spawn time so Puck doesn't reach upward for team checks.
 var _team_resolver: Callable = Callable()
@@ -62,6 +63,10 @@ func set_client_prediction_mode(active: bool) -> void:
 	freeze = not active
 	if not active:
 		linear_velocity = Vector3.ZERO
+		_clamp_at_goal_line = false
+
+func set_goal_line_clamp(enabled: bool) -> void:
+	_clamp_at_goal_line = enabled
 
 # ── Contract for PuckController ───────────────────────────────────────────────
 func get_puck_position() -> Vector3:
@@ -236,6 +241,12 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		return
 	if state.linear_velocity.length() > max_speed:
 		state.linear_velocity = state.linear_velocity.normalized() * max_speed
+	if _clamp_at_goal_line:
+		var z: float = state.transform.origin.z
+		var goal_z: float = GameRules.GOAL_LINE_Z
+		if abs(z) >= goal_z and z * state.linear_velocity.z > 0.0:
+			state.transform.origin.z = goal_z * sign(z)
+			state.linear_velocity = Vector3.ZERO
 
 func _physics_process(delta: float) -> void:
 	if not _is_server:

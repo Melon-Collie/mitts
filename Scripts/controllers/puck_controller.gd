@@ -172,6 +172,7 @@ func notify_local_release(direction: Vector3, power: float, rtt_ms: float) -> vo
 	_pending_local_release = true
 	_shot_rtt_ms = rtt_ms
 	puck.set_client_prediction_mode(true)
+	puck.set_goal_line_clamp(true)
 	puck.set_puck_velocity(direction * power)
 	_state_buffer.clear()
 
@@ -182,7 +183,7 @@ func notify_remote_carrier_changed(new_carrier_peer_id: int) -> void:
 	if new_carrier_peer_id == -1 and _predicting_trajectory:
 		return
 	_predicting_trajectory = false
-	puck.set_client_prediction_mode(false)
+	puck.set_client_prediction_mode(false)  # also clears _clamp_at_goal_line
 
 # Called when the server forcibly ends a carry (e.g. goal scored).
 # Does not start trajectory prediction — just drops back to interpolation.
