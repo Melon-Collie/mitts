@@ -31,9 +31,9 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	camera.skater = assigned_skater
 	camera.puck = assigned_puck
 	camera.local_controller = self
-	skater.body_checked_player.connect(
-		func(_v: Skater, _f: float, _d: Vector3) -> void:
-			_body_check_impulse = -_d * (_f / skater.weight) * skater.body_check_restitution
+	skater.body_check_impulse_applied.connect(
+		func(impulse: Vector3) -> void:
+			_body_check_impulse = impulse
 			_body_check_impulse_timestamp = _current_input.host_timestamp)
 
 # Called after setup() to provide the local player's team — needed for
