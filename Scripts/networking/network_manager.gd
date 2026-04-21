@@ -319,6 +319,8 @@ func receive_input_batch(data: PackedByteArray) -> void:
 			if not _remote_controllers.has(sid):
 				push_warning("no remote controller for peer %d" % sid)
 				return
+			if not is_instance_valid(_remote_controllers[sid]):
+				return
 			if d.size() < 3:
 				return
 			var echo_raw: int = d.decode_u16(0)
