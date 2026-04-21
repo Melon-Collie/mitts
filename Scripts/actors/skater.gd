@@ -50,15 +50,16 @@ extends CharacterBody3D
 @export var block_crouch_depth: float = 0.35  # how far upper_body drops during block
 
 # ── Node References ───────────────────────────────────────────────────────────
-@onready var lower_body: Node3D = $LowerBody
-@onready var upper_body: Node3D = $UpperBody
-@onready var blade: Marker3D = $UpperBody/Blade
-@onready var shoulder: Marker3D = $UpperBody/Shoulder
-@onready var stick_mesh: MeshInstance3D = $UpperBody/StickMesh
-@onready var _upper_body_mesh: MeshInstance3D = $UpperBody/UpperBodyMesh
-@onready var _blade_mesh: MeshInstance3D = $UpperBody/Blade/MeshInstance3D
-@onready var _lower_body_mesh: MeshInstance3D = $LowerBody/LowerBodyMesh
-@onready var _direction_indicator: MeshInstance3D = $UpperBody/DirectionIndicator
+@onready var mesh_root: Node3D = $MeshRoot
+@onready var lower_body: Node3D = $MeshRoot/LowerBody
+@onready var upper_body: Node3D = $MeshRoot/UpperBody
+@onready var blade: Marker3D = $MeshRoot/UpperBody/Blade
+@onready var shoulder: Marker3D = $MeshRoot/UpperBody/Shoulder
+@onready var stick_mesh: MeshInstance3D = $MeshRoot/UpperBody/StickMesh
+@onready var _upper_body_mesh: MeshInstance3D = $MeshRoot/UpperBody/UpperBodyMesh
+@onready var _blade_mesh: MeshInstance3D = $MeshRoot/UpperBody/Blade/MeshInstance3D
+@onready var _lower_body_mesh: MeshInstance3D = $MeshRoot/LowerBody/LowerBodyMesh
+@onready var _direction_indicator: MeshInstance3D = $MeshRoot/UpperBody/DirectionIndicator
 
 # Top hand: the moving IK output. Positioned by the controller each tick.
 # If the scene file provides a `TopHand` Marker3D under UpperBody, we use it;
@@ -114,6 +115,14 @@ var _blade_area: Area3D = null
 var _slapper_zone_area: Area3D = null
 var _slapper_zone_sphere: SphereShape3D = null
 var _default_upper_body_y: float = 0.0
+# Visual-only offset applied to MeshRoot each frame. Set by LocalController
+# during reconcile blending to ease the visible correction over a few ticks.
+# Physics body (CharacterBody3D) is always at the authoritative position.
+var visual_offset: Vector3 = Vector3.ZERO:
+	set(v):
+		visual_offset = v
+		if mesh_root != null:
+			mesh_root.position = global_transform.basis.inverse() * v
 
 # 5×7 pixel font. Each entry is 7 row-bitmasks (MSB = leftmost of 5 columns).
 const _JERSEY_FONT: Dictionary = {

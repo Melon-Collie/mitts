@@ -16,6 +16,11 @@ var _body_check_impulse: Vector3 = Vector3.ZERO
 var _body_check_impulse_timestamp: float = 0.0
 const _BLADE_JUMP_THRESHOLD: float = 0.05
 
+var _reconcile_blend_from: Vector3 = Vector3.ZERO
+var _reconcile_blend_target: Vector3 = Vector3.ZERO
+var _reconcile_blend_t: float = 1.0
+const _RECONCILE_BLEND_FRAMES: int = 3
+
 func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> void:
 	camera = $Camera3D
 	super.setup(assigned_skater, assigned_puck, game_state)
@@ -51,10 +56,17 @@ func teleport_to(pos: Vector3) -> void:
 	_last_blade_pos = Vector3.ZERO
 	_body_check_impulse = Vector3.ZERO
 	_body_check_impulse_timestamp = 0.0
+	_reconcile_blend_t = 1.0
+	if skater != null:
+		skater.visual_offset = Vector3.ZERO
 
 func _physics_process(delta: float) -> void:
 	if skater == null or puck == null or _gatherer == null:
 		return
+	if _reconcile_blend_t < 1.0:
+		_reconcile_blend_t = minf(_reconcile_blend_t + 1.0 / _RECONCILE_BLEND_FRAMES, 1.0)
+		skater.visual_offset = _reconcile_blend_from.lerp(
+				_reconcile_blend_target, _reconcile_blend_t) - _reconcile_blend_target
 	if _game_state.is_movement_locked():
 		# Dead-puck phase: kill velocity and drain history every frame so that
 		# move_and_slide() can't drift the skater, and reconcile can't replay stale
@@ -93,6 +105,7 @@ func _physics_process(delta: float) -> void:
 
 func reconcile(server_state: SkaterNetworkState) -> void:
 	var pre_reconcile_blade: Vector3 = skater.get_blade_contact_global()
+	var pre_reconcile_visual_pos: Vector3 = skater.global_position + skater.visual_offset
 	# Apply authoritative ghost state. Server ghost=true always wins. Server
 	# ghost=false is held back if the client is still locally predicting offside —
 	# the broadcast was encoded before the host computed the transition and is stale.
@@ -174,6 +187,10 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	NetworkTelemetry.record_blade_reconcile(blade_reconcile_delta)
 	if blade_reconcile_delta > _BLADE_JUMP_THRESHOLD:
 		NetworkTelemetry.record_blade_jump(blade_reconcile_delta)
+	_reconcile_blend_from = pre_reconcile_visual_pos
+	_reconcile_blend_target = skater.global_position
+	_reconcile_blend_t = 0.0
+	skater.visual_offset = _reconcile_blend_from - _reconcile_blend_target
 
 func on_puck_picked_up_network() -> void:
 	super.on_puck_picked_up_network()

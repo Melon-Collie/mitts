@@ -45,32 +45,34 @@ script = ExtResource("1_7f3a6")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=76426733]
 shape = SubResource("CylinderShape3D_r0du0")
 
-[node name="UpperBody" type="Node3D" parent="." unique_id=1694959721]
+[node name="MeshRoot" type="Node3D" parent="." unique_id=313799581]
 
-[node name="Blade" type="Marker3D" parent="UpperBody" unique_id=1834082536]
+[node name="UpperBody" type="Node3D" parent="MeshRoot" unique_id=1694959721]
+
+[node name="Blade" type="Marker3D" parent="MeshRoot/UpperBody" unique_id=1834082536]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1.5)
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="UpperBody/Blade" unique_id=56105214]
+[node name="MeshInstance3D" type="MeshInstance3D" parent="MeshRoot/UpperBody/Blade" unique_id=56105214]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.15)
 mesh = SubResource("BoxMesh_rgh2o")
 
-[node name="UpperBodyMesh" type="MeshInstance3D" parent="UpperBody" unique_id=195925634]
+[node name="UpperBodyMesh" type="MeshInstance3D" parent="MeshRoot/UpperBody" unique_id=195925634]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0)
 mesh = SubResource("BoxMesh_50glp")
 
-[node name="DirectionIndicator" type="MeshInstance3D" parent="UpperBody" unique_id=1342161336]
+[node name="DirectionIndicator" type="MeshInstance3D" parent="MeshRoot/UpperBody" unique_id=1342161336]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, -0.1)
 mesh = SubResource("BoxMesh_r150o")
-skeleton = NodePath("../../..")
+skeleton = NodePath("../../../..")
 
-[node name="StickMesh" type="MeshInstance3D" parent="UpperBody" unique_id=1045205501]
+[node name="StickMesh" type="MeshInstance3D" parent="MeshRoot/UpperBody" unique_id=1045205501]
 mesh = SubResource("BoxMesh_bmxlf")
 
-[node name="Shoulder" type="Marker3D" parent="UpperBody" unique_id=1764989628]
+[node name="Shoulder" type="Marker3D" parent="MeshRoot/UpperBody" unique_id=1764989628]
 
-[node name="LowerBody" type="Node3D" parent="." unique_id=2124479063]
+[node name="LowerBody" type="Node3D" parent="MeshRoot" unique_id=2124479063]
 
-[node name="LowerBodyMesh" type="MeshInstance3D" parent="LowerBody" unique_id=868835872]
+[node name="LowerBodyMesh" type="MeshInstance3D" parent="MeshRoot/LowerBody" unique_id=868835872]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
 mesh = SubResource("BoxMesh_vy5pj")
-skeleton = NodePath("../..")
+skeleton = NodePath("../../..")
