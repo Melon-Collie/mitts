@@ -43,7 +43,7 @@ func _process(_delta: float) -> void:
 			NetworkSimManager.loss_pct,
 		]
 	else:
-		sim_label = "off  (keys 0–5 to set preset)"
+		sim_label = "off  (keys 0–6 to set preset)"
 	_label.text = (
 		"── Net Debug (F3 to close) ──────\n"
 		+ "RTT:           %.0f ms%s\n" % [NetworkManager.get_rtt_ms(), "" if NetworkManager.is_clock_ready() else " (syncing)"]
