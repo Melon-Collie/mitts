@@ -9,9 +9,14 @@ Ordered by impact-to-effort ratio. Items 1–4 are bugs/correctness fixes; 5–9
 
 ## Completed (from plan)
 
+- **1. Board collision in replay** — after each `global_position += velocity * delta` step in the replay loop, `GameRules.clamp_to_rink_inner` is called and velocity is slid along the wall normal. Eliminates the board-bounce reconcile feedback loop.
+- **2. RTT in debug overlay** — was already wired; `NetworkManager.get_rtt_ms()` displayed on line 49 of `network_debug_overlay.gd`.
 - **3. Hermite interpolation for puck** — `_hermite` moved to `BufferedStateInterpolator` as shared static; puck `_interpolate()` now uses velocity tangents for smooth curves.
 - **5. Faster adaptive interpolation delay** — replaced per-tick `move_toward` with per-packet `lerp(0.15)` capped at +5 ms / −1 ms; settles a 25 ms shift in ~375 ms instead of ~5 s.
+- **6. Clock nudge rate cap** — `apply_queue_depth_feedback` clamped to ±0.25 ms/call (10 ms/s at 40 Hz), matching the documented intent.
 - **7. Larger interpolation buffers** — raised cap 10 → 30 entries in `PuckController` and `RemoteController`.
+- **8. Goalie rotation quantization** — `rotation_y` encoded as s16 instead of f32; goalie state 10 → 8 bytes.
+- **9. Puck friction dead-reckoning** — `prediction_extra_friction` export added (default 0.0, no-op). Available to tune if playtest reveals client/host trajectory drift.
 
 ---
 
