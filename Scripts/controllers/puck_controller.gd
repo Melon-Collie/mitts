@@ -10,6 +10,7 @@ const CONTEST_SQUIRT_SPEED: float = 3.0
 @export var prediction_reconcile_threshold: float = 3.0
 @export var position_correction_blend: float = 0.3
 @export var velocity_correction_blend: float = 0.5
+@export var rejoin_blend_duration: float = 0.075
 
 var puck: Puck = null
 var is_server: bool = false
@@ -23,6 +24,9 @@ var _state_buffer: Array[BufferedPuckState] = []
 var _predicting_trajectory: bool = false
 var _pending_local_release: bool = false  # true from local release until host confirms carrier == -1
 var is_extrapolating: bool = false
+
+var _rejoin_blend_start_time: float = -1.0
+var _rejoin_blend_from_pos: Vector3 = Vector3.ZERO
 
 func get_buffer_depth() -> int:
 	return _state_buffer.size()
@@ -276,6 +280,7 @@ func _interpolate() -> void:
 	var render_time: float = _current_time - interpolation_delay
 	var bracket: BufferedStateInterpolator.BracketResult = BufferedStateInterpolator.find_bracket(
 			_state_buffer, render_time)
+	var prev_extrapolating: bool = is_extrapolating
 	is_extrapolating = bracket != null and bracket.is_extrapolating
 	if bracket == null:
 		return
@@ -288,6 +293,15 @@ func _interpolate() -> void:
 	else:
 		interpolated.position = bracket.from_state.position.lerp(bracket.to_state.position, bracket.t)
 		interpolated.velocity = bracket.from_state.velocity.lerp(bracket.to_state.velocity, bracket.t)
+	if prev_extrapolating and not is_extrapolating:
+		_rejoin_blend_from_pos = puck.get_puck_position()
+		_rejoin_blend_start_time = _current_time
+	if _rejoin_blend_start_time >= 0.0:
+		var ease_t: float = clampf(
+				(_current_time - _rejoin_blend_start_time) / rejoin_blend_duration, 0.0, 1.0)
+		interpolated.position = _rejoin_blend_from_pos.lerp(interpolated.position, ease_t)
+		if ease_t >= 1.0:
+			_rejoin_blend_start_time = -1.0
 	_apply_state_to_puck(interpolated)
 	BufferedStateInterpolator.drop_stale(_state_buffer, render_time)
 

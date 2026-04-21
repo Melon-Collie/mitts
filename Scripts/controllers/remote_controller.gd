@@ -3,12 +3,18 @@ extends SkaterController
 
 @export var interpolation_delay: float = Constants.NETWORK_INTERPOLATION_DELAY
 @export var extrapolation_max_ms: float = 50.0
+@export var rejoin_blend_duration: float = 0.075
 
 var _input_queue: Array[InputState] = []
 var _fallback_input: InputState = InputState.new()
 var _state_buffer: Array[BufferedSkaterState] = []
 var _current_time: float = 0.0
 var is_extrapolating: bool = false
+
+var _rejoin_blend_start_time: float = -1.0
+var _rejoin_blend_from_pos: Vector3 = Vector3.ZERO
+var _rejoin_blend_from_blade: Vector3 = Vector3.ZERO
+var _rejoin_blend_from_hand: Vector3 = Vector3.ZERO
 
 func get_buffer_depth() -> int:
 	return _state_buffer.size()
@@ -89,6 +95,7 @@ func _interpolate() -> void:
 	var render_time: float = _current_time - interpolation_delay
 	var bracket: BufferedStateInterpolator.BracketResult = BufferedStateInterpolator.find_bracket(
 			_state_buffer, render_time)
+	var prev_extrapolating: bool = is_extrapolating
 	is_extrapolating = bracket != null and bracket.is_extrapolating
 	if bracket == null:
 		return
@@ -129,6 +136,19 @@ func _interpolate() -> void:
 		# Boolean fields can't be lerped; take the freshest value so ghost-mode
 		# toggles flow through to remote skaters without a one-broadcast delay.
 		interpolated.is_ghost = to_state.is_ghost
+	if prev_extrapolating and not is_extrapolating and skater != null:
+		_rejoin_blend_from_pos = skater.global_position
+		_rejoin_blend_from_blade = skater.blade.global_position
+		_rejoin_blend_from_hand = skater.top_hand.global_position
+		_rejoin_blend_start_time = _current_time
+	if _rejoin_blend_start_time >= 0.0:
+		var ease_t: float = clampf(
+				(_current_time - _rejoin_blend_start_time) / rejoin_blend_duration, 0.0, 1.0)
+		interpolated.position = _rejoin_blend_from_pos.lerp(interpolated.position, ease_t)
+		interpolated.blade_position = _rejoin_blend_from_blade.lerp(interpolated.blade_position, ease_t)
+		interpolated.top_hand_position = _rejoin_blend_from_hand.lerp(interpolated.top_hand_position, ease_t)
+		if ease_t >= 1.0:
+			_rejoin_blend_start_time = -1.0
 	_apply_state_to_skater(interpolated)
 	BufferedStateInterpolator.drop_stale(_state_buffer, render_time)
 
