@@ -7,7 +7,7 @@ const CONTEST_SQUIRT_SPEED: float = 3.0
 
 @export var interpolation_delay: float = Constants.NETWORK_INTERPOLATION_DELAY
 @export var extrapolation_max_ms: float = 50.0
-@export var prediction_reconcile_threshold: float = 3.0
+@export var prediction_reconcile_threshold: float = 0.5
 @export var position_correction_blend: float = 0.1
 @export var rejoin_blend_duration: float = 0.075
 # Extra friction applied during trajectory prediction to compensate for any
@@ -65,6 +65,7 @@ func setup(assigned_puck: Puck, assigned_is_server: bool) -> void:
 		puck.puck_touched_goalie.connect(func(g: Goalie) -> void: puck_touched_by_goalie.emit(g))
 	else:
 		puck.puck_touched_goalie.connect(_on_client_puck_hit_goalie)
+		puck.puck_touched_post.connect(_on_client_puck_hit_post)
 
 func set_peer_id_resolver(resolver: Callable) -> void:
 	_peer_id_resolver = resolver
@@ -250,6 +251,13 @@ func _resolve_peer_id(skater: Skater) -> int:
 	return _peer_id_resolver.call(skater)
 
 func _on_client_puck_hit_goalie(_goalie: Goalie) -> void:
+	if not _predicting_trajectory:
+		return
+	_predicting_trajectory = false
+	_pending_local_release = false
+	puck.set_client_prediction_mode(false)
+
+func _on_client_puck_hit_post() -> void:
 	if not _predicting_trajectory:
 		return
 	_predicting_trajectory = false
