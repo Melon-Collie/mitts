@@ -84,7 +84,7 @@ overlay after changing — if wall reconcile rate spikes visibly, settle at `0.0
 
 ## Tier 2 — Medium Lifts (architectural but self-contained)
 
-### 6. Remote player input extrapolation
+### 6. Remote player input extrapolation ✓ done
 
 **Files:** `Scripts/controllers/remote_controller.gd`, `Scripts/networking/buffered_state_interpolator.gd`
 
