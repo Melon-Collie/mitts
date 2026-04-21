@@ -84,6 +84,8 @@ func _drive_from_input(delta: float) -> void:
 func apply_network_state(state: SkaterNetworkState) -> void:
 	if _is_host:
 		return
+	if not _state_buffer.is_empty() and _current_time <= _state_buffer.back().timestamp:
+		return
 	var buffered := BufferedSkaterState.new()
 	buffered.timestamp = _current_time
 	buffered.state = state

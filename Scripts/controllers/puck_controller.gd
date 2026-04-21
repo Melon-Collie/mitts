@@ -269,6 +269,8 @@ func apply_state(state: PuckNetworkState) -> void:
 			latency_corrected.velocity = state.velocity
 			_reconcile(latency_corrected)
 			return  # Don't buffer during prediction; interpolation isn't running
+	if not _state_buffer.is_empty() and _current_time <= _state_buffer.back().timestamp:
+		return
 	var buffered := BufferedPuckState.new()
 	buffered.timestamp = _current_time
 	buffered.state = state
