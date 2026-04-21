@@ -2,6 +2,17 @@
 
 Ordered by impact-to-effort ratio. Items 1–4 are bugs/correctness fixes; 5–9 are quality improvements.
 
+## Completed (not in original plan)
+
+- **Shot trajectory reconcile snapping** — removed velocity correction from `_reconcile` during prediction (Jolt owns velocity); locked RTT value at shot time so both sides use the same sample; lowered `position_correction_blend` 0.3 → 0.1.
+- **Shot puck placement when moving** — host was rewinding state buffer for blade position, giving `blade_at(shot_time - rtt)` for a moving skater (full RTT behind). Fixed to use `puck.get_puck_position()` (current pinned blade ≈ client blade at shot time) + directional advancement. Goalie rewind unchanged.
+
+## Completed (from plan)
+
+- **3. Hermite interpolation for puck** — `_hermite` moved to `BufferedStateInterpolator` as shared static; puck `_interpolate()` now uses velocity tangents for smooth curves.
+- **5. Faster adaptive interpolation delay** — replaced per-tick `move_toward` with per-packet `lerp(0.15)` capped at +5 ms / −1 ms; settles a 25 ms shift in ~375 ms instead of ~5 s.
+- **7. Larger interpolation buffers** — raised cap 10 → 30 entries in `PuckController` and `RemoteController`.
+
 ---
 
 ## 1. Fix Board Collision During Reconcile Replay
