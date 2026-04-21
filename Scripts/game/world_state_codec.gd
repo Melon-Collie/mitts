@@ -13,12 +13,12 @@ extends RefCounted
 #       score0, score1, phase, period, time_remaining]
 #
 #    Quantization layout:
-#      Skater  (35 B): pos s16/s8/s16@1cm, vel 3×s16@0.1m/s,
+#      Skater  (35 B): pos s16/s8/s16@1cm, vel 3×s16@0.02m/s,
 #                      blade 3×s16@1cm, top_hand 3×s16@1cm,
 #                      facing u16 (0–TAU→0–65535), upper_body_rot s16 (−π–π→−32767–32767),
 #                      last_processed_ts f32, flags u8 (shot_state[3:0]+ghost[4]),
 #                      shot_charge u8
-#      Puck    (13 B): pos s16/s8/s16@1cm, vel 3×s16@0.1m/s, carrier_peer_id s16
+#      Puck    (13 B): pos s16/s8/s16@1cm, vel 3×s16@0.02m/s, carrier_peer_id s16
 #      Goalie   (8 B): pos_x s16@1cm, pos_z s16@1cm, rot_y s16@π/32767, state u8, fho u8
 #
 # 2. Stats  (reliable, event-driven):
@@ -224,9 +224,9 @@ static func _encode_skater_quantized(s: SkaterNetworkState) -> PackedByteArray:
 	b.encode_s16(o, clampi(roundi(s.position.x * 100.0), -32768, 32767)); o += 2
 	b.encode_s8(o, clampi(roundi(s.position.y * 100.0), -128, 127)); o += 1
 	b.encode_s16(o, clampi(roundi(s.position.z * 100.0), -32768, 32767)); o += 2
-	b.encode_s16(o, clampi(roundi(s.velocity.x * 10.0), -32768, 32767)); o += 2
-	b.encode_s16(o, clampi(roundi(s.velocity.y * 10.0), -32768, 32767)); o += 2
-	b.encode_s16(o, clampi(roundi(s.velocity.z * 10.0), -32768, 32767)); o += 2
+	b.encode_s16(o, clampi(roundi(s.velocity.x * 50.0), -32768, 32767)); o += 2
+	b.encode_s16(o, clampi(roundi(s.velocity.y * 50.0), -32768, 32767)); o += 2
+	b.encode_s16(o, clampi(roundi(s.velocity.z * 50.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.blade_position.x * 100.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.blade_position.y * 100.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.blade_position.z * 100.0), -32768, 32767)); o += 2
@@ -251,9 +251,9 @@ static func _decode_skater_quantized(b: PackedByteArray) -> SkaterNetworkState:
 	s.position.x = b.decode_s16(o) / 100.0; o += 2
 	s.position.y = b.decode_s8(o) / 100.0; o += 1
 	s.position.z = b.decode_s16(o) / 100.0; o += 2
-	s.velocity.x = b.decode_s16(o) / 10.0; o += 2
-	s.velocity.y = b.decode_s16(o) / 10.0; o += 2
-	s.velocity.z = b.decode_s16(o) / 10.0; o += 2
+	s.velocity.x = b.decode_s16(o) / 50.0; o += 2
+	s.velocity.y = b.decode_s16(o) / 50.0; o += 2
+	s.velocity.z = b.decode_s16(o) / 50.0; o += 2
 	s.blade_position.x = b.decode_s16(o) / 100.0; o += 2
 	s.blade_position.y = b.decode_s16(o) / 100.0; o += 2
 	s.blade_position.z = b.decode_s16(o) / 100.0; o += 2
@@ -280,9 +280,9 @@ static func _encode_puck_quantized(s: PuckNetworkState) -> PackedByteArray:
 	b.encode_s16(o, clampi(roundi(s.position.x * 100.0), -32768, 32767)); o += 2
 	b.encode_s8(o, clampi(roundi(s.position.y * 100.0), -128, 127)); o += 1
 	b.encode_s16(o, clampi(roundi(s.position.z * 100.0), -32768, 32767)); o += 2
-	b.encode_s16(o, clampi(roundi(s.velocity.x * 10.0), -32768, 32767)); o += 2
-	b.encode_s16(o, clampi(roundi(s.velocity.y * 10.0), -32768, 32767)); o += 2
-	b.encode_s16(o, clampi(roundi(s.velocity.z * 10.0), -32768, 32767)); o += 2
+	b.encode_s16(o, clampi(roundi(s.velocity.x * 50.0), -32768, 32767)); o += 2
+	b.encode_s16(o, clampi(roundi(s.velocity.y * 50.0), -32768, 32767)); o += 2
+	b.encode_s16(o, clampi(roundi(s.velocity.z * 50.0), -32768, 32767)); o += 2
 	b.encode_s16(o, s.carrier_peer_id)
 	return b
 
@@ -293,9 +293,9 @@ static func _decode_puck_quantized(b: PackedByteArray) -> PuckNetworkState:
 	s.position.x = b.decode_s16(o) / 100.0; o += 2
 	s.position.y = b.decode_s8(o) / 100.0; o += 1
 	s.position.z = b.decode_s16(o) / 100.0; o += 2
-	s.velocity.x = b.decode_s16(o) / 10.0; o += 2
-	s.velocity.y = b.decode_s16(o) / 10.0; o += 2
-	s.velocity.z = b.decode_s16(o) / 10.0; o += 2
+	s.velocity.x = b.decode_s16(o) / 50.0; o += 2
+	s.velocity.y = b.decode_s16(o) / 50.0; o += 2
+	s.velocity.z = b.decode_s16(o) / 50.0; o += 2
 	s.carrier_peer_id = b.decode_s16(o)
 	return s
 

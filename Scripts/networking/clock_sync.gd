@@ -2,7 +2,7 @@ extends RefCounted
 
 const INITIAL_PING_COUNT: int = 3
 const INITIAL_PING_INTERVAL: float = 0.5
-const ONGOING_PING_INTERVAL: float = 5.0
+const ONGOING_PING_INTERVAL: float = 2.0
 const SAMPLE_WINDOW: int = 8
 const OUTLIER_DROP: int = 2
 
@@ -37,7 +37,7 @@ func record_pong(client_send_time: float, host_time: float, recv_time: float) ->
 func estimated_host_time() -> float:
 	return Time.get_ticks_msec() / 1000.0 + _offset
 
-const TARGET_DEPTH: int = 2
+const TARGET_DEPTH: int = 5
 const NUDGE_RATE: float = 0.0005        # 0.5 ms per step before clamping
 const MAX_WALK_PER_CALL: float = 0.00025  # 0.25 ms/call → 10 ms/s at 40 Hz
 
@@ -49,7 +49,10 @@ func apply_queue_depth_feedback(depth: int) -> void:
 func _recompute() -> void:
 	var sorted := _samples.duplicate()
 	sorted.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.rtt < b.rtt)
-	var keep := sorted.slice(0, max(sorted.size() - OUTLIER_DROP, 1))
+	var drop_each: int = OUTLIER_DROP / 2
+	var keep_start: int = mini(drop_each, sorted.size() - 1)
+	var keep_end: int = maxi(sorted.size() - drop_each, keep_start + 1)
+	var keep := sorted.slice(keep_start, keep_end)
 	var rtt_sum := 0.0
 	var offset_sum := 0.0
 	for s: Dictionary in keep:

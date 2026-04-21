@@ -7,7 +7,7 @@ Changes within a tier can be done in any order unless noted.
 
 ## Tier 1 — Quick Wins (low effort, meaningful payoff)
 
-### 1. Fix pickup lag compensation rewind depth
+### 1. Fix pickup lag compensation rewind depth ✓ already implemented
 
 **File:** `Scripts/game/game_manager.gd` (or wherever `pickup_claim_received` is handled)
 
@@ -26,7 +26,7 @@ prediction the client is at present time and `rtt/2` is correct.
 
 ---
 
-### 2. Clock sync rate increase
+### 2. Clock sync rate increase ✓ done
 
 **File:** `Scripts/networking/clock_sync.gd`
 
@@ -41,7 +41,7 @@ against occasional scheduler gifts that produce anomalously fast round-trips.
 
 ---
 
-### 3. Input queue target depth
+### 3. Input queue target depth ✓ done
 
 **File:** `Scripts/networking/clock_sync.gd` — `apply_queue_depth_feedback`
 
@@ -54,7 +54,7 @@ meaningful latency (6 extra inputs at 240 Hz = 25 ms).
 
 ---
 
-### 4. Velocity quantization resolution
+### 4. Velocity quantization resolution ✓ done
 
 **File:** `Scripts/game/world_state_codec.gd`
 
@@ -68,7 +68,7 @@ Packet size increases by ~6 bytes per skater and ~6 bytes for the puck; negligib
 
 ---
 
-### 5. Reduce wall-contact reconcile dead zone
+### 5. Reduce wall-contact reconcile dead zone ✓ done (0.1→0.05; tune to 0.03 after playtesting)
 
 **File:** `Scripts/controllers/local_controller.gd` — reconcile guard
 

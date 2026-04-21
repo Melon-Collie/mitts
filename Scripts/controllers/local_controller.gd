@@ -130,10 +130,10 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			reconcile_position_threshold, reconcile_velocity_threshold):
 		return
 	# Suppress reconcile jitter while pressing against the boards. Wall contact
-	# causes move_and_slide vs. server-physics noise (~3-5 cm each tick) that
-	# repeatedly sets small visual_offsets which compound into visible oscillation.
-	# Errors above 10 cm are real desync and still fire through.
-	if skater.is_on_wall() and skater.global_position.distance_to(server_state.position) < 0.1:
+	# causes move_and_slide vs. server-physics noise that repeatedly sets small
+	# visual_offsets which compound into visible oscillation.
+	# Errors above 5 cm are real desync and still fire through.
+	if skater.is_on_wall() and skater.global_position.distance_to(server_state.position) < 0.05:
 		return
 	# Save shot/state-machine state — replay can transition through shoot states
 	# (WRISTER_AIM → FOLLOW_THROUGH → SKATING) and leave _state wrong. Restore so
