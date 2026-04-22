@@ -686,22 +686,22 @@
       "id": "jets",
       "name": "Winnipeg",
       "primary": "#041E42",
-      "secondary": "#AC162C",
+      "secondary": "#7BC4E2",
       "home": {
         "helmet": "#041E42",
         "jersey": "#041E42",
         "pants": "#041E42",
         "goalie_pads": "#FFFFFF",
-        "text": "#AC162C",
-        "text_outline": "#041E42"
+        "text": "#FFFFFF",
+        "text_outline": "#7BC4E2"
       },
       "away": {
-        "helmet": "#041E42",
+        "helmet": "#FFFFFF",
         "jersey": "#FFFFFF",
-        "pants": "#FFFFFF",
+        "pants": "#041E42",
         "goalie_pads": "#FFFFFF",
         "text": "#041E42",
-        "text_outline": "#AC162C"
+        "text_outline": "#7BC4E2"
       }
     }
   ]
