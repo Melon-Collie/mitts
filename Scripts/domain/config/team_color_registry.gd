@@ -9,8 +9,8 @@ class_name TeamColorRegistry
 # game data directory (user://) — no other setup is required.
 # Unknown preset IDs return a fallback and log a warning; they never crash.
 
-const DEFAULT_HOME_ID: String = "penguins"
-const DEFAULT_AWAY_ID: String  = "leafs"
+const DEFAULT_HOME_ID: String = "blueberry"
+const DEFAULT_AWAY_ID: String  = "pomegranate"
 
 const _USER_JSON_PATH: String = "user://team_colors.json"
 const _RES_JSON_PATH:  String = "res://data/team_colors.json"
