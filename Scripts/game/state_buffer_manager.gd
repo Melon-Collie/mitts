@@ -174,7 +174,7 @@ func _interpolate_goalie(team_id: int, ts: float) -> GoalieNetworkState:
 	var result := GoalieNetworkState.new()
 	result.position_x = lerpf(from_g.position_x, to_g.position_x, t)
 	result.position_z = lerpf(from_g.position_z, to_g.position_z, t)
-	result.rotation_y = lerpf(from_g.rotation_y, to_g.rotation_y, t)
+	result.rotation_y = lerp_angle(from_g.rotation_y, to_g.rotation_y, t)
 	result.state_enum = to_g.state_enum
 	result.five_hole_openness = lerpf(from_g.five_hole_openness, to_g.five_hole_openness, t)
 	result.host_timestamp = ts
