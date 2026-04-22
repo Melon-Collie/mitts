@@ -14,6 +14,7 @@ class MovementConfig:
 	var puck_carry_speed_multiplier: float = 0.0 # max speed reduction while carrying
 	var backward_thrust_multiplier: float = 0.0  # thrust scale when moving against facing
 	var crossover_thrust_multiplier: float = 0.0 # thrust scale when moving perpendicular to facing
+	var brake_lateral_multiplier: float = 1.0    # friction multiplier on lateral speed while braking (carve)
 
 static func apply_movement(
 		current_velocity: Vector3,
@@ -25,7 +26,7 @@ static func apply_movement(
 		cfg: MovementConfig) -> Vector3:
 	var velocity: Vector3 = current_velocity
 
-	if move_input.length() > cfg.move_deadzone:
+	if move_input.length() > cfg.move_deadzone and not brake:
 		var thrust_dir := Vector3(move_input.x, 0.0, move_input.y)
 		var facing_dir := Vector2(-sin(facing_rotation_y), -cos(facing_rotation_y))
 		var move_dot: float = facing_dir.dot(move_input.normalized())
@@ -54,10 +55,21 @@ static func apply_movement(
 				velocity.x = limited.x
 				velocity.z = limited.y
 
-	# Friction (or braking)
-	var current_friction: float = cfg.friction * cfg.brake_multiplier if brake else cfg.friction
-	var horiz_vel := Vector2(velocity.x, velocity.z)
-	horiz_vel = horiz_vel.move_toward(Vector2.ZERO, current_friction * delta)
-	velocity.x = horiz_vel.x
-	velocity.z = horiz_vel.y
+	if brake:
+		# Directional friction: decompose into facing-parallel and facing-perpendicular.
+		# Parallel (forward/back) stops hard — simulates edge dig-in.
+		# Perpendicular (lateral) bleeds off slower — allows carve/slide.
+		var facing_dir := Vector2(-sin(facing_rotation_y), -cos(facing_rotation_y))
+		var vel_2d := Vector2(velocity.x, velocity.z)
+		var parallel: float = vel_2d.dot(facing_dir)
+		var perp: Vector2 = vel_2d - facing_dir * parallel
+		var new_parallel: float = move_toward(parallel, 0.0, cfg.friction * cfg.brake_multiplier * delta)
+		var new_perp: Vector2 = perp.move_toward(Vector2.ZERO, cfg.friction * cfg.brake_lateral_multiplier * delta)
+		velocity.x = facing_dir.x * new_parallel + new_perp.x
+		velocity.z = facing_dir.y * new_parallel + new_perp.y
+	else:
+		var horiz_vel := Vector2(velocity.x, velocity.z)
+		horiz_vel = horiz_vel.move_toward(Vector2.ZERO, cfg.friction * delta)
+		velocity.x = horiz_vel.x
+		velocity.z = horiz_vel.y
 	return velocity

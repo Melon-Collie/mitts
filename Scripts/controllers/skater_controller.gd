@@ -18,6 +18,7 @@ enum State {
 @export var max_speed: float = 9.0
 @export var move_deadzone: float = 0.1
 @export var brake_multiplier: float = 5.0
+@export var brake_lateral_multiplier: float = 2.0
 @export var puck_carry_speed_multiplier: float = 0.85
 @export var backward_thrust_multiplier: float = 0.80
 @export var crossover_thrust_multiplier: float = 0.90
@@ -880,8 +881,15 @@ func _apply_facing(input: InputState, delta: float) -> void:
 			mouse_world.z - skater.global_position.z
 		)
 		if to_mouse.length() > move_deadzone:
-			var drag: float = facing_drag_speed_braking if input.brake else facing_drag_speed
-			_facing = _facing.lerp(to_mouse.normalized(), drag * delta).normalized()
+			# Gate: stop rotating when the mouse is past the IK reachable zone.
+			# Upper body absorbs up to upper_body_max_twist_deg, then the arm clamps
+			# at rom_backhand_angle_max_deg. Beyond their sum, the IK is locked and
+			# continuing to rotate would flip which side the arm clamps to (the snap).
+			var mouse_body_angle: float = _facing.angle_to(to_mouse.normalized())
+			var ik_gate: float = deg_to_rad(rom_backhand_angle_max_deg + upper_body_max_twist_deg)
+			if abs(mouse_body_angle) < ik_gate:
+				var drag: float = facing_drag_speed_braking if input.brake else facing_drag_speed
+				_facing = _facing.lerp(to_mouse.normalized(), drag * delta).normalized()
 		skater.set_facing(_facing)
 		var turn_delta: float = angle_difference(prev_angle, skater.rotation.y)
 		_lower_body_lag = clampf(
@@ -940,6 +948,7 @@ func _movement_config() -> SkaterMovementRules.MovementConfig:
 	cfg.puck_carry_speed_multiplier = puck_carry_speed_multiplier
 	cfg.backward_thrust_multiplier = backward_thrust_multiplier
 	cfg.crossover_thrust_multiplier = crossover_thrust_multiplier
+	cfg.brake_lateral_multiplier = brake_lateral_multiplier
 	return cfg
 
 func _block_movement_config() -> SkaterMovementRules.MovementConfig:

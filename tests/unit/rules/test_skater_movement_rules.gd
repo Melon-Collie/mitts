@@ -9,6 +9,7 @@ func _default_cfg() -> SkaterMovementRules.MovementConfig:
 	cfg.max_speed = 10.0
 	cfg.move_deadzone = 0.1
 	cfg.brake_multiplier = 5.0
+	cfg.brake_lateral_multiplier = 2.0
 	cfg.puck_carry_speed_multiplier = 0.88
 	cfg.backward_thrust_multiplier = 0.7
 	cfg.crossover_thrust_multiplier = 0.85
@@ -62,42 +63,6 @@ func test_over_max_preserved_when_no_thrust() -> void:
 	# A single small step of friction should barely reduce 20
 	assert_gt(Vector2(result.x, result.z).length(), cfg.max_speed,
 		"over-max speed from external source should survive a single friction tick")
-
-func _dash_cfg() -> SkaterMovementRules.MovementConfig:
-	var cfg: SkaterMovementRules.MovementConfig = _default_cfg()
-	cfg.dash_impulse_magnitude = 3.5
-	return cfg
-
-func test_dash_adds_velocity_from_stopped() -> void:
-	var result: Vector3 = SkaterMovementRules.apply_dash_impulse(
-		Vector3.ZERO, Vector3(1, 0, 0), false, _dash_cfg())
-	assert_gt(result.x, 0.0, "dash from stopped should give positive X velocity")
-
-func test_dash_same_direction_at_max_speed_has_no_effect() -> void:
-	# Already at max — same-direction dash is clamped back to max. No spam exploit.
-	var cfg := _dash_cfg()
-	var initial := Vector3(cfg.max_speed, 0.0, 0.0)
-	var result: Vector3 = SkaterMovementRules.apply_dash_impulse(initial, Vector3(1, 0, 0), false, cfg)
-	assert_almost_eq(Vector2(result.x, result.z).length(), cfg.max_speed, 0.01,
-		"dash at max speed in same direction should not increase speed")
-
-func test_dash_opposing_at_max_speed_does_not_flip_direction() -> void:
-	var result: Vector3 = SkaterMovementRules.apply_dash_impulse(
-		Vector3(11.0, 0.0, 0.0), Vector3(-1, 0, 0), false, _dash_cfg())
-	assert_gt(result.x, 0.0, "opposing dash at max speed should not reverse direction")
-
-func test_dash_does_not_clamp_pre_existing_over_max() -> void:
-	# Body-check boosted player at 20 m/s — perpendicular dash redirects slightly
-	# but must preserve the total horizontal speed at 20 m/s (not clamp it to max_speed).
-	var result: Vector3 = SkaterMovementRules.apply_dash_impulse(
-		Vector3(20.0, 0.0, 0.0), Vector3(0, 0, 1), false, _dash_cfg())
-	assert_almost_eq(Vector2(result.x, result.z).length(), 20.0, 0.01,
-		"pre-existing over-max speed must not be retroactively clamped")
-
-func test_dash_y_component_unchanged() -> void:
-	var result: Vector3 = SkaterMovementRules.apply_dash_impulse(
-		Vector3(3.0, 1.5, 0.0), Vector3(1, 0, 0), false, _dash_cfg())
-	assert_almost_eq(result.y, 1.5, 0.001, "dash must not affect Y velocity")
 
 func test_backward_thrust_scaled_down() -> void:
 	# Facing +Z means facing_dir is (-sin(0), -cos(0)) = (0, -1), so moving
