@@ -42,7 +42,7 @@ func is_ready() -> bool:
 
 
 func capture(registry: PlayerRegistry, puck_controller: PuckController, goalie_controllers: Array) -> void:
-	var now: float = Time.get_ticks_msec() / 1000.0
+	var now: float = Time.get_ticks_usec() / 1_000_000.0
 
 	for peer_id: int in registry.all():
 		if not _skater_buffers.has(peer_id):
@@ -142,7 +142,7 @@ func _interpolate_skater(peer_id: int, ts: float) -> SkaterNetworkState:
 	result.blade_position = from_s.blade_position.lerp(to_s.blade_position, t)
 	result.blade_contact_world = from_s.blade_contact_world.lerp(to_s.blade_contact_world, t)
 	result.top_hand_position = from_s.top_hand_position.lerp(to_s.top_hand_position, t)
-	result.upper_body_rotation_y = lerpf(from_s.upper_body_rotation_y, to_s.upper_body_rotation_y, t)
+	result.upper_body_rotation_y = lerp_angle(from_s.upper_body_rotation_y, to_s.upper_body_rotation_y, t)
 	result.facing = BufferedStateInterpolator.lerp_facing(from_s.facing, to_s.facing, t)
 	result.is_ghost = to_s.is_ghost
 	result.host_timestamp = ts
@@ -193,7 +193,9 @@ func _find_bracket(buf: Array, write_ptr: int, ts: float) -> Array:
 	var prev: int = (i - 1 + BUFFER_SIZE) % BUFFER_SIZE
 	while prev != write_ptr:
 		var s: SkaterNetworkState = buf[prev]
-		if s.host_timestamp == 0.0 or s.host_timestamp <= ts:
+		if s.host_timestamp == 0.0:
+			break  # walked into uninitialized region — no valid bracket
+		if s.host_timestamp <= ts:
 			var from_s: SkaterNetworkState = buf[prev]
 			var to_s: SkaterNetworkState = buf[i]
 			var dt: float = to_s.host_timestamp - from_s.host_timestamp
@@ -216,7 +218,9 @@ func _find_bracket_puck(ts: float) -> Array:
 	var prev: int = (i - 1 + BUFFER_SIZE) % BUFFER_SIZE
 	while prev != _puck_ptr:
 		var s: PuckNetworkState = _puck_buffer[prev]
-		if s.host_timestamp == 0.0 or s.host_timestamp <= ts:
+		if s.host_timestamp == 0.0:
+			break  # walked into uninitialized region — no valid bracket
+		if s.host_timestamp <= ts:
 			var from_p: PuckNetworkState = _puck_buffer[prev]
 			var to_p: PuckNetworkState = _puck_buffer[i]
 			var dt: float = to_p.host_timestamp - from_p.host_timestamp
@@ -241,7 +245,9 @@ func _find_bracket_goalie(team_id: int, ts: float) -> Array:
 	var prev: int = (i - 1 + BUFFER_SIZE) % BUFFER_SIZE
 	while prev != write_ptr:
 		var s: GoalieNetworkState = buf[prev]
-		if s.host_timestamp == 0.0 or s.host_timestamp <= ts:
+		if s.host_timestamp == 0.0:
+			break  # walked into uninitialized region — no valid bracket
+		if s.host_timestamp <= ts:
 			var from_g: GoalieNetworkState = buf[prev]
 			var to_g: GoalieNetworkState = buf[i]
 			var dt: float = to_g.host_timestamp - from_g.host_timestamp

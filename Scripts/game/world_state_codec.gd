@@ -309,7 +309,7 @@ static func _encode_puck_quantized(s: PuckNetworkState) -> PackedByteArray:
 	b.encode_s16(o, clampi(roundi(s.position.z * 100.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.velocity.x * 50.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.velocity.y * 50.0), -32768, 32767)); o += 2
-	b.encode_s16(o, clampi(roundi(s.velocity.z * 50.0), -32768, 32767))
+	b.encode_s16(o, clampi(roundi(s.velocity.z * 50.0), -32768, 32767)); o += 2
 	return b
 
 
