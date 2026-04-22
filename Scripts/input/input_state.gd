@@ -56,7 +56,7 @@ func to_bytes() -> PackedByteArray:
 	var flags: int = (
 		(0x001 if shoot_pressed  else 0) | (0x002 if shoot_held     else 0) |
 		(0x004 if slap_pressed   else 0) | (0x008 if slap_held      else 0) |
-		                                   (0x020 if brake          else 0) |
+										   (0x020 if brake          else 0) |
 		(0x040 if elevation_up   else 0) | (0x080 if elevation_down else 0) |
 		(0x100 if block_held     else 0))
 	b.encode_u16(21, flags)
