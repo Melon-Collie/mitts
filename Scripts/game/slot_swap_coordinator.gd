@@ -88,15 +88,21 @@ func apply_confirmed_swap(
 	var colors: Dictionary = TeamColorRegistry.get_colors(_teams[new_team_id].color_id, new_team_id)
 	record.team               = _teams[new_team_id]
 	record.team_slot          = new_slot
-	record.jersey_color       = jersey
-	record.helmet_color       = helmet
-	record.pants_color        = pants
-	record.secondary_color    = colors.secondary
-	record.text_color         = colors.text
-	record.text_outline_color = colors.text_outline
-	record.faceoff_position   = PlayerRules.faceoff_position(new_team_id, new_slot)
-	record.skater.set_player_color(jersey, helmet, pants)
+	record.jersey_color        = jersey
+	record.helmet_color        = helmet
+	record.pants_color         = pants
+	record.jersey_stripe_color = colors.jersey_stripe
+	record.gloves_color        = colors.gloves
+	record.pants_stripe_color  = colors.pants_stripe
+	record.socks_color         = colors.socks
+	record.socks_stripe_color  = colors.socks_stripe
+	record.secondary_color     = colors.secondary
+	record.text_color          = colors.text
+	record.text_outline_color  = colors.text_outline
+	record.faceoff_position    = PlayerRules.faceoff_position(new_team_id, new_slot)
+	record.skater.set_player_color(jersey, helmet, pants, colors.gloves, colors.socks)
 	record.skater.set_ring_color(PlayerRules.slot_color(new_team_id, new_slot))
 	record.skater.set_jersey_info(record.player_name, record.jersey_number, colors.text)
+	record.skater.set_jersey_stripes(colors.jersey_stripe, colors.pants_stripe, colors.socks_stripe)
 	record.controller.teleport_to(record.faceoff_position)
 	stats_updated.emit()

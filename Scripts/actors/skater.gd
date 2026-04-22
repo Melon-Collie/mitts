@@ -89,6 +89,12 @@ var forearm_mesh: MeshInstance3D = null
 var bottom_upper_arm_mesh: MeshInstance3D = null
 var bottom_forearm_mesh: MeshInstance3D = null
 
+# Optional glove and sock meshes. Resolved from scene nodes in _ready;
+# guarded by null-checks so the skater works before the user adds the meshes.
+var _glove_top_mesh: MeshInstance3D = null
+var _glove_bottom_mesh: MeshInstance3D = null
+var _sock_mesh: MeshInstance3D = null
+
 signal body_checked_player(victim: Skater, impact_force: float, hit_direction: Vector3)
 signal body_check_impulse_applied(impulse: Vector3)
 signal body_block_hit(body: Node3D)
@@ -124,112 +130,6 @@ var visual_offset: Vector3 = Vector3.ZERO:
 		if mesh_root != null:
 			mesh_root.position = global_transform.basis.inverse() * v
 
-# 5×7 pixel font. Each entry is 7 row-bitmasks (MSB = leftmost of 5 columns).
-const _JERSEY_FONT: Dictionary = {
-	"0": [14,17,17,17,17,17,14], "1": [4,12,4,4,4,4,14],
-	"2": [14,17,1,2,4,8,31],    "3": [14,17,1,6,1,17,14],
-	"4": [2,6,10,18,31,2,2],    "5": [31,16,16,30,1,1,30],
-	"6": [6,8,16,30,17,17,14],  "7": [31,1,2,4,8,8,8],
-	"8": [14,17,17,14,17,17,14],"9": [14,17,17,15,1,2,12],
-	"A": [14,17,17,31,17,17,17],"B": [30,17,17,30,17,17,30],
-	"C": [14,17,16,16,16,17,14],"D": [30,17,17,17,17,17,30],
-	"E": [31,16,16,30,16,16,31],"F": [31,16,16,30,16,16,16],
-	"G": [14,17,16,23,17,17,14],"H": [17,17,17,31,17,17,17],
-	"I": [14,4,4,4,4,4,14],     "J": [7,1,1,1,1,17,14],
-	"K": [17,18,20,24,20,18,17],"L": [16,16,16,16,16,16,31],
-	"M": [17,27,21,17,17,17,17],"N": [17,25,21,19,17,17,17],
-	"O": [14,17,17,17,17,17,14],"P": [30,17,17,30,16,16,16],
-	"Q": [14,17,17,17,21,18,13],"R": [30,17,17,30,20,18,17],
-	"S": [14,17,16,14,1,17,14], "T": [31,4,4,4,4,4,4],
-	"U": [17,17,17,17,17,17,14],"V": [17,17,17,17,10,10,4],
-	"W": [17,17,17,21,21,27,17],"X": [17,10,10,4,10,10,17],
-	"Y": [17,17,10,4,4,4,4],    "Z": [31,1,2,4,8,16,31],
-	" ": [0,0,0,0,0,0,0],
-}
-
-func _draw_jersey_glyph(img: Image, ch: String, x: int, y: int, glyph_scale: int, color: Color) -> void:
-	var rows: Array = _JERSEY_FONT.get(ch.to_upper(), _JERSEY_FONT[" "])
-	for row: int in rows.size():
-		var bits: int = rows[row]
-		for col: int in 5:
-			if bits & (1 << (4 - col)):
-				for sy: int in glyph_scale:
-					for sx: int in glyph_scale:
-						var px: int = x + col * glyph_scale + sx
-						var py: int = y + row * glyph_scale + sy
-						if px >= 0 and px < img.get_width() and py >= 0 and py < img.get_height():
-							img.set_pixel(px, py, color)
-
-func _make_jersey_texture(p_name: String, number: int, text_color: Color) -> ImageTexture:
-	const IMG_W: int = 256
-	const IMG_H: int = 192
-	const NUM_SCALE: int = 18
-	const NAME_SCALE: int = 5
-	const GLYPH_W: int = 5
-	const GLYPH_H: int = 7
-
-	var img := Image.create(IMG_W, IMG_H, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0.0, 0.0, 0.0, 0.0))
-
-	# Name — on top
-	var name_upper: String = p_name.to_upper()
-	var char_w_name: int = GLYPH_W * NAME_SCALE
-	var gap_name: int = NAME_SCALE
-	var total_w_name: int = name_upper.length() * char_w_name + (name_upper.length() - 1) * gap_name
-	var name_x: int = int((IMG_W - total_w_name) / 2.0)
-	var name_y: int = 2
-	for i: int in name_upper.length():
-		_draw_jersey_glyph(img, name_upper[i], name_x + i * (char_w_name + gap_name), name_y, NAME_SCALE, text_color)
-
-	# Number — large, centered, below name
-	var num_str: String = str(number)
-	var char_w_num: int = GLYPH_W * NUM_SCALE
-	var gap_num: int = NUM_SCALE
-	var total_w_num: int = num_str.length() * char_w_num + (num_str.length() - 1) * gap_num
-	var num_x: int = int((IMG_W - total_w_num) / 2.0)
-	var num_y: int = name_y + GLYPH_H * NAME_SCALE + 6
-	for i: int in num_str.length():
-		_draw_jersey_glyph(img, num_str[i], num_x + i * (char_w_num + gap_num), num_y, NUM_SCALE, text_color)
-
-	return ImageTexture.create_from_image(img)
-
-func _make_shoulder_texture(number: int, text_color: Color) -> ImageTexture:
-	const IMG_W: int = 128
-	const IMG_H: int = 128
-	const NUM_SCALE: int = 10
-	const GLYPH_W: int = 5
-	const GLYPH_H: int = 7
-
-	var img := Image.create(IMG_W, IMG_H, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0.0, 0.0, 0.0, 0.0))
-
-	var num_str: String = str(number)
-	var char_w: int = GLYPH_W * NUM_SCALE
-	var gap: int = NUM_SCALE
-	var total_w: int = num_str.length() * char_w + (num_str.length() - 1) * gap
-	var x: int = int((IMG_W - total_w) / 2.0)
-	var y: int = int((IMG_H - GLYPH_H * NUM_SCALE) / 2.0)
-	for i: int in num_str.length():
-		_draw_jersey_glyph(img, num_str[i], x + i * (char_w + gap), y, NUM_SCALE, text_color)
-
-	return ImageTexture.create_from_image(img)
-
-func _make_shoulder_mesh(tex: ImageTexture, x_side: float) -> MeshInstance3D:
-	var mat := StandardMaterial3D.new()
-	mat.albedo_texture = tex
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.no_depth_test = false
-
-	var quad := QuadMesh.new()
-	quad.size = Vector2(0.18, 0.18)
-
-	var mesh_inst := MeshInstance3D.new()
-	mesh_inst.mesh = quad
-	mesh_inst.material_override = mat
-	mesh_inst.position = Vector3(x_side, 0.635, 0.0)
-	mesh_inst.rotation_degrees = Vector3(-90.0, 90.0 * sign(x_side), 0.0)
-	return mesh_inst
 
 func _ready() -> void:
 	# Shoulder anchors the top hand. The top hand lives on the OPPOSITE side
@@ -322,6 +222,10 @@ func _ready() -> void:
 	forearm_mesh = _resolve_or_create_bone_mesh("ForearmMesh")
 	bottom_upper_arm_mesh = _resolve_or_create_bone_mesh("BottomUpperArmMesh")
 	bottom_forearm_mesh = _resolve_or_create_bone_mesh("BottomForearmMesh")
+
+	_glove_top_mesh    = upper_body.get_node_or_null("GloveTopMesh") as MeshInstance3D
+	_glove_bottom_mesh = upper_body.get_node_or_null("GloveBottomMesh") as MeshInstance3D
+	_sock_mesh         = lower_body.get_node_or_null("SockMesh") as MeshInstance3D
 
 	_ring_mesh = MeshInstance3D.new()
 	_ring_mesh.name = "RingIndicator"
@@ -422,9 +326,19 @@ func set_lower_body_lag(angle: float) -> void:
 func get_facing() -> Vector2:
 	return _facing
 
-func set_player_color(jersey_color: Color, helmet_color: Color, pants_color: Color) -> void:
-	var jersey_mat := StandardMaterial3D.new()
-	jersey_mat.albedo_color = jersey_color
+func _make_solid_mat(color: Color) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	return mat
+
+
+func set_player_color(
+		jersey_color: Color,
+		helmet_color: Color,
+		pants_color: Color,
+		gloves_color: Color,
+		socks_color: Color) -> void:
+	var jersey_mat: StandardMaterial3D = _make_solid_mat(jersey_color)
 	_upper_body_mesh.material_override = jersey_mat
 	_blade_mesh.material_override = jersey_mat.duplicate()
 	if upper_arm_mesh != null:
@@ -435,16 +349,17 @@ func set_player_color(jersey_color: Color, helmet_color: Color, pants_color: Col
 		bottom_upper_arm_mesh.material_override = jersey_mat.duplicate()
 	if bottom_forearm_mesh != null:
 		bottom_forearm_mesh.material_override = jersey_mat.duplicate()
-	var helmet_mat := StandardMaterial3D.new()
-	helmet_mat.albedo_color = helmet_color
-	_direction_indicator.material_override = helmet_mat
-	var pants_mat := StandardMaterial3D.new()
-	pants_mat.albedo_color = pants_color
-	_lower_body_mesh.material_override = pants_mat
+	_direction_indicator.material_override = _make_solid_mat(helmet_color)
+	_lower_body_mesh.material_override = _make_solid_mat(pants_color)
+	if _glove_top_mesh != null:
+		_glove_top_mesh.material_override = _make_solid_mat(gloves_color)
+	if _glove_bottom_mesh != null:
+		_glove_bottom_mesh.material_override = _make_solid_mat(gloves_color)
+	if _sock_mesh != null:
+		_sock_mesh.material_override = _make_solid_mat(socks_color)
 	# Fixed stick shaft color — set explicitly so ghost mode never creates a
 	# blank gray override and corrupts the color after ghost ends.
-	var stick_mat := StandardMaterial3D.new()
-	stick_mat.albedo_color = Color(0.705, 0.640, 0.605)
+	var stick_mat: StandardMaterial3D = _make_solid_mat(Color(0.705, 0.640, 0.605))
 	stick_mesh.material_override = stick_mat
 
 func set_ring_color(color: Color) -> void:
@@ -464,7 +379,7 @@ func set_jersey_info(p_name: String, number: int, text_color: Color) -> void:
 		if child.name in ["JerseyBackMesh", "JerseyShoulderL", "JerseyShoulderR"]:
 			child.queue_free()
 
-	var tex := _make_jersey_texture(p_name, number, text_color)
+	var tex: ImageTexture = JerseyTextureGenerator.make_jersey_texture(p_name, number, text_color)
 
 	var mat := StandardMaterial3D.new()
 	mat.albedo_texture = tex
@@ -485,13 +400,75 @@ func set_jersey_info(p_name: String, number: int, text_color: Color) -> void:
 	mesh_inst.position = Vector3(0.0, 0.36, 0.15)
 	upper_body.add_child(mesh_inst)
 
-	var shoulder_tex := _make_shoulder_texture(number, text_color)
-	var left_shoulder := _make_shoulder_mesh(shoulder_tex, -0.14)
+	var shoulder_tex: ImageTexture = JerseyTextureGenerator.make_shoulder_texture(number, text_color)
+	var left_shoulder: MeshInstance3D = JerseyTextureGenerator.make_shoulder_mesh(shoulder_tex, -0.14)
 	left_shoulder.name = "JerseyShoulderL"
-	var right_shoulder := _make_shoulder_mesh(shoulder_tex, 0.14)
+	var right_shoulder: MeshInstance3D = JerseyTextureGenerator.make_shoulder_mesh(shoulder_tex, 0.14)
 	right_shoulder.name = "JerseyShoulderR"
 	upper_body.add_child(left_shoulder)
 	upper_body.add_child(right_shoulder)
+
+
+func set_jersey_stripes(
+		jersey_stripe_color: Color,
+		pants_stripe_color: Color,
+		socks_stripe_color: Color) -> void:
+	# Remove any previously generated stripe nodes.
+	for node: Node in upper_body.get_children():
+		if node.name.begins_with("Stripe_"):
+			node.queue_free()
+	for node: Node in lower_body.get_children():
+		if node.name.begins_with("Stripe_"):
+			node.queue_free()
+	if top_hand != null:
+		for node: Node in top_hand.get_children():
+			if node.name.begins_with("Stripe_"):
+				node.queue_free()
+	if bottom_hand != null:
+		for node: Node in bottom_hand.get_children():
+			if node.name.begins_with("Stripe_"):
+				node.queue_free()
+
+	# Jersey hem band — bottom 0.08 m of the UpperBodyMesh
+	# (BoxMesh 0.5×0.65×0.28, center (0,0.3,0) → bottom at y = -0.025).
+	var hem_quads: Array = JerseyTextureGenerator.make_box_stripe_band(
+			Vector3(0.0, 0.3, 0.0), Vector3(0.25, 0.325, 0.14),
+			-0.025, 0.08, jersey_stripe_color, "Stripe_JerseyHem")
+	for q: MeshInstance3D in hem_quads:
+		upper_body.add_child(q)
+
+	# Sleeve cuff band — around the wrist at top_hand / bottom_hand positions.
+	var cuff_half: float = arm_mesh_thickness * 0.5 + 0.01
+	if top_hand != null:
+		var top_cuffs: Array = JerseyTextureGenerator.make_sleeve_cuff(
+				cuff_half, 0.06, jersey_stripe_color, "Stripe_CuffTop")
+		for q: MeshInstance3D in top_cuffs:
+			top_hand.add_child(q)
+	if bottom_hand != null:
+		var bot_cuffs: Array = JerseyTextureGenerator.make_sleeve_cuff(
+				cuff_half, 0.06, jersey_stripe_color, "Stripe_CuffBot")
+		for q: MeshInstance3D in bot_cuffs:
+			bottom_hand.add_child(q)
+
+	# Pants side stripe — full-height vertical piping on the ±X faces
+	# (LowerBodyMesh BoxMesh 0.45×0.95×0.3, center (0,−0.5,0)).
+	var pants_quads: Array = JerseyTextureGenerator.make_box_side_stripe(
+			Vector3(0.0, -0.5, 0.0), Vector3(0.225, 0.475, 0.15),
+			0.07, pants_stripe_color, "Stripe_Pants")
+	for q: MeshInstance3D in pants_quads:
+		lower_body.add_child(q)
+
+	# Sock stripe — if SockMesh is present in the scene.
+	if _sock_mesh != null:
+		var sock_box: BoxMesh = _sock_mesh.mesh as BoxMesh
+		if sock_box != null:
+			var sh: Vector3 = sock_box.size * 0.5
+			var sc: Vector3 = _sock_mesh.position
+			var sock_quads: Array = JerseyTextureGenerator.make_box_stripe_band(
+					sc, sh, sc.y + sh.y * 0.3, sh.y * 0.4,
+					socks_stripe_color, "Stripe_Sock")
+			for q: MeshInstance3D in sock_quads:
+				lower_body.add_child(q)
 
 # ── Blade ─────────────────────────────────────────────────────────────────────
 func set_blade_position(pos: Vector3) -> void:

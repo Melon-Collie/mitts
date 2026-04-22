@@ -184,6 +184,7 @@ func on_slot_assigned(team_slot: int, team_id: int, jersey_color: Color, helmet_
 	_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
 	_registry.spawn(peer_id, team_slot, teams[team_id],
 			jersey_color, helmet_color, pants_color,
+			colors.jersey_stripe, colors.gloves, colors.pants_stripe, colors.socks, colors.socks_stripe,
 			colors.secondary, colors.text, colors.text_outline,
 			NetworkManager.local_is_left_handed, NetworkManager.local_player_name, true,
 			NetworkManager.local_jersey_number)
@@ -215,6 +216,7 @@ func on_player_connected(peer_id: int) -> void:
 			colors.jersey, colors.helmet, colors.pants, is_left, peer_name, peer_number)
 	_registry.spawn(peer_id, assignment.team_slot, team,
 			colors.jersey, colors.helmet, colors.pants,
+			colors.jersey_stripe, colors.gloves, colors.pants_stripe, colors.socks, colors.socks_stripe,
 			colors.secondary, colors.text, colors.text_outline,
 			is_left, peer_name, false, peer_number)
 
@@ -252,6 +254,7 @@ func sync_existing_players(player_data: Array) -> void:
 		_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
 		_registry.spawn(peer_id, team_slot, teams[team_id],
 				jersey_color, helmet_color, pants_color,
+				colors.jersey_stripe, colors.gloves, colors.pants_stripe, colors.socks, colors.socks_stripe,
 				colors.secondary, colors.text, colors.text_outline,
 				is_left, p_name, false, p_number)
 
@@ -265,6 +268,7 @@ func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int,
 	_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
 	_registry.spawn(peer_id, team_slot, teams[team_id],
 			jersey_color, helmet_color, pants_color,
+			colors.jersey_stripe, colors.gloves, colors.pants_stripe, colors.socks, colors.socks_stripe,
 			colors.secondary, colors.text, colors.text_outline,
 			is_left_handed, player_name, false, jersey_number)
 

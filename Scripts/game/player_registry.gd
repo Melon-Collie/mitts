@@ -58,6 +58,11 @@ func spawn(
 		jersey_color: Color,
 		helmet_color: Color,
 		pants_color: Color,
+		jersey_stripe_color: Color,
+		gloves_color: Color,
+		pants_stripe_color: Color,
+		socks_color: Color,
+		socks_stripe_color: Color,
 		secondary_color: Color,
 		text_color: Color,
 		text_outline_color: Color,
@@ -66,12 +71,17 @@ func spawn(
 		is_local: bool,
 		jersey_number: int = 10) -> PlayerRecord:
 	var record := PlayerRecord.new(peer_id, team_slot, is_local, team)
-	record.jersey_color       = jersey_color
-	record.helmet_color       = helmet_color
-	record.pants_color        = pants_color
-	record.secondary_color    = secondary_color
-	record.text_color         = text_color
-	record.text_outline_color = text_outline_color
+	record.jersey_color        = jersey_color
+	record.helmet_color        = helmet_color
+	record.pants_color         = pants_color
+	record.jersey_stripe_color = jersey_stripe_color
+	record.gloves_color        = gloves_color
+	record.pants_stripe_color  = pants_stripe_color
+	record.socks_color         = socks_color
+	record.socks_stripe_color  = socks_stripe_color
+	record.secondary_color     = secondary_color
+	record.text_color          = text_color
+	record.text_outline_color  = text_outline_color
 	record.is_left_handed = is_left_handed
 	record.player_name = player_name
 	record.jersey_number = jersey_number
@@ -82,16 +92,17 @@ func spawn(
 	var spawned: Dictionary
 	if is_local:
 		spawned = _spawner.spawn_local_player(
-				faceoff_pos, jersey_color, helmet_color, pants_color,
+				faceoff_pos, jersey_color, helmet_color, pants_color, gloves_color, socks_color,
 				is_left_handed, puck, _game_state_node, team.team_id)
 	else:
 		spawned = _spawner.spawn_remote_player(
-				faceoff_pos, jersey_color, helmet_color, pants_color,
+				faceoff_pos, jersey_color, helmet_color, pants_color, gloves_color, socks_color,
 				is_left_handed, puck, _game_state_node)
 	record.skater = spawned.skater
 	record.controller = spawned.controller
 	spawned.skater.set_ring_color(PlayerRules.slot_color(team.team_id, team_slot))
 	spawned.skater.set_jersey_info(player_name, jersey_number, text_color)
+	spawned.skater.set_jersey_stripes(jersey_stripe_color, pants_stripe_color, socks_stripe_color)
 	_players[peer_id] = record
 
 	if _spawn_wireup.is_valid():
