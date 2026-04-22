@@ -18,7 +18,7 @@ enum State {
 @export var max_speed: float = 9.0
 @export var move_deadzone: float = 0.1
 @export var brake_multiplier: float = 5.0
-@export var brake_redirect_speed_deg: float = 270.0  # deg/s velocity rotates toward input while carving
+@export var brake_redirect_speed_deg: float = 180.0  # deg/s velocity rotates toward input while carving
 @export var puck_carry_speed_multiplier: float = 0.85
 @export var backward_thrust_multiplier: float = 0.80
 @export var crossover_thrust_multiplier: float = 0.90
