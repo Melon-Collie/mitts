@@ -223,8 +223,8 @@
     {
       "id": "oilers",
       "name": "Edmonton",
-      "primary": "#003087",
-      "secondary": "#FF4C00",
+      "primary": "#FF4C00",
+      "secondary": "#003087",
       "home": {
         "helmet": "#003087",
         "jersey": "#003087",
