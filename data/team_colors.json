@@ -114,22 +114,22 @@
       "id": "blackhawks",
       "name": "Chicago",
       "primary": "#CF0A2C",
-      "secondary": "#111111",
+      "secondary": "#FFFFFF",
       "home": {
-        "helmet": "#CF0A2C",
+        "helmet": "#111111",
         "jersey": "#CF0A2C",
-        "pants": "#CF0A2C",
+        "pants": "#111111",
         "goalie_pads": "#FFFFFF",
-        "text": "#FFD100",
+        "text": "#FFFFFF",
         "text_outline": "#111111"
       },
       "away": {
-        "helmet": "#CF0A2C",
+        "helmet": "#FFFFFF",
         "jersey": "#FFFFFF",
-        "pants": "#FFFFFF",
+        "pants": "#111111",
         "goalie_pads": "#FFFFFF",
-        "text": "#CF0A2C",
-        "text_outline": "#111111"
+        "text": "#111111",
+        "text_outline": "#CF0A2C"
       }
     },
     {
