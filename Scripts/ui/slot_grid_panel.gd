@@ -18,12 +18,20 @@ var _buttons: Array = [[], []]
 var _num_labels:  Array = [[], []]
 var _name_labels: Array = [[], []]
 var _hand_labels: Array = [[], []]
+var _ping_labels: Array = [[], []]
+var _peer_ids:    Array = [[], []]   # stores peer_id per slot for timer refresh
 
 var _team_colors: Array[Dictionary] = []
-var _mono_font: SystemFont = null
 
 func _init() -> void:
 	_build_grid()
+
+func _ready() -> void:
+	var t := Timer.new()
+	t.wait_time = 2.0
+	t.autostart = true
+	t.timeout.connect(_refresh_pings)
+	add_child(t)
 
 func _build_grid() -> void:
 	add_theme_constant_override("separation", 6)
@@ -68,6 +76,9 @@ func _build_grid() -> void:
 		_num_labels[team_id].resize(PlayerRules.MAX_PER_TEAM)
 		_name_labels[team_id].resize(PlayerRules.MAX_PER_TEAM)
 		_hand_labels[team_id].resize(PlayerRules.MAX_PER_TEAM)
+		_ping_labels[team_id].resize(PlayerRules.MAX_PER_TEAM)
+		_peer_ids[team_id].resize(PlayerRules.MAX_PER_TEAM)
+		_peer_ids[team_id].fill(-1)
 
 		for col: int in _DISPLAY_ORDER.size():
 			var s: int = _DISPLAY_ORDER[col]
@@ -90,7 +101,6 @@ func _build_grid() -> void:
 			btn.add_child(hbox)
 
 			var num_lbl := Label.new()
-			num_lbl.add_theme_font_override("font", _get_mono_font())
 			num_lbl.add_theme_font_size_override("font_size", 33)
 			num_lbl.add_theme_constant_override("outline_size", 4)
 			num_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -108,14 +118,24 @@ func _build_grid() -> void:
 			hbox.add_child(name_lbl)
 			_name_labels[team_id][s] = name_lbl
 
+			var right_vbox := VBoxContainer.new()
+			right_vbox.add_theme_constant_override("separation", 1)
+			right_vbox.custom_minimum_size = Vector2(68, 0)
+			right_vbox.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			hbox.add_child(right_vbox)
+
 			var hand_lbl := Label.new()
-			hand_lbl.add_theme_font_override("font", _get_mono_font())
 			hand_lbl.add_theme_font_size_override("font_size", 18)
 			hand_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			hand_lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-			hand_lbl.custom_minimum_size = Vector2(68, 0)
-			hbox.add_child(hand_lbl)
+			right_vbox.add_child(hand_lbl)
 			_hand_labels[team_id][s] = hand_lbl
+
+			var ping_lbl := Label.new()
+			ping_lbl.add_theme_font_size_override("font_size", 11)
+			ping_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			right_vbox.add_child(ping_lbl)
+			_ping_labels[team_id][s] = ping_lbl
 
 # roster: Array of { team_id, slot, peer_id, player_name, jersey_number, is_left_handed }
 # local_peer_id: this client's peer ID
@@ -140,6 +160,7 @@ func _update_card(team_id: int, slot: int, entry, is_local: bool) -> void:
 	var num_lbl:   Label  = _num_labels[team_id][slot]
 	var name_lbl:  Label  = _name_labels[team_id][slot]
 	var hand_lbl:  Label  = _hand_labels[team_id][slot]
+	var ping_lbl:  Label  = _ping_labels[team_id][slot]
 
 	var jersey_c:  Color = _FALLBACK
 	var text_c:    Color = _WHITE
@@ -154,6 +175,7 @@ func _update_card(team_id: int, slot: int, entry, is_local: bool) -> void:
 	var pos_str: String = _POSITION_LABEL[slot]
 
 	if entry == null:
+		_peer_ids[team_id][slot] = -1
 		# Empty slot — clickable, dimmed jersey background.
 		_apply_style(btn, Color(jersey_c.r, jersey_c.g, jersey_c.b, 0.35),
 				Color(jersey_c.r, jersey_c.g, jersey_c.b, 0.50), false)
@@ -164,7 +186,10 @@ func _update_card(team_id: int, slot: int, entry, is_local: bool) -> void:
 		name_lbl.add_theme_color_override("font_color", Color(text_c.r, text_c.g, text_c.b, 0.45))
 		hand_lbl.text = " " + pos_str + " "
 		hand_lbl.add_theme_color_override("font_color", Color(text_c.r, text_c.g, text_c.b, 0.45))
+		ping_lbl.text = ""
 	elif is_local:
+		var peer_id: int = entry.get("peer_id", -1)
+		_peer_ids[team_id][slot] = peer_id
 		# Local player's slot — full color, disabled (can't switch to own slot).
 		_apply_style(btn, Color(jersey_c.r, jersey_c.g, jersey_c.b, 0.80),
 				Color(jersey_c.r, jersey_c.g, jersey_c.b, 0.80), true)
@@ -175,7 +200,11 @@ func _update_card(team_id: int, slot: int, entry, is_local: bool) -> void:
 		name_lbl.add_theme_color_override("font_color", text_c)
 		hand_lbl.text = _hand_str(slot, entry.get("is_left_handed", true))
 		hand_lbl.add_theme_color_override("font_color", text_c)
+		ping_lbl.text = _ping_str(peer_id)
+		ping_lbl.add_theme_color_override("font_color", Color(text_c.r, text_c.g, text_c.b, 0.65))
 	else:
+		var peer_id: int = entry.get("peer_id", -1)
+		_peer_ids[team_id][slot] = peer_id
 		# Another player's slot — full color, disabled.
 		_apply_style(btn, Color(jersey_c.r, jersey_c.g, jersey_c.b, 1.0),
 				Color(jersey_c.r, jersey_c.g, jersey_c.b, 1.0), true)
@@ -186,9 +215,11 @@ func _update_card(team_id: int, slot: int, entry, is_local: bool) -> void:
 		name_lbl.add_theme_color_override("font_color", text_c)
 		hand_lbl.text = _hand_str(slot, entry.get("is_left_handed", true))
 		hand_lbl.add_theme_color_override("font_color", text_c)
+		ping_lbl.text = _ping_str(peer_id)
+		ping_lbl.add_theme_color_override("font_color", Color(text_c.r, text_c.g, text_c.b, 0.65))
 
 func _fmt_num(n: int) -> String:
-	return ("%d " % n) if n < 10 else ("%d" % n)
+	return str(n)
 
 func _set_num(lbl: Label, text: String, color: Color, outline_color: Color, outline_size: int) -> void:
 	lbl.text = text
@@ -224,11 +255,20 @@ func _apply_style(btn: Button, normal_color: Color, disabled_color: Color, is_oc
 	if is_occupied:
 		btn.add_theme_color_override("font_disabled_color", Color(1, 1, 1, 1))
 
-func _get_mono_font() -> SystemFont:
-	if _mono_font == null:
-		_mono_font = SystemFont.new()
-		_mono_font.font_names = PackedStringArray(["Courier New", "Courier", "DejaVu Sans Mono", "Lucida Console", "monospace"])
-	return _mono_font
+func _ping_str(peer_id: int) -> String:
+	var local_id: int = multiplayer.get_unique_id()
+	if peer_id == local_id:
+		return "" if NetworkManager.is_host else "ping: %d" % int(NetworkManager.get_rtt_ms())
+	var p: int = NetworkManager.get_peer_ping_ms(peer_id)
+	return "ping: %d" % p if p > 0 else ""
+
+func _refresh_pings() -> void:
+	for team_id: int in 2:
+		for s: int in PlayerRules.MAX_PER_TEAM:
+			var peer_id: int = _peer_ids[team_id][s]
+			if peer_id < 0:
+				continue
+			_ping_labels[team_id][s].text = _ping_str(peer_id)
 
 func _hand_str(slot: int, is_left_handed: bool) -> String:
 	var pos: String = _POSITION_LABEL[slot]
