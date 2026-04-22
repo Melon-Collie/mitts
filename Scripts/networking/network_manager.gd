@@ -260,7 +260,10 @@ func _process(delta: float) -> void:
 		_ws_loss_window_timer += capped_delta
 		if _ws_loss_window_timer >= 1.0:
 			var total: int = _ws_recv_window + _ws_drop_window
-			packet_loss_pct = (float(_ws_drop_window) / float(total) * 100.0) if total > 0 else 0.0
+			var measured: float = (float(_ws_drop_window) / float(total) * 100.0) if total > 0 else 0.0
+			# EMA smoothing (α=0.3, ~3s memory) prevents a single bad second
+			# from swinging the batch-size threshold.
+			packet_loss_pct = lerpf(packet_loss_pct, measured, 0.3)
 			NetworkTelemetry.record_packet_loss(packet_loss_pct)
 			_ws_drop_window = 0
 			_ws_recv_window = 0

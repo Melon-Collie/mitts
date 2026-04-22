@@ -166,6 +166,9 @@ func decode_world_state(data: PackedByteArray) -> void:
 	# Goalies
 	var num_goalies: int = data.decode_u8(o); o += 1
 	for gi: int in mini(num_goalies, goalie_controllers.size()):
+		if o + GOALIE_BLOCK_SIZE > data.size():
+			push_warning("WorldStateCodec: truncated goalie block %d" % gi)
+			return
 		goalie_controllers[gi].apply_state(_decode_goalie_quantized(data.slice(o, o + GOALIE_BLOCK_SIZE)), host_ts)
 		o += GOALIE_BLOCK_SIZE
 	o += maxi(0, num_goalies - goalie_controllers.size()) * GOALIE_BLOCK_SIZE

@@ -305,6 +305,10 @@ func apply_state(state: PuckNetworkState, host_ts: float) -> void:
 				puck.set_puck_position(latency_corrected.position)
 				puck.set_puck_velocity(latency_corrected.velocity)
 				_state_buffer.clear()
+			else:
+				# Within snap threshold but still blend velocity each broadcast so
+				# friction / wall-normal divergence can't accumulate silently.
+				puck.set_puck_velocity(puck.get_puck_velocity().lerp(latency_corrected.velocity, 0.15))
 			return  # Don't buffer during prediction; interpolation isn't running
 	if not _state_buffer.is_empty() and host_ts < _state_buffer.back().timestamp:
 		return
