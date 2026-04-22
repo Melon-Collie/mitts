@@ -509,20 +509,20 @@
     {
       "id": "kraken",
       "name": "Seattle",
-      "primary": "#001628",
-      "secondary": "#68A2B9",
+      "primary": "#68A2B9",
+      "secondary": "#001628",
       "home": {
         "helmet": "#001628",
         "jersey": "#001628",
         "pants": "#001628",
         "goalie_pads": "#FFFFFF",
         "text": "#68A2B9",
-        "text_outline": "#001628"
+        "text_outline": "#68A2B9"
       },
       "away": {
-        "helmet": "#001628",
+        "helmet": "#FFFFFF",
         "jersey": "#FFFFFF",
-        "pants": "#FFFFFF",
+        "pants": "#001628",
         "goalie_pads": "#FFFFFF",
         "text": "#001628",
         "text_outline": "#68A2B9"
