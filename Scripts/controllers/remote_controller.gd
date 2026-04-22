@@ -80,6 +80,7 @@ func apply_network_state(state: SkaterNetworkState, host_ts: float) -> void:
 	if _is_host:
 		return
 	if not _state_buffer.is_empty() and host_ts < _state_buffer.back().timestamp:
+		NetworkTelemetry.record_ooo_drop()
 		return
 	var buffered := BufferedSkaterState.new()
 	buffered.timestamp = host_ts
@@ -118,7 +119,7 @@ func _interpolate() -> void:
 		interpolated.velocity = from_state.velocity.lerp(to_state.velocity, t)
 		interpolated.blade_position = from_state.blade_position.lerp(to_state.blade_position, t)
 		interpolated.top_hand_position = from_state.top_hand_position.lerp(to_state.top_hand_position, t)
-		interpolated.upper_body_rotation_y = lerpf(from_state.upper_body_rotation_y, to_state.upper_body_rotation_y, t)
+		interpolated.upper_body_rotation_y = lerp_angle(from_state.upper_body_rotation_y, to_state.upper_body_rotation_y, t)
 		interpolated.facing = BufferedStateInterpolator.lerp_facing(from_state.facing, to_state.facing, t)
 		# Boolean fields can't be lerped; take the freshest value so ghost-mode
 		# toggles flow through to remote skaters without a one-broadcast delay.

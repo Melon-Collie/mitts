@@ -105,7 +105,10 @@ func _physics_process(delta: float) -> void:
 	_current_input = input
 	_input_history.append(_current_input)
 	# Cap history size to prevent unbounded growth
-	if _input_history.size() > 480:  # 2 seconds at 240Hz
+	# Cap scales with RTT so sustained high-loss can't grow the buffer unboundedly:
+	# 2× RTT worth of frames (min 48, max 480) covers the full in-flight window.
+	var rtt_cap: int = clampi(int(NetworkManager.get_latest_rtt_ms() / 1000.0 * 240.0) * 2, 48, 480)
+	if _input_history.size() > rtt_cap:
 		_input_history.pop_front()
 	_process_input(_current_input, _current_input.delta)
 	var blade_pos: Vector3 = skater.get_blade_contact_global()
@@ -161,6 +164,14 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# Errors above 5 cm are real desync and still fire through.
 	if skater.is_on_wall() and skater.global_position.distance_to(server_state.position) < 0.05:
 		return
+	# Measure prediction drift before snapping to server position. In debug builds
+	# a large divergence indicates non-determinism (missing board clamp, wrong friction,
+	# uninjected impulse) that will recur every reconcile until the root cause is fixed.
+	var pre_replay_divergence: float = skater.global_position.distance_to(server_state.position)
+	NetworkTelemetry.record_prediction_divergence(pre_replay_divergence)
+	if OS.is_debug_build() and pre_replay_divergence > 0.10:
+		push_warning("Reconcile: pre-replay divergence %.3f m — possible non-determinism (inputs in replay: %d)" \
+				% [pre_replay_divergence, _input_history.size()])
 	# Save shot/state-machine state — replay can transition through shoot states
 	# (WRISTER_AIM → FOLLOW_THROUGH → SKATING) and leave _state wrong. Restore so
 	# the next _process_input runs the correct handler and blade doesn't teleport.
@@ -188,6 +199,9 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			skater.velocity += _body_check_impulse
 			_impulse_applied = true
 		skater.global_position += skater.velocity * input.delta
+		# Clamp to rink after every replay step — without this, a board bounce
+		# that differed by even one frame between client and host compounds into
+		# a divergence feedback loop that triggers repeated reconciles.
 		var unclamped_xz := Vector2(skater.global_position.x, skater.global_position.z)
 		var clamped_xz := GameRules.clamp_to_rink_inner(unclamped_xz)
 		if unclamped_xz.distance_squared_to(clamped_xz) > 1e-6:

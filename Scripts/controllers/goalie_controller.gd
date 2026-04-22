@@ -80,6 +80,8 @@ var _state: State = State.STANDING
 var _current_depth: float = 0.1
 var _current_x: float = 0.0
 var _target_x: float = 0.0
+var _velocity_x: float = 0.0
+var _velocity_z: float = 0.0
 var _five_hole_openness: float = 0.0
 var _tracked_puck_position: Vector3 = Vector3.ZERO
 var _shot_timer: float = 0.0
@@ -253,6 +255,8 @@ func _update_depth(delta: float) -> void:
 
 # ── Position ──────────────────────────────────────────────────────────────────
 func _update_position(delta: float) -> void:
+	var prev_x: float = _current_x
+	var prev_z: float = _goal_line_z + _direction_sign * _current_depth
 	match _state:
 		State.STANDING:
 			_update_lateral_standing(delta)
@@ -279,7 +283,11 @@ func _update_position(delta: float) -> void:
 			_current_x = move_toward(_current_x, _goal_center_x + (net_half_width - 0.38) * _direction_sign, rvh_transition_speed * delta)
 		State.RVH_RIGHT:
 			_current_x = move_toward(_current_x, _goal_center_x - (net_half_width - 0.38) * _direction_sign, rvh_transition_speed * delta)
-	goalie.set_goalie_position(_current_x, _goal_line_z + _direction_sign * _current_depth)
+	var new_z: float = _goal_line_z + _direction_sign * _current_depth
+	if delta > 0.0:
+		_velocity_x = (_current_x - prev_x) / delta
+		_velocity_z = (new_z - prev_z) / delta
+	goalie.set_goalie_position(_current_x, new_z)
 
 func _update_target_x() -> void:
 	_target_x = GoalieBehaviorRules.target_lateral_x(
@@ -456,6 +464,8 @@ func get_state() -> GoalieNetworkState:
 	s.rotation_y = goalie.get_goalie_rotation_y()
 	s.state_enum = _state as int
 	s.five_hole_openness = _five_hole_openness
+	s.velocity_x = _velocity_x
+	s.velocity_z = _velocity_z
 	return s
 
 func apply_state(network_state: GoalieNetworkState, host_ts: float) -> void:
@@ -483,13 +493,15 @@ func _interpolate() -> void:
 		return
 	var interpolated := GoalieNetworkState.new()
 	if bracket.is_extrapolating:
-		# GoalieNetworkState has no velocity field — hold the newest known state.
 		var newest: GoalieNetworkState = bracket.to_state
-		interpolated.position_x = newest.position_x
-		interpolated.position_z = newest.position_z
+		var dt: float = minf(bracket.extrapolation_dt, extrapolation_max_ms / 1000.0)
+		interpolated.position_x = newest.position_x + newest.velocity_x * dt
+		interpolated.position_z = newest.position_z + newest.velocity_z * dt
 		interpolated.rotation_y = newest.rotation_y
 		interpolated.five_hole_openness = newest.five_hole_openness
 		interpolated.state_enum = newest.state_enum
+		interpolated.velocity_x = newest.velocity_x
+		interpolated.velocity_z = newest.velocity_z
 	else:
 		var from_state: GoalieNetworkState = bracket.from_state
 		var to_state: GoalieNetworkState = bracket.to_state

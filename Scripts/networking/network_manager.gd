@@ -190,6 +190,7 @@ func reset() -> void:
 	pending_away_color_id = TeamColorRegistry.DEFAULT_AWAY_ID
 	_input_timer = 0.0
 	_state_timer = 0.0
+	state_delta = 1.0 / Constants.STATE_RATE
 	_connect_timer = -1.0
 	_clock_sync = null
 	_last_ws_seq_received = -1
@@ -260,7 +261,10 @@ func _process(delta: float) -> void:
 		_ws_loss_window_timer += capped_delta
 		if _ws_loss_window_timer >= 1.0:
 			var total: int = _ws_recv_window + _ws_drop_window
-			packet_loss_pct = (float(_ws_drop_window) / float(total) * 100.0) if total > 0 else 0.0
+			var measured: float = (float(_ws_drop_window) / float(total) * 100.0) if total > 0 else 0.0
+			# EMA smoothing (α=0.3, ~3s memory) prevents a single bad second
+			# from swinging the batch-size threshold.
+			packet_loss_pct = lerpf(packet_loss_pct, measured, 0.3)
 			NetworkTelemetry.record_packet_loss(packet_loss_pct)
 			_ws_drop_window = 0
 			_ws_recv_window = 0
@@ -281,6 +285,9 @@ func _process(delta: float) -> void:
 				_peer_echo_drop_window[pid] = 0
 				_peer_echo_recv_window[pid] = 0
 			_peer_loss_timer = 0.0
+
+func set_broadcast_rate(hz: float) -> void:
+	state_delta = 1.0 / maxf(hz, 1.0)
 
 func _broadcast_state() -> void:
 	if not _world_state_provider.is_valid():

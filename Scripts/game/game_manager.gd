@@ -402,6 +402,7 @@ func _wire_subsystems() -> void:
 		for gc: GoalieController in goalie_controllers:
 			gc.state_transitioned.connect(NetworkManager.send_goalie_state_transition_to_all)
 			gc.shot_reaction_started.connect(NetworkManager.send_goalie_shot_reaction_to_all)
+		_phase_coord.phase_changed.connect(_on_phase_for_broadcast_rate)
 
 	_telemetry = NetworkTelemetry.new()
 	NetworkTelemetry.instance = _telemetry
@@ -711,6 +712,13 @@ func _on_stats_received(data: Array) -> void:
 	if _codec != null:
 		_codec.decode_stats(data)
 	stats_updated.emit()
+
+
+func _on_phase_for_broadcast_rate(new_phase: GamePhase.Phase) -> void:
+	# Drop to 5 Hz during dead-puck phases (goal, prep, end-of-period, game-over)
+	# where positions don't change, recovering ~40% of session broadcast bandwidth.
+	var hz: float = 5.0 if PhaseRules.is_movement_locked(new_phase) else Constants.STATE_RATE
+	NetworkManager.set_broadcast_rate(hz)
 
 
 func _on_remote_phase_changed(new_phase: GamePhase.Phase) -> void:

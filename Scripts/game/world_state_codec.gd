@@ -12,10 +12,10 @@ extends RefCounted
 #      u16 ws_sequence, f32 host_capture_time, u8 num_skaters
 #      [u32 peer_id, skater_bytes(35), u8 queue_depth] × num_skaters
 #      puck_bytes(12)
-#      u8 num_goalies, [goalie_bytes(8)] × num_goalies
+#      u8 num_goalies, [goalie_bytes(12)] × num_goalies
 #      u8 score0, u8 score1, u8 phase, u8 period, u16 time_remaining
 #
-#    Total for 6 players + 2 goalies: 282 bytes (well under 1392-byte ENet MTU)
+#    Total for 6 players + 2 goalies: 290 bytes (well under 1392-byte ENet MTU)
 #
 #    Quantization layout:
 #      Skater  (35 B): pos s16/s8/s16@1cm, vel 3×s16@0.02m/s,
@@ -24,7 +24,7 @@ extends RefCounted
 #                      last_processed_ts f32, flags u8 (shot_state[3:0]+ghost[4]),
 #                      shot_charge u8
 #      Puck    (12 B): pos s16/s8/s16@1cm, vel 3×s16@0.02m/s, carrier_idx u8 (0xFF=none)
-#      Goalie   (8 B): pos_x s16@1cm, pos_z s16@1cm, rot_y s16@π/32767, state u8, fho u8
+#      Goalie  (12 B): pos_x s16@1cm, pos_z s16@1cm, rot_y s16@π/32767, state u8, fho u8, vel_x s16@0.02m/s, vel_z s16@0.02m/s
 #
 # 2. Stats  (reliable, event-driven):
 #      [pid, G, A, SOG, HITS] × N players
@@ -45,7 +45,7 @@ signal queue_depth_feedback(depth: int)
 const WS_HEADER_SIZE: int = 7      # u16 ws_seq (2) + f32 host_capture_time (4) + u8 num_skaters (1)
 const SKATER_BLOCK_SIZE: int = 40  # u32 peer_id (4) + 35B skater state + u8 queue_depth (1)
 const PUCK_BLOCK_SIZE: int = 12    # 11B pos+vel + 1B carrier_idx
-const GOALIE_BLOCK_SIZE: int = 8
+const GOALIE_BLOCK_SIZE: int = 12
 const GAME_STATE_BLOCK_SIZE: int = 6  # 4×u8 + u16 time_remaining
 const STATS_PLAYER_RECORD_SIZE: int = 5  # peer_id, G, A, SOG, HITS
 
@@ -166,6 +166,9 @@ func decode_world_state(data: PackedByteArray) -> void:
 	# Goalies
 	var num_goalies: int = data.decode_u8(o); o += 1
 	for gi: int in mini(num_goalies, goalie_controllers.size()):
+		if o + GOALIE_BLOCK_SIZE > data.size():
+			push_warning("WorldStateCodec: truncated goalie block %d" % gi)
+			return
 		goalie_controllers[gi].apply_state(_decode_goalie_quantized(data.slice(o, o + GOALIE_BLOCK_SIZE)), host_ts)
 		o += GOALIE_BLOCK_SIZE
 	o += maxi(0, num_goalies - goalie_controllers.size()) * GOALIE_BLOCK_SIZE
@@ -260,7 +263,7 @@ static func _encode_skater_quantized(s: SkaterNetworkState) -> PackedByteArray:
 	b.encode_s16(o, clampi(roundi(s.top_hand_position.x * 100.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.top_hand_position.y * 100.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.top_hand_position.z * 100.0), -32768, 32767)); o += 2
-	var angle: float = atan2(s.facing.y, s.facing.x)
+	var angle: float = atan2(s.facing.x, s.facing.y)
 	if angle < 0.0:
 		angle += TAU
 	b.encode_u16(o, roundi(angle / TAU * 65535.0) & 0xFFFF); o += 2
@@ -288,7 +291,7 @@ static func _decode_skater_quantized(b: PackedByteArray) -> SkaterNetworkState:
 	s.top_hand_position.y = b.decode_s16(o) / 100.0; o += 2
 	s.top_hand_position.z = b.decode_s16(o) / 100.0; o += 2
 	var angle: float = b.decode_u16(o) / 65535.0 * TAU; o += 2
-	s.facing = Vector2(cos(angle), sin(angle))
+	s.facing = Vector2(sin(angle), cos(angle))
 	s.upper_body_rotation_y = b.decode_s16(o) / 32767.0 * PI; o += 2
 	s.last_processed_host_timestamp = b.decode_float(o); o += 4
 	var flags: int = b.decode_u8(o); o += 1
@@ -309,7 +312,7 @@ static func _encode_puck_quantized(s: PuckNetworkState) -> PackedByteArray:
 	b.encode_s16(o, clampi(roundi(s.position.z * 100.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.velocity.x * 50.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.velocity.y * 50.0), -32768, 32767)); o += 2
-	b.encode_s16(o, clampi(roundi(s.velocity.z * 50.0), -32768, 32767))
+	b.encode_s16(o, clampi(roundi(s.velocity.z * 50.0), -32768, 32767)); o += 2
 	return b
 
 
@@ -325,17 +328,19 @@ static func _decode_puck_quantized(b: PackedByteArray) -> PuckNetworkState:
 	return s
 
 
-# Goalie: 8 bytes
-# Offsets: pos_x(0..1) pos_z(2..3) rot_y(4..5) state(6) fho(7)
+# Goalie: 12 bytes
+# Offsets: pos_x(0..1) pos_z(2..3) rot_y(4..5) state(6) fho(7) vel_x(8..9) vel_z(10..11)
 static func _encode_goalie_quantized(s: GoalieNetworkState) -> PackedByteArray:
 	var b := PackedByteArray()
-	b.resize(8)
+	b.resize(12)
 	var o: int = 0
 	b.encode_s16(o, clampi(roundi(s.position_x * 100.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.position_z * 100.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.rotation_y / PI * 32767.0), -32768, 32767)); o += 2
 	b.encode_u8(o, s.state_enum); o += 1
-	b.encode_u8(o, clampi(roundi(s.five_hole_openness * 255.0), 0, 255))
+	b.encode_u8(o, clampi(roundi(s.five_hole_openness * 255.0), 0, 255)); o += 1
+	b.encode_s16(o, clampi(roundi(s.velocity_x * 50.0), -32768, 32767)); o += 2
+	b.encode_s16(o, clampi(roundi(s.velocity_z * 50.0), -32768, 32767))
 	return b
 
 
@@ -346,5 +351,8 @@ static func _decode_goalie_quantized(b: PackedByteArray) -> GoalieNetworkState:
 	s.position_z = b.decode_s16(o) / 100.0; o += 2
 	s.rotation_y = b.decode_s16(o) / 32767.0 * PI; o += 2
 	s.state_enum = b.decode_u8(o); o += 1
-	s.five_hole_openness = b.decode_u8(o) / 255.0
+	s.five_hole_openness = b.decode_u8(o) / 255.0; o += 1
+	if b.size() > o + 3:
+		s.velocity_x = b.decode_s16(o) / 50.0; o += 2
+		s.velocity_z = b.decode_s16(o) / 50.0
 	return s
