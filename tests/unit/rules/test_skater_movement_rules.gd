@@ -9,7 +9,6 @@ func _default_cfg() -> SkaterMovementRules.MovementConfig:
 	cfg.max_speed = 10.0
 	cfg.move_deadzone = 0.1
 	cfg.brake_multiplier = 5.0
-	cfg.brake_lateral_multiplier = 2.0
 	cfg.puck_carry_speed_multiplier = 0.88
 	cfg.backward_thrust_multiplier = 0.7
 	cfg.crossover_thrust_multiplier = 0.85
