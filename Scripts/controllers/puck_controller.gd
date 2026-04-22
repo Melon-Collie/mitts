@@ -7,6 +7,9 @@ const CONTEST_SQUIRT_SPEED: float = 3.0
 
 @export var interpolation_delay: float = Constants.NETWORK_INTERPOLATION_DELAY
 @export var extrapolation_max_ms: float = 50.0
+# Velocity decay applied during extrapolation to approximate ice friction.
+# Set to match observed Jolt physics deceleration rate (m/s per second linear).
+@export var extrapolation_friction: float = 0.5
 @export var trajectory_hard_snap_threshold: float = 1.5
 @export var position_correction_blend: float = 0.1
 @export var rejoin_blend_duration: float = 0.075
@@ -332,8 +335,11 @@ func _interpolate() -> void:
 	if bracket.is_extrapolating:
 		var dt: float = minf(bracket.extrapolation_dt, extrapolation_max_ms / 1000.0)
 		var newest: PuckNetworkState = bracket.to_state
-		interpolated.position = newest.position + newest.velocity * dt
-		interpolated.velocity = newest.velocity
+		# Decay velocity to approximate ice friction so the extrapolated position
+		# matches Jolt's deceleration rather than linear dead-reckoning overshoot.
+		var friction_vel: Vector3 = newest.velocity * maxf(0.0, 1.0 - extrapolation_friction * dt)
+		interpolated.position = newest.position + friction_vel * dt
+		interpolated.velocity = friction_vel
 	else:
 		var from_state: PuckNetworkState = bracket.from_state
 		var to_state: PuckNetworkState = bracket.to_state
