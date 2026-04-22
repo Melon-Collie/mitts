@@ -164,6 +164,14 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# Errors above 5 cm are real desync and still fire through.
 	if skater.is_on_wall() and skater.global_position.distance_to(server_state.position) < 0.05:
 		return
+	# Measure prediction drift before snapping to server position. In debug builds
+	# a large divergence indicates non-determinism (missing board clamp, wrong friction,
+	# uninjected impulse) that will recur every reconcile until the root cause is fixed.
+	var pre_replay_divergence: float = skater.global_position.distance_to(server_state.position)
+	NetworkTelemetry.record_prediction_divergence(pre_replay_divergence)
+	if OS.is_debug_build() and pre_replay_divergence > 0.10:
+		push_warning("Reconcile: pre-replay divergence %.3f m — possible non-determinism (inputs in replay: %d)" \
+				% [pre_replay_divergence, _input_history.size()])
 	# Save shot/state-machine state — replay can transition through shoot states
 	# (WRISTER_AIM → FOLLOW_THROUGH → SKATING) and leave _state wrong. Restore so
 	# the next _process_input runs the correct handler and blade doesn't teleport.

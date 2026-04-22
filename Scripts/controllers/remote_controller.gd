@@ -80,6 +80,7 @@ func apply_network_state(state: SkaterNetworkState, host_ts: float) -> void:
 	if _is_host:
 		return
 	if not _state_buffer.is_empty() and host_ts < _state_buffer.back().timestamp:
+		NetworkTelemetry.record_ooo_drop()
 		return
 	var buffered := BufferedSkaterState.new()
 	buffered.timestamp = host_ts
