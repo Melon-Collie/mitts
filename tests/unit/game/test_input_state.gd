@@ -23,7 +23,6 @@ func test_round_trip_preserves_all_fields() -> void:
 	s.shoot_held       = false
 	s.slap_pressed     = false
 	s.slap_held        = true
-	s.facing_held      = true
 	s.brake            = false
 	s.elevation_up     = true
 	s.elevation_down   = false
@@ -43,7 +42,6 @@ func test_round_trip_preserves_all_fields() -> void:
 	assert_eq(r.shoot_held,      s.shoot_held)
 	assert_eq(r.slap_pressed,    s.slap_pressed)
 	assert_eq(r.slap_held,       s.slap_held)
-	assert_eq(r.facing_held,     s.facing_held)
 	assert_eq(r.brake,           s.brake)
 	assert_eq(r.elevation_up,    s.elevation_up)
 	assert_eq(r.elevation_down,  s.elevation_down)
@@ -54,7 +52,7 @@ func test_array_length_is_sixteen() -> void:
 	# Field count sentinel — if someone adds a field without updating
 	# to_array/from_array, this catches the mismatch.
 	var s := InputState.new()
-	assert_eq(s.to_array().size(), 18)
+	assert_eq(s.to_array().size(), 17)
 
 
 # ── Binary (bytes) round-trip ─────────────────────────────────────────────────
@@ -70,7 +68,6 @@ func test_bytes_round_trip_preserves_all_fields() -> void:
 	s.shoot_held       = false
 	s.slap_pressed     = false
 	s.slap_held        = true
-	s.facing_held      = true
 	s.brake            = false
 	s.elevation_up     = true
 	s.elevation_down   = false
@@ -90,7 +87,6 @@ func test_bytes_round_trip_preserves_all_fields() -> void:
 	assert_eq(r.shoot_held,      s.shoot_held)
 	assert_eq(r.slap_pressed,    s.slap_pressed)
 	assert_eq(r.slap_held,       s.slap_held)
-	assert_eq(r.facing_held,     s.facing_held)
 	assert_eq(r.brake,           s.brake)
 	assert_eq(r.elevation_up,    s.elevation_up)
 	assert_eq(r.elevation_down,  s.elevation_down)
