@@ -56,6 +56,10 @@ static func hermite(p0: Vector3, v0: Vector3, p1: Vector3, v1: Vector3, t: float
 		 + (-2.0*t3 + 3.0*t2) * p1 \
 		 + (t3 - t2) * dt * v1
 
+static func lerp_facing(from: Vector3, to: Vector3, t: float) -> Vector3:
+	var a := lerp_angle(atan2(from.x, from.z), atan2(to.x, to.z), t)
+	return Vector3(sin(a), 0.0, cos(a))
+
 static func _make(a, b, render_time: float) -> BracketResult:
 	var r := BracketResult.new()
 	r.from_state = a.state

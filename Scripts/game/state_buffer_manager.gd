@@ -143,7 +143,7 @@ func _interpolate_skater(peer_id: int, ts: float) -> SkaterNetworkState:
 	result.blade_contact_world = from_s.blade_contact_world.lerp(to_s.blade_contact_world, t)
 	result.top_hand_position = from_s.top_hand_position.lerp(to_s.top_hand_position, t)
 	result.upper_body_rotation_y = lerpf(from_s.upper_body_rotation_y, to_s.upper_body_rotation_y, t)
-	result.facing = from_s.facing.lerp(to_s.facing, t).normalized()
+	result.facing = BufferedStateInterpolator.lerp_facing(from_s.facing, to_s.facing, t)
 	result.is_ghost = to_s.is_ghost
 	result.host_timestamp = ts
 	return result
