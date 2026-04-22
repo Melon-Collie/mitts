@@ -10,6 +10,8 @@ const _SEP     := Color(0.28, 0.28, 0.33, 1.00)
 var _rows_container: VBoxContainer = null
 var _period_score_labels: Array = []  # [team_id][period_index, then total]
 var _period_summary_grid: GridContainer = null
+var _away_badge_style: StyleBoxFlat = null
+var _home_badge_style: StyleBoxFlat = null
 
 func _ready() -> void:
 	layer = 10
@@ -17,6 +19,7 @@ func _ready() -> void:
 	_build_panel()
 	GameManager.stats_updated.connect(_refresh)
 	GameManager.game_over.connect(_on_game_over)
+	GameManager.team_colors_ready.connect(_on_team_colors_ready)
 	var ping_timer := Timer.new()
 	ping_timer.wait_time = 2.0
 	ping_timer.autostart = true
@@ -31,6 +34,12 @@ func _input(event: InputEvent) -> void:
 func _on_game_over() -> void:
 	visible = true
 	_refresh()
+
+func _on_team_colors_ready(home_primary: Color, away_primary: Color) -> void:
+	if _home_badge_style != null:
+		_home_badge_style.bg_color = home_primary
+	if _away_badge_style != null:
+		_away_badge_style.bg_color = away_primary
 
 func _build_panel() -> void:
 	var root := Control.new()
@@ -119,7 +128,16 @@ func _rebuild_period_grid(num_periods: int) -> void:
 
 	for team_id: int in [1, 0]:
 		var label: String = "AWAY" if team_id == 1 else "HOME"
-		_period_summary_grid.add_child(_team_badge(label, TeamColorRegistry.get_preset(GameManager.teams[team_id].color_id).primary))
+		var primary: Color = _HEADER
+		if GameManager.teams.size() > team_id:
+			primary = TeamColorRegistry.get_colors(GameManager.teams[team_id].color_id, team_id).primary
+		var badge := _team_badge(label, primary)
+		var badge_style := badge.get_theme_stylebox("panel") as StyleBoxFlat
+		if team_id == 1:
+			_away_badge_style = badge_style
+		else:
+			_home_badge_style = badge_style
+		_period_summary_grid.add_child(badge)
 		var row_labels: Array[Label] = []
 		for _i: int in num_periods + 1:  # periods + total
 			var l := _lbl("0", 13, _WHITE)
@@ -181,7 +199,7 @@ func _refresh() -> void:
 
 func _make_team_header(team_id: int) -> PanelContainer:
 	var label: String = "AWAY" if team_id == 1 else "HOME"
-	var color: Color = TeamColorRegistry.get_preset(GameManager.teams[team_id].color_id).primary
+	var color: Color = TeamColorRegistry.get_colors(GameManager.teams[team_id].color_id, team_id).primary
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(color.r, color.g, color.b, 0.18)
 	style.set_corner_radius_all(3)
