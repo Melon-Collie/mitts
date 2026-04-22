@@ -541,7 +541,7 @@ func _on_game_reset() -> void:
 	_game_over_popup.visible = false
 
 func _get_team_colors() -> Array[Dictionary]:
-	if not GameManager.teams.has(0) or not GameManager.teams.has(1):
+	if GameManager.teams.size() < 2:
 		return []
 	return [
 		TeamColorRegistry.get_colors(GameManager.teams[0].color_id, 0),
