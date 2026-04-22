@@ -437,7 +437,7 @@ func get_peer_ping_ms(peer_id: int) -> int:
 func get_clock_offset_ms() -> float:
 	if _clock_sync == null:
 		return 0.0
-	return (_clock_sync._ntp_offset + _clock_sync._qd_offset) * 1000.0
+	return _clock_sync._offset * 1000.0
 
 @rpc("any_peer", "unreliable")
 func report_ping(rtt_ms: int) -> void:
@@ -456,9 +456,8 @@ func receive_all_pings(pings: Dictionary) -> void:
 		_peer_ping_ms[pid] = pings[pid]
 
 func on_queue_depth_received(depth: int) -> void:
-	if is_host or _clock_sync == null or not _clock_sync.is_ready:
+	if is_host:
 		return
-	_clock_sync.apply_queue_depth_feedback(depth)
 	NetworkTelemetry.record_queue_depth(depth)
 
 @rpc("authority", "reliable")
