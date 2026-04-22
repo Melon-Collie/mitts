@@ -456,9 +456,8 @@ func receive_all_pings(pings: Dictionary) -> void:
 		_peer_ping_ms[pid] = pings[pid]
 
 func on_queue_depth_received(depth: int) -> void:
-	if is_host or _clock_sync == null or not _clock_sync.is_ready:
+	if is_host:
 		return
-	_clock_sync.apply_queue_depth_feedback(depth)
 	NetworkTelemetry.record_queue_depth(depth)
 
 @rpc("authority", "reliable")
@@ -724,8 +723,17 @@ func get_target_interpolation_delay() -> float:
 	if not is_clock_ready():
 		return Constants.NETWORK_INTERPOLATION_DELAY
 	var rtt: float = get_rtt_ms() / 1000.0
-	var target: float = (rtt / 2.0) + (get_jitter_p95() * 1.5)
-	return clampf(target, maxf(rtt / 2.0, 0.016), 0.150)
+	var rtt_half: float = rtt / 2.0
+	var broadcast_interval: float = 1.0 / Constants.STATE_RATE
+	# Minimum is RTT/2 + one full broadcast interval so render_time always has
+	# a buffered state ahead of it between packet arrivals. Jitter margin on top.
+	var target: float = rtt_half + broadcast_interval + get_jitter_p95() * 1.5
+	return clampf(target, maxf(rtt_half + broadcast_interval, 0.016), 0.200)
+
+func adapt_interpolation_delay(current: float) -> float:
+	var target: float = get_target_interpolation_delay()
+	var change: float = lerpf(current, target, 0.15) - current
+	return current + clampf(change, -0.001, 0.005)
 
 func get_peer_loss_rate(peer_id: int = -1) -> float:
 	if is_host:

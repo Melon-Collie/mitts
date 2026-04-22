@@ -255,7 +255,7 @@ func get_network_state() -> SkaterNetworkState:
 	state.shot_charge = _aiming.charge_distance
 	return state
 
-func apply_network_state(_net_state: SkaterNetworkState) -> void:
+func apply_network_state(_net_state: SkaterNetworkState, _host_ts: float) -> void:
 	pass  # overridden by RemoteController on client
 	
 signal puck_release_requested(direction: Vector3, power: float)

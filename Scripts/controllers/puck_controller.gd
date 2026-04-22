@@ -7,7 +7,6 @@ const CONTEST_SQUIRT_SPEED: float = 3.0
 
 @export var interpolation_delay: float = Constants.NETWORK_INTERPOLATION_DELAY
 @export var extrapolation_max_ms: float = 50.0
-@export var prediction_reconcile_threshold: float = 0.5
 @export var trajectory_hard_snap_threshold: float = 1.5
 @export var position_correction_blend: float = 0.1
 @export var rejoin_blend_duration: float = 0.075
@@ -23,7 +22,6 @@ var is_server: bool = false
 # ── State ─────────────────────────────────────────────────────────────────────
 var _carrier_peer_id: int = -1            # server-side authoritative carrier
 var _local_carrier_skater: Skater = null  # client-side: local skater while carrying
-var _current_time: float = 0.0
 var _prev_puck_pos: Vector3 = Vector3.ZERO
 var _state_buffer: Array[BufferedPuckState] = []
 var _predicting_trajectory: bool = false
@@ -85,14 +83,15 @@ func _physics_process(delta: float) -> void:
 		_check_interactions()
 		_prev_puck_pos = puck.get_puck_position()
 		return
-	_current_time += delta
 	if _local_carrier_skater != null:
+		is_extrapolating = false
 		_apply_local_carrier_position(delta)
 		if NetworkTelemetry.instance: NetworkTelemetry.instance.puck_mode = "pinned"
 	elif not _predicting_trajectory:
 		_interpolate()
 		if NetworkTelemetry.instance: NetworkTelemetry.instance.puck_mode = "interpolating"
 	else:
+		is_extrapolating = false
 		if NetworkTelemetry.instance: NetworkTelemetry.instance.puck_mode = "predicting"
 		if prediction_extra_friction > 0.0:
 			puck.set_puck_velocity(puck.get_puck_velocity() * pow(1.0 - prediction_extra_friction, delta))
@@ -109,15 +108,20 @@ func apply_lag_comp_pickup(skater: Skater) -> void:
 
 
 # Two valid pickup claims arrived within the contest window. Neither player
-# wins — the puck squirts free perpendicular to the line between them.
+# wins — the puck squirts perpendicular to the line between the two blade
+# contact points (both blades pressing inward pinch the puck like a seed
+# between two fingers; it exits sideways, randomised left or right).
 func apply_contested_pickup(skater_a: Skater, skater_b: Skater) -> void:
 	if not is_instance_valid(skater_a) or not is_instance_valid(skater_b):
 		return
-	var dir: Vector3 = skater_a.global_position - skater_b.global_position
-	dir.y = 0.0
-	if dir.length() < 0.001:
-		dir = Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0))
-	puck.set_puck_velocity(dir.normalized() * CONTEST_SQUIRT_SPEED)
+	var along := skater_a.get_blade_contact_global() - skater_b.get_blade_contact_global()
+	along.y = 0.0
+	if along.length() < 0.001:
+		along = Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0))
+	var perp := Vector3(-along.z, 0.0, along.x)
+	if randf() > 0.5:
+		perp = -perp
+	puck.set_puck_velocity(perp.normalized() * CONTEST_SQUIRT_SPEED)
 	puck.set_skater_cooldown(skater_a, puck.reattach_cooldown)
 	puck.set_skater_cooldown(skater_b, puck.reattach_cooldown)
 
@@ -217,23 +221,6 @@ func _apply_local_carrier_position(delta: float) -> void:
 	contact.y = puck.ice_height
 	puck.set_puck_position(puck.get_puck_position().lerp(contact, carry_smoothing_speed * delta))
 
-# ── Reconciliation ────────────────────────────────────────────────────────────
-# Mirrors LocalController.reconcile — nudges Jolt state toward server truth each
-# broadcast. Hard-snaps only on extreme divergence (teleport, physics glitch).
-func _reconcile(state: PuckNetworkState) -> void:
-	if ReconciliationRules.puck_needs_hard_snap(
-			puck.get_puck_position(), state.position, prediction_reconcile_threshold):
-		puck.set_puck_position(state.position)
-		puck.set_puck_velocity(state.velocity)
-		_state_buffer.clear()
-		return
-	# Jolt owns velocity during trajectory prediction — don't override it.
-	# Only nudge position when velocities agree (avoids fighting Jolt mid-bounce).
-	var current_vel := puck.get_puck_velocity()
-	var pos_error := state.position - puck.get_puck_position()
-	if current_vel.dot(state.velocity) > 0.0:
-		puck.set_puck_position(puck.get_puck_position() + pos_error * position_correction_blend)
-
 # ── Server Signals ────────────────────────────────────────────────────────────
 # Run on host only (connected in setup() when is_server). Each resolves the
 # affected peer_id via the injected resolver and emits a signal upward — the
@@ -288,7 +275,7 @@ func get_state() -> PuckNetworkState:
 	state.carrier_peer_id = _carrier_peer_id
 	return state
 
-func apply_state(state: PuckNetworkState) -> void:
+func apply_state(state: PuckNetworkState, host_ts: float) -> void:
 	if is_server:
 		return
 	if _local_carrier_skater != null:
@@ -319,10 +306,10 @@ func apply_state(state: PuckNetworkState) -> void:
 				puck.set_puck_velocity(latency_corrected.velocity)
 				_state_buffer.clear()
 			return  # Don't buffer during prediction; interpolation isn't running
-	if not _state_buffer.is_empty() and _current_time <= _state_buffer.back().timestamp:
+	if not _state_buffer.is_empty() and host_ts < _state_buffer.back().timestamp:
 		return
 	var buffered := BufferedPuckState.new()
-	buffered.timestamp = _current_time
+	buffered.timestamp = host_ts
 	buffered.state = state
 	_state_buffer.append(buffered)
 	if _state_buffer.size() > 30:
@@ -330,7 +317,7 @@ func apply_state(state: PuckNetworkState) -> void:
 	_adapt_interpolation_delay()
 
 func _interpolate() -> void:
-	var render_time: float = _current_time - interpolation_delay
+	var render_time: float = NetworkManager.estimated_host_time() - interpolation_delay
 	var bracket: BufferedStateInterpolator.BracketResult = BufferedStateInterpolator.find_bracket(
 			_state_buffer, render_time)
 	var prev_extrapolating: bool = is_extrapolating
@@ -351,10 +338,10 @@ func _interpolate() -> void:
 		interpolated.velocity = from_state.velocity.lerp(to_state.velocity, bracket.t)
 	if prev_extrapolating and not is_extrapolating:
 		_rejoin_blend_from_pos = puck.get_puck_position()
-		_rejoin_blend_start_time = _current_time
+		_rejoin_blend_start_time = Time.get_ticks_msec() / 1000.0
 	if _rejoin_blend_start_time >= 0.0:
 		var ease_t: float = clampf(
-				(_current_time - _rejoin_blend_start_time) / rejoin_blend_duration, 0.0, 1.0)
+				(Time.get_ticks_msec() / 1000.0 - _rejoin_blend_start_time) / rejoin_blend_duration, 0.0, 1.0)
 		interpolated.position = _rejoin_blend_from_pos.lerp(interpolated.position, ease_t)
 		if ease_t >= 1.0:
 			_rejoin_blend_start_time = -1.0
@@ -362,9 +349,7 @@ func _interpolate() -> void:
 	BufferedStateInterpolator.drop_stale(_state_buffer, render_time)
 
 func _adapt_interpolation_delay() -> void:
-	var target: float = NetworkManager.get_target_interpolation_delay()
-	var change: float = lerpf(interpolation_delay, target, 0.15) - interpolation_delay
-	interpolation_delay += clampf(change, -0.001, 0.005)
+	interpolation_delay = NetworkManager.adapt_interpolation_delay(interpolation_delay)
 
 func _apply_state_to_puck(state: PuckNetworkState) -> void:
 	# Position only — puck is frozen during interpolation, Jolt ignores velocity.

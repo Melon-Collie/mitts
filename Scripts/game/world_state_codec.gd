@@ -9,13 +9,13 @@ extends RefCounted
 # Two wire formats are defined here:
 #
 # 1. World state  (40 Hz, unreliable_ordered) — single flat PackedByteArray:
-#      u16 ws_sequence, u8 num_skaters
+#      u16 ws_sequence, f32 host_capture_time, u8 num_skaters
 #      [u32 peer_id, skater_bytes(35), u8 queue_depth] × num_skaters
-#      puck_bytes(13)
+#      puck_bytes(12)
 #      u8 num_goalies, [goalie_bytes(8)] × num_goalies
 #      u8 score0, u8 score1, u8 phase, u8 period, u16 time_remaining
 #
-#    Total for 6 players + 2 goalies: 279 bytes (well under 1392-byte ENet MTU)
+#    Total for 6 players + 2 goalies: 282 bytes (well under 1392-byte ENet MTU)
 #
 #    Quantization layout:
 #      Skater  (35 B): pos s16/s8/s16@1cm, vel 3×s16@0.02m/s,
@@ -23,7 +23,7 @@ extends RefCounted
 #                      facing u16 (0–TAU→0–65535), upper_body_rot s16 (−π–π→−32767–32767),
 #                      last_processed_ts f32, flags u8 (shot_state[3:0]+ghost[4]),
 #                      shot_charge u8
-#      Puck    (13 B): pos s16/s8/s16@1cm, vel 3×s16@0.02m/s, carrier_peer_id s16
+#      Puck    (12 B): pos s16/s8/s16@1cm, vel 3×s16@0.02m/s, carrier_idx u8 (0xFF=none)
 #      Goalie   (8 B): pos_x s16@1cm, pos_z s16@1cm, rot_y s16@π/32767, state u8, fho u8
 #
 # 2. Stats  (reliable, event-driven):
@@ -42,8 +42,9 @@ signal clock_updated(time_remaining: float)
 signal shots_on_goal_changed(sog_0: int, sog_1: int)
 signal queue_depth_feedback(depth: int)
 
+const WS_HEADER_SIZE: int = 7      # u16 ws_seq (2) + f32 host_capture_time (4) + u8 num_skaters (1)
 const SKATER_BLOCK_SIZE: int = 40  # u32 peer_id (4) + 35B skater state + u8 queue_depth (1)
-const PUCK_BLOCK_SIZE: int = 13
+const PUCK_BLOCK_SIZE: int = 12    # 11B pos+vel + 1B carrier_idx
 const GOALIE_BLOCK_SIZE: int = 8
 const GAME_STATE_BLOCK_SIZE: int = 6  # 4×u8 + u16 time_remaining
 const STATS_PLAYER_RECORD_SIZE: int = 5  # peer_id, G, A, SOG, HITS
@@ -82,11 +83,12 @@ func encode_world_state() -> PackedByteArray:
 	var peers: Array = Array(_registry.all().keys())
 	var goalie_controllers: Array = _goalie_controllers_getter.call()
 	var b := PackedByteArray()
-	# Header: u16 sequence + u8 skater count
-	var hdr := PackedByteArray(); hdr.resize(3)
+	# Header: u16 sequence + f32 host_capture_time + u8 skater count
+	var hdr := PackedByteArray(); hdr.resize(WS_HEADER_SIZE)
 	hdr.encode_u16(0, _ws_sequence)
 	_ws_sequence = (_ws_sequence + 1) & 0xFFFF
-	hdr.encode_u8(2, peers.size())
+	hdr.encode_float(2, Time.get_ticks_msec() / 1000.0)
+	hdr.encode_u8(6, peers.size())
 	b.append_array(hdr)
 	# Skaters: u32 peer_id + 35B state + u8 queue_depth
 	for peer_id: int in peers:
@@ -99,8 +101,17 @@ func encode_world_state() -> PackedByteArray:
 		b.append_array(id_bytes)
 		b.append_array(_encode_skater_quantized(_state_buffer.latest_skater_state(peer_id)))
 		b.append(clampi(depth, 0, 255))
-	# Puck: 13 bytes
-	b.append_array(_encode_puck_quantized(_state_buffer.latest_puck_state()))
+	# Puck: 11B pos+vel + 1B carrier index (0xFF = no carrier).
+	# Carrier is encoded as the index of the carrier's peer_id in the peers array
+	# above so the client can resolve it without a separate peer_id lookup.
+	var puck_state := _state_buffer.latest_puck_state()
+	b.append_array(_encode_puck_quantized(puck_state))
+	var carrier_idx: int = 0xFF
+	if puck_state.carrier_peer_id != -1:
+		var idx: int = peers.find(puck_state.carrier_peer_id)
+		if idx >= 0:
+			carrier_idx = idx
+	b.append(carrier_idx)
 	# Goalies: u8 count + n × 8B
 	b.append(goalie_controllers.size())
 	for gc: GoalieController in goalie_controllers:
@@ -118,19 +129,22 @@ func encode_world_state() -> PackedByteArray:
 
 func decode_world_state(data: PackedByteArray) -> void:
 	var goalie_controllers: Array = _goalie_controllers_getter.call()
-	if data.size() < 3:
+	if data.size() < WS_HEADER_SIZE:
 		push_warning("WorldStateCodec: packet too small (%d bytes)" % data.size())
 		return
 	var o: int = 0
 	o += 2  # ws_sequence already consumed by NetworkManager for loss tracking
+	var host_ts: float = data.decode_float(o); o += 4
 	var num_skaters: int = data.decode_u8(o); o += 1
-	var min_size: int = 3 + num_skaters * SKATER_BLOCK_SIZE + PUCK_BLOCK_SIZE + 1 + GAME_STATE_BLOCK_SIZE
+	var min_size: int = WS_HEADER_SIZE + num_skaters * SKATER_BLOCK_SIZE + PUCK_BLOCK_SIZE + 1 + GAME_STATE_BLOCK_SIZE
 	if data.size() < min_size:
 		push_warning("WorldStateCodec: truncated (got %d, need %d)" % [data.size(), min_size])
 		return
-	# Skaters
+	# Skaters — collect peer_ids in packet order so we can resolve the puck carrier index below.
+	var decoded_peers: Array[int] = []
 	for _i: int in num_skaters:
 		var peer_id: int = data.decode_u32(o); o += 4
+		decoded_peers.append(peer_id)
 		var skater_bytes: PackedByteArray = data.slice(o, o + 35); o += 35
 		var depth: int = data.decode_u8(o); o += 1
 		var record: PlayerRecord = _registry.get_record(peer_id)
@@ -141,16 +155,18 @@ func decode_world_state(data: PackedByteArray) -> void:
 			(record.controller as LocalController).reconcile(skater_state)
 			queue_depth_feedback.emit(depth)
 		else:
-			record.controller.apply_network_state(skater_state)
-	# Puck
+			record.controller.apply_network_state(skater_state, host_ts)
+	# Puck: 11B pos+vel + 1B carrier index
+	var puck_state := _decode_puck_quantized(data.slice(o, o + 11)); o += 11
+	var carrier_idx: int = data.decode_u8(o); o += 1
+	puck_state.carrier_peer_id = decoded_peers[carrier_idx] if carrier_idx < decoded_peers.size() else -1
 	var puck_controller: PuckController = _puck_controller_getter.call() as PuckController
 	if puck_controller != null:
-		puck_controller.apply_state(_decode_puck_quantized(data.slice(o, o + PUCK_BLOCK_SIZE)))
-	o += PUCK_BLOCK_SIZE
+		puck_controller.apply_state(puck_state, host_ts)
 	# Goalies
 	var num_goalies: int = data.decode_u8(o); o += 1
 	for gi: int in mini(num_goalies, goalie_controllers.size()):
-		goalie_controllers[gi].apply_state(_decode_goalie_quantized(data.slice(o, o + GOALIE_BLOCK_SIZE)))
+		goalie_controllers[gi].apply_state(_decode_goalie_quantized(data.slice(o, o + GOALIE_BLOCK_SIZE)), host_ts)
 		o += GOALIE_BLOCK_SIZE
 	o += maxi(0, num_goalies - goalie_controllers.size()) * GOALIE_BLOCK_SIZE
 	# Game state
@@ -282,19 +298,18 @@ static func _decode_skater_quantized(b: PackedByteArray) -> SkaterNetworkState:
 	return s
 
 
-# Puck: 13 bytes
-# Offsets: pos(0..4) vel(5..10) carrier_peer_id(11..12)
+# Puck: 11 bytes (pos + vel only; carrier index handled separately in encode/decode_world_state)
+# Offsets: pos(0..4) vel(5..10)
 static func _encode_puck_quantized(s: PuckNetworkState) -> PackedByteArray:
 	var b := PackedByteArray()
-	b.resize(13)
+	b.resize(11)
 	var o: int = 0
 	b.encode_s16(o, clampi(roundi(s.position.x * 100.0), -32768, 32767)); o += 2
 	b.encode_s8(o, clampi(roundi(s.position.y * 100.0), -128, 127)); o += 1
 	b.encode_s16(o, clampi(roundi(s.position.z * 100.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.velocity.x * 50.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.velocity.y * 50.0), -32768, 32767)); o += 2
-	b.encode_s16(o, clampi(roundi(s.velocity.z * 50.0), -32768, 32767)); o += 2
-	b.encode_s16(o, s.carrier_peer_id)
+	b.encode_s16(o, clampi(roundi(s.velocity.z * 50.0), -32768, 32767))
 	return b
 
 
@@ -306,8 +321,7 @@ static func _decode_puck_quantized(b: PackedByteArray) -> PuckNetworkState:
 	s.position.z = b.decode_s16(o) / 100.0; o += 2
 	s.velocity.x = b.decode_s16(o) / 50.0; o += 2
 	s.velocity.y = b.decode_s16(o) / 50.0; o += 2
-	s.velocity.z = b.decode_s16(o) / 50.0; o += 2
-	s.carrier_peer_id = b.decode_s16(o)
+	s.velocity.z = b.decode_s16(o) / 50.0
 	return s
 
 

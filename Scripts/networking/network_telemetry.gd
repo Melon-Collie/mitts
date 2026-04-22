@@ -31,7 +31,8 @@ var buffer_depth_goalie: int = 0
 var blade_jump_per_sec: float = 0.0
 var blade_jump_mag_avg: float = 0.0
 var blade_reconcile_mag_avg: float = 0.0
-var input_queue_depth: int = 0
+var input_queue_depth_median: int = 0
+var _queue_depth_window: Array[int] = []
 var packet_loss_pct: float = 0.0
 var jitter_p95_ms: float = 0.0
 var puck_mode: String = "—"
@@ -43,8 +44,14 @@ static func record_world_state() -> void:
 static func record_input_sent() -> void:
 	if instance: instance._input_count += 1
 
+const QUEUE_DEPTH_WINDOW: int = 80  # 2 s at 40 Hz
+
 static func record_queue_depth(depth: int) -> void:
-	if instance: instance.input_queue_depth = depth
+	if instance == null:
+		return
+	instance._queue_depth_window.append(depth)
+	if instance._queue_depth_window.size() > QUEUE_DEPTH_WINDOW:
+		instance._queue_depth_window.pop_front()
 
 static func record_packet_loss(pct: float) -> void:
 	if instance: instance.packet_loss_pct = pct
@@ -94,6 +101,10 @@ func tick(delta: float) -> void:
 	blade_jump_per_sec = _blade_jump_count / _window_timer
 	blade_jump_mag_avg = _blade_jump_mag_sum / _blade_jump_n if _blade_jump_n > 0 else 0.0
 	blade_reconcile_mag_avg = _blade_reconcile_mag_sum / _blade_reconcile_n if _blade_reconcile_n > 0 else 0.0
+	if not _queue_depth_window.is_empty():
+		var sorted := _queue_depth_window.duplicate()
+		sorted.sort()
+		input_queue_depth_median = sorted[sorted.size() / 2]
 	_world_state_count = 0
 	_input_count = 0
 	_reconcile_count = 0
