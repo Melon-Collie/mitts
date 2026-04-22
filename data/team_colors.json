@@ -421,23 +421,23 @@
     {
       "id": "senators",
       "name": "Ottawa",
-      "primary": "#C8102E",
-      "secondary": "#C69214",
+      "primary": "#111111",
+      "secondary": "#C8102E",
       "home": {
         "helmet": "#111111",
-        "jersey": "#C8102E",
+        "jersey": "#111111",
         "pants": "#111111",
         "goalie_pads": "#FFFFFF",
-        "text": "#C69214",
+        "text": "#FFFFFF",
         "text_outline": "#C8102E"
       },
       "away": {
-        "helmet": "#111111",
+        "helmet": "#FFFFFF",
         "jersey": "#FFFFFF",
-        "pants": "#FFFFFF",
+        "pants": "#111111",
         "goalie_pads": "#FFFFFF",
-        "text": "#C8102E",
-        "text_outline": "#C69214"
+        "text": "#111111",
+        "text_outline": "#C8102E"
       }
     },
     {
