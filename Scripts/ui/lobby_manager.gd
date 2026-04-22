@@ -291,9 +291,9 @@ func _broadcast_confirm(peer_id: int, team_id: int, slot: int) -> void:
 	if entry.is_empty():
 		return
 	var color_id: String = _home_color_id if team_id == 0 else _away_color_id
-	var preset: Dictionary = TeamColorRegistry.get_preset(color_id)
+	var colors: Dictionary = TeamColorRegistry.get_colors(color_id, team_id)
 	NetworkManager.send_confirm_slot_swap(peer_id, -1, -1, team_id, slot,
-			preset.jersey, preset.helmet, preset.pants)
+			colors.jersey, colors.helmet, colors.pants)
 
 # ── Signal handlers ───────────────────────────────────────────────────────────
 

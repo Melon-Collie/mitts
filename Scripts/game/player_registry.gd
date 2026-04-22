@@ -98,7 +98,7 @@ func spawn(
 		_spawn_wireup.call(record)
 	player_added.emit(record)
 	if not is_local:
-		player_joined.emit(record.display_name(), TeamColorRegistry.get_preset(team.color_id).primary)
+		player_joined.emit(record.display_name(), TeamColorRegistry.get_colors(team.color_id, team.team_id).primary)
 	return record
 
 
@@ -109,7 +109,7 @@ func remove(peer_id: int) -> PlayerRecord:
 	if not _players.has(peer_id):
 		return null
 	var record: PlayerRecord = _players[peer_id]
-	player_left.emit(record.display_name(), TeamColorRegistry.get_preset(record.team.color_id).primary)
+	player_left.emit(record.display_name(), TeamColorRegistry.get_colors(record.team.color_id, record.team.team_id).primary)
 	_players.erase(peer_id)
 	if _state_machine != null:
 		_state_machine.on_player_disconnected(peer_id)
@@ -186,7 +186,7 @@ func reset_all_stats() -> void:
 
 static func generate_colors(team_id: int) -> Dictionary:
 	var id: String = NetworkManager.pending_home_color_id if team_id == 0 else NetworkManager.pending_away_color_id
-	return TeamColorRegistry.get_preset(id)
+	return TeamColorRegistry.get_colors(id, team_id)
 
 
 # Returns the domain roster enriched with live player names from PlayerRecord.

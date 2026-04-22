@@ -3,386 +3,450 @@
     {
       "id": "ducks",
       "name": "Anaheim Ducks",
-      "primary":      "#111111",
-      "secondary":    "#FC4C02",
-      "helmet":       "#111111",
-      "jersey":       "#111111",
-      "pants":        "#111111",
-      "goalie_pads":  "#FC4C02",
-      "text":         "#B09B5B",
-      "text_outline": "#111111"
+      "primary":   "#111111",
+      "secondary": "#FC4C02",
+      "home": {
+        "helmet": "#111111", "jersey": "#111111", "pants": "#111111",
+        "goalie_pads": "#FC4C02", "text": "#B09B5B", "text_outline": "#111111"
+      },
+      "away": {
+        "helmet": "#111111", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FC4C02", "text": "#111111", "text_outline": "#FC4C02"
+      }
     },
     {
       "id": "bruins",
       "name": "Boston Bruins",
-      "primary":      "#FFB81C",
-      "secondary":    "#111111",
-      "helmet":       "#111111",
-      "jersey":       "#111111",
-      "pants":        "#111111",
-      "goalie_pads":  "#FFB81C",
-      "text":         "#FFB81C",
-      "text_outline": "#111111"
+      "primary":   "#FFB81C",
+      "secondary": "#111111",
+      "home": {
+        "helmet": "#111111", "jersey": "#111111", "pants": "#111111",
+        "goalie_pads": "#FFB81C", "text": "#FFB81C", "text_outline": "#111111"
+      },
+      "away": {
+        "helmet": "#111111", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FFB81C", "text": "#111111", "text_outline": "#FFB81C"
+      }
     },
     {
       "id": "sabres",
       "name": "Buffalo Sabres",
-      "primary":      "#002654",
-      "secondary":    "#FCB514",
-      "helmet":       "#002654",
-      "jersey":       "#002654",
-      "pants":        "#002654",
-      "goalie_pads":  "#FCB514",
-      "text":         "#FCB514",
-      "text_outline": "#002654"
+      "primary":   "#002654",
+      "secondary": "#FCB514",
+      "home": {
+        "helmet": "#002654", "jersey": "#002654", "pants": "#002654",
+        "goalie_pads": "#FCB514", "text": "#FCB514", "text_outline": "#002654"
+      },
+      "away": {
+        "helmet": "#002654", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FCB514", "text": "#002654", "text_outline": "#FCB514"
+      }
     },
     {
       "id": "flames",
       "name": "Calgary Flames",
-      "primary":      "#C8102E",
-      "secondary":    "#F1BE48",
-      "helmet":       "#C8102E",
-      "jersey":       "#C8102E",
-      "pants":        "#111111",
-      "goalie_pads":  "#FFFFFF",
-      "text":         "#F1BE48",
-      "text_outline": "#C8102E"
+      "primary":   "#C8102E",
+      "secondary": "#F1BE48",
+      "home": {
+        "helmet": "#C8102E", "jersey": "#C8102E", "pants": "#111111",
+        "goalie_pads": "#FFFFFF", "text": "#F1BE48", "text_outline": "#C8102E"
+      },
+      "away": {
+        "helmet": "#C8102E", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FFFFFF", "text": "#C8102E", "text_outline": "#F1BE48"
+      }
     },
     {
       "id": "hurricanes",
       "name": "Carolina Hurricanes",
-      "primary":      "#CC0000",
-      "secondary":    "#111111",
-      "helmet":       "#111111",
-      "jersey":       "#CC0000",
-      "pants":        "#111111",
-      "goalie_pads":  "#FFFFFF",
-      "text":         "#111111",
-      "text_outline": "#CC0000"
+      "primary":   "#CC0000",
+      "secondary": "#111111",
+      "home": {
+        "helmet": "#111111", "jersey": "#CC0000", "pants": "#111111",
+        "goalie_pads": "#FFFFFF", "text": "#111111", "text_outline": "#CC0000"
+      },
+      "away": {
+        "helmet": "#111111", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FFFFFF", "text": "#CC0000", "text_outline": "#111111"
+      }
     },
     {
       "id": "blackhawks",
       "name": "Chicago Blackhawks",
-      "primary":      "#CF0A2C",
-      "secondary":    "#111111",
-      "helmet":       "#CF0A2C",
-      "jersey":       "#CF0A2C",
-      "pants":        "#CF0A2C",
-      "goalie_pads":  "#FFFFFF",
-      "text":         "#FFD100",
-      "text_outline": "#111111"
+      "primary":   "#CF0A2C",
+      "secondary": "#111111",
+      "home": {
+        "helmet": "#CF0A2C", "jersey": "#CF0A2C", "pants": "#CF0A2C",
+        "goalie_pads": "#FFFFFF", "text": "#FFD100", "text_outline": "#111111"
+      },
+      "away": {
+        "helmet": "#CF0A2C", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FFFFFF", "text": "#CF0A2C", "text_outline": "#111111"
+      }
     },
     {
       "id": "avalanche",
       "name": "Colorado Avalanche",
-      "primary":      "#6F263D",
-      "secondary":    "#236192",
-      "helmet":       "#6F263D",
-      "jersey":       "#6F263D",
-      "pants":        "#6F263D",
-      "goalie_pads":  "#236192",
-      "text":         "#A2AAAD",
-      "text_outline": "#6F263D"
+      "primary":   "#6F263D",
+      "secondary": "#236192",
+      "home": {
+        "helmet": "#6F263D", "jersey": "#6F263D", "pants": "#6F263D",
+        "goalie_pads": "#236192", "text": "#A2AAAD", "text_outline": "#6F263D"
+      },
+      "away": {
+        "helmet": "#236192", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#236192", "text": "#6F263D", "text_outline": "#236192"
+      }
     },
     {
       "id": "bluejackets",
       "name": "Columbus Blue Jackets",
-      "primary":      "#002654",
-      "secondary":    "#CE1126",
-      "helmet":       "#002654",
-      "jersey":       "#002654",
-      "pants":        "#002654",
-      "goalie_pads":  "#FFFFFF",
-      "text":         "#CE1126",
-      "text_outline": "#002654"
+      "primary":   "#002654",
+      "secondary": "#CE1126",
+      "home": {
+        "helmet": "#002654", "jersey": "#002654", "pants": "#002654",
+        "goalie_pads": "#FFFFFF", "text": "#CE1126", "text_outline": "#002654"
+      },
+      "away": {
+        "helmet": "#002654", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FFFFFF", "text": "#002654", "text_outline": "#CE1126"
+      }
     },
     {
       "id": "stars",
       "name": "Dallas Stars",
-      "primary":      "#006847",
-      "secondary":    "#8F8F8C",
-      "helmet":       "#006847",
-      "jersey":       "#006847",
-      "pants":        "#111111",
-      "goalie_pads":  "#FFFFFF",
-      "text":         "#8F8F8C",
-      "text_outline": "#006847"
+      "primary":   "#006847",
+      "secondary": "#8F8F8C",
+      "home": {
+        "helmet": "#006847", "jersey": "#006847", "pants": "#111111",
+        "goalie_pads": "#FFFFFF", "text": "#8F8F8C", "text_outline": "#006847"
+      },
+      "away": {
+        "helmet": "#006847", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FFFFFF", "text": "#006847", "text_outline": "#8F8F8C"
+      }
     },
     {
       "id": "redwings",
       "name": "Detroit Red Wings",
-      "primary":      "#CE1126",
-      "secondary":    "#FFFFFF",
-      "helmet":       "#CE1126",
-      "jersey":       "#CE1126",
-      "pants":        "#CE1126",
-      "goalie_pads":  "#FFFFFF",
-      "text":         "#FFFFFF",
-      "text_outline": "#CE1126"
+      "primary":   "#CE1126",
+      "secondary": "#FFFFFF",
+      "home": {
+        "helmet": "#CE1126", "jersey": "#CE1126", "pants": "#CE1126",
+        "goalie_pads": "#FFFFFF", "text": "#FFFFFF", "text_outline": "#CE1126"
+      },
+      "away": {
+        "helmet": "#CE1126", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FFFFFF", "text": "#CE1126", "text_outline": "#111111"
+      }
     },
     {
       "id": "oilers",
       "name": "Edmonton Oilers",
-      "primary":      "#FF4C00",
-      "secondary":    "#003087",
-      "helmet":       "#FF4C00",
-      "jersey":       "#003087",
-      "pants":        "#003087",
-      "goalie_pads":  "#FF4C00",
-      "text":         "#FF4C00",
-      "text_outline": "#003087"
+      "primary":   "#FF4C00",
+      "secondary": "#003087",
+      "home": {
+        "helmet": "#FF4C00", "jersey": "#003087", "pants": "#003087",
+        "goalie_pads": "#FF4C00", "text": "#FF4C00", "text_outline": "#003087"
+      },
+      "away": {
+        "helmet": "#FF4C00", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FF4C00", "text": "#003087", "text_outline": "#FF4C00"
+      }
     },
     {
       "id": "panthers",
       "name": "Florida Panthers",
-      "primary":      "#041E42",
-      "secondary":    "#C8102E",
-      "helmet":       "#041E42",
-      "jersey":       "#041E42",
-      "pants":        "#041E42",
-      "goalie_pads":  "#C8102E",
-      "text":         "#C8102E",
-      "text_outline": "#041E42"
+      "primary":   "#041E42",
+      "secondary": "#C8102E",
+      "home": {
+        "helmet": "#041E42", "jersey": "#041E42", "pants": "#041E42",
+        "goalie_pads": "#C8102E", "text": "#C8102E", "text_outline": "#041E42"
+      },
+      "away": {
+        "helmet": "#041E42", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#C8102E", "text": "#041E42", "text_outline": "#C8102E"
+      }
     },
     {
       "id": "kings",
       "name": "Los Angeles Kings",
-      "primary":      "#111111",
-      "secondary":    "#A2AAAD",
-      "helmet":       "#111111",
-      "jersey":       "#111111",
-      "pants":        "#111111",
-      "goalie_pads":  "#A2AAAD",
-      "text":         "#A2AAAD",
-      "text_outline": "#111111"
+      "primary":   "#111111",
+      "secondary": "#A2AAAD",
+      "home": {
+        "helmet": "#111111", "jersey": "#111111", "pants": "#111111",
+        "goalie_pads": "#A2AAAD", "text": "#A2AAAD", "text_outline": "#111111"
+      },
+      "away": {
+        "helmet": "#111111", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#A2AAAD", "text": "#111111", "text_outline": "#A2AAAD"
+      }
     },
     {
       "id": "wild",
       "name": "Minnesota Wild",
-      "primary":      "#154734",
-      "secondary":    "#A6192E",
-      "helmet":       "#154734",
-      "jersey":       "#154734",
-      "pants":        "#154734",
-      "goalie_pads":  "#A6192E",
-      "text":         "#DDCBA4",
-      "text_outline": "#154734"
+      "primary":   "#154734",
+      "secondary": "#A6192E",
+      "home": {
+        "helmet": "#154734", "jersey": "#154734", "pants": "#154734",
+        "goalie_pads": "#A6192E", "text": "#DDCBA4", "text_outline": "#154734"
+      },
+      "away": {
+        "helmet": "#154734", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#A6192E", "text": "#154734", "text_outline": "#A6192E"
+      }
     },
     {
       "id": "canadiens",
       "name": "Montréal Canadiens",
-      "primary":      "#AF1E2D",
-      "secondary":    "#003DA5",
-      "helmet":       "#003DA5",
-      "jersey":       "#AF1E2D",
-      "pants":        "#003DA5",
-      "goalie_pads":  "#FFFFFF",
-      "text":         "#003DA5",
-      "text_outline": "#AF1E2D"
+      "primary":   "#AF1E2D",
+      "secondary": "#003DA5",
+      "home": {
+        "helmet": "#003DA5", "jersey": "#AF1E2D", "pants": "#003DA5",
+        "goalie_pads": "#FFFFFF", "text": "#003DA5", "text_outline": "#AF1E2D"
+      },
+      "away": {
+        "helmet": "#003DA5", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FFFFFF", "text": "#AF1E2D", "text_outline": "#003DA5"
+      }
     },
     {
       "id": "predators",
       "name": "Nashville Predators",
-      "primary":      "#FFB81C",
-      "secondary":    "#041E42",
-      "helmet":       "#041E42",
-      "jersey":       "#041E42",
-      "pants":        "#041E42",
-      "goalie_pads":  "#FFB81C",
-      "text":         "#FFB81C",
-      "text_outline": "#041E42"
+      "primary":   "#FFB81C",
+      "secondary": "#041E42",
+      "home": {
+        "helmet": "#041E42", "jersey": "#041E42", "pants": "#041E42",
+        "goalie_pads": "#FFB81C", "text": "#FFB81C", "text_outline": "#041E42"
+      },
+      "away": {
+        "helmet": "#041E42", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FFB81C", "text": "#041E42", "text_outline": "#FFB81C"
+      }
     },
     {
       "id": "devils",
       "name": "New Jersey Devils",
-      "primary":      "#CE1126",
-      "secondary":    "#111111",
-      "helmet":       "#CE1126",
-      "jersey":       "#CE1126",
-      "pants":        "#111111",
-      "goalie_pads":  "#FFFFFF",
-      "text":         "#111111",
-      "text_outline": "#CE1126"
+      "primary":   "#CE1126",
+      "secondary": "#111111",
+      "home": {
+        "helmet": "#CE1126", "jersey": "#CE1126", "pants": "#111111",
+        "goalie_pads": "#FFFFFF", "text": "#111111", "text_outline": "#CE1126"
+      },
+      "away": {
+        "helmet": "#CE1126", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FFFFFF", "text": "#CE1126", "text_outline": "#111111"
+      }
     },
     {
       "id": "islanders",
       "name": "New York Islanders",
-      "primary":      "#003087",
-      "secondary":    "#FC4C02",
-      "helmet":       "#003087",
-      "jersey":       "#003087",
-      "pants":        "#FC4C02",
-      "goalie_pads":  "#FFFFFF",
-      "text":         "#FC4C02",
-      "text_outline": "#003087"
+      "primary":   "#003087",
+      "secondary": "#FC4C02",
+      "home": {
+        "helmet": "#003087", "jersey": "#003087", "pants": "#FC4C02",
+        "goalie_pads": "#FFFFFF", "text": "#FC4C02", "text_outline": "#003087"
+      },
+      "away": {
+        "helmet": "#003087", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FFFFFF", "text": "#003087", "text_outline": "#FC4C02"
+      }
     },
     {
       "id": "rangers",
       "name": "New York Rangers",
-      "primary":      "#0038A8",
-      "secondary":    "#CE1126",
-      "helmet":       "#0038A8",
-      "jersey":       "#0038A8",
-      "pants":        "#0038A8",
-      "goalie_pads":  "#FFFFFF",
-      "text":         "#CE1126",
-      "text_outline": "#0038A8"
+      "primary":   "#0038A8",
+      "secondary": "#CE1126",
+      "home": {
+        "helmet": "#0038A8", "jersey": "#0038A8", "pants": "#0038A8",
+        "goalie_pads": "#FFFFFF", "text": "#CE1126", "text_outline": "#0038A8"
+      },
+      "away": {
+        "helmet": "#0038A8", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FFFFFF", "text": "#0038A8", "text_outline": "#CE1126"
+      }
     },
     {
       "id": "senators",
       "name": "Ottawa Senators",
-      "primary":      "#C8102E",
-      "secondary":    "#C69214",
-      "helmet":       "#111111",
-      "jersey":       "#C8102E",
-      "pants":        "#111111",
-      "goalie_pads":  "#FFFFFF",
-      "text":         "#C69214",
-      "text_outline": "#C8102E"
+      "primary":   "#C8102E",
+      "secondary": "#C69214",
+      "home": {
+        "helmet": "#111111", "jersey": "#C8102E", "pants": "#111111",
+        "goalie_pads": "#FFFFFF", "text": "#C69214", "text_outline": "#C8102E"
+      },
+      "away": {
+        "helmet": "#111111", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FFFFFF", "text": "#C8102E", "text_outline": "#C69214"
+      }
     },
     {
       "id": "flyers",
       "name": "Philadelphia Flyers",
-      "primary":      "#F74902",
-      "secondary":    "#111111",
-      "helmet":       "#F74902",
-      "jersey":       "#F74902",
-      "pants":        "#111111",
-      "goalie_pads":  "#FFFFFF",
-      "text":         "#111111",
-      "text_outline": "#F74902"
+      "primary":   "#F74902",
+      "secondary": "#111111",
+      "home": {
+        "helmet": "#F74902", "jersey": "#F74902", "pants": "#111111",
+        "goalie_pads": "#FFFFFF", "text": "#111111", "text_outline": "#F74902"
+      },
+      "away": {
+        "helmet": "#F74902", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FFFFFF", "text": "#F74902", "text_outline": "#111111"
+      }
     },
     {
       "id": "penguins",
       "name": "Pittsburgh Penguins",
-      "primary":      "#FCB514",
-      "secondary":    "#0F0F0F",
-      "helmet":       "#0F0F0F",
-      "jersey":       "#FCB514",
-      "pants":        "#0F0F0F",
-      "goalie_pads":  "#FFFFFF",
-      "text":         "#0F0F0F",
-      "text_outline": "#FCB514"
+      "primary":   "#FCB514",
+      "secondary": "#0F0F0F",
+      "home": {
+        "helmet": "#0F0F0F", "jersey": "#FCB514", "pants": "#0F0F0F",
+        "goalie_pads": "#FFFFFF", "text": "#0F0F0F", "text_outline": "#FCB514"
+      },
+      "away": {
+        "helmet": "#0F0F0F", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FCB514", "text": "#0F0F0F", "text_outline": "#FCB514"
+      }
     },
     {
       "id": "sharks",
       "name": "San Jose Sharks",
-      "primary":      "#006D75",
-      "secondary":    "#111111",
-      "helmet":       "#111111",
-      "jersey":       "#006D75",
-      "pants":        "#111111",
-      "goalie_pads":  "#EA7200",
-      "text":         "#EA7200",
-      "text_outline": "#006D75"
+      "primary":   "#006D75",
+      "secondary": "#111111",
+      "home": {
+        "helmet": "#111111", "jersey": "#006D75", "pants": "#111111",
+        "goalie_pads": "#EA7200", "text": "#EA7200", "text_outline": "#006D75"
+      },
+      "away": {
+        "helmet": "#111111", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#EA7200", "text": "#006D75", "text_outline": "#111111"
+      }
     },
     {
       "id": "kraken",
       "name": "Seattle Kraken",
-      "primary":      "#001628",
-      "secondary":    "#68A2B9",
-      "helmet":       "#001628",
-      "jersey":       "#001628",
-      "pants":        "#001628",
-      "goalie_pads":  "#68A2B9",
-      "text":         "#68A2B9",
-      "text_outline": "#001628"
+      "primary":   "#001628",
+      "secondary": "#68A2B9",
+      "home": {
+        "helmet": "#001628", "jersey": "#001628", "pants": "#001628",
+        "goalie_pads": "#68A2B9", "text": "#68A2B9", "text_outline": "#001628"
+      },
+      "away": {
+        "helmet": "#001628", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#68A2B9", "text": "#001628", "text_outline": "#68A2B9"
+      }
     },
     {
       "id": "blues",
       "name": "St. Louis Blues",
-      "primary":      "#002F87",
-      "secondary":    "#FCB514",
-      "helmet":       "#002F87",
-      "jersey":       "#002F87",
-      "pants":        "#002F87",
-      "goalie_pads":  "#FCB514",
-      "text":         "#FCB514",
-      "text_outline": "#002F87"
+      "primary":   "#002F87",
+      "secondary": "#FCB514",
+      "home": {
+        "helmet": "#002F87", "jersey": "#002F87", "pants": "#002F87",
+        "goalie_pads": "#FCB514", "text": "#FCB514", "text_outline": "#002F87"
+      },
+      "away": {
+        "helmet": "#002F87", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FCB514", "text": "#002F87", "text_outline": "#FCB514"
+      }
     },
     {
       "id": "lightning",
       "name": "Tampa Bay Lightning",
-      "primary":      "#002868",
-      "secondary":    "#FFFFFF",
-      "helmet":       "#002868",
-      "jersey":       "#002868",
-      "pants":        "#002868",
-      "goalie_pads":  "#FFFFFF",
-      "text":         "#FFFFFF",
-      "text_outline": "#002868"
+      "primary":   "#002868",
+      "secondary": "#FFFFFF",
+      "home": {
+        "helmet": "#002868", "jersey": "#002868", "pants": "#002868",
+        "goalie_pads": "#FFFFFF", "text": "#FFFFFF", "text_outline": "#002868"
+      },
+      "away": {
+        "helmet": "#002868", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FFFFFF", "text": "#002868", "text_outline": "#002868"
+      }
     },
     {
       "id": "leafs",
       "name": "Toronto Maple Leafs",
-      "primary":      "#00205B",
-      "secondary":    "#FFFFFF",
-      "helmet":       "#00205B",
-      "jersey":       "#00205B",
-      "pants":        "#FFFFFF",
-      "goalie_pads":  "#FFFFFF",
-      "text":         "#FFFFFF",
-      "text_outline": "#00205B"
+      "primary":   "#00205B",
+      "secondary": "#FFFFFF",
+      "home": {
+        "helmet": "#00205B", "jersey": "#00205B", "pants": "#FFFFFF",
+        "goalie_pads": "#FFFFFF", "text": "#FFFFFF", "text_outline": "#00205B"
+      },
+      "away": {
+        "helmet": "#00205B", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FFFFFF", "text": "#00205B", "text_outline": "#00205B"
+      }
     },
     {
       "id": "utah",
       "name": "Utah Mammoth",
-      "primary":      "#111111",
-      "secondary":    "#6CACE3",
-      "helmet":       "#111111",
-      "jersey":       "#111111",
-      "pants":        "#111111",
-      "goalie_pads":  "#6CACE3",
-      "text":         "#6CACE3",
-      "text_outline": "#111111"
+      "primary":   "#111111",
+      "secondary": "#6CACE3",
+      "home": {
+        "helmet": "#111111", "jersey": "#111111", "pants": "#111111",
+        "goalie_pads": "#6CACE3", "text": "#6CACE3", "text_outline": "#111111"
+      },
+      "away": {
+        "helmet": "#111111", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#6CACE3", "text": "#111111", "text_outline": "#6CACE3"
+      }
     },
     {
       "id": "canucks",
       "name": "Vancouver Canucks",
-      "primary":      "#00205B",
-      "secondary":    "#00843D",
-      "helmet":       "#00205B",
-      "jersey":       "#00205B",
-      "pants":        "#00205B",
-      "goalie_pads":  "#00843D",
-      "text":         "#00843D",
-      "text_outline": "#00205B"
+      "primary":   "#00205B",
+      "secondary": "#00843D",
+      "home": {
+        "helmet": "#00205B", "jersey": "#00205B", "pants": "#00205B",
+        "goalie_pads": "#00843D", "text": "#00843D", "text_outline": "#00205B"
+      },
+      "away": {
+        "helmet": "#00205B", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#00843D", "text": "#00205B", "text_outline": "#00843D"
+      }
     },
     {
       "id": "goldenknights",
       "name": "Vegas Golden Knights",
-      "primary":      "#B4975A",
-      "secondary":    "#333F42",
-      "helmet":       "#333F42",
-      "jersey":       "#333F42",
-      "pants":        "#333F42",
-      "goalie_pads":  "#B4975A",
-      "text":         "#B4975A",
-      "text_outline": "#333F42"
+      "primary":   "#B4975A",
+      "secondary": "#333F42",
+      "home": {
+        "helmet": "#333F42", "jersey": "#333F42", "pants": "#333F42",
+        "goalie_pads": "#B4975A", "text": "#B4975A", "text_outline": "#333F42"
+      },
+      "away": {
+        "helmet": "#333F42", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#B4975A", "text": "#333F42", "text_outline": "#B4975A"
+      }
     },
     {
       "id": "capitals",
       "name": "Washington Capitals",
-      "primary":      "#C8102E",
-      "secondary":    "#041E42",
-      "helmet":       "#041E42",
-      "jersey":       "#C8102E",
-      "pants":        "#041E42",
-      "goalie_pads":  "#FFFFFF",
-      "text":         "#041E42",
-      "text_outline": "#C8102E"
+      "primary":   "#C8102E",
+      "secondary": "#041E42",
+      "home": {
+        "helmet": "#041E42", "jersey": "#C8102E", "pants": "#041E42",
+        "goalie_pads": "#FFFFFF", "text": "#041E42", "text_outline": "#C8102E"
+      },
+      "away": {
+        "helmet": "#041E42", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FFFFFF", "text": "#C8102E", "text_outline": "#041E42"
+      }
     },
     {
       "id": "jets",
       "name": "Winnipeg Jets",
-      "primary":      "#041E42",
-      "secondary":    "#AC162C",
-      "helmet":       "#041E42",
-      "jersey":       "#041E42",
-      "pants":        "#041E42",
-      "goalie_pads":  "#FFFFFF",
-      "text":         "#AC162C",
-      "text_outline": "#041E42"
+      "primary":   "#041E42",
+      "secondary": "#AC162C",
+      "home": {
+        "helmet": "#041E42", "jersey": "#041E42", "pants": "#041E42",
+        "goalie_pads": "#FFFFFF", "text": "#AC162C", "text_outline": "#041E42"
+      },
+      "away": {
+        "helmet": "#041E42", "jersey": "#FFFFFF", "pants": "#FFFFFF",
+        "goalie_pads": "#FFFFFF", "text": "#041E42", "text_outline": "#AC162C"
+      }
     }
   ]
 }
