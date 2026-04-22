@@ -34,7 +34,15 @@ static func find_bracket(buffer: Array, render_time: float) -> BracketResult:
 		r.extrapolation_dt = render_time - newest.timestamp
 		return r
 	if buffer.size() < 2:
-		return null  # render_time hasn't reached the single entry yet
+		# Only one snapshot and render_time is behind it — display it directly
+		# rather than holding at the spawn position until a second arrives.
+		var r := BracketResult.new()
+		r.from_state = newest.state
+		r.to_state = newest.state
+		r.t = 0.0
+		r.is_extrapolating = false
+		r.bracket_dt = 0.0
+		return r
 	for i in range(buffer.size() - 1):
 		var a = buffer[i]
 		var b = buffer[i + 1]
