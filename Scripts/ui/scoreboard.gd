@@ -7,6 +7,8 @@ const _DIM     := Color(0.62, 0.62, 0.68, 1.00)
 const _HEADER  := Color(0.55, 0.55, 0.62, 1.00)
 const _SEP     := Color(0.28, 0.28, 0.33, 1.00)
 
+const _POSITION_LABEL := ["C", "L", "R"]   # indexed by team_slot
+
 var _rows_container: VBoxContainer = null
 var _period_score_labels: Array = []  # [team_id][period_index, then total]
 var _period_summary_grid: GridContainer = null
@@ -71,7 +73,7 @@ func _build_panel() -> void:
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
-	panel.custom_minimum_size = Vector2(530, 0)
+	panel.custom_minimum_size = Vector2(560, 0)
 	h_centering.add_child(panel)
 
 	var vbox := VBoxContainer.new()
@@ -83,7 +85,7 @@ func _build_panel() -> void:
 	vbox.add_child(_hsep())
 
 	var header_row := _make_row()
-	_fill_row(header_row, ["PLAYER", "G", "A", "PTS", "SOG", "HITS", "PING"], _HEADER, true)
+	_fill_row(header_row, ["PING", "#", "POS", "PLAYER", "G", "A", "PTS", "SOG", "HITS"], _HEADER, true)
 	vbox.add_child(header_row)
 
 	vbox.add_child(_hsep())
@@ -201,8 +203,10 @@ func _refresh() -> void:
 		var display_name: String = record.display_name()
 		var name_color: Color = PlayerRules.slot_color(record.team.team_id, record.team_slot)
 		var ping_str: String = _ping_label(record.peer_id)
+		var pos_str: String = _POSITION_LABEL[record.team_slot]
+		var num_str: String = str(record.jersey_number)
 		_fill_row(row,
-			[display_name, str(s.goals), str(s.assists), str(pts), str(s.shots_on_goal), str(s.hits), ping_str],
+			[ping_str, num_str, pos_str, display_name, str(s.goals), str(s.assists), str(pts), str(s.shots_on_goal), str(s.hits)],
 			name_color, false
 		)
 
@@ -237,16 +241,16 @@ func _ping_label(peer_id: int) -> String:
 	return "%d ms" % p if p > 0 else "—"
 
 func _fill_row(row: HBoxContainer, texts: Array, name_color: Color, is_header: bool) -> void:
-	var widths := [190, 38, 38, 48, 48, 56, 52]
+	var widths := [52, 36, 36, 150, 38, 38, 48, 48, 56]
 	var font_size := 13 if is_header else 14
 	for i in texts.size():
 		var cell := Label.new()
 		cell.text = texts[i]
 		cell.custom_minimum_size = Vector2(widths[i], 0)
 		cell.add_theme_font_size_override("font_size", font_size)
-		var col := name_color if (i == 0 or is_header) else _WHITE
+		var col := name_color if (i > 0 and i < 4 or is_header) else _WHITE
 		cell.add_theme_color_override("font_color", col)
-		cell.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if i == 0 else HORIZONTAL_ALIGNMENT_CENTER
+		cell.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if i == 3 else HORIZONTAL_ALIGNMENT_CENTER
 		row.add_child(cell)
 
 func _team_badge(text: String, color: Color) -> PanelContainer:
