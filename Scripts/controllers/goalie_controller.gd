@@ -472,9 +472,7 @@ func apply_state(network_state: GoalieNetworkState, host_ts: float) -> void:
 	_adapt_interpolation_delay()
 
 func _adapt_interpolation_delay() -> void:
-	var target: float = NetworkManager.get_target_interpolation_delay()
-	var change: float = lerpf(interpolation_delay, target, 0.15) - interpolation_delay
-	interpolation_delay += clampf(change, -0.001, 0.005)
+	interpolation_delay = NetworkManager.adapt_interpolation_delay(interpolation_delay)
 
 func _interpolate() -> void:
 	var render_time: float = NetworkManager.estimated_host_time() - interpolation_delay

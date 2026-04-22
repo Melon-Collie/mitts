@@ -38,7 +38,7 @@ func remove_player(peer_id: int) -> void:
 
 
 func is_ready() -> bool:
-	return _capture_count > 0
+	return _capture_count >= 2
 
 
 func capture(registry: PlayerRegistry, puck_controller: PuckController, goalie_controllers: Array) -> void:

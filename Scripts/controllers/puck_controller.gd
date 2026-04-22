@@ -349,9 +349,7 @@ func _interpolate() -> void:
 	BufferedStateInterpolator.drop_stale(_state_buffer, render_time)
 
 func _adapt_interpolation_delay() -> void:
-	var target: float = NetworkManager.get_target_interpolation_delay()
-	var change: float = lerpf(interpolation_delay, target, 0.15) - interpolation_delay
-	interpolation_delay += clampf(change, -0.001, 0.005)
+	interpolation_delay = NetworkManager.adapt_interpolation_delay(interpolation_delay)
 
 func _apply_state_to_puck(state: PuckNetworkState) -> void:
 	# Position only — puck is frozen during interpolation, Jolt ignores velocity.

@@ -730,6 +730,11 @@ func get_target_interpolation_delay() -> float:
 	var target: float = rtt_half + broadcast_interval + get_jitter_p95() * 1.5
 	return clampf(target, maxf(rtt_half + broadcast_interval, 0.016), 0.200)
 
+func adapt_interpolation_delay(current: float) -> float:
+	var target: float = get_target_interpolation_delay()
+	var change: float = lerpf(current, target, 0.15) - current
+	return current + clampf(change, -0.001, 0.005)
+
 func get_peer_loss_rate(peer_id: int = -1) -> float:
 	if is_host:
 		return _peer_loss_rates.get(peer_id, 0.0)
