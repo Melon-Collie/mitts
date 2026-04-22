@@ -437,7 +437,7 @@ func get_peer_ping_ms(peer_id: int) -> int:
 func get_clock_offset_ms() -> float:
 	if _clock_sync == null:
 		return 0.0
-	return _clock_sync._offset * 1000.0
+	return (_clock_sync._ntp_offset + _clock_sync._qd_offset) * 1000.0
 
 @rpc("any_peer", "unreliable")
 func report_ping(rtt_ms: int) -> void:

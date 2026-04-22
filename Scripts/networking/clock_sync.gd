@@ -10,7 +10,8 @@ var is_ready: bool = false
 var rtt_ms: float = 0.0
 var latest_rtt_ms: float = 0.0
 
-var _offset: float = 0.0
+var _ntp_offset: float = 0.0   # pure NTP clock delta, EMA-smoothed by _recompute()
+var _qd_offset: float = 0.0    # queue-depth render correction, nudged by apply_queue_depth_feedback()
 var _last_estimated_time: float = 0.0
 var _samples: Array = []  # Array of {rtt: float, offset: float}
 var _pings_sent: int = 0
@@ -36,7 +37,7 @@ func record_pong(client_send_time: float, host_time: float, recv_time: float) ->
 		is_ready = true
 
 func estimated_host_time() -> float:
-	var t := Time.get_ticks_msec() / 1000.0 + _offset
+	var t := Time.get_ticks_msec() / 1000.0 + _ntp_offset + _qd_offset
 	_last_estimated_time = maxf(t, _last_estimated_time)
 	return _last_estimated_time
 
@@ -48,7 +49,7 @@ const OFFSET_EMA_ALPHA: float = 0.3     # after is_ready; ~3 pings to reach 66% 
 func apply_queue_depth_feedback(depth: int) -> void:
 	var error: int = depth - TARGET_DEPTH
 	var nudge: float = clampf(-error * NUDGE_RATE, -MAX_WALK_PER_CALL, MAX_WALK_PER_CALL)
-	_offset += nudge
+	_qd_offset += nudge
 
 func _recompute() -> void:
 	var sorted := _samples.duplicate()
@@ -62,4 +63,4 @@ func _recompute() -> void:
 		offset_sum += s.offset
 	rtt_ms = (rtt_sum / keep.size()) * 1000.0
 	var raw_offset := offset_sum / keep.size()
-	_offset = raw_offset if not is_ready else lerpf(_offset, raw_offset, OFFSET_EMA_ALPHA)
+	_ntp_offset = raw_offset if not is_ready else lerpf(_ntp_offset, raw_offset, OFFSET_EMA_ALPHA)
