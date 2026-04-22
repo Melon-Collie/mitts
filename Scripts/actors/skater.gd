@@ -89,9 +89,10 @@ var forearm_mesh: MeshInstance3D = null
 var bottom_upper_arm_mesh: MeshInstance3D = null
 var bottom_forearm_mesh: MeshInstance3D = null
 
-# Optional sock mesh. Resolved from scene nodes in _ready; guarded by
-# null-check so the skater works before the user adds the mesh.
+# Optional sock and skate meshes. Resolved from scene nodes in _ready;
+# guarded by null-checks so the skater works before the user adds the meshes.
 var _sock_mesh: MeshInstance3D = null
+var _skate_mesh: MeshInstance3D = null
 
 signal body_checked_player(victim: Skater, impact_force: float, hit_direction: Vector3)
 signal body_check_impulse_applied(impulse: Vector3)
@@ -221,7 +222,8 @@ func _ready() -> void:
 	bottom_upper_arm_mesh = _resolve_or_create_bone_mesh("BottomUpperArmMesh")
 	bottom_forearm_mesh = _resolve_or_create_bone_mesh("BottomForearmMesh")
 
-	_sock_mesh = lower_body.get_node_or_null("SockMesh") as MeshInstance3D
+	_sock_mesh  = lower_body.get_node_or_null("SockMesh") as MeshInstance3D
+	_skate_mesh = lower_body.get_node_or_null("SkateMesh") as MeshInstance3D
 
 	_ring_mesh = MeshInstance3D.new()
 	_ring_mesh.name = "RingIndicator"
@@ -348,10 +350,11 @@ func set_player_color(
 	_lower_body_mesh.material_override = _make_solid_mat(pants_color)
 	if _sock_mesh != null:
 		_sock_mesh.material_override = _make_solid_mat(socks_color)
-	# Fixed stick shaft color — set explicitly so ghost mode never creates a
-	# blank gray override and corrupts the color after ghost ends.
-	var stick_mat: StandardMaterial3D = _make_solid_mat(Color(0.705, 0.640, 0.605))
-	stick_mesh.material_override = stick_mat
+	# Fixed colors — set explicitly so ghost mode never creates a blank gray
+	# override and corrupts the color after ghost ends.
+	stick_mesh.material_override = _make_solid_mat(Color(0.705, 0.640, 0.605))
+	if _skate_mesh != null:
+		_skate_mesh.material_override = _make_solid_mat(Color(0.08, 0.08, 0.08))
 
 func set_ring_color(color: Color) -> void:
 	if _ring_mesh == null:
@@ -663,6 +666,7 @@ func _apply_ghost_visual(ghost: bool) -> void:
 			upper_arm_mesh, forearm_mesh,
 			bottom_upper_arm_mesh, bottom_forearm_mesh,
 			_lower_body_mesh, _direction_indicator,
+			_sock_mesh, _skate_mesh,
 		]
 	for mesh: MeshInstance3D in meshes:
 		if mesh == null:
