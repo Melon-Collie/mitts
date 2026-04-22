@@ -56,6 +56,6 @@ func _process(_delta: float) -> void:
 		+ "Reconcile: %.1f/s   avg %.3f m\n" % [t.reconcile_per_sec, t.reconcile_magnitude_avg]
 		+ "Extrap:    %.1f/s   buf: skater=%d  puck=%d  goalie=%d\n" % [t.extrapolation_per_sec, t.buffer_depth_skater, t.buffer_depth_puck, t.buffer_depth_goalie]
 		+ "Puck:      %s\n" % t.puck_mode
-		+ "Queue:     %d  (target 2)   loss: %.1f%%\n" % [t.input_queue_depth, t.packet_loss_pct]
+		+ "Queue:     %d frames (2s median)   loss: %.1f%%\n" % [t.input_queue_depth_median, t.packet_loss_pct]
 		+ "Jitter P95: %.1f ms   interp delay: %.0f ms" % [t.jitter_p95_ms, NetworkManager.get_target_interpolation_delay() * 1000.0]
 	)
