@@ -25,6 +25,7 @@ signal player_joined(player_name: String, team_color: Color)
 signal player_left(player_name: String, team_color: Color)
 signal stats_updated
 signal shots_on_goal_changed(sog_0: int, sog_1: int)
+signal team_colors_ready(home_primary: Color, home_secondary: Color, away_primary: Color, away_secondary: Color)
 
 # ── Domain state ──────────────────────────────────────────────────────────────
 var _state_machine: GameStateMachine = null
@@ -179,9 +180,11 @@ func on_connected_to_server() -> void:
 func on_slot_assigned(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color) -> void:
 	_spawn_world()
 	var peer_id: int = multiplayer.get_unique_id()
+	var colors: Dictionary = TeamColorRegistry.get_colors(teams[team_id].color_id, team_id)
 	_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
 	_registry.spawn(peer_id, team_slot, teams[team_id],
 			jersey_color, helmet_color, pants_color,
+			colors.secondary, colors.text, colors.text_outline,
 			NetworkManager.local_is_left_handed, NetworkManager.local_player_name, true,
 			NetworkManager.local_jersey_number)
 
@@ -191,7 +194,7 @@ func on_player_connected(peer_id: int) -> void:
 		return
 	var assignment: Dictionary = _state_machine.on_player_connected(peer_id)
 	var team: Team = teams[assignment.team_id]
-	var colors: Dictionary = PlayerRegistry.generate_colors(team.team_id)
+	var colors: Dictionary = TeamColorRegistry.get_colors(team.color_id, team.team_id)
 	var is_left: bool = NetworkManager.get_peer_handedness(peer_id)
 	var peer_name: String = NetworkManager.get_peer_name(peer_id)
 	var peer_number: int = NetworkManager.get_peer_number(peer_id)
@@ -201,6 +204,8 @@ func on_player_connected(peer_id: int) -> void:
 		"period_duration": _state_machine.period_duration,
 		"ot_enabled": _state_machine.ot_enabled,
 		"ot_duration": _state_machine.ot_duration,
+		"home_color_id": NetworkManager.pending_home_color_id,
+		"away_color_id": NetworkManager.pending_away_color_id,
 	}
 	NetworkManager.send_join_in_progress(peer_id, config)
 	NetworkManager.send_slot_assignment(peer_id, assignment.team_slot, team.team_id,
@@ -209,7 +214,9 @@ func on_player_connected(peer_id: int) -> void:
 	NetworkManager.send_spawn_remote_skater(peer_id, assignment.team_slot, team.team_id,
 			colors.jersey, colors.helmet, colors.pants, is_left, peer_name, peer_number)
 	_registry.spawn(peer_id, assignment.team_slot, team,
-			colors.jersey, colors.helmet, colors.pants, is_left, peer_name, false, peer_number)
+			colors.jersey, colors.helmet, colors.pants,
+			colors.secondary, colors.text, colors.text_outline,
+			is_left, peer_name, false, peer_number)
 
 
 func on_player_disconnected(peer_id: int) -> void:
@@ -241,9 +248,12 @@ func sync_existing_players(player_data: Array) -> void:
 		var is_left: bool = entry[6] if entry.size() > 6 else true
 		var p_name: String = entry[7] if entry.size() > 7 else "Player"
 		var p_number: int = entry[8] if entry.size() > 8 else 10
+		var colors: Dictionary = TeamColorRegistry.get_colors(teams[team_id].color_id, team_id)
 		_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
 		_registry.spawn(peer_id, team_slot, teams[team_id],
-				jersey_color, helmet_color, pants_color, is_left, p_name, false, p_number)
+				jersey_color, helmet_color, pants_color,
+				colors.secondary, colors.text, colors.text_outline,
+				is_left, p_name, false, p_number)
 
 
 func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int,
@@ -251,9 +261,11 @@ func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int,
 		is_left_handed: bool, player_name: String, jersey_number: int = 10) -> void:
 	if peer_id == multiplayer.get_unique_id() or _state_machine == null:
 		return
+	var colors: Dictionary = TeamColorRegistry.get_colors(teams[team_id].color_id, team_id)
 	_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
 	_registry.spawn(peer_id, team_slot, teams[team_id],
 			jersey_color, helmet_color, pants_color,
+			colors.secondary, colors.text, colors.text_outline,
 			is_left_handed, player_name, false, jersey_number)
 
 
@@ -279,8 +291,10 @@ func _spawn_world() -> void:
 func _create_teams() -> void:
 	var t0 := Team.new()
 	t0.team_id = 0
+	t0.color_id = NetworkManager.pending_home_color_id
 	var t1 := Team.new()
 	t1.team_id = 1
+	t1.color_id = NetworkManager.pending_away_color_id
 	teams = [t0, t1]
 
 
@@ -329,11 +343,8 @@ func _spawn_goalies() -> void:
 	teams[0].goalie_controller = result.bottom_controller
 	for team_id: int in [0, 1]:
 		var goalie: Goalie = result.bottom_goalie if team_id == 0 else result.top_goalie
-		goalie.set_goalie_color(
-			PlayerRules.generate_jersey_color(team_id),
-			PlayerRules.generate_helmet_color(team_id),
-			PlayerRules.generate_pads_color(team_id)
-		)
+		var colors: Dictionary = TeamColorRegistry.get_colors(teams[team_id].color_id, team_id)
+		goalie.set_goalie_color(colors.jersey, colors.helmet, colors.goalie_pads)
 
 
 func _wire_subsystems() -> void:
@@ -393,11 +404,16 @@ func _wire_subsystems() -> void:
 	_debug_overlay = NetworkDebugOverlay.new()
 	add_child(_debug_overlay)
 
+	var _home_c := TeamColorRegistry.get_colors(teams[0].color_id, 0)
+	var _away_c := TeamColorRegistry.get_colors(teams[1].color_id, 1)
+	team_colors_ready.emit(_home_c.primary, _home_c.secondary, _away_c.primary, _away_c.secondary)
+
 
 func _spawn_local(peer_id: int, team_slot: int, team: Team) -> void:
-	var colors: Dictionary = PlayerRegistry.generate_colors(team.team_id)
+	var colors: Dictionary = TeamColorRegistry.get_colors(team.color_id, team.team_id)
 	_registry.spawn(peer_id, team_slot, team,
 			colors.jersey, colors.helmet, colors.pants,
+			colors.secondary, colors.text, colors.text_outline,
 			NetworkManager.local_is_left_handed, NetworkManager.local_player_name, true,
 			NetworkManager.local_jersey_number)
 
@@ -926,14 +942,16 @@ func _push_lobby_assignments_to_clients() -> void:
 		var team_slot: int = entry.team_slot
 		_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
 		var team: Team = teams[team_id]
-		var colors: Dictionary = PlayerRegistry.generate_colors(team_id)
+		var colors: Dictionary = TeamColorRegistry.get_colors(team.color_id, team_id)
 		var is_left: bool = entry.get("is_left_handed", true)
 		var p_name: String = entry.get("player_name", "Player")
 		var p_number: int = entry.get("jersey_number", 10)
 		NetworkManager.send_slot_assignment(peer_id, team_slot, team_id, colors.jersey, colors.helmet, colors.pants)
 		NetworkManager.send_sync_existing_players(peer_id, existing)
 		NetworkManager.send_spawn_remote_skater(peer_id, team_slot, team_id, colors.jersey, colors.helmet, colors.pants, is_left, p_name, p_number)
-		_registry.spawn(peer_id, team_slot, team, colors.jersey, colors.helmet, colors.pants, is_left, p_name, false, p_number)
+		_registry.spawn(peer_id, team_slot, team, colors.jersey, colors.helmet, colors.pants,
+				colors.secondary, colors.text, colors.text_outline,
+				is_left, p_name, false, p_number)
 		existing.append([peer_id, team_slot, team_id, colors.jersey, colors.helmet, colors.pants, is_left, p_name, p_number])
 	NetworkManager.pending_lobby_slots = {}
 

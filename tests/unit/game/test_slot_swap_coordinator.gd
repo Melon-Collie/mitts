@@ -43,10 +43,11 @@ func test_request_cross_team_swap_regenerates_colors() -> void:
 	assert_eq(result.old_team_id, 0)
 	assert_eq(result.new_team_id, 1)
 	assert_eq(result.new_slot, 0)
-	# Cross-team: colors should match team 1's palette
-	assert_eq(result.jersey, PlayerRules.generate_jersey_color(1))
-	assert_eq(result.helmet, PlayerRules.generate_helmet_color(1))
-	assert_eq(result.pants,  PlayerRules.generate_pants_color(1))
+	# Cross-team: colors should match team 1's palette from the registry
+	var expected: Dictionary = TeamColorRegistry.get_colors(teams[1].color_id, 1)
+	assert_eq(result.jersey, expected.jersey)
+	assert_eq(result.helmet, expected.helmet)
+	assert_eq(result.pants,  expected.pants)
 
 
 func test_request_same_team_swap_keeps_original_colors() -> void:

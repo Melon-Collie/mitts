@@ -27,6 +27,7 @@ signal slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int)
 signal slot_swap_confirmed(peer_id: int, old_team_id: int, old_slot: int, new_team_id: int, new_slot: int, jersey: Color, helmet: Color, pants: Color)
 signal game_started(config: Dictionary)
 signal lobby_roster_synced(roster: Array)
+signal team_colors_synced(home_color_id: String, away_color_id: String)
 signal return_to_lobby_received(roster: Array)
 signal clock_ready
 signal pickup_claim_received(peer_id: int, host_timestamp: float, rtt_ms: float, interp_delay_ms: float)
@@ -44,6 +45,8 @@ var pending_game_config: Dictionary = {}
 var pending_lobby_slots: Dictionary = {}  # peer_id → { team_id, team_slot, player_name, is_left_handed }
 var pending_lobby_roster: Array = []
 var pending_join_slot: Dictionary = {}   # { team_slot, team_id, jersey_color, helmet_color, pants_color }
+var pending_home_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID
+var pending_away_color_id: String  = TeamColorRegistry.DEFAULT_AWAY_ID
 var pending_join_players: Array = []     # sync_existing_players data for join-in-progress
 var _local_controller: LocalController = null
 var _remote_controllers: Dictionary = {}  # peer_id -> RemoteController
@@ -183,6 +186,8 @@ func reset() -> void:
 	pending_lobby_roster = []
 	pending_join_slot = {}
 	pending_join_players = []
+	pending_home_color_id = TeamColorRegistry.DEFAULT_HOME_ID
+	pending_away_color_id = TeamColorRegistry.DEFAULT_AWAY_ID
 	_input_timer = 0.0
 	_state_timer = 0.0
 	_connect_timer = -1.0
@@ -626,27 +631,41 @@ signal join_in_progress(config: Dictionary)
 
 @rpc("authority", "reliable")
 func notify_join_in_progress(p_num_periods: int, p_period_duration: float,
-		p_ot_enabled: bool, p_ot_duration: float) -> void:
+		p_ot_enabled: bool, p_ot_duration: float,
+		p_home_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID,
+		p_away_color_id: String = TeamColorRegistry.DEFAULT_AWAY_ID) -> void:
+	pending_home_color_id = p_home_color_id
+	pending_away_color_id = p_away_color_id
 	join_in_progress.emit({
 		"num_periods": p_num_periods,
 		"period_duration": p_period_duration,
 		"ot_enabled": p_ot_enabled,
 		"ot_duration": p_ot_duration,
+		"home_color_id": p_home_color_id,
+		"away_color_id": p_away_color_id,
 	})
 
 func send_join_in_progress(peer_id: int, config: Dictionary) -> void:
+	var hid: String = config.get("home_color_id", pending_home_color_id)
+	var aid: String = config.get("away_color_id", pending_away_color_id)
 	notify_join_in_progress.rpc_id(peer_id,
 		config.num_periods, config.period_duration,
-		config.ot_enabled, config.ot_duration)
+		config.ot_enabled, config.ot_duration, hid, aid)
 
 @rpc("authority", "reliable")
 func notify_game_start(p_num_periods: int, p_period_duration: float,
-		p_ot_enabled: bool, p_ot_duration: float) -> void:
+		p_ot_enabled: bool, p_ot_duration: float,
+		p_home_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID,
+		p_away_color_id: String = TeamColorRegistry.DEFAULT_AWAY_ID) -> void:
+	pending_home_color_id = p_home_color_id
+	pending_away_color_id = p_away_color_id
 	game_started.emit({
 		"num_periods": p_num_periods,
 		"period_duration": p_period_duration,
 		"ot_enabled": p_ot_enabled,
 		"ot_duration": p_ot_duration,
+		"home_color_id": p_home_color_id,
+		"away_color_id": p_away_color_id,
 	})
 
 @rpc("authority", "reliable")
@@ -655,14 +674,33 @@ func sync_lobby_roster(roster: Array) -> void:
 	lobby_roster_synced.emit(roster)
 
 func send_game_start(config: Dictionary) -> void:
+	var hid: String = config.get("home_color_id", TeamColorRegistry.DEFAULT_HOME_ID)
+	var aid: String = config.get("away_color_id", TeamColorRegistry.DEFAULT_AWAY_ID)
+	pending_home_color_id = hid
+	pending_away_color_id = aid
 	for peer_id: int in multiplayer.get_peers():
 		notify_game_start.rpc_id(peer_id,
 			config.num_periods, config.period_duration,
-			config.ot_enabled, config.ot_duration)
+			config.ot_enabled, config.ot_duration, hid, aid)
 	game_started.emit(config)
 
 func send_lobby_roster(peer_id: int, roster: Array) -> void:
 	sync_lobby_roster.rpc_id(peer_id, roster)
+
+@rpc("authority", "reliable")
+func notify_team_colors(home_color_id: String, away_color_id: String) -> void:
+	pending_home_color_id = home_color_id
+	pending_away_color_id = away_color_id
+	team_colors_synced.emit(home_color_id, away_color_id)
+
+func send_team_colors(home_id: String, away_id: String) -> void:
+	pending_home_color_id = home_id
+	pending_away_color_id = away_id
+	for peer_id: int in multiplayer.get_peers():
+		notify_team_colors.rpc_id(peer_id, home_id, away_id)
+
+func send_team_colors_to(peer_id: int, home_id: String, away_id: String) -> void:
+	notify_team_colors.rpc_id(peer_id, home_id, away_id)
 
 @rpc("authority", "reliable")
 func notify_return_to_lobby(roster: Array) -> void:
