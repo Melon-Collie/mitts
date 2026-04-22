@@ -26,23 +26,23 @@ func _init() -> void:
 	_build_grid()
 
 func _build_grid() -> void:
-	add_theme_constant_override("separation", 4)
+	add_theme_constant_override("separation", 6)
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	# Header row: blank spacer + L / C / R column labels
 	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 6)
+	header.add_theme_constant_override("separation", 9)
 	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	add_child(header)
 
 	var spacer := Label.new()
-	spacer.custom_minimum_size = Vector2(44, 0)
+	spacer.custom_minimum_size = Vector2(88, 0)
 	header.add_child(spacer)
 
 	for col: int in _DISPLAY_ORDER.size():
 		var lbl := Label.new()
 		lbl.text = _POSITION_HEADER[col]
-		lbl.add_theme_font_size_override("font_size", 11)
+		lbl.add_theme_font_size_override("font_size", 16)
 		lbl.add_theme_color_override("font_color", _DIM)
 		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -51,15 +51,15 @@ func _build_grid() -> void:
 	# Away on top (team 1), Home on bottom (team 0) — matches rink perspective.
 	for team_id: int in [1, 0]:
 		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
+		row.add_theme_constant_override("separation", 9)
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		add_child(row)
 
 		var label := Label.new()
 		label.text = "AWAY" if team_id == 1 else "HOME"
-		label.add_theme_font_size_override("font_size", 11)
+		label.add_theme_font_size_override("font_size", 16)
 		label.add_theme_color_override("font_color", _DIM)
-		label.custom_minimum_size = Vector2(44, 0)
+		label.custom_minimum_size = Vector2(88, 0)
 		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		row.add_child(label)
 
@@ -73,7 +73,7 @@ func _build_grid() -> void:
 			var s: int = _DISPLAY_ORDER[col]
 
 			var btn := Button.new()
-			btn.custom_minimum_size = Vector2(0, 44)
+			btn.custom_minimum_size = Vector2(0, 66)
 			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			btn.clip_contents = true
 			btn.text = ""
@@ -82,7 +82,7 @@ func _build_grid() -> void:
 			_buttons[team_id][s] = btn
 
 			var hbox := HBoxContainer.new()
-			hbox.add_theme_constant_override("separation", 6)
+			hbox.add_theme_constant_override("separation", 9)
 			hbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			hbox.size_flags_vertical   = Control.SIZE_EXPAND_FILL
@@ -90,16 +90,17 @@ func _build_grid() -> void:
 			btn.add_child(hbox)
 
 			var num_lbl := Label.new()
-			num_lbl.add_theme_font_size_override("font_size", 22)
-			num_lbl.add_theme_constant_override("outline_size", 3)
+			num_lbl.add_theme_font_override("font", _get_mono_font())
+			num_lbl.add_theme_font_size_override("font_size", 33)
+			num_lbl.add_theme_constant_override("outline_size", 4)
 			num_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			num_lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-			num_lbl.custom_minimum_size = Vector2(38, 0)
+			num_lbl.custom_minimum_size = Vector2(76, 0)
 			hbox.add_child(num_lbl)
 			_num_labels[team_id][s] = num_lbl
 
 			var name_lbl := Label.new()
-			name_lbl.add_theme_font_size_override("font_size", 13)
+			name_lbl.add_theme_font_size_override("font_size", 19)
 			name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			name_lbl.horizontal_alignment  = HORIZONTAL_ALIGNMENT_CENTER
 			name_lbl.vertical_alignment    = VERTICAL_ALIGNMENT_CENTER
@@ -109,10 +110,10 @@ func _build_grid() -> void:
 
 			var hand_lbl := Label.new()
 			hand_lbl.add_theme_font_override("font", _get_mono_font())
-			hand_lbl.add_theme_font_size_override("font_size", 12)
+			hand_lbl.add_theme_font_size_override("font_size", 18)
 			hand_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			hand_lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-			hand_lbl.custom_minimum_size = Vector2(34, 0)
+			hand_lbl.custom_minimum_size = Vector2(68, 0)
 			hbox.add_child(hand_lbl)
 			_hand_labels[team_id][s] = hand_lbl
 
@@ -169,7 +170,7 @@ func _update_card(team_id: int, slot: int, entry, is_local: bool) -> void:
 				Color(jersey_c.r, jersey_c.g, jersey_c.b, 0.80), true)
 		btn.disabled = true
 		btn.modulate = Color(1, 1, 1, 0.85)
-		_set_num(num_lbl, "%d" % entry.get("jersey_number", 10), text_c, outline_c, 3)
+		_set_num(num_lbl, _fmt_num(entry.get("jersey_number", 10)), text_c, outline_c, 4)
 		name_lbl.text = "You"
 		name_lbl.add_theme_color_override("font_color", text_c)
 		hand_lbl.text = _hand_str(slot, entry.get("is_left_handed", true))
@@ -180,11 +181,14 @@ func _update_card(team_id: int, slot: int, entry, is_local: bool) -> void:
 				Color(jersey_c.r, jersey_c.g, jersey_c.b, 1.0), true)
 		btn.disabled = true
 		btn.modulate = Color(1, 1, 1, 0.70)
-		_set_num(num_lbl, "%d" % entry.get("jersey_number", 10), text_c, outline_c, 3)
+		_set_num(num_lbl, _fmt_num(entry.get("jersey_number", 10)), text_c, outline_c, 4)
 		name_lbl.text = entry.get("player_name", "Player") if not entry.get("player_name", "").is_empty() else "Player"
 		name_lbl.add_theme_color_override("font_color", text_c)
 		hand_lbl.text = _hand_str(slot, entry.get("is_left_handed", true))
 		hand_lbl.add_theme_color_override("font_color", text_c)
+
+func _fmt_num(n: int) -> String:
+	return ("%d " % n) if n < 10 else ("%d" % n)
 
 func _set_num(lbl: Label, text: String, color: Color, outline_color: Color, outline_size: int) -> void:
 	lbl.text = text

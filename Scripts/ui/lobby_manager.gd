@@ -67,7 +67,7 @@ func _build_ui() -> void:
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-	panel.custom_minimum_size = Vector2(480, 0)
+	panel.custom_minimum_size = Vector2(960, 0)
 	root.add_child(panel)
 
 	var vbox := VBoxContainer.new()
