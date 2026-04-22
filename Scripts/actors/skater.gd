@@ -708,3 +708,9 @@ func _apply_ghost_visual(ghost: bool) -> void:
 		var m: Node = upper_body.get_node_or_null(n)
 		if m:
 			m.visible = not ghost
+	for node: Node in upper_body.get_children():
+		if node.name.begins_with("Stripe_"):
+			node.visible = not ghost
+	for node: Node in lower_body.get_children():
+		if node.name.begins_with("Stripe_"):
+			node.visible = not ghost
