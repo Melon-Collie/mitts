@@ -278,13 +278,26 @@ func _build_slot_grid_roster() -> Array[Dictionary]:
 		var team_id: int = k / 3
 		var slot: int = k % 3
 		var entry: Dictionary = _lobby_slots[k]
-		result.append({ "peer_id": entry.peer_id, "team_id": team_id, "slot": slot, "player_name": entry.player_name })
+		result.append({
+			"peer_id":        entry.peer_id,
+			"team_id":        team_id,
+			"slot":           slot,
+			"player_name":    entry.player_name,
+			"jersey_number":  entry.get("jersey_number", 10),
+			"is_left_handed": entry.is_left_handed,
+		})
 	return result
+
+func _get_team_colors() -> Array[Dictionary]:
+	return [
+		TeamColorRegistry.get_colors(_home_color_id, 0),
+		TeamColorRegistry.get_colors(_away_color_id, 1),
+	]
 
 func _refresh_grid() -> void:
 	if _slot_grid == null:
 		return
-	_slot_grid.refresh(_build_slot_grid_roster(), multiplayer.get_unique_id())
+	_slot_grid.refresh(_build_slot_grid_roster(), multiplayer.get_unique_id(), _get_team_colors())
 
 func _broadcast_confirm(peer_id: int, team_id: int, slot: int) -> void:
 	var entry: Dictionary = _lobby_slots.get(_slot_key(team_id, slot), {})
@@ -381,6 +394,7 @@ func _on_team_colors_synced(home_id: String, away_id: String) -> void:
 	_sync_option_btn(_home_color_btn, home_id)
 	_sync_option_btn(_away_color_btn, away_id)
 	_update_color_exclusion()
+	_refresh_grid()
 
 func _on_game_started(config: Dictionary) -> void:
 	NetworkManager.pending_game_config = config

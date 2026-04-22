@@ -197,9 +197,14 @@ func get_slot_roster() -> Array[Dictionary]:
 	for entry: Dictionary in raw:
 		var pid: int = entry.peer_id
 		if _players.has(pid):
-			entry["player_name"] = _players[pid].display_name()
+			var rec: PlayerRecord = _players[pid]
+			entry["player_name"]    = rec.display_name()
+			entry["jersey_number"]  = rec.jersey_number
+			entry["is_left_handed"] = rec.is_left_handed
 		else:
-			entry["player_name"] = ""
+			entry["player_name"]    = ""
+			entry["jersey_number"]  = 10
+			entry["is_left_handed"] = true
 	return raw
 
 
