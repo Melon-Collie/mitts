@@ -245,23 +245,23 @@
     {
       "id": "panthers",
       "name": "Florida",
-      "primary": "#041E42",
-      "secondary": "#C8102E",
+      "primary": "#C8102E",
+      "secondary": "#041E42",
       "home": {
         "helmet": "#041E42",
-        "jersey": "#041E42",
+        "jersey": "#C8102E",
         "pants": "#041E42",
         "goalie_pads": "#FFFFFF",
-        "text": "#C8102E",
-        "text_outline": "#041E42"
+        "text": "#FFFFFF",
+        "text_outline": "#C59A2C"
       },
       "away": {
-        "helmet": "#041E42",
+        "helmet": "#FFFFFF",
         "jersey": "#FFFFFF",
-        "pants": "#FFFFFF",
+        "pants": "#041E42",
         "goalie_pads": "#FFFFFF",
         "text": "#041E42",
-        "text_outline": "#C8102E"
+        "text_outline": "#C59A2C"
       }
     },
     {
