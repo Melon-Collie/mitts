@@ -37,8 +37,9 @@ func test_direction_reversal_resets_charge() -> void:
 	ab.tick_wrister_charge(Vector2(50.0, 0.0), VARIANCE_DEG, MAX_DISTANCE)
 	var charge_after_first: float = ab.charge_distance
 	assert_gt(charge_after_first, 0.0)
-	# Move back toward origin (-X), reversing direction past variance threshold
-	ab.tick_wrister_charge(Vector2(0.0, 0.0), VARIANCE_DEG, MAX_DISTANCE)
+	# Short -X reversal (10 px = 0.1 units). ChargeTracking resets then adds the
+	# delta distance, so the reversal distance must be < accumulated charge.
+	ab.tick_wrister_charge(Vector2(40.0, 0.0), VARIANCE_DEG, MAX_DISTANCE)
 	# Charge should be less than the accumulated amount (reset then re-accumulate from new pos)
 	assert_lt(ab.charge_distance, charge_after_first, "direction reversal resets charge accumulator")
 
