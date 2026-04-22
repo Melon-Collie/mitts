@@ -84,12 +84,14 @@ func _physics_process(delta: float) -> void:
 		_prev_puck_pos = puck.get_puck_position()
 		return
 	if _local_carrier_skater != null:
+		is_extrapolating = false
 		_apply_local_carrier_position(delta)
 		if NetworkTelemetry.instance: NetworkTelemetry.instance.puck_mode = "pinned"
 	elif not _predicting_trajectory:
 		_interpolate()
 		if NetworkTelemetry.instance: NetworkTelemetry.instance.puck_mode = "interpolating"
 	else:
+		is_extrapolating = false
 		if NetworkTelemetry.instance: NetworkTelemetry.instance.puck_mode = "predicting"
 		if prediction_extra_friction > 0.0:
 			puck.set_puck_velocity(puck.get_puck_velocity() * pow(1.0 - prediction_extra_friction, delta))
