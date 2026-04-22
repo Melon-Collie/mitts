@@ -93,6 +93,11 @@ var bottom_forearm_mesh: MeshInstance3D = null
 # guarded by null-checks so the skater works before the user adds the meshes.
 var _sock_mesh: MeshInstance3D = null
 var _skate_mesh: MeshInstance3D = null
+# Sleeve cuff stripe meshes. Created by set_jersey_stripes() and updated
+# each frame in update_arm_mesh() / update_bottom_arm_mesh() so they stay
+# perpendicular to the forearm bone direction as the arm moves.
+var _top_cuff_mesh: MeshInstance3D = null
+var _bot_cuff_mesh: MeshInstance3D = null
 
 signal body_checked_player(victim: Skater, impact_force: float, hit_direction: Vector3)
 signal body_check_impulse_applied(impulse: Vector3)
@@ -329,6 +334,15 @@ func _make_solid_mat(color: Color) -> StandardMaterial3D:
 	mat.albedo_color = color
 	return mat
 
+func _make_cuff_mesh(cross_size: float, height: float, color: Color, mesh_name: String) -> MeshInstance3D:
+	var m := MeshInstance3D.new()
+	m.name = mesh_name
+	var box := BoxMesh.new()
+	box.size = Vector3(cross_size, cross_size, height)
+	m.mesh = box
+	m.material_override = _make_solid_mat(color)
+	return m
+
 
 func set_player_color(
 		jersey_color: Color,
@@ -407,6 +421,14 @@ func set_jersey_stripes(
 		jersey_stripe_color: Color,
 		pants_stripe_color: Color,
 		socks_stripe_color: Color) -> void:
+	# Free cuff meshes from a previous call before rebuilding stripes.
+	if _top_cuff_mesh != null and is_instance_valid(_top_cuff_mesh):
+		_top_cuff_mesh.queue_free()
+	_top_cuff_mesh = null
+	if _bot_cuff_mesh != null and is_instance_valid(_bot_cuff_mesh):
+		_bot_cuff_mesh.queue_free()
+	_bot_cuff_mesh = null
+
 	# Remove any previously generated stripe nodes.
 	for node: Node in upper_body.get_children():
 		if node.name.begins_with("Stripe_"):
@@ -414,14 +436,6 @@ func set_jersey_stripes(
 	for node: Node in lower_body.get_children():
 		if node.name.begins_with("Stripe_"):
 			node.queue_free()
-	if top_hand != null:
-		for node: Node in top_hand.get_children():
-			if node.name.begins_with("Stripe_"):
-				node.queue_free()
-	if bottom_hand != null:
-		for node: Node in bottom_hand.get_children():
-			if node.name.begins_with("Stripe_"):
-				node.queue_free()
 
 	# Jersey hem band — bottom 0.08 m of the UpperBodyMesh
 	# (BoxMesh 0.5×0.65×0.28, center (0,0.3,0) → bottom at y = -0.025).
@@ -431,18 +445,15 @@ func set_jersey_stripes(
 	for q: MeshInstance3D in hem_quads:
 		upper_body.add_child(q)
 
-	# Sleeve cuff band — around the wrist at top_hand / bottom_hand positions.
-	var cuff_half: float = arm_mesh_thickness * 0.5 + 0.01
-	if top_hand != null:
-		var top_cuffs: Array = JerseyTextureGenerator.make_sleeve_cuff(
-				cuff_half, 0.06, jersey_stripe_color, "Stripe_CuffTop")
-		for q: MeshInstance3D in top_cuffs:
-			top_hand.add_child(q)
-	if bottom_hand != null:
-		var bot_cuffs: Array = JerseyTextureGenerator.make_sleeve_cuff(
-				cuff_half, 0.06, jersey_stripe_color, "Stripe_CuffBot")
-		for q: MeshInstance3D in bot_cuffs:
-			bottom_hand.add_child(q)
+	# Sleeve cuffs — solid box meshes as children of upper_body. Their
+	# transforms are updated each frame in update_arm_mesh() /
+	# update_bottom_arm_mesh() using the elbow→hand direction so they stay
+	# perpendicular to the forearm bone regardless of arm pose.
+	var cuff_size: float = arm_mesh_thickness + 0.02
+	_top_cuff_mesh = _make_cuff_mesh(cuff_size, 0.06, jersey_stripe_color, "CuffTop")
+	upper_body.add_child(_top_cuff_mesh)
+	_bot_cuff_mesh = _make_cuff_mesh(cuff_size, 0.06, jersey_stripe_color, "CuffBot")
+	upper_body.add_child(_bot_cuff_mesh)
 
 	# Pants side stripe — full-height vertical piping on the ±X faces
 	# (LowerBodyMesh BoxMesh 0.45×0.4×0.3, center (0,−0.2,0)).
@@ -599,6 +610,7 @@ func update_arm_mesh() -> void:
 			shoulder_w, hand_w, upper_arm_length, forearm_length, pole_w)
 	_update_bone_mesh(upper_arm_mesh, shoulder_w, elbow_w)
 	_update_bone_mesh(forearm_mesh, elbow_w, hand_w)
+	_update_cuff_transform(_top_cuff_mesh, elbow_w, hand_w)
 
 # ── Bottom Arm Mesh ───────────────────────────────────────────────────────────
 # Renders the two-bone arm for the bottom hand. Same anatomy (upper_arm_length
@@ -616,6 +628,7 @@ func update_bottom_arm_mesh() -> void:
 			shoulder_w, hand_w, upper_arm_length, forearm_length, pole_w)
 	_update_bone_mesh(bottom_upper_arm_mesh, shoulder_w, elbow_w)
 	_update_bone_mesh(bottom_forearm_mesh, elbow_w, hand_w)
+	_update_cuff_transform(_bot_cuff_mesh, elbow_w, hand_w)
 
 func _update_bone_mesh(mesh: MeshInstance3D, a_world: Vector3, b_world: Vector3) -> void:
 	if mesh == null:
@@ -627,6 +640,16 @@ func _update_bone_mesh(mesh: MeshInstance3D, a_world: Vector3, b_world: Vector3)
 	mesh.scale = Vector3(1.0, 1.0, maxf(length, 0.001))
 	if (b_world - a_world).length() > 0.0001:
 		mesh.look_at(b_world, Vector3.UP)
+
+# Positions a cuff mesh at hand_w and orients it so its Z axis aligns with the
+# forearm (elbow→hand), making the cuff disk perpendicular to the bone.
+func _update_cuff_transform(mesh: MeshInstance3D, elbow_w: Vector3, hand_w: Vector3) -> void:
+	if mesh == null or not is_instance_valid(mesh):
+		return
+	mesh.position = upper_body.to_local(hand_w)
+	var bone_dir: Vector3 = hand_w - elbow_w
+	if bone_dir.length() > 0.0001:
+		mesh.look_at(hand_w + bone_dir.normalized(), Vector3.UP)
 
 # ── Coordinate Helpers ────────────────────────────────────────────────────────
 func upper_body_to_global(local_pos: Vector3) -> Vector3:
@@ -666,7 +689,7 @@ func _apply_ghost_visual(ghost: bool) -> void:
 			upper_arm_mesh, forearm_mesh,
 			bottom_upper_arm_mesh, bottom_forearm_mesh,
 			_lower_body_mesh, _direction_indicator,
-			_sock_mesh, _skate_mesh,
+			_sock_mesh, _skate_mesh, _top_cuff_mesh, _bot_cuff_mesh,
 		]
 	for mesh: MeshInstance3D in meshes:
 		if mesh == null:
