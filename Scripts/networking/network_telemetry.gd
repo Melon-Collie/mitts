@@ -124,7 +124,7 @@ func tick(delta: float) -> void:
 	if not _queue_depth_window.is_empty():
 		var sorted := _queue_depth_window.duplicate()
 		sorted.sort()
-		input_queue_depth_median = sorted[sorted.size() / 2]
+		input_queue_depth_median = sorted[int(sorted.size() / 2)]
 	_world_state_count = 0
 	_input_count = 0
 	_reconcile_count = 0
