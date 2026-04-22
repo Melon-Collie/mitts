@@ -85,7 +85,7 @@ func _build_panel() -> void:
 	vbox.add_child(_hsep())
 
 	var header_row := _make_row()
-	_fill_row(header_row, ["#", "POS", "PLAYER", "PING", "G", "A", "PTS", "SOG", "HITS"], _HEADER, true)
+	_fill_row(header_row, ["PING", "#", "POS", "PLAYER", "G", "A", "PTS", "SOG", "HITS"], _HEADER, true)
 	vbox.add_child(header_row)
 
 	vbox.add_child(_hsep())
@@ -206,7 +206,7 @@ func _refresh() -> void:
 		var pos_str: String = _POSITION_LABEL[record.team_slot]
 		var num_str: String = str(record.jersey_number)
 		_fill_row(row,
-			[num_str, pos_str, display_name, ping_str, str(s.goals), str(s.assists), str(pts), str(s.shots_on_goal), str(s.hits)],
+			[ping_str, num_str, pos_str, display_name, str(s.goals), str(s.assists), str(pts), str(s.shots_on_goal), str(s.hits)],
 			name_color, false
 		)
 
@@ -241,16 +241,16 @@ func _ping_label(peer_id: int) -> String:
 	return "%d ms" % p if p > 0 else "—"
 
 func _fill_row(row: HBoxContainer, texts: Array, name_color: Color, is_header: bool) -> void:
-	var widths := [36, 36, 150, 52, 38, 38, 48, 48, 56]
+	var widths := [52, 36, 36, 150, 38, 38, 48, 48, 56]
 	var font_size := 13 if is_header else 14
 	for i in texts.size():
 		var cell := Label.new()
 		cell.text = texts[i]
 		cell.custom_minimum_size = Vector2(widths[i], 0)
 		cell.add_theme_font_size_override("font_size", font_size)
-		var col := name_color if (i < 3 or is_header) else _WHITE
+		var col := name_color if (i > 0 and i < 4 or is_header) else _WHITE
 		cell.add_theme_color_override("font_color", col)
-		cell.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if i == 2 else HORIZONTAL_ALIGNMENT_CENTER
+		cell.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if i == 3 else HORIZONTAL_ALIGNMENT_CENTER
 		row.add_child(cell)
 
 func _team_badge(text: String, color: Color) -> PanelContainer:
