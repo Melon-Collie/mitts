@@ -6,29 +6,16 @@ signal goal_scored
 
 var vfx: GoalVFX = null
 
-# NHL regulation Art Ross net. Spec coordinate system:
-#   X = left/right (positive = right facing net)
-#   Vector2.y = depth into net (used as world Z offset from goal line)
-#   Y = up (constant per curve: 0 for base, NET_HEIGHT for top shelf)
+# Trapezoidal prism net. Viewed from above the net widens from the front
+# opening (POST_HALF_WIDTH each side) to the back (NET_BACK_HW each side).
+# All values in metres. Must stay in sync with GameRules net constants.
 
-# Base curve control points (right half, mirrored for left).
-# Flares wider than the posts — P2.x > P0.x.
-const BASE_P0 := Vector2(0.915, 0.0)
-const BASE_P1 := Vector2(0.915, 0.46)
-const BASE_P2 := Vector2(1.12,  0.92)
-const BASE_P3 := Vector2(0.0,   1.02)
-
-# Top shelf control points (right half, mirrored for left).
-# Pulls inward — P2.x < P0.x. Perfectly flat in Y at crossbar height.
-const TOP_P0 := Vector2(0.915, 0.0)
-const TOP_P1 := Vector2(0.915, 0.28)
-const TOP_P2 := Vector2(0.60,  0.52)
-const TOP_P3 := Vector2(0.0,   0.56)
-
-const POST_HALF_WIDTH: float = 0.915  # half of 1.83m opening
-const NET_HEIGHT: float = 1.22        # 48 inches
-const POST_RADIUS: float = 0.03       # 2 3/8" OD = ~0.06m diameter
-const SEGMENTS: int = 16              # per half-curve; 33 total points (2*SEGMENTS + 1)
+const POST_HALF_WIDTH: float = 0.915  # half of 1.83 m opening — matches GameRules.NET_HALF_WIDTH
+const NET_BACK_HW: float     = 1.02   # half-width at back — matches GameRules.NET_BACK_HALF_WIDTH
+const NET_HEIGHT: float      = 1.22   # 48 inches
+const NET_DEPTH: float       = 1.02   # goal line to back frame — matches GameRules.NET_DEPTH
+const POST_RADIUS: float     = 0.03   # 2 3/8" OD = ~0.06 m diameter
+const PANEL_THICKNESS: float = 0.04   # visual frame tube / wall thickness
 
 var defending_team_id: int = -1  # set by GameManager when goals are assigned to teams
 
@@ -68,11 +55,8 @@ func _rebuild() -> void:
 	for child in get_children():
 		child.queue_free()
 
-	var base_pts := _get_curve_points(BASE_P0, BASE_P1, BASE_P2, BASE_P3)
-	var top_pts  := _get_curve_points(TOP_P0,  TOP_P1,  TOP_P2,  TOP_P3)
 	var goal_z: float = facing * (rink_length / 2.0 - distance_from_end)
-
-	_build_goal(goal_z, facing, base_pts, top_pts)
+	_build_goal(goal_z)
 	_build_goal_sensor(goal_z)
 
 	var goal_vfx := GoalVFX.new()
@@ -81,15 +65,8 @@ func _rebuild() -> void:
 	add_child(goal_vfx)
 	vfx = goal_vfx
 
-func _build_goal(
-	goal_z: float,
-	face_dir: float,
-	base_pts: PackedVector2Array,
-	top_pts: PackedVector2Array
-) -> void:
-	var tube_dia: float = POST_RADIUS * 2.0
-
-	# Posts (vertical cylinders)
+func _build_goal(goal_z: float) -> void:
+	# Posts (vertical cylinders at the front opening)
 	for post_x: float in [-POST_HALF_WIDTH, POST_HALF_WIDTH]:
 		var cyl := CylinderMesh.new()
 		cyl.height = NET_HEIGHT
@@ -132,100 +109,81 @@ func _build_goal(
 	cross_col.rotation.z = PI / 2.0
 	add_child(cross_col)
 
-	# Curve tube segments.
-	# Segment SEGMENTS-1 (index 15 for SEGMENTS=16) spans from near-left-post to
-	# right-post — that is the front opening. Skip it for both curves.
-	for i in range(2 * SEGMENTS):
-		if i == SEGMENTS - 1:
-			continue
+	_build_trap_net(goal_z)
 
-		# Base curve (white, at Y = 0)
-		_add_tube_segment(
-			Vector3(base_pts[i].x,     0.0, goal_z + face_dir * base_pts[i].y),
-			Vector3(base_pts[i + 1].x, 0.0, goal_z + face_dir * base_pts[i + 1].y),
-			tube_dia, base_frame_color
-		)
+func _build_trap_net(goal_z: float) -> void:
+	# Side panels: each runs from (±POST_HALF_WIDTH, goal_z) to (±NET_BACK_HW, goal_z + facing*NET_DEPTH).
+	# The panel is a thin box rotated to match the flare angle.
+	var flare: float = NET_BACK_HW - POST_HALF_WIDTH  # 0.105 m each side
+	var panel_len: float = sqrt(flare * flare + NET_DEPTH * NET_DEPTH)
+	# Angle from the depth axis (world Z) toward the outside — positive for right side.
+	var flare_angle: float = atan2(flare, NET_DEPTH)
 
-		# Top shelf (red, at Y = NET_HEIGHT)
-		_add_tube_segment(
-			Vector3(top_pts[i].x,     NET_HEIGHT, goal_z + face_dir * top_pts[i].y),
-			Vector3(top_pts[i + 1].x, NET_HEIGHT, goal_z + face_dir * top_pts[i + 1].y),
-			tube_dia, post_color
-		)
+	for side: float in [-1.0, 1.0]:
+		var mid_x: float = side * (POST_HALF_WIDTH + NET_BACK_HW) / 2.0
+		var mid_z: float = goal_z + facing * NET_DEPTH / 2.0
 
-	# Netting — ruled surface between the two curves
-	_build_netting(base_pts, top_pts, goal_z, face_dir)
+		# Visual mesh
+		var box_mesh := BoxMesh.new()
+		box_mesh.size = Vector3(PANEL_THICKNESS, NET_HEIGHT, panel_len)
+		var side_mesh := MeshInstance3D.new()
+		side_mesh.mesh = box_mesh
+		side_mesh.position = Vector3(mid_x, NET_HEIGHT / 2.0, mid_z)
+		side_mesh.rotation.y = facing * side * -flare_angle
+		_apply_mat_net(side_mesh)
+		add_child(side_mesh)
 
-	# Solid back wall to block puck entry through netting seam gaps.
-	# Placed at the net's maximum depth (BASE_P3.y = 1.02m).
+		# Collision
+		var side_shape := BoxShape3D.new()
+		side_shape.size = Vector3(PANEL_THICKNESS, NET_HEIGHT, panel_len)
+		var side_col := CollisionShape3D.new()
+		side_col.shape = side_shape
+		side_col.position = Vector3(mid_x, NET_HEIGHT / 2.0, mid_z)
+		side_col.rotation.y = facing * side * -flare_angle
+		add_child(side_col)
+
+		# Base bar along ice for each side (visual only, thin rod at Y=0)
+		var bar_mesh := BoxMesh.new()
+		bar_mesh.size = Vector3(PANEL_THICKNESS, PANEL_THICKNESS, panel_len)
+		var bar_inst := MeshInstance3D.new()
+		bar_inst.mesh = bar_mesh
+		bar_inst.position = Vector3(mid_x, 0.0, mid_z)
+		bar_inst.rotation.y = facing * side * -flare_angle
+		_apply_mat(bar_inst, base_frame_color)
+		add_child(bar_inst)
+
+	# Back wall (solid, full width at NET_BACK_HW)
+	var back_z: float = goal_z + facing * NET_DEPTH
 	var back_wall := BoxShape3D.new()
-	back_wall.size = Vector3(POST_HALF_WIDTH * 2.0 + 0.1, NET_HEIGHT + 0.1, 0.05)
-	var back_wall_col := CollisionShape3D.new()
-	back_wall_col.shape = back_wall
-	back_wall_col.position = Vector3(0.0, NET_HEIGHT / 2.0, goal_z + face_dir * 1.0)
-	add_child(back_wall_col)
+	back_wall.size = Vector3(NET_BACK_HW * 2.0 + PANEL_THICKNESS, NET_HEIGHT + PANEL_THICKNESS, PANEL_THICKNESS)
+	var back_col := CollisionShape3D.new()
+	back_col.shape = back_wall
+	back_col.position = Vector3(0.0, NET_HEIGHT / 2.0, back_z)
+	add_child(back_col)
 
-func _build_netting(
-	base_pts: PackedVector2Array,
-	top_pts: PackedVector2Array,
-	goal_z: float,
-	face_dir: float
-) -> void:
-	var verts   := PackedVector3Array()
-	var normals := PackedVector3Array()
-	var uvs     := PackedVector2Array()
-	var indices := PackedInt32Array()
+	var back_mesh := BoxMesh.new()
+	back_mesh.size = Vector3(NET_BACK_HW * 2.0 + PANEL_THICKNESS, NET_HEIGHT, PANEL_THICKNESS)
+	var back_inst := MeshInstance3D.new()
+	back_inst.mesh = back_mesh
+	back_inst.position = Vector3(0.0, NET_HEIGHT / 2.0, back_z)
+	_apply_mat_net(back_inst)
+	add_child(back_inst)
 
-	for i in range(2 * SEGMENTS):
-		if i == SEGMENTS - 1:  # skip front opening
-			continue
+	# Top / ceiling panel (flat box at NET_HEIGHT, trapezoidal footprint approximated as box)
+	var top_shape := BoxShape3D.new()
+	top_shape.size = Vector3(NET_BACK_HW * 2.0, PANEL_THICKNESS, NET_DEPTH)
+	var top_col := CollisionShape3D.new()
+	top_col.shape = top_shape
+	top_col.position = Vector3(0.0, NET_HEIGHT, goal_z + facing * NET_DEPTH / 2.0)
+	add_child(top_col)
 
-		var bl := Vector3(base_pts[i].x,     0.0,        goal_z + face_dir * base_pts[i].y)
-		var br := Vector3(base_pts[i + 1].x, 0.0,        goal_z + face_dir * base_pts[i + 1].y)
-		var tl := Vector3(top_pts[i].x,      NET_HEIGHT, goal_z + face_dir * top_pts[i].y)
-		var top_right := Vector3(top_pts[i + 1].x,  NET_HEIGHT, goal_z + face_dir * top_pts[i + 1].y)
-
-		var normal := (br - bl).cross(tl - bl).normalized()
-		var base_idx: int = verts.size()
-		verts.append_array([bl, br, top_right, tl])
-		normals.append_array([normal, normal, normal, normal])
-		uvs.append_array([Vector2(0.0, 0.0), Vector2(1.0, 0.0), Vector2(1.0, 1.0), Vector2(0.0, 1.0)])
-		indices.append_array([
-			base_idx, base_idx + 1, base_idx + 2,
-			base_idx, base_idx + 2, base_idx + 3,
-		])
-
-	var arrays: Array = []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX]  = verts
-	arrays[Mesh.ARRAY_NORMAL]  = normals
-	arrays[Mesh.ARRAY_TEX_UV]  = uvs
-	arrays[Mesh.ARRAY_INDEX]   = indices
-
-	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-
-	var mesh_inst := MeshInstance3D.new()
-	mesh_inst.mesh = mesh
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = net_color
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mesh_inst.material_override = mat
-	add_child(mesh_inst)
-
-	# ConcavePolygonShape3D from the same triangles — accurate puck collision
-	var faces := PackedVector3Array()
-	for j in range(0, indices.size(), 3):
-		faces.append(verts[indices[j]])
-		faces.append(verts[indices[j + 1]])
-		faces.append(verts[indices[j + 2]])
-	var net_shape := ConcavePolygonShape3D.new()
-	net_shape.set_faces(faces)
-	net_shape.backface_collision = true
-	var net_col := CollisionShape3D.new()
-	net_col.shape = net_shape
-	add_child(net_col)
+	var top_mesh := BoxMesh.new()
+	top_mesh.size = Vector3(NET_BACK_HW * 2.0, PANEL_THICKNESS, NET_DEPTH)
+	var top_inst := MeshInstance3D.new()
+	top_inst.mesh = top_mesh
+	top_inst.position = Vector3(0.0, NET_HEIGHT, goal_z + facing * NET_DEPTH / 2.0)
+	_apply_mat_net(top_inst)
+	add_child(top_inst)
 
 func _build_goal_sensor(goal_z: float) -> void:
 	var area := Area3D.new()
@@ -237,16 +195,15 @@ func _build_goal_sensor(goal_z: float) -> void:
 
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	# Sized to the inner opening: excludes the post cylinders (POST_RADIUS each side)
-	# and stops below the crossbar inner face.
+	# Fill the full interior so any puck that enters through the front opening is caught,
+	# even on steep-angle shots. Side/back walls are solid so entry is always through the front.
 	var inner_hw: float = POST_HALF_WIDTH - POST_RADIUS
 	var inner_height: float = NET_HEIGHT - POST_RADIUS
-	box.size = Vector3(inner_hw * 2.0, inner_height, 0.3)
+	var sensor_depth: float = NET_DEPTH - POST_RADIUS
+	box.size = Vector3(inner_hw * 2.0, inner_height, sensor_depth)
 	shape.shape = box
 	area.add_child(shape)
-	# Front face at goal_z + 2*puck_radius (0.2m) so body_entered fires only
-	# when the puck's trailing edge has fully cleared the goal line.
-	area.position = Vector3(0.0, inner_height / 2.0, goal_z + facing * 0.35)
+	area.position = Vector3(0.0, inner_height / 2.0, goal_z + facing * (sensor_depth / 2.0))
 	add_child(area)
 	area.body_entered.connect(_on_goal_area_body_entered)
 
@@ -258,52 +215,14 @@ func _on_goal_area_body_entered(body: Node3D) -> void:
 		if vel.z * float(facing) > 0.0:
 			goal_scored.emit()
 
-func _add_tube_segment(p_start: Vector3, p_end: Vector3, diameter: float, color: Color) -> void:
-	var seg := p_end - p_start
-	var seg_len := seg.length()
-	if seg_len < 0.001:
-		return
-	var mid := (p_start + p_end) / 2.0
-	var rot_y := atan2(seg.x, seg.z)
-	var size := Vector3(diameter, diameter, seg_len)
-
-	var mesh_inst := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = size
-	mesh_inst.mesh = box
-	mesh_inst.position = mid
-	mesh_inst.rotation.y = rot_y
-	_apply_mat(mesh_inst, color)
-	add_child(mesh_inst)
-
-	var shape := BoxShape3D.new()
-	shape.size = size
-	var col := CollisionShape3D.new()
-	col.shape = shape
-	col.position = mid
-	col.rotation.y = rot_y
-	add_child(col)
-
 func _apply_mat(mesh_inst: MeshInstance3D, color: Color) -> void:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
 	mesh_inst.material_override = mat
 
-func _cubic_bezier(p0: Vector2, p1: Vector2, p2: Vector2, p3: Vector2, t: float) -> Vector2:
-	var u: float = 1.0 - t
-	return u * u * u * p0 + 3.0 * u * u * t * p1 + 3.0 * u * t * t * p2 + t * t * t * p3
-
-func _get_curve_points(p0: Vector2, p1: Vector2, p2: Vector2, p3: Vector2) -> PackedVector2Array:
-	# Sample the right half (post → center back), then mirror to build the full curve:
-	# left half (center back → near left post) + right half (right post → center back).
-	# Total: 2*SEGMENTS + 1 points. Segment SEGMENTS-1 spans the front opening.
-	var right_half: Array[Vector2] = []
-	for i in range(SEGMENTS + 1):
-		right_half.append(_cubic_bezier(p0, p1, p2, p3, float(i) / float(SEGMENTS)))
-
-	var points := PackedVector2Array()
-	for i in range(SEGMENTS, 0, -1):  # reverse right half, negate X — skip i=0 (would dupe center)
-		points.append(Vector2(-right_half[i].x, right_half[i].y))
-	for pt: Vector2 in right_half:
-		points.append(pt)
-	return points
+func _apply_mat_net(mesh_inst: MeshInstance3D) -> void:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = net_color
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh_inst.material_override = mat

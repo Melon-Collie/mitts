@@ -19,10 +19,9 @@ const OT_DURATION: float           = 4.0 * 60.0   # 240 s per OT period
 # ── Rink Geometry ─────────────────────────────────────────────────────────────
 const GOAL_LINE_Z: float = 26.65  # rink_length / 2 - distance_from_end (30 - 3.35)
 const BLUE_LINE_Z: float = 7.29  # 64 ft from goal line to near edge + 0.15m to center
-const NET_HALF_WIDTH: float = 0.915       # half of goal opening — must match HockeyGoal post positions
-const NET_DEPTH: float = 1.02             # goal depth from goal line to back frame (BASE_P3.y)
-const NET_FLARE_HALF_WIDTH: float = 1.12  # widest point of net mesh at depth (BASE_P2.x)
-const NET_FLARE_DEPTH: float = 0.92       # depth at which flare reaches maximum (BASE_P2.y)
+const NET_HALF_WIDTH: float = 0.915      # half of goal opening — must match HockeyGoal post positions
+const NET_DEPTH: float = 1.02            # goal depth from goal line to back frame
+const NET_BACK_HALF_WIDTH: float = 1.02  # half-width at back of net (trapezoid wider end)
 
 # Rink dimensions (must match HockeyRink export values in the scene)
 const RINK_HALF_WIDTH: float     = 13.0   # half of 26 m

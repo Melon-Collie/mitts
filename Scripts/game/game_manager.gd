@@ -717,7 +717,7 @@ func _on_stats_received(data: Array) -> void:
 func _on_phase_for_broadcast_rate(new_phase: GamePhase.Phase) -> void:
 	# Drop to 5 Hz during dead-puck phases (goal, prep, end-of-period, game-over)
 	# where positions don't change, recovering ~40% of session broadcast bandwidth.
-	var hz: float = 5.0 if PhaseRules.is_movement_locked(new_phase) else Constants.STATE_RATE
+	var hz: float = 5.0 if PhaseRules.is_movement_locked(new_phase) else float(Constants.STATE_RATE)
 	NetworkManager.set_broadcast_rate(hz)
 
 
