@@ -57,7 +57,7 @@ func _ready() -> void:
 	GameManager.player_left.connect(func(n: String, c: Color) -> void: _show_toast(n + " left", c))
 	GameManager.stats_updated.connect(func() -> void:
 		if _game_menu != null and _game_menu.visible and _slot_grid != null:
-			_slot_grid.refresh(GameManager.get_slot_roster(), multiplayer.get_unique_id()))
+			_slot_grid.refresh(GameManager.get_slot_roster(), multiplayer.get_unique_id(), _get_team_colors()))
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
@@ -365,7 +365,7 @@ func _build_game_menu() -> void:
 	slot_panel.set_anchors_preset(Control.PRESET_CENTER)
 	slot_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	slot_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-	slot_panel.custom_minimum_size = Vector2(360, 120)
+	slot_panel.custom_minimum_size = Vector2(720, 180)
 
 	_slot_grid = SlotGridPanel.new()
 	_slot_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -540,10 +540,18 @@ func _on_game_over() -> void:
 func _on_game_reset() -> void:
 	_game_over_popup.visible = false
 
+func _get_team_colors() -> Array[Dictionary]:
+	if not GameManager.teams.has(0) or not GameManager.teams.has(1):
+		return []
+	return [
+		TeamColorRegistry.get_colors(GameManager.teams[0].color_id, 0),
+		TeamColorRegistry.get_colors(GameManager.teams[1].color_id, 1),
+	]
+
 func _on_change_position_pressed() -> void:
 	_slot_grid_container.visible = not _slot_grid_container.visible
 	if _slot_grid_container.visible:
-		_slot_grid.refresh(GameManager.get_slot_roster(), multiplayer.get_unique_id())
+		_slot_grid.refresh(GameManager.get_slot_roster(), multiplayer.get_unique_id(), _get_team_colors())
 
 func _on_pause_slot_selected(team_id: int, slot: int) -> void:
 	NetworkManager.send_request_slot_swap(team_id, slot)

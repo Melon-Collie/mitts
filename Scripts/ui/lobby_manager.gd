@@ -67,7 +67,7 @@ func _build_ui() -> void:
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-	panel.custom_minimum_size = Vector2(480, 0)
+	panel.custom_minimum_size = Vector2(960, 0)
 	root.add_child(panel)
 
 	var vbox := VBoxContainer.new()
@@ -132,7 +132,8 @@ func _build_settings_panel() -> Control:
 		_away_color_btn.item_selected.connect(func(idx: int) -> void:
 			_away_color_id = TeamColorRegistry.get_all_ids()[idx]
 			_update_color_exclusion()
-			NetworkManager.send_team_colors(_home_color_id, _away_color_id))
+			NetworkManager.send_team_colors(_home_color_id, _away_color_id)
+			_refresh_grid())
 	else:
 		_away_color_btn.disabled = true
 		_away_color_btn.modulate = Color(1, 1, 1, 0.5)
@@ -144,7 +145,8 @@ func _build_settings_panel() -> Control:
 		_home_color_btn.item_selected.connect(func(idx: int) -> void:
 			_home_color_id = TeamColorRegistry.get_all_ids()[idx]
 			_update_color_exclusion()
-			NetworkManager.send_team_colors(_home_color_id, _away_color_id))
+			NetworkManager.send_team_colors(_home_color_id, _away_color_id)
+			_refresh_grid())
 	else:
 		_home_color_btn.disabled = true
 		_home_color_btn.modulate = Color(1, 1, 1, 0.5)
@@ -266,7 +268,7 @@ func _find_balanced_slot(_peer_id: int) -> Array:
 func _build_roster_array() -> Array:
 	var result: Array = []
 	for k: int in _lobby_slots:
-		var team_id: int = k / 3
+		var team_id: int = 1 if k >= PlayerRules.MAX_PER_TEAM else 0
 		var slot: int = k % 3
 		var entry: Dictionary = _lobby_slots[k]
 		result.append([entry.peer_id, team_id, slot, entry.player_name, entry.is_left_handed, entry.get("jersey_number", 10)])
@@ -275,16 +277,29 @@ func _build_roster_array() -> Array:
 func _build_slot_grid_roster() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for k: int in _lobby_slots:
-		var team_id: int = k / 3
+		var team_id: int = 1 if k >= PlayerRules.MAX_PER_TEAM else 0
 		var slot: int = k % 3
 		var entry: Dictionary = _lobby_slots[k]
-		result.append({ "peer_id": entry.peer_id, "team_id": team_id, "slot": slot, "player_name": entry.player_name })
+		result.append({
+			"peer_id":        entry.peer_id,
+			"team_id":        team_id,
+			"slot":           slot,
+			"player_name":    entry.player_name,
+			"jersey_number":  entry.get("jersey_number", 10),
+			"is_left_handed": entry.is_left_handed,
+		})
 	return result
+
+func _get_team_colors() -> Array[Dictionary]:
+	return [
+		TeamColorRegistry.get_colors(_home_color_id, 0),
+		TeamColorRegistry.get_colors(_away_color_id, 1),
+	]
 
 func _refresh_grid() -> void:
 	if _slot_grid == null:
 		return
-	_slot_grid.refresh(_build_slot_grid_roster(), multiplayer.get_unique_id())
+	_slot_grid.refresh(_build_slot_grid_roster(), multiplayer.get_unique_id(), _get_team_colors())
 
 func _broadcast_confirm(peer_id: int, team_id: int, slot: int) -> void:
 	var entry: Dictionary = _lobby_slots.get(_slot_key(team_id, slot), {})
@@ -307,7 +322,9 @@ func _on_peer_joined(peer_id: int) -> void:
 	var is_left: bool = NetworkManager.get_peer_handedness(peer_id)
 	var num: int = NetworkManager.get_peer_number(peer_id)
 	_assign_slot(peer_id, target[0], target[1], name_val, is_left, num)
-	NetworkManager.send_lobby_roster(peer_id, _build_roster_array())
+	var roster: Array = _build_roster_array()
+	for existing_peer: int in multiplayer.get_peers():
+		NetworkManager.send_lobby_roster(existing_peer, roster)
 	NetworkManager.send_team_colors_to(peer_id, _home_color_id, _away_color_id)
 	_broadcast_confirm(peer_id, target[0], target[1])
 	_refresh_grid()
@@ -340,7 +357,7 @@ func _on_slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int) -> v
 		return
 	var count: int = 0
 	for k: int in _lobby_slots:
-		if k / 3 == new_team_id:
+		if (1 if k >= PlayerRules.MAX_PER_TEAM else 0) == new_team_id:
 			count += 1
 	if count >= PlayerRules.MAX_PER_TEAM:
 		return
@@ -381,6 +398,7 @@ func _on_team_colors_synced(home_id: String, away_id: String) -> void:
 	_sync_option_btn(_home_color_btn, home_id)
 	_sync_option_btn(_away_color_btn, away_id)
 	_update_color_exclusion()
+	_refresh_grid()
 
 func _on_game_started(config: Dictionary) -> void:
 	NetworkManager.pending_game_config = config
@@ -390,7 +408,7 @@ func _on_game_started(config: Dictionary) -> void:
 func _build_pending_slots() -> Dictionary:
 	var result: Dictionary = {}
 	for k: int in _lobby_slots:
-		var team_id: int = k / 3
+		var team_id: int = 1 if k >= PlayerRules.MAX_PER_TEAM else 0
 		var slot: int = k % 3
 		var entry: Dictionary = _lobby_slots[k]
 		result[entry.peer_id] = {
