@@ -20,6 +20,7 @@ var _name_labels: Array = [[], []]
 var _hand_labels: Array = [[], []]
 
 var _team_colors: Array[Dictionary] = []
+var _mono_font: SystemFont = null
 
 func _init() -> void:
 	_build_grid()
@@ -107,10 +108,11 @@ func _build_grid() -> void:
 			_name_labels[team_id][s] = name_lbl
 
 			var hand_lbl := Label.new()
+			hand_lbl.add_theme_font_override("font", _get_mono_font())
 			hand_lbl.add_theme_font_size_override("font_size", 12)
 			hand_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			hand_lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-			hand_lbl.custom_minimum_size = Vector2(30, 0)
+			hand_lbl.custom_minimum_size = Vector2(34, 0)
 			hbox.add_child(hand_lbl)
 			_hand_labels[team_id][s] = hand_lbl
 
@@ -159,7 +161,7 @@ func _update_card(team_id: int, slot: int, entry, is_local: bool) -> void:
 		_set_num(num_lbl, "--", Color(text_c.r, text_c.g, text_c.b, 0.45), Color(0, 0, 0, 0), 0)
 		name_lbl.text = ""
 		name_lbl.add_theme_color_override("font_color", Color(text_c.r, text_c.g, text_c.b, 0.45))
-		hand_lbl.text = pos_str
+		hand_lbl.text = " " + pos_str + " "
 		hand_lbl.add_theme_color_override("font_color", Color(text_c.r, text_c.g, text_c.b, 0.45))
 	elif is_local:
 		# Local player's slot — full color, disabled (can't switch to own slot).
@@ -218,9 +220,15 @@ func _apply_style(btn: Button, normal_color: Color, disabled_color: Color, is_oc
 	if is_occupied:
 		btn.add_theme_color_override("font_disabled_color", Color(1, 1, 1, 1))
 
+func _get_mono_font() -> SystemFont:
+	if _mono_font == null:
+		_mono_font = SystemFont.new()
+		_mono_font.font_names = PackedStringArray(["Courier New", "Courier", "DejaVu Sans Mono", "Lucida Console", "monospace"])
+	return _mono_font
+
 func _hand_str(slot: int, is_left_handed: bool) -> String:
 	var pos: String = _POSITION_LABEL[slot]
-	return ("<" + pos) if is_left_handed else (pos + ">")
+	return ("<" + pos + " ") if is_left_handed else (" " + pos + ">")
 
 func _on_button_pressed(team_id: int, slot: int) -> void:
 	slot_selected.emit(team_id, slot)
