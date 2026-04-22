@@ -7,7 +7,6 @@ const CONTEST_SQUIRT_SPEED: float = 3.0
 
 @export var interpolation_delay: float = Constants.NETWORK_INTERPOLATION_DELAY
 @export var extrapolation_max_ms: float = 50.0
-@export var prediction_reconcile_threshold: float = 0.5
 @export var trajectory_hard_snap_threshold: float = 1.5
 @export var position_correction_blend: float = 0.1
 @export var rejoin_blend_duration: float = 0.075
@@ -216,23 +215,6 @@ func _apply_local_carrier_position(delta: float) -> void:
 	var contact: Vector3 = _local_carrier_skater.get_blade_contact_global()
 	contact.y = puck.ice_height
 	puck.set_puck_position(puck.get_puck_position().lerp(contact, carry_smoothing_speed * delta))
-
-# ── Reconciliation ────────────────────────────────────────────────────────────
-# Mirrors LocalController.reconcile — nudges Jolt state toward server truth each
-# broadcast. Hard-snaps only on extreme divergence (teleport, physics glitch).
-func _reconcile(state: PuckNetworkState) -> void:
-	if ReconciliationRules.puck_needs_hard_snap(
-			puck.get_puck_position(), state.position, prediction_reconcile_threshold):
-		puck.set_puck_position(state.position)
-		puck.set_puck_velocity(state.velocity)
-		_state_buffer.clear()
-		return
-	# Jolt owns velocity during trajectory prediction — don't override it.
-	# Only nudge position when velocities agree (avoids fighting Jolt mid-bounce).
-	var current_vel := puck.get_puck_velocity()
-	var pos_error := state.position - puck.get_puck_position()
-	if current_vel.dot(state.velocity) > 0.0:
-		puck.set_puck_position(puck.get_puck_position() + pos_error * position_correction_blend)
 
 # ── Server Signals ────────────────────────────────────────────────────────────
 # Run on host only (connected in setup() when is_server). Each resolves the
