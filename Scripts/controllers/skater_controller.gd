@@ -180,6 +180,7 @@ var _prev_blade_dir: Vector3 = Vector3.ZERO
 var _slapper_charge_timer: float = 0.0
 var last_processed_host_timestamp: float = 0.0
 var has_puck: bool = false
+var _ik_locked_side: int = 0  # +1 = exited right, -1 = exited left, 0 = unlocked
 var is_replaying: bool = false
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
@@ -881,13 +882,17 @@ func _apply_facing(input: InputState, delta: float) -> void:
 			mouse_world.z - skater.global_position.z
 		)
 		if to_mouse.length() > move_deadzone:
-			# Gate: stop rotating when the mouse is past the IK reachable zone.
-			# Upper body absorbs up to upper_body_max_twist_deg, then the arm clamps
-			# at rom_backhand_angle_max_deg. Beyond their sum, the IK is locked and
-			# continuing to rotate would flip which side the arm clamps to (the snap).
+			# Gate: prevent the body from rotating until the mouse crosses 180° and
+			# snaps the arm to the other side. When the mouse exits the reachable IK
+			# zone (rom_backhand_angle_max_deg + upper_body_max_twist_deg from forward),
+			# record which side it left from and freeze. Re-entry only from the same
+			# side unlocks — entering from the opposite side stays frozen.
 			var mouse_body_angle: float = _facing.angle_to(to_mouse.normalized())
 			var ik_gate: float = deg_to_rad(rom_backhand_angle_max_deg + upper_body_max_twist_deg)
-			if abs(mouse_body_angle) < ik_gate:
+			if abs(mouse_body_angle) >= ik_gate:
+				_ik_locked_side = int(sign(mouse_body_angle))
+			elif _ik_locked_side == 0 or _ik_locked_side * mouse_body_angle >= 0.0:
+				_ik_locked_side = 0
 				var drag: float = facing_drag_speed_braking if input.brake else facing_drag_speed
 				_facing = _facing.lerp(to_mouse.normalized(), drag * delta).normalized()
 		skater.set_facing(_facing)
