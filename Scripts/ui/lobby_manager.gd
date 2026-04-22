@@ -126,6 +126,30 @@ func _build_settings_panel() -> Control:
 
 	var is_interactive: bool = NetworkManager.is_host
 
+	grid.add_child(_setting_label("Away Colors"))
+	_away_color_btn = _color_option_btn(_away_color_id)
+	if is_interactive:
+		_away_color_btn.item_selected.connect(func(idx: int) -> void:
+			_away_color_id = TeamColorRegistry.get_all_ids()[idx]
+			_update_color_exclusion()
+			NetworkManager.send_team_colors(_home_color_id, _away_color_id))
+	else:
+		_away_color_btn.disabled = true
+		_away_color_btn.modulate = Color(1, 1, 1, 0.5)
+	grid.add_child(_away_color_btn)
+
+	grid.add_child(_setting_label("Home Colors"))
+	_home_color_btn = _color_option_btn(_home_color_id)
+	if is_interactive:
+		_home_color_btn.item_selected.connect(func(idx: int) -> void:
+			_home_color_id = TeamColorRegistry.get_all_ids()[idx]
+			_update_color_exclusion()
+			NetworkManager.send_team_colors(_home_color_id, _away_color_id))
+	else:
+		_home_color_btn.disabled = true
+		_home_color_btn.modulate = Color(1, 1, 1, 0.5)
+	grid.add_child(_home_color_btn)
+
 	grid.add_child(_setting_label("Periods"))
 	var periods_spin := SpinBox.new()
 	periods_spin.min_value = 1
@@ -161,30 +185,6 @@ func _build_settings_panel() -> Control:
 	else:
 		ot_check.modulate = Color(1, 1, 1, 0.5)
 	grid.add_child(ot_check)
-
-	grid.add_child(_setting_label("Home Colors"))
-	_home_color_btn = _color_option_btn(_home_color_id)
-	if is_interactive:
-		_home_color_btn.item_selected.connect(func(idx: int) -> void:
-			_home_color_id = TeamColorRegistry.get_all_ids()[idx]
-			_update_color_exclusion()
-			NetworkManager.send_team_colors(_home_color_id, _away_color_id))
-	else:
-		_home_color_btn.disabled = true
-		_home_color_btn.modulate = Color(1, 1, 1, 0.5)
-	grid.add_child(_home_color_btn)
-
-	grid.add_child(_setting_label("Away Colors"))
-	_away_color_btn = _color_option_btn(_away_color_id)
-	if is_interactive:
-		_away_color_btn.item_selected.connect(func(idx: int) -> void:
-			_away_color_id = TeamColorRegistry.get_all_ids()[idx]
-			_update_color_exclusion()
-			NetworkManager.send_team_colors(_home_color_id, _away_color_id))
-	else:
-		_away_color_btn.disabled = true
-		_away_color_btn.modulate = Color(1, 1, 1, 0.5)
-	grid.add_child(_away_color_btn)
 
 	_update_color_exclusion()
 	return box
