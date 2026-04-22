@@ -74,15 +74,15 @@
       "home": {
         "helmet": "#C8102E",
         "jersey": "#C8102E",
-        "pants": "#111111",
+        "pants": "#C8102E",
         "goalie_pads": "#FFFFFF",
-        "text": "#F1BE48",
-        "text_outline": "#C8102E"
+        "text": "#FFFFFF",
+        "text_outline": "#F1BE48"
       },
       "away": {
-        "helmet": "#C8102E",
+        "helmet": "#FFFFFF",
         "jersey": "#FFFFFF",
-        "pants": "#FFFFFF",
+        "pants": "#C8102E",
         "goalie_pads": "#FFFFFF",
         "text": "#C8102E",
         "text_outline": "#F1BE48"
