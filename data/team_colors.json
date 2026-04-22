@@ -531,23 +531,23 @@
     {
       "id": "blues",
       "name": "St. Louis",
-      "primary": "#002F87",
+      "primary": "#41B6E6",
       "secondary": "#FCB514",
       "home": {
-        "helmet": "#002F87",
-        "jersey": "#002F87",
-        "pants": "#002F87",
+        "helmet": "#41B6E6",
+        "jersey": "#41B6E6",
+        "pants": "#41B6E6",
         "goalie_pads": "#FFFFFF",
         "text": "#FCB514",
-        "text_outline": "#002F87"
+        "text_outline": "#FCB514"
       },
       "away": {
-        "helmet": "#002F87",
+        "helmet": "#FFFFFF",
         "jersey": "#FFFFFF",
-        "pants": "#FFFFFF",
+        "pants": "#41B6E6",
         "goalie_pads": "#FFFFFF",
-        "text": "#002F87",
-        "text_outline": "#FCB514"
+        "text": "#41B6E6",
+        "text_outline": "#41B6E6"
       }
     },
     {
