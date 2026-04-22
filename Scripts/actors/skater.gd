@@ -445,9 +445,9 @@ func set_jersey_stripes(
 			bottom_hand.add_child(q)
 
 	# Pants side stripe — full-height vertical piping on the ±X faces
-	# (LowerBodyMesh BoxMesh 0.45×0.95×0.3, center (0,−0.5,0)).
+	# (LowerBodyMesh BoxMesh 0.45×0.4×0.3, center (0,−0.2,0)).
 	var pants_quads: Array = JerseyTextureGenerator.make_box_side_stripe(
-			Vector3(0.0, -0.5, 0.0), Vector3(0.225, 0.475, 0.15),
+			Vector3(0.0, -0.2, 0.0), Vector3(0.225, 0.2, 0.15),
 			0.07, pants_stripe_color, "Stripe_Pants")
 	for q: MeshInstance3D in pants_quads:
 		lower_body.add_child(q)
