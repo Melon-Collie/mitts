@@ -516,8 +516,8 @@ func _is_in_slapper_state() -> bool:
 	return _sm.get_state() in [State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK]
 
 # Prevents the blade from entering either net's interior. Both nets are
-# centered at x=0. The x-boundary widens with depth to match the net's flared
-# shape (0.915 at goal line → 1.12 at max flare depth). When the blade is
+# centered at x=0. The x-boundary widens linearly with depth across the
+# trapezoidal net (0.915 at goal line → 1.02 at back). When the blade is
 # inside the volume, it escapes through the nearest face — but never through
 # the front face when the skater is already behind the goal line.
 func _clamp_blade_from_net(blade_world: Vector3) -> Vector3:
@@ -528,8 +528,8 @@ func _clamp_blade_from_net(blade_world: Vector3) -> Vector3:
 	# +Z net
 	if result.z > gl and result.z < gl + depth:
 		var local_depth: float = result.z - gl
-		var hw: float = lerpf(GameRules.NET_HALF_WIDTH, GameRules.NET_FLARE_HALF_WIDTH,
-				clampf(local_depth / GameRules.NET_FLARE_DEPTH, 0.0, 1.0))
+		var hw: float = lerpf(GameRules.NET_HALF_WIDTH, GameRules.NET_BACK_HALF_WIDTH,
+				local_depth / depth)
 		if abs(result.x) < hw:
 			var d_front: float = INF if skater_z >= gl else local_depth
 			var d_back: float  = INF if skater_z < gl  else (depth - local_depth)
@@ -546,8 +546,8 @@ func _clamp_blade_from_net(blade_world: Vector3) -> Vector3:
 	# -Z net
 	elif result.z < -gl and result.z > -gl - depth:
 		var local_depth: float = -gl - result.z
-		var hw: float = lerpf(GameRules.NET_HALF_WIDTH, GameRules.NET_FLARE_HALF_WIDTH,
-				clampf(local_depth / GameRules.NET_FLARE_DEPTH, 0.0, 1.0))
+		var hw: float = lerpf(GameRules.NET_HALF_WIDTH, GameRules.NET_BACK_HALF_WIDTH,
+				local_depth / depth)
 		if abs(result.x) < hw:
 			var d_front: float = INF if skater_z <= -gl else local_depth
 			var d_back: float  = INF if skater_z > -gl  else (depth - local_depth)
