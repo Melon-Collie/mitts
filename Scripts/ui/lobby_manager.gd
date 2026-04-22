@@ -132,7 +132,8 @@ func _build_settings_panel() -> Control:
 		_away_color_btn.item_selected.connect(func(idx: int) -> void:
 			_away_color_id = TeamColorRegistry.get_all_ids()[idx]
 			_update_color_exclusion()
-			NetworkManager.send_team_colors(_home_color_id, _away_color_id))
+			NetworkManager.send_team_colors(_home_color_id, _away_color_id)
+			_refresh_grid())
 	else:
 		_away_color_btn.disabled = true
 		_away_color_btn.modulate = Color(1, 1, 1, 0.5)
@@ -144,7 +145,8 @@ func _build_settings_panel() -> Control:
 		_home_color_btn.item_selected.connect(func(idx: int) -> void:
 			_home_color_id = TeamColorRegistry.get_all_ids()[idx]
 			_update_color_exclusion()
-			NetworkManager.send_team_colors(_home_color_id, _away_color_id))
+			NetworkManager.send_team_colors(_home_color_id, _away_color_id)
+			_refresh_grid())
 	else:
 		_home_color_btn.disabled = true
 		_home_color_btn.modulate = Color(1, 1, 1, 0.5)
