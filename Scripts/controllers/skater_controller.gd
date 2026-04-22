@@ -517,27 +517,23 @@ func _is_in_slapper_state() -> bool:
 
 # Prevents the blade from entering either net's interior. Both nets are
 # centered at x=0. The x-boundary widens linearly with depth across the
-# trapezoidal net (0.915 at goal line → 1.02 at back). When the blade is
-# inside the volume, it escapes through the nearest face — but never through
-# the front face when the skater is already behind the goal line.
+# trapezoidal net (0.915 at goal line → 1.02 at back). The blade always
+# escapes through the nearest side or back face — never through the front
+# mouth, regardless of where the skater is standing.
 func _clamp_blade_from_net(blade_world: Vector3) -> Vector3:
 	var result: Vector3 = blade_world
 	var gl: float    = GameRules.GOAL_LINE_Z
 	var depth: float = GameRules.NET_DEPTH
-	var skater_z: float = skater.global_position.z
 	# +Z net
 	if result.z > gl and result.z < gl + depth:
 		var local_depth: float = result.z - gl
 		var hw: float = lerpf(GameRules.NET_HALF_WIDTH, GameRules.NET_BACK_HALF_WIDTH,
 				local_depth / depth)
 		if abs(result.x) < hw:
-			var d_front: float = INF if skater_z >= gl else local_depth
-			var d_back: float  = INF if skater_z < gl  else (depth - local_depth)
+			var d_back: float  = depth - local_depth
 			var d_left: float  = result.x + hw
 			var d_right: float = hw - result.x
-			if d_front <= d_back and d_front <= d_left and d_front <= d_right:
-				result.z = gl
-			elif d_back <= d_left and d_back <= d_right:
+			if d_back <= d_left and d_back <= d_right:
 				result.z = gl + depth
 			elif d_left <= d_right:
 				result.x = -hw
@@ -549,13 +545,10 @@ func _clamp_blade_from_net(blade_world: Vector3) -> Vector3:
 		var hw: float = lerpf(GameRules.NET_HALF_WIDTH, GameRules.NET_BACK_HALF_WIDTH,
 				local_depth / depth)
 		if abs(result.x) < hw:
-			var d_front: float = INF if skater_z <= -gl else local_depth
-			var d_back: float  = INF if skater_z > -gl  else (depth - local_depth)
+			var d_back: float  = depth - local_depth
 			var d_left: float  = result.x + hw
 			var d_right: float = hw - result.x
-			if d_front <= d_back and d_front <= d_left and d_front <= d_right:
-				result.z = -gl
-			elif d_back <= d_left and d_back <= d_right:
+			if d_back <= d_left and d_back <= d_right:
 				result.z = -gl - depth
 			elif d_left <= d_right:
 				result.x = -hw
