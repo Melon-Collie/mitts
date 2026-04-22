@@ -320,7 +320,9 @@ func _on_peer_joined(peer_id: int) -> void:
 	var is_left: bool = NetworkManager.get_peer_handedness(peer_id)
 	var num: int = NetworkManager.get_peer_number(peer_id)
 	_assign_slot(peer_id, target[0], target[1], name_val, is_left, num)
-	NetworkManager.send_lobby_roster(peer_id, _build_roster_array())
+	var roster: Array = _build_roster_array()
+	for existing_peer: int in multiplayer.get_peers():
+		NetworkManager.send_lobby_roster(existing_peer, roster)
 	NetworkManager.send_team_colors_to(peer_id, _home_color_id, _away_color_id)
 	_broadcast_confirm(peer_id, target[0], target[1])
 	_refresh_grid()

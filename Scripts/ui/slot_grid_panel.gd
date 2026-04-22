@@ -167,7 +167,7 @@ func _update_card(team_id: int, slot: int, entry, is_local: bool) -> void:
 				Color(jersey_c.r, jersey_c.g, jersey_c.b, 0.80), true)
 		btn.disabled = true
 		btn.modulate = Color(1, 1, 1, 0.85)
-		_set_num(num_lbl, "#%d" % entry.get("jersey_number", 10), text_c, outline_c, 3)
+		_set_num(num_lbl, "%d" % entry.get("jersey_number", 10), text_c, outline_c, 3)
 		name_lbl.text = "You"
 		name_lbl.add_theme_color_override("font_color", text_c)
 		hand_lbl.text = _hand_str(slot, entry.get("is_left_handed", true))
@@ -178,7 +178,7 @@ func _update_card(team_id: int, slot: int, entry, is_local: bool) -> void:
 				Color(jersey_c.r, jersey_c.g, jersey_c.b, 1.0), true)
 		btn.disabled = true
 		btn.modulate = Color(1, 1, 1, 0.70)
-		_set_num(num_lbl, "#%d" % entry.get("jersey_number", 10), text_c, outline_c, 3)
+		_set_num(num_lbl, "%d" % entry.get("jersey_number", 10), text_c, outline_c, 3)
 		name_lbl.text = entry.get("player_name", "Player") if not entry.get("player_name", "").is_empty() else "Player"
 		name_lbl.add_theme_color_override("font_color", text_c)
 		hand_lbl.text = _hand_str(slot, entry.get("is_left_handed", true))
