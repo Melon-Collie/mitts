@@ -24,7 +24,6 @@ var _blade_trail_particles: Array[GPUParticles3D] = []
 var _stop_spray_emitter: CPUParticles3D = null  # forward fan spray on brake
 var _speed_lines: CPUParticles3D = null
 var _body_check_burst: CPUParticles3D = null
-var _dash_push_emitter: CPUParticles3D = null
 var _prev_pos: Vector3 = Vector3.ZERO
 var _prev_vel: Vector3 = Vector3.ZERO
 
@@ -54,13 +53,9 @@ func _ready() -> void:
 	_body_check_burst = _make_body_check_emitter()
 	add_child(_body_check_burst)
 
-	_dash_push_emitter = _make_dash_push_emitter()
-	add_child(_dash_push_emitter)
-
 	var skater: Skater = get_parent() as Skater
 	if skater != null:
 		skater.body_checked_player.connect(_on_body_check)
-		skater.pulse_dashed.connect(_on_pulse_dashed)
 
 	_prev_pos = global_position
 
@@ -117,46 +112,6 @@ func _process(_delta: float) -> void:
 		_speed_lines.emitting = false
 
 
-
-func _on_pulse_dashed(dash_direction: Vector3) -> void:
-	_emit_dash_push(dash_direction)
-
-func _emit_dash_push(dash_direction: Vector3) -> void:
-	# Spray fires OPPOSITE the dash — the pushing foot kicks ice backward.
-	var anti_dir: Vector3 = -dash_direction
-	anti_dir.y = 0.0
-	if anti_dir.length() < 0.001:
-		return
-	anti_dir = anti_dir.normalized()
-
-	var skater: Skater = get_parent() as Skater
-	if skater == null:
-		return
-
-	var world_dir: Vector3 = (anti_dir + Vector3(0.0, 0.03, 0.0)).normalized()
-	var local_dir: Vector3 = _dash_push_emitter.global_transform.basis.inverse() * world_dir
-	_dash_push_emitter.global_position = skater.global_position + anti_dir * 0.2 + Vector3(0.0, 0.005, 0.0)
-	_dash_push_emitter.direction = local_dir
-	_dash_push_emitter.restart()
-
-func _make_dash_push_emitter() -> CPUParticles3D:
-	var e := CPUParticles3D.new()
-	e.emitting = false
-	e.amount = 25
-	e.lifetime = 0.35
-	e.one_shot = true
-	e.explosiveness = 0.95
-	e.randomness = 0.3
-	e.local_coords = false
-	e.direction = Vector3(1.0, 0.0, 0.0)  # overwritten at emit time
-	e.spread = 25.0
-	e.initial_velocity_min = 4.0
-	e.initial_velocity_max = 10.0
-	e.gravity = Vector3(0.0, -25.0, 0.0)
-	e.scale_amount_min = 0.04
-	e.scale_amount_max = 0.08
-	e.mesh = _make_sphere_mesh(Color(0.95, 0.93, 0.88, 0.80))
-	return e
 
 func _on_body_check(victim: Skater, _force: float, hit_dir: Vector3) -> void:
 	# Burst at the victim's position, emitting outward along the hit direction.

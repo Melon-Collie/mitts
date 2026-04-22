@@ -4,7 +4,7 @@ const BYTES_SIZE: int = 23
 # Layout: f32 timestamp(0) f32 delta(4) s16 move.x(8) s16 move.y(10)
 #         s16 mwp.x(12) s8 mwp.y(14) s16 mwp.z(15) u16 msp.x(17) u16 msp.y(19)
 #         u16 flags(21)  flags: shoot_pressed[0] shoot_held[1] slap_pressed[2]
-#         slap_held[3] facing_held[4] brake[5] elevation_up[6] elevation_down[7]
+#         slap_held[3] (reserved)[4] brake[5] elevation_up[6] elevation_down[7]
 #         block_held[8]
 
 var host_timestamp: float = 0.0
@@ -16,7 +16,6 @@ var shoot_pressed: bool = false
 var shoot_held: bool = false
 var slap_pressed: bool = false
 var slap_held: bool = false
-var facing_held: bool = false
 var brake: bool = false
 var elevation_up: bool = false
 var elevation_down: bool = false
@@ -35,7 +34,6 @@ func to_array() -> Array:
 		shoot_held,
 		slap_pressed,
 		slap_held,
-		facing_held,
 		brake,
 		elevation_up,
 		elevation_down,
@@ -58,7 +56,7 @@ func to_bytes() -> PackedByteArray:
 	var flags: int = (
 		(0x001 if shoot_pressed  else 0) | (0x002 if shoot_held     else 0) |
 		(0x004 if slap_pressed   else 0) | (0x008 if slap_held      else 0) |
-		(0x010 if facing_held    else 0) | (0x020 if brake          else 0) |
+		                                   (0x020 if brake          else 0) |
 		(0x040 if elevation_up   else 0) | (0x080 if elevation_down else 0) |
 		(0x100 if block_held     else 0))
 	b.encode_u16(21, flags)
@@ -81,7 +79,6 @@ static func from_bytes(b: PackedByteArray, offset: int = 0) -> InputState:
 	s.shoot_held         = (flags & 0x002) != 0
 	s.slap_pressed       = (flags & 0x004) != 0
 	s.slap_held          = (flags & 0x008) != 0
-	s.facing_held        = (flags & 0x010) != 0
 	s.brake              = (flags & 0x020) != 0
 	s.elevation_up       = (flags & 0x040) != 0
 	s.elevation_down     = (flags & 0x080) != 0
@@ -99,10 +96,9 @@ static func from_array(data: Array) -> InputState:
 	state.shoot_held = data[8]
 	state.slap_pressed = data[9]
 	state.slap_held = data[10]
-	state.facing_held = data[11]
-	state.brake = data[12]
-	state.elevation_up = data[13]
-	state.elevation_down = data[14]
-	state.block_held = data[15]
-	state.mouse_screen_pos = Vector2(data[16], data[17])
+	state.brake = data[11]
+	state.elevation_up = data[12]
+	state.elevation_down = data[13]
+	state.block_held = data[14]
+	state.mouse_screen_pos = Vector2(data[15], data[16])
 	return state

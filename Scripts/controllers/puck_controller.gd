@@ -15,6 +15,7 @@ const CONTEST_SQUIRT_SPEED: float = 3.0
 # divergence between client and host Jolt friction. Set to 0 while both run
 # identical physics; tune upward if free-puck trajectories drift apart.
 @export var prediction_extra_friction: float = 0.0
+@export var carry_smoothing_speed: float = 20.0
 
 var puck: Puck = null
 var is_server: bool = false
@@ -86,7 +87,7 @@ func _physics_process(delta: float) -> void:
 		return
 	_current_time += delta
 	if _local_carrier_skater != null:
-		_apply_local_carrier_position()
+		_apply_local_carrier_position(delta)
 		if NetworkTelemetry.instance: NetworkTelemetry.instance.puck_mode = "pinned"
 	elif not _predicting_trajectory:
 		_interpolate()
@@ -208,11 +209,13 @@ func notify_local_puck_dropped() -> void:
 	puck.set_client_prediction_mode(false)
 	_state_buffer.clear()
 
-func _apply_local_carrier_position() -> void:
-	# Pin puck at the blade contact point (mid-blade), not the heel (Marker3D).
+func _apply_local_carrier_position(delta: float) -> void:
+	# Smooth puck toward the blade contact point each tick. The lerp damps rapid
+	# blade movements so the puck feels weighty during stickhandling rather than
+	# teleporting instantly to the blade tip.
 	var contact: Vector3 = _local_carrier_skater.get_blade_contact_global()
 	contact.y = puck.ice_height
-	puck.set_puck_position(contact)
+	puck.set_puck_position(puck.get_puck_position().lerp(contact, carry_smoothing_speed * delta))
 
 # ── Reconciliation ────────────────────────────────────────────────────────────
 # Mirrors LocalController.reconcile — nudges Jolt state toward server truth each

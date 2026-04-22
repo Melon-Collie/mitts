@@ -10,11 +10,11 @@ class MovementConfig:
 	var friction: float = 0.0                    # base friction applied each tick
 	var max_speed: float = 0.0                   # maximum horizontal speed
 	var move_deadzone: float = 0.0               # stick deadzone
-	var brake_multiplier: float = 0.0            # friction multiplier when braking
+	var brake_multiplier: float = 0.0            # friction multiplier when braking with no input
 	var puck_carry_speed_multiplier: float = 0.0 # max speed reduction while carrying
 	var backward_thrust_multiplier: float = 0.0  # thrust scale when moving against facing
 	var crossover_thrust_multiplier: float = 0.0 # thrust scale when moving perpendicular to facing
-	var dash_impulse_magnitude: float = 0.0      # speed added per pulse dash
+	var brake_redirect_speed: float = 0.0        # rad/s velocity direction rotates toward input while carving
 
 static func apply_movement(
 		current_velocity: Vector3,
@@ -26,7 +26,23 @@ static func apply_movement(
 		cfg: MovementConfig) -> Vector3:
 	var velocity: Vector3 = current_velocity
 
-	if move_input.length() > cfg.move_deadzone:
+	if brake and move_input.length() > cfg.move_deadzone:
+		# CARVE: rotate existing velocity toward the movement input direction at a
+		# fixed angular rate. Speed is preserved — the edge redirects momentum
+		# rather than building new velocity. Normal friction bleeds speed slowly.
+		var vel_2d := Vector2(velocity.x, velocity.z)
+		var speed: float = vel_2d.length()
+		if speed > 0.01:
+			var vel_dir := vel_2d.normalized()
+			var target_dir := move_input.normalized()
+			var angle_diff: float = vel_dir.angle_to(target_dir)
+			var max_rot: float = cfg.brake_redirect_speed * delta
+			vel_2d = vel_dir.rotated(clampf(angle_diff, -max_rot, max_rot)) * speed
+			velocity.x = vel_2d.x
+			velocity.z = vel_2d.y
+
+	elif move_input.length() > cfg.move_deadzone:
+		# NORMAL: apply thrust in the input direction, scaled by facing alignment.
 		var thrust_dir := Vector3(move_input.x, 0.0, move_input.y)
 		var facing_dir := Vector2(-sin(facing_rotation_y), -cos(facing_rotation_y))
 		var move_dot: float = facing_dir.dot(move_input.normalized())
@@ -55,36 +71,10 @@ static func apply_movement(
 				velocity.x = limited.x
 				velocity.z = limited.y
 
-	# Friction (or braking)
-	var current_friction: float = cfg.friction * cfg.brake_multiplier if brake else cfg.friction
+	# Friction: heavy stop when braking with no input, normal otherwise.
+	var effective_friction: float = cfg.friction * cfg.brake_multiplier if (brake and move_input.length() <= cfg.move_deadzone) else cfg.friction
 	var horiz_vel := Vector2(velocity.x, velocity.z)
-	horiz_vel = horiz_vel.move_toward(Vector2.ZERO, current_friction * delta)
+	horiz_vel = horiz_vel.move_toward(Vector2.ZERO, effective_friction * delta)
 	velocity.x = horiz_vel.x
 	velocity.z = horiz_vel.y
-	return velocity
-
-# Pulse dash — additive impulse in dash_dir, capped at effective_max.
-# Same cap philosophy as apply_movement's thrust block: preserves pre-existing
-# over-max speed (body check, etc.) but prevents free acceleration when already
-# at max (same-direction spamming has no effect).
-static func apply_dash_impulse(
-		current_velocity: Vector3,
-		dash_dir: Vector3,
-		has_puck: bool,
-		cfg: MovementConfig) -> Vector3:
-	var velocity: Vector3 = current_velocity
-	var impulse: Vector3 = dash_dir.normalized() * cfg.dash_impulse_magnitude
-	velocity += impulse
-
-	var effective_max: float = cfg.max_speed * cfg.puck_carry_speed_multiplier if has_puck else cfg.max_speed
-	var horiz := Vector2(velocity.x, velocity.z)
-	var speed: float = horiz.length()
-	if speed > effective_max:
-		var pre_impulse_speed: float = Vector2(
-			velocity.x - impulse.x, velocity.z - impulse.z).length()
-		var target_speed: float = maxf(pre_impulse_speed, effective_max)
-		if speed > target_speed:
-			var limited: Vector2 = horiz.normalized() * target_speed
-			velocity.x = limited.x
-			velocity.z = limited.y
 	return velocity
