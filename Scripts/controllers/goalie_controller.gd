@@ -93,7 +93,6 @@ var _prev_puck_position: Vector3 = Vector3.ZERO
 var _puck_approach_velocity: float = 0.0
 
 # ── Client Interpolation ──────────────────────────────────────────────────────
-var _current_time: float = 0.0
 var _state_buffer: Array[BufferedGoalieState] = []
 var is_extrapolating: bool = false
 var _transition_override_state: int = -1
@@ -147,7 +146,6 @@ func _physics_process(delta: float) -> void:
 	if goalie == null or puck == null:
 		return
 	if not is_server:
-		_current_time += delta
 		if _client_reaction_timer > 0.0:
 			_client_reaction_timer -= delta
 			if _client_reaction_timer <= 0.0:
@@ -460,11 +458,13 @@ func get_state() -> GoalieNetworkState:
 	s.five_hole_openness = _five_hole_openness
 	return s
 
-func apply_state(network_state: GoalieNetworkState) -> void:
+func apply_state(network_state: GoalieNetworkState, host_ts: float) -> void:
 	if is_server:
 		return
+	if not _state_buffer.is_empty() and host_ts < _state_buffer.back().timestamp:
+		return
 	var buffered := BufferedGoalieState.new()
-	buffered.timestamp = _current_time
+	buffered.timestamp = host_ts
 	buffered.state = network_state
 	_state_buffer.append(buffered)
 	if _state_buffer.size() > 30:
@@ -477,7 +477,7 @@ func _adapt_interpolation_delay() -> void:
 	interpolation_delay += clampf(change, -0.001, 0.005)
 
 func _interpolate() -> void:
-	var render_time: float = _current_time - interpolation_delay
+	var render_time: float = NetworkManager.estimated_host_time() - interpolation_delay
 	var bracket: BufferedStateInterpolator.BracketResult = BufferedStateInterpolator.find_bracket(
 			_state_buffer, render_time)
 	is_extrapolating = bracket != null and bracket.is_extrapolating
@@ -508,7 +508,7 @@ func apply_state_transition(new_state: int) -> void:
 	if is_server:
 		return
 	_transition_override_state = new_state
-	_transition_override_until = _current_time + 0.15
+	_transition_override_until = Time.get_ticks_msec() / 1000.0 + 0.15
 	if new_state == State.STANDING as int:
 		_reacting_to_shot = false
 		_client_reaction_timer = 0.0
@@ -528,7 +528,7 @@ func _apply_network_state(s: GoalieNetworkState) -> void:
 	_five_hole_openness = s.five_hole_openness
 	var effective_state: int = s.state_enum
 	if _transition_override_state >= 0:
-		if _current_time < _transition_override_until:
+		if Time.get_ticks_msec() / 1000.0 < _transition_override_until:
 			effective_state = _transition_override_state
 		else:
 			_transition_override_state = -1

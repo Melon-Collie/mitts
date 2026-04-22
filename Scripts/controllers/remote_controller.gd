@@ -8,7 +8,6 @@ extends SkaterController
 var _input_queue: Array[InputState] = []
 var _fallback_input: InputState = InputState.new()
 var _state_buffer: Array[BufferedSkaterState] = []
-var _current_time: float = 0.0
 var is_extrapolating: bool = false
 
 var _rejoin_blend_start_time: float = -1.0
@@ -32,7 +31,6 @@ func _physics_process(delta: float) -> void:
 	if _is_host:
 		_drive_from_input(delta)
 	else:
-		_current_time += delta
 		_interpolate()
 		skater.update_stick_mesh()
 
@@ -78,13 +76,13 @@ func _drive_from_input(delta: float) -> void:
 			return
 		_process_input(_fallback_input, delta)
 
-func apply_network_state(state: SkaterNetworkState) -> void:
+func apply_network_state(state: SkaterNetworkState, host_ts: float) -> void:
 	if _is_host:
 		return
-	if not _state_buffer.is_empty() and _current_time <= _state_buffer.back().timestamp:
+	if not _state_buffer.is_empty() and host_ts < _state_buffer.back().timestamp:
 		return
 	var buffered := BufferedSkaterState.new()
-	buffered.timestamp = _current_time
+	buffered.timestamp = host_ts
 	buffered.state = state
 	_state_buffer.append(buffered)
 	if _state_buffer.size() > 30:
@@ -92,7 +90,7 @@ func apply_network_state(state: SkaterNetworkState) -> void:
 	_adapt_interpolation_delay()
 
 func _interpolate() -> void:
-	var render_time: float = _current_time - interpolation_delay
+	var render_time: float = NetworkManager.estimated_host_time() - interpolation_delay
 	var bracket: BufferedStateInterpolator.BracketResult = BufferedStateInterpolator.find_bracket(
 			_state_buffer, render_time)
 	var prev_extrapolating: bool = is_extrapolating
@@ -136,10 +134,10 @@ func _interpolate() -> void:
 		_rejoin_blend_from_pos = skater.global_position
 		_rejoin_blend_from_blade = skater.get_blade_position()
 		_rejoin_blend_from_hand = skater.top_hand.position
-		_rejoin_blend_start_time = _current_time
+		_rejoin_blend_start_time = Time.get_ticks_msec() / 1000.0
 	if _rejoin_blend_start_time >= 0.0:
 		var ease_t: float = clampf(
-				(_current_time - _rejoin_blend_start_time) / rejoin_blend_duration, 0.0, 1.0)
+				(Time.get_ticks_msec() / 1000.0 - _rejoin_blend_start_time) / rejoin_blend_duration, 0.0, 1.0)
 		interpolated.position = _rejoin_blend_from_pos.lerp(interpolated.position, ease_t)
 		interpolated.blade_position = _rejoin_blend_from_blade.lerp(interpolated.blade_position, ease_t)
 		interpolated.top_hand_position = _rejoin_blend_from_hand.lerp(interpolated.top_hand_position, ease_t)

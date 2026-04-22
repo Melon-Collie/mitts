@@ -22,7 +22,6 @@ var is_server: bool = false
 # ── State ─────────────────────────────────────────────────────────────────────
 var _carrier_peer_id: int = -1            # server-side authoritative carrier
 var _local_carrier_skater: Skater = null  # client-side: local skater while carrying
-var _current_time: float = 0.0
 var _prev_puck_pos: Vector3 = Vector3.ZERO
 var _state_buffer: Array[BufferedPuckState] = []
 var _predicting_trajectory: bool = false
@@ -84,7 +83,6 @@ func _physics_process(delta: float) -> void:
 		_check_interactions()
 		_prev_puck_pos = puck.get_puck_position()
 		return
-	_current_time += delta
 	if _local_carrier_skater != null:
 		_apply_local_carrier_position(delta)
 		if NetworkTelemetry.instance: NetworkTelemetry.instance.puck_mode = "pinned"
@@ -270,7 +268,7 @@ func get_state() -> PuckNetworkState:
 	state.carrier_peer_id = _carrier_peer_id
 	return state
 
-func apply_state(state: PuckNetworkState) -> void:
+func apply_state(state: PuckNetworkState, host_ts: float) -> void:
 	if is_server:
 		return
 	if _local_carrier_skater != null:
@@ -301,10 +299,10 @@ func apply_state(state: PuckNetworkState) -> void:
 				puck.set_puck_velocity(latency_corrected.velocity)
 				_state_buffer.clear()
 			return  # Don't buffer during prediction; interpolation isn't running
-	if not _state_buffer.is_empty() and _current_time <= _state_buffer.back().timestamp:
+	if not _state_buffer.is_empty() and host_ts < _state_buffer.back().timestamp:
 		return
 	var buffered := BufferedPuckState.new()
-	buffered.timestamp = _current_time
+	buffered.timestamp = host_ts
 	buffered.state = state
 	_state_buffer.append(buffered)
 	if _state_buffer.size() > 30:
@@ -312,7 +310,7 @@ func apply_state(state: PuckNetworkState) -> void:
 	_adapt_interpolation_delay()
 
 func _interpolate() -> void:
-	var render_time: float = _current_time - interpolation_delay
+	var render_time: float = NetworkManager.estimated_host_time() - interpolation_delay
 	var bracket: BufferedStateInterpolator.BracketResult = BufferedStateInterpolator.find_bracket(
 			_state_buffer, render_time)
 	var prev_extrapolating: bool = is_extrapolating
@@ -333,10 +331,10 @@ func _interpolate() -> void:
 		interpolated.velocity = from_state.velocity.lerp(to_state.velocity, bracket.t)
 	if prev_extrapolating and not is_extrapolating:
 		_rejoin_blend_from_pos = puck.get_puck_position()
-		_rejoin_blend_start_time = _current_time
+		_rejoin_blend_start_time = Time.get_ticks_msec() / 1000.0
 	if _rejoin_blend_start_time >= 0.0:
 		var ease_t: float = clampf(
-				(_current_time - _rejoin_blend_start_time) / rejoin_blend_duration, 0.0, 1.0)
+				(Time.get_ticks_msec() / 1000.0 - _rejoin_blend_start_time) / rejoin_blend_duration, 0.0, 1.0)
 		interpolated.position = _rejoin_blend_from_pos.lerp(interpolated.position, ease_t)
 		if ease_t >= 1.0:
 			_rejoin_blend_start_time = -1.0
