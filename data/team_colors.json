@@ -158,19 +158,19 @@
       "id": "bluejackets",
       "name": "Columbus",
       "primary": "#002654",
-      "secondary": "#CE1126",
+      "secondary": "#FFFFFF",
       "home": {
         "helmet": "#002654",
         "jersey": "#002654",
-        "pants": "#002654",
+        "pants": "#CE1126",
         "goalie_pads": "#FFFFFF",
-        "text": "#CE1126",
-        "text_outline": "#002654"
+        "text": "#FFFFFF",
+        "text_outline": "#CE1126"
       },
       "away": {
-        "helmet": "#002654",
+        "helmet": "#FFFFFF",
         "jersey": "#FFFFFF",
-        "pants": "#FFFFFF",
+        "pants": "#002654",
         "goalie_pads": "#FFFFFF",
         "text": "#002654",
         "text_outline": "#CE1126"
