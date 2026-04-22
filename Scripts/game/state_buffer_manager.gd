@@ -217,7 +217,11 @@ func _find_bracket(buf: Array, write_ptr: int, count: int, ts: float) -> Array:
 			lo = mid + 1
 		else:
 			hi = mid - 1
-	if found < 0 or found >= count - 1:
+	if found < 0:
+		if OS.is_debug_build():
+			push_warning("StateBufferManager: ts %.4f predates oldest buffered %.4f (skater)" % [ts, buf[oldest_ptr].host_timestamp])
+		return [-1.0, null, newest]
+	if found >= count - 1:
 		return [-1.0, null, newest]
 	var from_s = buf[(oldest_ptr + found) % BUFFER_SIZE]
 	var to_s = buf[(oldest_ptr + found + 1) % BUFFER_SIZE]
@@ -246,7 +250,11 @@ func _find_bracket_puck(ts: float) -> Array:
 			lo = mid + 1
 		else:
 			hi = mid - 1
-	if found < 0 or found >= _puck_count - 1:
+	if found < 0:
+		if OS.is_debug_build():
+			push_warning("StateBufferManager: ts %.4f predates oldest buffered %.4f (puck)" % [ts, _puck_buffer[oldest_ptr].host_timestamp])
+		return [-1.0, null, newest]
+	if found >= _puck_count - 1:
 		return [-1.0, null, newest]
 	var from_p = _puck_buffer[(oldest_ptr + found) % BUFFER_SIZE]
 	var to_p = _puck_buffer[(oldest_ptr + found + 1) % BUFFER_SIZE]
@@ -278,7 +286,11 @@ func _find_bracket_goalie(team_id: int, ts: float) -> Array:
 			lo = mid + 1
 		else:
 			hi = mid - 1
-	if found < 0 or found >= count - 1:
+	if found < 0:
+		if OS.is_debug_build():
+			push_warning("StateBufferManager: ts %.4f predates oldest buffered %.4f (goalie team %d)" % [ts, buf[oldest_ptr].host_timestamp, team_id])
+		return [-1.0, null, newest]
+	if found >= count - 1:
 		return [-1.0, null, newest]
 	var from_g = buf[(oldest_ptr + found) % BUFFER_SIZE]
 	var to_g = buf[(oldest_ptr + found + 1) % BUFFER_SIZE]

@@ -16,6 +16,10 @@ var _last_estimated_time: float = 0.0
 var _samples: Array = []  # Array of {rtt: float, offset: float}
 var _pings_sent: int = 0
 var _timer: float = 0.0
+var _session_start_ms: int = 0
+
+func init_session(ms: int) -> void:
+	_session_start_ms = ms
 
 func tick(delta: float) -> bool:
 	_timer -= delta
@@ -37,7 +41,7 @@ func record_pong(client_send_time: float, host_time: float, recv_time: float) ->
 		is_ready = true
 
 func estimated_host_time() -> float:
-	var t := Time.get_ticks_msec() / 1000.0 + _offset
+	var t := (Time.get_ticks_msec() - _session_start_ms) / 1000.0 + _offset
 	_last_estimated_time = maxf(t, _last_estimated_time)
 	return _last_estimated_time
 

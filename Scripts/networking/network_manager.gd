@@ -58,6 +58,7 @@ var _peer_ping_ms: Dictionary[int, int] = {}  # peer_id -> latest RTT in ms (all
 # can pull world state without reaching up into the application layer.
 var _world_state_provider: Callable = Callable()
 var _clock_sync: RefCounted = null  # ClockSync instance, client only
+var _session_start_ms: int = 0
 
 # ── Packet-loss tracking ──────────────────────────────────────────────────────
 # Client-side: gap detection from received WS sequence numbers.
@@ -104,7 +105,11 @@ func start_offline() -> void:
 	_peer_numbers[1] = local_jersey_number
 
 
+func local_time() -> float:
+	return (Time.get_ticks_msec() - _session_start_ms) / 1000.0
+
 func start_host() -> void:
+	_session_start_ms = Time.get_ticks_msec()
 	is_host = true
 	game_initiated = true
 	_peer_handedness[1] = local_is_left_handed
@@ -147,7 +152,9 @@ func _on_peer_disconnected(id: int) -> void:
 
 func _on_connected_to_server() -> void:
 	_connect_timer = -1.0
+	_session_start_ms = Time.get_ticks_msec()
 	_clock_sync = load("res://Scripts/networking/clock_sync.gd").new()
+	_clock_sync.init_session(_session_start_ms)
 	request_join.rpc_id(1, local_is_left_handed, local_player_name, local_jersey_number)
 	client_connected.emit()
 
@@ -193,6 +200,7 @@ func reset() -> void:
 	state_delta = 1.0 / Constants.STATE_RATE
 	_connect_timer = -1.0
 	_clock_sync = null
+	_session_start_ms = 0
 	_last_ws_seq_received = -1
 	_ws_drop_window = 0
 	_ws_recv_window = 0
@@ -232,7 +240,7 @@ func _process(delta: float) -> void:
 
 	if not is_host and _clock_sync != null:
 		if _clock_sync.tick(capped_delta):
-			send_ping.rpc_id(1, Time.get_ticks_msec() / 1000.0)
+			send_ping.rpc_id(1, local_time())
 
 	_ping_timer += capped_delta
 	if _ping_timer >= _PING_INTERVAL:
@@ -354,7 +362,7 @@ func receive_world_state(data: PackedByteArray) -> void:
 		return
 	NetworkSimManager.send(
 		func(s: PackedByteArray) -> void:
-			var now: float = Time.get_ticks_msec() / 1000.0
+			var now: float = local_time()
 			if _last_ws_arrival_time > 0.0:
 				const EXPECTED_INTERVAL: float = 1.0 / Constants.STATE_RATE
 				var jitter: float = absf((now - _last_ws_arrival_time) - EXPECTED_INTERVAL)
@@ -377,7 +385,7 @@ func send_ping(client_send_time: float) -> void:
 	var peer_id := multiplayer.get_remote_sender_id()
 	NetworkSimManager.send(
 		func(cst: float, pid: int) -> void:
-			receive_pong.rpc_id(pid, cst, Time.get_ticks_msec() / 1000.0),
+			receive_pong.rpc_id(pid, cst, local_time()),
 		[client_send_time, peer_id], true)
 
 @rpc("authority", "reliable")
@@ -387,7 +395,7 @@ func receive_pong(client_send_time: float, host_time: float) -> void:
 	NetworkSimManager.send(
 		func(cst: float, ht: float) -> void:
 			var was_ready: bool = _clock_sync.is_ready
-			_clock_sync.record_pong(cst, ht, Time.get_ticks_msec() / 1000.0)
+			_clock_sync.record_pong(cst, ht, local_time())
 			if not was_ready and _clock_sync.is_ready:
 				clock_ready.emit(),
 		[client_send_time, host_time], true)
@@ -420,7 +428,7 @@ func receive_hit_claim(victim_peer_id: int, host_timestamp: float, rtt_ms: float
 
 func estimated_host_time() -> float:
 	if is_host:
-		return Time.get_ticks_msec() / 1000.0
+		return local_time()
 	if _clock_sync == null or not _clock_sync.is_ready:
 		return 0.0
 	return _clock_sync.estimated_host_time()

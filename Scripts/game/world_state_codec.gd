@@ -87,7 +87,7 @@ func encode_world_state() -> PackedByteArray:
 	var hdr := PackedByteArray(); hdr.resize(WS_HEADER_SIZE)
 	hdr.encode_u16(0, _ws_sequence)
 	_ws_sequence = (_ws_sequence + 1) & 0xFFFF
-	hdr.encode_float(2, Time.get_ticks_msec() / 1000.0)
+	hdr.encode_float(2, NetworkManager.local_time())
 	hdr.encode_u8(6, peers.size())
 	b.append_array(hdr)
 	# Skaters: u32 peer_id + 35B state + u8 queue_depth
@@ -276,6 +276,9 @@ static func _encode_skater_quantized(s: SkaterNetworkState) -> PackedByteArray:
 
 
 static func _decode_skater_quantized(b: PackedByteArray) -> SkaterNetworkState:
+	if b.size() < 35:
+		push_warning("WorldStateCodec: truncated skater block (%d bytes)" % b.size())
+		return SkaterNetworkState.new()
 	var s := SkaterNetworkState.new()
 	var o: int = 0
 	s.position.x = b.decode_s16(o) / 100.0; o += 2
@@ -317,6 +320,9 @@ static func _encode_puck_quantized(s: PuckNetworkState) -> PackedByteArray:
 
 
 static func _decode_puck_quantized(b: PackedByteArray) -> PuckNetworkState:
+	if b.size() < 11:
+		push_warning("WorldStateCodec: truncated puck block (%d bytes)" % b.size())
+		return PuckNetworkState.new()
 	var s := PuckNetworkState.new()
 	var o: int = 0
 	s.position.x = b.decode_s16(o) / 100.0; o += 2
@@ -345,6 +351,9 @@ static func _encode_goalie_quantized(s: GoalieNetworkState) -> PackedByteArray:
 
 
 static func _decode_goalie_quantized(b: PackedByteArray) -> GoalieNetworkState:
+	if b.size() < 8:
+		push_warning("WorldStateCodec: truncated goalie block (%d bytes)" % b.size())
+		return GoalieNetworkState.new()
 	var s := GoalieNetworkState.new()
 	var o: int = 0
 	s.position_x = b.decode_s16(o) / 100.0; o += 2
