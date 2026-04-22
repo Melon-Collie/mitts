@@ -268,7 +268,7 @@ func _find_balanced_slot(_peer_id: int) -> Array:
 func _build_roster_array() -> Array:
 	var result: Array = []
 	for k: int in _lobby_slots:
-		var team_id: int = k / 3
+		var team_id: int = 1 if k >= PlayerRules.MAX_PER_TEAM else 0
 		var slot: int = k % 3
 		var entry: Dictionary = _lobby_slots[k]
 		result.append([entry.peer_id, team_id, slot, entry.player_name, entry.is_left_handed, entry.get("jersey_number", 10)])
@@ -277,7 +277,7 @@ func _build_roster_array() -> Array:
 func _build_slot_grid_roster() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for k: int in _lobby_slots:
-		var team_id: int = k / 3
+		var team_id: int = 1 if k >= PlayerRules.MAX_PER_TEAM else 0
 		var slot: int = k % 3
 		var entry: Dictionary = _lobby_slots[k]
 		result.append({
@@ -357,7 +357,7 @@ func _on_slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int) -> v
 		return
 	var count: int = 0
 	for k: int in _lobby_slots:
-		if k / 3 == new_team_id:
+		if (1 if k >= PlayerRules.MAX_PER_TEAM else 0) == new_team_id:
 			count += 1
 	if count >= PlayerRules.MAX_PER_TEAM:
 		return
@@ -408,7 +408,7 @@ func _on_game_started(config: Dictionary) -> void:
 func _build_pending_slots() -> Dictionary:
 	var result: Dictionary = {}
 	for k: int in _lobby_slots:
-		var team_id: int = k / 3
+		var team_id: int = 1 if k >= PlayerRules.MAX_PER_TEAM else 0
 		var slot: int = k % 3
 		var entry: Dictionary = _lobby_slots[k]
 		result[entry.peer_id] = {
