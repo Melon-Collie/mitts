@@ -164,10 +164,10 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# Save shot/state-machine state — replay can transition through shoot states
 	# (WRISTER_AIM → FOLLOW_THROUGH → SKATING) and leave _state wrong. Restore so
 	# the next _process_input runs the correct handler and blade doesn't teleport.
-	var pre_state: State = _state
-	var pre_follow_through_timer: float = _follow_through_timer
-	var pre_follow_through_is_slapper: bool = _follow_through_is_slapper
-	var pre_one_timer_window_timer: float = _one_timer_window_timer
+	var pre_state: State = _sm.get_state()
+	var pre_follow_through_timer: float = _sm.follow_through_timer
+	var pre_follow_through_is_slapper: bool = _sm.follow_through_is_slapper
+	var pre_one_timer_window_timer: float = _aiming.one_timer_window_timer
 	skater.global_position = server_state.position
 	skater.velocity = server_state.velocity
 	# Snap facing for replay accuracy — facing drives move_and_slide direction,
@@ -179,7 +179,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# Seed mouse pos from the first replayed input so the first frame's
 	# direction-variance delta is zero rather than a large garbage value.
 	if not _input_history.is_empty():
-		_prev_mouse_screen_pos = _input_history[0].mouse_screen_pos
+		_aiming.prev_mouse_screen_pos = _input_history[0].mouse_screen_pos
 	is_replaying = true
 	var _impulse_applied: bool = false
 	for input in _input_history:
@@ -203,20 +203,20 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			skater.global_position.z = clamped_xz.y
 	is_replaying = false
 	# Restore shot-state fields that replay must not transition past.
-	_state = pre_state
-	_follow_through_timer = pre_follow_through_timer
-	_follow_through_is_slapper = pre_follow_through_is_slapper
-	_one_timer_window_timer = pre_one_timer_window_timer
+	_sm.set_state(pre_state)
+	_sm.follow_through_timer = pre_follow_through_timer
+	_sm.follow_through_is_slapper = pre_follow_through_is_slapper
+	_aiming.one_timer_window_timer = pre_one_timer_window_timer
 	# Set mouse pos baseline to the end of the replay window so the next real
 	# frame's direction-variance delta is correct.
 	if not _input_history.is_empty():
-		_prev_mouse_screen_pos = _input_history.back().mouse_screen_pos
+		_aiming.prev_mouse_screen_pos = _input_history.back().mouse_screen_pos
 	# Server authority on shot state: if the server disagrees with the client's
 	# pre-replay state, server wins — this corrects charge that was wrong before
 	# the reconcile (e.g. from a dropped shoot_pressed input).
 	if server_state.shot_state != pre_state:
-		_state = server_state.shot_state as State
-		_charge_distance = server_state.shot_charge
+		_sm.set_state(server_state.shot_state as SkaterStateMachine.State)
+		_aiming.charge_distance = server_state.shot_charge
 	skater.set_facing(_facing)
 	skater.set_upper_body_rotation(_upper_body_angle)
 	skater.set_lower_body_lag(_lower_body_lag)
