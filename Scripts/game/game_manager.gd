@@ -25,7 +25,7 @@ signal player_joined(player_name: String, team_color: Color)
 signal player_left(player_name: String, team_color: Color)
 signal stats_updated
 signal shots_on_goal_changed(sog_0: int, sog_1: int)
-signal team_colors_ready(home_primary: Color, away_primary: Color)
+signal team_colors_ready(home_primary: Color, home_secondary: Color, away_primary: Color, away_secondary: Color)
 
 # ── Domain state ──────────────────────────────────────────────────────────────
 var _state_machine: GameStateMachine = null
@@ -404,9 +404,9 @@ func _wire_subsystems() -> void:
 	_debug_overlay = NetworkDebugOverlay.new()
 	add_child(_debug_overlay)
 
-	team_colors_ready.emit(
-		TeamColorRegistry.get_colors(teams[0].color_id, 0).primary,
-		TeamColorRegistry.get_colors(teams[1].color_id, 1).primary)
+	var _home_c := TeamColorRegistry.get_colors(teams[0].color_id, 0)
+	var _away_c := TeamColorRegistry.get_colors(teams[1].color_id, 1)
+	team_colors_ready.emit(_home_c.primary, _home_c.secondary, _away_c.primary, _away_c.secondary)
 
 
 func _spawn_local(peer_id: int, team_slot: int, team: Team) -> void:

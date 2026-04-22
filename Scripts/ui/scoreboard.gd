@@ -12,6 +12,8 @@ var _period_score_labels: Array = []  # [team_id][period_index, then total]
 var _period_summary_grid: GridContainer = null
 var _away_badge_style: StyleBoxFlat = null
 var _home_badge_style: StyleBoxFlat = null
+var _away_badge_label: Label = null
+var _home_badge_label: Label = null
 
 func _ready() -> void:
 	layer = 10
@@ -35,11 +37,15 @@ func _on_game_over() -> void:
 	visible = true
 	_refresh()
 
-func _on_team_colors_ready(home_primary: Color, away_primary: Color) -> void:
+func _on_team_colors_ready(home_primary: Color, home_secondary: Color, away_primary: Color, away_secondary: Color) -> void:
 	if _home_badge_style != null:
 		_home_badge_style.bg_color = home_primary
+	if _home_badge_label != null:
+		_home_badge_label.add_theme_color_override("font_color", home_secondary)
 	if _away_badge_style != null:
 		_away_badge_style.bg_color = away_primary
+	if _away_badge_label != null:
+		_away_badge_label.add_theme_color_override("font_color", away_secondary)
 
 func _build_panel() -> void:
 	var root := Control.new()
@@ -133,10 +139,13 @@ func _rebuild_period_grid(num_periods: int) -> void:
 			primary = TeamColorRegistry.get_colors(GameManager.teams[team_id].color_id, team_id).primary
 		var badge := _team_badge(label, primary)
 		var badge_style := badge.get_theme_stylebox("panel") as StyleBoxFlat
+		var badge_label := badge.get_child(0) as Label
 		if team_id == 1:
 			_away_badge_style = badge_style
+			_away_badge_label = badge_label
 		else:
 			_home_badge_style = badge_style
+			_home_badge_label = badge_label
 		_period_summary_grid.add_child(badge)
 		var row_labels: Array[Label] = []
 		for _i: int in num_periods + 1:  # periods + total

@@ -22,6 +22,8 @@ var _score_0: int = 0
 var _score_1: int = 0
 var _home_badge_style: StyleBoxFlat = null
 var _away_badge_style: StyleBoxFlat = null
+var _home_badge_label: Label = null
+var _away_badge_label: Label = null
 
 const _DARK_BG    := Color(0.07, 0.07, 0.09, 0.92)
 const _WHITE      := Color(1.00, 1.00, 1.00, 1.00)
@@ -114,6 +116,7 @@ func _build_scorebug() -> void:
 	teams_vbox.add_child(away_row)
 	var away_badge := _team_badge("AWAY", PlayerRules.generate_primary_color(1))
 	_away_badge_style = away_badge.get_theme_stylebox("panel") as StyleBoxFlat
+	_away_badge_label = away_badge.get_child(0) as Label
 	away_row.add_child(away_badge)
 	_away_score_label = _lbl("0", 20, _WHITE)
 	_away_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -127,6 +130,7 @@ func _build_scorebug() -> void:
 	teams_vbox.add_child(home_row)
 	var home_badge := _team_badge("HOME", PlayerRules.generate_primary_color(0))
 	_home_badge_style = home_badge.get_theme_stylebox("panel") as StyleBoxFlat
+	_home_badge_label = home_badge.get_child(0) as Label
 	home_row.add_child(home_badge)
 	_home_score_label = _lbl("0", 20, _WHITE)
 	_home_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -470,7 +474,7 @@ func _on_goal_scored(scoring_team: Team, scorer_name: String, assist1_name: Stri
 		_GOLD, _WHITE, 1.5)
 	_phase_label.text = ("GOAL!  %s" % scorer_name) if not scorer_name.is_empty() else "GOAL!"
 	_phase_label.add_theme_color_override("font_color", _GOLD)
-	var team_color: Color = TeamColorRegistry.get_preset(GameManager.teams[scoring_team.team_id].color_id).primary
+	var team_color: Color = TeamColorRegistry.get_colors(GameManager.teams[scoring_team.team_id].color_id, scoring_team.team_id).primary
 	_phase_style.bg_color = Color(team_color.r * 0.25, team_color.g * 0.25, team_color.b * 0.25, 0.92)
 	if not assist1_name.is_empty():
 		var assist_text: String = assist1_name
@@ -481,11 +485,15 @@ func _on_goal_scored(scoring_team: Team, scorer_name: String, assist1_name: Stri
 	else:
 		_assist_label.visible = false
 
-func _on_team_colors_ready(home_primary: Color, away_primary: Color) -> void:
+func _on_team_colors_ready(home_primary: Color, home_secondary: Color, away_primary: Color, away_secondary: Color) -> void:
 	if _home_badge_style != null:
 		_home_badge_style.bg_color = home_primary
+	if _home_badge_label != null:
+		_home_badge_label.add_theme_color_override("font_color", home_secondary)
 	if _away_badge_style != null:
 		_away_badge_style.bg_color = away_primary
+	if _away_badge_label != null:
+		_away_badge_label.add_theme_color_override("font_color", away_secondary)
 
 func _on_phase_changed(new_phase: int) -> void:
 	match new_phase:
