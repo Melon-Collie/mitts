@@ -223,8 +223,8 @@ func _ready() -> void:
 	bottom_upper_arm_mesh = _resolve_or_create_bone_mesh("BottomUpperArmMesh")
 	bottom_forearm_mesh = _resolve_or_create_bone_mesh("BottomForearmMesh")
 
-	_glove_top_mesh    = upper_body.get_node_or_null("GloveTopMesh") as MeshInstance3D
-	_glove_bottom_mesh = upper_body.get_node_or_null("GloveBottomMesh") as MeshInstance3D
+	_glove_top_mesh    = top_hand.get_node_or_null("GloveTopMesh") as MeshInstance3D
+	_glove_bottom_mesh = bottom_hand.get_node_or_null("GloveBottomMesh") as MeshInstance3D
 	_sock_mesh         = lower_body.get_node_or_null("SockMesh") as MeshInstance3D
 
 	_ring_mesh = MeshInstance3D.new()
