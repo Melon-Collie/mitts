@@ -561,12 +561,12 @@
         "pants": "#002868",
         "goalie_pads": "#FFFFFF",
         "text": "#FFFFFF",
-        "text_outline": "#002868"
+        "text_outline": "#FFFFFF"
       },
       "away": {
-        "helmet": "#002868",
+        "helmet": "#FFFFFF",
         "jersey": "#FFFFFF",
-        "pants": "#FFFFFF",
+        "pants": "#002868",
         "goalie_pads": "#FFFFFF",
         "text": "#002868",
         "text_outline": "#002868"
