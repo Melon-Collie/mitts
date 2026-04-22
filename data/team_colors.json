@@ -47,22 +47,22 @@
     {
       "id": "sabres",
       "name": "Buffalo",
-      "primary": "#002654",
+      "primary": "#003F9B",
       "secondary": "#FCB514",
       "home": {
-        "helmet": "#002654",
-        "jersey": "#002654",
-        "pants": "#002654",
+        "helmet": "#003F9B",
+        "jersey": "#003F9B",
+        "pants": "#003F9B",
         "goalie_pads": "#FFFFFF",
         "text": "#FCB514",
-        "text_outline": "#002654"
+        "text_outline": "#FFFFFF"
       },
       "away": {
-        "helmet": "#002654",
+        "helmet": "#FFFFFF",
         "jersey": "#FFFFFF",
-        "pants": "#FFFFFF",
+        "pants": "#003F9B",
         "goalie_pads": "#FFFFFF",
-        "text": "#002654",
+        "text": "#003F9B",
         "text_outline": "#FCB514"
       }
     },
