@@ -723,8 +723,12 @@ func get_target_interpolation_delay() -> float:
 	if not is_clock_ready():
 		return Constants.NETWORK_INTERPOLATION_DELAY
 	var rtt: float = get_rtt_ms() / 1000.0
-	var target: float = (rtt / 2.0) + (get_jitter_p95() * 1.5)
-	return clampf(target, maxf(rtt / 2.0, 0.016), 0.150)
+	var rtt_half: float = rtt / 2.0
+	var broadcast_interval: float = 1.0 / Constants.STATE_RATE
+	# Minimum is RTT/2 + one full broadcast interval so render_time always has
+	# a buffered state ahead of it between packet arrivals. Jitter margin on top.
+	var target: float = rtt_half + broadcast_interval + get_jitter_p95() * 1.5
+	return clampf(target, maxf(rtt_half + broadcast_interval, 0.016), 0.200)
 
 func get_peer_loss_rate(peer_id: int = -1) -> float:
 	if is_host:
