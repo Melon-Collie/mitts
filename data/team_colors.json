@@ -25,18 +25,18 @@
     {
       "id": "bruins",
       "name": "Boston",
-      "primary": "#FFB81C",
-      "secondary": "#111111",
+      "primary": "#111111",
+      "secondary": "#FFB81C",
       "home": {
         "helmet": "#111111",
         "jersey": "#111111",
         "pants": "#111111",
         "goalie_pads": "#FFFFFF",
         "text": "#FFB81C",
-        "text_outline": "#111111"
+        "text_outline": "#FFFFFF"
       },
       "away": {
-        "helmet": "#111111",
+        "helmet": "#FFFFFF",
         "jersey": "#FFFFFF",
         "pants": "#FFFFFF",
         "goalie_pads": "#FFFFFF",
