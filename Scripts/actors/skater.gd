@@ -89,10 +89,8 @@ var forearm_mesh: MeshInstance3D = null
 var bottom_upper_arm_mesh: MeshInstance3D = null
 var bottom_forearm_mesh: MeshInstance3D = null
 
-# Optional glove and sock meshes. Resolved from scene nodes in _ready;
-# guarded by null-checks so the skater works before the user adds the meshes.
-var _glove_top_mesh: MeshInstance3D = null
-var _glove_bottom_mesh: MeshInstance3D = null
+# Optional sock mesh. Resolved from scene nodes in _ready; guarded by
+# null-check so the skater works before the user adds the mesh.
 var _sock_mesh: MeshInstance3D = null
 
 signal body_checked_player(victim: Skater, impact_force: float, hit_direction: Vector3)
@@ -223,9 +221,7 @@ func _ready() -> void:
 	bottom_upper_arm_mesh = _resolve_or_create_bone_mesh("BottomUpperArmMesh")
 	bottom_forearm_mesh = _resolve_or_create_bone_mesh("BottomForearmMesh")
 
-	_glove_top_mesh    = top_hand.get_node_or_null("GloveTopMesh") as MeshInstance3D
-	_glove_bottom_mesh = bottom_hand.get_node_or_null("GloveBottomMesh") as MeshInstance3D
-	_sock_mesh         = lower_body.get_node_or_null("SockMesh") as MeshInstance3D
+	_sock_mesh = lower_body.get_node_or_null("SockMesh") as MeshInstance3D
 
 	_ring_mesh = MeshInstance3D.new()
 	_ring_mesh.name = "RingIndicator"
@@ -336,7 +332,6 @@ func set_player_color(
 		jersey_color: Color,
 		helmet_color: Color,
 		pants_color: Color,
-		gloves_color: Color,
 		socks_color: Color) -> void:
 	var jersey_mat: StandardMaterial3D = _make_solid_mat(jersey_color)
 	_upper_body_mesh.material_override = jersey_mat
@@ -351,10 +346,6 @@ func set_player_color(
 		bottom_forearm_mesh.material_override = jersey_mat.duplicate()
 	_direction_indicator.material_override = _make_solid_mat(helmet_color)
 	_lower_body_mesh.material_override = _make_solid_mat(pants_color)
-	if _glove_top_mesh != null:
-		_glove_top_mesh.material_override = _make_solid_mat(gloves_color)
-	if _glove_bottom_mesh != null:
-		_glove_bottom_mesh.material_override = _make_solid_mat(gloves_color)
 	if _sock_mesh != null:
 		_sock_mesh.material_override = _make_solid_mat(socks_color)
 	# Fixed stick shaft color — set explicitly so ghost mode never creates a
