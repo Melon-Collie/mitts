@@ -336,17 +336,17 @@
       "primary": "#FFB81C",
       "secondary": "#041E42",
       "home": {
-        "helmet": "#041E42",
-        "jersey": "#041E42",
+        "helmet": "#FFB81C",
+        "jersey": "#FFB81C",
         "pants": "#041E42",
         "goalie_pads": "#FFFFFF",
-        "text": "#FFB81C",
-        "text_outline": "#041E42"
+        "text": "#041E42",
+        "text_outline": "#FFFFFF"
       },
       "away": {
-        "helmet": "#041E42",
+        "helmet": "#FFFFFF",
         "jersey": "#FFFFFF",
-        "pants": "#FFFFFF",
+        "pants": "#041E42",
         "goalie_pads": "#FFFFFF",
         "text": "#041E42",
         "text_outline": "#FFB81C"
