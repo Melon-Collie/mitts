@@ -28,7 +28,6 @@ func gather() -> InputState:
 	state.shoot_pressed = _pending_shoot_pressed
 	state.slap_held = Input.is_action_pressed("slapshot")
 	state.slap_pressed = _pending_slap_pressed
-	state.facing_held = Input.is_action_pressed("facing")
 	state.brake = Input.is_action_pressed("brake")
 	state.elevation_up = _pending_elevation_up
 	state.elevation_down = _pending_elevation_down

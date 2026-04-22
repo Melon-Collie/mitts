@@ -21,14 +21,12 @@ enum State {
 @export var puck_carry_speed_multiplier: float = 0.85
 @export var backward_thrust_multiplier: float = 0.80
 @export var crossover_thrust_multiplier: float = 0.90
-@export var dash_impulse_magnitude: float = 3.5
-@export var dash_cooldown: float = 1.0
-
 # ── Facing Tuning ─────────────────────────────────────────────────────────────
 # How fast facing drifts toward the cursor during normal play. Lower = more
 # skating lag before the body re-orients (more backskate/crossover time).
 # Shift freezes facing entirely (see _apply_facing). Good range: 1.0 (very lazy) – 3.0 (snappy).
 @export var facing_drag_speed: float = 3.0
+@export var facing_drag_speed_braking: float = 8.0
 
 # ── Blade / Stick / Top-Hand IK Tuning ────────────────────────────────────────
 # Blade world-space Y. 0.0 = ice surface. Converted to upper-body-local via
@@ -63,7 +61,7 @@ enum State {
 # which effectively reduces how far the hand must reach in upper-body-local space
 # — these values assume that twist is active.
 @export var rom_forehand_angle_max_deg: float = 90.0
-@export var rom_backhand_angle_max_deg: float = 120.0
+@export var rom_backhand_angle_max_deg: float = 90.0
 @export var rom_forehand_reach_max: float = 0.45
 @export var rom_backhand_reach_max: float = 0.70
 
@@ -89,7 +87,7 @@ enum State {
 @export var upper_body_twist_ratio: float = 0.8
 @export var upper_body_max_twist_deg: float = 67.0   # caps rotation so extreme angles don't over-rotate
 @export var upper_body_return_speed: float = 6.0
-@export var upper_body_lean_max_deg: float = 8.0
+@export var upper_body_lean_max_deg: float = 15.0
 @export var upper_body_lean_return_speed: float = 8.0
 
 # ── Velocity Lean Tuning ──────────────────────────────────────────────────────
@@ -179,7 +177,6 @@ var _charge_distance: float = 0.0
 var _prev_mouse_screen_pos: Vector2 = Vector2.ZERO
 var _prev_blade_dir: Vector3 = Vector3.ZERO
 var _slapper_charge_timer: float = 0.0
-var _dash_cooldown_timer: float = 0.0
 var last_processed_host_timestamp: float = 0.0
 var has_puck: bool = false
 var is_replaying: bool = false
@@ -882,8 +879,9 @@ func _apply_facing(input: InputState, delta: float) -> void:
 			mouse_world.x - skater.global_position.x,
 			mouse_world.z - skater.global_position.z
 		)
-		if to_mouse.length() > move_deadzone and not input.facing_held:
-			_facing = _facing.lerp(to_mouse.normalized(), facing_drag_speed * delta).normalized()
+		if to_mouse.length() > move_deadzone:
+			var drag: float = facing_drag_speed_braking if input.brake else facing_drag_speed
+			_facing = _facing.lerp(to_mouse.normalized(), drag * delta).normalized()
 		skater.set_facing(_facing)
 		var turn_delta: float = angle_difference(prev_angle, skater.rotation.y)
 		_lower_body_lag = clampf(
@@ -920,37 +918,17 @@ func _apply_velocity_lean(delta: float) -> void:
 
 # ── Movement ──────────────────────────────────────────────────────────────────
 func _apply_movement(input: InputState, delta: float) -> void:
-	# Tick cooldown before state guard so it drains even during shot states.
-	if _dash_cooldown_timer > 0.0:
-		_dash_cooldown_timer -= delta
-
 	# Pure brake (no direction) — drives hockey stop VFX on the skater.
 	skater.is_braking = input.brake and input.move_vector.length() <= move_deadzone
+	skater.is_braced = input.brake
 
 	if _state in [State.SLAPPER_CHARGE_WITH_PUCK, State.SHOT_BLOCKING]:
 		return
 
 	var cfg: SkaterMovementRules.MovementConfig = _movement_config()
-	var wants_dash: bool = (
-		input.brake
-		and input.move_vector.length() > move_deadzone
-		and _dash_cooldown_timer <= 0.0
-	)
-
-	if wants_dash:
-		_dash_cooldown_timer = dash_cooldown
-		var dash_dir := Vector3(input.move_vector.x, 0.0, input.move_vector.y)
-		skater.velocity = SkaterMovementRules.apply_dash_impulse(
-				skater.velocity, dash_dir, has_puck, cfg)
-		skater.pulse_dashed.emit(dash_dir.normalized())
-		# Impulse served the brake input; apply normal friction this tick (not brake friction).
-		skater.velocity = SkaterMovementRules.apply_movement(
-				skater.velocity, input.move_vector, skater.rotation.y,
-				has_puck, false, delta, cfg)
-	else:
-		skater.velocity = SkaterMovementRules.apply_movement(
-				skater.velocity, input.move_vector, skater.rotation.y,
-				has_puck, input.brake, delta, cfg)
+	skater.velocity = SkaterMovementRules.apply_movement(
+			skater.velocity, input.move_vector, skater.rotation.y,
+			has_puck, input.brake, delta, cfg)
 
 func _movement_config() -> SkaterMovementRules.MovementConfig:
 	var cfg := SkaterMovementRules.MovementConfig.new()
@@ -962,7 +940,6 @@ func _movement_config() -> SkaterMovementRules.MovementConfig:
 	cfg.puck_carry_speed_multiplier = puck_carry_speed_multiplier
 	cfg.backward_thrust_multiplier = backward_thrust_multiplier
 	cfg.crossover_thrust_multiplier = crossover_thrust_multiplier
-	cfg.dash_impulse_magnitude = dash_impulse_magnitude
 	return cfg
 
 func _block_movement_config() -> SkaterMovementRules.MovementConfig:

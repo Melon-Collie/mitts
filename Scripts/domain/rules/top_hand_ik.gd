@@ -120,15 +120,12 @@ static func solve(
 	var hand_disp := Vector2(sin(world_angle) * radius, -cos(world_angle) * radius)
 	var hand_xz: Vector2 = shoulder_xz + hand_disp
 
-	# Blade sits exactly stick_horiz_at_rest from the hand along the line
-	# pointing at the original target — when target is reachable, blade ==
-	# target; when beyond ROM, blade lands short along the same aim line.
-	var hand_to_target: Vector2 = desired_blade_xz - hand_xz
-	var blade_dir: Vector2
-	if hand_to_target.length_squared() > 0.0001:
-		blade_dir = hand_to_target.normalized()
-	else:
-		blade_dir = aim_dir
+	# Blade sits exactly stick_horiz_at_rest from the hand along the clamped
+	# arm direction. Using the clamped world_angle (not hand_to_target) ensures
+	# the blade stays at the ROM limit when the mouse is past it — hand_to_target
+	# wraps around as the mouse moves further past the limit, causing the blade
+	# to swing in the wrong direction.
+	var blade_dir := Vector2(sin(world_angle), -cos(world_angle))
 	var blade_xz: Vector2 = hand_xz + blade_dir * stick_horiz_at_rest
 
 	return {

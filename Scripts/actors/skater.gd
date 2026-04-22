@@ -43,6 +43,7 @@ extends CharacterBody3D
 @export var weight: float = 1.0                   # dimensionless — scale up for heavy players
 @export var body_check_restitution: float = 0.3   # fraction of approach speed bounced back to self
 @export var body_check_transfer: float = 0.8      # fraction of approach speed pushed to victim (before weight ratio)
+@export var body_check_brace_resistance: float = 0.4  # multiplier on transfer when the victim is braced (holding brake)
 
 # ── Body Block Tuning ─────────────────────────────────────────────────────────
 @export var body_block_radius: float = 0.5
@@ -91,15 +92,13 @@ var bottom_forearm_mesh: MeshInstance3D = null
 signal body_checked_player(victim: Skater, impact_force: float, hit_direction: Vector3)
 signal body_check_impulse_applied(impulse: Vector3)
 signal body_block_hit(body: Node3D)
-@warning_ignore("unused_signal")
-signal pulse_dashed(dash_direction: Vector3)
-
 # ── Runtime ───────────────────────────────────────────────────────────────────
 var _ring_mesh: MeshInstance3D = null
 var _facing: Vector2 = Vector2.DOWN
 var is_elevated: bool = false
 var is_ghost: bool = false
 var is_braking: bool = false
+var is_braced: bool = false
 var shot_charge: float = 0.0
 var slapper_aim_dir: Vector3 = Vector3.ZERO
 var blade_world_velocity: Vector3 = Vector3.ZERO
@@ -406,7 +405,9 @@ func _resolve_player_collisions(vel_before: Vector3) -> void:
 		# Bounce self back away from other.
 		velocity += normal * approach * body_check_restitution
 		# Push other away; heavier checker transfers more to a lighter victim.
-		other.velocity -= normal * approach * (weight / other.weight) * body_check_transfer
+		# Reduce transfer when the victim is bracing (holding brake).
+		var effective_transfer: float = body_check_transfer * (other.body_check_brace_resistance if other.is_braced else 1.0)
+		other.velocity -= normal * approach * (weight / other.weight) * effective_transfer
 		# Signal for server-side puck strip check.
 		body_checked_player.emit(other, weight * approach, -normal)
 
