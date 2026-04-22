@@ -260,7 +260,7 @@ static func _encode_skater_quantized(s: SkaterNetworkState) -> PackedByteArray:
 	b.encode_s16(o, clampi(roundi(s.top_hand_position.x * 100.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.top_hand_position.y * 100.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.top_hand_position.z * 100.0), -32768, 32767)); o += 2
-	var angle: float = atan2(s.facing.y, s.facing.x)
+	var angle: float = atan2(s.facing.x, s.facing.y)
 	if angle < 0.0:
 		angle += TAU
 	b.encode_u16(o, roundi(angle / TAU * 65535.0) & 0xFFFF); o += 2
@@ -288,7 +288,7 @@ static func _decode_skater_quantized(b: PackedByteArray) -> SkaterNetworkState:
 	s.top_hand_position.y = b.decode_s16(o) / 100.0; o += 2
 	s.top_hand_position.z = b.decode_s16(o) / 100.0; o += 2
 	var angle: float = b.decode_u16(o) / 65535.0 * TAU; o += 2
-	s.facing = Vector2(cos(angle), sin(angle))
+	s.facing = Vector2(sin(angle), cos(angle))
 	s.upper_body_rotation_y = b.decode_s16(o) / 32767.0 * PI; o += 2
 	s.last_processed_host_timestamp = b.decode_float(o); o += 4
 	var flags: int = b.decode_u8(o); o += 1
