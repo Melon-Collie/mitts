@@ -207,7 +207,7 @@ func _color_option_btn(selected_id: String) -> OptionButton:
 	var btn := OptionButton.new()
 	var ids: Array[String] = TeamColorRegistry.get_all_ids()
 	for i: int in ids.size():
-		btn.add_item(TeamColorRegistry.get_name(ids[i]), i)
+		btn.add_item(TeamColorRegistry.get_preset_name(ids[i]), i)
 		if ids[i] == selected_id:
 			btn.select(i)
 	return btn

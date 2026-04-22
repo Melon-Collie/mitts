@@ -63,7 +63,7 @@ static func get_all_ids() -> Array[String]:
 	return _preset_ids.duplicate()
 
 
-static func get_name(id: String) -> String:
+static func get_preset_name(id: String) -> String:
 	return get_preset(id).get("name", id)
 
 
