@@ -106,15 +106,20 @@ func apply_lag_comp_pickup(skater: Skater) -> void:
 
 
 # Two valid pickup claims arrived within the contest window. Neither player
-# wins — the puck squirts free perpendicular to the line between them.
+# wins — the puck squirts perpendicular to the line between the two blade
+# contact points (both blades pressing inward pinch the puck like a seed
+# between two fingers; it exits sideways, randomised left or right).
 func apply_contested_pickup(skater_a: Skater, skater_b: Skater) -> void:
 	if not is_instance_valid(skater_a) or not is_instance_valid(skater_b):
 		return
-	var dir: Vector3 = skater_a.global_position - skater_b.global_position
-	dir.y = 0.0
-	if dir.length() < 0.001:
-		dir = Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0))
-	puck.set_puck_velocity(dir.normalized() * CONTEST_SQUIRT_SPEED)
+	var along := skater_a.get_blade_contact_global() - skater_b.get_blade_contact_global()
+	along.y = 0.0
+	if along.length() < 0.001:
+		along = Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0))
+	var perp := Vector3(-along.z, 0.0, along.x)
+	if randf() > 0.5:
+		perp = -perp
+	puck.set_puck_velocity(perp.normalized() * CONTEST_SQUIRT_SPEED)
 	puck.set_skater_cooldown(skater_a, puck.reattach_cooldown)
 	puck.set_skater_cooldown(skater_b, puck.reattach_cooldown)
 
