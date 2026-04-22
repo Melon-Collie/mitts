@@ -180,22 +180,22 @@
       "id": "stars",
       "name": "Dallas",
       "primary": "#006847",
-      "secondary": "#8F8F8C",
+      "secondary": "#111111",
       "home": {
-        "helmet": "#006847",
+        "helmet": "#111111",
         "jersey": "#006847",
         "pants": "#111111",
         "goalie_pads": "#FFFFFF",
-        "text": "#8F8F8C",
-        "text_outline": "#006847"
+        "text": "#FFFFFF",
+        "text_outline": "#FFFFFF"
       },
       "away": {
-        "helmet": "#006847",
+        "helmet": "#FFFFFF",
         "jersey": "#FFFFFF",
-        "pants": "#FFFFFF",
+        "pants": "#111111",
         "goalie_pads": "#FFFFFF",
         "text": "#006847",
-        "text_outline": "#8F8F8C"
+        "text_outline": "#006847"
       }
     },
     {
