@@ -6,7 +6,7 @@
       "primary": "#4A7AD6",
       "secondary": "#6B1E4A",
       "home": {
-        "helmet":        "#2A4A8C",
+        "helmet":        "#6B1E4A",
         "jersey":        "#4A7AD6",
         "jersey_stripe": "#6B1E4A",
         "gloves":        "#4A7AD6",
@@ -19,7 +19,7 @@
         "text_outline":  "#6B1E4A"
       },
       "away": {
-        "helmet":        "#2A4A8C",
+        "helmet":        "#6B1E4A",
         "jersey":        "#FFFFFF",
         "jersey_stripe": "#4A7AD6",
         "gloves":        "#FFFFFF",
@@ -38,7 +38,7 @@
       "primary": "#6B1822",
       "secondary": "#E8445A",
       "home": {
-        "helmet":        "#3D0A12",
+        "helmet":        "#6B1822",
         "jersey":        "#6B1822",
         "jersey_stripe": "#E8445A",
         "gloves":        "#6B1822",
@@ -48,10 +48,10 @@
         "socks_stripe":  "#E8445A",
         "goalie_pads":   "#6B1822",
         "text":          "#F5E6D3",
-        "text_outline":  "#3D0A12"
+        "text_outline":  "#E8445A"
       },
       "away": {
-        "helmet":        "#3D0A12",
+        "helmet":        "#6B1822",
         "jersey":        "#F5E6D3",
         "jersey_stripe": "#6B1822",
         "gloves":        "#F5E6D3",
@@ -61,71 +61,71 @@
         "socks_stripe":  "#6B1822",
         "goalie_pads":   "#F5E6D3",
         "text":          "#6B1822",
-        "text_outline":  "#3D0A12"
+        "text_outline":  "#E8445A"
       }
     },
     {
       "id": "lemon",
       "name": "Lemon",
-      "primary": "#F4DC1A",
-      "secondary": "#7A9DB8",
+      "primary": "#F5D028",
+      "secondary": "#5AB4E0",
       "home": {
-        "helmet":        "#7A9DB8",
-        "jersey":        "#F4DC1A",
-        "jersey_stripe": "#7A9DB8",
-        "gloves":        "#F4DC1A",
-        "pants":         "#F4DC1A",
-        "pants_stripe":  "#7A9DB8",
-        "socks":         "#F4DC1A",
-        "socks_stripe":  "#7A9DB8",
-        "goalie_pads":   "#F4DC1A",
-        "text":          "#7A9DB8",
+        "helmet":        "#5AB4E0",
+        "jersey":        "#F5D028",
+        "jersey_stripe": "#5AB4E0",
+        "gloves":        "#F5D028",
+        "pants":         "#F5D028",
+        "pants_stripe":  "#5AB4E0",
+        "socks":         "#F5D028",
+        "socks_stripe":  "#5AB4E0",
+        "goalie_pads":   "#F5D028",
+        "text":          "#5AB4E0",
         "text_outline":  "#FFFFFF"
       },
       "away": {
-        "helmet":        "#7A9DB8",
+        "helmet":        "#5AB4E0",
         "jersey":        "#FFFFFF",
-        "jersey_stripe": "#F4DC1A",
+        "jersey_stripe": "#F5D028",
         "gloves":        "#FFFFFF",
-        "pants":         "#F4DC1A",
-        "pants_stripe":  "#7A9DB8",
+        "pants":         "#F5D028",
+        "pants_stripe":  "#5AB4E0",
         "socks":         "#FFFFFF",
-        "socks_stripe":  "#F4DC1A",
+        "socks_stripe":  "#F5D028",
         "goalie_pads":   "#FFFFFF",
-        "text":          "#F4DC1A",
-        "text_outline":  "#7A9DB8"
+        "text":          "#F5D028",
+        "text_outline":  "#5AB4E0"
       }
     },
     {
       "id": "coconut",
       "name": "Coconut",
       "primary": "#5A3A22",
-      "secondary": "#4A9C8E",
+      "secondary": "#3A8AA8",
       "home": {
-        "helmet":        "#2D1810",
+        "helmet":        "#5A3A22",
         "jersey":        "#5A3A22",
-        "jersey_stripe": "#4A9C8E",
+        "jersey_stripe": "#3A8AA8",
         "gloves":        "#5A3A22",
         "pants":         "#5A3A22",
-        "pants_stripe":  "#4A9C8E",
+        "pants_stripe":  "#3A8AA8",
         "socks":         "#5A3A22",
         "socks_stripe":  "#F5E6D3",
         "goalie_pads":   "#5A3A22",
         "text":          "#F5E6D3",
-        "text_outline":  "#2D1810"
+        "text_outline":  "#3A8AA8"
       },
       "away": {
-        "helmet":        "#2D1810",
+        "helmet":        "#5A3A22",
         "jersey":        "#F5E6D3",
         "jersey_stripe": "#5A3A22",
         "gloves":        "#F5E6D3",
         "pants":         "#5A3A22",
-        "pants_stripe":  "#4A9C8E",
+        "pants_stripe":  "#3A8AA8",
         "socks":         "#F5E6D3",
         "socks_stripe":  "#5A3A22",
         "goalie_pads":   "#F5E6D3",
         "text":          "#5A3A22",
-        "text_outline":  "#2D1810"
+        "text_outline":  "#3A8AA8"
       }
     },
     {
@@ -136,15 +136,15 @@
       "home": {
         "helmet":        "#1AA892",
         "jersey":        "#F46B2A",
-        "jersey_stripe": "#1AA892",
+        "jersey_stripe": "#C8321A",
         "gloves":        "#F46B2A",
         "pants":         "#F46B2A",
         "pants_stripe":  "#1AA892",
         "socks":         "#F46B2A",
-        "socks_stripe":  "#1A1A1A",
+        "socks_stripe":  "#C8321A",
         "goalie_pads":   "#F46B2A",
         "text":          "#FFFFFF",
-        "text_outline":  "#1AA892"
+        "text_outline":  "#C8321A"
       },
       "away": {
         "helmet":        "#1AA892",
@@ -152,12 +152,12 @@
         "jersey_stripe": "#F46B2A",
         "gloves":        "#FFFFFF",
         "pants":         "#F46B2A",
-        "pants_stripe":  "#1AA892",
+        "pants_stripe":  "#C8321A",
         "socks":         "#FFFFFF",
         "socks_stripe":  "#F46B2A",
         "goalie_pads":   "#FFFFFF",
         "text":          "#F46B2A",
-        "text_outline":  "#1AA892"
+        "text_outline":  "#C8321A"
       }
     },
     {
@@ -196,32 +196,32 @@
       "id": "fig",
       "name": "Fig",
       "primary": "#6B3A5C",
-      "secondary": "#C48A6B",
+      "secondary": "#D47A4A",
       "home": {
-        "helmet":        "#3D1E35",
+        "helmet":        "#6B3A5C",
         "jersey":        "#6B3A5C",
-        "jersey_stripe": "#C48A6B",
+        "jersey_stripe": "#D47A4A",
         "gloves":        "#6B3A5C",
         "pants":         "#6B3A5C",
-        "pants_stripe":  "#C48A6B",
+        "pants_stripe":  "#D47A4A",
         "socks":         "#6B3A5C",
-        "socks_stripe":  "#C48A6B",
+        "socks_stripe":  "#D47A4A",
         "goalie_pads":   "#6B3A5C",
-        "text":          "#C48A6B",
-        "text_outline":  "#3D1E35"
+        "text":          "#FFFFFF",
+        "text_outline":  "#D47A4A"
       },
       "away": {
-        "helmet":        "#3D1E35",
-        "jersey":        "#F5E6D3",
+        "helmet":        "#6B3A5C",
+        "jersey":        "#FFFFFF",
         "jersey_stripe": "#6B3A5C",
-        "gloves":        "#F5E6D3",
+        "gloves":        "#FFFFFF",
         "pants":         "#6B3A5C",
-        "pants_stripe":  "#C48A6B",
-        "socks":         "#F5E6D3",
+        "pants_stripe":  "#D47A4A",
+        "socks":         "#FFFFFF",
         "socks_stripe":  "#6B3A5C",
-        "goalie_pads":   "#F5E6D3",
+        "goalie_pads":   "#FFFFFF",
         "text":          "#6B3A5C",
-        "text_outline":  "#3D1E35"
+        "text_outline":  "#D47A4A"
       }
     },
     {
