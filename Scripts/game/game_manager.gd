@@ -417,6 +417,7 @@ func _spawn_local(peer_id: int, team_slot: int, team: Team) -> void:
 	var colors: Dictionary = TeamColorRegistry.get_colors(team.color_id, team.team_id)
 	_registry.spawn(peer_id, team_slot, team,
 			colors.jersey, colors.helmet, colors.pants,
+			colors.jersey_stripe, colors.gloves, colors.pants_stripe, colors.socks, colors.socks_stripe,
 			colors.secondary, colors.text, colors.text_outline,
 			NetworkManager.local_is_left_handed, NetworkManager.local_player_name, true,
 			NetworkManager.local_jersey_number)
@@ -954,6 +955,7 @@ func _push_lobby_assignments_to_clients() -> void:
 		NetworkManager.send_sync_existing_players(peer_id, existing)
 		NetworkManager.send_spawn_remote_skater(peer_id, team_slot, team_id, colors.jersey, colors.helmet, colors.pants, is_left, p_name, p_number)
 		_registry.spawn(peer_id, team_slot, team, colors.jersey, colors.helmet, colors.pants,
+				colors.jersey_stripe, colors.gloves, colors.pants_stripe, colors.socks, colors.socks_stripe,
 				colors.secondary, colors.text, colors.text_outline,
 				is_left, p_name, false, p_number)
 		existing.append([peer_id, team_slot, team_id, colors.jersey, colors.helmet, colors.pants, is_left, p_name, p_number])
