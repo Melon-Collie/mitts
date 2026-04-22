@@ -223,20 +223,20 @@
     {
       "id": "oilers",
       "name": "Edmonton",
-      "primary": "#FF4C00",
-      "secondary": "#003087",
+      "primary": "#003087",
+      "secondary": "#FF4C00",
       "home": {
-        "helmet": "#FF4C00",
+        "helmet": "#003087",
         "jersey": "#003087",
         "pants": "#003087",
         "goalie_pads": "#FFFFFF",
         "text": "#FF4C00",
-        "text_outline": "#003087"
+        "text_outline": "#FFFFFF"
       },
       "away": {
-        "helmet": "#FF4C00",
+        "helmet": "#FFFFFF",
         "jersey": "#FFFFFF",
-        "pants": "#FFFFFF",
+        "pants": "#003087",
         "goalie_pads": "#FFFFFF",
         "text": "#003087",
         "text_outline": "#FF4C00"
