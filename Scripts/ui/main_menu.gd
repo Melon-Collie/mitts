@@ -313,12 +313,12 @@ func _build_settings_popup() -> void:
 		var r: Vector2i = PlayerPrefs.RESOLUTIONS[i]
 		res_btn.add_item("%dx%d" % [r.x, r.y], i)
 	res_btn.selected = PlayerPrefs.resolution_index
-	res_btn.disabled = PlayerPrefs.is_fullscreen
 	res_btn.item_selected.connect(func(idx: int) -> void:
 		PlayerPrefs.resolution_index = idx
 		PlayerPrefs.apply_video()
 		PlayerPrefs.save())
 	res_row.add_child(res_btn)
+	res_row.visible = not PlayerPrefs.is_fullscreen
 
 	var fs_check := CheckButton.new()
 	fs_check.button_pressed = PlayerPrefs.is_fullscreen
@@ -328,7 +328,7 @@ func _build_settings_popup() -> void:
 		PlayerPrefs.is_fullscreen = pressed
 		PlayerPrefs.apply_video()
 		PlayerPrefs.save()
-		res_btn.disabled = pressed)
+		res_row.visible = not pressed)
 	fs_row.add_child(fs_check)
 
 	var done_btn := _make_button("Done")
