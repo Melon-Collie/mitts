@@ -37,11 +37,15 @@ func apply_audio() -> void:
 	AudioServer.set_bus_mute(bus, master_muted)
 
 func apply_video() -> void:
+	var target_h: float
 	if is_fullscreen:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		target_h = float(DisplayServer.screen_get_size().y)
 	else:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 		DisplayServer.window_set_size(RESOLUTIONS[resolution_index])
+		target_h = float(RESOLUTIONS[resolution_index].y)
+	get_tree().root.content_scale_factor = target_h / 1080.0
 
 func _load() -> void:
 	var cfg := ConfigFile.new()
