@@ -58,4 +58,4 @@ func _load() -> void:
 	is_fullscreen = cfg.get_value("video", "fullscreen", false)
 	resolution_index = clamp(cfg.get_value("video", "resolution_index", 1), 0, RESOLUTIONS.size() - 1)
 	apply_audio()
-	apply_video()
+	call_deferred(&"apply_video")
