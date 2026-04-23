@@ -164,14 +164,10 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# Errors above 5 cm are real desync and still fire through.
 	if skater.is_on_wall() and skater.global_position.distance_to(server_state.position) < 0.05:
 		return
-	# Measure prediction drift before snapping to server position. In debug builds
-	# a large divergence indicates non-determinism (missing board clamp, wrong friction,
-	# uninjected impulse) that will recur every reconcile until the root cause is fixed.
+	# Record how far the client has predicted ahead of the server's last known position.
+	# This grows naturally with RTT and speed — it is not a non-determinism signal.
 	var pre_replay_divergence: float = skater.global_position.distance_to(server_state.position)
 	NetworkTelemetry.record_prediction_divergence(pre_replay_divergence)
-	if OS.is_debug_build() and pre_replay_divergence > 0.10:
-		push_warning("Reconcile: pre-replay divergence %.3f m — possible non-determinism (inputs in replay: %d)" \
-				% [pre_replay_divergence, _input_history.size()])
 	# Save shot/state-machine state — replay can transition through shoot states
 	# (WRISTER_AIM → FOLLOW_THROUGH → SKATING) and leave _state wrong. Restore so
 	# the next _process_input runs the correct handler and blade doesn't teleport.
@@ -243,6 +239,9 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	if blade_reconcile_delta > _BLADE_JUMP_THRESHOLD:
 		NetworkTelemetry.record_blade_jump(blade_reconcile_delta)
 	skater.visual_offset = pre_reconcile_visual_pos - skater.global_position
+	if OS.is_debug_build() and skater.visual_offset.length() > 0.05:
+		push_warning("Reconcile: %.3fm snap applied (inputs replayed: %d)" \
+				% [skater.visual_offset.length(), _input_history.size()])
 
 func on_puck_picked_up_network() -> void:
 	super.on_puck_picked_up_network()
