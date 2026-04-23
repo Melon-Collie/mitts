@@ -5,7 +5,7 @@ var _ip_field: LineEdit
 var _error_label: Label = null
 var _player_popup: Control = null
 var _options_popup: Control = null
-var _connecting_popup: Control = null
+var _loading_screen: LoadingScreen = null
 var _exit_popup: Control = null
 
 func _ready() -> void:
@@ -105,8 +105,10 @@ func _build_ui() -> void:
 
 	_build_player_popup()
 	_build_options_popup()
-	_build_connecting_popup()
 	_build_exit_popup()
+	_loading_screen = LoadingScreen.new()
+	_loading_screen.cancel_pressed.connect(_on_join_cancelled)
+	add_child(_loading_screen)
 
 func _build_player_popup() -> void:
 	var overlay := ColorRect.new()
@@ -286,46 +288,6 @@ func _build_options_popup() -> void:
 	_options_popup.add_child(panel)
 	add_child(_options_popup)
 
-func _build_connecting_popup() -> void:
-	var overlay := ColorRect.new()
-	overlay.color = Color(0.0, 0.0, 0.0, 0.65)
-	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.07, 0.07, 0.09, 0.96)
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(36)
-
-	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", panel_style)
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-
-	var vbox := VBoxContainer.new()
-	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	vbox.add_theme_constant_override("separation", 20)
-	panel.add_child(vbox)
-
-	var status_label := Label.new()
-	status_label.name = "StatusLabel"
-	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	status_label.add_theme_font_size_override("font_size", 22)
-	status_label.add_theme_color_override("font_color", Color.WHITE)
-	vbox.add_child(status_label)
-
-	var cancel_btn := _make_button("Cancel")
-	cancel_btn.pressed.connect(_on_join_cancelled)
-	vbox.add_child(cancel_btn)
-
-	_connecting_popup = Control.new()
-	_connecting_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_connecting_popup.visible = false
-	_connecting_popup.add_child(overlay)
-	_connecting_popup.add_child(panel)
-	add_child(_connecting_popup)
-
 func _build_exit_popup() -> void:
 	var overlay := ColorRect.new()
 	overlay.color = Color(0.0, 0.0, 0.0, 0.6)
@@ -377,20 +339,14 @@ func _build_exit_popup() -> void:
 	_exit_popup.add_child(panel)
 	add_child(_exit_popup)
 
-func _show_connecting(ip: String) -> void:
-	var label := _connecting_popup.find_child("StatusLabel", true, false) as Label
-	if label:
-		label.text = "Connecting to %s..." % ip
-	_connecting_popup.visible = true
-
 func _on_join_cancelled() -> void:
 	_disconnect_join_signals()
 	NetworkManager.reset()
-	_connecting_popup.visible = false
+	_loading_screen.visible = false
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
-		if _connecting_popup.visible:
+		if _loading_screen != null and _loading_screen.visible:
 			_on_join_cancelled()
 			get_viewport().set_input_as_handled()
 		elif _player_popup.visible:
@@ -445,15 +401,27 @@ func _on_join_pressed() -> void:
 	PlayerPrefs.save()
 	_disconnect_join_signals()
 	NetworkManager.start_client(ip)
-	_show_connecting(ip)
+	_loading_screen.show_joining(ip)
+	NetworkManager.client_connected.connect(_on_loading_connected, CONNECT_ONE_SHOT)
+	NetworkManager.clock_ready.connect(_on_loading_clock_ready, CONNECT_ONE_SHOT)
 	NetworkManager.lobby_roster_synced.connect(_on_join_got_lobby, CONNECT_ONE_SHOT)
 	NetworkManager.join_in_progress.connect(_on_join_got_game, CONNECT_ONE_SHOT)
 
 func _disconnect_join_signals() -> void:
+	if NetworkManager.client_connected.is_connected(_on_loading_connected):
+		NetworkManager.client_connected.disconnect(_on_loading_connected)
+	if NetworkManager.clock_ready.is_connected(_on_loading_clock_ready):
+		NetworkManager.clock_ready.disconnect(_on_loading_clock_ready)
 	if NetworkManager.lobby_roster_synced.is_connected(_on_join_got_lobby):
 		NetworkManager.lobby_roster_synced.disconnect(_on_join_got_lobby)
 	if NetworkManager.join_in_progress.is_connected(_on_join_got_game):
 		NetworkManager.join_in_progress.disconnect(_on_join_got_game)
+
+func _on_loading_connected() -> void:
+	_loading_screen.set_status("Syncing clock")
+
+func _on_loading_clock_ready() -> void:
+	_loading_screen.set_status("Loading")
 
 func _on_join_got_lobby(_roster: Array) -> void:
 	if NetworkManager.join_in_progress.is_connected(_on_join_got_game):
