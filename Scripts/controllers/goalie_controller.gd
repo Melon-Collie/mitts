@@ -43,9 +43,9 @@ extends Node
 
 # ── Client Correction Tuning ──────────────────────────────────────────────────
 # Server broadcasts (40 Hz) soft-correct the client-side goalie simulation.
-@export var correction_blend: float = 0.10      # per-broadcast blend strength toward server
+@export var correction_blend: float = 0.40      # per-broadcast blend strength toward server
 @export var correction_hard_snap: float = 1.5   # metres — snap immediately if farther than this
-@export var correction_dead_zone: float = 0.05  # metres — ignore errors smaller than this
+@export var correction_dead_zone: float = 0.02  # metres — ignore errors smaller than this
 
 @export var low_shot_threshold: float = 0.45
 @export var elevated_threshold: float = 0.45
@@ -490,23 +490,22 @@ func apply_state(network_state: GoalieNetworkState, host_ts: float) -> void:
 	if host_ts <= _last_server_ts:
 		return  # out-of-order packet; discard
 	_last_server_ts = host_ts
-	# Soft-correct the client AI position toward the server broadcast.
-	# State is managed by apply_state_transition (reliable RPC) — don't
-	# override it here; the unreliable broadcast can arrive out of order
-	# relative to state-change RPCs and would cause flickering.
-	var server_depth: float = (network_state.position_z - _goal_line_z) * _direction_sign
+	# Forward-predict server position to compensate for broadcast transit time.
+	# elapsed ≈ RTT/2 at call-time; capped to avoid over-shooting on bad connections.
+	var elapsed: float = clampf(NetworkManager.estimated_host_time() - host_ts, 0.0, 0.15)
+	var predicted_x: float = network_state.position_x + network_state.velocity_x * elapsed
+	var predicted_z: float = network_state.position_z + network_state.velocity_z * elapsed
+	var server_depth: float = (predicted_z - _goal_line_z) * _direction_sign
 	var client_z: float = _goal_line_z + _direction_sign * _current_depth
-	var dist: float = Vector2(_current_x - network_state.position_x,
-			client_z - network_state.position_z).length()
+	var dist: float = Vector2(_current_x - predicted_x, client_z - predicted_z).length()
 	if dist > correction_hard_snap:
-		_current_x = network_state.position_x
+		_current_x = predicted_x
 		_current_depth = server_depth
 	elif dist > correction_dead_zone:
-		_current_x = lerpf(_current_x, network_state.position_x, correction_blend)
+		_current_x = lerpf(_current_x, predicted_x, correction_blend)
 		_current_depth = lerpf(_current_depth, server_depth, correction_blend)
-	# Five hole: use a strong blend so the client's visual matches server physics
-	# within 1-2 broadcasts (~50 ms). The local AI doesn't compute this on clients,
-	# so there's nothing to fight the correction.
+	# Five hole: strong blend so client visual matches server physics within ~50 ms.
+	# Client AI doesn't compute _five_hole_openness, so nothing fights the correction.
 	_five_hole_openness = lerpf(_five_hole_openness, network_state.five_hole_openness, 0.80)
 
 func apply_state_transition(new_state: int) -> void:
