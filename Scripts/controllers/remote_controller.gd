@@ -137,8 +137,10 @@ func _interpolate() -> void:
 		# on a rough connection doesn't over-predict on direction changes.
 		var forward_dt: float = minf(interpolation_delay, extrapolation_max_ms / 1000.0)
 		interpolated.position += interpolated.velocity * forward_dt
-		interpolated.blade_position += interpolated.velocity * forward_dt
-		interpolated.top_hand_position += interpolated.velocity * forward_dt
+		# blade_position and top_hand_position are in upper_body local space;
+		# velocity is world space. Adding them is a coordinate frame error.
+		# The body forward-advance above already moves their world positions
+		# via the scene tree — no additional local-space offset needed.
 	if prev_extrapolating and not is_extrapolating and skater != null:
 		_rejoin_blend_from_pos = skater.global_position
 		_rejoin_blend_from_blade = skater.get_blade_position()

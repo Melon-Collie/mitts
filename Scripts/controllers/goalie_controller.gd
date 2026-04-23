@@ -506,8 +506,14 @@ func _interpolate() -> void:
 		var from_state: GoalieNetworkState = bracket.from_state
 		var to_state: GoalieNetworkState = bracket.to_state
 		var t: float = bracket.t
-		interpolated.position_x = lerpf(from_state.position_x, to_state.position_x, t)
-		interpolated.position_z = lerpf(from_state.position_z, to_state.position_z, t)
+		var hermite_pos: Vector3 = BufferedStateInterpolator.hermite(
+				Vector3(from_state.position_x, 0.0, from_state.position_z),
+				Vector3(from_state.velocity_x, 0.0, from_state.velocity_z),
+				Vector3(to_state.position_x,   0.0, to_state.position_z),
+				Vector3(to_state.velocity_x,   0.0, to_state.velocity_z),
+				t, bracket.bracket_dt)
+		interpolated.position_x = hermite_pos.x
+		interpolated.position_z = hermite_pos.z
 		interpolated.rotation_y = lerp_angle(from_state.rotation_y, to_state.rotation_y, t)
 		interpolated.five_hole_openness = lerpf(from_state.five_hole_openness, to_state.five_hole_openness, t)
 		interpolated.state_enum = to_state.state_enum
@@ -550,26 +556,32 @@ func _apply_network_state(s: GoalieNetworkState) -> void:
 func _forward_predict_position(s: GoalieNetworkState, effective_state: int) -> void:
 	if puck == null:
 		return
-	var predicted_x: float = s.position_x
+	# Dead-reckon position forward over the interpolation delay using the
+	# transmitted velocity. This keeps the goalie visually current during
+	# butterfly, shot reactions, and depth transitions — states where AI
+	# prediction was previously suppressed.
+	var predicted_x: float = s.position_x + s.velocity_x * interpolation_delay
+	var predicted_z: float = s.position_z + s.velocity_z * interpolation_delay
 	match effective_state:
 		State.STANDING:
 			if not _reacting_to_shot:
-				var current_depth: float = (s.position_z - _goal_line_z) * _direction_sign
+				# AI lateral override: re-target based on current puck position
+				# from the velocity-predicted depth rather than the raw snapshot.
+				var current_depth: float = (predicted_z - _goal_line_z) * _direction_sign
 				var target_x: float = GoalieBehaviorRules.target_lateral_x(
 						puck.global_position, _goal_line_z, _goal_center_x,
 						current_depth, net_half_width, _direction_sign)
-				var speed: float = t_push_speed if abs(target_x - s.position_x) > lateral_threshold else shuffle_speed
-				predicted_x = move_toward(s.position_x, target_x, speed * interpolation_delay)
+				var speed: float = t_push_speed if abs(target_x - predicted_x) > lateral_threshold else shuffle_speed
+				predicted_x = move_toward(predicted_x, target_x, speed * interpolation_delay)
 		State.RVH_LEFT:
-			predicted_x = move_toward(s.position_x,
+			predicted_x = move_toward(predicted_x,
 					_goal_center_x + (net_half_width - 0.38) * _direction_sign,
 					rvh_transition_speed * interpolation_delay)
 		State.RVH_RIGHT:
-			predicted_x = move_toward(s.position_x,
+			predicted_x = move_toward(predicted_x,
 					_goal_center_x - (net_half_width - 0.38) * _direction_sign,
 					rvh_transition_speed * interpolation_delay)
-	if predicted_x != s.position_x:
-		goalie.set_goalie_position(predicted_x, s.position_z)
+	goalie.set_goalie_position(predicted_x, predicted_z)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 func _is_puck_in_defensive_zone() -> bool:
