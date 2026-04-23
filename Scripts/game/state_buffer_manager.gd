@@ -152,8 +152,14 @@ func _interpolate_skater(peer_id: int, ts: float) -> SkaterNetworkState:
 	result.blade_position = from_s.blade_position.lerp(to_s.blade_position, t)
 	result.blade_contact_world = from_s.blade_contact_world.lerp(to_s.blade_contact_world, t)
 	result.top_hand_position = from_s.top_hand_position.lerp(to_s.top_hand_position, t)
-	result.upper_body_rotation_y = lerp_angle(from_s.upper_body_rotation_y, to_s.upper_body_rotation_y, t)
-	result.facing = BufferedStateInterpolator.lerp_facing(from_s.facing, to_s.facing, t)
+	var bracket_dt: float = to_s.host_timestamp - from_s.host_timestamp
+	result.upper_body_rotation_y = BufferedStateInterpolator.hermite_angle(
+			from_s.upper_body_rotation_y, from_s.upper_body_angular_velocity,
+			to_s.upper_body_rotation_y, to_s.upper_body_angular_velocity, t, bracket_dt)
+	var lag_fa: float = BufferedStateInterpolator.hermite_angle(
+			atan2(from_s.facing.x, from_s.facing.y), from_s.facing_angular_velocity,
+			atan2(to_s.facing.x, to_s.facing.y), to_s.facing_angular_velocity, t, bracket_dt)
+	result.facing = Vector2(sin(lag_fa), cos(lag_fa))
 	result.is_ghost = to_s.is_ghost
 	result.host_timestamp = ts
 	return result

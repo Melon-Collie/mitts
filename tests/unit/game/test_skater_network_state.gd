@@ -13,6 +13,8 @@ func test_round_trip_preserves_all_wire_fields() -> void:
 	s.top_hand_position           = Vector3(0.2, 0.4, -0.6)
 	s.upper_body_rotation_y       = 0.785
 	s.facing                      = Vector2(0.0, -1.0)
+	s.facing_angular_velocity     = 1.2
+	s.upper_body_angular_velocity = -0.8
 	s.last_processed_host_timestamp = 12.345
 	s.is_ghost                    = true
 	s.shot_state                  = 2
@@ -27,17 +29,19 @@ func test_round_trip_preserves_all_wire_fields() -> void:
 	assert_almost_eq(r.top_hand_position.y,          s.top_hand_position.y,          0.00001)
 	assert_almost_eq(r.upper_body_rotation_y,        s.upper_body_rotation_y,        0.00001)
 	assert_almost_eq(r.facing.y,                     s.facing.y,                     0.00001)
+	assert_almost_eq(r.facing_angular_velocity,      s.facing_angular_velocity,      0.00001)
+	assert_almost_eq(r.upper_body_angular_velocity,  s.upper_body_angular_velocity,  0.00001)
 	assert_almost_eq(r.last_processed_host_timestamp, s.last_processed_host_timestamp, 0.00001)
 	assert_eq(r.is_ghost,    s.is_ghost)
 	assert_eq(r.shot_state,  s.shot_state)
 	assert_almost_eq(r.shot_charge, s.shot_charge, 0.00001)
 
 
-func test_array_length_is_ten() -> void:
+func test_array_length_is_twelve() -> void:
 	# Field-count sentinel — if a field is added without updating to_array /
 	# from_array, this catches the mismatch before it becomes a silent bug.
 	var s := SkaterNetworkState.new()
-	assert_eq(s.to_array().size(), 10)
+	assert_eq(s.to_array().size(), 12)
 
 
 func test_host_only_fields_not_serialized() -> void:

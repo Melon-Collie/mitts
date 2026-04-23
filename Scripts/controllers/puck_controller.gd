@@ -11,6 +11,7 @@ const CONTEST_SQUIRT_SPEED: float = 3.0
 # Set to match observed Jolt physics deceleration rate (m/s per second linear).
 @export var extrapolation_friction: float = 0.5
 @export var trajectory_hard_snap_threshold: float = 1.5
+@export var trajectory_soft_blend_threshold: float = 0.3
 @export var position_correction_blend: float = 0.1
 @export var rejoin_blend_duration: float = 0.075
 # Extra friction applied during trajectory prediction to compensate for any
@@ -304,13 +305,18 @@ func apply_state(state: PuckNetworkState, host_ts: float) -> void:
 			# RTT jitter — blending toward a noisy target creates visible snapback.
 			# Only hard-snap on genuine physics divergence (wall/goalie bounce
 			# that differed between client and host).
-			if puck.get_puck_position().distance_to(latency_corrected.position) > trajectory_hard_snap_threshold:
+			var dist: float = puck.get_puck_position().distance_to(latency_corrected.position)
+			if dist > trajectory_hard_snap_threshold:
+				# Large divergence (wall/goalie bounce that differed): hard snap both.
 				puck.set_puck_position(latency_corrected.position)
 				puck.set_puck_velocity(latency_corrected.velocity)
 				_state_buffer.clear()
+			elif dist > trajectory_soft_blend_threshold:
+				# Medium divergence: velocity-only blend, no position change.
+				puck.set_puck_velocity(puck.get_puck_velocity().lerp(latency_corrected.velocity, 0.15))
 			else:
-				# Within snap threshold but still blend velocity each broadcast so
-				# friction / wall-normal divergence can't accumulate silently.
+				# Small divergence (RTT jitter): soft position blend + velocity blend.
+				puck.set_puck_position(puck.get_puck_position().lerp(latency_corrected.position, position_correction_blend))
 				puck.set_puck_velocity(puck.get_puck_velocity().lerp(latency_corrected.velocity, 0.15))
 			return  # Don't buffer during prediction; interpolation isn't running
 	if not _state_buffer.is_empty() and host_ts < _state_buffer.back().timestamp:

@@ -106,8 +106,11 @@ func _interpolate() -> void:
 		interpolated.velocity = newest.velocity
 		interpolated.blade_position = newest.blade_position + newest.velocity * dt
 		interpolated.top_hand_position = newest.top_hand_position + newest.velocity * dt
-		interpolated.upper_body_rotation_y = newest.upper_body_rotation_y
-		interpolated.facing = newest.facing
+		interpolated.upper_body_rotation_y = newest.upper_body_rotation_y + newest.upper_body_angular_velocity * dt
+		var extrap_fa: float = atan2(newest.facing.x, newest.facing.y) + newest.facing_angular_velocity * dt
+		interpolated.facing = Vector2(sin(extrap_fa), cos(extrap_fa))
+		interpolated.facing_angular_velocity = newest.facing_angular_velocity
+		interpolated.upper_body_angular_velocity = newest.upper_body_angular_velocity
 		interpolated.is_ghost = newest.is_ghost
 	else:
 		var from_state: SkaterNetworkState = bracket.from_state
@@ -119,8 +122,13 @@ func _interpolate() -> void:
 		interpolated.velocity = from_state.velocity.lerp(to_state.velocity, t)
 		interpolated.blade_position = from_state.blade_position.lerp(to_state.blade_position, t)
 		interpolated.top_hand_position = from_state.top_hand_position.lerp(to_state.top_hand_position, t)
-		interpolated.upper_body_rotation_y = lerp_angle(from_state.upper_body_rotation_y, to_state.upper_body_rotation_y, t)
-		interpolated.facing = BufferedStateInterpolator.lerp_facing(from_state.facing, to_state.facing, t)
+		interpolated.upper_body_rotation_y = BufferedStateInterpolator.hermite_angle(
+				from_state.upper_body_rotation_y, from_state.upper_body_angular_velocity,
+				to_state.upper_body_rotation_y, to_state.upper_body_angular_velocity, t, dt)
+		var interp_fa: float = BufferedStateInterpolator.hermite_angle(
+				atan2(from_state.facing.x, from_state.facing.y), from_state.facing_angular_velocity,
+				atan2(to_state.facing.x, to_state.facing.y), to_state.facing_angular_velocity, t, dt)
+		interpolated.facing = Vector2(sin(interp_fa), cos(interp_fa))
 		# Boolean fields can't be lerped; take the freshest value so ghost-mode
 		# toggles flow through to remote skaters without a one-broadcast delay.
 		interpolated.is_ghost = to_state.is_ghost

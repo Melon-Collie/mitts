@@ -6,6 +6,8 @@ var blade_position: Vector3 = Vector3.ZERO
 var top_hand_position: Vector3 = Vector3.ZERO
 var upper_body_rotation_y: float = 0.0
 var facing: Vector2 = Vector2.ZERO
+var facing_angular_velocity: float = 0.0      # rad/s; used for Hermite interpolation on remotes
+var upper_body_angular_velocity: float = 0.0  # rad/s
 var shot_state: int = 0
 var shot_charge: float = 0.0
 var last_processed_host_timestamp: float = 0.0
@@ -25,6 +27,8 @@ func to_array() -> Array:
 		is_ghost,
 		shot_state,
 		shot_charge,
+		facing_angular_velocity,
+		upper_body_angular_velocity,
 	]
 
 func copy_from(s: SkaterNetworkState) -> void:
@@ -34,6 +38,8 @@ func copy_from(s: SkaterNetworkState) -> void:
 	top_hand_position = s.top_hand_position
 	upper_body_rotation_y = s.upper_body_rotation_y
 	facing = s.facing
+	facing_angular_velocity = s.facing_angular_velocity
+	upper_body_angular_velocity = s.upper_body_angular_velocity
 	last_processed_host_timestamp = s.last_processed_host_timestamp
 	is_ghost = s.is_ghost
 	shot_state = s.shot_state
@@ -53,4 +59,6 @@ static func from_array(data: Array) -> SkaterNetworkState:
 	state.is_ghost = data[7]
 	state.shot_state = data[8]
 	state.shot_charge = data[9]
+	state.facing_angular_velocity = data[10]
+	state.upper_body_angular_velocity = data[11]
 	return state
