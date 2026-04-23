@@ -236,6 +236,52 @@ func _build_settings_popup() -> void:
 		PlayerPrefs.is_left_handed = not pressed
 		PlayerPrefs.save())
 
+	var volume_row := HBoxContainer.new()
+	volume_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	volume_row.add_theme_constant_override("separation", 12)
+	vbox.add_child(volume_row)
+
+	var volume_label := Label.new()
+	volume_label.text = "Volume:"
+	volume_label.add_theme_font_size_override("font_size", 20)
+	volume_label.add_theme_color_override("font_color", Color.WHITE)
+	volume_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	volume_row.add_child(volume_label)
+
+	var volume_slider := HSlider.new()
+	volume_slider.min_value = 0.0
+	volume_slider.max_value = 1.0
+	volume_slider.step = 0.01
+	volume_slider.value = PlayerPrefs.master_volume
+	volume_slider.custom_minimum_size = Vector2(200, 32)
+	volume_slider.value_changed.connect(func(v: float) -> void:
+		PlayerPrefs.master_volume = v
+		PlayerPrefs.apply_audio()
+		PlayerPrefs.save())
+	volume_row.add_child(volume_slider)
+
+	var mute_row := HBoxContainer.new()
+	mute_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	mute_row.add_theme_constant_override("separation", 12)
+	vbox.add_child(mute_row)
+
+	var mute_label := Label.new()
+	mute_label.text = "Mute:"
+	mute_label.add_theme_font_size_override("font_size", 20)
+	mute_label.add_theme_color_override("font_color", Color.WHITE)
+	mute_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	mute_row.add_child(mute_label)
+
+	var mute_check := CheckButton.new()
+	mute_check.button_pressed = PlayerPrefs.master_muted
+	mute_check.add_theme_font_size_override("font_size", 18)
+	SoundManager.wire_button(mute_check)
+	mute_check.toggled.connect(func(pressed: bool) -> void:
+		PlayerPrefs.master_muted = pressed
+		PlayerPrefs.apply_audio()
+		PlayerPrefs.save())
+	mute_row.add_child(mute_check)
+
 	var done_btn := _make_button("Done")
 	done_btn.pressed.connect(func() -> void: _settings_popup.visible = false)
 	vbox.add_child(done_btn)
