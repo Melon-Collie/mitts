@@ -3,6 +3,8 @@ extends VBoxContainer
 
 signal close_requested
 
+var _res_row: HBoxContainer = null
+
 const _WHITE  := Color(1.00, 1.00, 1.00, 1.00)
 const _DIM    := Color(0.62, 0.62, 0.68, 1.00)
 const _SEP    := Color(0.28, 0.28, 0.33, 1.00)
@@ -99,16 +101,16 @@ func _build_video_tab() -> Control:
 	box.add_theme_constant_override("separation", 14)
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 
-	var res_row := HBoxContainer.new()
-	res_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	res_row.add_theme_constant_override("separation", 12)
+	_res_row = HBoxContainer.new()
+	_res_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_res_row.add_theme_constant_override("separation", 12)
 
 	var res_label := Label.new()
 	res_label.text = "Resolution:"
 	res_label.add_theme_font_size_override("font_size", 20)
 	res_label.add_theme_color_override("font_color", _WHITE)
 	res_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	res_row.add_child(res_label)
+	_res_row.add_child(res_label)
 
 	var res_btn := OptionButton.new()
 	res_btn.custom_minimum_size = Vector2(160, 48)
@@ -121,7 +123,7 @@ func _build_video_tab() -> Control:
 		PlayerPrefs.resolution_index = idx
 		PlayerPrefs.apply_video()
 		PlayerPrefs.save())
-	res_row.add_child(res_btn)
+	_res_row.add_child(res_btn)
 
 	var fs_row := HBoxContainer.new()
 	fs_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -142,12 +144,12 @@ func _build_video_tab() -> Control:
 		PlayerPrefs.is_fullscreen = pressed
 		PlayerPrefs.apply_video()
 		PlayerPrefs.save()
-		res_row.visible = not pressed)
+		_res_row.visible = not pressed)
 	fs_row.add_child(fs_check)
 
 	box.add_child(fs_row)
-	res_row.visible = not PlayerPrefs.is_fullscreen
-	box.add_child(res_row)
+	_res_row.visible = not PlayerPrefs.is_fullscreen
+	box.add_child(_res_row)
 
 	return box
 
