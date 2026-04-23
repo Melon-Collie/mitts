@@ -286,8 +286,9 @@ func _update_position(delta: float) -> void:
 			var slide_speed: float = lerpf(shuffle_speed * 0.5, butterfly_slide_speed, rotation_demand)
 			var remaining_x: float = abs(_target_x - _current_x)
 			_current_x = move_toward(_current_x, _target_x, slide_speed * delta)
-			var five_hole_target: float = five_hole_butterfly_move_max if remaining_x > 0.05 else 0.0
-			_five_hole_openness = lerpf(_five_hole_openness, five_hole_target, part_lerp_speed * delta)
+			if is_server:
+				var five_hole_target: float = five_hole_butterfly_move_max if remaining_x > 0.05 else 0.0
+				_five_hole_openness = lerpf(_five_hole_openness, five_hole_target, part_lerp_speed * delta)
 		State.RVH_LEFT:
 			# 0.38 = outer pad reach (0.88) - 0.50 body inset toward post.
 			# Body sits 0.535m from center; body parts shift +0.50 in local X to keep
@@ -320,7 +321,10 @@ func _update_lateral_standing(delta: float) -> void:
 	else:
 		_current_x = move_toward(_current_x, _target_x, shuffle_speed * delta)
 		five_hole_target = five_hole_shuffle_max
-	_five_hole_openness = lerpf(_five_hole_openness, five_hole_target, part_lerp_speed * delta)
+	# Client _five_hole_openness is server-driven (apply_state); only the server
+	# computes it locally so the broadcast value is authoritative.
+	if is_server:
+		_five_hole_openness = lerpf(_five_hole_openness, five_hole_target, part_lerp_speed * delta)
 
 # ── Facing ────────────────────────────────────────────────────────────────────
 func _update_facing(delta: float) -> void:
@@ -500,7 +504,10 @@ func apply_state(network_state: GoalieNetworkState, host_ts: float) -> void:
 	elif dist > correction_dead_zone:
 		_current_x = lerpf(_current_x, network_state.position_x, correction_blend)
 		_current_depth = lerpf(_current_depth, server_depth, correction_blend)
-	_five_hole_openness = lerpf(_five_hole_openness, network_state.five_hole_openness, correction_blend)
+	# Five hole: use a strong blend so the client's visual matches server physics
+	# within 1-2 broadcasts (~50 ms). The local AI doesn't compute this on clients,
+	# so there's nothing to fight the correction.
+	_five_hole_openness = lerpf(_five_hole_openness, network_state.five_hole_openness, 0.80)
 
 func apply_state_transition(new_state: int) -> void:
 	if is_server:
