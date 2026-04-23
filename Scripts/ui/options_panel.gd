@@ -4,6 +4,12 @@ extends VBoxContainer
 signal close_requested
 
 var _res_row: HBoxContainer = null
+var _fs_check: CheckButton = null
+var _mute_check: CheckButton = null
+var _volume_slider: HSlider = null
+var _res_btn: OptionButton = null
+var _tab_contents: Array[Control] = []
+var _tab_btns: Array[Button] = []
 
 const _WHITE  := Color(1.00, 1.00, 1.00, 1.00)
 const _DIM    := Color(0.62, 0.62, 0.68, 1.00)
@@ -20,69 +26,58 @@ func _ready() -> void:
 	title.add_theme_color_override("font_color", _WHITE)
 	add_child(title)
 
-	var video_content := _build_video_tab()
-	var audio_content := _build_audio_tab()
-
-	add_child(_build_tab_switcher(
-		["Video", "Audio"],
-		[video_content, audio_content]
-	))
+	add_child(_build_tab_switcher())
 
 	var done_btn := _make_button("Done")
-	done_btn.pressed.connect(func() -> void: close_requested.emit())
+	done_btn.pressed.connect(_on_done_pressed)
 	add_child(done_btn)
 
-func _build_tab_switcher(tab_names: Array, contents: Array) -> Control:
+func _build_tab_switcher() -> Control:
 	var wrapper := VBoxContainer.new()
 	wrapper.add_theme_constant_override("separation", 0)
 	wrapper.custom_minimum_size = Vector2(340, 0)
 
-	# Tab button row
 	var bar := HBoxContainer.new()
 	bar.add_theme_constant_override("separation", 0)
 	wrapper.add_child(bar)
 
-	# Separator line between tab bar and content
 	var sep := ColorRect.new()
 	sep.color = _SEP
 	sep.custom_minimum_size = Vector2(0, 1)
 	wrapper.add_child(sep)
 
-	# Content area with padding
 	var content_margin := MarginContainer.new()
 	content_margin.add_theme_constant_override("margin_top", 16)
 	content_margin.add_theme_constant_override("margin_bottom", 8)
 	content_margin.add_theme_constant_override("margin_left", 0)
 	content_margin.add_theme_constant_override("margin_right", 0)
-	for c: Control in contents:
-		content_margin.add_child(c)
 	wrapper.add_child(content_margin)
 
-	# Build tab buttons and wire switching
-	var tab_btns: Array[Button] = []
-	for i: int in tab_names.size():
+	var video_tab := _build_video_tab()
+	var audio_tab := _build_audio_tab()
+	_tab_contents = [video_tab, audio_tab]
+	content_margin.add_child(video_tab)
+	content_margin.add_child(audio_tab)
+
+	for i: int in ["Video", "Audio"].size():
 		var btn := Button.new()
-		btn.text = tab_names[i]
+		btn.text = ["Video", "Audio"][i]
 		btn.flat = true
 		btn.custom_minimum_size = Vector2(100, 40)
 		btn.add_theme_font_size_override("font_size", 18)
-		_apply_tab_style(btn, false)
 		bar.add_child(btn)
-		tab_btns.append(btn)
+		_tab_btns.append(btn)
 		SoundManager.wire_button(btn)
+		btn.pressed.connect(_activate_tab.bind(i))
 
-	var activate := func(idx: int) -> void:
-		for i: int in contents.size():
-			(contents[i] as Control).visible = (i == idx)
-		for i: int in tab_btns.size():
-			_apply_tab_style(tab_btns[i], i == idx)
-
-	activate.call(0)
-	for i: int in tab_btns.size():
-		var captured_i := i
-		tab_btns[i].pressed.connect(func() -> void: activate.call(captured_i))
-
+	_activate_tab(0)
 	return wrapper
+
+func _activate_tab(idx: int) -> void:
+	for i: int in _tab_contents.size():
+		_tab_contents[i].visible = (i == idx)
+	for i: int in _tab_btns.size():
+		_apply_tab_style(_tab_btns[i], i == idx)
 
 func _apply_tab_style(btn: Button, active: bool) -> void:
 	var s := StyleBoxFlat.new()
@@ -112,18 +107,15 @@ func _build_video_tab() -> Control:
 	res_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_res_row.add_child(res_label)
 
-	var res_btn := OptionButton.new()
-	res_btn.custom_minimum_size = Vector2(160, 48)
-	res_btn.add_theme_font_size_override("font_size", 18)
+	_res_btn = OptionButton.new()
+	_res_btn.custom_minimum_size = Vector2(160, 48)
+	_res_btn.add_theme_font_size_override("font_size", 18)
 	for i: int in PlayerPrefs.RESOLUTIONS.size():
 		var r: Vector2i = PlayerPrefs.RESOLUTIONS[i]
-		res_btn.add_item("%dx%d" % [r.x, r.y], i)
-	res_btn.selected = PlayerPrefs.resolution_index
-	res_btn.item_selected.connect(func(idx: int) -> void:
-		PlayerPrefs.resolution_index = idx
-		PlayerPrefs.apply_video()
-		PlayerPrefs.save())
-	_res_row.add_child(res_btn)
+		_res_btn.add_item("%dx%d" % [r.x, r.y], i)
+	_res_btn.selected = PlayerPrefs.resolution_index
+	_res_btn.item_selected.connect(_on_resolution_selected)
+	_res_row.add_child(_res_btn)
 
 	var fs_row := HBoxContainer.new()
 	fs_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -136,16 +128,12 @@ func _build_video_tab() -> Control:
 	fs_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	fs_row.add_child(fs_label)
 
-	var fs_check := CheckButton.new()
-	fs_check.button_pressed = PlayerPrefs.is_fullscreen
-	fs_check.add_theme_font_size_override("font_size", 18)
-	SoundManager.wire_button(fs_check)
-	fs_check.toggled.connect(func(pressed: bool) -> void:
-		PlayerPrefs.is_fullscreen = pressed
-		PlayerPrefs.apply_video()
-		PlayerPrefs.save()
-		_res_row.visible = not pressed)
-	fs_row.add_child(fs_check)
+	_fs_check = CheckButton.new()
+	_fs_check.set_pressed_no_signal(PlayerPrefs.is_fullscreen)
+	_fs_check.add_theme_font_size_override("font_size", 18)
+	SoundManager.wire_button(_fs_check)
+	_fs_check.toggled.connect(_on_fullscreen_toggled)
+	fs_row.add_child(_fs_check)
 
 	box.add_child(fs_row)
 	_res_row.visible = not PlayerPrefs.is_fullscreen
@@ -169,17 +157,14 @@ func _build_audio_tab() -> Control:
 	volume_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	volume_row.add_child(volume_label)
 
-	var volume_slider := HSlider.new()
-	volume_slider.min_value = 0.0
-	volume_slider.max_value = 1.0
-	volume_slider.step = 0.01
-	volume_slider.value = PlayerPrefs.master_volume
-	volume_slider.custom_minimum_size = Vector2(200, 32)
-	volume_slider.value_changed.connect(func(v: float) -> void:
-		PlayerPrefs.master_volume = v
-		PlayerPrefs.apply_audio()
-		PlayerPrefs.save())
-	volume_row.add_child(volume_slider)
+	_volume_slider = HSlider.new()
+	_volume_slider.min_value = 0.0
+	_volume_slider.max_value = 1.0
+	_volume_slider.step = 0.01
+	_volume_slider.value = PlayerPrefs.master_volume
+	_volume_slider.custom_minimum_size = Vector2(200, 32)
+	_volume_slider.value_changed.connect(_on_volume_changed)
+	volume_row.add_child(_volume_slider)
 	box.add_child(volume_row)
 
 	var mute_row := HBoxContainer.new()
@@ -193,18 +178,44 @@ func _build_audio_tab() -> Control:
 	mute_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	mute_row.add_child(mute_label)
 
-	var mute_check := CheckButton.new()
-	mute_check.button_pressed = PlayerPrefs.master_muted
-	mute_check.add_theme_font_size_override("font_size", 18)
-	SoundManager.wire_button(mute_check)
-	mute_check.toggled.connect(func(pressed: bool) -> void:
-		PlayerPrefs.master_muted = pressed
-		PlayerPrefs.apply_audio()
-		PlayerPrefs.save())
-	mute_row.add_child(mute_check)
+	_mute_check = CheckButton.new()
+	_mute_check.set_pressed_no_signal(PlayerPrefs.master_muted)
+	_mute_check.add_theme_font_size_override("font_size", 18)
+	SoundManager.wire_button(_mute_check)
+	_mute_check.toggled.connect(_on_mute_toggled)
+	mute_row.add_child(_mute_check)
 	box.add_child(mute_row)
 
 	return box
+
+# ---------------------------------------------------------------------------
+# Signal handlers
+# ---------------------------------------------------------------------------
+
+func _on_fullscreen_toggled(pressed: bool) -> void:
+	PlayerPrefs.is_fullscreen = pressed
+	PlayerPrefs.apply_video()
+	PlayerPrefs.save()
+	if _res_row != null:
+		_res_row.visible = not pressed
+
+func _on_resolution_selected(idx: int) -> void:
+	PlayerPrefs.resolution_index = idx
+	PlayerPrefs.apply_video()
+	PlayerPrefs.save()
+
+func _on_volume_changed(value: float) -> void:
+	PlayerPrefs.master_volume = value
+	PlayerPrefs.apply_audio()
+	PlayerPrefs.save()
+
+func _on_mute_toggled(pressed: bool) -> void:
+	PlayerPrefs.master_muted = pressed
+	PlayerPrefs.apply_audio()
+	PlayerPrefs.save()
+
+func _on_done_pressed() -> void:
+	close_requested.emit()
 
 func _make_button(label: String) -> Button:
 	var btn := Button.new()
