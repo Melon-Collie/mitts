@@ -272,7 +272,7 @@ func get_network_state() -> SkaterNetworkState:
 func apply_network_state(_net_state: SkaterNetworkState, _host_ts: float) -> void:
 	pass  # overridden by RemoteController on client
 	
-signal puck_release_requested(direction: Vector3, power: float)
+signal puck_release_requested(direction: Vector3, power: float, is_slapper: bool)
 # Fired when the player releases slap while the puck is nearby but not yet
 # carried — the leniency one-timer. GameManager acquires + releases the puck;
 # the controller transitions to follow-through immediately.
@@ -281,7 +281,8 @@ signal one_timer_release_requested(direction: Vector3, power: float)
 func _do_release(direction: Vector3, power: float) -> void:
 	if is_replaying:
 		return
-	puck_release_requested.emit(direction, power)
+	var slapper: bool = _sm.get_state() == State.SLAPPER_CHARGE_WITH_PUCK
+	puck_release_requested.emit(direction, power, slapper)
 
 # ── Puck Signals ──────────────────────────────────────────────────────────────
 func on_puck_picked_up_network() -> void:
