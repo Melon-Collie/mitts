@@ -18,3 +18,8 @@ License: Creative Commons Attribution 4.0
 "Plastic Bang.wav" by djahren
 https://freesound.org/s/84803/
 License: Creative Commons Attribution 4.0
+
+**shot_wrister.wav**
+"Windbreaker Pop" by VANWINKLE3
+https://freesound.org/s/607123/
+License: Creative Commons 0 (public domain)
