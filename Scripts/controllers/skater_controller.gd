@@ -168,6 +168,10 @@ var last_processed_host_timestamp: float = 0.0
 var has_puck: bool = false
 var _ik_locked_side: int = 0  # +1 = exited right, -1 = exited left, 0 = unlocked
 var is_replaying: bool = false
+var _prev_facing_angle: float = 0.0
+var _prev_upper_body_angle_for_vel: float = 0.0
+var _facing_angular_velocity: float = 0.0
+var _upper_body_angular_velocity: float = 0.0
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> void:
@@ -194,6 +198,8 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	_cb.apply_slapper_velocity_drag = _apply_slapper_velocity_drag
 	_cb.apply_block_movement = _apply_block_movement
 	_sm.setup(_cb, _aiming)
+	_prev_facing_angle = atan2(_facing.x, _facing.y)
+	_prev_upper_body_angle_for_vel = _upper_body_angle
 
 func _on_body_checked_player(victim: Skater, impact_force: float, hit_direction: Vector3) -> void:
 	if not _is_host:
@@ -236,6 +242,12 @@ func _process_input(input: InputState, delta: float) -> void:
 	skater.update_stick_mesh()
 	skater.update_arm_mesh()
 	skater.update_bottom_arm_mesh()
+	if delta > 0.0 and not is_replaying:
+		var cur_fa: float = atan2(_facing.x, _facing.y)
+		_facing_angular_velocity = angle_difference(_prev_facing_angle, cur_fa) / delta
+		_upper_body_angular_velocity = angle_difference(_prev_upper_body_angle_for_vel, _upper_body_angle) / delta
+		_prev_facing_angle = cur_fa
+		_prev_upper_body_angle_for_vel = _upper_body_angle
 
 # ── Network State ─────────────────────────────────────────────────────────────
 # Returns the typed network state object. Flattening to Array happens at the
@@ -249,6 +261,8 @@ func get_network_state() -> SkaterNetworkState:
 	state.top_hand_position = skater.get_top_hand_position()
 	state.upper_body_rotation_y = skater.get_upper_body_rotation()
 	state.facing = skater.get_facing()
+	state.facing_angular_velocity = _facing_angular_velocity
+	state.upper_body_angular_velocity = _upper_body_angular_velocity
 	state.last_processed_host_timestamp = last_processed_host_timestamp
 	state.is_ghost = skater.is_ghost
 	state.shot_state = _sm.get_state() as int

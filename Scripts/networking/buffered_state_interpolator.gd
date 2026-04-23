@@ -68,6 +68,18 @@ static func lerp_facing(from: Vector2, to: Vector2, t: float) -> Vector2:
 	var a := lerp_angle(atan2(from.x, from.y), atan2(to.x, to.y), t)
 	return Vector2(sin(a), cos(a))
 
+# Cubic Hermite interpolation for scalar angles (radians).
+# a0/a1: endpoint angles; av0/av1: angular velocities at each endpoint (rad/s).
+# t: normalized [0,1]; dt: bracket time span (seconds).
+# Safe as long as |av| < π/dt — always satisfied at hockey rotation speeds.
+static func hermite_angle(a0: float, av0: float, a1: float, av1: float, t: float, dt: float) -> float:
+	var t2: float = t * t
+	var t3: float = t2 * t
+	return (2.0*t3 - 3.0*t2 + 1.0) * a0 \
+		 + (t3 - 2.0*t2 + t) * dt * av0 \
+		 + (-2.0*t3 + 3.0*t2) * a1 \
+		 + (t3 - t2) * dt * av1
+
 static func _make(a, b, render_time: float) -> BracketResult:
 	var r := BracketResult.new()
 	r.from_state = a.state

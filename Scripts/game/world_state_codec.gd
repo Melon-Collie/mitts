@@ -43,7 +43,7 @@ signal shots_on_goal_changed(sog_0: int, sog_1: int)
 signal queue_depth_feedback(depth: int)
 
 const WS_HEADER_SIZE: int = 7      # u16 ws_seq (2) + f32 host_capture_time (4) + u8 num_skaters (1)
-const SKATER_BLOCK_SIZE: int = 40  # u32 peer_id (4) + 35B skater state + u8 queue_depth (1)
+const SKATER_BLOCK_SIZE: int = 42  # u32 peer_id (4) + 37B skater state + u8 queue_depth (1)
 const PUCK_BLOCK_SIZE: int = 12    # 11B pos+vel + 1B carrier_idx
 const GOALIE_BLOCK_SIZE: int = 12
 const GAME_STATE_BLOCK_SIZE: int = 6  # 4×u8 + u16 time_remaining
@@ -145,7 +145,7 @@ func decode_world_state(data: PackedByteArray) -> void:
 	for _i: int in num_skaters:
 		var peer_id: int = data.decode_u32(o); o += 4
 		decoded_peers.append(peer_id)
-		var skater_bytes: PackedByteArray = data.slice(o, o + 35); o += 35
+		var skater_bytes: PackedByteArray = data.slice(o, o + 37); o += 37
 		var depth: int = data.decode_u8(o); o += 1
 		var record: PlayerRecord = _registry.get_record(peer_id)
 		if record == null:
@@ -244,12 +244,12 @@ func decode_stats(data: Array) -> void:
 
 # ── Quantization helpers ──────────────────────────────────────────────────────
 
-# Skater: 35 bytes
+# Skater: 37 bytes
 # Offsets: pos(0..4) vel(5..10) blade(11..16) top_hand(17..22)
-#          facing(23..24) ubrot(25..28) lp_ts(29..32) flags(33) charge(34)
+#          facing(23..24) ubrot(25..26) fav(27..28) ubav(29..30) lp_ts(31..34) flags(35) charge(36)
 static func _encode_skater_quantized(s: SkaterNetworkState) -> PackedByteArray:
 	var b := PackedByteArray()
-	b.resize(35)
+	b.resize(37)
 	var o: int = 0
 	b.encode_s16(o, clampi(roundi(s.position.x * 100.0), -32768, 32767)); o += 2
 	b.encode_s8(o, clampi(roundi(s.position.y * 100.0), -128, 127)); o += 1
@@ -268,6 +268,8 @@ static func _encode_skater_quantized(s: SkaterNetworkState) -> PackedByteArray:
 		angle += TAU
 	b.encode_u16(o, roundi(angle / TAU * 65535.0) & 0xFFFF); o += 2
 	b.encode_s16(o, clampi(roundi(s.upper_body_rotation_y / PI * 32767.0), -32768, 32767)); o += 2
+	b.encode_s16(o, clampi(roundi(s.facing_angular_velocity / (PI * 10.0) * 32767.0), -32768, 32767)); o += 2
+	b.encode_s16(o, clampi(roundi(s.upper_body_angular_velocity / (PI * 10.0) * 32767.0), -32768, 32767)); o += 2
 	b.encode_float(o, s.last_processed_host_timestamp); o += 4
 	var flags: int = (s.shot_state & 0x0F) | (0x10 if s.is_ghost else 0)
 	b.encode_u8(o, flags); o += 1
@@ -276,7 +278,7 @@ static func _encode_skater_quantized(s: SkaterNetworkState) -> PackedByteArray:
 
 
 static func _decode_skater_quantized(b: PackedByteArray) -> SkaterNetworkState:
-	if b.size() < 35:
+	if b.size() < 37:
 		push_warning("WorldStateCodec: truncated skater block (%d bytes)" % b.size())
 		return SkaterNetworkState.new()
 	var s := SkaterNetworkState.new()
@@ -296,6 +298,8 @@ static func _decode_skater_quantized(b: PackedByteArray) -> SkaterNetworkState:
 	var angle: float = b.decode_u16(o) / 65535.0 * TAU; o += 2
 	s.facing = Vector2(sin(angle), cos(angle))
 	s.upper_body_rotation_y = b.decode_s16(o) / 32767.0 * PI; o += 2
+	s.facing_angular_velocity = b.decode_s16(o) / 32767.0 * (PI * 10.0); o += 2
+	s.upper_body_angular_velocity = b.decode_s16(o) / 32767.0 * (PI * 10.0); o += 2
 	s.last_processed_host_timestamp = b.decode_float(o); o += 4
 	var flags: int = b.decode_u8(o); o += 1
 	s.shot_state = flags & 0x0F
