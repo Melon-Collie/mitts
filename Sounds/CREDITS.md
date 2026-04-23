@@ -1,0 +1,13 @@
+# Sound Credits
+
+## UI Sounds
+
+**ui_hover.wav**
+"UI hover item" by steaq
+https://freesound.org/s/757328/
+License: Creative Commons 0 (public domain)
+
+**ui_select.wav**
+"Select - Impact Organic UI Bright.wav" by ryusa
+https://freesound.org/s/467603/
+License: Creative Commons Attribution 4.0
