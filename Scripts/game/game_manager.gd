@@ -414,6 +414,33 @@ func _wire_subsystems() -> void:
 	var _away_c := TeamColorRegistry.get_colors(teams[1].color_id, 1)
 	team_colors_ready.emit(_home_c.primary, _home_c.secondary, _away_c.primary, _away_c.secondary)
 
+	_wire_sound_signals()
+
+
+func _wire_sound_signals() -> void:
+	NetworkManager.local_puck_pickup_confirmed.connect(_on_local_pickup_sound)
+	NetworkManager.remote_carrier_changed.connect(_on_remote_carrier_sound)
+	_phase_coord.goal_scored.connect(
+		func(_t: Team, _s: String, _a1: String, _a2: String) -> void:
+			SoundManager.play_ui(SoundManager.Sound.GOAL_HORN))
+	NetworkManager.goal_received.connect(
+		func(_tid: int, _s0: int, _s1: int, _sn: String, _a1: String, _a2: String) -> void:
+			SoundManager.play_ui(SoundManager.Sound.GOAL_HORN))
+
+
+func _on_local_pickup_sound() -> void:
+	var record := _registry.get_local() if _registry != null else null
+	if record != null and record.skater != null:
+		SoundManager.play_world(SoundManager.Sound.PUCK_PICKUP, record.skater.global_position)
+
+
+func _on_remote_carrier_sound(new_carrier_peer_id: int) -> void:
+	if _registry == null:
+		return
+	var record: PlayerRecord = _registry.get_record(new_carrier_peer_id)
+	if record != null and record.skater != null:
+		SoundManager.play_world(SoundManager.Sound.PUCK_PICKUP, record.skater.global_position)
+
 
 func _spawn_local(peer_id: int, team_slot: int, team: Team) -> void:
 	var colors: Dictionary = TeamColorRegistry.get_colors(team.color_id, team.team_id)
@@ -443,6 +470,9 @@ func _on_player_spawned(record: PlayerRecord) -> void:
 	record.skater.body_checked_player.connect(
 		func(v: Skater, _f: float, _d: Vector3) -> void: _on_hit_landed(pid, v)
 	)
+	var snd := SkaterSoundController.new()
+	record.skater.add_child(snd)
+	snd.setup(record.skater)
 
 
 func _on_registry_player_added(record: PlayerRecord) -> void:
@@ -595,7 +625,9 @@ func _defending_team_id_for_goalie(goalie: Goalie) -> int:
 
 
 # ── Puck release / one-timer ─────────────────────────────────────────────────
-func _on_puck_release_requested(direction: Vector3, power: float) -> void:
+func _on_puck_release_requested(direction: Vector3, power: float, is_slapper: bool) -> void:
+	var sound: SoundManager.Sound = SoundManager.Sound.SHOT_SLAPPER if is_slapper else SoundManager.Sound.SHOT_WRISTER
+	SoundManager.play_world(sound, puck.get_puck_position())
 	if NetworkManager.is_host:
 		_start_pending_shot_from_carrier()
 		puck.release(direction, power)
@@ -605,7 +637,7 @@ func _on_puck_release_requested(direction: Vector3, power: float) -> void:
 			record.controller.on_puck_released_network()
 		var shot_rtt_ms: float = NetworkManager.get_latest_rtt_ms()
 		puck_controller.notify_local_release(direction, power, shot_rtt_ms, record.skater.velocity)
-		NetworkManager.send_puck_release(direction, power)
+		NetworkManager.send_puck_release(direction, power, is_slapper)
 
 
 func _on_one_timer_release_requested(direction: Vector3, power: float, skater: Skater) -> void:
@@ -617,7 +649,10 @@ func _on_one_timer_release_requested(direction: Vector3, power: float, skater: S
 	puck.release(direction, power)
 
 
-func on_remote_puck_release(direction: Vector3, power: float, shooter_peer_id: int, host_timestamp: float, rtt_ms: float) -> void:
+func on_remote_puck_release(direction: Vector3, power: float, is_slapper: bool, shooter_peer_id: int, host_timestamp: float, rtt_ms: float) -> void:
+	var sound: SoundManager.Sound = SoundManager.Sound.SHOT_SLAPPER if is_slapper else SoundManager.Sound.SHOT_WRISTER
+	var shot_pos: Vector3 = puck.get_puck_position() if puck != null else Vector3.ZERO
+	SoundManager.play_world(sound, shot_pos)
 	if NetworkManager.is_host:
 		if puck == null or _registry == null:
 			return

@@ -68,6 +68,7 @@ func _build_ui() -> void:
 	join_btn.add_theme_font_size_override("font_size", 20)
 	join_btn.pressed.connect(_on_join_pressed)
 	_wire_hover_scale(join_btn)
+	SoundManager.wire_button(join_btn)
 	join_row.add_child(join_btn)
 
 	var settings_btn := _make_button("Settings")
@@ -203,6 +204,7 @@ func _build_settings_popup() -> void:
 	left_btn.custom_minimum_size = Vector2(90, 48)
 	left_btn.add_theme_font_size_override("font_size", 18)
 	_wire_hover_scale(left_btn)
+	SoundManager.wire_button(left_btn)
 	hand_row.add_child(left_btn)
 
 	var right_btn := Button.new()
@@ -212,6 +214,7 @@ func _build_settings_popup() -> void:
 	right_btn.custom_minimum_size = Vector2(90, 48)
 	right_btn.add_theme_font_size_override("font_size", 18)
 	_wire_hover_scale(right_btn)
+	SoundManager.wire_button(right_btn)
 	hand_row.add_child(right_btn)
 
 	NetworkManager.local_is_left_handed = PlayerPrefs.is_left_handed
@@ -313,6 +316,7 @@ func _make_button(label: String) -> Button:
 	btn.custom_minimum_size = Vector2(308, 48)
 	btn.add_theme_font_size_override("font_size", 20)
 	_wire_hover_scale(btn)
+	SoundManager.wire_button(btn)
 	return btn
 
 func _wire_hover_scale(btn: Button) -> void:

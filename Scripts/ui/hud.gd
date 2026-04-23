@@ -478,6 +478,7 @@ func _popup_button(label: String) -> Button:
 	btn.custom_minimum_size = Vector2(220, 48)
 	btn.add_theme_font_size_override("font_size", 20)
 	_wire_hover_scale(btn)
+	SoundManager.wire_button(btn)
 	return btn
 
 func _add_host_button(vbox: VBoxContainer, text: String, handler: Callable) -> void:

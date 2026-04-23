@@ -204,6 +204,7 @@ func _btn(text: String) -> Button:
 	b.text = text
 	b.custom_minimum_size = Vector2(140, 40)
 	_wire_hover_scale(b)
+	SoundManager.wire_button(b)
 	return b
 
 func _wire_hover_scale(btn: Button) -> void:
