@@ -8,7 +8,7 @@ Complex features (AI state machines, new systems, architectural changes) are des
 
 **Before every commit:** update Known Issues in this file. When a feature ships to players, update README's What's In / Planned. When a build stage completes, update ARCHITECTURE's Build Status table.
 
-**Never push to `main` without the user testing locally first.** Feature branches (e.g. `claude/*`) may be pushed after committing so the user can pull and test on their machine. For `main`, always stop at commit and wait for explicit confirmation before running `git push`.
+**Never push to `main` without the user testing locally first.** Feature branches (e.g. `claude/*`) may be pushed after committing so the user can pull and test on their machine. Merging a feature branch into `main` is done by the user via a pull request in the UI — do not `git merge` a feature branch into `main` directly. For work done directly on `main`, always stop at commit and wait for explicit confirmation before running `git push`.
 
 **Scene files (`.tscn`) and resource files (`.tres`) are edited by the user, not Claude.** Godot's text formats are error-prone to edit — node unique IDs, sub-resource references, and property ordering can silently break them. Describe the change and let the user make it in the Godot editor.
 
@@ -65,7 +65,7 @@ These are non-obvious constraints that cause subtle bugs if violated. Rates and 
 
 **Trajectory prediction exits on post contact and puck-goalie contact**, not only on carrier-change RPCs. Both controllers call `end_trajectory_prediction()` directly on the relevant physics signal.
 
-**Goalie state transitions and shot reactions are sent via reliable RPCs** (`state_transitioned`, `shot_reaction_started` on `GoalieController`). Clients play a local `_client_reaction_timer` from the RPC payload. Do not rely on interpolation alone for goalie reactions.
+**Goalie state transitions and shot reactions are sent via reliable RPCs** (`state_transitioned`, `shot_reaction_started` on `GoalieController`). `apply_state_transition` directly sets the client state machine; `apply_shot_reaction` seeds `_shot_timer` so the butterfly cadence matches the host. The client runs a full copy of the goalie AI every frame — do not add interpolation logic or attempt to derive goalie state from unreliable broadcasts.
 
 **Reconcile saves and restores only narrow shot-state fields** (`_state`, follow-through timers, one-timer window). Visual and charge fields come from replay output. Server authority on shot state: if `server_state.shot_state` differs after replay, server wins — `_state` and `_charge_distance` are overwritten.
 
@@ -91,7 +91,7 @@ These are non-obvious constraints that cause subtle bugs if violated. Rates and 
 
 **`facing` in `SkaterNetworkState` is `Vector2` (XZ packed as XY), not `Vector3`.** Both `WorldStateCodec` and `BufferedStateInterpolator.lerp_facing` use the same compass convention: extract angle via `atan2(x, y)` (bearing from +Z/forward axis) and reconstruct with `Vector2(sin, cos)`. Do not pass a `Vector3` facing direction to `lerp_facing`. `RemoteController` and `StateBufferManager` use `BufferedStateInterpolator.hermite_angle` for C1-continuous facing and upper-body rotation interpolation, driven by `facing_angular_velocity` and `upper_body_angular_velocity` fields on `SkaterNetworkState` (encoded as s16, scale `PI * 10` rad/s, at wire offsets 27–28 and 29–30 of the 37-byte skater block).
 
-**All interpolators use host-capture timestamps, not client arrival time.** `apply_network_state` / `apply_state` on `RemoteController`, `PuckController`, and `GoalieController` each take a `host_ts: float` parameter (decoded from the world-state header) and buffer it as the snapshot timestamp. `render_time = NetworkManager.estimated_host_time() - interpolation_delay`. Using client arrival time instead causes same-frame world-state packets to silently clobber each other and decouples the render timeline from the simulation timeline.
+**All interpolators use host-capture timestamps, not client arrival time.** `apply_network_state` / `apply_state` on `RemoteController`, `PuckController`, and `GoalieController` each take a `host_ts: float` parameter decoded from the world-state header. `RemoteController` and `PuckController` buffer it as the snapshot timestamp (`render_time = NetworkManager.estimated_host_time() - interpolation_delay`). `GoalieController` uses it differently — `elapsed = estimated_host_time() - host_ts` drives position forward-prediction rather than buffer lookup. Using client arrival time instead of host-capture time causes same-frame world-state packets to silently clobber each other and decouples the render timeline from the simulation timeline.
 
 ## Where New Code Goes
 

@@ -86,13 +86,15 @@ Period clock ticks only during `PLAYING`. On expiry: if periods remain → `END_
 
 ### Goalie Networking
 
-**GoalieController** AI runs on the host only. Clients receive goalie state via the world state broadcast and interpolate with a 100ms delay using a `BufferedGoalieState` buffer — the same pattern as remote skaters.
+**GoalieController** AI runs on both host and client. Clients do not interpolate server snapshots — they run the full goalie state machine every physics tick using their local puck position. This eliminates interpolation delay and keeps goalie reactions immediate. Server broadcasts (40 Hz) soft-correct position only, keeping client and host in sync despite the client tracking a slightly stale puck.
 
-Serialized per goalie: position (x/z), rotation_y, state enum, five_hole_openness (5 elements). Clients reconstruct body part configs locally from the state enum and five_hole_openness, then snap body parts to the interpolated config each frame.
+Serialized per goalie: position (x/z), rotation_y, state_enum, five_hole_openness, velocity (x/z) — 7 fields, 8 B quantized. `apply_state` forward-predicts the server position using `velocity * elapsed` (elapsed ≈ RTT/2 at call time), then blends at 40% per broadcast. `five_hole_openness` is computed only on the server; clients adopt it at 80% blend per broadcast so the visual pad gap matches server physics within ~50 ms. The client AI does not recompute `five_hole_openness`, so nothing fights the correction. Body part configs are rebuilt from the running AI state each frame.
+
+State changes (STANDING ↔ BUTTERFLY ↔ RVH) and shot reactions are delivered via reliable RPCs (`apply_state_transition`, `apply_shot_reaction`). `apply_state_transition` directly sets the client state machine. `apply_shot_reaction` seeds `_shot_timer` on the client so the butterfly drop cadence matches the server.
 
 RVH triggers when `_is_puck_in_defensive_zone()` — either the puck is behind the goal line, or it is within `zone_post_z` of the goal line and the horizontal angle to the puck exceeds `rvh_early_angle` (default 60°). This matches the Buckley depth chart's "Defensive" corner zones, which extend slightly in front of the goal line at sharp angles.
 
-**Tracking lag:** `GoalieController` maintains `_tracked_puck_position` that lerps toward the real puck at `tracking_speed` (default 6.0) each frame. All positioning logic — lateral target, depth, facing, and state transitions — reads from this tracked position rather than the real puck. `_on_puck_released` (shot detection) reads the real puck position and velocity so butterfly reactions stay accurate. `tracking_speed` is the master difficulty export: lower = more positional lag.
+**Tracking lag:** `GoalieController` maintains `_tracked_puck_position` that lerps toward the real puck at `tracking_speed` (default 6.0) each frame. All positioning logic — lateral target, depth, facing, and state transitions — reads from this tracked position rather than the real puck. `_on_puck_released` (shot detection, server only) reads the real puck position and velocity so butterfly reactions stay accurate. `tracking_speed` is the master difficulty export: lower = more positional lag.
 
 ### Puck Interactions (server-side)
 
