@@ -296,7 +296,6 @@ func _on_fullscreen_toggled(pressed: bool) -> void:
 
 func _on_resolution_selected(idx: int) -> void:
 	PlayerPrefs.resolution_index = idx
-	PlayerPrefs.apply_video()
 	PlayerPrefs.save()
 
 func _on_volume_changed(value: float) -> void:
@@ -336,6 +335,7 @@ func _on_sensitivity_typed(text: String) -> void:
 		_sens_slider.value = value
 
 func _on_done_pressed() -> void:
+	PlayerPrefs.apply_video()
 	close_requested.emit()
 
 func _make_button(label: String) -> Button:
