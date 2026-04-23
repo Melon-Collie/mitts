@@ -67,6 +67,7 @@ func _build_ui() -> void:
 	join_btn.custom_minimum_size = Vector2(120, 48)
 	join_btn.add_theme_font_size_override("font_size", 20)
 	join_btn.pressed.connect(_on_join_pressed)
+	_wire_hover_scale(join_btn)
 	join_row.add_child(join_btn)
 
 	var settings_btn := _make_button("Settings")
@@ -201,6 +202,7 @@ func _build_settings_popup() -> void:
 	left_btn.button_pressed = PlayerPrefs.is_left_handed
 	left_btn.custom_minimum_size = Vector2(90, 48)
 	left_btn.add_theme_font_size_override("font_size", 18)
+	_wire_hover_scale(left_btn)
 	hand_row.add_child(left_btn)
 
 	var right_btn := Button.new()
@@ -209,6 +211,7 @@ func _build_settings_popup() -> void:
 	right_btn.button_pressed = not PlayerPrefs.is_left_handed
 	right_btn.custom_minimum_size = Vector2(90, 48)
 	right_btn.add_theme_font_size_override("font_size", 18)
+	_wire_hover_scale(right_btn)
 	hand_row.add_child(right_btn)
 
 	NetworkManager.local_is_left_handed = PlayerPrefs.is_left_handed
@@ -309,7 +312,19 @@ func _make_button(label: String) -> Button:
 	btn.text = label
 	btn.custom_minimum_size = Vector2(308, 48)
 	btn.add_theme_font_size_override("font_size", 20)
+	_wire_hover_scale(btn)
 	return btn
+
+func _wire_hover_scale(btn: Button) -> void:
+	btn.item_rect_changed.connect(func() -> void: btn.pivot_offset = btn.size / 2.0)
+	btn.mouse_entered.connect(func() -> void: _scale_btn(btn, Vector2(1.04, 1.04)))
+	btn.mouse_exited.connect(func() -> void: _scale_btn(btn, Vector2.ONE))
+	btn.button_down.connect(func() -> void: _scale_btn(btn, Vector2(0.97, 0.97)))
+	btn.button_up.connect(func() -> void: _scale_btn(btn, Vector2(1.04, 1.04)))
+
+func _scale_btn(btn: Button, target: Vector2) -> void:
+	var t := btn.create_tween()
+	t.tween_property(btn, "scale", target, 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 func _on_offline_pressed() -> void:
 	NetworkManager.start_offline()
