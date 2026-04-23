@@ -28,3 +28,8 @@ License: Creative Commons 0 (public domain)
 "Mechanical Plastic Click 11" by SmallConfusion
 https://freesound.org/s/751089/
 License: Creative Commons Attribution 4.0
+
+**goal_horn.wav**
+"fog horn sample(dry).wav" by kathol
+https://freesound.org/s/37914/
+License: Creative Commons 0 (public domain)
