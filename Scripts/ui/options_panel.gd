@@ -10,6 +10,11 @@ var _volume_slider: HSlider = null
 var _res_btn: OptionButton = null
 var _tab_contents: Array[Control] = []
 var _tab_btns: Array[Button] = []
+var _vsync_check: CheckButton = null
+var _fps_btn: OptionButton = null
+var _brightness_slider: HSlider = null
+var _sens_slider: HSlider = null
+var _sens_field: LineEdit = null
 
 const _WHITE  := Color(1.00, 1.00, 1.00, 1.00)
 const _DIM    := Color(0.62, 0.62, 0.68, 1.00)
@@ -55,13 +60,15 @@ func _build_tab_switcher() -> Control:
 
 	var video_tab := _build_video_tab()
 	var audio_tab := _build_audio_tab()
-	_tab_contents = [video_tab, audio_tab]
+	var input_tab := _build_input_tab()
+	_tab_contents = [video_tab, audio_tab, input_tab]
 	content_margin.add_child(video_tab)
 	content_margin.add_child(audio_tab)
+	content_margin.add_child(input_tab)
 
-	for i: int in ["Video", "Audio"].size():
+	for i: int in ["Video", "Audio", "Input"].size():
 		var btn := Button.new()
-		btn.text = ["Video", "Audio"][i]
+		btn.text = ["Video", "Audio", "Input"][i]
 		btn.flat = true
 		btn.custom_minimum_size = Vector2(100, 40)
 		btn.add_theme_font_size_override("font_size", 18)
@@ -139,6 +146,61 @@ func _build_video_tab() -> Control:
 	_res_row.visible = not PlayerPrefs.is_fullscreen
 	box.add_child(_res_row)
 
+	var vsync_row := HBoxContainer.new()
+	vsync_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	vsync_row.add_theme_constant_override("separation", 12)
+	var vsync_label := Label.new()
+	vsync_label.text = "VSync:"
+	vsync_label.add_theme_font_size_override("font_size", 20)
+	vsync_label.add_theme_color_override("font_color", _WHITE)
+	vsync_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	vsync_row.add_child(vsync_label)
+	_vsync_check = CheckButton.new()
+	_vsync_check.set_pressed_no_signal(PlayerPrefs.vsync_enabled)
+	_vsync_check.add_theme_font_size_override("font_size", 18)
+	SoundManager.wire_button(_vsync_check)
+	_vsync_check.toggled.connect(_on_vsync_toggled)
+	vsync_row.add_child(_vsync_check)
+	box.add_child(vsync_row)
+
+	var fps_row := HBoxContainer.new()
+	fps_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	fps_row.add_theme_constant_override("separation", 12)
+	var fps_label := Label.new()
+	fps_label.text = "FPS Cap:"
+	fps_label.add_theme_font_size_override("font_size", 20)
+	fps_label.add_theme_color_override("font_color", _WHITE)
+	fps_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	fps_row.add_child(fps_label)
+	_fps_btn = OptionButton.new()
+	_fps_btn.custom_minimum_size = Vector2(140, 48)
+	_fps_btn.add_theme_font_size_override("font_size", 18)
+	for label: String in ["30", "60", "120", "144", "240", "Unlimited"]:
+		_fps_btn.add_item(label)
+	_fps_btn.selected = PlayerPrefs.fps_cap_index
+	_fps_btn.item_selected.connect(_on_fps_cap_selected)
+	fps_row.add_child(_fps_btn)
+	box.add_child(fps_row)
+
+	var bright_row := HBoxContainer.new()
+	bright_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	bright_row.add_theme_constant_override("separation", 12)
+	var bright_label := Label.new()
+	bright_label.text = "Brightness:"
+	bright_label.add_theme_font_size_override("font_size", 20)
+	bright_label.add_theme_color_override("font_color", _WHITE)
+	bright_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	bright_row.add_child(bright_label)
+	_brightness_slider = HSlider.new()
+	_brightness_slider.min_value = 0.5
+	_brightness_slider.max_value = 1.5
+	_brightness_slider.step = 0.05
+	_brightness_slider.value = PlayerPrefs.brightness
+	_brightness_slider.custom_minimum_size = Vector2(200, 32)
+	_brightness_slider.value_changed.connect(_on_brightness_changed)
+	bright_row.add_child(_brightness_slider)
+	box.add_child(bright_row)
+
 	return box
 
 func _build_audio_tab() -> Control:
@@ -188,6 +250,39 @@ func _build_audio_tab() -> Control:
 
 	return box
 
+func _build_input_tab() -> Control:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+
+	var sens_row := HBoxContainer.new()
+	sens_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	sens_row.add_theme_constant_override("separation", 12)
+	var sens_label := Label.new()
+	sens_label.text = "Mouse Sensitivity:"
+	sens_label.add_theme_font_size_override("font_size", 20)
+	sens_label.add_theme_color_override("font_color", _WHITE)
+	sens_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	sens_row.add_child(sens_label)
+	_sens_slider = HSlider.new()
+	_sens_slider.min_value = 0.5
+	_sens_slider.max_value = 3.0
+	_sens_slider.step = 0.05
+	_sens_slider.value = PlayerPrefs.mouse_sensitivity
+	_sens_slider.custom_minimum_size = Vector2(160, 32)
+	_sens_slider.value_changed.connect(_on_sensitivity_changed)
+	sens_row.add_child(_sens_slider)
+	_sens_field = LineEdit.new()
+	_sens_field.text = "%.2f" % PlayerPrefs.mouse_sensitivity
+	_sens_field.custom_minimum_size = Vector2(64, 32)
+	_sens_field.add_theme_font_size_override("font_size", 18)
+	_sens_field.text_submitted.connect(_on_sensitivity_typed)
+	_sens_field.focus_exited.connect(func() -> void: _on_sensitivity_typed(_sens_field.text))
+	sens_row.add_child(_sens_field)
+	box.add_child(sens_row)
+
+	return box
+
 # ---------------------------------------------------------------------------
 # Signal handlers
 # ---------------------------------------------------------------------------
@@ -213,6 +308,32 @@ func _on_mute_toggled(pressed: bool) -> void:
 	PlayerPrefs.master_muted = pressed
 	PlayerPrefs.apply_audio()
 	PlayerPrefs.save()
+
+func _on_vsync_toggled(pressed: bool) -> void:
+	PlayerPrefs.vsync_enabled = pressed
+	PlayerPrefs.apply_video()
+	PlayerPrefs.save()
+
+func _on_fps_cap_selected(idx: int) -> void:
+	PlayerPrefs.fps_cap_index = idx
+	PlayerPrefs.apply_video()
+	PlayerPrefs.save()
+
+func _on_brightness_changed(value: float) -> void:
+	PlayerPrefs.brightness = value
+	PlayerPrefs.apply_video()
+	PlayerPrefs.save()
+
+func _on_sensitivity_changed(value: float) -> void:
+	PlayerPrefs.mouse_sensitivity = value
+	PlayerPrefs.save()
+	if _sens_field != null:
+		_sens_field.text = "%.2f" % value
+
+func _on_sensitivity_typed(text: String) -> void:
+	var value: float = clampf(text.to_float(), 0.5, 3.0)
+	if _sens_slider != null:
+		_sens_slider.value = value
 
 func _on_done_pressed() -> void:
 	close_requested.emit()

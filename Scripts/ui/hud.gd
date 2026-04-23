@@ -28,6 +28,9 @@ var _away_badge_label: Label = null
 var _flash_rect: ColorRect = null
 var _vignette_rect: ColorRect = null
 var _last_clock_pulse_second: int = -1
+var _confirm_popup: CanvasLayer = null
+var _confirm_label: Label = null
+var _confirm_callback: Callable = Callable()
 
 const _DARK_BG    := Color(0.07, 0.07, 0.09, 0.92)
 const _WHITE      := Color(1.00, 1.00, 1.00, 1.00)
@@ -43,6 +46,7 @@ func _ready() -> void:
 	_build_version_tag()
 	_build_game_over_popup()
 	_build_game_menu()
+	_build_confirm_popup()
 	_build_toast_area()
 	_build_flash_overlay()
 	_build_vignette_overlay()
@@ -69,6 +73,10 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		if _game_over_popup.visible:
+			return
+		if _confirm_popup != null and _confirm_popup.visible:
+			_confirm_popup.visible = false
+			get_viewport().set_input_as_handled()
 			return
 		if _game_menu.visible and _options_container != null and _options_container.visible:
 			_options_container.visible = false
@@ -290,7 +298,8 @@ func _build_game_over_popup() -> void:
 	_add_host_button(vbox, "Return to Lobby", func() -> void: GameManager.return_to_lobby())
 
 	var menu_btn := _popup_button("Disconnect")
-	menu_btn.pressed.connect(func() -> void: GameManager.exit_to_main_menu())
+	menu_btn.pressed.connect(func() -> void:
+		_show_confirm("Return to main menu?", GameManager.exit_to_main_menu))
 	vbox.add_child(menu_btn)
 
 	var root := Control.new()
@@ -350,14 +359,16 @@ func _build_game_menu() -> void:
 	vbox.add_child(bug_btn)
 
 	var quit_btn := _popup_button("Disconnect")
-	quit_btn.pressed.connect(func() -> void: GameManager.exit_to_main_menu())
+	quit_btn.pressed.connect(func() -> void:
+		_show_confirm("Return to main menu?", GameManager.exit_to_main_menu))
 	vbox.add_child(quit_btn)
 
 	var exit_btn := _popup_button("Exit Game")
 	exit_btn.pressed.connect(func() -> void:
-		GameManager.on_scene_exit()
-		NetworkManager.reset()
-		get_tree().quit())
+		_show_confirm("Exit game?", func() -> void:
+			GameManager.on_scene_exit()
+			NetworkManager.reset()
+			get_tree().quit()))
 	vbox.add_child(exit_btn)
 
 	var root := Control.new()
@@ -429,6 +440,68 @@ func _build_options_overlay() -> void:
 	options_layer.layer = 21
 	options_layer.add_child(root)
 	add_child(options_layer)
+
+func _build_confirm_popup() -> void:
+	var overlay := ColorRect.new()
+	overlay.color = Color(0.0, 0.0, 0.0, 0.6)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = _DARK_BG
+	panel_style.set_corner_radius_all(6)
+	panel_style.set_content_margin_all(36)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", panel_style)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 20)
+	panel.add_child(vbox)
+
+	_confirm_label = Label.new()
+	_confirm_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_confirm_label.add_theme_font_size_override("font_size", 26)
+	_confirm_label.add_theme_color_override("font_color", _WHITE)
+	vbox.add_child(_confirm_label)
+
+	var btn_row := HBoxContainer.new()
+	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	btn_row.add_theme_constant_override("separation", 16)
+	vbox.add_child(btn_row)
+
+	var confirm_btn := _popup_button("Confirm")
+	confirm_btn.custom_minimum_size = Vector2(140, 48)
+	confirm_btn.pressed.connect(func() -> void:
+		_confirm_popup.visible = false
+		if _confirm_callback.is_valid():
+			_confirm_callback.call())
+	btn_row.add_child(confirm_btn)
+
+	var cancel_btn := _popup_button("Cancel")
+	cancel_btn.custom_minimum_size = Vector2(140, 48)
+	cancel_btn.pressed.connect(func() -> void: _confirm_popup.visible = false)
+	btn_row.add_child(cancel_btn)
+
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(overlay)
+	root.add_child(panel)
+
+	_confirm_popup = CanvasLayer.new()
+	_confirm_popup.layer = 22
+	_confirm_popup.visible = false
+	_confirm_popup.add_child(root)
+	add_child(_confirm_popup)
+
+func _show_confirm(message: String, callback: Callable) -> void:
+	_confirm_label.text = message
+	_confirm_callback = callback
+	_confirm_popup.visible = true
 
 func _build_flash_overlay() -> void:
 	_flash_rect = ColorRect.new()

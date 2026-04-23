@@ -24,8 +24,9 @@ func tick_wrister_charge(
 		screen_pos: Vector2,
 		max_charge_direction_variance: float,
 		max_wrister_charge_distance: float) -> void:
-	var cur := Vector3(screen_pos.x * 0.01, 0.0, screen_pos.y * 0.01)
-	var prev := Vector3(prev_mouse_screen_pos.x * 0.01, 0.0, prev_mouse_screen_pos.y * 0.01)
+	var scale: float = 0.01 * PlayerPrefs.mouse_sensitivity
+	var cur := Vector3(screen_pos.x * scale, 0.0, screen_pos.y * scale)
+	var prev := Vector3(prev_mouse_screen_pos.x * scale, 0.0, prev_mouse_screen_pos.y * scale)
 	var result: Dictionary = ChargeTracking.accumulate(
 			prev, cur, prev_blade_dir, charge_distance, max_charge_direction_variance)
 	charge_distance = minf(result.charge, max_wrister_charge_distance)

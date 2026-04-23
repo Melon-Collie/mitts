@@ -1,6 +1,7 @@
 extends Node
 
 func _ready() -> void:
+	PlayerPrefs.apply_video()
 	NetworkManager.on_game_scene_ready()
 	if not NetworkManager.is_host and not NetworkManager.pending_join_slot.is_empty():
 		var s: Dictionary = NetworkManager.pending_join_slot

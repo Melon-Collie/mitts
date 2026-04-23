@@ -6,6 +6,7 @@ var _error_label: Label = null
 var _player_popup: Control = null
 var _options_popup: Control = null
 var _connecting_popup: Control = null
+var _exit_popup: Control = null
 
 func _ready() -> void:
 	TeamColorRegistry.ensure_loaded()
@@ -81,7 +82,7 @@ func _build_ui() -> void:
 	vbox.add_child(options_btn)
 
 	var exit_btn := _make_button("Exit Game")
-	exit_btn.pressed.connect(func() -> void: get_tree().quit())
+	exit_btn.pressed.connect(func() -> void: _exit_popup.visible = true)
 	vbox.add_child(exit_btn)
 
 	_error_label = Label.new()
@@ -105,6 +106,7 @@ func _build_ui() -> void:
 	_build_player_popup()
 	_build_options_popup()
 	_build_connecting_popup()
+	_build_exit_popup()
 
 func _build_player_popup() -> void:
 	var overlay := ColorRect.new()
@@ -324,6 +326,57 @@ func _build_connecting_popup() -> void:
 	_connecting_popup.add_child(panel)
 	add_child(_connecting_popup)
 
+func _build_exit_popup() -> void:
+	var overlay := ColorRect.new()
+	overlay.color = Color(0.0, 0.0, 0.0, 0.6)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.07, 0.07, 0.09, 0.96)
+	panel_style.set_corner_radius_all(6)
+	panel_style.set_content_margin_all(36)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", panel_style)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 20)
+	panel.add_child(vbox)
+
+	var label := Label.new()
+	label.text = "Exit game?"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 26)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	vbox.add_child(label)
+
+	var btn_row := HBoxContainer.new()
+	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	btn_row.add_theme_constant_override("separation", 16)
+	vbox.add_child(btn_row)
+
+	var confirm_btn := _make_button("Exit")
+	confirm_btn.custom_minimum_size = Vector2(140, 48)
+	confirm_btn.pressed.connect(func() -> void: get_tree().quit())
+	btn_row.add_child(confirm_btn)
+
+	var cancel_btn := _make_button("Cancel")
+	cancel_btn.custom_minimum_size = Vector2(140, 48)
+	cancel_btn.pressed.connect(func() -> void: _exit_popup.visible = false)
+	btn_row.add_child(cancel_btn)
+
+	_exit_popup = Control.new()
+	_exit_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_exit_popup.visible = false
+	_exit_popup.add_child(overlay)
+	_exit_popup.add_child(panel)
+	add_child(_exit_popup)
+
 func _show_connecting(ip: String) -> void:
 	var label := _connecting_popup.find_child("StatusLabel", true, false) as Label
 	if label:
@@ -345,6 +398,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		elif _options_popup.visible:
 			_options_popup.visible = false
+			get_viewport().set_input_as_handled()
+		elif _exit_popup.visible:
+			_exit_popup.visible = false
 			get_viewport().set_input_as_handled()
 
 func _on_player_pressed() -> void:
