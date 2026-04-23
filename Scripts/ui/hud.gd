@@ -14,6 +14,7 @@ var _game_over_popup: CanvasLayer = null
 var _game_menu: CanvasLayer = null
 var _slot_grid: SlotGridPanel = null
 var _slot_grid_container: Control = null
+var _options_container: Control = null
 var _toast_container: VBoxContainer = null
 var _home_sog_label: Label = null
 var _away_sog_label: Label = null
@@ -69,7 +70,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		if _game_over_popup.visible:
 			return
-		if _game_menu.visible and _slot_grid_container != null and _slot_grid_container.visible:
+		if _game_menu.visible and _options_container != null and _options_container.visible:
+			_options_container.visible = false
+		elif _game_menu.visible and _slot_grid_container != null and _slot_grid_container.visible:
 			_slot_grid_container.visible = false
 		else:
 			_set_menu_open(not _game_menu.visible)
@@ -78,8 +81,11 @@ func _unhandled_input(event: InputEvent) -> void:
 func _set_menu_open(open: bool) -> void:
 	_game_menu.visible = open
 	GameManager.set_input_blocked(open)
-	if not open and _slot_grid_container != null:
-		_slot_grid_container.visible = false
+	if not open:
+		if _slot_grid_container != null:
+			_slot_grid_container.visible = false
+		if _options_container != null:
+			_options_container.visible = false
 
 func _process(_delta: float) -> void:
 	if _local_skater == null:
@@ -328,6 +334,10 @@ func _build_game_menu() -> void:
 	change_pos_btn.pressed.connect(_on_change_position_pressed)
 	vbox.add_child(change_pos_btn)
 
+	var options_btn := _popup_button("Options")
+	options_btn.pressed.connect(_on_options_pressed)
+	vbox.add_child(options_btn)
+
 	_add_host_button(vbox, "Rematch", func() -> void:
 		_set_menu_open(false)
 		GameManager.reset_game())
@@ -389,6 +399,36 @@ func _build_game_menu() -> void:
 	slot_grid_layer.layer = 21
 	slot_grid_layer.add_child(slot_grid_root)
 	add_child(slot_grid_layer)
+
+	_build_options_overlay()
+
+func _build_options_overlay() -> void:
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = _DARK_BG
+	panel_style.set_corner_radius_all(6)
+	panel_style.set_content_margin_all(32)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", panel_style)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+
+	var options := OptionsPanel.new()
+	options.close_requested.connect(func() -> void: _options_container.visible = false)
+	panel.add_child(options)
+
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(panel)
+
+	_options_container = root
+	_options_container.visible = false
+
+	var options_layer := CanvasLayer.new()
+	options_layer.layer = 21
+	options_layer.add_child(root)
+	add_child(options_layer)
 
 func _build_flash_overlay() -> void:
 	_flash_rect = ColorRect.new()
@@ -620,6 +660,9 @@ func _get_team_colors() -> Array[Dictionary]:
 		TeamColorRegistry.get_colors(GameManager.teams[0].color_id, 0),
 		TeamColorRegistry.get_colors(GameManager.teams[1].color_id, 1),
 	]
+
+func _on_options_pressed() -> void:
+	_options_container.visible = true
 
 func _on_change_position_pressed() -> void:
 	_slot_grid_container.visible = not _slot_grid_container.visible
