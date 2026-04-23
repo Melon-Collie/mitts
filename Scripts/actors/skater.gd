@@ -385,6 +385,7 @@ func set_ring_color(color: Color) -> void:
 func set_jersey_info(p_name: String, number: int, text_color: Color) -> void:
 	for child: Node in upper_body.get_children():
 		if child.name in ["JerseyBackMesh", "JerseyShoulderL", "JerseyShoulderR"]:
+			upper_body.remove_child(child)
 			child.queue_free()
 
 	var tex: ImageTexture = JerseyTextureGenerator.make_jersey_texture(p_name, number, text_color)
@@ -423,18 +424,22 @@ func set_jersey_stripes(
 		socks_stripe_color: Color) -> void:
 	# Free cuff meshes from a previous call before rebuilding stripes.
 	if _top_cuff_mesh != null and is_instance_valid(_top_cuff_mesh):
+		upper_body.remove_child(_top_cuff_mesh)
 		_top_cuff_mesh.queue_free()
 	_top_cuff_mesh = null
 	if _bot_cuff_mesh != null and is_instance_valid(_bot_cuff_mesh):
+		upper_body.remove_child(_bot_cuff_mesh)
 		_bot_cuff_mesh.queue_free()
 	_bot_cuff_mesh = null
 
 	# Remove any previously generated stripe nodes.
 	for node: Node in upper_body.get_children():
 		if node.name.begins_with("Stripe_"):
+			upper_body.remove_child(node)
 			node.queue_free()
 	for node: Node in lower_body.get_children():
 		if node.name.begins_with("Stripe_"):
+			lower_body.remove_child(node)
 			node.queue_free()
 
 	# Jersey hem band — bottom 0.08 m of the UpperBodyMesh
