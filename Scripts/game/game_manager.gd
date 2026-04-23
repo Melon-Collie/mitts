@@ -418,6 +418,8 @@ func _wire_subsystems() -> void:
 
 
 func _wire_sound_signals() -> void:
+	if NetworkManager.local_puck_pickup_confirmed.is_connected(_on_local_pickup_sound):
+		return
 	NetworkManager.local_puck_pickup_confirmed.connect(_on_local_pickup_sound)
 	NetworkManager.remote_carrier_changed.connect(_on_remote_carrier_sound)
 	_phase_coord.goal_scored.connect(
