@@ -23,3 +23,8 @@ License: Creative Commons Attribution 4.0
 "Windbreaker Pop" by VANWINKLE3
 https://freesound.org/s/607123/
 License: Creative Commons 0 (public domain)
+
+**puck_pickup.wav**
+"Mechanical Plastic Click 11" by SmallConfusion
+https://freesound.org/s/751089/
+License: Creative Commons Attribution 4.0
