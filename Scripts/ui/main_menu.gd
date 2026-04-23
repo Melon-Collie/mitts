@@ -426,10 +426,12 @@ func _on_loading_clock_ready() -> void:
 func _on_join_got_lobby(_roster: Array) -> void:
 	if NetworkManager.join_in_progress.is_connected(_on_join_got_game):
 		NetworkManager.join_in_progress.disconnect(_on_join_got_game)
-	get_tree().change_scene_to_file(Constants.SCENE_LOBBY)
+	_loading_screen.close_when_ready(func() -> void:
+		get_tree().change_scene_to_file(Constants.SCENE_LOBBY))
 
 func _on_join_got_game(config: Dictionary) -> void:
 	if NetworkManager.lobby_roster_synced.is_connected(_on_join_got_lobby):
 		NetworkManager.lobby_roster_synced.disconnect(_on_join_got_lobby)
 	NetworkManager.pending_game_config = config
-	get_tree().change_scene_to_file(Constants.SCENE_HOCKEY)
+	_loading_screen.close_when_ready(func() -> void:
+		get_tree().change_scene_to_file(Constants.SCENE_HOCKEY))

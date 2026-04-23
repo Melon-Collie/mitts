@@ -9,6 +9,9 @@ var _cancel_btn: Button = null
 var _base_status: String = ""
 var _dot_timer: float = 0.0
 var _dot_count: int = 0
+var _shown_at: float = -1.0
+
+const MIN_DISPLAY_SECS: float = 1.0
 
 func _ready() -> void:
 	layer = 100
@@ -76,7 +79,15 @@ func show_joining(ip: String) -> void:
 	_subtitle_label.text = "Joining %s" % ip
 	_cancel_btn.visible = true
 	set_status("Connecting")
+	_shown_at = Time.get_ticks_msec() / 1000.0
 	visible = true
+
+func close_when_ready(callback: Callable) -> void:
+	var remaining: float = MIN_DISPLAY_SECS - (Time.get_ticks_msec() / 1000.0 - _shown_at)
+	if remaining <= 0.0:
+		callback.call()
+	else:
+		get_tree().create_timer(remaining).timeout.connect(callback, CONNECT_ONE_SHOT)
 
 func set_status(text: String) -> void:
 	_base_status = text
