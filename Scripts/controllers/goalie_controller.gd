@@ -36,12 +36,16 @@ extends Node
 @export var five_hole_shuffle_max: float = 0.06
 @export var five_hole_t_push_max: float = 0.15
 
-@export var extrapolation_max_ms: float = 50.0
 @export var tracking_speed: float = 6.0
 @export var part_lerp_speed: float = 6.0
 @export var reaction_lerp_speed: float = 18.0
 @export var recovery_lerp_speed: float = 3.0
-@export var interpolation_delay: float = Constants.NETWORK_INTERPOLATION_DELAY
+
+# ── Client Correction Tuning ──────────────────────────────────────────────────
+# Server broadcasts (40 Hz) soft-correct the client-side goalie simulation.
+@export var correction_blend: float = 0.10      # per-broadcast blend strength toward server
+@export var correction_hard_snap: float = 1.5   # metres — snap immediately if farther than this
+@export var correction_dead_zone: float = 0.05  # metres — ignore errors smaller than this
 
 @export var low_shot_threshold: float = 0.45
 @export var elevated_threshold: float = 0.45
@@ -94,15 +98,13 @@ var _recovering_from_butterfly: bool = false
 var _prev_puck_position: Vector3 = Vector3.ZERO
 var _puck_approach_velocity: float = 0.0
 
-# ── Client Interpolation ──────────────────────────────────────────────────────
-var _state_buffer: Array[BufferedGoalieState] = []
-var is_extrapolating: bool = false
-var _transition_override_state: int = -1
-var _transition_override_until: float = 0.0
+# ── Client Simulation ─────────────────────────────────────────────────────────
+var is_extrapolating: bool = false  # always false; kept for telemetry compat
 var _client_reaction_timer: float = 0.0
+var _last_server_ts: float = 0.0
 
 func get_buffer_depth() -> int:
-	return _state_buffer.size()
+	return 0  # no longer buffering; kept for telemetry compat
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: float, assigned_is_server: bool) -> void:
@@ -147,13 +149,12 @@ func reset_to_crease() -> void:
 func _physics_process(delta: float) -> void:
 	if goalie == null or puck == null:
 		return
-	if not is_server:
-		if _client_reaction_timer > 0.0:
-			_client_reaction_timer -= delta
-			if _client_reaction_timer <= 0.0:
-				_reacting_to_shot = false
-		_interpolate()
-		return
+	# Client runs the full goalie AI every frame using its local puck position.
+	# Server broadcasts correct the AI state softly via apply_state().
+	if not is_server and _client_reaction_timer > 0.0:
+		_client_reaction_timer -= delta
+		if _client_reaction_timer <= 0.0:
+			_reacting_to_shot = false
 	_update_tracking(delta)
 	_update_shot_timer(delta)
 	_update_state(delta)
@@ -169,10 +170,12 @@ func _update_tracking(delta: float) -> void:
 	var dz: float = (puck.global_position.z - _prev_puck_position.z) * -_direction_sign
 	_puck_approach_velocity = dz / maxf(delta, 0.0001)
 	_prev_puck_position = puck.global_position
-	if not _reacting_to_shot:
+	if not _reacting_to_shot or not is_server:
 		return
 	# Re-project each frame so impact position stays accurate (handles bounces, deflections).
 	# detect_shot returns is_shot=false if puck slowed or moved away from net — clears reaction.
+	# Client skips this: linear_velocity is unreliable during interpolation; impact
+	# position comes from the shot_reaction RPC and clears via _client_reaction_timer.
 	var result: GoalieBehaviorRules.ShotResult = GoalieBehaviorRules.detect_shot(
 			puck.global_position, puck.linear_velocity,
 			_goal_line_z, _goal_center_x, _shot_detection_config())
@@ -215,11 +218,20 @@ func _update_state(delta: float) -> void:
 				_state = State.BUTTERFLY
 				_recovery_timer = 0.0
 		State.BUTTERFLY:
-			var moving_away: bool = puck.linear_velocity.z * _direction_sign > 0.0
+			# linear_velocity is unreliable on the client (frozen body during interpolation).
+			# Use approach velocity (computed from position delta) as a reliable proxy.
+			var speed_low: bool
+			var moving_away: bool
+			if is_server:
+				speed_low = puck.linear_velocity.length() < shot_speed_threshold
+				moving_away = puck.linear_velocity.z * _direction_sign > 0.0
+			else:
+				speed_low = absf(_puck_approach_velocity) < shot_speed_threshold
+				moving_away = _puck_approach_velocity < 0.0
 			# Don't recover while a player is still charging the net.
 			if _is_under_pressure():
 				_recovery_timer = 0.0
-			elif puck.linear_velocity.length() < shot_speed_threshold or moving_away:
+			elif speed_low or moving_away:
 				_recovery_timer += delta
 				if _recovery_timer >= butterfly_recovery_time:
 					_state = State.STANDING
@@ -471,63 +483,33 @@ func get_state() -> GoalieNetworkState:
 func apply_state(network_state: GoalieNetworkState, host_ts: float) -> void:
 	if is_server:
 		return
-	if not _state_buffer.is_empty() and host_ts < _state_buffer.back().timestamp:
-		return
-	var buffered := BufferedGoalieState.new()
-	buffered.timestamp = host_ts
-	buffered.state = network_state
-	_state_buffer.append(buffered)
-	if _state_buffer.size() > 30:
-		_state_buffer.pop_front()
-	_adapt_interpolation_delay()
-
-func _adapt_interpolation_delay() -> void:
-	interpolation_delay = NetworkManager.adapt_interpolation_delay(interpolation_delay)
-
-func _interpolate() -> void:
-	var render_time: float = NetworkManager.estimated_host_time() - interpolation_delay
-	var bracket: BufferedStateInterpolator.BracketResult = BufferedStateInterpolator.find_bracket(
-			_state_buffer, render_time)
-	is_extrapolating = bracket != null and bracket.is_extrapolating
-	if bracket == null:
-		return
-	var interpolated := GoalieNetworkState.new()
-	if bracket.is_extrapolating:
-		var newest: GoalieNetworkState = bracket.to_state
-		var dt: float = minf(bracket.extrapolation_dt, extrapolation_max_ms / 1000.0)
-		interpolated.position_x = newest.position_x + newest.velocity_x * dt
-		interpolated.position_z = newest.position_z + newest.velocity_z * dt
-		interpolated.rotation_y = newest.rotation_y
-		interpolated.five_hole_openness = newest.five_hole_openness
-		interpolated.state_enum = newest.state_enum
-		interpolated.velocity_x = newest.velocity_x
-		interpolated.velocity_z = newest.velocity_z
-	else:
-		var from_state: GoalieNetworkState = bracket.from_state
-		var to_state: GoalieNetworkState = bracket.to_state
-		var t: float = bracket.t
-		var hermite_pos: Vector3 = BufferedStateInterpolator.hermite(
-				Vector3(from_state.position_x, 0.0, from_state.position_z),
-				Vector3(from_state.velocity_x, 0.0, from_state.velocity_z),
-				Vector3(to_state.position_x,   0.0, to_state.position_z),
-				Vector3(to_state.velocity_x,   0.0, to_state.velocity_z),
-				t, bracket.bracket_dt)
-		interpolated.position_x = hermite_pos.x
-		interpolated.position_z = hermite_pos.z
-		interpolated.rotation_y = lerp_angle(from_state.rotation_y, to_state.rotation_y, t)
-		interpolated.five_hole_openness = lerpf(from_state.five_hole_openness, to_state.five_hole_openness, t)
-		interpolated.state_enum = to_state.state_enum
-	_apply_network_state(interpolated)
-	BufferedStateInterpolator.drop_stale(_state_buffer, render_time)
+	if host_ts <= _last_server_ts:
+		return  # out-of-order packet; discard
+	_last_server_ts = host_ts
+	# Soft-correct the client AI position toward the server broadcast.
+	# State is managed by apply_state_transition (reliable RPC) — don't
+	# override it here; the unreliable broadcast can arrive out of order
+	# relative to state-change RPCs and would cause flickering.
+	var server_depth: float = (network_state.position_z - _goal_line_z) * _direction_sign
+	var client_z: float = _goal_line_z + _direction_sign * _current_depth
+	var dist: float = Vector2(_current_x - network_state.position_x,
+			client_z - network_state.position_z).length()
+	if dist > correction_hard_snap:
+		_current_x = network_state.position_x
+		_current_depth = server_depth
+	elif dist > correction_dead_zone:
+		_current_x = lerpf(_current_x, network_state.position_x, correction_blend)
+		_current_depth = lerpf(_current_depth, server_depth, correction_blend)
+	_five_hole_openness = lerpf(_five_hole_openness, network_state.five_hole_openness, correction_blend)
 
 func apply_state_transition(new_state: int) -> void:
 	if is_server:
 		return
-	_transition_override_state = new_state
-	_transition_override_until = Time.get_ticks_msec() / 1000.0 + 0.15
+	_state = new_state as State
 	if new_state == State.STANDING as int:
 		_reacting_to_shot = false
 		_client_reaction_timer = 0.0
+		_shot_timer = 0.0
 
 func apply_shot_reaction(impact_x: float, impact_y: float, is_elevated: bool) -> void:
 	if is_server:
@@ -537,51 +519,10 @@ func apply_shot_reaction(impact_x: float, impact_y: float, is_elevated: bool) ->
 	_shot_impact_y = impact_y
 	_shot_is_elevated = is_elevated
 	_client_reaction_timer = 1.5
-
-func _apply_network_state(s: GoalieNetworkState) -> void:
-	goalie.set_goalie_position(s.position_x, s.position_z)
-	goalie.set_goalie_rotation_y(s.rotation_y)
-	_five_hole_openness = s.five_hole_openness
-	var effective_state: int = s.state_enum
-	if _transition_override_state >= 0:
-		if Time.get_ticks_msec() / 1000.0 < _transition_override_until:
-			effective_state = _transition_override_state
-		else:
-			_transition_override_state = -1
-	var config := _get_config(effective_state as State)
-	goalie.apply_body_config(config, 1.0)
-	_forward_predict_position(s, effective_state)
-
-
-func _forward_predict_position(s: GoalieNetworkState, effective_state: int) -> void:
-	if puck == null:
-		return
-	# Dead-reckon position forward over the interpolation delay using the
-	# transmitted velocity. This keeps the goalie visually current during
-	# butterfly, shot reactions, and depth transitions — states where AI
-	# prediction was previously suppressed.
-	var predicted_x: float = s.position_x + s.velocity_x * interpolation_delay
-	var predicted_z: float = s.position_z + s.velocity_z * interpolation_delay
-	match effective_state:
-		State.STANDING:
-			if not _reacting_to_shot:
-				# AI lateral override: re-target based on current puck position
-				# from the velocity-predicted depth rather than the raw snapshot.
-				var current_depth: float = (predicted_z - _goal_line_z) * _direction_sign
-				var target_x: float = GoalieBehaviorRules.target_lateral_x(
-						puck.global_position, _goal_line_z, _goal_center_x,
-						current_depth, net_half_width, _direction_sign)
-				var speed: float = t_push_speed if abs(target_x - predicted_x) > lateral_threshold else shuffle_speed
-				predicted_x = move_toward(predicted_x, target_x, speed * interpolation_delay)
-		State.RVH_LEFT:
-			predicted_x = move_toward(predicted_x,
-					_goal_center_x + (net_half_width - 0.38) * _direction_sign,
-					rvh_transition_speed * interpolation_delay)
-		State.RVH_RIGHT:
-			predicted_x = move_toward(predicted_x,
-					_goal_center_x - (net_half_width - 0.38) * _direction_sign,
-					rvh_transition_speed * interpolation_delay)
-	goalie.set_goalie_position(predicted_x, predicted_z)
+	# Mirror the host: low shots start the butterfly-drop countdown so the
+	# client drops butterfly on the same frame cadence as the server.
+	if not is_elevated and _state == State.STANDING:
+		_shot_timer = reaction_delay
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 func _is_puck_in_defensive_zone() -> bool:
