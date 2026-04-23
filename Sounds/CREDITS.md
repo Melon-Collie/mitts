@@ -11,3 +11,10 @@ License: Creative Commons 0 (public domain)
 "Select - Impact Organic UI Bright.wav" by ryusa
 https://freesound.org/s/467603/
 License: Creative Commons Attribution 4.0
+
+## Game Sounds
+
+**shot_slapper.wav**
+"Plastic Bang.wav" by djahren
+https://freesound.org/s/84803/
+License: Creative Commons Attribution 4.0

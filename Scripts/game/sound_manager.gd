@@ -16,7 +16,7 @@ const _SOUND_PATHS: Dictionary = {
 	Sound.UI_HOVER:     "res://Sounds/ui_hover.wav",
 	Sound.UI_CLICK:     "res://Sounds/ui_select.wav",
 	Sound.SHOT_WRISTER: "res://Sounds/shot_wrister.ogg",
-	Sound.SHOT_SLAPPER: "res://Sounds/shot_slapper.ogg",
+	Sound.SHOT_SLAPPER: "res://Sounds/shot_slapper.wav",
 	Sound.PUCK_PICKUP:  "res://Sounds/puck_pickup.ogg",
 	Sound.GOAL_HORN:    "res://Sounds/goal_horn.ogg",
 	Sound.SKATE_BRAKE:  "res://Sounds/skate_brake.ogg",
