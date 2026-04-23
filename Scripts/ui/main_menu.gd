@@ -282,6 +282,55 @@ func _build_settings_popup() -> void:
 		PlayerPrefs.save())
 	mute_row.add_child(mute_check)
 
+	var fs_row := HBoxContainer.new()
+	fs_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	fs_row.add_theme_constant_override("separation", 12)
+	vbox.add_child(fs_row)
+
+	var fs_label := Label.new()
+	fs_label.text = "Fullscreen:"
+	fs_label.add_theme_font_size_override("font_size", 20)
+	fs_label.add_theme_color_override("font_color", Color.WHITE)
+	fs_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	fs_row.add_child(fs_label)
+
+	var res_row := HBoxContainer.new()
+	res_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	res_row.add_theme_constant_override("separation", 12)
+	vbox.add_child(res_row)
+
+	var res_label := Label.new()
+	res_label.text = "Resolution:"
+	res_label.add_theme_font_size_override("font_size", 20)
+	res_label.add_theme_color_override("font_color", Color.WHITE)
+	res_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	res_row.add_child(res_label)
+
+	var res_btn := OptionButton.new()
+	res_btn.custom_minimum_size = Vector2(160, 48)
+	res_btn.add_theme_font_size_override("font_size", 18)
+	for i: int in PlayerPrefs.RESOLUTIONS.size():
+		var r: Vector2i = PlayerPrefs.RESOLUTIONS[i]
+		res_btn.add_item("%dx%d" % [r.x, r.y], i)
+	res_btn.selected = PlayerPrefs.resolution_index
+	res_btn.item_selected.connect(func(idx: int) -> void:
+		PlayerPrefs.resolution_index = idx
+		PlayerPrefs.apply_video()
+		PlayerPrefs.save())
+	res_row.add_child(res_btn)
+	res_row.visible = not PlayerPrefs.is_fullscreen
+
+	var fs_check := CheckButton.new()
+	fs_check.button_pressed = PlayerPrefs.is_fullscreen
+	fs_check.add_theme_font_size_override("font_size", 18)
+	SoundManager.wire_button(fs_check)
+	fs_check.toggled.connect(func(pressed: bool) -> void:
+		PlayerPrefs.is_fullscreen = pressed
+		PlayerPrefs.apply_video()
+		PlayerPrefs.save()
+		res_row.visible = not pressed)
+	fs_row.add_child(fs_check)
+
 	var done_btn := _make_button("Done")
 	done_btn.pressed.connect(func() -> void: _settings_popup.visible = false)
 	vbox.add_child(done_btn)
