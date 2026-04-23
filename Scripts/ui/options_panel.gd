@@ -15,6 +15,8 @@ var _fps_btn: OptionButton = null
 var _brightness_slider: HSlider = null
 var _sens_slider: HSlider = null
 var _sens_field: LineEdit = null
+var _apply_btn: Button = null
+var _original: Dictionary = {}
 
 const _WHITE  := Color(1.00, 1.00, 1.00, 1.00)
 const _DIM    := Color(0.62, 0.62, 0.68, 1.00)
@@ -33,9 +35,49 @@ func _ready() -> void:
 
 	add_child(_build_tab_switcher())
 
-	var done_btn := _make_button("Done")
-	done_btn.pressed.connect(_on_done_pressed)
-	add_child(done_btn)
+	_original = _snapshot()
+
+	var btn_row := HBoxContainer.new()
+	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	btn_row.add_theme_constant_override("separation", 12)
+	add_child(btn_row)
+
+	_apply_btn = _make_small_button("Apply")
+	_apply_btn.pressed.connect(_on_apply_pressed)
+	_apply_btn.disabled = true
+	btn_row.add_child(_apply_btn)
+
+	var cancel_btn := _make_small_button("Cancel")
+	cancel_btn.pressed.connect(_on_cancel_pressed)
+	btn_row.add_child(cancel_btn)
+
+func _snapshot() -> Dictionary:
+	return {
+		"fullscreen": PlayerPrefs.is_fullscreen,
+		"resolution_index": PlayerPrefs.resolution_index,
+		"vsync_enabled": PlayerPrefs.vsync_enabled,
+		"fps_cap_index": PlayerPrefs.fps_cap_index,
+		"brightness": PlayerPrefs.brightness,
+		"master_volume": PlayerPrefs.master_volume,
+		"master_muted": PlayerPrefs.master_muted,
+		"mouse_sensitivity": PlayerPrefs.mouse_sensitivity,
+	}
+
+func _read_controls() -> Dictionary:
+	return {
+		"fullscreen": _fs_check.button_pressed,
+		"resolution_index": _res_btn.selected,
+		"vsync_enabled": _vsync_check.button_pressed,
+		"fps_cap_index": _fps_btn.selected,
+		"brightness": _brightness_slider.value,
+		"master_volume": _volume_slider.value,
+		"master_muted": _mute_check.button_pressed,
+		"mouse_sensitivity": _sens_slider.value,
+	}
+
+func _update_apply_state() -> void:
+	if _apply_btn != null:
+		_apply_btn.disabled = (_read_controls() == _original)
 
 func _build_tab_switcher() -> Control:
 	var wrapper := VBoxContainer.new()
@@ -284,64 +326,88 @@ func _build_input_tab() -> Control:
 	return box
 
 # ---------------------------------------------------------------------------
-# Signal handlers
+# Signal handlers — controls only; no PlayerPrefs writes until Apply
 # ---------------------------------------------------------------------------
 
-func _on_fullscreen_toggled(pressed: bool) -> void:
-	PlayerPrefs.is_fullscreen = pressed
-	PlayerPrefs.apply_video()
-	PlayerPrefs.save()
+func _on_fullscreen_toggled(_pressed: bool) -> void:
 	if _res_row != null:
-		_res_row.visible = not pressed
+		_res_row.visible = not _fs_check.button_pressed
+	_update_apply_state()
 
-func _on_resolution_selected(idx: int) -> void:
-	PlayerPrefs.resolution_index = idx
-	PlayerPrefs.save()
+func _on_resolution_selected(_idx: int) -> void:
+	_update_apply_state()
 
-func _on_volume_changed(value: float) -> void:
-	PlayerPrefs.master_volume = value
-	PlayerPrefs.apply_audio()
-	PlayerPrefs.save()
+func _on_volume_changed(_value: float) -> void:
+	_update_apply_state()
 
-func _on_mute_toggled(pressed: bool) -> void:
-	PlayerPrefs.master_muted = pressed
-	PlayerPrefs.apply_audio()
-	PlayerPrefs.save()
+func _on_mute_toggled(_pressed: bool) -> void:
+	_update_apply_state()
 
-func _on_vsync_toggled(pressed: bool) -> void:
-	PlayerPrefs.vsync_enabled = pressed
-	PlayerPrefs.apply_video()
-	PlayerPrefs.save()
+func _on_vsync_toggled(_pressed: bool) -> void:
+	_update_apply_state()
 
-func _on_fps_cap_selected(idx: int) -> void:
-	PlayerPrefs.fps_cap_index = idx
-	PlayerPrefs.apply_video()
-	PlayerPrefs.save()
+func _on_fps_cap_selected(_idx: int) -> void:
+	_update_apply_state()
 
-func _on_brightness_changed(value: float) -> void:
-	PlayerPrefs.brightness = value
-	PlayerPrefs.apply_video()
-	PlayerPrefs.save()
+func _on_brightness_changed(_value: float) -> void:
+	_update_apply_state()
 
 func _on_sensitivity_changed(value: float) -> void:
-	PlayerPrefs.mouse_sensitivity = value
-	PlayerPrefs.save()
 	if _sens_field != null:
 		_sens_field.text = "%.2f" % value
+	_update_apply_state()
 
 func _on_sensitivity_typed(text: String) -> void:
 	var value: float = clampf(text.to_float(), 0.5, 3.0)
 	if _sens_slider != null:
 		_sens_slider.value = value
 
-func _on_done_pressed() -> void:
+# ---------------------------------------------------------------------------
+# Apply / Cancel
+# ---------------------------------------------------------------------------
+
+func _on_apply_pressed() -> void:
+	var c: Dictionary = _read_controls()
+	PlayerPrefs.is_fullscreen = c.fullscreen
+	PlayerPrefs.resolution_index = c.resolution_index
+	PlayerPrefs.vsync_enabled = c.vsync_enabled
+	PlayerPrefs.fps_cap_index = c.fps_cap_index
+	PlayerPrefs.brightness = c.brightness
+	PlayerPrefs.master_volume = c.master_volume
+	PlayerPrefs.master_muted = c.master_muted
+	PlayerPrefs.mouse_sensitivity = c.mouse_sensitivity
+	PlayerPrefs.apply_audio()
 	PlayerPrefs.apply_video()
+	PlayerPrefs.save()
+	_original = _snapshot()
+	_apply_btn.disabled = true
+	close_requested.emit()
+
+func _on_cancel_pressed() -> void:
+	_fs_check.set_pressed_no_signal(_original.fullscreen)
+	if _res_row != null:
+		_res_row.visible = not _original.fullscreen
+	_res_btn.selected = _original.resolution_index
+	_vsync_check.set_pressed_no_signal(_original.vsync_enabled)
+	_fps_btn.selected = _original.fps_cap_index
+	_brightness_slider.value = _original.brightness
+	_volume_slider.value = _original.master_volume
+	_mute_check.set_pressed_no_signal(_original.master_muted)
+	_sens_slider.value = _original.mouse_sensitivity
 	close_requested.emit()
 
 func _make_button(label: String) -> Button:
 	var btn := Button.new()
 	btn.text = label
 	btn.custom_minimum_size = Vector2(308, 48)
+	btn.add_theme_font_size_override("font_size", 20)
+	SoundManager.wire_button(btn)
+	return btn
+
+func _make_small_button(label: String) -> Button:
+	var btn := Button.new()
+	btn.text = label
+	btn.custom_minimum_size = Vector2(148, 48)
 	btn.add_theme_font_size_override("font_size", 20)
 	SoundManager.wire_button(btn)
 	return btn
