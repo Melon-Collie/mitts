@@ -371,7 +371,7 @@ func _build_game_menu() -> void:
 	slot_panel.set_anchors_preset(Control.PRESET_CENTER)
 	slot_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	slot_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-	slot_panel.custom_minimum_size = Vector2(720, 180)
+	slot_panel.custom_minimum_size = Vector2(960, 0)
 
 	_slot_grid = SlotGridPanel.new()
 	_slot_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
