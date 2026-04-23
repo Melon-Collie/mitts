@@ -18,7 +18,7 @@ const CONTEST_SQUIRT_SPEED: float = 3.0
 # divergence between client and host Jolt friction. Set to 0 while both run
 # identical physics; tune upward if free-puck trajectories drift apart.
 @export var prediction_extra_friction: float = 0.0
-@export var carry_smoothing_speed: float = 20.0
+@export var carry_smoothing_speed: float = 80.0
 
 var puck: Puck = null
 var is_server: bool = false
@@ -258,6 +258,11 @@ func _resolve_peer_id(skater: Skater) -> int:
 func _on_client_puck_hit_goalie(_goalie: Goalie) -> void:
 	if not _predicting_trajectory:
 		return
+	# Seed rejoin blend before dropping out of prediction so the puck smoothly
+	# transitions from the predicted bounce position to the interpolation buffer
+	# rather than snapping to the pre-bounce delayed position.
+	_rejoin_blend_from_pos = puck.get_puck_position()
+	_rejoin_blend_start_time = Time.get_ticks_msec() / 1000.0
 	_predicting_trajectory = false
 	_pending_local_release = false
 	puck.set_client_prediction_mode(false)
@@ -265,6 +270,8 @@ func _on_client_puck_hit_goalie(_goalie: Goalie) -> void:
 func _on_client_puck_hit_post() -> void:
 	if not _predicting_trajectory:
 		return
+	_rejoin_blend_from_pos = puck.get_puck_position()
+	_rejoin_blend_start_time = Time.get_ticks_msec() / 1000.0
 	_predicting_trajectory = false
 	_pending_local_release = false
 	puck.set_client_prediction_mode(false)
