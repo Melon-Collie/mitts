@@ -28,9 +28,9 @@ var _carving: bool = false
 
 func setup(skater: CharacterBody3D) -> void:
 	_skater = skater
-	_skate_player = _make_loop_player("res://Sounds/skate_loop.ogg")
-	_brake_player = _make_oneshot_player("res://Sounds/skate_brake.ogg")
-	_carve_player = _make_loop_player("res://Sounds/skate_carve.ogg")
+	_skate_player = _make_loop_player("res://Sounds/skate_loop.wav")
+	_brake_player = _make_oneshot_player("res://Sounds/skate_brake.wav")
+	_carve_player = _make_loop_player("res://Sounds/skate_carve.wav")
 
 
 func _make_loop_player(path: String) -> AudioStreamPlayer3D:
