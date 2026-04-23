@@ -1,6 +1,8 @@
 class_name LocalController
 extends SkaterController
 
+signal hit_received(magnitude: float)
+
 @export var reconcile_position_threshold: float = 0.05
 @export var reconcile_velocity_threshold: float = 0.4
 
@@ -34,7 +36,8 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	skater.body_check_impulse_applied.connect(
 		func(impulse: Vector3) -> void:
 			_body_check_impulse = impulse
-			_body_check_impulse_timestamp = _current_input.host_timestamp)
+			_body_check_impulse_timestamp = _current_input.host_timestamp
+			hit_received.emit(impulse.length()))
 
 # Called after setup() to provide the local player's team — needed for
 # client-side offside prediction. Separate from setup() because GDScript

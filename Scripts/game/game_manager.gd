@@ -26,6 +26,7 @@ signal player_left(player_name: String, team_color: Color)
 signal stats_updated
 signal shots_on_goal_changed(sog_0: int, sog_1: int)
 signal team_colors_ready(home_primary: Color, home_secondary: Color, away_primary: Color, away_secondary: Color)
+signal local_player_hit(magnitude: float)
 
 # ── Domain state ──────────────────────────────────────────────────────────────
 var _state_machine: GameStateMachine = null
@@ -431,6 +432,7 @@ func _on_player_spawned(record: PlayerRecord) -> void:
 		local_ctrl.set_goal_context(
 				teams[0].defended_goal, teams[1].defended_goal, _get_puck_carrier_team_id)
 		local_ctrl.puck_release_requested.connect(_on_puck_release_requested)
+		local_ctrl.hit_received.connect(func(mag: float) -> void: local_player_hit.emit(mag))
 		NetworkManager.register_local_controller(local_ctrl)
 	else:
 		NetworkManager.register_remote_controller(

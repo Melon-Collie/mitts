@@ -37,6 +37,11 @@ var _current_height: float = 15.0
 var _smoothed_attack_dir: float = 0.0    # lerps between -1, 0, +1 on possession change
 var _smoothed_direction_factor: float = 1.0  # lerps movement-direction bias to avoid snapping
 
+# ── Shake ─────────────────────────────────────────────────────────────────────
+var _shake_trauma: float = 0.0
+const _SHAKE_DECAY: float = 4.0
+const _SHAKE_MAG: float = 0.25
+
 func set_goal_context(goal_0: HockeyGoal, goal_1: HockeyGoal, carrier_team_getter: Callable) -> void:
 	_goal_0 = goal_0
 	_goal_1 = goal_1
@@ -54,8 +59,15 @@ func _get_attacking_direction() -> int:
 		return 0
 	return 1 if attacking_goal.defending_team_id == 0 else -1
 
+func shake(trauma: float) -> void:
+	_shake_trauma = minf(1.0, _shake_trauma + trauma)
+
 func _ready() -> void:
 	make_current()
+	GameManager.goal_scored.connect(func(_t, _n, _a1, _a2) -> void: shake(1.0))
+	GameManager.local_player_hit.connect(func(mag: float) -> void:
+		if mag >= 3.0:
+			shake(clampf(mag / 12.0, 0.2, 0.4)))
 
 func _physics_process(delta: float) -> void:
 	if not skater or not puck:
@@ -131,3 +143,11 @@ func _physics_process(delta: float) -> void:
 	var target_pos: Vector3 = Vector3(target_center.x, _current_height, target_center.z)
 	global_position = global_position.lerp(target_pos, smooth_speed * delta)
 	rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+
+	# ── Step 6: Shake ─────────────────────────────────────────────────────────
+	if _shake_trauma > 0.0:
+		_shake_trauma = maxf(0.0, _shake_trauma - _SHAKE_DECAY * delta)
+		global_position += Vector3(
+			randf_range(-1.0, 1.0) * _shake_trauma * _SHAKE_MAG,
+			0.0,
+			randf_range(-1.0, 1.0) * _shake_trauma * _SHAKE_MAG)

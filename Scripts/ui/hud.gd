@@ -24,6 +24,9 @@ var _home_badge_style: StyleBoxFlat = null
 var _away_badge_style: StyleBoxFlat = null
 var _home_badge_label: Label = null
 var _away_badge_label: Label = null
+var _flash_rect: ColorRect = null
+var _vignette_rect: ColorRect = null
+var _last_clock_pulse_second: int = -1
 
 const _DARK_BG    := Color(0.07, 0.07, 0.09, 0.92)
 const _WHITE      := Color(1.00, 1.00, 1.00, 1.00)
@@ -40,6 +43,8 @@ func _ready() -> void:
 	_build_game_over_popup()
 	_build_game_menu()
 	_build_toast_area()
+	_build_flash_overlay()
+	_build_vignette_overlay()
 	_period_label.text = _period_ordinal(1)
 	_clock_label.text = _format_clock(GameManager.get_period_duration())
 	_home_score_label.text = "0"
@@ -55,6 +60,7 @@ func _ready() -> void:
 	GameManager.shots_on_goal_changed.connect(_on_shots_on_goal_changed)
 	GameManager.player_joined.connect(func(n: String, c: Color) -> void: _show_toast(n + " joined", c))
 	GameManager.player_left.connect(func(n: String, c: Color) -> void: _show_toast(n + " left", c))
+	GameManager.local_player_hit.connect(_on_local_player_hit)
 	GameManager.stats_updated.connect(func() -> void:
 		if _game_menu != null and _game_menu.visible and _slot_grid != null:
 			_slot_grid.refresh(GameManager.get_slot_roster(), multiplayer.get_unique_id(), _get_team_colors()))
@@ -384,6 +390,34 @@ func _build_game_menu() -> void:
 	slot_grid_layer.add_child(slot_grid_root)
 	add_child(slot_grid_layer)
 
+func _build_flash_overlay() -> void:
+	_flash_rect = ColorRect.new()
+	_flash_rect.color = Color(1.0, 1.0, 1.0, 0.0)
+	_flash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_flash_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var flash_root := Control.new()
+	flash_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	flash_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flash_root.add_child(_flash_rect)
+	var flash_layer := CanvasLayer.new()
+	flash_layer.layer = 25
+	flash_layer.add_child(flash_root)
+	add_child(flash_layer)
+
+func _build_vignette_overlay() -> void:
+	_vignette_rect = ColorRect.new()
+	_vignette_rect.color = Color(0.85, 0.05, 0.05, 0.0)
+	_vignette_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_vignette_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var vig_root := Control.new()
+	vig_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vig_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vig_root.add_child(_vignette_rect)
+	var vig_layer := CanvasLayer.new()
+	vig_layer.layer = 24
+	vig_layer.add_child(vig_root)
+	add_child(vig_layer)
+
 func _build_toast_area() -> void:
 	_toast_container = VBoxContainer.new()
 	_toast_container.anchor_left = 1.0
@@ -421,16 +455,29 @@ func _show_toast(text: String, name_color: Color = _WHITE) -> void:
 		hbox.add_child(action_lbl)
 	panel.add_child(hbox)
 
+	# Slide in from right after layout settles
+	_slide_toast_in(panel)
+
 	var tween := create_tween()
 	tween.tween_interval(2.5)
 	tween.tween_method(func(a: float) -> void: panel.modulate.a = a, 1.0, 0.0, 0.5)
 	tween.tween_callback(panel.queue_free)
+
+func _slide_toast_in(panel: PanelContainer) -> void:
+	await get_tree().process_frame
+	if not is_instance_valid(panel):
+		return
+	panel.position.x += 240.0
+	var st := create_tween()
+	st.tween_property(panel, "position:x", panel.position.x - 240.0, 0.18) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
 func _popup_button(label: String) -> Button:
 	var btn := Button.new()
 	btn.text = label
 	btn.custom_minimum_size = Vector2(220, 48)
 	btn.add_theme_font_size_override("font_size", 20)
+	_wire_hover_scale(btn)
 	return btn
 
 func _add_host_button(vbox: VBoxContainer, text: String, handler: Callable) -> void:
@@ -472,6 +519,14 @@ func _on_goal_scored(scoring_team: Team, scorer_name: String, assist1_name: Stri
 	tween.tween_method(
 		func(c: Color) -> void: score_label.add_theme_color_override("font_color", c),
 		_GOLD, _WHITE, 1.5)
+
+	# Score digit pop
+	score_label.pivot_offset = score_label.size / 2.0
+	var pop := create_tween()
+	pop.tween_property(score_label, "scale", Vector2(1.6, 1.6), 0.0)
+	pop.tween_property(score_label, "scale", Vector2.ONE, 0.5) \
+		.set_trans(Tween.TRANS_SPRING).set_ease(Tween.EASE_OUT)
+
 	_phase_label.text = ("GOAL!  %s" % scorer_name) if not scorer_name.is_empty() else "GOAL!"
 	_phase_label.add_theme_color_override("font_color", _GOLD)
 	var team_color: Color = TeamColorRegistry.get_colors(GameManager.teams[scoring_team.team_id].color_id, scoring_team.team_id).primary
@@ -484,6 +539,12 @@ func _on_goal_scored(scoring_team: Team, scorer_name: String, assist1_name: Stri
 		_assist_label.visible = true
 	else:
 		_assist_label.visible = false
+
+	# Full-screen team-color flash
+	_flash_rect.color = Color(team_color.r, team_color.g, team_color.b, 0.45)
+	_flash_rect.modulate.a = 1.0
+	var ft := create_tween()
+	ft.tween_property(_flash_rect, "modulate:a", 0.0, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 
 func _on_team_colors_ready(home_primary: Color, home_secondary: Color, away_primary: Color, away_secondary: Color) -> void:
 	if _home_badge_style != null:
@@ -523,6 +584,17 @@ func _on_period_changed(new_period: int) -> void:
 func _on_clock_updated(t: float) -> void:
 	_clock_label.text = _format_clock(t)
 	_clock_label.add_theme_color_override("font_color", _GOLD if t <= 30.0 and t > 0.0 else _WHITE)
+	if t > 0.0 and t <= 10.0:
+		var sec := int(ceil(t))
+		if sec != _last_clock_pulse_second:
+			_last_clock_pulse_second = sec
+			_clock_label.pivot_offset = _clock_label.size / 2.0
+			var cp := create_tween()
+			cp.tween_property(_clock_label, "scale", Vector2(1.3, 1.3), 0.0)
+			cp.tween_property(_clock_label, "scale", Vector2.ONE, 0.25) \
+				.set_trans(Tween.TRANS_SPRING).set_ease(Tween.EASE_OUT)
+	else:
+		_last_clock_pulse_second = -1
 
 func _on_game_over() -> void:
 	if _score_0 > _score_1:
@@ -562,6 +634,15 @@ func _on_bug_report_pressed() -> void:
 	var body: String = "Version: v%s\nOS: %s\n\nWhat happened:\n\nSteps to reproduce:\n1. \n2. \n3. \n" % [BuildInfo.VERSION, OS.get_name()]
 	var url: String = "https://github.com/%s/issues/new?title=%s&body=%s" % [BuildInfo.REPO, title.uri_encode(), body.uri_encode()]
 	OS.shell_open(url)
+
+func _on_local_player_hit(magnitude: float) -> void:
+	if magnitude < 3.0:
+		return
+	var strength := clampf(magnitude / 12.0, 0.2, 0.55)
+	_vignette_rect.modulate.a = strength
+	var vt := create_tween()
+	vt.tween_property(_vignette_rect, "modulate:a", 0.0, 0.5) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 
 func _on_shots_on_goal_changed(sog_0: int, sog_1: int) -> void:
 	if _home_sog_label != null:
@@ -613,6 +694,17 @@ func _lbl(text: String, size: int, color: Color) -> Label:
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", color)
 	return l
+
+func _wire_hover_scale(btn: Button) -> void:
+	btn.item_rect_changed.connect(func() -> void: btn.pivot_offset = btn.size / 2.0)
+	btn.mouse_entered.connect(func() -> void: _scale_btn(btn, Vector2(1.04, 1.04)))
+	btn.mouse_exited.connect(func() -> void: _scale_btn(btn, Vector2.ONE))
+	btn.button_down.connect(func() -> void: _scale_btn(btn, Vector2(0.97, 0.97)))
+	btn.button_up.connect(func() -> void: _scale_btn(btn, Vector2(1.04, 1.04)))
+
+func _scale_btn(btn: Button, target: Vector2) -> void:
+	var t := btn.create_tween()
+	t.tween_property(btn, "scale", target, 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 func _period_ordinal(p: int) -> String:
 	var n: int = GameManager.get_num_periods()
