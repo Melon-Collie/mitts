@@ -226,16 +226,25 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# frame's direction-variance delta is correct.
 	if not _input_history.is_empty():
 		_aiming.prev_mouse_screen_pos = _input_history.back().mouse_screen_pos
-	# Server authority on shot state — but never revert past a release transition.
-	# If the client is in FOLLOW_THROUGH and the server is still in an aim state,
-	# the host just hasn't processed the release input yet; the reliable RPC already
-	# fired it. Reverting would loop the follow-through animation every reconcile cycle.
+	# Server authority on shot state — but never revert the client backwards through
+	# the shot-state sequence. The host's RemoteController is up to one input-batch
+	# interval (~17 ms) behind the client on aim/release transitions because it
+	# processes inputs from the queue, not directly from the player's device.
+	# Reverting WRISTER_AIM → SKATING_WITH_PUCK resets the just-pressed shoot event so
+	# the player can never re-enter WRISTER_AIM while still holding the button.
+	# Reverting FOLLOW_THROUGH → WRISTER_AIM loops the follow-through animation.
 	var apply_server_shot_state: bool = server_state.shot_state != pre_state
-	if apply_server_shot_state and pre_state == SkaterStateMachine.State.FOLLOW_THROUGH:
-		var server_still_aiming: bool = \
+	if apply_server_shot_state:
+		var client_aiming: bool = pre_state == SkaterStateMachine.State.WRISTER_AIM \
+				or pre_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITH_PUCK
+		var server_skating: bool = \
+				server_state.shot_state == SkaterStateMachine.State.SKATING_WITH_PUCK or \
+				server_state.shot_state == SkaterStateMachine.State.SKATING_WITHOUT_PUCK
+		var client_released: bool = pre_state == SkaterStateMachine.State.FOLLOW_THROUGH
+		var server_aiming: bool = \
 				server_state.shot_state == SkaterStateMachine.State.WRISTER_AIM or \
 				server_state.shot_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITH_PUCK
-		if server_still_aiming:
+		if (client_aiming and server_skating) or (client_released and server_aiming):
 			apply_server_shot_state = false
 	if apply_server_shot_state:
 		_sm.set_state(server_state.shot_state as SkaterStateMachine.State)
