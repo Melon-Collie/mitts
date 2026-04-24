@@ -90,6 +90,15 @@ func set_puck_position(pos: Vector3) -> void:
 func set_puck_velocity(vel: Vector3) -> void:
 	linear_velocity = vel
 
+# Used by client-side prediction release (notify_local_release). Applies the
+# same _pending_elevation_vel treatment as release() so Jolt's first dynamic
+# integration step gets the full XYZ vector instead of starting at zero.
+func apply_release_velocity(vel: Vector3) -> void:
+	linear_velocity = vel
+	if vel.y > 0.0:
+		_pending_elevation_vel = vel
+		_pending_elevation = true
+
 func get_carrier() -> Skater:
 	return carrier
 
