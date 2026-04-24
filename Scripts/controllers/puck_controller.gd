@@ -34,6 +34,7 @@ var _shot_rtt_ms: float = 0.0             # RTT captured at release time; used f
 var is_extrapolating: bool = false
 
 var _rejoin_blend_elapsed: float = -1.0  # < 0 means inactive
+var _post_contact_timer: float = -1.0    # >= 0 while suppressing reconcile after a bounce
 var _rejoin_blend_from_pos: Vector3 = Vector3.ZERO
 
 func get_buffer_depth() -> int:
@@ -99,7 +100,16 @@ func _physics_process(delta: float) -> void:
 	else:
 		is_extrapolating = false
 		if NetworkTelemetry.instance: NetworkTelemetry.instance.puck_mode = "predicting"
-		if prediction_extra_friction > 0.0:
+		if _post_contact_timer >= 0.0:
+			_post_contact_timer -= delta
+			if _post_contact_timer < 0.0:
+				# Suppression window expired: buffer has post-bounce data. Transition
+				# to interpolation with a rejoin blend from the Jolt-simulated position.
+				_rejoin_blend_from_pos = puck.get_puck_position()
+				_rejoin_blend_elapsed = 0.0
+				_predicting_trajectory = false
+				puck.set_client_prediction_mode(false)
+		if _predicting_trajectory and prediction_extra_friction > 0.0:
 			puck.set_puck_velocity(puck.get_puck_velocity() * pow(1.0 - prediction_extra_friction, delta))
 
 # ── Lag Compensation ─────────────────────────────────────────────────────────
@@ -178,6 +188,7 @@ func _check_interactions() -> void:
 func notify_local_pickup(local_skater: Skater) -> void:
 	_local_carrier_skater = local_skater
 	_predicting_trajectory = false
+	_post_contact_timer = -1.0
 	puck.set_client_prediction_mode(false)
 	_state_buffer.clear()
 
@@ -208,6 +219,7 @@ func notify_remote_carrier_changed(new_carrier_peer_id: int) -> void:
 	if new_carrier_peer_id == -1 and _predicting_trajectory:
 		return
 	_predicting_trajectory = false
+	_post_contact_timer = -1.0
 	puck.set_client_prediction_mode(false)  # also clears _clamp_at_goal_line
 
 # Called when the server forcibly ends a carry (e.g. goal scored).
@@ -216,6 +228,7 @@ func notify_local_puck_dropped() -> void:
 	_local_carrier_skater = null
 	_predicting_trajectory = false
 	_pending_local_release = false
+	_post_contact_timer = -1.0
 	puck.set_client_prediction_mode(false)
 	_state_buffer.clear()
 
@@ -258,25 +271,21 @@ func _resolve_peer_id(skater: Skater) -> int:
 	return _peer_id_resolver.call(skater)
 
 func _on_client_puck_hit_goalie(_goalie: Goalie) -> void:
-	if not _predicting_trajectory:
+	if not _predicting_trajectory or _post_contact_timer >= 0.0:
 		return
-	# Seed rejoin blend before dropping out of prediction so the puck smoothly
-	# transitions from the predicted bounce position to the interpolation buffer
-	# rather than snapping to the pre-bounce delayed position.
-	_rejoin_blend_from_pos = puck.get_puck_position()
-	_rejoin_blend_elapsed = 0.0
-	_predicting_trajectory = false
+	# Hold prediction for RTT + one broadcast interval so the buffer fills with
+	# post-bounce server data before we switch to interpolation. Ending prediction
+	# immediately would blend toward pre-bounce buffer positions, making the puck
+	# appear to slide backward into the goalie. Jolt keeps simulating the bounce
+	# and server states are buffered (not reconciled) until the window expires.
 	_pending_local_release = false
-	puck.set_client_prediction_mode(false)
+	_post_contact_timer = NetworkManager.get_latest_rtt_ms() / 1000.0 + 0.025
 
 func _on_client_puck_hit_post() -> void:
-	if not _predicting_trajectory:
+	if not _predicting_trajectory or _post_contact_timer >= 0.0:
 		return
-	_rejoin_blend_from_pos = puck.get_puck_position()
-	_rejoin_blend_elapsed = 0.0
-	_predicting_trajectory = false
 	_pending_local_release = false
-	puck.set_client_prediction_mode(false)
+	_post_contact_timer = NetworkManager.get_latest_rtt_ms() / 1000.0 + 0.025
 
 # ── State Serialization ───────────────────────────────────────────────────────
 # Returns the typed network state object. Flattening to Array happens at the
@@ -301,7 +310,23 @@ func apply_state(state: PuckNetworkState, host_ts: float) -> void:
 				return
 			# A different player picked it up — end trajectory prediction.
 			_predicting_trajectory = false
+			_post_contact_timer = -1.0
 			puck.set_client_prediction_mode(false)
+		elif _post_contact_timer >= 0.0:
+			# Post-contact suppression window: buffer states for interpolation but
+			# skip reconcile. Pre-bounce server states would otherwise hard-snap the
+			# puck backward into the goalie/boards. Jolt is running; buffer fills so
+			# interpolation has post-bounce data when the window expires.
+			if not _state_buffer.is_empty() and host_ts < _state_buffer.back().timestamp:
+				return
+			var buffered := BufferedPuckState.new()
+			buffered.timestamp = host_ts
+			buffered.state = state
+			_state_buffer.append(buffered)
+			if _state_buffer.size() > 30:
+				_state_buffer.pop_front()
+			_adapt_interpolation_delay()
+			return
 		else:
 			if _pending_local_release:
 				_pending_local_release = false

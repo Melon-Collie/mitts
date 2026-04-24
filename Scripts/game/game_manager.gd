@@ -660,20 +660,12 @@ func on_remote_puck_release(direction: Vector3, power: float, is_slapper: bool, 
 			return
 		_start_pending_shot_from_carrier()
 		var rtt_half: float = rtt_ms / 2000.0
-		# Puck is still pinned to the host's RemoteController blade. That blade
-		# reflects inputs received ~rtt/2 ago, which by the time the RPC arrives
-		# corresponds to the client's blade at shot time. Advance along the shot
-		# direction by rtt_half so the host starting position matches the client's
-		# Jolt trajectory. Previously this rewound the state buffer for the blade
-		# position, but that gave blade_at(shot - rtt) for a moving skater — a full
-		# RTT behind, causing the moving-shot snap.
+		var skater_vel := Vector3.ZERO
 		if rtt_ms > 0.0:
-			var skater_vel := Vector3.ZERO
 			var shooter_record: PlayerRecord = _registry.get_record(shooter_peer_id)
 			if shooter_record != null and shooter_record.skater != null:
 				skater_vel = shooter_record.skater.velocity
 				skater_vel.y = 0.0
-			puck.set_puck_position(puck.get_puck_position() + (direction * power + skater_vel) * rtt_half)
 		var saved_goalie_positions: Array[Vector3] = []
 		var saved_goalie_rotations: Array[float] = []
 		if _state_buffer_manager != null and _state_buffer_manager.is_ready() and shooter_peer_id > 0 and rtt_ms > 0.0:
@@ -687,6 +679,13 @@ func on_remote_puck_release(direction: Vector3, power: float, is_slapper: bool, 
 					gc.goalie.set_goalie_position(gs.position_x, gs.position_z)
 					gc.goalie.set_goalie_rotation_y(gs.rotation_y)
 		puck.release(direction, power)
+		# Apply RTT advance AFTER release. puck.release() snaps global_position to
+		# ex_carrier.get_blade_contact_global() (carrier is still set at call time),
+		# so any position set before release() is silently overwritten. Applying the
+		# advance here ensures the host trajectory starts from the same position as
+		# the client's Jolt prediction (blade + velocity * rtt_half).
+		if rtt_ms > 0.0:
+			puck.set_puck_position(puck.get_puck_position() + (direction * power + skater_vel) * rtt_half)
 		for i: int in goalie_controllers.size():
 			goalie_controllers[i].goalie.global_position = saved_goalie_positions[i]
 			goalie_controllers[i].goalie.set_goalie_rotation_y(saved_goalie_rotations[i])

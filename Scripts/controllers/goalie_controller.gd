@@ -527,8 +527,13 @@ func apply_shot_reaction(impact_x: float, impact_y: float, is_elevated: bool) ->
 	_client_reaction_timer = 1.5
 	# Mirror the host: low shots start the butterfly-drop countdown so the
 	# client drops butterfly on the same frame cadence as the server.
+	# Subtract the RPC transit time (≈ full RTT: shooter→server + server→client)
+	# so the client butterfly lands at the same wall-clock offset as the host.
+	# At RTT < reaction_delay the timer fires early enough to match T+reaction_delay.
+	# At RTT >= reaction_delay the timer is clamped to 0 — butterfly drops on arrival.
 	if not is_elevated and _state == State.STANDING:
-		_shot_timer = reaction_delay
+		var rtt_s: float = NetworkManager.get_latest_rtt_ms() / 1000.0
+		_shot_timer = maxf(reaction_delay - rtt_s, 0.0)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 func _is_puck_in_defensive_zone() -> bool:
