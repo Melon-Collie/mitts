@@ -58,7 +58,16 @@ func _drive_from_input(delta: float) -> void:
 	# During locked phases drain the queue (advancing the ack) but don't apply
 	# movement — stale input would contaminate server state and cause a velocity
 	# burst when the phase lifts.
-	if _input_queue.size() > 0:
+	#
+	# Timestamp gate: only pop an input when its scheduled host time has arrived.
+	# Without this, inputs are consumed immediately on arrival regardless of their
+	# timestamp, so the queue empties between 60Hz batches and fallback-input fires
+	# every gap. Fall through when clock isn't ready to preserve behaviour during
+	# NTP warmup.
+	var input_due: bool = _input_queue.size() > 0 and (
+			not NetworkManager.is_clock_ready() or
+			_input_queue.front().host_timestamp <= NetworkManager.estimated_host_time())
+	if input_due:
 		var input: InputState = _input_queue.pop_front()
 		last_processed_host_timestamp = input.host_timestamp
 		if not _game_state.is_movement_locked():
@@ -77,6 +86,7 @@ func _drive_from_input(delta: float) -> void:
 			skater.velocity = Vector3.ZERO
 			return
 		_process_input(_fallback_input, delta)
+
 
 func apply_network_state(state: SkaterNetworkState, host_ts: float) -> void:
 	if _is_host:
