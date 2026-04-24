@@ -140,32 +140,36 @@ func test_depth_at_origin_is_defensive() -> void:
 		0.0, _depth_cfg())
 	assert_almost_eq(d, _depth_cfg().depth_defensive, 0.001)
 
-# ── target_lateral_x ─────────────────────────────────────────────────────────
-# Goalie defends +Z goal: direction_sign = sign(-26.6) = -1
+# ── target_position_on_arc ───────────────────────────────────────────────────
+# Goalie defends +Z goal: goal_line_z=26.6, direction_sign=-1
 
-func test_lateral_x_clamps_to_net_width() -> void:
-	var x: float = GoalieBehaviorRules.target_lateral_x(
-		Vector3(100, 0, 10), 26.6, 0.0, 0.5, 0.915, -1)
-	assert_true(x <= 0.916, "x=%f should be clamped to net_half_width" % x)
-
-func test_lateral_x_centered_puck_returns_center() -> void:
-	# Puck directly in front of goal, centred — bisector is straight ahead, target = 0.
-	var x: float = GoalieBehaviorRules.target_lateral_x(
+func test_arc_centered_puck_returns_center_x() -> void:
+	var pt: Vector2 = GoalieBehaviorRules.target_position_on_arc(
 		Vector3(0, 0, 10), 26.6, 0.0, 1.0, 0.915, -1)
-	assert_almost_eq(x, 0.0, 0.05)
+	assert_almost_eq(pt.x, 0.0, 0.01)
 
-func test_lateral_x_bisector_closer_to_near_post_on_angle() -> void:
-	# Puck far to the right at (4, 0, 16) — bisector should place goalie
-	# closer to the right post than simple X-projection would.
-	var bisect_x: float = GoalieBehaviorRules.target_lateral_x(
-		Vector3(4, 0, 16), 26.6, 0.0, 1.0, 0.915, -1)
-	var simple_x: float = 0.0 + (4.0 - 0.0) * (1.0 / absf(16.0 - 26.6))  # old formula
-	# Angle bisector pulls goalie further toward the near post than simple projection.
-	assert_true(bisect_x > simple_x, "bisect=%f should exceed simple=%f on sharp angle" % [bisect_x, simple_x])
-	assert_true(bisect_x <= 0.916)
+func test_arc_centered_puck_z_offset_matches_depth() -> void:
+	# Puck dead ahead — arc z = goal_line_z - depth (direction_sign = -1)
+	var pt: Vector2 = GoalieBehaviorRules.target_position_on_arc(
+		Vector3(0, 0, 10), 26.6, 0.0, 1.0, 0.915, -1)
+	assert_almost_eq(pt.y, 25.6, 0.01)
 
-func test_lateral_x_puck_at_goal_line_clamps_to_post() -> void:
-	# Puck sitting at the goal line far to the right — goalie should hug that post.
-	var x: float = GoalieBehaviorRules.target_lateral_x(
-		Vector3(5, 0, 26.6), 26.6, 0.0, 1.0, 0.915, -1)
-	assert_almost_eq(x, 0.915, 0.01)
+func test_arc_point_is_at_correct_depth_from_goal_center() -> void:
+	# Arc point should always be exactly current_depth from the goal center.
+	var pt: Vector2 = GoalieBehaviorRules.target_position_on_arc(
+		Vector3(3, 0, 15), 26.6, 0.0, 1.2, 0.915, -1)
+	var dist: float = pt.distance_to(Vector2(0.0, 26.6))
+	assert_almost_eq(dist, 1.2, 0.001)
+
+func test_arc_clamps_x_to_net_half_width() -> void:
+	# Puck extreme right — x clamped to net_half_width, not beyond post.
+	var pt: Vector2 = GoalieBehaviorRules.target_position_on_arc(
+		Vector3(100, 0, 10), 26.6, 0.0, 1.0, 0.915, -1)
+	assert_almost_eq(pt.x, 0.915, 0.001)
+
+func test_arc_degenerate_puck_at_goal_center_uses_fallback() -> void:
+	# Puck exactly at goal center — degenerate dir, fallback: z = goal_line_z + sign*depth
+	var pt: Vector2 = GoalieBehaviorRules.target_position_on_arc(
+		Vector3(0, 0, 26.6), 26.6, 0.0, 1.0, 0.915, -1)
+	assert_almost_eq(pt.x, 0.0, 0.001)
+	assert_almost_eq(pt.y, 25.6, 0.001)

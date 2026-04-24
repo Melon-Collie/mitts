@@ -184,7 +184,7 @@ func test_credit_assists_stops_at_scorers_own_prior_touch() -> void:
 	# Sequence: scorer carries, teammate carries, scorer carries again and scores.
 	# The scorer's earlier touch should stop the assist chain — no self-assist.
 	var scorer := _add_player(10, 0, "Scorer")
-	var teammate := _add_player(11, 0, "Teammate")
+	var _teammate := _add_player(11, 0, "Teammate")
 	tracker.on_pickup(10)   # scorer first touch
 	tracker.on_pickup(11)   # teammate
 	tracker.on_pickup(10)   # scorer picks up again and shoots

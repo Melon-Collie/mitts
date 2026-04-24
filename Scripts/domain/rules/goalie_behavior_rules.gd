@@ -46,6 +46,12 @@ class PressureConfig:
 	var pressure_lateral_margin: float = 0.0
 	var net_half_width: float = 0.0
 
+class ShotIntentConfig:
+	var shot_intent_max_distance: float = 18.0
+	var shot_intent_commit_close: float = 0.55
+	var shot_intent_commit_mid: float = 0.75
+	var shot_intent_commit_far: float = 0.90
+
 # Is a released puck on course to hit this goalie's net? Returns a ShotResult.
 # is_shot == false means not on net or below fake_threshold.
 static func detect_shot(
@@ -125,51 +131,64 @@ static func is_under_pressure(
 		return false
 	return puck_approach_velocity >= cfg.pressure_velocity_threshold
 
-# Lateral X target using angle bisector: find the line from the puck that
-# bisects the shooting angle between the two posts, then intersect it with
-# the goalie's depth plane. This maximises net coverage from the goalie's
-# position rather than simply projecting the puck's X onto the depth plane.
-# direction_sign: sign(-goal_line_z) — determines which side of the goal
-# the goalie stands on (same convention as GoalieController._direction_sign).
-static func target_lateral_x(
+# Arc-based positioning: returns (x, z) point on a circle of radius current_depth
+# centered at the goal center, along the ray from goal center to puck.
+# Replaces the angle-bisector depth-plane intersection for STANDING lateral target.
+# The goalie's Z now varies with puck angle instead of staying on a flat plane.
+static func target_position_on_arc(
 		puck_position: Vector3,
 		goal_line_z: float,
 		goal_center_x: float,
 		current_depth: float,
 		net_half_width: float,
-		direction_sign: int) -> float:
-	var px: float = puck_position.x
-	var pz: float = puck_position.z
-	var left_x: float  = goal_center_x - net_half_width
-	var right_x: float = goal_center_x + net_half_width
+		direction_sign: int) -> Vector2:
+	var gc := Vector2(goal_center_x, goal_line_z)
+	var p  := Vector2(puck_position.x, puck_position.z)
+	var dir := p - gc
+	if dir.length() < 0.001:
+		return Vector2(goal_center_x, goal_line_z + direction_sign * current_depth)
+	dir = dir.normalized()
+	var arc_point := gc + dir * current_depth
+	arc_point.x = clampf(arc_point.x, goal_center_x - net_half_width, goal_center_x + net_half_width)
+	return arc_point
 
-	# 2D (XZ) vectors from puck to each post.
-	var dlx: float = left_x  - px
-	var dlz: float = goal_line_z - pz
-	var drx: float = right_x - px
-	var drz: float = goal_line_z - pz   # same Z for both posts
+# Shot intent score: 0.0 (no intent) → 1.0 (imminent shot).
+# carrier_stick_load: 0.0–1.0 if available, -1.0 to use velocity fallback.
+# Returns 0.0 immediately when intent scoring is disabled or no carrier.
+static func compute_shot_intent(
+		carrier_position: Vector3,
+		carrier_rotation_y: float,
+		carrier_velocity: Vector3,
+		carrier_stick_load: float,
+		puck_position: Vector3,
+		goal_line_z: float,
+		goal_center_x: float,
+		cfg: ShotIntentConfig) -> float:
+	var distance_to_net: float = abs(puck_position.z - goal_line_z)
+	if distance_to_net > cfg.shot_intent_max_distance:
+		return 0.0
+	var to_net_v := Vector2(goal_center_x - carrier_position.x, goal_line_z - carrier_position.z)
+	if to_net_v.length() < 0.001:
+		return 0.0
+	var to_net := to_net_v.normalized()
+	var facing := Vector2(-sin(carrier_rotation_y), -cos(carrier_rotation_y))
+	var facing_dot: float = facing.dot(to_net)
+	if facing_dot < 0.3:
+		return 0.0
+	var facing_score: float = smoothstep(0.3, 0.85, facing_dot)
+	var stick_score: float
+	if carrier_stick_load >= 0.0:
+		stick_score = carrier_stick_load
+	else:
+		var vel_xz := Vector2(carrier_velocity.x, carrier_velocity.z)
+		stick_score = clampf(vel_xz.normalized().dot(to_net) if vel_xz.length() > 0.001 else 0.0, 0.0, 1.0)
+	var distance_score: float = 1.0 - smoothstep(6.0, cfg.shot_intent_max_distance, distance_to_net)
+	return facing_score * 0.4 + stick_score * 0.4 + distance_score * 0.2
 
-	var dl: float = sqrt(dlx * dlx + dlz * dlz)
-	var dr: float = sqrt(drx * drx + drz * drz)
-	if dl < 0.001 or dr < 0.001:
-		return goal_center_x
-
-	# Angle bisector direction (sum of unit vectors to each post).
-	var bx: float = dlx / dl + drx / dr
-	var bz: float = dlz / dl + drz / dr
-	var blen: float = sqrt(bx * bx + bz * bz)
-	if blen < 0.001:
-		return goal_center_x   # perfectly centred — bisector undefined, stay put
-
-	bx /= blen
-	bz /= blen
-
-	# Intersect the bisector ray with the goalie's depth plane.
-	if abs(bz) < 0.001:
-		return clampf(px, left_x, right_x)
-	var goalie_z: float = goal_line_z + direction_sign * current_depth
-	var t: float = (goalie_z - pz) / bz
-	if t <= 0.0:
-		return clampf(px, left_x, right_x)
-
-	return clampf(px + bx * t, left_x, right_x)
+# Commit threshold for butterfly drop given puck distance to net.
+static func shot_intent_commit_threshold(puck_z_dist: float, cfg: ShotIntentConfig) -> float:
+	if puck_z_dist < 6.0:
+		return cfg.shot_intent_commit_close
+	if puck_z_dist < 9.0:
+		return cfg.shot_intent_commit_mid
+	return cfg.shot_intent_commit_far
