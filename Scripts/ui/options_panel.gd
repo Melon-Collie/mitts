@@ -33,12 +33,9 @@ const _REBINDABLE_ACTIONS: Array = [
 	{"action": "brake",          "label": "Brake"},
 	{"action": "shoot",          "label": "Shoot"},
 	{"action": "slapshot",       "label": "Slapshot"},
-	{"action": "self_pass",      "label": "Self Pass"},
-	{"action": "self_shot",      "label": "Self Shot"},
 	{"action": "block",          "label": "Block"},
 	{"action": "elevation_up",   "label": "Elevation Up"},
 	{"action": "elevation_down", "label": "Elevation Down"},
-	{"action": "reset",          "label": "Reset"},
 ]
 
 func _ready() -> void:

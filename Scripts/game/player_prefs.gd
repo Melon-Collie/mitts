@@ -9,8 +9,7 @@ const RESOLUTIONS: Array[Vector2i] = [
 const FPS_CAP_VALUES: Array[int] = [30, 60, 120, 144, 240, 0]
 const REBINDABLE_ACTIONS: PackedStringArray = [
 	"move_up", "move_down", "move_left", "move_right", "brake",
-	"shoot", "slapshot", "self_pass", "self_shot", "block",
-	"elevation_up", "elevation_down", "reset",
+	"shoot", "slapshot", "block", "elevation_up", "elevation_down",
 ]
 
 var player_name: String = "Player"
