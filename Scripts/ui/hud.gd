@@ -314,7 +314,10 @@ func _build_game_over_popup() -> void:
 	_vote_label.add_theme_color_override("font_color", _DIM)
 	rematch_box.add_child(_vote_label)
 
-	_add_host_button(vbox, "Return to Lobby", func() -> void: GameManager.return_to_lobby())
+	if NetworkManager.is_offline_mode:
+		_add_host_button(vbox, "Return to Menu", func() -> void: GameManager.exit_to_main_menu())
+	else:
+		_add_host_button(vbox, "Return to Lobby", func() -> void: GameManager.return_to_lobby())
 
 	var menu_btn := _popup_button("Disconnect")
 	menu_btn.pressed.connect(func() -> void:
@@ -369,18 +372,24 @@ func _build_game_menu() -> void:
 	_add_host_button(vbox, "Rematch", func() -> void:
 		_set_menu_open(false)
 		GameManager.reset_game())
-	_add_host_button(vbox, "Return to Lobby", func() -> void:
-		_set_menu_open(false)
-		GameManager.return_to_lobby())
+	if NetworkManager.is_offline_mode:
+		_add_host_button(vbox, "Return to Menu", func() -> void:
+			_set_menu_open(false)
+			GameManager.exit_to_main_menu())
+	else:
+		_add_host_button(vbox, "Return to Lobby", func() -> void:
+			_set_menu_open(false)
+			GameManager.return_to_lobby())
 
 	var bug_btn := _popup_button("Report Bug")
 	bug_btn.pressed.connect(_on_bug_report_pressed)
 	vbox.add_child(bug_btn)
 
-	var quit_btn := _popup_button("Disconnect")
-	quit_btn.pressed.connect(func() -> void:
-		_show_confirm("Return to main menu?", GameManager.exit_to_main_menu))
-	vbox.add_child(quit_btn)
+	if not NetworkManager.is_offline_mode:
+		var quit_btn := _popup_button("Disconnect")
+		quit_btn.pressed.connect(func() -> void:
+			_show_confirm("Return to main menu?", GameManager.exit_to_main_menu))
+		vbox.add_child(quit_btn)
 
 	var exit_btn := _popup_button("Exit Game")
 	exit_btn.pressed.connect(func() -> void:
@@ -716,6 +725,10 @@ func _on_period_changed(new_period: int) -> void:
 
 func _on_clock_updated(t: float) -> void:
 	_clock_label.text = _format_clock(t)
+	if NetworkManager.is_offline_mode:
+		_clock_label.add_theme_color_override("font_color", _WHITE)
+		_last_clock_pulse_second = -1
+		return
 	_clock_label.add_theme_color_override("font_color", _GOLD if t <= 30.0 and t > 0.0 else _WHITE)
 	if t > 0.0 and t <= 10.0:
 		var sec := int(ceil(t))

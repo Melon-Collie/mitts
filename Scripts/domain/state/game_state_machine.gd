@@ -23,6 +23,7 @@ var _phase_timer: float = 0.0
 # ── Period + clock ───────────────────────────────────────────────────────────
 var current_period: int   = 1
 var time_remaining: float = GameRules.PERIOD_DURATION
+var infinite_time: bool   = false
 
 # ── Configurable rules (overridden by lobby; default to GameRules constants) ─
 var num_periods: int       = GameRules.NUM_PERIODS
@@ -285,11 +286,12 @@ func reset_all() -> void:
 	_offside_peer_ids.clear()
 
 func apply_config(p_num_periods: int, p_period_duration: float, p_ot_enabled: bool, p_ot_duration: float) -> void:
+	infinite_time    = (p_period_duration <= 0.0)
 	num_periods      = p_num_periods
 	period_duration  = p_period_duration
 	ot_enabled       = p_ot_enabled
 	ot_duration      = p_ot_duration
-	time_remaining   = period_duration
+	time_remaining   = 0.0 if infinite_time else p_period_duration
 	period_scores    = _make_period_scores(num_periods)
 
 # Transitions to FACEOFF_PREP and clears icing state. Used by manual reset and
@@ -351,6 +353,9 @@ func _set_phase(phase: int) -> void:
 
 func _tick_phase(delta: float) -> bool:
 	if current_phase == GamePhase.Phase.PLAYING:
+		if infinite_time:
+			time_remaining += delta
+			return false
 		time_remaining -= delta
 		if time_remaining <= 0.0:
 			time_remaining = 0.0
