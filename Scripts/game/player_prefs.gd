@@ -24,7 +24,14 @@ var vsync_enabled: bool = true
 var fps_cap_index: int = 5
 var brightness: float = 1.0
 var mouse_sensitivity: float = 1.0
+var attack_up: bool = false
 var bindings: Dictionary = {}  # action -> {type, physical_keycode or button_index}
+
+func _get_save_path() -> String:
+	for arg: String in OS.get_cmdline_user_args():
+		if arg.begins_with("--config-suffix="):
+			return "user://preferences_%s.cfg" % arg.substr(16)
+	return SAVE_PATH
 
 func _ready() -> void:
 	_load()
@@ -43,6 +50,7 @@ func save() -> void:
 	cfg.set_value("video", "fps_cap_index", fps_cap_index)
 	cfg.set_value("video", "brightness", brightness)
 	cfg.set_value("input", "mouse_sensitivity", mouse_sensitivity)
+	cfg.set_value("game", "attack_up", attack_up)
 	for action: String in REBINDABLE_ACTIONS:
 		if not bindings.has(action):
 			continue
@@ -53,7 +61,7 @@ func save() -> void:
 			cfg.set_value("bindings", action + "_code", b.get("physical_keycode", 0))
 		elif t == "mouse":
 			cfg.set_value("bindings", action + "_code", b.get("button_index", 0))
-	cfg.save(SAVE_PATH)
+	cfg.save(_get_save_path())
 
 func apply_bindings() -> void:
 	for action: String in bindings:
@@ -102,7 +110,7 @@ func apply_video() -> void:
 
 func _load() -> void:
 	var cfg := ConfigFile.new()
-	if cfg.load(SAVE_PATH) == OK:
+	if cfg.load(_get_save_path()) == OK:
 		player_name = cfg.get_value("player", "name", "Player").substr(0, 10)
 		if player_name.strip_edges().is_empty():
 			player_name = "Player"
@@ -117,6 +125,7 @@ func _load() -> void:
 		fps_cap_index = clamp(cfg.get_value("video", "fps_cap_index", 5), 0, FPS_CAP_VALUES.size() - 1)
 		brightness = clampf(cfg.get_value("video", "brightness", 1.0), 0.5, 1.5)
 		mouse_sensitivity = clampf(cfg.get_value("input", "mouse_sensitivity", 1.0), 0.5, 3.0)
+		attack_up = cfg.get_value("game", "attack_up", false)
 		for action: String in REBINDABLE_ACTIONS:
 			var t: String = cfg.get_value("bindings", action + "_type", "")
 			if t == "key":

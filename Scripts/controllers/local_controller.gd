@@ -39,6 +39,8 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 # requires overrides to match the parent signature exactly.
 func set_local_team_id(team_id: int) -> void:
 	_team_id = team_id
+	camera.set_local_team_id(team_id)
+	_gatherer.set_local_team_id(team_id)
 
 func set_goal_context(goal_0: HockeyGoal, goal_1: HockeyGoal, carrier_team_getter: Callable) -> void:
 	camera.set_goal_context(goal_0, goal_1, carrier_team_getter)
@@ -249,6 +251,12 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	if OS.is_debug_build() and skater.visual_offset.length() > 0.05:
 		push_warning("Reconcile: %.3fm snap applied (inputs replayed: %d)" \
 				% [skater.visual_offset.length(), _input_history.size()])
+
+func _get_charge_direction() -> Vector3:
+	var dir: Vector3 = _aiming.prev_blade_dir
+	if PlayerPrefs.attack_up and _team_id == 1:
+		return -dir
+	return dir
 
 func on_puck_picked_up_network() -> void:
 	super.on_puck_picked_up_network()

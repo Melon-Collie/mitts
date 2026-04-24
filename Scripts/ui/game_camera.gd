@@ -31,6 +31,7 @@ extends Camera3D
 var _goal_0: HockeyGoal = null  # Team 0's defended goal
 var _goal_1: HockeyGoal = null  # Team 1's defended goal
 var _carrier_team_getter: Callable  # () -> int team_id, or -1 if no carrier
+var _local_team_id: int = -1
 
 # ── Runtime ───────────────────────────────────────────────────────────────────
 var _current_height: float = 15.0
@@ -46,6 +47,9 @@ func set_goal_context(goal_0: HockeyGoal, goal_1: HockeyGoal, carrier_team_gette
 	_goal_0 = goal_0
 	_goal_1 = goal_1
 	_carrier_team_getter = carrier_team_getter
+
+func set_local_team_id(team_id: int) -> void:
+	_local_team_id = team_id
 
 # Returns +1 or -1 (attacking direction in Z) when someone has the puck, 0 otherwise.
 func _get_attacking_direction() -> int:
@@ -142,7 +146,8 @@ func _physics_process(delta: float) -> void:
 	# ── Step 5: Smooth movement ───────────────────────────────────────────────
 	var target_pos: Vector3 = Vector3(target_center.x, _current_height, target_center.z)
 	global_position = global_position.lerp(target_pos, smooth_speed * delta)
-	rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+	var flip_y: float = 180.0 if PlayerPrefs.attack_up and _local_team_id == 1 else 0.0
+	rotation_degrees = Vector3(-90.0, flip_y, 0.0)
 
 	# ── Step 6: Shake ─────────────────────────────────────────────────────────
 	if _shake_trauma > 0.0:
