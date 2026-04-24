@@ -26,6 +26,7 @@ func gather() -> InputState:
 	state.move_vector = Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	if not is_zero_approx(_camera.rotation_degrees.y):
 		state.move_vector = -state.move_vector
+		state.mouse_screen_pos = -state.mouse_screen_pos
 	state.shoot_held = Input.is_action_pressed("shoot")
 	state.shoot_pressed = _pending_shoot_pressed
 	state.slap_held = Input.is_action_pressed("slapshot")
