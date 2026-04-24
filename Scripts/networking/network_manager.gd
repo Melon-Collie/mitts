@@ -28,6 +28,7 @@ signal slot_swap_confirmed(peer_id: int, old_team_id: int, old_slot: int, new_te
 signal game_started(config: Dictionary)
 signal lobby_roster_synced(roster: Array)
 signal team_colors_synced(home_color_id: String, away_color_id: String)
+signal lobby_settings_synced(num_periods: int, period_duration: float, ot_enabled: bool)
 signal return_to_lobby_received(roster: Array)
 signal player_ready_changed(peer_id: int, is_ready: bool)
 signal rematch_vote_changed(peer_id: int, vote: bool)
@@ -49,6 +50,9 @@ var pending_lobby_roster: Array = []
 var pending_join_slot: Dictionary = {}   # { team_slot, team_id, jersey_color, helmet_color, pants_color }
 var pending_home_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID
 var pending_away_color_id: String  = TeamColorRegistry.DEFAULT_AWAY_ID
+var pending_num_periods: int = GameRules.NUM_PERIODS
+var pending_period_duration: float = GameRules.PERIOD_DURATION
+var pending_ot_enabled: bool = GameRules.OT_ENABLED
 var pending_join_players: Array = []     # sync_existing_players data for join-in-progress
 var _local_controller: LocalController = null
 var _remote_controllers: Dictionary = {}  # peer_id -> RemoteController
@@ -751,6 +755,23 @@ func send_team_colors(home_id: String, away_id: String) -> void:
 
 func send_team_colors_to(peer_id: int, home_id: String, away_id: String) -> void:
 	notify_team_colors.rpc_id(peer_id, home_id, away_id)
+
+@rpc("authority", "reliable")
+func notify_lobby_settings(num_periods: int, period_duration: float, ot_enabled: bool) -> void:
+	pending_num_periods = num_periods
+	pending_period_duration = period_duration
+	pending_ot_enabled = ot_enabled
+	lobby_settings_synced.emit(num_periods, period_duration, ot_enabled)
+
+func send_lobby_settings(num_periods: int, period_duration: float, ot_enabled: bool) -> void:
+	pending_num_periods = num_periods
+	pending_period_duration = period_duration
+	pending_ot_enabled = ot_enabled
+	for peer_id: int in multiplayer.get_peers():
+		notify_lobby_settings.rpc_id(peer_id, num_periods, period_duration, ot_enabled)
+
+func send_lobby_settings_to(peer_id: int, num_periods: int, period_duration: float, ot_enabled: bool) -> void:
+	notify_lobby_settings.rpc_id(peer_id, num_periods, period_duration, ot_enabled)
 
 @rpc("authority", "reliable")
 func notify_return_to_lobby(roster: Array) -> void:
