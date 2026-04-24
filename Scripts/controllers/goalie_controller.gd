@@ -383,7 +383,10 @@ func _update_lateral_standing(delta: float) -> void:
 				_tracked_puck_position, _goal_line_z, _goal_center_x,
 				_current_depth, net_half_width, _direction_sign)
 		_target_x = arc.x
-		_target_arc_z = arc.y
+		# Clamp arc Z so sharp angles near the goal line never push the goalie
+		# into or past the net. arc_depth < depth_defensive triggers the clamp.
+		var arc_depth: float = (arc.y - _goal_line_z) * _direction_sign
+		_target_arc_z = _goal_line_z + _direction_sign * maxf(arc_depth, depth_defensive)
 		# Short-side bias: cheat toward near post on sharp angles
 		var puck_z_dist: float = abs(_tracked_puck_position.z - _goal_line_z)
 		var puck_x_dist: float = abs(_tracked_puck_position.x - _goal_center_x)
@@ -623,15 +626,17 @@ func apply_state(network_state: GoalieNetworkState, host_ts: float) -> void:
 	var elapsed: float = clampf(NetworkManager.estimated_host_time() - host_ts, 0.0, 0.15)
 	var predicted_x: float = network_state.position_x + network_state.velocity_x * elapsed
 	var predicted_z: float = network_state.position_z + network_state.velocity_z * elapsed
-	var server_depth: float = (predicted_z - _goal_line_z) * _direction_sign
 	var client_z: float = _goal_line_z + _direction_sign * _current_depth
 	var dist: float = Vector2(_current_x - predicted_x, client_z - predicted_z).length()
 	if dist > correction_hard_snap:
+		# Gross divergence (reconnect / state reset): snap both X and depth.
 		_current_x = predicted_x
-		_current_depth = server_depth
-	elif dist > correction_dead_zone:
+		_current_depth = maxf((predicted_z - _goal_line_z) * _direction_sign, depth_defensive)
+		_target_arc_z = predicted_z
+	elif abs(_current_x - predicted_x) > correction_dead_zone:
+		# Soft blend X only. Arc Z is owned by the client AI (_target_arc_z) —
+		# blending depth here fights the arc calculation every broadcast and causes jitter.
 		_current_x = lerpf(_current_x, predicted_x, correction_blend)
-		_current_depth = lerpf(_current_depth, server_depth, correction_blend)
 	_five_hole_openness = lerpf(_five_hole_openness, network_state.five_hole_openness, 0.80)
 
 func apply_state_transition(new_state: int) -> void:
