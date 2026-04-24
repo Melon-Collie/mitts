@@ -19,10 +19,9 @@ var _body_check_impulse_timestamp: float = 0.0
 const _BLADE_JUMP_THRESHOLD: float = 0.05
 
 const _RECONCILE_VISUAL_ALPHA: float = 0.12  # exponential decay per physics frame
-# 6 physics frames at 240 Hz = ~25 ms. Must exceed the input batch interval
-# (INPUT_RATE=60 Hz = 4 ticks) so the host queue never starves between batches.
-# With D=6 and K=4: min queue depth = D - K + 1 = 3. Imperceptible at 240 Hz.
-const INPUT_DELAY_FRAMES: int = 6
+# 2-tick buffer before applying gathered inputs; stamped with estimated_host_time()
+# at apply-time so the reconcile echo cursor and RemoteController sort are consistent.
+const INPUT_DELAY_FRAMES: int = 2
 var _pending_input_queue: Array[InputState] = []
 
 func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> void:
@@ -227,12 +226,18 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# frame's direction-variance delta is correct.
 	if not _input_history.is_empty():
 		_aiming.prev_mouse_screen_pos = _input_history.back().mouse_screen_pos
-	# Server authority on shot state: if the server disagrees with the client's
-	# pre-replay state, server wins — this corrects charge that was wrong before
-	# the reconcile (e.g. from a dropped shoot_pressed input).
-	# charge_distance is always overwritten: states can agree while charge drifts
-	# (replay accumulation divergence), which would otherwise go uncorrected.
-	if server_state.shot_state != pre_state:
+	# Server authority on shot state — but never revert past a release transition.
+	# If the client is in FOLLOW_THROUGH and the server is still in an aim state,
+	# the host just hasn't processed the release input yet; the reliable RPC already
+	# fired it. Reverting would loop the follow-through animation every reconcile cycle.
+	var apply_server_shot_state: bool = server_state.shot_state != pre_state
+	if apply_server_shot_state and pre_state == SkaterStateMachine.State.FOLLOW_THROUGH:
+		var server_still_aiming: bool = \
+				server_state.shot_state == SkaterStateMachine.State.WRISTER_AIM or \
+				server_state.shot_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITH_PUCK
+		if server_still_aiming:
+			apply_server_shot_state = false
+	if apply_server_shot_state:
 		_sm.set_state(server_state.shot_state as SkaterStateMachine.State)
 	_aiming.charge_distance = server_state.shot_charge
 	skater.set_facing(_facing)
