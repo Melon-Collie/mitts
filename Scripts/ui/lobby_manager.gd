@@ -351,8 +351,7 @@ func _update_start_btn() -> void:
 func _update_ready_btn() -> void:
 	if _ready_btn == null:
 		return
-	_ready_btn.text = "Not Ready" if _local_is_ready else "Ready"
-	_ready_btn.modulate = Color(0.55, 1.0, 0.60, 1.0) if _local_is_ready else Color(1, 1, 1, 1.0)
+	_ready_btn.text = "Unready" if _local_is_ready else "Ready"
 
 # ── Signal handlers ───────────────────────────────────────────────────────────
 
