@@ -198,10 +198,15 @@ func apply_poke_check(checker_skater: Skater) -> void:
 
 func release(direction: Vector3, power: float) -> void:
 	var ex_carrier: Skater = carrier
-	clear_carrier()
-	if direction.y > 0:
-		position.y = ice_height + 0.1
+	# Set position and velocity while still frozen so Jolt activates the body
+	# from the correct state. Without this, the puck launches from the previous
+	# frame's pinned position (blade moved during this frame's move_and_slide
+	# before release() was called).
+	if ex_carrier != null:
+		global_position = ex_carrier.get_blade_contact_global()
+	global_position.y = ice_height + (0.1 if direction.y > 0 else 0.0)
 	linear_velocity = direction * power
+	clear_carrier()
 	if ex_carrier != null:
 		_set_cooldown(ex_carrier, reattach_cooldown)
 	puck_released.emit()
