@@ -149,12 +149,6 @@ Playtester builds ship via GitHub Releases (`latest` tag). `deploy.yml` computes
 
 ## Planned Features
 
-**Tier 2 — medium scope:**
-- **Loading screen:** Replace the basic connecting popup with a polished loading screen (progress indicator, tips, team colors).
-- **Key rebinding UI:** Runtime `InputMap` remapping with conflict detection, saved to `PlayerPrefs` under an "input" section. Pairs with the new Input tab in `OptionsPanel`.
-- **Ready-up system:** Per-player ready toggle in the lobby; host Start button only enables when all slots are ready. Requires a new `player_ready` RPC and roster sync field.
-- **Rematch voting:** Any player can call a vote; a majority triggers rematch instead of host-only control. Requires a voting state tracked per peer in `GameManager`.
-
 **Tier 3 — larger scope:**
 - **Reconnect / slot reservation:** When a peer drops, host marks the slot "reserved" for ~60 s. If the same player (matched by name) reconnects within the window, they reclaim their slot, stats, and team without restarting the game. Requires a pending-reconnect state in `GameManager` and a rejoin handshake in `NetworkManager`.
 - **Spectator mode:** Join-as-spectator lobby slot (beyond the 3v3 roster). Spectator receives world state normally but skips all input/controller setup. Needs a follow-camera (track puck, or cycle through players) and lobby slot-type handling.
