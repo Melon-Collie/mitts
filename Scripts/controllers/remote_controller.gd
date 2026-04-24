@@ -106,8 +106,11 @@ func _interpolate() -> void:
 		var newest: SkaterNetworkState = bracket.to_state
 		interpolated.position = newest.position + newest.velocity * dt
 		interpolated.velocity = newest.velocity
-		interpolated.blade_position = newest.blade_position + newest.velocity * dt
-		interpolated.top_hand_position = newest.top_hand_position + newest.velocity * dt
+		# blade_position and top_hand_position are in upper_body local space;
+		# velocity is world space — do not advance them here. The scene graph
+		# moves their world positions when body position advances above.
+		interpolated.blade_position = newest.blade_position
+		interpolated.top_hand_position = newest.top_hand_position
 		interpolated.upper_body_rotation_y = newest.upper_body_rotation_y + newest.upper_body_angular_velocity * dt
 		var extrap_fa: float = atan2(newest.facing.x, newest.facing.y) + newest.facing_angular_velocity * dt
 		interpolated.facing = Vector2(sin(extrap_fa), cos(extrap_fa))
