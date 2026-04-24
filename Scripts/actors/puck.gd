@@ -198,15 +198,20 @@ func apply_poke_check(checker_skater: Skater) -> void:
 
 func release(direction: Vector3, power: float) -> void:
 	var ex_carrier: Skater = carrier
-	# Set position and velocity while still frozen so Jolt activates the body
-	# from the correct state. Without this, the puck launches from the previous
-	# frame's pinned position (blade moved during this frame's move_and_slide
-	# before release() was called).
+	# Snap XZ to current blade position while frozen — Jolt activates from this
+	# state. Without this the body starts from the previous frame's pinned
+	# position (blade moved during move_and_slide this frame).
 	if ex_carrier != null:
 		global_position = ex_carrier.get_blade_contact_global()
-	global_position.y = ice_height + (0.1 if direction.y > 0 else 0.0)
 	linear_velocity = direction * power
 	clear_carrier()
+	# Y must be set AFTER clear_carrier() so position.y is immediately readable
+	# by _physics_process (is_airborne()). On a frozen Jolt body, writing
+	# global_position.y updates the static transform record but is not reflected
+	# in GDScript position.y until the next physics sync — causing is_airborne()
+	# to return false and zero linear_velocity.y, killing the elevation.
+	if direction.y > 0:
+		global_position.y = ice_height + 0.1
 	if ex_carrier != null:
 		_set_cooldown(ex_carrier, reattach_cooldown)
 	puck_released.emit()
