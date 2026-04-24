@@ -73,6 +73,7 @@ extends Node
 # ── Short-Side Bias Tuning ────────────────────────────────────────────────────
 @export var short_side_bias: float = 0.15
 @export var sharp_angle_distance: float = 5.0
+@export var standing_x_limit: float = 0.70
 
 # ── Hand Pose Blend Tuning ────────────────────────────────────────────────────
 @export var butterfly_blocking_dist_min: float = 1.5
@@ -425,6 +426,10 @@ func _update_lateral_standing(delta: float) -> void:
 		if puck_z_dist < zone_post_z * 2.5 and puck_x_dist > net_half_width:
 			var near_post_x: float = _goal_center_x + sign(_tracked_puck_position.x - _goal_center_x) * net_half_width
 			_target_x = lerpf(_target_x, near_post_x, short_side_bias)
+		# Hard cap: at aggressive depth the arc radius exceeds net_half_width at moderate
+		# angles, pushing the body center to the post and the pads 0.22m past it into
+		# the goal frame geometry. standing_x_limit keeps the near pad inside the post.
+		_target_x = clampf(_target_x, _goal_center_x - standing_x_limit, _goal_center_x + standing_x_limit)
 	var delta_x: float = _target_x - _current_x
 	var five_hole_target: float
 	if abs(delta_x) < 0.01:
