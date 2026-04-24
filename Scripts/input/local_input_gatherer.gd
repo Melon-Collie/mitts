@@ -31,7 +31,6 @@ func gather() -> InputState:
 	state.mouse_screen_pos = get_viewport().get_mouse_position()
 	if PlayerPrefs.attack_up and _local_team_id == 1:
 		state.move_vector = -state.move_vector
-		state.mouse_screen_pos = -state.mouse_screen_pos
 	state.shoot_held = Input.is_action_pressed("shoot")
 	state.shoot_pressed = _pending_shoot_pressed
 	state.slap_held = Input.is_action_pressed("slapshot")

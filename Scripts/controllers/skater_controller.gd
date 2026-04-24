@@ -424,6 +424,9 @@ func _enter_slapper_charge(input: InputState) -> void:
 		skater.set_slapper_zone(true, slapper_zone_radius, slapper_zone_offset_x, slapper_zone_offset_z)
 		_sm.set_state(State.SLAPPER_CHARGE_WITHOUT_PUCK)
 
+func _get_charge_direction() -> Vector3:
+	return _aiming.prev_blade_dir
+
 func _release_wrister(input: InputState) -> void:
 	if has_puck:
 		var blade_world: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
@@ -439,7 +442,7 @@ func _release_wrister(input: InputState) -> void:
 				_is_elevated,
 				_aiming.charge_distance,
 				_wrister_config(),
-				_aiming.prev_blade_dir)
+				_get_charge_direction())
 		_sm.shot_dir = result.direction
 		_do_release(result.direction, result.power)
 
