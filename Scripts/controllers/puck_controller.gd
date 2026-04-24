@@ -209,7 +209,7 @@ func notify_local_release(direction: Vector3, power: float, rtt_ms: float, skate
 	puck.set_goal_line_clamp(true)
 	var rtt_half: float = rtt_ms / 2000.0
 	puck.set_puck_position(release_pos + (direction * power + skater_vel) * rtt_half)
-	puck.set_puck_velocity(direction * power)
+	puck.apply_release_velocity(direction * power)
 	_state_buffer.clear()
 
 func notify_remote_carrier_changed(new_carrier_peer_id: int) -> void:
