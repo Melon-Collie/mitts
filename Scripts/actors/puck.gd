@@ -300,7 +300,7 @@ func _physics_process(delta: float) -> void:
 		global_position.y = ice_height
 	elif _pending_elevation:
 		# Elevated release this frame: skip is_airborne() so linear_velocity.y
-		# is not zeroed before _integrate_forces can apply _pending_elevation_vy.
+		# is not zeroed before _integrate_forces can apply _pending_elevation_vel.
 		_pending_elevation = false
 	elif not is_airborne():
 		# Max-speed clamp already runs every physics substep in _integrate_forces.
