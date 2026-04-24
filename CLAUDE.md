@@ -79,7 +79,7 @@ These are non-obvious constraints that cause subtle bugs if violated. Rates and 
 
 **`LocalController.reconcile` is blocked during dead-puck phases.** `on_faceoff_positions` RPC is the authoritative source of skater positions during locked phases.
 
-**Client inputs are delayed `RTT/2 + _INPUT_HOST_CUSHION_S` (capped at `input_delay_cap_ms`, default 50ms) before being applied locally.** This keeps the client and host applying each input at the same wall-clock moment, near-zeroing position divergence and reconcile snaps. Inputs are stamped with `estimated_host_time() + _INPUT_HOST_CUSHION_S` at apply-time — the RTT/2 component is already in transit, so only the 8ms cushion is visible to the host gate. The cushion fills the ~4ms inter-batch gap (60Hz send / 240Hz process) so the host queue never starves. Above the cap, the client predicts ahead and reconcile absorbs the remainder.
+**Client inputs are delayed `INPUT_DELAY_FRAMES = 2` physics ticks (≈8ms) before being applied**, then stamped with `estimated_host_time()` at apply-time. This keeps the reconcile echo cursor and RemoteController sort order correct on the host.
 
 **The pending input queue is drained on both `is_movement_locked()` and `is_input_blocked()` phases.** Both gates must be checked — draining only on movement-locked leaves stale inputs from input-blocked phases (shot cancel, etc.) flooding through when the phase lifts.
 
