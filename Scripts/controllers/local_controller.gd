@@ -19,10 +19,14 @@ var _body_check_impulse_timestamp: float = 0.0
 const _BLADE_JUMP_THRESHOLD: float = 0.05
 
 const _RECONCILE_VISUAL_ALPHA: float = 0.12  # exponential decay per physics frame
-# 2-tick buffer before applying gathered inputs; stamped with estimated_host_time()
-# at apply-time so the reconcile echo cursor and RemoteController sort are consistent.
-const INPUT_DELAY_FRAMES: int = 2
+# RTT/2-based local delay so the client and host apply each input at the same
+# wall-clock moment, keeping their positions in sync and minimising reconcile snaps.
+# _INPUT_HOST_CUSHION_S is added to both the local delay and the host timestamp:
+# it fills the ~4ms inter-batch gap (60Hz send / 240Hz process) and absorbs jitter.
+@export var input_delay_cap_ms: float = 50.0
+const _INPUT_HOST_CUSHION_S: float = 0.008
 var _pending_input_queue: Array[InputState] = []
+var _pending_input_ready_at: Array[float] = []
 
 func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> void:
 	camera = $Camera3D
@@ -58,6 +62,7 @@ func teleport_to(pos: Vector3) -> void:
 	super.teleport_to(pos)
 	_input_history.clear()
 	_pending_input_queue.clear()
+	_pending_input_ready_at.clear()
 	_last_blade_pos = Vector3.ZERO
 	_body_check_impulse = Vector3.ZERO
 	_body_check_impulse_timestamp = 0.0
@@ -77,11 +82,13 @@ func _physics_process(delta: float) -> void:
 		skater.velocity = Vector3.ZERO
 		_input_history.clear()
 		_pending_input_queue.clear()
+		_pending_input_ready_at.clear()
 		return
 	if _game_state.is_input_blocked():
 		# UI blocking input — clear pending inputs so they don't queue up and
 		# fire all at once when the menu closes.
 		_pending_input_queue.clear()
+		_pending_input_ready_at.clear()
 		return
 	# Predict offsides locally for instant ghost feedback
 	_predict_offside()
@@ -94,23 +101,26 @@ func _physics_process(delta: float) -> void:
 			gathered.host_timestamp = NetworkManager.estimated_host_time()
 		input = gathered
 	else:
-		# Client: buffer for INPUT_DELAY_FRAMES ticks so inputs arrive at the host
-		# before their scheduled simulation tick, eliminating fallback-input firing.
+		# Client: delay each input by RTT/2 + cushion before applying locally.
+		# This keeps the client and host applying inputs at the same wall-clock moment,
+		# eliminating prediction drift and near-zeroing reconcile snaps.
+		# _INPUT_HOST_CUSHION_S is added to both the delay and the host timestamp:
+		# it fills the ~4ms inter-batch gap and absorbs send-rate jitter so the host
+		# queue never starves between 60Hz batches.
+		# Cap prevents felt lag from growing unboundedly on high-RTT connections;
+		# above the cap the client predicts ahead and reconcile absorbs the remainder.
+		var rtt_s: float = NetworkManager.get_rtt_ms() / 2000.0 if NetworkManager.is_clock_ready() else 0.0
+		var delay_s: float = minf(rtt_s + _INPUT_HOST_CUSHION_S, input_delay_cap_ms / 1000.0)
 		_pending_input_queue.append(gathered)
-		if _pending_input_queue.size() <= INPUT_DELAY_FRAMES:
-			return  # Filling initial delay buffer; nothing to apply yet
+		_pending_input_ready_at.append(Time.get_ticks_msec() / 1000.0 + delay_s)
+		if Time.get_ticks_msec() / 1000.0 < _pending_input_ready_at.front():
+			return  # Delay not yet elapsed
 		input = _pending_input_queue.pop_front()
-		# Stamp at apply time plus RTT/2 + INPUT_DELAY_FRAMES so inputs arrive at the
-		# host before their scheduled simulation tick. The RTT/2 component compensates
-		# for one-way network transit (inputs stamped for "now" would arrive already
-		# late on internet connections). The INPUT_DELAY_FRAMES component adds a
-		# 2-frame cushion that the host-side gate holds, giving a consistent non-zero
-		# queue depth and drop resilience. Using the smoothed rtt_ms rather than the
-		# raw latest_rtt_ms avoids spike-induced timestamp jitter.
+		_pending_input_ready_at.pop_front()
+		# At apply-time the host already has this input (sent at gather-time, rtt_s ago).
+		# Stamp with just the cushion so the host gate fires shortly after arrival.
 		if NetworkManager.is_clock_ready():
-			var rtt_s: float = NetworkManager.get_rtt_ms() / 2000.0
-			input.host_timestamp = NetworkManager.estimated_host_time() \
-					+ rtt_s + float(INPUT_DELAY_FRAMES) / 240.0
+			input.host_timestamp = NetworkManager.estimated_host_time() + _INPUT_HOST_CUSHION_S
 	_current_input = input
 	_input_history.append(_current_input)
 	# Cap history size to prevent unbounded growth

@@ -59,11 +59,10 @@ func _drive_from_input(delta: float) -> void:
 	# movement — stale input would contaminate server state and cause a velocity
 	# burst when the phase lifts.
 	#
-	# Timestamp gate: client inputs are stamped for estimated_host_time + rtt/2 +
-	# INPUT_DELAY_FRAMES so they arrive slightly before their scheduled tick. Only
-	# pop an input when its scheduled time has arrived — this turns the advance into
-	# a real queue buffer. If the clock isn't ready yet, fall through and process
-	# immediately (same as the old behaviour during NTP warmup).
+	# Timestamp gate: client inputs are stamped for estimated_host_time + cushion
+	# (a small inter-batch buffer). Only pop an input when its scheduled time has
+	# arrived. If the clock isn't ready yet, fall through and process immediately
+	# (same as the old behaviour during NTP warmup).
 	var input_due: bool = _input_queue.size() > 0 and (
 			not NetworkManager.is_clock_ready() or
 			_input_queue.front().host_timestamp <= NetworkManager.estimated_host_time())
