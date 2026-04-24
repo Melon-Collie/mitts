@@ -100,10 +100,17 @@ func _physics_process(delta: float) -> void:
 		if _pending_input_queue.size() <= INPUT_DELAY_FRAMES:
 			return  # Filling initial delay buffer; nothing to apply yet
 		input = _pending_input_queue.pop_front()
-		# Stamp at apply time — this is what the host reconcile echoes back, and what
-		# the remote controller uses to sort inputs in chronological order.
+		# Stamp at apply time plus RTT/2 + INPUT_DELAY_FRAMES so inputs arrive at the
+		# host before their scheduled simulation tick. The RTT/2 component compensates
+		# for one-way network transit (inputs stamped for "now" would arrive already
+		# late on internet connections). The INPUT_DELAY_FRAMES component adds a
+		# 2-frame cushion that the host-side gate holds, giving a consistent non-zero
+		# queue depth and drop resilience. Using the smoothed rtt_ms rather than the
+		# raw latest_rtt_ms avoids spike-induced timestamp jitter.
 		if NetworkManager.is_clock_ready():
-			input.host_timestamp = NetworkManager.estimated_host_time()
+			var rtt_s: float = NetworkManager.get_rtt_ms() / 2000.0
+			input.host_timestamp = NetworkManager.estimated_host_time() \
+					+ rtt_s + float(INPUT_DELAY_FRAMES) / 240.0
 	_current_input = input
 	_input_history.append(_current_input)
 	# Cap history size to prevent unbounded growth
@@ -236,6 +243,20 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 				server_state.shot_state == SkaterStateMachine.State.WRISTER_AIM or \
 				server_state.shot_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITH_PUCK
 		if server_still_aiming:
+			apply_server_shot_state = false
+	# Symmetric guard for the reverse direction: don't revert from an aiming state
+	# back to skating when we have the puck. The server hasn't processed the shoot
+	# input yet (it's still in-flight or queued); letting the server override here
+	# ejects the client from WRISTER_AIM every reconcile cycle, so shoot_pressed
+	# never re-fires and the release has no puck to dispatch.
+	if apply_server_shot_state and has_puck:
+		var client_aiming: bool = \
+				pre_state == SkaterStateMachine.State.WRISTER_AIM or \
+				pre_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITH_PUCK
+		var server_skating: bool = \
+				server_state.shot_state == SkaterStateMachine.State.SKATING_WITH_PUCK or \
+				server_state.shot_state == SkaterStateMachine.State.SKATING_WITHOUT_PUCK
+		if client_aiming and server_skating:
 			apply_server_shot_state = false
 	if apply_server_shot_state:
 		_sm.set_state(server_state.shot_state as SkaterStateMachine.State)
