@@ -30,10 +30,14 @@ var _cooldown_timers: Dictionary = {}  # Skater -> float
 var _is_server: bool = false
 var _pending_reset: bool = false
 var _clamp_at_goal_line: bool = false
-# Set by release() when direction.y > 0. Consumed by _physics_process to skip
-# the is_airborne() zeroing for one frame — global_position.y writes to a
-# Jolt dynamic body are not reflected in position.y until the next physics
-# sync, so is_airborne() would return false and kill the Y velocity.
+# Set by release() when direction.y > 0, cleared by _integrate_forces.
+# Stores the Y velocity to re-apply inside Jolt's integration step so that:
+# (a) _physics_process cannot zero it before Jolt runs, and
+# (b) Jolt's first dynamic step starts with the correct Y velocity regardless
+#     of whether position.y was immediately readable when set on the static body.
+var _pending_elevation_vy: float = 0.0
+# Belt-and-suspenders for _physics_process: skip is_airborne() zeroing the
+# same frame as release() so _pending_elevation_vy reaches _integrate_forces.
 var _pending_elevation: bool = false
 # Callable (Skater) -> int team_id, or -1 if the skater isn't registered. Set
 # by GameManager at spawn time so Puck doesn't reach upward for team checks.
@@ -203,16 +207,17 @@ func apply_poke_check(checker_skater: Skater) -> void:
 
 func release(direction: Vector3, power: float) -> void:
 	var ex_carrier: Skater = carrier
-	# Snap XZ to current blade position while frozen — Jolt activates from this
-	# state. Without this the body starts from the previous frame's pinned
-	# position (blade moved during move_and_slide this frame).
+	# Set position, elevation, and velocity while still frozen so Jolt activates
+	# the body from the correct initial state. Writes on a live dynamic body are
+	# not guaranteed to be picked up for the first integration step.
 	if ex_carrier != null:
 		global_position = ex_carrier.get_blade_contact_global()
-	linear_velocity = direction * power
-	_pending_elevation = direction.y > 0
-	clear_carrier()
 	if direction.y > 0:
 		global_position.y = ice_height + 0.1
+		_pending_elevation_vy = direction.y * power
+		_pending_elevation = true
+	linear_velocity = direction * power
+	clear_carrier()
 	if ex_carrier != null:
 		_set_cooldown(ex_carrier, reattach_cooldown)
 	puck_released.emit()
@@ -252,6 +257,13 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		state.linear_velocity = Vector3.ZERO
 		state.angular_velocity = Vector3.ZERO
 		return
+	if _pending_elevation_vy > 0.0:
+		# Directly write Y velocity and position into Jolt's physics state.
+		# This runs inside the integration step, bypassing any GDScript sync
+		# delays that would let _physics_process zero linear_velocity.y first.
+		state.linear_velocity.y = _pending_elevation_vy
+		state.transform.origin.y = ice_height + 0.1
+		_pending_elevation_vy = 0.0
 	if state.linear_velocity.length() > max_speed:
 		state.linear_velocity = state.linear_velocity.normalized() * max_speed
 	if _clamp_at_goal_line:
@@ -280,15 +292,14 @@ func _physics_process(delta: float) -> void:
 
 	if carrier != null:
 		_pending_elevation = false
+		_pending_elevation_vy = 0.0
 		freeze = true
 		# Pin at the blade contact point (mid-blade), not the heel (Marker3D).
 		global_position = carrier.get_blade_contact_global()
 		global_position.y = ice_height
 	elif _pending_elevation:
-		# release() set linear_velocity.y and global_position.y this frame, but
-		# Jolt does not reflect a dynamic-body position write back into position.y
-		# until the next physics sync. Skip the is_airborne() zero this one frame
-		# so the Y velocity survives into Jolt's integration step.
+		# Elevated release this frame: skip is_airborne() so linear_velocity.y
+		# is not zeroed before _integrate_forces can apply _pending_elevation_vy.
 		_pending_elevation = false
 	elif not is_airborne():
 		# Max-speed clamp already runs every physics substep in _integrate_forces.
