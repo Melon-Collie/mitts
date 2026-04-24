@@ -30,6 +30,11 @@ var _cooldown_timers: Dictionary = {}  # Skater -> float
 var _is_server: bool = false
 var _pending_reset: bool = false
 var _clamp_at_goal_line: bool = false
+# Set by release() when direction.y > 0. Consumed by _physics_process to skip
+# the is_airborne() zeroing for one frame — global_position.y writes to a
+# Jolt dynamic body are not reflected in position.y until the next physics
+# sync, so is_airborne() would return false and kill the Y velocity.
+var _pending_elevation: bool = false
 # Callable (Skater) -> int team_id, or -1 if the skater isn't registered. Set
 # by GameManager at spawn time so Puck doesn't reach upward for team checks.
 var _team_resolver: Callable = Callable()
@@ -204,12 +209,8 @@ func release(direction: Vector3, power: float) -> void:
 	if ex_carrier != null:
 		global_position = ex_carrier.get_blade_contact_global()
 	linear_velocity = direction * power
+	_pending_elevation = direction.y > 0
 	clear_carrier()
-	# Y must be set AFTER clear_carrier() so position.y is immediately readable
-	# by _physics_process (is_airborne()). On a frozen Jolt body, writing
-	# global_position.y updates the static transform record but is not reflected
-	# in GDScript position.y until the next physics sync — causing is_airborne()
-	# to return false and zero linear_velocity.y, killing the elevation.
 	if direction.y > 0:
 		global_position.y = ice_height + 0.1
 	if ex_carrier != null:
@@ -278,10 +279,17 @@ func _physics_process(delta: float) -> void:
 		_cooldown_timers.erase(s)
 
 	if carrier != null:
+		_pending_elevation = false
 		freeze = true
 		# Pin at the blade contact point (mid-blade), not the heel (Marker3D).
 		global_position = carrier.get_blade_contact_global()
 		global_position.y = ice_height
+	elif _pending_elevation:
+		# release() set linear_velocity.y and global_position.y this frame, but
+		# Jolt does not reflect a dynamic-body position write back into position.y
+		# until the next physics sync. Skip the is_airborne() zero this one frame
+		# so the Y velocity survives into Jolt's integration step.
+		_pending_elevation = false
 	elif not is_airborne():
 		# Max-speed clamp already runs every physics substep in _integrate_forces.
 		linear_velocity.y = 0.0
