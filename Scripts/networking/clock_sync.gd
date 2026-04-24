@@ -7,6 +7,15 @@ const SAMPLE_WINDOW: int = 8
 const OUTLIER_DROP: int = 2
 const OFFSET_EMA_ALPHA: float = 0.3  # after is_ready; ~3 pings to reach 66% of a new target
 
+# Lead time added to input timestamps so they arrive at the host before their
+# scheduled processing tick, keeping the host queue non-empty.
+# BATCH_INTERVAL: worst-case send delay (input stamped right after a batch went out).
+# BUFFER_TICKS: target host-side queue depth after accounting for batch delay.
+const BATCH_INTERVAL: float = 1.0 / 60.0
+const BUFFER_TICKS: float = 2.0
+const TICK_DURATION: float = 1.0 / 240.0
+const INPUT_LEAD_SEC: float = BATCH_INTERVAL + BUFFER_TICKS * TICK_DURATION  # ~25 ms
+
 var is_ready: bool = false
 var rtt_ms: float = 0.0
 var latest_rtt_ms: float = 0.0
@@ -44,6 +53,9 @@ func estimated_host_time() -> float:
 	var t := (Time.get_ticks_msec() - _session_start_ms) / 1000.0 + _offset
 	_last_estimated_time = maxf(t, _last_estimated_time)
 	return _last_estimated_time
+
+func estimated_input_stamp_time() -> float:
+	return estimated_host_time() + INPUT_LEAD_SEC
 
 func _recompute() -> void:
 	var sorted := _samples.duplicate()

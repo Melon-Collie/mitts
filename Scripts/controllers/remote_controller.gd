@@ -70,6 +70,8 @@ func _drive_from_input(delta: float) -> void:
 	if input_due:
 		var input: InputState = _input_queue.pop_front()
 		last_processed_host_timestamp = input.host_timestamp
+		NetworkTelemetry.record_input_lead(
+				NetworkManager.estimated_host_time() - input.host_timestamp)
 		if not _game_state.is_movement_locked():
 			_process_input(input, delta)
 		else:
@@ -85,6 +87,8 @@ func _drive_from_input(delta: float) -> void:
 		if _game_state.is_movement_locked():
 			skater.velocity = Vector3.ZERO
 			return
+		if _input_queue.is_empty():
+			NetworkTelemetry.record_input_starvation()
 		_process_input(_fallback_input, delta)
 
 
