@@ -19,10 +19,10 @@ var _body_check_impulse_timestamp: float = 0.0
 const _BLADE_JUMP_THRESHOLD: float = 0.05
 
 const _RECONCILE_VISUAL_ALPHA: float = 0.12  # exponential decay per physics frame
-# 2 physics frames at 240 Hz = ~8 ms. Inputs are applied this many ticks after
-# gather so they reach the host before their scheduled simulation tick, eliminating
-# fallback-input firing on clean low-latency connections. Imperceptible at 240 Hz.
-const INPUT_DELAY_FRAMES: int = 2
+# 6 physics frames at 240 Hz = ~25 ms. Must exceed the input batch interval
+# (INPUT_RATE=60 Hz = 4 ticks) so the host queue never starves between batches.
+# With D=6 and K=4: min queue depth = D - K + 1 = 3. Imperceptible at 240 Hz.
+const INPUT_DELAY_FRAMES: int = 6
 var _pending_input_queue: Array[InputState] = []
 
 func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> void:
