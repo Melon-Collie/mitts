@@ -24,6 +24,7 @@ var vsync_enabled: bool = true
 var fps_cap_index: int = 5
 var brightness: float = 1.0
 var mouse_sensitivity: float = 1.0
+var attack_up: bool = false
 var bindings: Dictionary = {}  # action -> {type, physical_keycode or button_index}
 
 func _ready() -> void:
@@ -43,6 +44,7 @@ func save() -> void:
 	cfg.set_value("video", "fps_cap_index", fps_cap_index)
 	cfg.set_value("video", "brightness", brightness)
 	cfg.set_value("input", "mouse_sensitivity", mouse_sensitivity)
+	cfg.set_value("game", "attack_up", attack_up)
 	for action: String in REBINDABLE_ACTIONS:
 		if not bindings.has(action):
 			continue
@@ -117,6 +119,7 @@ func _load() -> void:
 		fps_cap_index = clamp(cfg.get_value("video", "fps_cap_index", 5), 0, FPS_CAP_VALUES.size() - 1)
 		brightness = clampf(cfg.get_value("video", "brightness", 1.0), 0.5, 1.5)
 		mouse_sensitivity = clampf(cfg.get_value("input", "mouse_sensitivity", 1.0), 0.5, 3.0)
+		attack_up = cfg.get_value("game", "attack_up", false)
 		for action: String in REBINDABLE_ACTIONS:
 			var t: String = cfg.get_value("bindings", action + "_type", "")
 			if t == "key":

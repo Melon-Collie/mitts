@@ -44,6 +44,7 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 # requires overrides to match the parent signature exactly.
 func set_local_team_id(team_id: int) -> void:
 	_team_id = team_id
+	camera.set_local_team_id(team_id)
 
 func set_goal_context(goal_0: HockeyGoal, goal_1: HockeyGoal, carrier_team_getter: Callable) -> void:
 	camera.set_goal_context(goal_0, goal_1, carrier_team_getter)

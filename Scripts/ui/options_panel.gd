@@ -15,6 +15,7 @@ var _fps_btn: OptionButton = null
 var _brightness_slider: HSlider = null
 var _sens_slider: HSlider = null
 var _sens_field: LineEdit = null
+var _attack_up_check: CheckButton = null
 var _apply_btn: Button = null
 var _original: Dictionary = {}
 var _listening_action: String = ""
@@ -77,6 +78,7 @@ func _snapshot() -> Dictionary:
 		"master_volume": PlayerPrefs.master_volume,
 		"master_muted": PlayerPrefs.master_muted,
 		"mouse_sensitivity": PlayerPrefs.mouse_sensitivity,
+		"attack_up": PlayerPrefs.attack_up,
 		"bindings": PlayerPrefs.bindings.duplicate(true),
 	}
 
@@ -90,6 +92,7 @@ func _read_controls() -> Dictionary:
 		"master_volume": _volume_slider.value,
 		"master_muted": _mute_check.button_pressed,
 		"mouse_sensitivity": _sens_slider.value,
+		"attack_up": _attack_up_check.button_pressed,
 		"bindings": _pending_bindings.duplicate(true),
 	}
 
@@ -122,14 +125,16 @@ func _build_tab_switcher() -> Control:
 	var video_tab := _build_video_tab()
 	var audio_tab := _build_audio_tab()
 	var input_tab := _build_input_tab()
-	_tab_contents = [video_tab, audio_tab, input_tab]
+	var game_tab := _build_game_tab()
+	_tab_contents = [video_tab, audio_tab, input_tab, game_tab]
 	content_margin.add_child(video_tab)
 	content_margin.add_child(audio_tab)
 	content_margin.add_child(input_tab)
+	content_margin.add_child(game_tab)
 
-	for i: int in ["Video", "Audio", "Input"].size():
+	for i: int in ["Video", "Audio", "Input", "Game"].size():
 		var btn := Button.new()
-		btn.text = ["Video", "Audio", "Input"][i]
+		btn.text = ["Video", "Audio", "Input", "Game"][i]
 		btn.flat = true
 		btn.custom_minimum_size = Vector2(100, 40)
 		btn.add_theme_font_size_override("font_size", 18)
@@ -398,6 +403,32 @@ func _build_input_tab() -> Control:
 
 	return box
 
+func _build_game_tab() -> Control:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+
+	var lbl := Label.new()
+	lbl.text = "Always Attack Up:"
+	lbl.add_theme_font_size_override("font_size", 20)
+	lbl.add_theme_color_override("font_color", _WHITE)
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(lbl)
+
+	_attack_up_check = CheckButton.new()
+	_attack_up_check.set_pressed_no_signal(PlayerPrefs.attack_up)
+	_attack_up_check.add_theme_font_size_override("font_size", 18)
+	SoundManager.wire_button(_attack_up_check)
+	_attack_up_check.toggled.connect(_on_attack_up_toggled)
+	row.add_child(_attack_up_check)
+	box.add_child(row)
+
+	return box
+
 # ---------------------------------------------------------------------------
 # Signal handlers — controls only; no PlayerPrefs writes until Apply
 # ---------------------------------------------------------------------------
@@ -423,6 +454,9 @@ func _on_fps_cap_selected(_idx: int) -> void:
 	_update_apply_state()
 
 func _on_brightness_changed(_value: float) -> void:
+	_update_apply_state()
+
+func _on_attack_up_toggled(_pressed: bool) -> void:
 	_update_apply_state()
 
 func _on_sensitivity_changed(value: float) -> void:
@@ -532,6 +566,7 @@ func _on_apply_pressed() -> void:
 	PlayerPrefs.master_volume = c.master_volume
 	PlayerPrefs.master_muted = c.master_muted
 	PlayerPrefs.mouse_sensitivity = c.mouse_sensitivity
+	PlayerPrefs.attack_up = c.attack_up
 	PlayerPrefs.bindings = (_pending_bindings as Dictionary).duplicate(true)
 	PlayerPrefs.apply_audio()
 	PlayerPrefs.apply_video()
@@ -552,6 +587,7 @@ func _on_cancel_pressed() -> void:
 	_volume_slider.value = _original.master_volume
 	_mute_check.set_pressed_no_signal(_original.master_muted)
 	_sens_slider.value = _original.mouse_sensitivity
+	_attack_up_check.set_pressed_no_signal(_original.attack_up)
 	_listening_action = ""
 	_pending_bindings = (_original.get("bindings", {}) as Dictionary).duplicate(true)
 	_update_binding_btns()
