@@ -10,7 +10,7 @@ var _fallback_input: InputState = InputState.new()
 var _state_buffer: Array[BufferedSkaterState] = []
 var is_extrapolating: bool = false
 
-var _rejoin_blend_start_time: float = -1.0
+var _rejoin_blend_elapsed: float = -1.0  # < 0 means inactive
 var _rejoin_blend_from_pos: Vector3 = Vector3.ZERO
 var _rejoin_blend_from_blade: Vector3 = Vector3.ZERO
 var _rejoin_blend_from_hand: Vector3 = Vector3.ZERO
@@ -31,6 +31,8 @@ func _physics_process(delta: float) -> void:
 	if _is_host:
 		_drive_from_input(delta)
 	else:
+		if _rejoin_blend_elapsed >= 0.0:
+			_rejoin_blend_elapsed += delta
 		_interpolate()
 		skater.update_stick_mesh()
 
@@ -145,15 +147,14 @@ func _interpolate() -> void:
 		_rejoin_blend_from_pos = skater.global_position
 		_rejoin_blend_from_blade = skater.get_blade_position()
 		_rejoin_blend_from_hand = skater.top_hand.position
-		_rejoin_blend_start_time = Time.get_ticks_msec() / 1000.0
-	if _rejoin_blend_start_time >= 0.0:
-		var ease_t: float = clampf(
-				(Time.get_ticks_msec() / 1000.0 - _rejoin_blend_start_time) / rejoin_blend_duration, 0.0, 1.0)
+		_rejoin_blend_elapsed = 0.0
+	if _rejoin_blend_elapsed >= 0.0:
+		var ease_t: float = clampf(_rejoin_blend_elapsed / rejoin_blend_duration, 0.0, 1.0)
 		interpolated.position = _rejoin_blend_from_pos.lerp(interpolated.position, ease_t)
 		interpolated.blade_position = _rejoin_blend_from_blade.lerp(interpolated.blade_position, ease_t)
 		interpolated.top_hand_position = _rejoin_blend_from_hand.lerp(interpolated.top_hand_position, ease_t)
 		if ease_t >= 1.0:
-			_rejoin_blend_start_time = -1.0
+			_rejoin_blend_elapsed = -1.0
 	_apply_state_to_skater(interpolated)
 	BufferedStateInterpolator.drop_stale(_state_buffer, render_time)
 
