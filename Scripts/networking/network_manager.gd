@@ -187,6 +187,25 @@ func _close() -> void:
 	if multiplayer.multiplayer_peer != null and multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_DISCONNECTED:
 		multiplayer.multiplayer_peer.close()
 
+func prepare_for_new_game() -> void:
+	_local_controller = null
+	_remote_controllers.clear()
+	_peer_last_echoed.clear()
+	_peer_echo_drop_window.clear()
+	_peer_echo_recv_window.clear()
+	_peer_loss_rates.clear()
+	_peer_loss_timer = 0.0
+	_input_timer = 0.0
+	_state_timer = 0.0
+	state_delta = 1.0 / Constants.STATE_RATE
+	_last_ws_seq_received = -1
+	_ws_drop_window = 0
+	_ws_recv_window = 0
+	_ws_loss_window_timer = 0.0
+	packet_loss_pct = 0.0
+	_jitter_samples.clear()
+	_last_ws_arrival_time = -1.0
+
 func reset() -> void:
 	_close()
 	multiplayer.multiplayer_peer = null

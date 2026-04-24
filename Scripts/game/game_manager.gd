@@ -902,6 +902,7 @@ func on_scene_exit() -> void:
 	_telemetry = null
 	NetworkTelemetry.instance = null
 	_last_emitted_clock_secs = -1
+	NetworkManager.prepare_for_new_game()
 
 
 func reset_game() -> void:
