@@ -2,6 +2,7 @@ class_name LocalInputGatherer
 extends Node
 
 var _camera: Camera3D
+var _local_team_id: int = -1
 var _pending_shoot_pressed: bool = false
 var _pending_slap_pressed: bool = false
 var _pending_elevation_up: bool = false
@@ -9,6 +10,9 @@ var _pending_elevation_down: bool = false
 
 func _init(camera: Camera3D) -> void:
 	_camera = camera
+
+func set_local_team_id(team_id: int) -> void:
+	_local_team_id = team_id
 
 func _process(_delta: float) -> void:
 	# Accumulate just_pressed events every frame
@@ -24,7 +28,8 @@ func _process(_delta: float) -> void:
 func gather() -> InputState:
 	var state := InputState.new()
 	state.move_vector = Input.get_vector("move_left", "move_right", "move_up", "move_down")
-	if not is_zero_approx(_camera.rotation_degrees.y):
+	state.mouse_screen_pos = get_viewport().get_mouse_position()
+	if PlayerPrefs.attack_up and _local_team_id == 1:
 		state.move_vector = -state.move_vector
 		state.mouse_screen_pos = -state.mouse_screen_pos
 	state.shoot_held = Input.is_action_pressed("shoot")
@@ -36,7 +41,6 @@ func gather() -> InputState:
 	state.elevation_down = _pending_elevation_down
 	state.block_held = Input.is_action_pressed("block")
 	state.mouse_world_pos = _get_mouse_world_pos(_camera)
-	state.mouse_screen_pos = get_viewport().get_mouse_position()
 	state.host_timestamp = NetworkManager.estimated_host_time()
 	# Clear pending flags after gather
 	_pending_shoot_pressed = false
