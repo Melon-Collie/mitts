@@ -319,10 +319,10 @@ func apply_state(state: PuckNetworkState, host_ts: float) -> void:
 			# interpolation has post-bounce data when the window expires.
 			if not _state_buffer.is_empty() and host_ts < _state_buffer.back().timestamp:
 				return
-			var buffered := BufferedPuckState.new()
-			buffered.timestamp = host_ts
-			buffered.state = state
-			_state_buffer.append(buffered)
+			var post_contact_buf := BufferedPuckState.new()
+			post_contact_buf.timestamp = host_ts
+			post_contact_buf.state = state
+			_state_buffer.append(post_contact_buf)
 			if _state_buffer.size() > 30:
 				_state_buffer.pop_front()
 			_adapt_interpolation_delay()

@@ -267,8 +267,8 @@ func _build_back_support(goal_z: float) -> void:
 	var mid: Vector3 = (top_point + bot_point) / 2.0
 	var dir: Vector3 = (top_point - bot_point).normalized()
 	var length: float = top_point.distance_to(bot_point)
-	var basis: Basis = _basis_from_up(dir)
-	_add_cylinder(mid, basis, length, POST_RADIUS, crown_color, false)
+	var cyl_basis: Basis = _basis_from_up(dir)
+	_add_cylinder(mid, cyl_basis, length, POST_RADIUS, crown_color, false)
 
 
 # --------------------------------------------------------------------------
@@ -375,8 +375,8 @@ func _build_net_panels(goal_z: float) -> void:
 # HELPERS
 # --------------------------------------------------------------------------
 func _add_cylinder(
-	position: Vector3,
-	basis: Basis,
+	pos: Vector3,
+	xform: Basis,
 	length: float,
 	radius: float,
 	color: Color,
@@ -389,7 +389,7 @@ func _add_cylinder(
 	cyl.radial_segments = PIPE_RADIAL_SEGMENTS
 	var mesh_inst := MeshInstance3D.new()
 	mesh_inst.mesh = cyl
-	mesh_inst.transform = Transform3D(basis, position)
+	mesh_inst.transform = Transform3D(xform, pos)
 	_apply_mat(mesh_inst, color)
 	add_child(mesh_inst)
 
@@ -399,7 +399,7 @@ func _add_cylinder(
 		shape.radius = radius
 		var col := CollisionShape3D.new()
 		col.shape = shape
-		col.transform = Transform3D(basis, position)
+		col.transform = Transform3D(xform, pos)
 		add_child(col)
 
 
@@ -429,17 +429,17 @@ func _add_quarter_bend(
 		var p1: Vector3 = center + radius * (cos(t1) * u + sin(t1) * v)
 		var mid: Vector3 = (p0 + p1) / 2.0
 		var dir: Vector3 = (p1 - p0).normalized()
-		var basis: Basis = _basis_from_up(dir)
+		var seg_basis: Basis = _basis_from_up(dir)
 		# Overlap slightly so there's no visible seam
-		_add_cylinder(mid, basis, seg_len * 1.05, POST_RADIUS, color, with_collision)
+		_add_cylinder(mid, seg_basis, seg_len * 1.05, POST_RADIUS, color, with_collision)
 
 
 # Project a 3D point onto a 2D UV coordinate, given an anchor point and two
 # perpendicular basis vectors in the panel's plane. The UV is the point's
 # offset from the anchor expressed in the (u_axis, v_axis) basis, scaled.
-func _project_uv(p: Vector3, anchor: Vector3, u_axis: Vector3, v_axis: Vector3, scale: float) -> Vector2:
+func _project_uv(p: Vector3, anchor: Vector3, u_axis: Vector3, v_axis: Vector3, uv_scale: float) -> Vector2:
 	var offset: Vector3 = p - anchor
-	return Vector2(offset.dot(u_axis) * scale, offset.dot(v_axis) * scale)
+	return Vector2(offset.dot(u_axis) * uv_scale, offset.dot(v_axis) * uv_scale)
 
 
 # Godot's CylinderMesh default axis is +Y. Build a Basis whose Y axis
