@@ -122,19 +122,19 @@ func _build_tab_switcher() -> Control:
 	content_margin.add_theme_constant_override("margin_right", 0)
 	wrapper.add_child(content_margin)
 
+	var game_tab := _build_game_tab()
 	var video_tab := _build_video_tab()
 	var audio_tab := _build_audio_tab()
 	var input_tab := _build_input_tab()
-	var game_tab := _build_game_tab()
-	_tab_contents = [video_tab, audio_tab, input_tab, game_tab]
+	_tab_contents = [game_tab, video_tab, audio_tab, input_tab]
+	content_margin.add_child(game_tab)
 	content_margin.add_child(video_tab)
 	content_margin.add_child(audio_tab)
 	content_margin.add_child(input_tab)
-	content_margin.add_child(game_tab)
 
-	for i: int in ["Video", "Audio", "Input", "Game"].size():
+	for i: int in ["Game", "Video", "Audio", "Input"].size():
 		var btn := Button.new()
-		btn.text = ["Video", "Audio", "Input", "Game"][i]
+		btn.text = ["Game", "Video", "Audio", "Input"][i]
 		btn.flat = true
 		btn.custom_minimum_size = Vector2(100, 40)
 		btn.add_theme_font_size_override("font_size", 18)
