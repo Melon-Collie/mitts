@@ -28,6 +28,13 @@ var _away_badge_label: Label = null
 var _flash_rect: ColorRect = null
 var _vignette_rect: ColorRect = null
 var _last_clock_pulse_second: int = -1
+var _confirm_popup: CanvasLayer = null
+var _confirm_label: Label = null
+var _confirm_callback: Callable = Callable()
+var _rematch_btn: Button = null
+var _vote_label: Label = null
+var _rematch_votes: Dictionary = {}
+var _local_voted: bool = false
 
 const _DARK_BG    := Color(0.07, 0.07, 0.09, 0.92)
 const _WHITE      := Color(1.00, 1.00, 1.00, 1.00)
@@ -43,6 +50,7 @@ func _ready() -> void:
 	_build_version_tag()
 	_build_game_over_popup()
 	_build_game_menu()
+	_build_confirm_popup()
 	_build_toast_area()
 	_build_flash_overlay()
 	_build_vignette_overlay()
@@ -58,6 +66,8 @@ func _ready() -> void:
 	GameManager.clock_updated.connect(_on_clock_updated)
 	GameManager.game_over.connect(_on_game_over)
 	GameManager.game_reset.connect(_on_game_reset)
+	NetworkManager.rematch_vote_changed.connect(_on_rematch_vote_changed)
+	NetworkManager.peer_disconnected.connect(_on_rematch_peer_disconnected)
 	GameManager.shots_on_goal_changed.connect(_on_shots_on_goal_changed)
 	GameManager.player_joined.connect(func(n: String, c: Color) -> void: _show_toast(n + " joined", c))
 	GameManager.player_left.connect(func(n: String, c: Color) -> void: _show_toast(n + " left", c))
@@ -69,6 +79,10 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		if _game_over_popup.visible:
+			return
+		if _confirm_popup != null and _confirm_popup.visible:
+			_confirm_popup.visible = false
+			get_viewport().set_input_as_handled()
 			return
 		if _game_menu.visible and _options_container != null and _options_container.visible:
 			_options_container.visible = false
@@ -286,11 +300,25 @@ func _build_game_over_popup() -> void:
 	title.add_theme_color_override("font_color", _GOLD)
 	vbox.add_child(title)
 
-	_add_host_button(vbox, "Rematch", func() -> void: GameManager.reset_game())
+	var rematch_box := VBoxContainer.new()
+	rematch_box.add_theme_constant_override("separation", 4)
+	vbox.add_child(rematch_box)
+
+	_rematch_btn = _popup_button("Rematch")
+	_rematch_btn.pressed.connect(_on_rematch_vote_pressed)
+	rematch_box.add_child(_rematch_btn)
+
+	_vote_label = Label.new()
+	_vote_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_vote_label.add_theme_font_size_override("font_size", 13)
+	_vote_label.add_theme_color_override("font_color", _DIM)
+	rematch_box.add_child(_vote_label)
+
 	_add_host_button(vbox, "Return to Lobby", func() -> void: GameManager.return_to_lobby())
 
 	var menu_btn := _popup_button("Disconnect")
-	menu_btn.pressed.connect(func() -> void: GameManager.exit_to_main_menu())
+	menu_btn.pressed.connect(func() -> void:
+		_show_confirm("Return to main menu?", GameManager.exit_to_main_menu))
 	vbox.add_child(menu_btn)
 
 	var root := Control.new()
@@ -350,14 +378,16 @@ func _build_game_menu() -> void:
 	vbox.add_child(bug_btn)
 
 	var quit_btn := _popup_button("Disconnect")
-	quit_btn.pressed.connect(func() -> void: GameManager.exit_to_main_menu())
+	quit_btn.pressed.connect(func() -> void:
+		_show_confirm("Return to main menu?", GameManager.exit_to_main_menu))
 	vbox.add_child(quit_btn)
 
 	var exit_btn := _popup_button("Exit Game")
 	exit_btn.pressed.connect(func() -> void:
-		GameManager.on_scene_exit()
-		NetworkManager.reset()
-		get_tree().quit())
+		_show_confirm("Exit game?", func() -> void:
+			GameManager.on_scene_exit()
+			NetworkManager.reset()
+			get_tree().quit()))
 	vbox.add_child(exit_btn)
 
 	var root := Control.new()
@@ -429,6 +459,68 @@ func _build_options_overlay() -> void:
 	options_layer.layer = 21
 	options_layer.add_child(root)
 	add_child(options_layer)
+
+func _build_confirm_popup() -> void:
+	var overlay := ColorRect.new()
+	overlay.color = Color(0.0, 0.0, 0.0, 0.6)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = _DARK_BG
+	panel_style.set_corner_radius_all(6)
+	panel_style.set_content_margin_all(36)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", panel_style)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 20)
+	panel.add_child(vbox)
+
+	_confirm_label = Label.new()
+	_confirm_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_confirm_label.add_theme_font_size_override("font_size", 26)
+	_confirm_label.add_theme_color_override("font_color", _WHITE)
+	vbox.add_child(_confirm_label)
+
+	var btn_row := HBoxContainer.new()
+	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	btn_row.add_theme_constant_override("separation", 16)
+	vbox.add_child(btn_row)
+
+	var confirm_btn := _popup_button("Confirm")
+	confirm_btn.custom_minimum_size = Vector2(140, 48)
+	confirm_btn.pressed.connect(func() -> void:
+		_confirm_popup.visible = false
+		if _confirm_callback.is_valid():
+			_confirm_callback.call())
+	btn_row.add_child(confirm_btn)
+
+	var cancel_btn := _popup_button("Cancel")
+	cancel_btn.custom_minimum_size = Vector2(140, 48)
+	cancel_btn.pressed.connect(func() -> void: _confirm_popup.visible = false)
+	btn_row.add_child(cancel_btn)
+
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(overlay)
+	root.add_child(panel)
+
+	_confirm_popup = CanvasLayer.new()
+	_confirm_popup.layer = 22
+	_confirm_popup.visible = false
+	_confirm_popup.add_child(root)
+	add_child(_confirm_popup)
+
+func _show_confirm(message: String, callback: Callable) -> void:
+	_confirm_label.text = message
+	_confirm_callback = callback
+	_confirm_popup.visible = true
 
 func _build_flash_overlay() -> void:
 	_flash_rect = ColorRect.new()
@@ -648,10 +740,51 @@ func _on_game_over() -> void:
 		_phase_label.text = "TIE"
 		_phase_label.add_theme_color_override("font_color", _WHITE)
 	_phase_panel.visible = true
+	_rematch_votes.clear()
+	_local_voted = false
+	_update_rematch_ui()
 	_game_over_popup.visible = true
 
 func _on_game_reset() -> void:
 	_game_over_popup.visible = false
+	if _slot_grid_container != null:
+		_slot_grid_container.visible = false
+
+func _on_rematch_vote_pressed() -> void:
+	_local_voted = not _local_voted
+	NetworkManager.send_rematch_vote(_local_voted)
+
+func _on_rematch_vote_changed(peer_id: int, vote: bool) -> void:
+	_rematch_votes[peer_id] = vote
+	_update_rematch_ui()
+	if NetworkManager.is_host:
+		_check_rematch_unanimous()
+
+func _on_rematch_peer_disconnected(peer_id: int) -> void:
+	_rematch_votes.erase(peer_id)
+	_update_rematch_ui()
+	if NetworkManager.is_host:
+		_check_rematch_unanimous()
+
+func _update_rematch_ui() -> void:
+	if _rematch_btn == null:
+		return
+	_rematch_btn.text = "Unvote" if _local_voted else "Rematch"
+	var total: int = multiplayer.get_peers().size() + 1
+	var count: int = 0
+	for v: bool in _rematch_votes.values():
+		if v:
+			count += 1
+	_vote_label.text = "%d / %d voted" % [count, total]
+
+func _check_rematch_unanimous() -> void:
+	var total: int = multiplayer.get_peers().size() + 1
+	var count: int = 0
+	for v: bool in _rematch_votes.values():
+		if v:
+			count += 1
+	if count >= total:
+		GameManager.reset_game()
 
 func _get_team_colors() -> Array[Dictionary]:
 	if GameManager.teams.size() < 2:

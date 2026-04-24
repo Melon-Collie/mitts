@@ -118,6 +118,8 @@ These are non-obvious constraints that cause subtle bugs if violated. Rates and 
 
 **Don't shy away from complexity when it improves feel.** This project already has full client-side prediction with input replay, buffered interpolation, and puck trajectory prediction with reconciliation. If adding a complex system will make the game feel meaningfully better to play, it's worth doing — think it through carefully first, then implement it properly.
 
+**All popups and modal dialogs must be closeable via `ui_cancel` (Escape).** Add the popup to the existing `_unhandled_input` block in the relevant UI script — check `popup.visible`, hide it, and call `get_viewport().set_input_as_handled()`.
+
 ## Launch Modes
 
 All start paths go through `MainMenu.tscn`. `NetworkManager._ready()` does nothing — the menu calls `start_offline()`, `start_host()`, or `start_client(ip)` directly. These set up ENet but defer world spawning. `Hockey.tscn`'s root node runs `game_scene.gd`, whose `_ready()` calls `NetworkManager.on_game_scene_ready()`, which emits `host_ready` on hosts; `GameManager` listens and calls `on_host_started`. Client world spawn is triggered by the `client_connected` signal from `_on_connected_to_server()`.
@@ -144,3 +146,9 @@ Playtester builds ship via GitHub Releases (`latest` tag). `deploy.yml` computes
 - **Reconcile replay doesn't skip non-movement inputs:** Every unconfirmed input replays through the full `_process_input` pipeline — state machine dispatch, IK solve, aiming update. At 100 ms RTT (~24 inputs) this is fine. At 500 ms on bad WiFi (~120 inputs) it becomes noticeable. Inputs that can't affect position/velocity (dead-phase frames, menu-only inputs) could be detected and short-circuited in the replay loop.
 - **No integration test for the game loop:** The domain layer is well-tested but nothing covers faceoff → play → goal → reset end-to-end. This is the code path that silently breaks when `PhaseCoordinator` or `GameStateMachine` is refactored.
 - **Uniform rendering should move to UV-mapped texture painting:** The current system applies solid colors via `material_override` and stamps numbers/stripes as overlay `QuadMesh` nodes. The right approach is UV-unwrapped meshes (jersey, pants, gloves, socks) with a single painted `ImageTexture` per mesh — `Image.fill_rect` for stripe bands, glyph stamping for name/number, all composited into one atlas at spawn time. Prerequisites: UV-unwrap the skater meshes in Blender so each face (back panel, front panel, sleeves, etc.) has a predictable UV island; define matching UV region constants in `JerseyTextureGenerator`; replace `set_player_color` / `set_jersey_stripes` with a single `paint_and_apply_textures` call. Eliminates all overlay quad nodes and z-fighting.
+
+## Planned Features
+
+**Tier 3 — larger scope:**
+- **Reconnect / slot reservation:** When a peer drops, host marks the slot "reserved" for ~60 s. If the same player (matched by name) reconnects within the window, they reclaim their slot, stats, and team without restarting the game. Requires a pending-reconnect state in `GameManager` and a rejoin handshake in `NetworkManager`.
+- **Spectator mode:** Join-as-spectator lobby slot (beyond the 3v3 roster). Spectator receives world state normally but skips all input/controller setup. Needs a follow-camera (track puck, or cycle through players) and lobby slot-type handling.
