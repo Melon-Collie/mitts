@@ -42,7 +42,7 @@ Your blade follows your mouse at all times. Move it toward the puck to pick it u
 
 Pucks coming in fast deflect off your blade instead of sticking. Move your stick backward with the puck to absorb a pass and catch it; hold your stick still against a fast puck to deflect it. Opposing blades can poke-check the puck loose — stick battles are momentum-based. Skate hard into a puck carrier to body check them — a big enough hit knocks the puck loose. Get in the way of a shot and it deflects off your body. Opponents can't poke their stick through you — position your body to shield the puck.
 
-A simplified version of offsides and icing have been implemented. If you cross the blue line before the puck, you're offsides. You'll be ghosted (can't interact with the puck or other players). Tag back up at the line to exit ghost mode. For icing, if you ice the puck, your whole team will be ghosted for a few seconds or until the opponent picks up the puck.
+A fast-paced version of offsides and icing have been implemented. If you cross the blue line before the puck, you're offsides. You'll be ghosted (can't interact with the puck or other players). Tag back up at the line to exit ghost mode. For icing, if you ice the puck, your whole team will be ghosted for a few seconds or until the opponent picks up the puck.
 
 You can charge up a one-timer without the puck by holding right click. If you release while the puck is in your shooting zone, you'll fire off a one-timer.
 
