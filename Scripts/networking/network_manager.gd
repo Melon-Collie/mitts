@@ -29,6 +29,7 @@ signal game_started(config: Dictionary)
 signal lobby_roster_synced(roster: Array)
 signal team_colors_synced(home_color_id: String, away_color_id: String)
 signal return_to_lobby_received(roster: Array)
+signal player_ready_changed(peer_id: int, is_ready: bool)
 signal clock_ready
 signal pickup_claim_received(peer_id: int, host_timestamp: float, rtt_ms: float, interp_delay_ms: float)
 signal hit_claim_received(hitter_peer_id: int, victim_peer_id: int, host_timestamp: float, rtt_ms: float)
@@ -640,6 +641,23 @@ func send_confirm_slot_swap(peer_id: int, old_team_id: int, old_slot: int,
 		confirm_slot_swap.rpc_id(remote_id, peer_id, old_team_id, old_slot,
 				new_team_id, new_slot, jersey, helmet, pants)
 	slot_swap_confirmed.emit(peer_id, old_team_id, old_slot, new_team_id, new_slot, jersey, helmet, pants)
+
+@rpc("any_peer", "reliable")
+func request_player_ready(is_ready: bool) -> void:
+	var peer_id: int = multiplayer.get_remote_sender_id()
+	for remote_id: int in multiplayer.get_peers():
+		notify_player_ready.rpc_id(remote_id, peer_id, is_ready)
+	player_ready_changed.emit(peer_id, is_ready)
+
+@rpc("authority", "reliable")
+func notify_player_ready(peer_id: int, is_ready: bool) -> void:
+	player_ready_changed.emit(peer_id, is_ready)
+
+func send_player_ready(is_ready: bool) -> void:
+	if is_host:
+		player_ready_changed.emit(multiplayer.get_unique_id(), is_ready)
+	else:
+		request_player_ready.rpc_id(1, is_ready)
 
 signal join_in_progress(config: Dictionary)
 

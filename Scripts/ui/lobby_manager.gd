@@ -10,6 +10,11 @@ var _lobby_slots: Dictionary = {}
 
 var _slot_grid: SlotGridPanel = null
 var _start_btn: Button = null
+var _ready_btn: Button = null
+
+# key = peer_id → bool; tracks non-host peers only (host uses Start instead)
+var _ready_states: Dictionary = {}
+var _local_is_ready: bool = false
 
 # Settings (host only editable; all players see them)
 var _num_periods: int = GameRules.NUM_PERIODS
@@ -33,6 +38,7 @@ func _ready() -> void:
 	NetworkManager.lobby_roster_synced.connect(_on_lobby_roster_synced)
 	NetworkManager.game_started.connect(_on_game_started)
 	NetworkManager.team_colors_synced.connect(_on_team_colors_synced)
+	NetworkManager.player_ready_changed.connect(_on_player_ready_changed)
 
 	if not NetworkManager.pending_lobby_roster.is_empty():
 		_on_lobby_roster_synced(NetworkManager.pending_lobby_roster)
@@ -100,7 +106,13 @@ func _build_ui() -> void:
 	if NetworkManager.is_host:
 		_start_btn = _btn("Start Game")
 		_start_btn.pressed.connect(_on_start_pressed)
+		_start_btn.disabled = true
+		_start_btn.modulate = Color(1, 1, 1, 0.5)
 		btn_box.add_child(_start_btn)
+	else:
+		_ready_btn = _btn("Ready")
+		_ready_btn.pressed.connect(_on_ready_pressed)
+		btn_box.add_child(_ready_btn)
 
 	_refresh_grid()
 
@@ -284,7 +296,8 @@ func _build_roster_array() -> Array:
 		var team_id: int = 1 if k >= PlayerRules.MAX_PER_TEAM else 0
 		var slot: int = k % 3
 		var entry: Dictionary = _lobby_slots[k]
-		result.append([entry.peer_id, team_id, slot, entry.player_name, entry.is_left_handed, entry.get("jersey_number", 10)])
+		var is_ready: bool = _ready_states.get(entry.peer_id, false)
+		result.append([entry.peer_id, team_id, slot, entry.player_name, entry.is_left_handed, entry.get("jersey_number", 10), is_ready])
 	return result
 
 func _build_slot_grid_roster() -> Array[Dictionary]:
@@ -300,6 +313,7 @@ func _build_slot_grid_roster() -> Array[Dictionary]:
 			"player_name":    entry.player_name,
 			"jersey_number":  entry.get("jersey_number", 10),
 			"is_left_handed": entry.is_left_handed,
+			"is_ready":       _ready_states.get(entry.peer_id, false),
 		})
 	return result
 
@@ -323,6 +337,23 @@ func _broadcast_confirm(peer_id: int, team_id: int, slot: int) -> void:
 	NetworkManager.send_confirm_slot_swap(peer_id, -1, -1, team_id, slot,
 			colors.jersey, colors.helmet, colors.pants)
 
+func _update_start_btn() -> void:
+	if _start_btn == null:
+		return
+	var all_ready: bool = not _ready_states.is_empty()
+	for v: bool in _ready_states.values():
+		if not v:
+			all_ready = false
+			break
+	_start_btn.disabled = not all_ready
+	_start_btn.modulate = Color(1, 1, 1, 1.0) if all_ready else Color(1, 1, 1, 0.5)
+
+func _update_ready_btn() -> void:
+	if _ready_btn == null:
+		return
+	_ready_btn.text = "Not Ready" if _local_is_ready else "Ready"
+	_ready_btn.modulate = Color(0.55, 1.0, 0.60, 1.0) if _local_is_ready else Color(1, 1, 1, 1.0)
+
 # ── Signal handlers ───────────────────────────────────────────────────────────
 
 func _on_peer_joined(peer_id: int) -> void:
@@ -335,11 +366,13 @@ func _on_peer_joined(peer_id: int) -> void:
 	var is_left: bool = NetworkManager.get_peer_handedness(peer_id)
 	var num: int = NetworkManager.get_peer_number(peer_id)
 	_assign_slot(peer_id, target[0], target[1], name_val, is_left, num)
+	_ready_states[peer_id] = false
 	var roster: Array = _build_roster_array()
 	for existing_peer: int in multiplayer.get_peers():
 		NetworkManager.send_lobby_roster(existing_peer, roster)
 	NetworkManager.send_team_colors_to(peer_id, _home_color_id, _away_color_id)
 	_broadcast_confirm(peer_id, target[0], target[1])
+	_update_start_btn()
 	_refresh_grid()
 
 func _on_peer_disconnected(peer_id: int) -> void:
@@ -347,6 +380,8 @@ func _on_peer_disconnected(peer_id: int) -> void:
 		if _lobby_slots[k].peer_id == peer_id:
 			_lobby_slots.erase(k)
 			break
+	_ready_states.erase(peer_id)
+	_update_start_btn()
 	_refresh_grid()
 
 func _on_slot_selected(team_id: int, slot: int) -> void:
@@ -390,6 +425,7 @@ func _on_slot_swap_confirmed(peer_id: int, _old_team_id: int, _old_slot: int,
 
 func _on_lobby_roster_synced(roster: Array) -> void:
 	_lobby_slots.clear()
+	_ready_states.clear()
 	for entry: Array in roster:
 		var peer_id: int = entry[0]
 		var team_id: int = entry[1]
@@ -397,12 +433,28 @@ func _on_lobby_roster_synced(roster: Array) -> void:
 		var p_name: String = entry[3] if entry.size() > 3 else "Player"
 		var is_left: bool = entry[4] if entry.size() > 4 else true
 		var p_number: int = entry[5] if entry.size() > 5 else 10
+		var is_ready: bool = entry[6] if entry.size() > 6 else false
 		_lobby_slots[_slot_key(team_id, slot)] = {
 			"peer_id": peer_id,
 			"player_name": p_name,
 			"is_left_handed": is_left,
 			"jersey_number": p_number,
 		}
+		# Host (peer_id 1) doesn't participate in the ready-check.
+		if peer_id != 1:
+			_ready_states[peer_id] = is_ready
+	_update_start_btn()
+	_refresh_grid()
+
+func _on_player_ready_changed(peer_id: int, is_ready: bool) -> void:
+	# Host doesn't need to be ready — only track non-host peers.
+	if peer_id == 1:
+		return
+	_ready_states[peer_id] = is_ready
+	if peer_id == multiplayer.get_unique_id():
+		_local_is_ready = is_ready
+		_update_ready_btn()
+	_update_start_btn()
 	_refresh_grid()
 
 func _on_team_colors_synced(home_id: String, away_id: String) -> void:
@@ -432,6 +484,11 @@ func _build_pending_slots() -> Dictionary:
 			"jersey_number": entry.get("jersey_number", 10),
 		}
 	return result
+
+func _on_ready_pressed() -> void:
+	_local_is_ready = not _local_is_ready
+	_update_ready_btn()
+	NetworkManager.send_player_ready(_local_is_ready)
 
 func _on_start_pressed() -> void:
 	var config: Dictionary = {
