@@ -47,6 +47,7 @@ var pending_game_config: Dictionary = {}
 var pending_lobby_slots: Dictionary = {}  # peer_id → { team_id, team_slot, player_name, is_left_handed }
 var pending_lobby_roster: Array = []
 var pending_join_slot: Dictionary = {}   # { team_slot, team_id, jersey_color, helmet_color, pants_color }
+var is_offline_mode: bool = false
 var pending_home_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID
 var pending_away_color_id: String  = TeamColorRegistry.DEFAULT_AWAY_ID
 var pending_join_players: Array = []     # sync_existing_players data for join-in-progress
@@ -102,9 +103,11 @@ func _ready() -> void:
 func start_offline() -> void:
 	is_host = true
 	game_initiated = true
+	is_offline_mode = true
 	_peer_handedness[1] = local_is_left_handed
 	_peer_names[1] = local_player_name
 	_peer_numbers[1] = local_jersey_number
+	pending_game_config = {"num_periods": 1, "period_duration": 0.0, "ot_enabled": false, "ot_duration": 0.0}
 
 
 func local_time() -> float:
@@ -185,6 +188,7 @@ func reset() -> void:
 	multiplayer.multiplayer_peer = null
 	is_host = false
 	game_initiated = false
+	is_offline_mode = false
 	_local_controller = null
 	_remote_controllers.clear()
 	_peer_handedness.clear()

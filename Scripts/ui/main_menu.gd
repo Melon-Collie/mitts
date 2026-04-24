@@ -5,6 +5,11 @@ var _ip_field: LineEdit
 var _error_label: Label = null
 var _player_popup: Control = null
 var _options_popup: Control = null
+var _offline_popup: Control = null
+var _offline_home_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID
+var _offline_away_color_id: String  = TeamColorRegistry.DEFAULT_AWAY_ID
+var _offline_home_btn: OptionButton = null
+var _offline_away_btn: OptionButton = null
 var _loading_screen: LoadingScreen = null
 var _exit_popup: Control = null
 
@@ -106,6 +111,7 @@ func _build_ui() -> void:
 	_build_player_popup()
 	_build_options_popup()
 	_build_exit_popup()
+	_build_offline_popup()
 	_loading_screen = LoadingScreen.new()
 	_loading_screen.cancel_pressed.connect(_on_join_cancelled)
 	add_child(_loading_screen)
@@ -349,6 +355,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _loading_screen != null and _loading_screen.visible:
 			_on_join_cancelled()
 			get_viewport().set_input_as_handled()
+		elif _offline_popup.visible:
+			_offline_popup.visible = false
+			get_viewport().set_input_as_handled()
 		elif _player_popup.visible:
 			_player_popup.visible = false
 			get_viewport().set_input_as_handled()
@@ -386,6 +395,108 @@ func _scale_btn(btn: Button, target: Vector2) -> void:
 	t.tween_property(btn, "scale", target, 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 func _on_offline_pressed() -> void:
+	_offline_popup.visible = true
+
+func _build_offline_popup() -> void:
+	var overlay := ColorRect.new()
+	overlay.color = Color(0.0, 0.0, 0.0, 0.6)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.pressed:
+			_offline_popup.visible = false)
+
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.07, 0.07, 0.09, 0.96)
+	panel_style.set_corner_radius_all(6)
+	panel_style.set_content_margin_all(32)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", panel_style)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 20)
+	panel.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "Play Offline"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", Color.WHITE)
+	vbox.add_child(title)
+
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 16)
+	grid.add_theme_constant_override("v_separation", 12)
+	vbox.add_child(grid)
+
+	var home_lbl := Label.new()
+	home_lbl.text = "Home:"
+	home_lbl.add_theme_font_size_override("font_size", 20)
+	home_lbl.add_theme_color_override("font_color", Color.WHITE)
+	home_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	grid.add_child(home_lbl)
+
+	_offline_home_btn = _color_option_btn(_offline_home_color_id)
+	_offline_home_btn.item_selected.connect(func(idx: int) -> void:
+		_offline_home_color_id = TeamColorRegistry.get_all_ids()[idx]
+		_update_offline_color_exclusion())
+	grid.add_child(_offline_home_btn)
+
+	var away_lbl := Label.new()
+	away_lbl.text = "Away:"
+	away_lbl.add_theme_font_size_override("font_size", 20)
+	away_lbl.add_theme_color_override("font_color", Color.WHITE)
+	away_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	grid.add_child(away_lbl)
+
+	_offline_away_btn = _color_option_btn(_offline_away_color_id)
+	_offline_away_btn.item_selected.connect(func(idx: int) -> void:
+		_offline_away_color_id = TeamColorRegistry.get_all_ids()[idx]
+		_update_offline_color_exclusion())
+	grid.add_child(_offline_away_btn)
+
+	_update_offline_color_exclusion()
+
+	var play_btn := _make_button("Play")
+	play_btn.pressed.connect(_do_start_offline)
+	vbox.add_child(play_btn)
+
+	_offline_popup = Control.new()
+	_offline_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_offline_popup.visible = false
+	_offline_popup.add_child(overlay)
+	_offline_popup.add_child(panel)
+	add_child(_offline_popup)
+
+func _color_option_btn(selected_id: String) -> OptionButton:
+	var btn := OptionButton.new()
+	btn.custom_minimum_size = Vector2(160, 40)
+	btn.add_theme_font_size_override("font_size", 18)
+	var ids: Array[String] = TeamColorRegistry.get_all_ids()
+	for i: int in ids.size():
+		btn.add_item(TeamColorRegistry.get_preset_name(ids[i]), i)
+		if ids[i] == selected_id:
+			btn.select(i)
+	return btn
+
+func _update_offline_color_exclusion() -> void:
+	var ids: Array[String] = TeamColorRegistry.get_all_ids()
+	if _offline_home_btn != null:
+		for i: int in ids.size():
+			_offline_home_btn.set_item_disabled(i, ids[i] == _offline_away_color_id)
+	if _offline_away_btn != null:
+		for i: int in ids.size():
+			_offline_away_btn.set_item_disabled(i, ids[i] == _offline_home_color_id)
+
+func _do_start_offline() -> void:
+	NetworkManager.pending_home_color_id = _offline_home_color_id
+	NetworkManager.pending_away_color_id = _offline_away_color_id
 	NetworkManager.start_offline()
 	get_tree().change_scene_to_file(Constants.SCENE_HOCKEY)
 
