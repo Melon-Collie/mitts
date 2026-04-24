@@ -231,7 +231,11 @@ func _update_state(delta: float) -> void:
 	var puck_local_x: float = (_tracked_puck_position.x - _goal_center_x) * -_direction_sign
 	match _state:
 		State.STANDING:
-			if _is_puck_in_defensive_zone():
+			# RVH entry/exit is a spatial puck-position query. Client puck position
+			# differs from server (interpolation lag), causing the client to
+			# oscillate across the zone boundary and fight server reliable RPCs.
+			# Server owns RVH transitions; client receives them via apply_state_transition.
+			if is_server and _is_puck_in_defensive_zone():
 				_reacting_to_shot = false
 				_recovering_from_butterfly = false
 				_state = State.RVH_LEFT if puck_local_x < 0.0 else State.RVH_RIGHT
@@ -287,14 +291,14 @@ func _update_state(delta: float) -> void:
 				_recovery_timer = 0.0
 				_slide_recommit_timer = slide_recommit_delay
 		State.RVH_LEFT:
-			if not _is_puck_in_defensive_zone():
+			if is_server and not _is_puck_in_defensive_zone():
 				_state = State.STANDING
-			elif puck_local_x >= 0.0:
+			elif is_server and puck_local_x >= 0.0:
 				_state = State.RVH_RIGHT
 		State.RVH_RIGHT:
-			if not _is_puck_in_defensive_zone():
+			if is_server and not _is_puck_in_defensive_zone():
 				_state = State.STANDING
-			elif puck_local_x < 0.0:
+			elif is_server and puck_local_x < 0.0:
 				_state = State.RVH_LEFT
 	if _state != prev_state:
 		state_transitioned.emit(team_id, _state as int)
