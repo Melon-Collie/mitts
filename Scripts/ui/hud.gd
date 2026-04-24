@@ -761,6 +761,8 @@ func _on_rematch_vote_changed(peer_id: int, vote: bool) -> void:
 func _on_rematch_peer_disconnected(peer_id: int) -> void:
 	_rematch_votes.erase(peer_id)
 	_update_rematch_ui()
+	if NetworkManager.is_host:
+		_check_rematch_unanimous()
 
 func _update_rematch_ui() -> void:
 	if _rematch_btn == null:
