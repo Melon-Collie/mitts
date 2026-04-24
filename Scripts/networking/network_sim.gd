@@ -6,7 +6,15 @@ var enabled: bool = false
 var delay_ms: float = 0.0
 var jitter_ms: float = 0.0
 var loss_pct: float = 0.0
-var current_preset: int = 0  # 0 = off, 1–5 = increasing degradation
+var current_preset: int = 0  # 0 = off, 1–6 = increasing degradation
+
+# Key 7: trigger a 50ms unreliable-packet blackout.
+# Drains the host input queue to 0 (fires the fallback), then on recovery the
+# reconcile receives a stale world-state broadcast — reproducing the low-queue
+# scenario seen on real LAN that random-loss simulation can't reach due to
+# 12-frame batch redundancy absorbing individual drops.
+const STARVATION_BURST_MS: float = 50.0
+var _starvation_until: float = -1.0
 
 const PRESETS: Array[Dictionary] = [
 	{ delay = 0.0,   jitter = 0.0,  loss = 0.0  },  # 0: Off
@@ -26,6 +34,8 @@ class PendingPacket:
 var _pending: Array[PendingPacket] = []
 
 func send(c: Callable, args: Array, reliable: bool) -> void:
+	if not reliable and _starvation_until > Time.get_ticks_msec() / 1000.0:
+		return
 	if not enabled:
 		c.callv(args)
 		return
@@ -54,6 +64,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_4: preset = 4
 		KEY_5: preset = 5
 		KEY_6: preset = 6
+		KEY_7:
+			_starvation_until = Time.get_ticks_msec() / 1000.0 + STARVATION_BURST_MS / 1000.0
+			return
 	if preset == -1:
 		return
 	apply_preset(preset)
