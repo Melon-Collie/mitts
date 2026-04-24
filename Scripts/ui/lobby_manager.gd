@@ -11,6 +11,9 @@ var _lobby_slots: Dictionary = {}
 var _slot_grid: SlotGridPanel = null
 var _start_btn: Button = null
 var _ready_btn: Button = null
+var _periods_spin: SpinBox = null
+var _dur_spin: SpinBox = null
+var _ot_check: CheckButton = null
 
 # key = peer_id → bool; tracks non-host peers only (host uses Start instead)
 var _ready_states: Dictionary = {}
@@ -30,6 +33,9 @@ var _away_color_btn: OptionButton = null
 func _ready() -> void:
 	_home_color_id = NetworkManager.pending_home_color_id
 	_away_color_id = NetworkManager.pending_away_color_id
+	_num_periods = NetworkManager.pending_num_periods
+	_period_duration = NetworkManager.pending_period_duration
+	_ot_enabled = NetworkManager.pending_ot_enabled
 	_build_ui()
 	NetworkManager.peer_joined.connect(_on_peer_joined)
 	NetworkManager.peer_disconnected.connect(_on_peer_disconnected)
@@ -38,6 +44,7 @@ func _ready() -> void:
 	NetworkManager.lobby_roster_synced.connect(_on_lobby_roster_synced)
 	NetworkManager.game_started.connect(_on_game_started)
 	NetworkManager.team_colors_synced.connect(_on_team_colors_synced)
+	NetworkManager.lobby_settings_synced.connect(_on_lobby_settings_synced)
 	NetworkManager.player_ready_changed.connect(_on_player_ready_changed)
 
 	if not NetworkManager.pending_lobby_roster.is_empty():
@@ -165,40 +172,46 @@ func _build_settings_panel() -> Control:
 	grid.add_child(_home_color_btn)
 
 	grid.add_child(_setting_label("Periods"))
-	var periods_spin := SpinBox.new()
-	periods_spin.min_value = 1
-	periods_spin.max_value = 5
-	periods_spin.step = 1
-	periods_spin.value = _num_periods
-	periods_spin.editable = is_interactive
+	_periods_spin = SpinBox.new()
+	_periods_spin.min_value = 1
+	_periods_spin.max_value = 5
+	_periods_spin.step = 1
+	_periods_spin.value = _num_periods
+	_periods_spin.editable = is_interactive
 	if is_interactive:
-		periods_spin.value_changed.connect(func(v: float) -> void: _num_periods = int(v))
+		_periods_spin.value_changed.connect(func(v: float) -> void:
+			_num_periods = int(v)
+			NetworkManager.send_lobby_settings(_num_periods, _period_duration, _ot_enabled))
 	else:
-		periods_spin.modulate = Color(1, 1, 1, 0.5)
-	grid.add_child(periods_spin)
+		_periods_spin.modulate = Color(1, 1, 1, 0.5)
+	grid.add_child(_periods_spin)
 
 	grid.add_child(_setting_label("Period length (min)"))
-	var dur_spin := SpinBox.new()
-	dur_spin.min_value = 1
-	dur_spin.max_value = 10
-	dur_spin.step = 1
-	dur_spin.value = _period_duration / 60.0
-	dur_spin.editable = is_interactive
+	_dur_spin = SpinBox.new()
+	_dur_spin.min_value = 1
+	_dur_spin.max_value = 10
+	_dur_spin.step = 1
+	_dur_spin.value = _period_duration / 60.0
+	_dur_spin.editable = is_interactive
 	if is_interactive:
-		dur_spin.value_changed.connect(func(v: float) -> void: _period_duration = v * 60.0)
+		_dur_spin.value_changed.connect(func(v: float) -> void:
+			_period_duration = v * 60.0
+			NetworkManager.send_lobby_settings(_num_periods, _period_duration, _ot_enabled))
 	else:
-		dur_spin.modulate = Color(1, 1, 1, 0.5)
-	grid.add_child(dur_spin)
+		_dur_spin.modulate = Color(1, 1, 1, 0.5)
+	grid.add_child(_dur_spin)
 
 	grid.add_child(_setting_label("Overtime"))
-	var ot_check := CheckButton.new()
-	ot_check.button_pressed = _ot_enabled
-	ot_check.disabled = not is_interactive
+	_ot_check = CheckButton.new()
+	_ot_check.button_pressed = _ot_enabled
+	_ot_check.disabled = not is_interactive
 	if is_interactive:
-		ot_check.toggled.connect(func(pressed: bool) -> void: _ot_enabled = pressed)
+		_ot_check.toggled.connect(func(pressed: bool) -> void:
+			_ot_enabled = pressed
+			NetworkManager.send_lobby_settings(_num_periods, _period_duration, _ot_enabled))
 	else:
-		ot_check.modulate = Color(1, 1, 1, 0.5)
-	grid.add_child(ot_check)
+		_ot_check.modulate = Color(1, 1, 1, 0.5)
+	grid.add_child(_ot_check)
 
 	_update_color_exclusion()
 	return box
@@ -370,6 +383,7 @@ func _on_peer_joined(peer_id: int) -> void:
 	for existing_peer: int in multiplayer.get_peers():
 		NetworkManager.send_lobby_roster(existing_peer, roster)
 	NetworkManager.send_team_colors_to(peer_id, _home_color_id, _away_color_id)
+	NetworkManager.send_lobby_settings_to(peer_id, _num_periods, _period_duration, _ot_enabled)
 	_broadcast_confirm(peer_id, target[0], target[1])
 	_update_start_btn()
 	_refresh_grid()
@@ -463,6 +477,17 @@ func _on_team_colors_synced(home_id: String, away_id: String) -> void:
 	_sync_option_btn(_away_color_btn, away_id)
 	_update_color_exclusion()
 	_refresh_grid()
+
+func _on_lobby_settings_synced(num_periods: int, period_duration: float, ot_enabled: bool) -> void:
+	_num_periods = num_periods
+	_period_duration = period_duration
+	_ot_enabled = ot_enabled
+	if _periods_spin != null:
+		_periods_spin.value = _num_periods
+	if _dur_spin != null:
+		_dur_spin.value = _period_duration / 60.0
+	if _ot_check != null:
+		_ot_check.button_pressed = _ot_enabled
 
 func _on_game_started(config: Dictionary) -> void:
 	NetworkManager.pending_game_config = config
