@@ -33,7 +33,7 @@ var _pending_local_release: bool = false  # true from local release until host c
 var _shot_rtt_ms: float = 0.0             # RTT captured at release time; used for trajectory reconcile
 var is_extrapolating: bool = false
 
-var _rejoin_blend_start_time: float = -1.0
+var _rejoin_blend_elapsed: float = -1.0  # < 0 means inactive
 var _rejoin_blend_from_pos: Vector3 = Vector3.ZERO
 
 func get_buffer_depth() -> int:
@@ -87,6 +87,8 @@ func _physics_process(delta: float) -> void:
 		_check_interactions()
 		_prev_puck_pos = puck.get_puck_position()
 		return
+	if _rejoin_blend_elapsed >= 0.0:
+		_rejoin_blend_elapsed += delta
 	if _local_carrier_skater != null:
 		is_extrapolating = false
 		_apply_local_carrier_position(delta)
@@ -262,7 +264,7 @@ func _on_client_puck_hit_goalie(_goalie: Goalie) -> void:
 	# transitions from the predicted bounce position to the interpolation buffer
 	# rather than snapping to the pre-bounce delayed position.
 	_rejoin_blend_from_pos = puck.get_puck_position()
-	_rejoin_blend_start_time = Time.get_ticks_msec() / 1000.0
+	_rejoin_blend_elapsed = 0.0
 	_predicting_trajectory = false
 	_pending_local_release = false
 	puck.set_client_prediction_mode(false)
@@ -271,7 +273,7 @@ func _on_client_puck_hit_post() -> void:
 	if not _predicting_trajectory:
 		return
 	_rejoin_blend_from_pos = puck.get_puck_position()
-	_rejoin_blend_start_time = Time.get_ticks_msec() / 1000.0
+	_rejoin_blend_elapsed = 0.0
 	_predicting_trajectory = false
 	_pending_local_release = false
 	puck.set_client_prediction_mode(false)
@@ -361,13 +363,12 @@ func _interpolate() -> void:
 		interpolated.velocity = from_state.velocity.lerp(to_state.velocity, bracket.t)
 	if prev_extrapolating and not is_extrapolating:
 		_rejoin_blend_from_pos = puck.get_puck_position()
-		_rejoin_blend_start_time = Time.get_ticks_msec() / 1000.0
-	if _rejoin_blend_start_time >= 0.0:
-		var ease_t: float = clampf(
-				(Time.get_ticks_msec() / 1000.0 - _rejoin_blend_start_time) / rejoin_blend_duration, 0.0, 1.0)
+		_rejoin_blend_elapsed = 0.0
+	if _rejoin_blend_elapsed >= 0.0:
+		var ease_t: float = clampf(_rejoin_blend_elapsed / rejoin_blend_duration, 0.0, 1.0)
 		interpolated.position = _rejoin_blend_from_pos.lerp(interpolated.position, ease_t)
 		if ease_t >= 1.0:
-			_rejoin_blend_start_time = -1.0
+			_rejoin_blend_elapsed = -1.0
 	_apply_state_to_puck(interpolated)
 	BufferedStateInterpolator.drop_stale(_state_buffer, render_time)
 

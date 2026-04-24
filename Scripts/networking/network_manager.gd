@@ -784,7 +784,12 @@ func get_target_interpolation_delay() -> float:
 func adapt_interpolation_delay(current: float) -> float:
 	var target: float = get_target_interpolation_delay()
 	var change: float = lerpf(current, target, 0.15) - current
-	return current + clampf(change, -0.001, 0.005)
+	# Up-clamp raised to 10 ms/packet (was 5 ms): a sudden RTT spike can push the
+	# target 150+ ms above current; at 5 ms/packet that takes ~750 ms to converge,
+	# during which extrapolation fires every 50 ms on all remote skaters (visible
+	# micro-stutters). 10 ms/packet halves the recovery window with no oscillation
+	# risk — the down-clamp stays at 1 ms/packet to avoid chasing transient jitter.
+	return current + clampf(change, -0.001, 0.010)
 
 func get_peer_loss_rate(peer_id: int = -1) -> float:
 	if is_host:

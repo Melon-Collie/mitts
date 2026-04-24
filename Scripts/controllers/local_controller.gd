@@ -184,6 +184,9 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# so the replay must start from the server's facing to reproduce the trajectory.
 	_facing = server_state.facing
 	skater.set_facing(_facing)
+	# IK lock side is relative to the old facing; reset so the gate re-evaluates
+	# cleanly from the snapped facing on the first post-reconcile frame.
+	_ik_locked_side = 0
 	_lower_body_lag = 0.0
 	skater.set_lower_body_lag(0.0)
 	# Seed mouse pos from the first replayed input so the first frame's
@@ -227,9 +230,11 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# Server authority on shot state: if the server disagrees with the client's
 	# pre-replay state, server wins — this corrects charge that was wrong before
 	# the reconcile (e.g. from a dropped shoot_pressed input).
+	# charge_distance is always overwritten: states can agree while charge drifts
+	# (replay accumulation divergence), which would otherwise go uncorrected.
 	if server_state.shot_state != pre_state:
 		_sm.set_state(server_state.shot_state as SkaterStateMachine.State)
-		_aiming.charge_distance = server_state.shot_charge
+	_aiming.charge_distance = server_state.shot_charge
 	skater.set_facing(_facing)
 	skater.set_upper_body_rotation(_upper_body_angle)
 	skater.set_lower_body_lag(_lower_body_lag)
@@ -242,6 +247,9 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	if blade_reconcile_delta > _BLADE_JUMP_THRESHOLD:
 		NetworkTelemetry.record_blade_jump(blade_reconcile_delta)
 	skater.visual_offset = pre_reconcile_visual_pos - skater.global_position
+	# Update the blade baseline so the next physics tick doesn't report a
+	# spurious blade jump equal to the reconcile snap distance.
+	_last_blade_pos = skater.get_blade_contact_global()
 	if OS.is_debug_build() and skater.visual_offset.length() > 0.05:
 		push_warning("Reconcile: %.3fm snap applied (inputs replayed: %d)" \
 				% [skater.visual_offset.length(), _input_history.size()])
