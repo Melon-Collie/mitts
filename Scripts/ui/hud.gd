@@ -747,6 +747,8 @@ func _on_game_over() -> void:
 
 func _on_game_reset() -> void:
 	_game_over_popup.visible = false
+	if _slot_grid_container != null:
+		_slot_grid_container.visible = false
 
 func _on_rematch_vote_pressed() -> void:
 	_local_voted = not _local_voted
