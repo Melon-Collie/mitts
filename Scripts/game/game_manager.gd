@@ -824,6 +824,14 @@ func _on_slot_swap_confirmed(peer_id: int, old_team_id: int, old_slot: int,
 	if _swap_coord != null:
 		_swap_coord.apply_confirmed_swap(peer_id, old_team_id, old_slot,
 				new_team_id, new_slot, jersey, helmet, pants)
+	# Update the local controller's team context (camera flip, move vector, shot
+	# direction) when the local player is the one who swapped.
+	if _registry != null:
+		var record: PlayerRecord = _registry.get_record(peer_id)
+		if record != null and record.is_local:
+			var local_ctrl: LocalController = record.controller as LocalController
+			if local_ctrl != null:
+				local_ctrl.set_local_team_id(new_team_id)
 
 
 # ── Hit tracking ─────────────────────────────────────────────────────────────
