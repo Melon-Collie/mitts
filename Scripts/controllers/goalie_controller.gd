@@ -42,7 +42,7 @@ extends Node
 @export var recovery_lerp_speed: float = 3.0
 
 # ── Client Correction Tuning ──────────────────────────────────────────────────
-@export var correction_blend: float = 0.40
+@export var correction_blend: float = 0.08
 @export var correction_hard_snap: float = 1.5
 @export var correction_dead_zone: float = 0.02
 
@@ -398,14 +398,27 @@ func _update_target_x() -> void:
 
 func _update_lateral_standing(delta: float) -> void:
 	if not _reacting_to_shot:
-		var arc := GoalieBehaviorRules.target_position_on_arc(
-				_tracked_puck_position, _goal_line_z, _goal_center_x,
-				_current_depth, net_half_width, _direction_sign)
-		_target_x = arc.x
-		# Clamp arc Z so sharp angles near the goal line never push the goalie
-		# into or past the net. arc_depth < depth_defensive triggers the clamp.
-		var arc_depth: float = (arc.y - _goal_line_z) * _direction_sign
-		_target_arc_z = _goal_line_z + _direction_sign * maxf(arc_depth, depth_defensive)
+		if not is_server and _is_puck_in_defensive_zone():
+			# Client: puck is in the defensive zone but the RVH state_transitioned
+			# RPC hasn't arrived yet. Mirror the RVH target X so the client
+			# pre-positions near the post instead of staying at the arc X (~0.82m).
+			# Without this, apply_state correction fights an ~11cm offset every
+			# broadcast while the client is waiting for the transition RPC.
+			var puck_local_x: float = (_tracked_puck_position.x - _goal_center_x) * -_direction_sign
+			if puck_local_x < 0.0:
+				_target_x = _goal_center_x + (net_half_width - 0.38) * _direction_sign
+			else:
+				_target_x = _goal_center_x - (net_half_width - 0.38) * _direction_sign
+			_target_arc_z = _goal_line_z + _direction_sign * depth_defensive
+		else:
+			var arc := GoalieBehaviorRules.target_position_on_arc(
+					_tracked_puck_position, _goal_line_z, _goal_center_x,
+					_current_depth, net_half_width, _direction_sign)
+			_target_x = arc.x
+			# Clamp arc Z so sharp angles near the goal line never push the goalie
+			# into or past the net. arc_depth < depth_defensive triggers the clamp.
+			var arc_depth: float = (arc.y - _goal_line_z) * _direction_sign
+			_target_arc_z = _goal_line_z + _direction_sign * maxf(arc_depth, depth_defensive)
 		# Short-side bias: cheat toward near post on sharp angles
 		var puck_z_dist: float = abs(_tracked_puck_position.z - _goal_line_z)
 		var puck_x_dist: float = abs(_tracked_puck_position.x - _goal_center_x)
