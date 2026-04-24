@@ -59,5 +59,6 @@ func _process(_delta: float) -> void:
 		+ "Extrap:    %.1f/s   buf: skater=%d  puck=%d  goalie=%d\n" % [t.extrapolation_per_sec, t.buffer_depth_skater, t.buffer_depth_puck, t.buffer_depth_goalie]
 		+ "Puck:      %s\n" % t.puck_mode
 		+ "Queue:     %d frames (2s median)   loss: %.1f%%\n" % [t.input_queue_depth_median, t.packet_loss_pct]
+		+ "InBuf:     lead %.1f ms   starved %.0f/s\n" % [t.input_lead_avg_ms, t.input_starvations_per_sec]
 		+ "Jitter P95: %.1f ms   interp delay: %.0f ms" % [t.jitter_p95_ms, NetworkManager.get_target_interpolation_delay() * 1000.0]
 	)

@@ -442,7 +442,14 @@ func estimated_host_time() -> float:
 	if _clock_sync == null or not _clock_sync.is_ready:
 		return 0.0
 	return _clock_sync.estimated_host_time()
-	
+
+func estimated_input_stamp_time() -> float:
+	if is_host:
+		return local_time()
+	if _clock_sync == null or not _clock_sync.is_ready:
+		return 0.0
+	return _clock_sync.estimated_input_stamp_time()
+
 func is_clock_ready() -> bool:
 	return is_host or (_clock_sync != null and _clock_sync.is_ready)
 
