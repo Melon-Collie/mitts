@@ -67,6 +67,7 @@ extends Node
 @export var slide_decel_distance: float = 0.5
 @export var slide_settle_distance: float = 0.1
 @export var slide_recommit_delay: float = 0.15
+@export var rvh_exit_delay: float = 0.12
 @export var five_hole_slide_max: float = 0.22
 
 # ── Short-Side Bias Tuning ────────────────────────────────────────────────────
@@ -109,6 +110,7 @@ var _target_x: float = 0.0
 var _target_arc_z: float = 0.0
 var _slide_target_x: float = 0.0
 var _slide_recommit_timer: float = 0.0
+var _rvh_exit_timer: float = 0.0
 var _velocity_x: float = 0.0
 var _velocity_z: float = 0.0
 var _five_hole_openness: float = 0.0
@@ -163,6 +165,7 @@ func reset_to_crease() -> void:
 	_target_arc_z = _goal_line_z + _direction_sign * depth_defensive
 	_slide_target_x = _goal_center_x
 	_slide_recommit_timer = 0.0
+	_rvh_exit_timer = 0.0
 	_five_hole_openness = 0.0
 	_shot_timer = 0.0
 	_recovery_timer = 0.0
@@ -291,15 +294,27 @@ func _update_state(delta: float) -> void:
 				_recovery_timer = 0.0
 				_slide_recommit_timer = slide_recommit_delay
 		State.RVH_LEFT:
-			if is_server and not _is_puck_in_defensive_zone():
-				_state = State.STANDING
-			elif is_server and puck_local_x >= 0.0:
-				_state = State.RVH_RIGHT
+			if is_server:
+				if _is_puck_in_defensive_zone():
+					_rvh_exit_timer = 0.0
+					if puck_local_x >= 0.0:
+						_state = State.RVH_RIGHT
+				else:
+					_rvh_exit_timer += delta
+					if _rvh_exit_timer >= rvh_exit_delay:
+						_state = State.STANDING
+						_rvh_exit_timer = 0.0
 		State.RVH_RIGHT:
-			if is_server and not _is_puck_in_defensive_zone():
-				_state = State.STANDING
-			elif is_server and puck_local_x < 0.0:
-				_state = State.RVH_LEFT
+			if is_server:
+				if _is_puck_in_defensive_zone():
+					_rvh_exit_timer = 0.0
+					if puck_local_x < 0.0:
+						_state = State.RVH_LEFT
+				else:
+					_rvh_exit_timer += delta
+					if _rvh_exit_timer >= rvh_exit_delay:
+						_state = State.STANDING
+						_rvh_exit_timer = 0.0
 	if _state != prev_state:
 		state_transitioned.emit(team_id, _state as int)
 
