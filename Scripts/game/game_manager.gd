@@ -424,10 +424,10 @@ func _wire_sound_signals() -> void:
 	NetworkManager.remote_carrier_changed.connect(_on_remote_carrier_sound)
 	_phase_coord.goal_scored.connect(
 		func(_t: Team, _s: String, _a1: String, _a2: String) -> void:
-			SoundManager.play_ui(SoundManager.Sound.GOAL_HORN, -6.0))
+			SoundManager.play_sfx(SoundManager.Sound.GOAL_HORN, -6.0))
 	NetworkManager.goal_received.connect(
 		func(_tid: int, _s0: int, _s1: int, _sn: String, _a1: String, _a2: String) -> void:
-			SoundManager.play_ui(SoundManager.Sound.GOAL_HORN, -6.0))
+			SoundManager.play_sfx(SoundManager.Sound.GOAL_HORN, -6.0))
 	if NetworkManager.is_host:
 		puck.puck_hit_boards.connect(func() -> void:
 			SoundManager.play_world(SoundManager.Sound.PUCK_BOARDS, puck.get_puck_position())
@@ -458,8 +458,8 @@ func _wire_sound_signals() -> void:
 		func(_g: Goalie) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_GOALIE, puck.get_puck_position()))
 	puck.puck_touched_post.connect(
 		func() -> void: SoundManager.play_world(SoundManager.Sound.PUCK_POST, puck.get_puck_position()))
-	period_changed.connect(func(_p: int) -> void: SoundManager.play_ui(SoundManager.Sound.PERIOD_BUZZER))
-	game_over.connect(func() -> void: SoundManager.play_ui(SoundManager.Sound.PERIOD_BUZZER))
+	period_changed.connect(func(_p: int) -> void: SoundManager.play_sfx(SoundManager.Sound.PERIOD_BUZZER))
+	game_over.connect(func() -> void: SoundManager.play_sfx(SoundManager.Sound.PERIOD_BUZZER))
 
 
 func _on_local_pickup_sound() -> void:

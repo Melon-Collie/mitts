@@ -17,6 +17,8 @@ var jersey_number: int = 10
 var is_left_handed: bool = true
 var last_ip: String = ""
 var master_volume: float = 1.0
+var sfx_volume: float = 1.0
+var ui_volume: float = 1.0
 var master_muted: bool = false
 var is_fullscreen: bool = false
 var resolution_index: int = 1
@@ -43,6 +45,8 @@ func save() -> void:
 	cfg.set_value("player", "left_handed", is_left_handed)
 	cfg.set_value("player", "last_ip", last_ip)
 	cfg.set_value("audio", "master_volume", master_volume)
+	cfg.set_value("audio", "sfx_volume", sfx_volume)
+	cfg.set_value("audio", "ui_volume", ui_volume)
 	cfg.set_value("audio", "master_muted", master_muted)
 	cfg.set_value("video", "fullscreen", is_fullscreen)
 	cfg.set_value("video", "resolution_index", resolution_index)
@@ -89,9 +93,15 @@ func _read_current_input_event(action: String) -> Dictionary:
 	return {}
 
 func apply_audio() -> void:
-	var bus := AudioServer.get_bus_index("Master")
-	AudioServer.set_bus_volume_db(bus, linear_to_db(maxf(master_volume, 0.0001)))
-	AudioServer.set_bus_mute(bus, master_muted)
+	var master_bus := AudioServer.get_bus_index("Master")
+	AudioServer.set_bus_volume_db(master_bus, linear_to_db(maxf(master_volume, 0.0001)))
+	AudioServer.set_bus_mute(master_bus, master_muted)
+	var sfx_bus := AudioServer.get_bus_index("SFX")
+	if sfx_bus != -1:
+		AudioServer.set_bus_volume_db(sfx_bus, linear_to_db(maxf(sfx_volume, 0.0001)))
+	var ui_bus := AudioServer.get_bus_index("UI")
+	if ui_bus != -1:
+		AudioServer.set_bus_volume_db(ui_bus, linear_to_db(maxf(ui_volume, 0.0001)))
 
 func apply_video() -> void:
 	if is_fullscreen:
@@ -118,6 +128,8 @@ func _load() -> void:
 		is_left_handed = cfg.get_value("player", "left_handed", true)
 		last_ip = cfg.get_value("player", "last_ip", "")
 		master_volume = clampf(cfg.get_value("audio", "master_volume", 1.0), 0.0, 1.0)
+		sfx_volume = clampf(cfg.get_value("audio", "sfx_volume", 1.0), 0.0, 1.0)
+		ui_volume = clampf(cfg.get_value("audio", "ui_volume", 1.0), 0.0, 1.0)
 		master_muted = cfg.get_value("audio", "master_muted", false)
 		is_fullscreen = cfg.get_value("video", "fullscreen", false)
 		resolution_index = clamp(cfg.get_value("video", "resolution_index", 1), 0, RESOLUTIONS.size() - 1)

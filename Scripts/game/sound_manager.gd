@@ -21,14 +21,14 @@ enum Sound {
 }
 
 const _SOUND_PATHS: Dictionary = {
-	Sound.UI_HOVER:     "res://Sounds/ui_hover.wav",
-	Sound.UI_CLICK:     "res://Sounds/ui_select.wav",
-	Sound.SHOT_WRISTER: "res://Sounds/shot_wrister.ogg",
-	Sound.SHOT_SLAPPER: "res://Sounds/shot_slapper.ogg",
-	Sound.PUCK_PICKUP:  "res://Sounds/puck_pickup.ogg",
-	Sound.GOAL_HORN:    "res://Sounds/goal_horn.ogg",
-	Sound.SKATE_BRAKE:  "res://Sounds/skate_brake.wav",
-	Sound.SKATE_CARVE:  "res://Sounds/skate_carve.wav",
+	Sound.UI_HOVER:         "res://Sounds/ui_hover.wav",
+	Sound.UI_CLICK:         "res://Sounds/ui_select.wav",
+	Sound.SHOT_WRISTER:     "res://Sounds/shot_wrister.ogg",
+	Sound.SHOT_SLAPPER:     "res://Sounds/shot_slapper.ogg",
+	Sound.PUCK_PICKUP:      "res://Sounds/puck_pickup.ogg",
+	Sound.GOAL_HORN:        "res://Sounds/goal_horn.ogg",
+	Sound.SKATE_BRAKE:      "res://Sounds/skate_brake.wav",
+	Sound.SKATE_CARVE:      "res://Sounds/skate_carve.wav",
 	Sound.PUCK_BOARDS:      "res://Sounds/puck_boards.wav",
 	Sound.PUCK_GOALIE:      "res://Sounds/puck_goalie.wav",
 	Sound.PUCK_POST:        "res://Sounds/puck_post.wav",
@@ -40,17 +40,29 @@ const _SOUND_PATHS: Dictionary = {
 	Sound.BODY_CHECK:       "res://Sounds/body_check.wav",
 }
 
-const _2D_POOL_SIZE: int = 8
-const _3D_POOL_SIZE: int = 12
+const _UI_POOL_SIZE: int = 4
+const _SFX_2D_POOL_SIZE: int = 4
+const _SFX_3D_POOL_SIZE: int = 12
 
-var _streams: Dictionary = {}          # Sound -> AudioStream
-var _pool_2d: Array[AudioStreamPlayer] = []
-var _pool_3d: Array[AudioStreamPlayer3D] = []
+var _streams: Dictionary = {}
+var _pool_ui: Array[AudioStreamPlayer] = []      # UI bus — hover, click
+var _pool_sfx_2d: Array[AudioStreamPlayer] = []  # SFX bus — horn, buzzer
+var _pool_3d: Array[AudioStreamPlayer3D] = []    # SFX bus — all world sounds
 
 
 func _ready() -> void:
+	_ensure_buses()
 	_load_streams()
 	_build_pools()
+
+
+func _ensure_buses() -> void:
+	for bus_name: String in ["SFX", "UI"]:
+		if AudioServer.get_bus_index(bus_name) == -1:
+			var idx: int = AudioServer.bus_count
+			AudioServer.add_bus(idx)
+			AudioServer.set_bus_name(idx, bus_name)
+			AudioServer.set_bus_send(idx, "Master")
 
 
 func _load_streams() -> void:
@@ -61,14 +73,19 @@ func _load_streams() -> void:
 
 
 func _build_pools() -> void:
-	for i: int in _2D_POOL_SIZE:
+	for i: int in _UI_POOL_SIZE:
 		var p := AudioStreamPlayer.new()
-		p.bus = "Master"
+		p.bus = "UI"
 		add_child(p)
-		_pool_2d.append(p)
-	for i: int in _3D_POOL_SIZE:
+		_pool_ui.append(p)
+	for i: int in _SFX_2D_POOL_SIZE:
+		var p := AudioStreamPlayer.new()
+		p.bus = "SFX"
+		add_child(p)
+		_pool_sfx_2d.append(p)
+	for i: int in _SFX_3D_POOL_SIZE:
 		var p := AudioStreamPlayer3D.new()
-		p.bus = "Master"
+		p.bus = "SFX"
 		p.max_distance = 40.0
 		p.unit_size = 6.0
 		p.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
@@ -80,7 +97,19 @@ func play_ui(sound: Sound, volume_db: float = 0.0) -> void:
 	var stream: AudioStream = _streams.get(sound)
 	if stream == null:
 		return
-	for p: AudioStreamPlayer in _pool_2d:
+	for p: AudioStreamPlayer in _pool_ui:
+		if not p.playing:
+			p.stream = stream
+			p.volume_db = volume_db
+			p.play()
+			return
+
+
+func play_sfx(sound: Sound, volume_db: float = 0.0) -> void:
+	var stream: AudioStream = _streams.get(sound)
+	if stream == null:
+		return
+	for p: AudioStreamPlayer in _pool_sfx_2d:
 		if not p.playing:
 			p.stream = stream
 			p.volume_db = volume_db
