@@ -424,10 +424,16 @@ func _wire_sound_signals() -> void:
 	NetworkManager.remote_carrier_changed.connect(_on_remote_carrier_sound)
 	_phase_coord.goal_scored.connect(
 		func(_t: Team, _s: String, _a1: String, _a2: String) -> void:
-			SoundManager.play_ui(SoundManager.Sound.GOAL_HORN))
+			SoundManager.play_ui(SoundManager.Sound.GOAL_HORN, -6.0))
 	NetworkManager.goal_received.connect(
 		func(_tid: int, _s0: int, _s1: int, _sn: String, _a1: String, _a2: String) -> void:
-			SoundManager.play_ui(SoundManager.Sound.GOAL_HORN))
+			SoundManager.play_ui(SoundManager.Sound.GOAL_HORN, -6.0))
+	puck.puck_hit_boards.connect(
+		func() -> void: SoundManager.play_world(SoundManager.Sound.PUCK_BOARDS, puck.get_puck_position()))
+	puck.puck_touched_goalie.connect(
+		func(_g: Goalie) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_GOALIE, puck.get_puck_position()))
+	puck.puck_touched_post.connect(
+		func() -> void: SoundManager.play_world(SoundManager.Sound.PUCK_POST, puck.get_puck_position()))
 
 
 func _on_local_pickup_sound() -> void:
@@ -471,6 +477,10 @@ func _on_player_spawned(record: PlayerRecord) -> void:
 	var pid: int = record.peer_id
 	record.skater.body_checked_player.connect(
 		func(v: Skater, _f: float, _d: Vector3) -> void: _on_hit_landed(pid, v)
+	)
+	record.skater.body_checked_player.connect(
+		func(_v: Skater, _f: float, _d: Vector3) -> void:
+			SoundManager.play_world(SoundManager.Sound.BODY_CHECK, record.skater.global_position)
 	)
 	var snd := SkaterSoundController.new()
 	record.skater.add_child(snd)

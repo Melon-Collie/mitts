@@ -9,6 +9,10 @@ enum Sound {
 	GOAL_HORN,
 	SKATE_BRAKE,
 	SKATE_CARVE,
+	PUCK_BOARDS,
+	PUCK_GOALIE,
+	PUCK_POST,
+	BODY_CHECK,
 }
 
 const _SOUND_PATHS: Dictionary = {
@@ -20,6 +24,10 @@ const _SOUND_PATHS: Dictionary = {
 	Sound.GOAL_HORN:    "res://Sounds/goal_horn.ogg",
 	Sound.SKATE_BRAKE:  "res://Sounds/skate_brake.wav",
 	Sound.SKATE_CARVE:  "res://Sounds/skate_carve.wav",
+	Sound.PUCK_BOARDS:  "res://Sounds/puck_boards.wav",
+	Sound.PUCK_GOALIE:  "res://Sounds/puck_goalie.wav",
+	Sound.PUCK_POST:    "res://Sounds/puck_post.wav",
+	Sound.BODY_CHECK:   "res://Sounds/body_check.wav",
 }
 
 const _2D_POOL_SIZE: int = 8
