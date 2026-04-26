@@ -219,12 +219,19 @@ func _build_player_popup() -> void:
 	vbox.add_theme_constant_override("separation", 16)
 	panel.add_child(vbox)
 
+	var header := HBoxContainer.new()
+	vbox.add_child(header)
 	var title := Label.new()
 	title.text = "Player"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", Color.WHITE)
-	vbox.add_child(title)
+	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
+	header.add_child(title)
+	var close_btn := MenuStyle.close_button()
+	close_btn.pressed.connect(func() -> void: _player_popup.visible = false)
+	SoundManager.wire_button(close_btn)
+	header.add_child(close_btn)
 
 	var name_row := HBoxContainer.new()
 	name_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -372,9 +379,6 @@ func _build_player_popup() -> void:
 		if _card_hand_label != null:
 			_card_hand_label.text = "Shoots %s" % ("L" if not pressed else "R"))
 
-	var done_btn := _make_button("Done")
-	done_btn.pressed.connect(func() -> void: _player_popup.visible = false)
-	vbox.add_child(done_btn)
 
 	_player_popup = Control.new()
 	_player_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -430,12 +434,19 @@ func _build_exit_popup() -> void:
 	vbox.add_theme_constant_override("separation", 20)
 	panel.add_child(vbox)
 
+	var exit_header := HBoxContainer.new()
+	vbox.add_child(exit_header)
 	var label := Label.new()
 	label.text = "Exit game?"
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.add_theme_font_size_override("font_size", 26)
-	label.add_theme_color_override("font_color", Color.WHITE)
-	vbox.add_child(label)
+	label.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
+	exit_header.add_child(label)
+	var exit_close_btn := MenuStyle.close_button()
+	exit_close_btn.pressed.connect(func() -> void: _exit_popup.visible = false)
+	SoundManager.wire_button(exit_close_btn)
+	exit_header.add_child(exit_close_btn)
 
 	var btn_row := HBoxContainer.new()
 	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -481,12 +492,19 @@ func _build_offline_popup() -> void:
 	vbox.add_theme_constant_override("separation", 16)
 	panel.add_child(vbox)
 
+	var header := HBoxContainer.new()
+	vbox.add_child(header)
 	var title := Label.new()
 	title.text = "Offline"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", Color.WHITE)
-	vbox.add_child(title)
+	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
+	header.add_child(title)
+	var close_btn := MenuStyle.close_button()
+	close_btn.pressed.connect(func() -> void: _offline_popup.visible = false)
+	SoundManager.wire_button(close_btn)
+	header.add_child(close_btn)
 
 	var free_play_btn := _make_button("Free Play")
 	free_play_btn.pressed.connect(func() -> void:
@@ -510,9 +528,6 @@ func _build_offline_popup() -> void:
 	planned_label.add_theme_color_override("font_color", Color(0.50, 0.50, 0.55))
 	tutorial_section.add_child(planned_label)
 
-	var back_btn := _make_button("Back")
-	back_btn.pressed.connect(func() -> void: _offline_popup.visible = false)
-	vbox.add_child(back_btn)
 
 	_offline_popup = Control.new()
 	_offline_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -543,12 +558,21 @@ func _build_free_play_popup() -> void:
 	vbox.add_theme_constant_override("separation", 20)
 	panel.add_child(vbox)
 
+	var header := HBoxContainer.new()
+	vbox.add_child(header)
 	var title := Label.new()
 	title.text = "Free Play"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", Color.WHITE)
-	vbox.add_child(title)
+	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
+	header.add_child(title)
+	var close_btn := MenuStyle.close_button()
+	close_btn.pressed.connect(func() -> void:
+		_free_play_popup.visible = false
+		_offline_popup.visible = true)
+	SoundManager.wire_button(close_btn)
+	header.add_child(close_btn)
 
 	var grid := GridContainer.new()
 	grid.columns = 2
@@ -588,11 +612,6 @@ func _build_free_play_popup() -> void:
 	play_btn.pressed.connect(_do_start_offline)
 	vbox.add_child(play_btn)
 
-	var back_btn := _make_button("Back")
-	back_btn.pressed.connect(func() -> void:
-		_free_play_popup.visible = false
-		_offline_popup.visible = true)
-	vbox.add_child(back_btn)
 
 	_free_play_popup = Control.new()
 	_free_play_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -623,12 +642,19 @@ func _build_online_popup() -> void:
 	vbox.add_theme_constant_override("separation", 16)
 	panel.add_child(vbox)
 
+	var header := HBoxContainer.new()
+	vbox.add_child(header)
 	var title := Label.new()
 	title.text = "Online"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", Color.WHITE)
-	vbox.add_child(title)
+	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
+	header.add_child(title)
+	var close_btn := MenuStyle.close_button()
+	close_btn.pressed.connect(func() -> void: _online_popup.visible = false)
+	SoundManager.wire_button(close_btn)
+	header.add_child(close_btn)
 
 	var host_btn := _make_button("Host Game")
 	host_btn.pressed.connect(func() -> void:
@@ -657,9 +683,6 @@ func _build_online_popup() -> void:
 	SoundManager.wire_button(join_btn)
 	join_row.add_child(join_btn)
 
-	var back_btn := _make_button("Back")
-	back_btn.pressed.connect(func() -> void: _online_popup.visible = false)
-	vbox.add_child(back_btn)
 
 	_online_popup = Control.new()
 	_online_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)

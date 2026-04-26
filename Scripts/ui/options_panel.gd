@@ -44,12 +44,19 @@ func _ready() -> void:
 	add_theme_constant_override("separation", 16)
 	alignment = BoxContainer.ALIGNMENT_CENTER
 
+	var header := HBoxContainer.new()
+	add_child(header)
 	var title := Label.new()
 	title.text = "Options"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", _WHITE)
-	add_child(title)
+	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
+	header.add_child(title)
+	var close_btn := MenuStyle.close_button()
+	close_btn.pressed.connect(_on_cancel_pressed)
+	SoundManager.wire_button(close_btn)
+	header.add_child(close_btn)
 
 	add_child(_build_tab_switcher())
 

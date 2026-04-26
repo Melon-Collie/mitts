@@ -79,6 +79,25 @@ static func apply_button(btn: Button) -> void:
 	btn.add_theme_stylebox_override("focus",    hover)
 	btn.add_theme_stylebox_override("disabled", disabled)
 
+static func close_button() -> Button:
+	var btn := Button.new()
+	btn.text = "×"
+	btn.flat = true
+	btn.custom_minimum_size = Vector2(30, 30)
+	btn.add_theme_font_size_override("font_size", 22)
+	btn.add_theme_color_override("font_color",         TEXT_DIM)
+	btn.add_theme_color_override("font_hover_color",   TEXT_BODY)
+	btn.add_theme_color_override("font_pressed_color", ICE)
+	var empty := StyleBoxEmpty.new()
+	var hover := StyleBoxFlat.new()
+	hover.bg_color = Color(BTN_HOVER.r, BTN_HOVER.g, BTN_HOVER.b, 0.65)
+	hover.set_corner_radius_all(4)
+	btn.add_theme_stylebox_override("normal",  empty)
+	btn.add_theme_stylebox_override("hover",   hover)
+	btn.add_theme_stylebox_override("pressed", hover)
+	btn.add_theme_stylebox_override("focus",   empty)
+	return btn
+
 static func apply_tab_button(btn: Button, active: bool) -> void:
 	var s := StyleBoxFlat.new()
 	s.set_corner_radius_all(0)
