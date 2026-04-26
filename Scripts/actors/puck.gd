@@ -30,11 +30,11 @@ var _cooldown_timers: Dictionary = {}  # Skater -> float
 var _is_server: bool = false
 var _pending_reset: bool = false
 var _clamp_at_goal_line: bool = false
-# Full velocity stored by release() when direction.y > 0, applied by
-# _integrate_forces. Jolt does not preserve linear_velocity set on a static
-# (frozen) body when it activates as dynamic — state.linear_velocity in the
-# first _integrate_forces call is zero. Storing and applying the full vector
-# here ensures XYZ all reach the simulation on the first dynamic step.
+# Full velocity stored by release() for every shot, applied by _integrate_forces.
+# Jolt does not preserve linear_velocity set on a frozen body when it activates
+# as dynamic — state.linear_velocity on the first dynamic step is zero. Storing
+# and applying the full vector here ensures XYZ reach the simulation correctly.
+# For elevated shots (y > 0) _integrate_forces also writes the elevated Y position.
 var _pending_elevation_vel: Vector3 = Vector3.ZERO
 # Belt-and-suspenders for _physics_process: skip is_airborne() zeroing the
 # same frame as release() so _pending_elevation_vel reaches _integrate_forces.
@@ -223,8 +223,8 @@ func release(direction: Vector3, power: float) -> void:
 		global_position = ex_carrier.get_blade_contact_global()
 	if direction.y > 0:
 		global_position.y = ice_height + 0.1
-		_pending_elevation_vel = direction * power
 		_pending_elevation = true
+	_pending_elevation_vel = direction * power
 	linear_velocity = direction * power
 	clear_carrier()
 	if ex_carrier != null:
@@ -267,12 +267,12 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		state.angular_velocity = Vector3.ZERO
 		return
 	if not _pending_elevation_vel.is_zero_approx():
-		# Write the full velocity vector and elevated Y position directly into
-		# Jolt's physics state. Jolt does not carry linear_velocity set on a
-		# frozen body through to state.linear_velocity on the first dynamic step,
-		# so state.linear_velocity starts at zero — setting only .y left XZ dead.
+		# Write the full velocity vector directly into Jolt's physics state.
+		# Jolt zeros state.linear_velocity on the first dynamic step after a
+		# body unfreezes, so velocity set on a frozen body is lost without this.
 		state.linear_velocity = _pending_elevation_vel
-		state.transform.origin.y = ice_height + 0.1
+		if _pending_elevation_vel.y > 0.0:
+			state.transform.origin.y = ice_height + 0.1
 		_pending_elevation_vel = Vector3.ZERO
 	if state.linear_velocity.length() > max_speed:
 		state.linear_velocity = state.linear_velocity.normalized() * max_speed
