@@ -537,9 +537,8 @@ func _is_in_slapper_state() -> bool:
 	return _sm.get_state() in [State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK]
 
 # Prevents the blade from entering either net's interior. Both nets are
-# centered at x=0. The x-boundary widens linearly with depth across the
-# trapezoidal net (0.915 at goal line → 1.02 at back), then expanded by
-# NET_STRIP_BUFFER so the hard stop is outside the physical posts. The blade
+# centered at x=0. The clamp volume is a rectangle: constant width
+# NET_HALF_WIDTH + NET_STRIP_BUFFER on each side, NET_DEPTH deep. The blade
 # always escapes through the nearest side or back face — never the front mouth.
 func _clamp_blade_from_net(blade_world: Vector3) -> Vector3:
 	if blade_world.y > GameRules.NET_HEIGHT:
@@ -548,11 +547,10 @@ func _clamp_blade_from_net(blade_world: Vector3) -> Vector3:
 	var gl: float    = GameRules.GOAL_LINE_Z
 	var depth: float = GameRules.NET_DEPTH
 	var buf: float   = GameRules.NET_STRIP_BUFFER
+	var hw: float = GameRules.NET_HALF_WIDTH + buf
 	# +Z net
 	if result.z >= gl and result.z < gl + depth:
 		var local_depth: float = result.z - gl
-		var hw: float = lerpf(GameRules.NET_HALF_WIDTH, GameRules.NET_BACK_HALF_WIDTH,
-				local_depth / depth) + buf
 		if abs(result.x) < hw:
 			var d_back: float  = depth - local_depth
 			var d_left: float  = result.x + hw
@@ -566,8 +564,6 @@ func _clamp_blade_from_net(blade_world: Vector3) -> Vector3:
 	# -Z net
 	elif result.z <= -gl and result.z > -gl - depth:
 		var local_depth: float = -gl - result.z
-		var hw: float = lerpf(GameRules.NET_HALF_WIDTH, GameRules.NET_BACK_HALF_WIDTH,
-				local_depth / depth) + buf
 		if abs(result.x) < hw:
 			var d_back: float  = depth - local_depth
 			var d_left: float  = result.x + hw
@@ -600,15 +596,14 @@ func _check_net_puck_strip(blade_world: Vector3) -> void:
 		# No strip behind the net (z_rel > depth) — that is valid behind-net play.
 		if z_rel < -buf or z_rel > depth:
 			continue
-		var local_depth: float = clampf(z_rel, 0.0, depth)
-		var hw_at_depth: float = lerpf(hw, GameRules.NET_BACK_HALF_WIDTH, local_depth / depth)
-		if absf(blade_world.x) > hw_at_depth + buf:
+		var hw_buf: float = hw + buf
+		if absf(blade_world.x) > hw_buf:
 			continue
 		# Blade is in the strip zone — release puck away from the net.
 		# Front approach (d_front smaller): push straight back away from net face.
 		# Side approach (d_side smaller): push laterally outward past the post.
 		var d_front: float = absf(z_rel + buf)
-		var d_side: float  = (hw_at_depth + buf) - absf(blade_world.x)
+		var d_side: float  = hw_buf - absf(blade_world.x)
 		var release_dir: Vector3
 		if d_front <= d_side:
 			release_dir = Vector3(0.0, 0.0, -facing_z)
