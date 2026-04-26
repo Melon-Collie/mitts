@@ -32,10 +32,26 @@ func _ready() -> void:
 		NetworkManager.pending_error = ""
 
 func _build_ui() -> void:
-	var bg := ColorRect.new()
-	bg.color = Color(0.05, 0.07, 0.10, 1.0)
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
+	const BG_PATH := "res://Assets/menu_bg.png"
+	if ResourceLoader.exists(BG_PATH):
+		var bg := TextureRect.new()
+		bg.texture = load(BG_PATH)
+		bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		bg.stretch_mode = TextureRect.STRETCH_TILE
+		add_child(bg)
+	else:
+		var bg := ColorRect.new()
+		bg.color = Color(0.05, 0.07, 0.10, 1.0)
+		bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		add_child(bg)
+
+	# Dark overlay keeps menu text readable over the busy background
+	var overlay := ColorRect.new()
+	overlay.color = Color(0.0, 0.0, 0.0, 0.45)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(overlay)
 
 	# ── Center stack ──────────────────────────────────────────────────────────
 	var center := CenterContainer.new()
