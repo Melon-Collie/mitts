@@ -167,12 +167,28 @@ func _build_player_popup() -> void:
 	name_field.add_theme_font_size_override("font_size", 18)
 	name_field.text = PlayerPrefs.player_name
 	NetworkManager.local_player_name = PlayerPrefs.player_name
+	name_row.add_child(name_field)
+
+	var name_warning := Label.new()
+	name_warning.text = "Name not allowed"
+	name_warning.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_warning.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
+	name_warning.add_theme_font_size_override("font_size", 14)
+	name_warning.visible = false
+	vbox.add_child(name_warning)
+
 	name_field.text_changed.connect(func(t: String) -> void:
 		var trimmed: String = t.strip_edges() if not t.strip_edges().is_empty() else "Player"
+		if not NameFilter.is_clean(trimmed):
+			name_warning.visible = true
+			NetworkManager.local_player_name = "Player"
+			PlayerPrefs.player_name = "Player"
+			PlayerPrefs.save()
+			return
+		name_warning.visible = false
 		NetworkManager.local_player_name = trimmed
 		PlayerPrefs.player_name = trimmed
 		PlayerPrefs.save())
-	name_row.add_child(name_field)
 
 	var number_row := HBoxContainer.new()
 	number_row.alignment = BoxContainer.ALIGNMENT_CENTER
