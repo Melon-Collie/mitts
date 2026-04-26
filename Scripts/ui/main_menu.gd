@@ -4,6 +4,10 @@ extends Control
 var _ip_field: LineEdit
 var _error_label: Label = null
 var _player_popup: Control = null
+var _center_container: CenterContainer = null
+var _title_label: Label = null
+var _version_label: Label = null
+var _player_card_panel: PanelContainer = null
 var _options_popup: Control = null
 var _offline_popup: Control = null
 var _free_play_popup: Control = null
@@ -37,6 +41,8 @@ func _build_ui() -> void:
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
+	_center_container = center
+	_center_container.modulate.a = 0.0
 
 	var vbox := VBoxContainer.new()
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -49,6 +55,9 @@ func _build_ui() -> void:
 	title.add_theme_font_size_override("font_size", 64)
 	title.add_theme_color_override("font_color", Color.WHITE)
 	vbox.add_child(title)
+	_title_label = title
+	_title_label.item_rect_changed.connect(func() -> void:
+		_title_label.pivot_offset = _title_label.size / 2.0)
 
 	var spacer := Control.new()
 	spacer.custom_minimum_size = Vector2(0, 20)
@@ -82,17 +91,18 @@ func _build_ui() -> void:
 	vbox.add_child(update_checker)
 
 	# ── Version label — bottom-right corner ───────────────────────────────────
-	var version_label := Label.new()
-	version_label.text = "v%s" % BuildInfo.VERSION
-	version_label.add_theme_font_size_override("font_size", 14)
-	version_label.add_theme_color_override("font_color", Color(0.55, 0.55, 0.60, 1.0))
-	version_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	version_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	version_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	version_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	version_label.offset_right = -16
-	version_label.offset_bottom = -12
-	add_child(version_label)
+	_version_label = Label.new()
+	_version_label.text = "v%s" % BuildInfo.VERSION
+	_version_label.add_theme_font_size_override("font_size", 14)
+	_version_label.add_theme_color_override("font_color", Color(0.55, 0.55, 0.60, 1.0))
+	_version_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_version_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	_version_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_version_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_version_label.offset_right = -16
+	_version_label.offset_bottom = -12
+	_version_label.modulate.a = 0.0
+	add_child(_version_label)
 
 	_build_player_popup()
 	_build_options_popup()
@@ -104,6 +114,10 @@ func _build_ui() -> void:
 	_loading_screen = LoadingScreen.new()
 	_loading_screen.cancel_pressed.connect(_on_join_cancelled)
 	add_child(_loading_screen)
+
+	var intro := MenuIntro.new()
+	intro.intro_finished.connect(_on_intro_finished)
+	add_child(intro)
 
 func _build_player_card() -> void:
 	var normal_style := StyleBoxFlat.new()
@@ -160,6 +174,8 @@ func _build_player_card() -> void:
 		panel.add_theme_stylebox_override("panel", normal_style))
 
 	panel.position = Vector2(16.0, 16.0)
+	panel.modulate.a = 0.0
+	_player_card_panel = panel
 	add_child(panel)
 
 func _build_player_popup() -> void:
@@ -679,6 +695,22 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif _exit_popup.visible:
 			_exit_popup.visible = false
 			get_viewport().set_input_as_handled()
+
+func _on_intro_finished() -> void:
+	if _title_label != null:
+		_title_label.scale = Vector2(1.18, 1.18)
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(_center_container, "modulate:a", 1.0, 0.38) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	if _title_label != null:
+		tw.tween_property(_title_label, "scale", Vector2.ONE, 0.32) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(_player_card_panel, "modulate:a", 1.0, 0.32) \
+		.set_delay(0.10).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	if _version_label != null:
+		tw.tween_property(_version_label, "modulate:a", 1.0, 0.28) \
+			.set_delay(0.16)
 
 func _on_options_pressed() -> void:
 	_options_popup.visible = true
