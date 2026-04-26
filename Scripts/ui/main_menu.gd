@@ -680,9 +680,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			_exit_popup.visible = false
 			get_viewport().set_input_as_handled()
 
-func _on_player_pressed() -> void:
-	_player_popup.visible = true
-
 func _on_options_pressed() -> void:
 	_options_popup.visible = true
 

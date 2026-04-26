@@ -330,6 +330,14 @@ func _build_game_over_popup() -> void:
 		_show_confirm("Return to main menu?", GameManager.exit_to_main_menu))
 	vbox.add_child(menu_btn)
 
+	var exit_btn := _popup_button("Exit Game")
+	exit_btn.pressed.connect(func() -> void:
+		_show_confirm("Exit game?", func() -> void:
+			GameManager.on_scene_exit()
+			NetworkManager.reset()
+			get_tree().quit()))
+	vbox.add_child(exit_btn)
+
 	var root := Control.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.add_child(panel)
