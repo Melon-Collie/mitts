@@ -66,7 +66,7 @@ func _build_ui() -> void:
 	menu_panel_style.set_content_margin_all(40)
 	menu_panel_style.set_content_margin(SIDE_TOP, 36)
 	menu_panel_style.set_content_margin(SIDE_BOTTOM, 36)
-	menu_panel_style.border_color = Color(0.30, 0.30, 0.45, 0.50)
+	menu_panel_style.border_color = Color(0.35, 0.58, 0.80, 0.55)
 	menu_panel_style.set_border_width_all(1)
 
 	var menu_panel := PanelContainer.new()
@@ -83,7 +83,7 @@ func _build_ui() -> void:
 	title.text = "Mitts"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 64)
-	title.add_theme_color_override("font_color", Color.WHITE)
+	title.add_theme_color_override("font_color", Color(0.88, 0.95, 1.0, 1.0))
 	vbox.add_child(title)
 	_title_label = title
 	_title_label.item_rect_changed.connect(func() -> void:
@@ -154,14 +154,14 @@ func _build_player_card() -> void:
 	normal_style.bg_color = Color(0.10, 0.10, 0.14, 0.85)
 	normal_style.set_corner_radius_all(6)
 	normal_style.set_content_margin_all(14)
-	normal_style.border_color = Color(0.30, 0.30, 0.45, 0.50)
+	normal_style.border_color = Color(0.35, 0.55, 0.78, 0.55)
 	normal_style.set_border_width_all(1)
 
 	var hover_style := StyleBoxFlat.new()
-	hover_style.bg_color = Color(0.14, 0.14, 0.20, 0.92)
+	hover_style.bg_color = Color(0.13, 0.16, 0.24, 0.92)
 	hover_style.set_corner_radius_all(6)
 	hover_style.set_content_margin_all(14)
-	hover_style.border_color = Color(0.45, 0.45, 0.65, 0.70)
+	hover_style.border_color = Color(0.55, 0.78, 1.0, 0.85)
 	hover_style.set_border_width_all(1)
 
 	var panel := PanelContainer.new()
@@ -750,6 +750,36 @@ func _make_button(label: String) -> Button:
 	btn.text = label
 	btn.custom_minimum_size = Vector2(308, 48)
 	btn.add_theme_font_size_override("font_size", 20)
+	btn.add_theme_color_override("font_color", Color(0.88, 0.95, 1.0, 1.0))
+	btn.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 1.0, 1.0))
+	btn.add_theme_color_override("font_pressed_color", Color(0.70, 0.88, 1.0, 1.0))
+
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0.10, 0.14, 0.22, 0.80)
+	normal.set_corner_radius_all(6)
+	normal.border_color = Color(0.40, 0.62, 0.85, 0.75)
+	normal.set_border_width_all(1)
+	normal.set_content_margin_all(10)
+
+	var hover := StyleBoxFlat.new()
+	hover.bg_color = Color(0.14, 0.20, 0.34, 0.92)
+	hover.set_corner_radius_all(6)
+	hover.border_color = Color(0.60, 0.82, 1.0, 0.95)
+	hover.set_border_width_all(2)
+	hover.set_content_margin_all(10)
+
+	var pressed := StyleBoxFlat.new()
+	pressed.bg_color = Color(0.07, 0.10, 0.18, 1.0)
+	pressed.set_corner_radius_all(6)
+	pressed.border_color = Color(0.45, 0.70, 0.92, 0.85)
+	pressed.set_border_width_all(1)
+	pressed.set_content_margin_all(10)
+
+	btn.add_theme_stylebox_override("normal", normal)
+	btn.add_theme_stylebox_override("hover", hover)
+	btn.add_theme_stylebox_override("pressed", pressed)
+	btn.add_theme_stylebox_override("focus", hover)
+
 	_wire_hover_scale(btn)
 	SoundManager.wire_button(btn)
 	return btn
