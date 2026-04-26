@@ -53,6 +53,8 @@ var _swap_coord: SlotSwapCoordinator = null
 var _telemetry: NetworkTelemetry = null
 var _debug_overlay: NetworkDebugOverlay = null
 var _state_buffer_manager: StateBufferManager = null
+var _recorder: ReplayRecorder = null
+var _goal_replay_driver: GoalReplayDriver = null
 
 # ── Lag compensation ──────────────────────────────────────────────────────────
 const _MAX_CLAIM_AGE_S: float = 0.2
@@ -363,6 +365,12 @@ func _wire_subsystems() -> void:
 	_state_buffer_manager = StateBufferManager.new()
 	_state_buffer_manager.setup(_registry, goalie_controllers)
 
+	if NetworkManager.is_host:
+		_recorder = ReplayRecorder.new()
+		_recorder.setup()
+		_goal_replay_driver = GoalReplayDriver.new()
+		add_child(_goal_replay_driver)
+
 	_codec = WorldStateCodec.new()
 	_codec.setup(_registry, _state_machine,
 			get_puck, _get_puck_controller, _get_goalie_controllers, _state_buffer_manager)
@@ -387,6 +395,9 @@ func _wire_subsystems() -> void:
 	_phase_coord.goal_scored.connect(goal_scored.emit)
 	_phase_coord.score_changed.connect(score_changed.emit)
 	_phase_coord.phase_changed.connect(phase_changed.emit)
+	if NetworkManager.is_host:
+		_phase_coord.goal_scored.connect(_on_goal_for_replay)
+		_phase_coord.phase_changed.connect(_on_phase_changed_for_replay)
 	_phase_coord.period_changed.connect(period_changed.emit)
 	_phase_coord.clock_updated.connect(_on_clock_updated_externally)
 	_phase_coord.game_over.connect(game_over.emit)
@@ -901,6 +912,11 @@ func on_scene_exit() -> void:
 	_registry = null
 	_codec = null
 	_state_buffer_manager = null
+	if _goal_replay_driver != null:
+		_goal_replay_driver.stop()
+		_goal_replay_driver.queue_free()
+		_goal_replay_driver = null
+	_recorder = null
 	_shot_tracker = null
 	_phase_coord = null
 	_swap_coord = null
@@ -1038,7 +1054,22 @@ func _get_goalie_controllers() -> Array:
 
 # ── World state (NetworkManager provider callback) ───────────────────────────
 func get_world_state() -> PackedByteArray:
-	return _codec.encode_world_state() if _codec != null else PackedByteArray()
+	var state: PackedByteArray = _codec.encode_world_state() if _codec != null else PackedByteArray()
+	if _recorder != null and not state.is_empty():
+		_recorder.record_frame(state, NetworkManager.local_time())
+	return state
+
+
+# ── Goal replay (host only) ──────────────────────────────────────────────────
+func _on_goal_for_replay(_scoring_team: Team, _scorer: String, _a1: String, _a2: String) -> void:
+	if _recorder == null or _goal_replay_driver == null:
+		return
+	_goal_replay_driver.start(_recorder, _codec)
+
+
+func _on_phase_changed_for_replay(new_phase: GamePhase.Phase) -> void:
+	if new_phase == GamePhase.Phase.FACEOFF_PREP and _goal_replay_driver != null:
+		_goal_replay_driver.stop()
 
 
 # ── Public API consumed by controllers, HUD, camera, scoreboard ──────────────

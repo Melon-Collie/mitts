@@ -151,7 +151,7 @@ func decode_world_state(data: PackedByteArray) -> void:
 		if record == null:
 			continue
 		var skater_state := _decode_skater_quantized(skater_bytes)
-		if record.is_local:
+		if record.is_local and not NetworkManager.is_replay_mode():
 			(record.controller as LocalController).reconcile(skater_state)
 			queue_depth_feedback.emit(depth)
 		else:
