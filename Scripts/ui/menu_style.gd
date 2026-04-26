@@ -101,10 +101,21 @@ static func apply_line_edit(field: LineEdit) -> void:
 	field.add_theme_stylebox_override("read_only", normal)
 
 static func apply_check_button(btn: CheckButton) -> void:
-	btn.add_theme_color_override("font_color",          TEXT_BODY)
-	btn.add_theme_color_override("font_hover_color",    TEXT_BODY)
-	btn.add_theme_color_override("font_pressed_color",  ICE)
-	btn.add_theme_color_override("font_disabled_color", TEXT_DIM)
+	btn.add_theme_color_override("font_color",               TEXT_BODY)
+	btn.add_theme_color_override("font_hover_color",         TEXT_BODY)
+	btn.add_theme_color_override("font_pressed_color",       ICE)
+	btn.add_theme_color_override("font_disabled_color",      TEXT_DIM)
+	# Toggle indicator: off = dim blue-gray, on = ice blue
+	btn.add_theme_color_override("icon_normal_color",        Color(0.45, 0.52, 0.65, 1.0))
+	btn.add_theme_color_override("icon_hover_color",         Color(0.60, 0.70, 0.88, 1.0))
+	btn.add_theme_color_override("icon_pressed_color",       ICE)
+	btn.add_theme_color_override("icon_hover_pressed_color", ICE_HOVER)
+	btn.add_theme_color_override("icon_focus_color",         ICE_MID)
+	btn.add_theme_color_override("icon_disabled_color",      TEXT_DIM)
+	# Transparent background — the toggle icon is the visual indicator
+	var empty := StyleBoxEmpty.new()
+	for state: StringName in [&"normal", &"hover", &"pressed", &"hover_pressed", &"focus", &"disabled"]:
+		btn.add_theme_stylebox_override(state, empty)
 
 static func apply_slider(slider: HSlider) -> void:
 	var track := StyleBoxFlat.new()
