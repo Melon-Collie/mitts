@@ -39,7 +39,7 @@ Lower layers never reach up: actors take their collaborators via `setup()` (e.g.
 
 ## Autoloads
 
-Initialized in this order: `PlayerPrefs` → `Constants` → `BuildInfo` → `SoundManager` (`sound_manager.gd`, no class_name) → `NetworkManager` → `NetworkSimManager` (`network_sim.gd`, no class_name) → `GameManager`. `NetworkManager._ready()` is a no-op; the menu drives initialization.
+Initialized in this order: `PlayerPrefs` → `Constants` → `BuildInfo` → `SoundManager` (`sound_manager.gd`, no class_name) → `NetworkManager` → `NetworkSimManager` (`network_sim.gd`, no class_name) → `GameManager`. `NetworkManager._ready()` is a no-op; the menu drives initialization. `SoundManager` exposes `play_ui(sound: SoundManager.Sound, volume_db: float)` and `play_world(sound: SoundManager.Sound, pos: Vector3, volume_db: float)`; sound constants live in its `Sound` enum.
 
 ## Confusing Boundaries
 
@@ -53,9 +53,13 @@ Initialized in this order: `PlayerPrefs` → `Constants` → `BuildInfo` → `So
 
 **`GameManager` wires six collaborators:** `PlayerRegistry`, `WorldStateCodec`, `ShotOnGoalTracker`, `HitTracker`, `PhaseCoordinator`, `SlotSwapCoordinator`. Documentation that says "five" is stale.
 
+**`SkaterStateMachine` and `SkaterAimingBehavior`** live in `Scripts/controllers/`, not `domain/`. Despite being pure `RefCounted` with no engine dependencies, they carry controller-local mutable state (current shot state, charge distance, sweep history) that is tightly coupled to per-tick input processing. Domain rules are stateless static methods; these classes are stateful collaborators owned by `SkaterController`.
+
 ## Networking Invariants
 
 These are non-obvious constraints that cause subtle bugs if violated. Rates and wire format are in `ARCHITECTURE.md`.
+
+**A client's puck is always in one of three modes.** *Carried* — `_carrier_peer_id` is set, puck is pinned to the carrier's blade; no interpolation runs. *Trajectory prediction* — carrier has released; `PuckController` advances the puck forward from the release point using stored velocity and `ICE_FRICTION`, applying three-zone broadcast correction each tick (see below). *Interpolated* — no carrier, no prediction; client buffers host snapshots and renders from `estimated_host_time() - interpolation_delay`. The `carrier_idx` field decoded from world state is what `PuckController.apply_state` reads to switch non-carrier clients between prediction and interpolation modes.
 
 **On clients, `_carrier_peer_id` is managed exclusively by reliable RPCs, never by world state.** Unreliable packet ordering conflicts with locally-predicted carrier transitions. On the server, `_carrier_peer_id` in `PuckController` is set by physics callbacks (`_on_puck_picked_up` / `_on_puck_released`). The world state does encode a `carrier_idx` field, but clients use it only to enter/exit trajectory-prediction mode — they do not write `_carrier_peer_id` from it.
 
@@ -103,10 +107,12 @@ These are non-obvious constraints that cause subtle bugs if violated. Rates and 
 |------|----------|
 | New game rule or geometry constant | `domain/config/game_rules.gd` |
 | New pure stateless math or rule | New file in `domain/rules/` + GUT test |
+| New domain state type | New file in `domain/state/` + GUT test |
 | New per-player stat | `PlayerStats` → wire format → `WorldStateCodec` |
 | New RPC | `NetworkManager` (define) → emit a signal → `GameManager._wire_network_signals()` (connect) |
 | New phase-entry side effect | `PhaseCoordinator` |
 | New controller behavior | Method on `SkaterController`; `GameManager` calls it, never pokes internals directly |
+| New reconcile logic | `domain/rules/reconciliation_rules.gd` + GUT test |
 
 ## Code Conventions
 
