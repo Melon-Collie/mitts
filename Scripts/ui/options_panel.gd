@@ -22,6 +22,7 @@ var _listening_action: String = ""
 var _pending_bindings: Dictionary = {}
 var _binding_btns: Dictionary = {}
 var _conflict_label: Label = null
+var _export_status_label: Label = null
 
 const _WHITE  := Color(1.00, 1.00, 1.00, 1.00)
 const _DIM    := Color(0.62, 0.62, 0.68, 1.00)
@@ -427,6 +428,28 @@ func _build_game_tab() -> Control:
 	row.add_child(_attack_up_check)
 	box.add_child(row)
 
+	var sep := HSeparator.new()
+	box.add_child(sep)
+
+	var colors_lbl := Label.new()
+	colors_lbl.text = "Team Colors"
+	colors_lbl.add_theme_font_size_override("font_size", 16)
+	colors_lbl.add_theme_color_override("font_color", _DIM)
+	colors_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(colors_lbl)
+
+	var export_btn := _make_button("Export Colors File...")
+	export_btn.pressed.connect(_on_export_colors_pressed)
+	box.add_child(export_btn)
+
+	_export_status_label = Label.new()
+	_export_status_label.add_theme_font_size_override("font_size", 13)
+	_export_status_label.add_theme_color_override("font_color", _DIM)
+	_export_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_export_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_export_status_label.custom_minimum_size = Vector2(308, 0)
+	box.add_child(_export_status_label)
+
 	return box
 
 # ---------------------------------------------------------------------------
@@ -458,6 +481,28 @@ func _on_brightness_changed(_value: float) -> void:
 
 func _on_attack_up_toggled(_pressed: bool) -> void:
 	_update_apply_state()
+
+func _on_export_colors_pressed() -> void:
+	const SRC: String = "res://data/team_colors.json"
+	const DST: String = "user://team_colors.json"
+	var src_file := FileAccess.open(SRC, FileAccess.READ)
+	if src_file == null:
+		_export_status_label.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3, 1.0))
+		_export_status_label.text = "Error: bundled colors file not found."
+		return
+	var content: String = src_file.get_as_text()
+	src_file.close()
+	var existed: bool = FileAccess.file_exists(DST)
+	var dst_file := FileAccess.open(DST, FileAccess.WRITE)
+	if dst_file == null:
+		_export_status_label.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3, 1.0))
+		_export_status_label.text = "Error: could not write to user data folder."
+		return
+	dst_file.store_string(content)
+	dst_file.close()
+	var global_path: String = ProjectSettings.globalize_path(DST)
+	_export_status_label.add_theme_color_override("font_color", _DIM)
+	_export_status_label.text = "%s:\n%s" % ["Overwrote" if existed else "Saved", global_path]
 
 func _on_sensitivity_changed(value: float) -> void:
 	if _sens_field != null:
