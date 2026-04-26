@@ -178,7 +178,10 @@ func _build_player_popup() -> void:
 	vbox.add_child(name_warning)
 
 	name_field.text_changed.connect(func(t: String) -> void:
-		var trimmed: String = t.strip_edges() if not t.strip_edges().is_empty() else "Player"
+		if t.strip_edges().is_empty():
+			name_field.text = "Player"
+			return
+		var trimmed: String = t.strip_edges()
 		if not NameFilter.is_alphanumeric(trimmed):
 			name_warning.text = "Letters and numbers only"
 			name_warning.visible = true
