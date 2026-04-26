@@ -100,22 +100,54 @@ static func apply_line_edit(field: LineEdit) -> void:
 	field.add_theme_stylebox_override("focus",     focus)
 	field.add_theme_stylebox_override("read_only", normal)
 
-static func apply_check_button(btn: CheckButton) -> void:
-	btn.add_theme_color_override("font_color",               TEXT_BODY)
-	btn.add_theme_color_override("font_hover_color",         TEXT_BODY)
-	btn.add_theme_color_override("font_pressed_color",       ICE)
-	btn.add_theme_color_override("font_disabled_color",      TEXT_DIM)
-	# Toggle indicator: off = dim blue-gray, on = ice blue
-	btn.add_theme_color_override("icon_normal_color",        Color(0.45, 0.52, 0.65, 1.0))
-	btn.add_theme_color_override("icon_hover_color",         Color(0.60, 0.70, 0.88, 1.0))
-	btn.add_theme_color_override("icon_pressed_color",       ICE)
-	btn.add_theme_color_override("icon_hover_pressed_color", ICE_HOVER)
-	btn.add_theme_color_override("icon_focus_color",         ICE_MID)
-	btn.add_theme_color_override("icon_disabled_color",      TEXT_DIM)
-	# Transparent background — the toggle icon is the visual indicator
-	var empty := StyleBoxEmpty.new()
-	for state: StringName in [&"normal", &"hover", &"pressed", &"hover_pressed", &"focus", &"disabled"]:
-		btn.add_theme_stylebox_override(state, empty)
+static func apply_toggle(btn: Button) -> void:
+	btn.toggle_mode = true
+	btn.text = "ON" if btn.button_pressed else "OFF"
+	btn.custom_minimum_size = Vector2(64, 32)
+	btn.toggled.connect(func(p: bool) -> void: btn.text = "ON" if p else "OFF")
+
+	var off := StyleBoxFlat.new()
+	off.bg_color = BTN_FILL
+	off.set_corner_radius_all(6)
+	off.border_color = ICE_DIM
+	off.set_border_width_all(1)
+	off.set_content_margin_all(10)
+
+	var off_hover := StyleBoxFlat.new()
+	off_hover.bg_color = BTN_HOVER
+	off_hover.set_corner_radius_all(6)
+	off_hover.border_color = ICE_MID
+	off_hover.set_border_width_all(1)
+	off_hover.set_content_margin_all(10)
+
+	var on := StyleBoxFlat.new()
+	on.bg_color = Color(0.10, 0.22, 0.38, 0.90)
+	on.set_corner_radius_all(6)
+	on.border_color = ICE
+	on.set_border_width_all(2)
+	on.set_content_margin_all(10)
+
+	var on_hover := StyleBoxFlat.new()
+	on_hover.bg_color = Color(0.14, 0.28, 0.46, 0.95)
+	on_hover.set_corner_radius_all(6)
+	on_hover.border_color = ICE_HOVER
+	on_hover.set_border_width_all(2)
+	on_hover.set_content_margin_all(10)
+
+	btn.add_theme_stylebox_override("normal",        off)
+	btn.add_theme_stylebox_override("hover",         off_hover)
+	btn.add_theme_stylebox_override("pressed",       on)
+	btn.add_theme_stylebox_override("hover_pressed", on_hover)
+	btn.add_theme_stylebox_override("focus",         off_hover)
+	btn.add_theme_stylebox_override("disabled",      off)
+
+	btn.add_theme_color_override("font_color",          TEXT_DIM)
+	btn.add_theme_color_override("font_hover_color",    TEXT_BODY)
+	btn.add_theme_color_override("font_pressed_color",  ICE)
+	btn.add_theme_color_override("font_disabled_color", TEXT_DIM)
+
+static func sync_toggle(btn: Button) -> void:
+	btn.text = "ON" if btn.button_pressed else "OFF"
 
 static func apply_slider(slider: HSlider) -> void:
 	var track := StyleBoxFlat.new()
