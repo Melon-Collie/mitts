@@ -217,13 +217,26 @@ func _build_player_popup() -> void:
 	number_field.add_theme_font_size_override("font_size", 18)
 	number_field.text = str(PlayerPrefs.jersey_number)
 	NetworkManager.local_jersey_number = PlayerPrefs.jersey_number
+	number_row.add_child(number_field)
+
+	var number_warning := Label.new()
+	number_warning.text = "Numbers only"
+	number_warning.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	number_warning.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
+	number_warning.add_theme_font_size_override("font_size", 14)
+	number_warning.visible = false
+	vbox.add_child(number_warning)
+
 	number_field.text_changed.connect(func(t: String) -> void:
+		if not t.is_empty() and not t.is_valid_int():
+			number_warning.visible = true
+			return
+		number_warning.visible = false
 		var n: int = t.to_int() if t.is_valid_int() else PlayerPrefs.jersey_number
 		n = clamp(n, 0, 99)
 		NetworkManager.local_jersey_number = n
 		PlayerPrefs.jersey_number = n
 		PlayerPrefs.save())
-	number_row.add_child(number_field)
 
 	var hand_row := HBoxContainer.new()
 	hand_row.alignment = BoxContainer.ALIGNMENT_CENTER
