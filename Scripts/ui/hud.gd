@@ -31,6 +31,7 @@ var _last_clock_pulse_second: int = -1
 var _confirm_popup: CanvasLayer = null
 var _confirm_label: Label = null
 var _confirm_callback: Callable = Callable()
+var _leave_container: Control = null
 var _rematch_btn: Button = null
 var _vote_label: Label = null
 var _rematch_votes: Dictionary = {}
@@ -48,6 +49,7 @@ func _ready() -> void:
 	_build_phase_banner()
 	_build_elevation_indicator()
 	_build_version_tag()
+	_build_bug_icon()
 	_build_game_over_popup()
 	_build_game_menu()
 	_build_confirm_popup()
@@ -88,6 +90,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_options_container.visible = false
 		elif _game_menu.visible and _slot_grid_container != null and _slot_grid_container.visible:
 			_slot_grid_container.visible = false
+		elif _game_menu.visible and _leave_container != null and _leave_container.visible:
+			_leave_container.visible = false
 		else:
 			_set_menu_open(not _game_menu.visible)
 		get_viewport().set_input_as_handled()
@@ -100,6 +104,8 @@ func _set_menu_open(open: bool) -> void:
 			_slot_grid_container.visible = false
 		if _options_container != null:
 			_options_container.visible = false
+		if _leave_container != null:
+			_leave_container.visible = false
 
 func _process(_delta: float) -> void:
 	if _local_skater == null:
@@ -324,6 +330,14 @@ func _build_game_over_popup() -> void:
 		_show_confirm("Return to main menu?", GameManager.exit_to_main_menu))
 	vbox.add_child(menu_btn)
 
+	var exit_btn := _popup_button("Exit Game")
+	exit_btn.pressed.connect(func() -> void:
+		_show_confirm("Exit game?", func() -> void:
+			GameManager.on_scene_exit()
+			NetworkManager.reset()
+			get_tree().quit()))
+	vbox.add_child(exit_btn)
+
 	var root := Control.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.add_child(panel)
@@ -361,6 +375,10 @@ func _build_game_menu() -> void:
 	resume_btn.pressed.connect(func() -> void: _set_menu_open(false))
 	vbox.add_child(resume_btn)
 
+	_add_host_button(vbox, "Rematch", func() -> void:
+		_set_menu_open(false)
+		GameManager.reset_game())
+
 	var change_pos_btn := _popup_button("Change Position")
 	change_pos_btn.pressed.connect(_on_change_position_pressed)
 	vbox.add_child(change_pos_btn)
@@ -369,35 +387,9 @@ func _build_game_menu() -> void:
 	options_btn.pressed.connect(_on_options_pressed)
 	vbox.add_child(options_btn)
 
-	_add_host_button(vbox, "Rematch", func() -> void:
-		_set_menu_open(false)
-		GameManager.reset_game())
-	if NetworkManager.is_offline_mode:
-		_add_host_button(vbox, "Return to Menu", func() -> void:
-			_set_menu_open(false)
-			GameManager.exit_to_main_menu())
-	else:
-		_add_host_button(vbox, "Return to Lobby", func() -> void:
-			_set_menu_open(false)
-			GameManager.return_to_lobby())
-
-	var bug_btn := _popup_button("Report Bug")
-	bug_btn.pressed.connect(_on_bug_report_pressed)
-	vbox.add_child(bug_btn)
-
-	if not NetworkManager.is_offline_mode:
-		var quit_btn := _popup_button("Disconnect")
-		quit_btn.pressed.connect(func() -> void:
-			_show_confirm("Return to main menu?", GameManager.exit_to_main_menu))
-		vbox.add_child(quit_btn)
-
-	var exit_btn := _popup_button("Exit Game")
-	exit_btn.pressed.connect(func() -> void:
-		_show_confirm("Exit game?", func() -> void:
-			GameManager.on_scene_exit()
-			NetworkManager.reset()
-			get_tree().quit()))
-	vbox.add_child(exit_btn)
+	var leave_btn := _popup_button("Leave Game")
+	leave_btn.pressed.connect(func() -> void: _leave_container.visible = true)
+	vbox.add_child(leave_btn)
 
 	var root := Control.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -422,10 +414,19 @@ func _build_game_menu() -> void:
 	slot_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 	slot_panel.custom_minimum_size = Vector2(960, 0)
 
+	var slot_vbox := VBoxContainer.new()
+	slot_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	slot_vbox.add_theme_constant_override("separation", 16)
+	slot_panel.add_child(slot_vbox)
+
 	_slot_grid = SlotGridPanel.new()
 	_slot_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_slot_grid.slot_selected.connect(_on_pause_slot_selected)
-	slot_panel.add_child(_slot_grid)
+	slot_vbox.add_child(_slot_grid)
+
+	var slot_back_btn := _popup_button("Back")
+	slot_back_btn.pressed.connect(func() -> void: _slot_grid_container.visible = false)
+	slot_vbox.add_child(slot_back_btn)
 
 	var slot_grid_root := Control.new()
 	slot_grid_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -440,6 +441,7 @@ func _build_game_menu() -> void:
 	add_child(slot_grid_layer)
 
 	_build_options_overlay()
+	_build_leave_overlay()
 
 func _build_options_overlay() -> void:
 	var panel_style := StyleBoxFlat.new()
@@ -468,6 +470,101 @@ func _build_options_overlay() -> void:
 	options_layer.layer = 21
 	options_layer.add_child(root)
 	add_child(options_layer)
+
+func _build_leave_overlay() -> void:
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = _DARK_BG
+	panel_style.set_corner_radius_all(6)
+	panel_style.set_content_margin_all(32)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", panel_style)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 16)
+	panel.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "Leave Game"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", _WHITE)
+	vbox.add_child(title)
+
+	if NetworkManager.is_offline_mode:
+		_add_host_button(vbox, "Return to Menu", func() -> void: GameManager.exit_to_main_menu())
+	else:
+		_add_host_button(vbox, "Return to Lobby", func() -> void: GameManager.return_to_lobby())
+
+	if not NetworkManager.is_offline_mode:
+		var disconnect_btn := _popup_button("Disconnect")
+		disconnect_btn.pressed.connect(func() -> void:
+			_show_confirm("Return to main menu?", GameManager.exit_to_main_menu))
+		vbox.add_child(disconnect_btn)
+
+	var exit_btn := _popup_button("Exit Game")
+	exit_btn.pressed.connect(func() -> void:
+		_show_confirm("Exit game?", func() -> void:
+			GameManager.on_scene_exit()
+			NetworkManager.reset()
+			get_tree().quit()))
+	vbox.add_child(exit_btn)
+
+	var back_btn := _popup_button("Back")
+	back_btn.pressed.connect(func() -> void: _leave_container.visible = false)
+	vbox.add_child(back_btn)
+
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(panel)
+
+	_leave_container = root
+	_leave_container.visible = false
+
+	var leave_layer := CanvasLayer.new()
+	leave_layer.layer = 21
+	leave_layer.add_child(root)
+	add_child(leave_layer)
+
+func _build_bug_icon() -> void:
+	var icon_tex := load("res://Assets/Icons/bug_report.svg") as Texture2D
+
+	var normal_style := StyleBoxFlat.new()
+	normal_style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+
+	var hover_style := StyleBoxFlat.new()
+	hover_style.bg_color = Color(1.0, 1.0, 1.0, 0.08)
+	hover_style.set_corner_radius_all(4)
+
+	var focus_style := StyleBoxFlat.new()
+	focus_style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+
+	var btn := Button.new()
+	btn.icon = icon_tex
+	btn.expand_icon = true
+	btn.custom_minimum_size = Vector2(28, 28)
+	btn.add_theme_stylebox_override("normal", normal_style)
+	btn.add_theme_stylebox_override("hover", hover_style)
+	btn.add_theme_stylebox_override("pressed", hover_style)
+	btn.add_theme_stylebox_override("focus", focus_style)
+	btn.add_theme_color_override("icon_normal_color", Color(0.7, 0.7, 0.75, 0.55))
+	btn.add_theme_color_override("icon_hover_color", Color(1.0, 1.0, 1.0, 0.90))
+	btn.add_theme_color_override("icon_pressed_color", Color(1.0, 1.0, 1.0, 0.70))
+	btn.tooltip_text = "Report Bug"
+	btn.anchor_left = 1.0
+	btn.anchor_right = 1.0
+	btn.anchor_top = 1.0
+	btn.anchor_bottom = 1.0
+	btn.offset_left = -36.0
+	btn.offset_right = -8.0
+	btn.offset_top = -52.0
+	btn.offset_bottom = -24.0
+	btn.pressed.connect(_on_bug_report_pressed)
+	add_child(btn)
 
 func _build_confirm_popup() -> void:
 	var overlay := ColorRect.new()
