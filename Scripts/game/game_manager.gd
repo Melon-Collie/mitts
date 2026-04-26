@@ -435,9 +435,12 @@ func _wire_sound_signals() -> void:
 		puck.puck_hit_goal_body.connect(func() -> void:
 			SoundManager.play_world(SoundManager.Sound.PUCK_GOAL_BODY, puck.get_puck_position())
 			NetworkManager.send_goal_body_hit_to_all(puck.get_puck_position()))
-		puck_controller.puck_touched_while_loose.connect(func(_pid: int) -> void:
+		puck.puck_touched_loose.connect(func(_s: Skater) -> void:
 			SoundManager.play_world(SoundManager.Sound.PUCK_DEFLECTION, puck.get_puck_position())
 			NetworkManager.send_deflection_to_all(puck.get_puck_position()))
+		puck.puck_body_blocked.connect(func(_s: Skater) -> void:
+			SoundManager.play_world(SoundManager.Sound.PUCK_BODY_BLOCK, puck.get_puck_position())
+			NetworkManager.send_body_block_to_all(puck.get_puck_position()))
 		puck_controller.puck_stripped_from.connect(func(_pid: int) -> void:
 			SoundManager.play_world(SoundManager.Sound.PUCK_STRIP, puck.get_puck_position())
 			NetworkManager.send_puck_strip_to_all(puck.get_puck_position()))
@@ -447,6 +450,8 @@ func _wire_sound_signals() -> void:
 		func(pos: Vector3) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_GOAL_BODY, pos))
 	NetworkManager.deflection_received.connect(
 		func(pos: Vector3) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_DEFLECTION, pos))
+	NetworkManager.body_block_received.connect(
+		func(pos: Vector3) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_BODY_BLOCK, pos))
 	NetworkManager.puck_strip_received.connect(
 		func(pos: Vector3) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_STRIP, pos))
 	puck.puck_touched_goalie.connect(
