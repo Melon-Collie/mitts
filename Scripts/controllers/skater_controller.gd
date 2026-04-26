@@ -546,38 +546,39 @@ func _is_in_slapper_state() -> bool:
 
 # Clamps `point` (either the puck contact point or the blade heel during
 # follow-through) out of the net exclusion zone. The zone is NET_HALF_WIDTH +
-# NET_PUCK_BUFFER wide on each side and NET_DEPTH deep from the goal line.
-# The point always escapes through the nearest side or back face — never the
+# NET_PUCK_BUFFER wide on each side and NET_DEPTH + NET_PUCK_BUFFER deep from
+# the goal line. The buffer applies uniformly to both the side posts and the
+# back board. The point always escapes through the nearest face — never the
 # front mouth.
 func _clamp_blade_from_net(point: Vector3) -> Vector3:
 	if point.y > GameRules.NET_HEIGHT:
 		return point
 	var result: Vector3 = point
-	var gl: float    = GameRules.GOAL_LINE_Z
-	var depth: float = GameRules.NET_DEPTH
-	var hw: float = GameRules.NET_HALF_WIDTH + GameRules.NET_PUCK_BUFFER
+	var gl: float           = GameRules.GOAL_LINE_Z
+	var eff_depth: float    = GameRules.NET_DEPTH + GameRules.NET_PUCK_BUFFER
+	var hw: float           = GameRules.NET_HALF_WIDTH + GameRules.NET_PUCK_BUFFER
 	# +Z net
-	if result.z >= gl and result.z < gl + depth:
+	if result.z >= gl and result.z < gl + eff_depth:
 		var local_depth: float = result.z - gl
 		if abs(result.x) < hw:
-			var d_back: float  = depth - local_depth
+			var d_back: float  = eff_depth - local_depth
 			var d_left: float  = result.x + hw
 			var d_right: float = hw - result.x
 			if d_back <= d_left and d_back <= d_right:
-				result.z = gl + depth
+				result.z = gl + eff_depth
 			elif d_left <= d_right:
 				result.x = -hw
 			else:
 				result.x = hw
 	# -Z net
-	elif result.z <= -gl and result.z > -gl - depth:
+	elif result.z <= -gl and result.z > -gl - eff_depth:
 		var local_depth: float = -gl - result.z
 		if abs(result.x) < hw:
-			var d_back: float  = depth - local_depth
+			var d_back: float  = eff_depth - local_depth
 			var d_left: float  = result.x + hw
 			var d_right: float = hw - result.x
 			if d_back <= d_left and d_back <= d_right:
-				result.z = -gl - depth
+				result.z = -gl - eff_depth
 			elif d_left <= d_right:
 				result.x = -hw
 			else:
