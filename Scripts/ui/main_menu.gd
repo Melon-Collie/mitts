@@ -60,14 +60,9 @@ func _build_ui() -> void:
 	_center_container = center
 	_center_container.modulate.a = 0.0
 
-	var menu_panel_style := StyleBoxFlat.new()
-	menu_panel_style.bg_color = Color(0.10, 0.10, 0.14, 0.85)
-	menu_panel_style.set_corner_radius_all(8)
-	menu_panel_style.set_content_margin_all(40)
+	var menu_panel_style := MenuStyle.panel(8, 40)
 	menu_panel_style.set_content_margin(SIDE_TOP, 36)
 	menu_panel_style.set_content_margin(SIDE_BOTTOM, 36)
-	menu_panel_style.border_color = Color(0.35, 0.58, 0.80, 0.55)
-	menu_panel_style.set_border_width_all(1)
 
 	var menu_panel := PanelContainer.new()
 	menu_panel.add_theme_stylebox_override("panel", menu_panel_style)
@@ -83,7 +78,7 @@ func _build_ui() -> void:
 	title.text = "Mitts"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 64)
-	title.add_theme_color_override("font_color", Color(0.88, 0.95, 1.0, 1.0))
+	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
 	vbox.add_child(title)
 	_title_label = title
 	_title_label.item_rect_changed.connect(func() -> void:
@@ -150,18 +145,12 @@ func _build_ui() -> void:
 	add_child(intro)
 
 func _build_player_card() -> void:
-	var normal_style := StyleBoxFlat.new()
-	normal_style.bg_color = Color(0.10, 0.10, 0.14, 0.85)
-	normal_style.set_corner_radius_all(6)
-	normal_style.set_content_margin_all(14)
-	normal_style.border_color = Color(0.35, 0.55, 0.78, 0.55)
-	normal_style.set_border_width_all(1)
-
+	var normal_style := MenuStyle.panel(6, 14)
 	var hover_style := StyleBoxFlat.new()
-	hover_style.bg_color = Color(0.13, 0.16, 0.24, 0.92)
+	hover_style.bg_color = Color(MenuStyle.BTN_HOVER.r, MenuStyle.BTN_HOVER.g, MenuStyle.BTN_HOVER.b, 0.92)
 	hover_style.set_corner_radius_all(6)
 	hover_style.set_content_margin_all(14)
-	hover_style.border_color = Color(0.55, 0.78, 1.0, 0.85)
+	hover_style.border_color = MenuStyle.ICE_HOVER
 	hover_style.set_border_width_all(1)
 
 	var panel := PanelContainer.new()
@@ -217,10 +206,7 @@ func _build_player_popup() -> void:
 		if event is InputEventMouseButton and event.pressed:
 			_player_popup.visible = false)
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.07, 0.07, 0.09, 0.96)
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -406,10 +392,7 @@ func _build_options_popup() -> void:
 		if event is InputEventMouseButton and event.pressed:
 			_options_popup.visible = false)
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.07, 0.07, 0.09, 0.96)
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -434,10 +417,7 @@ func _build_exit_popup() -> void:
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.07, 0.07, 0.09, 0.96)
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(36)
+	var panel_style := MenuStyle.panel(6, 36)
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -488,10 +468,7 @@ func _build_offline_popup() -> void:
 		if event is InputEventMouseButton and event.pressed:
 			_offline_popup.visible = false)
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.07, 0.07, 0.09, 0.96)
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -553,10 +530,7 @@ func _build_free_play_popup() -> void:
 		if event is InputEventMouseButton and event.pressed:
 			_free_play_popup.visible = false)
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.07, 0.07, 0.09, 0.96)
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -636,10 +610,7 @@ func _build_online_popup() -> void:
 		if event is InputEventMouseButton and event.pressed:
 			_online_popup.visible = false)
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.07, 0.07, 0.09, 0.96)
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -750,36 +721,7 @@ func _make_button(label: String) -> Button:
 	btn.text = label
 	btn.custom_minimum_size = Vector2(308, 48)
 	btn.add_theme_font_size_override("font_size", 20)
-	btn.add_theme_color_override("font_color", Color(0.88, 0.95, 1.0, 1.0))
-	btn.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 1.0, 1.0))
-	btn.add_theme_color_override("font_pressed_color", Color(0.70, 0.88, 1.0, 1.0))
-
-	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color(0.10, 0.14, 0.22, 0.80)
-	normal.set_corner_radius_all(6)
-	normal.border_color = Color(0.40, 0.62, 0.85, 0.75)
-	normal.set_border_width_all(1)
-	normal.set_content_margin_all(10)
-
-	var hover := StyleBoxFlat.new()
-	hover.bg_color = Color(0.14, 0.20, 0.34, 0.92)
-	hover.set_corner_radius_all(6)
-	hover.border_color = Color(0.60, 0.82, 1.0, 0.95)
-	hover.set_border_width_all(2)
-	hover.set_content_margin_all(10)
-
-	var pressed := StyleBoxFlat.new()
-	pressed.bg_color = Color(0.07, 0.10, 0.18, 1.0)
-	pressed.set_corner_radius_all(6)
-	pressed.border_color = Color(0.45, 0.70, 0.92, 0.85)
-	pressed.set_border_width_all(1)
-	pressed.set_content_margin_all(10)
-
-	btn.add_theme_stylebox_override("normal", normal)
-	btn.add_theme_stylebox_override("hover", hover)
-	btn.add_theme_stylebox_override("pressed", pressed)
-	btn.add_theme_stylebox_override("focus", hover)
-
+	MenuStyle.apply_button(btn)
 	_wire_hover_scale(btn)
 	SoundManager.wire_button(btn)
 	return btn

@@ -279,10 +279,7 @@ func _build_elevation_indicator() -> void:
 	_elevation_panel.add_child(label)
 
 func _build_game_over_popup() -> void:
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = _DARK_BG
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -355,10 +352,7 @@ func _build_game_menu() -> void:
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = _DARK_BG
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -402,10 +396,7 @@ func _build_game_menu() -> void:
 	_game_menu.add_child(root)
 	add_child(_game_menu)
 
-	var slot_grid_panel_style := StyleBoxFlat.new()
-	slot_grid_panel_style.bg_color = _DARK_BG
-	slot_grid_panel_style.set_corner_radius_all(6)
-	slot_grid_panel_style.set_content_margin_all(32)
+	var slot_grid_panel_style := MenuStyle.panel()
 
 	var slot_panel := PanelContainer.new()
 	slot_panel.add_theme_stylebox_override("panel", slot_grid_panel_style)
@@ -444,10 +435,7 @@ func _build_game_menu() -> void:
 	_build_leave_overlay()
 
 func _build_options_overlay() -> void:
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = _DARK_BG
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -472,10 +460,7 @@ func _build_options_overlay() -> void:
 	add_child(options_layer)
 
 func _build_leave_overlay() -> void:
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = _DARK_BG
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -572,10 +557,7 @@ func _build_confirm_popup() -> void:
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = _DARK_BG
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(36)
+	var panel_style := MenuStyle.panel(6, 36)
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -715,6 +697,7 @@ func _popup_button(label: String) -> Button:
 	btn.text = label
 	btn.custom_minimum_size = Vector2(220, 48)
 	btn.add_theme_font_size_override("font_size", 20)
+	MenuStyle.apply_button(btn)
 	_wire_hover_scale(btn)
 	SoundManager.wire_button(btn)
 	return btn

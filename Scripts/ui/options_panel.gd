@@ -24,9 +24,9 @@ var _binding_btns: Dictionary = {}
 var _conflict_label: Label = null
 var _export_status_label: Label = null
 
-const _WHITE  := Color(1.00, 1.00, 1.00, 1.00)
-const _DIM    := Color(0.62, 0.62, 0.68, 1.00)
-const _SEP    := Color(0.28, 0.28, 0.33, 1.00)
+const _WHITE  := MenuStyle.TEXT_BODY
+const _DIM    := MenuStyle.TEXT_DIM
+const _SEP    := MenuStyle.TEXT_SEP
 const _REBINDABLE_ACTIONS: Array = [
 	{"action": "move_up",        "label": "Move Up"},
 	{"action": "move_down",      "label": "Move Down"},
@@ -157,16 +157,7 @@ func _activate_tab(idx: int) -> void:
 		_apply_tab_style(_tab_btns[i], i == idx)
 
 func _apply_tab_style(btn: Button, active: bool) -> void:
-	var s := StyleBoxFlat.new()
-	s.set_corner_radius_all(0)
-	s.set_content_margin(SIDE_LEFT, 16)
-	s.set_content_margin(SIDE_RIGHT, 16)
-	s.set_content_margin(SIDE_TOP, 8)
-	s.set_content_margin(SIDE_BOTTOM, 8)
-	s.bg_color = Color(0.14, 0.14, 0.17, 1.0) if active else Color(0.0, 0.0, 0.0, 0.0)
-	for state: StringName in [&"normal", &"hover", &"pressed", &"focus"]:
-		btn.add_theme_stylebox_override(state, s)
-	btn.add_theme_color_override("font_color", _WHITE if active else _DIM)
+	MenuStyle.apply_tab_button(btn, active)
 
 func _build_video_tab() -> Control:
 	var box := VBoxContainer.new()
@@ -645,6 +636,7 @@ func _make_button(label: String) -> Button:
 	btn.text = label
 	btn.custom_minimum_size = Vector2(308, 48)
 	btn.add_theme_font_size_override("font_size", 20)
+	MenuStyle.apply_button(btn)
 	SoundManager.wire_button(btn)
 	return btn
 
@@ -653,5 +645,6 @@ func _make_small_button(label: String) -> Button:
 	btn.text = label
 	btn.custom_minimum_size = Vector2(148, 48)
 	btn.add_theme_font_size_override("font_size", 20)
+	MenuStyle.apply_button(btn)
 	SoundManager.wire_button(btn)
 	return btn
