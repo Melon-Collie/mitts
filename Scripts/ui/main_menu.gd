@@ -48,7 +48,7 @@ func _build_ui() -> void:
 
 	# Dark overlay keeps menu text readable over the busy background
 	var overlay := ColorRect.new()
-	overlay.color = Color(0.0, 0.0, 0.0, 0.45)
+	overlay.color = Color(0.0, 0.0, 0.0, 0.65)
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(overlay)
