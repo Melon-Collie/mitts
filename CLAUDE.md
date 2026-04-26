@@ -39,7 +39,7 @@ Lower layers never reach up: actors take their collaborators via `setup()` (e.g.
 
 ## Autoloads
 
-Initialized in this order: `PlayerPrefs` → `Constants` → `BuildInfo` → `NetworkManager` → `NetworkSimManager` (`network_sim.gd`, no class_name) → `GameManager`. `NetworkManager._ready()` is a no-op; the menu drives initialization.
+Initialized in this order: `PlayerPrefs` → `Constants` → `BuildInfo` → `SoundManager` (`sound_manager.gd`, no class_name) → `NetworkManager` → `NetworkSimManager` (`network_sim.gd`, no class_name) → `GameManager`. `NetworkManager._ready()` is a no-op; the menu drives initialization. `SoundManager` exposes `play_ui(sound: SoundManager.Sound, volume_db: float)` and `play_world(sound: SoundManager.Sound, pos: Vector3, volume_db: float)`; sound constants live in its `Sound` enum.
 
 ## Confusing Boundaries
 
@@ -53,11 +53,15 @@ Initialized in this order: `PlayerPrefs` → `Constants` → `BuildInfo` → `Ne
 
 **`GameManager` wires six collaborators:** `PlayerRegistry`, `WorldStateCodec`, `ShotOnGoalTracker`, `HitTracker`, `PhaseCoordinator`, `SlotSwapCoordinator`. Documentation that says "five" is stale.
 
+**`SkaterStateMachine` and `SkaterAimingBehavior`** live in `Scripts/controllers/`, not `domain/`. Despite being pure `RefCounted` with no engine dependencies, they carry controller-local mutable state (current shot state, charge distance, sweep history) that is tightly coupled to per-tick input processing. Domain rules are stateless static methods; these classes are stateful collaborators owned by `SkaterController`.
+
 ## Networking Invariants
 
 These are non-obvious constraints that cause subtle bugs if violated. Rates and wire format are in `ARCHITECTURE.md`.
 
-**`_carrier_peer_id` is managed exclusively by reliable RPCs, never by world state.** Unreliable packet ordering conflicts with locally-predicted carrier transitions.
+**A client's puck is always in one of three modes.** *Carried* — `_carrier_peer_id` is set, puck is pinned to the carrier's blade; no interpolation runs. *Trajectory prediction* — carrier has released; `PuckController` advances the puck forward from the release point using stored velocity and `ICE_FRICTION`, applying three-zone broadcast correction each tick (see below). *Interpolated* — no carrier, no prediction; client buffers host snapshots and renders from `estimated_host_time() - interpolation_delay`. The `carrier_idx` field decoded from world state is what `PuckController.apply_state` reads to switch non-carrier clients between prediction and interpolation modes.
+
+**On clients, `_carrier_peer_id` is managed exclusively by reliable RPCs, never by world state.** Unreliable packet ordering conflicts with locally-predicted carrier transitions. On the server, `_carrier_peer_id` in `PuckController` is set by physics callbacks (`_on_puck_picked_up` / `_on_puck_released`). The world state does encode a `carrier_idx` field, but clients use it only to enter/exit trajectory-prediction mode — they do not write `_carrier_peer_id` from it.
 
 **`rtt_ms` in pickup, shot, and hit claims is the raw unaveraged latest sample** (`latest_rtt_ms` from `ClockSync`), not the smoothed average. Rewind depth must track the actual current round-trip.
 
@@ -103,10 +107,12 @@ These are non-obvious constraints that cause subtle bugs if violated. Rates and 
 |------|----------|
 | New game rule or geometry constant | `domain/config/game_rules.gd` |
 | New pure stateless math or rule | New file in `domain/rules/` + GUT test |
+| New domain state type | New file in `domain/state/` + GUT test |
 | New per-player stat | `PlayerStats` → wire format → `WorldStateCodec` |
 | New RPC | `NetworkManager` (define) → emit a signal → `GameManager._wire_network_signals()` (connect) |
 | New phase-entry side effect | `PhaseCoordinator` |
 | New controller behavior | Method on `SkaterController`; `GameManager` calls it, never pokes internals directly |
+| New reconcile logic | `domain/rules/reconciliation_rules.gd` + GUT test |
 
 ## Code Conventions
 
@@ -146,11 +152,11 @@ Playtester builds ship via GitHub Releases (`latest` tag). `deploy.yml` computes
 - **Reconcile replay skips skater-vs-skater collisions:** `LocalController.reconcile` replays inputs through movement code but does not re-run `move_and_slide` for player-player collisions. A body-check that occurs during the replay window is injected as a velocity impulse at the matching `host_timestamp` (via `body_check_impulse_applied`), which approximates the post-collision trajectory. Full re-simulation would require running all skater bodies through Jolt together in the replay loop — expensive and likely to introduce its own divergence. The impulse injection approach is the correct trade-off; do not attempt to add full collision replay without a careful design pass.
 - **Input batch size is partially adaptive:** The 1-second loss-rate measurement window is fairly noisy on marginal connections (~40 samples at 40 Hz); a sliding window rather than a resetting one would improve accuracy.
 - **`INPUT_LEAD_SEC` may need to become adaptive per-client:** The current fixed ~25ms lead (worst-case batch jitter + 2-tick buffer) works well for typical internet connections but may be too tight for high-jitter links or too loose (adding unnecessary input lag) on LAN. The standard AAA solution (used by Rocket League and similar) is: host measures actual input arrival jitter per peer from the incoming queue — specifically the variance of `estimated_host_time() - input.host_timestamp` at pop time — computes a target lead per peer (e.g. p95 jitter + 2-tick buffer), and sends it to the client in the world-state packet (a single float, negligible wire cost). The client lerps its local `INPUT_LEAD_SEC` toward the received target each broadcast. This keeps the buffer as small as possible for each individual connection. Prerequisite: add a per-peer jitter tracker on the host (ring buffer of recent lead samples, publish p95), extend the world-state header with a `target_input_lead_ms` field per skater slot, and have `LocalController` consume it via `ClockSync.set_input_lead`.
-- **`SkaterController` is too large (~1073 lines):** The state machine, shot charging/release, blade IK calls, arm mesh updates, and body check handling should be split across a `SkaterShotStateMachine` and a `SkaterIKCoordinator`, leaving `SkaterController` as a thin coordinator. Needs care because `LocalController` and `RemoteController` inherit from it.
+- **`SkaterController` still needs refactoring (~949 lines):** `SkaterStateMachine` and `SkaterAimingBehavior` have already been extracted as separate `RefCounted` classes. The remaining work is extracting blade IK calls and arm mesh updates into a `SkaterIKCoordinator`, leaving `SkaterController` as a thin coordinator. Needs care because `LocalController` and `RemoteController` inherit from it.
 - **`WorldStateCodec` is a leaky abstraction:** It emits `phase_changed`, `game_over_triggered`, `clock_updated`, and other game-state signals from inside `decode_world_state`. A codec should decode into typed objects; a separate dispatcher should emit signals. The current design makes it hard to follow where `phase_changed` originates.
 - **Reconcile replay doesn't skip non-movement inputs:** Every unconfirmed input replays through the full `_process_input` pipeline — state machine dispatch, IK solve, aiming update. At 100 ms RTT (~24 inputs) this is fine. At 500 ms on bad WiFi (~120 inputs) it becomes noticeable. Inputs that can't affect position/velocity (dead-phase frames, menu-only inputs) could be detected and short-circuited in the replay loop.
 - **No integration test for the game loop:** The domain layer is well-tested but nothing covers faceoff → play → goal → reset end-to-end. This is the code path that silently breaks when `PhaseCoordinator` or `GameStateMachine` is refactored.
-- **Uniform rendering should move to UV-mapped texture painting:** The current system applies solid colors via `material_override` and stamps numbers/stripes as overlay `QuadMesh` nodes. The right approach is UV-unwrapped meshes (jersey, pants, gloves, socks) with a single painted `ImageTexture` per mesh — `Image.fill_rect` for stripe bands, glyph stamping for name/number, all composited into one atlas at spawn time. Prerequisites: UV-unwrap the skater meshes in Blender so each face (back panel, front panel, sleeves, etc.) has a predictable UV island; define matching UV region constants in `JerseyTextureGenerator`; replace `set_player_color` / `set_jersey_stripes` with a single `paint_and_apply_textures` call. Eliminates all overlay quad nodes and z-fighting.
+- **Uniform rendering should move to full UV-mapped texture painting:** The jersey body already uses a pixel-drawn `ImageTexture` (via `Image` fill + glyph stamp in `JerseyTextureGenerator`). Numbers and stripe overlays are still rendered as `QuadMesh` nodes with `material_override`, which causes z-fighting. The right approach is UV-unwrapped meshes (jersey, pants, gloves, socks) with a single composited `ImageTexture` per mesh — all stripe bands and number glyphs painted into one atlas at spawn time. Prerequisites: UV-unwrap the skater meshes in Blender so each face (back panel, front panel, sleeves, etc.) has a predictable UV island; define matching UV region constants in `JerseyTextureGenerator`; replace the overlay quad creation with a single `paint_and_apply_textures` call. Eliminates all overlay quad nodes and z-fighting.
 
 ## Planned Features
 
