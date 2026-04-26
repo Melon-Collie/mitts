@@ -6,6 +6,7 @@ signal intro_finished
 var _overlay_alpha: float = 1.0
 var _stick_alpha: float = 0.0
 var _puck_alpha: float = 0.0
+var _puck_radius: float = 72.0
 var _flash_alpha: float = 0.0
 var _spray: Array[Dictionary] = []
 var _grip: Vector2 = Vector2.ZERO
@@ -14,8 +15,9 @@ var _puck: Vector2 = Vector2.ZERO
 var _active: bool = true
 var _tween: Tween = null
 
-const _SHAFT_LEN: float = 280.0
-const _BLADE_LEN: float = 68.0
+const _SHAFT_LEN: float = 1120.0
+const _BLADE_LEN: float = 272.0
+const _PUCK_RADIUS_INIT: float = 72.0
 const _SHAFT_ANGLE_ENTRY: float = 0.4887  # 28 degrees
 const _BLADE_OFFSET_RAD: float = -0.6283  # blade is -36 degrees from shaft
 
@@ -53,26 +55,31 @@ func _run() -> void:
 	var py: float = sz.y
 
 	_puck = Vector2(px * 0.48, py * 0.52)
+	_puck_radius = _PUCK_RADIUS_INIT
 	_shaft_angle = _SHAFT_ANGLE_ENTRY
 
 	var shaft_dir := Vector2(cos(_shaft_angle), sin(_shaft_angle))
 	var blade_dir := Vector2(cos(_shaft_angle + _BLADE_OFFSET_RAD), sin(_shaft_angle + _BLADE_OFFSET_RAD))
 	var grip_contact: Vector2 = _puck - blade_dir * _BLADE_LEN - shaft_dir * _SHAFT_LEN
 
-	_grip = Vector2(-300.0, py * 0.35)
-	var grip_windup: Vector2 = grip_contact + Vector2(-70.0, 15.0)
-	var grip_follow: Vector2 = grip_contact + Vector2(55.0, -18.0)
-	var puck_exit: Vector2 = Vector2(_puck.x + px * 0.27, _puck.y - py * 0.01)
+	# Radius needed for puck to fill every corner of the screen from its position
+	var screen_fill_radius: float = maxf(
+		_puck.distance_to(Vector2.ZERO),
+		maxf(_puck.distance_to(Vector2(px, 0.0)),
+		maxf(_puck.distance_to(Vector2(0.0, py)),
+			 _puck.distance_to(Vector2(px, py))))) + 60.0
+
+	_grip = Vector2(-1500.0, py * 0.35)
+	var grip_windup: Vector2 = grip_contact + Vector2(-200.0, 35.0)
+	var grip_follow: Vector2 = grip_contact + Vector2(160.0, -50.0)
 
 	_tween = create_tween()
 
 	# Brief black hold
 	_tween.tween_interval(0.12)
 
-	# Stick fades in
+	# Stick fades in and slides into frame
 	_tween.tween_property(self, "_stick_alpha", 1.0, 0.18)
-
-	# Stick slides into frame (wind-up position)
 	_tween.tween_property(self, "_grip", grip_windup, 0.48) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
@@ -87,19 +94,23 @@ func _run() -> void:
 	# Impact
 	_tween.tween_callback(_fire_contact)
 
-	# Puck shoots across screen, stick follows through
-	_tween.tween_property(self, "_puck", puck_exit, 0.20) \
+	# Puck rushes toward camera (radius expands to fill screen), stick follows through and fades
+	_tween.tween_property(self, "_puck_radius", screen_fill_radius, 0.35) \
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	_tween.parallel().tween_property(self, "_grip", grip_follow, 0.22)
 	_tween.parallel().tween_property(self, "_shaft_angle", _SHAFT_ANGLE_ENTRY - 0.175, 0.22)
+	_tween.parallel().tween_property(self, "_stick_alpha", 0.0, 0.20)
+	_tween.parallel().tween_property(self, "_flash_alpha", 0.0, 0.18)
 
-	# Everything fades
-	_tween.tween_property(self, "_stick_alpha", 0.0, 0.28)
-	_tween.parallel().tween_property(self, "_puck_alpha", 0.0, 0.22)
-	_tween.parallel().tween_property(self, "_flash_alpha", 0.0, 0.38)
+	# Puck has filled the screen — snap to solid overlay and hide the puck circle
+	_tween.tween_callback(func() -> void:
+		_overlay_alpha = 1.0
+		_puck_alpha = 0.0
+		queue_redraw())
 
-	# Overlay fades, revealing menu underneath
-	_tween.tween_interval(0.04)
+	_tween.tween_interval(0.06)
+
+	# Overlay fades out, revealing menu
 	_tween.tween_property(self, "_overlay_alpha", 0.0, 0.52) \
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
 
@@ -111,14 +122,14 @@ func _fire_contact() -> void:
 	_flash_alpha = 1.0
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
-	for _i: int in 24:
-		var ang: float = rng.randf_range(deg_to_rad(-75.0), deg_to_rad(10.0))
-		var spd: float = rng.randf_range(70.0, 260.0)
+	for _i: int in 28:
+		var ang: float = rng.randf_range(deg_to_rad(-80.0), deg_to_rad(15.0))
+		var spd: float = rng.randf_range(250.0, 900.0)
 		_spray.append({
 			"pos": Vector2(_puck.x, _puck.y),
 			"vel": Vector2(cos(ang), sin(ang)) * spd,
-			"life": rng.randf_range(0.18, 0.62),
-			"max_life": 0.62,
+			"life": rng.randf_range(0.15, 0.50),
+			"max_life": 0.50,
 		})
 
 func _process(delta: float) -> void:
@@ -139,15 +150,19 @@ func _draw() -> void:
 		draw_rect(Rect2(Vector2.ZERO, sz), Color(0.0, 0.0, 0.0, _overlay_alpha))
 
 	if _flash_alpha > 0.001:
-		draw_rect(Rect2(Vector2.ZERO, sz), Color(1.0, 1.0, 1.0, _flash_alpha * 0.20))
+		draw_rect(Rect2(Vector2.ZERO, sz), Color(1.0, 1.0, 1.0, _flash_alpha * 0.22))
 
+	# Puck drawn before spray so sparks appear on top of the expanding disk
+	if _puck_alpha > 0.001:
+		draw_circle(_puck, _puck_radius, Color(0.12, 0.12, 0.16, _puck_alpha))
+		if _puck_radius < 120.0:
+			draw_arc(_puck, _puck_radius, 0.0, TAU, 48,
+				Color(0.38, 0.38, 0.45, _puck_alpha * 0.9), 10.0)
+
+	# Spray on top of puck — visible as ice sparks embedded in the expanding surface
 	for p: Dictionary in _spray:
 		var a: float = clampf(p.life / p.max_life, 0.0, 1.0)
-		draw_line(p.pos, p.pos - p.vel * 0.07, Color(0.88, 0.93, 1.0, a * 0.9), 2.0)
-
-	if _puck_alpha > 0.001:
-		draw_circle(_puck, 18.0, Color(0.12, 0.12, 0.16, _puck_alpha))
-		draw_arc(_puck, 18.0, 0.0, TAU, 40, Color(0.38, 0.38, 0.45, _puck_alpha * 0.9), 2.5)
+		draw_line(p.pos, p.pos - p.vel * 0.06, Color(0.88, 0.93, 1.0, a * 0.85), 3.0)
 
 	if _stick_alpha > 0.001:
 		_draw_stick()
@@ -162,22 +177,22 @@ func _draw_stick() -> void:
 	var perp: Vector2 = shaft_dir.orthogonal()
 
 	# Shaft (dark wood / carbon composite)
-	draw_line(_grip, heel, Color(0.17, 0.10, 0.05, a), 10.0)
-	draw_line(_grip + perp * 2.5, heel + perp * 2.5, Color(0.40, 0.25, 0.12, a * 0.45), 4.5)
+	draw_line(_grip, heel, Color(0.17, 0.10, 0.05, a), 40.0)
+	draw_line(_grip + perp * 10.0, heel + perp * 10.0, Color(0.40, 0.25, 0.12, a * 0.45), 18.0)
 
 	# Grip tape — black tape at top of shaft
-	var grip_end: Vector2 = _grip + shaft_dir * 42.0
-	draw_line(_grip, grip_end, Color(0.07, 0.07, 0.09, a), 11.5)
+	var grip_end: Vector2 = _grip + shaft_dir * 168.0
+	draw_line(_grip, grip_end, Color(0.07, 0.07, 0.09, a), 46.0)
 	for k: int in 3:
-		var t0: Vector2 = _grip + shaft_dir * (8.0 + k * 11.0)
-		var t1: Vector2 = t0 + shaft_dir * 5.0
-		draw_line(t0, t1, Color(0.20, 0.20, 0.22, a * 0.55), 11.5)
+		var t0: Vector2 = _grip + shaft_dir * (32.0 + k * 44.0)
+		var t1: Vector2 = t0 + shaft_dir * 20.0
+		draw_line(t0, t1, Color(0.20, 0.20, 0.22, a * 0.55), 46.0)
 
 	# Blade (dark composite)
-	draw_line(heel, toe, Color(0.13, 0.13, 0.17, a), 13.0)
+	draw_line(heel, toe, Color(0.13, 0.13, 0.17, a), 52.0)
 	# White tape over most of blade
-	draw_line(heel.lerp(toe, 0.1), heel.lerp(toe, 0.9), Color(0.88, 0.88, 0.88, a * 0.62), 6.0)
+	draw_line(heel.lerp(toe, 0.1), heel.lerp(toe, 0.9), Color(0.88, 0.88, 0.88, a * 0.62), 24.0)
 	# Bottom edge highlight
 	var blade_perp: Vector2 = blade_dir.orthogonal()
-	draw_line(heel + blade_perp * 3.5, toe + blade_perp * 3.5,
-		Color(0.50, 0.50, 0.60, a * 0.65), 2.0)
+	draw_line(heel + blade_perp * 14.0, toe + blade_perp * 14.0,
+		Color(0.50, 0.50, 0.60, a * 0.65), 8.0)
