@@ -489,8 +489,10 @@ func _apply_slapper_blade_position() -> void:
 	var clamped_world: Vector3 = blade_world
 	if has_puck:
 		clamped_world = _clamp_blade_from_goalies(clamped_world)
-		_check_net_puck_strip(clamped_world)
+	var pre_net_world: Vector3 = clamped_world
 	clamped_world = _clamp_blade_from_net(clamped_world)
+	if has_puck and pre_net_world.distance_to(clamped_world) > GameRules.NET_STRIP_THRESHOLD:
+		_check_net_puck_strip(pre_net_world)
 	if clamped_world != blade_world:
 		pos = skater.upper_body_to_local(clamped_world)
 	var hand_pos := Vector3(skater.shoulder.position.x, hand_rest_y, skater.shoulder.position.z)
@@ -536,20 +538,21 @@ func _is_in_slapper_state() -> bool:
 
 # Prevents the blade from entering either net's interior. Both nets are
 # centered at x=0. The x-boundary widens linearly with depth across the
-# trapezoidal net (0.915 at goal line → 1.02 at back). The blade always
-# escapes through the nearest side or back face — never through the front
-# mouth, regardless of where the skater is standing.
+# trapezoidal net (0.915 at goal line → 1.02 at back), then expanded by
+# NET_STRIP_BUFFER so the hard stop is outside the physical posts. The blade
+# always escapes through the nearest side or back face — never the front mouth.
 func _clamp_blade_from_net(blade_world: Vector3) -> Vector3:
 	if blade_world.y > GameRules.NET_HEIGHT:
 		return blade_world
 	var result: Vector3 = blade_world
 	var gl: float    = GameRules.GOAL_LINE_Z
 	var depth: float = GameRules.NET_DEPTH
+	var buf: float   = GameRules.NET_STRIP_BUFFER
 	# +Z net
-	if result.z > gl and result.z < gl + depth:
+	if result.z >= gl and result.z < gl + depth:
 		var local_depth: float = result.z - gl
 		var hw: float = lerpf(GameRules.NET_HALF_WIDTH, GameRules.NET_BACK_HALF_WIDTH,
-				local_depth / depth)
+				local_depth / depth) + buf
 		if abs(result.x) < hw:
 			var d_back: float  = depth - local_depth
 			var d_left: float  = result.x + hw
@@ -561,10 +564,10 @@ func _clamp_blade_from_net(blade_world: Vector3) -> Vector3:
 			else:
 				result.x = hw
 	# -Z net
-	elif result.z < -gl and result.z > -gl - depth:
+	elif result.z <= -gl and result.z > -gl - depth:
 		var local_depth: float = -gl - result.z
 		var hw: float = lerpf(GameRules.NET_HALF_WIDTH, GameRules.NET_BACK_HALF_WIDTH,
-				local_depth / depth)
+				local_depth / depth) + buf
 		if abs(result.x) < hw:
 			var d_back: float  = depth - local_depth
 			var d_left: float  = result.x + hw
@@ -577,10 +580,10 @@ func _clamp_blade_from_net(blade_world: Vector3) -> Vector3:
 				result.x = hw
 	return result
 
-# Releases the puck when the blade (while carrying) enters the buffer zone
-# surrounding either net's opening. Prevents nudging the puck to the goal line
-# (Mode 1) and side-jamming through the post gap (Mode 2). Must be called
-# BEFORE _clamp_blade_from_net so the pre-clamp position informs direction.
+# Releases the puck using the pre-clamp blade position to determine the
+# correct exit direction (front vs side). Called only when _clamp_blade_from_net
+# produced a squeeze above NET_STRIP_THRESHOLD, so light wraparound contact
+# does not drop the puck.
 func _check_net_puck_strip(blade_world: Vector3) -> void:
 	if not has_puck:
 		return
@@ -728,14 +731,16 @@ func _apply_blade_from_mouse(input: InputState, _delta: float) -> void:
 		hand_local.x += clamp_delta_xz.x
 		hand_local.z += clamp_delta_xz.z
 
-	# Goalie body clamp (strips puck on contact) + net strip buffer + net volume hard wall.
+	# Goalie body clamp (strips puck on contact) + expanded net hard wall + squeeze strip.
 	# Single world-space pass so we only convert once.
 	var blade_world: Vector3 = skater.upper_body_to_global(wall_clamped)
 	var clamped_world: Vector3 = blade_world
 	if has_puck:
 		clamped_world = _clamp_blade_from_goalies(clamped_world)
-		_check_net_puck_strip(clamped_world)
+	var pre_net_world: Vector3 = clamped_world
 	clamped_world = _clamp_blade_from_net(clamped_world)
+	if has_puck and pre_net_world.distance_to(clamped_world) > GameRules.NET_STRIP_THRESHOLD:
+		_check_net_puck_strip(pre_net_world)
 	if clamped_world != blade_world:
 		var clamped_local: Vector3 = skater.upper_body_to_local(clamped_world)
 		hand_local.x += clamped_local.x - wall_clamped.x
