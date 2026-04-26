@@ -179,7 +179,7 @@ func _build_player_popup() -> void:
 
 	name_field.text_changed.connect(func(t: String) -> void:
 		if t.strip_edges().is_empty():
-			name_field.text = "Player"
+			name_warning.visible = false
 			return
 		var trimmed: String = t.strip_edges()
 		if not NameFilter.is_alphanumeric(trimmed):

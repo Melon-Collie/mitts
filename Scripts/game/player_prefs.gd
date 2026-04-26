@@ -112,8 +112,6 @@ func _load() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(_get_save_path()) == OK:
 		player_name = cfg.get_value("player", "name", "Player").substr(0, 10)
-		if player_name.strip_edges().is_empty():
-			player_name = "Player"
 		jersey_number = clamp(cfg.get_value("player", "jersey_number", 10), 0, 99)
 		is_left_handed = cfg.get_value("player", "left_handed", true)
 		last_ip = cfg.get_value("player", "last_ip", "")
