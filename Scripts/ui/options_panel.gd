@@ -192,6 +192,7 @@ func _build_video_tab() -> Control:
 		_res_btn.add_item("%dx%d" % [r.x, r.y], i)
 	_res_btn.selected = PlayerPrefs.resolution_index
 	_res_btn.item_selected.connect(_on_resolution_selected)
+	MenuStyle.apply_button(_res_btn)
 	_res_row.add_child(_res_btn)
 
 	var fs_row := HBoxContainer.new()
@@ -208,6 +209,7 @@ func _build_video_tab() -> Control:
 	_fs_check = CheckButton.new()
 	_fs_check.set_pressed_no_signal(PlayerPrefs.is_fullscreen)
 	_fs_check.add_theme_font_size_override("font_size", 18)
+	MenuStyle.apply_check_button(_fs_check)
 	SoundManager.wire_button(_fs_check)
 	_fs_check.toggled.connect(_on_fullscreen_toggled)
 	fs_row.add_child(_fs_check)
@@ -228,6 +230,7 @@ func _build_video_tab() -> Control:
 	_vsync_check = CheckButton.new()
 	_vsync_check.set_pressed_no_signal(PlayerPrefs.vsync_enabled)
 	_vsync_check.add_theme_font_size_override("font_size", 18)
+	MenuStyle.apply_check_button(_vsync_check)
 	SoundManager.wire_button(_vsync_check)
 	_vsync_check.toggled.connect(_on_vsync_toggled)
 	vsync_row.add_child(_vsync_check)
@@ -249,6 +252,7 @@ func _build_video_tab() -> Control:
 		_fps_btn.add_item(label)
 	_fps_btn.selected = PlayerPrefs.fps_cap_index
 	_fps_btn.item_selected.connect(_on_fps_cap_selected)
+	MenuStyle.apply_button(_fps_btn)
 	fps_row.add_child(_fps_btn)
 	box.add_child(fps_row)
 
@@ -268,6 +272,7 @@ func _build_video_tab() -> Control:
 	_brightness_slider.value = PlayerPrefs.brightness
 	_brightness_slider.custom_minimum_size = Vector2(200, 32)
 	_brightness_slider.value_changed.connect(_on_brightness_changed)
+	MenuStyle.apply_slider(_brightness_slider)
 	bright_row.add_child(_brightness_slider)
 	box.add_child(bright_row)
 
@@ -296,6 +301,7 @@ func _build_audio_tab() -> Control:
 	_volume_slider.value = PlayerPrefs.master_volume
 	_volume_slider.custom_minimum_size = Vector2(200, 32)
 	_volume_slider.value_changed.connect(_on_volume_changed)
+	MenuStyle.apply_slider(_volume_slider)
 	volume_row.add_child(_volume_slider)
 	box.add_child(volume_row)
 
@@ -313,6 +319,7 @@ func _build_audio_tab() -> Control:
 	_mute_check = CheckButton.new()
 	_mute_check.set_pressed_no_signal(PlayerPrefs.master_muted)
 	_mute_check.add_theme_font_size_override("font_size", 18)
+	MenuStyle.apply_check_button(_mute_check)
 	SoundManager.wire_button(_mute_check)
 	_mute_check.toggled.connect(_on_mute_toggled)
 	mute_row.add_child(_mute_check)
@@ -341,6 +348,7 @@ func _build_input_tab() -> Control:
 	_sens_slider.value = PlayerPrefs.mouse_sensitivity
 	_sens_slider.custom_minimum_size = Vector2(160, 32)
 	_sens_slider.value_changed.connect(_on_sensitivity_changed)
+	MenuStyle.apply_slider(_sens_slider)
 	sens_row.add_child(_sens_slider)
 	_sens_field = LineEdit.new()
 	_sens_field.text = "%.2f" % PlayerPrefs.mouse_sensitivity
@@ -348,6 +356,7 @@ func _build_input_tab() -> Control:
 	_sens_field.add_theme_font_size_override("font_size", 18)
 	_sens_field.text_submitted.connect(_on_sensitivity_typed)
 	_sens_field.focus_exited.connect(func() -> void: _on_sensitivity_typed(_sens_field.text))
+	MenuStyle.apply_line_edit(_sens_field)
 	sens_row.add_child(_sens_field)
 	box.add_child(sens_row)
 
@@ -391,6 +400,7 @@ func _build_input_tab() -> Control:
 		btn.add_theme_font_size_override("font_size", 15)
 		btn.text = _binding_display(_pending_bindings.get(action, {}))
 		btn.pressed.connect(_on_bind_btn_pressed.bind(action))
+		MenuStyle.apply_button(btn)
 		SoundManager.wire_button(btn)
 		row.add_child(btn)
 		_binding_btns[action] = btn
@@ -423,6 +433,7 @@ func _build_game_tab() -> Control:
 	_attack_up_check = CheckButton.new()
 	_attack_up_check.set_pressed_no_signal(PlayerPrefs.attack_up)
 	_attack_up_check.add_theme_font_size_override("font_size", 18)
+	MenuStyle.apply_check_button(_attack_up_check)
 	SoundManager.wire_button(_attack_up_check)
 	_attack_up_check.toggled.connect(_on_attack_up_toggled)
 	row.add_child(_attack_up_check)

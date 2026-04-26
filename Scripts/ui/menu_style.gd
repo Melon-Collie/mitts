@@ -79,6 +79,50 @@ static func apply_button(btn: Button) -> void:
 	btn.add_theme_stylebox_override("focus",    hover)
 	btn.add_theme_stylebox_override("disabled", disabled)
 
+static func apply_line_edit(field: LineEdit) -> void:
+	field.add_theme_color_override("font_color",             TEXT_BODY)
+	field.add_theme_color_override("font_placeholder_color", TEXT_DIM)
+	field.add_theme_color_override("caret_color",            ICE)
+	field.add_theme_color_override("selection_color",        Color(ICE_MID.r, ICE_MID.g, ICE_MID.b, 0.35))
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = BTN_FILL
+	normal.set_corner_radius_all(6)
+	normal.border_color = ICE_DIM
+	normal.set_border_width_all(1)
+	normal.set_content_margin_all(10)
+	var focus := StyleBoxFlat.new()
+	focus.bg_color = BTN_FILL
+	focus.set_corner_radius_all(6)
+	focus.border_color = ICE_HOVER
+	focus.set_border_width_all(2)
+	focus.set_content_margin_all(10)
+	field.add_theme_stylebox_override("normal",    normal)
+	field.add_theme_stylebox_override("focus",     focus)
+	field.add_theme_stylebox_override("read_only", normal)
+
+static func apply_check_button(btn: CheckButton) -> void:
+	btn.add_theme_color_override("font_color",          TEXT_BODY)
+	btn.add_theme_color_override("font_hover_color",    TEXT_BODY)
+	btn.add_theme_color_override("font_pressed_color",  ICE)
+	btn.add_theme_color_override("font_disabled_color", TEXT_DIM)
+
+static func apply_slider(slider: HSlider) -> void:
+	var track := StyleBoxFlat.new()
+	track.bg_color = BTN_FILL
+	track.set_corner_radius_all(3)
+	track.border_color = ICE_DIM
+	track.set_border_width_all(1)
+	track.set_content_margin(SIDE_TOP, 3)
+	track.set_content_margin(SIDE_BOTTOM, 3)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = Color(ICE_MID.r, ICE_MID.g, ICE_MID.b, 0.65)
+	fill.set_corner_radius_all(3)
+	fill.set_content_margin(SIDE_TOP, 3)
+	fill.set_content_margin(SIDE_BOTTOM, 3)
+	slider.add_theme_stylebox_override("slider",                  track)
+	slider.add_theme_stylebox_override("grabber_area",            fill)
+	slider.add_theme_stylebox_override("grabber_area_highlight",  fill)
+
 static func close_button() -> Button:
 	var btn := Button.new()
 	btn.text = "×"

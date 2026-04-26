@@ -254,6 +254,7 @@ func _build_player_popup() -> void:
 	name_field.add_theme_font_size_override("font_size", 18)
 	name_field.text = PlayerPrefs.player_name
 	NetworkManager.local_player_name = PlayerPrefs.player_name
+	MenuStyle.apply_line_edit(name_field)
 	name_row.add_child(name_field)
 
 	var name_warning := Label.new()
@@ -303,6 +304,7 @@ func _build_player_popup() -> void:
 	number_field.add_theme_font_size_override("font_size", 18)
 	number_field.text = str(PlayerPrefs.jersey_number)
 	NetworkManager.local_jersey_number = PlayerPrefs.jersey_number
+	MenuStyle.apply_line_edit(number_field)
 	number_row.add_child(number_field)
 
 	var number_warning := Label.new()
@@ -682,12 +684,14 @@ func _build_online_popup() -> void:
 	_ip_field.text = PlayerPrefs.last_ip
 	_ip_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_ip_field.add_theme_font_size_override("font_size", 18)
+	MenuStyle.apply_line_edit(_ip_field)
 	join_row.add_child(_ip_field)
 
 	var join_btn := Button.new()
 	join_btn.text = "Join Game"
 	join_btn.custom_minimum_size = Vector2(120, 48)
 	join_btn.add_theme_font_size_override("font_size", 20)
+	MenuStyle.apply_button(join_btn)
 	join_btn.pressed.connect(_on_join_pressed)
 	_wire_hover_scale(join_btn)
 	SoundManager.wire_button(join_btn)
