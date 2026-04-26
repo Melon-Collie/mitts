@@ -4,18 +4,18 @@ extends VBoxContainer
 signal close_requested
 
 var _res_row: HBoxContainer = null
-var _fs_check: CheckButton = null
-var _mute_check: CheckButton = null
+var _fs_check: Button = null
+var _mute_check: Button = null
 var _volume_slider: HSlider = null
 var _res_btn: OptionButton = null
 var _tab_contents: Array[Control] = []
 var _tab_btns: Array[Button] = []
-var _vsync_check: CheckButton = null
+var _vsync_check: Button = null
 var _fps_btn: OptionButton = null
 var _brightness_slider: HSlider = null
 var _sens_slider: HSlider = null
 var _sens_field: LineEdit = null
-var _attack_up_check: CheckButton = null
+var _attack_up_check: Button = null
 var _apply_btn: Button = null
 var _original: Dictionary = {}
 var _listening_action: String = ""
@@ -24,9 +24,9 @@ var _binding_btns: Dictionary = {}
 var _conflict_label: Label = null
 var _export_status_label: Label = null
 
-const _WHITE  := Color(1.00, 1.00, 1.00, 1.00)
-const _DIM    := Color(0.62, 0.62, 0.68, 1.00)
-const _SEP    := Color(0.28, 0.28, 0.33, 1.00)
+const _WHITE  := MenuStyle.TEXT_BODY
+const _DIM    := MenuStyle.TEXT_DIM
+const _SEP    := MenuStyle.TEXT_SEP
 const _REBINDABLE_ACTIONS: Array = [
 	{"action": "move_up",        "label": "Move Up"},
 	{"action": "move_down",      "label": "Move Down"},
@@ -44,11 +44,20 @@ func _ready() -> void:
 	add_theme_constant_override("separation", 16)
 	alignment = BoxContainer.ALIGNMENT_CENTER
 
+	var close_row := HBoxContainer.new()
+	var close_spacer := Control.new()
+	close_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	close_row.add_child(close_spacer)
+	var close_btn := MenuStyle.close_button()
+	close_btn.pressed.connect(_on_cancel_pressed)
+	SoundManager.wire_button(close_btn)
+	close_row.add_child(close_btn)
+	add_child(close_row)
 	var title := Label.new()
 	title.text = "Options"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", _WHITE)
+	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
 	add_child(title)
 
 	add_child(_build_tab_switcher())
@@ -157,16 +166,7 @@ func _activate_tab(idx: int) -> void:
 		_apply_tab_style(_tab_btns[i], i == idx)
 
 func _apply_tab_style(btn: Button, active: bool) -> void:
-	var s := StyleBoxFlat.new()
-	s.set_corner_radius_all(0)
-	s.set_content_margin(SIDE_LEFT, 16)
-	s.set_content_margin(SIDE_RIGHT, 16)
-	s.set_content_margin(SIDE_TOP, 8)
-	s.set_content_margin(SIDE_BOTTOM, 8)
-	s.bg_color = Color(0.14, 0.14, 0.17, 1.0) if active else Color(0.0, 0.0, 0.0, 0.0)
-	for state: StringName in [&"normal", &"hover", &"pressed", &"focus"]:
-		btn.add_theme_stylebox_override(state, s)
-	btn.add_theme_color_override("font_color", _WHITE if active else _DIM)
+	MenuStyle.apply_tab_button(btn, active)
 
 func _build_video_tab() -> Control:
 	var box := VBoxContainer.new()
@@ -192,6 +192,7 @@ func _build_video_tab() -> Control:
 		_res_btn.add_item("%dx%d" % [r.x, r.y], i)
 	_res_btn.selected = PlayerPrefs.resolution_index
 	_res_btn.item_selected.connect(_on_resolution_selected)
+	MenuStyle.apply_button(_res_btn)
 	_res_row.add_child(_res_btn)
 
 	var fs_row := HBoxContainer.new()
@@ -205,9 +206,10 @@ func _build_video_tab() -> Control:
 	fs_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	fs_row.add_child(fs_label)
 
-	_fs_check = CheckButton.new()
+	_fs_check = Button.new()
 	_fs_check.set_pressed_no_signal(PlayerPrefs.is_fullscreen)
 	_fs_check.add_theme_font_size_override("font_size", 18)
+	MenuStyle.apply_toggle(_fs_check)
 	SoundManager.wire_button(_fs_check)
 	_fs_check.toggled.connect(_on_fullscreen_toggled)
 	fs_row.add_child(_fs_check)
@@ -225,9 +227,10 @@ func _build_video_tab() -> Control:
 	vsync_label.add_theme_color_override("font_color", _WHITE)
 	vsync_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	vsync_row.add_child(vsync_label)
-	_vsync_check = CheckButton.new()
+	_vsync_check = Button.new()
 	_vsync_check.set_pressed_no_signal(PlayerPrefs.vsync_enabled)
 	_vsync_check.add_theme_font_size_override("font_size", 18)
+	MenuStyle.apply_toggle(_vsync_check)
 	SoundManager.wire_button(_vsync_check)
 	_vsync_check.toggled.connect(_on_vsync_toggled)
 	vsync_row.add_child(_vsync_check)
@@ -249,6 +252,7 @@ func _build_video_tab() -> Control:
 		_fps_btn.add_item(label)
 	_fps_btn.selected = PlayerPrefs.fps_cap_index
 	_fps_btn.item_selected.connect(_on_fps_cap_selected)
+	MenuStyle.apply_button(_fps_btn)
 	fps_row.add_child(_fps_btn)
 	box.add_child(fps_row)
 
@@ -268,6 +272,7 @@ func _build_video_tab() -> Control:
 	_brightness_slider.value = PlayerPrefs.brightness
 	_brightness_slider.custom_minimum_size = Vector2(200, 32)
 	_brightness_slider.value_changed.connect(_on_brightness_changed)
+	MenuStyle.apply_slider(_brightness_slider)
 	bright_row.add_child(_brightness_slider)
 	box.add_child(bright_row)
 
@@ -296,6 +301,7 @@ func _build_audio_tab() -> Control:
 	_volume_slider.value = PlayerPrefs.master_volume
 	_volume_slider.custom_minimum_size = Vector2(200, 32)
 	_volume_slider.value_changed.connect(_on_volume_changed)
+	MenuStyle.apply_slider(_volume_slider)
 	volume_row.add_child(_volume_slider)
 	box.add_child(volume_row)
 
@@ -310,9 +316,10 @@ func _build_audio_tab() -> Control:
 	mute_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	mute_row.add_child(mute_label)
 
-	_mute_check = CheckButton.new()
+	_mute_check = Button.new()
 	_mute_check.set_pressed_no_signal(PlayerPrefs.master_muted)
 	_mute_check.add_theme_font_size_override("font_size", 18)
+	MenuStyle.apply_toggle(_mute_check)
 	SoundManager.wire_button(_mute_check)
 	_mute_check.toggled.connect(_on_mute_toggled)
 	mute_row.add_child(_mute_check)
@@ -341,6 +348,7 @@ func _build_input_tab() -> Control:
 	_sens_slider.value = PlayerPrefs.mouse_sensitivity
 	_sens_slider.custom_minimum_size = Vector2(160, 32)
 	_sens_slider.value_changed.connect(_on_sensitivity_changed)
+	MenuStyle.apply_slider(_sens_slider)
 	sens_row.add_child(_sens_slider)
 	_sens_field = LineEdit.new()
 	_sens_field.text = "%.2f" % PlayerPrefs.mouse_sensitivity
@@ -348,6 +356,7 @@ func _build_input_tab() -> Control:
 	_sens_field.add_theme_font_size_override("font_size", 18)
 	_sens_field.text_submitted.connect(_on_sensitivity_typed)
 	_sens_field.focus_exited.connect(func() -> void: _on_sensitivity_typed(_sens_field.text))
+	MenuStyle.apply_line_edit(_sens_field)
 	sens_row.add_child(_sens_field)
 	box.add_child(sens_row)
 
@@ -391,6 +400,7 @@ func _build_input_tab() -> Control:
 		btn.add_theme_font_size_override("font_size", 15)
 		btn.text = _binding_display(_pending_bindings.get(action, {}))
 		btn.pressed.connect(_on_bind_btn_pressed.bind(action))
+		MenuStyle.apply_button(btn)
 		SoundManager.wire_button(btn)
 		row.add_child(btn)
 		_binding_btns[action] = btn
@@ -420,9 +430,10 @@ func _build_game_tab() -> Control:
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(lbl)
 
-	_attack_up_check = CheckButton.new()
+	_attack_up_check = Button.new()
 	_attack_up_check.set_pressed_no_signal(PlayerPrefs.attack_up)
 	_attack_up_check.add_theme_font_size_override("font_size", 18)
+	MenuStyle.apply_toggle(_attack_up_check)
 	SoundManager.wire_button(_attack_up_check)
 	_attack_up_check.toggled.connect(_on_attack_up_toggled)
 	row.add_child(_attack_up_check)
@@ -623,16 +634,20 @@ func _on_apply_pressed() -> void:
 
 func _on_cancel_pressed() -> void:
 	_fs_check.set_pressed_no_signal(_original.fullscreen)
+	MenuStyle.sync_toggle(_fs_check)
 	if _res_row != null:
 		_res_row.visible = not _original.fullscreen
 	_res_btn.selected = _original.resolution_index
 	_vsync_check.set_pressed_no_signal(_original.vsync_enabled)
+	MenuStyle.sync_toggle(_vsync_check)
 	_fps_btn.selected = _original.fps_cap_index
 	_brightness_slider.value = _original.brightness
 	_volume_slider.value = _original.master_volume
 	_mute_check.set_pressed_no_signal(_original.master_muted)
+	MenuStyle.sync_toggle(_mute_check)
 	_sens_slider.value = _original.mouse_sensitivity
 	_attack_up_check.set_pressed_no_signal(_original.attack_up)
+	MenuStyle.sync_toggle(_attack_up_check)
 	_listening_action = ""
 	_pending_bindings = (_original.get("bindings", {}) as Dictionary).duplicate(true)
 	_update_binding_btns()
@@ -645,6 +660,7 @@ func _make_button(label: String) -> Button:
 	btn.text = label
 	btn.custom_minimum_size = Vector2(308, 48)
 	btn.add_theme_font_size_override("font_size", 20)
+	MenuStyle.apply_button(btn)
 	SoundManager.wire_button(btn)
 	return btn
 
@@ -653,5 +669,6 @@ func _make_small_button(label: String) -> Button:
 	btn.text = label
 	btn.custom_minimum_size = Vector2(148, 48)
 	btn.add_theme_font_size_override("font_size", 20)
+	MenuStyle.apply_button(btn)
 	SoundManager.wire_button(btn)
 	return btn

@@ -279,10 +279,7 @@ func _build_elevation_indicator() -> void:
 	_elevation_panel.add_child(label)
 
 func _build_game_over_popup() -> void:
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = _DARK_BG
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -355,10 +352,7 @@ func _build_game_menu() -> void:
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = _DARK_BG
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -402,10 +396,7 @@ func _build_game_menu() -> void:
 	_game_menu.add_child(root)
 	add_child(_game_menu)
 
-	var slot_grid_panel_style := StyleBoxFlat.new()
-	slot_grid_panel_style.bg_color = _DARK_BG
-	slot_grid_panel_style.set_corner_radius_all(6)
-	slot_grid_panel_style.set_content_margin_all(32)
+	var slot_grid_panel_style := MenuStyle.panel()
 
 	var slot_panel := PanelContainer.new()
 	slot_panel.add_theme_stylebox_override("panel", slot_grid_panel_style)
@@ -419,14 +410,26 @@ func _build_game_menu() -> void:
 	slot_vbox.add_theme_constant_override("separation", 16)
 	slot_panel.add_child(slot_vbox)
 
+	var slot_close_row := HBoxContainer.new()
+	var slot_close_spacer := Control.new()
+	slot_close_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slot_close_row.add_child(slot_close_spacer)
+	var slot_close_btn := MenuStyle.close_button()
+	slot_close_btn.pressed.connect(func() -> void: _slot_grid_container.visible = false)
+	SoundManager.wire_button(slot_close_btn)
+	slot_close_row.add_child(slot_close_btn)
+	slot_vbox.add_child(slot_close_row)
+	var slot_title := Label.new()
+	slot_title.text = "Change Position"
+	slot_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	slot_title.add_theme_font_size_override("font_size", 24)
+	slot_title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
+	slot_vbox.add_child(slot_title)
+
 	_slot_grid = SlotGridPanel.new()
 	_slot_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_slot_grid.slot_selected.connect(_on_pause_slot_selected)
 	slot_vbox.add_child(_slot_grid)
-
-	var slot_back_btn := _popup_button("Back")
-	slot_back_btn.pressed.connect(func() -> void: _slot_grid_container.visible = false)
-	slot_vbox.add_child(slot_back_btn)
 
 	var slot_grid_root := Control.new()
 	slot_grid_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -444,10 +447,7 @@ func _build_game_menu() -> void:
 	_build_leave_overlay()
 
 func _build_options_overlay() -> void:
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = _DARK_BG
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -472,10 +472,7 @@ func _build_options_overlay() -> void:
 	add_child(options_layer)
 
 func _build_leave_overlay() -> void:
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = _DARK_BG
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -488,11 +485,20 @@ func _build_leave_overlay() -> void:
 	vbox.add_theme_constant_override("separation", 16)
 	panel.add_child(vbox)
 
+	var close_row := HBoxContainer.new()
+	var close_spacer := Control.new()
+	close_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	close_row.add_child(close_spacer)
+	var close_btn := MenuStyle.close_button()
+	close_btn.pressed.connect(func() -> void: _leave_container.visible = false)
+	SoundManager.wire_button(close_btn)
+	close_row.add_child(close_btn)
+	vbox.add_child(close_row)
 	var title := Label.new()
 	title.text = "Leave Game"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", _WHITE)
+	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
 	vbox.add_child(title)
 
 	if NetworkManager.is_offline_mode:
@@ -514,9 +520,6 @@ func _build_leave_overlay() -> void:
 			get_tree().quit()))
 	vbox.add_child(exit_btn)
 
-	var back_btn := _popup_button("Back")
-	back_btn.pressed.connect(func() -> void: _leave_container.visible = false)
-	vbox.add_child(back_btn)
 
 	var root := Control.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -572,10 +575,7 @@ func _build_confirm_popup() -> void:
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = _DARK_BG
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(36)
+	var panel_style := MenuStyle.panel(6, 36)
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -587,6 +587,16 @@ func _build_confirm_popup() -> void:
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	vbox.add_theme_constant_override("separation", 20)
 	panel.add_child(vbox)
+
+	var confirm_header := HBoxContainer.new()
+	vbox.add_child(confirm_header)
+	var confirm_spacer := Control.new()
+	confirm_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	confirm_header.add_child(confirm_spacer)
+	var confirm_close_btn := MenuStyle.close_button()
+	confirm_close_btn.pressed.connect(func() -> void: _confirm_popup.visible = false)
+	SoundManager.wire_button(confirm_close_btn)
+	confirm_header.add_child(confirm_close_btn)
 
 	_confirm_label = Label.new()
 	_confirm_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -715,6 +725,7 @@ func _popup_button(label: String) -> Button:
 	btn.text = label
 	btn.custom_minimum_size = Vector2(220, 48)
 	btn.add_theme_font_size_override("font_size", 20)
+	MenuStyle.apply_button(btn)
 	_wire_hover_scale(btn)
 	SoundManager.wire_button(btn)
 	return btn

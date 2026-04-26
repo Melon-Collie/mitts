@@ -4,6 +4,10 @@ extends Control
 var _ip_field: LineEdit
 var _error_label: Label = null
 var _player_popup: Control = null
+var _center_container: CenterContainer = null
+var _title_label: Label = null
+var _version_label: Label = null
+var _player_card_panel: PanelContainer = null
 var _options_popup: Control = null
 var _offline_popup: Control = null
 var _free_play_popup: Control = null
@@ -28,27 +32,57 @@ func _ready() -> void:
 		NetworkManager.pending_error = ""
 
 func _build_ui() -> void:
-	var bg := ColorRect.new()
-	bg.color = Color(0.05, 0.07, 0.10, 1.0)
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
+	const BG_PATH := "res://Assets/menu_bg.png"
+	if ResourceLoader.exists(BG_PATH):
+		var bg := TextureRect.new()
+		bg.texture = load(BG_PATH)
+		bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		bg.stretch_mode = TextureRect.STRETCH_TILE
+		add_child(bg)
+	else:
+		var bg := ColorRect.new()
+		bg.color = Color(0.05, 0.07, 0.10, 1.0)
+		bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		add_child(bg)
+
+	# Dark overlay keeps menu text readable over the busy background
+	var overlay := ColorRect.new()
+	overlay.color = Color(0.0, 0.0, 0.0, 0.65)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(overlay)
 
 	# ── Center stack ──────────────────────────────────────────────────────────
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
+	_center_container = center
+	_center_container.modulate.a = 0.0
+
+	var menu_panel_style := MenuStyle.panel(8, 40)
+	menu_panel_style.set_content_margin(SIDE_TOP, 36)
+	menu_panel_style.set_content_margin(SIDE_BOTTOM, 36)
+
+	var menu_panel := PanelContainer.new()
+	menu_panel.add_theme_stylebox_override("panel", menu_panel_style)
+	menu_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	center.add_child(menu_panel)
 
 	var vbox := VBoxContainer.new()
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	vbox.add_theme_constant_override("separation", 12)
-	center.add_child(vbox)
+	menu_panel.add_child(vbox)
 
 	var title := Label.new()
 	title.text = "Mitts"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 64)
-	title.add_theme_color_override("font_color", Color.WHITE)
+	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
 	vbox.add_child(title)
+	_title_label = title
+	_title_label.item_rect_changed.connect(func() -> void:
+		_title_label.pivot_offset = _title_label.size / 2.0)
 
 	var spacer := Control.new()
 	spacer.custom_minimum_size = Vector2(0, 20)
@@ -82,17 +116,18 @@ func _build_ui() -> void:
 	vbox.add_child(update_checker)
 
 	# ── Version label — bottom-right corner ───────────────────────────────────
-	var version_label := Label.new()
-	version_label.text = "v%s" % BuildInfo.VERSION
-	version_label.add_theme_font_size_override("font_size", 14)
-	version_label.add_theme_color_override("font_color", Color(0.55, 0.55, 0.60, 1.0))
-	version_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	version_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	version_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	version_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	version_label.offset_right = -16
-	version_label.offset_bottom = -12
-	add_child(version_label)
+	_version_label = Label.new()
+	_version_label.text = "v%s" % BuildInfo.VERSION
+	_version_label.add_theme_font_size_override("font_size", 14)
+	_version_label.add_theme_color_override("font_color", Color(0.55, 0.55, 0.60, 1.0))
+	_version_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_version_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	_version_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_version_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_version_label.offset_right = -16
+	_version_label.offset_bottom = -12
+	_version_label.modulate.a = 0.0
+	add_child(_version_label)
 
 	_build_player_popup()
 	_build_options_popup()
@@ -105,19 +140,17 @@ func _build_ui() -> void:
 	_loading_screen.cancel_pressed.connect(_on_join_cancelled)
 	add_child(_loading_screen)
 
-func _build_player_card() -> void:
-	var normal_style := StyleBoxFlat.new()
-	normal_style.bg_color = Color(0.10, 0.10, 0.14, 0.85)
-	normal_style.set_corner_radius_all(6)
-	normal_style.set_content_margin_all(14)
-	normal_style.border_color = Color(0.30, 0.30, 0.45, 0.50)
-	normal_style.set_border_width_all(1)
+	var intro := MenuIntro.new()
+	intro.intro_finished.connect(_on_intro_finished)
+	add_child(intro)
 
+func _build_player_card() -> void:
+	var normal_style := MenuStyle.panel(6, 14)
 	var hover_style := StyleBoxFlat.new()
-	hover_style.bg_color = Color(0.14, 0.14, 0.20, 0.92)
+	hover_style.bg_color = Color(MenuStyle.BTN_HOVER.r, MenuStyle.BTN_HOVER.g, MenuStyle.BTN_HOVER.b, 0.92)
 	hover_style.set_corner_radius_all(6)
 	hover_style.set_content_margin_all(14)
-	hover_style.border_color = Color(0.45, 0.45, 0.65, 0.70)
+	hover_style.border_color = MenuStyle.ICE_HOVER
 	hover_style.set_border_width_all(1)
 
 	var panel := PanelContainer.new()
@@ -160,6 +193,8 @@ func _build_player_card() -> void:
 		panel.add_theme_stylebox_override("panel", normal_style))
 
 	panel.position = Vector2(16.0, 16.0)
+	panel.modulate.a = 0.0
+	_player_card_panel = panel
 	add_child(panel)
 
 func _build_player_popup() -> void:
@@ -171,10 +206,7 @@ func _build_player_popup() -> void:
 		if event is InputEventMouseButton and event.pressed:
 			_player_popup.visible = false)
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.07, 0.07, 0.09, 0.96)
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -187,11 +219,20 @@ func _build_player_popup() -> void:
 	vbox.add_theme_constant_override("separation", 16)
 	panel.add_child(vbox)
 
+	var close_row := HBoxContainer.new()
+	var close_spacer := Control.new()
+	close_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	close_row.add_child(close_spacer)
+	var close_btn := MenuStyle.close_button()
+	close_btn.pressed.connect(func() -> void: _player_popup.visible = false)
+	SoundManager.wire_button(close_btn)
+	close_row.add_child(close_btn)
+	vbox.add_child(close_row)
 	var title := Label.new()
 	title.text = "Player"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", Color.WHITE)
+	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
 	vbox.add_child(title)
 
 	var name_row := HBoxContainer.new()
@@ -213,6 +254,7 @@ func _build_player_popup() -> void:
 	name_field.add_theme_font_size_override("font_size", 18)
 	name_field.text = PlayerPrefs.player_name
 	NetworkManager.local_player_name = PlayerPrefs.player_name
+	MenuStyle.apply_line_edit(name_field)
 	name_row.add_child(name_field)
 
 	var name_warning := Label.new()
@@ -262,6 +304,7 @@ func _build_player_popup() -> void:
 	number_field.add_theme_font_size_override("font_size", 18)
 	number_field.text = str(PlayerPrefs.jersey_number)
 	NetworkManager.local_jersey_number = PlayerPrefs.jersey_number
+	MenuStyle.apply_line_edit(number_field)
 	number_row.add_child(number_field)
 
 	var number_warning := Label.new()
@@ -340,9 +383,6 @@ func _build_player_popup() -> void:
 		if _card_hand_label != null:
 			_card_hand_label.text = "Shoots %s" % ("L" if not pressed else "R"))
 
-	var done_btn := _make_button("Done")
-	done_btn.pressed.connect(func() -> void: _player_popup.visible = false)
-	vbox.add_child(done_btn)
 
 	_player_popup = Control.new()
 	_player_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -360,10 +400,7 @@ func _build_options_popup() -> void:
 		if event is InputEventMouseButton and event.pressed:
 			_options_popup.visible = false)
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.07, 0.07, 0.09, 0.96)
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -388,10 +425,7 @@ func _build_exit_popup() -> void:
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.07, 0.07, 0.09, 0.96)
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(36)
+	var panel_style := MenuStyle.panel(6, 36)
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -404,11 +438,20 @@ func _build_exit_popup() -> void:
 	vbox.add_theme_constant_override("separation", 20)
 	panel.add_child(vbox)
 
+	var exit_close_row := HBoxContainer.new()
+	var exit_close_spacer := Control.new()
+	exit_close_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	exit_close_row.add_child(exit_close_spacer)
+	var exit_close_btn := MenuStyle.close_button()
+	exit_close_btn.pressed.connect(func() -> void: _exit_popup.visible = false)
+	SoundManager.wire_button(exit_close_btn)
+	exit_close_row.add_child(exit_close_btn)
+	vbox.add_child(exit_close_row)
 	var label := Label.new()
 	label.text = "Exit game?"
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.add_theme_font_size_override("font_size", 26)
-	label.add_theme_color_override("font_color", Color.WHITE)
+	label.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
 	vbox.add_child(label)
 
 	var btn_row := HBoxContainer.new()
@@ -442,10 +485,7 @@ func _build_offline_popup() -> void:
 		if event is InputEventMouseButton and event.pressed:
 			_offline_popup.visible = false)
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.07, 0.07, 0.09, 0.96)
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -458,11 +498,20 @@ func _build_offline_popup() -> void:
 	vbox.add_theme_constant_override("separation", 16)
 	panel.add_child(vbox)
 
+	var close_row := HBoxContainer.new()
+	var close_spacer := Control.new()
+	close_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	close_row.add_child(close_spacer)
+	var close_btn := MenuStyle.close_button()
+	close_btn.pressed.connect(func() -> void: _offline_popup.visible = false)
+	SoundManager.wire_button(close_btn)
+	close_row.add_child(close_btn)
+	vbox.add_child(close_row)
 	var title := Label.new()
 	title.text = "Offline"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", Color.WHITE)
+	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
 	vbox.add_child(title)
 
 	var free_play_btn := _make_button("Free Play")
@@ -487,9 +536,6 @@ func _build_offline_popup() -> void:
 	planned_label.add_theme_color_override("font_color", Color(0.50, 0.50, 0.55))
 	tutorial_section.add_child(planned_label)
 
-	var back_btn := _make_button("Back")
-	back_btn.pressed.connect(func() -> void: _offline_popup.visible = false)
-	vbox.add_child(back_btn)
 
 	_offline_popup = Control.new()
 	_offline_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -507,10 +553,7 @@ func _build_free_play_popup() -> void:
 		if event is InputEventMouseButton and event.pressed:
 			_free_play_popup.visible = false)
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.07, 0.07, 0.09, 0.96)
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -523,11 +566,22 @@ func _build_free_play_popup() -> void:
 	vbox.add_theme_constant_override("separation", 20)
 	panel.add_child(vbox)
 
+	var close_row := HBoxContainer.new()
+	var close_spacer := Control.new()
+	close_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	close_row.add_child(close_spacer)
+	var close_btn := MenuStyle.close_button()
+	close_btn.pressed.connect(func() -> void:
+		_free_play_popup.visible = false
+		_offline_popup.visible = true)
+	SoundManager.wire_button(close_btn)
+	close_row.add_child(close_btn)
+	vbox.add_child(close_row)
 	var title := Label.new()
 	title.text = "Free Play"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", Color.WHITE)
+	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
 	vbox.add_child(title)
 
 	var grid := GridContainer.new()
@@ -568,11 +622,6 @@ func _build_free_play_popup() -> void:
 	play_btn.pressed.connect(_do_start_offline)
 	vbox.add_child(play_btn)
 
-	var back_btn := _make_button("Back")
-	back_btn.pressed.connect(func() -> void:
-		_free_play_popup.visible = false
-		_offline_popup.visible = true)
-	vbox.add_child(back_btn)
 
 	_free_play_popup = Control.new()
 	_free_play_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -590,10 +639,7 @@ func _build_online_popup() -> void:
 		if event is InputEventMouseButton and event.pressed:
 			_online_popup.visible = false)
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.07, 0.07, 0.09, 0.96)
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -606,11 +652,20 @@ func _build_online_popup() -> void:
 	vbox.add_theme_constant_override("separation", 16)
 	panel.add_child(vbox)
 
+	var close_row := HBoxContainer.new()
+	var close_spacer := Control.new()
+	close_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	close_row.add_child(close_spacer)
+	var close_btn := MenuStyle.close_button()
+	close_btn.pressed.connect(func() -> void: _online_popup.visible = false)
+	SoundManager.wire_button(close_btn)
+	close_row.add_child(close_btn)
+	vbox.add_child(close_row)
 	var title := Label.new()
 	title.text = "Online"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", Color.WHITE)
+	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
 	vbox.add_child(title)
 
 	var host_btn := _make_button("Host Game")
@@ -629,20 +684,19 @@ func _build_online_popup() -> void:
 	_ip_field.text = PlayerPrefs.last_ip
 	_ip_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_ip_field.add_theme_font_size_override("font_size", 18)
+	MenuStyle.apply_line_edit(_ip_field)
 	join_row.add_child(_ip_field)
 
 	var join_btn := Button.new()
 	join_btn.text = "Join Game"
 	join_btn.custom_minimum_size = Vector2(120, 48)
 	join_btn.add_theme_font_size_override("font_size", 20)
+	MenuStyle.apply_button(join_btn)
 	join_btn.pressed.connect(_on_join_pressed)
 	_wire_hover_scale(join_btn)
 	SoundManager.wire_button(join_btn)
 	join_row.add_child(join_btn)
 
-	var back_btn := _make_button("Back")
-	back_btn.pressed.connect(func() -> void: _online_popup.visible = false)
-	vbox.add_child(back_btn)
 
 	_online_popup = Control.new()
 	_online_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -680,6 +734,22 @@ func _unhandled_input(event: InputEvent) -> void:
 			_exit_popup.visible = false
 			get_viewport().set_input_as_handled()
 
+func _on_intro_finished() -> void:
+	if _title_label != null:
+		_title_label.scale = Vector2(1.18, 1.18)
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(_center_container, "modulate:a", 1.0, 0.38) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	if _title_label != null:
+		tw.tween_property(_title_label, "scale", Vector2.ONE, 0.32) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(_player_card_panel, "modulate:a", 1.0, 0.32) \
+		.set_delay(0.10).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	if _version_label != null:
+		tw.tween_property(_version_label, "modulate:a", 1.0, 0.28) \
+			.set_delay(0.16)
+
 func _on_options_pressed() -> void:
 	_options_popup.visible = true
 
@@ -688,6 +758,7 @@ func _make_button(label: String) -> Button:
 	btn.text = label
 	btn.custom_minimum_size = Vector2(308, 48)
 	btn.add_theme_font_size_override("font_size", 20)
+	MenuStyle.apply_button(btn)
 	_wire_hover_scale(btn)
 	SoundManager.wire_button(btn)
 	return btn

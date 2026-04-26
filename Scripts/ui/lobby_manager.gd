@@ -1,9 +1,8 @@
 class_name LobbyManager
 extends Node
 
-const _DARK_BG   := Color(0.07, 0.07, 0.09, 0.92)
-const _WHITE     := Color(1.00, 1.00, 1.00, 1.00)
-const _DIM       := Color(0.62, 0.62, 0.68, 1.00)
+const _WHITE     := MenuStyle.TEXT_BODY
+const _DIM       := MenuStyle.TEXT_DIM
 
 # key = team_id * 3 + slot  →  { peer_id, player_name, is_left_handed }
 var _lobby_slots: Dictionary = {}
@@ -70,10 +69,7 @@ func _build_ui() -> void:
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.add_child(bg)
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = _DARK_BG
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -128,7 +124,7 @@ func _build_settings_panel() -> Control:
 	box.add_theme_constant_override("separation", 10)
 
 	var sep_style := StyleBoxFlat.new()
-	sep_style.bg_color = Color(0.28, 0.28, 0.33, 1.0)
+	sep_style.bg_color = MenuStyle.TEXT_SEP
 	var sep := HSeparator.new()
 	sep.add_theme_stylebox_override("separator", sep_style)
 	box.add_child(sep)
@@ -228,6 +224,7 @@ func _btn(text: String) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.custom_minimum_size = Vector2(140, 40)
+	MenuStyle.apply_button(b)
 	_wire_hover_scale(b)
 	SoundManager.wire_button(b)
 	return b
