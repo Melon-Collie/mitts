@@ -410,19 +410,21 @@ func _build_game_menu() -> void:
 	slot_vbox.add_theme_constant_override("separation", 16)
 	slot_panel.add_child(slot_vbox)
 
-	var slot_header := HBoxContainer.new()
-	slot_vbox.add_child(slot_header)
-	var slot_title := Label.new()
-	slot_title.text = "Change Position"
-	slot_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	slot_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	slot_title.add_theme_font_size_override("font_size", 24)
-	slot_title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
-	slot_header.add_child(slot_title)
+	var slot_close_row := HBoxContainer.new()
+	var slot_close_spacer := Control.new()
+	slot_close_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slot_close_row.add_child(slot_close_spacer)
 	var slot_close_btn := MenuStyle.close_button()
 	slot_close_btn.pressed.connect(func() -> void: _slot_grid_container.visible = false)
 	SoundManager.wire_button(slot_close_btn)
-	slot_header.add_child(slot_close_btn)
+	slot_close_row.add_child(slot_close_btn)
+	slot_vbox.add_child(slot_close_row)
+	var slot_title := Label.new()
+	slot_title.text = "Change Position"
+	slot_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	slot_title.add_theme_font_size_override("font_size", 24)
+	slot_title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
+	slot_vbox.add_child(slot_title)
 
 	_slot_grid = SlotGridPanel.new()
 	_slot_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -483,19 +485,21 @@ func _build_leave_overlay() -> void:
 	vbox.add_theme_constant_override("separation", 16)
 	panel.add_child(vbox)
 
-	var header := HBoxContainer.new()
-	vbox.add_child(header)
-	var title := Label.new()
-	title.text = "Leave Game"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
-	header.add_child(title)
+	var close_row := HBoxContainer.new()
+	var close_spacer := Control.new()
+	close_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	close_row.add_child(close_spacer)
 	var close_btn := MenuStyle.close_button()
 	close_btn.pressed.connect(func() -> void: _leave_container.visible = false)
 	SoundManager.wire_button(close_btn)
-	header.add_child(close_btn)
+	close_row.add_child(close_btn)
+	vbox.add_child(close_row)
+	var title := Label.new()
+	title.text = "Leave Game"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
+	vbox.add_child(title)
 
 	if NetworkManager.is_offline_mode:
 		_add_host_button(vbox, "Return to Menu", func() -> void: GameManager.exit_to_main_menu())

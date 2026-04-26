@@ -219,19 +219,21 @@ func _build_player_popup() -> void:
 	vbox.add_theme_constant_override("separation", 16)
 	panel.add_child(vbox)
 
-	var header := HBoxContainer.new()
-	vbox.add_child(header)
-	var title := Label.new()
-	title.text = "Player"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
-	header.add_child(title)
+	var close_row := HBoxContainer.new()
+	var close_spacer := Control.new()
+	close_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	close_row.add_child(close_spacer)
 	var close_btn := MenuStyle.close_button()
 	close_btn.pressed.connect(func() -> void: _player_popup.visible = false)
 	SoundManager.wire_button(close_btn)
-	header.add_child(close_btn)
+	close_row.add_child(close_btn)
+	vbox.add_child(close_row)
+	var title := Label.new()
+	title.text = "Player"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
+	vbox.add_child(title)
 
 	var name_row := HBoxContainer.new()
 	name_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -434,19 +436,21 @@ func _build_exit_popup() -> void:
 	vbox.add_theme_constant_override("separation", 20)
 	panel.add_child(vbox)
 
-	var exit_header := HBoxContainer.new()
-	vbox.add_child(exit_header)
-	var label := Label.new()
-	label.text = "Exit game?"
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	label.add_theme_font_size_override("font_size", 26)
-	label.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
-	exit_header.add_child(label)
+	var exit_close_row := HBoxContainer.new()
+	var exit_close_spacer := Control.new()
+	exit_close_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	exit_close_row.add_child(exit_close_spacer)
 	var exit_close_btn := MenuStyle.close_button()
 	exit_close_btn.pressed.connect(func() -> void: _exit_popup.visible = false)
 	SoundManager.wire_button(exit_close_btn)
-	exit_header.add_child(exit_close_btn)
+	exit_close_row.add_child(exit_close_btn)
+	vbox.add_child(exit_close_row)
+	var label := Label.new()
+	label.text = "Exit game?"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 26)
+	label.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
+	vbox.add_child(label)
 
 	var btn_row := HBoxContainer.new()
 	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -492,19 +496,21 @@ func _build_offline_popup() -> void:
 	vbox.add_theme_constant_override("separation", 16)
 	panel.add_child(vbox)
 
-	var header := HBoxContainer.new()
-	vbox.add_child(header)
-	var title := Label.new()
-	title.text = "Offline"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
-	header.add_child(title)
+	var close_row := HBoxContainer.new()
+	var close_spacer := Control.new()
+	close_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	close_row.add_child(close_spacer)
 	var close_btn := MenuStyle.close_button()
 	close_btn.pressed.connect(func() -> void: _offline_popup.visible = false)
 	SoundManager.wire_button(close_btn)
-	header.add_child(close_btn)
+	close_row.add_child(close_btn)
+	vbox.add_child(close_row)
+	var title := Label.new()
+	title.text = "Offline"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
+	vbox.add_child(title)
 
 	var free_play_btn := _make_button("Free Play")
 	free_play_btn.pressed.connect(func() -> void:
@@ -558,21 +564,23 @@ func _build_free_play_popup() -> void:
 	vbox.add_theme_constant_override("separation", 20)
 	panel.add_child(vbox)
 
-	var header := HBoxContainer.new()
-	vbox.add_child(header)
-	var title := Label.new()
-	title.text = "Free Play"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
-	header.add_child(title)
+	var close_row := HBoxContainer.new()
+	var close_spacer := Control.new()
+	close_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	close_row.add_child(close_spacer)
 	var close_btn := MenuStyle.close_button()
 	close_btn.pressed.connect(func() -> void:
 		_free_play_popup.visible = false
 		_offline_popup.visible = true)
 	SoundManager.wire_button(close_btn)
-	header.add_child(close_btn)
+	close_row.add_child(close_btn)
+	vbox.add_child(close_row)
+	var title := Label.new()
+	title.text = "Free Play"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
+	vbox.add_child(title)
 
 	var grid := GridContainer.new()
 	grid.columns = 2
@@ -642,19 +650,21 @@ func _build_online_popup() -> void:
 	vbox.add_theme_constant_override("separation", 16)
 	panel.add_child(vbox)
 
-	var header := HBoxContainer.new()
-	vbox.add_child(header)
-	var title := Label.new()
-	title.text = "Online"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
-	header.add_child(title)
+	var close_row := HBoxContainer.new()
+	var close_spacer := Control.new()
+	close_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	close_row.add_child(close_spacer)
 	var close_btn := MenuStyle.close_button()
 	close_btn.pressed.connect(func() -> void: _online_popup.visible = false)
 	SoundManager.wire_button(close_btn)
-	header.add_child(close_btn)
+	close_row.add_child(close_btn)
+	vbox.add_child(close_row)
+	var title := Label.new()
+	title.text = "Online"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
+	vbox.add_child(title)
 
 	var host_btn := _make_button("Host Game")
 	host_btn.pressed.connect(func() -> void:
