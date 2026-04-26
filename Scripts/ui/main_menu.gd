@@ -77,16 +77,22 @@ func _build_ui() -> void:
 	_error_label.visible = false
 	vbox.add_child(_error_label)
 
-	var version_label := Label.new()
-	version_label.text = "v%s" % BuildInfo.VERSION
-	version_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	version_label.add_theme_font_size_override("font_size", 14)
-	version_label.add_theme_color_override("font_color", Color(0.55, 0.55, 0.60, 1.0))
-	vbox.add_child(version_label)
-
 	var update_checker: UpdateChecker = UpdateChecker.new()
 	update_checker.custom_minimum_size = Vector2(380, 0)
 	vbox.add_child(update_checker)
+
+	# ── Version label — bottom-right corner ───────────────────────────────────
+	var version_label := Label.new()
+	version_label.text = "v%s" % BuildInfo.VERSION
+	version_label.add_theme_font_size_override("font_size", 14)
+	version_label.add_theme_color_override("font_color", Color(0.55, 0.55, 0.60, 1.0))
+	version_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	version_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	version_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	version_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	version_label.offset_right = -16
+	version_label.offset_bottom = -12
+	add_child(version_label)
 
 	_build_player_popup()
 	_build_options_popup()
@@ -481,6 +487,10 @@ func _build_offline_popup() -> void:
 	planned_label.add_theme_color_override("font_color", Color(0.50, 0.50, 0.55))
 	tutorial_section.add_child(planned_label)
 
+	var back_btn := _make_button("Back")
+	back_btn.pressed.connect(func() -> void: _offline_popup.visible = false)
+	vbox.add_child(back_btn)
+
 	_offline_popup = Control.new()
 	_offline_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_offline_popup.visible = false
@@ -558,6 +568,12 @@ func _build_free_play_popup() -> void:
 	play_btn.pressed.connect(_do_start_offline)
 	vbox.add_child(play_btn)
 
+	var back_btn := _make_button("Back")
+	back_btn.pressed.connect(func() -> void:
+		_free_play_popup.visible = false
+		_offline_popup.visible = true)
+	vbox.add_child(back_btn)
+
 	_free_play_popup = Control.new()
 	_free_play_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_free_play_popup.visible = false
@@ -623,6 +639,10 @@ func _build_online_popup() -> void:
 	_wire_hover_scale(join_btn)
 	SoundManager.wire_button(join_btn)
 	join_row.add_child(join_btn)
+
+	var back_btn := _make_button("Back")
+	back_btn.pressed.connect(func() -> void: _online_popup.visible = false)
+	vbox.add_child(back_btn)
 
 	_online_popup = Control.new()
 	_online_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
