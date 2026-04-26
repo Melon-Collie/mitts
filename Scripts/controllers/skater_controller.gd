@@ -489,6 +489,7 @@ func _apply_slapper_blade_position() -> void:
 	var clamped_world: Vector3 = blade_world
 	if has_puck:
 		clamped_world = _clamp_blade_from_goalies(clamped_world)
+		_check_net_puck_strip(clamped_world)
 	clamped_world = _clamp_blade_from_net(clamped_world)
 	if clamped_world != blade_world:
 		pos = skater.upper_body_to_local(clamped_world)
@@ -539,6 +540,8 @@ func _is_in_slapper_state() -> bool:
 # escapes through the nearest side or back face — never through the front
 # mouth, regardless of where the skater is standing.
 func _clamp_blade_from_net(blade_world: Vector3) -> Vector3:
+	if blade_world.y > GameRules.NET_HEIGHT:
+		return blade_world
 	var result: Vector3 = blade_world
 	var gl: float    = GameRules.GOAL_LINE_Z
 	var depth: float = GameRules.NET_DEPTH
@@ -573,6 +576,44 @@ func _clamp_blade_from_net(blade_world: Vector3) -> Vector3:
 			else:
 				result.x = hw
 	return result
+
+# Releases the puck when the blade (while carrying) enters the buffer zone
+# surrounding either net's opening. Prevents nudging the puck to the goal line
+# (Mode 1) and side-jamming through the post gap (Mode 2). Must be called
+# BEFORE _clamp_blade_from_net so the pre-clamp position informs direction.
+func _check_net_puck_strip(blade_world: Vector3) -> void:
+	if not has_puck:
+		return
+	var buf: float   = GameRules.NET_STRIP_BUFFER
+	var gl: float    = GameRules.GOAL_LINE_Z
+	var hw: float    = GameRules.NET_HALF_WIDTH
+	var depth: float = GameRules.NET_DEPTH
+
+	for facing_z: float in [1.0, -1.0]:
+		var net_gl: float = facing_z * gl
+		# z_rel > 0 means blade is inside the net or in the front buffer zone.
+		var z_rel: float = (blade_world.z - net_gl) * facing_z
+		# Strip zone: buf before the goal line through the full net depth.
+		# No strip behind the net (z_rel > depth) — that is valid behind-net play.
+		if z_rel < -buf or z_rel > depth:
+			continue
+		var local_depth: float = clampf(z_rel, 0.0, depth)
+		var hw_at_depth: float = lerpf(hw, GameRules.NET_BACK_HALF_WIDTH, local_depth / depth)
+		if absf(blade_world.x) > hw_at_depth + buf:
+			continue
+		# Blade is in the strip zone — release puck away from the net.
+		# Front approach (d_front smaller): push straight back away from net face.
+		# Side approach (d_side smaller): push laterally outward past the post.
+		var d_front: float = absf(z_rel + buf)
+		var d_side: float  = (hw_at_depth + buf) - absf(blade_world.x)
+		var release_dir: Vector3
+		if d_front <= d_side:
+			release_dir = Vector3(0.0, 0.0, -facing_z)
+		else:
+			var side_sign: float = signf(blade_world.x) if blade_world.x != 0.0 else 1.0
+			release_dir = Vector3(side_sign, 0.0, 0.0)
+		_do_release(release_dir, goalie_strip_power)
+		return
 
 # Pushes blade_world out of every goalie's collision zone and strips the puck
 # on contact. Standing/RVH use an XZ cylinder; butterfly uses an oriented box
@@ -687,12 +728,13 @@ func _apply_blade_from_mouse(input: InputState, _delta: float) -> void:
 		hand_local.x += clamp_delta_xz.x
 		hand_local.z += clamp_delta_xz.z
 
-	# Goalie body clamp (strips puck on contact) + net volume hard wall.
+	# Goalie body clamp (strips puck on contact) + net strip buffer + net volume hard wall.
 	# Single world-space pass so we only convert once.
 	var blade_world: Vector3 = skater.upper_body_to_global(wall_clamped)
 	var clamped_world: Vector3 = blade_world
 	if has_puck:
 		clamped_world = _clamp_blade_from_goalies(clamped_world)
+		_check_net_puck_strip(clamped_world)
 	clamped_world = _clamp_blade_from_net(clamped_world)
 	if clamped_world != blade_world:
 		var clamped_local: Vector3 = skater.upper_body_to_local(clamped_world)
