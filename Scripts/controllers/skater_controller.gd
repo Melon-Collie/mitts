@@ -585,7 +585,6 @@ func _clamp_blade_from_net(point: Vector3) -> Vector3:
 				result.x = hw
 	return result
 
-
 # Pushes blade_world out of every goalie's collision zone and strips the puck
 # on contact. Standing/RVH use an XZ cylinder; butterfly uses an oriented box
 # around the leg pads. Returns the adjusted world position.
