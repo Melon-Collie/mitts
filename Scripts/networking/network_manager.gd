@@ -37,6 +37,7 @@ signal pickup_claim_received(peer_id: int, host_timestamp: float, rtt_ms: float,
 signal hit_claim_received(hitter_peer_id: int, victim_peer_id: int, host_timestamp: float, rtt_ms: float)
 signal goalie_state_transition_received(team_id: int, new_state: int)
 signal goalie_shot_reaction_received(team_id: int, impact_x: float, impact_y: float, is_elevated: bool)
+signal board_hit_received(position: Vector3)
 
 # ── State ─────────────────────────────────────────────────────────────────────
 var is_host: bool = false
@@ -883,3 +884,11 @@ func register_remote_controller(peer_id: int, controller: RemoteController) -> v
 
 func unregister_remote_controller(peer_id: int) -> void:
 	_remote_controllers.erase(peer_id)
+
+func send_board_hit_to_all(position: Vector3) -> void:
+	for peer_id: int in multiplayer.get_peers():
+		notify_board_hit.rpc_id(peer_id, position)
+
+@rpc("authority", "unreliable")
+func notify_board_hit(position: Vector3) -> void:
+	NetworkSimManager.send(func(pos: Vector3) -> void: board_hit_received.emit(pos), [position], false)
