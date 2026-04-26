@@ -21,13 +21,13 @@ The Rocket League freeplay ceiling is a guiding star: the stickhandling-to-shot 
 | Channel | Rate | Transport |
 |---------|------|-----------|
 | Input (client → host) | 60 Hz | Unreliable, last 12 frames per packet |
-| World state (host → clients) | 40 Hz | Unreliable, ~279 bytes at 6 players (single flat PackedByteArray, well under ENet MTU) |
+| World state (host → clients) | 40 Hz | Unreliable, ~302 bytes at 6 players + 2 goalies (single flat PackedByteArray, well under 1392-byte ENet MTU) |
 | Events (pickup, spawn, goal, goalie transitions) | On event | Reliable |
 | Stats sync | On change | Reliable |
 
 Interpolation delay: 75ms baseline, adapts per-packet via `lerp(0.15)`, capped at +5ms / −1ms per packet.
 
-Wire format: Skater 35B · Puck 13B · Goalie 8B. ~62% reduction vs unquantized.
+Wire format: Skater 37B · Puck 12B · Goalie 12B. ~62% reduction vs unquantized.
 
 **Input timestamp lead:** Client inputs are stamped with `NetworkManager.estimated_input_stamp_time()` = `estimated_host_time() + INPUT_LEAD_SEC` (~25ms). `estimated_host_time()` already encodes the NTP-measured RTT/2, so inputs arrive at the host at approximately their timestamp. The 25ms lead = 16.7ms worst-case batch-send jitter + 8.3ms two-tick buffer, ensuring the host input queue never starves between 60Hz batches. The host gates consumption in `RemoteController._drive_from_input`: inputs are held until `host_timestamp <= estimated_host_time()`. F3 overlay reports `InBuf: lead X ms  starved Y/s` — healthy values are lead ≈ 0–8ms, starved = 0.
 
@@ -75,8 +75,7 @@ Period clock ticks only during `PLAYING`. On expiry: if periods remain → `END_
 
 **Goalie state transitions and shot reactions via reliable RPCs.** Interpolation gives smooth position but can't guarantee reaction timing — a butterfly during a rapid shot sequence may arrive in the wrong bracket order. Reliable RPCs deliver exact state changes; clients play a local reaction timer from the RPC payload for immediate visual feedback.
 
-**Trajectory prediction uses hard-snap only, no soft blend.** Each broadcast computes `latency_corrected.position = state.position + state.velocity * rtt_s` (full-RTT forward correction) and hard-snaps only when divergence exceeds `trajectory_hard_snap_threshold` (1.5m). Soft-blending toward a noisy position target (RTT jitter ±20ms at 20m/s = ±0.4m) causes visible snapback every broadcast tick; Jolt is trusted otherwise.
-3. **Interpolation** — buffer server snapshots and interpolate with the same 100ms delay as skaters. Position only — velocity is not applied to the frozen body (`_apply_state_to_puck` is position-only).
+**Trajectory prediction uses a three-zone response.** Each broadcast computes `latency_corrected.position = state.position + state.velocity * rtt_s` (full-RTT forward correction) then compares the distance to two thresholds: below `trajectory_soft_blend_threshold` (0.3 m) — soft position blend (`position_correction_blend` = 0.1) plus velocity blend; 0.3–1.5 m — velocity-only blend, no position change; above `trajectory_hard_snap_threshold` (1.5 m) — hard snap both position and velocity and clear the state buffer. RTT jitter (±20ms at 20m/s = ±0.4m) falls in the velocity-only zone so position never visibly snaps; the hard snap fires only on genuine physics divergence (wall/goalie bounce that differed between host and client).
 
 **Carrier transitions:**
 - Pickup: client sends a reliable `receive_pickup_claim` RPC with `host_timestamp` and `rtt_ms` (raw unaveraged latest sample so rewind depth tracks the current round-trip). Host rewinds `StateBufferManager` to `host_timestamp − rtt/2`, reads `blade_contact_world` (world-space mid-blade, host-only non-serialized field on `SkaterNetworkState`) from the rewound snapshot, runs the segment-segment distance test against the rewound puck path, and either grants the pickup, squirts the puck on a contested claim (two claims within 50ms, contest timer in `_physics_process`), or drops it as stale/invalid. On grant: reliable `notify_puck_picked_up` RPC to the carrier → `on_puck_picked_up_network()` on their LocalController + `notify_local_pickup(skater)` pins puck to blade. Simultaneously, reliable `notify_carrier_changed(peer_id)` broadcast to **all** peers so non-carrier clients exit trajectory-prediction mode regardless of unreliable world-state delivery.
