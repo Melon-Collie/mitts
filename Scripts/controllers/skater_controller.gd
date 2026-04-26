@@ -9,7 +9,8 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 
 # ── Movement Tuning ───────────────────────────────────────────────────────────
 @export var thrust: float = 12.0
-@export var friction: float = 3.5
+@export var friction: float = 0.8
+@export var friction_drag: float = 0.27
 @export var max_speed: float = 10.5
 @export var move_deadzone: float = 0.1
 @export var brake_multiplier: float = 5.0
@@ -552,7 +553,8 @@ func _update_slapper_charge(delta: float) -> void:
 
 func _apply_slapper_velocity_drag(delta: float) -> void:
 	var slapper_vel := Vector2(skater.velocity.x, skater.velocity.z)
-	slapper_vel = slapper_vel.move_toward(Vector2.ZERO, friction * delta)
+	var drag: float = friction + friction_drag * slapper_vel.length()
+	slapper_vel = slapper_vel.move_toward(Vector2.ZERO, drag * delta)
 	skater.velocity.x = slapper_vel.x
 	skater.velocity.z = slapper_vel.y
 
@@ -903,6 +905,7 @@ func _movement_config() -> SkaterMovementRules.MovementConfig:
 	var cfg := SkaterMovementRules.MovementConfig.new()
 	cfg.thrust = thrust
 	cfg.friction = friction
+	cfg.friction_drag = friction_drag
 	cfg.max_speed = max_speed
 	cfg.move_deadzone = move_deadzone
 	cfg.brake_multiplier = brake_multiplier

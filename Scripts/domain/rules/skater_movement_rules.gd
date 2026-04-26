@@ -15,6 +15,7 @@ class MovementConfig:
 	var backward_thrust_multiplier: float = 0.0  # thrust scale when moving against facing
 	var crossover_thrust_multiplier: float = 0.0 # thrust scale when moving perpendicular to facing
 	var brake_redirect_speed: float = 0.0        # rad/s velocity direction rotates toward input while carving
+	var friction_drag: float = 0.0               # velocity-proportional drag coefficient (m/s² per m/s)
 
 static func apply_movement(
 		current_velocity: Vector3,
@@ -71,9 +72,10 @@ static func apply_movement(
 				velocity.x = limited.x
 				velocity.z = limited.y
 
-	# Friction: heavy stop when braking with no input, normal otherwise.
-	var effective_friction: float = cfg.friction * cfg.brake_multiplier if (brake and move_input.length() <= cfg.move_deadzone) else cfg.friction
+	# Friction: constant base + velocity-proportional drag, heavy when braking with no input.
 	var horiz_vel := Vector2(velocity.x, velocity.z)
+	var base_decel: float = cfg.friction + cfg.friction_drag * horiz_vel.length()
+	var effective_friction: float = base_decel * cfg.brake_multiplier if (brake and move_input.length() <= cfg.move_deadzone) else base_decel
 	horiz_vel = horiz_vel.move_toward(Vector2.ZERO, effective_friction * delta)
 	velocity.x = horiz_vel.x
 	velocity.z = horiz_vel.y
