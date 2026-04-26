@@ -20,8 +20,8 @@ var _tween: Tween = null
 const _SHAFT_LEN: float = 1120.0
 const _BLADE_LEN: float = 272.0
 const _PUCK_RADIUS_INIT: float = 72.0
-const _SHAFT_ANGLE_ENTRY: float = 0.4887  # 28 degrees
-const _BLADE_OFFSET_RAD: float = -0.6283  # blade is -36 degrees from shaft
+const _SHAFT_ANGLE_ENTRY: float = 1.2217  # 70° — shaft points strongly downward
+const _BLADE_OFFSET_RAD: float = -1.2217  # blade lies horizontal when shaft is at 70°
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -69,10 +69,11 @@ func _run() -> void:
 	var screen_center := Vector2(px * 0.5, py * 0.5)
 	var screen_fill_radius := screen_center.length() + 80.0
 
-	_grip = Vector2(-1500.0, py * 0.35)
-	var grip_windup: Vector2 = grip_contact + Vector2(-200.0, 35.0)
-	# Brief follow-through — kept short so the stick vanishes before it reads as rightward
-	var grip_follow: Vector2 = grip_contact + Vector2(70.0, -22.0)
+	# Grip starts well above the screen — blade descends from above onto the puck
+	_grip = Vector2(grip_contact.x - 80.0, grip_contact.y - 700.0)
+	var grip_windup: Vector2 = grip_contact + Vector2(-80.0, -250.0)
+	# Follow-through continues downward, reinforcing the overhead/forward direction
+	var grip_follow: Vector2 = grip_contact + Vector2(50.0, 80.0)
 
 	_tween = create_tween()
 
@@ -90,7 +91,6 @@ func _run() -> void:
 	# Fast final swing into contact
 	_tween.tween_property(self, "_grip", grip_contact, 0.11) \
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	_tween.parallel().tween_property(self, "_shaft_angle", _SHAFT_ANGLE_ENTRY - 0.105, 0.11)
 
 	# Impact — _fire_contact pops the puck radius and spawns effects
 	_tween.tween_callback(_fire_contact)
@@ -106,7 +106,6 @@ func _run() -> void:
 		.set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
 	_tween.parallel().tween_property(self, "_shock_ring_alpha", 0.0, 0.28)
 	_tween.parallel().tween_property(self, "_grip", grip_follow, 0.18)
-	_tween.parallel().tween_property(self, "_shaft_angle", _SHAFT_ANGLE_ENTRY - 0.175, 0.18)
 	_tween.parallel().tween_property(self, "_stick_alpha", 0.0, 0.15)
 	_tween.parallel().tween_property(self, "_flash_alpha", 0.0, 0.15)
 
