@@ -6,12 +6,17 @@ var _error_label: Label = null
 var _player_popup: Control = null
 var _options_popup: Control = null
 var _offline_popup: Control = null
+var _free_play_popup: Control = null
+var _online_popup: Control = null
 var _offline_home_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID
 var _offline_away_color_id: String  = TeamColorRegistry.DEFAULT_AWAY_ID
 var _offline_home_btn: OptionButton = null
 var _offline_away_btn: OptionButton = null
 var _loading_screen: LoadingScreen = null
 var _exit_popup: Control = null
+var _card_name_label: Label = null
+var _card_number_label: Label = null
+var _card_hand_label: Label = null
 
 func _ready() -> void:
 	TeamColorRegistry.ensure_loaded()
@@ -49,38 +54,13 @@ func _build_ui() -> void:
 	spacer.custom_minimum_size = Vector2(0, 20)
 	vbox.add_child(spacer)
 
-	var offline_btn := _make_button("Play Offline")
+	var offline_btn := _make_button("Offline")
 	offline_btn.pressed.connect(_on_offline_pressed)
 	vbox.add_child(offline_btn)
 
-	var host_btn := _make_button("Host Game")
-	host_btn.pressed.connect(_on_host_pressed)
-	vbox.add_child(host_btn)
-
-	var join_row := HBoxContainer.new()
-	join_row.custom_minimum_size = Vector2(308, 48)
-	join_row.add_theme_constant_override("separation", 8)
-	vbox.add_child(join_row)
-
-	_ip_field = LineEdit.new()
-	_ip_field.placeholder_text = "IP Address"
-	_ip_field.text = PlayerPrefs.last_ip
-	_ip_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_ip_field.add_theme_font_size_override("font_size", 18)
-	join_row.add_child(_ip_field)
-
-	var join_btn := Button.new()
-	join_btn.text = "Join Game"
-	join_btn.custom_minimum_size = Vector2(120, 48)
-	join_btn.add_theme_font_size_override("font_size", 20)
-	join_btn.pressed.connect(_on_join_pressed)
-	_wire_hover_scale(join_btn)
-	SoundManager.wire_button(join_btn)
-	join_row.add_child(join_btn)
-
-	var player_btn := _make_button("Player")
-	player_btn.pressed.connect(_on_player_pressed)
-	vbox.add_child(player_btn)
+	var online_btn := _make_button("Online")
+	online_btn.pressed.connect(func() -> void: _online_popup.visible = true)
+	vbox.add_child(online_btn)
 
 	var options_btn := _make_button("Options")
 	options_btn.pressed.connect(_on_options_pressed)
@@ -112,9 +92,69 @@ func _build_ui() -> void:
 	_build_options_popup()
 	_build_exit_popup()
 	_build_offline_popup()
+	_build_free_play_popup()
+	_build_online_popup()
+	_build_player_card()
 	_loading_screen = LoadingScreen.new()
 	_loading_screen.cancel_pressed.connect(_on_join_cancelled)
 	add_child(_loading_screen)
+
+func _build_player_card() -> void:
+	var normal_style := StyleBoxFlat.new()
+	normal_style.bg_color = Color(0.10, 0.10, 0.14, 0.85)
+	normal_style.set_corner_radius_all(6)
+	normal_style.set_content_margin_all(14)
+	normal_style.border_color = Color(0.30, 0.30, 0.45, 0.50)
+	normal_style.set_border_width_all(1)
+
+	var hover_style := StyleBoxFlat.new()
+	hover_style.bg_color = Color(0.14, 0.14, 0.20, 0.92)
+	hover_style.set_corner_radius_all(6)
+	hover_style.set_content_margin_all(14)
+	hover_style.border_color = Color(0.45, 0.45, 0.65, 0.70)
+	hover_style.set_border_width_all(1)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", normal_style)
+	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 5)
+	panel.add_child(vbox)
+
+	_card_name_label = Label.new()
+	_card_name_label.text = PlayerPrefs.player_name
+	_card_name_label.add_theme_font_size_override("font_size", 20)
+	_card_name_label.add_theme_color_override("font_color", Color.WHITE)
+	vbox.add_child(_card_name_label)
+
+	var detail_row := HBoxContainer.new()
+	detail_row.add_theme_constant_override("separation", 10)
+	vbox.add_child(detail_row)
+
+	_card_number_label = Label.new()
+	_card_number_label.text = "#%d" % PlayerPrefs.jersey_number
+	_card_number_label.add_theme_font_size_override("font_size", 15)
+	_card_number_label.add_theme_color_override("font_color", Color(0.70, 0.70, 0.78))
+	detail_row.add_child(_card_number_label)
+
+	_card_hand_label = Label.new()
+	_card_hand_label.text = "Shoots %s" % ("L" if PlayerPrefs.is_left_handed else "R")
+	_card_hand_label.add_theme_font_size_override("font_size", 15)
+	_card_hand_label.add_theme_color_override("font_color", Color(0.70, 0.70, 0.78))
+	detail_row.add_child(_card_hand_label)
+
+	panel.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			_player_popup.visible = true)
+	panel.mouse_entered.connect(func() -> void:
+		panel.add_theme_stylebox_override("panel", hover_style))
+	panel.mouse_exited.connect(func() -> void:
+		panel.add_theme_stylebox_override("panel", normal_style))
+
+	panel.position = Vector2(16.0, 16.0)
+	add_child(panel)
 
 func _build_player_popup() -> void:
 	var overlay := ColorRect.new()
@@ -193,7 +233,9 @@ func _build_player_popup() -> void:
 		name_warning.visible = false
 		NetworkManager.local_player_name = trimmed
 		PlayerPrefs.player_name = trimmed
-		PlayerPrefs.save())
+		PlayerPrefs.save()
+		if _card_name_label != null:
+			_card_name_label.text = trimmed)
 
 	var number_row := HBoxContainer.new()
 	number_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -233,7 +275,9 @@ func _build_player_popup() -> void:
 		n = clamp(n, 0, 99)
 		NetworkManager.local_jersey_number = n
 		PlayerPrefs.jersey_number = n
-		PlayerPrefs.save())
+		PlayerPrefs.save()
+		if _card_number_label != null:
+			_card_number_label.text = "#%d" % n)
 
 	var hand_row := HBoxContainer.new()
 	hand_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -276,7 +320,9 @@ func _build_player_popup() -> void:
 		right_btn.button_pressed = not pressed
 		NetworkManager.local_is_left_handed = pressed
 		PlayerPrefs.is_left_handed = pressed
-		PlayerPrefs.save())
+		PlayerPrefs.save()
+		if _card_hand_label != null:
+			_card_hand_label.text = "Shoots %s" % ("L" if pressed else "R"))
 	right_btn.toggled.connect(func(pressed: bool) -> void:
 		if not pressed and not left_btn.button_pressed:
 			right_btn.button_pressed = true
@@ -284,7 +330,9 @@ func _build_player_popup() -> void:
 		left_btn.button_pressed = not pressed
 		NetworkManager.local_is_left_handed = not pressed
 		PlayerPrefs.is_left_handed = not pressed
-		PlayerPrefs.save())
+		PlayerPrefs.save()
+		if _card_hand_label != null:
+			_card_hand_label.text = "Shoots %s" % ("L" if not pressed else "R"))
 
 	var done_btn := _make_button("Done")
 	done_btn.pressed.connect(func() -> void: _player_popup.visible = false)
@@ -379,58 +427,6 @@ func _build_exit_popup() -> void:
 	_exit_popup.add_child(panel)
 	add_child(_exit_popup)
 
-func _on_join_cancelled() -> void:
-	_disconnect_join_signals()
-	NetworkManager.reset()
-	_loading_screen.visible = false
-
-func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("ui_cancel"):
-		if _loading_screen != null and _loading_screen.visible:
-			_on_join_cancelled()
-			get_viewport().set_input_as_handled()
-		elif _offline_popup.visible:
-			_offline_popup.visible = false
-			get_viewport().set_input_as_handled()
-		elif _player_popup.visible:
-			_player_popup.visible = false
-			get_viewport().set_input_as_handled()
-		elif _options_popup.visible:
-			_options_popup.visible = false
-			get_viewport().set_input_as_handled()
-		elif _exit_popup.visible:
-			_exit_popup.visible = false
-			get_viewport().set_input_as_handled()
-
-func _on_player_pressed() -> void:
-	_player_popup.visible = true
-
-func _on_options_pressed() -> void:
-	_options_popup.visible = true
-
-func _make_button(label: String) -> Button:
-	var btn := Button.new()
-	btn.text = label
-	btn.custom_minimum_size = Vector2(308, 48)
-	btn.add_theme_font_size_override("font_size", 20)
-	_wire_hover_scale(btn)
-	SoundManager.wire_button(btn)
-	return btn
-
-func _wire_hover_scale(btn: Button) -> void:
-	btn.item_rect_changed.connect(func() -> void: btn.pivot_offset = btn.size / 2.0)
-	btn.mouse_entered.connect(func() -> void: _scale_btn(btn, Vector2(1.04, 1.04)))
-	btn.mouse_exited.connect(func() -> void: _scale_btn(btn, Vector2.ONE))
-	btn.button_down.connect(func() -> void: _scale_btn(btn, Vector2(0.97, 0.97)))
-	btn.button_up.connect(func() -> void: _scale_btn(btn, Vector2(1.04, 1.04)))
-
-func _scale_btn(btn: Button, target: Vector2) -> void:
-	var t := btn.create_tween()
-	t.tween_property(btn, "scale", target, 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-
-func _on_offline_pressed() -> void:
-	_offline_popup.visible = true
-
 func _build_offline_popup() -> void:
 	var overlay := ColorRect.new()
 	overlay.color = Color(0.0, 0.0, 0.0, 0.6)
@@ -453,11 +449,72 @@ func _build_offline_popup() -> void:
 
 	var vbox := VBoxContainer.new()
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 16)
+	panel.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "Offline"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", Color.WHITE)
+	vbox.add_child(title)
+
+	var free_play_btn := _make_button("Free Play")
+	free_play_btn.pressed.connect(func() -> void:
+		_offline_popup.visible = false
+		_free_play_popup.visible = true)
+	vbox.add_child(free_play_btn)
+
+	# Tutorial placeholder — grouped tightly with its "Planned" label
+	var tutorial_section := VBoxContainer.new()
+	tutorial_section.add_theme_constant_override("separation", 4)
+	vbox.add_child(tutorial_section)
+
+	var tutorial_btn := _make_button("Tutorial")
+	tutorial_btn.disabled = true
+	tutorial_section.add_child(tutorial_btn)
+
+	var planned_label := Label.new()
+	planned_label.text = "Planned"
+	planned_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	planned_label.add_theme_font_size_override("font_size", 13)
+	planned_label.add_theme_color_override("font_color", Color(0.50, 0.50, 0.55))
+	tutorial_section.add_child(planned_label)
+
+	_offline_popup = Control.new()
+	_offline_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_offline_popup.visible = false
+	_offline_popup.add_child(overlay)
+	_offline_popup.add_child(panel)
+	add_child(_offline_popup)
+
+func _build_free_play_popup() -> void:
+	var overlay := ColorRect.new()
+	overlay.color = Color(0.0, 0.0, 0.0, 0.6)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.pressed:
+			_free_play_popup.visible = false)
+
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.07, 0.07, 0.09, 0.96)
+	panel_style.set_corner_radius_all(6)
+	panel_style.set_content_margin_all(32)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", panel_style)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	vbox.add_theme_constant_override("separation", 20)
 	panel.add_child(vbox)
 
 	var title := Label.new()
-	title.text = "Play Offline"
+	title.text = "Free Play"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 28)
 	title.add_theme_color_override("font_color", Color.WHITE)
@@ -501,12 +558,136 @@ func _build_offline_popup() -> void:
 	play_btn.pressed.connect(_do_start_offline)
 	vbox.add_child(play_btn)
 
-	_offline_popup = Control.new()
-	_offline_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_offline_popup.visible = false
-	_offline_popup.add_child(overlay)
-	_offline_popup.add_child(panel)
-	add_child(_offline_popup)
+	_free_play_popup = Control.new()
+	_free_play_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_free_play_popup.visible = false
+	_free_play_popup.add_child(overlay)
+	_free_play_popup.add_child(panel)
+	add_child(_free_play_popup)
+
+func _build_online_popup() -> void:
+	var overlay := ColorRect.new()
+	overlay.color = Color(0.0, 0.0, 0.0, 0.6)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.pressed:
+			_online_popup.visible = false)
+
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.07, 0.07, 0.09, 0.96)
+	panel_style.set_corner_radius_all(6)
+	panel_style.set_content_margin_all(32)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", panel_style)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 16)
+	panel.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "Online"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", Color.WHITE)
+	vbox.add_child(title)
+
+	var host_btn := _make_button("Host Game")
+	host_btn.pressed.connect(func() -> void:
+		_online_popup.visible = false
+		_on_host_pressed())
+	vbox.add_child(host_btn)
+
+	var join_row := HBoxContainer.new()
+	join_row.custom_minimum_size = Vector2(308, 48)
+	join_row.add_theme_constant_override("separation", 8)
+	vbox.add_child(join_row)
+
+	_ip_field = LineEdit.new()
+	_ip_field.placeholder_text = "IP Address"
+	_ip_field.text = PlayerPrefs.last_ip
+	_ip_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_ip_field.add_theme_font_size_override("font_size", 18)
+	join_row.add_child(_ip_field)
+
+	var join_btn := Button.new()
+	join_btn.text = "Join Game"
+	join_btn.custom_minimum_size = Vector2(120, 48)
+	join_btn.add_theme_font_size_override("font_size", 20)
+	join_btn.pressed.connect(_on_join_pressed)
+	_wire_hover_scale(join_btn)
+	SoundManager.wire_button(join_btn)
+	join_row.add_child(join_btn)
+
+	_online_popup = Control.new()
+	_online_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_online_popup.visible = false
+	_online_popup.add_child(overlay)
+	_online_popup.add_child(panel)
+	add_child(_online_popup)
+
+func _on_join_cancelled() -> void:
+	_disconnect_join_signals()
+	NetworkManager.reset()
+	_loading_screen.visible = false
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel"):
+		if _loading_screen != null and _loading_screen.visible:
+			_on_join_cancelled()
+			get_viewport().set_input_as_handled()
+		elif _free_play_popup.visible:
+			_free_play_popup.visible = false
+			get_viewport().set_input_as_handled()
+		elif _offline_popup.visible:
+			_offline_popup.visible = false
+			get_viewport().set_input_as_handled()
+		elif _online_popup.visible:
+			_online_popup.visible = false
+			get_viewport().set_input_as_handled()
+		elif _player_popup.visible:
+			_player_popup.visible = false
+			get_viewport().set_input_as_handled()
+		elif _options_popup.visible:
+			_options_popup.visible = false
+			get_viewport().set_input_as_handled()
+		elif _exit_popup.visible:
+			_exit_popup.visible = false
+			get_viewport().set_input_as_handled()
+
+func _on_player_pressed() -> void:
+	_player_popup.visible = true
+
+func _on_options_pressed() -> void:
+	_options_popup.visible = true
+
+func _make_button(label: String) -> Button:
+	var btn := Button.new()
+	btn.text = label
+	btn.custom_minimum_size = Vector2(308, 48)
+	btn.add_theme_font_size_override("font_size", 20)
+	_wire_hover_scale(btn)
+	SoundManager.wire_button(btn)
+	return btn
+
+func _wire_hover_scale(btn: Button) -> void:
+	btn.item_rect_changed.connect(func() -> void: btn.pivot_offset = btn.size / 2.0)
+	btn.mouse_entered.connect(func() -> void: _scale_btn(btn, Vector2(1.04, 1.04)))
+	btn.mouse_exited.connect(func() -> void: _scale_btn(btn, Vector2.ONE))
+	btn.button_down.connect(func() -> void: _scale_btn(btn, Vector2(0.97, 0.97)))
+	btn.button_up.connect(func() -> void: _scale_btn(btn, Vector2(1.04, 1.04)))
+
+func _scale_btn(btn: Button, target: Vector2) -> void:
+	var t := btn.create_tween()
+	t.tween_property(btn, "scale", target, 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+func _on_offline_pressed() -> void:
+	_offline_popup.visible = true
 
 func _color_option_btn(selected_id: String) -> OptionButton:
 	var btn := OptionButton.new()
