@@ -21,7 +21,7 @@ extends Node
 @export var rotation_speed: float = 8.0
 @export var rvh_transition_speed: float = 6.0
 
-@export var reaction_delay: float = 0.10
+@export var reaction_delay: float = 0.13
 @export var butterfly_recovery_time: float = 0.4
 
 @export var shot_speed_threshold: float = 5.0

@@ -10,11 +10,11 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 # ── Movement Tuning ───────────────────────────────────────────────────────────
 @export var thrust: float = 12.0
 @export var friction: float = 3.5
-@export var max_speed: float = 9.0
+@export var max_speed: float = 10.5
 @export var move_deadzone: float = 0.1
 @export var brake_multiplier: float = 5.0
 @export var brake_redirect_speed_deg: float = 180.0  # deg/s velocity rotates toward input while carving
-@export var puck_carry_speed_multiplier: float = 0.85
+@export var puck_carry_speed_multiplier: float = 0.82
 @export var backward_thrust_multiplier: float = 0.80
 @export var crossover_thrust_multiplier: float = 0.90
 # ── Facing Tuning ─────────────────────────────────────────────────────────────
@@ -95,12 +95,12 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 @export var lower_body_lag_speed: float = 5.0
 
 # ── Wrister Tuning ────────────────────────────────────────────────────────────
-@export var min_wrister_power: float = 12.0
-@export var max_wrister_power: float = 20.0
+@export var min_wrister_power: float = 14.0
+@export var max_wrister_power: float = 24.0
 @export var max_wrister_charge_distance: float = 1.5
 @export var backhand_power_coefficient: float = 0.75
 @export var max_charge_direction_variance: float = 35.0
-@export var quick_shot_power: float = 12.0
+@export var quick_shot_power: float = 14.0
 @export var quick_shot_threshold: float = 0.1
 @export var wrister_elevation: float = 0.3
 
@@ -114,8 +114,8 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 @export var slapper_zone_radius: float = 0.5
 @export var slapper_zone_offset_x: float = 0.8  # lateral offset toward blade side
 @export var slapper_zone_offset_z: float = -1.0  # forward offset (negative = in front of player)
-@export var min_slapper_power: float = 14.0
-@export var max_slapper_power: float = 28.0
+@export var min_slapper_power: float = 17.0
+@export var max_slapper_power: float = 34.0
 @export var max_slapper_charge_time: float = 1.0
 @export var slapper_blade_x: float = 1.0
 @export var slapper_blade_z: float = -0.5
