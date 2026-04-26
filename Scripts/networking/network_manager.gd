@@ -38,6 +38,7 @@ signal hit_claim_received(hitter_peer_id: int, victim_peer_id: int, host_timesta
 signal goalie_state_transition_received(team_id: int, new_state: int)
 signal goalie_shot_reaction_received(team_id: int, impact_x: float, impact_y: float, is_elevated: bool)
 signal board_hit_received(position: Vector3)
+signal goal_body_hit_received(position: Vector3)
 
 # ── State ─────────────────────────────────────────────────────────────────────
 var is_host: bool = false
@@ -892,3 +893,11 @@ func send_board_hit_to_all(position: Vector3) -> void:
 @rpc("authority", "unreliable")
 func notify_board_hit(position: Vector3) -> void:
 	NetworkSimManager.send(func(pos: Vector3) -> void: board_hit_received.emit(pos), [position], false)
+
+func send_goal_body_hit_to_all(position: Vector3) -> void:
+	for peer_id: int in multiplayer.get_peers():
+		notify_goal_body_hit.rpc_id(peer_id, position)
+
+@rpc("authority", "unreliable")
+func notify_goal_body_hit(position: Vector3) -> void:
+	NetworkSimManager.send(func(pos: Vector3) -> void: goal_body_hit_received.emit(pos), [position], false)

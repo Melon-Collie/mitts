@@ -432,8 +432,13 @@ func _wire_sound_signals() -> void:
 		puck.puck_hit_boards.connect(func() -> void:
 			SoundManager.play_world(SoundManager.Sound.PUCK_BOARDS, puck.get_puck_position())
 			NetworkManager.send_board_hit_to_all(puck.get_puck_position()))
+		puck.puck_hit_goal_body.connect(func() -> void:
+			SoundManager.play_world(SoundManager.Sound.PUCK_GOAL_BODY, puck.get_puck_position())
+			NetworkManager.send_goal_body_hit_to_all(puck.get_puck_position()))
 	NetworkManager.board_hit_received.connect(
 		func(pos: Vector3) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_BOARDS, pos))
+	NetworkManager.goal_body_hit_received.connect(
+		func(pos: Vector3) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_GOAL_BODY, pos))
 	puck.puck_touched_goalie.connect(
 		func(_g: Goalie) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_GOALIE, puck.get_puck_position()))
 	puck.puck_touched_post.connect(

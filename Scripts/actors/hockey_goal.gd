@@ -186,6 +186,7 @@ func _build_skirt(goal_z: float) -> void:
 			rail_len,
 			POST_RADIUS,
 			post_color,
+			true,
 			true
 		)
 
@@ -198,7 +199,7 @@ func _build_skirt(goal_z: float) -> void:
 		# End:   where the back rail ends on this side — offset (0, 0, facing*r) from center
 		var start_offset := Vector3(side * SKIRT_CORNER_RADIUS, 0.0, 0.0)
 		var end_offset := Vector3(0.0, 0.0, facing * SKIRT_CORNER_RADIUS)
-		_add_quarter_bend(corner_center, start_offset, end_offset, post_color, true)
+		_add_quarter_bend(corner_center, start_offset, end_offset, post_color, true, true)
 
 	# Back rail along X axis, spanning between the two corner end-points
 	var back_rail_len: float = (POST_HALF_WIDTH - corner_x_offset) * 2.0
@@ -209,6 +210,7 @@ func _build_skirt(goal_z: float) -> void:
 		back_rail_len,
 		POST_RADIUS,
 		post_color,
+		true,
 		true
 	)
 
@@ -385,7 +387,8 @@ func _add_cylinder(
 	length: float,
 	radius: float,
 	color: Color,
-	with_collision: bool
+	with_collision: bool,
+	use_net_body: bool = false
 ) -> void:
 	var cyl := CylinderMesh.new()
 	cyl.height = length
@@ -405,7 +408,10 @@ func _add_cylinder(
 		var col := CollisionShape3D.new()
 		col.shape = shape
 		col.transform = Transform3D(xform, pos)
-		add_child(col)
+		if use_net_body:
+			_net_body.add_child(col)
+		else:
+			add_child(col)
 
 
 # Build a quarter-circle bend. The bend lies in the plane defined by the
@@ -418,7 +424,8 @@ func _add_quarter_bend(
 	start_offset: Vector3,
 	end_offset: Vector3,
 	color: Color,
-	with_collision: bool
+	with_collision: bool,
+	use_net_body: bool = false
 ) -> void:
 	var radius: float = start_offset.length()
 	var u: Vector3 = start_offset.normalized()  # unit vector from center to arc start
@@ -436,7 +443,7 @@ func _add_quarter_bend(
 		var dir: Vector3 = (p1 - p0).normalized()
 		var seg_basis: Basis = _basis_from_up(dir)
 		# Overlap slightly so there's no visible seam
-		_add_cylinder(mid, seg_basis, seg_len * 1.05, POST_RADIUS, color, with_collision)
+		_add_cylinder(mid, seg_basis, seg_len * 1.05, POST_RADIUS, color, with_collision, use_net_body)
 
 
 # Project a 3D point onto a 2D UV coordinate, given an anchor point and two
