@@ -256,6 +256,8 @@ func _on_body_entered(body: Node3D) -> void:
 		puck_touched_goalie.emit(body.get_parent() as Goalie)
 	elif body is HockeyGoal:
 		puck_touched_post.emit()
+	elif body.get_parent() is HockeyGoal:
+		pass  # net panel contact — no sound
 	elif body is StaticBody3D and linear_velocity.length() >= 1.0:
 		puck_hit_boards.emit()
 

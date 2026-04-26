@@ -37,6 +37,7 @@ const NET_TEXTURE_PATH: String    = "res://Assets/textures/net_diamond.png"
 const NET_TEXTURE_TILE_SIZE: float = 0.164  # 4 diamonds × 41mm each
 
 var defending_team_id: int = -1  # set by GameManager when goals are assigned to teams
+var _net_body: StaticBody3D = null  # holds net-panel collision shapes; kept separate so puck can distinguish pipe vs net contact
 
 # +1 for positive-Z end (Team 0 defends), -1 for negative-Z end (Team 1 defends)
 @export var facing: int = 1:
@@ -84,6 +85,10 @@ func _rebuild() -> void:
 
 	for child in get_children():
 		child.queue_free()
+
+	_net_body = StaticBody3D.new()
+	_net_body.collision_layer = 1  # LAYER_WALLS — puck must still bounce off net panels
+	add_child(_net_body)
 
 	var goal_z: float = facing * (rink_length / 2.0 - distance_from_end)
 	_build_mouth(goal_z)
@@ -503,7 +508,7 @@ func _add_net_tri(a: Vector3, b: Vector3, c: Vector3) -> void:
 	var col := CollisionShape3D.new()
 	col.shape = shape
 	col.position = box_center
-	add_child(col)
+	_net_body.add_child(col)
 
 
 # Build an arbitrary quadrilateral net panel from four corners in world space.
@@ -567,7 +572,7 @@ func _add_net_quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
 	var col := CollisionShape3D.new()
 	col.shape = shape
 	col.position = box_center
-	add_child(col)
+	_net_body.add_child(col)
 
 
 func _build_goal_sensor(goal_z: float) -> void:
