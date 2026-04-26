@@ -7,10 +7,21 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* Palette — mirrors MenuStyle.gd */
+    :root {
+      --ice:        #99D1FF;
+      --ice-mid:    rgba(102, 158, 217, 0.80);
+      --ice-dim:    rgba(89,  140, 199, 0.55);
+      --ice-hover:  #9ED6FF;
+      --text-title: #E0F2FF;
+      --text-body:  #ffffff;
+      --text-dim:   #8C9EB8;
+      --panel-bg:   rgba(25, 25, 36, 0.88);
+      --btn-fill:   rgba(25, 36, 56, 0.80);
+      --btn-hover:  rgba(36, 51, 87, 0.92);
+    }
+
     body {
-      background: #0d1117;
-      color: #e6edf3;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -18,84 +29,131 @@
       justify-content: center;
       text-align: center;
       padding: 2rem;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text-body);
+
+      background: #0a0a10 url('menu_bg.png') center / cover no-repeat fixed;
+    }
+
+    /* dark overlay so text stays readable over the image */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: rgba(8, 8, 16, 0.58);
+      pointer-events: none;
+    }
+
+    .card {
+      position: relative;
+      background: var(--panel-bg);
+      border: 1px solid var(--ice-dim);
+      border-radius: 10px;
+      padding: 3rem 3.5rem 2.5rem;
+      max-width: 520px;
+      width: 100%;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
     }
 
     h1 {
-      font-size: clamp(2.5rem, 8vw, 5rem);
+      font-size: clamp(2.8rem, 9vw, 5.5rem);
       font-weight: 800;
       letter-spacing: -0.02em;
-      color: #ffffff;
+      color: var(--text-title);
+      text-shadow: 0 0 40px rgba(153, 209, 255, 0.35);
     }
 
     .subtitle {
-      margin-top: 0.75rem;
-      font-size: 1.15rem;
-      color: #8b949e;
-      max-width: 480px;
+      margin-top: 0.6rem;
+      font-size: 1.1rem;
+      color: var(--text-dim);
+    }
+
+    .version {
+      margin-top: 0.35rem;
+      font-size: 0.82rem;
+      color: var(--text-dim);
+      opacity: 0.7;
+    }
+
+    /* separator */
+    .sep {
+      margin: 1.75rem auto;
+      height: 1px;
+      background: var(--ice-dim);
     }
 
     .downloads {
-      margin-top: 2.5rem;
       display: flex;
-      gap: 1rem;
+      gap: 0.85rem;
       flex-wrap: wrap;
       justify-content: center;
     }
 
     .download {
       display: inline-block;
-      width: 220px;
-      text-align: center;
-      background: #1f6feb;
-      color: #ffffff;
-      font-size: 1.1rem;
+      width: 210px;
+      padding: 0.8rem 0;
+      background: var(--btn-fill);
+      color: var(--text-title);
+      border: 1px solid var(--ice-mid);
+      border-radius: 6px;
+      font-size: 1rem;
       font-weight: 600;
-      padding: 0.85rem 0;
-      border-radius: 8px;
       text-decoration: none;
-      transition: background 0.15s;
+      transition: background 0.14s, border-color 0.14s, color 0.14s;
     }
 
-    .download:hover { background: #388bfd; }
-
-    .version {
-      margin-top: 0.5rem;
-      font-size: 0.85rem;
-      color: #484f58;
+    .download:hover {
+      background: var(--btn-hover);
+      border-color: var(--ice-hover);
+      color: var(--text-body);
     }
 
     .meta {
-      margin-top: 1rem;
-      font-size: 0.85rem;
-      color: #484f58;
+      margin-top: 1.5rem;
+      font-size: 0.82rem;
     }
+
+    .meta a {
+      color: var(--text-dim);
+      text-decoration: none;
+      transition: color 0.14s;
+    }
+
+    .meta a:hover { color: var(--ice); }
   </style>
 </head>
 <body>
-  <h1>Mitts</h1>
-  <p class="subtitle">3v3 arcade hockey. Online multiplayer.</p>
-  <p class="version" id="version">dev</p>
+  <div class="card">
+    <h1>Mitts</h1>
+    <p class="subtitle">3v3 arcade hockey &nbsp;·&nbsp; Online multiplayer</p>
+    <p class="version" id="version">dev</p>
+
+    <div class="sep"></div>
+
+    <div class="downloads">
+      <a class="download"
+         href="https://github.com/Melon-Collie/mitts/releases/latest/download/Windows.Desktop.zip">
+        ⬇ Windows
+      </a>
+      <a class="download"
+         href="https://github.com/Melon-Collie/mitts/releases/latest/download/LinuxX11.zip">
+        ⬇ Linux
+      </a>
+    </div>
+
+    <p class="meta">
+      <a href="https://github.com/Melon-Collie/mitts">Source on GitHub</a>
+    </p>
+  </div>
+
   <script>
     fetch('https://api.github.com/repos/Melon-Collie/mitts/releases/latest')
       .then(r => r.json())
       .then(d => { if (d.name) document.getElementById('version').textContent = d.name; })
       .catch(() => {});
   </script>
-
-  <div class="downloads">
-    <a class="download"
-       href="https://github.com/Melon-Collie/mitts/releases/latest/download/Windows.Desktop.zip">
-      Download for Windows
-    </a>
-    <a class="download"
-       href="https://github.com/Melon-Collie/mitts/releases/latest/download/LinuxX11.zip">
-      Download for Linux
-    </a>
-  </div>
-
-  <p class="meta">
-    <a href="https://github.com/Melon-Collie/mitts"
-       style="color: #484f58;">Source</a>
-  </p>
 </body>
 </html>
