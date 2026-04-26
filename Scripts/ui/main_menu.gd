@@ -185,16 +185,10 @@ func _build_player_popup() -> void:
 		if not NameFilter.is_alphanumeric(trimmed):
 			name_warning.text = "Letters and numbers only"
 			name_warning.visible = true
-			NetworkManager.local_player_name = "Player"
-			PlayerPrefs.player_name = "Player"
-			PlayerPrefs.save()
 			return
 		if not NameFilter.is_clean(trimmed):
 			name_warning.text = "Name not allowed"
 			name_warning.visible = true
-			NetworkManager.local_player_name = "Player"
-			PlayerPrefs.player_name = "Player"
-			PlayerPrefs.save()
 			return
 		name_warning.visible = false
 		NetworkManager.local_player_name = trimmed
