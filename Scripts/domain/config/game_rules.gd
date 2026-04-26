@@ -22,6 +22,9 @@ const BLUE_LINE_Z: float = 7.29  # 64 ft from goal line to near edge + 0.15m to 
 const NET_HALF_WIDTH: float = 0.915      # half of goal opening — must match HockeyGoal post positions
 const NET_DEPTH: float = 1.02            # goal depth from goal line to back frame
 const NET_BACK_HALF_WIDTH: float = 1.02  # half-width at back of net (trapezoid wider end)
+const NET_HEIGHT: float = 1.22           # crossbar height — must match HockeyGoal.NET_HEIGHT
+const NET_STRIP_BUFFER: float = 0.15     # hard clamp expansion beyond the physical net boundary
+const NET_STRIP_THRESHOLD: float = 0.10  # minimum clamp displacement (m) before the puck is stripped
 
 # Rink dimensions (must match HockeyRink export values in the scene)
 const RINK_HALF_WIDTH: float     = 13.0   # half of 26 m
