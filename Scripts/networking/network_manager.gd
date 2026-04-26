@@ -340,7 +340,8 @@ func _broadcast_state() -> void:
 func request_join(is_left_handed: bool, player_name: String, jersey_number: int = 10) -> void:
 	var sender_id: int = multiplayer.get_remote_sender_id()
 	_peer_handedness[sender_id] = is_left_handed
-	_peer_names[sender_id] = player_name.strip_edges().left(16)
+	var sanitized_name: String = player_name.strip_edges().left(10)
+	_peer_names[sender_id] = sanitized_name if NameFilter.is_alphanumeric(sanitized_name) and NameFilter.is_clean(sanitized_name) else "Player"
 	_peer_numbers[sender_id] = jersey_number
 	# Set a generous disconnect window here rather than in _on_peer_connected —
 	# peer_connected fires before ENet registers the peer, so get_peer() asserts.
