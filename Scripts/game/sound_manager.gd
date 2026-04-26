@@ -13,6 +13,9 @@ enum Sound {
 	PUCK_GOALIE,
 	PUCK_POST,
 	PUCK_GOAL_BODY,
+	PUCK_DEFLECTION,
+	PUCK_STRIP,
+	PERIOD_BUZZER,
 	BODY_CHECK,
 }
 
@@ -25,11 +28,14 @@ const _SOUND_PATHS: Dictionary = {
 	Sound.GOAL_HORN:    "res://Sounds/goal_horn.ogg",
 	Sound.SKATE_BRAKE:  "res://Sounds/skate_brake.wav",
 	Sound.SKATE_CARVE:  "res://Sounds/skate_carve.wav",
-	Sound.PUCK_BOARDS:     "res://Sounds/puck_boards.wav",
-	Sound.PUCK_GOALIE:     "res://Sounds/puck_goalie.wav",
-	Sound.PUCK_POST:       "res://Sounds/puck_post.wav",
-	Sound.PUCK_GOAL_BODY:  "res://Sounds/puck_goal_body.wav",
-	Sound.BODY_CHECK:      "res://Sounds/body_check.wav",
+	Sound.PUCK_BOARDS:      "res://Sounds/puck_boards.wav",
+	Sound.PUCK_GOALIE:      "res://Sounds/puck_goalie.wav",
+	Sound.PUCK_POST:        "res://Sounds/puck_post.wav",
+	Sound.PUCK_GOAL_BODY:   "res://Sounds/puck_goal_body.wav",
+	Sound.PUCK_DEFLECTION:  "res://Sounds/puck_deflection.wav",
+	Sound.PUCK_STRIP:       "res://Sounds/puck_strip.wav",
+	Sound.PERIOD_BUZZER:    "res://Sounds/period_buzzer.wav",
+	Sound.BODY_CHECK:       "res://Sounds/body_check.wav",
 }
 
 const _2D_POOL_SIZE: int = 8

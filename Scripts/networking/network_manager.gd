@@ -39,6 +39,8 @@ signal goalie_state_transition_received(team_id: int, new_state: int)
 signal goalie_shot_reaction_received(team_id: int, impact_x: float, impact_y: float, is_elevated: bool)
 signal board_hit_received(position: Vector3)
 signal goal_body_hit_received(position: Vector3)
+signal deflection_received(position: Vector3)
+signal puck_strip_received(position: Vector3)
 
 # ── State ─────────────────────────────────────────────────────────────────────
 var is_host: bool = false
@@ -901,3 +903,19 @@ func send_goal_body_hit_to_all(position: Vector3) -> void:
 @rpc("authority", "unreliable")
 func notify_goal_body_hit(position: Vector3) -> void:
 	NetworkSimManager.send(func(pos: Vector3) -> void: goal_body_hit_received.emit(pos), [position], false)
+
+func send_deflection_to_all(position: Vector3) -> void:
+	for peer_id: int in multiplayer.get_peers():
+		notify_deflection.rpc_id(peer_id, position)
+
+@rpc("authority", "unreliable")
+func notify_deflection(position: Vector3) -> void:
+	NetworkSimManager.send(func(pos: Vector3) -> void: deflection_received.emit(pos), [position], false)
+
+func send_puck_strip_to_all(position: Vector3) -> void:
+	for peer_id: int in multiplayer.get_peers():
+		notify_puck_strip.rpc_id(peer_id, position)
+
+@rpc("authority", "unreliable")
+func notify_puck_strip(position: Vector3) -> void:
+	NetworkSimManager.send(func(pos: Vector3) -> void: puck_strip_received.emit(pos), [position], false)
