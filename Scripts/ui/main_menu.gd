@@ -60,10 +60,24 @@ func _build_ui() -> void:
 	_center_container = center
 	_center_container.modulate.a = 0.0
 
+	var menu_panel_style := StyleBoxFlat.new()
+	menu_panel_style.bg_color = Color(0.10, 0.10, 0.14, 0.85)
+	menu_panel_style.set_corner_radius_all(8)
+	menu_panel_style.set_content_margin_all(40)
+	menu_panel_style.set_content_margin(SIDE_TOP, 36)
+	menu_panel_style.set_content_margin(SIDE_BOTTOM, 36)
+	menu_panel_style.border_color = Color(0.30, 0.30, 0.45, 0.50)
+	menu_panel_style.set_border_width_all(1)
+
+	var menu_panel := PanelContainer.new()
+	menu_panel.add_theme_stylebox_override("panel", menu_panel_style)
+	menu_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	center.add_child(menu_panel)
+
 	var vbox := VBoxContainer.new()
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	vbox.add_theme_constant_override("separation", 12)
-	center.add_child(vbox)
+	menu_panel.add_child(vbox)
 
 	var title := Label.new()
 	title.text = "Mitts"
