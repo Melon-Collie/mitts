@@ -27,6 +27,16 @@ static func _normalize(name: String) -> String:
 	s = s.replace("5", "s").replace("$", "s")
 	return s
 
+static func is_alphanumeric(player_name: String) -> bool:
+	for i: int in range(player_name.length()):
+		var code: int = player_name.unicode_at(i)
+		var digit: bool = code >= 48 and code <= 57
+		var upper: bool = code >= 65 and code <= 90
+		var lower: bool = code >= 97 and code <= 122
+		if not (digit or upper or lower):
+			return false
+	return true
+
 static func is_clean(player_name: String) -> bool:
 	_ensure_loaded()
 	var normalized: String = _normalize(player_name)

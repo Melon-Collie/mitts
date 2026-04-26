@@ -179,7 +179,15 @@ func _build_player_popup() -> void:
 
 	name_field.text_changed.connect(func(t: String) -> void:
 		var trimmed: String = t.strip_edges() if not t.strip_edges().is_empty() else "Player"
+		if not NameFilter.is_alphanumeric(trimmed):
+			name_warning.text = "Letters and numbers only"
+			name_warning.visible = true
+			NetworkManager.local_player_name = "Player"
+			PlayerPrefs.player_name = "Player"
+			PlayerPrefs.save()
+			return
 		if not NameFilter.is_clean(trimmed):
+			name_warning.text = "Name not allowed"
 			name_warning.visible = true
 			NetworkManager.local_player_name = "Player"
 			PlayerPrefs.player_name = "Player"
