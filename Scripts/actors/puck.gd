@@ -216,16 +216,13 @@ func apply_poke_check(checker_skater: Skater) -> void:
 
 func release(direction: Vector3, power: float) -> void:
 	var ex_carrier: Skater = carrier
-	# Set position, elevation, and velocity while still frozen so Jolt activates
-	# the body from the correct initial state. Writes on a live dynamic body are
-	# not guaranteed to be picked up for the first integration step.
+	# Set position while still frozen so Jolt activates from the correct state.
 	if ex_carrier != null:
 		global_position = ex_carrier.get_blade_contact_global()
 	if direction.y > 0:
 		global_position.y = ice_height + 0.1
 		_pending_elevation = true
 	_pending_elevation_vel = direction * power
-	linear_velocity = direction * power
 	clear_carrier()
 	if ex_carrier != null:
 		_set_cooldown(ex_carrier, reattach_cooldown)
