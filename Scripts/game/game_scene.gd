@@ -3,6 +3,8 @@ extends Node
 func _ready() -> void:
 	PlayerPrefs.apply_video()
 	NetworkManager.on_game_scene_ready()
+	if NetworkManager.is_tutorial_mode:
+		add_child(preload("res://Scripts/game/tutorial_manager.gd").new())
 	if not NetworkManager.is_host and not NetworkManager.pending_join_slot.is_empty():
 		var s: Dictionary = NetworkManager.pending_join_slot
 		NetworkManager.pending_join_slot = {}
