@@ -123,6 +123,7 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 @export var slapper_elevation: float = 0.15
 @export var one_timer_window_duration: float = 0.45  # seconds after puck arrives to release
 @export var one_timer_leniency_radius: float = 1.2   # metres; buffer for early release
+@export var one_timer_center_power_bonus: float = 0.25  # max multiplier bonus at dead centre
 
 var show_one_timer_indicator: bool = false
 
@@ -250,6 +251,12 @@ func _process_input(input: InputState, delta: float) -> void:
 		_upper_body_angular_velocity = angle_difference(_prev_upper_body_angle_for_vel, _upper_body_angle) / delta
 		_prev_facing_angle = cur_fa
 		_prev_upper_body_angle_for_vel = _upper_body_angle
+	if show_one_timer_indicator and _sm.get_state() == State.SLAPPER_CHARGE_WITHOUT_PUCK:
+		var zone_world: Vector3 = skater.get_slapper_zone_global_position()
+		var zone_xz := Vector2(zone_world.x, zone_world.z)
+		var puck_xz := Vector2(puck.global_position.x, puck.global_position.z)
+		var ratio: float = clampf(zone_xz.distance_to(puck_xz) / slapper_zone_radius, 0.0, 1.0)
+		skater.update_slapper_indicator_convergence(ratio)
 
 # ── Network State ─────────────────────────────────────────────────────────────
 # Returns the typed network state object. Flattening to Array happens at the
@@ -538,7 +545,8 @@ func _try_one_timer_release(input: InputState) -> Dictionary:
 	var zone_world: Vector3 = skater.get_slapper_zone_global_position()
 	var zone_xz := Vector2(zone_world.x, zone_world.z)
 	var puck_xz := Vector2(puck.global_position.x, puck.global_position.z)
-	if zone_xz.distance_to(puck_xz) > one_timer_leniency_radius:
+	var dist: float = zone_xz.distance_to(puck_xz)
+	if dist > one_timer_leniency_radius:
 		return {fired = false}
 	var blade_world: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
 	var locked_dir_3d := Vector3(_sm.locked_slapper_dir.x, 0.0, _sm.locked_slapper_dir.y)
@@ -546,6 +554,8 @@ func _try_one_timer_release(input: InputState) -> Dictionary:
 	var result := ShotMechanics.release_slapper(
 			blade_world, input.mouse_world_pos,
 			_is_elevated, cfg.max_slapper_charge_time, cfg, locked_dir_3d)
+	var proximity: float = clampf(1.0 - dist / slapper_zone_radius, 0.0, 1.0)
+	result.power *= 1.0 + one_timer_center_power_bonus * proximity
 	if not is_replaying:
 		one_timer_release_requested.emit(result.direction, result.power)
 	return {fired = true, direction = result.direction, follow_through_duration = follow_through_duration}

@@ -104,8 +104,18 @@ signal body_check_impulse_applied(impulse: Vector3)
 signal body_block_hit(body: Node3D)
 # ── Runtime ───────────────────────────────────────────────────────────────────
 var _ring_mesh: MeshInstance3D = null
-var _slapper_indicator: MeshInstance3D = null
+var _slapper_indicator: Node3D = null
 var _slapper_indicator_mat: StandardMaterial3D = null
+var _slapper_arm_nodes: Array[MeshInstance3D] = []
+const _SLAPPER_ARM_DIRS: Array[Vector3] = [
+	Vector3(1, 0, 0), Vector3(-1, 0, 0),
+	Vector3(0, 0, 1), Vector3(0, 0, -1),
+]
+# All arm constants are in unit (1 m) space; _slapper_indicator.scale applies radius.
+const _SLAPPER_ARM_WIDTH: float      = 0.10   # arm width
+const _SLAPPER_ARM_CENTER_GAP: float = 0.08   # inner tip at ratio = 1 (fully extended)
+const _SLAPPER_ARM_OUTER_FULL: float = 1.00   # outer tip at ratio = 1
+const _SLAPPER_ARM_OUTER_MIN: float  = 0.20   # outer tip at ratio = 0 (converged)
 var _facing: Vector2 = Vector2.DOWN
 var is_elevated: bool = false
 var is_ghost: bool = false
@@ -239,17 +249,26 @@ func _ready() -> void:
 	_ring_mesh.visible = false
 	add_child(_ring_mesh)
 
-	_slapper_indicator = MeshInstance3D.new()
+	_slapper_indicator = Node3D.new()
 	_slapper_indicator.name = "SlapperIndicator"
-	# Unit mesh (arms reach 1.0 m from centre); scaled to zone radius at activation.
-	_slapper_indicator.mesh = _create_reticle_mesh(0.92, 0.07, 0.08)
 	_slapper_indicator.visible = false
 	add_child(_slapper_indicator)
 	_slapper_indicator_mat = StandardMaterial3D.new()
 	_slapper_indicator_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_slapper_indicator_mat.emission_enabled = true
 	_slapper_indicator_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_slapper_indicator.material_override = _slapper_indicator_mat
+	# Y rotations that align each arm's local +Z with its world direction.
+	var arm_y_rots: Array[float] = [90.0, -90.0, 0.0, 180.0]
+	for i: int in _SLAPPER_ARM_DIRS.size():
+		var arm := MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = Vector3(_SLAPPER_ARM_WIDTH, 0.005, 1.0)
+		arm.mesh = box
+		arm.material_override = _slapper_indicator_mat
+		arm.rotation_degrees.y = arm_y_rots[i]
+		_slapper_indicator.add_child(arm)
+		_slapper_arm_nodes.append(arm)
+	update_slapper_indicator_convergence(1.0)
 
 	var vfx := SkaterVFX.new()
 	vfx.name = "VFX"
@@ -279,44 +298,19 @@ func _create_ring_mesh(inner_r: float, outer_r: float, segments: int) -> ArrayMe
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh
 
-# Four-arm crosshair (+) lying flat on the XZ plane.
-# arm_length: length of each arm beyond the center gap.
-# arm_width:  thickness of each arm.
-# center_gap: dead zone radius so the arms don't overlap at the centre.
-func _create_reticle_mesh(arm_length: float, arm_width: float, center_gap: float) -> ArrayMesh:
-	var verts := PackedVector3Array()
-	var normals := PackedVector3Array()
-	var indices := PackedInt32Array()
-	var half_w: float = arm_width * 0.5
-	# Four cardinal arms: +X, −X, +Z, −Z.
-	# perp = along × UP always gives a perpendicular whose winding (perp × along = +Y)
-	# ensures the quad normal faces up regardless of the sign of along.
-	var along_dirs: Array[Vector3] = [
-		Vector3(1, 0, 0), Vector3(-1, 0, 0),
-		Vector3(0, 0, 1), Vector3(0, 0, -1),
-	]
-	for along: Vector3 in along_dirs:
-		var perp: Vector3 = along.cross(Vector3.UP)
-		var p0: Vector3 = along * center_gap - perp * half_w
-		var p1: Vector3 = along * center_gap + perp * half_w
-		var p2: Vector3 = along * (center_gap + arm_length) + perp * half_w
-		var p3: Vector3 = along * (center_gap + arm_length) - perp * half_w
-		var base: int = verts.size()
-		verts.append(p0)
-		verts.append(p1)
-		verts.append(p2)
-		verts.append(p3)
-		for _n: int in 4:
-			normals.append(Vector3.UP)
-		indices.append_array([base, base + 1, base + 2, base, base + 2, base + 3])
-	var arrays: Array = []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	arrays[Mesh.ARRAY_NORMAL] = normals
-	arrays[Mesh.ARRAY_INDEX] = indices
-	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	return mesh
+# Slides the four arm nodes to visualise puck proximity.
+# ratio = 1.0: puck at zone edge, arms fully extended.
+# ratio = 0.0: puck at zone centre, arms converged to short stubs.
+func update_slapper_indicator_convergence(ratio: float) -> void:
+	var r: float = clampf(ratio, 0.0, 1.0)
+	var inner_tip: float = _SLAPPER_ARM_CENTER_GAP * r
+	var outer_tip: float = lerpf(_SLAPPER_ARM_OUTER_MIN, _SLAPPER_ARM_OUTER_FULL, r)
+	var arm_len: float = outer_tip - inner_tip
+	var arm_center: float = inner_tip + arm_len * 0.5
+	for i: int in _slapper_arm_nodes.size():
+		var arm: MeshInstance3D = _slapper_arm_nodes[i]
+		arm.position = _SLAPPER_ARM_DIRS[i] * arm_center
+		arm.scale.z = arm_len
 
 func _resolve_or_create_bone_mesh(node_name: String) -> MeshInstance3D:
 	var existing: MeshInstance3D = upper_body.get_node_or_null(node_name) as MeshInstance3D
@@ -454,6 +448,7 @@ func set_slapper_indicator(active: bool, offset_x: float = 0.0, offset_z: float 
 	_slapper_indicator_mat.emission = Color(0.3, 0.8, 1.0)
 	_slapper_indicator_mat.emission_energy_multiplier = 0.4
 	_slapper_indicator.visible = true
+	update_slapper_indicator_convergence(1.0)
 
 func set_slapper_indicator_ready(ready: bool) -> void:
 	if not _slapper_indicator.visible:
