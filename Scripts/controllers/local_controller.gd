@@ -275,7 +275,7 @@ func _update_one_timer_indicator() -> void:
 		var zone_world: Vector3 = skater.get_slapper_zone_global_position()
 		var zone_xz := Vector2(zone_world.x, zone_world.z)
 		var puck_xz := Vector2(puck.global_position.x, puck.global_position.z)
-		var would_fire: bool = zone_xz.distance_to(puck_xz) <= one_timer_leniency_radius
+		var would_fire: bool = zone_xz.distance_to(puck_xz) <= _effective_one_timer_leniency()
 		skater.set_slapper_indicator_ready(would_fire)
 	else:
 		skater.set_slapper_indicator(false)

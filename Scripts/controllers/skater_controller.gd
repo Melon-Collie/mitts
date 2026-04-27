@@ -122,7 +122,8 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 @export var slapper_aim_arc: float = 45.0
 @export var slapper_elevation: float = 0.15
 @export var one_timer_window_duration: float = 0.45  # seconds after puck arrives to release
-@export var one_timer_leniency_radius: float = 1.2   # metres; buffer for early release
+@export var one_timer_base_leniency: float = 0.2    # fixed extra radius beyond the zone
+@export var one_timer_leniency_per_speed: float = 0.05  # extra metres of leniency per m/s of puck speed
 @export var one_timer_center_power_bonus: float = 0.25  # max multiplier bonus at dead centre
 
 var show_one_timer_indicator: bool = false
@@ -546,7 +547,7 @@ func _try_one_timer_release(input: InputState) -> Dictionary:
 	var zone_xz := Vector2(zone_world.x, zone_world.z)
 	var puck_xz := Vector2(puck.global_position.x, puck.global_position.z)
 	var dist: float = zone_xz.distance_to(puck_xz)
-	if dist > one_timer_leniency_radius:
+	if dist > _effective_one_timer_leniency():
 		return {fired = false}
 	var blade_world: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
 	var locked_dir_3d := Vector3(_sm.locked_slapper_dir.x, 0.0, _sm.locked_slapper_dir.y)
@@ -564,6 +565,10 @@ func _apply_block_movement(input: InputState, delta: float) -> void:
 	skater.velocity = SkaterMovementRules.apply_movement(
 			skater.velocity, input.move_vector, skater.rotation.y,
 			false, input.brake, delta, _block_movement_config())
+
+func _effective_one_timer_leniency() -> float:
+	var puck_xz_speed: float = Vector2(puck.velocity.x, puck.velocity.z).length()
+	return slapper_zone_radius + one_timer_base_leniency + puck_xz_speed * one_timer_leniency_per_speed
 
 func _is_in_slapper_state() -> bool:
 	return _sm.get_state() in [State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK]
