@@ -520,21 +520,12 @@ func _build_offline_popup() -> void:
 		_free_play_popup.visible = true)
 	vbox.add_child(free_play_btn)
 
-	# Tutorial placeholder — grouped tightly with its "Planned" label
-	var tutorial_section := VBoxContainer.new()
-	tutorial_section.add_theme_constant_override("separation", 4)
-	vbox.add_child(tutorial_section)
-
 	var tutorial_btn := _make_button("Tutorial")
-	tutorial_btn.disabled = true
-	tutorial_section.add_child(tutorial_btn)
-
-	var planned_label := Label.new()
-	planned_label.text = "Planned"
-	planned_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	planned_label.add_theme_font_size_override("font_size", 13)
-	planned_label.add_theme_color_override("font_color", Color(0.50, 0.50, 0.55))
-	tutorial_section.add_child(planned_label)
+	tutorial_btn.pressed.connect(func() -> void:
+		_offline_popup.visible = false
+		_do_start_tutorial())
+	SoundManager.wire_button(tutorial_btn)
+	vbox.add_child(tutorial_btn)
 
 
 	_offline_popup = Control.new()
@@ -802,6 +793,14 @@ func _do_start_offline() -> void:
 	NetworkManager.pending_away_color_id = _offline_away_color_id
 	NetworkManager.start_offline()
 	get_tree().change_scene_to_file(Constants.SCENE_HOCKEY)
+
+
+func _do_start_tutorial() -> void:
+	NetworkManager.pending_home_color_id = _offline_home_color_id
+	NetworkManager.pending_away_color_id = _offline_away_color_id
+	NetworkManager.start_tutorial()
+	get_tree().change_scene_to_file(Constants.SCENE_HOCKEY)
+
 
 func _on_host_pressed() -> void:
 	NetworkManager.start_host()

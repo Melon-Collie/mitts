@@ -49,6 +49,7 @@ var pending_lobby_slots: Dictionary = {}  # peer_id → { team_id, team_slot, pl
 var pending_lobby_roster: Array = []
 var pending_join_slot: Dictionary = {}   # { team_slot, team_id, jersey_color, helmet_color, pants_color }
 var is_offline_mode: bool = false
+var is_tutorial_mode: bool = false
 var pending_home_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID
 var pending_away_color_id: String  = TeamColorRegistry.DEFAULT_AWAY_ID
 var pending_num_periods: int = GameRules.NUM_PERIODS
@@ -112,6 +113,14 @@ func start_offline() -> void:
 	_peer_names[1] = local_player_name
 	_peer_numbers[1] = local_jersey_number
 	pending_game_config = {"num_periods": 1, "period_duration": 0.0, "ot_enabled": false, "ot_duration": 0.0}
+
+
+func start_tutorial() -> void:
+	is_tutorial_mode = true
+	# Pre-assign team 0, slot 0 so the player always spawns as the home team.
+	# on_host_started reads pending_lobby_slots[1] and skips the random assignment path.
+	pending_lobby_slots[1] = {"team_id": 0, "team_slot": 0}
+	start_offline()
 
 
 func local_time() -> float:

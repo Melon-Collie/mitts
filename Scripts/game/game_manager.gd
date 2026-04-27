@@ -1068,6 +1068,22 @@ func get_puck() -> Puck:
 	return puck
 
 
+func spawn_tutorial_dummy(position: Vector3) -> Dictionary:
+	return _spawner.spawn_remote_player(
+		position, Color(0.8, 0.3, 0.3), Color(0.2, 0.2, 0.2), Color(0.15, 0.15, 0.15),
+		Color(0.8, 0.3, 0.3), false, puck, self)
+
+
+# Directly triggers icing ghost mode for team 0 without requiring a hybrid-icing
+# race win. Used by TutorialManager to demonstrate the mechanic in single-player
+# (no opposing players means the race always waves off in normal detection).
+func trigger_tutorial_icing() -> void:
+	if _state_machine == null:
+		return
+	_state_machine.icing_team_id = 0
+	_state_machine._icing_timer = GameRules.ICING_GHOST_DURATION
+
+
 func get_goalie_data() -> Array[Dictionary]:
 	var data: Array[Dictionary] = []
 	for i: int in range(goalies.size()):
