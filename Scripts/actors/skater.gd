@@ -104,6 +104,12 @@ signal body_check_impulse_applied(impulse: Vector3)
 signal body_block_hit(body: Node3D)
 # ── Runtime ───────────────────────────────────────────────────────────────────
 var _ring_mesh: MeshInstance3D = null
+var _charge_ring_mesh: MeshInstance3D = null
+var _charge_ring_mat: ShaderMaterial = null
+var _chevron_mesh: MeshInstance3D = null
+var _name_label: Label3D = null
+var _slapper_arrow_mesh: MeshInstance3D = null
+var _slapper_arrow_root: Node3D = null
 var _slapper_indicator: Node3D = null
 var _slapper_indicator_mat: StandardMaterial3D = null
 var _slapper_arm_nodes: Array[MeshInstance3D] = []
@@ -112,8 +118,51 @@ const _SLAPPER_ARM_DIRS: Array[Vector3] = [
 	Vector3(0, 0, 1), Vector3(0, 0, -1),
 ]
 # All arm constants are in unit (1 m) space; _slapper_indicator.scale applies radius.
-const _SLAPPER_ARM_WIDTH: float  = 0.10  # arm width
 const _SLAPPER_ARM_LENGTH: float = 0.30  # fixed arm length; arms slide, don't resize
+
+# ── HUD geometry (ice-blue overlay system) ────────────────────────────────────
+# Slot ring sits just inside RING_OUTER_R. Charge ring is concentric, just
+# outside, with a small gap. Chevron and player name sit below the rings on
+# the +Z side (player's "back-of-feet" relative to camera).
+const RING_OUTER_R: float       = 0.45
+const CHARGE_RING_GAP: float    = 0.02
+const CHARGE_RING_OUTER_R: float = 0.49
+const CHARGE_RING_INNER_R: float = CHARGE_RING_OUTER_R - 0.04
+const _CHARGE_FULL_PULSE_HZ: float = 3.0
+const _CHARGE_LOST_FLASH_DURATION: float = 0.35
+
+# Charge ring shader: angle-mask + tri-color blend. Fill goes clockwise from 12
+# o'clock as viewed from above. UV.x of the procedural ring encodes 0..1
+# clockwise; fragment discards above `fill`. Lost-flash overrides fill color.
+const _CHARGE_RING_SHADER_CODE := """
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_opaque, cull_disabled;
+
+uniform float fill : hint_range(0.0, 1.0) = 0.0;
+uniform float pulse : hint_range(0.0, 1.0) = 0.0;       // 1.0 at full charge → modulates alpha
+uniform float lost_flash : hint_range(0.0, 1.0) = 0.0;  // 1.0 just after charge cancel
+uniform vec4 color_low;
+uniform vec4 color_high;
+uniform vec4 color_full;
+uniform vec4 color_lost;
+uniform float opacity = 0.7;
+
+void fragment() {
+	float t = UV.x;
+	if (t > fill && lost_flash < 0.001) {
+		discard;
+	}
+	vec3 base = mix(color_low.rgb, color_high.rgb, clamp(fill, 0.0, 1.0));
+	if (pulse > 0.001) {
+		base = mix(base, color_full.rgb, pulse);
+	}
+	if (lost_flash > 0.001) {
+		base = mix(base, color_lost.rgb, lost_flash);
+	}
+	ALBEDO = base;
+	ALPHA = opacity * (lost_flash > 0.001 ? lost_flash : 1.0);
+}
+"""
 var _facing: Vector2 = Vector2.DOWN
 var is_elevated: bool = false
 var is_ghost: bool = false
@@ -121,6 +170,10 @@ var is_braking: bool = false
 var is_braced: bool = false
 var shot_charge: float = 0.0
 var slapper_aim_dir: Vector3 = Vector3.ZERO
+# Drives the charge ring + lost-flash pulse. Set by LocalController only;
+# remote skaters leave these at defaults so the charge ring stays hidden.
+var _charge_ring_visible: bool = false
+var _charge_lost_flash_timer: float = 0.0
 var blade_world_velocity: Vector3 = Vector3.ZERO
 var _prev_blade_world_pos: Vector3 = Vector3.ZERO
 var _prev_blade_contact: Vector3 = Vector3.ZERO
@@ -242,31 +295,76 @@ func _ready() -> void:
 
 	_ring_mesh = MeshInstance3D.new()
 	_ring_mesh.name = "RingIndicator"
-	_ring_mesh.mesh = _create_ring_mesh(0.34, 0.45, 32)
+	_ring_mesh.mesh = _create_ring_mesh(RING_OUTER_R - MenuStyle.HUD_LINE_THIN, RING_OUTER_R, 48)
 	_ring_mesh.position = Vector3.ZERO
-	_ring_mesh.visible = false
+	_ring_mesh.material_override = _make_hud_ice_material()
 	add_child(_ring_mesh)
+
+	_charge_ring_mesh = MeshInstance3D.new()
+	_charge_ring_mesh.name = "ChargeRing"
+	_charge_ring_mesh.mesh = _create_ring_mesh_with_uv(
+			CHARGE_RING_INNER_R, CHARGE_RING_OUTER_R, 64)
+	_charge_ring_mat = _make_charge_ring_material()
+	_charge_ring_mesh.material_override = _charge_ring_mat
+	_charge_ring_mesh.visible = false
+	add_child(_charge_ring_mesh)
+
+	_chevron_mesh = MeshInstance3D.new()
+	_chevron_mesh.name = "ElevatedChevron"
+	_chevron_mesh.mesh = _create_chevron_mesh()
+	_chevron_mesh.material_override = _make_hud_ice_material()
+	_chevron_mesh.visible = false
+	add_child(_chevron_mesh)
+
+	# Player name billboard. `top_level = true` so it inherits neither the
+	# skater's rotation nor its body Y — its world transform is rewritten each
+	# tick in _physics_process so the on-screen position stays stable as the
+	# skater turns. Always reads at +Z world offset from the body, so on a
+	# typical end-on hockey camera it sits at a consistent screen edge.
+	_name_label = Label3D.new()
+	_name_label.name = "PlayerNameLabel"
+	_name_label.top_level = true
+	_name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_name_label.no_depth_test = false
+	_name_label.fixed_size = false
+	_name_label.font_size = 36
+	_name_label.outline_size = 6
+	_name_label.modulate = Color(MenuStyle.HUD_ICE.r, MenuStyle.HUD_ICE.g,
+			MenuStyle.HUD_ICE.b, MenuStyle.HUD_OPACITY)
+	_name_label.outline_modulate = Color(0.0, 0.0, 0.0, MenuStyle.HUD_OPACITY)
+	_name_label.pixel_size = 0.005
+	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	add_child(_name_label)
 
 	_slapper_indicator = Node3D.new()
 	_slapper_indicator.name = "SlapperIndicator"
 	_slapper_indicator.visible = false
 	add_child(_slapper_indicator)
-	_slapper_indicator_mat = StandardMaterial3D.new()
-	_slapper_indicator_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_slapper_indicator_mat.emission_enabled = true
-	_slapper_indicator_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_slapper_indicator_mat = _make_hud_ice_material()
 	# Y rotations that align each arm's local +Z with its world direction.
 	var arm_y_rots: Array[float] = [90.0, -90.0, 0.0, 180.0]
 	for i: int in _SLAPPER_ARM_DIRS.size():
 		var arm := MeshInstance3D.new()
 		var box := BoxMesh.new()
-		box.size = Vector3(_SLAPPER_ARM_WIDTH, 0.005, _SLAPPER_ARM_LENGTH)
+		box.size = Vector3(MenuStyle.HUD_LINE_THIN, 0.005, _SLAPPER_ARM_LENGTH)
 		arm.mesh = box
 		arm.material_override = _slapper_indicator_mat
 		arm.rotation_degrees.y = arm_y_rots[i]
 		_slapper_indicator.add_child(arm)
 		_slapper_arm_nodes.append(arm)
 	update_slapper_indicator_convergence(1.0)
+
+	# Slapshot direction arrow. Sits at the slapper-zone center (whichever
+	# offset the controller passes via set_slapshot_arrow); rotates each tick
+	# to face slapper_aim_dir. Outline-only style — drawn as four thin boxes
+	# (two shaft sides + two arrowhead sides).
+	_slapper_arrow_root = Node3D.new()
+	_slapper_arrow_root.name = "SlapperArrow"
+	_slapper_arrow_root.visible = false
+	add_child(_slapper_arrow_root)
+	_slapper_arrow_mesh = _create_arrow_mesh()
+	_slapper_arrow_mesh.material_override = _make_hud_ice_material()
+	_slapper_arrow_root.add_child(_slapper_arrow_mesh)
 
 	var vfx := SkaterVFX.new()
 	vfx.name = "VFX"
@@ -295,6 +393,181 @@ func _create_ring_mesh(inner_r: float, outer_r: float, segments: int) -> ArrayMe
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh
+
+# Variant of _create_ring_mesh that bakes a clockwise-from-12-o'clock UV.x onto
+# every vertex (UV.x = 0 at angle 0 / +Z, growing clockwise to 1 at TAU). The
+# charge-ring shader uses UV.x as the angular fill mask. UV.y stays 0/1 across
+# the rim so a future "rim glow" gradient could read it.
+func _create_ring_mesh_with_uv(inner_r: float, outer_r: float, segments: int) -> ArrayMesh:
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var indices := PackedInt32Array()
+	for i: int in segments:
+		# Start angle at -PI/2 (top of ring, +Z-forward in world after parent
+		# rotation) and progress clockwise so charge fills like a wall clock.
+		var t0: float = float(i) / float(segments)
+		var t1: float = float(i + 1) / float(segments)
+		var a0: float = -PI * 0.5 - t0 * TAU
+		var a1: float = -PI * 0.5 - t1 * TAU
+		var base: int = verts.size()
+		verts.append(Vector3(cos(a0) * inner_r, 0.0, sin(a0) * inner_r))
+		verts.append(Vector3(cos(a0) * outer_r, 0.0, sin(a0) * outer_r))
+		verts.append(Vector3(cos(a1) * inner_r, 0.0, sin(a1) * inner_r))
+		verts.append(Vector3(cos(a1) * outer_r, 0.0, sin(a1) * outer_r))
+		uvs.append(Vector2(t0, 0.0))
+		uvs.append(Vector2(t0, 1.0))
+		uvs.append(Vector2(t1, 0.0))
+		uvs.append(Vector2(t1, 1.0))
+		for _n: int in 4:
+			normals.append(Vector3.UP)
+		indices.append_array([base, base + 1, base + 2, base + 1, base + 3, base + 2])
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
+
+# Upward-pointing chevron drawn flat on the ice. Two thin legs forming a "^",
+# placed below the slot ring on the +Z side (back of the player relative to
+# camera-forward). Thickness uses MenuStyle.HUD_LINE_THIN so it visually
+# matches the slot ring stroke.
+func _create_chevron_mesh() -> ArrayMesh:
+	var size: float = 0.18                       # full chevron height/width
+	var z_offset: float = -RING_OUTER_R - 0.10   # in front of player ring (camera-side)
+	var leg_len: float = size * 0.7
+	var thickness: float = MenuStyle.HUD_LINE_THIN
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var indices := PackedInt32Array()
+
+	# Build a leg as a thin XZ rectangle, rotate it 45° about Y, place it.
+	# Each leg is a quad — 4 verts, 2 triangles.
+	var legs: Array = [
+		{ "rot": deg_to_rad(45.0),  "anchor": Vector3(0.0, 0.0, z_offset) },
+		{ "rot": deg_to_rad(-45.0), "anchor": Vector3(0.0, 0.0, z_offset) },
+	]
+	for leg: Dictionary in legs:
+		var rot_y: float = leg.rot
+		var anchor: Vector3 = leg.anchor
+		var dir := Vector3(sin(rot_y), 0.0, -cos(rot_y))   # forward along the leg
+		var perp := Vector3(cos(rot_y), 0.0, sin(rot_y))   # widthwise
+		var half_t: float = thickness * 0.5
+		var p0: Vector3 = anchor + perp * half_t
+		var p1: Vector3 = anchor - perp * half_t
+		var p2: Vector3 = anchor + dir * leg_len + perp * half_t
+		var p3: Vector3 = anchor + dir * leg_len - perp * half_t
+		var base: int = verts.size()
+		verts.append(p0); verts.append(p1); verts.append(p2); verts.append(p3)
+		for _n: int in 4:
+			normals.append(Vector3.UP)
+		indices.append_array([base, base + 2, base + 1, base + 1, base + 2, base + 3])
+
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
+
+# Outline arrow drawn flat on the ice, pointing along +Z. Built from four thin
+# rectangles: two shaft sides + two arrowhead sides (no base — open shape).
+# Used for the slapshot direction indicator.
+func _create_arrow_mesh() -> MeshInstance3D:
+	var shaft_len: float = 0.55
+	var head_len: float  = 0.18
+	var head_half_w: float = 0.14
+	var shaft_half_w: float = 0.04
+	var thickness: float = MenuStyle.HUD_LINE_THIN
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var indices := PackedInt32Array()
+
+	# Two shaft sides: parallel rectangles running from z=0 to z=shaft_len at
+	# x = ±shaft_half_w. Width of each rectangle is `thickness` along x.
+	for sign_x: float in [-1.0, 1.0]:
+		var x0: float = sign_x * (shaft_half_w - thickness * 0.5)
+		var x1: float = sign_x * (shaft_half_w + thickness * 0.5)
+		var z0: float = 0.0
+		var z1: float = shaft_len
+		_append_quad(verts, normals, indices, x0, z0, x1, z0, x1, z1, x0, z1)
+
+	# Two arrowhead sides: from (±shaft_half_w, shaft_len) widening to
+	# (±head_half_w, shaft_len) and tapering to (0, shaft_len + head_len).
+	# Drawn as a thin strip along the diagonal edge.
+	var tip := Vector2(0.0, shaft_len + head_len)
+	for sign_x: float in [-1.0, 1.0]:
+		var base_outer := Vector2(sign_x * head_half_w, shaft_len)
+		# Edge runs from base_outer to tip. Build a thin rectangle along it.
+		var edge: Vector2 = tip - base_outer
+		var edge_len: float = edge.length()
+		if edge_len < 0.0001:
+			continue
+		var edge_dir: Vector2 = edge / edge_len
+		var edge_perp := Vector2(-edge_dir.y, edge_dir.x)
+		var half_t: float = thickness * 0.5
+		var a: Vector2 = base_outer + edge_perp * half_t
+		var b: Vector2 = base_outer - edge_perp * half_t
+		var c: Vector2 = tip - edge_perp * half_t
+		var d: Vector2 = tip + edge_perp * half_t
+		_append_quad(verts, normals, indices, a.x, a.y, b.x, b.y, c.x, c.y, d.x, d.y)
+
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var inst := MeshInstance3D.new()
+	inst.mesh = mesh
+	return inst
+
+# Append an XZ-plane quad (Y = 0) defined by 4 corner XZ pairs. Triangulated
+# fan-style: (0,1,2), (0,2,3). Caller must supply corners in CW or CCW order.
+func _append_quad(
+		verts: PackedVector3Array, normals: PackedVector3Array, indices: PackedInt32Array,
+		x0: float, z0: float, x1: float, z1: float,
+		x2: float, z2: float, x3: float, z3: float) -> void:
+	var base: int = verts.size()
+	verts.append(Vector3(x0, 0.0, z0))
+	verts.append(Vector3(x1, 0.0, z1))
+	verts.append(Vector3(x2, 0.0, z2))
+	verts.append(Vector3(x3, 0.0, z3))
+	for _n: int in 4:
+		normals.append(Vector3.UP)
+	indices.append_array([base, base + 1, base + 2, base, base + 2, base + 3])
+
+# Solid ice-blue material at HUD opacity, unshaded, alpha-blended. Shared by
+# every HUD-on-ice element except the charge ring (which has its own shader).
+func _make_hud_ice_material() -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(MenuStyle.HUD_ICE.r, MenuStyle.HUD_ICE.g,
+			MenuStyle.HUD_ICE.b, MenuStyle.HUD_OPACITY)
+	return mat
+
+func _make_charge_ring_material() -> ShaderMaterial:
+	var shader := Shader.new()
+	shader.code = _CHARGE_RING_SHADER_CODE
+	var mat := ShaderMaterial.new()
+	mat.shader = shader
+	mat.set_shader_parameter("fill", 0.0)
+	mat.set_shader_parameter("pulse", 0.0)
+	mat.set_shader_parameter("lost_flash", 0.0)
+	mat.set_shader_parameter("color_low", MenuStyle.CHARGE_LOW)
+	mat.set_shader_parameter("color_high", MenuStyle.CHARGE_HIGH)
+	mat.set_shader_parameter("color_full", MenuStyle.CHARGE_FULL)
+	mat.set_shader_parameter("color_lost", MenuStyle.CHARGE_LOST)
+	mat.set_shader_parameter("opacity", MenuStyle.HUD_OPACITY)
+	return mat
 
 # Slides the four fixed-length arms to visualise puck proximity.
 # ratio = 1.0: puck at zone edge, arms at zone boundary.
@@ -333,14 +606,35 @@ func _physics_process(delta: float) -> void:
 		body_check_impulse_applied.emit(body_check_delta)
 	if _ring_mesh != null:
 		_ring_mesh.global_position.y = 0.05
+	if _name_label != null and _name_label.visible:
+		# top_level: write absolute world transform every tick so the label
+		# position decouples from skater rotation. +Z world-offset by ring
+		# radius + a small pad so it sits just past the slot ring on the ice.
+		_name_label.global_position = Vector3(
+				global_position.x, 0.05, global_position.z + RING_OUTER_R + 0.18)
+	if _charge_ring_mesh != null and _charge_ring_mesh.visible:
+		_charge_ring_mesh.global_position.y = 0.05
+		var pulse_amount: float = 0.0
+		if shot_charge >= 0.999:
+			pulse_amount = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.001 * TAU * _CHARGE_FULL_PULSE_HZ)
+		_charge_ring_mat.set_shader_parameter("fill", clampf(shot_charge, 0.0, 1.0))
+		_charge_ring_mat.set_shader_parameter("pulse", pulse_amount)
+		var lost_t: float = 0.0
+		if _charge_lost_flash_timer > 0.0:
+			_charge_lost_flash_timer = maxf(_charge_lost_flash_timer - delta, 0.0)
+			lost_t = _charge_lost_flash_timer / _CHARGE_LOST_FLASH_DURATION
+		_charge_ring_mat.set_shader_parameter("lost_flash", lost_t)
+		# Auto-hide once the lost flash has finished and there's nothing to show.
+		if shot_charge <= 0.001 and lost_t <= 0.001 and not _charge_ring_visible:
+			_charge_ring_mesh.visible = false
+	if _chevron_mesh != null:
+		_chevron_mesh.visible = is_elevated and not is_ghost
+		if _chevron_mesh.visible:
+			_chevron_mesh.global_position.y = 0.05
 	if _slapper_indicator != null and _slapper_indicator.visible:
 		_slapper_indicator.global_position.y = 0.05
-		# Pulse the "waiting" state (dim cyan, no ready-color override active).
-		# Bright green (ready) and the window countdown skip this via their own energy values.
-		var emission: float = _slapper_indicator_mat.emission_energy_multiplier
-		if emission < 1.0:
-			var pulse: float = 0.4 + 0.2 * sin(Time.get_ticks_msec() * 0.004)
-			_slapper_indicator_mat.emission_energy_multiplier = pulse
+	if _slapper_arrow_root != null and _slapper_arrow_root.visible:
+		_slapper_arrow_root.global_position.y = 0.05
 
 func _resolve_player_collisions(vel_before: Vector3) -> void:
 	for i: int in get_slide_collision_count():
@@ -419,17 +713,50 @@ func set_player_color(
 	if _skate_mesh != null:
 		_skate_mesh.material_override = _make_solid_mat(Color(0.08, 0.08, 0.08))
 
-func set_ring_color(color: Color) -> void:
-	if _ring_mesh == null:
+func set_player_name(p_name: String) -> void:
+	if _name_label != null:
+		_name_label.text = p_name
+
+# Local-only: enable/disable the concentric charge ring under this skater.
+# Driven by the controller; remote skaters never call this so the ring stays
+# hidden. The actual fill level animates from `shot_charge` in _physics_process.
+func set_charge_ring_visible(visible: bool) -> void:
+	_charge_ring_visible = visible
+	if _charge_ring_mesh != null:
+		_charge_ring_mesh.visible = visible or _charge_lost_flash_timer > 0.0
+
+# Local-only: trigger the red lost-charge flash on the charge ring. The ring
+# stays visible for _CHARGE_LOST_FLASH_DURATION seconds, fades to red, then
+# auto-hides via _physics_process.
+func trigger_charge_lost_flash() -> void:
+	_charge_lost_flash_timer = _CHARGE_LOST_FLASH_DURATION
+	if _charge_ring_mesh != null:
+		_charge_ring_mesh.visible = true
+
+# Local-only: enable the slapshot direction arrow at the given zone offset.
+# `offset_x` matches slapper_zone_offset_x (controller-side), already pre-signed.
+# Arrow rotates each tick to face slapper_aim_dir.
+func set_slapshot_arrow(active: bool, offset_x: float = 0.0, offset_z: float = 0.0) -> void:
+	if _slapper_arrow_root == null:
 		return
-	var mat := StandardMaterial3D.new()
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.albedo_color = Color(color.r, color.g, color.b, 0.55)
-	mat.emission_enabled = true
-	mat.emission = color
-	mat.emission_energy_multiplier = 0.3
-	_ring_mesh.material_override = mat
-	_ring_mesh.visible = true
+	if not active:
+		_slapper_arrow_root.visible = false
+		return
+	var blade_side_sign: float = -1.0 if is_left_handed else 1.0
+	_slapper_arrow_root.position = Vector3(blade_side_sign * offset_x, 0.05, offset_z)
+	_slapper_arrow_root.visible = true
+
+func update_slapshot_arrow_direction(world_dir: Vector3) -> void:
+	if _slapper_arrow_root == null or not _slapper_arrow_root.visible:
+		return
+	if world_dir.length() < 0.001:
+		return
+	var local_dir: Vector3 = global_transform.basis.inverse() * world_dir
+	local_dir.y = 0.0
+	if local_dir.length() < 0.001:
+		return
+	# Arrow mesh is built pointing along +Z, so atan2 of (x, z) gives Y rotation.
+	_slapper_arrow_root.rotation.y = atan2(local_dir.x, local_dir.z)
 
 func set_slapper_indicator(active: bool, offset_x: float = 0.0, offset_z: float = 0.0, radius: float = 0.5) -> void:
 	if not active:
@@ -438,32 +765,17 @@ func set_slapper_indicator(active: bool, offset_x: float = 0.0, offset_z: float 
 	var blade_side_sign: float = -1.0 if is_left_handed else 1.0
 	_slapper_indicator.position = Vector3(blade_side_sign * offset_x, 0.0, offset_z)
 	_slapper_indicator.scale = Vector3(radius, 1.0, radius)
-	_slapper_indicator_mat.albedo_color = Color(0.3, 0.8, 1.0, 0.35)
-	_slapper_indicator_mat.emission = Color(0.3, 0.8, 1.0)
-	_slapper_indicator_mat.emission_energy_multiplier = 0.4
 	_slapper_indicator.visible = true
 	update_slapper_indicator_convergence(1.0)
 
-func set_slapper_indicator_ready(is_ready: bool) -> void:
-	if not _slapper_indicator.visible:
-		return
-	if is_ready:
-		_slapper_indicator_mat.albedo_color = Color(0.2, 1.0, 0.3, 0.6)
-		_slapper_indicator_mat.emission = Color(0.2, 1.0, 0.3)
-		_slapper_indicator_mat.emission_energy_multiplier = 1.5
-	else:
-		_slapper_indicator_mat.albedo_color = Color(0.3, 0.8, 1.0, 0.35)
-		_slapper_indicator_mat.emission = Color(0.3, 0.8, 1.0)
-		# Pulse is driven by _physics_process; energy is set there.
+# Kept as no-ops so the existing controller signature compiles. The reticle is
+# now monochromatic ice blue — readiness/window timing read from blade pose,
+# not from a color change. If we want timing feedback back, drive a uniform.
+func set_slapper_indicator_ready(_is_ready: bool) -> void:
+	pass
 
-func update_slapper_indicator_window(t: float) -> void:
-	# t = 1.0 (window just opened, green) → t = 0.0 (about to expire, red)
-	if not _slapper_indicator.visible:
-		return
-	var color: Color = Color(0.2, 1.0, 0.2).lerp(Color(1.0, 0.2, 0.2), 1.0 - t)
-	_slapper_indicator_mat.albedo_color = Color(color.r, color.g, color.b, 0.4 + 0.35 * (1.0 - t))
-	_slapper_indicator_mat.emission = color
-	_slapper_indicator_mat.emission_energy_multiplier = 0.5 + 0.8 * (1.0 - t)
+func update_slapper_indicator_window(_t: float) -> void:
+	pass
 
 func set_jersey_info(p_name: String, number: int, text_color: Color) -> void:
 	for child: Node in upper_body.get_children():
@@ -802,3 +1114,16 @@ func _apply_ghost_visual(ghost: bool) -> void:
 	for node: Node in lower_body.get_children():
 		if node.name.begins_with("Stripe_"):
 			node.visible = not ghost
+	# HUD-on-ice elements: hide during ghost so a "phantom" skater doesn't
+	# carry rings, name, or charge UI. The chevron already gates on is_ghost
+	# in _physics_process; the rest are explicitly toggled here.
+	if _ring_mesh != null:
+		_ring_mesh.visible = not ghost
+	if _name_label != null:
+		_name_label.visible = not ghost
+	if _charge_ring_mesh != null and ghost:
+		_charge_ring_mesh.visible = false
+	if _slapper_indicator != null and ghost:
+		_slapper_indicator.visible = false
+	if _slapper_arrow_root != null and ghost:
+		_slapper_arrow_root.visible = false
