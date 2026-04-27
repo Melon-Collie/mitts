@@ -561,7 +561,7 @@ func _apply_block_movement(input: InputState, delta: float) -> void:
 			false, input.brake, delta, _block_movement_config())
 
 func _effective_one_timer_leniency() -> float:
-	var puck_xz_speed: float = Vector2(puck.velocity.x, puck.velocity.z).length()
+	var puck_xz_speed: float = Vector2(puck.linear_velocity.x, puck.linear_velocity.z).length()
 	return slapper_zone_radius + puck_xz_speed * one_timer_leniency_time
 
 func _is_in_slapper_state() -> bool:
