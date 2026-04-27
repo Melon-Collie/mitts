@@ -148,17 +148,27 @@ func _physics_process(delta: float) -> void:
 	target_center.z = clampf(target_center.z, -safe_z, safe_z)
 
 	# ── Step 5: Smooth movement ───────────────────────────────────────────────
-	var target_pos: Vector3 = Vector3(target_center.x, _current_height, target_center.z)
+	# Tilted mode: camera looks along a slanted ray, so a camera at
+	# target_center.xz looks at a point ~h*tan(off-axis-angle) behind itself.
+	# Offset the camera in the direction the view is being pulled away from
+	# so the play stays centered. attack_up flip mirrors the offset sign.
+	var pitch: float = -90.0
+	var tilt_z_offset: float = 0.0
+	if PlayerPrefs.camera_mode == PlayerPrefs.CAMERA_MODE_TILTED:
+		pitch = _TILTED_PITCH_DEG
+		var off_axis_rad: float = deg_to_rad(90.0 + _TILTED_PITCH_DEG)  # 15° at -75° pitch
+		var raw_offset: float = _current_height * tan(off_axis_rad)
+		var flip_sign: float = -1.0 if PlayerPrefs.attack_up and _local_team_id == 1 else 1.0
+		tilt_z_offset = raw_offset * flip_sign
+	var target_pos: Vector3 = Vector3(
+			target_center.x, _current_height, target_center.z + tilt_z_offset)
 	global_position = global_position.lerp(target_pos, smooth_speed * delta)
 
 	# ── Step 5b: Apply projection + pitch from PlayerPrefs ────────────────────
 	# Ortho `size` = vertical world units visible; matches the perspective
 	# FOV's vertical extent at the current height so the same zone frames in
-	# both modes. Tilted mode keeps perspective and pitches the camera 15°
-	# forward of straight-down — subtle "looking-down-at-the-action" feel
-	# without breaking mouse-to-world stickhandling linearity.
+	# both modes.
 	var flip_y: float = 180.0 if PlayerPrefs.attack_up and _local_team_id == 1 else 0.0
-	var pitch: float = -90.0
 	match PlayerPrefs.camera_mode:
 		PlayerPrefs.CAMERA_MODE_ORTHOGRAPHIC:
 			if projection != PROJECTION_ORTHOGONAL:
@@ -170,7 +180,6 @@ func _physics_process(delta: float) -> void:
 		PlayerPrefs.CAMERA_MODE_TILTED:
 			if projection != PROJECTION_PERSPECTIVE:
 				projection = PROJECTION_PERSPECTIVE
-			pitch = _TILTED_PITCH_DEG
 	rotation_degrees = Vector3(pitch, flip_y, 0.0)
 
 	# ── Step 6: Shake ─────────────────────────────────────────────────────────
