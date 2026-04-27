@@ -306,6 +306,7 @@ func _physics_process(delta: float) -> void:
 	if _ring_mesh != null:
 		_ring_mesh.global_position.y = 0.05
 	if _slapper_indicator != null and _slapper_indicator.visible:
+		_slapper_indicator.global_position.y = 0.05
 		# Pulse the "waiting" state (dim cyan, no ready-color override active).
 		# Bright green (ready) and the window countdown skip this via their own energy values.
 		var emission: float = _slapper_indicator_mat.emission_energy_multiplier
@@ -407,7 +408,7 @@ func set_slapper_indicator(active: bool, offset_x: float = 0.0, offset_z: float 
 		_slapper_indicator.visible = false
 		return
 	var blade_side_sign: float = -1.0 if is_left_handed else 1.0
-	_slapper_indicator.position = Vector3(blade_side_sign * offset_x, 0.05, offset_z)
+	_slapper_indicator.position = Vector3(blade_side_sign * offset_x, 0.0, offset_z)
 	_slapper_indicator_mat.albedo_color = Color(0.3, 0.8, 1.0, 0.35)
 	_slapper_indicator_mat.emission = Color(0.3, 0.8, 1.0)
 	_slapper_indicator_mat.emission_energy_multiplier = 0.4
