@@ -7,6 +7,18 @@ const RESOLUTIONS: Array[Vector2i] = [
 	Vector2i(2560, 1440),
 ]
 const FPS_CAP_VALUES: Array[int] = [30, 60, 120, 144, 240, 0]
+
+# Camera projection modes. Index matches OptionButton ordering in
+# OptionsPanel; GameCamera reads camera_mode each tick to flip projection
+# and pitch.
+const CAMERA_MODE_ORTHOGRAPHIC: int = 0
+const CAMERA_MODE_TOP_DOWN: int = 1   # perspective, looking straight down (the original)
+const CAMERA_MODE_TILTED: int = 2     # perspective, pitched 15° forward of straight down
+const CAMERA_MODE_LABELS: Array[String] = [
+	"Top-Down (Orthographic)",
+	"Top-Down (Perspective)",
+	"Tilted (Perspective)",
+]
 const REBINDABLE_ACTIONS: PackedStringArray = [
 	"move_up", "move_down", "move_left", "move_right", "brake",
 	"shoot", "slapshot", "block", "elevation_up", "elevation_down",
@@ -27,6 +39,7 @@ var fps_cap_index: int = 5
 var brightness: float = 1.0
 var mouse_sensitivity: float = 1.0
 var attack_up: bool = false
+var camera_mode: int = CAMERA_MODE_TOP_DOWN
 var bindings: Dictionary = {}  # action -> {type, physical_keycode or button_index}
 
 func _get_save_path() -> String:
@@ -55,6 +68,7 @@ func save() -> void:
 	cfg.set_value("video", "brightness", brightness)
 	cfg.set_value("input", "mouse_sensitivity", mouse_sensitivity)
 	cfg.set_value("game", "attack_up", attack_up)
+	cfg.set_value("game", "camera_mode", camera_mode)
 	for action: String in REBINDABLE_ACTIONS:
 		if not bindings.has(action):
 			continue
@@ -136,6 +150,7 @@ func _load() -> void:
 		brightness = clampf(cfg.get_value("video", "brightness", 1.0), 0.5, 1.5)
 		mouse_sensitivity = clampf(cfg.get_value("input", "mouse_sensitivity", 1.0), 0.5, 3.0)
 		attack_up = cfg.get_value("game", "attack_up", false)
+		camera_mode = clamp(cfg.get_value("game", "camera_mode", CAMERA_MODE_TOP_DOWN), 0, CAMERA_MODE_LABELS.size() - 1)
 		for action: String in REBINDABLE_ACTIONS:
 			var t: String = cfg.get_value("bindings", action + "_type", "")
 			if t == "key":

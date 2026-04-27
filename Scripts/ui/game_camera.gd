@@ -27,11 +27,9 @@ extends Camera3D
 # ── Smoothing ─────────────────────────────────────────────────────────────────
 @export var smooth_speed: float = 3.0
 
-# ── Projection ────────────────────────────────────────────────────────────────
-# Toggle in the inspector during playtest to A/B perspective vs ortho. Ortho
-# makes head + feet project to the same screen point (no off-center body lean),
-# trading "looking down on people" for "playing on a board."
-@export var use_orthographic: bool = false
+# Tilted-camera pitch. Subtle by design — much steeper than this and the
+# mouse-to-world projection becomes nonlinear enough to break stickhandling.
+const _TILTED_PITCH_DEG: float = -75.0
 
 # ── Goal Context (set via set_goal_context) ───────────────────────────────────
 var _goal_0: HockeyGoal = null  # Team 0's defended goal
@@ -152,20 +150,28 @@ func _physics_process(delta: float) -> void:
 	# ── Step 5: Smooth movement ───────────────────────────────────────────────
 	var target_pos: Vector3 = Vector3(target_center.x, _current_height, target_center.z)
 	global_position = global_position.lerp(target_pos, smooth_speed * delta)
-	var flip_y: float = 180.0 if PlayerPrefs.attack_up and _local_team_id == 1 else 0.0
-	rotation_degrees = Vector3(-90.0, flip_y, 0.0)
 
-	# ── Step 5b: Apply projection ─────────────────────────────────────────────
-	# Ortho size = vertical world units visible. Match the perspective FOV's
-	# vertical extent at the current height so the same play stays in frame
-	# either way; existing zoom math drives both projections identically.
-	if use_orthographic:
-		if projection != PROJECTION_ORTHOGONAL:
-			projection = PROJECTION_ORTHOGONAL
-		size = 2.0 * tan_half_fov * _current_height
-	else:
-		if projection != PROJECTION_PERSPECTIVE:
-			projection = PROJECTION_PERSPECTIVE
+	# ── Step 5b: Apply projection + pitch from PlayerPrefs ────────────────────
+	# Ortho `size` = vertical world units visible; matches the perspective
+	# FOV's vertical extent at the current height so the same zone frames in
+	# both modes. Tilted mode keeps perspective and pitches the camera 15°
+	# forward of straight-down — subtle "looking-down-at-the-action" feel
+	# without breaking mouse-to-world stickhandling linearity.
+	var flip_y: float = 180.0 if PlayerPrefs.attack_up and _local_team_id == 1 else 0.0
+	var pitch: float = -90.0
+	match PlayerPrefs.camera_mode:
+		PlayerPrefs.CAMERA_MODE_ORTHOGRAPHIC:
+			if projection != PROJECTION_ORTHOGONAL:
+				projection = PROJECTION_ORTHOGONAL
+			size = 2.0 * tan_half_fov * _current_height
+		PlayerPrefs.CAMERA_MODE_TOP_DOWN:
+			if projection != PROJECTION_PERSPECTIVE:
+				projection = PROJECTION_PERSPECTIVE
+		PlayerPrefs.CAMERA_MODE_TILTED:
+			if projection != PROJECTION_PERSPECTIVE:
+				projection = PROJECTION_PERSPECTIVE
+			pitch = _TILTED_PITCH_DEG
+	rotation_degrees = Vector3(pitch, flip_y, 0.0)
 
 	# ── Step 6: Shake ─────────────────────────────────────────────────────────
 	if _shake_trauma > 0.0:
