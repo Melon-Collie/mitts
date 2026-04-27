@@ -653,16 +653,31 @@ func _physics_process(delta: float) -> void:
 		var center_offset: float = (n - 1) * 0.5
 		for i: int in n:
 			var theta: float = arc_base_angle + (float(i) - center_offset) * char_angle_rad
-			var dir := Vector3(sin(theta), 0.0, cos(theta))
+			var radial := Vector3(sin(theta), 0.0, cos(theta))
+			# Build the character's basis so it lies flat on the ice (normal
+			# up = +Y world) with its text "up" pointing radially outward
+			# (away from the player center). This makes consecutive letters
+			# tilt to follow the arc curve.
+			# Basis columns: X = right, Y = up, Z = forward (camera-facing).
+			# We want Z = +Y world (text reads from above), Y = radial, X = Y × Z.
 			var label: Label3D = _name_char_labels[i]
-			label.global_position = Vector3(
-					global_position.x + dir.x * _NAME_ARC_RADIUS,
+			var pos := Vector3(
+					global_position.x + radial.x * _NAME_ARC_RADIUS,
 					0.05,
-					global_position.z + dir.z * _NAME_ARC_RADIUS)
+					global_position.z + radial.z * _NAME_ARC_RADIUS)
+			var basis_y: Vector3 = radial            # text-up = radially outward
+			var basis_z: Vector3 = Vector3.UP        # text-front = world up (faces camera)
+			var basis_x: Vector3 = basis_y.cross(basis_z).normalized()
+			label.global_transform = Transform3D(
+					Basis(basis_x, basis_y, basis_z), pos)
 			if i == n - 1:
 				rightmost_angle = theta
 	if _chevron_mesh != null:
+		var was_visible: bool = _chevron_mesh.visible
 		_chevron_mesh.visible = is_elevated and not is_ghost
+		if _chevron_mesh.visible and not was_visible:
+			print("[skater] chevron flipped visible — pos pending, mesh AABB=",
+					_chevron_mesh.get_aabb(), " mat=", _chevron_mesh.material_override)
 		if _chevron_mesh.visible:
 			var chevron_angle: float = rightmost_angle + deg_to_rad(_NAME_CHEVRON_GAP_DEG)
 			var dir := Vector3(sin(chevron_angle), 0.0, cos(chevron_angle))
@@ -786,7 +801,7 @@ func set_player_name(p_name: String) -> void:
 	for i: int in p_name.length():
 		var label := Label3D.new()
 		label.text = p_name.substr(i, 1)
-		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 		label.no_depth_test = false
 		label.fixed_size = false
 		label.font_size = 40

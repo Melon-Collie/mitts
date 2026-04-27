@@ -221,8 +221,10 @@ func _on_body_block_hit(body: Node3D) -> void:
 func _process_input(input: InputState, delta: float) -> void:
 	if input.elevation_up:
 		_is_elevated = true
+		print("[skater] elevation ENABLED — chevron should be visible")
 	if input.elevation_down:
 		_is_elevated = false
+		print("[skater] elevation DISABLED")
 	skater.is_elevated = _is_elevated
 
 	_apply_movement(input, delta)
