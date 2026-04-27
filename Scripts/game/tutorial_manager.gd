@@ -21,22 +21,26 @@ const STEP_QUICK_SHOT:  int = 2
 const STEP_WRIST_SHOT:  int = 3
 const STEP_SLAPSHOT:    int = 4
 const STEP_ONE_TIMER:   int = 5
-const STEP_STICKCHECK:  int = 6
-const STEP_BODY_CHECK:  int = 7
-const STEP_ELEVATION:   int = 8
-const STEP_OFFSIDES:    int = 9
-const STEP_ICING:       int = 10
+const STEP_SHOT_BLOCK:  int = 6
+const STEP_STICKCHECK:  int = 7
+const STEP_BODY_CHECK:  int = 8
+const STEP_ELEVATION:   int = 9
+const STEP_OFFSIDES:    int = 10
+const STEP_ICING:       int = 11
 
 # Duration thresholds for sustained-hold steps
-const _SKATE_HOLD:          float = 1.5
-const _BRAKE_HOLD:          float = 1.0
-const _BLOCK_HOLD:          float = 2.0
+const _SKATE_HOLD:           float = 1.5
+const _BRAKE_HOLD:           float = 1.0
+const _BLOCK_HOLD:           float = 2.0
+const _SHOT_BLOCK_HOLD:      float = 1.0
 # Wrist shot: must hold WRISTER_AIM for this long to distinguish from quick shot
-const _WRIST_HOLD_MIN:      float = 0.4
+const _WRIST_HOLD_MIN:       float = 0.4
 # One-timer puck launch speed (m/s toward player)
 const _ONE_TIMER_PUCK_SPEED: float = 8.0
+# Shot block: puck comes from the offensive zone toward the player's goal
+const _SHOT_BLOCK_PUCK_SPEED: float = 10.0
 # Ice height for puck placement
-const _ICE_Y:               float = 0.05
+const _ICE_Y:                float = 0.05
 
 # ── References ────────────────────────────────────────────────────────────────
 
@@ -126,9 +130,13 @@ func _build_steps() -> void:
 		"Wind up [Slap] before the puck arrives, then release the moment it reaches you.",
 		"Start the Slap windup first — the puck is coming toward you!"))
 	_steps.append(TutorialStep.new(
-		"Stickcheck",
-		"Hold [Block] near the opponent to get into a defensive stance.",
+		"Shot Block",
+		"A shot is coming at you — hold [Block] to get into a deflecting stance.",
 		"Block key is RMB / RB / R1."))
+	_steps.append(TutorialStep.new(
+		"Stickcheck",
+		"Hold [Block] while close to the opponent with the puck to attempt a stickcheck.",
+		"Stay tight to the opponent and hold Block."))
 	_steps.append(TutorialStep.new(
 		"Body Check",
 		"Skate directly into the opponent to body check them.",
@@ -139,12 +147,12 @@ func _build_steps() -> void:
 		"Hold Elevation Up (E / D-Up) before pressing Shoot or Slap."))
 	_steps.append(TutorialStep.new(
 		"Offsides",
-		"You've entered the offensive zone before the puck — you're a ghost! Skate back past the blue line to reset.",
-		"The blue line is the boundary between neutral and offensive zones."))
+		"You're in the offensive zone before the puck — that's offside. Skate back past the blue line to reset!",
+		"The blue line marks the boundary between neutral and offensive zones."))
 	_steps.append(TutorialStep.new(
 		"Icing",
-		"Dump the puck the full length of the ice from your own end — that's icing.",
-		"Shoot from here toward the far goal. A hard shot should do it."))
+		"Shooting the puck the full length of the ice from your own end gives the opponents a faceoff in your zone — that's icing. Try it now.",
+		"Aim for the far end and give it everything. Don't do this in a real game!"))
 
 
 # ── Step sequencing ───────────────────────────────────────────────────────────
@@ -190,10 +198,15 @@ func _begin_step(index: int) -> void:
 				_fire_puck_at_player()
 			_local_controller.puck_release_requested.connect(_on_regular_shot_in_one_timer)
 
+		STEP_SHOT_BLOCK:
+			_local_controller.teleport_to(Vector3(0.0, 1.0, 5.0))
+			_fire_puck_for_shot_block()
+
 		STEP_STICKCHECK:
 			_local_controller.teleport_to(Vector3(0.0, 1.0, 2.0))
-			_place_puck(Vector3(100.0, _ICE_Y, 100.0))
 			_ensure_dummy(Vector3(0.0, 1.0, 0.0))
+			# Puck near the dummy so the stickcheck context makes sense
+			_place_puck(Vector3(0.0, _ICE_Y, 0.2))
 
 		STEP_BODY_CHECK:
 			_local_controller.teleport_to(Vector3(-4.0, 1.0, 0.0))
@@ -234,6 +247,8 @@ func _advance_step() -> void:
 
 
 func _on_skip() -> void:
+	if _current_step in [STEP_SHOT_BLOCK]:
+		_place_puck(Vector3(100.0, _ICE_Y, 100.0))  # clear the in-flight puck
 	if _current_step in [STEP_STICKCHECK, STEP_BODY_CHECK]:
 		_free_dummy()
 	_complete_step()
@@ -289,6 +304,20 @@ func _process(delta: float) -> void:
 			else:
 				_step_timer = 0.0
 
+		STEP_SHOT_BLOCK:
+			# Complete when player holds the block stance for long enough
+			if _local_controller.get_shot_state() == 6:  # SHOT_BLOCKING
+				_step_timer += delta
+				if _step_timer >= _SHOT_BLOCK_HOLD:
+					_complete_step()
+			else:
+				_step_timer = 0.0
+			# Re-fire if puck passed the player or stopped before reaching them
+			if _puck.carrier == null:
+				var puck_z: float = _puck.get_puck_position().z
+				if puck_z > _skater.global_position.z + 4.0:
+					_fire_puck_for_shot_block()
+
 		STEP_STICKCHECK:
 			if _local_controller.get_current_input().block_held:
 				_step_timer += delta
@@ -311,8 +340,8 @@ func _process(delta: float) -> void:
 					_offside_ghost_seen = true
 					_hud.set_step(_current_step, _steps.size(),
 						"Offsides",
-						"You're a ghost — the puck can't find you. Skate back past the blue line to reset.",
-						"Cross the blue line heading back toward your own end.")
+						"Now you're a ghost — passes skip right over you. Cross back past the blue line to tag up!",
+						"Head toward your own end and cross the blue line.")
 			else:
 				if not _skater.is_ghost:
 					_complete_step()
@@ -371,6 +400,15 @@ func _place_puck(pos: Vector3) -> void:
 	_puck.set_puck_position(pos)
 	# Velocity: Jolt zeroes it on the first dynamic step after unfreeze, which is fine.
 	_puck.linear_velocity = Vector3.ZERO
+
+
+# Fires the puck from the offensive zone toward the player's goal for the shot-block step.
+# Player is at z≈5 (own half); puck comes from z=-8 in the +Z direction.
+func _fire_puck_for_shot_block() -> void:
+	if _puck.carrier != null:
+		_puck.drop()
+	_puck.set_puck_position(Vector3(0.0, _ICE_Y, -8.0))
+	_puck.apply_release_velocity(Vector3(0.0, 0.001, _SHOT_BLOCK_PUCK_SPEED))
 
 
 # Fires the puck from z=+15 toward the player at z=-3 for the one-timer step.

@@ -117,6 +117,9 @@ func start_offline() -> void:
 
 func start_tutorial() -> void:
 	is_tutorial_mode = true
+	# Pre-assign team 0, slot 0 so the player always spawns as the home team.
+	# on_host_started reads pending_lobby_slots[1] and skips the random assignment path.
+	pending_lobby_slots[1] = {"team_id": 0, "team_slot": 0}
 	start_offline()
 
 
