@@ -311,6 +311,7 @@ func _ready() -> void:
 
 	_chevron_mesh = MeshInstance3D.new()
 	_chevron_mesh.name = "ElevatedChevron"
+	_chevron_mesh.top_level = true
 	_chevron_mesh.mesh = _create_chevron_mesh()
 	_chevron_mesh.material_override = _make_hud_ice_material()
 	_chevron_mesh.visible = false
@@ -328,10 +329,9 @@ func _ready() -> void:
 	_name_label.no_depth_test = false
 	_name_label.fixed_size = false
 	_name_label.font_size = 36
-	_name_label.outline_size = 6
+	_name_label.outline_size = 0
 	_name_label.modulate = Color(MenuStyle.HUD_ICE.r, MenuStyle.HUD_ICE.g,
 			MenuStyle.HUD_ICE.b, MenuStyle.HUD_OPACITY)
-	_name_label.outline_modulate = Color(0.0, 0.0, 0.0, MenuStyle.HUD_OPACITY)
 	_name_label.pixel_size = 0.005
 	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_name_label)
@@ -437,19 +437,23 @@ func _create_ring_mesh_with_uv(inner_r: float, outer_r: float, segments: int) ->
 # camera-forward). Thickness uses MenuStyle.HUD_LINE_THIN so it visually
 # matches the slot ring stroke.
 func _create_chevron_mesh() -> ArrayMesh:
+	# Built at the origin pointing UP in screen-space (vertex tip toward -Z in
+	# the chevron's local frame). The mesh is repositioned each tick from
+	# _physics_process using camera-aware screen axes.
 	var size: float = 0.18                       # full chevron height/width
-	var z_offset: float = -RING_OUTER_R - 0.10   # in front of player ring (camera-side)
 	var leg_len: float = size * 0.7
 	var thickness: float = MenuStyle.HUD_LINE_THIN
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var indices := PackedInt32Array()
 
-	# Build a leg as a thin XZ rectangle, rotate it 45° about Y, place it.
-	# Each leg is a quad — 4 verts, 2 triangles.
+	# Two legs of a "^" meeting at origin, each angled 45° off the chevron's
+	# local +Z axis. After the per-tick world transform places the chevron at
+	# the right of the name label and rotates it to face screen-up, the legs
+	# read as an upward chevron regardless of camera flip.
 	var legs: Array = [
-		{ "rot": deg_to_rad(45.0),  "anchor": Vector3(0.0, 0.0, z_offset) },
-		{ "rot": deg_to_rad(-45.0), "anchor": Vector3(0.0, 0.0, z_offset) },
+		{ "rot": deg_to_rad(135.0), "anchor": Vector3.ZERO },
+		{ "rot": deg_to_rad(-135.0), "anchor": Vector3.ZERO },
 	]
 	for leg: Dictionary in legs:
 		var rot_y: float = leg.rot
@@ -476,9 +480,10 @@ func _create_chevron_mesh() -> ArrayMesh:
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh
 
-# Outline arrow drawn flat on the ice, pointing along +Z. Built from four thin
-# rectangles: two shaft sides + two arrowhead sides (no base — open shape).
-# Used for the slapshot direction indicator.
+# Outline arrow drawn flat on the ice, pointing along +Z. Six edges form a
+# closed arrow shape with the base (z = 0) left open: two shaft sides + two
+# shoulder segments (where the shaft widens into the head) + two head
+# diagonals meeting at the tip. Drawn as thin strips, one per edge.
 func _create_arrow_mesh() -> MeshInstance3D:
 	var shaft_len: float = 0.55
 	var head_len: float  = 0.18
@@ -489,34 +494,38 @@ func _create_arrow_mesh() -> MeshInstance3D:
 	var normals := PackedVector3Array()
 	var indices := PackedInt32Array()
 
-	# Two shaft sides: parallel rectangles running from z=0 to z=shaft_len at
-	# x = ±shaft_half_w. Width of each rectangle is `thickness` along x.
-	for sign_x: float in [-1.0, 1.0]:
-		var x0: float = sign_x * (shaft_half_w - thickness * 0.5)
-		var x1: float = sign_x * (shaft_half_w + thickness * 0.5)
-		var z0: float = 0.0
-		var z1: float = shaft_len
-		_append_quad(verts, normals, indices, x0, z0, x1, z0, x1, z1, x0, z1)
-
-	# Two arrowhead sides: from (±shaft_half_w, shaft_len) widening to
-	# (±head_half_w, shaft_len) and tapering to (0, shaft_len + head_len).
-	# Drawn as a thin strip along the diagonal edge.
 	var tip := Vector2(0.0, shaft_len + head_len)
+
+	# Shape edges, each a 2D segment in (x, z). Drawn as a thin strip of width
+	# `thickness` perpendicular to the segment direction.
+	var edges: Array[Array] = []
 	for sign_x: float in [-1.0, 1.0]:
-		var base_outer := Vector2(sign_x * head_half_w, shaft_len)
-		# Edge runs from base_outer to tip. Build a thin rectangle along it.
-		var edge: Vector2 = tip - base_outer
+		var shaft_base   := Vector2(sign_x * shaft_half_w, 0.0)
+		var shaft_top    := Vector2(sign_x * shaft_half_w, shaft_len)
+		var head_shoulder := Vector2(sign_x * head_half_w,  shaft_len)
+		# Shaft side: base → shoulder-base
+		edges.append([shaft_base, shaft_top])
+		# Shoulder: shaft top → head outer corner (perpendicular to shaft)
+		edges.append([shaft_top, head_shoulder])
+		# Head diagonal: head outer corner → tip
+		edges.append([head_shoulder, tip])
+
+	for edge_pair: Array in edges:
+		var a_pt: Vector2 = edge_pair[0]
+		var b_pt: Vector2 = edge_pair[1]
+		var edge: Vector2 = b_pt - a_pt
 		var edge_len: float = edge.length()
 		if edge_len < 0.0001:
 			continue
 		var edge_dir: Vector2 = edge / edge_len
 		var edge_perp := Vector2(-edge_dir.y, edge_dir.x)
 		var half_t: float = thickness * 0.5
-		var a: Vector2 = base_outer + edge_perp * half_t
-		var b: Vector2 = base_outer - edge_perp * half_t
-		var c: Vector2 = tip - edge_perp * half_t
-		var d: Vector2 = tip + edge_perp * half_t
-		_append_quad(verts, normals, indices, a.x, a.y, b.x, b.y, c.x, c.y, d.x, d.y)
+		var p0: Vector2 = a_pt + edge_perp * half_t
+		var p1: Vector2 = a_pt - edge_perp * half_t
+		var p2: Vector2 = b_pt - edge_perp * half_t
+		var p3: Vector2 = b_pt + edge_perp * half_t
+		_append_quad(verts, normals, indices,
+				p0.x, p0.y, p1.x, p1.y, p2.x, p2.y, p3.x, p3.y)
 
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
@@ -553,6 +562,22 @@ func _make_hud_ice_material() -> StandardMaterial3D:
 	mat.albedo_color = Color(MenuStyle.HUD_ICE.r, MenuStyle.HUD_ICE.g,
 			MenuStyle.HUD_ICE.b, MenuStyle.HUD_OPACITY)
 	return mat
+
+# World XZ direction that maps to "down" on the local player's screen. The
+# game camera looks straight down (rotation X = -90°) with an optional 180°
+# Y flip when PlayerPrefs.attack_up + away team. The camera's basis Y, in that
+# pose, points along world +Z (no flip) or -Z (flip); we want screen-DOWN
+# which is the negation, projected to XZ. Falls back to +Z when there's no
+# active camera (e.g. during early load).
+func _hud_screen_down_xz() -> Vector2:
+	var cam: Camera3D = get_viewport().get_camera_3d() if get_viewport() != null else null
+	if cam == null:
+		return Vector2(0.0, 1.0)
+	var up_world: Vector3 = cam.global_transform.basis.y
+	var down := Vector2(-up_world.x, -up_world.z)
+	if down.length_squared() < 0.0001:
+		return Vector2(0.0, 1.0)
+	return down.normalized()
 
 func _make_charge_ring_material() -> ShaderMaterial:
 	var shader := Shader.new()
@@ -606,12 +631,34 @@ func _physics_process(delta: float) -> void:
 		body_check_impulse_applied.emit(body_check_delta)
 	if _ring_mesh != null:
 		_ring_mesh.global_position.y = 0.05
+	# Camera-aware screen axes for the name + chevron. The game camera looks
+	# straight down with an optional 180° Y flip (PlayerPrefs.attack_up); both
+	# elements need to honor that flip so they always sit "below" the skater
+	# in screen space. Falls back to +Z world-down if there's no active camera.
+	var screen_down: Vector2 = _hud_screen_down_xz()
+	# Screen-right in world XZ = 90° clockwise of screen-down (standard screen
+	# orientation where +X right, +Y down). Down=(0,1) → right=(1,0). ✓
+	var screen_right := Vector2(screen_down.y, -screen_down.x)
 	if _name_label != null and _name_label.visible:
-		# top_level: write absolute world transform every tick so the label
-		# position decouples from skater rotation. +Z world-offset by ring
-		# radius + a small pad so it sits just past the slot ring on the ice.
+		var name_offset: float = RING_OUTER_R + 0.18
 		_name_label.global_position = Vector3(
-				global_position.x, 0.05, global_position.z + RING_OUTER_R + 0.18)
+				global_position.x + screen_down.x * name_offset,
+				0.05,
+				global_position.z + screen_down.y * name_offset)
+	if _chevron_mesh != null:
+		_chevron_mesh.visible = is_elevated and not is_ghost
+		if _chevron_mesh.visible:
+			# Sit to the right of the name label, with chevron's local "up"
+			# (vertex tip toward -Z) aligned to screen-up.
+			var name_offset_c: float = RING_OUTER_R + 0.18
+			var right_offset: float = 0.18
+			var pos_xz := Vector2(global_position.x, global_position.z) \
+					+ screen_down * name_offset_c \
+					+ screen_right * right_offset
+			_chevron_mesh.global_position = Vector3(pos_xz.x, 0.05, pos_xz.y)
+			# screen_down points along the chevron's +Z; rotate so the legs
+			# open in that direction (point reads "up" in screen space).
+			_chevron_mesh.rotation = Vector3(0.0, atan2(screen_down.x, screen_down.y), 0.0)
 	if _charge_ring_mesh != null and _charge_ring_mesh.visible:
 		_charge_ring_mesh.global_position.y = 0.05
 		var pulse_amount: float = 0.0
@@ -627,10 +674,6 @@ func _physics_process(delta: float) -> void:
 		# Auto-hide once the lost flash has finished and there's nothing to show.
 		if shot_charge <= 0.001 and lost_t <= 0.001 and not _charge_ring_visible:
 			_charge_ring_mesh.visible = false
-	if _chevron_mesh != null:
-		_chevron_mesh.visible = is_elevated and not is_ghost
-		if _chevron_mesh.visible:
-			_chevron_mesh.global_position.y = 0.05
 	if _slapper_indicator != null and _slapper_indicator.visible:
 		_slapper_indicator.global_position.y = 0.05
 	if _slapper_arrow_root != null and _slapper_arrow_root.visible:
