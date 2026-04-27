@@ -138,16 +138,18 @@ const _CHARGE_LOST_FLASH_DURATION: float = 0.35
 # are tuned for readability at typical hockey camera height.
 const _NAME_ARC_RADIUS: float = RING_OUTER_R + 0.22
 const _NAME_CHAR_ANGLE_DEG: float = 7.0
-# Chevron sits inside the name arc, directly along the screen-down axis,
-# so it's the most prominent thing below the slot ring.
-const _CHEVRON_RADIUS: float = RING_OUTER_R + 0.08
+# Chevron sits at the same arc radius as the name, just past the
+# end-of-name on the side opposite the player's stick (so it's never
+# behind the blade/stick visual). Angular gap from the last/first letter.
+const _CHEVRON_RADIUS: float = RING_OUTER_R + 0.22
+const _CHEVRON_GAP_DEG: float = 9.0
 
 # Charge ring shader: angle-mask + tri-color blend. Fill goes clockwise from 12
 # o'clock as viewed from above. UV.x of the procedural ring encodes 0..1
 # clockwise; fragment discards above `fill`. Lost-flash overrides fill color.
 const _CHARGE_RING_SHADER_CODE := """
 shader_type spatial;
-render_mode unshaded, blend_mix, depth_draw_opaque, cull_disabled;
+render_mode unshaded, blend_mix, depth_draw_opaque, depth_test_disabled, cull_disabled;
 
 uniform float fill : hint_range(0.0, 1.0) = 0.0;
 uniform float pulse : hint_range(0.0, 1.0) = 0.0;       // 1.0 at full charge → modulates alpha
@@ -563,10 +565,14 @@ func _append_quad(
 
 # Solid ice-blue material at HUD opacity, unshaded, alpha-blended. Shared by
 # every HUD-on-ice element except the charge ring (which has its own shader).
+# `no_depth_test = true` so the player's body / stick / blade never occlude
+# the HUD when the camera looks straight down through them.
 func _make_hud_ice_material() -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.no_depth_test = true
+	mat.render_priority = 1
 	mat.albedo_color = Color(MenuStyle.HUD_ICE.r, MenuStyle.HUD_ICE.g,
 			MenuStyle.HUD_ICE.b, MenuStyle.HUD_OPACITY)
 	return mat
@@ -678,13 +684,21 @@ func _physics_process(delta: float) -> void:
 	if _chevron_mesh != null:
 		_chevron_mesh.visible = is_elevated and not is_ghost
 		if _chevron_mesh.visible:
-			# Sit directly along the screen-down axis between the slot ring
-			# and the name arc. Tip points toward the player (legs extend
-			# outward), reading as an upward chevron in screen space.
+			# Place the chevron just past the end of the name on the side
+			# OPPOSITE the player's stick: lefty's stick is on -X local, so
+			# chevron sits on +X-side of the name arc (and vice versa).
+			# arc_base_angle is screen-down direction; +offset rotates the
+			# arc clockwise as viewed from above (toward +X for arc_base=0).
+			var side_sign: float = 1.0 if is_left_handed else -1.0
+			var name_half_sweep_deg: float = float(maxi(n - 1, 0)) * 0.5 * _NAME_CHAR_ANGLE_DEG
+			var chevron_angle: float = arc_base_angle + side_sign * deg_to_rad(name_half_sweep_deg + _CHEVRON_GAP_DEG)
+			var dir := Vector3(sin(chevron_angle), 0.0, cos(chevron_angle))
 			_chevron_mesh.global_position = Vector3(
-					global_position.x + screen_down.x * _CHEVRON_RADIUS,
+					global_position.x + dir.x * _CHEVRON_RADIUS,
 					0.05,
-					global_position.z + screen_down.y * _CHEVRON_RADIUS)
+					global_position.z + dir.z * _CHEVRON_RADIUS)
+			# Keep the chevron's "up" aligned with screen-up regardless of
+			# its angular position on the arc.
 			_chevron_mesh.rotation = Vector3(0.0, arc_base_angle, 0.0)
 	if _charge_ring_mesh != null and _charge_ring_mesh.visible:
 		_charge_ring_mesh.global_position.y = 0.05
@@ -800,7 +814,8 @@ func set_player_name(p_name: String) -> void:
 		var label := Label3D.new()
 		label.text = p_name.substr(i, 1)
 		label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
-		label.no_depth_test = false
+		label.no_depth_test = true
+		label.render_priority = 1
 		label.fixed_size = false
 		label.font_size = 40
 		label.outline_size = 0
