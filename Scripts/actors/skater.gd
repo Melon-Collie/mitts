@@ -112,10 +112,8 @@ const _SLAPPER_ARM_DIRS: Array[Vector3] = [
 	Vector3(0, 0, 1), Vector3(0, 0, -1),
 ]
 # All arm constants are in unit (1 m) space; _slapper_indicator.scale applies radius.
-const _SLAPPER_ARM_WIDTH: float      = 0.10   # arm width
-const _SLAPPER_ARM_CENTER_GAP: float = 0.08   # inner tip at ratio = 1 (fully extended)
-const _SLAPPER_ARM_OUTER_FULL: float = 1.00   # outer tip at ratio = 1
-const _SLAPPER_ARM_OUTER_MIN: float  = 0.20   # outer tip at ratio = 0 (converged)
+const _SLAPPER_ARM_WIDTH: float  = 0.10  # arm width
+const _SLAPPER_ARM_LENGTH: float = 0.30  # fixed arm length; arms slide, don't resize
 var _facing: Vector2 = Vector2.DOWN
 var is_elevated: bool = false
 var is_ghost: bool = false
@@ -262,7 +260,7 @@ func _ready() -> void:
 	for i: int in _SLAPPER_ARM_DIRS.size():
 		var arm := MeshInstance3D.new()
 		var box := BoxMesh.new()
-		box.size = Vector3(_SLAPPER_ARM_WIDTH, 0.005, 1.0)
+		box.size = Vector3(_SLAPPER_ARM_WIDTH, 0.005, _SLAPPER_ARM_LENGTH)
 		arm.mesh = box
 		arm.material_override = _slapper_indicator_mat
 		arm.rotation_degrees.y = arm_y_rots[i]
@@ -298,19 +296,15 @@ func _create_ring_mesh(inner_r: float, outer_r: float, segments: int) -> ArrayMe
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh
 
-# Slides the four arm nodes to visualise puck proximity.
-# ratio = 1.0: puck at zone edge, arms fully extended.
-# ratio = 0.0: puck at zone centre, arms converged to short stubs.
+# Slides the four fixed-length arms to visualise puck proximity.
+# ratio = 1.0: puck at zone edge, arms at zone boundary.
+# ratio = 0.0: puck at zone centre, arms slid inward pointing at centre.
 func update_slapper_indicator_convergence(ratio: float) -> void:
 	var r: float = clampf(ratio, 0.0, 1.0)
-	var inner_tip: float = _SLAPPER_ARM_CENTER_GAP * r
-	var outer_tip: float = lerpf(_SLAPPER_ARM_OUTER_MIN, _SLAPPER_ARM_OUTER_FULL, r)
-	var arm_len: float = outer_tip - inner_tip
-	var arm_center: float = inner_tip + arm_len * 0.5
+	var inner_tip: float = lerpf(0.0, 1.0 - _SLAPPER_ARM_LENGTH, r)
+	var arm_center: float = inner_tip + _SLAPPER_ARM_LENGTH * 0.5
 	for i: int in _slapper_arm_nodes.size():
-		var arm: MeshInstance3D = _slapper_arm_nodes[i]
-		arm.position = _SLAPPER_ARM_DIRS[i] * arm_center
-		arm.scale.z = arm_len
+		_slapper_arm_nodes[i].position = _SLAPPER_ARM_DIRS[i] * arm_center
 
 func _resolve_or_create_bone_mesh(node_name: String) -> MeshInstance3D:
 	var existing: MeshInstance3D = upper_body.get_node_or_null(node_name) as MeshInstance3D
