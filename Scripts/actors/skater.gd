@@ -138,7 +138,9 @@ const _CHARGE_LOST_FLASH_DURATION: float = 0.35
 # are tuned for readability at typical hockey camera height.
 const _NAME_ARC_RADIUS: float = RING_OUTER_R + 0.22
 const _NAME_CHAR_ANGLE_DEG: float = 7.0
-const _NAME_CHEVRON_GAP_DEG: float = 7.0
+# Chevron sits inside the name arc, directly along the screen-down axis,
+# so it's the most prominent thing below the slot ring.
+const _CHEVRON_RADIUS: float = RING_OUTER_R + 0.08
 
 # Charge ring shader: angle-mask + tri-color blend. Fill goes clockwise from 12
 # o'clock as viewed from above. UV.x of the procedural ring encodes 0..1
@@ -444,7 +446,7 @@ func _create_chevron_mesh() -> ArrayMesh:
 	# Built at the origin pointing UP in screen-space (vertex tip toward -Z in
 	# the chevron's local frame). The mesh is repositioned each tick from
 	# _physics_process using camera-aware screen axes.
-	var size: float = 0.28                       # full chevron height/width (bigger so it reads at 15m camera)
+	var size: float = 0.45                       # full chevron height/width
 	var leg_len: float = size * 0.7
 	var thickness: float = MenuStyle.HUD_LINE_THICK
 	var verts := PackedVector3Array()
@@ -648,7 +650,6 @@ func _physics_process(delta: float) -> void:
 	var arc_base_angle: float = atan2(screen_down.x, screen_down.y)
 	var char_angle_rad: float = deg_to_rad(_NAME_CHAR_ANGLE_DEG)
 	var n: int = _name_char_labels.size()
-	var rightmost_angle: float = arc_base_angle
 	if n > 0:
 		var center_offset: float = (n - 1) * 0.5
 		for i: int in n:
@@ -672,19 +673,16 @@ func _physics_process(delta: float) -> void:
 			var basis_x: Vector3 = basis_y.cross(basis_z).normalized()
 			label.global_transform = Transform3D(
 					Basis(basis_x, basis_y, basis_z), pos)
-			if i == n - 1:
-				rightmost_angle = theta
 	if _chevron_mesh != null:
 		_chevron_mesh.visible = is_elevated and not is_ghost
 		if _chevron_mesh.visible:
-			var chevron_angle: float = rightmost_angle + deg_to_rad(_NAME_CHEVRON_GAP_DEG)
-			var dir := Vector3(sin(chevron_angle), 0.0, cos(chevron_angle))
+			# Sit directly along the screen-down axis between the slot ring
+			# and the name arc. Tip points toward the player (legs extend
+			# outward), reading as an upward chevron in screen space.
 			_chevron_mesh.global_position = Vector3(
-					global_position.x + dir.x * _NAME_ARC_RADIUS,
+					global_position.x + screen_down.x * _CHEVRON_RADIUS,
 					0.05,
-					global_position.z + dir.z * _NAME_ARC_RADIUS)
-			# Chevron's local +Z must align with screen-down so the legs open
-			# downward and the tip reads "up" in screen space.
+					global_position.z + screen_down.y * _CHEVRON_RADIUS)
 			_chevron_mesh.rotation = Vector3(0.0, arc_base_angle, 0.0)
 	if _charge_ring_mesh != null and _charge_ring_mesh.visible:
 		_charge_ring_mesh.global_position.y = 0.05
