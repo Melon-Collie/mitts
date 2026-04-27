@@ -231,6 +231,7 @@ func on_player_connected(peer_id: int) -> void:
 		"ot_duration": _state_machine.ot_duration,
 		"home_color_id": NetworkManager.pending_home_color_id,
 		"away_color_id": NetworkManager.pending_away_color_id,
+		"rule_set": _state_machine.rule_set,
 	}
 	NetworkManager.send_join_in_progress(peer_id, config)
 	NetworkManager.send_slot_assignment(peer_id, assignment.team_slot, team.team_id,
@@ -302,7 +303,8 @@ func _spawn_world() -> void:
 	_state_machine = GameStateMachine.new()
 	if not NetworkManager.pending_game_config.is_empty():
 		var cfg: Dictionary = NetworkManager.pending_game_config
-		_state_machine.apply_config(cfg.num_periods, cfg.period_duration, cfg.ot_enabled, cfg.ot_duration)
+		_state_machine.apply_config(cfg.num_periods, cfg.period_duration, cfg.ot_enabled, cfg.ot_duration,
+				cfg.get("rule_set", GameRules.DEFAULT_RULE_SET))
 		NetworkManager.pending_game_config = {}
 	_spawner = ActorSpawner.new()
 	_spawner.setup(get_tree().current_scene)
@@ -1228,6 +1230,10 @@ func get_period_duration() -> float:
 
 func get_num_periods() -> int:
 	return _state_machine.num_periods if _state_machine != null else GameRules.NUM_PERIODS
+
+
+func get_rule_set() -> int:
+	return _state_machine.rule_set if _state_machine != null else GameRules.DEFAULT_RULE_SET
 
 
 func get_period_scores() -> Array:

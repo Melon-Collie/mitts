@@ -284,6 +284,9 @@ func _update_one_timer_indicator() -> void:
 func _predict_offside() -> void:
 	if _is_host:
 		return  # Host computes authoritatively in GameManager
+	# OFF preset disables offside detection entirely; matches host behavior.
+	if GameManager.get_rule_set() == GameRules.RuleSet.OFF:
+		return
 	var is_carrier: bool = puck.carrier == skater
 	var offside: bool = InfractionRules.is_offside(
 		skater.global_position.z, _team_id, puck.global_position.z, is_carrier)
