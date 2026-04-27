@@ -444,10 +444,10 @@ func set_slapper_indicator(active: bool, offset_x: float = 0.0, offset_z: float 
 	_slapper_indicator.visible = true
 	update_slapper_indicator_convergence(1.0)
 
-func set_slapper_indicator_ready(ready: bool) -> void:
+func set_slapper_indicator_ready(is_ready: bool) -> void:
 	if not _slapper_indicator.visible:
 		return
-	if ready:
+	if is_ready:
 		_slapper_indicator_mat.albedo_color = Color(0.2, 1.0, 0.3, 0.6)
 		_slapper_indicator_mat.emission = Color(0.2, 1.0, 0.3)
 		_slapper_indicator_mat.emission_energy_multiplier = 1.5
