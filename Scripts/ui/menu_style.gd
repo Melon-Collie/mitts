@@ -46,9 +46,10 @@ const GOLD        := Color(1.00, 0.85, 0.20, 1.00)
 # Shared by every element drawn flat on the ice under a skater. All three
 # values are referenced by Skater for procedural mesh construction; tweak here
 # rather than per-element.
-const HUD_ICE       := ICE                # primary stroke color for all on-ice HUD
-const HUD_OPACITY   := 0.70               # 60–75% range — single tunable
-const HUD_LINE_THIN := 0.02               # "thin line" thickness in 3D meters
+const HUD_ICE        := ICE                # primary stroke color for all on-ice HUD
+const HUD_OPACITY    := 0.70               # 60–75% range — single tunable
+const HUD_LINE_THIN  := 0.02               # "thin line" thickness in 3D meters (slot ring, reticle)
+const HUD_LINE_THICK := 0.045              # heavier stroke for symbols (arrow, chevron)
 
 # Charge-ring fill colors. Lerps from CHARGE_LOW → CHARGE_HIGH across the fill;
 # CHARGE_FULL pulses at 100%; CHARGE_LOST flashes briefly when charge is
