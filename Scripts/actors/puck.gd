@@ -55,6 +55,7 @@ func _ready() -> void:
 	# Mask = LAYER_WALLS only: bounces off boards + goalie bodies, not skater bodies.
 	collision_layer = Constants.LAYER_PUCK
 	collision_mask  = Constants.MASK_PUCK
+	continuous_cd = true
 	process_physics_priority = 1  # Run after Skater.move_and_slide so blade world pos is current
 	contact_monitor = true
 	max_contacts_reported = 4
