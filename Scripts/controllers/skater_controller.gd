@@ -251,12 +251,6 @@ func _process_input(input: InputState, delta: float) -> void:
 		_upper_body_angular_velocity = angle_difference(_prev_upper_body_angle_for_vel, _upper_body_angle) / delta
 		_prev_facing_angle = cur_fa
 		_prev_upper_body_angle_for_vel = _upper_body_angle
-	if show_one_timer_indicator and _sm.get_state() == State.SLAPPER_CHARGE_WITHOUT_PUCK:
-		var zone_world: Vector3 = skater.get_slapper_zone_global_position()
-		var zone_xz := Vector2(zone_world.x, zone_world.z)
-		var puck_xz := Vector2(puck.global_position.x, puck.global_position.z)
-		var ratio: float = clampf(zone_xz.distance_to(puck_xz) / slapper_zone_radius, 0.0, 1.0)
-		skater.update_slapper_indicator_convergence(ratio)
 
 # ── Network State ─────────────────────────────────────────────────────────────
 # Returns the typed network state object. Flattening to Array happens at the
@@ -307,6 +301,7 @@ func on_puck_picked_up_network() -> void:
 		_aiming.one_timer_window_timer = one_timer_window_duration + NetworkManager.get_latest_rtt_ms() / 2000.0
 		_sm.set_state(State.SLAPPER_CHARGE_WITH_PUCK)
 		if show_one_timer_indicator:
+			skater.update_slapper_indicator_convergence(1.0)
 			skater.update_slapper_indicator_window(1.0)
 	else:
 		_sm.set_state(State.SKATING_WITH_PUCK)
