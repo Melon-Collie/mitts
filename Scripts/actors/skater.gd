@@ -493,7 +493,7 @@ func _create_arrow_mesh() -> MeshInstance3D:
 	var head_len: float  = 0.18
 	var head_half_w: float = 0.16
 	var shaft_half_w: float = 0.05
-	var thickness: float = MenuStyle.HUD_LINE_THICK
+	var thickness: float = MenuStyle.HUD_LINE_THIN
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var indices := PackedInt32Array()
