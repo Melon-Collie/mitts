@@ -12,7 +12,7 @@ var _start_btn: Button = null
 var _ready_btn: Button = null
 var _periods_spin: SpinBox = null
 var _dur_spin: SpinBox = null
-var _ot_check: CheckButton = null
+var _ot_check: Button = null
 var _rules_btn: OptionButton = null
 
 # key = peer_id → bool; tracks non-host peers only (host uses Start instead)
@@ -201,8 +201,11 @@ func _build_settings_panel() -> Control:
 	grid.add_child(_dur_spin)
 
 	grid.add_child(_setting_label("Overtime"))
-	_ot_check = CheckButton.new()
-	_ot_check.button_pressed = _ot_enabled
+	_ot_check = Button.new()
+	_ot_check.set_pressed_no_signal(_ot_enabled)
+	_ot_check.add_theme_font_size_override("font_size", 18)
+	MenuStyle.apply_toggle(_ot_check)
+	SoundManager.wire_button(_ot_check)
 	_ot_check.disabled = not is_interactive
 	if is_interactive:
 		_ot_check.toggled.connect(func(pressed: bool) -> void:
@@ -214,9 +217,13 @@ func _build_settings_panel() -> Control:
 
 	grid.add_child(_setting_label("Rules"))
 	_rules_btn = OptionButton.new()
+	_rules_btn.custom_minimum_size = Vector2(160, 48)
+	_rules_btn.add_theme_font_size_override("font_size", 18)
 	for i: int in range(GameRules.RULE_SET_NAMES.size()):
 		_rules_btn.add_item(GameRules.RULE_SET_NAMES[i], i)
 	_rules_btn.select(_rule_set)
+	MenuStyle.apply_button(_rules_btn)
+	SoundManager.wire_button(_rules_btn)
 	_rules_btn.disabled = not is_interactive
 	if is_interactive:
 		_rules_btn.item_selected.connect(func(idx: int) -> void:
@@ -259,11 +266,15 @@ func _scale_btn(btn: Button, target: Vector2) -> void:
 
 func _color_option_btn(selected_id: String) -> OptionButton:
 	var btn := OptionButton.new()
+	btn.custom_minimum_size = Vector2(160, 48)
+	btn.add_theme_font_size_override("font_size", 18)
 	var ids: Array[String] = TeamColorRegistry.get_all_ids()
 	for i: int in ids.size():
 		btn.add_item(TeamColorRegistry.get_preset_name(ids[i]), i)
 		if ids[i] == selected_id:
 			btn.select(i)
+	MenuStyle.apply_button(btn)
+	SoundManager.wire_button(btn)
 	return btn
 
 func _sync_option_btn(btn: OptionButton, id: String) -> void:
@@ -502,7 +513,8 @@ func _on_lobby_settings_synced(num_periods: int, period_duration: float, ot_enab
 	if _dur_spin != null:
 		_dur_spin.value = _period_duration / 60.0
 	if _ot_check != null:
-		_ot_check.button_pressed = _ot_enabled
+		_ot_check.set_pressed_no_signal(_ot_enabled)
+		MenuStyle.sync_toggle(_ot_check)
 	if _rules_btn != null:
 		_rules_btn.select(_rule_set)
 
