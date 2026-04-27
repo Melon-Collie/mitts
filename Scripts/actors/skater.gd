@@ -104,6 +104,16 @@ signal body_check_impulse_applied(impulse: Vector3)
 signal body_block_hit(body: Node3D)
 # ── Runtime ───────────────────────────────────────────────────────────────────
 var _ring_mesh: MeshInstance3D = null
+var _slapper_indicator: Node3D = null
+var _slapper_indicator_mat: StandardMaterial3D = null
+var _slapper_arm_nodes: Array[MeshInstance3D] = []
+const _SLAPPER_ARM_DIRS: Array[Vector3] = [
+	Vector3(1, 0, 0), Vector3(-1, 0, 0),
+	Vector3(0, 0, 1), Vector3(0, 0, -1),
+]
+# All arm constants are in unit (1 m) space; _slapper_indicator.scale applies radius.
+const _SLAPPER_ARM_WIDTH: float  = 0.10  # arm width
+const _SLAPPER_ARM_LENGTH: float = 0.30  # fixed arm length; arms slide, don't resize
 var _facing: Vector2 = Vector2.DOWN
 var is_elevated: bool = false
 var is_ghost: bool = false
@@ -237,6 +247,27 @@ func _ready() -> void:
 	_ring_mesh.visible = false
 	add_child(_ring_mesh)
 
+	_slapper_indicator = Node3D.new()
+	_slapper_indicator.name = "SlapperIndicator"
+	_slapper_indicator.visible = false
+	add_child(_slapper_indicator)
+	_slapper_indicator_mat = StandardMaterial3D.new()
+	_slapper_indicator_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_slapper_indicator_mat.emission_enabled = true
+	_slapper_indicator_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	# Y rotations that align each arm's local +Z with its world direction.
+	var arm_y_rots: Array[float] = [90.0, -90.0, 0.0, 180.0]
+	for i: int in _SLAPPER_ARM_DIRS.size():
+		var arm := MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = Vector3(_SLAPPER_ARM_WIDTH, 0.005, _SLAPPER_ARM_LENGTH)
+		arm.mesh = box
+		arm.material_override = _slapper_indicator_mat
+		arm.rotation_degrees.y = arm_y_rots[i]
+		_slapper_indicator.add_child(arm)
+		_slapper_arm_nodes.append(arm)
+	update_slapper_indicator_convergence(1.0)
+
 	var vfx := SkaterVFX.new()
 	vfx.name = "VFX"
 	add_child(vfx)
@@ -265,6 +296,16 @@ func _create_ring_mesh(inner_r: float, outer_r: float, segments: int) -> ArrayMe
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh
 
+# Slides the four fixed-length arms to visualise puck proximity.
+# ratio = 1.0: puck at zone edge, arms at zone boundary.
+# ratio = 0.0: puck at zone centre, arms slid inward pointing at centre.
+func update_slapper_indicator_convergence(ratio: float) -> void:
+	var r: float = clampf(ratio, 0.0, 1.0)
+	var inner_tip: float = lerpf(0.0, 1.0 - _SLAPPER_ARM_LENGTH, r)
+	var arm_center: float = inner_tip + _SLAPPER_ARM_LENGTH * 0.5
+	for i: int in _slapper_arm_nodes.size():
+		_slapper_arm_nodes[i].position = _SLAPPER_ARM_DIRS[i] * arm_center
+
 func _resolve_or_create_bone_mesh(node_name: String) -> MeshInstance3D:
 	var existing: MeshInstance3D = upper_body.get_node_or_null(node_name) as MeshInstance3D
 	if existing != null:
@@ -292,6 +333,14 @@ func _physics_process(delta: float) -> void:
 		body_check_impulse_applied.emit(body_check_delta)
 	if _ring_mesh != null:
 		_ring_mesh.global_position.y = 0.05
+	if _slapper_indicator != null and _slapper_indicator.visible:
+		_slapper_indicator.global_position.y = 0.05
+		# Pulse the "waiting" state (dim cyan, no ready-color override active).
+		# Bright green (ready) and the window countdown skip this via their own energy values.
+		var emission: float = _slapper_indicator_mat.emission_energy_multiplier
+		if emission < 1.0:
+			var pulse: float = 0.4 + 0.2 * sin(Time.get_ticks_msec() * 0.004)
+			_slapper_indicator_mat.emission_energy_multiplier = pulse
 
 func _resolve_player_collisions(vel_before: Vector3) -> void:
 	for i: int in get_slide_collision_count():
@@ -381,6 +430,40 @@ func set_ring_color(color: Color) -> void:
 	mat.emission_energy_multiplier = 0.3
 	_ring_mesh.material_override = mat
 	_ring_mesh.visible = true
+
+func set_slapper_indicator(active: bool, offset_x: float = 0.0, offset_z: float = 0.0, radius: float = 0.5) -> void:
+	if not active:
+		_slapper_indicator.visible = false
+		return
+	var blade_side_sign: float = -1.0 if is_left_handed else 1.0
+	_slapper_indicator.position = Vector3(blade_side_sign * offset_x, 0.0, offset_z)
+	_slapper_indicator.scale = Vector3(radius, 1.0, radius)
+	_slapper_indicator_mat.albedo_color = Color(0.3, 0.8, 1.0, 0.35)
+	_slapper_indicator_mat.emission = Color(0.3, 0.8, 1.0)
+	_slapper_indicator_mat.emission_energy_multiplier = 0.4
+	_slapper_indicator.visible = true
+	update_slapper_indicator_convergence(1.0)
+
+func set_slapper_indicator_ready(ready: bool) -> void:
+	if not _slapper_indicator.visible:
+		return
+	if ready:
+		_slapper_indicator_mat.albedo_color = Color(0.2, 1.0, 0.3, 0.6)
+		_slapper_indicator_mat.emission = Color(0.2, 1.0, 0.3)
+		_slapper_indicator_mat.emission_energy_multiplier = 1.5
+	else:
+		_slapper_indicator_mat.albedo_color = Color(0.3, 0.8, 1.0, 0.35)
+		_slapper_indicator_mat.emission = Color(0.3, 0.8, 1.0)
+		# Pulse is driven by _physics_process; energy is set there.
+
+func update_slapper_indicator_window(t: float) -> void:
+	# t = 1.0 (window just opened, green) → t = 0.0 (about to expire, red)
+	if not _slapper_indicator.visible:
+		return
+	var color: Color = Color(0.2, 1.0, 0.2).lerp(Color(1.0, 0.2, 0.2), 1.0 - t)
+	_slapper_indicator_mat.albedo_color = Color(color.r, color.g, color.b, 0.4 + 0.35 * (1.0 - t))
+	_slapper_indicator_mat.emission = color
+	_slapper_indicator_mat.emission_energy_multiplier = 0.5 + 0.8 * (1.0 - t)
 
 func set_jersey_info(p_name: String, number: int, text_color: Color) -> void:
 	for child: Node in upper_body.get_children():

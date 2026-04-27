@@ -121,8 +121,11 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 @export var slapper_blade_z: float = -0.5
 @export var slapper_aim_arc: float = 45.0
 @export var slapper_elevation: float = 0.15
-@export var one_timer_window_duration: float = 0.30  # seconds after puck arrives to release
-@export var one_timer_leniency_radius: float = 1.2   # metres; buffer for early release
+@export var one_timer_window_duration: float = 0.45  # seconds after puck arrives to release
+@export var one_timer_leniency_time: float = 0.08   # seconds of puck travel added to zone radius as leniency
+@export var one_timer_center_power_bonus: float = 0.25  # max multiplier bonus at dead centre
+
+var show_one_timer_indicator: bool = false
 
 # ── Follow Through Tuning ─────────────────────────────────────────────────────
 @export var follow_through_duration: float = 0.15
@@ -298,8 +301,11 @@ func on_puck_picked_up_network() -> void:
 		# the shot is cancelled and they keep the puck in carry state.
 		skater.set_slapper_zone(false)
 		skater.set_slapper_mode(true)
-		_aiming.one_timer_window_timer = one_timer_window_duration
+		_aiming.one_timer_window_timer = one_timer_window_duration + NetworkManager.get_latest_rtt_ms() / 2000.0
 		_sm.set_state(State.SLAPPER_CHARGE_WITH_PUCK)
+		if show_one_timer_indicator:
+			skater.update_slapper_indicator_convergence(1.0)
+			skater.update_slapper_indicator_window(1.0)
 	else:
 		_sm.set_state(State.SKATING_WITH_PUCK)
 
@@ -377,6 +383,8 @@ func _transition_to_skating() -> void:
 	skater.set_lower_body_lag(0.0)
 	skater.set_slapper_mode(false)
 	skater.set_slapper_zone(false)
+	if show_one_timer_indicator:
+		skater.set_slapper_indicator(false)
 
 func _enter_shot_block() -> void:
 	_sm.set_state(State.SHOT_BLOCKING)
@@ -426,6 +434,8 @@ func _enter_slapper_charge(input: InputState) -> void:
 		# ground level even though the blade is lifted during wind-up.
 		skater.set_slapper_zone(true, slapper_zone_radius, slapper_zone_offset_x, slapper_zone_offset_z)
 		_sm.set_state(State.SLAPPER_CHARGE_WITHOUT_PUCK)
+		if show_one_timer_indicator:
+			skater.set_slapper_indicator(true, slapper_zone_offset_x, slapper_zone_offset_z, slapper_zone_radius)
 
 func _get_charge_direction() -> Vector3:
 	return _aiming.prev_blade_dir
@@ -527,14 +537,23 @@ func _apply_slapper_velocity_drag(delta: float) -> void:
 	skater.velocity.z = slapper_vel.y
 
 func _try_one_timer_release(input: InputState) -> Dictionary:
-	var blade_world: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
-	if puck.global_position.distance_to(blade_world) > one_timer_leniency_radius:
+	# Use XZ distance from the slapper zone center (ground level) — this matches
+	# the ring indicator the player sees and avoids penalising blade height since
+	# the blade is lifted during wind-up.
+	var zone_world: Vector3 = skater.get_slapper_zone_global_position()
+	var zone_xz := Vector2(zone_world.x, zone_world.z)
+	var puck_xz := Vector2(puck.global_position.x, puck.global_position.z)
+	var dist: float = zone_xz.distance_to(puck_xz)
+	if dist > _effective_one_timer_leniency():
 		return {fired = false}
+	var blade_world: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
 	var locked_dir_3d := Vector3(_sm.locked_slapper_dir.x, 0.0, _sm.locked_slapper_dir.y)
 	var cfg: ShotMechanics.SlapperConfig = _slapper_config()
 	var result := ShotMechanics.release_slapper(
 			blade_world, input.mouse_world_pos,
 			_is_elevated, cfg.max_slapper_charge_time, cfg, locked_dir_3d)
+	var proximity: float = clampf(1.0 - dist / slapper_zone_radius, 0.0, 1.0)
+	result.power *= 1.0 + one_timer_center_power_bonus * proximity
 	if not is_replaying:
 		one_timer_release_requested.emit(result.direction, result.power)
 	return {fired = true, direction = result.direction, follow_through_duration = follow_through_duration}
@@ -543,6 +562,10 @@ func _apply_block_movement(input: InputState, delta: float) -> void:
 	skater.velocity = SkaterMovementRules.apply_movement(
 			skater.velocity, input.move_vector, skater.rotation.y,
 			false, input.brake, delta, _block_movement_config())
+
+func _effective_one_timer_leniency() -> float:
+	var puck_xz_speed: float = Vector2(puck.linear_velocity.x, puck.linear_velocity.z).length()
+	return slapper_zone_radius + puck_xz_speed * one_timer_leniency_time
 
 func _is_in_slapper_state() -> bool:
 	return _sm.get_state() in [State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK]

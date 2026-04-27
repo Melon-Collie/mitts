@@ -222,6 +222,8 @@ func release(direction: Vector3, power: float) -> void:
 	if direction.y > 0:
 		global_position.y = ice_height + 0.1
 		_pending_elevation = true
+	else:
+		global_position.y = ice_height
 	_pending_elevation_vel = direction * power
 	clear_carrier()
 	if ex_carrier != null:
