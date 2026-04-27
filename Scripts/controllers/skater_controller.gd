@@ -532,8 +532,13 @@ func _apply_slapper_velocity_drag(delta: float) -> void:
 	skater.velocity.z = slapper_vel.y
 
 func _try_one_timer_release(input: InputState) -> Dictionary:
-	var blade_world: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
-	if puck.global_position.distance_to(blade_world) > one_timer_leniency_radius:
+	# Use XZ distance from the slapper zone center (ground level) — this matches
+	# the ring indicator the player sees and avoids penalising blade height since
+	# the blade is lifted during wind-up.
+	var zone_world: Vector3 = skater.get_slapper_zone_global_position()
+	var zone_xz := Vector2(zone_world.x, zone_world.z)
+	var puck_xz := Vector2(puck.global_position.x, puck.global_position.z)
+	if zone_xz.distance_to(puck_xz) > one_timer_leniency_radius:
 		return {fired = false}
 	var locked_dir_3d := Vector3(_sm.locked_slapper_dir.x, 0.0, _sm.locked_slapper_dir.y)
 	var cfg: ShotMechanics.SlapperConfig = _slapper_config()

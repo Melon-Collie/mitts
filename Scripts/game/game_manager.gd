@@ -688,9 +688,10 @@ func _host_release_one_timer(direction: Vector3, power: float, skater: Skater,
 	if rtt_ms > 0.0:
 		var skater_vel := Vector3(skater.velocity.x, 0.0, skater.velocity.z)
 		puck.set_puck_position(puck.get_puck_position() + (direction * power + skater_vel) * rtt_half)
-	for i: int in goalie_controllers.size():
-		goalie_controllers[i].goalie.global_position = saved_goalie_positions[i]
-		goalie_controllers[i].goalie.set_goalie_rotation_y(saved_goalie_rotations[i])
+	if not saved_goalie_positions.is_empty():
+		for i: int in goalie_controllers.size():
+			goalie_controllers[i].goalie.global_position = saved_goalie_positions[i]
+			goalie_controllers[i].goalie.set_goalie_rotation_y(saved_goalie_rotations[i])
 
 
 func on_remote_puck_release(direction: Vector3, power: float, is_slapper: bool, shooter_peer_id: int, host_timestamp: float, rtt_ms: float) -> void:

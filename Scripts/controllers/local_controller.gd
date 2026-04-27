@@ -272,8 +272,10 @@ func _update_one_timer_indicator() -> void:
 		var t: float = clampf(_aiming.one_timer_window_timer / full_window, 0.0, 1.0)
 		skater.update_slapper_indicator_window(t)
 	elif state == State.SLAPPER_CHARGE_WITHOUT_PUCK:
-		var blade_world: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
-		var would_fire: bool = puck.global_position.distance_to(blade_world) <= one_timer_leniency_radius
+		var zone_world: Vector3 = skater.get_slapper_zone_global_position()
+		var zone_xz := Vector2(zone_world.x, zone_world.z)
+		var puck_xz := Vector2(puck.global_position.x, puck.global_position.z)
+		var would_fire: bool = zone_xz.distance_to(puck_xz) <= one_timer_leniency_radius
 		skater.set_slapper_indicator_ready(would_fire)
 	else:
 		skater.set_slapper_indicator(false)
