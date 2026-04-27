@@ -218,8 +218,8 @@ func _tab_box(active: bool) -> StyleBoxFlat:
 # Godot's default CheckButton icons so the "on" state is ice-blue rather
 # than the editor's stock green/grey.
 func _slide_switch(on: bool, disabled: bool) -> ImageTexture:
-	const W: int = 60
-	const H: int = 30
+	const W: int = 32
+	const H: int = 16
 	var img := Image.create(W, H, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0.0, 0.0, 0.0, 0.0))
 
@@ -267,7 +267,7 @@ func _slide_switch(on: bool, disabled: bool) -> ImageTexture:
 				img.set_pixel(x, y, Color(border_color.r, border_color.g, border_color.b, border_color.a * t))
 
 	# Knob — overlay a filled circle on the appropriate side
-	var knob_r: float = radius_outer - 4.0
+	var knob_r: float = radius_outer - 2.5
 	var knob_center: Vector2 = center_r if on else center_l
 	for y: int in H:
 		for x: int in W:
