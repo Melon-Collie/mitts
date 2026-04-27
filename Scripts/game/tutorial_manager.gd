@@ -61,6 +61,7 @@ var _complete_flash_timer: float = 0.0
 var _wrister_aim_start:  float = -1.0   # -1 when not in WRISTER_AIM
 var _offside_ghost_seen: bool  = false
 var _icing_armed:        bool  = false  # true once puck is staged and loose
+var _icing_scored:       bool  = false  # true after puck crosses goal line
 
 var _hud: TutorialHUD = null
 
@@ -151,8 +152,8 @@ func _build_steps() -> void:
 		"The blue line marks the boundary between neutral and offensive zones."))
 	_steps.append(TutorialStep.new(
 		"Icing",
-		"Shooting the puck the full length of the ice from your own end gives the opponents a faceoff in your zone — that's icing. Try it now.",
-		"Aim for the far end and give it everything. Don't do this in a real game!"))
+		"Shooting the puck from your own end past the far goal line is icing — your whole team goes ghost, giving the other team free possession. Try it now.",
+		"Wind up a big Slapshot and fire toward the far end."))
 
 
 # ── Step sequencing ───────────────────────────────────────────────────────────
@@ -166,6 +167,7 @@ func _begin_step(index: int) -> void:
 	_wrister_aim_start  = -1.0
 	_offside_ghost_seen = false
 	_icing_armed        = false
+	_icing_scored       = false
 
 	var step: TutorialStep = _steps[index]
 	_hud.set_step(index, _steps.size(), step.title, step.instruction, step.hint)
@@ -351,10 +353,22 @@ func _process(delta: float) -> void:
 				# Arm after the first physics frame so puck settles from placement
 				_icing_armed = true
 				return
-			if _puck.carrier == null:
-				var puck_z: float = _puck.get_puck_position().z
-				# Team 0 attacks toward -Z; far goal line is at -GOAL_LINE_Z
-				if puck_z < -(GameRules.GOAL_LINE_Z - 1.0):
+			if not _icing_scored:
+				# Wait for puck to cross the far goal line (team 0 attacks toward -Z)
+				if _puck.carrier == null:
+					var puck_z: float = _puck.get_puck_position().z
+					if puck_z < -(GameRules.GOAL_LINE_Z - 1.0):
+						_icing_scored = true
+						# Trigger ghost mode directly — single-player can't win the
+						# hybrid icing race (no defending-team players to compare against)
+						GameManager.trigger_tutorial_icing()
+						_hud.set_step(_current_step, _steps.size(),
+							"Icing — You're Ghosted",
+							"See? Your whole team goes ghost. In a real game, opponents skate in and grab the puck freely. Ghost clears in a moment.",
+							"Avoid icing in real games — free possession for the other team is bad news.")
+			else:
+				# Wait for the ghost timer to expire and ghost to clear
+				if not _skater.is_ghost:
 					_complete_step()
 
 
