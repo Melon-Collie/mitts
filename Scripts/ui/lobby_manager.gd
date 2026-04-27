@@ -10,9 +10,11 @@ var _lobby_slots: Dictionary = {}
 var _slot_grid: SlotGridPanel = null
 var _start_btn: Button = null
 var _ready_btn: Button = null
-var _periods_spin: SpinBox = null
-var _dur_spin: SpinBox = null
-var _ot_check: Button = null
+var _periods_slider: HSlider = null
+var _periods_value_label: Label = null
+var _dur_slider: HSlider = null
+var _dur_value_label: Label = null
+var _ot_check: CheckButton = null
 var _rules_btn: OptionButton = null
 
 # key = peer_id → bool; tracks non-host peers only (host uses Start instead)
@@ -171,40 +173,38 @@ func _build_settings_panel() -> Control:
 	grid.add_child(_home_color_btn)
 
 	grid.add_child(_setting_label("Periods"))
-	_periods_spin = SpinBox.new()
-	_periods_spin.min_value = 1
-	_periods_spin.max_value = 5
-	_periods_spin.step = 1
-	_periods_spin.value = _num_periods
-	_periods_spin.editable = is_interactive
+	var periods_row := HBoxContainer.new()
+	periods_row.add_theme_constant_override("separation", 12)
+	_periods_slider = _stepper_slider(1, 5, _num_periods, is_interactive)
 	if is_interactive:
-		_periods_spin.value_changed.connect(func(v: float) -> void:
+		_periods_slider.value_changed.connect(func(v: float) -> void:
 			_num_periods = int(v)
+			_periods_value_label.text = str(_num_periods)
 			NetworkManager.send_lobby_settings(_num_periods, _period_duration, _ot_enabled, _rule_set))
-	else:
-		_periods_spin.modulate = Color(1, 1, 1, 0.5)
-	grid.add_child(_periods_spin)
+	periods_row.add_child(_periods_slider)
+	_periods_value_label = _stepper_value_label(str(_num_periods))
+	periods_row.add_child(_periods_value_label)
+	grid.add_child(periods_row)
 
-	grid.add_child(_setting_label("Period length (min)"))
-	_dur_spin = SpinBox.new()
-	_dur_spin.min_value = 1
-	_dur_spin.max_value = 10
-	_dur_spin.step = 1
-	_dur_spin.value = _period_duration / 60.0
-	_dur_spin.editable = is_interactive
+	grid.add_child(_setting_label("Period Length"))
+	var dur_row := HBoxContainer.new()
+	dur_row.add_theme_constant_override("separation", 12)
+	var dur_min: int = int(_period_duration / 60.0)
+	_dur_slider = _stepper_slider(1, 10, dur_min, is_interactive)
 	if is_interactive:
-		_dur_spin.value_changed.connect(func(v: float) -> void:
+		_dur_slider.value_changed.connect(func(v: float) -> void:
 			_period_duration = v * 60.0
+			_dur_value_label.text = "%d min" % int(v)
 			NetworkManager.send_lobby_settings(_num_periods, _period_duration, _ot_enabled, _rule_set))
-	else:
-		_dur_spin.modulate = Color(1, 1, 1, 0.5)
-	grid.add_child(_dur_spin)
+	dur_row.add_child(_dur_slider)
+	_dur_value_label = _stepper_value_label("%d min" % dur_min)
+	dur_row.add_child(_dur_value_label)
+	grid.add_child(dur_row)
 
 	grid.add_child(_setting_label("Overtime"))
-	_ot_check = Button.new()
+	_ot_check = CheckButton.new()
 	_ot_check.set_pressed_no_signal(_ot_enabled)
 	_ot_check.add_theme_font_size_override("font_size", 18)
-	MenuStyle.apply_toggle(_ot_check)
 	SoundManager.wire_button(_ot_check)
 	_ot_check.disabled = not is_interactive
 	if is_interactive:
@@ -241,6 +241,33 @@ func _setting_label(text: String) -> Label:
 	lbl.add_theme_font_size_override("font_size", 13)
 	lbl.add_theme_color_override("font_color", _DIM)
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	return lbl
+
+
+# Discrete-integer slider for small ranges (periods, period length). Tick marks
+# on every integer make the granularity obvious.
+func _stepper_slider(low: int, high: int, value: int, interactive: bool) -> HSlider:
+	var slider := HSlider.new()
+	slider.min_value = low
+	slider.max_value = high
+	slider.step = 1
+	slider.value = value
+	slider.tick_count = high - low + 1
+	slider.ticks_on_borders = true
+	slider.custom_minimum_size = Vector2(160, 32)
+	slider.editable = interactive
+	if not interactive:
+		slider.modulate = Color(1, 1, 1, 0.5)
+	return slider
+
+
+func _stepper_value_label(text: String) -> Label:
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.add_theme_font_size_override("font_size", 16)
+	lbl.add_theme_color_override("font_color", _WHITE)
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lbl.custom_minimum_size = Vector2(56, 0)
 	return lbl
 
 func _btn(text: String) -> Button:
@@ -505,13 +532,17 @@ func _on_lobby_settings_synced(num_periods: int, period_duration: float, ot_enab
 	_period_duration = period_duration
 	_ot_enabled = ot_enabled
 	_rule_set = rule_set
-	if _periods_spin != null:
-		_periods_spin.value = _num_periods
-	if _dur_spin != null:
-		_dur_spin.value = _period_duration / 60.0
+	if _periods_slider != null:
+		_periods_slider.set_value_no_signal(_num_periods)
+		if _periods_value_label != null:
+			_periods_value_label.text = str(_num_periods)
+	if _dur_slider != null:
+		var dur_min: int = int(_period_duration / 60.0)
+		_dur_slider.set_value_no_signal(dur_min)
+		if _dur_value_label != null:
+			_dur_value_label.text = "%d min" % dur_min
 	if _ot_check != null:
 		_ot_check.set_pressed_no_signal(_ot_enabled)
-		MenuStyle.sync_toggle(_ot_check)
 	if _rules_btn != null:
 		_rules_btn.select(_rule_set)
 

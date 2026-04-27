@@ -4,9 +4,6 @@ extends EditorScript
 # Run this script (File → Run, Ctrl+Shift+X) to (re)generate Resources/MenuTheme.tres
 # from the MenuStyle palette. After running, set the resource as the project's
 # default theme: Project Settings → General → GUI → Theme → Custom.
-#
-# All styling is derived from MenuStyle constants so the generated theme is
-# byte-equivalent to what MenuStyle.apply_* used to produce at runtime.
 
 const _OUT_PATH: String = "res://Resources/MenuTheme.tres"
 
@@ -27,10 +24,10 @@ func _build_theme() -> Theme:
 	_apply_button_type(theme, "Button")
 	_apply_button_type(theme, "OptionButton")
 	_apply_line_edit(theme)
-	_apply_spin_box(theme)
 	_apply_h_slider(theme)
+	_apply_check_button(theme)
 	_apply_panel_container(theme)
-	_apply_toggle_variation(theme)
+	_apply_popup_menu(theme)
 	_apply_tab_inactive_variation(theme)
 	_apply_tab_active_variation(theme)
 	return theme
@@ -65,13 +62,6 @@ func _apply_line_edit(theme: Theme) -> void:
 	theme.set_stylebox("read_only", TYPE, _btn_box(MenuStyle.BTN_FILL, MenuStyle.ICE_DIM,   1))
 
 
-func _apply_spin_box(theme: Theme) -> void:
-	# SpinBox renders as a LineEdit with up/down arrows. Mirror the LineEdit look
-	# so spin boxes match the rest of the inputs.
-	const TYPE: String = "SpinBox"
-	theme.set_color("font_color", TYPE, MenuStyle.TEXT_BODY)
-
-
 func _apply_h_slider(theme: Theme) -> void:
 	const TYPE: String = "HSlider"
 	var track := StyleBoxFlat.new()
@@ -89,11 +79,26 @@ func _apply_h_slider(theme: Theme) -> void:
 	theme.set_stylebox("slider",                 TYPE, track)
 	theme.set_stylebox("grabber_area",           TYPE, fill)
 	theme.set_stylebox("grabber_area_highlight", TYPE, fill)
+	# Circular grabber knob — a procedural ice-blue dot with a darker rim.
+	theme.set_icon("grabber",           TYPE, _circle_icon(16, MenuStyle.ICE,       MenuStyle.BTN_PRESS))
+	theme.set_icon("grabber_highlight", TYPE, _circle_icon(18, MenuStyle.ICE_HOVER, MenuStyle.BTN_PRESS))
+	theme.set_icon("grabber_disabled",  TYPE, _circle_icon(16, MenuStyle.TEXT_DIM,  MenuStyle.BTN_PRESS))
+
+
+func _apply_check_button(theme: Theme) -> void:
+	# CheckButton is a slide-switch — show the native switch icon and label,
+	# but don't draw a heavy Button-style box around the whole thing.
+	const TYPE: String = "CheckButton"
+	theme.set_color("font_color",          TYPE, MenuStyle.TEXT_BODY)
+	theme.set_color("font_hover_color",    TYPE, MenuStyle.TEXT_TITLE)
+	theme.set_color("font_pressed_color",  TYPE, MenuStyle.ICE)
+	theme.set_color("font_disabled_color", TYPE, MenuStyle.TEXT_DIM)
+	var empty := StyleBoxEmpty.new()
+	for state: StringName in [&"normal", &"hover", &"pressed", &"focus", &"disabled", &"hover_pressed"]:
+		theme.set_stylebox(state, TYPE, empty)
 
 
 func _apply_panel_container(theme: Theme) -> void:
-	# Default PanelContainer panel — matches MenuStyle.panel() defaults (corner=6, margin=32).
-	# PanelContainers that need other dimensions (popups, cards) still call MenuStyle.panel().
 	const TYPE: String = "PanelContainer"
 	var s := StyleBoxFlat.new()
 	s.bg_color = MenuStyle.PANEL_BG
@@ -104,26 +109,36 @@ func _apply_panel_container(theme: Theme) -> void:
 	theme.set_stylebox("panel", TYPE, s)
 
 
+func _apply_popup_menu(theme: Theme) -> void:
+	# Styles the dropdown that appears when an OptionButton is opened.
+	const TYPE: String = "PopupMenu"
+	theme.set_color("font_color",           TYPE, MenuStyle.TEXT_BODY)
+	theme.set_color("font_hover_color",     TYPE, MenuStyle.ICE)
+	theme.set_color("font_disabled_color",  TYPE, MenuStyle.TEXT_DIM)
+	theme.set_color("font_separator_color", TYPE, MenuStyle.TEXT_SEP)
+	theme.set_constant("h_separation", TYPE, 8)
+	theme.set_constant("v_separation", TYPE, 4)
+	var panel := StyleBoxFlat.new()
+	panel.bg_color = MenuStyle.PANEL_BG
+	panel.set_corner_radius_all(4)
+	panel.border_color = MenuStyle.ICE_DIM
+	panel.set_border_width_all(1)
+	panel.set_content_margin_all(6)
+	theme.set_stylebox("panel", TYPE, panel)
+	var hover := StyleBoxFlat.new()
+	hover.bg_color = MenuStyle.BTN_HOVER
+	hover.set_corner_radius_all(3)
+	hover.set_content_margin(SIDE_LEFT,  6)
+	hover.set_content_margin(SIDE_RIGHT, 6)
+	theme.set_stylebox("hover", TYPE, hover)
+	var sep := StyleBoxFlat.new()
+	sep.bg_color = MenuStyle.TEXT_SEP
+	sep.set_content_margin(SIDE_TOP,    1)
+	sep.set_content_margin(SIDE_BOTTOM, 1)
+	theme.set_stylebox("separator", TYPE, sep)
+
+
 # ── Type variations ──────────────────────────────────────────────────────────
-
-func _apply_toggle_variation(theme: Theme) -> void:
-	const TYPE: StringName = &"ToggleButton"
-	theme.set_type_variation(TYPE, &"Button")
-	theme.set_color("font_color",          TYPE, MenuStyle.TEXT_DIM)
-	theme.set_color("font_hover_color",    TYPE, MenuStyle.TEXT_BODY)
-	theme.set_color("font_pressed_color",  TYPE, MenuStyle.ICE)
-	theme.set_color("font_disabled_color", TYPE, MenuStyle.TEXT_DIM)
-	var off       := _btn_box(MenuStyle.BTN_FILL,  MenuStyle.ICE_DIM,   1)
-	var off_hover := _btn_box(MenuStyle.BTN_HOVER, MenuStyle.ICE_MID,   1)
-	var on        := _btn_box(Color(0.10, 0.22, 0.38, 0.90), MenuStyle.ICE,       2)
-	var on_hover  := _btn_box(Color(0.14, 0.28, 0.46, 0.95), MenuStyle.ICE_HOVER, 2)
-	theme.set_stylebox("normal",        TYPE, off)
-	theme.set_stylebox("hover",         TYPE, off_hover)
-	theme.set_stylebox("pressed",       TYPE, on)
-	theme.set_stylebox("hover_pressed", TYPE, on_hover)
-	theme.set_stylebox("focus",         TYPE, off_hover)
-	theme.set_stylebox("disabled",      TYPE, off)
-
 
 func _apply_tab_inactive_variation(theme: Theme) -> void:
 	const TYPE: StringName = &"TabButton"
@@ -145,7 +160,7 @@ func _apply_tab_active_variation(theme: Theme) -> void:
 		theme.set_stylebox(state, TYPE, s)
 
 
-# ── Stylebox factories ───────────────────────────────────────────────────────
+# ── Stylebox / icon factories ────────────────────────────────────────────────
 
 func _btn_box(bg: Color, border: Color, border_width: int) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
@@ -171,3 +186,26 @@ func _tab_box(active: bool) -> StyleBoxFlat:
 		s.set_border_width_all(0)
 		s.border_width_bottom = 2
 	return s
+
+
+# Antialiased filled circle with a 1-pixel rim — used for slider grabbers.
+func _circle_icon(diameter: int, fill: Color, rim: Color) -> ImageTexture:
+	var img := Image.create(diameter, diameter, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0.0, 0.0, 0.0, 0.0))
+	var center := Vector2(diameter * 0.5 - 0.5, diameter * 0.5 - 0.5)
+	var outer: float = diameter * 0.5
+	var inner: float = outer - 1.5
+	for y: int in diameter:
+		for x: int in diameter:
+			var d: float = Vector2(x, y).distance_to(center)
+			if d <= inner - 0.5:
+				img.set_pixel(x, y, fill)
+			elif d <= inner + 0.5:
+				var t: float = clampf(inner + 0.5 - d, 0.0, 1.0)
+				img.set_pixel(x, y, fill.lerp(rim, 1.0 - t))
+			elif d <= outer - 0.5:
+				img.set_pixel(x, y, rim)
+			elif d <= outer:
+				var t: float = clampf(outer - d, 0.0, 1.0)
+				img.set_pixel(x, y, Color(rim.r, rim.g, rim.b, rim.a * t))
+	return ImageTexture.create_from_image(img)

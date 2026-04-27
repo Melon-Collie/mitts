@@ -12,8 +12,6 @@ class_name MenuStyle
 #     covered by the theme's PanelContainer entry.
 #   - close_button() — full control factory; the × button is a custom widget,
 #     not just a styled Button.
-#   - apply_toggle() / sync_toggle() — toggle behaviour (toggle_mode + ON/OFF
-#     text wiring). Visual styling comes from the &"ToggleButton" theme variation.
 #   - apply_tab_button() — flips between &"TabButton" and &"TabButtonActive"
 #     theme variations.
 
@@ -77,23 +75,6 @@ static func close_button() -> Button:
 	btn.add_theme_stylebox_override("pressed", hover)
 	btn.add_theme_stylebox_override("focus",   empty)
 	return btn
-
-
-# Wire a Button to behave as an ON/OFF toggle. Visual styling comes from the
-# &"ToggleButton" theme variation; this just sets toggle_mode, the initial text,
-# and the text-flip on toggle.
-static func apply_toggle(btn: Button) -> void:
-	btn.theme_type_variation = &"ToggleButton"
-	btn.toggle_mode = true
-	btn.text = "ON" if btn.button_pressed else "OFF"
-	btn.custom_minimum_size = Vector2(64, 32)
-	btn.toggled.connect(func(p: bool) -> void: btn.text = "ON" if p else "OFF")
-
-
-# Update toggle text after programmatically changing button_pressed without
-# emitting the toggled signal (set_pressed_no_signal).
-static func sync_toggle(btn: Button) -> void:
-	btn.text = "ON" if btn.button_pressed else "OFF"
 
 
 # Flip a tab button between active and inactive theme variations.
