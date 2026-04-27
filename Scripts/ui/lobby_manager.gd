@@ -175,7 +175,7 @@ func _build_settings_panel() -> Control:
 	grid.add_child(_setting_label("Periods"))
 	var periods_row := HBoxContainer.new()
 	periods_row.add_theme_constant_override("separation", 12)
-	_periods_slider = _stepper_slider(1, 5, _num_periods, is_interactive)
+	_periods_slider = _stepper_slider(1, 3, _num_periods, is_interactive)
 	if is_interactive:
 		_periods_slider.value_changed.connect(func(v: float) -> void:
 			_num_periods = int(v)
