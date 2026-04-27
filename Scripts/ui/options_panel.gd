@@ -7,6 +7,8 @@ var _res_row: HBoxContainer = null
 var _fs_check: Button = null
 var _mute_check: Button = null
 var _volume_slider: HSlider = null
+var _sfx_slider: HSlider = null
+var _ui_slider: HSlider = null
 var _res_btn: OptionButton = null
 var _tab_contents: Array[Control] = []
 var _tab_btns: Array[Button] = []
@@ -86,6 +88,8 @@ func _snapshot() -> Dictionary:
 		"fps_cap_index": PlayerPrefs.fps_cap_index,
 		"brightness": PlayerPrefs.brightness,
 		"master_volume": PlayerPrefs.master_volume,
+		"sfx_volume": PlayerPrefs.sfx_volume,
+		"ui_volume": PlayerPrefs.ui_volume,
 		"master_muted": PlayerPrefs.master_muted,
 		"mouse_sensitivity": PlayerPrefs.mouse_sensitivity,
 		"attack_up": PlayerPrefs.attack_up,
@@ -100,6 +104,8 @@ func _read_controls() -> Dictionary:
 		"fps_cap_index": _fps_btn.selected,
 		"brightness": _brightness_slider.value,
 		"master_volume": _volume_slider.value,
+		"sfx_volume": _sfx_slider.value,
+		"ui_volume": _ui_slider.value,
 		"master_muted": _mute_check.button_pressed,
 		"mouse_sensitivity": _sens_slider.value,
 		"attack_up": _attack_up_check.button_pressed,
@@ -288,10 +294,11 @@ func _build_audio_tab() -> Control:
 	volume_row.add_theme_constant_override("separation", 12)
 
 	var volume_label := Label.new()
-	volume_label.text = "Volume:"
+	volume_label.text = "Master:"
 	volume_label.add_theme_font_size_override("font_size", 20)
 	volume_label.add_theme_color_override("font_color", _WHITE)
 	volume_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	volume_label.custom_minimum_size = Vector2(80, 0)
 	volume_row.add_child(volume_label)
 
 	_volume_slider = HSlider.new()
@@ -304,6 +311,48 @@ func _build_audio_tab() -> Control:
 	MenuStyle.apply_slider(_volume_slider)
 	volume_row.add_child(_volume_slider)
 	box.add_child(volume_row)
+
+	var sfx_row := HBoxContainer.new()
+	sfx_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	sfx_row.add_theme_constant_override("separation", 12)
+	var sfx_label := Label.new()
+	sfx_label.text = "SFX:"
+	sfx_label.add_theme_font_size_override("font_size", 20)
+	sfx_label.add_theme_color_override("font_color", _WHITE)
+	sfx_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	sfx_label.custom_minimum_size = Vector2(80, 0)
+	sfx_row.add_child(sfx_label)
+	_sfx_slider = HSlider.new()
+	_sfx_slider.min_value = 0.0
+	_sfx_slider.max_value = 1.0
+	_sfx_slider.step = 0.01
+	_sfx_slider.value = PlayerPrefs.sfx_volume
+	_sfx_slider.custom_minimum_size = Vector2(200, 32)
+	_sfx_slider.value_changed.connect(_on_volume_changed)
+	MenuStyle.apply_slider(_sfx_slider)
+	sfx_row.add_child(_sfx_slider)
+	box.add_child(sfx_row)
+
+	var ui_row := HBoxContainer.new()
+	ui_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	ui_row.add_theme_constant_override("separation", 12)
+	var ui_label := Label.new()
+	ui_label.text = "UI:"
+	ui_label.add_theme_font_size_override("font_size", 20)
+	ui_label.add_theme_color_override("font_color", _WHITE)
+	ui_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	ui_label.custom_minimum_size = Vector2(80, 0)
+	ui_row.add_child(ui_label)
+	_ui_slider = HSlider.new()
+	_ui_slider.min_value = 0.0
+	_ui_slider.max_value = 1.0
+	_ui_slider.step = 0.01
+	_ui_slider.value = PlayerPrefs.ui_volume
+	_ui_slider.custom_minimum_size = Vector2(200, 32)
+	_ui_slider.value_changed.connect(_on_volume_changed)
+	MenuStyle.apply_slider(_ui_slider)
+	ui_row.add_child(_ui_slider)
+	box.add_child(ui_row)
 
 	var mute_row := HBoxContainer.new()
 	mute_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -620,6 +669,8 @@ func _on_apply_pressed() -> void:
 	PlayerPrefs.fps_cap_index = c.fps_cap_index
 	PlayerPrefs.brightness = c.brightness
 	PlayerPrefs.master_volume = c.master_volume
+	PlayerPrefs.sfx_volume = c.sfx_volume
+	PlayerPrefs.ui_volume = c.ui_volume
 	PlayerPrefs.master_muted = c.master_muted
 	PlayerPrefs.mouse_sensitivity = c.mouse_sensitivity
 	PlayerPrefs.attack_up = c.attack_up
@@ -643,6 +694,8 @@ func _on_cancel_pressed() -> void:
 	_fps_btn.selected = _original.fps_cap_index
 	_brightness_slider.value = _original.brightness
 	_volume_slider.value = _original.master_volume
+	_sfx_slider.value = _original.sfx_volume
+	_ui_slider.value = _original.ui_volume
 	_mute_check.set_pressed_no_signal(_original.master_muted)
 	MenuStyle.sync_toggle(_mute_check)
 	_sens_slider.value = _original.mouse_sensitivity
