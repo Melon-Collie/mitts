@@ -23,6 +23,7 @@ const _RECONCILE_VISUAL_ALPHA: float = 0.12  # exponential decay per physics fra
 func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> void:
 	camera = $Camera3D
 	super.setup(assigned_skater, assigned_puck, game_state)
+	show_one_timer_indicator = true
 	_gatherer = LocalInputGatherer.new(camera)
 	add_child(_gatherer)
 	camera.skater = assigned_skater
@@ -92,6 +93,7 @@ func _physics_process(delta: float) -> void:
 	if _input_history.size() > rtt_cap:
 		_input_history.pop_front()
 	_process_input(_current_input, _current_input.delta)
+	_update_one_timer_indicator()
 	var blade_pos: Vector3 = skater.get_blade_contact_global()
 	if not _last_blade_pos.is_zero_approx():
 		var blade_delta: float = blade_pos.distance_to(_last_blade_pos)
@@ -262,6 +264,19 @@ func on_puck_picked_up_network() -> void:
 	super.on_puck_picked_up_network()
 	_claim_cooldown = 0.0
 
+
+func _update_one_timer_indicator() -> void:
+	var state: State = _sm.get_state()
+	if state == State.SLAPPER_CHARGE_WITH_PUCK and _aiming.one_timer_window_timer > 0.0:
+		var full_window: float = one_timer_window_duration + NetworkManager.get_latest_rtt_ms() / 2000.0
+		var t: float = clampf(_aiming.one_timer_window_timer / full_window, 0.0, 1.0)
+		skater.update_slapper_indicator_window(t)
+	elif state == State.SLAPPER_CHARGE_WITHOUT_PUCK:
+		var blade_world: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
+		var would_fire: bool = puck.global_position.distance_to(blade_world) <= one_timer_leniency_radius
+		skater.set_slapper_indicator_ready(would_fire)
+	else:
+		skater.set_slapper_indicator(false)
 
 func _predict_offside() -> void:
 	if _is_host:

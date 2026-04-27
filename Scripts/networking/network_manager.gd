@@ -16,6 +16,7 @@ signal existing_players_synced(player_data: Array)
 signal local_puck_pickup_confirmed
 signal local_puck_stolen
 signal remote_puck_release_received(direction: Vector3, power: float, is_slapper: bool, shooter_peer_id: int, host_timestamp: float, rtt_ms: float)
+signal one_timer_release_received(direction: Vector3, power: float, peer_id: int, host_timestamp: float, rtt_ms: float)
 signal carrier_puck_dropped
 signal remote_carrier_changed(new_carrier_peer_id: int)
 signal ghost_state_received(peer_id: int, is_ghost: bool)
@@ -597,6 +598,17 @@ func release_puck(direction: Vector3, power: float, is_slapper: bool, host_times
 		func(d: Vector3, p: float, slap: bool, ts: float, rtt: float, sid: int) -> void:
 			remote_puck_release_received.emit(d, p, slap, sid, ts, rtt),
 		[direction, power, is_slapper, host_timestamp, rtt_ms, sender], true)
+
+func send_one_timer_release(direction: Vector3, power: float) -> void:
+	release_puck_one_timer.rpc_id(1, direction, power, estimated_host_time(), get_latest_rtt_ms())
+
+@rpc("any_peer", "reliable")
+func release_puck_one_timer(direction: Vector3, power: float, host_timestamp: float, rtt_ms: float) -> void:
+	var sender: int = multiplayer.get_remote_sender_id()
+	NetworkSimManager.send(
+		func(d: Vector3, p: float, ts: float, rtt: float, sid: int) -> void:
+			one_timer_release_received.emit(d, p, sid, ts, rtt),
+		[direction, power, host_timestamp, rtt_ms, sender], true)
 
 func notify_goal_to_all(scoring_team_id: int, score0: int, score1: int, scorer_name: String, assist1_name: String, assist2_name: String) -> void:
 	for peer_id in multiplayer.get_peers():

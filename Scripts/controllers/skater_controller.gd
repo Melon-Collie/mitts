@@ -121,8 +121,10 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 @export var slapper_blade_z: float = -0.5
 @export var slapper_aim_arc: float = 45.0
 @export var slapper_elevation: float = 0.15
-@export var one_timer_window_duration: float = 0.30  # seconds after puck arrives to release
+@export var one_timer_window_duration: float = 0.45  # seconds after puck arrives to release
 @export var one_timer_leniency_radius: float = 1.2   # metres; buffer for early release
+
+var show_one_timer_indicator: bool = false
 
 # ── Follow Through Tuning ─────────────────────────────────────────────────────
 @export var follow_through_duration: float = 0.15
@@ -295,8 +297,10 @@ func on_puck_picked_up_network() -> void:
 		# the shot is cancelled and they keep the puck in carry state.
 		skater.set_slapper_zone(false)
 		skater.set_slapper_mode(true)
-		_aiming.one_timer_window_timer = one_timer_window_duration
+		_aiming.one_timer_window_timer = one_timer_window_duration + NetworkManager.get_latest_rtt_ms() / 2000.0
 		_sm.set_state(State.SLAPPER_CHARGE_WITH_PUCK)
+		if show_one_timer_indicator:
+			skater.update_slapper_indicator_window(1.0)
 	else:
 		_sm.set_state(State.SKATING_WITH_PUCK)
 
@@ -374,6 +378,8 @@ func _transition_to_skating() -> void:
 	skater.set_lower_body_lag(0.0)
 	skater.set_slapper_mode(false)
 	skater.set_slapper_zone(false)
+	if show_one_timer_indicator:
+		skater.set_slapper_indicator(false)
 
 func _enter_shot_block() -> void:
 	_sm.set_state(State.SHOT_BLOCKING)
@@ -423,6 +429,8 @@ func _enter_slapper_charge(input: InputState) -> void:
 		# ground level even though the blade is lifted during wind-up.
 		skater.set_slapper_zone(true, slapper_zone_radius, slapper_zone_offset_x, slapper_zone_offset_z)
 		_sm.set_state(State.SLAPPER_CHARGE_WITHOUT_PUCK)
+		if show_one_timer_indicator:
+			skater.set_slapper_indicator(true, slapper_zone_offset_x, slapper_zone_offset_z, slapper_zone_radius)
 
 func _get_charge_direction() -> Vector3:
 	return _aiming.prev_blade_dir
