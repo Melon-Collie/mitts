@@ -77,7 +77,7 @@ func _ready() -> void:
 	GameManager.local_player_hit.connect(_on_local_player_hit)
 	GameManager.stats_updated.connect(func() -> void:
 		if _game_menu != null and _game_menu.visible and _slot_grid != null:
-			_slot_grid.refresh(GameManager.get_slot_roster(), multiplayer.get_unique_id(), _get_team_colors()))
+			_slot_grid.refresh(GameManager.get_slot_roster(), NetworkManager.local_peer_id(), _get_team_colors()))
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
@@ -895,7 +895,7 @@ func _update_rematch_ui() -> void:
 	if _rematch_btn == null:
 		return
 	_rematch_btn.text = "Unvote" if _local_voted else "Rematch"
-	var total: int = multiplayer.get_peers().size() + 1
+	var total: int = NetworkManager.connected_peer_ids().size() + 1
 	var count: int = 0
 	for v: bool in _rematch_votes.values():
 		if v:
@@ -903,7 +903,7 @@ func _update_rematch_ui() -> void:
 	_vote_label.text = "%d / %d voted" % [count, total]
 
 func _check_rematch_unanimous() -> void:
-	var total: int = multiplayer.get_peers().size() + 1
+	var total: int = NetworkManager.connected_peer_ids().size() + 1
 	var count: int = 0
 	for v: bool in _rematch_votes.values():
 		if v:
@@ -925,7 +925,7 @@ func _on_options_pressed() -> void:
 func _on_change_position_pressed() -> void:
 	_slot_grid_container.visible = not _slot_grid_container.visible
 	if _slot_grid_container.visible:
-		_slot_grid.refresh(GameManager.get_slot_roster(), multiplayer.get_unique_id(), _get_team_colors())
+		_slot_grid.refresh(GameManager.get_slot_roster(), NetworkManager.local_peer_id(), _get_team_colors())
 
 func _on_pause_slot_selected(team_id: int, slot: int) -> void:
 	NetworkManager.send_request_slot_swap(team_id, slot)

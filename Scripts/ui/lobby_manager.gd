@@ -405,7 +405,7 @@ func _get_team_colors() -> Array[Dictionary]:
 func _refresh_grid() -> void:
 	if _slot_grid == null:
 		return
-	_slot_grid.refresh(_build_slot_grid_roster(), multiplayer.get_unique_id(), _get_team_colors())
+	_slot_grid.refresh(_build_slot_grid_roster(), NetworkManager.local_peer_id(), _get_team_colors())
 
 func _broadcast_confirm(peer_id: int, team_id: int, slot: int) -> void:
 	var entry: Dictionary = _lobby_slots.get(_slot_key(team_id, slot), {})
@@ -446,7 +446,7 @@ func _on_peer_joined(peer_id: int) -> void:
 	_assign_slot(peer_id, target[0], target[1], name_val, is_left, num)
 	_ready_states[peer_id] = false
 	var roster: Array = _build_roster_array()
-	for existing_peer: int in multiplayer.get_peers():
+	for existing_peer: int in NetworkManager.connected_peer_ids():
 		NetworkManager.send_lobby_roster(existing_peer, roster)
 	NetworkManager.send_team_colors_to(peer_id, _home_color_id, _away_color_id)
 	NetworkManager.send_lobby_settings_to(peer_id, _num_periods, _period_duration, _ot_enabled, _rule_set)
@@ -530,7 +530,7 @@ func _on_player_ready_changed(peer_id: int, is_ready: bool) -> void:
 	if peer_id == 1:
 		return
 	_ready_states[peer_id] = is_ready
-	if peer_id == multiplayer.get_unique_id():
+	if peer_id == NetworkManager.local_peer_id():
 		_local_is_ready = is_ready
 		_update_ready_btn()
 	_update_start_btn()

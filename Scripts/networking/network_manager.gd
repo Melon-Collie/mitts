@@ -163,6 +163,20 @@ func on_game_scene_ready() -> void:
 	if is_host:
 		host_ready.emit()
 
+# Local peer id, safe to call when no multiplayer peer is assigned (offline mode):
+# returns 1 since the local player acts as the host.
+func local_peer_id() -> int:
+	if multiplayer.multiplayer_peer == null:
+		return 1
+	return multiplayer.get_unique_id()
+
+# Connected remote peer ids, safe to call when no multiplayer peer is assigned:
+# returns an empty array in offline mode.
+func connected_peer_ids() -> PackedInt32Array:
+	if multiplayer.multiplayer_peer == null:
+		return PackedInt32Array()
+	return multiplayer.get_peers()
+
 # ── Network Signals ───────────────────────────────────────────────────────────
 func _on_peer_connected(_id: int) -> void:
 	pass
@@ -173,7 +187,7 @@ func _on_peer_disconnected(id: int) -> void:
 	_peer_numbers.erase(id)
 	peer_disconnected.emit(id)
 	# Notify all remaining clients so they remove the stale skater.
-	for peer_id in multiplayer.get_peers():
+	for peer_id in connected_peer_ids():
 		notify_player_disconnected.rpc_id(peer_id, id)
 
 func _on_connected_to_server() -> void:
@@ -291,9 +305,9 @@ func _process(delta: float) -> void:
 	_ping_timer += capped_delta
 	if _ping_timer >= _PING_INTERVAL:
 		_ping_timer = 0.0
-		if is_host:
+		if is_host and not is_offline_mode:
 			_broadcast_all_pings()
-		elif _clock_sync != null and _clock_sync.is_ready:
+		elif not is_host and _clock_sync != null and _clock_sync.is_ready:
 			report_ping.rpc_id(1, int(get_rtt_ms()))
 
 	if not is_host and _local_controller != null:
@@ -344,12 +358,14 @@ func set_broadcast_rate(hz: float) -> void:
 	state_delta = 1.0 / maxf(hz, 1.0)
 
 func _broadcast_state() -> void:
+	if is_offline_mode:
+		return
 	if not _world_state_provider.is_valid():
 		return
 	var state: PackedByteArray = _world_state_provider.call()
 	if state.is_empty():
 		return
-	for peer_id in multiplayer.get_peers():
+	for peer_id in connected_peer_ids():
 		receive_world_state.rpc_id(peer_id, state)
 
 # ── RPCs ──────────────────────────────────────────────────────────────────────
@@ -516,7 +532,7 @@ func _broadcast_all_pings() -> void:
 	var pings: Dictionary[int, int] = {}
 	for pid: int in _peer_ping_ms:
 		pings[pid] = _peer_ping_ms[pid]
-	for peer_id: int in multiplayer.get_peers():
+	for peer_id: int in connected_peer_ids():
 		receive_all_pings.rpc_id(peer_id, pings)
 
 @rpc("authority", "unreliable")
@@ -558,7 +574,7 @@ func notify_puck_picked_up() -> void:
 	NetworkSimManager.send(func() -> void: local_puck_pickup_confirmed.emit(), [], true)
 
 func send_ghost_state_to_all(peer_id: int, is_ghost: bool) -> void:
-	for remote_id: int in multiplayer.get_peers():
+	for remote_id: int in connected_peer_ids():
 		notify_ghost_state.rpc_id(remote_id, peer_id, is_ghost)
 
 @rpc("authority", "reliable")
@@ -568,7 +584,7 @@ func notify_ghost_state(peer_id: int, is_ghost: bool) -> void:
 		[peer_id, is_ghost], true)
 
 func send_goalie_shot_reaction_to_all(team_id: int, impact_x: float, impact_y: float, is_elevated: bool) -> void:
-	for peer_id: int in multiplayer.get_peers():
+	for peer_id: int in connected_peer_ids():
 		notify_goalie_shot_reaction.rpc_id(peer_id, team_id, impact_x, impact_y, is_elevated)
 
 @rpc("authority", "reliable")
@@ -579,7 +595,7 @@ func notify_goalie_shot_reaction(team_id: int, impact_x: float, impact_y: float,
 		[team_id, impact_x, impact_y, is_elevated], true)
 
 func send_goalie_state_transition_to_all(team_id: int, new_state: int) -> void:
-	for peer_id: int in multiplayer.get_peers():
+	for peer_id: int in connected_peer_ids():
 		notify_goalie_state_transition.rpc_id(peer_id, team_id, new_state)
 
 @rpc("authority", "reliable")
@@ -589,7 +605,7 @@ func notify_goalie_state_transition(team_id: int, new_state: int) -> void:
 		[team_id, new_state], true)
 
 func send_carrier_changed_to_all(new_carrier_peer_id: int) -> void:
-	for peer_id: int in multiplayer.get_peers():
+	for peer_id: int in connected_peer_ids():
 		notify_carrier_changed.rpc_id(peer_id, new_carrier_peer_id)
 	remote_carrier_changed.emit(new_carrier_peer_id)
 
@@ -627,7 +643,7 @@ func release_puck_one_timer(direction: Vector3, power: float, host_timestamp: fl
 		[direction, power, host_timestamp, rtt_ms, sender], true)
 
 func notify_goal_to_all(scoring_team_id: int, score0: int, score1: int, scorer_name: String, assist1_name: String, assist2_name: String) -> void:
-	for peer_id in multiplayer.get_peers():
+	for peer_id in connected_peer_ids():
 		notify_goal.rpc_id(peer_id, scoring_team_id, score0, score1, scorer_name, assist1_name, assist2_name)
 
 func notify_puck_dropped_to_carrier(carrier_peer_id: int) -> void:
@@ -649,7 +665,7 @@ func notify_goal(scoring_team_id: int, score0: int, score1: int, scorer_name: St
 		[scoring_team_id, score0, score1, scorer_name, assist1_name, assist2_name], true)
 
 func send_faceoff_positions(positions: Array) -> void:
-	for peer_id in multiplayer.get_peers():
+	for peer_id in connected_peer_ids():
 		notify_faceoff_positions.rpc_id(peer_id, positions)
 
 @rpc("authority", "reliable")
@@ -657,7 +673,7 @@ func notify_faceoff_positions(positions: Array) -> void:
 	NetworkSimManager.send(func(p: Array) -> void: faceoff_positions_received.emit(p), [positions], true)
 
 func notify_reset_to_all() -> void:
-	for peer_id in multiplayer.get_peers():
+	for peer_id in connected_peer_ids():
 		notify_game_reset.rpc_id(peer_id)
 
 @rpc("authority", "reliable")
@@ -665,7 +681,7 @@ func notify_game_reset() -> void:
 	game_reset_received.emit()
 
 func send_stats_to_all(data: Array) -> void:
-	for peer_id in multiplayer.get_peers():
+	for peer_id in connected_peer_ids():
 		receive_stats.rpc_id(peer_id, data)
 
 @rpc("authority", "call_remote", "reliable")
@@ -694,14 +710,14 @@ func send_sync_existing_players(peer_id: int, player_data: Array) -> void:
 
 func send_request_slot_swap(new_team_id: int, new_slot: int) -> void:
 	if is_host:
-		slot_swap_requested.emit(multiplayer.get_unique_id(), new_team_id, new_slot)
+		slot_swap_requested.emit(local_peer_id(), new_team_id, new_slot)
 	else:
 		request_slot_swap.rpc_id(1, new_team_id, new_slot)
 
 func send_confirm_slot_swap(peer_id: int, old_team_id: int, old_slot: int,
 		new_team_id: int, new_slot: int,
 		jersey: Color, helmet: Color, pants: Color) -> void:
-	for remote_id: int in multiplayer.get_peers():
+	for remote_id: int in connected_peer_ids():
 		confirm_slot_swap.rpc_id(remote_id, peer_id, old_team_id, old_slot,
 				new_team_id, new_slot, jersey, helmet, pants)
 	slot_swap_confirmed.emit(peer_id, old_team_id, old_slot, new_team_id, new_slot, jersey, helmet, pants)
@@ -709,7 +725,7 @@ func send_confirm_slot_swap(peer_id: int, old_team_id: int, old_slot: int,
 @rpc("any_peer", "reliable")
 func request_player_ready(is_ready: bool) -> void:
 	var peer_id: int = multiplayer.get_remote_sender_id()
-	for remote_id: int in multiplayer.get_peers():
+	for remote_id: int in connected_peer_ids():
 		notify_player_ready.rpc_id(remote_id, peer_id, is_ready)
 	player_ready_changed.emit(peer_id, is_ready)
 
@@ -719,14 +735,14 @@ func notify_player_ready(peer_id: int, is_ready: bool) -> void:
 
 func send_player_ready(is_ready: bool) -> void:
 	if is_host:
-		player_ready_changed.emit(multiplayer.get_unique_id(), is_ready)
+		player_ready_changed.emit(local_peer_id(), is_ready)
 	else:
 		request_player_ready.rpc_id(1, is_ready)
 
 @rpc("any_peer", "reliable")
 func request_rematch_vote(vote: bool) -> void:
 	var peer_id: int = multiplayer.get_remote_sender_id()
-	for remote_id: int in multiplayer.get_peers():
+	for remote_id: int in connected_peer_ids():
 		notify_rematch_vote.rpc_id(remote_id, peer_id, vote)
 	rematch_vote_changed.emit(peer_id, vote)
 
@@ -736,7 +752,7 @@ func notify_rematch_vote(peer_id: int, vote: bool) -> void:
 
 func send_rematch_vote(vote: bool) -> void:
 	if is_host:
-		rematch_vote_changed.emit(multiplayer.get_unique_id(), vote)
+		rematch_vote_changed.emit(local_peer_id(), vote)
 	else:
 		request_rematch_vote.rpc_id(1, vote)
 
@@ -800,7 +816,7 @@ func send_game_start(config: Dictionary) -> void:
 	pending_home_color_id = hid
 	pending_away_color_id = aid
 	pending_rule_set = rs
-	for peer_id: int in multiplayer.get_peers():
+	for peer_id: int in connected_peer_ids():
 		notify_game_start.rpc_id(peer_id,
 			config.num_periods, config.period_duration,
 			config.ot_enabled, config.ot_duration, hid, aid, rs)
@@ -818,7 +834,7 @@ func notify_team_colors(home_color_id: String, away_color_id: String) -> void:
 func send_team_colors(home_id: String, away_id: String) -> void:
 	pending_home_color_id = home_id
 	pending_away_color_id = away_id
-	for peer_id: int in multiplayer.get_peers():
+	for peer_id: int in connected_peer_ids():
 		notify_team_colors.rpc_id(peer_id, home_id, away_id)
 
 func send_team_colors_to(peer_id: int, home_id: String, away_id: String) -> void:
@@ -838,7 +854,7 @@ func send_lobby_settings(num_periods: int, period_duration: float, ot_enabled: b
 	pending_period_duration = period_duration
 	pending_ot_enabled = ot_enabled
 	pending_rule_set = rule_set
-	for peer_id: int in multiplayer.get_peers():
+	for peer_id: int in connected_peer_ids():
 		notify_lobby_settings.rpc_id(peer_id, num_periods, period_duration, ot_enabled, rule_set)
 
 func send_lobby_settings_to(peer_id: int, num_periods: int, period_duration: float, ot_enabled: bool,
@@ -851,7 +867,7 @@ func notify_return_to_lobby(roster: Array) -> void:
 	return_to_lobby_received.emit(roster)
 
 func send_return_to_lobby_to_all(roster: Array) -> void:
-	for peer_id: int in multiplayer.get_peers():
+	for peer_id: int in connected_peer_ids():
 		notify_return_to_lobby.rpc_id(peer_id, roster)
 	pending_lobby_roster = roster
 	return_to_lobby_received.emit(roster)
@@ -926,7 +942,7 @@ func unregister_remote_controller(peer_id: int) -> void:
 	_remote_controllers.erase(peer_id)
 
 func send_board_hit_to_all(position: Vector3) -> void:
-	for peer_id: int in multiplayer.get_peers():
+	for peer_id: int in connected_peer_ids():
 		notify_board_hit.rpc_id(peer_id, position)
 
 @rpc("authority", "unreliable")
@@ -934,7 +950,7 @@ func notify_board_hit(position: Vector3) -> void:
 	NetworkSimManager.send(func(pos: Vector3) -> void: board_hit_received.emit(pos), [position], false)
 
 func send_goal_body_hit_to_all(position: Vector3) -> void:
-	for peer_id: int in multiplayer.get_peers():
+	for peer_id: int in connected_peer_ids():
 		notify_goal_body_hit.rpc_id(peer_id, position)
 
 @rpc("authority", "unreliable")
@@ -942,7 +958,7 @@ func notify_goal_body_hit(position: Vector3) -> void:
 	NetworkSimManager.send(func(pos: Vector3) -> void: goal_body_hit_received.emit(pos), [position], false)
 
 func send_deflection_to_all(position: Vector3) -> void:
-	for peer_id: int in multiplayer.get_peers():
+	for peer_id: int in connected_peer_ids():
 		notify_deflection.rpc_id(peer_id, position)
 
 @rpc("authority", "unreliable")
@@ -950,7 +966,7 @@ func notify_deflection(position: Vector3) -> void:
 	NetworkSimManager.send(func(pos: Vector3) -> void: deflection_received.emit(pos), [position], false)
 
 func send_body_block_to_all(position: Vector3) -> void:
-	for peer_id: int in multiplayer.get_peers():
+	for peer_id: int in connected_peer_ids():
 		notify_body_block.rpc_id(peer_id, position)
 
 @rpc("authority", "unreliable")
@@ -958,7 +974,7 @@ func notify_body_block(position: Vector3) -> void:
 	NetworkSimManager.send(func(pos: Vector3) -> void: body_block_received.emit(pos), [position], false)
 
 func send_puck_strip_to_all(position: Vector3) -> void:
-	for peer_id: int in multiplayer.get_peers():
+	for peer_id: int in connected_peer_ids():
 		notify_puck_strip.rpc_id(peer_id, position)
 
 @rpc("authority", "unreliable")
