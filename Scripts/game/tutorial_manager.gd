@@ -386,7 +386,7 @@ func _process(delta: float) -> void:
 
 # ── Shot signal handler ───────────────────────────────────────────────────────
 
-func _on_shot_released(dir: Vector3, power: float, is_slapper: bool) -> void:
+func _on_shot_released(dir: Vector3, _power: float, is_slapper: bool) -> void:
 	var completed := false
 	match _current_step:
 		STEP_QUICK_SHOT:

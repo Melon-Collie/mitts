@@ -45,6 +45,7 @@ const _SEP_COLOR  := Color(0.28, 0.28, 0.33, 1.00)
 
 func _ready() -> void:
 	GameManager.team_colors_ready.connect(_on_team_colors_ready)
+	_build_offscreen_indicators()
 	_build_scorebug()
 	_build_phase_banner()
 	_build_elevation_indicator()
@@ -254,6 +255,10 @@ func _build_phase_banner() -> void:
 	_assist_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_assist_label.visible = false
 	vbox.add_child(_assist_label)
+
+func _build_offscreen_indicators() -> void:
+	var indicators := OffScreenPlayerIndicators.new()
+	add_child(indicators)
 
 func _build_elevation_indicator() -> void:
 	var style := StyleBoxFlat.new()
