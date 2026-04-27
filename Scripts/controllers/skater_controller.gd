@@ -540,6 +540,7 @@ func _try_one_timer_release(input: InputState) -> Dictionary:
 	var puck_xz := Vector2(puck.global_position.x, puck.global_position.z)
 	if zone_xz.distance_to(puck_xz) > one_timer_leniency_radius:
 		return {fired = false}
+	var blade_world: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
 	var locked_dir_3d := Vector3(_sm.locked_slapper_dir.x, 0.0, _sm.locked_slapper_dir.y)
 	var cfg: ShotMechanics.SlapperConfig = _slapper_config()
 	var result := ShotMechanics.release_slapper(
