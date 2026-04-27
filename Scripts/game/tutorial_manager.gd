@@ -179,7 +179,16 @@ func _begin_step(index: int) -> void:
 			_local_controller.puck_release_requested.connect(_on_release_callable)
 
 		STEP_ONE_TIMER:
-			_complete_step()
+			_local_controller.teleport_to(Vector3(0.0, 1.0, -3.0))
+			_fire_puck_at_player()
+			_on_one_timer_callable = func(_dir: Vector3, _power: float) -> void:
+				_complete_step()
+			_local_controller.one_timer_release_requested.connect(_on_one_timer_callable)
+			# If player picks up puck normally and shoots, re-stage
+			_on_regular_shot_in_one_timer = func(_dir: Vector3, _power: float, _is_slapper: bool) -> void:
+				_local_controller.teleport_to(Vector3(0.0, 1.0, -3.0))
+				_fire_puck_at_player()
+			_local_controller.puck_release_requested.connect(_on_regular_shot_in_one_timer)
 
 		STEP_STICKCHECK:
 			_local_controller.teleport_to(Vector3(0.0, 1.0, 2.0))
