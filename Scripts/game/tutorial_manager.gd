@@ -70,10 +70,11 @@ var _restage_timer: float = -1.0
 const _RESTAGE_DELAY: float = 1.5
 
 # Connected callables stored for safe disconnection
-var _on_release_callable:    Callable = Callable()
-var _on_one_timer_callable:  Callable = Callable()
-var _on_body_check_callable: Callable = Callable()
+var _on_release_callable:          Callable = Callable()
+var _on_one_timer_callable:        Callable = Callable()
+var _on_body_check_callable:       Callable = Callable()
 var _on_regular_shot_in_one_timer: Callable = Callable()
+var _on_stickcheck_callable:       Callable = Callable()
 
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -112,40 +113,40 @@ func _build_steps() -> void:
 		"Push the stick in any direction to build up speed."))
 	_steps.append(TutorialStep.new(
 		"Brake",
-		"Hold [Brake] with no direction to stop, or hold it with a direction to carve.",
-		"Brake key is Space (keyboard) or LB/L1 (controller)."))
+		"Hold Space to brake. Hold Space with a direction to carve — great for sharp turns.",
+		"Tap Space while moving to shed speed quickly."))
 	_steps.append(TutorialStep.new(
 		"Quick Shot",
-		"Skate to the puck to pick it up, then tap [Shoot] quickly for a Quick Shot.",
-		"Just flick the Shoot button — don't hold it."))
+		"Skate to the puck to pick it up, then click LMB quickly for a Quick Shot.",
+		"Just flick LMB — don't hold it."))
 	_steps.append(TutorialStep.new(
 		"Wrist Shot",
-		"Pick up the puck, hold [Shoot], and sweep the mouse / stick to aim a Wrist Shot.",
-		"Hold Shoot and drag — the longer you hold, the more power."))
+		"Pick up the puck, hold LMB, and sweep the mouse to aim a Wrist Shot.",
+		"Hold LMB and sweep — the longer you hold and the further you sweep, the more power."))
 	_steps.append(TutorialStep.new(
 		"Slapshot",
-		"Pick up the puck, hold [Slap] to wind up, then release for a Slapshot.",
-		"Slap key is RMB / LT / L2."))
+		"Pick up the puck, hold RMB to wind up, then release for a Slapshot.",
+		"RMB charges the slap — release at full charge for max power."))
 	_steps.append(TutorialStep.new(
 		"One-timer",
-		"Wind up [Slap] before the puck arrives, then release the moment it reaches you.",
-		"Start the Slap windup first — the puck is coming toward you!"))
+		"Wind up RMB before the puck arrives, then release the moment it reaches you.",
+		"Start the RMB windup first — the puck is coming toward you!"))
 	_steps.append(TutorialStep.new(
 		"Shot Block",
-		"A shot is coming at you — hold [Block] to get into a deflecting stance.",
-		"Block key is RMB / RB / R1."))
+		"A shot is coming at you — hold Ctrl to get into a deflecting stance.",
+		"Hold Ctrl and position yourself in the puck's path."))
 	_steps.append(TutorialStep.new(
 		"Stickcheck",
-		"Hold [Block] while close to the opponent with the puck to attempt a stickcheck.",
-		"Stay tight to the opponent and hold Block."))
+		"Skate your stick blade into the opponent's puck to strip it — that's a stickcheck.",
+		"Move close and sweep through the puck."))
 	_steps.append(TutorialStep.new(
 		"Body Check",
 		"Skate directly into the opponent to body check them.",
 		"Pick up speed and aim straight at them."))
 	_steps.append(TutorialStep.new(
 		"Elevation",
-		"Pick up the puck, hold [Elevation Up], then shoot to lift the puck off the ice.",
-		"Hold Elevation Up (E / D-Up) before pressing Shoot or Slap."))
+		"Pick up the puck, scroll the mouse wheel up, then shoot to lift the puck off the ice.",
+		"Scroll up before clicking LMB or RMB — the puck lifts when released."))
 	_steps.append(TutorialStep.new(
 		"Offsides",
 		"You're in the offensive zone before the puck — that's offside. Skate back past the blue line to reset!",
@@ -205,10 +206,17 @@ func _begin_step(index: int) -> void:
 			_fire_puck_for_shot_block()
 
 		STEP_STICKCHECK:
-			_local_controller.teleport_to(Vector3(0.0, 1.0, 2.0))
+			_local_controller.teleport_to(Vector3(0.0, 1.0, 2.5))
 			_ensure_dummy(Vector3(0.0, 1.0, 0.0))
-			# Puck near the dummy so the stickcheck context makes sense
-			_place_puck(Vector3(0.0, _ICE_Y, 0.2))
+			# Give the dummy the puck — it pins to the dummy's blade each physics frame.
+			# PuckController sees the player as an opposing skater (dummy resolves to team -1)
+			# and will call apply_poke_check when the player's blade sweeps through.
+			if _puck.carrier != null:
+				_puck.drop()
+			_puck.set_carrier(_dummy_skater)
+			_on_stickcheck_callable = func(_ex: Skater) -> void:
+				_complete_step()
+			_puck.puck_stripped.connect(_on_stickcheck_callable)
 
 		STEP_BODY_CHECK:
 			_local_controller.teleport_to(Vector3(-4.0, 1.0, 0.0))
@@ -299,7 +307,8 @@ func _process(delta: float) -> void:
 				_step_timer = 0.0
 
 		STEP_BRAKE:
-			if _skater.is_braking:
+			# is_braced is true whenever Space is held, with or without a direction
+			if _skater.is_braced:
 				_step_timer += delta
 				if _step_timer >= _BRAKE_HOLD:
 					_complete_step()
@@ -319,14 +328,6 @@ func _process(delta: float) -> void:
 				var puck_z: float = _puck.get_puck_position().z
 				if puck_z > _skater.global_position.z + 4.0:
 					_fire_puck_for_shot_block()
-
-		STEP_STICKCHECK:
-			if _local_controller.get_current_input().block_held:
-				_step_timer += delta
-				if _step_timer >= _BLOCK_HOLD:
-					_complete_step()
-			else:
-				_step_timer = 0.0
 
 		STEP_ONE_TIMER:
 			# Re-fire puck if it stopped or left the play area
@@ -449,6 +450,9 @@ func _ensure_dummy(position: Vector3) -> void:
 
 func _free_dummy() -> void:
 	if is_instance_valid(_dummy_skater):
+		# Drop the puck before freeing so the puck carrier pointer doesn't dangle
+		if _puck != null and _puck.carrier == _dummy_skater:
+			_puck.drop()
 		_dummy_skater.queue_free()
 		_dummy_skater = null
 	if is_instance_valid(_dummy_controller):
@@ -481,3 +485,8 @@ func _disconnect_all_signals() -> void:
 		if _local_controller.puck_release_requested.is_connected(_on_regular_shot_in_one_timer):
 			_local_controller.puck_release_requested.disconnect(_on_regular_shot_in_one_timer)
 		_on_regular_shot_in_one_timer = Callable()
+
+	if _on_stickcheck_callable.is_valid() and _puck != null:
+		if _puck.puck_stripped.is_connected(_on_stickcheck_callable):
+			_puck.puck_stripped.disconnect(_on_stickcheck_callable)
+		_on_stickcheck_callable = Callable()

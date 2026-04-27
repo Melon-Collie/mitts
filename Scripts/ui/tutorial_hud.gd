@@ -25,88 +25,73 @@ func _ready() -> void:
 
 
 func _build() -> void:
-	# Bottom bar backing
-	var bar_bg := ColorRect.new()
-	bar_bg.color = MenuStyle.HUD_BG
-	bar_bg.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	bar_bg.custom_minimum_size = Vector2(0, 96)
-	bar_bg.offset_top = -96
-	bar_bg.offset_bottom = 0
-	add_child(bar_bg)
+	# Compact panel pinned to the top-right corner, clear of all bottom HUD elements.
+	# anchor_left = anchor_right = 1.0 pins both edges to the right of the screen;
+	# grow_horizontal = GROW_DIRECTION_BEGIN makes the panel extend leftward from there.
+	var panel_style := MenuStyle.panel(6, 14)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", panel_style)
+	panel.anchor_left   = 1.0
+	panel.anchor_right  = 1.0
+	panel.anchor_top    = 0.0
+	panel.anchor_bottom = 0.0
+	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	panel.grow_vertical   = Control.GROW_DIRECTION_END
+	panel.offset_right  = -12.0
+	panel.offset_top    = 12.0
+	panel.custom_minimum_size = Vector2(360.0, 0.0)
+	add_child(panel)
 
-	# Border line at top of bar
-	var border := ColorRect.new()
-	border.color = MenuStyle.ICE_DIM
-	border.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	border.custom_minimum_size = Vector2(0, 1)
-	border.offset_top = -97
-	border.offset_bottom = -96
-	add_child(border)
+	var inner := MarginContainer.new()
+	inner.add_theme_constant_override("margin_left",   14)
+	inner.add_theme_constant_override("margin_right",  14)
+	inner.add_theme_constant_override("margin_top",    10)
+	inner.add_theme_constant_override("margin_bottom", 10)
+	panel.add_child(inner)
 
-	# Main HBox inside the bar
-	var hbox := HBoxContainer.new()
-	hbox.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	hbox.offset_top = -96
-	hbox.offset_bottom = 0
-	hbox.add_theme_constant_override("separation", 24)
-	var margins := MarginContainer.new()
-	margins.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	margins.offset_top = -96
-	margins.offset_bottom = 0
-	margins.add_theme_constant_override("margin_left", 24)
-	margins.add_theme_constant_override("margin_right", 24)
-	margins.add_theme_constant_override("margin_top", 8)
-	margins.add_theme_constant_override("margin_bottom", 8)
-	margins.add_child(hbox)
-	add_child(margins)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 5)
+	inner.add_child(vbox)
 
-	# Left: step counter
+	# Row 1: step counter + skip button
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 8)
+	vbox.add_child(header)
+
 	_step_label = Label.new()
+	_step_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_step_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_step_label.add_theme_font_size_override("font_size", 13)
+	_step_label.add_theme_font_size_override("font_size", 11)
 	_step_label.add_theme_color_override("font_color", MenuStyle.TEXT_DIM)
-	_step_label.custom_minimum_size = Vector2(80, 0)
-	hbox.add_child(_step_label)
-
-	# Center: title + instruction stacked
-	var center_vbox := VBoxContainer.new()
-	center_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	center_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	center_vbox.add_theme_constant_override("separation", 4)
-	hbox.add_child(center_vbox)
-
-	_title_label = Label.new()
-	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_title_label.add_theme_font_size_override("font_size", 22)
-	_title_label.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
-	center_vbox.add_child(_title_label)
-
-	_instruction_label = Label.new()
-	_instruction_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_instruction_label.add_theme_font_size_override("font_size", 14)
-	_instruction_label.add_theme_color_override("font_color", MenuStyle.TEXT_BODY)
-	_instruction_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	center_vbox.add_child(_instruction_label)
-
-	_hint_label = Label.new()
-	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hint_label.add_theme_font_size_override("font_size", 12)
-	_hint_label.add_theme_color_override("font_color", MenuStyle.ICE_MID)
-	_hint_label.visible = false
-	center_vbox.add_child(_hint_label)
-
-	# Right: skip button
-	var right_vbox := VBoxContainer.new()
-	right_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	right_vbox.custom_minimum_size = Vector2(80, 0)
-	hbox.add_child(right_vbox)
+	header.add_child(_step_label)
 
 	_skip_btn = Button.new()
 	_skip_btn.text = "Skip →"
 	MenuStyle.apply_button(_skip_btn)
 	_skip_btn.pressed.connect(func() -> void: skip_pressed.emit())
 	SoundManager.wire_button(_skip_btn)
-	right_vbox.add_child(_skip_btn)
+	header.add_child(_skip_btn)
+
+	# Row 2: step title
+	_title_label = Label.new()
+	_title_label.add_theme_font_size_override("font_size", 18)
+	_title_label.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
+	vbox.add_child(_title_label)
+
+	# Row 3: instruction text (word-wrapped)
+	_instruction_label = Label.new()
+	_instruction_label.add_theme_font_size_override("font_size", 13)
+	_instruction_label.add_theme_color_override("font_color", MenuStyle.TEXT_BODY)
+	_instruction_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(_instruction_label)
+
+	# Row 4: hint (hidden until hint delay expires)
+	_hint_label = Label.new()
+	_hint_label.add_theme_font_size_override("font_size", 11)
+	_hint_label.add_theme_color_override("font_color", MenuStyle.ICE_MID)
+	_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_hint_label.visible = false
+	vbox.add_child(_hint_label)
 
 	# Step-complete flash overlay (full screen, semi-transparent green)
 	_complete_flash = ColorRect.new()
