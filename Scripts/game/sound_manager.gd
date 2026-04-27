@@ -93,7 +93,7 @@ func _build_pools() -> void:
 		_pool_3d.append(p)
 
 
-func play_ui(sound: Sound, volume_db: float = 0.0) -> void:
+func play_ui(sound: Sound, volume_db: float = 0.0, pitch_variance: float = 0.0) -> void:
 	var stream: AudioStream = _streams.get(sound)
 	if stream == null:
 		return
@@ -101,11 +101,12 @@ func play_ui(sound: Sound, volume_db: float = 0.0) -> void:
 		if not p.playing:
 			p.stream = stream
 			p.volume_db = volume_db
+			p.pitch_scale = randf_range(1.0 - pitch_variance, 1.0 + pitch_variance) if pitch_variance > 0.0 else 1.0
 			p.play()
 			return
 
 
-func play_sfx(sound: Sound, volume_db: float = 0.0) -> void:
+func play_sfx(sound: Sound, volume_db: float = 0.0, pitch_variance: float = 0.0) -> void:
 	var stream: AudioStream = _streams.get(sound)
 	if stream == null:
 		return
@@ -113,11 +114,12 @@ func play_sfx(sound: Sound, volume_db: float = 0.0) -> void:
 		if not p.playing:
 			p.stream = stream
 			p.volume_db = volume_db
+			p.pitch_scale = randf_range(1.0 - pitch_variance, 1.0 + pitch_variance) if pitch_variance > 0.0 else 1.0
 			p.play()
 			return
 
 
-func play_world(sound: Sound, position: Vector3, volume_db: float = 0.0) -> void:
+func play_world(sound: Sound, position: Vector3, volume_db: float = 0.0, pitch_variance: float = 0.0) -> void:
 	var stream: AudioStream = _streams.get(sound)
 	if stream == null:
 		return
@@ -125,6 +127,7 @@ func play_world(sound: Sound, position: Vector3, volume_db: float = 0.0) -> void
 		if not p.playing:
 			p.stream = stream
 			p.volume_db = volume_db
+			p.pitch_scale = randf_range(1.0 - pitch_variance, 1.0 + pitch_variance) if pitch_variance > 0.0 else 1.0
 			p.global_position = position
 			p.play()
 			return
