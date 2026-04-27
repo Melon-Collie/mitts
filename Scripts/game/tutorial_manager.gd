@@ -274,7 +274,7 @@ func _process(delta: float) -> void:
 
 	match _current_step:
 		STEP_SKATE:
-			if _skater.linear_velocity.length() > 2.5:
+			if _skater.velocity.length() > 2.5:
 				_step_timer += delta
 				if _step_timer >= _SKATE_HOLD:
 					_complete_step()
