@@ -40,7 +40,9 @@ const _ONE_TIMER_PUCK_SPEED: float = 8.0
 # Delay before the puck fires in the one-timer step (gives player time to wind up RMB)
 const _ONE_TIMER_LAUNCH_DELAY: float = 2.5
 # Shot block: puck comes from the offensive zone toward the player's goal
-const _SHOT_BLOCK_PUCK_SPEED: float = 10.0
+const _SHOT_BLOCK_PUCK_SPEED: float = 22.0
+# Slapshot: cross-ice pass speed (slow enough to pick up, above-board cross-ice slide)
+const _SLAPSHOT_CROSS_SPEED: float = 5.0
 # Ice height for puck placement
 const _ICE_Y:                float = 0.05
 
@@ -61,6 +63,7 @@ var _step_timer:         float = 0.0
 var _hint_timer:         float = 0.0
 var _complete_flash_timer: float = 0.0
 var _wrister_aim_start:  float = -1.0   # -1 when not in WRISTER_AIM
+var _slapshot_dot_x:           float = 6.0   # set in _begin_step based on handedness
 var _offside_ghost_seen:       bool  = false
 var _icing_armed:              bool  = false  # true once puck is staged and loose
 var _icing_scored:             bool  = false  # true after puck crosses goal line
@@ -128,7 +131,7 @@ func _build_steps() -> void:
 		"Hold LMB and sweep — the longer you hold and the further you sweep, the more power."))
 	_steps.append(TutorialStep.new(
 		"Slapshot",
-		"Pick up the puck, hold RMB to wind up, then release for a Slapshot.",
+		"The puck is sliding over from the far dot. Let it reach you, pick it up, hold RMB to wind up, then release for a Slapshot.",
 		"RMB charges the slap — release at full charge for max power."))
 	_steps.append(TutorialStep.new(
 		"One-timer",
@@ -185,10 +188,20 @@ func _begin_step(index: int) -> void:
 		STEP_BRAKE:
 			pass  # player is already on the ice from the skate step
 
-		STEP_QUICK_SHOT, STEP_WRIST_SHOT, STEP_SLAPSHOT, STEP_ELEVATION:
+		STEP_QUICK_SHOT, STEP_WRIST_SHOT, STEP_ELEVATION:
 			_local_controller.teleport_to(Vector3(0.0, 1.0, 5.0))
 			# Puck 1 m ahead in attacking direction (-Z)
 			_place_puck(Vector3(0.0, _ICE_Y, 3.5))
+			_on_release_callable = func(dir: Vector3, power: float, is_slapper: bool) -> void:
+				_on_shot_released(dir, power, is_slapper)
+			_local_controller.puck_release_requested.connect(_on_release_callable)
+
+		STEP_SLAPSHOT:
+			# Left-handed players shoot from right dot; right-handed from left dot
+			# (forehand faces the incoming cross-ice pass)
+			_slapshot_dot_x = 6.0 if PlayerPrefs.is_left_handed else -6.0
+			_local_controller.teleport_to(Vector3(_slapshot_dot_x, 1.0, -GameRules.ICING_FACEOFF_DOT_Z))
+			_fire_puck_cross_ice()
 			_on_release_callable = func(dir: Vector3, power: float, is_slapper: bool) -> void:
 				_on_shot_released(dir, power, is_slapper)
 			_local_controller.puck_release_requested.connect(_on_release_callable)
@@ -295,8 +308,12 @@ func _process(delta: float) -> void:
 		_restage_timer -= delta
 		if _restage_timer <= 0.0:
 			_restage_timer = -1.0
-			_local_controller.teleport_to(Vector3(0.0, 1.0, 5.0))
-			_place_puck(Vector3(0.0, _ICE_Y, 3.5))
+			if _current_step == STEP_SLAPSHOT:
+				_local_controller.teleport_to(Vector3(_slapshot_dot_x, 1.0, -GameRules.ICING_FACEOFF_DOT_Z))
+				_fire_puck_cross_ice()
+			else:
+				_local_controller.teleport_to(Vector3(0.0, 1.0, 5.0))
+				_place_puck(Vector3(0.0, _ICE_Y, 3.5))
 
 	# Track WRISTER_AIM (state 2) entry for quick vs wrist shot distinction
 	var shot_state: int = _local_controller.get_shot_state()
@@ -427,6 +444,17 @@ func _place_puck(pos: Vector3) -> void:
 	_puck.set_puck_position(pos)
 	# Velocity: Jolt zeroes it on the first dynamic step after unfreeze, which is fine.
 	_puck.linear_velocity = Vector3.ZERO
+
+
+# Fires the puck from the opposite end-zone faceoff dot toward _slapshot_dot_x for STEP_SLAPSHOT.
+func _fire_puck_cross_ice() -> void:
+	var from_x: float = -_slapshot_dot_x
+	if _puck.carrier != null:
+		_puck.drop()
+	_puck.set_puck_position(Vector3(from_x, _ICE_Y, -GameRules.ICING_FACEOFF_DOT_Z))
+	# Slide toward the player's dot; tiny Y keeps velocity alive through Jolt's first integration step
+	var vel_x: float = signf(-from_x) * _SLAPSHOT_CROSS_SPEED
+	_puck.apply_release_velocity(Vector3(vel_x, 0.001, 0.0))
 
 
 # Fires the puck from the offensive zone toward the player's goal for the shot-block step.
