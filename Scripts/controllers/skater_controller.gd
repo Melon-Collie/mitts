@@ -269,6 +269,9 @@ func get_network_state() -> SkaterNetworkState:
 	state.shot_charge = _aiming.charge_distance
 	return state
 
+func get_shot_state() -> int:
+	return _sm.get_state()
+
 func apply_network_state(_net_state: SkaterNetworkState, _host_ts: float) -> void:
 	pass  # overridden by RemoteController on client
 	

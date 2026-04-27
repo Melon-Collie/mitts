@@ -1068,6 +1068,12 @@ func get_puck() -> Puck:
 	return puck
 
 
+func spawn_tutorial_dummy(position: Vector3) -> Dictionary:
+	return _spawner.spawn_remote_player(
+		position, Color(0.8, 0.3, 0.3), Color(0.2, 0.2, 0.2), Color(0.15, 0.15, 0.15),
+		Color(0.8, 0.3, 0.3), false, puck, self)
+
+
 func get_goalie_data() -> Array[Dictionary]:
 	var data: Array[Dictionary] = []
 	for i: int in range(goalies.size()):
