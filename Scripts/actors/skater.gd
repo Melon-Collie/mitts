@@ -134,15 +134,15 @@ const _CHARGE_FULL_PULSE_HZ: float = 3.0
 const _CHARGE_LOST_FLASH_DURATION: float = 0.35
 
 # Curved-name layout. Each character is its own Label3D positioned on an arc
-# centered on the screen-down direction. Radius and per-char angular spacing
-# are tuned for readability at typical hockey camera height.
-const _NAME_ARC_RADIUS: float = RING_OUTER_R + 0.22
-const _NAME_CHAR_ANGLE_DEG: float = 7.0
-# Chevron sits at the same arc radius as the name, just past the
-# end-of-name on the side opposite the player's stick (so it's never
-# behind the blade/stick visual). Angular gap from the last/first letter.
-const _CHEVRON_RADIUS: float = RING_OUTER_R + 0.22
-const _CHEVRON_GAP_DEG: float = 9.0
+# centered on the screen-down direction. The radius is generous + the per-char
+# angle is small so the curve reads as a *gentle* wrap, not a half-circle —
+# letters at the ends still tilt into the arc but the name stays readable.
+const _NAME_ARC_RADIUS: float = RING_OUTER_R + 0.35
+const _NAME_CHAR_ANGLE_DEG: float = 4.0
+# Chevron sits on the same arc, just past the end of the name on the side
+# OPPOSITE the player's stick (so it's never tucked behind the blade visual).
+const _CHEVRON_RADIUS: float = RING_OUTER_R + 0.35
+const _CHEVRON_GAP_DEG: float = 6.0
 
 # Charge ring shader: angle-mask + tri-color blend. Fill goes clockwise from 12
 # o'clock as viewed from above. UV.x of the procedural ring encodes 0..1
@@ -448,9 +448,9 @@ func _create_chevron_mesh() -> ArrayMesh:
 	# Built at the origin pointing UP in screen-space (vertex tip toward -Z in
 	# the chevron's local frame). The mesh is repositioned each tick from
 	# _physics_process using camera-aware screen axes.
-	var size: float = 0.45                       # full chevron height/width
+	var size: float = 0.14                       # full chevron height/width — small, reads as a glyph
 	var leg_len: float = size * 0.7
-	var thickness: float = MenuStyle.HUD_LINE_THICK
+	var thickness: float = MenuStyle.HUD_LINE_THIN
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var indices := PackedInt32Array()
