@@ -72,6 +72,15 @@ const ICING_GHOST_DURATION: float = 3.0  # seconds team stays ghosted after icin
 # Hybrid icing race measures which team's player is closer to this dot.
 const ICING_FACEOFF_DOT_Z: float = 22.1
 
+# Rule preset that gates which infractions are detected and how they're punished.
+#   OFF    — no offsides, no icing (free-for-all).
+#   ARCADE — offsides ghost the offending player; icing is ignored.
+#   NHL    — offsides + icing both detected; today they fall back to the ghost
+#            penalty as a stub for the future stoppage + faceoff implementation.
+enum RuleSet { OFF, ARCADE, NHL }
+const DEFAULT_RULE_SET: int = RuleSet.ARCADE
+const RULE_SET_NAMES: Array[String] = ["Off", "Arcade", "NHL"]
+
 # ── Players ───────────────────────────────────────────────────────────────────
 const MAX_PLAYERS: int = 6  # 3v3
 
