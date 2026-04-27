@@ -63,6 +63,8 @@ static func clamp_to_rink_inner(world_xz: Vector2) -> Vector2:
 # ── Puck ──────────────────────────────────────────────────────────────────────
 const PUCK_START_POS: Vector3 = Vector3(0, 0.05, 0)
 const ICE_FRICTION: float = 0.01
+# Seconds puck must remain fully outside the rink boundary before a faceoff is forced.
+const PUCK_OOB_FACEOFF_TIMEOUT: float = 3.0
 
 # ── Infractions ───────────────────────────────────────────────────────────────
 const ICING_GHOST_DURATION: float = 3.0  # seconds team stays ghosted after icing

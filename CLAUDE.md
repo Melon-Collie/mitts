@@ -18,6 +18,8 @@ Complex features (AI state machines, new systems, architectural changes) are des
 
 A 3v3 arcade hockey game built in Godot 4.6.2 (GDScript, 3D). Online multiplayer — one player per machine, each with their own camera and local simulation. Prioritizes feel over realism: deep stickhandling, multiple shot types, satisfying puck physics.
 
+**Puck RigidBody3D has Continuous CD enabled.** Do not suggest enabling CCD as a fix for puck tunnelling — it is already on. Puck escaping the rink is more likely a velocity/reflection compounding bug or a Jolt edge case.
+
 ## Tech Stack
 
 - **Engine:** Godot 4.6.2 (Jolt Physics)

@@ -26,6 +26,7 @@ signal puck_hit_goal_body  # uncarried puck struck net panel or skirt (non-pipe 
 @export var body_check_puck_speed: float = 5.0
 @export var body_block_dampen: float = 0.5
 @export var body_block_cooldown: float = 0.1
+@export var max_height: float = 3.0
 
 var carrier: Skater = null
 var pickup_locked: bool = false
@@ -54,6 +55,7 @@ func _ready() -> void:
 	# Mask = LAYER_WALLS only: bounces off boards + goalie bodies, not skater bodies.
 	collision_layer = Constants.LAYER_PUCK
 	collision_mask  = Constants.MASK_PUCK
+	continuous_cd = true
 	process_physics_priority = 1  # Run after Skater.move_and_slide so blade world pos is current
 	contact_monitor = true
 	max_contacts_reported = 4
@@ -283,6 +285,10 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		_pending_elevation_vel = Vector3.ZERO
 	if state.linear_velocity.length() > max_speed:
 		state.linear_velocity = state.linear_velocity.normalized() * max_speed
+	if state.transform.origin.y > ice_height + max_height:
+		state.transform.origin.y = ice_height + max_height
+		if state.linear_velocity.y > 0.0:
+			state.linear_velocity.y = 0.0
 	if _clamp_at_goal_line:
 		var z: float = state.transform.origin.z
 		var goal_z: float = GameRules.GOAL_LINE_Z
