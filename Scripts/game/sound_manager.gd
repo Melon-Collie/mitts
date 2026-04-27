@@ -34,10 +34,10 @@ const _SOUND_PATHS: Dictionary = {
 	Sound.PUCK_POST:        "res://Sounds/puck_post.wav",
 	Sound.PUCK_GOAL_BODY:   "res://Sounds/puck_goal_body.wav",
 	Sound.PUCK_DEFLECTION:  "res://Sounds/puck_deflection.wav",
-	Sound.PUCK_BODY_BLOCK:  "res://Sounds/puck_body_block.wav",
+	Sound.PUCK_BODY_BLOCK:  "res://Sounds/puck_body_block.ogg",
 	Sound.PUCK_STRIP:       "res://Sounds/puck_strip.wav",
 	Sound.PERIOD_BUZZER:    "res://Sounds/period_buzzer.wav",
-	Sound.BODY_CHECK:       "res://Sounds/body_check.wav",
+	Sound.BODY_CHECK:       "res://Sounds/body_check.ogg",
 }
 
 const _UI_POOL_SIZE: int = 4
