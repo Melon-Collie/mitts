@@ -35,14 +35,10 @@ const _BLOCK_HOLD:           float = 2.0
 const _SHOT_BLOCK_HOLD:      float = 1.0
 # Quick shot: must release WRISTER_AIM within this window (else counts as wrist shot)
 const _WRIST_HOLD_MIN:       float = 0.4
-# One-timer puck launch speed (m/s toward player)
-const _ONE_TIMER_PUCK_SPEED: float = 8.0
-# Delay before the puck fires in the one-timer step (gives player time to wind up RMB)
-const _ONE_TIMER_LAUNCH_DELAY: float = 2.5
 # Shot block: puck comes from the offensive zone toward the player's goal
 const _SHOT_BLOCK_PUCK_SPEED: float = 22.0
-# Slapshot: cross-ice pass speed (slow enough to pick up, above-board cross-ice slide)
-const _SLAPSHOT_CROSS_SPEED: float = 5.0
+# One-timer: cross-ice pass speed from the opposite faceoff dot
+const _ONE_TIMER_CROSS_SPEED: float = 5.0
 # Ice height for puck placement
 const _ICE_Y:                float = 0.05
 
@@ -63,11 +59,10 @@ var _step_timer:         float = 0.0
 var _hint_timer:         float = 0.0
 var _complete_flash_timer: float = 0.0
 var _wrister_aim_start:  float = -1.0   # -1 when not in WRISTER_AIM
-var _slapshot_dot_x:           float = 6.0   # set in _begin_step based on handedness
+var _cross_ice_dot_x:          float = 6.0   # set in _begin_step based on handedness
 var _offside_ghost_seen:       bool  = false
 var _icing_armed:              bool  = false  # true once puck is staged and loose
 var _icing_scored:             bool  = false  # true after puck crosses goal line
-var _one_timer_launch_timer:   float = -1.0   # counts down before firing puck in one-timer step
 
 var _hud: TutorialHUD = null
 
@@ -132,12 +127,12 @@ func _build_steps() -> void:
 		"Hold LMB and sweep — the longer you hold and the further you sweep, the more power."))
 	_steps.append(TutorialStep.new(
 		"Slapshot",
-		"The puck is sliding over from the far dot. Let it reach you, pick it up, hold RMB to wind up, then release for a Slapshot.",
+		"Pick up the puck, hold RMB to wind up, then release for a Slapshot.",
 		"RMB charges the slap — release at full charge for max power."))
 	_steps.append(TutorialStep.new(
 		"One-timer",
-		"Wind up RMB before the puck arrives, then release the moment it reaches you.",
-		"Start the RMB windup first — the puck is coming toward you!"))
+		"The puck is sliding across from the far dot. Wind up RMB before it arrives, then release the moment it reaches you.",
+		"Start winding up RMB now — the puck is already on its way!"))
 	_steps.append(TutorialStep.new(
 		"Shot Block",
 		"A shot is coming at you — hold Ctrl to get into a deflecting stance.",
@@ -173,7 +168,6 @@ func _begin_step(index: int) -> void:
 	_complete_flash_timer = 0.0
 	_restage_timer           = -1.0
 	_wrister_aim_start       = -1.0
-	_one_timer_launch_timer  = -1.0
 	_offside_ghost_seen      = false
 	_icing_armed        = false
 	_icing_scored       = false
@@ -189,7 +183,7 @@ func _begin_step(index: int) -> void:
 		STEP_BRAKE:
 			pass  # player is already on the ice from the skate step
 
-		STEP_QUICK_SHOT, STEP_WRIST_SHOT, STEP_ELEVATION:
+		STEP_QUICK_SHOT, STEP_WRIST_SHOT, STEP_SLAPSHOT, STEP_ELEVATION:
 			_local_controller.teleport_to(Vector3(0.0, 1.0, 5.0))
 			# Puck 1 m ahead in attacking direction (-Z)
 			_place_puck(Vector3(0.0, _ICE_Y, 3.5))
@@ -197,29 +191,20 @@ func _begin_step(index: int) -> void:
 				_on_shot_released(dir, power, is_slapper)
 			_local_controller.puck_release_requested.connect(_on_release_callable)
 
-		STEP_SLAPSHOT:
-			# Left-handed players shoot from right dot; right-handed from left dot
-			# (forehand faces the incoming cross-ice pass)
-			_slapshot_dot_x = 6.0 if PlayerPrefs.is_left_handed else -6.0
-			_local_controller.teleport_to(Vector3(_slapshot_dot_x, 1.0, -GameRules.ICING_FACEOFF_DOT_Z))
-			_fire_puck_cross_ice()
-			_on_release_callable = func(dir: Vector3, power: float, is_slapper: bool) -> void:
-				_on_shot_released(dir, power, is_slapper)
-			_local_controller.puck_release_requested.connect(_on_release_callable)
-
 		STEP_ONE_TIMER:
-			_local_controller.teleport_to(Vector3(0.0, 1.0, -5.0))
-			_place_puck(Vector3(100.0, _ICE_Y, 100.0))  # out of the way until launch delay expires
-			_one_timer_launch_timer = _ONE_TIMER_LAUNCH_DELAY
+			# Left-handed players receive from right dot; right-handed from left dot
+			# (forehand faces the incoming cross-ice pass)
+			_cross_ice_dot_x = 6.0 if PlayerPrefs.is_left_handed else -6.0
+			_local_controller.teleport_to(Vector3(_cross_ice_dot_x, 1.0, -GameRules.ICING_FACEOFF_DOT_Z))
+			_fire_puck_cross_ice()
 			_on_one_timer_callable = func(_dir: Vector3, _power: float) -> void:
 				_complete_step()
 			_local_controller.one_timer_release_requested.connect(_on_one_timer_callable)
-			# If player picks up puck normally and shoots, re-stage with delay
+			# If player picks up puck normally and shoots, re-stage the cross-ice pass
 			_on_regular_shot_in_one_timer = func(_dir: Vector3, _power: float, _is_slapper: bool) -> void:
-				_local_controller.teleport_to(Vector3(0.0, 1.0, -5.0))
-				_place_puck(Vector3(100.0, _ICE_Y, 100.0))
+				_local_controller.teleport_to(Vector3(_cross_ice_dot_x, 1.0, -GameRules.ICING_FACEOFF_DOT_Z))
 				_icing_armed = false
-				_one_timer_launch_timer = _ONE_TIMER_LAUNCH_DELAY
+				_fire_puck_cross_ice()
 			_local_controller.puck_release_requested.connect(_on_regular_shot_in_one_timer)
 
 		STEP_SHOT_BLOCK:
@@ -313,12 +298,8 @@ func _process(delta: float) -> void:
 		_restage_timer -= delta
 		if _restage_timer <= 0.0:
 			_restage_timer = -1.0
-			if _current_step == STEP_SLAPSHOT:
-				_local_controller.teleport_to(Vector3(_slapshot_dot_x, 1.0, -GameRules.ICING_FACEOFF_DOT_Z))
-				_fire_puck_cross_ice()
-			else:
-				_local_controller.teleport_to(Vector3(0.0, 1.0, 5.0))
-				_place_puck(Vector3(0.0, _ICE_Y, 3.5))
+			_local_controller.teleport_to(Vector3(0.0, 1.0, 5.0))
+			_place_puck(Vector3(0.0, _ICE_Y, 3.5))
 
 	# Track WRISTER_AIM (state 2) entry for quick vs wrist shot distinction
 	var shot_state: int = _local_controller.get_shot_state()
@@ -362,18 +343,10 @@ func _process(delta: float) -> void:
 					_fire_puck_for_shot_block()
 
 		STEP_ONE_TIMER:
-			# Launch delay: give the player time to read the instruction and wind up RMB
-			if _one_timer_launch_timer >= 0.0:
-				_one_timer_launch_timer -= delta
-				if _one_timer_launch_timer <= 0.0:
-					_one_timer_launch_timer = -1.0
-					_fire_puck_at_player()
-			# Re-fire puck if it stopped or left the play area
-			elif _icing_armed and _puck.carrier == null:
-				var puck_pos: Vector3 = _puck.get_puck_position()
-				var puck_speed: float = _puck.get_puck_velocity().length()
-				if puck_pos.z < -8.0 or (puck_speed < 0.3 and absf(puck_pos.z - (-5.0)) > 2.0):
-					_fire_puck_at_player()
+			# Re-fire if the cross-ice pass stopped (hit boards or missed the player)
+			if _icing_armed and _puck.carrier == null:
+				if _puck.get_puck_velocity().length() < 0.3:
+					_fire_puck_cross_ice()
 
 		STEP_OFFSIDES:
 			if not _offside_ghost_seen:
@@ -451,15 +424,16 @@ func _place_puck(pos: Vector3) -> void:
 	_puck.linear_velocity = Vector3.ZERO
 
 
-# Fires the puck from the opposite end-zone faceoff dot toward _slapshot_dot_x for STEP_SLAPSHOT.
+# Fires the puck from the opposite end-zone faceoff dot toward _cross_ice_dot_x for STEP_ONE_TIMER.
 func _fire_puck_cross_ice() -> void:
-	var from_x: float = -_slapshot_dot_x
+	var from_x: float = -_cross_ice_dot_x
 	if _puck.carrier != null:
 		_puck.drop()
 	_puck.set_puck_position(Vector3(from_x, _ICE_Y, -GameRules.ICING_FACEOFF_DOT_Z))
 	# Slide toward the player's dot; tiny Y keeps velocity alive through Jolt's first integration step
-	var vel_x: float = signf(-from_x) * _SLAPSHOT_CROSS_SPEED
+	var vel_x: float = signf(-from_x) * _ONE_TIMER_CROSS_SPEED
 	_puck.apply_release_velocity(Vector3(vel_x, 0.001, 0.0))
+	_icing_armed = true
 
 
 # Fires the puck from the offensive zone toward the player's goal for the shot-block step.
@@ -472,17 +446,6 @@ func _fire_puck_for_shot_block() -> void:
 
 
 # Fires the puck from z=+15 toward the player at z=-3 for the one-timer step.
-# Uses apply_release_velocity with tiny Y so velocity persists through Jolt's
-# first-dynamic-step zeroing (same technique as Puck.release()).
-func _fire_puck_at_player() -> void:
-	if _puck.carrier != null:
-		_puck.drop()
-	_puck.set_puck_position(Vector3(0.0, _ICE_Y, 15.0))
-	# Tiny Y component forces _pending_elevation_vel path in _integrate_forces,
-	# which writes velocity directly into Jolt's state before it can be zeroed.
-	_puck.apply_release_velocity(Vector3(0.0, 0.001, -_ONE_TIMER_PUCK_SPEED))
-	_icing_armed = true
-
 
 func _ensure_dummy(position: Vector3) -> void:
 	if is_instance_valid(_dummy_skater):
