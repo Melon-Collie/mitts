@@ -475,7 +475,9 @@ func _create_chevron_mesh() -> ArrayMesh:
 		verts.append(p0); verts.append(p1); verts.append(p2); verts.append(p3)
 		for _n: int in 4:
 			normals.append(Vector3.UP)
-		indices.append_array([base, base + 2, base + 1, base + 1, base + 2, base + 3])
+		# CCW winding when viewed from +Y so the front face is up (camera looks
+		# down at -Y). Mirrors _create_ring_mesh; CW would get culled.
+		indices.append_array([base, base + 1, base + 2, base + 1, base + 3, base + 2])
 
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
