@@ -33,10 +33,12 @@ const _SKATE_HOLD:           float = 1.5
 const _BRAKE_HOLD:           float = 1.0
 const _BLOCK_HOLD:           float = 2.0
 const _SHOT_BLOCK_HOLD:      float = 1.0
-# Wrist shot: must hold WRISTER_AIM for this long to distinguish from quick shot
+# Quick shot: must release WRISTER_AIM within this window (else counts as wrist shot)
 const _WRIST_HOLD_MIN:       float = 0.4
 # One-timer puck launch speed (m/s toward player)
 const _ONE_TIMER_PUCK_SPEED: float = 8.0
+# Delay before the puck fires in the one-timer step (gives player time to wind up RMB)
+const _ONE_TIMER_LAUNCH_DELAY: float = 2.5
 # Shot block: puck comes from the offensive zone toward the player's goal
 const _SHOT_BLOCK_PUCK_SPEED: float = 10.0
 # Ice height for puck placement
@@ -59,9 +61,10 @@ var _step_timer:         float = 0.0
 var _hint_timer:         float = 0.0
 var _complete_flash_timer: float = 0.0
 var _wrister_aim_start:  float = -1.0   # -1 when not in WRISTER_AIM
-var _offside_ghost_seen: bool  = false
-var _icing_armed:        bool  = false  # true once puck is staged and loose
-var _icing_scored:       bool  = false  # true after puck crosses goal line
+var _offside_ghost_seen:       bool  = false
+var _icing_armed:              bool  = false  # true once puck is staged and loose
+var _icing_scored:             bool  = false  # true after puck crosses goal line
+var _one_timer_launch_timer:   float = -1.0   # counts down before firing puck in one-timer step
 
 var _hud: TutorialHUD = null
 
@@ -149,8 +152,8 @@ func _build_steps() -> void:
 		"Scroll up before clicking LMB or RMB — the puck lifts when released."))
 	_steps.append(TutorialStep.new(
 		"Offsides",
-		"You're in the offensive zone before the puck — that's offside. Skate back past the blue line to reset!",
-		"The blue line marks the boundary between neutral and offensive zones."))
+		"The puck must enter the offensive zone before your skates do. You crossed the blue line first — that's offside. You're ghosted until you skate back past the blue line!",
+		"Head back toward your own end and cross the blue line to tag up."))
 	_steps.append(TutorialStep.new(
 		"Icing",
 		"Shooting the puck from your own end past the far goal line is icing — your whole team goes ghost, giving the other team free possession. Try it now.",
@@ -164,9 +167,10 @@ func _begin_step(index: int) -> void:
 	_step_timer         = 0.0
 	_hint_timer         = 0.0
 	_complete_flash_timer = 0.0
-	_restage_timer      = -1.0
-	_wrister_aim_start  = -1.0
-	_offside_ghost_seen = false
+	_restage_timer           = -1.0
+	_wrister_aim_start       = -1.0
+	_one_timer_launch_timer  = -1.0
+	_offside_ghost_seen      = false
 	_icing_armed        = false
 	_icing_scored       = false
 
@@ -190,15 +194,18 @@ func _begin_step(index: int) -> void:
 			_local_controller.puck_release_requested.connect(_on_release_callable)
 
 		STEP_ONE_TIMER:
-			_local_controller.teleport_to(Vector3(0.0, 1.0, -3.0))
-			_fire_puck_at_player()
+			_local_controller.teleport_to(Vector3(0.0, 1.0, -5.0))
+			_place_puck(Vector3(100.0, _ICE_Y, 100.0))  # out of the way until launch delay expires
+			_one_timer_launch_timer = _ONE_TIMER_LAUNCH_DELAY
 			_on_one_timer_callable = func(_dir: Vector3, _power: float) -> void:
 				_complete_step()
 			_local_controller.one_timer_release_requested.connect(_on_one_timer_callable)
-			# If player picks up puck normally and shoots, re-stage
+			# If player picks up puck normally and shoots, re-stage with delay
 			_on_regular_shot_in_one_timer = func(_dir: Vector3, _power: float, _is_slapper: bool) -> void:
-				_local_controller.teleport_to(Vector3(0.0, 1.0, -3.0))
-				_fire_puck_at_player()
+				_local_controller.teleport_to(Vector3(0.0, 1.0, -5.0))
+				_place_puck(Vector3(100.0, _ICE_Y, 100.0))
+				_icing_armed = false
+				_one_timer_launch_timer = _ONE_TIMER_LAUNCH_DELAY
 			_local_controller.puck_release_requested.connect(_on_regular_shot_in_one_timer)
 
 		STEP_SHOT_BLOCK:
@@ -221,6 +228,9 @@ func _begin_step(index: int) -> void:
 		STEP_BODY_CHECK:
 			_local_controller.teleport_to(Vector3(-4.0, 1.0, 0.0))
 			_place_puck(Vector3(100.0, _ICE_Y, 100.0))
+			# Prevent race-condition re-pickup: drop() is sync but set_puck_position is
+			# deferred by Jolt; one physics tick sees the puck at the old position.
+			_puck.set_skater_cooldown(_skater, 0.5)
 			_ensure_dummy(Vector3(4.0, 1.0, 0.0))
 			_on_body_check_callable = func(_victim: Skater, _force: float, _dir: Vector3) -> void:
 				_complete_step()
@@ -330,11 +340,17 @@ func _process(delta: float) -> void:
 					_fire_puck_for_shot_block()
 
 		STEP_ONE_TIMER:
+			# Launch delay: give the player time to read the instruction and wind up RMB
+			if _one_timer_launch_timer >= 0.0:
+				_one_timer_launch_timer -= delta
+				if _one_timer_launch_timer <= 0.0:
+					_one_timer_launch_timer = -1.0
+					_fire_puck_at_player()
 			# Re-fire puck if it stopped or left the play area
-			if _icing_armed and _puck.carrier == null:
+			elif _icing_armed and _puck.carrier == null:
 				var puck_pos: Vector3 = _puck.get_puck_position()
 				var puck_speed: float = _puck.get_puck_velocity().length()
-				if puck_pos.z < -8.0 or (puck_speed < 0.3 and absf(puck_pos.z - (-3.0)) > 2.0):
+				if puck_pos.z < -8.0 or (puck_speed < 0.3 and absf(puck_pos.z - (-5.0)) > 2.0):
 					_fire_puck_at_player()
 
 		STEP_OFFSIDES:
@@ -387,11 +403,7 @@ func _on_shot_released(dir: Vector3, power: float, is_slapper: bool) -> void:
 					completed = true
 		STEP_WRIST_SHOT:
 			if not is_slapper:
-				var elapsed: float = 0.0
-				if _wrister_aim_start >= 0.0:
-					elapsed = Time.get_ticks_msec() / 1000.0 - _wrister_aim_start
-				if elapsed >= _WRIST_HOLD_MIN:
-					completed = true
+				completed = true
 		STEP_SLAPSHOT:
 			if is_slapper:
 				completed = true
