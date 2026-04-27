@@ -8,12 +8,14 @@ var _step_label: Label = null
 var _title_label: Label = null
 var _instruction_label: Label = null
 var _hint_label: Label = null
+var _reset_btn: Button = null
 var _skip_btn: Button = null
 var _complete_flash: ColorRect = null
 var _complete_label: Label = null
 var _complete_panel: Control = null
 
 signal skip_pressed
+signal reset_pressed
 
 
 func _init() -> void:
@@ -64,6 +66,13 @@ func _build() -> void:
 	_step_label.add_theme_font_size_override("font_size", 11)
 	_step_label.add_theme_color_override("font_color", MenuStyle.TEXT_DIM)
 	header.add_child(_step_label)
+
+	_reset_btn = Button.new()
+	_reset_btn.text = "↺ Reset"
+	MenuStyle.apply_button(_reset_btn)
+	_reset_btn.pressed.connect(func() -> void: reset_pressed.emit())
+	SoundManager.wire_button(_reset_btn)
+	header.add_child(_reset_btn)
 
 	_skip_btn = Button.new()
 	_skip_btn.text = "Skip →"

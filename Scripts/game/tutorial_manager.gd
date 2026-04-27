@@ -99,6 +99,7 @@ func _ready() -> void:
 	_hud = TutorialHUD.new()
 	add_child(_hud)
 	_hud.skip_pressed.connect(_on_skip)
+	_hud.reset_pressed.connect(_on_reset)
 
 	_begin_step(_current_step)
 
@@ -285,6 +286,10 @@ func _on_skip() -> void:
 	if _current_step in [STEP_STICKCHECK, STEP_BODY_CHECK]:
 		_free_dummy()
 	_complete_step()
+
+
+func _on_reset() -> void:
+	_begin_step(_current_step)
 
 
 # ── Per-frame logic ───────────────────────────────────────────────────────────
