@@ -86,6 +86,10 @@ func _physics_process(delta: float) -> void:
 	var puck_pos: Vector3 = puck.global_position
 	puck_pos.y = 0.0
 
+	# Pull FOV from prefs so the user-facing slider drives every downstream
+	# computation (zoom math, ortho size, tilt offset).
+	if not is_equal_approx(fov, PlayerPrefs.fov):
+		fov = PlayerPrefs.fov
 	var fov_rad: float = deg_to_rad(fov)
 	var aspect: float = get_viewport().get_visible_rect().size.x / get_viewport().get_visible_rect().size.y
 	var tan_half_fov: float = tan(fov_rad / 2.0)

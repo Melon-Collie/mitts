@@ -107,9 +107,7 @@ var _ring_mesh: MeshInstance3D = null
 var _charge_ring_mesh: MeshInstance3D = null
 var _charge_ring_mat: ShaderMaterial = null
 var _chevron_mesh: MeshInstance3D = null
-var _name_label_root: Node3D = null
-var _name_char_labels: Array[Label3D] = []
-var _name_text: String = ""
+var _name_label: Label3D = null
 var _slapper_arrow_mesh: MeshInstance3D = null
 var _slapper_arrow_root: Node3D = null
 var _slapper_indicator: Node3D = null
@@ -133,16 +131,14 @@ const CHARGE_RING_INNER_R: float = CHARGE_RING_OUTER_R - 0.04
 const _CHARGE_FULL_PULSE_HZ: float = 3.0
 const _CHARGE_LOST_FLASH_DURATION: float = 0.35
 
-# Curved-name layout. Each character is its own Label3D positioned on an arc
-# centered on the screen-down direction. The radius is generous + the per-char
-# angle is small so the curve reads as a *gentle* wrap, not a half-circle —
-# letters at the ends still tilt into the arc but the name stays readable.
-const _NAME_ARC_RADIUS: float = RING_OUTER_R + 0.35
-const _NAME_CHAR_ANGLE_DEG: float = 4.0
-# Chevron sits on the same arc, just past the end of the name on the side
+# Player-name placement. Single billboarded Label3D sitting just outside the
+# slot ring on the screen-down axis. Kept simple — the curved per-character
+# arc didn't read well; close-and-readable beats stylish-and-tilted here.
+const _NAME_RADIUS: float = RING_OUTER_R + 0.10
+# Chevron sits on the screen-down axis just past the name, on the side
 # OPPOSITE the player's stick (so it's never tucked behind the blade visual).
-const _CHEVRON_RADIUS: float = RING_OUTER_R + 0.35
-const _CHEVRON_GAP_DEG: float = 6.0
+const _CHEVRON_RADIUS: float = RING_OUTER_R + 0.10
+const _CHEVRON_OFFSET_DEG: float = 22.0
 
 # Charge ring shader: angle-mask + tri-color blend. Fill goes clockwise from 12
 # o'clock as viewed from above. UV.x of the procedural ring encodes 0..1
@@ -335,14 +331,23 @@ func _ready() -> void:
 	# tick in _physics_process so the on-screen position stays stable as the
 	# skater turns. Always reads at +Z world offset from the body, so on a
 	# typical end-on hockey camera it sits at a consistent screen edge.
-	# Curved player name. One Label3D per character, parented under a
-	# top-level root so we can keep the per-tick world placement loop tight
-	# (just walk the children). Each label billboards to face the camera
-	# while its position rides an arc around the slot ring.
-	_name_label_root = Node3D.new()
-	_name_label_root.name = "PlayerNameRoot"
-	_name_label_root.top_level = true
-	add_child(_name_label_root)
+	# Player name. Single billboarded Label3D, top-level so its world
+	# transform isn't tied to the skater's rotation. Position is rewritten
+	# each tick from camera screen-down so it always sits below the ring.
+	_name_label = Label3D.new()
+	_name_label.name = "PlayerNameLabel"
+	_name_label.top_level = true
+	_name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_name_label.no_depth_test = true
+	_name_label.render_priority = 1
+	_name_label.fixed_size = false
+	_name_label.font_size = 40
+	_name_label.outline_size = 0
+	_name_label.modulate = Color(MenuStyle.HUD_ICE.r, MenuStyle.HUD_ICE.g,
+			MenuStyle.HUD_ICE.b, MenuStyle.HUD_OPACITY)
+	_name_label.pixel_size = 0.005
+	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	add_child(_name_label)
 
 	_slapper_indicator = Node3D.new()
 	_slapper_indicator.name = "SlapperIndicator"
@@ -650,55 +655,26 @@ func _physics_process(delta: float) -> void:
 	# elements need to honor that flip so they always sit "below" the skater
 	# in screen space. Falls back to +Z world-down if there's no active camera.
 	var screen_down: Vector2 = _hud_screen_down_xz()
-	# Position each character on an arc centered on the screen-down bisector,
-	# then drop the chevron just past the last character on the same arc.
-	# screen_down direction is treated as angle 0 of the local arc; characters
-	# are placed at ±i * char_angle around it. atan2(screen_down.x, .y) gives
-	# the world Y-rotation that maps "local +Z = screen-down" to world.
 	var arc_base_angle: float = atan2(screen_down.x, screen_down.y)
-	var char_angle_rad: float = deg_to_rad(_NAME_CHAR_ANGLE_DEG)
-	var n: int = _name_char_labels.size()
-	if n > 0:
-		var center_offset: float = (n - 1) * 0.5
-		for i: int in n:
-			var theta: float = arc_base_angle + (float(i) - center_offset) * char_angle_rad
-			var radial := Vector3(sin(theta), 0.0, cos(theta))
-			# Build the character's basis so it lies flat on the ice (normal
-			# up = +Y world) with text "up" pointing radially INWARD (toward
-			# the player center). For a name arc that sits below the player
-			# in screen space, "inward" maps to "up on screen" — same
-			# convention as a stadium logo painted on the ice. Letters tilt
-			# to follow the arc curve.
-			# Basis columns: X = right, Y = up, Z = forward (camera-facing).
-			# We want Z = +Y world (text reads from above), Y = -radial.
-			var label: Label3D = _name_char_labels[i]
-			var pos := Vector3(
-					global_position.x + radial.x * _NAME_ARC_RADIUS,
-					0.05,
-					global_position.z + radial.z * _NAME_ARC_RADIUS)
-			var basis_y: Vector3 = -radial           # text-up = radially inward
-			var basis_z: Vector3 = Vector3.UP        # text-front = world up (faces camera)
-			var basis_x: Vector3 = basis_y.cross(basis_z).normalized()
-			label.global_transform = Transform3D(
-					Basis(basis_x, basis_y, basis_z), pos)
+	if _name_label != null and _name_label.visible:
+		_name_label.global_position = Vector3(
+				global_position.x + screen_down.x * _NAME_RADIUS,
+				0.05,
+				global_position.z + screen_down.y * _NAME_RADIUS)
 	if _chevron_mesh != null:
 		_chevron_mesh.visible = is_elevated and not is_ghost
 		if _chevron_mesh.visible:
-			# Place the chevron just past the end of the name on the side
-			# OPPOSITE the player's stick: lefty's stick is on -X local, so
-			# chevron sits on +X-side of the name arc (and vice versa).
-			# arc_base_angle is screen-down direction; +offset rotates the
-			# arc clockwise as viewed from above (toward +X for arc_base=0).
+			# Sit on the same arc-radius as the name, offset to the side
+			# OPPOSITE the player's stick (lefty stick on -X local → chevron
+			# on +X side; righty inverts).
 			var side_sign: float = 1.0 if is_left_handed else -1.0
-			var name_half_sweep_deg: float = float(maxi(n - 1, 0)) * 0.5 * _NAME_CHAR_ANGLE_DEG
-			var chevron_angle: float = arc_base_angle + side_sign * deg_to_rad(name_half_sweep_deg + _CHEVRON_GAP_DEG)
+			var chevron_angle: float = arc_base_angle + side_sign * deg_to_rad(_CHEVRON_OFFSET_DEG)
 			var dir := Vector3(sin(chevron_angle), 0.0, cos(chevron_angle))
 			_chevron_mesh.global_position = Vector3(
 					global_position.x + dir.x * _CHEVRON_RADIUS,
 					0.05,
 					global_position.z + dir.z * _CHEVRON_RADIUS)
-			# Keep the chevron's "up" aligned with screen-up regardless of
-			# its angular position on the arc.
+			# Keep chevron's "up" aligned with screen-up.
 			_chevron_mesh.rotation = Vector3(0.0, arc_base_angle, 0.0)
 	if _charge_ring_mesh != null and _charge_ring_mesh.visible:
 		_charge_ring_mesh.global_position.y = 0.05
@@ -798,33 +774,8 @@ func set_player_color(
 		_skate_mesh.material_override = _make_solid_mat(Color(0.08, 0.08, 0.08))
 
 func set_player_name(p_name: String) -> void:
-	if _name_label_root == null:
-		return
-	if p_name == _name_text:
-		return
-	_name_text = p_name
-	# Rebuild per-character labels. Cheap — names change only on spawn or
-	# slot-swap, never per-tick.
-	for old_label: Label3D in _name_char_labels:
-		if is_instance_valid(old_label):
-			_name_label_root.remove_child(old_label)
-			old_label.queue_free()
-	_name_char_labels.clear()
-	for i: int in p_name.length():
-		var label := Label3D.new()
-		label.text = p_name.substr(i, 1)
-		label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
-		label.no_depth_test = true
-		label.render_priority = 1
-		label.fixed_size = false
-		label.font_size = 40
-		label.outline_size = 0
-		label.modulate = Color(MenuStyle.HUD_ICE.r, MenuStyle.HUD_ICE.g,
-				MenuStyle.HUD_ICE.b, MenuStyle.HUD_OPACITY)
-		label.pixel_size = 0.005
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_name_label_root.add_child(label)
-		_name_char_labels.append(label)
+	if _name_label != null:
+		_name_label.text = p_name
 
 # Local-only: enable/disable the concentric charge ring under this skater.
 # Driven by the controller; remote skaters never call this so the ring stays
@@ -1228,8 +1179,8 @@ func _apply_ghost_visual(ghost: bool) -> void:
 	# in _physics_process; the rest are explicitly toggled here.
 	if _ring_mesh != null:
 		_ring_mesh.visible = not ghost
-	if _name_label_root != null:
-		_name_label_root.visible = not ghost
+	if _name_label != null:
+		_name_label.visible = not ghost
 	if _charge_ring_mesh != null and ghost:
 		_charge_ring_mesh.visible = false
 	if _slapper_indicator != null and ghost:
