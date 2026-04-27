@@ -33,6 +33,7 @@ var _state_machine: GameStateMachine = null
 var _last_emitted_clock_secs: int = -1
 var _last_ghost_state: Dictionary = {}  # peer_id -> bool, host only
 var _input_blocked: bool = false
+var _puck_oob_timer: float = 0.0
 
 # ── Infrastructure ────────────────────────────────────────────────────────────
 var _spawner: ActorSpawner = null
@@ -120,6 +121,7 @@ func _physics_process(delta: float) -> void:
 	if _state_buffer_manager != null and puck_controller != null:
 		_state_buffer_manager.capture(_registry, puck_controller, goalie_controllers)
 	_update_host_puck_tracking()
+	_check_puck_out_of_bounds(delta)
 	_apply_ghost_state()
 	_shot_tracker.tick(delta)
 	if not _pending_pickup_claim.is_empty():
@@ -128,6 +130,26 @@ func _physics_process(delta: float) -> void:
 			puck_controller.apply_lag_comp_pickup(_pending_pickup_claim.skater)
 			_pending_pickup_claim = {}
 			_pending_claim_timer = 0.0
+
+
+func _check_puck_out_of_bounds(delta: float) -> void:
+	if _state_machine.current_phase != GamePhase.Phase.PLAYING:
+		_puck_oob_timer = 0.0
+		return
+	if puck.carrier != null:
+		_puck_oob_timer = 0.0
+		return
+	var pos := puck.global_position
+	var pos2d := Vector2(pos.x, pos.z)
+	var clamped := GameRules.clamp_to_rink_inner(pos2d)
+	if pos2d.distance_to(clamped) > 0.2:
+		_puck_oob_timer += delta
+		if _puck_oob_timer >= GameRules.PUCK_OOB_FACEOFF_TIMEOUT:
+			_puck_oob_timer = 0.0
+			_state_machine.begin_faceoff_prep()
+			_phase_coord.handle_phase_entered()
+	else:
+		_puck_oob_timer = 0.0
 
 
 func _update_host_puck_tracking() -> void:
@@ -994,6 +1016,7 @@ func on_scene_exit() -> void:
 	_telemetry = null
 	NetworkTelemetry.instance = null
 	_last_emitted_clock_secs = -1
+	_puck_oob_timer = 0.0
 	NetworkManager.prepare_for_new_game()
 
 
@@ -1021,6 +1044,7 @@ func _apply_reset() -> void:
 	_last_emitted_clock_secs = -1
 	_last_ghost_state.clear()
 	_last_hit_claim_sent.clear()
+	_puck_oob_timer = 0.0
 	score_changed.emit(0, 0)
 	period_changed.emit(1)
 	clock_updated.emit(_state_machine.period_duration)
