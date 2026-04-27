@@ -730,7 +730,6 @@ func _popup_button(label: String) -> Button:
 	btn.text = label
 	btn.custom_minimum_size = Vector2(220, 48)
 	btn.add_theme_font_size_override("font_size", 20)
-	MenuStyle.apply_button(btn)
 	_wire_hover_scale(btn)
 	SoundManager.wire_button(btn)
 	return btn

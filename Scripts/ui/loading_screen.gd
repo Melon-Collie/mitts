@@ -60,7 +60,6 @@ func _build_ui() -> void:
 	_cancel_btn.text = "Cancel"
 	_cancel_btn.custom_minimum_size = Vector2(200, 48)
 	_cancel_btn.add_theme_font_size_override("font_size", 20)
-	MenuStyle.apply_button(_cancel_btn)
 	_cancel_btn.pressed.connect(func() -> void: cancel_pressed.emit())
 	SoundManager.wire_button(_cancel_btn)
 	var cancel_container := CenterContainer.new()
