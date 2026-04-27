@@ -27,6 +27,12 @@ extends Camera3D
 # ── Smoothing ─────────────────────────────────────────────────────────────────
 @export var smooth_speed: float = 3.0
 
+# ── Projection ────────────────────────────────────────────────────────────────
+# Toggle in the inspector during playtest to A/B perspective vs ortho. Ortho
+# makes head + feet project to the same screen point (no off-center body lean),
+# trading "looking down on people" for "playing on a board."
+@export var use_orthographic: bool = false
+
 # ── Goal Context (set via set_goal_context) ───────────────────────────────────
 var _goal_0: HockeyGoal = null  # Team 0's defended goal
 var _goal_1: HockeyGoal = null  # Team 1's defended goal
@@ -148,6 +154,18 @@ func _physics_process(delta: float) -> void:
 	global_position = global_position.lerp(target_pos, smooth_speed * delta)
 	var flip_y: float = 180.0 if PlayerPrefs.attack_up and _local_team_id == 1 else 0.0
 	rotation_degrees = Vector3(-90.0, flip_y, 0.0)
+
+	# ── Step 5b: Apply projection ─────────────────────────────────────────────
+	# Ortho size = vertical world units visible. Match the perspective FOV's
+	# vertical extent at the current height so the same play stays in frame
+	# either way; existing zoom math drives both projections identically.
+	if use_orthographic:
+		if projection != PROJECTION_ORTHOGONAL:
+			projection = PROJECTION_ORTHOGONAL
+		size = 2.0 * tan_half_fov * _current_height
+	else:
+		if projection != PROJECTION_PERSPECTIVE:
+			projection = PROJECTION_PERSPECTIVE
 
 	# ── Step 6: Shake ─────────────────────────────────────────────────────────
 	if _shake_trauma > 0.0:
