@@ -241,7 +241,8 @@ func _ready() -> void:
 
 	_slapper_indicator = MeshInstance3D.new()
 	_slapper_indicator.name = "SlapperIndicator"
-	_slapper_indicator.mesh = _create_reticle_mesh(0.16, 0.035, 0.045)
+	# Unit mesh (arms reach 1.0 m from centre); scaled to zone radius at activation.
+	_slapper_indicator.mesh = _create_reticle_mesh(0.92, 0.07, 0.08)
 	_slapper_indicator.visible = false
 	add_child(_slapper_indicator)
 	_slapper_indicator_mat = StandardMaterial3D.new()
@@ -287,16 +288,15 @@ func _create_reticle_mesh(arm_length: float, arm_width: float, center_gap: float
 	var normals := PackedVector3Array()
 	var indices := PackedInt32Array()
 	var half_w: float = arm_width * 0.5
-	# Four cardinal arms: +X, −X, +Z, −Z
-	var arms: Array = [
-		[Vector3(1, 0, 0), Vector3(0, 0, 1)],
-		[Vector3(-1, 0, 0), Vector3(0, 0, 1)],
-		[Vector3(0, 0, 1), Vector3(1, 0, 0)],
-		[Vector3(0, 0, -1), Vector3(1, 0, 0)],
+	# Four cardinal arms: +X, −X, +Z, −Z.
+	# perp = along × UP always gives a perpendicular whose winding (perp × along = +Y)
+	# ensures the quad normal faces up regardless of the sign of along.
+	var along_dirs: Array[Vector3] = [
+		Vector3(1, 0, 0), Vector3(-1, 0, 0),
+		Vector3(0, 0, 1), Vector3(0, 0, -1),
 	]
-	for arm in arms:
-		var along: Vector3 = arm[0]
-		var perp: Vector3 = arm[1]
+	for along: Vector3 in along_dirs:
+		var perp: Vector3 = along.cross(Vector3.UP)
 		var p0: Vector3 = along * center_gap - perp * half_w
 		var p1: Vector3 = along * center_gap + perp * half_w
 		var p2: Vector3 = along * (center_gap + arm_length) + perp * half_w
@@ -443,12 +443,13 @@ func set_ring_color(color: Color) -> void:
 	_ring_mesh.material_override = mat
 	_ring_mesh.visible = true
 
-func set_slapper_indicator(active: bool, offset_x: float = 0.0, offset_z: float = 0.0, _radius: float = 0.5) -> void:
+func set_slapper_indicator(active: bool, offset_x: float = 0.0, offset_z: float = 0.0, radius: float = 0.5) -> void:
 	if not active:
 		_slapper_indicator.visible = false
 		return
 	var blade_side_sign: float = -1.0 if is_left_handed else 1.0
 	_slapper_indicator.position = Vector3(blade_side_sign * offset_x, 0.0, offset_z)
+	_slapper_indicator.scale = Vector3(radius, 1.0, radius)
 	_slapper_indicator_mat.albedo_color = Color(0.3, 0.8, 1.0, 0.35)
 	_slapper_indicator_mat.emission = Color(0.3, 0.8, 1.0)
 	_slapper_indicator_mat.emission_energy_multiplier = 0.4
