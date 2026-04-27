@@ -241,7 +241,7 @@ func _ready() -> void:
 
 	_slapper_indicator = MeshInstance3D.new()
 	_slapper_indicator.name = "SlapperIndicator"
-	_slapper_indicator.mesh = _create_ring_mesh(0.25, 0.50, 32)
+	_slapper_indicator.mesh = _create_reticle_mesh(0.16, 0.035, 0.045)
 	_slapper_indicator.visible = false
 	add_child(_slapper_indicator)
 	_slapper_indicator_mat = StandardMaterial3D.new()
@@ -269,6 +269,46 @@ func _create_ring_mesh(inner_r: float, outer_r: float, segments: int) -> ArrayMe
 		for _n: int in 4:
 			normals.append(Vector3.UP)
 		indices.append_array([base, base + 1, base + 2, base + 1, base + 3, base + 2])
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
+
+# Four-arm crosshair (+) lying flat on the XZ plane.
+# arm_length: length of each arm beyond the center gap.
+# arm_width:  thickness of each arm.
+# center_gap: dead zone radius so the arms don't overlap at the centre.
+func _create_reticle_mesh(arm_length: float, arm_width: float, center_gap: float) -> ArrayMesh:
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var indices := PackedInt32Array()
+	var half_w: float = arm_width * 0.5
+	# Four cardinal arms: +X, −X, +Z, −Z
+	var arms: Array = [
+		[Vector3(1, 0, 0), Vector3(0, 0, 1)],
+		[Vector3(-1, 0, 0), Vector3(0, 0, 1)],
+		[Vector3(0, 0, 1), Vector3(1, 0, 0)],
+		[Vector3(0, 0, -1), Vector3(1, 0, 0)],
+	]
+	for arm in arms:
+		var along: Vector3 = arm[0]
+		var perp: Vector3 = arm[1]
+		var p0: Vector3 = along * center_gap - perp * half_w
+		var p1: Vector3 = along * center_gap + perp * half_w
+		var p2: Vector3 = along * (center_gap + arm_length) + perp * half_w
+		var p3: Vector3 = along * (center_gap + arm_length) - perp * half_w
+		var base: int = verts.size()
+		verts.append(p0)
+		verts.append(p1)
+		verts.append(p2)
+		verts.append(p3)
+		for _n: int in 4:
+			normals.append(Vector3.UP)
+		indices.append_array([base, base + 1, base + 2, base, base + 2, base + 3])
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
