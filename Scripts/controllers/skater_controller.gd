@@ -122,8 +122,7 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 @export var slapper_aim_arc: float = 45.0
 @export var slapper_elevation: float = 0.15
 @export var one_timer_window_duration: float = 0.45  # seconds after puck arrives to release
-@export var one_timer_base_leniency: float = 0.2    # fixed extra radius beyond the zone
-@export var one_timer_leniency_per_speed: float = 0.05  # extra metres of leniency per m/s of puck speed
+@export var one_timer_leniency_time: float = 0.08   # seconds of puck travel added to zone radius as leniency
 @export var one_timer_center_power_bonus: float = 0.25  # max multiplier bonus at dead centre
 
 var show_one_timer_indicator: bool = false
@@ -568,7 +567,7 @@ func _apply_block_movement(input: InputState, delta: float) -> void:
 
 func _effective_one_timer_leniency() -> float:
 	var puck_xz_speed: float = Vector2(puck.velocity.x, puck.velocity.z).length()
-	return slapper_zone_radius + one_timer_base_leniency + puck_xz_speed * one_timer_leniency_per_speed
+	return slapper_zone_radius + puck_xz_speed * one_timer_leniency_time
 
 func _is_in_slapper_state() -> bool:
 	return _sm.get_state() in [State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK]
