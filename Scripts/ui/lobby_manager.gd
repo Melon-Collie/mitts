@@ -222,7 +222,6 @@ func _build_settings_panel() -> Control:
 	for i: int in range(GameRules.RULE_SET_NAMES.size()):
 		_rules_btn.add_item(GameRules.RULE_SET_NAMES[i], i)
 	_rules_btn.select(_rule_set)
-	MenuStyle.apply_button(_rules_btn)
 	SoundManager.wire_button(_rules_btn)
 	_rules_btn.disabled = not is_interactive
 	if is_interactive:
@@ -248,7 +247,6 @@ func _btn(text: String) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.custom_minimum_size = Vector2(140, 40)
-	MenuStyle.apply_button(b)
 	_wire_hover_scale(b)
 	SoundManager.wire_button(b)
 	return b
@@ -273,7 +271,6 @@ func _color_option_btn(selected_id: String) -> OptionButton:
 		btn.add_item(TeamColorRegistry.get_preset_name(ids[i]), i)
 		if ids[i] == selected_id:
 			btn.select(i)
-	MenuStyle.apply_button(btn)
 	SoundManager.wire_button(btn)
 	return btn
 

@@ -69,14 +69,12 @@ func _build() -> void:
 
 	_reset_btn = Button.new()
 	_reset_btn.text = "↺ Reset"
-	MenuStyle.apply_button(_reset_btn)
 	_reset_btn.pressed.connect(func() -> void: reset_pressed.emit())
 	SoundManager.wire_button(_reset_btn)
 	header.add_child(_reset_btn)
 
 	_skip_btn = Button.new()
 	_skip_btn.text = "Skip →"
-	MenuStyle.apply_button(_skip_btn)
 	_skip_btn.pressed.connect(func() -> void: skip_pressed.emit())
 	SoundManager.wire_button(_skip_btn)
 	header.add_child(_skip_btn)
@@ -163,14 +161,12 @@ func _build_complete_panel() -> void:
 
 	var free_play_btn := Button.new()
 	free_play_btn.text = "Free Play"
-	MenuStyle.apply_button(free_play_btn)
 	free_play_btn.pressed.connect(_on_free_play_after_tutorial)
 	SoundManager.wire_button(free_play_btn)
 	btn_row.add_child(free_play_btn)
 
 	var menu_btn := Button.new()
 	menu_btn.text = "Main Menu"
-	MenuStyle.apply_button(menu_btn)
 	menu_btn.pressed.connect(_on_main_menu_after_tutorial)
 	SoundManager.wire_button(menu_btn)
 	btn_row.add_child(menu_btn)
