@@ -104,6 +104,18 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 @export var quick_shot_threshold: float = 0.1
 @export var quick_shot_elevation: float = 0.10
 @export var wrister_elevation_target_height: float = 0.90
+# Apex cap for elevated shots — puck can't rise more than this above the blade.
+# 1.5 m is just under the glass, well above crossbar (1.22 m). On-net shots
+# arrive at goal line at ≤ target_height; missed shots can't fly over boards.
+@export var max_apex_above_blade: float = 1.5
+# Cosine of the half-angle cone within which a shot counts as "toward the net".
+# 0.5 = 60° cone. Shots outside this cone use `away_from_net_elevation` instead
+# of the ballistic-targeting math.
+@export var toward_net_dot_threshold: float = 0.5
+# Fixed Y direction for elevated shots not aimed at the offensive net (passes,
+# clears, backward dumps). Small positive value so the puck still lifts off ice
+# without trying to arc toward an irrelevant target height.
+@export var away_from_net_elevation: float = 0.10
 
 # ── Head Tracking Tuning ─────────────────────────────────────────────────────
 @export var head_track_speed: float = 12.0
@@ -933,6 +945,10 @@ func _wrister_config() -> ShotMechanics.WristerConfig:
 	cfg.elevation_blade_height = 0.05
 	cfg.elevation_gravity = 9.8
 	cfg.elevation_goal_line_z = GameRules.GOAL_LINE_Z
+	cfg.max_apex_above_blade = max_apex_above_blade
+	cfg.attacking_goal_z = get_attacking_goal_z()
+	cfg.toward_net_dot_threshold = toward_net_dot_threshold
+	cfg.away_from_net_y = away_from_net_elevation
 	return cfg
 
 func _slapper_config() -> ShotMechanics.SlapperConfig:
@@ -944,7 +960,17 @@ func _slapper_config() -> ShotMechanics.SlapperConfig:
 	cfg.elevation_blade_height = 0.05
 	cfg.elevation_gravity = 9.8
 	cfg.elevation_goal_line_z = GameRules.GOAL_LINE_Z
+	cfg.max_apex_above_blade = max_apex_above_blade
+	cfg.attacking_goal_z = get_attacking_goal_z()
+	cfg.toward_net_dot_threshold = toward_net_dot_threshold
+	cfg.away_from_net_y = away_from_net_elevation
 	return cfg
+
+# Signed Z of the goal this skater is attacking. Default 0.0 means "team
+# unknown" — the elevation math falls back to picking a goal by shot_dir.z
+# sign. LocalController overrides this once team_id is set.
+func get_attacking_goal_z() -> float:
+	return 0.0
 
 # Converts the world-space blade_height to upper-body-local Y.
 # Uses the upper body's world Y so the result is correct regardless of where

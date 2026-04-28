@@ -170,6 +170,91 @@ func test_slapper_elevation() -> void:
 	assert_almost_eq(flat.direction.y, 0.0, 0.01)
 	assert_gt(elevated.direction.y, 0.0)
 
+# ── Elevation apex cap ───────────────────────────────────────────────────────
+
+# Point-blank max-power elevated shot used to compute v_y ≈ 12 m/s (apex ~7 m).
+# With the apex cap at 1.5 m, v_y_max = sqrt(2·9.8·1.5) ≈ 5.42 m/s.
+func test_elevation_caps_apex_for_close_max_power_shot() -> void:
+	var cfg := _wrister_cfg()
+	# Origin is 2 m from the +Z goal line so the math wants a steep angle.
+	var origin := Vector3(0, 0, 24.65)
+	var result: Dictionary = ShotMechanics.release_wrister(
+		origin, origin + Vector3(0, 0, 10),
+		origin + Vector3(0.5, 0, 0),
+		Vector3(0.5, 0, 0), Vector3(0.35, 0, 0),
+		false, true,
+		3.0,                            # full charge → max_wrister_power = 25
+		cfg,
+		Vector3(0, 0, 1))               # shoot toward +Z goal
+	var v_y: float = result.power * result.direction.y
+	var v_y_max: float = sqrt(2.0 * 9.8 * cfg.max_apex_above_blade)
+	assert_almost_eq(v_y, v_y_max, 0.05,
+		"close-range elevated shot at max power should be capped at apex v_y")
+
+func test_elevation_does_not_cap_blue_line_shot() -> void:
+	var cfg := _wrister_cfg()
+	# Blue-line distance (D ≈ 15 m) at max power: natural v_y ≈ 4.3 m/s, under cap.
+	var origin := Vector3(0, 0, 11.65)
+	var result: Dictionary = ShotMechanics.release_wrister(
+		origin, origin + Vector3(0, 0, 15),
+		origin + Vector3(0.5, 0, 0),
+		Vector3(0.5, 0, 0), Vector3(0.35, 0, 0),
+		false, true,
+		3.0, cfg,
+		Vector3(0, 0, 1))
+	var v_y: float = result.power * result.direction.y
+	var v_y_max: float = sqrt(2.0 * 9.8 * cfg.max_apex_above_blade)
+	assert_lt(v_y, v_y_max, "mid-range shot should fit under apex cap unmodified")
+	assert_gt(v_y, 0.0)
+
+# ── Toward-net classification ────────────────────────────────────────────────
+
+func test_elevation_uses_fallback_when_shooting_away_from_net() -> void:
+	var cfg := _wrister_cfg()
+	cfg.attacking_goal_z = 26.65          # team attacks +Z goal
+	cfg.away_from_net_y = 0.10
+	# Player at center, shooting toward -Z (away from offensive net).
+	var result: Dictionary = ShotMechanics.release_wrister(
+		Vector3.ZERO, Vector3(0, 0, -10),
+		Vector3(0.5, 0, 0), Vector3(0.5, 0, 0), Vector3(0.35, 0, 0),
+		false, true,
+		3.0, cfg,
+		Vector3(0, 0, -1))
+	# Direction is normalized; Y component reflects the small fallback Y.
+	# expected_y = away_from_net_y / sqrt(1 + away_from_net_y²) ≈ 0.0995
+	assert_almost_eq(result.direction.y, 0.0995, 0.005,
+		"shot away from offensive net should use small fallback elevation")
+
+func test_elevation_uses_full_math_when_shooting_at_net() -> void:
+	var cfg := _wrister_cfg()
+	cfg.attacking_goal_z = 26.65
+	cfg.away_from_net_y = 0.10
+	# Player at center, shooting toward +Z (offensive net).
+	var result: Dictionary = ShotMechanics.release_wrister(
+		Vector3.ZERO, Vector3(0, 0, 10),
+		Vector3(0.5, 0, 0), Vector3(0.5, 0, 0), Vector3(0.35, 0, 0),
+		false, true,
+		3.0, cfg,
+		Vector3(0, 0, 1))
+	# Full ballistic math gives a larger Y than the away_from_net fallback.
+	assert_gt(result.direction.y, 0.10,
+		"shot toward offensive net should use full ballistic elevation")
+
+func test_elevation_lateral_shot_classified_as_away_from_net() -> void:
+	var cfg := _wrister_cfg()
+	cfg.attacking_goal_z = 26.65
+	cfg.away_from_net_y = 0.10
+	# Player at center, shooting purely along +X — perpendicular to goal axis,
+	# dot(shot, to_goal) = 0 < threshold (0.5).
+	var result: Dictionary = ShotMechanics.release_wrister(
+		Vector3.ZERO, Vector3(10, 0, 0),
+		Vector3(0.5, 0, 0), Vector3(0.5, 0, 0), Vector3(0.35, 0, 0),
+		false, true,
+		3.0, cfg,
+		Vector3(1, 0, 0))
+	assert_almost_eq(result.direction.y, 0.0995, 0.005,
+		"lateral shot outside net cone uses fallback")
+
 # ── Wall-pin release ─────────────────────────────────────────────────────────
 
 func test_wall_pin_fires_above_threshold() -> void:
