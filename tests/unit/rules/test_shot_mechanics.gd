@@ -10,7 +10,11 @@ func _wrister_cfg() -> ShotMechanics.WristerConfig:
 	cfg.backhand_power_coefficient = 0.75
 	cfg.quick_shot_power = 12.0
 	cfg.quick_shot_threshold = 0.1
-	cfg.wrister_elevation = 0.3
+	cfg.quick_shot_elevation = 0.10
+	cfg.elevation_target_height = 0.90
+	cfg.elevation_blade_height = 0.05
+	cfg.elevation_gravity = 9.8
+	cfg.elevation_goal_line_z = 26.65
 	return cfg
 
 func _slapper_cfg() -> ShotMechanics.SlapperConfig:
@@ -18,7 +22,10 @@ func _slapper_cfg() -> ShotMechanics.SlapperConfig:
 	cfg.min_slapper_power = 20.0
 	cfg.max_slapper_power = 40.0
 	cfg.max_slapper_charge_time = 1.0
-	cfg.slapper_elevation = 0.15
+	cfg.elevation_target_height = 0.65
+	cfg.elevation_blade_height = 0.05
+	cfg.elevation_gravity = 9.8
+	cfg.elevation_goal_line_z = 26.65
 	return cfg
 
 # ── Wrister: quick shot branch ───────────────────────────────────────────────
