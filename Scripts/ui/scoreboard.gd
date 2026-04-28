@@ -201,13 +201,12 @@ func _refresh() -> void:
 		var s := record.stats
 		var pts := s.goals + s.assists
 		var display_name: String = record.display_name()
-		var name_color: Color = PlayerRules.slot_color(record.team.team_id, record.team_slot)
 		var ping_str: String = _ping_label(record.peer_id)
 		var pos_str: String = _POSITION_LABEL[record.team_slot]
 		var num_str: String = str(record.jersey_number)
 		_fill_row(row,
 			[ping_str, num_str, pos_str, display_name, str(s.goals), str(s.assists), str(pts), str(s.shots_on_goal), str(s.hits)],
-			name_color, false
+			_WHITE, false
 		)
 
 func _make_team_header(team_id: int) -> PanelContainer:
