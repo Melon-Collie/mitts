@@ -4,6 +4,7 @@ var goals: int = 0
 var assists: int = 0
 var shots_on_goal: int = 0
 var hits: int = 0
+var toi_seconds: float = 0.0
 
 func to_array() -> Array:
 	return [goals, assists, shots_on_goal, hits]
@@ -15,3 +16,12 @@ static func from_array(a: Array) -> PlayerStats:
 	s.shots_on_goal = a[2]
 	s.hits = a[3]
 	return s
+
+func to_dict() -> Dictionary:
+	return {
+		"goals": goals,
+		"assists": assists,
+		"shots_on_goal": shots_on_goal,
+		"hits": hits,
+		"toi_seconds": int(toi_seconds),
+	}

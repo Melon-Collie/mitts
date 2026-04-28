@@ -11,6 +11,7 @@ var _assist_label: Label
 var _phase_style: StyleBoxFlat
 var _game_over_popup: CanvasLayer = null
 var _game_menu: CanvasLayer = null
+var _bug_dialog: BugReportDialog = null
 var _slot_grid: SlotGridPanel = null
 var _slot_grid_container: Control = null
 var _options_container: Control = null
@@ -48,6 +49,8 @@ func _ready() -> void:
 	_build_phase_banner()
 	_build_version_tag()
 	_build_bug_icon()
+	_bug_dialog = BugReportDialog.new()
+	add_child(_bug_dialog)
 	_build_game_over_popup()
 	_build_game_menu()
 	_build_confirm_popup()
@@ -903,10 +906,7 @@ func _on_pause_slot_selected(team_id: int, slot: int) -> void:
 	_set_menu_open(false)
 
 func _on_bug_report_pressed() -> void:
-	var title: String = "[bug] v%s %s - " % [BuildInfo.VERSION, OS.get_name()]
-	var body: String = "Version: v%s\nOS: %s\n\nWhat happened:\n\nSteps to reproduce:\n1. \n2. \n3. \n" % [BuildInfo.VERSION, OS.get_name()]
-	var url: String = "https://github.com/%s/issues/new?title=%s&body=%s" % [BuildInfo.REPO, title.uri_encode(), body.uri_encode()]
-	OS.shell_open(url)
+	_bug_dialog.open()
 
 func _on_local_player_hit(magnitude: float) -> void:
 	if magnitude < 3.0:
