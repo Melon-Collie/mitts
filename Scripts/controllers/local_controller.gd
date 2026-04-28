@@ -158,6 +158,10 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	var pre_follow_through_timer: float = _sm.follow_through_timer
 	var pre_follow_through_is_slapper: bool = _sm.follow_through_is_slapper
 	var pre_one_timer_window_timer: float = _aiming.one_timer_window_timer
+	# slapper_charge_timer ticks inside _update_slapper_charge during replay; without
+	# save/restore each reconcile re-ticks the unconfirmed inputs and the timer
+	# inflates O(N) per broadcast, popping the blade above slapper_wind_up_height.
+	var pre_slapper_charge_timer: float = _aiming.slapper_charge_timer
 	skater.global_position = server_state.position
 	skater.velocity = server_state.velocity
 	# Snap facing for replay accuracy — facing drives move_and_slide direction,
@@ -203,6 +207,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	_sm.follow_through_timer = pre_follow_through_timer
 	_sm.follow_through_is_slapper = pre_follow_through_is_slapper
 	_aiming.one_timer_window_timer = pre_one_timer_window_timer
+	_aiming.slapper_charge_timer = pre_slapper_charge_timer
 	# Set mouse pos baseline to the end of the replay window so the next real
 	# frame's direction-variance delta is correct.
 	if not _input_history.is_empty():
@@ -241,7 +246,21 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	last_reconcile_error = (skater.global_position - server_state.position).length()
 	# Blade must be re-applied after position is set — upper_body_to_local()
 	# uses skater.global_position, so it must reflect the final replayed position.
-	_apply_blade_from_mouse(_current_input, 0.0)
+	# Dispatch by state: slapper/follow-through have their own pose handlers; using
+	# _apply_blade_from_mouse here would IK the blade to the mouse position every
+	# reconcile, popping it down from the slapper wind-up pose at the broadcast rate.
+	match _sm.get_state():
+		State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK:
+			_apply_slapper_blade_position()
+		State.FOLLOW_THROUGH:
+			if _sm.follow_through_is_slapper:
+				_apply_slapper_follow_through()
+			else:
+				_apply_wrister_follow_through()
+		State.SHOT_BLOCKING:
+			pass  # block stance owns the pose; no per-frame blade write
+		_:
+			_apply_blade_from_mouse(_current_input, 0.0)
 	var blade_reconcile_delta: float = skater.get_blade_contact_global().distance_to(pre_reconcile_blade)
 	NetworkTelemetry.record_blade_reconcile(blade_reconcile_delta)
 	if blade_reconcile_delta > _BLADE_JUMP_THRESHOLD:
