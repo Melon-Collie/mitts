@@ -112,13 +112,21 @@ var _slapper_arrow_mesh: MeshInstance3D = null
 var _slapper_arrow_root: Node3D = null
 var _slapper_indicator: Node3D = null
 var _slapper_indicator_mat: StandardMaterial3D = null
-var _slapper_arm_nodes: Array[MeshInstance3D] = []
-const _SLAPPER_ARM_DIRS: Array[Vector3] = [
-	Vector3(1, 0, 0), Vector3(-1, 0, 0),
-	Vector3(0, 0, 1), Vector3(0, 0, -1),
-]
-# All arm constants are in unit (1 m) space; _slapper_indicator.scale applies radius.
-const _SLAPPER_ARM_LENGTH: float = 0.30  # fixed arm length; arms slide, don't resize
+var _slapper_reticle_node: MeshInstance3D = null
+var _slapper_zone_radius_cached: float = 0.5
+var _slapper_current_ring_scale: float = 1.0
+
+# Slapper one-timer reticle constants. All geometry is built in unit (1 m)
+# space; _slapper_indicator.scale = (radius, 1, radius) carries the actual
+# zone radius from the controller. Ring shrinks from 1.0 (puck at zone edge)
+# to _SLAPPER_RING_MIN_SCALE (puck at zone centre) as the puck approaches.
+const _SLAPPER_RING_MIN_SCALE: float = 0.15
+const _ARROW_TIP_DISTANCE_UNIT: float = 1.8     # arrowhead tip stays fixed at this radius
+const _ARROW_HEAD_LEN_UNIT: float = 0.30
+const _ARROW_HEAD_HALF_W_UNIT: float = 0.20
+const _ARROW_SHAFT_HALF_W_UNIT: float = 0.06    # gap half-angle in ring = asin(this / ring_scale)
+const _RETICLE_HALF_LENGTH: float = 0.06        # crosshair arm length, world meters
+const _RING_SEGMENTS: int = 48
 
 # ── HUD geometry (ice-blue overlay system) ────────────────────────────────────
 # Slot ring sits just inside RING_OUTER_R. Charge ring is concentric, just
@@ -138,7 +146,7 @@ const _NAME_RADIUS: float = RING_OUTER_R + 0.10
 # Chevron sits on the screen-down axis just past the name, on the side
 # OPPOSITE the player's stick (so it's never tucked behind the blade visual).
 const _CHEVRON_RADIUS: float = RING_OUTER_R + 0.10
-const _CHEVRON_OFFSET_DEG: float = 90.0
+const _CHEVRON_OFFSET_DEG: float = 30.0
 
 # Charge ring shader: angle-mask + tri-color blend. Fill goes clockwise from 12
 # o'clock as viewed from above. UV.x of the procedural ring encodes 0..1
@@ -348,35 +356,30 @@ func _ready() -> void:
 	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_name_label)
 
+	# Slapper one-timer reticle. Composed of a fixed centre crosshair (does NOT
+	# rotate with aim) and a rotating arrow + partial-arc ring composite. The
+	# composite is rebuilt each tick from update_slapper_indicator_convergence:
+	# the ring shrinks as the puck approaches the zone centre, and its gap
+	# stays glued to the arrow tail so the whole shape reads as one continuous
+	# outline (head → shoulders → shaft sides curving smoothly into the arc).
 	_slapper_indicator = Node3D.new()
 	_slapper_indicator.name = "SlapperIndicator"
 	_slapper_indicator.visible = false
 	add_child(_slapper_indicator)
 	_slapper_indicator_mat = _make_hud_ice_material()
-	# Y rotations that align each arm's local +Z with its world direction.
-	var arm_y_rots: Array[float] = [90.0, -90.0, 0.0, 180.0]
-	for i: int in _SLAPPER_ARM_DIRS.size():
-		var arm := MeshInstance3D.new()
-		var box := BoxMesh.new()
-		box.size = Vector3(MenuStyle.HUD_LINE_THIN, 0.005, _SLAPPER_ARM_LENGTH)
-		arm.mesh = box
-		arm.material_override = _slapper_indicator_mat
-		arm.rotation_degrees.y = arm_y_rots[i]
-		_slapper_indicator.add_child(arm)
-		_slapper_arm_nodes.append(arm)
-	update_slapper_indicator_convergence(1.0)
 
-	# Slapshot direction arrow. Sits at the slapper-zone center (whichever
-	# offset the controller passes via set_slapshot_arrow); rotates each tick
-	# to face slapper_aim_dir. Outline-only style — drawn as four thin boxes
-	# (two shaft sides + two arrowhead sides).
+	_slapper_reticle_node = _create_reticle_mesh(_RETICLE_HALF_LENGTH)
+	_slapper_reticle_node.material_override = _slapper_indicator_mat
+	_slapper_indicator.add_child(_slapper_reticle_node)
+
 	_slapper_arrow_root = Node3D.new()
 	_slapper_arrow_root.name = "SlapperArrow"
 	_slapper_arrow_root.visible = false
-	add_child(_slapper_arrow_root)
-	_slapper_arrow_mesh = _create_arrow_mesh()
-	_slapper_arrow_mesh.material_override = _make_hud_ice_material()
+	_slapper_indicator.add_child(_slapper_arrow_root)
+	_slapper_arrow_mesh = MeshInstance3D.new()
+	_slapper_arrow_mesh.material_override = _slapper_indicator_mat
 	_slapper_arrow_root.add_child(_slapper_arrow_mesh)
+	update_slapper_indicator_convergence(1.0)
 
 	var vfx := SkaterVFX.new()
 	vfx.name = "VFX"
@@ -494,53 +497,24 @@ func _create_chevron_mesh() -> ArrayMesh:
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh
 
-# Outline arrow drawn flat on the ice, pointing along +Z. Six edges form a
-# closed arrow shape with the base (z = 0) left open: two shaft sides + two
-# shoulder segments (where the shaft widens into the head) + two head
-# diagonals meeting at the tip. Drawn as thin strips, one per edge.
-func _create_arrow_mesh() -> MeshInstance3D:
-	var shaft_len: float = 0.55
-	var head_len: float  = 0.18
-	var head_half_w: float = 0.16
-	var shaft_half_w: float = 0.05
+# Centre crosshair for the slapper one-timer reticle. Two thin boxes meeting
+# at the origin (one along X, one along Z), each `2 * half_len` long. Built
+# in world meters; counter-scaled in set_slapper_indicator so it stays the
+# same visual size regardless of slapper_zone_radius.
+func _create_reticle_mesh(half_len: float) -> MeshInstance3D:
 	var thickness: float = MenuStyle.HUD_LINE_THIN
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var indices := PackedInt32Array()
-
-	var tip := Vector2(0.0, shaft_len + head_len)
-
-	# Shape edges, each a 2D segment in (x, z). Drawn as a thin strip of width
-	# `thickness` perpendicular to the segment direction.
-	var edges: Array[Array] = []
-	for sign_x: float in [-1.0, 1.0]:
-		var shaft_base   := Vector2(sign_x * shaft_half_w, 0.0)
-		var shaft_top    := Vector2(sign_x * shaft_half_w, shaft_len)
-		var head_shoulder := Vector2(sign_x * head_half_w,  shaft_len)
-		# Shaft side: base → shoulder-base
-		edges.append([shaft_base, shaft_top])
-		# Shoulder: shaft top → head outer corner (perpendicular to shaft)
-		edges.append([shaft_top, head_shoulder])
-		# Head diagonal: head outer corner → tip
-		edges.append([head_shoulder, tip])
-
-	for edge_pair: Array in edges:
-		var a_pt: Vector2 = edge_pair[0]
-		var b_pt: Vector2 = edge_pair[1]
-		var edge: Vector2 = b_pt - a_pt
-		var edge_len: float = edge.length()
-		if edge_len < 0.0001:
-			continue
-		var edge_dir: Vector2 = edge / edge_len
-		var edge_perp := Vector2(-edge_dir.y, edge_dir.x)
-		var half_t: float = thickness * 0.5
-		var p0: Vector2 = a_pt + edge_perp * half_t
-		var p1: Vector2 = a_pt - edge_perp * half_t
-		var p2: Vector2 = b_pt - edge_perp * half_t
-		var p3: Vector2 = b_pt + edge_perp * half_t
-		_append_quad(verts, normals, indices,
-				p0.x, p0.y, p1.x, p1.y, p2.x, p2.y, p3.x, p3.y)
-
+	var half_t: float = thickness * 0.5
+	# X-axis bar
+	_append_quad(verts, normals, indices,
+			-half_len, -half_t, -half_len, half_t,
+			half_len, half_t, half_len, -half_t)
+	# Z-axis bar
+	_append_quad(verts, normals, indices,
+			-half_t, -half_len, -half_t, half_len,
+			half_t, half_len, half_t, -half_len)
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
@@ -551,6 +525,120 @@ func _create_arrow_mesh() -> MeshInstance3D:
 	var inst := MeshInstance3D.new()
 	inst.mesh = mesh
 	return inst
+
+# Append a thin rectangular strip of the given thickness along the segment
+# from a_pt → b_pt (XZ plane, Y = 0). Used for arrow edges.
+func _append_strip(
+		verts: PackedVector3Array, normals: PackedVector3Array, indices: PackedInt32Array,
+		a_pt: Vector2, b_pt: Vector2, thickness: float) -> void:
+	var edge: Vector2 = b_pt - a_pt
+	var edge_len: float = edge.length()
+	if edge_len < 0.0001:
+		return
+	var edge_dir: Vector2 = edge / edge_len
+	var edge_perp := Vector2(-edge_dir.y, edge_dir.x)
+	var half_t: float = thickness * 0.5
+	var p0: Vector2 = a_pt + edge_perp * half_t
+	var p1: Vector2 = a_pt - edge_perp * half_t
+	var p2: Vector2 = b_pt - edge_perp * half_t
+	var p3: Vector2 = b_pt + edge_perp * half_t
+	_append_quad(verts, normals, indices,
+			p0.x, p0.y, p1.x, p1.y, p2.x, p2.y, p3.x, p3.y)
+
+# Append a partial-arc annulus (inner_r → outer_r) sweeping from start_angle
+# to end_angle (radians). Angle 0 is along +Z; positive angle rotates toward
+# +X (matches sin/cos convention used elsewhere here). `segments` is the
+# number of quads to emit across the sweep.
+func _append_partial_ring(
+		verts: PackedVector3Array, normals: PackedVector3Array, indices: PackedInt32Array,
+		inner_r: float, outer_r: float,
+		start_angle: float, end_angle: float, segments: int) -> void:
+	if segments <= 0:
+		return
+	var sweep: float = end_angle - start_angle
+	for i: int in segments:
+		var t0: float = float(i) / float(segments)
+		var t1: float = float(i + 1) / float(segments)
+		var a0: float = start_angle + sweep * t0
+		var a1: float = start_angle + sweep * t1
+		var s0: float = sin(a0)
+		var c0: float = cos(a0)
+		var s1: float = sin(a1)
+		var c1: float = cos(a1)
+		var base: int = verts.size()
+		verts.append(Vector3(s0 * inner_r, 0.0, c0 * inner_r))
+		verts.append(Vector3(s0 * outer_r, 0.0, c0 * outer_r))
+		verts.append(Vector3(s1 * inner_r, 0.0, c1 * inner_r))
+		verts.append(Vector3(s1 * outer_r, 0.0, c1 * outer_r))
+		for _n: int in 4:
+			normals.append(Vector3.UP)
+		indices.append_array([base, base + 1, base + 2, base + 1, base + 3, base + 2])
+
+# Rebuild the arrow + partial-arc ring composite mesh. Called from
+# update_slapper_indicator_convergence whenever the ring radius changes, and
+# from set_slapper_indicator when the zone radius changes (so the unit-space
+# stroke thickness can be recomputed). All math is unit-space; the parent
+# _slapper_indicator scale carries the conversion to world meters.
+func _rebuild_slapper_geometry() -> void:
+	if _slapper_arrow_mesh == null:
+		return
+	var r: float = _slapper_current_ring_scale
+	var w: float = _ARROW_SHAFT_HALF_W_UNIT
+	# Counter-scale stroke thickness so the line stays at HUD_LINE_THIN world
+	# meters regardless of the zone radius scale on the parent indicator.
+	var t_unit: float = MenuStyle.HUD_LINE_THIN / max(_slapper_zone_radius_cached, 0.001)
+	var tip_z: float = _ARROW_TIP_DISTANCE_UNIT
+	var head_len: float = _ARROW_HEAD_LEN_UNIT
+	var head_half_w: float = _ARROW_HEAD_HALF_W_UNIT
+	var shoulder_z: float = tip_z - head_len
+
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var indices := PackedInt32Array()
+
+	# Arrow tail anchors on the live ring radius. The tail point sits at
+	# x = ±w (shaft half-width); for that x to lie ON the ring, its z must be
+	# sqrt(r² - w²) — same value the ring arc reaches at angle asin(w/r), so
+	# the shaft side and the arc meet at the same point with no daylight.
+	# Skip shaft sides when r ≤ w (degenerate ring) or when the tail would
+	# already be past the arrow shoulder.
+	if r > w:
+		var tail_z: float = sqrt(r * r - w * w)
+		if tail_z < shoulder_z:
+			for sign_x: float in [-1.0, 1.0]:
+				var shaft_tail := Vector2(sign_x * w, tail_z)
+				var shaft_top  := Vector2(sign_x * w, shoulder_z)
+				_append_strip(verts, normals, indices, shaft_tail, shaft_top, t_unit)
+	# Shoulders + head diagonals always drawn (arrowhead position is fixed).
+	var tip := Vector2(0.0, tip_z)
+	for sign_x_h: float in [-1.0, 1.0]:
+		var shoulder_in  := Vector2(sign_x_h * w, shoulder_z)
+		var shoulder_out := Vector2(sign_x_h * head_half_w, shoulder_z)
+		_append_strip(verts, normals, indices, shoulder_in, shoulder_out, t_unit)
+		_append_strip(verts, normals, indices, shoulder_out, tip, t_unit)
+
+	# Partial-arc ring with a gap at the arrow tail. Gap half-angle satisfies
+	# r * sin(gap_half) = w so the arc endpoints meet the shaft sides. Skip
+	# the ring entirely if the radius is too small to admit the gap.
+	if r > w + t_unit:
+		var gap_half: float = asin(clampf(w / r, -1.0, 1.0))
+		var sweep_total: float = TAU - 2.0 * gap_half
+		var seg_count: int = max(8, int(ceil(_RING_SEGMENTS * sweep_total / TAU)))
+		# Sweep CCW from +gap_half (one shaft side, +X side at angle > 0) the
+		# long way around to TAU - gap_half (other shaft side at angle < 2π).
+		_append_partial_ring(verts, normals, indices,
+				r - t_unit, r,
+				gap_half, TAU - gap_half, seg_count)
+
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	if verts.size() > 0:
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	_slapper_arrow_mesh.mesh = mesh
 
 # Append an XZ-plane quad (Y = 0) defined by 4 corner XZ pairs. Triangulated
 # fan-style: (0,1,2), (0,2,3). Caller must supply corners in CW or CCW order.
@@ -610,15 +698,13 @@ func _make_charge_ring_material() -> ShaderMaterial:
 	mat.set_shader_parameter("opacity", MenuStyle.HUD_OPACITY)
 	return mat
 
-# Slides the four fixed-length arms to visualise puck proximity.
-# ratio = 1.0: puck at zone edge, arms at zone boundary.
-# ratio = 0.0: puck at zone centre, arms slid inward pointing at centre.
+# Drives the shrinking ring + extending arrow tail.
+# ratio = 1.0: puck at zone edge → ring at full unit-space radius (= zone radius).
+# ratio = 0.0: puck at zone centre → ring shrinks to _SLAPPER_RING_MIN_SCALE.
 func update_slapper_indicator_convergence(ratio: float) -> void:
-	var r: float = clampf(ratio, 0.0, 1.0)
-	var inner_tip: float = lerpf(0.0, 1.0 - _SLAPPER_ARM_LENGTH, r)
-	var arm_center: float = inner_tip + _SLAPPER_ARM_LENGTH * 0.5
-	for i: int in _slapper_arm_nodes.size():
-		_slapper_arm_nodes[i].position = _SLAPPER_ARM_DIRS[i] * arm_center
+	_slapper_current_ring_scale = lerpf(
+			_SLAPPER_RING_MIN_SCALE, 1.0, clampf(ratio, 0.0, 1.0))
+	_rebuild_slapper_geometry()
 
 func _resolve_or_create_bone_mesh(node_name: String) -> MeshInstance3D:
 	var existing: MeshInstance3D = upper_body.get_node_or_null(node_name) as MeshInstance3D
@@ -690,8 +776,6 @@ func _physics_process(delta: float) -> void:
 			_charge_ring_mesh.visible = false
 	if _slapper_indicator != null and _slapper_indicator.visible:
 		_slapper_indicator.global_position.y = 0.05
-	if _slapper_arrow_root != null and _slapper_arrow_root.visible:
-		_slapper_arrow_root.global_position.y = 0.05
 
 func _resolve_player_collisions(vel_before: Vector3) -> void:
 	for i: int in get_slide_collision_count():
@@ -802,18 +886,14 @@ func trigger_charge_lost_flash() -> void:
 	if _charge_ring_mesh != null:
 		_charge_ring_mesh.visible = true
 
-# Local-only: enable the slapshot direction arrow at the given zone offset.
-# `offset_x` matches slapper_zone_offset_x (controller-side), already pre-signed.
-# Arrow rotates each tick to face slapper_aim_dir.
-func set_slapshot_arrow(active: bool, offset_x: float = 0.0, offset_z: float = 0.0) -> void:
+# Local-only: toggle visibility of the slapshot direction arrow. Its position
+# is fixed at the indicator origin (the parent _slapper_indicator already
+# carries the zone offset and radius scale), so the offset args are unused
+# here but kept for backward compatibility with the controller call site.
+func set_slapshot_arrow(active: bool, _offset_x: float = 0.0, _offset_z: float = 0.0) -> void:
 	if _slapper_arrow_root == null:
 		return
-	if not active:
-		_slapper_arrow_root.visible = false
-		return
-	var blade_side_sign: float = -1.0 if is_left_handed else 1.0
-	_slapper_arrow_root.position = Vector3(blade_side_sign * offset_x, 0.05, offset_z)
-	_slapper_arrow_root.visible = true
+	_slapper_arrow_root.visible = active
 
 func update_slapshot_arrow_direction(world_dir: Vector3) -> void:
 	if _slapper_arrow_root == null or not _slapper_arrow_root.visible:
@@ -825,6 +905,8 @@ func update_slapshot_arrow_direction(world_dir: Vector3) -> void:
 	if local_dir.length() < 0.001:
 		return
 	# Arrow mesh is built pointing along +Z, so atan2 of (x, z) gives Y rotation.
+	# The partial-arc ring rotates with the arrow because it lives in this same
+	# frame; the gap stays glued to the arrow tail.
 	_slapper_arrow_root.rotation.y = atan2(local_dir.x, local_dir.z)
 
 func set_slapper_indicator(active: bool, offset_x: float = 0.0, offset_z: float = 0.0, radius: float = 0.5) -> void:
@@ -835,6 +917,12 @@ func set_slapper_indicator(active: bool, offset_x: float = 0.0, offset_z: float 
 	_slapper_indicator.position = Vector3(blade_side_sign * offset_x, 0.0, offset_z)
 	_slapper_indicator.scale = Vector3(radius, 1.0, radius)
 	_slapper_indicator.visible = true
+	_slapper_zone_radius_cached = radius
+	# Counter-scale the centre crosshair so it stays the same visual size
+	# regardless of the parent indicator's radius scale.
+	if _slapper_reticle_node != null:
+		var inv: float = 1.0 / max(radius, 0.001)
+		_slapper_reticle_node.scale = Vector3(inv, 1.0, inv)
 	update_slapper_indicator_convergence(1.0)
 
 # Kept as no-ops so the existing controller signature compiles. The reticle is

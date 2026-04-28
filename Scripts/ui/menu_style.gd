@@ -46,8 +46,11 @@ const GOLD        := Color(1.00, 0.85, 0.20, 1.00)
 # Shared by every element drawn flat on the ice under a skater. All three
 # values are referenced by Skater for procedural mesh construction; tweak here
 # rather than per-element.
-const HUD_ICE        := ICE                # primary stroke color for all on-ice HUD
-const HUD_OPACITY    := 0.70               # 60–75% range — single tunable
+# Slate grey-blue reads against bright white ice without glare washout, where
+# the previous ICE blue washed out under overhead arena lights.
+const HUD_SLATE      := Color(0.22, 0.30, 0.42, 1.00)
+const HUD_ICE        := HUD_SLATE          # primary stroke color for all on-ice HUD
+const HUD_OPACITY    := 0.85               # darker color reads better at higher opacity
 const HUD_LINE_THIN  := 0.03               # "thin line" thickness in 3D meters (slot ring, reticle, arrow)
 const HUD_LINE_THICK := 0.045              # heavier stroke for symbols (arrow, chevron)
 
