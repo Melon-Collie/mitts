@@ -74,6 +74,32 @@ extends StaticBody3D
 	set(v):
 		ice_friction = v
 		_rebuild()
+@export_group("Ice Shader")
+@export var ice_fog_color: Color = Color(0.9, 0.95, 1.0):
+	set(v):
+		ice_fog_color = v
+		_rebuild()
+@export_range(0.0, 1.0) var ice_subsurface_fade: float = 0.55:
+	set(v):
+		ice_subsurface_fade = v
+		_rebuild()
+@export_range(0.0, 0.05) var ice_subsurface_depth: float = 0.012:
+	set(v):
+		ice_subsurface_depth = v
+		_rebuild()
+@export_range(0.0, 1.0) var ice_specular: float = 0.6:
+	set(v):
+		ice_specular = v
+		_rebuild()
+@export_range(0.0, 1.0) var ice_roughness_head_on: float = 0.20:
+	set(v):
+		ice_roughness_head_on = v
+		_rebuild()
+@export_range(0.0, 1.0) var ice_roughness_grazing: float = 0.04:
+	set(v):
+		ice_roughness_grazing = v
+		_rebuild()
+@export_group("")
 @export var rebuild: bool = false:
 	set(v):
 		_rebuild()
@@ -215,12 +241,16 @@ func _add_ice(half_l: float) -> void:
 	plane.size = Vector2(rink_width, rink_length)
 	mesh_instance.mesh = plane
 	mesh_instance.position = Vector3(0, 0, 0)
-	var mat = StandardMaterial3D.new()
-	mat.albedo_texture = tex
-	mat.albedo_color = Color.WHITE
-	mat.roughness = 0.08
-	mat.metallic_specular = 0.9
-	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	var mat := ShaderMaterial.new()
+	mat.shader = preload("res://Shaders/ice.gdshader")
+	mat.set_shader_parameter("albedo_tex", tex)
+	mat.set_shader_parameter("rink_size", Vector2(rink_width, rink_length))
+	mat.set_shader_parameter("ice_fog_color", ice_fog_color)
+	mat.set_shader_parameter("subsurface_fade", ice_subsurface_fade)
+	mat.set_shader_parameter("subsurface_depth", ice_subsurface_depth)
+	mat.set_shader_parameter("specular_strength", ice_specular)
+	mat.set_shader_parameter("roughness_head_on", ice_roughness_head_on)
+	mat.set_shader_parameter("roughness_grazing", ice_roughness_grazing)
 	mesh_instance.material_override = mat
 	add_child(mesh_instance)
 	
