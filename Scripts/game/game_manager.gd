@@ -1248,6 +1248,19 @@ func _build_lobby_roster_array() -> Array:
 		var team_id: int = r.team.team_id if r.team != null else 0
 		result.append([peer_id, team_id, r.team_slot, r.player_name,
 				r.is_left_handed, r.jersey_number])
+	# Spectators aren't in _registry, so without this they'd come back to the
+	# lobby as orphan peers — no slot, no name, no jersey number — and the
+	# host's identity lookup would default everything to "Player" / 10. Append
+	# them explicitly using the names/handedness/numbers tracked by
+	# NetworkManager from request_join. Spectator slots are reassigned 0..N
+	# since the original index isn't preserved across the game session.
+	var spec_idx: int = 0
+	for peer_id: int in _spectator_peers:
+		result.append([peer_id, NetworkManager.SPECTATOR_TEAM_ID, spec_idx,
+				NetworkManager.get_peer_name(peer_id),
+				NetworkManager.get_peer_handedness(peer_id),
+				NetworkManager.get_peer_number(peer_id)])
+		spec_idx += 1
 	return result
 
 
