@@ -15,6 +15,15 @@ extends Node
 
 @export var playback_speed: float = 1.0
 
+# Brackets larger than this are treated as recording gaps (e.g. host's
+# goal-replay window — broadcasts pause for ~8 s). Interpolating across one
+# would drift actors smoothly between the pre- and post-gap positions; instead
+# we hold the FROM frame so the moment that triggered the gap lingers, then
+# snap to TO when virtual_clock reaches it. Any normal-play bracket is well
+# under this (40 Hz = 25 ms; 5 Hz dead-puck phase = 200 ms; jitter adds
+# tens of ms on top).
+const _GAP_THRESHOLD_S: float = 0.5
+
 signal goal_event_emitted(event: Dictionary)
 signal game_state_changed(game_state: Dictionary)
 signal playback_ended
@@ -179,8 +188,13 @@ func _apply_current_frame(delta: float) -> void:
 	if _cached_from_snap.is_empty():
 		return
 	var bracket_dt: float = _timestamps[idx_next] - _timestamps[idx]
-	var t: float = clampf((_virtual_clock - _timestamps[idx]) / bracket_dt, 0.0, 1.0) \
-			if bracket_dt > 0.0 else 0.0
+	var t: float
+	if bracket_dt > _GAP_THRESHOLD_S:
+		t = 0.0  # hold FROM across the gap; snap when clock reaches TO
+	elif bracket_dt > 0.0:
+		t = clampf((_virtual_clock - _timestamps[idx]) / bracket_dt, 0.0, 1.0)
+	else:
+		t = 0.0
 	ReplayPlaybackEngine.apply_interpolated_snapshot(
 			_cached_from_snap, _cached_to_snap, t, bracket_dt, delta,
 			_records, _puck, _goalie_controllers)
