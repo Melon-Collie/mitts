@@ -124,7 +124,7 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 @export var slapper_elevation_target_height: float = 0.65
 @export var one_timer_window_duration: float = 0.45  # seconds after puck arrives to release
 @export var one_timer_leniency_time: float = 0.08   # seconds of puck travel added to zone radius as leniency
-@export var one_timer_center_power_bonus: float = 0.25  # max multiplier bonus at dead centre
+@export var one_timer_center_power_bonus: float = 0.10  # ±10%: edge of zone = −10%, dead centre = +10%
 
 var show_one_timer_indicator: bool = false
 
@@ -575,7 +575,7 @@ func _try_one_timer_release(input: InputState) -> Dictionary:
 			blade_world, input.mouse_world_pos,
 			_is_elevated, cfg.max_slapper_charge_time, cfg, locked_dir_3d)
 	var proximity: float = clampf(1.0 - dist / slapper_zone_radius, 0.0, 1.0)
-	result.power *= 1.0 + one_timer_center_power_bonus * proximity
+	result.power *= 1.0 + one_timer_center_power_bonus * (2.0 * proximity - 1.0)
 	if not is_replaying:
 		one_timer_release_requested.emit(result.direction, result.power)
 	return {fired = true, direction = result.direction, follow_through_duration = follow_through_duration}
