@@ -1410,7 +1410,8 @@ func _on_game_over() -> void:
 		outcome = "win"
 	elif gf < ga:
 		outcome = "loss"
-	_career_reporter.report(local, gf, ga, outcome)
+	_career_reporter.report(local, gf, ga, outcome,
+			_game_id, team_id, _state_machine.period_scores)
 
 
 func on_scene_exit() -> void:
