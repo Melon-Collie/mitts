@@ -889,8 +889,8 @@ func _apply_velocity_lean(delta: float) -> void:
 
 # ── Movement ──────────────────────────────────────────────────────────────────
 func _apply_movement(input: InputState, delta: float) -> void:
-	# Pure brake (no direction) — drives hockey stop VFX on the skater.
-	skater.is_braking = input.brake and input.move_vector.length() <= move_deadzone
+	# Brake held — drives hockey stop VFX (gated on speed in skater_vfx.gd).
+	skater.is_braking = input.brake
 	skater.is_braced = input.brake
 
 	if _sm.get_state() in [State.SLAPPER_CHARGE_WITH_PUCK, State.SHOT_BLOCKING]:
