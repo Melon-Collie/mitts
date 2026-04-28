@@ -8,8 +8,8 @@ extends Node
 #   3. Decoding each recorded packet into typed actor states (via the codec's
 #      side-effect-free decode_for_replay) and applying them directly to the
 #      Skater / Puck nodes.
-#   4. Goalie controllers run freely tracking the replay puck — their AI
-#      drives body-part animation naturally without needing frame-by-frame state.
+#   4. Freezing goalie AI and applying recorded GoalieNetworkState (position,
+#      rotation, state_enum, five_hole_openness) so poses reflect what happened.
 #
 # Bypasses WorldStateCodec.decode_world_state because that path mutates the
 # host's GameStateMachine — replaying a packet would slam phase / score / clock
@@ -45,6 +45,8 @@ var _cached_from_snap: Dictionary = {}
 var _cached_to_snap: Dictionary = {}
 var _cached_from_idx: int = -1
 var _cached_to_idx: int = -1
+
+var _saved_goalie_processing: Array[bool] = []
 
 var _outro_elapsed: float = -1.0  # >= 0 while holding the final frame
 var _spectator_cam: SpectatorCamera = null
@@ -158,7 +160,7 @@ func _process(delta: float) -> void:
 	var bracket_dt: float = _timestamps[idx_next] - _timestamps[idx]
 	var t: float = clampf((_virtual_clock - _timestamps[idx]) / bracket_dt, 0.0, 1.0) \
 			if bracket_dt > 0.0 else 0.0
-	_apply_interpolated_snapshot(t, bracket_dt)
+	_apply_interpolated_snapshot(t, bracket_dt, delta)
 
 
 func _find_frame_idx(t: float) -> int:
@@ -171,7 +173,7 @@ func _find_frame_idx(t: float) -> int:
 	return best
 
 
-func _apply_interpolated_snapshot(t: float, dt: float) -> void:
+func _apply_interpolated_snapshot(t: float, dt: float, delta: float) -> void:
 	# Skaters: Hermite position (velocity as tangent), Hermite angle for facing
 	# and upper_body_rotation, linear lerp for blade/hand (local-space, no derivative).
 	var from_skaters: Dictionary = _cached_from_snap.skaters
@@ -209,22 +211,32 @@ func _apply_interpolated_snapshot(t: float, dt: float) -> void:
 				fp.position, fp.velocity, tp.position, tp.velocity, t, dt))
 		_puck.set_puck_velocity(Vector3.ZERO)
 
+	# Goalies: interpolate position, rotation, five_hole_openness, and state_enum.
+	# apply_replay_state sets those fields then calls _update_body_parts(delta) so
+	# pad/body animations track the recorded pose rather than re-simulating from AI.
+	var from_goalies: Array = _cached_from_snap.goalies
+	var to_goalies: Array = _cached_to_snap.goalies
+	for i: int in from_goalies.size():
+		if i >= _goalie_controllers.size() or i >= to_goalies.size():
+			break
+		var fg: GoalieNetworkState = from_goalies[i]
+		var tg: GoalieNetworkState = to_goalies[i]
+		var interp := GoalieNetworkState.new()
+		interp.position_x = lerpf(fg.position_x, tg.position_x, t)
+		interp.position_z = lerpf(fg.position_z, tg.position_z, t)
+		interp.rotation_y = lerp_angle(fg.rotation_y, tg.rotation_y, t)
+		interp.five_hole_openness = lerpf(fg.five_hole_openness, tg.five_hole_openness, t)
+		interp.state_enum = tg.state_enum if t >= 0.5 else fg.state_enum
+		_goalie_controllers[i].apply_replay_state(interp, delta)
+
 
 func _freeze_live_simulation() -> void:
 	if _puck != null:
 		_puck.freeze = true
-	# Snap goalies to clip-start positions, then let GoalieController._physics_process
-	# run freely. It reads puck.global_position, which is driven to replay positions
-	# each frame, so the AI tracks the replay puck with natural body-part animation.
-	if _frames.size() > 0:
-		var first_snap: Dictionary = _codec.decode_for_replay(_frames[0])
-		var first_goalies: Array = first_snap.goalies
-		for i: int in first_goalies.size():
-			if i >= _goalies.size():
-				break
-			var fg: GoalieNetworkState = first_goalies[i]
-			_goalies[i].set_goalie_position(fg.position_x, fg.position_z)
-			_goalies[i].set_goalie_rotation_y(fg.rotation_y)
+	_saved_goalie_processing.clear()
+	for gc: GoalieController in _goalie_controllers:
+		_saved_goalie_processing.append(gc.is_physics_processing())
+		gc.set_physics_process(false)
 
 
 func _unfreeze_live_simulation() -> void:
@@ -233,3 +245,7 @@ func _unfreeze_live_simulation() -> void:
 	# Restoring a saved value here could re-freeze the puck before reset() runs.
 	if _puck != null:
 		_puck.freeze = false
+	for i: int in _goalie_controllers.size():
+		var was: bool = _saved_goalie_processing[i] if i < _saved_goalie_processing.size() else true
+		_goalie_controllers[i].set_physics_process(was)
+	_saved_goalie_processing.clear()
