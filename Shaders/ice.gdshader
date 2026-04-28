@@ -19,16 +19,18 @@ uniform vec2 rink_size = vec2(26.0, 60.0);
 // Color the lines fade toward at grazing. Default to the ice color itself so
 // lines blend into the surrounding ice; nudge cooler/lighter for more drama.
 uniform vec3 ice_fog_color : source_color = vec3(0.9, 0.95, 1.0);
-// How strongly the lines fade toward fog at grazing (0 = no fade, 1 = full).
-uniform float subsurface_fade : hint_range(0.0, 1.0) = 0.55;
+// How strongly the lines fade through the ice. Models Beer-Lambert
+// absorption: fade = 1 - exp(-extinction / cos(view_angle)). At the same
+// extinction value the fade strengthens exponentially as the view goes
+// grazing, since the ray traverses more ice. Default 0.4 gives ~33% fade
+// head-on, ~55% at 45°, ~85% near grazing.
+uniform float subsurface_fade : hint_range(0.0, 3.0) = 0.4;
 // Apparent depth of the lines below the ice surface, in meters.
 uniform float subsurface_depth : hint_range(0.0, 0.05) = 0.012;
 // F0 reflectance multiplier (0.5 = water-baseline F0 of 0.04).
 uniform float specular_strength : hint_range(0.0, 1.0) = 0.6;
 uniform float roughness_head_on : hint_range(0.0, 1.0) = 0.20;
 uniform float roughness_grazing : hint_range(0.0, 1.0) = 0.04;
-// Shapes how quickly the fade ramps up toward grazing (higher = sharper edge).
-uniform float grazing_falloff : hint_range(0.5, 8.0) = 2.0;
 
 void fragment() {
 	float NdotV = clamp(dot(normalize(NORMAL), normalize(VIEW)), 0.0, 1.0);
@@ -44,8 +46,10 @@ void fragment() {
 
 	vec3 base = texture(albedo_tex, uv).rgb;
 
-	// Fade lines toward ice fog at grazing.
-	float fade = pow(grazing, grazing_falloff) * subsurface_fade;
+	// Beer-Lambert fade: light traversing the ice depth loses energy
+	// proportional to path length, which is depth / cos(view_angle).
+	float path_factor = 1.0 / max(NdotV, 0.05);
+	float fade = 1.0 - exp(-subsurface_fade * path_factor);
 	vec3 albedo = mix(base, ice_fog_color, fade);
 
 	ALBEDO = albedo;

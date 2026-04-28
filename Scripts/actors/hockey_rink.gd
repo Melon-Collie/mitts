@@ -79,7 +79,7 @@ extends StaticBody3D
 	set(v):
 		ice_fog_color = v
 		_rebuild()
-@export_range(0.0, 1.0) var ice_subsurface_fade: float = 0.55:
+@export_range(0.0, 3.0) var ice_subsurface_fade: float = 0.4:
 	set(v):
 		ice_subsurface_fade = v
 		_rebuild()
