@@ -222,6 +222,45 @@ func test_one_timer_credits_receiver_not_passer() -> void:
 	assert_eq(receiver.stats.assists, 0)
 
 
+# ── Shots blocked ────────────────────────────────────────────────────────────
+
+func test_body_block_by_defender_credits_shots_blocked() -> void:
+	var shooter := _add_player(10, 0)
+	var blocker := _add_player(20, 1)
+	tracker.on_shot_started(10)
+	var credited: bool = tracker.on_body_block(20)
+	assert_true(credited)
+	assert_eq(blocker.stats.shots_blocked, 1)
+	assert_eq(shooter.stats.shots_blocked, 0)
+	assert_false(tracker.has_pending_shot(),
+			"defender intercept ends the shot — pending state cleared")
+
+
+func test_body_block_by_teammate_does_not_credit() -> void:
+	_add_player(10, 0)
+	var teammate := _add_player(11, 0)
+	tracker.on_shot_started(10)
+	var credited: bool = tracker.on_body_block(11)
+	assert_false(credited)
+	assert_eq(teammate.stats.shots_blocked, 0)
+	assert_true(tracker.has_pending_shot(),
+			"same-team body contact doesn't end the pending shot")
+
+
+func test_body_block_without_pending_shot_is_noop() -> void:
+	var blocker := _add_player(20, 1)
+	var credited: bool = tracker.on_body_block(20)
+	assert_false(credited)
+	assert_eq(blocker.stats.shots_blocked, 0)
+
+
+func test_body_block_with_invalid_peer_is_noop() -> void:
+	_add_player(10, 0)
+	tracker.on_shot_started(10)
+	assert_false(tracker.on_body_block(-1))
+	assert_true(tracker.has_pending_shot())
+
+
 # ── Reset ────────────────────────────────────────────────────────────────────
 
 func test_reset_all_clears_state_and_team_shots() -> void:

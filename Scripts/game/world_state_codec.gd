@@ -28,7 +28,7 @@ extends RefCounted
 #      Goalie  (12 B): pos_x s16@1cm, pos_z s16@1cm, rot_y s16@π/32767, state u8, fho u8, vel_x s16@0.02m/s, vel_z s16@0.02m/s
 #
 # 2. Stats  (reliable, event-driven):
-#      [pid, G, A, SOG, HITS] × N players
+#      [pid, G, A, SOG, HITS, BLK] × N players
 #      team_shots[0], team_shots[1]
 #      period_scores[0][0..P-1], period_scores[1][0..P-1]
 #      num_periods (trailing sentinel)
@@ -48,7 +48,7 @@ const SKATER_BLOCK_SIZE: int = 42  # u32 peer_id (4) + 37B skater state + u8 que
 const PUCK_BLOCK_SIZE: int = 12    # 11B pos+vel + 1B carrier_idx
 const GOALIE_BLOCK_SIZE: int = 12
 const GAME_STATE_BLOCK_SIZE: int = 6  # 4×u8 + u16 time_remaining
-const STATS_PLAYER_RECORD_SIZE: int = 5  # peer_id, G, A, SOG, HITS
+const STATS_PLAYER_RECORD_SIZE: int = 6  # peer_id, G, A, SOG, HITS, BLK
 
 var _ws_sequence: int = 0
 var _last_period: int = -1
