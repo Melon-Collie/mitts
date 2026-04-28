@@ -41,8 +41,11 @@ var mouse_sensitivity: float = 1.0
 var attack_up: bool = false
 var camera_mode: int = CAMERA_MODE_TOP_DOWN
 var fov: float = 75.0  # GameCamera writes this to its Camera3D.fov each tick
+var camera_distance: float = 1.0  # multiplier on min/ozone/max camera heights
 const FOV_MIN: float = 40.0
 const FOV_MAX: float = 90.0
+const CAMERA_DISTANCE_MIN: float = 0.6
+const CAMERA_DISTANCE_MAX: float = 1.6
 var bindings: Dictionary = {}  # action -> {type, physical_keycode or button_index}
 
 func _get_save_path() -> String:
@@ -73,6 +76,7 @@ func save() -> void:
 	cfg.set_value("game", "attack_up", attack_up)
 	cfg.set_value("game", "camera_mode", camera_mode)
 	cfg.set_value("game", "fov", fov)
+	cfg.set_value("game", "camera_distance", camera_distance)
 	for action: String in REBINDABLE_ACTIONS:
 		if not bindings.has(action):
 			continue
@@ -156,6 +160,7 @@ func _load() -> void:
 		attack_up = cfg.get_value("game", "attack_up", false)
 		camera_mode = clamp(cfg.get_value("game", "camera_mode", CAMERA_MODE_TOP_DOWN), 0, CAMERA_MODE_LABELS.size() - 1)
 		fov = clampf(cfg.get_value("game", "fov", 75.0), FOV_MIN, FOV_MAX)
+		camera_distance = clampf(cfg.get_value("game", "camera_distance", 1.0), CAMERA_DISTANCE_MIN, CAMERA_DISTANCE_MAX)
 		for action: String in REBINDABLE_ACTIONS:
 			var t: String = cfg.get_value("bindings", action + "_type", "")
 			if t == "key":

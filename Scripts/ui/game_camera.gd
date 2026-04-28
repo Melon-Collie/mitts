@@ -107,8 +107,13 @@ func _physics_process(delta: float) -> void:
 	var attack_dir_now: int = _get_attacking_direction()
 	var in_ozone: bool = attack_dir_now != 0 and \
 		(player_pos.z * float(attack_dir_now)) > GameRules.BLUE_LINE_Z
-	var effective_min: float = ozone_min_height if in_ozone else min_height
-	var target_height: float = clampf(maxf(needed_x, needed_z), effective_min, max_height)
+	# User-facing camera-distance multiplier (Options → Game). Scales the
+	# clamp range so the dynamic zoom math keeps its shape but the overall
+	# height shifts up/down per the player's preference.
+	var dist_mult: float = PlayerPrefs.camera_distance
+	var effective_min: float = (ozone_min_height if in_ozone else min_height) * dist_mult
+	var effective_max: float = max_height * dist_mult
+	var target_height: float = clampf(maxf(needed_x, needed_z), effective_min, effective_max)
 	_current_height = lerpf(_current_height, target_height, zoom_speed * delta)
 
 	var visible_half_x: float = tan_half_fov * aspect * _current_height
