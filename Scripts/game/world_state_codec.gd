@@ -152,7 +152,7 @@ func decode_world_state(data: PackedByteArray) -> void:
 		if record == null:
 			continue
 		var skater_state := _decode_skater_quantized(skater_bytes)
-		if record.is_local:
+		if record.is_local and not NetworkManager.is_replay_mode():
 			(record.controller as LocalController).reconcile(skater_state)
 			queue_depth_feedback.emit(depth)
 		else:
@@ -199,6 +199,64 @@ func _apply_game_state(score0: int, score1: int, new_phase: GamePhase.Phase,
 		_last_period = period
 		period_changed.emit(period)
 	clock_updated.emit(t_remaining)
+
+
+# ── Replay decode (host-side, no side effects) ───────────────────────────────
+
+# Decodes a recorded packet into typed actor states without touching the game
+# state machine, controllers, or signals. GoalReplayDriver uses this on the
+# host because decode_world_state is designed for clients receiving authoritative
+# state — calling it here would slam the live state machine (phase, score) back
+# to whatever the recorded packet contained.
+#
+# Returns:
+#   {
+#     host_ts:         float,
+#     skaters:         Dictionary[int, SkaterNetworkState],   # peer_id → state
+#     puck:            PuckNetworkState (or null on malformed input),
+#     carrier_peer_id: int,                                   # -1 if no carrier
+#     goalies:         Array[GoalieNetworkState]              # team index order
+#   }
+# Or {} if the packet is too small to decode.
+func decode_for_replay(data: PackedByteArray) -> Dictionary:
+	if data.size() < WS_HEADER_SIZE:
+		return {}
+	var o: int = 0
+	o += 2  # ws_sequence
+	var host_ts: float = data.decode_float(o); o += 4
+	var num_skaters: int = data.decode_u8(o); o += 1
+	var min_size: int = WS_HEADER_SIZE + num_skaters * SKATER_BLOCK_SIZE + PUCK_BLOCK_SIZE + 1 + GAME_STATE_BLOCK_SIZE
+	if data.size() < min_size:
+		return {}
+
+	var skaters: Dictionary = {}
+	var decoded_peers: Array[int] = []
+	for _i: int in num_skaters:
+		var peer_id: int = data.decode_u32(o); o += 4
+		decoded_peers.append(peer_id)
+		var skater_bytes: PackedByteArray = data.slice(o, o + 37); o += 37
+		o += 1  # queue_depth (not needed for replay)
+		skaters[peer_id] = _decode_skater_quantized(skater_bytes)
+
+	var puck_state := _decode_puck_quantized(data.slice(o, o + 11)); o += 11
+	var carrier_idx: int = data.decode_u8(o); o += 1
+	var carrier_peer_id: int = decoded_peers[carrier_idx] if carrier_idx < decoded_peers.size() else -1
+
+	var num_goalies: int = data.decode_u8(o); o += 1
+	var goalies: Array[GoalieNetworkState] = []
+	for _gi: int in num_goalies:
+		if o + GOALIE_BLOCK_SIZE > data.size():
+			break
+		goalies.append(_decode_goalie_quantized(data.slice(o, o + GOALIE_BLOCK_SIZE)))
+		o += GOALIE_BLOCK_SIZE
+
+	return {
+		host_ts = host_ts,
+		skaters = skaters,
+		puck = puck_state,
+		carrier_peer_id = carrier_peer_id,
+		goalies = goalies,
+	}
 
 
 # ── Stats ────────────────────────────────────────────────────────────────────

@@ -27,6 +27,8 @@ signal stats_updated
 signal shots_on_goal_changed(sog_0: int, sog_1: int)
 signal team_colors_ready(home_primary: Color, home_secondary: Color, away_primary: Color, away_secondary: Color)
 signal local_player_hit(magnitude: float)
+signal replay_started
+signal replay_stopped
 
 # ── Domain state ──────────────────────────────────────────────────────────────
 var _state_machine: GameStateMachine = null
@@ -54,6 +56,8 @@ var _swap_coord: SlotSwapCoordinator = null
 var _telemetry: NetworkTelemetry = null
 var _debug_overlay: NetworkDebugOverlay = null
 var _state_buffer_manager: StateBufferManager = null
+var _recorder: ReplayRecorder = null
+var _goal_replay_driver: GoalReplayDriver = null
 var _career_reporter: CareerStatsReporter = null
 
 # ── Lag compensation ──────────────────────────────────────────────────────────
@@ -116,6 +120,8 @@ func _process(delta: float) -> void:
 		_observe_telemetry()
 	if not NetworkManager.is_host or _state_machine == null:
 		return
+	if NetworkManager.is_replay_mode():
+		return
 	if _state_machine.tick(delta):
 		_phase_coord.handle_phase_entered()
 	if _state_machine.current_phase == GamePhase.Phase.PLAYING:
@@ -131,6 +137,11 @@ func _physics_process(delta: float) -> void:
 		if local != null and not PhaseRules.is_dead_puck_phase(_state_machine.current_phase):
 			local.stats.toi_seconds += delta
 	if not NetworkManager.is_host or puck == null or _state_machine == null:
+		return
+	# Goal replay temporarily owns actor positions on the host. Skip the live
+	# simulation tick so authoritative state buffer captures, ghost checks, etc.
+	# don't fight (or pollute the recorder with) replay positions.
+	if NetworkManager.is_replay_mode():
 		return
 	if _state_buffer_manager != null and puck_controller != null:
 		_state_buffer_manager.capture(_registry, puck_controller, goalie_controllers)
@@ -401,6 +412,15 @@ func _wire_subsystems() -> void:
 	_state_buffer_manager = StateBufferManager.new()
 	_state_buffer_manager.setup(_registry, goalie_controllers)
 
+	if NetworkManager.is_host:
+		_recorder = ReplayRecorder.new()
+		_recorder.setup()
+		_goal_replay_driver = GoalReplayDriver.new()
+		add_child(_goal_replay_driver)
+		_goal_replay_driver.replay_started.connect(replay_started.emit)
+		_goal_replay_driver.replay_stopped.connect(replay_stopped.emit)
+		_goal_replay_driver.replay_stopped.connect(_on_goal_replay_stopped)
+
 	_codec = WorldStateCodec.new()
 	_codec.setup(_registry, _state_machine,
 			get_puck, _get_puck_controller, _get_goalie_controllers, _state_buffer_manager)
@@ -425,6 +445,9 @@ func _wire_subsystems() -> void:
 	_phase_coord.goal_scored.connect(goal_scored.emit)
 	_phase_coord.score_changed.connect(score_changed.emit)
 	_phase_coord.phase_changed.connect(phase_changed.emit)
+	if NetworkManager.is_host:
+		_phase_coord.goal_scored.connect(_on_goal_for_replay)
+		_phase_coord.phase_changed.connect(_on_phase_changed_for_replay)
 	_phase_coord.period_changed.connect(period_changed.emit)
 	_phase_coord.clock_updated.connect(_on_clock_updated_externally)
 	_phase_coord.game_over.connect(game_over.emit)
@@ -1072,6 +1095,11 @@ func on_scene_exit() -> void:
 	_registry = null
 	_codec = null
 	_state_buffer_manager = null
+	if _goal_replay_driver != null:
+		_goal_replay_driver.stop()
+		_goal_replay_driver.queue_free()
+		_goal_replay_driver = null
+	_recorder = null
 	_shot_tracker = null
 	_phase_coord = null
 	_swap_coord = null
@@ -1215,7 +1243,53 @@ func _get_goalie_controllers() -> Array:
 
 # ── World state (NetworkManager provider callback) ───────────────────────────
 func get_world_state() -> PackedByteArray:
-	return _codec.encode_world_state() if _codec != null else PackedByteArray()
+	var state: PackedByteArray = _codec.encode_world_state() if _codec != null else PackedByteArray()
+	# Don't pollute the recorder with stale frames during goal replay — live
+	# capture is gated, so encode would just re-emit the pre-replay snapshot
+	# until the replay ends.
+	if _recorder != null and not state.is_empty() and not NetworkManager.is_replay_mode():
+		_recorder.record_frame(state, NetworkManager.local_time())
+	return state
+
+
+# ── Goal replay (host only) ──────────────────────────────────────────────────
+
+# Seconds to keep recording after the goal fires so the clip includes the puck
+# entering the net and the shooter's follow-through.  Must be well under
+# GameStateMachine.GOAL_PAUSE_DURATION (2.0 s) so the phase timer doesn't
+# expire before replay mode freezes it.
+const POST_GOAL_CAPTURE_WINDOW: float = 0.5
+
+func _on_goal_for_replay(_scoring_team: Team, _scorer: String, _a1: String, _a2: String) -> void:
+	if _recorder == null or _goal_replay_driver == null or _codec == null:
+		return
+	# Force-record the goal-moment frame in case the last broadcast was up to
+	# 25 ms ago, ensuring the exact detection instant is in the buffer.
+	var goal_frame: PackedByteArray = _codec.encode_world_state()
+	if not goal_frame.is_empty():
+		_recorder.record_frame(goal_frame, NetworkManager.local_time())
+	# Let the broadcaster keep feeding the recorder for POST_GOAL_CAPTURE_WINDOW
+	# seconds so the clip naturally ends with the puck in the net.
+	get_tree().create_timer(POST_GOAL_CAPTURE_WINDOW).timeout.connect(_start_goal_replay)
+
+
+func _start_goal_replay() -> void:
+	if _recorder == null or _goal_replay_driver == null or _codec == null:
+		return
+	_goal_replay_driver.start(_recorder, _codec, _registry, puck, goalie_controllers)
+
+
+func _on_phase_changed_for_replay(new_phase: GamePhase.Phase) -> void:
+	if new_phase == GamePhase.Phase.FACEOFF_PREP and _goal_replay_driver != null:
+		_goal_replay_driver.stop()
+
+
+func _on_goal_replay_stopped() -> void:
+	if _state_machine == null or _state_machine.current_phase != GamePhase.Phase.GOAL_SCORED:
+		return
+	# Replay ended naturally — drive straight into FACEOFF_PREP.
+	_state_machine.begin_faceoff_prep()
+	_phase_coord.handle_phase_entered()
 
 
 # ── Public API consumed by controllers, HUD, camera, scoreboard ──────────────

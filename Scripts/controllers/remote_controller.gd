@@ -28,6 +28,8 @@ func apply_ghost_rpc(is_ghost: bool) -> void:
 func _physics_process(delta: float) -> void:
 	if skater == null:
 		return
+	if NetworkManager.is_replay_mode():
+		return
 	if _is_host:
 		_drive_from_input(delta)
 	else:

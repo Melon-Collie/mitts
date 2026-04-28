@@ -63,6 +63,22 @@ func get_input_batch(frames: int = 12) -> Array[InputState]:
 	var start: int = maxi(_input_history.size() - frames, 0)
 	return _input_history.slice(start)
 
+# Used by WorldStateCodec during goal replay to reposition the local skater the
+# same way RemoteController does, bypassing reconcile which is a no-op during
+# dead-puck phases anyway. Mirrors RemoteController._apply_state_to_skater.
+func apply_network_state(state: SkaterNetworkState, _host_ts: float) -> void:
+	if skater == null:
+		return
+	skater.global_position = state.position
+	skater.velocity = state.velocity
+	skater.set_facing(state.facing)
+	skater.set_upper_body_rotation(state.upper_body_rotation_y)
+	skater.set_top_hand_position(state.top_hand_position)
+	skater.set_blade_position(state.blade_position)
+	skater.update_arm_mesh()
+	skater.update_bottom_arm_mesh()
+
+
 func teleport_to(pos: Vector3) -> void:
 	super.teleport_to(pos)
 	_input_history.clear()
@@ -74,6 +90,8 @@ func teleport_to(pos: Vector3) -> void:
 
 func _physics_process(delta: float) -> void:
 	if skater == null or puck == null or _gatherer == null:
+		return
+	if NetworkManager.is_replay_mode():
 		return
 	if not skater.visual_offset.is_zero_approx():
 		var new_offset: Vector3 = skater.visual_offset * (1.0 - _RECONCILE_VISUAL_ALPHA)

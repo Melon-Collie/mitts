@@ -35,6 +35,7 @@ var _rematch_btn: Button = null
 var _vote_label: Label = null
 var _rematch_votes: Dictionary = {}
 var _local_voted: bool = false
+var _replay_label: Label = null
 
 const _DARK_BG    := Color(0.07, 0.07, 0.09, 0.92)
 const _WHITE      := Color(1.00, 1.00, 1.00, 1.00)
@@ -75,6 +76,8 @@ func _ready() -> void:
 	GameManager.player_joined.connect(func(n: String, c: Color) -> void: _show_toast(n + " joined", c))
 	GameManager.player_left.connect(func(n: String, c: Color) -> void: _show_toast(n + " left", c))
 	GameManager.local_player_hit.connect(_on_local_player_hit)
+	GameManager.replay_started.connect(_on_replay_started)
+	GameManager.replay_stopped.connect(_on_replay_stopped)
 	GameManager.stats_updated.connect(func() -> void:
 		if _game_menu != null and _game_menu.visible and _slot_grid != null:
 			_slot_grid.refresh(GameManager.get_slot_roster(), NetworkManager.local_peer_id(), _get_team_colors()))
@@ -247,6 +250,11 @@ func _build_phase_banner() -> void:
 	_assist_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_assist_label.visible = false
 	vbox.add_child(_assist_label)
+
+	_replay_label = _lbl("◀  REPLAY  ▶", 11, _DIM)
+	_replay_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_replay_label.visible = false
+	vbox.add_child(_replay_label)
 
 func _build_offscreen_indicators() -> void:
 	var indicators := OffScreenPlayerIndicators.new()
@@ -784,6 +792,14 @@ func _on_team_colors_ready(home_primary: Color, home_secondary: Color, away_prim
 	if _away_badge_label != null:
 		_away_badge_label.add_theme_color_override("font_color", away_secondary)
 
+func _on_replay_started() -> void:
+	if _replay_label != null:
+		_replay_label.visible = true
+
+func _on_replay_stopped() -> void:
+	if _replay_label != null:
+		_replay_label.visible = false
+
 func _on_phase_changed(new_phase: int) -> void:
 	match new_phase:
 		GamePhase.Phase.PLAYING:
@@ -791,6 +807,8 @@ func _on_phase_changed(new_phase: int) -> void:
 			_phase_label.add_theme_color_override("font_color", _GOLD)
 			_phase_style.bg_color = Color(0.07, 0.07, 0.09, 0.88)
 			_assist_label.visible = false
+			if _replay_label != null:
+				_replay_label.visible = false
 		GamePhase.Phase.GOAL_SCORED:
 			_phase_panel.visible = true  # text + color set by _on_goal_scored
 		GamePhase.Phase.END_OF_PERIOD:

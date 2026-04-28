@@ -79,6 +79,8 @@ var _world_state_provider: Callable = Callable()
 var _input_batch_provider: Callable = Callable()
 var _clock_sync: RefCounted = null  # ClockSync instance, client only
 var _session_start_ms: int = 0
+var _replay_mode: bool = false
+var _replay_clock: float = 0.0
 
 # ── Packet-loss tracking ──────────────────────────────────────────────────────
 # Client-side: gap detection from received WS sequence numbers.
@@ -267,6 +269,7 @@ func reset() -> void:
 	_clock_sync = null
 	_session_start_ms = 0
 	_last_ws_seq_received = -1
+	_replay_mode = false
 	_ws_drop_window = 0
 	_ws_recv_window = 0
 	_ws_loss_window_timer = 0.0
@@ -363,12 +366,12 @@ func set_broadcast_rate(hz: float) -> void:
 	state_delta = 1.0 / maxf(hz, 1.0)
 
 func _broadcast_state() -> void:
-	if is_offline_mode:
-		return
 	if not _world_state_provider.is_valid():
 		return
 	var state: PackedByteArray = _world_state_provider.call()
 	if state.is_empty():
+		return
+	if is_offline_mode:
 		return
 	for peer_id in connected_peer_ids():
 		receive_world_state.rpc_id(peer_id, state)
@@ -497,7 +500,26 @@ func receive_hit_claim(victim_peer_id: int, host_timestamp: float, rtt_ms: float
 	var hitter_peer_id: int = multiplayer.get_remote_sender_id()
 	hit_claim_received.emit(hitter_peer_id, victim_peer_id, host_timestamp, rtt_ms)
 
+func start_replay_mode(initial_ts: float) -> void:
+	_replay_mode = true
+	_replay_clock = initial_ts
+
+
+func stop_replay_mode() -> void:
+	_replay_mode = false
+
+
+func set_replay_clock(t: float) -> void:
+	_replay_clock = t
+
+
+func is_replay_mode() -> bool:
+	return _replay_mode
+
+
 func estimated_host_time() -> float:
+	if _replay_mode:
+		return _replay_clock
 	if is_host:
 		return local_time()
 	if _clock_sync == null or not _clock_sync.is_ready:
