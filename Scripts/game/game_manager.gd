@@ -323,7 +323,18 @@ func on_player_disconnected(peer_id: int) -> void:
 	# the record is still intact.
 	if NetworkManager.is_host and puck != null and puck.carrier == record.skater:
 		puck.drop()
-	if puck != null:
+	_despawn_skater_for_peer(peer_id)
+
+
+# Tears down host/client-side actor state for a peer whose skater is going
+# away (disconnect or mid-game demote). Caller is responsible for any
+# host-only side effects that happen *before* the skater is queue_freed
+# (puck drop, pending-claim clear) — those need the live record.
+func _despawn_skater_for_peer(peer_id: int) -> void:
+	if _registry == null or not _registry.has(peer_id):
+		return
+	var record: PlayerRecord = _registry.get_record(peer_id)
+	if puck != null and record.skater != null:
 		puck.remove_skater_cooldown(record.skater)
 	if _state_buffer_manager != null:
 		_state_buffer_manager.remove_player(peer_id)
@@ -628,44 +639,31 @@ func spectator_peer_count() -> int:
 # spawn_remote_skater + assign_player_slot RPCs that mid-game joins use.
 
 func _demote_player_to_spectator(peer_id: int) -> void:
-	# Reject if the peer isn't currently a player.
 	if _registry == null or not _registry.has(peer_id):
 		return
 	var record: PlayerRecord = _registry.get_record(peer_id)
 	# Drop the puck before broadcasting so the carrier change goes out while
 	# the controller still exists (mirrors on_player_disconnected).
-	if puck != null and record != null and puck.carrier == record.skater:
+	if puck != null and puck.carrier == record.skater:
 		puck.drop()
-	# Clear any pending lag-comp pickup that points at the demoted skater —
-	# the skater is about to be queue_freed and apply_lag_comp_pickup would
-	# operate on a freed RID.
-	if not _pending_pickup_claim.is_empty() and record != null \
+	# Pending lag-comp claim references the about-to-be-queue_freed skater.
+	if not _pending_pickup_claim.is_empty() \
 			and _pending_pickup_claim.get("skater") == record.skater:
 		_pending_pickup_claim = {}
 		_pending_claim_timer = 0.0
-	_spectator_peers[peer_id] = true
 	NetworkManager.send_spectator_demoted_to_all(peer_id)
 
 
 # Runs on every peer (host + clients) when a demotion is broadcast. Despawns
-# the demoted peer's skater locally; if the local peer is the demoted one,
-# tears down the LocalController/GameCamera and mounts SpectatorCamera.
+# the demoted peer's skater locally; the demoted peer additionally tears down
+# its LocalController and mounts SpectatorCamera.
 func _on_spectator_demoted_received(peer_id: int) -> void:
 	var is_local_demote: bool = peer_id == NetworkManager.local_peer_id()
 	if is_local_demote:
 		# Stop input batches before the controller is queue_freed — the Callable
 		# would otherwise reference a dead object.
 		NetworkManager.set_input_batch_provider(Callable())
-	if _registry != null and _registry.has(peer_id):
-		var record: PlayerRecord = _registry.get_record(peer_id)
-		if puck != null and record != null and record.skater != null:
-			puck.remove_skater_cooldown(record.skater)
-		if _state_buffer_manager != null:
-			_state_buffer_manager.remove_player(peer_id)
-		_registry.remove(peer_id)
-	# On clients this is bookkeeping only; on the host the demote helper has
-	# already set this. Kept symmetric so future host-side callers (e.g.
-	# disconnect cleanup) can rely on the entry being present.
+	_despawn_skater_for_peer(peer_id)
 	_spectator_peers[peer_id] = true
 	if is_local_demote:
 		_become_local_spectator()
