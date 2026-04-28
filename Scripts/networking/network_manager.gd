@@ -80,6 +80,9 @@ var pending_period_duration: float = GameRules.PERIOD_DURATION
 var pending_ot_enabled: bool = GameRules.OT_ENABLED
 var pending_rule_set: int = GameRules.DEFAULT_RULE_SET
 var pending_join_players: Array = []     # sync_existing_players data for join-in-progress
+# Path to a .mreplay set by the main-menu replay browser before changing scene
+# to the viewer. Cleared by ReplayViewer._ready after consumption.
+var pending_replay_path: String = ""
 var _peer_handedness: Dictionary = {}     # peer_id -> bool (host only)
 var _peer_names: Dictionary = {}          # peer_id -> String (host only)
 var _peer_numbers: Dictionary = {}        # peer_id -> int (host only)

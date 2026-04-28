@@ -176,7 +176,7 @@ func _find_frame_idx(t: float) -> int:
 func _apply_interpolated_snapshot(t: float, dt: float, delta: float) -> void:
 	ReplayPlaybackEngine.apply_interpolated_snapshot(
 			_cached_from_snap, _cached_to_snap, t, dt, delta,
-			_registry, _puck, _goalie_controllers)
+			_registry.all(), _puck, _goalie_controllers)
 
 
 func _freeze_live_simulation() -> void:

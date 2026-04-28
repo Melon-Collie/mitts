@@ -20,7 +20,10 @@ signal game_state_changed(game_state: Dictionary)
 signal playback_ended
 
 var _codec: WorldStateCodec = null
-var _registry: PlayerRegistry = null
+# peer_id → PlayerRecord; built by the viewer from the .mreplay header roster.
+# Avoids the heavyweight PlayerRegistry setup (state machine + teams + spawn
+# wireup) that the live game uses.
+var _records: Dictionary = {}
 var _puck: Puck = null
 var _goalie_controllers: Array[GoalieController] = []
 
@@ -49,12 +52,12 @@ var _frame_idx_hint: int = 0
 
 
 func setup(codec: WorldStateCodec,
-		registry: PlayerRegistry,
+		records: Dictionary,
 		puck: Puck,
 		goalie_controllers: Array,
 		decoded_frames: Array) -> void:
 	_codec = codec
-	_registry = registry
+	_records = records
 	_puck = puck
 	_goalie_controllers = []
 	for gc: GoalieController in goalie_controllers:
@@ -180,7 +183,7 @@ func _apply_current_frame(delta: float) -> void:
 			if bracket_dt > 0.0 else 0.0
 	ReplayPlaybackEngine.apply_interpolated_snapshot(
 			_cached_from_snap, _cached_to_snap, t, bracket_dt, delta,
-			_registry, _puck, _goalie_controllers)
+			_records, _puck, _goalie_controllers)
 	# Emit game-state changes (score / phase / period / clock) so the viewer
 	# HUD doesn't have to poll every tick. Compare-and-emit avoids spamming
 	# subscribers with the same dict every frame.

@@ -23,15 +23,19 @@ static func apply_interpolated_snapshot(
 		t: float,
 		dt: float,
 		delta: float,
-		registry: PlayerRegistry,
+		records: Dictionary,
 		puck: Puck,
 		goalie_controllers: Array) -> void:
+	# `records` is peer_id → PlayerRecord. GoalReplayDriver passes
+	# PlayerRegistry.all() (the underlying dict); FileReplayDriver builds its
+	# own dict from the .mreplay header so the viewer doesn't need to stand
+	# up a full registry / state machine just to feed this engine.
 	var from_skaters: Dictionary = from_snap.skaters
 	var to_skaters: Dictionary = to_snap.skaters
 	for peer_id: int in from_skaters:
 		if not to_skaters.has(peer_id):
 			continue
-		var record: PlayerRecord = registry.get_record(peer_id)
+		var record: PlayerRecord = records.get(peer_id)
 		if record == null or record.controller == null:
 			continue
 		var fs: SkaterNetworkState = from_skaters[peer_id]
