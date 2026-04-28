@@ -90,6 +90,8 @@ func teleport_to(pos: Vector3) -> void:
 func _physics_process(delta: float) -> void:
 	if skater == null or puck == null or _gatherer == null:
 		return
+	if NetworkManager.is_replay_mode():
+		return
 	if not skater.visual_offset.is_zero_approx():
 		var new_offset: Vector3 = skater.visual_offset * (1.0 - _RECONCILE_VISUAL_ALPHA)
 		skater.visual_offset = new_offset if new_offset.length_squared() > 0.000001 else Vector3.ZERO

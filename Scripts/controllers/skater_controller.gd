@@ -290,6 +290,18 @@ func get_shot_state() -> int:
 
 func apply_network_state(_net_state: SkaterNetworkState, _host_ts: float) -> void:
 	pass  # overridden by RemoteController on client
+
+func apply_replay_state(state: SkaterNetworkState) -> void:
+	if skater == null:
+		return
+	skater.global_position = state.position
+	skater.velocity = state.velocity
+	skater.set_facing(state.facing)
+	skater.set_upper_body_rotation(state.upper_body_rotation_y)
+	skater.set_top_hand_position(state.top_hand_position)
+	skater.set_blade_position(state.blade_position)
+	skater.update_arm_mesh()
+	skater.update_bottom_arm_mesh()
 	
 signal puck_release_requested(direction: Vector3, power: float, is_slapper: bool)
 # Fired when the player releases slap while the puck is nearby but not yet

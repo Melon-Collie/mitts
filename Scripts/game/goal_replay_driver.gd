@@ -99,7 +99,8 @@ func _process(delta: float) -> void:
 
 	_virtual_clock += delta * playback_speed
 	if _virtual_clock > _clip_end_ts:
-		_virtual_clock = _clip_start_ts  # loop
+		stop()
+		return
 
 	NetworkManager.set_replay_clock(_virtual_clock)
 
@@ -125,14 +126,15 @@ func _find_frame_idx(t: float) -> int:
 
 
 func _apply_snapshot_to_actors(snapshot: Dictionary) -> void:
-	# Skaters: route through controllers' apply_network_state. LocalController
-	# and RemoteController both implement it and update Skater visuals/IK.
+	# Skaters: use apply_replay_state (SkaterController base) which directly sets
+	# position/IK without buffering or input processing. apply_network_state is a
+	# no-op for RemoteController on host, so we bypass it entirely here.
 	var skater_states: Dictionary = snapshot.skaters
 	for peer_id: int in skater_states:
 		var record: PlayerRecord = _registry.get_record(peer_id)
 		if record == null or record.controller == null:
 			continue
-		record.controller.apply_network_state(skater_states[peer_id], _virtual_clock)
+		record.controller.apply_replay_state(skater_states[peer_id])
 
 	# Puck: bypass PuckController (its apply_state is a no-op on host) and
 	# position the rigid body directly. Body stays frozen for the duration.
@@ -162,9 +164,9 @@ func _freeze_live_simulation() -> void:
 
 
 func _unfreeze_live_simulation() -> void:
-	# puck.freeze is intentionally not restored: the FACEOFF_PREP transition
-	# that triggers stop() runs puck.reset() first, which unconditionally sets
-	# freeze=false. Restoring a saved value here could re-freeze the puck.
+	# puck.freeze is intentionally not restored: after stop() the game transitions
+	# to FACEOFF_PREP which calls puck.reset(), unconditionally setting freeze=false.
+	# Restoring a saved value here could re-freeze the puck before reset() runs.
 	if _puck != null:
 		_puck.freeze = false
 	for i: int in _goalie_controllers.size():

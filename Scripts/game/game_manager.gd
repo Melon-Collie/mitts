@@ -111,6 +111,8 @@ func _process(delta: float) -> void:
 		_observe_telemetry()
 	if not NetworkManager.is_host or _state_machine == null:
 		return
+	if NetworkManager.is_replay_mode():
+		return
 	if _state_machine.tick(delta):
 		_phase_coord.handle_phase_entered()
 	if _state_machine.current_phase == GamePhase.Phase.PLAYING:
@@ -407,6 +409,7 @@ func _wire_subsystems() -> void:
 		_recorder.setup()
 		_goal_replay_driver = GoalReplayDriver.new()
 		add_child(_goal_replay_driver)
+		_goal_replay_driver.replay_stopped.connect(_on_goal_replay_stopped)
 
 	_codec = WorldStateCodec.new()
 	_codec.setup(_registry, _state_machine,
@@ -1215,14 +1218,26 @@ func get_world_state() -> PackedByteArray:
 
 # ── Goal replay (host only) ──────────────────────────────────────────────────
 func _on_goal_for_replay(_scoring_team: Team, _scorer: String, _a1: String, _a2: String) -> void:
-	if _recorder == null or _goal_replay_driver == null:
+	if _recorder == null or _goal_replay_driver == null or _codec == null:
 		return
+	# Capture the goal-moment frame so the clip ends at the goal, not 25ms before.
+	var goal_frame: PackedByteArray = _codec.encode_world_state()
+	if not goal_frame.is_empty():
+		_recorder.record_frame(goal_frame, NetworkManager.local_time())
 	_goal_replay_driver.start(_recorder, _codec, _registry, puck, goalie_controllers)
 
 
 func _on_phase_changed_for_replay(new_phase: GamePhase.Phase) -> void:
 	if new_phase == GamePhase.Phase.FACEOFF_PREP and _goal_replay_driver != null:
 		_goal_replay_driver.stop()
+
+
+func _on_goal_replay_stopped() -> void:
+	if _state_machine == null or _state_machine.current_phase != GamePhase.Phase.GOAL_SCORED:
+		return
+	# Replay ended naturally — drive straight into FACEOFF_PREP.
+	_state_machine.begin_faceoff_prep()
+	_phase_coord.handle_phase_entered()
 
 
 # ── Public API consumed by controllers, HUD, camera, scoreboard ──────────────
