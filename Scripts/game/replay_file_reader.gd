@@ -88,3 +88,25 @@ static func read(path: String) -> Dictionary:
 		"truncated": truncated,
 		"error": "",
 	}
+
+
+# Reads only the magic + header JSON, skipping the frame stream entirely.
+# Used by the main-menu replay browser to populate the list without walking
+# 24K frames per file. Returns {ok, header, error} only.
+static func read_header_only(path: String) -> Dictionary:
+	var file: FileAccess = FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return {"ok": false, "header": {}, "error": "open failed"}
+	var magic: PackedByteArray = file.get_buffer(ReplayFileWriter.MAGIC.size())
+	if magic != ReplayFileWriter.MAGIC:
+		file.close()
+		return {"ok": false, "header": {}, "error": "magic mismatch"}
+	var header_size: int = file.get_32()
+	var header_bytes: PackedByteArray = file.get_buffer(header_size)
+	file.close()
+	if header_bytes.size() != header_size:
+		return {"ok": false, "header": {}, "error": "header truncated"}
+	var parsed: Variant = JSON.parse_string(header_bytes.get_string_from_utf8())
+	if not parsed is Dictionary:
+		return {"ok": false, "header": {}, "error": "header parse failed"}
+	return {"ok": true, "header": parsed as Dictionary, "error": ""}
