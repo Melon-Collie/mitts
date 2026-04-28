@@ -36,7 +36,7 @@ static func apply_movement(
 		var speed: float = vel_2d.length()
 		if speed > 0.01:
 			var vel_dir := vel_2d.normalized()
-			var target_dir := move_input.normalized()
+			var target_dir := Vector2(-sin(facing_rotation_y), -cos(facing_rotation_y))
 			var angle_diff: float = vel_dir.angle_to(target_dir)
 			var angular_rate: float = cfg.carve_force / speed
 			var actual_rot: float = clampf(angle_diff, -angular_rate * delta, angular_rate * delta)
