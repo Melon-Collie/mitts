@@ -14,8 +14,8 @@ extends Node
 @export var zone_conservative_z: float = 20.0
 @export var depth_speed: float = 2.0
 
-@export var shuffle_speed: float = 1.3
-@export var t_push_speed: float = 3.0
+@export var shuffle_speed: float = 2.0
+@export var t_push_speed: float = 3.8
 @export var lateral_threshold: float = 0.3
 @export var max_facing_angle: float = 70.0
 @export var rotation_speed: float = 8.0

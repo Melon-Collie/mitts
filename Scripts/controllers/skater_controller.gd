@@ -129,7 +129,7 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 var show_one_timer_indicator: bool = false
 
 # ── Follow Through Tuning ─────────────────────────────────────────────────────
-@export var follow_through_duration: float = 0.15
+@export var follow_through_duration: float = 0.25
 @export var wrister_follow_through_hand_y: float = 0.35
 @export var wrister_follow_through_blade_lift: float = 0.20
 
