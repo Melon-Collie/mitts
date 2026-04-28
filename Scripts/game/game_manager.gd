@@ -1232,13 +1232,12 @@ func _on_input_batch_received(peer_id: int, inputs: Array[InputState]) -> void:
 # ── World state & stats RPC forwarding ───────────────────────────────────────
 func _on_world_state_received(data: PackedByteArray) -> void:
 	if _codec != null:
-		_codec.decode_world_state(data)
+		_codec.decode_world_state(data)  # updates _state_machine.current_phase
 	# Tee the broadcast into the local .mreplay file. Use the host_ts encoded
 	# in the packet (bytes 2..5, after the 2-byte ws_sequence) so timestamps
 	# align across host + client recordings — local_time() differs per peer.
-	# Skip during host's goal-replay window (broadcast continues but contains
-	# frozen state); the host mirrors the same gate on its own recorder.
-	if _replay_file_writer != null and data.size() >= 6 and not NetworkManager.is_replay_mode():
+	# Same dead-puck + replay-mode gate as the host's get_world_state path.
+	if _replay_file_writer != null and data.size() >= 6 and _should_record_to_file():
 		var host_ts: float = data.decode_float(2)
 		_replay_file_writer.enqueue_frame(host_ts, data)
 
@@ -1609,16 +1608,29 @@ func _get_goalie_controllers() -> Array:
 # ── World state (NetworkManager provider callback) ───────────────────────────
 func get_world_state() -> PackedByteArray:
 	var state: PackedByteArray = _codec.encode_world_state() if _codec != null else PackedByteArray()
-	# Don't pollute the recorder with stale frames during goal replay — live
-	# capture is gated, so encode would just re-emit the pre-replay snapshot
-	# until the replay ends.
-	if not state.is_empty() and not NetworkManager.is_replay_mode():
-		var ts: float = NetworkManager.local_time()
-		if _recorder != null:
-			_recorder.record_frame(state, ts)
-		if _replay_file_writer != null:
-			_replay_file_writer.enqueue_frame(ts, state)
+	if state.is_empty():
+		return state
+	var ts: float = NetworkManager.local_time()
+	# In-memory recorder feeds GoalReplayDriver — only the goal-replay-window
+	# gate applies (we still need dead-puck frames in the buffer to bracket
+	# the goal moment cleanly).
+	if _recorder != null and not NetworkManager.is_replay_mode():
+		_recorder.record_frame(state, ts)
+	# File writer skips dead-puck phases too (FACEOFF_PREP, GOAL_SCORED,
+	# END_OF_PERIOD, GAME_OVER). Those broadcast at 5 Hz of duplicate static
+	# state; the playback engine's dwell-then-snap handles the resulting
+	# bracket-gap visually.
+	if _replay_file_writer != null and _should_record_to_file():
+		_replay_file_writer.enqueue_frame(ts, state)
 	return state
+
+
+func _should_record_to_file() -> bool:
+	if NetworkManager.is_replay_mode():
+		return false
+	if _state_machine != null and PhaseRules.is_movement_locked(_state_machine.current_phase):
+		return false
+	return true
 
 
 # ── Goal replay (host only) ──────────────────────────────────────────────────
