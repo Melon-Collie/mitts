@@ -138,7 +138,7 @@ const _NAME_RADIUS: float = RING_OUTER_R + 0.10
 # Chevron sits on the screen-down axis just past the name, on the side
 # OPPOSITE the player's stick (so it's never tucked behind the blade visual).
 const _CHEVRON_RADIUS: float = RING_OUTER_R + 0.10
-const _CHEVRON_OFFSET_DEG: float = 22.0
+const _CHEVRON_OFFSET_DEG: float = 90.0
 
 # Charge ring shader: angle-mask + tri-color blend. Fill goes clockwise from 12
 # o'clock as viewed from above. UV.x of the procedural ring encodes 0..1
