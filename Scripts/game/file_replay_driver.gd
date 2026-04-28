@@ -16,13 +16,17 @@ extends Node
 @export var playback_speed: float = 1.0
 
 # Brackets larger than this are treated as recording gaps (e.g. host's
-# goal-replay window — broadcasts pause for ~8 s). Interpolating across one
-# would drift actors smoothly between the pre- and post-gap positions; instead
-# we hold the FROM frame so the moment that triggered the gap lingers, then
-# snap to TO when virtual_clock reaches it. Any normal-play bracket is well
-# under this (40 Hz = 25 ms; 5 Hz dead-puck phase = 200 ms; jitter adds
-# tens of ms on top).
+# goal-replay window — broadcasts pause for ~8 s). Without special handling
+# the interpolator would drift actors smoothly across the gap; instead we
+# hold the FROM frame for _GAP_DWELL_S of virtual time so the moment that
+# triggered the gap registers, then jump straight to the post-gap timestamp.
+# Normal-play brackets are well under this (40 Hz = 25 ms; 5 Hz dead-puck
+# phase = 200 ms; jitter adds tens of ms on top).
 const _GAP_THRESHOLD_S: float = 0.5
+# Dwell scales with playback_speed (uses virtual clock, not wall time) so
+# at 4× the dwell flies by — consistent with the rest of playback where
+# speed multiplies everything.
+const _GAP_DWELL_S: float = 0.5
 
 signal goal_event_emitted(event: Dictionary)
 signal game_state_changed(game_state: Dictionary)
@@ -188,6 +192,11 @@ func _skip_recording_gaps() -> void:
 		return
 	var bracket_dt: float = _timestamps[idx + 1] - _timestamps[idx]
 	if bracket_dt <= _GAP_THRESHOLD_S:
+		return
+	# Hold the FROM frame for _GAP_DWELL_S of virtual time so the moment
+	# that triggered the gap (goal, period end) registers visually before
+	# the snap.
+	if _virtual_clock - _timestamps[idx] < _GAP_DWELL_S:
 		return
 	_virtual_clock = _timestamps[idx + 1]
 

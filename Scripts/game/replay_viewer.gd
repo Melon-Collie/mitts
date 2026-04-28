@@ -107,6 +107,13 @@ func _spawn_skater_from_roster(entry: Dictionary, home_id: String, away_id: Stri
 			is_left, _puck, self)
 	var skater: Skater = spawned.skater
 	var controller: RemoteController = spawned.controller
+	# Skater._physics_process calls move_and_slide each tick using whatever
+	# velocity apply_replay_state set last. When the viewer is paused, the
+	# replay engine isn't running so velocity isn't refreshed — the skater
+	# coasts on its stale velocity until unpause snaps it back. Disable
+	# physics processing entirely; apply_replay_state covers all visual
+	# updates (position, blade, IK) on its own.
+	skater.set_physics_process(false)
 	skater.set_player_name(p_name)
 	skater.set_jersey_info(p_name, jersey_number, team_colors.text)
 	skater.set_jersey_stripes(team_colors.jersey_stripe, team_colors.pants_stripe, team_colors.socks_stripe)
