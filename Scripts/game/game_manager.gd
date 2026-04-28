@@ -1669,8 +1669,11 @@ func _on_phase_changed_for_replay(new_phase: GamePhase.Phase) -> void:
 func _on_goal_replay_stopped() -> void:
 	if _state_machine == null or _state_machine.current_phase != GamePhase.Phase.GOAL_SCORED:
 		return
-	# Replay ended naturally — drive straight into FACEOFF_PREP.
-	_state_machine.begin_faceoff_prep()
+	# Replay ended naturally — drive forward via the same OT-aware branch the
+	# timer path uses (FACEOFF_PREP for regulation, GAME_OVER in sudden-death
+	# OT). Without this, every OT goal cycled back to faceoff and the game
+	# couldn't end.
+	_state_machine.advance_post_goal()
 	_phase_coord.handle_phase_entered()
 
 
