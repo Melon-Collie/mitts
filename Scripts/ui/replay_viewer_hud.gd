@@ -17,7 +17,10 @@ const _DIM: Color        = Color(0.62, 0.62, 0.68, 1.00)
 const _GOAL_TICK: Color  = Color(1.00, 0.85, 0.20, 0.85)
 
 const _SPEEDS: Array[float] = [0.25, 0.5, 1.0, 2.0, 4.0]
-const _DEFAULT_SPEED_IDX: int = 2  # 1.0×
+# Parallel labels — GDScript's % operator doesn't support %g, and %f stamps
+# ugly trailing zeros (1.000×).
+const _SPEED_LABELS: Array[String] = ["0.25×", "0.5×", "1×", "2×", "4×"]
+const _DEFAULT_SPEED_IDX: int = 2  # 1×
 
 var _driver: FileReplayDriver = null
 var _header: Dictionary = {}
@@ -185,7 +188,7 @@ func _build_bottom_bar(root: Control) -> void:
 
 	_speed_btn = OptionButton.new()
 	for i: int in _SPEEDS.size():
-		_speed_btn.add_item("%g×" % _SPEEDS[i], i)
+		_speed_btn.add_item(_SPEED_LABELS[i], i)
 	_speed_btn.select(_DEFAULT_SPEED_IDX)
 	_speed_btn.custom_minimum_size = Vector2(72, 36)
 	_speed_btn.item_selected.connect(_on_speed_changed)
