@@ -316,23 +316,13 @@ func on_player_connected(peer_id: int) -> void:
 		NetworkManager.send_sync_existing_players(peer_id, _collect_existing_player_data())
 		return
 	var assignment: Dictionary = _state_machine.on_player_connected(peer_id)
-	var team: Team = teams[assignment.team_id]
-	var colors: Dictionary = TeamColorRegistry.get_colors(team.color_id, team.team_id)
-	var is_left: bool = NetworkManager.get_peer_handedness(peer_id)
-	var peer_name: String = NetworkManager.get_peer_name(peer_id)
-	var peer_number: int = NetworkManager.get_peer_number(peer_id)
-
 	NetworkManager.send_join_in_progress(peer_id, config)
-	NetworkManager.send_slot_assignment(peer_id, assignment.team_slot, team.team_id,
-			colors.jersey, colors.helmet, colors.pants)
 	NetworkManager.send_sync_existing_players(peer_id, _collect_existing_player_data())
-	NetworkManager.send_spawn_remote_skater(peer_id, assignment.team_slot, team.team_id,
-			colors.jersey, colors.helmet, colors.pants, is_left, peer_name, peer_number)
-	_registry.spawn(peer_id, assignment.team_slot, team,
-			colors.jersey, colors.helmet, colors.pants,
-			colors.jersey_stripe, colors.gloves, colors.pants_stripe, colors.socks, colors.socks_stripe,
-			colors.secondary, colors.text, colors.text_outline,
-			is_left, peer_name, false, peer_number)
+	_spawn_player_and_broadcast(peer_id, assignment.team_id, assignment.team_slot,
+			NetworkManager.get_peer_handedness(peer_id),
+			NetworkManager.get_peer_name(peer_id),
+			NetworkManager.get_peer_number(peer_id),
+			false)
 
 
 func on_player_disconnected(peer_id: int) -> void:
@@ -726,31 +716,16 @@ func _promote_spectator_to_player(peer_id: int, new_team_id: int, new_slot: int)
 	if _state_machine.count_players_on_team(new_team_id) >= PlayerRules.MAX_PER_TEAM:
 		return
 	_spectator_peers.erase(peer_id)
-	var team: Team = teams[new_team_id]
-	var colors: Dictionary = TeamColorRegistry.get_colors(team.color_id, team.team_id)
-	var is_left: bool = NetworkManager.get_peer_handedness(peer_id)
-	var peer_name: String = NetworkManager.get_peer_name(peer_id)
-	var peer_number: int = NetworkManager.get_peer_number(peer_id)
-	_state_machine.register_remote_assigned_player(peer_id, new_slot, new_team_id)
 	var is_local: bool = peer_id == NetworkManager.local_peer_id()
 	if is_local and _is_local_spectator:
 		# Host promoting itself: tear down the spectator camera before the
 		# LocalController spawns its own camera.
 		_teardown_spectator_camera()
-	_registry.spawn(peer_id, new_slot, team,
-			colors.jersey, colors.helmet, colors.pants,
-			colors.jersey_stripe, colors.gloves, colors.pants_stripe, colors.socks, colors.socks_stripe,
-			colors.secondary, colors.text, colors.text_outline,
-			is_left, peer_name, is_local, peer_number)
-	# Tell every other client to spawn a remote copy. The promoting client's
-	# spawn_remote_skater handler short-circuits on `peer_id == local_peer_id`,
-	# so broadcasting to all is safe.
-	NetworkManager.send_spawn_remote_skater(peer_id, new_slot, new_team_id,
-			colors.jersey, colors.helmet, colors.pants, is_left, peer_name, peer_number)
-	# The promoting peer needs slot info for its own LocalController spawn.
-	if not is_local:
-		NetworkManager.send_slot_assignment(peer_id, new_slot, new_team_id,
-				colors.jersey, colors.helmet, colors.pants)
+	_spawn_player_and_broadcast(peer_id, new_team_id, new_slot,
+			NetworkManager.get_peer_handedness(peer_id),
+			NetworkManager.get_peer_name(peer_id),
+			NetworkManager.get_peer_number(peer_id),
+			is_local)
 
 
 func _teardown_spectator_camera() -> void:
@@ -893,6 +868,38 @@ func _on_replay_player_left_event(record: PlayerRecord) -> void:
 		"peer_id": record.peer_id,
 	}).to_utf8_buffer()
 	_replay_file_writer.enqueue_event(ts, payload)
+
+
+# Common path shared by every host-side player-spawn site:
+#   - register the slot in the state machine
+#   - send_slot_assignment to the joining peer (skipped if the peer is the
+#     local host, who already has its slot)
+#   - broadcast spawn_remote_skater to all peers (handler short-circuits
+#     for the local peer)
+#   - _registry.spawn locally
+#
+# Returns the resolved colors dict so callers can reuse it for adjacent
+# bookkeeping (e.g. _push_lobby_assignments_to_clients's `existing` array).
+# Adjacent RPCs that vary by call site (send_join_in_progress,
+# send_sync_existing_players, spectator-camera teardown) stay inline at
+# the caller — this helper owns only the shared shape.
+func _spawn_player_and_broadcast(peer_id: int, team_id: int, team_slot: int,
+		is_left: bool, p_name: String, p_number: int, is_local: bool) -> Dictionary:
+	var team: Team = teams[team_id]
+	var colors: Dictionary = TeamColorRegistry.get_colors(team.color_id, team_id)
+	_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
+	if not is_local:
+		NetworkManager.send_slot_assignment(peer_id, team_slot, team_id,
+				colors.jersey, colors.helmet, colors.pants)
+	NetworkManager.send_spawn_remote_skater(peer_id, team_slot, team_id,
+			colors.jersey, colors.helmet, colors.pants, is_left, p_name, p_number)
+	_registry.spawn(peer_id, team_slot, team,
+			colors.jersey, colors.helmet, colors.pants,
+			colors.jersey_stripe, colors.gloves, colors.pants_stripe,
+			colors.socks, colors.socks_stripe,
+			colors.secondary, colors.text, colors.text_outline,
+			is_left, p_name, is_local, p_number)
+	return colors
 
 
 func _spawn_local(peer_id: int, team_slot: int, team: Team) -> void:
@@ -1613,20 +1620,14 @@ func _push_lobby_assignments_to_clients() -> void:
 					Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0))
 			NetworkManager.send_sync_existing_players(peer_id, existing)
 			continue
-		_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
-		var team: Team = teams[team_id]
-		var colors: Dictionary = TeamColorRegistry.get_colors(team.color_id, team_id)
 		var is_left: bool = entry.get("is_left_handed", true)
 		var p_name: String = entry.get("player_name", "Player")
 		var p_number: int = entry.get("jersey_number", 10)
-		NetworkManager.send_slot_assignment(peer_id, team_slot, team_id, colors.jersey, colors.helmet, colors.pants)
 		NetworkManager.send_sync_existing_players(peer_id, existing)
-		NetworkManager.send_spawn_remote_skater(peer_id, team_slot, team_id, colors.jersey, colors.helmet, colors.pants, is_left, p_name, p_number)
-		_registry.spawn(peer_id, team_slot, team, colors.jersey, colors.helmet, colors.pants,
-				colors.jersey_stripe, colors.gloves, colors.pants_stripe, colors.socks, colors.socks_stripe,
-				colors.secondary, colors.text, colors.text_outline,
-				is_left, p_name, false, p_number)
-		existing.append([peer_id, team_slot, team_id, colors.jersey, colors.helmet, colors.pants, is_left, p_name, p_number])
+		var colors: Dictionary = _spawn_player_and_broadcast(
+				peer_id, team_id, team_slot, is_left, p_name, p_number, false)
+		existing.append([peer_id, team_slot, team_id,
+				colors.jersey, colors.helmet, colors.pants, is_left, p_name, p_number])
 	NetworkManager.pending_lobby_slots = {}
 
 
