@@ -14,8 +14,7 @@ class MovementConfig:
 	var puck_carry_speed_multiplier: float = 0.0 # max speed reduction while carrying
 	var backward_thrust_multiplier: float = 0.0  # thrust scale when moving against facing
 	var crossover_thrust_multiplier: float = 0.0 # thrust scale when moving perpendicular to facing
-	var carve_force: float = 0.0                 # centripetal force for carving; angular_rate = carve_force / speed
-	var carve_speed_loss: float = 0.0            # speed fraction lost per radian redirected
+	var brake_redirect_speed: float = 0.0        # rad/s velocity direction rotates toward input while carving
 	var friction_drag: float = 0.0               # velocity-proportional drag coefficient (m/s² per m/s)
 
 static func apply_movement(
@@ -29,19 +28,17 @@ static func apply_movement(
 	var velocity: Vector3 = current_velocity
 
 	if brake and move_input.length() > cfg.move_deadzone:
-		# CARVE: rotate velocity toward input using a centripetal-force model.
-		# angular_rate = carve_force / speed — tight turns at low speed, wide arcs
-		# at pace. A small speed cost scales with how sharply the edge is dug in.
+		# CARVE: rotate existing velocity toward the movement input direction at a
+		# fixed angular rate. Speed is preserved — the edge redirects momentum
+		# rather than building new velocity. Normal friction bleeds speed slowly.
 		var vel_2d := Vector2(velocity.x, velocity.z)
 		var speed: float = vel_2d.length()
 		if speed > 0.01:
 			var vel_dir := vel_2d.normalized()
-			var target_dir := Vector2(-sin(facing_rotation_y), -cos(facing_rotation_y))
+			var target_dir := move_input.normalized()
 			var angle_diff: float = vel_dir.angle_to(target_dir)
-			var angular_rate: float = cfg.carve_force / speed
-			var actual_rot: float = clampf(angle_diff, -angular_rate * delta, angular_rate * delta)
-			speed *= 1.0 - cfg.carve_speed_loss * absf(actual_rot)
-			vel_2d = vel_dir.rotated(actual_rot) * speed
+			var max_rot: float = cfg.brake_redirect_speed * delta
+			vel_2d = vel_dir.rotated(clampf(angle_diff, -max_rot, max_rot)) * speed
 			velocity.x = vel_2d.x
 			velocity.z = vel_2d.y
 

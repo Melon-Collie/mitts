@@ -14,8 +14,7 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 @export var max_speed: float = 10.5
 @export var move_deadzone: float = 0.1
 @export var brake_multiplier: float = 5.0
-@export var carve_force: float = 35.0       # centripetal force; higher = tighter arcs at pace
-@export var carve_speed_loss: float = 0.06  # speed fraction lost per radian redirected
+@export var brake_redirect_speed_deg: float = 180.0  # deg/s velocity rotates toward input while carving
 @export var puck_carry_speed_multiplier: float = 0.82
 @export var backward_thrust_multiplier: float = 0.80
 @export var crossover_thrust_multiplier: float = 0.90
@@ -104,7 +103,7 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 @export var max_charge_direction_variance: float = 35.0
 @export var quick_shot_power: float = 14.0
 @export var quick_shot_threshold: float = 0.1
-@export var wrister_elevation: float = 0.3
+@export var wrister_elevation: float = 0.22
 
 # ── Head Tracking Tuning ─────────────────────────────────────────────────────
 @export var head_track_speed: float = 12.0
@@ -122,7 +121,7 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 @export var slapper_blade_x: float = 1.0
 @export var slapper_blade_z: float = -0.5
 @export var slapper_aim_arc: float = 45.0
-@export var slapper_elevation: float = 0.15
+@export var slapper_elevation: float = 0.12
 @export var one_timer_window_duration: float = 0.45  # seconds after puck arrives to release
 @export var one_timer_leniency_time: float = 0.08   # seconds of puck travel added to zone radius as leniency
 @export var one_timer_center_power_bonus: float = 0.25  # max multiplier bonus at dead centre
@@ -913,8 +912,7 @@ func _movement_config() -> SkaterMovementRules.MovementConfig:
 	cfg.puck_carry_speed_multiplier = puck_carry_speed_multiplier
 	cfg.backward_thrust_multiplier = backward_thrust_multiplier
 	cfg.crossover_thrust_multiplier = crossover_thrust_multiplier
-	cfg.carve_force = carve_force
-	cfg.carve_speed_loss = carve_speed_loss
+	cfg.brake_redirect_speed = deg_to_rad(brake_redirect_speed_deg)
 	return cfg
 
 func _block_movement_config() -> SkaterMovementRules.MovementConfig:
