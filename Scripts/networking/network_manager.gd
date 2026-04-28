@@ -44,6 +44,7 @@ signal goal_body_hit_received(position: Vector3)
 signal deflection_received(position: Vector3)
 signal body_block_received(position: Vector3)
 signal puck_strip_received(position: Vector3)
+signal input_batch_received(peer_id: int, inputs: Array[InputState])
 
 # ── State ─────────────────────────────────────────────────────────────────────
 var is_host: bool = false
@@ -65,8 +66,6 @@ var pending_period_duration: float = GameRules.PERIOD_DURATION
 var pending_ot_enabled: bool = GameRules.OT_ENABLED
 var pending_rule_set: int = GameRules.DEFAULT_RULE_SET
 var pending_join_players: Array = []     # sync_existing_players data for join-in-progress
-var _local_controller: LocalController = null
-var _remote_controllers: Dictionary = {}  # peer_id -> RemoteController
 var _peer_handedness: Dictionary = {}     # peer_id -> bool (host only)
 var _peer_names: Dictionary = {}          # peer_id -> String (host only)
 var _peer_numbers: Dictionary = {}        # peer_id -> int (host only)
@@ -74,6 +73,10 @@ var _peer_ping_ms: Dictionary[int, int] = {}  # peer_id -> latest RTT in ms (all
 # Callable () -> Array. Set by GameManager at startup so the broadcast loop
 # can pull world state without reaching up into the application layer.
 var _world_state_provider: Callable = Callable()
+# Callable (batch_frames: int) -> Array[InputState]. Set by GameManager when the
+# local player spawns; the input-tick poll uses it to gather a batch without
+# holding a controller reference.
+var _input_batch_provider: Callable = Callable()
 var _clock_sync: RefCounted = null  # ClockSync instance, client only
 var _session_start_ms: int = 0
 
@@ -222,8 +225,7 @@ func _close() -> void:
 		multiplayer.multiplayer_peer.close()
 
 func prepare_for_new_game() -> void:
-	_local_controller = null
-	_remote_controllers.clear()
+	_input_batch_provider = Callable()
 	_peer_last_echoed.clear()
 	_peer_echo_drop_window.clear()
 	_peer_echo_recv_window.clear()
@@ -246,8 +248,7 @@ func reset() -> void:
 	is_host = false
 	game_initiated = false
 	is_offline_mode = false
-	_local_controller = null
-	_remote_controllers.clear()
+	_input_batch_provider = Callable()
 	_peer_handedness.clear()
 	_peer_names.clear()
 	_peer_numbers.clear()
@@ -314,12 +315,12 @@ func _process(delta: float) -> void:
 		elif not is_host and _clock_sync != null and _clock_sync.is_ready:
 			report_ping.rpc_id(1, int(get_rtt_ms()))
 
-	if not is_host and _local_controller != null:
+	if not is_host and _input_batch_provider.is_valid():
 		_input_timer += capped_delta
 		if _input_timer >= input_delta:
 			_input_timer -= input_delta
 			var batch_frames: int = 24 if get_peer_loss_rate() > 10.0 else 12
-			var batch: Array[InputState] = _local_controller.get_input_batch(batch_frames)
+			var batch: Array[InputState] = _input_batch_provider.call(batch_frames)
 			var buf := PackedByteArray(); buf.resize(3)
 			# u16 echo (0xFFFF = no world state received yet), u8 count
 			buf.encode_u16(0, _last_ws_seq_received if _last_ws_seq_received >= 0 else 0xFFFF)
@@ -399,28 +400,31 @@ func get_peer_name(peer_id: int) -> String:
 func get_peer_number(peer_id: int) -> int:
 	return _peer_numbers.get(peer_id, 10)
 
+# Cap on inputs per RPC. Matches the host queue depth in RemoteController so a
+# malicious peer can't force the loop into hundreds of failed decode iterations
+# by claiming count=255 with a short payload.
+const _MAX_INPUTS_PER_BATCH: int = 120
+
 @rpc("any_peer", "unreliable_ordered")
 func receive_input_batch(data: PackedByteArray) -> void:
 	var sender_id: int = multiplayer.get_remote_sender_id()
 	NetworkSimManager.send(
 		func(d: PackedByteArray, sid: int) -> void:
-			if not _remote_controllers.has(sid):
-				push_warning("no remote controller for peer %d" % sid)
-				return
-			if not is_instance_valid(_remote_controllers[sid]):
-				return
 			if d.size() < 3:
 				return
 			var echo_raw: int = d.decode_u16(0)
 			_update_peer_echo(sid, -1 if echo_raw == 0xFFFF else echo_raw)
 			var count: int = d.decode_u8(2)
+			if count > _MAX_INPUTS_PER_BATCH:
+				push_warning("oversized input batch from peer %d: count=%d" % [sid, count])
+				return
 			var inputs: Array[InputState] = []
 			for i: int in count:
 				var off: int = 3 + i * InputState.BYTES_SIZE
 				if off + InputState.BYTES_SIZE > d.size():
 					break
 				inputs.append(InputState.from_bytes(d, off))
-			_remote_controllers[sid].receive_input_batch(inputs),
+			input_batch_received.emit(sid, inputs),
 		[data, sender_id], false)
 
 @rpc("authority", "unreliable_ordered")
@@ -957,14 +961,8 @@ func _update_peer_echo(peer_id: int, echoed_seq: int) -> void:
 func set_world_state_provider(provider: Callable) -> void:
 	_world_state_provider = provider
 
-func register_local_controller(controller: LocalController) -> void:
-	_local_controller = controller
-
-func register_remote_controller(peer_id: int, controller: RemoteController) -> void:
-	_remote_controllers[peer_id] = controller
-
-func unregister_remote_controller(peer_id: int) -> void:
-	_remote_controllers.erase(peer_id)
+func set_input_batch_provider(provider: Callable) -> void:
+	_input_batch_provider = provider
 
 func send_board_hit_to_all(position: Vector3) -> void:
 	for peer_id: int in connected_peer_ids():

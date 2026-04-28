@@ -37,13 +37,26 @@ func _physics_process(delta: float) -> void:
 		skater.update_stick_mesh()
 
 func receive_input_batch(batch: Array[InputState]) -> void:
+	# Reject inputs whose timestamps fall outside a plausible window around the
+	# host clock. Legitimate timestamps land in [now - RTT, now + INPUT_LEAD_SEC];
+	# anything wildly outside is either a malicious peer or a desynced clock and
+	# would otherwise sit in the queue indefinitely (future) or fail the gate
+	# forever (past). The queue cap below already truncates older stragglers.
+	const FUTURE_SLACK_S: float = 0.1   # INPUT_LEAD_SEC (~25ms) + slack for jitter / clock convergence
+	const PAST_SLACK_S: float = 2.0     # generous: queue cap is 0.5s at 240Hz, this is 4x
+	var now: float = NetworkManager.estimated_host_time()
 	var existing_timestamps: Dictionary = {}
 	for queued: InputState in _input_queue:
 		existing_timestamps[queued.host_timestamp] = true
 	for state: InputState in batch:
-		if state.host_timestamp > last_processed_host_timestamp and not existing_timestamps.has(state.host_timestamp):
-			_input_queue.append(state)
-			existing_timestamps[state.host_timestamp] = true
+		if state.host_timestamp <= last_processed_host_timestamp:
+			continue
+		if existing_timestamps.has(state.host_timestamp):
+			continue
+		if state.host_timestamp < now - PAST_SLACK_S or state.host_timestamp > now + FUTURE_SLACK_S:
+			continue
+		_input_queue.append(state)
+		existing_timestamps[state.host_timestamp] = true
 	_input_queue.sort_custom(func(a: InputState, b: InputState) -> bool:
 		return a.host_timestamp < b.host_timestamp)
 	const MAX_QUEUE_DEPTH: int = 120  # 0.5s at 240 Hz

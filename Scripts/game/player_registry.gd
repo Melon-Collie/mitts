@@ -17,7 +17,6 @@ extends RefCounted
 #     subsystems (shot tracker, phase coordinator, etc.)
 
 signal player_added(record: PlayerRecord)
-signal player_removed(record: PlayerRecord)
 signal player_joined(name: String, team_color: Color)
 signal player_left(name: String, team_color: Color)
 
@@ -125,7 +124,6 @@ func remove(peer_id: int) -> PlayerRecord:
 	_players.erase(peer_id)
 	if _state_machine != null:
 		_state_machine.on_player_disconnected(peer_id)
-	player_removed.emit(record)
 	if record.controller:
 		record.controller.queue_free()
 	if record.skater:
