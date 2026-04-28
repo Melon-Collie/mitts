@@ -300,6 +300,8 @@ func apply_replay_state(state: SkaterNetworkState) -> void:
 	skater.set_upper_body_rotation(state.upper_body_rotation_y)
 	skater.set_top_hand_position(state.top_hand_position)
 	skater.set_blade_position(state.blade_position)
+	_update_bottom_hand()
+	skater.update_stick_mesh()
 	skater.update_arm_mesh()
 	skater.update_bottom_arm_mesh()
 	
