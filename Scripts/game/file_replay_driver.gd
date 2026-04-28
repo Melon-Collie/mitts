@@ -164,6 +164,7 @@ func _process(delta: float) -> void:
 	if _paused or _frames.is_empty():
 		return
 	_virtual_clock += delta * playback_speed
+	_skip_recording_gaps()
 	if _virtual_clock >= _end_ts:
 		_virtual_clock = _end_ts
 		_paused = true
@@ -173,6 +174,22 @@ func _process(delta: float) -> void:
 		return
 	_apply_current_frame(delta)
 	_emit_due_events()
+
+
+# When the virtual clock would otherwise sit on a gap bracket (host paused
+# broadcasting during a goal-replay cinematic, or any future broadcast
+# pause), jump straight to the post-gap timestamp so the viewer doesn't
+# stare at a frozen goal-moment frame for 8 wall-clock seconds. Goal
+# events are still surfaced because _emit_due_events catches anything
+# with host_ts <= the new virtual_clock on the next tick.
+func _skip_recording_gaps() -> void:
+	var idx: int = _find_frame_idx(_virtual_clock)
+	if idx < 0 or idx >= _frames.size() - 1:
+		return
+	var bracket_dt: float = _timestamps[idx + 1] - _timestamps[idx]
+	if bracket_dt <= _GAP_THRESHOLD_S:
+		return
+	_virtual_clock = _timestamps[idx + 1]
 
 
 func _apply_current_frame(delta: float) -> void:
