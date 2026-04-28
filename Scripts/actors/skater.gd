@@ -145,7 +145,7 @@ const _CHEVRON_OFFSET_DEG: float = 22.0
 # clockwise; fragment discards above `fill`. Lost-flash overrides fill color.
 const _CHARGE_RING_SHADER_CODE := """
 shader_type spatial;
-render_mode unshaded, blend_mix, depth_draw_opaque, depth_test_disabled, cull_disabled;
+render_mode unshaded, blend_mix, depth_draw_opaque, cull_disabled;
 
 uniform float fill : hint_range(0.0, 1.0) = 0.0;
 uniform float pulse : hint_range(0.0, 1.0) = 0.0;       // 1.0 at full charge → modulates alpha
@@ -338,8 +338,7 @@ func _ready() -> void:
 	_name_label.name = "PlayerNameLabel"
 	_name_label.top_level = true
 	_name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	_name_label.no_depth_test = true
-	_name_label.render_priority = 1
+	_name_label.no_depth_test = false
 	_name_label.fixed_size = false
 	_name_label.font_size = 40
 	_name_label.outline_size = 0
@@ -570,14 +569,12 @@ func _append_quad(
 
 # Solid ice-blue material at HUD opacity, unshaded, alpha-blended. Shared by
 # every HUD-on-ice element except the charge ring (which has its own shader).
-# `no_depth_test = true` so the player's body / stick / blade never occlude
-# the HUD when the camera looks straight down through them.
+# Depth testing is on; HUD elements are paint on the ice and get occluded by
+# whatever crosses over them (player body, stick, opponents).
 func _make_hud_ice_material() -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.no_depth_test = true
-	mat.render_priority = 1
 	mat.albedo_color = Color(MenuStyle.HUD_ICE.r, MenuStyle.HUD_ICE.g,
 			MenuStyle.HUD_ICE.b, MenuStyle.HUD_OPACITY)
 	return mat
