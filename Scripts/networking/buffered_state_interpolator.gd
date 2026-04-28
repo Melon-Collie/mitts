@@ -73,6 +73,17 @@ static func lerp_facing(from: Vector2, to: Vector2, t: float) -> Vector2:
 # t: normalized [0,1]; dt: bracket time span (seconds).
 # Safe as long as |av| < π/dt — always satisfied at hockey rotation speeds.
 static func hermite_angle(a0: float, av0: float, a1: float, av1: float, t: float, dt: float) -> float:
+	# Unwrap a1 to within ±π of a0 so interpolation takes the short way around
+	# the circle. Without this, a turn that crosses the ±π wrap (e.g. a0 = 3.1
+	# ≈ 179°, a1 = -3.1 ≈ -179°) interpolates through 0° — a visible
+	# half-rotation jump in one bracket instead of the intended tiny nudge.
+	# Surfaced as a one-frame "weird rotation" hitch in goal replays and in
+	# live remote skater rendering whenever a player turns past 180°.
+	var diff: float = a1 - a0
+	if diff > PI:
+		a1 -= TAU
+	elif diff < -PI:
+		a1 += TAU
 	var t2: float = t * t
 	var t3: float = t2 * t
 	return (2.0*t3 - 3.0*t2 + 1.0) * a0 \

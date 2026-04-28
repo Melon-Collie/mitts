@@ -70,6 +70,13 @@ var _career_reporter: CareerStatsReporter = null
 # once the registry has stabilized (post-_push_lobby_assignments_to_clients
 # on host, post-sync_existing_players on clients) and closes on scene exit.
 var _replay_file_writer: ReplayFileWriter = null
+# Tracks the phase of the most recent .mreplay frame so movement-locked
+# phases (GOAL_SCORED, FACEOFF_PREP, END_OF_PERIOD, GAME_OVER) record their
+# first transition frame and skip the duplicate-static frames that follow.
+# The transition frame at GOAL_SCORED entry captures puck-in-net, which the
+# previous broadcast (still PLAYING) usually missed. -1 = nothing recorded
+# yet this game; reset on scene exit + rematch rollover.
+var _last_recorded_phase: int = -1
 
 # ── Spectator state ───────────────────────────────────────────────────────────
 # Host-side: peer_ids of connected spectators. Used to gate `_registry.spawn`
@@ -316,23 +323,13 @@ func on_player_connected(peer_id: int) -> void:
 		NetworkManager.send_sync_existing_players(peer_id, _collect_existing_player_data())
 		return
 	var assignment: Dictionary = _state_machine.on_player_connected(peer_id)
-	var team: Team = teams[assignment.team_id]
-	var colors: Dictionary = TeamColorRegistry.get_colors(team.color_id, team.team_id)
-	var is_left: bool = NetworkManager.get_peer_handedness(peer_id)
-	var peer_name: String = NetworkManager.get_peer_name(peer_id)
-	var peer_number: int = NetworkManager.get_peer_number(peer_id)
-
 	NetworkManager.send_join_in_progress(peer_id, config)
-	NetworkManager.send_slot_assignment(peer_id, assignment.team_slot, team.team_id,
-			colors.jersey, colors.helmet, colors.pants)
 	NetworkManager.send_sync_existing_players(peer_id, _collect_existing_player_data())
-	NetworkManager.send_spawn_remote_skater(peer_id, assignment.team_slot, team.team_id,
-			colors.jersey, colors.helmet, colors.pants, is_left, peer_name, peer_number)
-	_registry.spawn(peer_id, assignment.team_slot, team,
-			colors.jersey, colors.helmet, colors.pants,
-			colors.jersey_stripe, colors.gloves, colors.pants_stripe, colors.socks, colors.socks_stripe,
-			colors.secondary, colors.text, colors.text_outline,
-			is_left, peer_name, false, peer_number)
+	_spawn_player_and_broadcast(peer_id, assignment.team_id, assignment.team_slot,
+			NetworkManager.get_peer_handedness(peer_id),
+			NetworkManager.get_peer_name(peer_id),
+			NetworkManager.get_peer_number(peer_id),
+			false)
 
 
 func on_player_disconnected(peer_id: int) -> void:
@@ -493,17 +490,30 @@ func _wire_subsystems() -> void:
 	_registry.player_joined.connect(player_joined.emit)
 	_registry.player_left.connect(player_left.emit)
 	_registry.player_added.connect(_on_registry_player_added)
+	# Replay file roster events — fire whenever the registry changes after
+	# the writer is open. The initial roster is captured in the file header
+	# so these handlers no-op until _open_replay_file_writer has run, which
+	# is only after the registry's initial population (host_started /
+	# sync_existing_players) — no double-fire risk.
+	_registry.player_added.connect(_on_replay_player_joined_event)
+	_registry.player_removed.connect(_on_replay_player_left_event)
 
 	_state_buffer_manager = StateBufferManager.new()
 	_state_buffer_manager.setup(_registry, goalie_controllers)
 
+	# Goal-replay cinematic now runs on every peer against its own broadcast
+	# buffer, so host and clients all see the same 8-second instant-replay
+	# (clients used to see actors freeze in place because broadcasts were
+	# gated). The host's _on_goal_replay_stopped advances the state machine
+	# back to FACEOFF_PREP; clients let the next world-state broadcast
+	# drive that transition naturally, so that handler stays host-only.
+	_recorder = ReplayRecorder.new()
+	_recorder.setup()
+	_goal_replay_driver = GoalReplayDriver.new()
+	add_child(_goal_replay_driver)
+	_goal_replay_driver.replay_started.connect(replay_started.emit)
+	_goal_replay_driver.replay_stopped.connect(replay_stopped.emit)
 	if NetworkManager.is_host:
-		_recorder = ReplayRecorder.new()
-		_recorder.setup()
-		_goal_replay_driver = GoalReplayDriver.new()
-		add_child(_goal_replay_driver)
-		_goal_replay_driver.replay_started.connect(replay_started.emit)
-		_goal_replay_driver.replay_stopped.connect(replay_stopped.emit)
 		_goal_replay_driver.replay_stopped.connect(_on_goal_replay_stopped)
 
 	_codec = WorldStateCodec.new()
@@ -531,9 +541,11 @@ func _wire_subsystems() -> void:
 	_phase_coord.goal_scored.connect(_on_goal_for_replay_event)
 	_phase_coord.score_changed.connect(score_changed.emit)
 	_phase_coord.phase_changed.connect(phase_changed.emit)
-	if NetworkManager.is_host:
-		_phase_coord.goal_scored.connect(_on_goal_for_replay)
-		_phase_coord.phase_changed.connect(_on_phase_changed_for_replay)
+	# Per-peer cinematic kickoff + teardown: every peer starts its own
+	# GoalReplayDriver on observed goal_scored, and stops on FACEOFF_PREP
+	# entry (which clients also reach via the next post-cinematic broadcast).
+	_phase_coord.goal_scored.connect(_on_goal_for_replay)
+	_phase_coord.phase_changed.connect(_on_phase_changed_for_replay)
 	_phase_coord.period_changed.connect(period_changed.emit)
 	_phase_coord.clock_updated.connect(_on_clock_updated_externally)
 	_phase_coord.game_over.connect(game_over.emit)
@@ -719,31 +731,16 @@ func _promote_spectator_to_player(peer_id: int, new_team_id: int, new_slot: int)
 	if _state_machine.count_players_on_team(new_team_id) >= PlayerRules.MAX_PER_TEAM:
 		return
 	_spectator_peers.erase(peer_id)
-	var team: Team = teams[new_team_id]
-	var colors: Dictionary = TeamColorRegistry.get_colors(team.color_id, team.team_id)
-	var is_left: bool = NetworkManager.get_peer_handedness(peer_id)
-	var peer_name: String = NetworkManager.get_peer_name(peer_id)
-	var peer_number: int = NetworkManager.get_peer_number(peer_id)
-	_state_machine.register_remote_assigned_player(peer_id, new_slot, new_team_id)
 	var is_local: bool = peer_id == NetworkManager.local_peer_id()
 	if is_local and _is_local_spectator:
 		# Host promoting itself: tear down the spectator camera before the
 		# LocalController spawns its own camera.
 		_teardown_spectator_camera()
-	_registry.spawn(peer_id, new_slot, team,
-			colors.jersey, colors.helmet, colors.pants,
-			colors.jersey_stripe, colors.gloves, colors.pants_stripe, colors.socks, colors.socks_stripe,
-			colors.secondary, colors.text, colors.text_outline,
-			is_left, peer_name, is_local, peer_number)
-	# Tell every other client to spawn a remote copy. The promoting client's
-	# spawn_remote_skater handler short-circuits on `peer_id == local_peer_id`,
-	# so broadcasting to all is safe.
-	NetworkManager.send_spawn_remote_skater(peer_id, new_slot, new_team_id,
-			colors.jersey, colors.helmet, colors.pants, is_left, peer_name, peer_number)
-	# The promoting peer needs slot info for its own LocalController spawn.
-	if not is_local:
-		NetworkManager.send_slot_assignment(peer_id, new_slot, new_team_id,
-				colors.jersey, colors.helmet, colors.pants)
+	_spawn_player_and_broadcast(peer_id, new_team_id, new_slot,
+			NetworkManager.get_peer_handedness(peer_id),
+			NetworkManager.get_peer_name(peer_id),
+			NetworkManager.get_peer_number(peer_id),
+			is_local)
 
 
 func _teardown_spectator_camera() -> void:
@@ -784,6 +781,26 @@ func _close_replay_file_writer() -> void:
 		return
 	_replay_file_writer.close_async(_build_replay_footer())
 	_replay_file_writer = null
+
+
+# Rematch path: close the current .mreplay (writes its footer with the
+# previous game's final scores) and open a new one against new_game_id so
+# the rematch lands in a separate file. Empty new_game_id (offline /
+# tutorial / recording disabled) is a no-op — there's no writer to roll.
+# Note: between the host's notify_reset_to_all and the client receiving
+# it, a couple of post-reset world-state frames may land in the OLD file
+# instead of the new one. They're recorded with reset state (0-0, period
+# 1) and show up as a brief "score-reset glitch" at the very end of the
+# old file's playback. Acceptable for v1; the alternative is throttling
+# host broadcasts during rollover, which adds complexity for marginal
+# benefit.
+func _rollover_replay_file_to(new_game_id: String) -> void:
+	if new_game_id.is_empty():
+		return
+	_close_replay_file_writer()
+	_last_recorded_phase = -1
+	_game_id = new_game_id
+	_open_replay_file_writer()
 
 
 # Roster captured at game-start; mid-game joiners aren't in here but the viewer
@@ -850,6 +867,74 @@ func _on_goal_for_replay_event(scoring_team: Team, scorer: String,
 		"assist2": assist2,
 	}).to_utf8_buffer()
 	_replay_file_writer.enqueue_event(ts, payload)
+
+
+# Roster events for the .mreplay viewer. Header captures the initial roster;
+# these fire only for mid-game changes (joins, demotes, promotes,
+# disconnects) so the viewer can spawn / despawn actors instead of leaving
+# them stuck or invisible. _replay_file_writer is null during the initial
+# registry-population pass (writer opens AFTER registry stabilizes), so the
+# `if _replay_file_writer == null: return` guard naturally suppresses the
+# initial spawns.
+func _on_replay_player_joined_event(record: PlayerRecord) -> void:
+	if _replay_file_writer == null:
+		return
+	var ts: float = NetworkManager.local_time() if NetworkManager.is_host \
+			else NetworkManager.estimated_host_time()
+	var payload: PackedByteArray = JSON.stringify({
+		"kind": "player_joined",
+		"peer_id": record.peer_id,
+		"player_name": record.player_name,
+		"jersey_number": record.jersey_number,
+		"team_id": record.team.team_id if record.team != null else 0,
+		"team_slot": record.team_slot,
+		"is_left_handed": record.is_left_handed,
+	}).to_utf8_buffer()
+	_replay_file_writer.enqueue_event(ts, payload)
+
+
+func _on_replay_player_left_event(record: PlayerRecord) -> void:
+	if _replay_file_writer == null:
+		return
+	var ts: float = NetworkManager.local_time() if NetworkManager.is_host \
+			else NetworkManager.estimated_host_time()
+	var payload: PackedByteArray = JSON.stringify({
+		"kind": "player_left",
+		"peer_id": record.peer_id,
+	}).to_utf8_buffer()
+	_replay_file_writer.enqueue_event(ts, payload)
+
+
+# Common path shared by every host-side player-spawn site:
+#   - register the slot in the state machine
+#   - send_slot_assignment to the joining peer (skipped if the peer is the
+#     local host, who already has its slot)
+#   - broadcast spawn_remote_skater to all peers (handler short-circuits
+#     for the local peer)
+#   - _registry.spawn locally
+#
+# Returns the resolved colors dict so callers can reuse it for adjacent
+# bookkeeping (e.g. _push_lobby_assignments_to_clients's `existing` array).
+# Adjacent RPCs that vary by call site (send_join_in_progress,
+# send_sync_existing_players, spectator-camera teardown) stay inline at
+# the caller — this helper owns only the shared shape.
+func _spawn_player_and_broadcast(peer_id: int, team_id: int, team_slot: int,
+		is_left: bool, p_name: String, p_number: int, is_local: bool) -> Dictionary:
+	var team: Team = teams[team_id]
+	var colors: Dictionary = TeamColorRegistry.get_colors(team.color_id, team_id)
+	_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
+	if not is_local:
+		NetworkManager.send_slot_assignment(peer_id, team_slot, team_id,
+				colors.jersey, colors.helmet, colors.pants)
+	NetworkManager.send_spawn_remote_skater(peer_id, team_slot, team_id,
+			colors.jersey, colors.helmet, colors.pants, is_left, p_name, p_number)
+	_registry.spawn(peer_id, team_slot, team,
+			colors.jersey, colors.helmet, colors.pants,
+			colors.jersey_stripe, colors.gloves, colors.pants_stripe,
+			colors.socks, colors.socks_stripe,
+			colors.secondary, colors.text, colors.text_outline,
+			is_left, p_name, is_local, p_number)
+	return colors
 
 
 func _spawn_local(peer_id: int, team_slot: int, team: Team) -> void:
@@ -1233,13 +1318,23 @@ func _on_input_batch_received(peer_id: int, inputs: Array[InputState]) -> void:
 func _on_world_state_received(data: PackedByteArray) -> void:
 	if _codec != null:
 		_codec.decode_world_state(data)  # updates _state_machine.current_phase
+	if data.size() < 6:
+		return
+	var host_ts: float = data.decode_float(2)
+	# Feed the in-memory ring buffer so this peer's GoalReplayDriver has a
+	# clip to extract when a goal fires. Skipped during the cinematic itself
+	# (NetworkManager.is_replay_mode is mirrored to clients) so we don't
+	# overwrite the live pre-goal frames with frozen mid-replay state.
+	if _recorder != null and not NetworkManager.is_replay_mode():
+		_recorder.record_frame(data, host_ts)
 	# Tee the broadcast into the local .mreplay file. Use the host_ts encoded
-	# in the packet (bytes 2..5, after the 2-byte ws_sequence) so timestamps
-	# align across host + client recordings — local_time() differs per peer.
-	# Same dead-puck + replay-mode gate as the host's get_world_state path.
-	if _replay_file_writer != null and data.size() >= 6 and _should_record_to_file():
-		var host_ts: float = data.decode_float(2)
+	# in the packet so timestamps align across host + client recordings —
+	# local_time() differs per peer. Same dead-puck + replay-mode gate as
+	# the host's get_world_state path.
+	if _replay_file_writer != null and _should_record_to_file():
 		_replay_file_writer.enqueue_frame(host_ts, data)
+		if _state_machine != null:
+			_last_recorded_phase = _state_machine.current_phase
 
 
 func _on_stats_received(data: Array) -> void:
@@ -1420,6 +1515,7 @@ func on_scene_exit() -> void:
 	# blocks until the worker exits, so we must call this while the registry
 	# (used to build the footer) is still intact.
 	_close_replay_file_writer()
+	_last_recorded_phase = -1
 	if _shot_tracker != null:
 		_shot_tracker.clear_state()
 	if _registry != null:
@@ -1459,14 +1555,23 @@ func on_scene_exit() -> void:
 func reset_game() -> void:
 	_drop_puck_if_carried()
 	_apply_reset()
-	NetworkManager.notify_reset_to_all()
+	# Each rematch gets its own .mreplay so the viewer doesn't render two
+	# games concatenated as one continuous file with a visible score reset
+	# in the middle. Host mints the new game_id and ships it so every peer
+	# rolls over to the same filename.
+	var new_id: String = ""
+	if not _game_id.is_empty():
+		new_id = PlayerPrefs.generate_uuid()
+	NetworkManager.notify_reset_to_all(new_id)
+	_rollover_replay_file_to(new_id)
 	_state_machine.begin_faceoff_prep()
 	_phase_coord.handle_phase_entered()
 	game_reset.emit()
 
 
-func on_game_reset() -> void:
+func on_game_reset(new_game_id: String = "") -> void:
 	_apply_reset()
+	_rollover_replay_file_to(new_game_id)
 	# Clear client-side carry state so PuckController stops pinning to blade.
 	var local_record := _registry.get_local() if _registry != null else null
 	if local_record != null and local_record.controller.has_puck:
@@ -1570,20 +1675,14 @@ func _push_lobby_assignments_to_clients() -> void:
 					Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0))
 			NetworkManager.send_sync_existing_players(peer_id, existing)
 			continue
-		_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
-		var team: Team = teams[team_id]
-		var colors: Dictionary = TeamColorRegistry.get_colors(team.color_id, team_id)
 		var is_left: bool = entry.get("is_left_handed", true)
 		var p_name: String = entry.get("player_name", "Player")
 		var p_number: int = entry.get("jersey_number", 10)
-		NetworkManager.send_slot_assignment(peer_id, team_slot, team_id, colors.jersey, colors.helmet, colors.pants)
 		NetworkManager.send_sync_existing_players(peer_id, existing)
-		NetworkManager.send_spawn_remote_skater(peer_id, team_slot, team_id, colors.jersey, colors.helmet, colors.pants, is_left, p_name, p_number)
-		_registry.spawn(peer_id, team_slot, team, colors.jersey, colors.helmet, colors.pants,
-				colors.jersey_stripe, colors.gloves, colors.pants_stripe, colors.socks, colors.socks_stripe,
-				colors.secondary, colors.text, colors.text_outline,
-				is_left, p_name, false, p_number)
-		existing.append([peer_id, team_slot, team_id, colors.jersey, colors.helmet, colors.pants, is_left, p_name, p_number])
+		var colors: Dictionary = _spawn_player_and_broadcast(
+				peer_id, team_id, team_slot, is_left, p_name, p_number, false)
+		existing.append([peer_id, team_slot, team_id,
+				colors.jersey, colors.helmet, colors.pants, is_left, p_name, p_number])
 	NetworkManager.pending_lobby_slots = {}
 
 
@@ -1617,20 +1716,30 @@ func get_world_state() -> PackedByteArray:
 	# the goal moment cleanly).
 	if _recorder != null and not NetworkManager.is_replay_mode():
 		_recorder.record_frame(state, ts)
-	# File writer skips dead-puck phases too (FACEOFF_PREP, GOAL_SCORED,
-	# END_OF_PERIOD, GAME_OVER). Those broadcast at 5 Hz of duplicate static
-	# state; the playback engine's dwell-then-snap handles the resulting
-	# bracket-gap visually.
+	# File writer skips dead-puck phase ticks past the first one — see
+	# _should_record_to_file. The first frame on each phase transition
+	# captures the puck-in-net moment / faceoff snap / etc.
 	if _replay_file_writer != null and _should_record_to_file():
 		_replay_file_writer.enqueue_frame(ts, state)
+		if _state_machine != null:
+			_last_recorded_phase = _state_machine.current_phase
 	return state
 
 
 func _should_record_to_file() -> bool:
 	if NetworkManager.is_replay_mode():
 		return false
-	if _state_machine != null and PhaseRules.is_movement_locked(_state_machine.current_phase):
-		return false
+	if _state_machine == null:
+		return true
+	var phase: int = _state_machine.current_phase
+	if PhaseRules.is_movement_locked(phase):
+		# Capture only the first frame of each movement-locked phase. Goal:
+		# the puck-in-net moment on GOAL_SCORED entry — without this, the
+		# last recorded frame before the gap is the previous PLAYING tick,
+		# which usually shows the puck still approaching the net rather
+		# than inside it. Subsequent ticks at 5 Hz are duplicate static
+		# state and add nothing.
+		return phase != _last_recorded_phase
 	return true
 
 
@@ -1645,13 +1754,19 @@ const POST_GOAL_CAPTURE_WINDOW: float = 0.5
 func _on_goal_for_replay(_scoring_team: Team, _scorer: String, _a1: String, _a2: String) -> void:
 	if _recorder == null or _goal_replay_driver == null or _codec == null:
 		return
-	# Force-record the goal-moment frame in case the last broadcast was up to
-	# 25 ms ago, ensuring the exact detection instant is in the buffer.
-	var goal_frame: PackedByteArray = _codec.encode_world_state()
-	if not goal_frame.is_empty():
-		_recorder.record_frame(goal_frame, NetworkManager.local_time())
-	# Let the broadcaster keep feeding the recorder for POST_GOAL_CAPTURE_WINDOW
-	# seconds so the clip naturally ends with the puck in the net.
+	# Host-only: force-record the goal-moment frame in case the last broadcast
+	# was up to 25 ms ago, ensuring the exact detection instant is in the
+	# in-memory buffer. Clients can't encode_world_state (no authoritative
+	# state) — their buffer's most-recent frame is whatever just arrived,
+	# which is good enough for the cinematic.
+	if NetworkManager.is_host:
+		var goal_frame: PackedByteArray = _codec.encode_world_state()
+		if not goal_frame.is_empty():
+			_recorder.record_frame(goal_frame, NetworkManager.local_time())
+	# Let the recorder keep feeding for POST_GOAL_CAPTURE_WINDOW seconds so
+	# the clip naturally ends with the puck in the net. Each peer schedules
+	# its own — RTT-driven offsets between peers are in the tens of ms,
+	# imperceptible against an 8-second clip.
 	get_tree().create_timer(POST_GOAL_CAPTURE_WINDOW).timeout.connect(_start_goal_replay)
 
 

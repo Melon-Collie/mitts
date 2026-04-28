@@ -17,6 +17,10 @@ extends RefCounted
 #     subsystems (shot tracker, phase coordinator, etc.)
 
 signal player_added(record: PlayerRecord)
+# Fires before the record is freed so subscribers can read every field
+# (peer_id, team, colors). Companion to player_added; the player_joined /
+# player_left signals stay name+color-only for the existing HUD toast path.
+signal player_removed(record: PlayerRecord)
 signal player_joined(name: String, team_color: Color)
 signal player_left(name: String, team_color: Color)
 
@@ -121,6 +125,7 @@ func remove(peer_id: int) -> PlayerRecord:
 		return null
 	var record: PlayerRecord = _players[peer_id]
 	player_left.emit(record.display_name(), TeamColorRegistry.get_colors(record.team.color_id, record.team.team_id).primary)
+	player_removed.emit(record)
 	_players.erase(peer_id)
 	if _state_machine != null:
 		_state_machine.on_player_disconnected(peer_id)
