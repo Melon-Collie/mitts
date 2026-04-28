@@ -1221,13 +1221,29 @@ func get_world_state() -> PackedByteArray:
 
 
 # ── Goal replay (host only) ──────────────────────────────────────────────────
+
+# Seconds to keep recording after the goal fires so the clip includes the puck
+# entering the net and the shooter's follow-through.  Must be well under
+# GameStateMachine.GOAL_PAUSE_DURATION (2.0 s) so the phase timer doesn't
+# expire before replay mode freezes it.
+const POST_GOAL_CAPTURE_WINDOW: float = 0.5
+
 func _on_goal_for_replay(_scoring_team: Team, _scorer: String, _a1: String, _a2: String) -> void:
 	if _recorder == null or _goal_replay_driver == null or _codec == null:
 		return
-	# Capture the goal-moment frame so the clip ends at the goal, not 25ms before.
+	# Force-record the goal-moment frame in case the last broadcast was up to
+	# 25 ms ago, ensuring the exact detection instant is in the buffer.
 	var goal_frame: PackedByteArray = _codec.encode_world_state()
 	if not goal_frame.is_empty():
 		_recorder.record_frame(goal_frame, NetworkManager.local_time())
+	# Let the broadcaster keep feeding the recorder for POST_GOAL_CAPTURE_WINDOW
+	# seconds so the clip naturally ends with the puck in the net.
+	get_tree().create_timer(POST_GOAL_CAPTURE_WINDOW).timeout.connect(_start_goal_replay)
+
+
+func _start_goal_replay() -> void:
+	if _recorder == null or _goal_replay_driver == null or _codec == null:
+		return
 	_goal_replay_driver.start(_recorder, _codec, _registry, puck, goalie_controllers)
 
 
