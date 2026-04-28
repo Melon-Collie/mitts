@@ -18,7 +18,7 @@ func before_each() -> void:
 	codec.setup(registry, sm, Callable(), Callable(), Callable(), null)
 
 
-func _add_player(peer_id: int, team_id: int, g: int = 0, a: int = 0, sog: int = 0, hits: int = 0) -> PlayerRecord:
+func _add_player(peer_id: int, team_id: int, g: int = 0, a: int = 0, sog: int = 0, hits: int = 0, blk: int = 0) -> PlayerRecord:
 	var team := Team.new()
 	team.team_id = team_id
 	var record := PlayerRecord.new(peer_id, 0, false, team)
@@ -27,6 +27,7 @@ func _add_player(peer_id: int, team_id: int, g: int = 0, a: int = 0, sog: int = 
 	record.stats.assists       = a
 	record.stats.shots_on_goal = sog
 	record.stats.hits          = hits
+	record.stats.shots_blocked = blk
 	registry._players[peer_id] = record
 	return record
 
@@ -34,8 +35,8 @@ func _add_player(peer_id: int, team_id: int, g: int = 0, a: int = 0, sog: int = 
 # ── Stats round-trip ─────────────────────────────────────────────────────────
 
 func test_stats_round_trip_preserves_per_player_counters() -> void:
-	_add_player(10, 0, 2, 1, 5, 3)
-	_add_player(11, 1, 0, 0, 4, 1)
+	_add_player(10, 0, 2, 1, 5, 3, 2)
+	_add_player(11, 1, 0, 0, 4, 1, 7)
 	sm.team_shots[0] = 5
 	sm.team_shots[1] = 4
 	sm.period_scores[0][0] = 2
@@ -57,7 +58,9 @@ func test_stats_round_trip_preserves_per_player_counters() -> void:
 	assert_eq(registry._players[10].stats.assists, 1)
 	assert_eq(registry._players[10].stats.shots_on_goal, 5)
 	assert_eq(registry._players[10].stats.hits, 3)
+	assert_eq(registry._players[10].stats.shots_blocked, 2)
 	assert_eq(registry._players[11].stats.shots_on_goal, 4)
+	assert_eq(registry._players[11].stats.shots_blocked, 7)
 	assert_eq(sm.team_shots[0], 5)
 	assert_eq(sm.team_shots[1], 4)
 	assert_eq(sm.period_scores[0][0], 2)

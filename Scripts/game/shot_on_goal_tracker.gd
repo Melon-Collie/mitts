@@ -11,6 +11,7 @@ extends RefCounted
 #   on_shot_started(peer_id)        → arms pending-shot timer
 #   on_goalie_touch(defending_tid)  → confirms SOG if eligible
 #   on_goal_confirmed(scorer_id)    → confirms SOG (non-own-goal only)
+#   on_block(blocker_peer_id)       → credits shots_blocked if defender intercepts a pending shot
 #   credit_assists(scorer_id)       → reads recent_carriers for 2 assists
 #   tick(delta)                     → clears pending after timeout
 #
@@ -68,6 +69,31 @@ func on_shot_started(shooter_peer_id: int) -> void:
 	_shooter_peer_id = shooter_peer_id
 	_pending_remaining = SHOT_ON_GOAL_TIMEOUT
 	_shot_on_goal_counted = false
+
+
+# Called when a skater (blade or body) intercepts a loose puck while a shot is
+# in flight. If the blocker is on the defending team, credit the blocker with a
+# blocked shot and clear the pending shot — the puck has been intercepted
+# before reaching the goalie. Same-team contact (a tip-in attempt) doesn't
+# count and is left for `on_deflection` to record. Returns true if a stat was
+# credited.
+func on_block(blocker_peer_id: int) -> bool:
+	if blocker_peer_id == -1:
+		return false
+	if _shooter_peer_id == -1:
+		return false
+	var shooter_team: int = _registry.resolve_team_id_for_peer(_shooter_peer_id)
+	var blocker_team: int = _registry.resolve_team_id_for_peer(blocker_peer_id)
+	if shooter_team == -1 or blocker_team == -1:
+		return false
+	if shooter_team == blocker_team:
+		return false
+	var record: PlayerRecord = _registry.get_record(blocker_peer_id)
+	if record == null:
+		return false
+	record.stats.shots_blocked += 1
+	clear_pending()
+	return true
 
 
 # Called when a goalie body contacts the puck while a shot is in flight.

@@ -88,6 +88,7 @@ func _on_totals_received(totals: Dictionary) -> void:
 	_add_row("Points",        str(totals.get("points", 0)))
 	_add_row("Shots on Goal", str(totals.get("shots_on_goal", 0)))
 	_add_row("Hits",          str(totals.get("hits", 0)))
+	_add_row("Shots Blocked", str(totals.get("shots_blocked", 0)))
 	_add_separator()
 	_add_row("+/-",           "%+d" % [totals.get("plus_minus", 0)])
 	_add_row("Goals For",     str(totals.get("goals_for", 0)))

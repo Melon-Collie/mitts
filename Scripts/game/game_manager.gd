@@ -669,6 +669,9 @@ func _on_server_puck_stripped_from(peer_id: int) -> void:
 
 func _on_server_puck_touched_while_loose(peer_id: int) -> void:
 	_state_machine.notify_icing_contact()
+	if _shot_tracker.on_block(peer_id):
+		_sync_stats_to_clients()
+		return
 	_shot_tracker.on_deflection(peer_id)
 
 

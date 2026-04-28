@@ -73,7 +73,7 @@ func _build_panel() -> void:
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
-	panel.custom_minimum_size = Vector2(560, 0)
+	panel.custom_minimum_size = Vector2(610, 0)
 	h_centering.add_child(panel)
 
 	var vbox := VBoxContainer.new()
@@ -85,7 +85,7 @@ func _build_panel() -> void:
 	vbox.add_child(_hsep())
 
 	var header_row := _make_row()
-	_fill_row(header_row, ["PING", "#", "POS", "PLAYER", "G", "A", "PTS", "SOG", "HITS"], _HEADER, true)
+	_fill_row(header_row, ["PING", "#", "POS", "PLAYER", "G", "A", "PTS", "SOG", "HITS", "BLK"], _HEADER, true)
 	vbox.add_child(header_row)
 
 	vbox.add_child(_hsep())
@@ -205,7 +205,7 @@ func _refresh() -> void:
 		var pos_str: String = _POSITION_LABEL[record.team_slot]
 		var num_str: String = str(record.jersey_number)
 		_fill_row(row,
-			[ping_str, num_str, pos_str, display_name, str(s.goals), str(s.assists), str(pts), str(s.shots_on_goal), str(s.hits)],
+			[ping_str, num_str, pos_str, display_name, str(s.goals), str(s.assists), str(pts), str(s.shots_on_goal), str(s.hits), str(s.shots_blocked)],
 			_WHITE, false
 		)
 
@@ -240,7 +240,7 @@ func _ping_label(peer_id: int) -> String:
 	return "%d ms" % p if p > 0 else "—"
 
 func _fill_row(row: HBoxContainer, texts: Array, name_color: Color, is_header: bool) -> void:
-	var widths := [52, 36, 36, 150, 38, 38, 48, 48, 56]
+	var widths := [52, 36, 36, 150, 38, 38, 48, 48, 56, 48]
 	var font_size := 13 if is_header else 14
 	for i in texts.size():
 		var cell := Label.new()
