@@ -810,7 +810,8 @@ func notify_join_in_progress(p_num_periods: int, p_period_duration: float,
 		p_ot_enabled: bool, p_ot_duration: float,
 		p_home_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID,
 		p_away_color_id: String = TeamColorRegistry.DEFAULT_AWAY_ID,
-		p_rule_set: int = GameRules.DEFAULT_RULE_SET) -> void:
+		p_rule_set: int = GameRules.DEFAULT_RULE_SET,
+		p_game_id: String = "") -> void:
 	pending_home_color_id = p_home_color_id
 	pending_away_color_id = p_away_color_id
 	pending_rule_set = p_rule_set
@@ -822,22 +823,25 @@ func notify_join_in_progress(p_num_periods: int, p_period_duration: float,
 		"home_color_id": p_home_color_id,
 		"away_color_id": p_away_color_id,
 		"rule_set": p_rule_set,
+		"game_id": p_game_id,
 	})
 
 func send_join_in_progress(peer_id: int, config: Dictionary) -> void:
 	var hid: String = config.get("home_color_id", pending_home_color_id)
 	var aid: String = config.get("away_color_id", pending_away_color_id)
 	var rs: int = config.get("rule_set", pending_rule_set)
+	var gid: String = config.get("game_id", "")
 	notify_join_in_progress.rpc_id(peer_id,
 		config.num_periods, config.period_duration,
-		config.ot_enabled, config.ot_duration, hid, aid, rs)
+		config.ot_enabled, config.ot_duration, hid, aid, rs, gid)
 
 @rpc("authority", "reliable")
 func notify_game_start(p_num_periods: int, p_period_duration: float,
 		p_ot_enabled: bool, p_ot_duration: float,
 		p_home_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID,
 		p_away_color_id: String = TeamColorRegistry.DEFAULT_AWAY_ID,
-		p_rule_set: int = GameRules.DEFAULT_RULE_SET) -> void:
+		p_rule_set: int = GameRules.DEFAULT_RULE_SET,
+		p_game_id: String = "") -> void:
 	pending_home_color_id = p_home_color_id
 	pending_away_color_id = p_away_color_id
 	pending_rule_set = p_rule_set
@@ -849,6 +853,7 @@ func notify_game_start(p_num_periods: int, p_period_duration: float,
 		"home_color_id": p_home_color_id,
 		"away_color_id": p_away_color_id,
 		"rule_set": p_rule_set,
+		"game_id": p_game_id,
 	})
 
 @rpc("authority", "reliable")
@@ -860,13 +865,14 @@ func send_game_start(config: Dictionary) -> void:
 	var hid: String = config.get("home_color_id", TeamColorRegistry.DEFAULT_HOME_ID)
 	var aid: String = config.get("away_color_id", TeamColorRegistry.DEFAULT_AWAY_ID)
 	var rs: int = config.get("rule_set", GameRules.DEFAULT_RULE_SET)
+	var gid: String = config.get("game_id", "")
 	pending_home_color_id = hid
 	pending_away_color_id = aid
 	pending_rule_set = rs
 	for peer_id: int in connected_peer_ids():
 		notify_game_start.rpc_id(peer_id,
 			config.num_periods, config.period_duration,
-			config.ot_enabled, config.ot_duration, hid, aid, rs)
+			config.ot_enabled, config.ot_duration, hid, aid, rs, gid)
 	game_started.emit(config)
 
 func send_lobby_roster(peer_id: int, roster: Array) -> void:

@@ -798,6 +798,10 @@ func _on_start_pressed() -> void:
 		"home_color_id": _home_color_id,
 		"away_color_id": _away_color_id,
 		"rule_set": _rule_set,
+		# Minted on the host and broadcast via game_start so every peer shares
+		# the same id. Used as the .mreplay filename and (Feature C) stored on
+		# career_stats rows so a game can be reconstructed across players.
+		"game_id": PlayerPrefs.generate_uuid(),
 	}
 	NetworkManager.send_game_start(config)
 

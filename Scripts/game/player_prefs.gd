@@ -61,7 +61,7 @@ func _get_save_path() -> String:
 func _ready() -> void:
 	_load()
 	if player_uuid.is_empty():
-		player_uuid = _generate_uuid()
+		player_uuid = generate_uuid()
 		save()
 
 func save() -> void:
@@ -191,7 +191,7 @@ func _load() -> void:
 	call_deferred(&"apply_video")
 
 
-static func _generate_uuid() -> String:
+static func generate_uuid() -> String:
 	const HEX: String = "0123456789abcdef"
 	var result: String = ""
 	for i: int in 32:

@@ -77,6 +77,13 @@ var _spectator_peers: Dictionary[int, bool] = {}
 var _is_local_spectator: bool = false
 var _spectator_camera: SpectatorCamera = null
 
+# ── Game identity ─────────────────────────────────────────────────────────────
+# Minted by the host in LobbyManager._on_start_pressed and broadcast via
+# game_start. Used as the .mreplay filename and (planned for Feature C) stored
+# on career_stats rows so a single game can be reconstructed across players.
+# Falls back to a fresh UUID in offline / tutorial mode where no broadcast runs.
+var _game_id: String = ""
+
 # ── Lag compensation ──────────────────────────────────────────────────────────
 const _MAX_CLAIM_AGE_S: float = 0.2
 const _CONTEST_WINDOW_S: float = 0.05
@@ -389,7 +396,10 @@ func _spawn_world() -> void:
 		var cfg: Dictionary = NetworkManager.pending_game_config
 		_state_machine.apply_config(cfg.num_periods, cfg.period_duration, cfg.ot_enabled, cfg.ot_duration,
 				cfg.get("rule_set", GameRules.DEFAULT_RULE_SET))
+		_game_id = cfg.get("game_id", "")
 		NetworkManager.pending_game_config = {}
+	if _game_id.is_empty():
+		_game_id = PlayerPrefs.generate_uuid()
 	_spawner = ActorSpawner.new()
 	_spawner.setup(get_tree().current_scene)
 	_create_teams()
@@ -625,6 +635,10 @@ func _become_local_spectator() -> void:
 
 func is_local_spectator() -> bool:
 	return _is_local_spectator
+
+
+func get_game_id() -> String:
+	return _game_id
 
 
 # Host-only accurate. Clients only know their own spectator status (via
@@ -1308,6 +1322,7 @@ func on_scene_exit() -> void:
 	_puck_oob_timer = 0.0
 	_teardown_spectator_camera()
 	_spectator_peers.clear()
+	_game_id = ""
 	NetworkManager.prepare_for_new_game()
 
 
