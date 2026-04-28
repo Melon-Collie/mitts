@@ -223,7 +223,7 @@ func _build_game_card(game: Dictionary) -> Control:
 
 	vbox.add_child(_build_score_line(game))
 
-	var period_line: Label = _build_period_breakdown(game)
+	var period_line: Control = _build_period_breakdown(game)
 	if period_line != null:
 		vbox.add_child(period_line)
 
@@ -274,13 +274,16 @@ func _build_score_line(game: Dictionary) -> Control:
 	return hbox
 
 
-# Period breakdown formatted as "P1 1-0 · P2 0-1 · P3 2-0 · OT1 1-0".
-# Periods past num_periods are labelled OT1, OT2, … so a 1-period game
-# that goes to sudden-death OT shows "P1 0-0 · OT1 0-0 · OT2 1-0" rather
-# than "P1 P2 P3". Falls back to "P%d" labelling when num_periods is
-# missing (older rows pre-migration). Returns null if period_scores is
-# missing or malformed.
-func _build_period_breakdown(game: Dictionary) -> Label:
+# Period breakdown grid mirroring the in-game tab scoreboard: a row per team
+# (AWAY on top to match rink-perspective convention), columns for each
+# regulation + OT period, plus a T column for totals. Period headers label
+# OT periods correctly when num_periods is known. Returns null on missing
+# or malformed period_scores.
+#
+# Plain HOME/AWAY text labels (no colored badges) — career_stats doesn't
+# store the resolved home/away color IDs today; adding them is a small
+# follow-up if we want the badges to match the in-game look.
+func _build_period_breakdown(game: Dictionary) -> Control:
 	var ps: Variant = game.get("period_scores", null)
 	if not ps is Array or (ps as Array).size() < 2:
 		return null
@@ -289,21 +292,59 @@ func _build_period_breakdown(game: Dictionary) -> Label:
 	var team1: Array = ps_arr[1] as Array
 	if team0.is_empty() or team0.size() != team1.size():
 		return null
+	var total_periods: int = team0.size()
 	var num_periods: int = _safe_int(game.get("num_periods", 0))
-	var parts: PackedStringArray = PackedStringArray()
-	for p: int in team0.size():
+
+	var center := HBoxContainer.new()
+	center.alignment = BoxContainer.ALIGNMENT_CENTER
+
+	var grid := GridContainer.new()
+	grid.columns = 2 + total_periods  # row label + periods + total
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 3)
+	center.add_child(grid)
+
+	var col_min: Vector2 = Vector2(28, 0)
+	var label_min: Vector2 = Vector2(48, 0)
+
+	# Header row: blank + period labels + T
+	var blank := Control.new()
+	blank.custom_minimum_size = label_min
+	grid.add_child(blank)
+	for p: int in total_periods:
 		var period_num: int = p + 1
-		var label: String
+		var header_text: String
 		if num_periods > 0 and period_num > num_periods:
-			label = "OT%d" % (period_num - num_periods)
+			header_text = "OT%d" % (period_num - num_periods)
 		else:
-			label = "P%d" % period_num
-		parts.append("%s %d-%d" % [label, _safe_int(team0[p]), _safe_int(team1[p])])
-	var lbl := Label.new()
-	lbl.text = " · ".join(parts)
-	lbl.add_theme_font_size_override("font_size", 11)
-	lbl.add_theme_color_override("font_color", MenuStyle.TEXT_DIM)
-	return lbl
+			header_text = str(period_num)
+		grid.add_child(_grid_cell(header_text, col_min, true))
+	grid.add_child(_grid_cell("T", col_min, true))
+
+	# AWAY row first (team 1), then HOME (team 0) — matches in-game convention.
+	for team_id: int in [1, 0]:
+		var team_label: String = "AWAY" if team_id == 1 else "HOME"
+		grid.add_child(_grid_cell(team_label, label_min, false, HORIZONTAL_ALIGNMENT_LEFT))
+		var team_scores: Array = team1 if team_id == 1 else team0
+		var total: int = 0
+		for p: int in total_periods:
+			var goals: int = _safe_int(team_scores[p])
+			total += goals
+			grid.add_child(_grid_cell(str(goals), col_min, false))
+		grid.add_child(_grid_cell(str(total), col_min, false))
+
+	return center
+
+
+func _grid_cell(text: String, min_size: Vector2, is_header: bool,
+		align: int = HORIZONTAL_ALIGNMENT_CENTER) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_size_override("font_size", 12 if is_header else 13)
+	l.add_theme_color_override("font_color", MenuStyle.TEXT_DIM if is_header else MenuStyle.TEXT_BODY)
+	l.custom_minimum_size = min_size
+	l.horizontal_alignment = align
+	return l
 
 
 # Compact 7-column grid: HOME/AWAY tag · player name · G · A · P · SOG · +/-.
