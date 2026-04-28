@@ -28,7 +28,7 @@ signal remote_carrier_changed(new_carrier_peer_id: int)
 signal ghost_state_received(peer_id: int, is_ghost: bool)
 signal goal_received(scoring_team_id: int, score0: int, score1: int, scorer_name: String, assist1_name: String, assist2_name: String)
 signal faceoff_positions_received(positions: Array)
-signal game_reset_received
+signal game_reset_received(new_game_id: String)
 signal stats_received(data: Array)
 signal slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int)
 signal slot_swap_confirmed(peer_id: int, old_team_id: int, old_slot: int, new_team_id: int, new_slot: int, jersey: Color, helmet: Color, pants: Color)
@@ -734,13 +734,13 @@ func send_faceoff_positions(positions: Array) -> void:
 func notify_faceoff_positions(positions: Array) -> void:
 	NetworkSimManager.send(func(p: Array) -> void: faceoff_positions_received.emit(p), [positions], true)
 
-func notify_reset_to_all() -> void:
+func notify_reset_to_all(new_game_id: String = "") -> void:
 	for peer_id in connected_peer_ids():
-		notify_game_reset.rpc_id(peer_id)
+		notify_game_reset.rpc_id(peer_id, new_game_id)
 
 @rpc("authority", "reliable")
-func notify_game_reset() -> void:
-	game_reset_received.emit()
+func notify_game_reset(new_game_id: String = "") -> void:
+	game_reset_received.emit(new_game_id)
 
 func send_stats_to_all(data: Array) -> void:
 	for peer_id in connected_peer_ids():

@@ -768,6 +768,25 @@ func _close_replay_file_writer() -> void:
 	_replay_file_writer = null
 
 
+# Rematch path: close the current .mreplay (writes its footer with the
+# previous game's final scores) and open a new one against new_game_id so
+# the rematch lands in a separate file. Empty new_game_id (offline /
+# tutorial / recording disabled) is a no-op — there's no writer to roll.
+# Note: between the host's notify_reset_to_all and the client receiving
+# it, a couple of post-reset world-state frames may land in the OLD file
+# instead of the new one. They're recorded with reset state (0-0, period
+# 1) and show up as a brief "score-reset glitch" at the very end of the
+# old file's playback. Acceptable for v1; the alternative is throttling
+# host broadcasts during rollover, which adds complexity for marginal
+# benefit.
+func _rollover_replay_file_to(new_game_id: String) -> void:
+	if new_game_id.is_empty():
+		return
+	_close_replay_file_writer()
+	_game_id = new_game_id
+	_open_replay_file_writer()
+
+
 # Roster captured at game-start; mid-game joiners aren't in here but the viewer
 # can still observe them appearing in later world-state packets.
 func _build_replay_header() -> Dictionary:
@@ -1509,14 +1528,23 @@ func on_scene_exit() -> void:
 func reset_game() -> void:
 	_drop_puck_if_carried()
 	_apply_reset()
-	NetworkManager.notify_reset_to_all()
+	# Each rematch gets its own .mreplay so the viewer doesn't render two
+	# games concatenated as one continuous file with a visible score reset
+	# in the middle. Host mints the new game_id and ships it so every peer
+	# rolls over to the same filename.
+	var new_id: String = ""
+	if not _game_id.is_empty():
+		new_id = PlayerPrefs.generate_uuid()
+	NetworkManager.notify_reset_to_all(new_id)
+	_rollover_replay_file_to(new_id)
 	_state_machine.begin_faceoff_prep()
 	_phase_coord.handle_phase_entered()
 	game_reset.emit()
 
 
-func on_game_reset() -> void:
+func on_game_reset(new_game_id: String = "") -> void:
 	_apply_reset()
+	_rollover_replay_file_to(new_game_id)
 	# Clear client-side carry state so PuckController stops pinning to blade.
 	var local_record := _registry.get_local() if _registry != null else null
 	if local_record != null and local_record.controller.has_puck:
