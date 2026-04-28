@@ -82,6 +82,10 @@ func _ready() -> void:
 	elif NetworkManager.is_host:
 		_assign_slot(1, 0, 0, NetworkManager.local_player_name, NetworkManager.local_is_left_handed, NetworkManager.local_jersey_number)
 		_broadcast_confirm(1, 0, 0)
+	# Initial Start-button state. The button is constructed disabled; nothing
+	# else fires _update_start_btn until a peer joins/readies, so without this
+	# the host-alone case stays disabled forever.
+	_update_start_btn()
 
 func _initial_color_preference() -> String:
 	var saved: String = PlayerPrefs.preferred_color_id
