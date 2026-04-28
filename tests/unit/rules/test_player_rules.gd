@@ -1,6 +1,6 @@
 extends GutTest
 
-# PlayerRules — team balancing, color generation, faceoff position lookup.
+# PlayerRules — team balancing and faceoff position lookup.
 
 # ── assign_team ──────────────────────────────────────────────────────────────
 
@@ -15,22 +15,6 @@ func test_smaller_team_gets_next_player() -> void:
 
 func test_lopsided_filled_to_smaller() -> void:
 	assert_eq(PlayerRules.assign_team(3, 1), 1)
-
-# ── generate_primary_color ───────────────────────────────────────────────────
-
-func test_team_0_primary_is_gold() -> void:
-	var c: Color = PlayerRules.generate_primary_color(0)
-	assert_true(c.r > 0.8 and c.g > 0.5 and c.b < 0.3, "home primary should be Penguins gold, got r=%f g=%f b=%f" % [c.r, c.g, c.b])
-
-func test_team_1_primary_is_blue() -> void:
-	var c: Color = PlayerRules.generate_primary_color(1)
-	assert_true(c.b > c.r and c.b > c.g, "away primary should be Leafs blue-dominant, got r=%f g=%f b=%f" % [c.r, c.g, c.b])
-
-func test_team_0_primary_is_deterministic() -> void:
-	assert_eq(PlayerRules.generate_primary_color(0), PlayerRules.generate_primary_color(0))
-
-func test_team_1_primary_is_deterministic() -> void:
-	assert_eq(PlayerRules.generate_primary_color(1), PlayerRules.generate_primary_color(1))
 
 # ── faceoff_position ─────────────────────────────────────────────────────────
 

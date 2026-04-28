@@ -100,7 +100,7 @@ func apply_confirmed_swap(
 	record.text_color          = colors.text
 	record.text_outline_color  = colors.text_outline
 	record.faceoff_position    = PlayerRules.faceoff_position(new_team_id, new_slot)
-	record.skater.set_player_color(jersey, helmet, pants, colors.socks)
+	record.skater.set_player_color(jersey, helmet, pants, colors.socks, colors.primary)
 	record.skater.set_player_name(record.player_name)
 	record.skater.set_jersey_info(record.player_name, record.jersey_number, colors.text)
 	record.skater.set_jersey_stripes(colors.jersey_stripe, colors.pants_stripe, colors.socks_stripe)

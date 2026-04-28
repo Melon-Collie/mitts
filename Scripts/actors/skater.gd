@@ -748,10 +748,11 @@ func set_player_color(
 		jersey_color: Color,
 		helmet_color: Color,
 		pants_color: Color,
-		socks_color: Color) -> void:
+		socks_color: Color,
+		blade_color: Color) -> void:
 	var jersey_mat: StandardMaterial3D = _make_solid_mat(jersey_color)
 	_upper_body_mesh.material_override = jersey_mat
-	_blade_mesh.material_override = jersey_mat.duplicate()
+	_blade_mesh.material_override = _make_solid_mat(blade_color)
 	if upper_arm_mesh != null:
 		upper_arm_mesh.material_override = jersey_mat.duplicate()
 	if forearm_mesh != null:

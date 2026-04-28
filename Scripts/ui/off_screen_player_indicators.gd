@@ -9,6 +9,9 @@ const _FAR_DISTANCE: float = 30.0
 const _EDGE_MARGIN: float = 28.0
 const _OUTLINE_COLOR: Color = Color(0.0, 0.0, 0.0, 0.85)
 const _OUTLINE_WIDTH: float = 2.0
+const _NUMBER_FONT_SIZE: int = 18
+const _NUMBER_MIN_FONT_SIZE: int = 12
+const _NUMBER_OFFSET_FACTOR: float = 0.95
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -56,8 +59,8 @@ func _draw() -> void:
 		var dist: float = local_pos.distance_to(world_pos)
 		var t: float = clampf(inverse_lerp(_NEAR_DISTANCE, _FAR_DISTANCE, dist), 0.0, 1.0)
 		var arrow_scale: float = lerpf(_ARROW_MAX_SCALE, _ARROW_MIN_SCALE, t)
-		var color: Color = PlayerRules.slot_color(record.team.team_id, record.team_slot)
-		_draw_arrow(edge_pos, dir, arrow_scale, color)
+		_draw_arrow(edge_pos, dir, arrow_scale, record.jersey_color)
+		_draw_number(edge_pos, dir, arrow_scale, record.jersey_number, record.text_color, record.text_outline_color)
 
 func _draw_arrow(pos: Vector2, dir: Vector2, arrow_scale: float, color: Color) -> void:
 	var sz: float = _ARROW_BASE_SIZE * arrow_scale
@@ -70,6 +73,19 @@ func _draw_arrow(pos: Vector2, dir: Vector2, arrow_scale: float, color: Color) -
 	draw_polygon(fill, fill_colors)
 	var outline: PackedVector2Array = PackedVector2Array([tip, base_left, base_right, tip])
 	draw_polyline(outline, _OUTLINE_COLOR, _OUTLINE_WIDTH, true)
+
+func _draw_number(pos: Vector2, dir: Vector2, arrow_scale: float, number: int, text_color: Color, outline_color: Color) -> void:
+	var sz: float = _ARROW_BASE_SIZE * arrow_scale
+	var font: Font = ThemeDB.fallback_font
+	var font_size: int = maxi(_NUMBER_MIN_FONT_SIZE, int(_NUMBER_FONT_SIZE * arrow_scale))
+	var text: String = str(number)
+	var text_size: Vector2 = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
+	var ascent: float = font.get_ascent(font_size)
+	var descent: float = font.get_descent(font_size)
+	var center: Vector2 = pos - dir * (sz * _NUMBER_OFFSET_FACTOR)
+	var baseline: Vector2 = Vector2(center.x - text_size.x * 0.5, center.y + (ascent - descent) * 0.5)
+	draw_string_outline(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, int(_OUTLINE_WIDTH), outline_color)
+	draw_string(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, text_color)
 
 func _intersect_rect_from_center(c: Vector2, dir: Vector2, r: Rect2) -> Vector2:
 	var t_x: float = INF

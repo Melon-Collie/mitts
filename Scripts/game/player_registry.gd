@@ -89,14 +89,15 @@ func spawn(
 	record.faceoff_position = faceoff_pos
 
 	var puck: Puck = _puck_getter.call() as Puck
+	var blade_color: Color = TeamColorRegistry.get_colors(team.color_id, team.team_id).primary
 	var spawned: Dictionary
 	if is_local:
 		spawned = _spawner.spawn_local_player(
-				faceoff_pos, jersey_color, helmet_color, pants_color, socks_color,
+				faceoff_pos, jersey_color, helmet_color, pants_color, socks_color, blade_color,
 				is_left_handed, puck, _game_state_node, team.team_id)
 	else:
 		spawned = _spawner.spawn_remote_player(
-				faceoff_pos, jersey_color, helmet_color, pants_color, socks_color,
+				faceoff_pos, jersey_color, helmet_color, pants_color, socks_color, blade_color,
 				is_left_handed, puck, _game_state_node)
 	record.skater = spawned.skater
 	record.controller = spawned.controller

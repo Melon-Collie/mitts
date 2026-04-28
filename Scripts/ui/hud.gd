@@ -136,7 +136,7 @@ func _build_scorebug() -> void:
 	away_row.add_theme_constant_override("separation", 8)
 	away_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	teams_vbox.add_child(away_row)
-	var away_badge := _team_badge("AWAY", PlayerRules.generate_primary_color(1))
+	var away_badge := _team_badge("AWAY", _initial_team_primary(1))
 	_away_badge_style = away_badge.get_theme_stylebox("panel") as StyleBoxFlat
 	_away_badge_label = away_badge.get_child(0) as Label
 	away_row.add_child(away_badge)
@@ -150,7 +150,7 @@ func _build_scorebug() -> void:
 	home_row.add_theme_constant_override("separation", 8)
 	home_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	teams_vbox.add_child(home_row)
-	var home_badge := _team_badge("HOME", PlayerRules.generate_primary_color(0))
+	var home_badge := _team_badge("HOME", _initial_team_primary(0))
 	_home_badge_style = home_badge.get_theme_stylebox("panel") as StyleBoxFlat
 	_home_badge_label = home_badge.get_child(0) as Label
 	home_row.add_child(home_badge)
@@ -765,6 +765,11 @@ func _on_goal_scored(scoring_team: Team, scorer_name: String, assist1_name: Stri
 	_flash_rect.modulate.a = 1.0
 	var ft := create_tween()
 	ft.tween_property(_flash_rect, "modulate:a", 0.0, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+
+func _initial_team_primary(team_id: int) -> Color:
+	if GameManager.teams.size() > team_id:
+		return TeamColorRegistry.get_colors(GameManager.teams[team_id].color_id, team_id).primary
+	return Color(0.5, 0.5, 0.5)  # placeholder; team_colors_ready overwrites
 
 func _on_team_colors_ready(home_primary: Color, home_secondary: Color, away_primary: Color, away_secondary: Color) -> void:
 	if _home_badge_style != null:
