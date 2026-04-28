@@ -11,7 +11,7 @@ extends RefCounted
 #   on_shot_started(peer_id)        → arms pending-shot timer
 #   on_goalie_touch(defending_tid)  → confirms SOG if eligible
 #   on_goal_confirmed(scorer_id)    → confirms SOG (non-own-goal only)
-#   on_body_block(blocker_peer_id)  → credits shots_blocked if defender intercepts a pending shot
+#   on_block(blocker_peer_id)       → credits shots_blocked if defender intercepts a pending shot
 #   credit_assists(scorer_id)       → reads recent_carriers for 2 assists
 #   tick(delta)                     → clears pending after timeout
 #
@@ -71,12 +71,13 @@ func on_shot_started(shooter_peer_id: int) -> void:
 	_shot_on_goal_counted = false
 
 
-# Called when a skater body-blocks the puck while a shot is in flight. If the
-# blocker is on the defending team, credit the blocker with a blocked shot and
-# clear the pending shot — the puck has been intercepted before reaching the
-# goalie. Same-team body contact (deflecting your own team's shot) doesn't
-# count. Returns true if a stat was credited.
-func on_body_block(blocker_peer_id: int) -> bool:
+# Called when a skater (blade or body) intercepts a loose puck while a shot is
+# in flight. If the blocker is on the defending team, credit the blocker with a
+# blocked shot and clear the pending shot — the puck has been intercepted
+# before reaching the goalie. Same-team contact (a tip-in attempt) doesn't
+# count and is left for `on_deflection` to record. Returns true if a stat was
+# credited.
+func on_block(blocker_peer_id: int) -> bool:
 	if blocker_peer_id == -1:
 		return false
 	if _shooter_peer_id == -1:

@@ -223,12 +223,16 @@ func test_one_timer_credits_receiver_not_passer() -> void:
 
 
 # ── Shots blocked ────────────────────────────────────────────────────────────
+# `on_block` is called by GameManager for both blade deflections and body
+# blocks via `puck_touched_while_loose`. The differentiator that decides
+# whether it's a block (credit + clear pending) vs a tip-in (continue pending)
+# is the team of the toucher relative to the shooter.
 
-func test_body_block_by_defender_credits_shots_blocked() -> void:
+func test_block_by_defender_credits_shots_blocked() -> void:
 	var shooter := _add_player(10, 0)
 	var blocker := _add_player(20, 1)
 	tracker.on_shot_started(10)
-	var credited: bool = tracker.on_body_block(20)
+	var credited: bool = tracker.on_block(20)
 	assert_true(credited)
 	assert_eq(blocker.stats.shots_blocked, 1)
 	assert_eq(shooter.stats.shots_blocked, 0)
@@ -236,28 +240,28 @@ func test_body_block_by_defender_credits_shots_blocked() -> void:
 			"defender intercept ends the shot — pending state cleared")
 
 
-func test_body_block_by_teammate_does_not_credit() -> void:
+func test_block_by_teammate_does_not_credit() -> void:
 	_add_player(10, 0)
 	var teammate := _add_player(11, 0)
 	tracker.on_shot_started(10)
-	var credited: bool = tracker.on_body_block(11)
+	var credited: bool = tracker.on_block(11)
 	assert_false(credited)
 	assert_eq(teammate.stats.shots_blocked, 0)
 	assert_true(tracker.has_pending_shot(),
-			"same-team body contact doesn't end the pending shot")
+			"same-team contact (tip-in attempt) doesn't end the pending shot")
 
 
-func test_body_block_without_pending_shot_is_noop() -> void:
+func test_block_without_pending_shot_is_noop() -> void:
 	var blocker := _add_player(20, 1)
-	var credited: bool = tracker.on_body_block(20)
+	var credited: bool = tracker.on_block(20)
 	assert_false(credited)
 	assert_eq(blocker.stats.shots_blocked, 0)
 
 
-func test_body_block_with_invalid_peer_is_noop() -> void:
+func test_block_with_invalid_peer_is_noop() -> void:
 	_add_player(10, 0)
 	tracker.on_shot_started(10)
-	assert_false(tracker.on_body_block(-1))
+	assert_false(tracker.on_block(-1))
 	assert_true(tracker.has_pending_shot())
 
 

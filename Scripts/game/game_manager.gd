@@ -466,13 +466,10 @@ func _wire_sound_signals() -> void:
 			var spd: float = puck.linear_velocity.length()
 			SoundManager.play_world(SoundManager.Sound.PUCK_DEFLECTION, puck.get_puck_position(), _puck_speed_volume(spd), 0.06)
 			NetworkManager.send_deflection_to_all(puck.get_puck_position()))
-		puck.puck_body_blocked.connect(func(s: Skater) -> void:
+		puck.puck_body_blocked.connect(func(_s: Skater) -> void:
 			var spd: float = puck.linear_velocity.length()
 			SoundManager.play_world(SoundManager.Sound.PUCK_BODY_BLOCK, puck.get_puck_position(), _puck_speed_volume(spd), 0.07)
-			NetworkManager.send_body_block_to_all(puck.get_puck_position())
-			var blocker_pid: int = _registry.resolve_peer_id(s)
-			if _shot_tracker.on_body_block(blocker_pid):
-				_sync_stats_to_clients())
+			NetworkManager.send_body_block_to_all(puck.get_puck_position()))
 		puck_controller.puck_stripped_from.connect(func(_pid: int) -> void:
 			var spd: float = puck.linear_velocity.length()
 			SoundManager.play_world(SoundManager.Sound.PUCK_STRIP, puck.get_puck_position(), _puck_speed_volume(spd), 0.06)
@@ -665,6 +662,9 @@ func _on_server_puck_stripped_from(peer_id: int) -> void:
 
 func _on_server_puck_touched_while_loose(peer_id: int) -> void:
 	_state_machine.notify_icing_contact()
+	if _shot_tracker.on_block(peer_id):
+		_sync_stats_to_clients()
+		return
 	_shot_tracker.on_deflection(peer_id)
 
 
