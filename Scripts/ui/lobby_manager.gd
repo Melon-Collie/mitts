@@ -580,21 +580,19 @@ func _update_start_btn() -> void:
 	if _start_btn == null:
 		return
 	# Spectators don't have a controller to ready; their ready state is ignored
-	# so the host can start with a non-empty spectator pool.
+	# so the host can start with a non-empty spectator pool. Host alone (no
+	# non-host player peers) can also start — useful for solo testing.
 	var spectator_peers: Dictionary = {}
 	for k: int in _lobby_slots:
 		if _is_spectator_key(k):
 			spectator_peers[_lobby_slots[k].peer_id] = true
-	var has_player: bool = false
 	var all_ready: bool = true
 	for pid: int in _ready_states:
 		if spectator_peers.has(pid):
 			continue
-		has_player = true
 		if not _ready_states[pid]:
 			all_ready = false
 			break
-	all_ready = all_ready and has_player
 	_start_btn.disabled = not all_ready
 	_start_btn.modulate = Color(1, 1, 1, 1.0) if all_ready else Color(1, 1, 1, 0.5)
 
