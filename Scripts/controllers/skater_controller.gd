@@ -478,7 +478,7 @@ func _enter_slapper_charge(input: InputState) -> void:
 			skater.set_slapper_indicator(true, slapper_zone_offset_x, slapper_zone_offset_z, slapper_zone_radius)
 	if show_one_timer_indicator:
 		skater.set_charge_ring_visible(true)
-		skater.set_slapshot_arrow(true, slapper_zone_offset_x, slapper_zone_offset_z)
+		skater.set_slapshot_arrow(true, slapper_zone_offset_x, slapper_zone_offset_z, slapper_zone_radius)
 		skater.update_slapshot_arrow_direction(skater.slapper_aim_dir)
 
 func _get_charge_direction() -> Vector3:

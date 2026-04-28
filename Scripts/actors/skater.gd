@@ -109,6 +109,7 @@ var _charge_ring_mat: ShaderMaterial = null
 var _chevron_mesh: MeshInstance3D = null
 var _name_label: Label3D = null
 var _slapper_arrow_mesh: MeshInstance3D = null
+var _slapper_ring_mesh: MeshInstance3D = null
 var _slapper_arrow_root: Node3D = null
 var _slapper_indicator: Node3D = null
 var _slapper_indicator_mat: StandardMaterial3D = null
@@ -146,7 +147,7 @@ const _NAME_RADIUS: float = RING_OUTER_R + 0.10
 # Chevron sits on the screen-down axis just past the name, on the side
 # OPPOSITE the player's stick (so it's never tucked behind the blade visual).
 const _CHEVRON_RADIUS: float = RING_OUTER_R + 0.10
-const _CHEVRON_OFFSET_DEG: float = 30.0
+const _CHEVRON_OFFSET_DEG: float = 60.0
 
 # Charge ring shader: angle-mask + tri-color blend. Fill goes clockwise from 12
 # o'clock as viewed from above. UV.x of the procedural ring encodes 0..1
@@ -356,29 +357,37 @@ func _ready() -> void:
 	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_name_label)
 
-	# Slapper one-timer reticle. Composed of a fixed centre crosshair (does NOT
-	# rotate with aim) and a rotating arrow + partial-arc ring composite. The
-	# composite is rebuilt each tick from update_slapper_indicator_convergence:
-	# the ring shrinks as the puck approaches the zone centre, and its gap
-	# stays glued to the arrow tail so the whole shape reads as one continuous
-	# outline (head → shoulders → shaft sides curving smoothly into the arc).
+	# Slapper one-timer reticle. The parent _slapper_indicator carries the zone
+	# offset + radius scale and is left always visible — the individual child
+	# meshes are toggled instead. The reticle (centre crosshair) and ring
+	# (partial-arc) only show in one-timer mode (gated by set_slapper_indicator);
+	# the arrow shows whenever a slapshot is being charged (gated by
+	# set_slapshot_arrow). Arrow + ring share `_slapper_arrow_root`'s rotation
+	# so the ring's gap stays glued to the arrow tail.
 	_slapper_indicator = Node3D.new()
 	_slapper_indicator.name = "SlapperIndicator"
-	_slapper_indicator.visible = false
 	add_child(_slapper_indicator)
 	_slapper_indicator_mat = _make_hud_ice_material()
 
 	_slapper_reticle_node = _create_reticle_mesh(_RETICLE_HALF_LENGTH)
 	_slapper_reticle_node.material_override = _slapper_indicator_mat
+	_slapper_reticle_node.visible = false
 	_slapper_indicator.add_child(_slapper_reticle_node)
 
 	_slapper_arrow_root = Node3D.new()
 	_slapper_arrow_root.name = "SlapperArrow"
-	_slapper_arrow_root.visible = false
 	_slapper_indicator.add_child(_slapper_arrow_root)
+
 	_slapper_arrow_mesh = MeshInstance3D.new()
 	_slapper_arrow_mesh.material_override = _slapper_indicator_mat
+	_slapper_arrow_mesh.visible = false
 	_slapper_arrow_root.add_child(_slapper_arrow_mesh)
+
+	_slapper_ring_mesh = MeshInstance3D.new()
+	_slapper_ring_mesh.material_override = _slapper_indicator_mat
+	_slapper_ring_mesh.visible = false
+	_slapper_arrow_root.add_child(_slapper_ring_mesh)
+
 	update_slapper_indicator_convergence(1.0)
 
 	var vfx := SkaterVFX.new()
@@ -574,13 +583,14 @@ func _append_partial_ring(
 			normals.append(Vector3.UP)
 		indices.append_array([base, base + 1, base + 2, base + 1, base + 3, base + 2])
 
-# Rebuild the arrow + partial-arc ring composite mesh. Called from
-# update_slapper_indicator_convergence whenever the ring radius changes, and
-# from set_slapper_indicator when the zone radius changes (so the unit-space
-# stroke thickness can be recomputed). All math is unit-space; the parent
-# _slapper_indicator scale carries the conversion to world meters.
+# Rebuild the arrow shaft/head outline AND the partial-arc ring as two
+# separate meshes (sibling MeshInstance3D nodes under the same rotating
+# `_slapper_arrow_root`). Called from update_slapper_indicator_convergence
+# whenever the ring radius changes, and from set_slapper_indicator /
+# set_slapshot_arrow when the zone radius changes. All math is unit-space;
+# the parent _slapper_indicator scale carries the conversion to world meters.
 func _rebuild_slapper_geometry() -> void:
-	if _slapper_arrow_mesh == null:
+	if _slapper_arrow_mesh == null or _slapper_ring_mesh == null:
 		return
 	var r: float = _slapper_current_ring_scale
 	var w: float = _ARROW_SHAFT_HALF_W_UNIT
@@ -592,53 +602,60 @@ func _rebuild_slapper_geometry() -> void:
 	var head_half_w: float = _ARROW_HEAD_HALF_W_UNIT
 	var shoulder_z: float = tip_z - head_len
 
-	var verts := PackedVector3Array()
-	var normals := PackedVector3Array()
-	var indices := PackedInt32Array()
-
-	# Arrow tail anchors on the live ring radius. The tail point sits at
-	# x = ±w (shaft half-width); for that x to lie ON the ring, its z must be
-	# sqrt(r² - w²) — same value the ring arc reaches at angle asin(w/r), so
-	# the shaft side and the arc meet at the same point with no daylight.
-	# Skip shaft sides when r ≤ w (degenerate ring) or when the tail would
-	# already be past the arrow shoulder.
-	if r > w:
-		var tail_z: float = sqrt(r * r - w * w)
-		if tail_z < shoulder_z:
-			for sign_x: float in [-1.0, 1.0]:
-				var shaft_tail := Vector2(sign_x * w, tail_z)
-				var shaft_top  := Vector2(sign_x * w, shoulder_z)
-				_append_strip(verts, normals, indices, shaft_tail, shaft_top, t_unit)
-	# Shoulders + head diagonals always drawn (arrowhead position is fixed).
+	# ── Arrow mesh (shaft sides + shoulders + head diagonals) ──
+	# Shaft tail anchors on the live ring radius: at x = ±w, z = sqrt(r² - w²)
+	# so the shaft side meets the ring arc with no daylight. When the ring is
+	# hidden (regular slapshot) we still draw the shaft from z = 0 so the
+	# arrow looks complete.
+	var arrow_verts := PackedVector3Array()
+	var arrow_normals := PackedVector3Array()
+	var arrow_indices := PackedInt32Array()
+	var shaft_base_z: float = 0.0
+	if _slapper_ring_mesh.visible and r > w:
+		shaft_base_z = sqrt(r * r - w * w)
+	if shaft_base_z < shoulder_z:
+		for sign_x: float in [-1.0, 1.0]:
+			var shaft_tail := Vector2(sign_x * w, shaft_base_z)
+			var shaft_top  := Vector2(sign_x * w, shoulder_z)
+			_append_strip(arrow_verts, arrow_normals, arrow_indices, shaft_tail, shaft_top, t_unit)
 	var tip := Vector2(0.0, tip_z)
 	for sign_x_h: float in [-1.0, 1.0]:
 		var shoulder_in  := Vector2(sign_x_h * w, shoulder_z)
 		var shoulder_out := Vector2(sign_x_h * head_half_w, shoulder_z)
-		_append_strip(verts, normals, indices, shoulder_in, shoulder_out, t_unit)
-		_append_strip(verts, normals, indices, shoulder_out, tip, t_unit)
+		_append_strip(arrow_verts, arrow_normals, arrow_indices, shoulder_in, shoulder_out, t_unit)
+		_append_strip(arrow_verts, arrow_normals, arrow_indices, shoulder_out, tip, t_unit)
+	_slapper_arrow_mesh.mesh = _build_array_mesh(arrow_verts, arrow_normals, arrow_indices)
 
-	# Partial-arc ring with a gap at the arrow tail. Gap half-angle satisfies
-	# r * sin(gap_half) = w so the arc endpoints meet the shaft sides. Skip
-	# the ring entirely if the radius is too small to admit the gap.
+	# ── Ring mesh (partial-arc annulus with gap on the arrow tail side) ──
+	# Gap half-angle satisfies r * sin(gap_half) = w so the arc endpoints
+	# meet the shaft sides. Sweep CCW from +gap_half the long way around to
+	# TAU - gap_half. Skip when the radius is too small to admit the gap.
+	var ring_verts := PackedVector3Array()
+	var ring_normals := PackedVector3Array()
+	var ring_indices := PackedInt32Array()
 	if r > w + t_unit:
 		var gap_half: float = asin(clampf(w / r, -1.0, 1.0))
 		var sweep_total: float = TAU - 2.0 * gap_half
 		var seg_count: int = max(8, int(ceil(_RING_SEGMENTS * sweep_total / TAU)))
-		# Sweep CCW from +gap_half (one shaft side, +X side at angle > 0) the
-		# long way around to TAU - gap_half (other shaft side at angle < 2π).
-		_append_partial_ring(verts, normals, indices,
+		_append_partial_ring(ring_verts, ring_normals, ring_indices,
 				r - t_unit, r,
 				gap_half, TAU - gap_half, seg_count)
+	_slapper_ring_mesh.mesh = _build_array_mesh(ring_verts, ring_normals, ring_indices)
 
+func _build_array_mesh(
+		verts: PackedVector3Array,
+		normals: PackedVector3Array,
+		indices: PackedInt32Array) -> ArrayMesh:
+	var mesh := ArrayMesh.new()
+	if verts.size() == 0:
+		return mesh
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
 	arrays[Mesh.ARRAY_NORMAL] = normals
 	arrays[Mesh.ARRAY_INDEX] = indices
-	var mesh := ArrayMesh.new()
-	if verts.size() > 0:
-		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	_slapper_arrow_mesh.mesh = mesh
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
 
 # Append an XZ-plane quad (Y = 0) defined by 4 corner XZ pairs. Triangulated
 # fan-style: (0,1,2), (0,2,3). Caller must supply corners in CW or CCW order.
@@ -886,17 +903,37 @@ func trigger_charge_lost_flash() -> void:
 	if _charge_ring_mesh != null:
 		_charge_ring_mesh.visible = true
 
-# Local-only: toggle visibility of the slapshot direction arrow. Its position
-# is fixed at the indicator origin (the parent _slapper_indicator already
-# carries the zone offset and radius scale), so the offset args are unused
-# here but kept for backward compatibility with the controller call site.
-func set_slapshot_arrow(active: bool, _offset_x: float = 0.0, _offset_z: float = 0.0) -> void:
-	if _slapper_arrow_root == null:
+# Apply the slapshot zone offset + radius scale to the parent indicator.
+# Called from both set_slapper_indicator and set_slapshot_arrow so either
+# entry point can position the reticle correctly.
+func _apply_slapshot_zone_transform(offset_x: float, offset_z: float, radius: float) -> void:
+	var blade_side_sign: float = -1.0 if is_left_handed else 1.0
+	_slapper_indicator.position = Vector3(blade_side_sign * offset_x, 0.0, offset_z)
+	_slapper_indicator.scale = Vector3(radius, 1.0, radius)
+	_slapper_zone_radius_cached = radius
+	# Counter-scale the centre crosshair so it stays at fixed world size
+	# regardless of the parent indicator's radius scale.
+	if _slapper_reticle_node != null:
+		var inv: float = 1.0 / max(radius, 0.001)
+		_slapper_reticle_node.scale = Vector3(inv, 1.0, inv)
+
+# Toggle the slapshot direction arrow. The parent _slapper_indicator stays
+# always visible — only individual child meshes (arrow, ring, reticle) are
+# toggled. The arrow shows whenever a slapshot is being charged (regular or
+# one-timer); the ring + reticle show only in one-timer mode.
+func set_slapshot_arrow(active: bool, offset_x: float = 0.0, offset_z: float = 0.0, radius: float = -1.0) -> void:
+	if _slapper_arrow_mesh == null:
 		return
-	_slapper_arrow_root.visible = active
+	if not active:
+		_slapper_arrow_mesh.visible = false
+		return
+	var r: float = radius if radius > 0.0 else _slapper_zone_radius_cached
+	_apply_slapshot_zone_transform(offset_x, offset_z, r)
+	_slapper_arrow_mesh.visible = true
+	_rebuild_slapper_geometry()
 
 func update_slapshot_arrow_direction(world_dir: Vector3) -> void:
-	if _slapper_arrow_root == null or not _slapper_arrow_root.visible:
+	if _slapper_arrow_root == null or not _slapper_arrow_mesh.visible:
 		return
 	if world_dir.length() < 0.001:
 		return
@@ -909,20 +946,18 @@ func update_slapshot_arrow_direction(world_dir: Vector3) -> void:
 	# frame; the gap stays glued to the arrow tail.
 	_slapper_arrow_root.rotation.y = atan2(local_dir.x, local_dir.z)
 
+# Toggle the one-timer ring + centre crosshair (one-timer specific). The
+# arrow is controlled separately via set_slapshot_arrow.
 func set_slapper_indicator(active: bool, offset_x: float = 0.0, offset_z: float = 0.0, radius: float = 0.5) -> void:
-	if not active:
-		_slapper_indicator.visible = false
+	if _slapper_ring_mesh == null or _slapper_reticle_node == null:
 		return
-	var blade_side_sign: float = -1.0 if is_left_handed else 1.0
-	_slapper_indicator.position = Vector3(blade_side_sign * offset_x, 0.0, offset_z)
-	_slapper_indicator.scale = Vector3(radius, 1.0, radius)
-	_slapper_indicator.visible = true
-	_slapper_zone_radius_cached = radius
-	# Counter-scale the centre crosshair so it stays the same visual size
-	# regardless of the parent indicator's radius scale.
-	if _slapper_reticle_node != null:
-		var inv: float = 1.0 / max(radius, 0.001)
-		_slapper_reticle_node.scale = Vector3(inv, 1.0, inv)
+	if not active:
+		_slapper_ring_mesh.visible = false
+		_slapper_reticle_node.visible = false
+		return
+	_apply_slapshot_zone_transform(offset_x, offset_z, radius)
+	_slapper_ring_mesh.visible = true
+	_slapper_reticle_node.visible = true
 	update_slapper_indicator_convergence(1.0)
 
 # Kept as no-ops so the existing controller signature compiles. The reticle is
@@ -1280,7 +1315,10 @@ func _apply_ghost_visual(ghost: bool) -> void:
 		_name_label.visible = not ghost
 	if _charge_ring_mesh != null and ghost:
 		_charge_ring_mesh.visible = false
-	if _slapper_indicator != null and ghost:
-		_slapper_indicator.visible = false
-	if _slapper_arrow_root != null and ghost:
-		_slapper_arrow_root.visible = false
+	if ghost:
+		if _slapper_arrow_mesh != null:
+			_slapper_arrow_mesh.visible = false
+		if _slapper_ring_mesh != null:
+			_slapper_ring_mesh.visible = false
+		if _slapper_reticle_node != null:
+			_slapper_reticle_node.visible = false
