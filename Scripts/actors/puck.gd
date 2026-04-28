@@ -3,11 +3,14 @@ extends RigidBody3D
 
 signal puck_released()
 signal puck_stripped(ex_carrier: Skater)
-signal puck_touched_loose(skater: Skater)  # any loose-puck touch (deflection, body block)
+signal puck_touched_loose(skater: Skater)  # blade redirect (deflection, tip-in)
+signal puck_body_blocked(skater: Skater)   # puck absorbed by a player's body
 signal puck_touched_goalie(goalie: Goalie)  # puck contacted a goalie StaticBody3D part while uncarried
 signal puck_touched_post  # puck contacted any HockeyGoal geometry while uncarried
+signal puck_hit_boards     # uncarried puck struck rink boards at meaningful speed
+signal puck_hit_goal_body  # uncarried puck struck net panel or skirt (non-pipe goal geometry)
 
-@export var max_speed: float = 30.0
+@export var max_speed: float = 38.0
 @export var reattach_cooldown: float = 0.5
 @export var ice_height: float = 0.05
 @export var pickup_max_speed: float = 8.0
@@ -21,20 +24,23 @@ signal puck_touched_post  # puck contacted any HockeyGoal geometry while uncarri
 @export var poke_checker_cooldown: float = 0.1
 @export var body_check_strip_threshold: float = 6.0  # weight × approach_speed needed to strip
 @export var body_check_puck_speed: float = 5.0
+@export var hit_pickup_cooldown: float = 0.6              # seconds victim cannot pick up after a hard hit
+@export var hit_pickup_cooldown_threshold: float = 6.0    # weight × approach needed to apply hit pickup cooldown
 @export var body_block_dampen: float = 0.5
 @export var body_block_cooldown: float = 0.1
+@export var max_height: float = 3.0
 
 var carrier: Skater = null
 var pickup_locked: bool = false
-var _cooldown_timers: Dictionary = {}  # Skater -> float
+var _cooldown_timers: Dictionary[Skater, float] = {}
 var _is_server: bool = false
 var _pending_reset: bool = false
 var _clamp_at_goal_line: bool = false
-# Full velocity stored by release() when direction.y > 0, applied by
-# _integrate_forces. Jolt does not preserve linear_velocity set on a static
-# (frozen) body when it activates as dynamic — state.linear_velocity in the
-# first _integrate_forces call is zero. Storing and applying the full vector
-# here ensures XYZ all reach the simulation on the first dynamic step.
+# Full velocity stored by release() for every shot, applied by _integrate_forces.
+# Jolt does not preserve linear_velocity set on a frozen body when it activates
+# as dynamic — state.linear_velocity on the first dynamic step is zero. Storing
+# and applying the full vector here ensures XYZ reach the simulation correctly.
+# For elevated shots (y > 0) _integrate_forces also writes the elevated Y position.
 var _pending_elevation_vel: Vector3 = Vector3.ZERO
 # Belt-and-suspenders for _physics_process: skip is_airborne() zeroing the
 # same frame as release() so _pending_elevation_vel reaches _integrate_forces.
@@ -51,6 +57,7 @@ func _ready() -> void:
 	# Mask = LAYER_WALLS only: bounces off boards + goalie bodies, not skater bodies.
 	collision_layer = Constants.LAYER_PUCK
 	collision_mask  = Constants.MASK_PUCK
+	continuous_cd = true
 	process_physics_priority = 1  # Run after Skater.move_and_slide so blade world pos is current
 	contact_monitor = true
 	max_contacts_reported = 4
@@ -115,7 +122,10 @@ func is_on_cooldown(skater: Skater) -> bool:
 	return _cooldown_timers.get(skater, 0.0) > 0.0
 
 func _set_cooldown(skater: Skater, duration: float) -> void:
-	_cooldown_timers[skater] = duration
+	# Take the max with any existing entry so a shorter cooldown set immediately
+	# after a longer one (e.g. body_block_cooldown 0.1s right after reattach 0.5s)
+	# never shortens the in-flight cooldown.
+	_cooldown_timers[skater] = maxf(_cooldown_timers.get(skater, 0.0), duration)
 
 func set_skater_cooldown(skater: Skater, duration: float) -> void:
 	_set_cooldown(skater, duration)
@@ -173,13 +183,17 @@ func on_body_block(blocker: Skater, dampen_override: float = -1.0) -> void:
 	linear_velocity = PuckCollisionRules.body_block_velocity(
 			linear_velocity, contact_normal, effective_dampen)
 	_set_cooldown(blocker, body_block_cooldown)
-	puck_touched_loose.emit(blocker)
+	puck_body_blocked.emit(blocker)
 
 func on_body_check(checker: Skater, victim: Skater, impact_force: float, hit_direction: Vector3) -> void:
 	if not _is_server:
 		return
 	if checker.is_ghost or victim.is_ghost:
 		return
+	if impact_force < hit_pickup_cooldown_threshold:
+		return
+	# Hard hits temporarily deny the victim a pickup, even if they weren't carrying.
+	_set_cooldown(victim, hit_pickup_cooldown)
 	if carrier == null or carrier != victim:
 		return
 	if pickup_locked:
@@ -216,16 +230,15 @@ func apply_poke_check(checker_skater: Skater) -> void:
 
 func release(direction: Vector3, power: float) -> void:
 	var ex_carrier: Skater = carrier
-	# Set position, elevation, and velocity while still frozen so Jolt activates
-	# the body from the correct initial state. Writes on a live dynamic body are
-	# not guaranteed to be picked up for the first integration step.
+	# Set position while still frozen so Jolt activates from the correct state.
 	if ex_carrier != null:
 		global_position = ex_carrier.get_blade_contact_global()
 	if direction.y > 0:
 		global_position.y = ice_height + 0.1
-		_pending_elevation_vel = direction * power
 		_pending_elevation = true
-	linear_velocity = direction * power
+	else:
+		global_position.y = ice_height
+	_pending_elevation_vel = direction * power
 	clear_carrier()
 	if ex_carrier != null:
 		_set_cooldown(ex_carrier, reattach_cooldown)
@@ -256,8 +269,13 @@ func _on_body_entered(body: Node3D) -> void:
 		return
 	if body.get_parent() is Goalie:
 		puck_touched_goalie.emit(body.get_parent() as Goalie)
-	if body is HockeyGoal:
+	elif body is HockeyGoal:
 		puck_touched_post.emit()
+	elif body.get_parent() is HockeyGoal:
+		if linear_velocity.length() >= 1.0:
+			puck_hit_goal_body.emit()
+	elif body is StaticBody3D and linear_velocity.length() >= 1.0:
+		puck_hit_boards.emit()
 
 func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	if _pending_reset:
@@ -267,15 +285,19 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		state.angular_velocity = Vector3.ZERO
 		return
 	if not _pending_elevation_vel.is_zero_approx():
-		# Write the full velocity vector and elevated Y position directly into
-		# Jolt's physics state. Jolt does not carry linear_velocity set on a
-		# frozen body through to state.linear_velocity on the first dynamic step,
-		# so state.linear_velocity starts at zero — setting only .y left XZ dead.
+		# Write the full velocity vector directly into Jolt's physics state.
+		# Jolt zeros state.linear_velocity on the first dynamic step after a
+		# body unfreezes, so velocity set on a frozen body is lost without this.
 		state.linear_velocity = _pending_elevation_vel
-		state.transform.origin.y = ice_height + 0.1
+		if _pending_elevation_vel.y > 0.0:
+			state.transform.origin.y = ice_height + 0.1
 		_pending_elevation_vel = Vector3.ZERO
 	if state.linear_velocity.length() > max_speed:
 		state.linear_velocity = state.linear_velocity.normalized() * max_speed
+	if state.transform.origin.y > ice_height + max_height:
+		state.transform.origin.y = ice_height + max_height
+		if state.linear_velocity.y > 0.0:
+			state.linear_velocity.y = 0.0
 	if _clamp_at_goal_line:
 		var z: float = state.transform.origin.z
 		var goal_z: float = GameRules.GOAL_LINE_Z

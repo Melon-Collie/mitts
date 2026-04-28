@@ -7,6 +7,8 @@ var _res_row: HBoxContainer = null
 var _fs_check: CheckButton = null
 var _mute_check: CheckButton = null
 var _volume_slider: HSlider = null
+var _sfx_slider: HSlider = null
+var _ui_slider: HSlider = null
 var _res_btn: OptionButton = null
 var _tab_contents: Array[Control] = []
 var _tab_btns: Array[Button] = []
@@ -16,16 +18,22 @@ var _brightness_slider: HSlider = null
 var _sens_slider: HSlider = null
 var _sens_field: LineEdit = null
 var _attack_up_check: CheckButton = null
+var _camera_mode_btn: OptionButton = null
+var _fov_slider: HSlider = null
+var _fov_label: Label = null
+var _cam_dist_slider: HSlider = null
+var _cam_dist_label: Label = null
 var _apply_btn: Button = null
 var _original: Dictionary = {}
 var _listening_action: String = ""
 var _pending_bindings: Dictionary = {}
 var _binding_btns: Dictionary = {}
 var _conflict_label: Label = null
+var _export_status_label: Label = null
 
-const _WHITE  := Color(1.00, 1.00, 1.00, 1.00)
-const _DIM    := Color(0.62, 0.62, 0.68, 1.00)
-const _SEP    := Color(0.28, 0.28, 0.33, 1.00)
+const _WHITE  := MenuStyle.TEXT_BODY
+const _DIM    := MenuStyle.TEXT_DIM
+const _SEP    := MenuStyle.TEXT_SEP
 const _REBINDABLE_ACTIONS: Array = [
 	{"action": "move_up",        "label": "Move Up"},
 	{"action": "move_down",      "label": "Move Down"},
@@ -43,11 +51,20 @@ func _ready() -> void:
 	add_theme_constant_override("separation", 16)
 	alignment = BoxContainer.ALIGNMENT_CENTER
 
+	var close_row := HBoxContainer.new()
+	var close_spacer := Control.new()
+	close_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	close_row.add_child(close_spacer)
+	var close_btn := MenuStyle.close_button()
+	close_btn.pressed.connect(_on_cancel_pressed)
+	SoundManager.wire_button(close_btn)
+	close_row.add_child(close_btn)
+	add_child(close_row)
 	var title := Label.new()
 	title.text = "Options"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", _WHITE)
+	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
 	add_child(title)
 
 	add_child(_build_tab_switcher())
@@ -76,9 +93,14 @@ func _snapshot() -> Dictionary:
 		"fps_cap_index": PlayerPrefs.fps_cap_index,
 		"brightness": PlayerPrefs.brightness,
 		"master_volume": PlayerPrefs.master_volume,
+		"sfx_volume": PlayerPrefs.sfx_volume,
+		"ui_volume": PlayerPrefs.ui_volume,
 		"master_muted": PlayerPrefs.master_muted,
 		"mouse_sensitivity": PlayerPrefs.mouse_sensitivity,
 		"attack_up": PlayerPrefs.attack_up,
+		"camera_mode": PlayerPrefs.camera_mode,
+		"fov": PlayerPrefs.fov,
+		"camera_distance": PlayerPrefs.camera_distance,
 		"bindings": PlayerPrefs.bindings.duplicate(true),
 	}
 
@@ -90,9 +112,14 @@ func _read_controls() -> Dictionary:
 		"fps_cap_index": _fps_btn.selected,
 		"brightness": _brightness_slider.value,
 		"master_volume": _volume_slider.value,
+		"sfx_volume": _sfx_slider.value,
+		"ui_volume": _ui_slider.value,
 		"master_muted": _mute_check.button_pressed,
 		"mouse_sensitivity": _sens_slider.value,
 		"attack_up": _attack_up_check.button_pressed,
+		"camera_mode": _camera_mode_btn.selected,
+		"fov": _fov_slider.value,
+		"camera_distance": _cam_dist_slider.value,
 		"bindings": _pending_bindings.duplicate(true),
 	}
 
@@ -156,16 +183,7 @@ func _activate_tab(idx: int) -> void:
 		_apply_tab_style(_tab_btns[i], i == idx)
 
 func _apply_tab_style(btn: Button, active: bool) -> void:
-	var s := StyleBoxFlat.new()
-	s.set_corner_radius_all(0)
-	s.set_content_margin(SIDE_LEFT, 16)
-	s.set_content_margin(SIDE_RIGHT, 16)
-	s.set_content_margin(SIDE_TOP, 8)
-	s.set_content_margin(SIDE_BOTTOM, 8)
-	s.bg_color = Color(0.14, 0.14, 0.17, 1.0) if active else Color(0.0, 0.0, 0.0, 0.0)
-	for state: StringName in [&"normal", &"hover", &"pressed", &"focus"]:
-		btn.add_theme_stylebox_override(state, s)
-	btn.add_theme_color_override("font_color", _WHITE if active else _DIM)
+	MenuStyle.apply_tab_button(btn, active)
 
 func _build_video_tab() -> Control:
 	var box := VBoxContainer.new()
@@ -282,10 +300,11 @@ func _build_audio_tab() -> Control:
 	volume_row.add_theme_constant_override("separation", 12)
 
 	var volume_label := Label.new()
-	volume_label.text = "Volume:"
+	volume_label.text = "Master:"
 	volume_label.add_theme_font_size_override("font_size", 20)
 	volume_label.add_theme_color_override("font_color", _WHITE)
 	volume_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	volume_label.custom_minimum_size = Vector2(80, 0)
 	volume_row.add_child(volume_label)
 
 	_volume_slider = HSlider.new()
@@ -297,6 +316,46 @@ func _build_audio_tab() -> Control:
 	_volume_slider.value_changed.connect(_on_volume_changed)
 	volume_row.add_child(_volume_slider)
 	box.add_child(volume_row)
+
+	var sfx_row := HBoxContainer.new()
+	sfx_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	sfx_row.add_theme_constant_override("separation", 12)
+	var sfx_label := Label.new()
+	sfx_label.text = "SFX:"
+	sfx_label.add_theme_font_size_override("font_size", 20)
+	sfx_label.add_theme_color_override("font_color", _WHITE)
+	sfx_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	sfx_label.custom_minimum_size = Vector2(80, 0)
+	sfx_row.add_child(sfx_label)
+	_sfx_slider = HSlider.new()
+	_sfx_slider.min_value = 0.0
+	_sfx_slider.max_value = 1.0
+	_sfx_slider.step = 0.01
+	_sfx_slider.value = PlayerPrefs.sfx_volume
+	_sfx_slider.custom_minimum_size = Vector2(200, 32)
+	_sfx_slider.value_changed.connect(_on_volume_changed)
+	sfx_row.add_child(_sfx_slider)
+	box.add_child(sfx_row)
+
+	var ui_row := HBoxContainer.new()
+	ui_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	ui_row.add_theme_constant_override("separation", 12)
+	var ui_label := Label.new()
+	ui_label.text = "UI:"
+	ui_label.add_theme_font_size_override("font_size", 20)
+	ui_label.add_theme_color_override("font_color", _WHITE)
+	ui_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	ui_label.custom_minimum_size = Vector2(80, 0)
+	ui_row.add_child(ui_label)
+	_ui_slider = HSlider.new()
+	_ui_slider.min_value = 0.0
+	_ui_slider.max_value = 1.0
+	_ui_slider.step = 0.01
+	_ui_slider.value = PlayerPrefs.ui_volume
+	_ui_slider.custom_minimum_size = Vector2(200, 32)
+	_ui_slider.value_changed.connect(_on_volume_changed)
+	ui_row.add_child(_ui_slider)
+	box.add_child(ui_row)
 
 	var mute_row := HBoxContainer.new()
 	mute_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -427,6 +486,107 @@ func _build_game_tab() -> Control:
 	row.add_child(_attack_up_check)
 	box.add_child(row)
 
+	var cam_row := HBoxContainer.new()
+	cam_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	cam_row.add_theme_constant_override("separation", 12)
+
+	var cam_label := Label.new()
+	cam_label.text = "Camera:"
+	cam_label.add_theme_font_size_override("font_size", 20)
+	cam_label.add_theme_color_override("font_color", _WHITE)
+	cam_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	cam_row.add_child(cam_label)
+
+	_camera_mode_btn = OptionButton.new()
+	_camera_mode_btn.custom_minimum_size = Vector2(220, 48)
+	_camera_mode_btn.add_theme_font_size_override("font_size", 16)
+	for i: int in PlayerPrefs.CAMERA_MODE_LABELS.size():
+		_camera_mode_btn.add_item(PlayerPrefs.CAMERA_MODE_LABELS[i], i)
+	_camera_mode_btn.selected = PlayerPrefs.camera_mode
+	_camera_mode_btn.item_selected.connect(_on_camera_mode_selected)
+	cam_row.add_child(_camera_mode_btn)
+	box.add_child(cam_row)
+
+	var fov_row := HBoxContainer.new()
+	fov_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	fov_row.add_theme_constant_override("separation", 12)
+
+	var fov_label_static := Label.new()
+	fov_label_static.text = "FOV:"
+	fov_label_static.add_theme_font_size_override("font_size", 20)
+	fov_label_static.add_theme_color_override("font_color", _WHITE)
+	fov_label_static.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	fov_row.add_child(fov_label_static)
+
+	_fov_slider = HSlider.new()
+	_fov_slider.min_value = PlayerPrefs.FOV_MIN
+	_fov_slider.max_value = PlayerPrefs.FOV_MAX
+	_fov_slider.step = 1.0
+	_fov_slider.value = PlayerPrefs.fov
+	_fov_slider.custom_minimum_size = Vector2(160, 32)
+	_fov_slider.value_changed.connect(_on_fov_changed)
+	fov_row.add_child(_fov_slider)
+
+	_fov_label = Label.new()
+	_fov_label.text = "%d°" % int(PlayerPrefs.fov)
+	_fov_label.add_theme_font_size_override("font_size", 18)
+	_fov_label.add_theme_color_override("font_color", _DIM)
+	_fov_label.custom_minimum_size = Vector2(40, 0)
+	_fov_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	fov_row.add_child(_fov_label)
+	box.add_child(fov_row)
+
+	var dist_row := HBoxContainer.new()
+	dist_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	dist_row.add_theme_constant_override("separation", 12)
+
+	var dist_label_static := Label.new()
+	dist_label_static.text = "Camera Distance:"
+	dist_label_static.add_theme_font_size_override("font_size", 20)
+	dist_label_static.add_theme_color_override("font_color", _WHITE)
+	dist_label_static.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	dist_row.add_child(dist_label_static)
+
+	_cam_dist_slider = HSlider.new()
+	_cam_dist_slider.min_value = PlayerPrefs.CAMERA_DISTANCE_MIN
+	_cam_dist_slider.max_value = PlayerPrefs.CAMERA_DISTANCE_MAX
+	_cam_dist_slider.step = 0.05
+	_cam_dist_slider.value = PlayerPrefs.camera_distance
+	_cam_dist_slider.custom_minimum_size = Vector2(160, 32)
+	_cam_dist_slider.value_changed.connect(_on_cam_dist_changed)
+	dist_row.add_child(_cam_dist_slider)
+
+	_cam_dist_label = Label.new()
+	_cam_dist_label.text = "%.2fx" % PlayerPrefs.camera_distance
+	_cam_dist_label.add_theme_font_size_override("font_size", 18)
+	_cam_dist_label.add_theme_color_override("font_color", _DIM)
+	_cam_dist_label.custom_minimum_size = Vector2(48, 0)
+	_cam_dist_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	dist_row.add_child(_cam_dist_label)
+	box.add_child(dist_row)
+
+	var sep := HSeparator.new()
+	box.add_child(sep)
+
+	var colors_lbl := Label.new()
+	colors_lbl.text = "Team Colors"
+	colors_lbl.add_theme_font_size_override("font_size", 16)
+	colors_lbl.add_theme_color_override("font_color", _DIM)
+	colors_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(colors_lbl)
+
+	var export_btn := _make_button("Export Colors File...")
+	export_btn.pressed.connect(_on_export_colors_pressed)
+	box.add_child(export_btn)
+
+	_export_status_label = Label.new()
+	_export_status_label.add_theme_font_size_override("font_size", 13)
+	_export_status_label.add_theme_color_override("font_color", _DIM)
+	_export_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_export_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_export_status_label.custom_minimum_size = Vector2(308, 0)
+	box.add_child(_export_status_label)
+
 	return box
 
 # ---------------------------------------------------------------------------
@@ -458,6 +618,41 @@ func _on_brightness_changed(_value: float) -> void:
 
 func _on_attack_up_toggled(_pressed: bool) -> void:
 	_update_apply_state()
+
+func _on_camera_mode_selected(_idx: int) -> void:
+	_update_apply_state()
+
+func _on_fov_changed(value: float) -> void:
+	if _fov_label != null:
+		_fov_label.text = "%d°" % int(value)
+	_update_apply_state()
+
+func _on_cam_dist_changed(value: float) -> void:
+	if _cam_dist_label != null:
+		_cam_dist_label.text = "%.2fx" % value
+	_update_apply_state()
+
+func _on_export_colors_pressed() -> void:
+	const SRC: String = "res://data/team_colors.json"
+	const DST: String = "user://team_colors.json"
+	var src_file := FileAccess.open(SRC, FileAccess.READ)
+	if src_file == null:
+		_export_status_label.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3, 1.0))
+		_export_status_label.text = "Error: bundled colors file not found."
+		return
+	var content: String = src_file.get_as_text()
+	src_file.close()
+	var existed: bool = FileAccess.file_exists(DST)
+	var dst_file := FileAccess.open(DST, FileAccess.WRITE)
+	if dst_file == null:
+		_export_status_label.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3, 1.0))
+		_export_status_label.text = "Error: could not write to user data folder."
+		return
+	dst_file.store_string(content)
+	dst_file.close()
+	var global_path: String = ProjectSettings.globalize_path(DST)
+	_export_status_label.add_theme_color_override("font_color", _DIM)
+	_export_status_label.text = "%s:\n%s" % ["Overwrote" if existed else "Saved", global_path]
 
 func _on_sensitivity_changed(value: float) -> void:
 	if _sens_field != null:
@@ -564,9 +759,14 @@ func _on_apply_pressed() -> void:
 	PlayerPrefs.fps_cap_index = c.fps_cap_index
 	PlayerPrefs.brightness = c.brightness
 	PlayerPrefs.master_volume = c.master_volume
+	PlayerPrefs.sfx_volume = c.sfx_volume
+	PlayerPrefs.ui_volume = c.ui_volume
 	PlayerPrefs.master_muted = c.master_muted
 	PlayerPrefs.mouse_sensitivity = c.mouse_sensitivity
 	PlayerPrefs.attack_up = c.attack_up
+	PlayerPrefs.camera_mode = c.camera_mode
+	PlayerPrefs.fov = c.fov
+	PlayerPrefs.camera_distance = c.camera_distance
 	PlayerPrefs.bindings = (_pending_bindings as Dictionary).duplicate(true)
 	PlayerPrefs.apply_audio()
 	PlayerPrefs.apply_video()
@@ -585,9 +785,17 @@ func _on_cancel_pressed() -> void:
 	_fps_btn.selected = _original.fps_cap_index
 	_brightness_slider.value = _original.brightness
 	_volume_slider.value = _original.master_volume
+	_sfx_slider.value = _original.sfx_volume
+	_ui_slider.value = _original.ui_volume
 	_mute_check.set_pressed_no_signal(_original.master_muted)
 	_sens_slider.value = _original.mouse_sensitivity
 	_attack_up_check.set_pressed_no_signal(_original.attack_up)
+	if _camera_mode_btn != null:
+		_camera_mode_btn.selected = _original.camera_mode
+	if _fov_slider != null:
+		_fov_slider.value = _original.fov
+	if _cam_dist_slider != null:
+		_cam_dist_slider.value = _original.camera_distance
 	_listening_action = ""
 	_pending_bindings = (_original.get("bindings", {}) as Dictionary).duplicate(true)
 	_update_binding_btns()

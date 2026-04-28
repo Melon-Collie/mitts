@@ -22,6 +22,8 @@ const BLUE_LINE_Z: float = 7.29  # 64 ft from goal line to near edge + 0.15m to 
 const NET_HALF_WIDTH: float = 0.915      # half of goal opening — must match HockeyGoal post positions
 const NET_DEPTH: float = 1.02            # goal depth from goal line to back frame
 const NET_BACK_HALF_WIDTH: float = 1.02  # half-width at back of net (trapezoid wider end)
+const NET_HEIGHT: float = 1.22           # crossbar height — must match HockeyGoal.NET_HEIGHT
+const NET_PUCK_BUFFER: float = 0.10      # exclusion zone expansion beyond the physical net boundary
 
 # Rink dimensions (must match HockeyRink export values in the scene)
 const RINK_HALF_WIDTH: float     = 13.0   # half of 26 m
@@ -61,12 +63,23 @@ static func clamp_to_rink_inner(world_xz: Vector2) -> Vector2:
 # ── Puck ──────────────────────────────────────────────────────────────────────
 const PUCK_START_POS: Vector3 = Vector3(0, 0.05, 0)
 const ICE_FRICTION: float = 0.01
+# Seconds puck must remain fully outside the rink boundary before a faceoff is forced.
+const PUCK_OOB_FACEOFF_TIMEOUT: float = 3.0
 
 # ── Infractions ───────────────────────────────────────────────────────────────
 const ICING_GHOST_DURATION: float = 3.0  # seconds team stays ghosted after icing
 # End-zone faceoff dot Z offset from center (≈ 15 ft inside goal line).
 # Hybrid icing race measures which team's player is closer to this dot.
 const ICING_FACEOFF_DOT_Z: float = 22.1
+
+# Rule preset that gates which infractions are detected and how they're punished.
+#   OFF    — no offsides, no icing (free-for-all).
+#   ARCADE — offsides ghost the offending player; icing is ignored.
+#   NHL    — offsides + icing both detected; today they fall back to the ghost
+#            penalty as a stub for the future stoppage + faceoff implementation.
+enum RuleSet { OFF, ARCADE, NHL }
+const DEFAULT_RULE_SET: int = RuleSet.ARCADE
+const RULE_SET_NAMES: Array[String] = ["Off", "Arcade", "NHL"]
 
 # ── Players ───────────────────────────────────────────────────────────────────
 const MAX_PLAYERS: int = 6  # 3v3

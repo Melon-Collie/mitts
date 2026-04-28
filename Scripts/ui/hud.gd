@@ -9,7 +9,6 @@ var _phase_panel: PanelContainer
 var _phase_label: Label
 var _assist_label: Label
 var _phase_style: StyleBoxFlat
-var _elevation_panel: PanelContainer
 var _game_over_popup: CanvasLayer = null
 var _game_menu: CanvasLayer = null
 var _slot_grid: SlotGridPanel = null
@@ -18,7 +17,6 @@ var _options_container: Control = null
 var _toast_container: VBoxContainer = null
 var _home_sog_label: Label = null
 var _away_sog_label: Label = null
-var _local_skater: Skater = null
 var _score_0: int = 0
 var _score_1: int = 0
 var _home_badge_style: StyleBoxFlat = null
@@ -31,6 +29,7 @@ var _last_clock_pulse_second: int = -1
 var _confirm_popup: CanvasLayer = null
 var _confirm_label: Label = null
 var _confirm_callback: Callable = Callable()
+var _leave_container: Control = null
 var _rematch_btn: Button = null
 var _vote_label: Label = null
 var _rematch_votes: Dictionary = {}
@@ -44,10 +43,11 @@ const _SEP_COLOR  := Color(0.28, 0.28, 0.33, 1.00)
 
 func _ready() -> void:
 	GameManager.team_colors_ready.connect(_on_team_colors_ready)
+	_build_offscreen_indicators()
 	_build_scorebug()
 	_build_phase_banner()
-	_build_elevation_indicator()
 	_build_version_tag()
+	_build_bug_icon()
 	_build_game_over_popup()
 	_build_game_menu()
 	_build_confirm_popup()
@@ -74,7 +74,7 @@ func _ready() -> void:
 	GameManager.local_player_hit.connect(_on_local_player_hit)
 	GameManager.stats_updated.connect(func() -> void:
 		if _game_menu != null and _game_menu.visible and _slot_grid != null:
-			_slot_grid.refresh(GameManager.get_slot_roster(), multiplayer.get_unique_id(), _get_team_colors()))
+			_slot_grid.refresh(GameManager.get_slot_roster(), NetworkManager.local_peer_id(), _get_team_colors()))
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
@@ -88,6 +88,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_options_container.visible = false
 		elif _game_menu.visible and _slot_grid_container != null and _slot_grid_container.visible:
 			_slot_grid_container.visible = false
+		elif _game_menu.visible and _leave_container != null and _leave_container.visible:
+			_leave_container.visible = false
 		else:
 			_set_menu_open(not _game_menu.visible)
 		get_viewport().set_input_as_handled()
@@ -100,14 +102,8 @@ func _set_menu_open(open: bool) -> void:
 			_slot_grid_container.visible = false
 		if _options_container != null:
 			_options_container.visible = false
-
-func _process(_delta: float) -> void:
-	if _local_skater == null:
-		var record: PlayerRecord = GameManager.get_local_player()
-		if record:
-			_local_skater = record.skater
-	if _local_skater != null:
-		_elevation_panel.visible = _local_skater.is_elevated
+		if _leave_container != null:
+			_leave_container.visible = false
 
 # ---------------------------------------------------------------------------
 # Build helpers
@@ -140,7 +136,7 @@ func _build_scorebug() -> void:
 	away_row.add_theme_constant_override("separation", 8)
 	away_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	teams_vbox.add_child(away_row)
-	var away_badge := _team_badge("AWAY", PlayerRules.generate_primary_color(1))
+	var away_badge := _team_badge("AWAY", _initial_team_primary(1))
 	_away_badge_style = away_badge.get_theme_stylebox("panel") as StyleBoxFlat
 	_away_badge_label = away_badge.get_child(0) as Label
 	away_row.add_child(away_badge)
@@ -154,7 +150,7 @@ func _build_scorebug() -> void:
 	home_row.add_theme_constant_override("separation", 8)
 	home_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	teams_vbox.add_child(home_row)
-	var home_badge := _team_badge("HOME", PlayerRules.generate_primary_color(0))
+	var home_badge := _team_badge("HOME", _initial_team_primary(0))
 	_home_badge_style = home_badge.get_theme_stylebox("panel") as StyleBoxFlat
 	_home_badge_label = home_badge.get_child(0) as Label
 	home_row.add_child(home_badge)
@@ -249,34 +245,12 @@ func _build_phase_banner() -> void:
 	_assist_label.visible = false
 	vbox.add_child(_assist_label)
 
-func _build_elevation_indicator() -> void:
-	var style := StyleBoxFlat.new()
-	style.bg_color = _DARK_BG
-	style.set_corner_radius_all(6)
-	style.set_content_margin_all(8)
-
-	_elevation_panel = PanelContainer.new()
-	_elevation_panel.add_theme_stylebox_override("panel", style)
-	_elevation_panel.anchor_left = 0.5
-	_elevation_panel.anchor_right = 0.5
-	_elevation_panel.anchor_top = 1.0
-	_elevation_panel.anchor_bottom = 1.0
-	_elevation_panel.offset_left = -60.0
-	_elevation_panel.offset_right = 60.0
-	_elevation_panel.offset_top = -48.0
-	_elevation_panel.offset_bottom = -16.0
-	_elevation_panel.visible = false
-	add_child(_elevation_panel)
-
-	var label := _lbl("\u2191 ELEVATED", 16, Color(0.4, 0.8, 1.0, 1.0))
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_elevation_panel.add_child(label)
+func _build_offscreen_indicators() -> void:
+	var indicators := OffScreenPlayerIndicators.new()
+	add_child(indicators)
 
 func _build_game_over_popup() -> void:
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = _DARK_BG
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -324,6 +298,14 @@ func _build_game_over_popup() -> void:
 		_show_confirm("Return to main menu?", GameManager.exit_to_main_menu))
 	vbox.add_child(menu_btn)
 
+	var exit_btn := _popup_button("Exit Game")
+	exit_btn.pressed.connect(func() -> void:
+		_show_confirm("Exit game?", func() -> void:
+			GameManager.on_scene_exit()
+			NetworkManager.reset()
+			get_tree().quit()))
+	vbox.add_child(exit_btn)
+
 	var root := Control.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.add_child(panel)
@@ -341,10 +323,7 @@ func _build_game_menu() -> void:
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = _DARK_BG
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -361,6 +340,10 @@ func _build_game_menu() -> void:
 	resume_btn.pressed.connect(func() -> void: _set_menu_open(false))
 	vbox.add_child(resume_btn)
 
+	_add_host_button(vbox, "Rematch", func() -> void:
+		_set_menu_open(false)
+		GameManager.reset_game())
+
 	var change_pos_btn := _popup_button("Change Position")
 	change_pos_btn.pressed.connect(_on_change_position_pressed)
 	vbox.add_child(change_pos_btn)
@@ -369,35 +352,9 @@ func _build_game_menu() -> void:
 	options_btn.pressed.connect(_on_options_pressed)
 	vbox.add_child(options_btn)
 
-	_add_host_button(vbox, "Rematch", func() -> void:
-		_set_menu_open(false)
-		GameManager.reset_game())
-	if NetworkManager.is_offline_mode:
-		_add_host_button(vbox, "Return to Menu", func() -> void:
-			_set_menu_open(false)
-			GameManager.exit_to_main_menu())
-	else:
-		_add_host_button(vbox, "Return to Lobby", func() -> void:
-			_set_menu_open(false)
-			GameManager.return_to_lobby())
-
-	var bug_btn := _popup_button("Report Bug")
-	bug_btn.pressed.connect(_on_bug_report_pressed)
-	vbox.add_child(bug_btn)
-
-	if not NetworkManager.is_offline_mode:
-		var quit_btn := _popup_button("Disconnect")
-		quit_btn.pressed.connect(func() -> void:
-			_show_confirm("Return to main menu?", GameManager.exit_to_main_menu))
-		vbox.add_child(quit_btn)
-
-	var exit_btn := _popup_button("Exit Game")
-	exit_btn.pressed.connect(func() -> void:
-		_show_confirm("Exit game?", func() -> void:
-			GameManager.on_scene_exit()
-			NetworkManager.reset()
-			get_tree().quit()))
-	vbox.add_child(exit_btn)
+	var leave_btn := _popup_button("Leave Game")
+	leave_btn.pressed.connect(func() -> void: _leave_container.visible = true)
+	vbox.add_child(leave_btn)
 
 	var root := Control.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -410,10 +367,7 @@ func _build_game_menu() -> void:
 	_game_menu.add_child(root)
 	add_child(_game_menu)
 
-	var slot_grid_panel_style := StyleBoxFlat.new()
-	slot_grid_panel_style.bg_color = _DARK_BG
-	slot_grid_panel_style.set_corner_radius_all(6)
-	slot_grid_panel_style.set_content_margin_all(32)
+	var slot_grid_panel_style := MenuStyle.panel()
 
 	var slot_panel := PanelContainer.new()
 	slot_panel.add_theme_stylebox_override("panel", slot_grid_panel_style)
@@ -422,10 +376,31 @@ func _build_game_menu() -> void:
 	slot_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 	slot_panel.custom_minimum_size = Vector2(960, 0)
 
+	var slot_vbox := VBoxContainer.new()
+	slot_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	slot_vbox.add_theme_constant_override("separation", 16)
+	slot_panel.add_child(slot_vbox)
+
+	var slot_close_row := HBoxContainer.new()
+	var slot_close_spacer := Control.new()
+	slot_close_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slot_close_row.add_child(slot_close_spacer)
+	var slot_close_btn := MenuStyle.close_button()
+	slot_close_btn.pressed.connect(func() -> void: _slot_grid_container.visible = false)
+	SoundManager.wire_button(slot_close_btn)
+	slot_close_row.add_child(slot_close_btn)
+	slot_vbox.add_child(slot_close_row)
+	var slot_title := Label.new()
+	slot_title.text = "Change Position"
+	slot_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	slot_title.add_theme_font_size_override("font_size", 24)
+	slot_title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
+	slot_vbox.add_child(slot_title)
+
 	_slot_grid = SlotGridPanel.new()
 	_slot_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_slot_grid.slot_selected.connect(_on_pause_slot_selected)
-	slot_panel.add_child(_slot_grid)
+	slot_vbox.add_child(_slot_grid)
 
 	var slot_grid_root := Control.new()
 	slot_grid_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -440,12 +415,10 @@ func _build_game_menu() -> void:
 	add_child(slot_grid_layer)
 
 	_build_options_overlay()
+	_build_leave_overlay()
 
 func _build_options_overlay() -> void:
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = _DARK_BG
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(32)
+	var panel_style := MenuStyle.panel()
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -469,16 +442,111 @@ func _build_options_overlay() -> void:
 	options_layer.add_child(root)
 	add_child(options_layer)
 
+func _build_leave_overlay() -> void:
+	var panel_style := MenuStyle.panel()
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", panel_style)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 16)
+	panel.add_child(vbox)
+
+	var close_row := HBoxContainer.new()
+	var close_spacer := Control.new()
+	close_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	close_row.add_child(close_spacer)
+	var close_btn := MenuStyle.close_button()
+	close_btn.pressed.connect(func() -> void: _leave_container.visible = false)
+	SoundManager.wire_button(close_btn)
+	close_row.add_child(close_btn)
+	vbox.add_child(close_row)
+	var title := Label.new()
+	title.text = "Leave Game"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
+	vbox.add_child(title)
+
+	if NetworkManager.is_offline_mode:
+		_add_host_button(vbox, "Return to Menu", func() -> void: GameManager.exit_to_main_menu())
+	else:
+		_add_host_button(vbox, "Return to Lobby", func() -> void: GameManager.return_to_lobby())
+
+	if not NetworkManager.is_offline_mode:
+		var disconnect_btn := _popup_button("Disconnect")
+		disconnect_btn.pressed.connect(func() -> void:
+			_show_confirm("Return to main menu?", GameManager.exit_to_main_menu))
+		vbox.add_child(disconnect_btn)
+
+	var exit_btn := _popup_button("Exit Game")
+	exit_btn.pressed.connect(func() -> void:
+		_show_confirm("Exit game?", func() -> void:
+			GameManager.on_scene_exit()
+			NetworkManager.reset()
+			get_tree().quit()))
+	vbox.add_child(exit_btn)
+
+
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(panel)
+
+	_leave_container = root
+	_leave_container.visible = false
+
+	var leave_layer := CanvasLayer.new()
+	leave_layer.layer = 21
+	leave_layer.add_child(root)
+	add_child(leave_layer)
+
+func _build_bug_icon() -> void:
+	var icon_tex := load("res://Assets/Icons/bug_report.svg") as Texture2D
+
+	var normal_style := StyleBoxFlat.new()
+	normal_style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+
+	var hover_style := StyleBoxFlat.new()
+	hover_style.bg_color = Color(1.0, 1.0, 1.0, 0.08)
+	hover_style.set_corner_radius_all(4)
+
+	var focus_style := StyleBoxFlat.new()
+	focus_style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+
+	var btn := Button.new()
+	btn.icon = icon_tex
+	btn.expand_icon = true
+	btn.custom_minimum_size = Vector2(28, 28)
+	btn.add_theme_stylebox_override("normal", normal_style)
+	btn.add_theme_stylebox_override("hover", hover_style)
+	btn.add_theme_stylebox_override("pressed", hover_style)
+	btn.add_theme_stylebox_override("focus", focus_style)
+	btn.add_theme_color_override("icon_normal_color", Color(0.7, 0.7, 0.75, 0.55))
+	btn.add_theme_color_override("icon_hover_color", Color(1.0, 1.0, 1.0, 0.90))
+	btn.add_theme_color_override("icon_pressed_color", Color(1.0, 1.0, 1.0, 0.70))
+	btn.tooltip_text = "Report Bug"
+	btn.anchor_left = 1.0
+	btn.anchor_right = 1.0
+	btn.anchor_top = 1.0
+	btn.anchor_bottom = 1.0
+	btn.offset_left = -36.0
+	btn.offset_right = -8.0
+	btn.offset_top = -52.0
+	btn.offset_bottom = -24.0
+	btn.pressed.connect(_on_bug_report_pressed)
+	add_child(btn)
+
 func _build_confirm_popup() -> void:
 	var overlay := ColorRect.new()
 	overlay.color = Color(0.0, 0.0, 0.0, 0.6)
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = _DARK_BG
-	panel_style.set_corner_radius_all(6)
-	panel_style.set_content_margin_all(36)
+	var panel_style := MenuStyle.panel(6, 36)
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", panel_style)
@@ -490,6 +558,16 @@ func _build_confirm_popup() -> void:
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	vbox.add_theme_constant_override("separation", 20)
 	panel.add_child(vbox)
+
+	var confirm_header := HBoxContainer.new()
+	vbox.add_child(confirm_header)
+	var confirm_spacer := Control.new()
+	confirm_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	confirm_header.add_child(confirm_spacer)
+	var confirm_close_btn := MenuStyle.close_button()
+	confirm_close_btn.pressed.connect(func() -> void: _confirm_popup.visible = false)
+	SoundManager.wire_button(confirm_close_btn)
+	confirm_header.add_child(confirm_close_btn)
 
 	_confirm_label = Label.new()
 	_confirm_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -688,6 +766,11 @@ func _on_goal_scored(scoring_team: Team, scorer_name: String, assist1_name: Stri
 	var ft := create_tween()
 	ft.tween_property(_flash_rect, "modulate:a", 0.0, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 
+func _initial_team_primary(team_id: int) -> Color:
+	if GameManager.teams.size() > team_id:
+		return TeamColorRegistry.get_colors(GameManager.teams[team_id].color_id, team_id).primary
+	return Color(0.5, 0.5, 0.5)  # placeholder; team_colors_ready overwrites
+
 func _on_team_colors_ready(home_primary: Color, home_secondary: Color, away_primary: Color, away_secondary: Color) -> void:
 	if _home_badge_style != null:
 		_home_badge_style.bg_color = home_primary
@@ -783,7 +866,7 @@ func _update_rematch_ui() -> void:
 	if _rematch_btn == null:
 		return
 	_rematch_btn.text = "Unvote" if _local_voted else "Rematch"
-	var total: int = multiplayer.get_peers().size() + 1
+	var total: int = NetworkManager.connected_peer_ids().size() + 1
 	var count: int = 0
 	for v: bool in _rematch_votes.values():
 		if v:
@@ -791,7 +874,7 @@ func _update_rematch_ui() -> void:
 	_vote_label.text = "%d / %d voted" % [count, total]
 
 func _check_rematch_unanimous() -> void:
-	var total: int = multiplayer.get_peers().size() + 1
+	var total: int = NetworkManager.connected_peer_ids().size() + 1
 	var count: int = 0
 	for v: bool in _rematch_votes.values():
 		if v:
@@ -813,7 +896,7 @@ func _on_options_pressed() -> void:
 func _on_change_position_pressed() -> void:
 	_slot_grid_container.visible = not _slot_grid_container.visible
 	if _slot_grid_container.visible:
-		_slot_grid.refresh(GameManager.get_slot_roster(), multiplayer.get_unique_id(), _get_team_colors())
+		_slot_grid.refresh(GameManager.get_slot_roster(), NetworkManager.local_peer_id(), _get_team_colors())
 
 func _on_pause_slot_selected(team_id: int, slot: int) -> void:
 	NetworkManager.send_request_slot_swap(team_id, slot)

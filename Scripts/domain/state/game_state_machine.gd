@@ -30,6 +30,7 @@ var num_periods: int       = GameRules.NUM_PERIODS
 var period_duration: float = GameRules.PERIOD_DURATION
 var ot_enabled: bool       = GameRules.OT_ENABLED
 var ot_duration: float     = GameRules.OT_DURATION
+var rule_set: int          = GameRules.DEFAULT_RULE_SET
 
 # ── Scores ───────────────────────────────────────────────────────────────────
 var scores: Array[int] = [0, 0]
@@ -114,6 +115,8 @@ func notify_icing_contact() -> void:
 # waved off if the icing team's player is closer.
 func check_icing_for_loose_puck(
 		puck_z: float, player_positions: Dictionary = {}) -> void:
+	if rule_set != GameRules.RuleSet.NHL:
+		return
 	if current_phase != GamePhase.Phase.PLAYING:
 		return
 	if icing_team_id != -1:
@@ -148,6 +151,12 @@ func compute_ghost_state(
 		puck_carrier_peer_id: int,
 		puck_position: Vector3) -> Dictionary:
 	var result: Dictionary = {}
+	# OFF preset disables every infraction-driven ghost.
+	if rule_set == GameRules.RuleSet.OFF:
+		_offside_peer_ids.clear()
+		for peer_id in player_positions:
+			result[peer_id] = false
+		return result
 	var is_active_play: bool = (current_phase == GamePhase.Phase.PLAYING
 			or current_phase == GamePhase.Phase.FACEOFF)
 	if not is_active_play:
@@ -285,12 +294,14 @@ func reset_all() -> void:
 	last_carrier_team_id = -1
 	_offside_peer_ids.clear()
 
-func apply_config(p_num_periods: int, p_period_duration: float, p_ot_enabled: bool, p_ot_duration: float) -> void:
+func apply_config(p_num_periods: int, p_period_duration: float, p_ot_enabled: bool, p_ot_duration: float,
+		p_rule_set: int = GameRules.DEFAULT_RULE_SET) -> void:
 	infinite_time    = (p_period_duration <= 0.0)
 	num_periods      = p_num_periods
 	period_duration  = p_period_duration
 	ot_enabled       = p_ot_enabled
 	ot_duration      = p_ot_duration
+	rule_set         = p_rule_set
 	time_remaining   = 0.0 if infinite_time else p_period_duration
 	period_scores    = _make_period_scores(num_periods)
 

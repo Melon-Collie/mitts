@@ -114,13 +114,16 @@ func test_disconnected_player_removed() -> void:
 	assert_true(sm.players.has(1))
 
 # ── Icing ────────────────────────────────────────────────────────────────────
+# Icing detection only runs in NHL rule mode; tests force it explicitly.
 
 func test_icing_triggered_by_loose_puck_past_goal_line() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
 	sm.notify_puck_carried(0, 5.0)
 	sm.check_icing_for_loose_puck(-30.0)
 	assert_eq(sm.icing_team_id, 0)
 
 func test_icing_expires_after_timer() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
 	sm.notify_puck_carried(0, 5.0)
 	sm.check_icing_for_loose_puck(-30.0)
 	assert_eq(sm.icing_team_id, 0)
@@ -128,6 +131,7 @@ func test_icing_expires_after_timer() -> void:
 	assert_eq(sm.icing_team_id, -1)
 
 func test_icing_cleared_by_opponent_pickup() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
 	sm.notify_puck_carried(0, 5.0)
 	sm.check_icing_for_loose_puck(-30.0)
 	assert_eq(sm.icing_team_id, 0)
@@ -135,6 +139,7 @@ func test_icing_cleared_by_opponent_pickup() -> void:
 	assert_eq(sm.icing_team_id, -1)
 
 func test_icing_not_cleared_by_offending_team_pickup() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
 	sm.notify_puck_carried(0, 5.0)
 	sm.check_icing_for_loose_puck(-30.0)
 	assert_eq(sm.icing_team_id, 0)
@@ -142,19 +147,34 @@ func test_icing_not_cleared_by_offending_team_pickup() -> void:
 	assert_eq(sm.icing_team_id, 0, "icing must not clear when offending team picks up puck")
 
 func test_icing_not_triggered_during_dead_puck_phase() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
 	sm.on_goal_scored(1)  # → GOAL_SCORED
 	sm.notify_puck_carried(0, 5.0)
 	sm.check_icing_for_loose_puck(-30.0)
 	assert_eq(sm.icing_team_id, -1, "icing only detects during PLAYING")
 
 func test_icing_not_triggered_from_attacking_half() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
 	sm.notify_puck_carried(0, -5.0)  # already past center
 	sm.check_icing_for_loose_puck(-30.0)
 	assert_eq(sm.icing_team_id, -1)
 
+func test_arcade_mode_skips_icing_detection() -> void:
+	sm.rule_set = GameRules.RuleSet.ARCADE
+	sm.notify_puck_carried(0, 5.0)
+	sm.check_icing_for_loose_puck(-30.0)
+	assert_eq(sm.icing_team_id, -1, "ARCADE must not detect icing")
+
+func test_off_mode_skips_icing_detection() -> void:
+	sm.rule_set = GameRules.RuleSet.OFF
+	sm.notify_puck_carried(0, 5.0)
+	sm.check_icing_for_loose_puck(-30.0)
+	assert_eq(sm.icing_team_id, -1, "OFF must not detect icing")
+
 # ── Hybrid icing race ────────────────────────────────────────────────────────
 
 func test_icing_waved_off_when_icing_team_closer() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
 	sm.register_remote_assigned_player(1, 0, 0)   # peer 1 → team 0
 	sm.register_remote_assigned_player(100, 0, 1) # peer 100 → team 1
 	sm.notify_puck_carried(0, 5.0)
@@ -165,6 +185,7 @@ func test_icing_waved_off_when_icing_team_closer() -> void:
 	assert_eq(sm.icing_team_id, -1, "icing team closer → waved off")
 
 func test_icing_confirmed_when_defending_team_closer() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
 	sm.register_remote_assigned_player(1, 0, 0)
 	sm.register_remote_assigned_player(100, 0, 1)
 	sm.notify_puck_carried(0, 5.0)
@@ -175,6 +196,7 @@ func test_icing_confirmed_when_defending_team_closer() -> void:
 	assert_eq(sm.icing_team_id, 0, "defending team closer → icing confirmed")
 
 func test_icing_confirmed_when_defending_team_slightly_closer() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
 	sm.register_remote_assigned_player(1, 0, 0)
 	sm.register_remote_assigned_player(100, 0, 1)
 	sm.notify_puck_carried(0, 5.0)
@@ -185,6 +207,7 @@ func test_icing_confirmed_when_defending_team_slightly_closer() -> void:
 	assert_eq(sm.icing_team_id, 0, "defending team slightly closer → icing confirmed")
 
 func test_icing_waved_off_team1_symmetric() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
 	sm.register_remote_assigned_player(1, 0, 0)   # team 0
 	sm.register_remote_assigned_player(100, 0, 1) # team 1
 	sm.register_remote_assigned_player(200, 1, 0) # team 0
@@ -217,6 +240,7 @@ func test_carrier_not_ghosted_by_offside() -> void:
 	assert_false(ghosts[1])
 
 func test_icing_team_all_ghosted() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
 	sm.register_remote_assigned_player(1, 0, 0)  # team 0
 	sm.notify_puck_carried(0, 5.0)
 	sm.check_icing_for_loose_puck(-30.0)
@@ -224,6 +248,14 @@ func test_icing_team_all_ghosted() -> void:
 		{1: Vector3(0, 1, 0)},      # position that wouldn't be offside
 		-1, Vector3.ZERO)
 	assert_true(ghosts[1])
+
+func test_off_mode_disables_offside_ghost() -> void:
+	sm.rule_set = GameRules.RuleSet.OFF
+	sm.register_remote_assigned_player(1, 0, 0)  # team 0
+	# Position that would be offside under ARCADE
+	var ghosts: Dictionary = sm.compute_ghost_state(
+		{1: Vector3(0, 1, -10)}, -1, Vector3(0, 0, 0))
+	assert_false(ghosts[1], "OFF must not ghost for offside")
 
 func test_no_ghosts_during_dead_puck_phase() -> void:
 	sm.register_remote_assigned_player(1, 0, 0)
@@ -260,6 +292,7 @@ func test_reset_scores_zeros_both_teams() -> void:
 	assert_eq(sm.scores[1], 0)
 
 func test_begin_faceoff_prep_clears_icing() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
 	sm.notify_puck_carried(0, 5.0)
 	sm.check_icing_for_loose_puck(-30.0)
 	assert_eq(sm.icing_team_id, 0)

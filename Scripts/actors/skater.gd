@@ -41,8 +41,8 @@ extends CharacterBody3D
 
 # ── Body Check Tuning ─────────────────────────────────────────────────────────
 @export var weight: float = 1.0                   # dimensionless — scale up for heavy players
-@export var body_check_restitution: float = 0.3   # fraction of approach speed bounced back to self
-@export var body_check_transfer: float = 0.8      # fraction of approach speed pushed to victim (before weight ratio)
+@export var body_check_restitution: float = 0.25  # fraction of approach speed bounced back to self
+@export var body_check_transfer: float = 0.45     # fraction of approach speed pushed to victim (before weight ratio)
 @export var body_check_brace_resistance: float = 0.4  # multiplier on transfer when the victim is braced (holding brake)
 
 # ── Body Block Tuning ─────────────────────────────────────────────────────────
@@ -104,6 +104,74 @@ signal body_check_impulse_applied(impulse: Vector3)
 signal body_block_hit(body: Node3D)
 # ── Runtime ───────────────────────────────────────────────────────────────────
 var _ring_mesh: MeshInstance3D = null
+var _charge_ring_mesh: MeshInstance3D = null
+var _charge_ring_mat: ShaderMaterial = null
+var _chevron_mesh: MeshInstance3D = null
+var _name_label: Label3D = null
+var _slapper_arrow_mesh: MeshInstance3D = null
+var _slapper_arrow_root: Node3D = null
+var _slapper_indicator: Node3D = null
+var _slapper_indicator_mat: StandardMaterial3D = null
+var _slapper_arm_nodes: Array[MeshInstance3D] = []
+const _SLAPPER_ARM_DIRS: Array[Vector3] = [
+	Vector3(1, 0, 0), Vector3(-1, 0, 0),
+	Vector3(0, 0, 1), Vector3(0, 0, -1),
+]
+# All arm constants are in unit (1 m) space; _slapper_indicator.scale applies radius.
+const _SLAPPER_ARM_LENGTH: float = 0.30  # fixed arm length; arms slide, don't resize
+
+# ── HUD geometry (ice-blue overlay system) ────────────────────────────────────
+# Slot ring sits just inside RING_OUTER_R. Charge ring is concentric, just
+# outside, with a small gap. Chevron and player name sit below the rings on
+# the +Z side (player's "back-of-feet" relative to camera).
+const RING_OUTER_R: float       = 0.45
+const CHARGE_RING_GAP: float    = 0.02
+const CHARGE_RING_OUTER_R: float = 0.49
+const CHARGE_RING_INNER_R: float = CHARGE_RING_OUTER_R - 0.04
+const _CHARGE_FULL_PULSE_HZ: float = 3.0
+const _CHARGE_LOST_FLASH_DURATION: float = 0.35
+
+# Player-name placement. Single billboarded Label3D sitting just outside the
+# slot ring on the screen-down axis. Kept simple — the curved per-character
+# arc didn't read well; close-and-readable beats stylish-and-tilted here.
+const _NAME_RADIUS: float = RING_OUTER_R + 0.10
+# Chevron sits on the screen-down axis just past the name, on the side
+# OPPOSITE the player's stick (so it's never tucked behind the blade visual).
+const _CHEVRON_RADIUS: float = RING_OUTER_R + 0.10
+const _CHEVRON_OFFSET_DEG: float = 90.0
+
+# Charge ring shader: angle-mask + tri-color blend. Fill goes clockwise from 12
+# o'clock as viewed from above. UV.x of the procedural ring encodes 0..1
+# clockwise; fragment discards above `fill`. Lost-flash overrides fill color.
+const _CHARGE_RING_SHADER_CODE := """
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_opaque, cull_disabled;
+
+uniform float fill : hint_range(0.0, 1.0) = 0.0;
+uniform float pulse : hint_range(0.0, 1.0) = 0.0;       // 1.0 at full charge → modulates alpha
+uniform float lost_flash : hint_range(0.0, 1.0) = 0.0;  // 1.0 just after charge cancel
+uniform vec4 color_low;
+uniform vec4 color_high;
+uniform vec4 color_full;
+uniform vec4 color_lost;
+uniform float opacity = 0.7;
+
+void fragment() {
+	float t = UV.x;
+	if (t > fill && lost_flash < 0.001) {
+		discard;
+	}
+	vec3 base = mix(color_low.rgb, color_high.rgb, clamp(fill, 0.0, 1.0));
+	if (pulse > 0.001) {
+		base = mix(base, color_full.rgb, pulse);
+	}
+	if (lost_flash > 0.001) {
+		base = mix(base, color_lost.rgb, lost_flash);
+	}
+	ALBEDO = base;
+	ALPHA = opacity * (lost_flash > 0.001 ? lost_flash : 1.0);
+}
+"""
 var _facing: Vector2 = Vector2.DOWN
 var is_elevated: bool = false
 var is_ghost: bool = false
@@ -111,6 +179,10 @@ var is_braking: bool = false
 var is_braced: bool = false
 var shot_charge: float = 0.0
 var slapper_aim_dir: Vector3 = Vector3.ZERO
+# Drives the charge ring + lost-flash pulse. Set by LocalController only;
+# remote skaters leave these at defaults so the charge ring stays hidden.
+var _charge_ring_visible: bool = false
+var _charge_lost_flash_timer: float = 0.0
 var blade_world_velocity: Vector3 = Vector3.ZERO
 var _prev_blade_world_pos: Vector3 = Vector3.ZERO
 var _prev_blade_contact: Vector3 = Vector3.ZERO
@@ -232,10 +304,79 @@ func _ready() -> void:
 
 	_ring_mesh = MeshInstance3D.new()
 	_ring_mesh.name = "RingIndicator"
-	_ring_mesh.mesh = _create_ring_mesh(0.34, 0.45, 32)
+	_ring_mesh.mesh = _create_ring_mesh(RING_OUTER_R - MenuStyle.HUD_LINE_THIN, RING_OUTER_R, 48)
 	_ring_mesh.position = Vector3.ZERO
-	_ring_mesh.visible = false
+	_ring_mesh.material_override = _make_hud_ice_material()
 	add_child(_ring_mesh)
+
+	_charge_ring_mesh = MeshInstance3D.new()
+	_charge_ring_mesh.name = "ChargeRing"
+	_charge_ring_mesh.mesh = _create_ring_mesh_with_uv(
+			CHARGE_RING_INNER_R, CHARGE_RING_OUTER_R, 64)
+	_charge_ring_mat = _make_charge_ring_material()
+	_charge_ring_mesh.material_override = _charge_ring_mat
+	_charge_ring_mesh.visible = false
+	add_child(_charge_ring_mesh)
+
+	_chevron_mesh = MeshInstance3D.new()
+	_chevron_mesh.name = "ElevatedChevron"
+	_chevron_mesh.top_level = true
+	_chevron_mesh.mesh = _create_chevron_mesh()
+	_chevron_mesh.material_override = _make_hud_ice_material()
+	_chevron_mesh.visible = false
+	add_child(_chevron_mesh)
+
+	# Player name billboard. `top_level = true` so it inherits neither the
+	# skater's rotation nor its body Y — its world transform is rewritten each
+	# tick in _physics_process so the on-screen position stays stable as the
+	# skater turns. Always reads at +Z world offset from the body, so on a
+	# typical end-on hockey camera it sits at a consistent screen edge.
+	# Player name. Single billboarded Label3D, top-level so its world
+	# transform isn't tied to the skater's rotation. Position is rewritten
+	# each tick from camera screen-down so it always sits below the ring.
+	_name_label = Label3D.new()
+	_name_label.name = "PlayerNameLabel"
+	_name_label.top_level = true
+	_name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_name_label.no_depth_test = false
+	_name_label.fixed_size = false
+	_name_label.font_size = 40
+	_name_label.outline_size = 0
+	_name_label.modulate = Color(MenuStyle.HUD_ICE.r, MenuStyle.HUD_ICE.g,
+			MenuStyle.HUD_ICE.b, MenuStyle.HUD_OPACITY)
+	_name_label.pixel_size = 0.005
+	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	add_child(_name_label)
+
+	_slapper_indicator = Node3D.new()
+	_slapper_indicator.name = "SlapperIndicator"
+	_slapper_indicator.visible = false
+	add_child(_slapper_indicator)
+	_slapper_indicator_mat = _make_hud_ice_material()
+	# Y rotations that align each arm's local +Z with its world direction.
+	var arm_y_rots: Array[float] = [90.0, -90.0, 0.0, 180.0]
+	for i: int in _SLAPPER_ARM_DIRS.size():
+		var arm := MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = Vector3(MenuStyle.HUD_LINE_THIN, 0.005, _SLAPPER_ARM_LENGTH)
+		arm.mesh = box
+		arm.material_override = _slapper_indicator_mat
+		arm.rotation_degrees.y = arm_y_rots[i]
+		_slapper_indicator.add_child(arm)
+		_slapper_arm_nodes.append(arm)
+	update_slapper_indicator_convergence(1.0)
+
+	# Slapshot direction arrow. Sits at the slapper-zone center (whichever
+	# offset the controller passes via set_slapshot_arrow); rotates each tick
+	# to face slapper_aim_dir. Outline-only style — drawn as four thin boxes
+	# (two shaft sides + two arrowhead sides).
+	_slapper_arrow_root = Node3D.new()
+	_slapper_arrow_root.name = "SlapperArrow"
+	_slapper_arrow_root.visible = false
+	add_child(_slapper_arrow_root)
+	_slapper_arrow_mesh = _create_arrow_mesh()
+	_slapper_arrow_mesh.material_override = _make_hud_ice_material()
+	_slapper_arrow_root.add_child(_slapper_arrow_mesh)
 
 	var vfx := SkaterVFX.new()
 	vfx.name = "VFX"
@@ -265,6 +406,220 @@ func _create_ring_mesh(inner_r: float, outer_r: float, segments: int) -> ArrayMe
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh
 
+# Variant of _create_ring_mesh that bakes a clockwise-from-12-o'clock UV.x onto
+# every vertex (UV.x = 0 at angle 0 / +Z, growing clockwise to 1 at TAU). The
+# charge-ring shader uses UV.x as the angular fill mask. UV.y stays 0/1 across
+# the rim so a future "rim glow" gradient could read it.
+func _create_ring_mesh_with_uv(inner_r: float, outer_r: float, segments: int) -> ArrayMesh:
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var indices := PackedInt32Array()
+	for i: int in segments:
+		# Start angle at -PI/2 (top of ring, +Z-forward in world after parent
+		# rotation) and progress clockwise so charge fills like a wall clock.
+		var t0: float = float(i) / float(segments)
+		var t1: float = float(i + 1) / float(segments)
+		var a0: float = -PI * 0.5 - t0 * TAU
+		var a1: float = -PI * 0.5 - t1 * TAU
+		var base: int = verts.size()
+		verts.append(Vector3(cos(a0) * inner_r, 0.0, sin(a0) * inner_r))
+		verts.append(Vector3(cos(a0) * outer_r, 0.0, sin(a0) * outer_r))
+		verts.append(Vector3(cos(a1) * inner_r, 0.0, sin(a1) * inner_r))
+		verts.append(Vector3(cos(a1) * outer_r, 0.0, sin(a1) * outer_r))
+		uvs.append(Vector2(t0, 0.0))
+		uvs.append(Vector2(t0, 1.0))
+		uvs.append(Vector2(t1, 0.0))
+		uvs.append(Vector2(t1, 1.0))
+		for _n: int in 4:
+			normals.append(Vector3.UP)
+		indices.append_array([base, base + 1, base + 2, base + 1, base + 3, base + 2])
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
+
+# Upward-pointing chevron drawn flat on the ice. Two thin legs forming a "^",
+# placed below the slot ring on the +Z side (back of the player relative to
+# camera-forward). Thickness uses MenuStyle.HUD_LINE_THIN so it visually
+# matches the slot ring stroke.
+func _create_chevron_mesh() -> ArrayMesh:
+	# Built at the origin pointing UP in screen-space (vertex tip toward -Z in
+	# the chevron's local frame). The mesh is repositioned each tick from
+	# _physics_process using camera-aware screen axes.
+	var size: float = 0.14                       # full chevron height/width — small, reads as a glyph
+	var leg_len: float = size * 0.7
+	var thickness: float = MenuStyle.HUD_LINE_THIN
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var indices := PackedInt32Array()
+
+	# Two legs of a "^" meeting at origin, each angled 45° off the chevron's
+	# local +Z axis. After the per-tick world transform places the chevron at
+	# the right of the name label and rotates it to face screen-up, the legs
+	# read as an upward chevron regardless of camera flip.
+	var legs: Array = [
+		{ "rot": deg_to_rad(135.0), "anchor": Vector3.ZERO },
+		{ "rot": deg_to_rad(-135.0), "anchor": Vector3.ZERO },
+	]
+	for leg: Dictionary in legs:
+		var rot_y: float = leg.rot
+		var anchor: Vector3 = leg.anchor
+		var dir := Vector3(sin(rot_y), 0.0, -cos(rot_y))   # forward along the leg
+		var perp := Vector3(cos(rot_y), 0.0, sin(rot_y))   # widthwise
+		var half_t: float = thickness * 0.5
+		var p0: Vector3 = anchor + perp * half_t
+		var p1: Vector3 = anchor - perp * half_t
+		var p2: Vector3 = anchor + dir * leg_len + perp * half_t
+		var p3: Vector3 = anchor + dir * leg_len - perp * half_t
+		var base: int = verts.size()
+		verts.append(p0); verts.append(p1); verts.append(p2); verts.append(p3)
+		for _n: int in 4:
+			normals.append(Vector3.UP)
+		# CCW winding when viewed from +Y so the front face is up (camera looks
+		# down at -Y). Mirrors _create_ring_mesh; CW would get culled.
+		indices.append_array([base, base + 1, base + 2, base + 1, base + 3, base + 2])
+
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
+
+# Outline arrow drawn flat on the ice, pointing along +Z. Six edges form a
+# closed arrow shape with the base (z = 0) left open: two shaft sides + two
+# shoulder segments (where the shaft widens into the head) + two head
+# diagonals meeting at the tip. Drawn as thin strips, one per edge.
+func _create_arrow_mesh() -> MeshInstance3D:
+	var shaft_len: float = 0.55
+	var head_len: float  = 0.18
+	var head_half_w: float = 0.16
+	var shaft_half_w: float = 0.05
+	var thickness: float = MenuStyle.HUD_LINE_THIN
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var indices := PackedInt32Array()
+
+	var tip := Vector2(0.0, shaft_len + head_len)
+
+	# Shape edges, each a 2D segment in (x, z). Drawn as a thin strip of width
+	# `thickness` perpendicular to the segment direction.
+	var edges: Array[Array] = []
+	for sign_x: float in [-1.0, 1.0]:
+		var shaft_base   := Vector2(sign_x * shaft_half_w, 0.0)
+		var shaft_top    := Vector2(sign_x * shaft_half_w, shaft_len)
+		var head_shoulder := Vector2(sign_x * head_half_w,  shaft_len)
+		# Shaft side: base → shoulder-base
+		edges.append([shaft_base, shaft_top])
+		# Shoulder: shaft top → head outer corner (perpendicular to shaft)
+		edges.append([shaft_top, head_shoulder])
+		# Head diagonal: head outer corner → tip
+		edges.append([head_shoulder, tip])
+
+	for edge_pair: Array in edges:
+		var a_pt: Vector2 = edge_pair[0]
+		var b_pt: Vector2 = edge_pair[1]
+		var edge: Vector2 = b_pt - a_pt
+		var edge_len: float = edge.length()
+		if edge_len < 0.0001:
+			continue
+		var edge_dir: Vector2 = edge / edge_len
+		var edge_perp := Vector2(-edge_dir.y, edge_dir.x)
+		var half_t: float = thickness * 0.5
+		var p0: Vector2 = a_pt + edge_perp * half_t
+		var p1: Vector2 = a_pt - edge_perp * half_t
+		var p2: Vector2 = b_pt - edge_perp * half_t
+		var p3: Vector2 = b_pt + edge_perp * half_t
+		_append_quad(verts, normals, indices,
+				p0.x, p0.y, p1.x, p1.y, p2.x, p2.y, p3.x, p3.y)
+
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var inst := MeshInstance3D.new()
+	inst.mesh = mesh
+	return inst
+
+# Append an XZ-plane quad (Y = 0) defined by 4 corner XZ pairs. Triangulated
+# fan-style: (0,1,2), (0,2,3). Caller must supply corners in CW or CCW order.
+func _append_quad(
+		verts: PackedVector3Array, normals: PackedVector3Array, indices: PackedInt32Array,
+		x0: float, z0: float, x1: float, z1: float,
+		x2: float, z2: float, x3: float, z3: float) -> void:
+	var base: int = verts.size()
+	verts.append(Vector3(x0, 0.0, z0))
+	verts.append(Vector3(x1, 0.0, z1))
+	verts.append(Vector3(x2, 0.0, z2))
+	verts.append(Vector3(x3, 0.0, z3))
+	for _n: int in 4:
+		normals.append(Vector3.UP)
+	indices.append_array([base, base + 1, base + 2, base, base + 2, base + 3])
+
+# Solid ice-blue material at HUD opacity, unshaded, alpha-blended. Shared by
+# every HUD-on-ice element except the charge ring (which has its own shader).
+# Depth testing is on; HUD elements are paint on the ice and get occluded by
+# whatever crosses over them (player body, stick, opponents).
+func _make_hud_ice_material() -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(MenuStyle.HUD_ICE.r, MenuStyle.HUD_ICE.g,
+			MenuStyle.HUD_ICE.b, MenuStyle.HUD_OPACITY)
+	return mat
+
+# World XZ direction that maps to "down" on the local player's screen. The
+# game camera looks straight down (rotation X = -90°) with an optional 180°
+# Y flip when PlayerPrefs.attack_up + away team. The camera's basis Y, in that
+# pose, points along world +Z (no flip) or -Z (flip); we want screen-DOWN
+# which is the negation, projected to XZ. Falls back to +Z when there's no
+# active camera (e.g. during early load).
+func _hud_screen_down_xz() -> Vector2:
+	var cam: Camera3D = get_viewport().get_camera_3d() if get_viewport() != null else null
+	if cam == null:
+		return Vector2(0.0, 1.0)
+	var up_world: Vector3 = cam.global_transform.basis.y
+	var down := Vector2(-up_world.x, -up_world.z)
+	if down.length_squared() < 0.0001:
+		return Vector2(0.0, 1.0)
+	return down.normalized()
+
+func _make_charge_ring_material() -> ShaderMaterial:
+	var shader := Shader.new()
+	shader.code = _CHARGE_RING_SHADER_CODE
+	var mat := ShaderMaterial.new()
+	mat.shader = shader
+	mat.set_shader_parameter("fill", 0.0)
+	mat.set_shader_parameter("pulse", 0.0)
+	mat.set_shader_parameter("lost_flash", 0.0)
+	mat.set_shader_parameter("color_low", MenuStyle.CHARGE_LOW)
+	mat.set_shader_parameter("color_high", MenuStyle.CHARGE_HIGH)
+	mat.set_shader_parameter("color_full", MenuStyle.CHARGE_FULL)
+	mat.set_shader_parameter("color_lost", MenuStyle.CHARGE_LOST)
+	mat.set_shader_parameter("opacity", MenuStyle.HUD_OPACITY)
+	return mat
+
+# Slides the four fixed-length arms to visualise puck proximity.
+# ratio = 1.0: puck at zone edge, arms at zone boundary.
+# ratio = 0.0: puck at zone centre, arms slid inward pointing at centre.
+func update_slapper_indicator_convergence(ratio: float) -> void:
+	var r: float = clampf(ratio, 0.0, 1.0)
+	var inner_tip: float = lerpf(0.0, 1.0 - _SLAPPER_ARM_LENGTH, r)
+	var arm_center: float = inner_tip + _SLAPPER_ARM_LENGTH * 0.5
+	for i: int in _slapper_arm_nodes.size():
+		_slapper_arm_nodes[i].position = _SLAPPER_ARM_DIRS[i] * arm_center
+
 func _resolve_or_create_bone_mesh(node_name: String) -> MeshInstance3D:
 	var existing: MeshInstance3D = upper_body.get_node_or_null(node_name) as MeshInstance3D
 	if existing != null:
@@ -292,6 +647,51 @@ func _physics_process(delta: float) -> void:
 		body_check_impulse_applied.emit(body_check_delta)
 	if _ring_mesh != null:
 		_ring_mesh.global_position.y = 0.05
+	# Camera-aware screen axes for the name + chevron. The game camera looks
+	# straight down with an optional 180° Y flip (PlayerPrefs.attack_up); both
+	# elements need to honor that flip so they always sit "below" the skater
+	# in screen space. Falls back to +Z world-down if there's no active camera.
+	var screen_down: Vector2 = _hud_screen_down_xz()
+	var arc_base_angle: float = atan2(screen_down.x, screen_down.y)
+	if _name_label != null and _name_label.visible:
+		_name_label.global_position = Vector3(
+				global_position.x + screen_down.x * _NAME_RADIUS,
+				0.05,
+				global_position.z + screen_down.y * _NAME_RADIUS)
+	if _chevron_mesh != null:
+		_chevron_mesh.visible = is_elevated and not is_ghost
+		if _chevron_mesh.visible:
+			# Sit on the same arc-radius as the name, offset to the side
+			# OPPOSITE the player's stick (lefty stick on -X local → chevron
+			# on +X side; righty inverts).
+			var side_sign: float = 1.0 if is_left_handed else -1.0
+			var chevron_angle: float = arc_base_angle + side_sign * deg_to_rad(_CHEVRON_OFFSET_DEG)
+			var dir := Vector3(sin(chevron_angle), 0.0, cos(chevron_angle))
+			_chevron_mesh.global_position = Vector3(
+					global_position.x + dir.x * _CHEVRON_RADIUS,
+					0.05,
+					global_position.z + dir.z * _CHEVRON_RADIUS)
+			# Keep chevron's "up" aligned with screen-up.
+			_chevron_mesh.rotation = Vector3(0.0, arc_base_angle, 0.0)
+	if _charge_ring_mesh != null and _charge_ring_mesh.visible:
+		_charge_ring_mesh.global_position.y = 0.05
+		var pulse_amount: float = 0.0
+		if shot_charge >= 0.999:
+			pulse_amount = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.001 * TAU * _CHARGE_FULL_PULSE_HZ)
+		_charge_ring_mat.set_shader_parameter("fill", clampf(shot_charge, 0.0, 1.0))
+		_charge_ring_mat.set_shader_parameter("pulse", pulse_amount)
+		var lost_t: float = 0.0
+		if _charge_lost_flash_timer > 0.0:
+			_charge_lost_flash_timer = maxf(_charge_lost_flash_timer - delta, 0.0)
+			lost_t = _charge_lost_flash_timer / _CHARGE_LOST_FLASH_DURATION
+		_charge_ring_mat.set_shader_parameter("lost_flash", lost_t)
+		# Auto-hide once the lost flash has finished and there's nothing to show.
+		if shot_charge <= 0.001 and lost_t <= 0.001 and not _charge_ring_visible:
+			_charge_ring_mesh.visible = false
+	if _slapper_indicator != null and _slapper_indicator.visible:
+		_slapper_indicator.global_position.y = 0.05
+	if _slapper_arrow_root != null and _slapper_arrow_root.visible:
+		_slapper_arrow_root.global_position.y = 0.05
 
 func _resolve_player_collisions(vel_before: Vector3) -> void:
 	for i: int in get_slide_collision_count():
@@ -306,7 +706,10 @@ func _resolve_player_collisions(vel_before: Vector3) -> void:
 			continue
 		normal = normal.normalized()
 		var vel_horiz := Vector3(vel_before.x, 0.0, vel_before.z)
-		var approach: float = vel_horiz.dot(-normal)
+		# Use relative closing velocity along the contact normal so perpendicular
+		# victim motion doesn't subtract from impact and head-on hits register harder.
+		var other_vel_horiz := Vector3(other.velocity.x, 0.0, other.velocity.z)
+		var approach: float = (vel_horiz - other_vel_horiz).dot(-normal)
 		if approach <= 0.0:
 			continue
 		# Bounce self back away from other.
@@ -314,7 +717,15 @@ func _resolve_player_collisions(vel_before: Vector3) -> void:
 		# Push other away; heavier checker transfers more to a lighter victim.
 		# Reduce transfer when the victim is bracing (holding brake).
 		var effective_transfer: float = body_check_transfer * (other.body_check_brace_resistance if other.is_braced else 1.0)
+		var other_vel_before: Vector3 = other.velocity
 		other.velocity -= normal * approach * (weight / other.weight) * effective_transfer
+		# Emit on the victim too so their LocalController.reconcile can inject the
+		# transfer impulse during input replay. Without this, only the attacker's
+		# rebound was captured and the victim relied entirely on snapshot authority
+		# absorbing the impulse — broken if the snapshot predates the host's resolve.
+		var other_delta: Vector3 = other.velocity - other_vel_before
+		if other_delta.length_squared() > 0.0001:
+			other.body_check_impulse_applied.emit(other_delta)
 		# Signal for server-side puck strip check.
 		body_checked_player.emit(other, weight * approach, -normal)
 
@@ -348,10 +759,11 @@ func set_player_color(
 		jersey_color: Color,
 		helmet_color: Color,
 		pants_color: Color,
-		socks_color: Color) -> void:
+		socks_color: Color,
+		blade_color: Color) -> void:
 	var jersey_mat: StandardMaterial3D = _make_solid_mat(jersey_color)
 	_upper_body_mesh.material_override = jersey_mat
-	_blade_mesh.material_override = jersey_mat.duplicate()
+	_blade_mesh.material_override = _make_solid_mat(blade_color)
 	if upper_arm_mesh != null:
 		upper_arm_mesh.material_override = jersey_mat.duplicate()
 	if forearm_mesh != null:
@@ -370,17 +782,69 @@ func set_player_color(
 	if _skate_mesh != null:
 		_skate_mesh.material_override = _make_solid_mat(Color(0.08, 0.08, 0.08))
 
-func set_ring_color(color: Color) -> void:
-	if _ring_mesh == null:
+func set_player_name(p_name: String) -> void:
+	if _name_label != null:
+		_name_label.text = p_name
+
+# Local-only: enable/disable the concentric charge ring under this skater.
+# Driven by the controller; remote skaters never call this so the ring stays
+# hidden. The actual fill level animates from `shot_charge` in _physics_process.
+func set_charge_ring_visible(visible: bool) -> void:
+	_charge_ring_visible = visible
+	if _charge_ring_mesh != null:
+		_charge_ring_mesh.visible = visible or _charge_lost_flash_timer > 0.0
+
+# Local-only: trigger the red lost-charge flash on the charge ring. The ring
+# stays visible for _CHARGE_LOST_FLASH_DURATION seconds, fades to red, then
+# auto-hides via _physics_process.
+func trigger_charge_lost_flash() -> void:
+	_charge_lost_flash_timer = _CHARGE_LOST_FLASH_DURATION
+	if _charge_ring_mesh != null:
+		_charge_ring_mesh.visible = true
+
+# Local-only: enable the slapshot direction arrow at the given zone offset.
+# `offset_x` matches slapper_zone_offset_x (controller-side), already pre-signed.
+# Arrow rotates each tick to face slapper_aim_dir.
+func set_slapshot_arrow(active: bool, offset_x: float = 0.0, offset_z: float = 0.0) -> void:
+	if _slapper_arrow_root == null:
 		return
-	var mat := StandardMaterial3D.new()
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.albedo_color = Color(color.r, color.g, color.b, 0.55)
-	mat.emission_enabled = true
-	mat.emission = color
-	mat.emission_energy_multiplier = 0.3
-	_ring_mesh.material_override = mat
-	_ring_mesh.visible = true
+	if not active:
+		_slapper_arrow_root.visible = false
+		return
+	var blade_side_sign: float = -1.0 if is_left_handed else 1.0
+	_slapper_arrow_root.position = Vector3(blade_side_sign * offset_x, 0.05, offset_z)
+	_slapper_arrow_root.visible = true
+
+func update_slapshot_arrow_direction(world_dir: Vector3) -> void:
+	if _slapper_arrow_root == null or not _slapper_arrow_root.visible:
+		return
+	if world_dir.length() < 0.001:
+		return
+	var local_dir: Vector3 = global_transform.basis.inverse() * world_dir
+	local_dir.y = 0.0
+	if local_dir.length() < 0.001:
+		return
+	# Arrow mesh is built pointing along +Z, so atan2 of (x, z) gives Y rotation.
+	_slapper_arrow_root.rotation.y = atan2(local_dir.x, local_dir.z)
+
+func set_slapper_indicator(active: bool, offset_x: float = 0.0, offset_z: float = 0.0, radius: float = 0.5) -> void:
+	if not active:
+		_slapper_indicator.visible = false
+		return
+	var blade_side_sign: float = -1.0 if is_left_handed else 1.0
+	_slapper_indicator.position = Vector3(blade_side_sign * offset_x, 0.0, offset_z)
+	_slapper_indicator.scale = Vector3(radius, 1.0, radius)
+	_slapper_indicator.visible = true
+	update_slapper_indicator_convergence(1.0)
+
+# Kept as no-ops so the existing controller signature compiles. The reticle is
+# now monochromatic ice blue — readiness/window timing read from blade pose,
+# not from a color change. If we want timing feedback back, drive a uniform.
+func set_slapper_indicator_ready(_is_ready: bool) -> void:
+	pass
+
+func update_slapper_indicator_window(_t: float) -> void:
+	pass
 
 func set_jersey_info(p_name: String, number: int, text_color: Color) -> void:
 	for child: Node in upper_body.get_children():
@@ -719,3 +1183,16 @@ func _apply_ghost_visual(ghost: bool) -> void:
 	for node: Node in lower_body.get_children():
 		if node.name.begins_with("Stripe_"):
 			node.visible = not ghost
+	# HUD-on-ice elements: hide during ghost so a "phantom" skater doesn't
+	# carry rings, name, or charge UI. The chevron already gates on is_ghost
+	# in _physics_process; the rest are explicitly toggled here.
+	if _ring_mesh != null:
+		_ring_mesh.visible = not ghost
+	if _name_label != null:
+		_name_label.visible = not ghost
+	if _charge_ring_mesh != null and ghost:
+		_charge_ring_mesh.visible = false
+	if _slapper_indicator != null and ghost:
+		_slapper_indicator.visible = false
+	if _slapper_arrow_root != null and ghost:
+		_slapper_arrow_root.visible = false

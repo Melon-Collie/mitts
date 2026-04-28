@@ -27,6 +27,10 @@ extends Camera3D
 # ── Smoothing ─────────────────────────────────────────────────────────────────
 @export var smooth_speed: float = 3.0
 
+# Tilted-camera pitch. Subtle by design — much steeper than this and the
+# mouse-to-world projection becomes nonlinear enough to break stickhandling.
+const _TILTED_PITCH_DEG: float = -75.0
+
 # ── Goal Context (set via set_goal_context) ───────────────────────────────────
 var _goal_0: HockeyGoal = null  # Team 0's defended goal
 var _goal_1: HockeyGoal = null  # Team 1's defended goal
@@ -82,6 +86,10 @@ func _physics_process(delta: float) -> void:
 	var puck_pos: Vector3 = puck.global_position
 	puck_pos.y = 0.0
 
+	# Pull FOV from prefs so the user-facing slider drives every downstream
+	# computation (zoom math, ortho size, tilt offset).
+	if not is_equal_approx(fov, PlayerPrefs.fov):
+		fov = PlayerPrefs.fov
 	var fov_rad: float = deg_to_rad(fov)
 	var aspect: float = get_viewport().get_visible_rect().size.x / get_viewport().get_visible_rect().size.y
 	var tan_half_fov: float = tan(fov_rad / 2.0)
@@ -99,8 +107,13 @@ func _physics_process(delta: float) -> void:
 	var attack_dir_now: int = _get_attacking_direction()
 	var in_ozone: bool = attack_dir_now != 0 and \
 		(player_pos.z * float(attack_dir_now)) > GameRules.BLUE_LINE_Z
-	var effective_min: float = ozone_min_height if in_ozone else min_height
-	var target_height: float = clampf(maxf(needed_x, needed_z), effective_min, max_height)
+	# User-facing camera-distance multiplier (Options → Game). Scales the
+	# clamp range so the dynamic zoom math keeps its shape but the overall
+	# height shifts up/down per the player's preference.
+	var dist_mult: float = PlayerPrefs.camera_distance
+	var effective_min: float = (ozone_min_height if in_ozone else min_height) * dist_mult
+	var effective_max: float = max_height * dist_mult
+	var target_height: float = clampf(maxf(needed_x, needed_z), effective_min, effective_max)
 	_current_height = lerpf(_current_height, target_height, zoom_speed * delta)
 
 	var visible_half_x: float = tan_half_fov * aspect * _current_height
@@ -144,10 +157,39 @@ func _physics_process(delta: float) -> void:
 	target_center.z = clampf(target_center.z, -safe_z, safe_z)
 
 	# ── Step 5: Smooth movement ───────────────────────────────────────────────
-	var target_pos: Vector3 = Vector3(target_center.x, _current_height, target_center.z)
+	# Tilted mode: camera looks along a slanted ray, so a camera at
+	# target_center.xz looks at a point ~h*tan(off-axis-angle) behind itself.
+	# Offset the camera in the direction the view is being pulled away from
+	# so the play stays centered. attack_up flip mirrors the offset sign.
+	var pitch: float = -90.0
+	var tilt_z_offset: float = 0.0
+	if PlayerPrefs.camera_mode == PlayerPrefs.CAMERA_MODE_TILTED:
+		pitch = _TILTED_PITCH_DEG
+		var off_axis_rad: float = deg_to_rad(90.0 + _TILTED_PITCH_DEG)  # 15° at -75° pitch
+		var raw_offset: float = _current_height * tan(off_axis_rad)
+		var flip_sign: float = -1.0 if PlayerPrefs.attack_up and _local_team_id == 1 else 1.0
+		tilt_z_offset = raw_offset * flip_sign
+	var target_pos: Vector3 = Vector3(
+			target_center.x, _current_height, target_center.z + tilt_z_offset)
 	global_position = global_position.lerp(target_pos, smooth_speed * delta)
+
+	# ── Step 5b: Apply projection + pitch from PlayerPrefs ────────────────────
+	# Ortho `size` = vertical world units visible; matches the perspective
+	# FOV's vertical extent at the current height so the same zone frames in
+	# both modes.
 	var flip_y: float = 180.0 if PlayerPrefs.attack_up and _local_team_id == 1 else 0.0
-	rotation_degrees = Vector3(-90.0, flip_y, 0.0)
+	match PlayerPrefs.camera_mode:
+		PlayerPrefs.CAMERA_MODE_ORTHOGRAPHIC:
+			if projection != PROJECTION_ORTHOGONAL:
+				projection = PROJECTION_ORTHOGONAL
+			size = 2.0 * tan_half_fov * _current_height
+		PlayerPrefs.CAMERA_MODE_TOP_DOWN:
+			if projection != PROJECTION_PERSPECTIVE:
+				projection = PROJECTION_PERSPECTIVE
+		PlayerPrefs.CAMERA_MODE_TILTED:
+			if projection != PROJECTION_PERSPECTIVE:
+				projection = PROJECTION_PERSPECTIVE
+	rotation_degrees = Vector3(pitch, flip_y, 0.0)
 
 	# ── Step 6: Shake ─────────────────────────────────────────────────────────
 	if _shake_trauma > 0.0:

@@ -74,6 +74,7 @@ func spawn_local_player(
 		helmet_color: Color,
 		pants_color: Color,
 		socks_color: Color,
+		blade_color: Color,
 		is_left_handed: bool,
 		puck: Puck,
 		game_state: Node,
@@ -82,7 +83,7 @@ func spawn_local_player(
 	skater.is_left_handed = is_left_handed  # must be set before add_child so _ready sees it
 	skater.position = position
 	_scene_root.add_child(skater)
-	skater.set_player_color(jersey_color, helmet_color, pants_color, socks_color)
+	skater.set_player_color(jersey_color, helmet_color, pants_color, socks_color, blade_color)
 	var controller: LocalController = LOCAL_CONTROLLER_SCENE.instantiate()
 	_scene_root.add_child(controller)
 	controller.setup(skater, puck, game_state)
@@ -97,6 +98,7 @@ func spawn_remote_player(
 		helmet_color: Color,
 		pants_color: Color,
 		socks_color: Color,
+		blade_color: Color,
 		is_left_handed: bool,
 		puck: Puck,
 		game_state: Node) -> Dictionary:
@@ -104,7 +106,7 @@ func spawn_remote_player(
 	skater.is_left_handed = is_left_handed  # must be set before add_child so _ready sees it
 	skater.position = position
 	_scene_root.add_child(skater)
-	skater.set_player_color(jersey_color, helmet_color, pants_color, socks_color)
+	skater.set_player_color(jersey_color, helmet_color, pants_color, socks_color, blade_color)
 	var controller: RemoteController = REMOTE_CONTROLLER_SCENE.instantiate()
 	_scene_root.add_child(controller)
 	controller.setup(skater, puck, game_state)

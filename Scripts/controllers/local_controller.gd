@@ -23,6 +23,7 @@ const _RECONCILE_VISUAL_ALPHA: float = 0.12  # exponential decay per physics fra
 func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> void:
 	camera = $Camera3D
 	super.setup(assigned_skater, assigned_puck, game_state)
+	show_one_timer_indicator = true
 	_gatherer = LocalInputGatherer.new(camera)
 	add_child(_gatherer)
 	camera.skater = assigned_skater
@@ -44,6 +45,15 @@ func set_local_team_id(team_id: int) -> void:
 
 func set_goal_context(goal_0: HockeyGoal, goal_1: HockeyGoal, carrier_team_getter: Callable) -> void:
 	camera.set_goal_context(goal_0, goal_1, carrier_team_getter)
+
+# Team 0 defends the +Z goal → attacks -Z. Team 1 defends -Z → attacks +Z.
+# See GameManager._assign_goals_to_teams.
+func get_attacking_goal_z() -> float:
+	if _team_id == 0:
+		return -GameRules.GOAL_LINE_Z
+	if _team_id == 1:
+		return GameRules.GOAL_LINE_Z
+	return 0.0
 
 func get_current_input() -> InputState:
 	return _current_input
@@ -108,6 +118,7 @@ func _physics_process(delta: float) -> void:
 	if _input_history.size() > rtt_cap:
 		_input_history.pop_front()
 	_process_input(_current_input, _current_input.delta)
+	_update_one_timer_indicator()
 	var blade_pos: Vector3 = skater.get_blade_contact_global()
 	if not _last_blade_pos.is_zero_approx():
 		var blade_delta: float = blade_pos.distance_to(_last_blade_pos)
@@ -172,6 +183,10 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	var pre_follow_through_timer: float = _sm.follow_through_timer
 	var pre_follow_through_is_slapper: bool = _sm.follow_through_is_slapper
 	var pre_one_timer_window_timer: float = _aiming.one_timer_window_timer
+	# slapper_charge_timer ticks inside _update_slapper_charge during replay; without
+	# save/restore each reconcile re-ticks the unconfirmed inputs and the timer
+	# inflates O(N) per broadcast, popping the blade above slapper_wind_up_height.
+	var pre_slapper_charge_timer: float = _aiming.slapper_charge_timer
 	skater.global_position = server_state.position
 	skater.velocity = server_state.velocity
 	# Snap facing for replay accuracy — facing drives move_and_slide direction,
@@ -217,6 +232,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	_sm.follow_through_timer = pre_follow_through_timer
 	_sm.follow_through_is_slapper = pre_follow_through_is_slapper
 	_aiming.one_timer_window_timer = pre_one_timer_window_timer
+	_aiming.slapper_charge_timer = pre_slapper_charge_timer
 	# Set mouse pos baseline to the end of the replay window so the next real
 	# frame's direction-variance delta is correct.
 	if not _input_history.is_empty():
@@ -255,7 +271,21 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	last_reconcile_error = (skater.global_position - server_state.position).length()
 	# Blade must be re-applied after position is set — upper_body_to_local()
 	# uses skater.global_position, so it must reflect the final replayed position.
-	_apply_blade_from_mouse(_current_input, 0.0)
+	# Dispatch by state: slapper/follow-through have their own pose handlers; using
+	# _apply_blade_from_mouse here would IK the blade to the mouse position every
+	# reconcile, popping it down from the slapper wind-up pose at the broadcast rate.
+	match _sm.get_state():
+		State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK:
+			_apply_slapper_blade_position()
+		State.FOLLOW_THROUGH:
+			if _sm.follow_through_is_slapper:
+				_apply_slapper_follow_through()
+			else:
+				_apply_wrister_follow_through()
+		State.SHOT_BLOCKING:
+			pass  # block stance owns the pose; no per-frame blade write
+		_:
+			_apply_blade_from_mouse(_current_input, 0.0)
 	var blade_reconcile_delta: float = skater.get_blade_contact_global().distance_to(pre_reconcile_blade)
 	NetworkTelemetry.record_blade_reconcile(blade_reconcile_delta)
 	if blade_reconcile_delta > _BLADE_JUMP_THRESHOLD:
@@ -279,9 +309,28 @@ func on_puck_picked_up_network() -> void:
 	_claim_cooldown = 0.0
 
 
+func _update_one_timer_indicator() -> void:
+	var state: State = _sm.get_state()
+	if state == State.SLAPPER_CHARGE_WITH_PUCK and _aiming.one_timer_window_timer > 0.0:
+		var full_window: float = one_timer_window_duration + NetworkManager.get_latest_rtt_ms() / 2000.0
+		var t: float = clampf(_aiming.one_timer_window_timer / full_window, 0.0, 1.0)
+		skater.update_slapper_indicator_window(t)
+	elif state == State.SLAPPER_CHARGE_WITHOUT_PUCK:
+		var zone_world: Vector3 = skater.get_slapper_zone_global_position()
+		var zone_xz := Vector2(zone_world.x, zone_world.z)
+		var puck_xz := Vector2(puck.global_position.x, puck.global_position.z)
+		var dist: float = zone_xz.distance_to(puck_xz)
+		skater.set_slapper_indicator_ready(dist <= _effective_one_timer_leniency())
+		skater.update_slapper_indicator_convergence(clampf(dist / slapper_zone_radius, 0.0, 1.0))
+	else:
+		skater.set_slapper_indicator(false)
+
 func _predict_offside() -> void:
 	if _is_host:
 		return  # Host computes authoritatively in GameManager
+	# OFF preset disables offside detection entirely; matches host behavior.
+	if GameManager.get_rule_set() == GameRules.RuleSet.OFF:
+		return
 	var is_carrier: bool = puck.carrier == skater
 	var offside: bool = InfractionRules.is_offside(
 		skater.global_position.z, _team_id, puck.global_position.z, is_carrier)

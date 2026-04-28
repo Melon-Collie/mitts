@@ -7,6 +7,18 @@ const RESOLUTIONS: Array[Vector2i] = [
 	Vector2i(2560, 1440),
 ]
 const FPS_CAP_VALUES: Array[int] = [30, 60, 120, 144, 240, 0]
+
+# Camera projection modes. Index matches OptionButton ordering in
+# OptionsPanel; GameCamera reads camera_mode each tick to flip projection
+# and pitch.
+const CAMERA_MODE_ORTHOGRAPHIC: int = 0
+const CAMERA_MODE_TOP_DOWN: int = 1   # perspective, looking straight down (the original)
+const CAMERA_MODE_TILTED: int = 2     # perspective, pitched 15° forward of straight down
+const CAMERA_MODE_LABELS: Array[String] = [
+	"Top-Down (Orthographic)",
+	"Top-Down (Perspective)",
+	"Tilted (Perspective)",
+]
 const REBINDABLE_ACTIONS: PackedStringArray = [
 	"move_up", "move_down", "move_left", "move_right", "brake",
 	"shoot", "slapshot", "block", "elevation_up", "elevation_down",
@@ -15,8 +27,11 @@ const REBINDABLE_ACTIONS: PackedStringArray = [
 var player_name: String = "Player"
 var jersey_number: int = 10
 var is_left_handed: bool = true
+var preferred_color_id: String = ""  # team color preset id; "" → use team default at lobby join
 var last_ip: String = ""
 var master_volume: float = 1.0
+var sfx_volume: float = 1.0
+var ui_volume: float = 1.0
 var master_muted: bool = false
 var is_fullscreen: bool = false
 var resolution_index: int = 1
@@ -25,6 +40,13 @@ var fps_cap_index: int = 5
 var brightness: float = 1.0
 var mouse_sensitivity: float = 1.0
 var attack_up: bool = false
+var camera_mode: int = CAMERA_MODE_TOP_DOWN
+var fov: float = 75.0  # GameCamera writes this to its Camera3D.fov each tick
+var camera_distance: float = 1.0  # multiplier on min/ozone/max camera heights
+const FOV_MIN: float = 40.0
+const FOV_MAX: float = 90.0
+const CAMERA_DISTANCE_MIN: float = 0.6
+const CAMERA_DISTANCE_MAX: float = 1.6
 var bindings: Dictionary = {}  # action -> {type, physical_keycode or button_index}
 
 func _get_save_path() -> String:
@@ -41,8 +63,11 @@ func save() -> void:
 	cfg.set_value("player", "name", player_name)
 	cfg.set_value("player", "jersey_number", jersey_number)
 	cfg.set_value("player", "left_handed", is_left_handed)
+	cfg.set_value("player", "preferred_color_id", preferred_color_id)
 	cfg.set_value("player", "last_ip", last_ip)
 	cfg.set_value("audio", "master_volume", master_volume)
+	cfg.set_value("audio", "sfx_volume", sfx_volume)
+	cfg.set_value("audio", "ui_volume", ui_volume)
 	cfg.set_value("audio", "master_muted", master_muted)
 	cfg.set_value("video", "fullscreen", is_fullscreen)
 	cfg.set_value("video", "resolution_index", resolution_index)
@@ -51,6 +76,9 @@ func save() -> void:
 	cfg.set_value("video", "brightness", brightness)
 	cfg.set_value("input", "mouse_sensitivity", mouse_sensitivity)
 	cfg.set_value("game", "attack_up", attack_up)
+	cfg.set_value("game", "camera_mode", camera_mode)
+	cfg.set_value("game", "fov", fov)
+	cfg.set_value("game", "camera_distance", camera_distance)
 	for action: String in REBINDABLE_ACTIONS:
 		if not bindings.has(action):
 			continue
@@ -89,9 +117,15 @@ func _read_current_input_event(action: String) -> Dictionary:
 	return {}
 
 func apply_audio() -> void:
-	var bus := AudioServer.get_bus_index("Master")
-	AudioServer.set_bus_volume_db(bus, linear_to_db(maxf(master_volume, 0.0001)))
-	AudioServer.set_bus_mute(bus, master_muted)
+	var master_bus := AudioServer.get_bus_index("Master")
+	AudioServer.set_bus_volume_db(master_bus, linear_to_db(maxf(master_volume, 0.0001)))
+	AudioServer.set_bus_mute(master_bus, master_muted)
+	var sfx_bus := AudioServer.get_bus_index("SFX")
+	if sfx_bus != -1:
+		AudioServer.set_bus_volume_db(sfx_bus, linear_to_db(maxf(sfx_volume, 0.0001)))
+	var ui_bus := AudioServer.get_bus_index("UI")
+	if ui_bus != -1:
+		AudioServer.set_bus_volume_db(ui_bus, linear_to_db(maxf(ui_volume, 0.0001)))
 
 func apply_video() -> void:
 	if is_fullscreen:
@@ -112,12 +146,13 @@ func _load() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(_get_save_path()) == OK:
 		player_name = cfg.get_value("player", "name", "Player").substr(0, 10)
-		if player_name.strip_edges().is_empty():
-			player_name = "Player"
 		jersey_number = clamp(cfg.get_value("player", "jersey_number", 10), 0, 99)
 		is_left_handed = cfg.get_value("player", "left_handed", true)
+		preferred_color_id = cfg.get_value("player", "preferred_color_id", "")
 		last_ip = cfg.get_value("player", "last_ip", "")
 		master_volume = clampf(cfg.get_value("audio", "master_volume", 1.0), 0.0, 1.0)
+		sfx_volume = clampf(cfg.get_value("audio", "sfx_volume", 1.0), 0.0, 1.0)
+		ui_volume = clampf(cfg.get_value("audio", "ui_volume", 1.0), 0.0, 1.0)
 		master_muted = cfg.get_value("audio", "master_muted", false)
 		is_fullscreen = cfg.get_value("video", "fullscreen", false)
 		resolution_index = clamp(cfg.get_value("video", "resolution_index", 1), 0, RESOLUTIONS.size() - 1)
@@ -126,6 +161,9 @@ func _load() -> void:
 		brightness = clampf(cfg.get_value("video", "brightness", 1.0), 0.5, 1.5)
 		mouse_sensitivity = clampf(cfg.get_value("input", "mouse_sensitivity", 1.0), 0.5, 3.0)
 		attack_up = cfg.get_value("game", "attack_up", false)
+		camera_mode = clamp(cfg.get_value("game", "camera_mode", CAMERA_MODE_TOP_DOWN), 0, CAMERA_MODE_LABELS.size() - 1)
+		fov = clampf(cfg.get_value("game", "fov", 75.0), FOV_MIN, FOV_MAX)
+		camera_distance = clampf(cfg.get_value("game", "camera_distance", 1.0), CAMERA_DISTANCE_MIN, CAMERA_DISTANCE_MAX)
 		for action: String in REBINDABLE_ACTIONS:
 			var t: String = cfg.get_value("bindings", action + "_type", "")
 			if t == "key":

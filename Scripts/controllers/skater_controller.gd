@@ -9,12 +9,12 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 
 # ── Movement Tuning ───────────────────────────────────────────────────────────
 @export var thrust: float = 12.0
-@export var friction: float = 3.5
-@export var max_speed: float = 9.0
+@export var friction: float = 0.8
+@export var friction_drag: float = 0.27
+@export var max_speed: float = 10.5
 @export var move_deadzone: float = 0.1
-@export var brake_multiplier: float = 5.0
-@export var brake_redirect_speed_deg: float = 180.0  # deg/s velocity rotates toward input while carving
-@export var puck_carry_speed_multiplier: float = 0.85
+@export var brake_multiplier: float = 4.0
+@export var puck_carry_speed_multiplier: float = 0.82
 @export var backward_thrust_multiplier: float = 0.80
 @export var crossover_thrust_multiplier: float = 0.90
 # ── Facing Tuning ─────────────────────────────────────────────────────────────
@@ -95,14 +95,27 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 @export var lower_body_lag_speed: float = 5.0
 
 # ── Wrister Tuning ────────────────────────────────────────────────────────────
-@export var min_wrister_power: float = 12.0
-@export var max_wrister_power: float = 20.0
-@export var max_wrister_charge_distance: float = 1.5
+@export var min_wrister_power: float = 14.0
+@export var max_wrister_power: float = 24.0
+@export var max_wrister_charge_distance: float = 2.0
 @export var backhand_power_coefficient: float = 0.75
 @export var max_charge_direction_variance: float = 35.0
-@export var quick_shot_power: float = 12.0
+@export var quick_shot_power: float = 14.0
 @export var quick_shot_threshold: float = 0.1
-@export var wrister_elevation: float = 0.3
+@export var quick_shot_elevation: float = 0.10
+@export var wrister_elevation_target_height: float = 0.90
+# Apex cap for elevated shots — puck can't rise more than this above the blade.
+# 1.5 m is just under the glass, well above crossbar (1.22 m). On-net shots
+# arrive at goal line at ≤ target_height; missed shots can't fly over boards.
+@export var max_apex_above_blade: float = 1.5
+# Cosine of the half-angle cone within which a shot counts as "toward the net".
+# 0.5 = 60° cone. Shots outside this cone use `away_from_net_elevation` instead
+# of the ballistic-targeting math.
+@export var toward_net_dot_threshold: float = 0.5
+# Fixed Y direction for elevated shots not aimed at the offensive net (passes,
+# clears, backward dumps). Small positive value so the puck still lifts off ice
+# without trying to arc toward an irrelevant target height.
+@export var away_from_net_elevation: float = 0.10
 
 # ── Head Tracking Tuning ─────────────────────────────────────────────────────
 @export var head_track_speed: float = 12.0
@@ -114,18 +127,21 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 @export var slapper_zone_radius: float = 0.5
 @export var slapper_zone_offset_x: float = 0.8  # lateral offset toward blade side
 @export var slapper_zone_offset_z: float = -1.0  # forward offset (negative = in front of player)
-@export var min_slapper_power: float = 14.0
-@export var max_slapper_power: float = 28.0
-@export var max_slapper_charge_time: float = 1.0
+@export var min_slapper_power: float = 17.0
+@export var max_slapper_power: float = 34.0
+@export var max_slapper_charge_time: float = 0.7
 @export var slapper_blade_x: float = 1.0
 @export var slapper_blade_z: float = -0.5
 @export var slapper_aim_arc: float = 45.0
-@export var slapper_elevation: float = 0.15
-@export var one_timer_window_duration: float = 0.30  # seconds after puck arrives to release
-@export var one_timer_leniency_radius: float = 1.2   # metres; buffer for early release
+@export var slapper_elevation_target_height: float = 0.65
+@export var one_timer_window_duration: float = 0.45  # seconds after puck arrives to release
+@export var one_timer_leniency_time: float = 0.08   # seconds of puck travel added to zone radius as leniency
+@export var one_timer_center_power_bonus: float = 0.10  # ±10%: edge of zone = −10%, dead centre = +10%
+
+var show_one_timer_indicator: bool = false
 
 # ── Follow Through Tuning ─────────────────────────────────────────────────────
-@export var follow_through_duration: float = 0.15
+@export var follow_through_duration: float = 0.25
 @export var wrister_follow_through_hand_y: float = 0.35
 @export var wrister_follow_through_blade_lift: float = 0.20
 
@@ -269,6 +285,9 @@ func get_network_state() -> SkaterNetworkState:
 	state.shot_charge = _aiming.charge_distance
 	return state
 
+func get_shot_state() -> int:
+	return _sm.get_state()
+
 func apply_network_state(_net_state: SkaterNetworkState, _host_ts: float) -> void:
 	pass  # overridden by RemoteController on client
 	
@@ -295,8 +314,11 @@ func on_puck_picked_up_network() -> void:
 		# the shot is cancelled and they keep the puck in carry state.
 		skater.set_slapper_zone(false)
 		skater.set_slapper_mode(true)
-		_aiming.one_timer_window_timer = one_timer_window_duration
+		_aiming.one_timer_window_timer = one_timer_window_duration + NetworkManager.get_latest_rtt_ms() / 2000.0
 		_sm.set_state(State.SLAPPER_CHARGE_WITH_PUCK)
+		if show_one_timer_indicator:
+			skater.update_slapper_indicator_convergence(1.0)
+			skater.update_slapper_indicator_window(1.0)
 	else:
 		_sm.set_state(State.SKATING_WITH_PUCK)
 
@@ -359,6 +381,13 @@ func _apply_slapper_follow_through() -> void:
 
 # ── State Helpers ─────────────────────────────────────────────────────────────
 func _transition_to_skating() -> void:
+	# Lost-charge feedback: if we're leaving an active charge state without
+	# firing (i.e. not via FOLLOW_THROUGH), flash the charge ring red. The
+	# ring auto-clears via Skater._physics_process once the flash decays.
+	var prev_state: int = _sm.get_state()
+	var was_charging: bool = prev_state == State.WRISTER_AIM \
+			or prev_state == State.SLAPPER_CHARGE_WITH_PUCK \
+			or prev_state == State.SLAPPER_CHARGE_WITHOUT_PUCK
 	skater.shot_charge = 0.0
 	skater.slapper_aim_dir = Vector3.ZERO
 	if has_puck:
@@ -374,6 +403,12 @@ func _transition_to_skating() -> void:
 	skater.set_lower_body_lag(0.0)
 	skater.set_slapper_mode(false)
 	skater.set_slapper_zone(false)
+	if show_one_timer_indicator:
+		skater.set_slapper_indicator(false)
+		skater.set_slapshot_arrow(false)
+		skater.set_charge_ring_visible(false)
+		if was_charging:
+			skater.trigger_charge_lost_flash()
 
 func _enter_shot_block() -> void:
 	_sm.set_state(State.SHOT_BLOCKING)
@@ -423,6 +458,12 @@ func _enter_slapper_charge(input: InputState) -> void:
 		# ground level even though the blade is lifted during wind-up.
 		skater.set_slapper_zone(true, slapper_zone_radius, slapper_zone_offset_x, slapper_zone_offset_z)
 		_sm.set_state(State.SLAPPER_CHARGE_WITHOUT_PUCK)
+		if show_one_timer_indicator:
+			skater.set_slapper_indicator(true, slapper_zone_offset_x, slapper_zone_offset_z, slapper_zone_radius)
+	if show_one_timer_indicator:
+		skater.set_charge_ring_visible(true)
+		skater.set_slapshot_arrow(true, slapper_zone_offset_x, slapper_zone_offset_z)
+		skater.update_slapshot_arrow_direction(skater.slapper_aim_dir)
 
 func _get_charge_direction() -> Vector3:
 	return _aiming.prev_blade_dir
@@ -486,13 +527,24 @@ func _apply_slapper_blade_position() -> void:
 			skater.shoulder.position.z + slapper_blade_z)
 	pos = skater.clamp_blade_to_walls(pos)
 	var blade_world: Vector3 = skater.upper_body_to_global(pos)
-	var clamped_world: Vector3 = blade_world
+	var clamped_heel: Vector3 = blade_world
 	if has_puck:
-		clamped_world = _clamp_blade_from_goalies(clamped_world)
-	clamped_world = _clamp_blade_from_net(clamped_world)
-	if clamped_world != blade_world:
-		pos = skater.upper_body_to_local(clamped_world)
+		clamped_heel = _clamp_blade_from_goalies(clamped_heel)
 	var hand_pos := Vector3(skater.shoulder.position.x, hand_rest_y, skater.shoulder.position.z)
+	var hand_world: Vector3 = skater.upper_body_to_global(hand_pos)
+	var shaft: Vector3 = clamped_heel - hand_world
+	shaft.y = 0.0
+	var contact_world: Vector3 = clamped_heel
+	if shaft.length() > 0.001:
+		contact_world = clamped_heel + shaft.normalized() * skater.blade_length * 0.5
+	var clamped_contact: Vector3 = _clamp_blade_from_net(contact_world)
+	if clamped_contact != contact_world:
+		var delta: Vector3 = clamped_contact - contact_world
+		clamped_heel += delta
+		if has_puck:
+			_do_release(delta.normalized(), goalie_strip_power)
+	if clamped_heel != blade_world:
+		pos = skater.upper_body_to_local(clamped_heel)
 	skater.set_top_hand_position(hand_pos)
 	skater.set_blade_position(pos)
 
@@ -501,26 +553,41 @@ func _update_wrister_charge(input: InputState) -> void:
 		return
 	_aiming.tick_wrister_charge(input.mouse_screen_pos, max_charge_direction_variance, max_wrister_charge_distance)
 	skater.shot_charge = _aiming.charge_distance / max_wrister_charge_distance
+	# Charge ring is local-only; gate on the same flag as the one-timer reticle.
+	if show_one_timer_indicator:
+		skater.set_charge_ring_visible(true)
 
 func _update_slapper_charge(delta: float) -> void:
 	_aiming.tick_slapper(delta)
 	skater.shot_charge = minf(_aiming.slapper_charge_timer / max_slapper_charge_time, 1.0)
+	if show_one_timer_indicator:
+		skater.update_slapshot_arrow_direction(skater.slapper_aim_dir)
 
 func _apply_slapper_velocity_drag(delta: float) -> void:
 	var slapper_vel := Vector2(skater.velocity.x, skater.velocity.z)
-	slapper_vel = slapper_vel.move_toward(Vector2.ZERO, friction * delta)
+	var drag: float = friction + friction_drag * slapper_vel.length()
+	slapper_vel = slapper_vel.move_toward(Vector2.ZERO, drag * delta)
 	skater.velocity.x = slapper_vel.x
 	skater.velocity.z = slapper_vel.y
 
 func _try_one_timer_release(input: InputState) -> Dictionary:
-	var blade_world: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
-	if puck.global_position.distance_to(blade_world) > one_timer_leniency_radius:
+	# Use XZ distance from the slapper zone center (ground level) — this matches
+	# the ring indicator the player sees and avoids penalising blade height since
+	# the blade is lifted during wind-up.
+	var zone_world: Vector3 = skater.get_slapper_zone_global_position()
+	var zone_xz := Vector2(zone_world.x, zone_world.z)
+	var puck_xz := Vector2(puck.global_position.x, puck.global_position.z)
+	var dist: float = zone_xz.distance_to(puck_xz)
+	if dist > _effective_one_timer_leniency():
 		return {fired = false}
+	var blade_world: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
 	var locked_dir_3d := Vector3(_sm.locked_slapper_dir.x, 0.0, _sm.locked_slapper_dir.y)
 	var cfg: ShotMechanics.SlapperConfig = _slapper_config()
 	var result := ShotMechanics.release_slapper(
 			blade_world, input.mouse_world_pos,
 			_is_elevated, cfg.max_slapper_charge_time, cfg, locked_dir_3d)
+	var proximity: float = clampf(1.0 - dist / slapper_zone_radius, 0.0, 1.0)
+	result.power *= 1.0 + one_timer_center_power_bonus * (2.0 * proximity - 1.0)
 	if not is_replaying:
 		one_timer_release_requested.emit(result.direction, result.power)
 	return {fired = true, direction = result.direction, follow_through_duration = follow_through_duration}
@@ -530,44 +597,48 @@ func _apply_block_movement(input: InputState, delta: float) -> void:
 			skater.velocity, input.move_vector, skater.rotation.y,
 			false, input.brake, delta, _block_movement_config())
 
+func _effective_one_timer_leniency() -> float:
+	var puck_xz_speed: float = Vector2(puck.linear_velocity.x, puck.linear_velocity.z).length()
+	return slapper_zone_radius + puck_xz_speed * one_timer_leniency_time
+
 func _is_in_slapper_state() -> bool:
 	return _sm.get_state() in [State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK]
 
-# Prevents the blade from entering either net's interior. Both nets are
-# centered at x=0. The x-boundary widens linearly with depth across the
-# trapezoidal net (0.915 at goal line → 1.02 at back). The blade always
-# escapes through the nearest side or back face — never through the front
-# mouth, regardless of where the skater is standing.
-func _clamp_blade_from_net(blade_world: Vector3) -> Vector3:
-	var result: Vector3 = blade_world
-	var gl: float    = GameRules.GOAL_LINE_Z
-	var depth: float = GameRules.NET_DEPTH
+# Clamps `point` (either the puck contact point or the blade heel during
+# follow-through) out of the net exclusion zone. The zone is NET_HALF_WIDTH +
+# NET_PUCK_BUFFER wide on each side and NET_DEPTH + NET_PUCK_BUFFER deep from
+# the goal line. The buffer applies uniformly to both the side posts and the
+# back board. The point always escapes through the nearest face — never the
+# front mouth.
+func _clamp_blade_from_net(point: Vector3) -> Vector3:
+	if point.y > GameRules.NET_HEIGHT:
+		return point
+	var result: Vector3 = point
+	var gl: float           = GameRules.GOAL_LINE_Z
+	var eff_depth: float    = GameRules.NET_DEPTH + GameRules.NET_PUCK_BUFFER
+	var hw: float           = GameRules.NET_HALF_WIDTH + GameRules.NET_PUCK_BUFFER
 	# +Z net
-	if result.z > gl and result.z < gl + depth:
+	if result.z >= gl and result.z < gl + eff_depth:
 		var local_depth: float = result.z - gl
-		var hw: float = lerpf(GameRules.NET_HALF_WIDTH, GameRules.NET_BACK_HALF_WIDTH,
-				local_depth / depth)
 		if abs(result.x) < hw:
-			var d_back: float  = depth - local_depth
+			var d_back: float  = eff_depth - local_depth
 			var d_left: float  = result.x + hw
 			var d_right: float = hw - result.x
 			if d_back <= d_left and d_back <= d_right:
-				result.z = gl + depth
+				result.z = gl + eff_depth
 			elif d_left <= d_right:
 				result.x = -hw
 			else:
 				result.x = hw
 	# -Z net
-	elif result.z < -gl and result.z > -gl - depth:
+	elif result.z <= -gl and result.z > -gl - eff_depth:
 		var local_depth: float = -gl - result.z
-		var hw: float = lerpf(GameRules.NET_HALF_WIDTH, GameRules.NET_BACK_HALF_WIDTH,
-				local_depth / depth)
 		if abs(result.x) < hw:
-			var d_back: float  = depth - local_depth
+			var d_back: float  = eff_depth - local_depth
 			var d_left: float  = result.x + hw
 			var d_right: float = hw - result.x
 			if d_back <= d_left and d_back <= d_right:
-				result.z = -gl - depth
+				result.z = -gl - eff_depth
 			elif d_left <= d_right:
 				result.x = -hw
 			else:
@@ -687,15 +758,28 @@ func _apply_blade_from_mouse(input: InputState, _delta: float) -> void:
 		hand_local.x += clamp_delta_xz.x
 		hand_local.z += clamp_delta_xz.z
 
-	# Goalie body clamp (strips puck on contact) + net volume hard wall.
-	# Single world-space pass so we only convert once.
-	var blade_world: Vector3 = skater.upper_body_to_global(wall_clamped)
-	var clamped_world: Vector3 = blade_world
+	# Goalie body clamp (strips puck on contact) + net exclusion zone.
+	# All work in world space; convert back once at the end.
+	var heel_world: Vector3 = skater.upper_body_to_global(wall_clamped)
+	var clamped_heel: Vector3 = heel_world
 	if has_puck:
-		clamped_world = _clamp_blade_from_goalies(clamped_world)
-	clamped_world = _clamp_blade_from_net(clamped_world)
-	if clamped_world != blade_world:
-		var clamped_local: Vector3 = skater.upper_body_to_local(clamped_world)
+		clamped_heel = _clamp_blade_from_goalies(clamped_heel)
+	# Compute the puck contact point (mid-blade) and clamp that against the net,
+	# not the heel. This is geometrically correct regardless of blade angle.
+	var hand_world: Vector3 = skater.upper_body_to_global(hand_local)
+	var shaft: Vector3 = clamped_heel - hand_world
+	shaft.y = 0.0
+	var contact_world: Vector3 = clamped_heel
+	if shaft.length() > 0.001:
+		contact_world = clamped_heel + shaft.normalized() * skater.blade_length * 0.5
+	var clamped_contact: Vector3 = _clamp_blade_from_net(contact_world)
+	if clamped_contact != contact_world:
+		var delta: Vector3 = clamped_contact - contact_world
+		clamped_heel += delta
+		if has_puck:
+			_do_release(delta.normalized(), goalie_strip_power)
+	if clamped_heel != heel_world:
+		var clamped_local: Vector3 = skater.upper_body_to_local(clamped_heel)
 		hand_local.x += clamped_local.x - wall_clamped.x
 		hand_local.z += clamped_local.z - wall_clamped.z
 		wall_clamped = clamped_local
@@ -817,8 +901,8 @@ func _apply_velocity_lean(delta: float) -> void:
 
 # ── Movement ──────────────────────────────────────────────────────────────────
 func _apply_movement(input: InputState, delta: float) -> void:
-	# Pure brake (no direction) — drives hockey stop VFX on the skater.
-	skater.is_braking = input.brake and input.move_vector.length() <= move_deadzone
+	# Brake held — drives hockey stop VFX (gated on speed in skater_vfx.gd).
+	skater.is_braking = input.brake
 	skater.is_braced = input.brake
 
 	if _sm.get_state() in [State.SLAPPER_CHARGE_WITH_PUCK, State.SHOT_BLOCKING]:
@@ -833,13 +917,13 @@ func _movement_config() -> SkaterMovementRules.MovementConfig:
 	var cfg := SkaterMovementRules.MovementConfig.new()
 	cfg.thrust = thrust
 	cfg.friction = friction
+	cfg.friction_drag = friction_drag
 	cfg.max_speed = max_speed
 	cfg.move_deadzone = move_deadzone
 	cfg.brake_multiplier = brake_multiplier
 	cfg.puck_carry_speed_multiplier = puck_carry_speed_multiplier
 	cfg.backward_thrust_multiplier = backward_thrust_multiplier
 	cfg.crossover_thrust_multiplier = crossover_thrust_multiplier
-	cfg.brake_redirect_speed = deg_to_rad(brake_redirect_speed_deg)
 	return cfg
 
 func _block_movement_config() -> SkaterMovementRules.MovementConfig:
@@ -856,7 +940,15 @@ func _wrister_config() -> ShotMechanics.WristerConfig:
 	cfg.backhand_power_coefficient = backhand_power_coefficient
 	cfg.quick_shot_power = quick_shot_power
 	cfg.quick_shot_threshold = quick_shot_threshold
-	cfg.wrister_elevation = wrister_elevation
+	cfg.quick_shot_elevation = quick_shot_elevation
+	cfg.elevation_target_height = wrister_elevation_target_height
+	cfg.elevation_blade_height = 0.05
+	cfg.elevation_gravity = 9.8
+	cfg.elevation_goal_line_z = GameRules.GOAL_LINE_Z
+	cfg.max_apex_above_blade = max_apex_above_blade
+	cfg.attacking_goal_z = get_attacking_goal_z()
+	cfg.toward_net_dot_threshold = toward_net_dot_threshold
+	cfg.away_from_net_y = away_from_net_elevation
 	return cfg
 
 func _slapper_config() -> ShotMechanics.SlapperConfig:
@@ -864,8 +956,21 @@ func _slapper_config() -> ShotMechanics.SlapperConfig:
 	cfg.min_slapper_power = min_slapper_power
 	cfg.max_slapper_power = max_slapper_power
 	cfg.max_slapper_charge_time = max_slapper_charge_time
-	cfg.slapper_elevation = slapper_elevation
+	cfg.elevation_target_height = slapper_elevation_target_height
+	cfg.elevation_blade_height = 0.05
+	cfg.elevation_gravity = 9.8
+	cfg.elevation_goal_line_z = GameRules.GOAL_LINE_Z
+	cfg.max_apex_above_blade = max_apex_above_blade
+	cfg.attacking_goal_z = get_attacking_goal_z()
+	cfg.toward_net_dot_threshold = toward_net_dot_threshold
+	cfg.away_from_net_y = away_from_net_elevation
 	return cfg
+
+# Signed Z of the goal this skater is attacking. Default 0.0 means "team
+# unknown" — the elevation math falls back to picking a goal by shot_dir.z
+# sign. LocalController overrides this once team_id is set.
+func get_attacking_goal_z() -> float:
+	return 0.0
 
 # Converts the world-space blade_height to upper-body-local Y.
 # Uses the upper body's world Y so the result is correct regardless of where

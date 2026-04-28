@@ -15,12 +15,13 @@ extends RefCounted
 #      u8 num_goalies, [goalie_bytes(12)] × num_goalies
 #      u8 score0, u8 score1, u8 phase, u8 period, u16 time_remaining
 #
-#    Total for 6 players + 2 goalies: 290 bytes (well under 1392-byte ENet MTU)
+#    Total for 6 players + 2 goalies: 302 bytes (well under 1392-byte ENet MTU)
 #
 #    Quantization layout:
-#      Skater  (35 B): pos s16/s8/s16@1cm, vel 3×s16@0.02m/s,
+#      Skater  (37 B): pos s16/s8/s16@1cm, vel 3×s16@0.02m/s,
 #                      blade 3×s16@1cm, top_hand 3×s16@1cm,
 #                      facing u16 (0–TAU→0–65535), upper_body_rot s16 (−π–π→−32767–32767),
+#                      facing_angular_velocity s16@PI*10 rad/s, upper_body_angular_velocity s16@PI*10 rad/s,
 #                      last_processed_ts f32, flags u8 (shot_state[3:0]+ghost[4]),
 #                      shot_charge u8
 #      Puck    (12 B): pos s16/s8/s16@1cm, vel 3×s16@0.02m/s, carrier_idx u8 (0xFF=none)
