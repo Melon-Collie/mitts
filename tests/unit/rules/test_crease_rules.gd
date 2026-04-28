@@ -46,9 +46,13 @@ func test_outside_half_width_not_in_crease() -> void:
 	assert_false(CreaseRules.is_in_crease(Vector2(1.5, _GOAL_Z - 0.3)))
 
 
-func test_corner_case_at_arc_boundary_inside() -> void:
-	# At exactly the arc radius the point counts as inside (<=).
-	assert_true(CreaseRules.is_in_crease(Vector2(0.0, _GOAL_Z - CreaseRules.ARC_RADIUS)))
+func test_just_inside_arc_radius_is_in_crease() -> void:
+	# 1mm inside the arc — avoids float-precision boundary noise.
+	assert_true(CreaseRules.is_in_crease(Vector2(0.0, _GOAL_Z - CreaseRules.ARC_RADIUS + 0.001)))
+
+
+func test_just_outside_arc_radius_not_in_crease() -> void:
+	assert_false(CreaseRules.is_in_crease(Vector2(0.0, _GOAL_Z - CreaseRules.ARC_RADIUS - 0.001)))
 
 
 # ── outward_direction ─────────────────────────────────────────────────────────
