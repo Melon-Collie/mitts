@@ -64,6 +64,12 @@ var _state_buffer_manager: StateBufferManager = null
 var _recorder: ReplayRecorder = null
 var _goal_replay_driver: GoalReplayDriver = null
 var _career_reporter: CareerStatsReporter = null
+# Streams broadcast frames to user://replays/<game_id>.mreplay on a worker
+# thread. Lives on every peer (host + client + spectator) for any session
+# with a non-empty _game_id and PlayerPrefs.replay_recording_enabled. Opens
+# once the registry has stabilized (post-_push_lobby_assignments_to_clients
+# on host, post-sync_existing_players on clients) and closes on scene exit.
+var _replay_file_writer: ReplayFileWriter = null
 
 # ── Spectator state ───────────────────────────────────────────────────────────
 # Host-side: peer_ids of connected spectators. Used to gate `_registry.spawn`
@@ -255,6 +261,8 @@ func on_host_started() -> void:
 	else:
 		var assignment: Dictionary = _state_machine.register_host(1)
 		_spawn_local(1, assignment.team_slot, teams[assignment.team_id])
+	# Registry is fully populated by this point — capture roster + open file.
+	_open_replay_file_writer()
 
 
 func on_connected_to_server() -> void:
@@ -374,6 +382,11 @@ func sync_existing_players(player_data: Array) -> void:
 				colors.jersey_stripe, colors.gloves, colors.pants_stripe, colors.socks, colors.socks_stripe,
 				colors.secondary, colors.text, colors.text_outline,
 				is_left, p_name, false, p_number)
+	# Client / spectator: registry is now populated with all players the host
+	# knew about at the moment we joined. Open the replay file so subsequent
+	# world-state broadcasts get recorded. Idempotent — short-circuits if a
+	# previous sync already opened it.
+	_open_replay_file_writer()
 
 
 func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int,
@@ -740,6 +753,76 @@ func _teardown_spectator_camera() -> void:
 	if _is_local_spectator:
 		_is_local_spectator = false
 		local_spectator_state_changed.emit(false)
+
+
+# ── Replay file recording ────────────────────────────────────────────────────
+# Opened once per game on every peer, after the registry has been populated
+# from lobby assignments / sync_existing_players. Idempotent — safe to call
+# repeatedly from both the host and client setup paths; the second call
+# short-circuits.
+func _open_replay_file_writer() -> void:
+	if _replay_file_writer != null:
+		return
+	if _game_id.is_empty():
+		return  # offline / tutorial — see _spawn_world
+	if not PlayerPrefs.replay_recording_enabled:
+		return
+	# Purge oldest first so the new file is never the one we delete next game.
+	# keep_count - 1 because we're about to add a new file.
+	ReplayFileIndex.purge_oldest(ReplayFileIndex.REPLAY_DIR,
+			maxi(PlayerPrefs.replay_keep_count - 1, 0))
+	var path: String = ReplayFileIndex.REPLAY_DIR.path_join(_game_id + ReplayFileIndex.REPLAY_EXT)
+	var writer := ReplayFileWriter.new()
+	if not writer.open(path, _build_replay_header()):
+		return
+	_replay_file_writer = writer
+
+
+func _close_replay_file_writer() -> void:
+	if _replay_file_writer == null:
+		return
+	_replay_file_writer.close_async(_build_replay_footer())
+	_replay_file_writer = null
+
+
+# Roster captured at game-start; mid-game joiners aren't in here but the viewer
+# can still observe them appearing in later world-state packets.
+func _build_replay_header() -> Dictionary:
+	var roster: Array[Dictionary] = []
+	if _registry != null:
+		for peer_id: int in _registry.all():
+			var r: PlayerRecord = _registry.get_record(peer_id)
+			roster.append({
+				"peer_id": peer_id,
+				"player_name": r.player_name,
+				"jersey_number": r.jersey_number,
+				"team_id": r.team.team_id if r.team != null else 0,
+				"team_slot": r.team_slot,
+				"is_left_handed": r.is_left_handed,
+				"is_local": peer_id == NetworkManager.local_peer_id(),
+			})
+	return {
+		"game_id": _game_id,
+		"started_at": Time.get_unix_time_from_system(),
+		"build_version": BuildInfo.VERSION,
+		"num_periods": _state_machine.num_periods if _state_machine != null else GameRules.NUM_PERIODS,
+		"period_duration": _state_machine.period_duration if _state_machine != null else GameRules.PERIOD_DURATION,
+		"ot_enabled": _state_machine.ot_enabled if _state_machine != null else GameRules.OT_ENABLED,
+		"rule_set": _state_machine.rule_set if _state_machine != null else GameRules.DEFAULT_RULE_SET,
+		"home_color_id": NetworkManager.pending_home_color_id,
+		"away_color_id": NetworkManager.pending_away_color_id,
+		"recorded_by_peer_id": NetworkManager.local_peer_id(),
+		"roster": roster,
+	}
+
+
+func _build_replay_footer() -> Dictionary:
+	var footer: Dictionary = {}
+	if _state_machine != null:
+		footer["final_score_home"] = _state_machine.scores[0]
+		footer["final_score_away"] = _state_machine.scores[1]
+	footer["ended_at"] = Time.get_unix_time_from_system()
+	return footer
 
 
 func _spawn_local(peer_id: int, team_slot: int, team: Team) -> void:
@@ -1123,6 +1206,12 @@ func _on_input_batch_received(peer_id: int, inputs: Array[InputState]) -> void:
 func _on_world_state_received(data: PackedByteArray) -> void:
 	if _codec != null:
 		_codec.decode_world_state(data)
+	# Tee the broadcast into the local .mreplay file. Use the host_ts encoded
+	# in the packet (bytes 2..5, after the 2-byte ws_sequence) so timestamps
+	# align across host + client recordings — local_time() differs per peer.
+	if _replay_file_writer != null and data.size() >= 6:
+		var host_ts: float = data.decode_float(2)
+		_replay_file_writer.enqueue_frame(host_ts, data)
 
 
 func _on_stats_received(data: Array) -> void:
@@ -1298,6 +1387,10 @@ func _on_game_over() -> void:
 
 func on_scene_exit() -> void:
 	set_input_blocked(false)
+	# Drain + flush the replay file before tearing down state — close_async
+	# blocks until the worker exits, so we must call this while the registry
+	# (used to build the footer) is still intact.
+	_close_replay_file_writer()
 	if _shot_tracker != null:
 		_shot_tracker.clear_state()
 	if _registry != null:
@@ -1490,8 +1583,12 @@ func get_world_state() -> PackedByteArray:
 	# Don't pollute the recorder with stale frames during goal replay — live
 	# capture is gated, so encode would just re-emit the pre-replay snapshot
 	# until the replay ends.
-	if _recorder != null and not state.is_empty() and not NetworkManager.is_replay_mode():
-		_recorder.record_frame(state, NetworkManager.local_time())
+	if not state.is_empty() and not NetworkManager.is_replay_mode():
+		var ts: float = NetworkManager.local_time()
+		if _recorder != null:
+			_recorder.record_frame(state, ts)
+		if _replay_file_writer != null:
+			_replay_file_writer.enqueue_frame(ts, state)
 	return state
 
 
