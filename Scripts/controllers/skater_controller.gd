@@ -97,7 +97,7 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 # ── Wrister Tuning ────────────────────────────────────────────────────────────
 @export var min_wrister_power: float = 14.0
 @export var max_wrister_power: float = 24.0
-@export var max_wrister_charge_distance: float = 1.5
+@export var max_wrister_charge_distance: float = 2.0
 @export var backhand_power_coefficient: float = 0.75
 @export var max_charge_direction_variance: float = 35.0
 @export var quick_shot_power: float = 14.0
@@ -117,7 +117,7 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 @export var slapper_zone_offset_z: float = -1.0  # forward offset (negative = in front of player)
 @export var min_slapper_power: float = 17.0
 @export var max_slapper_power: float = 34.0
-@export var max_slapper_charge_time: float = 1.0
+@export var max_slapper_charge_time: float = 0.7
 @export var slapper_blade_x: float = 1.0
 @export var slapper_blade_z: float = -0.5
 @export var slapper_aim_arc: float = 45.0
