@@ -30,11 +30,17 @@ var _period_duration: float = GameRules.PERIOD_DURATION
 var _ot_enabled: bool = GameRules.OT_ENABLED
 var _rule_set: int = GameRules.DEFAULT_RULE_SET
 
-# Team color preset selection
+# Team color presets used as placeholders in the lobby slot-grid preview.
+# Real per-team colors are resolved from votes at game start.
 var _home_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID
 var _away_color_id: String = TeamColorRegistry.DEFAULT_AWAY_ID
-var _home_color_btn: OptionButton = null
-var _away_color_btn: OptionButton = null
+
+# Local player's current color vote + a mirror of every player's vote so
+# everyone in the lobby can see who voted for what. Host is authoritative;
+# clients receive updates via NetworkManager.color_vote_changed.
+var _my_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID
+var _color_votes: Dictionary = {}  # peer_id → color_id
+var _my_color_btn: OptionButton = null
 
 func _ready() -> void:
 	_home_color_id = NetworkManager.pending_home_color_id
@@ -43,6 +49,8 @@ func _ready() -> void:
 	_period_duration = NetworkManager.pending_period_duration
 	_ot_enabled = NetworkManager.pending_ot_enabled
 	_rule_set = NetworkManager.pending_rule_set
+	_my_color_id = _initial_color_preference()
+	_color_votes = NetworkManager.pending_color_votes.duplicate()
 	_build_ui()
 	NetworkManager.peer_joined.connect(_on_peer_joined)
 	NetworkManager.peer_disconnected.connect(_on_peer_disconnected)
@@ -50,9 +58,14 @@ func _ready() -> void:
 	NetworkManager.slot_swap_confirmed.connect(_on_slot_swap_confirmed)
 	NetworkManager.lobby_roster_synced.connect(_on_lobby_roster_synced)
 	NetworkManager.game_started.connect(_on_game_started)
-	NetworkManager.team_colors_synced.connect(_on_team_colors_synced)
+	NetworkManager.color_vote_changed.connect(_on_color_vote_changed)
+	NetworkManager.color_votes_synced.connect(_on_color_votes_synced)
 	NetworkManager.lobby_settings_synced.connect(_on_lobby_settings_synced)
 	NetworkManager.player_ready_changed.connect(_on_player_ready_changed)
+
+	# Submit our own vote into the shared map so the host (and other peers)
+	# count it. send_color_vote handles both host-local and client-RPC paths.
+	NetworkManager.send_color_vote(_my_color_id)
 
 	if not NetworkManager.pending_lobby_roster.is_empty():
 		_on_lobby_roster_synced(NetworkManager.pending_lobby_roster)
@@ -60,6 +73,14 @@ func _ready() -> void:
 	elif NetworkManager.is_host:
 		_assign_slot(1, 0, 0, NetworkManager.local_player_name, NetworkManager.local_is_left_handed, NetworkManager.local_jersey_number)
 		_broadcast_confirm(1, 0, 0)
+
+func _initial_color_preference() -> String:
+	var saved: String = PlayerPrefs.preferred_color_id
+	if saved.is_empty():
+		return TeamColorRegistry.DEFAULT_HOME_ID
+	if not TeamColorRegistry.get_all_ids().has(saved):
+		return TeamColorRegistry.DEFAULT_HOME_ID
+	return saved
 
 # ── UI ────────────────────────────────────────────────────────────────────────
 
@@ -213,33 +234,19 @@ func _build_settings_panel() -> Control:
 		_rules_btn.modulate = Color(1, 1, 1, 0.5)
 	grid.add_child(_rules_btn)
 
-	grid.add_child(_setting_label("Home Colors"))
-	_home_color_btn = _color_option_btn(_home_color_id)
-	if is_interactive:
-		_home_color_btn.item_selected.connect(func(idx: int) -> void:
-			_home_color_id = TeamColorRegistry.get_all_ids()[idx]
-			_update_color_exclusion()
-			NetworkManager.send_team_colors(_home_color_id, _away_color_id)
-			_refresh_grid())
-	else:
-		_home_color_btn.disabled = true
-		_home_color_btn.modulate = Color(1, 1, 1, 0.5)
-	grid.add_child(_home_color_btn)
+	# Color voting: every player votes for their own team's color. The host
+	# tallies all votes from the players assigned to each team at game-start
+	# time and picks the majority (random tiebreak). If both teams' winners
+	# clash, the away team re-rolls. Resolution lives in ColorVoteRules.
+	grid.add_child(_setting_label("Your Color"))
+	_my_color_btn = _color_option_btn(_my_color_id)
+	_my_color_btn.item_selected.connect(func(idx: int) -> void:
+		_my_color_id = TeamColorRegistry.get_all_ids()[idx]
+		PlayerPrefs.preferred_color_id = _my_color_id
+		PlayerPrefs.save()
+		NetworkManager.send_color_vote(_my_color_id))
+	grid.add_child(_my_color_btn)
 
-	grid.add_child(_setting_label("Away Colors"))
-	_away_color_btn = _color_option_btn(_away_color_id)
-	if is_interactive:
-		_away_color_btn.item_selected.connect(func(idx: int) -> void:
-			_away_color_id = TeamColorRegistry.get_all_ids()[idx]
-			_update_color_exclusion()
-			NetworkManager.send_team_colors(_home_color_id, _away_color_id)
-			_refresh_grid())
-	else:
-		_away_color_btn.disabled = true
-		_away_color_btn.modulate = Color(1, 1, 1, 0.5)
-	grid.add_child(_away_color_btn)
-
-	_update_color_exclusion()
 	return box
 
 
@@ -317,26 +324,6 @@ func _color_option_btn(selected_id: String) -> OptionButton:
 			btn.select(i)
 	SoundManager.wire_button(btn)
 	return btn
-
-func _sync_option_btn(btn: OptionButton, id: String) -> void:
-	if btn == null:
-		return
-	var ids: Array[String] = TeamColorRegistry.get_all_ids()
-	for i: int in ids.size():
-		if ids[i] == id:
-			btn.select(i)
-			return
-
-# Disables the opposing team's currently selected preset in each dropdown so
-# the same colors cannot be chosen for both teams simultaneously.
-func _update_color_exclusion() -> void:
-	var ids: Array[String] = TeamColorRegistry.get_all_ids()
-	if _home_color_btn != null:
-		for i: int in ids.size():
-			_home_color_btn.set_item_disabled(i, ids[i] == _away_color_id)
-	if _away_color_btn != null:
-		for i: int in ids.size():
-			_away_color_btn.set_item_disabled(i, ids[i] == _home_color_id)
 
 # ── Slot management ───────────────────────────────────────────────────────────
 
@@ -448,7 +435,7 @@ func _on_peer_joined(peer_id: int) -> void:
 	var roster: Array = _build_roster_array()
 	for existing_peer: int in NetworkManager.connected_peer_ids():
 		NetworkManager.send_lobby_roster(existing_peer, roster)
-	NetworkManager.send_team_colors_to(peer_id, _home_color_id, _away_color_id)
+	NetworkManager.send_color_votes_to(peer_id, _color_votes)
 	NetworkManager.send_lobby_settings_to(peer_id, _num_periods, _period_duration, _ot_enabled, _rule_set)
 	_broadcast_confirm(peer_id, target[0], target[1])
 	_update_start_btn()
@@ -536,13 +523,13 @@ func _on_player_ready_changed(peer_id: int, is_ready: bool) -> void:
 	_update_start_btn()
 	_refresh_grid()
 
-func _on_team_colors_synced(home_id: String, away_id: String) -> void:
-	_home_color_id = home_id
-	_away_color_id = away_id
-	_sync_option_btn(_home_color_btn, home_id)
-	_sync_option_btn(_away_color_btn, away_id)
-	_update_color_exclusion()
-	_refresh_grid()
+func _on_color_vote_changed(peer_id: int, color_id: String) -> void:
+	_color_votes[peer_id] = color_id
+
+func _on_color_votes_synced(votes: Dictionary) -> void:
+	_color_votes = votes.duplicate()
+	# Make sure our own vote is still recorded after a full sync.
+	_color_votes[NetworkManager.local_peer_id()] = _my_color_id
 
 func _on_lobby_settings_synced(num_periods: int, period_duration: float, ot_enabled: bool, rule_set: int) -> void:
 	_num_periods = num_periods
@@ -589,6 +576,9 @@ func _on_ready_pressed() -> void:
 	NetworkManager.send_player_ready(_local_is_ready)
 
 func _on_start_pressed() -> void:
+	var resolved: Array[String] = _resolve_team_colors_from_votes()
+	_home_color_id = resolved[0]
+	_away_color_id = resolved[1]
 	var config: Dictionary = {
 		"num_periods": _num_periods,
 		"period_duration": _period_duration,
@@ -599,6 +589,30 @@ func _on_start_pressed() -> void:
 		"rule_set": _rule_set,
 	}
 	NetworkManager.send_game_start(config)
+
+# Tally each team's player votes from the current lobby roster and let
+# ColorVoteRules pick winners (random tiebreak; away re-rolls on clash).
+func _resolve_team_colors_from_votes() -> Array[String]:
+	var home_votes: Array[String] = []
+	var away_votes: Array[String] = []
+	for k: int in _lobby_slots:
+		var entry: Dictionary = _lobby_slots[k]
+		var peer_id: int = entry.peer_id
+		if not _color_votes.has(peer_id):
+			continue
+		var team_id: int = 1 if k >= PlayerRules.MAX_PER_TEAM else 0
+		if team_id == 0:
+			home_votes.append(_color_votes[peer_id])
+		else:
+			away_votes.append(_color_votes[peer_id])
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	return ColorVoteRules.resolve_team_colors(
+			home_votes, away_votes,
+			TeamColorRegistry.get_all_ids(),
+			TeamColorRegistry.DEFAULT_HOME_ID,
+			TeamColorRegistry.DEFAULT_AWAY_ID,
+			rng)
 
 func _on_back_pressed() -> void:
 	GameManager.exit_to_main_menu()
