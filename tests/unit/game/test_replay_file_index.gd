@@ -31,15 +31,17 @@ func _clear_dir() -> void:
 
 
 # Writes a 1-byte placeholder so FileAccess.get_modified_time has something to
-# stat. Uses Time.get_ticks_usec to differentiate consecutive files since
-# mtime resolution on some filesystems is a single second.
+# stat. FileAccess.get_modified_time is second-resolution on every supported
+# platform, so consecutive _make_replay calls need ≥ 1 second between them
+# for the order-sensitive tests to be deterministic. (10 ms wasn't enough —
+# all three files ended up sharing a second, sort returned all-equal, and
+# stable sort kept directory-listing order = alphabetical.)
 func _make_replay(name: String) -> String:
 	var path: String = TEST_DIR.path_join(name)
 	var f: FileAccess = FileAccess.open(path, FileAccess.WRITE)
 	f.store_8(0)
 	f.close()
-	# Sleep a hair so consecutive files get distinguishable mtimes on FAT/exFAT.
-	OS.delay_msec(10)
+	OS.delay_msec(1100)
 	return path
 
 
