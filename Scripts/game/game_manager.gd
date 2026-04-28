@@ -1209,7 +1209,9 @@ func _on_world_state_received(data: PackedByteArray) -> void:
 	# Tee the broadcast into the local .mreplay file. Use the host_ts encoded
 	# in the packet (bytes 2..5, after the 2-byte ws_sequence) so timestamps
 	# align across host + client recordings — local_time() differs per peer.
-	if _replay_file_writer != null and data.size() >= 6:
+	# Skip during host's goal-replay window (broadcast continues but contains
+	# frozen state); the host mirrors the same gate on its own recorder.
+	if _replay_file_writer != null and data.size() >= 6 and not NetworkManager.is_replay_mode():
 		var host_ts: float = data.decode_float(2)
 		_replay_file_writer.enqueue_frame(host_ts, data)
 

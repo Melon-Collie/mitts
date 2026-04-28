@@ -517,10 +517,25 @@ func receive_hit_claim(victim_peer_id: int, host_timestamp: float, rtt_ms: float
 func start_replay_mode(initial_ts: float) -> void:
 	_replay_mode = true
 	_replay_clock = initial_ts
+	# Mirror the flag onto every connected client so their .mreplay recorder
+	# gates identically. Clients still receive (frozen) world-state broadcasts
+	# during the cinematic, but their file writer skips them so the host and
+	# client files align.
+	if is_host:
+		for peer_id: int in connected_peer_ids():
+			notify_replay_mode.rpc_id(peer_id, true)
 
 
 func stop_replay_mode() -> void:
 	_replay_mode = false
+	if is_host:
+		for peer_id: int in connected_peer_ids():
+			notify_replay_mode.rpc_id(peer_id, false)
+
+
+@rpc("authority", "reliable")
+func notify_replay_mode(active: bool) -> void:
+	_replay_mode = active
 
 
 func set_replay_clock(t: float) -> void:
