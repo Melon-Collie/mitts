@@ -29,6 +29,14 @@ const _GAP_THRESHOLD_S: float = 0.5
 const _GAP_DWELL_S: float = 0.5
 
 signal event_emitted(event: Dictionary)
+# Fires after a backward seek so the viewer can rebuild the roster snapshot
+# at the new clock. Forward play / forward seek don't need this — the
+# event_emitted stream catches up by re-firing events between old and new
+# clock. Backward goes the other way: events whose side effects already
+# applied (a despawn, say) need to be undone. Cleanest fix is "tear down,
+# rebuild from header, replay events ≤ t," and the viewer owns the spawn
+# logic so the driver hands it the events list and lets it run the rebuild.
+signal roster_rebuild_requested(events_through_t: Array)
 signal game_state_changed(game_state: Dictionary)
 signal playback_ended
 
@@ -126,12 +134,18 @@ func seek(t: float) -> void:
 
 
 func _seek_internal(t: float) -> void:
-	if t < _virtual_clock:
+	var was_backward: bool = t < _virtual_clock
+	if was_backward:
 		_frame_idx_hint = 0  # backward seek invalidates forward scan hint
 	_virtual_clock = t
 	_cached_from_idx = -1
 	_cached_to_idx = -1
 	_next_event_idx = _find_next_event_idx(_virtual_clock)
+	if was_backward:
+		var snapshot: Array = []
+		for i: int in _next_event_idx:
+			snapshot.append(_events[i].data)
+		roster_rebuild_requested.emit(snapshot)
 
 
 # ── Read accessors for the viewer HUD ────────────────────────────────────────

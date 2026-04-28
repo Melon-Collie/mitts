@@ -31,6 +31,10 @@ var _home_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID
 var _away_color_id: String = TeamColorRegistry.DEFAULT_AWAY_ID
 var _home_colors: Dictionary = {}
 var _away_colors: Dictionary = {}
+# Header roster cached for backward-seek rebuilds — the driver sends us the
+# events stream up through the new clock, but we have to re-spawn the
+# initial roster ourselves first.
+var _header_roster: Array = []
 
 
 func _ready() -> void:
@@ -91,8 +95,9 @@ func _spawn_actors_from_header(header: Dictionary) -> void:
 	goalie_result.bottom_goalie.set_goalie_color(_home_colors.jersey, _home_colors.helmet, _home_colors.goalie_pads)
 	goalie_result.top_goalie.set_goalie_color(_away_colors.jersey, _away_colors.helmet, _away_colors.goalie_pads)
 
-	for entry: Dictionary in header.get("roster", []):
-		_spawn_skater_from_roster(entry)
+	_header_roster = header.get("roster", []) as Array
+	for entry: Variant in _header_roster:
+		_spawn_skater_from_roster(entry as Dictionary)
 
 
 func _spawn_skater_from_roster(entry: Dictionary) -> void:
@@ -156,6 +161,7 @@ func _start_playback(frames: Array) -> void:
 	add_child(_driver)
 	_driver.setup(_codec, _records, _puck, _goalie_controllers, frames)
 	_driver.event_emitted.connect(_on_replay_event)
+	_driver.roster_rebuild_requested.connect(_on_roster_rebuild)
 	_driver.play()
 
 
@@ -179,6 +185,20 @@ func _despawn_skater(peer_id: int) -> void:
 	if record.controller != null:
 		record.controller.queue_free()
 	_records.erase(peer_id)
+
+
+# Backward seek: tear down every actor, respawn the header roster, replay
+# the events stream up to the new clock so any mid-game joins/leaves that
+# happened before the seek target are reflected in the visible roster.
+func _on_roster_rebuild(events_through_t: Array) -> void:
+	# Snapshot keys before iterating — _despawn_skater erases from _records.
+	var current_peers: Array = _records.keys()
+	for peer_id: Variant in current_peers:
+		_despawn_skater(int(peer_id))
+	for entry: Variant in _header_roster:
+		_spawn_skater_from_roster(entry as Dictionary)
+	for event: Variant in events_through_t:
+		_on_replay_event(event as Dictionary)
 
 
 func _mount_hud(header: Dictionary) -> void:
