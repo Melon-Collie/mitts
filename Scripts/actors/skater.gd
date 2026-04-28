@@ -717,7 +717,15 @@ func _resolve_player_collisions(vel_before: Vector3) -> void:
 		# Push other away; heavier checker transfers more to a lighter victim.
 		# Reduce transfer when the victim is bracing (holding brake).
 		var effective_transfer: float = body_check_transfer * (other.body_check_brace_resistance if other.is_braced else 1.0)
+		var other_vel_before: Vector3 = other.velocity
 		other.velocity -= normal * approach * (weight / other.weight) * effective_transfer
+		# Emit on the victim too so their LocalController.reconcile can inject the
+		# transfer impulse during input replay. Without this, only the attacker's
+		# rebound was captured and the victim relied entirely on snapshot authority
+		# absorbing the impulse — broken if the snapshot predates the host's resolve.
+		var other_delta: Vector3 = other.velocity - other_vel_before
+		if other_delta.length_squared() > 0.0001:
+			other.body_check_impulse_applied.emit(other_delta)
 		# Signal for server-side puck strip check.
 		body_checked_player.emit(other, weight * approach, -normal)
 
