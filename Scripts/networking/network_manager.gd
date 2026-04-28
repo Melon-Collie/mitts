@@ -752,7 +752,10 @@ func notify_rematch_vote(peer_id: int, vote: bool) -> void:
 
 func send_rematch_vote(vote: bool) -> void:
 	if is_host:
-		rematch_vote_changed.emit(local_peer_id(), vote)
+		var peer_id: int = local_peer_id()
+		for remote_id: int in connected_peer_ids():
+			notify_rematch_vote.rpc_id(remote_id, peer_id, vote)
+		rematch_vote_changed.emit(peer_id, vote)
 	else:
 		request_rematch_vote.rpc_id(1, vote)
 
