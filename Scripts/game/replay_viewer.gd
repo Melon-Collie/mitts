@@ -24,6 +24,7 @@ var _records: Dictionary = {}  # peer_id → PlayerRecord
 var _codec: WorldStateCodec = null
 var _driver: FileReplayDriver = null
 var _camera: SpectatorCamera = null
+var _hud: ReplayViewerHUD = null
 
 
 func _ready() -> void:
@@ -51,6 +52,7 @@ func _ready() -> void:
 	_spawn_actors_from_header(read_result.header)
 	_mount_camera()
 	_start_playback(read_result.frames)
+	_mount_hud(read_result.header)
 
 
 func _exit_tree() -> void:
@@ -137,6 +139,12 @@ func _start_playback(frames: Array) -> void:
 	add_child(_driver)
 	_driver.setup(_codec, _records, _puck, _goalie_controllers, frames)
 	_driver.play()
+
+
+func _mount_hud(header: Dictionary) -> void:
+	_hud = ReplayViewerHUD.new()
+	add_child(_hud)
+	_hud.setup(_driver, header)
 
 
 # ── Stub interface for RemoteController.setup(skater, puck, game_state) ─────
