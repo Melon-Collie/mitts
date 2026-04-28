@@ -49,6 +49,7 @@ var _away_color_id: String = TeamColorRegistry.DEFAULT_AWAY_ID
 var _my_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID
 var _color_votes: Dictionary = {}  # peer_id → color_id
 var _my_color_btn: OptionButton = null
+var _color_vote_row: Control = null
 
 func _ready() -> void:
 	_home_color_id = NetworkManager.pending_home_color_id
@@ -127,7 +128,8 @@ func _build_ui() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(title)
 
-	vbox.add_child(_build_color_vote_row())
+	_color_vote_row = _build_color_vote_row()
+	vbox.add_child(_color_vote_row)
 
 	_slot_grid = SlotGridPanel.new()
 	_slot_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -199,38 +201,29 @@ func _refresh_spectator_panel() -> void:
 		for e: Dictionary in entries:
 			names.append(e.player_name)
 		_spectator_list_label.text = "Spectating: " + ", ".join(names)
-	if _spectator_join_btn != null:
-		var local_peer: int = NetworkManager.local_peer_id()
-		var local_is_spectator: bool = false
-		for e: Dictionary in entries:
-			if e.peer_id == local_peer:
-				local_is_spectator = true
-				break
-		if local_is_spectator:
-			_spectator_join_btn.text = "Play"
-			_spectator_join_btn.disabled = _find_balanced_slot(local_peer).is_empty()
-		else:
-			_spectator_join_btn.text = "Spectate"
-			_spectator_join_btn.disabled = _find_open_spectator_slot() < 0
-
-func _on_spectate_pressed() -> void:
 	var local_peer: int = NetworkManager.local_peer_id()
-	var entries: Array[Dictionary] = _build_spectator_roster()
 	var local_is_spectator: bool = false
 	for e: Dictionary in entries:
 		if e.peer_id == local_peer:
 			local_is_spectator = true
 			break
-	if local_is_spectator:
-		var target: Array = _find_balanced_slot(local_peer)
-		if target.is_empty():
-			return
-		NetworkManager.send_request_slot_swap(target[0], target[1])
-	else:
-		var open: int = _find_open_spectator_slot()
-		if open < 0:
-			return
-		NetworkManager.send_request_slot_swap(NetworkManager.SPECTATOR_TEAM_ID, open)
+	if _spectator_join_btn != null:
+		# Spectators get back into a player slot by clicking on an empty slot in
+		# the grid above — no separate "Play" button. Only show "Spectate" while
+		# the local peer is in a player slot.
+		_spectator_join_btn.visible = not local_is_spectator
+		_spectator_join_btn.disabled = _find_open_spectator_slot() < 0
+	# Spectators don't belong to a team, so their color vote can't affect any
+	# team's resolution (`_recompute_resolved_colors` skips spectator entries).
+	# Hide the row entirely so the UI doesn't suggest the dropdown does anything.
+	if _color_vote_row != null:
+		_color_vote_row.visible = not local_is_spectator
+
+func _on_spectate_pressed() -> void:
+	var open: int = _find_open_spectator_slot()
+	if open < 0:
+		return
+	NetworkManager.send_request_slot_swap(NetworkManager.SPECTATOR_TEAM_ID, open)
 
 func _build_settings_panel() -> Control:
 	var box := VBoxContainer.new()
