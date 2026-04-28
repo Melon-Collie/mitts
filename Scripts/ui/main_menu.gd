@@ -13,6 +13,7 @@ var _offline_popup: Control = null
 var _free_play_popup: Control = null
 var _online_popup: Control = null
 var _offline_home_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID
+var _career_screen: CareerStatsScreen = null
 var _offline_away_color_id: String  = TeamColorRegistry.DEFAULT_AWAY_ID
 var _offline_home_btn: OptionButton = null
 var _offline_away_btn: OptionButton = null
@@ -96,6 +97,10 @@ func _build_ui() -> void:
 	online_btn.pressed.connect(func() -> void: _online_popup.visible = true)
 	vbox.add_child(online_btn)
 
+	var career_btn := _make_button("Career")
+	career_btn.pressed.connect(func() -> void: _career_screen.open())
+	vbox.add_child(career_btn)
+
 	var options_btn := _make_button("Options")
 	options_btn.pressed.connect(_on_options_pressed)
 	vbox.add_child(options_btn)
@@ -129,6 +134,8 @@ func _build_ui() -> void:
 	_version_label.modulate.a = 0.0
 	add_child(_version_label)
 
+	_career_screen = CareerStatsScreen.new()
+	add_child(_career_screen)
 	_build_player_popup()
 	_build_options_popup()
 	_build_exit_popup()
