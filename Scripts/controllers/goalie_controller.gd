@@ -14,14 +14,14 @@ extends Node
 @export var zone_conservative_z: float = 20.0
 @export var depth_speed: float = 2.0
 
-@export var shuffle_speed: float = 1.3
-@export var t_push_speed: float = 3.0
+@export var shuffle_speed: float = 2.0
+@export var t_push_speed: float = 3.8
 @export var lateral_threshold: float = 0.3
 @export var max_facing_angle: float = 70.0
 @export var rotation_speed: float = 8.0
 @export var rvh_transition_speed: float = 6.0
 
-@export var reaction_delay: float = 0.10
+@export var reaction_delay: float = 0.13
 @export var butterfly_recovery_time: float = 0.4
 
 @export var shot_speed_threshold: float = 5.0

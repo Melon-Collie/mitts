@@ -9,12 +9,12 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 
 # ── Movement Tuning ───────────────────────────────────────────────────────────
 @export var thrust: float = 12.0
-@export var friction: float = 3.5
-@export var max_speed: float = 9.0
+@export var friction: float = 0.8
+@export var friction_drag: float = 0.27
+@export var max_speed: float = 10.5
 @export var move_deadzone: float = 0.1
-@export var brake_multiplier: float = 5.0
-@export var brake_redirect_speed_deg: float = 180.0  # deg/s velocity rotates toward input while carving
-@export var puck_carry_speed_multiplier: float = 0.85
+@export var brake_multiplier: float = 4.0
+@export var puck_carry_speed_multiplier: float = 0.82
 @export var backward_thrust_multiplier: float = 0.80
 @export var crossover_thrust_multiplier: float = 0.90
 # ── Facing Tuning ─────────────────────────────────────────────────────────────
@@ -95,14 +95,15 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 @export var lower_body_lag_speed: float = 5.0
 
 # ── Wrister Tuning ────────────────────────────────────────────────────────────
-@export var min_wrister_power: float = 12.0
-@export var max_wrister_power: float = 20.0
-@export var max_wrister_charge_distance: float = 1.5
+@export var min_wrister_power: float = 14.0
+@export var max_wrister_power: float = 24.0
+@export var max_wrister_charge_distance: float = 2.0
 @export var backhand_power_coefficient: float = 0.75
 @export var max_charge_direction_variance: float = 35.0
-@export var quick_shot_power: float = 12.0
+@export var quick_shot_power: float = 14.0
 @export var quick_shot_threshold: float = 0.1
-@export var wrister_elevation: float = 0.3
+@export var quick_shot_elevation: float = 0.10
+@export var wrister_elevation_target_height: float = 0.90
 
 # ── Head Tracking Tuning ─────────────────────────────────────────────────────
 @export var head_track_speed: float = 12.0
@@ -114,21 +115,21 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 @export var slapper_zone_radius: float = 0.5
 @export var slapper_zone_offset_x: float = 0.8  # lateral offset toward blade side
 @export var slapper_zone_offset_z: float = -1.0  # forward offset (negative = in front of player)
-@export var min_slapper_power: float = 14.0
-@export var max_slapper_power: float = 28.0
-@export var max_slapper_charge_time: float = 1.0
+@export var min_slapper_power: float = 17.0
+@export var max_slapper_power: float = 34.0
+@export var max_slapper_charge_time: float = 0.7
 @export var slapper_blade_x: float = 1.0
 @export var slapper_blade_z: float = -0.5
 @export var slapper_aim_arc: float = 45.0
-@export var slapper_elevation: float = 0.15
+@export var slapper_elevation_target_height: float = 0.65
 @export var one_timer_window_duration: float = 0.45  # seconds after puck arrives to release
 @export var one_timer_leniency_time: float = 0.08   # seconds of puck travel added to zone radius as leniency
-@export var one_timer_center_power_bonus: float = 0.25  # max multiplier bonus at dead centre
+@export var one_timer_center_power_bonus: float = 0.10  # ±10%: edge of zone = −10%, dead centre = +10%
 
 var show_one_timer_indicator: bool = false
 
 # ── Follow Through Tuning ─────────────────────────────────────────────────────
-@export var follow_through_duration: float = 0.15
+@export var follow_through_duration: float = 0.25
 @export var wrister_follow_through_hand_y: float = 0.35
 @export var wrister_follow_through_blade_lift: float = 0.20
 
@@ -552,7 +553,8 @@ func _update_slapper_charge(delta: float) -> void:
 
 func _apply_slapper_velocity_drag(delta: float) -> void:
 	var slapper_vel := Vector2(skater.velocity.x, skater.velocity.z)
-	slapper_vel = slapper_vel.move_toward(Vector2.ZERO, friction * delta)
+	var drag: float = friction + friction_drag * slapper_vel.length()
+	slapper_vel = slapper_vel.move_toward(Vector2.ZERO, drag * delta)
 	skater.velocity.x = slapper_vel.x
 	skater.velocity.z = slapper_vel.y
 
@@ -573,7 +575,7 @@ func _try_one_timer_release(input: InputState) -> Dictionary:
 			blade_world, input.mouse_world_pos,
 			_is_elevated, cfg.max_slapper_charge_time, cfg, locked_dir_3d)
 	var proximity: float = clampf(1.0 - dist / slapper_zone_radius, 0.0, 1.0)
-	result.power *= 1.0 + one_timer_center_power_bonus * proximity
+	result.power *= 1.0 + one_timer_center_power_bonus * (2.0 * proximity - 1.0)
 	if not is_replaying:
 		one_timer_release_requested.emit(result.direction, result.power)
 	return {fired = true, direction = result.direction, follow_through_duration = follow_through_duration}
@@ -903,13 +905,13 @@ func _movement_config() -> SkaterMovementRules.MovementConfig:
 	var cfg := SkaterMovementRules.MovementConfig.new()
 	cfg.thrust = thrust
 	cfg.friction = friction
+	cfg.friction_drag = friction_drag
 	cfg.max_speed = max_speed
 	cfg.move_deadzone = move_deadzone
 	cfg.brake_multiplier = brake_multiplier
 	cfg.puck_carry_speed_multiplier = puck_carry_speed_multiplier
 	cfg.backward_thrust_multiplier = backward_thrust_multiplier
 	cfg.crossover_thrust_multiplier = crossover_thrust_multiplier
-	cfg.brake_redirect_speed = deg_to_rad(brake_redirect_speed_deg)
 	return cfg
 
 func _block_movement_config() -> SkaterMovementRules.MovementConfig:
@@ -926,7 +928,11 @@ func _wrister_config() -> ShotMechanics.WristerConfig:
 	cfg.backhand_power_coefficient = backhand_power_coefficient
 	cfg.quick_shot_power = quick_shot_power
 	cfg.quick_shot_threshold = quick_shot_threshold
-	cfg.wrister_elevation = wrister_elevation
+	cfg.quick_shot_elevation = quick_shot_elevation
+	cfg.elevation_target_height = wrister_elevation_target_height
+	cfg.elevation_blade_height = 0.05
+	cfg.elevation_gravity = 9.8
+	cfg.elevation_goal_line_z = GameRules.GOAL_LINE_Z
 	return cfg
 
 func _slapper_config() -> ShotMechanics.SlapperConfig:
@@ -934,7 +940,10 @@ func _slapper_config() -> ShotMechanics.SlapperConfig:
 	cfg.min_slapper_power = min_slapper_power
 	cfg.max_slapper_power = max_slapper_power
 	cfg.max_slapper_charge_time = max_slapper_charge_time
-	cfg.slapper_elevation = slapper_elevation
+	cfg.elevation_target_height = slapper_elevation_target_height
+	cfg.elevation_blade_height = 0.05
+	cfg.elevation_gravity = 9.8
+	cfg.elevation_goal_line_z = GameRules.GOAL_LINE_Z
 	return cfg
 
 # Converts the world-space blade_height to upper-body-local Y.

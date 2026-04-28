@@ -10,7 +10,7 @@ signal puck_touched_post  # puck contacted any HockeyGoal geometry while uncarri
 signal puck_hit_boards     # uncarried puck struck rink boards at meaningful speed
 signal puck_hit_goal_body  # uncarried puck struck net panel or skirt (non-pipe goal geometry)
 
-@export var max_speed: float = 30.0
+@export var max_speed: float = 38.0
 @export var reattach_cooldown: float = 0.5
 @export var ice_height: float = 0.05
 @export var pickup_max_speed: float = 8.0
