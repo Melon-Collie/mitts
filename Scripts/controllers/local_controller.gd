@@ -46,6 +46,15 @@ func set_local_team_id(team_id: int) -> void:
 func set_goal_context(goal_0: HockeyGoal, goal_1: HockeyGoal, carrier_team_getter: Callable) -> void:
 	camera.set_goal_context(goal_0, goal_1, carrier_team_getter)
 
+# Team 0 defends the +Z goal → attacks -Z. Team 1 defends -Z → attacks +Z.
+# See GameManager._assign_goals_to_teams.
+func get_attacking_goal_z() -> float:
+	if _team_id == 0:
+		return -GameRules.GOAL_LINE_Z
+	if _team_id == 1:
+		return GameRules.GOAL_LINE_Z
+	return 0.0
+
 func get_current_input() -> InputState:
 	return _current_input
 
