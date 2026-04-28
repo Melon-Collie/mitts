@@ -274,8 +274,12 @@ func _build_score_line(game: Dictionary) -> Control:
 	return hbox
 
 
-# Period breakdown formatted as "P1 1-0 · P2 0-1 · P3 2-0". Returns null if
-# period_scores is missing or malformed (older rows pre-migration).
+# Period breakdown formatted as "P1 1-0 · P2 0-1 · P3 2-0 · OT1 1-0".
+# Periods past num_periods are labelled OT1, OT2, … so a 1-period game
+# that goes to sudden-death OT shows "P1 0-0 · OT1 0-0 · OT2 1-0" rather
+# than "P1 P2 P3". Falls back to "P%d" labelling when num_periods is
+# missing (older rows pre-migration). Returns null if period_scores is
+# missing or malformed.
 func _build_period_breakdown(game: Dictionary) -> Label:
 	var ps: Variant = game.get("period_scores", null)
 	if not ps is Array or (ps as Array).size() < 2:
@@ -285,9 +289,16 @@ func _build_period_breakdown(game: Dictionary) -> Label:
 	var team1: Array = ps_arr[1] as Array
 	if team0.is_empty() or team0.size() != team1.size():
 		return null
+	var num_periods: int = _safe_int(game.get("num_periods", 0))
 	var parts: PackedStringArray = PackedStringArray()
 	for p: int in team0.size():
-		parts.append("P%d %d-%d" % [p + 1, _safe_int(team0[p]), _safe_int(team1[p])])
+		var period_num: int = p + 1
+		var label: String
+		if num_periods > 0 and period_num > num_periods:
+			label = "OT%d" % (period_num - num_periods)
+		else:
+			label = "P%d" % period_num
+		parts.append("%s %d-%d" % [label, _safe_int(team0[p]), _safe_int(team1[p])])
 	var lbl := Label.new()
 	lbl.text = " · ".join(parts)
 	lbl.add_theme_font_size_override("font_size", 11)

@@ -1,7 +1,7 @@
 class_name CareerStatsReporter extends RefCounted
 
 func report(record: PlayerRecord, goals_for: int, goals_against: int, outcome: String,
-		game_id: String, team_id: int, period_scores: Array) -> void:
+		game_id: String, team_id: int, period_scores: Array, num_periods: int) -> void:
 	var body: Dictionary = record.stats.to_dict()
 	body["uuid"] = PlayerPrefs.player_uuid
 	body["player_name"] = record.display_name()
@@ -12,6 +12,7 @@ func report(record: PlayerRecord, goals_for: int, goals_against: int, outcome: S
 	body["game_id"] = game_id
 	body["team_id"] = team_id
 	body["period_scores"] = period_scores
+	body["num_periods"] = num_periods
 	_post(SupabaseConfig.URL + "/rest/v1/career_stats", body)
 
 
