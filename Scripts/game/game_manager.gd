@@ -54,6 +54,7 @@ var _swap_coord: SlotSwapCoordinator = null
 var _telemetry: NetworkTelemetry = null
 var _debug_overlay: NetworkDebugOverlay = null
 var _state_buffer_manager: StateBufferManager = null
+var _career_reporter: CareerStatsReporter = null
 
 # ── Lag compensation ──────────────────────────────────────────────────────────
 const _MAX_CLAIM_AGE_S: float = 0.2
@@ -65,6 +66,8 @@ var _last_hit_claim_sent: Dictionary = {}  # "hitter:victim" -> float, client on
 
 func _ready() -> void:
 	randomize()
+	_career_reporter = CareerStatsReporter.new()
+	game_over.connect(_on_game_over)
 	_wire_network_signals()
 
 
@@ -116,6 +119,10 @@ func _process(delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if _state_machine != null and _registry != null:
+		var local: PlayerRecord = _registry.get_local()
+		if local != null and not PhaseRules.is_dead_puck_phase(_state_machine.current_phase):
+			local.stats.toi_seconds += delta
 	if not NetworkManager.is_host or puck == null or _state_machine == null:
 		return
 	if _state_buffer_manager != null and puck_controller != null:
@@ -1002,6 +1009,23 @@ func _on_hit_claim_received(hitter_peer_id: int, victim_peer_id: int, host_times
 
 
 # ── Scene exit & reset ───────────────────────────────────────────────────────
+func _on_game_over() -> void:
+	if _state_machine == null or _registry == null or _career_reporter == null:
+		return
+	var local: PlayerRecord = _registry.get_local()
+	if local == null or local.team == null:
+		return
+	var team_id: int = local.team.team_id
+	var gf: int = _state_machine.scores[team_id]
+	var ga: int = _state_machine.scores[1 - team_id]
+	var outcome: String = "draw"
+	if gf > ga:
+		outcome = "win"
+	elif gf < ga:
+		outcome = "loss"
+	_career_reporter.report(local, gf, ga, outcome)
+
+
 func on_scene_exit() -> void:
 	set_input_blocked(false)
 	if _shot_tracker != null:

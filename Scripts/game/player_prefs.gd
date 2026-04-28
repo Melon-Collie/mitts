@@ -24,6 +24,9 @@ const REBINDABLE_ACTIONS: PackedStringArray = [
 	"shoot", "slapshot", "block", "elevation_up", "elevation_down",
 ]
 
+var player_uuid: String = ""
+var steam_id_linked: bool = false
+
 var player_name: String = "Player"
 var jersey_number: int = 10
 var is_left_handed: bool = true
@@ -57,9 +60,14 @@ func _get_save_path() -> String:
 
 func _ready() -> void:
 	_load()
+	if player_uuid.is_empty():
+		player_uuid = _generate_uuid()
+		save()
 
 func save() -> void:
 	var cfg := ConfigFile.new()
+	cfg.set_value("identity", "player_uuid", player_uuid)
+	cfg.set_value("identity", "steam_id_linked", steam_id_linked)
 	cfg.set_value("player", "name", player_name)
 	cfg.set_value("player", "jersey_number", jersey_number)
 	cfg.set_value("player", "left_handed", is_left_handed)
@@ -145,6 +153,8 @@ func apply_video() -> void:
 func _load() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(_get_save_path()) == OK:
+		player_uuid = cfg.get_value("identity", "player_uuid", "")
+		steam_id_linked = cfg.get_value("identity", "steam_id_linked", false)
 		player_name = cfg.get_value("player", "name", "Player").substr(0, 10)
 		jersey_number = clamp(cfg.get_value("player", "jersey_number", 10), 0, 99)
 		is_left_handed = cfg.get_value("player", "left_handed", true)
@@ -179,3 +189,18 @@ func _load() -> void:
 	apply_audio()
 	apply_bindings()
 	call_deferred(&"apply_video")
+
+
+static func _generate_uuid() -> String:
+	const HEX: String = "0123456789abcdef"
+	var result: String = ""
+	for i: int in 32:
+		if i == 8 or i == 12 or i == 16 or i == 20:
+			result += "-"
+		if i == 12:
+			result += "4"
+		elif i == 16:
+			result += HEX[(randi() % 4) + 8]
+		else:
+			result += HEX[randi() % 16]
+	return result
