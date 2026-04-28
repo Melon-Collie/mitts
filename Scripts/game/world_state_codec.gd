@@ -141,6 +141,12 @@ func decode_world_state(data: PackedByteArray) -> void:
 	if data.size() < min_size:
 		push_warning("WorldStateCodec: truncated (got %d, need %d)" % [data.size(), min_size])
 		return
+	# During the goal-replay cinematic, GoalReplayDriver owns actor positions
+	# locally. Broadcast packets keep arriving (frozen state from the host),
+	# but applying them would fight the driver's apply_replay_state writes.
+	# Skip actor application; still walk the byte cursor so the trailing
+	# game-state block lands at the right offset.
+	var skip_actors: bool = NetworkManager.is_replay_mode()
 	# Skaters — collect peer_ids in packet order so we can resolve the puck carrier index below.
 	var decoded_peers: Array[int] = []
 	for _i: int in num_skaters:
@@ -148,6 +154,8 @@ func decode_world_state(data: PackedByteArray) -> void:
 		decoded_peers.append(peer_id)
 		var skater_bytes: PackedByteArray = data.slice(o, o + 37); o += 37
 		var depth: int = data.decode_u8(o); o += 1
+		if skip_actors:
+			continue
 		var record: PlayerRecord = _registry.get_record(peer_id)
 		if record == null:
 			continue
@@ -161,16 +169,18 @@ func decode_world_state(data: PackedByteArray) -> void:
 	var puck_state := _decode_puck_quantized(data.slice(o, o + 11)); o += 11
 	var carrier_idx: int = data.decode_u8(o); o += 1
 	puck_state.carrier_peer_id = decoded_peers[carrier_idx] if carrier_idx < decoded_peers.size() else -1
-	var puck_controller: PuckController = _puck_controller_getter.call() as PuckController
-	if puck_controller != null:
-		puck_controller.apply_state(puck_state, host_ts)
+	if not skip_actors:
+		var puck_controller: PuckController = _puck_controller_getter.call() as PuckController
+		if puck_controller != null:
+			puck_controller.apply_state(puck_state, host_ts)
 	# Goalies
 	var num_goalies: int = data.decode_u8(o); o += 1
 	for gi: int in mini(num_goalies, goalie_controllers.size()):
 		if o + GOALIE_BLOCK_SIZE > data.size():
 			push_warning("WorldStateCodec: truncated goalie block %d" % gi)
 			return
-		goalie_controllers[gi].apply_state(_decode_goalie_quantized(data.slice(o, o + GOALIE_BLOCK_SIZE)), host_ts)
+		if not skip_actors:
+			goalie_controllers[gi].apply_state(_decode_goalie_quantized(data.slice(o, o + GOALIE_BLOCK_SIZE)), host_ts)
 		o += GOALIE_BLOCK_SIZE
 	o += maxi(0, num_goalies - goalie_controllers.size()) * GOALIE_BLOCK_SIZE
 	# Game state

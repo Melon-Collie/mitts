@@ -501,13 +501,19 @@ func _wire_subsystems() -> void:
 	_state_buffer_manager = StateBufferManager.new()
 	_state_buffer_manager.setup(_registry, goalie_controllers)
 
+	# Goal-replay cinematic now runs on every peer against its own broadcast
+	# buffer, so host and clients all see the same 8-second instant-replay
+	# (clients used to see actors freeze in place because broadcasts were
+	# gated). The host's _on_goal_replay_stopped advances the state machine
+	# back to FACEOFF_PREP; clients let the next world-state broadcast
+	# drive that transition naturally, so that handler stays host-only.
+	_recorder = ReplayRecorder.new()
+	_recorder.setup()
+	_goal_replay_driver = GoalReplayDriver.new()
+	add_child(_goal_replay_driver)
+	_goal_replay_driver.replay_started.connect(replay_started.emit)
+	_goal_replay_driver.replay_stopped.connect(replay_stopped.emit)
 	if NetworkManager.is_host:
-		_recorder = ReplayRecorder.new()
-		_recorder.setup()
-		_goal_replay_driver = GoalReplayDriver.new()
-		add_child(_goal_replay_driver)
-		_goal_replay_driver.replay_started.connect(replay_started.emit)
-		_goal_replay_driver.replay_stopped.connect(replay_stopped.emit)
 		_goal_replay_driver.replay_stopped.connect(_on_goal_replay_stopped)
 
 	_codec = WorldStateCodec.new()
@@ -535,9 +541,11 @@ func _wire_subsystems() -> void:
 	_phase_coord.goal_scored.connect(_on_goal_for_replay_event)
 	_phase_coord.score_changed.connect(score_changed.emit)
 	_phase_coord.phase_changed.connect(phase_changed.emit)
-	if NetworkManager.is_host:
-		_phase_coord.goal_scored.connect(_on_goal_for_replay)
-		_phase_coord.phase_changed.connect(_on_phase_changed_for_replay)
+	# Per-peer cinematic kickoff + teardown: every peer starts its own
+	# GoalReplayDriver on observed goal_scored, and stops on FACEOFF_PREP
+	# entry (which clients also reach via the next post-cinematic broadcast).
+	_phase_coord.goal_scored.connect(_on_goal_for_replay)
+	_phase_coord.phase_changed.connect(_on_phase_changed_for_replay)
 	_phase_coord.period_changed.connect(period_changed.emit)
 	_phase_coord.clock_updated.connect(_on_clock_updated_externally)
 	_phase_coord.game_over.connect(game_over.emit)
@@ -1310,12 +1318,20 @@ func _on_input_batch_received(peer_id: int, inputs: Array[InputState]) -> void:
 func _on_world_state_received(data: PackedByteArray) -> void:
 	if _codec != null:
 		_codec.decode_world_state(data)  # updates _state_machine.current_phase
+	if data.size() < 6:
+		return
+	var host_ts: float = data.decode_float(2)
+	# Feed the in-memory ring buffer so this peer's GoalReplayDriver has a
+	# clip to extract when a goal fires. Skipped during the cinematic itself
+	# (NetworkManager.is_replay_mode is mirrored to clients) so we don't
+	# overwrite the live pre-goal frames with frozen mid-replay state.
+	if _recorder != null and not NetworkManager.is_replay_mode():
+		_recorder.record_frame(data, host_ts)
 	# Tee the broadcast into the local .mreplay file. Use the host_ts encoded
-	# in the packet (bytes 2..5, after the 2-byte ws_sequence) so timestamps
-	# align across host + client recordings — local_time() differs per peer.
-	# Same dead-puck + replay-mode gate as the host's get_world_state path.
-	if _replay_file_writer != null and data.size() >= 6 and _should_record_to_file():
-		var host_ts: float = data.decode_float(2)
+	# in the packet so timestamps align across host + client recordings —
+	# local_time() differs per peer. Same dead-puck + replay-mode gate as
+	# the host's get_world_state path.
+	if _replay_file_writer != null and _should_record_to_file():
 		_replay_file_writer.enqueue_frame(host_ts, data)
 		if _state_machine != null:
 			_last_recorded_phase = _state_machine.current_phase
@@ -1738,13 +1754,19 @@ const POST_GOAL_CAPTURE_WINDOW: float = 0.5
 func _on_goal_for_replay(_scoring_team: Team, _scorer: String, _a1: String, _a2: String) -> void:
 	if _recorder == null or _goal_replay_driver == null or _codec == null:
 		return
-	# Force-record the goal-moment frame in case the last broadcast was up to
-	# 25 ms ago, ensuring the exact detection instant is in the buffer.
-	var goal_frame: PackedByteArray = _codec.encode_world_state()
-	if not goal_frame.is_empty():
-		_recorder.record_frame(goal_frame, NetworkManager.local_time())
-	# Let the broadcaster keep feeding the recorder for POST_GOAL_CAPTURE_WINDOW
-	# seconds so the clip naturally ends with the puck in the net.
+	# Host-only: force-record the goal-moment frame in case the last broadcast
+	# was up to 25 ms ago, ensuring the exact detection instant is in the
+	# in-memory buffer. Clients can't encode_world_state (no authoritative
+	# state) — their buffer's most-recent frame is whatever just arrived,
+	# which is good enough for the cinematic.
+	if NetworkManager.is_host:
+		var goal_frame: PackedByteArray = _codec.encode_world_state()
+		if not goal_frame.is_empty():
+			_recorder.record_frame(goal_frame, NetworkManager.local_time())
+	# Let the recorder keep feeding for POST_GOAL_CAPTURE_WINDOW seconds so
+	# the clip naturally ends with the puck in the net. Each peer schedules
+	# its own — RTT-driven offsets between peers are in the tens of ms,
+	# imperceptible against an 8-second clip.
 	get_tree().create_timer(POST_GOAL_CAPTURE_WINDOW).timeout.connect(_start_goal_replay)
 
 
