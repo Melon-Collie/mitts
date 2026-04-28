@@ -59,8 +59,7 @@ func _draw() -> void:
 		var dist: float = local_pos.distance_to(world_pos)
 		var t: float = clampf(inverse_lerp(_NEAR_DISTANCE, _FAR_DISTANCE, dist), 0.0, 1.0)
 		var arrow_scale: float = lerpf(_ARROW_MAX_SCALE, _ARROW_MIN_SCALE, t)
-		var color: Color = TeamColorRegistry.get_colors(record.team.color_id, record.team.team_id).primary
-		_draw_arrow(edge_pos, dir, arrow_scale, color)
+		_draw_arrow(edge_pos, dir, arrow_scale, record.jersey_color)
 		_draw_number(edge_pos, dir, arrow_scale, record.jersey_number, record.text_color, record.text_outline_color)
 
 func _draw_arrow(pos: Vector2, dir: Vector2, arrow_scale: float, color: Color) -> void:

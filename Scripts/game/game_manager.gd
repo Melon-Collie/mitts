@@ -1185,7 +1185,7 @@ func get_puck() -> Puck:
 func spawn_tutorial_dummy(position: Vector3) -> Dictionary:
 	return _spawner.spawn_remote_player(
 		position, Color(0.8, 0.3, 0.3), Color(0.2, 0.2, 0.2), Color(0.15, 0.15, 0.15),
-		Color(0.8, 0.3, 0.3), false, puck, self)
+		Color(0.8, 0.3, 0.3), Color(0.8, 0.3, 0.3), false, puck, self)
 
 
 # Directly triggers icing ghost mode for team 0 without requiring a hybrid-icing
