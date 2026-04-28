@@ -24,6 +24,8 @@ signal puck_hit_goal_body  # uncarried puck struck net panel or skirt (non-pipe 
 @export var poke_checker_cooldown: float = 0.1
 @export var body_check_strip_threshold: float = 6.0  # weight × approach_speed needed to strip
 @export var body_check_puck_speed: float = 5.0
+@export var hit_pickup_cooldown: float = 0.6              # seconds victim cannot pick up after a hard hit
+@export var hit_pickup_cooldown_threshold: float = 6.0    # weight × approach needed to apply hit pickup cooldown
 @export var body_block_dampen: float = 0.5
 @export var body_block_cooldown: float = 0.1
 @export var max_height: float = 3.0
@@ -185,6 +187,13 @@ func on_body_check(checker: Skater, victim: Skater, impact_force: float, hit_dir
 		return
 	if checker.is_ghost or victim.is_ghost:
 		return
+	if impact_force < hit_pickup_cooldown_threshold:
+		return
+	# Hard hits temporarily deny the victim a pickup, even if they weren't carrying.
+	# Take the max with any existing cooldown so we never shorten one (e.g. the
+	# reattach_cooldown set by _body_check_strip below when the victim is the carrier).
+	var existing: float = _cooldown_timers.get(victim, 0.0)
+	_set_cooldown(victim, maxf(existing, hit_pickup_cooldown))
 	if carrier == null or carrier != victim:
 		return
 	if pickup_locked:

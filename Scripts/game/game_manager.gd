@@ -606,6 +606,8 @@ func _on_pickup_claim_received(peer_id: int, host_timestamp: float, rtt_ms: floa
 	var record: PlayerRecord = _registry.get_record(peer_id)
 	if record == null or record.skater == null or record.skater.is_ghost:
 		return
+	if puck.is_on_cooldown(record.skater):
+		return
 	if _state_buffer_manager == null or not _state_buffer_manager.is_ready():
 		return
 	var rewind_rtt: float = clampf(rtt_ms, 10.0, 200.0)

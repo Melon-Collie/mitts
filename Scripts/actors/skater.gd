@@ -41,8 +41,8 @@ extends CharacterBody3D
 
 # ── Body Check Tuning ─────────────────────────────────────────────────────────
 @export var weight: float = 1.0                   # dimensionless — scale up for heavy players
-@export var body_check_restitution: float = 0.3   # fraction of approach speed bounced back to self
-@export var body_check_transfer: float = 0.8      # fraction of approach speed pushed to victim (before weight ratio)
+@export var body_check_restitution: float = 0.25  # fraction of approach speed bounced back to self
+@export var body_check_transfer: float = 0.45     # fraction of approach speed pushed to victim (before weight ratio)
 @export var body_check_brace_resistance: float = 0.4  # multiplier on transfer when the victim is braced (holding brake)
 
 # ── Body Block Tuning ─────────────────────────────────────────────────────────
@@ -706,7 +706,10 @@ func _resolve_player_collisions(vel_before: Vector3) -> void:
 			continue
 		normal = normal.normalized()
 		var vel_horiz := Vector3(vel_before.x, 0.0, vel_before.z)
-		var approach: float = vel_horiz.dot(-normal)
+		# Use relative closing velocity along the contact normal so perpendicular
+		# victim motion doesn't subtract from impact and head-on hits register harder.
+		var other_vel_horiz := Vector3(other.velocity.x, 0.0, other.velocity.z)
+		var approach: float = (vel_horiz - other_vel_horiz).dot(-normal)
 		if approach <= 0.0:
 			continue
 		# Bounce self back away from other.
