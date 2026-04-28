@@ -18,6 +18,8 @@ extends Node
 const CLIP_DURATION: float = 4.0  # seconds of history to replay
 
 @export var playback_speed: float = 1.0
+@export var slowmo_window: float = 0.75  # seconds before clip end that slow-motion kicks in
+@export var slowmo_speed: float = 0.4    # playback multiplier during slow-motion window
 
 signal replay_started
 signal replay_stopped
@@ -107,7 +109,8 @@ func _process(delta: float) -> void:
 	if not _active:
 		return
 
-	_virtual_clock += delta * playback_speed
+	var speed: float = slowmo_speed if (_clip_end_ts - _virtual_clock) < slowmo_window else playback_speed
+	_virtual_clock += delta * speed
 	if _virtual_clock > _clip_end_ts:
 		stop()
 		return

@@ -27,6 +27,8 @@ signal stats_updated
 signal shots_on_goal_changed(sog_0: int, sog_1: int)
 signal team_colors_ready(home_primary: Color, home_secondary: Color, away_primary: Color, away_secondary: Color)
 signal local_player_hit(magnitude: float)
+signal replay_started
+signal replay_stopped
 
 # ── Domain state ──────────────────────────────────────────────────────────────
 var _state_machine: GameStateMachine = null
@@ -409,6 +411,8 @@ func _wire_subsystems() -> void:
 		_recorder.setup()
 		_goal_replay_driver = GoalReplayDriver.new()
 		add_child(_goal_replay_driver)
+		_goal_replay_driver.replay_started.connect(replay_started.emit)
+		_goal_replay_driver.replay_stopped.connect(replay_stopped.emit)
 		_goal_replay_driver.replay_stopped.connect(_on_goal_replay_stopped)
 
 	_codec = WorldStateCodec.new()

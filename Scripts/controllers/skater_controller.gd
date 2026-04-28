@@ -295,6 +295,7 @@ func apply_replay_state(state: SkaterNetworkState) -> void:
 	if skater == null:
 		return
 	skater.global_position = state.position
+	skater.visual_offset = Vector3.ZERO
 	skater.velocity = state.velocity
 	skater.set_facing(state.facing)
 	skater.set_upper_body_rotation(state.upper_body_rotation_y)
