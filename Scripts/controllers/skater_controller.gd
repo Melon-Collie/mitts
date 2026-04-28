@@ -14,7 +14,6 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 @export var max_speed: float = 10.5
 @export var move_deadzone: float = 0.1
 @export var brake_multiplier: float = 5.0
-@export var brake_redirect_speed_deg: float = 180.0  # deg/s velocity rotates toward input while carving
 @export var puck_carry_speed_multiplier: float = 0.82
 @export var backward_thrust_multiplier: float = 0.80
 @export var crossover_thrust_multiplier: float = 0.90
@@ -912,7 +911,6 @@ func _movement_config() -> SkaterMovementRules.MovementConfig:
 	cfg.puck_carry_speed_multiplier = puck_carry_speed_multiplier
 	cfg.backward_thrust_multiplier = backward_thrust_multiplier
 	cfg.crossover_thrust_multiplier = crossover_thrust_multiplier
-	cfg.brake_redirect_speed = deg_to_rad(brake_redirect_speed_deg)
 	return cfg
 
 func _block_movement_config() -> SkaterMovementRules.MovementConfig:
