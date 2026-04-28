@@ -236,7 +236,7 @@ func _build_game_card(game: Dictionary) -> Control:
 	var away_players: Array = []
 	for p_var: Variant in players:
 		var p: Dictionary = p_var as Dictionary
-		if int(p.get("team_id", 0)) == 0:
+		if _safe_int(p.get("team_id", 0)) == 0:
 			home_players.append(p)
 		else:
 			away_players.append(p)
@@ -266,7 +266,7 @@ func _build_score_line(game: Dictionary) -> Control:
 	hbox.add_child(date_label)
 
 	var score_label := Label.new()
-	score_label.text = "%d — %d" % [int(game.get("home_score", 0)), int(game.get("away_score", 0))]
+	score_label.text = "%d — %d" % [_safe_int(game.get("home_score", 0)), _safe_int(game.get("away_score", 0))]
 	score_label.add_theme_font_size_override("font_size", 18)
 	score_label.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
 	hbox.add_child(score_label)
@@ -287,7 +287,7 @@ func _build_period_breakdown(game: Dictionary) -> Label:
 		return null
 	var parts: PackedStringArray = PackedStringArray()
 	for p: int in team0.size():
-		parts.append("P%d %d-%d" % [p + 1, int(team0[p]), int(team1[p])])
+		parts.append("P%d %d-%d" % [p + 1, _safe_int(team0[p]), _safe_int(team1[p])])
 	var lbl := Label.new()
 	lbl.text = " · ".join(parts)
 	lbl.add_theme_font_size_override("font_size", 11)
@@ -311,11 +311,13 @@ func _build_player_table(players: Array, side_label: String) -> Control:
 		var p: Dictionary = p_var as Dictionary
 		grid.add_child(_table_cell(""))  # blank under side tag
 		grid.add_child(_table_cell(str(p.get("player_name", "Player"))))
-		grid.add_child(_table_cell(str(int(p.get("goals", 0)))))
-		grid.add_child(_table_cell(str(int(p.get("assists", 0)))))
-		grid.add_child(_table_cell(str(int(p.get("goals", 0)) + int(p.get("assists", 0)))))
-		grid.add_child(_table_cell(str(int(p.get("shots_on_goal", 0)))))
-		grid.add_child(_table_cell("%+d" % int(p.get("plus_minus", 0))))
+		var goals: int = _safe_int(p.get("goals", 0))
+		var assists: int = _safe_int(p.get("assists", 0))
+		grid.add_child(_table_cell(str(goals)))
+		grid.add_child(_table_cell(str(assists)))
+		grid.add_child(_table_cell(str(goals + assists)))
+		grid.add_child(_table_cell(str(_safe_int(p.get("shots_on_goal", 0)))))
+		grid.add_child(_table_cell("%+d" % _safe_int(p.get("plus_minus", 0))))
 
 	return grid
 
@@ -354,6 +356,18 @@ func _on_watch_pressed(path: String) -> void:
 	get_tree().change_scene_to_file(Constants.SCENE_REPLAY_VIEWER)
 
 
+# Supabase fields can come back as null (e.g. MAX() FILTER with no matching
+# rows, or columns that were NULL on the row). int(null) errors out with
+# "Nonexistent 'int' constructor", so route every JSON-derived integer
+# through this helper.
+static func _safe_int(v: Variant, default: int = 0) -> int:
+	if v is int:
+		return v
+	if v is float:
+		return int(v)
+	return default
+
+
 # Supabase returns ISO-8601 like "2026-04-28T15:30:45.123+00:00". Trim to
 # "YYYY-MM-DD HH:MM" for compactness.
 func _format_date(ended_at_iso: String) -> String:
@@ -366,5 +380,5 @@ func _format_date(ended_at_iso: String) -> String:
 
 
 static func _format_toi(seconds: Variant) -> String:
-	var s: int = int(seconds)
+	var s: int = _safe_int(seconds)
 	return "%d:%02d" % [s / 60, s % 60]
