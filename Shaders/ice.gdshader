@@ -22,9 +22,9 @@ uniform vec3 ice_fog_color : source_color = vec3(0.9, 0.95, 1.0);
 // How strongly the lines fade through the ice. Models Beer-Lambert
 // absorption: fade = 1 - exp(-extinction / cos(view_angle)). At the same
 // extinction value the fade strengthens exponentially as the view goes
-// grazing, since the ray traverses more ice. Default 0.4 gives ~33% fade
-// head-on, ~55% at 45°, ~85% near grazing.
-uniform float subsurface_fade : hint_range(0.0, 3.0) = 0.4;
+// grazing, since the ray traverses more ice. Default 0.2 gives ~18% fade
+// head-on, ~33% at 45°, ~55% near grazing.
+uniform float subsurface_fade : hint_range(0.0, 3.0) = 0.2;
 // Apparent depth of the lines below the ice surface, in meters.
 uniform float subsurface_depth : hint_range(0.0, 0.05) = 0.012;
 // F0 reflectance multiplier (0.5 = water-baseline F0 of 0.04).
