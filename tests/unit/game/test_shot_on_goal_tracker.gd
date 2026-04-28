@@ -198,6 +198,30 @@ func test_credit_assists_scorer_without_team_returns_empty() -> void:
 	assert_eq(assists.size(), 0)
 
 
+# ── One-timer attribution ────────────────────────────────────────────────────
+# Mirrors the host call sequence in GameManager._host_release_one_timer:
+# the passer picks up + shoots, then the receiver redirects the moving puck
+# as a one-timer. on_deflection(receiver) records the shooter in the carrier
+# history; without it, the passer would be returned as the last toucher and
+# wrongly credited with the goal.
+
+func test_one_timer_credits_receiver_not_passer() -> void:
+	var passer := _add_player(10, 0, "Passer")
+	var receiver := _add_player(11, 0, "Receiver")
+	tracker.on_pickup(10)              # passer picks up
+	tracker.on_shot_started(10)        # passer "shoots" (the pass)
+	tracker.on_deflection(11)          # receiver redirects mid-flight
+	tracker.on_shot_started(11)        # one-timer arms shooter = receiver
+	assert_eq(tracker.get_last_toucher(), 11,
+			"goal must be attributed to the one-timer shooter, not the passer")
+	assert_eq(tracker.get_shooter_peer_id(), 11)
+	var assists: Array[String] = tracker.credit_assists(11)
+	assert_eq(assists.size(), 1, "passer earns the assist")
+	assert_eq(assists[0], "Passer")
+	assert_eq(passer.stats.assists, 1)
+	assert_eq(receiver.stats.assists, 0)
+
+
 # ── Reset ────────────────────────────────────────────────────────────────────
 
 func test_reset_all_clears_state_and_team_shots() -> void:

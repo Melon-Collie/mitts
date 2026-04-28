@@ -736,6 +736,11 @@ func on_remote_one_timer_release(direction: Vector3, power: float, peer_id: int,
 func _host_release_one_timer(direction: Vector3, power: float, skater: Skater,
 		host_timestamp: float, rtt_ms: float) -> void:
 	var pid: int = _registry.resolve_peer_id(skater)
+	# One-timers skip the normal pickup flow, so the shooter is never recorded
+	# in the carrier history. Record them as a deflection (the shooter redirects
+	# a moving puck without possessing it) so goal attribution and assist credit
+	# work — without this, get_last_toucher() returns the passer at goal time.
+	_shot_tracker.on_deflection(pid)
 	_shot_tracker.on_shot_started(pid)
 	var rtt_half: float = rtt_ms / 2000.0
 	var saved_goalie_positions: Array[Vector3] = []
