@@ -18,6 +18,11 @@ var _brightness_slider: HSlider = null
 var _sens_slider: HSlider = null
 var _sens_field: LineEdit = null
 var _attack_up_check: CheckButton = null
+var _camera_mode_btn: OptionButton = null
+var _fov_slider: HSlider = null
+var _fov_label: Label = null
+var _cam_dist_slider: HSlider = null
+var _cam_dist_label: Label = null
 var _apply_btn: Button = null
 var _original: Dictionary = {}
 var _listening_action: String = ""
@@ -93,6 +98,9 @@ func _snapshot() -> Dictionary:
 		"master_muted": PlayerPrefs.master_muted,
 		"mouse_sensitivity": PlayerPrefs.mouse_sensitivity,
 		"attack_up": PlayerPrefs.attack_up,
+		"camera_mode": PlayerPrefs.camera_mode,
+		"fov": PlayerPrefs.fov,
+		"camera_distance": PlayerPrefs.camera_distance,
 		"bindings": PlayerPrefs.bindings.duplicate(true),
 	}
 
@@ -109,6 +117,9 @@ func _read_controls() -> Dictionary:
 		"master_muted": _mute_check.button_pressed,
 		"mouse_sensitivity": _sens_slider.value,
 		"attack_up": _attack_up_check.button_pressed,
+		"camera_mode": _camera_mode_btn.selected,
+		"fov": _fov_slider.value,
+		"camera_distance": _cam_dist_slider.value,
 		"bindings": _pending_bindings.duplicate(true),
 	}
 
@@ -475,6 +486,85 @@ func _build_game_tab() -> Control:
 	row.add_child(_attack_up_check)
 	box.add_child(row)
 
+	var cam_row := HBoxContainer.new()
+	cam_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	cam_row.add_theme_constant_override("separation", 12)
+
+	var cam_label := Label.new()
+	cam_label.text = "Camera:"
+	cam_label.add_theme_font_size_override("font_size", 20)
+	cam_label.add_theme_color_override("font_color", _WHITE)
+	cam_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	cam_row.add_child(cam_label)
+
+	_camera_mode_btn = OptionButton.new()
+	_camera_mode_btn.custom_minimum_size = Vector2(220, 48)
+	_camera_mode_btn.add_theme_font_size_override("font_size", 16)
+	for i: int in PlayerPrefs.CAMERA_MODE_LABELS.size():
+		_camera_mode_btn.add_item(PlayerPrefs.CAMERA_MODE_LABELS[i], i)
+	_camera_mode_btn.selected = PlayerPrefs.camera_mode
+	_camera_mode_btn.item_selected.connect(_on_camera_mode_selected)
+	cam_row.add_child(_camera_mode_btn)
+	box.add_child(cam_row)
+
+	var fov_row := HBoxContainer.new()
+	fov_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	fov_row.add_theme_constant_override("separation", 12)
+
+	var fov_label_static := Label.new()
+	fov_label_static.text = "FOV:"
+	fov_label_static.add_theme_font_size_override("font_size", 20)
+	fov_label_static.add_theme_color_override("font_color", _WHITE)
+	fov_label_static.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	fov_row.add_child(fov_label_static)
+
+	_fov_slider = HSlider.new()
+	_fov_slider.min_value = PlayerPrefs.FOV_MIN
+	_fov_slider.max_value = PlayerPrefs.FOV_MAX
+	_fov_slider.step = 1.0
+	_fov_slider.value = PlayerPrefs.fov
+	_fov_slider.custom_minimum_size = Vector2(160, 32)
+	_fov_slider.value_changed.connect(_on_fov_changed)
+	fov_row.add_child(_fov_slider)
+
+	_fov_label = Label.new()
+	_fov_label.text = "%d°" % int(PlayerPrefs.fov)
+	_fov_label.add_theme_font_size_override("font_size", 18)
+	_fov_label.add_theme_color_override("font_color", _DIM)
+	_fov_label.custom_minimum_size = Vector2(40, 0)
+	_fov_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	fov_row.add_child(_fov_label)
+	box.add_child(fov_row)
+
+	var dist_row := HBoxContainer.new()
+	dist_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	dist_row.add_theme_constant_override("separation", 12)
+
+	var dist_label_static := Label.new()
+	dist_label_static.text = "Camera Distance:"
+	dist_label_static.add_theme_font_size_override("font_size", 20)
+	dist_label_static.add_theme_color_override("font_color", _WHITE)
+	dist_label_static.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	dist_row.add_child(dist_label_static)
+
+	_cam_dist_slider = HSlider.new()
+	_cam_dist_slider.min_value = PlayerPrefs.CAMERA_DISTANCE_MIN
+	_cam_dist_slider.max_value = PlayerPrefs.CAMERA_DISTANCE_MAX
+	_cam_dist_slider.step = 0.05
+	_cam_dist_slider.value = PlayerPrefs.camera_distance
+	_cam_dist_slider.custom_minimum_size = Vector2(160, 32)
+	_cam_dist_slider.value_changed.connect(_on_cam_dist_changed)
+	dist_row.add_child(_cam_dist_slider)
+
+	_cam_dist_label = Label.new()
+	_cam_dist_label.text = "%.2fx" % PlayerPrefs.camera_distance
+	_cam_dist_label.add_theme_font_size_override("font_size", 18)
+	_cam_dist_label.add_theme_color_override("font_color", _DIM)
+	_cam_dist_label.custom_minimum_size = Vector2(48, 0)
+	_cam_dist_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	dist_row.add_child(_cam_dist_label)
+	box.add_child(dist_row)
+
 	var sep := HSeparator.new()
 	box.add_child(sep)
 
@@ -527,6 +617,19 @@ func _on_brightness_changed(_value: float) -> void:
 	_update_apply_state()
 
 func _on_attack_up_toggled(_pressed: bool) -> void:
+	_update_apply_state()
+
+func _on_camera_mode_selected(_idx: int) -> void:
+	_update_apply_state()
+
+func _on_fov_changed(value: float) -> void:
+	if _fov_label != null:
+		_fov_label.text = "%d°" % int(value)
+	_update_apply_state()
+
+func _on_cam_dist_changed(value: float) -> void:
+	if _cam_dist_label != null:
+		_cam_dist_label.text = "%.2fx" % value
 	_update_apply_state()
 
 func _on_export_colors_pressed() -> void:
@@ -661,6 +764,9 @@ func _on_apply_pressed() -> void:
 	PlayerPrefs.master_muted = c.master_muted
 	PlayerPrefs.mouse_sensitivity = c.mouse_sensitivity
 	PlayerPrefs.attack_up = c.attack_up
+	PlayerPrefs.camera_mode = c.camera_mode
+	PlayerPrefs.fov = c.fov
+	PlayerPrefs.camera_distance = c.camera_distance
 	PlayerPrefs.bindings = (_pending_bindings as Dictionary).duplicate(true)
 	PlayerPrefs.apply_audio()
 	PlayerPrefs.apply_video()
@@ -684,6 +790,12 @@ func _on_cancel_pressed() -> void:
 	_mute_check.set_pressed_no_signal(_original.master_muted)
 	_sens_slider.value = _original.mouse_sensitivity
 	_attack_up_check.set_pressed_no_signal(_original.attack_up)
+	if _camera_mode_btn != null:
+		_camera_mode_btn.selected = _original.camera_mode
+	if _fov_slider != null:
+		_fov_slider.value = _original.fov
+	if _cam_dist_slider != null:
+		_cam_dist_slider.value = _original.camera_distance
 	_listening_action = ""
 	_pending_bindings = (_original.get("bindings", {}) as Dictionary).duplicate(true)
 	_update_binding_btns()

@@ -100,7 +100,7 @@ func spawn(
 				is_left_handed, puck, _game_state_node)
 	record.skater = spawned.skater
 	record.controller = spawned.controller
-	spawned.skater.set_ring_color(PlayerRules.slot_color(team.team_id, team_slot))
+	spawned.skater.set_player_name(player_name)
 	spawned.skater.set_jersey_info(player_name, jersey_number, text_color)
 	spawned.skater.set_jersey_stripes(jersey_stripe_color, pants_stripe_color, socks_stripe_color)
 	_players[peer_id] = record

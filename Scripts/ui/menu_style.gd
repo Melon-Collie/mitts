@@ -42,6 +42,24 @@ const BTN_PRESS   := Color(0.07, 0.10, 0.18, 1.00)
 const GOLD        := Color(1.00, 0.85, 0.20, 1.00)
 
 
+# ── HUD ice-overlay (3D-on-ice elements: rings, glyphs, reticles) ─────────────
+# Shared by every element drawn flat on the ice under a skater. All three
+# values are referenced by Skater for procedural mesh construction; tweak here
+# rather than per-element.
+const HUD_ICE        := ICE                # primary stroke color for all on-ice HUD
+const HUD_OPACITY    := 0.70               # 60–75% range — single tunable
+const HUD_LINE_THIN  := 0.03               # "thin line" thickness in 3D meters (slot ring, reticle, arrow)
+const HUD_LINE_THICK := 0.045              # heavier stroke for symbols (arrow, chevron)
+
+# Charge-ring fill colors. Lerps from CHARGE_LOW → CHARGE_HIGH across the fill;
+# CHARGE_FULL pulses at 100%; CHARGE_LOST flashes briefly when charge is
+# cancelled without firing (e.g. puck stripped during wrister aim).
+const CHARGE_LOW    := Color(1.00, 0.85, 0.20, 1.00)   # yellow
+const CHARGE_HIGH   := Color(1.00, 0.50, 0.10, 1.00)   # orange
+const CHARGE_FULL   := Color(1.00, 0.20, 0.20, 1.00)   # red pulse at full
+const CHARGE_LOST   := Color(1.00, 0.20, 0.20, 1.00)   # red flash on cancel
+
+
 # ── Factories ─────────────────────────────────────────────────────────────────
 
 # Build a panel stylebox at custom dimensions. PanelContainers that don't call

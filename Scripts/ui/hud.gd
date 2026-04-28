@@ -9,7 +9,6 @@ var _phase_panel: PanelContainer
 var _phase_label: Label
 var _assist_label: Label
 var _phase_style: StyleBoxFlat
-var _elevation_panel: PanelContainer
 var _game_over_popup: CanvasLayer = null
 var _game_menu: CanvasLayer = null
 var _slot_grid: SlotGridPanel = null
@@ -18,7 +17,6 @@ var _options_container: Control = null
 var _toast_container: VBoxContainer = null
 var _home_sog_label: Label = null
 var _away_sog_label: Label = null
-var _local_skater: Skater = null
 var _score_0: int = 0
 var _score_1: int = 0
 var _home_badge_style: StyleBoxFlat = null
@@ -48,7 +46,6 @@ func _ready() -> void:
 	_build_offscreen_indicators()
 	_build_scorebug()
 	_build_phase_banner()
-	_build_elevation_indicator()
 	_build_version_tag()
 	_build_bug_icon()
 	_build_game_over_popup()
@@ -107,14 +104,6 @@ func _set_menu_open(open: bool) -> void:
 			_options_container.visible = false
 		if _leave_container != null:
 			_leave_container.visible = false
-
-func _process(_delta: float) -> void:
-	if _local_skater == null:
-		var record: PlayerRecord = GameManager.get_local_player()
-		if record:
-			_local_skater = record.skater
-	if _local_skater != null:
-		_elevation_panel.visible = _local_skater.is_elevated
 
 # ---------------------------------------------------------------------------
 # Build helpers
@@ -259,29 +248,6 @@ func _build_phase_banner() -> void:
 func _build_offscreen_indicators() -> void:
 	var indicators := OffScreenPlayerIndicators.new()
 	add_child(indicators)
-
-func _build_elevation_indicator() -> void:
-	var style := StyleBoxFlat.new()
-	style.bg_color = _DARK_BG
-	style.set_corner_radius_all(6)
-	style.set_content_margin_all(8)
-
-	_elevation_panel = PanelContainer.new()
-	_elevation_panel.add_theme_stylebox_override("panel", style)
-	_elevation_panel.anchor_left = 0.5
-	_elevation_panel.anchor_right = 0.5
-	_elevation_panel.anchor_top = 1.0
-	_elevation_panel.anchor_bottom = 1.0
-	_elevation_panel.offset_left = -60.0
-	_elevation_panel.offset_right = 60.0
-	_elevation_panel.offset_top = -48.0
-	_elevation_panel.offset_bottom = -16.0
-	_elevation_panel.visible = false
-	add_child(_elevation_panel)
-
-	var label := _lbl("\u2191 ELEVATED", 16, Color(0.4, 0.8, 1.0, 1.0))
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_elevation_panel.add_child(label)
 
 func _build_game_over_popup() -> void:
 	var panel_style := MenuStyle.panel()

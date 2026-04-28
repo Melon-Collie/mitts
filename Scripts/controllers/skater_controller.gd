@@ -368,6 +368,13 @@ func _apply_slapper_follow_through() -> void:
 
 # ── State Helpers ─────────────────────────────────────────────────────────────
 func _transition_to_skating() -> void:
+	# Lost-charge feedback: if we're leaving an active charge state without
+	# firing (i.e. not via FOLLOW_THROUGH), flash the charge ring red. The
+	# ring auto-clears via Skater._physics_process once the flash decays.
+	var prev_state: int = _sm.get_state()
+	var was_charging: bool = prev_state == State.WRISTER_AIM \
+			or prev_state == State.SLAPPER_CHARGE_WITH_PUCK \
+			or prev_state == State.SLAPPER_CHARGE_WITHOUT_PUCK
 	skater.shot_charge = 0.0
 	skater.slapper_aim_dir = Vector3.ZERO
 	if has_puck:
@@ -385,6 +392,10 @@ func _transition_to_skating() -> void:
 	skater.set_slapper_zone(false)
 	if show_one_timer_indicator:
 		skater.set_slapper_indicator(false)
+		skater.set_slapshot_arrow(false)
+		skater.set_charge_ring_visible(false)
+		if was_charging:
+			skater.trigger_charge_lost_flash()
 
 func _enter_shot_block() -> void:
 	_sm.set_state(State.SHOT_BLOCKING)
@@ -436,6 +447,10 @@ func _enter_slapper_charge(input: InputState) -> void:
 		_sm.set_state(State.SLAPPER_CHARGE_WITHOUT_PUCK)
 		if show_one_timer_indicator:
 			skater.set_slapper_indicator(true, slapper_zone_offset_x, slapper_zone_offset_z, slapper_zone_radius)
+	if show_one_timer_indicator:
+		skater.set_charge_ring_visible(true)
+		skater.set_slapshot_arrow(true, slapper_zone_offset_x, slapper_zone_offset_z)
+		skater.update_slapshot_arrow_direction(skater.slapper_aim_dir)
 
 func _get_charge_direction() -> Vector3:
 	return _aiming.prev_blade_dir
@@ -525,10 +540,15 @@ func _update_wrister_charge(input: InputState) -> void:
 		return
 	_aiming.tick_wrister_charge(input.mouse_screen_pos, max_charge_direction_variance, max_wrister_charge_distance)
 	skater.shot_charge = _aiming.charge_distance / max_wrister_charge_distance
+	# Charge ring is local-only; gate on the same flag as the one-timer reticle.
+	if show_one_timer_indicator:
+		skater.set_charge_ring_visible(true)
 
 func _update_slapper_charge(delta: float) -> void:
 	_aiming.tick_slapper(delta)
 	skater.shot_charge = minf(_aiming.slapper_charge_timer / max_slapper_charge_time, 1.0)
+	if show_one_timer_indicator:
+		skater.update_slapshot_arrow_direction(skater.slapper_aim_dir)
 
 func _apply_slapper_velocity_drag(delta: float) -> void:
 	var slapper_vel := Vector2(skater.velocity.x, skater.velocity.z)
