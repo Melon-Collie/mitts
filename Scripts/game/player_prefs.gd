@@ -27,6 +27,7 @@ const REBINDABLE_ACTIONS: PackedStringArray = [
 var player_name: String = "Player"
 var jersey_number: int = 10
 var is_left_handed: bool = true
+var preferred_color_id: String = ""  # team color preset id; "" → use team default at lobby join
 var last_ip: String = ""
 var master_volume: float = 1.0
 var sfx_volume: float = 1.0
@@ -62,6 +63,7 @@ func save() -> void:
 	cfg.set_value("player", "name", player_name)
 	cfg.set_value("player", "jersey_number", jersey_number)
 	cfg.set_value("player", "left_handed", is_left_handed)
+	cfg.set_value("player", "preferred_color_id", preferred_color_id)
 	cfg.set_value("player", "last_ip", last_ip)
 	cfg.set_value("audio", "master_volume", master_volume)
 	cfg.set_value("audio", "sfx_volume", sfx_volume)
@@ -146,6 +148,7 @@ func _load() -> void:
 		player_name = cfg.get_value("player", "name", "Player").substr(0, 10)
 		jersey_number = clamp(cfg.get_value("player", "jersey_number", 10), 0, 99)
 		is_left_handed = cfg.get_value("player", "left_handed", true)
+		preferred_color_id = cfg.get_value("player", "preferred_color_id", "")
 		last_ip = cfg.get_value("player", "last_ip", "")
 		master_volume = clampf(cfg.get_value("audio", "master_volume", 1.0), 0.0, 1.0)
 		sfx_volume = clampf(cfg.get_value("audio", "sfx_volume", 1.0), 0.0, 1.0)

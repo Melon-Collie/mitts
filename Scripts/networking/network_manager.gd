@@ -28,7 +28,8 @@ signal slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int)
 signal slot_swap_confirmed(peer_id: int, old_team_id: int, old_slot: int, new_team_id: int, new_slot: int, jersey: Color, helmet: Color, pants: Color)
 signal game_started(config: Dictionary)
 signal lobby_roster_synced(roster: Array)
-signal team_colors_synced(home_color_id: String, away_color_id: String)
+signal color_vote_changed(peer_id: int, color_id: String)
+signal color_votes_synced(votes: Dictionary)
 signal lobby_settings_synced(num_periods: int, period_duration: float, ot_enabled: bool, rule_set: int)
 signal return_to_lobby_received(roster: Array)
 signal player_ready_changed(peer_id: int, is_ready: bool)
@@ -58,6 +59,7 @@ var is_offline_mode: bool = false
 var is_tutorial_mode: bool = false
 var pending_home_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID
 var pending_away_color_id: String  = TeamColorRegistry.DEFAULT_AWAY_ID
+var pending_color_votes: Dictionary = {}  # peer_id → color_id (host authoritative; all peers mirror)
 var pending_num_periods: int = GameRules.NUM_PERIODS
 var pending_period_duration: float = GameRules.PERIOD_DURATION
 var pending_ot_enabled: bool = GameRules.OT_ENABLED
@@ -185,6 +187,7 @@ func _on_peer_disconnected(id: int) -> void:
 	_peer_handedness.erase(id)
 	_peer_names.erase(id)
 	_peer_numbers.erase(id)
+	pending_color_votes.erase(id)
 	peer_disconnected.emit(id)
 	# Notify all remaining clients so they remove the stale skater.
 	for peer_id in connected_peer_ids():
@@ -255,6 +258,7 @@ func reset() -> void:
 	pending_join_players = []
 	pending_home_color_id = TeamColorRegistry.DEFAULT_HOME_ID
 	pending_away_color_id = TeamColorRegistry.DEFAULT_AWAY_ID
+	pending_color_votes = {}
 	_input_timer = 0.0
 	_state_timer = 0.0
 	state_delta = 1.0 / Constants.STATE_RATE
@@ -828,20 +832,38 @@ func send_game_start(config: Dictionary) -> void:
 func send_lobby_roster(peer_id: int, roster: Array) -> void:
 	sync_lobby_roster.rpc_id(peer_id, roster)
 
+@rpc("any_peer", "reliable")
+func request_color_vote(color_id: String) -> void:
+	# Host receives a peer's vote, mirrors it locally, then fans out to all
+	# peers (including the sender) so everyone holds the same vote map.
+	var peer_id: int = multiplayer.get_remote_sender_id()
+	pending_color_votes[peer_id] = color_id
+	for remote_id: int in connected_peer_ids():
+		notify_color_vote.rpc_id(remote_id, peer_id, color_id)
+	color_vote_changed.emit(peer_id, color_id)
+
 @rpc("authority", "reliable")
-func notify_team_colors(home_color_id: String, away_color_id: String) -> void:
-	pending_home_color_id = home_color_id
-	pending_away_color_id = away_color_id
-	team_colors_synced.emit(home_color_id, away_color_id)
+func notify_color_vote(peer_id: int, color_id: String) -> void:
+	pending_color_votes[peer_id] = color_id
+	color_vote_changed.emit(peer_id, color_id)
 
-func send_team_colors(home_id: String, away_id: String) -> void:
-	pending_home_color_id = home_id
-	pending_away_color_id = away_id
-	for peer_id: int in connected_peer_ids():
-		notify_team_colors.rpc_id(peer_id, home_id, away_id)
+@rpc("authority", "reliable")
+func sync_color_votes(votes: Dictionary) -> void:
+	pending_color_votes = votes.duplicate()
+	color_votes_synced.emit(pending_color_votes)
 
-func send_team_colors_to(peer_id: int, home_id: String, away_id: String) -> void:
-	notify_team_colors.rpc_id(peer_id, home_id, away_id)
+func send_color_vote(color_id: String) -> void:
+	if is_host:
+		var pid: int = local_peer_id()
+		pending_color_votes[pid] = color_id
+		for remote_id: int in connected_peer_ids():
+			notify_color_vote.rpc_id(remote_id, pid, color_id)
+		color_vote_changed.emit(pid, color_id)
+	else:
+		request_color_vote.rpc_id(1, color_id)
+
+func send_color_votes_to(peer_id: int, votes: Dictionary) -> void:
+	sync_color_votes.rpc_id(peer_id, votes)
 
 @rpc("authority", "reliable")
 func notify_lobby_settings(num_periods: int, period_duration: float, ot_enabled: bool,
