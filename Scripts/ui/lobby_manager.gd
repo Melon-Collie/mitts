@@ -7,7 +7,13 @@ const _DIM       := MenuStyle.TEXT_DIM
 const _SETTING_LABEL_WIDTH: int = 140
 const _SETTING_CONTROL_WIDTH: int = 220
 
-# key = team_id * 3 + slot  →  { peer_id, player_name, is_left_handed }
+# Spectator slot encoding: team_id == NetworkManager.SPECTATOR_TEAM_ID (-1) and
+# slot is the spectator index. Stored under keys _SPECTATOR_KEY_BASE..base+MAX-1
+# so they never collide with the 0..5 home/away keys.
+const _SPECTATOR_KEY_BASE: int = 100
+
+# key = _slot_key(team_id, slot)  →  { peer_id, player_name, is_left_handed, jersey_number }
+# Players: team_id ∈ {0, 1}, slot ∈ {0,1,2}. Spectators: team_id = -1, slot = spectator_idx.
 var _lobby_slots: Dictionary = {}
 
 var _slot_grid: SlotGridPanel = null
@@ -19,6 +25,8 @@ var _dur_slider: HSlider = null
 var _dur_value_label: Label = null
 var _ot_check: CheckButton = null
 var _rules_btn: OptionButton = null
+var _spectator_list_label: Label = null
+var _spectator_join_btn: Button = null
 
 # key = peer_id → bool; tracks non-host peers only (host uses Start instead)
 var _ready_states: Dictionary = {}
@@ -41,6 +49,7 @@ var _away_color_id: String = TeamColorRegistry.DEFAULT_AWAY_ID
 var _my_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID
 var _color_votes: Dictionary = {}  # peer_id → color_id
 var _my_color_btn: OptionButton = null
+var _color_vote_row: Control = null
 
 func _ready() -> void:
 	_home_color_id = NetworkManager.pending_home_color_id
@@ -73,6 +82,10 @@ func _ready() -> void:
 	elif NetworkManager.is_host:
 		_assign_slot(1, 0, 0, NetworkManager.local_player_name, NetworkManager.local_is_left_handed, NetworkManager.local_jersey_number)
 		_broadcast_confirm(1, 0, 0)
+	# Initial Start-button state. The button is constructed disabled; nothing
+	# else fires _update_start_btn until a peer joins/readies, so without this
+	# the host-alone case stays disabled forever.
+	_update_start_btn()
 
 func _initial_color_preference() -> String:
 	var saved: String = PlayerPrefs.preferred_color_id
@@ -119,12 +132,15 @@ func _build_ui() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(title)
 
-	vbox.add_child(_build_color_vote_row())
+	_color_vote_row = _build_color_vote_row()
+	vbox.add_child(_color_vote_row)
 
 	_slot_grid = SlotGridPanel.new()
 	_slot_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_slot_grid.slot_selected.connect(_on_slot_selected)
 	vbox.add_child(_slot_grid)
+
+	vbox.add_child(_build_spectator_panel())
 
 	vbox.add_child(_build_settings_panel())
 
@@ -149,6 +165,69 @@ func _build_ui() -> void:
 		btn_box.add_child(_ready_btn)
 
 	_refresh_grid()
+	_refresh_spectator_panel()
+
+# Spectator slots sit below the 3v3 slot grid. The list shows everyone currently
+# spectating; the button toggles the local peer between "playing slot" and
+# "spectator slot" — the host's slot-swap path validates and broadcasts.
+func _build_spectator_panel() -> VBoxContainer:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_child(row)
+
+	_spectator_list_label = Label.new()
+	_spectator_list_label.add_theme_font_size_override("font_size", 13)
+	_spectator_list_label.add_theme_color_override("font_color", _DIM)
+	_spectator_list_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_spectator_list_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	row.add_child(_spectator_list_label)
+
+	_spectator_join_btn = _btn("Spectate")
+	_spectator_join_btn.pressed.connect(_on_spectate_pressed)
+	row.add_child(_spectator_join_btn)
+
+	return box
+
+func _refresh_spectator_panel() -> void:
+	_update_ready_btn()
+	if _spectator_list_label == null:
+		return
+	var entries: Array[Dictionary] = _build_spectator_roster()
+	if entries.is_empty():
+		_spectator_list_label.text = "No spectators"
+	else:
+		var names: Array[String] = []
+		for e: Dictionary in entries:
+			names.append(e.player_name)
+		_spectator_list_label.text = "Spectating: " + ", ".join(names)
+	var local_peer: int = NetworkManager.local_peer_id()
+	var local_is_spectator: bool = false
+	for e: Dictionary in entries:
+		if e.peer_id == local_peer:
+			local_is_spectator = true
+			break
+	if _spectator_join_btn != null:
+		# Spectators get back into a player slot by clicking on an empty slot in
+		# the grid above — no separate "Play" button. Only show "Spectate" while
+		# the local peer is in a player slot.
+		_spectator_join_btn.visible = not local_is_spectator
+		_spectator_join_btn.disabled = _find_open_spectator_slot() < 0
+	# Spectators don't belong to a team, so their color vote can't affect any
+	# team's resolution (`_recompute_resolved_colors` skips spectator entries).
+	# Hide the row entirely so the UI doesn't suggest the dropdown does anything.
+	if _color_vote_row != null:
+		_color_vote_row.visible = not local_is_spectator
+
+func _on_spectate_pressed() -> void:
+	var open: int = _find_open_spectator_slot()
+	if open < 0:
+		return
+	NetworkManager.send_request_slot_swap(NetworkManager.SPECTATOR_TEAM_ID, open)
 
 func _build_settings_panel() -> Control:
 	var box := VBoxContainer.new()
@@ -345,7 +424,22 @@ func _color_option_btn(selected_id: String) -> OptionButton:
 # ── Slot management ───────────────────────────────────────────────────────────
 
 func _slot_key(team_id: int, slot: int) -> int:
+	if team_id == NetworkManager.SPECTATOR_TEAM_ID:
+		return _SPECTATOR_KEY_BASE + slot
 	return team_id * 3 + slot
+
+func _team_id_from_key(k: int) -> int:
+	if k >= _SPECTATOR_KEY_BASE:
+		return NetworkManager.SPECTATOR_TEAM_ID
+	return 1 if k >= PlayerRules.MAX_PER_TEAM else 0
+
+func _slot_from_key(k: int) -> int:
+	if k >= _SPECTATOR_KEY_BASE:
+		return k - _SPECTATOR_KEY_BASE
+	return k % 3
+
+func _is_spectator_key(k: int) -> bool:
+	return k >= _SPECTATOR_KEY_BASE
 
 func _assign_slot(peer_id: int, team_id: int, slot: int, player_name: String, is_left_handed: bool, jersey_number: int = 10) -> void:
 	# Clear any existing slot for this peer first.
@@ -364,7 +458,9 @@ func _find_balanced_slot(_peer_id: int) -> Array:
 	var team0: int = 0
 	var team1: int = 0
 	for k: int in _lobby_slots:
-		if k < PlayerRules.MAX_PER_TEAM: team0 += 1
+		if _is_spectator_key(k):
+			continue
+		if _team_id_from_key(k) == 0: team0 += 1
 		else: team1 += 1
 	var preferred_team: int = 0 if team0 <= team1 else 1
 	for attempt_team: int in [preferred_team, 1 - preferred_team]:
@@ -373,11 +469,17 @@ func _find_balanced_slot(_peer_id: int) -> Array:
 				return [attempt_team, s]
 	return []
 
+func _find_open_spectator_slot() -> int:
+	for s: int in GameRules.MAX_SPECTATORS:
+		if not _lobby_slots.has(_slot_key(NetworkManager.SPECTATOR_TEAM_ID, s)):
+			return s
+	return -1
+
 func _build_roster_array() -> Array:
 	var result: Array = []
 	for k: int in _lobby_slots:
-		var team_id: int = 1 if k >= PlayerRules.MAX_PER_TEAM else 0
-		var slot: int = k % 3
+		var team_id: int = _team_id_from_key(k)
+		var slot: int = _slot_from_key(k)
 		var entry: Dictionary = _lobby_slots[k]
 		var is_ready: bool = _ready_states.get(entry.peer_id, false)
 		result.append([entry.peer_id, team_id, slot, entry.player_name, entry.is_left_handed, entry.get("jersey_number", 10), is_ready])
@@ -386,8 +488,10 @@ func _build_roster_array() -> Array:
 func _build_slot_grid_roster() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for k: int in _lobby_slots:
-		var team_id: int = 1 if k >= PlayerRules.MAX_PER_TEAM else 0
-		var slot: int = k % 3
+		if _is_spectator_key(k):
+			continue
+		var team_id: int = _team_id_from_key(k)
+		var slot: int = _slot_from_key(k)
 		var entry: Dictionary = _lobby_slots[k]
 		result.append({
 			"peer_id":        entry.peer_id,
@@ -398,6 +502,21 @@ func _build_slot_grid_roster() -> Array[Dictionary]:
 			"is_left_handed": entry.is_left_handed,
 			"is_ready":       _ready_states.get(entry.peer_id, false),
 		})
+	return result
+
+func _build_spectator_roster() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for k: int in _lobby_slots:
+		if not _is_spectator_key(k):
+			continue
+		var entry: Dictionary = _lobby_slots[k]
+		result.append({
+			"peer_id":        entry.peer_id,
+			"slot":           _slot_from_key(k),
+			"player_name":    entry.player_name,
+			"is_ready":       _ready_states.get(entry.peer_id, false),
+		})
+	result.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.slot < b.slot)
 	return result
 
 func _get_team_colors() -> Array[Dictionary]:
@@ -411,6 +530,7 @@ func _refresh_grid() -> void:
 		return
 	_recompute_resolved_colors()
 	_slot_grid.refresh(_build_slot_grid_roster(), NetworkManager.local_peer_id(), _get_team_colors())
+	_refresh_spectator_panel()
 
 # Live vote resolution. Walks the current roster, buckets each player's vote
 # onto their currently assigned team, then asks ColorVoteRules for the new
@@ -420,11 +540,13 @@ func _recompute_resolved_colors() -> void:
 	var home_votes: Array[String] = []
 	var away_votes: Array[String] = []
 	for k: int in _lobby_slots:
+		if _is_spectator_key(k):
+			continue
 		var entry: Dictionary = _lobby_slots[k]
 		var peer_id: int = entry.peer_id
 		if not _color_votes.has(peer_id):
 			continue
-		var team_id: int = 1 if k >= PlayerRules.MAX_PER_TEAM else 0
+		var team_id: int = _team_id_from_key(k)
 		var vote: String = _color_votes[peer_id]
 		if team_id == 0:
 			home_votes.append(vote)
@@ -447,6 +569,12 @@ func _broadcast_confirm(peer_id: int, team_id: int, slot: int) -> void:
 	var entry: Dictionary = _lobby_slots.get(_slot_key(team_id, slot), {})
 	if entry.is_empty():
 		return
+	if team_id == NetworkManager.SPECTATOR_TEAM_ID:
+		# Spectators don't carry a jersey palette; pass zero colors so the receiving
+		# side knows to take the spectator path rather than spawn a skater.
+		NetworkManager.send_confirm_slot_swap(peer_id, -1, -1, team_id, slot,
+				Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0))
+		return
 	var color_id: String = _home_color_id if team_id == 0 else _away_color_id
 	var colors: Dictionary = TeamColorRegistry.get_colors(color_id, team_id)
 	NetworkManager.send_confirm_slot_swap(peer_id, -1, -1, team_id, slot,
@@ -455,9 +583,18 @@ func _broadcast_confirm(peer_id: int, team_id: int, slot: int) -> void:
 func _update_start_btn() -> void:
 	if _start_btn == null:
 		return
-	var all_ready: bool = not _ready_states.is_empty()
-	for v: bool in _ready_states.values():
-		if not v:
+	# Spectators don't have a controller to ready; their ready state is ignored
+	# so the host can start with a non-empty spectator pool. Host alone (no
+	# non-host player peers) can also start — useful for solo testing.
+	var spectator_peers: Dictionary = {}
+	for k: int in _lobby_slots:
+		if _is_spectator_key(k):
+			spectator_peers[_lobby_slots[k].peer_id] = true
+	var all_ready: bool = true
+	for pid: int in _ready_states:
+		if spectator_peers.has(pid):
+			continue
+		if not _ready_states[pid]:
 			all_ready = false
 			break
 	_start_btn.disabled = not all_ready
@@ -466,6 +603,16 @@ func _update_start_btn() -> void:
 func _update_ready_btn() -> void:
 	if _ready_btn == null:
 		return
+	# Spectators don't ready up — their button hides until they swap back to a
+	# playing slot. _refresh_spectator_panel calls this whenever the local slot
+	# changes.
+	var local_peer: int = NetworkManager.local_peer_id()
+	var local_is_spectator: bool = false
+	for k: int in _lobby_slots:
+		if _is_spectator_key(k) and _lobby_slots[k].peer_id == local_peer:
+			local_is_spectator = true
+			break
+	_ready_btn.visible = not local_is_spectator
 	_ready_btn.text = "Unready" if _local_is_ready else "Ready"
 
 # ── Signal handlers ───────────────────────────────────────────────────────────
@@ -475,7 +622,12 @@ func _on_peer_joined(peer_id: int) -> void:
 		return
 	var target: Array = _find_balanced_slot(peer_id)
 	if target.is_empty():
-		return
+		# Player roster full — fall back to a spectator slot. If those are also
+		# full, drop the assignment (peer stays connected but in limbo).
+		var spec_slot: int = _find_open_spectator_slot()
+		if spec_slot < 0:
+			return
+		target = [NetworkManager.SPECTATOR_TEAM_ID, spec_slot]
 	var name_val: String = NetworkManager.get_peer_name(peer_id)
 	var is_left: bool = NetworkManager.get_peer_handedness(peer_id)
 	var num: int = NetworkManager.get_peer_number(peer_id)
@@ -519,17 +671,24 @@ func _on_slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int) -> v
 		return
 	if _lobby_slots.has(_slot_key(new_team_id, new_slot)):
 		return
-	var count: int = 0
-	for k: int in _lobby_slots:
-		if (1 if k >= PlayerRules.MAX_PER_TEAM else 0) == new_team_id:
-			count += 1
-	if count >= PlayerRules.MAX_PER_TEAM:
-		return
+	if new_team_id == NetworkManager.SPECTATOR_TEAM_ID:
+		if new_slot < 0 or new_slot >= GameRules.MAX_SPECTATORS:
+			return
+	else:
+		var count: int = 0
+		for k: int in _lobby_slots:
+			if _is_spectator_key(k):
+				continue
+			if _team_id_from_key(k) == new_team_id:
+				count += 1
+		if count >= PlayerRules.MAX_PER_TEAM:
+			return
 	var identity: Dictionary = _find_peer_identity(peer_id)
 	_assign_slot(peer_id, new_team_id, new_slot,
 			identity.player_name, identity.is_left_handed, identity.jersey_number)
 	_broadcast_confirm(peer_id, new_team_id, new_slot)
 	_refresh_grid()
+	_refresh_spectator_panel()
 
 func _on_slot_swap_confirmed(peer_id: int, _old_team_id: int, _old_slot: int,
 		new_team_id: int, new_slot: int,
@@ -538,6 +697,7 @@ func _on_slot_swap_confirmed(peer_id: int, _old_team_id: int, _old_slot: int,
 	_assign_slot(peer_id, new_team_id, new_slot,
 			identity.player_name, identity.is_left_handed, identity.jersey_number)
 	_refresh_grid()
+	_refresh_spectator_panel()
 
 func _on_lobby_roster_synced(roster: Array) -> void:
 	_lobby_slots.clear()
@@ -561,6 +721,7 @@ func _on_lobby_roster_synced(roster: Array) -> void:
 			_ready_states[peer_id] = is_ready
 	_update_start_btn()
 	_refresh_grid()
+	_refresh_spectator_panel()
 
 func _on_player_ready_changed(peer_id: int, is_ready: bool) -> void:
 	# Host doesn't need to be ready — only track non-host peers.
@@ -610,8 +771,8 @@ func _on_game_started(config: Dictionary) -> void:
 func _build_pending_slots() -> Dictionary:
 	var result: Dictionary = {}
 	for k: int in _lobby_slots:
-		var team_id: int = 1 if k >= PlayerRules.MAX_PER_TEAM else 0
-		var slot: int = k % 3
+		var team_id: int = _team_id_from_key(k)
+		var slot: int = _slot_from_key(k)
 		var entry: Dictionary = _lobby_slots[k]
 		result[entry.peer_id] = {
 			"team_id": team_id,
@@ -639,6 +800,10 @@ func _on_start_pressed() -> void:
 		"home_color_id": _home_color_id,
 		"away_color_id": _away_color_id,
 		"rule_set": _rule_set,
+		# Minted on the host and broadcast via game_start so every peer shares
+		# the same id. Used as the .mreplay filename and (Feature C) stored on
+		# career_stats rows so a game can be reconstructed across players.
+		"game_id": PlayerPrefs.generate_uuid(),
 	}
 	NetworkManager.send_game_start(config)
 

@@ -250,12 +250,26 @@ func decode_for_replay(data: PackedByteArray) -> Dictionary:
 		goalies.append(_decode_goalie_quantized(data.slice(o, o + GOALIE_BLOCK_SIZE)))
 		o += GOALIE_BLOCK_SIZE
 
+	# Game state block follows the goalies. The viewer needs score / phase /
+	# period / clock to render the HUD; live decode_world_state side-effects
+	# game state into the live state machine, so that path can't be reused.
+	var game_state: Dictionary = {}
+	if o + GAME_STATE_BLOCK_SIZE <= data.size():
+		game_state = {
+			"score0": data.decode_u8(o),
+			"score1": data.decode_u8(o + 1),
+			"phase": data.decode_u8(o + 2),
+			"period": data.decode_u8(o + 3),
+			"time_remaining": float(data.decode_u16(o + 4)),
+		}
+
 	return {
 		host_ts = host_ts,
 		skaters = skaters,
 		puck = puck_state,
 		carrier_peer_id = carrier_peer_id,
 		goalies = goalies,
+		game_state = game_state,
 	}
 
 
