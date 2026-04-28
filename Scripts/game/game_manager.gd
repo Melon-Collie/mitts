@@ -203,7 +203,7 @@ func on_connected_to_server() -> void:
 
 func on_slot_assigned(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color) -> void:
 	_spawn_world()
-	var peer_id: int = multiplayer.get_unique_id()
+	var peer_id: int = NetworkManager.local_peer_id()
 	var colors: Dictionary = TeamColorRegistry.get_colors(teams[team_id].color_id, team_id)
 	_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
 	_registry.spawn(peer_id, team_slot, teams[team_id],
@@ -287,7 +287,7 @@ func sync_existing_players(player_data: Array) -> void:
 func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int,
 		jersey_color: Color, helmet_color: Color, pants_color: Color,
 		is_left_handed: bool, player_name: String, jersey_number: int = 10) -> void:
-	if peer_id == multiplayer.get_unique_id() or _state_machine == null:
+	if peer_id == NetworkManager.local_peer_id() or _state_machine == null:
 		return
 	var colors: Dictionary = TeamColorRegistry.get_colors(teams[team_id].color_id, team_id)
 	_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
@@ -1100,7 +1100,7 @@ func _drop_puck_if_carried() -> int:
 		return -1
 	var carrier_peer_id: int = _resolve_skater_peer_id(puck.carrier)
 	puck.drop()
-	if carrier_peer_id != -1 and multiplayer.get_peers().has(carrier_peer_id):
+	if carrier_peer_id != -1 and NetworkManager.connected_peer_ids().has(carrier_peer_id):
 		NetworkManager.notify_puck_dropped_to_carrier(carrier_peer_id)
 	return carrier_peer_id
 

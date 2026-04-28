@@ -234,7 +234,7 @@ func _make_row() -> HBoxContainer:
 	return row
 
 func _ping_label(peer_id: int) -> String:
-	var local_id: int = multiplayer.get_unique_id()
+	var local_id: int = NetworkManager.local_peer_id()
 	if peer_id == local_id:
 		return "—" if NetworkManager.is_host else "%d ms" % int(NetworkManager.get_rtt_ms())
 	var p: int = NetworkManager.get_peer_ping_ms(peer_id)
