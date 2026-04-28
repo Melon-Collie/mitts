@@ -365,12 +365,12 @@ func set_broadcast_rate(hz: float) -> void:
 	state_delta = 1.0 / maxf(hz, 1.0)
 
 func _broadcast_state() -> void:
-	if is_offline_mode:
-		return
 	if not _world_state_provider.is_valid():
 		return
 	var state: PackedByteArray = _world_state_provider.call()
 	if state.is_empty():
+		return
+	if is_offline_mode:
 		return
 	for peer_id in connected_peer_ids():
 		receive_world_state.rpc_id(peer_id, state)
