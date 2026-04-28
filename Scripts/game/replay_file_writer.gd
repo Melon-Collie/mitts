@@ -23,7 +23,10 @@ extends RefCounted
 # END_OF_RECORDS; the reader walks records until it can't read a full frame
 # and reports `truncated = true`. Only the in-flight frame is lost.
 
-const MAGIC: PackedByteArray = PackedByteArray([77, 82, 69, 80, 76, 65, 89, 49])  # "MREPLAY1"
+# PackedByteArray() can't be a const expression in GDScript, so this is a
+# `static var` initialized once at class load. Same access pattern
+# (ReplayFileWriter.MAGIC) for callers.
+static var MAGIC: PackedByteArray = PackedByteArray([77, 82, 69, 80, 76, 65, 89, 49])  # "MREPLAY1"
 const KIND_WORLD_STATE: int = 0
 const KIND_EVENT: int = 1
 const FRAME_INNER_HEADER_SIZE: int = 5  # host_ts (4) + kind (1)
