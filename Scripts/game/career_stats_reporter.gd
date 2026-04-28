@@ -24,7 +24,7 @@ func fetch_totals(callback: Callable) -> void:
 	var url: String = "%s/rest/v1/career_totals?uuid=eq.%s" % [
 		SupabaseConfig.URL, PlayerPrefs.player_uuid
 	]
-	_get(url, callback)
+	_fetch(url, callback)
 
 
 func _post(url: String, body: Dictionary) -> void:
@@ -50,7 +50,7 @@ func _fire(url: String, method: HTTPClient.Method, body: Dictionary) -> void:
 		req.queue_free()
 
 
-func _get(url: String, callback: Callable) -> void:
+func _fetch(url: String, callback: Callable) -> void:
 	var root: Window = (Engine.get_main_loop() as SceneTree).root
 	var req := HTTPRequest.new()
 	root.add_child(req)
