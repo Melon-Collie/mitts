@@ -17,7 +17,7 @@ extends Node
 #
 # Owned by GameManager (host only). start() / stop() called from there.
 
-const CLIP_DURATION: float = 4.0  # seconds of history to replay
+const CLIP_DURATION: float = 8.0  # seconds of history to replay
 
 @export var playback_speed: float = 1.0
 @export var slowmo_window: float = 0.75  # seconds before clip end that slow-motion kicks in

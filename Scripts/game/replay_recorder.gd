@@ -5,7 +5,7 @@ extends RefCounted
 # circular buffer so GoalReplayDriver can extract the last N seconds on demand.
 # Lives on the host only; created alongside WorldStateCodec in game_scene.gd.
 
-const MEMORY_SIZE: int = 200  # ~5 s at 40 Hz
+const MEMORY_SIZE: int = 360  # ~9 s at 40 Hz (covers 8 s clip + 0.5 s post-goal window)
 
 var _frames: Array[PackedByteArray]
 var _timestamps: Array[float]
