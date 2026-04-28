@@ -493,6 +493,13 @@ func _wire_subsystems() -> void:
 	_registry.player_joined.connect(player_joined.emit)
 	_registry.player_left.connect(player_left.emit)
 	_registry.player_added.connect(_on_registry_player_added)
+	# Replay file roster events — fire whenever the registry changes after
+	# the writer is open. The initial roster is captured in the file header
+	# so these handlers no-op until _open_replay_file_writer has run, which
+	# is only after the registry's initial population (host_started /
+	# sync_existing_players) — no double-fire risk.
+	_registry.player_added.connect(_on_replay_player_joined_event)
+	_registry.player_removed.connect(_on_replay_player_left_event)
 
 	_state_buffer_manager = StateBufferManager.new()
 	_state_buffer_manager.setup(_registry, goalie_controllers)
@@ -848,6 +855,42 @@ func _on_goal_for_replay_event(scoring_team: Team, scorer: String,
 		"scorer": scorer,
 		"assist1": assist1,
 		"assist2": assist2,
+	}).to_utf8_buffer()
+	_replay_file_writer.enqueue_event(ts, payload)
+
+
+# Roster events for the .mreplay viewer. Header captures the initial roster;
+# these fire only for mid-game changes (joins, demotes, promotes,
+# disconnects) so the viewer can spawn / despawn actors instead of leaving
+# them stuck or invisible. _replay_file_writer is null during the initial
+# registry-population pass (writer opens AFTER registry stabilizes), so the
+# `if _replay_file_writer == null: return` guard naturally suppresses the
+# initial spawns.
+func _on_replay_player_joined_event(record: PlayerRecord) -> void:
+	if _replay_file_writer == null:
+		return
+	var ts: float = NetworkManager.local_time() if NetworkManager.is_host \
+			else NetworkManager.estimated_host_time()
+	var payload: PackedByteArray = JSON.stringify({
+		"kind": "player_joined",
+		"peer_id": record.peer_id,
+		"player_name": record.player_name,
+		"jersey_number": record.jersey_number,
+		"team_id": record.team.team_id if record.team != null else 0,
+		"team_slot": record.team_slot,
+		"is_left_handed": record.is_left_handed,
+	}).to_utf8_buffer()
+	_replay_file_writer.enqueue_event(ts, payload)
+
+
+func _on_replay_player_left_event(record: PlayerRecord) -> void:
+	if _replay_file_writer == null:
+		return
+	var ts: float = NetworkManager.local_time() if NetworkManager.is_host \
+			else NetworkManager.estimated_host_time()
+	var payload: PackedByteArray = JSON.stringify({
+		"kind": "player_left",
+		"peer_id": record.peer_id,
 	}).to_utf8_buffer()
 	_replay_file_writer.enqueue_event(ts, payload)
 

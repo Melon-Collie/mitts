@@ -25,6 +25,12 @@ var _codec: WorldStateCodec = null
 var _driver: FileReplayDriver = null
 var _camera: SpectatorCamera = null
 var _hud: ReplayViewerHUD = null
+# Cached so the player_joined event handler can spawn mid-game arrivals
+# without re-deriving them from header.
+var _home_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID
+var _away_color_id: String = TeamColorRegistry.DEFAULT_AWAY_ID
+var _home_colors: Dictionary = {}
+var _away_colors: Dictionary = {}
 
 
 func _ready() -> void:
@@ -78,19 +84,23 @@ func _spawn_actors_from_header(header: Dictionary) -> void:
 	for gc: GoalieController in _goalie_controllers:
 		gc.set_physics_process(false)
 
-	var home_id: String = header.get("home_color_id", TeamColorRegistry.DEFAULT_HOME_ID)
-	var away_id: String = header.get("away_color_id", TeamColorRegistry.DEFAULT_AWAY_ID)
-	var home_colors: Dictionary = TeamColorRegistry.get_colors(home_id, 0)
-	var away_colors: Dictionary = TeamColorRegistry.get_colors(away_id, 1)
-	goalie_result.bottom_goalie.set_goalie_color(home_colors.jersey, home_colors.helmet, home_colors.goalie_pads)
-	goalie_result.top_goalie.set_goalie_color(away_colors.jersey, away_colors.helmet, away_colors.goalie_pads)
+	_home_color_id = header.get("home_color_id", TeamColorRegistry.DEFAULT_HOME_ID)
+	_away_color_id = header.get("away_color_id", TeamColorRegistry.DEFAULT_AWAY_ID)
+	_home_colors = TeamColorRegistry.get_colors(_home_color_id, 0)
+	_away_colors = TeamColorRegistry.get_colors(_away_color_id, 1)
+	goalie_result.bottom_goalie.set_goalie_color(_home_colors.jersey, _home_colors.helmet, _home_colors.goalie_pads)
+	goalie_result.top_goalie.set_goalie_color(_away_colors.jersey, _away_colors.helmet, _away_colors.goalie_pads)
 
 	for entry: Dictionary in header.get("roster", []):
-		_spawn_skater_from_roster(entry, home_id, away_id, home_colors, away_colors)
+		_spawn_skater_from_roster(entry)
 
 
-func _spawn_skater_from_roster(entry: Dictionary, home_id: String, away_id: String,
-		home_colors: Dictionary, away_colors: Dictionary) -> void:
+func _spawn_skater_from_roster(entry: Dictionary) -> void:
+	var peer_id: int = int(entry.get("peer_id", 0))
+	# Idempotent — header roster + event-replay re-fires on seek-forward
+	# could otherwise spawn the same actor twice.
+	if _records.has(peer_id):
+		return
 	var team_id: int = int(entry.get("team_id", 0))
 	var team_slot: int = int(entry.get("team_slot", 0))
 	var is_left: bool = bool(entry.get("is_left_handed", true))
@@ -98,8 +108,8 @@ func _spawn_skater_from_roster(entry: Dictionary, home_id: String, away_id: Stri
 	var jersey_number: int = int(entry.get("jersey_number", 10))
 	var team_obj := Team.new()
 	team_obj.team_id = team_id
-	team_obj.color_id = home_id if team_id == 0 else away_id
-	var team_colors: Dictionary = home_colors if team_id == 0 else away_colors
+	team_obj.color_id = _home_color_id if team_id == 0 else _away_color_id
+	var team_colors: Dictionary = _home_colors if team_id == 0 else _away_colors
 	var spawned: Dictionary = _spawner.spawn_remote_player(
 			PlayerRules.faceoff_position(team_id, team_slot),
 			team_colors.jersey, team_colors.helmet, team_colors.pants,
@@ -118,7 +128,7 @@ func _spawn_skater_from_roster(entry: Dictionary, home_id: String, away_id: Stri
 	skater.set_jersey_info(p_name, jersey_number, team_colors.text)
 	skater.set_jersey_stripes(team_colors.jersey_stripe, team_colors.pants_stripe, team_colors.socks_stripe)
 
-	var record := PlayerRecord.new(int(entry.get("peer_id", 0)), team_slot, false, team_obj)
+	var record := PlayerRecord.new(peer_id, team_slot, false, team_obj)
 	record.skater = skater
 	record.controller = controller
 	record.player_name = p_name
@@ -145,7 +155,30 @@ func _start_playback(frames: Array) -> void:
 	_driver = FileReplayDriver.new()
 	add_child(_driver)
 	_driver.setup(_codec, _records, _puck, _goalie_controllers, frames)
+	_driver.event_emitted.connect(_on_replay_event)
 	_driver.play()
+
+
+# Dispatch on event kind so the viewer stays in sync with mid-game roster
+# changes (player_joined / player_left). Goal events are forwarded to the
+# HUD if it cares (currently no-op; future goal banner work consumes them).
+func _on_replay_event(event: Dictionary) -> void:
+	var kind: String = event.get("kind", "")
+	if kind == "player_joined":
+		_spawn_skater_from_roster(event)
+	elif kind == "player_left":
+		_despawn_skater(int(event.get("peer_id", -1)))
+
+
+func _despawn_skater(peer_id: int) -> void:
+	if not _records.has(peer_id):
+		return
+	var record: PlayerRecord = _records[peer_id]
+	if record.skater != null:
+		record.skater.queue_free()
+	if record.controller != null:
+		record.controller.queue_free()
+	_records.erase(peer_id)
 
 
 func _mount_hud(header: Dictionary) -> void:

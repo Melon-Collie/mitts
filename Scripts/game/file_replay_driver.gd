@@ -9,9 +9,9 @@ extends Node
 # that have no networking attached.
 #
 # Setup expects a roster + frame list parsed from ReplayFileReader.read().
-# World-state frames feed the playback engine; event frames (currently goal
-# events) replay through goal_event_emitted at their host_ts so the viewer
-# HUD can show goal banners + jump-to-goal buttons.
+# World-state frames feed the playback engine; event frames (kind=="goal",
+# "player_joined", "player_left", …) replay through event_emitted at their
+# host_ts so the viewer can update HUD banners and roster on the fly.
 
 @export var playback_speed: float = 1.0
 
@@ -28,7 +28,7 @@ const _GAP_THRESHOLD_S: float = 0.5
 # speed multiplies everything.
 const _GAP_DWELL_S: float = 0.5
 
-signal goal_event_emitted(event: Dictionary)
+signal event_emitted(event: Dictionary)
 signal game_state_changed(game_state: Dictionary)
 signal playback_ended
 
@@ -235,7 +235,7 @@ func _apply_current_frame(delta: float) -> void:
 
 func _emit_due_events() -> void:
 	while _next_event_idx < _events.size() and _events[_next_event_idx].host_ts <= _virtual_clock:
-		goal_event_emitted.emit(_events[_next_event_idx].data)
+		event_emitted.emit(_events[_next_event_idx].data)
 		_next_event_idx += 1
 
 
