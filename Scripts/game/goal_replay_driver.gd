@@ -3,11 +3,13 @@ extends Node
 
 # Drives in-game goal replay on the HOST by:
 #   1. Extracting the last CLIP_DURATION seconds from ReplayRecorder on goal.
-#   2. Freezing live host physics (puck, goalie AI) so authoritative simulation
+#   2. Freezing live host physics (puck) so authoritative simulation
 #      doesn't fight the replay positions.
 #   3. Decoding each recorded packet into typed actor states (via the codec's
 #      side-effect-free decode_for_replay) and applying them directly to the
-#      Skater / Puck / Goalie nodes.
+#      Skater / Puck nodes.
+#   4. Goalie controllers run freely tracking the replay puck — their AI
+#      drives body-part animation naturally without needing frame-by-frame state.
 #
 # Bypasses WorldStateCodec.decode_world_state because that path mutates the
 # host's GameStateMachine — replaying a packet would slam phase / score / clock
@@ -20,6 +22,7 @@ const CLIP_DURATION: float = 4.0  # seconds of history to replay
 @export var playback_speed: float = 1.0
 @export var slowmo_window: float = 0.75  # seconds before clip end that slow-motion kicks in
 @export var slowmo_speed: float = 0.4    # playback multiplier during slow-motion window
+@export var outro_duration: float = 0.25 # extra hold at clip end before stopping
 
 signal replay_started
 signal replay_stopped
@@ -43,8 +46,8 @@ var _cached_to_snap: Dictionary = {}
 var _cached_from_idx: int = -1
 var _cached_to_idx: int = -1
 
-# Snapshot of pre-replay processing flags so we can restore on stop.
-var _saved_goalie_processing: Array[bool] = []
+var _outro_elapsed: float = -1.0  # >= 0 while holding the final frame
+var _spectator_cam: SpectatorCamera = null
 
 
 func start(recorder: ReplayRecorder,
@@ -77,9 +80,15 @@ func start(recorder: ReplayRecorder,
 	_virtual_clock = _clip_start_ts
 	_cached_from_idx = -1
 	_cached_to_idx = -1
+	_outro_elapsed = -1.0
 	_active = true
 
 	_freeze_live_simulation()
+
+	_spectator_cam = SpectatorCamera.new()
+	add_child(_spectator_cam)
+	_spectator_cam.setup(func() -> Vector3: return _puck.global_position)
+	_spectator_cam.activate()
 
 	NetworkManager.start_replay_mode(_clip_start_ts)
 	replay_started.emit()
@@ -89,6 +98,13 @@ func stop() -> void:
 	if not _active:
 		return
 	_active = false
+	_outro_elapsed = -1.0
+
+	if _spectator_cam != null:
+		_spectator_cam.deactivate()
+		_spectator_cam.queue_free()
+		_spectator_cam = null
+
 	NetworkManager.stop_replay_mode()
 	_unfreeze_live_simulation()
 	_frames = []
@@ -109,11 +125,18 @@ func _process(delta: float) -> void:
 	if not _active:
 		return
 
+	# Outro: hold the final frame for outro_duration real seconds then stop.
+	if _outro_elapsed >= 0.0:
+		_outro_elapsed += delta
+		if _outro_elapsed >= outro_duration:
+			stop()
+		return
+
 	var speed: float = slowmo_speed if (_clip_end_ts - _virtual_clock) < slowmo_window else playback_speed
 	_virtual_clock += delta * speed
-	if _virtual_clock > _clip_end_ts:
-		stop()
-		return
+	if _virtual_clock >= _clip_end_ts:
+		_virtual_clock = _clip_end_ts
+		_outro_elapsed = 0.0
 
 	NetworkManager.set_replay_clock(_virtual_clock)
 
@@ -186,27 +209,22 @@ func _apply_interpolated_snapshot(t: float, dt: float) -> void:
 				fp.position, fp.velocity, tp.position, tp.velocity, t, dt))
 		_puck.set_puck_velocity(Vector3.ZERO)
 
-	# Goalies: linear lerp — they move slowly and have no angular velocity field.
-	var from_goalies: Array = _cached_from_snap.goalies
-	var to_goalies: Array = _cached_to_snap.goalies
-	for i: int in from_goalies.size():
-		if i >= _goalies.size() or i >= to_goalies.size():
-			break
-		var fg: GoalieNetworkState = from_goalies[i]
-		var tg: GoalieNetworkState = to_goalies[i]
-		_goalies[i].set_goalie_position(
-				lerpf(fg.position_x, tg.position_x, t),
-				lerpf(fg.position_z, tg.position_z, t))
-		_goalies[i].set_goalie_rotation_y(lerp_angle(fg.rotation_y, tg.rotation_y, t))
-
 
 func _freeze_live_simulation() -> void:
 	if _puck != null:
 		_puck.freeze = true
-	_saved_goalie_processing.clear()
-	for gc: GoalieController in _goalie_controllers:
-		_saved_goalie_processing.append(gc.is_physics_processing())
-		gc.set_physics_process(false)
+	# Snap goalies to clip-start positions, then let GoalieController._physics_process
+	# run freely. It reads puck.global_position, which is driven to replay positions
+	# each frame, so the AI tracks the replay puck with natural body-part animation.
+	if _frames.size() > 0:
+		var first_snap: Dictionary = _codec.decode_for_replay(_frames[0])
+		var first_goalies: Array = first_snap.goalies
+		for i: int in first_goalies.size():
+			if i >= _goalies.size():
+				break
+			var fg: GoalieNetworkState = first_goalies[i]
+			_goalies[i].set_goalie_position(fg.position_x, fg.position_z)
+			_goalies[i].set_goalie_rotation_y(fg.rotation_y)
 
 
 func _unfreeze_live_simulation() -> void:
@@ -215,7 +233,3 @@ func _unfreeze_live_simulation() -> void:
 	# Restoring a saved value here could re-freeze the puck before reset() runs.
 	if _puck != null:
 		_puck.freeze = false
-	for i: int in _goalie_controllers.size():
-		var was_processing: bool = _saved_goalie_processing[i] if i < _saved_goalie_processing.size() else true
-		_goalie_controllers[i].set_physics_process(was_processing)
-	_saved_goalie_processing.clear()
