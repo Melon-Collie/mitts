@@ -24,13 +24,15 @@ signal puck_hit_goal_body  # uncarried puck struck net panel or skirt (non-pipe 
 @export var poke_checker_cooldown: float = 0.1
 @export var body_check_strip_threshold: float = 6.0  # weight × approach_speed needed to strip
 @export var body_check_puck_speed: float = 5.0
+@export var hit_pickup_cooldown: float = 0.6              # seconds victim cannot pick up after a hard hit
+@export var hit_pickup_cooldown_threshold: float = 6.0    # weight × approach needed to apply hit pickup cooldown
 @export var body_block_dampen: float = 0.5
 @export var body_block_cooldown: float = 0.1
 @export var max_height: float = 3.0
 
 var carrier: Skater = null
 var pickup_locked: bool = false
-var _cooldown_timers: Dictionary = {}  # Skater -> float
+var _cooldown_timers: Dictionary[Skater, float] = {}
 var _is_server: bool = false
 var _pending_reset: bool = false
 var _clamp_at_goal_line: bool = false
@@ -120,7 +122,10 @@ func is_on_cooldown(skater: Skater) -> bool:
 	return _cooldown_timers.get(skater, 0.0) > 0.0
 
 func _set_cooldown(skater: Skater, duration: float) -> void:
-	_cooldown_timers[skater] = duration
+	# Take the max with any existing entry so a shorter cooldown set immediately
+	# after a longer one (e.g. body_block_cooldown 0.1s right after reattach 0.5s)
+	# never shortens the in-flight cooldown.
+	_cooldown_timers[skater] = maxf(_cooldown_timers.get(skater, 0.0), duration)
 
 func set_skater_cooldown(skater: Skater, duration: float) -> void:
 	_set_cooldown(skater, duration)
@@ -185,6 +190,10 @@ func on_body_check(checker: Skater, victim: Skater, impact_force: float, hit_dir
 		return
 	if checker.is_ghost or victim.is_ghost:
 		return
+	if impact_force < hit_pickup_cooldown_threshold:
+		return
+	# Hard hits temporarily deny the victim a pickup, even if they weren't carrying.
+	_set_cooldown(victim, hit_pickup_cooldown)
 	if carrier == null or carrier != victim:
 		return
 	if pickup_locked:
