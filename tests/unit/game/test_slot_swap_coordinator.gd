@@ -27,9 +27,10 @@ func before_each() -> void:
 func _add_player(peer_id: int, team_id: int, team_slot: int) -> PlayerRecord:
 	sm.register_remote_assigned_player(peer_id, team_slot, team_id)
 	var record := PlayerRecord.new(peer_id, team_slot, false, teams[team_id])
-	record.jersey_color = PlayerRules.generate_jersey_color(team_id)
-	record.helmet_color = PlayerRules.generate_helmet_color(team_id)
-	record.pants_color  = PlayerRules.generate_pants_color(team_id)
+	var colors: Dictionary = TeamColorRegistry.get_colors(teams[team_id].color_id, team_id)
+	record.jersey_color = colors.jersey
+	record.helmet_color = colors.helmet
+	record.pants_color  = colors.pants
 	registry._players[peer_id] = record
 	return record
 
