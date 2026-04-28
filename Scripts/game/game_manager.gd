@@ -80,7 +80,7 @@ var _spectator_camera: SpectatorCamera = null
 # ── Lag compensation ──────────────────────────────────────────────────────────
 const _MAX_CLAIM_AGE_S: float = 0.2
 const _CONTEST_WINDOW_S: float = 0.05
-var _pending_pickup_claim: Dictionary = {}
+var _pending_pickup_claim_peer_id: int = -1
 var _pending_claim_timer: float = 0.0
 var _last_hit_claim_sent: Dictionary = {}  # "hitter:victim" -> float, client only
 
@@ -167,11 +167,16 @@ func _physics_process(delta: float) -> void:
 	_check_puck_out_of_bounds(delta)
 	_apply_ghost_state()
 	_shot_tracker.tick(delta)
-	if not _pending_pickup_claim.is_empty():
+	if _pending_pickup_claim_peer_id != -1:
 		_pending_claim_timer += delta
 		if _pending_claim_timer >= _CONTEST_WINDOW_S:
-			puck_controller.apply_lag_comp_pickup(_pending_pickup_claim.skater)
-			_pending_pickup_claim = {}
+			# Resolve at use time so a peer that disconnected / demoted during
+			# the contest window doesn't dereference a freed skater. Registry
+			# lookup returns null → apply_lag_comp_pickup is skipped.
+			var claim_record: PlayerRecord = _registry.get_record(_pending_pickup_claim_peer_id)
+			if claim_record != null and claim_record.skater != null:
+				puck_controller.apply_lag_comp_pickup(claim_record.skater)
+			_pending_pickup_claim_peer_id = -1
 			_pending_claim_timer = 0.0
 
 
@@ -643,14 +648,11 @@ func _demote_player_to_spectator(peer_id: int) -> void:
 		return
 	var record: PlayerRecord = _registry.get_record(peer_id)
 	# Drop the puck before broadcasting so the carrier change goes out while
-	# the controller still exists (mirrors on_player_disconnected).
+	# the controller still exists (mirrors on_player_disconnected). The
+	# pending pickup claim self-cleans at apply time via registry lookup,
+	# so no extra mirror-clear is needed here.
 	if puck != null and puck.carrier == record.skater:
 		puck.drop()
-	# Pending lag-comp claim references the about-to-be-queue_freed skater.
-	if not _pending_pickup_claim.is_empty() \
-			and _pending_pickup_claim.get("skater") == record.skater:
-		_pending_pickup_claim = {}
-		_pending_claim_timer = 0.0
 	NetworkManager.send_spectator_demoted_to_all(peer_id)
 
 
@@ -788,7 +790,7 @@ func _resolve_skater_peer_id(skater: Skater) -> int:
 
 
 func _on_server_puck_picked_up_by(peer_id: int) -> void:
-	_pending_pickup_claim = {}
+	_pending_pickup_claim_peer_id = -1
 	_pending_claim_timer = 0.0
 	var record: PlayerRecord = _registry.get_record(peer_id)
 	if record == null:
@@ -853,13 +855,21 @@ func _on_pickup_claim_received(peer_id: int, host_timestamp: float, rtt_ms: floa
 	var blade_prev: Vector3 = skater_prev_snap.blade_contact_world
 	if not PuckInteractionRules.check_pickup(puck_prev, puck_pos, blade_prev, blade_curr, PuckController.PICKUP_RADIUS):
 		return
-	if not _pending_pickup_claim.is_empty():
-		puck_controller.apply_contested_pickup(record.skater, _pending_pickup_claim.skater)
-		_pending_pickup_claim = {}
-		_pending_claim_timer = 0.0
+	if _pending_pickup_claim_peer_id != -1:
+		# Resolve the prior claimant at contest time. If they've disconnected
+		# or demoted in the contest window, treat the new claim as uncontested
+		# and let it stand.
+		var prior_record: PlayerRecord = _registry.get_record(_pending_pickup_claim_peer_id)
+		if prior_record != null and prior_record.skater != null:
+			puck_controller.apply_contested_pickup(record.skater, prior_record.skater)
+			_pending_pickup_claim_peer_id = -1
+			_pending_claim_timer = 0.0
+		else:
+			_pending_pickup_claim_peer_id = peer_id
+			_pending_claim_timer = 0.0
 	else:
 		_pending_claim_timer = 0.0
-		_pending_pickup_claim = { skater = record.skater }
+		_pending_pickup_claim_peer_id = peer_id
 
 
 func _on_server_puck_released_by_carrier(peer_id: int) -> void:

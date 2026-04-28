@@ -14,6 +14,8 @@ Complex features (AI state machines, new systems, architectural changes) are des
 
 **You cannot run the game or the test suite.** The GUT panel runs in the Godot editor; the headless CLI does not work in this environment. After touching domain code, note which test files cover the affected area and ask the user to run them. For gameplay or networking changes, describe what to test in a local session and wait for the user to verify.
 
+**If you spot a bug or code smell while working on something else, flag it.** Don't silently fix it (out of scope), don't silently ignore it (it'll rot), don't tack it onto the current commit (muddies the diff). Surface it in chat with a one-line description and let the user decide: fix now as a small follow-up, defer to a separate task, or capture as a Known Issue here. Latent bugs in adjacent code paths are especially worth flagging — they often pair with whatever you're touching.
+
 ## What This Is
 
 A 3v3 arcade hockey game built in Godot 4.6.2 (GDScript, 3D). Online multiplayer — one player per machine, each with their own camera and local simulation. Prioritizes feel over realism: deep stickhandling, multiple shot types, satisfying puck physics.
