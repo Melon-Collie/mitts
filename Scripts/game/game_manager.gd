@@ -528,6 +528,7 @@ func _wire_subsystems() -> void:
 	_phase_coord.setup(_state_machine, _registry, teams,
 			get_puck, _get_goalie_controllers, _shot_tracker, _drop_puck_if_carried)
 	_phase_coord.goal_scored.connect(goal_scored.emit)
+	_phase_coord.goal_scored.connect(_on_goal_for_replay_event)
 	_phase_coord.score_changed.connect(score_changed.emit)
 	_phase_coord.phase_changed.connect(phase_changed.emit)
 	if NetworkManager.is_host:
@@ -823,6 +824,32 @@ func _build_replay_footer() -> Dictionary:
 		footer["final_score_away"] = _state_machine.scores[1]
 	footer["ended_at"] = Time.get_unix_time_from_system()
 	return footer
+
+
+# Goals don't appear in the world-state packet (they're broadcast via the
+# notify_goal RPC on a separate channel), so the viewer has no way to render
+# the goal banner / jump-to-goal buttons unless we capture them as events
+# alongside the frame stream. Fires on every peer when phase_coord re-emits
+# goal_scored locally — host detects + emits, clients receive notify_goal +
+# emit. JSON payload because goals are infrequent (~10/game) and the field
+# set is small enough that the byte overhead doesn't matter.
+func _on_goal_for_replay_event(scoring_team: Team, scorer: String,
+		assist1: String, assist2: String) -> void:
+	if _replay_file_writer == null or _state_machine == null:
+		return
+	var ts: float = NetworkManager.local_time() if NetworkManager.is_host \
+			else NetworkManager.estimated_host_time()
+	var payload: PackedByteArray = JSON.stringify({
+		"kind": "goal",
+		"scoring_team_id": scoring_team.team_id,
+		"score0": _state_machine.scores[0],
+		"score1": _state_machine.scores[1],
+		"period": _state_machine.current_period,
+		"scorer": scorer,
+		"assist1": assist1,
+		"assist2": assist2,
+	}).to_utf8_buffer()
+	_replay_file_writer.enqueue_event(ts, payload)
 
 
 func _spawn_local(peer_id: int, team_slot: int, team: Team) -> void:
