@@ -70,6 +70,13 @@ var _career_reporter: CareerStatsReporter = null
 # once the registry has stabilized (post-_push_lobby_assignments_to_clients
 # on host, post-sync_existing_players on clients) and closes on scene exit.
 var _replay_file_writer: ReplayFileWriter = null
+# Tracks the phase of the most recent .mreplay frame so movement-locked
+# phases (GOAL_SCORED, FACEOFF_PREP, END_OF_PERIOD, GAME_OVER) record their
+# first transition frame and skip the duplicate-static frames that follow.
+# The transition frame at GOAL_SCORED entry captures puck-in-net, which the
+# previous broadcast (still PLAYING) usually missed. -1 = nothing recorded
+# yet this game; reset on scene exit + rematch rollover.
+var _last_recorded_phase: int = -1
 
 # ── Spectator state ───────────────────────────────────────────────────────────
 # Host-side: peer_ids of connected spectators. Used to gate `_registry.spawn`
@@ -783,6 +790,7 @@ func _rollover_replay_file_to(new_game_id: String) -> void:
 	if new_game_id.is_empty():
 		return
 	_close_replay_file_writer()
+	_last_recorded_phase = -1
 	_game_id = new_game_id
 	_open_replay_file_writer()
 
@@ -1309,6 +1317,8 @@ func _on_world_state_received(data: PackedByteArray) -> void:
 	if _replay_file_writer != null and data.size() >= 6 and _should_record_to_file():
 		var host_ts: float = data.decode_float(2)
 		_replay_file_writer.enqueue_frame(host_ts, data)
+		if _state_machine != null:
+			_last_recorded_phase = _state_machine.current_phase
 
 
 func _on_stats_received(data: Array) -> void:
@@ -1489,6 +1499,7 @@ func on_scene_exit() -> void:
 	# blocks until the worker exits, so we must call this while the registry
 	# (used to build the footer) is still intact.
 	_close_replay_file_writer()
+	_last_recorded_phase = -1
 	if _shot_tracker != null:
 		_shot_tracker.clear_state()
 	if _registry != null:
@@ -1689,20 +1700,30 @@ func get_world_state() -> PackedByteArray:
 	# the goal moment cleanly).
 	if _recorder != null and not NetworkManager.is_replay_mode():
 		_recorder.record_frame(state, ts)
-	# File writer skips dead-puck phases too (FACEOFF_PREP, GOAL_SCORED,
-	# END_OF_PERIOD, GAME_OVER). Those broadcast at 5 Hz of duplicate static
-	# state; the playback engine's dwell-then-snap handles the resulting
-	# bracket-gap visually.
+	# File writer skips dead-puck phase ticks past the first one — see
+	# _should_record_to_file. The first frame on each phase transition
+	# captures the puck-in-net moment / faceoff snap / etc.
 	if _replay_file_writer != null and _should_record_to_file():
 		_replay_file_writer.enqueue_frame(ts, state)
+		if _state_machine != null:
+			_last_recorded_phase = _state_machine.current_phase
 	return state
 
 
 func _should_record_to_file() -> bool:
 	if NetworkManager.is_replay_mode():
 		return false
-	if _state_machine != null and PhaseRules.is_movement_locked(_state_machine.current_phase):
-		return false
+	if _state_machine == null:
+		return true
+	var phase: int = _state_machine.current_phase
+	if PhaseRules.is_movement_locked(phase):
+		# Capture only the first frame of each movement-locked phase. Goal:
+		# the puck-in-net moment on GOAL_SCORED entry — without this, the
+		# last recorded frame before the gap is the previous PLAYING tick,
+		# which usually shows the puck still approaching the net rather
+		# than inside it. Subsequent ticks at 5 Hz are duplicate static
+		# state and add nothing.
+		return phase != _last_recorded_phase
 	return true
 
 
