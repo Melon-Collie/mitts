@@ -29,6 +29,11 @@ signal team_colors_ready(home_primary: Color, home_secondary: Color, away_primar
 signal local_player_hit(magnitude: float)
 signal replay_started
 signal replay_stopped
+# Emitted on the local peer when a spectator-slot assignment lands. HUD / camera /
+# input subsystems listen so they can flip spectator chrome on/off without
+# polling. Only ever fires once per session right now (lobby → game transition);
+# mid-game player ↔ spectator swap is deferred.
+signal local_spectator_state_changed(is_spectator: bool)
 
 # ── Domain state ──────────────────────────────────────────────────────────────
 var _state_machine: GameStateMachine = null
@@ -59,6 +64,18 @@ var _state_buffer_manager: StateBufferManager = null
 var _recorder: ReplayRecorder = null
 var _goal_replay_driver: GoalReplayDriver = null
 var _career_reporter: CareerStatsReporter = null
+
+# ── Spectator state ───────────────────────────────────────────────────────────
+# Host-side: peer_ids of connected spectators. Used to gate `_registry.spawn`
+# and the `send_spawn_remote_skater` broadcast on join.  Locally cleared on
+# scene exit. Spectators are NOT in `_registry`, so any path that iterates
+# `_registry.all()` already excludes them naturally.
+var _spectator_peers: Dictionary[int, bool] = {}
+# Client-side: true when the local peer was assigned a spectator slot. Drives
+# the SpectatorCamera mount and HUD chrome hiding. Also gates the local-skater
+# spawn path in on_slot_assigned.
+var _is_local_spectator: bool = false
+var _spectator_camera: SpectatorCamera = null
 
 # ── Lag compensation ──────────────────────────────────────────────────────────
 const _MAX_CLAIM_AGE_S: float = 0.2
@@ -214,8 +231,12 @@ func on_host_started() -> void:
 		var my_slot: Dictionary = NetworkManager.pending_lobby_slots.get(1, {})
 		var team_id: int = my_slot.get("team_id", 0)
 		var team_slot: int = my_slot.get("team_slot", 0)
-		_state_machine.register_remote_assigned_player(1, team_slot, team_id)
-		_spawn_local(1, team_slot, teams[team_id])
+		if team_id == NetworkManager.SPECTATOR_TEAM_ID:
+			_spectator_peers[1] = true
+			_become_local_spectator()
+		else:
+			_state_machine.register_remote_assigned_player(1, team_slot, team_id)
+			_spawn_local(1, team_slot, teams[team_id])
 		_push_lobby_assignments_to_clients()
 	else:
 		var assignment: Dictionary = _state_machine.register_host(1)
@@ -229,6 +250,9 @@ func on_connected_to_server() -> void:
 func on_slot_assigned(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color) -> void:
 	_spawn_world()
 	var peer_id: int = NetworkManager.local_peer_id()
+	if team_id == NetworkManager.SPECTATOR_TEAM_ID:
+		_become_local_spectator()
+		return
 	var colors: Dictionary = TeamColorRegistry.get_colors(teams[team_id].color_id, team_id)
 	_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
 	_registry.spawn(peer_id, team_slot, teams[team_id],
@@ -242,13 +266,6 @@ func on_slot_assigned(team_slot: int, team_id: int, jersey_color: Color, helmet_
 func on_player_connected(peer_id: int) -> void:
 	if not NetworkManager.is_host or _state_machine == null:
 		return
-	var assignment: Dictionary = _state_machine.on_player_connected(peer_id)
-	var team: Team = teams[assignment.team_id]
-	var colors: Dictionary = TeamColorRegistry.get_colors(team.color_id, team.team_id)
-	var is_left: bool = NetworkManager.get_peer_handedness(peer_id)
-	var peer_name: String = NetworkManager.get_peer_name(peer_id)
-	var peer_number: int = NetworkManager.get_peer_number(peer_id)
-
 	var config: Dictionary = {
 		"num_periods": _state_machine.num_periods,
 		"period_duration": _state_machine.period_duration,
@@ -258,6 +275,25 @@ func on_player_connected(peer_id: int) -> void:
 		"away_color_id": NetworkManager.pending_away_color_id,
 		"rule_set": _state_machine.rule_set,
 	}
+	# Spectator branch: declared via pending_lobby_slots[peer_id].team_id == -1.
+	# Mid-game joiners always come in as players (existing auto-balance flow);
+	# joining-as-spectator is a lobby-only choice for v1.
+	var pending_slot: Dictionary = NetworkManager.pending_lobby_slots.get(peer_id, {})
+	if pending_slot.get("team_id", 0) == NetworkManager.SPECTATOR_TEAM_ID:
+		_spectator_peers[peer_id] = true
+		NetworkManager.send_join_in_progress(peer_id, config)
+		NetworkManager.send_slot_assignment(peer_id,
+				pending_slot.get("team_slot", 0), NetworkManager.SPECTATOR_TEAM_ID,
+				Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0))
+		NetworkManager.send_sync_existing_players(peer_id, _collect_existing_player_data())
+		return
+	var assignment: Dictionary = _state_machine.on_player_connected(peer_id)
+	var team: Team = teams[assignment.team_id]
+	var colors: Dictionary = TeamColorRegistry.get_colors(team.color_id, team.team_id)
+	var is_left: bool = NetworkManager.get_peer_handedness(peer_id)
+	var peer_name: String = NetworkManager.get_peer_name(peer_id)
+	var peer_number: int = NetworkManager.get_peer_number(peer_id)
+
 	NetworkManager.send_join_in_progress(peer_id, config)
 	NetworkManager.send_slot_assignment(peer_id, assignment.team_slot, team.team_id,
 			colors.jersey, colors.helmet, colors.pants)
@@ -272,6 +308,7 @@ func on_player_connected(peer_id: int) -> void:
 
 
 func on_player_disconnected(peer_id: int) -> void:
+	_spectator_peers.erase(peer_id)
 	var record: PlayerRecord = _registry.get_record(peer_id) if _registry != null else null
 	if record == null:
 		return
@@ -546,6 +583,35 @@ func _on_remote_carrier_sound(new_carrier_peer_id: int) -> void:
 	var record: PlayerRecord = _registry.get_record(new_carrier_peer_id)
 	if record != null and record.skater != null:
 		SoundManager.play_world(SoundManager.Sound.PUCK_PICKUP, record.skater.global_position, 0.0, 0.05)
+
+
+# Local peer is a spectator. Set the flag so HUD chrome can hide local-only
+# elements, and mount a SpectatorCamera tracking the puck. No skater is
+# created — the spectator renders the active 6 via the existing remote-controller
+# path that all clients already use.
+func _become_local_spectator() -> void:
+	_is_local_spectator = true
+	if _spectator_camera == null:
+		_spectator_camera = SpectatorCamera.new()
+		get_tree().current_scene.add_child(_spectator_camera)
+		_spectator_camera.setup(func() -> Vector3:
+			return puck.global_position if puck != null else Vector3.ZERO)
+		_spectator_camera.activate()
+	local_spectator_state_changed.emit(true)
+
+
+func is_local_spectator() -> bool:
+	return _is_local_spectator
+
+
+# Host-only accurate. Clients only know their own spectator status (via
+# is_local_spectator), so callers iterating peer IDs should be host-gated.
+func is_spectator_peer(peer_id: int) -> bool:
+	return _spectator_peers.has(peer_id)
+
+
+func spectator_peer_count() -> int:
+	return _spectator_peers.size()
 
 
 func _spawn_local(peer_id: int, team_slot: int, team: Team) -> void:
@@ -985,6 +1051,11 @@ func _sync_stats_to_clients() -> void:
 func _on_slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int) -> void:
 	if not NetworkManager.is_host or _swap_coord == null:
 		return
+	# Mid-game player ↔ spectator swaps are deferred to a later release — they
+	# require despawning/spawning skaters and reconciling the state machine.
+	# Ignore the request silently; the lobby is the only place to take this action.
+	if new_team_id == NetworkManager.SPECTATOR_TEAM_ID or _spectator_peers.has(peer_id):
+		return
 	var carrier: Skater = puck.carrier if puck != null else null
 	var confirmation: Dictionary = _swap_coord.request_swap(peer_id, new_team_id, new_slot, carrier)
 	if confirmation.is_empty():
@@ -1110,6 +1181,14 @@ func on_scene_exit() -> void:
 	NetworkTelemetry.instance = null
 	_last_emitted_clock_secs = -1
 	_puck_oob_timer = 0.0
+	if _spectator_camera != null:
+		_spectator_camera.deactivate()
+		_spectator_camera.queue_free()
+		_spectator_camera = null
+	if _is_local_spectator:
+		_is_local_spectator = false
+		local_spectator_state_changed.emit(false)
+	_spectator_peers.clear()
 	NetworkManager.prepare_for_new_game()
 
 
@@ -1205,6 +1284,15 @@ func _push_lobby_assignments_to_clients() -> void:
 		var entry: Dictionary = slots[peer_id]
 		var team_id: int = entry.team_id
 		var team_slot: int = entry.team_slot
+		if team_id == NetworkManager.SPECTATOR_TEAM_ID:
+			# Spectators get the slot-assignment RPC so they take the SpectatorCamera
+			# path on the client, plus existing-players sync for actor render. No
+			# state-machine slot is reserved and no skater is spawned.
+			_spectator_peers[peer_id] = true
+			NetworkManager.send_slot_assignment(peer_id, team_slot, team_id,
+					Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0))
+			NetworkManager.send_sync_existing_players(peer_id, existing)
+			continue
 		_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
 		var team: Team = teams[team_id]
 		var colors: Dictionary = TeamColorRegistry.get_colors(team.color_id, team_id)

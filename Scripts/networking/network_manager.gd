@@ -1,5 +1,11 @@
 extends Node
 
+# Sentinel team_id used to mark spectator slots end-to-end (lobby roster, slot
+# assignment RPCs, GameManager bookkeeping). A peer with team_id == this value
+# never spawns a local/remote skater — it just receives world-state broadcasts
+# and renders via SpectatorCamera.
+const SPECTATOR_TEAM_ID: int = -1
+
 # ── Outbound signals (application layer listens) ─────────────────────────────
 # NetworkManager observes ENet + RPC traffic; GameManager connects to these in
 # _ready and executes the corresponding orchestration work. Keeps the upward
@@ -149,7 +155,7 @@ func start_host() -> void:
 	_peer_names[1] = local_player_name
 	_peer_numbers[1] = local_jersey_number
 	var peer := ENetMultiplayerPeer.new()
-	var error := peer.create_server(Constants.PORT, GameRules.MAX_PLAYERS)
+	var error := peer.create_server(Constants.PORT, GameRules.MAX_CONNECTIONS)
 	if error != OK:
 		push_error("Failed to start server: " + str(error))
 		return

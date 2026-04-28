@@ -36,6 +36,8 @@ var _vote_label: Label = null
 var _rematch_votes: Dictionary = {}
 var _local_voted: bool = false
 var _replay_label: Label = null
+var _spectator_banner: PanelContainer = null
+var _change_position_btn: Button = null
 
 const _DARK_BG    := Color(0.07, 0.07, 0.09, 0.92)
 const _WHITE      := Color(1.00, 1.00, 1.00, 1.00)
@@ -78,6 +80,8 @@ func _ready() -> void:
 	GameManager.local_player_hit.connect(_on_local_player_hit)
 	GameManager.replay_started.connect(_on_replay_started)
 	GameManager.replay_stopped.connect(_on_replay_stopped)
+	GameManager.local_spectator_state_changed.connect(func(_is_spec: bool) -> void: _apply_spectator_chrome())
+	_apply_spectator_chrome()
 	GameManager.stats_updated.connect(func() -> void:
 		if _game_menu != null and _game_menu.visible and _slot_grid != null:
 			_slot_grid.refresh(GameManager.get_slot_roster(), NetworkManager.local_peer_id(), _get_team_colors()))
@@ -256,6 +260,56 @@ func _build_phase_banner() -> void:
 	_replay_label.visible = false
 	vbox.add_child(_replay_label)
 
+# Persistent banner shown on spectator clients only. Sits centered at the top
+# of the screen, above the phase banner area. Toggled by _apply_spectator_chrome.
+func _build_spectator_banner() -> void:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.07, 0.07, 0.09, 0.88)
+	style.set_corner_radius_all(3)
+	style.set_content_margin(SIDE_LEFT, 14)
+	style.set_content_margin(SIDE_RIGHT, 14)
+	style.set_content_margin(SIDE_TOP, 4)
+	style.set_content_margin(SIDE_BOTTOM, 4)
+
+	_spectator_banner = PanelContainer.new()
+	_spectator_banner.add_theme_stylebox_override("panel", style)
+	_spectator_banner.add_child(_lbl("SPECTATING", 12, _GOLD))
+
+	# Centered horizontally, anchored to the top.
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var centering := HBoxContainer.new()
+	centering.alignment = BoxContainer.ALIGNMENT_CENTER
+	centering.anchor_right = 1.0
+	centering.offset_top = 14.0
+	centering.offset_bottom = 40.0
+	centering.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(centering)
+	centering.add_child(_spectator_banner)
+
+	add_child(root)
+	_spectator_banner.visible = false
+
+# Hides local-only menu options (Rematch, Change Position) when the local peer
+# is a spectator and shows the spectator banner. Off-screen indicators and the
+# rink scoreboard already gate on registry membership, so they need no change.
+func _apply_spectator_chrome() -> void:
+	var is_spec: bool = GameManager.is_local_spectator()
+	if _spectator_banner == null and is_spec:
+		_build_spectator_banner()
+	if _spectator_banner != null:
+		_spectator_banner.visible = is_spec
+	if is_spec:
+		if _rematch_btn != null:
+			_rematch_btn.visible = false
+		if _vote_label != null:
+			_vote_label.visible = false
+		if _change_position_btn != null:
+			_change_position_btn.disabled = true
+			_change_position_btn.tooltip_text = "Spectators can't change position mid-game."
+
 func _build_offscreen_indicators() -> void:
 	var indicators := OffScreenPlayerIndicators.new()
 	add_child(indicators)
@@ -355,9 +409,9 @@ func _build_game_menu() -> void:
 		_set_menu_open(false)
 		GameManager.reset_game())
 
-	var change_pos_btn := _popup_button("Change Position")
-	change_pos_btn.pressed.connect(_on_change_position_pressed)
-	vbox.add_child(change_pos_btn)
+	_change_position_btn = _popup_button("Change Position")
+	_change_position_btn.pressed.connect(_on_change_position_pressed)
+	vbox.add_child(_change_position_btn)
 
 	var options_btn := _popup_button("Options")
 	options_btn.pressed.connect(_on_options_pressed)
@@ -895,12 +949,16 @@ func _update_rematch_ui() -> void:
 	_vote_label.text = "%d / %d voted" % [count, total]
 
 func _check_rematch_unanimous() -> void:
-	var total: int = NetworkManager.connected_peer_ids().size() + 1
+	# Host-side: spectators don't have a vote button. spectator_peer_count
+	# already includes the host's peer (1) if the host is itself a spectator,
+	# so a single subtraction here yields the actual voter pool.
+	var total: int = NetworkManager.connected_peer_ids().size() + 1 \
+			- GameManager.spectator_peer_count()
 	var count: int = 0
 	for v: bool in _rematch_votes.values():
 		if v:
 			count += 1
-	if count >= total:
+	if total > 0 and count >= total:
 		GameManager.reset_game()
 
 func _get_team_colors() -> Array[Dictionary]:

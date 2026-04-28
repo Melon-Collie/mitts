@@ -83,6 +83,10 @@ const RULE_SET_NAMES: Array[String] = ["Off", "Arcade", "NHL"]
 
 # ── Players ───────────────────────────────────────────────────────────────────
 const MAX_PLAYERS: int = 6  # 3v3
+const MAX_SPECTATORS: int = 4
+# ENet connection cap = playable roster + spectator slots. Player count
+# (3v3 roster) is still gated separately by PlayerRules.MAX_PER_TEAM.
+const MAX_CONNECTIONS: int = MAX_PLAYERS + MAX_SPECTATORS
 
 # ── Faceoff Positions ─────────────────────────────────────────────────────────
 # Indexed by [team_id][team_slot]. Team 0 occupies the +Z half; Team 1 the -Z half.
