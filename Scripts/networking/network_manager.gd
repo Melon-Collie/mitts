@@ -51,6 +51,14 @@ signal deflection_received(position: Vector3)
 signal body_block_received(position: Vector3)
 signal puck_strip_received(position: Vector3)
 signal input_batch_received(peer_id: int, inputs: Array[InputState])
+# Mid-game player → spectator transition. Host broadcasts to all peers; every
+# receiver despawns the demoted peer's skater locally (registry.remove handles
+# state-machine cleanup, queue_free, etc.). The demoted peer's local
+# GameManager additionally tears down its LocalController and mounts
+# SpectatorCamera. The opposite direction (spectator → player) reuses the
+# existing assign_player_slot + spawn_remote_skater RPCs and needs no new
+# broadcast.
+signal spectator_demoted_received(peer_id: int)
 
 # ── State ─────────────────────────────────────────────────────────────────────
 var is_host: bool = false
@@ -1031,3 +1039,12 @@ func send_puck_strip_to_all(position: Vector3) -> void:
 @rpc("authority", "unreliable")
 func notify_puck_strip(position: Vector3) -> void:
 	NetworkSimManager.send(func(pos: Vector3) -> void: puck_strip_received.emit(pos), [position], false)
+
+func send_spectator_demoted_to_all(peer_id: int) -> void:
+	for remote_id: int in connected_peer_ids():
+		notify_spectator_demoted.rpc_id(remote_id, peer_id)
+	spectator_demoted_received.emit(peer_id)
+
+@rpc("authority", "reliable")
+func notify_spectator_demoted(peer_id: int) -> void:
+	spectator_demoted_received.emit(peer_id)

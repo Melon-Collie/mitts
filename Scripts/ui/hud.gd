@@ -38,6 +38,7 @@ var _local_voted: bool = false
 var _replay_label: Label = null
 var _spectator_banner: PanelContainer = null
 var _change_position_btn: Button = null
+var _spectate_btn: Button = null
 
 const _DARK_BG    := Color(0.07, 0.07, 0.09, 0.92)
 const _WHITE      := Color(1.00, 1.00, 1.00, 1.00)
@@ -301,14 +302,19 @@ func _apply_spectator_chrome() -> void:
 		_build_spectator_banner()
 	if _spectator_banner != null:
 		_spectator_banner.visible = is_spec
-	if is_spec:
-		if _rematch_btn != null:
-			_rematch_btn.visible = false
-		if _vote_label != null:
-			_vote_label.visible = false
-		if _change_position_btn != null:
-			_change_position_btn.disabled = true
-			_change_position_btn.tooltip_text = "Spectators can't change position mid-game."
+	if _rematch_btn != null:
+		_rematch_btn.visible = not is_spec
+	if _vote_label != null:
+		_vote_label.visible = not is_spec
+	# Spectator clicks the slot grid to come back; the dedicated demote button
+	# only makes sense while playing.
+	if _spectate_btn != null:
+		_spectate_btn.visible = not is_spec
+	# Change Position is enabled both ways now: players use it to swap teams /
+	# slots, spectators use it to claim an open player slot.
+	if _change_position_btn != null:
+		_change_position_btn.disabled = false
+		_change_position_btn.tooltip_text = ""
 
 func _build_offscreen_indicators() -> void:
 	var indicators := OffScreenPlayerIndicators.new()
@@ -412,6 +418,13 @@ func _build_game_menu() -> void:
 	_change_position_btn = _popup_button("Change Position")
 	_change_position_btn.pressed.connect(_on_change_position_pressed)
 	vbox.add_child(_change_position_btn)
+
+	# Players can demote themselves mid-game; spectators come back via the slot
+	# grid in Change Position. Hidden for spectators (handled in
+	# _apply_spectator_chrome).
+	_spectate_btn = _popup_button("Spectate")
+	_spectate_btn.pressed.connect(_on_spectate_pressed)
+	vbox.add_child(_spectate_btn)
 
 	var options_btn := _popup_button("Options")
 	options_btn.pressed.connect(_on_options_pressed)
@@ -979,6 +992,13 @@ func _on_change_position_pressed() -> void:
 
 func _on_pause_slot_selected(team_id: int, slot: int) -> void:
 	NetworkManager.send_request_slot_swap(team_id, slot)
+	_set_menu_open(false)
+
+func _on_spectate_pressed() -> void:
+	# Spectator slot index doesn't matter mid-game — the host doesn't track
+	# in-game spectator slots (the lobby reassigns them on return-to-lobby
+	# anyway). Send slot 0 and let the host's demote helper run.
+	NetworkManager.send_request_slot_swap(NetworkManager.SPECTATOR_TEAM_ID, 0)
 	_set_menu_open(false)
 
 func _on_bug_report_pressed() -> void:

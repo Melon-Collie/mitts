@@ -128,6 +128,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.goalie_state_transition_received.connect(_on_goalie_state_transition_received)
 	NetworkManager.goalie_shot_reaction_received.connect(_on_goalie_shot_reaction_received)
 	NetworkManager.input_batch_received.connect(_on_input_batch_received)
+	NetworkManager.spectator_demoted_received.connect(_on_spectator_demoted_received)
 
 
 # ── Process ───────────────────────────────────────────────────────────────────
@@ -248,11 +249,17 @@ func on_connected_to_server() -> void:
 
 
 func on_slot_assigned(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color) -> void:
-	_spawn_world()
+	# `_state_machine != null` means the world is already spawned → this is a
+	# mid-game spectator-to-player promotion, not the initial scene load.
+	var is_mid_game_promote: bool = _state_machine != null
+	if not is_mid_game_promote:
+		_spawn_world()
 	var peer_id: int = NetworkManager.local_peer_id()
 	if team_id == NetworkManager.SPECTATOR_TEAM_ID:
 		_become_local_spectator()
 		return
+	if _is_local_spectator:
+		_teardown_spectator_camera()
 	var colors: Dictionary = TeamColorRegistry.get_colors(teams[team_id].color_id, team_id)
 	_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
 	_registry.spawn(peer_id, team_slot, teams[team_id],
@@ -612,6 +619,111 @@ func is_spectator_peer(peer_id: int) -> bool:
 
 func spectator_peer_count() -> int:
 	return _spectator_peers.size()
+
+
+# ── Mid-game spectator ↔ player swap ─────────────────────────────────────────
+# Both directions branch out of `_on_slot_swap_requested` (host-only). The
+# demote path despawns the skater everywhere via `notify_spectator_demoted`;
+# the promote path spawns a fresh skater everywhere by reusing the
+# spawn_remote_skater + assign_player_slot RPCs that mid-game joins use.
+
+func _demote_player_to_spectator(peer_id: int) -> void:
+	# Reject if the peer isn't currently a player.
+	if _registry == null or not _registry.has(peer_id):
+		return
+	var record: PlayerRecord = _registry.get_record(peer_id)
+	# Drop the puck before broadcasting so the carrier change goes out while
+	# the controller still exists (mirrors on_player_disconnected).
+	if puck != null and record != null and puck.carrier == record.skater:
+		puck.drop()
+	# Clear any pending lag-comp pickup that points at the demoted skater —
+	# the skater is about to be queue_freed and apply_lag_comp_pickup would
+	# operate on a freed RID.
+	if not _pending_pickup_claim.is_empty() and record != null \
+			and _pending_pickup_claim.get("skater") == record.skater:
+		_pending_pickup_claim = {}
+		_pending_claim_timer = 0.0
+	_spectator_peers[peer_id] = true
+	NetworkManager.send_spectator_demoted_to_all(peer_id)
+
+
+# Runs on every peer (host + clients) when a demotion is broadcast. Despawns
+# the demoted peer's skater locally; if the local peer is the demoted one,
+# tears down the LocalController/GameCamera and mounts SpectatorCamera.
+func _on_spectator_demoted_received(peer_id: int) -> void:
+	var is_local_demote: bool = peer_id == NetworkManager.local_peer_id()
+	if is_local_demote:
+		# Stop input batches before the controller is queue_freed — the Callable
+		# would otherwise reference a dead object.
+		NetworkManager.set_input_batch_provider(Callable())
+	if _registry != null and _registry.has(peer_id):
+		var record: PlayerRecord = _registry.get_record(peer_id)
+		if puck != null and record != null and record.skater != null:
+			puck.remove_skater_cooldown(record.skater)
+		if _state_buffer_manager != null:
+			_state_buffer_manager.remove_player(peer_id)
+		_registry.remove(peer_id)
+	# On clients this is bookkeeping only; on the host the demote helper has
+	# already set this. Kept symmetric so future host-side callers (e.g.
+	# disconnect cleanup) can rely on the entry being present.
+	_spectator_peers[peer_id] = true
+	if is_local_demote:
+		_become_local_spectator()
+
+
+# Host-only. Spawns a skater for a peer that's currently a spectator and tells
+# every peer to do the same (clients via spawn_remote_skater, the promoted peer
+# via assign_player_slot). Validation is inline because `try_swap_slot` only
+# operates on peers already in `_state_machine.players`.
+func _promote_spectator_to_player(peer_id: int, new_team_id: int, new_slot: int) -> void:
+	if _state_machine == null or _registry == null:
+		return
+	if new_team_id < 0 or new_team_id > 1:
+		return
+	if new_slot < 0 or new_slot >= PlayerRules.MAX_PER_TEAM:
+		return
+	for other_id: int in _state_machine.players:
+		var p: Dictionary = _state_machine.players[other_id]
+		if p.team_id == new_team_id and p.team_slot == new_slot:
+			return
+	if _state_machine.count_players_on_team(new_team_id) >= PlayerRules.MAX_PER_TEAM:
+		return
+	_spectator_peers.erase(peer_id)
+	var team: Team = teams[new_team_id]
+	var colors: Dictionary = TeamColorRegistry.get_colors(team.color_id, team.team_id)
+	var is_left: bool = NetworkManager.get_peer_handedness(peer_id)
+	var peer_name: String = NetworkManager.get_peer_name(peer_id)
+	var peer_number: int = NetworkManager.get_peer_number(peer_id)
+	_state_machine.register_remote_assigned_player(peer_id, new_slot, new_team_id)
+	var is_local: bool = peer_id == NetworkManager.local_peer_id()
+	if is_local and _is_local_spectator:
+		# Host promoting itself: tear down the spectator camera before the
+		# LocalController spawns its own camera.
+		_teardown_spectator_camera()
+	_registry.spawn(peer_id, new_slot, team,
+			colors.jersey, colors.helmet, colors.pants,
+			colors.jersey_stripe, colors.gloves, colors.pants_stripe, colors.socks, colors.socks_stripe,
+			colors.secondary, colors.text, colors.text_outline,
+			is_left, peer_name, is_local, peer_number)
+	# Tell every other client to spawn a remote copy. The promoting client's
+	# spawn_remote_skater handler short-circuits on `peer_id == local_peer_id`,
+	# so broadcasting to all is safe.
+	NetworkManager.send_spawn_remote_skater(peer_id, new_slot, new_team_id,
+			colors.jersey, colors.helmet, colors.pants, is_left, peer_name, peer_number)
+	# The promoting peer needs slot info for its own LocalController spawn.
+	if not is_local:
+		NetworkManager.send_slot_assignment(peer_id, new_slot, new_team_id,
+				colors.jersey, colors.helmet, colors.pants)
+
+
+func _teardown_spectator_camera() -> void:
+	if _spectator_camera != null:
+		_spectator_camera.deactivate()
+		_spectator_camera.queue_free()
+		_spectator_camera = null
+	if _is_local_spectator:
+		_is_local_spectator = false
+		local_spectator_state_changed.emit(false)
 
 
 func _spawn_local(peer_id: int, team_slot: int, team: Team) -> void:
@@ -1051,10 +1163,15 @@ func _sync_stats_to_clients() -> void:
 func _on_slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int) -> void:
 	if not NetworkManager.is_host or _swap_coord == null:
 		return
-	# Mid-game player ↔ spectator swaps are deferred to a later release — they
-	# require despawning/spawning skaters and reconciling the state machine.
-	# Ignore the request silently; the lobby is the only place to take this action.
-	if new_team_id == NetworkManager.SPECTATOR_TEAM_ID or _spectator_peers.has(peer_id):
+	# Player → spectator: any peer requesting a spectator slot.
+	if new_team_id == NetworkManager.SPECTATOR_TEAM_ID:
+		_demote_player_to_spectator(peer_id)
+		return
+	# Spectator → player: peer is in the spectator set, requesting a player slot.
+	# `try_swap_slot` won't validate this because the peer isn't in
+	# `_state_machine.players` yet, so we run a dedicated promotion path.
+	if _spectator_peers.has(peer_id):
+		_promote_spectator_to_player(peer_id, new_team_id, new_slot)
 		return
 	var carrier: Skater = puck.carrier if puck != null else null
 	var confirmation: Dictionary = _swap_coord.request_swap(peer_id, new_team_id, new_slot, carrier)
@@ -1181,13 +1298,7 @@ func on_scene_exit() -> void:
 	NetworkTelemetry.instance = null
 	_last_emitted_clock_secs = -1
 	_puck_oob_timer = 0.0
-	if _spectator_camera != null:
-		_spectator_camera.deactivate()
-		_spectator_camera.queue_free()
-		_spectator_camera = null
-	if _is_local_spectator:
-		_is_local_spectator = false
-		local_spectator_state_changed.emit(false)
+	_teardown_spectator_camera()
 	_spectator_peers.clear()
 	NetworkManager.prepare_for_new_game()
 
