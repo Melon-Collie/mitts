@@ -102,7 +102,8 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 @export var max_charge_direction_variance: float = 35.0
 @export var quick_shot_power: float = 14.0
 @export var quick_shot_threshold: float = 0.1
-@export var wrister_elevation: float = 0.22
+@export var quick_shot_elevation: float = 0.10
+@export var wrister_elevation_target_height: float = 0.90
 
 # ── Head Tracking Tuning ─────────────────────────────────────────────────────
 @export var head_track_speed: float = 12.0
@@ -120,7 +121,7 @@ var _sm: SkaterStateMachine = SkaterStateMachine.new()
 @export var slapper_blade_x: float = 1.0
 @export var slapper_blade_z: float = -0.5
 @export var slapper_aim_arc: float = 45.0
-@export var slapper_elevation: float = 0.12
+@export var slapper_elevation_target_height: float = 0.65
 @export var one_timer_window_duration: float = 0.45  # seconds after puck arrives to release
 @export var one_timer_leniency_time: float = 0.08   # seconds of puck travel added to zone radius as leniency
 @export var one_timer_center_power_bonus: float = 0.25  # max multiplier bonus at dead centre
@@ -927,7 +928,11 @@ func _wrister_config() -> ShotMechanics.WristerConfig:
 	cfg.backhand_power_coefficient = backhand_power_coefficient
 	cfg.quick_shot_power = quick_shot_power
 	cfg.quick_shot_threshold = quick_shot_threshold
-	cfg.wrister_elevation = wrister_elevation
+	cfg.quick_shot_elevation = quick_shot_elevation
+	cfg.elevation_target_height = wrister_elevation_target_height
+	cfg.elevation_blade_height = 0.05
+	cfg.elevation_gravity = 9.8
+	cfg.elevation_goal_line_z = GameRules.GOAL_LINE_Z
 	return cfg
 
 func _slapper_config() -> ShotMechanics.SlapperConfig:
@@ -935,7 +940,10 @@ func _slapper_config() -> ShotMechanics.SlapperConfig:
 	cfg.min_slapper_power = min_slapper_power
 	cfg.max_slapper_power = max_slapper_power
 	cfg.max_slapper_charge_time = max_slapper_charge_time
-	cfg.slapper_elevation = slapper_elevation
+	cfg.elevation_target_height = slapper_elevation_target_height
+	cfg.elevation_blade_height = 0.05
+	cfg.elevation_gravity = 9.8
+	cfg.elevation_goal_line_z = GameRules.GOAL_LINE_Z
 	return cfg
 
 # Converts the world-space blade_height to upper-body-local Y.
