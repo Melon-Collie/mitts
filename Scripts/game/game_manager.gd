@@ -63,6 +63,12 @@ var _pending_pickup_claim: Dictionary = {}
 var _pending_claim_timer: float = 0.0
 var _last_hit_claim_sent: Dictionary = {}  # "hitter:victim" -> float, client only
 
+# Sound wiring is split between persistent (NetworkManager autoload, GameManager
+# self-signals — wire once for the lifetime of the process) and per-game (puck /
+# puck_controller / _phase_coord — recreated each match in _spawn_world). The
+# guard prevents duplicate connections to the persistent set on rematch.
+var _persistent_sound_signals_wired: bool = false
+
 
 func _ready() -> void:
 	randomize()
@@ -100,6 +106,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.hit_claim_received.connect(_on_hit_claim_received)
 	NetworkManager.goalie_state_transition_received.connect(_on_goalie_state_transition_received)
 	NetworkManager.goalie_shot_reaction_received.connect(_on_goalie_shot_reaction_received)
+	NetworkManager.input_batch_received.connect(_on_input_batch_received)
 
 
 # ── Process ───────────────────────────────────────────────────────────────────
@@ -261,7 +268,6 @@ func on_player_disconnected(peer_id: int) -> void:
 	# the record is still intact.
 	if NetworkManager.is_host and puck != null and puck.carrier == record.skater:
 		puck.drop()
-	NetworkManager.unregister_remote_controller(peer_id)
 	if puck != null:
 		puck.remove_skater_cooldown(record.skater)
 	if _state_buffer_manager != null:
@@ -450,15 +456,10 @@ func _wire_subsystems() -> void:
 
 
 func _wire_sound_signals() -> void:
-	if NetworkManager.local_puck_pickup_confirmed.is_connected(_on_local_pickup_sound):
-		return
-	NetworkManager.local_puck_pickup_confirmed.connect(_on_local_pickup_sound)
-	NetworkManager.remote_carrier_changed.connect(_on_remote_carrier_sound)
+	# Per-game connections: puck / puck_controller / _phase_coord are recreated
+	# each match by _spawn_world, so these always get freshly wired here.
 	_phase_coord.goal_scored.connect(
 		func(_t: Team, _s: String, _a1: String, _a2: String) -> void:
-			SoundManager.play_sfx(SoundManager.Sound.GOAL_HORN, -6.0))
-	NetworkManager.goal_received.connect(
-		func(_tid: int, _s0: int, _s1: int, _sn: String, _a1: String, _a2: String) -> void:
 			SoundManager.play_sfx(SoundManager.Sound.GOAL_HORN, -6.0))
 	if NetworkManager.is_host:
 		puck.puck_hit_boards.connect(func() -> void:
@@ -481,20 +482,31 @@ func _wire_sound_signals() -> void:
 			var spd: float = puck.linear_velocity.length()
 			SoundManager.play_world(SoundManager.Sound.PUCK_STRIP, puck.get_puck_position(), _puck_speed_volume(spd), 0.06)
 			NetworkManager.send_puck_strip_to_all(puck.get_puck_position()))
-	NetworkManager.board_hit_received.connect(
-		func(pos: Vector3) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_BOARDS, pos, _puck_speed_volume(puck.linear_velocity.length()), 0.05))
-	NetworkManager.goal_body_hit_received.connect(
-		func(pos: Vector3) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_GOAL_BODY, pos, _puck_speed_volume(puck.linear_velocity.length()), 0.06))
-	NetworkManager.deflection_received.connect(
-		func(pos: Vector3) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_DEFLECTION, pos, _puck_speed_volume(puck.linear_velocity.length()), 0.06))
-	NetworkManager.body_block_received.connect(
-		func(pos: Vector3) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_BODY_BLOCK, pos, _puck_speed_volume(puck.linear_velocity.length()), 0.07))
-	NetworkManager.puck_strip_received.connect(
-		func(pos: Vector3) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_STRIP, pos, _puck_speed_volume(puck.linear_velocity.length()), 0.06))
 	puck.puck_touched_goalie.connect(
 		func(_g: Goalie) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_GOALIE, puck.get_puck_position(), _puck_speed_volume(puck.linear_velocity.length()), 0.05))
 	puck.puck_touched_post.connect(
 		func() -> void: SoundManager.play_world(SoundManager.Sound.PUCK_POST, puck.get_puck_position(), _puck_speed_volume(puck.linear_velocity.length()), 0.04))
+
+	# Persistent connections: NetworkManager autoload + GameManager self-signals
+	# survive across rematches; wire once.
+	if _persistent_sound_signals_wired:
+		return
+	_persistent_sound_signals_wired = true
+	NetworkManager.local_puck_pickup_confirmed.connect(_on_local_pickup_sound)
+	NetworkManager.remote_carrier_changed.connect(_on_remote_carrier_sound)
+	NetworkManager.goal_received.connect(
+		func(_tid: int, _s0: int, _s1: int, _sn: String, _a1: String, _a2: String) -> void:
+			SoundManager.play_sfx(SoundManager.Sound.GOAL_HORN, -6.0))
+	NetworkManager.board_hit_received.connect(
+		func(pos: Vector3) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_BOARDS, pos, _puck_speed_volume(puck.linear_velocity.length() if puck != null else 0.0), 0.05))
+	NetworkManager.goal_body_hit_received.connect(
+		func(pos: Vector3) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_GOAL_BODY, pos, _puck_speed_volume(puck.linear_velocity.length() if puck != null else 0.0), 0.06))
+	NetworkManager.deflection_received.connect(
+		func(pos: Vector3) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_DEFLECTION, pos, _puck_speed_volume(puck.linear_velocity.length() if puck != null else 0.0), 0.06))
+	NetworkManager.body_block_received.connect(
+		func(pos: Vector3) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_BODY_BLOCK, pos, _puck_speed_volume(puck.linear_velocity.length() if puck != null else 0.0), 0.07))
+	NetworkManager.puck_strip_received.connect(
+		func(pos: Vector3) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_STRIP, pos, _puck_speed_volume(puck.linear_velocity.length() if puck != null else 0.0), 0.06))
 	period_changed.connect(func(_p: int) -> void: SoundManager.play_sfx(SoundManager.Sound.PERIOD_BUZZER))
 	game_over.connect(func() -> void: SoundManager.play_sfx(SoundManager.Sound.PERIOD_BUZZER))
 
@@ -531,10 +543,7 @@ func _on_player_spawned(record: PlayerRecord) -> void:
 				teams[0].defended_goal, teams[1].defended_goal, _get_puck_carrier_team_id)
 		local_ctrl.puck_release_requested.connect(_on_puck_release_requested)
 		local_ctrl.hit_received.connect(func(mag: float) -> void: local_player_hit.emit(mag))
-		NetworkManager.register_local_controller(local_ctrl)
-	else:
-		NetworkManager.register_remote_controller(
-				record.peer_id, record.controller as RemoteController)
+		NetworkManager.set_input_batch_provider(local_ctrl.get_input_batch)
 	record.controller.one_timer_release_requested.connect(
 			_on_one_timer_release_requested.bind(record.skater))
 	var pid: int = record.peer_id
@@ -607,7 +616,11 @@ func _on_pickup_claim_received(peer_id: int, host_timestamp: float, rtt_ms: floa
 		return
 	if puck.carrier != null or puck.pickup_locked:
 		return
-	var now: float = Time.get_ticks_msec() / 1000.0
+	# Use session-relative game time so the age check matches the time base of
+	# host_timestamp (which came from the client stamping with estimated_host_time).
+	# Time.get_ticks_msec() is OS uptime and would diverge by however long the
+	# host was alive before the game started.
+	var now: float = NetworkManager.local_time()
 	if now - host_timestamp > _MAX_CLAIM_AGE_S:
 		return
 	var record: PlayerRecord = _registry.get_record(peer_id)
@@ -860,6 +873,22 @@ func _on_goal_received(scoring_team_id: int, score0: int, score1: int,
 func _on_faceoff_positions_received(positions: Array) -> void:
 	if _phase_coord != null:
 		_phase_coord.on_faceoff_positions(positions)
+
+
+# ── Input batches from peers (host only) ─────────────────────────────────────
+# NetworkManager emits `input_batch_received` from its receive_input_batch RPC;
+# we route to the matching RemoteController. Drops batches for unregistered
+# peers or freed controllers (peer left mid-flight).
+func _on_input_batch_received(peer_id: int, inputs: Array[InputState]) -> void:
+	if not NetworkManager.is_host or _registry == null:
+		return
+	var record: PlayerRecord = _registry.get_record(peer_id)
+	if record == null or not is_instance_valid(record.controller):
+		return
+	var remote: RemoteController = record.controller as RemoteController
+	if remote == null:
+		return
+	remote.receive_input_batch(inputs)
 
 
 # ── World state & stats RPC forwarding ───────────────────────────────────────

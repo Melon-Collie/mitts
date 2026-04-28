@@ -144,6 +144,7 @@ var show_one_timer_indicator: bool = false
 @export var follow_through_duration: float = 0.25
 @export var wrister_follow_through_hand_y: float = 0.35
 @export var wrister_follow_through_blade_lift: float = 0.20
+@export var slapper_follow_through_arc_dist: float = 0.4  # blade XZ travel along shot_dir during follow-through
 
 # ── Shot-Block Tuning ─────────────────────────────────────────────────────────
 @export var block_speed_multiplier: float = 0.45   # movement speed while blocking
@@ -367,9 +368,9 @@ func _apply_slapper_follow_through() -> void:
 	if shot_xz.length() > 0.001:
 		shot_xz = shot_xz.normalized()
 	var blade_pos := Vector3(
-		skater.shoulder.position.x + blade_side_sign * slapper_blade_x + shot_xz.x * t * 0.4,
+		skater.shoulder.position.x + blade_side_sign * slapper_blade_x + shot_xz.x * t * slapper_follow_through_arc_dist,
 		lerpf(slapper_wind_up_height, _blade_y_local(), smoothstep(0.0, 1.0, t)),
-		skater.shoulder.position.z + slapper_blade_z + shot_xz.y * t * 0.4)
+		skater.shoulder.position.z + slapper_blade_z + shot_xz.y * t * slapper_follow_through_arc_dist)
 	blade_pos = skater.clamp_blade_to_walls(blade_pos)
 	blade_pos = skater.upper_body_to_local(_clamp_blade_from_net(skater.upper_body_to_global(blade_pos)))
 	var hand_pos := Vector3(

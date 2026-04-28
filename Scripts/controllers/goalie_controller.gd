@@ -99,6 +99,7 @@ var _prev_puck_position: Vector3 = Vector3.ZERO
 var _puck_approach_velocity: float = 0.0
 
 # ── Client Simulation ─────────────────────────────────────────────────────────
+const _CLIENT_REACTION_DURATION_S: float = 1.5  # how long the client holds the shot-reaction visual after a goalie shot RPC
 var is_extrapolating: bool = false  # always false; kept for telemetry compat
 var _client_reaction_timer: float = 0.0
 var _last_server_ts: float = 0.0
@@ -487,7 +488,7 @@ func get_state() -> GoalieNetworkState:
 func apply_state(network_state: GoalieNetworkState, host_ts: float) -> void:
 	if is_server:
 		return
-	if host_ts <= _last_server_ts:
+	if host_ts < _last_server_ts:
 		return  # out-of-order packet; discard
 	_last_server_ts = host_ts
 	# Forward-predict server position to compensate for broadcast transit time.
@@ -524,7 +525,7 @@ func apply_shot_reaction(impact_x: float, impact_y: float, is_elevated: bool) ->
 	_shot_impact_x = impact_x
 	_shot_impact_y = impact_y
 	_shot_is_elevated = is_elevated
-	_client_reaction_timer = 1.5
+	_client_reaction_timer = _CLIENT_REACTION_DURATION_S
 	# Mirror the host: low shots start the butterfly-drop countdown so the
 	# client drops butterfly on the same frame cadence as the server.
 	# Subtract the RPC transit time (≈ full RTT: shooter→server + server→client)

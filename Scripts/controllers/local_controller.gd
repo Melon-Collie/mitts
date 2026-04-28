@@ -17,6 +17,7 @@ var _last_blade_pos: Vector3 = Vector3.ZERO
 var _body_check_impulse: Vector3 = Vector3.ZERO
 var _body_check_impulse_timestamp: float = 0.0
 const _BLADE_JUMP_THRESHOLD: float = 0.05
+const _CLAIM_COOLDOWN_S: float = 0.3  # gap between speculative pickup claims to the host
 
 const _RECONCILE_VISUAL_ALPHA: float = 0.12  # exponential decay per physics frame
 
@@ -114,7 +115,7 @@ func _physics_process(delta: float) -> void:
 		if puck.carrier == null and not puck.pickup_locked and not skater.is_ghost:
 			var dist: float = puck.global_position.distance_to(skater.get_blade_contact_global())
 			if dist <= PuckController.PICKUP_RADIUS:
-				_claim_cooldown = 0.3
+				_claim_cooldown = _CLAIM_COOLDOWN_S
 				NetworkManager.send_pickup_claim(
 					NetworkManager.estimated_host_time(),
 					NetworkManager.get_latest_rtt_ms(),
