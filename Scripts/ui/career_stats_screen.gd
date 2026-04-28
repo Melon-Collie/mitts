@@ -1,8 +1,20 @@
 class_name CareerStatsScreen extends Control
 
+# Two-tab career screen: lifetime totals (existing) + per-game history with
+# replay-launch buttons (Feature C). Both tabs fetch concurrently on open()
+# and surface their own loading / empty states.
+
 var _reporter := CareerStatsReporter.new()
-var _content: VBoxContainer
-var _status: Label
+var _tabs: TabContainer = null
+
+# Career Totals tab (existing layout, just moved into a tab).
+var _totals_content: VBoxContainer = null
+var _totals_status: Label = null
+
+# Recent Games tab (new). Each game renders as a card panel with score,
+# period breakdown, team-grouped player rows, and a Watch Replay button.
+var _recent_content: VBoxContainer = null
+var _recent_status: Label = null
 
 
 func _ready() -> void:
@@ -19,7 +31,7 @@ func _ready() -> void:
 	add_child(center)
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(520.0, 0.0)
+	panel.custom_minimum_size = Vector2(640.0, 0.0)
 	panel.add_theme_stylebox_override("panel", MenuStyle.panel(8, 32))
 	center.add_child(panel)
 
@@ -27,12 +39,11 @@ func _ready() -> void:
 	vbox.add_theme_constant_override("separation", 14)
 	panel.add_child(vbox)
 
-	# Header
 	var header := HBoxContainer.new()
 	vbox.add_child(header)
 
 	var title := Label.new()
-	title.text = "Career Stats"
+	title.text = "Career"
 	title.add_theme_font_size_override("font_size", 18)
 	title.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -46,25 +57,20 @@ func _ready() -> void:
 	sep.add_theme_color_override("color", MenuStyle.TEXT_SEP)
 	vbox.add_child(sep)
 
-	_status = Label.new()
-	_status.text = "Loading..."
-	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_status.add_theme_color_override("font_color", MenuStyle.TEXT_DIM)
-	vbox.add_child(_status)
+	_tabs = TabContainer.new()
+	_tabs.custom_minimum_size = Vector2(0, 520)
+	vbox.add_child(_tabs)
 
-	_content = VBoxContainer.new()
-	_content.add_theme_constant_override("separation", 6)
-	vbox.add_child(_content)
+	_build_totals_tab()
+	_build_recent_games_tab()
 
 	hide()
 
 
 func open() -> void:
-	_clear_content()
-	_status.text = "Loading..."
-	_status.visible = true
 	show()
-	_reporter.fetch_totals(_on_totals_received)
+	_refresh_totals()
+	_refresh_recent_games()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -73,58 +79,290 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
+# ── Totals tab ───────────────────────────────────────────────────────────────
+
+func _build_totals_tab() -> void:
+	var tab := VBoxContainer.new()
+	tab.name = "Career Totals"
+	tab.add_theme_constant_override("separation", 6)
+	_tabs.add_child(tab)
+
+	_totals_status = Label.new()
+	_totals_status.text = "Loading..."
+	_totals_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_totals_status.add_theme_color_override("font_color", MenuStyle.TEXT_DIM)
+	tab.add_child(_totals_status)
+
+	_totals_content = VBoxContainer.new()
+	_totals_content.add_theme_constant_override("separation", 6)
+	tab.add_child(_totals_content)
+
+
+func _refresh_totals() -> void:
+	_clear_totals_content()
+	_totals_status.text = "Loading..."
+	_totals_status.visible = true
+	_reporter.fetch_totals(_on_totals_received)
+
+
 func _on_totals_received(totals: Dictionary) -> void:
-	_status.visible = false
+	_totals_status.visible = false
 	if totals.is_empty():
-		_status.text = "No games recorded yet."
-		_status.visible = true
+		_totals_status.text = "No games recorded yet."
+		_totals_status.visible = true
 		return
-	_clear_content()
-	_add_row("Games Played",  str(totals.get("games_played", 0)))
-	_add_row("Record (W-L)",  "%d-%d" % [totals.get("wins", 0), totals.get("losses", 0)])
-	_add_separator()
-	_add_row("Goals",         str(totals.get("goals", 0)))
-	_add_row("Assists",       str(totals.get("assists", 0)))
-	_add_row("Points",        str(totals.get("points", 0)))
-	_add_row("Shots on Goal", str(totals.get("shots_on_goal", 0)))
-	_add_row("Hits",          str(totals.get("hits", 0)))
-	_add_row("Shots Blocked", str(totals.get("shots_blocked", 0)))
-	_add_separator()
-	_add_row("+/-",           "%+d" % [totals.get("plus_minus", 0)])
-	_add_row("Goals For",     str(totals.get("goals_for", 0)))
-	_add_row("Goals Against", str(totals.get("goals_against", 0)))
-	_add_separator()
-	_add_row("Time on Ice",   _format_toi(totals.get("toi_seconds", 0)))
-	_add_row("G/60",          str(totals.get("goals_per_60", 0.0)))
-	_add_row("A/60",          str(totals.get("assists_per_60", 0.0)))
-	_add_row("P/60",          str(totals.get("points_per_60", 0.0)))
+	_clear_totals_content()
+	_add_totals_row("Games Played",  str(totals.get("games_played", 0)))
+	_add_totals_row("Record (W-L)",  "%d-%d" % [totals.get("wins", 0), totals.get("losses", 0)])
+	_add_totals_separator()
+	_add_totals_row("Goals",         str(totals.get("goals", 0)))
+	_add_totals_row("Assists",       str(totals.get("assists", 0)))
+	_add_totals_row("Points",        str(totals.get("points", 0)))
+	_add_totals_row("Shots on Goal", str(totals.get("shots_on_goal", 0)))
+	_add_totals_row("Hits",          str(totals.get("hits", 0)))
+	_add_totals_row("Shots Blocked", str(totals.get("shots_blocked", 0)))
+	_add_totals_separator()
+	_add_totals_row("+/-",           "%+d" % [totals.get("plus_minus", 0)])
+	_add_totals_row("Goals For",     str(totals.get("goals_for", 0)))
+	_add_totals_row("Goals Against", str(totals.get("goals_against", 0)))
+	_add_totals_separator()
+	_add_totals_row("Time on Ice",   _format_toi(totals.get("toi_seconds", 0)))
+	_add_totals_row("G/60",          str(totals.get("goals_per_60", 0.0)))
+	_add_totals_row("A/60",          str(totals.get("assists_per_60", 0.0)))
+	_add_totals_row("P/60",          str(totals.get("points_per_60", 0.0)))
 
 
-func _add_row(label_text: String, value_text: String) -> void:
+func _add_totals_row(label_text: String, value_text: String) -> void:
 	var row := HBoxContainer.new()
-	_content.add_child(row)
-
+	_totals_content.add_child(row)
 	var lbl := Label.new()
 	lbl.text = label_text
 	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lbl.add_theme_color_override("font_color", MenuStyle.TEXT_DIM)
 	row.add_child(lbl)
-
 	var val := Label.new()
 	val.text = value_text
 	val.add_theme_color_override("font_color", MenuStyle.TEXT_BODY)
 	row.add_child(val)
 
 
-func _add_separator() -> void:
+func _add_totals_separator() -> void:
 	var sep := HSeparator.new()
 	sep.add_theme_color_override("color", MenuStyle.TEXT_SEP)
-	_content.add_child(sep)
+	_totals_content.add_child(sep)
 
 
-func _clear_content() -> void:
-	for child: Node in _content.get_children():
+func _clear_totals_content() -> void:
+	for child: Node in _totals_content.get_children():
 		child.queue_free()
+
+
+# ── Recent Games tab ─────────────────────────────────────────────────────────
+
+func _build_recent_games_tab() -> void:
+	var tab := VBoxContainer.new()
+	tab.name = "Recent Games"
+	tab.add_theme_constant_override("separation", 6)
+	_tabs.add_child(tab)
+
+	_recent_status = Label.new()
+	_recent_status.text = "Loading..."
+	_recent_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_recent_status.add_theme_color_override("font_color", MenuStyle.TEXT_DIM)
+	tab.add_child(_recent_status)
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	tab.add_child(scroll)
+
+	_recent_content = VBoxContainer.new()
+	_recent_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_recent_content.add_theme_constant_override("separation", 10)
+	scroll.add_child(_recent_content)
+
+
+func _refresh_recent_games() -> void:
+	_clear_recent_content()
+	_recent_status.text = "Loading..."
+	_recent_status.visible = true
+	_reporter.fetch_recent_games(PlayerPrefs.player_uuid, 20, _on_recent_received)
+
+
+func _on_recent_received(games: Array) -> void:
+	_recent_status.visible = false
+	if games.is_empty():
+		_recent_status.text = "No recent games yet. Play a multiplayer game to fill this list."
+		_recent_status.visible = true
+		return
+	_clear_recent_content()
+	for entry: Variant in games:
+		_recent_content.add_child(_build_game_card(entry as Dictionary))
+
+
+func _clear_recent_content() -> void:
+	for child: Node in _recent_content.get_children():
+		child.queue_free()
+
+
+# Card layout: date · score line | period breakdown | separator |
+# home roster grid | away roster grid | Watch Replay button.
+func _build_game_card(game: Dictionary) -> Control:
+	var card_style := StyleBoxFlat.new()
+	card_style.bg_color = Color(0.10, 0.10, 0.13)
+	card_style.set_corner_radius_all(4)
+	card_style.set_content_margin_all(12)
+
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", card_style)
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 8)
+	card.add_child(vbox)
+
+	vbox.add_child(_build_score_line(game))
+
+	var period_line: Label = _build_period_breakdown(game)
+	if period_line != null:
+		vbox.add_child(period_line)
+
+	var sep := HSeparator.new()
+	sep.add_theme_color_override("color", MenuStyle.TEXT_SEP)
+	vbox.add_child(sep)
+
+	var players: Array = game.get("players", []) as Array
+	var home_players: Array = []
+	var away_players: Array = []
+	for p_var: Variant in players:
+		var p: Dictionary = p_var as Dictionary
+		if int(p.get("team_id", 0)) == 0:
+			home_players.append(p)
+		else:
+			away_players.append(p)
+	vbox.add_child(_build_player_table(home_players, "HOME"))
+	vbox.add_child(_build_player_table(away_players, "AWAY"))
+
+	var bottom := HBoxContainer.new()
+	bottom.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bottom.add_child(spacer)
+	bottom.add_child(_build_replay_button(game))
+	vbox.add_child(bottom)
+
+	return card
+
+
+func _build_score_line(game: Dictionary) -> Control:
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 12)
+
+	var date_label := Label.new()
+	date_label.text = _format_date(str(game.get("ended_at", "")))
+	date_label.add_theme_font_size_override("font_size", 12)
+	date_label.add_theme_color_override("font_color", MenuStyle.TEXT_DIM)
+	date_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hbox.add_child(date_label)
+
+	var score_label := Label.new()
+	score_label.text = "%d — %d" % [int(game.get("home_score", 0)), int(game.get("away_score", 0))]
+	score_label.add_theme_font_size_override("font_size", 18)
+	score_label.add_theme_color_override("font_color", MenuStyle.TEXT_TITLE)
+	hbox.add_child(score_label)
+
+	return hbox
+
+
+# Period breakdown formatted as "P1 1-0 · P2 0-1 · P3 2-0". Returns null if
+# period_scores is missing or malformed (older rows pre-migration).
+func _build_period_breakdown(game: Dictionary) -> Label:
+	var ps: Variant = game.get("period_scores", null)
+	if not ps is Array or (ps as Array).size() < 2:
+		return null
+	var ps_arr: Array = ps as Array
+	var team0: Array = ps_arr[0] as Array
+	var team1: Array = ps_arr[1] as Array
+	if team0.is_empty() or team0.size() != team1.size():
+		return null
+	var parts: PackedStringArray = PackedStringArray()
+	for p: int in team0.size():
+		parts.append("P%d %d-%d" % [p + 1, int(team0[p]), int(team1[p])])
+	var lbl := Label.new()
+	lbl.text = " · ".join(parts)
+	lbl.add_theme_font_size_override("font_size", 11)
+	lbl.add_theme_color_override("font_color", MenuStyle.TEXT_DIM)
+	return lbl
+
+
+# Compact 7-column grid: HOME/AWAY tag · player name · G · A · P · SOG · +/-.
+# Header row uses dim text; player rows use body text.
+func _build_player_table(players: Array, side_label: String) -> Control:
+	var grid := GridContainer.new()
+	grid.columns = 7
+	grid.add_theme_constant_override("h_separation", 14)
+	grid.add_theme_constant_override("v_separation", 2)
+
+	var headers: PackedStringArray = PackedStringArray([side_label, "Player", "G", "A", "P", "SOG", "+/-"])
+	for h: String in headers:
+		grid.add_child(_table_cell(h, true))
+
+	for p_var: Variant in players:
+		var p: Dictionary = p_var as Dictionary
+		grid.add_child(_table_cell(""))  # blank under side tag
+		grid.add_child(_table_cell(str(p.get("player_name", "Player"))))
+		grid.add_child(_table_cell(str(int(p.get("goals", 0)))))
+		grid.add_child(_table_cell(str(int(p.get("assists", 0)))))
+		grid.add_child(_table_cell(str(int(p.get("goals", 0)) + int(p.get("assists", 0)))))
+		grid.add_child(_table_cell(str(int(p.get("shots_on_goal", 0)))))
+		grid.add_child(_table_cell("%+d" % int(p.get("plus_minus", 0))))
+
+	return grid
+
+
+func _table_cell(text: String, is_header: bool = false) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_size_override("font_size", 11 if is_header else 12)
+	l.add_theme_color_override("font_color", MenuStyle.TEXT_DIM if is_header else MenuStyle.TEXT_BODY)
+	return l
+
+
+# Watch button enabled iff the .mreplay file is on this machine. Otherwise
+# disabled with an explanatory tooltip — covers games played from another
+# machine or a re-installed OS.
+func _build_replay_button(game: Dictionary) -> Button:
+	var btn := Button.new()
+	btn.text = "▶  Watch Replay"
+	btn.custom_minimum_size = Vector2(150, 32)
+	var game_id: String = str(game.get("game_id", ""))
+	if game_id.is_empty():
+		btn.disabled = true
+		btn.tooltip_text = "Replay not available"
+		return btn
+	var path: String = "user://replays/%s.mreplay" % game_id
+	if FileAccess.file_exists(path):
+		btn.pressed.connect(_on_watch_pressed.bind(path))
+	else:
+		btn.disabled = true
+		btn.tooltip_text = "Replay not on this machine"
+	return btn
+
+
+func _on_watch_pressed(path: String) -> void:
+	NetworkManager.pending_replay_path = path
+	get_tree().change_scene_to_file(Constants.SCENE_REPLAY_VIEWER)
+
+
+# Supabase returns ISO-8601 like "2026-04-28T15:30:45.123+00:00". Trim to
+# "YYYY-MM-DD HH:MM" for compactness.
+func _format_date(ended_at_iso: String) -> String:
+	if ended_at_iso.is_empty():
+		return "—"
+	var no_tz: String = ended_at_iso.split("+")[0].split(".")[0].replace("T", " ")
+	if no_tz.length() >= 16:
+		return no_tz.substr(0, 16)
+	return no_tz
 
 
 static func _format_toi(seconds: Variant) -> String:
