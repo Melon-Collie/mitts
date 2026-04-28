@@ -105,3 +105,48 @@ func test_resolve_default_clash_forces_away_reroll() -> void:
 			"blueberry", "blueberry", _rng(11))
 	assert_eq(result[0], "blueberry")
 	assert_ne(result[1], "blueberry")
+
+
+# ── sticky resolution ───────────────────────────────────────────────────────
+
+func test_pick_winner_sticky_keeps_previous_when_still_tied() -> void:
+	var t: Dictionary = ColorVoteRules.tally_votes(["lemon", "lime", "fig"] as Array[String])
+	# Three-way tie: lemon, lime, fig. Sticky on "lime" should keep lime
+	# regardless of the rng seed.
+	for seed: int in [1, 2, 3, 4, 5]:
+		var winner: String = ColorVoteRules.pick_winner_sticky(t, "lime", _rng(seed))
+		assert_eq(winner, "lime", "sticky should hold previous on seed %d" % seed)
+
+func test_pick_winner_sticky_rerolls_when_previous_no_longer_tied() -> void:
+	# lemon now has 2 votes, lime/fig only 1. Previous "lime" is no longer a leader.
+	var t: Dictionary = ColorVoteRules.tally_votes(["lemon", "lemon", "lime", "fig"] as Array[String])
+	assert_eq(ColorVoteRules.pick_winner_sticky(t, "lime", _rng()), "lemon")
+
+func test_pick_winner_sticky_ignores_unknown_previous() -> void:
+	var t: Dictionary = ColorVoteRules.tally_votes(["lemon", "lemon", "lime"] as Array[String])
+	# Previous was a color nobody voted for — should fall through to majority.
+	assert_eq(ColorVoteRules.pick_winner_sticky(t, "papaya", _rng()), "lemon")
+
+func test_resolve_sticky_holds_home_winner_through_unrelated_vote_change() -> void:
+	# Three-way tie on home. Pick once, then change ONE away vote. Home's
+	# winner must remain identical because its tied set didn't change.
+	var home: Array[String] = ["lemon", "lime", "fig"]
+	var first: Array[String] = ColorVoteRules.resolve_team_colors(
+			home, ["papaya"] as Array[String], _ALL_IDS,
+			"blueberry", "pomegranate", _rng(7))
+	var second: Array[String] = ColorVoteRules.resolve_team_colors(
+			home, ["dragonfruit"] as Array[String], _ALL_IDS,
+			"blueberry", "pomegranate", _rng(99),
+			first[0], first[1])
+	assert_eq(second[0], first[0], "sticky home should not re-roll on unrelated change")
+
+func test_resolve_sticky_clash_drops_previous_when_it_collides_with_home() -> void:
+	# Both teams unanimously vote lemon. Previous away was lemon (now equal
+	# to home), so sticky must NOT keep it — must re-roll to a different color.
+	var votes: Array[String] = ["lemon", "lemon", "lemon"]
+	var result: Array[String] = ColorVoteRules.resolve_team_colors(
+			votes, votes, _ALL_IDS,
+			"blueberry", "pomegranate", _rng(5),
+			"lemon", "lemon")
+	assert_eq(result[0], "lemon")
+	assert_ne(result[1], "lemon")

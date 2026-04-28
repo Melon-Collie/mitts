@@ -119,6 +119,8 @@ func _build_ui() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(title)
 
+	vbox.add_child(_build_color_vote_row())
+
 	_slot_grid = SlotGridPanel.new()
 	_slot_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_slot_grid.slot_selected.connect(_on_slot_selected)
@@ -234,20 +236,35 @@ func _build_settings_panel() -> Control:
 		_rules_btn.modulate = Color(1, 1, 1, 0.5)
 	grid.add_child(_rules_btn)
 
-	# Color voting: every player votes for their own team's color. The host
-	# tallies all votes from the players assigned to each team at game-start
-	# time and picks the majority (random tiebreak). If both teams' winners
-	# clash, the away team re-rolls. Resolution lives in ColorVoteRules.
-	grid.add_child(_setting_label("Your Color"))
+	return box
+
+
+# Builds the live color-vote row that sits above the slot grid. Every player
+# votes for their own team's color; both teams' resolved colors are recomputed
+# on every vote change and reflected in the slot-grid preview below.
+# Resolution is sticky — a previous winner that's still tied for the lead
+# stays put, so the displayed colors don't flicker when unrelated votes shift.
+func _build_color_vote_row() -> Control:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+
+	var lbl := Label.new()
+	lbl.text = "Team Color"
+	lbl.add_theme_font_size_override("font_size", 14)
+	lbl.add_theme_color_override("font_color", _DIM)
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(lbl)
+
 	_my_color_btn = _color_option_btn(_my_color_id)
 	_my_color_btn.item_selected.connect(func(idx: int) -> void:
 		_my_color_id = TeamColorRegistry.get_all_ids()[idx]
 		PlayerPrefs.preferred_color_id = _my_color_id
 		PlayerPrefs.save()
 		NetworkManager.send_color_vote(_my_color_id))
-	grid.add_child(_my_color_btn)
+	row.add_child(_my_color_btn)
 
-	return box
+	return row
 
 
 func _stepper_row() -> HBoxContainer:
@@ -392,7 +409,39 @@ func _get_team_colors() -> Array[Dictionary]:
 func _refresh_grid() -> void:
 	if _slot_grid == null:
 		return
+	_recompute_resolved_colors()
 	_slot_grid.refresh(_build_slot_grid_roster(), NetworkManager.local_peer_id(), _get_team_colors())
+
+# Live vote resolution. Walks the current roster, buckets each player's vote
+# onto their currently assigned team, then asks ColorVoteRules for the new
+# (home, away) pair — passing the previous winners as sticky hints so an
+# already-tied lead doesn't re-roll on every unrelated vote change.
+func _recompute_resolved_colors() -> void:
+	var home_votes: Array[String] = []
+	var away_votes: Array[String] = []
+	for k: int in _lobby_slots:
+		var entry: Dictionary = _lobby_slots[k]
+		var peer_id: int = entry.peer_id
+		if not _color_votes.has(peer_id):
+			continue
+		var team_id: int = 1 if k >= PlayerRules.MAX_PER_TEAM else 0
+		var vote: String = _color_votes[peer_id]
+		if team_id == 0:
+			home_votes.append(vote)
+		else:
+			away_votes.append(vote)
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var resolved: Array[String] = ColorVoteRules.resolve_team_colors(
+			home_votes, away_votes,
+			TeamColorRegistry.get_all_ids(),
+			TeamColorRegistry.DEFAULT_HOME_ID,
+			TeamColorRegistry.DEFAULT_AWAY_ID,
+			rng,
+			_home_color_id,
+			_away_color_id)
+	_home_color_id = resolved[0]
+	_away_color_id = resolved[1]
 
 func _broadcast_confirm(peer_id: int, team_id: int, slot: int) -> void:
 	var entry: Dictionary = _lobby_slots.get(_slot_key(team_id, slot), {})
@@ -447,6 +496,7 @@ func _on_peer_disconnected(peer_id: int) -> void:
 			_lobby_slots.erase(k)
 			break
 	_ready_states.erase(peer_id)
+	_color_votes.erase(peer_id)
 	_update_start_btn()
 	_refresh_grid()
 
@@ -525,11 +575,13 @@ func _on_player_ready_changed(peer_id: int, is_ready: bool) -> void:
 
 func _on_color_vote_changed(peer_id: int, color_id: String) -> void:
 	_color_votes[peer_id] = color_id
+	_refresh_grid()
 
 func _on_color_votes_synced(votes: Dictionary) -> void:
 	_color_votes = votes.duplicate()
 	# Make sure our own vote is still recorded after a full sync.
 	_color_votes[NetworkManager.local_peer_id()] = _my_color_id
+	_refresh_grid()
 
 func _on_lobby_settings_synced(num_periods: int, period_duration: float, ot_enabled: bool, rule_set: int) -> void:
 	_num_periods = num_periods
@@ -576,9 +628,9 @@ func _on_ready_pressed() -> void:
 	NetworkManager.send_player_ready(_local_is_ready)
 
 func _on_start_pressed() -> void:
-	var resolved: Array[String] = _resolve_team_colors_from_votes()
-	_home_color_id = resolved[0]
-	_away_color_id = resolved[1]
+	# _home_color_id / _away_color_id already reflect the live vote tally —
+	# every vote and slot change has been folded in by _refresh_grid →
+	# _recompute_resolved_colors. Just ship the current values.
 	var config: Dictionary = {
 		"num_periods": _num_periods,
 		"period_duration": _period_duration,
@@ -589,30 +641,6 @@ func _on_start_pressed() -> void:
 		"rule_set": _rule_set,
 	}
 	NetworkManager.send_game_start(config)
-
-# Tally each team's player votes from the current lobby roster and let
-# ColorVoteRules pick winners (random tiebreak; away re-rolls on clash).
-func _resolve_team_colors_from_votes() -> Array[String]:
-	var home_votes: Array[String] = []
-	var away_votes: Array[String] = []
-	for k: int in _lobby_slots:
-		var entry: Dictionary = _lobby_slots[k]
-		var peer_id: int = entry.peer_id
-		if not _color_votes.has(peer_id):
-			continue
-		var team_id: int = 1 if k >= PlayerRules.MAX_PER_TEAM else 0
-		if team_id == 0:
-			home_votes.append(_color_votes[peer_id])
-		else:
-			away_votes.append(_color_votes[peer_id])
-	var rng := RandomNumberGenerator.new()
-	rng.randomize()
-	return ColorVoteRules.resolve_team_colors(
-			home_votes, away_votes,
-			TeamColorRegistry.get_all_ids(),
-			TeamColorRegistry.DEFAULT_HOME_ID,
-			TeamColorRegistry.DEFAULT_AWAY_ID,
-			rng)
 
 func _on_back_pressed() -> void:
 	GameManager.exit_to_main_menu()
