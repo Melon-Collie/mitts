@@ -81,7 +81,8 @@ var _spectator_camera: SpectatorCamera = null
 # Minted by the host in LobbyManager._on_start_pressed and broadcast via
 # game_start. Used as the .mreplay filename and (planned for Feature C) stored
 # on career_stats rows so a single game can be reconstructed across players.
-# Falls back to a fresh UUID in offline / tutorial mode where no broadcast runs.
+# **Empty in offline / tutorial mode** — those sessions don't write replays
+# or career stats. Downstream consumers must treat empty as "skip recording".
 var _game_id: String = ""
 
 # ── Lag compensation ──────────────────────────────────────────────────────────
@@ -398,8 +399,9 @@ func _spawn_world() -> void:
 				cfg.get("rule_set", GameRules.DEFAULT_RULE_SET))
 		_game_id = cfg.get("game_id", "")
 		NetworkManager.pending_game_config = {}
-	if _game_id.is_empty():
-		_game_id = PlayerPrefs.generate_uuid()
+	# Offline / tutorial sessions intentionally leave _game_id empty — they
+	# don't broadcast (no other peer would see the id) and downstream consumers
+	# (ReplayFileWriter, CareerStatsReporter) treat empty as "don't record".
 	_spawner = ActorSpawner.new()
 	_spawner.setup(get_tree().current_scene)
 	_create_teams()
@@ -1273,6 +1275,12 @@ func _on_hit_claim_received(hitter_peer_id: int, victim_peer_id: int, host_times
 # ── Scene exit & reset ───────────────────────────────────────────────────────
 func _on_game_over() -> void:
 	if _state_machine == null or _registry == null or _career_reporter == null:
+		return
+	# Offline + tutorial don't count as career games — there's no opponent
+	# pool, the tutorial is replayed as practice, and a player shouldn't be
+	# able to pad stats by playing themselves. is_offline_mode covers both
+	# (start_tutorial calls start_offline).
+	if NetworkManager.is_offline_mode:
 		return
 	var local: PlayerRecord = _registry.get_local()
 	if local == null or local.team == null:
