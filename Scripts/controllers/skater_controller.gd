@@ -175,6 +175,7 @@ var _blade_relative_angle: float = 0.0
 var _is_elevated: bool = false
 var _aiming: SkaterAimingBehavior = SkaterAimingBehavior.new()
 var _pose: SkaterPoseCoordinator = SkaterPoseCoordinator.new()
+var _shot_pose: SkaterShotPoseCoordinator = SkaterShotPoseCoordinator.new()
 var last_processed_host_timestamp: float = 0.0
 var has_puck: bool = false
 var is_replaying: bool = false
@@ -188,11 +189,12 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	process_physics_priority = -1  # Run before Skater.move_and_slide
 	skater.body_checked_player.connect(_on_body_checked_player)
 	skater.body_block_hit.connect(_on_body_block_hit)
+	_shot_pose.setup(skater, _sm, _aiming, self)
 	var _cb := SkaterStateMachine.Callbacks.new()
 	_cb.apply_blade_from_mouse = _apply_blade_from_mouse
-	_cb.apply_slapper_blade_position = _apply_slapper_blade_position
-	_cb.apply_wrister_follow_through = _apply_wrister_follow_through
-	_cb.apply_slapper_follow_through = _apply_slapper_follow_through
+	_cb.apply_slapper_blade_position = _shot_pose.apply_slapper_blade_position
+	_cb.apply_wrister_follow_through = _shot_pose.apply_wrister_follow_through
+	_cb.apply_slapper_follow_through = _shot_pose.apply_slapper_follow_through
 	_cb.enter_shot_block = _enter_shot_block
 	_cb.enter_slapper_charge = _enter_slapper_charge
 	_cb.transition_to_skating = _transition_to_skating
@@ -336,49 +338,6 @@ func teleport_to(pos: Vector3) -> void:
 func _apply_state(input: InputState, delta: float) -> void:
 	_sm.dispatch(skater, input, delta, has_puck, _game_state.is_movement_locked())
 
-# ── Follow-Through Callbacks ──────────────────────────────────────────────────
-func _apply_wrister_follow_through() -> void:
-	var t: float = 1.0 - (_sm.follow_through_timer / follow_through_duration)
-	var arc: float = sin(t * PI)
-	var stick_horiz: float = _stick_horiz()
-	var local_dir := Vector3(sin(_blade_relative_angle), 0.0, -cos(_blade_relative_angle))
-	var hand_pos := skater.shoulder.position
-	hand_pos.y = hand_rest_y + arc * wrister_follow_through_hand_y
-	var intended_target: Vector3 = hand_pos + local_dir * stick_horiz
-	intended_target.y = _blade_y_local() + arc * wrister_follow_through_blade_lift
-	var local_target: Vector3 = skater.clamp_blade_to_walls(intended_target)
-	var clamp_delta_xz := Vector3(
-		local_target.x - intended_target.x, 0.0, local_target.z - intended_target.z)
-	if clamp_delta_xz.length_squared() > 0.0:
-		hand_pos.x += clamp_delta_xz.x
-		hand_pos.z += clamp_delta_xz.z
-	var net_world: Vector3 = _clamp_blade_from_net(skater.upper_body_to_global(local_target))
-	var net_local: Vector3 = skater.upper_body_to_local(net_world)
-	hand_pos.x += net_local.x - local_target.x
-	hand_pos.z += net_local.z - local_target.z
-	local_target = net_local
-	skater.set_top_hand_position(hand_pos)
-	skater.set_blade_position(local_target)
-
-func _apply_slapper_follow_through() -> void:
-	var t: float = 1.0 - (_sm.follow_through_timer / follow_through_duration)
-	var blade_side_sign: float = -1.0 if skater.is_left_handed else 1.0
-	var shot_xz := Vector2(_sm.shot_dir.x, _sm.shot_dir.z)
-	if shot_xz.length() > 0.001:
-		shot_xz = shot_xz.normalized()
-	var blade_pos := Vector3(
-		skater.shoulder.position.x + blade_side_sign * slapper_blade_x + shot_xz.x * t * slapper_follow_through_arc_dist,
-		lerpf(slapper_wind_up_height, _blade_y_local(), smoothstep(0.0, 1.0, t)),
-		skater.shoulder.position.z + slapper_blade_z + shot_xz.y * t * slapper_follow_through_arc_dist)
-	blade_pos = skater.clamp_blade_to_walls(blade_pos)
-	blade_pos = skater.upper_body_to_local(_clamp_blade_from_net(skater.upper_body_to_global(blade_pos)))
-	var hand_pos := Vector3(
-		skater.shoulder.position.x,
-		hand_rest_y + t * wrister_follow_through_hand_y,
-		skater.shoulder.position.z)
-	skater.set_top_hand_position(hand_pos)
-	skater.set_blade_position(blade_pos)
-
 # ── State Helpers ─────────────────────────────────────────────────────────────
 func _transition_to_skating() -> void:
 	# Lost-charge feedback: if we're leaving an active charge state without
@@ -503,42 +462,6 @@ func _release_slapper(input: InputState, one_timer: bool = false) -> void:
 	_sm.follow_through_is_slapper = true
 	_sm.set_state(State.FOLLOW_THROUGH)
 	_sm.follow_through_timer = follow_through_duration
-
-func _apply_slapper_blade_position() -> void:
-	# Slapper has a fixed blade pose offset from the shoulder — separate from
-	# the IK flow (this is a charged pre-shot pose, not player-aimed). Hand
-	# sits at the shoulder XZ at `hand_rest_y`; blade XZ is offset from the
-	# shoulder by slapper_blade_x/z; Y lerps from _blade_y_local() (ice) up to
-	# slapper_wind_up_height during the wind-up charge.
-	var blade_side_sign: float = -1.0 if skater.is_left_handed else 1.0
-	var wind_up_t: float = clampf(_aiming.slapper_charge_timer / slapper_wind_up_time, 0.0, 1.0)
-	var current_blade_y: float = lerpf(_blade_y_local(), slapper_wind_up_height, wind_up_t)
-	var pos := Vector3(
-			skater.shoulder.position.x + blade_side_sign * slapper_blade_x,
-			current_blade_y,
-			skater.shoulder.position.z + slapper_blade_z)
-	pos = skater.clamp_blade_to_walls(pos)
-	var blade_world: Vector3 = skater.upper_body_to_global(pos)
-	var clamped_heel: Vector3 = blade_world
-	if has_puck:
-		clamped_heel = _clamp_blade_from_goalies(clamped_heel)
-	var hand_pos := Vector3(skater.shoulder.position.x, hand_rest_y, skater.shoulder.position.z)
-	var hand_world: Vector3 = skater.upper_body_to_global(hand_pos)
-	var shaft: Vector3 = clamped_heel - hand_world
-	shaft.y = 0.0
-	var contact_world: Vector3 = clamped_heel
-	if shaft.length() > 0.001:
-		contact_world = clamped_heel + shaft.normalized() * skater.blade_length * 0.5
-	var clamped_contact: Vector3 = _clamp_blade_from_net(contact_world)
-	if clamped_contact != contact_world:
-		var delta: Vector3 = clamped_contact - contact_world
-		clamped_heel += delta
-		if has_puck:
-			_do_release(delta.normalized(), goalie_strip_power)
-	if clamped_heel != blade_world:
-		pos = skater.upper_body_to_local(clamped_heel)
-	skater.set_top_hand_position(hand_pos)
-	skater.set_blade_position(pos)
 
 func _update_wrister_charge(input: InputState) -> void:
 	if not has_puck:

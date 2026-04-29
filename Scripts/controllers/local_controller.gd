@@ -279,12 +279,12 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# reconcile, popping it down from the slapper wind-up pose at the broadcast rate.
 	match _sm.get_state():
 		State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK:
-			_apply_slapper_blade_position()
+			_shot_pose.apply_slapper_blade_position()
 		State.FOLLOW_THROUGH:
 			if _sm.follow_through_is_slapper:
-				_apply_slapper_follow_through()
+				_shot_pose.apply_slapper_follow_through()
 			else:
-				_apply_wrister_follow_through()
+				_shot_pose.apply_wrister_follow_through()
 		State.SHOT_BLOCKING:
 			pass  # block stance owns the pose; no per-frame blade write
 		_:
