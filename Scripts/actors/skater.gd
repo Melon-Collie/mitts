@@ -128,6 +128,7 @@ const _ARROW_HEAD_HALF_W_UNIT: float = 0.20
 const _ARROW_SHAFT_HALF_W_UNIT: float = 0.06    # gap half-angle in ring = asin(this / ring_scale)
 const _RETICLE_HALF_LENGTH: float = 0.06        # crosshair arm length, world meters
 const _RING_SEGMENTS: int = 48
+const _SLAPPER_HUD_Y: float = 0.05              # local Y lift for slapper HUD meshes (above ice)
 
 # ── HUD geometry (ice-blue overlay system) ────────────────────────────────────
 # Slot ring sits just inside RING_OUTER_R. Charge ring is concentric, just
@@ -366,16 +367,22 @@ func _ready() -> void:
 	# so the ring's gap stays glued to the arrow tail.
 	_slapper_indicator = Node3D.new()
 	_slapper_indicator.name = "SlapperIndicator"
+	_slapper_indicator.visible = true
 	add_child(_slapper_indicator)
 	_slapper_indicator_mat = _make_hud_ice_material()
 
 	_slapper_reticle_node = _create_reticle_mesh(_RETICLE_HALF_LENGTH)
 	_slapper_reticle_node.material_override = _slapper_indicator_mat
 	_slapper_reticle_node.visible = false
+	# Local Y lift so it sits above the ice without depending on the parent's
+	# global_position pin. After parent scale (radius, 1, radius) the Y stays
+	# at this value (Y axis is unscaled).
+	_slapper_reticle_node.position = Vector3(0.0, _SLAPPER_HUD_Y, 0.0)
 	_slapper_indicator.add_child(_slapper_reticle_node)
 
 	_slapper_arrow_root = Node3D.new()
 	_slapper_arrow_root.name = "SlapperArrow"
+	_slapper_arrow_root.position = Vector3(0.0, _SLAPPER_HUD_Y, 0.0)
 	_slapper_indicator.add_child(_slapper_arrow_root)
 
 	_slapper_arrow_mesh = MeshInstance3D.new()
@@ -680,6 +687,7 @@ func _make_hud_ice_material() -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mat.albedo_color = Color(MenuStyle.HUD_ICE.r, MenuStyle.HUD_ICE.g,
 			MenuStyle.HUD_ICE.b, MenuStyle.HUD_OPACITY)
 	return mat
@@ -791,8 +799,8 @@ func _physics_process(delta: float) -> void:
 		# Auto-hide once the lost flash has finished and there's nothing to show.
 		if shot_charge <= 0.001 and lost_t <= 0.001 and not _charge_ring_visible:
 			_charge_ring_mesh.visible = false
-	if _slapper_indicator != null and _slapper_indicator.visible:
-		_slapper_indicator.global_position.y = 0.05
+	if _slapper_indicator != null:
+		_slapper_indicator.global_position.y = 0.0
 
 func _resolve_player_collisions(vel_before: Vector3) -> void:
 	for i: int in get_slide_collision_count():
