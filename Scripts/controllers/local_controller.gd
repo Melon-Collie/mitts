@@ -275,7 +275,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# Blade must be re-applied after position is set — upper_body_to_local()
 	# uses skater.global_position, so it must reflect the final replayed position.
 	# Dispatch by state: slapper/follow-through have their own pose handlers; using
-	# _apply_blade_from_mouse here would IK the blade to the mouse position every
+	# _ik.apply_blade_from_mouse here would IK the blade to the mouse position every
 	# reconcile, popping it down from the slapper wind-up pose at the broadcast rate.
 	match _sm.get_state():
 		State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK:
@@ -288,7 +288,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 		State.SHOT_BLOCKING:
 			pass  # block stance owns the pose; no per-frame blade write
 		_:
-			_apply_blade_from_mouse(_current_input, 0.0)
+			_ik.apply_blade_from_mouse(_current_input, 0.0)
 	var blade_reconcile_delta: float = skater.get_blade_contact_global().distance_to(pre_reconcile_blade)
 	NetworkTelemetry.record_blade_reconcile(blade_reconcile_delta)
 	if blade_reconcile_delta > _BLADE_JUMP_THRESHOLD:
