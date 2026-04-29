@@ -52,6 +52,15 @@ const CAMERA_DISTANCE_MIN: float = 0.6
 const CAMERA_DISTANCE_MAX: float = 1.6
 var bindings: Dictionary = {}  # action -> {type, physical_keycode or button_index}
 
+# Replay recording. Recording fires on every peer (host + clients) for every
+# multiplayer game; offline / tutorial sessions never record. ReplayFileIndex
+# purges oldest replays in user://replays/ down to keep_count at writer-open
+# time so the on-disk footprint stays bounded.
+var replay_recording_enabled: bool = true
+var replay_keep_count: int = 20
+const REPLAY_KEEP_MIN: int = 1
+const REPLAY_KEEP_MAX: int = 100
+
 func _get_save_path() -> String:
 	for arg: String in OS.get_cmdline_user_args():
 		if arg.begins_with("--config-suffix="):
@@ -61,7 +70,7 @@ func _get_save_path() -> String:
 func _ready() -> void:
 	_load()
 	if player_uuid.is_empty():
-		player_uuid = _generate_uuid()
+		player_uuid = generate_uuid()
 		save()
 
 func save() -> void:
@@ -87,6 +96,8 @@ func save() -> void:
 	cfg.set_value("game", "camera_mode", camera_mode)
 	cfg.set_value("game", "fov", fov)
 	cfg.set_value("game", "camera_distance", camera_distance)
+	cfg.set_value("replay", "recording_enabled", replay_recording_enabled)
+	cfg.set_value("replay", "keep_count", replay_keep_count)
 	for action: String in REBINDABLE_ACTIONS:
 		if not bindings.has(action):
 			continue
@@ -174,6 +185,8 @@ func _load() -> void:
 		camera_mode = clamp(cfg.get_value("game", "camera_mode", CAMERA_MODE_TOP_DOWN), 0, CAMERA_MODE_LABELS.size() - 1)
 		fov = clampf(cfg.get_value("game", "fov", 75.0), FOV_MIN, FOV_MAX)
 		camera_distance = clampf(cfg.get_value("game", "camera_distance", 1.0), CAMERA_DISTANCE_MIN, CAMERA_DISTANCE_MAX)
+		replay_recording_enabled = cfg.get_value("replay", "recording_enabled", true)
+		replay_keep_count = clampi(cfg.get_value("replay", "keep_count", 20), REPLAY_KEEP_MIN, REPLAY_KEEP_MAX)
 		for action: String in REBINDABLE_ACTIONS:
 			var t: String = cfg.get_value("bindings", action + "_type", "")
 			if t == "key":
@@ -191,7 +204,7 @@ func _load() -> void:
 	call_deferred(&"apply_video")
 
 
-static func _generate_uuid() -> String:
+static func generate_uuid() -> String:
 	const HEX: String = "0123456789abcdef"
 	var result: String = ""
 	for i: int in 32:

@@ -1,5 +1,11 @@
 extends Node
 
+# Sentinel team_id used to mark spectator slots end-to-end (lobby roster, slot
+# assignment RPCs, GameManager bookkeeping). A peer with team_id == this value
+# never spawns a local/remote skater — it just receives world-state broadcasts
+# and renders via SpectatorCamera.
+const SPECTATOR_TEAM_ID: int = -1
+
 # ── Outbound signals (application layer listens) ─────────────────────────────
 # NetworkManager observes ENet + RPC traffic; GameManager connects to these in
 # _ready and executes the corresponding orchestration work. Keeps the upward
@@ -22,7 +28,7 @@ signal remote_carrier_changed(new_carrier_peer_id: int)
 signal ghost_state_received(peer_id: int, is_ghost: bool)
 signal goal_received(scoring_team_id: int, score0: int, score1: int, scorer_name: String, assist1_name: String, assist2_name: String)
 signal faceoff_positions_received(positions: Array)
-signal game_reset_received
+signal game_reset_received(new_game_id: String)
 signal stats_received(data: Array)
 signal slot_swap_requested(peer_id: int, new_team_id: int, new_slot: int)
 signal slot_swap_confirmed(peer_id: int, old_team_id: int, old_slot: int, new_team_id: int, new_slot: int, jersey: Color, helmet: Color, pants: Color)
@@ -45,6 +51,14 @@ signal deflection_received(position: Vector3)
 signal body_block_received(position: Vector3)
 signal puck_strip_received(position: Vector3)
 signal input_batch_received(peer_id: int, inputs: Array[InputState])
+# Mid-game player → spectator transition. Host broadcasts to all peers; every
+# receiver despawns the demoted peer's skater locally (registry.remove handles
+# state-machine cleanup, queue_free, etc.). The demoted peer's local
+# GameManager additionally tears down its LocalController and mounts
+# SpectatorCamera. The opposite direction (spectator → player) reuses the
+# existing assign_player_slot + spawn_remote_skater RPCs and needs no new
+# broadcast.
+signal spectator_demoted_received(peer_id: int)
 
 # ── State ─────────────────────────────────────────────────────────────────────
 var is_host: bool = false
@@ -66,6 +80,9 @@ var pending_period_duration: float = GameRules.PERIOD_DURATION
 var pending_ot_enabled: bool = GameRules.OT_ENABLED
 var pending_rule_set: int = GameRules.DEFAULT_RULE_SET
 var pending_join_players: Array = []     # sync_existing_players data for join-in-progress
+# Path to a .mreplay set by the main-menu replay browser before changing scene
+# to the viewer. Cleared by ReplayViewer._ready after consumption.
+var pending_replay_path: String = ""
 var _peer_handedness: Dictionary = {}     # peer_id -> bool (host only)
 var _peer_names: Dictionary = {}          # peer_id -> String (host only)
 var _peer_numbers: Dictionary = {}        # peer_id -> int (host only)
@@ -149,7 +166,7 @@ func start_host() -> void:
 	_peer_names[1] = local_player_name
 	_peer_numbers[1] = local_jersey_number
 	var peer := ENetMultiplayerPeer.new()
-	var error := peer.create_server(Constants.PORT, GameRules.MAX_PLAYERS)
+	var error := peer.create_server(Constants.PORT, GameRules.MAX_CONNECTIONS)
 	if error != OK:
 		push_error("Failed to start server: " + str(error))
 		return
@@ -503,10 +520,25 @@ func receive_hit_claim(victim_peer_id: int, host_timestamp: float, rtt_ms: float
 func start_replay_mode(initial_ts: float) -> void:
 	_replay_mode = true
 	_replay_clock = initial_ts
+	# Mirror the flag onto every connected client so their .mreplay recorder
+	# gates identically. Clients still receive (frozen) world-state broadcasts
+	# during the cinematic, but their file writer skips them so the host and
+	# client files align.
+	if is_host:
+		for peer_id: int in connected_peer_ids():
+			notify_replay_mode.rpc_id(peer_id, true)
 
 
 func stop_replay_mode() -> void:
 	_replay_mode = false
+	if is_host:
+		for peer_id: int in connected_peer_ids():
+			notify_replay_mode.rpc_id(peer_id, false)
+
+
+@rpc("authority", "reliable")
+func notify_replay_mode(active: bool) -> void:
+	_replay_mode = active
 
 
 func set_replay_clock(t: float) -> void:
@@ -702,13 +734,13 @@ func send_faceoff_positions(positions: Array) -> void:
 func notify_faceoff_positions(positions: Array) -> void:
 	NetworkSimManager.send(func(p: Array) -> void: faceoff_positions_received.emit(p), [positions], true)
 
-func notify_reset_to_all() -> void:
+func notify_reset_to_all(new_game_id: String = "") -> void:
 	for peer_id in connected_peer_ids():
-		notify_game_reset.rpc_id(peer_id)
+		notify_game_reset.rpc_id(peer_id, new_game_id)
 
 @rpc("authority", "reliable")
-func notify_game_reset() -> void:
-	game_reset_received.emit()
+func notify_game_reset(new_game_id: String = "") -> void:
+	game_reset_received.emit(new_game_id)
 
 func send_stats_to_all(data: Array) -> void:
 	for peer_id in connected_peer_ids():
@@ -796,7 +828,8 @@ func notify_join_in_progress(p_num_periods: int, p_period_duration: float,
 		p_ot_enabled: bool, p_ot_duration: float,
 		p_home_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID,
 		p_away_color_id: String = TeamColorRegistry.DEFAULT_AWAY_ID,
-		p_rule_set: int = GameRules.DEFAULT_RULE_SET) -> void:
+		p_rule_set: int = GameRules.DEFAULT_RULE_SET,
+		p_game_id: String = "") -> void:
 	pending_home_color_id = p_home_color_id
 	pending_away_color_id = p_away_color_id
 	pending_rule_set = p_rule_set
@@ -808,22 +841,25 @@ func notify_join_in_progress(p_num_periods: int, p_period_duration: float,
 		"home_color_id": p_home_color_id,
 		"away_color_id": p_away_color_id,
 		"rule_set": p_rule_set,
+		"game_id": p_game_id,
 	})
 
 func send_join_in_progress(peer_id: int, config: Dictionary) -> void:
 	var hid: String = config.get("home_color_id", pending_home_color_id)
 	var aid: String = config.get("away_color_id", pending_away_color_id)
 	var rs: int = config.get("rule_set", pending_rule_set)
+	var gid: String = config.get("game_id", "")
 	notify_join_in_progress.rpc_id(peer_id,
 		config.num_periods, config.period_duration,
-		config.ot_enabled, config.ot_duration, hid, aid, rs)
+		config.ot_enabled, config.ot_duration, hid, aid, rs, gid)
 
 @rpc("authority", "reliable")
 func notify_game_start(p_num_periods: int, p_period_duration: float,
 		p_ot_enabled: bool, p_ot_duration: float,
 		p_home_color_id: String = TeamColorRegistry.DEFAULT_HOME_ID,
 		p_away_color_id: String = TeamColorRegistry.DEFAULT_AWAY_ID,
-		p_rule_set: int = GameRules.DEFAULT_RULE_SET) -> void:
+		p_rule_set: int = GameRules.DEFAULT_RULE_SET,
+		p_game_id: String = "") -> void:
 	pending_home_color_id = p_home_color_id
 	pending_away_color_id = p_away_color_id
 	pending_rule_set = p_rule_set
@@ -835,6 +871,7 @@ func notify_game_start(p_num_periods: int, p_period_duration: float,
 		"home_color_id": p_home_color_id,
 		"away_color_id": p_away_color_id,
 		"rule_set": p_rule_set,
+		"game_id": p_game_id,
 	})
 
 @rpc("authority", "reliable")
@@ -846,13 +883,14 @@ func send_game_start(config: Dictionary) -> void:
 	var hid: String = config.get("home_color_id", TeamColorRegistry.DEFAULT_HOME_ID)
 	var aid: String = config.get("away_color_id", TeamColorRegistry.DEFAULT_AWAY_ID)
 	var rs: int = config.get("rule_set", GameRules.DEFAULT_RULE_SET)
+	var gid: String = config.get("game_id", "")
 	pending_home_color_id = hid
 	pending_away_color_id = aid
 	pending_rule_set = rs
 	for peer_id: int in connected_peer_ids():
 		notify_game_start.rpc_id(peer_id,
 			config.num_periods, config.period_duration,
-			config.ot_enabled, config.ot_duration, hid, aid, rs)
+			config.ot_enabled, config.ot_duration, hid, aid, rs, gid)
 	game_started.emit(config)
 
 func send_lobby_roster(peer_id: int, roster: Array) -> void:
@@ -1025,3 +1063,12 @@ func send_puck_strip_to_all(position: Vector3) -> void:
 @rpc("authority", "unreliable")
 func notify_puck_strip(position: Vector3) -> void:
 	NetworkSimManager.send(func(pos: Vector3) -> void: puck_strip_received.emit(pos), [position], false)
+
+func send_spectator_demoted_to_all(peer_id: int) -> void:
+	for remote_id: int in connected_peer_ids():
+		notify_spectator_demoted.rpc_id(remote_id, peer_id)
+	spectator_demoted_received.emit(peer_id)
+
+@rpc("authority", "reliable")
+func notify_spectator_demoted(peer_id: int) -> void:
+	spectator_demoted_received.emit(peer_id)

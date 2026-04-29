@@ -85,6 +85,21 @@ func on_goal_scored(defending_team_id: int) -> int:
 	_set_phase(GamePhase.Phase.GOAL_SCORED)
 	return scoring_team_id
 
+
+# Drives the state machine forward from GOAL_SCORED. Sudden-death OT (any
+# period past num_periods) ends the game here; otherwise we cycle to
+# FACEOFF_PREP for the next play. Used by both the timer-driven advance in
+# tick() and external callers (GoalReplayDriver finishing) that need to
+# bypass the timer because tick() is gated during is_replay_mode.
+func advance_post_goal() -> void:
+	if current_phase != GamePhase.Phase.GOAL_SCORED:
+		return
+	if _is_ot_period():
+		_set_phase(GamePhase.Phase.GAME_OVER)
+	else:
+		_set_phase(GamePhase.Phase.FACEOFF_PREP)
+
+
 # Called when a puck is picked up during FACEOFF phase. Returns true if it
 # caused the transition back to PLAYING.
 func on_faceoff_puck_picked_up() -> bool:
@@ -379,10 +394,7 @@ func _tick_phase(delta: float) -> bool:
 	match current_phase:
 		GamePhase.Phase.GOAL_SCORED:
 			if _phase_timer >= GameRules.GOAL_PAUSE_DURATION:
-				if _is_ot_period():
-					_set_phase(GamePhase.Phase.GAME_OVER)
-				else:
-					_set_phase(GamePhase.Phase.FACEOFF_PREP)
+				advance_post_goal()
 				return true
 		GamePhase.Phase.FACEOFF_PREP:
 			if _phase_timer >= GameRules.FACEOFF_PREP_DURATION:

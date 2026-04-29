@@ -1,6 +1,7 @@
 class_name CareerStatsReporter extends RefCounted
 
-func report(record: PlayerRecord, goals_for: int, goals_against: int, outcome: String) -> void:
+func report(record: PlayerRecord, goals_for: int, goals_against: int, outcome: String,
+		game_id: String, team_id: int, period_scores: Array, num_periods: int) -> void:
 	var body: Dictionary = record.stats.to_dict()
 	body["uuid"] = PlayerPrefs.player_uuid
 	body["player_name"] = record.display_name()
@@ -8,7 +9,22 @@ func report(record: PlayerRecord, goals_for: int, goals_against: int, outcome: S
 	body["goals_for"] = goals_for
 	body["goals_against"] = goals_against
 	body["outcome"] = outcome
+	body["game_id"] = game_id
+	body["team_id"] = team_id
+	body["period_scores"] = period_scores
+	body["num_periods"] = num_periods
 	_post(SupabaseConfig.URL + "/rest/v1/career_stats", body)
+
+
+# Calls the recent_games_for RPC and returns up to `limit` recent games the
+# given player UUID participated in, newest first. Each game row carries
+# nested players JSON, period_scores, and the home/away final score. Used by
+# the Career screen's Recent Games tab. Empty array on error or no games.
+func fetch_recent_games(player_uuid: String, limit: int, callback: Callable) -> void:
+	_call_rpc("recent_games_for", {
+		"player_uuid": player_uuid,
+		"game_limit": limit,
+	}, callback)
 
 
 func migrate_to_steam_id(uuid: String, steam_id: int) -> void:
@@ -48,6 +64,32 @@ func _fire(url: String, method: HTTPClient.Method, body: Dictionary) -> void:
 	if err != OK:
 		push_warning("CareerStatsReporter: request failed: %s" % error_string(err))
 		req.queue_free()
+
+
+# PostgREST RPC: POST with a JSON body, parse the JSON-array response. Used
+# by fetch_recent_games. Calls back with the parsed Array (empty on error).
+func _call_rpc(name: String, body: Dictionary, callback: Callable) -> void:
+	var url: String = "%s/rest/v1/rpc/%s" % [SupabaseConfig.URL, name]
+	var root: Window = (Engine.get_main_loop() as SceneTree).root
+	var req := HTTPRequest.new()
+	root.add_child(req)
+	req.request_completed.connect(func(_result: int, code: int, _headers: PackedStringArray, body_bytes: PackedByteArray) -> void:
+		if code == 200:
+			var parsed: Variant = JSON.parse_string(body_bytes.get_string_from_utf8())
+			if parsed is Array:
+				callback.call(parsed as Array)
+			else:
+				callback.call([])
+		else:
+			push_warning("CareerStatsReporter: RPC %s returned HTTP %d" % [name, code])
+			callback.call([])
+		req.queue_free()
+	)
+	var err: Error = req.request(url, _write_headers(), HTTPClient.METHOD_POST, JSON.stringify(body))
+	if err != OK:
+		push_warning("CareerStatsReporter: RPC %s failed: %s" % [name, error_string(err)])
+		req.queue_free()
+		callback.call([])
 
 
 func _fetch(url: String, callback: Callable) -> void:
