@@ -98,6 +98,8 @@ var arm_reaction_delay: float = GameRules.DEFAULT_GOALIE_ARM_REACTION_DELAY_S
 # before the play arrives. At 0.45s a 25 m/s shot drops around the top of the
 # circles; slower pucks have to get correspondingly closer before it commits.
 var drop_max_time_to_impact: float = 0.45
+# Off only for counterfactual measurement (test_goalie_standup_save.gd).
+var stand_up_low_saves: bool = true
 
 # ── Pre-armed read (quiet-eye anticipation) ──────────────────────────────────
 # Reading a visible windup from a slot shooter (_is_reading_shot_threat) for
@@ -1700,8 +1702,33 @@ func _update_shot_timer(delta: float) -> void:
 	# puck_released like any quick-shot. `low_drop_ready` is a level signal, so the
 	# drop fires on whichever tick the puck first becomes imminent.
 	var ttg: float = _puck_time_to_goal_line()
-	if ttg >= 0.0 and ttg <= drop_max_time_to_impact:
+	if ttg >= 0.0 and ttg <= drop_max_time_to_impact and not _standing_pads_meet_it(ttg):
 		_enter_butterfly()
+
+# A low shot he has READ ONTO A PAD FACE is a stand-up save. Standing, the pads
+# are a column from the ice to the pad-top seam; rolled flat they are 0.28 m tall
+# and the band above is open outside the trunk. So for a puck already on a pad,
+# going down buys no width he needs, gives up height he has, and spends 0.2 s
+# mid-rotation (test_goalie_mid_drop_gap). The five-hole and the ice outside the
+# pads are the butterfly's to close, so those still drop him.
+#
+# Only on a CONVERGED read: until the belief has caught up with the puck he does
+# not know it is on his pad, and hedging wide is the butterfly's job — so a stale
+# wind-up read still drops him, and a late aim change still pays.
+func _standing_pads_meet_it(ttg: float) -> bool:
+	if not stand_up_low_saves or _read_blend < 1.0:
+		return false
+	# The believed line, crossing his own plane, against where his drift puts him.
+	var p: Vector3 = puck.global_position
+	var run: float = _goal_line_z - p.z
+	if absf(run) < 0.001:
+		return false
+	var f: float = clampf((goalie.global_position.z - p.z) / run, 0.0, 1.0)
+	var x_at_pads: float = p.x + (_reaction.impact_x - p.x) * f
+	var body_x: float = _current_x + _reaction_drift_vx * ttg
+	return GoalieAnatomy.standing_pad_takes(x_at_pads - body_x, _reaction.impact_y,
+			GameRules.PUCK_COLLISION_RADIUS)
+
 
 # Seconds until the puck crosses this goalie's goal line on its current heading,
 # or -1 if it isn't approaching (moving parallel or away). Host-side only — uses

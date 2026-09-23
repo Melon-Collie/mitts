@@ -146,3 +146,14 @@ static func structural_cover_half_width_at(y: float, down: bool) -> float:
 	if y >= head.x and y <= head.y:
 		cover = maxf(cover, HEAD_BOX_M * 0.5)
 	return cover
+
+
+# Does a puck crossing his plane `rel_x` off his midline at height `y` land
+# wholly on a STANDING pad's face? Between the pads is the five-hole and outside
+# them is open ice; both are the butterfly's to close, so neither counts.
+static func standing_pad_takes(rel_x: float, y: float, puck_radius: float) -> bool:
+	var ax: float = absf(rel_x)
+	var half: float = PAD_BOX_WIDTH_M * 0.5
+	var centre: float = GoalieBehaviorRules.STANDING_PAD_CENTER_X_M
+	return ax >= centre - half + puck_radius and ax <= centre + half - puck_radius \
+			and y + puck_radius <= pad_span(false).y
