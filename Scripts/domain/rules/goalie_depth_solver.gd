@@ -44,6 +44,9 @@ class Constraints:
 	# Backdoor re-square race cap (GoalieBehaviorRules.backdoor_depth_cap).
 	# INF when no weak-side one-timer threat binds.
 	var backdoor_cap: float = INF
+	# Room to see around a screen (GoalieScreenDepth.sight_cap). INF unless a body
+	# on top of him hides the release and stepping in would let him see it.
+	var screen_cap: float = INF
 	# Rush-backflow curve anchor for a closing carrier. INF when not engaged.
 	var rush_radius: float = INF
 	# Retreat rate (m/s) that keeps him ON the backflow curve at the attacker's
@@ -89,6 +92,8 @@ static func solve_caps(c: Constraints) -> float:
 		target = maxf(c.lateral_cap, c.floor_radius)
 	if c.backdoor_cap < target:
 		target = maxf(c.backdoor_cap, c.floor_radius)
+	if c.screen_cap < target:
+		target = maxf(c.screen_cap, c.floor_radius)
 	return target
 
 

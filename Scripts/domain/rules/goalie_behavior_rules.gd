@@ -767,12 +767,18 @@ static func screen_occlusion_delay(
 # him step, see, un-step, be blinded, and oscillate at the tick rate. Asking "from
 # where I want to stand, what is hidden?" makes the input independent of the
 # output. Returns a signed world-X offset. No allocation.
+#
+# A body standing ON the sightline has no side of its own, so `prefer_side` (the
+# sign of the peek he is already holding) picks it: a goalie commits to a side of
+# a dead-on screen and stays there. Without it the side came from float noise in
+# the perpendicular and flipped from tick to tick.
 static func screen_peek_offset(
 		square_position: Vector3,
 		puck_position: Vector3,
 		screener_positions: PackedVector3Array,
 		cfg: ScreenConfig,
-		max_offset: float) -> float:
+		max_offset: float,
+		prefer_side: float = 0.0) -> float:
 	if max_offset <= 0.0:
 		return 0.0
 	var px: float = puck_position.x - square_position.x
@@ -790,7 +796,9 @@ static func screen_peek_offset(
 		var wx: float = body.x - square_position.x
 		var wz: float = body.z - square_position.z
 		var along: float = wx * vhx + wz * vhz
-		if along <= cfg.min_along or along >= p_len:
+		# Excluded at BOTH ends, as the occlusion solve does: a body on his own
+		# eyes cannot be stepped around, and one on the puck is the shooter.
+		if along <= cfg.min_along or along >= p_len - cfg.min_along:
 			continue
 		var f: float = along / p_len
 		var sight_y: float = eye_y + f * (puck_position.y - eye_y)
@@ -808,6 +816,8 @@ static func screen_peek_offset(
 			return 0.0   # cannot get the eyes around it — stay square and block
 		# Step AWAY from the body: +x moves the line's perp coordinate by −vhz per
 		# metre, so clearing a body on the +perp side means stepping with vhz's sign.
+		if absf(perp) < cfg.peek_clearance and prefer_side != 0.0:
+			perp = signf(prefer_side) * signf(vhz)
 		if perp > 0.0:
 			need_pos = maxf(need_pos, need)
 		else:

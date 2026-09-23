@@ -183,6 +183,8 @@ var screen_peek_max_offset: float = 0.35     # m
 # still cosmetic. This one is not: it moves the sightline the occlusion solve is
 # taken along.
 var head_peek_max_offset: float = 0.15       # m
+# Off only for counterfactual measurement (test_goalie_screen_room.gd).
+var screen_room: bool = true
 
 # ── Caught moving ─────────────────────────────────────────────────────────────
 # Being unset costs three things, and only the third is perceptual: momentum he
@@ -1023,7 +1025,12 @@ var _slide_coverage_confirm_timer: float = 0.0
 # it on the wire costs clients nothing visible.
 var _eye_offset_x: float = 0.0
 var _eye_peek_target_x: float = 0.0
+# Side of the last peek he took (±1, 0 before any) — the side he keeps on a
+# screen standing dead on his sightline.
+var _peek_side: float = 0.0
 const _HEAD_PEEK_RATE_M_S: float = 1.2
+# Resolution of the screen-room search — finer than a depth step he could see.
+const _SCREEN_CAP_STEP_M: float = 0.05
 
 # Beaten-wide latch. `_armed` means the onset fired and the puck has stayed
 # around him since (the confirmation window is running or has elapsed);
@@ -1448,8 +1455,12 @@ func reset_to_crease() -> void:
 	_cross_crease_react_timer = 0.0
 	_cross_crease_timer = 0.0
 	_cross_crease_target_x = 0.0
+	_pass_reception.found = false
+	_pass_read_timer = 0.0
+	_pass_read_responded = false
 	_eye_offset_x = 0.0
 	_eye_peek_target_x = 0.0
+	_peek_side = 0.0
 	_shot_commit_timer = 0.0
 	_shot_read_timer = 0.0
 	_prime_linger_timer = 0.0
@@ -2923,8 +2934,30 @@ func _update_depth(delta: float) -> void:
 	# side, don't challenge farther out than the cross-crease re-square race
 	# allows. INF when no threat binds.
 	c.backdoor_cap = _backdoor_depth_cap()
+	c.screen_cap = INF
+	c.screen_cap = _screen_sight_cap(GoalieDepthSolver.solve_caps(c))
 	_fill_rush_constraint(c)
 	_current_depth = GoalieDepthSolver.solve(_current_depth, delta, c)
+
+
+# How far out he can stand and still look around the traffic hiding a carrier's
+# release (GoalieScreenDepth). Only against an opposing carrier — a screen hides
+# a SHOT, and a loose puck is tracked, not read off a blade. `r_hi` is where the
+# other caps would put him, so this only ever gives ground.
+func _screen_sight_cap(r_hi: float) -> float:
+	var carrier: Skater = puck.get_carrier()
+	if not screen_room or carrier == null \
+			or (team_id != -1 and carrier.get_team_id() == team_id):
+		return INF
+	_ensure_view()
+	if _view.screeners.is_empty():
+		return INF
+	_screen_cfg.eye_height = GoalieAnatomy.HEAD_CENTER_Y_STANDING_M
+	return GoalieScreenDepth.sight_cap(
+			Vector3(_goal_center_x, goalie.global_position.y, _goal_line_z),
+			_tracked_threat_position, puck.global_position, _view.screeners,
+			_screen_cfg, head_peek_max_offset + screen_peek_max_offset,
+			r_hi, depth_defensive, _SCREEN_CAP_STEP_M)
 
 
 # Has the play actually entered the zone? Depth is solved from the races, but the
@@ -3306,7 +3339,9 @@ func _screen_peek_x(square_xz: Vector2) -> float:
 			total = GoalieBehaviorRules.screen_peek_offset(
 					Vector3(square_xz.x, goalie.global_position.y, square_xz.y),
 					puck.global_position, _view.screeners, _screen_cfg,
-					head_peek_max_offset + screen_peek_max_offset)
+					head_peek_max_offset + screen_peek_max_offset, _peek_side)
+	if total != 0.0:
+		_peek_side = signf(total)
 	_eye_peek_target_x = clampf(total, -head_peek_max_offset, head_peek_max_offset)
 	return total - _eye_peek_target_x
 

@@ -20,6 +20,7 @@ execute; they never reach up. Goalie *math* is pure and lives in
 | `domain/rules/goalie_behavior_rules.gd` | reads, depth, races (pure) |
 | `domain/rules/goalie_save_selection.gd` | block-or-react, as one question |
 | `domain/rules/goalie_pass_read.gd` | where a pass in flight will be shot from |
+| `domain/rules/goalie_screen_depth.gd` | room to see around a screen |
 | `domain/rules/goalie_save_rules.gd` | rebound doctrine |
 | `domain/rules/goalie_depth_solver.gd` | depth constraint composition |
 | `domain/rules/goalie_stick_rules.gd` | stick geometry and coverage |
@@ -286,8 +287,18 @@ not retreat.** Backing in concedes angle exactly when the goalie has his best
 look, and a windup is MORE read time, which is why slapshots convert lower than
 snap shots. Being set emerges rather than being applied: the charging carrier
 glides, so the arc target goes stationary and the movement converges. No depth
-concession is applied anywhere; screened windups are handled by the blocking
+concession is applied to a windup; screened windups are handled by the blocking
 drop, not by depth.
+
+**The one depth term a screen earns is room to see around it.** At challenge
+depth he is already tight to a slot or top-of-the-crease screen, which is where
+a peek works best: the sightline pivots about the release, so a head move close
+to the body swings the line past it. What blinds him is a body ON him, inside
+the peek's reach of his own eyes. `GoalieScreenDepth.sight_cap` gives up exactly
+the room that takes, and nothing for a screen he could not see around from
+anywhere (that release is the blocking drop's). The peek holds the side it chose
+on a dead-on screen (`_peek_side`); left to the sign of a perpendicular near
+zero it flipped every tick. `test_goalie_screen_room.gd` holds both.
 
 ## Behind-net puck play — the doctrine
 
