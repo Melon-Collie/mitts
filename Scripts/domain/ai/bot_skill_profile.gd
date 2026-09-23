@@ -86,6 +86,14 @@ var settle_penalty_frac: float
 # get comfortable with the puck. ~3τ is when it is effectively gone.
 var settle_penalty_tau_s: float
 
+# PACE: seconds a fresh carrier needs to read the ice before it can start a
+# PASS — the look up that locates a moving teammate after the eyes were on the
+# catch. Shots are exempt (the net never moves), so the one-timer and the
+# catch-and-shoot keep their teeth; what a human gains is time to follow the
+# puck through a passing sequence. Unlike settle doubt this holds an OBVIOUS feed
+# too, which is the point: settle doubt is selectivity, this is processing time.
+var pass_read_time_s: float
+
 # PACE: extra metres the on-puck PRESSURE defender drops its cut-off line back
 # toward its own net, beyond the one-stick-length baseline. Consumed in
 # pressure.gd. Must stay under a stick length — see normal().
@@ -163,6 +171,7 @@ func _init(p_carrier_reaction_delay_s: float,
 		p_shot_aim_error_rad: float, p_pass_aim_error_rad: float,
 		p_shot_timing_error_s: float,
 		p_settle_penalty_frac: float, p_settle_penalty_tau_s: float,
+		p_pass_read_time_s: float,
 		p_pursuit_standoff_m: float, p_pass_speed_scale: float,
 		p_check_aggression: float, p_defensive_anticipation_scale: float,
 		p_reads_goalie_motion: bool, p_holds_for_developing_feeds: bool,
@@ -176,6 +185,7 @@ func _init(p_carrier_reaction_delay_s: float,
 	shot_timing_error_s = p_shot_timing_error_s
 	settle_penalty_frac = p_settle_penalty_frac
 	settle_penalty_tau_s = p_settle_penalty_tau_s
+	pass_read_time_s = p_pass_read_time_s
 	pursuit_standoff_m = p_pursuit_standoff_m
 	pass_speed_scale = p_pass_speed_scale
 	check_aggression = p_check_aggression
@@ -193,11 +203,12 @@ func _init(p_carrier_reaction_delay_s: float,
 # error on both releases, and 0.10 s of release slop — so the doorstep lateral
 # beat is still hunted but a window in the ~0.05–0.10 s band is a coin flip the
 # goalie sometimes robs. No settle doubt, pace knobs at their no-op baseline,
-# every cognition gate open.
+# every cognition gate open. No pass read time: Hard moves the puck the tick it
+# sees the play.
 #
 # Tune carrier_reaction_delay_s UP if it matches passes too readily.
 static func hard() -> BotSkillProfile:
-	return BotSkillProfile.new(0.05, 2, 0.01, 0.01, 0.10, 0.0, 0.25,
+	return BotSkillProfile.new(0.05, 2, 0.01, 0.01, 0.10, 0.0, 0.25, 0.0,
 			0.0, 1.0, 1.0, 1.0,
 			true, true, true, true, true, true)
 
@@ -216,13 +227,16 @@ static func hard() -> BotSkillProfile:
 # (τ = 0.30 s, so ~1.25× by 0.3 s and gone by ~0.9 s). It is most of what stops
 # Normal reading as "Hard with extra lag" — it no longer finds EVERY pass on the
 # first touch, so pressuring a fresh carrier off a marginal outlet is a real play.
+# The 0.35 s pass read is what stops tape-to-tape-to-shot outrunning a human's
+# eyes: every link in a passing chain now costs a visible beat, while the shot at
+# the end of it does not.
 #
 # pursuit_standoff_m must stay well under a stick length: at 1.5 m the pressurer
 # sits permanently outside blade reach and can never poke, which playtests read
 # as "bots never challenge". At 0.75 the carrier's own motion brings the puck
 # transiently into contest range while the human still gets his beat.
 static func normal() -> BotSkillProfile:
-	return BotSkillProfile.new(0.22, 6, 0.04, 0.015, 0.16, 0.60, 0.30,
+	return BotSkillProfile.new(0.22, 6, 0.04, 0.015, 0.16, 0.60, 0.30, 0.35,
 			0.75, 0.85, 0.65, 0.6,
 			true, true, true, true, true, true)
 
@@ -243,7 +257,7 @@ static func normal() -> BotSkillProfile:
 # Cognition: all gates closed, so the cutback to the middle, the straight-line
 # poke-check, and the cross-crease 2-on-1 glory feed all genuinely work.
 static func easy() -> BotSkillProfile:
-	return BotSkillProfile.new(0.34, 9, 0.055, 0.0225, 0.24, 0.85, 0.55,
+	return BotSkillProfile.new(0.34, 9, 0.055, 0.0225, 0.24, 0.85, 0.55, 0.50,
 			3.0, 0.75, 0.0, 0.2,
 			false, false, false, false, false, false)
 

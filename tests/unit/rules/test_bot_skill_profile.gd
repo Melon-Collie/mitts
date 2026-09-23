@@ -77,6 +77,11 @@ func test_tiers_form_a_strictly_softening_ladder_on_every_axis() -> void:
 			"settle doubt is a raised bar, never the flat gate it replaced")
 	assert_lt(easy.settle_penalty_frac, 1.0,
 			"settle doubt is a raised bar, never the flat gate it replaced")
+	# Pace — pass read: a longer look before a fresh carrier may start a pass.
+	assert_gt(normal.pass_read_time_s, hard.pass_read_time_s,
+			"Normal takes longer than Hard to find a pass on a fresh puck")
+	assert_gt(easy.pass_read_time_s, normal.pass_read_time_s,
+			"Easy takes longer than Normal to find a pass on a fresh puck")
 	# Pace — pursuit standoff: bigger sags further off the carrier (more time).
 	assert_gt(normal.pursuit_standoff_m, hard.pursuit_standoff_m,
 			"Normal sags further off the carrier than Hard")

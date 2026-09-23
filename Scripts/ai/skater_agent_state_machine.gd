@@ -1280,10 +1280,11 @@ var _pursuit_standoff_m: float = 0.0
 var _pass_speed_scale: float = 1.0
 var _check_aggression: float = 1.0
 var _defensive_anticipation_scale: float = 1.0
-# Post-possession settle doubt forwarded to the carrier via RoleContext (see
-# BotSkillProfile.settle_penalty_frac). 0.0 = commit the tick the compete says so.
+# Post-possession settle doubt and pass read time, forwarded to the carrier via
+# RoleContext (see BotSkillProfile). 0.0 = commit the tick the compete says so.
 var _settle_penalty_frac: float = 0.0
 var _settle_penalty_tau_s: float = 0.25
+var _pass_read_time_s: float = 0.0
 # Difficulty COGNITION gates (from BotSkillProfile via apply_profile). True =
 # the perfect-bot default. _reads_goalie_motion gates the across-the-grain
 # velocity projection in _shot_aim_point (and rides RoleContext into the
@@ -1515,6 +1516,7 @@ func apply_profile(profile: BotSkillProfile) -> void:
 	_defensive_anticipation_scale = profile.defensive_anticipation_scale
 	_settle_penalty_frac = profile.settle_penalty_frac
 	_settle_penalty_tau_s = profile.settle_penalty_tau_s
+	_pass_read_time_s = profile.pass_read_time_s
 	# Same lever the global carrier debounce uses, applied HERE for the chase
 	# gate so puck reactivity has its own bounded clock (see _loose_elapsed_s).
 	_chase_reaction_delay_s = maxf(profile.carrier_reaction_delay_s, 0.0)
@@ -2231,6 +2233,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	ctx.defensive_anticipation_scale = _defensive_anticipation_scale
 	ctx.settle_penalty_frac = _settle_penalty_frac
 	ctx.settle_penalty_tau_s = _settle_penalty_tau_s
+	ctx.pass_read_time_s = _pass_read_time_s
 	ctx.reads_goalie_motion = _reads_goalie_motion
 	ctx.holds_for_developing_feeds = _holds_for_developing_feeds
 	ctx.reads_receiver_commitment = _reads_receiver_commitment

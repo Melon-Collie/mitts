@@ -183,6 +183,9 @@ var defensive_anticipation_scale: float = 1.0
 # once; a marginal one waits. 0.0 = the perfect-bot / Hard baseline.
 var settle_penalty_frac: float = 0.0
 var settle_penalty_tau_s: float = 0.25
+# Seconds a fresh carrier must hold before it may START a pass (see
+# BotSkillProfile.pass_read_time_s). Shots are exempt. 0.0 = the Hard baseline.
+var pass_read_time_s: float = 0.0
 # COGNITION gate: false = this bot models the goalie as always SET — the
 # unsettled re-square race is invisible to its pass / one-timer EV
 # (carrier._goalie_unsettled_at returns 0). The aim-side half of the same gate

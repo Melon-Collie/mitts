@@ -1502,6 +1502,12 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	# already spent above, as the raised bar each active option had to clear to
 	# reach this compete at all.
 	var staggered: bool = ctx.self_stagger_timer > 0.0
+	# A fresh carrier has not yet looked up to find the moving target a pass
+	# needs (the shot's net never moves). Holding blocks the dump too: a feed it
+	# has not read yet is no reason to fling the puck away instead.
+	var reading_pass: bool = fire_intent == INTENT_PASS \
+			and _settle_elapsed_s < ctx.pass_read_time_s
+	var holding_fire: bool = staggered or reading_pass
 
 	# Opportunity cost of firing NOW: the value of keeping the puck for a
 	# developing cross-seam one-timer a teammate is staging. Same EV currency as
@@ -1580,7 +1586,7 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	# that matters.
 	if ((fire_score >= carry_score and fire_score >= hold_value)
 			or (retention_hopeless and fire_score > -INF)) \
-			and not staggered:
+			and not holding_fire:
 		_hold_elapsed_s = 0.0
 		new_intent = fire_intent
 		if new_intent == INTENT_PASS:
@@ -1676,7 +1682,7 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 						(target_v / coef - min_v)
 							/ maxf(ctx.self_wrister_shot_speed - min_v, 0.001),
 						0.0, 1.0)
-	elif retention_hopeless and not staggered:
+	elif retention_hopeless and not holding_fire:
 		# Last resort, and the ONLY place the delivery search runs: keeping the puck
 		# is worth nothing and no qualified fire exists, so clear our zone or
 		# dump-and-chase. The search's whole job here is to pick WHICH delivery —

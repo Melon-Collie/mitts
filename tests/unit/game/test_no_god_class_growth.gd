@@ -47,7 +47,7 @@ const _SIZE_LIMIT: int = 800
 const _SIZE_SLACK: int = 40
 
 const _SIZE_ALLOWANCE: Dictionary[String, int] = {
-	"res://Scripts/ai/skater_agent_state_machine.gd": 6166,
+	"res://Scripts/ai/skater_agent_state_machine.gd": 6169,
 	"res://Scripts/game/game_manager.gd": 5654,
 	"res://Scripts/domain/ai/action_scoring.gd": 4476,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
@@ -58,7 +58,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# It is a one-tick finite difference feeding a positional decision, so a
 	# teleport read as travel moved the tracked threat metres in a tick.
 	"res://Scripts/controllers/goalie_controller.gd": 4550,
-	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3755,
+	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3761,
 	"res://Scripts/controllers/skater_controller.gd": 3391,
 	"res://Scripts/actors/skater.gd": 2502,
 	"res://Scripts/networking/network_manager.gd": 2824,

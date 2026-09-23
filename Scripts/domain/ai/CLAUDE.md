@@ -45,7 +45,7 @@ separate is what makes tiers tunable without a rebalance cascade:
 | axis | what it changes | knobs |
 |---|---|---|
 | **PRECISION** | how sharp the bot is | reaction delay, dispatch cadence, aim/timing error, settle doubt |
-| **PACE** | how much time and space a human gets | pursuit standoff, anticipation lead, check aggression |
+| **PACE** | how much time and space a human gets | pursuit standoff, anticipation lead, check aggression, pass read time |
 | **COGNITION** | which reads exist in its model at all | the bool gates |
 
 Precision only shows up on the bot's *finish*. Pace is what a human feels on
@@ -54,7 +54,7 @@ when a tier feels oppressive, precision when it finishes too well.
 
 The pace knobs further split by what a lower tier concedes: standoff and
 anticipation concede **space** (positioning); check aggression concedes
-**threat** (physicality).
+**threat** (physicality); pass read time concedes **time** (puck movement).
 
 Two things deliberately outside the table. **Aim slew is not a tier knob** — a
 bot slews its cursor at its real Hands blade speed (`AISkaterCaps.blade_speed`),
@@ -88,6 +88,15 @@ where the bot stands, so a handicap inside the fire-vs-carry compete can only be
 a uniform delay — it holds the doorstep tap-in exactly as hard as the hopeless
 point shot. That is the flat "may not commit for N seconds" gate this replaced,
 and it is what "obvious choices still fast" is a rule against.
+
+**The pass read is the one timer, and it is pass-only.** Settle doubt cannot
+slow an obvious feed by construction, so without this a chain of clear plays
+runs tape-to-tape faster than a human can follow the puck.
+`BotSkillProfile.pass_read_time_s` holds a fresh carrier's PASS (never a shot)
+until it has had time to locate a moving target; the net never moves, so the
+doorstep tap-in and the one-timer keep their speed. It holds rather than
+removes the pass: hiding the option would let a mediocre shot win the window
+instead. It blocks the dump for the same reason.
 
 ### The rule that keeps cognition gates honest
 

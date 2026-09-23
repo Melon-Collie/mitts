@@ -1214,6 +1214,62 @@ func test_zero_settle_doubt_is_the_hard_baseline() -> void:
 			"no settle doubt → the tick-one fire is unchanged")
 
 
+# ─── pass read: a fresh carrier's time to find a moving target ──────────────
+
+func test_pass_read_holds_even_an_obvious_outlet() -> void:
+	# Unlike settle doubt, the read holds the wide-open feed that clears any bar,
+	# then releases it once the carrier has had its look.
+	var self_pos := Vector3(3, 0, 20)
+	var ctx: RoleContext = _make_ctx(self_pos, _settle_skaters(self_pos, _STRONG_OUTLET))
+	ctx.pass_read_time_s = 0.35
+	var c := AIRoleCarrier.new()
+	c.decide(ctx)
+	assert_eq(c.intended_action, AIRoleCarrier.INTENT_CARRY,
+			"the open outlet waits for the carrier to look up")
+	assert_gt(c.debug_pass_score, AIRoleCarrier.PASS_MIN_VALUE,
+			"sanity: the feed is on — only the read is holding it")
+	for _i: int in range(40):   # 40 ticks ≈ 0.33 s, still reading
+		c.decide(ctx)
+	assert_eq(c.intended_action, AIRoleCarrier.INTENT_CARRY,
+			"still inside the read window")
+	for _i: int in range(12):   # past 0.35 s plus a re-eval cadence
+		c.decide(ctx)
+	assert_eq(c.intended_action, AIRoleCarrier.INTENT_PASS,
+			"the same outlet goes once the read is done")
+
+
+func test_pass_read_never_holds_a_shot() -> void:
+	# The net never moves, so the doorstep look fires on tick one — the read
+	# only slows the passing chain, never the finish.
+	var net := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
+	var self_pos := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z + 3.0)
+	var ctx := _make_ctx(self_pos)
+	ctx.snapshot.goalie_states[1 - TEAM_ID] = _squared_goalie(self_pos, net, 1.3)
+	ctx.pass_read_time_s = 0.5
+	var c := AIRoleCarrier.new()
+	c.decide(ctx)
+	assert_eq(c.intended_action, AIRoleCarrier.INTENT_SHOOT,
+			"an obvious shot fires on tick one through any pass read")
+
+
+func test_pass_read_rearms_on_reset() -> void:
+	var self_pos := Vector3(3, 0, 20)
+	var ctx: RoleContext = _make_ctx(self_pos, _settle_skaters(self_pos, _STRONG_OUTLET))
+	ctx.pass_read_time_s = 0.35
+	var c := AIRoleCarrier.new()
+	for _i: int in range(60):
+		c.decide(ctx)
+	assert_eq(c.intended_action, AIRoleCarrier.INTENT_PASS, "sanity: the read finished")
+	c.clear_intent()
+	c.decide(ctx)
+	assert_eq(c.intended_action, AIRoleCarrier.INTENT_PASS,
+			"a press bail back to CARRY is the same possession — no second read")
+	c.reset()
+	c.decide(ctx)
+	assert_eq(c.intended_action, AIRoleCarrier.INTENT_CARRY,
+			"a new possession starts a new read")
+
+
 # ─── reset() ──────────────────────────────────────────────────────────────
 
 func test_reset_clears_all_persistent_state() -> void:
