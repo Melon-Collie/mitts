@@ -109,7 +109,7 @@ var _state_buffer: Array[BufferedPuckState] = []
 # (host never got the release, or we lost every broadcast), fall back to
 # whatever the buffer says rather than predicting a shot the host never fired.
 var _release_seed_active: bool = false
-var _release_seed_stamp: float = 0.0      # estimated_host_time() at the release
+var _release_seed_stamp: float = 0.0      # _render_instant() at the release
 var _release_seed_pos: Vector3 = Vector3.ZERO
 var _release_seed_vel: Vector3 = Vector3.ZERO
 const _RELEASE_SEED_TIMEOUT_S: float = 0.5  # ~2× worst healthy RTT + broadcast interval
@@ -808,7 +808,8 @@ func notify_local_nudge(velocity: Vector3) -> void:
 # snapshot arriving after this stamp.
 func _seed_release_prediction(pos: Vector3, vel: Vector3) -> void:
 	_release_seed_active = true
-	_release_seed_stamp = NetworkManager.estimated_host_time()
+	# Our blade — and the tick the host fires on — sit a lead past host-present.
+	_release_seed_stamp = _render_instant()
 	_release_seed_pos = pos
 	_release_seed_vel = vel
 	_state_buffer.clear()
@@ -1086,16 +1087,7 @@ func _ice_friction_velocity(vel: Vector3, dt: float) -> Vector3:
 # Returns false when prediction isn't possible (no data / stale snapshot) —
 # caller falls back to the legacy interpolation path.
 func _predict_loose(delta: float) -> bool:
-	var now: float = NetworkManager.estimated_host_time()
-	# The predicted puck renders at host-present + the local input LEAD, the same
-	# instant this client's own body and blade occupy, so reaching for a loose
-	# puck is judged across one clock instead of a lead-wide skew. `now` stays
-	# host-present for the STALENESS and seed-timeout gates below — those measure
-	# how old the authoritative data is, which the render target must not shift.
-	# The host reproduces this instant exactly: LagCompRewind.puck_view_time adds
-	# the same bounded lead, and DeferredClaimQueue holds the claim until the
-	# buffer covers it, so it stays an ordinary past lookup there.
-	var lead: float = LagCompRewind.clamped_lead_s(NetworkManager.get_input_lead_ms())
+	var render_t: float = _render_instant()
 	if _release_seed_active:
 		var confirmed: BufferedPuckState = null
 		if not _state_buffer.is_empty():
@@ -1103,26 +1095,24 @@ func _predict_loose(delta: float) -> bool:
 			if newest.state.carrier_peer_id == -1 and newest.timestamp >= _release_seed_stamp:
 				confirmed = newest
 		if confirmed != null:
-			# Handover: the host's snapshots now carry this same flight. Measure
-			# the launch divergence — seed-predicted position at the snapshot's
-			# own instant vs the authoritative snapshot. Both sides fired from
-			# the same client-sent origin on the same solver, so this should be
-			# small (clock estimate error × puck speed); a spike is genuine
-			# launch divergence. Then fall through to snapshot prediction.
+			# Handover: the host's snapshots now carry this same flight. Both
+			# sides fire from the same blade pose on the same solver, so the
+			# seed-vs-snapshot gap at the snapshot's instant should be clock
+			# error × puck speed; a spike is genuine launch divergence.
 			_run_prediction(_release_seed_pos, _release_seed_vel,
 					maxf(confirmed.timestamp - _release_seed_stamp, 0.0))
 			NetworkTelemetry.record_shot_launch_divergence(
 					(_sim_pos - confirmed.state.position).length(),
 					(_sim_vel - confirmed.state.velocity).length())
 			_release_seed_active = false
-		elif now - _release_seed_stamp > _RELEASE_SEED_TIMEOUT_S:
+		elif render_t - _release_seed_stamp > _RELEASE_SEED_TIMEOUT_S:
 			# No confirming snapshot inside the window (deep loss, or the host
 			# never processed the release) — stop trusting the seed and let the
 			# buffer (or the interpolation fallback) drive.
 			_release_seed_active = false
 		else:
 			_run_prediction(_release_seed_pos, _release_seed_vel,
-					maxf(now - _release_seed_stamp, 0.0) + lead)
+					maxf(render_t - _release_seed_stamp, 0.0))
 			is_extrapolating = false
 			if NetworkTelemetry.instance:
 				NetworkTelemetry.instance.puck_mode = "predicted_hold" if _sim_stopped else "predicted_seed"
@@ -1132,18 +1122,28 @@ func _predict_loose(delta: float) -> bool:
 	if _state_buffer.is_empty():
 		return false
 	var source: BufferedPuckState = _state_buffer.back()
-	var age: float = now - source.timestamp
+	# Staleness is measured against host-present, not the render instant.
+	var age: float = NetworkManager.estimated_host_time() - source.timestamp
 	if age < 0.0 or age > Constants.PUCK_PREDICT_MAX_S:
 		if age > Constants.PUCK_PREDICT_MAX_S:
 			NetworkTelemetry.record_puck_predict_fallback()
 		return false
-	_run_prediction(source.state.position, source.state.velocity, age + lead)
+	_run_prediction(source.state.position, source.state.velocity, render_t - source.timestamp)
 	is_extrapolating = false  # prediction is the mode, not a buffer underrun
 	if NetworkTelemetry.instance:
 		NetworkTelemetry.instance.puck_mode = "predicted_hold" if _sim_stopped else "predicted"
 	_record_predict_residual(_sim_pos)
 	_smooth_apply_and_prune(_sim_pos, _sim_vel, delta, NetworkManager.get_interpolation_delay())
 	return true
+
+
+# Host-present + the local input LEAD: the instant this client's own body and
+# blade occupy, so a loose puck is reached for across one clock. The host
+# reproduces it via LagCompRewind.puck_view_time (same bounded lead), and
+# DeferredClaimQueue holds the claim until the buffer covers it.
+func _render_instant() -> float:
+	return NetworkManager.estimated_host_time() \
+			+ LagCompRewind.clamped_lead_s(NetworkManager.get_input_lead_ms())
 
 
 # Goalies whose end the predicted span can actually reach — the client-side twin
