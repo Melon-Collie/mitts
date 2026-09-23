@@ -711,7 +711,7 @@ static func planned_goalie_depth(
 	# Same model the live keeper solves — ceiling gated on the play being in-zone,
 	# floored, and bounded by the physical standoff. The caps the planner cannot
 	# see (the lateral tracking cap, the backdoor re-square race, room to see
-	# around a screen) only ever pull him DEEPER, and the retreat-only `minf` below already means this never
+	# around a screen, a net-front tip) only ever pull him DEEPER, and the retreat-only `minf` below already means this never
 	# challenges him out, so omitting them stays on the conservative side.
 	var c := _depth_cfg_planning
 	c.ceiling_radius = _planning_ceiling if dist <= GOALIE_ZONE_DEPTH_M \

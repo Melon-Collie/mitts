@@ -185,6 +185,8 @@ var screen_peek_max_offset: float = 0.35     # m
 var head_peek_max_offset: float = 0.15       # m
 # Off only for counterfactual measurement (test_goalie_screen_room.gd).
 var screen_room: bool = true
+# Off only for counterfactual measurement (test_goalie_tip_threat.gd).
+var tip_room: bool = true
 
 # ── Caught moving ─────────────────────────────────────────────────────────────
 # Being unset costs three things, and only the third is perceptual: momentum he
@@ -1029,8 +1031,6 @@ var _eye_peek_target_x: float = 0.0
 # screen standing dead on his sightline.
 var _peek_side: float = 0.0
 const _HEAD_PEEK_RATE_M_S: float = 1.2
-# Resolution of the screen-room search — finer than a depth step he could see.
-const _SCREEN_CAP_STEP_M: float = 0.05
 
 # Beaten-wide latch. `_armed` means the onset fired and the puck has stayed
 # around him since (the confirmation window is running or has elapsed);
@@ -2934,6 +2934,7 @@ func _update_depth(delta: float) -> void:
 	# side, don't challenge farther out than the cross-crease re-square race
 	# allows. INF when no threat binds.
 	c.backdoor_cap = _backdoor_depth_cap()
+	c.tip_cap = _tip_depth_cap()
 	c.screen_cap = INF
 	c.screen_cap = _screen_sight_cap(GoalieDepthSolver.solve_caps(c))
 	_fill_rush_constraint(c)
@@ -2957,7 +2958,7 @@ func _screen_sight_cap(r_hi: float) -> float:
 			Vector3(_goal_center_x, goalie.global_position.y, _goal_line_z),
 			_tracked_threat_position, puck.global_position, _view.screeners,
 			_screen_cfg, head_peek_max_offset + screen_peek_max_offset,
-			r_hi, depth_defensive, _SCREEN_CAP_STEP_M)
+			r_hi, depth_defensive)
 
 
 # Has the play actually entered the zone? Depth is solved from the races, but the
@@ -3057,6 +3058,25 @@ func _backdoor_depth_cap() -> float:
 				puck.global_position, _tracked_threat_position,
 				pos, _goal_line_z, _goal_center_x,
 				_direction_sign, _defender_arrival_time(pos), _backdoor_cfg))
+	return cap
+
+
+# Tightest tip cap across the opposing sticks at the net front, or INF. A tip he
+# cannot react to is one whose flight to him beats his leg read at the hardest
+# shot pace; the redirect keeps that pace (a glance keeps its speed).
+func _tip_depth_cap() -> float:
+	var carrier: Skater = puck.get_carrier()
+	if not tip_room or carrier == null \
+			or (team_id != -1 and carrier.get_team_id() == team_id):
+		return INF
+	_ensure_view()
+	var shot_pace: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
+	var cap: float = INF
+	for pos in _view.off_puck_opponents:
+		cap = minf(cap, GoalieTipDepth.tip_cap(_tracked_threat_position, pos,
+				_goal_line_z, _goal_center_x, _direction_sign,
+				GoalieAnatomy.butterfly_pad_edge_half_width(),
+				reaction_delay * shot_pace, shot_pace, _defender_arrival_time(pos)))
 	return cap
 
 

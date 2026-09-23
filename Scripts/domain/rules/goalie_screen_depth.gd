@@ -17,17 +17,21 @@ class_name GoalieScreenDepth
 #
 # So the constraint is a MAXIMUM radius: the furthest out, along his challenge
 # ray, from which the peek still clears every body hiding the release. INF when
-# he can already see from `r_hi`, and INF when he cannot see from anywhere down
-# to `r_lo` either — then retreating buys nothing, and a release he never saw is
-# the blocking drop's to answer.
+# he can already see from `r_hi`, and INF when backing off would not let him see
+# either — then a release he never saw is the blocking drop's to answer.
 #
-# Pure/static, no allocation. The search is a scalar march, run only when the
-# release is hidden from `r_hi`.
+# Only one radius per hiding body is worth asking about: the one that puts it
+# just outside the peek's reach of his eyes (`min_along`). Short of that it
+# fills the view; past it, every further step back only lengthens the lever the
+# peek has to turn, so a body he cannot see around from there he cannot see
+# around from deeper either.
+#
+# Pure/static, no allocation.
 
 static func sight_cap(goal_center: Vector3, threat: Vector3, puck: Vector3,
 		screeners: PackedVector3Array, cfg: GoalieBehaviorRules.ScreenConfig,
-		max_peek: float, r_hi: float, r_lo: float, step: float) -> float:
-	if screeners.is_empty() or step <= 0.0:
+		max_peek: float, r_hi: float, r_lo: float) -> float:
+	if screeners.is_empty():
 		return INF
 	var ux: float = threat.x - goal_center.x
 	var uz: float = threat.z - goal_center.z
@@ -38,12 +42,15 @@ static func sight_cap(goal_center: Vector3, threat: Vector3, puck: Vector3,
 	uz /= u_len
 	if _sees_from(goal_center, ux, uz, r_hi, puck, screeners, cfg, max_peek):
 		return INF
-	var r: float = r_hi - step
-	while r >= r_lo:
+	var best: float = INF
+	for body in screeners:
+		var along: float = (body.x - goal_center.x) * ux + (body.z - goal_center.z) * uz
+		var r: float = along - cfg.min_along - cfg.peek_clearance
+		if r >= r_hi or r < r_lo or (not is_inf(best) and r <= best):
+			continue
 		if _sees_from(goal_center, ux, uz, r, puck, screeners, cfg, max_peek):
-			return r
-		r -= step
-	return INF
+			best = r
+	return best
 
 
 # Can he see the release from radius `r` on the ray, peeking as far as he may?

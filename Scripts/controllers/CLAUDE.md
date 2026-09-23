@@ -21,6 +21,7 @@ execute; they never reach up. Goalie *math* is pure and lives in
 | `domain/rules/goalie_save_selection.gd` | block-or-react, as one question |
 | `domain/rules/goalie_pass_read.gd` | where a pass in flight will be shot from |
 | `domain/rules/goalie_screen_depth.gd` | room to see around a screen |
+| `domain/rules/goalie_tip_depth.gd` | challenge depth against a net-front stick |
 | `domain/rules/goalie_save_rules.gd` | rebound doctrine |
 | `domain/rules/goalie_depth_solver.gd` | depth constraint composition |
 | `domain/rules/goalie_stick_rules.gd` | stick geometry and coverage |
@@ -299,6 +300,16 @@ the room that takes, and nothing for a screen he could not see around from
 anywhere (that release is the blocking drop's). The peek holds the side it chose
 on a dead-on screen (`_peek_side`); left to the sign of a perpendicular near
 zero it flipped every tick. `test_goalie_screen_room.gd` holds both.
+
+**A tip is covered by where he stands, never by a reaction or a pre-commit.**
+Its flight from a net-front blade is shorter than his read, and he is frozen
+on the shot until it is touched, so there is no race to run. `GoalieTipDepth`
+holds him on the tip's line (`r · sin θ <= butterfly half-width`) for a stick
+he could not react to. From the point this costs nothing: the direct shot is
+a reaction save at any depth, so A's extra angle only sold the redirect. A
+stick on the shooter's line needs nothing, since challenging covers it. A
+BLOCK on tip risk is the pre-commit trap above and stays out.
+`test_goalie_tip_threat.gd` holds it.
 
 ## Behind-net puck play — the doctrine
 

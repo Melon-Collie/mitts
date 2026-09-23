@@ -47,6 +47,9 @@ class Constraints:
 	# Room to see around a screen (GoalieScreenDepth.sight_cap). INF unless a body
 	# on top of him hides the release and stepping in would let him see it.
 	var screen_cap: float = INF
+	# A net-front stick he could not react to a tip from (GoalieTipDepth). INF
+	# when none binds.
+	var tip_cap: float = INF
 	# Rush-backflow curve anchor for a closing carrier. INF when not engaged.
 	var rush_radius: float = INF
 	# Retreat rate (m/s) that keeps him ON the backflow curve at the attacker's
@@ -94,6 +97,8 @@ static func solve_caps(c: Constraints) -> float:
 		target = maxf(c.backdoor_cap, c.floor_radius)
 	if c.screen_cap < target:
 		target = maxf(c.screen_cap, c.floor_radius)
+	if c.tip_cap < target:
+		target = maxf(c.tip_cap, c.floor_radius)
 	return target
 
 

@@ -16,7 +16,7 @@ func _cfg() -> GoalieBehaviorRules.ScreenConfig:
 
 func _cap(screener: Vector3, r_hi: float = 1.75) -> float:
 	return GoalieScreenDepth.sight_cap(GOAL, SHOOTER, SHOOTER,
-			PackedVector3Array([screener, SHOOTER]), _cfg(), MAX_PEEK, r_hi, 0.1, 0.05)
+			PackedVector3Array([screener, SHOOTER]), _cfg(), MAX_PEEK, r_hi, 0.1)
 
 
 func test_a_screener_on_top_of_him_backs_him_off_until_he_can_see_around() -> void:
@@ -45,4 +45,4 @@ func test_a_screen_he_cannot_see_around_from_anywhere_is_not_a_retreat() -> void
 
 func test_no_screeners_no_cap() -> void:
 	assert_true(is_inf(GoalieScreenDepth.sight_cap(GOAL, SHOOTER, SHOOTER,
-			PackedVector3Array(), _cfg(), MAX_PEEK, 1.75, 0.1, 0.05)))
+			PackedVector3Array(), _cfg(), MAX_PEEK, 1.75, 0.1)))
