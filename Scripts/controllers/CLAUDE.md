@@ -19,6 +19,7 @@ execute; they never reach up. Goalie *math* is pure and lives in
 | `goalie_world_view.gd` | the perception surface |
 | `domain/rules/goalie_behavior_rules.gd` | reads, depth, races (pure) |
 | `domain/rules/goalie_save_selection.gd` | block-or-react, as one question |
+| `domain/rules/goalie_pass_read.gd` | where a pass in flight will be shot from |
 | `domain/rules/goalie_save_rules.gd` | rebound doctrine |
 | `domain/rules/goalie_depth_solver.gd` | depth constraint composition |
 | `domain/rules/goalie_stick_rules.gd` | stick geometry and coverage |
@@ -228,7 +229,7 @@ a SHOT can beat him, and a walkaround is not a shot yet.
 
 ### The committed slide is a retreat, and its budget is depth
 
-`_post_edge_seal_x` puts the body at `net_half_width − pad_edge · cos(slide
+`_post_edge_reach` puts the body at `net_half_width − pad_edge · cos(slide
 rotation)` = **0.154 m** off centre, because a butterfly pad lies 0.84 m along
 the ice and the seal is the pad's outer EDGE on the post, not the body on it.
 So a slide's lateral leg is centimetres by construction; measured over a full
