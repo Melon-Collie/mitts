@@ -54,6 +54,8 @@ var host_timestamp: float = 0.0  # host-only, not serialized
 # remote pose) never hand-roll the enum split.
 func is_down() -> bool:
 	return state_enum == GoalieStateMachine.State.BUTTERFLY as int \
+			or state_enum == GoalieStateMachine.State.HALF_BUTTERFLY_LEFT as int \
+			or state_enum == GoalieStateMachine.State.HALF_BUTTERFLY_RIGHT as int \
 			or state_enum == GoalieStateMachine.State.SLIDING as int \
 			or state_enum == GoalieStateMachine.State.RVH_LEFT as int \
 			or state_enum == GoalieStateMachine.State.RVH_RIGHT as int \

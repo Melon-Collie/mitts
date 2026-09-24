@@ -100,6 +100,8 @@ var arm_reaction_delay: float = GameRules.DEFAULT_GOALIE_ARM_REACTION_DELAY_S
 var drop_max_time_to_impact: float = 0.45
 # Off only for counterfactual measurement (test_goalie_standup_save.gd).
 var stand_up_low_saves: bool = true
+# Off only for counterfactual measurement (test_goalie_half_butterfly.gd).
+var half_butterfly_saves: bool = true
 
 # ── Pre-armed read (quiet-eye anticipation) ──────────────────────────────────
 # Reading a visible windup from a slot shooter (_is_reading_shot_threat) for
@@ -1033,6 +1035,10 @@ var _peek_side: float = 0.0
 # Went down to BLOCK rather than to react (`_enter_butterfly`). Moves the hands
 # and chest only; the hands are colliders, so it is coverage as well as look.
 var _blocking_seal: bool = false
+# The rise the current RECOVERING owes: the whole `recovery_duration` from the
+# butterfly, HALF_BUTTERFLY_RISE_SHARE of it from the half.
+var _recovery_needed: float = 0.0
+const HALF_BUTTERFLY_RISE_SHARE: float = 0.5
 const _HEAD_PEEK_RATE_M_S: float = 1.2
 
 # Beaten-wide latch. `_armed` means the onset fired and the puck has stayed
@@ -1718,7 +1724,13 @@ func _update_shot_timer(delta: float) -> void:
 	# drop fires on whichever tick the puck first becomes imminent.
 	var ttg: float = _puck_time_to_goal_line()
 	if ttg >= 0.0 and ttg <= drop_max_time_to_impact and not _standing_pads_meet_it(ttg):
-		_enter_butterfly()
+		var half: float = _half_butterfly_side(ttg)
+		if half != 0.0:
+			_blocking_seal = false
+			_sm.transition_to(State.HALF_BUTTERFLY_RIGHT if half > 0.0
+					else State.HALF_BUTTERFLY_LEFT)
+		else:
+			_enter_butterfly()
 
 # A low shot he has READ ONTO A PAD FACE is a stand-up save. Standing, the pads
 # are a column from the ice to the pad-top seam; rolled flat they are 0.28 m tall
@@ -1731,18 +1743,60 @@ func _update_shot_timer(delta: float) -> void:
 # not know it is on his pad, and hedging wide is the butterfly's job — so a stale
 # wind-up read still drops him, and a late aim change still pays.
 func _standing_pads_meet_it(ttg: float) -> bool:
-	if not stand_up_low_saves or _read_blend < 1.0:
+	if not stand_up_low_saves:
 		return false
-	# The believed line, crossing his own plane, against where his drift puts him.
+	var rel: float = _converged_rel_x_at_pads(ttg)
+	return not is_nan(rel) and GoalieAnatomy.standing_pad_takes(
+			rel, _reaction.impact_y, GameRules.PUCK_COLLISION_RADIUS)
+
+
+# World-x offset of the believed line from his body where it crosses his own
+# plane, against where his drift puts him by then. NAN until the read has
+# converged — before that he does not know where it crosses.
+func _converged_rel_x_at_pads(ttg: float) -> float:
+	if _read_blend < 1.0:
+		return NAN
 	var p: Vector3 = puck.global_position
 	var run: float = _goal_line_z - p.z
 	if absf(run) < 0.001:
-		return false
+		return NAN
 	var f: float = clampf((goalie.global_position.z - p.z) / run, 0.0, 1.0)
 	var x_at_pads: float = p.x + (_reaction.impact_x - p.x) * f
-	var body_x: float = _current_x + _reaction_drift_vx * ttg
-	return GoalieAnatomy.standing_pad_takes(x_at_pads - body_x, _reaction.impact_y,
-			GameRules.PUCK_COLLISION_RADIUS)
+	return x_at_pads - (_current_x + _reaction_drift_vx * ttg)
+
+
+# The HALF-BUTTERFLY: a converged low read wide of one standing pad but inside a
+# flat pad's reach is answered by that pad alone. The other leg stays loaded on
+# its skate, which is what buys the mobility — a push without the coil and half
+# the rise. Its cost is the other side: that leg covers only its standing pad,
+# so a late change of side beats it (a stale read never gets here), and a live
+# opponent on that side means the rebound needs both pads down.
+#
+# Returns the goalie-local side of the pad to drop (±1), or 0 for a full drop.
+func _half_butterfly_side(ttg: float) -> float:
+	if not half_butterfly_saves:
+		return 0.0
+	var rel: float = _converged_rel_x_at_pads(ttg)
+	if is_nan(rel):
+		return 0.0
+	var r: float = GameRules.PUCK_COLLISION_RADIUS
+	var standing_edge: float = GoalieBehaviorRules.STANDING_PAD_CENTER_X_M \
+			+ GoalieAnatomy.PAD_BOX_WIDTH_M * 0.5
+	if absf(rel) <= standing_edge - r \
+			or absf(rel) > GoalieAnatomy.butterfly_pad_edge_half_width() - r \
+			or _reaction.impact_y + r > GoalieAnatomy.pad_span(true).y:
+		return 0.0
+	_ensure_view()
+	for opp: Vector3 in _view.off_puck_opponents:
+		if (opp.z - _goal_line_z) * _direction_sign <= 0.0:
+			continue
+		if GoalieBehaviorRules.threat_distance_to_goal(opp, _goal_line_z, _goal_center_x) \
+				> backdoor_max_shooter_distance:
+			continue
+		if signf(opp.x - _current_x) == -signf(rel):
+			return 0.0
+	# World x to goalie-local x (the -Z goalie is turned PI).
+	return signf(rel * -_direction_sign)
 
 
 # Seconds until the puck crosses this goalie's goal line on its current heading,
@@ -1894,9 +1948,25 @@ func _update_state(delta: float) -> void:
 				# Also clear the reaction freeze for any client that missed
 				# the state-change RPC.
 				_reaction.finish()
+		State.HALF_BUTTERFLY_LEFT, State.HALF_BUTTERFLY_RIGHT:
+			_slide.tick_butterfly(delta)
+			if _maybe_arrest_drop():
+				return
+			# Both routes into the full butterfly go through the same verdicts that
+			# would have put him there from his feet: beaten to the post, or a
+			# scramble no reaction can answer.
+			if _beaten_wide_committed:
+				_enter_butterfly()
+				_seal_beaten_wide_post()
+			elif not _reaction.reacting and _should_block():
+				_enter_butterfly(true)
+			elif _slide.can_recover() and not _is_threat_pressing():
+				_sm.transition_to(State.RECOVERING)
+				_sm.recovery_timer = 0.0
+				_reaction.finish()
 		State.RECOVERING:
 			_sm.recovery_timer += delta
-			if _sm.recovery_timer >= recovery_duration:
+			if _sm.recovery_timer >= _recovery_needed:
 				_sm.transition_to(State.READY if _is_ready_situation() else State.STANDING)
 				_sm.recovery_timer = 0.0
 		State.RVH_LEFT:
@@ -2785,7 +2855,7 @@ func _enter_butterfly(blocking: bool = false) -> void:
 # depth in BUTTERFLY/RVH) and the wrong unit on entry teleports the goalie.
 func _on_sm_transitioned(prev: State, new_state: State) -> void:
 	match new_state:
-		State.BUTTERFLY:
+		State.BUTTERFLY, State.HALF_BUTTERFLY_LEFT, State.HALF_BUTTERFLY_RIGHT:
 			# Fresh butterfly entry resets timers + snaps depth. Returning
 			# inside the same slide cycle (COILING/SLIDING → BUTTERFLY)
 			# preserves accumulated hold time, drop progress, and the depth
@@ -2798,6 +2868,10 @@ func _on_sm_transitioned(prev: State, new_state: State) -> void:
 			_slide.velocity_x = 0.0
 		State.RECOVERING:
 			_slide.velocity_x = 0.0
+			# One leg to bring back under him instead of two.
+			_recovery_needed = recovery_duration * (HALF_BUTTERFLY_RISE_SHARE
+					if prev == State.HALF_BUTTERFLY_LEFT or prev == State.HALF_BUTTERFLY_RIGHT
+					else 1.0)
 			# Directional recovery: a real recovery loads the
 			# far-side leg and RISES MOVING toward the puck — the stand-up and the
 			# push to the new position are one motion, not stand-then-move (USA
@@ -2835,7 +2909,7 @@ func _on_sm_transitioned(prev: State, new_state: State) -> void:
 # unsealed drop qualifies — a committed slide is a different commitment and is
 # deliberately not abortable.
 func _maybe_arrest_drop() -> bool:
-	if _sm.current != State.BUTTERFLY:
+	if _sm.current != State.BUTTERFLY and not _sm.is_half_butterfly():
 		return false
 	if not _reaction.reacting or not _reaction.is_elevated:
 		return false
@@ -2903,7 +2977,7 @@ func _update_depth(delta: float) -> void:
 		# RVH and VH share the on-the-post depth.
 		_current_depth = lerpf(_current_depth, rvh_depth, depth_speed * delta)
 		return
-	if _sm.current == State.BUTTERFLY:
+	if _sm.current == State.BUTTERFLY or _sm.is_half_butterfly():
 		# Idle butterfly: commit at the depth set on entry, hold it.
 		return
 	if _sm.current == State.COVERING:
@@ -3170,6 +3244,21 @@ func _update_position(delta: float) -> void:
 						_tracked_threat_position, _goal_line_z, _goal_center_x,
 						_direction_sign, butterfly_radius, _arc_cfg)
 				_current_x = move_toward(_current_x, knee_target.x, knee_shuffle_speed * delta)
+			new_z = _goal_line_z + _direction_sign * _current_depth
+		State.HALF_BUTTERFLY_LEFT, State.HALF_BUTTERFLY_RIGHT:
+			_update_butterfly_five_hole(delta)
+			_try_commit_slide(delta)
+			# The loaded leg is the half-butterfly's whole point: where the full
+			# butterfly can only knee-shuffle, he pushes off the planted skate at
+			# shuffle pace toward the angle.
+			if _sm.is_half_butterfly():
+				if _reaction.reacting:
+					_current_x = _reaction_drift_x(delta, _current_x)
+				elif _slide.drop_progress >= 1.0:
+					var half_target: Vector2 = GoalieBehaviorRules.target_arc_position(
+							_tracked_threat_position, _goal_line_z, _goal_center_x,
+							_direction_sign, butterfly_radius, _arc_cfg)
+					_current_x = move_toward(_current_x, half_target.x, shuffle_speed * delta)
 			new_z = _goal_line_z + _direction_sign * _current_depth
 		State.COILING:
 			# Body rotates around the planted (pivot) foot, sweeping from
@@ -3515,7 +3604,11 @@ func _commit_slide_to(seal_target: float) -> void:
 	var side: float = signf(seal_target - _current_x)
 	if side == 0.0:
 		return
-	var seal_end: Vector2 = _coil_end_xz(side, slide_rot)
+	# From the half-butterfly the push leg is already loaded: no coil to rotate
+	# around it, the push starts from where he is.
+	var loaded: bool = _sm.is_half_butterfly()
+	var seal_end: Vector2 = Vector2(_current_x, _current_depth) if loaded \
+			else _coil_end_xz(side, slide_rot)
 	# No-ops when he is already sitting in that seal — the 2D test lives in the
 	# collaborator, which owns both endpoints (see commit_slide).
 	if not _slide.commit_slide(_current_x, _current_depth, seal_target,
@@ -3527,7 +3620,11 @@ func _commit_slide_to(seal_target: float) -> void:
 	# Drop any caught-moving drift so it can't resume if the slide finishes while
 	# the goalie is still frozen on the same read.
 	_reaction_drift_vx = 0.0
-	_sm.transition_to(State.COILING)
+	if loaded:
+		_slide.push_off_now()
+		_sm.transition_to(State.SLIDING)
+	else:
+		_sm.transition_to(State.COILING)
 
 
 # Where the body ends up after the coil phase: it rotates around the PIVOT
@@ -3614,8 +3711,8 @@ func _update_facing(delta: float) -> void:
 		return
 	if _reaction.shot_timer > 0.0:
 		return
-	if _sm.current == State.BUTTERFLY or _sm.current == State.COVERING \
-			or _sm.is_catching():
+	if _sm.current == State.BUTTERFLY or _sm.is_half_butterfly() \
+			or _sm.current == State.COVERING or _sm.is_catching():
 		# Idle butterfly / smother / catch squeeze: hold whatever angle the drop
 		# or slide came in at. No animation — real goalies don't rotate the body once down,
 		# and the slow lerp toward centre we used to do quietly undid the
@@ -3648,9 +3745,14 @@ func _update_facing(delta: float) -> void:
 	if _sm.current == State.SLIDING:
 		# Slide phase: hold the end angle the coil set. No further rotation —
 		# the body is committed and translating.
+		# A slide pushed from the half-butterfly skipped the coil, so it turns
+		# into the angle here at the coil's own rate; after a coil it is there.
 		var base_angle: float = PI if _direction_sign == 1 else 0.0
 		var deviation: float = _direction_sign * _slide.dir * deg_to_rad(slide_max_rotation_deg)
-		goalie.set_goalie_rotation_y(base_angle + deviation)
+		var turn: float = deg_to_rad(slide_max_rotation_deg) / maxf(slide_coil_duration, 0.001) * delta
+		var cur: float = goalie.get_goalie_rotation_y()
+		goalie.set_goalie_rotation_y(cur + clampf(
+				angle_difference(cur, base_angle + deviation), -turn, turn))
 		return
 	var dx: float = _tracked_threat_position.x - goalie.global_position.x
 	var dz: float = _tracked_threat_position.z - goalie.global_position.z
@@ -4393,6 +4495,8 @@ func _eye_position() -> Vector3:
 # down to find a puck in a crowd. The silhouette model turns that into shorter
 # screen delays for a down goalie without any rule saying so.
 func _sight_height() -> float:
+	if _sm.is_half_butterfly():
+		return GoalieBodyConfigBuilder.HALF_HEAD_Y_M
 	return GoalieAnatomy.HEAD_CENTER_Y_BUTTERFLY_M if _sm.is_down() \
 			else GoalieAnatomy.HEAD_CENTER_Y_STANDING_M
 

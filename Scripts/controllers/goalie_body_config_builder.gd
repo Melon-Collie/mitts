@@ -127,6 +127,15 @@ var sweep_windup_max_yaw_deg: float = 25.0
 # Blocking hands sit in against the pads rather than out in front of them.
 const BLOCK_HAND_Z_M: float = -0.12
 
+# The half-butterfly body: one knee on the ice, the other leg in the ready
+# crouch, so the hips sit between the two stances' — the butterfly trunk raised
+# by half the drop from the ready stance — and lean over the down knee. The head
+# rides the trunk at the butterfly's own neck offset.
+const HALF_BODY_Y_M: float = (0.40 + 1.06) * 0.5
+const HALF_HEAD_Y_M: float = HALF_BODY_Y_M + (0.97 - 0.40)
+const HALF_BODY_SHIFT_M: float = 0.06
+const HALF_BODY_ROLL_DEG: float = 6.0
+
 # Per-tick input bundle. Controller scratches one instance and overwrites all
 # fields before each `build()` call.
 class Inputs:
@@ -260,6 +269,14 @@ func build(inputs: Inputs) -> GoalieBodyConfig:
 			_apply_lunge(c, inputs)
 			_apply_sweep_anim(c, inputs)
 			_apply_elevated_shot_reaction(c, inputs)
+		GoalieStateMachine.State.HALF_BUTTERFLY_LEFT:
+			_set_half_butterfly_pose(c, inputs, -1.0)
+			_apply_blade_intent_for_down_state(c, inputs)
+			_apply_elevated_shot_reaction(c, inputs)
+		GoalieStateMachine.State.HALF_BUTTERFLY_RIGHT:
+			_set_half_butterfly_pose(c, inputs, 1.0)
+			_apply_blade_intent_for_down_state(c, inputs)
+			_apply_elevated_shot_reaction(c, inputs)
 		GoalieStateMachine.State.SLIDING:
 			_set_sliding_pose(c, inputs)
 			_apply_blade_intent_for_down_state(c, inputs)
@@ -319,6 +336,8 @@ static func resting_body_position_for_state(state: int) -> Vector3:
 		GoalieStateMachine.State.PLAYING_PUCK:                    return Vector3(0.0,  1.06, -0.05)
 		GoalieStateMachine.State.CATCHING:                        return Vector3(0.0,  1.06, -0.05)
 		GoalieStateMachine.State.CATCHING_DOWN:                   return Vector3(0.0,  0.40,  0.0)
+		GoalieStateMachine.State.HALF_BUTTERFLY_LEFT:             return Vector3(-HALF_BODY_SHIFT_M, HALF_BODY_Y_M, -0.02)
+		GoalieStateMachine.State.HALF_BUTTERFLY_RIGHT:            return Vector3( HALF_BODY_SHIFT_M, HALF_BODY_Y_M, -0.02)
 	return Vector3(0.0, 1.22, 0.0)
 
 static func resting_head_position_for_state(state: int) -> Vector3:
@@ -337,6 +356,8 @@ static func resting_head_position_for_state(state: int) -> Vector3:
 		GoalieStateMachine.State.PLAYING_PUCK:                    return Vector3(0.0,  1.62, -0.22)
 		GoalieStateMachine.State.CATCHING:                        return Vector3(0.0,  1.62, -0.22)
 		GoalieStateMachine.State.CATCHING_DOWN:                   return Vector3(0.0,  0.97, -0.06)
+		GoalieStateMachine.State.HALF_BUTTERFLY_LEFT:             return Vector3(-HALF_BODY_SHIFT_M, HALF_HEAD_Y_M, -0.12)
+		GoalieStateMachine.State.HALF_BUTTERFLY_RIGHT:            return Vector3( HALF_BODY_SHIFT_M, HALF_HEAD_Y_M, -0.12)
 	return Vector3(0.0, 1.79, -0.04)
 
 
@@ -442,6 +463,38 @@ func _tuck_into_block(c: GoalieBodyConfig) -> void:
 	c.body_rot = Vector3.ZERO
 	c.glove_pos = Vector3(-hand_x, hand_y, BLOCK_HAND_Z_M)
 	c.blocker_pos = Vector3(hand_x, hand_y, BLOCK_HAND_Z_M)
+
+# Half-butterfly: the `down_side` pad (goalie-local ±1) lies flat exactly as in
+# the butterfly, the other leg keeps the ready stance's pad, and the trunk sits
+# between the two, leaning over the down knee. Hands ready, at the lowered
+# trunk's height.
+func _set_half_butterfly_pose(c: GoalieBodyConfig, inputs: Inputs, down_side: float) -> void:
+	var toe: float = _resolved_toe_out(inputs.right_pad_toe_out if down_side > 0.0
+			else inputs.left_pad_toe_out)
+	var flat_pos := Vector3(down_side * (0.42 + inputs.five_hole_openness), 0.14, -0.20)
+	var flat_rot := Vector3(0.0, -down_side * toe, down_side * 90.0)
+	var up_pos := Vector3(-down_side * (0.26 + inputs.five_hole_openness), 0.44, -0.16)
+	var up_rot := Vector3(0.0, down_side * pad_toe_out_standing, -down_side * 10.0)
+	if down_side > 0.0:
+		c.right_pad_pos = flat_pos
+		c.right_pad_rot = flat_rot
+		c.left_pad_pos = up_pos
+		c.left_pad_rot = up_rot
+	else:
+		c.left_pad_pos = flat_pos
+		c.left_pad_rot = flat_rot
+		c.right_pad_pos = up_pos
+		c.right_pad_rot = up_rot
+	c.body_pos = Vector3(down_side * HALF_BODY_SHIFT_M, HALF_BODY_Y_M, -0.02)
+	c.body_rot = Vector3(-12.0, 0.0, down_side * HALF_BODY_ROLL_DEG)
+	c.head_pos = Vector3(down_side * HALF_BODY_SHIFT_M, HALF_HEAD_Y_M, -0.12)
+	c.head_rot = Vector3.ZERO
+	var hand_y: float = HALF_BODY_Y_M - 0.40 + 0.46
+	c.blocker_pos = Vector3(0.46, hand_y, -0.24)
+	c.blocker_rot = Vector3.ZERO
+	c.glove_pos = Vector3(-0.42, hand_y + 0.06, -0.24)
+	c.glove_rot = Vector3.ZERO
+
 
 # Pivot slide: sealing pad (toward post) stays flat; push-off pad (opposite
 # side) kicks toward vertical at push-off and returns to flat as the slide

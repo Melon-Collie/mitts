@@ -311,6 +311,19 @@ stick on the shooter's line needs nothing, since challenging covers it. A
 BLOCK on tip risk is the pre-commit trap above and stays out.
 `test_goalie_tip_threat.gd` holds it.
 
+**Three low-save shapes, picked off the converged read.** On a pad face he
+stays standing. Wide of one standing pad, inside a flat pad's reach and low
+enough for it, he goes to the HALF-butterfly: that pad down, the other leg
+loaded on its skate. The five-hole, a rising shot, or a read that hasn't
+converged get the full butterfly. The half's cost is the up-leg side, so a man
+alive there sends him full. Its payoff is the loaded leg: a slide from it
+skips the coil, he moves at shuffle pace instead of knee-shuffling, and the
+rise is half as long. The full butterfly has two poses of its own: the square
+BLOCK sits tall with the hands tucked, and every other drop leans out with
+the hands ready. The half states ride the wire as `state_enum` values (v60),
+and the bot shot model reads them as down (`GoalieNetworkState.is_down`).
+`test_goalie_half_butterfly.gd` holds it.
+
 ## Behind-net puck play — the doctrine
 
 **"Stop it, leave it, get back."** The goalie leaves his net ONLY to trap a rim

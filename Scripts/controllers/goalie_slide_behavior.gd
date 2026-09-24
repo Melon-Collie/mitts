@@ -210,6 +210,12 @@ func tick_coil(delta: float) -> Vector2:
 			lerpf(coil_start_x, start_x, coil_progress),
 			lerpf(coil_start_depth, start_depth, coil_progress))
 
+# Push off at once, skipping the coil — for a slide whose push leg is already
+# loaded (the half-butterfly). Call right after `commit_slide`.
+func push_off_now() -> void:
+	coil_timer = 0.0
+	velocity_x = dir * slide_initial_speed
+
 # True once the coil timer has expired and push-off has been applied. The
 # controller polls this from State.COILING to transition into State.SLIDING.
 func is_coil_complete() -> bool:

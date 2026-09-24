@@ -1,7 +1,8 @@
 extends SceneTree
 
 # Dev visualizer: renders the goalie offscreen from three standing angles, a
-# butterfly, a near-overhead butterfly and a close-up of the stick on the ice,
+# butterfly, a near-overhead butterfly, a close-up of the stick on the ice, the
+# half-butterfly and the blocking vs reaction butterfly,
 # so goalie mesh/pose changes can be SEEN without launching the game. A bare-instantiated goalie is a collapsed lump — every part is placed
 # per-tick by its controller — so this drives the real pose builder directly:
 # a GoalieBodyConfigBuilder.Inputs bundle (state + defaults) rebuilt and
@@ -119,6 +120,25 @@ func _on_frame() -> void:
 		_camera.look_at(Vector3(-0.05, 0.0, -0.62))
 	elif _frames == 94:
 		_save("goalie_blade_plan.png")
+		# The two butterfly variants, from the shooter's side.
+		_inputs.state = GoalieStateMachine.State.HALF_BUTTERFLY_RIGHT
+		_camera.position = Vector3(0.0, 1.0, -3.0)
+		_camera.look_at(Vector3(0.0, 0.6, 0.0))
+	elif _frames == 106:
+		_save("goalie_half_butterfly.png")
+		_camera.position = Vector3(-2.8, 1.0, -1.2)
+		_camera.look_at(Vector3(0.0, 0.6, 0.0))
+	elif _frames == 116:
+		_save("goalie_half_butterfly_34.png")
+		_inputs.state = GoalieStateMachine.State.BUTTERFLY
+		_inputs.blocking_seal = true
+		_camera.position = Vector3(0.0, 1.0, -3.0)
+		_camera.look_at(Vector3(0.0, 0.6, 0.0))
+	elif _frames == 128:
+		_save("goalie_blocking_butterfly.png")
+		_inputs.blocking_seal = false
+	elif _frames == 140:
+		_save("goalie_reaction_butterfly.png")
 		quit()
 
 
