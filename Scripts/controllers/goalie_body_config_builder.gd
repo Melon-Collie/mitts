@@ -124,11 +124,17 @@ var sweep_windup_x_extension: float = 0.12
 var sweep_windup_z_pull: float = 0.06
 var sweep_windup_max_yaw_deg: float = 25.0
 
+# Blocking hands sit in against the pads rather than out in front of them.
+const BLOCK_HAND_Z_M: float = -0.12
+
 # Per-tick input bundle. Controller scratches one instance and overwrites all
 # fields before each `build()` call.
 class Inputs:
 	var state: int  # GoalieStateMachine.State
 	var five_hole_openness: float = 0.0
+	# Down to BLOCK rather than to react — tall and tight instead of leaning
+	# out ready to reach (_set_butterfly_pose).
+	var blocking_seal: bool = false
 	var reading_pinned_windup: bool = false
 	var reacting_to_shot: bool = false
 	var shot_is_elevated: bool = false
@@ -421,6 +427,21 @@ func _set_butterfly_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 	c.blocker_rot   = Vector3(0.0, 0.0, 0.0)
 	c.glove_pos     = Vector3(-0.42, 0.44, -0.18)
 	c.glove_rot     = Vector3.ZERO
+	if inputs.blocking_seal:
+		_tuck_into_block(c)
+
+
+# The BLOCKING butterfly: he is not going to reach, so he makes himself big and
+# still — chest upright instead of leaning out over the pads, and both hands
+# flush against the trunk just above the pad tops, sealing the gap a flat pad
+# leaves beside the body. Derived from the anatomy rather than authored, so the
+# hands sit exactly where that gap is.
+func _tuck_into_block(c: GoalieBodyConfig) -> void:
+	var hand_x: float = GoalieAnatomy.torso_half_width() + GoalieAnatomy.GLOVE_BOX_WIDTH_M * 0.5
+	var hand_y: float = GoalieAnatomy.pad_span(true).y + GoalieAnatomy.hand_vertical_half_extent()
+	c.body_rot = Vector3.ZERO
+	c.glove_pos = Vector3(-hand_x, hand_y, BLOCK_HAND_Z_M)
+	c.blocker_pos = Vector3(hand_x, hand_y, BLOCK_HAND_Z_M)
 
 # Pivot slide: sealing pad (toward post) stays flat; push-off pad (opposite
 # side) kicks toward vertical at push-off and returns to flat as the slide

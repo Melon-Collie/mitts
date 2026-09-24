@@ -1030,6 +1030,9 @@ var _eye_peek_target_x: float = 0.0
 # Side of the last peek he took (±1, 0 before any) — the side he keeps on a
 # screen standing dead on his sightline.
 var _peek_side: float = 0.0
+# Went down to BLOCK rather than to react (`_enter_butterfly`). Moves the hands
+# and chest only; the hands are colliders, so it is coverage as well as look.
+var _blocking_seal: bool = false
 const _HEAD_PEEK_RATE_M_S: float = 1.2
 
 # Beaten-wide latch. `_armed` means the onset fired and the puck has stayed
@@ -1461,6 +1464,7 @@ func reset_to_crease() -> void:
 	_eye_offset_x = 0.0
 	_eye_peek_target_x = 0.0
 	_peek_side = 0.0
+	_blocking_seal = false
 	_shot_commit_timer = 0.0
 	_shot_read_timer = 0.0
 	_prime_linger_timer = 0.0
@@ -1705,7 +1709,7 @@ func _update_shot_timer(delta: float) -> void:
 			if _screen_block_drop_timer <= 0.0:
 				_screen_block_drop_timer = -1.0
 				if _sm.is_upright():
-					_enter_butterfly()
+					_enter_butterfly(true)
 	if not _reaction.low_drop_ready(_sm.is_upright()):
 		return
 	# The reaction freeze + arm tracking begin at release; only the leg drop waits
@@ -1853,7 +1857,7 @@ func _update_state(delta: float) -> void:
 				#
 				# Purely a TIMING drop by the time it gets here — the coverage half,
 				# beaten laterally where only the seal answers, took the branch above.
-				_enter_butterfly()
+				_enter_butterfly(true)
 			else:
 				# Toggle STANDING ↔ READY based on threat conditions.
 				var should_be_ready: bool = _is_ready_situation()
@@ -2763,7 +2767,13 @@ func _opposing_shooter_near_puck(loose_puck_radius: float) -> bool:
 # disarms the moment it stops holding, and `_update_position`'s BUTTERFLY branch
 # still runs `_try_commit_slide`, so a goalie already down converting a confirmed
 # beat into a seal is the behaviour, not a bug to guard against.
-func _enter_butterfly() -> void:
+# `blocking` marks the SQUARE block — set in front of a puck he cannot answer by
+# reacting — against every other drop: a reaction to a read low shot, and the
+# seals that push him somewhere (beaten wide, a lost cross-crease race), where
+# the hands stay up for the short side. The two look different — see
+# GoalieBodyConfigBuilder._set_butterfly_pose.
+func _enter_butterfly(blocking: bool = false) -> void:
+	_blocking_seal = blocking
 	_slide_coverage_confirm_timer = 0.0
 	_sm.transition_to(State.BUTTERFLY)
 
@@ -3512,6 +3522,7 @@ func _commit_slide_to(seal_target: float) -> void:
 			net_half_width, seal_end.x, seal_end.y):
 		return
 	_slide_start_rotation_y = goalie.get_goalie_rotation_y()
+	_blocking_seal = false
 	# The slide owns lateral motion from here (committed endpoints, own velocity).
 	# Drop any caught-moving drift so it can't resume if the slide finishes while
 	# the goalie is still frozen on the same read.
@@ -3721,6 +3732,7 @@ func _update_body_parts(delta: float) -> void:
 		return
 	_pose_inputs.state = _sm.current
 	_pose_inputs.five_hole_openness = _five_hole_openness
+	_pose_inputs.blocking_seal = _blocking_seal
 	_pose_inputs.reading_pinned_windup = _reading_pinned_windup
 	_pose_inputs.reacting_to_shot = _reaction.reacting
 	_pose_inputs.shot_is_elevated = _reaction.is_elevated
@@ -4547,7 +4559,7 @@ func _on_puck_contact(contacted: Goalie) -> void:
 	# slide, so the goalie doesn't chase an unpredictable fresh deflection.)
 	_reaction.arm_clear(true)
 	if is_server and _sm.is_upright() and _should_block():
-		_enter_butterfly()
+		_enter_butterfly(true)
 
 # Resolving events (boards / post / net) that aren't goalie-specific. Any of
 # these means the shot has resolved — no longer a threat the goalie is
