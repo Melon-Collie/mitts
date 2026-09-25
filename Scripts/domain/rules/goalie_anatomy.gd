@@ -157,3 +157,30 @@ static func standing_pad_takes(rel_x: float, y: float, puck_radius: float) -> bo
 	var centre: float = GoalieBehaviorRules.STANDING_PAD_CENTER_X_M
 	return ax >= centre - half + puck_radius and ax <= centre + half - puck_radius \
 			and y + puck_radius <= pad_span(false).y
+
+
+# ── The arms ─────────────────────────────────────────────────────────────────
+# Upper arm and forearm-to-glove-centre, and the shoulder joint in the trunk's
+# frame (±x). Goalie draws the arms from these, and the pose builder holds the
+# hands out at a distance these arms can reach at a real bend — a hand posed
+# nearer than the arm allows can only be drawn by folding the elbow into the
+# body.
+const ARM_UPPER_M: float = 0.38
+const ARM_FOREARM_M: float = 0.38
+const SHOULDER_OFFSET := Vector3(0.23, 0.24, 0.0)
+
+
+# Depth (goalie-local z, forward negative) that puts a hand at (`hand_x`,
+# `hand_y`) with the elbow bent to `bend_deg` from a shoulder at `shoulder`. A
+# hand that is already too far for that bend at zero depth offset stays level
+# with the shoulder's depth.
+static func hand_depth_for_bend(shoulder: Vector3, hand_x: float, hand_y: float,
+		bend_deg: float) -> float:
+	var half: float = deg_to_rad(bend_deg) * 0.5
+	# Law of cosines with equal bones reduces to 2·L·sin(θ/2); the general form
+	# covers unequal ones.
+	var reach_sq: float = ARM_UPPER_M * ARM_UPPER_M + ARM_FOREARM_M * ARM_FOREARM_M \
+			- 2.0 * ARM_UPPER_M * ARM_FOREARM_M * cos(half * 2.0)
+	var dx: float = hand_x - shoulder.x
+	var dy: float = hand_y - shoulder.y
+	return shoulder.z - sqrt(maxf(reach_sq - dx * dx - dy * dy, 0.0))

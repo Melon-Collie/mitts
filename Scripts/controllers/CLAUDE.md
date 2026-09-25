@@ -94,11 +94,26 @@ both flat and on the ice puts the wrist at exactly one place
 blade resting on its heel, which is the one thing every goalie coach says not to
 do and which measured out as the blade presenting its UNDERSIDE to the shooter.
 
-What is left over is a real property of this rig rather than a tuning decision:
-the wrist-to-blade lever is 0.92 m where a senior paddle is 0.66, because the
-hand is modelled a quarter-metre up the shaft from the paddle's top. That extra
-length is why the butterfly still has to lay the paddle over past its lie to
-reach the ice, and it is a `Goalie.tscn` change, not a code one.
+The hand grips the top of the paddle (`Goalie.tscn`), so the wrist-to-blade
+lever is the paddle's own 0.67 m. In the butterfly the hand sits lower than that
+above the ice, which is why the paddle lays over past its lie to reach it.
+
+### The hands are held out, and the elbows hang
+
+A hand posed nearer the shoulder than the arm allows can only be drawn by
+folding the elbow into the body. So the pose builder places the glove at the
+depth that gives a real bend for the stance (`GoalieAnatomy.hand_depth_for_bend`,
+from the same arm lengths `Goalie` draws with), and the blocker where the stick
+puts it: flat blade, paddle rolled in, blade out in front of the five-hole. The
+elevated reach extends from the hand's rest depth, not from a fixed one.
+
+The elbow is not aimed with a pole. A fixed "down" hint is wrong for a hand held
+out in front and below, because down projects to down-and-behind, into his
+chest. `TwoBoneIK.solve_elbow_hanging` lets it hang: the lowest elbow the bones
+allow that is neither behind the shoulder nor inside it.
+`test_goalie_arm_rig.gd` holds both, and records the one arm that stays
+cramped: the butterfly blocker, whose shoulder the low butterfly trunk puts
+barely above the stick hand.
 
 ## What kills a collaborator extraction
 

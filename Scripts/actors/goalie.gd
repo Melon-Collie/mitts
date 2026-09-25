@@ -32,11 +32,11 @@ extends Node3D
 @onready var stick_shaft_mesh: MeshInstance3D = $BlockArm/Stick/StickShaftMesh
 
 # Arm-to-glove segments. 0.76 per side is ~104% wingspan-equivalent on the
-# ~1.92 m frame (torso box + standing pose in goalie_body_config_builder) —
-# same anthropometry target as the skaters. Cosmetic only: glove/blocker
-# positions are pose-driven, the arm just draws to them.
-const _ARM_UPPER_LEN: float = 0.38
-const _ARM_FOREARM_LEN: float = 0.38
+# ~1.92 m frame — same anthropometry target as the skaters. The arms draw to the
+# pose-driven hands; the poses in turn hold the hands at a distance these arms
+# reach at a real bend (GoalieAnatomy.hand_depth_for_bend).
+const _ARM_UPPER_LEN: float = GoalieAnatomy.ARM_UPPER_M
+const _ARM_FOREARM_LEN: float = GoalieAnatomy.ARM_FOREARM_M
 const _ARM_RADIUS: float = 0.16
 const _SHOULDER_SPHERE_RADIUS: float = 0.10
 const _ELBOW_SPHERE_RADIUS: float = 0.08
@@ -459,19 +459,19 @@ func _make_connector_mesh() -> MeshInstance3D:
 	return mi
 
 
-# Two-bone arm IK. shoulder_local / hand_local are in goalie-local space.
-# pole_local is the elbow-hint direction in goalie-local space — the solver
-# converts to world space before projecting onto the perpendicular plane.
+# Two-bone arm IK. shoulder_local / hand_local are in goalie-local space;
+# outward_local is the arm's side (±X), which the elbow may not fold inside of.
 func _update_arm_ik(upper: Node3D, forearm_bone: Node3D,
-		shoulder_local: Vector3, hand_local: Vector3, pole_local: Vector3,
+		shoulder_local: Vector3, hand_local: Vector3, outward_local: Vector3,
 		elbow_sphere: MeshInstance3D = null) -> void:
 	if upper == null or forearm_bone == null:
 		return
 	var shoulder_w: Vector3 = to_global(shoulder_local)
 	var hand_w: Vector3 = to_global(hand_local)
-	var pole_w: Vector3 = global_transform.basis * pole_local
-	var elbow_w: Vector3 = TwoBoneIK.solve_elbow(
-			shoulder_w, hand_w, _ARM_UPPER_LEN, _ARM_FOREARM_LEN, pole_w)
+	# He faces local -Z.
+	var elbow_w: Vector3 = TwoBoneIK.solve_elbow_hanging(
+			shoulder_w, hand_w, _ARM_UPPER_LEN, _ARM_FOREARM_LEN,
+			global_transform.basis * Vector3.FORWARD, global_transform.basis * outward_local)
 	var elbow_local: Vector3 = to_local(elbow_w)
 	if elbow_sphere != null:
 		elbow_sphere.position = elbow_local
@@ -553,18 +553,19 @@ func _update_connectors() -> void:
 		_body.position + _body.basis * Vector3(0.10, -0.30, 0.0),
 		_right_pad.position)
 	# Shoulder spheres follow the body pivot each frame.
-	var glove_shoulder: Vector3 = _body.position + _body.basis * Vector3(-0.23, 0.24, 0.0)
-	var blocker_shoulder: Vector3 = _body.position + _body.basis * Vector3(0.23, 0.24, 0.0)
+	var glove_shoulder: Vector3 = _body.position + _body.basis * Vector3(
+			-GoalieAnatomy.SHOULDER_OFFSET.x, GoalieAnatomy.SHOULDER_OFFSET.y, 0.0)
+	var blocker_shoulder: Vector3 = _body.position + _body.basis * GoalieAnatomy.SHOULDER_OFFSET
 	glove_shoulder_sphere.position = glove_shoulder
 	blocker_shoulder_sphere.position = blocker_shoulder
-	# Glove arm: shoulder on body's left side (goalie's catch hand), elbow drops down.
+	# Glove arm: shoulder on body's left side (goalie's catch hand).
 	_update_arm_ik(glove_upper_arm, glove_forearm,
-		glove_shoulder, _glove.position, Vector3(-0.3, -1.0, 0.0),
+		glove_shoulder, _glove.position, Vector3.LEFT,
 		glove_elbow_sphere)
 	# Blocker arm: forearm connects directly to BlockArm (wrist position of the
 	# blocker pad + hand mesh assembly).
 	_update_arm_ik(blocker_upper_arm, blocker_forearm,
-		blocker_shoulder, _block_arm.position, Vector3(0.3, -1.0, 0.0),
+		blocker_shoulder, _block_arm.position, Vector3.RIGHT,
 		blocker_elbow_sphere)
 
 

@@ -21,7 +21,8 @@ extends GutTest
 #   16 m, 5 wide  (1.0, 5.5)    1.72  3/8    3            1.72  3/8    3
 #   16 m, 5 wide  (-1.5, 4.0)   1.70  0/10   2            1.70  0/10   2
 #
-# Tips 18 -> 13, direct shots unchanged: from the point the direct shot is a
+# Tips 18 -> 13, direct shots no worse (11 -> 11 as first measured, 11 -> 10
+# once the hands moved out in front): from the point the direct shot is a
 # reaction save at any depth, so the angle A buys is worth nothing there while
 # the redirect it sells is. A stick on the shooter's line is covered by
 # challenging, and one at 5.5 m is a tip he can still react to — neither moves
@@ -156,4 +157,4 @@ func test_tips_score_less_and_the_direct_shot_is_untouched() -> void:
 	gut.p("tips %d -> %d, direct %d -> %d" % [tips[false], tips[true], direct[false], direct[true]])
 	assert_lt(tips[true], tips[false], "the redirect is covered better")
 	assert_gt(tips[true], 0, "and it still scores — not a wall")
-	assert_eq(direct[true], direct[false], "at no cost to the shot he can react to")
+	assert_lte(direct[true], direct[false], "at no cost to the shot he can react to")

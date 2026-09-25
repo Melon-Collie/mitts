@@ -57,7 +57,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +7: the puck-velocity estimate is bounded by the puck's own speed limit.
 	# It is a one-tick finite difference feeding a positional decision, so a
 	# teleport read as travel moved the tracked threat metres in a tick.
-	"res://Scripts/controllers/goalie_controller.gd": 4875,
+	"res://Scripts/controllers/goalie_controller.gd": 4873,
 	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3755,
 	"res://Scripts/controllers/skater_controller.gd": 3391,
 	"res://Scripts/actors/skater.gd": 2502,
@@ -76,7 +76,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/ui/lobby_manager.gd": 1247,
 	"res://Scripts/actors/puck.gd": 1029,
 	"res://Scripts/ui/side_menu.gd": 995,
-	"res://Scripts/controllers/goalie_body_config_builder.gd": 1048,
+	"res://Scripts/controllers/goalie_body_config_builder.gd": 1077,
 	"res://Scripts/ui/network_debug_overlay.gd": 956,
 	"res://Scripts/networking/network_telemetry.gd": 957,
 	"res://Scripts/controllers/local_controller.gd": 924,

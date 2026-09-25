@@ -811,7 +811,6 @@ var react_hand_y_max: float = 1.55
 # 1.06 + 0.49 = 1.55, the human upright ceiling, so only the down postures give
 # anything up. See GoalieBodyConfigBuilder._reachable_hand_y.
 var arm_reach_above_chest: float = 0.49
-var react_hand_z: float = -0.28
 # Glove arm reach. The glove (in `_apply_elevated_shot_reaction`) moves
 # toward the shot's lateral impact point clamped within these bounds, so
 # the goalie actively extends the arm to make catch saves rather than
@@ -1319,7 +1318,6 @@ func _configure_collaborators() -> void:
 	_pose.react_hand_y_min = react_hand_y_min
 	_pose.react_hand_y_max = react_hand_y_max
 	_pose.arm_reach_above_chest = arm_reach_above_chest
-	_pose.react_hand_z = react_hand_z
 	_pose.slide_pushoff_lift = slide_pushoff_lift
 	_pose.slide_pushoff_rot_deg = slide_pushoff_rot_deg
 	_pose.slide_body_lean_deg = slide_body_lean_deg

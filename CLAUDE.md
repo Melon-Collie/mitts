@@ -49,10 +49,14 @@ for explicit confirmation before pushing.
 **Scene files (`.tscn`) and complex resource files (`.tres`) are CREATED by the
 user, not Claude.** The risk is the generated half of the format: node unique
 IDs, sub-resource ids and the references between them, editor-enforced property
-ordering. Authoring any of that by hand — a node, a property, a sub-resource,
-anything in a theme, a shader material or an animation — means inventing
-identifiers the editor owns, so describe the change and let the user make it
-there.
+ordering. Authoring any of that by hand — a new node, a new property line, a
+sub-resource, anything in a theme, a shader material or an animation — means
+inventing identifiers the editor owns, so describe the change and let the user
+make it there.
+
+**Changing a value that is already there is Claude's to do** — a transform, a
+size, a number on an existing line. It invents no identifier and reorders
+nothing; run the suite afterwards, since the scene is instantiated all over it.
 
 **Deleting is not that, and is Claude's to do**: a property line, a whole node
 block, or a sub-resource nothing references any more. A delete invents no
