@@ -40,6 +40,10 @@ const _ARM_FOREARM_LEN: float = GoalieAnatomy.ARM_FOREARM_M
 const _ARM_RADIUS: float = 0.16
 const _SHOULDER_SPHERE_RADIUS: float = 0.10
 const _ELBOW_SPHERE_RADIUS: float = 0.08
+# How far outboard of the shoulder joint the elbow must be before it may hang
+# back past it: to the trunk's side face, plus the arm's own thickness.
+const _ELBOW_CLEARS_TRUNK_M: float = GoalieAnatomy.TORSO_BOX_WIDTH_M * 0.5 \
+		- GoalieAnatomy.SHOULDER_OFFSET.x + _ARM_RADIUS * 0.5
 
 var _uniform_coordinator: GoalieUniformCoordinator
 # Dynamic visual nodes — public for GoalieUniformCoordinator access.
@@ -471,7 +475,8 @@ func _update_arm_ik(upper: Node3D, forearm_bone: Node3D,
 	# He faces local -Z.
 	var elbow_w: Vector3 = TwoBoneIK.solve_elbow_hanging(
 			shoulder_w, hand_w, _ARM_UPPER_LEN, _ARM_FOREARM_LEN,
-			global_transform.basis * Vector3.FORWARD, global_transform.basis * outward_local)
+			global_transform.basis * Vector3.FORWARD, global_transform.basis * outward_local,
+			_ELBOW_CLEARS_TRUNK_M)
 	var elbow_local: Vector3 = to_local(elbow_w)
 	if elbow_sphere != null:
 		elbow_sphere.position = elbow_local

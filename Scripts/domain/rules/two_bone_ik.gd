@@ -50,16 +50,18 @@ static func solve_elbow(
 
 
 # The elbow of an arm that HANGS: of every elbow the two bone lengths allow — a
-# circle around the shoulder→hand axis — the lowest one that is neither behind
-# the shoulder (`forward`) nor inside it (`outward`). The torso is in the way of
-# both, and gravity picks the rest. Unlike a fixed pole, this holds up when the
-# hand moves around the shoulder: a pole says "down", and for a hand out in front
-# and below, down projects to down-and-BEHIND, which puts the elbow in the chest.
+# circle around the shoulder→hand axis — the lowest one that stays out of the
+# trunk. It may not fold inside the shoulder (`outward`), and it may not go back
+# past the shoulder (`forward`) while it is still within `clear_out` of it —
+# that is behind the chest. Once it is `clear_out` outboard it is beside the
+# body, and hanging back there is exactly what a low hand's elbow does. Unlike
+# a fixed pole, this holds up when the hand moves around the shoulder: a pole
+# says "down", and for a hand out in front and below, down projects to
+# down-and-BEHIND, which puts the elbow in the chest.
 #
-# Sampled rather than solved (the feasible arc's ends are where the circle crosses
-# two planes), which is plenty for a cosmetic joint and allocates nothing. When no
-# sample satisfies both, the one that violates them least wins, so the arm still
-# folds somewhere sensible for a hand pulled into the body.
+# Sampled rather than solved, which is plenty for a cosmetic joint and
+# allocates nothing. When no sample stays clear, the one that intrudes least
+# wins, so the arm still folds somewhere sensible for a hand pulled into the body.
 const _HANG_SAMPLES: int = 24
 
 static func solve_elbow_hanging(
@@ -68,7 +70,8 @@ static func solve_elbow_hanging(
 		upper_len: float,
 		forearm_len: float,
 		forward: Vector3,
-		outward: Vector3) -> Vector3:
+		outward: Vector3,
+		clear_out: float = INF) -> Vector3:
 	var d_vec: Vector3 = hand - shoulder
 	var d: float = d_vec.length()
 	if d < 0.0001:
@@ -88,7 +91,9 @@ static func solve_elbow_hanging(
 		var a: float = TAU * float(i) / float(_HANG_SAMPLES)
 		var e: Vector3 = foot + (e1 * cos(a) + e2 * sin(a)) * h
 		var off: Vector3 = e - shoulder
-		var miss: float = maxf(-off.dot(forward), 0.0) + maxf(-off.dot(outward), 0.0)
+		var out: float = off.dot(outward)
+		var behind: float = maxf(-off.dot(forward), 0.0) if out < clear_out else 0.0
+		var miss: float = behind + maxf(-out, 0.0)
 		if miss < best_miss - 0.0001 or (absf(miss - best_miss) <= 0.0001 and e.y < best_y):
 			best_miss = miss
 			best_y = e.y

@@ -142,3 +142,17 @@ func test_a_hanging_elbow_hangs_as_low_as_it_may() -> void:
 	var e: Vector3 = TwoBoneIK.solve_elbow_hanging(shoulder, Vector3(0.0, 0.0, -0.5),
 			0.38, 0.38, Vector3.FORWARD, Vector3.RIGHT)
 	assert_lt(e.y, -0.2)
+
+
+func test_a_hanging_elbow_goes_back_only_beside_the_trunk() -> void:
+	# A low hand in front: hanging back is right once the elbow is clear of the
+	# trunk's side, and forbidden within it.
+	var shoulder := Vector3(0.23, 0.64, 0.0)
+	var hand := Vector3(0.40, 0.40, -0.20)
+	var free: Vector3 = TwoBoneIK.solve_elbow_hanging(shoulder, hand, 0.38, 0.38,
+			Vector3.FORWARD, Vector3.RIGHT, 0.11)
+	assert_gt(free.z, shoulder.z, "back past the shoulder")
+	assert_gte(free.x - shoulder.x, 0.11 - 0.001, "but out beside the trunk")
+	var boxed: Vector3 = TwoBoneIK.solve_elbow_hanging(shoulder, hand, 0.38, 0.38,
+			Vector3.FORWARD, Vector3.RIGHT)
+	assert_lte(boxed.z, shoulder.z + 0.001, "with no clearance it may never go back")

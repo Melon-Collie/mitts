@@ -104,16 +104,16 @@ A hand posed nearer the shoulder than the arm allows can only be drawn by
 folding the elbow into the body. So the pose builder places the glove at the
 depth that gives a real bend for the stance (`GoalieAnatomy.hand_depth_for_bend`,
 from the same arm lengths `Goalie` draws with), and the blocker where the stick
-puts it: flat blade, paddle rolled in, blade out in front of the five-hole. The
-elevated reach extends from the hand's rest depth, not from a fixed one.
+puts it: paddle rolled in, blade out in front of the five-hole — upright at the
+flat-blade wrist height, down just above the pad tops. The elevated reach
+extends from the hand's rest depth, not from a fixed one.
 
 The elbow is not aimed with a pole. A fixed "down" hint is wrong for a hand held
 out in front and below, because down projects to down-and-behind, into his
 chest. `TwoBoneIK.solve_elbow_hanging` lets it hang: the lowest elbow the bones
-allow that is neither behind the shoulder nor inside it.
-`test_goalie_arm_rig.gd` holds both, and records the one arm that stays
-cramped: the butterfly blocker, whose shoulder the low butterfly trunk puts
-barely above the stick hand.
+allow that stays out of the trunk — never inside the shoulder, and back past it
+only once it is out beside the body, which is where a butterfly blocker's elbow
+goes. `test_goalie_arm_rig.gd` holds both.
 
 ## What kills a collaborator extraction
 

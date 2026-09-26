@@ -128,8 +128,11 @@ var sweep_windup_max_yaw_deg: float = 25.0
 const BLOCK_HAND_Z_M: float = -0.40
 # Down-stance hands (see _set_down_hands).
 const DOWN_BLOCKER_X_M: float = 0.40
-const DOWN_BLOCKER_Z_M: float = -0.35
+const DOWN_BLOCKER_Z_M: float = -0.20
 const DOWN_GLOVE_Y_M: float = 0.50
+# Just above the flat pads' tops.
+const DOWN_HAND_Y_M: float = GoalieAnatomy.PAD_CENTER_Y_BUTTERFLY_M \
+		+ GoalieAnatomy.PAD_BOX_WIDTH_M * 0.5 + 0.125
 
 # The half-butterfly body: one knee on the ice, the other leg in the ready
 # crouch, so the hips sit between the two stances' — the butterfly trunk raised
@@ -479,8 +482,7 @@ func _set_butterfly_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 # lays the blade flat, as upright, far enough forward to put the blade out in
 # front of the knees. The glove is held out over the pads at a real bend.
 func _set_down_hands(c: GoalieBodyConfig, glove_y: float) -> void:
-	c.blocker_pos = Vector3(DOWN_BLOCKER_X_M,
-			GoalieStickRules.wrist_y_for_flat_blade_on_ice(UPRIGHT_ASSEMBLY_ROLL), DOWN_BLOCKER_Z_M)
+	c.blocker_pos = Vector3(DOWN_BLOCKER_X_M, DOWN_HAND_Y_M, DOWN_BLOCKER_Z_M)
 	c.blocker_rot = Vector3(0.0, 0.0, UPRIGHT_ASSEMBLY_ROLL)
 	c.glove_pos = Vector3(-0.42, glove_y, 0.0)
 	c.glove_pos.z = _hand_depth(c, -1.0, c.glove_pos.x, glove_y, BEND_DOWN_DEG)

@@ -20,9 +20,11 @@ extends GutTest
 #   behind-R -> slot L     0.31    7      2 far side    0.06    4      0
 #   corner-R -> slot C     0.24    8      2 far side    0.00    10     3
 #
-# (Re-measured once the hands moved out in front, GoalieAnatomy.hand_depth_for_
-# bend: the same 21 goals, one of them a low lift in the corner feed. No flat
-# shot scores on any of the three.)
+# Re-measured once the hands moved (out in front at a real bend, and the
+# butterfly blocker down to just above the pads): 9 / 5 / 12, 26 in all. The
+# extra goals are all in the top two rows — a lower blocker concedes more over a
+# butterfly, which is that stance's real trade. No flat shot scores on any of
+# the three.
 #
 # Before, the block-or-react clock priced the pass as a loose puck at his feet
 # (a launch from where the puck WAS, not where it would be received) and dropped

@@ -2,14 +2,15 @@ extends GutTest
 
 # ── WHERE THE GOALIE'S ELBOWS GO ─────────────────────────────────────────────
 # Builds the live rig in each stance and measures the arm. The elbow may not
-# sit behind the shoulder (in his chest) or inside it (in his ribs); the
-# hanging solve (TwoBoneIK.solve_elbow_hanging) holds both. The bend is reported
+# fold inside the shoulder (his ribs), and may only go back past it once it is
+# out beside the trunk (not in his chest); the hanging solve
+# (TwoBoneIK.solve_elbow_hanging) holds both. The bend is reported
 # alongside, because an arm folded far past a right angle is what a hand held
 # too close to the body looks like, whatever the elbow does — so the stances
 # that hold the glove out are held to a real bend.
 #
-# The butterfly BLOCKER stays cramped (~55°): the stick fixes its hand, and the
-# butterfly trunk (GoalieAnatomy.torso_span) puts the shoulder barely above it.
+# The butterfly BLOCKER is not held to a bend: its hand sits just above the pads
+# with the stick, and its elbow hangs back beside the body, as a real one does.
 
 const State := GoalieStateMachine.State
 const STANCES: Array[int] = [
@@ -51,7 +52,9 @@ func _check(g: Goalie, label: String) -> void:
 		var arm: String = "glove" if side < 0.0 else "blocker"
 		gut.p("%-22s %-7s fwd %+.2f out %+.2f down %+.2f  elbow %3.0f°" % [
 				label, arm, fwd, out, shoulder.y - elbow.y, bend])
-		assert_gte(fwd, -TOL, "%s %s: elbow behind the shoulder" % [label, arm])
+		if fwd < -TOL:
+			assert_gte(out, Goalie._ELBOW_CLEARS_TRUNK_M - TOL,
+					"%s %s: an elbow back past the shoulder is beside the trunk, not in it" % [label, arm])
 		assert_gte(out, -TOL, "%s %s: elbow inside the shoulder" % [label, arm])
 		if side < 0.0 and label in HELD_OUT:
 			assert_between(bend, 75.0, 160.0, "%s glove: held out at a real bend" % label)

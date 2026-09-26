@@ -15,7 +15,8 @@ extends GutTest
 #   late swing,    6 m centre, flat   before SSSSSGSSS   after SSSSSGSSS
 #
 # The two pad-face aims stay up once the read has converged. Across the cold
-# grid goals go 11 -> 7 and none is added: the four he stops are pad-face shots
+# grid goals went 11 -> 7 and none is added (6 -> 5 once the butterfly stick
+# was centred on the five-hole, which took some of the always-drop goals too): the four he stops are pad-face shots
 # at 4-6 m that used to score THROUGH the drop — the pads mid-rotation on a puck
 # that was already on them. Everything left is the five-hole, the posts and the
 # 9 m low corners, as before. The late swing reads exactly as before: a stale
