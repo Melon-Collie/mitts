@@ -403,6 +403,9 @@ signal body_check_received(impulse: Vector3)
 # host_timestamp exceeds reconcile_position_threshold on nearly every moving
 # tick. Emitted for every skater; only the local controller connects.
 signal post_move_integrated()
+# A carry stroke's hop just landed the blade on the puck's far face. Cosmetic
+# (audio); `hardness` 0..1 is the stroke's toe-ride blend.
+signal carry_catch_landed(hardness: float)
 # Mirrors SkaterStateMachine.State for the current carrier. Updated each tick
 # by Local/RemoteController so the goalie AI can read shot-state tells (e.g.
 # SLAPPER_CHARGE_WITH_PUCK windup) without reaching across controller boundaries.
@@ -1777,6 +1780,7 @@ func _update_carry_contact(delta: float) -> void:
 		# The hop just landed on the far face: the catch. Heel-first, rolling
 		# back to the carry seat as the blend decays.
 		_catch_heel_blend = 1.0
+		carry_catch_landed.emit(_stroke_toe_blend)
 	var new_drag: float = move_toward(_toe_drag_gesture, drag_target, carry_gesture_ease * delta)
 	var new_cradle: float = move_toward(_heel_cradle, cradle_target, carry_gesture_ease * delta)
 	var new_stroke: float = move_toward(

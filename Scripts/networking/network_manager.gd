@@ -115,7 +115,7 @@ signal stick_lift_received(position: Vector3)
 # gameplay event, so it carries its own cue and can be re-sounded independently
 # later without disturbing the opponent stick-lift strip.
 signal nudge_received(position: Vector3)
-signal shot_sound_received(position: Vector3, is_slapper: bool)
+signal shot_sound_received(position: Vector3, power: float, is_slapper: bool)
 # Host-authoritative body-check impact (Lever A). Fired on every client (and
 # self-emitted on the host) when a hit is credited, so impact VFX/sound — and
 # the hitter's check-delivery body pose — are consistent everywhere instead of
@@ -2743,18 +2743,19 @@ func notify_nudge(position: Vector3) -> void:
 # Shot SFX (wrister/slapper). Unlike puck-collision SFX, the shooter already
 # plays the cue locally the instant they release (LocalController path), so the
 # host excludes them from the broadcast to avoid a double-hit; every other peer
-# hears it here. `except_peer_id` is the shooter (host's own shots pass -1).
-func send_shot_to_all(position: Vector3, is_slapper: bool, except_peer_id: int = -1) -> void:
+# hears it here. `power` is release speed (m/s); `except_peer_id` is the shooter
+# (host's own shots pass -1).
+func send_shot_to_all(position: Vector3, power: float, is_slapper: bool, except_peer_id: int = -1) -> void:
 	for peer_id: int in connected_peer_ids():
 		if peer_id == except_peer_id:
 			continue
-		notify_shot.rpc_id(peer_id, position, is_slapper)
+		notify_shot.rpc_id(peer_id, position, power, is_slapper)
 
 @rpc("authority", "reliable")
-func notify_shot(position: Vector3, is_slapper: bool) -> void:
+func notify_shot(position: Vector3, power: float, is_slapper: bool) -> void:
 	NetworkSimManager.send(
-		func(pos: Vector3, slap: bool) -> void: shot_sound_received.emit(pos, slap),
-		[position, is_slapper], true)
+		func(pos: Vector3, pow_m_s: float, slap: bool) -> void: shot_sound_received.emit(pos, pow_m_s, slap),
+		[position, power, is_slapper], true)
 
 func send_spectator_demoted_to_all(peer_id: int) -> void:
 	for remote_id: int in connected_peer_ids():

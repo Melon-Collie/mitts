@@ -60,8 +60,11 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/controllers/goalie_controller.gd": 4550,
 	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3755,
 	"res://Scripts/controllers/skater_controller.gd": 3391,
-	"res://Scripts/actors/skater.gd": 2502,
-	"res://Scripts/networking/network_manager.gd": 2824,
+	# +4: carry_catch_landed, the stroke-catch signal the stickhandling tap
+	# listens to — the catch is only detectable inside _update_carry_contact.
+	"res://Scripts/actors/skater.gd": 2506,
+	# +1: notify_shot carries release power for the shot cue's loudness.
+	"res://Scripts/networking/network_manager.gd": 2825,
 	"res://Scripts/game/tutorial_manager.gd": 2101,
 	"res://Scripts/controllers/skater_skating_coordinator.gd": 1642,
 	"res://Scripts/controllers/skater_ik_coordinator.gd": 895,

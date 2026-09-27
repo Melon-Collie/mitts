@@ -268,4 +268,6 @@ here whenever you bump, in the same format.
 #      (an old client renders remotes and the puck a lead behind a new host's
 #      rewind, and vice versa), which is a mis-adjudication rather than a
 #      decode error, so mixed builds must be refused.
-
+# v60: notify_shot carries the release power (m/s) so every peer scales the
+#      shot cue's loudness and pitch by it (ShotSound). RPC signature change —
+#      an older peer would mis-decode the argument list.

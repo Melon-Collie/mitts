@@ -11,6 +11,16 @@ const _SKATE_MAX_PITCH: float = 1.15
 
 const _BRAKE_MIN_SPEED: float = 1.5        # must be moving this fast for brake sound
 
+# Stickhandling tap, one per stroke catch. A cradle is a whisper, a hard dangle
+# a crisp click. Two voices so a fast dangle's next catch never cuts the last.
+const _TAP_PATH: String = "res://Sounds/stick_puck_tap.wav"
+const _TAP_SOFT_DB: float = -16.0
+const _TAP_HARD_DB: float = -6.0
+const _TAP_PITCH_SOFT: float = 0.96
+const _TAP_PITCH_HARD: float = 1.08
+const _TAP_PITCH_VARIANCE: float = 0.06
+const _TAP_VOICES: int = 2
+
 # Last skate-loop blend factor pushed to the player (see _update_skate_loop).
 # -1 forces the first write.
 const _LEVEL_EPSILON: float = 0.002
@@ -18,12 +28,17 @@ var _skate_level: float = -1.0
 var _skater: Skater = null
 var _skate_player: AudioStreamPlayer3D = null
 var _brake_player: AudioStreamPlayer3D = null
+var _tap_player: AudioStreamPlayer3D = null
 
 
 func setup(skater: Skater) -> void:
 	_skater = skater
 	_skate_player = _make_player("res://Sounds/skate_loop.ogg")
 	_brake_player = _make_player("res://Sounds/skate_brake.wav")
+	_tap_player = _make_player(_TAP_PATH)
+	_tap_player.max_polyphony = _TAP_VOICES
+	if _tap_player.stream != null:
+		skater.carry_catch_landed.connect(_on_carry_catch_landed)
 
 
 # A skater's own emitters are ordinary world sounds — same SFX bus, so the SFX
@@ -84,3 +99,11 @@ func _update_brake(speed: float) -> void:
 	if _skater.is_braking and speed >= _BRAKE_MIN_SPEED:
 		_brake_player.global_position = _skater.global_position
 		_brake_player.play()
+
+
+func _on_carry_catch_landed(hardness: float) -> void:
+	_tap_player.volume_db = lerpf(_TAP_SOFT_DB, _TAP_HARD_DB, hardness)
+	_tap_player.pitch_scale = lerpf(_TAP_PITCH_SOFT, _TAP_PITCH_HARD, hardness) \
+			* randf_range(1.0 - _TAP_PITCH_VARIANCE, 1.0 + _TAP_PITCH_VARIANCE)
+	_tap_player.global_position = _skater.get_blade_contact_global()
+	_tap_player.play()
