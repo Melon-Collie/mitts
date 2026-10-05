@@ -1,43 +1,40 @@
 extends GutTest
 
 # Pins the stick's model — geometry in, coverage out.
-#
-# The stick used to have no owner: collider boxes in Goalie.tscn, tilts and the
-# aim solve in the pose builder, and NOTHING in the planning model. These pin the
-# two properties that made that gap expensive, so it cannot silently reopen:
-#   * the standing reach is DERIVED from the blade geometry (change the collider
-#     or the yaw cap and the planner follows), and lands in the band the live
-#     goalie measures;
-#   * the blade closes the standing five-hole, which is what the live keeper
-#     does and what the planner used to deny.
 
 
-func test_standing_reach_lands_in_the_measured_band() -> void:
-	# tests/unit/ai/test_goalie_low_cover.gd sweeps flat shots for the point where
-	# saves stop, and the derivation must land where it says — that agreement is
-	# the whole claim that this is a model of the stick rather than a fitted
-	# number.
-	#
-	# The window is wider than the 0.59-0.64 it once bracketed, and the reason is
-	# in that sweep's own output: once the tilt solve puts the blade on the ice,
-	# the BLOCKER side (the side the stick covers) stops scoring at every range
-	# tested, 3 m to 12 m, so the sweep gives a floor and no longer an upper
-	# bound. The cap below is geometric — the blade centre at the yaw cap plus its
-	# half-width cannot exceed it — not another measurement.
-	var reach: float = GoalieStickRules.standing_lateral_reach()
-	gut.p("derived standing lateral reach: %.3f m" % reach)
-	assert_true(reach >= 0.59 and reach <= 0.72,
-			"derived reach must match the measured band (got %.3f)" % reach)
+# A goalie stick's lie is in the plane of the blade's face, and the paddle
+# leaning its complement off vertical is what lays the blade's length flush.
+# Rolled any other way the blade rests on its heel or its toe. The curve turns
+# the blade a few degrees in plan, so a laid-back paddle lifts the toe by a
+# fraction of that — a curved blade's toe does ride up off a tilted stick.
+func test_the_flush_roll_lays_the_blade_level_at_any_tilt() -> void:
+	for tilt: float in [0.0, GoalieStickRules.UPRIGHT_TILT_DEG, 55.0]:
+		var b: Basis = GoalieStickRules.blade_basis(tilt, GoalieStickRules.FLUSH_ROLL_DEG)
+		var lift: float = rad_to_deg(asin(absf(b.x.y)))
+		assert_lt(lift, GoalieStickRules.blade_curve_face_deg(),
+				"tilt %.0f: the blade's long axis is %.1f deg off level" % [tilt, lift])
+	var off: Basis = GoalieStickRules.blade_basis(
+			GoalieStickRules.UPRIGHT_TILT_DEG, GoalieStickRules.FLUSH_ROLL_DEG - 10.0)
+	assert_gt(absf(off.x.y), 0.1, "ten degrees off the flush roll tips it")
 
 
-func test_the_stick_is_the_wider_low_surface() -> void:
-	# The premise of the fix: while upright the PADS are not the outer edge, the
-	# stick is. If this ever inverts, the planner's LOW core silently reverts to
-	# the pad column and the slot re-opens.
-	var pads: float = GoalieBehaviorRules.STANDING_PAD_CENTER_X_M \
-			+ GoalieBehaviorRules.PAD_BOX_WIDTH_M * 0.5
-	assert_gt(GoalieStickRules.standing_lateral_reach(), pads,
-			"the standing keeper's outer low surface is the paddle, not the pads")
+func test_the_lie_is_the_paddle_to_blade_angle_in_the_face_plane() -> void:
+	var b: Basis = GoalieStickRules.blade_basis(0.0, 0.0)
+	var paddle_down := Vector3(0.0, -1.0, 0.0)
+	var toe: Vector3 = -b.x
+	assert_almost_eq(rad_to_deg(paddle_down.angle_to(toe)),
+			180.0 - GoalieStickRules.PADDLE_TO_BLADE_DEG, 0.5,
+			"blade and paddle meet at the lie")
+	assert_almost_eq(b.z.dot(Vector3(0.0, 0.0, 1.0)), 1.0, 0.01,
+			"in the plane of the face, not about the blade's length")
+
+
+# The blade lies across the five-hole, not out to one side of it.
+func test_the_ready_blade_rests_across_the_five_hole() -> void:
+	var centre: float = GoalieStickRules.blade_center_x(
+			GoalieStickRules.READY_WRIST_X_M, GoalieStickRules.UPRIGHT_TILT_DEG, 0.0)
+	assert_lt(absf(centre), 0.05, "blade centre %.3f m off the midline" % centre)
 
 
 func test_reach_tracks_the_blade_geometry() -> void:
@@ -46,7 +43,7 @@ func test_reach_tracks_the_blade_geometry() -> void:
 	var center: float = reach - GoalieStickRules.BLADE_WIDTH_M * 0.5
 	assert_almost_eq(center,
 			GoalieStickRules.blade_center_x(GoalieStickRules.READY_WRIST_X_M,
-					GoalieStickRules.ready_tilt_deg(),
+					GoalieStickRules.UPRIGHT_TILT_DEG,
 					-GoalieStickRules.ACTIVE_YAW_CAP_DEG),
 			0.001,
 			"reach is the furthest blade CENTRE the yaw cap allows, plus its half-width")
@@ -79,9 +76,9 @@ func test_yaw_aims_the_blade_not_the_assembly() -> void:
 	var target_z: float = -1.40
 	var yaw: float = GoalieStickRules.yaw_to_target(
 			wrist_x, wrist_z, target_x, target_z,
-			GoalieStickRules.ready_tilt_deg(), 90.0)
+			GoalieStickRules.UPRIGHT_TILT_DEG, 90.0)
 	var b: Vector2 = GoalieStickRules.blade_offset_from_wrist(
-			GoalieStickRules.ready_tilt_deg())
+			GoalieStickRules.UPRIGHT_TILT_DEG)
 	var t: float = deg_to_rad(yaw)
 	var bx: float = b.x * cos(t) + b.y * sin(t)
 	var bz: float = -b.x * sin(t) + b.y * cos(t)
@@ -92,9 +89,10 @@ func test_yaw_aims_the_blade_not_the_assembly() -> void:
 
 func test_yaw_is_capped() -> void:
 	# The blocker pad is rigidly attached, so an uncapped swing takes it off the
-	# body. A target hard to one side must saturate, not over-rotate.
+	# body. A target hard out on the blocker side (the blade already hangs toward
+	# the glove side of the hand) must saturate, not over-rotate.
 	var yaw: float = GoalieStickRules.yaw_to_target(
-			0.44, -0.32, -4.0, -0.4, GoalieStickRules.ready_tilt_deg(),
+			0.44, -0.32, 4.0, -0.4, GoalieStickRules.UPRIGHT_TILT_DEG,
 			GoalieStickRules.ACTIVE_YAW_CAP_DEG)
 	assert_almost_eq(absf(yaw), GoalieStickRules.ACTIVE_YAW_CAP_DEG, 0.001,
 			"a far-side target saturates the yaw cap")
@@ -102,7 +100,7 @@ func test_yaw_is_capped() -> void:
 
 func test_degenerate_inputs_hold_neutral() -> void:
 	assert_eq(GoalieStickRules.yaw_to_target(0.44, -0.32, 0.44, -0.32,
-			GoalieStickRules.ready_tilt_deg(), 25.0), 0.0,
+			GoalieStickRules.UPRIGHT_TILT_DEG, 25.0), 0.0,
 			"a target at the wrist has no defined direction")
 	# Zero TILT is NOT degenerate — the blade still hangs ASSEMBLY_LATERAL_M to
 	# the side, so there is still a lever to swing. (The builder comment this

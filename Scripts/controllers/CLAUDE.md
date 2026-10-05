@@ -79,24 +79,27 @@ planner for free.
 
 ### The stick's angle is not a pose choice
 
-The blocker assembly's forward tilt used to be four authored numbers, one per
-stance family. It cannot be: shaft, paddle and blade are one rigid piece hanging
-a fixed distance below the wrist, so once the pose puts the hand somewhere, the
-paddle angle that lands the blade on the ice is *decided* — by that height and by
-the stick's lie, and by nothing else. `GoalieStickRules.tilt_for_blade_on_ice`
-solves it and `GoalieBodyConfigBuilder._seat_stick_tilt` is the only writer of
-`blocker_rot.x`, running last so every modifier that moved the hand — sweeps,
-lunge, prelean, elevated reach — gets a stick that follows it.
+Shaft, paddle and blade are one rigid piece hanging a fixed distance below the
+wrist, and the lie (117°) is the angle between paddle and blade in the plane of
+the blade's FACE. Two things follow, and every stance obeys both:
 
-The upright stances give up their hand HEIGHT to the same constraint. A blade
-both flat and on the ice puts the wrist at exactly one place
-(`wrist_y_for_flat_blade_on_ice`); standing taller than it is what leaves the
-blade resting on its heel, which is the one thing every goalie coach says not to
-do and which measured out as the blade presenting its UNDERSIDE to the shooter.
+- **The roll is fixed.** Only the paddle leaning the lie's complement sideways
+  (`GoalieStickRules.FLUSH_ROLL_DEG`, top toward the blocker side) lays the
+  blade's length flush on the ice. Any other roll rests it on its heel or toe,
+  the thing every goalie coach says not to do. Never apply the lie about the
+  blade's long axis: that is a loft, and the forward tilt already owns loft.
+- **The forward tilt follows the hand.** Once the hand is placed, the tilt that
+  lands the blade on the ice is decided (`tilt_for_blade_on_ice`), and it opens
+  the blade's face by the same angle. The last step of
+  `GoalieBodyConfigBuilder.build` is the only writer of `blocker_rot.x`, so every
+  modifier that moved the hand — sweeps, lunge, prelean, elevated reach — gets a
+  stick that follows it.
 
-The hand grips the top of the paddle (`Goalie.tscn`), so the wrist-to-blade
-lever is the paddle's own 0.67 m. In the butterfly the hand sits lower than that
-above the ice, which is why the paddle lays over past its lie to reach it.
+Upright, the stance picks the tilt (`UPRIGHT_TILT_DEG`, the blade a foot out in
+front of the skates) and the hand height follows (`upright_wrist_y`). Down, the
+hand sits just above the pads, so the paddle lays well forward and the face
+opens with it — a face square to the shooter and a blade flush on the ice put
+the hand at one height, and the butterfly's is lower.
 
 ### The hands are held out, and the elbows hang
 
@@ -105,7 +108,7 @@ folding the elbow into the body. So the pose builder places the glove at the
 depth that gives a real bend for the stance (`GoalieAnatomy.hand_depth_for_bend`,
 from the same arm lengths `Goalie` draws with), and the blocker where the stick
 puts it: paddle rolled in, blade out in front of the five-hole — upright at the
-flat-blade wrist height, down just above the pad tops. The elevated reach
+upright wrist height, down just above the pad tops. The elevated reach
 extends from the hand's rest depth, not from a fixed one.
 
 The elbow is not aimed with a pole. A fixed "down" hint is wrong for a hand held

@@ -352,22 +352,17 @@ func apply_network_pose(state: GoalieNetworkState) -> void:
 	_block_arm.position = state.blocker_offset
 	_block_arm.rotation = Vector3(state.blocker_pitch, state.blocker_yaw, _block_arm.rotation.z)
 
-# Seat the blade at its lie angle — the fixed shaft-to-blade angle the authored
-# scene geometry does not carry (GoalieStickRules.BLADE_LIE_DEG). Applied once at
-# build time: a lie is a property of the stick, so the blade stays rigid to the
-# shaft and every stance inherits it through the assembly transform. Collider and
-# mesh together, which is why the blade is held out of the stick mesh merge.
+# Seat the blade at its lie and curve (GoalieStickRules.blade_rotation), which
+# the authored square L does not carry. Applied once at build time: a lie is a
+# property of the stick, so the blade stays rigid to the shaft and every stance
+# inherits it through the assembly transform. Collider and mesh together, which
+# is why the blade is held out of the stick mesh merge.
 #
 # IT PIVOTS ABOUT THE HEEL, not the blade's middle. The heel is where the blade
-# meets the paddle, so it is the one point that may not move — and rotating a
-# centred box about its own centre swings it clear: 27 degrees of lie and 18 of
-# curve carried the heel about 6 cm out of the paddle, which is the open joint
-# you can see in a render. Pivoting at the heel closes it and moves the toe
-# instead, which is what a stick does.
+# meets the paddle, so it is the one point that may not move; rotating the box
+# about its centre swings the heel out of the paddle and leaves an open joint.
 func _seat_blade() -> void:
-	var rot := Basis.from_euler(Vector3(
-			deg_to_rad(GoalieStickRules.BLADE_LIE_DEG),
-			deg_to_rad(GoalieStickRules.blade_curve_face_deg()), 0.0), EULER_ORDER_YXZ)
+	var rot: Basis = GoalieStickRules.blade_rotation()
 	# The heel is the authored box's +X end, and the only point that may not move.
 	var half := Vector3(GoalieStickRules.BLADE_WIDTH_M * 0.5, 0.0, 0.0)
 	var heel: Vector3 = _stick_blade.position + half

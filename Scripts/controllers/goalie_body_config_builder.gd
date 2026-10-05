@@ -70,27 +70,16 @@ var slide_initial_speed: float = 4.5
 # rebound is most dangerous.
 var pad_toe_out_standing: float = 12.0
 var pad_toe_out_butterfly: float = 18.0
-# Assembly roll in the upright stances. The forward TILT is solved from the hand
-# rather than authored per stance; see Scripts/controllers/CLAUDE.md →
-# "The stick's angle is not a pose choice".
-const UPRIGHT_ASSEMBLY_ROLL: float = GoalieStickRules.READY_ROLL_DEG
+# Assembly roll in every stance: the one that lays the blade flush. The forward
+# TILT is solved from the hand rather than authored per stance; see
+# Scripts/controllers/CLAUDE.md → "The stick's angle is not a pose choice".
+const STICK_ROLL: float = GoalieStickRules.FLUSH_ROLL_DEG
 
 # Active blade intent: max yaw on the blocker assembly to point the blade
 # toward a close-range threat. Smaller cap than the elevated-shot reach yaw
 # because the blocker pad is rigidly attached — swinging too far moves the
 # whole pad off the right side of the body.
 var active_blade_max_yaw_deg: float = GoalieStickRules.ACTIVE_YAW_CAP_DEG
-# Blade offset from the BlockArm assembly origin, BlockArm-local. Derived from
-# the Goalie.tscn node chain (Stick at y −0.25, StickBladeCollider at
-# (−0.15, −0.67, 0) inside it → blade centre ≈ (−0.15, −0.92, 0) below the
-# wrist), which test_goalie_scene_mirrors.gd holds against the scene. The
-# per-state X tilt swings that below-wrist offset FORWARD: at tilt φ the blade's
-# horizontal offset from the wrist is (BLADE_ASSEMBLY_X,
-# −BLADE_ASSEMBLY_DROP·sin(φ)), and the blade-aim solve rotates that offset onto
-# the wrist→puck line so the BLADE lands on the puck rather than the assembly
-# merely pointing puck-side.
-const BLADE_ASSEMBLY_X: float = GoalieStickRules.ASSEMBLY_LATERAL_M
-const BLADE_ASSEMBLY_DROP: float = GoalieStickRules.ASSEMBLY_DROP_M
 # Lunge forward extension at peak. Pushes c.blocker_pos forward (in goalie-
 # local -Z, the slot direction). Sin-curved by the controller's
 # lunge_progress so it reads as a quick jab.
@@ -391,8 +380,8 @@ func _set_standing_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 	c.body_rot      = Vector3(-4.0, 0.0, 0.0)
 	c.head_pos      = Vector3(0.0,  1.79, -0.04)
 	c.head_rot      = Vector3.ZERO
-	c.blocker_pos   = Vector3( 0.38, GoalieStickRules.wrist_y_for_flat_blade_on_ice(UPRIGHT_ASSEMBLY_ROLL), -0.18)
-	c.blocker_rot   = Vector3(0.0, 0.0, UPRIGHT_ASSEMBLY_ROLL)
+	c.blocker_pos   = Vector3( 0.38, GoalieStickRules.upright_wrist_y(), -0.18)
+	c.blocker_rot   = Vector3(0.0, 0.0, STICK_ROLL)
 	c.glove_pos     = Vector3(-0.35, 1.12, 0.0)
 	c.glove_pos.z   = _hand_depth(c, -1.0, c.glove_pos.x, c.glove_pos.y, BEND_STANDING_DEG)
 	c.glove_rot     = Vector3.ZERO
@@ -423,8 +412,8 @@ func _set_ready_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 	c.body_rot      = Vector3(-14.0, 0.0, 0.0)
 	c.head_pos      = Vector3(0.0,  1.62, -0.22)
 	c.head_rot      = Vector3.ZERO
-	c.blocker_pos   = Vector3( 0.44, GoalieStickRules.wrist_y_for_flat_blade_on_ice(UPRIGHT_ASSEMBLY_ROLL), -0.32)
-	c.blocker_rot   = Vector3(0.0, 0.0, UPRIGHT_ASSEMBLY_ROLL)
+	c.blocker_pos   = Vector3( 0.44, GoalieStickRules.upright_wrist_y(), -0.32)
+	c.blocker_rot   = Vector3(0.0, 0.0, STICK_ROLL)
 	c.glove_pos     = Vector3(-0.42, 0.90, 0.0)
 	c.glove_pos.z   = _hand_depth(c, -1.0, c.glove_pos.x, c.glove_pos.y, BEND_READY_DEG)
 	c.glove_rot     = Vector3.ZERO
@@ -477,13 +466,13 @@ func _set_butterfly_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 		_tuck_into_block(c)
 
 
-# Hands in the down stances, for the trunk already posed in `c`. The stick
-# decides the blocker: the paddle rolled in and the wrist at the height that
-# lays the blade flat, as upright, far enough forward to put the blade out in
-# front of the knees. The glove is held out over the pads at a real bend.
+# Hands in the down stances, for the trunk already posed in `c`. The blocker
+# sits just above the pads with the paddle at the flush roll, and the tilt solve
+# lays the stick forward until the blade reaches the ice out in front of the
+# knees. The glove is held out over the pads at a real bend.
 func _set_down_hands(c: GoalieBodyConfig, glove_y: float) -> void:
 	c.blocker_pos = Vector3(DOWN_BLOCKER_X_M, DOWN_HAND_Y_M, DOWN_BLOCKER_Z_M)
-	c.blocker_rot = Vector3(0.0, 0.0, UPRIGHT_ASSEMBLY_ROLL)
+	c.blocker_rot = Vector3(0.0, 0.0, STICK_ROLL)
 	c.glove_pos = Vector3(-0.42, glove_y, 0.0)
 	c.glove_pos.z = _hand_depth(c, -1.0, c.glove_pos.x, glove_y, BEND_DOWN_DEG)
 	c.glove_rot = Vector3.ZERO
@@ -592,7 +581,7 @@ func _set_covering_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 	c.glove_pos     = Vector3(puck_local_x, 0.09, puck_local_z)
 	c.glove_rot     = Vector3(-70.0, 0.0, 0.0)
 	c.blocker_pos   = Vector3( 0.46, 0.49, -0.18)
-	c.blocker_rot   = Vector3(0.0, 0.0, 0.0)
+	c.blocker_rot   = Vector3(0.0, 0.0, STICK_ROLL)
 
 # Stride shape for the behind-net skate (pad-legged reduction of the skater
 # gait). The stroke skew is the skater idiom verbatim: warping the phase
@@ -619,7 +608,7 @@ func _set_puck_play_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 	# Paddle-down trap: blocker drops low and forward, blade flat on the ice
 	# across the boards lane; glove low and ready beside it for a bouncing rim.
 	c.blocker_pos = Vector3(0.34, 0.32, -0.42)
-	c.blocker_rot = Vector3(0.0, 0.0, -10.0)
+	c.blocker_rot = Vector3(0.0, 0.0, STICK_ROLL)
 	c.glove_pos = Vector3(-0.38, 0.55, -0.30)
 	c.body_rot = Vector3(-18.0, 0.0, 0.0)
 
@@ -673,9 +662,6 @@ func _apply_puck_play_stride(c: GoalieBodyConfig, inputs: Inputs) -> void:
 
 
 func _set_rvh_left_pose(c: GoalieBodyConfig) -> void:
-	# RVH stick swings toward the post. Z rotation rolls the stick laterally
-	# so the blade points along the goal line toward the post rather than
-	# straight forward.
 	c.left_pad_pos  = Vector3( 0.04, 0.14, 0.0)
 	c.left_pad_rot  = Vector3(0.0, rvh_post_pad_angle, -90.0)
 	c.right_pad_pos = Vector3( 0.45, 0.33, 0.0)
@@ -687,7 +673,7 @@ func _set_rvh_left_pose(c: GoalieBodyConfig) -> void:
 	c.glove_pos     = Vector3(-0.12, 0.69, -0.18)
 	c.glove_rot     = Vector3.ZERO
 	c.blocker_pos   = Vector3( 0.40, 0.64, -0.18)
-	c.blocker_rot   = Vector3(0.0, 0.0, -25.0)
+	c.blocker_rot   = Vector3(0.0, 0.0, STICK_ROLL)
 
 # VH (post pad VERTICAL, back pad horizontal) — the post stance for a sharp-
 # angle SHOT threat still in FRONT of the goal line (realism audit F14; Allaire/
@@ -711,7 +697,7 @@ func _set_vh_left_pose(c: GoalieBodyConfig) -> void:
 	c.glove_pos     = Vector3(-0.30, 0.90, -0.14)
 	c.glove_rot     = Vector3.ZERO
 	c.blocker_pos   = Vector3( 0.36, 0.68, -0.16)
-	c.blocker_rot   = Vector3(0.0, 0.0, -25.0)
+	c.blocker_rot   = Vector3(0.0, 0.0, STICK_ROLL)
 
 func _set_vh_right_pose(c: GoalieBodyConfig) -> void:
 	c.right_pad_pos = Vector3( 0.28, 0.44, -0.02)
@@ -725,7 +711,7 @@ func _set_vh_right_pose(c: GoalieBodyConfig) -> void:
 	# Blocker side is the post side here: the paddle stays low along the post
 	# so the blade keeps the ice; the glove holds the far-side lane.
 	c.blocker_pos   = Vector3( 0.30, 0.72, -0.12)
-	c.blocker_rot   = Vector3(0.0, 0.0,  25.0)
+	c.blocker_rot   = Vector3(0.0, 0.0, STICK_ROLL)
 	c.glove_pos     = Vector3(-0.36, 0.68, -0.16)
 	c.glove_rot     = Vector3.ZERO
 
@@ -739,7 +725,7 @@ func _set_rvh_right_pose(c: GoalieBodyConfig) -> void:
 	c.head_pos      = Vector3( 0.02, 1.17,  0.08)
 	c.head_rot      = Vector3.ZERO
 	c.blocker_pos   = Vector3( 0.12, 0.69, -0.18)
-	c.blocker_rot   = Vector3(0.0, 0.0,  25.0)
+	c.blocker_rot   = Vector3(0.0, 0.0, STICK_ROLL)
 	c.glove_pos     = Vector3(-0.40, 0.64, -0.18)
 	c.glove_rot     = Vector3.ZERO
 
@@ -761,14 +747,8 @@ func _mirror_hands(c: GoalieBodyConfig) -> void:
 # plane before reaching the goal. Falls back to the goal-line impact value
 # if the intercept can't be computed.
 # Closed-loop blade aim: the assembly yaw that lands the stick BLADE on the
-# wrist→puck line. The blade's horizontal offset from the wrist at forward
-# tilt φ is (BLADE_ASSEMBLY_X, −BLADE_ASSEMBLY_DROP·sin(φ)); Godot's YXZ Euler
-# order applies the Y yaw around that tilted offset, so solving
-# yaw = angle(wrist→puck) − angle(blade offset at yaw 0) points the blade at
-# the puck itself, honouring both the puck's actual depth and the stick
-# geometry — a fixed-lookahead atan2(puck_x, k) aims the assembly, not the blade.
-# Angle convention matches the reach math: A(v) = atan2(−v.x, −v.z), positive
-# yaw carries local −Z toward −X. Caller clamps via `max_yaw_deg`.
+# wrist→puck line (GoalieStickRules.yaw_to_target), at the tilt the hand's
+# height will give it. Caller clamps via `max_yaw_deg`.
 func _blade_yaw_to_puck(
 		c: GoalieBodyConfig, inputs: Inputs, max_yaw_deg: float) -> float:
 	var px: float = (inputs.puck_position.x - inputs.current_x) * -inputs.direction_sign

@@ -2,8 +2,8 @@ extends SceneTree
 
 # Dev visualizer: renders the goalie offscreen from three standing angles, a
 # butterfly, a near-overhead butterfly, a close-up of the stick on the ice, the
-# half-butterfly and the blocking vs reaction butterfly,
-# so goalie mesh/pose changes can be SEEN without launching the game. A bare-instantiated goalie is a collapsed lump — every part is placed
+# half-butterfly, the blocking vs reaction butterfly and the butterfly stick
+# side-on, so goalie mesh/pose changes can be SEEN without launching the game. A bare-instantiated goalie is a collapsed lump — every part is placed
 # per-tick by its controller — so this drives the real pose builder directly:
 # a GoalieBodyConfigBuilder.Inputs bundle (state + defaults) rebuilt and
 # snapped with apply_body_config(config, 1.0) each frame. The goalie faces −Z.
@@ -139,6 +139,11 @@ func _on_frame() -> void:
 		_inputs.blocking_seal = false
 	elif _frames == 140:
 		_save("goalie_reaction_butterfly.png")
+		# Side-on, low: how far the paddle lays forward and the blade's face opens.
+		_camera.position = Vector3(-2.2, 0.45, -0.5)
+		_camera.look_at(Vector3(0.0, 0.25, -0.5))
+	elif _frames == 150:
+		_save("goalie_butterfly_stick_side.png")
 		quit()
 
 
