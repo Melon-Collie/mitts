@@ -51,7 +51,7 @@ var react_hand_y_min: float = 0.50
 var react_hand_y_max: float = 1.55
 # How far above the CHEST ANCHOR (`body_pos.y` of the pose in play) either hand
 # can be raised. This is what makes going down cost something: the butterfly's
-# chest sits at 0.40 against READY's 1.06, so the same arm reaches 0.66 m lower
+# chest sits at 0.64 against READY's 1.06, so the same arm reaches 0.42 m lower
 # from the ice than from the feet. See GoalieController.arm_reach_above_chest.
 var arm_reach_above_chest: float = 0.49
 
@@ -118,17 +118,21 @@ const BLOCK_HAND_Z_M: float = -0.40
 # Down-stance hands (see _set_down_hands).
 const DOWN_BLOCKER_X_M: float = 0.40
 const DOWN_BLOCKER_Z_M: float = -0.20
-const DOWN_GLOVE_Y_M: float = 0.50
+# The glove held out at belly height.
+const DOWN_GLOVE_Y_M: float = GoalieAnatomy.TORSO_CENTER_Y_BUTTERFLY_M
 # Just above the flat pads' tops.
 const DOWN_HAND_Y_M: float = GoalieAnatomy.PAD_CENTER_Y_BUTTERFLY_M \
 		+ GoalieAnatomy.PAD_BOX_WIDTH_M * 0.5 + 0.125
 
+# The butterfly trunk and head (GoalieAnatomy: sitting on the flat pads).
+const DOWN_BODY_Y_M: float = GoalieAnatomy.TORSO_CENTER_Y_BUTTERFLY_M
+const DOWN_HEAD_Y_M: float = GoalieAnatomy.HEAD_CENTER_Y_BUTTERFLY_M
+
 # The half-butterfly body: one knee on the ice, the other leg in the ready
 # crouch, so the hips sit between the two stances' — the butterfly trunk raised
-# by half the drop from the ready stance — and lean over the down knee. The head
-# rides the trunk at the butterfly's own neck offset.
-const HALF_BODY_Y_M: float = (0.40 + 1.06) * 0.5
-const HALF_HEAD_Y_M: float = HALF_BODY_Y_M + (0.97 - 0.40)
+# by half the drop from the ready stance — and lean over the down knee.
+const HALF_BODY_Y_M: float = (DOWN_BODY_Y_M + 1.06) * 0.5
+const HALF_HEAD_Y_M: float = HALF_BODY_Y_M + GoalieAnatomy.NECK_M
 const HALF_BODY_SHIFT_M: float = 0.06
 const HALF_BODY_ROLL_DEG: float = 6.0
 
@@ -321,9 +325,9 @@ static func resting_body_position_for_state(state: int) -> Vector3:
 		GoalieStateMachine.State.STANDING:                        return Vector3(0.0,  1.22,  0.0)
 		GoalieStateMachine.State.READY:                           return Vector3(0.0,  1.06, -0.05)
 		GoalieStateMachine.State.RECOVERING:                      return Vector3(0.0,  1.06, -0.05)
-		GoalieStateMachine.State.BUTTERFLY:                       return Vector3(0.0,  0.40,  0.0)
-		GoalieStateMachine.State.COILING:                         return Vector3(0.0,  0.40,  0.0)
-		GoalieStateMachine.State.SLIDING:                         return Vector3(0.0,  0.40,  0.0)
+		GoalieStateMachine.State.BUTTERFLY:                       return Vector3(0.0, DOWN_BODY_Y_M, 0.0)
+		GoalieStateMachine.State.COILING:                         return Vector3(0.0, DOWN_BODY_Y_M, 0.0)
+		GoalieStateMachine.State.SLIDING:                         return Vector3(0.0, DOWN_BODY_Y_M, 0.0)
 		GoalieStateMachine.State.RVH_LEFT:                        return Vector3(-0.02, 0.60, 0.05)
 		GoalieStateMachine.State.RVH_RIGHT:                       return Vector3( 0.02, 0.60, 0.05)
 		GoalieStateMachine.State.VH_LEFT:                         return Vector3(-0.05, 0.85, 0.02)
@@ -331,7 +335,7 @@ static func resting_body_position_for_state(state: int) -> Vector3:
 		GoalieStateMachine.State.COVERING:                        return Vector3(0.0,  0.48, -0.10)
 		GoalieStateMachine.State.PLAYING_PUCK:                    return Vector3(0.0,  1.06, -0.05)
 		GoalieStateMachine.State.CATCHING:                        return Vector3(0.0,  1.06, -0.05)
-		GoalieStateMachine.State.CATCHING_DOWN:                   return Vector3(0.0,  0.40,  0.0)
+		GoalieStateMachine.State.CATCHING_DOWN:                   return Vector3(0.0, DOWN_BODY_Y_M, 0.0)
 		GoalieStateMachine.State.HALF_BUTTERFLY_LEFT:             return Vector3(-HALF_BODY_SHIFT_M, HALF_BODY_Y_M, -0.02)
 		GoalieStateMachine.State.HALF_BUTTERFLY_RIGHT:            return Vector3( HALF_BODY_SHIFT_M, HALF_BODY_Y_M, -0.02)
 	return Vector3(0.0, 1.22, 0.0)
@@ -341,9 +345,9 @@ static func resting_head_position_for_state(state: int) -> Vector3:
 		GoalieStateMachine.State.STANDING:                        return Vector3(0.0,  1.79, -0.04)
 		GoalieStateMachine.State.READY:                           return Vector3(0.0,  1.62, -0.22)
 		GoalieStateMachine.State.RECOVERING:                      return Vector3(0.0,  1.62, -0.22)
-		GoalieStateMachine.State.BUTTERFLY:                       return Vector3(0.0,  0.97, -0.06)
-		GoalieStateMachine.State.COILING:                         return Vector3(0.0,  0.97, -0.06)
-		GoalieStateMachine.State.SLIDING:                         return Vector3(0.0,  0.97, -0.06)
+		GoalieStateMachine.State.BUTTERFLY:                       return Vector3(0.0, DOWN_HEAD_Y_M, -0.06)
+		GoalieStateMachine.State.COILING:                         return Vector3(0.0, DOWN_HEAD_Y_M, -0.06)
+		GoalieStateMachine.State.SLIDING:                         return Vector3(0.0, DOWN_HEAD_Y_M, -0.06)
 		GoalieStateMachine.State.RVH_LEFT:                        return Vector3(-0.02, 1.17, 0.08)
 		GoalieStateMachine.State.RVH_RIGHT:                       return Vector3( 0.02, 1.17, 0.08)
 		GoalieStateMachine.State.VH_LEFT:                         return Vector3(-0.05, 1.45, 0.06)
@@ -351,7 +355,7 @@ static func resting_head_position_for_state(state: int) -> Vector3:
 		GoalieStateMachine.State.COVERING:                        return Vector3(0.0,  0.92, -0.28)
 		GoalieStateMachine.State.PLAYING_PUCK:                    return Vector3(0.0,  1.62, -0.22)
 		GoalieStateMachine.State.CATCHING:                        return Vector3(0.0,  1.62, -0.22)
-		GoalieStateMachine.State.CATCHING_DOWN:                   return Vector3(0.0,  0.97, -0.06)
+		GoalieStateMachine.State.CATCHING_DOWN:                   return Vector3(0.0, DOWN_HEAD_Y_M, -0.06)
 		GoalieStateMachine.State.HALF_BUTTERFLY_LEFT:             return Vector3(-HALF_BODY_SHIFT_M, HALF_HEAD_Y_M, -0.12)
 		GoalieStateMachine.State.HALF_BUTTERFLY_RIGHT:            return Vector3( HALF_BODY_SHIFT_M, HALF_HEAD_Y_M, -0.12)
 	return Vector3(0.0, 1.79, -0.04)
@@ -428,6 +432,12 @@ func _set_ready_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 const BEND_STANDING_DEG: float = 90.0
 const BEND_READY_DEG: float = 105.0
 const BEND_DOWN_DEG: float = 95.0
+const BEND_SQUEEZE_DEG: float = 65.0
+
+# RVH: the glove held over the post pad's top.
+const RVH_GLOVE_Y_M: float = 0.72
+# Blocker hand over the back of a smothering glove.
+const COVER_BLOCKER_OFFSET := Vector3(0.20, 0.30, 0.10)
 
 
 # The depth that holds a hand at (x, y) out in front of `side`'s shoulder (±1,
@@ -457,9 +467,9 @@ func _set_butterfly_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 	c.left_pad_rot  = Vector3(0.0,  left_toe, -90.0)
 	c.right_pad_pos = Vector3( 0.42 + inputs.five_hole_openness, 0.14, -0.20)
 	c.right_pad_rot = Vector3(0.0, -right_toe,  90.0)
-	c.body_pos      = Vector3(0.0,  0.40,  0.0)
+	c.body_pos      = Vector3(0.0, DOWN_BODY_Y_M, 0.0)
 	c.body_rot      = Vector3(-10.0, 0.0, 0.0)
-	c.head_pos      = Vector3(0.0,  0.97, -0.06)
+	c.head_pos      = Vector3(0.0, DOWN_HEAD_Y_M, -0.06)
 	c.head_rot      = Vector3.ZERO
 	_set_down_hands(c, DOWN_GLOVE_Y_M)
 	if inputs.blocking_seal:
@@ -516,7 +526,7 @@ func _set_half_butterfly_pose(c: GoalieBodyConfig, inputs: Inputs, down_side: fl
 	c.body_rot = Vector3(-12.0, 0.0, down_side * HALF_BODY_ROLL_DEG)
 	c.head_pos = Vector3(down_side * HALF_BODY_SHIFT_M, HALF_HEAD_Y_M, -0.12)
 	c.head_rot = Vector3.ZERO
-	_set_down_hands(c, DOWN_GLOVE_Y_M + HALF_BODY_Y_M - 0.40)
+	_set_down_hands(c, DOWN_GLOVE_Y_M + HALF_BODY_Y_M - DOWN_BODY_Y_M)
 
 
 # Pivot slide: sealing pad (toward post) stays flat; push-off pad (opposite
@@ -529,10 +539,10 @@ func _set_sliding_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 	var push_lift: float = slide_pushoff_lift * speed_ratio
 	var push_rot: float  = slide_pushoff_rot_deg * speed_ratio
 	# Base butterfly pose shared with idle.
-	c.body_pos    = Vector3(0.0,  0.40,  0.0)
+	c.body_pos    = Vector3(0.0, DOWN_BODY_Y_M, 0.0)
 	c.body_rot    = Vector3(-10.0, 0.0,
 			inputs.slide_dir * -inputs.direction_sign * slide_body_lean_deg * speed_ratio)
-	c.head_pos    = Vector3(0.0,  0.97, -0.06)
+	c.head_pos    = Vector3(0.0, DOWN_HEAD_Y_M, -0.06)
 	c.head_rot    = Vector3.ZERO
 	_set_down_hands(c, DOWN_GLOVE_Y_M)
 	# Per-pad toe-out: the sealing pad (toward the post) squares flat as it
@@ -566,10 +576,11 @@ func _set_covering_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 	c.left_pad_rot  = Vector3(0.0,  left_toe, -90.0)
 	c.right_pad_pos = Vector3( 0.42, 0.14, -0.20)
 	c.right_pad_rot = Vector3(0.0, -right_toe,  90.0)
-	# Torso folds over the puck; head drops low, eyes on the smother.
-	c.body_pos      = Vector3(0.0,  0.48, -0.10)
+	# Torso folds over the puck from its seat on the pads; head drops low, eyes on
+	# the smother.
+	c.body_pos      = Vector3(0.0, DOWN_BODY_Y_M - 0.10, -0.10)
 	c.body_rot      = Vector3(-32.0, 0.0, 0.0)
-	c.head_pos      = Vector3(0.0,  0.92, -0.28)
+	c.head_pos      = Vector3(0.0, DOWN_BODY_Y_M + 0.34, -0.28)
 	c.head_rot      = Vector3.ZERO
 	# Glove to the puck (goalie-local; same frame convention as the reach math).
 	var puck_local_x: float = clampf(
@@ -580,7 +591,9 @@ func _set_covering_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 			-0.95, -0.10)
 	c.glove_pos     = Vector3(puck_local_x, 0.09, puck_local_z)
 	c.glove_rot     = Vector3(-70.0, 0.0, 0.0)
-	c.blocker_pos   = Vector3( 0.46, 0.49, -0.18)
+	# The blocker comes over the back of the glove, paddle laid across the top.
+	c.blocker_pos   = Vector3(puck_local_x + COVER_BLOCKER_OFFSET.x, COVER_BLOCKER_OFFSET.y,
+			puck_local_z + COVER_BLOCKER_OFFSET.z)
 	c.blocker_rot   = Vector3(0.0, 0.0, STICK_ROLL)
 
 # Stride shape for the behind-net skate (pad-legged reduction of the skater
@@ -622,14 +635,16 @@ func _set_puck_play_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 func _set_catching_pose(c: GoalieBodyConfig, inputs: Inputs, down: bool) -> void:
 	if down:
 		_set_butterfly_pose(c, inputs)
-		c.glove_pos = Vector3(-0.24, 0.72, -0.26)
-		c.head_pos = Vector3(-0.06, 0.95, -0.12)
+		c.head_pos = Vector3(-0.06, DOWN_HEAD_Y_M - 0.02, -0.12)
 	else:
 		_set_ready_pose(c, inputs)
-		c.glove_pos = Vector3(-0.22, 0.98, -0.24)
 		c.head_pos = Vector3(-0.06, 1.58, -0.24)
 	c.glove_rot = Vector3(-40.0, 20.0, 0.0)
 	c.body_rot = Vector3(c.body_rot.x - 6.0, 0.0, 4.0)
+	# Into the belly, squeezed: the elbow shut well past a right angle.
+	var glove_y: float = c.body_pos.y - 0.08 if not down else c.body_pos.y + 0.08
+	c.glove_pos = Vector3(-0.22, glove_y,
+			_hand_depth(c, -1.0, -0.22, glove_y, BEND_SQUEEZE_DEG))
 
 # The stride itself: alternating fore/aft pad swing (translation + hip pitch,
 # half a cycle apart, sharing the skater's slow-load / fast-release warp — the
@@ -670,10 +685,7 @@ func _set_rvh_left_pose(c: GoalieBodyConfig) -> void:
 	c.body_rot      = Vector3(0.0, 0.0,  rvh_body_lean_deg)
 	c.head_pos      = Vector3(-0.02, 1.17,  0.08)
 	c.head_rot      = Vector3.ZERO
-	c.glove_pos     = Vector3(-0.12, 0.69, -0.18)
-	c.glove_rot     = Vector3.ZERO
-	c.blocker_pos   = Vector3( 0.40, 0.64, -0.18)
-	c.blocker_rot   = Vector3(0.0, 0.0, STICK_ROLL)
+	_set_down_hands(c, RVH_GLOVE_Y_M)
 
 # VH (post pad VERTICAL, back pad horizontal) — the post stance for a sharp-
 # angle SHOT threat still in FRONT of the goal line (realism audit F14; Allaire/
@@ -694,10 +706,7 @@ func _set_vh_left_pose(c: GoalieBodyConfig) -> void:
 	c.body_rot      = Vector3(-4.0, 0.0,  rvh_body_lean_deg)
 	c.head_pos      = Vector3(-0.05, 1.45,  0.06)
 	c.head_rot      = Vector3.ZERO
-	c.glove_pos     = Vector3(-0.30, 0.90, -0.14)
-	c.glove_rot     = Vector3.ZERO
-	c.blocker_pos   = Vector3( 0.36, 0.68, -0.16)
-	c.blocker_rot   = Vector3(0.0, 0.0, STICK_ROLL)
+	_set_hands_out(c, Vector2(-0.34, 0.92), Vector2(0.36, 0.68))
 
 func _set_vh_right_pose(c: GoalieBodyConfig) -> void:
 	c.right_pad_pos = Vector3( 0.28, 0.44, -0.02)
@@ -710,10 +719,7 @@ func _set_vh_right_pose(c: GoalieBodyConfig) -> void:
 	c.head_rot      = Vector3.ZERO
 	# Blocker side is the post side here: the paddle stays low along the post
 	# so the blade keeps the ice; the glove holds the far-side lane.
-	c.blocker_pos   = Vector3( 0.30, 0.72, -0.12)
-	c.blocker_rot   = Vector3(0.0, 0.0, STICK_ROLL)
-	c.glove_pos     = Vector3(-0.36, 0.68, -0.16)
-	c.glove_rot     = Vector3.ZERO
+	_set_hands_out(c, Vector2(-0.38, 0.80), Vector2(0.30, 0.68))
 
 func _set_rvh_right_pose(c: GoalieBodyConfig) -> void:
 	c.right_pad_pos = Vector3(-0.04, 0.14, 0.0)
@@ -724,10 +730,17 @@ func _set_rvh_right_pose(c: GoalieBodyConfig) -> void:
 	c.body_rot      = Vector3(0.0, 0.0, -rvh_body_lean_deg)
 	c.head_pos      = Vector3( 0.02, 1.17,  0.08)
 	c.head_rot      = Vector3.ZERO
-	c.blocker_pos   = Vector3( 0.12, 0.69, -0.18)
-	c.blocker_rot   = Vector3(0.0, 0.0, STICK_ROLL)
-	c.glove_pos     = Vector3(-0.40, 0.64, -0.18)
-	c.glove_rot     = Vector3.ZERO
+	_set_down_hands(c, RVH_GLOVE_Y_M)
+
+# Both hands held out in front at the ready bend, at (x, y) for the trunk
+# already posed in `c`.
+func _set_hands_out(c: GoalieBodyConfig, glove: Vector2, blocker: Vector2) -> void:
+	c.glove_pos = Vector3(glove.x, glove.y,
+			_hand_depth(c, -1.0, glove.x, glove.y, BEND_READY_DEG))
+	c.glove_rot = Vector3.ZERO
+	c.blocker_pos = Vector3(blocker.x, blocker.y,
+			_hand_depth(c, 1.0, blocker.x, blocker.y, BEND_READY_DEG))
+	c.blocker_rot = Vector3(0.0, 0.0, STICK_ROLL)
 
 # Swap glove ↔ blocker positions for right-catching goalies. The pose data
 # is authored assuming catches_left; mirror the X axis for the opposite stance.
@@ -1006,7 +1019,7 @@ func _apply_elevated_shot_reaction(c: GoalieBodyConfig, inputs: Inputs) -> void:
 #
 # Real goaltending's trade is "seal the ice, concede the top". Here it falls out
 # of the chest anchor each pose already authors: READY sits at 1.06 and the
-# butterfly at 0.40, so the same arm reaches 0.66 m lower from the ice.
+# butterfly at 0.64, so the same arm reaches 0.42 m lower from the ice.
 #
 # `arm_reach_above_chest` is DERIVED, not chosen — 1.06 + 0.49 = 1.55, the
 # absolute cap, so upright reach is unchanged by construction and only the down

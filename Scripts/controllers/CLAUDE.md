@@ -377,18 +377,16 @@ Whenever the bots' shot model reads the same quantity as a goalie knob, the two
 must be synced (`AIActionScoring.set_goalie_profile`) or the bots score against a
 goalie they do not face. See the AI MIRROR note in `goalie_skill_profile.gd`.
 
-**On a breakaway walkaround there is no ladder at all.** Measured as open aim
-points out of seven at a fixed release: EASY 2, NORMAL 2, HARD 2. It used to run
-BACKWARDS (0 / 2 / 4, HARD the most beatable), and fixing the beaten-wide verdict
-took HARD from 4 to 2 and lifted EASY from 0 to 2 — so the inversion is gone and
-flat is what is left.
+**On a breakaway walkaround the ladder is open work.** Measured as open aim
+points out of seven at a fixed release: EASY 4, NORMAL 4, HARD 5. The butterfly
+trunk sits on the pads, so a keeper down beside the wrap but off the post is
+beaten along the ice behind them, which is the real goalie's weakness too; the
+answer is getting to the post, and until he does `test_goalie_breakaway_ladder`'s
+two ladder tests are held pending.
 
-`depth_base_m` is the only tier lever this play can feel; every read latency,
-reach speed, drop time, the five-hole, the poke, the toe-out and
-`depth_aggressive_m` move it by exactly nothing. So a tier ladder here can only
-be a depth ladder, and depth cuts the wrong way — a goalie who challenges the
-rush harder is easier to walk around. Separating the tiers on this play is
-therefore not a matter of turning the existing knobs.
+`depth_base_m`, the drop time and the lateral push move this play; the read
+latencies, the five-hole, the poke and the toe-out do not. Depth cuts the wrong
+way — a goalie who challenges the rush harder is easier to walk around.
 
 Pulling `depth_base_m` in is not free — it concedes the centre-lane rush from
 5 m, which is what challenge depth exists for. `test_goalie_breakaway_ladder.gd`

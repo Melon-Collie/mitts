@@ -15,15 +15,15 @@ extends GutTest
 const State := GoalieStateMachine.State
 const STANCES: Array[int] = [
 	State.STANDING, State.READY, State.BUTTERFLY, State.HALF_BUTTERFLY_LEFT,
-	State.HALF_BUTTERFLY_RIGHT, State.SLIDING, State.RVH_LEFT, State.VH_RIGHT,
-	State.COVERING, State.CATCHING,
+	State.HALF_BUTTERFLY_RIGHT, State.SLIDING, State.RVH_LEFT, State.RVH_RIGHT,
+	State.VH_LEFT, State.VH_RIGHT, State.COVERING, State.CATCHING, State.CATCHING_DOWN,
 ]
 const TOL: float = 0.005
 # Stances whose glove is posed out in front (GoalieAnatomy.hand_depth_for_bend);
-# the post stances, the smother and the catch hold committed hands.
+# the smother reaches for the puck and the catch squeezes it in.
 const HELD_OUT: Array[String] = [
 	"STANDING", "READY", "BUTTERFLY", "HALF_BUTTERFLY_LEFT", "HALF_BUTTERFLY_RIGHT",
-	"SLIDING", "BUTTERFLY (block)",
+	"SLIDING", "BUTTERFLY (block)", "RVH_LEFT", "RVH_RIGHT", "VH_LEFT", "VH_RIGHT",
 ]
 
 

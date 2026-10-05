@@ -66,9 +66,15 @@ const PAD_CENTER_Y_STANDING_M: float = 0.44
 const TORSO_CENTER_Y_STANDING_M: float = 1.22
 const HEAD_CENTER_Y_STANDING_M: float = 1.79
 
+# Head centre above trunk centre, the same in every stance.
+const NECK_M: float = HEAD_CENTER_Y_STANDING_M - TORSO_CENTER_Y_STANDING_M
+
 const PAD_CENTER_Y_BUTTERFLY_M: float = 0.14
-const TORSO_CENTER_Y_BUTTERFLY_M: float = 0.40
-const HEAD_CENTER_Y_BUTTERFLY_M: float = 0.97
+# Down, he sits on his heels between the flat pads, so the trunk starts at their
+# tops.
+const TORSO_CENTER_Y_BUTTERFLY_M: float = PAD_CENTER_Y_BUTTERFLY_M \
+		+ PAD_BOX_WIDTH_M * 0.5 + TORSO_BOX_HEIGHT_M * 0.5
+const HEAD_CENTER_Y_BUTTERFLY_M: float = TORSO_CENTER_Y_BUTTERFLY_M + NECK_M
 
 
 # Vertical extent (bottom, top) of a part, as a Vector2 so callers can test a
@@ -90,8 +96,7 @@ static func pad_span(down: bool) -> Vector2:
 
 
 # The trunk. Standing it is glued to the pad-top seam (0.86–1.58); in the save
-# stances it drops with the body so the same box spans 0.04–0.76 — which is
-# what leaves a gap above it once the pads are flat.
+# stances it sits on the flat pads, 0.28–1.00.
 static func torso_span(down: bool) -> Vector2:
 	if down:
 		return _span(TORSO_CENTER_Y_BUTTERFLY_M, TORSO_BOX_HEIGHT_M)

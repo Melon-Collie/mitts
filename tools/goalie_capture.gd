@@ -2,8 +2,8 @@ extends SceneTree
 
 # Dev visualizer: renders the goalie offscreen from three standing angles, a
 # butterfly, a near-overhead butterfly, a close-up of the stick on the ice, the
-# half-butterfly, the blocking vs reaction butterfly and the butterfly stick
-# side-on, so goalie mesh/pose changes can be SEEN without launching the game. A bare-instantiated goalie is a collapsed lump — every part is placed
+# half-butterfly, the blocking vs reaction butterfly, the butterfly stick
+# side-on, and the post, cover and catch stances, so goalie mesh/pose changes can be SEEN without launching the game. A bare-instantiated goalie is a collapsed lump — every part is placed
 # per-tick by its controller — so this drives the real pose builder directly:
 # a GoalieBodyConfigBuilder.Inputs bundle (state + defaults) rebuilt and
 # snapped with apply_body_config(config, 1.0) each frame. The goalie faces −Z.
@@ -144,7 +144,34 @@ func _on_frame() -> void:
 		_camera.look_at(Vector3(0.0, 0.25, -0.5))
 	elif _frames == 150:
 		_save("goalie_butterfly_stick_side.png")
+		_capture_next_stance()
+	elif _frames > 150 and (_frames - 150) % 12 == 0:
+		_save("goalie_%s.png" % _STANCE_SHOTS[_stance_index - 1][0])
+		_capture_next_stance()
+
+
+# The stances that hold the arms somewhere other than ready, each from the
+# shooter's 3/4 so both elbows read.
+const _STANCE_SHOTS: Array = [
+	["rvh_left", GoalieStateMachine.State.RVH_LEFT],
+	["vh_left", GoalieStateMachine.State.VH_LEFT],
+	["rvh_right", GoalieStateMachine.State.RVH_RIGHT],
+	["covering", GoalieStateMachine.State.COVERING],
+	["catching", GoalieStateMachine.State.CATCHING],
+	["catching_down", GoalieStateMachine.State.CATCHING_DOWN],
+]
+var _stance_index: int = 0
+
+
+func _capture_next_stance() -> void:
+	if _stance_index >= _STANCE_SHOTS.size():
 		quit()
+		return
+	_inputs.state = _STANCE_SHOTS[_stance_index][1]
+	_inputs.puck_position = Vector3(0.0, 0.0, -0.5)
+	_camera.position = Vector3(-2.0, 1.1, -2.2)
+	_camera.look_at(Vector3(0.0, 0.6, 0.0))
+	_stance_index += 1
 
 
 func _save(fname: String) -> void:
