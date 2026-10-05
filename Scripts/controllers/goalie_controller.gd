@@ -1187,6 +1187,7 @@ func _apply_skill_profile(profile: GoalieSkillProfile) -> void:
 	read_converge_time = profile.read_converge_s
 	butterfly_drop_speed = profile.butterfly_drop_s
 	five_hole_base = profile.five_hole_base_m
+	slide_initial_speed = profile.slide_push_speed_mps
 
 
 # Live re-apply of a difficulty profile onto a running goalie — used by free play,
