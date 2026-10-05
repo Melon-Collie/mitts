@@ -2199,6 +2199,8 @@ func _advance_beaten_wide(delta: float) -> void:
 	# 63 by declining seals he used to push into. Two questions, two numbers.
 	_beaten_wide_cfg.cover_radius = _seal_cover_radius() if _sm.is_down() \
 			else pad_local_offset
+	_beaten_wide_cfg.pad_turn_rad = Vector2(_turn_from_seal(-1.0), _turn_from_seal(1.0)) \
+			if _sm.is_down() else Vector2.ZERO
 	if _beaten_wide_armed and _beaten_wide_holds():
 		_beaten_wide_confirm_timer += delta
 	elif _is_beaten_wide():
@@ -2210,6 +2212,18 @@ func _advance_beaten_wide(delta: float) -> void:
 		_beaten_wide_committed = false
 		return
 	_beaten_wide_committed = _beaten_wide_confirm_timer >= lateral_commit_confirm_s
+
+
+# A seal is facing its post once the coil's own lerp has landed.
+const SEAL_FACING_TOLERANCE_RAD: float = 0.01
+
+
+# How far the body is turned from the facing a seal toward the `side` post ends
+# at (`_update_facing`'s coil target), radians.
+func _turn_from_seal(side: float) -> float:
+	var seal_yaw: float = (PI if _direction_sign == 1 else 0.0) \
+			+ _direction_sign * side * deg_to_rad(slide_max_rotation_deg)
+	return angle_difference(goalie.get_goalie_rotation_y(), seal_yaw)
 
 
 # Does the beat still stand? Coverage only — see GoalieBehaviorRules.
@@ -3610,7 +3624,8 @@ func _commit_slide_to(seal_target: float) -> void:
 	# No-ops when he is already sitting in that seal — the 2D test lives in the
 	# collaborator, which owns both endpoints (see commit_slide).
 	if not _slide.commit_slide(_current_x, _current_depth, seal_target,
-			net_half_width, seal_end.x, seal_end.y):
+			net_half_width, seal_end.x, seal_end.y,
+			absf(_turn_from_seal(side)) > SEAL_FACING_TOLERANCE_RAD):
 		return
 	_slide_start_rotation_y = goalie.get_goalie_rotation_y()
 	_blocking_seal = false

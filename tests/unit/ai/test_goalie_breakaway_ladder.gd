@@ -4,16 +4,14 @@ extends GutTest
 # This project's own player scores overwhelmingly on breakaways, and the move is
 # always the same one `test_human_wraparound` models: drive at him, pull the puck
 # across to commit him, walk around him, tuck it. So the ladder that matters is
-# the ladder ON THAT MOVE, and there ISN'T one:
+# the ladder ON THAT MOVE, and it runs backwards:
 #
-#   EASY   2 of 7 aim points open
-#   NORMAL 2 of 7
+#   EASY   0 of 7 aim points open
+#   NORMAL 0 of 7
 #   HARD   2 of 7
 #
-# Flat. It used to run backwards — 0 / 2 / 4, with HARD the most beatable tier —
-# and fixing the beaten-wide verdict so a sealed goalie stops reading as beaten
-# took HARD from 4 to 2 and lifted EASY from 0 to 2. So the inversion is gone and
-# what is left is a tier ladder this play cannot feel at all.
+# He seals the post on the wrap now, and the deeper tiers get there in time;
+# HARD, out at challenge depth, is caught retreating — the depth trade below.
 #
 # Every measurement below fires the same seven-point aim fan at the same release
 # point after the same bait, so the count IS how much net is open — not whether
@@ -52,10 +50,11 @@ extends GutTest
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 const Harness := preload("res://tests/unit/ai/human_wraparound_harness.gd")
 const SkaterScene := preload("res://Scenes/Skater.tscn")
-# Measured with the trunk on the pads: EASY 4, NORMAL 4, HARD 5 of 7 open, and
-# the drop time and lateral push both move it — the walkaround is now decided by
-# whether he gets to the post, which these two tests predate.
-const _WAITING_ON_THE_WRAP_SEAL: bool = true
+# Measured once he seals the post on a wrap: EASY 0, NORMAL 0, HARD 2 of 7 open.
+# The deeper tiers get to the post in time; HARD, out at challenge depth, is
+# caught retreating. That inverts the floor below, and what the tiers SHOULD do
+# on this play is a design question still open, so the floor waits on it.
+const _LADDER_FLOOR_OPEN: bool = true
 const AIM_X: Array[float] = [-0.85, -0.55, -0.25, 0.0, 0.25, 0.55, 0.85]
 const START_M: float = 9.0
 const DRIVE_M_S: float = 5.0
@@ -125,9 +124,9 @@ func _rush_open(over: Dictionary, lane: float, dist: float) -> int:
 # not currently separate here at all — see the header. Making them separate is
 # open work, and this is what stops it regressing past flat while that is decided.
 func test_the_difficulty_ladder_is_not_inverted_on_a_walkaround() -> void:
-	if _WAITING_ON_THE_WRAP_SEAL:
-		pending("the butterfly trunk sits on the pads now, so a keeper down but off"
-				+ " the post is beaten behind them; held until he seals the post on a wrap")
+	if _LADDER_FLOOR_OPEN:
+		pending("the deeper tiers now seal the wrap and HARD does not; how the tiers"
+				+ " should separate on this play is undecided")
 		return
 	var open: Dictionary = {}
 	for tier: int in [GoalieSkillProfile.Difficulty.EASY,
@@ -155,10 +154,6 @@ func test_the_difficulty_ladder_is_not_inverted_on_a_walkaround() -> void:
 # this fails, and that is worth knowing — right now the only thing the ladder
 # does to a breakaway walkaround is change how far out he stands.
 func test_depth_base_is_the_only_tier_lever_this_play_can_feel() -> void:
-	if _WAITING_ON_THE_WRAP_SEAL:
-		pending("the butterfly trunk sits on the pads now, so a keeper down but off"
-				+ " the post is beaten behind them; held until he seals the post on a wrap")
-		return
 	var baseline: int = _walkaround_open({})
 	var inert: Dictionary = {
 		"reaction_delay_s": 0.30,

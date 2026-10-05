@@ -970,6 +970,11 @@ class BeatenWideConfig:
 	# number ties the threshold that decides a beat to the threshold that clears
 	# it, so making arrival reachable silently moved what counts as beaten.
 	var cover_radius: float = 0.0
+	# Down, the pad reaches the post only if it points there: how far his body is
+	# turned from the seal's own facing, for a drive to -x (x) and to +x (y).
+	# Rotated off it, the pad end swings clear of the post and the ice behind the
+	# pad is open.
+	var pad_turn_rad: Vector2 = Vector2.ZERO
 
 static func is_beaten_wide(
 		threat_position: Vector3,
@@ -1038,7 +1043,16 @@ static func tuck_point_travel(goalie_position: Vector3, post_x: float,
 	var dz: float = goal_line_z - goalie_position.z
 	var reach: float = cfg.cover_radius if cfg.cover_radius > 0.0 \
 			else cfg.reach_half_width
-	return sqrt(dx * dx + dz * dz) - reach
+	var d: float = sqrt(dx * dx + dz * dz)
+	var turn: float = absf(cfg.pad_turn_rad.y if dx > 0.0 else cfg.pad_turn_rad.x)
+	if turn < 0.001:
+		return d - reach
+	# The pad as a segment `reach` long from his body, `turn` off the post spot:
+	# the spot's distance from it.
+	var along: float = d * cos(turn)
+	if along > reach:
+		return Vector2(along - reach, d * sin(turn)).length()
+	return d * sin(turn) if along > 0.0 else d
 
 
 # ── Rush retreat (speed-matched backflow) ────────────────────────────────────

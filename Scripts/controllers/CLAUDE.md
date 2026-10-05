@@ -212,6 +212,14 @@ The shape of that failure is worth recognising: a stance loop at a fixed period
 whose slide has NO lateral leg means two owners are fighting over
 `_current_depth`. `test_goalie_held_puck_slide_loop.gd` holds all of it.
 
+**Down, the pad covers the post only if it points there.** The arrival test
+measures the post spot against the sealing pad as a segment turned however far
+his body is from the seal's own facing (`BeatenWideConfig.pad_turn_rad`). A
+butterfly still turned from an earlier push the other way has its post-side pad
+swung out from the line, and a wrap slides in behind it; a radius that ignored
+the turn called him sealed. Sitting on the seal spot turned wrong still coils,
+because the coil is what turns the pad onto the post.
+
 The one sanctioned commit is the **beaten-wide post seal** — and it is sanctioned
 because it is not a prediction. Its gate is positional (the puck is already past
 his standing sealing reach on the side it went), so it fires on an accomplished
@@ -377,16 +385,16 @@ Whenever the bots' shot model reads the same quantity as a goalie knob, the two
 must be synced (`AIActionScoring.set_goalie_profile`) or the bots score against a
 goalie they do not face. See the AI MIRROR note in `goalie_skill_profile.gd`.
 
-**On a breakaway walkaround the ladder is open work.** Measured as open aim
-points out of seven at a fixed release: EASY 4, NORMAL 4, HARD 5. The butterfly
-trunk sits on the pads, so a keeper down beside the wrap but off the post is
-beaten along the ice behind them, which is the real goalie's weakness too; the
-answer is getting to the post, and until he does `test_goalie_breakaway_ladder`'s
-two ladder tests are held pending.
+**On a breakaway walkaround the ladder runs backwards.** Measured as open aim
+points out of seven at a fixed release: EASY 0, NORMAL 0, HARD 2. He seals the
+post on the wrap, and the deeper tiers reach it in time while HARD is caught
+retreating from challenge depth. How the tiers should separate here is an open
+design question; `test_goalie_breakaway_ladder`'s floor is held pending on it.
 
-`depth_base_m`, the drop time and the lateral push move this play; the read
-latencies, the five-hole, the poke and the toe-out do not. Depth cuts the wrong
-way — a goalie who challenges the rush harder is easier to walk around.
+`depth_base_m` is the only tier lever this play can feel; every read latency,
+reach speed, drop time, the five-hole, the poke, the toe-out and
+`depth_aggressive_m` move it by exactly nothing. Depth cuts the wrong way — a
+goalie who challenges the rush harder is easier to walk around.
 
 Pulling `depth_base_m` in is not free — it concedes the centre-lane rush from
 5 m, which is what challenge depth exists for. `test_goalie_breakaway_ladder.gd`

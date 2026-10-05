@@ -148,7 +148,7 @@ const MIN_COMMIT_TRAVEL_M: float = 0.05
 # at challenge depth with the tuck open — the same
 # lateral-only reasoning about a 2D path that `advance_slide` documents.
 func commit_slide(current_x: float, current_depth: float, target_x: float, net_half_width: float,
-		coil_end_x: float, coil_end_depth: float) -> bool:
+		coil_end_x: float, coil_end_depth: float, turned: bool = false) -> bool:
 	var commit_dir: float = signf(target_x - current_x)
 	# Extremity is measured against the SLIDE CLAMP LIMIT (the puck-side
 	# post-pad-edge, where target_x is already clamped to), not the post
@@ -163,8 +163,10 @@ func commit_slide(current_x: float, current_depth: float, target_x: float, net_h
 	var clamp_limit: float = maxf(net_half_width - pad_edge_extent, 0.001)
 	var x_extremity: float = clampf(absf(target_x) / clamp_limit, 0.0, 1.0)
 	var depth_target: float = lerpf(coil_end_depth, post_seal_depth, x_extremity)
+	# Sitting on the seal spot is not sealed while he faces the wrong way: the
+	# coil is what turns the pad onto the post.
 	if absf(target_x - current_x) < MIN_COMMIT_TRAVEL_M \
-			and absf(depth_target - current_depth) < MIN_COMMIT_TRAVEL_M:
+			and absf(depth_target - current_depth) < MIN_COMMIT_TRAVEL_M and not turned:
 		return false
 	# Start in COIL phase: body lerps from (current_x, current_depth) — captured
 	# as coil_start_* — to (coil_end_x, coil_end_depth) as it rotates around the
