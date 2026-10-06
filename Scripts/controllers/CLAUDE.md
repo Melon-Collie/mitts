@@ -279,6 +279,14 @@ Two things follow that are easy to get backwards:
 things the instrument does NOT reproduce (it starts from a fully settled keeper,
 and it never reaches the 1.30–1.60 m radius band the live log holds).
 
+**A rebound gets a push to square, not a seal.** Down after the save, with a
+shooter on a loose puck, he pushes once the knee shuffle would lose the race
+to the release (`knee_shuffle_speed · backdoor_release_time`), to where he is
+square to the puck and at the depth he is at — the slide with `hold_depth`, not
+clamped to the seal band, which is where a body sits with its pad on a post.
+A carried puck still gets the seal. A quick put-back beats him mid-push.
+`test_goalie_rebound_push.gd` holds it.
+
 **The goalie can be WRONG, deterministically.** His committed belief about where
 a shot is going is the aim he read `read_lag` seconds ago, sampled from the
 shooter's published `predicted_shot_velocity`, converging onto the true line over

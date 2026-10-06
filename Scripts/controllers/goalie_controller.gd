@@ -456,6 +456,7 @@ var slide_cooldown: float = 0.20            # s between committed slides
 var slide_threat_max_distance: float = 6.0  # m — Euclidean puck→goal; filters long shots
 var slide_coverage_buffer: float = 0.10     # m — past pad edge before triggering (anti-jitter)
 var slide_anticipation_time: float = 0.10   # s — projects puck via velocity so cross-crease commits early
+var rebound_push: bool = true
 # Shooter-present gate: only slide if there's someone who can actually shoot
 # the puck. Opposing carrier (any range) counts; loose puck counts only if an
 # opposing skater is within this radius. No need to seal the back door for a
@@ -3583,6 +3584,17 @@ func _try_commit_slide(delta: float) -> void:
 	# its sign to pick the post side, and the seal target is solved there.
 	var coverage_x: float = square.x
 	var lateral_offset: float = coverage_x - _current_x
+	# A loose puck with a shooter on it is a put-back: his pad reaching it is not
+	# enough, he has to be square before the release, and the knee shuffle covers
+	# almost nothing in a quick swing. So he pushes once the shuffle loses that
+	# race, as far as square and no further.
+	if not carried and rebound_push and absf(lateral_offset) \
+			> knee_shuffle_speed * backdoor_release_time + GoalieSlideBehavior.MIN_COMMIT_TRAVEL_M:
+		_slide_coverage_confirm_timer = 0.0
+		# Not clamped to the seal band: that band is where a body sits with its
+		# pad on the post, and a push at depth is square to the puck instead.
+		_commit_slide_to(coverage_x, true)
+		return
 	if absf(lateral_offset) <= pad_edge + slide_coverage_buffer:
 		_slide_coverage_confirm_timer = 0.0
 		return
@@ -3612,7 +3624,7 @@ func _commit_slide_toward(coverage_x: float) -> void:
 
 
 # Commit the pivot slide to a lateral destination already inside the seal band.
-func _commit_slide_to(seal_target: float) -> void:
+func _commit_slide_to(seal_target: float, hold_depth: bool = false) -> void:
 	var slide_rot: float = deg_to_rad(slide_max_rotation_deg)
 	var side: float = signf(seal_target - _current_x)
 	if side == 0.0:
@@ -3626,7 +3638,7 @@ func _commit_slide_to(seal_target: float) -> void:
 	# collaborator, which owns both endpoints (see commit_slide).
 	if not _slide.commit_slide(_current_x, _current_depth, seal_target,
 			net_half_width, seal_end.x, seal_end.y,
-			absf(_turn_from_seal(side)) > SEAL_FACING_TOLERANCE_RAD):
+			absf(_turn_from_seal(side)) > SEAL_FACING_TOLERANCE_RAD, hold_depth):
 		return
 	_slide_start_rotation_y = goalie.get_goalie_rotation_y()
 	_blocking_seal = false
