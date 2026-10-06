@@ -62,9 +62,16 @@ func _run_rush(start: Vector3, vel: Vector3, secs: float = 3.0,
 	var first_shot_dist: float = -1.0
 	if trace:
 		gut.p("  t(s)  carrier(x,z) dist  shootEV carryEV  goalie(x,z) depth  shots")
+	var stripped: bool = false
 	for t: int in int(secs / DT):
 		var before: int = duel.releases.size()
 		duel.step()
+		# A strip is the rush's outcome — the defender won the puck. The harness
+		# would let the carrier re-collect and be re-stripped tick after tick,
+		# which says nothing about whether it shoots, so the run ends here.
+		if duel.strips > 0:
+			stripped = true
+			break
 		var sk: Object = duel._skater(CARRIER)
 		if duel.releases.size() > before:
 			var n: int = duel.releases.size() - before
@@ -84,7 +91,7 @@ func _run_rush(start: Vector3, vel: Vector3, secs: float = 3.0,
 					sk.agent.debug_shoot_score, sk.agent.debug_carry_score,
 					g.x, g.z, absf(g.z - goal_z), shots])
 	return {"shots": shots, "legit": legit_shots, "crease": crease_shots,
-			"min_dist": min_dist, "first_dist": first_shot_dist}
+			"min_dist": min_dist, "first_dist": first_shot_dist, "stripped": stripped}
 
 
 func test_straight_1v1_produces_a_shot() -> void:
@@ -162,8 +169,9 @@ func test_pressured_1v1_with_backchecker_still_shoots() -> void:
 			var start: Vector3 = net + Vector3(sin(a), 0.0, cos(a)) * radius
 			var vel: Vector3 = (net - start).normalized() * speed
 			var r: Dictionary = _run_rush(start, vel, 3.5, false, prof, gap)
-			gut.p("  %-6s angle %+5.0f°  →  shots=%d (legit=%d crease=%d)  first@%.1fm min-dist=%.1f" % [
-					tier, deg, r["shots"], r["legit"], r["crease"], r["first_dist"], r["min_dist"]])
+			gut.p("  %-6s angle %+5.0f°  →  shots=%d (legit=%d crease=%d)  first@%.1fm min-dist=%.1f%s" % [
+					tier, deg, r["shots"], r["legit"], r["crease"], r["first_dist"], r["min_dist"],
+					"  STRIPPED" if r["stripped"] else ""])
 			if r["shots"] <= 0:
 				missed.append("%s@%+.0f" % [tier, deg])
 	# The bug this originally fixed: under backchecker pressure the bot failed to
