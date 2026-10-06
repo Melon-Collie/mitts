@@ -147,6 +147,25 @@ func test_forecheck_f1_is_a_forward_and_line_is_held_by_d() -> void:
 	assert_eq(dp, [4, 5] as Array[int], "the D pair holds the line")
 
 
+func test_a_pinching_strong_point_keeps_his_job() -> void:
+	# The strong point sinking down his wall at speed is the role doing its job,
+	# not leaving it: the points are raced on the LATERAL trip, so his pinch
+	# (and his momentum away from the line) does not hand the strong point to
+	# the weak D sliding toward the middle — even with the lobby-side bias on
+	# the weak D's side (RD is home on +X).
+	var skaters: Array = [
+		[1, 0, Vector3(6.8, 0, -21.0)],                          # carrier, strong wall
+		[2, 0, Vector3(-6.0, 0, -20.0)],
+		[3, 0, Vector3(0.5, 0, -16.0)],
+		[4, 0, Vector3(5.2, 0, -11.5), Vector3(-2.0, 0, -5.4)],  # LD pinching on +X
+		[5, 0, Vector3(-5.6, 0, -9.3), Vector3(2.6, 0, 0.0)],    # RD sliding in
+	]
+	var prev: Dictionary = {4: AIRoleSlots.Slot.POINT_STRONG, 5: AIRoleSlots.Slot.POINT_WEAK}
+	var a: Dictionary = _assign(skaters, AIPossessionState.State.OZONE, 1, 0.0, 0.0, prev, 1.0)
+	assert_eq(a[4], AIRoleSlots.Slot.POINT_STRONG, "the pinch stays the strong point's")
+	assert_eq(a[5], AIRoleSlots.Slot.POINT_WEAK)
+
+
 # ── Cross-fill: the emergent cover rotation ──────────────────────────────────
 
 func test_d_carrier_vacated_point_is_covered_by_a_forward() -> void:

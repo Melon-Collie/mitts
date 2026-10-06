@@ -82,6 +82,10 @@ class SlotSpec:
 	# cross-fill pass. INF = no deadline (every other slot). Physical filter,
 	# so hysteresis/home-bias adjustments don't enter it.
 	var deadline_s: float = INF
+	# Race the LATERAL trip only (x position and x velocity): the slot is a
+	# side of the ice, and how deep its holder plays along that side is the
+	# role's own business — the strong point's pinch must not lose him the job.
+	var lateral_race: bool = false
 
 	static func make(p_slot: int, p_group: int, p_target: Vector3,
 			p_home_slot: int = -1) -> SlotSpec:
@@ -289,15 +293,19 @@ static func _specs_for_state(state: int, own_goal_z: float, strong_x: float,
 
 	match state:
 		AIPossessionState.State.OZONE:
+			var point_strong := SlotSpec.make(AIRoleSlots.Slot.POINT_STRONG, Group.D,
+					Vector3(strong_x * GameRules.END_ZONE_FACEOFF_DOT_X, 0.0,
+							opp_blue_z - own_dir * _POINT_INSET_M),
+					_side_home_d(strong_x))
+			point_strong.lateral_race = true
+			var point_weak := SlotSpec.make(AIRoleSlots.Slot.POINT_WEAK, Group.D,
+					Vector3(-strong_x * _POINT_WEAK_X_M, 0.0,
+							opp_blue_z - own_dir * _POINT_INSET_M),
+					_side_home_d(-strong_x))
+			point_weak.lateral_race = true
 			return [
-				SlotSpec.make(AIRoleSlots.Slot.POINT_STRONG, Group.D,
-						Vector3(strong_x * GameRules.END_ZONE_FACEOFF_DOT_X, 0.0,
-								opp_blue_z - own_dir * _POINT_INSET_M),
-						_side_home_d(strong_x)),
-				SlotSpec.make(AIRoleSlots.Slot.POINT_WEAK, Group.D,
-						Vector3(-strong_x * _POINT_WEAK_X_M, 0.0,
-								opp_blue_z - own_dir * _POINT_INSET_M),
-						_side_home_d(-strong_x)),
+				point_strong,
+				point_weak,
 				SlotSpec.make(AIRoleSlots.Slot.NET_FRONT, Group.F,
 						Vector3(0.0, 0.0, opp_goal_z + own_dir * _NET_FRONT_OFF_M)),
 				SlotSpec.make(AIRoleSlots.Slot.HIGH_SLOT, Group.F,
@@ -478,8 +486,14 @@ static func _pick_soonest(
 		var caps: AISkaterCaps = caps_by_peer.get(pid)
 		var speed: float = caps.max_speed if caps != null \
 				else AIActionScoring.SKATER_REF_SPEED_M_S
-		var t: float = AIActionScoring.time_to_arrive(
-				s.position, spec.target, s.velocity, speed)
+		var t: float
+		if spec.lateral_race:
+			t = AIActionScoring.time_to_arrive(
+					Vector3(s.position.x, 0.0, 0.0), Vector3(spec.target.x, 0.0, 0.0),
+					Vector3(s.velocity.x, 0.0, 0.0), speed)
+		else:
+			t = AIActionScoring.time_to_arrive(
+					s.position, spec.target, s.velocity, speed)
 		# Feasibility deadline (pass 1 only): a candidate who can't make the
 		# race target in time is no candidate — defer to cross-fill rather
 		# than electing a body that can never do the job. Raw kinematic t;
