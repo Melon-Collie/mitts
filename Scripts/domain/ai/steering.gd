@@ -52,6 +52,10 @@ const NET_DETOUR_FRONT_MARGIN: float = 0.3
 # Below this distance to anchor we stop attracting and let friction settle
 # the bot — prevents jittering across the anchor at high speed.
 const ANCHOR_DEADBAND: float = 0.5
+# Within one body-width of a threatening defender's sweep line, the carrier's
+# offset is too small to call a side (GameRules.OFFSIDE_LINE_SLACK is the
+# canonical body half-width) — see _carrier_threat_repel.
+const THREAT_LINE_BAND_M: float = 2.0 * GameRules.OFFSIDE_LINE_SLACK
 
 # ── Velocity-matched seek ────────────────────────────────────────────────────
 # Only the CROSS component of our own velocity is cancelled — never the
@@ -409,16 +413,21 @@ static func _carrier_threat_repel(self_pos: Vector3, to_anchor: Vector3,
 				(d - reach) / AICarrySpace.EVADE_SAFE_MARGIN_M, 0.0, 1.0)
 		if threat <= 0.0:
 			continue
-		if d > 0.001:
-			force += Vector2(dx / d, dz / d) * (threat * repel_weight)
-		elif sweep_len_sq > 0.0001:
-			# Standing ON his sweep line: sidestep perpendicular to his travel,
-			# on whichever side doesn't fight the anchor pull.
+		var away := Vector2(dx / d, dz / d) if d > 0.001 else Vector2.ZERO
+		if sweep_len_sq > 0.0001 and d < THREAT_LINE_BAND_M:
+			# On or near his sweep line, "away from the closest point" is the
+			# sign of a few centimetres of drift — a full-strength push that
+			# flips every tick. Commit to one side instead: the anchor's, when
+			# the anchor is clearly off his line, else a fixed default; the
+			# actual away direction takes over as the offset reaches the band.
 			var inv_sweep: float = 1.0 / sqrt(sweep_len_sq)
 			var perp := Vector2(-sweep_z * inv_sweep, sweep_x * inv_sweep)
-			if perp.x * to_anchor.x + perp.y * to_anchor.z < 0.0:
+			if perp.x * to_anchor.x + perp.y * to_anchor.z < -THREAT_LINE_BAND_M:
 				perp = -perp
-			force += perp * (threat * repel_weight)
+			var committed: Vector2 = perp.lerp(away, d / THREAT_LINE_BAND_M)
+			away = committed.normalized() if committed.length_squared() > 1e-6 else perp
+		if away != Vector2.ZERO:
+			force += away * (threat * repel_weight)
 	# Route AROUND: strip the component opposing the anchor direction so the
 	# summed pressure can bend the carry line but never push the carrier
 	# backwards off it.

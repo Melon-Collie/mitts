@@ -178,6 +178,31 @@ func test_carrier_bends_around_a_flanking_threat_without_retreating() -> void:
 	assert_gt(v.y, 0.8, "forward drive survives the bend")
 
 
+func test_carrier_commits_a_side_against_a_trailer_on_its_line() -> void:
+	# A backchecker on the carrier's hip, matched speed, dead on its line: his
+	# sweep runs through the carrier, so the closest point is the carrier's own
+	# few centimetres of drift. Either side of the line must read the SAME
+	# committed side at a bounded push — never a full-strength flip.
+	var anchor := Vector3(0, 0, 8)
+	var opps: Array[Vector3] = [Vector3(0, 0, -2.0)]
+	var vels: Array[Vector3] = [Vector3(0, 0, 5.5)]
+	var left := _carrier_move(Vector3(-0.05, 0, 0), anchor, opps, vels)
+	var right := _carrier_move(Vector3(0.05, 0, 0), anchor, opps, vels)
+	assert_eq(signf(left.x), signf(right.x), "drift either way commits the same side")
+	assert_almost_eq(left.x, right.x, 0.15, "and the push barely moves with the drift")
+
+
+func test_carrier_beyond_the_band_is_pushed_off_its_own_side() -> void:
+	# Clearly off the line (past one body-width) the real away direction rules:
+	# the carrier bends off whichever side it is actually on.
+	var anchor := Vector3(0, 0, 8)
+	var opps: Array[Vector3] = [Vector3(0, 0, -2.0)]
+	var vels: Array[Vector3] = [Vector3(0, 0, 5.5)]
+	var off: float = AISteering.THREAT_LINE_BAND_M + 0.1
+	assert_lt(_carrier_move(Vector3(-off, 0, 0), anchor, opps, vels).x, 0.0)
+	assert_gt(_carrier_move(Vector3(off, 0, 0), anchor, opps, vels).x, 0.0)
+
+
 # ── Teammate swept-path repel (teammate velocities supplied) ─────────────────
 # With teammate velocities the spacing field repels from each teammate's
 # momentum-swept path, so bots anticipate a crossing route before the bodies
