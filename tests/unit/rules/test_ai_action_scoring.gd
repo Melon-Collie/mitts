@@ -1029,8 +1029,9 @@ func test_chase_recovery_races_arrivals_not_metres() -> void:
 	var our_vels: Array[Vector3] = [Vector3(0, 0, -9)]
 	var theirs: Array[Vector3] = [Vector3(0, 0, -10)]
 	var their_vels: Array[Vector3] = [Vector3(0, 0, -9)]
-	# On metres alone this is a race we lose outright (10 m vs 12 m).
-	assert_eq(AIActionScoring.chase_recovery(target, ours, theirs), 0.0,
+	# On metres alone this is a race we lose outright (10 m vs 12 m — a
+	# cruise-pace gap of exactly the contest band, so 0 to rounding).
+	assert_almost_eq(AIActionScoring.chase_recovery(target, ours, theirs), 0.0, 1e-9,
 			"the distance read hands it to the nearer body")
 	assert_gt(AIActionScoring.chase_recovery(
 			target, ours, theirs, our_vels, their_vels), 0.99,
@@ -1067,18 +1068,25 @@ func test_time_to_arrive_zero_at_destination() -> void:
 
 func test_time_to_arrive_charges_the_standing_start_ramp() -> void:
 	# Stationary skater 10 m from dest: the calibrated phase model charges
-	# the real acceleration ramp (capped at a_net = accel × RAMP_EFFICIENCY)
-	# before the cruise — a standing start is genuinely slower than
-	# dist / top_speed (the old free-ramp read). Exact phase math:
-	# ramp to v_max, then cruise the remainder.
+	# the stride's real ramp before the cruise — a standing start is
+	# genuinely slower than dist / top_speed. Exact phase math: constant
+	# accel to the power knee, constant power to v_max, then cruise.
 	var from := Vector3(0.0, 0.0, 0.0)
 	var dest := Vector3(10.0, 0.0, 0.0)
 	var t: float = AIActionScoring.time_to_arrive(from, dest, Vector3.ZERO)
 	var vmax: float = AIActionScoring.SKATER_REF_SPEED_M_S
-	var a_net: float = AIActionScoring.SHED_ACCEL_DEFAULT_M_S2 \
-			* AIActionScoring.RAMP_EFFICIENCY
-	var d_ramp: float = vmax * vmax / (2.0 * a_net)
-	var expected: float = vmax / a_net + (10.0 - d_ramp) / vmax
+	var a: float = AIActionScoring.SHED_ACCEL_DEFAULT_M_S2 \
+			* AIStrideRamp.EFFICIENCY
+	var knee: float = GameRules.DEFAULT_SKATER_POWER_KNEE_M_S
+	var p: float = a * knee
+	var d_a: float = knee * knee / (2.0 * a)
+	var d_b: float = (vmax * vmax * vmax - knee * knee * knee) / (3.0 * p)
+	var expected: float = knee / a
+	if 10.0 - d_a <= d_b:
+		var v_end: float = pow(knee * knee * knee + 3.0 * p * (10.0 - d_a), 1.0 / 3.0)
+		expected += (v_end * v_end - knee * knee) / (2.0 * p)
+	else:
+		expected += (vmax * vmax - knee * knee) / (2.0 * p) + (10.0 - d_a - d_b) / vmax
 	assert_almost_eq(t, expected, 0.001)
 	assert_gt(t, 10.0 / vmax, "the ramp costs real time over the naive cruise")
 

@@ -62,10 +62,9 @@ const ENGAGEMENT_COOLDOWN_MIN_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 10  
 const ENGAGEMENT_COOLDOWN_MAX_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 2 / 5     # ~400 ms
 const ENGAGEMENT_PROXIMITY_M: float = 2.0        # blade-on-puck range
 
-# This bot's all-direction thrust — the redirect authority its own ETA reads
-# price the cross-momentum shed at (see _lead_intercept). Set to the real value
-# via apply_capabilities; the default mirrors SkaterController.thrust's 12.0.
-var _chase_max_accel: float = 12.0
+# This bot's standing-start push — what its own ETA reads price the pursuit
+# ramp at (see _lead_intercept). Set to the real value via apply_capabilities.
+var _chase_max_accel: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
 
 # Per-peer velocity-history smoothing for acceleration estimation.
 # Raw frame-over-frame velocity diffs at the physics rate are noisy (a thrust
@@ -75,9 +74,9 @@ var _chase_max_accel: float = 12.0
 # tick spikes while still reacting inside a 400-600 ms pass window.
 const ACCEL_SMOOTH_ALPHA: float = 0.2
 # Clamp on the smoothed accel magnitude. Caps any pathological
-# spike (e.g., teleport on respawn) at a value just above
-# SkaterController.thrust so a legitimate hard turn still reads as
-# full-thrust accel.
+# spike (e.g., teleport on respawn) above a striding turn's centripetal
+# accel (SkaterController.turn_accel × grip), so a legitimate hard turn
+# still reads in full.
 const ACCEL_CLAMP_M_S2: float = 14.0
 
 # Above this speed a loose puck is a live pass / stripped puck rather than one to
@@ -4544,11 +4543,11 @@ func _apply_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 	# direction (~180° transition), stopping hard beats carving a wide arc.
 	# The bot presses the REAL brake key and keeps move_vector on the exit
 	# direction — the input shape a human uses — so the physics gets the
-	# heavy brake friction and the cosmetic layer reads a genuine hockey
-	# stop into a dig-in restart. While brake is held the movement rules
-	# ignore move_vector, so the exit direction costs nothing until the
-	# brake releases (hysteresis + speed floor in AISteering.should_brake)
-	# and thrust resumes toward it instantly.
+	# hockey stop and the cosmetic layer reads a genuine stop into a dig-in
+	# restart. Past the pivot angle the braking stick is behind the skater,
+	# which the movement rules treat as a stop (only a sliver of tight-turn
+	# toward the exit), and the stride resumes toward it once the brake
+	# releases (hysteresis + speed floor in AISteering.should_brake).
 	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 	if self_state != null:
 		var v: Vector3 = self_state.velocity

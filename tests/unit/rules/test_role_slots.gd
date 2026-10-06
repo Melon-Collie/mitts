@@ -398,10 +398,11 @@ func test_assign_speed_cap_feeds_election() -> void:
 	# Each peer races at its real Speed cap: a faster build farther out
 	# arrives sooner and takes the slot. Distances long enough for top
 	# speed to engage — the calibrated ETA charges both builds the same
-	# standing-start ramp, so the cap only pays past its ramp distance.
+	# power-limited stride, so the cap only pays once the reference build
+	# is cruising (~9 m in) and the faster one is still building.
 	var skaters: Array = [
-			[100, 0, Vector3(5.0, 0.0, 4.0)],    # 18 m from puck at ref 9
-			[110, 0, Vector3(5.0, 0.0, -4.0)],   # 26 m from puck at cap 20
+			[100, 0, Vector3(5.0, 0.0, -8.0)],   # 30 m from puck at ref 9
+			[110, 0, Vector3(5.0, 0.0, -10.0)],  # 32 m from puck at cap 20
 			[120, 0, Vector3(-10.0, 0.0, -18.0)],  # far — out of the race
 			[200, 1, Vector3(5.0, 0.0, 22.0)],
 	]

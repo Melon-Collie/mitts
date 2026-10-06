@@ -84,8 +84,8 @@ var loft_tans: Vector3 = Vector3(
 		GameRules.DEFAULT_LOFT_TAN_HIGH)
 
 # Lateral grip multiplier (= SkaterController.lateral_grip — agility × the
-# skate-profile lean). Scales the PERPENDICULAR thrust authority in the real
-# movement core, so planning reads it wherever it models a direction change:
+# skate-profile lean). Scales the edge turn authority in the real movement
+# core, so planning reads it wherever it models a direction change:
 # the cross-momentum shed in time_to_arrive / reach_clearance, and the deke's
 # bite/unwind budgets. Straight-line phases (ramp, race-home) stay pure accel
 # — grip never limits parallel drive, in planning or in physics.

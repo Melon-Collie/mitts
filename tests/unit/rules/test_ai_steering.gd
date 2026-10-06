@@ -508,8 +508,11 @@ func test_arrival_brake_uses_closing_component_not_raw_speed() -> void:
 func test_arrival_brake_hysteresis_holds_the_brake_longer() -> void:
 	# Borderline geometry sits between the engage and release margins:
 	# not braking → stays off; already braking → holds on.
-	var vel := Vector2(0, 8)           # stop_dist = 3.2 m
-	var anchor := Vector3(0, 0, 4.0)   # engage needs 3.7 ≥ 4 (no); release needs 4.7 ≥ 4 (yes)
+	var vel := Vector2(0, 8)
+	var stop_dist: float = 64.0 / (2.0 * AISteering.ARRIVAL_BRAKE_DECEL_M_S2)
+	# Halfway between the engage and release margins.
+	var anchor := Vector3(0, 0, stop_dist + 0.5 * (AISteering.ARRIVAL_BRAKE_ENGAGE_MARGIN_M
+			+ AISteering.ARRIVAL_BRAKE_RELEASE_MARGIN_M))
 	assert_false(AISteering.should_arrival_brake(Vector3.ZERO, anchor, vel, false),
 			"outside the engage margin — don't start braking")
 	assert_true(AISteering.should_arrival_brake(Vector3.ZERO, anchor, vel, true),

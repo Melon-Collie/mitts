@@ -1,35 +1,63 @@
 class_name SkaterMovementRules
 
-# Pure movement math extracted from SkaterController._apply_movement.
-# Takes current state + input + tuning config, returns the new velocity.
-# The caller (SkaterController) still owns the state machine guard (slapper
-# charge windup, etc.); this function just does the physics.
+# Pure skating physics: current state + input + tuning config → new velocity.
+# The caller (SkaterController) owns the state-machine guards (slapper wind-up
+# etc.); this function only does the physics.
+#
+# Above GRIP_MIN_SPEED the travel direction stands in for the blade heading —
+# blades glide along their length, so velocity IS where the skates point. The
+# stick is then resolved against that heading rather than applied as a free
+# thrust: the component along travel is a stride (power-limited, so it fades
+# toward top speed), the component against travel is a skid (a skater must stop
+# before pushing the other way), and the stick's angle off travel turns the
+# velocity at an edge-limited rate (turn radius v²/(turn_accel·grip)). The brake
+# is a hockey stop; brake with the stick off to the side digs a tight turn.
+# Below GRIP_MIN_SPEED there is no heading to respect and the push is free in
+# any direction (first steps, net-front shuffles).
 
 class MovementConfig:
-	var thrust: float = 0.0                      # forward thrust magnitude
-	var friction: float = 0.0                    # base friction applied each tick
-	var max_speed: float = 0.0                   # maximum horizontal speed
+	var thrust: float = 0.0                      # standing-start push, m/s²
+	# Speed (m/s) above which the push is power-limited: drive = thrust·knee/speed.
+	var power_knee_speed: float = 0.0
+	var friction: float = 0.0                    # glide: constant decel, m/s²
+	var friction_drag: float = 0.0               # glide: velocity-proportional decel (m/s² per m/s)
+	var max_speed: float = 0.0                   # forward skating top speed
 	var move_deadzone: float = 0.0               # stick deadzone
-	var brake_multiplier: float = 0.0            # friction multiplier when braking
+	var stop_decel: float = 0.0                  # hockey-stop deceleration, m/s²
+	# Fraction of stop_decel the skid delivers when the stick opposes travel
+	# without the brake — the dedicated stop stays the better stop.
+	var reverse_skid_fraction: float = 0.0
+	# Centripetal acceleration of a striding turn at full stick, m/s² (× lateral_grip).
+	var turn_accel: float = 0.0
+	var max_turn_rate: float = 0.0               # rad/s ceiling, binds only at low speed
+	var tight_turn_multiplier: float = 0.0       # turn_accel scale while braking into a turn
+	var tight_turn_decel: float = 0.0            # speed bled while digging a tight turn, m/s²
+	# Within this angle (rad) of the stick, a held brake blends from tight turn to stop.
+	var tight_turn_align_angle: float = 0.0
 	var puck_carry_speed_multiplier: float = 0.0 # max speed reduction while carrying
-	var backward_thrust_multiplier: float = 0.0  # thrust scale when moving against facing
-	var crossover_thrust_multiplier: float = 0.0 # thrust scale when moving perpendicular to facing
-	var friction_drag: float = 0.0               # velocity-proportional drag coefficient (m/s² per m/s)
+	var backward_thrust_multiplier: float = 0.0  # stride scale when pushing against facing
+	var crossover_thrust_multiplier: float = 0.0 # stride scale when pushing perpendicular to facing
+	# Top-speed scale when TRAVEL runs against facing (backward skating).
+	var backward_max_speed_multiplier: float = 1.0
 	var sprint_thrust_multiplier: float = 1.0     # thrust boost while sprinting (modest, to reach the cap)
 	var sprint_max_speed_multiplier: float = 1.0  # top-speed boost while sprinting (the headline effect)
 	var sprint_carry_penalty_bypass: float = 0.0  # fraction of the carry speed penalty waived WHILE sprinting (heads-down straight-line flat-out); 0 = no bypass
-	# Lateral grip — the edges' authority to REDIRECT momentum. Scales only the
-	# component of thrust perpendicular to the current motion, so straight-line
-	# drive (and slowing down) is untouched and 1.0 is an exact no-op. The
-	# emergent turn radius is v²/(grip·a_perp) — the F = mv²/r seam that agility
-	# (and later the skate-profile gear) actually owns: sub-1.0 turns wide AT
-	# SPEED while a standing start keeps full authority (no momentum to fight).
+	# Edge grip — scales turn authority (striding and tight turns alike), so
+	# the emergent turn radius v²/(turn_accel·grip) is what agility (and later
+	# the skate-profile gear) owns. Straight-line drive and stops are untouched.
 	var lateral_grip: float = 1.0
 
-# Below this horizontal speed (m/s) the grip decomposition is skipped: there is
-# no meaningful momentum to redirect, and the velocity direction is numerically
-# unstable. A standing start always gets full thrust authority.
+# Below this horizontal speed (m/s) travel carries no usable heading — the
+# velocity direction is numerically unstable — so the push is free in any
+# direction.
 const GRIP_MIN_SPEED: float = 0.5
+# Past 90° off travel a braking stick tapers from tight turn to full stop over
+# this many radians: a stick held behind you while braking is a stop.
+const TIGHT_TURN_TAPER: float = PI * 0.25
+# Within this many radians of dead-opposite the stride turn fades out, so a
+# stick held straight back skids straight instead of picking a side by the
+# sign of a rounding error.
+const SKID_TURN_TAPER: float = PI * 0.25
 
 
 static func apply_movement(
@@ -46,67 +74,82 @@ static func apply_movement(
 	# multipliers + sprint_active=false make this a no-op for non-sprint callers.
 	var sprint_thrust: float = cfg.sprint_thrust_multiplier if sprint_active else 1.0
 	var sprint_max: float = cfg.sprint_max_speed_multiplier if sprint_active else 1.0
+	var applied_thrust: float = cfg.thrust * sprint_thrust
+	var has_input: bool = move_input.length() > cfg.move_deadzone
+	var facing_dir := Vector2(-sin(facing_rotation_y), -cos(facing_rotation_y))
 
-	if not brake and move_input.length() > cfg.move_deadzone:
-		# NORMAL: apply thrust in the input direction, scaled by facing alignment.
-		var thrust_dir := Vector3(move_input.x, 0.0, move_input.y)
-		var facing_dir := Vector2(-sin(facing_rotation_y), -cos(facing_rotation_y))
+	# Stride scale by how the push lines up with facing (forward > crossover >
+	# backward stride).
+	var thrust_scale: float = 1.0
+	if has_input:
 		var move_dot: float = facing_dir.dot(move_input.normalized())
-
-		var thrust_scale: float
 		if move_dot >= 0.0:
 			thrust_scale = lerpf(cfg.crossover_thrust_multiplier, 1.0, move_dot)
 		else:
 			thrust_scale = lerpf(cfg.backward_thrust_multiplier, cfg.crossover_thrust_multiplier, move_dot + 1.0)
 
-		var applied_thrust: float = cfg.thrust * sprint_thrust
-		var thrust_vec: Vector3 = thrust_dir * applied_thrust * thrust_scale
-		# Lateral grip: decompose the thrust against the current motion and scale
-		# only the perpendicular component (see MovementConfig.lateral_grip). The
-		# parallel component — driving on, or slowing down — always passes whole,
-		# and grip 1.0 recomposes exactly (guarded out as a no-op).
-		if cfg.lateral_grip != 1.0:
-			var vel_dir := Vector2(current_velocity.x, current_velocity.z)
-			if vel_dir.length() > GRIP_MIN_SPEED:
-				vel_dir = vel_dir.normalized()
-				var t2 := Vector2(thrust_vec.x, thrust_vec.z)
-				var par: Vector2 = vel_dir * t2.dot(vel_dir)
-				var gripped: Vector2 = par + (t2 - par) * cfg.lateral_grip
-				thrust_vec = Vector3(gripped.x, 0.0, gripped.y)
-		var thrust_delta: Vector3 = thrust_vec * delta
-		velocity += thrust_delta
+	var horiz := Vector2(velocity.x, velocity.z)
+	var speed: float = horiz.length()
+	if speed <= GRIP_MIN_SPEED:
+		if brake:
+			horiz = horiz.move_toward(Vector2.ZERO, cfg.stop_decel * delta)
+		else:
+			if has_input:
+				horiz += move_input * (applied_thrust * thrust_scale * delta)
+			horiz = horiz.move_toward(Vector2.ZERO,
+					(cfg.friction + cfg.friction_drag * horiz.length()) * delta)
+		velocity.x = horiz.x
+		velocity.z = horiz.y
+		return velocity
 
-		# Speed cap — but preserve over-max speed from external sources (body
-		# check boost, etc.) so we don't instantly clamp a legitimate momentum gain.
-		var base_max: float = cfg.max_speed * sprint_max
-		# Sprinting with the puck is heads-down and straight-line (the turn radius
-		# blows up anyway), so most of the carry speed penalty is waived while
-		# sprinting — that's what lets a fast carrier actually run. The 1.6x sprint
-		# stamina drain (StaminaRules) is the real cost of carrying at speed.
-		var carry_mult: float = cfg.puck_carry_speed_multiplier
-		if sprint_active:
-			carry_mult = lerpf(carry_mult, 1.0, cfg.sprint_carry_penalty_bypass)
-		var effective_max: float = base_max * carry_mult if has_puck else base_max
-		var horiz := Vector2(velocity.x, velocity.z)
-		var speed: float = horiz.length()
-		if speed > effective_max:
-			var pre_thrust_speed: float = Vector2(
-				velocity.x - thrust_delta.x,
-				velocity.z - thrust_delta.z
-			).length()
-			var target_speed: float = maxf(pre_thrust_speed, effective_max)
-			if speed > target_speed:
-				var limited: Vector2 = horiz.normalized() * target_speed
-				velocity.x = limited.x
-				velocity.z = limited.y
-
-	# Friction: heavy when braking (regardless of direction input), normal otherwise.
-	var horiz_vel := Vector2(velocity.x, velocity.z)
-	var base_decel: float = cfg.friction + cfg.friction_drag * horiz_vel.length()
-	var effective_friction: float = base_decel * cfg.brake_multiplier if brake else base_decel
-	horiz_vel = horiz_vel.move_toward(Vector2.ZERO, effective_friction * delta)
-	velocity.x = horiz_vel.x
-	velocity.z = horiz_vel.y
+	var travel: Vector2 = horiz / speed
+	var stick: float = minf(move_input.length(), 1.0)
+	var steer: float = travel.angle_to(move_input) if has_input else 0.0
+	var steer_abs: float = absf(steer)
+	var turn: float = 0.0
+	if brake:
+		# 0 = hockey stop, 1 = full tight turn. Ramps in with the stick's angle
+		# off travel (lined up = stop), and tapers out past 90° (stick behind = stop).
+		var w: float = 0.0
+		if has_input:
+			w = minf(steer_abs / maxf(cfg.tight_turn_align_angle, 0.001), 1.0)
+			if steer_abs > PI * 0.5:
+				w *= maxf(0.0, 1.0 - (steer_abs - PI * 0.5) / TIGHT_TURN_TAPER)
+		if w > 0.0:
+			var tight_rate: float = minf(
+					cfg.turn_accel * cfg.tight_turn_multiplier * cfg.lateral_grip * stick / speed,
+					cfg.max_turn_rate)
+			turn = signf(steer) * minf(tight_rate * delta, steer_abs)
+		speed = maxf(speed - lerpf(cfg.stop_decel, cfg.tight_turn_decel, w) * delta, 0.0)
+	else:
+		if has_input:
+			var turn_rate: float = minf(cfg.turn_accel * cfg.lateral_grip * stick / speed,
+					cfg.max_turn_rate) * minf((PI - steer_abs) / SKID_TURN_TAPER, 1.0)
+			turn = signf(steer) * minf(turn_rate * delta, steer_abs)
+			var par: float = move_input.dot(travel)
+			if par >= 0.0:
+				# Over-max speed from external sources (body-check boost, a sprint
+				# ending) is preserved: the stride stops adding, nothing clamps down.
+				var base_max: float = cfg.max_speed * sprint_max
+				# Sprinting with the puck is heads-down and straight-line, so most of
+				# the carry speed penalty is waived while sprinting — that's what lets
+				# a fast carrier actually run. The 1.6x sprint stamina drain
+				# (StaminaRules) is the real cost of carrying at speed.
+				var carry_mult: float = cfg.puck_carry_speed_multiplier
+				if sprint_active:
+					carry_mult = lerpf(carry_mult, 1.0, cfg.sprint_carry_penalty_bypass)
+				var effective_max: float = base_max * carry_mult if has_puck else base_max
+				var backward: float = clampf(-travel.dot(facing_dir), 0.0, 1.0)
+				effective_max *= lerpf(1.0, cfg.backward_max_speed_multiplier, backward)
+				var drive: float = minf(applied_thrust, applied_thrust * cfg.power_knee_speed / speed)
+				var driven: float = speed + par * drive * thrust_scale * delta
+				speed = minf(driven, maxf(speed, effective_max))
+			else:
+				speed = maxf(speed + par * cfg.stop_decel * cfg.reverse_skid_fraction * delta, 0.0)
+		speed = maxf(speed - (cfg.friction + cfg.friction_drag * speed) * delta, 0.0)
+	horiz = travel.rotated(turn) * speed
+	velocity.x = horiz.x
+	velocity.z = horiz.y
 	return velocity
 
 
@@ -127,9 +170,9 @@ class ForwardResult:
 # reopen the contested-pickup desync that render == rewind fixed.
 #
 # Free-space integration (position += velocity·dt per tick): board/net clamps and
-# facing evolution are deliberately omitted. Facing affects only the thrust-
-# alignment scale and turns slowly over the ~interp_delay span, so it is held
-# constant here; the caller renders facing via the existing angular-velocity
+# facing evolution are deliberately omitted. Facing affects only the stride-
+# alignment scale and the backward top speed, and turns slowly over the
+# ~interp_delay span, so it is held constant here; the caller renders facing via the existing angular-velocity
 # extrapolation. The residual vs the host's true integration is corrected by the
 # next snapshot — what must match exactly is client-render vs host-rewind, and both
 # run THIS function on the same inputs. Fills the caller-owned `result`.

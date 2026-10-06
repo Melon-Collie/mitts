@@ -84,7 +84,7 @@ const BRAKE_PIVOT_MIN_SPEED: float = 3.0
 
 # Arrival brake. Station-keeping bots approach a POINT that can stop moving, and
 # nothing else in the field slows them: the anchor attraction is full-strength
-# until the deadband, and at 9 m/s friction alone needs ~11 m to stop. Same
+# until the deadband, and at 9 m/s glide alone needs ~45 m to stop. Same
 # stopping-distance law as the offside brake, applied to a point — when the
 # CLOSING speed toward the anchor can no longer be shed inside the remaining
 # distance, press the real brake. Evaluated fresh every tick, so a target still
@@ -97,7 +97,7 @@ const BRAKE_PIVOT_MIN_SPEED: float = 3.0
 # every re-eval, loose-puck chases (arrive at speed; momentum wins contested
 # pickups), body-check commits (drive THROUGH the man) — the caller opts in per
 # call site.
-const ARRIVAL_BRAKE_DECEL_M_S2: float = 10.0
+const ARRIVAL_BRAKE_DECEL_M_S2: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
 const ARRIVAL_BRAKE_ENGAGE_MARGIN_M: float = 0.5
 const ARRIVAL_BRAKE_RELEASE_MARGIN_M: float = 1.5
 const ARRIVAL_BRAKE_MIN_SPEED_M_S: float = 3.0
@@ -110,12 +110,12 @@ const ARRIVAL_BRAKE_MIN_SPEED_M_S: float = 3.0
 # field can push the body across regardless. This is the body-level
 # guard, applied to the actual move output every tick.
 #
-# OFFSIDE_BRAKE_DECEL_M_S2 is the braking deceleration assumed when
-# estimating stopping distance — set a touch below skater thrust accel
-# so the bot starts braking early enough to stop short rather than
-# crossing. OFFSIDE_BRAKE_MARGIN_M is the safety gap the projected stop
-# must clear the line by, since one tick over is already a ghost.
-const OFFSIDE_BRAKE_DECEL_M_S2: float = 10.0
+# OFFSIDE_BRAKE_DECEL_M_S2 is the deceleration that override actually gets:
+# a stick opposing travel skids at the reverse-skid rate.
+# OFFSIDE_BRAKE_MARGIN_M is the safety gap the projected stop must clear the
+# line by, since one tick over is already a ghost.
+const OFFSIDE_BRAKE_DECEL_M_S2: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2 \
+		* GameRules.DEFAULT_SKATER_REVERSE_SKID_FRACTION
 const OFFSIDE_BRAKE_MARGIN_M: float = 0.35
 
 
@@ -537,9 +537,8 @@ static func _net_detour(self_pos: Vector3, anchor: Vector3) -> Vector2:
 # Decides whether to press the actual BRAKE input for a pivot. When the
 # desired direction is roughly opposite (>= BRAKE_PIVOT_ANGLE_DEG) the
 # current heading and we're carrying speed (>= BRAKE_PIVOT_MIN_SPEED),
-# braking beats carving a wide arc: brake friction decelerates at least as
-# hard as reverse thrust across the speed band (and unlike thrust it isn't
-# scaled down by facing misalignment), and the caller keeps move_vector on
+# braking beats carving a wide arc: the hockey stop out-decelerates the
+# stick's reverse skid, and the caller keeps move_vector on
 # the NEW direction — the same input shape a human uses (brake held + the
 # exit direction on the stick), so the cosmetic layer reads a genuine
 # hockey stop into a dig-in restart.
@@ -597,7 +596,7 @@ static func should_arrival_brake(self_pos: Vector3, anchor: Vector3,
 # attacking blue line, the puck is still on the near side (entering
 # would be offside), and the bot's stopping distance would carry it
 # across within OFFSIDE_BRAKE_MARGIN_M. In that case it overrides the
-# steering with a hard brake away from the line (full reverse thrust on
+# steering with a hard brake away from the line (a full reverse skid on
 # the depth axis, lateral intent preserved), so the body stops short
 # instead of ghosting. Releases the instant the puck crosses the line
 # (offside risk gone) or the bot is already retreating.
@@ -629,7 +628,7 @@ static func offside_brake(
 	var stop_dist: float = (v_toward * v_toward) / (2.0 * OFFSIDE_BRAKE_DECEL_M_S2)
 	if stop_dist + OFFSIDE_BRAKE_MARGIN_M < dist_to_line:
 		return desired  # plenty of room to stop before the line
-	# Brake: full reverse thrust along the depth axis (back toward our
+	# Brake: a full reverse skid along the depth axis (back toward our
 	# own end), keep lateral intent, clamp to unit length.
 	var brake := Vector2(desired.x, -attack_dir)
 	if brake.length() > 1.0:

@@ -1047,9 +1047,7 @@ static func expected_pass_speed(shooter: Vector3, receiver: Vector3) -> float:
 const SKATER_REF_SPEED_M_S: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 
 # Approximate kinematic stopping time for a skater steering against
-# their own velocity. Derived from the friction model in
-# SkaterController (drag = friction + friction_drag × |v| ≈ 3.6 m/s²
-# at top speed) plus reverse-thrust steering. Used by OUTLET's
+# their own velocity. Used by OUTLET's
 # offside filter to project a candidate forward by current velocity:
 # if "where I'd be in BRAKE_TIME_S given current momentum" is past
 # the blue line, the candidate is rejected as effectively offside.
@@ -3893,11 +3891,10 @@ const EVADE_CARRY_HANDLE_M: float = 0.9
 #     spare headroom, so moderate drift costs nothing; only the EXCESS above
 #     VM_FREE_SHED_M_S pays, at the measured net shed rate.
 #   REVERSAL — velocity pointed away brakes out at the brake key's real
-#     friction decel and gives back the ground lost while braking (both
-#     measured; the decel is brake_multiplier × (friction + drag·v) at game
-#     speeds).
-#   PURSUIT — a capped ramp at the NET accel the movement model delivers
-#     (thrust minus friction/drag losses — RAMP_EFFICIENCY) up to top speed,
+#     stop decel and gives back the ground lost while braking.
+#   PURSUIT — the stride's own ramp at the NET push the movement model
+#     delivers after glide losses: constant accel up to the power knee,
+#     constant power above it (AIStrideRamp), up to top speed,
 #     then cruise. A standing start genuinely pays ~0.5 s over a plain
 #     dist/speed read; a full-speed head-on drive pays nothing.
 #
@@ -3911,18 +3908,13 @@ const EVADE_CARRY_HANDLE_M: float = 0.9
 # runs up to ~2× the estimate. The calibration suite fails loudly if the
 # movement tuning drifts.
 
-# Cross speed the velocity-matched seek sheds inside the thrust headroom
-# (costs no time). Measured.
-const VM_FREE_SHED_M_S: float = 3.5
+# Cross speed the velocity-matched seek redirects for free (costs no time).
+# Measured.
+const VM_FREE_SHED_M_S: float = 2.0
 # Net shed rate for cross speed beyond the free band. Measured.
-const VM_SHED_DECEL_M_S2: float = 6.5
-# Brake-key deceleration for reversals: brake_multiplier × (friction +
-# drag·v̄) at game speeds — physical, and confirmed by the reversal cells.
-const REVERSAL_BRAKE_DECEL_M_S2: float = 10.5
-# Fraction of commanded thrust the movement model nets after friction and
-# velocity drag over a 0→top ramp. Measured (≈0.51 s ramp overhead at league
-# tuning).
-const RAMP_EFFICIENCY: float = 0.84
+const VM_SHED_DECEL_M_S2: float = 11.0
+# Brake-key deceleration for reversals — the hockey stop itself.
+const REVERSAL_BRAKE_DECEL_M_S2: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
 
 
 # `ref_speed_m_s` is the actor's flat skating speed; `accel_m_s2` its all-direction
@@ -4033,14 +4025,12 @@ static func _time_to_arrive_direct(from_pos: Vector3, dest: Vector3,
 			+ from_velocity.z * from_velocity.z
 	var v_perp: float = sqrt(maxf(0.0, v_len_sq - v_along * v_along))
 	# REDIRECT: only the cross momentum the seek can't shed for free pays,
-	# scaled by this build's PERPENDICULAR authority relative to league —
-	# thrust × lateral_grip, exactly the quantity SkaterMovementRules scales
-	# in the real body (a power-profile/heavy build sheds sideways momentum
-	# slower; the ramp below stays pure accel — grip never limits parallel
-	# drive, in planning or in physics).
-	var accel_ratio: float = maxf(accel_m_s2 * lateral_grip, 0.001) / SHED_ACCEL_DEFAULT_M_S2
-	var t: float = maxf(0.0, v_perp - VM_FREE_SHED_M_S * accel_ratio) \
-			/ (VM_SHED_DECEL_M_S2 * accel_ratio)
+	# scaled by this build's edge grip — the turn authority SkaterMovementRules
+	# scales in the real body (turning redirects momentum on the edges; the
+	# stride plays no part, and grip never limits the ramp below).
+	var grip: float = maxf(lateral_grip, 0.001)
+	var t: float = maxf(0.0, v_perp - VM_FREE_SHED_M_S * grip) \
+			/ (VM_SHED_DECEL_M_S2 * grip)
 	var r: float = dist
 	var v0: float = v_along
 	if v0 < 0.0:
@@ -4050,15 +4040,7 @@ static func _time_to_arrive_direct(from_pos: Vector3, dest: Vector3,
 		t += -v0 / REVERSAL_BRAKE_DECEL_M_S2
 		r += v0 * v0 / (2.0 * REVERSAL_BRAKE_DECEL_M_S2)
 		v0 = 0.0
-	v0 = minf(v0, vmax)
-	# PURSUIT: capped ramp at the delivered net accel, then cruise.
-	var a_net: float = maxf(accel_m_s2 * RAMP_EFFICIENCY, 0.001)
-	var d_ramp: float = (vmax * vmax - v0 * v0) / (2.0 * a_net)
-	if r <= d_ramp:
-		t += (sqrt(v0 * v0 + 2.0 * a_net * r) - v0) / a_net
-	else:
-		t += (vmax - v0) / a_net + (r - d_ramp) / vmax
-	return t
+	return t + AIStrideRamp.time_to_cover(v0, r, vmax, accel_m_s2)
 
 
 # True iff the segment from `from` to `to` (in world XZ) intersects

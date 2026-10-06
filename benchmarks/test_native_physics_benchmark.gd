@@ -48,7 +48,15 @@ func _movement_cfg() -> SkaterMovementRules.MovementConfig:
 	cfg.friction = 3.0
 	cfg.max_speed = 8.5
 	cfg.move_deadzone = 0.1
-	cfg.brake_multiplier = 3.0
+	cfg.stop_decel = 9.0
+	cfg.reverse_skid_fraction = 0.75
+	cfg.turn_accel = 9.0
+	cfg.max_turn_rate = 6.0
+	cfg.tight_turn_multiplier = 2.0
+	cfg.tight_turn_decel = 3.0
+	cfg.tight_turn_align_angle = 0.5
+	cfg.power_knee_speed = 3.0
+	cfg.backward_max_speed_multiplier = 0.75
 	cfg.puck_carry_speed_multiplier = 0.9
 	cfg.backward_thrust_multiplier = 0.5
 	cfg.crossover_thrust_multiplier = 0.7

@@ -13,10 +13,10 @@ extends GutTest
 # the extremes). If the movement tuning drifts (thrust, friction, drag, brake,
 # top speed), cells here fail and the phase-model constants in action_scoring
 # (VM_FREE_SHED_M_S, VM_SHED_DECEL_M_S2, REVERSAL_BRAKE_DECEL_M_S2,
-# RAMP_EFFICIENCY) get re-measured — never silently absorbed.
+# AIStrideRamp.EFFICIENCY) get re-measured — never silently absorbed.
 #
 # Known soft spot, deliberately excluded from the tight band: SHORT DIAGONAL
-# cuts at speed (≈45° off-velocity within ~8 m). There the controller
+# cuts at full speed (≈45° off-velocity within ~8 m). There the controller
 # overflies the catch window laterally and loops once before converging —
 # reality runs up to ~3× the estimate. Those cells get a loose sanity band
 # instead; tightening them is steering work (a better cornering policy), not
@@ -33,15 +33,9 @@ var _cfg: SkaterMovementRules.MovementConfig
 
 
 func before_each() -> void:
-	_cfg = SkaterMovementRules.MovementConfig.new()
-	_cfg.thrust = GameRules.DEFAULT_SKATER_THRUST_M_S2
-	_cfg.friction = 0.8
-	_cfg.friction_drag = 0.27
-	_cfg.max_speed = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
-	_cfg.move_deadzone = 0.1
-	_cfg.brake_multiplier = 4.0
-	_cfg.backward_thrust_multiplier = 0.80
-	_cfg.crossover_thrust_multiplier = 0.90
+	var ctrl := SkaterController.new()
+	_cfg = ctrl.get_movement_config()
+	ctrl.free()
 	_cfg.puck_carry_speed_multiplier = 1.0
 
 
@@ -142,6 +136,7 @@ func test_full_reversal() -> void:
 
 func test_long_diagonals() -> void:
 	# 45° at range — past the miss-loop zone the model tracks.
+	_check_cell(4.5, 45.0, 4.0)
 	_check_cell(4.5, 45.0, 8.0)
 	_check_cell(4.5, 45.0, 16.0)
 	_check_cell(9.0, 45.0, 16.0)
@@ -153,7 +148,7 @@ func test_short_diagonal_miss_loop_sanity() -> void:
 	# window and loop (see header). The estimator stays an optimistic bound
 	# there; the loose ceiling catches a catastrophic steering regression
 	# without pinning the loop's exact cost.
-	for cell: Array in [[9.0, 45.0, 4.0], [9.0, 45.0, 8.0], [4.5, 45.0, 4.0]]:
+	for cell: Array in [[9.0, 45.0, 4.0], [9.0, 45.0, 8.0]]:
 		var pair: Array = _cell(cell[0], cell[1], cell[2])
 		assert_lte(pair[0], pair[1] + 0.02,
 				"model stays a lower bound in the miss-loop zone")
@@ -234,9 +229,8 @@ func test_retrieval_race_read_is_now_net_honest() -> void:
 
 
 # ── Lateral grip: planning matches the gripped body ──────────────────────────
-# Attributes v4 gave the movement core a perpendicular-thrust authority
-# (MovementConfig.lateral_grip) and the ETA's cross-momentum shed reads the
-# same quantity (accel × grip). This pins the match: for a hard 90° redirect
+# The movement core turns on edge grip (MovementConfig.lateral_grip) and the
+# ETA's cross-momentum shed reads the same quantity. This pins the match: for a hard 90° redirect
 # at speed, the LOW-grip body genuinely arrives later in the real sim, and
 # the grip-aware model tracks the gripped sim within the suite's band.
 

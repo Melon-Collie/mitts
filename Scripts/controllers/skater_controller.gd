@@ -7,20 +7,31 @@ const State = SkaterStateMachine.State
 var _sm: SkaterStateMachine = SkaterStateMachine.new()
 
 # ── Movement Tuning ───────────────────────────────────────────────────────────
+# Field meanings and units: SkaterMovementRules.MovementConfig.
 var thrust: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
-var friction: float = 0.8
-var friction_drag: float = 0.27
+# Push power runs out above this speed — 0→5 m/s in ~0.6 s, top speed in ~2 s.
+var power_knee_speed: float = GameRules.DEFAULT_SKATER_POWER_KNEE_M_S
+# Glide: ~12 s to coast down from top speed. Real ice glides several times
+# longer; this keeps momentum a thing to manage without making the rink skid.
+var friction: float = 0.35
+var friction_drag: float = 0.09
 var max_speed: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 var move_deadzone: float = 0.1
-var brake_multiplier: float = 4.0
-# Lateral grip — perpendicular-to-motion thrust authority (the edges' bite in a
-# cut; see SkaterMovementRules.MovementConfig.lateral_grip). 1.0 = the shipped
-# neutral feel; per-build value = base × agility_mult in apply_attributes, and
-# the skate-profile gear slot leans it later. Turn radius at speed rides this.
+var stop_decel: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
+var reverse_skid_fraction: float = GameRules.DEFAULT_SKATER_REVERSE_SKID_FRACTION
+var turn_accel: float = GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2
+var max_turn_rate: float = 6.0
+# Brake + stick off travel: ~3 m radius at top speed, coming out near 7 m/s.
+var tight_turn_multiplier: float = 2.0
+var tight_turn_decel: float = 3.0
+var tight_turn_align_angle: float = deg_to_rad(30.0)
+# Edge grip; per-build value = base × agility_mult in apply_attributes, and the
+# skate-profile gear slot leans it later. Turn radius at speed rides this.
 var lateral_grip: float = 1.0
 var puck_carry_speed_multiplier: float = 0.92  # pre-apply default; per-build value is set by apply_attributes (PlayerAttributes.carry_speed_mult, Speed-eased)
 var backward_thrust_multiplier: float = 0.80
 var crossover_thrust_multiplier: float = 0.90
+var backward_max_speed_multiplier: float = 0.75
 # Ceiling on the velocity fed to the gait during the faceoff / intro skate-in
 # (see begin_approach / apply_approach). The glide always completes in a fixed
 # duration, so a far start implies a high velocity — clamp it here so the stride
@@ -61,8 +72,6 @@ var sprint_turn_multiplier: float = 0.55
 # up, spend stamina, give up puck play), not a free bump. Deterministic from the
 # replicated input.hit_held, so every cost re-derives through reconcile replay.
 var hit_stamina_drain_per_sec: float = 0.5    # drained while committing a check
-# Turn-rate scale while committing (< 1.0 = wider turns). Now 1.0 (no penalty): the
-# commitment cost moved entirely onto the withdrawn stick above, so you can steer
 # Turn-rate scale while committing (< 1.0 = wider turns). 1.0 — the commitment
 # cost sits entirely on the withdrawn stick above, so you can steer freely to line
 # up the hit; penalising the ATTEMPT (tracking a mover) rather than the miss is
@@ -1230,7 +1239,7 @@ var _base_thrust:                       float = 0.0
 var _base_max_speed:                    float = 0.0
 var _base_facing_drag_speed:            float = 0.0
 var _base_facing_drag_speed_braking:    float = 0.0
-var _base_brake_multiplier:             float = 0.0
+var _base_stop_decel:                   float = 0.0
 var _base_friction_drag:                float = 0.0
 var _base_lateral_grip:                 float = 0.0
 var _base_min_wrister_power:            float = 0.0
@@ -1333,11 +1342,11 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	thrust    = _base_thrust    * attrs.accel_mult()
 	facing_drag_speed           = _base_facing_drag_speed           * m_agility
 	facing_drag_speed_braking   = _base_facing_drag_speed_braking   * m_agility
-	brake_multiplier            = _base_brake_multiplier            * m_agility
+	stop_decel                  = _base_stop_decel                  * m_agility
 	# Lateral grip is where agility's turn promise physically lands: it scales the
-	# perpendicular thrust authority in the movement core, so the emergent turn radius
-	# v²/(grip·a_perp) genuinely widens for a heavy/tall build and tightens for a
-	# lean/small one. The facing/brake terms above are the feel of quickness; this is
+	# turn authority in the movement core, so the emergent turn radius
+	# v²/(turn_accel·grip) genuinely widens for a heavy/tall build and tightens for a
+	# lean/small one. The facing/stop terms above are the feel of quickness; this is
 	# the arc itself.
 	lateral_grip                = _base_lateral_grip                * m_agility
 	# The sprint CEILING is Speed-attributed and grounded to the 20–25 mph NHL burst
@@ -1512,7 +1521,7 @@ func _capture_attribute_bases() -> void:
 	_base_max_speed                    = max_speed
 	_base_facing_drag_speed            = facing_drag_speed
 	_base_facing_drag_speed_braking    = facing_drag_speed_braking
-	_base_brake_multiplier             = brake_multiplier
+	_base_stop_decel                   = stop_decel
 	_base_friction_drag                = friction_drag
 	_base_lateral_grip                 = lateral_grip
 	_base_min_wrister_power            = min_wrister_power
@@ -3216,14 +3225,22 @@ func _block_movement_config() -> SkaterMovementRules.MovementConfig:
 func _build_movement_config() -> SkaterMovementRules.MovementConfig:
 	var cfg := SkaterMovementRules.MovementConfig.new()
 	cfg.thrust = thrust
+	cfg.power_knee_speed = power_knee_speed
 	cfg.friction = friction
 	cfg.friction_drag = friction_drag
 	cfg.max_speed = max_speed
 	cfg.move_deadzone = move_deadzone
-	cfg.brake_multiplier = brake_multiplier
+	cfg.stop_decel = stop_decel
+	cfg.reverse_skid_fraction = reverse_skid_fraction
+	cfg.turn_accel = turn_accel
+	cfg.max_turn_rate = max_turn_rate
+	cfg.tight_turn_multiplier = tight_turn_multiplier
+	cfg.tight_turn_decel = tight_turn_decel
+	cfg.tight_turn_align_angle = tight_turn_align_angle
 	cfg.puck_carry_speed_multiplier = puck_carry_speed_multiplier
 	cfg.backward_thrust_multiplier = backward_thrust_multiplier
 	cfg.crossover_thrust_multiplier = crossover_thrust_multiplier
+	cfg.backward_max_speed_multiplier = backward_max_speed_multiplier
 	cfg.sprint_thrust_multiplier = sprint_thrust_multiplier
 	cfg.sprint_max_speed_multiplier = sprint_max_speed_multiplier
 	cfg.sprint_carry_penalty_bypass = sprint_carry_penalty_bypass

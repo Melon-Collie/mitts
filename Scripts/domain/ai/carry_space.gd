@@ -87,8 +87,8 @@ static func board_gap_m(point: Vector3) -> float:
 # NOMINAL, not best-case: the defender's coverage is the calibrated
 # time_to_arrive phase model in distance form — coast on momentum through the
 # reaction gate, shed excess cross-speed at the measured rate, brake out a
-# retreat (losing ground while braking), then a speed-capped pursuit ramp at
-# the measured net accel (AIActionScoring.RAMP_EFFICIENCY) — plus the stick span. Measured
+# retreat (losing ground while braking), then the stride's pursuit ramp
+# (AIStrideRamp.distance_in) — plus the stick span. Measured
 # against a committed defender under the real movement rules + rate-limited
 # blade (the #27 probe): crossing times track reality within ~0.05 s at rest
 # and toward-motion across 2–12 m, where a best-case 0.5·a·t² lunge over-reaches
@@ -193,13 +193,12 @@ static func _reach_clearance_one(point_x: float, point_z: float, time: float,
 		var inv: float = 1.0 / dist
 		var v_along: float = (vx * dx + vz * dz) * inv
 		var v_perp: float = absf((vx * dz - vz * dx) * inv)
-		# Shed excess cross-speed (a pure delay, as calibrated — perpendicular
-		# authority = thrust × lateral_grip, the same quantity the movement
-		# core scales), then brake out any retreat (losing ground), then the
-		# capped pursuit ramp (pure accel — grip never limits parallel drive).
-		var agility: float = maxf(accel * lateral_grip, 0.001) / AIActionScoring.SHED_ACCEL_DEFAULT_M_S2
-		var tau_p: float = tau - maxf(0.0, v_perp - AIActionScoring.VM_FREE_SHED_M_S * agility) \
-				/ (AIActionScoring.VM_SHED_DECEL_M_S2 * agility)
+		# Shed excess cross-speed (a pure delay, as calibrated — authority is
+		# the edge grip the movement core turns with), then brake out any
+		# retreat (losing ground), then the stride's pursuit ramp.
+		var grip: float = maxf(lateral_grip, 0.001)
+		var tau_p: float = tau - maxf(0.0, v_perp - AIActionScoring.VM_FREE_SHED_M_S * grip) \
+				/ (AIActionScoring.VM_SHED_DECEL_M_S2 * grip)
 		if tau_p > 0.0:
 			var v0: float = v_along
 			if v0 < 0.0:
@@ -207,13 +206,7 @@ static func _reach_clearance_one(point_x: float, point_z: float, time: float,
 				d = v0 * t_b + 0.5 * AIActionScoring.REVERSAL_BRAKE_DECEL_M_S2 * t_b * t_b
 				v0 += AIActionScoring.REVERSAL_BRAKE_DECEL_M_S2 * t_b
 				tau_p -= t_b
-			v0 = minf(v0, vmax)
-			var a_net: float = maxf(accel * AIActionScoring.RAMP_EFFICIENCY, 0.001)
-			var t_r: float = (vmax - v0) / a_net
-			if tau_p <= t_r:
-				d += v0 * tau_p + 0.5 * a_net * tau_p * tau_p
-			else:
-				d += (vmax * vmax - v0 * v0) / (2.0 * a_net) + vmax * (tau_p - t_r)
+			d += AIStrideRamp.distance_in(v0, tau_p, vmax, accel)
 	return dist - d - stick
 
 

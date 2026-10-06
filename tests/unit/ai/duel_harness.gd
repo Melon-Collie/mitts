@@ -172,21 +172,14 @@ var goalie_provider: Callable = Callable()
 
 
 func _init() -> void:
-	move_cfg = SkaterMovementRules.MovementConfig.new()
-	move_cfg.thrust = GameRules.DEFAULT_SKATER_THRUST_M_S2
-	move_cfg.friction = 0.8
-	move_cfg.max_speed = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
-	move_cfg.move_deadzone = 0.1
-	move_cfg.brake_multiplier = 4.0
+	# The league-default skating physics, read from a real controller so the
+	# harness can't drift from what the bodies actually run.
+	var ctrl := SkaterController.new()
+	move_cfg = ctrl.get_movement_config()
+	ctrl.free()
 	move_cfg.puck_carry_speed_multiplier = 0.86
-	move_cfg.backward_thrust_multiplier = 0.80
-	move_cfg.crossover_thrust_multiplier = 0.90
-	move_cfg.friction_drag = 0.27
-	# Sprint plant (SkaterController league export defaults) — see the
-	# SimSkater stamina comment.
-	move_cfg.sprint_thrust_multiplier = 1.20
+	# Sprint plant — see the SimSkater stamina comment.
 	move_cfg.sprint_max_speed_multiplier = AISkaterCaps.LEAGUE_SPRINT_SPEED_MULT
-	move_cfg.sprint_carry_penalty_bypass = 0.6
 	_stamina_cfg = StaminaRules.StaminaConfig.new()
 
 
