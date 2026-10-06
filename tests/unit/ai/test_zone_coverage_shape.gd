@@ -83,6 +83,10 @@ extends GutTest
 #     and nobody has explained it. If that number moves again, explain it
 #     before pinning it.
 #
+# The point-shot fixture's attack is now SCRIPTED (a held possession — see the
+# test), so its readings are not rollouts of the bot attack and no longer belong
+# to the table above: it reads 0.63 unattended/tick and carries its own pin.
+#
 # A regression to the argmaxes still breaks the double-lock ceiling, which is
 # the guard that separated the two models sharply in the first place.
 #
@@ -142,6 +146,8 @@ const UNCOVERED_CEILING: float = 2.2
 # 2.4 commit is remembered for. A fixture that moved gets a new pin; fixtures
 # that did not keep their tight one.
 const UNCOVERED_CEILING_CROSSING_CUTTER: float = 2.6
+# The scripted point shot (measured 0.63), pinned at the same ~0.28 margin.
+const UNCOVERED_CEILING_POINT_SHOT: float = 0.9
 # The man nobody has should not routinely be a prime scoring threat. A loose
 # guard — it separated the two models weakly — against a collapse.
 const OPEN_DANGER_CEILING: float = 0.25
@@ -163,12 +169,19 @@ class Result:
 
 
 # Runs a 5v5 sim with team 0 attacking and team 1 defending -Z, and reads team
-# 1's coverage every tick it is actually in D-zone shape.
+# 1's coverage every tick it is actually in D-zone shape. `attackers` holds
+# spawn points for bot attackers, or — for a scripted attack — one
+# [path: Array[Vector3], speed] pair per attacker (Duel.add_scripted_attacker).
 func _run(attackers: Array, defenders: Array, carrier: int) -> Result:
 	var duel := Duel.new()
 	duel.team_size = 5
 	for i: int in attackers.size():
-		duel.add_skater(1 + i, 0, attackers[i], BotSkillProfile.hard())
+		if attackers[i] is Array:
+			var path: Array[Vector3] = []
+			path.assign(attackers[i][0])
+			duel.add_scripted_attacker(1 + i, 0, path, attackers[i][1])
+		else:
+			duel.add_skater(1 + i, 0, attackers[i], BotSkillProfile.hard())
 		duel.positions[1 + i] = i
 	for i: int in defenders.size():
 		duel.add_skater(50 + i, 1, defenders[i], BotSkillProfile.hard())
@@ -271,18 +284,21 @@ func test_a_low_cycle_is_covered() -> void:
 func test_a_point_shot_setup_is_covered() -> void:
 	# The puck up at the point with traffic below: the wingers own the high ice
 	# and the D own the house, which is the split the areas are drawn for.
+	# The attack is SCRIPTED — a held possession, the carrier walking the line
+	# and the traffic working below — so the fixture measures the coverage
+	# rather than whichever release the point man decides on.
 	var r: Result = _run(
-		[Vector3(5.0, 0.0, -15.0),    # carrier at the strong point
-		 Vector3(-0.5, 0.0, -24.5),   # net-front screen
-		 Vector3(2.5, 0.0, -21.0),    # low slot
-		 Vector3(-8.0, 0.0, -18.0),   # weak wall
-		 Vector3(-5.0, 0.0, -15.0)],  # weak point
+		[[[Vector3(5.0, 0.0, -15.0), Vector3(1.5, 0.0, -15.5)], 2.0],      # carrier walks the line
+		 [[Vector3(-0.5, 0.0, -24.5), Vector3(0.5, 0.0, -24.0)], 1.0],     # net-front screen
+		 [[Vector3(2.5, 0.0, -21.0), Vector3(0.5, 0.0, -20.5)], 1.5],      # low slot
+		 [[Vector3(-8.0, 0.0, -18.0), Vector3(-7.0, 0.0, -20.5)], 1.5],    # weak wall
+		 [[Vector3(-5.0, 0.0, -15.0), Vector3(-3.0, 0.0, -15.5)], 1.5]],   # weak point
 		[Vector3(1.0, 0.0, -23.0), Vector3(-1.5, 0.0, -24.5),
 		 Vector3(0.5, 0.0, -19.5), Vector3(6.0, 0.0, -14.0),
 		 Vector3(-6.0, 0.0, -14.5)],
 		1)
 	_report("point shot", r)
-	_assert_shape("point shot", r)
+	_assert_shape("point shot", r, UNCOVERED_CEILING_POINT_SHOT)
 
 
 func test_a_man_who_changes_areas_is_handed_off_not_dropped() -> void:

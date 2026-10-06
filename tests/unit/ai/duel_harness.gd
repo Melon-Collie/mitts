@@ -75,6 +75,15 @@ const PUPPET_ACCEL_M_S2: float = 10.5       # DEFAULT_SKATER_THRUST_M_S2
 const PUPPET_MAX_SPEED_M_S: float = 9.0
 const PUPPET_GAIN: float = 4.0              # P-control: desired m/s per m of error
 
+# ── Scripted ATTACKER tuning ─────────────────────────────────────────────────
+# A scripted attacker (add_scripted_attacker) is an agentless skater looping a
+# fixed waypoint path at a set pace, facing the net it attacks. A scripted
+# carrier keeps the puck on its blade for the whole run — no release, no strip
+# — so a defensive fixture measures the defence against a held possession
+# instead of riding on whatever the attack decides to do.
+const SCRIPT_ARRIVE_M: float = 0.2
+const SCRIPT_CARRY_REACH_M: float = 0.8
+
 
 class SimSkater:
 	var peer_id: int
@@ -98,6 +107,10 @@ class SimSkater:
 	# ≥ 0 marks a scripted puppet container (no agent); the gap it holds.
 	var puppet_hold_gap: float = -1.0
 	var puppet_depth_floor_z: float = 0.0
+	# Non-empty marks a scripted attacker (no agent): its looped waypoints.
+	var script_path: Array[Vector3] = []
+	var script_speed: float = 0.0
+	var script_idx: int = 0
 
 
 var skaters: Array[SimSkater] = []
@@ -207,6 +220,17 @@ func add_puppet_container(peer_id: int, team_id: int, pos: Vector3,
 	s.puppet_depth_floor_z = depth_floor_z if depth_floor_z != 0.0 else pos.z
 
 
+# A scripted attacker (see the SCRIPT_* block): starts on `path[0]` and loops
+# the path at `speed` m/s.
+func add_scripted_attacker(peer_id: int, team_id: int, path: Array[Vector3],
+		speed: float) -> void:
+	add_skater(peer_id, team_id, path[0])
+	var s: SimSkater = _skater(peer_id)
+	s.script_path = path
+	s.script_speed = speed
+	s.script_idx = 1 % path.size()
+
+
 # Build brains + agents and hand the puck to `carrier_peer` (-1 = loose at
 # `loose_puck_pos`). Call once, after every add_skater.
 func start(carrier_peer: int, loose_puck_pos: Vector3 = Vector3.ZERO) -> void:
@@ -214,7 +238,7 @@ func start(carrier_peer: int, loose_puck_pos: Vector3 = Vector3.ZERO) -> void:
 		brains[tid] = TeamBrain.new(tid, team_map, {}, team_size, positions)
 	for s: SimSkater in skaters:
 		carry_ticks[s.peer_id] = 0
-		if s.puppet_hold_gap >= 0.0:
+		if s.puppet_hold_gap >= 0.0 or not s.script_path.is_empty():
 			continue
 		s.agent = Agent.new()
 		s.agent.setup(s.peer_id, s.team_id, brains[s.team_id], team_map, false)
@@ -318,7 +342,10 @@ func step() -> void:
 	# Integrate bodies + blades.
 	for s: SimSkater in skaters:
 		if s.agent == null:
-			_puppet_step(s)
+			if s.script_path.is_empty():
+				_puppet_step(s)
+			else:
+				_script_step(s)
 			continue
 		var to_mouse := Vector2(s.input.mouse_world_pos.x - s.pos.x,
 				s.input.mouse_world_pos.z - s.pos.z)
@@ -351,8 +378,11 @@ func step() -> void:
 		puck_pos = c2.blade
 		puck_vel = c2.vel
 		carry_ticks[carrier_id] += 1
-		# Strips: an opponent's blade sweeping through the carried puck.
+		# Strips: an opponent's blade sweeping through the carried puck. A
+		# scripted carrier holds possession by construction.
 		for s: SimSkater in skaters:
+			if not c2.script_path.is_empty():
+				break
 			if s.team_id == c2.team_id:
 				continue
 			if PuckInteractionRules.check_poke(
@@ -440,6 +470,27 @@ func _puppet_step(s: SimSkater) -> void:
 	var reach := Vector3(to_puck.x, 0.0, to_puck.y).limit_length(BLADE_REACH * 0.8)
 	var max_step: float = (MAX_BLADE_SPEED + s.vel.length()) * DT
 	s.blade = s.blade + (s.pos + reach - s.blade).limit_length(max_step)
+
+
+# One scripted tick: accel-limited toward the current waypoint at the path's
+# pace, advancing (and looping) on arrival; facing the attacked net, blade
+# carried out in front.
+func _script_step(s: SimSkater) -> void:
+	var target: Vector3 = s.script_path[s.script_idx]
+	var err := Vector3(target.x - s.pos.x, 0.0, target.z - s.pos.z)
+	if err.length() < SCRIPT_ARRIVE_M:
+		s.script_idx = (s.script_idx + 1) % s.script_path.size()
+		target = s.script_path[s.script_idx]
+		err = Vector3(target.x - s.pos.x, 0.0, target.z - s.pos.z)
+	var desired: Vector3 = (err * PUPPET_GAIN).limit_length(s.script_speed)
+	s.vel += (desired - s.vel).limit_length(PUPPET_ACCEL_M_S2 * DT)
+	s.pos += s.vel * DT
+	var attacked_net_z: float = (-1.0 if s.team_id == 0 else 1.0) * GameRules.GOAL_LINE_Z
+	var to_net := Vector2(-s.pos.x, attacked_net_z - s.pos.z)
+	if to_net.length() > 0.05:
+		s.facing = to_net.normalized()
+	s.prev_blade = s.blade
+	s.blade = s.pos + Vector3(s.facing.x, 0.0, s.facing.y) * SCRIPT_CARRY_REACH_M
 
 
 func carrier() -> int:
