@@ -229,7 +229,7 @@ static func compute_move_vector(
 	if not opponent_velocities.is_empty() \
 			and opponent_velocities.size() == opponent_positions.size():
 		var opp_force: Vector2 = _carrier_threat_repel(
-				self_pos, to_anchor, anchor_dist,
+				self_pos, self_velocity, to_anchor, anchor_dist,
 				opponent_positions, opponent_velocities, opponent_repel_weight)
 		force_x += opp_force.x
 		force_z += opp_force.y
@@ -369,8 +369,10 @@ static func _moving_frame_pursuit(to_anchor: Vector3, anchor_dist: float,
 
 
 # The carrier's opponent avoidance reads THREAT, not proximity, and routes
-# AROUND, not away. Per defender: project his body along his momentum over the
-# evasion horizon; his stick can touch anywhere within the league reach of that
+# AROUND, not away. Per defender: project his body along his momentum RELATIVE
+# to the carrier over the evasion horizon (both are moving — a trailer at
+# matched pace is not advancing on the puck, while a head-on charger closes at
+# both speeds); his stick can touch anywhere within the league reach of that
 # swept segment, so the repel points away from the CLOSEST POINT of the sweep and
 # its strength is how deep inside that reach (plus a stick of margin) the carrier
 # sits. A beaten man whose momentum carries him away exerts nothing; a jockeying
@@ -381,8 +383,8 @@ static func _moving_frame_pursuit(to_anchor: Vector3, anchor_dist: float,
 # repels ~nothing and driving at him is the aggressive read the poke-evade owns.
 # Pure value math, no allocation. `to_anchor` / `anchor_dist` are the
 # already-computed anchor pull inputs, passed through to avoid recomputing.
-static func _carrier_threat_repel(self_pos: Vector3, to_anchor: Vector3,
-		anchor_dist: float, opponent_positions: Array[Vector3],
+static func _carrier_threat_repel(self_pos: Vector3, self_velocity: Vector3,
+		to_anchor: Vector3, anchor_dist: float, opponent_positions: Array[Vector3],
 		opponent_velocities: Array[Vector3], repel_weight: float) -> Vector2:
 	# League-default reach off the momentum line — same double-integrator model
 	# as AICarrySpace.reach_clearance (reaction-gated maneuver + stick), the
@@ -395,8 +397,10 @@ static func _carrier_threat_repel(self_pos: Vector3, to_anchor: Vector3,
 	var force := Vector2.ZERO
 	for i: int in opponent_positions.size():
 		var op: Vector3 = opponent_positions[i]
-		var sweep_x: float = opponent_velocities[i].x * AICarrySpace.EVADE_HORIZON_S
-		var sweep_z: float = opponent_velocities[i].z * AICarrySpace.EVADE_HORIZON_S
+		var sweep_x: float = (opponent_velocities[i].x - self_velocity.x) \
+				* AICarrySpace.EVADE_HORIZON_S
+		var sweep_z: float = (opponent_velocities[i].z - self_velocity.z) \
+				* AICarrySpace.EVADE_HORIZON_S
 		# Closest point to the carrier on the swept segment [op, op + sweep].
 		var t: float = 0.0
 		var sweep_len_sq: float = sweep_x * sweep_x + sweep_z * sweep_z

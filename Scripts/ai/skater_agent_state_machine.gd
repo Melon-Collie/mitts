@@ -4519,8 +4519,9 @@ func _apply_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 	# (velocity_match_speed > 0 — the carrier path): the anchor pull cancels
 	# cross-momentum so the bot redirects onto the line instead of orbiting past
 	# it. Read our own velocity from the snapshot for the match.
+	# Also the carrier's threat repel frame (defenders are swept relative to us).
 	var match_self_vel: Vector3 = Vector3.ZERO
-	if velocity_match_speed > 0.0:
+	if velocity_match_speed > 0.0 or carrier == _peer_id:
 		var self_st: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 		if self_st != null:
 			match_self_vel = self_st.velocity

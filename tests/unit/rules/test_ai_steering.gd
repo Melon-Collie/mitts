@@ -203,6 +203,36 @@ func test_carrier_beyond_the_band_is_pushed_off_its_own_side() -> void:
 	assert_gt(_carrier_move(Vector3(off, 0, 0), anchor, opps, vels).x, 0.0)
 
 
+func _moving_carrier_move(self_pos: Vector3, self_vel: Vector3, anchor: Vector3,
+		opponents: Array[Vector3], opp_vels: Array[Vector3]) -> Vector2:
+	return AISteering.compute_move_vector(
+			self_pos, anchor, NO_OPS, opponents, NO_LANE, NO_LANE, RINK_X, RINK_Z,
+			AISteering.OPPONENT_REPEL_WEIGHT_CARRY, opp_vels, NO_OPS, self_vel,
+			GameRules.DEFAULT_SKATER_MAX_SPEED_M_S)
+
+
+func test_a_matched_trailer_is_no_reason_to_sidestep() -> void:
+	# Backchecker 2 m behind at the carrier's own pace: relative to the carrier
+	# he isn't advancing on the puck, so sidestepping him buys nothing (he
+	# follows) — the carrier keeps driving down its line.
+	var anchor := Vector3(0, 0, 8)
+	var opps: Array[Vector3] = [Vector3(0.05, 0, -2.0)]
+	var vels: Array[Vector3] = [Vector3(0, 0, 6.0)]
+	var v := _moving_carrier_move(Vector3.ZERO, Vector3(0, 0, 6.0), anchor, opps, vels)
+	assert_lt(absf(v.x), 0.1, "no lateral weave off a trailer on our hip; got %s" % v)
+	assert_gt(v.y, 0.95, "full drive at the anchor")
+
+
+func test_a_head_on_charger_still_forces_the_sidestep_when_moving() -> void:
+	# The same relative frame keeps the matador: a charger closing head-on at
+	# both skaters' speeds sweeps straight through a carrier moving into him.
+	var anchor := Vector3(0, 0, 8)
+	var opps: Array[Vector3] = [Vector3(0, 0, 4.0)]
+	var vels: Array[Vector3] = [Vector3(0, 0, -6.0)]
+	var v := _moving_carrier_move(Vector3.ZERO, Vector3(0, 0, 4.0), anchor, opps, vels)
+	assert_gt(absf(v.x), 0.3, "sidestep perpendicular to the charge line")
+
+
 # ── Teammate swept-path repel (teammate velocities supplied) ─────────────────
 # With teammate velocities the spacing field repels from each teammate's
 # momentum-swept path, so bots anticipate a crossing route before the bodies
