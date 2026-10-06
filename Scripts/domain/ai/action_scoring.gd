@@ -1046,15 +1046,6 @@ static func expected_pass_speed(shooter: Vector3, receiver: Vector3) -> float:
 # documented at its site.
 const SKATER_REF_SPEED_M_S: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 
-# Approximate kinematic stopping time for a skater steering against
-# their own velocity. Used by OUTLET's
-# offside filter to project a candidate forward by current velocity:
-# if "where I'd be in BRAKE_TIME_S given current momentum" is past
-# the blue line, the candidate is rejected as effectively offside.
-# Pure kinematic — the constant is "how long does momentum dominate
-# steering," not a behavioral knob.
-const SKATER_BRAKE_TIME_S: float = 0.3
-
 # Floor for momentum-adverse `time_to_arrive` returns. When the
 # velocity component along the destination is so negative that
 # effective_speed would go non-positive, clamp at this minimum so

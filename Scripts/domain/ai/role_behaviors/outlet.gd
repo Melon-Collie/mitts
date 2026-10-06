@@ -174,11 +174,12 @@ static func _paced_depth_z(ctx: RoleContext, carrier_pos: Vector3,
 # definition, so a candidate past that line would put OUTLET in the OZ and ghost
 # it.
 #
-# Velocity-corrected — a candidate is "effectively offside" when the bot's
-# projected position one SKATER_BRAKE_TIME_S out is already past the line, so a
-# bot flying at the opp net needs more buffer while one at rest can sit right on
-# it. Pure kinematics, no behavioral knob.
+# Velocity-corrected — a candidate is "effectively offside" when the bot,
+# braking to it on its current momentum, would stop past the line: the arrival
+# brake's stopping distance (v²/2B) on the velocity component toward that line.
+# Momentum away from the line carries no overshoot.
 static func _is_offside(c: Vector3, ctx: RoleContext) -> bool:
-	var opp_blue_z: float = -ctx.own_goal_dir * GameRules.BLUE_LINE_Z
-	var future_z: float = c.z + ctx.self_velocity.z * AIActionScoring.SKATER_BRAKE_TIME_S
-	return -ctx.own_goal_dir * future_z > -ctx.own_goal_dir * opp_blue_z
+	var attack: float = -ctx.own_goal_dir
+	var v_toward: float = maxf(attack * ctx.self_velocity.z, 0.0)
+	var overshoot: float = v_toward * v_toward / (2.0 * AISteering.ARRIVAL_BRAKE_DECEL_M_S2)
+	return attack * c.z + overshoot > GameRules.BLUE_LINE_Z
