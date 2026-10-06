@@ -52,10 +52,12 @@ var host_timestamp: float = 0.0  # host-only, not serialized
 # as int` (see GoalieController.capture/apply) — this accessor is the one place
 # that mapping is interpreted off the wire, so readers (bot AI shot model,
 # remote pose) never hand-roll the enum split.
+#
+# The HALF-butterfly is not down: one leg is still up, and down concedes both
+# sides' drop and the arm's reach. The shot model reads the down pad from
+# pads_read, where it measures flat on the ice anyway.
 func is_down() -> bool:
 	return state_enum == GoalieStateMachine.State.BUTTERFLY as int \
-			or state_enum == GoalieStateMachine.State.HALF_BUTTERFLY_LEFT as int \
-			or state_enum == GoalieStateMachine.State.HALF_BUTTERFLY_RIGHT as int \
 			or state_enum == GoalieStateMachine.State.SLIDING as int \
 			or state_enum == GoalieStateMachine.State.RVH_LEFT as int \
 			or state_enum == GoalieStateMachine.State.RVH_RIGHT as int \

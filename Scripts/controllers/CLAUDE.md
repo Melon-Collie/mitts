@@ -354,8 +354,10 @@ alive there sends him full. Its payoff is the loaded leg: a slide from it
 skips the coil, he moves at shuffle pace instead of knee-shuffling, and the
 rise is half as long. The full butterfly has two poses of its own: the square
 BLOCK sits tall with the hands tucked, and every other drop leans out with
-the hands ready. The half states ride the wire as `state_enum` values (v60),
-and the bot shot model reads them as down (`GoalieNetworkState.is_down`).
+the hands ready. The half states ride the wire as `state_enum` values (v60).
+The bot shot model does NOT read them as down (`GoalieNetworkState.is_down`):
+the down pad measures flat through the replicated pads, and the up leg keeps a
+standing leg's drop and the arm's reach.
 `test_goalie_half_butterfly.gd` holds it.
 
 ## Behind-net puck play — the doctrine
