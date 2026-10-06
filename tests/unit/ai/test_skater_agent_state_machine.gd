@@ -611,6 +611,15 @@ func test_dispatch_throttled_tick_reuses_cached_decision() -> void:
 	assert_almost_eq(input.mouse_world_pos.z, 2.0, 1e-6)
 
 
+func test_leaving_the_role_clears_the_covered_man() -> void:
+	# A defender who breaks off to chase the puck covers nobody — his last
+	# role decision's lock must not survive as "the man I'm on".
+	sm._state = Agent.State.OFF_PUCK
+	sm._prev_locked_man_pid = 7
+	sm._set_state(Agent.State.CHASE_PUCK)
+	assert_eq(sm._prev_locked_man_pid, -1, "chasing the puck drops the cover lock")
+
+
 # ── Slice 5: press-state handlers + transitions ──────────────────────────────
 # The fire states (SHOOT_PRESSED / ONE_TIMER_PRESSED / PASS_PRESSED) are
 # entered by the carrier from CARRY, but once entered they run

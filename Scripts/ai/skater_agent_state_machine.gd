@@ -739,8 +739,10 @@ var _inert_rush_read := AIRushRead.new()
 # stamped across a slot change so no role inherits another role's target).
 var _prev_role_slot: int = AIRoleSlots.Slot.NONE
 var _prev_role_target: Vector3 = Vector3.INF
-# Zone soft-lock incumbent from the last dispatch (RoleDecision.
-# locked_man_pid) — feeds RoleContext.prev_locked_man, reset on slot change.
+# The man this skater's role is covering, from the last role dispatch
+# (RoleDecision.locked_man_pid) — feeds RoleContext.prev_locked_man, reset on
+# slot change, and cleared on leaving OFF_PUCK: a skater chasing or carrying
+# the puck covers nobody, whatever his last role decision said.
 var _prev_locked_man_pid: int = -1
 # Incumbent for the offensive stations' control hysteresis (see
 # RoleDecision.held_forward_stand).
@@ -6113,6 +6115,8 @@ func _update_engagement_cooldown(snapshot: WorldSnapshot, self_state: SkaterNetw
 
 func _set_state(s: State) -> void:
 	if s != _state:
+		if s != State.OFF_PUCK:
+			_prev_locked_man_pid = -1
 		# Wrister charge resets on every SHOOT_PRESSED entry — fresh
 		# sweep direction, fresh tick count. SkaterStateMachine seeds the
 		# charge tracker from the blade's current position at the entry edge.
