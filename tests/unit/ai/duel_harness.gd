@@ -107,6 +107,8 @@ class SimSkater:
 	# ≥ 0 marks a scripted puppet container (no agent); the gap it holds.
 	var puppet_hold_gap: float = -1.0
 	var puppet_depth_floor_z: float = 0.0
+	# False: the presented blade holds lanes but never strips the carrier.
+	var puppet_can_strip: bool = true
 	# Non-empty marks a scripted attacker (no agent): its looped waypoints.
 	var script_path: Array[Vector3] = []
 	var script_speed: float = 0.0
@@ -212,12 +214,15 @@ func add_skater(peer_id: int, team_id: int, pos: Vector3,
 
 # A scripted patient container (see the PUPPET_* block). `depth_floor_z` is
 # the deepest own-net z it will retreat to (0.0 = hold the spawn line).
+# `can_strip` false keeps it from taking the puck — for fixtures whose question
+# needs possession granted rather than contested.
 func add_puppet_container(peer_id: int, team_id: int, pos: Vector3,
-		hold_gap: float = 2.3, depth_floor_z: float = 0.0) -> void:
+		hold_gap: float = 2.3, depth_floor_z: float = 0.0, can_strip: bool = true) -> void:
 	add_skater(peer_id, team_id, pos)
 	var s: SimSkater = _skater(peer_id)
 	s.puppet_hold_gap = hold_gap
 	s.puppet_depth_floor_z = depth_floor_z if depth_floor_z != 0.0 else pos.z
+	s.puppet_can_strip = can_strip
 
 
 # A scripted attacker (see the SCRIPT_* block): starts on `path[0]` and loops
@@ -383,7 +388,7 @@ func step() -> void:
 		for s: SimSkater in skaters:
 			if not c2.script_path.is_empty():
 				break
-			if s.team_id == c2.team_id:
+			if s.team_id == c2.team_id or not s.puppet_can_strip:
 				continue
 			if PuckInteractionRules.check_poke(
 					prev_puck, puck_pos, s.prev_blade, s.blade, PICKUP_RADIUS):
