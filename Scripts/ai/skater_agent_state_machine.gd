@@ -1314,6 +1314,11 @@ var _cached_sprint_held: bool = false
 # ticks or blade_up strobes at 1-in-dispatch_period and never reaches the raised
 # pose at Normal/Easy (the lift blend never leaves ~0).
 var _cached_stick_lift_held: bool = false
+# Same for the brake (pivot / arrival / brake-steering stops, tight turns) and
+# the body-check commit: set only on dispatch ticks, so without the replay a
+# lower tier — dispatching every 6–9 ticks — would hold them for one tick in N.
+var _cached_brake: bool = false
+var _cached_hit_held: bool = false
 # Updated inside `_step_mouse_toward` so skipped ticks can re-step
 # toward the most recently decided target without re-running the
 # state handler. ZERO sentinel suppresses stepping until the first
@@ -1812,6 +1817,8 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 		input.move_vector = _cached_move_vector
 		input.sprint_held = _cached_sprint_held
 		input.stick_lift_held = _cached_stick_lift_held
+		input.brake = _cached_brake
+		input.hit_held = _cached_hit_held
 		# Aim runs at the physics rate even though the DECISION is throttled:
 		# while chasing, re-derive the reception blade target from current
 		# perception every tick so the blade tracks a puck crossing into reach
@@ -1893,6 +1900,8 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 	# false and the next OFF_PUCK/CARRY tick re-engages from a fresh state.
 	_cached_sprint_held = input.sprint_held
 	_cached_stick_lift_held = input.stick_lift_held
+	_cached_brake = input.brake
+	_cached_hit_held = input.hit_held
 
 
 # ── State handlers ───────────────────────────────────────────────────────────

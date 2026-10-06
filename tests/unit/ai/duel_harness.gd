@@ -266,10 +266,9 @@ func step() -> void:
 			continue
 		s.was_holding_shot = s.input.shoot_held
 		s.was_holding_slap = s.input.slap_held
-		s.input.shoot_pressed = false
-		s.input.slap_pressed = false
-		s.input.quick_pass_pressed = false
-		s.input.stick_lift_pressed = false
+		# Production's per-tick reset (SkaterAgent.tick) — held flags that a
+		# cancelled press state leaves set must not latch into later ticks.
+		SkaterAgent.zero_input(s.input, DT, s.input.host_timestamp)
 		if collect_perf:
 			var t0: int = Time.get_ticks_usec()
 			s.agent.dispatch(s.input, snapshot)
