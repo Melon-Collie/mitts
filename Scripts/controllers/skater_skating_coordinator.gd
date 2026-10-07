@@ -1,36 +1,16 @@
 class_name SkaterSkatingCoordinator
 extends RefCounted
 
-# The procedural gait — no animation clips. The locomotion state and its leg
-# stroke are SkaterLocomotion's; this class layers everything else on them —
-# the shot loads and kicks, the block, the faceoff stance, the knockdown, the
-# check and the stick lift — resolves the legs into joint angles and a crouch
-# drop, and publishes the trunk texture and the lower-body yaw channels.
-# Purely cosmetic and derived entirely from replicated state, so it costs zero
-# network state: remote skaters animate identically from what interpolation
-# already hands them.
+# The procedural gait — no animation clips. SkaterLocomotion decides the skating
+# state and its stroke; this class reads the hip-to-travel alignment and the
+# pivot off it, solves the stance crouch, runs the overlay layers (GaitLayer) in
+# priority order over the result, and publishes the legs, the crouch drop, the
+# trunk texture and the lower-body yaw channels. Purely cosmetic and derived
+# entirely from replicated state, so it costs zero network state: remote skaters
+# animate identically from what interpolation already hands them.
 #
 # Runs on real render ticks only — SkaterController guards the call with
 # `not is_replaying` so reconcile re-simulation doesn't over-spin the gait.
-
-const State = SkaterStateMachine.State
-
-# MESH-NATIVE leg segment spans from Scenes/Skater.tscn — hip pivot to knee
-# pivot (LegL → ShinL) and knee pivot to skate sole (ShinL → FootL). Used to
-# derive the stance knee flex and body drop from the hip flex so the crouch
-# keeps the skates planted. Keep in sync with the scene if the leg pivots
-# move. The knee-flex math only reads their RATIO, so it is build-independent;
-# the vertical drop is a length and rides `leg_scale` below.
-const _THIGH_LEN: float = 0.31
-const _SHIN_LEN: float = 0.45
-# Forward offset from the shin's end to the FOOT pivot (ShinL → FootL local −Z):
-# the boot's centre sits ahead of the ankle, not under it. Folding the shin
-# swings this offset from horizontal toward straight DOWN, so any solve that
-# holds the boot LEVEL — the shot block's extended leg, the faceoff centre's
-# address — owes the height it costs, or it buries that skate in the ice. A boot
-# left to tilt with its shin does not: it keeps its sole planted, which is the
-# model the stance crouch solves.
-const _FOOT_FWD: float = 0.10
 
 # Quiet time before the settled early-out in apply() engages. Sized to sit well
 # past the slowest smoothed channel's convergence (the eases run at ≥ ~5/s, so
@@ -53,44 +33,63 @@ const _PSI_SMOOTH_EASE: float = 15.0
 
 var _skater: Skater = null
 var _sm: SkaterStateMachine = null
-var _controller: SkaterController = null  # tunables live as @export on the controller
+var _controller: SkaterController = null  # tunables live on the controller
 
 # Settled early-out state (see the block at the top of apply()).
 var _settle_timer: float = 0.0
 var _settled: bool = false
 
+var _locomotion := SkaterLocomotion.new()
+var _pose := GaitPose.new()
+
+# The overlays, lowest priority first — the order IS the priority: an additive
+# stage lays on everything before it, an override takes everything before it
+# with the channels it owns. The block holds the legs over every additive
+# layer; a blocker who gets run over goes down, so the knockdown is last.
+var _faceoff := GaitFaceoffLayer.new()
+var _shot := GaitShotLayer.new()
+var _check := GaitCheckLayer.new()
+var _lift := GaitStickLiftLayer.new()
+var _celebration := GaitCelebrationLayer.new()
+var _stagger := GaitStaggerLayer.new()
+var _block := GaitBlockLayer.new()
+var _knockdown := GaitKnockdownLayer.new()
+var _layers: Array[GaitLayer] = [_faceoff, _shot, _check, _lift, _celebration,
+		_stagger, _block, _knockdown]
+# Per-stage subsets of _layers in the same order, each beside its layers' bits
+# in the pass's active mask (built in setup).
+var _hold_layers: Array[GaitLayer] = []
+var _floor_layers: Array[GaitLayer] = []
+var _leg_layers: Array[GaitLayer] = []
+var _trunk_layers: Array[GaitLayer] = []
+var _override_layers: Array[GaitLayer] = []
+var _hold_bits := PackedInt32Array()
+var _floor_bits := PackedInt32Array()
+var _leg_bits := PackedInt32Array()
+var _trunk_bits := PackedInt32Array()
+var _override_bits := PackedInt32Array()
+
 # Height multiplier for this build's legs, set by SkaterController
 # .apply_attributes alongside the skeleton scaling (the appearance pass
-# lengthens the actual leg pivot chain by the same factor). Scales the
-# crouch's vertical body drop so the flexed legs' deficit matches the longer
-# segments; the knee ANGLES are ratio-derived and stay build-independent.
-var leg_scale: float = 1.0
+# lengthens the actual leg pivot chain by the same factor). Scales every
+# vertical length the crouch solves; the knee ANGLES are ratio-derived and stay
+# build-independent.
+var leg_scale: float = 1.0:
+	set(value):
+		leg_scale = value
+		_pose.leg_scale = value
 
 
 # This build's (thigh, shin) segment lengths in metres — the knockdown sprawl
 # solve (SkaterController._apply_knockdown_fall) shares the leg geometry the
 # crouch solve uses, served from the one place that owns it.
 func leg_segment_lengths() -> Vector2:
-	return Vector2(_THIGH_LEN, _SHIN_LEN) * leg_scale
+	return Vector2(GaitPose.THIGH_LEN, GaitPose.SHIN_LEN) * leg_scale
 
 
-# How far the centre's faceoff address drops his body, in metres — the same
-# crouch the gait settles at over the dot, derived instead of measured because
-# the placement that needs it runs at the whistle, before the pose exists (and
-# on a body still carrying whatever depth it was skating at). Full leg length
-# minus the vertical span left by the address's hip flex, its knee (the flex
-# that keeps the skate under the hip) and the cosine the width splay costs.
-# test_faceoff_prep_pose.gd holds this against the settled live crouch.
+# How far the centre's faceoff address drops his body (GaitFaceoffLayer).
 func faceoff_address_drop() -> float:
-	var hip: float = deg_to_rad(
-			_controller.stance_hip_deg * _controller.faceoff_center_stance)
-	var knee: float = hip + asin(
-			clampf(_THIGH_LEN / _SHIN_LEN * sin(hip), -1.0, 1.0))
-	var shin: float = knee - hip
-	var span: float = leg_scale * (_THIGH_LEN * cos(hip) + _SHIN_LEN * cos(shin)
-			+ _FOOT_FWD * sin(shin))
-	return leg_scale * (_THIGH_LEN + _SHIN_LEN) \
-			- span * cos(deg_to_rad(_controller.faceoff_center_width_deg))
+	return _faceoff.address_drop(leg_scale)
 
 # ── Runtime State ─────────────────────────────────────────────────────────────
 var stride_phase: float = 0.0
@@ -109,14 +108,15 @@ var crouch_drop: float = 0.0
 # apply() and trunk_texture_smooth_rate).
 var _trunk_pitch_s: float = 0.0
 var _trunk_roll_s: float = 0.0
-# Eased 0..1 "committing a check" stance factor, tracked toward skater.hit_committed
-# at render rate. Drives the load-up lean and crouch below.
-var _hit_commit_blend: float = 0.0
-# Smoothed faceoff ready-stance engagement, so the crouch eases in over the
-# countdown and releases into the draw instead of popping on the phase flip.
-# Published: the address is not only a leg pose — the hands take their draw grip
-# on the same ease (SkaterIKCoordinator.update_bottom_hand).
-var faceoff_blend: float = 0.0
+# The faceoff layer's engagement (GaitFaceoffLayer.blend).
+var faceoff_blend: float:
+	get:
+		return _faceoff.blend
+# Radians of lower-body rotation.y the shot coils and kicks the hips through
+# (GaitShotLayer.hip_yaw).
+var shot_hip_yaw: float:
+	get:
+		return _shot.hip_yaw
 # Radians of lower-body rotation.y the hockey stop turns the hips across travel
 # (SkaterLocomotion.stop_yaw, republished for the pose coordinator's yaw sum).
 var stop_yaw_offset: float = 0.0
@@ -140,43 +140,33 @@ var _pivot_dwell: float = 0.0
 # sum — two writers tracking the same rotation on different clocks is a
 # wobble, not a pose.
 var pivot_hold: float = 0.0
-# Shot body animation (see the Shot block in apply()). Driven from the
-# replicated current_shot_state + shot_charge, exactly like the stick flex:
-# the wrister load tracks the drag-charge through WRISTER_AIM, the slapper
-# load tracks the wind-up through the charge states, and the transition into
-# FOLLOW_THROUGH latches the smoothed load as the release kick's power (the
-# raw charge may already be zeroed by then), with the kick's amplitude set
-# picked by which charge it came from. shot_hip_yaw is radians of lower-body
-# rotation.y.
-var shot_hip_yaw: float = 0.0
-var _shot_prev_state: int = 0
-var _wrister_load: float = 0.0      # smoothed 0..1 drag-charge engagement
-var _slap_load: float = 0.0         # smoothed 0..1 wind-up engagement
-var _shot_kick_t: float = -1.0      # seconds into the release kick; <0 = idle
-var _shot_kick_power: float = 0.0   # load latched at release (min-pop floored)
-var _shot_kick_is_slap: bool = false
-# Smoothed shot-block engagement: the one-knee drop snaps in with the committed
-# plant and eases back out on release. Keyed off the replicated
-# current_shot_state like the shot signals above.
-var _block_blend: float = 0.0
-# Check-delivery drive: the hitter's shoulder finishing through the contact.
-# Started by SkaterController.start_check_drive off the host-authoritative
-# body_check_landed broadcast (and the replay event dispatcher), so every
-# machine plays the identical drive the same frame as the burst/thud.
-var _drive_dir: Vector3 = Vector3.ZERO  # world-space, attacker → victim
-var _drive_t: float = -1.0              # seconds into the drive; <0 = idle
-var _drive_intensity: float = 0.0       # 0..1 VFX hit hardness
-# Smoothed stick-lift engagement — the working posture while jabbing under an
-# opponent's stick. Keyed off the replicated blade_up.
-var _lift_blend: float = 0.0
 
-var _locomotion := SkaterLocomotion.new()
 
 func setup(skater: Skater, sm: SkaterStateMachine, controller: SkaterController) -> void:
 	_skater = skater
 	_sm = sm
 	_controller = controller
 	_locomotion.setup(skater, controller)
+	for i: int in _layers.size():
+		var layer: GaitLayer = _layers[i]
+		layer.setup(skater, controller)
+		var stages: int = layer.stages()
+		var bit: int = 1 << i
+		if stages & GaitLayer.Stage.HOLD:
+			_hold_layers.append(layer)
+			_hold_bits.append(bit)
+		if stages & GaitLayer.Stage.FLOOR:
+			_floor_layers.append(layer)
+			_floor_bits.append(bit)
+		if stages & GaitLayer.Stage.LEGS:
+			_leg_layers.append(layer)
+			_leg_bits.append(bit)
+		if stages & GaitLayer.Stage.TRUNK:
+			_trunk_layers.append(layer)
+			_trunk_bits.append(bit)
+		if stages & GaitLayer.Stage.OVERRIDE:
+			_override_layers.append(layer)
+			_override_bits.append(bit)
 
 
 # Snaps the gait back to a clean standstill and plants the legs at their rest
@@ -184,9 +174,10 @@ func setup(skater: Skater, sm: SkaterStateMachine, controller: SkaterController)
 # dot mid-stride carrying the previous shift's leg swing.
 func reset_to_rest() -> void:
 	_locomotion.reset()
+	for layer: GaitLayer in _layers:
+		layer.reset()
 	stride_phase = 0.0
 	crouch_drop = 0.0
-	faceoff_blend = 0.0
 	trunk_pitch_add = 0.0
 	trunk_roll_add = 0.0
 	_trunk_pitch_s = 0.0
@@ -203,18 +194,6 @@ func reset_to_rest() -> void:
 	_pivot_blend = 0.0
 	_pivot_dwell = 0.0
 	pivot_hold = 0.0
-	shot_hip_yaw = 0.0
-	_shot_prev_state = 0
-	_wrister_load = 0.0
-	_slap_load = 0.0
-	_shot_kick_t = -1.0
-	_shot_kick_power = 0.0
-	_shot_kick_is_slap = false
-	_block_blend = 0.0
-	_drive_dir = Vector3.ZERO
-	_drive_t = -1.0
-	_drive_intensity = 0.0
-	_lift_blend = 0.0
 	if _skater != null:
 		_skater.set_leg_swing(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 		_skater.set_skating_crouch_drop(0.0)
@@ -222,36 +201,9 @@ func reset_to_rest() -> void:
 		_skater.set_edge_loads(0.0, 0.0)
 
 
-# The ready-stance crouch floor and foot split for this skater's role at the
-# dot: the centre taking the draw sits deeper and splits wider than the players
-# lined up behind him (see SkaterController.faceoff_center_stance). Both read
-# the same replicated-by-derivation flag, so a wire-fed remote centre poses
-# identically to a locally-simulated one.
-func _faceoff_stance_floor() -> float:
-	return _controller.faceoff_center_stance if _skater.is_faceoff_center \
-			else _controller.faceoff_stance
-
-
-func _faceoff_split_deg() -> float:
-	return _controller.faceoff_center_split_deg if _skater.is_faceoff_center \
-			else _controller.faceoff_split_deg
-
-
-# Arms the check-delivery drive (see the runtime state above). During
-# sustained contact or a quick follow-up hit inside an active drive the
-# broadcast can re-fire: harden the intensity but never restart the clock —
-# a re-zeroed envelope would pin the pose at its rise for as long as the
-# contact grinds.
+# Arms the check-delivery drive (GaitCheckLayer.start_drive).
 func start_check_drive(hit_dir: Vector3, intensity: float) -> void:
-	var flat := Vector3(hit_dir.x, 0.0, hit_dir.z)
-	if flat.length_squared() < 0.0001 or intensity <= 0.0:
-		return
-	if _drive_t >= 0.0:
-		_drive_intensity = maxf(_drive_intensity, intensity)
-		return
-	_drive_dir = flat.normalized()
-	_drive_intensity = intensity
-	_drive_t = 0.0
+	_check.start_drive(hit_dir, intensity)
 
 # ── Per-Tick Application ──────────────────────────────────────────────────────
 func apply(delta: float) -> void:
@@ -259,9 +211,9 @@ func apply(delta: float) -> void:
 		return
 
 	# ── Settled early-out ──────────────────────────────────────────────────────
-	# At true rest the converged gait pose is static: with no inputs, no speed,
-	# no timers and a plain skating state, every smoothed channel decays to zero
-	# and the pass rewrites the same rest pose every frame — the fixed cost the
+	# At true rest the converged gait pose is static: with no inputs, no speed
+	# and every layer's trigger idle, every smoothed channel decays to zero and
+	# the pass rewrites the same rest pose every frame — the fixed cost the
 	# micro-benchmark's "at rest" row measures. Detect the steady state from the
 	# same replicated inputs the pass itself reads (so remotes settle too), and
 	# once quiet has held for _SETTLE_SECONDS — long past every ease/spring's
@@ -273,27 +225,21 @@ func apply(delta: float) -> void:
 			qvel.x * qvel.x + qvel.z * qvel.z < 0.0025
 			and _skater.move_intent.length_squared() <= 0.0025
 			and not _skater.brake_intent
-			and not _controller.sprint_active
-			and not _skater.hit_committed
-			and not _skater.blade_up
-			and (_skater.current_shot_state == State.SKATING_WITH_PUCK
-				or _skater.current_shot_state == State.SKATING_WITHOUT_PUCK)
-			and _skater.current_shot_state == _shot_prev_state
-			and _controller.stagger_timer <= 0.0
-			and _controller.knockdown_timer <= 0.0
-			and _drive_t < 0.0 and _shot_kick_t < 0.0
-			and not _controller.is_faceoff_ready()
-			and _controller.celebration_progress() <= 0.0)
+			and not _controller.sprint_active)
+	if quiet:
+		for layer: GaitLayer in _layers:
+			if not layer.is_quiet():
+				quiet = false
+				break
 	if quiet:
 		_settle_timer = minf(_settle_timer + delta, _SETTLE_SECONDS)
 		if _settle_timer >= _SETTLE_SECONDS:
 			if not _settled:
 				_settled = true
 				reset_to_rest()
-				# reset_to_rest clears the shot-transition latch to 0; re-stamp
-				# the live state or `quiet` fails every other frame and the
-				# settle/reset cycle never holds.
-				_shot_prev_state = _skater.current_shot_state
+				# reset_to_rest clears the shot-transition latch; re-stamp it or
+				# `quiet` fails every other frame and the settle never holds.
+				_shot.sync_state()
 			return
 	else:
 		_settle_timer = 0.0
@@ -302,122 +248,27 @@ func apply(delta: float) -> void:
 	var vel: Vector3 = _skater.velocity
 	# Ground speed only — vertical velocity never feeds the stride.
 	var ground_speed: float = Vector2(vel.x, vel.z).length()
-	# Plant the legs while shot-blocking (the one-knee drop below owns them). Read
-	# off the REPLICATED shot state, not the state machine — a wire-fed remote's
-	# state machine is never ticked, so it would never see the block.
-	var planted: bool = _skater.current_shot_state == State.SHOT_BLOCKING
-
-	# ── Shots: load + release kick signals ─────────────────────────────────────
-	# The wrister load tracks the drag-charge through WRISTER_AIM; the slapper
-	# load tracks the wind-up through the charge states. Entering FOLLOW_THROUGH
-	# latches the smoothed load as the kick's power (floored by the min pop so
-	# an uncharged snap still reads and a short-wind slap still commits), with
-	# the amplitude set picked by which charge it came from — a quick-shot pass
-	# (no charge state at all) rides the wrister set, the same split the stick
-	# flex uses. The kick then rides the shared asymmetric arc (fast weight
-	# transfer through the release, slow settle) on its own cosmetic timer —
-	# remotes don't see the state machine's follow-through timer, only the
-	# state flip.
-	var shot_state: int = _skater.current_shot_state
-	# The one-timer's retention hold is the loaded tail of the wind-up, so the
-	# legs stay in the slapper load through it — and the follow-through it hands
-	# off to is a slap kick, not a wrister's (every one-timer now reaches
-	# FOLLOW_THROUGH via retention, so omitting it here would misclassify all of
-	# them).
-	var in_slap_charge: bool = shot_state == State.SLAPPER_CHARGE_WITH_PUCK \
-			or shot_state == State.SLAPPER_CHARGE_WITHOUT_PUCK \
-			or shot_state == State.ONE_TIMER_RETENTION
-	if shot_state != _shot_prev_state:
-		if shot_state == State.FOLLOW_THROUGH:
-			_shot_kick_t = 0.0
-			_shot_kick_is_slap = _shot_prev_state == State.SLAPPER_CHARGE_WITH_PUCK \
-					or _shot_prev_state == State.SLAPPER_CHARGE_WITHOUT_PUCK \
-					or _shot_prev_state == State.ONE_TIMER_RETENTION
-			if _shot_kick_is_slap:
-				_shot_kick_power = maxf(_slap_load, _controller.slapper_kick_min_power)
-			else:
-				# Latch from the release charge as well as the smoothed aim load:
-				# the frozen wrister is a quick flick, so _wrister_load never builds
-				# over the brief coil and would pin the kick at the min-power floor.
-				# shot_charge holds the release power through the follow-through, so
-				# a hard flick drives a hard leg kick; on the non-frozen path
-				# _wrister_load ≈ shot_charge and the max changes nothing.
-				_shot_kick_power = maxf(
-						maxf(_wrister_load, _skater.shot_charge),
-						_controller.wrister_kick_min_power)
-		_shot_prev_state = shot_state
-	var wrister_target: float = _skater.shot_charge if shot_state == State.WRISTER_AIM else 0.0
-	_wrister_load = lerpf(_wrister_load, wrister_target,
-			minf(_controller.wrister_load_blend_speed * delta, 1.0))
-	# Slapper wind-up engagement, re-derived from the replicated charge the way
-	# every machine can: shot_charge and the wind-up pose both fill over
-	# max_slapper_charge_time (the pose is the charge gauge — see
-	# SkaterController.slapper_wind_up_t), so shot_charge IS the wind-up
-	# progress; sqrt-ease to match the torso coil's front-loaded snap
-	# (SkaterPoseCoordinator.apply_upper_body).
-	var slap_target: float = 0.0
-	if in_slap_charge:
-		slap_target = sqrt(clampf(_skater.shot_charge, 0.0, 1.0))
-	_slap_load = lerpf(_slap_load, slap_target,
-			minf(_controller.wrister_load_blend_speed * delta, 1.0))
-	var kick_env: float = 0.0
-	if _shot_kick_t >= 0.0:
-		_shot_kick_t += delta
-		var kick_total: float = _controller.slapper_kick_time if _shot_kick_is_slap \
-				else _controller.wrister_kick_time
-		var kt: float = _shot_kick_t / maxf(kick_total, 0.001)
-		if kt >= 1.0:
-			_shot_kick_t = -1.0
-		else:
-			kick_env = sin(PI * pow(kt, _controller.follow_through_arc_skew)) * _shot_kick_power
-	# Shot-block engagement: fast into the committed plant, eased back out on
-	# release so the knee drop doesn't pop back to a stride.
-	_block_blend = lerpf(_block_blend, 1.0 if planted else 0.0,
-			minf(_controller.block_pose_blend_speed * delta, 1.0))
-	# Check-delivery drive envelope: an explosive rise (peaks ~15% in) easing
-	# out over check_drive_time — the shoulder finishing through the contact.
-	var drive_env: float = 0.0
-	if _drive_t >= 0.0:
-		_drive_t += delta
-		var du: float = _drive_t / maxf(_controller.check_drive_time, 0.001)
-		if du >= 1.0:
-			_drive_t = -1.0
-		else:
-			drive_env = sin(PI * pow(du, 0.35)) * _drive_intensity
-	# Stick-lift read, off the replicated blade_up (own lift or a forced pop —
-	# either way the body reacts).
-	_lift_blend = lerpf(_lift_blend, 1.0 if _skater.blade_up else 0.0,
-			minf(_controller.stick_lift_blend_speed * delta, 1.0))
-	# Celebration window: this pass runs at RENDER rate (Skater._process) and is
-	# visibility-gated, so it only READS the progress — the callers age the timer
-	# at physics rate (SkaterController._process_input / RemoteController.
-	# _physics_process) so it stays deterministic and never freezes off-screen.
-	var celebr_p: float = _controller.celebration_progress()
-	# Combined engagement, for the stride suppression below — shooting is a
-	# glide (the feet set through the load and drive through the release), and
-	# a landed check plants through the finish.
-	var shot_body: float = maxf(maxf(_wrister_load, _slap_load), maxf(kick_env, drive_env))
-	var stick_side: float = -1.0 if _skater.is_left_handed else 1.0
-	# Hips coil with the load (stick-side hip pulls back, riding the torso coil
-	# — the wrister's blade-tracking twist or the slapper's authored wind-up
-	# coil) and uncoil THROUGH the release — the stick-side hip drives forward
-	# past square, mirroring the follow-through's torso `through` term.
-	# Positive lower-body yaw turns the legs toward −X, i.e. pulls the +X hip
-	# forward, hence the signs.
-	var kick_hip_yaw_deg: float = _controller.slapper_kick_hip_yaw_deg if _shot_kick_is_slap \
-			else _controller.wrister_kick_hip_yaw_deg
-	shot_hip_yaw = -stick_side * (
-				deg_to_rad(_controller.wrister_load_hip_coil_deg) * _wrister_load
-				+ deg_to_rad(_controller.slapper_load_hip_coil_deg) * _slap_load) \
-			+ stick_side * deg_to_rad(kick_hip_yaw_deg) * kick_env
+	# Which layers contribute this pass; an idle one's stages are skipped.
+	var active: int = 0
+	for i: int in _layers.size():
+		if _layers[i].advance(delta):
+			active |= 1 << i
+	var p: GaitPose = _pose
+	p.stick_side = -1.0 if _skater.is_left_handed else 1.0
+	# The stride holds for whatever sets the feet: the pivot's transit, and any
+	# layer's.
+	var hold: float = _pivot_blend * _controller.pivot_stride_fade
+	if active:
+		for i: int in _hold_layers.size():
+			if active & _hold_bits[i]:
+				hold = maxf(hold, _hold_layers[i].stride_hold())
 
 	# ── Locomotion ─────────────────────────────────────────────────────────────
 	# Which skating state the skater is in and the stroke it skates
 	# (SkaterLocomotion). Shooting sets the feet and the pivot glides through its
 	# transit, so both hold the stroke; the block takes the legs outright.
 	var basis_inv: Basis = _skater.global_transform.basis.inverse()
-	_locomotion.sense(delta, planted, maxf(shot_body * _controller.shot_stride_fade,
-			_pivot_blend * _controller.pivot_stride_fade))
+	_locomotion.sense(delta, _block.planted, hold)
 	var mix: LocomotionRules.Mix = _locomotion.mix
 	stride_phase = _locomotion.stride_phase
 	stop_yaw_offset = _locomotion.stop_yaw
@@ -559,358 +410,46 @@ func apply(delta: float) -> void:
 		align_speed = lerpf(align_speed, _controller.pivot_yaw_speed, _pivot_blend)
 	_hip_align_yaw = lerpf(_hip_align_yaw, align_target, align_speed * delta)
 	travel_align_yaw = _hip_align_yaw * (1.0 - mix.stop)
-	# Velocity in the yawed hip frame: v_hip = RotY(−ψ) · v_local.
-	var hip_cos: float = cos(travel_align_yaw)
-	var hip_sin: float = sin(travel_align_yaw)
-	var hip_x: float = local_vel.x * hip_cos - local_vel.z * hip_sin
-	var hip_z: float = local_vel.x * hip_sin + local_vel.z * hip_cos
-	fwd = -hip_z
+	# Forward speed in the yawed hip frame: v_hip = RotY(−ψ) · v_local.
+	fwd = -(local_vel.x * sin(travel_align_yaw) + local_vel.z * cos(travel_align_yaw))
 
 	_locomotion.strokes(delta, fwd)
 
 	# ── Stance: the crouch ─────────────────────────────────────────────────────
-	# The locomotion state's own sit, floored by everything layered on it. From
-	# the hip flex alone, the knee flex that keeps the skate under the hip
-	# (knee = hip + asin(thigh/shin · sin(hip))) and the vertical deficit of the
-	# bent leg both follow from the leg geometry; the deficit is applied as a
-	# whole-body drop (Skater.set_skating_crouch_drop) so the skates stay on the
-	# ice.
-	var stance: float = _locomotion.stance
-	# Faceoff ready stance: at the dot the skater is at a standstill, so the
-	# speed-driven envelope leaves them bolt upright — floor the engagement
-	# through the countdown instead. Eased both ways: the crouch settles in
-	# over the prep and releases into the draw as the players explode out.
-	# The two centres sit far deeper than the players behind them.
-	faceoff_blend = lerpf(faceoff_blend,
-			1.0 if _controller.is_faceoff_ready() else 0.0,
-			_controller.stride_intensity_speed * delta)
-	if faceoff_blend > 0.001:
-		stance = maxf(stance, _faceoff_stance_floor() * faceoff_blend)
-	# The pivot sits too: the open-hip glide and the step-around are both done
-	# on bent knees.
-	stance = maxf(stance, _controller.pivot_stance * _pivot_blend)
-	# Shot loads sit INTO the shot as the charge builds (the slapper wind-up
-	# deepest — the power position), and the release keeps the front leg seated
-	# through the drive (the back knee is pulled out of this flex by the kick
-	# extension below — that asymmetry IS the weight transfer read).
-	stance = maxf(stance, _controller.wrister_load_stance * _wrister_load)
-	stance = maxf(stance, _controller.slapper_load_stance * _slap_load)
-	var kick_stance: float = _controller.slapper_kick_stance if _shot_kick_is_slap \
-			else _controller.wrister_kick_stance
-	stance = maxf(stance, kick_stance * kick_env)
-	# A landed check drives with the LEGS — the finishing base under the
-	# shoulder — and a stick lift works from a light coil.
-	stance = maxf(stance, _controller.check_drive_stance * drive_env)
-	stance = maxf(stance, _controller.stick_lift_stance * _lift_blend)
-	# Celebration bounce: knee pumps between straight and seated (the body
-	# drop follows, so it reads as a hop bob) — 3 pumps across the window,
-	# double the raised-stick pose's bob rate. Gated to plain skating like the
-	# pose (SkaterController's celebration block) so it never fights a
-	# follow-through kick, and ramped in over the same first 20%.
-	if celebr_p > 0.0 and (shot_state == State.SKATING_WITH_PUCK
-			or shot_state == State.SKATING_WITHOUT_PUCK):
-		var cel_ramp: float = clampf(celebr_p / 0.2, 0.0, 1.0)
-		cel_ramp = cel_ramp * cel_ramp * (3.0 - 2.0 * cel_ramp)
-		var pump: float = 0.5 - 0.5 * cos(celebr_p * TAU * 3.0)
-		stance = maxf(stance, _controller.celebration_leg_stance * cel_ramp * pump)
-	var stance_hip: float = deg_to_rad(_controller.stance_hip_deg) * stance
-	var stance_knee: float = stance_hip + asin(
-			clampf(_THIGH_LEN / _SHIN_LEN * sin(stance_hip), -1.0, 1.0))
-	var stance_shin: float = stance_knee - stance_hip
-	var drop: float = leg_scale * (_THIGH_LEN * (1.0 - cos(stance_hip)) \
-			+ _SHIN_LEN * (1.0 - cos(stance_shin)))
+	# The locomotion state's own sit, floored by the pivot (the open-hip glide
+	# and the step-around are both done on bent knees) and by every layer.
+	var stance: float = maxf(_locomotion.stance, _controller.pivot_stance * _pivot_blend)
+	if active:
+		for i: int in _floor_layers.size():
+			if active & _floor_bits[i]:
+				stance = maxf(stance, _floor_layers[i].stance_floor())
+	p.solve_stance(deg_to_rad(_controller.stance_hip_deg) * stance)
 
-	var l_pitch: float = stance_hip + _locomotion.l_pitch
-	var l_roll: float = _locomotion.l_roll
-	var r_pitch: float = stance_hip + _locomotion.r_pitch
-	var r_roll: float = _locomotion.r_roll
-	var l_ext: float = _locomotion.l_ext
-	var r_ext: float = _locomotion.r_ext
+	p.seed_legs(_locomotion, pivot_yaw_l, pivot_yaw_r)
+	if active:
+		for i: int in _leg_layers.size():
+			if active & _leg_bits[i]:
+				_leg_layers[i].shape_legs(p)
+	p.solve_knees(_locomotion, _controller.stance_knee_release)
+	p.seed_trunk(_locomotion)
+	if active:
+		for i: int in _trunk_layers.size():
+			if active & _trunk_bits[i]:
+				_trunk_layers[i].shape_trunk(p)
+		for i: int in _override_layers.size():
+			if active & _override_bits[i]:
+				_override_layers[i].override(p)
 
-	# Faceoff stance: the stick-side foot drops back, braced for the draw, and
-	# the centre splays both legs into the wide base he sets over the dot — a sit
-	# this deep over feet at hip width is a squat, not an address. The splay
-	# rotates the whole leg chain, so its vertical span is span·cos(splay) and the
-	# body pays the deficit as extra drop; without it the skates ride up off the
-	# ice. The ankles give the whole chain back below (foot_flat_*) so the blades
-	# still lie flat — the shot block's argument, at a gentler angle.
-	var faceoff_splay: float = 0.0
-	var faceoff_flat: float = 0.0
-	if faceoff_blend > 0.001:
-		var split: float = deg_to_rad(_faceoff_split_deg()) * faceoff_blend \
-				* (-1.0 if _skater.is_left_handed else 1.0)
-		l_pitch += split
-		r_pitch -= split
-		if _skater.is_faceoff_center:
-			faceoff_splay = deg_to_rad(_controller.faceoff_center_width_deg) \
-					* faceoff_blend
-			l_roll -= faceoff_splay
-			r_roll += faceoff_splay
-			drop += (leg_scale * (_THIGH_LEN + _SHIN_LEN) - drop) \
-					* (1.0 - cos(faceoff_splay))
-			# A sit this deep, over a base this wide, would stand both blades on
-			# their heels and outside edges; the ankles give it back (an address
-			# is held on flat blades, and a real ankle has the range for it).
-			faceoff_flat = faceoff_blend
-			# Which changes what the drop above owes. A skate left to tilt with
-			# its shin keeps its SOLE planted, and that is the crouch's model; a
-			# level one hangs its blade below the FOOT pivot instead, and that
-			# pivot swings down as the shin folds (_FOOT_FWD), so the hip rides
-			# the same amount higher. The shot block's own solve pays it too.
-			drop -= leg_scale * _FOOT_FWD * sin(stance_shin) * faceoff_blend
-
-	# Shot stance. Load: the shooting base — stick-side foot staggers back and
-	# both legs roll toward it, settling the weight over the back leg while the
-	# charge builds (same shared-roll idiom as the strafe lean: a common roll
-	# rides the body over that side's leg); wrister and slapper loads sum, but
-	# their charge states are exclusive so only the decay tails ever overlap.
-	# Release: the roll flips to land the weight over the FRONT foot while the
-	# back leg drives into extension behind — the kick pitch here; the knee
-	# straighten below frees the shin into it.
-	var shot_load_split_deg: float = _controller.wrister_load_split_deg * _wrister_load \
-			+ _controller.slapper_load_split_deg * _slap_load
-	var shot_load_lean_deg: float = _controller.wrister_load_lean_deg * _wrister_load \
-			+ _controller.slapper_load_lean_deg * _slap_load
-	if shot_load_split_deg > 0.001 or shot_load_lean_deg > 0.001:
-		var load_split: float = deg_to_rad(shot_load_split_deg) * stick_side
-		l_pitch += load_split
-		r_pitch -= load_split
-		var load_lean: float = deg_to_rad(shot_load_lean_deg) * stick_side
-		l_roll += load_lean
-		r_roll += load_lean
-	if kick_env > 0.001:
-		var kick_lean_deg: float = _controller.slapper_kick_lean_deg if _shot_kick_is_slap \
-				else _controller.wrister_kick_lean_deg
-		var kick_lean: float = deg_to_rad(kick_lean_deg) * kick_env * stick_side
-		l_roll -= kick_lean
-		r_roll -= kick_lean
-		var kick_back_deg: float = _controller.slapper_kick_back_deg if _shot_kick_is_slap \
-				else _controller.wrister_kick_back_deg
-		var kick_back: float = deg_to_rad(kick_back_deg) * kick_env
-		if stick_side > 0.0:
-			r_pitch -= kick_back
-		else:
-			l_pitch -= kick_back
-
-	# Knee flex — three layers that read as one leg working. (1) The stance flex,
-	# the seated base both knees carry. (2) Push extension: the loaded leg
-	# straightens as it extends back (stance_knee_release of the stance flex gone
-	# at full extension) — the power stroke. (3) The locomotion state's own
-	# folds: recovery tuck, crossover clearance, the glide's inside tuck.
-	# Negative folds the shin back under the body.
-	var release: float = _controller.stance_knee_release * _locomotion.intensity
-	var l_knee: float = -(stance_knee * (1.0 - release * l_ext) + _locomotion.l_tuck)
-	var r_knee: float = -(stance_knee * (1.0 - release * r_ext) + _locomotion.r_tuck)
-
-	# Shot release: the back (stick-side) knee straightens through the kick —
-	# extension toward 0, never past straight — while the front knee keeps the
-	# full stance flex (the kick_stance floor above). Applied before the
-	# fore-aft compensation so the freed shin carries into the kick's rearward
-	# reach, same anatomical bookkeeping as the stride's knee layers.
-	if kick_env > 0.001:
-		var kick_extend_deg: float = _controller.slapper_kick_knee_extend_deg \
-				if _shot_kick_is_slap else _controller.wrister_kick_knee_extend_deg
-		var kick_extend: float = deg_to_rad(kick_extend_deg) * kick_env
-		if stick_side > 0.0:
-			r_knee = minf(r_knee + kick_extend, 0.0)
-		else:
-			l_knee = minf(l_knee + kick_extend, 0.0)
-
-	# ── Knee fore-aft compensation ────────────────────────────────────────────
-	# The dynamic knee layers (push extension, recovery tuck, carve clearance)
-	# exist for LIFT and leg-length texture, but each also drags the FOOT
-	# fore-aft: uncompensated, unfolding mid-push shoves the skate forward
-	# against the thigh's backward sweep and the tuck's release adds to the
-	# forward swing, so measured AT THE SKATE the stride's fast phase comes out
-	# FORWARD (recovery) — the inverse of a real push (test_gait_stroke_profile
-	# pins the corrected profile). Counter-pitch the thigh by the small-angle
-	# FK term (Δpitch = −Δknee · L_shin / L_leg) so the foot tracks the
-	# thigh-design curve — slow recovery, fast push — while the knee keeps its
-	# full fold/extend range and vertical travel. Anatomically this reads
-	# right: a folded shin needs more hip flex for the same skate position,
-	# and the compensated full extension sits the knee joint farther back.
-	var shin_frac: float = _SHIN_LEN / (_THIGH_LEN + _SHIN_LEN)
-	l_pitch += -(l_knee + stance_knee) * shin_frac
-	r_pitch += -(r_knee + stance_knee) * shin_frac
-
-	drop += _locomotion.bob
-
-	# Trunk texture: the locomotion state's sway and weight shift, then the
-	# overlays' leans.
-	trunk_pitch_add = _locomotion.trunk_pitch
-	trunk_roll_add = _locomotion.trunk_roll
-	# Check-delivery drive: the trunk drives INTO the hit — the shoulder
-	# finishing through the contact. Same directional decomposition as the
-	# reach lean (pitch = mag·local.z folds toward local −Z, roll = −mag·local.x),
-	# re-derived body-local each tick so the lean stays on the victim line
-	# while the body carries through.
-	if drive_env > 0.0:
-		var drive_local: Vector3 = basis_inv * _drive_dir
-		var drive_mag: float = deg_to_rad(_controller.check_drive_lean_deg) * drive_env
-		trunk_pitch_add += drive_mag * drive_local.z
-		trunk_roll_add += -drive_mag * drive_local.x
-	# Stick lift: a slight chest-up pop while jabbing under the opponent's
-	# stick (positive pitch tips the shoulders back).
-	trunk_pitch_add += deg_to_rad(_controller.stick_lift_trunk_deg) * _lift_blend
-
-	# Knockdown pose factor: holds full while more than knockdown_getup_seconds
-	# remains on the timer, then eases to 0 over that tail (the get-up). Derived FROM
-	# the replicated knockdown_timer, so it renders identically everywhere and through
-	# reconcile — same discipline as the stagger stumble below. The entry end is
-	# ramped over the buckle window (KnockdownFallRules.entry_ramp — kd_t alone
-	# is 1 on the first down frame, landing the whole crumple in one frame);
-	# the smoothstep is inlined here because the native port mirrors this body.
-	var kd_t: float = clampf(
-			_controller.knockdown_timer / maxf(_controller.knockdown_getup_seconds, 0.001), 0.0, 1.0)
-	if kd_t > 0.0:
-		var buckle_t: float = clampf(_controller.knockdown_elapsed()
-				/ maxf(_controller.knockdown_fall_buckle_seconds, 0.001), 0.0, 1.0)
-		kd_t *= buckle_t * buckle_t * (3.0 - 2.0 * buckle_t)
-
-	# Stagger stumble: a checked player visibly fights for balance. The wobble
-	# phase is derived FROM stagger_timer (a uniform countdown), so every
-	# machine — and reconcile replay, which snaps the timer from the host —
-	# renders the identical stumble with zero new network state. Amplitude
-	# tracks the time left, so the wobble eases out with the recovery window;
-	# the two axes run at incommensurate frequencies so it reads as a stumble,
-	# not a metronome. It is kept OUT of the summed texture and added after the
-	# inertia filter at the publish tail — a stumble is supposed to shake, and
-	# the filter would blunt exactly the frequencies that sell it.
-	var stagger_pitch: float = 0.0
-	var stagger_roll: float = 0.0
-	var stagger_t: float = clampf(
-			_controller.stagger_timer / maxf(_controller.stagger_max_seconds, 0.001), 0.0, 1.0)
-	if stagger_t > 0.0:
-		# Knockdown supersedes the stumble — fade the wobble out as the player goes down.
-		var wobble_amp: float = deg_to_rad(_controller.stagger_wobble_deg) * stagger_t * (1.0 - kd_t)
-		var wobble_phase: float = _controller.stagger_timer * TAU * _controller.stagger_wobble_hz
-		stagger_pitch = wobble_amp * sin(wobble_phase)
-		stagger_roll = wobble_amp * 0.7 * sin(wobble_phase * 1.31)
-
-	# How much of each leg's splay and fold its ankle gives back, so the blade
-	# under it lies flat on the ice (SkaterLegRig.set_ankle_flatten). Seeded by
-	# the faceoff address; the block overwrites both when it takes the legs (the
-	# two poses never overlap — the whistle stands a blocker up).
-	var foot_flat_l: float = faceoff_flat
-	var foot_flat_r: float = faceoff_flat
-
-	# ── Shot block: the one-knee drop ─────────────────────────────────────────
-	# The block a real skater plays. The STICK-SIDE knee sinks toward the ice
-	# with the shin folded back along it; the far leg extends out to the other
-	# side, shin low and skate on the ice. Body and stick then seal opposite
-	# halves of the lane — the blade lies flat on the stick side
-	# (SkaterShotPoseCoordinator.apply_block_blade_position), the extended pad
-	# covers the other, which is why the block's reach is wider than the torso.
-	#
-	# Geometry, not authored numbers: the kneeling hip height falls out of the
-	# down leg's thigh/shin angles AND the boot's forward offset under them
-	# (_FOOT_FWD), and the extended leg's abduction is SOLVED from that same
-	# height (its vertical span is exactly leg·cos(roll), since the knee folds in
-	# the rolled leg's own sagittal plane) so its skate lands on the ice instead
-	# of floating above it or scissoring through it.
-	#
-	# The pose REPLACES the stance rather than layering on it — lerped on
-	# _block_blend like the knockdown crumple below, which supersedes it (a
-	# blocker who gets run over goes down, he doesn't hold the knee).
-	if _block_blend > 0.001:
-		var kneel_hip: float = deg_to_rad(_controller.block_kneel_hip_deg)
-		var kneel_shin: float = deg_to_rad(_controller.block_kneel_shin_deg)
-		var hip_h: float = leg_scale * (_THIGH_LEN * cos(kneel_hip)
-				+ _SHIN_LEN * cos(kneel_shin) + _FOOT_FWD * sin(kneel_shin))
-		var ext_knee: float = deg_to_rad(_controller.block_extend_knee_deg)
-		var ext_len: float = leg_scale * (_THIGH_LEN
-				+ _SHIN_LEN * cos(ext_knee) + _FOOT_FWD * sin(ext_knee))
-		var ext_roll: float = acos(clampf(hip_h / maxf(ext_len, 0.001), -1.0, 1.0))
-		# Knee value is the total fold (hip + shin-from-vertical), negative-folds-
-		# back, matching the stance_knee convention above. The extended leg rolls
-		# AWAY from the body: left toward −X (negative roll), right toward +X.
-		var down_knee: float = -(kneel_hip + kneel_shin)
-		# The extended leg's ankle gives back what that leg took, so its blade
-		# lies flat on the ice instead of swinging up onto an edge under a leg
-		# splayed 60° out of vertical. The kneeling leg keeps its fold — that
-		# skate is up on its toe by design.
-		if stick_side > 0.0:
-			foot_flat_l = _block_blend
-			foot_flat_r = 0.0
-		else:
-			foot_flat_r = _block_blend
-			foot_flat_l = 0.0
-		if stick_side > 0.0:
-			r_pitch = lerpf(r_pitch, kneel_hip, _block_blend)
-			r_roll = lerpf(r_roll, 0.0, _block_blend)
-			r_knee = lerpf(r_knee, down_knee, _block_blend)
-			l_pitch = lerpf(l_pitch, 0.0, _block_blend)
-			l_roll = lerpf(l_roll, -ext_roll, _block_blend)
-			l_knee = lerpf(l_knee, -ext_knee, _block_blend)
-		else:
-			l_pitch = lerpf(l_pitch, kneel_hip, _block_blend)
-			l_roll = lerpf(l_roll, 0.0, _block_blend)
-			l_knee = lerpf(l_knee, down_knee, _block_blend)
-			r_pitch = lerpf(r_pitch, 0.0, _block_blend)
-			r_roll = lerpf(r_roll, ext_roll, _block_blend)
-			r_knee = lerpf(r_knee, -ext_knee, _block_blend)
-		drop = lerpf(drop, leg_scale * (_THIGH_LEN + _SHIN_LEN) - hip_h, _block_blend)
-
-	# Knockdown crumple: sink the body toward the ice and let the stride swing go
-	# limp, blended by kd_t so a downed body doesn't keep pumping strides while it
-	# slides. The torso fold is layered in SkaterPoseCoordinator._apply_lean (the
-	# recoil channel); here it's the drop + limp legs. Both ease back over the get-up.
-	if kd_t > 0.0:
-		drop = lerpf(drop, _controller.knockdown_pose_drop_m, kd_t)
-		l_pitch = lerpf(l_pitch, 0.0, kd_t)
-		r_pitch = lerpf(r_pitch, 0.0, kd_t)
-		l_roll = lerpf(l_roll, 0.0, kd_t)
-		r_roll = lerpf(r_roll, 0.0, kd_t)
-		l_knee = lerpf(l_knee, 0.0, kd_t)
-		r_knee = lerpf(r_knee, 0.0, kd_t)
-
-	# Commit stance: holding the Hit button loads the skater up for the check — lean
-	# forward into it and sink a touch. Off the replicated skater.hit_committed
-	# (renders on remotes), eased at render rate. Suppressed while going down (kd_t)
-	# so it can't fight the crumple.
-	#
-	# The gait owns no shoulder channel here, and must not grow one: the trunk
-	# texture is symmetric, so a roll raises the trailing shoulder by exactly what
-	# it drops the leading one, which is a skater tipping over rather than one
-	# loading up. The per-side geometry lives in CheckStanceRules, eased at physics
-	# rate on the skater (Skater._update_commit_stance) — the loaded blade reads it.
-	_hit_commit_blend = move_toward(_hit_commit_blend,
-			1.0 if _skater.hit_committed else 0.0, _controller.hit_commit_pose_speed * delta)
-	var commit_t: float = _hit_commit_blend * (1.0 - kd_t)
-	if commit_t > 0.001:
-		trunk_pitch_add += -deg_to_rad(_controller.hit_commit_lean_deg) * commit_t
-		drop += _controller.hit_commit_crouch_m * commit_t
-
-	# The centre's fold over the dot. It rides the trunk TEXTURE rather than the
-	# torso lean the block uses, because the lean rotates the UpperBody node the
-	# blade markers hang from: the blade-first IK then has to solve a stick onto
-	# the ice out of a pitched frame, and at any fold worth seeing it gives up
-	# and stands the shaft on end. The texture is bones only, so the chest reads
-	# folded while the stick keeps the address the centre actually took.
-	if faceoff_blend > 0.001 and _skater.is_faceoff_center:
-		trunk_pitch_add += -deg_to_rad(_controller.faceoff_center_lean_deg) * faceoff_blend
-
-	# The mohawk yaw fades with the crumple like every other leg channel.
-	_skater.set_leg_swing(l_pitch, l_roll, l_knee, r_pitch, r_roll, r_knee,
-			pivot_yaw_l * (1.0 - kd_t), pivot_yaw_r * (1.0 - kd_t))
-	# Publish per-blade edge load for the ice VFX: the push half-wave (which
-	# already carries the crossover under-stroke) scaled by stroke engagement,
-	# floored by the dug edges of the stop and the tight turn — and released
-	# through the crumple.
-	_skater.set_edge_loads(
-			clampf(maxf(l_ext * _locomotion.intensity, _locomotion.edge_floor), 0.0, 1.0) * (1.0 - kd_t),
-			clampf(maxf(r_ext * _locomotion.intensity, _locomotion.edge_floor), 0.0, 1.0) * (1.0 - kd_t))
-	_skater.set_ankle_flatten(foot_flat_l, foot_flat_r)
-	_skater.set_faceoff_address(faceoff_flat)
-	crouch_drop = drop
-	_skater.set_skating_crouch_drop(drop)
-	# Trunk inertia: filter the summed texture, then layer the stumble wobble
-	# back on top (see trunk_texture_smooth_rate).
+	_skater.set_faceoff_address(_faceoff.address)
+	p.publish_legs(_skater)
+	crouch_drop = p.drop
+	# Trunk inertia: filter the summed texture, then lay the wobble back on top
+	# (see trunk_texture_smooth_rate).
 	var tex_ease: float = 1.0
 	if _controller.trunk_texture_smooth_rate > 0.0:
 		tex_ease = minf(_controller.trunk_texture_smooth_rate * delta, 1.0)
-	_trunk_pitch_s = lerpf(_trunk_pitch_s, trunk_pitch_add, tex_ease)
-	_trunk_roll_s = lerpf(_trunk_roll_s, trunk_roll_add, tex_ease)
-	trunk_pitch_add = _trunk_pitch_s + stagger_pitch
-	trunk_roll_add = _trunk_roll_s + stagger_roll
+	_trunk_pitch_s = lerpf(_trunk_pitch_s, p.trunk_pitch, tex_ease)
+	_trunk_roll_s = lerpf(_trunk_roll_s, p.trunk_roll, tex_ease)
+	trunk_pitch_add = _trunk_pitch_s + p.wobble_pitch
+	trunk_roll_add = _trunk_roll_s + p.wobble_roll
 	_skater.set_trunk_texture(trunk_pitch_add, trunk_roll_add)

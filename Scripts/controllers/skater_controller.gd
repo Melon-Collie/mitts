@@ -83,7 +83,7 @@ var hit_turn_multiplier: float = 1.0
 # up for the check — leans into it, sinks into a crouch, drives the leading
 # shoulder forward across the chest with the near arm tucked, and (empty-handed
 # only) pulls the stick up off the ice. Three parts on two clocks: the lean and
-# crouch are a render-rate trunk blend (SkaterSkatingCoordinator), the per-side
+# crouch are a render-rate trunk blend (GaitCheckLayer), the per-side
 # shoulder load-up is physics-rate on the skater (CheckStanceRules), and the
 # stick rides the IK's blade_y. All three derive from the replicated
 # skater.hit_committed, so they read on every machine, and all three are
@@ -153,7 +153,7 @@ var stagger_max_seconds: float = 1.0       # recovery window of a full-strength 
 var stagger_max_stamina_drain: float = 0.35  # pool fraction a full-strength check bites
 var stagger_max_thrust_penalty: float = 0.5  # peak thrust reduction at full stagger
 # Cosmetic stumble while staggered: a decaying trunk wobble layered into the
-# gait's trunk texture (SkaterSkatingCoordinator). Amplitude tracks the time
+# gait's trunk texture (GaitStaggerLayer). Amplitude tracks the time
 # left on stagger_timer, and the wobble phase is derived FROM the timer, so
 # every machine renders the identical stumble from the replicated value.
 var stagger_wobble_deg: float = 9.0   # peak trunk wobble at full stagger
@@ -848,7 +848,7 @@ var slapper_follow_through_hand_follow: float = 0.4  # fraction of blade travel 
 var slapper_follow_through_contact_frac: float = 0.22  # first fraction of the timer spent on the downswing
 
 # ── Shot Body Animation Tuning ────────────────────────────────────────────────
-# Cosmetic lower-body work for the shots (SkaterSkatingCoordinator): the load
+# Cosmetic lower-body work for the shots (GaitShotLayer): the load
 # sinks the weight onto the stick-side back leg while the charge builds, and
 # the release drives it over the front foot with the back leg kicking into
 # extension behind — the weight transfer that sells a shot. Wrister and
@@ -887,12 +887,12 @@ var slapper_kick_hip_yaw_deg: float = 20.0     # hips uncoil hard through the sh
 var shot_stride_fade: float = 0.8              # stride suppression while loading/kicking (glide through the shot)
 
 # ── Body Language Tuning ──────────────────────────────────────────────────────
-# Remaining cosmetic body reads (all in SkaterSkatingCoordinator). Check
-# delivery fires from the host-authoritative body_check_landed broadcast
-# (start_check_drive), so the hitter's drive lands the same frame as the
-# burst/thud on every machine; the stick-lift read keys off the replicated
-# blade_up; the celebration bounce reads the same timer the raised-stick pose
-# uses (started on every machine — see GameManager._trigger_scorer_celebration).
+# Remaining cosmetic body reads (GaitCheckLayer, GaitStickLiftLayer,
+# GaitCelebrationLayer). Check delivery fires from the host-authoritative
+# body_check_landed broadcast (start_check_drive), so the hitter's drive lands
+# the same frame as the burst/thud on every machine; the stick-lift read keys
+# off the replicated blade_up; the celebration bounce reads the same timer the
+# raised-stick pose uses (started on every machine — see GameManager._trigger_scorer_celebration).
 var check_drive_time: float = 0.45        # seconds of shoulder-drive after a landed hit
 var check_drive_lean_deg: float = 14.0    # trunk drives INTO the hit at full hardness
 var check_drive_stance: float = 0.6       # legs drive under the hit — the finishing base
@@ -927,7 +927,7 @@ var block_hand_y: float = -0.10      # top-hand height while blocking (m, local;
 # ice the stick can't cover, and the chest tips forward over the down knee.
 # These three leg angles fully determine the pose: the kneeling hip height falls
 # out of the down leg, and the extended leg's abduction is solved from that
-# height so its skate stays on the ice (SkaterSkatingCoordinator). Keyed off the
+# height so its skate stays on the ice (GaitBlockLayer). Keyed off the
 # replicated current_shot_state, so remote blockers read identically.
 var block_kneel_hip_deg: float = 30.0    # down-leg thigh, forward of vertical
 var block_kneel_shin_deg: float = 88.0   # down-leg shin, from vertical (90 = flat on the ice)
@@ -1123,9 +1123,8 @@ func celebration_progress() -> float:
 	return 1.0 - _celebration_timer / _celebration_total
 
 
-# Ages the celebration window. Called from SkaterSkatingCoordinator.apply —
-# the one per-tick pass that runs on EVERY path (local sim, host-driven
-# remote, wire-fed remote, replay) — so the timer counts down even for
+# Ages the celebration window, at physics rate on real ticks from both the
+# simulating path and RemoteController, so the timer counts down even for
 # skaters this machine doesn't simulate (the timer starts on every machine;
 # see GameManager._trigger_scorer_celebration).
 func tick_celebration(delta: float) -> void:

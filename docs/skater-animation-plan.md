@@ -351,3 +351,33 @@ skaters, bring the port forward rather than letting it slide to the end.
   pinned to dead code; its benchmark was already broken. Measured GDScript
   cost: ~46–56 µs per skater per frame skating (native was ~20), about 0.5 ms
   a frame for ten skaters until the Phase 5 port.
+
+## §14 Phase 4 as built
+
+- **`GaitLayer`** (`Scripts/controllers/gait/`): one class per overlay — faceoff,
+  shot, check (commit and drive), stick lift, celebration, stagger, block,
+  knockdown — each owning its clock, its blend and its reset, advanced from
+  replicated state. The coordinator runs them lowest priority first through
+  five stages (hold, floor, legs, trunk, override) over a scratch `GaitPose`,
+  which owns the stance and knee solve. Each layer declares its stages once,
+  and `advance` reports whether it contributes this pass, so an idle layer's
+  stages are never called. The coordinator went from 916 to 455 lines and
+  keeps the alignment, the pivot and publishing.
+- **The masks are the overrides.** An additive layer lays offsets on what is
+  beneath it; an override lerps the channels it owns toward its own pose, which
+  takes everything beneath with them. That replaced the hand-written
+  `(1 − kd_t)` factors scattered through the old pass with one rule.
+- **One behaviour change, on purpose:** the knockdown now owns the trunk
+  texture too. Before, a downed skater sliding at speed kept the stroke's trunk
+  sway, and the check drive's and stick lift's leans, under the fall; only the
+  commit was suppressed by hand. `test_gait_layers.gd` fails without it.
+- **Not moved:** the upper-body overlays (the shot coil, the follow-through
+  blade, the celebration's raised stick, the block's torso lean) and
+  `CheckStanceRules`. They move the gameplay frame or the blade, so they stay in
+  the pose coordinators at physics rate, as §6 planned.
+- Verified by a pose render against the Phase 3 baseline: all 27 poses
+  identical.
+- **Cost:** the micro-benchmark's skating row went from ~41–45 µs to ~46–48 µs
+  per skater per frame, and the settled row from 1.7 to 3.3 µs (eight quiet
+  checks where there was one inline expression). No allocation; the Phase 5
+  port takes this path with it.

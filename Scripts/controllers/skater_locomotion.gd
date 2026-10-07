@@ -2,9 +2,8 @@ class_name SkaterLocomotion
 extends RefCounted
 
 # The skating half of the gait: which locomotion state the skater is in, and the
-# leg stroke each state skates. SkaterSkatingCoordinator owns everything layered
-# on top — shots, the block, the faceoff, the knockdown, the check — and turns
-# this file's stroke layers into joint angles.
+# leg stroke each state skates. SkaterSkatingCoordinator turns the stroke into
+# joint angles, with the overlays (GaitLayer) composed on top.
 #
 # The state is the physics' own decision (LocomotionRules), crossfaded: each
 # state owns its legs outright while it holds weight and the weights sum to one,

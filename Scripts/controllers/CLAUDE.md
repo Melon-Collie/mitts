@@ -413,9 +413,41 @@ Two things the split alone would get wrong, both handled in the easing:
   taken, including the not-yet-committed part of a turn, is skated as a glide
   on the edges.
 
-The coordinator layers the overlays (shots, block, faceoff, knockdown, check,
-stick lift) on the state's stroke and resolves the joints; their own
-restructuring is the next phase of `docs/skater-animation-plan.md`.
+### Overlays are layers, and the order is the priority
+
+Everything the gait lays on the stroke — the faceoff stance, the shot loads and
+kick, the check commit and drive, the stick lift, the celebration bounce, the
+stagger, the block and the knockdown — is a `GaitLayer`
+(`Scripts/controllers/gait/`). The coordinator runs them lowest priority first
+over the locomotion pose in a `GaitPose`, one stage at a time:
+
+| Stage | Composition | Why it sits there |
+|---|---|---|
+| `HOLD` | max with the pivot's | how much the layer sets the feet |
+| `FLOOR` | max over the stance | a floor, so order cannot matter |
+| `LEGS` | additive on the joints | before the knee solve: the fore-aft compensation must see it |
+| `TRUNK` | additive texture; sinks; `wobble` | `wobble` skips the trunk inertia filter |
+| `OVERRIDE` | lerp owned channels to the layer's pose | last, so it takes everything beneath |
+
+The override is what makes the priority real. It lerps the channels it owns
+toward its own pose by its weight, so the stroke and every additive layer below
+it fade with no layer knowing about another. The block owns the legs, the drop
+and the ankles; the knockdown, last, owns the legs, the drop, the mohawk yaw,
+the edges, the trunk and the wobble. **A layer never suppresses another with a
+`(1 − other.weight)` factor** — if one must win, it is an override above the
+other. `test_gait_layers.gd` holds the order and the knockdown's mask.
+
+A layer reads replicated state only and writes only the pose and its own
+published fields (`GaitFaceoffLayer.blend`, `GaitShotLayer.hip_yaw`). Its clock
+lives in `advance` (render rate, so no timer gameplay reads), which also
+reports whether the layer contributes this pass: an idle layer's stages are
+never called, so `advance` may answer false only when every stage would leave
+the pose untouched (to within the shared 0.001 blend floor).
+
+The upper-body overlays (the shot coil, the follow-through blade, the
+celebration's raised stick, the block's torso lean) are not layers: they move
+the gameplay frame and the blade, so they stay in the pose coordinators at
+physics rate.
 
 ### Pose the hand, not the blade
 
@@ -472,7 +504,7 @@ The address is spread across the collaborators that own its parts, and the parts
 are not independent:
 
 - **The crouch, the splay and the foot split are gait channels**
-  (`SkaterSkatingCoordinator`), floored over the speed-driven envelope. The
+  (`GaitFaceoffLayer`), floored over the speed-driven envelope. The
   splay costs each leg a cosine of vertical span, which the body pays as extra
   drop.
 - **The chest fold rides the trunk TEXTURE**, not the torso lean — the lean
