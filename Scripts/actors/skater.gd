@@ -707,16 +707,18 @@ var visual_offset: Vector3 = Vector3.ZERO:
 			_blade_contact_dirty = true
 			mesh_root.position = global_transform.basis.inverse() * v
 
-# Collaborators. The three rigs own the cosmetic skeletons and the stick; the
-# draw tracker is the faceoff clock. Each reads this node's tuning vars and
-# markers and writes only its own state — see Scripts/actors/CLAUDE.md.
+# Collaborators. The four rigs own the cosmetic body skeleton's bones and the
+# stick; the draw tracker is the faceoff clock. Each reads this node's tuning
+# vars and markers and writes only its own state — see Scripts/actors/CLAUDE.md.
 var _legs: SkaterLegRig
 var _arms: SkaterArmRig
+var _spine: SkaterSpineRig
 var _stick: SkaterStickRig
 var _draw: SkaterDrawTracker = SkaterDrawTracker.new()
 var _uniform: SkaterUniformCoordinator
 var _hud: SkaterHUDCoordinator
 var _appearance: SkaterAppearanceCoordinator
+var _trunk_fold: float = 0.0
 
 
 func _ready() -> void:
@@ -759,13 +761,23 @@ func _ready() -> void:
 	# Rig collaborators first: the uniform and appearance passes below paint and
 	# size through their seams, and the stick rig's setup subdivides the shaft
 	# mesh the uniform's shader material is about to be installed on.
+	# One skeleton for the whole figure, handed to each rig that poses part of
+	# it. A sibling of UpperBody and LowerBody at identity, so skeleton space is
+	# the space both gameplay frames are positioned in.
+	var body: Skeleton3D = SkaterBodySkeleton.new_body_skeleton()
+	mesh_root.add_child(body)
+
 	_legs = SkaterLegRig.new()
 	_legs.setup(self)
-	_legs.build()
+	_legs.build(body)
 
 	_arms = SkaterArmRig.new()
 	_arms.setup(self)
-	_arms.build()
+	_arms.build(body)
+
+	_spine = SkaterSpineRig.new()
+	_spine.setup(self)
+	_spine.build(body)
 
 	_stick = SkaterStickRig.new()
 	_stick.setup(self)
@@ -815,7 +827,8 @@ func _process(delta: float) -> void:
 		# blade tilt without moving any marker, so _rig_pose_changed can't see it
 		# (see _update_blade_elevation). Left set while hidden so the pose is
 		# rebuilt on the first visible frame.
-		if _rig_pose_changed() or _blade_tilt_dirty:
+		var spine_moved: bool = _spine.update()
+		if _rig_pose_changed() or spine_moved or _blade_tilt_dirty:
 			_blade_tilt_dirty = false
 			update_stick_mesh()
 			update_arm_mesh()
@@ -1596,6 +1609,9 @@ func _apply_body_height() -> void:
 			- _skating_crouch_drop
 	lower_body.position.y = _default_lower_body_y + _skeleton_root_offset \
 			- _skating_crouch_drop
+	# The skeleton copies these frames rather than hanging off them: re-seat it.
+	if _spine != null:
+		_spine.update()
 
 
 # ── Blade ─────────────────────────────────────────────────────────────────────
@@ -2082,10 +2098,16 @@ func set_upper_body_rotation(angle: float) -> void:
 	upper_body.rotation.y = angle
 
 
-func set_upper_body_lean(lean_x: float, lean_z: float = 0.0) -> void:
+# `fold`: the share of lean_x that is posture, not reach (SkaterSpineRig).
+func set_upper_body_lean(lean_x: float, lean_z: float = 0.0, fold: float = 0.0) -> void:
 	_blade_contact_dirty = true
 	upper_body.rotation.x = lean_x
 	upper_body.rotation.z = lean_z
+	_trunk_fold = fold
+
+
+func trunk_fold() -> float:
+	return _trunk_fold
 
 
 func set_lower_body_lean(lean_x: float) -> void:
@@ -2221,11 +2243,14 @@ func set_leg_surface_material(surface: int, mat: Material) -> void:
 
 # ── Arm rig (delegate to SkaterArmRig) ────────────────────────────────────────
 
+# The spine first: a physics-rate caller would grow arms from a stale shoulder.
 func update_arm_mesh() -> void:
+	_spine.update()
 	_arms.update_top_arm()
 
 
 func update_bottom_arm_mesh() -> void:
+	_spine.update()
 	_arms.update_bottom_arm()
 
 

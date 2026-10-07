@@ -203,7 +203,7 @@ func _apply_lean() -> void:
 	# via Skater.set_trunk_texture — mesh-only, so the invariant holds.
 	_skater.set_upper_body_lean(
 			upper_body_lean + velocity_lean_x + recoil_pitch,
-			upper_body_lean_roll + recoil_roll)
+			upper_body_lean_roll + recoil_roll, velocity_lean_x)
 	_skater.set_lower_body_lean(velocity_lean_x * _controller.lower_body_pitch_follow)
 
 func apply_facing(input: InputState, delta: float) -> void:

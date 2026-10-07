@@ -3,8 +3,9 @@ extends RefCounted
 
 # The lower-body skeleton and the gait written onto it.
 #
-# Both legs are one skinned mesh on one Skeleton3D, sixteen bones in the chain
-# LowerBody → Leg → Shin (see SkaterMeshBuilder.LegBone). Twelve of the bones
+# Both legs are one skinned mesh on the body skeleton, fourteen bones in the
+# chain Hips → Leg → Shin (see SkaterMeshBuilder.LegBone). Bone indices here are
+# LegBone values; the skeleton holds them past the upper bones, at _OFFSET. Twelve of the bones
 # carry geometry; the four pivots exist to be rotated by the gait
 # (SkaterSkatingCoordinator).
 #
@@ -15,6 +16,8 @@ extends RefCounted
 # Also the source of the ice VFX's two reads — where a skate is being DRAWN and
 # how hard its edge is loaded — because both are properties of this skeleton and
 # of nothing else.
+
+const _OFFSET: int = SkaterBodySkeleton.LEG_BONE_OFFSET
 
 var _skater: Skater
 var _skeleton: Skeleton3D = null
@@ -54,14 +57,14 @@ func setup(skater: Skater) -> void:
 	_skater = skater
 
 
-# Reads the leg segment offsets out of the scene's LowerBody subtree, builds the
-# skeleton from them, then frees the subtree.
+# Reads the leg segment offsets out of the scene's LowerBody subtree, seeds the
+# body skeleton's leg bones from them, then frees the subtree.
 #
 # Reading the scene rather than hard-coding the offsets keeps Scenes/Skater.tscn
 # the place leg proportions are authored — the nodes are still what you edit to
 # move a knee, they just stop existing at runtime. Hard-coding them here would
 # fork the numbers into two files that no test compares.
-func build() -> void:
+func build(skeleton: Skeleton3D) -> void:
 	var count: int = SkaterMeshBuilder.LEG_BONE_COUNT
 	var lower_body: Node3D = _skater.lower_body
 	_basis.resize(count)
@@ -71,8 +74,7 @@ func build() -> void:
 	_base_pos.resize(count)
 	_shin_base_euler.resize(2)
 
-	_skeleton = Skeleton3D.new()
-	_skeleton.name = "LegRig"
+	_skeleton = skeleton
 	for bone: int in count:
 		var node: Node3D = lower_body.get_node(
 				SkaterMeshBuilder.LEG_BONE_NODE[bone]) as Node3D
@@ -83,9 +85,6 @@ func build() -> void:
 		_pos[bone] = xform.origin
 		_base_scale[bone] = part_scale
 		_base_pos[bone] = xform.origin
-		_skeleton.add_bone(str(bone))
-		_skeleton.set_bone_parent(bone, SkaterMeshBuilder.LEG_BONE_PARENT[bone])
-		_skeleton.set_bone_rest(bone, Transform3D.IDENTITY)
 	_shin_base_euler[0] = _basis[SkaterMeshBuilder.LegBone.SHIN_L].get_euler()
 	_shin_base_euler[1] = _basis[SkaterMeshBuilder.LegBone.SHIN_R].get_euler()
 
@@ -99,7 +98,6 @@ func build() -> void:
 	lower_body.get_node("LegL").free()
 	lower_body.get_node("LegR").free()
 
-	lower_body.add_child(_skeleton)
 	_mesh = MeshInstance3D.new()
 	_mesh.name = "LegMesh"
 	_mesh.mesh = SkaterMeshBuilder.shared_leg_skin_mesh()
@@ -109,7 +107,7 @@ func build() -> void:
 
 
 func _repose_bone(bone: int) -> void:
-	_skeleton.set_bone_pose(bone, Transform3D(
+	_skeleton.set_bone_pose(_OFFSET + bone, Transform3D(
 			_basis[bone].scaled_local(_scale[bone]), _pos[bone]))
 
 
@@ -166,7 +164,7 @@ func apply_knockdown_overlay(pose: KnockdownFallRules.SprawlPose,
 
 
 func _pose_pivot(bone: int, euler: Vector3) -> void:
-	_skeleton.set_bone_pose(bone, Transform3D(Basis.from_euler(euler), _pos[bone]))
+	_skeleton.set_bone_pose(_OFFSET + bone, Transform3D(Basis.from_euler(euler), _pos[bone]))
 
 
 # Levels a skate against everything the leg above it did: `weight` of the hip's
@@ -209,7 +207,7 @@ func _pose_foot(bone: int, leg: Vector3, knee: float, shin_base: Vector3,
 			* Basis.from_euler(Vector3(0.0, shin_base.y, shin_base.z))
 	var give_back: Basis = (posed.inverse() * level).orthonormalized()
 	var basis: Basis = Basis.IDENTITY.slerp(give_back, weight) * _basis[bone]
-	_skeleton.set_bone_pose(bone,
+	_skeleton.set_bone_pose(_OFFSET + bone,
 			Transform3D(basis.scaled_local(_scale[bone]), _pos[bone]))
 
 
@@ -241,7 +239,7 @@ func mark_position(left: bool) -> Vector3:
 	var bone: int = SkaterMeshBuilder.LegBone.FOOT_L if left \
 			else SkaterMeshBuilder.LegBone.FOOT_R
 	return (_skeleton.get_global_transform_interpolated()
-			* _skeleton.get_bone_global_pose(bone)).origin
+			* _skeleton.get_bone_global_pose(_OFFSET + bone)).origin
 
 
 # ── Sizing seam ──────────────────────────────────────────────────────────────
@@ -263,11 +261,11 @@ func set_bone_position(bone: int, pos: Vector3) -> void:
 # sizing seam wrote. The euler round-trips exactly for the four pivots, whose
 # basis is built from one (set_swing).
 func bone_euler(bone: int) -> Vector3:
-	return _skeleton.get_bone_pose(bone).basis.get_euler()
+	return _skeleton.get_bone_pose(_OFFSET + bone).basis.get_euler()
 
 
 func bone_position(bone: int) -> Vector3:
-	return _skeleton.get_bone_pose(bone).origin
+	return _skeleton.get_bone_pose(_OFFSET + bone).origin
 
 
 func bone_base_scale(bone: int) -> Vector3:

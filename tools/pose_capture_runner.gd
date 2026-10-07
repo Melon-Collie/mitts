@@ -407,6 +407,11 @@ func _run_pose() -> void:
 			_skater._process(DT)
 			if pose.has("trace") and t % int(pose["trace"]) == 0:
 				_print_trace()
+			_track_reach()
+	print("  %s reach: worst %.2f of arm length (frame %.2f)" % [
+			String(pose["name"]), _reach_worst, _reach_worst_frame])
+	_reach_worst = 0.0
+	_reach_worst_frame = 0.0
 	if bool(pose.get("readout", false)):
 		var v: Vector3 = _skater.velocity
 		print("  %s: speed %.2f heading %.0f° | lower body pitch %.1f° yaw %.1f° roll %.1f° | upper body pitch %.1f° roll %.1f°" % [
@@ -440,6 +445,27 @@ func _run_pose() -> void:
 	_camera.look_at(_skater.global_position + CAM_AIM, Vector3.UP)
 
 
+var _reach_worst: float = 0.0
+var _reach_worst_frame: float = 0.0
+
+
+# How far each arm has to stretch, as a fraction of its length: from the
+# shoulder on the visible trunk, and (for comparison) from the one on the
+# gameplay frame. Over 1.0 is an arm that cannot reach its hand.
+func _track_reach() -> void:
+	var body: Skeleton3D = _skater._arms._skeleton
+	var spine: Transform3D = body.get_bone_global_pose(SkaterBodySkeleton.SPINE_BONE)
+	var arm: float = _skater.upper_arm_length + _skater.forearm_length
+	for pair: Array in [[_skater.shoulder, _skater.top_hand],
+			[_skater.bottom_shoulder, _skater.bottom_hand]]:
+		var marker: Vector3 = (pair[0] as Node3D).position
+		var hand: Vector3 = _skater.upper_body.transform * (pair[1] as Node3D).position
+		var visible: Vector3 = spine * _skater._arms._textured_shoulder(marker)
+		var frame: Vector3 = _skater.upper_body.transform * _skater._arms._textured_shoulder(marker)
+		_reach_worst = maxf(_reach_worst, visible.distance_to(hand) / arm)
+		_reach_worst_frame = maxf(_reach_worst_frame, frame.distance_to(hand) / arm)
+
+
 # One line of where the body's segments sit ACROSS the line of travel, metres
 # (+ = travel's right): head over pelvis is the trunk's lean, pelvis over the
 # hip joints is the seam between the two skeletons, hips over skates the legs'.
@@ -451,16 +477,14 @@ func _print_trace() -> void:
 	var right: Vector3 = flat.normalized().cross(Vector3.UP)
 	# Everything in the skater's own frame: the global chain is stale under a
 	# hand-ticked harness (interpolation never advances).
-	var upper: Skeleton3D = _skater._arms._skeleton
-	var legs: Skeleton3D = _skater._legs._skeleton
-	var up_x: Transform3D = _skater.upper_body.transform * upper.transform
-	var lo_x: Transform3D = _skater.lower_body.transform * legs.transform
-	var head: Vector3 = up_x * upper.get_bone_global_pose(SkaterMeshBuilder.UpperBone.HELMET).origin
-	var pelvis: Vector3 = up_x * upper.get_bone_global_pose(SkaterMeshBuilder.UpperBone.PELVIS).origin
-	var hips: Vector3 = lo_x * ((legs.get_bone_global_pose(SkaterMeshBuilder.LegBone.LEG_L).origin
-			+ legs.get_bone_global_pose(SkaterMeshBuilder.LegBone.LEG_R).origin) * 0.5)
-	var feet: Vector3 = lo_x * ((legs.get_bone_global_pose(SkaterMeshBuilder.LegBone.FOOT_L).origin
-			+ legs.get_bone_global_pose(SkaterMeshBuilder.LegBone.FOOT_R).origin) * 0.5)
+	var body: Skeleton3D = _skater._arms._skeleton
+	var off: int = SkaterBodySkeleton.LEG_BONE_OFFSET
+	var head: Vector3 = body.get_bone_global_pose(SkaterMeshBuilder.UpperBone.HELMET).origin
+	var pelvis: Vector3 = body.get_bone_global_pose(SkaterMeshBuilder.UpperBone.PELVIS).origin
+	var hips: Vector3 = (body.get_bone_global_pose(off + SkaterMeshBuilder.LegBone.LEG_L).origin
+			+ body.get_bone_global_pose(off + SkaterMeshBuilder.LegBone.LEG_R).origin) * 0.5
+	var feet: Vector3 = (body.get_bone_global_pose(off + SkaterMeshBuilder.LegBone.FOOT_L).origin
+			+ body.get_bone_global_pose(off + SkaterMeshBuilder.LegBone.FOOT_R).origin) * 0.5
 	print("    face %+.0f° v %.1f | head-pelvis %+.2f  pelvis-hips %+.2f fwd %+.2f  hips-feet %+.2f | ub yaw %+.0f° pitch %+.0f° roll %+.0f° lb yaw %+.0f° | trunk p %+.0f° r %+.0f° | carve %+.2f" % [
 			_skater.rotation_degrees.y, flat.length(), (head - pelvis).dot(right), (pelvis - hips).dot(right),
 			(pelvis - hips).dot(flat.normalized()), (hips - feet).dot(right),

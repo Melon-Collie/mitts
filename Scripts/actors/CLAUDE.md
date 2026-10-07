@@ -12,8 +12,9 @@ delegates to.
 
 | holder | class | what it owns |
 |---|---|---|
-| `_legs` | `SkaterLegRig` | the leg skeleton, the gait written onto it, the ankles' give-back against it, and the ice VFX's two reads (skate mark position, edge load) |
-| `_arms` | `SkaterArmRig` | the upper skeleton: torso, pelvis, helmet, deltoid caps, both arms by IK, the trunk texture, the face gear |
+| `_legs` | `SkaterLegRig` | the leg bones, the gait written onto them, the ankles' give-back against it, and the ice VFX's two reads (skate mark position, edge load) |
+| `_arms` | `SkaterArmRig` | the upper bones: torso, pelvis, helmet, deltoid caps, both arms by IK, the trunk texture, the face gear |
+| `_spine` | `SkaterSpineRig` | the three bones that join them: hips, waist, spine |
 | `_stick` | `SkaterStickRig` | the shaft pose, the knob, and the cosmetic flex/whip |
 | `_draw` | `SkaterDrawTracker` | the faceoff swipe crest, host-only |
 | `_uniform` | `SkaterUniformCoordinator` | the paint |
@@ -55,13 +56,49 @@ That is the same shape `_hud` and `_uniform` already had. So the size ratchet
 moved a long way and the API ratchet did not — the entanglement the split was
 measured against is shared *fields*, and there are now none.
 
+## One skeleton, one chain
+
+The whole figure is one `Skeleton3D` (`SkaterBodySkeleton.new_body_skeleton`),
+built by `Skater` and handed to each rig, which poses only its own bones. It
+sits under `MeshRoot` as a sibling of `UpperBody` and `LowerBody`, so skeleton
+space is the space those two gameplay frames are placed in, and the arm IK
+reads the gameplay hands straight into it.
+
+```
+HIPS     yaw and pitch from LowerBody; both legs root here
+  WAIST  half the trunk's twist — the pelvis (shorts) rides it
+    SPINE  the fold about the hips, then the rest of the twist, then the
+           reach lean; torso, helmet and caps hang here
+arms     roots, solved from the spine's shoulders to the gameplay hands
+```
+
+Two things that order buys, and that the old sibling rigs (an upper skeleton
+under `UpperBody`, a leg skeleton under `LowerBody`) could not:
+
+- **The fold comes before the twist.** `UpperBody` is yawed and then pitched
+  (Godot's YXZ), so its forward lean tips sideways whenever the shoulders turn
+  toward the stick. The spine folds about the hips' axis first and twists on
+  top of the fold. Measured skating at 9 m/s with the cursor swept across the
+  body: the head drifted ±0.18 m across the line of travel off the pelvis
+  before, ±0.05 m after — what is left is the reach lean.
+- **The twist has a joint limit** (`SkaterSpineRig.TWIST_LIMIT`, 55°). The
+  shoulders always point where gameplay put them, so the arms reach their
+  hands; past the limit the hips come round instead.
+
+The shorts and the jersey are both rigid shells, so the twist between them
+shows as a seam wherever it happens. Half of it goes on the waist and half
+on the spine, and the pelvis profile above the hem is narrow enough to stay
+inside the jersey at the resulting angle.
+`tests/unit/actors/test_body_chain.gd` holds the chain and
+`test_pelvis_fills_the_seat.gd` the seat.
+
 ## Cosmetic vs. gameplay, and the render clock
 
-Everything in the three rigs is cosmetic and derived. Nothing gameplay reads
+Everything in the four rigs is cosmetic and derived. Nothing gameplay reads
 comes out of them, and that is what makes them safe to move: the blade contact
 point is the `Blade` marker's, and the rigs only read it.
 
-Two rules the rigs sit inside, both easy to break from in here:
+Three rules the rigs sit inside, all easy to break from in here:
 
 - **Anything drawn onto the skater at render rate reads
   `Skater.render_transform()`**, not `global_position` — the post-tick pose is up
@@ -69,14 +106,13 @@ Two rules the rigs sit inside, both easy to break from in here:
   opt OUT of physics interpolation, or the engine interpolates an
   already-interpolated pose. `SkaterLegRig.mark_position` is the worked example:
   the body half is read interpolated, the bone-pose half as-is.
-- **The trunk texture rotates BONES, not the `UpperBody` node.** The blade and
-  shoulder markers hang under `UpperBody`, so a node rotation would move
-  gameplay geometry at render rate. Bones are pure mesh.
-- **The pelvis is the one upper-rig part the texture must not touch.** It rides
-  that mesh because it can belong to neither of the alternatives — folding with
-  the torso is what opens the seat in the first place, and hanging it off a leg
-  pivot would swing the whole seat with that leg. So it sits in `UpperBody`'s
-  space, painted as pants rather than jersey, while the chest folds above it.
-  `tests/unit/actors/test_pelvis_fills_the_seat.gd` holds all three: it stays
-  under the jersey at rest, it meets the hip balls it sits between, and it does
-  not take the fold.
+- **Nothing in the skeleton is written back into `UpperBody` or `LowerBody`.**
+  The blade and shoulder markers hang under `UpperBody`, so writing it at render
+  rate would move gameplay geometry. The chain reads both frames and writes
+  bones, which are pure mesh.
+- **The pelvis must not take the fold.** It hangs from the waist, not the
+  spine: folding with the torso is what opens the seat in the first place, and
+  hanging it off a leg pivot would swing the whole seat with that leg.
+  `tests/unit/actors/test_pelvis_fills_the_seat.gd` holds it: it stays under the
+  jersey at any twist the waist leaves it, it meets the hip balls it sits
+  between, and it does not take the fold.

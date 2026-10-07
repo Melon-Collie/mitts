@@ -1,8 +1,8 @@
 # Skater animation rebuild — plan
 
-Status: **draft for agreement.** Nothing here is implemented. §9 lists the
-decisions that need an answer before Phase 1 starts; deviating from the agreed
-version means asking first, per CLAUDE.md.
+Status: **agreed; Phase 1 landed.** The §9 decisions were taken as proposed.
+Deviating from this version means asking first, per CLAUDE.md. §11 records
+what Phase 1 changed from the design and what it found.
 
 ## Why rebuild instead of tune
 
@@ -286,3 +286,28 @@ skaters, bring the port forward rather than letting it slide to the end.
   stop, alignment and shot channels, until the next tick rewrites it.
 - The slapper wind-up path skips `_apply_lean` entirely, so the torso lean
   stays at the zero written on entry while the trunk texture keeps moving.
+
+## §11 Phase 1 as built
+
+- **One skeleton, three joining bones.** HIPS (legs), WAIST (the pelvis/shorts)
+  and SPINE (the shell), posed by `SkaterSpineRig`; arms are root bones solved
+  in skeleton space. See `Scripts/actors/CLAUDE.md`.
+- **WAIST was not in the design.** With the pelvis on the hips and the jersey on
+  the spine, the whole twist showed as one seam at the hem, and the pelvis's
+  wide flanks poked out through the jersey. The waist takes half the twist, and
+  the pelvis rings above the hem were narrowed so their wide axis fits the
+  jersey's deep one at the remaining angle (`test_pelvis_fills_the_seat.gd`).
+- **Measured.** Cursor swept at 9 m/s: head drift across the travel line off the
+  pelvis ±0.18 m → ±0.05 m (`test_body_chain.gd`). Arm stretch from the visible
+  shoulders matches stretch from the gameplay frame's within 0.03 of arm length
+  in every pose of the capture set, so the reach budget is not a constraint.
+- **The crouch drop stays in the gameplay frame for now** (§3, Q5 deferred). The
+  premise "the IK corrects it, so the effect is nil" was wrong: the top hand's
+  world height feeds the stick-lift shaft test and the pickup reception normal,
+  and taking the drop out raises the hands 5–13 cm against a crouched body.
+  Phase 2's posture is computed at physics rate from replicated state, so the
+  gameplay frame takes its height from that instead — deterministic, and in
+  step with the visible crouch.
+- **Not yet done from §2:** the BANK bone, and the head's counter-roll of the
+  bank (§9 Q3) — both arrive with Phase 2's bank.
+
