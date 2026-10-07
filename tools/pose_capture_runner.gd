@@ -120,6 +120,24 @@ const POSES: Array = [
 	# striding crossover turn, the Space + side-key tight turn mid-carve, and
 	# the tight turn held until it lines up with the key (where it blends into
 	# a stop).
+	{"name": "wiggle_aim", "puck": false, "trace": 10, "steps": [
+		[40, {"aim": Vector3(3.0, 0.0, 0.0)}],
+		[40, {"aim": Vector3(0.0, 0.0, -3.0)}],
+		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[40, {"move": Vector2(0.0, -1.0), "aim": Vector3(2.5, 0.0, -1.5)}],
+		[40, {"move": Vector2(0.0, -1.0), "aim": Vector3(-2.5, 0.0, -1.5)}],
+		[40, {"move": Vector2(0.0, -1.0), "aim": Vector3(2.5, 0.0, -1.5)}],
+		[40, {"move": Vector2(0.0, -1.0), "aim": Vector3(-2.5, 0.0, -1.5)}],
+	]},
+	{"name": "wiggle_keys", "puck": false, "trace": 10, "steps": [
+		[40, {"aim": Vector3(3.0, 0.0, 0.0)}],
+		[40, {"aim": Vector3(0.0, 0.0, -3.0)}],
+		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[30, {"move": Vector2(0.7, -0.7), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[30, {"move": Vector2(-0.7, -0.7), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[30, {"move": Vector2(0.7, -0.7), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[30, {"move": Vector2(-0.7, -0.7), "aim": Vector3(0.0, 0.0, -3.0)}],
+	]},
 	{"name": "turn_carve_hard", "puck": false, "readout": true, "cam_ahead": 3.2, "steps": [
 		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
 		[45, {"move": Vector2(1.0, 0.0), "aim": Vector3(2.2, 0.0, -2.2)}],
@@ -387,6 +405,8 @@ func _run_pose() -> void:
 			_controller._process_input(input, DT)
 			_skater._physics_process(DT)
 			_skater._process(DT)
+			if pose.has("trace") and t % int(pose["trace"]) == 0:
+				_print_trace()
 	if bool(pose.get("readout", false)):
 		var v: Vector3 = _skater.velocity
 		print("  %s: speed %.2f heading %.0f° | lower body pitch %.1f° yaw %.1f° roll %.1f° | upper body pitch %.1f° roll %.1f°" % [
@@ -418,6 +438,36 @@ func _run_pose() -> void:
 		offset = v_flat.normalized() * float(pose["cam_ahead"]) + Vector3(0.0, 0.3, 0.0)
 	_camera.global_position = _skater.global_position + offset
 	_camera.look_at(_skater.global_position + CAM_AIM, Vector3.UP)
+
+
+# One line of where the body's segments sit ACROSS the line of travel, metres
+# (+ = travel's right): head over pelvis is the trunk's lean, pelvis over the
+# hip joints is the seam between the two skeletons, hips over skates the legs'.
+func _print_trace() -> void:
+	var v: Vector3 = _skater.global_transform.basis.inverse() * _skater.velocity
+	var flat: Vector3 = Vector3(v.x, 0.0, v.z)
+	if flat.length() < 0.1:
+		return
+	var right: Vector3 = flat.normalized().cross(Vector3.UP)
+	# Everything in the skater's own frame: the global chain is stale under a
+	# hand-ticked harness (interpolation never advances).
+	var upper: Skeleton3D = _skater._arms._skeleton
+	var legs: Skeleton3D = _skater._legs._skeleton
+	var up_x: Transform3D = _skater.upper_body.transform * upper.transform
+	var lo_x: Transform3D = _skater.lower_body.transform * legs.transform
+	var head: Vector3 = up_x * upper.get_bone_global_pose(SkaterMeshBuilder.UpperBone.HELMET).origin
+	var pelvis: Vector3 = up_x * upper.get_bone_global_pose(SkaterMeshBuilder.UpperBone.PELVIS).origin
+	var hips: Vector3 = lo_x * ((legs.get_bone_global_pose(SkaterMeshBuilder.LegBone.LEG_L).origin
+			+ legs.get_bone_global_pose(SkaterMeshBuilder.LegBone.LEG_R).origin) * 0.5)
+	var feet: Vector3 = lo_x * ((legs.get_bone_global_pose(SkaterMeshBuilder.LegBone.FOOT_L).origin
+			+ legs.get_bone_global_pose(SkaterMeshBuilder.LegBone.FOOT_R).origin) * 0.5)
+	print("    face %+.0f° v %.1f | head-pelvis %+.2f  pelvis-hips %+.2f fwd %+.2f  hips-feet %+.2f | ub yaw %+.0f° pitch %+.0f° roll %+.0f° lb yaw %+.0f° | trunk p %+.0f° r %+.0f° | carve %+.2f" % [
+			_skater.rotation_degrees.y, flat.length(), (head - pelvis).dot(right), (pelvis - hips).dot(right),
+			(pelvis - hips).dot(flat.normalized()), (hips - feet).dot(right),
+			_skater.upper_body.rotation_degrees.y, _skater.upper_body.rotation_degrees.x,
+			_skater.upper_body.rotation_degrees.z, _skater.lower_body.rotation_degrees.y,
+			rad_to_deg(_controller._skating.trunk_pitch_add),
+			rad_to_deg(_controller._skating.trunk_roll_add), _controller._skating._carve])
 
 
 # The live game's own framing, so a tile can answer the question the beauty
