@@ -40,21 +40,12 @@ var _helmet_base_euler: Vector3 = Vector3.ZERO
 var _face_gear_attach: BoneAttachment3D = null
 var _face_gear_mesh: MeshInstance3D = null
 
-# Cosmetic per-stride trunk texture (the gait's dig lean / weight-shift sway /
-# stagger wobble), applied to the torso/helmet/shoulder-cap BONES rather than
-# the UpperBody node: the blade and shoulder markers hang under UpperBody, so
-# a node rotation would move the blade's WORLD position — physics-rate
-# gameplay geometry — while the gait runs at render rate. Bones are pure mesh,
-# so this keeps the invariant documented in SkaterPoseCoordinator._apply_lean.
-# The arms stay anchored to the (deterministic) hands and stick on purpose.
-# Head stabilization: the helmet rides only a fraction of the trunk texture.
-# Real players hold the head steady while the shoulders work under it (the
-# vestibulocollic "eyes level" reflex) — with full coupling every per-stride
-# trunk roll was also a head wobble, the most visible motion on the rig. Roll
-# (the oscillating weight-shift channel) is damped hard; pitch follows nearly
-# fully because its big components are sustained postures (the effort dig, the
-# sprint lean) the head genuinely leans with — a low follow there detaches the
-# helmet from the torso top at deep folds. 1.0 / 1.0 restores rigid coupling.
+# The gait's trunk texture (stride sway, weight shift, sprint and check leans,
+# the stagger wobble), applied to the shell bones on top of the spine. The
+# helmet rides only part of it — players hold the head steady while the
+# shoulders work under it — roll hard-damped because it is the oscillating
+# channel, pitch nearly full because a low follow there detaches the helmet
+# from the torso top at deep folds. 1.0 / 1.0 is rigid coupling.
 var helmet_pitch_follow: float = 0.85
 var helmet_roll_follow: float = 0.4
 

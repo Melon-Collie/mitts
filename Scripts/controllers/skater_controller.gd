@@ -465,10 +465,6 @@ var carve_stride_fade: float = 0.7     # fraction of fore/aft stride removed at 
 var crossover_phase_per_turn: float = 7.0  # stride-phase rad per rad of heading change at full carve
 var carve_forward_ramp: float = 1.0    # m/s of forward travel over which crossovers fade in
 var carve_rock_fade: float = 0.85      # edge-rock/abduction/scissor faded out at full carve
-# Turn bank: the whole body inclines toward the arc's centre at the balancing
-# angle atan(v·ω/g) (SkaterSkatingCoordinator._turn_bank).
-var carve_bank_knee_accel: float = 2.0 # m/s² of lateral accel at half bank authority — the steering-noise gate
-var turn_bank_max_deg: float = 30.0    # bank cap — the rig's leg roll and arm reach past this read as a fall
 var carve_stance: float = 0.75         # stance floor at full carve — sit low to hold the edges
 # Gliding — releasing all movement keys settles the legs to rest (the stride
 # is input-gated, v15 intent byte) while this floor keeps working knees under
@@ -485,7 +481,6 @@ var stride_rear_bias: float = 0.45
 var stride_abduction_deg: float = 10.0    # outward flare of the extending leg (the skating "V" push)
 var stride_bob_m: float = 0.02            # vertical body bob per half-stride (weight transfer)
 var stride_sway_deg: float = 2.1          # torso weight-shift roll oscillating with the stride
-var stride_dig_lean_deg: float = 8.0      # extra trunk pitch from effort: forward driving, back braking
 # Trunk inertia at the texture seam: the trunk texture sums many reads and
 # each carries residual step/noise from its input; the trunk — the body's
 # most massive segment — cannot physically re-orient at those frequencies.
@@ -574,7 +569,6 @@ var hockey_stop_max_yaw_deg: float = 70.0  # lower-body turn cap across travel
 var hockey_stop_split_deg: float = 14.0  # leading/trailing leg scissor
 var hockey_stop_edge_deg: float = 12.0   # shared leg roll — edges biting
 var hockey_stop_stance: float = 0.9      # stance floor while stopping (deep knees)
-var hockey_stop_trunk_roll_deg: float = 6.0  # trunk bank over the skid
 var hockey_stop_blend_speed: float = 9.0 # pose ease-in/out rate
 # Tight turn (brake held with the stick off travel): two blades dug in under a
 # deep sit, inside skate leading, no crossovers — the bank does the leaning.
@@ -620,13 +614,11 @@ var dig_in_intensity: float = 0.85       # stride intensity floor while digging 
 var dig_in_cadence_rate: float = 4.5     # rad/s stride-phase floor — quick chop from a standstill
 var dig_in_chop: float = 0.35            # push-amplitude cut at full dig (short strides)
 var dig_in_stance: float = 0.7           # stance floor — power comes from bent knees
-var dig_in_lean_deg: float = 6.0         # extra forward trunk pitch driving out of the start
 # Reversal: intent opposing travel at speed — the stop-and-go weight shift.
 var reversal_min_speed: float = 2.5      # m/s floor — a slow reversal is just a step
 var reversal_start_opposition: float = 0.5  # travel·intent opposition where the shift begins
 var reversal_stride_fade: float = 0.8    # stride suppression at full reversal (legs plant)
 var reversal_stance: float = 0.85        # stance floor — sits down hard into the plant
-var reversal_lean_deg: float = 7.0       # trunk tips BACK against the travel it fights
 var reversal_plant_deg: float = 8.0      # wide-V outward leg plant
 # Shuffle: lateral intent at low speed — hips stay square, legs side-step.
 var shuffle_fade_speed: float = 4.0      # m/s where crossovers take over from the shuffle

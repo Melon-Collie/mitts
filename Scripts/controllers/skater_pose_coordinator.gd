@@ -85,8 +85,7 @@ func apply_velocity_lean(delta: float) -> void:
 # −Z), backward skating sits slightly back. Pitch only, radians: sideways
 # travel is not a lean — a strafe doesn't bank, and the facing leads travel
 # through a carve, so a roll toward body-frame lateral velocity would lean OUT
-# of the turn. The turn's bank is the gait's (SkaterSkatingCoordinator
-# ._turn_bank).
+# of the turn. The turn's bank is the balance lean's (SkaterSpineRig).
 static func compute_velocity_lean_target(
 		world_velocity: Vector3, body_basis: Basis, max_speed: float,
 		fwd_lean_max_deg: float, back_lean_max_deg: float) -> float:

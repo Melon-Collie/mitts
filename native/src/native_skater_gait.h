@@ -30,7 +30,6 @@ namespace mitts {
 	X(backpedal_pitch_fade) X(backpedal_start) X(backpedal_tuck_fade) \
 	X(block_extend_knee_deg) X(block_kneel_hip_deg) X(block_kneel_shin_deg) \
 	X(block_pose_blend_speed) X(cadence_cruise_falloff) X(cadence_glide_stance_gain) \
-	X(carve_bank_knee_accel) \
 	X(carve_clearance_knee_deg) X(carve_engage_speed) X(carve_forward_ramp) \
 	X(carve_min_speed) X(carve_over_pitch_deg) X(carve_over_roll_deg) \
 	X(carve_ref_turn_rate) X(carve_rock_fade) X(carve_stance) \
@@ -38,7 +37,7 @@ namespace mitts {
 	X(check_drive_lean_deg) X(check_drive_stance) X(check_drive_time) \
 	X(crossover_lean_deg) X(crossover_phase_per_turn) X(crossover_scissor_deg) \
 	X(dig_in_cadence_rate) X(dig_in_chop) X(dig_in_fade_speed) \
-	X(dig_in_intensity) X(dig_in_lean_deg) X(dig_in_stance) \
+	X(dig_in_intensity) X(dig_in_stance) \
 	X(faceoff_center_lean_deg) X(faceoff_center_split_deg) X(faceoff_center_stance) \
 	X(faceoff_center_width_deg) X(faceoff_split_deg) X(faceoff_stance) \
 	X(follow_through_arc_skew) \
@@ -48,14 +47,14 @@ namespace mitts {
 	X(hit_commit_lean_deg) X(hit_commit_pose_speed) \
 	X(hockey_stop_blend_speed) X(hockey_stop_edge_deg) X(hockey_stop_effort) \
 	X(hockey_stop_max_yaw_deg) X(hockey_stop_min_speed) X(hockey_stop_split_deg) \
-	X(hockey_stop_stance) X(hockey_stop_trunk_roll_deg) X(intent_signal_speed) \
+	X(hockey_stop_stance) X(intent_signal_speed) \
 	X(knockdown_fall_buckle_seconds) X(knockdown_getup_seconds) \
 	X(knockdown_pose_drop_m) X(max_speed) \
 	X(pivot_band_hi_deg) X(pivot_band_lo_deg) X(pivot_blend_speed) \
 	X(pivot_commit_time) X(pivot_depth_ramp_deg) X(pivot_min_speed) \
 	X(pivot_mohawk_deg) X(pivot_rate_min) X(pivot_stance) \
 	X(pivot_step_begin) X(pivot_stride_fade) X(pivot_yaw_speed) \
-	X(reversal_lean_deg) X(reversal_min_speed) X(reversal_plant_deg) \
+	X(reversal_min_speed) X(reversal_plant_deg) \
 	X(reversal_stance) X(reversal_start_opposition) X(reversal_stride_fade) \
 	X(shot_stride_fade) X(shuffle_cadence_rate) X(shuffle_fade_speed) \
 	X(shuffle_intensity) X(shuffle_start_lateral) X(slapper_kick_back_deg) \
@@ -68,13 +67,13 @@ namespace mitts {
 	X(stance_hip_deg) X(stance_knee_release) X(stance_push_gain) \
 	X(stick_lift_blend_speed) X(stick_lift_stance) X(stick_lift_trunk_deg) \
 	X(stride_abduction_deg) X(stride_back_pitch_deg) X(stride_bob_m) \
-	X(stride_cadence) X(stride_cadence_max_rate) X(stride_dig_lean_deg) \
+	X(stride_cadence) X(stride_cadence_max_rate) \
 	X(stride_effort_ref_accel) X(stride_effort_speed) X(stride_glide_floor) \
 	X(stride_intensity_speed) X(stride_knee_deg) X(stride_pitch_deg) \
 	X(stride_push_ceiling) X(stride_push_gain) X(stride_rear_bias) \
 	X(stride_roll_deg) X(stride_skew) X(stride_sway_deg) \
 	X(tight_turn_align_angle) X(tight_turn_blend_speed) X(tight_turn_split_deg) \
-	X(tight_turn_stance) X(turn_bank_max_deg) \
+	X(tight_turn_stance) \
 	X(trunk_texture_smooth_rate) \
 	X(weight_shift_deg) X(weight_spring_damping) X(weight_spring_stiffness) \
 	X(wrister_kick_back_deg) X(wrister_kick_hip_yaw_deg) \
@@ -194,7 +193,6 @@ private:
 	double out_drop = 0.0;
 
 	void reset_state();
-	double turn_bank(double ground_speed) const;
 
 protected:
 	static void _bind_methods();

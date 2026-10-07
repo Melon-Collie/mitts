@@ -264,6 +264,17 @@ var hand_sphere_radius: float = 0.064
 # pullback exposes the hand sphere as a distinct ball at the wrist.
 var cuff_wrist_offset: float = 0.05
 
+# ── Balance posture (cosmetic; SkaterSpineRig, BalanceRules) ──────────────────
+# Natural frequency of the lean's spring: a held lean arrives in ~0.55 s, a 4 Hz
+# steering wiggle shows at 7% of its swing.
+var balance_omega: float = 7.0
+var balance_lean_cap_deg: float = 30.0
+# Share of the lean the trunk keeps, the rest taken back above the hips: the
+# legs carry the edge angle and the shoulders stay nearer the stick.
+var trunk_lean_share: float = 0.6
+# Share of the trunk's lean the neck takes back, keeping the eyes nearer level.
+var head_level_share: float = 0.67
+
 # ── Stick Flex Tuning (cosmetic) ──────────────────────────────────────────────
 # Vertex-shader shaft bow (Shaders/stick_flex.gdshader), driven entirely from
 # replicated fields (current_shot_state + shot_charge) and the stick's own
@@ -827,6 +838,7 @@ func _process(delta: float) -> void:
 		# blade tilt without moving any marker, so _rig_pose_changed can't see it
 		# (see _update_blade_elevation). Left set while hidden so the pose is
 		# rebuilt on the first visible frame.
+		_spine.advance(delta)
 		var spine_moved: bool = _spine.update()
 		if _rig_pose_changed() or spine_moved or _blade_tilt_dirty:
 			_blade_tilt_dirty = false

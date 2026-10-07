@@ -362,20 +362,6 @@ func _faceoff_stance_floor() -> float:
 			else _controller.faceoff_stance
 
 
-# Signed whole-body bank toward the arc's centre, radians (+ = toward the
-# traveller's right): the balancing angle atan(v·ω / g). The soft knee in a_lat
-# keeps steering-noise curvature from shimmering the body — a skater banks only
-# for a sustained arc.
-func _turn_bank(ground_speed: float) -> float:
-	if ground_speed <= 0.1:
-		return 0.0
-	var a_lat: float = ground_speed * absf(_turn_rate)
-	var knee: float = maxf(_controller.carve_bank_knee_accel, 0.001)
-	var engage: float = a_lat * a_lat / (a_lat * a_lat + knee * knee)
-	return signf(_turn_rate) * minf(atan2(a_lat, 9.8), deg_to_rad(_controller.turn_bank_max_deg)) \
-			* engage * (1.0 - _stop_blend)
-
-
 func _faceoff_split_deg() -> float:
 	return _controller.faceoff_center_split_deg if _skater.is_faceoff_center \
 			else _controller.faceoff_split_deg
@@ -1100,17 +1086,6 @@ func apply(delta: float) -> void:
 			# the same amount higher. The shot block's own solve pays it too.
 			drop -= leg_scale * _FOOT_FWD * sin(stance_shin) * faceoff_blend
 
-	# ── Turn bank ──────────────────────────────────────────────────────────────
-	# The bank pivots about the BLADES but the hips are pinned to the origin, so
-	# the legs roll the skates OUT (hip frame), the body drops what the roll
-	# costs each leg's span, and the trunk continues the line below.
-	var bank: float = _turn_bank(ground_speed)
-	if absf(bank) > 0.001:
-		var leg_bank: float = bank * fwd / ground_speed
-		l_roll -= leg_bank
-		r_roll -= leg_bank
-		drop += (leg_scale * (_THIGH_LEN + _SHIN_LEN) - drop) * (1.0 - cos(leg_bank))
-
 	# Tight turn: the inside skate leads (gait_scale already planted the stride).
 	if _tight_blend > 0.001:
 		var tight_split: float = deg_to_rad(_controller.tight_turn_split_deg) * _tight_blend
@@ -1379,7 +1354,7 @@ func apply(delta: float) -> void:
 	# harmonics on the torso, which reads as trunk jitter at cruise (where the
 	# glide_hold_skew warp is deepest). The legs keep the skew.
 	var s_fund: float = sin(stride_phase)
-	trunk_pitch_add = -deg_to_rad(_controller.stride_dig_lean_deg) * _effort
+	trunk_pitch_add = 0.0
 	trunk_roll_add = deg_to_rad(_controller.stride_sway_deg) * _intensity * fb_w * s_fund * gait_scale
 	# Spring weight transfer (Rosen-style secondary motion): a damped spring lags
 	# the lateral weight shift behind the stride so the body settles OVER the
@@ -1392,15 +1367,12 @@ func apply(delta: float) -> void:
 	_weight_shift_vel += shift_accel * delta
 	_weight_shift += _weight_shift_vel * delta
 	trunk_roll_add += deg_to_rad(_controller.weight_shift_deg) * _weight_shift
-	# Intent trunk reads: dig-in drives the shoulders over the first strides,
-	# a reversal tips them BACK against the travel it's fighting, and a
-	# deliberate backpedal keeps the chest up over the C-cuts.
-	trunk_pitch_add += -deg_to_rad(_controller.dig_in_lean_deg) * _dig \
-			+ deg_to_rad(_controller.reversal_lean_deg) * rev_amt \
-			+ deg_to_rad(_controller.backpedal_chest_deg) * ccut
-	# Sprint drives the shoulders forward for the whole burst (the effort dig
-	# above fades once the sprint tops out). gait_scale keeps it from fighting
-	# the hockey-stop / reversal trunk reads on their shared channel.
+	# A deliberate backpedal keeps the chest up over the C-cuts. (Leaning into
+	# a start or back against a stop is the balance lean, SkaterSpineRig.)
+	trunk_pitch_add += deg_to_rad(_controller.backpedal_chest_deg) * ccut
+	# Sprint drives the shoulders forward for the whole burst, including once it
+	# tops out and the balance lean has nothing left to lean into. gait_scale
+	# keeps it off the stop and reversal plants.
 	trunk_pitch_add += -deg_to_rad(_controller.sprint_lean_deg) * _sprint * gait_scale
 	# Check-delivery drive: the trunk drives INTO the hit — the shoulder
 	# finishing through the contact. Same directional decomposition as the
@@ -1426,16 +1398,6 @@ func apply(delta: float) -> void:
 		trunk_roll_add += sway
 		l_roll += sway * 0.5
 		r_roll += sway * 0.5
-	# Hockey stop: the trunk banks over the skid (the dig-lean above already
-	# tips the shoulders back against the braking effort).
-	if _stop_blend > 0.001:
-		trunk_roll_add += deg_to_rad(_controller.hockey_stop_trunk_roll_deg) \
-				* _stop_blend * _stop_side
-	# The trunk's half of the bank, body-local (the centre sits 90° from travel,
-	# so this holds at any facing-vs-travel angle, forward or backward).
-	if absf(bank) > 0.001:
-		trunk_pitch_add += bank * local_vel.x / ground_speed
-		trunk_roll_add += bank * local_vel.z / ground_speed
 
 	# Knockdown pose factor: holds full while more than knockdown_getup_seconds
 	# remains on the timer, then eases to 0 over that tail (the get-up). Derived FROM

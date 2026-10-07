@@ -1,8 +1,8 @@
 # Skater animation rebuild — plan
 
-Status: **agreed; Phase 1 landed.** The §9 decisions were taken as proposed.
-Deviating from this version means asking first, per CLAUDE.md. §11 records
-what Phase 1 changed from the design and what it found.
+Status: **agreed; Phases 1 and 2 landed.** The §9 decisions were taken as proposed.
+Deviating from this version means asking first, per CLAUDE.md. §11 and §12
+record what each phase changed from the design and what it found.
 
 ## Why rebuild instead of tune
 
@@ -279,7 +279,7 @@ skaters, bring the port forward rather than letting it slide to the end.
 ## §10 Bugs found along the way, not yet fixed
 
 - The crouch drop writes the gameplay frame at render rate, visibility-gated
-  (§1). Blade height may differ between machines; this is unconfirmed.
+  (§1). Measured in Phase 2: under 3 mm across frame rates (§11), so left as is.
 - The knockdown tilt rotates `MeshRoot` about the skater origin (hip height),
   while its comment describes a pivot at ice level between the skates.
 - Reconcile writes `lower_body_lag` alone to the lower-body yaw, without the
@@ -301,13 +301,29 @@ skaters, bring the port forward rather than letting it slide to the end.
   pelvis ±0.18 m → ±0.05 m (`test_body_chain.gd`). Arm stretch from the visible
   shoulders matches stretch from the gameplay frame's within 0.03 of arm length
   in every pose of the capture set, so the reach budget is not a constraint.
-- **The crouch drop stays in the gameplay frame for now** (§3, Q5 deferred). The
-  premise "the IK corrects it, so the effect is nil" was wrong: the top hand's
-  world height feeds the stick-lift shaft test and the pickup reception normal,
-  and taking the drop out raises the hands 5–13 cm against a crouched body.
-  Phase 2's posture is computed at physics rate from replicated state, so the
-  gameplay frame takes its height from that instead — deterministic, and in
-  step with the visible crouch.
-- **Not yet done from §2:** the BANK bone, and the head's counter-roll of the
-  bank (§9 Q3) — both arrive with Phase 2's bank.
+- **The crouch drop stays in the gameplay frame** (§3, Q5). Taking it out is
+  not gameplay-neutral — the top hand's world height feeds the stick-lift shaft
+  test and the pickup reception normal — and the worry behind it was measured
+  and does not hold: across 60, 120 and 240 fps the gameplay frame's height
+  differs by at most 2.9 mm (of a 72 mm crouch) with physics bit-identical.
+
+## §12 Phase 2 as built
+
+- **One lean, from acceleration.** `BalanceRules` gives atan(|a|/g) toward the
+  horizontal acceleration and an exactly-solved critically damped spring
+  (ω 7 rad/s). It replaced the gait's turn bank (legs, drop and trunk) and its
+  acceleration-driven trunk pitches — effort dig, dig-in, reversal, the stop's
+  trunk roll. Sprint's forward lean stays: it is posture, held after the
+  acceleration is gone.
+- **No BANK bone.** §2 put the pivot at the blades. The skater's origin is the
+  centre of mass, which carries the collision body, so pivoting at the ice
+  would carry the visible pelvis half a metre off it in a hard turn. The lean
+  goes on HIPS, about the hips, with the drop that keeps the blades on the ice.
+- **Angulation.** The trunk keeps 60% of the lean, which keeps the shoulders
+  near the stick — reach from the visible shoulders stays at or under the
+  gameplay frame's in every pose — and NECK takes back two thirds of that.
+- **Measured.** Steering taps a quarter second apart at 9 m/s: the trunk
+  swung +24° / -14° before; the balance lean now stays under 10° once the
+  first tap's step has passed, and a held hard turn reaches its balancing
+  angle. `test_body_chain.gd` holds both and the head's share.
 

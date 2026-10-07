@@ -14,7 +14,7 @@ delegates to.
 |---|---|---|
 | `_legs` | `SkaterLegRig` | the leg bones, the gait written onto them, the ankles' give-back against it, and the ice VFX's two reads (skate mark position, edge load) |
 | `_arms` | `SkaterArmRig` | the upper bones: torso, pelvis, helmet, deltoid caps, both arms by IK, the trunk texture, the face gear |
-| `_spine` | `SkaterSpineRig` | the three bones that join them: hips, waist, spine |
+| `_spine` | `SkaterSpineRig` | the four bones that join them (hips, waist, spine, neck) and the balance lean |
 | `_stick` | `SkaterStickRig` | the shaft pose, the knob, and the cosmetic flex/whip |
 | `_draw` | `SkaterDrawTracker` | the faceoff swipe crest, host-only |
 | `_uniform` | `SkaterUniformCoordinator` | the paint |
@@ -65,10 +65,11 @@ space is the space those two gameplay frames are placed in, and the arm IK
 reads the gameplay hands straight into it.
 
 ```
-HIPS     yaw and pitch from LowerBody; both legs root here
+HIPS     yaw and pitch from LowerBody, the balance lean; both legs root here
   WAIST  half the trunk's twist — the pelvis (shorts) rides it
     SPINE  the fold about the hips, then the rest of the twist, then the
-           reach lean; torso, helmet and caps hang here
+           reach lean, less the lean the trunk hands back; torso and caps
+      NECK   takes back part of the trunk's lean; the helmet
 arms     roots, solved from the spine's shoulders to the gameplay hands
 ```
 
@@ -84,6 +85,17 @@ under `UpperBody`, a leg skeleton under `LowerBody`) could not:
 - **The twist has a joint limit** (`SkaterSpineRig.TWIST_LIMIT`, 55°). The
   shoulders always point where gameplay put them, so the arms reach their
   hands; past the limit the hips come round instead.
+
+**The body leans toward its acceleration** (`BalanceRules`): atan(|a|/g),
+through a critically damped spring solved exactly, so frame rate cannot change
+it. One model is the turn's bank, the start's forward drive and the stop's sit
+back; the gait authors none of them. It pivots at the HIPS, not the ice,
+because the skater's origin is the centre of mass travelling the path — the
+skates are what swing out — and the hips drop by what the tilt costs the legs'
+span. The trunk keeps only `trunk_lean_share` of it (legs carry the edge,
+shoulders stay near the stick) and the neck takes back `head_level_share` of
+that. The spring is what tells a steering correction from a turn: a held arc
+arrives in ~0.55 s, taps a quarter second apart show at a fraction.
 
 The shorts and the jersey are both rigid shells, so the twist between them
 shows as a seam wherever it happens. Half of it goes on the waist and half

@@ -52,9 +52,11 @@ func test_the_shorts_and_the_legs_hang_from_the_same_hips() -> void:
 		assert_eq(rig.get_bone_parent(SkaterBodySkeleton.LEG_BONE_OFFSET + leg), hips,
 				"each leg roots on the hips, so the seat cannot turn away from them")
 	assert_eq(rig.get_bone_parent(SkaterBodySkeleton.SPINE_BONE), waist)
-	for shell: int in [SkaterMeshBuilder.UpperBone.TORSO, SkaterMeshBuilder.UpperBone.HELMET,
+	for shell: int in [SkaterMeshBuilder.UpperBone.TORSO,
 			SkaterMeshBuilder.UpperBone.SHOULDER_L, SkaterMeshBuilder.UpperBone.SHOULDER_R]:
 		assert_eq(rig.get_bone_parent(shell), SkaterBodySkeleton.SPINE_BONE)
+	assert_eq(rig.get_bone_parent(SkaterMeshBuilder.UpperBone.HELMET), SkaterBodySkeleton.NECK_BONE)
+	assert_eq(rig.get_bone_parent(SkaterBodySkeleton.NECK_BONE), SkaterBodySkeleton.SPINE_BONE)
 
 
 # ── Fold, then twist ─────────────────────────────────────────────────────────
@@ -102,7 +104,7 @@ func test_past_the_spine_s_range_the_hips_come_round() -> void:
 # forward at speed and sweep the cursor across the body. The head has to stay
 # over the pelvis across the line of travel; what is left is the reach lean
 # toward the hand. Measured before the chain: ±0.18 m.
-func test_sweeping_the_cursor_at_speed_keeps_the_head_over_the_pelvis() -> void:
+func _live_controller() -> SkaterController:
 	var state := StubGameState.new()
 	add_child_autofree(state)
 	var puck: Puck = PUCK_SCENE.instantiate() as Puck
@@ -117,29 +119,45 @@ func test_sweeping_the_cursor_at_speed_keeps_the_head_over_the_pelvis() -> void:
 	c.set_process(false)
 	c.setup(skater, puck, state)
 	c.apply_attributes(PlayerAttributes.new())
+	return c
 
+
+# The tick order of a live frame at 120 fps: controller, physics, render.
+func _tick(c: SkaterController, input: InputState, move: Vector2, aim: Vector3) -> void:
+	input.host_timestamp += DT
+	input.move_vector = move
+	input.mouse_world_pos = c.skater.global_position + aim
+	c._process_input(input, DT)
+	c.skater._physics_process(DT)
+	c.skater._process(DT)
+
+
+# Face up the ice and build to cruising speed.
+func _skate_up_the_ice(c: SkaterController, input: InputState) -> void:
+	for _i: int in 40:
+		_tick(c, input, Vector2.ZERO, Vector3(3.0, 0.0, 0.0))
+	for _i: int in 40:
+		_tick(c, input, Vector2.ZERO, Vector3(0.0, 0.0, -3.0))
+	for _i: int in 240:
+		_tick(c, input, Vector2(0.0, -1.0), Vector3(0.0, 0.0, -3.0))
+
+
+func test_sweeping_the_cursor_at_speed_keeps_the_head_over_the_pelvis() -> void:
+	var c: SkaterController = _live_controller()
+	var skater: Skater = c.skater
 	var input := InputState.new()
 	input.delta = DT
 	var worst: float = 0.0
 	# Turn to face up the ice, build speed, then sweep the cursor side to side.
-	var segments: Array = [[40, Vector2.ZERO, Vector3(3.0, 0.0, 0.0)],
-			[40, Vector2.ZERO, Vector3(0.0, 0.0, -3.0)],
-			[240, Vector2(0.0, -1.0), Vector3(0.0, 0.0, -3.0)],
-			[40, Vector2(0.0, -1.0), Vector3(2.5, 0.0, -1.5)],
+	_skate_up_the_ice(c, input)
+	var segments: Array = [[40, Vector2(0.0, -1.0), Vector3(2.5, 0.0, -1.5)],
 			[40, Vector2(0.0, -1.0), Vector3(-2.5, 0.0, -1.5)],
 			[40, Vector2(0.0, -1.0), Vector3(2.5, 0.0, -1.5)],
 			[40, Vector2(0.0, -1.0), Vector3(-2.5, 0.0, -1.5)]]
-	for k: int in segments.size():
-		var seg: Array = segments[k]
+	for seg: Array in segments:
 		for _i: int in int(seg[0]):
-			input.host_timestamp += DT
-			input.move_vector = seg[1]
-			input.mouse_world_pos = skater.global_position + (seg[2] as Vector3)
-			c._process_input(input, DT)
-			skater._physics_process(DT)
-			skater._process(DT)
-			if k >= 3:
-				worst = maxf(worst, absf(_head_across_travel(skater)))
+			_tick(c, input, seg[1], seg[2])
+			worst = maxf(worst, absf(_head_across_travel(skater)))
 	assert_gt(Vector2(skater.velocity.x, skater.velocity.z).length(), 7.0,
 			"the sweep has to happen at speed to mean anything")
 	assert_lt(worst, 0.08,
@@ -153,3 +171,58 @@ func _head_across_travel(skater: Skater) -> float:
 	var head: Vector3 = rig.get_bone_global_pose(SkaterMeshBuilder.UpperBone.HELMET).origin
 	var pelvis: Vector3 = rig.get_bone_global_pose(SkaterMeshBuilder.UpperBone.PELVIS).origin
 	return (head - pelvis).dot(right)
+
+
+# ── Live: the balance lean ───────────────────────────────────────────────────
+
+# A held turn leans the body by what balances it; steering taps a quarter second
+# apart do not, because the centre of mass cannot be moved over the edges that
+# fast. Measured before the balance spring: the trunk swung +24° / -14° per tap.
+# The first two taps are skipped: the first is a step, and a quarter second of
+# hard steering genuinely does lean a skater half way.
+func test_a_held_turn_leans_and_steering_taps_do_not() -> void:
+	var c: SkaterController = _live_controller()
+	var input := InputState.new()
+	input.delta = DT
+	_skate_up_the_ice(c, input)
+	var tap_worst: float = 0.0
+	for k: int in 8:
+		var move := Vector2(0.7 if k % 2 == 0 else -0.7, -0.7)
+		for _i: int in 30:
+			_tick(c, input, move, Vector3(0.0, 0.0, -3.0))
+			if k >= 2:
+				tap_worst = maxf(tap_worst, c.skater._spine.balance_tilt().length())
+	assert_lt(rad_to_deg(tap_worst), 10.0,
+			"steering taps leaned the body %.1f°" % rad_to_deg(tap_worst))
+
+	for _i: int in 90:
+		_tick(c, input, Vector2(1.0, 0.0), Vector3(2.2, 0.0, -2.2))
+	assert_gt(rad_to_deg(c.skater._spine.balance_tilt().length()), 15.0,
+			"a held hard turn must lean the body into it")
+
+
+# The neck takes back part of the trunk's lean, so the head reads the lean but
+# the eyes stay nearer level than the shoulders. Measured as roll across the line
+# of travel: the forward fold is posture, which the neck leaves alone.
+func test_the_head_leans_less_than_the_trunk() -> void:
+	var c: SkaterController = _live_controller()
+	var input := InputState.new()
+	input.delta = DT
+	_skate_up_the_ice(c, input)
+	for _i: int in 90:
+		_tick(c, input, Vector2(1.0, 0.0), Vector3(2.2, 0.0, -2.2))
+	var rig: Skeleton3D = _rig(c.skater)
+	var v: Vector3 = c.skater.global_transform.basis.inverse() * c.skater.velocity
+	var right: Vector3 = Vector3(v.x, 0.0, v.z).normalized().cross(Vector3.UP)
+	var trunk_roll: float = _roll(rig, SkaterBodySkeleton.SPINE_BONE, right)
+	var head_roll: float = _roll(rig, SkaterBodySkeleton.NECK_BONE, right)
+	assert_gt(rad_to_deg(absf(trunk_roll)), 5.0,
+			"the trunk must be leaning for this to mean anything")
+	assert_lt(absf(head_roll), absf(trunk_roll) * 0.6,
+			"the head must lean well short of the trunk")
+
+
+func _roll(rig: Skeleton3D, bone: int, right: Vector3) -> float:
+	var up: Vector3 = rig.get_bone_global_pose(bone).basis.y
+	return atan2(up.dot(right), up.y)
+

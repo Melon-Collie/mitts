@@ -207,18 +207,6 @@ static double rules_tight_turn_weight(double steer_abs, double align_angle) {
 	return w;
 }
 
-// SkaterSkatingCoordinator._turn_bank.
-double NativeSkaterGait::turn_bank(double ground_speed) const {
-	if (ground_speed <= 0.1) {
-		return 0.0;
-	}
-	const double a_lat = ground_speed * Math::abs(turn_rate);
-	const double knee = MAX(cfg.carve_bank_knee_accel, 0.001);
-	const double engage = a_lat * a_lat / (a_lat * a_lat + knee * knee);
-	return sgn(turn_rate) * MIN(Math::atan2(a_lat, 9.8), Math::deg_to_rad(cfg.turn_bank_max_deg)) *
-			engage * (1.0 - stop_blend);
-}
-
 void NativeSkaterGait::reset_state() {
 	stride_phase = 0.0;
 	intensity = 0.0;
@@ -792,16 +780,6 @@ int64_t NativeSkaterGait::apply(
 		}
 	}
 
-	// Turn bank — legs roll the skates out, the body drops to keep them on the
-	// ice (see the GDScript reference).
-	const double bank = turn_bank(ground_speed);
-	if (Math::abs(bank) > 0.001) {
-		const double leg_bank = bank * fwd / ground_speed;
-		l_roll -= leg_bank;
-		r_roll -= leg_bank;
-		drop += (leg_scale * (THIGH_LEN + SHIN_LEN) - drop) * (1.0 - Math::cos(leg_bank));
-	}
-
 	// Tight-turn leg pose: inside skate leads.
 	if (tight_blend > 0.001) {
 		const double tight_split = Math::deg_to_rad(cfg.tight_turn_split_deg) * tight_blend;
@@ -966,7 +944,7 @@ int64_t NativeSkaterGait::apply(
 	// Trunk texture. Roll channels ride the stride FUNDAMENTAL, not the skewed
 	// stroke `s` — see the GDScript reference.
 	const double s_fund = Math::sin(stride_phase);
-	trunk_pitch_add = -Math::deg_to_rad(cfg.stride_dig_lean_deg) * effort;
+	trunk_pitch_add = 0.0;
 	trunk_roll_add = Math::deg_to_rad(cfg.stride_sway_deg) * intensity * fb_w * s_fund * gait_scale;
 	const double shift_target = fb_w * s_fund * intensity * gait_scale;
 	const double shift_accel = cfg.weight_spring_stiffness * (shift_target - weight_shift) -
@@ -974,9 +952,7 @@ int64_t NativeSkaterGait::apply(
 	weight_shift_vel += shift_accel * delta;
 	weight_shift += weight_shift_vel * delta;
 	trunk_roll_add += Math::deg_to_rad(cfg.weight_shift_deg) * weight_shift;
-	trunk_pitch_add += -Math::deg_to_rad(cfg.dig_in_lean_deg) * dig +
-			Math::deg_to_rad(cfg.reversal_lean_deg) * rev_amt +
-			Math::deg_to_rad(cfg.backpedal_chest_deg) * ccut;
+	trunk_pitch_add += Math::deg_to_rad(cfg.backpedal_chest_deg) * ccut;
 	trunk_pitch_add += -Math::deg_to_rad(cfg.sprint_lean_deg) * sprint * gait_scale;
 	if (drive_env > 0.0) {
 		const Vector3 drive_local = basis_inv.xform(drive_dir);
@@ -994,15 +970,6 @@ int64_t NativeSkaterGait::apply(
 		trunk_roll_add += sway;
 		l_roll += sway * 0.5;
 		r_roll += sway * 0.5;
-	}
-	if (stop_blend > 0.001) {
-		trunk_roll_add += Math::deg_to_rad(cfg.hockey_stop_trunk_roll_deg) *
-				stop_blend * stop_side;
-	}
-	// The trunk's half of the bank.
-	if (Math::abs(bank) > 0.001) {
-		trunk_pitch_add += bank * (double)local_vel.x / ground_speed;
-		trunk_roll_add += bank * (double)local_vel.z / ground_speed;
 	}
 
 	// Stagger stumble / knockdown factor. The entry end ramps over the buckle
