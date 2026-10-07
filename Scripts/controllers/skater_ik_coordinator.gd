@@ -611,7 +611,7 @@ func address_carry() -> float:
 
 func address_stick_horiz() -> float:
 	var drop: float = _address_hand_y() - blade_y_local() \
-			- (_skating.faceoff_address_drop() - _skating.crouch_drop)
+			- (_skating.faceoff_address_drop() - _skating.frame_drop)
 	var length: float = _controller.stick_length - _skater.faceoff_choke_m
 	return sqrt(maxf(length * length - drop * drop, 0.0001))
 

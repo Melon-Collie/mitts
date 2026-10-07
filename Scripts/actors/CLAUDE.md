@@ -110,7 +110,7 @@ Everything in the four rigs is cosmetic and derived. Nothing gameplay reads
 comes out of them, and that is what makes them safe to move: the blade contact
 point is the `Blade` marker's, and the rigs only read it.
 
-Three rules the rigs sit inside, all easy to break from in here:
+Four rules the rigs sit inside, all easy to break from in here:
 
 - **Anything drawn onto the skater at render rate reads
   `Skater.render_transform()`**, not `global_position` — the post-tick pose is up
@@ -118,6 +118,10 @@ Three rules the rigs sit inside, all easy to break from in here:
   opt OUT of physics interpolation, or the engine interpolates an
   already-interpolated pose. `SkaterLegRig.mark_position` is the worked example:
   the body half is read interpolated, the bone-pose half as-is.
+- **The crouch is the body's, not the frame's.** The visible body sits
+  `Skater.body_drop_below_frame()` under `LowerBody`, applied at the HIPS bone,
+  so the skating crouch and its bob never move the frame the hands hang from;
+  only a held pose's share lowers the frame itself.
 - **Nothing in the skeleton is written back into `UpperBody` or `LowerBody`.**
   The blade and shoulder markers hang under `UpperBody`, so writing it at render
   rate would move gameplay geometry. The chain reads both frames and writes

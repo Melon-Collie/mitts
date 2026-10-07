@@ -118,10 +118,11 @@ var stride_phase: float = 0.0
 # it holds steady through reconcile replay like the rest of the gait.
 var trunk_pitch_add: float = 0.0
 var trunk_roll_add: float = 0.0
-# Body drop of the crouch this pose pass settled on, in metres. Published
-# because the faceoff placement measures the stick's span from the hand height
-# the crouch leaves, and a skater's live depth is whatever he was skating at.
+# Body drop of the crouch this pose pass settled on, in metres, and the part of
+# it the gameplay frame took (GaitPose.frame_share). The faceoff placement
+# measures the stick's span from the hand height the frame's drop leaves.
 var crouch_drop: float = 0.0
+var frame_drop: float = 0.0
 # Inertia-filter state for the summed trunk texture (see the publish tail of
 # apply() and trunk_texture_smooth_rate).
 var _trunk_pitch_s: float = 0.0
@@ -241,6 +242,7 @@ func reset_to_rest() -> void:
 		layer.reset()
 	stride_phase = 0.0
 	crouch_drop = 0.0
+	frame_drop = 0.0
 	trunk_pitch_add = 0.0
 	trunk_roll_add = 0.0
 	_trunk_pitch_s = 0.0
@@ -387,6 +389,7 @@ func apply(delta: float) -> void:
 	_skater.set_faceoff_address(_faceoff.address)
 	p.publish_legs(_skater)
 	crouch_drop = p.drop
+	frame_drop = p.frame_drop()
 	# Trunk inertia: filter the summed texture, then lay the wobble back on top
 	# (see trunk_texture_smooth_rate).
 	var tex_ease: float = 1.0

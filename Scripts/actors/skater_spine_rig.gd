@@ -111,13 +111,15 @@ func update() -> bool:
 	var theta: float = tilt3.length()
 	var lean := Basis.IDENTITY
 	var axis := Vector3.RIGHT
-	var drop: float = 0.0
+	# The visible hips sit below LowerBody by the part of the crouch the
+	# gameplay frame does not take (Skater.set_skating_crouch_drop).
+	var drop: float = _skater.body_drop_below_frame()
 	if theta > 1e-4:
 		axis = Vector3.UP.cross(tilt3 / theta)
 		lean = Basis(axis, theta)
 		# The legs swing out about the hips, so the body comes down by what that
 		# costs their span to the ice.
-		drop = (lower.position.y + GameRules.FACEOFF_SPAWN_HEIGHT) * (1.0 - cos(theta))
+		drop += (lower.position.y - drop + GameRules.FACEOFF_SPAWN_HEIGHT) * (1.0 - cos(theta))
 	var hips := Transform3D(lean * hip_basis, lower.position - Vector3(0.0, drop, 0.0))
 	var waist := Transform3D(waist_basis, Vector3.ZERO)
 

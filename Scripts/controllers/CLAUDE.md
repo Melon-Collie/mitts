@@ -377,7 +377,11 @@ over-spins the phase — which also means it can own no timer, and is why the
 celebration window is aged by its callers at physics rate instead.
 
 **It writes leg swing, the ankles' give-back, edge loads and the crouch drop directly
-onto `Skater`, and never a torso or lower-body rotation.** Everything rotational
+onto `Skater`, and never a torso or lower-body rotation.** The crouch lowers the
+visible body only — it is render-rate, and the hands and blade hang from the
+gameplay frame — except in the held poses (block, faceoff set, knockdown), whose
+layers hand the frame their drop by their weight (`GaitPose.frame_share`)
+because those hands are posed in a frame that went down with the body. Everything rotational
 is *published* as a field for `SkaterPoseCoordinator` to sum into one write:
 `trunk_pitch_add` / `trunk_roll_add` (torso texture), `stop_yaw_offset` (hockey
 stop), `travel_align_yaw` (hip-to-travel alignment, which the pivot also drives

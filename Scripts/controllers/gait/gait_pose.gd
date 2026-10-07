@@ -32,8 +32,11 @@ var stick_side: float = 1.0
 var stance_hip: float = 0.0
 var stance_knee: float = 0.0
 var stance_shin: float = 0.0
-# Whole-body crouch drop, metres.
+# Whole-body crouch drop, metres, and the share of it the gameplay frame takes
+# (0..1): the held-pose layers raise it to their weight, everything else leaves
+# it at 0 (Skater.set_skating_crouch_drop).
 var drop: float = 0.0
+var frame_share: float = 0.0
 
 var l_pitch: float = 0.0
 var l_roll: float = 0.0
@@ -84,6 +87,7 @@ func seed_legs(loco: SkaterLocomotion, yaw_l: float, yaw_r: float) -> void:
 	r_roll = loco.r_roll
 	l_yaw = yaw_l
 	r_yaw = yaw_r
+	frame_share = 0.0
 	knee_extend_l = 0.0
 	knee_extend_r = 0.0
 	foot_flat_l = 0.0
@@ -155,10 +159,15 @@ func load_native(native: RefCounted) -> void:
 	foot_flat_r = 0.0
 	wobble_pitch = 0.0
 	wobble_roll = 0.0
+	frame_share = 0.0
+
+
+func frame_drop() -> float:
+	return drop * frame_share
 
 
 func publish_legs(skater: Skater) -> void:
 	skater.set_leg_swing(l_pitch, l_roll, l_knee, r_pitch, r_roll, r_knee, l_yaw, r_yaw)
 	skater.set_edge_loads(edge_l, edge_r)
 	skater.set_ankle_flatten(foot_flat_l, foot_flat_r)
-	skater.set_skating_crouch_drop(drop)
+	skater.set_skating_crouch_drop(drop, frame_drop())

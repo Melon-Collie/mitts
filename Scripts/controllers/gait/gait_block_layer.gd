@@ -50,6 +50,9 @@ func advance(delta: float) -> bool:
 func override(p: GaitPose) -> void:
 	if _blend <= 0.001:
 		return
+	# A held pose: the block's stick is solved in a frame that has gone down
+	# with the body (GaitPose.frame_share).
+	p.frame_share = maxf(p.frame_share, _blend)
 	const THIGH: float = GaitPose.THIGH_LEN
 	const SHIN: float = GaitPose.SHIN_LEN
 	const FOOT: float = GaitPose.FOOT_FWD

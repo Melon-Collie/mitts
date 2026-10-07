@@ -53,7 +53,7 @@ func _tick(count: int) -> void:
 
 
 func test_wrister_load_settles_over_back_leg() -> void:
-	var rest_body_y: float = _skater.upper_body.position.y
+	var rest_body_y: float = _visible_body_y()
 	_skater.current_shot_state = State.WRISTER_AIM
 	_skater.shot_charge = 1.0
 	_tick(180)  # 1.5 s — load blend fully settled
@@ -67,7 +67,7 @@ func test_wrister_load_settles_over_back_leg() -> void:
 	# Hips coil with the load — stick-side (−X) hip back reads as positive yaw.
 	assert_gt(_coord.shot_hip_yaw, 0.01, "hips should coil into the load")
 	# The load sits into the shot — the stance crouch drops the body.
-	assert_lt(_skater.upper_body.position.y, rest_body_y - 0.005,
+	assert_lt(_visible_body_y(), rest_body_y - 0.005,
 			"the load stance should sink the body")
 
 
@@ -125,7 +125,7 @@ func test_quick_pass_release_still_flicks() -> void:
 
 
 func test_slapper_wind_up_loads_back_leg() -> void:
-	var rest_body_y: float = _skater.upper_body.position.y
+	var rest_body_y: float = _visible_body_y()
 	# A full wind-up: the pose fills over the same max_slapper_charge_time as
 	# shot_charge (the wind-up IS the charge gauge), so charge 1.0 is a
 	# complete wind-up.
@@ -137,7 +137,7 @@ func test_slapper_wind_up_loads_back_leg() -> void:
 			% [_skater.leg_bone_euler(_LEG_L).x, _skater.leg_bone_euler(_LEG_R).x])
 	assert_lt(_skater.leg_bone_euler(_LEG_L).z, -0.02, "legs should roll the weight to the stick side")
 	assert_gt(_coord.shot_hip_yaw, 0.05, "hips should coil under the wound-up torso")
-	assert_lt(_skater.upper_body.position.y, rest_body_y - 0.01,
+	assert_lt(_visible_body_y(), rest_body_y - 0.01,
 			"the wind-up should sit deep — the power position")
 
 
@@ -306,3 +306,9 @@ func test_block_tips_the_chest_onto_the_down_knee() -> void:
 	assert_gt(_skater.upper_body.rotation.z, 0.1,
 			"the torso should roll onto the down knee (roll %.3f rad)"
 			% _skater.upper_body.rotation.z)
+
+
+# Height of the visible trunk: the crouch lowers the body under the gameplay
+# frame rather than the frame itself (Skater.body_drop_below_frame).
+func _visible_body_y() -> float:
+	return _skater.upper_body.position.y - _skater.body_drop_below_frame()

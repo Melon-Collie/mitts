@@ -278,17 +278,21 @@ skaters, bring the port forward rather than letting it slide to the end.
 
 ## §10 Bugs found along the way
 
-Open:
-
-- The crouch drop writes the gameplay frame at render rate (§1). Measured in
-  Phase 2: under 3 mm across frame rates (§11). The "visibility-gated" half
-  does not hold — the gate is `is_visible_in_tree`, which only hidden skaters
-  fail, and they are not in play. Removing it is a gameplay change (the hand's
-  world height feeds the carry pin, the pickup claims and the stick-lift test,
-  and the faceoff dot is laid out from the crouched hand), so it waits on a
-  decision.
-
 Fixed after Phase 5:
+
+- **The crouch drop left the gameplay frame** (§1, §3). The gait computes it at
+  render rate, so the skating crouch and its stride bob now lower only the
+  visible body (`Skater.body_drop_below_frame`, applied at the HIPS bone) and
+  the hands and blade hang from a frame that holds its height at any frame rate.
+  A gameplay change, chosen: the top hand sits at standing height while
+  skating, up to ~7 cm higher than when it rode the crouch, which moves the
+  carry pin, the pickup claims and the stick-lift test by as much. The held
+  poses — block, faceoff set, knockdown — still take the frame down with the
+  body by their weight (`GaitPose.frame_share`), because their hands are posed
+  for it; they are steady poses and interactions are mostly gated in them.
+  The "visibility-gated" half of the old note did not hold: the gate is
+  `is_visible_in_tree`, which only hidden skaters fail.
+  `test_crouch_leaves_the_gameplay_frame.gd`.
 
 - **The knockdown fall pivoted at the hips.** `MeshRoot` tipped about the
   skater origin, which rides 1 m up, so a body lying on the ice lay there at

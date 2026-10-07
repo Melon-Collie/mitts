@@ -42,6 +42,9 @@ func advance(_delta: float) -> bool:
 func override(p: GaitPose) -> void:
 	if weight <= 0.0:
 		return
+	# A held pose: the brace is posed in a frame that has gone down with the
+	# body (GaitPose.frame_share).
+	p.frame_share = maxf(p.frame_share, weight)
 	p.drop = lerpf(p.drop, _controller.knockdown_pose_drop_m, weight)
 	p.l_pitch = lerpf(p.l_pitch, 0.0, weight)
 	p.r_pitch = lerpf(p.r_pitch, 0.0, weight)

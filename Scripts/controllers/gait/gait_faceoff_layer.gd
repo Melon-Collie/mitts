@@ -17,7 +17,7 @@ var address: float = 0.0
 
 
 func stages() -> int:
-	return Stage.FLOOR | Stage.LEGS | Stage.TRUNK
+	return Stage.FLOOR | Stage.LEGS | Stage.TRUNK | Stage.OVERRIDE
 
 
 func reset() -> void:
@@ -83,6 +83,13 @@ func shape_legs(p: GaitPose) -> void:
 func shape_trunk(p: GaitPose) -> void:
 	if blend > 0.001 and _skater.is_faceoff_center:
 		p.trunk_pitch += -deg_to_rad(_controller.faceoff_center_lean_deg) * blend
+
+
+# A held pose: the stick address is solved in a frame that has gone down with
+# the body (GaitPose.frame_share).
+func override(p: GaitPose) -> void:
+	if blend > 0.001:
+		p.frame_share = maxf(p.frame_share, blend)
 
 
 # How far the centre's address drops his body, in metres — the crouch this

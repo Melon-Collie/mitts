@@ -634,11 +634,13 @@ var _prev_blade_contact: Vector3 = Vector3.ZERO
 var _last_wall_normal: Vector3 = Vector3.ZERO
 var _default_upper_body_y: float = 0.0
 var _default_lower_body_y: float = 0.0
-# Cosmetic vertical drop of the whole visible body (torso + hips) while in
-# the bent-knee skating stance, so the flexed legs keep the skates on the
-# ice. Driven by SkaterSkatingCoordinator; composes with the shot-block
-# crouch through _apply_body_height (the single writer of both body Ys).
+# Vertical drop of the visible body under the gait's crouch, so the flexed legs
+# keep the skates on the ice, and the share of it the gameplay frames
+# (UpperBody / LowerBody) take — nonzero only in the held poses (see
+# set_skating_crouch_drop). _apply_body_height is the single writer of both
+# frames' Ys.
 var _skating_crouch_drop: float = 0.0
+var _frame_drop: float = 0.0
 var _block_stance_active: bool = false
 # Slapper one-timer zone — armed only while charging a slapper without the puck
 # (see set_slapper_zone). Plain state: the zone is an ice-plane disc the analytic
@@ -1588,16 +1590,24 @@ func set_faceoff_address(blend: float) -> void:
 	_faceoff_address = blend
 
 
-# Sets the skating-stance body drop (metres). The stance flexes hips/knees,
-# which shortens the legs' vertical span; lowering the torso AND the hips by
-# the deficit keeps the skates planted instead of floating. Cosmetic only —
-# the collision body and every gameplay read are unaffected; the blade IK
-# re-lands the blade at ice height from upper_body.global_position each tick.
-func set_skating_crouch_drop(drop: float) -> void:
-	if is_equal_approx(_skating_crouch_drop, drop):
+# Sets the gait's crouch (metres): `drop` lowers the visible body, so the flexed
+# legs keep the skates planted, and `frame_drop` of it also lowers the gameplay
+# frames. The gait computes the crouch at render rate, so the skating crouch and
+# its stride bob stay out of the frames the hands and blade hang from — gameplay
+# geometry must not depend on frame rate. Only the held poses (block, faceoff,
+# knockdown) hand the frame their drop, because their hands are posed in a
+# frame that has gone down with the body.
+func set_skating_crouch_drop(drop: float, frame_drop: float = 0.0) -> void:
+	if is_equal_approx(_skating_crouch_drop, drop) and is_equal_approx(_frame_drop, frame_drop):
 		return
 	_skating_crouch_drop = drop
+	_frame_drop = frame_drop
 	_apply_body_height()
+
+
+# How far the visible body sits below the gameplay frames (SkaterSpineRig).
+func body_drop_below_frame() -> float:
+	return _skating_crouch_drop - _frame_drop
 
 
 # Skeleton height offset (m), set by SkaterAppearanceCoordinator.apply:
@@ -1617,10 +1627,8 @@ func set_skeleton_root_offset(offset: float) -> void:
 
 func _apply_body_height() -> void:
 	_blade_contact_dirty = true
-	upper_body.position.y = _default_upper_body_y + _skeleton_root_offset \
-			- _skating_crouch_drop
-	lower_body.position.y = _default_lower_body_y + _skeleton_root_offset \
-			- _skating_crouch_drop
+	upper_body.position.y = _default_upper_body_y + _skeleton_root_offset - _frame_drop
+	lower_body.position.y = _default_lower_body_y + _skeleton_root_offset - _frame_drop
 	# The skeleton copies these frames rather than hanging off them: re-seat it.
 	if _spine != null:
 		_spine.update()
