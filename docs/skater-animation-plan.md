@@ -1,7 +1,7 @@
 # Skater animation rebuild — plan
 
-Status: **agreed; Phases 1 and 2 landed.** The §9 decisions were taken as proposed.
-Deviating from this version means asking first, per CLAUDE.md. §11 and §12
+Status: **agreed; Phases 1–3 landed.** The §9 decisions were taken as proposed.
+Deviating from this version means asking first, per CLAUDE.md. §11–§13
 record what each phase changed from the design and what it found.
 
 ## Why rebuild instead of tune
@@ -327,3 +327,27 @@ skaters, bring the port forward rather than letting it slide to the end.
   first tap's step has passed, and a held hard turn reaches its balancing
   angle. `test_body_chain.gd` holds both and the head's share.
 
+## §13 Phase 3 as built
+
+- **`LocomotionRules.classify`** splits the stick against travel exactly as the
+  movement model resolves it — cos² along (stride), sin² across (crossover),
+  cos² against (skid); brake by the tight-turn weight (tight turn / stop);
+  below grip speed against facing (start, side-step, backward push); travel
+  behind the facing is backward skating. Weights sum to one by construction.
+- **`SkaterLocomotion`** owns the states: their easing, the shared stride
+  phase (cadence is each state's own rate, weighted), and each state's stroke,
+  ported from the old gait's stroke maths. The coordinator went from 1628 to
+  916 lines; the dig-in, reversal, shuffle, backpedal, carve-intent and glide
+  channels, the effort-hysteresis stop latch, and their fade factors are gone.
+- **Not in the design: the signed crossover commit.** The split makes a
+  steering tap at speed a crossover — the physics does turn the travel — but a
+  skater corrects on the edges and crosses over only through a held turn. The
+  crossover eases in slower than the other states and with its side as the
+  sign, so taps alternating sides cancel; the uncommitted share is skated as a
+  glide. Measured: taps a quarter second apart commit under 0.3 (they swung the
+  skates ±0.3 m on alternating crossovers before); a held arc commits past 0.6.
+- **Native gait retired early.** `NativeSkaterGait` mirrored the gait this
+  phase replaces, so it and its parity fuzz are deleted rather than left
+  pinned to dead code; its benchmark was already broken. Measured GDScript
+  cost: ~46–56 µs per skater per frame skating (native was ~20), about 0.5 ms
+  a frame for ten skaters until the Phase 5 port.

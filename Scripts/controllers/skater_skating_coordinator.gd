@@ -1,23 +1,17 @@
 class_name SkaterSkatingCoordinator
 extends RefCounted
 
-# Procedural skating stride — no skeleton, no animation clips. Advances a stride
-# phase by ground speed and swings each leg about its hip via Skater.set_leg_swing(),
-# matching the same per-frame "write the transforms" idiom the arm-bone IK already
-# uses. Beyond the leg swing it owns the skating STANCE: a speed-engaged crouch
-# (hip + knee flex with a matching whole-body drop via Skater.set_skating_crouch_drop
-# so the skates stay planted), a per-stride body bob, and the trunk texture the
-# pose coordinator layers into the torso lean (trunk_pitch_add / trunk_roll_add
-# — effort dig and weight-shift sway). Purely cosmetic and derived entirely from
-# the skater's velocity, so it
-# costs zero network state: remote skaters animate identically from the velocity
-# that interpolation already hands them.
+# The procedural gait — no animation clips. The locomotion state and its leg
+# stroke are SkaterLocomotion's; this class layers everything else on them —
+# the shot loads and kicks, the block, the faceoff stance, the knockdown, the
+# check and the stick lift — resolves the legs into joint angles and a crouch
+# drop, and publishes the trunk texture and the lower-body yaw channels.
+# Purely cosmetic and derived entirely from replicated state, so it costs zero
+# network state: remote skaters animate identically from what interpolation
+# already hands them.
 #
-# The phase is advanced only on real render ticks — SkaterController guards the
-# call with `not is_replaying` so reconcile re-simulation (many ticks per frame)
-# doesn't over-spin the gait. Standstill freezes the phase (advance is scaled by
-# speed) and the intensity envelope eases the legs back to their rest pose, so
-# nothing pops when starting or stopping.
+# Runs on real render ticks only — SkaterController guards the call with
+# `not is_replaying` so reconcile re-simulation doesn't over-spin the gait.
 
 const State = SkaterStateMachine.State
 
@@ -42,13 +36,6 @@ const _FOOT_FWD: float = 0.10
 # past the slowest smoothed channel's convergence (the eases run at ≥ ~5/s, so
 # one second leaves residuals under e⁻⁵ ≈ 0.7% of amplitude).
 const _SETTLE_SECONDS: float = 1.0
-
-# Cap on the effort/carve finite-difference sampling interval (see the aliasing
-# note in apply()). A bit-identical velocity — true rest, or a cruise pinned
-# exactly at the speed cap — never trips the changed-velocity sample, so the
-# window forces a re-sample often enough (10 Hz, well above the ~5/s eases the
-# targets feed) that the signals still read zero acceleration and decay.
-const _FD_WINDOW_MAX: float = 0.1
 
 # Smoothing rate of the ψ-rate signal the pivot detector thresholds. A trigger,
 # not a pose channel, so a plain smoothed per-frame FD suffices (high-fps
@@ -125,38 +112,14 @@ var _trunk_roll_s: float = 0.0
 # Eased 0..1 "committing a check" stance factor, tracked toward skater.hit_committed
 # at render rate. Drives the load-up lean and crouch below.
 var _hit_commit_blend: float = 0.0
-# Smoothed [0,1] stride intensity so the legs ease in/out of motion at the
-# start/end of a stride instead of snapping to full amplitude.
-var _intensity: float = 0.0
-# Smoothed effort signal in [-1, +1]: +1 driving hard (deep push), -1
-# coasting/braking (settle into a glide). Derived from tangential acceleration —
-# see apply(). Previous velocity backs the finite-difference; the flag suppresses
-# the spurious spike on the very first frame (no prior sample yet). The _fd_*
-# fields hold the last sampled targets between velocity changes — the FD is
-# sampled over the accumulated interval since the velocity last stepped (see
-# the aliasing note in apply()), not per render frame.
-var _effort: float = 0.0
-var _prev_velocity: Vector3 = Vector3.ZERO
-var _have_prev_velocity: bool = false
-var _fd_time: float = 0.0
-var _fd_effort_target: float = 0.0
-var _fd_turn: float = 0.0
-var _fd_carve: float = 0.0
 # Smoothed faceoff ready-stance engagement, so the crouch eases in over the
 # countdown and releases into the draw instead of popping on the phase flip.
 # Published: the address is not only a leg pose — the hands take their draw grip
 # on the same ease (SkaterIKCoordinator.update_bottom_hand).
 var faceoff_blend: float = 0.0
-# Hockey-stop state (see the Hockey stop block in apply()). stop_yaw_offset is
-# radians of lower-body rotation.y.
+# Radians of lower-body rotation.y the hockey stop turns the hips across travel
+# (SkaterLocomotion.stop_yaw, republished for the pose coordinator's yaw sum).
 var stop_yaw_offset: float = 0.0
-var _stop_engaged: bool = false
-var _stop_side: float = 1.0
-var _stop_blend: float = 0.0
-# Tight-turn blend (brake held off travel) and the side the stick is on,
-# +1 = toward the traveller's right (CarveRules' sign).
-var _tight_blend: float = 0.0
-var _tight_side: float = 1.0
 # Hip-to-travel alignment (see the block in apply()).
 var travel_align_yaw: float = 0.0
 var _hip_align_yaw: float = 0.0
@@ -177,40 +140,6 @@ var _pivot_dwell: float = 0.0
 # sum — two writers tracking the same rotation on different clocks is a
 # wobble, not a pose.
 var pivot_hold: float = 0.0
-# Smoothed signed carve engagement [−1, +1] (CarveRules): path curvature
-# drives the crossover gait. Sign = turn direction (+ = toward local +X).
-var _carve: float = 0.0
-# Curvature-only carve (no intent anticipation) and the smoothed travel turn
-# rate (rad/s), for the crossover CADENCE: stride frequency during a carve
-# follows the arc — crossovers per radian of heading change — not straight-line
-# speed. Cadence keys off real curvature only, so an anticipatory intent-carve
-# poses the legs without re-timing them until the path actually bends.
-var _carve_curve: float = 0.0
-var _turn_rate: float = 0.0
-# Smoothed input-intent signals (GaitIntentRules) — what the player is TRYING
-# to do, read from the replicated v15 intent byte. Eased so the 8-way octant
-# flips remotes decode never pop the pose. _shuffle is SIGNED (+ = toward the
-# body's +X); _glide is the no-keys coast engagement with its own slow sway
-# phase (local-only — at sway amplitudes machines don't need to agree on it).
-var _dig: float = 0.0
-var _reversal: float = 0.0
-var _shuffle: float = 0.0
-var _backpedal: float = 0.0
-var _glide: float = 0.0
-var _glide_phase: float = 0.0
-# Smoothed sprint engagement [0, 1], from the controller's resolved
-# sprint_active (replicated for remotes, v16 intent byte). Sprint reads as
-# LONGER strides — amplitude on top of push_scale, a deeper sit, and the
-# shoulders driving — never faster leg turnover (the cadence tanh ceiling
-# above stride_cadence_max_rate already owns that plateau).
-var _sprint: float = 0.0
-# Spring-damped lateral weight shift (Rosen-style secondary motion): the body
-# RIDES over the loaded leg and settles with follow-through instead of rolling
-# rigidly with the stride. Local integrator state, advanced only on real ticks
-# and small in amplitude — machines needn't agree exactly (same contract as
-# _glide_phase). Position + velocity of the critically-ish damped spring.
-var _weight_shift: float = 0.0
-var _weight_shift_vel: float = 0.0
 # Shot body animation (see the Shot block in apply()). Driven from the
 # replicated current_shot_state + shot_charge, exactly like the stick flex:
 # the wrister load tracks the drag-charge through WRISTER_AIM, the slapper
@@ -241,75 +170,28 @@ var _drive_intensity: float = 0.0       # 0..1 VFX hit hardness
 # opponent's stick. Keyed off the replicated blade_up.
 var _lift_blend: float = 0.0
 
-# NativeSkaterGait (null = extension absent, the GDScript body below runs).
-# The native port carries the full gait state machine; this class then acts as
-# the wrapper that feeds inputs, writes the pose outputs, and republishes the
-# trunk/yaw channels the pose coordinator reads.
-var _native: RefCounted = null
+var _locomotion := SkaterLocomotion.new()
 
 func setup(skater: Skater, sm: SkaterStateMachine, controller: SkaterController) -> void:
 	_skater = skater
 	_sm = sm
 	_controller = controller
-	if ClassDB.class_exists(&"NativeSkaterGait"):
-		_native = ClassDB.instantiate(&"NativeSkaterGait")
-		_native.set_state_ids(
-				State.SKATING_WITH_PUCK, State.SKATING_WITHOUT_PUCK,
-				State.SHOT_BLOCKING, State.FOLLOW_THROUGH, State.WRISTER_AIM,
-				State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK,
-				State.ONE_TIMER_RETENTION)
-		native_reconfigure()
+	_locomotion.setup(skater, controller)
 
-# Reloads the native port's tunables and leg scale from the controller.
-# Called from setup and from SkaterController.apply_attributes (which rewrites
-# the exports the config was built from — same invalidation moment as the
-# cached movement/IK configs).
-func native_reconfigure() -> void:
-	if _native == null:
-		return
-	var missing: String = _native.configure(_controller)
-	if missing != "":
-		# A rename/removal desynced the port's tunable table — running it with
-		# stale values would be a silent behavior fork. Loudly fall back.
-		push_error("NativeSkaterGait disabled — controller exports missing: %s" % missing)
-		_native = null
-		return
-	# A stale extension build can pass configure (all ITS exports still exist)
-	# while running old gait math and lacking newer getters — which the
-	# republish would then error on EVERY FRAME. Probe the NEWEST getter this
-	# coordinator calls and loudly fall back instead.
-	if not _native.has_method(&"get_faceoff_blend"):
-		push_error("NativeSkaterGait disabled — stale extension build (rebuild native/)")
-		_native = null
-		return
-	_native.set_leg_scale(leg_scale)
 
 # Snaps the gait back to a clean standstill and plants the legs at their rest
 # pose. Called on faceoff / respawn teleports so a skater doesn't drop into the
 # dot mid-stride carrying the previous shift's leg swing.
 func reset_to_rest() -> void:
-	if _native != null:
-		_native.reset_to_rest()
+	_locomotion.reset()
 	stride_phase = 0.0
-	_intensity = 0.0
-	_effort = 0.0
 	crouch_drop = 0.0
 	faceoff_blend = 0.0
 	trunk_pitch_add = 0.0
 	trunk_roll_add = 0.0
 	_trunk_pitch_s = 0.0
 	_trunk_roll_s = 0.0
-	_prev_velocity = Vector3.ZERO
-	_have_prev_velocity = false
-	_fd_time = 0.0
-	_fd_effort_target = 0.0
-	_fd_turn = 0.0
-	_fd_carve = 0.0
 	stop_yaw_offset = 0.0
-	_stop_engaged = false
-	_stop_blend = 0.0
-	_tight_blend = 0.0
-	_tight_side = 1.0
 	travel_align_yaw = 0.0
 	_hip_align_yaw = 0.0
 	_prev_psi = 0.0
@@ -321,18 +203,6 @@ func reset_to_rest() -> void:
 	_pivot_blend = 0.0
 	_pivot_dwell = 0.0
 	pivot_hold = 0.0
-	_carve = 0.0
-	_carve_curve = 0.0
-	_turn_rate = 0.0
-	_dig = 0.0
-	_reversal = 0.0
-	_shuffle = 0.0
-	_backpedal = 0.0
-	_glide = 0.0
-	_glide_phase = 0.0
-	_sprint = 0.0
-	_weight_shift = 0.0
-	_weight_shift_vel = 0.0
 	shot_hip_yaw = 0.0
 	_shot_prev_state = 0
 	_wrister_load = 0.0
@@ -373,8 +243,6 @@ func _faceoff_split_deg() -> float:
 # a re-zeroed envelope would pin the pose at its rise for as long as the
 # contact grinds.
 func start_check_drive(hit_dir: Vector3, intensity: float) -> void:
-	if _native != null:
-		_native.start_check_drive(hit_dir, intensity)
 	var flat := Vector3(hit_dir.x, 0.0, hit_dir.z)
 	if flat.length_squared() < 0.0001 or intensity <= 0.0:
 		return
@@ -386,17 +254,8 @@ func start_check_drive(hit_dir: Vector3, intensity: float) -> void:
 	_drive_t = 0.0
 
 # ── Per-Tick Application ──────────────────────────────────────────────────────
-# Three gait shapes — forward, backward, and lateral (crossover) — are computed
-# from the same stride phase and blended by the direction of travel expressed in
-# the skater's body frame. Because facing tracks the cursor independently of
-# momentum, a skater can glide in any direction relative to where it's pointing;
-# the blend reads that out of local velocity so diagonal motion mixes gaits
-# smoothly instead of snapping between them.
 func apply(delta: float) -> void:
 	if _skater == null or delta <= 0.0:
-		return
-	if _native != null:
-		_apply_native(delta)
 		return
 
 	# ── Settled early-out ──────────────────────────────────────────────────────
@@ -443,48 +302,10 @@ func apply(delta: float) -> void:
 	var vel: Vector3 = _skater.velocity
 	# Ground speed only — vertical velocity never feeds the stride.
 	var ground_speed: float = Vector2(vel.x, vel.z).length()
-	var speed_t: float = clampf(ground_speed / maxf(_controller.max_speed, 0.001), 0.0, 1.0)
-
-	# Plant the legs while shot-blocking (the one-knee drop below owns them);
-	# otherwise drive intensity from speed — GATED BY INTENT: no movement keys
-	# means a glide, so the legs settle to rest and ride the edges even at full
-	# speed. The stride is something the player DOES, not something speed does
-	# to them. (Velocity lean, the carve/faceoff/stop stance floors, and the
-	# glide stance floor below keep the posture alive while coasting.) Read off
-	# the REPLICATED shot state, not the state machine — a wire-fed remote's
+	# Plant the legs while shot-blocking (the one-knee drop below owns them). Read
+	# off the REPLICATED shot state, not the state machine — a wire-fed remote's
 	# state machine is never ticked, so it would never see the block.
 	var planted: bool = _skater.current_shot_state == State.SHOT_BLOCKING
-	var has_move_intent: bool = _skater.move_intent.length_squared() > 0.0025
-
-	# ── Intent signals ─────────────────────────────────────────────────────────
-	# What the player is TRYING to do (GaitIntentRules), read from the same
-	# replicated intent as the stride gate, decomposed into the body frame
-	# where the read is facing-relative (forward = (0, −1)). All smoothed at
-	# intent_signal_speed so the 8-way octant flips remotes decode never pop.
-	var mi: Vector2 = _skater.move_intent
-	var basis_inv: Basis = _skater.global_transform.basis.inverse()
-	var local_intent3: Vector3 = basis_inv * Vector3(mi.x, 0.0, mi.y)
-	var local_intent: Vector2 = Vector2(local_intent3.x, local_intent3.z)
-	var dig_t: float = 0.0
-	var rev_t: float = 0.0
-	var shuf_t: float = 0.0
-	var back_t: float = 0.0
-	if not planted:
-		dig_t = GaitIntentRules.dig_in(has_move_intent, ground_speed, _controller.dig_in_fade_speed)
-		rev_t = GaitIntentRules.reversal(Vector2(vel.x, vel.z), mi, ground_speed,
-				_controller.reversal_min_speed, _controller.reversal_start_opposition)
-		shuf_t = GaitIntentRules.shuffle(local_intent, ground_speed,
-				_controller.shuffle_fade_speed, _controller.shuffle_start_lateral)
-		back_t = GaitIntentRules.backpedal(local_intent, _controller.backpedal_start)
-	var intent_ease: float = _controller.intent_signal_speed * delta
-	_dig = lerpf(_dig, dig_t, intent_ease)
-	_reversal = lerpf(_reversal, rev_t, intent_ease)
-	_shuffle = lerpf(_shuffle, shuf_t, intent_ease)
-	_backpedal = lerpf(_backpedal, back_t, intent_ease)
-	_glide = lerpf(_glide, 0.0 if (has_move_intent or planted or _skater.brake_intent) else 1.0,
-			intent_ease)
-	_sprint = lerpf(_sprint,
-			1.0 if (_controller.sprint_active and not planted) else 0.0, intent_ease)
 
 	# ── Shots: load + release kick signals ─────────────────────────────────────
 	# The wrister load tracks the drag-charge through WRISTER_AIM; the slapper
@@ -590,202 +411,22 @@ func apply(delta: float) -> void:
 				+ deg_to_rad(_controller.slapper_load_hip_coil_deg) * _slap_load) \
 			+ stick_side * deg_to_rad(kick_hip_yaw_deg) * kick_env
 
-	var target_intensity: float = speed_t if (has_move_intent and not planted) else 0.0
-	# Dig-in / shuffle floors: the legs work from a standstill when the player
-	# is ASKING for movement, before there's speed to drive them — the choppy
-	# first strides and the net-front side-step.
-	if not planted:
-		target_intensity = maxf(target_intensity, maxf(
-				_dig * _controller.dig_in_intensity,
-				absf(_shuffle) * _controller.shuffle_intensity))
-	_intensity = lerpf(_intensity, target_intensity, _controller.stride_intensity_speed * delta)
-
-	# Advance the stride phase. The naive law — rate = ground_speed × cadence — is
-	# linear and uncapped, so leg turnover doubles when speed doubles and the gait
-	# "whirs" at sprint. Real skating instead plateaus its stride *rate* and buys
-	# extra speed with longer strides (more glide + reach per push), which the
-	# speed-scaled amplitude below already delivers. So treat ground_speed × cadence
-	# as the low-speed slope but saturate it through tanh toward a ceiling: near a
-	# standstill the response is ~linear (phase still freezes at zero speed), and by
-	# top speed the cadence has flattened to ~stride_cadence_max_rate. Cruise and
-	# sprint then share almost the same leg turnover — the sprint reads as longer,
-	# more powerful strides, not faster ones.
-	var cadence_ceiling: float = maxf(_controller.stride_cadence_max_rate, 0.001)
-	var linear_rate: float = ground_speed * _controller.stride_cadence
-	var phase_rate: float = cadence_ceiling * tanh(linear_rate / cadence_ceiling)
-	# Cadence "gears" (grounded in on-ice biomechanics: stride frequency DROPS
-	# from acceleration to sustained max velocity while the glide phase and
-	# ground-contact time lengthen — speed comes from power per stride, not
-	# faster turnover). cruise_gear is high when the skater is FAST but not still
-	# driving to gain speed (prior-frame _effort — the one-frame lag is invisible
-	# through the smoothing, same as the stop/reversal reads below). It eases the
-	# stride rate down here, deepens the sit and lengthens the glide dwell (extra
-	# stroke skew) further down — all zero while accelerating/digging, so the
-	# start and chop feel is unchanged.
-	var cruise_gear: float = speed_t * (1.0 - clampf(_effort, 0.0, 1.0))
-	phase_rate *= 1.0 - _controller.cadence_cruise_falloff * cruise_gear
-	# Crossover cadence: while the path is actually bending (curvature-only
-	# carve + smoothed turn rate — prior-frame values, the same documented
-	# one-frame lag as the stop/reversal reads below), stride frequency follows
-	# the ARC instead of straight-line speed: the feet step per radian of
-	# heading change (crossover_phase_per_turn), so a hard tight turn quickens
-	# the crossovers while a wide arc at speed glides between steps. Gated to
-	# forward travel — backward turning keeps its C-cuts on the speed law (the
-	# carve overlay below is gated by the same forwardness).
-	var carve_fwd_gate: float = clampf(-(basis_inv * vel).z
-			/ maxf(_controller.carve_forward_ramp, 0.001), 0.0, 1.0)
-	var carve_cadence: float = absf(_carve_curve) * carve_fwd_gate
-	if carve_cadence > 0.001:
-		phase_rate = lerpf(phase_rate,
-				absf(_turn_rate) * _controller.crossover_phase_per_turn, carve_cadence)
-	# Dig-in chop / shuffle steps put leg turnover UNDER the speed law: quick
-	# first strides and side-steps cycle before the body is moving fast enough
-	# to advance the phase on its own.
-	phase_rate = maxf(phase_rate, maxf(_dig * _controller.dig_in_cadence_rate,
-			absf(_shuffle) * _controller.shuffle_cadence_rate))
-	# The stop/reversal plant and the pivot's gliding transit (previous frame's
-	# values — computed below, and the one-frame lag is invisible through the
-	# smoothing) freeze the stride: scraping, planted, and open-hip blades
-	# don't stride.
-	stride_phase = wrapf(stride_phase + phase_rate
-			* (1.0 - maxf(maxf(maxf(_stop_blend, _tight_blend),
-					_reversal * _controller.reversal_stride_fade),
-					_pivot_blend * _controller.pivot_stride_fade)) * delta,
-			0.0, TAU)
-
-	# ── Effort: glide vs. push ─────────────────────────────────────────────────
-	# Velocity-only skating pumps the legs purely by speed, so a skater coasting at
-	# top speed strides exactly as hard as one digging for it. Real skating glides
-	# when it isn't gaining speed and pushes hard when it is. Recover that intent
-	# from the sign of tangential acceleration (the component of accel along travel):
-	# speeding up reads as a push, coasting/braking as a glide. Acceleration is the
-	# only "is the player pushing?" signal available without new network state — it
-	# falls out of the velocity remotes and replays already have — so they inherit
-	# the glide/push texture for free, exactly like the rest of the gait.
-	# The FD is sampled over the time since the velocity LAST CHANGED, not per
-	# render frame: velocity only steps on 120 Hz physics ticks, so above 120 fps
-	# a per-frame difference alternates between zero (no tick this frame) and
-	# ~double the true acceleration — a beat-frequency shimmer on every
-	# effort-driven channel (trunk dig pitch, stride amplitude, stance depth).
-	# Holding the last sample through no-tick frames and dividing by the
-	# accumulated interval reads the true acceleration at any frame rate.
-	_fd_time += delta
-	if not _have_prev_velocity:
-		_prev_velocity = vel
-		_have_prev_velocity = true
-		_fd_time = 0.0
-	elif vel != _prev_velocity or _fd_time >= _FD_WINDOW_MAX:
-		var accel: Vector3 = (vel - _prev_velocity) / _fd_time
-		var travel: Vector2 = Vector2(vel.x, vel.z)
-		_fd_effort_target = 0.0
-		if travel.length() > 0.1:
-			var tangential: float = Vector2(accel.x, accel.z).dot(travel.normalized())
-			_fd_effort_target = clampf(
-					tangential / maxf(_controller.stride_effort_ref_accel, 0.001), -1.0, 1.0)
-		# Path curvature off the same velocity history — the carve/crossover
-		# trigger (see CarveRules and the carve block below). The raw turn
-		# rate is kept for the crossover cadence law above.
-		_fd_turn = CarveRules.turn_rate(
-				Vector2(_prev_velocity.x, _prev_velocity.z),
-				Vector2(vel.x, vel.z), _fd_time, _controller.carve_min_speed)
-		_fd_carve = CarveRules.carve_target(_fd_turn,
-				ground_speed, _controller.carve_ref_turn_rate, _controller.carve_min_speed)
-		_prev_velocity = vel
-		_fd_time = 0.0
-	var effort_target: float = _fd_effort_target
-	var carve_target: float = _fd_carve
-	var raw_turn: float = _fd_turn
-	# Curvature-only engagement for the cadence law, smoothed BEFORE intent is
-	# folded in — anticipation poses the legs, only a real arc re-times them.
-	var curve_only: float = carve_target
-	# Intent carve: holding ACROSS the travel line anticipates the turn —
-	# crossovers fire to show what the player is TRYING to do, before the
-	# path visibly bends. Combined with the curvature signal by larger
-	# magnitude so the two never double-count.
-	var intent_carve: float = CarveRules.intent_carve(
-			Vector2(vel.x, vel.z), _skater.move_intent,
-			ground_speed, _controller.carve_min_speed)
-	if absf(intent_carve) > absf(carve_target):
-		carve_target = intent_carve
-	_effort = lerpf(_effort, effort_target, _controller.stride_effort_speed * delta)
-	_carve = lerpf(_carve, carve_target, _controller.carve_engage_speed * delta)
-	_carve_curve = lerpf(_carve_curve, curve_only, _controller.carve_engage_speed * delta)
-	_turn_rate = lerpf(_turn_rate, raw_turn, _controller.carve_engage_speed * delta)
-	# Push-amplitude scale around the speed baseline: >1 driving, easing toward
-	# stride_glide_floor when coasting so the legs settle instead of churning. The
-	# static crossover lean is intentionally left off this scale — you still lean
-	# through a turn while gliding.
-	var push_scale: float = clampf(1.0 + _effort * _controller.stride_push_gain,
-			_controller.stride_glide_floor, _controller.stride_push_ceiling)
-	# Sprint lengthens every stroke channel that rides push_scale (push, roll,
-	# abduction, tuck, scissor) — applied OUTSIDE the effort clamp because the
-	# effort signal is tangential accel, which decays to zero once the sprint
-	# reaches its raised speed cap: exactly when the sprint should still read.
-	push_scale *= 1.0 + _sprint * _controller.sprint_stride_gain
-
-	# Decompose travel into the body frame: -Z is forward, +X is the skater's right.
+	# ── Locomotion ─────────────────────────────────────────────────────────────
+	# Which skating state the skater is in and the stroke it skates
+	# (SkaterLocomotion). Shooting sets the feet and the pivot glides through its
+	# transit, so both hold the stroke; the block takes the legs outright.
+	var basis_inv: Basis = _skater.global_transform.basis.inverse()
+	_locomotion.sense(delta, planted, maxf(shot_body * _controller.shot_stride_fade,
+			_pivot_blend * _controller.pivot_stride_fade))
+	var mix: LocomotionRules.Mix = _locomotion.mix
+	stride_phase = _locomotion.stride_phase
+	stop_yaw_offset = _locomotion.stop_yaw
+	# Path curvature as a carve engagement, 0..1: blades committed to carving
+	# edges cannot pivot.
+	var curve: float = clampf(absf(_locomotion.turn_rate)
+			/ maxf(_controller.carve_ref_turn_rate, 0.001), 0.0, 1.0)
 	var local_vel: Vector3 = basis_inv * vel
-	var fwd: float = -local_vel.z   # >0 skating forward, <0 skating backward
-	var lat: float = local_vel.x    # >0 strafing right, <0 strafing left (crossover)
-	# Blend weights — fore/aft gait vs. lateral crossover gait — summing to 1.
-	var fb_w: float = 1.0
-	var lr_w: float = 0.0
-	var denom: float = absf(fwd) + absf(lat)
-	if denom > 0.001:
-		fb_w = absf(fwd) / denom
-		lr_w = absf(lat) / denom
-
-	# ── Hockey stop ────────────────────────────────────────────────────────────
-	# Braking hard at speed turns the LOWER BODY across the travel direction
-	# (legs sideways, blades scraping) while the torso keeps facing the play —
-	# the pose coordinator adds stop_yaw_offset to its lower-body write. The
-	# engage/release decisions and the side latch live in HockeyStopRules
-	# (pure, hysteresis-guarded so the legs never flip mid-skid); everything
-	# derives from the velocity-based effort signal, so remotes and bots read
-	# the identical stop from state they already have. While blended in, the
-	# normal stride amplitudes are suppressed (blades scrape, they don't
-	# stride) and the stop stance below takes over the legs.
-	# A brake held off travel is a tight turn (the physics' own blend): it sheds
-	# speed too, so the stop waits for the stick to come back in line.
-	var tight_t: float = 0.0
-	if _skater.brake_intent and has_move_intent and ground_speed >= _controller.carve_min_speed:
-		var steer: float = Vector2(vel.x, vel.z).angle_to(mi)
-		tight_t = SkaterMovementRules.tight_turn_weight(absf(steer),
-				_controller.tight_turn_align_angle)
-		if tight_t > 0.0:
-			_tight_side = signf(steer)
-	var tight_turning: bool = tight_t >= 0.5
-	if _stop_engaged:
-		if tight_turning or HockeyStopRules.should_release(_effort, ground_speed,
-				_controller.hockey_stop_effort, _controller.hockey_stop_min_speed,
-				_skater.brake_intent):
-			_stop_engaged = false
-	elif not tight_turning and HockeyStopRules.should_engage(_effort, ground_speed,
-			_controller.hockey_stop_effort, _controller.hockey_stop_min_speed,
-			_skater.brake_intent):
-		_stop_engaged = true
-		_stop_side = HockeyStopRules.latch_side(local_vel)
-	_stop_blend = lerpf(_stop_blend, 1.0 if _stop_engaged else 0.0,
-			_controller.hockey_stop_blend_speed * delta)
-	_tight_blend = lerpf(_tight_blend, tight_t, _controller.tight_turn_blend_speed * delta)
-	if _stop_blend > 0.001:
-		stop_yaw_offset = HockeyStopRules.stop_yaw(local_vel, _stop_side,
-				deg_to_rad(_controller.hockey_stop_max_yaw_deg)) * _stop_blend
-	else:
-		stop_yaw_offset = 0.0
-	# Stride suppression factor: 1 = normal gait, 0 = fully planted (stop pose,
-	# tight turn, the reversal plant, or the pivot's gliding transit — fighting
-	# momentum, digging a turn and swapping ends are edges, not strides).
-	var gait_scale: float = 1.0 - maxf(
-			maxf(maxf(_stop_blend, _tight_blend), _reversal * _controller.reversal_stride_fade),
-			_pivot_blend * _controller.pivot_stride_fade)
-	# Shooting is a glide: while a shot load or the release kick is live the
-	# stride blends out — a shooter sets their feet, they don't keep striding
-	# through the shot.
-	gait_scale *= 1.0 - shot_body * _controller.shot_stride_fade
-	# Reversal engagement for the plant/lean adds below. The hockey stop wins
-	# the shared channels when both fire (brake held while holding opposite).
-	var rev_amt: float = _reversal * (1.0 - _stop_blend)
+	var fwd: float = -local_vel.z
 
 	# ── Hip-to-travel alignment ────────────────────────────────────────────────
 	# Real skaters' hips align with the direction of MOTION while the torso
@@ -806,9 +447,9 @@ func apply(delta: float) -> void:
 	# below releases on the speed floor anyway.
 	var psi: float = _prev_psi
 	if ground_speed > 0.1:
-		psi = atan2(lat, fwd)
+		psi = atan2(local_vel.x, fwd)
 		var align_engage: float = clampf(
-				_intensity / maxf(_controller.stance_full_speed_fraction, 0.01), 0.0, 1.0)
+				_locomotion.intensity / maxf(_controller.stance_full_speed_fraction, 0.01), 0.0, 1.0)
 		# rotation.y positive turns the legs toward −X, i.e. toward NEGATIVE
 		# body-frame angles — hence the negation.
 		align_target = clampf(-psi,
@@ -830,7 +471,7 @@ func apply(delta: float) -> void:
 	# defender back-skates and the net-front shuffler side-steps with hips
 	# square to the chest, so intent suppresses the travel alignment and the
 	# body-frame backward / lateral gaits play in full.
-	align_target *= 1.0 - maxf(_backpedal, absf(_shuffle))
+	align_target *= 1.0 - maxf(mix.backward, mix.shuffle)
 	# Hips align TOWARD travel only while travel is broadly ahead: past 90° the
 	# sensible anchor flips to hips-square (the backward C-cut stance), so the
 	# clamp's ±hip_align_max pull fades out geometrically across the band's
@@ -884,7 +525,7 @@ func apply(delta: float) -> void:
 		pivot_target_blend = PivotRules.hold_depth(abs_psi, band_lo,
 				deg_to_rad(_controller.pivot_depth_ramp_deg)) \
 				* clampf(_pivot_dwell / maxf(_controller.pivot_commit_time, 0.001), 0.0, 1.0) \
-				* (1.0 - clampf(absf(_carve_curve), 0.0, 1.0))
+				* (1.0 - curve)
 	else:
 		_pivot_dwell = 0.0
 	_pivot_blend = lerpf(_pivot_blend, pivot_target_blend,
@@ -917,48 +558,24 @@ func apply(delta: float) -> void:
 		align_target = lerpf(align_target, pivot_target, _pivot_blend)
 		align_speed = lerpf(align_speed, _controller.pivot_yaw_speed, _pivot_blend)
 	_hip_align_yaw = lerpf(_hip_align_yaw, align_target, align_speed * delta)
-	travel_align_yaw = _hip_align_yaw * (1.0 - _stop_blend)
+	travel_align_yaw = _hip_align_yaw * (1.0 - mix.stop)
 	# Velocity in the yawed hip frame: v_hip = RotY(−ψ) · v_local.
 	var hip_cos: float = cos(travel_align_yaw)
 	var hip_sin: float = sin(travel_align_yaw)
 	var hip_x: float = local_vel.x * hip_cos - local_vel.z * hip_sin
 	var hip_z: float = local_vel.x * hip_sin + local_vel.z * hip_cos
 	fwd = -hip_z
-	lat = hip_x
-	denom = absf(fwd) + absf(lat)
-	fb_w = 1.0
-	lr_w = 0.0
-	if denom > 0.001:
-		fb_w = absf(fwd) / denom
-		lr_w = absf(lat) / denom
-	# At a near-standstill velocity can't vote on the gait blend (fb_w
-	# defaults to 1), so lateral INTENT biases the mix toward the scissor
-	# gait the side-step needs.
-	if absf(_shuffle) > 0.001:
-		lr_w = maxf(lr_w, absf(_shuffle))
-		fb_w = 1.0 - lr_w
 
-	# ── Stance: the speed-engaged crouch ───────────────────────────────────────
-	# Real skaters sit into flexed hips and knees as soon as they're moving with
-	# intent — the seated posture is most of what separates skating from walking
-	# on blades. Engagement saturates well below top speed (stance_full_speed_
-	# fraction) so even a cruise carries bent knees; effort then deepens the sit
-	# when driving and lets it rise toward a taller glide when coasting. From
+	_locomotion.strokes(delta, fwd)
+
+	# ── Stance: the crouch ─────────────────────────────────────────────────────
+	# The locomotion state's own sit, floored by everything layered on it. From
 	# the hip flex alone, the knee flex that keeps the skate under the hip
 	# (knee = hip + asin(thigh/shin · sin(hip))) and the vertical deficit of the
-	# bent leg both follow from the leg geometry, so one export drives an
-	# anatomically consistent crouch. The deficit is applied as a whole-body
-	# drop (Skater.set_skating_crouch_drop) so the skates stay on the ice.
-	var stance: float = clampf(
-			_intensity / maxf(_controller.stance_full_speed_fraction, 0.01), 0.0, 1.0)
-	stance *= clampf(1.0 + _effort * _controller.stance_push_gain, 0.0, 1.35)
-	# Sprint sits DOWN into the burst — same rationale as the push_scale gain
-	# above: the effort deepening fades once the sprint tops out, but a
-	# sprinting skater stays low the whole way.
-	stance *= 1.0 + _sprint * _controller.sprint_stance_gain
-	# Cadence gear: a skater cruising at max velocity sits into a deeper glide
-	# (joint angles shift from extended toward deeper as frequency drops).
-	stance *= 1.0 + _controller.cadence_glide_stance_gain * cruise_gear
+	# bent leg both follow from the leg geometry; the deficit is applied as a
+	# whole-body drop (Skater.set_skating_crouch_drop) so the skates stay on the
+	# ice.
+	var stance: float = _locomotion.stance
 	# Faceoff ready stance: at the dot the skater is at a standstill, so the
 	# speed-driven envelope leaves them bolt upright — floor the engagement
 	# through the countdown instead. Eased both ways: the crouch settles in
@@ -969,21 +586,6 @@ func apply(delta: float) -> void:
 			_controller.stride_intensity_speed * delta)
 	if faceoff_blend > 0.001:
 		stance = maxf(stance, _faceoff_stance_floor() * faceoff_blend)
-	# Hockey stop sits DEEP — the edges only bite under bent knees.
-	if _stop_blend > 0.001:
-		stance = maxf(stance, _controller.hockey_stop_stance * _stop_blend)
-	stance = maxf(stance, _controller.tight_turn_stance * _tight_blend)
-	# Gliding (no movement keys) keeps working knees at speed — the intensity
-	# gate zeroed the stride, but a coasting skater still rides bent edges.
-	if not has_move_intent:
-		stance = maxf(stance, _controller.glide_stance * speed_t)
-	# Dig-in and the reversal plant both sit DOWN — the power position for the
-	# first strides, and the edges only kill momentum under bent knees.
-	stance = maxf(stance, _controller.dig_in_stance * _dig)
-	stance = maxf(stance, _controller.reversal_stance * rev_amt)
-	# A committed carve sits DOWN — the edges hold a fast arc only under bent
-	# knees, and the lowered center of mass is what lets the body bank into it.
-	stance = maxf(stance, _controller.carve_stance * absf(_carve))
 	# The pivot sits too: the open-hip glide and the step-around are both done
 	# on bent knees.
 	stance = maxf(stance, _controller.pivot_stance * _pivot_blend)
@@ -1018,41 +620,12 @@ func apply(delta: float) -> void:
 	var drop: float = leg_scale * (_THIGH_LEN * (1.0 - cos(stance_hip)) \
 			+ _SHIN_LEN * (1.0 - cos(stance_shin)))
 
-	# Asymmetric stroke: warp the phase before sampling the sine so each leg's swing
-	# eases out to the push and snaps back, reading as skating rather than a
-	# metronome tick-tock. The two legs are half a cycle apart, so the right leg
-	# samples the SAME warp shifted by PI — `s_opp`, not a negated `s`. For a pure
-	# sine sin(θ+PI) == -sin(θ), but once warped that identity breaks: negating
-	# flips the skew, so `-s` would give the right leg the opposite (load-fast /
-	# release-slow) asymmetry — one leg snappy, one not. Sampling θ+PI gives both
-	# legs the identical slow-load / fast-release stroke. stride_skew in [0, 1);
-	# 0 collapses both back to the pure sine (s_opp == -s). The fore/aft roll below
-	# stays in-phase (`s` for both legs) on purpose — it's the shared weight-shift
-	# edge rock, not a per-leg stroke.
-	# Cadence gear also warps the stroke: at sustained cruise the push compresses
-	# and the glide/recovery stretches (the 80/20 glide-to-propulsion split of a
-	# top-speed stride) by adding to the stroke skew. Flows through s/s_opp/c/c_opp
-	# and their (1 + skew) derivative normalization below automatically; clamped
-	# under 1 so the warp stays well-defined.
-	var skew: float = clampf(
-			_controller.stride_skew + _controller.glide_hold_skew * cruise_gear, 0.0, 0.95)
-	var s: float = sin(stride_phase - skew * sin(stride_phase))
-	var phase_opp: float = stride_phase + PI
-	var s_opp: float = sin(phase_opp - skew * sin(phase_opp))
-	# Swing-direction sample — d/dθ of the warped sine, positive while the leg
-	# swings forward (its recovery). Normalized by (1 + skew), the derivative's
-	# peak magnitude, so the tuck amplitude below is skew-independent.
-	var c: float = cos(stride_phase - skew * sin(stride_phase)) \
-			* (1.0 - skew * cos(stride_phase)) / (1.0 + skew)
-	var c_opp: float = cos(phase_opp - skew * sin(phase_opp)) \
-			* (1.0 - skew * cos(phase_opp)) / (1.0 + skew)
-	var roll_amp: float = deg_to_rad(_controller.stride_roll_deg) * _intensity * push_scale * gait_scale
-
-	# Stance hip flex applies in every gait — thighs pitch forward into the sit.
-	var l_pitch: float = stance_hip
-	var l_roll: float = 0.0
-	var r_pitch: float = stance_hip
-	var r_roll: float = 0.0
+	var l_pitch: float = stance_hip + _locomotion.l_pitch
+	var l_roll: float = _locomotion.l_roll
+	var r_pitch: float = stance_hip + _locomotion.r_pitch
+	var r_roll: float = _locomotion.r_roll
+	var l_ext: float = _locomotion.l_ext
+	var r_ext: float = _locomotion.r_ext
 
 	# Faceoff stance: the stick-side foot drops back, braced for the draw, and
 	# the centre splays both legs into the wide base he sets over the dot — a sit
@@ -1085,39 +658,6 @@ func apply(delta: float) -> void:
 			# pivot swings down as the shin folds (_FOOT_FWD), so the hip rides
 			# the same amount higher. The shot block's own solve pays it too.
 			drop -= leg_scale * _FOOT_FWD * sin(stance_shin) * faceoff_blend
-
-	# Tight turn: the inside skate leads (gait_scale already planted the stride).
-	if _tight_blend > 0.001:
-		var tight_split: float = deg_to_rad(_controller.tight_turn_split_deg) * _tight_blend
-		if _tight_side * signf(fwd) > 0.0:
-			r_pitch += tight_split
-			l_pitch -= tight_split
-		else:
-			l_pitch += tight_split
-			r_pitch -= tight_split
-
-	# Hockey-stop leg pose, in the TURNED leg frame (the pose coordinator adds
-	# stop_yaw_offset to the lower body): the leading leg braces ahead and the
-	# trailing leg tucks behind (fore/aft split, side-signed), while both legs
-	# roll the same way — the edges digging into the skid.
-	if _stop_blend > 0.001:
-		var stop_split: float = deg_to_rad(_controller.hockey_stop_split_deg) \
-				* _stop_blend * _stop_side
-		l_pitch += stop_split
-		r_pitch -= stop_split
-		var stop_edge: float = deg_to_rad(_controller.hockey_stop_edge_deg) \
-				* _stop_blend * _stop_side
-		l_roll += stop_edge
-		r_roll += stop_edge
-
-	# Reversal plant: fighting to go the other way plants both legs in a wide
-	# outward V while the stride is suppressed (gait_scale) — edges killing
-	# momentum, knees down (stance floor above), trunk tipped back (trunk add
-	# below) until the velocity flips and the dig-in takes over the restart.
-	if rev_amt > 0.001:
-		var plant: float = deg_to_rad(_controller.reversal_plant_deg) * rev_amt
-		l_roll -= plant
-		r_roll += plant
 
 	# Shot stance. Load: the shooting base — stick-side foot staggers back and
 	# both legs roll toward it, settling the weight over the back leg while the
@@ -1152,161 +692,15 @@ func apply(delta: float) -> void:
 		else:
 			l_pitch -= kick_back
 
-	# Forward / backward gait. Shared side-to-side roll rocks the lower body onto
-	# alternating edges (each leg pivots about its own hip, so the same roll
-	# extends the outer leg while the inner one tucks under — the skating weight
-	# shift). Alternating fore/aft pitch makes it a push. Backward skating reaches
-	# the legs forward to pull through C-cuts, so the push flips sign and uses a
-	# shallower amplitude.
-	var push_deg: float = _controller.stride_pitch_deg if fwd >= 0.0 else _controller.stride_back_pitch_deg
-	var push_dir: float = 1.0 if fwd >= 0.0 else -1.0
-	# Deliberate backpedal (intent behind the facing) widens the edge rock
-	# into real C-cuts — the legs sweep out-and-in while the chest stays up
-	# (trunk add below). Faded in over the first m/s of backward travel so
-	# the read never pops on the fwd sign flip.
-	var ccut: float = _backpedal * clampf(-fwd, 0.0, 1.0)
-	roll_amp += deg_to_rad(_controller.backpedal_ccut_roll_deg) * ccut * _intensity * gait_scale
-	# A hard carve IS the stride — the fore/aft push bleeds out as the
-	# crossover gait takes over (carve_stride_fade), instead of striding
-	# straight ahead while the legs cross. The dig-in chop shortens the push
-	# the same way: quick feet out of the start, not full extensions. The
-	# backpedal fades it too: a C-cut's push is the lateral sweep (the widened
-	# abduction below), so the fore/aft pump shrinks toward a residual reach
-	# instead of pumping like a mirrored forward stride.
-	var push_amp: float = deg_to_rad(push_deg) * _intensity * push_dir * push_scale * gait_scale \
-			* (1.0 - absf(_carve) * _controller.carve_stride_fade) \
-			* (1.0 - _dig * _controller.dig_in_chop) \
-			* (1.0 - ccut * _controller.backpedal_pitch_fade)
-	# Rear-bias the pitch stroke so the stride pushes BACK instead of kicking
-	# forward: a CONSTANT offset shifts the whole swing rearward — the back
-	# extension reaches (1+bias)·amp while the recovery lands only
-	# (1−bias)·amp ahead, so the returning skate settles under the hips the
-	# way a real stride does. A constant is load-bearing: never make the bias a
-	# warp of the phase (s − bias·s²) — same endpoints, but it speeds the stroke
-	# across the rear half in BOTH directions, so the leg snaps forward out of
-	# the push as hard as it drove in and reads as a quick FORWARD kick. An
-	# offset has zero effect on timing, leaving the stroke speed purely to
-	# stride_skew (fast backswing, gentle return). Pitch channel
-	# only; the edge-rock roll and the abduction gate keep the symmetric
-	# wave. For the backward gait push_amp is negated, which flips the bias
-	# toward the forward reach — the C-cut's long pull happens out front,
-	# which is also correct.
-	var bias: float = _controller.stride_rear_bias
-	l_pitch += fb_w * (s - bias) * push_amp
-	r_pitch += fb_w * (s_opp - bias) * push_amp
-	# A committed carve HOLDS its lean — fade the shared edge rock, the V-flare
-	# abduction, and the strafe scissor as the crossover overlay takes over
-	# their roll channels — without the fade all three write against the
-	# overlay's fixed-role over/under rolls at partial blends, which reads as
-	# leg flail at odd travel angles. Forward-gated like the overlay itself.
-	var rock_fade: float = 1.0 - absf(_carve) * carve_fwd_gate * _controller.carve_rock_fade
-	l_roll += fb_w * s * roll_amp * rock_fade
-	r_roll += fb_w * s * roll_amp * rock_fade
-
-	# Abduction: the extending leg flares OUT to the side as it drives back —
-	# the V-shaped hockey push — half-wave rectified (max(-s, 0) is that leg's
-	# back-extension) so only the push half of each cycle flares while the
-	# recovery returns under the body. Left leg flares toward -X: negative roll.
-	# The backpedal widens this into the C-cut's defining stroke: each leg
-	# alternately sweeps out and pulls back in while the other glides.
-	var l_ext: float = maxf(-s, 0.0)
-	var r_ext: float = maxf(-s_opp, 0.0)
-	var abduct_amp: float = deg_to_rad(_controller.stride_abduction_deg
-			+ _controller.backpedal_ccut_sweep_deg * ccut) * _intensity * push_scale * gait_scale
-	l_roll -= fb_w * abduct_amp * l_ext * rock_fade
-	r_roll += fb_w * abduct_amp * r_ext * rock_fade
-
-	# Strafe scissor. Lean into the travel direction (static bias toward the
-	# inside) plus a scissoring roll 180° out of phase between the legs. This
-	# is the AIM-LOCKED lateral shuffle — genuine crossovers (turning at
-	# speed) are the carve block below, keyed off path curvature instead of
-	# hip-frame lateral velocity (which hip alignment mostly removes anyway).
-	# Lean sign: velocity votes when there's meaningful travel; a standstill
-	# side-step leans by INTENT instead (lat is noise at near-zero speed).
-	var strafe_sign: float = signf(_shuffle) if absf(_shuffle) > 0.3 else signf(lat)
-	var lean: float = strafe_sign * deg_to_rad(_controller.crossover_lean_deg) * _intensity * gait_scale
-	var scissor: float = deg_to_rad(_controller.crossover_scissor_deg) * _intensity * push_scale * gait_scale
-	# rock_fade: on diagonal travel the residual lr_w would double-fire the
-	# scissor against the carve overlay — turning at speed, the crossovers win.
-	l_roll += lr_w * (lean + s * scissor) * rock_fade
-	r_roll += lr_w * (lean + s_opp * scissor) * rock_fade
-
-	# ── Carve crossovers ──────────────────────────────────────────────────────
-	# Turning at speed plays real crossovers, with FIXED roles set by the turn
-	# direction (they never alternate): the OUTSIDE leg lifts and steps across
-	# in front while the INSIDE leg extends in an under-push beneath the body.
-	# TWO-BEAT rhythm — the strokes alternate halves of the shared stride
-	# phase (over-step on the positive half, under-push on the negative half),
-	# the continuous push-push that runs a skater around a corner, instead of
-	# both firing simultaneously with an idle half between. The clearance knee
-	# rides the RISE of the stroke (same derivative
-	# gate as the recovery tuck) so the crossing skate lifts OVER the planted
-	# leg and extends as it lands; the under-push leg feeds the existing
-	# knee-release path through its ext value, so the extension stays
-	# anatomically consistent with the stance geometry. Forward-gated
-	# (carve_fwd_gate): a backward turn keeps its C-cuts and edges — forward
-	# crossover roles mirror wrong when travel flips.
-	var l_tuck_extra: float = 0.0
-	var r_tuck_extra: float = 0.0
-	var carve_amt: float = absf(_carve) * _intensity * gait_scale * carve_fwd_gate
-	if carve_amt > 0.001:
-		var over_stroke: float = maxf(s, 0.0)
-		var under_stroke: float = maxf(-s, 0.0)
-		var over_roll: float = deg_to_rad(_controller.carve_over_roll_deg) * carve_amt * over_stroke
-		var under_roll: float = deg_to_rad(_controller.carve_under_roll_deg) * carve_amt * under_stroke
-		var over_pitch: float = deg_to_rad(_controller.carve_over_pitch_deg) * carve_amt * over_stroke
-		var clearance: float = deg_to_rad(_controller.carve_clearance_knee_deg) \
-				* carve_amt * maxf(c, 0.0)
-		if _carve > 0.0:
-			# Turning toward +X: left leg crosses over, right leg under-pushes.
-			l_roll += over_roll
-			l_pitch += over_pitch
-			l_tuck_extra = clearance
-			r_roll -= under_roll
-			r_ext = maxf(r_ext, under_stroke)
-		else:
-			# Turning toward −X: mirrored roles.
-			r_roll -= over_roll
-			r_pitch += over_pitch
-			r_tuck_extra = clearance
-			l_roll += under_roll
-			l_ext = maxf(l_ext, under_stroke)
-
-	# ── Glide reads ────────────────────────────────────────────────────────────
-	# Releasing the keys mid-turn glides OUT of the carve: while the smoothed
-	# carve decays the INSIDE knee tucks light — weight on the outside leg, the
-	# one-foot-glide read — instead of pumping crossovers (the stroke gaits
-	# above are intensity-gated to zero without intent, so this replaces, not
-	# stacks).
-	var glide_amt: float = _glide * speed_t * gait_scale
-	if glide_amt > 0.001 and absf(_carve) > 0.001:
-		var inside_tuck: float = deg_to_rad(_controller.glide_inside_tuck_deg) \
-				* absf(_carve) * glide_amt
-		if _carve > 0.0:
-			r_tuck_extra += inside_tuck
-		else:
-			l_tuck_extra += inside_tuck
-
 	# Knee flex — three layers that read as one leg working. (1) The stance flex,
 	# the seated base both knees carry. (2) Push extension: the loaded leg
 	# straightens as it extends back (stance_knee_release of the stance flex gone
-	# at full extension) — the power stroke. (3) Recovery tuck: the unloaded leg
-	# folds as it swings back under the body (direction-gated on `c`, not
-	# position, so the tuck rides the return swing and not the push-out through
-	# the same spot). Negative folds the shin back under the body.
-	# The backpedal fades the tuck out: a C-cut keeps both blades ON the ice for
-	# the whole cycle — the sweeping leg extends and re-flexes through the
-	# stance/release channel, it never lifts under the body like a forward
-	# recovery.
-	var tuck_amp: float = deg_to_rad(_controller.stride_knee_deg) * _intensity * push_scale \
-			* gait_scale * (1.0 - _controller.backpedal_tuck_fade * ccut)
-	# The release is stride work, so it rides the stride intensity envelope
-	# like every other stroke channel (tuck/push/roll already do via their
-	# amps). Ungated, the phase — which advances with SPEED, not intent —
-	# kept pumping the knees at full amplitude through a no-keys glide.
-	var release: float = _controller.stance_knee_release * _intensity * gait_scale
-	var l_knee: float = -(stance_knee * (1.0 - release * l_ext) + tuck_amp * maxf(c, 0.0) + l_tuck_extra)
-	var r_knee: float = -(stance_knee * (1.0 - release * r_ext) + tuck_amp * maxf(c_opp, 0.0) + r_tuck_extra)
+	# at full extension) — the power stroke. (3) The locomotion state's own
+	# folds: recovery tuck, crossover clearance, the glide's inside tuck.
+	# Negative folds the shin back under the body.
+	var release: float = _controller.stance_knee_release * _locomotion.intensity
+	var l_knee: float = -(stance_knee * (1.0 - release * l_ext) + _locomotion.l_tuck)
+	var r_knee: float = -(stance_knee * (1.0 - release * r_ext) + _locomotion.r_tuck)
 
 	# Shot release: the back (stick-side) knee straightens through the kick —
 	# extension toward 0, never past straight — while the front knee keeps the
@@ -1339,41 +733,12 @@ func apply(delta: float) -> void:
 	l_pitch += -(l_knee + stance_knee) * shin_frac
 	r_pitch += -(r_knee + stance_knee) * shin_frac
 
-	# Body bob: the body rides highest at full extension (|s| = 1) and sits
-	# deepest mid-transfer (s = 0) — a subtle vertical pulse at twice the leg
-	# cadence that sells the weight moving from skate to skate.
-	drop += _controller.stride_bob_m * _intensity * (1.0 - s * s) * gait_scale
+	drop += _locomotion.bob
 
-	# Trunk texture, consumed by SkaterPoseCoordinator's next lean application:
-	# effort digs the shoulders forward when driving (and tips them back on a
-	# hard brake), and the torso rolls over the loaded leg with the weight shift.
-	# Both roll channels sample the stride FUNDAMENTAL (the unwarped sine), not
-	# the skewed stroke waveform `s`: stride_skew models the leg's fast-release
-	# snap, but the trunk is the body's most massive segment and its weight
-	# transfers over the gliding leg smoothly — riding `s` puts the stroke's snap
-	# harmonics on the torso, which reads as trunk jitter at cruise (where the
-	# glide_hold_skew warp is deepest). The legs keep the skew.
-	var s_fund: float = sin(stride_phase)
-	trunk_pitch_add = 0.0
-	trunk_roll_add = deg_to_rad(_controller.stride_sway_deg) * _intensity * fb_w * s_fund * gait_scale
-	# Spring weight transfer (Rosen-style secondary motion): a damped spring lags
-	# the lateral weight shift behind the stride so the body settles OVER the
-	# loaded leg with follow-through instead of the roll tracking the leg rigidly.
-	# Semi-implicit Euler (update velocity, then position) for stability; local
-	# integrator state, advanced only on real ticks like the rest of the gait.
-	var shift_target: float = fb_w * s_fund * _intensity * gait_scale
-	var shift_accel: float = _controller.weight_spring_stiffness * (shift_target - _weight_shift) \
-			- _controller.weight_spring_damping * _weight_shift_vel
-	_weight_shift_vel += shift_accel * delta
-	_weight_shift += _weight_shift_vel * delta
-	trunk_roll_add += deg_to_rad(_controller.weight_shift_deg) * _weight_shift
-	# A deliberate backpedal keeps the chest up over the C-cuts. (Leaning into
-	# a start or back against a stop is the balance lean, SkaterSpineRig.)
-	trunk_pitch_add += deg_to_rad(_controller.backpedal_chest_deg) * ccut
-	# Sprint drives the shoulders forward for the whole burst, including once it
-	# tops out and the balance lean has nothing left to lean into. gait_scale
-	# keeps it off the stop and reversal plants.
-	trunk_pitch_add += -deg_to_rad(_controller.sprint_lean_deg) * _sprint * gait_scale
+	# Trunk texture: the locomotion state's sway and weight shift, then the
+	# overlays' leans.
+	trunk_pitch_add = _locomotion.trunk_pitch
+	trunk_roll_add = _locomotion.trunk_roll
 	# Check-delivery drive: the trunk drives INTO the hit — the shoulder
 	# finishing through the contact. Same directional decomposition as the
 	# reach lean (pitch = mag·local.z folds toward local −Z, roll = −mag·local.x),
@@ -1387,17 +752,6 @@ func apply(delta: float) -> void:
 	# Stick lift: a slight chest-up pop while jabbing under the opponent's
 	# stick (positive pitch tips the shoulders back).
 	trunk_pitch_add += deg_to_rad(_controller.stick_lift_trunk_deg) * _lift_blend
-	# Glide sway: a coasting skater shifts weight lazily edge-to-edge — a slow
-	# roll (trunk plus a touch of shared leg roll) far below stride cadence.
-	# The phase is local-only; at ~2° amplitude machines needn't agree on it.
-	if _glide > 0.01:
-		_glide_phase = wrapf(_glide_phase
-				+ TAU * _controller.glide_sway_hz * _glide * delta, 0.0, TAU)
-	if glide_amt > 0.001:
-		var sway: float = sin(_glide_phase) * deg_to_rad(_controller.glide_sway_deg) * glide_amt
-		trunk_roll_add += sway
-		l_roll += sway * 0.5
-		r_roll += sway * 0.5
 
 	# Knockdown pose factor: holds full while more than knockdown_getup_seconds
 	# remains on the timer, then eases to 0 over that tail (the get-up). Derived FROM
@@ -1540,12 +894,12 @@ func apply(delta: float) -> void:
 	_skater.set_leg_swing(l_pitch, l_roll, l_knee, r_pitch, r_roll, r_knee,
 			pivot_yaw_l * (1.0 - kd_t), pivot_yaw_r * (1.0 - kd_t))
 	# Publish per-blade edge load for the ice VFX: the push half-wave (which
-	# already carries the carve under-stroke) scaled by stride engagement,
-	# floored by the stop scrape and the tight turn's dug edges — and released
+	# already carries the crossover under-stroke) scaled by stroke engagement,
+	# floored by the dug edges of the stop and the tight turn — and released
 	# through the crumple.
 	_skater.set_edge_loads(
-			clampf(maxf(l_ext * _intensity, maxf(_stop_blend, _tight_blend)), 0.0, 1.0) * (1.0 - kd_t),
-			clampf(maxf(r_ext * _intensity, maxf(_stop_blend, _tight_blend)), 0.0, 1.0) * (1.0 - kd_t))
+			clampf(maxf(l_ext * _locomotion.intensity, _locomotion.edge_floor), 0.0, 1.0) * (1.0 - kd_t),
+			clampf(maxf(r_ext * _locomotion.intensity, _locomotion.edge_floor), 0.0, 1.0) * (1.0 - kd_t))
 	_skater.set_ankle_flatten(foot_flat_l, foot_flat_r)
 	_skater.set_faceoff_address(faceoff_flat)
 	crouch_drop = drop
@@ -1559,70 +913,4 @@ func apply(delta: float) -> void:
 	_trunk_roll_s = lerpf(_trunk_roll_s, trunk_roll_add, tex_ease)
 	trunk_pitch_add = _trunk_pitch_s + stagger_pitch
 	trunk_roll_add = _trunk_roll_s + stagger_roll
-	_skater.set_trunk_texture(trunk_pitch_add, trunk_roll_add)
-
-
-# The native path: feed the replicated inputs to NativeSkaterGait, write its
-# pose outputs onto the skater, republish the trunk/yaw channels. Behavior is
-# pinned to the GDScript body above by tests/unit/rules/test_native_gait_parity.gd.
-func _apply_native(delta: float) -> void:
-	var flags: int = 0
-	if _skater.brake_intent:
-		flags |= 1   # FLAG_BRAKE
-	if _skater.hit_committed:
-		flags |= 2   # FLAG_HIT_COMMITTED
-	if _skater.blade_up:
-		flags |= 4   # FLAG_BLADE_UP
-	if _skater.is_left_handed:
-		flags |= 8   # FLAG_LEFT_HANDED
-	if _controller.sprint_active:
-		flags |= 16  # FLAG_SPRINT
-	if _controller.is_faceoff_ready():
-		flags |= 32  # FLAG_FACEOFF_READY
-	if _skater.is_faceoff_center:
-		flags |= 64  # FLAG_FACEOFF_CENTER
-	var code: int = _native.apply(delta, _skater.velocity,
-			_skater.global_transform.basis, _skater.move_intent,
-			_skater.current_shot_state, _skater.shot_charge,
-			_controller.stagger_timer, _controller.knockdown_timer,
-			_controller.knockdown_elapsed(),
-			_controller.celebration_progress(), flags)
-	_settled = code != 0
-	if code == 2:
-		# Settle edge — mirror reset_to_rest's one-time rest-pose write.
-		_skater.set_leg_swing(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-		crouch_drop = 0.0
-		_skater.set_skating_crouch_drop(0.0)
-		_skater.set_trunk_texture(0.0, 0.0)
-		_skater.set_edge_loads(0.0, 0.0)
-		stride_phase = 0.0
-		trunk_pitch_add = 0.0
-		trunk_roll_add = 0.0
-		stop_yaw_offset = 0.0
-		travel_align_yaw = 0.0
-		shot_hip_yaw = 0.0
-		pivot_hold = 0.0
-		return
-	if code != 0:
-		return
-	# Republish the public channels external readers consume (the pose
-	# coordinator's yaw sum, stride_phase for tests/tooling) so the coordinator
-	# surface stays truthful whichever implementation ran.
-	stride_phase = _native.get_stride_phase()
-	_skater.set_leg_swing(
-			_native.get_l_pitch(), _native.get_l_roll(), _native.get_l_knee(),
-			_native.get_r_pitch(), _native.get_r_roll(), _native.get_r_knee(),
-			_native.get_l_yaw(), _native.get_r_yaw())
-	_skater.set_ankle_flatten(_native.get_foot_flat_l(), _native.get_foot_flat_r())
-	_skater.set_faceoff_address(faceoff_blend if _skater.is_faceoff_center else 0.0)
-	_skater.set_edge_loads(_native.get_edge_load_l(), _native.get_edge_load_r())
-	crouch_drop = _native.get_crouch_drop()
-	faceoff_blend = _native.get_faceoff_blend()
-	_skater.set_skating_crouch_drop(crouch_drop)
-	trunk_pitch_add = _native.get_trunk_pitch_add()
-	trunk_roll_add = _native.get_trunk_roll_add()
-	stop_yaw_offset = _native.get_stop_yaw_offset()
-	travel_align_yaw = _native.get_travel_align_yaw()
-	shot_hip_yaw = _native.get_shot_hip_yaw()
-	pivot_hold = _native.get_pivot_blend()
 	_skater.set_trunk_texture(trunk_pitch_add, trunk_roll_add)

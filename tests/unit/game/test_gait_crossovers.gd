@@ -48,13 +48,16 @@ func _make_rig(backward: bool) -> Rig:
 
 # One tick of steady circular (or straight, turn = 0) travel. Positive turn
 # rotates travel toward +X — the skater's right when facing along travel — so
-# carve > 0 (left leg over, right leg under-pushes).
+# the left leg crosses over and the right leg under-pushes. The stick is held
+# the way the physics needs it for that arc: across the travel, toward the
+# turn (along it is a stride, which turns nothing).
 func _tick(rig: Rig, turn: float) -> void:
 	rig.travel = rig.travel.rotated(turn * DT)
 	var facing: Vector2 = -rig.travel if rig.backward else rig.travel
 	rig.skater.set_facing(facing)
 	rig.skater.velocity = Vector3(rig.travel.x, 0.0, rig.travel.y) * SPEED
-	rig.skater.move_intent = rig.travel
+	rig.skater.move_intent = rig.travel.rotated(signf(turn) * PI * 0.5) \
+			if turn != 0.0 else rig.travel
 	rig.coord.apply(DT)
 
 

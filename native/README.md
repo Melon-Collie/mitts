@@ -1,16 +1,16 @@
 # mitts_native — GDExtension hot-path kernels
 
 C++ ports of per-tick math kernels, registered as `Native*` classes
-(`NativeTopHandIK`, `NativeBottomHandIK`, `NativeSkaterGait`,
-`NativeSkaterMovement`, `NativePuckStep`, `NativeBladeDangle`). The GDScript
-originals (in `Scripts/domain/rules/` and `Scripts/controllers/`) remain the
-behavioral reference; each ported kernel is pinned to its reference by a
-seeded fuzz test (`tests/unit/rules/test_native_ik_parity.gd`,
-`test_native_gait_parity.gd`). **Change a solver in both places or not at
-all** — the parity tests are the gate. `NativeSkaterGait` additionally loads
-its ~126 tunables from the controller's @exports by name via
-`configure(controller)`; renaming an export fails the configure parity test
-rather than silently desyncing.
+(`NativeTopHandIK`, `NativeBottomHandIK`, `NativeSkaterMovement`,
+`NativePuckStep`, `NativeBladeDangle`). The GDScript originals (in
+`Scripts/domain/rules/` and `Scripts/controllers/`) remain the behavioral
+reference; each ported kernel is pinned to its reference by a seeded fuzz test
+(`tests/unit/rules/test_native_ik_parity.gd` and its siblings). **Change a
+solver in both places or not at all** — the parity tests are the gate.
+
+The skating gait had a port (`NativeSkaterGait`) and is GDScript-only while it
+is rebuilt (`docs/skater-animation-plan.md` — the port returns in its Phase 5,
+with a new parity fuzz).
 
 This directory exists because interpreter overhead on the 120 Hz tick (and its
 reconcile-replay amplification) is the game's scripting bottleneck. The rule
@@ -106,11 +106,6 @@ GDScript config is built — the extension missing simply leaves the handle
 null and the reference GDScript path runs (a fresh clone, or any platform
 without a built binary, loses performance, never correctness — CI builds it):
 
-- **Gait** — inside `SkaterSkatingCoordinator` (`_apply_native`): all five
-  `apply()` call sites route through the coordinator, which republishes the
-  public channels (`stride_phase`, yaw offsets, trunk adds) so external
-  readers see a truthful surface. Reconfigured from
-  `SkaterController.apply_attributes` via `native_reconfigure()`.
 - **Movement** — `SkaterController._apply_movement` / `_apply_block_movement`
   (per-tick thrust rides `apply_movement_with_thrust`), plus the batched
   `integrate_forward` in `RemoteController` (stage-3 render) and

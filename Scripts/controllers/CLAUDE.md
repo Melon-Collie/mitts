@@ -368,15 +368,15 @@ which is not a workflow on this project.
 
 ## The gait publishes channels; it never writes body rotations
 
-`SkaterSkatingCoordinator` is the whole procedural gait — no skeleton, no
-animation clips, everything derived from replicated velocity plus the intent
-byte, so it costs zero network state and a wire-fed remote animates identically
-to a locally-simulated one. It runs at RENDER rate (`Skater._process`,
+`SkaterSkatingCoordinator` is the whole procedural gait — no animation clips,
+everything derived from replicated velocity plus the intent byte, so it costs
+zero network state and a wire-fed remote animates identically to a
+locally-simulated one. It runs at RENDER rate (`Skater._process`,
 visibility-gated) and is guarded by `not is_replaying` so reconcile replay never
 over-spins the phase — which also means it can own no timer, and is why the
 celebration window is aged by its callers at physics rate instead.
 
-**It writes leg swing, foot eversion, edge loads and the crouch drop directly
+**It writes leg swing, the ankles' give-back, edge loads and the crouch drop directly
 onto `Skater`, and never a torso or lower-body rotation.** Everything rotational
 is *published* as a field for `SkaterPoseCoordinator` to sum into one write:
 `trunk_pitch_add` / `trunk_roll_add` (torso texture), `stop_yaw_offset` (hockey
@@ -387,6 +387,35 @@ tracking one rotation on different clocks is a wobble, not a pose — hence one
 summing site rather than five writers. The trunk texture in particular goes onto
 the cosmetic torso, helmet and shoulder BONES, never onto the `UpperBody` node,
 whose rotation carries the blade markers and is therefore gameplay geometry.
+
+### The legs skate a state, and the state is the physics' decision
+
+`SkaterLocomotion` owns the locomotion half: glide, stride, crossover,
+backward, shuffle, skid, tight turn and stop. Which one is not re-guessed from
+how the velocity happened to change; it is the split the movement model makes
+(`LocomotionRules`, a pure function of velocity, move intent, brake and facing
+— all replicated). The stick's component along travel is a stride, against it a
+skid, across it a turn — and the squares of those cosine and sine terms sum to
+one, so the same split is directly the crossfade. Each state owns its legs
+outright while it holds weight; nothing fades against anything else, which is
+what the old intent channels (dig-in, reversal, shuffle, backpedal, carve
+intent, glide) had to do and is where their flail came from.
+
+Two things the split alone would get wrong, both handled in the easing:
+
+- **Crossovers commit, corrections do not.** A steering tap at speed does turn
+  the travel, but skaters correct a line on their edges and cross over only
+  through a held turn. The crossover eases in slower than anything else, and
+  SIGNED — taps alternating sides have to pass through zero, so they cancel
+  while a turn held to one side commits. `test_body_chain.gd` holds both
+  halves.
+- **The glide is the remainder.** Whatever the other states have not yet
+  taken, including the not-yet-committed part of a turn, is skated as a glide
+  on the edges.
+
+The coordinator layers the overlays (shots, block, faceoff, knockdown, check,
+stick lift) on the state's stroke and resolves the joints; their own
+restructuring is the next phase of `docs/skater-animation-plan.md`.
 
 ### Pose the hand, not the blade
 

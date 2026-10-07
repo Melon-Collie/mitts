@@ -485,13 +485,14 @@ func _print_trace() -> void:
 			+ body.get_bone_global_pose(off + SkaterMeshBuilder.LegBone.LEG_R).origin) * 0.5
 	var feet: Vector3 = (body.get_bone_global_pose(off + SkaterMeshBuilder.LegBone.FOOT_L).origin
 			+ body.get_bone_global_pose(off + SkaterMeshBuilder.LegBone.FOOT_R).origin) * 0.5
-	print("    face %+.0f° v %.1f | head-pelvis %+.2f  pelvis-hips %+.2f fwd %+.2f  hips-feet %+.2f | ub yaw %+.0f° pitch %+.0f° roll %+.0f° lb yaw %+.0f° | trunk p %+.0f° r %+.0f° | carve %+.2f" % [
+	print("    face %+.0f° v %.1f | head-pelvis %+.2f  pelvis-hips %+.2f fwd %+.2f  hips-feet %+.2f | ub yaw %+.0f° pitch %+.0f° roll %+.0f° lb yaw %+.0f° | trunk p %+.0f° r %+.0f° | xover %.2f stride %.2f glide %.2f" % [
 			_skater.rotation_degrees.y, flat.length(), (head - pelvis).dot(right), (pelvis - hips).dot(right),
 			(pelvis - hips).dot(flat.normalized()), (hips - feet).dot(right),
 			_skater.upper_body.rotation_degrees.y, _skater.upper_body.rotation_degrees.x,
 			_skater.upper_body.rotation_degrees.z, _skater.lower_body.rotation_degrees.y,
 			rad_to_deg(_controller._skating.trunk_pitch_add),
-			rad_to_deg(_controller._skating.trunk_roll_add), _controller._skating._carve])
+			rad_to_deg(_controller._skating.trunk_roll_add), _controller._skating._locomotion.mix.crossover,
+			_controller._skating._locomotion.mix.stride, _controller._skating._locomotion.mix.glide])
 
 
 # The live game's own framing, so a tile can answer the question the beauty

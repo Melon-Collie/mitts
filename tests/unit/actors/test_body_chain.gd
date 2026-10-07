@@ -226,3 +226,36 @@ func _roll(rig: Skeleton3D, bone: int, right: Vector3) -> float:
 	var up: Vector3 = rig.get_bone_global_pose(bone).basis.y
 	return atan2(up.dot(right), up.y)
 
+
+# ── Live: crossovers commit to a turn ────────────────────────────────────────
+
+# Crossovers are how a skater carries a turn, not how they correct a line:
+# steering taps alternating sides cancel (the crossover is eased with its side
+# as the sign), and only a turn held to one side commits. Measured before the
+# locomotion states: the taps fired crossovers on alternate legs and swung the
+# skates ±0.3 m.
+func test_steering_taps_ride_the_edges_and_a_held_turn_crosses_over() -> void:
+	var c: SkaterController = _live_controller()
+	# From the far end: the skate-up and the taps cover most of the half-rink.
+	c.skater.global_position.z = 25.0
+	var input := InputState.new()
+	input.delta = DT
+	_skate_up_the_ice(c, input)
+	var tap_worst: float = 0.0
+	for k: int in 8:
+		var move := Vector2(0.7 if k % 2 == 0 else -0.7, -0.7)
+		for _i: int in 30:
+			_tick(c, input, move, Vector3(0.0, 0.0, -3.0))
+			if k >= 2:
+				tap_worst = maxf(tap_worst, c._skating._locomotion.mix.crossover)
+	assert_lt(tap_worst, 0.3, "steering taps committed %.2f to crossovers" % tap_worst)
+
+	# A held arc: the stick kept across the travel, so the turn never completes.
+	for _i: int in 120:
+		var v := Vector2(c.skater.velocity.x, c.skater.velocity.z).normalized()
+		var across := Vector2(-v.y, v.x)
+		var look: Vector2 = (v + across).normalized() * 3.0
+		_tick(c, input, across, Vector3(look.x, 0.0, look.y))
+	assert_gt(c._skating._locomotion.mix.crossover, 0.6,
+			"a held turn must be skated with crossovers")
+

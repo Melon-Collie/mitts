@@ -1,44 +1,14 @@
 class_name HockeyStopRules
 
-# Pure math for the cosmetic hockey-stop pose: when a skater brakes hard at
-# speed, the LOWER BODY yaws across the travel direction (legs sideways,
-# blades scraping) while the torso keeps facing the play — the signature
-# stop silhouette. Everything here derives from the velocity-based effort
-# signal the gait already computes, so every machine (local, bot, remote,
-# replay) reads the identical engagement from state it already has; nothing
-# crosses the wire.
+# Pure math for the cosmetic hockey-stop pose: the LOWER BODY yaws across the
+# travel direction (legs sideways, blades scraping) while the torso keeps
+# facing the play — the signature stop silhouette. When the stop is on is the
+# locomotion state's (LocomotionRules); this file owns the side, which must not
+# wobble frame-to-frame, and the yaw.
 #
-# The pose itself (leg yaw blend, scissor, edge roll, stance floor) lives in
-# SkaterSkatingCoordinator; this file owns the decisions that must not
-# wobble frame-to-frame: engagement hysteresis and the side latch.
-#
-# Conventions: upper-body/skater local frame with −Z forward, +X right.
-# `effort` is the gait's smoothed tangential-acceleration signal in [−1, +1]
-# (−1 = braking hard). Yaw values are lower-body rotation.y offsets, where
-# POSITIVE rotation.y turns the legs toward −X (left).
-
-
-# Engage when the BRAKE IS HELD and the body is actually braking hard at
-# real speed. The brake input (replicated as the skater's intent byte, v15)
-# makes the stop deliberate: hitting a wall or a body decelerates just as
-# hard, but nobody chose a hockey stop — the effort term then confirms the
-# brake is actually biting (holding Space at a standstill isn't a stop).
-static func should_engage(
-		effort: float, ground_speed: float,
-		effort_threshold: float, min_speed: float, brake_held: bool) -> bool:
-	return brake_held and effort <= -effort_threshold and ground_speed >= min_speed
-
-
-# Release with hysteresis — well inside the engage bounds, so the pose never
-# chatters at the threshold: dropping the brake key, the brake easing off
-# physically (effort recovering past 40% of the engage bar), or the stop
-# completing (speed collapsing below 40% of the engage floor) all end it.
-static func should_release(
-		effort: float, ground_speed: float,
-		effort_threshold: float, min_speed: float, brake_held: bool) -> bool:
-	return not brake_held or effort > -effort_threshold * 0.4 \
-			or ground_speed < min_speed * 0.4
-
+# Conventions: skater local frame with −Z forward, +X right. Yaw values are
+# lower-body rotation.y offsets, where POSITIVE rotation.y turns the legs
+# toward −X (left).
 
 # Which hip leads the stop, latched ONCE at engagement (travel direction
 # wobbles during the skid; re-deriving per tick would flip the legs
