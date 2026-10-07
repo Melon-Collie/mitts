@@ -381,3 +381,26 @@ skaters, bring the port forward rather than letting it slide to the end.
   per skater per frame, and the settled row from 1.7 to 3.3 µs (eight quiet
   checks where there was one inline expression). No allocation; the Phase 5
   port takes this path with it.
+
+## §15 Phase 5 as built
+
+- **`NativeSkaterGait`** ports the numeric core in one kernel: `SkaterLocomotion`
+  with the rules it calls, the coordinator's alignment and pivot read, and the
+  `GaitPose` solve. The overlay layers were not ported — idle most frames, and
+  where the feel tuning lives — so a pass a layer shapes mirrors the port's
+  stroke back and solves the pose in GDScript. Results cross the boundary as a
+  few `Vector4`s: a native getter costs ~0.14 µs against ~0.03 µs for a
+  GDScript field read, so copying the locomotion's thirty fields back would
+  have spent much of what the port saves.
+- **Parity at the coordinator, not the kernel.** Two coordinators share one
+  capture skater, one native and one forced to GDScript, and every published
+  output is compared every pass through fuzzed skating, pivots, every overlay,
+  resets, the settle and a reconfigure. Worst difference 2.6e-7 (the float32
+  of the `Vector4`s); three planted bugs (the pivot law, the skid's stance, the
+  stop's split sign) each fail it within a few hundred passes.
+- **Cost, skating, per skater per frame:** 46 µs GDScript → 21 µs native, of
+  which the rig writes are ~15 (gliding 36 → 17, hockey stop 32 → 13; a pass a
+  layer shapes 63 → 30). The old native gait was ~20.
+- Render against the Phase 3 baseline: 26 poses identical, `turn_tight_exit`
+  3 px (the float32 rounding, over the longest held sequence).
+- Also corrected: the ARCHITECTURE sections that still described two skeletons.

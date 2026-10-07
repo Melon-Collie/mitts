@@ -8,6 +8,9 @@ class_name CarveRules
 # Frame: XZ plane vectors as Vector2(x, z). Sign convention (pinned by
 # tests): turning toward +X (the skater's right when travelling toward −Z)
 # yields a POSITIVE turn rate.
+#
+# Mirrored in C++ by NativeSkaterGait (native/src/native_skater_gait.cpp);
+# test_native_gait_parity.gd fails if the two drift. Change both or neither.
 
 
 # Signed turn rate of the travel direction in rad/s. Zero when either sample

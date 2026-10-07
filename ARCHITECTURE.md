@@ -216,7 +216,7 @@ One trap this rig has to respect: **Godot skins normals with the bone matrix its
 
 **Goalie rendering:** the goalie is deliberately NOT skinned — its moving parts are `StaticBody3D`s with live colliders, so bones would add per-frame writes rather than replace them (see `docs/skinned-skater-plan.md`). Its meshes are instead merged where they are rigid AND share a material: the catch glove (rim + pocket + cuff), the stick (shaft + paddle + blade) and the blocker (board + hand) are each one mesh on one node. The colliders in `Goalie.tscn` are untouched — the absorbed nodes were mesh-only.
 
-**Leg rendering:** Both legs are one skinned mesh on one `Skeleton3D` (`Skater._build_leg_rig`), sixteen bones in the chain `LowerBody → Leg → Shin`, mirroring the node tree it replaced. Four pivots (`LegL/R`, `ShinL/R`) carry no geometry and exist to be rotated by the gait (`set_leg_swing`); the other twelve carry hips, thighs, knees, socks, skate collars and boots. Surfaces are `SkaterMeshBuilder.LegSurface` — twenty-two, not twelve, because the skate collar carries its accent stripe and the boot carries its toe cap, its blade holder, its steel runner and its laces. Each of those is a piece a gear MODEL paints on its own (`GearModelRegistry`); the runner is the exception that stays steel by construction. The segment offsets are **read out of `Scenes/Skater.tscn` at `_ready` and the subtree is then freed**, so the scene stays the place leg proportions are authored while costing nothing at runtime.
+**Leg rendering:** Both legs are one skinned mesh bound into the body skeleton (`SkaterLegRig.build`), sixteen bones chained `Leg → Shin` under the `HIPS` bone (see `Scripts/actors/CLAUDE.md` → *One skeleton, one chain*). Four pivots (`LegL/R`, `ShinL/R`) carry no geometry and exist to be rotated by the gait (`set_leg_swing`); the other twelve carry hips, thighs, knees, socks, skate collars and boots. Surfaces are `SkaterMeshBuilder.LegSurface` — twenty-two, not twelve, because the skate collar carries its accent stripe and the boot carries its toe cap, its blade holder, its steel runner and its laces. Each of those is a piece a gear MODEL paints on its own (`GearModelRegistry`); the runner is the exception that stays steel by construction. The segment offsets are **read out of `Scenes/Skater.tscn` at `_ready` and the subtree is then freed**, so the scene stays the place leg proportions are authored while costing nothing at runtime.
 
 **Bottom hand (reactive):** A second hand grips the shaft a short way below the top hand. It is purely reactive — it never influences blade placement. After each top-hand solve, the controller computes the grip target as `top_hand.lerp(blade, bottom_hand_grip_fraction)` (default 0.25, ≈0.33 m down a 1.30 m shaft) and runs `BottomHandIK.solve` against an anchor at the `bottom_shoulder` marker (blade side of the body). The solver places the hand on the grip target unless the blade has swung into extreme backhand. Release is angle-based: the controller measures the blade's world direction in the skater's body frame, normalizes it so positive = backhand, and drives a smoothstep from `bh_release_angle_deg` (67°, matching the upper-body rotation clamp) to `+bh_release_angle_band_deg` (15°) — so the hand stays on the stick throughout any swing the upper body can track, and only blends to a shoulder rest pose when the blade genuinely passes the body's rotation limit. Rendered via the same `TwoBoneIK.solve_elbow` path with a mirrored pole. No network state is added — clients recompute the bottom hand locally from the interpolated top-hand + blade positions.
 
@@ -423,15 +423,18 @@ one node, one mesh, one draw call. The absorbed nodes are resolved by path and
 freed, so anything that must stay addressable has to stay OUT of its merge — the
 goalie stick blade is the standing example (`GoalieMeshBuilder._merge_stick`).
 
-## The skater body is two skinned meshes, not a node tree
+## The skater body is two skinned meshes on one skeleton, not a node tree
 
 `SkaterMeshBuilder` assembles `shared_upper_skin_mesh` (fourteen `UpperBone`s,
 seventeen `UpperSurface`s) and `shared_leg_skin_mesh` (sixteen `LegBone`s,
 twenty-two `LegSurface`s). Both are cached and shared by the whole roster:
 per-skater colour is a surface override, per-build sizing rides the scale inside
-a bone's pose, and no mesh is ever mutated per instance.
+a bone's pose, and no mesh is ever mutated per instance. Both skin one
+`Skeleton3D` (`SkaterBodySkeleton`), the leg mesh binding through
+`LEG_BONE_OFFSET`, with four vertex-less joint bones (hips, waist, spine, neck)
+joining the halves into one chain.
 
-`Skater._build_arm_rig` / `_build_leg_rig` read the scene's authored transforms
+`SkaterArmRig.build` / `SkaterLegRig.build` read the scene's authored transforms
 out of `Scenes/Skater.tscn` and then **free those nodes**, so the `.tscn` stays
 the place proportions are authored while nothing survives at runtime to be
 transformed. A node renamed in the editor is therefore not a missing-node error —
@@ -440,10 +443,10 @@ it is a bone silently left at identity, which is why
 
 Four properties make a bone pose mean exactly a node's local transform, and all
 four have to hold: every vertex weighted 1.0 to one bone, identity bone rests,
-identity skin binds, and part geometry left in its own local space. The upper
-bone list is flat (all fourteen posed independently in `UpperBody`'s space); the
-leg list is a chain (`Leg` → `Shin`) because the gait rotates hips and knees
-separately. The goalie and the puck still hang meshes on nodes and subclass
+identity skin binds, and part geometry left in its own local space. Each part
+is posed in its parent bone's frame — the shell under the spine, the pelvis under
+the waist, the legs `Leg` → `Shin` under the hips — and the arms are root bones
+solved in skeleton space. The goalie and the puck still hang meshes on nodes and subclass
 `SkaterMeshBuilder` only for its geometry helpers.
 
 **No mesh in the skater rig may take `material_override`.** It overrides every

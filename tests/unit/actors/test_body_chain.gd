@@ -247,7 +247,7 @@ func test_steering_taps_ride_the_edges_and_a_held_turn_crosses_over() -> void:
 		for _i: int in 30:
 			_tick(c, input, move, Vector3(0.0, 0.0, -3.0))
 			if k >= 2:
-				tap_worst = maxf(tap_worst, c._skating._locomotion.mix.crossover)
+				tap_worst = maxf(tap_worst, c._skating.locomotion_mix().crossover)
 	assert_lt(tap_worst, 0.3, "steering taps committed %.2f to crossovers" % tap_worst)
 
 	# A held arc: the stick kept across the travel, so the turn never completes.
@@ -256,6 +256,6 @@ func test_steering_taps_ride_the_edges_and_a_held_turn_crosses_over() -> void:
 		var across := Vector2(-v.y, v.x)
 		var look: Vector2 = (v + across).normalized() * 3.0
 		_tick(c, input, across, Vector3(look.x, 0.0, look.y))
-	assert_gt(c._skating._locomotion.mix.crossover, 0.6,
+	assert_gt(c._skating.locomotion_mix().crossover, 0.6,
 			"a held turn must be skated with crossovers")
 

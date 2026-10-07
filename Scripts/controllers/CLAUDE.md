@@ -449,6 +449,22 @@ celebration's raised stick, the block's torso lean) are not layers: they move
 the gameplay frame and the blade, so they stay in the pose coordinators at
 physics rate.
 
+### The numeric core is native; the layers are not
+
+`NativeSkaterGait` ports the part that runs every frame for every skater —
+`SkaterLocomotion`, the coordinator's alignment and pivot read
+(`_align_to_travel`), and `GaitPose`'s solve — and the GDScript stays the
+reference it is fuzzed against (`test_native_gait_parity.gd`). **Change both or
+neither.** The layers are not ported: they are idle most frames, and they are
+where the feel tuning happens. A pass one of them shapes therefore crosses back
+— the port's stroke is mirrored into `SkaterLocomotion` and `GaitPose` solves —
+which is why the parity fuzz drives every overlay, not just skating.
+
+On the native path the GDScript `SkaterLocomotion` does not advance, so nothing
+outside the coordinator may read its state: `locomotion_mix()` answers for
+whichever path runs. Measured skating, per skater per frame: 46 µs GDScript,
+21 µs native, of which the rig writes are about 15.
+
 ### Pose the hand, not the blade
 
 The tracked path is blade-first: the cursor names a blade position and
@@ -517,7 +533,7 @@ are not independent:
   folds the shin far enough back to stand the blades on their heels, and the
   splay puts them on their outside edges; the ankles give the whole chain back.
   A level boot then hangs its blade below the FOOT pivot rather than keeping its
-  sole planted, so the crouch owes `_FOOT_FWD`'s vertical share on top.
+  sole planted, so the crouch owes `GaitPose.FOOT_FWD`'s vertical share on top.
 - **The hands are solved off the FOLDED shoulder**
   (`SkaterIKCoordinator.address_shoulder`), because that is where the arms are
   rooted. This is the one that bites: solved off the marker, the hands land a

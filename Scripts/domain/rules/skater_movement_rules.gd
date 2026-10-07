@@ -183,7 +183,8 @@ class ForwardResult:
 # How much of a held brake is a tight turn rather than a hockey stop: 0 = stop,
 # 1 = full tight turn. Ramps in with the stick's angle off travel (lined up =
 # stop) and tapers out past 90° (stick behind = stop). The gait reads it too,
-# to pose the turn the physics is actually doing.
+# to pose the turn the physics is actually doing (and so does NativeSkaterGait's
+# copy, held to this by test_native_gait_parity.gd).
 static func tight_turn_weight(steer_abs: float, align_angle: float) -> float:
 	var w: float = minf(steer_abs / maxf(align_angle, 0.001), 1.0)
 	if steer_abs > PI * 0.5:

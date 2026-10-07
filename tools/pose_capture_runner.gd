@@ -491,8 +491,8 @@ func _print_trace() -> void:
 			_skater.upper_body.rotation_degrees.y, _skater.upper_body.rotation_degrees.x,
 			_skater.upper_body.rotation_degrees.z, _skater.lower_body.rotation_degrees.y,
 			rad_to_deg(_controller._skating.trunk_pitch_add),
-			rad_to_deg(_controller._skating.trunk_roll_add), _controller._skating._locomotion.mix.crossover,
-			_controller._skating._locomotion.mix.stride, _controller._skating._locomotion.mix.glide])
+			rad_to_deg(_controller._skating.trunk_roll_add), _controller._skating.locomotion_mix().crossover,
+			_controller._skating.locomotion_mix().stride, _controller._skating.locomotion_mix().glide])
 
 
 # The live game's own framing, so a tile can answer the question the beauty

@@ -13,6 +13,9 @@ extends RefCounted
 #
 # Runs at render rate, guarded against reconcile replay by its caller, so it may
 # own no timer that gameplay reads.
+#
+# Mirrored in C++ by NativeSkaterGait (native/src/native_skater_gait.cpp);
+# test_native_gait_parity.gd fails if the two drift. Change both or neither.
 
 # Acceleration and turn rate are sampled over the time since velocity last
 # changed (it only steps on physics ticks), held at most this long.
@@ -410,6 +413,28 @@ func _sample_velocity(delta: float, vel: Vector3) -> void:
 			_fd_time, c.carve_min_speed)
 	_prev_velocity = vel
 	_fd_time = 0.0
+
+
+# Takes the stroke NativeSkaterGait skated this pass, for GaitPose's solve on a
+# pass a layer shapes. Only the outputs that solve reads are carried; the state
+# behind them lives in the port.
+func mirror_native(native: RefCounted) -> void:
+	var legs: Vector4 = native.get_stroke_legs()
+	var knees: Vector4 = native.get_stroke_knees()
+	var body: Vector4 = native.get_stroke_body()
+	l_pitch = legs.x
+	l_roll = legs.y
+	r_pitch = legs.z
+	r_roll = legs.w
+	l_ext = knees.x
+	r_ext = knees.y
+	l_tuck = knees.z
+	r_tuck = knees.w
+	bob = body.x
+	trunk_pitch = body.y
+	trunk_roll = body.z
+	edge_floor = body.w
+	intensity = (native.get_stroke_drive() as Vector4).x
 
 
 func _clear_strokes() -> void:

@@ -2,15 +2,11 @@
 
 C++ ports of per-tick math kernels, registered as `Native*` classes
 (`NativeTopHandIK`, `NativeBottomHandIK`, `NativeSkaterMovement`,
-`NativePuckStep`, `NativeBladeDangle`). The GDScript originals (in
+`NativePuckStep`, `NativeBladeDangle`, `NativeSkaterGait`). The GDScript originals (in
 `Scripts/domain/rules/` and `Scripts/controllers/`) remain the behavioral
 reference; each ported kernel is pinned to its reference by a seeded fuzz test
 (`tests/unit/rules/test_native_ik_parity.gd` and its siblings). **Change a
 solver in both places or not at all** — the parity tests are the gate.
-
-The skating gait had a port (`NativeSkaterGait`) and is GDScript-only while it
-is rebuilt (`docs/skater-animation-plan.md` — the port returns in its Phase 5,
-with a new parity fuzz).
 
 This directory exists because interpreter overhead on the 120 Hz tick (and its
 reconcile-replay amplification) is the game's scripting bottleneck. The rule
@@ -126,6 +122,14 @@ without a built binary, loses performance, never correctness — CI builds it):
   identical step.
 - **Swept-OBB atom** — `GoalieContactDetector.nearest` (host saves + client
   goalie-stop prediction).
+- **Gait core** — `SkaterSkatingCoordinator.apply` (render rate, every skater):
+  `locomote` runs `SkaterLocomotion`, the hip alignment and the pivot read in
+  one call, and `solve` the `GaitPose` solve. The overlay layers stay GDScript;
+  a pass one of them shapes solves the pose in `GaitPose` from the port's
+  stroke (`get_stroke_*`), so the parity fuzz
+  (`tests/unit/rules/test_native_gait_parity.gd`) drives the overlays too.
+  Tunables load by name in `configure(controller)`, re-run from
+  `SkaterController.apply_attributes`.
 
 The parity suites force the GDScript path on their reference objects (e.g.
 nulling `_skating._native`) — a parity test must never compare the native
