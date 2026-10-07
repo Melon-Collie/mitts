@@ -2088,9 +2088,8 @@ func set_upper_body_lean(lean_x: float, lean_z: float = 0.0) -> void:
 	upper_body.rotation.z = lean_z
 
 
-func set_lower_body_lean(lean_x: float, lean_z: float) -> void:
+func set_lower_body_lean(lean_x: float) -> void:
 	lower_body.rotation.x = lean_x
-	lower_body.rotation.z = lean_z
 
 
 # ── Knockdown Fall ────────────────────────────────────────────────────────────

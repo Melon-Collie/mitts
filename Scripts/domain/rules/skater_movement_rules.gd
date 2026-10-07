@@ -108,13 +108,8 @@ static func apply_movement(
 	var steer_abs: float = absf(steer)
 	var turn: float = 0.0
 	if brake:
-		# 0 = hockey stop, 1 = full tight turn. Ramps in with the stick's angle
-		# off travel (lined up = stop), and tapers out past 90° (stick behind = stop).
-		var w: float = 0.0
-		if has_input:
-			w = minf(steer_abs / maxf(cfg.tight_turn_align_angle, 0.001), 1.0)
-			if steer_abs > PI * 0.5:
-				w *= maxf(0.0, 1.0 - (steer_abs - PI * 0.5) / TIGHT_TURN_TAPER)
+		var w: float = tight_turn_weight(steer_abs, cfg.tight_turn_align_angle) \
+				if has_input else 0.0
 		if w > 0.0:
 			var tight_rate: float = minf(
 					cfg.turn_accel * cfg.tight_turn_multiplier * cfg.lateral_grip * stick / speed,
@@ -185,6 +180,17 @@ class ForwardResult:
 # same formula, so render == rewind holds. cfg.thrust is transiently scaled
 # and restored (the caller may pass a shared cached config). Omit (0 / null)
 # to integrate at base thrust.
+# How much of a held brake is a tight turn rather than a hockey stop: 0 = stop,
+# 1 = full tight turn. Ramps in with the stick's angle off travel (lined up =
+# stop) and tapers out past 90° (stick behind = stop). The gait reads it too,
+# to pose the turn the physics is actually doing.
+static func tight_turn_weight(steer_abs: float, align_angle: float) -> float:
+	var w: float = minf(steer_abs / maxf(align_angle, 0.001), 1.0)
+	if steer_abs > PI * 0.5:
+		w *= maxf(0.0, 1.0 - (steer_abs - PI * 0.5) / TIGHT_TURN_TAPER)
+	return w
+
+
 static func integrate_forward(
 		position: Vector3,
 		velocity: Vector3,

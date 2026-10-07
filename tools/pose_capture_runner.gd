@@ -72,7 +72,10 @@ const CAM_AIM: Vector3 = Vector3(0.0, -0.05, 0.0)
 #
 # Spec keys: move (Vector2, world), aim (Vector3, RELATIVE to the skater —
 # absolute would swing as the body translates), sprint, shoot, slap, block,
-# deflect, hit (bool), loft (int elevation level).
+# deflect, hit, brake (bool), loft (int elevation level). Pose keys beyond
+# name/puck/steps: cam (offset), cam_ahead (metres down the travel line),
+# game_cam, readout, faceoff. "readout": true also prints the pose's speed
+# and body lean, which a tile can't be read for.
 const POSES: Array = [
 	{"name": "rest", "puck": false, "steps": [[40, {}]]},
 	{"name": "carry", "puck": true, "steps": [[40, {"aim": Vector3(0.6, 0.0, -2.2)}]]},
@@ -112,6 +115,26 @@ const POSES: Array = [
 		[10, {"aim": Vector3(0.4, 0.0, -2.0)}],
 		[58, {"aim": Vector3(0.8, 0.0, -3.2), "slap": true}],
 		[16, {"aim": Vector3(0.8, 0.0, -3.2)}],
+	]},
+	# Turning at speed: build to cruise heading -Z, then turn toward +X. A
+	# striding crossover turn, the Space + side-key tight turn mid-carve, and
+	# the tight turn held until it lines up with the key (where it blends into
+	# a stop).
+	{"name": "turn_carve_hard", "puck": false, "readout": true, "cam_ahead": 3.2, "steps": [
+		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[45, {"move": Vector2(1.0, 0.0), "aim": Vector3(2.2, 0.0, -2.2)}],
+	]},
+	{"name": "turn_tight", "puck": false, "readout": true, "cam_ahead": 3.2, "steps": [
+		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[30, {"move": Vector2(1.0, 0.0), "brake": true, "aim": Vector3(2.2, 0.0, -2.2)}],
+	]},
+	{"name": "turn_tight_game", "puck": false, "game_cam": true, "steps": [
+		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[30, {"move": Vector2(1.0, 0.0), "brake": true, "aim": Vector3(2.2, 0.0, -2.2)}],
+	]},
+	{"name": "turn_tight_exit", "puck": false, "readout": true, "cam_ahead": 3.2, "steps": [
+		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[70, {"move": Vector2(1.0, 0.0), "brake": true, "aim": Vector3(3.0, 0.0, -0.5)}],
 	]},
 	{"name": "shot_block", "puck": false, "steps": [
 		[30, {"block": true, "aim": Vector3(0.0, 0.0, -3.0)}],
@@ -364,6 +387,19 @@ func _run_pose() -> void:
 			_controller._process_input(input, DT)
 			_skater._physics_process(DT)
 			_skater._process(DT)
+	if bool(pose.get("readout", false)):
+		var v: Vector3 = _skater.velocity
+		print("  %s: speed %.2f heading %.0f° | lower body pitch %.1f° yaw %.1f° roll %.1f° | upper body pitch %.1f° roll %.1f°" % [
+				String(pose["name"]), Vector2(v.x, v.z).length(), rad_to_deg(atan2(v.x, -v.z)),
+				_skater.lower_body.rotation_degrees.x, _skater.lower_body.rotation_degrees.y,
+				_skater.lower_body.rotation_degrees.z, _skater.upper_body.rotation_degrees.x,
+				_skater.upper_body.rotation_degrees.z])
+		print("    gait: bank %.1f° trunk pitch %.1f° roll %.1f° | leg roll L %.1f° R %.1f° | drop %.3f m" % [
+				rad_to_deg(_controller._skating._turn_bank(Vector2(v.x, v.z).length())),
+				rad_to_deg(_controller._skating.trunk_pitch_add),
+				rad_to_deg(_controller._skating.trunk_roll_add),
+				rad_to_deg(_skater._legs._gait_leg_l.z), rad_to_deg(_skater._legs._gait_leg_r.z),
+				_controller._skating.crouch_drop])
 	if pose.has("faceoff"):
 		_run_faceoff(pose["faceoff"] as Dictionary)
 	# `game_cam` shoots the pose the way the PLAYER sees it; `cam` re-shoots it
@@ -375,6 +411,11 @@ func _run_pose() -> void:
 		return
 	_camera.fov = CAM_FOV
 	var offset: Vector3 = pose.get("cam", CAM_OFFSET)
+	# `cam_ahead` looks back down the line of travel, which is the only view a
+	# turn's lean reads from — side-on, a bank is a foreshortened tilt.
+	var v_flat: Vector3 = Vector3(_skater.velocity.x, 0.0, _skater.velocity.z)
+	if pose.has("cam_ahead") and v_flat.length() > 0.1:
+		offset = v_flat.normalized() * float(pose["cam_ahead"]) + Vector3(0.0, 0.3, 0.0)
 	_camera.global_position = _skater.global_position + offset
 	_camera.look_at(_skater.global_position + CAM_AIM, Vector3.UP)
 
@@ -473,6 +514,7 @@ func _fill_input(input: InputState, spec: Dictionary, first: bool) -> void:
 	input.mouse_world_pos = _skater.global_position + aim
 	input.sprint_held = spec.get("sprint", false)
 	input.hit_held = spec.get("hit", false)
+	input.brake = spec.get("brake", false)
 	input.block_held = spec.get("block", false)
 	input.elevation_level = spec.get("loft", 0)
 	input.shoot_held = shoot

@@ -270,8 +270,20 @@ func test_scripted_scenarios_match() -> void:
 		if not _step(DELTA, "carve"):
 			return
 
-	# Hockey stop: brake hard from speed (effort collapses, stop pose latches).
+	# Tight turn: brake held with the stick across travel digs the turn, then
+	# the stick comes in line and it finishes as a stop.
 	_skater.brake_intent = true
+	var heading: float = 0.0
+	var speed: float = 6.0
+	for i: int in 140:
+		heading += 2.4 * DELTA
+		speed = maxf(speed - 3.0 * DELTA, 0.0)
+		vel = Vector3(sin(heading), 0.0, -cos(heading)) * speed
+		_pose(vel, Vector2(1.0, 0.0), 0.5)
+		if not _step(DELTA, "tight turn"):
+			return
+
+	# Hockey stop: brake hard from speed (effort collapses, stop pose latches).
 	for i: int in 160:
 		vel = vel.move_toward(Vector3.ZERO, 9.0 * DELTA)
 		_pose(vel, Vector2.ZERO, 0.6)

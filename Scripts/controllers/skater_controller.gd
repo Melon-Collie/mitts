@@ -415,12 +415,11 @@ var upper_body_lean_return_speed: float = 8.0
 # Trunk lean INTO travel, re-derived from velocity on every machine (never
 # networked — see SkaterPoseCoordinator.compute_velocity_lean_target). Forward
 # skating folds the torso forward into the attack posture that makes skating
-# read as skating; backward skating sits slightly back; lateral travel banks
-# into the carve. The lower body banks fully but follows the forward pitch
-# only fractionally — the legs stay under the hips while the trunk folds.
+# read as skating; backward skating sits slightly back. The lower body follows
+# the pitch only fractionally — the legs stay under the hips while the trunk
+# folds.
 var velocity_lean_forward_max_deg: float = 20.0
 var velocity_lean_back_max_deg: float = 6.0
-var velocity_lean_lateral_max_deg: float = 12.0
 var velocity_lean_speed: float = 6.0
 var lower_body_pitch_follow: float = 0.35
 
@@ -459,22 +458,17 @@ var carve_clearance_knee_deg: float = 28.0  # lift while crossing the planted le
 var carve_stride_fade: float = 0.7     # fraction of fore/aft stride removed at full carve
 # Crossover rhythm + cadence (see the carve block in SkaterSkatingCoordinator):
 # the over-step and under-push alternate halves of the stride cycle (two-beat
-# push-push), the legs hold a static lean into the turn, and while the path is
-# actually bending the stride frequency follows the ARC — steps per radian of
-# heading change — instead of straight-line speed. Forward-gated: a backward
+# push-push), and while the path is actually bending the stride frequency
+# follows the ARC — steps per radian of heading change — instead of
+# straight-line speed. Forward-gated: a backward
 # turn keeps its C-cuts (forward crossover roles mirror wrong through the flip).
 var crossover_phase_per_turn: float = 7.0  # stride-phase rad per rad of heading change at full carve
 var carve_forward_ramp: float = 1.0    # m/s of forward travel over which crossovers fade in
-var carve_base_lean_deg: float = 7.0   # static both-leg lean into the turn while striding a carve
 var carve_rock_fade: float = 0.85      # edge-rock/abduction/scissor faded out at full carve
-# Centripetal trunk bank: the inclination that balances a turn is atan(v·ω/g),
-# derived from the speed and turn rate the carve already smooths — so every
-# machine banks identically with no new state, and the angle scales with how
-# hard the arc actually is instead of a fixed lean. The legs' carve lean
-# carries part of the physical angle; the gain sets the trunk's share.
-var carve_bank_gain: float = 0.5       # fraction of the physical bank angle the trunk shows
+# Turn bank: the whole body inclines toward the arc's centre at the balancing
+# angle atan(v·ω/g) (SkaterSkatingCoordinator._turn_bank).
 var carve_bank_knee_accel: float = 2.0 # m/s² of lateral accel at half bank authority — the steering-noise gate
-var carve_bank_max_deg: float = 16.0   # trunk bank cap for the tightest whips
+var turn_bank_max_deg: float = 30.0    # bank cap — the rig's leg roll and arm reach past this read as a fall
 var carve_stance: float = 0.75         # stance floor at full carve — sit low to hold the edges
 # Gliding — releasing all movement keys settles the legs to rest (the stride
 # is input-gated, v15 intent byte) while this floor keeps working knees under
@@ -582,6 +576,11 @@ var hockey_stop_edge_deg: float = 12.0   # shared leg roll — edges biting
 var hockey_stop_stance: float = 0.9      # stance floor while stopping (deep knees)
 var hockey_stop_trunk_roll_deg: float = 6.0  # trunk bank over the skid
 var hockey_stop_blend_speed: float = 9.0 # pose ease-in/out rate
+# Tight turn (brake held with the stick off travel): two blades dug in under a
+# deep sit, inside skate leading, no crossovers — the bank does the leaning.
+var tight_turn_stance: float = 0.9       # stance floor while digging the turn
+var tight_turn_split_deg: float = 12.0   # inside skate leads, outside trails
+var tight_turn_blend_speed: float = 9.0  # pose ease-in/out rate
 # Hip-to-travel alignment — the lower body yaws toward the direction of
 # MOTION (torso keeps facing the cursor) so the legs stride along travel
 # instead of flailing through the crossover/backward blends whenever cursor
@@ -647,10 +646,9 @@ var backpedal_tuck_fade: float = 0.75    # recovery-tuck lift removed at full C-
 var backpedal_pitch_fade: float = 0.4    # fore/aft pump removed at full C-cut (the push is the sweep)
 var backpedal_chest_deg: float = 4.0     # chest-up trunk pitch over the C-cuts
 # Glide enrichment: coasting (no keys) sways weight edge-to-edge, and a carve
-# released into a glide exits the turn on its edges (one-foot-glide read).
+# released into a glide exits the turn weighted on its outside leg.
 var glide_sway_deg: float = 1.8          # lazy edge-to-edge roll amplitude
 var glide_sway_hz: float = 0.4           # sway frequency — far below stride cadence
-var glide_carve_lean_deg: float = 10.0   # legs lean into the arc gliding out of a turn
 var glide_inside_tuck_deg: float = 10.0  # inside-leg knee tuck — weight on the outside edge
 # Sprint read: sprint_active (resolved where the skater is simulated; bit 5 of
 # the v16 intent byte for client-rendered remotes) drives a visibly committed
@@ -2577,7 +2575,7 @@ func _enter_shot_block() -> void:
 	_pose.reset_lean_and_lag()
 	skater.set_upper_body_rotation(0.0)
 	skater.set_upper_body_lean(0.0)
-	skater.set_lower_body_lean(0.0, 0.0)
+	skater.set_lower_body_lean(0.0)
 	skater.set_lower_body_lag(0.0)
 	# Snap facing toward puck on entry — locked for duration of stance
 	var to_puck: Vector3 = puck.global_position - skater.global_position
@@ -2607,7 +2605,7 @@ func _enter_slapper_charge(input: InputState) -> void:
 	_pose.reset_lean_and_lag()
 	skater.set_upper_body_rotation(0.0)
 	skater.set_upper_body_lean(0.0)
-	skater.set_lower_body_lean(0.0, 0.0)
+	skater.set_lower_body_lean(0.0)
 	skater.set_lower_body_lag(0.0)
 	# Lock aim direction from the squared blade-side release point → mouse. BOTS
 	# commit the direction instead (input.bot_slapper_aim_dir): the blade point

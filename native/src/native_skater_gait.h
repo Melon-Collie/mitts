@@ -30,8 +30,7 @@ namespace mitts {
 	X(backpedal_pitch_fade) X(backpedal_start) X(backpedal_tuck_fade) \
 	X(block_extend_knee_deg) X(block_kneel_hip_deg) X(block_kneel_shin_deg) \
 	X(block_pose_blend_speed) X(cadence_cruise_falloff) X(cadence_glide_stance_gain) \
-	X(carve_bank_gain) X(carve_bank_knee_accel) X(carve_bank_max_deg) \
-	X(carve_base_lean_deg) \
+	X(carve_bank_knee_accel) \
 	X(carve_clearance_knee_deg) X(carve_engage_speed) X(carve_forward_ramp) \
 	X(carve_min_speed) X(carve_over_pitch_deg) X(carve_over_roll_deg) \
 	X(carve_ref_turn_rate) X(carve_rock_fade) X(carve_stance) \
@@ -43,7 +42,7 @@ namespace mitts {
 	X(faceoff_center_lean_deg) X(faceoff_center_split_deg) X(faceoff_center_stance) \
 	X(faceoff_center_width_deg) X(faceoff_split_deg) X(faceoff_stance) \
 	X(follow_through_arc_skew) \
-	X(glide_carve_lean_deg) X(glide_hold_skew) X(glide_inside_tuck_deg) \
+	X(glide_hold_skew) X(glide_inside_tuck_deg) \
 	X(glide_stance) X(glide_sway_deg) X(glide_sway_hz) \
 	X(hip_align_max_deg) X(hip_align_speed) X(hit_commit_crouch_m) \
 	X(hit_commit_lean_deg) X(hit_commit_pose_speed) \
@@ -74,6 +73,8 @@ namespace mitts {
 	X(stride_intensity_speed) X(stride_knee_deg) X(stride_pitch_deg) \
 	X(stride_push_ceiling) X(stride_push_gain) X(stride_rear_bias) \
 	X(stride_roll_deg) X(stride_skew) X(stride_sway_deg) \
+	X(tight_turn_align_angle) X(tight_turn_blend_speed) X(tight_turn_split_deg) \
+	X(tight_turn_stance) X(turn_bank_max_deg) \
 	X(trunk_texture_smooth_rate) \
 	X(weight_shift_deg) X(weight_spring_damping) X(weight_spring_stiffness) \
 	X(wrister_kick_back_deg) X(wrister_kick_hip_yaw_deg) \
@@ -147,6 +148,8 @@ private:
 	bool stop_engaged = false;
 	double stop_side = 1.0;
 	double stop_blend = 0.0;
+	double tight_blend = 0.0;
+	double tight_side = 1.0;
 	double travel_align_yaw = 0.0;
 	double hip_align_yaw = 0.0;
 	double prev_psi = 0.0;
@@ -191,6 +194,7 @@ private:
 	double out_drop = 0.0;
 
 	void reset_state();
+	double turn_bank(double ground_speed) const;
 
 protected:
 	static void _bind_methods();

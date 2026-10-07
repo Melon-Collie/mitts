@@ -153,6 +153,10 @@ var stop_yaw_offset: float = 0.0
 var _stop_engaged: bool = false
 var _stop_side: float = 1.0
 var _stop_blend: float = 0.0
+# Tight-turn blend (brake held off travel) and the side the stick is on,
+# +1 = toward the traveller's right (CarveRules' sign).
+var _tight_blend: float = 0.0
+var _tight_side: float = 1.0
 # Hip-to-travel alignment (see the block in apply()).
 var travel_align_yaw: float = 0.0
 var _hip_align_yaw: float = 0.0
@@ -304,6 +308,8 @@ func reset_to_rest() -> void:
 	stop_yaw_offset = 0.0
 	_stop_engaged = false
 	_stop_blend = 0.0
+	_tight_blend = 0.0
+	_tight_side = 1.0
 	travel_align_yaw = 0.0
 	_hip_align_yaw = 0.0
 	_prev_psi = 0.0
@@ -354,6 +360,20 @@ func reset_to_rest() -> void:
 func _faceoff_stance_floor() -> float:
 	return _controller.faceoff_center_stance if _skater.is_faceoff_center \
 			else _controller.faceoff_stance
+
+
+# Signed whole-body bank toward the arc's centre, radians (+ = toward the
+# traveller's right): the balancing angle atan(v·ω / g). The soft knee in a_lat
+# keeps steering-noise curvature from shimmering the body — a skater banks only
+# for a sustained arc.
+func _turn_bank(ground_speed: float) -> float:
+	if ground_speed <= 0.1:
+		return 0.0
+	var a_lat: float = ground_speed * absf(_turn_rate)
+	var knee: float = maxf(_controller.carve_bank_knee_accel, 0.001)
+	var engage: float = a_lat * a_lat / (a_lat * a_lat + knee * knee)
+	return signf(_turn_rate) * minf(atan2(a_lat, 9.8), deg_to_rad(_controller.turn_bank_max_deg)) \
+			* engage * (1.0 - _stop_blend)
 
 
 func _faceoff_split_deg() -> float:
@@ -642,7 +662,8 @@ func apply(delta: float) -> void:
 	# smoothing) freeze the stride: scraping, planted, and open-hip blades
 	# don't stride.
 	stride_phase = wrapf(stride_phase + phase_rate
-			* (1.0 - maxf(maxf(_stop_blend, _reversal * _controller.reversal_stride_fade),
+			* (1.0 - maxf(maxf(maxf(_stop_blend, _tight_blend),
+					_reversal * _controller.reversal_stride_fade),
 					_pivot_blend * _controller.pivot_stride_fade)) * delta,
 			0.0, TAU)
 
@@ -738,28 +759,39 @@ func apply(delta: float) -> void:
 	# the identical stop from state they already have. While blended in, the
 	# normal stride amplitudes are suppressed (blades scrape, they don't
 	# stride) and the stop stance below takes over the legs.
+	# A brake held off travel is a tight turn (the physics' own blend): it sheds
+	# speed too, so the stop waits for the stick to come back in line.
+	var tight_t: float = 0.0
+	if _skater.brake_intent and has_move_intent and ground_speed >= _controller.carve_min_speed:
+		var steer: float = Vector2(vel.x, vel.z).angle_to(mi)
+		tight_t = SkaterMovementRules.tight_turn_weight(absf(steer),
+				_controller.tight_turn_align_angle)
+		if tight_t > 0.0:
+			_tight_side = signf(steer)
+	var tight_turning: bool = tight_t >= 0.5
 	if _stop_engaged:
-		if HockeyStopRules.should_release(_effort, ground_speed,
+		if tight_turning or HockeyStopRules.should_release(_effort, ground_speed,
 				_controller.hockey_stop_effort, _controller.hockey_stop_min_speed,
 				_skater.brake_intent):
 			_stop_engaged = false
-	elif HockeyStopRules.should_engage(_effort, ground_speed,
+	elif not tight_turning and HockeyStopRules.should_engage(_effort, ground_speed,
 			_controller.hockey_stop_effort, _controller.hockey_stop_min_speed,
 			_skater.brake_intent):
 		_stop_engaged = true
 		_stop_side = HockeyStopRules.latch_side(local_vel)
 	_stop_blend = lerpf(_stop_blend, 1.0 if _stop_engaged else 0.0,
 			_controller.hockey_stop_blend_speed * delta)
+	_tight_blend = lerpf(_tight_blend, tight_t, _controller.tight_turn_blend_speed * delta)
 	if _stop_blend > 0.001:
 		stop_yaw_offset = HockeyStopRules.stop_yaw(local_vel, _stop_side,
 				deg_to_rad(_controller.hockey_stop_max_yaw_deg)) * _stop_blend
 	else:
 		stop_yaw_offset = 0.0
 	# Stride suppression factor: 1 = normal gait, 0 = fully planted (stop pose,
-	# the reversal plant, or the pivot's gliding transit — fighting momentum
-	# and swapping ends are edges, not strides).
+	# tight turn, the reversal plant, or the pivot's gliding transit — fighting
+	# momentum, digging a turn and swapping ends are edges, not strides).
 	var gait_scale: float = 1.0 - maxf(
-			maxf(_stop_blend, _reversal * _controller.reversal_stride_fade),
+			maxf(maxf(_stop_blend, _tight_blend), _reversal * _controller.reversal_stride_fade),
 			_pivot_blend * _controller.pivot_stride_fade)
 	# Shooting is a glide: while a shot load or the release kick is live the
 	# stride blends out — a shooter sets their feet, they don't keep striding
@@ -954,6 +986,7 @@ func apply(delta: float) -> void:
 	# Hockey stop sits DEEP — the edges only bite under bent knees.
 	if _stop_blend > 0.001:
 		stance = maxf(stance, _controller.hockey_stop_stance * _stop_blend)
+	stance = maxf(stance, _controller.tight_turn_stance * _tight_blend)
 	# Gliding (no movement keys) keeps working knees at speed — the intensity
 	# gate zeroed the stride, but a coasting skater still rides bent edges.
 	if not has_move_intent:
@@ -1066,6 +1099,27 @@ func apply(delta: float) -> void:
 			# pivot swings down as the shin folds (_FOOT_FWD), so the hip rides
 			# the same amount higher. The shot block's own solve pays it too.
 			drop -= leg_scale * _FOOT_FWD * sin(stance_shin) * faceoff_blend
+
+	# ── Turn bank ──────────────────────────────────────────────────────────────
+	# The bank pivots about the BLADES but the hips are pinned to the origin, so
+	# the legs roll the skates OUT (hip frame), the body drops what the roll
+	# costs each leg's span, and the trunk continues the line below.
+	var bank: float = _turn_bank(ground_speed)
+	if absf(bank) > 0.001:
+		var leg_bank: float = bank * fwd / ground_speed
+		l_roll -= leg_bank
+		r_roll -= leg_bank
+		drop += (leg_scale * (_THIGH_LEN + _SHIN_LEN) - drop) * (1.0 - cos(leg_bank))
+
+	# Tight turn: the inside skate leads (gait_scale already planted the stride).
+	if _tight_blend > 0.001:
+		var tight_split: float = deg_to_rad(_controller.tight_turn_split_deg) * _tight_blend
+		if _tight_side * signf(fwd) > 0.0:
+			r_pitch += tight_split
+			l_pitch -= tight_split
+		else:
+			l_pitch += tight_split
+			r_pitch -= tight_split
 
 	# Hockey-stop leg pose, in the TURNED leg frame (the pose coordinator adds
 	# stop_yaw_offset to the lower body): the leading leg braces ahead and the
@@ -1209,10 +1263,8 @@ func apply(delta: float) -> void:
 	# TWO-BEAT rhythm — the strokes alternate halves of the shared stride
 	# phase (over-step on the positive half, under-push on the negative half),
 	# the continuous push-push that runs a skater around a corner, instead of
-	# both firing simultaneously with an idle half between. On top of the
-	# alternating strokes both legs HOLD a static lean into the turn
-	# (carve_base_lean_deg) so the turn read never pulses to zero between
-	# steps. The clearance knee rides the RISE of the stroke (same derivative
+	# both firing simultaneously with an idle half between. The clearance knee
+	# rides the RISE of the stroke (same derivative
 	# gate as the recovery tuck) so the crossing skate lifts OVER the planted
 	# leg and extends as it lands; the under-push leg feeds the existing
 	# knee-release path through its ext value, so the extension stays
@@ -1225,10 +1277,6 @@ func apply(delta: float) -> void:
 	if carve_amt > 0.001:
 		var over_stroke: float = maxf(s, 0.0)
 		var under_stroke: float = maxf(-s, 0.0)
-		var base_lean: float = deg_to_rad(_controller.carve_base_lean_deg) \
-				* signf(_carve) * carve_amt
-		l_roll += base_lean
-		r_roll += base_lean
 		var over_roll: float = deg_to_rad(_controller.carve_over_roll_deg) * carve_amt * over_stroke
 		var under_roll: float = deg_to_rad(_controller.carve_under_roll_deg) * carve_amt * under_stroke
 		var over_pitch: float = deg_to_rad(_controller.carve_over_pitch_deg) * carve_amt * over_stroke
@@ -1250,16 +1298,13 @@ func apply(delta: float) -> void:
 			l_ext = maxf(l_ext, under_stroke)
 
 	# ── Glide reads ────────────────────────────────────────────────────────────
-	# Releasing the keys mid-turn glides OUT of the carve on the edges: while
-	# the smoothed carve decays, both legs hold a static lean into the arc and
-	# the INSIDE knee tucks light — weight on the outside leg, the one-foot-
-	# glide read — instead of pumping crossovers (the stroke gaits above are
-	# intensity-gated to zero without intent, so this replaces, not stacks).
+	# Releasing the keys mid-turn glides OUT of the carve: while the smoothed
+	# carve decays the INSIDE knee tucks light — weight on the outside leg, the
+	# one-foot-glide read — instead of pumping crossovers (the stroke gaits
+	# above are intensity-gated to zero without intent, so this replaces, not
+	# stacks).
 	var glide_amt: float = _glide * speed_t * gait_scale
 	if glide_amt > 0.001 and absf(_carve) > 0.001:
-		var glide_lean: float = deg_to_rad(_controller.glide_carve_lean_deg) * _carve * glide_amt
-		l_roll += glide_lean
-		r_roll += glide_lean
 		var inside_tuck: float = deg_to_rad(_controller.glide_inside_tuck_deg) \
 				* absf(_carve) * glide_amt
 		if _carve > 0.0:
@@ -1386,33 +1431,11 @@ func apply(delta: float) -> void:
 	if _stop_blend > 0.001:
 		trunk_roll_add += deg_to_rad(_controller.hockey_stop_trunk_roll_deg) \
 				* _stop_blend * _stop_side
-	# Centripetal bank — the trunk inclines toward the arc's center like a
-	# banking bicycle. The balancing inclination is atan(a_lat/g) with
-	# a_lat = v·ω, both from signals already smoothed above (ground speed, the
-	# turn rate), so remotes and replay derive the identical bank for free.
-	# Decomposed body-local exactly like the check-drive lean (pitch = mag·dir.z,
-	# roll = −mag·dir.x): the center sits 90° from travel in the turn sense, so
-	# the bank stays correct at any facing-vs-travel angle, forward or backward.
-	# The gain leaves the rest of the physical angle to the legs' carve lean;
-	# the stop fade hands the channel to the hockey stop's authored bank.
-	if ground_speed > 0.1:
-		var a_lat: float = ground_speed * absf(_turn_rate)
-		# Soft knee on the centripetal accel: the balancing bank's slope near
-		# zero is v/g rad per rad/s — steep enough that residual turn-rate
-		# noise from ordinary steering corrections read back as a trunk
-		# shimmer while cruising. A real trunk ignores micro-curvature (the
-		# transient is absorbed at the hips and ankles — the leg roll) and
-		# banks only for a sustained arc, so gate by a rational sigmoid in
-		# a_lat: dead at noise level, full by a genuine turn's several m/s².
-		var knee: float = maxf(_controller.carve_bank_knee_accel, 0.001)
-		var bank_engage: float = a_lat * a_lat / (a_lat * a_lat + knee * knee)
-		var bank_mag: float = minf(
-				atan2(a_lat, 9.8) * _controller.carve_bank_gain,
-				deg_to_rad(_controller.carve_bank_max_deg)) * bank_engage * (1.0 - _stop_blend)
-		var centri_x: float = signf(_turn_rate) * -local_vel.z / ground_speed
-		var centri_z: float = signf(_turn_rate) * local_vel.x / ground_speed
-		trunk_pitch_add += bank_mag * centri_z
-		trunk_roll_add += -bank_mag * centri_x
+	# The trunk's half of the bank, body-local (the centre sits 90° from travel,
+	# so this holds at any facing-vs-travel angle, forward or backward).
+	if absf(bank) > 0.001:
+		trunk_pitch_add += bank * local_vel.x / ground_speed
+		trunk_roll_add += bank * local_vel.z / ground_speed
 
 	# Knockdown pose factor: holds full while more than knockdown_getup_seconds
 	# remains on the timer, then eases to 0 over that tail (the get-up). Derived FROM
@@ -1556,10 +1579,11 @@ func apply(delta: float) -> void:
 			pivot_yaw_l * (1.0 - kd_t), pivot_yaw_r * (1.0 - kd_t))
 	# Publish per-blade edge load for the ice VFX: the push half-wave (which
 	# already carries the carve under-stroke) scaled by stride engagement,
-	# floored by the stop scrape — and released through the crumple.
+	# floored by the stop scrape and the tight turn's dug edges — and released
+	# through the crumple.
 	_skater.set_edge_loads(
-			clampf(maxf(l_ext * _intensity, _stop_blend), 0.0, 1.0) * (1.0 - kd_t),
-			clampf(maxf(r_ext * _intensity, _stop_blend), 0.0, 1.0) * (1.0 - kd_t))
+			clampf(maxf(l_ext * _intensity, maxf(_stop_blend, _tight_blend)), 0.0, 1.0) * (1.0 - kd_t),
+			clampf(maxf(r_ext * _intensity, maxf(_stop_blend, _tight_blend)), 0.0, 1.0) * (1.0 - kd_t))
 	_skater.set_ankle_flatten(foot_flat_l, foot_flat_r)
 	_skater.set_faceoff_address(faceoff_flat)
 	crouch_drop = drop

@@ -198,6 +198,27 @@ static double rules_stop_yaw(const Vector3 &local_velocity, double side, double 
 
 // ── NativeSkaterGait ─────────────────────────────────────────────────────────
 
+// SkaterMovementRules.tight_turn_weight.
+static double rules_tight_turn_weight(double steer_abs, double align_angle) {
+	double w = MIN(steer_abs / MAX(align_angle, 0.001), 1.0);
+	if (steer_abs > Math_PI * 0.5) {
+		w *= MAX(0.0, 1.0 - (steer_abs - Math_PI * 0.5) / (Math_PI * 0.25));
+	}
+	return w;
+}
+
+// SkaterSkatingCoordinator._turn_bank.
+double NativeSkaterGait::turn_bank(double ground_speed) const {
+	if (ground_speed <= 0.1) {
+		return 0.0;
+	}
+	const double a_lat = ground_speed * Math::abs(turn_rate);
+	const double knee = MAX(cfg.carve_bank_knee_accel, 0.001);
+	const double engage = a_lat * a_lat / (a_lat * a_lat + knee * knee);
+	return sgn(turn_rate) * MIN(Math::atan2(a_lat, 9.8), Math::deg_to_rad(cfg.turn_bank_max_deg)) *
+			engage * (1.0 - stop_blend);
+}
+
 void NativeSkaterGait::reset_state() {
 	stride_phase = 0.0;
 	intensity = 0.0;
@@ -216,6 +237,8 @@ void NativeSkaterGait::reset_state() {
 	stop_yaw_offset = 0.0;
 	stop_engaged = false;
 	stop_blend = 0.0;
+	tight_blend = 0.0;
+	tight_side = 1.0;
 	travel_align_yaw = 0.0;
 	hip_align_yaw = 0.0;
 	prev_psi = 0.0;
@@ -490,7 +513,8 @@ int64_t NativeSkaterGait::apply(
 	phase_rate = MAX(phase_rate, MAX(dig * cfg.dig_in_cadence_rate,
 			Math::abs(shuffle) * cfg.shuffle_cadence_rate));
 	stride_phase = Math::wrapf(stride_phase + phase_rate *
-			(1.0 - MAX(MAX(stop_blend, reversal * cfg.reversal_stride_fade),
+			(1.0 - MAX(MAX(MAX(stop_blend, tight_blend),
+					reversal * cfg.reversal_stride_fade),
 					pivot_blend * cfg.pivot_stride_fade)) * delta,
 			0.0, Math_TAU);
 
@@ -549,26 +573,38 @@ int64_t NativeSkaterGait::apply(
 		lr_w = Math::abs(lat) / denom;
 	}
 
-	// ── Hockey stop ──
+	// ── Hockey stop ── (a brake held off travel is a tight turn instead — see
+	// the GDScript reference)
+	double tight_t = 0.0;
+	if (brake_intent && has_move_intent && ground_speed >= cfg.carve_min_speed) {
+		const double steer = (double)Vector2(vel.x, vel.z).angle_to(mi);
+		tight_t = rules_tight_turn_weight(Math::abs(steer), cfg.tight_turn_align_angle);
+		if (tight_t > 0.0) {
+			tight_side = sgn(steer);
+		}
+	}
+	const bool tight_turning = tight_t >= 0.5;
 	if (stop_engaged) {
-		if (rules_stop_should_release(effort, ground_speed,
+		if (tight_turning || rules_stop_should_release(effort, ground_speed,
 				cfg.hockey_stop_effort, cfg.hockey_stop_min_speed, brake_intent)) {
 			stop_engaged = false;
 		}
-	} else if (rules_stop_should_engage(effort, ground_speed,
+	} else if (!tight_turning && rules_stop_should_engage(effort, ground_speed,
 			cfg.hockey_stop_effort, cfg.hockey_stop_min_speed, brake_intent)) {
 		stop_engaged = true;
 		stop_side = rules_stop_latch_side(local_vel);
 	}
 	stop_blend = Math::lerp(stop_blend, stop_engaged ? 1.0 : 0.0,
 			cfg.hockey_stop_blend_speed * delta);
+	tight_blend = Math::lerp(tight_blend, tight_t, cfg.tight_turn_blend_speed * delta);
 	if (stop_blend > 0.001) {
 		stop_yaw_offset = rules_stop_yaw(local_vel, stop_side,
 				Math::deg_to_rad(cfg.hockey_stop_max_yaw_deg)) * stop_blend;
 	} else {
 		stop_yaw_offset = 0.0;
 	}
-	double gait_scale = 1.0 - MAX(MAX(stop_blend, reversal * cfg.reversal_stride_fade),
+	double gait_scale = 1.0 - MAX(
+			MAX(MAX(stop_blend, tight_blend), reversal * cfg.reversal_stride_fade),
 			pivot_blend * cfg.pivot_stride_fade);
 	gait_scale *= 1.0 - shot_body * cfg.shot_stride_fade;
 	const double rev_amt = reversal * (1.0 - stop_blend);
@@ -685,6 +721,7 @@ int64_t NativeSkaterGait::apply(
 	if (stop_blend > 0.001) {
 		stance = MAX(stance, cfg.hockey_stop_stance * stop_blend);
 	}
+	stance = MAX(stance, cfg.tight_turn_stance * tight_blend);
 	if (!has_move_intent) {
 		stance = MAX(stance, cfg.glide_stance * speed_t);
 	}
@@ -752,6 +789,28 @@ int64_t NativeSkaterGait::apply(
 			// blade below the FOOT pivot, which the fold swings down.
 			faceoff_flat = faceoff_blend;
 			drop -= leg_scale * FOOT_FWD * Math::sin(stance_shin) * faceoff_blend;
+		}
+	}
+
+	// Turn bank — legs roll the skates out, the body drops to keep them on the
+	// ice (see the GDScript reference).
+	const double bank = turn_bank(ground_speed);
+	if (Math::abs(bank) > 0.001) {
+		const double leg_bank = bank * fwd / ground_speed;
+		l_roll -= leg_bank;
+		r_roll -= leg_bank;
+		drop += (leg_scale * (THIGH_LEN + SHIN_LEN) - drop) * (1.0 - Math::cos(leg_bank));
+	}
+
+	// Tight-turn leg pose: inside skate leads.
+	if (tight_blend > 0.001) {
+		const double tight_split = Math::deg_to_rad(cfg.tight_turn_split_deg) * tight_blend;
+		if (tight_side * sgn(fwd) > 0.0) {
+			r_pitch += tight_split;
+			l_pitch -= tight_split;
+		} else {
+			l_pitch += tight_split;
+			r_pitch -= tight_split;
 		}
 	}
 
@@ -845,10 +904,6 @@ int64_t NativeSkaterGait::apply(
 	if (carve_amt > 0.001) {
 		const double over_stroke = MAX(s, 0.0);
 		const double under_stroke = MAX(-s, 0.0);
-		const double base_lean = Math::deg_to_rad(cfg.carve_base_lean_deg) *
-				sgn(carve) * carve_amt;
-		l_roll += base_lean;
-		r_roll += base_lean;
 		const double over_roll = Math::deg_to_rad(cfg.carve_over_roll_deg) * carve_amt * over_stroke;
 		const double under_roll = Math::deg_to_rad(cfg.carve_under_roll_deg) * carve_amt * under_stroke;
 		const double over_pitch = Math::deg_to_rad(cfg.carve_over_pitch_deg) * carve_amt * over_stroke;
@@ -872,9 +927,6 @@ int64_t NativeSkaterGait::apply(
 	// ── Glide reads ──
 	const double glide_amt = glide * speed_t * gait_scale;
 	if (glide_amt > 0.001 && Math::abs(carve) > 0.001) {
-		const double glide_lean = Math::deg_to_rad(cfg.glide_carve_lean_deg) * carve * glide_amt;
-		l_roll += glide_lean;
-		r_roll += glide_lean;
 		const double inside_tuck = Math::deg_to_rad(cfg.glide_inside_tuck_deg) *
 				Math::abs(carve) * glide_amt;
 		if (carve > 0.0) {
@@ -947,18 +999,10 @@ int64_t NativeSkaterGait::apply(
 		trunk_roll_add += Math::deg_to_rad(cfg.hockey_stop_trunk_roll_deg) *
 				stop_blend * stop_side;
 	}
-	// Centripetal bank — see the GDScript reference.
-	if (ground_speed > 0.1) {
-		const double a_lat = ground_speed * Math::abs(turn_rate);
-		const double knee = MAX(cfg.carve_bank_knee_accel, 0.001);
-		const double bank_engage = a_lat * a_lat / (a_lat * a_lat + knee * knee);
-		const double bank_mag = MIN(
-				Math::atan2(a_lat, 9.8) * cfg.carve_bank_gain,
-				Math::deg_to_rad(cfg.carve_bank_max_deg)) * bank_engage * (1.0 - stop_blend);
-		const double centri_x = sgn(turn_rate) * -(double)local_vel.z / ground_speed;
-		const double centri_z = sgn(turn_rate) * (double)local_vel.x / ground_speed;
-		trunk_pitch_add += bank_mag * centri_z;
-		trunk_roll_add += -bank_mag * centri_x;
+	// The trunk's half of the bank.
+	if (Math::abs(bank) > 0.001) {
+		trunk_pitch_add += bank * (double)local_vel.x / ground_speed;
+		trunk_roll_add += bank * (double)local_vel.z / ground_speed;
 	}
 
 	// Stagger stumble / knockdown factor. The entry end ramps over the buckle
@@ -1073,8 +1117,8 @@ int64_t NativeSkaterGait::apply(
 	out_r_yaw = pivot_yaw_r * (1.0 - kd_t);
 	out_foot_flat_l = foot_flat_l;
 	out_foot_flat_r = foot_flat_r;
-	out_edge_load_l = CLAMP(MAX(l_ext * intensity, stop_blend), 0.0, 1.0) * (1.0 - kd_t);
-	out_edge_load_r = CLAMP(MAX(r_ext * intensity, stop_blend), 0.0, 1.0) * (1.0 - kd_t);
+	out_edge_load_l = CLAMP(MAX(l_ext * intensity, MAX(stop_blend, tight_blend)), 0.0, 1.0) * (1.0 - kd_t);
+	out_edge_load_r = CLAMP(MAX(r_ext * intensity, MAX(stop_blend, tight_blend)), 0.0, 1.0) * (1.0 - kd_t);
 	out_drop = drop;
 	return APPLY_ACTIVE;
 }
