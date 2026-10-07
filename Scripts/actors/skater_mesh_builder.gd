@@ -375,7 +375,7 @@ const LEG_BONE_PARENT: Array[int] = [
 	-1, LegBone.LEG_R, LegBone.LEG_R,
 	LegBone.LEG_R, LegBone.SHIN_R, LegBone.SHIN_R, LegBone.SHIN_R,
 ]
-# Scene node name per bone, index-aligned with LegBone. Skater._build_leg_rig
+# Scene node name per bone, index-aligned with LegBone. SkaterLegRig.build
 # reads each one's local transform before freeing the subtree, so the .tscn stays
 # the place leg proportions are authored.
 const LEG_BONE_NODE: Array[String] = [
@@ -644,7 +644,7 @@ enum UpperSurface {
 const UPPER_SURFACE_COUNT: int = 18
 # Scene node name per bone for the four parts whose placement is authored in
 # Scenes/Skater.tscn rather than derived (the arm parts are placed by IK). Read
-# by Skater._build_upper_rig, which then frees them — same deal as LEG_BONE_NODE.
+# by SkaterArmRig.build, which then frees them — same deal as LEG_BONE_NODE.
 # Indices 0-9 are unused; the arm parts have no scene node.
 const UPPER_BONE_NODE: Array[String] = [
 	"", "", "", "", "", "", "", "", "", "",

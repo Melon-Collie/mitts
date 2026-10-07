@@ -276,16 +276,35 @@ skaters, bring the port forward rather than letting it slide to the end.
 6. **One skeleton** — merge the two now (proposed), or keep two skeletons
    reparented into the chain and merge later?
 
-## §10 Bugs found along the way, not yet fixed
+## §10 Bugs found along the way
 
-- The crouch drop writes the gameplay frame at render rate, visibility-gated
-  (§1). Measured in Phase 2: under 3 mm across frame rates (§11), so left as is.
-- The knockdown tilt rotates `MeshRoot` about the skater origin (hip height),
-  while its comment describes a pivot at ice level between the skates.
-- Reconcile writes `lower_body_lag` alone to the lower-body yaw, without the
-  stop, alignment and shot channels, until the next tick rewrites it.
-- The slapper wind-up path skips `_apply_lean` entirely, so the torso lean
-  stays at the zero written on entry while the trunk texture keeps moving.
+Open:
+
+- The crouch drop writes the gameplay frame at render rate (§1). Measured in
+  Phase 2: under 3 mm across frame rates (§11). The "visibility-gated" half
+  does not hold — the gate is `is_visible_in_tree`, which only hidden skaters
+  fail, and they are not in play. Removing it is a gameplay change (the hand's
+  world height feeds the carry pin, the pickup claims and the stick-lift test,
+  and the faceoff dot is laid out from the crouched hand), so it waits on a
+  decision.
+
+Fixed after Phase 5:
+
+- **The knockdown fall pivoted at the hips.** `MeshRoot` tipped about the
+  skater origin, which rides 1 m up, so a body lying on the ice lay there at
+  hip height — measured 0.93 m for the pelvis. It now tips about the ice under
+  the origin (`Skater.set_knockdown_fall`); `test_knockdown_lies_on_the_ice.gd`
+  holds it, and the pose set has three knockdown tiles.
+- **Reconcile squared the hips.** It wrote the facing lag alone to the lower
+  body, dropping the gait's yaw channels (up to 40° of hip alignment at a
+  stride off the facing) until the next tick; it now publishes through
+  `apply_lower_body_yaw`. `test_reconcile_keeps_the_gait_yaw.gd`.
+- **The slapper wind-up dropped its posture.** It skipped `_apply_lean`, so the
+  shooter's torso sat at the zero written on entry while a remote re-derived a
+  skating lean plus a reach lean off the authored wind-up hand — about 24° apart
+  measured. Both sides now keep the posture (skating lean, stagger reel) with
+  no reach lean. The puck is pinned to the body during the wind-up, so it reads
+  none of this. `test_slapper_wind_up_lean.gd`.
 
 ## §11 Phase 1 as built
 

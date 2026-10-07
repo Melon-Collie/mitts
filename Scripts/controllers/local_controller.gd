@@ -579,7 +579,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# cleanly from the snapped facing on the first post-reconcile frame.
 	_pose.ik_locked_side = 0
 	_pose.lower_body_lag = 0.0
-	skater.set_lower_body_lag(0.0)
+	_pose.apply_lower_body_yaw(0.0)
 	# Snap upper-body rotation to server value. Pose evolution is deterministic
 	# from inputs, but _pose.upper_body_angle is the one persistent pose field
 	# that carries across reconciles without a per-cycle resync — anchoring it
@@ -727,7 +727,9 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# round-trip through server state.
 	skater.set_facing(_pose.facing)
 	skater.set_upper_body_rotation(_pose.upper_body_angle)
-	skater.set_lower_body_lag(_pose.lower_body_lag)
+	# Through the summing site, not the lag alone: the gait's yaw channels ride
+	# on it (SkaterPoseCoordinator.apply_lower_body_yaw).
+	_pose.apply_lower_body_yaw(0.0)
 	# Report trajectory divergence (predicted vs server at the same timestamp) so
 	# the F3 Reconcile magnitude reflects true non-determinism. Falls back to
 	# post-replay residual when no prediction was matched.

@@ -73,8 +73,10 @@ const CAM_AIM: Vector3 = Vector3(0.0, -0.05, 0.0)
 # Spec keys: move (Vector2, world), aim (Vector3, RELATIVE to the skater —
 # absolute would swing as the body translates), sprint, shoot, slap, block,
 # deflect, hit, brake (bool), loft (int elevation level). Pose keys beyond
-# name/puck/steps: cam (offset), cam_ahead (metres down the travel line),
-# game_cam, readout, faceoff. "readout": true also prints the pose's speed
+# name/puck/steps: cam (offset), cam_aim (the point it looks at, relative to the
+# skater like cam), cam_ahead (metres down the travel line),
+# game_cam, readout, faceoff, knockdown (a world-space impulse absorbed as a
+# check before the first tick). "readout": true also prints the pose's speed
 # and body lean, which a tile can't be read for.
 const POSES: Array = [
 	{"name": "rest", "puck": false, "steps": [[40, {}]]},
@@ -177,6 +179,20 @@ const POSES: Array = [
 	{"name": "hit_commit_deep", "puck": false, "steps": [
 		[60, {"hit": true, "move": Vector2(0.84, -0.55), "aim": Vector3(1.6, 0.0, 2.4)}],
 	]},
+	# ── Knockdown ───────────────────────────────────────────────────────────
+	# A hit hard enough to put the skater down, mid-fall and lying, shoved to
+	# the side and backward. These are the tiles that show where the fall
+	# pivots: a body lying a hip-height above the ice, or one sunk through it,
+	# is a proportion no display-less test catches.
+	{"name": "knockdown_mid_fall", "puck": false, "knockdown": Vector3(3.0, 0.0, 0.0),
+		"cam": Vector3(0.6, -0.2, 3.4), "cam_aim": Vector3(0.6, -0.5, 0.0),
+		"steps": [[30, {}]]},
+	{"name": "knockdown_lying_side", "puck": false, "knockdown": Vector3(3.0, 0.0, 0.0),
+		"cam": Vector3(0.9, -0.45, 2.6), "cam_aim": Vector3(0.9, -0.95, 0.0),
+		"steps": [[100, {}]]},
+	{"name": "knockdown_lying_back", "puck": false, "knockdown": Vector3(0.0, 0.0, 3.0),
+		"cam": Vector3(2.6, -0.45, 0.9), "cam_aim": Vector3(0.0, -0.95, 0.9),
+		"steps": [[100, {}]]},
 	# ── FACEOFF_PREP ──────────────────────────────────────────────────────────
 	# The locked-phase path (begin_approach → tick_faceoff_approach →
 	# apply_blade_aim_only), which _process_input never reaches, so the specs
@@ -393,6 +409,8 @@ func _run_pose() -> void:
 
 	var input := InputState.new()
 	_state.faceoff_prep = false
+	if pose.has("knockdown"):
+		_controller._on_body_check_received(pose["knockdown"] as Vector3)
 	var steps: Array = pose.get("steps", [])
 	for step: Array in steps:
 		var ticks: int = step[0]
@@ -442,7 +460,7 @@ func _run_pose() -> void:
 	if pose.has("cam_ahead") and v_flat.length() > 0.1:
 		offset = v_flat.normalized() * float(pose["cam_ahead"]) + Vector3(0.0, 0.3, 0.0)
 	_camera.global_position = _skater.global_position + offset
-	_camera.look_at(_skater.global_position + CAM_AIM, Vector3.UP)
+	_camera.look_at(_skater.global_position + pose.get("cam_aim", CAM_AIM), Vector3.UP)
 
 
 var _reach_worst: float = 0.0

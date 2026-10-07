@@ -716,7 +716,7 @@ var visual_offset: Vector3 = Vector3.ZERO:
 			# Shifts MeshRoot, an ancestor of the Blade marker — the blade
 			# contact memo must not serve the un-shifted point.
 			_blade_contact_dirty = true
-			mesh_root.position = global_transform.basis.inverse() * v
+			_place_mesh_root()
 
 # Collaborators. The four rigs own the cosmetic body skeleton's bones and the
 # stick; the draw tracker is the faceoff clock. Each reads this node's tuning
@@ -2127,14 +2127,18 @@ func set_lower_body_lean(lean_x: float) -> void:
 
 
 # ── Knockdown Fall ────────────────────────────────────────────────────────────
-# Whole-rig tilt of the knockdown fall: rotates MeshRoot about its own origin —
-# the ice-level point between the skates — so the body tips like a felled tree
-# while the gameplay body (collider, slide, capsule position) stays upright
-# underneath. `axis` is the horizontal rotation axis in body-local space
-# (perpendicular to the fall direction), `tilt` in radians. MeshRoot's basis has
-# exactly this one writer (visual_offset owns its position), so the write is
-# absolute; the zero↔zero early-out keeps the upright hot path free.
+# Whole-rig tilt of the knockdown fall: rotates MeshRoot about the ice under the
+# skater — the point between the skates KnockdownFallRules tips its rod about —
+# so the body tips like a felled tree while the gameplay body (collider, slide,
+# capsule position) stays upright underneath. The skater's origin rides at hip
+# height, so tilting MeshRoot about its own origin would lay the body down a
+# hip-height above the ice; the pivot shift carries it down to where it lies.
+# `axis` is the horizontal rotation axis in body-local space (perpendicular to
+# the fall direction), `tilt` in radians. This is MeshRoot's one basis writer;
+# its position is the shift plus visual_offset (_place_mesh_root). The
+# zero↔zero early-out keeps the upright hot path free.
 var _knockdown_fall_tilt: float = 0.0
+var _fall_pivot_shift: Vector3 = Vector3.ZERO
 
 
 func set_knockdown_fall(axis: Vector3, tilt: float) -> void:
@@ -2146,8 +2150,19 @@ func set_knockdown_fall(axis: Vector3, tilt: float) -> void:
 	_blade_contact_dirty = true
 	if tilt == 0.0 or axis.length_squared() < 0.000001:
 		mesh_root.basis = Basis.IDENTITY
-		return
-	mesh_root.basis = Basis(axis.normalized(), tilt)
+		_fall_pivot_shift = Vector3.ZERO
+	else:
+		var tip := Basis(axis.normalized(), tilt)
+		mesh_root.basis = tip
+		# Rotating about the ice point P (ice is world Y = 0) instead of the
+		# origin is the rotation plus the shift P − tip·P.
+		var pivot := Vector3(0.0, -global_position.y, 0.0)
+		_fall_pivot_shift = pivot - tip * pivot
+	_place_mesh_root()
+
+
+func _place_mesh_root() -> void:
+	mesh_root.position = global_transform.basis.inverse() * visual_offset + _fall_pivot_shift
 
 
 # Head yaw, onto the helmet bone. The write owns Y only; the rig's captured

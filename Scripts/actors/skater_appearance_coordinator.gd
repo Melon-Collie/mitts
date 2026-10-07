@@ -137,7 +137,7 @@ func apply(attrs: PlayerAttributes) -> void:
 
 func _capture_baselines() -> void:
 	# Both rigs captured their own baselines off the scene subtree before freeing
-	# it (Skater._build_leg_rig / _build_upper_rig), so there is nothing to
+	# it (SkaterLegRig.build / SkaterArmRig.build), so there is nothing to
 	# capture here.
 	# The arm parts have no scene node — they are placed by IK — so their
 	# baselines come off the @exports the rig was seeded from.

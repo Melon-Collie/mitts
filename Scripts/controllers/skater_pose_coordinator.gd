@@ -136,6 +136,11 @@ func snap_lean_to_state() -> void:
 		# block pose itself snaps on entry.
 		upper_body_lean = -deg_to_rad(_controller.block_trunk_pitch_deg)
 		upper_body_lean_roll = _block_trunk_roll()
+	elif _is_slapper_charge(_skater.current_shot_state):
+		# The wind-up's hands are authored, not reached for (apply_upper_body's
+		# charge branch): no reach lean.
+		upper_body_lean = 0.0
+		upper_body_lean_roll = 0.0
 	else:
 		var reach_target: Vector2 = compute_upper_body_lean_target(
 				Vector2(_skater.top_hand.position.x, _skater.top_hand.position.z),
@@ -145,6 +150,12 @@ func snap_lean_to_state() -> void:
 		upper_body_lean = reach_target.x
 		upper_body_lean_roll = reach_target.y
 	_apply_lean()
+
+
+static func _is_slapper_charge(state: int) -> bool:
+	return state == State.SLAPPER_CHARGE_WITH_PUCK \
+			or state == State.SLAPPER_CHARGE_WITHOUT_PUCK \
+			or state == State.ONE_TIMER_RETENTION
 
 
 # Torso roll of the shot block, as a rotation.z: the chest leans onto the down
@@ -334,9 +345,7 @@ func apply_upper_body(delta: float) -> void:
 	# ONE_TIMER_RETENTION rides this branch too: the wind-up charge timer is
 	# frozen through the hold, so the coil simply holds at its apex — loaded and
 	# still — instead of unwinding to the generic tracking pose for a beat.
-	if charge_state == State.SLAPPER_CHARGE_WITH_PUCK \
-			or charge_state == State.SLAPPER_CHARGE_WITHOUT_PUCK \
-			or charge_state == State.ONE_TIMER_RETENTION:
+	if _is_slapper_charge(charge_state):
 		# Hold upper body facing the locked shot direction throughout the wind-up,
 		# then layer the coil rotation on top: back shoulder pulls away from the
 		# target as the wind-up timer fills, ending in a loaded stance with the
@@ -353,6 +362,13 @@ func apply_upper_body(delta: float) -> void:
 			var coil: float = -blade_side_sign * deg_to_rad(_controller.slapper_wind_up_twist_deg) * wind_up_eased
 			upper_body_angle = lerp_angle(upper_body_angle, aim_target + coil, _controller.slapper_wind_up_lerp_speed * delta)
 			_skater.set_upper_body_rotation(upper_body_angle)
+		# The wind-up's hands are authored, not reached for, so there is no reach
+		# lean (snap_lean_to_state agrees); the posture under the coil — the
+		# skating lean, a stagger's reel — carries on as in every other state.
+		var settle: float = minf(_controller.upper_body_lean_return_speed * delta, 1.0)
+		upper_body_lean = lerpf(upper_body_lean, 0.0, settle)
+		upper_body_lean_roll = lerpf(upper_body_lean_roll, 0.0, settle)
+		_apply_lean()
 		return
 
 	if charge_state == State.FOLLOW_THROUGH:

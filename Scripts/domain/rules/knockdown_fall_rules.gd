@@ -64,8 +64,8 @@ static func tilt_at(elapsed: float, entry_speed: float, cfg: Config) -> float:
 # develops over the buckle window instead of landing in one frame — the get-up
 # factor kd_t is built for the tail and is already 1 on the first down frame.
 # Closed-form in elapsed down-time rather than an eased state, so a replay
-# scrub lands on the exact pose. 1 for the rest of the down window; the native
-# gait kernel inlines the same expression (parity-gated).
+# scrub lands on the exact pose. 1 for the rest of the down window;
+# GaitKnockdownLayer inlines the same expression.
 static func entry_ramp(elapsed: float, cfg: Config) -> float:
 	var t: float = clampf(elapsed / maxf(cfg.buckle_seconds, 0.001), 0.0, 1.0)
 	return t * t * (3.0 - 2.0 * t)
