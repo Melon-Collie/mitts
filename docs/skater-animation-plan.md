@@ -147,9 +147,9 @@ Separate from the visual work, and decided independently (§9, Q5):
 
 - The crouch drop leaves the gameplay frame (§1).
 - `UpperBody`'s velocity lean is a pitch about the twisted axis — the same
-  frame bug as §0, but *gameplay* geometry. It decides where the blade sits.
-  Fixing it is a gameplay change (blade reach while the torso is twisted), so
-  it is listed rather than assumed.
+  frame bug as point 2 of "Why rebuild", but on *gameplay* geometry: it
+  decides where the blade sits. Fixing it is a gameplay change (blade reach
+  while the torso is twisted), so it is listed rather than assumed.
 - The reach lean is a real mechanic ("leaning toward the target genuinely
   extends world reach") and stays.
 
