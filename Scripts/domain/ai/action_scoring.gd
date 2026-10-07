@@ -400,8 +400,8 @@ static func _cover_at_height(arrival_y: float, t_read: float, goalie_down: bool,
 			# A hand below the PUCK covers nothing until it has risen to it —
 			# the lift spends read budget at the arm's pace. Racing to the
 			# puck's own height rather than to a fixed seam is what makes the
-			# armpit a real target: a keeper whose gloves are sealed at 0.49 m
-			# has to travel to 0.70 m, and often cannot in the time given.
+			# armpit a real target: a keeper whose gloves are sealed low has to
+			# travel up to it, and often cannot in the time given.
 			var reach_y: float = arrival_y - GoalieAnatomy.hand_vertical_half_extent()
 			if hand_y < reach_y:
 				t_arm = maxf(0.0, t_arm - (reach_y - hand_y) / arm_speed)
@@ -710,8 +710,8 @@ static func planned_goalie_depth(
 	var dist: float = sqrt(dx * dx + dz * dz)
 	# Same model the live keeper solves — ceiling gated on the play being in-zone,
 	# floored, and bounded by the physical standoff. The caps the planner cannot
-	# see (the lateral tracking cap, the backdoor re-square race) only ever pull
-	# him DEEPER, and the retreat-only `minf` below already means this never
+	# see (the lateral tracking cap, the backdoor re-square race, room to see
+	# around a screen, a net-front tip) only ever pull him DEEPER, and the retreat-only `minf` below already means this never
 	# challenges him out, so omitting them stays on the conservative side.
 	var c := _depth_cfg_planning
 	c.ceiling_radius = _planning_ceiling if dist <= GOALIE_ZONE_DEPTH_M \

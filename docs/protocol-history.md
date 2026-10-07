@@ -268,4 +268,9 @@ here whenever you bump, in the same format.
 #      (an old client renders remotes and the puck a lead behind a new host's
 #      rewind, and vice versa), which is a mis-adjudication rather than a
 #      decode error, so mixed builds must be refused.
-
+# v60: goalie `state_enum` gains HALF_BUTTERFLY_LEFT / HALF_BUTTERFLY_RIGHT
+#      (appended, same u8). Clients derive the goalie's body and head heights
+#      from the state, and the bot shot model reads its stance family off it,
+#      so an older peer would render and read the new values as unknown
+#      states — the legal range of an existing field changed, so mixed builds
+#      must be refused.

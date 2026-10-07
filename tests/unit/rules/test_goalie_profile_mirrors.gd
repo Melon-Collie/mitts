@@ -29,6 +29,7 @@ const _MIRRORED_EXPORTS: Array[StringName] = [
 	&"pad_toe_out_butterfly_deg", &"lateral_accel", &"puck_play_go_margin",
 	&"reaction_delay", &"prearmed_reaction_delay", &"read_lag",
 	&"read_converge_time", &"butterfly_drop_speed", &"five_hole_base",
+	&"slide_initial_speed",
 ]
 
 # The authored defaults are read off a PRISTINE controller rather than from the

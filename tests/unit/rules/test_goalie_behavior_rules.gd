@@ -719,6 +719,24 @@ func test_peek_actually_clears_the_screen_it_solved_for() -> void:
 		Vector3.ZERO, peeked - Vector3.ZERO, peeked, body, _screen_cfg())
 	assert_eq(after, 0.0, "stepped off the angle, he has his eyes on it")
 
+func test_peek_keeps_its_side_of_a_dead_on_screen() -> void:
+	# A body exactly on the sightline has no side of its own. Nudged by float noise
+	# either way, he stays on the side he is already peeking to.
+	for nudge: float in [-1e-6, 0.0, 1e-6]:
+		var body := PackedVector3Array([Vector3(nudge, 0, 8.5)])
+		for side: float in [-1.0, 1.0]:
+			var d: float = GoalieBehaviorRules.screen_peek_offset(
+				Vector3(0, 0, 10), Vector3.ZERO, body, _screen_cfg(), 0.5, side)
+			assert_eq(signf(d), side, "nudge %s, holding side %s" % [nudge, side])
+
+func test_peek_ignores_the_shooter_at_the_end_of_the_line() -> void:
+	# The carrier's own body sits on the puck. It is the release, not a screen,
+	# and it must not read as an unclearable one (f -> 1) however the float lands.
+	var body := PackedVector3Array([Vector3(0.2, 0, 5), Vector3(0.0, 0, 1e-6)])
+	var d: float = GoalieBehaviorRules.screen_peek_offset(
+		Vector3(0, 0, 10), Vector3.ZERO, body, _screen_cfg(), 0.5)
+	assert_almost_eq(d, -0.4, 0.02, "same peek as with the screener alone")
+
 # ── unset_fraction / movement_read_penalty ────────────────────────────────────
 # A set (stopped) goalie reads at the base delay; a moving / scrambling one reads
 # late — and the two pay DIFFERENT costs (see movement_read_penalty). Test-local
