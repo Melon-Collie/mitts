@@ -438,7 +438,7 @@ func _run_pose() -> void:
 				_skater.lower_body.rotation_degrees.z, _skater.upper_body.rotation_degrees.x,
 				_skater.upper_body.rotation_degrees.z])
 		print("    gait: balance lean %.1f° trunk pitch %.1f° roll %.1f° | leg roll L %.1f° R %.1f° | drop %.3f m" % [
-				rad_to_deg(_skater._spine.balance_tilt().length()),
+				rad_to_deg(_skater.balance_tilt().length()),
 				rad_to_deg(_controller._skating.trunk_pitch_add),
 				rad_to_deg(_controller._skating.trunk_roll_add),
 				rad_to_deg(_skater._legs._gait_leg_l.z), rad_to_deg(_skater._legs._gait_leg_r.z),

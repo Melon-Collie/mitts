@@ -427,3 +427,51 @@ Fixed after Phase 5:
 - Render against the Phase 3 baseline: 26 poses identical, `turn_tight_exit`
   3 px (the float32 rounding, over the longest held sequence).
 - Also corrected: the ARCHITECTURE sections that still described two skeletons.
+
+## §16 The lean in the gameplay frame (pivot at the skates)
+
+Decided after Phase 5: the balance lean pivots at the skates, not the hips, and
+the hands and stick lean with the body. Measured before: skating a hard turn the
+pelvis and chest sat exactly on the skater's position while the skates swung
+0.40 m out — the legs swinging round a still torso.
+
+A lean that pivots at the ice carries the shoulders ~0.5–0.65 m into the turn at
+the 30° cap, and the hands hang from the `UpperBody` frame, so the frame has to
+go with them. That makes the lean gameplay:
+
+- **The lean moves to the physics tick.** `SkaterController` steps the balance
+  spring in `_process_input`, right after `_apply_movement`, from that tick's
+  own acceleration — the velocity change the movement model made, so a body
+  check's impulse (applied after the tick, in the skater's integration) never
+  enters it and needs no snap filter. Reconcile replay re-runs it for free.
+- **The frames TRANSLATE, they do not tilt.** `LowerBody` moves where the hips
+  go when the rod tips about the ice under the skater; `UpperBody` moves where
+  the shoulders go when the trunk keeps `trunk_lean_share` of the lean on top.
+  Both keep their bases, so every IK assumption about an upright frame — the
+  blade landed on the ice from the frame's height, the lean-corrected blade Y —
+  still holds. The blade is placed blade-first from the cursor, so it stays
+  where the player aims; what changes is reach, measured from a shoulder that
+  has moved into the turn. `Skater._apply_body_height` stays the one writer of
+  both frames' positions.
+- **The visible body pivots at the ice too.** `SkaterSpineRig` seats the hips
+  at `LowerBody` (now shifted) and tips them by the full lean; the legs hang
+  from the hips, so the skates land back under the skater.
+- **On the wire.** The blade and top hand travel `UpperBody`-local, so every
+  machine must place the frame identically: `balance_tilt` (and its rate, for
+  the reconcile baseline) join `SkaterNetworkState`, four s16 —
+  `PROTOCOL_VERSION` 60, replay `FORMAT_VERSION` 8. Remotes interpolate the
+  tilt; the local reconcile snaps tilt and rate to the host's and replays.
+- **Claims.** The host bounds a claimed blade by `max_blade_reach` around the
+  body; a leaned shoulder reaches further toward the turn, so the bound grows by
+  the largest shift the lean cap allows.
+
+As built, measured on the same hard right turn as before (28° of lean): the
+skates sit 0.07 m off the skater's position (0.40 m before), the chest 0.50 m
+into the turn, and the visible shoulder within 0.14 m of the gameplay one the
+hand hangs from. `test_lean_pivots_at_the_skates.gd` holds the pivot, the
+blade on the ice, a body check not entering the lean, and a receiver
+rebuilding the frame and blade from the wire; the codec and reconcile suites
+hold the new fields. Left as it was, and now flagged: the torso's own pitch and
+roll are still not on the wire (`snap_lean_to_state` re-derives them), and in a
+hard turn a receiver's torso can differ by ~0.15 rad, enough to put that
+remote's blade ~18 cm off the ice.

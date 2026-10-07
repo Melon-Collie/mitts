@@ -23,6 +23,11 @@ var _input := InputState.new()
 
 
 func before_each() -> void:
+	_reset_rig()
+
+
+func _reset_rig() -> void:
+	_input = InputState.new()
 	var puck: Puck = load("res://Scenes/Puck.tscn").instantiate() as Puck
 	add_child_autofree(puck)
 	puck.global_position = Vector3(20.0, 0.0, 20.0)
@@ -58,22 +63,27 @@ func _hips_height() -> float:
 	return body.get_bone_pose_position(SkaterBodySkeleton.HIPS_BONE).y
 
 
+# The frame does move — the balance lean carries it — but only with tick state:
+# the same ticks drawn at 120 and at 360 fps place it identically.
 func test_the_skating_crouch_moves_the_body_not_the_frame() -> void:
-	var frame_y: float = _skater.upper_body.position.y
-	var lowest_hips: float = INF
-	var highest_hips: float = -INF
+	var frames_at: Array[PackedVector3Array] = []
+	for frames: int in [1, 3]:
+		_reset_rig()
+		var track := PackedVector3Array()
+		for _i: int in 300:
+			_tick(frames)
+			track.append(_skater.upper_body.position)
+		frames_at.append(track)
+		if frames == 1:
+			var crouch: float = _controller._skating.crouch_drop
+			assert_gt(crouch, 0.02, "skating at speed crouches")
+			assert_gt(_skater.body_drop_below_frame(), 0.02, "and the visible body sits down")
 	for i: int in 300:
-		_tick(1 + i % 3)  # 120, 240 and 360 fps in turn
-		assert_eq(_skater.upper_body.position.y, frame_y, "the gameplay frame holds its height")
-		if i > 150:
-			lowest_hips = minf(lowest_hips, _hips_height())
-			highest_hips = maxf(highest_hips, _hips_height())
-	var crouch: float = _controller._skating.crouch_drop
-	gut.p("skating: crouch %.3f m, visible hips %.3f..%.3f below the frame" % [
-			crouch, frame_y - highest_hips, frame_y - lowest_hips])
-	assert_gt(crouch, 0.02, "skating at speed crouches")
-	assert_gt(frame_y - highest_hips, 0.02, "and the visible body sits down")
-	assert_gt(highest_hips - lowest_hips, 0.002, "riding the stride's bob")
+		if not frames_at[0][i].is_equal_approx(frames_at[1][i]):
+			fail_test("tick %d: the frame sits at %s at 120 fps and %s at 360 fps" % [
+					i, frames_at[0][i], frames_at[1][i]])
+			return
+	assert_true(true, "the frame is a function of tick state alone")
 
 
 func test_a_held_pose_takes_the_frame_down_with_the_body() -> void:

@@ -561,6 +561,10 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# exactly like stamina: snap to the server value, then the replay loop's
 	# per-tick decay (in _apply_movement) re-derives it forward.
 	stagger_timer = server_state.stagger_timer
+	# The balance lean rides the same rail: the host's lean and spring rate at
+	# the ack, then the replay steps it forward through the unacked inputs.
+	balance_tilt_vel = server_state.balance_tilt_vel
+	skater.set_balance_tilt(server_state.balance_tilt)
 	# Knockdown rides the same rail — snap to the host value, replay re-derives the
 	# per-tick decay + lock. is_knocked_down follows so the replay's _apply_movement
 	# gates correctly from the first replayed tick. The meta sync covers the

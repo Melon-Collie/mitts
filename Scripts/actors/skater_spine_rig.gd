@@ -15,13 +15,14 @@ extends RefCounted
 # off the hips; and the shoulders cannot turn further from the hips than a
 # spine can, so past that the hips come round with them.
 #
-# On top of that order sits the balance lean (BalanceRules): the whole body
-# tilts toward its horizontal acceleration. It pivots at the hips, because the
-# skater's origin is the centre of mass travelling the path — in a real lean it
-# is the skates that swing out from under it — and the body drops by what the
-# tilt costs the legs' vertical span so the blades stay on the ice. The trunk
-# keeps only part of the lean (Skater.trunk_lean_share) and the neck takes part
-# of that back (Skater.head_level_share).
+# On top of that order sits the balance lean (Skater.balance_tilt, stepped in
+# the physics tick): the whole body tilts toward its horizontal acceleration
+# about the ice under the skater, so the blades stay where they are and the body
+# goes over them. The tip itself is LowerBody's shift (Skater._update_lean_shift)
+# — the hips bone sits on that frame and takes the full lean, the legs hang from
+# it back down to the ice. The trunk keeps only part of the lean
+# (Skater.trunk_lean_share) and the neck takes part of that back
+# (Skater.head_level_share).
 
 # Shoulders against hips: the trunk's comfortable axial rotation, thoracic and
 # lumbar together.
@@ -31,12 +32,6 @@ const TWIST_LIMIT: float = deg_to_rad(55.0)
 # happens; splitting it puts half at the hem and half at the hip balls instead of
 # all of it at the hem.
 const WAIST_TWIST_SHARE: float = 0.5
-# A velocity step past this (m/s²) is a snap — a teleport, a reconcile, an
-# impulse — not something a body leans into. Skating tops out near 1.1 g.
-const _ACCEL_SNAP: float = 3.0 * BalanceRules.GRAVITY
-# Longest the acceleration estimate holds one sample when velocity stops
-# changing (it only steps on physics ticks, so it is sampled since the last one).
-const _FD_WINDOW_MAX: float = 0.1
 
 var _skater: Skater
 var _skeleton: Skeleton3D = null
@@ -44,14 +39,6 @@ var _hips_pose := Transform3D.IDENTITY
 var _waist_pose := Transform3D.IDENTITY
 var _spine_pose := Transform3D.IDENTITY
 var _neck_pose := Transform3D.IDENTITY
-
-# Balance state, world XZ. `_tilt` is the lean the spring has reached, radians.
-var _accel := Vector2.ZERO
-var _tilt := Vector2.ZERO
-var _tilt_vel := Vector2.ZERO
-var _prev_velocity := Vector3.ZERO
-var _have_prev_velocity: bool = false
-var _fd_time: float = 0.0
 
 
 func setup(skater: Skater) -> void:
@@ -61,35 +48,6 @@ func setup(skater: Skater) -> void:
 func build(skeleton: Skeleton3D) -> void:
 	_skeleton = skeleton
 	update()
-
-
-# Advances the balance lean by one rendered frame. Velocity only steps on
-# physics ticks, so the acceleration is sampled over the time since it last
-# changed rather than per frame — a per-frame difference alternates between
-# zero and double above the tick rate.
-func advance(delta: float) -> void:
-	_fd_time += delta
-	var v: Vector3 = _skater.velocity
-	if not _have_prev_velocity:
-		_have_prev_velocity = true
-		_prev_velocity = v
-		_fd_time = 0.0
-	elif v != _prev_velocity or _fd_time >= _FD_WINDOW_MAX:
-		var accel := Vector2(v.x - _prev_velocity.x, v.z - _prev_velocity.z) / _fd_time
-		_accel = Vector2.ZERO if accel.length() > _ACCEL_SNAP else accel
-		_prev_velocity = v
-		_fd_time = 0.0
-	var target: Vector2 = BalanceRules.balance_tilt(_accel,
-			deg_to_rad(_skater.balance_lean_cap_deg))
-	var s: Vector4 = BalanceRules.spring_step(_tilt, _tilt_vel, target,
-			_skater.balance_omega, delta)
-	_tilt = Vector2(s.x, s.y)
-	_tilt_vel = Vector2(s.z, s.w)
-
-
-# The lean the spring has reached, world XZ, radians — for tests and tooling.
-func balance_tilt() -> Vector2:
-	return _tilt
 
 
 # Re-derives the four bones from the two frames and the balance lean. Returns
@@ -107,20 +65,19 @@ func update() -> bool:
 	var waist_basis := Basis(Vector3.UP, waist_yaw)
 
 	# The lean, in skeleton space (the skater root's frame), as an axis and angle.
-	var tilt3: Vector3 = _skater.global_transform.basis.inverse() * Vector3(_tilt.x, 0.0, _tilt.y)
+	var tilt: Vector2 = _skater.balance_tilt()
+	var tilt3: Vector3 = _skater.global_transform.basis.inverse() * Vector3(tilt.x, 0.0, tilt.y)
 	var theta: float = tilt3.length()
 	var lean := Basis.IDENTITY
 	var axis := Vector3.RIGHT
-	# The visible hips sit below LowerBody by the part of the crouch the
-	# gameplay frame does not take (Skater.set_skating_crouch_drop).
-	var drop: float = _skater.body_drop_below_frame()
 	if theta > 1e-4:
 		axis = Vector3.UP.cross(tilt3 / theta)
 		lean = Basis(axis, theta)
-		# The legs swing out about the hips, so the body comes down by what that
-		# costs their span to the ice.
-		drop += (lower.position.y - drop + GameRules.FACEOFF_SPAWN_HEIGHT) * (1.0 - cos(theta))
-	var hips := Transform3D(lean * hip_basis, lower.position - Vector3(0.0, drop, 0.0))
+	# LowerBody already carries the lean's shift; the visible hips sit below it
+	# by the part of the crouch the gameplay frame does not take
+	# (Skater.set_skating_crouch_drop).
+	var hips := Transform3D(lean * hip_basis,
+			lower.position - Vector3(0.0, _skater.body_drop_below_frame(), 0.0))
 	var waist := Transform3D(waist_basis, Vector3.ZERO)
 
 	# Relative to the hips, the trunk folds about THEIR axis by the share of the

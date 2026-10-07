@@ -311,6 +311,23 @@ func test_skater_stamina_quantizes_within_tolerance() -> void:
 		assert_almost_eq(dec.stamina, v, 1.0 / 255.0, "stamina %f round-trips within u8 tolerance" % v)
 
 
+# The balance lean places the UpperBody frame the wire's blade and hand are
+# local to, so a receiver must land on the sender's lean to the wire's precision.
+func test_skater_balance_lean_round_trips() -> void:
+	for tilt: Vector2 in [Vector2.ZERO, Vector2(0.52, -0.31), Vector2(-0.52, 0.52)]:
+		var s := SkaterNetworkState.new()
+		s.balance_tilt = tilt
+		s.balance_tilt_vel = Vector2(-tilt.y, tilt.x) * 9.0
+		s.wrister_address_side = -1  # the byte before it, so an offset slip shows
+		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+				WorldStateCodec._encode_skater_quantized(s))
+		assert_almost_eq(dec.balance_tilt.x, tilt.x, 1e-4, "lean x %s" % tilt)
+		assert_almost_eq(dec.balance_tilt.y, tilt.y, 1e-4, "lean z %s" % tilt)
+		assert_almost_eq(dec.balance_tilt_vel.x, s.balance_tilt_vel.x, 1e-3, "rate x %s" % tilt)
+		assert_almost_eq(dec.balance_tilt_vel.y, s.balance_tilt_vel.y, 1e-3, "rate z %s" % tilt)
+		assert_eq(dec.wrister_address_side, -1, "the intent byte is untouched")
+
+
 # ── decode_for_replay: side-effect-free world-state decode ────────────────────
 # The replay viewer / goal-replay driver decode packets through decode_for_replay
 # instead of decode_world_state precisely because it must NOT mutate the live
@@ -343,7 +360,7 @@ func _build_ws(
 	buf.append_array(header)
 	for entry: Dictionary in skaters:
 		_append_s32(buf, entry.id)
-		buf.append_array(WorldStateCodec._encode_skater_quantized(entry.state))  # 40 B
+		buf.append_array(WorldStateCodec._encode_skater_quantized(entry.state))
 		buf.append(0)  # queue_depth (ignored by replay decode)
 	buf.append_array(WorldStateCodec._encode_puck_quantized(puck))  # 12 B
 	buf.append(carrier_idx & 0xFF)

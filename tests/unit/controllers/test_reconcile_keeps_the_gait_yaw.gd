@@ -57,3 +57,21 @@ func test_a_reconcile_keeps_the_hips_on_the_travel_line() -> void:
 	assert_almost_eq(_skater.global_position.x, server.position.x, 0.001, "the reconcile snapped")
 	assert_almost_eq(_skater.lower_body.rotation.y, gait_yaw, 0.001,
 			"the hips keep the gait's yaw through the reconcile")
+
+
+# The lean is replicated state like stamina: the reconcile adopts the host's
+# lean and spring rate at the ack, then replays forward from it.
+func test_a_reconcile_adopts_the_hosts_lean() -> void:
+	_skater.set_facing(Vector2(0.0, -1.0))
+	var server := SkaterNetworkState.new()
+	server.position = _skater.global_position + Vector3(0.5, 0.0, 0.0)
+	server.velocity = Vector3(0.0, 0.0, -6.0)
+	server.facing = Vector2(0.0, -1.0)
+	server.last_processed_host_timestamp = 1.0
+	server.shot_state = _skater.current_shot_state
+	server.balance_tilt = Vector2(0.3, -0.1)
+	server.balance_tilt_vel = Vector2(-1.0, 0.5)
+	_controller.reconcile(server)
+	assert_almost_eq(_skater.balance_tilt().x, 0.3, 1e-6, "the host's lean")
+	assert_almost_eq(_skater.balance_tilt().y, -0.1, 1e-6, "the host's lean")
+	assert_almost_eq(_controller.balance_tilt_vel.x, -1.0, 1e-6, "and its rate")

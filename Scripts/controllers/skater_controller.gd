@@ -1032,6 +1032,10 @@ var stagger_timer: float = 0.0
 # knockdown threshold; while > 0 the skater is down (no input, sliding, no puck).
 # Replicated / snapped / decayed exactly like stagger_timer.
 var knockdown_timer: float = 0.0
+# Rate of the balance lean's spring (rad/s, world XZ); the lean itself lives on
+# the skater (Skater.balance_tilt). Stepped in the tick by _advance_balance and
+# replicated — the local reconcile snaps both to the host's before replay.
+var balance_tilt_vel: Vector2 = Vector2.ZERO
 # Down-window metadata for the knockdown fall pose: total seconds of the current
 # window (so elapsed down-time = _knockdown_total − knockdown_timer) and the
 # horizontal shove speed at entry (seeds the fall's tip rate). Captured by
@@ -1261,6 +1265,7 @@ func build_ai_caps() -> AISkaterCaps:
 	# anti-cheat clamp bounds against this build's real reach, not the league
 	# default. See AISkaterCaps.max_blade_reach / the claim resolvers.
 	caps.max_blade_reach = stick_length + GameRules.DEFAULT_BLADE_LENGTH_M + rom_backhand_reach_max
+	caps.max_lean_shift = skater.max_lean_shift()
 	caps.wrister_shot_speed = max_wrister_power
 	caps.blade_speed = max_blade_speed
 	caps.loft_tans = Vector3(loft_tan_low, loft_tan_mid, loft_tan_high)
@@ -1672,7 +1677,9 @@ func _process_input(input: InputState, delta: float) -> void:
 	if input.stick_lift_pressed and has_puck and _sm.get_state() == State.SKATING_WITH_PUCK:
 		_nudge()
 
+	var tick_start_velocity: Vector3 = skater.velocity
 	_apply_movement(input, delta)
+	_advance_balance(tick_start_velocity, delta)
 	_pose.apply_velocity_lean(delta)
 	_pose.apply_facing(input, delta)
 	_apply_state(input, delta)
@@ -1899,6 +1906,8 @@ func apply_blade_aim_only(input: InputState, delta: float) -> void:
 	# Movement is locked — whatever keys are down, nothing is being tried.
 	skater.move_intent = Vector2.ZERO
 	skater.brake_intent = false
+	# Nothing accelerates while locked; the lean settles.
+	_advance_balance(skater.velocity, delta)
 	# Feed the shared host-clock stamp to the faceoff draw (this is the countdown
 	# wind-up/rip path), so its timing is judged ping-neutrally.
 	if skater.is_draw_tracking():
@@ -1962,10 +1971,29 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.sprint_locked = _sprint_locked
 	state.stagger_timer = stagger_timer
 	state.knockdown_timer = knockdown_timer
+	state.balance_tilt = skater.balance_tilt()
+	state.balance_tilt_vel = balance_tilt_vel
 	state.move_intent = skater.move_intent
 	state.brake_intent = skater.brake_intent
 	state.hit_committed = skater.hit_committed
 	state.sprint_active = sprint_active
+
+# One tick of the balance lean: the body tips toward the acceleration THIS tick's
+# movement produced (BalanceRules.balance_tilt), through the critically damped
+# spring. Measured across _apply_movement alone, so a body check's impulse —
+# applied after the tick, in the skater's integration — never enters it, and a
+# reconcile that snaps velocity replays it exactly.
+func _advance_balance(tick_start_velocity: Vector3, delta: float) -> void:
+	if delta <= 0.0:
+		return
+	var dv: Vector3 = skater.velocity - tick_start_velocity
+	var target: Vector2 = BalanceRules.balance_tilt(Vector2(dv.x, dv.z) / delta,
+			deg_to_rad(skater.balance_lean_cap_deg))
+	var s: Vector4 = BalanceRules.spring_step(skater.balance_tilt(), balance_tilt_vel,
+			target, skater.balance_omega, delta)
+	balance_tilt_vel = Vector2(s.z, s.w)
+	skater.set_balance_tilt(Vector2(s.x, s.y))
+
 
 func get_shot_state() -> int:
 	return _sm.get_state()
@@ -2019,6 +2047,8 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	# bit so replayed sprints stride like live ones.
 	sprint_active = state.sprint_active
 	stagger_timer = state.stagger_timer
+	balance_tilt_vel = state.balance_tilt_vel
+	skater.set_balance_tilt(state.balance_tilt)
 	var prev_kd: float = knockdown_timer
 	knockdown_timer = state.knockdown_timer
 	skater.is_knocked_down = knockdown_timer > 0.0
@@ -2266,6 +2296,8 @@ func teleport_to(pos: Vector3, facing: Vector2 = Vector2.ZERO) -> void:
 	hit_active = false
 	skater.hit_committed = false
 	stagger_timer = 0.0
+	balance_tilt_vel = Vector2.ZERO
+	skater.set_balance_tilt(Vector2.ZERO)
 	var was_down: bool = knockdown_timer > 0.0
 	knockdown_timer = 0.0
 	skater.is_knocked_down = false
@@ -2382,6 +2414,8 @@ func apply_approach(delta: float) -> bool:
 		skater.set_facing(_approach_facing)
 		_pose.facing = _approach_facing
 		clear_approach()
+		# The path eased in; the snap onto the dot is not a stop to lean into.
+		_advance_balance(skater.velocity, delta)
 		return false
 	var new_pos: Vector3 = ApproachRules.path_position(
 			_approach_start, _approach_target, t, _approach_v0, _approach_duration)
@@ -2392,8 +2426,10 @@ func apply_approach(delta: float) -> bool:
 	var planar := Vector3(vel.x, 0.0, vel.z)
 	if planar.length() > approach_max_gait_speed:
 		planar = planar.normalized() * approach_max_gait_speed
+	var tick_start_velocity: Vector3 = skater.velocity
 	skater.global_position = new_pos
 	skater.velocity = planar
+	_advance_balance(tick_start_velocity, delta)
 	# Facing follows the actual per-tick travel (the momentum path curves), then
 	# settles to the dot facing near the end — so a stoppage skater keeps its
 	# heading through the whistle instead of snapping toward the dot.

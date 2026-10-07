@@ -191,13 +191,13 @@ func test_a_held_turn_leans_and_steering_taps_do_not() -> void:
 		for _i: int in 30:
 			_tick(c, input, move, Vector3(0.0, 0.0, -3.0))
 			if k >= 2:
-				tap_worst = maxf(tap_worst, c.skater._spine.balance_tilt().length())
+				tap_worst = maxf(tap_worst, c.skater.balance_tilt().length())
 	assert_lt(rad_to_deg(tap_worst), 10.0,
 			"steering taps leaned the body %.1f°" % rad_to_deg(tap_worst))
 
 	for _i: int in 90:
 		_tick(c, input, Vector2(1.0, 0.0), Vector3(2.2, 0.0, -2.2))
-	assert_gt(rad_to_deg(c.skater._spine.balance_tilt().length()), 15.0,
+	assert_gt(rad_to_deg(c.skater.balance_tilt().length()), 15.0,
 			"a held hard turn must lean the body into it")
 
 

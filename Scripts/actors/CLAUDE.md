@@ -65,7 +65,8 @@ space is the space those two gameplay frames are placed in, and the arm IK
 reads the gameplay hands straight into it.
 
 ```
-HIPS     yaw and pitch from LowerBody, the balance lean; both legs root here
+HIPS     on LowerBody (which carries the lean's shift): its yaw and pitch, and
+         the full balance lean; both legs root here
   WAIST  half the trunk's twist — the pelvis (shorts) rides it
     SPINE  the fold about the hips, then the rest of the twist, then the
            reach lean, less the lean the trunk hands back; torso and caps
@@ -87,15 +88,20 @@ under `UpperBody`, a leg skeleton under `LowerBody`) could not:
   hands; past the limit the hips come round instead.
 
 **The body leans toward its acceleration** (`BalanceRules`): atan(|a|/g),
-through a critically damped spring solved exactly, so frame rate cannot change
-it. One model is the turn's bank, the start's forward drive and the stop's sit
-back; the gait authors none of them. It pivots at the HIPS, not the ice,
-because the skater's origin is the centre of mass travelling the path — the
-skates are what swing out — and the hips drop by what the tilt costs the legs'
-span. The trunk keeps only `trunk_lean_share` of it (legs carry the edge,
-shoulders stay near the stick) and the neck takes back `head_level_share` of
-that. The spring is what tells a steering correction from a turn: a held arc
-arrives in ~0.55 s, taps a quarter second apart show at a fraction.
+through a critically damped spring solved exactly. One model is the turn's
+bank, the start's forward drive and the stop's sit back; the gait authors none
+of them. It pivots at the ICE under the skater: the blades are where the body
+touches the ice, so they stay put and the body goes over them. That carries
+the shoulders up to ~0.6 m into a turn, and the hands go with them, so the lean
+is gameplay — `SkaterController` steps it in the tick, it is replicated, and it
+TRANSLATES both gameplay frames (`Skater._update_lean_shift`) without tilting
+them; the chain then seats the hips on the shifted `LowerBody` and tips them by
+the full lean. (Pivoting at the hips instead keeps the torso still and swings
+the skates 0.4 m round it, which reads as the legs sliding.) The trunk keeps
+only `trunk_lean_share` of it (legs carry the edge, shoulders stay near the
+stick) and the neck takes back `head_level_share` of that. The spring is what
+tells a steering correction from a turn: a held arc arrives in ~0.55 s, taps a
+quarter second apart show at a fraction. `test_lean_pivots_at_the_skates.gd`.
 
 The shorts and the jersey are both rigid shells, so the twist between them
 shows as a seam wherever it happens. Half of it goes on the waist and half

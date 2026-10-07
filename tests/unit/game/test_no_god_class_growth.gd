@@ -59,8 +59,8 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# teleport read as travel moved the tracked threat metres in a tick.
 	"res://Scripts/controllers/goalie_controller.gd": 4550,
 	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3755,
-	"res://Scripts/controllers/skater_controller.gd": 3398,
-	"res://Scripts/actors/skater.gd": 2561,
+	"res://Scripts/controllers/skater_controller.gd": 3411,
+	"res://Scripts/actors/skater.gd": 2630,
 	"res://Scripts/networking/network_manager.gd": 2824,
 	"res://Scripts/game/tutorial_manager.gd": 2101,
 	"res://Scripts/controllers/skater_ik_coordinator.gd": 895,
@@ -78,7 +78,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/controllers/goalie_body_config_builder.gd": 974,
 	"res://Scripts/ui/network_debug_overlay.gd": 956,
 	"res://Scripts/networking/network_telemetry.gd": 957,
-	"res://Scripts/controllers/local_controller.gd": 926,
+	"res://Scripts/controllers/local_controller.gd": 930,
 	"res://Scripts/ui/player_settings_popup.gd": 863,
 	"res://Scripts/ui/slot_grid_panel.gd": 839,
 	"res://Scripts/domain/state/game_state_machine.gd": 838,
@@ -91,7 +91,7 @@ const _API_SLACK: int = 3
 
 const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/networking/network_manager.gd": 200,
-	"res://Scripts/actors/skater.gd": 137,
+	"res://Scripts/actors/skater.gd": 140,
 	"res://Scripts/domain/ai/action_scoring.gd": 68,
 	"res://Scripts/game/game_manager.gd": 61,
 	"res://Scripts/domain/state/player_attributes.gd": 53,

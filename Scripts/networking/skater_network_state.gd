@@ -67,6 +67,13 @@ var hit_committed: bool = false
 # shot_state == WRISTER_AIM (validity is implicit in the state, so the wire
 # spends one bit); garbage otherwise, and consumers must gate on the state.
 var wrister_address_side: int = 1
+# The balance lean (world XZ, radians) and its spring rate. LOAD-BEARING: the
+# lean translates the UpperBody frame the wire's blade_position and
+# top_hand_position are local to, so a receiver that placed the frame from any
+# other lean would put the blade somewhere else. The local reconcile snaps both
+# to the host's before replay (v60).
+var balance_tilt: Vector2 = Vector2.ZERO
+var balance_tilt_vel: Vector2 = Vector2.ZERO
 var host_timestamp: float = 0.0         # host-only, not serialized
 var blade_contact_world: Vector3 = Vector3.ZERO  # host-only, not serialized
 # World-space top-hand (grip) point. host-only, not serialized — paired with
@@ -100,6 +107,8 @@ func to_array() -> Array:
 		knockdown_timer,
 		hit_committed,
 		wrister_address_side,
+		balance_tilt,
+		balance_tilt_vel,
 	]
 
 func copy_from(s: SkaterNetworkState) -> void:
@@ -126,6 +135,8 @@ func copy_from(s: SkaterNetworkState) -> void:
 	sprint_active = s.sprint_active
 	hit_committed = s.hit_committed
 	wrister_address_side = s.wrister_address_side
+	balance_tilt = s.balance_tilt
+	balance_tilt_vel = s.balance_tilt_vel
 	host_timestamp = s.host_timestamp
 	blade_contact_world = s.blade_contact_world
 	top_hand_world = s.top_hand_world
@@ -164,4 +175,7 @@ static func from_array(data: Array) -> SkaterNetworkState:
 		state.hit_committed = data[21]
 	if data.size() > 22:
 		state.wrister_address_side = data[22]
+	if data.size() > 24:
+		state.balance_tilt = data[23]
+		state.balance_tilt_vel = data[24]
 	return state

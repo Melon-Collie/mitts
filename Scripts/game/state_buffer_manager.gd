@@ -218,6 +218,8 @@ func _interpolate_skater(peer_id: int, ts: float) -> SkaterNetworkState:
 	# resolver reads a (0,0,0) hand on rewound snapshots.
 	result.top_hand_world = from_s.top_hand_world.lerp(to_s.top_hand_world, t)
 	result.top_hand_position = from_s.top_hand_position.lerp(to_s.top_hand_position, t)
+	result.balance_tilt = from_s.balance_tilt.lerp(to_s.balance_tilt, t)
+	result.balance_tilt_vel = from_s.balance_tilt_vel.lerp(to_s.balance_tilt_vel, t)
 	var bracket_dt: float = to_s.host_timestamp - from_s.host_timestamp
 	result.upper_body_rotation_y = BufferedStateInterpolator.hermite_angle(
 			from_s.upper_body_rotation_y, from_s.upper_body_angular_velocity,

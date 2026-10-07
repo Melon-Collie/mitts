@@ -10,18 +10,18 @@ extends RefCounted
 # 1. World state  (STATE_RATE = 60 Hz, unreliable_ordered) — single flat
 #    PackedByteArray, sized once and written at offsets (see encode_world_state):
 #      u16 ws_sequence, u32 host_capture_time (0.1ms units), u8 num_skaters
-#      [u32 peer_id, skater_bytes(40), u8 queue_depth] × num_skaters
+#      [u32 peer_id, skater_bytes(49), u8 queue_depth] × num_skaters
 #      puck_bytes(13)
 #      u8 num_goalies, [goalie_bytes(43)] × num_goalies
 #      u8 score0, u8 score1, u8 phase, u8 period, u16 time_remaining
 #
-#    Total for 6 players + 2 goalies: 383 bytes — stays in a single packet, well
-#    under Steam's ~1200-byte unreliable cap. This matters: Steam (unlike ENet)
+#    Total for 6 players + 2 goalies: 437 bytes (10 players: 653) — stays in a
+#    single packet, well under Steam's ~1200-byte unreliable cap. This matters: Steam (unlike ENet)
 #    does NOT fragment unreliable messages, so an oversized snapshot would be
 #    dropped at send rather than split across datagrams.
 #
 #    Quantization layout:
-#      Skater  (40 B): pos s16/s8/s16@1cm, vel 3×s16@0.02m/s,
+#      Skater  (49 B): pos s16/s8/s16@1cm, vel 3×s16@0.02m/s,
 #                      blade 3×s16@1cm, top_hand 3×s16@1cm,
 #                      facing u16 (0–TAU→0–65535), upper_body_rot s16 (−π–π→−32767–32767),
 #                      facing_angular_velocity s16@PI*10 rad/s, upper_body_angular_velocity s16@PI*10 rad/s,
@@ -29,7 +29,8 @@ extends RefCounted
 #                      flags u8 (shot_state[2:0]+elevation_level[4:3]+ghost[5]+blade_up[6]+sprint_locked[7]),
 #                      shot_charge u8, stamina u8, stagger_timer u8@0.01s,
 #                      knockdown_timer u8@0.01s,
-#                      intent u8 (move octant[2:0]+moving[3]+brake[4] v15, sprint[5] v16, hit_commit[6] v28)
+#                      intent u8 (move octant[2:0]+moving[3]+brake[4] v15, sprint[5] v16, hit_commit[6] v28),
+#                      balance_tilt 2×s16@π/32767 rad, balance_tilt_vel 2×s16@20/32767 rad/s (v60)
 #      Puck    (13 B): pos s16/s16/s16@1cm, vel 3×s16@0.02m/s, carrier_idx u8 (0xFF=none)
 #      Goalie  (43 B): root (12 B) + pose (31 B). Root:
 #                      pos_x/z s16@1cm, rot_y s16@π/32767, state u8, fho u8,
@@ -70,9 +71,11 @@ const WS_SEQUENCE_OFFSET: int = 0     # u16
 const WS_HOST_TIME_OFFSET: int = 2    # u32, 0.1 ms units
 const WS_SKATER_COUNT_OFFSET: int = 6  # u8
 const WS_HEADER_SIZE: int = 7
-const SKATER_STATE_BYTES: int = 41  # inner skater state block; every encode/decode
+const SKATER_STATE_BYTES: int = 49  # inner skater state block; every encode/decode
                                     # site must read it from here, or a grown block
                                     # silently truncates instead of failing
+# Wire range of the balance lean's spring rate, rad/s.
+const _TILT_VEL_RANGE: float = 20.0
 const SKATER_BLOCK_SIZE: int = SKATER_STATE_BYTES + 5  # + u32 peer_id + u8 queue_depth
 const PUCK_BLOCK_SIZE: int = 13    # 12B pos+vel + 1B carrier_idx
 const GOALIE_BLOCK_SIZE: int = 43  # 12 root + 31 pose (glove/blocker offsets are s16-wide)
@@ -438,10 +441,11 @@ func decode_stats(data: Array) -> void:
 
 # ── Quantization helpers ──────────────────────────────────────────────────────
 
-# Skater: SKATER_STATE_BYTES (41) bytes
+# Skater: SKATER_STATE_BYTES (49) bytes
 # Offsets: pos(0..4) vel(5..10) blade(11..16) top_hand(17..22)
 #          facing(23..24) ubrot(25..26) fav(27..28) ubav(29..30) lp_ts(31..34)
 #          flags(35) charge(36) stamina(37) stagger(38) knockdown(39) intent(40)
+#          tilt(41..44) tilt_vel(45..48)
 # Writes the skater block into `b` at `o`, returning the next offset. Godot 4
 # passes Packed arrays to functions BY REFERENCE, so these writes land in the
 # caller's buffer — that is what lets the hot path fill one pre-sized packet
@@ -509,6 +513,13 @@ static func _write_skater_quantized(b: PackedByteArray, o: int, s: SkaterNetwork
 	if s.wrister_address_side > 0:
 		intent |= 0x80
 	b.encode_u8(o, intent); o += 1
+	# Balance lean (v60), s16 @ π/32767 rad per axis — the lean caps at 30°,
+	# and every machine must place the UpperBody frame the blade is local to
+	# from the same value — and its spring rate, s16 @ 20/32767 rad/s.
+	b.encode_s16(o, clampi(roundi(s.balance_tilt.x / PI * 32767.0), -32768, 32767)); o += 2
+	b.encode_s16(o, clampi(roundi(s.balance_tilt.y / PI * 32767.0), -32768, 32767)); o += 2
+	b.encode_s16(o, clampi(roundi(s.balance_tilt_vel.x / _TILT_VEL_RANGE * 32767.0), -32768, 32767)); o += 2
+	b.encode_s16(o, clampi(roundi(s.balance_tilt_vel.y / _TILT_VEL_RANGE * 32767.0), -32768, 32767)); o += 2
 	return o
 
 
@@ -582,6 +593,11 @@ static func _decode_skater_quantized(b: PackedByteArray, offset: int = 0) -> Ska
 	s.sprint_active = (intent & 0x20) != 0
 	s.hit_committed = (intent & 0x40) != 0
 	s.wrister_address_side = 1 if (intent & 0x80) != 0 else -1
+	o += 1
+	s.balance_tilt.x = b.decode_s16(o) / 32767.0 * PI; o += 2
+	s.balance_tilt.y = b.decode_s16(o) / 32767.0 * PI; o += 2
+	s.balance_tilt_vel.x = b.decode_s16(o) / 32767.0 * _TILT_VEL_RANGE; o += 2
+	s.balance_tilt_vel.y = b.decode_s16(o) / 32767.0 * _TILT_VEL_RANGE
 	return s
 
 
