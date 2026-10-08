@@ -130,8 +130,27 @@ playtesting says so.
 
 Today the gap is ~0.38 m/s at cruise but only ~0.17 when both sprint (the
 bypass waives 60% of the penalty), so this roughly 2.5×'s the top-end gap. An
-equal chaser closes about a metre every 2.4 s. That is correct hockey, but it
-removes "a fast carrier can separate" — see §6.
+equal chaser closes about a metre every 2.4 s.
+
+**A clean beat still holds, so `CARRY_BASE` stays.** Simulated with the stride
+model (neutral builds, straight line, instant pivot, "caught" = back inside
+~1.6 m of stick reach), a carrier at full carry speed beating a defender side
+by side:
+
+| Defender's speed at the beat | Peak lead | Caught after | Carrier has skated |
+|---|---|---|---|
+| 0 m/s | 7.5 m at 2.4 s | 16.5 s | 158 m |
+| 2 m/s | 5.8 m | 12.2 s | 117 m |
+| 4 m/s | 4.2 m | 8.3 s | 79 m |
+| 6 m/s | 2.3 m | 3.3 s | 31 m |
+| 8 m/s | 0.6 m | never beaten | — |
+
+Blue line to slot is ~12 m (~1.3 s) and red line to slot ~2 s, so a beat is
+decided in the defender's first two seconds of acceleration, not by top speed;
+the top-end gap only matters on long chases from the defensive zone. Today's
+sprint did not change this either: its 0.17 m/s gap lasted a ~2.2 s pool. A real
+backchecker mostly gets there by cutting inside the carrier's curve to the net,
+which this straight-line run does not model.
 
 ### 2.4 Stamina is deleted
 
@@ -352,10 +371,7 @@ the stance numbers have settled.
 2. **Low-speed turning.** `max_turn_rate` (6 rad/s) caps turning below
    ~3 m/s, so the stance's grip gain fades out there. Raise the cap in the
    stance?
-3. **Carrier separation.** Without the sprint bypass a carrier never
-   outruns an equal chaser, and the top-end gap is ~4% (§2.3). Accept it,
-   or raise `CARRY_BASE`?
-4. **Weight loses its metabolism lever.** Lean's compensation was fast
+3. **Weight loses its metabolism lever.** Lean's compensation was fast
    recovery; it keeps its agility edge, which the stance's grip multiplier
    amplifies. Check the corner budgets `test_player_attributes.gd` pins before
    adding anything.
