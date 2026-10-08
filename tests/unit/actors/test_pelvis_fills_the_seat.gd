@@ -47,28 +47,55 @@ func _profile_back(profile: Array[Vector2], sway: Array[float], y: float) -> flo
 	return -1.0
 
 
-# ── It must not show at rest ─────────────────────────────────────────────────
+# ── It must not show, at rest or twisted ─────────────────────────────────────
 
 # The pelvis exists to be seen only where there was nothing. Anywhere the torso
 # still has material — every height the two share — it has to sit inside the
 # torso's own rings, or it reads as a bulge through the jersey in every pose in
 # the game rather than as the seat under one.
-func test_the_pelvis_hides_under_the_jersey_at_rest() -> void:
+#
+# Not just square-on: the trunk twists on the pelvis by whatever share of the
+# spine's range the waist does not take (SkaterSpineRig), and both lathes are
+# wider than they are deep, so the check walks each pelvis ring's corners
+# through that yaw and asks the torso's ELLIPSE, sway included, whether they are
+# inside.
+func test_the_pelvis_hides_under_the_jersey_at_any_twist() -> void:
+	var max_twist: float = SkaterSpineRig.TWIST_LIMIT * (1.0 - SkaterSpineRig.WAIST_TWIST_SHARE)
+	var xs: float = SkaterMeshBuilder._TORSO_X_SCALE
+	var zs: float = SkaterMeshBuilder._TORSO_Z_SCALE
+	var sides: int = SkaterMeshBuilder._TORSO_SIDES
 	var checked: int = 0
-	for station: Vector2 in SkaterMeshBuilder._PELVIS_PROFILE:
-		# Pelvis stations are UpperBody-space; the torso lathe is built around
-		# its own scene origin.
-		var torso_local: float = station.x - _torso_origin_y
-		var torso: float = _profile_back(SkaterMeshBuilder._TORSO_PROFILE, SkaterMeshBuilder._TORSO_REAR_SWAY, torso_local)
-		if torso < 0.0:
+	for i: int in SkaterMeshBuilder._PELVIS_PROFILE.size():
+		var station: Vector2 = SkaterMeshBuilder._PELVIS_PROFILE[i]
+		var torso: Vector2 = _profile_ring(SkaterMeshBuilder._TORSO_PROFILE,
+				SkaterMeshBuilder._TORSO_REAR_SWAY, station.x - _torso_origin_y)
+		if torso.x < 0.0:
 			continue  # below the hem — the pelvis is on its own down there
-		var pelvis: float = _profile_back(
-				SkaterMeshBuilder._PELVIS_PROFILE, SkaterMeshBuilder._PELVIS_REAR_SWAY, station.x)
-		assert_lt(pelvis, torso,
-				"at y %.3f the pelvis (%.3f) must sit inside the torso (%.3f)"
-				% [station.x, pelvis, torso])
+		var sway: float = SkaterMeshBuilder._PELVIS_REAR_SWAY[i]
+		for twist: float in [0.0, max_twist * 0.5, max_twist, -max_twist * 0.5, -max_twist]:
+			for k: int in sides:
+				var a: float = TAU * float(k) / float(sides)
+				var corner := Vector2(station.y * xs * cos(a), station.y * zs * sin(a) + sway)
+				var turned: Vector2 = corner.rotated(twist)
+				var reach: float = pow(turned.x / (torso.x * xs), 2.0) \
+						+ pow((turned.y - torso.y) / (torso.x * zs), 2.0)
+				assert_lt(reach, 1.0,
+						"at y %.3f, twisted %.0f°, a pelvis corner pokes through the jersey"
+						% [station.x, rad_to_deg(twist)])
 		checked += 1
 	assert_gt(checked, 1, "the two parts must overlap in height at all")
+
+
+# A lathe profile's (radius, rear sway) at height `y`, linearly between its
+# stations; x < 0 outside its span.
+func _profile_ring(profile: Array[Vector2], sway: Array[float], y: float) -> Vector2:
+	for i: int in profile.size() - 1:
+		var hi: Vector2 = profile[i]
+		var lo: Vector2 = profile[i + 1]
+		if y <= hi.x and y >= lo.x:
+			var t: float = (hi.x - y) / maxf(hi.x - lo.x, 1e-6)
+			return Vector2(lerpf(hi.y, lo.y, t), lerpf(sway[i], sway[i + 1], t))
+	return Vector2(-1.0, 0.0)
 
 
 # ── It must meet what it sits between ────────────────────────────────────────
@@ -109,7 +136,7 @@ func test_the_pelvis_does_not_fold_with_the_chest() -> void:
 	add_child_autofree(skater)
 	skater.set_physics_process(false)
 	skater.set_process(false)
-	var rig: Skeleton3D = skater.upper_body.get_node("UpperRig") as Skeleton3D
+	var rig: Skeleton3D = skater.mesh_root.get_node("BodyRig") as Skeleton3D
 	var pelvis_rest: Transform3D = rig.get_bone_pose(SkaterMeshBuilder.UpperBone.PELVIS)
 
 	skater.set_trunk_texture(-deg_to_rad(48.0), 0.0)

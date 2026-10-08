@@ -145,9 +145,12 @@ func test_root_offset_composes_with_crouch_drop() -> void:
 			+ (h - 1.0) * GameRules.FACEOFF_SPAWN_HEIGHT
 	var upper: Node3D = skater.get_node("MeshRoot/UpperBody") as Node3D
 
-	# Crouch after scaling: both offsets share _apply_body_height.
+	# A skating crouch lowers the body, never the gameplay frame.
 	skater.set_skating_crouch_drop(0.05)
-	assert_almost_eq(upper.position.y, root - 0.05, 0.0001, "crouch stacks on root offset")
+	assert_almost_eq(upper.position.y, root, 0.0001, "a skating crouch leaves the frame")
+	# A held pose's share does: both offsets share _apply_body_height.
+	skater.set_skating_crouch_drop(0.05, 0.05)
+	assert_almost_eq(upper.position.y, root - 0.05, 0.0001, "frame drop stacks on root offset")
 	# Re-applying attributes mid-crouch must preserve the crouch component.
 	controller.apply_attributes(attrs)
 	assert_almost_eq(upper.position.y, root - 0.05, 0.0001, "re-apply keeps crouch")

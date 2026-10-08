@@ -486,11 +486,14 @@ const SLOT_DIST_M: float = 5.0
 # base + sprint both stay anchored to plausible skating speeds rather than
 # stacking into superhuman territory.
 const DEFAULT_SKATER_MAX_SPEED_M_S: float = 9.0
-# Maneuvering acceleration — the skate's thrust (SkaterController.thrust). Mirrors
-# that @export so the AI's pursuit/evasion reachable-set model (AIActionScoring
-# reach_clearance) uses the same accel the bodies actually have. It's what bounds
-# how far a skater can deviate from their momentum line in a short window.
+# League-default skating physics — SkaterController's defaults, and what the
+# AI's travel and reach models price against so they use the accelerations the
+# bodies actually have. Field meanings in SkaterMovementRules.MovementConfig.
 const DEFAULT_SKATER_THRUST_M_S2: float = 10.5
+const DEFAULT_SKATER_POWER_KNEE_M_S: float = 2.6
+const DEFAULT_SKATER_STOP_DECEL_M_S2: float = 9.0
+const DEFAULT_SKATER_REVERSE_SKID_FRACTION: float = 0.75
+const DEFAULT_SKATER_TURN_ACCEL_M_S2: float = 9.0
 const DEFAULT_STICK_LENGTH_M: float = 1.30
 const DEFAULT_BLADE_LENGTH_M: float = 0.30
 

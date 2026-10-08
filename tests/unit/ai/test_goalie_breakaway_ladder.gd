@@ -4,28 +4,27 @@ extends GutTest
 # This project's own player scores overwhelmingly on breakaways, and the move is
 # always the same one `test_human_wraparound` models: drive at him, pull the puck
 # across to commit him, walk around him, tuck it. So the ladder that matters is
-# the ladder ON THAT MOVE, and there ISN'T one:
+# the ladder ON THAT MOVE:
 #
-#   EASY   2 of 7 aim points open
+#   EASY   5 of 7 aim points open
 #   NORMAL 2 of 7
 #   HARD   2 of 7
 #
-# Flat. It used to run backwards — 0 / 2 / 4, with HARD the most beatable tier —
-# and fixing the beaten-wide verdict so a sealed goalie stops reading as beaten
-# took HARD from 4 to 2 and lifted EASY from 0 to 2. So the inversion is gone and
-# what is left is a tier ladder this play cannot feel at all.
+# He seals the post on the wrap, so what decides it is whether he gets there:
+# how far he has to retreat (depth) and how hard he pushes (the slide push,
+# tiered like every other movement speed). The deeper tiers sit closer to the
+# post, the weaker ones push slower, and the two cancel at NORMAL.
 #
 # Every measurement below fires the same seven-point aim fan at the same release
 # point after the same bait, so the count IS how much net is open — not whether
 # a shooter who already knows the answer can find it.
 #
-# ── AND IT IS ONE KNOB ──────────────────────────────────────────────────────
-# `depth_base_m` is the only tier lever this play can feel at all. The other
-# twelve — every read latency, every reach speed, the drop time, the five-hole,
-# the poke, the toe-out — change NOTHING here, to the shot. So a tier ladder on
-# the walkaround can only ever be a depth ladder, and depth cuts the other way:
-# a goalie who challenges the rush harder is easier to walk around. That is why
-# separating the tiers here is not a matter of turning the existing knobs.
+# ── TWO KNOBS ────────────────────────────────────────────────────────────────
+# `depth_base_m` and `slide_push_speed_mps` are the tier levers this play can
+# feel. The others — every read latency, every reach speed, the drop time, the
+# five-hole, the poke, the toe-out — change nothing here, to the shot. Depth cuts
+# the other way: a goalie who challenges the rush harder is easier to walk
+# around.
 #
 # ── THE TRADE IS REAL, AND IT HAS A MINIMUM ────────────────────────────────
 # Pulling `depth_base_m` in is not free — it concedes the centre-lane rush shot
@@ -116,10 +115,8 @@ func _rush_open(over: Dictionary, lane: float, dist: float) -> int:
 
 
 # ── 1. THE LADDER MUST NOT RUN BACKWARDS ─────────────────────────────────────
-# The floor this keeps: a HARD keeper never leaks MORE net on a walkaround than
-# an EASY one. It is deliberately not an ordering assertion, because the tiers do
-# not currently separate here at all — see the header. Making them separate is
-# open work, and this is what stops it regressing past flat while that is decided.
+# No tier leaks less net on a walkaround than the one above it, and EASY leaks
+# more than HARD.
 func test_the_difficulty_ladder_is_not_inverted_on_a_walkaround() -> void:
 	var open: Dictionary = {}
 	for tier: int in [GoalieSkillProfile.Difficulty.EASY,
@@ -135,18 +132,25 @@ func test_the_difficulty_ladder_is_not_inverted_on_a_walkaround() -> void:
 			"arm_reaction_delay_s": p.arm_reaction_delay_s,
 			"read_lag_s": p.read_lag_s,
 			"five_hole_base_m": p.five_hole_base_m,
+			"slide_push_speed_mps": p.slide_push_speed_mps,
 		})
 		gut.p("tier %d -> %d of %d aim points open" % [tier, open[tier], AIM_X.size()])
 	assert_lte(open[GoalieSkillProfile.Difficulty.HARD] as int,
 			open[GoalieSkillProfile.Difficulty.EASY] as int,
 			"a HARD keeper must never leak more net on a walkaround than an EASY one")
+	assert_lte(open[GoalieSkillProfile.Difficulty.HARD] as int,
+			open[GoalieSkillProfile.Difficulty.NORMAL] as int, "HARD never leaks more than NORMAL")
+	assert_lte(open[GoalieSkillProfile.Difficulty.NORMAL] as int,
+			open[GoalieSkillProfile.Difficulty.EASY] as int, "NORMAL never leaks more than EASY")
+	assert_lt(open[GoalieSkillProfile.Difficulty.HARD] as int,
+			open[GoalieSkillProfile.Difficulty.EASY] as int, "and the ladder separates")
 
 
-# ── 2. AND IT IS ONE KNOB ────────────────────────────────────────────────────
+# ── 2. TWO KNOBS ─────────────────────────────────────────────────────────────
 # The teeth: if a tier lever is ever added or retuned so that it moves this play,
-# this fails, and that is worth knowing — right now the only thing the ladder
-# does to a breakaway walkaround is change how far out he stands.
-func test_depth_base_is_the_only_tier_lever_this_play_can_feel() -> void:
+# this fails, and that is worth knowing — the ladder reaches a breakaway
+# walkaround through how far out he stands and how hard he pushes to the post.
+func test_depth_and_the_push_are_the_tier_levers_this_play_can_feel() -> void:
 	var baseline: int = _walkaround_open({})
 	var inert: Dictionary = {
 		"reaction_delay_s": 0.30,
@@ -169,7 +173,10 @@ func test_depth_base_is_the_only_tier_lever_this_play_can_feel() -> void:
 	var moved: int = _walkaround_open({"depth_base_m": 0.60})
 	gut.p("baseline %d of %d open; depth_base 0.60 -> %d"
 			% [baseline, AIM_X.size(), moved])
-	assert_lt(moved, baseline, "depth_base is the lever, and it is the only one")
+	assert_lt(moved, baseline, "depth_base is a lever")
+	var slow_push: int = _walkaround_open({"slide_push_speed_mps": 1.8})
+	gut.p("push 1.8 m/s -> %d" % slow_push)
+	assert_gt(slow_push, baseline, "and the push to the post is the other")
 
 
 # ── 3. THE TRADE, PRICED ─────────────────────────────────────────────────────

@@ -437,7 +437,7 @@ func _zero_script_input(delta: float) -> void:
 	_script_input.slap_pressed = false
 	_script_input.slap_held = false
 	_script_input.brake = false
-	# Same flat default as SkaterAgent._zero_input — the loft level is
+	# Same flat default as SkaterAgent.zero_input — the loft level is
 	# absolute per input frame, so scripted shots set it on their own ticks.
 	_script_input.elevation_level = 0
 	_script_input.block_held = false

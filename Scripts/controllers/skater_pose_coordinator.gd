@@ -26,7 +26,6 @@ var upper_body_angle: float = 0.0
 var upper_body_lean: float = 0.0
 var upper_body_lean_roll: float = 0.0
 var velocity_lean_x: float = 0.0
-var velocity_lean_z: float = 0.0
 var lower_body_lag: float = 0.0
 var head_angle: float = 0.0
 var ik_locked_side: int = 0  # +1 = exited right, -1 = exited left, 0 = unlocked
@@ -68,40 +67,29 @@ func setup(skater: Skater, sm: SkaterStateMachine, aiming: SkaterAimingBehavior,
 
 # ── Per-Tick Application ──────────────────────────────────────────────────────
 func apply_velocity_lean(delta: float) -> void:
-	var target: Vector2 = compute_velocity_lean_target(
+	var target: float = compute_velocity_lean_target(
 			_skater.velocity, _skater.global_transform.basis, _controller.max_speed,
 			_controller.velocity_lean_forward_max_deg,
-			_controller.velocity_lean_back_max_deg,
-			_controller.velocity_lean_lateral_max_deg)
-	velocity_lean_x = lerpf(velocity_lean_x, target.x, _controller.velocity_lean_speed * delta)
-	velocity_lean_z = lerpf(velocity_lean_z, target.y, _controller.velocity_lean_speed * delta)
+			_controller.velocity_lean_back_max_deg)
+	velocity_lean_x = lerpf(velocity_lean_x, target, _controller.velocity_lean_speed * delta)
 
 
-# Pure helpers — derive lean targets from state. Used both by the live pose
-# pipeline (apply_velocity_lean / apply_upper_body lerp toward these targets)
-# and by snap_lean_to_state below (remote / replay path snaps directly). Means
-# lean isn't transmitted over the wire — receivers re-derive it from the
-# velocity and hand position they already have.
-#
 # The lean is INTO travel: forward skating folds the trunk forward (the
 # skating posture — negative rotation.x pitches the torso top toward local
-# −Z), backward skating sits slightly back, and lateral travel banks into the
-# carve (negative rotation.z rolls the torso top toward local +X, the
-# skater's right). Returned as Vector2(x = pitch, y = roll), radians.
+# −Z), backward skating sits slightly back. Pitch only, radians: sideways
+# travel is not a lean — a strafe doesn't bank, and the facing leads travel
+# through a carve, so a roll toward body-frame lateral velocity would lean OUT
+# of the turn. The turn's bank is the balance lean's (SkaterSpineRig).
 static func compute_velocity_lean_target(
 		world_velocity: Vector3, body_basis: Basis, max_speed: float,
-		fwd_lean_max_deg: float, back_lean_max_deg: float,
-		lateral_lean_max_deg: float) -> Vector2:
+		fwd_lean_max_deg: float, back_lean_max_deg: float) -> float:
 	if max_speed <= 0.0:
-		return Vector2.ZERO
+		return 0.0
 	var local_vel: Vector3 = body_basis.inverse() * world_velocity
 	# −Z is the body's forward axis, so negate for a "how forward" fraction.
 	var fwd_t: float = clampf(-local_vel.z / max_speed, -1.0, 1.0)
 	var pitch_max_deg: float = fwd_lean_max_deg if fwd_t >= 0.0 else back_lean_max_deg
-	var target_x: float = -fwd_t * deg_to_rad(pitch_max_deg)
-	var lat_t: float = clampf(local_vel.x / max_speed, -1.0, 1.0)
-	var target_z: float = -lat_t * deg_to_rad(lateral_lean_max_deg)
-	return Vector2(target_x, target_z)
+	return -fwd_t * deg_to_rad(pitch_max_deg)
 
 
 # Directional reach lean: the torso tips TOWARD the hand's reach direction
@@ -125,35 +113,27 @@ static func compute_upper_body_lean_target(
 	return Vector2(mag * dir.y, -mag * dir.x)
 
 
-# Snap lean to the targets implied by current velocity + hand position. Used
-# by remote / replay state application — lean isn't in the network state, so
-# receivers re-derive it the same way the host computed it. Must be called
-# AFTER set_top_hand_position and BEFORE set_blade_position so the blade
-# marker lands at the correct world Y under the leaning upper body.
-func snap_lean_to_state() -> void:
-	var v_target: Vector2 = compute_velocity_lean_target(
-			_skater.velocity, _skater.global_transform.basis, _controller.max_speed,
-			_controller.velocity_lean_forward_max_deg,
-			_controller.velocity_lean_back_max_deg,
-			_controller.velocity_lean_lateral_max_deg)
-	velocity_lean_x = v_target.x
-	velocity_lean_z = v_target.y
-	if _skater.current_shot_state == State.SHOT_BLOCKING:
-		# Mirror the local block branch in apply_upper_body: the chest tips
-		# over the down knee instead of deriving a reach lean from the block's
-		# low hand pose. Snapped, like everything else on this path — the
-		# block pose itself snaps on entry.
-		upper_body_lean = -deg_to_rad(_controller.block_trunk_pitch_deg)
-		upper_body_lean_roll = _block_trunk_roll()
-	else:
-		var reach_target: Vector2 = compute_upper_body_lean_target(
-				Vector2(_skater.top_hand.position.x, _skater.top_hand.position.z),
-				Vector2(_skater.shoulder.position.x, _skater.shoulder.position.z),
-				_controller.rom_backhand_reach_max, _controller.upper_body_lean_max_deg,
-				_controller.upper_body_lean_engage_power) * (1.0 - _address_share())
-		upper_body_lean = reach_target.x
-		upper_body_lean_roll = reach_target.y
+# The torso's lean off the wire (remote, replay and goal-replay paths): the
+# simulating machine's smoothed state, applied through the one torso writer.
+# Must run BEFORE set_blade_position — the wire blade is local to the tilted
+# frame.
+func apply_wire_lean(state: SkaterNetworkState) -> void:
+	adopt_wire_lean(state)
 	_apply_lean()
+
+
+# The reconcile's half: adopt the host's lean at the ack, and let the replay
+# step it forward.
+func adopt_wire_lean(state: SkaterNetworkState) -> void:
+	upper_body_lean = state.torso_lean.x
+	upper_body_lean_roll = state.torso_lean.y
+	velocity_lean_x = state.posture_lean
+
+
+static func _is_slapper_charge(state: int) -> bool:
+	return state == State.SLAPPER_CHARGE_WITH_PUCK \
+			or state == State.SLAPPER_CHARGE_WITHOUT_PUCK \
+			or state == State.ONE_TIMER_RETENTION
 
 
 # Torso roll of the shot block, as a rotation.z: the chest leans onto the down
@@ -175,9 +155,9 @@ func _block_trunk_roll() -> float:
 func _apply_lean() -> void:
 	# Body-check recoil: while staggered, the torso reels the way the hit shoved
 	# it, easing out as the timer decays (same directional pitch/roll decomposition
-	# as the reach lean). Runs on every path — local, bot, and remote (which reels
-	# generically backward off the replicated timer) — since _apply_lean is the
-	# single torso writer both the live pass and snap_lean_to_state go through.
+	# as the reach lean). Runs on every path — local, bot, and remote, off the
+	# replicated timer and direction — since _apply_lean is the single torso
+	# writer both the live pass and apply_wire_lean go through.
 	var recoil_pitch: float = 0.0
 	var recoil_roll: float = 0.0
 	var recoil_t: float = clampf(
@@ -187,9 +167,8 @@ func _apply_lean() -> void:
 	# reflexive curl while airborne that resolves to the ground-plane complement
 	# as the body reaches the ice (KnockdownFallRules.fold_at), so the landed
 	# torso lies IN the ice plane instead of curling through it or propping up
-	# as a plank. It rides the SAME recoil direction (fall the way you were hit
-	# — re-derived from the replicated slide on remote entries) and the same
-	# deterministic/replicated timer, layered on top of the stagger recoil.
+	# as a plank. It rides the SAME recoil direction (fall the way you were hit)
+	# and the same replicated timer, layered on top of the stagger recoil.
 	# kd_t holds full while more than knockdown_getup_seconds remains, then
 	# eases to 0 (the get-up).
 	var kd_t: float = clampf(
@@ -211,9 +190,8 @@ func _apply_lean() -> void:
 	# via Skater.set_trunk_texture — mesh-only, so the invariant holds.
 	_skater.set_upper_body_lean(
 			upper_body_lean + velocity_lean_x + recoil_pitch,
-			upper_body_lean_roll + velocity_lean_z + recoil_roll)
-	_skater.set_lower_body_lean(
-			velocity_lean_x * _controller.lower_body_pitch_follow, velocity_lean_z)
+			upper_body_lean_roll + recoil_roll, velocity_lean_x)
+	_skater.set_lower_body_lean(velocity_lean_x * _controller.lower_body_pitch_follow)
 
 func apply_facing(input: InputState, delta: float) -> void:
 	var s: SkaterStateMachine.State = _sm.get_state()
@@ -344,9 +322,7 @@ func apply_upper_body(delta: float) -> void:
 	# ONE_TIMER_RETENTION rides this branch too: the wind-up charge timer is
 	# frozen through the hold, so the coil simply holds at its apex — loaded and
 	# still — instead of unwinding to the generic tracking pose for a beat.
-	if charge_state == State.SLAPPER_CHARGE_WITH_PUCK \
-			or charge_state == State.SLAPPER_CHARGE_WITHOUT_PUCK \
-			or charge_state == State.ONE_TIMER_RETENTION:
+	if _is_slapper_charge(charge_state):
 		# Hold upper body facing the locked shot direction throughout the wind-up,
 		# then layer the coil rotation on top: back shoulder pulls away from the
 		# target as the wind-up timer fills, ending in a loaded stance with the
@@ -363,6 +339,13 @@ func apply_upper_body(delta: float) -> void:
 			var coil: float = -blade_side_sign * deg_to_rad(_controller.slapper_wind_up_twist_deg) * wind_up_eased
 			upper_body_angle = lerp_angle(upper_body_angle, aim_target + coil, _controller.slapper_wind_up_lerp_speed * delta)
 			_skater.set_upper_body_rotation(upper_body_angle)
+		# The wind-up's hands are authored, not reached for, so there is no reach
+		# lean; the posture under the coil — the
+		# skating lean, a stagger's reel — carries on as in every other state.
+		var settle: float = minf(_controller.upper_body_lean_return_speed * delta, 1.0)
+		upper_body_lean = lerpf(upper_body_lean, 0.0, settle)
+		upper_body_lean_roll = lerpf(upper_body_lean_roll, 0.0, settle)
+		_apply_lean()
 		return
 
 	if charge_state == State.FOLLOW_THROUGH:
@@ -528,7 +511,6 @@ func reset_lean_and_lag() -> void:
 	upper_body_lean = 0.0
 	upper_body_lean_roll = 0.0
 	velocity_lean_x = 0.0
-	velocity_lean_z = 0.0
 	lower_body_lag = 0.0
 	_twist_follow = 0.0
 	_twist_follow_vel = 0.0

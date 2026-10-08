@@ -542,6 +542,11 @@ func _interpolate(delta: float) -> void:
 		interpolated.hit_committed = newest.hit_committed
 		interpolated.sprint_active = newest.sprint_active
 		interpolated.wrister_address_side = newest.wrister_address_side
+		interpolated.balance_tilt = newest.balance_tilt
+		interpolated.balance_tilt_vel = newest.balance_tilt_vel
+		interpolated.torso_lean = newest.torso_lean
+		interpolated.posture_lean = newest.posture_lean
+		interpolated.recoil_dir = newest.recoil_dir
 	else:
 		var from_state: SkaterNetworkState = bracket.from_state
 		var to_state: SkaterNetworkState = bracket.to_state
@@ -577,6 +582,13 @@ func _interpolate(delta: float) -> void:
 		interpolated.hit_committed = to_state.hit_committed
 		interpolated.sprint_active = to_state.sprint_active
 		interpolated.wrister_address_side = to_state.wrister_address_side
+		interpolated.balance_tilt = from_state.balance_tilt.lerp(to_state.balance_tilt, t)
+		interpolated.balance_tilt_vel = from_state.balance_tilt_vel.lerp(to_state.balance_tilt_vel, t)
+		interpolated.torso_lean = from_state.torso_lean.lerp(to_state.torso_lean, t)
+		interpolated.posture_lean = lerpf(from_state.posture_lean, to_state.posture_lean, t)
+		# A new hit swaps the direction outright; lerping would sweep the reel
+		# through every bearing in between.
+		interpolated.recoil_dir = to_state.recoil_dir
 		# The hermite result sits a full interp_delay in the past (or, past the
 		# newest sample, the is_extrapolating branch dead-reckons it); the stage-3
 		# intent integration below is what carries the body toward present. Any
@@ -688,13 +700,31 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	# Facing and upper-body rotation must be set before blade so the shaft mesh
 	# orients against the correct body transform, not the previous tick's.
 	skater.set_facing(state.facing)
+	# The lean places the UpperBody frame the wire's hand and blade are local
+	# to, so it lands before either of them.
+	balance_tilt_vel = state.balance_tilt_vel
+	skater.set_balance_tilt(state.balance_tilt, state.balance_tilt_vel)
 	skater.set_upper_body_rotation(state.upper_body_rotation_y)
 	# Top hand before blade so set_blade_position has the correct hand pivot.
 	skater.set_top_hand_position(state.top_hand_position)
-	# Re-derive lean from velocity + hand reach (not in network state) so the
-	# upper body is leaning correctly when the blade marker is placed —
-	# otherwise the host's lean-compensated blade_y lands above the ice.
-	_pose.snap_lean_to_state()
+	# The stagger reel and the knockdown fold tilt the torso, so they land
+	# before the lean. The stagger-stumble wobble reads the CONTROLLER's stagger_timer (the gait
+	# derives its phase from the countdown), so it has to be mirrored onto
+	# client-rendered remotes as well as the local victim's reconcile — otherwise
+	# a checked opponent stumbles on the host and stands rock-steady elsewhere.
+	stagger_timer = state.stagger_timer
+	stagger_recoil_dir = state.recoil_dir
+	# Knockdown mirrors stagger onto client-rendered remotes: the controller value
+	# and the skater flag so the down pose and any is_knocked_down read reflect a
+	# checked opponent on every machine, not just the host. The meta sync seeds
+	# the fall's tip rate from the replicated slide velocity stamped above.
+	var prev_kd: float = knockdown_timer
+	knockdown_timer = state.knockdown_timer
+	skater.is_knocked_down = knockdown_timer > 0.0
+	_sync_knockdown_meta(prev_kd)
+	# The torso's tilt is the frame the wire's blade is local to, so it too
+	# lands before the blade.
+	_pose.apply_wire_lean(state)
 	skater.set_blade_position(state.blade_position)
 	skater.set_ghost(state.is_ghost)
 	# Replicated from the host so the loft-level blade scoop (Skater
@@ -732,20 +762,6 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	# the replicated bit so another player's sprint visibly changes their
 	# stride on this machine (the on-screen stamina tell).
 	sprint_active = state.sprint_active
-	# The stagger-stumble wobble reads the CONTROLLER's stagger_timer (the gait
-	# derives its phase from the countdown), so it has to be mirrored onto
-	# client-rendered remotes as well as the local victim's reconcile — otherwise
-	# a checked opponent stumbles on the host and stands rock-steady elsewhere.
-	stagger_timer = state.stagger_timer
-	# Knockdown mirrors stagger onto client-rendered remotes: the controller value
-	# and the skater flag so the down pose and any is_knocked_down read reflect a
-	# checked opponent on every machine, not just the host. The meta sync seeds
-	# the fall (direction + tip rate) from the replicated slide velocity stamped
-	# above, so the remote body falls the way the hit actually shoved it.
-	var prev_kd: float = knockdown_timer
-	knockdown_timer = state.knockdown_timer
-	skater.is_knocked_down = knockdown_timer > 0.0
-	_sync_knockdown_meta(prev_kd)
 	# Bottom hand is purely reactive to top_hand + blade and needs no network
 	# state of its own; it's posed once per rendered frame in _render_pose_update
 	# (Skater._process) along with the gait, not here.

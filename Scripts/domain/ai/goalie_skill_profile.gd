@@ -22,9 +22,11 @@ extends RefCounted
 # defaults are the authored Hard baselines, so unwired contexts (unit tests)
 # score against the Hard goalie.
 #
-# FIXED ACROSS TIERS: t_push_speed, the lateral slide TOP speed — no tier varies
-# it, so the scorer keeps it as a const (GOALIE_MAX_LATERAL_SPEED_MPS). Add it
-# here only together with a set_goalie_profile field for it.
+# FIXED ACROSS TIERS: t_push_speed, the standing T-push TOP speed — no tier
+# varies it, so the scorer keeps it as a const (GOALIE_MAX_LATERAL_SPEED_MPS).
+# Add it here only together with a set_goalie_profile field for it. The
+# butterfly slide push IS tiered (slide_push_speed_mps); the bots' shot model
+# does not price the slide, so it has no mirror.
 #
 # To add a tier: add a Difficulty enum value, a factory, and a for_difficulty arm.
 # To add a knob: add a field + _init param, set it in all three factories, and
@@ -129,6 +131,9 @@ var read_lag_s: float
 # 0.05 / 0.08 / 0.10 / 0.13 s and are flat above, with the TELEGRAPHED control
 # pinned at 7 throughout.
 var read_converge_s: float
+# Butterfly push-off speed (m/s) — the slide to a post or across the crease. A
+# weaker goalie's push is softer, so he loses the race to the post on a wrap.
+var slide_push_speed_mps: float
 
 
 func _init(p_arm_reaction_delay_s: float, p_cross_crease_react_delay_s: float,
@@ -140,7 +145,8 @@ func _init(p_arm_reaction_delay_s: float, p_cross_crease_react_delay_s: float,
 		p_reaction_delay_s: float, p_prearmed_reaction_delay_s: float,
 		p_butterfly_drop_s: float, p_five_hole_base_m: float,
 		p_read_lag_s: float = 0.13,
-		p_read_converge_s: float = 0.13) -> void:
+		p_read_converge_s: float = 0.13,
+		p_slide_push_speed_mps: float = 2.8) -> void:
 	arm_reaction_delay_s = p_arm_reaction_delay_s
 	cross_crease_react_delay_s = p_cross_crease_react_delay_s
 	poke_radius_m = p_poke_radius_m
@@ -159,6 +165,7 @@ func _init(p_arm_reaction_delay_s: float, p_cross_crease_react_delay_s: float,
 	prearmed_reaction_delay_s = p_prearmed_reaction_delay_s
 	butterfly_drop_s = p_butterfly_drop_s
 	five_hole_base_m = p_five_hole_base_m
+	slide_push_speed_mps = p_slide_push_speed_mps
 
 
 # Hard == the GoalieController @export defaults verbatim, so applying Hard is a
@@ -166,7 +173,7 @@ func _init(p_arm_reaction_delay_s: float, p_cross_crease_react_delay_s: float,
 static func hard() -> GoalieSkillProfile:
 	return GoalieSkillProfile.new(0.18, 0.12, 0.25, 0.30, 0.12,
 			1.75, 1.30, 5.0, 5.0, 18.0, 14.0, 0.9,
-			0.13, 0.07, 0.20, 0.02, 0.05, 0.13)
+			0.13, 0.07, 0.20, 0.02, 0.05, 0.13, 2.8)
 
 
 # Normal is the middle tier: enough goalie to punish a lazy shot, soft enough
@@ -179,7 +186,7 @@ static func hard() -> GoalieSkillProfile:
 static func normal() -> GoalieSkillProfile:
 	return GoalieSkillProfile.new(0.28, 0.22, 0.16, 0.45, 0.20,
 			1.35, 0.95, 3.8, 3.8, 11.0, 10.0, INF,
-			0.18, 0.10, 0.25, 0.035, 0.10, 0.18)
+			0.18, 0.10, 0.25, 0.035, 0.10, 0.18, 2.3)
 
 
 # Easy is the newcomer floor, tuned so ANY decently-aimed shot scores: he sits
@@ -191,7 +198,7 @@ static func normal() -> GoalieSkillProfile:
 static func easy() -> GoalieSkillProfile:
 	return GoalieSkillProfile.new(0.45, 0.40, 0.08, 0.70, 0.35,
 			0.90, 0.60, 2.4, 2.4, 5.0, 6.0, INF,
-			0.30, 0.16, 0.32, 0.06, 0.16, 0.30)
+			0.30, 0.16, 0.32, 0.06, 0.16, 0.30, 1.8)
 
 
 static func for_difficulty(difficulty: int) -> GoalieSkillProfile:

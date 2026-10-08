@@ -7,8 +7,10 @@ using namespace godot;
 
 namespace mitts {
 
-// SkaterMovementRules.GRIP_MIN_SPEED.
+// SkaterMovementRules.GRIP_MIN_SPEED / TIGHT_TURN_TAPER / SKID_TURN_TAPER.
 static constexpr double GRIP_MIN_SPEED = 0.5;
+static constexpr double TIGHT_TURN_TAPER = Math_PI * 0.25;
+static constexpr double SKID_TURN_TAPER = Math_PI * 0.25;
 
 String NativeSkaterMovement::configure(Object *movement_config) {
 	ERR_FAIL_NULL_V(movement_config, String("null config"));
@@ -52,62 +54,85 @@ Vector3 NativeSkaterMovement::apply_movement_internal(
 	Vector3 velocity = current_velocity;
 	const double sprint_thrust = sprint_active ? cfg.sprint_thrust_multiplier : 1.0;
 	const double sprint_max = sprint_active ? cfg.sprint_max_speed_multiplier : 1.0;
+	const double applied_thrust = thrust_override * sprint_thrust;
+	const bool has_input = (double)move_input.length() > cfg.move_deadzone;
+	const Vector2 facing_dir(-Math::sin(facing_rotation_y), -Math::cos(facing_rotation_y));
 
-	if (!brake && (double)move_input.length() > cfg.move_deadzone) {
-		const Vector3 thrust_dir(move_input.x, 0.0f, move_input.y);
-		const Vector2 facing_dir(-Math::sin(facing_rotation_y), -Math::cos(facing_rotation_y));
+	double thrust_scale = 1.0;
+	if (has_input) {
 		const double move_dot = (double)facing_dir.dot(move_input.normalized());
-
-		double thrust_scale;
 		if (move_dot >= 0.0) {
 			thrust_scale = Math::lerp(cfg.crossover_thrust_multiplier, 1.0, move_dot);
 		} else {
 			thrust_scale = Math::lerp(cfg.backward_thrust_multiplier,
 					cfg.crossover_thrust_multiplier, move_dot + 1.0);
 		}
-
-		const double applied_thrust = thrust_override * sprint_thrust;
-		Vector3 thrust_vec = thrust_dir * (real_t)(applied_thrust * thrust_scale);
-		if (cfg.lateral_grip != 1.0) {
-			Vector2 vel_dir(current_velocity.x, current_velocity.z);
-			if ((double)vel_dir.length() > GRIP_MIN_SPEED) {
-				vel_dir = vel_dir.normalized();
-				const Vector2 t2(thrust_vec.x, thrust_vec.z);
-				const Vector2 par = vel_dir * t2.dot(vel_dir);
-				const Vector2 gripped = par + (t2 - par) * (real_t)cfg.lateral_grip;
-				thrust_vec = Vector3(gripped.x, 0.0f, gripped.y);
-			}
-		}
-		const Vector3 thrust_delta = thrust_vec * (real_t)delta;
-		velocity += thrust_delta;
-
-		const double base_max = cfg.max_speed * sprint_max;
-		double carry_mult = cfg.puck_carry_speed_multiplier;
-		if (sprint_active) {
-			carry_mult = Math::lerp(carry_mult, 1.0, cfg.sprint_carry_penalty_bypass);
-		}
-		const double effective_max = has_puck ? base_max * carry_mult : base_max;
-		const Vector2 horiz(velocity.x, velocity.z);
-		const double speed = horiz.length();
-		if (speed > effective_max) {
-			const double pre_thrust_speed = (double)Vector2(
-					velocity.x - thrust_delta.x,
-					velocity.z - thrust_delta.z).length();
-			const double target_speed = MAX(pre_thrust_speed, effective_max);
-			if (speed > target_speed) {
-				const Vector2 limited = horiz.normalized() * (real_t)target_speed;
-				velocity.x = limited.x;
-				velocity.z = limited.y;
-			}
-		}
 	}
 
-	Vector2 horiz_vel(velocity.x, velocity.z);
-	const double base_decel = cfg.friction + cfg.friction_drag * (double)horiz_vel.length();
-	const double effective_friction = brake ? base_decel * cfg.brake_multiplier : base_decel;
-	horiz_vel = horiz_vel.move_toward(Vector2(), (real_t)(effective_friction * delta));
-	velocity.x = horiz_vel.x;
-	velocity.z = horiz_vel.y;
+	Vector2 horiz(velocity.x, velocity.z);
+	double speed = horiz.length();
+	if (speed <= GRIP_MIN_SPEED) {
+		if (brake) {
+			horiz = horiz.move_toward(Vector2(), (real_t)(cfg.stop_decel * delta));
+		} else {
+			if (has_input) {
+				horiz += move_input * (real_t)(applied_thrust * thrust_scale * delta);
+			}
+			horiz = horiz.move_toward(Vector2(),
+					(real_t)((cfg.friction + cfg.friction_drag * (double)horiz.length()) * delta));
+		}
+		velocity.x = horiz.x;
+		velocity.z = horiz.y;
+		return velocity;
+	}
+
+	const Vector2 travel = horiz / (real_t)speed;
+	const double stick = MIN((double)move_input.length(), 1.0);
+	const double steer = has_input ? (double)travel.angle_to(move_input) : 0.0;
+	const double steer_abs = Math::abs(steer);
+	double turn = 0.0;
+	if (brake) {
+		double w = 0.0;
+		if (has_input) {
+			w = MIN(steer_abs / MAX(cfg.tight_turn_align_angle, 0.001), 1.0);
+			if (steer_abs > Math_PI * 0.5) {
+				w *= MAX(0.0, 1.0 - (steer_abs - Math_PI * 0.5) / TIGHT_TURN_TAPER);
+			}
+		}
+		if (w > 0.0) {
+			const double tight_rate = MIN(
+					cfg.turn_accel * cfg.tight_turn_multiplier * cfg.lateral_grip * stick / speed,
+					cfg.max_turn_rate);
+			turn = SIGN(steer) * MIN(tight_rate * delta, steer_abs);
+		}
+		speed = MAX(speed - Math::lerp(cfg.stop_decel, cfg.tight_turn_decel, w) * delta, 0.0);
+	} else {
+		if (has_input) {
+			const double turn_rate = MIN(cfg.turn_accel * cfg.lateral_grip * stick / speed,
+					cfg.max_turn_rate) * MIN((Math_PI - steer_abs) / SKID_TURN_TAPER, 1.0);
+			turn = SIGN(steer) * MIN(turn_rate * delta, steer_abs);
+			const double par = (double)move_input.dot(travel);
+			if (par >= 0.0) {
+				const double base_max = cfg.max_speed * sprint_max;
+				double carry_mult = cfg.puck_carry_speed_multiplier;
+				if (sprint_active) {
+					carry_mult = Math::lerp(carry_mult, 1.0, cfg.sprint_carry_penalty_bypass);
+				}
+				double effective_max = has_puck ? base_max * carry_mult : base_max;
+				const double backward = CLAMP(-(double)travel.dot(facing_dir), 0.0, 1.0);
+				effective_max *= Math::lerp(1.0, cfg.backward_max_speed_multiplier, backward);
+				const double drive = MIN(applied_thrust, applied_thrust * cfg.power_knee_speed / speed);
+				const double driven = speed + par * drive * thrust_scale * delta;
+				speed = MIN(driven, MAX(speed, effective_max));
+			} else {
+				speed = MAX(speed + par * cfg.stop_decel * cfg.reverse_skid_fraction * delta, 0.0);
+			}
+		}
+		speed = MAX(speed - (cfg.friction + cfg.friction_drag * speed) * delta, 0.0);
+	}
+	horiz = travel.rotated((real_t)turn) * (real_t)speed;
+	velocity.x = horiz.x;
+	velocity.z = horiz.y;
 	return velocity;
 }
 

@@ -62,10 +62,9 @@ const ENGAGEMENT_COOLDOWN_MIN_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 10  
 const ENGAGEMENT_COOLDOWN_MAX_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 2 / 5     # ~400 ms
 const ENGAGEMENT_PROXIMITY_M: float = 2.0        # blade-on-puck range
 
-# This bot's all-direction thrust — the redirect authority its own ETA reads
-# price the cross-momentum shed at (see _lead_intercept). Set to the real value
-# via apply_capabilities; the default mirrors SkaterController.thrust's 12.0.
-var _chase_max_accel: float = 12.0
+# This bot's standing-start push — what its own ETA reads price the pursuit
+# ramp at (see _lead_intercept). Set to the real value via apply_capabilities.
+var _chase_max_accel: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
 
 # Per-peer velocity-history smoothing for acceleration estimation.
 # Raw frame-over-frame velocity diffs at the physics rate are noisy (a thrust
@@ -75,9 +74,9 @@ var _chase_max_accel: float = 12.0
 # tick spikes while still reacting inside a 400-600 ms pass window.
 const ACCEL_SMOOTH_ALPHA: float = 0.2
 # Clamp on the smoothed accel magnitude. Caps any pathological
-# spike (e.g., teleport on respawn) at a value just above
-# SkaterController.thrust so a legitimate hard turn still reads as
-# full-thrust accel.
+# spike (e.g., teleport on respawn) above a striding turn's centripetal
+# accel (SkaterController.turn_accel × grip), so a legitimate hard turn
+# still reads in full.
 const ACCEL_CLAMP_M_S2: float = 14.0
 
 # Above this speed a loose puck is a live pass / stripped puck rather than one to
@@ -740,8 +739,10 @@ var _inert_rush_read := AIRushRead.new()
 # stamped across a slot change so no role inherits another role's target).
 var _prev_role_slot: int = AIRoleSlots.Slot.NONE
 var _prev_role_target: Vector3 = Vector3.INF
-# Zone soft-lock incumbent from the last dispatch (RoleDecision.
-# locked_man_pid) — feeds RoleContext.prev_locked_man, reset on slot change.
+# The man this skater's role is covering, from the last role dispatch
+# (RoleDecision.locked_man_pid) — feeds RoleContext.prev_locked_man, reset on
+# slot change, and cleared on leaving OFF_PUCK: a skater chasing or carrying
+# the puck covers nobody, whatever his last role decision said.
 var _prev_locked_man_pid: int = -1
 # Incumbent for the offensive stations' control hysteresis (see
 # RoleDecision.held_forward_stand).
@@ -1314,6 +1315,11 @@ var _cached_sprint_held: bool = false
 # ticks or blade_up strobes at 1-in-dispatch_period and never reaches the raised
 # pose at Normal/Easy (the lift blend never leaves ~0).
 var _cached_stick_lift_held: bool = false
+# Same for the brake (pivot / arrival / brake-steering stops, tight turns) and
+# the body-check commit: set only on dispatch ticks, so without the replay a
+# lower tier — dispatching every 6–9 ticks — would hold them for one tick in N.
+var _cached_brake: bool = false
+var _cached_hit_held: bool = false
 # Updated inside `_step_mouse_toward` so skipped ticks can re-step
 # toward the most recently decided target without re-running the
 # state handler. ZERO sentinel suppresses stepping until the first
@@ -1812,6 +1818,8 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 		input.move_vector = _cached_move_vector
 		input.sprint_held = _cached_sprint_held
 		input.stick_lift_held = _cached_stick_lift_held
+		input.brake = _cached_brake
+		input.hit_held = _cached_hit_held
 		# Aim runs at the physics rate even though the DECISION is throttled:
 		# while chasing, re-derive the reception blade target from current
 		# perception every tick so the blade tracks a puck crossing into reach
@@ -1893,6 +1901,8 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 	# false and the next OFF_PUCK/CARRY tick re-engages from a fresh state.
 	_cached_sprint_held = input.sprint_held
 	_cached_stick_lift_held = input.stick_lift_held
+	_cached_brake = input.brake
+	_cached_hit_held = input.hit_held
 
 
 # ── State handlers ───────────────────────────────────────────────────────────
@@ -4511,8 +4521,9 @@ func _apply_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 	# (velocity_match_speed > 0 — the carrier path): the anchor pull cancels
 	# cross-momentum so the bot redirects onto the line instead of orbiting past
 	# it. Read our own velocity from the snapshot for the match.
+	# Also the carrier's threat repel frame (defenders are swept relative to us).
 	var match_self_vel: Vector3 = Vector3.ZERO
-	if velocity_match_speed > 0.0:
+	if velocity_match_speed > 0.0 or carrier == _peer_id:
 		var self_st: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 		if self_st != null:
 			match_self_vel = self_st.velocity
@@ -4535,11 +4546,11 @@ func _apply_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 	# direction (~180° transition), stopping hard beats carving a wide arc.
 	# The bot presses the REAL brake key and keeps move_vector on the exit
 	# direction — the input shape a human uses — so the physics gets the
-	# heavy brake friction and the cosmetic layer reads a genuine hockey
-	# stop into a dig-in restart. While brake is held the movement rules
-	# ignore move_vector, so the exit direction costs nothing until the
-	# brake releases (hysteresis + speed floor in AISteering.should_brake)
-	# and thrust resumes toward it instantly.
+	# hockey stop and the cosmetic layer reads a genuine stop into a dig-in
+	# restart. Past the pivot angle the braking stick is behind the skater,
+	# which the movement rules treat as a stop (only a sliver of tight-turn
+	# toward the exit), and the stride resumes toward it once the brake
+	# releases (hysteresis + speed floor in AISteering.should_brake).
 	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 	if self_state != null:
 		var v: Vector3 = self_state.velocity
@@ -6104,6 +6115,8 @@ func _update_engagement_cooldown(snapshot: WorldSnapshot, self_state: SkaterNetw
 
 func _set_state(s: State) -> void:
 	if s != _state:
+		if s != State.OFF_PUCK:
+			_prev_locked_man_pid = -1
 		# Wrister charge resets on every SHOOT_PRESSED entry — fresh
 		# sweep direction, fresh tick count. SkaterStateMachine seeds the
 		# charge tracker from the blade's current position at the entry edge.

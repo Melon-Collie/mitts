@@ -44,12 +44,13 @@ func test_faster_skater_wins_the_race_from_further_out() -> void:
 	# speeds the nearer wins; giving the far skater a real top-speed edge
 	# flips the race — a burner genuinely gets to a loose puck first. The race
 	# must be LONG enough for top speed to engage: the calibrated ETA charges
-	# both builds the same standing-start ramp, so acceleration decides short
-	# races and the cap only pays past its ramp distance — which is the real
-	# physics (a 6 m sprint is won by position, not top gear).
+	# both builds the same power-limited stride, so acceleration decides short
+	# races and the cap only pays once the stride has built past the slower
+	# cap — which is the real physics (a 6 m sprint is won by position, not
+	# top gear).
 	var states := {
-		100: _skater(Vector3(0, 0, 12)),  # nearer
-		200: _skater(Vector3(0, 0, 16)),  # further
+		100: _skater(Vector3(0, 0, 20)),  # nearer
+		200: _skater(Vector3(0, 0, 24)),  # further
 	}
 	var league: int = AILoosePuckChase.elect(
 			states, [100, 200], Vector3.ZERO, Vector3.ZERO, -1)

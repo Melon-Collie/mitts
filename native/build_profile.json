@@ -2,6 +2,7 @@
 	"enabled_classes": [
 		"RefCounted",
 		"OS",
-		"Image"
+		"Image",
+		"Skeleton3D"
 	]
 }

@@ -27,18 +27,16 @@ func _standing_inputs(puck_local: Vector3) -> GoalieBodyConfigBuilder.Inputs:
 # Blade horizontal offset from the wrist after the config's tilt + yaw.
 func _blade_offset(cfg: GoalieBodyConfig) -> Vector2:
 	var yaw: float = deg_to_rad(cfg.blocker_rot.y)
-	var bx: float = GoalieBodyConfigBuilder.BLADE_ASSEMBLY_X
-	var bz: float = -GoalieBodyConfigBuilder.BLADE_ASSEMBLY_DROP \
-			* sin(deg_to_rad(cfg.blocker_rot.x))
+	var b: Vector2 = GoalieStickRules.blade_offset_from_wrist(cfg.blocker_rot.x)
 	return Vector2(
-			bx * cos(yaw) + bz * sin(yaw),
-			bz * cos(yaw) - bx * sin(yaw))
+			b.x * cos(yaw) + b.y * sin(yaw),
+			b.y * cos(yaw) - b.x * sin(yaw))
 
 
 func test_active_blade_lands_on_the_puck_line() -> void:
 	# Puck placed so the required yaw sits inside the ±25° intent cap: the
 	# solved yaw must rotate the blade offset exactly onto wrist→puck.
-	var puck := Vector3(0.263, 0.0, -0.666)
+	var puck := Vector3(-0.14, 0.0, -0.48)
 	var inputs := _standing_inputs(puck)
 	inputs.blade_intent_active = true
 	var cfg: GoalieBodyConfig = _builder().build(inputs)
@@ -51,9 +49,10 @@ func test_active_blade_lands_on_the_puck_line() -> void:
 
 
 func test_far_side_puck_clamps_at_the_intent_cap() -> void:
-	# A puck far across the body needs more yaw than the assembly allows —
-	# the solve saturates at the cap instead of swinging the pad off the body.
-	var inputs := _standing_inputs(Vector3(-1.5, 0.0, -0.5))
+	# A puck far out on the blocker side — the blade hangs toward the glove side
+	# of the hand — needs more yaw than the assembly allows: the solve saturates
+	# at the cap instead of swinging the pad off the body.
+	var inputs := _standing_inputs(Vector3(1.5, 0.0, -0.5))
 	inputs.blade_intent_active = true
 	var cfg: GoalieBodyConfig = _builder().build(inputs)
 	assert_almost_eq(absf(cfg.blocker_rot.y), _builder().active_blade_max_yaw_deg, 0.01,

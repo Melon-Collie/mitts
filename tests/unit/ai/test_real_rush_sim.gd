@@ -62,9 +62,16 @@ func _run_rush(start: Vector3, vel: Vector3, secs: float = 3.0,
 	var first_shot_dist: float = -1.0
 	if trace:
 		gut.p("  t(s)  carrier(x,z) dist  shootEV carryEV  goalie(x,z) depth  shots")
+	var stripped: bool = false
 	for t: int in int(secs / DT):
 		var before: int = duel.releases.size()
 		duel.step()
+		# A strip is the rush's outcome — the defender won the puck. The harness
+		# would let the carrier re-collect and be re-stripped tick after tick,
+		# which says nothing about whether it shoots, so the run ends here.
+		if duel.strips > 0:
+			stripped = true
+			break
 		var sk: Object = duel._skater(CARRIER)
 		if duel.releases.size() > before:
 			var n: int = duel.releases.size() - before
@@ -84,7 +91,7 @@ func _run_rush(start: Vector3, vel: Vector3, secs: float = 3.0,
 					sk.agent.debug_shoot_score, sk.agent.debug_carry_score,
 					g.x, g.z, absf(g.z - goal_z), shots])
 	return {"shots": shots, "legit": legit_shots, "crease": crease_shots,
-			"min_dist": min_dist, "first_dist": first_shot_dist}
+			"min_dist": min_dist, "first_dist": first_shot_dist, "stripped": stripped}
 
 
 func test_straight_1v1_produces_a_shot() -> void:
@@ -125,21 +132,11 @@ func test_every_angle_of_attack_produces_a_shot() -> void:
 			"every clean 1v1 angle (all tiers) must produce a shot attempt; missed: %s" % str(missed))
 
 
-# Cells of the pressured sweep below where an ANGLED pressurer takes the look
-# away entirely. Pinned exactly, not budgeted — see the note at the assertion.
-#
-# EASY@-25 LEFT THIS LIST when the goalie stopped low-passing the carrier's body
-# (Scripts/controllers/CLAUDE.md → "Filter the puck, not the man"). The bot now
-# releases there from 4.0 m instead of skating past, which is the direction this
-# test exists to protect — it was written for bots being paralysed under
-# pressure, not for them shooting too much.
-#
-# Read it as a MARGINAL cell rather than a settled one. It moved on a change to
-# where the keeper stands, so it sits near the compete's decision boundary and
-# will move again on the next one. The load-bearing halves are the HARD
-# assertion below (untouched, all seven angles) and the mirrored +25/-25 pair
-# still being taken away at the two lower tiers.
-const PRESSURED_ANGLED_NO_SHOT_CELLS: Array = ["EASY@+25", "NORMAL@-25"]
+# Cells of the pressured sweep below where the backchecker takes the look away
+# (strips the puck, or the carrier never releases). Pinned exactly, not
+# budgeted — see the note at the assertion. Empty: a trailer at matched pace
+# never gains enough to get a stick on the wind-up, so every tier shoots.
+const PRESSURED_ANGLED_NO_SHOT_CELLS: Array = []
 
 
 func test_pressured_1v1_with_backchecker_still_shoots() -> void:
@@ -162,38 +159,27 @@ func test_pressured_1v1_with_backchecker_still_shoots() -> void:
 			var start: Vector3 = net + Vector3(sin(a), 0.0, cos(a)) * radius
 			var vel: Vector3 = (net - start).normalized() * speed
 			var r: Dictionary = _run_rush(start, vel, 3.5, false, prof, gap)
-			gut.p("  %-6s angle %+5.0f°  →  shots=%d (legit=%d crease=%d)  first@%.1fm min-dist=%.1f" % [
-					tier, deg, r["shots"], r["legit"], r["crease"], r["first_dist"], r["min_dist"]])
+			gut.p("  %-6s angle %+5.0f°  →  shots=%d (legit=%d crease=%d)  first@%.1fm min-dist=%.1f%s" % [
+					tier, deg, r["shots"], r["legit"], r["crease"], r["first_dist"], r["min_dist"],
+					"  STRIPPED" if r["stripped"] else ""])
 			if r["shots"] <= 0:
 				missed.append("%s@%+.0f" % [tier, deg])
-	# The bug this originally fixed: under backchecker pressure the bot failed to
-	# get a shot off at sharp/off-centre angles and skated past. The momentum-aware
-	# time_to_arrive makes it release from range instead.
+	# Under backchecker pressure the bot must still get a shot off at sharp and
+	# off-centre angles rather than skate past. A strip ends the run (see
+	# _run_rush) and counts as no shot.
 	#
-	# It no longer asserts a shot from EVERY cell, because the defender changed.
-	# The pressurer used to hold the gap ladder's DISTANCE with no bearing doctrine
-	# at all — it stood wherever the argmax said deflated the carrier's options
-	# most, which is a defender offering the inside and outside lanes equally.
-	# It now angles him off the middle (AIRoleHelpers.carrier_stand), and a
-	# defender who has genuinely taken the inside lane is entitled to take the
-	# look with it. Measured: the pressurer concedes 1.2 m less of his own ice in
-	# the worst case (closest approach to our net 8.2 m -> 9.4 m, deep starts
-	# 5% -> 0%) and the cost is the three cells below.
+	# Two halves, and BOTH have to hold:
 	#
-	# So the spec splits in two, and BOTH halves have to hold:
-	#
-	#   HARD is untouched — the look is still there, and the tier with the
-	#   precision to take it does, from every angle. That is what says the play
-	#   exists and the bot is not paralysed.
+	#   HARD shoots from every angle — the look exists and the tier with the
+	#   precision to take it does. That is what says the bot is not paralysed.
 	#
 	#   The lower tiers' misses are PINNED EXACTLY rather than given a budget, so
-	#   this fails in both directions: angling that starts eating more looks fails
-	#   here, and angling that stops working fails here too. Re-pin only with the
-	#   measurement that justifies the new list.
+	#   this fails in both directions: pressure that starts eating more looks
+	#   fails here, and pressure that stops costing any fails here too. Re-pin
+	#   only with the measurement that justifies the new list.
 	#
-	# The absolute "never skate past" guard is unaffected and lives in
-	# test_every_angle_of_attack_produces_a_shot, which has no defender in it —
-	# with nobody to take the lane away, all 21 cells must still shoot, and do.
+	# The defender-free "never skate past" guard is
+	# test_every_angle_of_attack_produces_a_shot.
 	var hard_missed: Array = []
 	for cell: String in missed:
 		if cell.begins_with("HARD"):

@@ -148,9 +148,7 @@ func apply_network_state(state: SkaterNetworkState, _host_ts: float) -> void:
 	skater.set_facing(state.facing)
 	skater.set_upper_body_rotation(state.upper_body_rotation_y)
 	skater.set_top_hand_position(state.top_hand_position)
-	# Re-derive lean from velocity + hand reach so the upper body leans before
-	# the blade is placed (lean isn't transmitted; receivers re-derive).
-	_pose.snap_lean_to_state()
+	_pose.apply_wire_lean(state)
 	skater.set_blade_position(state.blade_position)
 	# Arm/stick meshes derive from the markers once per rendered frame in
 	# Skater._process.
@@ -561,6 +559,12 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# exactly like stamina: snap to the server value, then the replay loop's
 	# per-tick decay (in _apply_movement) re-derives it forward.
 	stagger_timer = server_state.stagger_timer
+	stagger_recoil_dir = server_state.recoil_dir
+	# The balance and torso leans ride the same rail: the host's values at the
+	# ack, then the replay steps them forward through the unacked inputs.
+	balance_tilt_vel = server_state.balance_tilt_vel
+	skater.set_balance_tilt(server_state.balance_tilt, server_state.balance_tilt_vel)
+	_pose.adopt_wire_lean(server_state)
 	# Knockdown rides the same rail — snap to the host value, replay re-derives the
 	# per-tick decay + lock. is_knocked_down follows so the replay's _apply_movement
 	# gates correctly from the first replayed tick. The meta sync covers the
@@ -579,7 +583,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# cleanly from the snapped facing on the first post-reconcile frame.
 	_pose.ik_locked_side = 0
 	_pose.lower_body_lag = 0.0
-	skater.set_lower_body_lag(0.0)
+	_pose.apply_lower_body_yaw(0.0)
 	# Snap upper-body rotation to server value. Pose evolution is deterministic
 	# from inputs, but _pose.upper_body_angle is the one persistent pose field
 	# that carries across reconciles without a per-cycle resync — anchoring it
@@ -727,7 +731,9 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# round-trip through server state.
 	skater.set_facing(_pose.facing)
 	skater.set_upper_body_rotation(_pose.upper_body_angle)
-	skater.set_lower_body_lag(_pose.lower_body_lag)
+	# Through the summing site, not the lag alone: the gait's yaw channels ride
+	# on it (SkaterPoseCoordinator.apply_lower_body_yaw).
+	_pose.apply_lower_body_yaw(0.0)
 	# Report trajectory divergence (predicted vs server at the same timestamp) so
 	# the F3 Reconcile magnitude reflects true non-determinism. Falls back to
 	# post-replay residual when no prediction was matched.

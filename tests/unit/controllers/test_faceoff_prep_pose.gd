@@ -266,10 +266,10 @@ func _hand(c: SkaterController, top: bool) -> Vector3:
 
 
 func _elbow(c: SkaterController, top: bool) -> Vector3:
-	var rig: Skeleton3D = c.skater.upper_body.get_node("UpperRig") as Skeleton3D
+	var rig: Skeleton3D = c.skater.mesh_root.get_node("BodyRig") as Skeleton3D
 	var bone: int = SkaterMeshBuilder.UpperBone.TOP_ELBOW if top \
 			else SkaterMeshBuilder.UpperBone.BOTTOM_ELBOW
-	return c.skater.upper_body_to_global(rig.get_bone_global_pose(bone).origin)
+	return c.skater.mesh_root.to_global(rig.get_bone_global_pose(bone).origin)
 
 
 # ── The centre's hands ───────────────────────────────────────────────────────
@@ -386,8 +386,8 @@ func _skate_tilt_deg(c: SkaterController, rest: SkaterController,
 
 
 func _sole_axis(c: SkaterController, bone: int) -> Vector3:
-	var rig: Skeleton3D = c.skater.lower_body.get_node("LegRig") as Skeleton3D
-	return rig.get_bone_global_pose(bone).basis.y.normalized()
+	var rig: Skeleton3D = c.skater.mesh_root.get_node("BodyRig") as Skeleton3D
+	return rig.get_bone_global_pose(SkaterBodySkeleton.LEG_BONE_OFFSET + bone).basis.y.normalized()
 
 
 # Lateral span between the two skates, in the skater's own frame.

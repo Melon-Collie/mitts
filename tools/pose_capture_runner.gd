@@ -72,7 +72,12 @@ const CAM_AIM: Vector3 = Vector3(0.0, -0.05, 0.0)
 #
 # Spec keys: move (Vector2, world), aim (Vector3, RELATIVE to the skater —
 # absolute would swing as the body translates), sprint, shoot, slap, block,
-# deflect, hit (bool), loft (int elevation level).
+# deflect, hit, brake (bool), loft (int elevation level). Pose keys beyond
+# name/puck/steps: cam (offset), cam_aim (the point it looks at, relative to the
+# skater like cam), cam_ahead (metres down the travel line),
+# game_cam, readout, faceoff, knockdown (a world-space impulse absorbed as a
+# check before the first tick). "readout": true also prints the pose's speed
+# and body lean, which a tile can't be read for.
 const POSES: Array = [
 	{"name": "rest", "puck": false, "steps": [[40, {}]]},
 	{"name": "carry", "puck": true, "steps": [[40, {"aim": Vector3(0.6, 0.0, -2.2)}]]},
@@ -113,6 +118,44 @@ const POSES: Array = [
 		[58, {"aim": Vector3(0.8, 0.0, -3.2), "slap": true}],
 		[16, {"aim": Vector3(0.8, 0.0, -3.2)}],
 	]},
+	# Turning at speed: build to cruise heading -Z, then turn toward +X. A
+	# striding crossover turn, the Space + side-key tight turn mid-carve, and
+	# the tight turn held until it lines up with the key (where it blends into
+	# a stop).
+	{"name": "wiggle_aim", "puck": false, "trace": 10, "steps": [
+		[40, {"aim": Vector3(3.0, 0.0, 0.0)}],
+		[40, {"aim": Vector3(0.0, 0.0, -3.0)}],
+		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[40, {"move": Vector2(0.0, -1.0), "aim": Vector3(2.5, 0.0, -1.5)}],
+		[40, {"move": Vector2(0.0, -1.0), "aim": Vector3(-2.5, 0.0, -1.5)}],
+		[40, {"move": Vector2(0.0, -1.0), "aim": Vector3(2.5, 0.0, -1.5)}],
+		[40, {"move": Vector2(0.0, -1.0), "aim": Vector3(-2.5, 0.0, -1.5)}],
+	]},
+	{"name": "wiggle_keys", "puck": false, "trace": 10, "steps": [
+		[40, {"aim": Vector3(3.0, 0.0, 0.0)}],
+		[40, {"aim": Vector3(0.0, 0.0, -3.0)}],
+		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[30, {"move": Vector2(0.7, -0.7), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[30, {"move": Vector2(-0.7, -0.7), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[30, {"move": Vector2(0.7, -0.7), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[30, {"move": Vector2(-0.7, -0.7), "aim": Vector3(0.0, 0.0, -3.0)}],
+	]},
+	{"name": "turn_carve_hard", "puck": false, "readout": true, "cam_ahead": 3.2, "steps": [
+		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[45, {"move": Vector2(1.0, 0.0), "aim": Vector3(2.2, 0.0, -2.2)}],
+	]},
+	{"name": "turn_tight", "puck": false, "readout": true, "cam_ahead": 3.2, "steps": [
+		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[30, {"move": Vector2(1.0, 0.0), "brake": true, "aim": Vector3(2.2, 0.0, -2.2)}],
+	]},
+	{"name": "turn_tight_game", "puck": false, "game_cam": true, "steps": [
+		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[30, {"move": Vector2(1.0, 0.0), "brake": true, "aim": Vector3(2.2, 0.0, -2.2)}],
+	]},
+	{"name": "turn_tight_exit", "puck": false, "readout": true, "cam_ahead": 3.2, "steps": [
+		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[70, {"move": Vector2(1.0, 0.0), "brake": true, "aim": Vector3(3.0, 0.0, -0.5)}],
+	]},
 	{"name": "shot_block", "puck": false, "steps": [
 		[30, {"block": true, "aim": Vector3(0.0, 0.0, -3.0)}],
 	]},
@@ -136,6 +179,20 @@ const POSES: Array = [
 	{"name": "hit_commit_deep", "puck": false, "steps": [
 		[60, {"hit": true, "move": Vector2(0.84, -0.55), "aim": Vector3(1.6, 0.0, 2.4)}],
 	]},
+	# ── Knockdown ───────────────────────────────────────────────────────────
+	# A hit hard enough to put the skater down, mid-fall and lying, shoved to
+	# the side and backward. These are the tiles that show where the fall
+	# pivots: a body lying a hip-height above the ice, or one sunk through it,
+	# is a proportion no display-less test catches.
+	{"name": "knockdown_mid_fall", "puck": false, "knockdown": Vector3(3.0, 0.0, 0.0),
+		"cam": Vector3(0.6, -0.2, 3.4), "cam_aim": Vector3(0.6, -0.5, 0.0),
+		"steps": [[30, {}]]},
+	{"name": "knockdown_lying_side", "puck": false, "knockdown": Vector3(3.0, 0.0, 0.0),
+		"cam": Vector3(0.9, -0.45, 2.6), "cam_aim": Vector3(0.9, -0.95, 0.0),
+		"steps": [[100, {}]]},
+	{"name": "knockdown_lying_back", "puck": false, "knockdown": Vector3(0.0, 0.0, 3.0),
+		"cam": Vector3(2.6, -0.45, 0.9), "cam_aim": Vector3(0.0, -0.95, 0.9),
+		"steps": [[100, {}]]},
 	# ── FACEOFF_PREP ──────────────────────────────────────────────────────────
 	# The locked-phase path (begin_approach → tick_faceoff_approach →
 	# apply_blade_aim_only), which _process_input never reaches, so the specs
@@ -352,6 +409,8 @@ func _run_pose() -> void:
 
 	var input := InputState.new()
 	_state.faceoff_prep = false
+	if pose.has("knockdown"):
+		_controller._on_body_check_received(pose["knockdown"] as Vector3)
 	var steps: Array = pose.get("steps", [])
 	for step: Array in steps:
 		var ticks: int = step[0]
@@ -364,8 +423,28 @@ func _run_pose() -> void:
 			_controller._process_input(input, DT)
 			_skater._physics_process(DT)
 			_skater._process(DT)
+			if pose.has("trace") and t % int(pose["trace"]) == 0:
+				_print_trace()
+			_track_reach()
+	if bool(pose.get("readout", false)):
+		var v: Vector3 = _skater.velocity
+		print("  %s: speed %.2f heading %.0f° | lower body pitch %.1f° yaw %.1f° roll %.1f° | upper body pitch %.1f° roll %.1f°" % [
+				String(pose["name"]), Vector2(v.x, v.z).length(), rad_to_deg(atan2(v.x, -v.z)),
+				_skater.lower_body.rotation_degrees.x, _skater.lower_body.rotation_degrees.y,
+				_skater.lower_body.rotation_degrees.z, _skater.upper_body.rotation_degrees.x,
+				_skater.upper_body.rotation_degrees.z])
+		print("    gait: balance lean %.1f° trunk pitch %.1f° roll %.1f° | leg roll L %.1f° R %.1f° | drop %.3f m" % [
+				rad_to_deg(_skater.balance_tilt().length()),
+				rad_to_deg(_controller._skating.trunk_pitch_add),
+				rad_to_deg(_controller._skating.trunk_roll_add),
+				rad_to_deg(_skater._legs._gait_leg_l.z), rad_to_deg(_skater._legs._gait_leg_r.z),
+				_controller._skating.crouch_drop])
 	if pose.has("faceoff"):
 		_run_faceoff(pose["faceoff"] as Dictionary)
+	print("  %s reach: worst %.2f of arm length (frame %.2f)" % [
+			String(pose["name"]), _reach_worst, _reach_worst_frame])
+	_reach_worst = 0.0
+	_reach_worst_frame = 0.0
 	# `game_cam` shoots the pose the way the PLAYER sees it; `cam` re-shoots it
 	# from somewhere the chase rig can't. The centre's address needs the second:
 	# he faces straight down his own stick, so from behind the shaft is a dot and
@@ -375,8 +454,63 @@ func _run_pose() -> void:
 		return
 	_camera.fov = CAM_FOV
 	var offset: Vector3 = pose.get("cam", CAM_OFFSET)
+	# `cam_ahead` looks back down the line of travel, which is the only view a
+	# turn's lean reads from — side-on, a bank is a foreshortened tilt.
+	var v_flat: Vector3 = Vector3(_skater.velocity.x, 0.0, _skater.velocity.z)
+	if pose.has("cam_ahead") and v_flat.length() > 0.1:
+		offset = v_flat.normalized() * float(pose["cam_ahead"]) + Vector3(0.0, 0.3, 0.0)
 	_camera.global_position = _skater.global_position + offset
-	_camera.look_at(_skater.global_position + CAM_AIM, Vector3.UP)
+	_camera.look_at(_skater.global_position + pose.get("cam_aim", CAM_AIM), Vector3.UP)
+
+
+var _reach_worst: float = 0.0
+var _reach_worst_frame: float = 0.0
+
+
+# How far each arm has to stretch, as a fraction of its length: from where the
+# rig roots it (the visible shoulder, plus the girdle's give), and (for
+# comparison) from the shoulder on the gameplay frame. Over 1.0 is an arm the
+# rig draws stretched.
+func _track_reach() -> void:
+	var arm: float = _skater.upper_arm_length + _skater.forearm_length
+	for pair: Array in [[_skater.shoulder, _skater.top_hand],
+			[_skater.bottom_shoulder, _skater.bottom_hand]]:
+		var marker: Vector3 = (pair[0] as Node3D).position
+		var hand_local: Vector3 = (pair[1] as Node3D).position
+		var hand: Vector3 = _skater.upper_body.transform * hand_local
+		var visible: Vector3 = _skater._arms.arm_root(marker, hand_local)
+		var frame: Vector3 = _skater.upper_body.transform * _skater._arms._textured_shoulder(marker)
+		_reach_worst = maxf(_reach_worst, visible.distance_to(hand) / arm)
+		_reach_worst_frame = maxf(_reach_worst_frame, frame.distance_to(hand) / arm)
+
+
+# One line of where the body's segments sit ACROSS the line of travel, metres
+# (+ = travel's right): head over pelvis is the trunk's lean, pelvis over the
+# hip joints is the seam between the two skeletons, hips over skates the legs'.
+func _print_trace() -> void:
+	var v: Vector3 = _skater.global_transform.basis.inverse() * _skater.velocity
+	var flat: Vector3 = Vector3(v.x, 0.0, v.z)
+	if flat.length() < 0.1:
+		return
+	var right: Vector3 = flat.normalized().cross(Vector3.UP)
+	# Everything in the skater's own frame: the global chain is stale under a
+	# hand-ticked harness (interpolation never advances).
+	var body: Skeleton3D = _skater._arms._skeleton
+	var off: int = SkaterBodySkeleton.LEG_BONE_OFFSET
+	var head: Vector3 = body.get_bone_global_pose(SkaterMeshBuilder.UpperBone.HELMET).origin
+	var pelvis: Vector3 = body.get_bone_global_pose(SkaterMeshBuilder.UpperBone.PELVIS).origin
+	var hips: Vector3 = (body.get_bone_global_pose(off + SkaterMeshBuilder.LegBone.LEG_L).origin
+			+ body.get_bone_global_pose(off + SkaterMeshBuilder.LegBone.LEG_R).origin) * 0.5
+	var feet: Vector3 = (body.get_bone_global_pose(off + SkaterMeshBuilder.LegBone.FOOT_L).origin
+			+ body.get_bone_global_pose(off + SkaterMeshBuilder.LegBone.FOOT_R).origin) * 0.5
+	print("    face %+.0f° v %.1f | head-pelvis %+.2f  pelvis-hips %+.2f fwd %+.2f  hips-feet %+.2f | ub yaw %+.0f° pitch %+.0f° roll %+.0f° lb yaw %+.0f° | trunk p %+.0f° r %+.0f° | xover %.2f stride %.2f glide %.2f" % [
+			_skater.rotation_degrees.y, flat.length(), (head - pelvis).dot(right), (pelvis - hips).dot(right),
+			(pelvis - hips).dot(flat.normalized()), (hips - feet).dot(right),
+			_skater.upper_body.rotation_degrees.y, _skater.upper_body.rotation_degrees.x,
+			_skater.upper_body.rotation_degrees.z, _skater.lower_body.rotation_degrees.y,
+			rad_to_deg(_controller._skating.trunk_pitch_add),
+			rad_to_deg(_controller._skating.trunk_roll_add), _controller._skating.locomotion_mix().crossover,
+			_controller._skating.locomotion_mix().stride, _controller._skating.locomotion_mix().glide])
 
 
 # The live game's own framing, so a tile can answer the question the beauty
@@ -448,6 +582,7 @@ func _run_faceoff(spec: Dictionary) -> void:
 			_controller.apply_blade_aim_only(input, DT)
 		_skater._physics_process(DT)
 		_skater._process(DT)
+		_track_reach()
 	# Numbers a 384 px tile can't be read for: how far off the dot the body
 	# settled, how deep the crouch went, and whether the hips came square.
 	print("  %s: pos %.3v crouch %.3f hips %.1f° skates %.3f/%.3f" % [
@@ -473,6 +608,7 @@ func _fill_input(input: InputState, spec: Dictionary, first: bool) -> void:
 	input.mouse_world_pos = _skater.global_position + aim
 	input.sprint_held = spec.get("sprint", false)
 	input.hit_held = spec.get("hit", false)
+	input.brake = spec.get("brake", false)
 	input.block_held = spec.get("block", false)
 	input.elevation_level = spec.get("loft", 0)
 	input.shoot_held = shoot

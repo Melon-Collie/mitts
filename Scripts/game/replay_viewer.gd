@@ -166,7 +166,7 @@ func _spawn_skater_from_roster(entry: Dictionary) -> void:
 	team_obj.color_slot = _home_color_slot if team_id == 0 else _away_color_slot
 	var team_colors: Dictionary = _home_colors if team_id == 0 else _away_colors
 	# Re-apply the recorded build (height / weight / gear) so the skater's mesh,
-	# reach, and re-derived lean match the host's — without it the replay skater
+	# reach, and lean placement match the host's — without it the replay skater
 	# sits at the neutral frame and the host's lean-compensated blade positions
 	# leave the stick floating off the ice. Missing "build" (a .mreplay recorded
 	# before builds were written into the header) → the neutral build.
