@@ -328,6 +328,21 @@ func test_skater_balance_lean_round_trips() -> void:
 		assert_eq(dec.wrister_address_side, -1, "the intent byte is untouched")
 
 
+# The torso's tilt is the rest of the frame the wire's blade is local to.
+func test_skater_torso_lean_round_trips() -> void:
+	for lean: Vector2 in [Vector2.ZERO, Vector2(-0.35, 0.2), Vector2(0.6, -0.4)]:
+		var s := SkaterNetworkState.new()
+		s.torso_lean = lean
+		s.posture_lean = -lean.x * 0.5
+		s.balance_tilt_vel = Vector2(-7.0, 3.0)  # the field before it
+		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+				WorldStateCodec._encode_skater_quantized(s))
+		assert_almost_eq(dec.torso_lean.x, lean.x, 1e-4, "reach pitch %s" % lean)
+		assert_almost_eq(dec.torso_lean.y, lean.y, 1e-4, "reach roll %s" % lean)
+		assert_almost_eq(dec.posture_lean, s.posture_lean, 1e-4, "posture %s" % lean)
+		assert_almost_eq(dec.balance_tilt_vel.y, 3.0, 1e-3, "the lean's rate is untouched")
+
+
 # ── decode_for_replay: side-effect-free world-state decode ────────────────────
 # The replay viewer / goal-replay driver decode packets through decode_for_replay
 # instead of decode_world_state precisely because it must NOT mutate the live

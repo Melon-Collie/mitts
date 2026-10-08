@@ -117,9 +117,8 @@ func test_a_body_check_does_not_lean_the_body() -> void:
 			"a shove is not something a body leans into")
 
 
-# The balance lean off the wire must place the frame where the shooter has it.
-# The torso's own pitch and roll are not on the wire (receivers re-derive them in
-# snap_lean_to_state), so they are matched here to isolate the balance lean.
+# The balance and torso leans off the wire must place the frame where the
+# shooter has it — the wire's blade is local to that frame.
 func test_a_remote_rebuilds_the_blade_from_the_wire() -> void:
 	var shooter: SkaterController = _rig(20.0)
 	_tick(shooter, Vector2(0.0, -1.0), 240)
@@ -133,8 +132,10 @@ func test_a_remote_rebuilds_the_blade_from_the_wire() -> void:
 	viewer.apply_replay_state(received, DT)
 	var a: Skater = shooter.skater
 	var b: Skater = viewer.skater
-	b.set_upper_body_lean(a.upper_body.rotation.x, a.upper_body.rotation.z)
-	b.set_blade_position(received.blade_position)
+	assert_gt(absf(a.upper_body.rotation.x) + absf(a.upper_body.rotation.z), 0.1,
+			"the shooter's torso leans")
+	assert_almost_eq(b.upper_body.rotation.x, a.upper_body.rotation.x, 0.001, "the torso pitch")
+	assert_almost_eq(b.upper_body.rotation.z, a.upper_body.rotation.z, 0.001, "the torso roll")
 	assert_lt(b.upper_body.position.distance_to(a.upper_body.position), 0.01,
 			"the receiver's frame sits where the shooter's does")
 	var expected: Vector3 = a.get_blade_contact_global() - a.global_position

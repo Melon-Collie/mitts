@@ -148,9 +148,7 @@ func apply_network_state(state: SkaterNetworkState, _host_ts: float) -> void:
 	skater.set_facing(state.facing)
 	skater.set_upper_body_rotation(state.upper_body_rotation_y)
 	skater.set_top_hand_position(state.top_hand_position)
-	# Re-derive lean from velocity + hand reach so the upper body leans before
-	# the blade is placed (lean isn't transmitted; receivers re-derive).
-	_pose.snap_lean_to_state()
+	_pose.apply_wire_lean(state)
 	skater.set_blade_position(state.blade_position)
 	# Arm/stick meshes derive from the markers once per rendered frame in
 	# Skater._process.
@@ -561,10 +559,11 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# exactly like stamina: snap to the server value, then the replay loop's
 	# per-tick decay (in _apply_movement) re-derives it forward.
 	stagger_timer = server_state.stagger_timer
-	# The balance lean rides the same rail: the host's lean and spring rate at
-	# the ack, then the replay steps it forward through the unacked inputs.
+	# The balance and torso leans ride the same rail: the host's values at the
+	# ack, then the replay steps them forward through the unacked inputs.
 	balance_tilt_vel = server_state.balance_tilt_vel
 	skater.set_balance_tilt(server_state.balance_tilt)
+	_pose.adopt_wire_lean(server_state)
 	# Knockdown rides the same rail — snap to the host value, replay re-derives the
 	# per-tick decay + lock. is_knocked_down follows so the replay's _apply_movement
 	# gates correctly from the first replayed tick. The meta sync covers the

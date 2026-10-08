@@ -412,8 +412,9 @@ var upper_body_lean_engage_power: float = 1.6
 var upper_body_lean_return_speed: float = 8.0
 
 # ── Velocity Lean / Skating Posture Tuning ────────────────────────────────────
-# Trunk lean INTO travel, re-derived from velocity on every machine (never
-# networked — see SkaterPoseCoordinator.compute_velocity_lean_target). Forward
+# Trunk lean INTO travel, eased toward a target from velocity on the simulating
+# machine (SkaterPoseCoordinator.compute_velocity_lean_target) and replicated
+# as SkaterNetworkState.posture_lean. Forward
 # skating folds the torso forward into the attack posture that makes skating
 # read as skating; backward skating sits slightly back. The lower body follows
 # the pitch only fractionally — the legs stay under the hips while the trunk
@@ -1973,6 +1974,8 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.knockdown_timer = knockdown_timer
 	state.balance_tilt = skater.balance_tilt()
 	state.balance_tilt_vel = balance_tilt_vel
+	state.torso_lean = Vector2(_pose.upper_body_lean, _pose.upper_body_lean_roll)
+	state.posture_lean = _pose.velocity_lean_x
 	state.move_intent = skater.move_intent
 	state.brake_intent = skater.brake_intent
 	state.hit_committed = skater.hit_committed
@@ -2058,10 +2061,7 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	skater.set_facing(state.facing)
 	skater.set_upper_body_rotation(state.upper_body_rotation_y)
 	skater.set_top_hand_position(state.top_hand_position)
-	# Re-derive lean from velocity + hand reach so the upper body leans before
-	# the blade marker is placed (host's lean-compensated blade_y needs the
-	# matching upper-body rotation to land at the ice in world space).
-	_pose.snap_lean_to_state()
+	_pose.apply_wire_lean(state)
 	skater.set_blade_position(state.blade_position)
 	_ik.update_bottom_hand()
 	# Procedural leg gait — derived from the velocity just applied, exactly as in
@@ -2603,7 +2603,7 @@ func _enter_slapper_charge(input: InputState) -> void:
 	# pose. Measuring first (as it did) built the blade world point through the
 	# residual skating twist/lean that's zeroed one line later — aiming from a
 	# pose that lasts zero frames, and worse, twist/lean are only loosely synced
-	# (lean isn't networked; twist re-snaps only at reconcile), so client and host
+	# (both re-snap only at reconcile), so client and host
 	# baked different transient poses into the lock and diverged. From the squared
 	# stance the lock depends only on facing + body position + the fixed blade
 	# offset, which both machines agree on.

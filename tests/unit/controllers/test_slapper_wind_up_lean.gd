@@ -2,8 +2,8 @@ extends GutTest
 
 # The slapper wind-up keeps the posture under its coil. Its hands are authored,
 # so it takes no reach lean — but the skating lean and a stagger's reel carry on
-# through the charge as in every other state, and a remote machine re-deriving
-# the lean (snap_lean_to_state) lands on the same torso as the shooter's own.
+# through the charge as in every other state, and a remote machine applying the
+# lean off the wire lands on the same torso as the shooter's own.
 
 const State = SkaterStateMachine.State
 const DT: float = 1.0 / 120.0
@@ -82,17 +82,17 @@ func test_a_stagger_reels_through_the_wind_up() -> void:
 			"the torso reels back off the hit during the charge")
 
 
-# The velocity lean is eased on the simulating machine and snapped to its target
-# on a remote one, in every state; what this pins is the part on top of it.
 func test_a_remote_sees_the_wind_up_the_shooter_sees() -> void:
 	_tick(150, false)
 	_tick(60, true, true)
 	assert_true(_charging(), "still winding up")
-	var local := Vector2(_skater.upper_body.rotation.x - _controller._pose.velocity_lean_x,
-			_skater.upper_body.rotation.z)
-	_controller._pose.snap_lean_to_state()
-	var remote := Vector2(_skater.upper_body.rotation.x - _controller._pose.velocity_lean_x,
-			_skater.upper_body.rotation.z)
-	assert_almost_eq(remote.x, local.x, 0.002, "same torso pitch over the posture")
-	assert_almost_eq(remote.y, local.y, 0.002, "same torso roll")
-
+	var local := Vector2(_skater.upper_body.rotation.x, _skater.upper_body.rotation.z)
+	var wire := SkaterNetworkState.new()
+	_controller.fill_network_state(wire)
+	var received: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+			WorldStateCodec._encode_skater_quantized(wire))
+	_controller._pose.apply_wire_lean(SkaterNetworkState.new())  # a receiver's blank pose
+	_controller._pose.apply_wire_lean(received)
+	var remote := Vector2(_skater.upper_body.rotation.x, _skater.upper_body.rotation.z)
+	assert_almost_eq(remote.x, local.x, 0.001, "same torso pitch")
+	assert_almost_eq(remote.y, local.y, 0.001, "same torso roll")

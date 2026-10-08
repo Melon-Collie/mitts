@@ -544,6 +544,8 @@ func _interpolate(delta: float) -> void:
 		interpolated.wrister_address_side = newest.wrister_address_side
 		interpolated.balance_tilt = newest.balance_tilt
 		interpolated.balance_tilt_vel = newest.balance_tilt_vel
+		interpolated.torso_lean = newest.torso_lean
+		interpolated.posture_lean = newest.posture_lean
 	else:
 		var from_state: SkaterNetworkState = bracket.from_state
 		var to_state: SkaterNetworkState = bracket.to_state
@@ -581,6 +583,8 @@ func _interpolate(delta: float) -> void:
 		interpolated.wrister_address_side = to_state.wrister_address_side
 		interpolated.balance_tilt = from_state.balance_tilt.lerp(to_state.balance_tilt, t)
 		interpolated.balance_tilt_vel = from_state.balance_tilt_vel.lerp(to_state.balance_tilt_vel, t)
+		interpolated.torso_lean = from_state.torso_lean.lerp(to_state.torso_lean, t)
+		interpolated.posture_lean = lerpf(from_state.posture_lean, to_state.posture_lean, t)
 		# The hermite result sits a full interp_delay in the past (or, past the
 		# newest sample, the is_extrapolating branch dead-reckons it); the stage-3
 		# intent integration below is what carries the body toward present. Any
@@ -699,10 +703,9 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	skater.set_upper_body_rotation(state.upper_body_rotation_y)
 	# Top hand before blade so set_blade_position has the correct hand pivot.
 	skater.set_top_hand_position(state.top_hand_position)
-	# Re-derive lean from velocity + hand reach (not in network state) so the
-	# upper body is leaning correctly when the blade marker is placed —
-	# otherwise the host's lean-compensated blade_y lands above the ice.
-	_pose.snap_lean_to_state()
+	# The torso's tilt is the frame the wire's blade is local to, so it too
+	# lands before the blade.
+	_pose.apply_wire_lean(state)
 	skater.set_blade_position(state.blade_position)
 	skater.set_ghost(state.is_ghost)
 	# Replicated from the host so the loft-level blade scoop (Skater

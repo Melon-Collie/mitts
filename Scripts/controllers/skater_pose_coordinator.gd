@@ -74,12 +74,6 @@ func apply_velocity_lean(delta: float) -> void:
 	velocity_lean_x = lerpf(velocity_lean_x, target, _controller.velocity_lean_speed * delta)
 
 
-# Pure helpers — derive lean targets from state. Used both by the live pose
-# pipeline (apply_velocity_lean / apply_upper_body lerp toward these targets)
-# and by snap_lean_to_state below (remote / replay path snaps directly). Means
-# lean isn't transmitted over the wire — receivers re-derive it from the
-# velocity and hand position they already have.
-#
 # The lean is INTO travel: forward skating folds the trunk forward (the
 # skating posture — negative rotation.x pitches the torso top toward local
 # −Z), backward skating sits slightly back. Pitch only, radians: sideways
@@ -119,37 +113,21 @@ static func compute_upper_body_lean_target(
 	return Vector2(mag * dir.y, -mag * dir.x)
 
 
-# Snap lean to the targets implied by current velocity + hand position. Used
-# by remote / replay state application — lean isn't in the network state, so
-# receivers re-derive it the same way the host computed it. Must be called
-# AFTER set_top_hand_position and BEFORE set_blade_position so the blade
-# marker lands at the correct world Y under the leaning upper body.
-func snap_lean_to_state() -> void:
-	velocity_lean_x = compute_velocity_lean_target(
-			_skater.velocity, _skater.global_transform.basis, _controller.max_speed,
-			_controller.velocity_lean_forward_max_deg,
-			_controller.velocity_lean_back_max_deg)
-	if _skater.current_shot_state == State.SHOT_BLOCKING:
-		# Mirror the local block branch in apply_upper_body: the chest tips
-		# over the down knee instead of deriving a reach lean from the block's
-		# low hand pose. Snapped, like everything else on this path — the
-		# block pose itself snaps on entry.
-		upper_body_lean = -deg_to_rad(_controller.block_trunk_pitch_deg)
-		upper_body_lean_roll = _block_trunk_roll()
-	elif _is_slapper_charge(_skater.current_shot_state):
-		# The wind-up's hands are authored, not reached for (apply_upper_body's
-		# charge branch): no reach lean.
-		upper_body_lean = 0.0
-		upper_body_lean_roll = 0.0
-	else:
-		var reach_target: Vector2 = compute_upper_body_lean_target(
-				Vector2(_skater.top_hand.position.x, _skater.top_hand.position.z),
-				Vector2(_skater.shoulder.position.x, _skater.shoulder.position.z),
-				_controller.rom_backhand_reach_max, _controller.upper_body_lean_max_deg,
-				_controller.upper_body_lean_engage_power) * (1.0 - _address_share())
-		upper_body_lean = reach_target.x
-		upper_body_lean_roll = reach_target.y
+# The torso's lean off the wire (remote, replay and goal-replay paths): the
+# simulating machine's smoothed state, applied through the one torso writer.
+# Must run BEFORE set_blade_position — the wire blade is local to the tilted
+# frame.
+func apply_wire_lean(state: SkaterNetworkState) -> void:
+	adopt_wire_lean(state)
 	_apply_lean()
+
+
+# The reconcile's half: adopt the host's lean at the ack, and let the replay
+# step it forward.
+func adopt_wire_lean(state: SkaterNetworkState) -> void:
+	upper_body_lean = state.torso_lean.x
+	upper_body_lean_roll = state.torso_lean.y
+	velocity_lean_x = state.posture_lean
 
 
 static func _is_slapper_charge(state: int) -> bool:
@@ -179,7 +157,7 @@ func _apply_lean() -> void:
 	# it, easing out as the timer decays (same directional pitch/roll decomposition
 	# as the reach lean). Runs on every path — local, bot, and remote (which reels
 	# generically backward off the replicated timer) — since _apply_lean is the
-	# single torso writer both the live pass and snap_lean_to_state go through.
+	# single torso writer both the live pass and apply_wire_lean go through.
 	var recoil_pitch: float = 0.0
 	var recoil_roll: float = 0.0
 	var recoil_t: float = clampf(
@@ -363,7 +341,7 @@ func apply_upper_body(delta: float) -> void:
 			upper_body_angle = lerp_angle(upper_body_angle, aim_target + coil, _controller.slapper_wind_up_lerp_speed * delta)
 			_skater.set_upper_body_rotation(upper_body_angle)
 		# The wind-up's hands are authored, not reached for, so there is no reach
-		# lean (snap_lean_to_state agrees); the posture under the coil — the
+		# lean; the posture under the coil — the
 		# skating lean, a stagger's reel — carries on as in every other state.
 		var settle: float = minf(_controller.upper_body_lean_return_speed * delta, 1.0)
 		upper_body_lean = lerpf(upper_body_lean, 0.0, settle)

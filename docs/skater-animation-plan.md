@@ -471,7 +471,9 @@ into the turn, and the visible shoulder within 0.14 m of the gameplay one the
 hand hangs from. `test_lean_pivots_at_the_skates.gd` holds the pivot, the
 blade on the ice, a body check not entering the lean, and a receiver
 rebuilding the frame and blade from the wire; the codec and reconcile suites
-hold the new fields. Left as it was, and now flagged: the torso's own pitch and
-roll are still not on the wire (`snap_lean_to_state` re-derives them), and in a
-hard turn a receiver's torso can differ by ~0.15 rad, enough to put that
-remote's blade ~18 cm off the ice.
+hold the new fields. The torso's own pitch and roll followed (v61): receivers
+used to re-derive them by snapping to the targets the simulator eases toward,
+which in a hard turn put a remote's torso ~0.15 rad and its blade ~18 cm off.
+The pose coordinator's smoothed reach lean and posture now replicate (3 × s16),
+are adopted on reconcile, and the rebuild test asserts the receiver's torso
+within 0.001 rad with no hand-matching.

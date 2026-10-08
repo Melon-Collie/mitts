@@ -71,7 +71,12 @@ func test_a_reconcile_adopts_the_hosts_lean() -> void:
 	server.shot_state = _skater.current_shot_state
 	server.balance_tilt = Vector2(0.3, -0.1)
 	server.balance_tilt_vel = Vector2(-1.0, 0.5)
+	server.torso_lean = Vector2(-0.2, 0.15)
+	server.posture_lean = -0.12
 	_controller.reconcile(server)
 	assert_almost_eq(_skater.balance_tilt().x, 0.3, 1e-6, "the host's lean")
 	assert_almost_eq(_skater.balance_tilt().y, -0.1, 1e-6, "the host's lean")
 	assert_almost_eq(_controller.balance_tilt_vel.x, -1.0, 1e-6, "and its rate")
+	assert_almost_eq(_controller._pose.upper_body_lean, -0.2, 1e-6, "the host's reach lean")
+	assert_almost_eq(_controller._pose.upper_body_lean_roll, 0.15, 1e-6, "the host's reach roll")
+	assert_almost_eq(_controller._pose.velocity_lean_x, -0.12, 1e-6, "the host's posture")

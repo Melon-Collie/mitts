@@ -74,6 +74,12 @@ var wrister_address_side: int = 1
 # to the host's before replay (v60).
 var balance_tilt: Vector2 = Vector2.ZERO
 var balance_tilt_vel: Vector2 = Vector2.ZERO
+# The torso's smoothed lean (SkaterPoseCoordinator): the reach lean (pitch,
+# roll) and the skating posture's pitch, radians. LOAD-BEARING for the same
+# reason — UpperBody's tilt is what puts the wire's local blade on the ice —
+# and like the balance lean the reconcile snaps them before replay (v61).
+var torso_lean: Vector2 = Vector2.ZERO
+var posture_lean: float = 0.0
 var host_timestamp: float = 0.0         # host-only, not serialized
 var blade_contact_world: Vector3 = Vector3.ZERO  # host-only, not serialized
 # World-space top-hand (grip) point. host-only, not serialized — paired with
@@ -109,6 +115,8 @@ func to_array() -> Array:
 		wrister_address_side,
 		balance_tilt,
 		balance_tilt_vel,
+		torso_lean,
+		posture_lean,
 	]
 
 func copy_from(s: SkaterNetworkState) -> void:
@@ -137,6 +145,8 @@ func copy_from(s: SkaterNetworkState) -> void:
 	wrister_address_side = s.wrister_address_side
 	balance_tilt = s.balance_tilt
 	balance_tilt_vel = s.balance_tilt_vel
+	torso_lean = s.torso_lean
+	posture_lean = s.posture_lean
 	host_timestamp = s.host_timestamp
 	blade_contact_world = s.blade_contact_world
 	top_hand_world = s.top_hand_world
@@ -178,4 +188,7 @@ static func from_array(data: Array) -> SkaterNetworkState:
 	if data.size() > 24:
 		state.balance_tilt = data[23]
 		state.balance_tilt_vel = data[24]
+	if data.size() > 26:
+		state.torso_lean = data[25]
+		state.posture_lean = data[26]
 	return state
