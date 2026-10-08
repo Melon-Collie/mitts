@@ -50,6 +50,9 @@ var helmet_pitch_follow: float = 0.85
 var helmet_roll_follow: float = 0.4
 
 var _trunk_texture := Basis.IDENTITY
+# Each cap's share of its arm's girdle give (left, right), in the cap's own
+# pose frame — see _update_arm.
+var _girdle: PackedVector3Array = PackedVector3Array([Vector3.ZERO, Vector3.ZERO])
 var _trunk_texture_head := Basis.IDENTITY
 var _trunk_texture_pitch: float = 0.0
 var _trunk_texture_roll: float = 0.0
@@ -153,9 +156,12 @@ func update_bottom_arm() -> void:
 func _update_arm(marker_local: Vector3, hand_local: Vector3, pole_sign: float,
 		upper: int, forearm: int, cuff: int, elbow_bone: int, glove: int) -> void:
 	var spine: Transform3D = _skeleton.get_bone_global_pose(SkaterBodySkeleton.SPINE_BONE)
-	var shoulder_l: Vector3 = _textured_shoulder(marker_local)
-	var shoulder_s: Vector3 = spine * shoulder_l
 	var hand_s: Vector3 = _skater.upper_body.transform * hand_local
+	var shoulder_s: Vector3 = arm_root(marker_local, hand_local)
+	# The deltoid cap rides the girdle's give with the arm, in the frame it is
+	# posed in (the spine's, before the trunk texture rotates it).
+	_girdle[0 if marker_local.x < 0.0 else 1] = _trunk_texture.transposed() \
+			* (spine.basis.inverse() * (shoulder_s - spine * _textured_shoulder(marker_local)))
 	var pole_local: Vector3 = _skater.arm_pole_local
 	pole_local.x *= pole_sign
 	pole_local = CheckStanceRules.tucked_pole(pole_local, CheckStanceRules.side_load(
@@ -167,7 +173,29 @@ func _update_arm(marker_local: Vector3, hand_local: Vector3, pole_sign: float,
 	_pose_cuff(cuff, elbow_s, hand_s)
 	_pose_ball(elbow_bone, elbow_s)
 	_pose_glove(glove, elbow_s, hand_s)
-	_orient_shoulder_cap(marker_local, shoulder_l, spine.affine_inverse() * elbow_s)
+	_orient_shoulder_cap(marker_local, spine.affine_inverse() * shoulder_s,
+			spine.affine_inverse() * elbow_s)
+
+
+# A shoulder MARKER's place on the visible trunk, in UpperBody's frame — where a
+# reactive hand must stay within reach of. Before the rig is built, the marker.
+func visible_shoulder(marker_local: Vector3) -> Vector3:
+	if _skeleton == null:
+		return marker_local
+	var spine: Transform3D = _skeleton.get_bone_global_pose(SkaterBodySkeleton.SPINE_BONE)
+	return _skater.upper_body.transform.affine_inverse() \
+			* (spine * _textured_shoulder(marker_local))
+
+
+# Where an arm roots, in skeleton space: the shoulder on the visible trunk,
+# drawn toward a hand past the arm's working length by the girdle's give
+# (TwoBoneIK.reach_root).
+func arm_root(marker_local: Vector3, hand_local: Vector3) -> Vector3:
+	var spine: Transform3D = _skeleton.get_bone_global_pose(SkaterBodySkeleton.SPINE_BONE)
+	return TwoBoneIK.reach_root(spine * _textured_shoulder(marker_local),
+			_skater.upper_body.transform * hand_local,
+			(_skater.upper_arm_length + _skater.forearm_length) * _skater.arm_working_extension,
+			_skater.shoulder_reach_m)
 
 
 # Where a shoulder MARKER actually sits on the visible trunk, in the spine's
@@ -280,7 +308,8 @@ func _pose_cuff(part: int, elbow: Vector3, hand: Vector3) -> void:
 #     outboard face via uv1_offset (±0.25), exactly as at identity. Flipping
 #     +X outboard per side turns the left cap's number to the inside.
 # Writes rotation only — the caps' scale is SkaterAppearanceCoordinator's
-# (quaternion assignment preserves it) and their position is the scene's.
+# (quaternion assignment preserves it) and their position is the scene's, plus
+# the girdle's give.
 func _orient_shoulder_cap(marker_local: Vector3, anchor_local: Vector3,
 		elbow_local: Vector3) -> void:
 	var side: float = signf(marker_local.x)
@@ -291,13 +320,15 @@ func _orient_shoulder_cap(marker_local: Vector3, anchor_local: Vector3,
 	# transposed is the inverse of that pure rotation.
 	var arm_dir: Vector3 = _trunk_texture.transposed() * (elbow_local - anchor_local)
 	if arm_dir.length_squared() < 0.0001:
+		repose_bone(bone)
 		return
 	var rest: Vector3 = _SHOULDER_CAP_REST_POLE.normalized()
 	rest.x *= side
 	var pole: Vector3 = -rest.slerp(arm_dir.normalized(), _SHOULDER_CAP_FOLLOW)
 	var x_axis: Vector3 = Vector3.RIGHT - pole * pole.x
 	if x_axis.length_squared() < 0.01:
-		return  # pole nearly along +X — keep the last stable roll
+		repose_bone(bone)  # pole nearly along +X — keep the last stable roll
+		return
 	x_axis = x_axis.normalized()
 	_basis[bone] = Basis(x_axis, pole, x_axis.cross(pole)).orthonormalized()
 	repose_bone(bone)
@@ -344,7 +375,7 @@ func repose_bone(bone: int) -> void:
 	# displacement is authored in the trunk's own frame, so it rides the roll.
 	if bone == SkaterMeshBuilder.UpperBone.SHOULDER_L \
 			or bone == SkaterMeshBuilder.UpperBone.SHOULDER_R:
-		origin += _check_load_offset(signf(origin.x))
+		origin += _check_load_offset(signf(origin.x)) + _girdle[0 if origin.x < 0.0 else 1]
 	var pose := Transform3D(_basis[bone].scaled_local(_scale[bone]), origin)
 	# The trunk texture rotates the upper-body SHELL about the trunk pivot (the
 	# shell is posed in the spine's frame, so a zero-origin premultiply is that

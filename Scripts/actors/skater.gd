@@ -240,6 +240,13 @@ var carry_contact_high_u: float = 0.70
 # height and inside the 100–104% real athletes run.
 var upper_arm_length: float = 0.33
 var forearm_length: float = 0.33
+# How far the shoulder girdle lets an arm's root travel toward a hand past the
+# arm's working length (TwoBoneIK.reach_root): the shoulder blade's protraction
+# and drop, a few centimetres on a real frame.
+var shoulder_reach_m: float = 0.06
+# The share of its full length an arm works at before the girdle gives: a
+# reaching arm keeps ~28° of elbow bend rather than locking straight.
+var arm_working_extension: float = 0.97
 # Pole direction for the elbow (upper-body local). Mostly down with a real
 # outward flare (+X is away from the body; the sign flips per side in
 # update_arm_mesh) and a touch backward — a hockey top-hand elbow rides out
@@ -2173,6 +2180,12 @@ func get_top_hand_position() -> Vector3:
 
 
 # ── Bottom Hand ───────────────────────────────────────────────────────────────
+# Where a shoulder marker sits on the visible trunk, in UpperBody's frame
+# (SkaterArmRig.visible_shoulder).
+func visible_shoulder(marker_local: Vector3) -> Vector3:
+	return _arms.visible_shoulder(marker_local)
+
+
 func set_bottom_hand_position(pos: Vector3) -> void:
 	bottom_hand.position = pos
 

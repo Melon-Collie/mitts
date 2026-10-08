@@ -316,6 +316,17 @@ Fixed after Phase 5:
   0.2–0.3 m. Left: on the hardest sideways hit the pinned leg folds its skate in
   by a hip joint that itself lies at the ice, ~3 cm under, beneath the body.
   `test_knockdown_lies_on_the_ice.gd`.
+- **The bottom arm was drawn stretched** — 1.06× its length at rest, 1.40×
+  with the stick out in front, 1.75× in a cross-body reach. Not the trunk work
+  (visible and gameplay shoulders agreed within 0.07 of an arm): the bottom
+  hand sat a fixed quarter of the way down the shaft, 0.69 m under a 0.66 m
+  arm, and `_pose_bone` scales the forearm to whatever span it is given. The
+  grip now slides up the shaft to stay within reach of the shoulder the arm
+  hangs from (`BottomHandIK.reachable_grip`), lets go of the stick when none of
+  it is in reach, and the shoulder girdle gives up to `Skater.shoulder_reach_m`
+  toward a reaching hand, cap and all (`TwoBoneIK.reach_root`). This is the
+  §1 reach budget: `test_arms_reach_their_hands.gd` fails any pose that draws
+  an arm bone longer than it is (2.47× without the fix).
 - **Reconcile squared the hips.** It wrote the facing lag alone to the lower
   body, dropping the gait's yaw channels (up to 40° of hip alignment at a
   stride off the facing) until the next tick; it now publishes through

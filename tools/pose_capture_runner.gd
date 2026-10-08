@@ -426,10 +426,6 @@ func _run_pose() -> void:
 			if pose.has("trace") and t % int(pose["trace"]) == 0:
 				_print_trace()
 			_track_reach()
-	print("  %s reach: worst %.2f of arm length (frame %.2f)" % [
-			String(pose["name"]), _reach_worst, _reach_worst_frame])
-	_reach_worst = 0.0
-	_reach_worst_frame = 0.0
 	if bool(pose.get("readout", false)):
 		var v: Vector3 = _skater.velocity
 		print("  %s: speed %.2f heading %.0f° | lower body pitch %.1f° yaw %.1f° roll %.1f° | upper body pitch %.1f° roll %.1f°" % [
@@ -445,6 +441,10 @@ func _run_pose() -> void:
 				_controller._skating.crouch_drop])
 	if pose.has("faceoff"):
 		_run_faceoff(pose["faceoff"] as Dictionary)
+	print("  %s reach: worst %.2f of arm length (frame %.2f)" % [
+			String(pose["name"]), _reach_worst, _reach_worst_frame])
+	_reach_worst = 0.0
+	_reach_worst_frame = 0.0
 	# `game_cam` shoots the pose the way the PLAYER sees it; `cam` re-shoots it
 	# from somewhere the chase rig can't. The centre's address needs the second:
 	# he faces straight down his own stick, so from behind the shaft is a dot and
@@ -467,18 +467,18 @@ var _reach_worst: float = 0.0
 var _reach_worst_frame: float = 0.0
 
 
-# How far each arm has to stretch, as a fraction of its length: from the
-# shoulder on the visible trunk, and (for comparison) from the one on the
-# gameplay frame. Over 1.0 is an arm that cannot reach its hand.
+# How far each arm has to stretch, as a fraction of its length: from where the
+# rig roots it (the visible shoulder, plus the girdle's give), and (for
+# comparison) from the shoulder on the gameplay frame. Over 1.0 is an arm the
+# rig draws stretched.
 func _track_reach() -> void:
-	var body: Skeleton3D = _skater._arms._skeleton
-	var spine: Transform3D = body.get_bone_global_pose(SkaterBodySkeleton.SPINE_BONE)
 	var arm: float = _skater.upper_arm_length + _skater.forearm_length
 	for pair: Array in [[_skater.shoulder, _skater.top_hand],
 			[_skater.bottom_shoulder, _skater.bottom_hand]]:
 		var marker: Vector3 = (pair[0] as Node3D).position
-		var hand: Vector3 = _skater.upper_body.transform * (pair[1] as Node3D).position
-		var visible: Vector3 = spine * _skater._arms._textured_shoulder(marker)
+		var hand_local: Vector3 = (pair[1] as Node3D).position
+		var hand: Vector3 = _skater.upper_body.transform * hand_local
+		var visible: Vector3 = _skater._arms.arm_root(marker, hand_local)
 		var frame: Vector3 = _skater.upper_body.transform * _skater._arms._textured_shoulder(marker)
 		_reach_worst = maxf(_reach_worst, visible.distance_to(hand) / arm)
 		_reach_worst_frame = maxf(_reach_worst_frame, frame.distance_to(hand) / arm)
@@ -582,6 +582,7 @@ func _run_faceoff(spec: Dictionary) -> void:
 			_controller.apply_blade_aim_only(input, DT)
 		_skater._physics_process(DT)
 		_skater._process(DT)
+		_track_reach()
 	# Numbers a 384 px tile can't be read for: how far off the dot the body
 	# settled, how deep the crouch went, and whether the hips came square.
 	print("  %s: pos %.3v crouch %.3f hips %.1f° skates %.3f/%.3f" % [

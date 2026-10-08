@@ -269,3 +269,17 @@ here whenever you bump, in the same format.
 #      rewind, and vice versa), which is a mis-adjudication rather than a
 #      decode error, so mixed builds must be refused.
 
+# v60: the balance lean on the wire. It pivots at the ice and translates the
+#      UpperBody frame the wire's blade and top hand are local to, so it moved
+#      into the tick (stepped by SkaterController, reconcile-snapped) and the
+#      skater block grew 41 -> 49 bytes: balance_tilt and its spring rate,
+#      4 x s16. Replay FORMAT_VERSION 8.
+# v61: the torso's lean on the wire — the pose coordinator's smoothed reach
+#      lean (pitch, roll) and skating posture, 3 x s16, which receivers used to
+#      re-derive by snapping to targets the simulator eases toward (~0.15 rad,
+#      ~0.25 m of blade off in a hard turn). Skater block 49 -> 55 bytes.
+#      Replay FORMAT_VERSION 9.
+# v62: the body check's recoil direction on the wire, one u8 bearing; remotes
+#      reeled every plain stagger backward and guessed a knockdown's fall
+#      direction from the slide. Skater block 55 -> 56 bytes. Replay
+#      FORMAT_VERSION 10.

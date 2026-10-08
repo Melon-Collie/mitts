@@ -385,6 +385,10 @@ var bh_hand_y: float = 0.0
 var bh_release_angle_deg: float = 67.0
 # Degrees past bh_release_angle_deg over which the hand blends to full rest.
 var bh_release_angle_band_deg: float = 15.0
+# How far beyond the bottom arm's reach the nearest point of the shaft may lie
+# before that hand has fully let go of the stick (m). The hand slides up the
+# shaft first (BottomHandIK.reachable_grip); this band is the letting go.
+var bh_reach_release_band_m: float = 0.08
 
 # ── Upper Body Tuning ─────────────────────────────────────────────────────────
 var upper_body_twist_ratio: float = 0.8
@@ -1224,6 +1228,7 @@ var _base_stick_length:                 float = 0.0
 var _base_wrister_full_stroke_travel:   float = 0.0
 var _base_skater_upper_arm_length:      float = 0.0
 var _base_skater_forearm_length:        float = 0.0
+var _base_skater_shoulder_reach_m:      float = 0.0
 var _base_skater_shoulder_offset:       float = 0.0
 var _base_skater_shoulder_height:       float = 0.0
 var _base_skater_weight:                float = 0.0
@@ -1400,6 +1405,7 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	skater.apply_blade_pattern(attrs.curve)
 	skater.upper_arm_length   = _base_skater_upper_arm_length   * m_height
 	skater.forearm_length     = _base_skater_forearm_length     * m_height
+	skater.shoulder_reach_m   = _base_skater_shoulder_reach_m   * m_height
 	# Shoulder anchors track the visual shoulder balls, which the appearance
 	# pass repositions from the same multipliers (y rides height, x rides
 	# torso bulk) — the drawn arm and the IK stay rooted at the same point on
@@ -1510,6 +1516,7 @@ func _capture_attribute_bases() -> void:
 	_base_hand_y_max                   = hand_y_max
 	_base_skater_upper_arm_length      = skater.upper_arm_length
 	_base_skater_forearm_length        = skater.forearm_length
+	_base_skater_shoulder_reach_m      = skater.shoulder_reach_m
 	_base_skater_shoulder_offset       = skater.shoulder_offset
 	_base_skater_shoulder_height       = skater.shoulder_height
 	_base_skater_weight                       = skater.weight

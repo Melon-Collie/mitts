@@ -539,12 +539,26 @@ func _solve_top_hand(desired_blade_xz: Vector2, blade_side_sign: float,
 
 # ── Bottom Hand ───────────────────────────────────────────────────────────────
 # Recompute the bottom hand pose from the current top_hand + blade positions.
-# Purely reactive — does not affect blade or top-hand placement. Caller must
-# have already written the top hand and blade for this tick before calling.
+# Purely reactive — does not affect blade or top-hand placement, and nothing
+# but the arm rig reads it. Caller must have already written the top hand and
+# blade for this tick before calling.
+#
+# The grip is where the arm can hold, not a fixed fraction: the hand slides up
+# the shaft to stay within reach, and lets go of the stick when none of it is.
+# The reach is the arm at its working extension plus the shoulder girdle's give
+# (SkaterArmRig roots the arm with the same give), measured from the shoulder
+# the arm hangs from on the visible trunk — in a hard turn the balance lean puts
+# that up to ~0.14 m from the marker — so the drawn arm is never shorter than
+# the span it bridges.
 func update_bottom_hand() -> void:
 	var blade_local: Vector3 = _skater.get_blade_position()
 	var hand_local: Vector3 = _skater.get_top_hand_position()
-	var grip: float = _grip_fraction()
+	var shoulder: Vector3 = _skater.visible_shoulder(_skater.bottom_shoulder.position)
+	var reach: float = (_skater.upper_arm_length + _skater.forearm_length) \
+			* _skater.arm_working_extension + _skater.shoulder_reach_m
+	var held: Vector2 = BottomHandIK.reachable_grip(
+			shoulder, hand_local, blade_local, _grip_fraction(), reach)
+	var grip: float = held.x
 	var grip_target_xz := Vector2(
 			lerpf(hand_local.x, blade_local.x, grip),
 			lerpf(hand_local.z, blade_local.z, grip))
@@ -553,13 +567,19 @@ func update_bottom_hand() -> void:
 	var grip_y: float = lerpf(hand_local.y, blade_local.y, grip) + _controller.bh_hand_y
 	var cfg: BottomHandIK.Config = _bottom_hand_ik_config()
 	cfg.hand_y = grip_y
-	var shoulder: Vector3 = address_shoulder(_skater.bottom_shoulder.position)
 	var bh: Vector3
 	if _native_bottom != null:
 		_native_bottom.hand_y = grip_y
 		bh = _native_bottom.solve(shoulder, grip_target_xz, cfg.backhand_angle)
 	else:
 		bh = BottomHandIK.solve(shoulder, grip_target_xz, cfg)
+	if held.y > 0.0:
+		bh = bh.lerp(Vector3(shoulder.x, grip_y, shoulder.z), smoothstep(
+				0.0, _controller.bh_reach_release_band_m, held.y))
+	# Off the stick, the hand hangs where the arm can put it.
+	var span: Vector3 = bh - shoulder
+	if span.length() > reach:
+		bh = shoulder + span.normalized() * reach
 	_skater.set_bottom_hand_position(bh)
 
 # ── The centre's faceoff address ──────────────────────────────────────────────
