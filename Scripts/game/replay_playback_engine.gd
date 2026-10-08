@@ -81,6 +81,7 @@ static func apply_interpolated_snapshot(
 		interp.shot_charge = lerpf(fs.shot_charge, ts.shot_charge, t)
 		interp.stamina = lerpf(fs.stamina, ts.stamina, t)
 		interp.sprint_active = ts.sprint_active
+		interp.wrister_address_side = ts.wrister_address_side
 		interp.recoil_dir = ts.recoil_dir
 		interp.stagger_timer = lerpf(fs.stagger_timer, ts.stagger_timer, t)
 		interp.knockdown_timer = lerpf(fs.knockdown_timer, ts.knockdown_timer, t)

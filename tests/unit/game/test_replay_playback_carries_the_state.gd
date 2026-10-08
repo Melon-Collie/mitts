@@ -14,10 +14,15 @@ const _NOT_PLAYED_BACK: Dictionary = {
 	"host_timestamp": "host-only, not serialized",
 	"blade_contact_world": "host-only, not serialized",
 	"top_hand_world": "host-only, not serialized",
-	# A known gap, not a choice: SkaterController.apply_replay_state has no
-	# consumer for it, so a replayed wrister addresses the forehand.
-	"wrister_address_side": "not consumed by apply_replay_state",
 }
+
+
+class StubGameState extends Node:
+	func is_host() -> bool:
+		return true
+
+	func is_movement_locked() -> bool:
+		return false
 
 
 class CaptureController extends SkaterController:
@@ -73,3 +78,34 @@ func test_every_recorded_field_reaches_the_controller() -> void:
 			continue
 		assert_eq(controller.applied.get(field), recorded.get(field),
 				"%s plays back at its recorded value" % field)
+
+
+# Carried is half of it: the replayed skater must address the side the shooter
+# did, backhand included.
+func test_a_replayed_wrister_addresses_the_recorded_side() -> void:
+	var puck: Puck = load("res://Scenes/Puck.tscn").instantiate() as Puck
+	add_child_autofree(puck)
+	var skater: Skater = load("res://Scenes/Skater.tscn").instantiate() as Skater
+	add_child_autofree(skater)
+	skater.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
+	skater.set_process(false)
+	skater.set_physics_process(false)
+	var game_state := StubGameState.new()
+	add_child_autofree(game_state)
+	var controller := SkaterController.new()
+	add_child_autofree(controller)
+	controller.setup(skater, puck, game_state)
+	controller.set_process(false)
+	controller.set_physics_process(false)
+	for side: int in [-1, 1]:
+		var state := SkaterNetworkState.new()
+		state.position = skater.global_position
+		state.facing = Vector2(0.0, -1.0)
+		state.shot_state = SkaterStateMachine.State.WRISTER_AIM
+		state.wrister_address_side = side
+		state.blade_position = Vector3(0.3, -0.85, -1.0)
+		state.top_hand_position = Vector3(0.2, -0.1, -0.2)
+		controller.apply_replay_state(state, 1.0 / 60.0)
+		skater._physics_process(1.0 / 120.0)
+		assert_eq(skater.get_wrister_address_side(), side,
+				"the replay addresses the recorded side (%d)" % side)

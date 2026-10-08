@@ -2045,6 +2045,10 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	# LIVE actors, so without these stamps the fields freeze at whatever the
 	# live tick last wrote and the replayed shot plays with the wrong stick.
 	skater.current_shot_state = state.shot_state
+	# The recorded wrister address, gated on the aim state like the live remote
+	# apply — the wire bit is garbage outside it.
+	if state.shot_state == SkaterStateMachine.State.WRISTER_AIM:
+		skater.set_wrister_address_side(state.wrister_address_side)
 	skater.shot_charge = state.shot_charge
 	skater.elevation_level = state.elevation_level
 	# Skid VFX (SkaterVFX trail marks + spray) keys off is_braking — stamp it

@@ -59,7 +59,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# teleport read as travel moved the tracked threat metres in a tick.
 	"res://Scripts/controllers/goalie_controller.gd": 4550,
 	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3755,
-	"res://Scripts/controllers/skater_controller.gd": 3419,
+	"res://Scripts/controllers/skater_controller.gd": 3423,
 	"res://Scripts/actors/skater.gd": 2643,
 	"res://Scripts/networking/network_manager.gd": 2824,
 	"res://Scripts/game/tutorial_manager.gd": 2101,
