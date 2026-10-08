@@ -851,18 +851,21 @@ func _process(delta: float) -> void:
 	# post-tick position while the body renders interpolated, separating the two
 	# by up to a tick of travel, and the stick visibly leaves the hands at speed.
 	if is_visible_in_tree():
+		_on_camera = SkaterCameraCull.sees(self)
 		# Cosmetic pose (leg gait / head / off-hand IK) at render rate, before the
 		# marker-driven mesh rebuild that consumes it. Skipped entirely when hidden
 		# — an off-screen skater needs no animated pose. Gameplay-relevant pose
 		# (facing, upper-body twist, blade IK) already ran in the physics tick.
+		# Off camera the hook still runs, for the part of the gait that is not mesh
+		# (on_camera).
 		if render_pose_update.is_valid():
 			render_pose_update.call(delta)
 		# _blade_tilt_dirty is ORed in because an elevation blend step changes the
 		# blade tilt without moving any marker, so _rig_pose_changed can't see it
-		# (see _update_blade_elevation). Left set while hidden so the pose is
-		# rebuilt on the first visible frame.
-		var spine_moved: bool = _spine.update()
-		if _rig_pose_changed() or spine_moved or _blade_tilt_dirty:
+		# (see _update_blade_elevation). Left set while hidden or off camera so the
+		# pose is rebuilt on the first frame it is drawn.
+		var spine_moved: bool = _on_camera and _spine.update()
+		if _on_camera and (_rig_pose_changed() or spine_moved or _blade_tilt_dirty):
 			_blade_tilt_dirty = false
 			update_stick_mesh()
 			update_arm_mesh()
@@ -1620,6 +1623,16 @@ func set_faceoff_address(blend: float) -> void:
 # geometry must not depend on frame rate. Only the held poses (block, faceoff,
 # knockdown) hand the frame their drop, because their hands are posed in a
 # frame that has gone down with the body.
+# Whether the camera can see this skater this frame (SkaterCameraCull). The rig's
+# work is mesh, so a skater out of frame skips it — but the gait still computes,
+# because a held pose's crouch moves the gameplay frame (set_skating_crouch_drop).
+var _on_camera: bool = true
+
+
+func on_camera() -> bool:
+	return _on_camera
+
+
 func set_skating_crouch_drop(drop: float, frame_drop: float = 0.0) -> void:
 	if is_equal_approx(_skating_crouch_drop, drop) and is_equal_approx(_frame_drop, frame_drop):
 		return
@@ -1629,7 +1642,7 @@ func set_skating_crouch_drop(drop: float, frame_drop: float = 0.0) -> void:
 	if not is_equal_approx(_frame_drop, frame_drop):
 		_frame_drop = frame_drop
 		_place_frames()
-	if _spine != null:
+	if _spine != null and _on_camera:
 		_spine.update()
 
 

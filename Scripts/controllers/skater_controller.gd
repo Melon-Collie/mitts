@@ -1764,6 +1764,9 @@ func _render_pose_update(delta: float) -> void:
 		return
 	_skating.apply(delta)
 	_apply_knockdown_fall()
+	# The head and the off hand are mesh (Skater.on_camera).
+	if not skater.on_camera():
+		return
 	_pose.apply_head_tracking_aim(_current_aim_world, delta)
 	# During a goal celebration the physics tick places the off-hand fist pump
 	# (apply_celebration_pose); yield so the base grip IK doesn't clobber it.
@@ -1808,7 +1811,7 @@ func _apply_knockdown_fall() -> void:
 	var d: Vector3 = skater.global_transform.basis.inverse() \
 			* Vector3(safe_dir.x, 0.0, safe_dir.y)
 	skater.set_knockdown_fall(Vector3.UP.cross(d), tilt)
-	if kd_t <= 0.0:
+	if kd_t <= 0.0 or not skater.on_camera():
 		return
 	# Leg sprawl overlay, composed on the gait's crumple (which zeroed the
 	# stride under it). The side pick reads the RAW recoil dir, not the

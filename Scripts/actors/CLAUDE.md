@@ -123,7 +123,7 @@ Everything in the four rigs is cosmetic and derived. Nothing gameplay reads
 comes out of them, and that is what makes them safe to move: the blade contact
 point is the `Blade` marker's, and the rigs only read it.
 
-Four rules the rigs sit inside, all easy to break from in here:
+Five rules the rigs sit inside, all easy to break from in here:
 
 - **Anything drawn onto the skater at render rate reads
   `Skater.render_transform()`**, not `global_position` — the post-tick pose is up
@@ -139,6 +139,14 @@ Four rules the rigs sit inside, all easy to break from in here:
   The blade and shoulder markers hang under `UpperBody`, so writing it at render
   rate would move gameplay geometry. The chain reads both frames and writes
   bones, which are pure mesh.
+- **Off camera, only mesh is skipped.** A skater the camera cannot see
+  (`Skater.on_camera`, `SkaterCameraCull`'s sphere against the frustum) skips the leg, trunk and
+  sprawl writes, the head, the off hand and the spine/arm/stick rebuild — about
+  two thirds of his render pass — and rebuilds on the first frame he is drawn.
+  The gait itself still computes, because a held pose's crouch moves the
+  gameplay frame: whether the host can see a blocker must not move his hands.
+  `test_off_camera_culling.gd` holds that, and `ClipFrameCapture` turns culling
+  off while its own camera records.
 - **The pelvis must not take the fold.** It hangs from the waist, not the
   spine: folding with the torso is what opens the seat in the first place, and
   hanging it off a leg pivot would swing the whole seat with that leg.

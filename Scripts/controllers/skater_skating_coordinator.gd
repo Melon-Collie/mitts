@@ -388,7 +388,11 @@ func apply(delta: float) -> void:
 					_override_layers[i].override(p)
 
 	_skater.set_faceoff_address(_faceoff.address)
-	p.publish_legs(_skater)
+	# Off camera the legs and trunk are mesh nobody draws; the crouch is not.
+	if _skater.on_camera():
+		p.publish_legs(_skater)
+	else:
+		_skater.set_skating_crouch_drop(p.drop, p.frame_drop())
 	crouch_drop = p.drop
 	frame_drop = p.frame_drop()
 	# Trunk inertia: filter the summed texture, then lay the wobble back on top
@@ -400,7 +404,8 @@ func apply(delta: float) -> void:
 	_trunk_roll_s = lerpf(_trunk_roll_s, p.trunk_roll, tex_ease)
 	trunk_pitch_add = _trunk_pitch_s + p.wobble_pitch
 	trunk_roll_add = _trunk_roll_s + p.wobble_roll
-	_skater.set_trunk_texture(trunk_pitch_add, trunk_roll_add)
+	if _skater.on_camera():
+		_skater.set_trunk_texture(trunk_pitch_add, trunk_roll_add)
 
 
 # ── Hip-to-travel alignment and the pivot ─────────────────────────────────────
