@@ -3,8 +3,9 @@ extends RefCounted
 
 # The lower-body skeleton and the gait written onto it.
 #
-# Both legs are one skinned mesh on one Skeleton3D, sixteen bones in the chain
-# LowerBody → Leg → Shin (see SkaterMeshBuilder.LegBone). Twelve of the bones
+# Both legs are one skinned mesh on the body skeleton, fourteen bones in the
+# chain Hips → Leg → Shin (see SkaterMeshBuilder.LegBone). Bone indices here are
+# LegBone values; the skeleton holds them past the upper bones, at _OFFSET. Twelve of the bones
 # carry geometry; the four pivots exist to be rotated by the gait
 # (SkaterSkatingCoordinator).
 #
@@ -16,6 +17,8 @@ extends RefCounted
 # how hard its edge is loaded — because both are properties of this skeleton and
 # of nothing else.
 
+const _OFFSET: int = SkaterBodySkeleton.LEG_BONE_OFFSET
+
 var _skater: Skater
 var _skeleton: Skeleton3D = null
 var _mesh: MeshInstance3D = null
@@ -25,9 +28,15 @@ var _pos: PackedVector3Array = PackedVector3Array()
 # The scene's authored shin euler, kept so the knee write can preserve its Y/Z
 # the way a node's `rotation.x = v` did. Index 0 = left, 1 = right.
 var _shin_base_euler: PackedVector3Array = PackedVector3Array()
-# True while the skate bones carry an ankle angle, so set_ankle_pose knows it
+# True while the skate bones carry an ankle angle, so set_ankle_flatten knows it
 # still owes one write to put them back (see there).
 var _ankles_posed: bool = false
+# The ankle weights the gait last asked for (set_ankle_flatten).
+var _ankle_l: float = 0.0
+var _ankle_r: float = 0.0
+# The bounds of a skate's two assemblies, in their bones' frames: the boot
+# (shell, holder, runner) on FOOT, the cuff on SKATE.
+var _skate_boxes: Array[AABB] = []
 # Untouched baselines the sizing seam multiplies against, captured off the scene
 # subtree before it is freed.
 var _base_scale: PackedVector3Array = PackedVector3Array()
@@ -54,14 +63,14 @@ func setup(skater: Skater) -> void:
 	_skater = skater
 
 
-# Reads the leg segment offsets out of the scene's LowerBody subtree, builds the
-# skeleton from them, then frees the subtree.
+# Reads the leg segment offsets out of the scene's LowerBody subtree, seeds the
+# body skeleton's leg bones from them, then frees the subtree.
 #
 # Reading the scene rather than hard-coding the offsets keeps Scenes/Skater.tscn
 # the place leg proportions are authored — the nodes are still what you edit to
 # move a knee, they just stop existing at runtime. Hard-coding them here would
 # fork the numbers into two files that no test compares.
-func build() -> void:
+func build(skeleton: Skeleton3D) -> void:
 	var count: int = SkaterMeshBuilder.LEG_BONE_COUNT
 	var lower_body: Node3D = _skater.lower_body
 	_basis.resize(count)
@@ -71,8 +80,7 @@ func build() -> void:
 	_base_pos.resize(count)
 	_shin_base_euler.resize(2)
 
-	_skeleton = Skeleton3D.new()
-	_skeleton.name = "LegRig"
+	_skeleton = skeleton
 	for bone: int in count:
 		var node: Node3D = lower_body.get_node(
 				SkaterMeshBuilder.LEG_BONE_NODE[bone]) as Node3D
@@ -83,9 +91,6 @@ func build() -> void:
 		_pos[bone] = xform.origin
 		_base_scale[bone] = part_scale
 		_base_pos[bone] = xform.origin
-		_skeleton.add_bone(str(bone))
-		_skeleton.set_bone_parent(bone, SkaterMeshBuilder.LEG_BONE_PARENT[bone])
-		_skeleton.set_bone_rest(bone, Transform3D.IDENTITY)
 	_shin_base_euler[0] = _basis[SkaterMeshBuilder.LegBone.SHIN_L].get_euler()
 	_shin_base_euler[1] = _basis[SkaterMeshBuilder.LegBone.SHIN_R].get_euler()
 
@@ -99,7 +104,8 @@ func build() -> void:
 	lower_body.get_node("LegL").free()
 	lower_body.get_node("LegR").free()
 
-	lower_body.add_child(_skeleton)
+	_skate_boxes = [SkaterMeshBuilder.shared_boot_assembly().get_aabb(),
+			SkaterMeshBuilder.shared_skate_assembly().get_aabb()]
 	_mesh = MeshInstance3D.new()
 	_mesh.name = "LegMesh"
 	_mesh.mesh = SkaterMeshBuilder.shared_leg_skin_mesh()
@@ -109,7 +115,7 @@ func build() -> void:
 
 
 func _repose_bone(bone: int) -> void:
-	_skeleton.set_bone_pose(bone, Transform3D(
+	_skeleton.set_bone_pose(_OFFSET + bone, Transform3D(
 			_basis[bone].scaled_local(_scale[bone]), _pos[bone]))
 
 
@@ -145,28 +151,90 @@ func set_swing(left_pitch: float, left_roll: float, left_knee: float,
 			Vector3(right_knee, base_r.y, base_r.z))
 
 
-# Knockdown leg sprawl: re-poses the leg pivots as the cached gait pose plus
-# `weight` of the sprawl overlay (SkaterController._apply_knockdown_fall calls
-# this right after the gait, only while a skater is down). Weight rides the
-# same get-up envelope as the fall tilt.
+# Knockdown leg sprawl: re-poses the leg pivots as the cached gait pose plus the
+# sprawl overlay, which arrives already eased (SkaterController
+# ._apply_knockdown_fall calls this after the gait and the tilt, only while a
+# skater is down). `weight` is the down pose's share, which the ankles hold by.
 func apply_knockdown_overlay(pose: KnockdownFallRules.SprawlPose,
 		weight: float) -> void:
 	if weight <= 0.001:
 		return
 	var base_l: Vector3 = _shin_base_euler[0]
 	var base_r: Vector3 = _shin_base_euler[1]
-	_pose_pivot(SkaterMeshBuilder.LegBone.LEG_L,
-			_gait_leg_l + Vector3(pose.l_pitch, 0.0, pose.l_roll) * weight)
-	_pose_pivot(SkaterMeshBuilder.LegBone.SHIN_L,
-			Vector3(_gait_knee_l + pose.l_knee * weight, base_l.y, base_l.z))
-	_pose_pivot(SkaterMeshBuilder.LegBone.LEG_R,
-			_gait_leg_r + Vector3(pose.r_pitch, 0.0, pose.r_roll) * weight)
-	_pose_pivot(SkaterMeshBuilder.LegBone.SHIN_R,
-			Vector3(_gait_knee_r + pose.r_knee * weight, base_r.y, base_r.z))
+	var leg_l: Vector3 = _gait_leg_l + Vector3(pose.l_pitch, 0.0, pose.l_roll)
+	var leg_r: Vector3 = _gait_leg_r + Vector3(pose.r_pitch, 0.0, pose.r_roll)
+	var knee_l: float = _gait_knee_l + pose.l_knee
+	var knee_r: float = _gait_knee_r + pose.r_knee
+	_pose_pivot(SkaterMeshBuilder.LegBone.LEG_L, leg_l)
+	_pose_pivot(SkaterMeshBuilder.LegBone.SHIN_L, Vector3(knee_l, base_l.y, base_l.z))
+	_pose_pivot(SkaterMeshBuilder.LegBone.LEG_R, leg_r)
+	_pose_pivot(SkaterMeshBuilder.LegBone.SHIN_R, Vector3(knee_r, base_r.y, base_r.z))
+	# The ankles give the buckle back as they do any deep sit: a shin folded
+	# back by it otherwise drives the toe into the ice.
+	_pose_foot(SkaterMeshBuilder.LegBone.FOOT_L, leg_l, knee_l, base_l,
+			lerpf(_ankle_l, 1.0, weight))
+	_pose_foot(SkaterMeshBuilder.LegBone.FOOT_R, leg_r, knee_r, base_r,
+			lerpf(_ankle_r, 1.0, weight))
+	_ankles_posed = true
+	_rest_on_ice(SkaterMeshBuilder.LegBone.LEG_L, SkaterMeshBuilder.LegBone.FOOT_L,
+			SkaterMeshBuilder.LegBone.SKATE_L)
+	_rest_on_ice(SkaterMeshBuilder.LegBone.LEG_R, SkaterMeshBuilder.LegBone.FOOT_R,
+			SkaterMeshBuilder.LegBone.SKATE_R)
+
+
+# The ice holds a downed leg up. Tipping the body puts the skates wherever the
+# hips carry them — under the ice on the side it falls toward, and wherever the
+# sprawl flings them — so a leg whose skate ends up below swings about its hip,
+# toward up, until the skate rests on the ice: the leg the body tips over stays
+# planted, and a leg lying on the ice lies on it. Reads the MeshRoot tilt the
+# fall wrote this frame (Skater.set_knockdown_fall runs first). A few passes,
+# because the swing can hand the lowest point to another corner of the skate.
+# Works in MeshRoot's parent frame, the skater's own, where the ice is flat at
+# −global_position.y.
+func _rest_on_ice(leg: int, foot: int, skate: int) -> void:
+	var to_body: Transform3D = _skater.mesh_root.transform * _skeleton.transform
+	var ice: float = -_skater.global_position.y
+	for _pass: int in 4:
+		var hip: Vector3 = to_body * _skeleton.get_bone_global_pose(_OFFSET + leg).origin
+		var low: Vector3 = _lowest_corner(to_body, foot, skate)
+		var sink: float = ice - low.y
+		if sink <= 0.0:
+			return
+		var r: Vector3 = low - hip
+		var r_h := Vector2(r.x, r.z)
+		var reach: float = r.length()
+		if r_h.length() < 0.01 or reach < 0.01:
+			return
+		# Swing r in the vertical plane through it until it is `sink` higher:
+		# its height is reach·sin(φ + β), β its current elevation.
+		var beta: float = atan2(r.y, r_h.length())
+		var phi: float = asin(clampf((r.y + sink) / reach, -1.0, 1.0)) - beta
+		var axis_body: Vector3 = r.cross(Vector3.UP).normalized()
+		var axis: Vector3 = (to_body.basis * _skeleton.get_bone_global_pose(
+				_skeleton.get_bone_parent(_OFFSET + leg)).basis).inverse() * axis_body
+		var pose: Transform3D = _skeleton.get_bone_pose(_OFFSET + leg)
+		_skeleton.set_bone_pose(_OFFSET + leg, Transform3D(
+				Basis(axis.normalized(), phi) * pose.basis, pose.origin))
+
+
+# The lowest corner of a skate's two boxes — the boot on `foot`, the cuff on
+# `skate` — in `to_body`'s space. Corners rather than vertices: a downed skater
+# runs this every frame, and a corner only ever errs high.
+func _lowest_corner(to_body: Transform3D, foot: int, skate: int) -> Vector3:
+	var lowest := Vector3(0.0, INF, 0.0)
+	for i: int in 2:
+		var part: Transform3D = to_body * _skeleton.get_bone_global_pose(
+				_OFFSET + (foot if i == 0 else skate))
+		var box: AABB = _skate_boxes[i]
+		for corner: int in 8:
+			var p: Vector3 = part * box.get_endpoint(corner)
+			if p.y < lowest.y:
+				lowest = p
+	return lowest
 
 
 func _pose_pivot(bone: int, euler: Vector3) -> void:
-	_skeleton.set_bone_pose(bone, Transform3D(Basis.from_euler(euler), _pos[bone]))
+	_skeleton.set_bone_pose(_OFFSET + bone, Transform3D(Basis.from_euler(euler), _pos[bone]))
 
 
 # Levels a skate against everything the leg above it did: `weight` of the hip's
@@ -188,6 +256,8 @@ func _pose_pivot(bone: int, euler: Vector3) -> void:
 # Skipped while both ankles are square (and once more to settle back), so the
 # common case adds no writes to the render-rate rig pass.
 func set_ankle_flatten(left: float, right: float) -> void:
+	_ankle_l = left
+	_ankle_r = right
 	var square: bool = is_zero_approx(left) and is_zero_approx(right)
 	if square and not _ankles_posed:
 		return
@@ -209,7 +279,7 @@ func _pose_foot(bone: int, leg: Vector3, knee: float, shin_base: Vector3,
 			* Basis.from_euler(Vector3(0.0, shin_base.y, shin_base.z))
 	var give_back: Basis = (posed.inverse() * level).orthonormalized()
 	var basis: Basis = Basis.IDENTITY.slerp(give_back, weight) * _basis[bone]
-	_skeleton.set_bone_pose(bone,
+	_skeleton.set_bone_pose(_OFFSET + bone,
 			Transform3D(basis.scaled_local(_scale[bone]), _pos[bone]))
 
 
@@ -241,7 +311,7 @@ func mark_position(left: bool) -> Vector3:
 	var bone: int = SkaterMeshBuilder.LegBone.FOOT_L if left \
 			else SkaterMeshBuilder.LegBone.FOOT_R
 	return (_skeleton.get_global_transform_interpolated()
-			* _skeleton.get_bone_global_pose(bone)).origin
+			* _skeleton.get_bone_global_pose(_OFFSET + bone)).origin
 
 
 # ── Sizing seam ──────────────────────────────────────────────────────────────
@@ -263,11 +333,11 @@ func set_bone_position(bone: int, pos: Vector3) -> void:
 # sizing seam wrote. The euler round-trips exactly for the four pivots, whose
 # basis is built from one (set_swing).
 func bone_euler(bone: int) -> Vector3:
-	return _skeleton.get_bone_pose(bone).basis.get_euler()
+	return _skeleton.get_bone_pose(_OFFSET + bone).basis.get_euler()
 
 
 func bone_position(bone: int) -> Vector3:
-	return _skeleton.get_bone_pose(bone).origin
+	return _skeleton.get_bone_pose(_OFFSET + bone).origin
 
 
 func bone_base_scale(bone: int) -> Vector3:

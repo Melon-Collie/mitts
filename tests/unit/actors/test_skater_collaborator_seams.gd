@@ -4,7 +4,7 @@ extends GutTest
 # check the split's riskiest piece needs.
 #
 # Skater keeps every @export tuning var and every marker — the gameplay geometry
-# the claim resolvers clamp against — and hands them to seven RefCounted
+# the claim resolvers clamp against — and hands them to eight RefCounted
 # collaborators that own the cosmetic rigs, the paint, the world HUD and the
 # faceoff clock. What makes that seam hold is that the traffic runs ONE way:
 # a collaborator reads the node's tuning and writes only its own state, and the
@@ -20,6 +20,7 @@ const _SKATER: String = "res://Scripts/actors/skater.gd"
 const _COLLABORATORS: Dictionary = {
 	"_legs": "res://Scripts/actors/skater_leg_rig.gd",
 	"_arms": "res://Scripts/actors/skater_arm_rig.gd",
+	"_spine": "res://Scripts/actors/skater_spine_rig.gd",
 	"_stick": "res://Scripts/actors/skater_stick_rig.gd",
 	"_draw": "res://Scripts/actors/skater_draw_tracker.gd",
 	"_uniform": "res://Scripts/actors/skater_uniform_coordinator.gd",
@@ -100,9 +101,9 @@ func test_the_rigs_never_reach_for_each_other() -> void:
 	# with it. The one allowed edge is the stick knob reading the arm rig's
 	# look-at helper, which its cuff pose is copied from; it is one-way.
 	const ALLOWED: Dictionary = {"skater_stick_rig.gd": "SkaterArmRig"}
-	var names: Array[String] = ["SkaterLegRig", "SkaterArmRig", "SkaterStickRig",
-			"SkaterDrawTracker"]
-	for holder: String in ["_legs", "_arms", "_stick", "_draw"]:
+	var names: Array[String] = ["SkaterLegRig", "SkaterArmRig", "SkaterSpineRig",
+			"SkaterStickRig", "SkaterDrawTracker"]
+	for holder: String in ["_legs", "_arms", "_spine", "_stick", "_draw"]:
 		var path: String = _COLLABORATORS[holder]
 		var src: String = _strip(FileAccess.get_file_as_string(path))
 		var own: String = path.get_file()
@@ -122,7 +123,8 @@ func test_every_rig_is_built_before_the_passes_that_size_and_paint_it() -> void:
 	# mesh that does not exist yet and fails only in a live match.
 	var ready_src: String = _skater_src().split("func _ready()")[1].split("\nfunc ")[0]
 	var order: Array[String] = []
-	for token: String in ["_legs.build()", "_arms.build()", "_stick.setup(self)",
+	for token: String in ["_legs.build(body)", "_arms.build(body)", "_spine.build(body)",
+			"_stick.setup(self)",
 			"_uniform = SkaterUniformCoordinator.new()",
 			"_appearance = SkaterAppearanceCoordinator.new()"]:
 		var at: int = ready_src.find(token)

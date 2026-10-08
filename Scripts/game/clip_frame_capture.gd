@@ -95,14 +95,22 @@ func start() -> void:
 	_accum = 0.0
 	_pending_read = false
 	_capturing = true
+	# The mirror can frame skaters the live camera does not.
+	SkaterCameraCull.enabled = false
 	set_process(true)
 
 
 func stop() -> void:
 	_capturing = false
+	SkaterCameraCull.enabled = true
 	_pending_read = false
 	_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	set_process(false)
+
+
+func _exit_tree() -> void:
+	if _capturing:
+		SkaterCameraCull.enabled = true
 
 
 # Stop and throw the buffer away — the segment ended without an export request.

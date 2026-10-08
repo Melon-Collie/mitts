@@ -436,16 +436,20 @@ which is not a workflow on this project.
 
 ## The gait publishes channels; it never writes body rotations
 
-`SkaterSkatingCoordinator` is the whole procedural gait — no skeleton, no
-animation clips, everything derived from replicated velocity plus the intent
-byte, so it costs zero network state and a wire-fed remote animates identically
-to a locally-simulated one. It runs at RENDER rate (`Skater._process`,
+`SkaterSkatingCoordinator` is the whole procedural gait — no animation clips,
+everything derived from replicated velocity plus the intent byte, so it costs
+zero network state and a wire-fed remote animates identically to a
+locally-simulated one. It runs at RENDER rate (`Skater._process`,
 visibility-gated) and is guarded by `not is_replaying` so reconcile replay never
 over-spins the phase — which also means it can own no timer, and is why the
 celebration window is aged by its callers at physics rate instead.
 
-**It writes leg swing, foot eversion, edge loads and the crouch drop directly
-onto `Skater`, and never a torso or lower-body rotation.** Everything rotational
+**It writes leg swing, the ankles' give-back, edge loads and the crouch drop directly
+onto `Skater`, and never a torso or lower-body rotation.** The crouch lowers the
+visible body only — it is render-rate, and the hands and blade hang from the
+gameplay frame — except in the held poses (block, faceoff set, knockdown), whose
+layers hand the frame their drop by their weight (`GaitPose.frame_share`)
+because those hands are posed in a frame that went down with the body. Everything rotational
 is *published* as a field for `SkaterPoseCoordinator` to sum into one write:
 `trunk_pitch_add` / `trunk_roll_add` (torso texture), `stop_yaw_offset` (hockey
 stop), `travel_align_yaw` (hip-to-travel alignment, which the pivot also drives
@@ -455,6 +459,83 @@ tracking one rotation on different clocks is a wobble, not a pose — hence one
 summing site rather than five writers. The trunk texture in particular goes onto
 the cosmetic torso, helmet and shoulder BONES, never onto the `UpperBody` node,
 whose rotation carries the blade markers and is therefore gameplay geometry.
+
+### The legs skate a state, and the state is the physics' decision
+
+`SkaterLocomotion` owns the locomotion half: glide, stride, crossover,
+backward, shuffle, skid, tight turn and stop. Which one is not re-guessed from
+how the velocity happened to change; it is the split the movement model makes
+(`LocomotionRules`, a pure function of velocity, move intent, brake and facing
+— all replicated). The stick's component along travel is a stride, against it a
+skid, across it a turn — and the squares of those cosine and sine terms sum to
+one, so the same split is directly the crossfade. Each state owns its legs
+outright while it holds weight; nothing fades against anything else, which is
+what the old intent channels (dig-in, reversal, shuffle, backpedal, carve
+intent, glide) had to do and is where their flail came from.
+
+Two things the split alone would get wrong, both handled in the easing:
+
+- **Crossovers commit, corrections do not.** A steering tap at speed does turn
+  the travel, but skaters correct a line on their edges and cross over only
+  through a held turn. The crossover eases in slower than anything else, and
+  SIGNED — taps alternating sides have to pass through zero, so they cancel
+  while a turn held to one side commits. `test_body_chain.gd` holds both
+  halves.
+- **The glide is the remainder.** Whatever the other states have not yet
+  taken, including the not-yet-committed part of a turn, is skated as a glide
+  on the edges.
+
+### Overlays are layers, and the order is the priority
+
+Everything the gait lays on the stroke — the faceoff stance, the shot loads and
+kick, the check commit and drive, the stick lift, the celebration bounce, the
+stagger, the block and the knockdown — is a `GaitLayer`
+(`Scripts/controllers/gait/`). The coordinator runs them lowest priority first
+over the locomotion pose in a `GaitPose`, one stage at a time:
+
+| Stage | Composition | Why it sits there |
+|---|---|---|
+| `HOLD` | max with the pivot's | how much the layer sets the feet |
+| `FLOOR` | max over the stance | a floor, so order cannot matter |
+| `LEGS` | additive on the joints | before the knee solve: the fore-aft compensation must see it |
+| `TRUNK` | additive texture; sinks; `wobble` | `wobble` skips the trunk inertia filter |
+| `OVERRIDE` | lerp owned channels to the layer's pose | last, so it takes everything beneath |
+
+The override is what makes the priority real. It lerps the channels it owns
+toward its own pose by its weight, so the stroke and every additive layer below
+it fade with no layer knowing about another. The block owns the legs, the drop
+and the ankles; the knockdown, last, owns the legs, the drop, the mohawk yaw,
+the edges, the trunk and the wobble. **A layer never suppresses another with a
+`(1 − other.weight)` factor** — if one must win, it is an override above the
+other. `test_gait_layers.gd` holds the order and the knockdown's mask.
+
+A layer reads replicated state only and writes only the pose and its own
+published fields (`GaitFaceoffLayer.blend`, `GaitShotLayer.hip_yaw`). Its clock
+lives in `advance` (render rate, so no timer gameplay reads), which also
+reports whether the layer contributes this pass: an idle layer's stages are
+never called, so `advance` may answer false only when every stage would leave
+the pose untouched (to within the shared 0.001 blend floor).
+
+The upper-body overlays (the shot coil, the follow-through blade, the
+celebration's raised stick, the block's torso lean) are not layers: they move
+the gameplay frame and the blade, so they stay in the pose coordinators at
+physics rate.
+
+### The numeric core is native; the layers are not
+
+`NativeSkaterGait` ports the part that runs every frame for every skater —
+`SkaterLocomotion`, the coordinator's alignment and pivot read
+(`_align_to_travel`), and `GaitPose`'s solve — and the GDScript stays the
+reference it is fuzzed against (`test_native_gait_parity.gd`). **Change both or
+neither.** The layers are not ported: they are idle most frames, and they are
+where the feel tuning happens. A pass one of them shapes therefore crosses back
+— the port's stroke is mirrored into `SkaterLocomotion` and `GaitPose` solves —
+which is why the parity fuzz drives every overlay, not just skating.
+
+On the native path the GDScript `SkaterLocomotion` does not advance, so nothing
+outside the coordinator may read its state: `locomotion_mix()` answers for
+whichever path runs. Measured skating, per skater per frame: 46 µs GDScript,
+21 µs native, of which the rig writes are about 15.
 
 ### Pose the hand, not the blade
 
@@ -511,7 +592,7 @@ The address is spread across the collaborators that own its parts, and the parts
 are not independent:
 
 - **The crouch, the splay and the foot split are gait channels**
-  (`SkaterSkatingCoordinator`), floored over the speed-driven envelope. The
+  (`GaitFaceoffLayer`), floored over the speed-driven envelope. The
   splay costs each leg a cosine of vertical span, which the body pays as extra
   drop.
 - **The chest fold rides the trunk TEXTURE**, not the torso lean — the lean
@@ -524,7 +605,7 @@ are not independent:
   folds the shin far enough back to stand the blades on their heels, and the
   splay puts them on their outside edges; the ankles give the whole chain back.
   A level boot then hangs its blade below the FOOT pivot rather than keeping its
-  sole planted, so the crouch owes `_FOOT_FWD`'s vertical share on top.
+  sole planted, so the crouch owes `GaitPose.FOOT_FWD`'s vertical share on top.
 - **The hands are solved off the FOLDED shoulder**
   (`SkaterIKCoordinator.address_shoulder`), because that is where the arms are
   rooted. This is the one that bites: solved off the marker, the hands land a

@@ -52,7 +52,7 @@ func push_one_timer_ready() -> void:
 # chord-cuts the SM's shaped cursor paths (arc / reach-cone clamp) across the
 # body on big flips, which can trip the pose IK gate's facing freeze.
 func tick(snapshot: WorldSnapshot, delta: float, host_timestamp: float) -> InputState:
-	_zero_input(_scratch_input, delta, host_timestamp)
+	zero_input(_scratch_input, delta, host_timestamp)
 	_sm.dispatch(_scratch_input, snapshot)
 	return _scratch_input
 
@@ -108,7 +108,7 @@ func debug_intent() -> String:
 	return _sm.debug_intent()
 
 
-func _zero_input(input: InputState, delta: float, host_timestamp: float) -> void:
+static func zero_input(input: InputState, delta: float, host_timestamp: float) -> void:
 	input.delta = delta
 	input.host_timestamp = host_timestamp
 	input.move_vector = Vector2.ZERO

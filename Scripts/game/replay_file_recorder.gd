@@ -63,7 +63,7 @@ static func roster_entry(record: PlayerRecord) -> Dictionary:
 		"is_left_handed": record.is_left_handed,
 		# Build (height / weight / gear) so the viewer can re-apply the
 		# player's attributes — otherwise replay skaters render at the
-		# neutral frame and their re-derived lean/reach no longer matches
+		# neutral frame and their lean placement/reach no longer matches
 		# the host's lean-compensated blade positions (stick off the ice).
 		"build": record.attributes.to_dict() if record.attributes != null else {},
 		# Cosmetics, packed exactly as the join / spawn wire carries them, so

@@ -240,6 +240,13 @@ var carry_contact_high_u: float = 0.70
 # height and inside the 100–104% real athletes run.
 var upper_arm_length: float = 0.33
 var forearm_length: float = 0.33
+# How far the shoulder girdle lets an arm's root travel toward a hand past the
+# arm's working length (TwoBoneIK.reach_root): the shoulder blade's protraction
+# and drop, a few centimetres on a real frame.
+var shoulder_reach_m: float = 0.06
+# The share of its full length an arm works at before the girdle gives: a
+# reaching arm keeps ~28° of elbow bend rather than locking straight.
+var arm_working_extension: float = 0.97
 # Pole direction for the elbow (upper-body local). Mostly down with a real
 # outward flare (+X is away from the body; the sign flips per side in
 # update_arm_mesh) and a touch backward — a hockey top-hand elbow rides out
@@ -263,6 +270,21 @@ var hand_sphere_radius: float = 0.064
 # cuff sits flush against the hand sphere and visually swallows it; a small
 # pullback exposes the hand sphere as a distinct ball at the wrist.
 var cuff_wrist_offset: float = 0.05
+
+# ── Balance posture (SkaterController steps it; BalanceRules) ────────────────
+# Natural frequency of the lean's spring: a held lean arrives in ~1 s, and
+# side-to-side steering shows as a few degrees. Eased softly into the cap.
+var balance_omega: float = 4.0
+var balance_lean_cap_deg: float = 20.0
+# Share of the lean the trunk keeps, the rest taken back above the hips: the
+# legs carry the edge angle and the shoulders stay nearer the stick.
+var trunk_lean_share: float = 0.6
+# How far the trunk's lean trails the hips', seconds: the hips go over first and
+# the chest follows, and on a reversal the chest is still finishing the last lean
+# as the hips cross under it (trunk_tilt).
+var trunk_lean_lag_s: float = 0.12
+# Share of the trunk's lean the neck takes back, keeping the eyes nearer level.
+var head_level_share: float = 0.67
 
 # ── Stick Flex Tuning (cosmetic) ──────────────────────────────────────────────
 # Vertex-shader shaft bow (Shaders/stick_flex.gdshader), driven entirely from
@@ -623,11 +645,23 @@ var _prev_blade_contact: Vector3 = Vector3.ZERO
 var _last_wall_normal: Vector3 = Vector3.ZERO
 var _default_upper_body_y: float = 0.0
 var _default_lower_body_y: float = 0.0
-# Cosmetic vertical drop of the whole visible body (torso + hips) while in
-# the bent-knee skating stance, so the flexed legs keep the skates on the
-# ice. Driven by SkaterSkatingCoordinator; composes with the shot-block
-# crouch through _apply_body_height (the single writer of both body Ys).
+# Vertical drop of the visible body under the gait's crouch, so the flexed legs
+# keep the skates on the ice, and the share of it the gameplay frames
+# (UpperBody / LowerBody) take — nonzero only in the held poses (see
+# set_skating_crouch_drop). _place_frames is the single writer of both frames'
+# positions (_place_upper_frame of UpperBody's alone, off its cached parts).
 var _skating_crouch_drop: float = 0.0
+var _frame_drop: float = 0.0
+# The balance lean, world XZ radians, stepped in the physics tick
+# (SkaterController._advance_balance) and replicated; and the translation it
+# gives each gameplay frame (_update_lean_shift).
+var _balance_tilt: Vector2 = Vector2.ZERO
+var _balance_tilt_rate: Vector2 = Vector2.ZERO
+var _lean_shift_lower: Vector3 = Vector3.ZERO
+var _lean_shift_upper: Vector3 = Vector3.ZERO
+# The trunk's lean in the body's frame, kept from the last full placement so a
+# torso write re-places UpperBody without re-deriving what it cannot change.
+var _lean_trunk_local: Basis = Basis.IDENTITY
 var _block_stance_active: bool = false
 # Slapper one-timer zone — armed only while charging a slapper without the puck
 # (see set_slapper_zone). Plain state: the zone is an ice-plane disc the analytic
@@ -705,18 +739,20 @@ var visual_offset: Vector3 = Vector3.ZERO:
 			# Shifts MeshRoot, an ancestor of the Blade marker — the blade
 			# contact memo must not serve the un-shifted point.
 			_blade_contact_dirty = true
-			mesh_root.position = global_transform.basis.inverse() * v
+			_place_mesh_root()
 
-# Collaborators. The three rigs own the cosmetic skeletons and the stick; the
-# draw tracker is the faceoff clock. Each reads this node's tuning vars and
-# markers and writes only its own state — see Scripts/actors/CLAUDE.md.
+# Collaborators. The four rigs own the cosmetic body skeleton's bones and the
+# stick; the draw tracker is the faceoff clock. Each reads this node's tuning
+# vars and markers and writes only its own state — see Scripts/actors/CLAUDE.md.
 var _legs: SkaterLegRig
 var _arms: SkaterArmRig
+var _spine: SkaterSpineRig
 var _stick: SkaterStickRig
 var _draw: SkaterDrawTracker = SkaterDrawTracker.new()
 var _uniform: SkaterUniformCoordinator
 var _hud: SkaterHUDCoordinator
 var _appearance: SkaterAppearanceCoordinator
+var _trunk_fold: float = 0.0
 
 
 func _ready() -> void:
@@ -759,13 +795,23 @@ func _ready() -> void:
 	# Rig collaborators first: the uniform and appearance passes below paint and
 	# size through their seams, and the stick rig's setup subdivides the shaft
 	# mesh the uniform's shader material is about to be installed on.
+	# One skeleton for the whole figure, handed to each rig that poses part of
+	# it. A sibling of UpperBody and LowerBody at identity, so skeleton space is
+	# the space both gameplay frames are positioned in.
+	var body: Skeleton3D = SkaterBodySkeleton.new_body_skeleton()
+	mesh_root.add_child(body)
+
 	_legs = SkaterLegRig.new()
 	_legs.setup(self)
-	_legs.build()
+	_legs.build(body)
 
 	_arms = SkaterArmRig.new()
 	_arms.setup(self)
-	_arms.build()
+	_arms.build(body)
+
+	_spine = SkaterSpineRig.new()
+	_spine.setup(self)
+	_spine.build(body)
 
 	_stick = SkaterStickRig.new()
 	_stick.setup(self)
@@ -805,17 +851,21 @@ func _process(delta: float) -> void:
 	# post-tick position while the body renders interpolated, separating the two
 	# by up to a tick of travel, and the stick visibly leaves the hands at speed.
 	if is_visible_in_tree():
+		_on_camera = SkaterCameraCull.sees(self)
 		# Cosmetic pose (leg gait / head / off-hand IK) at render rate, before the
 		# marker-driven mesh rebuild that consumes it. Skipped entirely when hidden
 		# — an off-screen skater needs no animated pose. Gameplay-relevant pose
 		# (facing, upper-body twist, blade IK) already ran in the physics tick.
+		# Off camera the hook still runs, for the part of the gait that is not mesh
+		# (on_camera).
 		if render_pose_update.is_valid():
 			render_pose_update.call(delta)
 		# _blade_tilt_dirty is ORed in because an elevation blend step changes the
 		# blade tilt without moving any marker, so _rig_pose_changed can't see it
-		# (see _update_blade_elevation). Left set while hidden so the pose is
-		# rebuilt on the first visible frame.
-		if _rig_pose_changed() or _blade_tilt_dirty:
+		# (see _update_blade_elevation). Left set while hidden or off camera so the
+		# pose is rebuilt on the first frame it is drawn.
+		var spine_moved: bool = _on_camera and _spine.update()
+		if _on_camera and (_rig_pose_changed() or spine_moved or _blade_tilt_dirty):
 			_blade_tilt_dirty = false
 			update_stick_mesh()
 			update_arm_mesh()
@@ -1494,6 +1544,9 @@ func set_facing(facing: Vector2) -> void:
 	_facing = facing
 	_blade_contact_dirty = true
 	rotation.y = atan2(-_facing.x, -_facing.y)
+	# The lean is world-space, so its shift in the body's frame turns with it.
+	if _leaning():
+		_place_frames()
 
 
 func set_lower_body_lag(angle: float) -> void:
@@ -1563,16 +1616,39 @@ func set_faceoff_address(blend: float) -> void:
 	_faceoff_address = blend
 
 
-# Sets the skating-stance body drop (metres). The stance flexes hips/knees,
-# which shortens the legs' vertical span; lowering the torso AND the hips by
-# the deficit keeps the skates planted instead of floating. Cosmetic only —
-# the collision body and every gameplay read are unaffected; the blade IK
-# re-lands the blade at ice height from upper_body.global_position each tick.
-func set_skating_crouch_drop(drop: float) -> void:
-	if is_equal_approx(_skating_crouch_drop, drop):
+# Sets the gait's crouch (metres): `drop` lowers the visible body, so the flexed
+# legs keep the skates planted, and `frame_drop` of it also lowers the gameplay
+# frames. The gait computes the crouch at render rate, so the skating crouch and
+# its stride bob stay out of the frames the hands and blade hang from — gameplay
+# geometry must not depend on frame rate. Only the held poses (block, faceoff,
+# knockdown) hand the frame their drop, because their hands are posed in a
+# frame that has gone down with the body.
+# Whether the camera can see this skater this frame (SkaterCameraCull). The rig's
+# work is mesh, so a skater out of frame skips it — but the gait still computes,
+# because a held pose's crouch moves the gameplay frame (set_skating_crouch_drop).
+var _on_camera: bool = true
+
+
+func on_camera() -> bool:
+	return _on_camera
+
+
+func set_skating_crouch_drop(drop: float, frame_drop: float = 0.0) -> void:
+	if is_equal_approx(_skating_crouch_drop, drop) and is_equal_approx(_frame_drop, frame_drop):
 		return
 	_skating_crouch_drop = drop
-	_apply_body_height()
+	# The stride's bob lowers the body alone; only a held pose's share moves the
+	# frames, so the every-frame case re-seats the skeleton and nothing else.
+	if not is_equal_approx(_frame_drop, frame_drop):
+		_frame_drop = frame_drop
+		_place_frames()
+	if _spine != null and _on_camera:
+		_spine.update()
+
+
+# How far the visible body sits below the gameplay frames (SkaterSpineRig).
+func body_drop_below_frame() -> float:
+	return _skating_crouch_drop - _frame_drop
 
 
 # Skeleton height offset (m), set by SkaterAppearanceCoordinator.apply:
@@ -1591,11 +1667,96 @@ func set_skeleton_root_offset(offset: float) -> void:
 
 
 func _apply_body_height() -> void:
+	_place_frames()
+	# The skeleton copies these frames rather than hanging off them: re-seat it.
+	if _spine != null:
+		_spine.update()
+
+
+# Positions both gameplay frames. The tick-side lean writes stop here: the
+# render pass re-seats the skeleton every drawn frame anyway.
+func _place_frames() -> void:
 	_blade_contact_dirty = true
-	upper_body.position.y = _default_upper_body_y + _skeleton_root_offset \
-			- _skating_crouch_drop
-	lower_body.position.y = _default_lower_body_y + _skeleton_root_offset \
-			- _skating_crouch_drop
+	_update_lean_shift()
+	upper_body.position = Vector3(0.0,
+			_default_upper_body_y + _skeleton_root_offset - _frame_drop, 0.0) + _lean_shift_upper
+	lower_body.position = Vector3(0.0,
+			_default_lower_body_y + _skeleton_root_offset - _frame_drop, 0.0) + _lean_shift_lower
+
+
+# UpperBody alone, for a torso write: the hips' shift and the trunk's lean are
+# functions of facing and the lean, which only _place_frames' callers change.
+func _place_upper_frame() -> void:
+	_blade_contact_dirty = true
+	_update_upper_lean_shift()
+	upper_body.position = Vector3(0.0,
+			_default_upper_body_y + _skeleton_root_offset - _frame_drop, 0.0) + _lean_shift_upper
+
+
+# The balance lean, world XZ radians, and its rate. Moves both gameplay frames,
+# so the hands and the blade markers lean with the body — gameplay, which is why
+# it is stepped in the tick and replicated rather than eased at render rate.
+func set_balance_tilt(tilt: Vector2, rate: Vector2 = Vector2.ZERO) -> void:
+	if tilt == _balance_tilt and rate == _balance_tilt_rate:
+		return
+	_balance_tilt = tilt
+	_balance_tilt_rate = rate
+	_place_frames()
+
+
+func balance_tilt() -> Vector2:
+	return _balance_tilt
+
+
+# The trunk's lean, world XZ radians: its share of where the hips' lean was
+# trunk_lean_lag_s ago, as a first-order delay (tilt − lag · rate) of state every
+# machine already holds, so the trail needs nothing on the wire. Kept within the
+# trunk's share of the cap, so a fast reversal cannot fling the chest past it.
+func trunk_tilt() -> Vector2:
+	return (trunk_lean_share * (_balance_tilt - trunk_lean_lag_s * _balance_tilt_rate)) \
+			.limit_length(trunk_lean_share * deg_to_rad(balance_lean_cap_deg))
+
+
+func _leaning() -> bool:
+	return _balance_tilt != Vector2.ZERO or _balance_tilt_rate != Vector2.ZERO
+
+
+# Upper bound on how far the lean can carry the shoulders horizontally off the
+# body at the lean cap: the hips' swing about the ice plus the trunk's on top.
+func max_lean_shift() -> float:
+	var cap: float = deg_to_rad(balance_lean_cap_deg)
+	var hips: float = global_position.y + _default_lower_body_y + _skeleton_root_offset
+	var shoulders: float = ((shoulder.position + bottom_shoulder.position) * 0.5).length()
+	return hips * sin(cap) + 2.0 * shoulders * sin(trunk_lean_share * cap * 0.5)
+
+
+# The body tips as a rod about the ice under the skater (KnockdownFallRules'
+# model, and where the blades are). LowerBody goes where the hips go; UpperBody
+# goes where the shoulders go once the trunk's own lean (trunk_tilt) sits on top
+# of the hips' — matched at the midpoint of the two shoulder markers, so the
+# arms the skeleton draws from its shoulders reach the hands gameplay placed.
+# The frames translate and never tilt: everything solved in them assumes an
+# upright frame. Heights are the frames' own (no render-rate crouch), so the
+# shift is a function of tick state alone.
+func _update_lean_shift() -> void:
+	var hips := Vector3(0.0, global_position.y + _default_lower_body_y + _skeleton_root_offset, 0.0)
+	_lean_shift_lower = _tilt_body_local(_balance_tilt) * hips - hips
+	_lean_trunk_local = _tilt_body_local(trunk_tilt())
+	_update_upper_lean_shift()
+
+
+func _update_upper_lean_shift() -> void:
+	var shoulders: Vector3 = upper_body.basis * ((shoulder.position + bottom_shoulder.position) * 0.5)
+	_lean_shift_upper = _lean_shift_lower + _lean_trunk_local * shoulders - shoulders
+
+
+# A world-XZ tilt as a rotation in the body's frame, toward the tilt.
+func _tilt_body_local(tilt: Vector2) -> Basis:
+	var tilt3: Vector3 = global_transform.basis.inverse() * Vector3(tilt.x, 0.0, tilt.y)
+	var theta: float = tilt3.length()
+	if theta < 1e-5:
+		return Basis.IDENTITY
+	return Basis(Vector3.UP.cross(tilt3 / theta), theta)
 
 
 # ── Blade ─────────────────────────────────────────────────────────────────────
@@ -1619,7 +1780,7 @@ func get_blade_position() -> Vector3:
 # interaction loops (plus IK, claims, and render-rate aim readers). The cached
 # point is served while (a) no pose setter that can move the blade's world
 # contact has run since the fill — set_blade_position, set_facing,
-# set_upper_body_rotation / lean, _apply_body_height, and the visual_offset
+# set_upper_body_rotation / lean, _place_frames, and the visual_offset
 # MeshRoot shift all raise _blade_contact_dirty — and (b) the body hasn't
 # translated, guarded by comparing local `position` against the fill-time value
 # (catches every direct global_position write: integration, collision push-out,
@@ -2073,6 +2234,12 @@ func get_top_hand_position() -> Vector3:
 
 
 # ── Bottom Hand ───────────────────────────────────────────────────────────────
+# Where a shoulder marker sits on the visible trunk, in UpperBody's frame
+# (SkaterArmRig.visible_shoulder).
+func visible_shoulder(marker_local: Vector3) -> Vector3:
+	return _arms.visible_shoulder(marker_local)
+
+
 func set_bottom_hand_position(pos: Vector3) -> void:
 	bottom_hand.position = pos
 
@@ -2080,28 +2247,42 @@ func set_bottom_hand_position(pos: Vector3) -> void:
 func set_upper_body_rotation(angle: float) -> void:
 	_blade_contact_dirty = true
 	upper_body.rotation.y = angle
+	# The shoulders turn with the frame, and the lean's shift follows them.
+	if _leaning():
+		_place_upper_frame()
 
 
-func set_upper_body_lean(lean_x: float, lean_z: float = 0.0) -> void:
+# `fold`: the share of lean_x that is posture, not reach (SkaterSpineRig).
+func set_upper_body_lean(lean_x: float, lean_z: float = 0.0, fold: float = 0.0) -> void:
 	_blade_contact_dirty = true
 	upper_body.rotation.x = lean_x
 	upper_body.rotation.z = lean_z
+	_trunk_fold = fold
+	if _leaning():
+		_place_upper_frame()
 
 
-func set_lower_body_lean(lean_x: float, lean_z: float) -> void:
+func trunk_fold() -> float:
+	return _trunk_fold
+
+
+func set_lower_body_lean(lean_x: float) -> void:
 	lower_body.rotation.x = lean_x
-	lower_body.rotation.z = lean_z
 
 
 # ── Knockdown Fall ────────────────────────────────────────────────────────────
-# Whole-rig tilt of the knockdown fall: rotates MeshRoot about its own origin —
-# the ice-level point between the skates — so the body tips like a felled tree
-# while the gameplay body (collider, slide, capsule position) stays upright
-# underneath. `axis` is the horizontal rotation axis in body-local space
-# (perpendicular to the fall direction), `tilt` in radians. MeshRoot's basis has
-# exactly this one writer (visual_offset owns its position), so the write is
-# absolute; the zero↔zero early-out keeps the upright hot path free.
+# Whole-rig tilt of the knockdown fall: rotates MeshRoot about the ice under the
+# skater — the point between the skates KnockdownFallRules tips its rod about —
+# so the body tips like a felled tree while the gameplay body (collider, slide,
+# capsule position) stays upright underneath. The skater's origin rides at hip
+# height, so tilting MeshRoot about its own origin would lay the body down a
+# hip-height above the ice; the pivot shift carries it down to where it lies.
+# `axis` is the horizontal rotation axis in body-local space (perpendicular to
+# the fall direction), `tilt` in radians. This is MeshRoot's one basis writer;
+# its position is the shift plus visual_offset (_place_mesh_root). The
+# zero↔zero early-out keeps the upright hot path free.
 var _knockdown_fall_tilt: float = 0.0
+var _fall_pivot_shift: Vector3 = Vector3.ZERO
 
 
 func set_knockdown_fall(axis: Vector3, tilt: float) -> void:
@@ -2113,8 +2294,19 @@ func set_knockdown_fall(axis: Vector3, tilt: float) -> void:
 	_blade_contact_dirty = true
 	if tilt == 0.0 or axis.length_squared() < 0.000001:
 		mesh_root.basis = Basis.IDENTITY
-		return
-	mesh_root.basis = Basis(axis.normalized(), tilt)
+		_fall_pivot_shift = Vector3.ZERO
+	else:
+		var tip := Basis(axis.normalized(), tilt)
+		mesh_root.basis = tip
+		# Rotating about the ice point P (ice is world Y = 0) instead of the
+		# origin is the rotation plus the shift P − tip·P.
+		var pivot := Vector3(0.0, -global_position.y, 0.0)
+		_fall_pivot_shift = pivot - tip * pivot
+	_place_mesh_root()
+
+
+func _place_mesh_root() -> void:
+	mesh_root.position = global_transform.basis.inverse() * visual_offset + _fall_pivot_shift
 
 
 # Head yaw, onto the helmet bone. The write owns Y only; the rig's captured
@@ -2222,11 +2414,14 @@ func set_leg_surface_material(surface: int, mat: Material) -> void:
 
 # ── Arm rig (delegate to SkaterArmRig) ────────────────────────────────────────
 
+# The spine first: a physics-rate caller would grow arms from a stale shoulder.
 func update_arm_mesh() -> void:
+	_spine.update()
 	_arms.update_top_arm()
 
 
 func update_bottom_arm_mesh() -> void:
+	_spine.update()
 	_arms.update_bottom_arm()
 
 

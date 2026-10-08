@@ -45,7 +45,9 @@ func resolve(registry: PlayerRegistry, peer_id: int, snap: SkaterNetworkState,
 	_catch = LagCompRewind.self_view_catch_up(snap, ctrl, self_view_t, newest_ts, _fp)
 	var caps: AISkaterCaps = registry.caps_by_peer.get(peer_id) if registry != null else null
 	if caps != null:
-		_max_reach = caps.max_blade_reach
+		# A leaned body carries its shoulders, and the blade with them, off the
+		# body point the reach is measured from.
+		_max_reach = caps.max_blade_reach + caps.max_lean_shift
 		_continuity = LagCompRewind.blade_continuity_tolerance(caps.blade_speed)
 	return true
 

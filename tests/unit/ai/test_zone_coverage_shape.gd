@@ -65,9 +65,9 @@ extends GutTest
 #                     1.59 / 1.57 / 2.00   with the gap-ladder / pinch fixes
 #                     1.69 / 1.92 / 2.54   with the stick-aware chase intercept
 #
-# That last row is the first one the shared ceiling could not hold, and the
-# crossing cutter now carries its own pin (see below). Two things about it are
-# worth keeping, because neither is visible in the number:
+# That last row is the first one the shared ceiling could not hold, which is
+# why the crossing cutter took its own pin. Two things about it are worth
+# keeping, because neither is visible in the number:
 #   - It is not a graded response. Shrinking the reach credit (1.80 m ->
 #     1.60 m) moved the cutter only 2.54 -> 2.52 while breaking BOTH
 #     point-holds-the-line fixtures, so these sims are landing in a DIFFERENT
@@ -82,6 +82,11 @@ extends GutTest
 #     clears OPEN_DANGER_CEILING with room, but it is the closest it has been,
 #     and nobody has explained it. If that number moves again, explain it
 #     before pinning it.
+#
+# The point-shot and crossing-cutter fixtures' attacks are now SCRIPTED (see the
+# tests), so their readings are not rollouts of the bot attack and no longer
+# belong to the table above: they read 0.63 and 0.35 unattended/tick and carry
+# their own pins. Only low cycle still runs the bot attack.
 #
 # A regression to the argmaxes still breaks the double-lock ceiling, which is
 # the guard that separated the two models sharply in the first place.
@@ -129,19 +134,15 @@ const ZONE_SLOTS: Array[int] = [
 	AIRoleSlots.Slot.ZONE_W_WEAK,
 ]
 
-# Attackers in the zone that no defender has, per tick. See the header: pins the
-# current measured readings (1.69 / 1.92), not a bound derived from the model it
-# replaced. It sat at 2.4 for one commit to accept a crossing-cutter cost the
-# reception rendezvous charged; the gap-ladder work paid that back, so the slack
-# comes back out rather than sitting there hiding the next one.
+# Attackers in the zone that no defender has, per tick — the bot-attack
+# fixtures' shared ceiling, now guarding low cycle alone (measured 2.02, with a
+# defender off chasing the puck counted as covering nobody). A pinned
+# measurement, not a bound derived from the model it replaced.
 const UNCOVERED_CEILING: float = 2.2
-# The crossing cutter is pinned SEPARATELY rather than by widening the bar above.
-# The stick-aware chase intercept moved it past 2.2 and left the other two
-# fixtures inside it, so a shared ceiling wide enough for 2.52 would park ~0.9 of
-# slack on low cycle — the exact "slack sitting there hiding the next one" the
-# 2.4 commit is remembered for. A fixture that moved gets a new pin; fixtures
-# that did not keep their tight one.
-const UNCOVERED_CEILING_CROSSING_CUTTER: float = 2.6
+# The scripted crossing cutter (measured 0.35), pinned at the same ~0.28 margin.
+const UNCOVERED_CEILING_CROSSING_CUTTER: float = 0.63
+# The scripted point shot (measured 0.63), pinned at the same ~0.28 margin.
+const UNCOVERED_CEILING_POINT_SHOT: float = 0.9
 # The man nobody has should not routinely be a prime scoring threat. A loose
 # guard — it separated the two models weakly — against a collapse.
 const OPEN_DANGER_CEILING: float = 0.25
@@ -163,12 +164,19 @@ class Result:
 
 
 # Runs a 5v5 sim with team 0 attacking and team 1 defending -Z, and reads team
-# 1's coverage every tick it is actually in D-zone shape.
+# 1's coverage every tick it is actually in D-zone shape. `attackers` holds
+# spawn points for bot attackers, or — for a scripted attack — one
+# [path: Array[Vector3], speed] pair per attacker (Duel.add_scripted_attacker).
 func _run(attackers: Array, defenders: Array, carrier: int) -> Result:
 	var duel := Duel.new()
 	duel.team_size = 5
 	for i: int in attackers.size():
-		duel.add_skater(1 + i, 0, attackers[i], BotSkillProfile.hard())
+		if attackers[i] is Array:
+			var path: Array[Vector3] = []
+			path.assign(attackers[i][0])
+			duel.add_scripted_attacker(1 + i, 0, path, attackers[i][1])
+		else:
+			duel.add_skater(1 + i, 0, attackers[i], BotSkillProfile.hard())
 		duel.positions[1 + i] = i
 	for i: int in defenders.size():
 		duel.add_skater(50 + i, 1, defenders[i], BotSkillProfile.hard())
@@ -271,18 +279,21 @@ func test_a_low_cycle_is_covered() -> void:
 func test_a_point_shot_setup_is_covered() -> void:
 	# The puck up at the point with traffic below: the wingers own the high ice
 	# and the D own the house, which is the split the areas are drawn for.
+	# The attack is SCRIPTED — a held possession, the carrier walking the line
+	# and the traffic working below — so the fixture measures the coverage
+	# rather than whichever release the point man decides on.
 	var r: Result = _run(
-		[Vector3(5.0, 0.0, -15.0),    # carrier at the strong point
-		 Vector3(-0.5, 0.0, -24.5),   # net-front screen
-		 Vector3(2.5, 0.0, -21.0),    # low slot
-		 Vector3(-8.0, 0.0, -18.0),   # weak wall
-		 Vector3(-5.0, 0.0, -15.0)],  # weak point
+		[[[Vector3(5.0, 0.0, -15.0), Vector3(1.5, 0.0, -15.5)], 2.0],      # carrier walks the line
+		 [[Vector3(-0.5, 0.0, -24.5), Vector3(0.5, 0.0, -24.0)], 1.0],     # net-front screen
+		 [[Vector3(2.5, 0.0, -21.0), Vector3(0.5, 0.0, -20.5)], 1.5],      # low slot
+		 [[Vector3(-8.0, 0.0, -18.0), Vector3(-7.0, 0.0, -20.5)], 1.5],    # weak wall
+		 [[Vector3(-5.0, 0.0, -15.0), Vector3(-3.0, 0.0, -15.5)], 1.5]],   # weak point
 		[Vector3(1.0, 0.0, -23.0), Vector3(-1.5, 0.0, -24.5),
 		 Vector3(0.5, 0.0, -19.5), Vector3(6.0, 0.0, -14.0),
 		 Vector3(-6.0, 0.0, -14.5)],
 		1)
 	_report("point shot", r)
-	_assert_shape("point shot", r)
+	_assert_shape("point shot", r, UNCOVERED_CEILING_POINT_SHOT)
 
 
 func test_a_man_who_changes_areas_is_handed_off_not_dropped() -> void:
@@ -290,10 +301,16 @@ func test_a_man_who_changes_areas_is_handed_off_not_dropped() -> void:
 	# areas. The handoff must not leave him uncovered for long, and must never
 	# leave BOTH defenders on him — the release margin widens eligibility for
 	# whoever holds him, so the seam is a handshake rather than a swap.
+	# The attack is SCRIPTED so every run measures the same crossing: the
+	# cutter goes weak side → through the slot → strong side and back while the
+	# carrier works the strong wall low.
 	var r: Result = _run(
-		[Vector3(9.0, 0.0, -21.0),                                # carrier
-		 Vector3(-7.0, 0.0, -19.0), Vector3(-1.0, 0.0, -24.0),
-		 Vector3(6.0, 0.0, -14.0), Vector3(-6.0, 0.0, -14.0)],
+		[[[Vector3(9.0, 0.0, -21.0), Vector3(8.5, 0.0, -23.5)], 1.5],    # carrier, strong wall low
+		 [[Vector3(-7.0, 0.0, -19.0), Vector3(-1.0, 0.0, -20.5),
+		   Vector3(4.0, 0.0, -19.5), Vector3(-1.0, 0.0, -20.5)], 3.0],     # the cutter
+		 [[Vector3(-1.0, 0.0, -24.0), Vector3(0.0, 0.0, -24.5)], 1.0],     # net front
+		 [[Vector3(6.0, 0.0, -14.0), Vector3(4.0, 0.0, -14.5)], 1.5],      # strong point
+		 [[Vector3(-6.0, 0.0, -14.0), Vector3(-4.0, 0.0, -14.5)], 1.5]],   # weak point
 		[Vector3(4.0, 0.0, -22.0), Vector3(-1.5, 0.0, -24.5),
 		 Vector3(0.0, 0.0, -19.0), Vector3(7.0, 0.0, -13.5),
 		 Vector3(-7.0, 0.0, -13.5)],

@@ -59,6 +59,10 @@ var stick_reach: float = GameRules.DEFAULT_STICK_LENGTH_M
 # from the same scaled geometry the body uses (SkaterController.build_ai_caps),
 # not a tuned margin. Default = league stick + blade + baseline backhand ROM reach.
 var max_blade_reach: float = GameRules.DEFAULT_STICK_LENGTH_M + GameRules.DEFAULT_BLADE_LENGTH_M + 0.46
+# The furthest the balance lean can carry the shoulders off the body, metres
+# (Skater.max_lean_shift). The claim reach bound adds it; the bots' own reach
+# model does not, since a lean is not something a bot plans a reach around.
+var max_lean_shift: float = 0.0
 
 # Charged wrister release speed (height-derived, leaned by stick flex and blade
 # curve). Feeds shot-quality eval (score_shoot) — a hard-shooting player's shot
@@ -84,8 +88,8 @@ var loft_tans: Vector3 = Vector3(
 		GameRules.DEFAULT_LOFT_TAN_HIGH)
 
 # Lateral grip multiplier (= SkaterController.lateral_grip — agility × the
-# skate-profile lean). Scales the PERPENDICULAR thrust authority in the real
-# movement core, so planning reads it wherever it models a direction change:
+# skate-profile lean). Scales the edge turn authority in the real movement
+# core, so planning reads it wherever it models a direction change:
 # the cross-momentum shed in time_to_arrive / reach_clearance, and the deke's
 # bite/unwind budgets. Straight-line phases (ramp, race-home) stay pure accel
 # — grip never limits parallel drive, in planning or in physics.

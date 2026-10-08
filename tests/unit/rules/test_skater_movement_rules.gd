@@ -1,18 +1,41 @@
 extends GutTest
 
-# SkaterMovementRules — thrust, friction, max speed clamping with carry penalty.
+# SkaterMovementRules — stride, glide, skid, turn, stop, and the speed caps.
+
+const DT: float = 1.0 / 120.0
+
 
 func _default_cfg() -> SkaterMovementRules.MovementConfig:
 	var cfg := SkaterMovementRules.MovementConfig.new()
 	cfg.thrust = 20.0
+	cfg.power_knee_speed = 100.0  # no power fade unless a test opts in
 	cfg.friction = 5.0
 	cfg.max_speed = 10.0
 	cfg.move_deadzone = 0.1
-	cfg.brake_multiplier = 5.0
+	cfg.stop_decel = 25.0
+	cfg.reverse_skid_fraction = 0.75
+	cfg.turn_accel = 9.0
+	cfg.max_turn_rate = 6.0
+	cfg.tight_turn_multiplier = 2.0
+	cfg.tight_turn_decel = 3.0
+	cfg.tight_turn_align_angle = deg_to_rad(30.0)
 	cfg.puck_carry_speed_multiplier = 0.88
 	cfg.backward_thrust_multiplier = 0.7
 	cfg.crossover_thrust_multiplier = 0.85
 	return cfg
+
+
+# A frictionless config, so a test reads one mechanism's effect exactly.
+func _clean_cfg() -> SkaterMovementRules.MovementConfig:
+	var cfg := _default_cfg()
+	cfg.friction = 0.0
+	cfg.max_speed = 30.0
+	return cfg
+
+
+func _speed(v: Vector3) -> float:
+	return Vector2(v.x, v.z).length()
+
 
 func test_no_input_applies_friction() -> void:
 	var result: Vector3 = SkaterMovementRules.apply_movement(
@@ -272,75 +295,174 @@ func test_integrate_forward_zero_stagger_matches_unstaggered() -> void:
 		false, false, false, _default_cfg(), 1.0 / 120.0, 9, 0, zeroed, 0.0, bc_cfg)
 	assert_eq(zeroed.position, plain.position, "zero stagger is a no-op")
 
-# ── Lateral grip (perpendicular thrust authority — the edges) ─────────────────
+# ── Stride power ─────────────────────────────────────────────────────────────
 
-func test_grip_one_is_exact_noop() -> void:
-	# grip 1.0 must recompose the thrust bit-identically — the neutral build's
-	# feel is the shipped baseline, not "almost".
+func test_stride_fades_above_the_power_knee() -> void:
+	var cfg := _clean_cfg()
+	cfg.power_knee_speed = 3.0
+	var slow_gain: float = _speed(SkaterMovementRules.apply_movement(
+		Vector3(2, 0, 0), Vector2(1, 0), -PI / 2.0, false, false, DT, cfg)) - 2.0
+	var fast_gain: float = _speed(SkaterMovementRules.apply_movement(
+		Vector3(8, 0, 0), Vector2(1, 0), -PI / 2.0, false, false, DT, cfg)) - 8.0
+	assert_almost_eq(slow_gain, cfg.thrust * DT, 1e-4, "below the knee the push is full thrust")
+	assert_almost_eq(fast_gain, cfg.thrust * 3.0 / 8.0 * DT, 1e-4, "above it the push is thrust·knee/speed")
+
+
+# ── Reversing: skid first, then push ─────────────────────────────────────────
+
+func test_opposing_stick_skids_instead_of_pushing_back() -> void:
+	var cfg := _clean_cfg()
+	var v: Vector3 = SkaterMovementRules.apply_movement(
+		Vector3(8, 0, 0), Vector2(-1, 0), -PI / 2.0, false, false, DT, cfg)
+	assert_almost_eq(v.x, 8.0 - cfg.stop_decel * cfg.reverse_skid_fraction * DT, 1e-4,
+		"an opposing stick decelerates at the skid rate, not at thrust")
+	assert_almost_eq(v.z, 0.0, 1e-5, "dead-opposite stick doesn't turn")
+
+
+func test_brake_stops_faster_than_the_opposing_stick() -> void:
 	var cfg := _default_cfg()
-	var gripped := _default_cfg()
-	gripped.lateral_grip = 1.0
-	var vel := Vector3(6, 0, 2)
-	var a: Vector3 = SkaterMovementRules.apply_movement(
-		vel, Vector2(0.3, -0.9), 0.5, false, false, 1.0 / 120.0, cfg)
-	var b: Vector3 = SkaterMovementRules.apply_movement(
-		vel, Vector2(0.3, -0.9), 0.5, false, false, 1.0 / 120.0, gripped)
-	assert_eq(a, b, "grip 1.0 is the identity")
+	var skid := Vector3(8, 0, 0)
+	var brake := Vector3(8, 0, 0)
+	for _i in 10:
+		skid = SkaterMovementRules.apply_movement(skid, Vector2(-1, 0), -PI / 2.0, false, false, DT, cfg)
+		brake = SkaterMovementRules.apply_movement(brake, Vector2.ZERO, -PI / 2.0, false, true, DT, cfg)
+	assert_lt(brake.x, skid.x, "the dedicated stop is the better stop")
 
 
-func test_low_grip_widens_the_turn() -> void:
-	# Moving +X, thrusting +Z (perpendicular): low grip redirects less per tick.
+func test_opposing_stick_eventually_reverses() -> void:
 	var cfg := _default_cfg()
-	cfg.lateral_grip = 0.9
-	var vel := Vector3(8, 0, 0)
-	var neutral: Vector3 = SkaterMovementRules.apply_movement(
-		vel, Vector2(0, 1), 0.0, false, false, 1.0 / 120.0, _default_cfg())
-	var heavy: Vector3 = SkaterMovementRules.apply_movement(
-		vel, Vector2(0, 1), 0.0, false, false, 1.0 / 120.0, cfg)
-	assert_lt(heavy.z, neutral.z, "low grip turns less per tick")
-	assert_almost_eq(heavy.x, neutral.x, 0.0001, "along-motion component untouched")
-	# The perpendicular gain scales exactly by the grip factor.
-	assert_almost_eq(heavy.z, neutral.z * 0.9, 0.0001, "perp thrust scales by grip")
+	var v := Vector3(8, 0, 0)
+	for _i in 240:
+		v = SkaterMovementRules.apply_movement(v, Vector2(-1, 0), -PI / 2.0, false, false, DT, cfg)
+	assert_lt(v.x, 0.0, "once stopped, the push takes over in the new direction")
 
 
-func test_grip_does_not_impede_straight_drive_or_slowing() -> void:
+# ── Turning ──────────────────────────────────────────────────────────────────
+
+func test_side_stick_turns_without_adding_speed() -> void:
+	var cfg := _clean_cfg()
+	var v: Vector3 = SkaterMovementRules.apply_movement(
+		Vector3(8, 0, 0), Vector2(0, 1), -PI / 2.0, false, false, DT, cfg)
+	assert_gt(v.z, 0.0, "turns toward the stick")
+	assert_almost_eq(_speed(v), 8.0, 1e-4, "a pure turn redirects momentum without adding to it")
+	var expected_angle: float = cfg.turn_accel / 8.0 * DT
+	assert_almost_eq(atan2(v.z, v.x), expected_angle, 1e-5, "turn rate is turn_accel / speed")
+
+
+func test_turn_never_overshoots_the_stick() -> void:
+	var cfg := _clean_cfg()
+	cfg.max_turn_rate = 1000.0
+	var v: Vector3 = SkaterMovementRules.apply_movement(
+		Vector3(1, 0, 0), Vector2(1, 0.01), -PI / 2.0, false, false, 0.5, cfg)
+	assert_almost_eq(atan2(v.z, v.x), atan2(0.01, 1.0), 1e-4, "lands on the stick, not past it")
+
+
+func test_turn_rate_capped_at_low_speed() -> void:
+	var cfg := _clean_cfg()
+	var v: Vector3 = SkaterMovementRules.apply_movement(
+		Vector3(1, 0, 0), Vector2(0, 1), -PI / 2.0, false, false, DT, cfg)
+	assert_almost_eq(atan2(v.z, v.x), cfg.max_turn_rate * DT, 1e-5, "max_turn_rate binds at low speed")
+
+
+func test_grip_scales_the_turn() -> void:
+	var cfg := _clean_cfg()
+	var grippy := _clean_cfg()
+	grippy.lateral_grip = 1.1
+	var loose := _clean_cfg()
+	loose.lateral_grip = 0.9
+	var a_neutral: float = atan2(SkaterMovementRules.apply_movement(
+		Vector3(8, 0, 0), Vector2(0, 1), -PI / 2.0, false, false, DT, cfg).z, 8.0)
+	var a_grippy: float = atan2(SkaterMovementRules.apply_movement(
+		Vector3(8, 0, 0), Vector2(0, 1), -PI / 2.0, false, false, DT, grippy).z, 8.0)
+	var a_loose: float = atan2(SkaterMovementRules.apply_movement(
+		Vector3(8, 0, 0), Vector2(0, 1), -PI / 2.0, false, false, DT, loose).z, 8.0)
+	assert_gt(a_grippy, a_neutral, "better edges turn tighter")
+	assert_lt(a_loose, a_neutral, "worse edges turn wider")
+
+
+func test_grip_does_not_touch_straight_drive_or_stops() -> void:
+	var cfg := _clean_cfg()
+	var loose := _clean_cfg()
+	loose.lateral_grip = 0.85
+	for brake: bool in [false, true]:
+		var a: Vector3 = SkaterMovementRules.apply_movement(
+			Vector3(5, 0, 0), Vector2(1, 0), -PI / 2.0, false, brake, DT, cfg)
+		var b: Vector3 = SkaterMovementRules.apply_movement(
+			Vector3(5, 0, 0), Vector2(1, 0), -PI / 2.0, false, brake, DT, loose)
+		assert_eq(a, b, "grip only governs turning (brake=%s)" % brake)
+
+
+func test_standing_start_pushes_freely_in_any_direction() -> void:
+	var cfg := _clean_cfg()
+	var v: Vector3 = SkaterMovementRules.apply_movement(
+		Vector3(0.2, 0, 0), Vector2(0, 1), 0.0, false, false, DT, cfg)
+	assert_gt(v.z, 0.0, "below GRIP_MIN_SPEED the push goes where the stick says")
+	assert_almost_eq(v.x, 0.2, 1e-5, "with no turn law at a standstill")
+
+
+# ── Brake: hockey stop and tight turn ────────────────────────────────────────
+
+func test_brake_alone_is_a_stop() -> void:
+	var cfg := _clean_cfg()
+	var v: Vector3 = SkaterMovementRules.apply_movement(
+		Vector3(8, 0, 0), Vector2.ZERO, -PI / 2.0, false, true, DT, cfg)
+	assert_almost_eq(v.x, 8.0 - cfg.stop_decel * DT, 1e-4, "brake decelerates at stop_decel")
+
+
+func test_brake_with_stick_along_travel_is_a_stop() -> void:
+	var cfg := _clean_cfg()
+	var v: Vector3 = SkaterMovementRules.apply_movement(
+		Vector3(8, 0, 0), Vector2(1, 0), -PI / 2.0, false, true, DT, cfg)
+	assert_almost_eq(v.x, 8.0 - cfg.stop_decel * DT, 1e-4,
+		"holding the stick on while braking still stops")
+
+
+func test_brake_with_stick_behind_is_a_stop() -> void:
+	var cfg := _clean_cfg()
+	var v: Vector3 = SkaterMovementRules.apply_movement(
+		Vector3(8, 0, 0), Vector2(-1, -1).normalized(), -PI / 2.0, false, true, DT, cfg)
+	assert_almost_eq(_speed(v), 8.0 - cfg.stop_decel * DT, 1e-4, "stick 135° back while braking: full stop")
+
+
+func test_brake_with_side_stick_is_a_tight_turn() -> void:
+	var cfg := _clean_cfg()
+	var turn: Vector3 = SkaterMovementRules.apply_movement(
+		Vector3(8, 0, 0), Vector2(0, 1), -PI / 2.0, false, false, DT, cfg)
+	var tight: Vector3 = SkaterMovementRules.apply_movement(
+		Vector3(8, 0, 0), Vector2(0, 1), -PI / 2.0, false, true, DT, cfg)
+	assert_almost_eq(atan2(tight.z, tight.x), atan2(turn.z, turn.x) * cfg.tight_turn_multiplier, 1e-5,
+		"digging in turns tight_turn_multiplier× harder")
+	assert_almost_eq(_speed(tight), 8.0 - cfg.tight_turn_decel * DT, 1e-4,
+		"and bleeds tight_turn_decel, not a full stop")
+
+
+func test_tight_turn_blends_to_stop_as_it_lines_up() -> void:
+	var cfg := _clean_cfg()
+	var half_aligned := Vector2(cos(cfg.tight_turn_align_angle * 0.5), sin(cfg.tight_turn_align_angle * 0.5))
+	var v: Vector3 = SkaterMovementRules.apply_movement(
+		Vector3(8, 0, 0), half_aligned, -PI / 2.0, false, true, DT, cfg)
+	var expected_decel: float = lerpf(cfg.stop_decel, cfg.tight_turn_decel, 0.5)
+	assert_almost_eq(_speed(v), 8.0 - expected_decel * DT, 1e-4, "halfway into the align window: half stop")
+
+
+# ── Backward skating ─────────────────────────────────────────────────────────
+
+func test_backward_top_speed_is_capped() -> void:
 	var cfg := _default_cfg()
-	cfg.lateral_grip = 0.85
-	var vel := Vector3(5, 0, 0)
-	# Thrust dead along the motion: identical to neutral.
-	var straight: Vector3 = SkaterMovementRules.apply_movement(
-		vel, Vector2(1, 0), PI / 2.0, false, false, 1.0 / 120.0, cfg)
-	var straight_neutral: Vector3 = SkaterMovementRules.apply_movement(
-		vel, Vector2(1, 0), PI / 2.0, false, false, 1.0 / 120.0, _default_cfg())
-	assert_eq(straight, straight_neutral, "parallel thrust passes whole")
-	# Thrust dead against the motion (slowing down): also untouched — grip
-	# limits redirecting momentum, never shedding it.
-	var slow: Vector3 = SkaterMovementRules.apply_movement(
-		vel, Vector2(-1, 0), PI / 2.0, false, false, 1.0 / 120.0, cfg)
-	var slow_neutral: Vector3 = SkaterMovementRules.apply_movement(
-		vel, Vector2(-1, 0), PI / 2.0, false, false, 1.0 / 120.0, _default_cfg())
-	assert_eq(slow, slow_neutral, "decelerating thrust passes whole")
+	cfg.backward_max_speed_multiplier = 0.7
+	var v := Vector3.ZERO
+	# Facing -Z (rotation 0), skating +Z: travel runs against facing.
+	for _i in 1200:
+		v = SkaterMovementRules.apply_movement(v, Vector2(0, 1), 0.0, false, false, DT, cfg)
+	assert_almost_eq(_speed(v), cfg.max_speed * 0.7, 0.2, "backward skating tops out lower")
 
 
-func test_grip_skipped_at_standing_start() -> void:
-	# Below GRIP_MIN_SPEED there is no momentum to fight — full authority, so a
-	# heavy build's first step off the mark is accel's business, not grip's.
+func test_turning_around_at_speed_glides_rather_than_clamps() -> void:
+	# Swinging facing around at full speed doesn't yank speed down to the
+	# backward cap — the stride just stops adding; glide does the rest.
 	var cfg := _default_cfg()
-	cfg.lateral_grip = 0.85
-	var from_rest: Vector3 = SkaterMovementRules.apply_movement(
-		Vector3.ZERO, Vector2(0, 1), 0.0, false, false, 1.0 / 120.0, cfg)
-	var from_rest_neutral: Vector3 = SkaterMovementRules.apply_movement(
-		Vector3.ZERO, Vector2(0, 1), 0.0, false, false, 1.0 / 120.0, _default_cfg())
-	assert_eq(from_rest, from_rest_neutral, "standing start ignores grip")
-
-
-func test_high_grip_tightens_the_turn() -> void:
-	# Better edges bite harder: grip above 1.0 redirects more per tick.
-	var cfg := _default_cfg()
-	cfg.lateral_grip = 1.08
-	var vel := Vector3(8, 0, 0)
-	var neutral: Vector3 = SkaterMovementRules.apply_movement(
-		vel, Vector2(0, 1), 0.0, false, false, 1.0 / 120.0, _default_cfg())
-	var sharp: Vector3 = SkaterMovementRules.apply_movement(
-		vel, Vector2(0, 1), 0.0, false, false, 1.0 / 120.0, cfg)
-	assert_gt(sharp.z, neutral.z, "high grip turns more per tick")
+	cfg.backward_max_speed_multiplier = 0.7
+	var v: Vector3 = SkaterMovementRules.apply_movement(
+		Vector3(0, 0, 9.5), Vector2(0, 1), 0.0, false, false, DT, cfg)
+	assert_gt(_speed(v), cfg.max_speed * 0.7, "speed above the backward cap survives the tick")
+	assert_lt(_speed(v), 9.5, "but the stride can't add to it")

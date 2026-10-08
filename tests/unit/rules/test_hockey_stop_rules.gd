@@ -1,59 +1,10 @@
 extends GutTest
 
-# HockeyStopRules — pure decisions for the cosmetic hockey-stop pose.
-# Frame convention: −Z forward, +X right; effort in [−1, +1] with −1 =
-# braking hard; yaw is lower-body rotation.y (positive = legs toward −X).
+# HockeyStopRules — the hockey stop's side latch and hip yaw.
+# Frame convention: −Z forward, +X right; yaw is lower-body rotation.y
+# (positive = legs toward −X).
 
-const THR: float = 0.55      # engage effort fraction
-const MIN_SPEED: float = 3.0
 const MAX_YAW: float = 70.0 * PI / 180.0
-
-
-# ── Engagement ────────────────────────────────────────────────────────────────
-
-func test_engages_when_braking_hard_at_speed() -> void:
-	assert_true(HockeyStopRules.should_engage(-0.8, 6.0, THR, MIN_SPEED, true))
-
-
-func test_no_engage_when_coasting() -> void:
-	# Coast/glide decel never reaches the effort bar.
-	assert_false(HockeyStopRules.should_engage(-0.3, 6.0, THR, MIN_SPEED, true))
-
-
-func test_no_engage_below_speed_floor() -> void:
-	assert_false(HockeyStopRules.should_engage(-1.0, 1.0, THR, MIN_SPEED, true))
-
-
-func test_no_engage_while_driving() -> void:
-	assert_false(HockeyStopRules.should_engage(0.9, 8.0, THR, MIN_SPEED, true))
-
-
-# ── Release hysteresis ────────────────────────────────────────────────────────
-
-func test_holds_between_engage_and_release_bounds() -> void:
-	# Effort recovered above the engage bar but below the release bar:
-	# an engaged stop must HOLD (no chatter at the threshold).
-	var effort: float = -THR * 0.7
-	assert_false(HockeyStopRules.should_engage(effort, 6.0, THR, MIN_SPEED, true))
-	assert_false(HockeyStopRules.should_release(effort, 6.0, THR, MIN_SPEED, true))
-
-
-func test_releases_when_brake_eases_off() -> void:
-	assert_true(HockeyStopRules.should_release(-0.1, 6.0, THR, MIN_SPEED, true))
-
-
-func test_releases_when_stopped() -> void:
-	assert_true(HockeyStopRules.should_release(-1.0, 0.5, THR, MIN_SPEED, true))
-
-
-func test_no_engage_without_brake_held() -> void:
-	# Wall/body impacts decelerate just as hard as a stop — but nobody chose
-	# one. The brake input is what makes it deliberate (v15 intent byte).
-	assert_false(HockeyStopRules.should_engage(-1.0, 6.0, THR, MIN_SPEED, false))
-
-
-func test_releases_when_brake_dropped() -> void:
-	assert_true(HockeyStopRules.should_release(-1.0, 6.0, THR, MIN_SPEED, false))
 
 
 # ── Side latch ────────────────────────────────────────────────────────────────

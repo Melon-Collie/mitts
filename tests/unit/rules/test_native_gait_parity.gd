@@ -1,59 +1,58 @@
 extends GutTest
 
-# Stateful parity: NativeSkaterGait (C++ GDExtension, native/src/) against the
-# GDScript reference SkaterSkatingCoordinator, driven side by side through the
-# same input sequences on a real Skater scene + SkaterController. Both solvers
-# carry ~40 floats of smoothed internal state, so parity is checked EVERY step
-# of every scenario — a logic divergence compounds and trips within a few
-# frames of where it happens.
+# Stateful parity: NativeSkaterGait (native/src/) against its GDScript reference.
+# Two SkaterSkatingCoordinators share one skater and controller — one wired to
+# the port, one with its handle nulled so it runs SkaterLocomotion, the
+# alignment and pivot read and GaitPose — and every step both publish into a
+# CaptureSkater whose pose writes land in fields instead of bones. The port
+# carries ~50 floats of smoothed state, so parity is checked EVERY step: a
+# divergence compounds and trips within a few frames of where it happens.
 #
-# The CaptureSkater subclass swaps in for the scene's script before _ready so
-# the GDScript coordinator's three pose writes land in inspectable fields
-# instead of skeleton bone poses. Goes pending when the extension isn't built.
+# The overlay layers run in GDScript on both sides, so the overlay scenarios
+# check the other half of the boundary: a pass a layer shapes solves the pose in
+# GaitPose from the port's stroke.
 
 const State = SkaterStateMachine.State
-const DELTA: float = 1.0 / 120.0
 const TOLERANCE: float = 0.001
 const SEED: int = 0x47414954  # "GAIT"
 
-# NativeSkaterGait.apply flag bits.
-const F_BRAKE: int = 1
-const F_HIT: int = 2
-const F_BLADE_UP: int = 4
-const F_LEFTY: int = 8
-const F_SPRINT: int = 16
-const F_FACEOFF: int = 32
-
 
 class CaptureSkater extends Skater:
-	var cap_leg: PackedFloat64Array = PackedFloat64Array([0, 0, 0, 0, 0, 0, 0, 0])
-	var cap_flat: PackedFloat64Array = PackedFloat64Array([0, 0])
-	var cap_crouch: float = 0.0
+	var cap := PackedFloat64Array()
+
+	func _init() -> void:
+		cap.resize(17)
 
 	func set_leg_swing(left_pitch: float, left_roll: float, left_knee: float,
 			right_pitch: float, right_roll: float, right_knee: float,
 			left_yaw: float = 0.0, right_yaw: float = 0.0) -> void:
-		cap_leg[0] = left_pitch
-		cap_leg[1] = left_roll
-		cap_leg[2] = left_knee
-		cap_leg[3] = right_pitch
-		cap_leg[4] = right_roll
-		cap_leg[5] = right_knee
-		cap_leg[6] = left_yaw
-		cap_leg[7] = right_yaw
+		cap[0] = left_pitch
+		cap[1] = left_roll
+		cap[2] = left_knee
+		cap[3] = right_pitch
+		cap[4] = right_roll
+		cap[5] = right_knee
+		cap[6] = left_yaw
+		cap[7] = right_yaw
 
 	func set_ankle_flatten(left: float, right: float) -> void:
-		cap_flat[0] = left
-		cap_flat[1] = right
-
-	var cap_edge: PackedFloat64Array = PackedFloat64Array([0, 0])
+		cap[8] = left
+		cap[9] = right
 
 	func set_edge_loads(left: float, right: float) -> void:
-		cap_edge[0] = left
-		cap_edge[1] = right
+		cap[10] = left
+		cap[11] = right
 
-	func set_skating_crouch_drop(drop: float) -> void:
-		cap_crouch = drop
+	func set_skating_crouch_drop(drop: float, frame_drop: float = 0.0) -> void:
+		cap[12] = drop
+		cap[16] = frame_drop
+
+	func set_trunk_texture(pitch_add: float, roll_add: float) -> void:
+		cap[13] = pitch_add
+		cap[14] = roll_add
+
+	func set_faceoff_address(blend: float) -> void:
+		cap[15] = blend
 
 
 class StubGameState extends Node:
@@ -69,419 +68,243 @@ class StubGameState extends Node:
 		return faceoff_prep
 
 
+const _CAP_NAMES: Array[String] = ["l_pitch", "l_roll", "l_knee", "r_pitch", "r_roll",
+		"r_knee", "l_yaw", "r_yaw", "flat_l", "flat_r", "edge_l", "edge_r", "crouch",
+		"trunk_pitch", "trunk_roll", "address", "frame_drop"]
+
 var _rng := RandomNumberGenerator.new()
 var _skater: CaptureSkater = null
 var _controller: SkaterController = null
-var _puck: Puck = null
 var _state: StubGameState = null
-var _native: RefCounted = null
-var _configure_missing: String = ""
-var _step_count: int = 0
+var _ref: SkaterSkatingCoordinator = null
+var _nat: SkaterSkatingCoordinator = null
+var _worst: float = 0.0
+var _worst_where: String = ""
+var _steps: int = 0
 
 
-func before_all() -> void:
+func before_each() -> void:
 	if not ClassDB.class_exists(&"NativeSkaterGait"):
 		return
-	_puck = load("res://Scenes/Puck.tscn").instantiate() as Puck
-	add_child(_puck)
-	_puck.global_position = Vector3(20.0, 0.0, 20.0)
-
-	var skater_node: Node = load("res://Scenes/Skater.tscn").instantiate()
-	skater_node.set_script(CaptureSkater)
-	_skater = skater_node as CaptureSkater
-	add_child(_skater)
+	_rng.seed = SEED
+	var puck: Puck = load("res://Scenes/Puck.tscn").instantiate() as Puck
+	add_child_autofree(puck)
+	puck.global_position = Vector3(20.0, 0.0, 20.0)
+	var node: Node = load("res://Scenes/Skater.tscn").instantiate()
+	node.set_script(CaptureSkater)
+	_skater = node as CaptureSkater
+	add_child_autofree(_skater)
 	_skater.global_position = Vector3(2.0, GameRules.FACEOFF_SPAWN_HEIGHT, 8.0)
-
 	_state = StubGameState.new()
-	add_child(_state)
-
+	add_child_autofree(_state)
 	_controller = SkaterController.new()
-	add_child(_controller)
-	_controller.setup(_skater, _puck, _state)
-	# The coordinator is now WIRED to the native port — null its handle so the
-	# reference side of this parity suite runs the actual GDScript body instead
-	# of comparing the native port against itself.
-	_controller._skating._native = null
-	# GUT yields frames between test functions; a live controller would tick
-	# the GDScript gait during those frames while the native one stands still,
-	# permanently offsetting the stride phase. All stepping here is explicit.
+	add_child_autofree(_controller)
+	_controller.setup(_skater, puck, _state)
+	# All stepping is explicit: a live controller would tick its own gait in the
+	# frames GUT yields between tests.
 	_controller.set_process(false)
 	_controller.set_physics_process(false)
 	_skater.set_process(false)
 	_skater.set_physics_process(false)
-
-	_native = ClassDB.instantiate(&"NativeSkaterGait")
-	_native.set_state_ids(
-			State.SKATING_WITH_PUCK, State.SKATING_WITHOUT_PUCK,
-			State.SHOT_BLOCKING, State.FOLLOW_THROUGH, State.WRISTER_AIM,
-			State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK,
-			State.ONE_TIMER_RETENTION)
-	_native.set_leg_scale(_controller._skating.leg_scale)
-	_configure_missing = _native.configure(_controller)
-
-
-func after_all() -> void:
-	if _controller != null:
-		_controller.free()
-	if _skater != null:
-		_skater.free()
-	if _puck != null:
-		_puck.free()
-	if _state != null:
-		_state.free()
+	_ref = SkaterSkatingCoordinator.new()
+	_ref.setup(_skater, SkaterStateMachine.new(), _controller)
+	_ref._native = null
+	_nat = SkaterSkatingCoordinator.new()
+	_nat.setup(_skater, SkaterStateMachine.new(), _controller)
+	_worst = 0.0
+	_worst_where = ""
+	_steps = 0
 
 
 func _native_missing() -> bool:
-	if _native != null:
+	if ClassDB.class_exists(&"NativeSkaterGait") and _nat != null and _nat._native != null:
 		return false
 	NativeParityGuard.report_missing(self, "NativeSkaterGait")
 	return true
 
 
-func _gd() -> SkaterSkatingCoordinator:
-	return _controller._skating
-
-
-# Runs both implementations one step from the same posed inputs, then compares
-# every output channel. Returns false (after failing the test) on divergence
-# so callers can bail out of long loops.
+# One render pass on both sides; returns false at the first divergence (and
+# fails the test with where it happened).
 func _step(delta: float, label: String) -> bool:
-	_gd().apply(delta)
-	var flags: int = 0
-	if _skater.brake_intent:
-		flags |= F_BRAKE
-	if _skater.hit_committed:
-		flags |= F_HIT
-	if _skater.blade_up:
-		flags |= F_BLADE_UP
-	if _skater.is_left_handed:
-		flags |= F_LEFTY
-	if _controller.sprint_active:
-		flags |= F_SPRINT
-	if _controller.is_faceoff_ready():
-		flags |= F_FACEOFF
-	var code: int = _native.apply(delta, _skater.velocity,
-			_skater.global_transform.basis, _skater.move_intent,
-			_skater.current_shot_state, _skater.shot_charge,
-			_controller.stagger_timer, _controller.knockdown_timer,
-			_controller.knockdown_elapsed(),
-			_controller.celebration_progress(), flags)
-	_step_count += 1
+	_steps += 1
+	_ref.apply(delta)
+	var want: PackedFloat64Array = _skater.cap.duplicate()
+	var want_pub: PackedFloat64Array = _published(_ref)
+	_nat.apply(delta)
+	var got: PackedFloat64Array = _skater.cap
+	var got_pub: PackedFloat64Array = _published(_nat)
+	for i: int in want.size():
+		if not _close(want[i], got[i], "%s step %d %s" % [label, _steps, _CAP_NAMES[i]]):
+			return false
+	var pub_names: Array[String] = ["stop_yaw", "travel_align_yaw", "pivot_hold",
+			"faceoff_blend", "shot_hip_yaw", "crouch_drop"]
+	for i: int in pub_names.size():
+		if not _close(want_pub[i], got_pub[i], "%s step %d %s" % [label, _steps, pub_names[i]]):
+			return false
+	return _close(0.0, angle_difference(_ref.stride_phase, _nat.stride_phase),
+			"%s step %d stride_phase" % [label, _steps])
 
-	var where: String = "%s @ step %d" % [label, _step_count]
-	if _gd()._settled != (code != 0):
-		fail_test("settle mismatch (%s): gd=%s native_code=%d" % [
-				where, _gd()._settled, code])
+
+func _published(c: SkaterSkatingCoordinator) -> PackedFloat64Array:
+	return PackedFloat64Array([c.stop_yaw_offset, c.travel_align_yaw, c.pivot_hold,
+			c.faceoff_blend, c.shot_hip_yaw, c.crouch_drop])
+
+
+func _close(want: float, got: float, where: String) -> bool:
+	var err: float = absf(want - got)
+	if err > _worst:
+		_worst = err
+		_worst_where = where
+	if err > TOLERANCE:
+		fail_test("native gait diverged at %s: GDScript %.6f, native %.6f" % [where, want, got])
 		return false
-	if code != 0:
-		return true
+	return true
 
-	var pairs: Array = [
-		["l_pitch", _skater.cap_leg[0], _native.get_l_pitch()],
-		["l_roll", _skater.cap_leg[1], _native.get_l_roll()],
-		["l_knee", _skater.cap_leg[2], _native.get_l_knee()],
-		["r_pitch", _skater.cap_leg[3], _native.get_r_pitch()],
-		["r_roll", _skater.cap_leg[4], _native.get_r_roll()],
-		["r_knee", _skater.cap_leg[5], _native.get_r_knee()],
-		["l_yaw", _skater.cap_leg[6], _native.get_l_yaw()],
-		["r_yaw", _skater.cap_leg[7], _native.get_r_yaw()],
-		["faceoff_blend", _gd().faceoff_blend, _native.get_faceoff_blend()],
-		["ankle_flat_l", _skater.cap_flat[0], _native.get_foot_flat_l()],
-		["ankle_flat_r", _skater.cap_flat[1], _native.get_foot_flat_r()],
-		["edge_l", _skater.cap_edge[0], _native.get_edge_load_l()],
-		["edge_r", _skater.cap_edge[1], _native.get_edge_load_r()],
-		["crouch", _skater.cap_crouch, _native.get_crouch_drop()],
-		["trunk_pitch", _gd().trunk_pitch_add, _native.get_trunk_pitch_add()],
-		["trunk_roll", _gd().trunk_roll_add, _native.get_trunk_roll_add()],
-		["stop_yaw", _gd().stop_yaw_offset, _native.get_stop_yaw_offset()],
-		["travel_yaw", _gd().travel_align_yaw, _native.get_travel_align_yaw()],
-		["shot_hip_yaw", _gd().shot_hip_yaw, _native.get_shot_hip_yaw()],
-	]
-	for p: Array in pairs:
-		var err: float = absf((p[1] as float) - (p[2] as float))
-		if err > TOLERANCE:
-			fail_test("%s diverged (%s): gd=%.6f native=%.6f err=%.6f" % [
-					p[0], where, p[1], p[2], err])
+
+func _report(label: String) -> void:
+	gut.p("%s: %d steps, worst |Δ| %s at %s" % [label, _steps,
+			String.num_scientific(_worst), _worst_where])
+	assert_lt(_worst, TOLERANCE, "%s stayed within tolerance" % label)
+
+
+func _random_delta() -> float:
+	# Render rates from 40 to 240 fps; the velocity below only steps on some of
+	# them, as it does between physics ticks.
+	return 1.0 / _rng.randf_range(40.0, 240.0)
+
+
+func _drive_skating(steps: int, label: String) -> bool:
+	var vel := Vector3(_rng.randf_range(-4.0, 4.0), 0.0, _rng.randf_range(-4.0, 4.0))
+	var heading: float = _rng.randf_range(-PI, PI)
+	var segment: int = 0
+	for _i: int in steps:
+		if segment <= 0:
+			segment = _rng.randi_range(10, 90)
+			var r: float = _rng.randf()
+			if r < 0.15:
+				_skater.move_intent = Vector2.ZERO
+			else:
+				_skater.move_intent = Vector2.from_angle(_rng.randf_range(-PI, PI))
+			_skater.brake_intent = _rng.randf() < 0.15
+			_controller.sprint_active = _rng.randf() < 0.2
+		segment -= 1
+		# Velocity steps on roughly two of three passes, toward the intent.
+		if _rng.randf() < 0.66:
+			var push := Vector3(_skater.move_intent.x, 0.0, _skater.move_intent.y) * 0.12
+			if _skater.brake_intent:
+				push = -vel * 0.05
+			vel = (vel + push + Vector3(_rng.randf_range(-0.05, 0.05), 0.0,
+					_rng.randf_range(-0.05, 0.05))).limit_length(9.0)
+			if _rng.randf() < 0.01:
+				vel = Vector3.ZERO
+		_skater.velocity = vel
+		# Facing wanders, with occasional fast swings across the travel line —
+		# the pivot's trigger.
+		heading += _rng.randf_range(-0.05, 0.05)
+		if _rng.randf() < 0.02:
+			heading += _rng.randf_range(-2.5, 2.5)
+		_skater.set_facing(Vector2(sin(heading), -cos(heading)))
+		if not _step(_random_delta(), label):
 			return false
 	return true
 
 
-func _pose(vel: Vector3, intent: Vector2, yaw: float) -> void:
-	_skater.velocity = vel
-	_skater.move_intent = intent
-	_skater.rotation.y = yaw
-
-
-# Hard resync at each test's start: tests must not depend on what state the
-# previous test (or any stray engine frame) left behind.
-func _resync() -> void:
-	_quiet_pose()
-	_gd().reset_to_rest()
-	_native.reset_to_rest()
-
-
-func _quiet_pose() -> void:
-	_pose(Vector3.ZERO, Vector2.ZERO, 0.0)
-	_skater.brake_intent = false
-	_skater.current_shot_state = State.SKATING_WITHOUT_PUCK
-	_skater.shot_charge = 0.0
-	_skater.hit_committed = false
-	_skater.blade_up = false
-	_controller.sprint_active = false
-	_controller.stagger_timer = 0.0
-	_controller.knockdown_timer = 0.0
-	_controller._knockdown_total = 0.0
-	_controller._celebration_timer = 0.0
-	_state.faceoff_prep = false
-
-
-# Every tunable the port reads must exist on the controller by its exact
-# @export name — a rename on either side fails here, not as silent drift.
-func test_configure_finds_every_tunable() -> void:
+func test_skating_parity() -> void:
 	if _native_missing():
 		return
-	assert_eq(_configure_missing, "", "controller properties missing: %s" % _configure_missing)
+	if _drive_skating(4000, "skating"):
+		_report("skating")
 
 
-func test_scripted_scenarios_match() -> void:
+func test_pivot_parity() -> void:
 	if _native_missing():
 		return
-	_rng.seed = SEED
-	_resync()
-
-	# Skate forward with acceleration (effort/push paths), then glide out.
-	var vel := Vector3.ZERO
-	for i: int in 240:
-		vel = vel.move_toward(Vector3(3.0, 0.0, -5.5), 6.0 * DELTA)
-		_pose(vel, Vector2(0.4, -0.9), 0.1)
-		if not _step(DELTA, "accelerate"):
-			return
-	for i: int in 180:
-		vel = vel.move_toward(Vector3(1.5, 0.0, -2.5), 1.2 * DELTA)
-		_pose(vel, Vector2.ZERO, 0.1)
-		if not _step(DELTA, "glide"):
-			return
-
-	# Carve: velocity direction sweeps while intent holds across travel.
-	for i: int in 300:
-		var ang: float = 0.9 * float(i) * DELTA
-		vel = Vector3(sin(ang), 0.0, -cos(ang)) * 5.0
-		_pose(vel, Vector2(1.0, 0.0), ang * 0.8)
-		if not _step(DELTA, "carve"):
-			return
-
-	# Hockey stop: brake hard from speed (effort collapses, stop pose latches).
-	_skater.brake_intent = true
-	for i: int in 160:
-		vel = vel.move_toward(Vector3.ZERO, 9.0 * DELTA)
-		_pose(vel, Vector2.ZERO, 0.6)
-		if not _step(DELTA, "hockey stop"):
-			return
-	_skater.brake_intent = false
-
-	# Backpedal and shuffle (aim-locked stances).
-	for i: int in 160:
-		vel = vel.move_toward(Vector3(0.0, 0.0, 3.0), 4.0 * DELTA)
-		_pose(vel, Vector2(0.0, 1.0), 0.0)
-		if not _step(DELTA, "backpedal"):
-			return
-	for i: int in 160:
-		vel = vel.move_toward(Vector3(1.2, 0.0, 0.0), 4.0 * DELTA)
-		_pose(vel, Vector2(1.0, 0.0), 0.0)
-		if not _step(DELTA, "shuffle"):
-			return
-
-	# Sprint burst.
-	_controller.sprint_active = true
-	for i: int in 200:
-		vel = vel.move_toward(Vector3(0.0, 0.0, -8.5), 7.0 * DELTA)
-		_pose(vel, Vector2(0.0, -1.0), 0.0)
-		if not _step(DELTA, "sprint"):
-			return
-	_controller.sprint_active = false
-	pass_test("all scripted skating scenarios in lockstep within %f" % TOLERANCE)
-
-
-func test_shot_and_contact_paths_match() -> void:
-	if _native_missing():
-		return
-	_rng.seed = SEED + 1
-	_resync()
-	var vel := Vector3(1.0, 0.0, -2.0)
-
-	# Wrister: aim + charge -> follow-through -> back to skating.
-	_skater.current_shot_state = State.WRISTER_AIM
-	for i: int in 90:
-		_skater.shot_charge = minf(float(i) / 60.0, 1.0)
-		_pose(vel, Vector2(0.2, -0.5), 0.2)
-		if not _step(DELTA, "wrister aim"):
-			return
-	_skater.current_shot_state = State.FOLLOW_THROUGH
-	for i: int in 60:
-		_pose(vel, Vector2.ZERO, 0.2)
-		if not _step(DELTA, "wrister follow-through"):
-			return
-	_skater.current_shot_state = State.SKATING_WITH_PUCK
-	_skater.shot_charge = 0.0
-
-	# Slapper: wind-up -> retention -> follow-through.
-	_skater.current_shot_state = State.SLAPPER_CHARGE_WITH_PUCK
-	for i: int in 80:
-		_skater.shot_charge = minf(float(i) / 70.0, 1.0)
-		_pose(vel, Vector2.ZERO, 0.2)
-		if not _step(DELTA, "slap charge"):
-			return
-	_skater.current_shot_state = State.ONE_TIMER_RETENTION
-	for i: int in 30:
-		if not _step(DELTA, "retention"):
-			return
-	_skater.current_shot_state = State.FOLLOW_THROUGH
-	for i: int in 70:
-		if not _step(DELTA, "slap follow-through"):
-			return
-	_skater.current_shot_state = State.SKATING_WITHOUT_PUCK
-	_skater.shot_charge = 0.0
-
-	# Shot block: one-knee drop in and out (foot eversion path).
-	_skater.current_shot_state = State.SHOT_BLOCKING
-	for i: int in 120:
-		_pose(Vector3.ZERO, Vector2.ZERO, 0.2)
-		if not _step(DELTA, "block"):
-			return
-	_skater.current_shot_state = State.SKATING_WITHOUT_PUCK
-	for i: int in 80:
-		if not _step(DELTA, "block release"):
-			return
-
-	# Check drive (same event injected into both), commit, stick lift.
-	var dir := Vector3(0.7, 0.0, -0.7)
-	_gd().start_check_drive(dir, 0.9)
-	_native.start_check_drive(dir, 0.9)
-	for i: int in 100:
-		_pose(vel, Vector2(0.3, -0.8), 0.2)
-		if not _step(DELTA, "check drive"):
-			return
-	_skater.hit_committed = true
-	_skater.blade_up = true
-	for i: int in 100:
-		if not _step(DELTA, "commit + lift"):
-			return
-	_skater.hit_committed = false
-	_skater.blade_up = false
-
-	# Stagger, then knockdown layered over it.
-	_controller.stagger_timer = 1.4
-	for i: int in 80:
-		_controller.stagger_timer = maxf(_controller.stagger_timer - DELTA, 0.0)
-		if not _step(DELTA, "stagger"):
-			return
-	# The window total feeds knockdown_elapsed(), which drives the entry ramp —
-	# maintained here the way apply_knockdown/_sync_knockdown_meta would.
-	_controller.knockdown_timer = 1.2
-	_controller._knockdown_total = 1.2
-	for i: int in 120:
-		_controller.stagger_timer = maxf(_controller.stagger_timer - DELTA, 0.0)
-		_controller.knockdown_timer = maxf(_controller.knockdown_timer - DELTA, 0.0)
-		if not _step(DELTA, "knockdown"):
-			return
-
-	# Faceoff ready stance, then celebration bounce.
-	_state.faceoff_prep = true
-	_pose(Vector3.ZERO, Vector2.ZERO, 0.0)
-	for i: int in 150:
-		if not _step(DELTA, "faceoff"):
-			return
-	_state.faceoff_prep = false
-	_controller.start_celebration(1.5)
-	for i: int in 150:
-		_controller._celebration_timer = maxf(_controller._celebration_timer - DELTA, 0.0)
-		if not _step(DELTA, "celebration"):
-			return
-	_controller._celebration_timer = 0.0
-	pass_test("all shot/contact/timer paths in lockstep within %f" % TOLERANCE)
-
-
-func test_settle_and_reset_match() -> void:
-	if _native_missing():
-		return
-	_resync()
-	# Some motion first so there's state to settle from.
-	for i: int in 120:
-		_pose(Vector3(2.0, 0.0, -2.0), Vector2(0.5, -0.5), 0.0)
-		if not _step(DELTA, "pre-settle motion"):
-			return
-	# Quiet for well past the settle window: both must settle in lockstep.
-	_quiet_pose()
-	for i: int in 200:
-		if not _step(DELTA, "settling"):
-			return
-	assert_true(_gd()._settled, "GDScript gait settled")
-	assert_true(_native.is_settled(), "native gait settled")
-	# Any input wakes both the same frame.
-	_pose(Vector3.ZERO, Vector2(0.0, -1.0), 0.0)
-	for i: int in 60:
-		if not _step(DELTA, "wake"):
-			return
-	assert_false(_gd()._settled, "GDScript gait woke")
-	# Explicit teleport reset, injected into both.
-	_gd().reset_to_rest()
-	_native.reset_to_rest()
-	for i: int in 60:
-		_pose(Vector3(1.0, 0.0, -1.0), Vector2(0.4, -0.4), 0.3)
-		if not _step(DELTA, "post-reset"):
-			return
-
-
-func test_chaos_fuzz_matches() -> void:
-	if _native_missing():
-		return
-	_rng.seed = SEED + 2
-	_resync()
-	var states: Array[int] = [
-		State.SKATING_WITH_PUCK, State.SKATING_WITHOUT_PUCK,
-		State.SHOT_BLOCKING, State.FOLLOW_THROUGH, State.WRISTER_AIM,
-		State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK,
-		State.ONE_TIMER_RETENTION,
-	]
-	var vel := Vector3.ZERO
-	var yaw: float = 0.0
-	var steps_done: int = 0
-	while steps_done < 2400:
-		# Dwell on a random scenario for a stretch, like real play does.
-		var dwell: int = _rng.randi_range(5, 45)
-		var target_vel := Vector3(_rng.randf_range(-8.0, 8.0), 0.0, _rng.randf_range(-8.0, 8.0))
-		var intent := Vector2.ZERO
-		if _rng.randf() < 0.75:
-			var oct: int = _rng.randi_range(0, 7)
-			intent = Vector2(sin(oct * PI / 4.0), -cos(oct * PI / 4.0))
-		var yaw_rate: float = _rng.randf_range(-2.0, 2.0)
-		_skater.brake_intent = _rng.randf() < 0.15
-		_controller.sprint_active = _rng.randf() < 0.2
-		_skater.hit_committed = _rng.randf() < 0.1
-		_skater.blade_up = _rng.randf() < 0.1
-		_state.faceoff_prep = _rng.randf() < 0.05
-		if _rng.randf() < 0.3:
-			_skater.current_shot_state = states[_rng.randi_range(0, states.size() - 1)]
-		_skater.shot_charge = _rng.randf() if _rng.randf() < 0.5 else 0.0
-		if _rng.randf() < 0.08:
-			_controller.stagger_timer = _rng.randf_range(0.2, 1.5)
-		if _rng.randf() < 0.05:
-			_controller.knockdown_timer = _rng.randf_range(0.2, 1.2)
-			_controller._knockdown_total = _controller.knockdown_timer
-		if _rng.randf() < 0.08:
-			var dir := Vector3(_rng.randf_range(-1, 1), 0.0, _rng.randf_range(-1, 1))
-			var hit: float = _rng.randf_range(0.2, 1.0)
-			_gd().start_check_drive(dir, hit)
-			_native.start_check_drive(dir, hit)
-		# Occasional off-rate frame (render hitch) — delta parity isn't 120 Hz-only.
-		var delta: float = DELTA if _rng.randf() < 0.9 else _rng.randf_range(1.0 / 30.0, 1.0 / 20.0)
-		for i: int in dwell:
-			vel = vel.move_toward(target_vel, 8.0 * delta)
-			yaw += yaw_rate * delta
-			_pose(vel, intent, yaw)
-			_controller.stagger_timer = maxf(_controller.stagger_timer - delta, 0.0)
-			_controller.knockdown_timer = maxf(_controller.knockdown_timer - delta, 0.0)
-			if not _step(delta, "chaos"):
+	# Travel held straight, facing swung through the lateral band and back, at
+	# several rates — engage, step-around, release, and an aborted swing.
+	_skater.velocity = Vector3(0.0, 0.0, -6.0)
+	_skater.move_intent = Vector2(0.0, -1.0)
+	for rate: float in [2.0, 5.0, 9.0, -6.0]:
+		var heading: float = 0.0
+		for _i: int in 240:
+			heading = clampf(heading + rate / 120.0, -PI, PI)
+			_skater.set_facing(Vector2(sin(heading), -cos(heading)))
+			if not _step(1.0 / 120.0, "pivot %.0f" % rate):
 				return
-			steps_done += 1
-	pass_test("%d chaos steps in lockstep within %f" % [steps_done, TOLERANCE])
+		for _i: int in 120:
+			heading = move_toward(heading, 0.0, 4.0 / 120.0)
+			_skater.set_facing(Vector2(sin(heading), -cos(heading)))
+			if not _step(1.0 / 120.0, "pivot return %.0f" % rate):
+				return
+	_report("pivot")
+
+
+func test_overlay_parity() -> void:
+	if _native_missing():
+		return
+	var shot_states: Array[int] = [State.SKATING_WITH_PUCK, State.SKATING_WITHOUT_PUCK,
+			State.WRISTER_AIM, State.SLAPPER_CHARGE_WITH_PUCK, State.ONE_TIMER_RETENTION,
+			State.FOLLOW_THROUGH, State.SHOT_BLOCKING]
+	var vel := Vector3(1.0, 0.0, -5.0)
+	for round_i: int in 60:
+		var r: float = _rng.randf()
+		_skater.current_shot_state = shot_states[_rng.randi_range(0, shot_states.size() - 1)]
+		_skater.shot_charge = _rng.randf()
+		_skater.hit_committed = r < 0.15
+		_skater.blade_up = _rng.randf() < 0.15
+		_skater.is_left_handed = _rng.randf() < 0.5
+		_skater.is_faceoff_center = _rng.randf() < 0.5
+		_state.faceoff_prep = _rng.randf() < 0.12
+		if _rng.randf() < 0.15:
+			_controller.set("_knockdown_total", 1.2)
+			_controller.knockdown_timer = 1.2
+		if _rng.randf() < 0.15:
+			_controller.stagger_timer = _rng.randf_range(0.2, _controller.stagger_max_seconds)
+		if _rng.randf() < 0.1:
+			_controller.start_celebration(1.0)
+		if _rng.randf() < 0.2:
+			var hit := Vector3.FORWARD.rotated(Vector3.UP, _rng.randf_range(-PI, PI))
+			var power: float = _rng.randf()
+			_ref.start_check_drive(hit, power)
+			_nat.start_check_drive(hit, power)
+		_skater.move_intent = Vector2.ZERO if r > 0.8 \
+				else Vector2.from_angle(_rng.randf_range(-PI, PI))
+		for _i: int in _rng.randi_range(20, 80):
+			var delta: float = _random_delta()
+			vel = (vel + Vector3(_skater.move_intent.x, 0.0, _skater.move_intent.y) * 0.1) \
+					.limit_length(8.0)
+			_skater.velocity = vel
+			_controller.knockdown_timer = maxf(_controller.knockdown_timer - delta, 0.0)
+			_controller.stagger_timer = maxf(_controller.stagger_timer - delta, 0.0)
+			_controller.tick_celebration(delta)
+			if not _step(delta, "overlays round %d" % round_i):
+				return
+	_report("overlays")
+
+
+func test_reset_settle_and_reconfigure_parity() -> void:
+	if _native_missing():
+		return
+	if not _drive_skating(400, "before reset"):
+		return
+	# A teleport resets both mid-stride.
+	_ref.reset_to_rest()
+	_nat.reset_to_rest()
+	if not _drive_skating(400, "after reset"):
+		return
+	# Quiet long enough to settle, then wake.
+	_skater.velocity = Vector3.ZERO
+	_skater.move_intent = Vector2.ZERO
+	_skater.brake_intent = false
+	_controller.sprint_active = false
+	for _i: int in 200:
+		if not _step(1.0 / 120.0, "settling"):
+			return
+	assert_true(_nat._settled and _ref._settled, "both sides settled")
+	# Attribute scaling rewrites tunables; the port reloads them.
+	_controller.max_speed *= 1.1
+	_controller.stride_pitch_deg *= 0.9
+	_nat.native_reconfigure()
+	_ref.leg_scale = 1.07
+	_nat.leg_scale = 1.07
+	if _drive_skating(800, "reconfigured"):
+		_report("reset, settle and reconfigure")

@@ -311,6 +311,56 @@ func test_skater_stamina_quantizes_within_tolerance() -> void:
 		assert_almost_eq(dec.stamina, v, 1.0 / 255.0, "stamina %f round-trips within u8 tolerance" % v)
 
 
+# The balance lean places the UpperBody frame the wire's blade and hand are
+# local to, so a receiver must land on the sender's lean to the wire's precision.
+func test_skater_balance_lean_round_trips() -> void:
+	for tilt: Vector2 in [Vector2.ZERO, Vector2(0.52, -0.31), Vector2(-0.52, 0.52)]:
+		var s := SkaterNetworkState.new()
+		s.balance_tilt = tilt
+		s.balance_tilt_vel = Vector2(-tilt.y, tilt.x) * 9.0
+		s.wrister_address_side = -1  # the byte before it, so an offset slip shows
+		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+				WorldStateCodec._encode_skater_quantized(s))
+		assert_almost_eq(dec.balance_tilt.x, tilt.x, 1e-4, "lean x %s" % tilt)
+		assert_almost_eq(dec.balance_tilt.y, tilt.y, 1e-4, "lean z %s" % tilt)
+		assert_almost_eq(dec.balance_tilt_vel.x, s.balance_tilt_vel.x, 1e-3, "rate x %s" % tilt)
+		assert_almost_eq(dec.balance_tilt_vel.y, s.balance_tilt_vel.y, 1e-3, "rate z %s" % tilt)
+		assert_eq(dec.wrister_address_side, -1, "the intent byte is untouched")
+
+
+# The torso's tilt is the rest of the frame the wire's blade is local to.
+func test_skater_torso_lean_round_trips() -> void:
+	for lean: Vector2 in [Vector2.ZERO, Vector2(-0.35, 0.2), Vector2(0.6, -0.4)]:
+		var s := SkaterNetworkState.new()
+		s.torso_lean = lean
+		s.posture_lean = -lean.x * 0.5
+		s.balance_tilt_vel = Vector2(-7.0, 3.0)  # the field before it
+		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+				WorldStateCodec._encode_skater_quantized(s))
+		assert_almost_eq(dec.torso_lean.x, lean.x, 1e-4, "reach pitch %s" % lean)
+		assert_almost_eq(dec.torso_lean.y, lean.y, 1e-4, "reach roll %s" % lean)
+		assert_almost_eq(dec.posture_lean, s.posture_lean, 1e-4, "posture %s" % lean)
+		assert_almost_eq(dec.balance_tilt_vel.y, 3.0, 1e-3, "the lean's rate is untouched")
+
+
+# One byte of bearing: within half a step (TAU / 512) of the sent direction, and
+# the untouched default (backward) is exact.
+func test_skater_recoil_dir_round_trips() -> void:
+	for dir: Vector2 in [Vector2(0.0, 1.0), Vector2(0.0, -1.0), Vector2(1.0, 0.0),
+			Vector2(-0.6, 0.8), Vector2(0.28, -0.96)]:
+		var s := SkaterNetworkState.new()
+		s.recoil_dir = dir
+		s.posture_lean = -0.3  # the field before it
+		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+				WorldStateCodec._encode_skater_quantized(s))
+		assert_lt(absf(dec.recoil_dir.angle_to(dir)), TAU / 512.0 + 1e-6, "bearing %s" % dir)
+		assert_almost_eq(dec.recoil_dir.length(), 1.0, 1e-6, "unit %s" % dir)
+		assert_almost_eq(dec.posture_lean, -0.3, 1e-4, "the posture is untouched")
+	var blank: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+			WorldStateCodec._encode_skater_quantized(SkaterNetworkState.new()))
+	assert_eq(blank.recoil_dir, Vector2(0.0, 1.0), "backward survives exactly")
+
+
 # ── decode_for_replay: side-effect-free world-state decode ────────────────────
 # The replay viewer / goal-replay driver decode packets through decode_for_replay
 # instead of decode_world_state precisely because it must NOT mutate the live
@@ -343,7 +393,7 @@ func _build_ws(
 	buf.append_array(header)
 	for entry: Dictionary in skaters:
 		_append_s32(buf, entry.id)
-		buf.append_array(WorldStateCodec._encode_skater_quantized(entry.state))  # 40 B
+		buf.append_array(WorldStateCodec._encode_skater_quantized(entry.state))
 		buf.append(0)  # queue_depth (ignored by replay decode)
 	buf.append_array(WorldStateCodec._encode_puck_quantized(puck))  # 12 B
 	buf.append(carrier_idx & 0xFF)

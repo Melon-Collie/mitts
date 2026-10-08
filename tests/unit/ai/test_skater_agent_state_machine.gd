@@ -593,6 +593,8 @@ func test_dispatch_throttled_tick_reuses_cached_decision() -> void:
 	sm._dispatch_skip_counter = 1
 	sm._cached_move_vector = Vector2(0.3, -0.4)
 	sm._cached_sprint_held = true
+	sm._cached_brake = true
+	sm._cached_hit_held = true
 	sm._has_cached_aim_target = true
 	sm._cached_aim_target = Vector3(1, 0, 2)
 	sm._cached_aim_mode = Agent._STEP_DIRECT
@@ -600,11 +602,22 @@ func test_dispatch_throttled_tick_reuses_cached_decision() -> void:
 	sm.dispatch(input, s)
 	assert_eq(input.move_vector, Vector2(0.3, -0.4), "throttled tick reuses cached move")
 	assert_true(input.sprint_held, "throttled tick reuses cached sprint")
+	assert_true(input.brake, "throttled tick keeps the brake held")
+	assert_true(input.hit_held, "throttled tick keeps the check committed")
 	assert_eq(sm._dispatch_skip_counter, 0, "skip counter decremented")
 	assert_eq(sm.get_state(), Agent.State.OFF_PUCK, "no re-decision on a skip tick")
 	# Mouse re-stepped toward the cached target (no-arc → first call snaps).
 	assert_almost_eq(input.mouse_world_pos.x, 1.0, 1e-6)
 	assert_almost_eq(input.mouse_world_pos.z, 2.0, 1e-6)
+
+
+func test_leaving_the_role_clears_the_covered_man() -> void:
+	# A defender who breaks off to chase the puck covers nobody — his last
+	# role decision's lock must not survive as "the man I'm on".
+	sm._state = Agent.State.OFF_PUCK
+	sm._prev_locked_man_pid = 7
+	sm._set_state(Agent.State.CHASE_PUCK)
+	assert_eq(sm._prev_locked_man_pid, -1, "chasing the puck drops the cover lock")
 
 
 # ── Slice 5: press-state handlers + transitions ──────────────────────────────

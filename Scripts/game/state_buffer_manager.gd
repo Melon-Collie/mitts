@@ -218,6 +218,10 @@ func _interpolate_skater(peer_id: int, ts: float) -> SkaterNetworkState:
 	# resolver reads a (0,0,0) hand on rewound snapshots.
 	result.top_hand_world = from_s.top_hand_world.lerp(to_s.top_hand_world, t)
 	result.top_hand_position = from_s.top_hand_position.lerp(to_s.top_hand_position, t)
+	result.balance_tilt = from_s.balance_tilt.lerp(to_s.balance_tilt, t)
+	result.balance_tilt_vel = from_s.balance_tilt_vel.lerp(to_s.balance_tilt_vel, t)
+	result.torso_lean = from_s.torso_lean.lerp(to_s.torso_lean, t)
+	result.posture_lean = lerpf(from_s.posture_lean, to_s.posture_lean, t)
 	var bracket_dt: float = to_s.host_timestamp - from_s.host_timestamp
 	result.upper_body_rotation_y = BufferedStateInterpolator.hermite_angle(
 			from_s.upper_body_rotation_y, from_s.upper_body_angular_velocity,
@@ -248,6 +252,7 @@ func _interpolate_skater(peer_id: int, ts: float) -> SkaterNetworkState:
 	# — the same snapshot — so the two agree. (It decays linearly, so newer-
 	# endpoint vs lerp differ by <= one broadcast interval of decay — sub-mm.)
 	result.stagger_timer = to_s.stagger_timer
+	result.recoil_dir = to_s.recoil_dir
 	result.host_timestamp = ts
 	return result
 

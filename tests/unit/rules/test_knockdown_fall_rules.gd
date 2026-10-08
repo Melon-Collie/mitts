@@ -5,6 +5,9 @@ extends GutTest
 # restitution bounces that never pierce the settle plane, the shove-speed
 # seeding, and the closed-form determinism the replay/reconcile paths rely on.
 
+# (thigh, shin, foot offset) — the neutral build's GaitPose spans.
+const _LEGS := Vector3(0.31, 0.45, 0.10)
+
 var _cfg: KnockdownFallRules.Config
 
 func before_each() -> void:
@@ -150,15 +153,15 @@ func test_torso_never_folds_through_the_ice() -> void:
 # ── buckle_angles ─────────────────────────────────────────────────────────────
 
 func test_buckle_deficit_matches_the_drop() -> void:
-	var b: Vector2 = KnockdownFallRules.buckle_angles(0.3, 0.31, 0.45)
-	assert_almost_eq((0.31 + 0.45) * (1.0 - cos(b.x)), 0.3, 0.0001,
-			"the collapse angle's leg-length deficit equals the crumple drop")
+	var b: Vector2 = KnockdownFallRules.buckle_angles(0.3, _LEGS)
+	assert_almost_eq((_LEGS.x + _LEGS.y) * (1.0 - cos(b.x)) - _LEGS.z * sin(b.x), 0.3, 0.0001,
+			"a level boot rises by the crumple drop, net of the foot offset swinging down")
 	assert_almost_eq(b.y, -2.0 * b.x, 0.0001,
 			"the knee folds back by thigh + shin from vertical")
 
 
 func test_zero_drop_stands_straight() -> void:
-	var b: Vector2 = KnockdownFallRules.buckle_angles(0.0, 0.31, 0.45)
+	var b: Vector2 = KnockdownFallRules.buckle_angles(0.0, _LEGS)
 	assert_almost_eq(b.x, 0.0, 0.0001, "no drop, no buckle")
 	assert_almost_eq(b.y, 0.0, 0.0001, "no drop, no knee fold")
 
@@ -167,7 +170,7 @@ func test_zero_drop_stands_straight() -> void:
 
 func _sprawl(elapsed: float, speed: float, dir: Vector2) -> KnockdownFallRules.SprawlPose:
 	var out := KnockdownFallRules.SprawlPose.new()
-	KnockdownFallRules.sprawl_into(out, elapsed, speed, dir, 0.3, 0.31, 0.45, _cfg)
+	KnockdownFallRules.sprawl_into(out, elapsed, speed, dir, 0.3, _LEGS, _cfg)
 	return out
 
 
@@ -179,7 +182,7 @@ func _settled_sprawl_time(speed: float) -> float:
 
 func test_sprawl_is_pure_buckle_before_first_impact() -> void:
 	var p: KnockdownFallRules.SprawlPose = _sprawl(0.05, 3.0, Vector2(1, 0))
-	var buckle: Vector2 = KnockdownFallRules.buckle_angles(0.3, 0.31, 0.45)
+	var buckle: Vector2 = KnockdownFallRules.buckle_angles(0.3, _LEGS)
 	assert_almost_eq(p.l_pitch, buckle.x, 0.0001, "in flight the body falls as one rod")
 	assert_almost_eq(p.r_pitch, buckle.x, 0.0001, "both legs hold the same buckle")
 	assert_almost_eq(p.l_roll, 0.0, 0.0001, "no scatter before the impact")
@@ -191,7 +194,7 @@ func test_sprawl_scatters_after_impact_and_frees_the_top_leg() -> void:
 	# to extend; the right stays pinned under the body and folds deeper.
 	var t: float = _settled_sprawl_time(3.0)
 	var p: KnockdownFallRules.SprawlPose = _sprawl(t, 3.0, Vector2(1, 0))
-	var buckle: Vector2 = KnockdownFallRules.buckle_angles(0.3, 0.31, 0.45)
+	var buckle: Vector2 = KnockdownFallRules.buckle_angles(0.3, _LEGS)
 	assert_true(absf(p.l_knee) < absf(buckle.y) - 0.01, "the free leg straightens")
 	assert_true(absf(p.r_knee) > absf(buckle.y) + 0.01, "the pinned leg folds deeper")
 	assert_true(p.l_roll < -0.01, "the free left leg splays outward (−X)")

@@ -52,6 +52,10 @@ const NET_DETOUR_FRONT_MARGIN: float = 0.3
 # Below this distance to anchor we stop attracting and let friction settle
 # the bot — prevents jittering across the anchor at high speed.
 const ANCHOR_DEADBAND: float = 0.5
+# Within one body-width of a threatening defender's sweep line, the carrier's
+# offset is too small to call a side (GameRules.OFFSIDE_LINE_SLACK is the
+# canonical body half-width) — see _carrier_threat_repel.
+const THREAT_LINE_BAND_M: float = 2.0 * GameRules.OFFSIDE_LINE_SLACK
 
 # ── Velocity-matched seek ────────────────────────────────────────────────────
 # Only the CROSS component of our own velocity is cancelled — never the
@@ -84,7 +88,7 @@ const BRAKE_PIVOT_MIN_SPEED: float = 3.0
 
 # Arrival brake. Station-keeping bots approach a POINT that can stop moving, and
 # nothing else in the field slows them: the anchor attraction is full-strength
-# until the deadband, and at 9 m/s friction alone needs ~11 m to stop. Same
+# until the deadband, and at 9 m/s glide alone needs ~45 m to stop. Same
 # stopping-distance law as the offside brake, applied to a point — when the
 # CLOSING speed toward the anchor can no longer be shed inside the remaining
 # distance, press the real brake. Evaluated fresh every tick, so a target still
@@ -97,7 +101,7 @@ const BRAKE_PIVOT_MIN_SPEED: float = 3.0
 # every re-eval, loose-puck chases (arrive at speed; momentum wins contested
 # pickups), body-check commits (drive THROUGH the man) — the caller opts in per
 # call site.
-const ARRIVAL_BRAKE_DECEL_M_S2: float = 10.0
+const ARRIVAL_BRAKE_DECEL_M_S2: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
 const ARRIVAL_BRAKE_ENGAGE_MARGIN_M: float = 0.5
 const ARRIVAL_BRAKE_RELEASE_MARGIN_M: float = 1.5
 const ARRIVAL_BRAKE_MIN_SPEED_M_S: float = 3.0
@@ -110,12 +114,12 @@ const ARRIVAL_BRAKE_MIN_SPEED_M_S: float = 3.0
 # field can push the body across regardless. This is the body-level
 # guard, applied to the actual move output every tick.
 #
-# OFFSIDE_BRAKE_DECEL_M_S2 is the braking deceleration assumed when
-# estimating stopping distance — set a touch below skater thrust accel
-# so the bot starts braking early enough to stop short rather than
-# crossing. OFFSIDE_BRAKE_MARGIN_M is the safety gap the projected stop
-# must clear the line by, since one tick over is already a ghost.
-const OFFSIDE_BRAKE_DECEL_M_S2: float = 10.0
+# OFFSIDE_BRAKE_DECEL_M_S2 is the deceleration that override actually gets:
+# a stick opposing travel skids at the reverse-skid rate.
+# OFFSIDE_BRAKE_MARGIN_M is the safety gap the projected stop must clear the
+# line by, since one tick over is already a ghost.
+const OFFSIDE_BRAKE_DECEL_M_S2: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2 \
+		* GameRules.DEFAULT_SKATER_REVERSE_SKID_FRACTION
 const OFFSIDE_BRAKE_MARGIN_M: float = 0.35
 
 
@@ -225,7 +229,7 @@ static func compute_move_vector(
 	if not opponent_velocities.is_empty() \
 			and opponent_velocities.size() == opponent_positions.size():
 		var opp_force: Vector2 = _carrier_threat_repel(
-				self_pos, to_anchor, anchor_dist,
+				self_pos, self_velocity, to_anchor, anchor_dist,
 				opponent_positions, opponent_velocities, opponent_repel_weight)
 		force_x += opp_force.x
 		force_z += opp_force.y
@@ -365,8 +369,10 @@ static func _moving_frame_pursuit(to_anchor: Vector3, anchor_dist: float,
 
 
 # The carrier's opponent avoidance reads THREAT, not proximity, and routes
-# AROUND, not away. Per defender: project his body along his momentum over the
-# evasion horizon; his stick can touch anywhere within the league reach of that
+# AROUND, not away. Per defender: project his body along his momentum RELATIVE
+# to the carrier over the evasion horizon (both are moving — a trailer at
+# matched pace is not advancing on the puck, while a head-on charger closes at
+# both speeds); his stick can touch anywhere within the league reach of that
 # swept segment, so the repel points away from the CLOSEST POINT of the sweep and
 # its strength is how deep inside that reach (plus a stick of margin) the carrier
 # sits. A beaten man whose momentum carries him away exerts nothing; a jockeying
@@ -377,8 +383,8 @@ static func _moving_frame_pursuit(to_anchor: Vector3, anchor_dist: float,
 # repels ~nothing and driving at him is the aggressive read the poke-evade owns.
 # Pure value math, no allocation. `to_anchor` / `anchor_dist` are the
 # already-computed anchor pull inputs, passed through to avoid recomputing.
-static func _carrier_threat_repel(self_pos: Vector3, to_anchor: Vector3,
-		anchor_dist: float, opponent_positions: Array[Vector3],
+static func _carrier_threat_repel(self_pos: Vector3, self_velocity: Vector3,
+		to_anchor: Vector3, anchor_dist: float, opponent_positions: Array[Vector3],
 		opponent_velocities: Array[Vector3], repel_weight: float) -> Vector2:
 	# League-default reach off the momentum line — same double-integrator model
 	# as AICarrySpace.reach_clearance (reaction-gated maneuver + stick), the
@@ -391,8 +397,10 @@ static func _carrier_threat_repel(self_pos: Vector3, to_anchor: Vector3,
 	var force := Vector2.ZERO
 	for i: int in opponent_positions.size():
 		var op: Vector3 = opponent_positions[i]
-		var sweep_x: float = opponent_velocities[i].x * AICarrySpace.EVADE_HORIZON_S
-		var sweep_z: float = opponent_velocities[i].z * AICarrySpace.EVADE_HORIZON_S
+		var sweep_x: float = (opponent_velocities[i].x - self_velocity.x) \
+				* AICarrySpace.EVADE_HORIZON_S
+		var sweep_z: float = (opponent_velocities[i].z - self_velocity.z) \
+				* AICarrySpace.EVADE_HORIZON_S
 		# Closest point to the carrier on the swept segment [op, op + sweep].
 		var t: float = 0.0
 		var sweep_len_sq: float = sweep_x * sweep_x + sweep_z * sweep_z
@@ -409,16 +417,21 @@ static func _carrier_threat_repel(self_pos: Vector3, to_anchor: Vector3,
 				(d - reach) / AICarrySpace.EVADE_SAFE_MARGIN_M, 0.0, 1.0)
 		if threat <= 0.0:
 			continue
-		if d > 0.001:
-			force += Vector2(dx / d, dz / d) * (threat * repel_weight)
-		elif sweep_len_sq > 0.0001:
-			# Standing ON his sweep line: sidestep perpendicular to his travel,
-			# on whichever side doesn't fight the anchor pull.
+		var away := Vector2(dx / d, dz / d) if d > 0.001 else Vector2.ZERO
+		if sweep_len_sq > 0.0001 and d < THREAT_LINE_BAND_M:
+			# On or near his sweep line, "away from the closest point" is the
+			# sign of a few centimetres of drift — a full-strength push that
+			# flips every tick. Commit to one side instead: the anchor's, when
+			# the anchor is clearly off his line, else a fixed default; the
+			# actual away direction takes over as the offset reaches the band.
 			var inv_sweep: float = 1.0 / sqrt(sweep_len_sq)
 			var perp := Vector2(-sweep_z * inv_sweep, sweep_x * inv_sweep)
-			if perp.x * to_anchor.x + perp.y * to_anchor.z < 0.0:
+			if perp.x * to_anchor.x + perp.y * to_anchor.z < -THREAT_LINE_BAND_M:
 				perp = -perp
-			force += perp * (threat * repel_weight)
+			var committed: Vector2 = perp.lerp(away, d / THREAT_LINE_BAND_M)
+			away = committed.normalized() if committed.length_squared() > 1e-6 else perp
+		if away != Vector2.ZERO:
+			force += away * (threat * repel_weight)
 	# Route AROUND: strip the component opposing the anchor direction so the
 	# summed pressure can bend the carry line but never push the carrier
 	# backwards off it.
@@ -537,9 +550,8 @@ static func _net_detour(self_pos: Vector3, anchor: Vector3) -> Vector2:
 # Decides whether to press the actual BRAKE input for a pivot. When the
 # desired direction is roughly opposite (>= BRAKE_PIVOT_ANGLE_DEG) the
 # current heading and we're carrying speed (>= BRAKE_PIVOT_MIN_SPEED),
-# braking beats carving a wide arc: brake friction decelerates at least as
-# hard as reverse thrust across the speed band (and unlike thrust it isn't
-# scaled down by facing misalignment), and the caller keeps move_vector on
+# braking beats carving a wide arc: the hockey stop out-decelerates the
+# stick's reverse skid, and the caller keeps move_vector on
 # the NEW direction — the same input shape a human uses (brake held + the
 # exit direction on the stick), so the cosmetic layer reads a genuine
 # hockey stop into a dig-in restart.
@@ -597,7 +609,7 @@ static func should_arrival_brake(self_pos: Vector3, anchor: Vector3,
 # attacking blue line, the puck is still on the near side (entering
 # would be offside), and the bot's stopping distance would carry it
 # across within OFFSIDE_BRAKE_MARGIN_M. In that case it overrides the
-# steering with a hard brake away from the line (full reverse thrust on
+# steering with a hard brake away from the line (a full reverse skid on
 # the depth axis, lateral intent preserved), so the body stops short
 # instead of ghosting. Releases the instant the puck crosses the line
 # (offside risk gone) or the bot is already retreating.
@@ -629,7 +641,7 @@ static func offside_brake(
 	var stop_dist: float = (v_toward * v_toward) / (2.0 * OFFSIDE_BRAKE_DECEL_M_S2)
 	if stop_dist + OFFSIDE_BRAKE_MARGIN_M < dist_to_line:
 		return desired  # plenty of room to stop before the line
-	# Brake: full reverse thrust along the depth axis (back toward our
+	# Brake: a full reverse skid along the depth axis (back toward our
 	# own end), keep lateral intent, clamp to unit length.
 	var brake := Vector2(desired.x, -attack_dir)
 	if brake.length() > 1.0:

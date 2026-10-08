@@ -40,8 +40,8 @@ const _TORSO_PROFILE: Array[Vector2] = [
 # the seat builds through the lower back and peaks at the hem that drapes
 # over it, while the chest rings stay centered so the belly keeps its line.
 const _TORSO_REAR_SWAY: Array[float] = [0.0, 0.0, 0.0, 0.006, 0.018, 0.028, 0.032]
-# The pelvis, in UpperBody space (y 0 is the trunk's fold pivot, the hip pivots
-# sit at −0.13). It is the seat the torso does NOT carry: the trunk texture
+# The pelvis, in the waist's space (y 0 is the trunk's fold pivot, the hip
+# pivots sit at −0.13). It is the seat the torso does NOT carry: the trunk texture
 # rotates the torso bone about that pivot, so at any fold worth seeing the
 # jersey hem swings up and away and leaves the body open from behind — a flat
 # bottom cap tipped into view over the bare space between the thighs. A real
@@ -49,19 +49,20 @@ const _TORSO_REAR_SWAY: Array[float] = [0.0, 0.0, 0.0, 0.006, 0.018, 0.028, 0.03
 # (SkaterArmRig.repose_bone leaves it out of the texture) and fills the seat at
 # every angle.
 #
-# Sized to hide UNDER the jersey hem at rest — a couple of centimetres inside
-# the torso's lower rings all the way up — so it changes no silhouette that was
-# already right, and only shows where there used to be nothing.
+# Above the hem it hides UNDER the jersey even with the trunk twisted on it:
+# both lathes are wider than deep, so the tucked rings are narrow enough that
+# their wide axis fits the jersey's deep one, and the seat flares below the hem.
 const _PELVIS_PROFILE: Array[Vector2] = [
-	Vector2(0.100, 0.175),   # waist, tucked up inside the hem
-	Vector2(0.020, 0.200),
-	Vector2(-0.060, 0.208),  # the seat
-	Vector2(-0.140, 0.196),
-	Vector2(-0.210, 0.155),  # the leg line
+	Vector2(0.100, 0.150),   # waist, tucked up inside the hem
+	Vector2(0.020, 0.160),
+	Vector2(-0.070, 0.166),  # just above the hem
+	Vector2(-0.120, 0.200),  # the seat
+	Vector2(-0.170, 0.190),
+	Vector2(-0.215, 0.152),  # the leg line
 	Vector2(-0.260, 0.100),  # buried in the thighs
 ]
-# Same hockey-butt sway the torso's own rings carry, peaked at the seat.
-const _PELVIS_REAR_SWAY: Array[float] = [0.006, 0.018, 0.030, 0.028, 0.014, 0.0]
+# Hockey-butt sway, peaked at the seat and kept small under the hem.
+const _PELVIS_REAR_SWAY: Array[float] = [0.004, 0.010, 0.014, 0.028, 0.024, 0.012, 0.0]
 
 # The thigh, with the hip joint on top of it. The upper four stations are a
 # DOME centred on the hip pivot (_HIP_PIVOT_IN_THIGH above the part's origin,
@@ -366,15 +367,15 @@ enum LegBone {
 	LEG_R, THIGH_R, KNEE_R, SHIN_R, SOCK_R, SKATE_R, FOOT_R,
 }
 const LEG_BONE_COUNT: int = 14
-# Parent per bone, index-aligned with LegBone. -1 = attached to the skeleton
-# root (LowerBody's frame).
+# Parent per bone, index-aligned with LegBone. -1 = the HIPS bone
+# (SkaterBodySkeleton).
 const LEG_BONE_PARENT: Array[int] = [
 	-1, LegBone.LEG_L, LegBone.LEG_L,
 	LegBone.LEG_L, LegBone.SHIN_L, LegBone.SHIN_L, LegBone.SHIN_L,
 	-1, LegBone.LEG_R, LegBone.LEG_R,
 	LegBone.LEG_R, LegBone.SHIN_R, LegBone.SHIN_R, LegBone.SHIN_R,
 ]
-# Scene node name per bone, index-aligned with LegBone. Skater._build_leg_rig
+# Scene node name per bone, index-aligned with LegBone. SkaterLegRig.build
 # reads each one's local transform before freeing the subtree, so the .tscn stays
 # the place leg proportions are authored.
 const LEG_BONE_NODE: Array[String] = [
@@ -429,7 +430,7 @@ static func shared_leg_skin() -> Skin:
 	if _leg_skin == null:
 		_leg_skin = Skin.new()
 		for i: int in LEG_BONE_COUNT:
-			_leg_skin.add_bind(i, Transform3D.IDENTITY)
+			_leg_skin.add_bind(SkaterBodySkeleton.LEG_BONE_OFFSET + i, Transform3D.IDENTITY)
 	return _leg_skin
 
 
@@ -577,9 +578,9 @@ static func shared_arm_bone_z() -> ArrayMesh:
 		return st.commit())
 
 
-# ── The upper-body rig: one skinned mesh, one Skeleton3D ─────────────────────
-# Fourteen bones of one skeleton — both arms, the torso, the helmet/head unit,
-# the two deltoid caps — driving one mesh, so posing a part costs an entry in
+# ── The upper-body rig: one skinned mesh ─────────────────────────────────────
+# Fifteen bones of the body skeleton — both arms, the torso, the helmet/head
+# unit, the two deltoid caps, the pelvis — driving one mesh, so posing a part costs an entry in
 # the skeleton's pose array rather than a Node3D transform write (which dirties
 # a subtree and pushes a global to the RenderingServer).
 #
@@ -588,9 +589,10 @@ static func shared_arm_bone_z() -> ArrayMesh:
 # are identity, the skin binds are identity, and each part's geometry is left in
 # its own local space. A skinned vertex is then exactly `bone_pose * v`.
 #
-# The bone list is FLAT (no parents): all fourteen are posed independently in
-# UpperBody's space, and a hierarchy would compose transforms these poses do not
-# expect. The legs are the opposite case — see LegBone.
+# The shell parts hang from the SPINE bone and the pelvis from WAIST
+# (SkaterBodySkeleton.upper_bone_parent); their poses are authored in a space that equals the old
+# UpperBody space while those two rest at identity. The arm parts are roots,
+# placed by IK straight in skeleton space.
 enum UpperBone {
 	TOP_UPPER_ARM,
 	TOP_FOREARM,
@@ -642,7 +644,7 @@ enum UpperSurface {
 const UPPER_SURFACE_COUNT: int = 18
 # Scene node name per bone for the four parts whose placement is authored in
 # Scenes/Skater.tscn rather than derived (the arm parts are placed by IK). Read
-# by Skater._build_upper_rig, which then frees them — same deal as LEG_BONE_NODE.
+# by SkaterArmRig.build, which then frees them — same deal as LEG_BONE_NODE.
 # Indices 0-9 are unused; the arm parts have no scene node.
 const UPPER_BONE_NODE: Array[String] = [
 	"", "", "", "", "", "", "", "", "", "",

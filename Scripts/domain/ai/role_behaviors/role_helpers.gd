@@ -1162,10 +1162,11 @@ static func has_support_behind(ctx: RoleContext) -> bool:
 # eating the same ice from the other side. Becoming rush-matched from an
 # approach speed `v` therefore costs him
 #
-#     consumed(v) = v²/2B  +  closing·v/B  +  closing²/2a
-#                   \_____/    \________/     \_________/
-#                   braking    the rush's     the PIVOT: spinning back up to
-#                   distance   share of it    his pace going the other way
+#     consumed(v) = v²/2B  +  closing·v/B  +  ramp(closing)
+#                   \_____/    \________/     \___________/
+#                   braking    the rush's     the PIVOT: the stride's distance
+#                   distance   share of it    back up to his pace going the
+#                                             other way
 #
 # and that must fit in the depth he has to spare, `self_along - desired_depth`.
 # Being merely stopped when the carrier arrives is not gap control — a stationary
@@ -1215,10 +1216,9 @@ static func settable_stand_depth(ctx: RoleContext, threat_pos: Vector3,
 static func approach_speed_cap(spare: float, closing: float, v_max: float,
 		max_accel: float) -> float:
 	var brake_decel: float = AISteering.ARRIVAL_BRAKE_DECEL_M_S2
-	var a_net: float = maxf(max_accel * AIActionScoring.RAMP_EFFICIENCY, 0.001)
-	# v² + 2·closing·v + B·(closing²/a - 2·spare) = 0
-	var disc: float = closing * closing * (1.0 - brake_decel / a_net) \
-			+ 2.0 * brake_decel * spare
+	var pivot: float = AIStrideRamp.distance_to_speed(closing, max_accel)
+	# v² + 2·closing·v + 2B·(pivot - spare) = 0
+	var disc: float = closing * closing + 2.0 * brake_decel * (spare - pivot)
 	if disc <= 0.0:
 		return 0.0
 	return clampf(sqrt(disc) - closing, 0.0, maxf(v_max, 0.0))

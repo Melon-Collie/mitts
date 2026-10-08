@@ -178,6 +178,61 @@ func test_carrier_bends_around_a_flanking_threat_without_retreating() -> void:
 	assert_gt(v.y, 0.8, "forward drive survives the bend")
 
 
+func test_carrier_commits_a_side_against_a_trailer_on_its_line() -> void:
+	# A backchecker on the carrier's hip, matched speed, dead on its line: his
+	# sweep runs through the carrier, so the closest point is the carrier's own
+	# few centimetres of drift. Either side of the line must read the SAME
+	# committed side at a bounded push — never a full-strength flip.
+	var anchor := Vector3(0, 0, 8)
+	var opps: Array[Vector3] = [Vector3(0, 0, -2.0)]
+	var vels: Array[Vector3] = [Vector3(0, 0, 5.5)]
+	var left := _carrier_move(Vector3(-0.05, 0, 0), anchor, opps, vels)
+	var right := _carrier_move(Vector3(0.05, 0, 0), anchor, opps, vels)
+	assert_eq(signf(left.x), signf(right.x), "drift either way commits the same side")
+	assert_almost_eq(left.x, right.x, 0.15, "and the push barely moves with the drift")
+
+
+func test_carrier_beyond_the_band_is_pushed_off_its_own_side() -> void:
+	# Clearly off the line (past one body-width) the real away direction rules:
+	# the carrier bends off whichever side it is actually on.
+	var anchor := Vector3(0, 0, 8)
+	var opps: Array[Vector3] = [Vector3(0, 0, -2.0)]
+	var vels: Array[Vector3] = [Vector3(0, 0, 5.5)]
+	var off: float = AISteering.THREAT_LINE_BAND_M + 0.1
+	assert_lt(_carrier_move(Vector3(-off, 0, 0), anchor, opps, vels).x, 0.0)
+	assert_gt(_carrier_move(Vector3(off, 0, 0), anchor, opps, vels).x, 0.0)
+
+
+func _moving_carrier_move(self_pos: Vector3, self_vel: Vector3, anchor: Vector3,
+		opponents: Array[Vector3], opp_vels: Array[Vector3]) -> Vector2:
+	return AISteering.compute_move_vector(
+			self_pos, anchor, NO_OPS, opponents, NO_LANE, NO_LANE, RINK_X, RINK_Z,
+			AISteering.OPPONENT_REPEL_WEIGHT_CARRY, opp_vels, NO_OPS, self_vel,
+			GameRules.DEFAULT_SKATER_MAX_SPEED_M_S)
+
+
+func test_a_matched_trailer_is_no_reason_to_sidestep() -> void:
+	# Backchecker 2 m behind at the carrier's own pace: relative to the carrier
+	# he isn't advancing on the puck, so sidestepping him buys nothing (he
+	# follows) — the carrier keeps driving down its line.
+	var anchor := Vector3(0, 0, 8)
+	var opps: Array[Vector3] = [Vector3(0.05, 0, -2.0)]
+	var vels: Array[Vector3] = [Vector3(0, 0, 6.0)]
+	var v := _moving_carrier_move(Vector3.ZERO, Vector3(0, 0, 6.0), anchor, opps, vels)
+	assert_lt(absf(v.x), 0.1, "no lateral weave off a trailer on our hip; got %s" % v)
+	assert_gt(v.y, 0.95, "full drive at the anchor")
+
+
+func test_a_head_on_charger_still_forces_the_sidestep_when_moving() -> void:
+	# The same relative frame keeps the matador: a charger closing head-on at
+	# both skaters' speeds sweeps straight through a carrier moving into him.
+	var anchor := Vector3(0, 0, 8)
+	var opps: Array[Vector3] = [Vector3(0, 0, 4.0)]
+	var vels: Array[Vector3] = [Vector3(0, 0, -6.0)]
+	var v := _moving_carrier_move(Vector3.ZERO, Vector3(0, 0, 4.0), anchor, opps, vels)
+	assert_gt(absf(v.x), 0.3, "sidestep perpendicular to the charge line")
+
+
 # ── Teammate swept-path repel (teammate velocities supplied) ─────────────────
 # With teammate velocities the spacing field repels from each teammate's
 # momentum-swept path, so bots anticipate a crossing route before the bodies
@@ -508,8 +563,11 @@ func test_arrival_brake_uses_closing_component_not_raw_speed() -> void:
 func test_arrival_brake_hysteresis_holds_the_brake_longer() -> void:
 	# Borderline geometry sits between the engage and release margins:
 	# not braking → stays off; already braking → holds on.
-	var vel := Vector2(0, 8)           # stop_dist = 3.2 m
-	var anchor := Vector3(0, 0, 4.0)   # engage needs 3.7 ≥ 4 (no); release needs 4.7 ≥ 4 (yes)
+	var vel := Vector2(0, 8)
+	var stop_dist: float = 64.0 / (2.0 * AISteering.ARRIVAL_BRAKE_DECEL_M_S2)
+	# Halfway between the engage and release margins.
+	var anchor := Vector3(0, 0, stop_dist + 0.5 * (AISteering.ARRIVAL_BRAKE_ENGAGE_MARGIN_M
+			+ AISteering.ARRIVAL_BRAKE_RELEASE_MARGIN_M))
 	assert_false(AISteering.should_arrival_brake(Vector3.ZERO, anchor, vel, false),
 			"outside the engage margin — don't start braking")
 	assert_true(AISteering.should_arrival_brake(Vector3.ZERO, anchor, vel, true),

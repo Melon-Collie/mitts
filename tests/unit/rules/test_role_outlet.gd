@@ -158,7 +158,7 @@ func test_offside_filter_rejects_oz_candidates() -> void:
 func test_velocity_buffer_pushes_target_back_at_speed() -> void:
 	# A bot moving fast toward the opp net needs to slow down before
 	# the blue line — the velocity-corrected offside filter rejects
-	# candidates that the bot would overshoot in SKATER_BRAKE_TIME_S.
+	# candidates the bot would brake past (its stopping distance).
 	# Compared with a stationary bot, the moving bot's chosen target
 	# should sit further NZ-side (further from the opp blue line).
 	var carrier_pos := Vector3(0, 0, 0)
@@ -180,10 +180,31 @@ func test_velocity_buffer_pushes_target_back_at_speed() -> void:
 	var moving_target: Vector3 = AIRoleOutlet.decide(ctx_moving).target_position
 
 	# Moving target should be NZ-side of the stationary one (higher z
-	# for Team 0). Brake time × velocity ≈ 3 m of forward overshoot
-	# the filter accounts for.
+	# for Team 0). At 10 m/s the arrival brake's stopping distance is
+	# ~5.6 m of forward overshoot the filter accounts for.
 	assert_gt(moving_target.z, stationary_target.z - 0.01,
 			"moving bot's target should be at least as far NZ-side; got moving=%s stationary=%s" % [moving_target, stationary_target])
+
+
+func test_offside_overshoot_is_the_stopping_distance() -> void:
+	# own_goal_dir = +1 attacks -Z: the opp blue line sits at z = -BLUE_LINE_Z.
+	var ctx: RoleContext = _make_ctx(Vector3.ZERO)
+	ctx.self_velocity = Vector3(0.0, 0.0, -8.0)
+	var stop: float = 64.0 / (2.0 * AISteering.ARRIVAL_BRAKE_DECEL_M_S2)
+	var line_z: float = -GameRules.BLUE_LINE_Z
+	assert_false(AIRoleOutlet._is_offside(Vector3(0, 0, line_z + stop + 0.05), ctx),
+			"a spot just over one stopping distance short of the line is legal")
+	assert_true(AIRoleOutlet._is_offside(Vector3(0, 0, line_z + stop - 0.05), ctx),
+			"just inside it, the bot would brake across the line")
+
+
+func test_retreating_momentum_buys_no_offside_room() -> void:
+	# Skating back toward our own end can't carry a body back onside from a
+	# spot already past the line — no negative overshoot.
+	var ctx: RoleContext = _make_ctx(Vector3.ZERO)
+	ctx.self_velocity = Vector3(0.0, 0.0, 9.0)
+	assert_true(AIRoleOutlet._is_offside(Vector3(0, 0, -GameRules.BLUE_LINE_Z - 1.0), ctx),
+			"a spot past the line is offside whatever the momentum")
 
 
 # ── Covered stretch spot ─────────────────────────────────────────────────────

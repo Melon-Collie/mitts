@@ -49,6 +49,21 @@ static func solve_elbow(
 	return foot + pole_dir.normalized() * h
 
 
+# Where an arm roots once the shoulder girdle has given: a hand past `arm_len`
+# (the arm's working length) draws the shoulder toward it — the shoulder blade
+# protracting and dropping — by up to `slack`. Past that the arm straightens,
+# and past its full length solve_elbow stretches the forearm, so callers keep
+# their hands within (arm_len + slack).
+static func reach_root(shoulder: Vector3, hand: Vector3, arm_len: float,
+		slack: float) -> Vector3:
+	var d_vec: Vector3 = hand - shoulder
+	var d: float = d_vec.length()
+	var over: float = d - arm_len
+	if over <= 0.0 or d < 0.0001:
+		return shoulder
+	return shoulder + d_vec / d * minf(over, slack)
+
+
 # The elbow of an arm that HANGS: of every elbow the two bone lengths allow — a
 # circle around the shoulder→hand axis — the lowest one that stays out of the
 # trunk. It may not fold inside the shoulder (`outward`), and it may not go back

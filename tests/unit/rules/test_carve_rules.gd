@@ -6,7 +6,6 @@ extends GutTest
 
 const DT: float = 1.0 / 120.0
 const MIN_SPEED: float = 2.5
-const REF: float = 1.6
 
 
 func _dir(angle_from_forward: float, speed: float = 6.0) -> Vector2:
@@ -38,56 +37,3 @@ func test_slow_samples_read_zero() -> void:
 
 func test_zero_delta_guard() -> void:
 	assert_eq(CarveRules.turn_rate(_dir(0.0), _dir(0.3), 0.0, MIN_SPEED), 0.0)
-
-
-# ── carve_target ──────────────────────────────────────────────────────────────
-
-func test_target_scales_by_reference_rate() -> void:
-	assert_almost_eq(CarveRules.carve_target(0.8, 6.0, REF, MIN_SPEED), 0.5, 0.0001)
-
-
-func test_target_clamps_to_unit() -> void:
-	assert_eq(CarveRules.carve_target(50.0, 6.0, REF, MIN_SPEED), 1.0)
-	assert_eq(CarveRules.carve_target(-50.0, 6.0, REF, MIN_SPEED), -1.0)
-
-
-func test_target_gates_below_min_speed() -> void:
-	assert_eq(CarveRules.carve_target(REF, 1.0, REF, MIN_SPEED), 0.0)
-
-
-func test_target_preserves_sign() -> void:
-	assert_lt(CarveRules.carve_target(-0.8, 6.0, REF, MIN_SPEED), 0.0)
-
-
-# ── intent_carve ──────────────────────────────────────────────────────────────
-
-func test_intent_right_of_travel_is_positive_full() -> void:
-	# Travelling up-ice, holding pure right: full carve toward the right.
-	var ic: float = CarveRules.intent_carve(
-			Vector2(0.0, -6.0), Vector2(1.0, 0.0), 6.0, MIN_SPEED)
-	assert_almost_eq(ic, 1.0, 0.0001)
-
-
-func test_intent_left_of_travel_is_negative() -> void:
-	assert_lt(CarveRules.intent_carve(
-			Vector2(0.0, -6.0), Vector2(-1.0, 0.0), 6.0, MIN_SPEED), 0.0)
-
-
-func test_intent_along_travel_is_zero() -> void:
-	assert_eq(CarveRules.intent_carve(
-			Vector2(0.0, -6.0), Vector2(0.0, -1.0), 6.0, MIN_SPEED), 0.0)
-
-
-func test_intent_squared_response_suppresses_small_angles() -> void:
-	# 22.5° off travel: cross ≈ 0.38 → squared ≈ 0.15 — drive corrections
-	# barely tickle the carve.
-	var ic: float = CarveRules.intent_carve(
-			Vector2(0.0, -6.0), Vector2(sin(PI / 8.0), -cos(PI / 8.0)), 6.0, MIN_SPEED)
-	assert_between(ic, 0.1, 0.2)
-
-
-func test_intent_gates_on_speed_and_empty_input() -> void:
-	assert_eq(CarveRules.intent_carve(
-			Vector2(0.0, -1.0), Vector2(1.0, 0.0), 1.0, MIN_SPEED), 0.0)
-	assert_eq(CarveRules.intent_carve(
-			Vector2(0.0, -6.0), Vector2.ZERO, 6.0, MIN_SPEED), 0.0)

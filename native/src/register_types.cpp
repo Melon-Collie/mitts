@@ -1,5 +1,6 @@
 #include "register_types.h"
 
+#include "native_arm_rig.h"
 #include "native_blade_dangle.h"
 #include "native_bottom_hand_ik.h"
 #include "native_gif_encoder.h"
@@ -21,10 +22,11 @@ void initialize_mitts_native_module(ModuleInitializationLevel p_level) {
 	}
 	ClassDB::register_class<mitts::NativeTopHandIK>();
 	ClassDB::register_class<mitts::NativeBottomHandIK>();
-	ClassDB::register_class<mitts::NativeSkaterGait>();
 	ClassDB::register_class<mitts::NativeSkaterMovement>();
 	ClassDB::register_class<mitts::NativePuckStep>();
 	ClassDB::register_class<mitts::NativeBladeDangle>();
+	ClassDB::register_class<mitts::NativeSkaterGait>();
+	ClassDB::register_class<mitts::NativeArmRig>();
 	ClassDB::register_class<mitts::NativeGifEncoder>();
 }
 

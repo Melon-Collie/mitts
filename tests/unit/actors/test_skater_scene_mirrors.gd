@@ -9,7 +9,7 @@ extends GutTest
 # is the authored truth for where a shoulder or a knee sits, and the code around
 # it is a copy that has to keep up.
 #
-# The rig is doubly scene-coupled: Skater._build_arm_rig / _build_leg_rig read
+# The rig is doubly scene-coupled: SkaterArmRig.build / SkaterLegRig.build read
 # each node's authored transform out of the scene and then FREE the subtree, so
 # a renamed or reparented node is not a missing-node error at runtime — it is a
 # bone that silently keeps its identity transform.
@@ -108,7 +108,7 @@ func test_the_skate_collar_seats_at_the_boot_heel_line() -> void:
 
 
 # Every bone the rig reads out of the scene. These are the paths
-# Skater._build_leg_rig / _build_upper_rig resolve before freeing the subtree —
+# SkaterLegRig.build / SkaterArmRig.build resolve before freeing the subtree —
 # a rename in the editor leaves the bone at identity, which is a silent
 # mispose rather than an error.
 func test_every_authored_bone_node_still_exists() -> void:

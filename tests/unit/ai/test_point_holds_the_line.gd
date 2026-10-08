@@ -53,11 +53,12 @@ class Sample:
 # starting at the line, their five collapsed in their own zone. Our carrier works
 # the puck along the wall — the situation the points exist for.
 #
-# Their five are scripted CONTAINERS holding a wide gap, not live forecheckers.
-# That is deliberate: the pinch read's first question is whether the puck is
-# genuinely ours, so a fixture where live opponents strip it inside a second
-# measures the retreat (which is correct behaviour) instead of the hold. Holding
-# possession is the precondition of the question, so the fixture has to grant it.
+# Their five are scripted CONTAINERS holding a wide gap, not live forecheckers,
+# and their sticks cannot strip. That is deliberate: the pinch read's first
+# question is whether the puck is genuinely ours, so a fixture where opponents
+# take it measures the retreat (which is correct behaviour) instead of the hold.
+# Holding possession is the precondition of the question, so the fixture has to
+# grant it; the contested version is test_what_a_live_forecheck_does_to_the_points.
 #
 # THE GRANT HAS A SHELF LIFE, and CYCLE_S is it. The containers hold their gap
 # forever, but our own five do not hold the puck forever: our share of it decays
@@ -86,7 +87,7 @@ func _run_cycle(seconds: float, live_opponents: bool = false) -> Sample:
 		if live_opponents:
 			h.add_skater(THEIR[i], 1, their_spots[i])
 		else:
-			h.add_puppet_container(THEIR[i], 1, their_spots[i], 5.0, their_spots[i].z)
+			h.add_puppet_container(THEIR[i], 1, their_spots[i], 5.0, their_spots[i].z, false)
 	h.start(OUR_F1)
 
 	var s := Sample.new()

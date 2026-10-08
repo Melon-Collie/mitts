@@ -21,9 +21,12 @@ namespace mitts {
 // BodyCheckRules.Config fields, set via set_stagger_params.
 
 #define MITTS_MOVEMENT_TUNABLES(X) \
-	X(thrust) X(friction) X(max_speed) X(move_deadzone) X(brake_multiplier) \
-	X(puck_carry_speed_multiplier) X(backward_thrust_multiplier) \
-	X(crossover_thrust_multiplier) X(friction_drag) X(sprint_thrust_multiplier) \
+	X(thrust) X(power_knee_speed) X(friction) X(friction_drag) X(max_speed) \
+	X(move_deadzone) X(stop_decel) X(reverse_skid_fraction) X(turn_accel) \
+	X(max_turn_rate) X(tight_turn_multiplier) X(tight_turn_decel) \
+	X(tight_turn_align_angle) X(puck_carry_speed_multiplier) \
+	X(backward_thrust_multiplier) X(crossover_thrust_multiplier) \
+	X(backward_max_speed_multiplier) X(sprint_thrust_multiplier) \
 	X(sprint_max_speed_multiplier) X(sprint_carry_penalty_bypass) X(lateral_grip)
 
 class NativeSkaterMovement : public godot::RefCounted {
