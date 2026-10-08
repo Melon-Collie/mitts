@@ -592,8 +592,8 @@ func test_dispatch_throttled_tick_reuses_cached_decision() -> void:
 	sm._state = Agent.State.OFF_PUCK  # non-press → eligible to skip
 	sm._dispatch_skip_counter = 1
 	sm._cached_move_vector = Vector2(0.3, -0.4)
-	sm._cached_sprint_held = true
 	sm._cached_brake = true
+	sm._cached_stance_held = true
 	sm._cached_hit_held = true
 	sm._has_cached_aim_target = true
 	sm._cached_aim_target = Vector3(1, 0, 2)
@@ -601,8 +601,8 @@ func test_dispatch_throttled_tick_reuses_cached_decision() -> void:
 	var input := InputState.new()
 	sm.dispatch(input, s)
 	assert_eq(input.move_vector, Vector2(0.3, -0.4), "throttled tick reuses cached move")
-	assert_true(input.sprint_held, "throttled tick reuses cached sprint")
 	assert_true(input.brake, "throttled tick keeps the brake held")
+	assert_true(input.stance_held, "throttled tick keeps the stance held")
 	assert_true(input.hit_held, "throttled tick keeps the check committed")
 	assert_eq(sm._dispatch_skip_counter, 0, "skip counter decremented")
 	assert_eq(sm.get_state(), Agent.State.OFF_PUCK, "no re-decision on a skip tick")
@@ -1073,7 +1073,6 @@ func test_receiver_gives_with_a_hot_incoming_feed() -> void:
 	var i := InputState.new()
 	sm.dispatch(i, s)
 	assert_true(i.brake, "over the receiver-frame ceiling — give with the puck")
-	assert_false(i.sprint_held, "never sprint at an inbound feed")
 
 
 func test_receiver_in_stride_keeps_skating_on_a_soft_feed() -> void:

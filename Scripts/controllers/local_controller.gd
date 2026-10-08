@@ -207,7 +207,7 @@ func _physics_process(delta: float) -> void:
 			prep_input.slap_pressed = false
 			prep_input.slap_held = false
 			prep_input.brake = false
-			prep_input.sprint_held = false
+			prep_input.stance_held = false
 			# elevation_level passes through untouched — it's a mode, not an
 			# action, so the faceoff freeze shouldn't flatten the chosen loft.
 			prep_input.block_held = false
@@ -549,15 +549,11 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	var pre_shot_charge: float = skater.shot_charge
 	skater.global_position = server_state.position
 	skater.velocity = server_state.velocity
-	# Stamina + lockout are deterministic from inputs, exactly like velocity:
-	# snap to the server baseline, then the replay loop below re-derives them
-	# forward through the unacked inputs (do NOT save/restore them — that's for
-	# fields replay must not advance, like the charge timers).
-	stamina = server_state.stamina
-	_sprint_locked = server_state.sprint_locked
 	# Body-check stagger is deterministic from the host baseline + tick decay,
-	# exactly like stamina: snap to the server value, then the replay loop's
-	# per-tick decay (in _apply_movement) re-derives it forward.
+	# exactly like velocity: snap to the server value, then the replay loop's
+	# per-tick decay (in _apply_movement) re-derives it forward (do NOT
+	# save/restore it — that's for fields replay must not advance, like the
+	# charge timers).
 	stagger_timer = server_state.stagger_timer
 	stagger_recoil_dir = server_state.recoil_dir
 	# The balance and torso leans ride the same rail: the host's values at the

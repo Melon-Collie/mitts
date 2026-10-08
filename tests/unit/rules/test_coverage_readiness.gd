@@ -53,7 +53,6 @@ func _snapshot(ours: Array, opp: Array, carrier: int) -> WorldSnapshot:
 		var s := SkaterNetworkState.new()
 		s.position = e[1]
 		s.velocity = e[2] if e.size() > 2 else Vector3.ZERO
-		s.stamina = 1.0
 		snap.skater_states[e[0]] = s
 	var puck := PuckNetworkState.new()
 	puck.carrier_peer_id = carrier

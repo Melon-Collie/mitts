@@ -21,12 +21,10 @@ func test_round_trip_preserves_all_wire_fields() -> void:
 	s.blade_up                    = true
 	s.shot_state                  = 2
 	s.shot_charge                 = 0.75
-	s.stamina                     = 0.4
-	s.sprint_locked               = true
 	s.stagger_timer               = 0.65
 	s.move_intent                 = Vector2(0.0, -1.0)
 	s.brake_intent                = true
-	s.sprint_active               = true
+	s.stance_active               = true
 
 	var r := SkaterNetworkState.from_array(s.to_array())
 
@@ -45,26 +43,24 @@ func test_round_trip_preserves_all_wire_fields() -> void:
 	assert_eq(r.blade_up,        s.blade_up)
 	assert_eq(r.shot_state,  s.shot_state)
 	assert_almost_eq(r.shot_charge, s.shot_charge, 0.00001)
-	assert_almost_eq(r.stamina, s.stamina, 0.00001)
-	assert_eq(r.sprint_locked, s.sprint_locked)
 	assert_almost_eq(r.stagger_timer, s.stagger_timer, 0.00001)
 	assert_eq(r.move_intent, s.move_intent)
 	assert_eq(r.brake_intent, s.brake_intent)
-	assert_eq(r.sprint_active, s.sprint_active)
+	assert_eq(r.stance_active, s.stance_active)
 
 
 func test_array_length_sentinel() -> void:
 	# Field-count sentinel — if a field is added without updating to_array /
 	# from_array, this catches the mismatch before it becomes a silent bug.
-	# 23: position, velocity, blade_position, top_hand_position,
+	# 26: position, velocity, blade_position, top_hand_position,
 	# upper_body_rotation_y, facing, last_processed_host_timestamp,
 	# is_ghost, shot_state, shot_charge, facing_angular_velocity,
-	# upper_body_angular_velocity, elevation_level, blade_up, stamina, sprint_locked,
-	# stagger_timer, move_intent, brake_intent, sprint_active, knockdown_timer,
+	# upper_body_angular_velocity, elevation_level, blade_up,
+	# stagger_timer, move_intent, brake_intent, stance_active, knockdown_timer,
 	# hit_committed, wrister_address_side, balance_tilt, balance_tilt_vel,
 	# torso_lean, posture_lean, recoil_dir.
 	var s := SkaterNetworkState.new()
-	assert_eq(s.to_array().size(), 28)
+	assert_eq(s.to_array().size(), 26)
 
 
 func test_blade_up_back_compat_defaults_false() -> void:
@@ -73,44 +69,31 @@ func test_blade_up_back_compat_defaults_false() -> void:
 	var s := SkaterNetworkState.new()
 	s.blade_up = true
 	var short_array: Array = s.to_array()
-	short_array.resize(13)  # drop blade_up, stamina, sprint_locked
+	short_array.resize(13)  # drop blade_up onward
 	var r := SkaterNetworkState.from_array(short_array)
 	assert_false(r.blade_up, "missing blade_up index should default false")
 
 
-func test_stamina_back_compat_defaults() -> void:
-	# A short array missing stamina/sprint_locked (indices 14/15) must decode
-	# with the safe defaults — full stamina, not locked.
-	var s := SkaterNetworkState.new()
-	s.stamina = 0.2
-	s.sprint_locked = true
-	var short_array: Array = s.to_array()
-	short_array.resize(14)  # keep blade_up, drop stamina + sprint_locked
-	var r := SkaterNetworkState.from_array(short_array)
-	assert_almost_eq(r.stamina, 1.0, 0.00001, "missing stamina defaults to full")
-	assert_false(r.sprint_locked, "missing sprint_locked defaults false")
-
-
 func test_stagger_back_compat_defaults() -> void:
-	# A short array from an older sender (no stagger_timer at index 16) must decode
+	# A short array from an older sender (no stagger_timer at index 14) must decode
 	# with stagger_timer defaulting to 0 (not staggered).
 	var s := SkaterNetworkState.new()
 	s.stagger_timer = 0.8
 	var short_array: Array = s.to_array()
-	short_array.resize(16)  # keep stamina + sprint_locked, drop stagger_timer
+	short_array.resize(14)  # keep blade_up, drop stagger_timer
 	var r := SkaterNetworkState.from_array(short_array)
 	assert_almost_eq(r.stagger_timer, 0.0, 0.00001, "missing stagger_timer defaults to 0")
 
 
-func test_sprint_active_back_compat_defaults_false() -> void:
-	# A short array from an older sender (no sprint_active at index 19) must
-	# decode with sprint_active defaulting to false (no sprint gait).
+func test_stance_active_back_compat_defaults_false() -> void:
+	# A short array from an older sender (no stance_active at index 17) must
+	# decode with stance_active defaulting to false (no stance gait).
 	var s := SkaterNetworkState.new()
-	s.sprint_active = true
+	s.stance_active = true
 	var short_array: Array = s.to_array()
-	short_array.resize(19)  # keep move/brake intent, drop sprint_active
+	short_array.resize(17)  # keep move/brake intent, drop stance_active
 	var r := SkaterNetworkState.from_array(short_array)
-	assert_false(r.sprint_active, "missing sprint_active defaults false")
+	assert_false(r.stance_active, "missing stance_active defaults false")
 
 
 func test_host_only_fields_not_serialized() -> void:

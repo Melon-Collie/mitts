@@ -202,7 +202,7 @@ const _LENGTH_LEAN: Array[float] = [0.960, 1.000, 1.040]  # SHORT / STANDARD / L
 # grind) = +top speed and +glide, −agility (turn/brake/grip — it multiplies
 # the full agility lever, lateral_grip included); AGILITY (rockered) = +first
 # step and +cornering, −top speed. The speed lean is what re-widens the
-# sprint band the body plane deliberately compressed (~20.5–24 mph across
+# top-speed band the body plane deliberately compressed (~20.5–24 mph across
 # profiles). STACKED AGILITY CORNERS
 # (body × gear, pinned by test): best 5'7"-lean-agility ≈ 1.15, worst
 # 6'8"-heavy-power ≈ 0.84 — a self-chosen extreme, deliberately outside the
@@ -306,14 +306,6 @@ const _ACCEL_F: Array[float] = [1.080, 1.040, 1.000, 0.980, 0.970]
 # agility_glide_mult.
 const _AGILITY_F: Array[float] = [1.030, 1.015, 1.000, 0.980, 0.960]
 
-# Stamina drain scale (sprint DURATION / pool depth). Lean = fast metabolism =
-# higher drain; heavy = deep pool = drains slower.
-const _STAMINA_DRAIN_F: Array[float] = [1.15, 1.07, 1.00, 0.92, 0.85]
-
-# Stamina regen scale (RECOVERY). Lean tops up fast; heavy recovers slowly.
-# The pair: lean = short repeatable bursts, heavy = one long drive, slow refill.
-const _STAMINA_REGEN_F: Array[float] = [1.25, 1.12, 1.00, 0.90, 0.82]
-
 # ── Visual tables ─────────────────────────────────────────────────────────────
 # Silhouette = body (v4): height drives overall Y scale; every LATERAL body
 # multiplier (torso, shoulders, limbs — and the hitbox radius, which tracks
@@ -323,16 +315,16 @@ const _STAMINA_REGEN_F: Array[float] = [1.25, 1.12, 1.00, 0.90, 0.82]
 # statures, so it moves a few percent, not with the body.
 const _HEAD_BULK: Array[float] = [0.935, 0.98, 1.00, 1.03, 1.07]   # height
 
-# ── Sprint / carry constants ──────────────────────────────────────────────────
+# ── Top-speed / carry constants ───────────────────────────────────────────────
 # The normalization span is wider than the body plane's own speed range, so
-# body-only builds sit in the middle of the sprint band and the skate-profile
+# body-only builds sit in the middle of the top-speed band and the skate-profile
 # lean is what reaches either end of it.
 const _SPEED_MULT_MIN: float = 0.955
 const _SPEED_MULT_MAX: float = 1.060
-# Sprint top-speed multiplier, interpolated across the speed span — grounded
-# to the NHL EDGE 20–25 mph burst band.
-const SPRINT_CEIL_MIN: float = 1.07
-const SPRINT_CEIL_MAX: float = 1.164
+# Top-speed multiplier, interpolated across the speed span — grounded to the
+# NHL EDGE 20–25 mph burst band.
+const TOP_SPEED_MIN: float = 1.07
+const TOP_SPEED_MAX: float = 1.164
 # Carry speed = how much of your speed survives carrying (higher = less
 # penalty). Speed is the only easing term — there is no hands lever, by
 # constitution — and the base is written as the sum it derives from so the
@@ -483,8 +475,6 @@ func shot_charge_mult() -> float:
 
 # Body — frame (× the profile's first-step lean)
 func accel_mult() -> float:         return _f(_ACCEL_F) * _PROFILE_ACCEL_LEAN[profile]
-func stamina_drain_mult() -> float: return _f(_STAMINA_DRAIN_F)
-func stamina_regen_mult() -> float: return _f(_STAMINA_REGEN_F)
 # Mass is linear in displayed weight — see NEUTRAL_WEIGHT_LBS.
 func mass_mult() -> float:          return float(weight) / NEUTRAL_WEIGHT_LBS
 
@@ -579,11 +569,16 @@ func curve_loft_tan_high() -> float:
 	return tan(deg_to_rad(_CURVE_LOFT_HIGH_DEG[curve]))
 
 
-# Sprint ceiling — speed-normalized, grounded to the 20–25 mph burst band.
-func sprint_ceiling_mult() -> float:
-	var n: float = clampf((speed_mult() - _SPEED_MULT_MIN)
+# Top speed relative to the neutral build — speed-normalized, grounded to the
+# 20–25 mph burst band.
+func top_speed_mult() -> float:
+	return _top_speed_ceiling(speed_mult()) / _top_speed_ceiling(1.0)
+
+
+static func _top_speed_ceiling(speed: float) -> float:
+	var n: float = clampf((speed - _SPEED_MULT_MIN)
 			/ (_SPEED_MULT_MAX - _SPEED_MULT_MIN), 0.0, 1.0)
-	return lerpf(SPRINT_CEIL_MIN, SPRINT_CEIL_MAX, n)
+	return lerpf(TOP_SPEED_MIN, TOP_SPEED_MAX, n)
 
 
 # Carry speed retention — speed-eased (see CARRY_BASE). Higher = less penalty.

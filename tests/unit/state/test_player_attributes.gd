@@ -15,7 +15,7 @@ const H_MIN: int = PlayerAttributes.HEIGHT_MIN     # 5'7" (67")
 const H_MED: int = PlayerAttributes.HEIGHT_MEDIUM  # 6'1" (73")
 const H_MAX: int = PlayerAttributes.HEIGHT_MAX     # 6'8" (80")
 
-const BASE_MAX_SPEED: float = 9.0  # GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
+const BASE_MAX_SPEED: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 const MS_TO_MPH: float = 2.23694
 
 
@@ -31,6 +31,7 @@ func test_neutral_is_all_ones() -> void:
 	assert_eq(a.profile, PlayerAttributes.GEAR_BALANCED)
 	# 6'1"/201/balanced must equal the shipped @export baseline everywhere.
 	assert_almost_eq(a.speed_mult(), 1.0, 0.0001, "speed")
+	assert_almost_eq(a.top_speed_mult(), 1.0, 0.0001, "top speed")
 	assert_almost_eq(a.accel_mult(), 1.0, 0.0001, "accel")
 	assert_almost_eq(a.agility_mult(), 1.0, 0.0001, "agility")
 	assert_almost_eq(a.hands_blade_mult(), 1.0, 0.0001, "hands")
@@ -38,8 +39,6 @@ func test_neutral_is_all_ones() -> void:
 	assert_almost_eq(a.check_delivery_mult(), 1.0, 0.0001, "delivery")
 	assert_almost_eq(a.brace_mult(), 1.0, 0.0001, "brace")
 	assert_almost_eq(a.mass_mult(), 1.0, 0.0001, "mass")
-	assert_almost_eq(a.stamina_drain_mult(), 1.0, 0.0001, "drain")
-	assert_almost_eq(a.stamina_regen_mult(), 1.0, 0.0001, "regen")
 	assert_almost_eq(a.torso_bulk_mult(), 1.0, 0.0001, "torso")
 
 
@@ -226,27 +225,13 @@ func test_legacy_1to5_height_maps_to_anchor_inches() -> void:
 	assert_eq(PlayerAttributes.new(5).height, 79)
 
 
-# ── Weight: accel fork, stamina metabolism, linear mass ───────────────────────
+# ── Weight: accel fork, linear mass ───────────────────────
 func test_accel_lean_favored() -> void:
 	var lean := _body(H_MED, 174)
 	var heavy := _body(H_MED, 220)
 	assert_true(lean.accel_mult() > heavy.accel_mult(), "lean gets the first step")
 	assert_almost_eq(lean.accel_mult(), 1.08, 0.001)
 	assert_almost_eq(heavy.accel_mult(), 0.97, 0.001)
-
-
-func test_stamina_metabolism_by_frame() -> void:
-	# Lean = fast metabolism (drains AND regens faster); heavy = deep pool,
-	# slow refill — the fork moved off height onto weight in v4.
-	var lean := _body(H_MED, 174)
-	var heavy := _body(H_MED, 220)
-	assert_true(lean.stamina_drain_mult() > heavy.stamina_drain_mult(), "lean drains faster")
-	assert_true(lean.stamina_regen_mult() > heavy.stamina_regen_mult(), "lean recovers faster")
-	# Same frame at different heights = same metabolism (height no longer
-	# enters). Band edges pin frame_t to exactly 0/1 at every height.
-	assert_almost_eq(_body(H_MIN, PlayerAttributes.weight_min(H_MIN)).stamina_drain_mult(),
-			_body(H_MAX, PlayerAttributes.weight_min(H_MAX)).stamina_drain_mult(),
-			0.0001, "metabolism is frame, not height")
 
 
 func test_mass_linear_in_displayed_weight() -> void:
@@ -331,18 +316,18 @@ func test_glide_and_charge_are_inverse_of_partner() -> void:
 	assert_almost_eq(a.shot_charge_mult(), 2.0 - a.shot_power_mult(), 0.0001)
 
 
-# ── Sprint ceiling (compressed pre-gear band) ────────────────────────────────
-func test_sprint_ceiling_bounded_pre_gear() -> void:
-	# Body-only speed occupies the middle of the v3 span, so every build's
-	# sprint lands in a tight ~22 mph band until the skate-profile gear slot
+# ── Top speed (compressed pre-gear band) ─────────────────────────────────────
+func test_top_speed_bounded_pre_gear() -> void:
+	# Body-only speed occupies the middle of the v3 span, so every build's top
+	# speed lands in a tight ~22 mph band until the skate-profile gear slot
 	# re-widens it. The medium-height hump still gets the best gear.
 	var med := _body(H_MED, 0)
 	var small := _body(H_MIN, 0)
-	assert_true(med.sprint_ceiling_mult() > small.sprint_ceiling_mult())
+	assert_true(med.top_speed_mult() > small.top_speed_mult())
 	for h: int in [H_MIN, H_MED, H_MAX]:
 		var a := _body(h, 0)
-		var top_mph: float = BASE_MAX_SPEED * a.speed_mult() * a.sprint_ceiling_mult() * MS_TO_MPH
-		assert_between(top_mph, 21.0, 23.0, "body-only sprint band at %d\"" % h)
+		var top_mph: float = BASE_MAX_SPEED * a.speed_mult() * a.top_speed_mult() * MS_TO_MPH
+		assert_between(top_mph, 21.0, 23.0, "body-only top-speed band at %d\"" % h)
 
 
 # ── Gear slots (step 1: stored + coerced, no gameplay effect) ────────────────
@@ -466,8 +451,8 @@ func test_profile_is_a_topend_burst_seesaw() -> void:
 	assert_gt(rocker.agility_mult(), flat.agility_mult(), "agility owns the corner")
 	assert_lt(flat.agility_glide_mult(), rocker.agility_glide_mult(),
 			"the long flat coasts, the rocker scrubs")
-	# The profile re-widens the sprint band the body plane compressed.
-	assert_gt(flat.sprint_ceiling_mult(), rocker.sprint_ceiling_mult())
+	# The profile re-widens the top-speed band the body plane compressed.
+	assert_gt(flat.top_speed_mult(), rocker.top_speed_mult())
 
 
 func test_stacked_agility_corners_budgeted() -> void:

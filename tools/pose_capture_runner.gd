@@ -71,7 +71,7 @@ const CAM_AIM: Vector3 = Vector3(0.0, -0.05, 0.0)
 # only, which is what makes "press, then hold" expressible as two segments.
 #
 # Spec keys: move (Vector2, world), aim (Vector3, RELATIVE to the skater —
-# absolute would swing as the body translates), sprint, shoot, slap, block,
+# absolute would swing as the body translates), stance, shoot, slap, block,
 # deflect, hit, brake (bool), loft (int elevation level). Pose keys beyond
 # name/puck/steps: cam (offset), cam_aim (the point it looks at, relative to the
 # skater like cam), cam_ahead (metres down the travel line),
@@ -85,10 +85,15 @@ const POSES: Array = [
 	# multiples of each other, so the stride lands at a different point in its
 	# cycle rather than at the same phase twice.
 	{"name": "stride_away", "puck": false, "steps": [
-		[64, {"move": Vector2(0.0, -1.0), "sprint": true, "aim": Vector3(0.0, 0.0, -3.0)}],
+		[64, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
 	]},
 	{"name": "stride_lateral", "puck": false, "steps": [
-		[97, {"move": Vector2(1.0, 0.0), "sprint": true, "aim": Vector3(2.0, 0.0, 1.5)}],
+		[97, {"move": Vector2(1.0, 0.0), "aim": Vector3(2.0, 0.0, 1.5)}],
+	]},
+	# The loaded stance mid-cut: up to speed, then dug in toward the right.
+	{"name": "stance_cut", "puck": false, "steps": [
+		[90, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[30, {"move": Vector2(1.0, 0.0), "stance": true, "aim": Vector3(2.0, 0.0, -1.5)}],
 	]},
 	# Arm IK near its ROM limit: the cursor sits well across the body, so the
 	# reach lean and the backhand ROM clamp both engage.
@@ -606,7 +611,7 @@ func _fill_input(input: InputState, spec: Dictionary, first: bool) -> void:
 	input.host_timestamp += DT
 	input.move_vector = move
 	input.mouse_world_pos = _skater.global_position + aim
-	input.sprint_held = spec.get("sprint", false)
+	input.stance_held = spec.get("stance", false)
 	input.hit_held = spec.get("hit", false)
 	input.brake = spec.get("brake", false)
 	input.block_held = spec.get("block", false)

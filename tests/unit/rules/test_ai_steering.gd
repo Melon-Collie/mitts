@@ -427,6 +427,18 @@ func test_should_brake_hysteresis_band() -> void:
 			"110° holds an already-engaged brake")
 
 
+# A pivot whose exit is still in front is cut on the edges; one whose exit is
+# behind the skater is a hockey stop.
+func test_a_pivot_cuts_in_the_stance_until_the_exit_is_behind() -> void:
+	var velocity := Vector2(8.0, 0.0)
+	assert_true(AISteering.pivot_cuts_in_stance(_dir_at(125.0), velocity),
+			"125° off travel: the edges can still carry it")
+	assert_false(AISteering.pivot_cuts_in_stance(_dir_at(150.0), velocity),
+			"150° off travel: the exit is behind, so stop")
+	assert_false(AISteering.pivot_cuts_in_stance(_dir_at(125.0), Vector2.ZERO),
+			"no travel, nothing to cut")
+
+
 func test_should_brake_releases_past_release_angle() -> void:
 	assert_false(AISteering.should_brake(_dir_at(95.0), Vector2(8.0, 0.0), true),
 			"opposition relaxed below 100° releases the brake")

@@ -6,14 +6,13 @@ extends GutTest
 
 const UP_ICE := Vector2(0.0, -1.0)   # travelling −Z, facing −Z
 const RIGHT := Vector2(1.0, 0.0)     # the traveller's right when going −Z
-const ALIGN: float = deg_to_rad(30.0)
 
 var _mix := LocomotionRules.Mix.new()
 
 
 func _classify(vel: Vector2, intent: Vector2, brake: bool = false,
-		facing: Vector2 = UP_ICE) -> LocomotionRules.Mix:
-	LocomotionRules.classify(vel, intent, brake, facing, ALIGN, _mix)
+		facing: Vector2 = UP_ICE, stance: bool = false) -> LocomotionRules.Mix:
+	LocomotionRules.classify(vel, intent, brake, stance, facing, _mix)
 	assert_almost_eq(_total(_mix), 1.0, 1e-5, "the weights are a crossfade")
 	return _mix
 
@@ -49,13 +48,20 @@ func test_stick_against_travel_is_a_skid() -> void:
 	assert_almost_eq(_classify(UP_ICE * 6.0, -UP_ICE).skid, 1.0, 1e-5)
 
 
-func test_brake_in_line_is_a_stop_and_off_line_a_tight_turn() -> void:
-	assert_almost_eq(_classify(UP_ICE * 6.0, Vector2.ZERO, true).stop, 1.0, 1e-5)
-	var m := _classify(UP_ICE * 6.0, RIGHT, true)
-	assert_almost_eq(m.tight, 1.0, 1e-5)
+func test_the_brake_is_a_stop_whatever_the_stick_says() -> void:
+	for stick: Vector2 in [Vector2.ZERO, UP_ICE, RIGHT, (UP_ICE + RIGHT).normalized(), -UP_ICE]:
+		assert_almost_eq(_classify(UP_ICE * 6.0, stick, true).stop, 1.0, 1e-5, "stick %s" % stick)
+	assert_eq(_classify(UP_ICE * 6.0, RIGHT, true).side, 1.0, "the stick still picks the stop's side")
+
+
+# The loaded stance skates the turning part with both blades dug in, where the
+# upright skater crosses over.
+func test_the_stance_turns_on_dug_edges_instead_of_crossovers() -> void:
+	var m := _classify(UP_ICE * 6.0, (UP_ICE + RIGHT).normalized(), false, UP_ICE, true)
+	assert_almost_eq(m.stride, 0.5, 1e-5)
+	assert_almost_eq(m.tight, 0.5, 1e-5)
+	assert_almost_eq(m.crossover, 0.0, 1e-5)
 	assert_eq(m.side, 1.0)
-	# The stick behind you while braking is a stop again (the physics' taper).
-	assert_almost_eq(_classify(UP_ICE * 6.0, -UP_ICE, true).stop, 1.0, 1e-5)
 
 
 func test_travel_behind_the_facing_is_backward_skating() -> void:

@@ -20,19 +20,9 @@ extends RefCounted
 # body — the consumers seed their values from these defaults.
 
 # Top skating speed (height-derived, leaned by the skate profile). Drives
-# chase-intercept reach, momentum-aware ETA,
-# and the post-engagement blade-reset cooldown scaling.
+# chase-intercept reach, momentum-aware ETA, every race read, and the
+# post-engagement blade-reset cooldown scaling.
 var max_speed: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
-
-# Sprint ceiling multiplier over max_speed (Speed — the attribute's HEADLINE
-# lever: cruise is near-uniform by design, separation lives in this gear).
-# Race-class reads (loose-puck election, race-lost, retrieval margins) fold it
-# in via BotSprintRules.race_speed, stamina-gated per peer, so a race is priced
-# at the pace the body will actually skate it. LEAGUE_* is the controller's
-# league export default — also the capless fallback, so an unset caps races like
-# a league body (which sprints).
-const LEAGUE_SPRINT_SPEED_MULT: float = 1.14
-var sprint_speed_mult: float = LEAGUE_SPRINT_SPEED_MULT
 
 # All-direction acceleration / thrust (Acceleration). The reachable-set tests ask
 # "how far off its momentum line can this skater pull a stick?" — that ceiling is

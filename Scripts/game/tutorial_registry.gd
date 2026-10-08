@@ -13,8 +13,7 @@ class_name TutorialRegistry
 # ── Step identifiers ──────────────────────────────────────────────────────────
 # Movement
 const STEP_SKATE:       int = 0
-const STEP_SPRINT:      int = 1
-const STEP_STAMINA:     int = 2
+const STEP_STANCE:      int = 1
 const STEP_BRAKE:       int = 3
 # Stick Basics — the cursor-driven blade, the Q gestures (deflect intents at
 # the three loft levels), and the Q-tap drop. Taught before Shooting so loft
@@ -61,7 +60,7 @@ const ALL_IDS: Array[String] = [
 static func get_step_ids(tutorial_id: String) -> Array[int]:
 	match tutorial_id:
 		MOVEMENT_ID:
-			return [STEP_SKATE, STEP_SPRINT, STEP_STAMINA, STEP_BRAKE]
+			return [STEP_SKATE, STEP_STANCE, STEP_BRAKE]
 		STICK_ID:
 			return [STEP_STICKHANDLE, STEP_DEFLECT, STEP_BLADE_LIFT, STEP_DROP_PUCK]
 		SHOOTING_ID:

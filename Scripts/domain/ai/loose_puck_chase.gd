@@ -104,21 +104,12 @@ static func setup_margin(puck_vel: Vector3) -> float:
 	return KILL_SETUP_MARGIN_S if is_fast_puck(puck_vel) else 0.0
 
 
-# Sprint-aware race cap for one candidate (BotSprintRules.race_speed): cruise
-# and sprint ceiling from caps (league defaults when unset — a league body
-# sprints), pool and lockout from the replicated skater state, race length
-# approximated by the straight distance to the puck's current spot. THE seam
-# through which Speed's sprint separation reaches every race read: the election
-# and the race-lost decline both price with it, so they cannot disagree about
-# who has the extra gear.
-static func race_vmax(s: SkaterNetworkState, caps: AISkaterCaps,
-		puck_pos: Vector3) -> float:
-	var cruise: float = caps.max_speed if caps != null \
-			else AIActionScoring.SKATER_REF_SPEED_M_S
-	var mult: float = caps.sprint_speed_mult if caps != null \
-			else AISkaterCaps.LEAGUE_SPRINT_SPEED_MULT
-	return BotSprintRules.race_speed(cruise, mult, s.stamina, s.sprint_locked,
-			Vector2(puck_pos.x - s.position.x, puck_pos.z - s.position.z).length())
+# Race cap for one candidate: his top speed from caps (league default when
+# unset). THE seam through which Speed's separation reaches every race read:
+# the election and the race-lost decline both price with it, so they cannot
+# disagree about who has the extra gear.
+static func race_vmax(caps: AISkaterCaps) -> float:
+	return caps.max_speed if caps != null else AIActionScoring.SKATER_REF_SPEED_M_S
 
 
 # ── Why the `reach` argument below is for the SELF read only ────────────────
@@ -431,10 +422,9 @@ static func elect(
 		if not human_ids.is_empty() and human_ids.has(pid) \
 				and not committed_to_race(s, puck_pos):
 			continue
-		# Each candidate races at ITS real sprint-aware race cap (Speed +
-		# the stamina-gated sprint gear) — a fast skater genuinely reaches
-		# a loose puck first. Missing caps → league default.
-		var max_speed: float = race_vmax(s, caps_by_peer.get(pid), puck_pos)
+		# Each candidate races at ITS real top speed — a fast skater
+		# genuinely reaches a loose puck first. Missing caps → league default.
+		var max_speed: float = race_vmax(caps_by_peer.get(pid))
 		var t: float = path_intercept_time(traj, step_dt, puck_pos,
 				s.position, s.velocity, max_speed, margin)
 		# Incumbent hysteresis: challengers pay HYSTERESIS_S, so the
@@ -471,7 +461,7 @@ static func best_intercept_time(
 		var s: SkaterNetworkState = skater_states.get(pid)
 		if s == null:
 			continue
-		var max_speed: float = race_vmax(s, caps_by_peer.get(pid), puck_pos)
+		var max_speed: float = race_vmax(caps_by_peer.get(pid))
 		var t: float = path_intercept_time(traj, step_dt, puck_pos,
 				s.position, s.velocity, max_speed, margin)
 		if t < best_t:

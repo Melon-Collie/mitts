@@ -16,7 +16,6 @@ func _skater(pos: Vector3, vel: Vector3 = Vector3.ZERO) -> SkaterNetworkState:
 	var s := SkaterNetworkState.new()
 	s.position = pos
 	s.velocity = vel
-	s.stamina = 1.0
 	return s
 
 

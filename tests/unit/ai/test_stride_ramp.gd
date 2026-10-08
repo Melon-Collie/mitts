@@ -31,5 +31,5 @@ func test_power_phase_is_slower_than_constant_accel() -> void:
 
 
 func test_cruise_after_top_speed() -> void:
-	var t1: float = AIStrideRamp.time_to_cover(VMAX, 18.0, VMAX, ACCEL)
+	var t1: float = AIStrideRamp.time_to_cover(VMAX, VMAX * 2.0, VMAX, ACCEL)
 	assert_almost_eq(t1, 2.0, 1e-6, "already at top speed: pure cruise")

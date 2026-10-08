@@ -175,7 +175,8 @@ func test_a_remote_reels_the_way_the_hit_shoved() -> void:
 func test_the_chest_trails_the_hips() -> void:
 	var c: SkaterController = _rig(20.0)
 	var sk: Skater = c.skater
-	_tick(c, Vector2(0.0, -1.0), 240)
+	# Settled at top speed first, so the only lean in play is the turn's.
+	_tick(c, Vector2(0.0, -1.0), 360)
 	_tick(c, Vector2(1.0, 0.0), 30)
 	assert_lt(sk.trunk_tilt().length(), 0.9 * sk.trunk_lean_share * sk.balance_tilt().length(),
 			"building into the turn, the chest is behind the hips")

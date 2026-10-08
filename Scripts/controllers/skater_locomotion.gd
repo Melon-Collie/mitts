@@ -35,7 +35,8 @@ var intensity: float = 0.0
 var effort: float = 0.0
 # Signed turn rate of the travel direction, rad/s, smoothed.
 var turn_rate: float = 0.0
-var sprint: float = 0.0
+# The loaded stance's engagement 0..1, eased from the controller's stance_active.
+var loaded: float = 0.0
 var cruise_gear: float = 0.0
 var push_scale: float = 1.0
 # The hockey stop's side, latched when the stop comes on so the legs never flip
@@ -94,7 +95,7 @@ func reset() -> void:
 	intensity = 0.0
 	effort = 0.0
 	turn_rate = 0.0
-	sprint = 0.0
+	loaded = 0.0
 	stop_yaw = 0.0
 	_stop_latched = false
 	_have_prev_velocity = false
@@ -118,13 +119,13 @@ func sense(delta: float, planted: bool, hold: float) -> void:
 	_sample_velocity(delta, vel)
 	effort = lerpf(effort, _fd_effort_target, c.stride_effort_speed * delta)
 	turn_rate = lerpf(turn_rate, _fd_turn, c.carve_engage_speed * delta)
-	sprint = lerpf(sprint, 1.0 if (c.sprint_active and not planted) else 0.0,
+	loaded = lerpf(loaded, 1.0 if (c.stance_active and not planted) else 0.0,
 			c.locomotion_blend_speed * delta)
 
 	var basis: Basis = _skater.global_transform.basis
 	var facing := Vector2(-basis.z.x, -basis.z.z)
 	LocomotionRules.classify(Vector2(vel.x, vel.z), _skater.move_intent,
-			_skater.brake_intent, facing, c.tight_turn_align_angle, _target)
+			_skater.brake_intent, c.stance_active, facing, _target)
 	# A brake below the stop's speed floor is no skid, and a turn below the carve
 	# floor is steps, not crossovers.
 	if _ground_speed < c.hockey_stop_min_speed:
@@ -158,7 +159,7 @@ func sense(delta: float, planted: bool, hold: float) -> void:
 	intensity = lerpf(intensity, target_intensity * (1.0 - hold), c.stride_intensity_speed * delta)
 
 	push_scale = clampf(1.0 + effort * c.stride_push_gain, c.stride_glide_floor, c.stride_push_ceiling) \
-			* (1.0 + sprint * c.sprint_stride_gain)
+			* (1.0 + loaded * c.stance_stride_gain)
 	cruise_gear = _speed_t * (1.0 - clampf(effort, 0.0, 1.0))
 
 	# Cadence: each striding state's own rate, weighted. Straight-line strides
@@ -312,7 +313,8 @@ func strokes(delta: float, fwd: float) -> void:
 
 	# Trunk: sway over the loaded leg on the stride fundamental (the trunk is
 	# too massive to carry the stroke's snap), a damped spring that lets the
-	# weight settle over each leg with follow-through, and the sprint's drive.
+	# weight settle over each leg with follow-through, and the loaded stance's
+	# chest over the knees.
 	var fore_aft: float = mix.stride + mix.backward + mix.crossover
 	var s_fund: float = sin(stride_phase)
 	trunk_roll += deg_to_rad(c.stride_sway_deg) * intensity * fore_aft * s_fund
@@ -322,7 +324,7 @@ func strokes(delta: float, fwd: float) -> void:
 	_weight_shift_vel += shift_accel * delta
 	_weight_shift += _weight_shift_vel * delta
 	trunk_roll += deg_to_rad(c.weight_shift_deg) * _weight_shift
-	trunk_pitch += -deg_to_rad(c.sprint_lean_deg) * sprint * (1.0 - mix.stop - mix.skid)
+	trunk_pitch += -deg_to_rad(c.stance_lean_deg) * loaded * (1.0 - mix.stop - mix.skid)
 
 
 # One leg-pair stroke, weighted: fore/aft push (rear-biased), in-phase edge rock,
@@ -346,7 +348,7 @@ func _stance(s: float) -> void:
 	var c: SkaterController = _controller
 	var stroke: float = clampf(intensity / maxf(c.stance_full_speed_fraction, 0.01), 0.0, 1.0) \
 			* clampf(1.0 + effort * c.stance_push_gain, 0.0, 1.35) \
-			* (1.0 + sprint * c.sprint_stance_gain) \
+			* (1.0 + loaded * c.stance_sit_gain) \
 			* (1.0 + c.cadence_glide_stance_gain * cruise_gear)
 	var stride_sit: float = maxf(stroke, c.dig_in_stance * _start * (1.0 if intensity > 0.01 else 0.0))
 	stance = (mix.stride + mix.backward + mix.shuffle) * stride_sit \
@@ -355,6 +357,7 @@ func _stance(s: float) -> void:
 			+ mix.tight * c.tight_turn_stance \
 			+ mix.stop * c.hockey_stop_stance \
 			+ mix.skid * c.reversal_stance
+	stance = maxf(stance, loaded * c.stance_sit_floor)
 	bob = c.stride_bob_m * intensity * (1.0 - s * s) * (mix.stride + mix.backward + mix.crossover)
 
 

@@ -182,7 +182,7 @@ func _spawn_skater_from_roster(entry: Dictionary) -> void:
 	# velocity until unpause snaps it back. Disable physics processing entirely;
 	# apply_replay_state covers all visual updates (position, blade, IK) itself.
 	skater.set_physics_process(false)
-	# Latch off the flat-on-ice slot rings, name labels, stamina rings, and
+	# Latch off the flat-on-ice slot rings, name labels, and
 	# slapper indicators — they're designed for the local player's top-down
 	# gameplay camera and look wrong (or misleading, in the top-down POV cam)
 	# from the director's camera angles. The latch, not the coordinator's own

@@ -177,7 +177,7 @@ const AA_LABELS: Array[String] = [
 ]
 
 const REBINDABLE_ACTIONS: PackedStringArray = [
-	"move_up", "move_down", "move_left", "move_right", "sprint", "brake",
+	"move_up", "move_down", "move_left", "move_right", "stance", "brake",
 	"shoot", "quick_pass", "slapshot", "hit", "block", "elevation_up", "elevation_down",
 	"stick_lift", "smart_ping",
 ]
@@ -191,15 +191,17 @@ const REBINDABLE_ACTIONS: PackedStringArray = [
 # load, so pad_button() always resolves, and LocalInputGatherer reads it live —
 # a rebind applies without a respawn, like the gamepad toggle itself.
 const PAD_REBINDABLE_ACTIONS: PackedStringArray = [
-	"block", "brake", "hit", "stick_lift", "sprint", "quick_pass",
+	"block", "brake", "hit", "stick_lift", "stance", "quick_pass",
 	"elevation_up", "elevation_down", "smart_ping",
 ]
 const PAD_DEFAULT_BUTTONS: Dictionary = {
 	"block": JOY_BUTTON_A,
 	"brake": JOY_BUTTON_B,
-	"hit": JOY_BUTTON_LEFT_SHOULDER,
+	# The stance is held while steering, so it cannot sit on a click of the
+	# steering stick; the check commit is held only for the beat before contact.
+	"stance": JOY_BUTTON_LEFT_SHOULDER,
 	"stick_lift": JOY_BUTTON_RIGHT_SHOULDER,
-	"sprint": JOY_BUTTON_LEFT_STICK,
+	"hit": JOY_BUTTON_LEFT_STICK,
 	"quick_pass": JOY_BUTTON_RIGHT_STICK,
 	"elevation_up": JOY_BUTTON_Y,
 	"elevation_down": JOY_BUTTON_X,
@@ -424,7 +426,7 @@ const REPLAY_KEEP_MAX: int = 100
 # Bump TUTORIAL_COURSE_VERSION whenever the course is restructured enough that
 # everyone should replay it: _load() wipes saved completion below the current
 # version, and boot.gd routes an untouched course into its first part.
-const TUTORIAL_COURSE_VERSION: int = 3
+const TUTORIAL_COURSE_VERSION: int = 4
 var tutorial_completion: Dictionary = {}
 
 func _get_save_path() -> String:
@@ -602,6 +604,7 @@ func save() -> void:
 	# a returning config is remapped exactly once and never re-forces Block off a
 	# key the player has since chosen for it.
 	cfg.set_value("bindings", "scheme_version", 1)
+	cfg.set_value("bindings", "pad_scheme_version", 1)
 	cfg.save(_get_save_path())
 	_push_to_cloud()
 
@@ -1264,6 +1267,23 @@ func _load() -> void:
 				bindings["quick_pass"] = {"type": "key", "physical_keycode": cfg.get_value("bindings", "quick_shot_code", 0)}
 			elif old_qp_type == "mouse":
 				bindings["quick_pass"] = {"type": "mouse", "button_index": cfg.get_value("bindings", "quick_shot_code", 0)}
+		# Action rename (sprint → stance), the same adoption for both devices.
+		if not bindings.has("stance"):
+			var old_sprint_type: String = cfg.get_value("bindings", "sprint_type", "")
+			if old_sprint_type == "key":
+				bindings["stance"] = {"type": "key", "physical_keycode": cfg.get_value("bindings", "sprint_code", 0)}
+			elif old_sprint_type == "mouse":
+				bindings["stance"] = {"type": "mouse", "button_index": cfg.get_value("bindings", "sprint_code", 0)}
+		if not pad_bindings.has("stance") and cfg.has_section_key("pad_bindings", "sprint"):
+			pad_bindings["stance"] = int(cfg.get_value("pad_bindings", "sprint", -1))
+		# Pad scheme swap (pad_scheme_version 1): the stance takes LB and the hit
+		# takes L3. Only a config still on BOTH old defaults moves; a player who
+		# rebound either is left alone.
+		if int(cfg.get_value("bindings", "pad_scheme_version", 0)) < 1 \
+				and int(pad_bindings.get("hit", JOY_BUTTON_LEFT_SHOULDER)) == JOY_BUTTON_LEFT_SHOULDER \
+				and int(pad_bindings.get("stance", JOY_BUTTON_LEFT_STICK)) == JOY_BUTTON_LEFT_STICK:
+			pad_bindings.erase("hit")
+			pad_bindings.erase("stance")
 		# Control-scheme swap (scheme_version 1): Hit takes Ctrl, Block moves to C.
 		# A config predating the swap that still has Block on its old Ctrl default
 		# is remapped to C; a player who deliberately rebound Block elsewhere is

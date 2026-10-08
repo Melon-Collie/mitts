@@ -6,7 +6,7 @@ namespace mitts {
 
 // C++ port of Scripts/domain/rules/skater_movement_rules.gd
 // (SkaterMovementRules.apply_movement / integrate_forward) plus the one
-// BodyCheckRules formula integrate_forward consumes (thrust_mult). The
+// BodyCheckRules formulas integrate_forward consumes (thrust_mult, grip_mult). The
 // GDScript files are the reference; tests/unit/rules/test_native_movement_parity.gd
 // fuzzes the implementations against each other. Change them together or not
 // at all.
@@ -17,17 +17,19 @@ namespace mitts {
 // ticks cross the boundary in ONE call here — the loop runs natively).
 //
 // MovementConfig fields load by property name from the GDScript config
-// object via configure(cfg); the stagger scaling needs only two
-// BodyCheckRules.Config fields, set via set_stagger_params.
+// object via configure(cfg); the stagger scaling needs only three
+// BodyCheckRules.Config fields, set via set_stagger_params. `posture` is
+// SkaterMovementRules.Posture as an int (UPRIGHT 0, STANCE 1, COMMIT 2).
 
 #define MITTS_MOVEMENT_TUNABLES(X) \
 	X(thrust) X(power_knee_speed) X(friction) X(friction_drag) X(max_speed) \
 	X(move_deadzone) X(stop_decel) X(reverse_skid_fraction) X(turn_accel) \
-	X(max_turn_rate) X(tight_turn_multiplier) X(tight_turn_decel) \
-	X(tight_turn_align_angle) X(puck_carry_speed_multiplier) \
+	X(max_turn_rate) X(puck_carry_speed_multiplier) \
 	X(backward_thrust_multiplier) X(crossover_thrust_multiplier) \
-	X(backward_max_speed_multiplier) X(sprint_thrust_multiplier) \
-	X(sprint_max_speed_multiplier) X(sprint_carry_penalty_bypass) X(lateral_grip)
+	X(backward_max_speed_multiplier) X(lateral_grip) \
+	X(stance_grip_mult) X(stance_scrape) X(stance_stride_mult) \
+	X(stance_max_speed_mult) X(stance_shuffle_mult) \
+	X(commit_grip_mult) X(commit_stride_mult)
 
 class NativeSkaterMovement : public godot::RefCounted {
 	GDCLASS(NativeSkaterMovement, godot::RefCounted)
@@ -41,6 +43,7 @@ class NativeSkaterMovement : public godot::RefCounted {
 
 	double stagger_max_seconds = 0.0;
 	double stagger_max_thrust_penalty = 0.0;
+	double stagger_max_grip_penalty = 0.0;
 
 	godot::Vector3 fwd_position;
 	godot::Vector3 fwd_velocity;
@@ -49,8 +52,8 @@ class NativeSkaterMovement : public godot::RefCounted {
 			const godot::Vector3 &current_velocity,
 			const godot::Vector2 &move_input,
 			double facing_rotation_y,
-			bool has_puck, bool brake, double delta, bool sprint_active,
-			double thrust_override) const;
+			bool has_puck, bool brake, double delta, int64_t posture,
+			double thrust, double grip_scale) const;
 
 protected:
 	static void _bind_methods();
@@ -59,30 +62,31 @@ public:
 	// Returns a space-separated list of missing property names — empty means
 	// every tunable loaded.
 	godot::String configure(godot::Object *movement_config);
-	void set_stagger_params(double max_stagger_seconds, double max_thrust_penalty);
+	void set_stagger_params(double max_stagger_seconds, double max_thrust_penalty,
+			double max_grip_penalty);
 
 	godot::Vector3 apply_movement(
 			const godot::Vector3 &current_velocity,
 			const godot::Vector2 &move_input,
 			double facing_rotation_y,
-			bool has_puck, bool brake, double delta, bool sprint_active) const;
+			bool has_puck, bool brake, double delta, int64_t posture) const;
 
-	// The live-tick shape: SkaterController scales cfg.thrust by the stagger
-	// penalty each tick, so the effective thrust arrives per call instead of
-	// forcing a per-tick reconfigure.
-	godot::Vector3 apply_movement_with_thrust(
+	// The live-tick shape: SkaterController scales thrust and grip by the
+	// stagger penalty each tick, so the effective values arrive per call instead
+	// of forcing a per-tick reconfigure.
+	godot::Vector3 apply_movement_staggered(
 			const godot::Vector3 &current_velocity,
 			const godot::Vector2 &move_input,
 			double facing_rotation_y,
-			bool has_puck, bool brake, double delta, bool sprint_active,
-			double thrust) const;
+			bool has_puck, bool brake, double delta, int64_t posture,
+			double thrust, double grip_scale) const;
 
 	void integrate_forward(
 			const godot::Vector3 &position,
 			const godot::Vector3 &velocity,
 			const godot::Vector2 &move_input,
 			double facing_rotation_y,
-			bool has_puck, bool brake, bool sprint_active,
+			bool has_puck, bool brake, int64_t posture,
 			double dt, int64_t ticks, int64_t intent_decay_ticks,
 			double stagger_timer, bool use_stagger);
 

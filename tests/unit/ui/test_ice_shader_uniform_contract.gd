@@ -6,7 +6,7 @@ extends GutTest
 # comment that turned out to describe a relationship that did not exist: the four
 # arrow-geometry constants it governed were unreferenced leftovers (the shader owns
 # that geometry outright), and the values that DO cross the boundary —
-# reticle_half_len, chevron_stack_gap, the stamina radii — are pushed by
+# reticle_half_len, chevron_stack_gap — are pushed by
 # IceRingField rather than duplicated, so they cannot drift.
 #
 # What can go wrong is the other thing, and it is worse because it is silent:
@@ -72,5 +72,5 @@ func test_parsers_still_see_both_sides() -> void:
 			"expected ice.gdshader to declare many uniforms — parser may have broken")
 	assert_true(_declared_uniforms().has("ring_pos"),
 			"uniform parser must find `ring_pos`, an array-typed declaration")
-	assert_true(_pushed_uniforms().has("stamina_inner_r"),
-			"push parser must find `stamina_inner_r`")
+	assert_true(_pushed_uniforms().has("chevron_stack_gap"),
+			"push parser must find `chevron_stack_gap`")

@@ -254,8 +254,8 @@ static func should_gap_up(ctx: RoleContext, read: AIRushRead,
 # The ladder says WHERE the stand is; it does not say whether this body can GET
 # there and still be a defender when the rush arrives. That bites in one regime:
 # a defender already DEEPER than the stand — a D at home with the rush still in
-# the neutral zone — where the ladder names a stand 10–18 m up-ice, past the
-# sprint engage gap, so he arrives carrying a full stride of up-ice momentum and
+# the neutral zone — where the ladder names a stand 10–18 m up-ice, a committed
+# skate rather than positioning, so he arrives carrying a full stride of up-ice momentum and
 # any cut leaves him reversing while the rush is gone (unbounded, 4.2 m/s of
 # up-ice speed at the meet, a mean 10.9 m off his own net).
 #

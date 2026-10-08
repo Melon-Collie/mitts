@@ -24,9 +24,8 @@ extends RefCounted
 #     blade speed (no ROM cone, no lift plane).
 #   - Strips: a defender's blade sweeping through the carried puck knocks it
 #     loose along the sweep (no host restitution detail).
-#   - Sprint & stamina: REAL (StaminaRules gate/drain/lockout + the movement
-#     model's sprint multipliers at league tuning) — required for parity with
-#     the sprint-aware race reads.
+#   - Posture: REAL — the agent's stance and hit buttons resolve to the
+#     movement model's posture exactly as the controller resolves them.
 #   - Absent entirely: body collisions / checks, boards beyond the analytic
 #     clamp+reflect, goalie BEHAVIOR (a static net-center keeper exists per
 #     team purely so shot scoring sees someone home).
@@ -98,12 +97,6 @@ class SimSkater:
 	var profile: BotSkillProfile = null
 	var was_holding_shot: bool = false
 	var was_holding_slap: bool = false
-	# Live sprint pool (StaminaRules): the plant runs real sprint physics so
-	# the sprint-aware race reads and the harness bodies agree — a read that
-	# prices sprint against a plant that can't sprint recreates the
-	# treadmill class of artifact.
-	var stamina: float = 1.0
-	var sprint_locked: bool = false
 	# ≥ 0 marks a scripted puppet container (no agent); the gap it holds.
 	var puppet_hold_gap: float = -1.0
 	var puppet_depth_floor_z: float = 0.0
@@ -147,7 +140,6 @@ var airborne_ticks: int = 0
 const LANDING_SPEED_KEEP: float = 0.6
 var ticks: int = 0
 var move_cfg: SkaterMovementRules.MovementConfig
-var _stamina_cfg: StaminaRules.StaminaConfig
 # Rolling puck positions for the puppets' reaction-delayed read.
 var _puck_history: Array[Vector3] = []
 # peer_id -> tick until which that peer can't re-catch its own release.
@@ -193,9 +185,6 @@ func _init() -> void:
 	move_cfg = ctrl.get_movement_config()
 	ctrl.free()
 	move_cfg.puck_carry_speed_multiplier = 0.86
-	# Sprint plant — see the SimSkater stamina comment.
-	move_cfg.sprint_max_speed_multiplier = AISkaterCaps.LEAGUE_SPRINT_SPEED_MULT
-	_stamina_cfg = StaminaRules.StaminaConfig.new()
 
 
 func add_skater(peer_id: int, team_id: int, pos: Vector3,
@@ -357,18 +346,10 @@ func step() -> void:
 		if to_mouse.length() > move_cfg.move_deadzone:
 			s.facing = s.facing.lerp(to_mouse.normalized(), FACING_DRAG * DT).normalized()
 		var rot_y: float = atan2(-s.facing.x, -s.facing.y)
-		# Real sprint physics + stamina pool, from the agent's own sprint
-		# input — the same gate/drain/lockout chain the controller runs.
-		var is_moving: bool = s.input.move_vector.length() > move_cfg.move_deadzone
-		var sprint_on: bool = StaminaRules.sprint_active(
-				s.stamina, s.input.sprint_held, is_moving, s.sprint_locked)
 		s.vel = SkaterMovementRules.apply_movement(
 				s.vel, s.input.move_vector, rot_y, carrier_id == s.peer_id,
-				s.input.brake, DT, move_cfg, sprint_on)
-		s.stamina = StaminaRules.next_stamina(
-				s.stamina, sprint_on, carrier_id == s.peer_id, DT, _stamina_cfg)
-		s.sprint_locked = StaminaRules.next_locked(
-				s.sprint_locked, s.stamina, sprint_on, _stamina_cfg)
+				s.input.brake, DT, move_cfg,
+				SkaterMovementRules.posture_of(s.input.stance_held, s.input.hit_held))
 		s.pos += s.vel * DT
 		s.prev_blade = s.blade
 		var to_cursor: Vector3 = s.input.mouse_world_pos - s.pos
@@ -525,8 +506,6 @@ func _build_snapshot() -> WorldSnapshot:
 		st.velocity = s.vel
 		st.facing = s.facing
 		st.blade_contact_world = s.blade
-		st.stamina = s.stamina
-		st.sprint_locked = s.sprint_locked
 		snap.skater_states[s.peer_id] = st
 	snap.puck_state = PuckNetworkState.new()
 	snap.puck_state.position = puck_pos

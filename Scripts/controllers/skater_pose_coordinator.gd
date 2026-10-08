@@ -230,16 +230,6 @@ func apply_facing(input: InputState, delta: float) -> void:
 				# facing) before reaching the cursor. See follow_through_facing_recover_speed.
 				if s == State.FOLLOW_THROUGH:
 					drag = maxf(drag, _controller.follow_through_facing_recover_speed)
-				# Sprinting widens the turn: commit to straight-line speed at the
-				# cost of agility. sprint_active is resolved in _apply_movement
-				# earlier this tick, so it's deterministic across reconcile replay.
-				if _controller.sprint_active:
-					drag *= _controller.sprint_turn_multiplier
-				# Committing a check widens the turn the same way sprint does — the
-				# agility cost of loading up a hit. Stacks with sprint (both held =
-				# very committed straight line). Deterministic across replay.
-				if _controller.hit_active:
-					drag *= _controller.hit_turn_multiplier
 				var facing_target: Vector2 = to_mouse.normalized()
 				# Board shield: a carrier working the wall squares up ALONG it and
 				# protects the puck rather than facing into it. Gated to carrying —

@@ -9,7 +9,7 @@ class_name AIRoleMark
 #
 # Net-front vs. weak-side vs. sprint-home positioning is EMERGENT — it falls out
 # of WHICH man the optimal matcher (AIThreatAssignment) hands this defender, plus
-# the shared cover geometry and the state machine's sprint resolver, never
+# the shared cover geometry and the state machine's steering, never
 # separate role code. One marker per man is the matcher's guarantee, so two
 # defenders cannot stack on the same opponent.
 #

@@ -8,9 +8,10 @@ class_name LocomotionRules
 # The physics resolves the stick against travel: the part along it is a stride,
 # the part against it is a skid, the part across it turns the travel on the
 # edges. The squares of those cosine and sine terms sum to 1, so the same split
-# is directly a crossfade between the three states. Braking divides the same way
-# by the physics' own tight-turn weight; below grip speed, where the push is free
-# in any direction, the split is against facing instead of travel.
+# is directly a crossfade between the three states. In the loaded stance the
+# turning part is skated with both blades dug in rather than crossed over; the
+# brake is a stop whatever the stick says. Below grip speed, where the push is
+# free in any direction, the split is against facing instead of travel.
 #
 # Frame: XZ-plane vectors as Vector2(x, z).
 #
@@ -46,8 +47,8 @@ class Mix extends RefCounted:
 const _INTENT_MIN_SQ: float = 0.0025
 
 
-static func classify(velocity: Vector2, intent: Vector2, brake: bool, facing: Vector2,
-		tight_align_angle: float, out: Mix) -> void:
+static func classify(velocity: Vector2, intent: Vector2, brake: bool, stance: bool,
+		facing: Vector2, out: Mix) -> void:
 	out.clear()
 	var speed: float = velocity.length()
 	var has_input: bool = intent.length_squared() > _INTENT_MIN_SQ
@@ -69,9 +70,8 @@ static func classify(velocity: Vector2, intent: Vector2, brake: bool, facing: Ve
 	if brake:
 		if has_input:
 			var steer: float = travel.angle_to(intent)
-			out.tight = SkaterMovementRules.tight_turn_weight(absf(steer), tight_align_angle)
 			out.side = signf(steer) if steer != 0.0 else 1.0
-		out.stop = 1.0 - out.tight
+		out.stop = 1.0
 		return
 	if not has_input:
 		out.glide = 1.0
@@ -87,4 +87,7 @@ static func classify(velocity: Vector2, intent: Vector2, brake: bool, facing: Ve
 		out.backward = maxf(along, 0.0) ** 2 + across_t * across_t
 	else:
 		out.stride = maxf(along, 0.0) ** 2
-		out.crossover = across_t * across_t
+		if stance:
+			out.tight = across_t * across_t
+		else:
+			out.crossover = across_t * across_t

@@ -75,7 +75,6 @@ func _compete(carrier: Vector3, behind_m: float) -> Dictionary:
 		st.velocity = Vector3.ZERO
 		st.facing = Vector2(to_goal.x, to_goal.z).normalized()
 		st.blade_contact_world = entry[1]
-		st.stamina = 1.0
 		snap.skater_states[entry[0]] = st
 	snap.puck_state = PuckNetworkState.new()
 	snap.puck_state.position = carrier

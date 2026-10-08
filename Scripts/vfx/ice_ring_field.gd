@@ -2,8 +2,7 @@ class_name IceRingField
 extends Node
 
 # Feeds the ice shader's analytic on-ice HUD — player rings, elevation chevrons,
-# the slapper one-timer indicator and the stamina gauge (see
-# Shaders/ice.gdshader). None of those marks is an object: a ring under a player
+# and the slapper one-timer indicator (see Shaders/ice.gdshader). None of those marks is an object: a ring under a player
 # is just ice coloured differently near a position, so the shader computes it and
 # this node's whole job is to hand over the positions. Per frame that is a
 # handful of set_shader_parameter calls, regardless of roster size.
@@ -14,8 +13,8 @@ extends Node
 # pass, nothing to z-fight, and the shader's fwidth feather antialiases
 # analytically at any camera height.
 #
-# The slapper indicator and the stamina gauge are SELF-ONLY — at most one skater
-# shows either — so they ride as scalar uniforms rather than arrays.
+# The slapper indicator is SELF-ONLY — at most one skater shows it — so it rides
+# as scalar uniforms rather than arrays.
 #
 # Sibling of IceScratchMap: same place in the tree, same owner (HockeyRink), same
 # job of turning live skater state into something the ice shader samples.
@@ -56,12 +55,6 @@ func setup(material: ShaderMaterial) -> void:
 			SkaterHUDCoordinator.RETICLE_HALF_LENGTH)
 	_material.set_shader_parameter(&"chevron_stack_gap",
 			SkaterHUDCoordinator.CHEVRON_STACK_GAP)
-	_material.set_shader_parameter(&"stamina_inner_r",
-			SkaterHUDCoordinator.STAMINA_RING_INNER_R)
-	_material.set_shader_parameter(&"stamina_outer_r",
-			SkaterHUDCoordinator.STAMINA_RING_OUTER_R)
-	_material.set_shader_parameter(&"stamina_track_col",
-			_linear_hud_rgba(SkaterHUDCoordinator.STAMINA_TRACK_COLOR))
 
 
 # The shader's colour uniforms are LINEAR — see the note on ring_col in
@@ -73,14 +66,6 @@ func setup(material: ShaderMaterial) -> void:
 static func _linear_rgba(c: Color) -> Vector4:
 	var lin: Color = c.srgb_to_linear()
 	return Vector4(lin.r, lin.g, lin.b, MenuStyle.HUD_OPACITY)
-
-
-# As above, but KEEPING the colour's own alpha (scaled by the HUD opacity) rather
-# than replacing it. The stamina gauge's track is deliberately fainter than its
-# fill, so the two cannot share one opacity the way the rings do.
-static func _linear_hud_rgba(c: Color) -> Vector4:
-	var lin: Color = c.srgb_to_linear()
-	return Vector4(lin.r, lin.g, lin.b, c.a * MenuStyle.HUD_OPACITY)
 
 
 func _process(_delta: float) -> void:
@@ -102,8 +87,6 @@ func _process(_delta: float) -> void:
 	# _update_one_timer_indicator), so the claim must trigger on either flag or
 	# the arrow-only case never reaches the shader at all.
 	var slapper_seen: bool = false
-	# Self-only for the same reason as the slapper indicator.
-	var stamina_seen: bool = false
 	for node: Node in _live_skaters():
 		var skater: Skater = node as Skater
 		if skater == null:
@@ -118,14 +101,6 @@ func _process(_delta: float) -> void:
 			_material.set_shader_parameter(&"slapper_active", skater.slapper_field_visible())
 			_material.set_shader_parameter(&"slapper_arrow",
 					skater.slapper_field_arrow_visible())
-		if not stamina_seen and skater.stamina_field_visible():
-			stamina_seen = true
-			var body: Vector2 = skater.stamina_field_center()
-			_material.set_shader_parameter(&"stamina_zone", Vector4(
-					body.x, body.y, skater.stamina_field_fill(), 0.0))
-			_material.set_shader_parameter(&"stamina_up", skater.stamina_field_up())
-			_material.set_shader_parameter(&"stamina_fill_col",
-					_linear_hud_rgba(skater.stamina_field_color()))
 		if count >= MAX_RINGS or not skater.ring_field_visible():
 			continue
 		screen_down = skater.hud_screen_down()
@@ -139,7 +114,7 @@ func _process(_delta: float) -> void:
 		# uses it. As a child node the ring inherited this for free; driving it
 		# from a uniform makes the choice explicit. Every other accessor read
 		# here goes through the same seam, so the whole on-ice rig — ring,
-		# chevrons, gauge, reticle — moves as one body.
+		# chevrons, reticle — moves as one body.
 		var pos: Vector3 = skater.render_transform().origin
 		_positions[count] = Vector4(pos.x, pos.z,
 				SkaterHUDCoordinator.RING_OUTER_R, SkaterHUDCoordinator.RING_INNER_R)
@@ -158,7 +133,6 @@ func _process(_delta: float) -> void:
 	if not slapper_seen:
 		_material.set_shader_parameter(&"slapper_active", false)
 		_material.set_shader_parameter(&"slapper_arrow", false)
-	_material.set_shader_parameter(&"stamina_active", stamina_seen)
 
 
 # The live Skater list, rebuilt only when the roster actually changes —

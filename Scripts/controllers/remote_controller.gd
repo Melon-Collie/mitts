@@ -479,7 +479,8 @@ func _predict_sample_forward(newest: SkaterNetworkState, dt: float) -> void:
 	if nm != null:
 		nm.integrate_forward(
 				newest.position, newest.velocity, newest.move_intent,
-				heading, false, newest.brake_intent, newest.sprint_active,
+				heading, false, newest.brake_intent,
+				SkaterMovementRules.posture_of(newest.stance_active, newest.hit_committed),
 				1.0 / float(Constants.PHYSICS_TICK), ticks,
 				Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, newest.stagger_timer, true)
 		_sample_scratch.position = nm.get_forward_position()
@@ -487,7 +488,8 @@ func _predict_sample_forward(newest: SkaterNetworkState, dt: float) -> void:
 	else:
 		SkaterMovementRules.integrate_forward(
 				newest.position, newest.velocity, newest.move_intent,
-				heading, false, newest.brake_intent, newest.sprint_active,
+				heading, false, newest.brake_intent,
+				SkaterMovementRules.posture_of(newest.stance_active, newest.hit_committed),
 				_movement_config(), 1.0 / float(Constants.PHYSICS_TICK), ticks,
 				Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, _fp_result,
 				newest.stagger_timer, _body_check_config())
@@ -535,7 +537,7 @@ func _interpolate(delta: float) -> void:
 		interpolated.move_intent = newest.move_intent
 		interpolated.brake_intent = newest.brake_intent
 		interpolated.hit_committed = newest.hit_committed
-		interpolated.sprint_active = newest.sprint_active
+		interpolated.stance_active = newest.stance_active
 		interpolated.wrister_address_side = newest.wrister_address_side
 		interpolated.balance_tilt = newest.balance_tilt
 		interpolated.balance_tilt_vel = newest.balance_tilt_vel
@@ -575,7 +577,7 @@ func _interpolate(delta: float) -> void:
 		interpolated.move_intent = to_state.move_intent
 		interpolated.brake_intent = to_state.brake_intent
 		interpolated.hit_committed = to_state.hit_committed
-		interpolated.sprint_active = to_state.sprint_active
+		interpolated.stance_active = to_state.stance_active
 		interpolated.wrister_address_side = to_state.wrister_address_side
 		interpolated.balance_tilt = from_state.balance_tilt.lerp(to_state.balance_tilt, t)
 		interpolated.balance_tilt_vel = from_state.balance_tilt_vel.lerp(to_state.balance_tilt_vel, t)
@@ -622,7 +624,9 @@ func _interpolate(delta: float) -> void:
 			nm.integrate_forward(
 					interpolated.position, interpolated.velocity, interpolated.move_intent,
 					atan2(interpolated.facing.x, interpolated.facing.y), false,
-					interpolated.brake_intent, interpolated.sprint_active,
+					interpolated.brake_intent,
+					SkaterMovementRules.posture_of(interpolated.stance_active,
+							interpolated.hit_committed),
 					1.0 / float(Constants.PHYSICS_TICK), fp_ticks,
 					Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, fp_stagger, true)
 			interpolated.position = nm.get_forward_position()
@@ -631,7 +635,10 @@ func _interpolate(delta: float) -> void:
 			SkaterMovementRules.integrate_forward(
 					interpolated.position, interpolated.velocity, interpolated.move_intent,
 					atan2(interpolated.facing.x, interpolated.facing.y), false,
-					interpolated.brake_intent, interpolated.sprint_active, _movement_config(),
+					interpolated.brake_intent,
+					SkaterMovementRules.posture_of(interpolated.stance_active,
+							interpolated.hit_committed),
+					_movement_config(),
 					1.0 / float(Constants.PHYSICS_TICK), fp_ticks,
 					Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, _fp_result,
 					fp_stagger, _body_check_config())
@@ -752,11 +759,10 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	# which only _process_input stamps — mirror it from the replicated brake
 	# bit so another player's hockey stop actually sprays on this machine.
 	skater.is_braking = state.brake_intent
-	# The gait's sprint read keys off the CONTROLLER's sprint_active, which
+	# The gait's stance read keys off the CONTROLLER's stance_active, which
 	# only the simulating machine resolves (_apply_movement) — mirror it from
-	# the replicated bit so another player's sprint visibly changes their
-	# stride on this machine (the on-screen stamina tell).
-	sprint_active = state.sprint_active
+	# the replicated bit so another player's stance reads on this machine.
+	stance_active = state.stance_active
 	# Bottom hand is purely reactive to top_hand + blade and needs no network
 	# state of its own; it's posed once per rendered frame in _render_pose_update
 	# (Skater._process) along with the gait, not here.

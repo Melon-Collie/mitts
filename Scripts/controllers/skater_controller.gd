@@ -21,10 +21,6 @@ var stop_decel: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
 var reverse_skid_fraction: float = GameRules.DEFAULT_SKATER_REVERSE_SKID_FRACTION
 var turn_accel: float = GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2
 var max_turn_rate: float = 6.0
-# Brake + stick off travel: ~3 m radius at top speed, coming out near 7 m/s.
-var tight_turn_multiplier: float = 2.0
-var tight_turn_decel: float = 3.0
-var tight_turn_align_angle: float = deg_to_rad(30.0)
 # Edge grip; per-build value = base × agility_mult in apply_attributes, and the
 # skate-profile gear slot leans it later. Turn radius at speed rides this.
 var lateral_grip: float = 1.0
@@ -37,48 +33,28 @@ var backward_max_speed_multiplier: float = 0.75
 # duration, so a far start implies a high velocity — clamp it here so the stride
 # animation reads as a hard skate rather than over-spinning past its range.
 var approach_max_gait_speed: float = 9.0
-# ── Sprint / Stamina Tuning ───────────────────────────────────────────────────
-# Sprint (Shift) burns a stamina pool for a top-speed burst. Boost is primarily
-# the speed cap; a smaller thrust bump lets you actually reach it. Stamina is a
-# 0..1 fraction; drain/regen are fractions-per-second.
-# sprint_max_speed_multiplier is OVERWRITTEN per-build by apply_attributes
-# (PlayerAttributes.sprint_ceiling_mult), which grounds the sprint CEILING to the
-# 20–25 mph NHL burst band so a burner opens a gear a plodder doesn't have. This
-# @export is only the pre-apply default (a neutral build).
-var sprint_max_speed_multiplier: float = 1.14
-# Fraction of the puck-carry speed penalty waived WHILE sprinting — heads-down,
-# straight-line, flat-out. Lets a fast carrier separate; the real carry cost is
-# the sprint stamina drain below, not an intrinsic slowdown.
-var sprint_carry_penalty_bypass: float = 0.6
-var sprint_thrust_multiplier: float = 1.20
-var sprint_drain_per_sec: float = 0.45         # ~2.2s of full sprint off-puck
-var sprint_carry_drain_multiplier: float = 1.6 # carrying drains faster (~1.4s)
-var stamina_regen_per_sec: float = 0.25        # baseline (medium Physical): ~4s to refill, ~2s to the 0.5 sprint-unlock
-var sprint_unlock_fraction: float = 0.5        # exhausted → recover to here before sprinting again
-# Turn-rate scale while sprinting (< 1.0 = wider, lazier turns). This is the
-# tradeoff that makes sprint a decision rather than a hold-always button:
-# committed straight-line speed at the cost of agility, mirroring the
-# hustle/turn-radius coupling in sim hockey games. Scales facing_drag_speed in
-# SkaterPoseCoordinator.apply_facing. Deterministic from sprint_active, so it
-# re-derives identically through reconcile replay (no new wire state).
-var sprint_turn_multiplier: float = 0.55
+# ── Stance Tuning ─────────────────────────────────────────────────────────────
+# The stance (Shift) is low and loaded: twice the edge grip for choppy strides
+# and a lower cap. Field meanings: SkaterMovementRules.MovementConfig.
+var stance_grip_mult: float = 2.0
+# 3 m/s² of bleed on a full-lock cut at top speed: at ×2 grip the excess there is
+# turn_accel, so the scrape is that bleed over turn_accel.
+var stance_scrape: float = 3.0 / GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2
+var stance_stride_mult: float = 0.6
+var stance_max_speed_mult: float = 0.85
+var stance_shuffle_mult: float = 1.2
 # ── Hit-Button (Body-Check Commit) Tuning ─────────────────────────────────────
 # The hit button (Ctrl / input.hit_held) commits a check: it delivers the full
 # body-check transfer (see Skater.hit_passive_transfer_mult for the uncommitted
-# floor), and pays for it with a stamina drain on the shared sprint pool PLUS the
-# commitment of pulling the stick off the ice — while committed you can't poke,
-# receive a pass, or corral a loose puck (gated in PuckController/PickupClaim on
-# the replicated skater.hit_committed). So a big hit is a committed read (line them
-# up, spend stamina, give up puck play), not a free bump. Deterministic from the
-# replicated input.hit_held, so every cost re-derives through reconcile replay.
-var hit_stamina_drain_per_sec: float = 0.5    # drained while committing a check
-# Turn-rate scale while committing (< 1.0 = wider turns). 1.0 — the commitment
-# cost sits entirely on the withdrawn stick above, so you can steer freely to line
-# up the hit; penalising the ATTEMPT (tracking a mover) rather than the miss is
-# backwards. Full-speed homing is still bounded because sprinting in for max
-# closing pays sprint's own turn radius (sprint_turn_multiplier). Dial below 1.0
-# if committed checks feel too sticky.
-var hit_turn_multiplier: float = 1.0
+# floor), and pays for it by pulling the stick off the ice — while committed you
+# can't poke, receive a pass, or corral a loose puck (gated in
+# PuckController/PickupClaim on the replicated skater.hit_committed) — and by
+# skating loaded on a shoulder: less grip, weaker strides. A commit loaded early
+# is visible and can't follow a carrier who cuts; one thrown late costs almost
+# nothing. Deterministic from the replicated input.hit_held, so every cost
+# re-derives through reconcile replay.
+var commit_grip_mult: float = 0.6
+var commit_stride_mult: float = 0.5
 # Commit stance (cosmetic): while the Hit button is held the skater visibly loads
 # up for the check — leans into it, sinks into a crouch, drives the leading
 # shoulder forward across the chest with the near arm tucked, and (empty-handed
@@ -129,13 +105,13 @@ var hit_commit_hand_local_z: float = -0.40
 var hit_commit_choke_frac: float = 0.10
 var hit_commit_pose_speed: float = 9.0        # how fast the stance eases in/out
 # ── Body-Check Stagger Tuning ─────────────────────────────────────────────────
-# Getting checked hard staggers the victim: a temporary thrust penalty plus a
-# stamina bite, both scaled by how hard the hit landed (the m/s transfer impulse).
-# stagger_timer (seconds) holds the recovery window AND drives the penalty depth —
-# a harder hit sets a longer timer, easing back to full thrust as it decays. Flat
-# for every player in v1 (the hit strength already reflects the attacker's Size/
-# Physical/Speed and the victim's mass). Pure math in BodyCheckRules; deterministic
-# and replicated so it survives reconcile replay (same treatment as stamina).
+# Getting checked hard staggers the victim: a temporary thrust and grip penalty,
+# scaled by how hard the hit landed (the m/s transfer impulse). stagger_timer
+# (seconds) holds the recovery window AND drives the penalty depth — a harder hit
+# sets a longer timer, easing back to full as it decays. Flat for every player in
+# v1 (the hit strength already reflects the attacker's Size/Physical/Speed and the
+# victim's mass). Pure math in BodyCheckRules; deterministic and replicated so it
+# survives reconcile replay.
 #
 # Grounded to the inelastic magnitudes: the delivered victim impulse is
 # closing_speed × transfer × m_a/(m_a+m_b), so at a MEDIUM build (transfer 0.65,
@@ -145,13 +121,13 @@ var hit_commit_pose_speed: float = 9.0        # how fast the stance eases in/out
 # loose. That lands a full check + strip at ~4 m/s closing for a medium build
 # (~3.4 for a heavy one) — "square them up and skate into them with some pace".
 # Closing past the ref keeps scaling the impulse linearly into the knockdown band
-# below, so a sprint / head-on collision is a bigger hit: a ceiling, not a
+# below, so a full-speed / head-on collision is a bigger hit: a ceiling, not a
 # requirement. Still feel tunables.
 var stagger_min_impulse: float = 0.6       # m/s transfer delta below which a hit doesn't stagger
 var stagger_ref_impulse: float = 1.35      # m/s transfer delta treated as a full-strength check (== puck-strip threshold)
 var stagger_max_seconds: float = 1.0       # recovery window of a full-strength check
-var stagger_max_stamina_drain: float = 0.35  # pool fraction a full-strength check bites
 var stagger_max_thrust_penalty: float = 0.5  # peak thrust reduction at full stagger
+var stagger_max_grip_penalty: float = 0.4    # peak edge-grip reduction at full stagger
 # Cosmetic stumble while staggered: a decaying trunk wobble layered into the
 # gait's trunk texture (GaitStaggerLayer). Amplitude tracks the time
 # left on stagger_timer, and the wobble phase is derived FROM the timer, so
@@ -172,7 +148,7 @@ var stagger_recoil_deg: float = 13.0  # peak torso recoil lean at full stagger
 # stagger_timer. Deliberately kept ABOVE the full-check point (stagger_ref 1.35):
 # a full check staggers + strips; a KNOCKDOWN is the reward for a genuinely SOLID
 # hit — ~5.5 m/s closing at a medium build (~4.5 for a heavy one), the pace of a
-# committed skate-in on a carrier, up to a maximal ~9.5 m/s head-on / sprint
+# committed skate-in on a carrier, up to a maximal ~9.5 m/s head-on
 # collision. It sits just above the AI's commit bar (AIBodyCheck.COMMIT_IMPULSE_M_S
 # 1.6) so a committed bot check lands a hard stagger/strip and, at real closing,
 # tips into a knockdown. Set knockdown_impulse very high (or 0) to effectively
@@ -433,7 +409,7 @@ var lower_body_lag_speed: float = 5.0
 # Procedural leg gait — see SkaterSkatingCoordinator. All cosmetic. Forward,
 # backward, and lateral (crossover) gaits blend by direction of travel.
 var stride_cadence: float = 1.4          # low-speed slope: radians of stride phase per metre skated
-var stride_cadence_max_rate: float = 6.5  # rad/s ceiling the cadence saturates toward (caps sprint leg turnover)
+var stride_cadence_max_rate: float = 6.5  # rad/s ceiling the cadence saturates toward (caps top-speed leg turnover)
 var stride_roll_deg: float = 7.0          # side-to-side leg rock amplitude (fwd/back)
 # Forward push amplitude (fore/aft). Raised 6 → 10 when the knee fore-aft
 # compensation landed: the old visible "reach" was mostly the knee-release
@@ -624,15 +600,14 @@ var backpedal_chest_deg: float = 4.0     # chest-up trunk pitch over the C-cuts
 var glide_sway_deg: float = 1.8          # lazy edge-to-edge roll amplitude
 var glide_sway_hz: float = 0.4           # sway frequency — far below stride cadence
 var glide_inside_tuck_deg: float = 10.0  # inside-leg knee tuck — weight on the outside edge
-# Sprint read: sprint_active (resolved where the skater is simulated; bit 5 of
-# the v16 intent byte for client-rendered remotes) drives a visibly committed
-# gait — LONGER, more powerful strides (the cadence ceiling already keeps leg
-# turnover flat, so sprint reads as reach, not churn), a deeper sit, and the
-# shoulders driving forward. Doubles as the opponent-stamina tell: a skater
-# who stops striding like this has run out of sprint.
-var sprint_stride_gain: float = 0.35     # stride amplitude boost at full sprint
-var sprint_stance_gain: float = 0.18     # extra crouch depth while sprinting
-var sprint_lean_deg: float = 7.0         # extra forward trunk pitch while sprinting
+# Stance read: stance_active (resolved where the skater is simulated; bit 5 of
+# the intent byte for client-rendered remotes) drops the skater low and loaded
+# — a deeper sit, SHORTER, choppier strides, and the chest over the knees — so
+# an opponent can read the stance before the cut comes.
+var stance_stride_gain: float = -0.3     # stride amplitude change at full stance
+var stance_sit_gain: float = 0.35        # extra crouch depth in the stance
+var stance_lean_deg: float = 6.0         # extra forward trunk pitch in the stance
+var stance_sit_floor: float = 0.75       # crouch held in the stance, even at rest
 # Cadence "gears" — grounded in on-ice biomechanics: from acceleration to
 # sustained max velocity real skaters DROP stride frequency and lengthen the
 # glide (speed is power per stride, not faster turnover). cruise_gear (fast AND
@@ -1018,16 +993,10 @@ var _has_prev_carry_pin: bool = false
 # to avoid a double gait pass. The main live path (_process_input) clears it and
 # delegates cosmetics to the render hook.
 var _self_posing: bool = false
-# Sprint stamina (0..1) and the exhaustion lockout latch. Updated deterministically
-# each tick in _apply_movement; the local player's reconcile snaps both to the
-# host's authoritative value before replay (see LocalController.reconcile) and
-# the host broadcasts them via fill_network_state.
-var stamina: float = 1.0
-var _sprint_locked: bool = false
-# Body-check stagger: seconds of thrust-penalty recovery remaining. Set
+# Body-check stagger: seconds of thrust/grip-penalty recovery remaining. Set
 # host-authoritatively when this skater absorbs a check (_on_body_check_received),
 # decayed each tick in _apply_movement, and replicated so the local player's
-# reconcile snaps it to the host baseline before replay (same as stamina).
+# reconcile snaps it to the host baseline before replay.
 var stagger_timer: float = 0.0
 # Body-check knockdown: seconds of full movement lockout remaining. Set host-
 # authoritatively (and predicted on the local victim) when a hit exceeds the
@@ -1055,16 +1024,14 @@ var _knockdown_entry_speed: float = 0.0
 # gates it: receivers apply it, the local reconcile adopts the host's. The reel
 # tilts UpperBody, so it moves the blade.
 var stagger_recoil_dir: Vector2 = Vector2(0.0, 1.0)
-# Resolved sprint-boost state for this tick. Written in _apply_movement (which
-# runs before _pose.apply_facing in _process_input) and read by the pose
-# coordinator to apply the turn-rate penalty. Public so the pose collaborator
-# can read it without a getter.
-var sprint_active: bool = false
+# Resolved stance for this tick (Shift held, no check committed, locomotion not
+# suppressed). Written in _apply_movement; the gait reads it for the stance pose
+# and fill_network_state replicates it for remotes.
+var stance_active: bool = false
 # Resolved hit-commit (body-check button) state for this tick. Written in
-# _apply_movement alongside sprint_active and read by the pose coordinator for the
-# turn-rate penalty; also mirrored to skater.hit_committed so the collision
-# resolver picks full-vs-passive transfer. Deterministic from input.hit_held +
-# stamina, so it re-derives through reconcile replay with no wire state.
+# _apply_movement and mirrored to skater.hit_committed so the collision resolver
+# picks full-vs-passive transfer. Deterministic from input.hit_held, so it
+# re-derives through reconcile replay with no wire state.
 var hit_active: bool = false
 
 var _game_state_has_faceoff_prep: bool = false
@@ -1242,8 +1209,6 @@ var _base_backhand_power_coefficient:   float = 0.0
 var loft_tan_low: float = GameRules.DEFAULT_LOFT_TAN_LOW
 var loft_tan_mid: float = GameRules.DEFAULT_LOFT_TAN_MID
 var loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH
-var _base_sprint_drain_per_sec:         float = 0.0
-var _base_stamina_regen_per_sec:        float = 0.0
 var _base_hand_rest_y:                  float = 0.0
 var _base_hand_y_max:                   float = 0.0
 
@@ -1257,7 +1222,6 @@ var _base_hand_y_max:                   float = 0.0
 func build_ai_caps() -> AISkaterCaps:
 	var caps := AISkaterCaps.new()
 	caps.max_speed = max_speed
-	caps.sprint_speed_mult = sprint_max_speed_multiplier
 	caps.max_accel = thrust
 	caps.blade_span = stick_length + GameRules.DEFAULT_BLADE_LENGTH_M
 	caps.stick_reach = stick_length
@@ -1309,11 +1273,13 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 		_capture_attribute_bases()
 	var m_height:  float = attrs.height_mult()
 	# Skating splits into THREE height-routed sub-levers: Speed owns top-end velocity
-	# (max_speed; the sprint ceiling below scales off it), Acceleration owns thrust
+	# (max_speed), Acceleration owns thrust
 	# (forward burst — small-favored, floored above agility so a big weak-skater can
 	# still drive straight), and Agility owns the turn/brake/edge handling.
 	var m_agility: float = attrs.agility_mult()
-	max_speed = _base_max_speed * attrs.speed_mult()
+	# Top speed is Speed-attributed and grounded to the 20–25 mph NHL burst band,
+	# so a real burner opens a gear a plodder does not have.
+	max_speed = _base_max_speed * attrs.speed_mult() * attrs.top_speed_mult()
 	thrust    = _base_thrust    * attrs.accel_mult()
 	facing_drag_speed           = _base_facing_drag_speed           * m_agility
 	facing_drag_speed_braking   = _base_facing_drag_speed_braking   * m_agility
@@ -1324,20 +1290,14 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	# lean/small one. The facing/stop terms above are the feel of quickness; this is
 	# the arc itself.
 	lateral_grip                = _base_lateral_grip                * m_agility
-	# The sprint CEILING is Speed-attributed and grounded to the 20–25 mph NHL burst
-	# band, so a real burner opens a gear a plodder does not have — that is where
-	# puck-carrier separation lives now that cruise speeds are near-uniform.
-	sprint_max_speed_multiplier = attrs.sprint_ceiling_mult()
 	# friction_drag is velocity-proportional drag — scaling it inversely with Agility
 	# gives agile players the "good edges" feel: less momentum leaks through the
 	# blades during a cut, so they carry more speed out of turns. The lateral /
 	# backward thrust multipliers stay universal; what makes an agile build agile is
 	# how cleanly it transitions between those directions.
 	friction_drag               = _base_friction_drag               * attrs.agility_glide_mult()
-	# Carry speed retention is a small, Speed-eased tax. The real cost of carrying at
-	# speed is the 1.6x sprint stamina drain (StaminaRules), not an intrinsic
-	# slowdown, so a fast carrier CAN separate in a stamina-limited burst. A computed
-	# value, not a base × mult.
+	# Carry speed retention is a small, Speed-eased tax on the top-speed cap. A
+	# computed value, not a base × mult.
 	puck_carry_speed_multiplier = attrs.carry_speed_mult()
 	# Hands has no lever by constitution ("your hands are you"): the blade caps derive
 	# from LEVER GEOMETRY below, after the reach/stick rescale computes this build's
@@ -1380,13 +1340,6 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	skater.weight                      = _base_skater_weight                  * attrs.mass_mult()
 	skater.body_check_transfer         = _base_skater_body_check_transfer     * attrs.check_delivery_mult()
 	skater.body_check_brace_resistance = _base_skater_body_check_brace_resistance * attrs.brace_mult()
-	# Stamina is height-flavored metabolism (no attribute touches it): a small player
-	# has a SHALLOWER pool that drains faster but recovers FAST, a big player a DEEP
-	# pool that drains slowly and recovers slowly. Small = short repeatable bursts,
-	# big = one long drive then a slow refill. The cached stamina config is dropped
-	# below so the next tick rebuilds from these rates.
-	sprint_drain_per_sec  = _base_sprint_drain_per_sec  * attrs.stamina_drain_mult()
-	stamina_regen_per_sec = _base_stamina_regen_per_sec * attrs.stamina_regen_mult()
 	# Arms scale with actual height (the dedicated height_mult, tighter than the
 	# gameplay size_mult) so proportions stay realistic. The stick is equipment, not
 	# anatomy, so it rides a GENTLER curve (stick_len_mult, ~0.65x the height
@@ -1483,7 +1436,6 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	_ik.invalidate_configs()
 	_cached_move_cfg = null
 	_cached_block_move_cfg = null
-	_cached_stamina_cfg = null
 	_cached_wrister_cfg = null
 	_cached_slapper_cfg = null
 	_skating.native_reconfigure()
@@ -1507,8 +1459,6 @@ func _capture_attribute_bases() -> void:
 	_base_max_blade_speed              = max_blade_speed
 	_base_max_blade_accel              = max_blade_accel
 	_base_backhand_power_coefficient   = backhand_power_coefficient
-	_base_sprint_drain_per_sec         = sprint_drain_per_sec
-	_base_stamina_regen_per_sec        = stamina_regen_per_sec
 	_base_puck_carry_speed_multiplier  = puck_carry_speed_multiplier
 	_base_stick_length                 = stick_length
 	_base_wrister_full_stroke_travel   = wrister_full_stroke_travel
@@ -1532,16 +1482,15 @@ func _on_body_checked_player(victim: Skater, impact_force: float, hit_direction:
 	puck.on_body_check(skater, victim, impact_force, hit_direction)
 
 # This skater just absorbed a check (victim-only signal). The host sets the stagger
-# window + stamina bite scaled by hit strength, then broadcasts stagger_timer /
-# stamina via fill_network_state. `max` so a weaker follow-up never shortens an
-# in-flight stagger.
+# window scaled by hit strength, then broadcasts stagger_timer via
+# fill_network_state. `max` so a weaker follow-up never shortens an in-flight
+# stagger.
 #
-# The LOCAL victim also fires this, so it predicts its own thrust stagger off the
-# same transfer impulse rather than waiting a round-trip for the host's snapshot.
-# Stamina stays host-only — predicting a pool drain that might be refunded is more
-# jarring than a brief thrust dip. Reconcile snaps stagger_timer to the server
-# value and re-derives the decay, so a misprediction self-heals in one reconcile.
-# Remote bodies on a client still defer to the snapshot (early return).
+# The LOCAL victim also fires this, so it predicts its own stagger off the same
+# transfer impulse rather than waiting a round-trip for the host's snapshot.
+# Reconcile snaps stagger_timer to the server value and re-derives the decay, so
+# a misprediction self-heals in one reconcile. Remote bodies on a client still
+# defer to the snapshot (early return).
 func _on_body_check_received(impulse: Vector3) -> void:
 	var impulse_magnitude: float = impulse.length()
 	# Capture the recoil direction (body frame) so the torso reels the way the
@@ -1564,14 +1513,8 @@ func _on_body_check_received(impulse: Vector3) -> void:
 			_set_knockdown_from_impulse(knockdown_add, impulse)
 		return
 	_set_knockdown_from_impulse(knockdown_add, impulse)
-	var add: float = BodyCheckRules.stagger_seconds_from_impulse(impulse_magnitude, cfg)
-	# Only extend (never shorten) the stagger window, and only bite stamina when
-	# this hit is harder than the residual — incremental_stamina_drain handles the
-	# sustained-contact case so a grind doesn't empty the pool every tick.
-	if add <= stagger_timer:
-		return
-	stamina = maxf(stamina - BodyCheckRules.incremental_stamina_drain(stagger_timer, impulse_magnitude, cfg), 0.0)
-	stagger_timer = add
+	stagger_timer = maxf(stagger_timer,
+			BodyCheckRules.stagger_seconds_from_impulse(impulse_magnitude, cfg))
 
 
 # Extend-never-shorten knockdown write for the impulse path (host + local-victim
@@ -1977,8 +1920,6 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	# shot stance, wind-up engagement) — charge feedback is fully diegetic:
 	# the wind-up animation itself is the gauge, there is no charge ring.
 	state.shot_charge = skater.shot_charge
-	state.stamina = stamina
-	state.sprint_locked = _sprint_locked
 	state.stagger_timer = stagger_timer
 	state.knockdown_timer = knockdown_timer
 	state.balance_tilt = skater.balance_tilt()
@@ -1989,7 +1930,7 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.move_intent = skater.move_intent
 	state.brake_intent = skater.brake_intent
 	state.hit_committed = skater.hit_committed
-	state.sprint_active = sprint_active
+	state.stance_active = stance_active
 
 # One tick of the balance lean: the body tips toward the acceleration THIS tick's
 # movement produced (BalanceRules.balance_tilt), through the critically damped
@@ -2010,11 +1951,6 @@ func _advance_balance(tick_start_velocity: Vector3, delta: float) -> void:
 
 func get_shot_state() -> int:
 	return _sm.get_state()
-
-# Whether sprint is currently locked out by exhaustion (stamina bottomed out and
-# hasn't recovered past sprint_unlock_fraction yet). Read-only view for the HUD.
-func is_sprint_exhausted() -> bool:
-	return _sprint_locked
 
 func apply_network_state(_net_state: SkaterNetworkState, _host_ts: float) -> void:
 	pass  # overridden by RemoteController on client
@@ -2057,12 +1993,9 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	# Skid VFX (SkaterVFX trail marks + spray) keys off is_braking — stamp it
 	# from the recorded brake bit so replayed hockey stops spray like live ones.
 	skater.is_braking = state.brake_intent
-	stamina = state.stamina
-	_sprint_locked = state.sprint_locked
-	# The gait's sprint read (longer strides, deeper sit, forward lean) keys
-	# off the controller's resolved sprint state — stamp it from the recorded
-	# bit so replayed sprints stride like live ones.
-	sprint_active = state.sprint_active
+	# The gait's stance read keys off the controller's resolved stance — stamp
+	# it from the recorded bit so a replayed stance skates like the live one.
+	stance_active = state.stance_active
 	stagger_timer = state.stagger_timer
 	stagger_recoil_dir = state.recoil_dir
 	balance_tilt_vel = state.balance_tilt_vel
@@ -2303,11 +2236,7 @@ func teleport_to(pos: Vector3, facing: Vector2 = Vector2.ZERO) -> void:
 	# discontinuity — respawn, slot swap, faceoff staging, drill restage — funnels
 	# through here, so this is the one place that has to drop the history.
 	skater.reset_physics_interpolation()
-	# Fresh legs out of a faceoff / respawn — refill the stamina pool and clear
-	# any exhaustion lockout so play resumes from a clean slate.
-	stamina = 1.0
-	_sprint_locked = false
-	sprint_active = false
+	stance_active = false
 	hit_active = false
 	skater.hit_committed = false
 	stagger_timer = 0.0
@@ -2377,7 +2306,7 @@ func begin_approach(start: Vector3, target: Vector3, settle_facing: Vector2,
 		teleport_to(start, ApproachRules.path_facing(start, target, 0.0, settle_facing))
 		carry = Vector3.ZERO
 	else:
-		# Momentum-preserving: clear stamina / charge and drop reconcile history
+		# Momentum-preserving: clear the charge and drop reconcile history
 		# (teleport_to with a zero facing skips the gait reset + facing snap), then
 		# re-seed the live velocity so the stride carries through the whistle.
 		teleport_to(start, Vector2.ZERO)
@@ -3063,7 +2992,7 @@ func _apply_block_movement(_input: InputState, delta: float) -> void:
 	if _native_block_move != null:
 		skater.velocity = _native_block_move.apply_movement(
 				skater.velocity, Vector2.ZERO, skater.rotation.y,
-				false, true, delta, false)
+				false, true, delta, SkaterMovementRules.Posture.UPRIGHT)
 	else:
 		skater.velocity = SkaterMovementRules.apply_movement(
 				skater.velocity, Vector2.ZERO, skater.rotation.y,
@@ -3100,67 +3029,57 @@ func _apply_movement(input: InputState, delta: float) -> void:
 
 	# Knockdown: the top of the stagger continuum. Decays every tick like stagger.
 	# While down, input is ignored entirely — the body keeps its momentum from the
-	# hit and bleeds it via heavy friction (slides, then stops), stamina regenerates,
-	# and stagger still decays, so the player recovers on all clocks while grounded.
-	# All deterministic → reconcile replay reproduces the down window; the flag gates
+	# hit and bleeds it via heavy friction (slides, then stops), and stagger still
+	# decays, so the player recovers on every clock while grounded. All
+	# deterministic → reconcile replay reproduces the down window; the flag gates
 	# puck pickup (Skater.is_knocked_down).
 	knockdown_timer = maxf(knockdown_timer - delta, 0.0)
 	skater.is_knocked_down = knockdown_timer > 0.0
 	if skater.is_knocked_down:
-		sprint_active = false
+		stance_active = false
 		hit_active = false
 		skater.hit_committed = false
 		stagger_timer = maxf(stagger_timer - delta, 0.0)
-		var kd_cfg: StaminaRules.StaminaConfig = _stamina_config()
-		stamina = StaminaRules.next_stamina(stamina, false, has_puck, delta, kd_cfg, false)
-		_sprint_locked = StaminaRules.next_locked(_sprint_locked, stamina, false, kd_cfg, false)
 		skater.velocity = skater.velocity.move_toward(Vector3.ZERO, knockdown_friction * delta)
 		return
 
 	var move_state: SkaterStateMachine.State = _sm.get_state()
-	# Locomotion is suppressed during a planted slap windup / block stance, but
-	# stamina still ticks (you can't sprint, so it regenerates). Computing it
-	# before the early-return keeps the bar honest through those states.
+	# Locomotion is suppressed during a planted slap windup / block stance.
 	var locomotion_suppressed: bool = \
 			move_state == State.SLAPPER_CHARGE_WITH_PUCK or move_state == State.SHOT_BLOCKING \
 			or move_state == State.ONE_TIMER_RETENTION
-	var is_moving: bool = not input.brake and input.move_vector.length() > move_deadzone
-	sprint_active = not locomotion_suppressed and StaminaRules.sprint_active(
-			stamina, input.sprint_held, is_moving, _sprint_locked)
-	# Hit commit shares the sprint stamina pool and lockout but needs no movement
-	# (you can hold the check-ready stance stationary to line someone up). Resolved
-	# before the stamina update so this tick's drain reflects the commit, and
-	# mirrored to the skater so the collision resolver reads full-vs-passive
-	# transfer. Deterministic (input.hit_held + snapped stamina), so reconcile
-	# replay reproduces it.
-	hit_active = not locomotion_suppressed and StaminaRules.hit_active(
-			stamina, input.hit_held, _sprint_locked)
+	# The commit wins over the stance: being caught upright is its whole cost.
+	# Mirrored to the skater so the collision resolver reads full-vs-passive
+	# transfer. Deterministic from the input, so reconcile replay reproduces both.
+	hit_active = not locomotion_suppressed and input.hit_held
 	skater.hit_committed = hit_active
-	var stamina_cfg: StaminaRules.StaminaConfig = _stamina_config()
-	stamina = StaminaRules.next_stamina(stamina, sprint_active, has_puck, delta, stamina_cfg, hit_active)
-	_sprint_locked = StaminaRules.next_locked(_sprint_locked, stamina, sprint_active, stamina_cfg, hit_active)
+	stance_active = not locomotion_suppressed and input.stance_held and not hit_active
 	# Body-check stagger decays deterministically every tick (including during a
-	# planted charge/block and through reconcile replay), so the thrust penalty
-	# eases back on its own. Decayed before the suppression early-out so a player
+	# planted charge/block and through reconcile replay), so the penalties ease
+	# back on their own. Decayed before the suppression early-out so a player
 	# checked mid-windup keeps recovering.
 	stagger_timer = maxf(stagger_timer - delta, 0.0)
 
 	if locomotion_suppressed:
 		return
 
+	var posture: SkaterMovementRules.Posture = SkaterMovementRules.posture_of(
+			stance_active, hit_active)
 	var cfg: SkaterMovementRules.MovementConfig = _movement_config()
-	# Apply the stagger thrust penalty on top of the attribute-scaled base thrust.
+	var bc: BodyCheckRules.Config = _body_check_config()
+	var grip_scale: float = BodyCheckRules.grip_mult(stagger_timer, bc)
+	# The stagger thrust penalty on top of the attribute-scaled base thrust.
 	# cfg.thrust is set from `thrust` every tick (cheap, no allocation), so the
 	# penalty is transient and never compounds into the cached config.
-	cfg.thrust = thrust * BodyCheckRules.thrust_mult(stagger_timer, _body_check_config())
+	cfg.thrust = thrust * BodyCheckRules.thrust_mult(stagger_timer, bc)
 	if _native_move != null:
-		skater.velocity = _native_move.apply_movement_with_thrust(
+		skater.velocity = _native_move.apply_movement_staggered(
 				skater.velocity, input.move_vector, skater.rotation.y,
-				has_puck, input.brake, delta, sprint_active, cfg.thrust)
+				has_puck, input.brake, delta, posture, cfg.thrust, grip_scale)
 	else:
 		skater.velocity = SkaterMovementRules.apply_movement(
 				skater.velocity, input.move_vector, skater.rotation.y,
-				has_puck, input.brake, delta, cfg, sprint_active)
+				has_puck, input.brake, delta, cfg, posture, grip_scale)
 
 # Movement configs are cached — _apply_movement runs every physics tick (and
 # once per reconcile-replayed input), and the source exports change only in
@@ -3187,7 +3106,8 @@ func _movement_config() -> SkaterMovementRules.MovementConfig:
 				_native_move = null
 			else:
 				var bc: BodyCheckRules.Config = _body_check_config()
-				_native_move.set_stagger_params(bc.max_stagger_seconds, bc.max_thrust_penalty)
+				_native_move.set_stagger_params(bc.max_stagger_seconds, bc.max_thrust_penalty,
+						bc.max_grip_penalty)
 	return _cached_move_cfg
 
 # The configured native movement kernel for this skater, or null when the
@@ -3252,38 +3172,24 @@ func _build_movement_config() -> SkaterMovementRules.MovementConfig:
 	cfg.reverse_skid_fraction = reverse_skid_fraction
 	cfg.turn_accel = turn_accel
 	cfg.max_turn_rate = max_turn_rate
-	cfg.tight_turn_multiplier = tight_turn_multiplier
-	cfg.tight_turn_decel = tight_turn_decel
-	cfg.tight_turn_align_angle = tight_turn_align_angle
 	cfg.puck_carry_speed_multiplier = puck_carry_speed_multiplier
 	cfg.backward_thrust_multiplier = backward_thrust_multiplier
 	cfg.crossover_thrust_multiplier = crossover_thrust_multiplier
 	cfg.backward_max_speed_multiplier = backward_max_speed_multiplier
-	cfg.sprint_thrust_multiplier = sprint_thrust_multiplier
-	cfg.sprint_max_speed_multiplier = sprint_max_speed_multiplier
-	cfg.sprint_carry_penalty_bypass = sprint_carry_penalty_bypass
 	cfg.lateral_grip = lateral_grip
+	cfg.stance_grip_mult = stance_grip_mult
+	cfg.stance_scrape = stance_scrape
+	cfg.stance_stride_mult = stance_stride_mult
+	cfg.stance_max_speed_mult = stance_max_speed_mult
+	cfg.stance_shuffle_mult = stance_shuffle_mult
+	cfg.commit_grip_mult = commit_grip_mult
+	cfg.commit_stride_mult = commit_stride_mult
 	return cfg
 
-# Stamina config is flat (not attribute-scaled), so a single lazily-built
-# instance is reused for the controller's lifetime — same caching pattern as
-# the movement config, minus the apply_attributes invalidation.
-var _cached_stamina_cfg: StaminaRules.StaminaConfig = null
-
-func _stamina_config() -> StaminaRules.StaminaConfig:
-	if _cached_stamina_cfg == null:
-		_cached_stamina_cfg = StaminaRules.StaminaConfig.new()
-		_cached_stamina_cfg.drain_per_sec = sprint_drain_per_sec
-		_cached_stamina_cfg.carry_drain_multiplier = sprint_carry_drain_multiplier
-		_cached_stamina_cfg.regen_per_sec = stamina_regen_per_sec
-		_cached_stamina_cfg.unlock_fraction = sprint_unlock_fraction
-		_cached_stamina_cfg.hit_drain_per_sec = hit_stamina_drain_per_sec
-	return _cached_stamina_cfg
-
 # Body-check stagger config is flat (not attribute-scaled), so a single lazily-built
-# instance is reused for the controller's lifetime — same pattern as the stamina
-# config, read both on a hit (_on_body_check_received) and every tick (the thrust
-# penalty in _apply_movement).
+# instance is reused for the controller's lifetime, read both on a hit
+# (_on_body_check_received) and every tick (the stagger penalties in
+# _apply_movement).
 var _cached_body_check_cfg: BodyCheckRules.Config = null
 
 func _body_check_config() -> BodyCheckRules.Config:
@@ -3292,8 +3198,8 @@ func _body_check_config() -> BodyCheckRules.Config:
 		_cached_body_check_cfg.min_impulse = stagger_min_impulse
 		_cached_body_check_cfg.ref_impulse = stagger_ref_impulse
 		_cached_body_check_cfg.max_stagger_seconds = stagger_max_seconds
-		_cached_body_check_cfg.max_stamina_drain = stagger_max_stamina_drain
 		_cached_body_check_cfg.max_thrust_penalty = stagger_max_thrust_penalty
+		_cached_body_check_cfg.max_grip_penalty = stagger_max_grip_penalty
 		_cached_body_check_cfg.knockdown_impulse = knockdown_impulse
 		_cached_body_check_cfg.knockdown_ref_impulse = knockdown_ref_impulse
 		_cached_body_check_cfg.min_knockdown_seconds = knockdown_min_seconds
@@ -3327,7 +3233,7 @@ var _sprawl_scratch: KnockdownFallRules.SprawlPose = null
 # Cached — _update_wrister_charge reads it every aim tick (120 Hz, replayed
 # again per input through reconcile), so a per-call .new() is hot-path churn.
 # Rebuilt lazily after apply_attributes nulls it (same pattern as the
-# movement/stamina configs above).
+# movement configs above).
 var _cached_wrister_cfg: ShotMechanics.WristerConfig = null
 
 func _wrister_config() -> ShotMechanics.WristerConfig:

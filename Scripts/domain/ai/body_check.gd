@@ -8,8 +8,8 @@ class_name AIBodyCheck
 # carrier at speed; Skater._resolve_player_collisions converts the closing
 # velocity + attributes into the transfer impulse, identical to a human hit. So
 # this rule decides only WHEN to commit and returns the intercept POINT to steer
-# at; the state machine points steering there, forces sprint (max closing velocity
-# = harder hit), AND holds the Hit button (input.hit_held) — committing delivers
+# at; the state machine points steering there AND holds the Hit button
+# (input.hit_held) — committing delivers
 # the FULL transfer this rule's predicted_impulse assumes (an uncommitted drive
 # lands only the passive fraction) and braces the checker against the collision.
 #
@@ -62,8 +62,7 @@ class Result:
 
 
 # `self_*` describe the checker; `carrier_*` the puck carrier it might hit.
-# `self_max_speed` is the closing-speed proxy (the bot will sprint in, so this
-# is conservative — sprint runs a touch faster). Returns commit=false with a
+# `self_max_speed` is the closing-speed proxy. Returns commit=false with a
 # zero target when no hit should be committed.
 static func evaluate(
 		self_pos: Vector3,

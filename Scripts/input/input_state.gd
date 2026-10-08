@@ -5,7 +5,7 @@ const BYTES_SIZE: int = 24
 #         s16 mwp.x(12) s8 mwp.y(14) s16 mwp.z(15) s16 msp.x(17) s16 msp.y(19)
 #         u16 flags(21) u8 wrister_power_t(23)
 #         flags: shoot_pressed[0] shoot_held[1] slap_pressed[2] slap_held[3]
-#         sprint_held[4] brake[5] elevation_level[6..7] block_held[8]
+#         stance_held[4] brake[5] elevation_level[6..7] block_held[8]
 #         stick_lift_held[9] stick_lift_pressed[10] quick_pass_pressed[11]
 #         hit_held[12] commit_wrister_power[13]
 
@@ -34,7 +34,8 @@ var stick_lift_held: bool = false
 # so it survives the physics-tick / input-frame cadence mismatch and replays
 # deterministically. Drives the nudge self-tap (Q while carrying).
 var stick_lift_pressed: bool = false
-var sprint_held: bool = false
+# Held THIS tick: the loaded stance (Shift / LB).
+var stance_held: bool = false
 # Edge: quick-pass button pressed THIS tick. Fires an instant quick pass (the
 # fixed-power blade→cursor snap) without entering wrister aim. It has its own
 # button because LMB is always a charged wrister — no tap-vs-hold ambiguity.
@@ -42,7 +43,7 @@ var quick_pass_pressed: bool = false
 # Held THIS tick: the body-check / hit button (Ctrl). A committed "line someone
 # up" stance rather than an instantaneous impact, so the collision resolver reads
 # intent over a window. Replicated, so reconcile replay re-derives the check's
-# full-vs-passive transfer and its stamina cost with no extra wire state.
+# full-vs-passive transfer and its skating cost with no extra wire state.
 var hit_held: bool = false
 # Committed wrister power fraction (0..1): the controller converts it to the
 # equivalent cursor speed (ShotMechanics.wrister_speed_for_power_t) so a committed
@@ -119,7 +120,7 @@ func to_array() -> Array:
 		mouse_screen_pos.x,
 		mouse_screen_pos.y,
 		stick_lift_held,
-		sprint_held,
+		stance_held,
 		stick_lift_pressed,
 		quick_pass_pressed,
 		hit_held,
@@ -159,7 +160,7 @@ func write_bytes(b: PackedByteArray, offset: int) -> void:
 	var flags: int = (
 		(0x001 if shoot_pressed  else 0) | (0x002 if shoot_held     else 0) |
 		(0x004 if slap_pressed   else 0) | (0x008 if slap_held      else 0) |
-		(0x010 if sprint_held    else 0) | (0x020 if brake          else 0) |
+		(0x010 if stance_held    else 0) | (0x020 if brake          else 0) |
 		((clampi(elevation_level, 0, MAX_ELEVATION_LEVEL) & 0x3) << 6) |
 		(0x100 if block_held     else 0) | (0x200 if stick_lift_held else 0) |
 		(0x400 if stick_lift_pressed else 0) | (0x800 if quick_pass_pressed else 0) |
@@ -193,7 +194,7 @@ static func from_bytes(b: PackedByteArray, offset: int = 0) -> InputState:
 	s.shoot_held         = (flags & 0x002) != 0
 	s.slap_pressed       = (flags & 0x004) != 0
 	s.slap_held          = (flags & 0x008) != 0
-	s.sprint_held        = (flags & 0x010) != 0
+	s.stance_held        = (flags & 0x010) != 0
 	s.brake              = (flags & 0x020) != 0
 	s.elevation_level    = mini((flags >> 6) & 0x3, MAX_ELEVATION_LEVEL)
 	s.block_held         = (flags & 0x100) != 0
@@ -223,7 +224,7 @@ static func from_array(data: Array) -> InputState:
 	if data.size() > 16:
 		state.stick_lift_held = data[16]
 	if data.size() > 17:
-		state.sprint_held = data[17]
+		state.stance_held = data[17]
 	if data.size() > 18:
 		state.stick_lift_pressed = data[18]
 	if data.size() > 19:

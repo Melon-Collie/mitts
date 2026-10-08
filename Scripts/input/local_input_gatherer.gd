@@ -280,7 +280,7 @@ func gather() -> InputState:
 		state.shoot_held = _pad_shoot_held
 		state.slap_held = _pad_slap_held
 		state.brake = _pad_held("brake")
-		state.sprint_held = _pad_held("sprint")
+		state.stance_held = _pad_held("stance")
 		state.block_held = _pad_held("block")
 		state.stick_lift_held = _pad_held("stick_lift")
 		state.hit_held = _pad_held("hit")
@@ -296,7 +296,7 @@ func gather() -> InputState:
 		state.shoot_held = Input.is_action_pressed("shoot")
 		state.slap_held = Input.is_action_pressed("slapshot")
 		state.brake = Input.is_action_pressed("brake")
-		state.sprint_held = Input.is_action_pressed("sprint")
+		state.stance_held = Input.is_action_pressed("stance")
 		state.block_held = Input.is_action_pressed("block")
 		state.stick_lift_held = Input.is_action_pressed("stick_lift")
 		state.hit_held = Input.is_action_pressed("hit")

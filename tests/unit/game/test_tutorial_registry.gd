@@ -49,8 +49,7 @@ func test_movement_covers_the_skating_fundamentals() -> void:
 	# core skating teaching that first-launch players see.
 	var steps: Array[int] = TutorialRegistry.get_step_ids(TutorialRegistry.MOVEMENT_ID)
 	assert_has(steps, TutorialRegistry.STEP_SKATE)
-	assert_has(steps, TutorialRegistry.STEP_SPRINT)
-	assert_has(steps, TutorialRegistry.STEP_STAMINA)
+	assert_has(steps, TutorialRegistry.STEP_STANCE)
 	assert_has(steps, TutorialRegistry.STEP_BRAKE)
 
 

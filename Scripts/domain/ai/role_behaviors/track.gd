@@ -14,9 +14,9 @@ class_name AIRoleTrack
 #     and owns whoever enters the middle from either half.
 #
 # ── Why this is a MODE, not just another position ────────────────────────────
-# Real backcheckers sprint until they are back, THEN pick up. So a peer the
+# Real backcheckers race until they are back, THEN pick up. So a peer the
 # shared read classifies as not-yet-inside gets NO argmax at all — just a lane
-# recovery point and a hard sprint (RoleDecision.sprint_override) — and converts
+# recovery point skated at full pace — and converts
 # to coverage on the tick he crosses goal-side of the puck. Never run a cover
 # argmax from behind the play: its whole supporting apparatus (arrival brake,
 # anti-crowd rejection, incumbent hysteresis) exists to make a STATIONARY POST
@@ -76,7 +76,6 @@ static func _decide_puck(ctx: RoleContext) -> RoleDecision:
 		return d
 	var carrier_pos: Vector3 = ap.carrier_pos
 	var hip: Vector3 = carrier_pos
-	var inside: bool = _is_inside(ctx, read)
 	if ap.dir_net != Vector3.ZERO:
 		# The hip, goal-side: arrive between him and the net, not beside him.
 		# NOT angled, unlike the stands AIRoleHelpers.carrier_stand produces: a
@@ -103,11 +102,6 @@ static func _decide_puck(ctx: RoleContext) -> RoleDecision:
 	# Full pace, no brake at the target: a backchecker who eases up at the hip has
 	# not caught him. Riding a man the closing profile already expresses that, so
 	# the flag is really covering the loose-puck fallback.
-	#
-	# The sprint override past both gap gates is licensed by being behind the play
-	# — a tracker the shared read already calls INSIDE is not doing that job, and
-	# sprinting him at a carrier he is in front of is a step-up, not a recovery.
-	d.sprint_override = not inside
 	d.arrive_at_speed = true
 	# Stick on the puck: aim at the carrier's blade side so the poke/lift is
 	# live the moment he's in reach, rather than the ready stance pointing at
@@ -126,7 +120,7 @@ static func _decide_puck(ctx: RoleContext) -> RoleDecision:
 # is ALREADY goal-side, and the election hands this slot to whoever of the
 # non-RUSH_D1 bodies reaches the puck soonest, which in a shape that is home
 # means somebody in front of the play: unbounded, a tracker 16.5 m off our own
-# net is sent to a hip 30 m out, sprint override on, to become a second
+# net is sent to a hip 30 m out, at full pace, to become a second
 # challenger on a carrier RUSH_D1 already owns.
 #
 # So the gap the hip asks for is bounded by the depth this body already owns,
@@ -165,7 +159,6 @@ static func _decide_mid(ctx: RoleContext, side: float) -> RoleDecision:
 	# pursuit curve at the rush's shoulder — the post is the researched answer.
 	if not _is_inside(ctx, read):
 		d.target_position = _post(ctx, read, side)
-		d.sprint_override = true
 		d.arrive_at_speed = true
 		return d
 

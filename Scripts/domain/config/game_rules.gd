@@ -480,12 +480,10 @@ const SLOT_DIST_M: float = 5.0
 # about a different "league average" than the controllers actually run.
 # Per-bot builds resolve through AISkaterCaps; these are the league-average
 # fallback for an unresolvable peer.
-# Neutral-build skater top speed. 9.0 m/s ≈ 20 mph ≈ 32 km/h — a solid NHL
-# stride. This is the *cruising* cap; the Sprint burst (sprint_max_speed_multiplier
-# on SkaterController) lifts it to ~25 mph, the real elite top speed. Tuned so
-# base + sprint both stay anchored to plausible skating speeds rather than
-# stacking into superhuman territory.
-const DEFAULT_SKATER_MAX_SPEED_M_S: float = 9.0
+# Neutral-build skater top speed. 10.0 m/s ≈ 22.4 mph — the middle of the NHL
+# EDGE 20–25 mph burst band; PlayerAttributes.top_speed_mult spreads builds
+# across it.
+const DEFAULT_SKATER_MAX_SPEED_M_S: float = 10.0
 # League-default skating physics — SkaterController's defaults, and what the
 # AI's travel and reach models price against so they use the accelerations the
 # bodies actually have. Field meanings in SkaterMovementRules.MovementConfig.

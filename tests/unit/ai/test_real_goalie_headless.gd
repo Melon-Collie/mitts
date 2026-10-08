@@ -112,7 +112,6 @@ func test_carrier_shoots_more_against_a_challenging_goalie() -> void:
 		st.velocity = vel
 		st.facing = Vector2(vel.x, vel.z).normalized()
 		st.blade_contact_world = pos
-		st.stamina = 1.0
 		snap.skater_states[1] = st
 		snap.puck_state = PuckNetworkState.new()
 		snap.puck_state.position = pos

@@ -239,7 +239,7 @@ func _fill_attackers(snapshot: WorldSnapshot, team_id: int,
 				else AIActionScoring.SHED_ACCEL_DEFAULT_M_S2
 		var t: float = AIActionScoring.time_to_arrive(
 				s.position, our_net, s.velocity,
-				_race_speed(s, caps, our_net), accel)
+				_race_speed(caps), accel)
 		if t <= bar:
 			attackers.append(pid)
 			attacker_leads.append(_lead(s.position, s.velocity))
@@ -287,7 +287,7 @@ func _fill_recovery(snapshot: WorldSnapshot, team_id: int,
 				else AIActionScoring.SHED_ACCEL_DEFAULT_M_S2
 		var t: float = AIActionScoring.time_to_arrive(
 				s.position, gate, s.velocity,
-				_race_speed(s, caps, gate), accel)
+				_race_speed(caps), accel)
 		# Enter/hold hysteresis on the race (see TRACK_ENTER_MARGIN_S).
 		var was_counted: bool = prev_recovery.get(pid, Recovery.BEATEN) \
 				!= Recovery.BEATEN
@@ -326,7 +326,7 @@ func _fill_backpressure(snapshot: WorldSnapshot,
 	for pid: int in tracking:
 		var s: SkaterNetworkState = snapshot.skater_states[pid]
 		var caps: AISkaterCaps = caps_by_peer.get(pid)
-		var speed: float = _race_speed(s, caps, hip)
+		var speed: float = _race_speed(caps)
 		var accel: float = caps.max_accel if caps != null \
 				else AIActionScoring.SHED_ACCEL_DEFAULT_M_S2
 		var t: float = AIActionScoring.time_to_arrive(
@@ -418,7 +418,7 @@ func _origin_eta(snapshot: WorldSnapshot, team_id: int,
 	if opp_carries:
 		var cs: SkaterNetworkState = snapshot.skater_states[pid_carrier]
 		return AIActionScoring.time_to_arrive(cs.position, our_net, cs.velocity,
-				_race_speed(cs, caps_by_peer.get(pid_carrier), our_net))
+				_race_speed(caps_by_peer.get(pid_carrier)))
 	var best_collect: float = INF
 	for pid: int in snapshot.skater_states:
 		if team_id_by_peer.get(pid, -1) == team_id:
@@ -426,7 +426,7 @@ func _origin_eta(snapshot: WorldSnapshot, team_id: int,
 		var s: SkaterNetworkState = snapshot.skater_states[pid]
 		var t: float = AIActionScoring.time_to_arrive(
 				s.position, rush_origin, s.velocity,
-				_race_speed(s, caps_by_peer.get(pid), rush_origin))
+				_race_speed(caps_by_peer.get(pid)))
 		if t < best_collect:
 			best_collect = t
 	if best_collect == INF:
@@ -449,19 +449,9 @@ func _entry_eta(own_dir: float, origin_along: float, closing: float) -> float:
 	return origin_along * frac / closing
 
 
-# The rush sprints, and so does the backcheck — a cruise-priced race under-clocks
-# both sides. Stamina/lockout ride the peer's own replicated pool, same seam
-# AIRoleHelpers.self_race_vmax and the counter channels use.
-func _race_speed(s: SkaterNetworkState, caps: AISkaterCaps,
-		dest: Vector3) -> float:
-	var speed: float = caps.max_speed if caps != null \
-			else AIActionScoring.SKATER_REF_SPEED_M_S
-	var mult: float = caps.sprint_speed_mult if caps != null \
-			else AISkaterCaps.LEAGUE_SPRINT_SPEED_MULT
-	var dx: float = dest.x - s.position.x
-	var dz: float = dest.z - s.position.z
-	return BotSprintRules.race_speed(speed, mult, s.stamina, s.sprint_locked,
-			sqrt(dx * dx + dz * dz))
+# The rush and the backcheck both race at the skater's own top speed.
+func _race_speed(caps: AISkaterCaps) -> float:
+	return caps.max_speed if caps != null else AIActionScoring.SKATER_REF_SPEED_M_S
 
 
 # Velocity lead, clamped — cover where he's cutting, not the freeze-frame. Shrinks

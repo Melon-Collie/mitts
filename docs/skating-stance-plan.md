@@ -1,7 +1,30 @@
 # Skating stance — Shift becomes agility, sprint and stamina go
 
-Status: PROPOSED — design agreed in chat 2026-10-08, nothing implemented.
-Treat this as the agreed design; ask before deviating from it.
+Status: IMPLEMENTED on `claude/awesome-allen-fn1f7d`, pending on-ice tuning.
+Treat this as the agreed design; ask before deviating from it. Deltas from the
+plan as written:
+
+- **The stance pose rides the gait's existing smoothed channel**, not a new
+  `GaitLayer`: the channel that drew the sprint stride (`SkaterLocomotion.loaded`,
+  mirrored in `NativeSkaterGait`) now draws the stance — a crouch floor
+  (`stance_sit_floor`), a deeper sit, shorter strides and the chest over the
+  knees — and `LocomotionRules.classify` skates the stance's turning share as the
+  `tight` state instead of crossovers. One channel, already native-mirrored,
+  rather than a layer and a parity seam.
+- **The league top speed is 10.0 m/s and `top_speed_mult` is 1.0 at neutral**
+  (`GameRules.DEFAULT_SKATER_MAX_SPEED_M_S`, `PlayerAttributes.top_speed_mult`),
+  rather than `9.0 × speed_mult × sprint_ceiling_mult`. It keeps the attributes'
+  invariant that the neutral build equals the shipped defaults, and every AI
+  fallback that prices "a league skater's speed" now prices the speed bodies
+  actually reach. Per-build values land within 0.1% of §2.3's.
+- **The host's state buffer carries `hit_committed` into rewound snapshots.** It
+  did not before; with the commit now a posture, a rewound snapshot without it
+  would integrate the wrong grip and break render == rewind.
+- **Saved pad binds migrate by scheme version.** A config still on BOTH old
+  defaults (hit LB, sprint L3) moves to the new ones; a player who rebound
+  either keeps theirs. The `sprint` bind is adopted as `stance` on both devices.
+- **The controls label stays a literal**, like every row beside it in
+  `controls_tab.gd`; it moves to the locale seam with the rest of that file.
 
 One-line summary: **Space is only the hockey stop. Shift is a low, loaded
 stance that buys turning grip with speed. Sprint and stamina are deleted, and
@@ -276,7 +299,7 @@ Feel tunables, hand-picked as starting points — tune on ice, not here.
 
 ### 4.5 Bots
 
-Phase 1 (bots never hold the stance yet):
+Phase 1 (bots hold the stance only to cut a pivot):
 
 - `BotSprintRules` and `test_bot_sprint_rules.gd` deleted; the agent's sprint
   resolution, `_cached_sprint_held`, and `RoleDecision.sprint_override` go.
@@ -289,8 +312,11 @@ Phase 1 (bots never hold the stance yet):
 - Goalie behind-net puck play assumes the forechecker at a flat 11 m/s
   (`GoaliePuckPlay.opponent_speed`), still above the fastest new top speed
   (~10.7 m/s), so it stays conservative and needs only its comment reworded.
-- The bots' pivot and arrival brakes are already stops, so Space losing the
-  tight turn costs them nothing.
+- The bots' pivot brake fires 120° off travel, where the old brake turn was
+  still mostly a turn, so it now cuts in the stance while the exit is within
+  135° of travel (`AISteering.pivot_cuts_in_stance`) and stops only past that.
+  Their other brake-with-a-direction maneuvers (the carrier's brake check) were
+  priced as stops already but executed partly as turns; those are Phase 3.
 - Expect calibration tests to move (pass lead, rush read, loose-puck chase,
   carrier, track, coverage readiness, duel harness). Recalibrate them against
   the model; do not loosen assertions to pass.
@@ -310,7 +336,7 @@ low-speed mirroring. Design it against `Scripts/domain/ai/CLAUDE.md`.
   steering stick. A commit is held too, but only for the beat before contact,
   and the grip cost already pushes it toward short holds. A player who saved
   the old pad defaults keeps them; only unsaved defaults move.
-- `controls_tab.gd` label → a `tr()` key in `locale/translations.csv`.
+- `controls_tab.gd` label "Sprint" → "Stance".
 - Stamina ring removed: `SkaterHUDCoordinator`, `IceRingField`, and the ice
   shader uniform `test_ice_shader_uniform_contract.gd` pins.
 - Tutorial: the sprint step and the tight-turn teaching become one stance step;

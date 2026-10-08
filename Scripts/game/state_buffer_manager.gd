@@ -240,13 +240,15 @@ func _interpolate_skater(peer_id: int, ts: float) -> SkaterNetworkState:
 	result.shot_state = to_s.shot_state
 	# Movement intent (discrete like shot_state — newer endpoint). The claim
 	# rewind (HitClaimResolver) forward-integrates the victim from this snapshot
-	# with SkaterMovementRules.integrate_forward; without these three fields an
+	# with SkaterMovementRules.integrate_forward; without these fields an
 	# interpolated rewind carries zero intent and the host integrates a friction
 	# coast while the client renders the real thrust — breaking render == rewind
-	# by the whole thrust contribution.
+	# by the whole thrust contribution. The stance and commit bits pick the
+	# posture the integration skates in.
 	result.move_intent = to_s.move_intent
 	result.brake_intent = to_s.brake_intent
-	result.sprint_active = to_s.sprint_active
+	result.stance_active = to_s.stance_active
+	result.hit_committed = to_s.hit_committed
 	# Stagger rides the same newer-endpoint rule: the forward prediction applies
 	# it as a thrust penalty, and the client render reads its bracket's to_state
 	# — the same snapshot — so the two agree. (It decays linearly, so newer-

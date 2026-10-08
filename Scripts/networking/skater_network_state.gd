@@ -21,15 +21,10 @@ var elevation_level: int = 0
 # needs the resolved "is the blade up" answer for rendering and the
 # on-ice/off-ice interaction gate.
 var blade_up: bool = false
-# Sprint stamina (0..1 fraction of the full pool) and the exhaustion lockout
-# flag. Both replicated so the local player's reconcile can snap them to the
-# host's authoritative value before replaying inputs — same treatment as
-# velocity. See StaminaRules / LocalController.reconcile.
-var stamina: float = 1.0
-var sprint_locked: bool = false
-# Body-check stagger: seconds of thrust-penalty recovery remaining on the victim.
-# Replicated for the same reason as stamina — the local player's reconcile snaps
-# it to the host baseline before replay and it decays deterministically forward
+# Body-check stagger: seconds of thrust/grip-penalty recovery remaining on the
+# victim. Replicated so the local player's reconcile can snap it to the host
+# baseline before replay — same treatment as velocity — and it decays
+# deterministically forward
 # (see BodyCheckRules / SkaterController._apply_movement). Host-authoritative: only
 # the host sets it on a hit; clients receive the resolved value off the wire.
 var stagger_timer: float = 0.0
@@ -48,14 +43,12 @@ var knockdown_timer: float = 0.0
 # the wire (v15).
 var move_intent: Vector2 = Vector2.ZERO
 var brake_intent: bool = false
-# Resolved sprint-boost state (held + moving + stamina available), from
-# SkaterController.sprint_active on the simulating machine. Drives the sprint
-# gait read (longer strides, deeper sit, forward lean) on client-rendered
-# remotes, which never resolve sprint themselves, and the sprint term of the
-# forward prediction (load-bearing, like move_intent above). Bit 5 of the intent
-# byte (v16).
-var sprint_active: bool = false
-# Resolved hit-commit (the Hit button held + stamina available), from
+# Resolved stance, from SkaterController.stance_active on the simulating machine.
+# Drives the stance gait read on client-rendered remotes, which never resolve the
+# stance themselves, and the posture term of the forward prediction
+# (load-bearing, like move_intent above). Bit 5 of the intent byte.
+var stance_active: bool = false
+# Resolved hit-commit (the Hit button held, locomotion not suppressed), from
 # SkaterController.hit_committed on the simulating machine. Replicated so the
 # body-check resolver reads a REMOTE victim's brace and a remote attacker's
 # full-vs-passive delivery correctly on a client (the host knows all locally).
@@ -108,12 +101,10 @@ func to_array() -> Array:
 		upper_body_angular_velocity,
 		elevation_level,
 		blade_up,
-		stamina,
-		sprint_locked,
 		stagger_timer,
 		move_intent,
 		brake_intent,
-		sprint_active,
+		stance_active,
 		knockdown_timer,
 		hit_committed,
 		wrister_address_side,
@@ -139,13 +130,11 @@ func copy_from(s: SkaterNetworkState) -> void:
 	blade_up = s.blade_up
 	shot_state = s.shot_state
 	shot_charge = s.shot_charge
-	stamina = s.stamina
-	sprint_locked = s.sprint_locked
 	stagger_timer = s.stagger_timer
 	knockdown_timer = s.knockdown_timer
 	move_intent = s.move_intent
 	brake_intent = s.brake_intent
-	sprint_active = s.sprint_active
+	stance_active = s.stance_active
 	hit_committed = s.hit_committed
 	wrister_address_side = s.wrister_address_side
 	balance_tilt = s.balance_tilt
@@ -175,28 +164,25 @@ static func from_array(data: Array) -> SkaterNetworkState:
 		state.elevation_level = data[12]
 	if data.size() > 13:
 		state.blade_up = data[13]
-	if data.size() > 15:
-		state.stamina = data[14]
-		state.sprint_locked = data[15]
+	if data.size() > 14:
+		state.stagger_timer = data[14]
 	if data.size() > 16:
-		state.stagger_timer = data[16]
+		state.move_intent = data[15]
+		state.brake_intent = data[16]
+	if data.size() > 17:
+		state.stance_active = data[17]
 	if data.size() > 18:
-		state.move_intent = data[17]
-		state.brake_intent = data[18]
+		state.knockdown_timer = data[18]
 	if data.size() > 19:
-		state.sprint_active = data[19]
+		state.hit_committed = data[19]
 	if data.size() > 20:
-		state.knockdown_timer = data[20]
-	if data.size() > 21:
-		state.hit_committed = data[21]
+		state.wrister_address_side = data[20]
 	if data.size() > 22:
-		state.wrister_address_side = data[22]
+		state.balance_tilt = data[21]
+		state.balance_tilt_vel = data[22]
 	if data.size() > 24:
-		state.balance_tilt = data[23]
-		state.balance_tilt_vel = data[24]
-	if data.size() > 26:
-		state.torso_lean = data[25]
-		state.posture_lean = data[26]
-	if data.size() > 27:
-		state.recoil_dir = data[27]
+		state.torso_lean = data[23]
+		state.posture_lean = data[24]
+	if data.size() > 25:
+		state.recoil_dir = data[25]
 	return state

@@ -59,7 +59,7 @@ func test_a_reconcile_keeps_the_hips_on_the_travel_line() -> void:
 			"the hips keep the gait's yaw through the reconcile")
 
 
-# The lean is replicated state like stamina: the reconcile adopts the host's
+# The lean is replicated state like velocity: the reconcile adopts the host's
 # lean and spring rate at the ack, then replays forward from it.
 func test_a_reconcile_adopts_the_hosts_lean() -> void:
 	_skater.set_facing(Vector2(0.0, -1.0))
