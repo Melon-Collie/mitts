@@ -1229,6 +1229,22 @@ func test_pass_pressed_dump_in_charges_flat_at_the_searched_pace() -> void:
 	assert_false(sm._dump_target.is_finite(), "releasing clears the dump target")
 
 
+func test_pass_pressed_rim_charges_flat_at_its_searched_pace() -> void:
+	# The rim pass (AIRimPass) walks its path at a searched pace, so like the
+	# dump-in it must leave FLAT at that pace on the charged path — the quick
+	# release's fixed pace would die in the first corner.
+	sm._state = Agent.State.PASS_PRESSED
+	sm._dump_target = Vector3(20, 0, 0)
+	sm._dump_is_rim = true
+	sm._dump_launch_speed = 26.4
+	var i := InputState.new()
+	sm.dispatch(i, _self_snap(Vector3.ZERO, true))
+	assert_false(i.quick_pass_pressed, "a rim does NOT take the one-tick path")
+	assert_eq(i.elevation_level, ShotMechanics.ELEVATION_FLAT, "a rim rides the ice")
+	assert_true(sm._pass_should_charge, "the rim charges")
+	assert_eq(sm._pass_target_speed, 26.4, "…at the pace its search walked")
+
+
 func test_pass_pressed_dump_clear_stays_a_one_tick_release() -> void:
 	# The other half of the split: only the dump-IN charges. A DZ clear is a last
 	# resort under pressure — getting the puck gone NOW beats a wind-up that gets

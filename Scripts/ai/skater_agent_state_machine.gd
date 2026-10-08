@@ -3825,16 +3825,16 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 	if is_dump:
 		_pass_should_saucer = false
 		_pass_target_peer_id = -1
-		# Delivery kind: FLAT for the dump-in (below) and for the 5v5 rim (the
-		# bank-pass delivery the posted winger meets — breakout plan §B); the
-		# HIGH chip clear lifts over every stick between us and the blue line.
+		# Delivery kind: FLAT for the dump-in (below) and for the rim pass
+		# (AIRimPass — the boards carry it to a teammate); the HIGH chip clear
+		# lifts over every stick between us and the blue line.
 		if _dump_is_soft or _dump_is_rim:
 			input.elevation_level = ShotMechanics.ELEVATION_FLAT
 		else:
 			input.elevation_level = ShotMechanics.ELEVATION_HIGH
-		# Only the dump-in charges (see _dump_launch_speed): its depth IS its
-		# pace, so it has to leave at the pace the search placed it with. The
-		# clear and the rim stay one-tick releases at the fixed quick pace.
+		# The dump-in and the rim charge (see _dump_launch_speed): where each
+		# goes IS its pace, so it has to leave at the pace its search walked.
+		# The clear stays a one-tick release at the fixed quick pace.
 		#
 		# FLAT is load-bearing on the charged path, not a look: release_wrister
 		# builds a charged release as the direction (dir.x, tan, dir.z)
@@ -3844,8 +3844,8 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 		# makes a searched landing spot the spot the puck reaches. (The clear
 		# keeps its HIGH chip: it fires on the quick-pass path, whose loft rides
 		# the fixed-vy pass table and leaves ground speed alone.)
-		_pass_should_charge = _dump_is_soft
-		if _dump_is_soft:
+		_pass_should_charge = _dump_is_soft or _dump_is_rim
+		if _pass_should_charge:
 			_pass_target_speed = _dump_launch_speed
 
 	_apply_brake_steering(input, snapshot, self_pos)

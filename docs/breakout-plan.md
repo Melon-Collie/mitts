@@ -211,11 +211,15 @@ decision layer:
    exit. The escape-speed gate (already in `reach_clearance`) is what makes
    the wheel price *well* exactly when the retriever has a step — the
    real trigger, for free.
-2. **The rim family — rim-as-a-bank-pass (fixes GAP 2b).** *Retired, not live:*
-   the bank pass was replaced by the searched DZ clear (`dump_clear_candidates`,
-   see `Scripts/domain/ai/CLAUDE.md` → "Dumps are searched RELEASES"), which
-   rims to the wall our posted man can win but prices no receiver. There is no
-   rim PASS to a teammate in the compete today. The original design: Rims stop being
+2. **The rim family — rim-as-a-bank-pass (fixes GAP 2b).** *As landed (second
+   time):* `AIRimPass` searches the rim as a RELEASE (bearing × a pace ladder up
+   to the passer's wrister max, banked glancing off the near boards), walks it on
+   the chase election's own path, races every opponent and their keeper along
+   it, and the carrier prices it as a third pass variant beside the flat feed and
+   the saucer through `_pass_ev`. A winner is released as a FLAT charged dump
+   along its bearing. (An earlier two-leg rim pricing was retired for a delivery
+   the release could not execute; this one fires the bearing it walked.) The
+   original design: Rims stop being
    zero-gain concessions and become PASSES whose lane is the boards wrap:
    - Receiver: the wall player up the rim's path (the half-wall W on the
      forward rim; the trailing partner / wall mate on the REVERSE rim back
