@@ -90,11 +90,8 @@ const POSES: Array = [
 	{"name": "stride_lateral", "puck": false, "steps": [
 		[97, {"move": Vector2(1.0, 0.0), "aim": Vector3(2.0, 0.0, 1.5)}],
 	]},
-	# The loaded stance mid-cut: up to speed, then dug in toward the right.
-	{"name": "stance_cut", "puck": false, "steps": [
-		[90, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
-		[30, {"move": Vector2(1.0, 0.0), "stance": true, "aim": Vector3(2.0, 0.0, -1.5)}],
-	]},
+	# The loaded stance held at a standstill — the crouch on its own.
+	{"name": "stance_rest", "puck": false, "steps": [[40, {"stance": true}]]},
 	# Arm IK near its ROM limit: the cursor sits well across the body, so the
 	# reach lean and the backhand ROM clamp both engage.
 	{"name": "cross_body_reach", "puck": true, "steps": [
@@ -151,15 +148,15 @@ const POSES: Array = [
 	]},
 	{"name": "turn_tight", "puck": false, "readout": true, "cam_ahead": 3.2, "steps": [
 		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
-		[30, {"move": Vector2(1.0, 0.0), "brake": true, "aim": Vector3(2.2, 0.0, -2.2)}],
+		[30, {"move": Vector2(1.0, 0.0), "stance": true, "aim": Vector3(2.2, 0.0, -2.2)}],
 	]},
 	{"name": "turn_tight_game", "puck": false, "game_cam": true, "steps": [
 		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
-		[30, {"move": Vector2(1.0, 0.0), "brake": true, "aim": Vector3(2.2, 0.0, -2.2)}],
+		[30, {"move": Vector2(1.0, 0.0), "stance": true, "aim": Vector3(2.2, 0.0, -2.2)}],
 	]},
 	{"name": "turn_tight_exit", "puck": false, "readout": true, "cam_ahead": 3.2, "steps": [
 		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
-		[70, {"move": Vector2(1.0, 0.0), "brake": true, "aim": Vector3(3.0, 0.0, -0.5)}],
+		[70, {"move": Vector2(1.0, 0.0), "stance": true, "aim": Vector3(3.0, 0.0, -0.5)}],
 	]},
 	{"name": "shot_block", "puck": false, "steps": [
 		[30, {"block": true, "aim": Vector3(0.0, 0.0, -3.0)}],
