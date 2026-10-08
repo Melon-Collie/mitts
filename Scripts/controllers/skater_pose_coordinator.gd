@@ -155,9 +155,9 @@ func _block_trunk_roll() -> float:
 func _apply_lean() -> void:
 	# Body-check recoil: while staggered, the torso reels the way the hit shoved
 	# it, easing out as the timer decays (same directional pitch/roll decomposition
-	# as the reach lean). Runs on every path — local, bot, and remote (which reels
-	# generically backward off the replicated timer) — since _apply_lean is the
-	# single torso writer both the live pass and apply_wire_lean go through.
+	# as the reach lean). Runs on every path — local, bot, and remote, off the
+	# replicated timer and direction — since _apply_lean is the single torso
+	# writer both the live pass and apply_wire_lean go through.
 	var recoil_pitch: float = 0.0
 	var recoil_roll: float = 0.0
 	var recoil_t: float = clampf(
@@ -167,9 +167,8 @@ func _apply_lean() -> void:
 	# reflexive curl while airborne that resolves to the ground-plane complement
 	# as the body reaches the ice (KnockdownFallRules.fold_at), so the landed
 	# torso lies IN the ice plane instead of curling through it or propping up
-	# as a plank. It rides the SAME recoil direction (fall the way you were hit
-	# — re-derived from the replicated slide on remote entries) and the same
-	# deterministic/replicated timer, layered on top of the stagger recoil.
+	# as a plank. It rides the SAME recoil direction (fall the way you were hit)
+	# and the same replicated timer, layered on top of the stagger recoil.
 	# kd_t holds full while more than knockdown_getup_seconds remains, then
 	# eases to 0 (the get-up).
 	var kd_t: float = clampf(

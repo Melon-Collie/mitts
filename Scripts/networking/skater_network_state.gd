@@ -80,6 +80,10 @@ var balance_tilt_vel: Vector2 = Vector2.ZERO
 # and like the balance lean the reconcile snaps them before replay (v61).
 var torso_lean: Vector2 = Vector2.ZERO
 var posture_lean: float = 0.0
+# Body-frame direction the last check shoved this skater (x = right, y =
+# forward), unit length. The stagger reel and the knockdown fall both tip this
+# way, and the reel tilts UpperBody (v62).
+var recoil_dir: Vector2 = Vector2(0.0, 1.0)
 var host_timestamp: float = 0.0         # host-only, not serialized
 var blade_contact_world: Vector3 = Vector3.ZERO  # host-only, not serialized
 # World-space top-hand (grip) point. host-only, not serialized — paired with
@@ -117,6 +121,7 @@ func to_array() -> Array:
 		balance_tilt_vel,
 		torso_lean,
 		posture_lean,
+		recoil_dir,
 	]
 
 func copy_from(s: SkaterNetworkState) -> void:
@@ -147,6 +152,7 @@ func copy_from(s: SkaterNetworkState) -> void:
 	balance_tilt_vel = s.balance_tilt_vel
 	torso_lean = s.torso_lean
 	posture_lean = s.posture_lean
+	recoil_dir = s.recoil_dir
 	host_timestamp = s.host_timestamp
 	blade_contact_world = s.blade_contact_world
 	top_hand_world = s.top_hand_world
@@ -191,4 +197,6 @@ static func from_array(data: Array) -> SkaterNetworkState:
 	if data.size() > 26:
 		state.torso_lean = data[25]
 		state.posture_lean = data[26]
+	if data.size() > 27:
+		state.recoil_dir = data[27]
 	return state

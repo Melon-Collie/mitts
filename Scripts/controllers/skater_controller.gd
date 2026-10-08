@@ -161,10 +161,7 @@ var stagger_wobble_hz: float = 3.0    # wobble frequency
 # Directional recoil: on top of the wobble, the whole torso reels the way the
 # hit shoved it (pitch + roll), easing out as stagger_timer decays — a body
 # absorbing the check, not just shaking. Direction is the transfer impulse
-# (stagger_recoil_dir); remotes recoil generically backward for plain staggers
-# (they get the timer off the wire, not the direction), but a knockdown entry
-# re-derives the true direction from the replicated slide velocity
-# (_sync_knockdown_meta). Applied in SkaterPoseCoordinator._apply_lean.
+# (stagger_recoil_dir, replicated). Applied in SkaterPoseCoordinator._apply_lean.
 var stagger_recoil_deg: float = 13.0  # peak torso recoil lean at full stagger
 # ── Knockdown Tuning ──────────────────────────────────────────────────────────
 # The top of the stagger continuum: a hit whose victim impulse exceeds
@@ -1043,18 +1040,16 @@ var balance_tilt_vel: Vector2 = Vector2.ZERO
 # whichever path observes the entry — from the transfer impulse on the
 # simulating side (_set_knockdown_from_impulse), from the replicated velocity on
 # receive-side rising edges (_sync_knockdown_meta) — and extended, not reset, by
-# follow-up hits so the elapsed clock never restarts mid-fall. Cosmetic, like
-# stagger_recoil_dir below: the replicated timer that gates the pose is the
-# deterministic rail.
+# follow-up hits so the elapsed clock never restarts mid-fall. Cosmetic: the
+# replicated timer that gates the pose is the deterministic rail.
 var _knockdown_total: float = 0.0
 var _knockdown_entry_speed: float = 0.0
 # Body-frame direction the last check shoved this skater (x = right, y = forward
 # in the (x, z) plane). Drives the recoil lean in SkaterPoseCoordinator and the
 # knockdown fall direction; set on the local victim / host from the transfer
-# impulse, and re-derived from the replicated slide velocity on receive-side
-# knockdown entries (_sync_knockdown_meta) so remote falls tip the way the hit
-# actually shoved. Cosmetic, so it does not need replicating or reconciling —
-# the timer that gates it already does.
+# impulse and replicated (SkaterNetworkState.recoil_dir) like the timer that
+# gates it: receivers apply it, the local reconcile adopts the host's. The reel
+# tilts UpperBody, so it moves the blade.
 var stagger_recoil_dir: Vector2 = Vector2(0.0, 1.0)
 # Resolved sprint-boost state for this tick. Written in _apply_movement (which
 # runs before _pose.apply_facing in _process_input) and read by the pose
@@ -1543,9 +1538,9 @@ func _on_body_checked_player(victim: Skater, impact_force: float, hit_direction:
 func _on_body_check_received(impulse: Vector3) -> void:
 	var impulse_magnitude: float = impulse.length()
 	# Capture the recoil direction (body frame) so the torso reels the way the
-	# hit shoved it — see SkaterPoseCoordinator._apply_lean. Set on the local
-	# victim AND the host (both drive the stagger); remotes keep the default
-	# backward recoil (they get stagger_timer off the wire, not the direction).
+	# hit shoved it — see SkaterPoseCoordinator._apply_lean. Set on every
+	# machine that resolves the hit; a client-rendered remote's is overwritten by
+	# the wire on its next apply.
 	var local_impulse: Vector3 = skater.global_transform.basis.inverse() * impulse
 	var recoil_xz: Vector2 = Vector2(local_impulse.x, local_impulse.z)
 	if recoil_xz.length() > 0.001:
@@ -1593,9 +1588,8 @@ func _set_knockdown_from_impulse(add_seconds: float, impulse: Vector3) -> void:
 # Same bookkeeping for every path that writes knockdown_timer from a received
 # state (reconcile snap, wire apply, goal replay) — call with the pre-write
 # timer AFTER skater.velocity has been stamped from the same state. A rising
-# edge seeds the fall from the replicated slide velocity: the post-hit slide IS
-# the shove, so every machine derives the same fall direction and tip rate with
-# zero new wire state. Mid-window, the total only grows when the written timer
+# edge seeds the fall's tip rate from the replicated slide speed (the post-hit
+# slide IS the shove); its direction is the replicated recoil_dir. Mid-window, the total only grows when the written timer
 # exceeds anything seen this window — a received value can lag the local decay
 # (a reconcile baseline is an RTT old), so a plain greater-than-previous check
 # would inflate the total, and with it the elapsed clock, on every snap.
@@ -1604,12 +1598,7 @@ func _sync_knockdown_meta(prev_timer: float) -> void:
 		return
 	if prev_timer <= 0.0:
 		_knockdown_total = knockdown_timer
-		var shove := Vector2(skater.velocity.x, skater.velocity.z)
-		_knockdown_entry_speed = shove.length()
-		if _knockdown_entry_speed > 0.1:
-			var local_shove: Vector3 = skater.global_transform.basis.inverse() \
-					* Vector3(shove.x, 0.0, shove.y)
-			stagger_recoil_dir = Vector2(local_shove.x, local_shove.z).normalized()
+		_knockdown_entry_speed = Vector2(skater.velocity.x, skater.velocity.z).length()
 	elif knockdown_timer > _knockdown_total:
 		# An unseen follow-up hit grew the window — preserve elapsed continuity.
 		_knockdown_total = maxf(_knockdown_total - prev_timer, 0.0) + knockdown_timer
@@ -1976,6 +1965,7 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.balance_tilt_vel = balance_tilt_vel
 	state.torso_lean = Vector2(_pose.upper_body_lean, _pose.upper_body_lean_roll)
 	state.posture_lean = _pose.velocity_lean_x
+	state.recoil_dir = stagger_recoil_dir
 	state.move_intent = skater.move_intent
 	state.brake_intent = skater.brake_intent
 	state.hit_committed = skater.hit_committed
@@ -2050,6 +2040,7 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	# bit so replayed sprints stride like live ones.
 	sprint_active = state.sprint_active
 	stagger_timer = state.stagger_timer
+	stagger_recoil_dir = state.recoil_dir
 	balance_tilt_vel = state.balance_tilt_vel
 	skater.set_balance_tilt(state.balance_tilt)
 	var prev_kd: float = knockdown_timer

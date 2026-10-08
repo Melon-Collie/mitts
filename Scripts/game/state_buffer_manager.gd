@@ -252,6 +252,7 @@ func _interpolate_skater(peer_id: int, ts: float) -> SkaterNetworkState:
 	# — the same snapshot — so the two agree. (It decays linearly, so newer-
 	# endpoint vs lerp differ by <= one broadcast interval of decay — sub-mm.)
 	result.stagger_timer = to_s.stagger_timer
+	result.recoil_dir = to_s.recoil_dir
 	result.host_timestamp = ts
 	return result
 

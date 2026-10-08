@@ -476,4 +476,6 @@ used to re-derive them by snapping to the targets the simulator eases toward,
 which in a hard turn put a remote's torso ~0.15 rad and its blade ~18 cm off.
 The pose coordinator's smoothed reach lean and posture now replicate (3 × s16),
 are adopted on reconcile, and the rebuild test asserts the receiver's torso
-within 0.001 rad with no hand-matching.
+within 0.001 rad with no hand-matching. The body check's recoil direction
+followed (v62, one byte): remotes had reeled every plain stagger backward, and
+a knockdown guessed its fall direction from the slide velocity.

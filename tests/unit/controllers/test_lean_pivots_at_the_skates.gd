@@ -146,3 +146,24 @@ func test_a_remote_rebuilds_the_blade_from_the_wire() -> void:
 	b.set_balance_tilt(Vector2.ZERO)
 	assert_gt(b.upper_body.position.distance_to(a.upper_body.position), 0.3,
 			"the lean is what carries the frame")
+
+
+# A check's reel tilts UpperBody the way the hit shoved, so a receiver must reel
+# the same way — sideways here, where a backward guess would pitch instead of roll.
+func test_a_remote_reels_the_way_the_hit_shoved() -> void:
+	var shooter: SkaterController = _rig(20.0)
+	_tick(shooter, Vector2(0.0, -1.0), 120)
+	shooter.stagger_recoil_dir = Vector2(1.0, 0.0)
+	shooter.stagger_timer = shooter.stagger_max_seconds
+	_tick(shooter, Vector2(0.0, -1.0), 1)
+	var wire := SkaterNetworkState.new()
+	shooter.fill_network_state(wire)
+	var received: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+			WorldStateCodec._encode_skater_quantized(wire))
+	var viewer: SkaterController = _rig(-20.0)
+	viewer.apply_replay_state(received, DT)
+	var a: Skater = shooter.skater
+	var b: Skater = viewer.skater
+	assert_gt(absf(a.upper_body.rotation.z), 0.05, "the shooter reels sideways")
+	assert_almost_eq(b.upper_body.rotation.x, a.upper_body.rotation.x, 0.002, "the reel's pitch")
+	assert_almost_eq(b.upper_body.rotation.z, a.upper_body.rotation.z, 0.002, "the reel's roll")

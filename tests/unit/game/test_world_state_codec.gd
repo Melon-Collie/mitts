@@ -343,6 +343,24 @@ func test_skater_torso_lean_round_trips() -> void:
 		assert_almost_eq(dec.balance_tilt_vel.y, 3.0, 1e-3, "the lean's rate is untouched")
 
 
+# One byte of bearing: within half a step (TAU / 512) of the sent direction, and
+# the untouched default (backward) is exact.
+func test_skater_recoil_dir_round_trips() -> void:
+	for dir: Vector2 in [Vector2(0.0, 1.0), Vector2(0.0, -1.0), Vector2(1.0, 0.0),
+			Vector2(-0.6, 0.8), Vector2(0.28, -0.96)]:
+		var s := SkaterNetworkState.new()
+		s.recoil_dir = dir
+		s.posture_lean = -0.3  # the field before it
+		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+				WorldStateCodec._encode_skater_quantized(s))
+		assert_lt(absf(dec.recoil_dir.angle_to(dir)), TAU / 512.0 + 1e-6, "bearing %s" % dir)
+		assert_almost_eq(dec.recoil_dir.length(), 1.0, 1e-6, "unit %s" % dir)
+		assert_almost_eq(dec.posture_lean, -0.3, 1e-4, "the posture is untouched")
+	var blank: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+			WorldStateCodec._encode_skater_quantized(SkaterNetworkState.new()))
+	assert_eq(blank.recoil_dir, Vector2(0.0, 1.0), "backward survives exactly")
+
+
 # ── decode_for_replay: side-effect-free world-state decode ────────────────────
 # The replay viewer / goal-replay driver decode packets through decode_for_replay
 # instead of decode_world_state precisely because it must NOT mutate the live
