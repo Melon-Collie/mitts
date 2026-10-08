@@ -717,7 +717,7 @@ func resolve_blade_against_net(heel_world: Vector3) -> NetBladeCollision.Result:
 			heel_world,
 			_blade_toe_for(heel_world),
 			_controller.net_blade_half_thickness,
-			_controller.net_mesh_give,
+			GameRules.NET_BLADE_MESH_GIVE,
 			_net_result)
 	return _net_result
 

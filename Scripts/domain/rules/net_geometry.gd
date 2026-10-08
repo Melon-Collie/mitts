@@ -207,6 +207,82 @@ static func ray_to_post(origin_xz: Vector2, dir_xz: Vector2, clearance: float) -
 	return best
 
 
+# True when the straight path `a` → `b` runs through something SOLID in the near
+# net — a post, or the twine of a side or back panel — so whatever is at one end
+# cannot touch what is at the other. The open mouth is not solid, and nor is the
+# air over the crossbar.
+#
+# Each twine panel counts as a slab `band` thick on either side of its plane,
+# because that is how far a blade sinks into the mesh (NetBladeCollision): the
+# plane alone would let a blade pressed through to within `band` of a puck on
+# the far side reach it. A stick buried in the twine reaches nothing on either
+# side, which is what a stick tangled in a net does. A puck's own centre never
+# sits inside the slab (it collides at its radius, which is wider), so this
+# never blocks a blade from a puck on its own side of a panel.
+#
+# Allocation-free: everything is a parametric interval on the segment.
+static func path_blocked(a: Vector3, b: Vector3, band: float) -> bool:
+	if a.y > GameRules.NET_HEIGHT and b.y > GameRules.NET_HEIGHT:
+		return false
+	var end_z: float = near_end_z((a.z + b.z) * 0.5)
+	var s: float = signf(end_z)
+	var hw: float = cavity_half_width()
+	var slack: float = band + GameRules.NET_POST_RADIUS
+	# Depth past the goal line, in a frame shared by both ends of the rink.
+	var da: float = a.z * s - GameRules.GOAL_LINE_Z
+	var db: float = b.z * s - GameRules.GOAL_LINE_Z
+	if (da < -slack and db < -slack) \
+			or (da > GameRules.NET_DEPTH + slack and db > GameRules.NET_DEPTH + slack):
+		return false
+	if minf(a.x, b.x) > GameRules.NET_BACK_HALF_WIDTH + slack \
+			or maxf(a.x, b.x) < -GameRules.NET_BACK_HALF_WIDTH - slack:
+		return false
+	var under_bar: Vector2 = _param_range(a.y, b.y, -INF, GameRules.NET_HEIGHT)
+
+	var a2 := Vector2(a.x, a.z)
+	var b2 := Vector2(b.x, b.z)
+	if post_overlap_xz(a2, b2, hw, end_z, 0.0).x > 0.0 \
+			or post_overlap_xz(a2, b2, -hw, end_z, 0.0).x > 0.0:
+		return true
+
+	# Side panels: the slab about x = ±hw, over the panel's depth (goal line to
+	# the back mesh, taken at the lower end's height — the deep end of the slant).
+	var panel_depth: Vector2 = _param_range(
+			da, db, 0.0, back_depth_at_height(minf(a.y, b.y)))
+	panel_depth = _overlap(panel_depth, under_bar)
+	if _overlaps(_param_range(a.x, b.x, hw - band, hw + band), panel_depth) \
+			or _overlaps(_param_range(a.x, b.x, -hw - band, -hw + band), panel_depth):
+		return true
+
+	# Back panel: the slab about the slanted plane, across the panel's width. The
+	# plane distance is linear in position, so it is linear along the segment.
+	var norm: float = back_plane_norm()
+	var ga: float = (da - GameRules.NET_DEPTH - BACK_SLOPE * a.y) / norm
+	var gb: float = (db - GameRules.NET_DEPTH - BACK_SLOPE * b.y) / norm
+	var across: Vector2 = _overlap(
+			_param_range(a.x, b.x, -hw - band, hw + band), under_bar)
+	return _overlaps(_param_range(ga, gb, -band, band), across)
+
+
+# The span of t in [0, 1] over which f(t) = lerp(f0, f1, t) lies in [lo, hi], as
+# (t_start, t_end); empty when t_start > t_end.
+static func _param_range(f0: float, f1: float, lo: float, hi: float) -> Vector2:
+	var df: float = f1 - f0
+	if absf(df) < 0.000001:
+		return Vector2(0.0, 1.0) if f0 >= lo and f0 <= hi else Vector2(1.0, 0.0)
+	var t0: float = (lo - f0) / df
+	var t1: float = (hi - f0) / df
+	return Vector2(maxf(minf(t0, t1), 0.0), minf(maxf(t0, t1), 1.0))
+
+
+static func _overlap(p: Vector2, q: Vector2) -> Vector2:
+	return Vector2(maxf(p.x, q.x), minf(p.y, q.y))
+
+
+static func _overlaps(p: Vector2, q: Vector2) -> bool:
+	return maxf(p.x, q.x) <= minf(p.y, q.y)
+
+
 # The nearer of the two: whichever part of the net the aim line meets first.
 static func ray_to_net(origin_xz: Vector2, dir_xz: Vector2, y: float, clearance: float) -> float:
 	return minf(

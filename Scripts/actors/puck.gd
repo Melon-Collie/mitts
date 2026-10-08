@@ -122,6 +122,12 @@ signal puck_hit_goal_body  # uncarried puck struck net panel or skirt (non-pipe 
 const CONTAINMENT_TELEPORT_SKIP: float = 2.0
 
 var carrier: Skater = null
+# Where the puck lay when `carrier` took it (host). The carrier's first pinned
+# tick sweeps its net collision from here, so a pin can't start life on the far
+# side of the twine from the puck it was picked up from. Kept apart from
+# global_position because a lag-comp claim lands after the carrier's controller
+# has run, so the puck is pinned once before the collision first sees it.
+var picked_up_from: Vector3 = Vector3.ZERO
 var pickup_locked: bool = false
 # Host time of the last release/nudge — the last moment this puck was teleported
 # onto a blade and given a wholesale new velocity. Host-side only; it exists so a
@@ -433,6 +439,17 @@ func get_release_velocity() -> Vector3:
 
 func set_carrier(skater: Skater) -> void:
 	carrier = skater
+	picked_up_from = global_position
+
+
+# Where a carried puck is pinned this tick: the carry target, inverse-offset from
+# the blade's actual position when the IK shifted the marker for forehand/backhand
+# carry, so the puck stays at the cursor while the blade renders to one side (and
+# tells the heel→toe seat story around it, mesh-only). Carrier required.
+func pinned_position() -> Vector3:
+	var pin: Vector3 = carrier.get_carry_target_global()
+	pin.y = ice_height
+	return pin
 
 func clear_carrier() -> void:
 	carrier = null
@@ -1017,12 +1034,7 @@ func _physics_process(delta: float) -> void:
 
 	if carrier != null:
 		_pending_elevation_vel = Vector3.ZERO
-		# Pin at the carry target — inverse-offset from the blade's actual
-		# position when the IK shifted the marker for forehand/backhand carry,
-		# so the puck stays at the cursor while the blade renders to one side
-		# (and tells the heel→toe seat story around it, mesh-only).
-		global_position = carrier.get_carry_target_global()
-		global_position.y = ice_height
+		global_position = pinned_position()
 	else:
 		# The analytic sim owns the loose puck on every host.
 		_drive_analytic(delta)

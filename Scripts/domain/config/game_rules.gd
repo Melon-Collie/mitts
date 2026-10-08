@@ -93,6 +93,14 @@ const NET_TOP_DEPTH: float = 0.559       # depth of the top net panel from the g
 # (NetGeometry). Never put this apron on a collider — an invisible 10 cm skirt
 # around the net makes the whole area feel broken.
 const NET_PUCK_BUFFER: float = 0.10
+# How deep the twine lets a blade sink before stopping it. The mesh is compliant
+# and a real stick does bury itself in it, but only just — reach is bounded before
+# the blade ever gets here (SkaterIKCoordinator._board_reach_limit casts the net
+# as well as the boards), so this only has to soften the residual contact. Deep
+# values read as the stick passing THROUGH the net. It is also the twine's
+# thickness for what a blade can reach (NetGeometry.path_blocked): a stick buried
+# in the mesh touches nothing on either side of it.
+const NET_BLADE_MESH_GIVE: float = 0.04
 
 # Half the skater's body so the blue line keys off the body EDGE, not its
 # centre — matching real hockey. You tag up the instant any part of your body
@@ -214,44 +222,50 @@ static func is_over_net_footprint(world_xz: Vector2) -> bool:
 	var az: float = absf(world_xz.y)
 	return az >= GOAL_LINE_Z - NET_PUCK_BUFFER and az <= GOAL_LINE_Z + NET_DEPTH + NET_PUCK_BUFFER
 
-# Projects a skater's XZ clear of the goal-net exclusion box — a smooth stand-in
-# for the concave net pocket (back + side panels), mirroring what
-# clamp_to_rink_inner does for the boards. Returns world_xz unchanged when the center is
-# already outside the box. Handles both net ends (|z|). Pure value-type math — no
-# allocation, hot-path safe at 120 Hz × actors.
+# Projects a skater's XZ clear of the goal net — the body disc of `radius` held
+# off the cage footprint, mirroring what clamp_to_rink_inner does for the boards.
+# Returns world_xz unchanged when the disc is already clear. Handles both net ends
+# (|z|). Pure value-type math — no allocation, hot-path safe at 120 Hz × actors.
 #
-# The box spans the net footprint: laterally |x| <= NET_BACK_HALF_WIDTH (the wider
-# trapezoid end), in depth |z| in [GOAL_LINE_Z, GOAL_LINE_Z + NET_DEPTH]. The back
-# and both side faces inset by `radius` so the body EDGE stops at the panel. The
-# FRONT face — the open goal mouth at the goal-line plane — is deliberately NOT
-# inset: a skater can still jam with their center right up to the goal line and
-# reach into the mouth, so crease / net-front play is untouched; they're only
-# stopped from putting their center past the line into the cage. Ejects along the
-# least-penetrated face.
+# The footprint is |x| <= NET_BACK_HALF_WIDTH (the wider trapezoid end) by
+# |z| in [GOAL_LINE_Z, GOAL_LINE_Z + NET_DEPTH], and EVERY face holds the body
+# edge, the open mouth included: the whole body stays in front of the goal line.
+# The stick still reaches into the mouth (NetGeometry.ray_to_solid_face leaves it
+# unbounded), so net-front play is the blade's, not the body's. Never leave the
+# mouth un-inset: a disc centred on the goal line overlaps both posts, and skates
+# along the line straight through them. The corners are rounded (the exact disc-vs-box
+# clearance), so a body sliding round a post isn't snagged on a square corner.
 static func push_out_of_net(world_xz: Vector2, radius: float = 0.0) -> Vector2:
 	var az: float = absf(world_xz.y)
-	var min_z: float = GOAL_LINE_Z                       # front (open mouth) — no inset
-	var max_z: float = GOAL_LINE_Z + NET_DEPTH + radius  # back panel (body edge stops here)
-	if az <= min_z or az >= max_z:
-		return world_xz
-	var max_x: float = NET_BACK_HALF_WIDTH + radius
 	var x: float = world_xz.x
-	if absf(x) >= max_x:
-		return world_xz
-	# Center is inside the exclusion box — eject along the least-penetrated face.
-	var pen_front: float = az - min_z    # toward center ice (reduce |z|)
-	var pen_back: float = max_z - az     # behind the net (increase |z|)
-	var pen_left: float = x + max_x      # toward -x
-	var pen_right: float = max_x - x     # toward +x
-	var min_pen: float = minf(minf(pen_front, pen_back), minf(pen_left, pen_right))
 	var end_sign: float = signf(world_xz.y)
+	var lo_z: float = GOAL_LINE_Z
+	var hi_z: float = GOAL_LINE_Z + NET_DEPTH
+	if az <= lo_z - radius or az >= hi_z + radius or absf(x) >= NET_BACK_HALF_WIDTH + radius:
+		return world_xz
+	var near := Vector2(clampf(x, -NET_BACK_HALF_WIDTH, NET_BACK_HALF_WIDTH), clampf(az, lo_z, hi_z))
+	var off := Vector2(x, az) - near
+	if off != Vector2.ZERO:
+		# Center outside the footprint, disc overlapping it: push radially off the
+		# nearest point (a face, or a rounded corner).
+		var d: float = off.length()
+		if d >= radius:
+			return world_xz
+		var out: Vector2 = near + off * (radius / d)
+		return Vector2(out.x, end_sign * out.y)
+	# Center inside the footprint — eject along the least-penetrated face.
+	var pen_front: float = az - lo_z + radius
+	var pen_back: float = hi_z - az + radius
+	var pen_left: float = x + NET_BACK_HALF_WIDTH + radius
+	var pen_right: float = NET_BACK_HALF_WIDTH - x + radius
+	var min_pen: float = minf(minf(pen_front, pen_back), minf(pen_left, pen_right))
 	if min_pen == pen_front:
-		return Vector2(x, end_sign * min_z)
+		return Vector2(x, end_sign * (lo_z - radius))
 	if min_pen == pen_back:
-		return Vector2(x, end_sign * max_z)
+		return Vector2(x, end_sign * (hi_z + radius))
 	if min_pen == pen_left:
-		return Vector2(-max_x, world_xz.y)
-	return Vector2(max_x, world_xz.y)
+		return Vector2(-NET_BACK_HALF_WIDTH - radius, world_xz.y)
+	return Vector2(NET_BACK_HALF_WIDTH + radius, world_xz.y)
 
 # Away-from-net normal scaled by closeness, for a skater at `pos_xz` — the
 # net-box analog of BoardPlayRules.board_proximity (same 0 → 1 closeness
