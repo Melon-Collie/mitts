@@ -2,8 +2,9 @@
 
 C++ ports of per-tick math kernels, registered as `Native*` classes
 (`NativeTopHandIK`, `NativeBottomHandIK`, `NativeSkaterMovement`,
-`NativePuckStep`, `NativeBladeDangle`, `NativeSkaterGait`). The GDScript originals (in
-`Scripts/domain/rules/` and `Scripts/controllers/`) remain the behavioral
+`NativePuckStep`, `NativeBladeDangle`, `NativeSkaterGait`, `NativeArmRig`). The
+GDScript originals (in `Scripts/domain/rules/`, `Scripts/controllers/` and
+`Scripts/actors/`) remain the behavioral
 reference; each ported kernel is pinned to its reference by a seeded fuzz test
 (`tests/unit/rules/test_native_ik_parity.gd` and its siblings). **Change a
 solver in both places or not at all** — the parity tests are the gate.
@@ -29,8 +30,9 @@ well under one in C++). Three consequences worth knowing:
   census answers "is gameplay running the C++ or the GDScript path?", and a
   non-gameplay class in it would make the boot log and debug digest report
   `PARTIAL` for a reason that has nothing to do with the tick.
-- **It is the reason `build_profile.json` enables `Image`** — the only bound
-  engine class any of this needs beyond `RefCounted` / `OS`.
+- **It is the reason `build_profile.json` enables `Image`.** The other bound
+  engine class beyond `RefCounted` / `OS` is `Skeleton3D`, for `NativeArmRig`
+  (below).
 
 ## Layout
 
@@ -91,7 +93,8 @@ bash .claude/hooks/run-gut.sh -gdir=res://benchmarks   # includes the IK micro-b
 ```
 
 The micro-benchmark (`benchmarks/test_ik_micro_benchmark.gd`) reports
-GDScript-vs-native µs/call including boundary-crossing cost. Compare
+GDScript-vs-native µs/call including boundary-crossing cost (the IK solvers and
+the arm rebuild). Compare
 relatively within one run; a debug engine build inflates both sides
 differently.
 
@@ -130,6 +133,17 @@ without a built binary, loses performance, never correctness — CI builds it):
   (`tests/unit/rules/test_native_gait_parity.gd`) drives the overlays too.
   Tunables load by name in `configure(controller)`, re-run from
   `SkaterController.apply_attributes`.
+
+- **Arm rig** — `SkaterArmRig._update_arm` (render rate, every drawn skater,
+  both arms): `pose` runs the whole arm and **writes the bones itself** — the
+  five arm parts and that side's deltoid cap, on the `Skeleton3D` handed to
+  `bind`. That is the one exception to "results out": the math is cheaper
+  than the crossings, so a port that hands six transforms back for GDScript to
+  write measured 9.2 µs against the GDScript's 10.6; one crossing is ~4. The
+  rig keeps its own view of the caps (`_basis`, `_girdle`) for the reposes it
+  makes itself (trunk texture, sizing) and reads the native's back on demand
+  (`_sync_cap`); a degenerate span returns false and takes the GDScript path.
+  `tests/unit/rules/test_native_arm_rig_parity.gd`.
 
 The parity suites force the GDScript path on their reference objects (e.g.
 nulling `_skating._native`) — a parity test must never compare the native

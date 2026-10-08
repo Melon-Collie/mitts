@@ -1,10 +1,10 @@
 extends GutTest
 
 # ── IK GDScript-vs-native micro-benchmark (report-only; NOT in the default
-# suite) ─ Times the top/bottom-hand IK solvers in their GDScript reference
-# form against the C++ GDExtension ports (native/src/), including the
-# boundary-crossing cost of the native calls (solve + get_hand + get_blade is
-# three crossings — the honest per-tick price, not just the math).
+# suite) ─ Times the top/bottom-hand IK solvers and the arm rig in their
+# GDScript reference form against the C++ GDExtension ports (native/src/),
+# including the boundary-crossing cost of the native calls (solve + get_hand +
+# get_blade is three crossings — the honest per-tick price, not just the math).
 #
 # This is the measurement the GDExtension spike exists to produce: the
 # per-call ratio says whether porting hot kernels to C++ pays for itself.
@@ -152,4 +152,36 @@ func test_bottom_hand_gdscript_vs_native() -> void:
 	var gd_us: float = _results[0]["us"]
 	var native_us: float = _results[1]["us"]
 	gut.p("  bottom-hand solve speedup: %.1fx" % (gd_us / native_us))
+	assert_true(_results.size() == 2, "benchmark produced rows")
+
+
+# The whole arm rebuild on a live rig (SkaterArmRig._update_arm): the textured
+# shoulder, the girdle, the elbow, five part poses and the deltoid cap, bone
+# writes included — the native call writes them itself, so this is one crossing.
+func test_arm_rig_gdscript_vs_native() -> void:
+	if not ClassDB.class_exists(&"NativeArmRig"):
+		pending("native extension not built — see native/README.md")
+		return
+	_results.clear()
+	var sk: Skater = load("res://Scenes/Skater.tscn").instantiate() as Skater
+	add_child_autofree(sk)
+	sk.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
+	sk.set_process(false)
+	sk.set_physics_process(false)
+	sk.set_trunk_texture(0.1, 0.05)
+	var rig: SkaterArmRig = sk._arms
+	var reps: int = REPS / 10
+	rig.native_enabled = false
+	var t0: int = Time.get_ticks_usec()
+	for _i: int in reps:
+		rig.update_top_arm()
+	_results.append({"label": "arm rebuild GDScript", "us": float(Time.get_ticks_usec() - t0) / reps})
+	rig.native_enabled = true
+	t0 = Time.get_ticks_usec()
+	for _i: int in reps:
+		rig.update_top_arm()
+	_results.append({"label": "arm rebuild native (1 crossing)", "us": float(Time.get_ticks_usec() - t0) / reps})
+
+	_print_results()
+	gut.p("  arm rebuild speedup: %.1fx" % (_results[0]["us"] / _results[1]["us"]))
 	assert_true(_results.size() == 2, "benchmark produced rows")

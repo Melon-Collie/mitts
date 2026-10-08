@@ -123,7 +123,7 @@ Everything in the four rigs is cosmetic and derived. Nothing gameplay reads
 comes out of them, and that is what makes them safe to move: the blade contact
 point is the `Blade` marker's, and the rigs only read it.
 
-Five rules the rigs sit inside, all easy to break from in here:
+Six rules the rigs sit inside, all easy to break from in here:
 
 - **Anything drawn onto the skater at render rate reads
   `Skater.render_transform()`**, not `global_position` — the post-tick pose is up
@@ -147,6 +147,10 @@ Five rules the rigs sit inside, all easy to break from in here:
   gameplay frame: whether the host can see a blocker must not move his hands.
   `test_off_camera_culling.gd` holds that, and `ClipFrameCapture` turns culling
   off while its own camera records.
+- **The arms are posed in C++ when the extension is built** (`NativeArmRig`,
+  which writes the arm and cap bones itself). Change `_update_arm`, the part
+  posing or the cap's orient-and-repose and the port changes with it, or
+  `test_native_arm_rig_parity.gd` fails; see `native/README.md`.
 - **The pelvis must not take the fold.** It hangs from the waist, not the
   spine: folding with the torso is what opens the seat in the first place, and
   hanging it off a leg pivot would swing the whole seat with that leg.
