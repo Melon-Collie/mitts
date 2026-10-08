@@ -69,6 +69,8 @@ static func apply_interpolated_snapshot(
 		# RECORDED values instead of fresh-state defaults (file viewer) or
 		# whatever live play left on the actors (goal replay). Discrete reads
 		# take the newest bracket end, like is_ghost; scalars lerp.
+		# test_replay_playback_carries_the_state.gd holds the list against
+		# SkaterNetworkState.
 		interp.move_intent = ts.move_intent
 		interp.brake_intent = ts.brake_intent
 		interp.hit_committed = ts.hit_committed
@@ -78,8 +80,15 @@ static func apply_interpolated_snapshot(
 		interp.sprint_locked = ts.sprint_locked
 		interp.shot_charge = lerpf(fs.shot_charge, ts.shot_charge, t)
 		interp.stamina = lerpf(fs.stamina, ts.stamina, t)
+		interp.sprint_active = ts.sprint_active
+		interp.recoil_dir = ts.recoil_dir
 		interp.stagger_timer = lerpf(fs.stagger_timer, ts.stagger_timer, t)
 		interp.knockdown_timer = lerpf(fs.knockdown_timer, ts.knockdown_timer, t)
+		# The leans place the UpperBody frame the recorded blade is local to.
+		interp.balance_tilt = fs.balance_tilt.lerp(ts.balance_tilt, t)
+		interp.balance_tilt_vel = fs.balance_tilt_vel.lerp(ts.balance_tilt_vel, t)
+		interp.torso_lean = fs.torso_lean.lerp(ts.torso_lean, t)
+		interp.posture_lean = lerpf(fs.posture_lean, ts.posture_lean, t)
 		record.controller.apply_replay_state(interp, sim_delta)
 
 	var fp: PuckNetworkState = from_snap.puck
