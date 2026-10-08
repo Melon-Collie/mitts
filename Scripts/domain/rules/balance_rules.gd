@@ -20,12 +20,15 @@ const GRAVITY: float = 9.8
 
 
 # The balancing tilt for a horizontal acceleration: direction of `accel`,
-# magnitude atan(|a| / g), capped at `cap`.
+# magnitude atan(|a| / g) eased into `cap` (cap · tanh(angle / cap)) rather
+# than clipped at it. A gentle push leans by its balancing angle; a hard one
+# approaches the cap without a corner, so pushes of different strength still
+# read as different leans instead of all landing on the same ceiling.
 static func balance_tilt(accel: Vector2, cap: float) -> Vector2:
 	var a: float = accel.length()
-	if a < 1e-6:
+	if a < 1e-6 or cap <= 0.0:
 		return Vector2.ZERO
-	return accel / a * minf(atan2(a, GRAVITY), cap)
+	return accel / a * cap * tanh(atan2(a, GRAVITY) / cap)
 
 
 # One step of a critically damped spring toward a target held over the step,

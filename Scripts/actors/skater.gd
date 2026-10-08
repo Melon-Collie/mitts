@@ -272,10 +272,10 @@ var hand_sphere_radius: float = 0.064
 var cuff_wrist_offset: float = 0.05
 
 # ── Balance posture (SkaterController steps it; BalanceRules) ────────────────
-# Natural frequency of the lean's spring: a held lean arrives in ~0.55 s, a 4 Hz
-# steering wiggle shows at 7% of its swing.
-var balance_omega: float = 7.0
-var balance_lean_cap_deg: float = 30.0
+# Natural frequency of the lean's spring: a held lean arrives in ~1 s, and
+# side-to-side steering shows as a few degrees. Eased softly into the cap.
+var balance_omega: float = 4.0
+var balance_lean_cap_deg: float = 20.0
 # Share of the lean the trunk keeps, the rest taken back above the hips: the
 # legs carry the edge angle and the shoulders stay nearer the stick.
 var trunk_lean_share: float = 0.6

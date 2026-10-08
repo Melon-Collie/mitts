@@ -192,12 +192,13 @@ func test_a_held_turn_leans_and_steering_taps_do_not() -> void:
 			_tick(c, input, move, Vector3(0.0, 0.0, -3.0))
 			if k >= 2:
 				tap_worst = maxf(tap_worst, c.skater.balance_tilt().length())
-	assert_lt(rad_to_deg(tap_worst), 10.0,
+	assert_lt(rad_to_deg(tap_worst), 7.0,
 			"steering taps leaned the body %.1f°" % rad_to_deg(tap_worst))
 
-	for _i: int in 90:
+	# A held lean takes about a second to arrive (Skater.balance_omega).
+	for _i: int in 120:
 		_tick(c, input, Vector2(1.0, 0.0), Vector3(2.2, 0.0, -2.2))
-	assert_gt(rad_to_deg(c.skater.balance_tilt().length()), 15.0,
+	assert_gt(rad_to_deg(c.skater.balance_tilt().length()), 13.0,
 			"a held hard turn must lean the body into it")
 
 
@@ -209,14 +210,14 @@ func test_the_head_leans_less_than_the_trunk() -> void:
 	var input := InputState.new()
 	input.delta = DT
 	_skate_up_the_ice(c, input)
-	for _i: int in 90:
+	for _i: int in 120:
 		_tick(c, input, Vector2(1.0, 0.0), Vector3(2.2, 0.0, -2.2))
 	var rig: Skeleton3D = _rig(c.skater)
 	var v: Vector3 = c.skater.global_transform.basis.inverse() * c.skater.velocity
 	var right: Vector3 = Vector3(v.x, 0.0, v.z).normalized().cross(Vector3.UP)
 	var trunk_roll: float = _roll(rig, SkaterBodySkeleton.SPINE_BONE, right)
 	var head_roll: float = _roll(rig, SkaterBodySkeleton.NECK_BONE, right)
-	assert_gt(rad_to_deg(absf(trunk_roll)), 5.0,
+	assert_gt(rad_to_deg(absf(trunk_roll)), 4.0,
 			"the trunk must be leaning for this to mean anything")
 	assert_lt(absf(head_roll), absf(trunk_roll) * 0.6,
 			"the head must lean well short of the trunk")

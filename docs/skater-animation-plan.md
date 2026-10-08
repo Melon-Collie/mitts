@@ -507,3 +507,14 @@ are adopted on reconcile, and the rebuild test asserts the receiver's torso
 within 0.001 rad with no hand-matching. The body check's recoil direction
 followed (v62, one byte): remotes had reeled every plain stagger backward, and
 a knockdown guessed its fall direction from the slide velocity.
+
+**Retuned after the first playtest of it.** The lean read as rigid: nearly
+every real push drives atan(|a|/g) past the cap, so with a hard 30° cap and
+ω 7 it sat at the ceiling within 0.6 s of any start, turn or stop, and
+side-to-side steering at 1.7 Hz rocked it 11° → 1° → 11° through upright on
+every switch. It is now ω 4 (a held lean arrives in ~1 s) into a 20° cap
+eased softly (cap · tanh(angle / cap)), so a harder push still leans further.
+Measured on the same moves: a start builds 1 → 13° over 0.6 s, a held turn
+17° after a second, steering at 1.7 Hz shows 1–4°, and the shoulders' largest
+shift into a turn falls from ~0.6 m to 0.44 m (`Skater.max_lean_shift`, which
+the claim reach bound follows).

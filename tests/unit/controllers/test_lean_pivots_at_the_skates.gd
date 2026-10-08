@@ -78,9 +78,9 @@ func test_a_hard_turn_leans_the_body_over_planted_skates() -> void:
 	var lean: float = rad_to_deg(c.skater.balance_tilt().length())
 	gut.p("hard turn: lean %.0f°, skates %+.2f m, chest %+.2f m into the turn" % [
 			lean, _inside(c, skates, true), _inside(c, chest, true)])
-	assert_gt(lean, 20.0, "a hard turn leans")
+	assert_gt(lean, 12.0, "a hard turn leans")
 	assert_lt(absf(_inside(c, skates, true)), 0.2, "the skates stay under the skater")
-	assert_gt(_inside(c, chest, true), 0.35, "and the body goes over into the turn")
+	assert_gt(_inside(c, chest, true), 0.2, "and the body goes over into the turn")
 
 
 func test_the_hands_go_with_the_shoulders() -> void:
@@ -123,7 +123,7 @@ func test_a_remote_rebuilds_the_blade_from_the_wire() -> void:
 	var shooter: SkaterController = _rig(20.0)
 	_tick(shooter, Vector2(0.0, -1.0), 240)
 	_tick(shooter, Vector2(1.0, 0.0), 80)
-	assert_gt(shooter.skater.balance_tilt().length(), 0.3, "leaned into the turn")
+	assert_gt(shooter.skater.balance_tilt().length(), 0.2, "leaned into the turn")
 	var wire := SkaterNetworkState.new()
 	shooter.fill_network_state(wire)
 	var received: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(

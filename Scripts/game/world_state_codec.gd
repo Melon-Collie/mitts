@@ -515,7 +515,7 @@ static func _write_skater_quantized(b: PackedByteArray, o: int, s: SkaterNetwork
 	if s.wrister_address_side > 0:
 		intent |= 0x80
 	b.encode_u8(o, intent); o += 1
-	# Balance lean (v60), s16 @ π/32767 rad per axis — the lean caps at 30°,
+	# Balance lean (v60), s16 @ π/32767 rad per axis — the lean stays under 20°,
 	# and every machine must place the UpperBody frame the blade is local to
 	# from the same value — and its spring rate, s16 @ 20/32767 rad/s.
 	b.encode_s16(o, clampi(roundi(s.balance_tilt.x / PI * 32767.0), -32768, 32767)); o += 2
