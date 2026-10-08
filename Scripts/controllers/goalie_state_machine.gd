@@ -27,9 +27,13 @@ extends RefCounted
 # ruleset-split resolution as COVERING when held under pressure; an
 # unpressured catch quick-drops and plays on (the real delay-of-game
 # incentive).
+# HALF_BUTTERFLY_* is one pad down (the goalie-local side named) and the other
+# leg still loaded on its skate: the reach of a flat pad on one side, with a leg
+# left to push and rise on.
 enum State {
 	STANDING, BUTTERFLY, RECOVERING, RVH_LEFT, RVH_RIGHT, READY, SLIDING, COILING,
 	VH_LEFT, VH_RIGHT, COVERING, PLAYING_PUCK, CATCHING, CATCHING_DOWN,
+	HALF_BUTTERFLY_LEFT, HALF_BUTTERFLY_RIGHT,
 }
 
 signal transitioned(prev: State, new: State)
@@ -46,11 +50,15 @@ func reset() -> void:
 func is_butterfly() -> bool:
 	return current == State.BUTTERFLY
 
-# "On the ice" — the three down states share the butterfly pose shape (pads
-# splayed). Use for code that should treat the goalie as "in a butterfly-ish
+func is_half_butterfly() -> bool:
+	return current == State.HALF_BUTTERFLY_LEFT or current == State.HALF_BUTTERFLY_RIGHT
+
+# "On the ice" — a pad down: the full butterfly (idle, coiled or mid-slide) and
+# the half. Use for code that should treat the goalie as "in a butterfly-ish
 # stance" regardless of whether they're coiled, mid-slide, or stationary.
 func is_down() -> bool:
 	return current == State.BUTTERFLY \
+			or is_half_butterfly() \
 			or current == State.COILING \
 			or current == State.SLIDING
 

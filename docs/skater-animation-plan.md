@@ -487,7 +487,7 @@ go with them. That makes the lean gameplay:
 - **On the wire.** The blade and top hand travel `UpperBody`-local, so every
   machine must place the frame identically: `balance_tilt` (and its rate, for
   the reconcile baseline) join `SkaterNetworkState`, four s16 —
-  `PROTOCOL_VERSION` 60, replay `FORMAT_VERSION` 8. Remotes interpolate the
+  `PROTOCOL_VERSION` 61, replay `FORMAT_VERSION` 8. Remotes interpolate the
   tilt; the local reconcile snaps tilt and rate to the host's and replays.
 - **Claims.** The host bounds a claimed blade by `max_blade_reach` around the
   body; a leaned shoulder reaches further toward the turn, so the bound grows by
@@ -499,13 +499,13 @@ into the turn, and the visible shoulder within 0.14 m of the gameplay one the
 hand hangs from. `test_lean_pivots_at_the_skates.gd` holds the pivot, the
 blade on the ice, a body check not entering the lean, and a receiver
 rebuilding the frame and blade from the wire; the codec and reconcile suites
-hold the new fields. The torso's own pitch and roll followed (v61): receivers
+hold the new fields. The torso's own pitch and roll followed (v62): receivers
 used to re-derive them by snapping to the targets the simulator eases toward,
 which in a hard turn put a remote's torso ~0.15 rad and its blade ~18 cm off.
 The pose coordinator's smoothed reach lean and posture now replicate (3 × s16),
 are adopted on reconcile, and the rebuild test asserts the receiver's torso
 within 0.001 rad with no hand-matching. The body check's recoil direction
-followed (v62, one byte): remotes had reeled every plain stagger backward, and
+followed (v63, one byte): remotes had reeled every plain stagger backward, and
 a knockdown guessed its fall direction from the slide velocity.
 
 **Retuned after the first playtest of it.** The lean read as rigid: nearly

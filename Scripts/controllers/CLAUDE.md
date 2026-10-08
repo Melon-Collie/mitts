@@ -19,6 +19,9 @@ execute; they never reach up. Goalie *math* is pure and lives in
 | `goalie_world_view.gd` | the perception surface |
 | `domain/rules/goalie_behavior_rules.gd` | reads, depth, races (pure) |
 | `domain/rules/goalie_save_selection.gd` | block-or-react, as one question |
+| `domain/rules/goalie_pass_read.gd` | where a pass in flight will be shot from |
+| `domain/rules/goalie_screen_depth.gd` | room to see around a screen |
+| `domain/rules/goalie_tip_depth.gd` | challenge depth against a net-front stick |
 | `domain/rules/goalie_save_rules.gd` | rebound doctrine |
 | `domain/rules/goalie_depth_solver.gd` | depth constraint composition |
 | `domain/rules/goalie_stick_rules.gd` | stick geometry and coverage |
@@ -76,26 +79,44 @@ planner for free.
 
 ### The stick's angle is not a pose choice
 
-The blocker assembly's forward tilt used to be four authored numbers, one per
-stance family. It cannot be: shaft, paddle and blade are one rigid piece hanging
-a fixed distance below the wrist, so once the pose puts the hand somewhere, the
-paddle angle that lands the blade on the ice is *decided* — by that height and by
-the stick's lie, and by nothing else. `GoalieStickRules.tilt_for_blade_on_ice`
-solves it and `GoalieBodyConfigBuilder._seat_stick_tilt` is the only writer of
-`blocker_rot.x`, running last so every modifier that moved the hand — sweeps,
-lunge, prelean, elevated reach — gets a stick that follows it.
+Shaft, paddle and blade are one rigid piece hanging a fixed distance below the
+wrist, and the lie (117°) is the angle between paddle and blade in the plane of
+the blade's FACE. Two things follow, and every stance obeys both:
 
-The upright stances give up their hand HEIGHT to the same constraint. A blade
-both flat and on the ice puts the wrist at exactly one place
-(`wrist_y_for_flat_blade_on_ice`); standing taller than it is what leaves the
-blade resting on its heel, which is the one thing every goalie coach says not to
-do and which measured out as the blade presenting its UNDERSIDE to the shooter.
+- **The roll is fixed.** Only the paddle leaning the lie's complement sideways
+  (`GoalieStickRules.FLUSH_ROLL_DEG`, top toward the blocker side) lays the
+  blade's length flush on the ice. Any other roll rests it on its heel or toe,
+  the thing every goalie coach says not to do. Never apply the lie about the
+  blade's long axis: that is a loft, and the forward tilt already owns loft.
+- **The forward tilt follows the hand.** Once the hand is placed, the tilt that
+  lands the blade on the ice is decided (`tilt_for_blade_on_ice`), and it opens
+  the blade's face by the same angle. The last step of
+  `GoalieBodyConfigBuilder.build` is the only writer of `blocker_rot.x`, so every
+  modifier that moved the hand — sweeps, lunge, prelean, elevated reach — gets a
+  stick that follows it.
 
-What is left over is a real property of this rig rather than a tuning decision:
-the wrist-to-blade lever is 0.92 m where a senior paddle is 0.66, because the
-hand is modelled a quarter-metre up the shaft from the paddle's top. That extra
-length is why the butterfly still has to lay the paddle over past its lie to
-reach the ice, and it is a `Goalie.tscn` change, not a code one.
+Upright, the stance picks the tilt (`UPRIGHT_TILT_DEG`, the blade a foot out in
+front of the skates) and the hand height follows (`upright_wrist_y`). Down, the
+hand sits just above the pads, so the paddle lays well forward and the face
+opens with it — a face square to the shooter and a blade flush on the ice put
+the hand at one height, and the butterfly's is lower.
+
+### The hands are held out, and the elbows hang
+
+A hand posed nearer the shoulder than the arm allows can only be drawn by
+folding the elbow into the body. So the pose builder places the glove at the
+depth that gives a real bend for the stance (`GoalieAnatomy.hand_depth_for_bend`,
+from the same arm lengths `Goalie` draws with), and the blocker where the stick
+puts it: paddle rolled in, blade out in front of the five-hole — upright at the
+upright wrist height, down just above the pad tops. The elevated reach
+extends from the hand's rest depth, not from a fixed one.
+
+The elbow is not aimed with a pole. A fixed "down" hint is wrong for a hand held
+out in front and below, because down projects to down-and-behind, into his
+chest. `TwoBoneIK.solve_elbow_hanging` lets it hang: the lowest elbow the bones
+allow that stays out of the trunk — never inside the shoulder, and back past it
+only once it is out beside the body, which is where a butterfly blocker's elbow
+goes. `test_goalie_arm_rig.gd` holds both.
 
 ## What kills a collaborator extraction
 
@@ -191,6 +212,14 @@ The shape of that failure is worth recognising: a stance loop at a fixed period
 whose slide has NO lateral leg means two owners are fighting over
 `_current_depth`. `test_goalie_held_puck_slide_loop.gd` holds all of it.
 
+**Down, the pad covers the post only if it points there.** The arrival test
+measures the post spot against the sealing pad as a segment turned however far
+his body is from the seal's own facing (`BeatenWideConfig.pad_turn_rad`). A
+butterfly still turned from an earlier push the other way has its post-side pad
+swung out from the line, and a wrap slides in behind it; a radius that ignored
+the turn called him sealed. Sitting on the seal spot turned wrong still coils,
+because the coil is what turns the pad onto the post.
+
 The one sanctioned commit is the **beaten-wide post seal** — and it is sanctioned
 because it is not a prediction. Its gate is positional (the puck is already past
 his standing sealing reach on the side it went), so it fires on an accomplished
@@ -228,7 +257,7 @@ a SHOT can beat him, and a walkaround is not a shot yet.
 
 ### The committed slide is a retreat, and its budget is depth
 
-`_post_edge_seal_x` puts the body at `net_half_width − pad_edge · cos(slide
+`_post_edge_reach` puts the body at `net_half_width − pad_edge · cos(slide
 rotation)` = **0.154 m** off centre, because a butterfly pad lies 0.84 m along
 the ice and the seal is the pad's outer EDGE on the post, not the body on it.
 So a slide's lateral leg is centimetres by construction; measured over a full
@@ -249,6 +278,14 @@ Two things follow that are easy to get backwards:
 `test_human_wraparound.gd` holds all of it, and the same file records the two
 things the instrument does NOT reproduce (it starts from a fully settled keeper,
 and it never reaches the 1.30–1.60 m radius band the live log holds).
+
+**A rebound gets a push to square, not a seal.** Down after the save, with a
+shooter on a loose puck, he pushes once the knee shuffle would lose the race
+to the release (`knee_shuffle_speed · backdoor_release_time`), to where he is
+square to the puck and at the depth he is at — the slide with `hold_depth`, not
+clamped to the seal band, which is where a body sits with its pad on a post.
+A carried puck still gets the seal. A quick put-back beats him mid-push.
+`test_goalie_rebound_push.gd` holds it.
 
 **The goalie can be WRONG, deterministically.** His committed belief about where
 a shot is going is the aim he read `read_lag` seconds ago, sampled from the
@@ -285,8 +322,43 @@ not retreat.** Backing in concedes angle exactly when the goalie has his best
 look, and a windup is MORE read time, which is why slapshots convert lower than
 snap shots. Being set emerges rather than being applied: the charging carrier
 glides, so the arc target goes stationary and the movement converges. No depth
-concession is applied anywhere; screened windups are handled by the blocking
+concession is applied to a windup; screened windups are handled by the blocking
 drop, not by depth.
+
+**The one depth term a screen earns is room to see around it.** At challenge
+depth he is already tight to a slot or top-of-the-crease screen, which is where
+a peek works best: the sightline pivots about the release, so a head move close
+to the body swings the line past it. What blinds him is a body ON him, inside
+the peek's reach of his own eyes. `GoalieScreenDepth.sight_cap` gives up exactly
+the room that takes, and nothing for a screen he could not see around from
+anywhere (that release is the blocking drop's). The peek holds the side it chose
+on a dead-on screen (`_peek_side`); left to the sign of a perpendicular near
+zero it flipped every tick. `test_goalie_screen_room.gd` holds both.
+
+**A tip is covered by where he stands, never by a reaction or a pre-commit.**
+Its flight from a net-front blade is shorter than his read, and he is frozen
+on the shot until it is touched, so there is no race to run. `GoalieTipDepth`
+holds him on the tip's line (`r · sin θ <= butterfly half-width`) for a stick
+he could not react to. From the point this costs nothing: the direct shot is
+a reaction save at any depth, so A's extra angle only sold the redirect. A
+stick on the shooter's line needs nothing, since challenging covers it. A
+BLOCK on tip risk is the pre-commit trap above and stays out.
+`test_goalie_tip_threat.gd` holds it.
+
+**Three low-save shapes, picked off the converged read.** On a pad face he
+stays standing. Wide of one standing pad, inside a flat pad's reach and low
+enough for it, he goes to the HALF-butterfly: that pad down, the other leg
+loaded on its skate. The five-hole, a rising shot, or a read that hasn't
+converged get the full butterfly. The half's cost is the up-leg side, so a man
+alive there sends him full. Its payoff is the loaded leg: a slide from it
+skips the coil, he moves at shuffle pace instead of knee-shuffling, and the
+rise is half as long. The full butterfly has two poses of its own: the square
+BLOCK sits tall with the hands tucked, and every other drop leans out with
+the hands ready. The half states ride the wire as `state_enum` values (v60).
+The bot shot model does NOT read them as down (`GoalieNetworkState.is_down`):
+the down pad measures flat through the replicated pads, and the up leg keeps a
+standing leg's drop and the arm's reach.
+`test_goalie_half_butterfly.gd` holds it.
 
 ## Behind-net puck play — the doctrine
 
@@ -323,18 +395,14 @@ Whenever the bots' shot model reads the same quantity as a goalie knob, the two
 must be synced (`AIActionScoring.set_goalie_profile`) or the bots score against a
 goalie they do not face. See the AI MIRROR note in `goalie_skill_profile.gd`.
 
-**On a breakaway walkaround there is no ladder at all.** Measured as open aim
-points out of seven at a fixed release: EASY 2, NORMAL 2, HARD 2. It used to run
-BACKWARDS (0 / 2 / 4, HARD the most beatable), and fixing the beaten-wide verdict
-took HARD from 4 to 2 and lifted EASY from 0 to 2 — so the inversion is gone and
-flat is what is left.
-
-`depth_base_m` is the only tier lever this play can feel; every read latency,
-reach speed, drop time, the five-hole, the poke, the toe-out and
-`depth_aggressive_m` move it by exactly nothing. So a tier ladder here can only
-be a depth ladder, and depth cuts the wrong way — a goalie who challenges the
-rush harder is easier to walk around. Separating the tiers on this play is
-therefore not a matter of turning the existing knobs.
+**On a breakaway walkaround the ladder comes from the push.** Measured as open
+aim points out of seven at a fixed release: EASY 5, NORMAL 2, HARD 2. He seals
+the post on the wrap, so the play is a race to it: depth sets how far he has to
+retreat and the tiered butterfly push (`slide_push_speed_mps`, softer the weaker
+the goalie, like every other movement speed) sets how fast. The read latencies,
+the drop time, the five-hole, the poke and the toe-out do not touch it. Depth
+cuts the wrong way — a goalie who challenges the rush harder is easier to walk
+around — and the push is what keeps the ladder the right way up.
 
 Pulling `depth_base_m` in is not free — it concedes the centre-lane rush from
 5 m, which is what challenge depth exists for. `test_goalie_breakaway_ladder.gd`

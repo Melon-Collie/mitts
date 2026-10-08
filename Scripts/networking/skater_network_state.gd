@@ -71,18 +71,18 @@ var wrister_address_side: int = 1
 # lean translates the UpperBody frame the wire's blade_position and
 # top_hand_position are local to, so a receiver that placed the frame from any
 # other lean would put the blade somewhere else. The local reconcile snaps both
-# to the host's before replay (v60).
+# to the host's before replay (v61).
 var balance_tilt: Vector2 = Vector2.ZERO
 var balance_tilt_vel: Vector2 = Vector2.ZERO
 # The torso's smoothed lean (SkaterPoseCoordinator): the reach lean (pitch,
 # roll) and the skating posture's pitch, radians. LOAD-BEARING for the same
 # reason — UpperBody's tilt is what puts the wire's local blade on the ice —
-# and like the balance lean the reconcile snaps them before replay (v61).
+# and like the balance lean the reconcile snaps them before replay (v62).
 var torso_lean: Vector2 = Vector2.ZERO
 var posture_lean: float = 0.0
 # Body-frame direction the last check shoved this skater (x = right, y =
 # forward), unit length. The stagger reel and the knockdown fall both tip this
-# way, and the reel tilts UpperBody (v62).
+# way, and the reel tilts UpperBody (v63).
 var recoil_dir: Vector2 = Vector2(0.0, 1.0)
 var host_timestamp: float = 0.0         # host-only, not serialized
 var blade_contact_world: Vector3 = Vector3.ZERO  # host-only, not serialized

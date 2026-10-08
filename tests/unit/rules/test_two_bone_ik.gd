@@ -112,3 +112,47 @@ func test_hand_beyond_max_reach_does_not_crash() -> void:
 	# Elbow on the axis (h collapsed to 0 because d_clamped = TOTAL, foot_t = UPPER).
 	assert_almost_eq(elbow.y, 0.0, 0.001, "elbow collapses onto SH line at max reach")
 	assert_almost_eq(elbow.x, UPPER, 0.001, "elbow at upper_len along axis when stretched")
+
+
+# ── solve_elbow_hanging ──────────────────────────────────────────────────────
+
+func test_a_hanging_elbow_stays_out_of_the_chest_and_ribs() -> void:
+	# Hand out in front and below: a "down" pole puts this elbow behind the shoulder.
+	var shoulder := Vector3(-0.23, 1.3, 0.0)
+	var hand := Vector3(-0.42, 0.9, -0.5)
+	var e: Vector3 = TwoBoneIK.solve_elbow_hanging(shoulder, hand, 0.38, 0.38,
+			Vector3.FORWARD, Vector3.LEFT)
+	assert_almost_eq(e.distance_to(shoulder), 0.38, 0.001)
+	assert_almost_eq(e.distance_to(hand), 0.38, 0.001)
+	assert_lte(e.z, shoulder.z + 0.001, "not behind the shoulder (he faces -Z)")
+	assert_lte(e.x, shoulder.x + 0.001, "not inside it (outward is -X here)")
+	# The pole solve it replaced folds into the chest once the hand is held close,
+	# as the ready glove was (0.21 m in front of the shoulder).
+	var close := Vector3(-0.42, 0.9, -0.21)
+	var pole: Vector3 = TwoBoneIK.solve_elbow(shoulder, close, 0.38, 0.38, Vector3.DOWN)
+	assert_gt(pole.z, shoulder.z, "down projects to down-and-behind")
+	var hung: Vector3 = TwoBoneIK.solve_elbow_hanging(shoulder, close, 0.38, 0.38,
+			Vector3.FORWARD, Vector3.LEFT)
+	assert_lte(hung.z, shoulder.z + 0.001, "hanging keeps it out of the chest")
+
+
+func test_a_hanging_elbow_hangs_as_low_as_it_may() -> void:
+	# Hand straight out in front at shoulder height: the elbow drops below.
+	var shoulder := Vector3.ZERO
+	var e: Vector3 = TwoBoneIK.solve_elbow_hanging(shoulder, Vector3(0.0, 0.0, -0.5),
+			0.38, 0.38, Vector3.FORWARD, Vector3.RIGHT)
+	assert_lt(e.y, -0.2)
+
+
+func test_a_hanging_elbow_goes_back_only_beside_the_trunk() -> void:
+	# A low hand in front: hanging back is right once the elbow is clear of the
+	# trunk's side, and forbidden within it.
+	var shoulder := Vector3(0.23, 0.64, 0.0)
+	var hand := Vector3(0.40, 0.40, -0.20)
+	var free: Vector3 = TwoBoneIK.solve_elbow_hanging(shoulder, hand, 0.38, 0.38,
+			Vector3.FORWARD, Vector3.RIGHT, 0.11)
+	assert_gt(free.z, shoulder.z, "back past the shoulder")
+	assert_gte(free.x - shoulder.x, 0.11 - 0.001, "but out beside the trunk")
+	var boxed: Vector3 = TwoBoneIK.solve_elbow_hanging(shoulder, hand, 0.38, 0.38,
+			Vector3.FORWARD, Vector3.RIGHT)
+	assert_lte(boxed.z, shoulder.z + 0.001, "with no clearance it may never go back")

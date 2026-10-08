@@ -35,16 +35,16 @@ func test_butterfly_collapses_the_pads_to_their_own_width() -> void:
 
 func test_the_armpit_seam_is_a_real_gap_in_the_butterfly() -> void:
 	# The shot the elevation ladder's MID rung aims at. With the pads flat the
-	# trunk tops out at 0.76 m and the head does not start until 0.84 m, so a
+	# trunk tops out at 1.00 m and the head does not start until 1.08 m, so a
 	# puck arriving in between meets nothing structural at all — and even below
 	# that, the trunk alone is far narrower than the splayed pads.
-	var armpit: float = 0.70
+	var armpit: float = GoalieAnatomy.torso_span(true).y - 0.06
 	var structural: float = GoalieAnatomy.structural_cover_half_width_at(armpit, true)
 	assert_almost_eq(structural, GoalieAnatomy.torso_half_width(), 0.001,
 			"at the armpit only the trunk is in the way")
 	assert_lt(structural, GoalieAnatomy.butterfly_pad_edge_half_width(),
 			"which is much less than the pads cover along the ice")
-	var above_torso: float = 0.80
+	var above_torso: float = _gap_between_trunk_and_head()
 	assert_eq(GoalieAnatomy.structural_cover_half_width_at(above_torso, true), 0.0,
 			"between the trunk top and the head there is no structure at all")
 
@@ -89,7 +89,12 @@ func test_structural_cover_falls_off_with_height_when_down() -> void:
 	# trunk → nothing → head, never widening except at the head.
 	var down_pads: float = GoalieAnatomy.structural_cover_half_width_at(0.10, true)
 	var down_torso: float = GoalieAnatomy.structural_cover_half_width_at(0.50, true)
-	var down_gap: float = GoalieAnatomy.structural_cover_half_width_at(0.80, true)
+	var down_gap: float = GoalieAnatomy.structural_cover_half_width_at(
+			_gap_between_trunk_and_head(), true)
 	assert_gt(down_pads, down_torso, "pads are the widest thing he has")
 	assert_gt(down_torso, down_gap, "and the trunk still beats open air")
 	assert_eq(down_gap, 0.0, "open air is open")
+
+
+func _gap_between_trunk_and_head() -> float:
+	return (GoalieAnatomy.torso_span(true).y + GoalieAnatomy.head_span(true).x) * 0.5

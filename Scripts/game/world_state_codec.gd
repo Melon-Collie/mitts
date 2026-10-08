@@ -30,9 +30,9 @@ extends RefCounted
 #                      shot_charge u8, stamina u8, stagger_timer u8@0.01s,
 #                      knockdown_timer u8@0.01s,
 #                      intent u8 (move octant[2:0]+moving[3]+brake[4] v15, sprint[5] v16, hit_commit[6] v28),
-#                      balance_tilt 2×s16@π/32767 rad, balance_tilt_vel 2×s16@20/32767 rad/s (v60),
-#                      torso_lean 2×s16 + posture_lean s16, all @π/32767 rad (v61),
-#                      recoil_dir u8 (bearing 0–TAU→0–256, 0 = backward) (v62)
+#                      balance_tilt 2×s16@π/32767 rad, balance_tilt_vel 2×s16@20/32767 rad/s (v61),
+#                      torso_lean 2×s16 + posture_lean s16, all @π/32767 rad (v62),
+#                      recoil_dir u8 (bearing 0–TAU→0–256, 0 = backward) (v63)
 #      Puck    (13 B): pos s16/s16/s16@1cm, vel 3×s16@0.02m/s, carrier_idx u8 (0xFF=none)
 #      Goalie  (43 B): root (12 B) + pose (31 B). Root:
 #                      pos_x/z s16@1cm, rot_y s16@π/32767, state u8, fho u8,
@@ -515,19 +515,19 @@ static func _write_skater_quantized(b: PackedByteArray, o: int, s: SkaterNetwork
 	if s.wrister_address_side > 0:
 		intent |= 0x80
 	b.encode_u8(o, intent); o += 1
-	# Balance lean (v60), s16 @ π/32767 rad per axis — the lean stays under 20°,
+	# Balance lean (v61), s16 @ π/32767 rad per axis — the lean stays under 20°,
 	# and every machine must place the UpperBody frame the blade is local to
 	# from the same value — and its spring rate, s16 @ 20/32767 rad/s.
 	b.encode_s16(o, clampi(roundi(s.balance_tilt.x / PI * 32767.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.balance_tilt.y / PI * 32767.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.balance_tilt_vel.x / _TILT_VEL_RANGE * 32767.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.balance_tilt_vel.y / _TILT_VEL_RANGE * 32767.0), -32768, 32767)); o += 2
-	# Torso lean (v61), s16 @ π/32767 rad: UpperBody's tilt, which the local
+	# Torso lean (v62), s16 @ π/32767 rad: UpperBody's tilt, which the local
 	# blade hangs under.
 	b.encode_s16(o, clampi(roundi(s.torso_lean.x / PI * 32767.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.torso_lean.y / PI * 32767.0), -32768, 32767)); o += 2
 	b.encode_s16(o, clampi(roundi(s.posture_lean / PI * 32767.0), -32768, 32767)); o += 2
-	# Recoil direction (v62) as a bearing off backward (+y), 1.4° a step: the reel
+	# Recoil direction (v63) as a bearing off backward (+y), 1.4° a step: the reel
 	# peaks near 13°, so a half step tilts the torso by well under 0.2°.
 	b.encode_u8(o, posmod(roundi(atan2(s.recoil_dir.x, s.recoil_dir.y) / TAU * 256.0), 256)); o += 1
 	return o

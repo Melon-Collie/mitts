@@ -66,9 +66,15 @@ const PAD_CENTER_Y_STANDING_M: float = 0.44
 const TORSO_CENTER_Y_STANDING_M: float = 1.22
 const HEAD_CENTER_Y_STANDING_M: float = 1.79
 
+# Head centre above trunk centre, the same in every stance.
+const NECK_M: float = HEAD_CENTER_Y_STANDING_M - TORSO_CENTER_Y_STANDING_M
+
 const PAD_CENTER_Y_BUTTERFLY_M: float = 0.14
-const TORSO_CENTER_Y_BUTTERFLY_M: float = 0.40
-const HEAD_CENTER_Y_BUTTERFLY_M: float = 0.97
+# Down, he sits on his heels between the flat pads, so the trunk starts at their
+# tops.
+const TORSO_CENTER_Y_BUTTERFLY_M: float = PAD_CENTER_Y_BUTTERFLY_M \
+		+ PAD_BOX_WIDTH_M * 0.5 + TORSO_BOX_HEIGHT_M * 0.5
+const HEAD_CENTER_Y_BUTTERFLY_M: float = TORSO_CENTER_Y_BUTTERFLY_M + NECK_M
 
 
 # Vertical extent (bottom, top) of a part, as a Vector2 so callers can test a
@@ -90,8 +96,7 @@ static func pad_span(down: bool) -> Vector2:
 
 
 # The trunk. Standing it is glued to the pad-top seam (0.86–1.58); in the save
-# stances it drops with the body so the same box spans 0.04–0.76 — which is
-# what leaves a gap above it once the pads are flat.
+# stances it sits on the flat pads, 0.28–1.00.
 static func torso_span(down: bool) -> Vector2:
 	if down:
 		return _span(TORSO_CENTER_Y_BUTTERFLY_M, TORSO_BOX_HEIGHT_M)
@@ -146,3 +151,41 @@ static func structural_cover_half_width_at(y: float, down: bool) -> float:
 	if y >= head.x and y <= head.y:
 		cover = maxf(cover, HEAD_BOX_M * 0.5)
 	return cover
+
+
+# Does a puck crossing his plane `rel_x` off his midline at height `y` land
+# wholly on a STANDING pad's face? Between the pads is the five-hole and outside
+# them is open ice; both are the butterfly's to close, so neither counts.
+static func standing_pad_takes(rel_x: float, y: float, puck_radius: float) -> bool:
+	var ax: float = absf(rel_x)
+	var half: float = PAD_BOX_WIDTH_M * 0.5
+	var centre: float = GoalieBehaviorRules.STANDING_PAD_CENTER_X_M
+	return ax >= centre - half + puck_radius and ax <= centre + half - puck_radius \
+			and y + puck_radius <= pad_span(false).y
+
+
+# ── The arms ─────────────────────────────────────────────────────────────────
+# Upper arm and forearm-to-glove-centre, and the shoulder joint in the trunk's
+# frame (±x). Goalie draws the arms from these, and the pose builder holds the
+# hands out at a distance these arms can reach at a real bend — a hand posed
+# nearer than the arm allows can only be drawn by folding the elbow into the
+# body.
+const ARM_UPPER_M: float = 0.38
+const ARM_FOREARM_M: float = 0.38
+const SHOULDER_OFFSET := Vector3(0.23, 0.24, 0.0)
+
+
+# Depth (goalie-local z, forward negative) that puts a hand at (`hand_x`,
+# `hand_y`) with the elbow bent to `bend_deg` from a shoulder at `shoulder`. A
+# hand that is already too far for that bend at zero depth offset stays level
+# with the shoulder's depth.
+static func hand_depth_for_bend(shoulder: Vector3, hand_x: float, hand_y: float,
+		bend_deg: float) -> float:
+	var half: float = deg_to_rad(bend_deg) * 0.5
+	# Law of cosines with equal bones reduces to 2·L·sin(θ/2); the general form
+	# covers unequal ones.
+	var reach_sq: float = ARM_UPPER_M * ARM_UPPER_M + ARM_FOREARM_M * ARM_FOREARM_M \
+			- 2.0 * ARM_UPPER_M * ARM_FOREARM_M * cos(half * 2.0)
+	var dx: float = hand_x - shoulder.x
+	var dy: float = hand_y - shoulder.y
+	return shoulder.z - sqrt(maxf(reach_sq - dx * dx - dy * dy, 0.0))
