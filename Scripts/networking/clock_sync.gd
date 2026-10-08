@@ -7,71 +7,54 @@ const SAMPLE_WINDOW: int = 8
 const OUTLIER_DROP: int = 2
 const OFFSET_EMA_ALPHA: float = 0.3  # after is_ready; ~3 pings to reach 66% of a new target
 
-# Lead time added to input timestamps so they arrive at the host before their
-# scheduled processing tick, keeping the host queue non-empty.
+# Input stamps lead host-present by the one-way trip plus a fixed margin, so an
+# input lands at the host before its stamp comes due. estimated_host_time() is
+# the host's clock NOW, not when the input arrives — the trip is not already in
+# it, and rtt/2 is the exact amount even on an asymmetric link, because the NTP
+# offset's asymmetry error cancels against it.
 # BATCH_INTERVAL: worst-case send delay (input stamped right after a batch went
 #   out). Derived from Constants.INPUT_RATE, never hardcoded — a send-rate change
 #   must not silently strand the lead at the old rate's value.
-# BUFFER_TICKS: target host-side queue depth after accounting for batch delay.
+# BUFFER_TICKS: jitter cushion — the host queue depth left once the trip is paid.
 const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 const BATCH_INTERVAL: float = 1.0 / _PhysicsConstants.INPUT_RATE
 const BUFFER_TICKS: float = 2.0
 const TICK_DURATION: float = 1.0 / _PhysicsConstants.PHYSICS_TICK
-const INPUT_LEAD_SEC: float = BATCH_INTERVAL + BUFFER_TICKS * TICK_DURATION  # ~25 ms at 120 Hz input / 120 Hz tick
-
-# ── Adaptive input-lead extra ────────────────────────────────────────────────
-# A bounded EXTRA lead on top of INPUT_LEAD_SEC, servoed from pop-overdue: each
-# snapshot's freshly-advanced input ack tells the client how overdue that input
-# was when the host popped it (snapshot host_ts − ack stamp), so the measurement
-# costs no wire. The step is asymmetric — fast up, because a starving host queue
-# is felt immediately; slow down, because over-lead only costs remote-visibility
-# latency. This state is separate from the NTP offset and shapes future input
-# STAMPS only, never `_offset`. Full rationale in Scripts/networking/CLAUDE.md.
-#
-# THE TARGET MUST SIT ABOVE THE MEASURE'S OWN FLOOR. Pop-overdue is one-sided:
-#
-#     overdue = max(0, arrival − stamp) + tick quantization
-#
-# The lead drives the lateness term to zero but never the quantization term, so
-# overdue floors at a uniform [0, TICK) — mean ~TICK/2, Jacobson deviation
-# ~TICK/4. Servo the MEAN alone against a one-tick target and the fixed point is
-# reachable. Servo `mean + 4·dev` instead and it is not: 4·dev alone floors at
-# ~TICK, so the error stays positive at ANY lead and the integrator winds to
-# MAX_LEAD_EXTRA_S even on a perfect link. Nor can a variance margin be restored
-# by moving it out of the error term — any margin the integrator can observe
-# reduces measured overdue and is simply backed out of _lead_extra, leaving the
-# equilibrium unchanged. Burst tolerance comes from the step asymmetry, which is
-# not a bias and does not move the fixed point.
-const MAX_LEAD_EXTRA_S: float = 0.05          # hard ceiling: 6 ticks of extra
-const _LEAD_GRACE_S: float = TICK_DURATION    # target MEAN overdue; floor is ~TICK/2
-const _OVR_GAIN: float = 0.05                 # EMA horizon ~20 acks (~170 ms)
-const _LEAD_UP_STEP_S: float = 0.001          # per ack: ~120 ms/s climb at 120 Hz
-const _LEAD_DOWN_STEP_S: float = 0.00005      # per ack: ~6 ms/s relax
-# Overdue beyond this is a phase-resume artifact (an input parked across a
-# replay/intermission), not link lateness — excluded from the servo.
-const _OVR_SAMPLE_MAX_S: float = 0.25
-var _lead_extra: float = TICK_DURATION  # start one tick up
-var _ovr_mean: float = 0.0
+const INPUT_LEAD_SEC: float = BATCH_INTERVAL + BUFFER_TICKS * TICK_DURATION  # the margin: ~25 ms
+# One-way trips past this are not covered: inputs from such a link land overdue
+# and the host's backlog drain absorbs them. Also the bound a claim-carried lead
+# is clamped to, so a modified client cannot buy a deeper rewind.
+const MAX_ONE_WAY_S: float = 0.1
+const MAX_INPUT_LEAD_SEC: float = INPUT_LEAD_SEC + MAX_ONE_WAY_S
+# Per-tick cap on how far the lead moves when the RTT estimate changes. Stamps
+# then stay within a hair of one tick apart, so a falling lead never reorders
+# them and a rising one never opens a gap the host's queue starves through.
+const _LEAD_SLEW_S: float = 0.0001
+var _lead: float = INPUT_LEAD_SEC
+var _lead_started: bool = false
 
 
-# Feed one measured pop-overdue sample (snapshot host_ts − freshly-advanced
-# input ack). Caller dedupes repeated acks; range-guarded here.
-func record_ack_overdue(overdue_s: float) -> void:
+# The lead for a link of this RTT. The client feeds its own estimate; the host
+# feeds the ping it measures to that client, to recover the lead a remote
+# stamped with where nothing on the wire carries it.
+static func input_lead_for_rtt(link_rtt_ms: float) -> float:
+	if not is_finite(link_rtt_ms):
+		return INPUT_LEAD_SEC
+	return INPUT_LEAD_SEC + clampf(link_rtt_ms / 2000.0, 0.0, MAX_ONE_WAY_S)
+
+
+# One physics step: slew the lead toward this link's target. Snaps on the first
+# step after sync, before any stamp has been issued against it.
+func advance_input_lead() -> void:
 	if not is_ready:
 		return
-	if overdue_s < 0.0 or overdue_s > _OVR_SAMPLE_MAX_S or not is_finite(overdue_s):
-		return
-	_ovr_mean += (overdue_s - _ovr_mean) * _OVR_GAIN
-	# The measured overdue already includes the current extra's effect, so the
-	# error is RELATIVE: how far the mean sits above one tick of grace.
-	var error: float = _ovr_mean - _LEAD_GRACE_S
-	_lead_extra = clampf(
-			_lead_extra + clampf(error, -_LEAD_DOWN_STEP_S, _LEAD_UP_STEP_S),
-			0.0, MAX_LEAD_EXTRA_S)
+	var target: float = input_lead_for_rtt(rtt_ms)
+	_lead = move_toward(_lead, target, _LEAD_SLEW_S) if _lead_started else target
+	_lead_started = true
 
 
 func current_input_lead_s() -> float:
-	return INPUT_LEAD_SEC + _lead_extra
+	return _lead
 
 var is_ready: bool = false
 var rtt_ms: float = 0.0
@@ -115,7 +98,7 @@ func estimated_host_time() -> float:
 	return _last_estimated_time
 
 func estimated_input_stamp_time() -> float:
-	return estimated_host_time() + INPUT_LEAD_SEC + _lead_extra
+	return estimated_host_time() + _lead
 
 func _recompute() -> void:
 	var sorted := _samples.duplicate()

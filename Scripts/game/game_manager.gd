@@ -3383,7 +3383,7 @@ func _on_remote_derived_one_timer(direction: Vector3, power: float,
 	# (the staleness check, the goalie's reaction back-date and position rewind)
 	# is anchored there rather than at the host's own tick.
 	var shooter_view_ts: float = record.controller.last_processed_host_timestamp \
-			- NetworkManager.INPUT_LEAD_SEC
+			- NetworkManager.peer_input_lead_s(shooter_peer_id)
 	# Somebody else played the puck after this shooter committed, so the loose
 	# puck the carrier check sees is one already in flight. The contact test
 	# can't notice — it evaluates the shooter's own view, where the puck was on
@@ -3589,7 +3589,7 @@ func _on_remote_derived_release(direction: Vector3, power: float, is_slapper: bo
 	# back-date then comes out ~0 and its rewind stops a lead short of what the
 	# shooter rendered. Same anchor as the one-timer path.
 	var release_ts: float = record.controller.last_processed_host_timestamp \
-			- NetworkManager.INPUT_LEAD_SEC
+			- NetworkManager.peer_input_lead_s(shooter_peer_id)
 	var rtt_ms: float = float(NetworkManager.get_peer_ping_ms(shooter_peer_id))
 	# Approximate the shooter's interpolation delay from the rtt the host already
 	# measures plus one broadcast interval — the two dominant terms of the client's
@@ -3965,10 +3965,7 @@ func _observe_telemetry() -> void:
 			_telemetry.current_rtt_ms = NetworkManager.get_rtt_ms()
 			_telemetry.current_delay_spread_ms = NetworkManager.get_packet_delay_spread_ms()
 			_telemetry.current_clock_correction_ms = NetworkManager.get_clock_correction_ms()
-			# The lead servo's live EXTRA (total stamp lead − the static
-			# INPUT_LEAD_SEC). Observability for the servo's equilibrium under
-			# the post-C1 honest capture labels — nothing else reports it, and
-			# the F3 latency budget shows only the static base.
+			# The one-way share of the stamp lead (total − the fixed margin).
 			_telemetry.current_input_lead_extra_ms = NetworkManager.get_input_lead_ms() \
 					- NetworkManager.INPUT_LEAD_SEC * 1000.0
 

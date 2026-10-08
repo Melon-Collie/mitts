@@ -34,8 +34,8 @@ var _host_stall_count: int = 0
 var current_delay_spread_ms: float = 0.0
 # Client-side: last clock-sync offset correction magnitude (see ClockSync).
 var current_clock_correction_ms: float = 0.0
-# Client-side: the input-lead servo's live EXTRA above the static
-# INPUT_LEAD_SEC (ms).
+# Client-side: the stamp lead above the fixed INPUT_LEAD_SEC margin — the
+# one-way share, rtt/2 bounded by ClockSync.MAX_ONE_WAY_S (ms).
 var current_input_lead_extra_ms: float = 0.0
 # Host-side: worst per-peer link this instant, so the host row carries a real
 # link picture instead of degenerate zeros (its own RTT/loss are 0).

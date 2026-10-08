@@ -164,7 +164,7 @@ func encode_world_state() -> PackedByteArray:
 			depth = record.controller.get_queue_depth()
 			# Host-side telemetry of its own pending-input depth (the client echo
 			# folds 0 on host rows). Read with input_drains_per_sec: draining a
-			# DEEP queue means the drain is eating the lead servo's cushion;
+			# DEEP queue means the drain is eating the lead margin's cushion;
 			# draining a SHALLOW one means inputs genuinely arrive late.
 			#
 			# Sampled for NETWORKED peers only. Bots are non-local too, and their
@@ -242,10 +242,6 @@ func decode_world_state(data: PackedByteArray) -> void:
 			continue
 		var skater_state := _decode_skater_quantized(data, skater_off)
 		if record.is_local and not NetworkManager.is_replay_mode():
-			# Adaptive input lead: this snapshot's freshly-advanced ack reveals
-			# how overdue the popped input was (host_ts − stamp) — the servo's
-			# whole input signal, measured with zero extra wire (see ClockSync).
-			NetworkManager.record_input_ack(host_ts, skater_state.last_processed_host_timestamp)
 			(record.controller as LocalController).reconcile(skater_state)
 			queue_depth_feedback.emit(depth)
 		else:

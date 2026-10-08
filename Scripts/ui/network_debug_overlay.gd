@@ -540,11 +540,11 @@ func _render_client(t: NetworkTelemetry) -> void:
 	# (_info): each term is either by-design or already colored elsewhere.
 	if NetworkManager.is_clock_ready():
 		_section("Latency budget (action → screen)")
-		var lead_ms := NetworkManager.INPUT_LEAD_SEC * 1000.0
+		var lead_ms := NetworkManager.get_input_lead_ms()
 		var interp_ms := NetworkManager.get_interpolation_delay() * 1000.0
 		var bcast_ms := NetworkManager.state_delta * 1000.0
 		_info("You → host sim", "%.0f ms" % lead_ms,
-			"input stamp lead, by design — your input is scheduled this far ahead so it's on the host before its tick (transit rides inside the synced clock); host-side overdue shows on the host's Input lead line")
+			"input stamp lead, by design — half your RTT plus a fixed cushion, so your input is on the host before its tick; host-side overdue shows on the host's Input lead line")
 		_info("Host → your screen", "%.0f ms (½rtt %.0f · tick %.0f · cushion %.0f)" % [interp_ms, rtt_avg / 2.0, bcast_ms, pdv],
 			"render age of the authoritative world (remote skaters, loose puck, goalie) — the live smoothing delay; decomposition shows its target terms")
 		_info("Round trip you → you", "%.0f ms" % (lead_ms + interp_ms),

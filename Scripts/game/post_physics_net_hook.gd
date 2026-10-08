@@ -11,8 +11,7 @@ extends Node
 # it takes the PREVIOUS tick's result at the start of the next one — every
 # snapshot pays a tick (~8.3 ms) of departure latency, skater velocity (updated
 # at −1) is captured one phase ahead of position, and the label overstates the
-# content's age by a tick, which the client input-lead servo measures as
-# "overdue" and silently pads lead over. See Scripts/networking/CLAUDE.md
+# content's age by a tick. See Scripts/networking/CLAUDE.md
 # (host capture / broadcast timing).
 
 var callback: Callable = Callable()

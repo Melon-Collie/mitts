@@ -41,8 +41,8 @@ extends RefCounted
 # clock unification landed, which could not be proven from a single playtest.
 #
 # VALIDATION — the thing that makes the rest of it worth reading. Run at the
-# conditions the 45%-miss playtest actually had (lead servo pinned at the 50 ms
-# ceiling, so a 75 ms lead, 30-60 ms RTT, contested-puck deflection rate) the
+# conditions the 45%-miss playtest actually had (a 75 ms lead — the since-removed
+# lead servo pinned at its ceiling — 30-60 ms RTT, contested-puck deflections) the
 # harness produces 33-41%, and the same conditions at the designed 25 ms lead
 # produce 6-15%. It reproduces the observed number and attributes most of it to
 # the pinned lead, which is a prediction the next playtest can falsify.

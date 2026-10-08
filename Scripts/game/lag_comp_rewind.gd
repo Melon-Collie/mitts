@@ -78,20 +78,14 @@ static func plausible_interp_delay_ms(reported_ms: float, peer_rtt_ms: float) ->
 	return bounded
 
 
-# Hard bound on the claim-carried adaptive lead extra — mirrors
-# ClockSync.MAX_LEAD_EXTRA_S (pinned by test) so a modified client can't push
-# its self-view rewind arbitrarily forward by inflating the reported lead.
-const _INPUT_LEAD_EXTRA_MAX_S: float = 0.05
-
-
 # Host-time at which to query StateBufferManager for the claimant's
 # locally-predicted entity. RTT does not enter the formula — the rewind depth is
 # a function of the input-lead stamping convention, so validation is
 # RTT-independent and lower-ping players don't beat higher-ping players on
-# legitimately-stamped claims. The lead ADAPTS (ClockSync's servo raises the
-# stamp lead when the host queue runs dry), so claims carry the lead the client
-# stamped with and the rewind follows it. input_lead_ms < 0 (or absent — the
-# host's own local claims) uses the base constant.
+# legitimately-stamped claims. The lead follows the client's RTT estimate
+# (ClockSync.input_lead_for_rtt), so claims carry the lead the client stamped
+# with and the rewind follows it. input_lead_ms < 0 (or absent — the host's own
+# local claims) uses the base constant.
 static func self_view_time(host_timestamp: float, input_lead_ms: float = -1.0) -> float:
 	return host_timestamp + clamped_lead_s(input_lead_ms)
 
@@ -105,7 +99,7 @@ static func clamped_lead_s(input_lead_ms: float = -1.0) -> float:
 	if input_lead_ms < 0.0 or not is_finite(input_lead_ms):
 		return NetworkManager.INPUT_LEAD_SEC
 	return clampf(input_lead_ms / 1000.0,
-			NetworkManager.INPUT_LEAD_SEC, NetworkManager.INPUT_LEAD_SEC + _INPUT_LEAD_EXTRA_MAX_S)
+			NetworkManager.INPUT_LEAD_SEC, NetworkManager.MAX_INPUT_LEAD_SEC)
 
 
 # Host-time at which to query StateBufferManager for any entity the claimant
@@ -151,7 +145,7 @@ static func forward_predict_ticks(fraction: float, interp_delay_s: float,
 		return 0
 	var delay_s: float = clampf(interp_delay_s, 0.0, _INTERP_DELAY_CLAMP_MS_MAX / 1000.0)
 	var lead: float = clampf(lead_s, 0.0,
-			NetworkManager.INPUT_LEAD_SEC + _INPUT_LEAD_EXTRA_MAX_S)
+			NetworkManager.MAX_INPUT_LEAD_SEC)
 	return roundi(clampf(fraction, 0.0, 1.0) * (delay_s + lead) * float(Constants.PHYSICS_TICK))
 
 
@@ -201,7 +195,7 @@ static func self_view_catch_up(snap: SkaterNetworkState, ctrl: SkaterController,
 	if snap == null or ctrl == null or newest_ts < 0.0 or not is_finite(self_view_t):
 		return Vector3.ZERO
 	var gap: float = minf(self_view_t - newest_ts,
-			NetworkManager.INPUT_LEAD_SEC + _INPUT_LEAD_EXTRA_MAX_S)
+			NetworkManager.MAX_INPUT_LEAD_SEC)
 	var ticks: int = roundi(gap * float(Constants.PHYSICS_TICK))
 	if ticks <= 0:
 		return Vector3.ZERO
