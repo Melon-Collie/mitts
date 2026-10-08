@@ -2,8 +2,9 @@ extends GutTest
 
 # Where the knockdown fall puts the body. KnockdownFallRules models a rod
 # tipping about the skates on the ice, so the tilt must pivot there — not at
-# the skater's origin, which rides at hip height (GameRules.FACEOFF_SPAWN_HEIGHT).
-# Measured on the live rig, through the render pass that applies the tilt.
+# the skater's origin, which rides at hip height (GameRules.FACEOFF_SPAWN_HEIGHT)
+# — and the ice holds the skates up the whole way down and back up. Measured on
+# the live rig, through the render pass that applies the tilt.
 
 const DT: float = 1.0 / 120.0
 const UpperBone = SkaterMeshBuilder.UpperBone
@@ -57,6 +58,37 @@ func _bone_height(bone: int) -> float:
 	return (_skater.global_transform * local).y
 
 
+# Lowest point of either skate's mesh — boot, holder, runner and cuff — above
+# the ice, from the vertices themselves.
+func _lowest_skate() -> float:
+	var body: Skeleton3D = _skater.mesh_root.get_node("BodyRig") as Skeleton3D
+	var to_world: Transform3D = _skater.global_transform * _skater.mesh_root.transform \
+			* body.transform
+	var off: int = SkaterBodySkeleton.LEG_BONE_OFFSET
+	var lowest: float = INF
+	for part: int in 4:
+		var bone: int = [LegBone.FOOT_L, LegBone.SKATE_L, LegBone.FOOT_R, LegBone.SKATE_R][part]
+		var mesh: ArrayMesh = SkaterMeshBuilder.shared_boot_assembly() if part % 2 == 0 \
+				else SkaterMeshBuilder.shared_skate_assembly()
+		var xf: Transform3D = to_world * body.get_bone_global_pose(off + bone)
+		for surface: int in mesh.get_surface_count():
+			for v: Vector3 in mesh.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX] as PackedVector3Array:
+				lowest = minf(lowest, (xf * v).y)
+	return lowest
+
+
+# The whole knockdown, every rendered frame from the hit to standing again.
+func _lowest_skate_through_a_knockdown(impulse: Vector3) -> float:
+	_controller._on_body_check_received(impulse)
+	var input := InputState.new()
+	var lowest: float = INF
+	while _controller.knockdown_timer > 0.0:
+		_controller._process_input(input, DT)
+		_controller._render_pose_update(DT)
+		lowest = minf(lowest, _lowest_skate())
+	return lowest
+
+
 func _report(label: String) -> Dictionary:
 	var off: int = SkaterBodySkeleton.LEG_BONE_OFFSET
 	var h: Dictionary = {
@@ -104,3 +136,15 @@ func test_mid_fall_the_skates_stay_planted() -> void:
 	var h: Dictionary = _report("mid-fall")
 	assert_lt(maxf(h["skate_l"], h["skate_r"]), upright["skate_l"] + 0.25,
 			"a body tipping about its skates does not lift them")
+
+
+# The leg the body tips over stays planted, the legs it lies on lie on the ice,
+# and the crumple's buckle keeps a level boot on it: no skate goes through the
+# ice in any direction, entry to get-up. (Measured before: 0.20–0.28 m under.)
+func test_the_skates_never_go_through_the_ice() -> void:
+	for impulse: Vector3 in [Vector3(3.0, 0.0, 0.0), Vector3(-3.0, 0.0, 0.0),
+			Vector3(0.0, 0.0, 3.0), Vector3(0.0, 0.0, -3.0), Vector3(2.0, 0.0, 2.0)]:
+		before_each()
+		var lowest: float = _lowest_skate_through_a_knockdown(impulse)
+		gut.p("shoved %s: lowest skate point %.3f m above the ice" % [impulse, lowest])
+		assert_gt(lowest, -0.005, "no skate goes through the ice, shoved %s" % impulse)

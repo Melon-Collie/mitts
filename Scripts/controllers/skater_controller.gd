@@ -1804,24 +1804,22 @@ func _apply_knockdown_fall() -> void:
 	if kd_t <= 0.0:
 		return
 	# Leg sprawl overlay, composed on the gait's crumple (which zeroed the
-	# stride under it) and eased out by the same get-up envelope as the tilt.
-	# The side pick reads the RAW recoil dir, not the wall-deflected one — the
-	# deflection re-resolves per frame near the glass and would flip the pinned
-	# leg mid-lie.
+	# stride under it). The side pick reads the RAW recoil dir, not the
+	# wall-deflected one — the deflection re-resolves per frame near the glass
+	# and would flip the pinned leg mid-lie. It lands after the tilt, which the
+	# legs read to rest their skates on the ice.
 	if _sprawl_scratch == null:
 		_sprawl_scratch = KnockdownFallRules.SprawlPose.new()
-	var legs: Vector2 = _skating.leg_segment_lengths()
-	var elapsed: float = knockdown_elapsed()
-	# The buckle is solved from the RAMPED drop so the boots stay planted at
-	# every point of the entry ease (the gait's sink carries the same ramp;
-	# angle-scaling the solved pose instead would not track it — the drop is
-	# 1 − cos of the angle).
-	var eased_drop: float = knockdown_pose_drop_m \
-			* KnockdownFallRules.entry_ramp(elapsed, _fall_config())
-	KnockdownFallRules.sprawl_into(_sprawl_scratch, elapsed, _knockdown_entry_speed,
-			stagger_recoil_dir, eased_drop, legs.x, legs.y, _fall_config())
-	skater.apply_knockdown_leg_overlay(
-			_sprawl_scratch, KnockdownFallRules.getup_scale(kd_t))
+	var legs: Vector3 = _skating.leg_segment_lengths()
+	var share: float = knockdown_pose_weight()
+	# The buckle is solved from the drop the gait is applying at this instant,
+	# entry and get-up alike: the drop is 1 − cos of the angle, so scaling a
+	# solved pose instead leaves the boots under the ice part-way. The scatter
+	# alone eases out with the get-up envelope.
+	KnockdownFallRules.sprawl_into(_sprawl_scratch, knockdown_elapsed(),
+			_knockdown_entry_speed, stagger_recoil_dir, knockdown_pose_drop_m * share,
+			legs, _fall_config(), KnockdownFallRules.getup_scale(kd_t))
+	skater.apply_knockdown_leg_overlay(_sprawl_scratch, share)
 
 
 # Elapsed down-time of the current knockdown (0 when upright) — the fall clock
@@ -1830,6 +1828,18 @@ func _apply_knockdown_fall() -> void:
 # this is as replicated-deterministic as the timer itself.
 func knockdown_elapsed() -> float:
 	return maxf(_knockdown_total - knockdown_timer, 0.0)
+
+
+# How much of the down pose holds (0..1): full while more than
+# knockdown_getup_seconds remain, easing out over that tail, and ramped in over
+# the buckle window. The gait's crumple sinks the body by this share of
+# knockdown_pose_drop_m, and the legs buckle to exactly that share.
+func knockdown_pose_weight() -> float:
+	var kd_t: float = clampf(
+			knockdown_timer / maxf(knockdown_getup_seconds, 0.001), 0.0, 1.0)
+	if kd_t <= 0.0:
+		return 0.0
+	return kd_t * KnockdownFallRules.entry_ramp(knockdown_elapsed(), _fall_config())
 
 
 # Current whole-body fall tilt (radians): the tipping-body solve scaled by the

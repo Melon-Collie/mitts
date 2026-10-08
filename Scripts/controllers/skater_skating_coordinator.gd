@@ -101,8 +101,9 @@ var leg_scale: float = 1.0:
 # This build's (thigh, shin) segment lengths in metres — the knockdown sprawl
 # solve (SkaterController._apply_knockdown_fall) shares the leg geometry the
 # crouch solve uses, served from the one place that owns it.
-func leg_segment_lengths() -> Vector2:
-	return Vector2(GaitPose.THIGH_LEN, GaitPose.SHIN_LEN) * leg_scale
+# (thigh, shin, foot offset) for this build — KnockdownFallRules.buckle_angles.
+func leg_segment_lengths() -> Vector3:
+	return Vector3(GaitPose.THIGH_LEN, GaitPose.SHIN_LEN, GaitPose.FOOT_FWD) * leg_scale
 
 
 # How far the centre's faceoff address drops his body (GaitFaceoffLayer).

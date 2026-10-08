@@ -99,16 +99,22 @@ static func fold_at(tilt: float, curl: float, cfg: Config) -> float:
 	return lerpf(curl, flat, ground_t)
 
 
-# The symmetric leg collapse (hip flex, knee fold) whose height deficit equals
-# `drop` — thigh forward and shin back by the same angle α, so
-# (thigh + shin)·(1 − cos α) = drop. This is the buckle pose that keeps the
-# boots at the ice while the gait's crumple sinks the body by the drop; without
-# it the straight-legged crumple buries the skates by exactly that length.
-# Returned as (hip pitch, knee fold) in the set_leg_swing conventions:
-# positive pitch flexes the thigh forward, knee = −(hip + shin-from-vertical).
-static func buckle_angles(drop: float, thigh_len: float, shin_len: float) -> Vector2:
-	var reach: float = maxf(thigh_len + shin_len, 0.001)
-	var a: float = acos(clampf(1.0 - drop / reach, -1.0, 1.0))
+# The symmetric leg collapse (hip flex, knee fold) that raises a LEVEL boot by
+# `drop` — thigh forward and shin back by the same angle α. `legs` is (thigh,
+# shin, foot offset): the foot pivot sits `legs.z` ahead of the shin's end
+# (GaitPose.FOOT_FWD), and folding the shin back swings that offset down by
+# legs.z·sin α, so the rise is (thigh + shin)·(1 − cos α) − legs.z·sin α. This
+# is the buckle pose that keeps the boots at the ice while the gait's crumple
+# sinks the body by the drop. Returned as (hip pitch, knee fold) in the
+# set_leg_swing conventions: positive pitch flexes the thigh forward,
+# knee = −(hip + shin-from-vertical).
+static func buckle_angles(drop: float, legs: Vector3) -> Vector2:
+	if drop <= 0.0:
+		return Vector2.ZERO
+	# K·cos α + F·sin α = K − drop, as R·cos(α − ψ).
+	var k: float = maxf(legs.x + legs.y, 0.001)
+	var r: float = sqrt(k * k + legs.z * legs.z)
+	var a: float = atan2(legs.z, k) + acos(clampf((k - drop) / r, -1.0, 1.0))
 	return Vector2(a, -2.0 * a)
 
 
@@ -143,10 +149,12 @@ const _PIN_SPLAY: float = 0.35      # pinned-leg outward roll, as a fraction of 
 #      lying pose varies hit-to-hit instead of being one authored keyframe.
 # `fall_dir` is the body-local fall direction (the recoil dir, unit XZ);
 # falling toward +X lands on the right side, which frees the LEFT leg on top.
+# `scatter_scale` fades the scatter alone (the get-up); the buckle follows
+# `drop`, which the caller eases itself.
 static func sprawl_into(out: SprawlPose, elapsed: float, entry_speed: float,
-		fall_dir: Vector2, drop: float, thigh_len: float, shin_len: float,
-		cfg: Config) -> void:
-	var buckle: Vector2 = buckle_angles(drop, thigh_len, shin_len)
+		fall_dir: Vector2, drop: float, legs: Vector3,
+		cfg: Config, scatter_scale: float = 1.0) -> void:
+	var buckle: Vector2 = buckle_angles(drop, legs)
 	out.l_pitch = buckle.x
 	out.l_roll = 0.0
 	out.l_knee = buckle.y
@@ -162,7 +170,7 @@ static func sprawl_into(out: SprawlPose, elapsed: float, entry_speed: float,
 	var omega_t: float = clampf(
 			entry_speed / maxf(cfg.com_height, 0.001)
 			/ maxf(cfg.max_entry_omega, 0.001), 0.0, 1.0)
-	var scatter: float = (_SCATTER_FLOOR + (1.0 - _SCATTER_FLOOR) * omega_t) * w
+	var scatter: float = (_SCATTER_FLOOR + (1.0 - _SCATTER_FLOOR) * omega_t) * w * scatter_scale
 	var free_pitch: float = buckle.x * (1.0 - _FREE_EXTEND * scatter)
 	var free_knee: float = buckle.y * (1.0 - _FREE_EXTEND * scatter)
 	var pin_knee: float = buckle.y * (1.0 + _PIN_FOLD * scatter)

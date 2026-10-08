@@ -299,6 +299,23 @@ Fixed after Phase 5:
   hip height — measured 0.93 m for the pelvis. It now tips about the ice under
   the origin (`Skater.set_knockdown_fall`); `test_knockdown_lies_on_the_ice.gd`
   holds it, and the pose set has three knockdown tiles.
+- **The knockdown put the skates through the ice** — 0.20–0.28 m at worst,
+  measured on the skate mesh, from the hit to the get-up. Three causes, three
+  fixes. The buckle held a level boot but solved the shin as a straight
+  segment, so the foot's 0.10 m forward offset swung down under it
+  (`buckle_angles` now pays `GaitPose.FOOT_FWD`'s share); the ankles did not
+  give the buckle back, so a 48° shin fold drove the toes in (the overlay now
+  levels the boots); and the get-up scaled the solved angles rather than
+  re-solving for the drop still applied (`SkaterController
+  .knockdown_pose_weight` is now the one share both read). What tipping does is
+  a constraint, not a pivot choice: a leg whose skate ends up below the ice
+  swings about its hip until the skate rests on it
+  (`SkaterLegRig._rest_on_ice`), so the leg the body tips over stays planted
+  and the legs it lies on lie on the ice. Tipping over the skates' edge instead
+  was tried and rejected — it holds the lying body up by the edge's distance,
+  0.2–0.3 m. Left: on the hardest sideways hit the pinned leg folds its skate in
+  by a hip joint that itself lies at the ice, ~3 cm under, beneath the body.
+  `test_knockdown_lies_on_the_ice.gd`.
 - **Reconcile squared the hips.** It wrote the facing lag alone to the lower
   body, dropping the gait's yaw channels (up to 40° of hip alignment at a
   stride off the facing) until the next tick; it now publishes through

@@ -59,7 +59,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# teleport read as travel moved the tracked threat metres in a tick.
 	"res://Scripts/controllers/goalie_controller.gd": 4550,
 	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3755,
-	"res://Scripts/controllers/skater_controller.gd": 3411,
+	"res://Scripts/controllers/skater_controller.gd": 3412,
 	"res://Scripts/actors/skater.gd": 2630,
 	"res://Scripts/networking/network_manager.gd": 2824,
 	"res://Scripts/game/tutorial_manager.gd": 2101,
@@ -97,7 +97,7 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/domain/state/player_attributes.gd": 53,
 	"res://Scripts/networking/network_telemetry.gd": 53,
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 48,
-	"res://Scripts/controllers/skater_controller.gd": 39,
+	"res://Scripts/controllers/skater_controller.gd": 40,
 	"res://Scripts/actors/puck.gd": 39,
 	"res://Scripts/domain/state/game_state_machine.gd": 38,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 36,

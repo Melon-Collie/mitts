@@ -10,10 +10,8 @@ extends GaitLayer
 # Derived FROM the replicated knockdown_timer, so it renders identically
 # everywhere and through reconcile.
 
-# 0..1: full while more than knockdown_getup_seconds remains on the timer, then
-# easing to 0 over that tail (the get-up); the entry is ramped over the buckle
-# window (the smoothstep of KnockdownFallRules.entry_ramp) so the crumple
-# doesn't land in one frame.
+# SkaterController.knockdown_pose_weight: the sprawl's buckle is solved from the
+# same share of the drop, so the two must not be computed apart.
 var weight: float = 0.0
 
 
@@ -30,12 +28,7 @@ func is_quiet() -> bool:
 
 
 func advance(_delta: float) -> bool:
-	weight = clampf(_controller.knockdown_timer
-			/ maxf(_controller.knockdown_getup_seconds, 0.001), 0.0, 1.0)
-	if weight > 0.0:
-		var buckle: float = clampf(_controller.knockdown_elapsed()
-				/ maxf(_controller.knockdown_fall_buckle_seconds, 0.001), 0.0, 1.0)
-		weight *= buckle * buckle * (3.0 - 2.0 * buckle)
+	weight = _controller.knockdown_pose_weight()
 	return weight > 0.0
 
 
