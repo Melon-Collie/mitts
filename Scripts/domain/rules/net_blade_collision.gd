@@ -38,9 +38,11 @@ class Result:
 		return offset != Vector3.ZERO or pipe_normal != Vector3.ZERO
 
 
-# Resolve the blade segment against the near end's net. `prev` is the blade's
-# previous world contact point, used only to classify which side of the two-sided
-# twine the stick is on — a sweep question, never a history one.
+# Resolve the blade segment against the near end's net. `prev` is used only to
+# classify which side of the two-sided twine the stick is on, and must be a
+# side_anchor rather than a raw contact (SkaterIKCoordinator keeps it): a contact
+# pressed into the twine sits on either side of the plane, and classifying from
+# that flips the face holding the stick.
 #
 # `half_thickness` is the blade's own reach perpendicular to the segment;
 # `mesh_give` is how deep the twine lets it sink before stopping.
@@ -65,16 +67,21 @@ static func resolve(
 	var reach: float = GameRules.NET_DEPTH + half_thickness + 1.0
 	if absf(heel.z - end_z) > reach and absf(toe.z - end_z) > reach:
 		return false
+	var interior: bool = NetGeometry.interior_or_mouth(prev)
 	# Same in x, which the depth test above cannot stand in for: the cage is
-	# NET_BACK_HALF_WIDTH across at its widest, so a stick out by the boards is
-	# touching nothing however close to the goal line it is. The bound is the
-	# cage's own footprint plus this caller's clearance — a stick within the give
-	# is sunk in compliant mesh, one beyond it never crossed anything — and it is
-	# what stops a blade in the corner from being claimed by a face whose plane
-	# happens to run past it. Tested on the blade's x-INTERVAL rather than end by
-	# end, so a segment lying across the cage still resolves.
+	# NET_BACK_HALF_WIDTH across at its widest, so a stick OUTSIDE it and out by
+	# the boards is touching nothing however close to the goal line it is. The
+	# bound is the cage's own footprint plus this caller's clearance — a stick
+	# within the give is sunk in compliant mesh, one beyond it never crossed
+	# anything — and it is what stops a blade in the corner from being claimed by
+	# a face whose plane happens to run past it. Tested on the blade's x-INTERVAL
+	# rather than end by end, so a segment lying across the cage still resolves.
+	# Never for a stick that is INSIDE: a pose pulled wholly past the footprint in
+	# one tick is the stick going through the side net, and the interior faces
+	# are what bring it back. (An inside `prev` with a blade metres away is a
+	# stale one — side_anchor re-seeds across a teleport.)
 	var lateral: float = GameRules.NET_BACK_HALF_WIDTH + half_thickness + mesh_give
-	if minf(heel.x, toe.x) > lateral or maxf(heel.x, toe.x) < -lateral:
+	if not interior and (minf(heel.x, toe.x) > lateral or maxf(heel.x, toe.x) < -lateral):
 		return false
 
 	# ── Pipes first: iron wins, and a post hit is the terminal answer ─────────
@@ -102,20 +109,43 @@ static func resolve(
 	# The surface the blade stops at is the twine pushed back by `mesh_give`, so
 	# the stick visibly sinks into the mesh instead of skidding along an invisible
 	# hard wall standing off it.
-	var interior: bool = NetGeometry.interior_or_mouth(prev)
+	# Each end measured on its own, and the larger correction adopted, exactly as
+	# the board clamp does across heel and toe — one translation has to satisfy
+	# both ends. Measuring the toe after the heel's shift instead reports only the
+	# toe's REMAINING overrun, which then loses to the heel's and leaves the toe
+	# that far through the mesh.
 	var offset := Vector3.ZERO
-	for point: Vector3 in [heel, toe]:
-		if point.y > GameRules.NET_HEIGHT:
-			continue
-		var moved: Vector3 = _twine_offset(prev, point + offset, interior, mesh_give, end_z)
-		# Adopt the larger correction, exactly as the board clamp does across heel
-		# and toe — one translation has to satisfy both ends.
-		if moved.length_squared() > offset.length_squared():
-			offset = moved
+	if heel.y <= GameRules.NET_HEIGHT:
+		offset = _twine_offset(prev, heel, interior, mesh_give, end_z)
+	if toe.y <= GameRules.NET_HEIGHT:
+		var toe_offset: Vector3 = _twine_offset(prev, toe, interior, mesh_give, end_z)
+		if toe_offset.length_squared() > offset.length_squared():
+			offset = toe_offset
 	if offset == Vector3.ZERO:
 		return false
 	result.offset = offset
 	return true
+
+
+# The point to classify the NEXT resolve from: `contact` as a rigid (zero-give)
+# twine would have stopped it, classified from the previous such point. A blade
+# pressed into compliant mesh sits on either side of the plane, so its own
+# contact can't say which face holds it; this can, because it is never on the
+# far side of a panel from the side the stick is on, and it stays within the
+# give of the blade, so it follows a stick sliding along the mesh. The stick
+# changes sides only the ways a real one can: through the mouth, round a post,
+# over the bar. A contact further than TELEPORT_M from the anchor is a teleport
+# (faceoff staging, a reconcile snap) and re-seeds it.
+const SIDE_EPS_M: float = 0.001
+const TELEPORT_M: float = 1.0
+
+
+static func side_anchor(anchor: Vector3, contact: Vector3) -> Vector3:
+	if anchor.distance_squared_to(contact) > TELEPORT_M * TELEPORT_M \
+			or contact.y > GameRules.NET_HEIGHT:
+		return contact
+	return contact + _twine_offset(anchor, contact, NetGeometry.interior_or_mouth(anchor),
+			-SIDE_EPS_M, NetGeometry.near_end_z(contact.z))
 
 
 # Blade vs a mouth-corner bend. Samples the blade at its closest approach to the
