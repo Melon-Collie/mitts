@@ -648,8 +648,8 @@ var _default_lower_body_y: float = 0.0
 # Vertical drop of the visible body under the gait's crouch, so the flexed legs
 # keep the skates on the ice, and the share of it the gameplay frames
 # (UpperBody / LowerBody) take — nonzero only in the held poses (see
-# set_skating_crouch_drop). _apply_body_height is the single writer of both
-# frames' Ys.
+# set_skating_crouch_drop). _place_frames is the single writer of both frames'
+# positions (_place_upper_frame of UpperBody's alone, off its cached parts).
 var _skating_crouch_drop: float = 0.0
 var _frame_drop: float = 0.0
 # The balance lean, world XZ radians, stepped in the physics tick
@@ -659,6 +659,9 @@ var _balance_tilt: Vector2 = Vector2.ZERO
 var _balance_tilt_rate: Vector2 = Vector2.ZERO
 var _lean_shift_lower: Vector3 = Vector3.ZERO
 var _lean_shift_upper: Vector3 = Vector3.ZERO
+# The trunk's lean in the body's frame, kept from the last full placement so a
+# torso write re-places UpperBody without re-deriving what it cannot change.
+var _lean_trunk_local: Basis = Basis.IDENTITY
 var _block_stance_active: bool = false
 # Slapper one-timer zone — armed only while charging a slapper without the puck
 # (see set_slapper_zone). Plain state: the zone is an ice-plane disc the analytic
@@ -1621,8 +1624,13 @@ func set_skating_crouch_drop(drop: float, frame_drop: float = 0.0) -> void:
 	if is_equal_approx(_skating_crouch_drop, drop) and is_equal_approx(_frame_drop, frame_drop):
 		return
 	_skating_crouch_drop = drop
-	_frame_drop = frame_drop
-	_apply_body_height()
+	# The stride's bob lowers the body alone; only a held pose's share moves the
+	# frames, so the every-frame case re-seats the skeleton and nothing else.
+	if not is_equal_approx(_frame_drop, frame_drop):
+		_frame_drop = frame_drop
+		_place_frames()
+	if _spine != null:
+		_spine.update()
 
 
 # How far the visible body sits below the gameplay frames (SkaterSpineRig).
@@ -1661,6 +1669,15 @@ func _place_frames() -> void:
 			_default_upper_body_y + _skeleton_root_offset - _frame_drop, 0.0) + _lean_shift_upper
 	lower_body.position = Vector3(0.0,
 			_default_lower_body_y + _skeleton_root_offset - _frame_drop, 0.0) + _lean_shift_lower
+
+
+# UpperBody alone, for a torso write: the hips' shift and the trunk's lean are
+# functions of facing and the lean, which only _place_frames' callers change.
+func _place_upper_frame() -> void:
+	_blade_contact_dirty = true
+	_update_upper_lean_shift()
+	upper_body.position = Vector3(0.0,
+			_default_upper_body_y + _skeleton_root_offset - _frame_drop, 0.0) + _lean_shift_upper
 
 
 # The balance lean, world XZ radians, and its rate. Moves both gameplay frames,
@@ -1711,9 +1728,13 @@ func max_lean_shift() -> float:
 func _update_lean_shift() -> void:
 	var hips := Vector3(0.0, global_position.y + _default_lower_body_y + _skeleton_root_offset, 0.0)
 	_lean_shift_lower = _tilt_body_local(_balance_tilt) * hips - hips
+	_lean_trunk_local = _tilt_body_local(trunk_tilt())
+	_update_upper_lean_shift()
+
+
+func _update_upper_lean_shift() -> void:
 	var shoulders: Vector3 = upper_body.basis * ((shoulder.position + bottom_shoulder.position) * 0.5)
-	_lean_shift_upper = _lean_shift_lower \
-			+ _tilt_body_local(trunk_tilt()) * shoulders - shoulders
+	_lean_shift_upper = _lean_shift_lower + _lean_trunk_local * shoulders - shoulders
 
 
 # A world-XZ tilt as a rotation in the body's frame, toward the tilt.
@@ -1746,7 +1767,7 @@ func get_blade_position() -> Vector3:
 # interaction loops (plus IK, claims, and render-rate aim readers). The cached
 # point is served while (a) no pose setter that can move the blade's world
 # contact has run since the fill — set_blade_position, set_facing,
-# set_upper_body_rotation / lean, _apply_body_height, and the visual_offset
+# set_upper_body_rotation / lean, _place_frames, and the visual_offset
 # MeshRoot shift all raise _blade_contact_dirty — and (b) the body hasn't
 # translated, guarded by comparing local `position` against the fill-time value
 # (catches every direct global_position write: integration, collision push-out,
@@ -2215,7 +2236,7 @@ func set_upper_body_rotation(angle: float) -> void:
 	upper_body.rotation.y = angle
 	# The shoulders turn with the frame, and the lean's shift follows them.
 	if _leaning():
-		_place_frames()
+		_place_upper_frame()
 
 
 # `fold`: the share of lean_x that is posture, not reach (SkaterSpineRig).
@@ -2225,7 +2246,7 @@ func set_upper_body_lean(lean_x: float, lean_z: float = 0.0, fold: float = 0.0) 
 	upper_body.rotation.z = lean_z
 	_trunk_fold = fold
 	if _leaning():
-		_place_frames()
+		_place_upper_frame()
 
 
 func trunk_fold() -> float:

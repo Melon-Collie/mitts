@@ -39,6 +39,18 @@ var _hips_pose := Transform3D.IDENTITY
 var _waist_pose := Transform3D.IDENTITY
 var _spine_pose := Transform3D.IDENTITY
 var _neck_pose := Transform3D.IDENTITY
+# Everything update() reads, as of its last solve. The render pass asks for the
+# spine from several places a frame (the crouch, the arm rebuilds, the pass
+# itself); a call whose inputs all match is answered without building a basis.
+var _in_hip := Vector3(NAN, NAN, NAN)
+var _in_trunk := Vector3.ZERO
+var _in_lower_pos := Vector3.ZERO
+var _in_basis := Basis.IDENTITY
+var _in_tilt := Vector2.ZERO
+var _in_trunk_tilt := Vector2.ZERO
+var _in_fold: float = 0.0
+var _in_drop: float = 0.0
+var _in_shoulder_y: float = 0.0
 
 
 func setup(skater: Skater) -> void:
@@ -59,22 +71,39 @@ func update() -> bool:
 	var hip: Vector3 = lower.rotation
 	var trunk: Vector3 = upper.rotation
 	var fold: float = _skater.trunk_fold()
+	var skater_basis: Basis = _skater.global_transform.basis
+	var tilt_in: Vector2 = _skater.balance_tilt()
+	var trunk_tilt_in: Vector2 = _skater.trunk_tilt()
+	var drop: float = _skater.body_drop_below_frame()
+	var shoulder_y: float = _skater.shoulder.position.y
+	if hip == _in_hip and trunk == _in_trunk and fold == _in_fold \
+			and lower.position == _in_lower_pos and skater_basis == _in_basis \
+			and tilt_in == _in_tilt and trunk_tilt_in == _in_trunk_tilt \
+			and drop == _in_drop and shoulder_y == _in_shoulder_y:
+		return false
+	_in_hip = hip
+	_in_trunk = trunk
+	_in_fold = fold
+	_in_lower_pos = lower.position
+	_in_basis = skater_basis
+	_in_tilt = tilt_in
+	_in_trunk_tilt = trunk_tilt_in
+	_in_drop = drop
+	_in_shoulder_y = shoulder_y
 	var twist: float = clampf(angle_difference(hip.y, trunk.y), -TWIST_LIMIT, TWIST_LIMIT)
 	var hip_basis := Basis.from_euler(Vector3(hip.x, trunk.y - twist, 0.0))
 	var waist_yaw: float = twist * WAIST_TWIST_SHARE
 	var waist_basis := Basis(Vector3.UP, waist_yaw)
 
 	# The lean, in skeleton space (the skater root's frame), as an axis and angle.
-	var tilt: Vector2 = _skater.balance_tilt()
-	var tilt3: Vector3 = _skater.global_transform.basis.inverse() * Vector3(tilt.x, 0.0, tilt.y)
+	var to_body: Basis = skater_basis.inverse()
+	var tilt3: Vector3 = to_body * Vector3(tilt_in.x, 0.0, tilt_in.y)
 	var theta: float = tilt3.length()
 	var lean := Basis.IDENTITY
 	if theta > 1e-4:
 		lean = Basis(Vector3.UP.cross(tilt3 / theta), theta)
 	# The trunk's own lean, trailing the hips' (Skater.trunk_tilt).
-	var trunk_tilt: Vector2 = _skater.trunk_tilt()
-	var trunk3: Vector3 = _skater.global_transform.basis.inverse() \
-			* Vector3(trunk_tilt.x, 0.0, trunk_tilt.y)
+	var trunk3: Vector3 = to_body * Vector3(trunk_tilt_in.x, 0.0, trunk_tilt_in.y)
 	var trunk_theta: float = trunk3.length()
 	var trunk_lean := Basis.IDENTITY
 	var trunk_axis := Vector3.RIGHT
@@ -85,7 +114,7 @@ func update() -> bool:
 	# by the part of the crouch the gameplay frame does not take
 	# (Skater.set_skating_crouch_drop).
 	var hips := Transform3D(lean * hip_basis,
-			lower.position - Vector3(0.0, _skater.body_drop_below_frame(), 0.0))
+			lower.position - Vector3(0.0, drop, 0.0))
 	var waist := Transform3D(waist_basis, Vector3.ZERO)
 
 	# Relative to the hips, the trunk folds about THEIR axis by the share of the
@@ -111,7 +140,7 @@ func update() -> bool:
 	if trunk_theta > 1e-4:
 		var spine_world: Basis = lean * under * spine_basis
 		var neck_axis: Vector3 = spine_world.inverse() * trunk_axis
-		var base := Vector3(0.0, _skater.shoulder.position.y, 0.0)
+		var base := Vector3(0.0, shoulder_y, 0.0)
 		var counter := Basis(neck_axis.normalized(), -_skater.head_level_share * trunk_theta)
 		neck = Transform3D(counter, base - counter * base)
 

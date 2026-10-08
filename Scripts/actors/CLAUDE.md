@@ -90,8 +90,9 @@ under `UpperBody`, a leg skeleton under `LowerBody`) could not:
 **The body leans toward its acceleration** (`BalanceRules`): atan(|a|/g),
 eased softly into a 20° cap, through a critically damped spring solved
 exactly. One model is the turn's bank, the start's forward drive and the
-stop's sit back; the gait authors none of them. It pivots at the ICE under the skater: the blades are where the body
-touches the ice, so they stay put and the body goes over them. That carries
+stop's sit back; the gait authors none of them. It pivots at the ICE under the
+skater: the blades are where the body touches the ice, so they stay put and the
+body goes over them. That carries
 the shoulders up to ~0.45 m into a turn, and the hands go with them, so the lean
 is gameplay — `SkaterController` steps it in the tick, it is replicated, and it
 TRANSLATES both gameplay frames (`Skater._update_lean_shift`) without tilting
