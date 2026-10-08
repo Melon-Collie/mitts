@@ -448,7 +448,6 @@ void NativeSkaterGait::strokes(double delta, double fwd) {
 	weight_shift_vel += shift_accel * delta;
 	weight_shift += weight_shift_vel * delta;
 	trunk_roll += deg_to_rad(c.weight_shift_deg) * weight_shift;
-	trunk_pitch += -deg_to_rad(c.stance_lean_deg) * loaded * (1.0 - mix.stop - mix.skid);
 }
 
 void NativeSkaterGait::stroke(double w, double push, double rock, double flare, double tuck,
@@ -469,7 +468,6 @@ void NativeSkaterGait::stance_of(double s) {
 	const double stroke_sit = clampd(intensity / maxd(c.stance_full_speed_fraction, 0.01), 0.0, 1.0) * clampd(1.0 + effort * c.stance_push_gain, 0.0, 1.35) * (1.0 + loaded * c.stance_sit_gain) * (1.0 + c.cadence_glide_stance_gain * cruise_gear);
 	const double stride_sit = maxd(stroke_sit, c.dig_in_stance * start * (intensity > 0.01 ? 1.0 : 0.0));
 	stance = (mix.stride + mix.backward + mix.shuffle) * stride_sit + mix.crossover * maxd(stroke_sit, c.carve_stance) + mix.glide * maxd(stroke_sit, c.glide_stance * speed_t) + mix.tight * c.tight_turn_stance + mix.stop * c.hockey_stop_stance + mix.skid * c.reversal_stance;
-	stance = maxd(stance, loaded * c.stance_sit_floor);
 	bob = c.stride_bob_m * intensity * (1.0 - s * s) * (mix.stride + mix.backward + mix.crossover);
 }
 

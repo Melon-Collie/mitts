@@ -4,13 +4,17 @@ Status: IMPLEMENTED on `claude/awesome-allen-fn1f7d`, pending on-ice tuning.
 Treat this as the agreed design; ask before deviating from it. Deltas from the
 plan as written:
 
-- **The stance pose rides the gait's existing smoothed channel**, not a new
-  `GaitLayer`: the channel that drew the sprint stride (`SkaterLocomotion.loaded`,
-  mirrored in `NativeSkaterGait`) now draws the stance — a crouch floor
-  (`stance_sit_floor`), a deeper sit, shorter strides and the chest over the
-  knees — and `LocomotionRules.classify` skates the stance's turning share as the
-  `tight` state instead of crossovers. One channel, already native-mirrored,
-  rather than a layer and a parity seam.
+- **The stance pose is split between the stroke and a layer.** The channel that
+  drew the sprint stride (`SkaterLocomotion.loaded`, mirrored in
+  `NativeSkaterGait`) draws what the stance does to the STROKE — shorter strides,
+  a deeper sit — and `LocomotionRules.classify` skates the stance's turning share
+  as the `tight` state instead of crossovers. The POSTURE over it is
+  `GaitStanceLayer` (`FLOOR | LEGS | TRUNK`): a crouch floor (`stance_crouch`),
+  both legs splayed into a wide base (`stance_width_deg`) and the chest folded
+  over the knees on the trunk texture (`stance_chest_deg`), so the blade never
+  moves. Width is what reads from the top-down game camera. The check commit
+  stands tall instead (`hit_commit_crouch_m` 0.03), so the two postures read
+  apart.
 - **The league top speed is 10.0 m/s and `top_speed_mult` is 1.0 at neutral**
   (`GameRules.DEFAULT_SKATER_MAX_SPEED_M_S`, `PlayerAttributes.top_speed_mult`),
   rather than `9.0 × speed_mult × sprint_ceiling_mult`. It keeps the attributes'
@@ -287,8 +291,8 @@ Feel tunables, hand-picked as starting points — tune on ice, not here.
 - `LocomotionRules.classify`: brake → `stop = 1`. The `tight` weight is driven
   by the stance instead — the excess-grip share of the turn (`(a_used − a_0) /
   a_0`, clamped) — and its side by the steer sign, as now.
-- A stance overlay as a `GaitLayer` at the `FLOOR` stage: a crouch floor while
-  held. The check commit's layer sits above it, and since the two are mutually
+- A stance overlay as a `GaitLayer` (`GaitStanceLayer`): a crouch floor, a wide
+  base and the chest over the knees while held. The check commit's layer sits above it, and since the two are mutually
   exclusive, no suppression factor is needed.
 - `NativeSkaterGait` mirrors the classify change — change both or neither;
   `test_native_gait_parity.gd` drives the stance.

@@ -61,6 +61,29 @@ func test_knockdown_takes_the_stride_and_the_trunk_texture() -> void:
 			"the crumple owns the drop")
 
 
+func test_the_stance_widens_lowers_and_folds_without_moving_the_blade() -> void:
+	for _i: int in 60:
+		_coord.apply(DT)
+	var upright_drop: float = _coord.crouch_drop
+	var upright_pitch: float = _coord.trunk_pitch_add
+	var upright_splay: float = _skater._legs._gait_leg_r.z - _skater._legs._gait_leg_l.z
+	var frame: Transform3D = _skater.upper_body.transform
+	_controller.stance_active = true
+	for _i: int in 60:
+		_coord.apply(DT)
+	var splay: float = _skater._legs._gait_leg_r.z - _skater._legs._gait_leg_l.z
+	assert_gt(splay - upright_splay, deg_to_rad(_controller.stance_width_deg) * 1.5,
+			"both legs splay into the wide base (%.3f rad wider)" % (splay - upright_splay))
+	assert_gt(_coord.crouch_drop, upright_drop + 0.02, "the stance sits the hips down")
+	assert_lt(_coord.trunk_pitch_add, upright_pitch - 0.2, "the chest folds over the knees")
+	assert_true(_skater.upper_body.transform.is_equal_approx(frame),
+			"the stance poses the body, never the frame the blade hangs from")
+	_controller.stance_active = false
+	for _i: int in 120:
+		_coord.apply(DT)
+	assert_almost_eq(_coord.crouch_drop, upright_drop, 0.005, "letting go stands back up")
+
+
 func test_knockdown_takes_the_check_commit_with_it() -> void:
 	_skater.hit_committed = true
 	for _i: int in 60:

@@ -485,8 +485,8 @@ Two things the split alone would get wrong, both handled in the easing:
 
 ### Overlays are layers, and the order is the priority
 
-Everything the gait lays on the stroke — the faceoff stance, the shot loads and
-kick, the check commit and drive, the stick lift, the celebration bounce, the
+Everything the gait lays on the stroke — the faceoff stance, the loaded skating
+stance (Shift), the shot loads and kick, the check commit and drive, the stick lift, the celebration bounce, the
 stagger, the block and the knockdown — is a `GaitLayer`
 (`Scripts/controllers/gait/`). The coordinator runs them lowest priority first
 over the locomotion pose in a `GaitPose`, one stage at a time:

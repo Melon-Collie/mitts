@@ -143,20 +143,40 @@ const POSES: Array = [
 		[30, {"move": Vector2(-0.7, -0.7), "aim": Vector3(0.0, 0.0, -3.0)}],
 	]},
 	{"name": "turn_carve_hard", "puck": false, "readout": true, "cam_ahead": 3.2, "steps": [
-		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[210, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
 		[45, {"move": Vector2(1.0, 0.0), "aim": Vector3(2.2, 0.0, -2.2)}],
 	]},
 	{"name": "turn_tight", "puck": false, "readout": true, "cam_ahead": 3.2, "steps": [
-		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[210, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
 		[30, {"move": Vector2(1.0, 0.0), "stance": true, "aim": Vector3(2.2, 0.0, -2.2)}],
 	]},
 	{"name": "turn_tight_game", "puck": false, "game_cam": true, "steps": [
-		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[210, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
 		[30, {"move": Vector2(1.0, 0.0), "stance": true, "aim": Vector3(2.2, 0.0, -2.2)}],
 	]},
 	{"name": "turn_tight_exit", "puck": false, "readout": true, "cam_ahead": 3.2, "steps": [
-		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[210, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
 		[70, {"move": Vector2(1.0, 0.0), "stance": true, "aim": Vector3(3.0, 0.0, -0.5)}],
+	]},
+	# The same reads from the game camera, where a pose has to work: from above,
+	# the stance has to read by WIDTH, the commit by being tall and narrow.
+	{"name": "rest_game", "puck": false, "game_cam": true, "steps": [[40, {}]]},
+	{"name": "stance_rest_game", "puck": false, "game_cam": true,
+			"steps": [[40, {"stance": true}]]},
+	{"name": "skate_game", "puck": false, "game_cam": true, "steps": [
+		[150, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+	]},
+	{"name": "stance_skate_game", "puck": false, "game_cam": true, "steps": [
+		[120, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[40, {"move": Vector2(0.0, -1.0), "stance": true, "aim": Vector3(0.0, 0.0, -3.0)}],
+	]},
+	{"name": "carve_game", "puck": false, "game_cam": true, "steps": [
+		[210, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[30, {"move": Vector2(1.0, 0.0), "aim": Vector3(2.2, 0.0, -2.2)}],
+	]},
+	{"name": "hit_commit_game", "puck": false, "game_cam": true, "steps": [
+		[120, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[40, {"move": Vector2(0.0, -1.0), "hit": true, "aim": Vector3(0.0, 0.0, -3.0)}],
 	]},
 	{"name": "shot_block", "puck": false, "steps": [
 		[30, {"block": true, "aim": Vector3(0.0, 0.0, -3.0)}],
@@ -387,6 +407,9 @@ func _build_actor() -> void:
 	_skater.set_uniform(TeamColorRegistry.get_colors(5, 0))
 	_skater.set_jersey_info("POSE", 8)
 	_skater.apply_appearance(attrs)
+	# The overhead self-beacon is chrome the camera can pass straight through,
+	# and the tiles are for the body.
+	_skater.set_world_hud_hidden(true)
 
 	_controller = SkaterController.new()
 	add_child(_controller)

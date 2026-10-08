@@ -313,8 +313,7 @@ func strokes(delta: float, fwd: float) -> void:
 
 	# Trunk: sway over the loaded leg on the stride fundamental (the trunk is
 	# too massive to carry the stroke's snap), a damped spring that lets the
-	# weight settle over each leg with follow-through, and the loaded stance's
-	# chest over the knees.
+	# weight settle over each leg with follow-through.
 	var fore_aft: float = mix.stride + mix.backward + mix.crossover
 	var s_fund: float = sin(stride_phase)
 	trunk_roll += deg_to_rad(c.stride_sway_deg) * intensity * fore_aft * s_fund
@@ -324,7 +323,6 @@ func strokes(delta: float, fwd: float) -> void:
 	_weight_shift_vel += shift_accel * delta
 	_weight_shift += _weight_shift_vel * delta
 	trunk_roll += deg_to_rad(c.weight_shift_deg) * _weight_shift
-	trunk_pitch += -deg_to_rad(c.stance_lean_deg) * loaded * (1.0 - mix.stop - mix.skid)
 
 
 # One leg-pair stroke, weighted: fore/aft push (rear-biased), in-phase edge rock,
@@ -357,7 +355,6 @@ func _stance(s: float) -> void:
 			+ mix.tight * c.tight_turn_stance \
 			+ mix.stop * c.hockey_stop_stance \
 			+ mix.skid * c.reversal_stance
-	stance = maxf(stance, loaded * c.stance_sit_floor)
 	bob = c.stride_bob_m * intensity * (1.0 - s * s) * (mix.stride + mix.backward + mix.crossover)
 
 

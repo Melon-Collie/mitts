@@ -70,7 +70,7 @@ var commit_stride_mult: float = 0.5
 # reads as reaching for something rather than coiling behind a shoulder, so the
 # pitch sets the attitude and the shoulder carries the read.
 var hit_commit_lean_deg: float = 14.0         # forward trunk lean into the check
-var hit_commit_crouch_m: float = 0.12         # sink into the checking stance
+var hit_commit_crouch_m: float = 0.03         # tall over the feet — the stance is the low pose
 var hit_commit_blade_lift_m: float = 0.22     # stick raise off the ice on an empty-handed commit
 # Loaded stick pose: while committing (empty-handed), the stick STOPS chasing the
 # cursor and eases to a body-local "ready to hit" pose, so the stance reads as a
@@ -600,14 +600,13 @@ var backpedal_chest_deg: float = 4.0     # chest-up trunk pitch over the C-cuts
 var glide_sway_deg: float = 1.8          # lazy edge-to-edge roll amplitude
 var glide_sway_hz: float = 0.4           # sway frequency — far below stride cadence
 var glide_inside_tuck_deg: float = 10.0  # inside-leg knee tuck — weight on the outside edge
-# Stance read: stance_active (resolved where the skater is simulated; bit 5 of
-# the intent byte for client-rendered remotes) drops the skater low and loaded
-# — a deeper sit, SHORTER, choppier strides, and the chest over the knees — so
-# an opponent can read the stance before the cut comes.
+# Stance read, off stance_active: the locomotion shortens the stride and deepens
+# the sit; GaitStanceLayer poses the low, wide, folded posture over it.
 var stance_stride_gain: float = -0.3     # stride amplitude change at full stance
-var stance_sit_gain: float = 0.35        # extra crouch depth in the stance
-var stance_lean_deg: float = 6.0         # extra forward trunk pitch in the stance
-var stance_sit_floor: float = 0.75       # crouch held in the stance, even at rest
+var stance_sit_gain: float = 0.35        # extra stroke crouch in the stance
+var stance_crouch: float = 1.7           # crouch floor in the stance (× stance_hip_deg)
+var stance_width_deg: float = 11.0       # each leg splayed out from the hip
+var stance_chest_deg: float = 26.0       # chest folded over the knees (trunk texture)
 # Cadence "gears" — grounded in on-ice biomechanics: from acceleration to
 # sustained max velocity real skaters DROP stride frequency and lengthen the
 # glide (speed is power per stride, not faster turnover). cruise_gear (fast AND
