@@ -17,14 +17,15 @@ cursor. The path a skater actually travels turns in
 `SkaterMovementRules.apply_movement` at radius v²/(turn_accel·grip), which
 sprint never touches except by being faster. What is left is "hold Shift for
 +14% top speed until the pool empties", and the momentum model already makes
-speed something you build and manage. Measured on the current numbers:
+speed something you build and manage. Measured on the current numbers for a
+neutral build (sprint ceiling ×1.11 → ~10.0 m/s), to 99% of the cap:
 
 | Run | Time |
 |---|---|
 | 0 → 9 m/s cruise cap, no sprint | ~2.0 s |
-| 0 → ~10.3 m/s sprint cap, sprinting | ~2.15 s, against a ~2.2 s pool off-puck and ~1.4 s carrying |
-| 9 → ~10.3 m/s, sprinting | ~0.5 s |
-| 0 → 10.3 m/s, no sprint thrust bump | ~2.75 s |
+| 0 → ~10.0 m/s sprint cap, sprinting | ~2.0 s, against a ~2.2 s pool off-puck and ~1.4 s carrying |
+| 9 → ~10.0 m/s, sprinting | ~0.4 s |
+| 0 → ~10.0 m/s, no sprint thrust bump | ~2.6 s |
 
 So from a standstill, sprint top speed is reached just as the pool runs out,
 and never with the puck.
@@ -110,16 +111,27 @@ survives as the extreme of the stance, not as a separate mechanic.
 ### 2.3 Sprint is deleted; top speed rises to the sprint ceiling
 
 Each build's `max_speed` becomes what its sprint ceiling was:
-`_base_max_speed · speed_mult() · sprint_ceiling_mult()` (≈ 9.6–10.5 m/s across
-builds, the 20–25 mph burst band the sprint ceiling is grounded to). The
+`_base_max_speed · speed_mult() · sprint_ceiling_mult()`: ≈ 9.1 m/s (20.4 mph)
+for the slowest build, ≈ 10.0 (22.4 mph) neutral, ≈ 10.7 (24.0 mph) for the
+fastest — the 20–25 mph burst band the sprint ceiling is grounded to. The
 burner/plodder spread and the skate-profile gear lean survive unchanged in
-shape. Thrust is left alone to start, so top speed takes ~2.75 s to build from
-a standstill; revisit only if playtesting says so.
+shape. Thrust is left alone to start, so top speed takes ~2.1 s (slowest) to
+~3.1 s (fastest) to build from a standstill, ~2.6 s neutral; revisit only if
+playtesting says so.
 
 `sprint_carry_penalty_bypass` goes with sprint, so a carrier always pays
-`carry_speed_mult()`. A chaser now gains on a carrier at top speed (≈ 10.26 vs
-≈ 9.83 m/s for a neutral build). That is correct hockey, but it removes "a fast
-carrier can separate" — see §6.
+`carry_speed_mult()` on the cap (it does not touch acceleration):
+
+| Build | Free skater | Carrier | Gap |
+|---|---|---|---|
+| slowest | 9.13 m/s | 8.64 | 0.48 m/s (5.3%) |
+| neutral | 9.99 | 9.57 | 0.42 (4.2%) |
+| fastest | 10.73 | 10.38 | 0.35 (3.3%) |
+
+Today the gap is ~0.38 m/s at cruise but only ~0.17 when both sprint (the
+bypass waives 60% of the penalty), so this roughly 2.5×'s the top-end gap. An
+equal chaser closes about a metre every 2.4 s. That is correct hockey, but it
+removes "a fast carrier can separate" — see §6.
 
 ### 2.4 Stamina is deleted
 
@@ -185,7 +197,7 @@ Feel tunables, hand-picked as starting points — tune on ice, not here.
 | `stance_grip_mult` | 2.0 | inherits `tight_turn_multiplier` |
 | `stance_scrape` | 0.33 | calibration anchor, §2.2 |
 | `stance_stride_mult` | 0.6 | |
-| `stance_max_speed_mult` | 0.85 | ~8.7 m/s neutral |
+| `stance_max_speed_mult` | 0.85 | ~8.5 m/s neutral |
 | `stance_shuffle_mult` | 1.2 | below `GRIP_MIN_SPEED` only |
 | `commit_grip_mult` | 0.6 | |
 | `commit_stride_mult` | 0.5 | |
@@ -257,7 +269,7 @@ Phase 1 (bots never hold the stance yet):
   what it now weighs.
 - Goalie behind-net puck play assumes the forechecker at a flat 11 m/s
   (`GoaliePuckPlay.opponent_speed`), still above the fastest new top speed
-  (~10.5 m/s), so it stays conservative and needs only its comment reworded.
+  (~10.7 m/s), so it stays conservative and needs only its comment reworded.
 - The bots' pivot and arrival brakes are already stops, so Space losing the
   tight turn costs them nothing.
 - Expect calibration tests to move (pass lead, rush read, loose-puck chase,
@@ -272,7 +284,13 @@ low-speed mirroring. Design it against `Scripts/domain/ai/CLAUDE.md`.
 ### 4.6 UI, input and tutorial
 
 - Input map action `sprint` → `stance` in `project.godot`; `PlayerPrefs` must
-  migrate a saved `sprint` rebind to `stance` on load, or players lose it.
+  migrate a saved `sprint` rebind (keyboard and pad) to `stance` on load, or
+  players lose it.
+- Gamepad defaults (`PlayerPrefs.PAD_DEFAULT_BUTTONS`): **stance on LB, hit on
+  L3** — a stance is held while steering, so it cannot sit on a click of the
+  steering stick. A commit is held too, but only for the beat before contact,
+  and the grip cost already pushes it toward short holds. A player who saved
+  the old pad defaults keeps them; only unsaved defaults move.
 - `controls_tab.gd` label → a `tr()` key in `locale/translations.csv`.
 - Stamina ring removed: `SkaterHUDCoordinator`, `IceRingField`, and the ice
   shader uniform `test_ice_shader_uniform_contract.gd` pins.
@@ -328,18 +346,16 @@ the stance numbers have settled.
 
 ## 6. Open questions
 
-1. **Gamepad binding.** Sprint is on L3. A held stance on a stick click while
-   steering with that stick is awkward, and every face, shoulder and stick
-   button is taken. Swap it with the hit (LB), or move something else?
-2. **Stance held always in the zone.** The stride and cap costs bind less in
+1. **Stance held always in the zone.** The stride and cap costs bind less in
    tight quarters. If playtesting shows it is never released, candidates are a
    slower first step out of the stance or a time budget — decide on evidence.
-3. **Low-speed turning.** `max_turn_rate` (6 rad/s) caps turning below
+2. **Low-speed turning.** `max_turn_rate` (6 rad/s) caps turning below
    ~3 m/s, so the stance's grip gain fades out there. Raise the cap in the
    stance?
-4. **Carrier separation.** Without the sprint bypass a carrier never
-   outruns an equal chaser. Accept it, or raise `CARRY_BASE`?
-5. **Weight loses its metabolism lever.** Lean's compensation was fast
+3. **Carrier separation.** Without the sprint bypass a carrier never
+   outruns an equal chaser, and the top-end gap is ~4% (§2.3). Accept it,
+   or raise `CARRY_BASE`?
+4. **Weight loses its metabolism lever.** Lean's compensation was fast
    recovery; it keeps its agility edge, which the stance's grip multiplier
    amplifies. Check the corner budgets `test_player_attributes.gd` pins before
    adding anything.
