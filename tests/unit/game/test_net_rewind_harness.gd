@@ -13,9 +13,9 @@ extends GutTest
 
 const H := preload("res://tests/harness/net_rewind_harness.gd")
 
-# The lead is what the servo settles on; it has been observed anywhere from the
-# 25 ms base to the 50 ms-extra ceiling, so the matrix covers the range.
-const LEADS_MS: Array[float] = [25.0, 40.0, 60.0, 75.0]
+# The lead is rtt/2 + the 25 ms margin, from 25 ms on a LAN to 125 ms at
+# ClockSync.MAX_ONE_WAY_S, so the matrix covers the range.
+const LEADS_MS: Array[float] = [25.0, 40.0, 60.0, 75.0, 125.0]
 const RTTS_MS: Array[float] = [10.0, 30.0, 60.0, 120.0, 200.0]
 
 

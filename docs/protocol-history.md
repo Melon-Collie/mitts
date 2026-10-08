@@ -289,3 +289,7 @@ here whenever you bump, in the same format.
 #      reeled every plain stagger backward and guessed a knockdown's fall
 #      direction from the slide. Skater block 55 -> 56 bytes. Replay
 #      FORMAT_VERSION 10.
+# v64: the input lead is rtt/2 + a fixed margin instead of a servo, so the
+#      claim-carried input_lead_ms may now reach INPUT_LEAD_SEC + 100 ms (was
+#      + 50 ms), and the host rebuilds a remote's lead from its own ping for the
+#      one-timer and release anchors. No byte layout changed.

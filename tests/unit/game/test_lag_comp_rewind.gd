@@ -8,6 +8,7 @@ extends GutTest
 # path. Pinning the formulas at the unit level is the cheapest backstop.
 
 const EPSILON: float = 1e-6
+const ClockSyncScript: GDScript = preload("res://Scripts/networking/clock_sync.gd")
 
 
 # ── self_view_time ───────────────────────────────────────────────────────────
@@ -258,7 +259,7 @@ func test_puck_view_time_lead_is_bounded_like_the_self_view() -> void:
 	# can't push the loose-puck rewind further forward than a real client stamps.
 	var inflated: float = LagCompRewind.puck_view_time(10.0, 5000.0)
 	assert_almost_eq(inflated,
-			10.0 + NetworkManager.INPUT_LEAD_SEC + LagCompRewind._INPUT_LEAD_EXTRA_MAX_S,
+			10.0 + NetworkManager.MAX_INPUT_LEAD_SEC,
 			EPSILON)
 
 
@@ -281,8 +282,7 @@ func test_forward_predict_fraction_zero_is_still_exact_legacy() -> void:
 
 func test_forward_predict_depth_bounds_a_crafted_lead() -> void:
 	var bounded: int = LagCompRewind.forward_predict_ticks(1.0, 0.0, 99.0)
-	assert_eq(bounded, roundi((NetworkManager.INPUT_LEAD_SEC
-			+ LagCompRewind._INPUT_LEAD_EXTRA_MAX_S) * Constants.PHYSICS_TICK))
+	assert_eq(bounded, roundi(NetworkManager.MAX_INPUT_LEAD_SEC * Constants.PHYSICS_TICK))
 
 
 func test_forward_predict_depth_rejects_garbage_lead() -> void:
@@ -353,9 +353,9 @@ func test_self_view_honest_lead_passes_through() -> void:
 
 func test_self_view_inflated_lead_clamped() -> void:
 	# A modified client reporting a huge lead can't push its self-view rewind
-	# arbitrarily forward — bounded at base + MAX extra (mirrors ClockSync).
+	# arbitrarily forward — bounded at the largest lead a client stamps with.
 	var t: float = LagCompRewind.self_view_time(10.0, 500.0)
-	assert_almost_eq(t, 10.0 + NetworkManager.INPUT_LEAD_SEC + 0.05, EPSILON)
+	assert_almost_eq(t, 10.0 + NetworkManager.MAX_INPUT_LEAD_SEC, EPSILON)
 
 
 func test_self_view_undercut_lead_clamped_to_base() -> void:
@@ -372,11 +372,12 @@ func test_self_view_default_and_garbage_use_base() -> void:
 			10.0 + NetworkManager.INPUT_LEAD_SEC, EPSILON)
 
 
-func test_lead_extra_max_mirrors_clock_sync() -> void:
-	# The host-side clamp must track the client-side servo ceiling — if they
-	# drift apart a legit fully-adapted claim gets mis-rewound.
-	var cs_script: GDScript = load("res://Scripts/networking/clock_sync.gd")
-	assert_eq(LagCompRewind._INPUT_LEAD_EXTRA_MAX_S, cs_script.MAX_LEAD_EXTRA_S)
+func test_lead_bound_covers_every_lead_a_client_stamps() -> void:
+	# The host-side clamp must admit the largest lead a legit client runs, or a
+	# fully-adapted claim gets mis-rewound.
+	assert_almost_eq(LagCompRewind.clamped_lead_s(
+			ClockSyncScript.input_lead_for_rtt(10000.0) * 1000.0),
+			ClockSyncScript.input_lead_for_rtt(10000.0), EPSILON)
 
 
 # ── self_view_catch_up ───────────────────────────────────────────────────────
@@ -437,11 +438,11 @@ func test_self_view_catch_up_advances_a_moving_body_by_the_gap() -> void:
 
 func test_self_view_catch_up_depth_is_bounded_by_the_lead_ceiling() -> void:
 	# A garbage or crafted view-time can't buy integration distance: the depth is
-	# clamped to the same INPUT_LEAD_SEC + extra ceiling that bounds the self-view
+	# clamped to the same MAX_INPUT_LEAD_SEC ceiling that bounds the self-view
 	# rewind itself. Five seconds of gap at 9 m/s would be 45 m unclamped.
 	var ctrl := autofree(SkaterController.new()) as SkaterController
 	var d: Vector3 = LagCompRewind.self_view_catch_up(
 			_moving_snap(9.0), ctrl, 15.0, 10.0,
 			SkaterMovementRules.ForwardResult.new())
-	var ceiling_m: float = 9.0 * (NetworkManager.INPUT_LEAD_SEC + 0.05) + 0.1
+	var ceiling_m: float = 9.0 * NetworkManager.MAX_INPUT_LEAD_SEC + 0.1
 	assert_lt(d.length(), ceiling_m)

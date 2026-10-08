@@ -7,8 +7,8 @@ extends RefCounted
 # Not a physics harness. Nothing here skates or shoots. It models the plumbing:
 # how a client's physics steps are scheduled against its render loop, what
 # instant each input is stamped with, how the link delays/reorders/drops the
-# batch, how the host dedupes and gates consumption, and what the lead servo
-# measures. Those are clocks, queues, buffers and ordering — and clocks, queues,
+# batch, how the host dedupes and gates consumption, and how overdue each input
+# is when the host pops it. Those are clocks, queues, buffers and ordering — and clocks, queues,
 # buffers and ordering are where the bugs have been.
 #
 # It exists because the alternative is finding these by feel. Every defect in
@@ -24,7 +24,7 @@ extends RefCounted
 #
 # Real code under test, not reimplementations:
 #   - NetworkManager.next_sim_offset  (the tick-domain slew)
-#   - ClockSync.record_ack_overdue / current_input_lead_s  (the lead servo)
+#   - ClockSync.input_lead_for_rtt  (the stamp lead)
 # The dedupe, gate and drain rules mirror RemoteController; they live in a Node
 # that can't be stood up headless, and the mirrors are pinned to the same
 # constants so a divergence shows up as a failing expectation rather than drift.
@@ -42,6 +42,11 @@ enum StampMode {
 	TICK_DOMAIN,  # shipping: NetworkManager.sim_time()
 }
 
+enum LeadMode {
+	MARGIN_ONLY,  # legacy: the fixed margin alone, as if the trip rode inside the clock
+	RTT,          # shipping: ClockSync.input_lead_for_rtt — the trip plus the margin
+}
+
 
 class Config:
 	var client_fps: float = 60.0
@@ -53,6 +58,7 @@ class Config:
 	var duration_s: float = 5.0
 	var stamp_mode: StampMode = StampMode.TICK_DOMAIN
 	var seed: int = 12345
+	var lead_mode: LeadMode = LeadMode.RTT
 
 
 class Result:
@@ -64,7 +70,7 @@ class Result:
 	var starvations: int = 0         # gate found an empty queue on a live tick
 	var drains: int = 0              # backlog drain fired
 	var drained_inputs: int = 0      # inputs acked-without-applying by the drain
-	var lead_extra_ms: float = 0.0   # where the servo settled
+	var lead_ms: float = 0.0         # the stamp lead the client ran
 	var overdue_mean_ms: float = 0.0
 	var overdue_max_ms: float = 0.0
 	var queue_depth_max: int = 0
@@ -72,9 +78,9 @@ class Result:
 
 	func summary() -> String:
 		return ("produced=%d sent=%d deduped=%d late=%d consumed=%d collisions=%d "
-				+ "starve=%d drains=%d lead_extra=%.1fms overdue_mean=%.1fms qmax=%d") % [
+				+ "starve=%d drains=%d lead=%.1fms overdue_mean=%.1fms qmax=%d") % [
 				produced, sent, deduped, late_drops, consumed, colliding_stamps,
-				starvations, drains, lead_extra_ms, overdue_mean_ms, queue_depth_max]
+				starvations, drains, lead_ms, overdue_mean_ms, queue_depth_max]
 
 
 class _Packet:
@@ -155,8 +161,9 @@ func run(cfg: Config) -> Result:
 	var client := _Peer.new(cfg.client_fps, cfg.physics_hz, 0.0)
 	var host := _Peer.new(cfg.host_fps, cfg.physics_hz, 0.0)
 
-	var servo: RefCounted = _ClockSyncScript.new()
-	servo.init_session(0)
+	var lead: float = _ClockSyncScript.input_lead_for_rtt(cfg.rtt_ms) \
+			if cfg.lead_mode == LeadMode.RTT else _ClockSyncScript.INPUT_LEAD_SEC
+	res.lead_ms = lead * 1000.0
 
 	var in_flight: Array[_Packet] = []
 	var queue: Array[float] = []          # stamps, sorted
@@ -184,8 +191,7 @@ func run(cfg: Config) -> Result:
 				client.advance_sim_tick()
 				var stamp: float = client.sim_now() \
 						if cfg.stamp_mode == StampMode.TICK_DOMAIN else client.wall_now()
-				# current_input_lead_s() is the FULL lead (base + servo extra).
-				stamp += servo.current_input_lead_s()
+				stamp += lead
 				res.produced += 1
 				# Distinguishability on the 0.1 ms wire grid — the property the
 				# host's strictly-greater dedupe depends on.
@@ -255,8 +261,6 @@ func run(cfg: Config) -> Result:
 				overdue_sum += overdue
 				overdue_n += 1
 				res.overdue_max_ms = maxf(res.overdue_max_ms, overdue * 1000.0)
-				servo.record_ack_overdue(overdue)
 
-	res.lead_extra_ms = (servo.current_input_lead_s() - NetworkManager.INPUT_LEAD_SEC) * 1000.0
 	res.overdue_mean_ms = (overdue_sum / float(maxi(overdue_n, 1))) * 1000.0
 	return res

@@ -84,21 +84,23 @@ worthless — **fix the harness, don't delete the test.**
 
 `net_timing_harness.gd` covers the input pipeline: physics-step scheduling
 against the render loop, stamping, the link, the host's dedupe/gate/drain, and
-the lead servo.
+how overdue each input is when the host pops it.
 
-It runs the real `NetworkManager.next_sim_offset` and the real `ClockSync` servo;
+It runs the real `NetworkManager.next_sim_offset` and the real
+`ClockSync.input_lead_for_rtt`;
 the dedupe/gate/drain rules are mirrors of `RemoteController` (a Node that can't
 be stood up headless) pinned to the same constants.
 
-`StampMode` switches between legacy wall-clock stamping and the shipping
-tick-domain clock, and `test_legacy_wall_stamping_loses_inputs_at_60fps` is this harness's teeth.
+Two legacy modes give it teeth. `StampMode` switches between wall-clock and
+tick-domain stamping (`test_legacy_wall_stamping_loses_inputs_at_60fps`), and
+`LeadMode` between a margin-only lead and one that also pays the one-way trip
+(`test_a_margin_only_lead_runs_inputs_overdue`).
 
 `test_net_timing_harness.gd` sweeps client framerates (including 75/100/144,
 which do NOT divide the 120 Hz tick and so produce an irregular step pattern)
 against a latency matrix, asserting: stamps never collide, no input is dropped as
 a duplicate, the drain never fires on a clean link, queue depth stays bounded,
-the lead servo settles below its ceiling, and pop-overdue does not track
-framerate.
+inputs land on time at every RTT, and pop-overdue does not track framerate.
 
 ### Claim rewind
 
@@ -170,7 +172,7 @@ is stale by within float noise of the 0.30 m pickup radius, so its phantom rate
 sits *at* the boundary. That coincidence is the finding; assert on the staleness.
 
 **It reproduces the playtest.** At the conditions that session actually ran at —
-lead servo pinned at the 50 ms-extra ceiling, 30–60 ms RTT, contested-puck
+a 75 ms lead (the since-removed servo pinned at its ceiling), 30–60 ms RTT, contested-puck
 deflection rate — it produces 33–41% against the observed ~45%, and the same
 conditions at the designed 25 ms lead give 6–15%. That is the validation that
 makes the rest of its numbers worth quoting, and it makes the clock fix's effect

@@ -19,26 +19,21 @@ func set_puck_history_provider(provider: Callable) -> void:
 # The puck this remote shooter was aiming at, one INPUT LEAD before the tick the
 # host replays their swing on.
 #
-# The client applied this input at its own estimate of host time
-# `host_timestamp - INPUT_LEAD_SEC` while rendering the loose puck predicted to
-# that same instant (PuckController's predicted mode), and the host replays the
-# input at `host_timestamp` — so the host's live puck is a whole lead further
-# down the feed than the one the player swung at. That offset is fixed and
-# ping-independent, which is the point: it is the ONLY lag compensation the
-# one-timer needs now that the shot fires off the input stream instead of an
-# arrival-timed claim RPC.
+# The client applied this input at its own estimate of host time one lead
+# before `host_timestamp`, and the host replays it at `host_timestamp` — so the
+# host's live puck is a whole lead further down the feed than the one the player
+# swung at. That offset is the ONLY lag compensation the one-timer needs now
+# that the shot fires off the input stream instead of an arrival-timed claim RPC.
 #
-# The base-constant lead is used rather than the client's adapted one (which
-# never rides the per-input wire). The servo only ever raises the lead, so this
-# under-rewinds slightly on a client running adapted — erring toward a tighter
-# window, never a friendlier one. Falls back to the live puck whenever the
-# buffer has no sample (warmup, or a stamp older than the buffer).
+# The lead never rides the per-input wire, so it is rebuilt from the host's own
+# ping to this peer. Falls back to the live puck whenever the buffer has no
+# sample (warmup, or a stamp older than the buffer).
 func sample_shooter_puck_view(input: InputState, out: SkaterController.PuckView) -> void:
 	super(input, out)
 	if not _is_host or _puck_history_provider.is_null():
 		return
 	_puck_history_provider.call(
-			input.host_timestamp - NetworkManager.INPUT_LEAD_SEC, out)
+			input.host_timestamp - NetworkManager.peer_input_lead_s(net_peer_id), out)
 
 
 # The host arms this carrier's caught-one-timer window on the tick it grants the
@@ -51,7 +46,7 @@ func one_timer_window_lag_grace() -> float:
 		return 0.0
 	return ShotReleaseRules.one_timer_window_grace(
 			float(NetworkManager.get_peer_ping_ms(net_peer_id)),
-			NetworkManager.INPUT_LEAD_SEC,
+			NetworkManager.peer_input_lead_s(net_peer_id),
 			1.0 / float(Constants.STATE_RATE))
 
 @export var extrapolation_max_ms: float = 50.0
@@ -292,7 +287,7 @@ func _drain_backlog(now: float) -> void:
 		# overdue one in the queue, so omitting it makes input_lead_ms
 		# survivorship-biased — its max bounded by _DRAIN_TARGET_S, which reads as
 		# mutually impossible next to a session draining several times a second.
-		# Phase-resume artifacts stay out, matching the servo's sample gate.
+		# Phase-resume artifacts stay out.
 		if overdue <= _DRAIN_STALE_SOLO_S:
 			NetworkTelemetry.record_input_lead(overdue)
 		# Presses are edges the player committed — dropping the frame that carried
@@ -335,10 +330,10 @@ func _drive_from_input(delta: float) -> void:
 		if not _game_state.is_movement_locked():
 			# Recorded for LIVE pops only: locked-phase pops (faceoff prep,
 			# celebrations) measure phase cadence, not link health, and would skew
-			# the metric the adaptive lead is judged by.
+			# the metric the input lead is judged by.
 			# sim_time, not wall: overdue is stamp-vs-consumption, both tick-domain.
-			# On wall time this reads the frame-bunching offset as lateness and
-			# saturates the lead servo (see NetworkManager's sim clock).
+			# On wall time this reads the frame-bunching offset as lateness (see
+			# NetworkManager's sim clock).
 			NetworkTelemetry.record_input_lead(
 					NetworkManager.sim_time() - input.host_timestamp)
 		if not _game_state.is_movement_locked():

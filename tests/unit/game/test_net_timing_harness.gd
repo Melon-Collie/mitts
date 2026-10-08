@@ -82,22 +82,34 @@ func test_queue_depth_stays_bounded() -> void:
 					"client %d fps @ %d ms: %s" % [int(fps), int(rtt), r.summary()])
 
 
-# ── The lead servo ───────────────────────────────────────────────────────────
+# ── The stamp lead ───────────────────────────────────────────────────────────
 
-func test_lead_servo_settles_below_its_ceiling() -> void:
-	# The failure this reproduces: input_lead_extra pinned at MAX_LEAD_EXTRA_S for
-	# a whole session on a 30 ms link. The servo can only be judged against a
-	# clean measurement, which is what the tick clock provides.
+func test_a_margin_only_lead_runs_inputs_overdue() -> void:
+	# This half's teeth. A lead that leaves out the one-way trip — the belief
+	# that estimated_host_time() already carries it — has every input land late,
+	# by the trip less the margin. If this goes green the harness has stopped
+	# modelling transit.
+	var cfg: RefCounted = _cfg(60.0, 120.0)
+	cfg.lead_mode = H.LeadMode.MARGIN_ONLY
+	var r: RefCounted = H.new().run(cfg)
+	assert_gt(r.overdue_mean_ms, 30.0, "margin-only must run overdue at 120 ms: " + r.summary())
+
+
+func test_the_lead_keeps_inputs_on_time_at_every_rtt() -> void:
+	# What remains is the host's frame quantization (two ticks per 60 fps frame).
 	for fps: float in CLIENT_FPS:
-		var r: RefCounted = H.new().run(_cfg(fps, 30.0))
-		assert_lt(r.lead_extra_ms, 49.0,
-				"client %d fps: servo saturated — %s" % [int(fps), r.summary()])
+		for rtt: float in RTTS:
+			var r: RefCounted = H.new().run(_cfg(fps, rtt))
+			assert_lt(r.overdue_mean_ms, 15.0,
+					"client %d fps @ %d ms: %s" % [int(fps), int(rtt), r.summary()])
+			assert_eq(r.drains, 0,
+					"client %d fps @ %d ms: %s" % [int(fps), int(rtt), r.summary()])
 
 
 func test_overdue_is_not_inflated_by_render_cadence() -> void:
 	# Pop-overdue must measure link lateness, not the host's frame cadence. Two
 	# clients on the SAME link at very different framerates should measure
-	# comparably; when they don't, the servo is being fed render rate.
+	# comparably; when they don't, render rate is leaking into the measurement.
 	var slow: RefCounted = H.new().run(_cfg(60.0, 30.0))
 	var fast: RefCounted = H.new().run(_cfg(240.0, 30.0))
 	assert_lt(absf(slow.overdue_mean_ms - fast.overdue_mean_ms), 8.0,

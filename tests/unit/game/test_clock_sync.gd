@@ -94,7 +94,7 @@ func test_positive_offset_when_host_is_ahead() -> void:
 	assert_almost_eq(cs.estimated_host_time(), now + 10.0, 0.05)
 
 
-# ── Adaptive input-lead servo ────────────────────────────────────────────────
+# ── Input lead: one-way trip + fixed margin ──────────────────────────────────
 
 func _ready_clock() -> RefCounted:
 	var cs := _make()
@@ -104,125 +104,69 @@ func _ready_clock() -> RefCounted:
 	return cs
 
 
-func test_lead_extra_starts_at_one_tick() -> void:
-	# Initial extra = one tick — the playtest-measured deficit of the static
-	# lead on a clean link, so warm-up starts near the right answer.
-	var cs := _ready_clock()
-	assert_almost_eq(cs.current_input_lead_s(),
-			cs.INPUT_LEAD_SEC + 1.0 / 120.0, 1e-6)
+func test_lead_covers_the_one_way_trip() -> void:
+	# estimated_host_time() is the host's clock NOW; an input lands one way
+	# later. A lead short of the trip runs every input overdue at the host.
+	assert_almost_eq(ClockSyncScript.input_lead_for_rtt(60.0),
+			ClockSyncScript.INPUT_LEAD_SEC + 0.030, 1e-9)
+	assert_almost_eq(ClockSyncScript.input_lead_for_rtt(0.0), ClockSyncScript.INPUT_LEAD_SEC, 1e-9)
 
 
-func test_sustained_overdue_raises_the_lead() -> void:
-	# The host popping our inputs ~20 ms late (queue running dry) must climb
-	# the extra — this is the servo's whole purpose.
+func test_lead_is_bounded() -> void:
+	assert_almost_eq(ClockSyncScript.input_lead_for_rtt(10000.0), ClockSyncScript.MAX_INPUT_LEAD_SEC, 1e-9)
+	assert_almost_eq(ClockSyncScript.input_lead_for_rtt(NAN), ClockSyncScript.INPUT_LEAD_SEC, 1e-9,
+			"a garbage RTT falls back to the margin")
+
+
+func test_lead_snaps_to_the_link_on_the_first_step() -> void:
+	var cs := _ready_clock()  # rtt 100 ms
+	cs.advance_input_lead()
+	assert_almost_eq(cs.current_input_lead_s(), ClockSyncScript.input_lead_for_rtt(cs.rtt_ms), 1e-9)
+
+
+func test_lead_waits_for_the_clock() -> void:
+	var cs := _make()
+	cs.advance_input_lead()
+	assert_almost_eq(cs.current_input_lead_s(), ClockSyncScript.INPUT_LEAD_SEC, 1e-9,
+			"no RTT yet, so no trip to cover")
+
+
+func test_a_changing_rtt_slews_the_lead() -> void:
+	# A lead that jumped would open a gap the host queue starves through (up) or
+	# fold stamps back over each other (down).
 	var cs := _ready_clock()
+	cs.advance_input_lead()
 	var before: float = cs.current_input_lead_s()
-	for _i in range(60):
-		cs.record_ack_overdue(0.020)
-	assert_gt(cs.current_input_lead_s(), before, "sustained overdue climbs the lead")
-
-
-# Closed-loop model of what the host actually measures at the pop:
-#
-#     overdue = max(0, arrival_lateness - extra_lead) + tick quantization
-#
-# The lead can drive the lateness term to zero but never the quantization term.
-# Feeding the servo its own output this way is the only way to test convergence
-# — an open-loop constant can't show a fixed point. Quantization cycles
-# deterministically (order is irrelevant, the distribution is the point) so the
-# test stays replay-safe.
-func _closed_loop_overdue(cs: RefCounted, arrival_lateness: float, i: int) -> float:
-	var extra: float = cs.current_input_lead_s() - cs.INPUT_LEAD_SEC
-	var quantization: float = (float(i % 8) / 8.0) * (1.0 / 120.0)
-	return maxf(0.0, arrival_lateness - extra) + quantization
-
-
-func test_the_servo_target_sits_above_the_measure_s_own_floor() -> void:
-	# The structural property the shipped servo violated. Mean overdue floors at
-	# ~TICK/2 no matter how much lead is applied, so a target below that floor is
-	# unsatisfiable at ANY lead and the integrator has no fixed point. The old
-	# form targeted `mean + 4*dev` (floor ~1.5*TICK) at one tick of grace.
-	var cs := _ready_clock()
-	var floor_mean: float = 0.0
-	for i in range(8):
-		floor_mean += (float(i) / 8.0) * (1.0 / 120.0)
-	floor_mean /= 8.0
-	assert_lt(floor_mean, cs._LEAD_GRACE_S,
-			"the target must be reachable with zero arrival lateness")
-
-
-func test_a_clean_link_settles_clear_of_the_ceiling() -> void:
-	# THE regression, in closed loop: no arrival lateness at all, only the
-	# unavoidable quantization. The old servo wound to MAX_LEAD_EXTRA_S here and
-	# stayed — measured pinned at the 50 ms cap for the full duration of three
-	# separate sessions on a 23 ms, 0%-loss link, a permanent input-latency tax
-	# nobody could see without the telemetry.
-	var cs := _ready_clock()
-	for i in range(20000):
-		cs.record_ack_overdue(_closed_loop_overdue(cs, 0.0, i))
-	var extra: float = cs.current_input_lead_s() - cs.INPUT_LEAD_SEC
-	assert_lt(extra, cs.MAX_LEAD_EXTRA_S * 0.5,
-			"a clean link must settle well clear of the ceiling, not pin against it")
-
-
-func test_a_genuinely_late_link_buys_lead_but_still_settles() -> void:
-	# The servo must still do its job: real lateness earns real extra lead. What
-	# it must NOT do is saturate — a finite equilibrium is what distinguishes
-	# "adapted" from "wound out".
-	var cs := _ready_clock()
-	for i in range(40000):
-		cs.record_ack_overdue(_closed_loop_overdue(cs, 0.030, i))
-	var extra: float = cs.current_input_lead_s() - cs.INPUT_LEAD_SEC
-	assert_gt(extra, 0.010, "30 ms of genuine lateness must buy real extra lead")
-	assert_lt(extra, cs.MAX_LEAD_EXTRA_S - 0.001,
-			"...and still settle short of the cap, leaving headroom for a burst")
-
-
-func test_lead_extra_is_hard_capped() -> void:
-	var cs := _ready_clock()
-	for _i in range(5000):
-		cs.record_ack_overdue(0.2)
-	assert_lte(cs.current_input_lead_s(), cs.INPUT_LEAD_SEC + cs.MAX_LEAD_EXTRA_S + 1e-9,
-			"extra never exceeds MAX_LEAD_EXTRA_S")
-
-
-func test_healthy_overdue_relaxes_toward_zero_extra() -> void:
-	# Overdue steady under the one-tick grace -> the servo slowly gives the
-	# extra back (over-lead only costs remote-visibility latency, but it does
-	# cost it).
-	var cs := _ready_clock()
-	for _i in range(60):
-		cs.record_ack_overdue(0.020)
-	var raised: float = cs.current_input_lead_s()
+	cs.rtt_ms = 20.0
+	cs.advance_input_lead()
+	assert_almost_eq(before - cs.current_input_lead_s(), cs._LEAD_SLEW_S, 1e-9)
 	for _i in range(2000):
-		cs.record_ack_overdue(0.0)
-	assert_lt(cs.current_input_lead_s(), raised, "healthy acks relax the lead")
+		cs.advance_input_lead()
+	assert_almost_eq(cs.current_input_lead_s(), ClockSyncScript.input_lead_for_rtt(20.0), 1e-9,
+			"and it arrives")
 
 
-func test_phase_artifact_overdue_is_ignored() -> void:
-	# A multi-second overdue is an input parked across a replay/intermission,
-	# not link lateness — it must not spike the servo.
+func test_stamps_stay_ordered_while_the_lead_falls() -> void:
 	var cs := _ready_clock()
-	var before: float = cs.current_input_lead_s()
-	for _i in range(50):
-		cs.record_ack_overdue(3.0)
-	assert_almost_eq(cs.current_input_lead_s(), before, 1e-9,
-			"phase-resume artifacts are excluded from the servo")
+	cs.advance_input_lead()
+	cs.rtt_ms = 0.0
+	var tick: float = 1.0 / 120.0
+	var prev: float = -INF
+	for i in range(1000):
+		cs.advance_input_lead()
+		var stamp: float = float(i) * tick + cs.current_input_lead_s()
+		assert_true(stamp - prev > tick * 0.9, "tick %d: stamps must keep a tick apart" % i)
+		prev = stamp
 
 
-func test_servo_never_touches_the_ntp_offset() -> void:
-	# The invariant: lead adaptation is separate state; the offset stays pure
-	# ping/pong NTP. Feeding the servo must not move estimated_host_time's base.
+func test_lead_never_touches_the_ntp_offset() -> void:
 	var cs := _ready_clock()
 	var offset_before: float = cs._offset
 	for _i in range(100):
-		cs.record_ack_overdue(0.05)
-	assert_eq(cs._offset, offset_before,
-			"100 overdue samples moved the NTP offset")
-	# Second, weaker check: nothing folded the offset into the stamp path either.
+		cs.advance_input_lead()
+	assert_eq(cs._offset, offset_before, "the lead moved the NTP offset")
 	# Both terms read the wall clock, so the tolerance must clear the 1 ms
-	# granularity of Time.get_ticks_msec() — a millisecond boundary landing
-	# between the two reads shrinks the gap by exactly one tick.
+	# granularity of Time.get_ticks_msec().
 	var lead_gap: float = cs.estimated_input_stamp_time() - cs.estimated_host_time()
 	assert_almost_eq(lead_gap, cs.current_input_lead_s(), 2e-3,
-			"stamp lead is base + extra, with no offset drift folded in")
+			"stamp lead is the lead, with no offset drift folded in")

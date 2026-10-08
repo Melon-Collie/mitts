@@ -49,8 +49,8 @@ var _pending_timer: float = 0.0
 # another reach instant — the host's live blade at `now`, or a contender's own
 # self-view — and the raw stamp is a lead earlier than the moment the claimant
 # actually reached. Comparing a stamp to a reach instant skews every present-time
-# verdict by a full lead (25-75 ms against a 50 ms window), and against a
-# contender by the DIFFERENCE of two per-client servo leads.
+# verdict by a full lead (25-125 ms against a 50 ms window), and against a
+# contender by the DIFFERENCE of two per-client leads.
 var _pending_view_time: float = 0.0
 # The pending claimant's client-sent blade geometry (already reach-clamped), kept
 # so a subsequent contest resolves the prior claimant's squirt from the blade IT
@@ -366,8 +366,8 @@ func receive_claim(peer_id: int, host_timestamp: float, _interp_delay_ms: float,
 		# despite their claims being far apart in client-time (jitter on one peer's
 		# link), and the fairness model is "two players reaching for the puck at
 		# roughly the same instant". That instant is the SELF-VIEW time, not the raw
-		# stamp: the lead is per-client and servo-driven, so two raw stamps can be
-		# equal while the reaches were up to MAX_LEAD_EXTRA_S apart.
+		# stamp: the lead is per-client (it follows each one's RTT), so two raw
+		# stamps can be equal while the reaches were a lead difference apart.
 		var claim_delta: float = absf(blade_rewind_time - _pending_view_time)
 		if claim_delta < CONTEST_WINDOW_S:
 			# Genuine contest — both claims stamped within window.

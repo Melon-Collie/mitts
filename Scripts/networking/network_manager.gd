@@ -14,6 +14,7 @@ const BOT_ID_MAX: int = BOT_ID_BASE + 9  # 10 bots max (5 per team, 5v5 capacity
 # loading the script directly. Single source of truth lives in clock_sync.gd.
 const _ClockSyncScript: GDScript = preload("res://Scripts/networking/clock_sync.gd")
 const INPUT_LEAD_SEC: float = _ClockSyncScript.INPUT_LEAD_SEC
+const MAX_INPUT_LEAD_SEC: float = _ClockSyncScript.MAX_INPUT_LEAD_SEC
 
 
 func is_bot_peer(peer_id: int) -> bool:
@@ -912,7 +913,6 @@ func reset() -> void:
 	_last_broadcast_us = 0
 	_connect_timer = -1.0
 	_clock_sync = null
-	_last_sampled_ack = 0.0
 	_session_start_ms = 0
 	_last_ws_seq_received = -1
 	_replay_mode = false
@@ -1558,48 +1558,13 @@ func _record_host_measured_rtt(peer_id: int, sample_ms: float) -> void:
 	_peer_rtt_ema_ms[peer_id] = ema
 	_peer_ping_ms[peer_id] = int(roundf(ema))
 
-# The claimant's CURRENT stamp lead (constant + adaptive extra, ms) — rides
-# every claim so the host's self-view rewind matches the lead the client
-# actually stamped its inputs with (bounded in LagCompRewind.self_view_time).
+# The claimant's CURRENT stamp lead (ms) — rides every claim so the host's
+# self-view rewind matches the lead the client actually stamped its inputs with
+# (bounded in LagCompRewind.clamped_lead_s).
 func get_input_lead_ms() -> float:
 	if _clock_sync == null:
 		return INPUT_LEAD_SEC * 1000.0
 	return _clock_sync.current_input_lead_s() * 1000.0
-
-
-# Feed the adaptive-lead servo (client only): each snapshot's freshly-advanced
-# input ack reveals how overdue that input was when the host popped it
-# (host_ts − ack stamp). Deduped on the ack so starvation plateaus (repeated
-# acks) don't skew the mean; the servo itself range-guards phase artifacts.
-var _last_sampled_ack: float = 0.0
-
-# A DRAIN acks several inputs in one tick (RemoteController._drain_backlog pops
-# from >_DRAIN_TRIGGER_S overdue down to _DRAIN_TARGET_S), so the ack jumps by
-# at least trigger − target ≈ 25 ms in a single snapshot, and the last drained
-# stamp reads hugely overdue. Feeding that to the servo is a double response:
-# the drain ALREADY cleared the backlog, so the extra lead buys nothing and is
-# charged straight to this player's input latency — the servo winds to its
-# ceiling and stays there.
-#
-# Detected client-side with no wire change: the host pops one input per tick and
-# broadcasts every _state_tick_divisor ticks, so a healthy ack advances by
-# ~1/STATE_RATE per snapshot. Anything at drain scale is a drain (or a burst of
-# consecutive lost snapshots, which is equally not a lead problem). Constraint:
-# the normal advance must stay under this bound — true while STATE_RATE ≥ 40.
-const _ACK_DRAIN_ADVANCE_S: float = 3.0 * _ClockSyncScript.TICK_DURATION
-
-func record_input_ack(host_ts: float, ack_ts: float) -> void:
-	if is_host or _clock_sync == null or ack_ts <= _last_sampled_ack:
-		return
-	var first_sample: bool = _last_sampled_ack <= 0.0
-	var ack_advance: float = ack_ts - _last_sampled_ack
-	_last_sampled_ack = ack_ts
-	# The first sample has no previous ack to difference against (and a session's
-	# opening ack legitimately jumps from 0), so it can't be classified — skip the
-	# servo rather than mistake it for a drain.
-	if first_sample or ack_advance >= _ACK_DRAIN_ADVANCE_S:
-		return
-	_clock_sync.record_ack_overdue(host_ts - ack_ts)
 
 
 # Host → claimant: your pickup claim resolved to no-grant. Unreliable by
@@ -1866,6 +1831,8 @@ func estimated_input_stamp_time() -> float:
 func _advance_sim_tick() -> void:
 	if not is_clock_ready():
 		return
+	if _clock_sync != null:
+		_clock_sync.advance_input_lead()
 	var wall: float = estimated_host_time()
 	if not _sim_started:
 		_sim_started = true
@@ -1914,6 +1881,11 @@ func get_latest_rtt_ms() -> float:
 
 func get_peer_ping_ms(peer_id: int) -> int:
 	return _peer_ping_ms.get(peer_id, 0)
+
+# Host: the stamp lead a remote is running, reconstructed from the ping the host
+# measures to it — for the anchors that need it where no claim carries it.
+func peer_input_lead_s(peer_id: int) -> float:
+	return _ClockSyncScript.input_lead_for_rtt(float(get_peer_ping_ms(peer_id)))
 
 func get_clock_offset_ms() -> float:
 	if _clock_sync == null:
