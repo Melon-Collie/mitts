@@ -314,16 +314,22 @@ static func _specs_for_state(state: int, own_goal_z: float, strong_x: float,
 			]
 
 		AIPossessionState.State.FORECHECK:
+			# The line pair races the lateral trip, like the points: a strong D
+			# pinching down his wall is still the strong-side D.
+			var dp_strong := SlotSpec.make(AIRoleSlots.Slot.DP_STRONG, Group.D,
+					Vector3(strong_x * GameRules.END_ZONE_FACEOFF_DOT_X, 0.0,
+							opp_blue_z + own_dir * _DP_STAND_BACK_M),
+					_side_home_d(strong_x))
+			dp_strong.lateral_race = true
+			var dp_weak := SlotSpec.make(AIRoleSlots.Slot.DP_WEAK, Group.D,
+					Vector3(-strong_x * _DP_WEAK_X_M, 0.0,
+							opp_blue_z + own_dir * _DP_STAND_BACK_M),
+					_side_home_d(-strong_x))
+			dp_weak.lateral_race = true
 			return [
 				SlotSpec.make(AIRoleSlots.Slot.F1_PRESSURE, Group.F, puck_pos),
-				SlotSpec.make(AIRoleSlots.Slot.DP_STRONG, Group.D,
-						Vector3(strong_x * GameRules.END_ZONE_FACEOFF_DOT_X, 0.0,
-								opp_blue_z + own_dir * _DP_STAND_BACK_M),
-						_side_home_d(strong_x)),
-				SlotSpec.make(AIRoleSlots.Slot.DP_WEAK, Group.D,
-						Vector3(-strong_x * _DP_WEAK_X_M, 0.0,
-								opp_blue_z + own_dir * _DP_STAND_BACK_M),
-						_side_home_d(-strong_x)),
+				dp_strong,
+				dp_weak,
 				SlotSpec.make(AIRoleSlots.Slot.F2_STRONG, Group.F,
 						Vector3(strong_x * (half_w - _F2_WALL_INSET_M), 0.0,
 								opp_goal_z + own_dir * _F2_STRONG_DEPTH_M),

@@ -47,7 +47,9 @@ const _SIZE_LIMIT: int = 800
 const _SIZE_SLACK: int = 40
 
 const _SIZE_ALLOWANCE: Dictionary[String, int] = {
-	"res://Scripts/ai/skater_agent_state_machine.gd": 6179,
+	# +3: the wrister wind-up side reads the trailer's relative motion over the
+	# charge (#740), not just where he stands at the commit.
+	"res://Scripts/ai/skater_agent_state_machine.gd": 6182,
 	"res://Scripts/game/game_manager.gd": 5654,
 	"res://Scripts/domain/ai/action_scoring.gd": 4458,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which

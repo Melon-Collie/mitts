@@ -37,10 +37,10 @@ off it in a predictable order.
 - No positional *inference* for humans — positions are explicit lobby picks (see below).
 - The transition-exposure term is **5v5-gated** for v1 (see §6).
 - No 3-on-3 OT format for 5v5 matches, no line changes, no fatigue rebalance (above).
-- No deliberate D **pinch** behavior in the O-zone (the "D pinches, F3 fills" rotation).
-  The election's cross-fill produces the *cover* half for free (a D who ends up deep —
-  e.g. wins a loose-puck race — leaves his point to a leftover forward), but nobody
-  *initiates* a pinch in v1. Tracked in §10.
+- No deliberate D **pinch** behavior (the "D pinches, F3 fills" rotation) in v1. Both
+  halves landed after it — see §10. (The election's cross-fill never produced the
+  cover half: the D slots race the lateral trip, so a deep D keeps his slot, and the
+  fill is a role read instead.)
 
 ## Guiding constraint: additive, mode-latched
 
@@ -171,8 +171,7 @@ Per-state specs (behavior module in parentheses; **bold = new code**, others reu
   same last-man read F3 uses (as landed: `AIRoleHelpers.offensive_station_target` — the
   counter-channel race this named was deleted, see transition-defense-plan §8) so a
   stretch threat sags them out — the existing F3 pinch-safety logic generalized to a
-  pair. No deliberate
-  down-the-wall pinch in v1 (§ non-goals).
+  pair. The strong-side situational pinch landed post-v1 (§10).
 
 - **DZONE** — the researched hybrid ("man where the battles are, zone where speed
   kills"): five puck-relative **areas** with soft-lock man responsibility inside each.
@@ -473,10 +472,14 @@ Each phase is shippable/testable on its own; 3v3 is untouched throughout.
 
 ## 10. Open details & follow-ups
 
-- **Deliberate D pinch + eyes/numbers pressure read** (post-v1): the pinch-initiation
-  ("keep the cycle alive down the wall, only with support behind") and the researched
-  pressure-vs-contain trigger; v1 ships the cover rotation (emergent) without the
-  aggressive halves.
+- **Deliberate D pinch** — LANDED (`AIRoleDefenseman._wall_pinch`): the strong-side D
+  of the forecheck pair steps down his wall onto a carrier bottled between the line
+  and the half-wall, as a pressurer, only when he gets there before the puck gets
+  out AND the pinch is covered (nobody behind his stand, partner on the line, F2_WEAK
+  able to take his point in the late-man window). The rotation landed with it: while
+  the strong D (DP_STRONG or POINT_STRONG) is past his slot's deepest stand, the weak
+  D holds the middle of the line and F2_WEAK / HIGH_SLOT takes his point.
+- **Eyes/numbers pressure read** (post-v1): the researched pressure-vs-contain trigger.
 - **3-on-3 OT for 5v5 matches** (post-v1): needs mid-game roster reduction machinery.
 - **Positional faceoff variants** — LANDED: end-zone draws play the NHL
   wall-and-stack on the defending side (strong-side D on the wall level with the dot,

@@ -247,6 +247,24 @@ literature defines support by whether a pass is on. It applies only while WE
 possess and only to a HOLDING station: clamping a legitimate recovery back
 up-ice toward the puck would undo the coverage the numbers read just called for.
 
+### A pinch is priced on both halves, and its cover is another role's read
+
+The back layer leaves the line in two ways. A **keep-in**
+(`AIRoleDefenseman.wall_rim_keepin`) costs it nothing — the stand is still the
+line, just out in the wall lane where the puck's predicted path crosses it — so
+every line station runs it: the points, the forecheck pair, 3v3's F3. A **pinch**
+goes down the wall, so it is gated on WINNING it (he is not already on his way
+out; I reach him before his skating gets the puck to the line) and on COVERING it
+(nobody behind my stand, my partner on the line, a forward able to take my point
+inside `LATE_MAN_WINDOW_S`). Only the strong-side D makes it; never both.
+
+The cover is not the pinching D's to arrange. It is keyed on the one fact every
+teammate can see — the strong D is deeper than any stand his slot takes — and each
+role reads it for itself: the weak D holds the middle of the line, HIGH_SLOT /
+F2_WEAK takes the vacated point. So it fires however he got deep (pinch, chase,
+battle), and releases when he is back. The D slots race the lateral trip
+(`SlotSpec.lateral_race`) precisely so a pinching D keeps his job while it runs.
+
 ## Covering a man is one behavior, and the role only chooses WHO
 
 `AIRoleHelpers.cover_threat` is the whole of it: take the ice between him and
