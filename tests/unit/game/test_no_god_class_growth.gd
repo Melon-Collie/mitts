@@ -47,7 +47,7 @@ const _SIZE_LIMIT: int = 800
 const _SIZE_SLACK: int = 40
 
 const _SIZE_ALLOWANCE: Dictionary[String, int] = {
-	"res://Scripts/ai/skater_agent_state_machine.gd": 6051,
+	"res://Scripts/ai/skater_agent_state_machine.gd": 6069,
 	"res://Scripts/game/game_manager.gd": 5654,
 	"res://Scripts/domain/ai/action_scoring.gd": 4458,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which

@@ -20,7 +20,7 @@ var move_deadzone: float = 0.1
 var stop_decel: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
 var reverse_skid_fraction: float = GameRules.DEFAULT_SKATER_REVERSE_SKID_FRACTION
 var turn_accel: float = GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2
-var max_turn_rate: float = 6.0
+var max_turn_rate: float = GameRules.DEFAULT_SKATER_MAX_TURN_RATE_RAD_S
 # Edge grip; per-build value = base × agility_mult in apply_attributes, and the
 # skate-profile gear slot leans it later. Turn radius at speed rides this.
 var lateral_grip: float = 1.0

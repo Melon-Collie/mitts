@@ -21,7 +21,8 @@ extends RefCounted
 #   - Facing: the pose coordinator's exponential lerp toward the cursor,
 #     without the back-wedge IK gate.
 #   - Blade: the cursor clamped to the reach ring, rate-limited at the Hands
-#     blade speed (no ROM cone, no lift plane).
+#     blade speed (no ROM cone, no lift plane). Through a wrister charge it
+#     holds the shot origin instead, as the controller does.
 #   - Strips: a defender's blade sweeping through the carried puck knocks it
 #     loose along the sweep (no host restitution detail).
 #   - Posture: REAL — the agent's stance and hit buttons resolve to the
@@ -97,6 +98,9 @@ class SimSkater:
 	var profile: BotSkillProfile = null
 	var was_holding_shot: bool = false
 	var was_holding_slap: bool = false
+	# Body-relative blade latched as a wrister charge starts (see step()).
+	var wrister_hold: Vector3 = Vector3.ZERO
+	var wrister_active: bool = false
 	# ≥ 0 marks a scripted puppet container (no agent); the gap it holds.
 	var puppet_hold_gap: float = -1.0
 	var puppet_depth_floor_z: float = 0.0
@@ -303,12 +307,16 @@ func step() -> void:
 	if collect_perf:
 		perf_tick_us.append(tick_ai_us)
 	# Releases (pass/shot fired by the carrier): quick-shot edge, or a held
-	# charge dropping. The puck leaves along the shooter's aim.
+	# charge dropping. The puck leaves along the shooter's aim. A charge
+	# dropped with the OTHER shot button pressed is the cancel, not a release
+	# (SkaterStateMachine's wrister aim and slapper charge both bail on it).
 	if carrier_id != -1:
 		var c: SimSkater = _skater(carrier_id)
 		var released: bool = c.input.quick_pass_pressed \
-				or (c.was_holding_shot and not c.input.shoot_held) \
-				or (c.was_holding_slap and not c.input.slap_held)
+				or (c.was_holding_shot and not c.input.shoot_held
+						and not c.input.slap_pressed) \
+				or (c.was_holding_slap and not c.input.slap_held
+						and not c.input.shoot_pressed)
 		if released:
 			# The release record carries the DECISION CONTEXT alongside the
 			# event (all additive keys — older consumers read tick/peer only):
@@ -352,9 +360,25 @@ func step() -> void:
 				SkaterMovementRules.posture_of(s.input.stance_held, s.input.hit_held))
 		s.pos += s.vel * DT
 		s.prev_blade = s.blade
-		var to_cursor: Vector3 = s.input.mouse_world_pos - s.pos
-		to_cursor.y = 0.0
-		var desired: Vector3 = s.pos + to_cursor.limit_length(BLADE_REACH)
+		var desired: Vector3
+		var in_charge: bool = s.input.shoot_held and carrier_id == s.peer_id
+		if in_charge and not s.wrister_active:
+			s.wrister_active = true
+			s.wrister_hold = s.blade - s.pos
+		if s.wrister_active:
+			# The wrister charge holds the puck where the shot fires from
+			# (SkaterController._apply_wrister_aim_blade): a bot's committed
+			# release offset off the body, else the blade frozen body-relative.
+			# The wind-up cursor is cosmetic and never moves the puck, and the
+			# release tick still fires from the hold.
+			var off: Vector3 = s.input.bot_wrister_origin_offset
+			desired = s.pos + (Vector3(off.x, 0.0, off.z)
+					if off.length_squared() > 0.0001 else s.wrister_hold)
+			s.wrister_active = in_charge
+		else:
+			var to_cursor: Vector3 = s.input.mouse_world_pos - s.pos
+			to_cursor.y = 0.0
+			desired = s.pos + to_cursor.limit_length(BLADE_REACH)
 		var max_step: float = (MAX_BLADE_SPEED + s.vel.length()) * DT
 		s.blade = s.blade + (desired - s.blade).limit_length(max_step)
 	# Puck.

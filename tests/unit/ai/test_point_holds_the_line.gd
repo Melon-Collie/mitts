@@ -31,7 +31,7 @@ const THEIR := [11, 12, 13, 14, 15]
 var _point_z: float = -(GameRules.BLUE_LINE_Z + 2.0)
 const AT_LINE_TOL_M: float = 3.0
 # Seconds of cycle each assertion measures — see _run_cycle's shelf-life note.
-const CYCLE_S: float = 3.0
+const CYCLE_S: float = 2.5
 
 
 class Sample:
@@ -62,7 +62,7 @@ class Sample:
 #
 # THE GRANT HAS A SHELF LIFE, and CYCLE_S is it. The containers hold their gap
 # forever, but our own five do not hold the puck forever: our share of it decays
-# down the run (roughly 64% at 2 s, 42% at 3 s, ~30% past 4 s) as the cycle turns
+# down the run (roughly 65% at 1.5 s, 39% at 2.5 s, ~30% past 3 s) as the cycle turns
 # into passes and scrambles between our own players. Past that the fixture is no
 # longer measuring a settled possession, and what it reports is a broken cycle —
 # D1 chasing deep and D2 sagging out behind him, which both do eventually in ANY

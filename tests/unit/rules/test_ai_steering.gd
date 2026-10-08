@@ -439,6 +439,79 @@ func test_a_pivot_cuts_in_the_stance_until_the_exit_is_behind() -> void:
 			"no travel, nothing to cut")
 
 
+const UPRIGHT_A: float = GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2
+
+
+# The arc through an anchor 60° off travel at 3 m asks 2·8·sin60/3 ≈ 4.6 rad/s
+# of an 8 m/s skater whose upright edges give 9/8 ≈ 1.1 rad/s; the same bearing
+# 30 m out asks 0.46.
+func test_the_stance_carves_a_turn_the_upright_edges_cannot_make() -> void:
+	var v := Vector2(8.0, 0.0)
+	var dir: Vector2 = _dir_at(60.0)
+	var near := Vector3(dir.x * 3.0, 0.0, dir.y * 3.0)
+	var far := Vector3(dir.x * 30.0, 0.0, dir.y * 30.0)
+	assert_true(AISteering.stance_carves_to(Vector3.ZERO, near, dir, v, UPRIGHT_A, 1.8, false),
+			"a tight turn onto a near anchor needs the doubled edge")
+	assert_false(AISteering.stance_carves_to(Vector3.ZERO, far, dir, v, UPRIGHT_A, 1.8, false),
+			"the same bearing far off is an upright carve")
+	assert_false(AISteering.stance_carves_to(Vector3.ZERO, Vector3(5.0, 0.0, 0.0),
+			Vector2(1.0, 0.0), v, UPRIGHT_A, 1.8, false), "straight ahead needs no turn")
+
+
+func test_an_anchor_inside_the_arrival_floor_does_not_demand_a_turn() -> void:
+	var dir: Vector2 = _dir_at(30.0)
+	var underfoot := Vector3(dir.x * 0.1, 0.0, dir.y * 0.1)
+	# 2·8·sin30 / 20 m = 0.4 rad/s — what the floor turns a 0.1 m anchor into.
+	assert_false(AISteering.stance_carves_to(Vector3.ZERO, underfoot, dir,
+			Vector2(8.0, 0.0), UPRIGHT_A, 20.0, false),
+			"an anchor the body is already on is not a turn to make")
+
+
+# Below a / max_turn_rate the upright turn is rate-bound, and doubling the grip
+# turns no faster.
+func test_the_stance_buys_nothing_where_the_turn_rate_already_binds() -> void:
+	var slow := Vector2(UPRIGHT_A / GameRules.DEFAULT_SKATER_MAX_TURN_RATE_RAD_S * 0.9, 0.0)
+	var dir: Vector2 = _dir_at(80.0)
+	assert_false(AISteering.stance_carves_to(Vector3.ZERO, Vector3(dir.x, 0.0, dir.y) * 2.0,
+			dir, slow, UPRIGHT_A, 0.5, false), "rate-bound: no stance")
+
+
+func test_the_stance_turn_holds_until_well_inside_the_upright_rate() -> void:
+	var v := Vector2(8.0, 0.0)
+	var upright_rate: float = UPRIGHT_A / 8.0
+	# Anchor straight across at d so the demand 2v/d sits at 0.9 of the upright rate.
+	var d: float = 2.0 * 8.0 / (0.9 * upright_rate)
+	var dir: Vector2 = _dir_at(90.0)
+	var anchor := Vector3(0.0, 0.0, d)
+	assert_false(AISteering.stance_carves_to(Vector3.ZERO, anchor, dir, v, UPRIGHT_A, 1.8, false),
+			"under the upright rate it doesn't engage")
+	assert_true(AISteering.stance_carves_to(Vector3.ZERO, anchor, dir, v, UPRIGHT_A, 1.8, true),
+			"above the release fraction a held stance stays held")
+
+
+func test_a_committed_cut_digs_in_when_the_window_is_short() -> void:
+	var v := Vector2(8.0, 0.0)
+	assert_true(AISteering.stance_cuts_onto(_dir_at(90.0), v, UPRIGHT_A, 0.2),
+			"a square cut inside 0.2 s needs the stance")
+	assert_false(AISteering.stance_cuts_onto(_dir_at(5.0), v, UPRIGHT_A, 0.2),
+			"a 5° drift is an upright carve")
+
+
+# The rule's upright rate is the movement core's: a full-lock upright turn at
+# speed rotates travel by turn_accel × grip / v per second.
+func test_the_upright_rate_the_rule_assumes_is_the_physics() -> void:
+	var ctrl := SkaterController.new()
+	var cfg: SkaterMovementRules.MovementConfig = ctrl.get_movement_config()
+	ctrl.free()
+	var speed: float = 8.0
+	var dt: float = 1.0 / 120.0
+	var v_out: Vector3 = SkaterMovementRules.apply_movement(Vector3(speed, 0.0, 0.0),
+			Vector2(0.0, 1.0), 0.0, false, false, dt, cfg)
+	var turned: float = absf(Vector2(1.0, 0.0).angle_to(Vector2(v_out.x, v_out.z)))
+	assert_almost_eq(turned / dt, UPRIGHT_A * cfg.lateral_grip / speed, 0.01,
+			"upright turn rate at 8 m/s")
+
+
 func test_should_brake_releases_past_release_angle() -> void:
 	assert_false(AISteering.should_brake(_dir_at(95.0), Vector2(8.0, 0.0), true),
 			"opposition relaxed below 100° releases the brake")
