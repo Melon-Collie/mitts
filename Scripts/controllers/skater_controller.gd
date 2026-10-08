@@ -2002,7 +2002,7 @@ func _advance_balance(tick_start_velocity: Vector3, delta: float) -> void:
 	var s: Vector4 = BalanceRules.spring_step(skater.balance_tilt(), balance_tilt_vel,
 			target, skater.balance_omega, delta)
 	balance_tilt_vel = Vector2(s.z, s.w)
-	skater.set_balance_tilt(Vector2(s.x, s.y))
+	skater.set_balance_tilt(Vector2(s.x, s.y), balance_tilt_vel)
 
 
 func get_shot_state() -> int:
@@ -2063,7 +2063,7 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	stagger_timer = state.stagger_timer
 	stagger_recoil_dir = state.recoil_dir
 	balance_tilt_vel = state.balance_tilt_vel
-	skater.set_balance_tilt(state.balance_tilt)
+	skater.set_balance_tilt(state.balance_tilt, state.balance_tilt_vel)
 	var prev_kd: float = knockdown_timer
 	knockdown_timer = state.knockdown_timer
 	skater.is_knocked_down = knockdown_timer > 0.0

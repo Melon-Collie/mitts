@@ -703,7 +703,7 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	# The lean places the UpperBody frame the wire's hand and blade are local
 	# to, so it lands before either of them.
 	balance_tilt_vel = state.balance_tilt_vel
-	skater.set_balance_tilt(state.balance_tilt)
+	skater.set_balance_tilt(state.balance_tilt, state.balance_tilt_vel)
 	skater.set_upper_body_rotation(state.upper_body_rotation_y)
 	# Top hand before blade so set_blade_position has the correct hand pivot.
 	skater.set_top_hand_position(state.top_hand_position)

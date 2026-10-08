@@ -279,6 +279,10 @@ var balance_lean_cap_deg: float = 20.0
 # Share of the lean the trunk keeps, the rest taken back above the hips: the
 # legs carry the edge angle and the shoulders stay nearer the stick.
 var trunk_lean_share: float = 0.6
+# How far the trunk's lean trails the hips', seconds: the hips go over first and
+# the chest follows, and on a reversal the chest is still finishing the last lean
+# as the hips cross under it (trunk_tilt).
+var trunk_lean_lag_s: float = 0.12
 # Share of the trunk's lean the neck takes back, keeping the eyes nearer level.
 var head_level_share: float = 0.67
 
@@ -652,6 +656,7 @@ var _frame_drop: float = 0.0
 # (SkaterController._advance_balance) and replicated; and the translation it
 # gives each gameplay frame (_update_lean_shift).
 var _balance_tilt: Vector2 = Vector2.ZERO
+var _balance_tilt_rate: Vector2 = Vector2.ZERO
 var _lean_shift_lower: Vector3 = Vector3.ZERO
 var _lean_shift_upper: Vector3 = Vector3.ZERO
 var _block_stance_active: bool = false
@@ -1534,7 +1539,7 @@ func set_facing(facing: Vector2) -> void:
 	_blade_contact_dirty = true
 	rotation.y = atan2(-_facing.x, -_facing.y)
 	# The lean is world-space, so its shift in the body's frame turns with it.
-	if _balance_tilt != Vector2.ZERO:
+	if _leaning():
 		_place_frames()
 
 
@@ -1658,18 +1663,32 @@ func _place_frames() -> void:
 			_default_lower_body_y + _skeleton_root_offset - _frame_drop, 0.0) + _lean_shift_lower
 
 
-# The balance lean, world XZ radians. Moves both gameplay frames, so the hands
-# and the blade markers lean with the body — gameplay, which is why it is
-# stepped in the tick and replicated rather than eased at render rate.
-func set_balance_tilt(tilt: Vector2) -> void:
-	if tilt == _balance_tilt:
+# The balance lean, world XZ radians, and its rate. Moves both gameplay frames,
+# so the hands and the blade markers lean with the body — gameplay, which is why
+# it is stepped in the tick and replicated rather than eased at render rate.
+func set_balance_tilt(tilt: Vector2, rate: Vector2 = Vector2.ZERO) -> void:
+	if tilt == _balance_tilt and rate == _balance_tilt_rate:
 		return
 	_balance_tilt = tilt
+	_balance_tilt_rate = rate
 	_place_frames()
 
 
 func balance_tilt() -> Vector2:
 	return _balance_tilt
+
+
+# The trunk's lean, world XZ radians: its share of where the hips' lean was
+# trunk_lean_lag_s ago, as a first-order delay (tilt − lag · rate) of state every
+# machine already holds, so the trail needs nothing on the wire. Kept within the
+# trunk's share of the cap, so a fast reversal cannot fling the chest past it.
+func trunk_tilt() -> Vector2:
+	return (trunk_lean_share * (_balance_tilt - trunk_lean_lag_s * _balance_tilt_rate)) \
+			.limit_length(trunk_lean_share * deg_to_rad(balance_lean_cap_deg))
+
+
+func _leaning() -> bool:
+	return _balance_tilt != Vector2.ZERO or _balance_tilt_rate != Vector2.ZERO
 
 
 # Upper bound on how far the lean can carry the shoulders horizontally off the
@@ -1683,26 +1702,27 @@ func max_lean_shift() -> float:
 
 # The body tips as a rod about the ice under the skater (KnockdownFallRules'
 # model, and where the blades are). LowerBody goes where the hips go; UpperBody
-# goes where the shoulders go once the trunk keeps trunk_lean_share of the lean
-# on top of the hips' — matched at the midpoint of the two shoulder markers, so
-# the arms the skeleton draws from its shoulders reach the hands gameplay placed.
+# goes where the shoulders go once the trunk's own lean (trunk_tilt) sits on top
+# of the hips' — matched at the midpoint of the two shoulder markers, so the
+# arms the skeleton draws from its shoulders reach the hands gameplay placed.
 # The frames translate and never tilt: everything solved in them assumes an
 # upright frame. Heights are the frames' own (no render-rate crouch), so the
 # shift is a function of tick state alone.
 func _update_lean_shift() -> void:
-	var tilt3: Vector3 = global_transform.basis.inverse() \
-			* Vector3(_balance_tilt.x, 0.0, _balance_tilt.y)
-	var theta: float = tilt3.length()
-	if theta < 1e-5:
-		_lean_shift_lower = Vector3.ZERO
-		_lean_shift_upper = Vector3.ZERO
-		return
-	var axis: Vector3 = Vector3.UP.cross(tilt3 / theta)
 	var hips := Vector3(0.0, global_position.y + _default_lower_body_y + _skeleton_root_offset, 0.0)
-	_lean_shift_lower = Basis(axis, theta) * hips - hips
+	_lean_shift_lower = _tilt_body_local(_balance_tilt) * hips - hips
 	var shoulders: Vector3 = upper_body.basis * ((shoulder.position + bottom_shoulder.position) * 0.5)
 	_lean_shift_upper = _lean_shift_lower \
-			+ Basis(axis, trunk_lean_share * theta) * shoulders - shoulders
+			+ _tilt_body_local(trunk_tilt()) * shoulders - shoulders
+
+
+# A world-XZ tilt as a rotation in the body's frame, toward the tilt.
+func _tilt_body_local(tilt: Vector2) -> Basis:
+	var tilt3: Vector3 = global_transform.basis.inverse() * Vector3(tilt.x, 0.0, tilt.y)
+	var theta: float = tilt3.length()
+	if theta < 1e-5:
+		return Basis.IDENTITY
+	return Basis(Vector3.UP.cross(tilt3 / theta), theta)
 
 
 # ── Blade ─────────────────────────────────────────────────────────────────────
@@ -2194,7 +2214,7 @@ func set_upper_body_rotation(angle: float) -> void:
 	_blade_contact_dirty = true
 	upper_body.rotation.y = angle
 	# The shoulders turn with the frame, and the lean's shift follows them.
-	if _balance_tilt != Vector2.ZERO:
+	if _leaning():
 		_place_frames()
 
 
@@ -2204,7 +2224,7 @@ func set_upper_body_lean(lean_x: float, lean_z: float = 0.0, fold: float = 0.0) 
 	upper_body.rotation.x = lean_x
 	upper_body.rotation.z = lean_z
 	_trunk_fold = fold
-	if _balance_tilt != Vector2.ZERO:
+	if _leaning():
 		_place_frames()
 
 

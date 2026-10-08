@@ -20,8 +20,8 @@ extends RefCounted
 # about the ice under the skater, so the blades stay where they are and the body
 # goes over them. The tip itself is LowerBody's shift (Skater._update_lean_shift)
 # — the hips bone sits on that frame and takes the full lean, the legs hang from
-# it back down to the ice. The trunk keeps only part of the lean
-# (Skater.trunk_lean_share) and the neck takes part of that back
+# it back down to the ice. The trunk leans by its own tilt (Skater.trunk_tilt:
+# part of the lean, trailing the hips') and the neck takes part of that back
 # (Skater.head_level_share).
 
 # Shoulders against hips: the trunk's comfortable axial rotation, thoracic and
@@ -69,10 +69,18 @@ func update() -> bool:
 	var tilt3: Vector3 = _skater.global_transform.basis.inverse() * Vector3(tilt.x, 0.0, tilt.y)
 	var theta: float = tilt3.length()
 	var lean := Basis.IDENTITY
-	var axis := Vector3.RIGHT
 	if theta > 1e-4:
-		axis = Vector3.UP.cross(tilt3 / theta)
-		lean = Basis(axis, theta)
+		lean = Basis(Vector3.UP.cross(tilt3 / theta), theta)
+	# The trunk's own lean, trailing the hips' (Skater.trunk_tilt).
+	var trunk_tilt: Vector2 = _skater.trunk_tilt()
+	var trunk3: Vector3 = _skater.global_transform.basis.inverse() \
+			* Vector3(trunk_tilt.x, 0.0, trunk_tilt.y)
+	var trunk_theta: float = trunk3.length()
+	var trunk_lean := Basis.IDENTITY
+	var trunk_axis := Vector3.RIGHT
+	if trunk_theta > 1e-4:
+		trunk_axis = Vector3.UP.cross(trunk3 / trunk_theta)
+		trunk_lean = Basis(trunk_axis, trunk_theta)
 	# LowerBody already carries the lean's shift; the visible hips sit below it
 	# by the part of the crouch the gameplay frame does not take
 	# (Skater.set_skating_crouch_drop).
@@ -89,22 +97,22 @@ func update() -> bool:
 			* Basis(Vector3.RIGHT, fold - hip.x) \
 			* Basis(Vector3.UP, twist) \
 			* Basis.from_euler(Vector3(trunk.x - fold, 0.0, trunk.z))
-	# The trunk hands back the part of the lean it does not keep: a rotation
-	# about the same world axis, carried into the waist's frame.
+	# The trunk leans by its own tilt, not the hips': the hips' lean undone and
+	# the trunk's put on, about skeleton-space axes, carried into the waist's
+	# frame. With no trail this is the trunk handing back the share of the lean
+	# it does not keep.
 	var under: Basis = hip_basis * waist_basis
-	var trunk_back: float = -(1.0 - _skater.trunk_lean_share) * theta
-	if theta > 1e-4:
-		spine_basis = under.inverse() * Basis(axis, trunk_back) * under * spine_basis
+	if theta > 1e-4 or trunk_theta > 1e-4:
+		spine_basis = under.inverse() * (lean.inverse() * trunk_lean) * under * spine_basis
 	var spine := Transform3D(spine_basis, Vector3.ZERO)
 
-	# The neck takes back part of what the trunk kept, about its own base.
+	# The neck takes back part of what the trunk leans, about its own base.
 	var neck := Transform3D.IDENTITY
-	if theta > 1e-4:
+	if trunk_theta > 1e-4:
 		var spine_world: Basis = lean * under * spine_basis
-		var neck_axis: Vector3 = spine_world.inverse() * axis
+		var neck_axis: Vector3 = spine_world.inverse() * trunk_axis
 		var base := Vector3(0.0, _skater.shoulder.position.y, 0.0)
-		var counter := Basis(neck_axis.normalized(),
-				-_skater.head_level_share * _skater.trunk_lean_share * theta)
+		var counter := Basis(neck_axis.normalized(), -_skater.head_level_share * trunk_theta)
 		neck = Transform3D(counter, base - counter * base)
 
 	if hips.is_equal_approx(_hips_pose) and waist.is_equal_approx(_waist_pose) \

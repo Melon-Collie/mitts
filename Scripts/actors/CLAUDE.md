@@ -99,7 +99,12 @@ them; the chain then seats the hips on the shifted `LowerBody` and tips them by
 the full lean. (Pivoting at the hips instead keeps the torso still and swings
 the skates 0.4 m round it, which reads as the legs sliding.) The trunk keeps
 only `trunk_lean_share` of it (legs carry the edge, shoulders stay near the
-stick) and the neck takes back `head_level_share` of that. The spring is what
+stick), and keeps it `trunk_lean_lag_s` late (`Skater.trunk_tilt`, a
+first-order delay off the lean and its replicated rate): the hips go over
+first and the chest follows, and on a reversal the chest crosses upright about
+0.1 s after the hips. Both the gameplay frame's shift and the spine read that
+one tilt, so the visible shoulders stay on the frame the hands hang from. The
+neck takes back `head_level_share` of the trunk's lean. The spring is what
 tells a steering correction from a turn, and gives the lean its weight: a held
 arc arrives in ~1 s, side-to-side steering shows as a few degrees.
 `test_lean_pivots_at_the_skates.gd`, `test_balance_rules.gd`.

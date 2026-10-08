@@ -167,3 +167,28 @@ func test_a_remote_reels_the_way_the_hit_shoved() -> void:
 	assert_gt(absf(a.upper_body.rotation.z), 0.05, "the shooter reels sideways")
 	assert_almost_eq(b.upper_body.rotation.x, a.upper_body.rotation.x, 0.002, "the reel's pitch")
 	assert_almost_eq(b.upper_body.rotation.z, a.upper_body.rotation.z, 0.002, "the reel's roll")
+
+
+# The chest trails the hips (Skater.trunk_tilt): building into a turn it has less
+# than its share of their lean, and on a reversal it crosses upright later, still
+# finishing the last lean as the hips go under it.
+func test_the_chest_trails_the_hips() -> void:
+	var c: SkaterController = _rig(20.0)
+	var sk: Skater = c.skater
+	_tick(c, Vector2(0.0, -1.0), 240)
+	_tick(c, Vector2(1.0, 0.0), 30)
+	assert_lt(sk.trunk_tilt().length(), 0.9 * sk.trunk_lean_share * sk.balance_tilt().length(),
+			"building into the turn, the chest is behind the hips")
+	_tick(c, Vector2(1.0, 0.0), 90)
+	var side: Vector2 = sk.balance_tilt().normalized()
+	var hips_cross: int = -1
+	var chest_cross: int = -1
+	for t: int in 120:
+		_tick(c, Vector2(-1.0, 0.0), 1)
+		if hips_cross < 0 and sk.balance_tilt().dot(side) < 0.0:
+			hips_cross = t
+		if chest_cross < 0 and sk.trunk_tilt().dot(side) < 0.0:
+			chest_cross = t
+	gut.p("reversal: hips cross upright at tick %d, chest at %d" % [hips_cross, chest_cross])
+	assert_gt(hips_cross, 0, "the hips reverse")
+	assert_gt(chest_cross, hips_cross + 8, "and the chest follows them over a beat later")

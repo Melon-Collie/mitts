@@ -563,7 +563,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# The balance and torso leans ride the same rail: the host's values at the
 	# ack, then the replay steps them forward through the unacked inputs.
 	balance_tilt_vel = server_state.balance_tilt_vel
-	skater.set_balance_tilt(server_state.balance_tilt)
+	skater.set_balance_tilt(server_state.balance_tilt, server_state.balance_tilt_vel)
 	_pose.adopt_wire_lean(server_state)
 	# Knockdown rides the same rail — snap to the host value, replay re-derives the
 	# per-tick decay + lock. is_knocked_down follows so the replay's _apply_movement

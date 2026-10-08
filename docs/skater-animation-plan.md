@@ -518,3 +518,12 @@ Measured on the same moves: a start builds 1 → 13° over 0.6 s, a held turn
 17° after a second, steering at 1.7 Hz shows 1–4°, and the shoulders' largest
 shift into a turn falls from ~0.6 m to 0.44 m (`Skater.max_lean_shift`, which
 the claim reach bound follows).
+
+**Then the trunk trails the hips.** The trunk had kept a fixed share of the
+lean at every instant, so hips and chest moved in lockstep, as one block. It now
+keeps that share `trunk_lean_lag_s` (0.12 s) late, as a first-order delay
+`share · (tilt − lag · rate)` of the lean and its rate, both already on the wire,
+so prediction, remotes and replays agree with no new state. The gameplay frame's
+shift and the spine both read it. Measured: building into a turn the chest
+holds under 90% of its share; on a reversal the hips cross upright at 0.42 s and
+the chest at 0.53 s. `test_lean_pivots_at_the_skates.gd`.
