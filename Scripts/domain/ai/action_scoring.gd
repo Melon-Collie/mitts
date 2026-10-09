@@ -580,6 +580,8 @@ static var goalie_arm_delay_s: float = GameRules.DEFAULT_GOALIE_ARM_REACTION_DEL
 static var goalie_butterfly_drop_s: float = GOALIE_BUTTERFLY_DROP_S
 static var goalie_lateral_accel_m_s2: float = GameRules.DEFAULT_GOALIE_LATERAL_ACCEL_M_S2
 static var goalie_arm_deploy_s: float = GOALIE_ARM_DEPLOY_S
+# The tier's puck-play GO margin (INF = he never leaves the net for a rim).
+static var goalie_puck_play_go_margin_s: float = 0.9
 
 # ── Planning keeper DEPTH: the challenge chart + the rush backflow ───────────
 # The keeper is not a fixed-depth turret. His radial distance out from the goal
@@ -659,6 +661,7 @@ static func set_goalie_profile(profile: GoalieSkillProfile) -> void:
 	goalie_arm_delay_s = profile.arm_reaction_delay_s
 	goalie_butterfly_drop_s = profile.butterfly_drop_s
 	goalie_lateral_accel_m_s2 = profile.lateral_accel_mps2
+	goalie_puck_play_go_margin_s = profile.puck_play_go_margin_s
 	# Deploy ramp = reaction-gated reach / arm speed (see GOALIE_ARM_DEPLOY_S).
 	goalie_arm_deploy_s = HOLE_BAND_EXT[HOLE_BAND_HIGH] / profile.glove_react_max_speed_mps
 	# Depth chart + backflow anchors — the tier's challenge depth (the live

@@ -63,9 +63,12 @@ var check_target: Vector3 = Vector3.ZERO
 # defender closing his man does not skate through anybody else.
 var engaged_peer_id: int = -1
 
-# The opponent this decision soft-locked onto (5v5 zone defense), or -1.
-# The state machine round-trips it into RoleContext.prev_locked_man on the
-# next dispatch so the lock is sticky without per-role state.
+# This decision is on the puck carrier even though its slot is not a pressurer
+# slot — the pinching D — so the poke jab arms for it.
+var pressures_puck: bool = false
+
+# The man this decision is covering, or -1. The state machine keeps it as the
+# skater's own coverage (`_prev_locked_man_pid`), read by the coverage tests.
 var locked_man_pid: int = -1
 
 # Arrive AT SPEED instead of braking to a stop at `target_position`. Off-puck

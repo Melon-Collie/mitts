@@ -211,7 +211,15 @@ decision layer:
    exit. The escape-speed gate (already in `reach_clearance`) is what makes
    the wheel price *well* exactly when the retriever has a step — the
    real trigger, for free.
-2. **The rim family — rim-as-a-bank-pass (fixes GAP 2b).** Rims stop being
+2. **The rim family — rim-as-a-bank-pass (fixes GAP 2b).** *As landed (second
+   time):* `AIRimPass` searches the rim as a RELEASE (bearing × a pace ladder up
+   to the passer's wrister max, banked glancing off the near boards), walks it on
+   the chase election's own path, races every opponent and their keeper along
+   it, and the carrier prices it as a third pass variant beside the flat feed and
+   the saucer through `_pass_ev`. A winner is released as a FLAT charged dump
+   along its bearing. (An earlier two-leg rim pricing was retired for a delivery
+   the release could not execute; this one fires the bearing it walked.) The
+   original design: Rims stop being
    zero-gain concessions and become PASSES whose lane is the boards wrap:
    - Receiver: the wall player up the rim's path (the half-wall W on the
      forward rim; the trailing partner / wall mate on the REVERSE rim back
@@ -248,9 +256,10 @@ decision layer:
    the lane × potential argmax only *adjusts along the wall* (low ↔ high)
    rather than swinging into the mid-seam by default. The mid-seam column
    survives as the explicit "wall is the carrier's own wheel route" case.
-   And the receiving half of the rim contract: when a rim commits toward
-   his wall, the W attacks the meet point along the boards
-   (arrive-at-speed, blade to the wall line) instead of holding the post.
+   The receiving half of the rim contract (the W attacking the meet point
+   along the boards) is NOT a role read: a rim reaches him through the
+   path-aware chase election and the reception's wall kill
+   (`Scripts/domain/ai/CLAUDE.md` → "Reception geometry").
 2. **Second touch**: when the wall W receives under a pinch, his own carrier
    compete must generate the glass-out — the Phase B rim aimed up the wall
    past the pinching D. The chip-to-C is already representable (a soft
@@ -268,6 +277,14 @@ decision layer:
    if the rim beats the step, bail up-ice rather than get sealed). This is
    the real keep-in point skill, and it rides the existing pinch/valve
    machinery rather than new structure.
+
+   As landed (`AIRoleDefenseman.wall_rim_keepin`): the read is the puck's
+   PREDICTED path crossing the line in the wall lane, not its current heading,
+   so a rim still coming around the end boards is read early. It is no longer
+   O-zone only: the forecheck's line stations (5v5 DP pair, 3v3 F3_HIGH) run it
+   against THEIR clears, which is the common case. The weak D's slide to the
+   middle and a forward filling the point are the rotation in
+   `defenseman.gd`, keyed on the strong D's depth.
 
 ### Phase D — Measure, calibrate, pin — instrument landed
 

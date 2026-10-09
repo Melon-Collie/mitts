@@ -241,11 +241,6 @@ var dispatch_period_ticks: int = 1
 # shared AIRoleHelpers.append_incumbent / incumbent_bonus / TARGET_SWITCH_MARGIN).
 var prev_role_target: Vector3 = Vector3.INF
 
-# The man this bot's zone role locked last dispatch (RoleDecision.
-# locked_man_pid round-tripped by the state machine; -1 = none / role
-# changed). The soft-lock's area-boundary hysteresis keys on it.
-var prev_locked_man: int = -1
-
 # Whether the match's ruleset enforces offsides (ARCADE ghost / NHL delayed —
 # both void an in-zone-early receiver until he tags up at the blue line; only
 # the OFF ruleset plays cherry-pickers as live threats). Read by the counter-

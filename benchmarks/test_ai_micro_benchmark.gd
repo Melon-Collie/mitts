@@ -161,6 +161,24 @@ func test_evaluator_costs() -> void:
 	_bench("open ice: best carry (candidates)", func() -> void:
 		open_carrier._best_carry(open_ctx, 0.1, open_ctx.self_pos))
 
+	# The rim pass: our carrier behind our own net with the forecheck in the
+	# lanes, the one scene where every receiver's flat feed is contested and the
+	# rim search runs in full.
+	var rim_ctx: RoleContext = _make_ctx(Vector3(3.0, 0.0, 28.0), 1)
+	var rim_carrier := AIRoleCarrier.new()
+	_bench("CARRIER compete (pinned breakout, rims)", func() -> void:
+		rim_carrier._pick_action_cooldown = 0
+		rim_carrier.decide(rim_ctx))
+	rim_carrier._build_action_opponents_lists(rim_ctx)
+	_bench("pinned breakout: fire phase (shot, passes, rims)", func() -> void:
+		rim_carrier._pick_fire_phase(rim_ctx))
+	_bench("AIRimPass.build (behind our net, 5 def)", func() -> void:
+		AIRimPass.build(Vector3(3.0, 0.0, 28.0), GameRules.DEFAULT_WRISTER_POWER_MAX_M_S,
+				OUR_NET_Z, rim_carrier._scratch_opponents,
+				rim_carrier._scratch_opponent_vels, rim_carrier._scratch_opponent_caps)
+		for k: int in AIRimPass.count:
+			AIRimPass.opp_time(k))
+
 	# Exposure-term share: same compete with the 5v5 gate closed.
 	var carrier3 := AIRoleCarrier.new()
 	_bench("CARRIER compete (no exposure)", func() -> void:
