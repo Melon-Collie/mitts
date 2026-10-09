@@ -292,12 +292,12 @@ func apply(delta: float) -> void:
 			if active & _floor_bits[i]:
 				stance = maxf(stance, _floor_layers[i].stance_floor())
 	p.solve_stance(deg_to_rad(_controller.stance_hip_deg) * stance)
-	p.seed_legs(_locomotion, _pivot_yaw_l, _pivot_yaw_r)
+	p.seed_legs(_locomotion, _pivot_yaw_l, _pivot_yaw_r, _controller.stance_knee_release)
 	if active:
 		for i: int in _leg_layers.size():
 			if active & _leg_bits[i]:
 				_leg_layers[i].shape_legs(p)
-	p.solve_knees(_locomotion, _controller.stance_knee_release)
+	p.extend_knees()
 	p.seed_trunk(_locomotion)
 	if active:
 		for i: int in _trunk_layers.size():

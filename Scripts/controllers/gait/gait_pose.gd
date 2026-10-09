@@ -65,6 +65,10 @@ var foot_flat_r: float = 0.0
 # Per-blade edge load for the ice VFX, 0..1.
 var edge_l: float = 0.0
 var edge_r: float = 0.0
+# Where the locomotion puts each ankle, and the joints the leg solve reaches it
+# with (LegIK, metres from the hip pivot).
+var leg_l := LegIK.Leg.new()
+var leg_r := LegIK.Leg.new()
 
 # Trunk texture, radians; the coordinator's inertia filter smooths it.
 var trunk_pitch: float = 0.0
@@ -88,30 +92,15 @@ func solve_stance(hip: float) -> void:
 	drop = leg_scale * (THIGH_LEN * (1.0 - cos(hip)) + SHIN_LEN * (1.0 - cos(stance_shin)))
 
 
-# The stroke on the solved stance, before any layer shapes the legs.
-func seed_legs(loco: SkaterLocomotion, yaw_l: float, yaw_r: float) -> void:
-	l_pitch = stance_hip + loco.l_pitch
-	l_roll = loco.l_roll
-	r_pitch = stance_hip + loco.r_pitch
-	r_roll = loco.r_roll
-	l_yaw = yaw_l
-	r_yaw = yaw_r
-	frame_share = 0.0
-	plant = 1.0
-	plant_l = 1.0
-	plant_r = 1.0
-	knee_extend_l = 0.0
-	knee_extend_r = 0.0
-	foot_flat_l = 0.0
-	foot_flat_r = 0.0
-
-
+# The stroke on the solved stance, before any layer shapes the legs: where it
+# puts each ankle, and the leg solve that reaches it.
+#
 # Knee flex — three layers that read as one leg working. (1) The stance flex,
 # the seated base both knees carry. (2) Push extension: the loaded leg
 # straightens as it extends back (`release` of the stance flex gone at full
 # extension and full stroke intensity) — the power stroke. (3) The locomotion
 # state's own folds: recovery tuck, crossover clearance, the glide's inside
-# tuck. Then any layer's straightening, never past straight.
+# tuck.
 #
 # Then the fore-aft compensation. The dynamic knee layers exist for LIFT and
 # leg-length texture, but each also drags the FOOT fore-aft: uncompensated,
@@ -121,19 +110,57 @@ func seed_legs(loco: SkaterLocomotion, yaw_l: float, yaw_r: float) -> void:
 # profile). The thigh counter-pitches by the small-angle FK term
 # (Δpitch = −Δknee · L_shin / L_leg), so the foot tracks the thigh's curve —
 # slow recovery, fast push — while the knee keeps its full range.
-func solve_knees(loco: SkaterLocomotion, release: float) -> void:
+func seed_legs(loco: SkaterLocomotion, yaw_l: float, yaw_r: float, release: float) -> void:
 	var r: float = release * loco.intensity
-	l_knee = -(stance_knee * (1.0 - r * loco.l_ext) + loco.l_tuck)
-	r_knee = -(stance_knee * (1.0 - r * loco.r_ext) + loco.r_tuck)
-	if knee_extend_l > 0.0:
-		l_knee = minf(l_knee + knee_extend_l, 0.0)
-	if knee_extend_r > 0.0:
-		r_knee = minf(r_knee + knee_extend_r, 0.0)
-	var shin_frac: float = SHIN_LEN / (THIGH_LEN + SHIN_LEN)
-	l_pitch += -(l_knee + stance_knee) * shin_frac
-	r_pitch += -(r_knee + stance_knee) * shin_frac
+	var knee_l: float = -(stance_knee * (1.0 - r * loco.l_ext) + loco.l_tuck)
+	var knee_r: float = -(stance_knee * (1.0 - r * loco.r_ext) + loco.r_tuck)
+	_reach(leg_l, stance_hip + loco.l_pitch - (knee_l + stance_knee) * _shin_frac(),
+			yaw_l, loco.l_roll, knee_l)
+	_reach(leg_r, stance_hip + loco.r_pitch - (knee_r + stance_knee) * _shin_frac(),
+			yaw_r, loco.r_roll, knee_r)
+	l_pitch = leg_l.pitch
+	l_roll = leg_l.roll
+	l_knee = leg_l.knee
+	l_yaw = yaw_l
+	r_pitch = leg_r.pitch
+	r_roll = leg_r.roll
+	r_knee = leg_r.knee
+	r_yaw = yaw_r
+	frame_share = 0.0
+	plant = 1.0
 	plant_l = plant_share(loco.intensity, loco.edge_floor)
 	plant_r = plant_l
+	knee_extend_l = 0.0
+	knee_extend_r = 0.0
+	foot_flat_l = 0.0
+	foot_flat_r = 0.0
+
+
+# The ankle the stroke's joints put the leg at, then the joints that reach it.
+func _reach(leg: LegIK.Leg, pitch: float, yaw: float, roll: float, knee: float) -> void:
+	leg.pitch = pitch
+	leg.yaw = yaw
+	leg.roll = roll
+	leg.knee = knee
+	LegIK.place(leg, leg_scale * THIGH_LEN, leg_scale * SHIN_LEN)
+	LegIK.solve(leg, leg_scale * THIGH_LEN, leg_scale * SHIN_LEN)
+
+
+# Any layer's straightening, never past straight, with the thigh counter-pitched
+# as the stroke's own knee is.
+func extend_knees() -> void:
+	if knee_extend_l > 0.0:
+		var k: float = minf(l_knee + knee_extend_l, 0.0)
+		l_pitch -= (k - l_knee) * _shin_frac()
+		l_knee = k
+	if knee_extend_r > 0.0:
+		var k: float = minf(r_knee + knee_extend_r, 0.0)
+		r_pitch -= (k - r_knee) * _shin_frac()
+		r_knee = k
+
+
+static func _shin_frac() -> float:
+	return SHIN_LEN / (THIGH_LEN + SHIN_LEN)
 
 
 # The stroke's bob, trunk texture and edge loads, before the trunk layers. The

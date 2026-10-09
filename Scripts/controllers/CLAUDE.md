@@ -500,6 +500,12 @@ Things the split alone would get wrong, handled where noted:
   mix with a carve fades in amplitude, never in tempo.
 - **The glide is the remainder.**
 
+The legs are solved from where the ankles go (`LegIK`): `GaitPose.seed_legs`
+places each ankle from the stroke's joints on the stance and solves the leg
+back to it, and the layers lay their joint offsets on that. Until the plan's
+Phase 3 the target is the stroke's own, so the pose is exactly the joint
+stroke's; from then on a state is authored as where its skates go.
+
 ### Overlays are layers, and the order is the priority
 
 Everything the gait lays on the stroke — the faceoff stance, the loaded skating

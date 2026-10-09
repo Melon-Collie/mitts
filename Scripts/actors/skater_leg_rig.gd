@@ -111,7 +111,7 @@ var _seat_ext := PackedFloat32Array([0.0, 0.0])
 var _seat_version: int = -1
 # _plant_feet's answer, per side.
 var _plant_ext := PackedFloat32Array([0.0, 0.0])
-# The fore-aft compensation GaitPose.solve_knees counter-pitches a knee change
+# The fore-aft compensation GaitPose.seed_legs counter-pitches a knee change
 # by — shin over leg, from this rig's own segment offsets.
 var _shin_frac: float = 0.0
 
@@ -373,7 +373,7 @@ func set_contact(plant_l: float, plant_r: float, dt: float) -> void:
 # placed from where the blades actually are.
 #
 # Both feet first (_plant_feet): the higher runner's knee is re-solved (the
-# thigh counter-pitched as GaitPose.solve_knees does, so the foot keeps its
+# thigh counter-pitched as GaitPose.seed_legs does, so the foot keeps its
 # fore-aft place) until it meets the lower one, by the gait's plant weight —
 # the two-footed stances, not the stride, whose push and recovery are the
 # stroke's own. Neither leg's re-solve moves the hips, so this is independent of

@@ -301,3 +301,29 @@ choreography from coaching material, and are to be judged on the strips.
   | D held at speed | up to 0.67 crossover | carve first, crossovers growing to 0.59 as thrust returns |
   | taps every 0.25 s | crossover up to 0.24 | crossover ≤ 0.14, each tap carved |
 
+## §12 Phase 2 as built
+
+- **The solve** is `LegIK` (`Scripts/domain/rules/`), analytic, in the rig's
+  own parametrisation: the hip's YXZ euler and a knee fold about X. It works in
+  scalars: `Vector3` is single precision, and near a straight knee the fold is
+  the square root of the reach error. `test_leg_ik.gd` holds the round trip
+  (5·10⁻⁸ rad worst over the gait's range) and the out-of-reach behaviour;
+  `test_leg_ik_mirrors_the_rig.gd` holds the model against the live bones,
+  build lengths included.
+- **The target is the ankle, not the skate.** The boot's centre sits 0.10 m
+  ahead of the shin's end, so near straight two knee folds reach the same boot
+  position; the ankle has exactly one. Phase 3 authors where the skate goes and
+  offsets it to the ankle by the boot.
+- **Not in the design: the states still blend in joint space.** §8 has every
+  state's foot path taken from its stroke by FK; FK is non-linear, so blending
+  per-state targets would move any pose that mixes states, and the phase is
+  defined as pose-identical. The ankle target is the FK of the blended joints.
+  Phase 3 adds each re-authored state as a foot-space offset on that target,
+  and Phase 4 empties the joint-space side.
+- **Not yet: the lean tilt** (§3 *Frame*). Un-tilting targets moves the feet,
+  so it arrives with Phase 3's targets on the ice.
+- **The layers are unchanged**: their joint offsets land on the solved legs,
+  and a layer's knee straightening (`GaitPose.extend_knees`) counter-pitches the
+  thigh as the stroke's own knee does.
+- **Measured:** every strip pixel-identical to Phase 1's, and the printed
+  locomotion mix identical line for line.

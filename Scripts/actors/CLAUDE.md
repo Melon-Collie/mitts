@@ -125,7 +125,7 @@ So the feet are placed from where the blades are (`SkaterLegRig.seat_on_ice`,
 called by the spine as it places the hips):
 
 - **Both feet, then the body.** The lower runner is the support. The other's
-  knee is re-solved (the thigh counter-pitched as `GaitPose.solve_knees` does,
+  knee is re-solved (the thigh counter-pitched as `GaitPose.seed_legs` does,
   so the foot keeps its fore-aft place) to bring its runner down to the
   support's; where it cannot reach — a braced front leg already straight — the
   support folds to meet it, the skater sitting deeper on the back leg. Then the
