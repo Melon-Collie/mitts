@@ -88,6 +88,15 @@ extends GutTest
 # belong to the table above: they read 0.63 and 0.35 unattended/tick and carry
 # their own pins. Only low cycle still runs the bot attack.
 #
+# Low cycle then read 2.02 unattended and 0.027 open danger, and moved to 2.21 and
+# 0.180 when the duel harness started holding the blade at the shot origin
+# through a wrister charge (as the controller does). Explained, not a coverage
+# change: no defensive code moved in that step. The rollout splits at its first
+# loose puck — a feed misses behind the net, and where the old harness let an
+# attacker win that race and shoot, now a defender collects it after ~1.5 s
+# loose. A loose puck counts every attacker in the zone as a man to cover, so a
+# longer loose window reads as more men unattended and a dearer worst one.
+#
 # A regression to the argmaxes still breaks the double-lock ceiling, which is
 # the guard that separated the two models sharply in the first place.
 #
@@ -135,10 +144,10 @@ const ZONE_SLOTS: Array[int] = [
 ]
 
 # Attackers in the zone that no defender has, per tick — the bot-attack
-# fixtures' shared ceiling, now guarding low cycle alone (measured 2.02, with a
+# fixtures' shared ceiling, now guarding low cycle alone (measured 2.21, with a
 # defender off chasing the puck counted as covering nobody). A pinned
 # measurement, not a bound derived from the model it replaced.
-const UNCOVERED_CEILING: float = 2.2
+const UNCOVERED_CEILING: float = 2.4
 # The scripted crossing cutter (measured 0.35), pinned at the same ~0.28 margin.
 const UNCOVERED_CEILING_CROSSING_CUTTER: float = 0.63
 # The scripted point shot (measured 0.63), pinned at the same ~0.28 margin.
