@@ -47,7 +47,9 @@ const _SIZE_LIMIT: int = 800
 const _SIZE_SLACK: int = 40
 
 const _SIZE_ALLOWANCE: Dictionary[String, int] = {
-	"res://Scripts/ai/skater_agent_state_machine.gd": 6069,
+	# +3: the wrister wind-up side reads the trailer's relative motion over the
+	# charge (#740), not just where he stands at the commit.
+	"res://Scripts/ai/skater_agent_state_machine.gd": 6072,
 	"res://Scripts/game/game_manager.gd": 5654,
 	"res://Scripts/domain/ai/action_scoring.gd": 4458,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
@@ -58,7 +60,10 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# It is a one-tick finite difference feeding a positional decision, so a
 	# teleport read as travel moved the tracked threat metres in a tick.
 	"res://Scripts/controllers/goalie_controller.gd": 4901,
-	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3755,
+	# +162: the rim pass. The path search lives in AIRimPass; what stays here is
+	# the variant's EV (it prices through _pass_ev, an instance method) and the
+	# commit that releases a winning rim as a flat charged dump.
+	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3910,
 	"res://Scripts/controllers/skater_controller.gd": 3332,
 	"res://Scripts/actors/skater.gd": 2697,
 	"res://Scripts/networking/network_manager.gd": 2824,

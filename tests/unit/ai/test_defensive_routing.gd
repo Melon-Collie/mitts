@@ -375,11 +375,12 @@ func test_two_defencemen_are_not_blown_by_a_neutral_zone_rush() -> void:
 # controls, and it is settled before the downstream variance starts.
 #
 #   Reference over the 8-start sweep:   no numbers half  →  with it
-#     mean deepest-body drift                  21.9 m            19.3 m
-#     worst single start                       24.2 m            20.2 m
+#     mean deepest-body drift                  21.9 m            19.0 m
+#     worst single start                       24.2 m            20.5 m
 #     starts with nobody left back              3/8               0/8
 #
-# The window is the FIRST 2.5 s, which is where the shape is set. Run it longer
+# The window is the FIRST 2.5 s, which is where the shape is set, and it ends
+# early if we win the puck — from there it is an attack. Run it longer
 # and a puck that rims into their end starts dragging the whole team after it,
 # which is correct play and not this bound's business — the reading gets noisier
 # without getting more informative.
@@ -415,6 +416,10 @@ func _deepest_body_drift(puck_at: Vector3, their_edge: float) -> float:
 	var worst: float = 0.0
 	for _t: int in int(LOOSE_SECS / DT):
 		duel.step()
+		# Once WE have it the shape is an attack, not this bound's business.
+		var c: int = duel.carrier()
+		if c != -1 and duel.team_map[c] == 1:
+			break
 		var deepest: float = INF
 		for pid: int in [11, 12, 13]:
 			deepest = minf(deepest, duel._skater(pid).pos.distance_to(net))

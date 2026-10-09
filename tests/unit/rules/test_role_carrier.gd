@@ -3210,3 +3210,57 @@ func test_a_carrier_out_front_keeps_the_old_goal_line_clamp() -> void:
 			Vector3(3.0, 0.0, OPP_NET_Z - 1.6), false),
 			"a carrier in front never plans a step past the goal line")
 	assert_true(c._candidate_ice_legal(Vector3(3.0, 0.0, -18.0), false))
+
+
+# ── The rim pass (AIRimPass) ─────────────────────────────────────────────────
+# Our D behind our own net, a forechecker on his hip and another sitting in the
+# straight lane to the strong half-wall winger. The boards are the open lane:
+# rimmed round the corner, the puck reaches the winger before anybody of theirs.
+
+func _rim_breakout_ctx(lane_blocked: bool) -> RoleContext:
+	var self_pos := Vector3(3.0, 0, 28.0)
+	var skaters: Array = [
+		[1, TEAM_ID, self_pos],
+		[2, TEAM_ID, Vector3(11.5, 0, 14.0)],      # strong half-wall winger
+		[3, 1, Vector3(1.5, 0, 28.5)],             # on the D's hip
+		[5, 1, Vector3(-3.0, 0, 18.0)],
+	]
+	if lane_blocked:
+		skaters.append([4, 1, Vector3(7.0, 0, 21.0)])   # in the straight lane
+	return _make_ctx(self_pos, skaters)
+
+
+func test_a_blocked_breakout_lane_is_rimmed_round_the_boards() -> void:
+	var ctx := _rim_breakout_ctx(true)
+	var c := AIRoleCarrier.new()
+	c._pick_fire_phase(ctx)
+	gut.p("  best pass %.4f to %d, rim %s at %.1f m/s" % [c._phase_best_pass_score,
+			c._phase_best_pass_peer, c._phase_best_pass_rim_dir, c._phase_best_pass_rim_pace])
+	assert_eq(c._phase_best_pass_peer, 2, "the winger is the target")
+	assert_ne(c._phase_best_pass_rim_dir, Vector3.ZERO,
+			"...by the boards, not through the forechecker")
+	assert_gt(c._phase_best_pass_rim_pace, AIActionScoring.PASS_SPEED_M_S,
+			"a rim is fired hard — the corner bleeds pace")
+
+
+func test_a_rim_commits_as_a_flat_charged_release_along_its_bearing() -> void:
+	var ctx := _rim_breakout_ctx(true)
+	var c := AIRoleCarrier.new()
+	c.decide(ctx)
+	assert_eq(c.intended_action, AIRoleCarrier.INTENT_DUMP,
+			"pinned on his own goal line with the lane cut, he rims it")
+	assert_true(c.dump_is_rim, "the dump release fires FLAT as a rim")
+	assert_false(c.dump_is_soft)
+	assert_eq(c.pass_target_peer_id, 2)
+	assert_gt(c.dump_launch_speed, AIActionScoring.PASS_SPEED_M_S)
+
+
+func test_an_open_breakout_lane_is_passed_straight() -> void:
+	var ctx := _rim_breakout_ctx(false)
+	var c := AIRoleCarrier.new()
+	c._pick_fire_phase(ctx)
+	gut.p("  best pass %.4f to %d, rim %s" % [c._phase_best_pass_score,
+			c._phase_best_pass_peer, c._phase_best_pass_rim_dir])
+	assert_gt(c._phase_best_pass_score, 0.0)
+	assert_eq(c._phase_best_pass_rim_dir, Vector3.ZERO,
+			"an open lane takes the tape-to-tape feed")

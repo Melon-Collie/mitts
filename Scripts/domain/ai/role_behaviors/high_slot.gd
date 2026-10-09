@@ -22,6 +22,11 @@ const ABOVE_PUCK_MARGIN_M: float = 1.0
 
 
 static func decide(ctx: RoleContext) -> RoleDecision:
+	# "D pinches, F3 fills": the strong point down his wall puts F3 on the line.
+	var fill: RoleDecision = AIRoleDefenseman.rotate_up_to_point(
+			ctx, AIRoleSlots.Slot.POINT_STRONG)
+	if fill != null:
+		return fill
 	var d := RoleDecision.new()
 	var own_dir: float = ctx.own_goal_dir
 	var opp_net: Vector3 = ctx.attacking_goal_pos

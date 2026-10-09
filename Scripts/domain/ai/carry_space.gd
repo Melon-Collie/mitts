@@ -74,10 +74,17 @@ const EVADE_SAFE_CLEAR_MIN_M: float = GameRules.DEFAULT_BLADE_LENGTH_M
 # playing surface — the seam samplers reject those samples (the handling
 # envelope intersected with the rink; see the boards note above). Uses the
 # INNER extents (the surface the puck actually lives on, inside kickplate lip
-# + wall half-thickness).
+# + wall half-thickness), rounded corners included: in a corner quadrant the
+# nearest board is the arc, which the rectangle overshoots by up to ~3.5 m —
+# exactly where a carrier gets pinned.
 static func board_gap_m(point: Vector3) -> float:
-	return minf(GameRules.INNER_HALF_WIDTH - absf(point.x),
-			GameRules.INNER_HALF_LENGTH - absf(point.z))
+	var ax: float = absf(point.x)
+	var az: float = absf(point.z)
+	if ax > GameRules.CORNER_CENTER_X and az > GameRules.CORNER_CENTER_Z:
+		var dx: float = ax - GameRules.CORNER_CENTER_X
+		var dz: float = az - GameRules.CORNER_CENTER_Z
+		return GameRules.INNER_CORNER_RADIUS - sqrt(dx * dx + dz * dz)
+	return minf(GameRules.INNER_HALF_WIDTH - ax, GameRules.INNER_HALF_LENGTH - az)
 
 
 # Clearance (metres) of a puck point from every defender's reachable stick at
@@ -772,8 +779,7 @@ static func controlled_space(from: Vector3, from_vel: Vector3,
 			var dir_z: float = fx * sa + fz * ca
 			var sample := Vector3(
 					from.x + dir_x * r, 0.0, from.z + dir_z * r)
-			if absf(sample.x) > GameRules.INNER_HALF_WIDTH \
-					or absf(sample.z) > GameRules.INNER_HALF_LENGTH:
+			if board_gap_m(sample) < 0.0:
 				continue   # off the playing surface — see the WEIGHTING note
 			# A sample whose straight path runs through a cage is not ice this
 			# carrier can take, so it leaves both sums exactly like an off-surface

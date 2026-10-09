@@ -134,9 +134,10 @@ func test_every_angle_of_attack_produces_a_shot() -> void:
 
 # Cells of the pressured sweep below where the backchecker takes the look away
 # (strips the puck, or the carrier never releases). Pinned exactly, not
-# budgeted — see the note at the assertion. Empty: a trailer at matched pace
-# never gains enough to get a stick on the wind-up, so every tier shoots.
-const PRESSURED_ANGLED_NO_SHOT_CELLS: Array = []
+# budgeted — see the note at the assertion. The trailer is faster than the
+# carrier (a puckless skater's top speed over a carrier's), so he gains on the
+# wind-up; EASY, which carries the puck presented, loses one look to it.
+const PRESSURED_ANGLED_NO_SHOT_CELLS: Array = ["EASY@+45"]
 
 
 func test_pressured_1v1_with_backchecker_still_shoots() -> void:

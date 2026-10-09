@@ -52,6 +52,12 @@ const F2_STRONG_DEPTH_OFF_GOAL_M: float = 12.0
 
 
 static func decide_f2(ctx: RoleContext, is_strong: bool) -> RoleDecision:
+	# The 1-2-2's high forward is the one who fills when the strong D pinches.
+	if not is_strong:
+		var fill: RoleDecision = AIRoleDefenseman.rotate_up_to_point(
+				ctx, AIRoleSlots.Slot.DP_STRONG)
+		if fill != null:
+			return fill
 	var carrier_pos: Vector3 = AIRoleHelpers.resolve_defensive_play_ref(ctx)
 	if not carrier_pos.is_finite():
 		var d := RoleDecision.new()
@@ -76,6 +82,14 @@ static func _decide_high(ctx: RoleContext) -> RoleDecision:
 	# opp blue line is at -own_goal_dir * BLUE_LINE_Z.
 	var blue_z: float = -ctx.own_goal_dir * GameRules.BLUE_LINE_Z
 	var wall_x: float = ctx.strong_x * (GameRules.RINK_HALF_WIDTH - F3_WALL_INSET_M)
+
+	# Their clear coming up my wall: kill it at the line. The stand is still the
+	# line, so the team's last man stays its last man.
+	var keepin: Vector3 = AIRoleDefenseman.wall_rim_keepin(ctx, ctx.strong_x)
+	if keepin.is_finite():
+		d.target_position = keepin
+		d.arrive_at_speed = true
+		return d
 
 	# The pinch read (AIRoleHelpers.may_hold_forward_stand): opponents bottled
 	# deep keep the line; their breakout genuinely under way, or a man behind

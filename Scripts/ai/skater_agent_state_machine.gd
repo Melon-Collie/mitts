@@ -736,8 +736,8 @@ var _inert_rush_read := AIRushRead.new()
 var _prev_role_slot: int = AIRoleSlots.Slot.NONE
 var _prev_role_target: Vector3 = Vector3.INF
 # The man this skater's role is covering, from the last role dispatch
-# (RoleDecision.locked_man_pid) — feeds RoleContext.prev_locked_man, reset on
-# slot change, and cleared on leaving OFF_PUCK: a skater chasing or carrying
+# (RoleDecision.locked_man_pid) — reset on slot change, and cleared on
+# leaving OFF_PUCK: a skater chasing or carrying
 # the puck covers nobody, whatever his last role decision said.
 var _prev_locked_man_pid: int = -1
 # Incumbent for the offensive stations' control hysteresis (see
@@ -2273,8 +2273,6 @@ func _dispatch_role_decision(ctx: RoleContext) -> RoleDecision:
 	# dispatch — INF across a slot change so no role inherits another's
 	# target (see RoleContext.prev_role_target).
 	ctx.prev_role_target = _prev_role_target if slot == _prev_role_slot else Vector3.INF
-	# Zone soft-lock incumbent, same reset-across-slot-change contract.
-	ctx.prev_locked_man = _prev_locked_man_pid if slot == _prev_role_slot else -1
 	# Pinch-read hysteresis incumbent, same reset-across-slot-change contract.
 	ctx.prev_held_forward_stand = _prev_held_forward_stand \
 			if slot == _prev_role_slot else false
@@ -2346,14 +2344,14 @@ func _dispatch_role_decision(ctx: RoleContext) -> RoleDecision:
 			decision = AIRoleWideLane.decide(ctx, -1.0)
 		AIRoleSlots.Slot.WIDE_R:
 			decision = AIRoleWideLane.decide(ctx, 1.0)
-		AIRoleSlots.Slot.TRAILER:
-			# High-slot trailer — SUPPORT's goal-side trail read.
+		AIRoleSlots.Slot.TRAILER, AIRoleSlots.Slot.CARRIER:
+			# High-slot trailer — SUPPORT's goal-side trail read. CARRIER lands
+			# here off the puck: the brain slots off the reaction-delayed carrier
+			# belief, so a passer keeps it for carrier_reaction_delay_s after the
+			# release. SUPPORT is his next job; holding braked him to a stop.
 			decision = AIRoleSupport.decide(ctx)
 		_:
-			# Slot.NONE, and CARRIER for the one brain cadence after a release
-			# (the slot is cached; AIRoleSlots only ever assigns it to the live
-			# carrier_peer_id, so it cannot persist). Either way there is
-			# nothing to be in position FOR yet. Hold.
+			# Slot.NONE: nothing to be in position FOR yet. Hold.
 			decision = RoleDecision.new()
 			decision.target_position = ctx.self_pos
 	_prev_role_slot = slot
@@ -3528,35 +3526,38 @@ func _state_shoot_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: 
 		# chirality classifier to charge the same shot — poke-avoidance must
 		# not flip it to the opposite side of a relocation the score depends
 		# on. Otherwise forehand by default, flipped to backhand if a defender
-		# is within stick reach AND clearly on the forehand side — they'd poke
-		# the puck off a forehand wind-up. Locked for the charge so no
-		# mid-swing oscillation.
+		# is within stick reach AND clearly on the forehand side at any point of
+		# the charge (relative motion projected to mid-way and release, so a
+		# trailer drifting up onto the forehand counts) — they'd poke the puck
+		# off a forehand wind-up. Locked for the charge: no mid-swing oscillation.
 		var offset_side_dot: float = _shot_release_offset_locked.x * forehand_perp_init.x \
 				+ _shot_release_offset_locked.z * forehand_perp_init.z
 		if _shot_release_offset_locked.length_squared() > 0.0001:
 			_shoot_side_sign = 1.0 if offset_side_dot >= 0.0 else -1.0
 		else:
 			_shoot_side_sign = 1.0
+			var self_vel: Vector3 = snapshot.skater_states[_peer_id].velocity \
+					if snapshot.skater_states.has(_peer_id) else Vector3.ZERO
 			for peer_id: int in snapshot.skater_states:
-				if peer_id == _peer_id:
+				if _shoot_side_sign < 0.0:
+					break
+				if peer_id == _peer_id or _team_id_by_peer.get(peer_id, -1) == _team_id:
 					continue
-				if _team_id_by_peer.get(peer_id, -1) == _team_id:
-					continue
-				var opp_pos: Vector3 = snapshot.skater_states[peer_id].position
-				var rel_x: float = opp_pos.x - self_pos.x
-				var rel_z: float = opp_pos.z - self_pos.z
-				var rel_len_sq: float = rel_x * rel_x + rel_z * rel_z
+				var opp: SkaterNetworkState = snapshot.skater_states[peer_id]
 				# THIS defender's poke reach — his real stick + the overhang
 				# buffer, league fallback when his build isn't wired.
 				var opp_caps: AISkaterCaps = _caps_by_peer.get(peer_id)
 				var reach: float = BOT_FOREHAND_STICK_REACH_M if opp_caps == null \
 						else opp_caps.stick_reach + BOT_POKE_REACH_BUFFER_M
-				if rel_len_sq > reach * reach:
-					continue
-				var forehand_dot: float = rel_x * forehand_perp_init.x + rel_z * forehand_perp_init.z
-				if forehand_dot > BOT_FOREHAND_LATERAL_THRESHOLD_M:
-					_shoot_side_sign = -1.0
-					break
+				for k: int in 3:
+					var t: float = 0.5 * float(k) * BOT_WRISTER_LOOKAHEAD_S
+					var rel_x: float = opp.position.x - self_pos.x + (opp.velocity.x - self_vel.x) * t
+					var rel_z: float = opp.position.z - self_pos.z + (opp.velocity.z - self_vel.z) * t
+					if rel_x * rel_x + rel_z * rel_z <= reach * reach \
+							and rel_x * forehand_perp_init.x + rel_z * forehand_perp_init.z \
+									> BOT_FOREHAND_LATERAL_THRESHOLD_M:
+						_shoot_side_sign = -1.0
+						break
 
 		# Wind-up endpoint OFFSETS captured at tick 0 (relative to self_pos)
 		# and held constant for the charge. Sized to the COSMETIC wind-up span
@@ -3746,16 +3747,16 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 	if is_dump:
 		_pass_should_saucer = false
 		_pass_target_peer_id = -1
-		# Delivery kind: FLAT for the dump-in (below) and for the 5v5 rim (the
-		# bank-pass delivery the posted winger meets — breakout plan §B); the
-		# HIGH chip clear lifts over every stick between us and the blue line.
+		# Delivery kind: FLAT for the dump-in (below) and for the rim pass
+		# (AIRimPass — the boards carry it to a teammate); the HIGH chip clear
+		# lifts over every stick between us and the blue line.
 		if _dump_is_soft or _dump_is_rim:
 			input.elevation_level = ShotMechanics.ELEVATION_FLAT
 		else:
 			input.elevation_level = ShotMechanics.ELEVATION_HIGH
-		# Only the dump-in charges (see _dump_launch_speed): its depth IS its
-		# pace, so it has to leave at the pace the search placed it with. The
-		# clear and the rim stay one-tick releases at the fixed quick pace.
+		# The dump-in and the rim charge (see _dump_launch_speed): where each
+		# goes IS its pace, so it has to leave at the pace its search walked.
+		# The clear stays a one-tick release at the fixed quick pace.
 		#
 		# FLAT is load-bearing on the charged path, not a look: release_wrister
 		# builds a charged release as the direction (dir.x, tan, dir.z)
@@ -3765,8 +3766,8 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 		# makes a searched landing spot the spot the puck reaches. (The clear
 		# keeps its HIGH chip: it fires on the quick-pass path, whose loft rides
 		# the fixed-vy pass table and leaves ground speed alone.)
-		_pass_should_charge = _dump_is_soft
-		if _dump_is_soft:
+		_pass_should_charge = _dump_is_soft or _dump_is_rim
+		if _pass_should_charge:
 			_pass_target_speed = _dump_launch_speed
 
 	_apply_brake_steering(input, snapshot, self_pos)
@@ -5202,6 +5203,8 @@ func _poke_jab_aim(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 func _is_puck_pressurer_slot(snapshot: WorldSnapshot) -> bool:
 	if _current_strategy == null:
 		return false
+	if _cached_role_decision != null and _cached_role_decision.pressures_puck:
+		return true   # a station role on the carrier this beat (the pinching D)
 	var slot: int = _current_strategy.get_slot(_peer_id)
 	if slot == AIRoleSlots.Slot.PRESSURE \
 			or slot == AIRoleSlots.Slot.F1_PRESSURE \
