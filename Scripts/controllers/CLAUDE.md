@@ -501,10 +501,28 @@ Things the split alone would get wrong, handled where noted:
 - **The glide is the remainder.**
 
 The legs are solved from where the ankles go (`LegIK`): `GaitPose.seed_legs`
-places each ankle from the stroke's joints on the stance and solves the leg
-back to it, and the layers lay their joint offsets on that. Until the plan's
-Phase 3 the target is the stroke's own, so the pose is exactly the joint
-stroke's; from then on a state is authored as where its skates go.
+places each ankle from the stroke's joints on the stance, lays on the states
+authored as where their skates go, and solves the leg to it; the layers lay
+their joint offsets on that. The stride is authored that way
+(`SkaterLocomotion._stride_path`): out and back from under the hips, toe
+turned out, landing ahead of them. Three things make it stand on the ice:
+
+- **It sits as low as its push needs.** A leg can only reach so far out at the
+  hip height it is at, so the stride asks for the crouch that lets the push's
+  full extension reach the ice (`GaitPose.reach_hip`, capped at
+  `stride_sit_max_deg`), and the reach eases in near full stretch rather than
+  halting the knee mid-swing. Driving hard reads deeper and wider than
+  cruising for that reason, not by a separate tunable.
+- **It is authored on the ice, not on the hips.** The hips pitch with the
+  lower body and tip with the balance lean about the ice under the body, so
+  the stride's targets are turned through that tilt (`GaitPose.ice`, `lean`):
+  the skate stays where it was put and the body goes over it.
+- **It aims the runner, not the ankle.** Its blades lie flat along their length
+  on whatever edge the leg rolls them to (the ankle's level give-back), and an
+  edge raises a runner toward its ankle, so the ankle comes down by what the
+  edge takes off and the leg is solved again.
+
+The other states are still the joint stroke's until the plan's Phase 4.
 
 ### Overlays are layers, and the order is the priority
 

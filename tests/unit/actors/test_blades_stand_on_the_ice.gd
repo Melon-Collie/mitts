@@ -37,6 +37,9 @@ var _controller: SkaterController = null
 # measured ticks, radians: a contact solve that hops between answers pops a leg
 # far faster than any stroke moves one.
 var _joint_step: float = 0.0
+# Over the last _skate's measured ticks, the highest a skate's runner rode while
+# that skate was pushing: moving back and out from under the body.
+var _push_float: float = 0.0
 var _runner := PackedVector3Array()
 
 
@@ -94,6 +97,8 @@ func _skate(steer: Callable, measure_from: int = WARMUP_TICKS) -> Vector4:
 	var last := PackedVector3Array()
 	last.resize(pivots.size())
 	_joint_step = 0.0
+	_push_float = 0.0
+	var skate_at: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 	for i: int in WARMUP_TICKS + MEASURE_TICKS:
 		steer.call(input, i, _skater.velocity)
 		input.mouse_world_pos += _skater.global_position
@@ -115,7 +120,20 @@ func _skate(steer: Callable, measure_from: int = WARMUP_TICKS) -> Vector4:
 		hi = maxf(hi, minf(left, right))
 		up_lo = minf(up_lo, maxf(left, right))
 		up_hi = maxf(up_hi, maxf(left, right))
+		for side: int in 2:
+			var at: Vector3 = _skate_in_body(side == 0)
+			var moved: Vector3 = at - skate_at[side]
+			if i > measure_from and moved.z > 0.0 and moved.x * at.x > 0.0:
+				_push_float = maxf(_push_float, left if side == 0 else right)
+			skate_at[side] = at
 	return Vector4(lo, hi, up_lo, up_hi)
+
+
+# Where a skate is drawn, in the skeleton's frame (the body's heading).
+func _skate_in_body(left: bool) -> Vector3:
+	var body: Skeleton3D = _skater.mesh_root.get_node("BodyRig") as Skeleton3D
+	return body.get_bone_global_pose(SkaterBodySkeleton.LEG_BONE_OFFSET
+			+ (LegBone.FOOT_L if left else LegBone.FOOT_R)).origin
 
 
 func _assert_on_ice(label: String, contact: Vector4) -> void:
@@ -146,6 +164,10 @@ func test_forward_stride_stands_on_the_ice() -> void:
 		inp.mouse_world_pos = Vector3(0.0, 0.0, -6.0))
 	_assert_on_ice("stride", contact)
 	assert_gt(contact.w, RECOVERY_LIFT_MIN_M, "the recovery skate comes off the ice")
+	# The push drives along the ice: the stroke puts the pushing skate's runner
+	# on it, edge and lean and all, rather than swinging it through the air.
+	gut.p("stride: a pushing skate rode at most %.4f m off the ice" % [_push_float])
+	assert_lt(_push_float, CONTACT_TOL_M, "the push is on the ice")
 
 
 func test_loaded_stance_stride_stands_on_the_ice() -> void:

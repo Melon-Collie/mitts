@@ -81,12 +81,11 @@ var leg_scale: float = 1.0:
 		_pose.leg_scale = value
 
 
-# This build's (thigh, shin) segment lengths in metres — the knockdown sprawl
-# solve (SkaterController._apply_knockdown_fall) shares the leg geometry the
-# crouch solve uses, served from the one place that owns it.
-# (thigh, shin, foot offset) for this build — KnockdownFallRules.buckle_angles.
+# (thigh, shin, foot offset) for this build, metres — the knockdown sprawl
+# (KnockdownFallRules.buckle_angles) shares the leg geometry the crouch solve
+# uses. The build lengthens the leg, not the boot.
 func leg_segment_lengths() -> Vector3:
-	return Vector3(GaitPose.THIGH_LEN, GaitPose.SHIN_LEN, GaitPose.FOOT_FWD) * leg_scale
+	return Vector3(GaitPose.THIGH_LEN * leg_scale, GaitPose.SHIN_LEN * leg_scale, GaitPose.FOOT_FWD)
 
 
 # How far the centre's faceoff address drops his body (GaitFaceoffLayer).
@@ -285,6 +284,10 @@ func apply(delta: float) -> void:
 	# The pivot sits too: the open-hip glide and the step-around are both done on
 	# bent knees.
 	var stance: float = maxf(_locomotion.stance, _controller.pivot_stance * _pivot_blend)
+	# The stride sits as low as its push needs to reach the ice.
+	if _locomotion.push_reach > 0.0:
+		stance = maxf(stance, minf(GaitPose.reach_hip(_locomotion.push_reach),
+				deg_to_rad(_controller.stride_sit_max_deg)) / deg_to_rad(_controller.stance_hip_deg))
 
 	# ── Stance and pose ────────────────────────────────────────────────────────
 	if active:
@@ -292,6 +295,11 @@ func apply(delta: float) -> void:
 			if active & _floor_bits[i]:
 				stance = maxf(stance, _floor_layers[i].stance_floor())
 	p.solve_stance(deg_to_rad(_controller.stance_hip_deg) * stance)
+	if _locomotion.mix.stride > 0.001:
+		tilt_hips(p)
+	else:
+		p.lean = Basis.IDENTITY
+		p.ice = Basis.IDENTITY
 	p.seed_legs(_locomotion, _pivot_yaw_l, _pivot_yaw_r, _controller.stance_knee_release)
 	if active:
 		for i: int in _leg_layers.size():
@@ -326,6 +334,24 @@ func apply(delta: float) -> void:
 	trunk_roll_add = _trunk_roll_s + p.wobble_roll
 	if _skater.on_camera():
 		_skater.set_trunk_texture(trunk_pitch_add, trunk_roll_add)
+
+
+# The hips' tilt against the ice, turned to their heading (GaitPose.lean / ice):
+# the spine tips them by the balance lean (Skater.balance_tilt) in skeleton
+# space over their yaw and the lower body's pitch (SkaterSpineRig), the twist
+# limit aside.
+func tilt_hips(p: GaitPose) -> void:
+	var lower: Vector3 = _skater.lower_body.rotation
+	var pitch := Basis(Vector3.RIGHT, lower.x)
+	p.lean = Basis.IDENTITY
+	var tilt: Vector2 = _skater.balance_tilt()
+	if tilt != Vector2.ZERO:
+		var tilt3: Vector3 = _skater.global_transform.basis.inverse() * Vector3(tilt.x, 0.0, tilt.y)
+		var theta: float = tilt3.length()
+		if theta > 1e-4:
+			var heading := Basis(Vector3.UP, lower.y)
+			p.lean = heading.inverse() * Basis(Vector3.UP.cross(tilt3 / theta), theta) * heading
+	p.ice = p.lean * pitch
 
 
 # ── Hip-to-travel alignment and the pivot ─────────────────────────────────────

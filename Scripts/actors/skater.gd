@@ -1607,8 +1607,9 @@ func edge_load(left: bool) -> float:
 	return _legs.edge_load(left)
 
 
-func set_ankle_flatten(left: float, right: float) -> void:
-	_legs.set_ankle_flatten(left, right)
+func set_ankle_flatten(left: float, right: float, level_l: float = 0.0,
+		level_r: float = 0.0, ice: Basis = Basis.IDENTITY) -> void:
+	_legs.set_ankle_flatten(left, right, level_l, level_r, ice)
 
 
 func set_leg_contact(plant_l: float, plant_r: float, dt: float) -> void:

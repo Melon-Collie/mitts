@@ -62,9 +62,15 @@ var _shin_base_euler: PackedVector3Array = PackedVector3Array()
 # True while the skate bones carry an ankle angle, so set_ankle_flatten knows it
 # still owes one write to put them back (see there).
 var _ankles_posed: bool = false
-# The ankle weights the gait last asked for (set_ankle_flatten).
+# The ankle weights the gait last asked for (set_ankle_flatten): the whole
+# give-back, and the blade levelled along its length alone.
 var _ankle_l: float = 0.0
 var _ankle_r: float = 0.0
+var _level_l: float = 0.0
+var _level_r: float = 0.0
+# The hips' frame against the ice, which the level give-back lays the blade
+# flat on.
+var _ice := Basis.IDENTITY
 # The bounds of a skate's two assemblies, in their bones' frames: the boot
 # (shell, holder, runner) on FOOT, the cuff on SKATE.
 var _skate_boxes: Array[AABB] = []
@@ -235,9 +241,9 @@ func apply_knockdown_overlay(pose: KnockdownFallRules.SprawlPose,
 	# The ankles give the buckle back as they do any deep sit: a shin folded
 	# back by it otherwise drives the toe into the ice.
 	_pose_foot(SkaterMeshBuilder.LegBone.FOOT_L, leg_l, knee_l, base_l,
-			lerpf(_ankle_l, 1.0, weight))
+			lerpf(_ankle_l, 1.0, weight), _level_l)
 	_pose_foot(SkaterMeshBuilder.LegBone.FOOT_R, leg_r, knee_r, base_r,
-			lerpf(_ankle_r, 1.0, weight))
+			lerpf(_ankle_r, 1.0, weight), _level_r)
 	_ankles_posed = true
 	_rest_on_ice(SkaterMeshBuilder.LegBone.LEG_L, SkaterMeshBuilder.LegBone.FOOT_L,
 			SkaterMeshBuilder.LegBone.SKATE_L)
@@ -316,42 +322,67 @@ func _pose_pivot(bone: int, euler: Vector3) -> void:
 # ankle owns. The give-back is the chain's own rotation inverted, which is exact
 # at any depth — and needs nothing passed in, since set_swing just wrote it.
 #
+# `level_*` is a narrower give-back on its own weight: the blade laid flat along
+# its length on the ice (`ice` is the hips' frame against it, the gait's
+# GaitPose.ice) and left on whatever edge the leg rolled it to — a pushing skate's
+# ankle flexing so the whole blade drives on its inside edge, rather than the
+# rigid chain rocking it onto its heel. The whole give-back supersedes it by its
+# own weight.
+#
 # Unlike the pivots this bone carries an authored rotation and the sizing seam's
 # scale, so the give-back composes onto the rest basis rather than replacing it.
 # Skipped while both ankles are square (and once more to settle back), so the
 # common case adds no writes to the render-rate rig pass.
-func set_ankle_flatten(left: float, right: float) -> void:
+func set_ankle_flatten(left: float, right: float, level_l: float = 0.0,
+		level_r: float = 0.0, ice: Basis = Basis.IDENTITY) -> void:
 	_ankle_l = left
 	_ankle_r = right
-	var square: bool = is_zero_approx(left) and is_zero_approx(right)
+	_level_l = level_l
+	_level_r = level_r
+	_ice = ice
+	var square: bool = is_zero_approx(left) and is_zero_approx(right) \
+			and is_zero_approx(level_l) and is_zero_approx(level_r)
 	if square and not _ankles_posed:
 		return
 	_ankles_posed = not square
 	_pose_foot(SkaterMeshBuilder.LegBone.FOOT_L, _gait_leg_l, _gait_knee_l,
-			_shin_base_euler[0], left)
+			_shin_base_euler[0], left, level_l)
 	_pose_foot(SkaterMeshBuilder.LegBone.FOOT_R, _gait_leg_r, _gait_knee_r,
-			_shin_base_euler[1], right)
+			_shin_base_euler[1], right, level_r)
 
 
 func _pose_foot(bone: int, leg: Vector3, knee: float, shin_base: Vector3,
-		weight: float) -> void:
+		weight: float, level: float = 0.0) -> void:
 	pose_version += 1
-	_skeleton.set_bone_pose(_OFFSET + bone, _foot_pose(bone, leg, knee, shin_base, weight))
+	_skeleton.set_bone_pose(_OFFSET + bone,
+			_foot_pose(bone, leg, knee, shin_base, weight, level))
 
 
 func _foot_pose(bone: int, leg: Vector3, knee: float, shin_base: Vector3,
-		weight: float) -> Transform3D:
-	if weight <= 0.0:
+		weight: float, level: float = 0.0) -> Transform3D:
+	if weight <= 0.0 and level <= 0.0:
 		return Transform3D(_basis[bone].scaled_local(_scale[bone]), _pos[bone])
 	# What the chain did to this boot, and what it would have done carrying the
 	# leg's yaw alone. Their difference, in the boot's own frame, is the ankle's
 	# give-back; the slerp eases it in from square.
 	var shin: Basis = Basis.from_euler(Vector3(knee, shin_base.y, shin_base.z))
 	var posed: Basis = Basis.from_euler(leg) * shin
-	var level: Basis = Basis.from_euler(Vector3(0.0, leg.y, 0.0)) \
-			* Basis.from_euler(Vector3(0.0, shin_base.y, shin_base.z))
-	var give_back: Basis = (posed.inverse() * level).orthonormalized()
-	var basis: Basis = Basis.IDENTITY.slerp(give_back, weight) * _basis[bone]
+	var target: Basis = posed
+	if level > 0.0:
+		# The least turn that lays the blade's length (the boot's −Z) level on
+		# the ice, which leaves its roll about that length as the chain set it.
+		var along: Vector3 = _ice * posed * Vector3.FORWARD
+		var flat := Vector3(along.x, 0.0, along.z)
+		var axis: Vector3 = along.cross(flat)
+		if flat.length_squared() > 1e-8 and axis.length_squared() > 1e-12:
+			target = _ice.inverse() * Basis(axis.normalized(), along.angle_to(flat) * level) \
+					* _ice * posed
+	if weight > 0.0:
+		var square: Basis = Basis.from_euler(Vector3(0.0, leg.y, 0.0)) \
+				* Basis.from_euler(Vector3(0.0, shin_base.y, shin_base.z))
+		target = target.slerp(square, weight)
+	var give_back: Basis = (posed.inverse() * target).orthonormalized()
+	var basis: Basis = give_back * _basis[bone]
 	return Transform3D(basis.scaled_local(_scale[bone]), _pos[bone])
 
 
@@ -519,7 +550,8 @@ func _chain(side: int, ext: float) -> Transform3D:
 	var shin_bone: int = _SHIN_BONES[side]
 	return Transform3D(Basis.from_euler(leg), _pos[_LEG_BONES[side]]) \
 			* Transform3D(Basis.from_euler(Vector3(knee, base.y, base.z)), _pos[shin_bone]) \
-			* _foot_pose(_FOOT_BONES[side], leg, knee, base, _ankle_l if side == 0 else _ankle_r)
+			* _foot_pose(_FOOT_BONES[side], leg, knee, base, _ankle_l if side == 0 else _ankle_r,
+					_level_l if side == 0 else _level_r)
 
 
 func _chain_low(hips_body: Transform3D, side: int, ext: float) -> float:
@@ -554,7 +586,8 @@ func _write_seat(side: int, ext: float) -> void:
 	_skeleton.set_bone_pose(_OFFSET + shin_bone,
 			Transform3D(Basis.from_euler(Vector3(knee, base.y, base.z)), _pos[shin_bone]))
 	_skeleton.set_bone_pose(_OFFSET + foot_bone,
-			_foot_pose(foot_bone, leg, knee, base, _ankle_l if side == 0 else _ankle_r))
+			_foot_pose(foot_bone, leg, knee, base, _ankle_l if side == 0 else _ankle_r,
+					_level_l if side == 0 else _level_r))
 
 
 # ── Ice VFX seams ────────────────────────────────────────────────────────────

@@ -71,7 +71,7 @@ func shape_legs(p: GaitPose) -> void:
 	# Which changes what the drop owes: a level blade hangs below the FOOT pivot,
 	# which swings down as the shin folds (GaitPose.FOOT_FWD), so the hip rides
 	# that much higher.
-	p.drop -= p.leg_scale * GaitPose.FOOT_FWD * sin(p.stance_shin) * blend
+	p.drop -= GaitPose.FOOT_FWD * sin(p.stance_shin) * blend
 
 
 # The centre's fold over the dot. It rides the trunk TEXTURE rather than the
@@ -105,6 +105,6 @@ func address_drop(leg_scale: float) -> float:
 	var hip: float = deg_to_rad(_controller.stance_hip_deg * _controller.faceoff_center_stance)
 	var knee: float = hip + asin(clampf(THIGH / SHIN * sin(hip), -1.0, 1.0))
 	var shin: float = knee - hip
-	var span: float = leg_scale * (THIGH * cos(hip) + SHIN * cos(shin)
-			+ GaitPose.FOOT_FWD * sin(shin))
+	var span: float = leg_scale * (THIGH * cos(hip) + SHIN * cos(shin)) \
+			+ GaitPose.FOOT_FWD * sin(shin)
 	return leg_scale * (THIGH + SHIN) - span * cos(deg_to_rad(_controller.faceoff_center_width_deg))

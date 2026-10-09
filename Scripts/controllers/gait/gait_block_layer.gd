@@ -58,10 +58,10 @@ func override(p: GaitPose) -> void:
 	const FOOT: float = GaitPose.FOOT_FWD
 	var kneel_hip: float = deg_to_rad(_controller.block_kneel_hip_deg)
 	var kneel_shin: float = deg_to_rad(_controller.block_kneel_shin_deg)
-	var hip_h: float = p.leg_scale * (THIGH * cos(kneel_hip)
-			+ SHIN * cos(kneel_shin) + FOOT * sin(kneel_shin))
+	var hip_h: float = p.leg_scale * (THIGH * cos(kneel_hip) + SHIN * cos(kneel_shin)) \
+			+ FOOT * sin(kneel_shin)
 	var ext_knee: float = deg_to_rad(_controller.block_extend_knee_deg)
-	var ext_len: float = p.leg_scale * (THIGH + SHIN * cos(ext_knee) + FOOT * sin(ext_knee))
+	var ext_len: float = p.leg_scale * (THIGH + SHIN * cos(ext_knee)) + FOOT * sin(ext_knee)
 	var ext_roll: float = acos(clampf(hip_h / maxf(ext_len, 0.001), -1.0, 1.0))
 	var down_knee: float = -(kneel_hip + kneel_shin)
 	# The extended leg rolls AWAY from the body (left toward −X, right toward

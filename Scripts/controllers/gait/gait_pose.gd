@@ -19,12 +19,26 @@ const SHIN_LEN: float = 0.45
 # ice. A boot left to tilt with its shin keeps its sole planted, which is the
 # model the stance crouch solves.
 const FOOT_FWD: float = 0.10
+# Each leg's hip pivot out from the body's centre line, and below the hips'
+# origin (LegL / LegR in the scene), metres; the build lengthens the drop, not
+# the width.
+const HIP_HALF_WIDTH: float = 0.13
+const HIP_DROP: float = 0.13
 # Stroke engagement over which the feet hand from the ice to the stroke: below
 # it the stance is two-footed (rest, glide, the held poses), above it the
 # stroke's push and recovery put the feet. A smoothstep band rather than a
 # step, so the handoff never pops a leg, and so the stroke's exponential
 # release reaches a full plant rather than lingering just short of it.
 const PLANT_STROKE_BAND: float = 0.2
+# The share of the leg's length an authored offset may carry a leg to: a target
+# past it is brought in toward the hip at its own height, so a skate on the ice
+# stays on it and the knee keeps a little bend rather than locking. Never below
+# what the joint strokes themselves reached.
+const REACH_MAX: float = 0.99
+# How far short of that limit, metres at leg_scale 1, the target starts easing
+# in. Near straight the knee turns fast per centimetre of reach, so a hard stop
+# would halt it mid-swing; eased, it slows into the limit instead.
+const REACH_EASE_M: float = 0.06
 
 # This build's leg height multiplier (SkaterController.apply_attributes).
 var leg_scale: float = 1.0
@@ -62,9 +76,20 @@ var knee_extend_r: float = 0.0
 # .set_ankle_flatten).
 var foot_flat_l: float = 0.0
 var foot_flat_r: float = 0.0
+# How much each blade is laid flat along its length on its edge (the same seam):
+# the states authored as where the skates go keep their blades on the ice.
+var foot_level_l: float = 0.0
+var foot_level_r: float = 0.0
 # Per-blade edge load for the ice VFX, 0..1.
 var edge_l: float = 0.0
 var edge_r: float = 0.0
+# The hips' frame against the ice under them, turned to the hips' heading:
+# `lean` the balance lean alone, which turns them about the ice, and `ice` all of
+# it, with the lower body's own pitch (SkaterSkatingCoordinator.tilt_hips). The
+# states authored as where the skates go are authored on the ice, and the hips
+# tip over them.
+var lean := Basis.IDENTITY
+var ice := Basis.IDENTITY
 # Where the locomotion puts each ankle, and the joints the leg solve reaches it
 # with (LegIK, metres from the hip pivot).
 var leg_l := LegIK.Leg.new()
@@ -114,18 +139,24 @@ func seed_legs(loco: SkaterLocomotion, yaw_l: float, yaw_r: float, release: floa
 	var r: float = release * loco.intensity
 	var knee_l: float = -(stance_knee * (1.0 - r * loco.l_ext) + loco.l_tuck)
 	var knee_r: float = -(stance_knee * (1.0 - r * loco.r_ext) + loco.r_tuck)
-	_reach(leg_l, stance_hip + loco.l_pitch - (knee_l + stance_knee) * _shin_frac(),
+	_place(leg_l, stance_hip + loco.l_pitch - (knee_l + stance_knee) * _shin_frac(),
 			yaw_l, loco.l_roll, knee_l)
-	_reach(leg_r, stance_hip + loco.r_pitch - (knee_r + stance_knee) * _shin_frac(),
+	_place(leg_r, stance_hip + loco.r_pitch - (knee_r + stance_knee) * _shin_frac(),
 			yaw_r, loco.r_roll, knee_r)
+	# Below the shared blend floor a share is a residue of an ease, not a pose.
+	var authored: float = loco.mix.stride if loco.mix.stride > 0.001 else 0.0
+	foot_level_l = authored
+	foot_level_r = authored
+	_reach(leg_l, loco.l_dx, loco.l_dy, loco.l_dz, yaw_l + loco.l_yaw, foot_level_l, -1.0)
+	_reach(leg_r, loco.r_dx, loco.r_dy, loco.r_dz, yaw_r + loco.r_yaw, foot_level_r, 1.0)
 	l_pitch = leg_l.pitch
 	l_roll = leg_l.roll
 	l_knee = leg_l.knee
-	l_yaw = yaw_l
+	l_yaw = leg_l.yaw
 	r_pitch = leg_r.pitch
 	r_roll = leg_r.roll
 	r_knee = leg_r.knee
-	r_yaw = yaw_r
+	r_yaw = leg_r.yaw
 	frame_share = 0.0
 	plant = 1.0
 	plant_l = plant_share(loco.intensity, loco.edge_floor)
@@ -136,14 +167,96 @@ func seed_legs(loco: SkaterLocomotion, yaw_l: float, yaw_r: float, release: floa
 	foot_flat_r = 0.0
 
 
-# The ankle the stroke's joints put the leg at, then the joints that reach it.
-func _reach(leg: LegIK.Leg, pitch: float, yaw: float, roll: float, knee: float) -> void:
+# The ankle the stroke's joints put the leg at.
+func _place(leg: LegIK.Leg, pitch: float, yaw: float, roll: float, knee: float) -> void:
 	leg.pitch = pitch
 	leg.yaw = yaw
 	leg.roll = roll
 	leg.knee = knee
 	LegIK.place(leg, leg_scale * THIGH_LEN, leg_scale * SHIN_LEN)
+
+
+# The authored states' offset on that ankle, then the joints that reach it,
+# turned to `yaw`. `level` is the share of the leg authored as where its skate
+# goes. That share is on the ice rather than on the hips: its target is turned
+# through the hips' tilt against the ice (`ice`), with the lean's turn about the
+# ice under the body, so the skate stays where it was put while the body goes
+# over it. Its blade lies flat along its length (foot_level_*), so what it aims
+# at the ice is the runner: the ankle comes down by whatever height the edge the
+# leg rolls the blade onto takes off the boot, and the leg is solved again —
+# twice, since the ankle's height moves the edge. `side` is −1 for the left leg.
+func _reach(leg: LegIK.Leg, dx: float, dy: float, dz: float, yaw: float, level: float,
+		side: float) -> void:
+	var reach: float = maxf(REACH_MAX * leg_length(),
+			sqrt(leg.x * leg.x + leg.y * leg.y + leg.z * leg.z))
+	leg.yaw = yaw
+	if level <= 0.0:
+		leg.x += dx * leg_scale
+		leg.y += dy * leg_scale
+		leg.z += dz * leg_scale
+		_solve_within(leg, reach)
+		return
+	var depth: float = _runner_depth(leg, ice)
+	# The hips' origin above the ice: the pivot hangs HIP_DROP below it, the
+	# stance ankle below that and the runner below the ankle.
+	var above: float = depth - leg.y + HIP_DROP * leg_scale
+	var pivot := Vector3(side * HIP_HALF_WIDTH, -HIP_DROP * leg_scale, 0.0)
+	var shift: Vector3 = lean * Vector3(0.0, above, 0.0) - Vector3(0.0, above, 0.0)
+	var aim := Vector3(leg.x + dx * leg_scale, leg.y + dy * leg_scale, leg.z + dz * leg_scale)
+	var lift: float = 0.0
+	for _pass: int in 2:
+		var on_ice: Vector3 = aim + Vector3(0.0, lift, 0.0)
+		var target: Vector3 = on_ice.lerp(ice.inverse() * (pivot + on_ice - shift) - pivot, level)
+		leg.x = target.x
+		leg.y = target.y
+		leg.z = target.z
+		_solve_within(leg, reach)
+		lift = (_runner_depth(leg, ice) - depth) * level
+
+
+# The target brought within `reach` at its own height: its distance out from
+# under the hip eases into the most that height allows (an exponential knee,
+# continuous in value and slope where it starts).
+func _solve_within(leg: LegIK.Leg, reach: float) -> void:
+	var out: float = sqrt(leg.x * leg.x + leg.z * leg.z)
+	var most: float = sqrt(maxf(reach * reach - leg.y * leg.y, 0.0))
+	var ease: float = REACH_EASE_M * leg_scale
+	if out > most - ease and out > 0.0:
+		var keep: float = (most - ease * exp((most - ease - out) / ease)) / out
+		leg.x *= maxf(keep, 0.0)
+		leg.z *= maxf(keep, 0.0)
 	LegIK.solve(leg, leg_scale * THIGH_LEN, leg_scale * SHIN_LEN)
+
+
+# How far the runner's edge hangs below the ankle, measured on the ice (`ice`
+# is the hips' frame against it), with the blade laid flat along its length
+# (SkaterLegRig's level give-back): the boot's pivot rides FOOT_FWD ahead of the
+# ankle on the shin, and the runner BLADE_ICE_Z below that pivot on the boot's
+# own down. Laying the blade flat turns the boot about the level line square to
+# its heading, which keeps down's share along that line (the edge) and stands
+# the rest of it vertical.
+static func _runner_depth(leg: LegIK.Leg, ice: Basis) -> float:
+	var posed: Basis = ice * Basis.from_euler(Vector3(leg.pitch, leg.yaw, leg.roll)) \
+			* Basis(Vector3.RIGHT, leg.knee)
+	var along: Vector3 = posed * Vector3.FORWARD
+	var down: Vector3 = posed * Vector3.DOWN
+	var heading: float = sqrt(along.x * along.x + along.z * along.z)
+	var edge: float = 0.0
+	if heading > 1e-6:
+		edge = (down.x * along.z - down.z * along.x) / heading
+	return -along.y * FOOT_FWD + sqrt(maxf(1.0 - edge * edge, 0.0)) * SkaterMeshBuilder.BLADE_ICE_Z
+
+
+# The hip flex whose stance (solve_stance) lets a leg reach `out` metres from
+# under the hip at the stance ankle's depth before the reach starts easing in
+# (_solve_within), leg_scale 1. The ankle hangs T·cos h + √(S² − T²·sin² h)
+# below the hip; set equal to the depth that leaves that reach, that is a
+# quadratic in cos h.
+static func reach_hip(out: float) -> float:
+	var leg: float = REACH_MAX * (THIGH_LEN + SHIN_LEN)
+	var depth: float = sqrt(maxf(leg * leg - (out + REACH_EASE_M) * (out + REACH_EASE_M), 1e-6))
+	return acos(clampf((depth * depth - SHIN_LEN * SHIN_LEN + THIGH_LEN * THIGH_LEN)
+			/ (2.0 * depth * THIGH_LEN), -1.0, 1.0))
 
 
 # Any layer's straightening, never past straight, with the thigh counter-pitched
@@ -173,8 +286,8 @@ func seed_trunk(loco: SkaterLocomotion) -> void:
 	trunk_roll = loco.trunk_roll
 	wobble_pitch = 0.0
 	wobble_roll = 0.0
-	edge_l = clampf(maxf(loco.l_ext * loco.intensity, loco.edge_floor), 0.0, 1.0)
-	edge_r = clampf(maxf(loco.r_ext * loco.intensity, loco.edge_floor), 0.0, 1.0)
+	edge_l = clampf(maxf(maxf(loco.l_ext, loco.l_push) * loco.intensity, loco.edge_floor), 0.0, 1.0)
+	edge_r = clampf(maxf(maxf(loco.r_ext, loco.r_push) * loco.intensity, loco.edge_floor), 0.0, 1.0)
 
 
 # Both feet on the ice while the stroke is idle, and through the dug-edge
@@ -193,6 +306,6 @@ func frame_drop() -> float:
 func publish_legs(skater: Skater, delta: float) -> void:
 	skater.set_leg_swing(l_pitch, l_roll, l_knee, r_pitch, r_roll, r_knee, l_yaw, r_yaw)
 	skater.set_edge_loads(edge_l, edge_r)
-	skater.set_ankle_flatten(foot_flat_l, foot_flat_r)
+	skater.set_ankle_flatten(foot_flat_l, foot_flat_r, foot_level_l, foot_level_r, ice)
 	skater.set_leg_contact(plant_l, plant_r, delta)
 	skater.set_skating_crouch_drop(drop, frame_drop(), plant)

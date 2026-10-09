@@ -327,3 +327,41 @@ choreography from coaching material, and are to be judged on the strips.
   thigh as the stroke's own knee does.
 - **Measured:** every strip pixel-identical to Phase 1's, and the printed
   locomotion mix identical line for line.
+
+## §13 Phase 3 as built
+
+- **The stride** is a foot path (`SkaterLocomotion._stride_path`): per unit of
+  stroke amplitude, the push leaves from under the hips and drives 0.28 m out
+  and 0.20 m back, toe turning out 25°; the recovery lifts up to 5 cm (by the
+  swing speed, so ~2.5 cm at cruise) and comes back in along the same line to
+  land 0.05 m ahead of the hips; both skates shift 0.04 m under the body toward
+  the support. The stroke's own phase, skew and cadence are untouched.
+  Measured on the skates: 0.31 m from the midline cruising at 6 m/s, 0.45–0.53 m
+  driving hard (the reach decides which), the push 2.2× the recovery's speed.
+- **The glide needed nothing.** §2's glide — both down, hip width, the existing
+  sway — is the stance with its joint-space sway, which it already was.
+- **Not in the design: the stride decides its own crouch.** §2 asked for the
+  push's width and the support's deep knee separately; a leg can only reach so
+  far out at a given hip height, so the stride sits as low as its push needs
+  (`GaitPose.reach_hip`, capped at `stride_sit_max_deg` 45°), and the reach
+  eases in near full stretch so the knee slows into it.
+- **Brought forward from Phase 4: the ice frame** (§3 *Frame*). The stride's
+  targets are turned through the hips' tilt against the ice — the balance lean
+  about the ice under the body, and the lower body's own pitch, which the plan
+  did not mention and which mattered as much (8° of it raised a push 2 cm).
+  Only the stride's share is turned, so the joint-space states keep their look
+  until Phase 4.
+- **The ankle** gained a second give-back (`SkaterLegRig.set_ankle_flatten`'s
+  level weights): the blade laid flat along its length against the ice, its
+  edge left as the leg rolled it. The stride aims the runner rather than the
+  ankle at the ice (`GaitPose._runner_depth`), so an edged push comes down by
+  what the edge takes off the boot. The pushing skate now rides within 0.1 mm of
+  the ice through every push (`test_blades_stand_on_the_ice.gd`); on Phase 2's
+  joint stride it floated 3.8 cm.
+- **Fixed on the way:** the boot's forward offset scaled with the build in the
+  gait's crouch maths, where the rig does not scale it.
+- **Measured cost:** skating ~+30 µs per skater per frame over Phase 2 in
+  GDScript (Phase 2 and 3 alternated in one session, ~70 → ~100 µs; the
+  benchmark's run-to-run noise is ±10 µs): each stride leg is solved twice for
+  its runner and the rig levels both blades. Gliding is within the noise. The
+  Phase 5 port is where it comes back.

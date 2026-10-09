@@ -119,10 +119,12 @@ inside the jersey at the resulting angle.
 
 ## The blades stand on the ice
 
-The gait poses joints, not feet, and its crouch pays for the stance alone; the
-push's extension, the splay, the stagger and the lean all move the blades too.
-So the feet are placed from where the blades are (`SkaterLegRig.seat_on_ice`,
-called by the spine as it places the hips):
+Most of the gait still poses joints rather than feet, and its crouch pays for
+the stance alone; the splay, the stagger and the lean all move the blades too.
+So the body is placed from where the blades are (`SkaterLegRig.seat_on_ice`,
+called by the spine as it places the hips). The stride is the exception: it is
+authored as where its skates go, on the ice (`Scripts/controllers/CLAUDE.md`),
+and only needs the seat to stand it up.
 
 - **Both feet, then the body.** The lower runner is the support. The other's
   knee is re-solved (the thigh counter-pitched as `GaitPose.seed_legs` does,
@@ -139,8 +141,14 @@ called by the spine as it places the hips):
   block unplants its kneeling leg; the knockdown unplants both and fades the
   seat itself (`plant`), and while the sprawl owns the legs the seat does not
   re-pose them.
-- **Height is not monotone in the knee.** The ankle is rigid outside the held
-  poses, so a blade tilts with its shin and its lowest point is a tip; near
+- **The ankle gives back two ways** (`SkaterLegRig.set_ankle_flatten`): the
+  whole chain's rotation, which squares the boot (the held poses), or only the
+  blade's tilt along its length against the ice, which leaves it on whatever
+  edge the leg rolled it to (the stride, so a push drives its whole inside edge
+  rather than rocking onto its heel). The second levels against the ice, not
+  the hips, so the gait passes the hips' tilt with it.
+- **Height is not monotone in the knee.** The ankle is otherwise rigid, so a
+  blade tilts with its shin and its lowest point is a tip; near
   straight, unbending rocks the boot and lifts that tip. The solve walks out
   from the gait's own knee in its role's direction (the reaching leg extends,
   the support folds) to the NEAREST crossing, interpolating the closest point
@@ -155,7 +163,8 @@ called by the spine as it places the hips):
 render pass, measures the runner mesh against the ice and bounds every leg
 pivot's per-tick step; `test_faceoff_prep_pose.gd` holds the centre's address
 on both blades; `test_gait_stroke_profile.gd` catches a plant that bleeds into
-the stride.
+the stride; `test_leg_ik_mirrors_the_rig.gd` holds the gait's model of the leg
+and the boot against these bones.
 
 ## Cosmetic vs. gameplay, and the render clock
 

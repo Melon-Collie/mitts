@@ -451,6 +451,16 @@ var stride_skew: float = 0.3              # push/recovery asymmetry of the strok
 # 0 = symmetric metronome (the old forward-kick look).
 var stride_rear_bias: float = 0.45
 var stride_abduction_deg: float = 10.0    # outward flare of the extending leg (the skating "V" push)
+# The forward stride as a foot path (SkaterLocomotion._stride_path), metres of
+# ankle travel per unit of stroke amplitude (intensity · push_scale, ~1 at
+# cruise, up to stride_push_ceiling driving hard), at full extension.
+var stride_push_out_m: float = 0.28       # out from under the hip
+var stride_push_back_m: float = 0.20      # back from under the hip
+var stride_land_fwd_m: float = 0.05       # where the recovery lands, ahead of the hip
+var stride_lift_m: float = 0.05           # recovery lift off the ice
+var stride_rock_m: float = 0.04           # both skates shift under the body toward the support leg
+var stride_toe_out_deg: float = 25.0      # push skate turned out at full extension
+var stride_sit_max_deg: float = 45.0      # deepest hip flex the stride sits to for its push's reach
 var stride_bob_m: float = 0.02            # vertical body bob per half-stride (weight transfer)
 var stride_sway_deg: float = 2.1          # torso weight-shift roll oscillating with the stride
 # Trunk inertia at the texture seam: the trunk texture sums many reads and

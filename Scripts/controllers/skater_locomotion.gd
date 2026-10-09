@@ -59,6 +59,25 @@ var r_ext: float = 0.0
 # Extra knee fold per leg: recovery tuck, crossover clearance, glide inside tuck.
 var l_tuck: float = 0.0
 var r_tuck: float = 0.0
+# The states authored as where the skates go (the stride): each ankle's offset
+# from where the joint strokes above put it, hip-pivot frame, metres at leg_scale
+# 1 (+X right, +Y up, −Z forward), and the leg's yaw (positive turns it toward
+# −X). GaitPose lays them on before the leg solve.
+var l_dx: float = 0.0
+var l_dy: float = 0.0
+var l_dz: float = 0.0
+var l_yaw: float = 0.0
+var r_dx: float = 0.0
+var r_dy: float = 0.0
+var r_dz: float = 0.0
+var r_yaw: float = 0.0
+# The stride's push per leg 0..1, for the edge load.
+var l_push: float = 0.0
+var r_push: float = 0.0
+# How far out from under its hip the stride's push reaches at full extension,
+# metres at leg_scale 1: the crouch has to let a leg get there (GaitPose
+# .reach_hip).
+var push_reach: float = 0.0
 # Crouch engagement before the overlays' floors; vertical body bob (m).
 var stance: float = 0.0
 var bob: float = 0.0
@@ -220,14 +239,9 @@ func strokes(delta: float, fwd: float) -> void:
 	var amp: float = intensity * push_scale
 	var bias: float = c.stride_rear_bias
 
-	# Forward stride: a rear-biased fore/aft push (the skate drives BACK and
-	# recovers under the hips), an in-phase edge rock, the V-flare of the
-	# extending leg, the push extension and the recovery tuck.
 	var w: float = mix.stride
 	if w > 0.001:
-		var push: float = deg_to_rad(c.stride_pitch_deg) * amp * (1.0 - c.dig_in_chop * _start)
-		_stroke(w, push, deg_to_rad(c.stride_roll_deg) * amp, deg_to_rad(c.stride_abduction_deg) * amp,
-				deg_to_rad(c.stride_knee_deg) * amp, s, s_opp, cs, cs_opp, ext_l, ext_r, bias)
+		_stride_path(w, amp * (1.0 - c.dig_in_chop * _start), s, s_opp, cs, cs_opp)
 
 	# Backward: C-cuts. The push reverses and shrinks (the long pull is out
 	# front), the edge rock and the out-and-in sweep widen, and the blades stay
@@ -352,6 +366,36 @@ func strokes(delta: float, fwd: float) -> void:
 	trunk_roll += deg_to_rad(c.weight_shift_deg) * _weight_shift
 
 
+# The forward stride, as where the skates go. Each push leaves from under the
+# hips and drives out and back, the toe turning out; the recovery lifts and
+# swings the skate back in along the same line to land under the hips, ahead of
+# them. `p` runs from 0 at the landing to 1 at full extension, so the push and
+# the recovery keep the stroke's own timing (the skew makes the push the fast
+# half). Both skates shift under the body toward the support leg in phase (the
+# rock), the body riding over the leg it stands on. `a` is the amplitude.
+func _stride_path(w: float, a: float, s: float, s_opp: float, cs: float, cs_opp: float) -> void:
+	var c: SkaterController = _controller
+	var rock: float = c.stride_rock_m * a * s
+	var p_l: float = 0.5 * (1.0 - s)
+	var p_r: float = 0.5 * (1.0 - s_opp)
+	var out: float = c.stride_push_out_m * a
+	var land: float = -c.stride_land_fwd_m * a
+	var travel: float = (c.stride_push_back_m + c.stride_land_fwd_m) * a
+	var lift: float = c.stride_lift_m * a
+	var toe: float = deg_to_rad(c.stride_toe_out_deg) * minf(a, 1.0)
+	l_dx += w * (rock - out * p_l)
+	r_dx += w * (rock + out * p_r)
+	l_dz += w * (land + travel * p_l)
+	r_dz += w * (land + travel * p_r)
+	l_dy += w * lift * maxf(cs, 0.0)
+	r_dy += w * lift * maxf(cs_opp, 0.0)
+	l_yaw += w * toe * p_l
+	r_yaw -= w * toe * p_r
+	l_push = maxf(l_push, w * maxf(-s, 0.0))
+	r_push = maxf(r_push, w * maxf(-s_opp, 0.0))
+	push_reach = maxf(push_reach, w * Vector2(out, c.stride_push_back_m * a).length())
+
+
 # One leg-pair stroke, weighted: fore/aft push (rear-biased), in-phase edge rock,
 # V-flare of the extending leg, push extension, recovery tuck.
 func _stroke(w: float, push: float, rock: float, flare: float, tuck: float,
@@ -460,6 +504,17 @@ func _clear_strokes() -> void:
 	r_ext = 0.0
 	l_tuck = 0.0
 	r_tuck = 0.0
+	l_dx = 0.0
+	l_dy = 0.0
+	l_dz = 0.0
+	l_yaw = 0.0
+	r_dx = 0.0
+	r_dy = 0.0
+	r_dz = 0.0
+	r_yaw = 0.0
+	l_push = 0.0
+	r_push = 0.0
+	push_reach = 0.0
 	trunk_pitch = 0.0
 	trunk_roll = 0.0
 	bob = 0.0
