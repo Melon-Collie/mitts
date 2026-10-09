@@ -2,22 +2,45 @@ class_name PuckInteractionRules
 
 # Segment-segment swept detection — tests whether the closest approach between
 # the puck's path (puck_prev→puck_curr) and the blade's path (blade_prev→blade_curr)
-# falls within `radius`. Handles stationary puck + fast blade swing: testing the
-# puck's segment against a blade POINT misses a blade that passes through the
-# zone entirely within a single tick.
+# falls within `radius`, with no net between the two at that approach. Handles
+# stationary puck + fast blade swing: testing the puck's segment against a blade
+# POINT misses a blade that passes through the zone entirely within a single tick.
+#
+# The net test is what keeps a stick in the cage off a puck lying against the
+# outside of the twine: the radius is half a metre and the mesh is centimetres
+# thick, so distance alone reaches straight through it.
 
 static func check_pickup(
 		puck_prev: Vector3, puck_curr: Vector3,
 		blade_prev: Vector3, blade_curr: Vector3,
 		radius: float) -> bool:
-	return _segment_segment_dist_sq(puck_prev, puck_curr, blade_prev, blade_curr) <= radius * radius
+	return _swept_reach(puck_prev, puck_curr, blade_prev, blade_curr, radius)
 
 
 static func check_poke(
 		puck_prev: Vector3, puck_curr: Vector3,
 		blade_prev: Vector3, blade_curr: Vector3,
 		radius: float) -> bool:
-	return _segment_segment_dist_sq(puck_prev, puck_curr, blade_prev, blade_curr) <= radius * radius
+	return _swept_reach(puck_prev, puck_curr, blade_prev, blade_curr, radius)
+
+
+# Whether the net stands between a blade and a puck, for callers holding single
+# positions rather than swept ones (the client's claim gates). The same test the
+# swept checks apply, so a client never claims what the host refuses.
+static func net_between(blade: Vector3, puck: Vector3) -> bool:
+	return NetGeometry.path_blocked(blade, puck, GameRules.NET_BLADE_MESH_GIVE)
+
+
+static func _swept_reach(
+		puck_prev: Vector3, puck_curr: Vector3,
+		blade_prev: Vector3, blade_curr: Vector3,
+		radius: float) -> bool:
+	var st: Vector2 = _segment_segment_params(puck_prev, puck_curr, blade_prev, blade_curr)
+	var puck_at: Vector3 = puck_prev.lerp(puck_curr, st.x)
+	var blade_at: Vector3 = blade_prev.lerp(blade_curr, st.y)
+	if puck_at.distance_squared_to(blade_at) > radius * radius:
+		return false
+	return not net_between(blade_at, puck_at)
 
 
 # The exact quantity check_pickup / check_poke threshold on, exposed for
@@ -113,11 +136,20 @@ static func _closest_point_on_segment(p: Vector3, a: Vector3, b: Vector3) -> Vec
 	return a + ab * t
 
 
-# Minimum squared distance between two line segments (Eberly analytical solution).
-# Degenerates correctly when either or both segments have zero length.
+# Minimum squared distance between two line segments.
 static func _segment_segment_dist_sq(
 		p0: Vector3, p1: Vector3,
 		q0: Vector3, q1: Vector3) -> float:
+	var st: Vector2 = _segment_segment_params(p0, p1, q0, q1)
+	return p0.lerp(p1, st.x).distance_squared_to(q0.lerp(q1, st.y))
+
+
+# Parameters (s on p0→p1, t on q0→q1) of the closest approach between two line
+# segments (Eberly analytical solution). Degenerates correctly when either or
+# both segments have zero length.
+static func _segment_segment_params(
+		p0: Vector3, p1: Vector3,
+		q0: Vector3, q1: Vector3) -> Vector2:
 	var d1: Vector3 = p1 - p0
 	var d2: Vector3 = q1 - q0
 	var r: Vector3 = p0 - q0
@@ -127,7 +159,7 @@ static func _segment_segment_dist_sq(
 	var s: float
 	var t: float
 	if a <= 1e-10 and e <= 1e-10:
-		return r.length_squared()
+		return Vector2.ZERO
 	if a <= 1e-10:
 		s = 0.0
 		t = clampf(f / e, 0.0, 1.0)
@@ -150,6 +182,4 @@ static func _segment_segment_dist_sq(
 			elif t > 1.0:
 				t = 1.0
 				s = clampf((b - c) / a, 0.0, 1.0)
-	var closest_p: Vector3 = p0 + d1 * s
-	var closest_q: Vector3 = q0 + d2 * t
-	return (closest_p - closest_q).length_squared()
+	return Vector2(s, t)

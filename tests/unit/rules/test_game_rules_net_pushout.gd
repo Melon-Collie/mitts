@@ -1,13 +1,14 @@
 extends GutTest
 
 # GameRules.push_out_of_net — analytic goal-net exclusion projection. Keeps a
-# skater's body disc out of the concave net pocket (the boards-style
-# wedge that freezes a skater the goalie shoves across the goal line).
+# skater's body disc off the cage footprint, the open mouth included: the whole
+# body stays in front of the goal line, and the posts are solid to it.
 #
-# Geometry under test (near/positive-Z net):
-#   GOAL_LINE_Z          front face (open mouth) — NOT radius-inset
+# Geometry under test (near/positive-Z net), every face inset by `radius`:
+#   GOAL_LINE_Z          front face (open mouth) at |z| = GOAL_LINE_Z (− radius)
 #   NET_DEPTH            back panel at |z| = GOAL_LINE_Z + NET_DEPTH (+ radius)
 #   NET_BACK_HALF_WIDTH  side panels at |x| = NET_BACK_HALF_WIDTH (+ radius)
+# with the corners rounded by `radius`.
 #
 # Derived from GameRules rather than restated as literals: test_net_geometry_mirrors
 # is what pins those constants, so this file is free to test the projection alone.
@@ -67,19 +68,53 @@ func test_negative_side_ejects_negative() -> void:
 	var r: Vector2 = GameRules.push_out_of_net(Vector2(-0.95, 27.15))
 	assert_almost_eq(r.x, -BACK_HW, TOL, "x ejected to -side face")
 
-# ── Radius insets the closed faces (not the open mouth) ───────────────────────
+# ── Radius insets every face, the mouth included ─────────────────────────────
 
-func test_radius_insets_back_and_sides_not_front() -> void:
+func test_radius_insets_every_face() -> void:
 	var radius: float = 0.35
-	# Front (mouth) face is NOT inset — a body centered on the goal line is clear.
+	# Front (mouth): a body centred on the goal line is half inside the cage.
 	var front: Vector2 = GameRules.push_out_of_net(Vector2(0.0, GOAL_Z), radius)
-	assert_almost_eq(front.y, GOAL_Z, TOL, "center on goal line is outside → untouched")
+	assert_almost_eq(front.y, GOAL_Z - radius, TOL, "front face inset — body edge on the line")
 	# Back panel inset by radius: the body edge stops at the back face, center at +r.
 	var back: Vector2 = GameRules.push_out_of_net(Vector2(0.0, 27.9), radius)
 	assert_almost_eq(back.y, GOAL_Z + DEPTH + radius, TOL, "back face inset by radius")
 	# Side panel inset by radius.
 	var side: Vector2 = GameRules.push_out_of_net(Vector2(1.3, 27.15), radius)
 	assert_almost_eq(side.x, BACK_HW + radius, TOL, "side face inset by radius")
+
+
+func test_crease_body_clear_of_the_line_is_untouched() -> void:
+	var radius: float = 0.35
+	var r: Vector2 = GameRules.push_out_of_net(Vector2(0.4, GOAL_Z - radius - 0.01), radius)
+	assert_almost_eq(r.y, GOAL_Z - radius - 0.01, TOL, "edge short of the line — free")
+
+
+func test_skating_along_the_goal_line_cannot_pass_through_the_posts() -> void:
+	# The reported case: a body just in front of the line slid sideways from beside
+	# the net, across the mouth and out the other side, through both posts. Every
+	# sample along that line must come out with the body edge off the cage.
+	var radius: float = 0.35
+	for i: int in 41:
+		var x: float = -2.0 + 0.1 * float(i)
+		var p: Vector2 = GameRules.push_out_of_net(Vector2(x, GOAL_Z - 0.01), radius)
+		var near := Vector2(clampf(p.x, -BACK_HW, BACK_HW), clampf(p.y, GOAL_Z, GOAL_Z + DEPTH))
+		assert_gte(p.distance_to(near), radius - TOL,
+				"body at x=%.1f overlaps the cage after the push" % x)
+
+
+func test_corner_is_rounded() -> void:
+	# Diagonally off the front corner, inside the inflated box but outside the
+	# rounded one: untouched. Pushed in closer: out radially from the corner.
+	var radius: float = 0.35
+	var corner := Vector2(BACK_HW, GOAL_Z)
+	var clear: Vector2 = corner + Vector2(0.3, -0.3)
+	assert_eq(GameRules.push_out_of_net(clear, radius), clear,
+			"0.42 m off the corner — clear of a 0.35 m body")
+	var touching: Vector2 = corner + Vector2(0.2, -0.2)
+	var out: Vector2 = GameRules.push_out_of_net(touching, radius)
+	assert_almost_eq(out.distance_to(corner), radius, TOL, "pushed to the body radius off the corner")
+	assert_almost_eq((out - corner).angle(), Vector2(1.0, -1.0).angle(), TOL, "radially")
+
 
 # ── The far (negative-Z) net mirrors the near net ─────────────────────────────
 

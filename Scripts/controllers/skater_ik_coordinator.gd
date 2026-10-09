@@ -59,6 +59,9 @@ var _cached_top_cfg: TopHandIK.Config = null
 var _cached_bottom_cfg: BottomHandIK.Config = null
 var _ik_result := TopHandIK.Result.new()
 var _net_result := NetBladeCollision.Result.new()
+# See resolve_blade_against_net.
+var _net_side_anchor: Vector3 = Vector3.ZERO
+var _has_net_side_anchor: bool = false
 var _rigid_result := TopHandIK.Result.new()
 # Native IK solvers (null = extension absent, GDScript fallback). Config
 # properties sync inside the cached-config builders — the same rebuild moment —
@@ -709,15 +712,22 @@ func rigid_stick(hand_local: Vector3, blade_local: Vector3,
 # NetBladeCollision, and docs/net-play-plan.md §3 for why there is no legality
 # concept on this path any more.
 #
+# Which face holds the stick is classified from NetBladeCollision.side_anchor,
+# never last tick's raw contact, which can sit on the far side of the twine.
+#
 # The returned Result is shared and overwritten by the next call, like _ik_result:
 # consume it before resolving again.
 func resolve_blade_against_net(heel_world: Vector3) -> NetBladeCollision.Result:
+	var prev: Vector3 = _skater.get_prev_blade_contact_global()
+	_net_side_anchor = NetBladeCollision.side_anchor(_net_side_anchor, prev) \
+			if _has_net_side_anchor else prev
+	_has_net_side_anchor = true
 	NetBladeCollision.resolve(
-			_skater.get_prev_blade_contact_global(),
+			_net_side_anchor,
 			heel_world,
 			_blade_toe_for(heel_world),
 			_controller.net_blade_half_thickness,
-			_controller.net_mesh_give,
+			GameRules.NET_BLADE_MESH_GIVE,
 			_net_result)
 	return _net_result
 

@@ -145,37 +145,14 @@ var _camped_ids_scratch: Array = []
 var _input_blocked: bool = false
 var _puck_oob_timer: float = 0.0
 var _puck_net_stuck_timer: float = 0.0
-# Swept goal detection (host): the puck's center last physics tick, so the goals
-# can test the segment prev -> curr for a full goal-line crossing. Invalid until
-# the first loose-puck tick of a live period (see _check_goal_crossing).
-var _prev_puck_pos: Vector3 = Vector3.ZERO
-var _has_prev_puck_pos: bool = false
-# Carry state of the puck last goal-crossing tick. A loose<->carried transition
-# moves the puck discontinuously (pickup snap to blade / release), so the tracker
-# reseeds across it instead of spanning the jump.
-var _puck_was_carried: bool = false
+# Swept goal detection (host): the puck path the goals test each tick.
+var _goal_tracker := GoalCrossingTracker.new()
 # The AI goalies' fixed identities, indexed by team_id — spawned onto the
 # jerseys and reused by the Three Stars podium when a goalie stars. Same on
 # every machine, so a goalie star candidate needs no wire traffic.
 const GOALIE_NAMES: Array[String] = ["WALL", "WARD"]
 const GOALIE_NUMBERS: Array[int] = [31, 35]
 
-# Any single-tick puck travel beyond this (metres) is a reset/reposition, not a
-# real crossing — the tracker reseeds and skips it. Far above any shot or blade
-# speed at 120 Hz (~2 m/tick = 240 m/s); a faceoff/OOB reset jumps much further.
-const _GOAL_MAX_TICK_TRAVEL: float = 2.0
-# Tighter bound for a puck that was PINNED on both ends of the segment. A
-# carried puck teleports to the carry target every tick, and that target can
-# jump discontinuously while play is continuous: a forehand/backhand flip
-# swings it around the body, and the blade's net clamp hands the contact
-# between box faces. Treating such a jump as a swept path let a carrier
-# dangling behind the net "score through the mesh" — pin beside the post one
-# tick, pin past the net the next, and the straight segment between them
-# pierced the goal-line plane inside the mouth (visually, the puck went
-# through the back of the net). Real carried motion is bounded by skate +
-# blade speed (~13 + 8 m/s -> ~0.18 m/tick); 0.5 gives ~3x headroom while the
-# flip artifacts it must reject span the net's width (~1 m and up).
-const _GOAL_MAX_CARRIED_TICK_TRAVEL: float = 0.5
 # True while the local goal cinematic OR intermission reel is playing. Gates
 # the skip_replay action so we don't fire stray vote RPCs outside a skippable
 # window.
@@ -914,53 +891,22 @@ func _update_host_puck_tracking() -> void:
 
 
 # Host-only swept goal detection. Feeds each goal the puck-center segment from
-# last tick to this tick; the goal emits `goal_scored` when the whole puck fully
-# crosses its line inside the mouth (GoalDetectionRules). Runs BEFORE the OOB /
-# stuck-on-net checks so a scored puck flips the phase out of PLAYING first and
-# those checks early-return rather than whistling the goal dead.
+# last tick to this tick (GoalCrossingTracker); the goal emits `goal_scored` when
+# the whole puck fully crosses its line inside the mouth (GoalDetectionRules).
+# Runs BEFORE the OOB / stuck-on-net checks so a scored puck flips the phase out
+# of PLAYING first and those checks early-return rather than whistling the goal
+# dead.
 func _check_goal_crossing() -> void:
 	# Non-PLAYING phases never award goals; drills own their own detection. Reset
 	# so the next live tick starts a fresh segment rather than spanning the gap.
 	if _state_machine.current_phase != GamePhase.Phase.PLAYING \
 			or NetworkManager.is_drill_mode():
-		_has_prev_puck_pos = false
+		_goal_tracker.reset()
 		return
-	# Both loose AND carried pucks are tracked: the puck is pinned to the carry
-	# target each tick (Puck._physics_process), so a stick tuck-in — the carrier
-	# pushing the puck across the line from the front of the mouth — is a real
-	# crossing, and it needs no special-casing: the pinned puck collides with the
-	# net like any other body (SkaterController._collide_pinned_puck_with_net), so
-	# reaching the cavity by any route other than the mouth is not available to it.
-	# Here we just watch the puck's path.
-	var curr: Vector3 = puck.global_position
-	var carried: bool = puck.carrier != null
-	# Reseed on a cold tracker or a loose->carried transition: the pickup snaps
-	# the puck to the blade discontinuously, and spanning that jump could
-	# fabricate a crossing. The carried->loose direction is NOT reseeded — a
-	# release repositions the puck by at most the carry offset plus one tick of
-	# shot travel, a real path. Reseeding it opened a one-tick blind window
-	# that swallowed point-blank crossings: a shot released within a tick's
-	# travel of the goal line finished crossing inside the skipped segment,
-	# and the puck then sat in the net permanently "already across" — a
-	# visible no-count goal. (The teleport guard below still catches resets.)
-	var was_carried: bool = _puck_was_carried
-	if not _has_prev_puck_pos or (carried and not was_carried):
-		_prev_puck_pos = curr
-		_has_prev_puck_pos = true
-		_puck_was_carried = carried
+	if not _goal_tracker.advance(puck):
 		return
-	_puck_was_carried = carried
-	# Teleport guard: an implausible jump is never a real crossing — reseed and
-	# skip. Pinned-on-both-ends segments get the tight carried bound (see
-	# _GOAL_MAX_CARRIED_TICK_TRAVEL); the transition tick out of carry keeps the
-	# loose bound, since a released shot legitimately travels a tick of shot
-	# speed plus the release reposition.
-	var max_travel: float = _GOAL_MAX_CARRIED_TICK_TRAVEL \
-			if carried and was_carried else _GOAL_MAX_TICK_TRAVEL
-	if _prev_puck_pos.distance_to(curr) <= max_travel:
-		for goal: HockeyGoal in goals:
-			goal.check_goal_crossing(_prev_puck_pos, curr)
-	_prev_puck_pos = curr
+	for goal: HockeyGoal in goals:
+		goal.check_goal_crossing(_goal_tracker.segment_start, _goal_tracker.segment_end)
 
 
 func _apply_ghost_state(delta: float) -> void:

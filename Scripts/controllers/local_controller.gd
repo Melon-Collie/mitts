@@ -281,7 +281,8 @@ func _physics_process(delta: float) -> void:
 			# the host rejected. _PICKUP_CLAIM_FLOOR_S caps the rate so boundary
 			# jitter can't spam claims.
 			var dist: float = puck.global_position.distance_to(blade_pos_for_claim)
-			var in_range: bool = dist <= PuckController.PICKUP_RADIUS
+			var in_range: bool = dist <= PuckController.PICKUP_RADIUS \
+					and not PuckInteractionRules.net_between(blade_pos_for_claim, puck.global_position)
 			var rising_edge: bool = in_range and not _was_in_pickup_range
 			# A deliberate deflect (holding LMB without the puck) is NOT a pickup —
 			# suppress the speculative claim + optimistic pin so we don't predict a
@@ -344,7 +345,8 @@ func _physics_process(delta: float) -> void:
 							blade_pos_for_claim, c_hand, c_blade,
 							PuckController.STICK_LIFT_RADIUS, PuckController.STICK_LIFT_UNDER_MARGIN)
 				else:
-					in_poke_range = puck.global_position.distance_to(blade_pos_for_claim) <= PuckController.POKE_RADIUS
+					in_poke_range = puck.global_position.distance_to(blade_pos_for_claim) <= PuckController.POKE_RADIUS \
+							and not PuckInteractionRules.net_between(blade_pos_for_claim, puck.global_position)
 			var rising_poke_edge: bool = in_poke_range and not _was_in_poke_range
 			if in_poke_range and _poke_claim_floor <= 0.0 and (rising_poke_edge or _poke_cooldown <= 0.0):
 				_poke_claim_floor = _POKE_CLAIM_FLOOR_S

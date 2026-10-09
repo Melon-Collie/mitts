@@ -50,7 +50,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +3: the wrister wind-up side reads the trailer's relative motion over the
 	# charge (#740), not just where he stands at the commit.
 	"res://Scripts/ai/skater_agent_state_machine.gd": 6182,
-	"res://Scripts/game/game_manager.gd": 5654,
+	"res://Scripts/game/game_manager.gd": 5597,
 	"res://Scripts/domain/ai/action_scoring.gd": 4458,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
@@ -68,7 +68,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/actors/skater.gd": 2697,
 	"res://Scripts/networking/network_manager.gd": 2824,
 	"res://Scripts/game/tutorial_manager.gd": 2101,
-	"res://Scripts/controllers/skater_ik_coordinator.gd": 915,
+	"res://Scripts/controllers/skater_ik_coordinator.gd": 925,
 	"res://Scripts/controllers/puck_controller.gd": 1520,
 	"res://Scripts/actors/hockey_rink.gd": 1472,
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 1436,
@@ -78,12 +78,12 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/ui/career_stats_screen.gd": 1271,
 	"res://Scripts/domain/ai/carry_space.gd": 1255,
 	"res://Scripts/ui/lobby_manager.gd": 1247,
-	"res://Scripts/actors/puck.gd": 1029,
+	"res://Scripts/actors/puck.gd": 1041,
 	"res://Scripts/ui/side_menu.gd": 995,
 	"res://Scripts/controllers/goalie_body_config_builder.gd": 1072,
 	"res://Scripts/ui/network_debug_overlay.gd": 956,
 	"res://Scripts/networking/network_telemetry.gd": 957,
-	"res://Scripts/controllers/local_controller.gd": 930,
+	"res://Scripts/controllers/local_controller.gd": 932,
 	"res://Scripts/ui/player_settings_popup.gd": 863,
 	"res://Scripts/ui/slot_grid_panel.gd": 839,
 	"res://Scripts/domain/state/game_state_machine.gd": 838,
@@ -103,7 +103,7 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/networking/network_telemetry.gd": 53,
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 48,
 	"res://Scripts/controllers/skater_controller.gd": 40,
-	"res://Scripts/actors/puck.gd": 39,
+	"res://Scripts/actors/puck.gd": 40,
 	"res://Scripts/domain/state/game_state_machine.gd": 38,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 36,
 	"res://Scripts/actors/skater_hud_coordinator.gd": 30,
