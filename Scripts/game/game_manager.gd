@@ -144,7 +144,7 @@ var _human_ids_scratch: Array = []
 var _camped_ids_scratch: Array = []
 var _input_blocked: bool = false
 var _puck_oob_timer: float = 0.0
-var _puck_net_stuck_timer: float = 0.0
+var _stuck_puck := StuckPuckWatchdog.new()
 # Swept goal detection (host): the puck path the goals test each tick.
 var _goal_tracker := GoalCrossingTracker.new()
 # The AI goalies' fixed identities, indexed by team_id — spawned onto the
@@ -636,7 +636,7 @@ func _physics_process(delta: float) -> void:
 	_update_host_puck_tracking()
 	_check_goal_crossing()
 	_check_puck_out_of_bounds(delta)
-	_check_puck_stuck_on_net(delta)
+	_check_puck_stuck(delta)
 	_apply_ghost_state(delta)
 	_shot_tracker.tick(delta)
 	_hit_tracker.tick(delta)
@@ -735,37 +735,30 @@ func _check_puck_out_of_bounds(delta: float) -> void:
 		_puck_oob_timer = 0.0
 
 
-# Host-only: catch a puck that settled motionless on the net frame. It never
-# touches the ice, so the on-ice/airborne logic would leave it stuck forever. If
-# it's only on the low back/skirt frame (a few cm up) it's realistically
-# playable, so drop it to the ice; if it's perched up on the crossbar/crown it's
-# genuinely unplayable, so whistle it dead like an out-of-play puck.
-func _check_puck_stuck_on_net(delta: float) -> void:
-	if _state_machine.current_phase != GamePhase.Phase.PLAYING:
-		_puck_net_stuck_timer = 0.0
-		return
-	if NetworkManager.is_drill_mode() or puck.carrier != null:
-		_puck_net_stuck_timer = 0.0
+# Host-only: a loose puck physically stuck on the net frame or against the
+# goalie in the crease (StuckPuckWatchdog judges which, and what it earns).
+func _check_puck_stuck(delta: float) -> void:
+	if _state_machine.current_phase != GamePhase.Phase.PLAYING \
+			or NetworkManager.is_drill_mode():
+		_stuck_puck.reset()
 		return
 	var pos: Vector3 = puck.global_position
-	var settled: bool = puck.linear_velocity.length() < GameRules.NET_STUCK_MAX_SPEED
-	if not (puck.is_airborne() and settled and GameRules.is_over_net_footprint(Vector2(pos.x, pos.z))):
-		_puck_net_stuck_timer = 0.0
-		return
-	_puck_net_stuck_timer += delta
-	if _puck_net_stuck_timer < GameRules.NET_STUCK_GRACE_DURATION:
-		return
-	_puck_net_stuck_timer = 0.0
-	if pos.y - puck.ice_height <= GameRules.NET_STUCK_PLAYABLE_HEIGHT:
-		# Low on the frame — realistically reachable. Drop it to the ice so play
-		# continues instead of stopping for something a stick could poke free.
-		puck.settle_to_ice()
-		return
-	# Perched up on the crossbar/crown — unplayable. Whistle dead and face off.
-	var dot: Vector2 = GameRules.nearest_faceoff_dot(Vector2(pos.x, pos.z))
-	puck_out_of_play.emit()
-	NetworkManager.notify_puck_out_of_play_to_all()
-	_whistle_and_faceoff(dot)
+	var verdict: StuckPuckWatchdog.Verdict = _stuck_puck.tick(delta, pos,
+			puck.linear_velocity.length(), pos.y - puck.ice_height,
+			puck.is_airborne(), puck.carrier != null or puck.pickup_locked)
+	match verdict:
+		StuckPuckWatchdog.Verdict.NONE:
+			return
+		StuckPuckWatchdog.Verdict.DROP_TO_ICE:
+			puck.settle_to_ice()
+			return
+		StuckPuckWatchdog.Verdict.OUT_OF_PLAY:
+			puck_out_of_play.emit()
+			NetworkManager.notify_puck_out_of_play_to_all()
+		StuckPuckWatchdog.Verdict.FROZEN:
+			goalie_freeze_called.emit()
+			NetworkManager.notify_goalie_freeze_called_to_all()
+	_whistle_and_faceoff(GameRules.nearest_faceoff_dot(Vector2(pos.x, pos.z)))
 
 
 # Plays the whistle, transitions the state machine to FACEOFF_PREP at the

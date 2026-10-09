@@ -1,12 +1,20 @@
 extends GutTest
 
-# CreaseRules — D-shape geometry for the goalie crease, used by PuckController
-# to detect a puck stuck in the crease and shove it outward.
+# CreaseRules — D-shape geometry for the goalie crease.
 
 const _GOAL_Z: float = GameRules.GOAL_LINE_Z
 
 
 # ── is_in_crease ──────────────────────────────────────────────────────────────
+
+func test_behind_line_slack_admits_the_mouth_up_to_the_slack() -> void:
+	var on_line_behind := Vector2(0.0, _GOAL_Z + 0.05)
+	assert_false(CreaseRules.is_in_crease(on_line_behind), "default: behind the line is out")
+	assert_true(CreaseRules.is_in_crease(on_line_behind, 0.065))
+	assert_false(CreaseRules.is_in_crease(Vector2(0.0, _GOAL_Z + 0.08), 0.065))
+	assert_true(CreaseRules.is_in_crease(Vector2(0.0, -_GOAL_Z - 0.05), 0.065),
+			"and at the other end")
+
 
 func test_center_ice_not_in_crease() -> void:
 	assert_false(CreaseRules.is_in_crease(Vector2(0.0, 0.0)))

@@ -50,7 +50,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +3: the wrister wind-up side reads the trailer's relative motion over the
 	# charge (#740), not just where he stands at the commit.
 	"res://Scripts/ai/skater_agent_state_machine.gd": 6072,
-	"res://Scripts/game/game_manager.gd": 5597,
+	"res://Scripts/game/game_manager.gd": 5590,
 	"res://Scripts/domain/ai/action_scoring.gd": 4458,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to

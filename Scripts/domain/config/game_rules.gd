@@ -445,6 +445,10 @@ const PUCK_OOB_XZ_TOLERANCE: float = 0.01
 const NET_STUCK_GRACE_DURATION: float = 1.0
 const NET_STUCK_MAX_SPEED: float = 0.6       # m/s — below this the puck counts as settled
 const NET_STUCK_PLAYABLE_HEIGHT: float = 0.30  # m above ice; at/under → drop to ice, over → whistle
+# A settled, uncovered puck in the crease this long is frozen (StuckPuckWatchdog).
+# Several times the goalie's own slowest clear (sweep dwell + windup ≈ 0.5 s), so
+# it fires only on a puck he cannot play, not on one he is about to.
+const CREASE_STUCK_GRACE_DURATION: float = 2.0
 
 # ── Infractions ───────────────────────────────────────────────────────────────
 const ICING_GHOST_DURATION: float = 3.0  # seconds team stays ghosted after icing (ARCADE/legacy path)

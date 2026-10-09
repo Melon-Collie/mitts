@@ -1,8 +1,7 @@
 class_name CreaseRules
 
 # Pure geometry for the goalie crease (NHL D-shape). No engine deps — fully
-# unit-testable. Used by PuckController to detect a puck stuck in the crease
-# (e.g. wedged under the goalie) and shove it back into play.
+# unit-testable.
 #
 # Crease shape: arc of radius ARC_RADIUS centered on the goal center, capped
 # by straight sides at ±HALF_WIDTH. The straight sides extend STRAIGHT_DEPTH
@@ -16,7 +15,8 @@ const STRAIGHT_DEPTH: float = 1.37    # 4.5 ft straight-side depth (here for par
 
 # Returns true if the XZ position lies within either team's goalie crease.
 # Crease centers sit at (0, ±GameRules.GOAL_LINE_Z), opening toward center ice.
-static func is_in_crease(xz: Vector2) -> bool:
+# `behind_line_slack` (m) also admits that much of the goal mouth behind the line.
+static func is_in_crease(xz: Vector2, behind_line_slack: float = 0.0) -> bool:
 	var goal_z_sign: float = signf(xz.y)
 	if goal_z_sign == 0.0:
 		return false
@@ -25,7 +25,7 @@ static func is_in_crease(xz: Vector2) -> bool:
 	var goal_z: float = goal_z_sign * GameRules.GOAL_LINE_Z
 	# dy_inward: positive when xz is on the rink (center) side of the goal line.
 	var dy_inward: float = (xz.y - goal_z) * -goal_z_sign
-	if dy_inward < 0.0:
+	if dy_inward < -behind_line_slack:
 		return false
 	return xz.x * xz.x + dy_inward * dy_inward <= ARC_RADIUS * ARC_RADIUS
 
