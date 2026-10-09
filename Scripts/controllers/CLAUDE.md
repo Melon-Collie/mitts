@@ -520,21 +520,14 @@ celebration's raised stick, the block's torso lean) are not layers: they move
 the gameplay frame and the blade, so they stay in the pose coordinators at
 physics rate.
 
-### The numeric core is native; the layers are not
+### The gait is GDScript while the stroke is rebuilt
 
-`NativeSkaterGait` ports the part that runs every frame for every skater —
-`SkaterLocomotion`, the coordinator's alignment and pivot read
-(`_align_to_travel`), and `GaitPose`'s solve — and the GDScript stays the
-reference it is fuzzed against (`test_native_gait_parity.gd`). **Change both or
-neither.** The layers are not ported: they are idle most frames, and they are
-where the feel tuning happens. A pass one of them shapes therefore crosses back
-— the port's stroke is mirrored into `SkaterLocomotion` and `GaitPose` solves —
-which is why the parity fuzz drives every overlay, not just skating.
-
-On the native path the GDScript `SkaterLocomotion` does not advance, so nothing
-outside the coordinator may read its state: `locomotion_mix()` answers for
-whichever path runs. Measured skating, per skater per frame: 46 µs GDScript,
-21 µs native, of which the rig writes are about 15.
+The gait has no native port during the stroke rebuild
+(`docs/skating-stroke-plan.md`): every phase reshapes the code a port would
+mirror, so the port returns in the plan's last phase, with a new parity fuzz
+driving every overlay as well as the skating. Measured before the port was
+retired, skating cost ~51 µs per skater per frame in GDScript against ~29
+native (one run of the gait benchmark), most of the gap the locomotion and the solve.
 
 ### Pose the hand, not the blade
 

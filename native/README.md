@@ -2,7 +2,7 @@
 
 C++ ports of per-tick math kernels, registered as `Native*` classes
 (`NativeTopHandIK`, `NativeBottomHandIK`, `NativeSkaterMovement`,
-`NativePuckStep`, `NativeBladeDangle`, `NativeSkaterGait`, `NativeArmRig`). The
+`NativePuckStep`, `NativeBladeDangle`, `NativeArmRig`). The
 GDScript originals (in `Scripts/domain/rules/`, `Scripts/controllers/` and
 `Scripts/actors/`) remain the behavioral
 reference; each ported kernel is pinned to its reference by a seeded fuzz test
@@ -125,14 +125,9 @@ without a built binary, loses performance, never correctness — CI builds it):
   identical step.
 - **Swept-OBB atom** — `GoalieContactDetector.nearest` (host saves + client
   goalie-stop prediction).
-- **Gait core** — `SkaterSkatingCoordinator.apply` (render rate, every skater):
-  `locomote` runs `SkaterLocomotion`, the hip alignment and the pivot read in
-  one call, and `solve` the `GaitPose` solve. The overlay layers stay GDScript;
-  a pass one of them shapes solves the pose in `GaitPose` from the port's
-  stroke (`get_stroke_*`), so the parity fuzz
-  (`tests/unit/rules/test_native_gait_parity.gd`) drives the overlays too.
-  Tunables load by name in `configure(controller)`, re-run from
-  `SkaterController.apply_attributes`.
+- **Gait core** — not ported while the stroke rebuild is in progress
+  (`docs/skating-stroke-plan.md`): the gait runs in GDScript, and the port
+  returns in that plan's last phase with a new parity fuzz.
 
 - **Arm rig** — `SkaterArmRig._update_arm` (render rate, every drawn skater,
   both arms): `pose` runs the whole arm and **writes the bones itself** — the
@@ -145,9 +140,8 @@ without a built binary, loses performance, never correctness — CI builds it):
   (`_sync_cap`); a degenerate span returns false and takes the GDScript path.
   `tests/unit/rules/test_native_arm_rig_parity.gd`.
 
-The parity suites force the GDScript path on their reference objects (e.g.
-nulling `_skating._native`) — a parity test must never compare the native
-port against itself.
+The parity suites force the GDScript path on their reference objects — a
+parity test must never compare the native port against itself.
 
 ## Adding a kernel
 

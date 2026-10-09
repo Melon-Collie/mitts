@@ -5,10 +5,6 @@ extends RefCounted
 # crouch, then every GaitLayer in priority order. Scratch — the coordinator owns
 # one and refills it each pass. Leg angles are hip-frame radians; knee values
 # are the total fold, negative folding the shin back under the body.
-#
-# The stance and knee solve below (solve_stance, seed_legs, solve_knees,
-# seed_trunk) is mirrored by NativeSkaterGait.solve; test_native_gait_parity.gd
-# fails if the two drift. Change both or neither.
 
 # MESH-NATIVE leg segment spans from Scenes/Skater.tscn — hip pivot to knee
 # pivot (LegL → ShinL) and knee pivot to skate sole (ShinL → FootL). The knee
@@ -152,36 +148,6 @@ func seed_trunk(loco: SkaterLocomotion) -> void:
 	wobble_roll = 0.0
 	edge_l = clampf(maxf(loco.l_ext * loco.intensity, loco.edge_floor), 0.0, 1.0)
 	edge_r = clampf(maxf(loco.r_ext * loco.intensity, loco.edge_floor), 0.0, 1.0)
-
-
-# The whole pose NativeSkaterGait.solve settled on, for a pass no layer shapes.
-func load_native(native: RefCounted) -> void:
-	var leg_l: Vector4 = native.get_leg_l()
-	var leg_r: Vector4 = native.get_leg_r()
-	var body: Vector4 = native.get_body()
-	var edges: Vector2 = native.get_edges()
-	l_pitch = leg_l.x
-	l_roll = leg_l.y
-	l_knee = leg_l.z
-	l_yaw = leg_l.w
-	r_pitch = leg_r.x
-	r_roll = leg_r.y
-	r_knee = leg_r.z
-	r_yaw = leg_r.w
-	drop = body.x
-	trunk_pitch = body.y
-	trunk_roll = body.z
-	edge_l = edges.x
-	edge_r = edges.y
-	foot_flat_l = 0.0
-	foot_flat_r = 0.0
-	wobble_pitch = 0.0
-	wobble_roll = 0.0
-	frame_share = 0.0
-	plant = 1.0
-	plant_l = plant_share((native.get_stroke_drive() as Vector4).x,
-			(native.get_stroke_body() as Vector4).w)
-	plant_r = plant_l
 
 
 # Both feet on the ice while the stroke is idle, and through the dug-edge

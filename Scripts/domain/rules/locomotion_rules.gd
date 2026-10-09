@@ -14,9 +14,6 @@ class_name LocomotionRules
 # free in any direction, the split is against facing instead of travel.
 #
 # Frame: XZ-plane vectors as Vector2(x, z).
-#
-# Mirrored in C++ by NativeSkaterGait (native/src/native_skater_gait.cpp);
-# test_native_gait_parity.gd fails if the two drift. Change both or neither.
 
 # The state mix, filled in place by classify() — one per caller, never shared.
 # Weights sum to 1.
