@@ -921,13 +921,6 @@ var net_blade_half_thickness: float = 0.012
 # wedge, where there is no rebound to inherit but the puck must still come off
 # rather than ride along with a stick the post is holding back.
 var post_catch_release_speed: float = 1.5
-# How deep the twine lets the blade sink before stopping it. The mesh is
-# compliant and a real stick does bury itself in it, but only just — reach is
-# bounded before the blade ever gets here (SkaterIKCoordinator._board_reach_limit
-# casts the net as well as the boards), so this only has to soften the residual
-# contact. Deep values read as the stick passing THROUGH the net, which is worse
-# than the hard wall it replaced.
-var net_mesh_give: float = 0.04
 
 # ── Goalie Body Block ─────────────────────────────────────────────────────────
 # XZ cylinder radius used to push the blade (and carried puck) away from a
@@ -2095,10 +2088,14 @@ func _collide_pinned_puck_with_net() -> void:
 		skater.carry_pin_correction = Vector3.ZERO
 		return
 	var raw: Vector3 = skater.get_carry_target_raw()
-	# Seed the sweep from the pin itself on the first carry tick: with no prior
-	# sample there is no segment, and a stationary point classifies off its own
-	# position exactly as the loose puck's first sub-step does.
-	var prev: Vector3 = _prev_carry_pin if _has_prev_carry_pin else raw
+	# On the first carry tick the sweep starts at the spot the puck was picked up
+	# from. Starting from the pin itself would classify the twine from the blade's
+	# side, so a puck picked up across the mesh would be held on the far side of
+	# it. Only the host knows the carrier; a client's local carry starts from the
+	# puck it is drawing.
+	var prev: Vector3 = _prev_carry_pin
+	if not _has_prev_carry_pin:
+		prev = puck.picked_up_from if puck.carrier == skater else puck.global_position
 
 	# IRON — a puck caught on the pipe comes off, whatever the carrier is doing.
 	# This is the distinction that matters at the net, and it is a property of the

@@ -1,7 +1,7 @@
 # Net Play — Design Doc
 
-Status: **A1 / A2 / B1 IMPLEMENTED** (one net, iron strips, legality emergent).
-**A3 and Part C outstanding.** Part C is still a sketch written to be argued
+Status: **A1 / A2 / B1 / A3 IMPLEMENTED** (one net, iron strips, legality
+emergent, net in the reach cast). **Part C outstanding.** Part C is still a sketch written to be argued
 with; §10's remaining open questions are live.
 
 Scope: everything that happens inside about two metres of the crease —
@@ -124,7 +124,7 @@ needs:
 | Consumer | Today | Should be |
 |---|---|---|
 | `NetClampRules` (blade) | 0.10 | gone — real geometry + blade half-thickness |
-| `GameRules.push_out_of_net` (skater bodies) | passed a body radius | unchanged — bodies legitimately need a fat exclusion |
+| `GameRules.push_out_of_net` (skater bodies) | passed a body radius | keeps the fat footprint, and insets the mouth too — the whole body stays in front of the goal line, so the posts are solid to it |
 | `GameRules.is_over_net_footprint` | 0.10 | unchanged — it is a coarse "is this over the net" query |
 
 So the constant survives; the blade stops reading it.
@@ -431,7 +431,16 @@ choice has to keep paying.
    snap is a discontinuity, not a sweep, so "the only continuous route" does not
    survive one. This is why `GoalDetectionRules` must stay host-only — it is an
    invariant now, not merely how it happens to be wired.
-7. **Physical legality only.** Rule legality (high stick, distinct kicking
+7. **Nothing reaches through the net.** Collision alone does not cover
+   pickup: the pickup and poke radius is half a metre and the twine is
+   centimetres thick, so a stick reached into the cage through the mouth picks
+   up a puck lying against the outside of the mesh, and the pin carries it
+   across. Pickup and poke refuse a blade-to-puck path through a post or a twine
+   panel (`NetGeometry.path_blocked`), and the pin's first carried tick sweeps
+   from where the puck was picked up (`Puck.picked_up_from`). With both, the
+   pickup snap is a real path: one that crosses the line went through the
+   mouth, and scores.
+8. **Physical legality only.** Rule legality (high stick, distinct kicking
    motion) is not derivable from collision and does not exist in this game. If
    ever added it belongs on the goal *event*, never in the collision layer.
 
@@ -445,8 +454,8 @@ Each stage is independently shippable and independently revertible.
 |---|---|---|
 | **A1** | ✅ Shared net geometry (`NetGeometry`); `NetBladeCollision` (segment vs pipes + twine); all four blade call sites switched | low — pose only |
 | **A2** | ✅ Buffer off the blade path; posts ring; iron strips the carried puck off its own reflection (§2.5) | low |
-| **B1** | The pinned puck becomes a swept collider; `NetClampRules` deleted whole (`allow_front`, mouth column, `_prev_carry_pin`); `if carried: return false` lifted from `GoalDetectionRules` | **medium — this is the own-goal surface**; gate on the wraparound regression battery below |
-| **A3** | Net folded into the reach cast alongside the boards. **Deliberately held**: its whole benefit is leaving the collision less to correct, so landing it in the same change would make the A1/A2/B1 playtest harder to attribute. Cheap to add after. | low |
+| **B1** | ✅ The pinned puck becomes a swept collider; `NetClampRules` deleted whole (`allow_front`, mouth column); `if carried: return false` lifted from `GoalDetectionRules` | **medium — this is the own-goal surface**; gate on the wraparound regression battery below |
+| **A3** | ✅ Net folded into the reach cast alongside the boards (`NetGeometry.ray_to_net` in `SkaterIKCoordinator._board_reach_limit`) | low |
 | **C1** | Jam contest — not started | design pass; own playtest cycle |
 
 B1 is the one to be careful with, and it is also the one that unlocks everything
@@ -525,7 +534,7 @@ reverse. These have no coverage today because the blade is a point.
 
 ## 10. Open questions
 
-1. **Blade penetration depth into twine** — 0.12 m is a guess. It wants to be
+1. **Blade penetration depth into twine** — `GameRules.NET_BLADE_MESH_GIVE`, 0.04 m (deep values read as the stick passing through). It wants to be
    deep enough to read as "buried in the mesh" and shallow enough that it never
    reaches a puck on the other side. Playtest.
    `carry_net_squeeze_threshold` (§3.2) is unset for the same reason, and the two

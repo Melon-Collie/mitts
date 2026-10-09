@@ -201,13 +201,14 @@ func test_result_is_reset_between_resolves() -> void:
 func test_a_blade_out_by_the_boards_touches_nothing_at_goal_line_depth() -> void:
 	# The reported bug, at its own coordinates: a skater jammed on the boards in
 	# the corner, blade at the depth of the back twine but nine metres wide of it.
+	# (A prev INSIDE the cage nine metres from its blade is a stale one, which
+	# side_anchor re-seeds — see test_a_teleport_reseeds_the_anchor.)
 	var heel := Vector3(9.4, ICE, GL + 0.6)
 	for prev: Vector3 in [
 			Vector3(9.3, ICE, GL + 1.4),    # prev behind the back plane
-			Vector3(0.0, ICE, GL + 0.3),    # prev inside the cavity
-			Vector3(0.0, ICE, GL - 0.4)]:   # prev in the mouth column
+			Vector3(8.0, ICE, GL + 0.5)]:   # prev beside the cage, out wide
 		assert_false(_resolve(prev, heel, _flat_toe(heel)).hit(),
-				"nothing to collide with out there, whatever prev says (prev=%s)" % prev)
+				"nothing to collide with out there (prev=%s)" % prev)
 
 
 func test_a_blade_rounding_the_cage_is_not_pinned_by_the_back_mesh() -> void:
@@ -222,22 +223,62 @@ func test_a_blade_rounding_the_cage_is_not_pinned_by_the_back_mesh() -> void:
 	assert_almost_eq(res.offset.y, 0.0, EPS, "and none up its slant")
 
 
-func test_the_footprint_bound_scales_with_the_clearance_it_is_given() -> void:
-	# The bound is geometry plus the caller's own compliance, not a constant: a
-	# blade allowed to sink further into the mesh is still on it further out.
+func test_a_stick_inside_pulled_wholly_past_the_footprint_is_held_by_the_side_twine() -> void:
+	# A drag toward a cursor beyond the side net can propose a whole blade outside
+	# the cage's footprint in one tick. The footprint early-out is for a stick that
+	# is outside; for one inside, skipping it is the stick going through the mesh.
 	var heel := Vector3(GameRules.NET_BACK_HALF_WIDTH + 0.08, ICE, GL + 0.4)
-	NetBladeCollision.resolve(
-			Vector3(0.0, ICE, GL + 0.3), heel, heel, THICK, GIVE, _r)
-	assert_true(_r.hit(), "within the footprint at this give, the mesh still holds it")
-	NetBladeCollision.resolve(
-			Vector3(0.0, ICE, GL + 0.3), heel, heel, THICK, 0.0, _r)
-	assert_false(_r.hit(), "with no give at all the same point is past the cage")
+	var res: NetBladeCollision.Result = _resolve(
+			Vector3(HW - 0.1, ICE, GL + 0.4), heel, _flat_toe(heel))
+	assert_true(res.hit(), "the interior side face still holds it")
+	assert_almost_eq(heel.x + res.offset.x + 0.30, HW + GIVE, EPS,
+			"toe back at the twine's give")
 
 
-# ── Reach limit: the net bounds the aim, like the boards ──────────────────────
-# The stick is stopped BEFORE it is aimed through the mesh, rather than solved to
-# full reach and clamped back. The mouth is exempt — the limit must never be what
-# stops a wraparound.
+# ── side_anchor: which side of the mesh the stick is on ──────────────────────
+# A blade pressed into compliant twine sits on either side of the plane, so the
+# next resolve must classify from the contact as a RIGID mesh would have stopped
+# it — never from the raw contact, which flips the face holding the stick.
+
+func test_an_anchor_inside_stays_inside_while_the_blade_is_sunk_through() -> void:
+	var anchor := Vector3(HW - 0.1, ICE, GL + 0.4)
+	var sunk := Vector3(HW + 0.03, ICE, GL + 0.45)
+	var next: Vector3 = NetBladeCollision.side_anchor(anchor, sunk)
+	assert_true(NetGeometry.interior_or_mouth(next), "still classified inside: %s" % next)
+	assert_almost_eq(next.z, sunk.z, EPS, "and it follows the blade along the mesh")
+
+
+func test_an_anchor_outside_stays_outside_while_the_blade_is_sunk_through() -> void:
+	var anchor := Vector3(HW + 0.1, ICE, GL + 0.4)
+	var sunk := Vector3(HW - 0.03, ICE, GL + 0.45)
+	assert_false(NetGeometry.interior_or_mouth(NetBladeCollision.side_anchor(anchor, sunk)),
+			"still classified outside")
+
+
+func test_an_anchor_behind_stays_behind_while_the_blade_is_sunk_through() -> void:
+	var back: float = GL + GameRules.NET_DEPTH
+	var anchor := Vector3(0.2, ICE, back + 0.2)
+	var sunk := Vector3(0.2, ICE, back - 0.03)
+	var next: Vector3 = NetBladeCollision.side_anchor(anchor, sunk)
+	assert_gte(NetGeometry.back_plane_distance(next), 0.0, "still behind the back twine")
+
+
+func test_an_anchor_crosses_through_the_mouth() -> void:
+	var anchor := Vector3(0.3, ICE, GL - 0.2)
+	var in_cage := Vector3(0.3, ICE, GL + 0.1)
+	assert_eq(NetBladeCollision.side_anchor(anchor, in_cage), in_cage,
+			"nothing solid in the mouth — the anchor goes in with the stick")
+	var out_front := Vector3(1.1, ICE, GL - 0.1)
+	assert_eq(NetBladeCollision.side_anchor(Vector3(0.6, ICE, GL - 0.1), out_front), out_front,
+			"and round the front of the post")
+
+
+func test_a_teleport_reseeds_the_anchor() -> void:
+	var anchor := Vector3(0.0, ICE, GL + 0.3)
+	var far := Vector3(9.4, ICE, GL + 0.6)
+	assert_eq(NetBladeCollision.side_anchor(anchor, far), far,
+			"metres from the anchor is a teleport, not a stick through the mesh")
+
 
 func _cast(from: Vector2, toward: Vector2) -> float:
 	return NetGeometry.ray_to_net(from, (toward - from).normalized(), ICE, THICK)
