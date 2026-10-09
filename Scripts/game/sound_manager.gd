@@ -43,6 +43,9 @@ enum Sound {
 	BODY_CHECK,
 	FACEOFF_WHISTLE,
 	PUCK_GLASS,
+	STICK_TAP,
+	GOALIE_PAD_DROP,
+	GOALIE_PAD_SLIDE,
 }
 
 const _SOUND_PATHS: Dictionary = {
@@ -65,6 +68,16 @@ const _SOUND_PATHS: Dictionary = {
 	Sound.BODY_CHECK:       "res://Sounds/body_check.ogg",
 	Sound.FACEOFF_WHISTLE:  "res://Sounds/faceoff_whistle.wav",
 	Sound.PUCK_GLASS:       "res://Sounds/puck_glass.wav",
+	Sound.STICK_TAP:        "res://Sounds/stick_tap_%02d.wav",
+	Sound.GOALIE_PAD_DROP:  "res://Sounds/goalie_pad_drop.wav",
+	Sound.GOALIE_PAD_SLIDE: "res://Sounds/goalie_pad_slide.wav",
+}
+
+# Cues recorded as several takes: the path above is a pattern numbered from 1,
+# and each play draws a take other than the last one, so a run of the same cue
+# never repeats a sample back to back.
+const _TAKE_COUNTS: Dictionary = {
+	Sound.STICK_TAP: 15,
 }
 
 # Every file above is mastered to one reference loudness
@@ -90,6 +103,9 @@ const _MIX_DB: Dictionary = {
 	Sound.BODY_CHECK:       0.0,
 	Sound.PUCK_PICKUP:     -6.0,
 	Sound.SKATE_BRAKE:     -4.0,
+	Sound.GOALIE_PAD_DROP: -3.0,
+	Sound.GOALIE_PAD_SLIDE: -4.0,
+	Sound.STICK_TAP:       -6.0,
 	Sound.UI_CLICK:       -12.0,
 	Sound.UI_HOVER:       -18.0,
 }
@@ -107,6 +123,8 @@ const _UNDER_REFERENCE_DB: Dictionary = {
 	Sound.PUCK_GOAL_BODY:  1.3,
 	Sound.PUCK_BODY_BLOCK: 4.1,
 	Sound.PUCK_GLASS:      7.1,
+	Sound.STICK_TAP:      10.0,
+	Sound.GOALIE_PAD_DROP: 11.0,
 }
 
 # A cue reusing another's recording, pitched to read as a different target:
@@ -155,6 +173,8 @@ const _SHOT_VOLUME_FLOOR_DB: float = -18.0
 const _SHOT_FULL_POWER_M_S: float = GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S
 
 var _streams: Dictionary = {}
+var _takes: Dictionary = {}       # Sound -> Array[AudioStream], multi-take cues only
+var _last_take: Dictionary = {}   # Sound -> index played last
 var _pool_ui: Array[AudioStreamPlayer] = []      # UI bus — hover, click
 var _pool_sfx_2d: Array[AudioStreamPlayer] = []  # SFX bus — non-spatial gameplay cues
 var _pool_3d: Array[AudioStreamPlayer3D] = []    # SFX bus — all world sounds
@@ -195,8 +215,27 @@ func _ensure_master_limiter() -> void:
 func _load_streams() -> void:
 	for sound: int in _SOUND_PATHS:
 		var path: String = _SOUND_PATHS[sound]
-		if ResourceLoader.exists(path):
+		if _TAKE_COUNTS.has(sound):
+			var takes: Array[AudioStream] = []
+			for i: int in _TAKE_COUNTS[sound]:
+				if ResourceLoader.exists(path % (i + 1)):
+					takes.append(load(path % (i + 1)))
+			if not takes.is_empty():
+				_takes[sound] = takes
+				_last_take[sound] = -1
+		elif ResourceLoader.exists(path):
 			_streams[sound] = load(path)
+
+
+func _stream_for(sound: Sound) -> AudioStream:
+	if not _takes.has(sound):
+		return _streams.get(sound)
+	var takes: Array[AudioStream] = _takes[sound]
+	var pick: int = randi() % takes.size()
+	if takes.size() > 1 and pick == _last_take[sound]:
+		pick = (pick + 1 + randi() % (takes.size() - 1)) % takes.size()
+	_last_take[sound] = pick
+	return takes[pick]
 
 
 func _build_pools() -> void:
@@ -226,7 +265,7 @@ func _build_pools() -> void:
 
 
 func play_ui(sound: Sound, volume_db: float = 0.0, pitch_variance: float = 0.0) -> void:
-	var stream: AudioStream = _streams.get(sound)
+	var stream: AudioStream = _stream_for(sound)
 	if stream == null:
 		return
 	for p: AudioStreamPlayer in _pool_ui:
@@ -239,7 +278,7 @@ func play_ui(sound: Sound, volume_db: float = 0.0, pitch_variance: float = 0.0) 
 
 
 func play_crowd(sound: Sound, volume_db: float = 0.0, pitch_variance: float = 0.0) -> void:
-	var stream: AudioStream = _streams.get(sound)
+	var stream: AudioStream = _stream_for(sound)
 	if stream == null:
 		return
 	for p: AudioStreamPlayer in _pool_crowd:
@@ -255,7 +294,7 @@ func play_crowd(sound: Sound, volume_db: float = 0.0, pitch_variance: float = 0.
 # new cue: in a scramble the fresh contact is the one the player is watching,
 # and the oldest voice is mostly tail by then.
 func play_world(sound: Sound, position: Vector3, volume_db: float = 0.0, pitch_variance: float = 0.0, pitch_scale: float = 1.0) -> void:
-	var stream: AudioStream = _streams.get(sound)
+	var stream: AudioStream = _stream_for(sound)
 	if stream == null:
 		return
 	var voice: AudioStreamPlayer3D = null
