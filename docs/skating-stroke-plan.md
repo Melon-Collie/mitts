@@ -1,8 +1,9 @@
 # Skating stroke rebuild — plan
 
-Status: **proposed.** Nothing here is built. Decisions needed are in §9; once
-they are taken this is the agreed design, and deviating from it means asking
-first (CLAUDE.md).
+Status: **agreed.** The §9 decisions were taken as proposed, with one change:
+the C++ port waits until every phase has landed, so the native gait retires at
+the start of Phase 1 rather than Phase 2. Deviating from this version means
+asking first (CLAUDE.md).
 
 Follows `docs/skater-animation-plan.md`, whose rebuild gave the body one chain,
 a balance lean and locomotion states, and explicitly kept the stroke maths
@@ -189,7 +190,7 @@ but not part of this plan.
 
 `NativeSkaterGait` ports the classifier, the strokes and the pose solve today,
 and `test_native_gait_parity.gd` fuzzes it against the GDScript. As in the
-animation rebuild, the native gait is **retired during Phases 2–4** (GDScript
+animation rebuild, the native gait is **retired during Phases 1–4** (GDScript
 only — measured ~+25 µs per skater per frame skating, ~0.25 ms a frame for ten)
 and re-ported in Phase 5 with a new parity fuzz. The leg solve is a handful of
 trig per leg; the target is to finish at or under today's native skating cost
@@ -219,16 +220,16 @@ Each phase pushed for local testing at its end.
 | Phase | Work | Visible result |
 |---|---|---|
 | 0 | `tools/gait_strip.gd` committed; baseline strips recorded | none |
-| 1 | §1 classifier (GDScript + native, both still live) | crossovers only through driven turns; coasting turns ride the edges |
-| 2 | §3 leg solve with every state's foot paths taken from today's strokes by forward kinematics (the framework, pose-identical); native gait retired | none (strips identical) |
+| 1 | native gait retired; §1 classifier | crossovers only through driven turns; coasting turns ride the edges |
+| 2 | §3 leg solve with every state's foot paths taken from today's strokes by forward kinematics (the framework, pose-identical) | none (strips identical) |
 | 3 | §2 stride and glide re-authored | the wide, out-and-back push |
 | 4 | §2 crossover and carve, then backward / shuffle / tight / stop / skid | crossovers that cross; consistent turns |
 | 5 | native re-port, new parity fuzz, plant solve measured and retired if redundant, docs | cost back |
 
 Phase 1 stands alone and is the quickest win, which is why it goes first and
-keeps the native classifier live.
+ships on its own for a playtest.
 
-## §9 Decisions needed
+## §9 Decisions (taken)
 
 1. **CARVE as its own state** (proposed), or skate undriven turns as GLIDE with
    the lean? CARVE costs one more state; it is what makes coasting turns and the
@@ -238,7 +239,7 @@ keeps the native classifier live.
    one frame too long as a turn.
 3. **Stride width at full drive:** ~0.5 m from the midline proposed. From the
    game camera width is what reads; too wide reads as speed skating.
-4. **Retire the native gait during Phases 2–4** (proposed), accepting ~+25 µs
+4. **Retire the native gait during Phases 1–4** (taken; proposed as 2–4), accepting ~+25 µs
    per skater per frame on main until Phase 5, or keep both in step every phase
    (slower; every iteration twice)?
 5. **Ship order:** Phase 1 alone first for you to feel (proposed), or hold it
