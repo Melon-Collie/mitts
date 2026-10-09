@@ -251,12 +251,34 @@ func test_steering_taps_ride_the_edges_and_a_held_turn_crosses_over() -> void:
 				tap_worst = maxf(tap_worst, c._skating.locomotion_mix().crossover)
 	assert_lt(tap_worst, 0.3, "steering taps committed %.2f to crossovers" % tap_worst)
 
-	# A held arc: the stick kept across the travel, so the turn never completes.
+	# A held, driven arc: the stick kept 45° into the turn, so the turn never
+	# completes and the stride keeps pushing through it.
 	for _i: int in 120:
+		var v := Vector2(c.skater.velocity.x, c.skater.velocity.z).normalized()
+		var into := (v + Vector2(-v.y, v.x)).normalized()
+		var look: Vector2 = into * 3.0
+		_tick(c, input, into, Vector3(look.x, 0.0, look.y))
+	assert_gt(c._skating.locomotion_mix().crossover, 0.6,
+			"a held, driven turn must be skated with crossovers")
+
+
+# A stick held straight across travel turns the skater at the full edge rate
+# with no thrust (SkaterMovementRules drives by the stick's cosine): he coasts
+# round on his edges, a carve, and power strokes would be a lie.
+func test_a_coasting_turn_is_carved_not_crossed_over() -> void:
+	var c: SkaterController = _live_controller()
+	c.skater.global_position.z = 25.0
+	var input := InputState.new()
+	input.delta = DT
+	_skate_up_the_ice(c, input)
+	var worst_cross: float = 0.0
+	for _i: int in 60:
 		var v := Vector2(c.skater.velocity.x, c.skater.velocity.z).normalized()
 		var across := Vector2(-v.y, v.x)
 		var look: Vector2 = (v + across).normalized() * 3.0
 		_tick(c, input, across, Vector3(look.x, 0.0, look.y))
-	assert_gt(c._skating.locomotion_mix().crossover, 0.6,
-			"a held turn must be skated with crossovers")
+		worst_cross = maxf(worst_cross, c._skating.locomotion_mix().crossover)
+	var m: LocomotionRules.Mix = c._skating.locomotion_mix()
+	assert_gt(m.carve, 0.6, "a coasting turn rides the edges (carve %.2f)" % m.carve)
+	assert_lt(worst_cross, 0.1, "no crossovers without thrust (worst %.2f)" % worst_cross)
 

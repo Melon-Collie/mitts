@@ -263,3 +263,30 @@ choreography from coaching material, and are to be judged on the strips.
   [Marino & Grasse, ISBS](https://ojs.ub.uni-konstanz.de/cpa/article/view/1699/1601).
 - Crossover technique (outside leg pushes round a circle, inside foot crossing
   under): [How To Hockey](https://howtohockey.com/forward-crossovers-basics/).
+
+## §11 Phase 1 as built
+
+- **The native gait is gone** until Phase 5: the C++ class, its parity fuzz and
+  the benchmark's native row. Skating costs ~51 µs per skater per frame in
+  GDScript against ~29 native.
+- **Not in the design: the push is banded, not linear.** §1 weighted the
+  crossover by the drive (`d · T`). Measured, a 45° arc — driving at 71% and
+  turning flat out — came out half carve, because the coasting share was the
+  stick's sine. The weights now say *whether* the skater pushes: from half the
+  thrust (`LocomotionRules.DRIVE_FULL`, a stick 60° off travel) fully, easing to
+  coasting below it by a smoothstep. How hard is the stroke's amplitude, which
+  already follows the measured acceleration.
+- **Not in the design: the cadence averages the stroking states only**, so a
+  crossover sharing the mix with a carve keeps its tempo.
+- **The carve's legs** are joint-space until Phase 4: inside skate leading
+  (`carve_lead_deg`), the inside knee light, the stance floored at
+  `carve_stance`, counted as an edge state for the ice marks and the plant.
+- **Measured** on the strips (mix at 0.75 s into the input):
+
+  | input | before | after |
+  |---|---|---|
+  | 45° stick, sustained arc | 0.51 stride + 0.45 crossover | 0.63 crossover + 0.35 carve, the carve the uncommitted part, still committing |
+  | stick across travel (no thrust) | 0.89 crossover | 0.92 carve, 0.00 crossover |
+  | D held at speed | up to 0.67 crossover | carve first, crossovers growing to 0.59 as thrust returns |
+  | taps every 0.25 s | crossover up to 0.24 | crossover ≤ 0.14, each tap carved |
+

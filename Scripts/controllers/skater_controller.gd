@@ -437,6 +437,7 @@ var carve_stride_fade: float = 0.7     # fraction of fore/aft stride removed at 
 # by straight-line speed.
 var crossover_phase_per_turn: float = 7.0  # stride-phase rad per rad of heading change
 var carve_stance: float = 0.75         # stance floor at full carve — sit low to hold the edges
+var carve_lead_deg: float = 8.0        # the carve's inside skate leads (the tight turn's split, milder)
 # Gliding — releasing all movement keys settles the legs to rest (the stride
 # is input-gated, v15 intent byte) while this floor keeps working knees under
 # a coasting skater, scaled by speed.

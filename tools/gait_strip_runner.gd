@@ -234,9 +234,9 @@ func _place_camera(view: int) -> void:
 func _report() -> void:
 	var m: LocomotionRules.Mix = _controller._skating.locomotion_mix()
 	var v := Vector2(_skater.velocity.x, _skater.velocity.z)
-	print("  f%d t%d %.2f m/s %4.0f° | glide %.2f stride %.2f cross %.2f back %.2f shuffle %.2f skid %.2f tight %.2f stop %.2f | lean %.1f°" % [
+	print("  f%d t%d %.2f m/s %4.0f° | glide %.2f stride %.2f cross %.2f carve %.2f back %.2f shuffle %.2f skid %.2f tight %.2f stop %.2f | lean %.1f°" % [
 			_frame, _tick, v.length(), rad_to_deg(atan2(v.x, -v.y)), m.glide, m.stride,
-			m.crossover, m.backward, m.shuffle, m.skid, m.tight, m.stop,
+			m.crossover, m.carve, m.backward, m.shuffle, m.skid, m.tight, m.stop,
 			rad_to_deg(_skater.balance_tilt().length())])
 
 

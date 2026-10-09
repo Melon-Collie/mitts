@@ -460,28 +460,36 @@ whose rotation carries the blade markers and is therefore gameplay geometry.
 
 ### The legs skate a state, and the state is the physics' decision
 
-`SkaterLocomotion` owns the locomotion half: glide, stride, crossover,
+`SkaterLocomotion` owns the locomotion half: glide, stride, crossover, carve,
 backward, shuffle, skid, tight turn and stop. Which one is not re-guessed from
-how the velocity happened to change; it is the split the movement model makes
-(`LocomotionRules`, a pure function of velocity, move intent, brake and facing
-— all replicated). The stick's component along travel is a stride, against it a
-skid, across it a turn — and the squares of those cosine and sine terms sum to
-one, so the same split is directly the crossfade. Each state owns its legs
-outright while it holds weight; nothing fades against anything else, which is
-what the old intent channels (dig-in, reversal, shuffle, backpedal, carve
-intent, glide) had to do and is where their flail came from.
+how the stick happens to point; it is what the movement model is doing
+(`LocomotionRules`, a pure function of velocity, move intent, brake, facing and
+the measured turn — all derived from replicated state). Two quantities decide
+it: whether the skater is **driving** (the stick's component along travel,
+which is what the physics thrusts by; against travel it is a skid) and how much
+of the edge's grip the travel's curve is **using** (centripetal acceleration
+over `turn_accel · lateral_grip`). Driving straight is a stride, driving
+through a turn a crossover, coasting straight a glide, coasting round a turn a
+carve. A stick held straight across travel turns the skater with no thrust, so
+it is carved, never crossed over. Each state owns its legs outright while it
+holds weight; nothing fades against anything else.
 
-Two things the split alone would get wrong, both handled in the easing:
+Things the split alone would get wrong, handled where noted:
 
-- **Crossovers commit, corrections do not.** A steering tap at speed does turn
+- **Crossovers commit, corrections do not.** A steering tap at speed does curve
   the travel, but skaters correct a line on their edges and cross over only
   through a held turn. The crossover eases in slower than anything else, and
-  SIGNED — taps alternating sides have to pass through zero, so they cancel
-  while a turn held to one side commits. `test_body_chain.gd` holds both
-  halves.
-- **The glide is the remainder.** Whatever the other states have not yet
-  taken, including the not-yet-committed part of a turn, is skated as a glide
-  on the edges.
+  SIGNED — taps alternating sides have to pass through zero, so they cancel —
+  and the part of a turn not yet committed is skated as a carve.
+  `test_body_chain.gd` holds both halves and the coasting carve.
+- **The weights say whether, not how hard.** From half the thrust
+  (`LocomotionRules.DRIVE_FULL`, a stick 60° off travel) the legs are pushing;
+  how hard is the stroke's amplitude, which follows the measured acceleration.
+  A linear split made a 45° arc half carve.
+- **The cadence is the stroking states' own.** The stride phase advances at the
+  stroking states' rate averaged over them alone, so a crossover sharing the
+  mix with a carve fades in amplitude, never in tempo.
+- **The glide is the remainder.**
 
 ### Overlays are layers, and the order is the priority
 

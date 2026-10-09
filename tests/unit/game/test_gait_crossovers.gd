@@ -6,7 +6,7 @@ const _LEG_L: int = SkaterMeshBuilder.LegBone.LEG_L
 const _LEG_R: int = SkaterMeshBuilder.LegBone.LEG_R
 
 # Crossover gait — three behaviors pinned:
-#  1. Cadence follows the ARC while carving: stride frequency during a real
+#  1. Cadence follows the ARC through a driven turn: stride frequency during a real
 #     turn is crossover_phase_per_turn × turn rate, not the straight-line
 #     speed law — a tight turn quickens the feet, a wide arc glides.
 #  2. Backward turning is gated out: a defender curling backward keeps C-cuts
@@ -19,7 +19,7 @@ const DT: float = 1.0 / 120.0
 const WARMUP_TICKS: int = 300
 const MEASURE_TICKS: int = 240
 const SPEED: float = 5.0
-const TURN_RATE: float = 1.6  # rad/s — exactly carve_ref_turn_rate: a full carve
+const TURN_RATE: float = 1.6  # rad/s — at SPEED, ~0.9 of the edge's lateral grip
 
 
 class Rig:
@@ -49,14 +49,15 @@ func _make_rig(backward: bool) -> Rig:
 # One tick of steady circular (or straight, turn = 0) travel. Positive turn
 # rotates travel toward +X — the skater's right when facing along travel — so
 # the left leg crosses over and the right leg under-pushes. The stick is held
-# the way the physics needs it for that arc: across the travel, toward the
-# turn (along it is a stride, which turns nothing).
+# 45° into the turn: the physics turns at the full edge rate for any stick off
+# travel and drives by its cosine, so this is a driven arc — a crossover. Held
+# straight across, it would coast round on the edges (a carve).
 func _tick(rig: Rig, turn: float) -> void:
 	rig.travel = rig.travel.rotated(turn * DT)
 	var facing: Vector2 = -rig.travel if rig.backward else rig.travel
 	rig.skater.set_facing(facing)
 	rig.skater.velocity = Vector3(rig.travel.x, 0.0, rig.travel.y) * SPEED
-	rig.skater.move_intent = rig.travel.rotated(signf(turn) * PI * 0.5) \
+	rig.skater.move_intent = rig.travel.rotated(signf(turn) * PI * 0.25) \
 			if turn != 0.0 else rig.travel
 	rig.coord.apply(DT)
 
@@ -74,17 +75,17 @@ func _phase_rate(rig: Rig, turn: float) -> float:
 	return advanced / (MEASURE_TICKS * DT)
 
 
-func test_carve_cadence_follows_turn_rate() -> void:
+func test_crossover_cadence_follows_turn_rate() -> void:
 	var straight_rig: Rig = _make_rig(false)
 	var straight: float = _phase_rate(straight_rig, 0.0)
-	var carving: float = _phase_rate(_make_rig(false), TURN_RATE)
+	var crossing: float = _phase_rate(_make_rig(false), TURN_RATE)
 	var turn_law: float = TURN_RATE * straight_rig.controller.crossover_phase_per_turn
-	gut.p("phase rate — straight %.2f, full carve %.2f (turn law %.2f) rad/s"
-			% [straight, carving, turn_law])
+	gut.p("phase rate — straight %.2f, crossover arc %.2f (turn law %.2f) rad/s"
+			% [straight, crossing, turn_law])
 	assert_lt(straight, 6.5, "straight cruise must stay on the speed law")
-	assert_gt(carving, 9.0, "a full carve must re-time the feet to the arc")
-	assert_almost_eq(carving, turn_law, 1.5,
-			"carve cadence should approximate crossover_phase_per_turn × turn rate")
+	assert_gt(crossing, 9.0, "a driven arc must re-time the feet to the arc")
+	assert_almost_eq(crossing, turn_law, 1.5,
+			"crossover cadence should approximate crossover_phase_per_turn × turn rate")
 
 
 func test_backward_turning_keeps_speed_law() -> void:
@@ -95,7 +96,7 @@ func test_backward_turning_keeps_speed_law() -> void:
 
 
 func test_crossover_strokes_alternate() -> void:
-	# Full right carve: left leg's over-step roll peaks on one half of the
+	# A driven right arc: left leg's over-step roll peaks on one half of the
 	# cycle, the right leg's under-push trough on the other — separated by well
 	# over a quarter cycle. (The old simultaneous strokes put both at the same
 	# phase.)
