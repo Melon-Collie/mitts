@@ -50,7 +50,7 @@ func test_driving_through_a_turn_is_a_crossover() -> void:
 	assert_almost_eq(m.crossover, 1.0, 1e-5)
 	assert_almost_eq(m.carve, 0.0, 1e-5)
 	assert_eq(m.side, 1.0, "turning toward the traveller's right")
-	assert_eq(_classify(UP_ICE * 6.0, Vector2(-DIAGONAL.x, DIAGONAL.y), 1.0).side, -1.0)
+	assert_eq(_classify(UP_ICE * 6.0, Vector2(-DIAGONAL.x, DIAGONAL.y), -1.0).side, -1.0)
 
 
 # A stick across travel turns the skater with no thrust at all: he coasts round
@@ -78,6 +78,16 @@ func test_the_turning_share_splits_push_and_coast() -> void:
 	assert_almost_eq(m.crossover, 0.5 * 0.25, 1e-5)
 	assert_almost_eq(m.glide, 0.5 * 0.75, 1e-5)
 	assert_almost_eq(m.carve, 0.5 * 0.25, 1e-5)
+
+
+# The inside of a turn is the way the travel curves, never the stick: once the
+# travel comes round to a held key the stick lands on alternate sides of it
+# tick to tick, and the legs would swap with it.
+func test_the_inside_of_a_turn_is_the_curve_not_the_stick() -> void:
+	assert_eq(_classify(UP_ICE * 6.0, DIAGONAL, -0.5).side, -1.0, "upright")
+	var m := _classify(UP_ICE * 6.0, DIAGONAL, -0.5, false, UP_ICE, true)
+	assert_almost_eq(m.tight, 0.5, 1e-5)
+	assert_eq(m.side, -1.0, "in the stance")
 
 
 func test_stick_against_travel_is_a_skid() -> void:

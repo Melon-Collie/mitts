@@ -486,6 +486,12 @@ Things the split alone would get wrong, handled where noted:
   (`LocomotionRules.DRIVE_FULL`, a stick 60° off travel) the legs are pushing;
   how hard is the stroke's amplitude, which follows the measured acceleration.
   A linear split made a 45° arc half carve.
+- **A turn's inside is the curve, never the stick.** `turning` is signed by
+  the way the travel curves, and the classifier takes the side from it. Once
+  the travel has come round to a held key the stick lands on alternate sides
+  of it tick to tick, and a pose keyed to that swapped its legs every frame.
+  The carve and the tight turn ease signed like the crossover, so a reversal
+  slides the legs through centre. `test_gait_turn_continuity.gd` holds it.
 - **The cadence is the stroking states' own.** The stride phase advances at the
   stroking states' rate averaged over them alone, so a crossover sharing the
   mix with a carve fades in amplitude, never in tempo.

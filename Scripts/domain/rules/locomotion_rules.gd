@@ -38,7 +38,8 @@ class Mix extends RefCounted:
 	var tight: float = 0.0
 	var stop: float = 0.0
 	# +1 toward the traveller's right (CarveRules' sign): the inside of the
-	# crossover, the carve and the tight turn, and the shuffle's direction.
+	# crossover, the carve and the tight turn — the way the travel is curving —
+	# and, from the stick, the shuffle's direction and the stop's.
 	var side: float = 1.0
 
 	func clear() -> void:
@@ -62,7 +63,10 @@ const DRIVE_FULL: float = 0.5
 
 
 # `turning` is the share of the edge's lateral grip the travel's curve is using,
-# 0..1 (SkaterLocomotion.sense).
+# signed by the way it curves (−1..1, SkaterLocomotion.sense). A turn's inside
+# is that sign, never the stick's: once the travel has come round to the stick,
+# the stick sits on alternate sides of it from tick to tick, and a turning pose
+# keyed to that would swap its legs every frame.
 static func classify(velocity: Vector2, intent: Vector2, brake: bool, stance: bool,
 		facing: Vector2, turning: float, out: Mix) -> void:
 	out.clear()
@@ -107,7 +111,9 @@ static func classify(velocity: Vector2, intent: Vector2, brake: bool, stance: bo
 	var moving: float = 1.0 - out.skid
 	var push: float = moving * smoothstep(0.0, 1.0, maxf(along, 0.0) * stick / DRIVE_FULL)
 	var coast: float = moving - push
-	var t: float = clampf(turning, 0.0, 1.0)
+	var t: float = clampf(absf(turning), 0.0, 1.0)
+	if turning != 0.0:
+		out.side = signf(turning)
 	out.stride = push * (1.0 - t)
 	out.glide = coast * (1.0 - t)
 	if stance:

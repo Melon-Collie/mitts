@@ -278,6 +278,14 @@ choreography from coaching material, and are to be judged on the strips.
   already follows the measured acceleration.
 - **Not in the design: the cadence averages the stroking states only**, so a
   crossover sharing the mix with a carve keeps its tempo.
+- **Not in the design: the turn's inside is the curve's sign.** §1 took the side
+  from the stick. Once the travel comes round to a held key the stick lands on
+  alternate sides of it tick to tick, and the tight turn and the carve swapped
+  their leading skate every frame (0.41–0.44 rad hip steps, the legs visibly
+  teleporting in stance turns). `turning` is signed, the side comes from it,
+  and the carve and tight turn ease signed like the crossover, so a reversal
+  slides through centre; the worst per-frame leg step through the keyboard
+  reversals is now the standstill start's 0.09 rad.
 - **The carve's legs** are joint-space until Phase 4: inside skate leading
   (`carve_lead_deg`), the inside knee light, the stance floored at
   `carve_stance`, counted as an edge state for the ice marks and the plant.

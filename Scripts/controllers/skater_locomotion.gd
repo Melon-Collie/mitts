@@ -32,9 +32,10 @@ var intensity: float = 0.0
 var effort: float = 0.0
 # Signed turn rate of the travel direction, rad/s, smoothed.
 var turn_rate: float = 0.0
-# Share of the edge's lateral grip the travel's curve is using, 0..1: the
-# centripetal acceleration speed·|turn_rate| over the most the movement model's
-# edges give (turn_accel · lateral_grip). What LocomotionRules calls turning.
+# Share of the edge's lateral grip the travel's curve is using, signed by the
+# way it curves (CarveRules' sign), −1..1: the centripetal acceleration
+# speed·turn_rate over the most the movement model's edges give
+# (turn_accel · lateral_grip). What LocomotionRules calls turning.
 var turning: float = 0.0
 # The loaded stance's engagement 0..1, eased from the controller's stance_active.
 var loaded: float = 0.0
@@ -67,9 +68,12 @@ var trunk_pitch: float = 0.0
 var trunk_roll: float = 0.0
 
 var _stop_latched: bool = false
-# The crossover's weight with its side as the sign: eased as one number, so a
-# turn that changes side has to pass through zero on the way.
+# The turning states' weights with their side as the sign: eased as one number,
+# so a turn that changes side has to pass through zero on the way, and the legs
+# posed from it slide through centre rather than swapping.
 var _cross_signed: float = 0.0
+var _carve_signed: float = 0.0
+var _tight_signed: float = 0.0
 var _prev_velocity: Vector3 = Vector3.ZERO
 var _have_prev_velocity: bool = false
 var _fd_time: float = 0.0
@@ -92,6 +96,8 @@ func reset() -> void:
 	mix.clear()
 	mix.glide = 1.0
 	_cross_signed = 0.0
+	_carve_signed = 0.0
+	_tight_signed = 0.0
 	stride_phase = 0.0
 	intensity = 0.0
 	effort = 0.0
@@ -121,8 +127,8 @@ func sense(delta: float, planted: bool, hold: float) -> void:
 	_sample_velocity(delta, vel)
 	effort = lerpf(effort, _fd_effort_target, c.stride_effort_speed * delta)
 	turn_rate = lerpf(turn_rate, _fd_turn, c.carve_engage_speed * delta)
-	turning = clampf(_ground_speed * absf(turn_rate)
-			/ maxf(c.turn_accel * c.lateral_grip, 0.001), 0.0, 1.0)
+	turning = clampf(_ground_speed * turn_rate
+			/ maxf(c.turn_accel * c.lateral_grip, 0.001), -1.0, 1.0)
 	loaded = lerpf(loaded, 1.0 if (c.stance_active and not planted) else 0.0,
 			c.locomotion_blend_speed * delta)
 
@@ -286,30 +292,23 @@ func strokes(delta: float, fwd: float) -> void:
 			l_tuck += inside_tuck
 
 	# Tight turn: both blades dug in, the inside skate leading.
-	w = mix.tight
-	if w > 0.001:
-		var split: float = deg_to_rad(c.tight_turn_split_deg) * w
-		if mix.side * signf(fwd) > 0.0:
-			r_pitch += split
-			l_pitch -= split
-		else:
-			l_pitch += split
-			r_pitch -= split
+	var tight_in: float = _tight_signed * signf(fwd)
+	if absf(tight_in) > 0.001:
+		var split: float = deg_to_rad(c.tight_turn_split_deg) * tight_in
+		r_pitch += split
+		l_pitch -= split
 
 	# Carve: both blades on the edges the lean puts them on, the inside skate
-	# leading, the weight on the outside one — the inside knee tucks light.
-	w = mix.carve
-	if w > 0.001:
-		var lead: float = deg_to_rad(c.carve_lead_deg) * w
-		var light: float = deg_to_rad(c.glide_inside_tuck_deg) * w
-		if mix.side * signf(fwd) > 0.0:
-			r_pitch += lead
-			l_pitch -= lead
-			r_tuck += light
-		else:
-			l_pitch += lead
-			r_pitch -= lead
-			l_tuck += light
+	# leading, the weight on the outside one — the inside knee tucks light. The
+	# inside is the signed weight's sign, so a reversal slides through centre.
+	var carve_in: float = _carve_signed * signf(fwd)
+	if absf(carve_in) > 0.001:
+		var lead: float = deg_to_rad(c.carve_lead_deg) * carve_in
+		r_pitch += lead
+		l_pitch -= lead
+		var light: float = deg_to_rad(c.glide_inside_tuck_deg)
+		r_tuck += light * maxf(carve_in, 0.0)
+		l_tuck += light * maxf(-carve_in, 0.0)
 
 	# Hockey stop, in the TURNED leg frame (stop_yaw turns the hips across):
 	# the leading leg braces ahead, the trailing one tucks behind, both rolled
@@ -394,11 +393,13 @@ func _ease_mix(delta: float) -> void:
 	mix.crossover = absf(_cross_signed)
 	# What the turn has not yet committed to crossovers is skated on the edges.
 	var uncommitted: float = maxf(_target.crossover - mix.crossover, 0.0)
-	mix.carve = lerpf(mix.carve, _target.carve + uncommitted, k)
+	_carve_signed = lerpf(_carve_signed, (_target.carve + uncommitted) * _target.side, k)
+	mix.carve = absf(_carve_signed)
 	mix.backward = lerpf(mix.backward, _target.backward, k)
 	mix.shuffle = lerpf(mix.shuffle, _target.shuffle, k)
 	mix.skid = lerpf(mix.skid, _target.skid, k)
-	mix.tight = lerpf(mix.tight, _target.tight, k)
+	_tight_signed = lerpf(_tight_signed, _target.tight * _target.side, k)
+	mix.tight = absf(_tight_signed)
 	mix.stop = lerpf(mix.stop, _target.stop, k)
 	var held: float = mix.stride + mix.crossover + mix.carve + mix.backward + mix.shuffle \
 			+ mix.skid + mix.tight + mix.stop
@@ -408,10 +409,12 @@ func _ease_mix(delta: float) -> void:
 		mix.crossover *= scale
 		mix.carve *= scale
 		_cross_signed *= scale
+		_carve_signed *= scale
 		mix.backward *= scale
 		mix.shuffle *= scale
 		mix.skid *= scale
 		mix.tight *= scale
+		_tight_signed *= scale
 		mix.stop *= scale
 		held = 1.0
 	# The glide is what is left: the crossfade's remainder.
