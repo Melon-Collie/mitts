@@ -13,9 +13,9 @@ extends Node
 
 @export var ambient_stream_path: String = "res://Sounds/crowd_ambient.wav"
 @export var cheer_stream_path: String = "res://Sounds/crowd_cheer.wav"
-@export var ambient_volume_db: float = -22.0
-@export var cheer_volume_db: float = -7.0
-@export var duck_volume_db: float = -10.0
+@export var ambient_volume_db: float = -26.2
+@export var cheer_volume_db: float = -2.5
+@export var duck_volume_db: float = -14.2
 @export var duck_recover_time: float = 4.0
 # Stoppage "settle": a brief murmur swell above ambient when the whistle blows,
 # easing back to baseline — so a whistle doesn't drop into dead air. Smaller and

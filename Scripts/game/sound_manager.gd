@@ -65,6 +65,40 @@ const _SOUND_PATHS: Dictionary = {
 	Sound.FACEOFF_WHISTLE:  "res://Sounds/faceoff_whistle.wav",
 }
 
+# Every file above is mastered to one reference loudness
+# (tools/normalize_sfx.py), so this table is the mix: each cue's level against
+# the others before distance and the call site's own modifiers (puck speed, shot
+# power, save bumps). Arena cues play without distance falloff, while a world
+# cue at the live camera's range loses about 8 dB (see WORLD_UNIT_SIZE).
+const _MIX_DB: Dictionary = {
+	Sound.GOAL_HORN:        4.0,
+	Sound.PERIOD_BUZZER:    0.0,
+	Sound.FACEOFF_WHISTLE: -2.0,
+	Sound.SHOT_SLAPPER:     2.0,
+	Sound.SHOT_WRISTER:     2.0,
+	Sound.PUCK_BOARDS:      0.0,
+	Sound.PUCK_GOALIE:      0.0,
+	Sound.PUCK_POST:        0.0,
+	Sound.PUCK_GOAL_BODY:   0.0,
+	Sound.PUCK_DEFLECTION:  0.0,
+	Sound.PUCK_BODY_BLOCK:  0.0,
+	Sound.PUCK_STRIP:       0.0,
+	Sound.STICK_LIFT:       0.0,
+	Sound.BODY_CHECK:       0.0,
+	Sound.PUCK_PICKUP:     -6.0,
+	Sound.SKATE_BRAKE:     -4.0,
+	Sound.UI_CLICK:       -12.0,
+	Sound.UI_HOVER:       -18.0,
+}
+
+# Files the mastering left under the reference because reaching it would have
+# limited their attack past normalize_sfx.MAX_LIMIT_DB; the tool's report gives
+# the number when a file is re-mastered.
+const _UNDER_REFERENCE_DB: Dictionary = {
+	Sound.UI_CLICK:    5.0,
+	Sound.PUCK_PICKUP: 2.3,
+}
+
 const _UI_POOL_SIZE: int = 4
 const _SFX_2D_POOL_SIZE: int = 4
 const _SFX_3D_POOL_SIZE: int = 12
@@ -101,6 +135,8 @@ const NO_DISTANCE_CUTOFF: float = 0.0
 
 # Where a feather pass bottoms out — still audible next to the passer.
 const _SHOT_VOLUME_FLOOR_DB: float = -18.0
+# The launch speed a shot cue is loudest at: the league's hardest shot.
+const _SHOT_FULL_POWER_M_S: float = GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S
 
 var _streams: Dictionary = {}
 var _pool_ui: Array[AudioStreamPlayer] = []      # UI bus — hover, click
@@ -168,7 +204,7 @@ func play_ui(sound: Sound, volume_db: float = 0.0, pitch_variance: float = 0.0) 
 	for p: AudioStreamPlayer in _pool_ui:
 		if not p.playing:
 			p.stream = stream
-			p.volume_db = volume_db
+			p.volume_db = volume_db + level_db(sound)
 			p.pitch_scale = randf_range(1.0 - pitch_variance, 1.0 + pitch_variance) if pitch_variance > 0.0 else 1.0
 			p.play()
 			return
@@ -181,7 +217,7 @@ func play_crowd(sound: Sound, volume_db: float = 0.0, pitch_variance: float = 0.
 	for p: AudioStreamPlayer in _pool_crowd:
 		if not p.playing:
 			p.stream = stream
-			p.volume_db = volume_db
+			p.volume_db = volume_db + level_db(sound)
 			p.pitch_scale = randf_range(1.0 - pitch_variance, 1.0 + pitch_variance) if pitch_variance > 0.0 else 1.0
 			p.play()
 			return
@@ -205,20 +241,24 @@ func play_world(sound: Sound, position: Vector3, volume_db: float = 0.0, pitch_v
 			oldest_s = played_s
 			voice = p
 	voice.stream = stream
-	voice.volume_db = volume_db
+	voice.volume_db = volume_db + level_db(sound)
 	voice.pitch_scale = randf_range(1.0 - pitch_variance, 1.0 + pitch_variance) * pitch_scale if pitch_variance > 0.0 else pitch_scale
 	voice.global_position = position
 	voice.play()
 
 
+# The gain a cue plays at before any situational modifier: its mix level, plus
+# make-up for a file mastered under the reference.
+static func level_db(sound: Sound) -> float:
+	return _MIX_DB[sound] + _UNDER_REFERENCE_DB.get(sound, 0.0)
+
+
 # A release's amplitude scales with the puck's launch speed (m/s), so its level
-# is that ratio in dB against the shot type's league-default maximum — each
-# sample is a full-power recording. Power past the maximum (a one-timer's bonus)
-# holds at the sample's own level.
-static func shot_volume_db(power: float, is_slapper: bool) -> float:
-	var full_power: float = GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S if is_slapper \
-			else GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
-	return clampf(linear_to_db(maxf(power, 0.0) / full_power), _SHOT_VOLUME_FLOOR_DB, 0.0)
+# is that ratio in dB against the hardest shot in the league. Wrister and
+# slapper files are mastered alike, so speed alone sets them apart. Power past
+# it (a one-timer's bonus) holds at full.
+static func shot_volume_db(power: float) -> float:
+	return clampf(linear_to_db(maxf(power, 0.0) / _SHOT_FULL_POWER_M_S), _SHOT_VOLUME_FLOOR_DB, 0.0)
 
 
 # Connects hover and click sounds to a button. Call after creating each Button node.

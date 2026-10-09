@@ -1661,7 +1661,7 @@ func _wire_sound_signals() -> void:
 	# each match by _spawn_world, so these always get freshly wired here.
 	_phase_coord.goal_scored.connect(
 		func(_t: Team, _s: String, _a1: String, _a2: String) -> void:
-			SoundManager.play_crowd(SoundManager.Sound.GOAL_HORN, -6.0))
+			SoundManager.play_crowd(SoundManager.Sound.GOAL_HORN))
 	if NetworkManager.is_host:
 		puck.puck_hit_boards.connect(func() -> void:
 			var spd: float = puck.linear_velocity.length()
@@ -1750,7 +1750,7 @@ func _wire_sound_signals() -> void:
 	NetworkManager.remote_carrier_changed.connect(_on_remote_carrier_sound)
 	NetworkManager.goal_received.connect(
 		func(_tid: int, _s0: int, _s1: int, _sn: String, _a1: String, _a2: String) -> void:
-			SoundManager.play_crowd(SoundManager.Sound.GOAL_HORN, -6.0))
+			SoundManager.play_crowd(SoundManager.Sound.GOAL_HORN))
 	NetworkManager.board_hit_received.connect(
 		func(pos: Vector3) -> void:
 			if _cue_is_echo(_local_boards_cue_at):
@@ -1796,7 +1796,7 @@ func _wire_sound_signals() -> void:
 	NetworkManager.shot_sound_received.connect(
 		func(pos: Vector3, is_slapper: bool, power: float) -> void:
 			var snd: SoundManager.Sound = SoundManager.Sound.SHOT_SLAPPER if is_slapper else SoundManager.Sound.SHOT_WRISTER
-			SoundManager.play_world(snd, pos, SoundManager.shot_volume_db(power, is_slapper), 0.04))
+			SoundManager.play_world(snd, pos, SoundManager.shot_volume_db(power), 0.04))
 	# Period-end buzzer fires only when a period actually ends — END_OF_PERIOD for
 	# regulation periods, GAME_OVER for the final one. (Not period_synced, which
 	# re-emits on every FACEOFF_PREP, i.e. every faceoff including post-goal.)
@@ -1808,7 +1808,7 @@ func _wire_sound_signals() -> void:
 
 func _on_phase_changed_period_buzzer(p: GamePhase.Phase) -> void:
 	if p == GamePhase.Phase.END_OF_PERIOD or p == GamePhase.Phase.GAME_OVER:
-		SoundManager.play_crowd(SoundManager.Sound.PERIOD_BUZZER, -10.0)
+		SoundManager.play_crowd(SoundManager.Sound.PERIOD_BUZZER)
 
 
 func _on_local_pickup_sound() -> void:
@@ -3200,7 +3200,7 @@ func _defending_team_id_for_goalie(goalie: Goalie) -> int:
 # ── Puck release / one-timer ─────────────────────────────────────────────────
 func _on_puck_release_requested(direction: Vector3, power: float, is_slapper: bool) -> void:
 	var sound: SoundManager.Sound = SoundManager.Sound.SHOT_SLAPPER if is_slapper else SoundManager.Sound.SHOT_WRISTER
-	SoundManager.play_world(sound, puck.get_puck_position(), SoundManager.shot_volume_db(power, is_slapper), 0.04)
+	SoundManager.play_world(sound, puck.get_puck_position(), SoundManager.shot_volume_db(power), 0.04)
 	if NetworkManager.is_host:
 		_record_replay_audio_event("shot", puck.get_puck_position(), power, {"is_slapper": is_slapper})
 	if NetworkManager.is_host:
@@ -3280,7 +3280,7 @@ func _on_one_timer_release_requested(direction: Vector3, power: float, skater: S
 	# shot sound + replay event here so the goal-replay driver can find the last
 	# "shot" event when scanning the clip — otherwise the slo-mo trims back to
 	# the start of the play instead of the moment of release.
-	SoundManager.play_world(SoundManager.Sound.SHOT_SLAPPER, puck.get_puck_position(), SoundManager.shot_volume_db(power, true), 0.04)
+	SoundManager.play_world(SoundManager.Sound.SHOT_SLAPPER, puck.get_puck_position(), SoundManager.shot_volume_db(power), 0.04)
 	if NetworkManager.is_host:
 		_record_replay_audio_event("shot", puck.get_puck_position(), power, {"is_slapper": true})
 	if not NetworkManager.is_host:
@@ -3346,7 +3346,7 @@ func _on_remote_derived_one_timer(direction: Vector3, power: float,
 			record.controller.max_slapper_power
 					* (1.0 + record.controller.one_timer_center_power_bonus))
 	var shot_pos: Vector3 = puck.get_puck_position()
-	SoundManager.play_world(SoundManager.Sound.SHOT_SLAPPER, shot_pos, SoundManager.shot_volume_db(power, true), 0.04)
+	SoundManager.play_world(SoundManager.Sound.SHOT_SLAPPER, shot_pos, SoundManager.shot_volume_db(power), 0.04)
 	_record_replay_audio_event("shot", shot_pos, power, {"is_slapper": true})
 	# Fan the cue out to the other clients (the shooter already played it locally).
 	NetworkManager.send_shot_to_all(shot_pos, true, power, shooter_peer_id)
@@ -3466,7 +3466,7 @@ func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shoot
 				rtt_ms, float(NetworkManager.get_peer_ping_ms(shooter_peer_id)))
 	var sound: SoundManager.Sound = SoundManager.Sound.SHOT_SLAPPER if is_slapper else SoundManager.Sound.SHOT_WRISTER
 	var shot_pos: Vector3 = puck.get_puck_position() if puck != null else Vector3.ZERO
-	SoundManager.play_world(sound, shot_pos, SoundManager.shot_volume_db(power, is_slapper), 0.04)
+	SoundManager.play_world(sound, shot_pos, SoundManager.shot_volume_db(power), 0.04)
 	if NetworkManager.is_host:
 		_record_replay_audio_event("shot", shot_pos, power, {"is_slapper": is_slapper})
 		# Fan the cue out to the other clients (the shooter already played it

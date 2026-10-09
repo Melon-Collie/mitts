@@ -6,8 +6,8 @@ extends Node3D
 # Tunable thresholds
 const _SKATE_START_SPEED: float = 0.5      # m/s XZ to start loop
 const _SKATE_MAX_SPEED: float = 10.0       # m/s XZ for full volume
-const _SKATE_MIN_VOL_DB: float = -24.0
-const _SKATE_MAX_VOL_DB: float = 0.0
+const _SKATE_MIN_VOL_DB: float = -28.6
+const _SKATE_MAX_VOL_DB: float = -4.6
 const _SKATE_MIN_PITCH: float = 0.85
 const _SKATE_MAX_PITCH: float = 1.15
 
@@ -26,6 +26,7 @@ func setup(skater: Skater) -> void:
 	_skater = skater
 	_skate_player = _make_player("res://Sounds/skate_loop.ogg")
 	_brake_player = _make_player("res://Sounds/skate_brake.wav")
+	_brake_player.volume_db = SoundManager.level_db(SoundManager.Sound.SKATE_BRAKE)
 
 
 # A skater's own emitters are ordinary world sounds — same SFX bus, so the SFX

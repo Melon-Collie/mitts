@@ -1,7 +1,7 @@
 extends GutTest
 
 # Import flags and level curves that no player ever reports wrongly: a bed that
-# stops looping just goes quiet, and a shot at the wrong level just sounds flat.
+# stops looping just goes quiet, and a cue at the wrong level just sounds flat.
 
 
 func test_the_skate_loop_loops() -> void:
@@ -17,22 +17,49 @@ func test_the_crowd_bed_loops() -> void:
 			"crowd_ambient.wav.import must set a loop mode")
 
 
-func test_a_full_power_shot_plays_at_the_samples_level() -> void:
-	assert_almost_eq(SoundManager.shot_volume_db(GameRules.DEFAULT_WRISTER_POWER_MAX_M_S, false), 0.0, 1e-4)
-	assert_almost_eq(SoundManager.shot_volume_db(GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S, true), 0.0, 1e-4)
+func test_the_hardest_shot_in_the_league_plays_at_full() -> void:
+	assert_almost_eq(SoundManager.shot_volume_db(GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S), 0.0, 1e-4)
 
 
 func test_shot_level_tracks_launch_speed() -> void:
 	# Half the launch speed is half the amplitude.
-	var half: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S * 0.5
-	assert_almost_eq(SoundManager.shot_volume_db(half, false), -6.02, 0.01)
+	var half: float = GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S * 0.5
+	assert_almost_eq(SoundManager.shot_volume_db(half), -6.02, 0.01)
 	var last: float = -INF
-	for power: float in [1.0, 5.0, 10.0, 14.0, 20.0, 33.0]:
-		var db: float = SoundManager.shot_volume_db(power, false)
+	for power: float in [1.0, 5.0, 10.0, 14.0, 20.0, 33.0, 40.0]:
+		var db: float = SoundManager.shot_volume_db(power)
 		assert_gte(db, last, "no quieter at %.0f m/s than below it" % power)
 		last = db
+	assert_lt(SoundManager.shot_volume_db(GameRules.DEFAULT_WRISTER_POWER_MAX_M_S), 0.0,
+			"a full wrister leaves the puck slower than a full slapper, so it plays under it")
 
 
 func test_shot_level_is_bounded() -> void:
-	assert_eq(SoundManager.shot_volume_db(0.0, false), SoundManager._SHOT_VOLUME_FLOOR_DB, "a dead release sits on the floor")
-	assert_eq(SoundManager.shot_volume_db(60.0, true), 0.0, "one-timer bonus power never boosts past the sample")
+	assert_eq(SoundManager.shot_volume_db(0.0), SoundManager._SHOT_VOLUME_FLOOR_DB, "a dead release sits on the floor")
+	assert_eq(SoundManager.shot_volume_db(60.0), 0.0, "one-timer bonus power never boosts past full")
+
+
+func test_every_cue_has_a_mix_level() -> void:
+	for sound: int in SoundManager.Sound.values():
+		assert_true(SoundManager._MIX_DB.has(sound),
+				"%s needs a deliberate level in _MIX_DB" % SoundManager.Sound.keys()[sound])
+
+
+# The agreed loudness order. Only cues that share a distance treatment are
+# compared: arena cues play flat, world cues fall off with distance.
+func test_the_mix_keeps_its_order() -> void:
+	var mix: Dictionary = SoundManager._MIX_DB
+	var S := SoundManager.Sound
+	assert_gt(mix[S.GOAL_HORN], mix[S.PERIOD_BUZZER], "the horn is the biggest moment")
+	assert_gt(mix[S.PERIOD_BUZZER], mix[S.FACEOFF_WHISTLE], "the whistle sits under the buzzer")
+	var contacts: Array = [S.PUCK_BOARDS, S.PUCK_GOALIE, S.PUCK_POST, S.PUCK_GOAL_BODY,
+			S.PUCK_DEFLECTION, S.PUCK_BODY_BLOCK, S.PUCK_STRIP, S.STICK_LIFT, S.BODY_CHECK]
+	for contact: int in contacts:
+		for shot: int in [S.SHOT_SLAPPER, S.SHOT_WRISTER]:
+			assert_gt(mix[shot], mix[contact], "shots over puck contacts")
+		for quiet: int in [S.PUCK_PICKUP, S.SKATE_BRAKE]:
+			assert_gt(mix[contact], mix[quiet], "puck contacts over pickup and brake")
+	for sound: int in S.values():
+		if sound != S.UI_HOVER and sound != S.UI_CLICK:
+			assert_gt(mix[sound], mix[S.UI_CLICK], "menus sit under everything in play")
+	assert_gt(mix[S.UI_CLICK], mix[S.UI_HOVER], "hover under click")
