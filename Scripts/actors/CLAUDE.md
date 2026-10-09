@@ -117,6 +117,46 @@ inside the jersey at the resulting angle.
 `tests/unit/actors/test_body_chain.gd` holds the chain and
 `test_pelvis_fills_the_seat.gd` the seat.
 
+## The blades stand on the ice
+
+The gait poses joints, not feet, and its crouch pays for the stance alone; the
+push's extension, the splay, the stagger and the lean all move the blades too.
+So the feet are placed from where the blades are (`SkaterLegRig.seat_on_ice`,
+called by the spine as it places the hips):
+
+- **Both feet, then the body.** The lower runner is the support. The other's
+  knee is re-solved (the thigh counter-pitched as `GaitPose.solve_knees` does,
+  so the foot keeps its fore-aft place) to bring its runner down to the
+  support's; where it cannot reach — a braced front leg already straight — the
+  support folds to meet it, the skater sitting deeper on the back leg. Then the
+  hips translate to put the support on the ice; a translation moves both feet,
+  so that step is exact.
+- **The plant is for two-footed stances.** The gait publishes how much each
+  foot is held (`GaitPose.plant_share`): fully while the stroke is idle (rest,
+  glide, the faceoff set) and through the dug-edge states (stop, tight turn),
+  none while the stroke is driving — a stride's push and recovery are where the
+  stroke puts the feet, and holding them down there fights its geometry. The
+  block unplants its kneeling leg; the knockdown unplants both and fades the
+  seat itself (`plant`), and while the sprawl owns the legs the seat does not
+  re-pose them.
+- **Height is not monotone in the knee.** The ankle is rigid outside the held
+  poses, so a blade tilts with its shin and its lowest point is a tip; near
+  straight, unbending rocks the boot and lifts that tip. The solve walks out
+  from the gait's own knee in its role's direction (the reaching leg extends,
+  the support folds) to the NEAREST crossing, interpolating the closest point
+  when there is none — never a sampled or far root, which hops between frames.
+- **The correction eases.** The right answer itself jumps when the support
+  hands from one foot to the other, so the knee change moves at most
+  `_PLANT_RATE_RAD_S`, from the render delta the gait passes with the plant.
+- **The seat's writes are a function of its inputs**, so they do not bump the
+  legs' `pose_version`, which the spine keys its cache on.
+
+`test_blades_stand_on_the_ice.gd` drives every locomotion state through the
+render pass, measures the runner mesh against the ice and bounds every leg
+pivot's per-tick step; `test_faceoff_prep_pose.gd` holds the centre's address
+on both blades; `test_gait_stroke_profile.gd` catches a plant that bleeds into
+the stride.
+
 ## Cosmetic vs. gameplay, and the render clock
 
 Everything in the four rigs is cosmetic and derived. Nothing gameplay reads
@@ -134,14 +174,8 @@ Six rules the rigs sit inside, all easy to break from in here:
 - **The crouch is the body's, not the frame's.** The visible body sits
   `Skater.body_drop_below_frame()` under `LowerBody`, applied at the HIPS bone,
   so the skating crouch and its bob never move the frame the hands hang from;
-  only a held pose's share lowers the frame itself. The spine then seats the
-  hips so the lower runner stands on the ice (`SkaterLegRig
-  .ice_contact_offset`, by the gait's `plant` share, which the knockdown takes
-  to zero): the crouch solve pays for the stance alone, while the push, splay,
-  tucks and lean move the blades too, so the hips are placed from where the
-  blades are. The spine reads the legs' `pose_version` in its cache key for
-  that reason.
-  `test_blades_stand_on_the_ice.gd`.
+  only a held pose's share lowers the frame itself. Then the hips are seated on
+  the blades (below).
 - **Nothing in the skeleton is written back into `UpperBody` or `LowerBody`.**
   The blade and shoulder markers hang under `UpperBody`, so writing it at render
   rate would move gameplay geometry. The chain reads both frames and writes

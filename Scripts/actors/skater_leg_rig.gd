@@ -25,6 +25,30 @@ const _OFFSET: int = SkaterBodySkeleton.LEG_BONE_OFFSET
 const _ICE_IN_BODY := -GameRules.FACEOFF_SPAWN_HEIGHT
 const _RUNNER_TOE := Vector3(0.0, SkaterMeshBuilder.RUNNER_TOE_Y, SkaterMeshBuilder.BLADE_ICE_Z)
 const _RUNNER_HEEL := Vector3(0.0, SkaterMeshBuilder.RUNNER_HEEL_Y, SkaterMeshBuilder.BLADE_ICE_Z)
+# Per side, index 0 = left: the chain the second-foot plant re-poses.
+const _LEG_BONES: Array[int] = [SkaterMeshBuilder.LegBone.LEG_L, SkaterMeshBuilder.LegBone.LEG_R]
+const _SHIN_BONES: Array[int] = [SkaterMeshBuilder.LegBone.SHIN_L, SkaterMeshBuilder.LegBone.SHIN_R]
+const _FOOT_BONES: Array[int] = [SkaterMeshBuilder.LegBone.FOOT_L, SkaterMeshBuilder.LegBone.FOOT_R]
+# Below this a planted runner already meets the support blade, metres.
+const _PLANT_SLACK_M: float = 0.0005
+# The deepest knee fold the support leg may sit to, radians — past a right
+# angle, short of the thigh meeting the calf.
+const _PLANT_FOLD_LIMIT_RAD: float = 2.2
+# The plant's first knee step, radians. The runner's lowest point is a tip of a
+# blade that tilts with the shin (the ankle is rigid outside the held poses), so
+# height is not monotone in the knee; the solve walks out from the gait pose in
+# steps that start this small rather than sampling the whole range.
+const _PLANT_STEP_RAD: float = 0.05
+# Steps the walk may take: doubling from _PLANT_STEP_RAD, enough to cross the
+# whole knee range.
+const _PLANT_WALK_STEPS: int = 7
+# How fast the plant's knee change may move, radians per second. The right
+# answer itself jumps — the support hands from one foot to the other as a
+# stop's hips turn across, and a reaching leg finds the ice past the hump its
+# blade's tilt makes — so the correction eases rather than popping a leg. Well
+# above the stroke's own knee speeds (the stride's thigh peaks near 2 rad/s), so
+# it binds only on those jumps.
+const _PLANT_RATE_RAD_S: float = 8.0
 
 var _skater: Skater
 var _skeleton: Skeleton3D = null
@@ -66,8 +90,30 @@ var _edge_load_l: float = 0.0
 var _edge_load_r: float = 0.0
 
 # Bumped on every leg bone write, so a reader that solves against the legs
-# (the spine's contact seat) can tell its cached answer went stale.
+# (the spine's contact seat) can tell its cached answer went stale. The seat's
+# own writes do not bump it: they are a function of what it already tracks.
 var pose_version: int = 0
+
+# How much the gait holds each foot on the ice rather than leaving it where the
+# joints put it, 0..1 (set_contact). Index 0 = left.
+var _plant := PackedFloat32Array([1.0, 1.0])
+# The render time the plant's correction may move by before the next seat, s;
+# spent by the first seat after set_contact, INF to snap.
+var _plant_dt: float = INF
+# The correction the plant is easing, per side, radians of knee from the gait.
+var _plant_eased := PackedFloat32Array([0.0, 0.0])
+# True from the knockdown sprawl's write until the gait's next one: the sprawl
+# owns the legs, and the seat must not re-pose them under it.
+var _sprawled: bool = false
+# The knee extension the seat last wrote per side, and the pose_version it wrote
+# over, so an unchanged answer costs no bone writes.
+var _seat_ext := PackedFloat32Array([0.0, 0.0])
+var _seat_version: int = -1
+# _plant_feet's answer, per side.
+var _plant_ext := PackedFloat32Array([0.0, 0.0])
+# The fore-aft compensation GaitPose.solve_knees counter-pitches a knee change
+# by — shin over leg, from this rig's own segment offsets.
+var _shin_frac: float = 0.0
 
 
 func setup(skater: Skater) -> void:
@@ -103,6 +149,9 @@ func build(skeleton: Skeleton3D) -> void:
 		_base_scale[bone] = part_scale
 		_base_pos[bone] = xform.origin
 	_shin_base_euler[0] = _basis[SkaterMeshBuilder.LegBone.SHIN_L].get_euler()
+	var thigh_len: float = -_base_pos[SkaterMeshBuilder.LegBone.SHIN_L].y
+	var shin_len: float = -_base_pos[SkaterMeshBuilder.LegBone.FOOT_L].y
+	_shin_frac = shin_len / (thigh_len + shin_len)
 	_shin_base_euler[1] = _basis[SkaterMeshBuilder.LegBone.SHIN_R].get_euler()
 
 	for bone: int in count:
@@ -150,6 +199,7 @@ func set_swing(left_pitch: float, left_roll: float, left_knee: float,
 	_gait_leg_r = Vector3(right_pitch, right_yaw, right_roll)
 	_gait_knee_l = left_knee
 	_gait_knee_r = right_knee
+	_sprawled = false
 	# Yaw rides the hip pivot's free Y slot: YXZ euler order puts it outermost,
 	# so the leg externally rotates about vertical and the shin + boot carry it
 	# — the mohawk open hip. Defaults keep the pre-yaw callers unchanged.
@@ -171,6 +221,7 @@ func apply_knockdown_overlay(pose: KnockdownFallRules.SprawlPose,
 		weight: float) -> void:
 	if weight <= 0.001:
 		return
+	_sprawled = true
 	var base_l: Vector3 = _shin_base_euler[0]
 	var base_r: Vector3 = _shin_base_euler[1]
 	var leg_l: Vector3 = _gait_leg_l + Vector3(pose.l_pitch, 0.0, pose.l_roll)
@@ -284,6 +335,14 @@ func set_ankle_flatten(left: float, right: float) -> void:
 
 func _pose_foot(bone: int, leg: Vector3, knee: float, shin_base: Vector3,
 		weight: float) -> void:
+	pose_version += 1
+	_skeleton.set_bone_pose(_OFFSET + bone, _foot_pose(bone, leg, knee, shin_base, weight))
+
+
+func _foot_pose(bone: int, leg: Vector3, knee: float, shin_base: Vector3,
+		weight: float) -> Transform3D:
+	if weight <= 0.0:
+		return Transform3D(_basis[bone].scaled_local(_scale[bone]), _pos[bone])
 	# What the chain did to this boot, and what it would have done carrying the
 	# leg's yaw alone. Their difference, in the boot's own frame, is the ankle's
 	# give-back; the slerp eases it in from square.
@@ -293,38 +352,201 @@ func _pose_foot(bone: int, leg: Vector3, knee: float, shin_base: Vector3,
 			* Basis.from_euler(Vector3(0.0, shin_base.y, shin_base.z))
 	var give_back: Basis = (posed.inverse() * level).orthonormalized()
 	var basis: Basis = Basis.IDENTITY.slerp(give_back, weight) * _basis[bone]
-	pose_version += 1
-	_skeleton.set_bone_pose(_OFFSET + bone,
-			Transform3D(basis.scaled_local(_scale[bone]), _pos[bone]))
+	return Transform3D(basis.scaled_local(_scale[bone]), _pos[bone])
 
 
 # ── Ice contact ──────────────────────────────────────────────────────────────
 
-# The skeleton-space translation that seats the lower of the two runners on the
-# ice, for the HIPS bone at `hips` (its parent is the skeleton root). The gait
-# poses joints, not feet, and the crouch it pays as a drop covers the stance
-# alone — the push's extension, the splay, the tucks and the lean each move the
-# blade too — so the body is placed from where the blades actually are. The
-# lower blade is the one the weight is on; its runner edge is a segment, so its
-# lowest point is an end.
+# The gait's ask of each foot (_plant), and the render time since its last ask,
+# read by the next seat; INF snaps the correction (a reset or a teleport).
+func set_contact(plant_l: float, plant_r: float, dt: float) -> void:
+	_plant[0] = plant_l
+	_plant[1] = plant_r
+	_plant_dt = dt
+
+
+# Stands the legs on the ice for the HIPS bone at `hips` (its parent is the
+# skeleton root), and returns the skeleton-space translation of the hips that
+# seats the lower runner on it. The gait poses joints, not feet, and the crouch
+# it pays as a drop covers the stance alone — the push's extension, the splay,
+# the stagger, the tucks and the lean each move the blades too — so the body is
+# placed from where the blades actually are.
+#
+# Both feet first (_plant_feet): the higher runner's knee is re-solved (the
+# thigh counter-pitched as GaitPose.solve_knees does, so the foot keeps its
+# fore-aft place) until it meets the lower one, by the gait's plant weight —
+# the two-footed stances, not the stride, whose push and recovery are the
+# stroke's own. Neither leg's re-solve moves the hips, so this is independent of
+# where they end up, and the seat after it is exact in one step.
 #
 # Reads only local bone poses, so it never forces the skeleton's global pose
 # update mid-frame.
-func ice_contact_offset(hips: Transform3D) -> Vector3:
+func seat_on_ice(hips: Transform3D) -> Vector3:
 	var to_body: Transform3D = _skater.mesh_root.transform * _skeleton.transform
 	var hips_body: Transform3D = to_body * hips
-	var low: float = minf(
-			_runner_low(hips_body, SkaterMeshBuilder.LegBone.LEG_L,
-					SkaterMeshBuilder.LegBone.SHIN_L, SkaterMeshBuilder.LegBone.FOOT_L),
-			_runner_low(hips_body, SkaterMeshBuilder.LegBone.LEG_R,
-					SkaterMeshBuilder.LegBone.SHIN_R, SkaterMeshBuilder.LegBone.FOOT_R))
-	return to_body.basis.inverse() * Vector3(0.0, _ICE_IN_BODY - low, 0.0)
+	var ground: float
+	if _sprawled:
+		ground = minf(_runner_low(hips_body, 0), _runner_low(hips_body, 1))
+	else:
+		_plant_feet(hips_body)
+		var reach: float = _PLANT_RATE_RAD_S * _plant_dt
+		_plant_dt = 0.0
+		for side: int in 2:
+			_plant_eased[side] = move_toward(_plant_eased[side], _plant_ext[side], reach)
+			_write_seat(side, _plant_eased[side])
+		_seat_version = pose_version
+		ground = minf(_chain_low(hips_body, 0, _plant_eased[0]),
+				_chain_low(hips_body, 1, _plant_eased[1]))
+	return to_body.basis.inverse() * Vector3(0.0, _ICE_IN_BODY - ground, 0.0)
 
 
-func _runner_low(hips_body: Transform3D, leg: int, shin: int, foot: int) -> float:
-	var boot: Transform3D = hips_body * _skeleton.get_bone_pose(_OFFSET + leg) \
-			* _skeleton.get_bone_pose(_OFFSET + shin) * _skeleton.get_bone_pose(_OFFSET + foot)
+# Fills _plant_ext with each leg's knee extension from the gait pose. The lower
+# runner
+# is the support; the other is brought down to it, and where it cannot reach
+# that far, the support folds to meet it — a skater sits deeper on the back leg
+# to get a braced front blade onto the ice.
+func _plant_feet(hips_body: Transform3D) -> void:
+	_plant_ext[0] = 0.0
+	_plant_ext[1] = 0.0
+	var h_l: float = _chain_low(hips_body, 0, 0.0)
+	var h_r: float = _chain_low(hips_body, 1, 0.0)
+	var sup: int = 0 if h_l <= h_r else 1
+	var other: int = 1 - sup
+	var h_sup: float = minf(h_l, h_r)
+	var h_other: float = maxf(h_l, h_r)
+	if _plant[other] <= 0.0 or h_other - h_sup <= _PLANT_SLACK_M:
+		return
+	var e_other: float = _solve_knee(hips_body, other, h_sup, h_other, 1.0)
+	var reached: float = _chain_low(hips_body, other, e_other)
+	var e_sup: float = 0.0
+	if reached - h_sup > _PLANT_SLACK_M:
+		e_sup = _solve_knee(hips_body, sup, reached, h_sup, -1.0)
+	_plant_ext[other] = e_other * _plant[other]
+	_plant_ext[sup] = e_sup * _plant[sup]
+
+
+# The knee change from the gait pose, in direction `dir` (+1 extends, −1
+# folds), that puts this side's runner at `target` (`h_start` is its height at
+# the gait's own knee): the crossing NEAREST the gait pose, because the gait
+# pose moves smoothly and so does that root, where a farther one can appear and
+# vanish between frames and pop the leg. Walks out in steps that double, to the
+# first crossing (then refines the bracket) or the end of the knee's range
+# (then the closest point it passed, interpolated). It does not stop at the
+# first step that does worse: the blade's tilt dips the height before the
+# leg's length takes over.
+func _solve_knee(hips_body: Transform3D, side: int, target: float, h_start: float,
+		dir: float) -> float:
+	var knee: float = _gait_knee_l if side == 0 else _gait_knee_r
+	var bound: float = maxf(-knee, 0.0) if dir > 0.0 \
+			else minf(-_PLANT_FOLD_LIMIT_RAD - knee, 0.0)
+	var best_e: float = 0.0
+	var best_err: float = absf(h_start - target)
+	var best_i: int = 0
+	var es := PackedFloat32Array([0.0])
+	var hs := PackedFloat32Array([h_start])
+	var step: float = _PLANT_STEP_RAD
+	var e: float = 0.0
+	while e != bound and es.size() < _PLANT_WALK_STEPS:
+		e = clampf(e + dir * step, minf(bound, 0.0), maxf(bound, 0.0))
+		var h: float = _chain_low(hips_body, side, e)
+		var prev_e: float = es[es.size() - 1]
+		var prev_h: float = hs[hs.size() - 1]
+		if (prev_h - target) * (h - target) <= 0.0:
+			return _refine(hips_body, side, target, prev_e, prev_h, e, h)
+		es.append(e)
+		hs.append(h)
+		if absf(h - target) < best_err:
+			best_err = absf(h - target)
+			best_e = e
+			best_i = es.size() - 1
+		step *= 2.0
+	if best_i <= 0 or best_i >= es.size() - 1:
+		return best_e
+	# Placing the closest point on the walk's own lattice would hop the knee a
+	# step at a time as the pose moves, so it is interpolated.
+	return _extremum(hips_body, side, target, es[best_i - 1], hs[best_i - 1],
+			best_e, hs[best_i], es[best_i + 1], hs[best_i + 1])
+
+
+# The knee nearest `target` between a and c, given b closer than both: the
+# vertex of the parabola through the three, if it does better than b.
+func _extremum(hips_body: Transform3D, side: int, target: float, a: float, h_a: float,
+		b: float, h_b: float, c: float, h_c: float) -> float:
+	var den: float = (b - a) * (h_b - h_c) - (b - c) * (h_b - h_a)
+	if is_zero_approx(den):
+		return b
+	var v: float = b - 0.5 * ((b - a) * (b - a) * (h_b - h_c)
+			- (b - c) * (b - c) * (h_b - h_a)) / den
+	v = clampf(v, minf(a, c), maxf(a, c))
+	var h_v: float = _chain_low(hips_body, side, v)
+	return v if absf(h_v - target) < absf(h_b - target) else b
+
+
+# Secant steps inside a bracket [a, b] around `target`, kept bracketed.
+func _refine(hips_body: Transform3D, side: int, target: float,
+		a: float, h_a: float, b: float, h_b: float) -> float:
+	for _step: int in 4:
+		if is_equal_approx(h_a, h_b):
+			break
+		var e: float = a + (target - h_a) * (b - a) / (h_b - h_a)
+		var h: float = _chain_low(hips_body, side, e)
+		if absf(h - target) < _PLANT_SLACK_M:
+			return e
+		if (h_a - target) * (h - target) <= 0.0:
+			b = e
+			h_b = h
+		else:
+			a = e
+			h_a = h
+	return b if absf(h_b - target) < absf(h_a - target) else a
+
+
+# The gait's leg on `side` with its knee extended by `ext` and the thigh
+# counter-pitched, as hip-local FOOT, from the cached gait pose.
+func _chain(side: int, ext: float) -> Transform3D:
+	var leg: Vector3 = (_gait_leg_l if side == 0 else _gait_leg_r) \
+			- Vector3(ext * _shin_frac, 0.0, 0.0)
+	var knee: float = (_gait_knee_l if side == 0 else _gait_knee_r) + ext
+	var base: Vector3 = _shin_base_euler[side]
+	var shin_bone: int = _SHIN_BONES[side]
+	return Transform3D(Basis.from_euler(leg), _pos[_LEG_BONES[side]]) \
+			* Transform3D(Basis.from_euler(Vector3(knee, base.y, base.z)), _pos[shin_bone]) \
+			* _foot_pose(_FOOT_BONES[side], leg, knee, base, _ankle_l if side == 0 else _ankle_r)
+
+
+func _chain_low(hips_body: Transform3D, side: int, ext: float) -> float:
+	var boot: Transform3D = hips_body * _chain(side, ext)
 	return minf((boot * _RUNNER_TOE).y, (boot * _RUNNER_HEEL).y)
+
+
+# The lowest runner point as the bones stand, for a pose the seat did not make.
+func _runner_low(hips_body: Transform3D, side: int) -> float:
+	var boot: Transform3D = hips_body * _skeleton.get_bone_pose(_OFFSET + _LEG_BONES[side]) \
+			* _skeleton.get_bone_pose(_OFFSET + _SHIN_BONES[side]) \
+			* _skeleton.get_bone_pose(_OFFSET + _FOOT_BONES[side])
+	return minf((boot * _RUNNER_TOE).y, (boot * _RUNNER_HEEL).y)
+
+
+# Poses one leg at the gait's pose extended by `ext`. A gait write since the last
+# seat left the bones at ext 0; otherwise they hold the last seat's.
+func _write_seat(side: int, ext: float) -> void:
+	var held: float = 0.0 if pose_version != _seat_version else _seat_ext[side]
+	_seat_ext[side] = ext
+	if ext == held:
+		return
+	var leg: Vector3 = (_gait_leg_l if side == 0 else _gait_leg_r) \
+			- Vector3(ext * _shin_frac, 0.0, 0.0)
+	var knee: float = (_gait_knee_l if side == 0 else _gait_knee_r) + ext
+	var base: Vector3 = _shin_base_euler[side]
+	var leg_bone: int = _LEG_BONES[side]
+	var shin_bone: int = _SHIN_BONES[side]
+	var foot_bone: int = _FOOT_BONES[side]
+	_skeleton.set_bone_pose(_OFFSET + leg_bone,
+			Transform3D(Basis.from_euler(leg), _pos[leg_bone]))
+	_skeleton.set_bone_pose(_OFFSET + shin_bone,
+			Transform3D(Basis.from_euler(Vector3(knee, base.y, base.z)), _pos[shin_bone]))
+	_skeleton.set_bone_pose(_OFFSET + foot_bone,
+			_foot_pose(foot_bone, leg, knee, base, _ankle_l if side == 0 else _ankle_r))
 
 
 # ── Ice VFX seams ────────────────────────────────────────────────────────────

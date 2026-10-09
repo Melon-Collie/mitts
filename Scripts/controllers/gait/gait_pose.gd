@@ -23,6 +23,12 @@ const SHIN_LEN: float = 0.45
 # ice. A boot left to tilt with its shin keeps its sole planted, which is the
 # model the stance crouch solves.
 const FOOT_FWD: float = 0.10
+# Stroke engagement over which the feet hand from the ice to the stroke: below
+# it the stance is two-footed (rest, glide, the held poses), above it the
+# stroke's push and recovery put the feet. A smoothstep band rather than a
+# step, so the handoff never pops a leg, and so the stroke's exponential
+# release reaches a full plant rather than lingering just short of it.
+const PLANT_STROKE_BAND: float = 0.2
 
 # This build's leg height multiplier (SkaterController.apply_attributes).
 var leg_scale: float = 1.0
@@ -40,6 +46,10 @@ var frame_share: float = 0.0
 # Share of the blade contact seat the visible body takes (Skater
 # .set_skating_crouch_drop): whole on skates, none for a body on the ice.
 var plant: float = 1.0
+# How much each foot is held on the ice (Skater.set_leg_contact): fully in the
+# two-footed stances, none while the stroke puts the feet (plant_share).
+var plant_l: float = 1.0
+var plant_r: float = 1.0
 
 var l_pitch: float = 0.0
 var l_roll: float = 0.0
@@ -92,6 +102,8 @@ func seed_legs(loco: SkaterLocomotion, yaw_l: float, yaw_r: float) -> void:
 	r_yaw = yaw_r
 	frame_share = 0.0
 	plant = 1.0
+	plant_l = 1.0
+	plant_r = 1.0
 	knee_extend_l = 0.0
 	knee_extend_r = 0.0
 	foot_flat_l = 0.0
@@ -124,6 +136,8 @@ func solve_knees(loco: SkaterLocomotion, release: float) -> void:
 	var shin_frac: float = SHIN_LEN / (THIGH_LEN + SHIN_LEN)
 	l_pitch += -(l_knee + stance_knee) * shin_frac
 	r_pitch += -(r_knee + stance_knee) * shin_frac
+	plant_l = plant_share(loco.intensity, loco.edge_floor)
+	plant_r = plant_l
 
 
 # The stroke's bob, trunk texture and edge loads, before the trunk layers. The
@@ -165,14 +179,27 @@ func load_native(native: RefCounted) -> void:
 	wobble_roll = 0.0
 	frame_share = 0.0
 	plant = 1.0
+	plant_l = plant_share((native.get_stroke_drive() as Vector4).x,
+			(native.get_stroke_body() as Vector4).w)
+	plant_r = plant_l
+
+
+# Both feet on the ice while the stroke is idle, and through the dug-edge
+# states (the stop and the tight turn, `edge_floor`) however hard it was
+# working going in.
+static func plant_share(intensity: float, edge_floor: float) -> float:
+	return maxf(smoothstep(0.0, 1.0, 1.0 - intensity / PLANT_STROKE_BAND),
+			clampf(edge_floor, 0.0, 1.0))
 
 
 func frame_drop() -> float:
 	return drop * frame_share
 
 
-func publish_legs(skater: Skater) -> void:
+# `delta` is the render time this pose covers: the plant eases over it.
+func publish_legs(skater: Skater, delta: float) -> void:
 	skater.set_leg_swing(l_pitch, l_roll, l_knee, r_pitch, r_roll, r_knee, l_yaw, r_yaw)
 	skater.set_edge_loads(edge_l, edge_r)
 	skater.set_ankle_flatten(foot_flat_l, foot_flat_r)
+	skater.set_leg_contact(plant_l, plant_r, delta)
 	skater.set_skating_crouch_drop(drop, frame_drop(), plant)

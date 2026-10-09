@@ -1611,6 +1611,10 @@ func set_ankle_flatten(left: float, right: float) -> void:
 	_legs.set_ankle_flatten(left, right)
 
 
+func set_leg_contact(plant_l: float, plant_r: float, dt: float) -> void:
+	_legs.set_contact(plant_l, plant_r, dt)
+
+
 # How far into his faceoff address this centre is, 0..1 (zero for everyone
 # else). Published by the gait, which owns the ease; read back through
 # grip_choke().
@@ -1635,8 +1639,8 @@ func on_camera() -> bool:
 # frame rate. Only the held poses (block, faceoff, knockdown) hand the frame
 # their drop, because their hands are posed in a frame that has gone down with
 # the body. `plant` is how much the visible hips are then re-seated so the lower
-# blade stands on the ice (SkaterLegRig.ice_contact_offset): all of it on
-# skates, none of it for a body lying on the ice, which the sprawl seats.
+# blade stands on the ice (SkaterLegRig.seat_on_ice): all of it on skates, none
+# of it for a body lying on the ice, which the sprawl seats.
 func set_skating_crouch_drop(drop: float, frame_drop: float = 0.0, plant: float = 1.0) -> void:
 	if is_equal_approx(_skating_crouch_drop, drop) and is_equal_approx(_frame_drop, frame_drop) \
 			and is_equal_approx(_plant, plant):
@@ -1666,8 +1670,8 @@ func leg_pose_version() -> int:
 	return _legs.pose_version
 
 
-func ice_contact_offset(hips: Transform3D) -> Vector3:
-	return _legs.ice_contact_offset(hips)
+func seat_on_ice(hips: Transform3D) -> Vector3:
+	return _legs.seat_on_ice(hips)
 
 
 # Skeleton height offset (m), set by SkaterAppearanceCoordinator.apply:

@@ -232,7 +232,7 @@ const BLADE_STEEL_COLOR := Color(0.62, 0.66, 0.70)
 # attribute uses) and the blade assembly reaches this much deeper than the
 # old foot-sphere ice contact (z 0.080). The authored chain still bottoms out
 # ~3 cm above the ice; what puts the steel on it is the visible hips' contact
-# solve (SkaterLegRig.ice_contact_offset), not this number.
+# solve (SkaterLegRig.seat_on_ice), not this number.
 const SKATE_LIFT_M: float = 0.04
 # The runner's bottom edge in the FOOT bone's frame (toe −Y, +Z down): the line
 # the blade touches the ice along, and what the contact solve seats on it.

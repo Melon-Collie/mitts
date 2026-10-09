@@ -265,6 +265,7 @@ func reset_to_rest() -> void:
 	_pivot_yaw_r = 0.0
 	if _skater != null:
 		_skater.set_leg_swing(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+		_skater.set_leg_contact(1.0, 1.0, INF)
 		_skater.set_skating_crouch_drop(0.0)
 		_skater.set_trunk_texture(0.0, 0.0)
 		_skater.set_edge_loads(0.0, 0.0)
@@ -391,7 +392,7 @@ func apply(delta: float) -> void:
 	_skater.set_faceoff_address(_faceoff.address)
 	# Off camera the legs and trunk are mesh nobody draws; the crouch is not.
 	if _skater.on_camera():
-		p.publish_legs(_skater)
+		p.publish_legs(_skater, delta)
 	else:
 		_skater.set_skating_crouch_drop(p.drop, p.frame_drop(), p.plant)
 	crouch_drop = p.drop

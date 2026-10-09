@@ -323,25 +323,17 @@ func test_the_centre_sets_a_wider_base_than_the_players_behind_him() -> void:
 			"the centre's feet must set wide, not stack under a deep squat")
 
 
-# Measured on the runners themselves, against the ice. The body is seated on
-# the lower blade (SkaterLegRig.ice_contact_offset), so that one is on the ice
-# by construction; what this holds is the other. The fore/aft stagger lifts one
-# boot against the other by a few centimetres, and a seat that moves the whole
-# body cannot answer two legs moving opposite ways — that residual is the
-# tolerance. The splay and the fold move both legs together, so anything past it
-# is one of those two left unpaid.
-const _STAGGER_RESIDUAL_M: float = 0.03
-
-
+# Measured on the runners themselves, against the ice. The splay, the fold and
+# the fore/aft stagger each lift the boots by different amounts; the body is
+# seated on one and the other leg re-solved onto the ice beside it
+# (SkaterLegRig.seat_on_ice), so an address the solve could not stand on both
+# blades fails here.
 func test_the_wide_base_keeps_both_skates_on_the_ice() -> void:
 	var centre: SkaterController = _controller(true)
 	_run_prep(centre, Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 4.0))
-	var left: float = _runner_height(centre, true)
-	var right: float = _runner_height(centre, false)
-	assert_almost_eq(minf(left, right), 0.0, 0.006,
-			"the address stands on the ice, not in it or above it")
-	assert_lt(maxf(left, right), _STAGGER_RESIDUAL_M,
-			"and neither skate floats off it past the stagger")
+	for left: bool in [true, false]:
+		assert_almost_eq(_runner_height(centre, left), 0.0, 0.006,
+				"the address stands both skates on the ice, not in it or above it")
 
 
 # Lowest runner vertex of one skate, metres above the ice.

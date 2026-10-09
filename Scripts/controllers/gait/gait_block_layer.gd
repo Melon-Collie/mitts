@@ -68,8 +68,9 @@ func override(p: GaitPose) -> void:
 	# +X), and its ankle gives back what that leg took, so its blade lies flat
 	# instead of swinging up onto an edge under a leg splayed 60° out of
 	# vertical. The kneeling leg keeps its fold — that skate is up on its toe by
-	# design.
+	# design, so it is not planted; the extended one is solved onto the ice.
 	if p.stick_side > 0.0:
+		p.plant_r = lerpf(p.plant_r, 0.0, _blend)
 		p.foot_flat_l = _blend
 		p.foot_flat_r = 0.0
 		p.r_pitch = lerpf(p.r_pitch, kneel_hip, _blend)
@@ -79,6 +80,7 @@ func override(p: GaitPose) -> void:
 		p.l_roll = lerpf(p.l_roll, -ext_roll, _blend)
 		p.l_knee = lerpf(p.l_knee, -ext_knee, _blend)
 	else:
+		p.plant_l = lerpf(p.plant_l, 0.0, _blend)
 		p.foot_flat_r = _blend
 		p.foot_flat_l = 0.0
 		p.l_pitch = lerpf(p.l_pitch, kneel_hip, _blend)
