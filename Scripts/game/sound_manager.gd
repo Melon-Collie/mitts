@@ -99,6 +99,9 @@ const _CROWD_POOL_SIZE: int = 4
 const WORLD_UNIT_SIZE: float = 6.0
 const NO_DISTANCE_CUTOFF: float = 0.0
 
+# Where a feather pass bottoms out — still audible next to the passer.
+const _SHOT_VOLUME_FLOOR_DB: float = -18.0
+
 var _streams: Dictionary = {}
 var _pool_ui: Array[AudioStreamPlayer] = []      # UI bus — hover, click
 var _pool_sfx_2d: Array[AudioStreamPlayer] = []  # SFX bus — non-spatial gameplay cues
@@ -184,18 +187,38 @@ func play_crowd(sound: Sound, volume_db: float = 0.0, pitch_variance: float = 0.
 			return
 
 
+# A full pool steals the voice furthest into its clip rather than dropping the
+# new cue: in a scramble the fresh contact is the one the player is watching,
+# and the oldest voice is mostly tail by then.
 func play_world(sound: Sound, position: Vector3, volume_db: float = 0.0, pitch_variance: float = 0.0, pitch_scale: float = 1.0) -> void:
 	var stream: AudioStream = _streams.get(sound)
 	if stream == null:
 		return
+	var voice: AudioStreamPlayer3D = null
+	var oldest_s: float = -1.0
 	for p: AudioStreamPlayer3D in _pool_3d:
 		if not p.playing:
-			p.stream = stream
-			p.volume_db = volume_db
-			p.pitch_scale = randf_range(1.0 - pitch_variance, 1.0 + pitch_variance) * pitch_scale if pitch_variance > 0.0 else pitch_scale
-			p.global_position = position
-			p.play()
-			return
+			voice = p
+			break
+		var played_s: float = p.get_playback_position()
+		if played_s > oldest_s:
+			oldest_s = played_s
+			voice = p
+	voice.stream = stream
+	voice.volume_db = volume_db
+	voice.pitch_scale = randf_range(1.0 - pitch_variance, 1.0 + pitch_variance) * pitch_scale if pitch_variance > 0.0 else pitch_scale
+	voice.global_position = position
+	voice.play()
+
+
+# A release's amplitude scales with the puck's launch speed (m/s), so its level
+# is that ratio in dB against the shot type's league-default maximum — each
+# sample is a full-power recording. Power past the maximum (a one-timer's bonus)
+# holds at the sample's own level.
+static func shot_volume_db(power: float, is_slapper: bool) -> float:
+	var full_power: float = GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S if is_slapper \
+			else GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
+	return clampf(linear_to_db(maxf(power, 0.0) / full_power), _SHOT_VOLUME_FLOOR_DB, 0.0)
 
 
 # Connects hover and click sounds to a button. Call after creating each Button node.

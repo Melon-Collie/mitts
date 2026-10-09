@@ -32,6 +32,21 @@ func test_a_skater_emitter_matches_the_shared_world_pool() -> void:
 		assert_eq(p.attenuation_model, mine.attenuation_model, "same attenuation model")
 
 
+func test_a_skater_emitter_sounds_from_the_skater() -> void:
+	# A 3D player under a non-Node3D parent keeps its own world transform, so the
+	# controller between skater and emitter has to pass the transform through or
+	# every stride sounds from the origin.
+	var skater_stand_in := Node3D.new()
+	add_child_autofree(skater_stand_in)
+	skater_stand_in.global_position = Vector3(12.0, 0.0, -7.0)
+	var controller := SkaterSoundController.new()
+	skater_stand_in.add_child(controller)
+	var mine: AudioStreamPlayer3D = controller._make_player("res://Sounds/skate_loop.ogg")
+	assert_eq(mine.global_position, skater_stand_in.global_position, "emitter sits on the skater")
+	skater_stand_in.global_position = Vector3(-20.0, 0.0, 4.0)
+	assert_eq(mine.global_position, skater_stand_in.global_position, "and follows it")
+
+
 func test_no_world_emitter_is_cut_off_by_distance() -> void:
 	# Godot reads 0.0 as unlimited. Any positive value here puts the silence cliff
 	# back: past it a sound stops entirely rather than getting quieter, which makes

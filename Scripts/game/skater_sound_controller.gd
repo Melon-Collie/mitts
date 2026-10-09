@@ -1,5 +1,7 @@
 class_name SkaterSoundController
-extends Node
+# Node3D, not Node: a 3D player only inherits its parent's transform through a
+# Node3D chain, so under a plain Node every stride would sound from the origin.
+extends Node3D
 
 # Tunable thresholds
 const _SKATE_START_SPEED: float = 0.5      # m/s XZ to start loop
@@ -82,5 +84,4 @@ func _update_brake(speed: float) -> void:
 	if _brake_player.stream == null or _brake_player.playing:
 		return
 	if _skater.is_braking and speed >= _BRAKE_MIN_SPEED:
-		_brake_player.global_position = _skater.global_position
 		_brake_player.play()

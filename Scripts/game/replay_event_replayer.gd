@@ -76,7 +76,7 @@ static func dispatch_with_records(event: Dictionary, records: Dictionary) -> voi
 		"shot":
 			var is_slapper: bool = bool(event.get("is_slapper", false))
 			var sound: SoundManager.Sound = SoundManager.Sound.SHOT_SLAPPER if is_slapper else SoundManager.Sound.SHOT_WRISTER
-			SoundManager.play_world(sound, pos, 0.0, 0.04)
+			SoundManager.play_world(sound, pos, SoundManager.shot_volume_db(speed, is_slapper), 0.04)
 		"body_check":
 			# "speed" carries the recorded impact_force; scale sound + burst by it
 			# the same way live play does (SkaterVFX.check_*). The thud is gated to
