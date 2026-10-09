@@ -85,6 +85,15 @@ const MOVING_FRAME_MIN_SPEED: float = 0.05
 const BRAKE_PIVOT_ANGLE_DEG: float = 120.0
 const BRAKE_PIVOT_RELEASE_ANGLE_DEG: float = 100.0
 const BRAKE_PIVOT_MIN_SPEED: float = 3.0
+# A pivot whose exit is still in front of this angle off travel is CUT in the
+# loaded stance rather than stopped: the edges can carry the turn, and stopping
+# throws the speed away. Past it the exit is behind the skater and a hockey stop
+# is the faster way round — a human's Shift-vs-Space choice, at the boundary
+# where the brake turn used to taper into a stop.
+const STANCE_CUT_MAX_ANGLE_DEG: float = 135.0
+# A stance held for a turn releases once the turn needs less than this share of
+# the upright edges' rate (stance_carves_to): hysteresis, not a model term.
+const STANCE_RELEASE_FRACTION: float = 0.8
 
 # Arrival brake. Station-keeping bots approach a POINT that can stop moving, and
 # nothing else in the field slows them: the anchor attraction is full-strength
@@ -570,6 +579,61 @@ static func should_brake(desired: Vector2, velocity_xz: Vector2, was_braking: bo
 		return false
 	var angle_deg: float = BRAKE_PIVOT_RELEASE_ANGLE_DEG if was_braking else BRAKE_PIVOT_ANGLE_DEG
 	return velocity_xz.dot(desired) / (speed * desired_len) < cos(deg_to_rad(angle_deg))
+
+
+# Whether a pivot (should_brake true) is cut in the stance rather than stopped:
+# its exit is still within STANCE_CUT_MAX_ANGLE_DEG of travel.
+static func pivot_cuts_in_stance(desired: Vector2, velocity_xz: Vector2) -> bool:
+	var speed: float = velocity_xz.length()
+	var desired_len: float = desired.length()
+	if speed < 0.01 or desired_len < 0.01:
+		return false
+	return velocity_xz.dot(desired) / (speed * desired_len) \
+			> cos(deg_to_rad(STANCE_CUT_MAX_ANGLE_DEG))
+
+
+# Whether the loaded stance's doubled edge makes a turn the upright edges can't:
+# the arc tangent to travel through `anchor` has radius d / (2 sin θ), so it takes
+# a turn rate of 2 v sin θ / d (θ off travel toward `desired`, held at 90° past it
+# — at least the half circle). Upright the edges give min(a / v, max_turn_rate),
+# a = turn_accel × grip, so below v = a / max_turn_rate the turn is rate-bound
+# and the stance turns no faster. `arrival_floor` bounds d: an anchor inside it is
+# one the body is already on, not one it must turn to reach. `was_holding` is the
+# previous tick's answer, so the stance releases at STANCE_RELEASE_FRACTION of
+# the upright rate rather than strobing the replicated stance bit.
+static func stance_carves_to(self_pos: Vector3, anchor: Vector3, desired: Vector2,
+		velocity_xz: Vector2, upright_lateral_accel: float, arrival_floor: float,
+		was_holding: bool) -> bool:
+	var speed: float = velocity_xz.length()
+	var desired_len: float = desired.length()
+	if speed < 0.01 or desired_len < 0.01:
+		return false
+	var cos_off: float = velocity_xz.dot(desired) / (speed * desired_len)
+	var sin_off: float = 1.0 if cos_off <= 0.0 else sqrt(maxf(1.0 - cos_off * cos_off, 0.0))
+	var dist: float = maxf(Vector2(anchor.x - self_pos.x, anchor.z - self_pos.z).length(),
+			arrival_floor)
+	return _stance_out_turns(2.0 * speed * sin_off / dist, speed, upright_lateral_accel,
+			was_holding)
+
+
+# The same read for a committed cut with no anchor (a deke or a poke-evade): the
+# whole turn onto `dir` has to happen inside the maneuver's `window_s`.
+static func stance_cuts_onto(dir: Vector2, velocity_xz: Vector2,
+		upright_lateral_accel: float, window_s: float) -> bool:
+	var speed: float = velocity_xz.length()
+	if speed < 0.01 or dir.length_squared() < 0.0001 or window_s <= 0.0:
+		return false
+	var turn: float = absf(velocity_xz.angle_to(dir))
+	return _stance_out_turns(turn / window_s, speed, upright_lateral_accel, false)
+
+
+static func _stance_out_turns(required_rate: float, speed: float,
+		upright_lateral_accel: float, was_holding: bool) -> bool:
+	if upright_lateral_accel >= speed * GameRules.DEFAULT_SKATER_MAX_TURN_RATE_RAD_S:
+		return false
+	var upright_rate: float = upright_lateral_accel / speed
+	var bar: float = upright_rate * (STANCE_RELEASE_FRACTION if was_holding else 1.0)
+	return required_rate > bar
 
 
 # Should the bot press the brake to ARRIVE at `anchor` instead of overshooting

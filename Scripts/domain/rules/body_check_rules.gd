@@ -1,11 +1,11 @@
 class_name BodyCheckRules
 
 # Pure math for the "stagger" debuff a body check inflicts on its victim: a
-# temporary thrust penalty plus an instantaneous stamina bite, both scaled by how
-# hard the hit landed. Kept pure (static, no engine state) so it unit-tests
-# without a live skater and — like StaminaRules / SkaterMovementRules — survives
-# client-side prediction + reconcile: the victim's stagger_timer is replicated,
-# snapped to the host baseline at replay start, and decays deterministically.
+# temporary thrust and edge-grip penalty, scaled by how hard the hit landed. Kept
+# pure (static, no engine state) so it unit-tests without a live skater and —
+# like SkaterMovementRules — survives client-side prediction + reconcile: the
+# victim's stagger_timer is replicated, snapped to the host baseline at replay
+# start, and decays deterministically.
 #
 # "How hard" is the victim's transfer-impulse magnitude — the m/s velocity delta
 # the hit imparts (= approach x weight_ratio x effective_transfer, so both
@@ -15,7 +15,7 @@ class_name BodyCheckRules
 #
 # One float, stagger_timer (seconds remaining), encodes BOTH the penalty depth
 # and the recovery window: a harder hit sets a longer timer, and the per-tick
-# thrust penalty is proportional to the timer that remains, so depth and duration
+# penalties are proportional to the timer that remains, so depth and duration
 # scale together off a single replicated value and ease back as it decays.
 
 class Config:
@@ -24,13 +24,16 @@ class Config:
 	# equals the puck-strip threshold (1.35), so a full-strength check is exactly
 	# a puck-dislodging check — landing at ~4 m/s closing for a medium build (0.65
 	# transfer), ~3.4 for a heavy one ("skate into them with some pace", not a
-	# sprint-only collision). See the ladder derivation on
+	# full-speed-only collision). See the ladder derivation on
 	# SkaterController.stagger_min_impulse.
 	var min_impulse: float = 0.6          # m/s victim velocity delta below which no debuff lands
 	var ref_impulse: float = 1.35         # m/s delta treated as a full-strength check (== puck-strip threshold)
 	var max_stagger_seconds: float = 1.0  # recovery window of a full-strength check
-	var max_stamina_drain: float = 0.35   # pool fraction (0..1) a full-strength check bites
 	var max_thrust_penalty: float = 0.5   # peak thrust reduction (fraction) at full stagger
+	# Peak edge-grip reduction (fraction) at full stagger. Thrust alone barely
+	# registers on a skater already at speed — the stride is power-limited there
+	# and the glide is long — so a rattled skater is also off his edges.
+	var max_grip_penalty: float = 0.4
 	# Knockdown: the top of the same intensity continuum. A hit whose victim impulse
 	# exceeds knockdown_impulse doesn't just stagger — it KNOCKS THE VICTIM DOWN
 	# (movement locked, slides + bleeds speed, can't touch the puck) for a recovery
@@ -39,7 +42,7 @@ class Config:
 	# knockdown_ref_impulse. Kept just ABOVE the full-check point (ref_impulse): a
 	# full check staggers + strips, and a knockdown is the reward for a SOLID hit —
 	# a committed skate-in at pace (~5.5 m/s closing, medium build) up to a maximal
-	# head-on/sprint collision — not the default result of every check.
+	# head-on collision — not the default result of every check.
 	var knockdown_impulse: float = 1.8         # m/s victim impulse above which a hit knocks down (0 disables)
 	var knockdown_ref_impulse: float = 3.1     # m/s impulse of a maximal (longest) knockdown
 	var min_knockdown_seconds: float = 0.7     # down time of a just-barely knockdown
@@ -71,31 +74,24 @@ static func knockdown_seconds_from_impulse(impulse_mag: float, cfg: Config) -> f
 	return lerpf(cfg.min_knockdown_seconds, cfg.max_knockdown_seconds, t)
 
 
-# Stamina (pool fraction, 0..1) a hit drains, charged only for the stagger it adds
-# BEYOND what's already decaying on the victim. A clean hit from a settled skater
-# (prev_stagger_timer 0) bites the full intensity-scaled amount; during sustained
-# contact, where prev is near the incoming stagger, only the small top-up is
-# charged — so grinding someone bleeds stamina at roughly the decay rate instead of
-# emptying the pool tick-by-tick. Returns 0 when the hit isn't harder than the
-# residual stagger.
-static func incremental_stamina_drain(prev_stagger_timer: float, impulse_mag: float, cfg: Config) -> float:
-	if cfg.max_stagger_seconds <= 0.0:
-		return 0.0
-	var add: float = stagger_seconds_from_impulse(impulse_mag, cfg)
-	if add <= prev_stagger_timer:
-		return 0.0
-	return ((add - prev_stagger_timer) / cfg.max_stagger_seconds) * cfg.max_stamina_drain
-
-
 # Thrust multiplier (<= 1.0) for the stagger remaining this tick. The penalty is
 # proportional to the fraction of a full-strength window still on the clock, so a
 # harder hit (longer timer) both starts deeper and takes longer to ease back to
 # full thrust as stagger_timer decays to 0.
 static func thrust_mult(stagger_timer: float, cfg: Config) -> float:
+	return 1.0 - _stagger_frac(stagger_timer, cfg) * cfg.max_thrust_penalty
+
+
+# Edge-grip multiplier (<= 1.0) for the stagger remaining this tick — the same
+# shape as thrust_mult.
+static func grip_mult(stagger_timer: float, cfg: Config) -> float:
+	return 1.0 - _stagger_frac(stagger_timer, cfg) * cfg.max_grip_penalty
+
+
+static func _stagger_frac(stagger_timer: float, cfg: Config) -> float:
 	if stagger_timer <= 0.0 or cfg.max_stagger_seconds <= 0.0:
-		return 1.0
-	var frac: float = clampf(stagger_timer / cfg.max_stagger_seconds, 0.0, 1.0)
-	return 1.0 - frac * cfg.max_thrust_penalty
+		return 0.0
+	return clampf(stagger_timer / cfg.max_stagger_seconds, 0.0, 1.0)
 
 
 # The victim transfer-impulse the puck-strip / pickup-denial decision keys off —

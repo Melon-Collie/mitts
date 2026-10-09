@@ -13,7 +13,7 @@ namespace mitts {
 //   - SkaterLocomotion (Scripts/controllers/skater_locomotion.gd): the state
 //     mix, its easing, the shared clocks and every state's stroke, with the
 //     pure helpers it calls (LocomotionRules.classify, HockeyStopRules,
-//     CarveRules.turn_rate, SkaterMovementRules.tight_turn_weight);
+//     CarveRules.turn_rate);
 //   - SkaterSkatingCoordinator's hip-to-travel alignment and pivot read, with
 //     PivotRules;
 //   - GaitPose's stance and knee solve, for a pass no GaitLayer shapes.
@@ -47,15 +47,16 @@ namespace mitts {
 	X(pivot_commit_time) X(pivot_depth_ramp_deg) X(pivot_min_speed) \
 	X(pivot_mohawk_deg) X(pivot_rate_min) X(pivot_stance) X(pivot_step_begin) \
 	X(pivot_yaw_speed) X(reversal_plant_deg) X(reversal_stance) \
-	X(shuffle_cadence_rate) X(shuffle_intensity) X(sprint_lean_deg) \
-	X(sprint_stance_gain) X(sprint_stride_gain) X(stance_full_speed_fraction) \
+	X(shuffle_cadence_rate) X(shuffle_intensity) \
+	X(stance_sit_gain) X(stance_stride_gain) \
+	X(stance_full_speed_fraction) \
 	X(stance_hip_deg) X(stance_knee_release) X(stance_push_gain) \
 	X(stride_abduction_deg) X(stride_back_pitch_deg) X(stride_bob_m) \
 	X(stride_cadence) X(stride_cadence_max_rate) X(stride_effort_ref_accel) \
 	X(stride_effort_speed) X(stride_glide_floor) X(stride_intensity_speed) \
 	X(stride_knee_deg) X(stride_pitch_deg) X(stride_push_ceiling) \
 	X(stride_push_gain) X(stride_rear_bias) X(stride_roll_deg) X(stride_skew) \
-	X(stride_sway_deg) X(tight_turn_align_angle) X(tight_turn_split_deg) \
+	X(stride_sway_deg) X(tight_turn_split_deg) \
 	X(tight_turn_stance) X(weight_shift_deg) X(weight_spring_damping) \
 	X(weight_spring_stiffness)
 
@@ -66,7 +67,7 @@ public:
 	// locomote() flags bitmask.
 	enum Flags {
 		FLAG_BRAKE = 1,
-		FLAG_SPRINT = 2,
+		FLAG_STANCE = 2,
 		FLAG_PLANTED = 4,
 	};
 
@@ -102,7 +103,7 @@ private:
 	double intensity = 0.0;
 	double effort = 0.0;
 	double turn_rate = 0.0;
-	double sprint = 0.0;
+	double loaded = 0.0;
 	double cruise_gear = 0.0;
 	double push_scale = 1.0;
 	double stop_side = 1.0;
@@ -162,7 +163,7 @@ private:
 	double p_edge_r = 0.0;
 
 	void sense(double delta, const godot::Vector3 &vel, const godot::Vector2 &intent,
-			const godot::Basis &basis, bool brake, bool sprint_active, bool planted, double hold);
+			const godot::Basis &basis, bool brake, bool stance_active, bool planted, double hold);
 	double align_and_pivot(double delta, const godot::Vector3 &vel, const godot::Basis &basis);
 	void strokes(double delta, double fwd);
 	void stroke(double w, double push, double rock, double flare, double tuck,

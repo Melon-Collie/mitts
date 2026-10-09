@@ -25,21 +25,18 @@ func _ctx(self_pos: Vector3, ours: Array, theirs: Array, carrier: int,
 	var team_map: Dictionary = {}
 	var s0 := SkaterNetworkState.new()
 	s0.position = self_pos
-	s0.stamina = 1.0
 	snap.skater_states[1] = s0
 	team_map[1] = TEAM_ID
 	for e: Array in ours:
 		var sk := SkaterNetworkState.new()
 		sk.position = e[1]
 		sk.velocity = e[2] if e.size() > 2 else Vector3.ZERO
-		sk.stamina = 1.0
 		snap.skater_states[e[0]] = sk
 		team_map[e[0]] = TEAM_ID
 	for e: Array in theirs:
 		var sk := SkaterNetworkState.new()
 		sk.position = e[1]
 		sk.velocity = e[2] if e.size() > 2 else Vector3.ZERO
-		sk.stamina = 1.0
 		snap.skater_states[e[0]] = sk
 		team_map[e[0]] = 1
 	var puck := PuckNetworkState.new()

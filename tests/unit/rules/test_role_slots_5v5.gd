@@ -290,7 +290,7 @@ func test_trans_od_rush_d1_stays_d_scoped_when_a_d_can_beat_the_rush_home() -> v
 		[1, 0, Vector3(0, 0, 14)],       # C even deeper than the valve D
 		[2, 0, Vector3(-6, 0, -10)],
 		[3, 0, Vector3(6, 0, -10)],
-		[4, 0, Vector3(-2, 0, 10)],      # LD home — feasible gap defender
+		[4, 0, Vector3(-2, 0, 12)],      # LD home — feasible gap defender
 		[5, 0, Vector3(5, 0, -7.8)],     # RD caught at their line
 		[10, 1, Vector3(0, 0, -6), Vector3(0, 0, 7.0)],  # carrier entering the NZ
 	]

@@ -2,30 +2,14 @@ class_name SkaterHUDCoordinator
 extends RefCounted
 
 # ── HUD geometry constants ────────────────────────────────────────────────────
-# Slot ring sits just inside RING_OUTER_R. The stamina ring is concentric,
-# just inside the slot ring's inner edge with a small gap. Chevron and player
-# name sit below the rings on the screen-down side.
+# Slot ring sits just inside RING_OUTER_R. Chevron and player name sit below the
+# ring on the screen-down side.
 const RING_LINE_SCALE: float     = 2.0   # line-thickness bump for readability; visual only, never a hitbox
 const RING_OUTER_R: float        = 0.45
 # The ice shader draws the slot ring analytically from these radii (see
 # IceRingField) — there is no ring mesh. They live here because everything else
 # on the rig is laid out relative to the ring's outer edge.
 const RING_INNER_R: float        = RING_OUTER_R - MenuStyle.HUD_LINE_THIN * RING_LINE_SCALE
-
-# Stamina ring — BOTW-style sprint gauge nested inside the player's own color
-# ring (self-only). Hidden while the pool is full; while draining/refilling the
-# arc empties clockwise over a faint track, goes amber when low, and flashes
-# red while sprint is locked out by exhaustion. The mesh is top_level with its
-# fill origin re-aligned to camera screen-up, so the gauge doesn't spin with
-# the skater's facing. Slot ring occupies 0.39..0.45 (RING_OUTER_R minus the
-# scaled line thickness); the stamina arc tucks inside that with a visible gap.
-const STAMINA_RING_OUTER_R: float = 0.37
-const STAMINA_RING_INNER_R: float = 0.31
-const _STAMINA_SHOW_BELOW: float = 0.999  # hidden while (effectively) full
-const _STAMINA_LOW_FRACTION: float = 0.3
-const _STAMINA_LOCKED_FLASH_HZ: float = 2.5
-const _STAMINA_LOW_COLOR := Color(0.95, 0.65, 0.20, 1.0)  # amber when running low
-const STAMINA_TRACK_COLOR := Color(0.06, 0.08, 0.11, 0.55)  # read by IceRingField
 
 # Player-name placement — a billboarded Label3D sitting just outside the slot
 # ring, on the screen-down side. WORLD-sized (pixel_size, not fixed_size), so a
@@ -101,12 +85,6 @@ const _RING_SEGMENTS: int              = 48
 enum RingRelation { UNKNOWN = -1, SELF = 0, TEAMMATE = 1, ENEMY = 2 }
 
 var _skater: Skater
-
-# Drawn by the ice shader (see IceRingField): no mesh, no material — just the
-# state the shader reads.
-var _stamina_visible: bool = false
-var _stamina_fill: float = 1.0
-var _stamina_color: Color = Color.WHITE
 
 # Player name. Billboarded Label3D, top_level so the plate keeps its screen-down
 # placement while the body spins under it, and opted OUT of physics
@@ -222,7 +200,6 @@ func update(delta: float) -> void:
 		if not _hidden_for_replay:
 			_hidden_for_replay = true
 			_ring_visible = false
-			_stamina_visible = false
 			_name_label.visible = false
 			if _self_beacon != null: _self_beacon.visible = false
 			if _ping_label != null:
@@ -231,9 +208,9 @@ func update(delta: float) -> void:
 		return
 	if _hidden_for_replay:
 		_hidden_for_replay = false
-		# Restore the always-visible chrome. The stamina gauge, the slapper
-		# indicator and the beacon are gated by their own show logic (driven from
-		# skater / stamina state) and re-enable themselves as needed.
+		# Restore the always-visible chrome. The slapper indicator and the beacon
+		# are gated by their own show logic (driven from skater state) and
+		# re-enable themselves as needed.
 		_ring_visible = true
 		_name_label.visible = true
 		_update_beacon_visibility()
@@ -286,71 +263,6 @@ func update(delta: float) -> void:
 
 	# Elevation chevrons are drawn by the ice shader (IceRingField reads
 	# chevron_stack() / chevron_apex()), so nothing is placed here.
-
-	_update_stamina_ring()
-
-
-# ── Stamina ring ──────────────────────────────────────────────────────────────
-# BOTW-style self-only sprint gauge. Gates on the ring-relation resolver's
-# SELF result, so only one skater in the scene ever runs the body of this.
-# Stamina lives on the LOCAL controller (it is never mirrored onto the Skater
-# node), so the controller is re-fetched per tick: it changes across respawns,
-# session changes and spectator swaps, and the fetch is a no-op except on the
-# frame it actually changes. Stays visible while ghosted —
-# sprinting back to tag up is exactly when the gauge matters.
-func _update_stamina_ring() -> void:
-	var controller: SkaterController = null
-	if _ring_relation_cached == RingRelation.SELF:
-		var record: PlayerRecord = GameManager.get_local_player()
-		controller = record.controller if record != null else null
-	if controller == null:
-		_stamina_visible = false
-		return
-	var s: float = clampf(controller.stamina, 0.0, 1.0)
-	var locked: bool = controller.is_sprint_exhausted()
-	# Hidden while full (the BOTW rule): the gauge only earns screen space
-	# while the pool is actually in play.
-	_stamina_visible = s < _STAMINA_SHOW_BELOW or locked
-	if not _stamina_visible:
-		return
-	_stamina_fill = s
-	# Fill color: normal tracks the player's own picked ring color (the gauge
-	# reads as part of "you"); amber when low; flashing red while locked out.
-	var col: Color
-	if locked:
-		var flash_t: float = 0.5 + 0.5 * sin(
-				Time.get_ticks_msec() * 0.001 * TAU * _STAMINA_LOCKED_FLASH_HZ)
-		col = MenuStyle.DANGER.lerp(STAMINA_TRACK_COLOR, flash_t * 0.6)
-	elif s < _STAMINA_LOW_FRACTION:
-		col = _STAMINA_LOW_COLOR
-	else:
-		col = PlayerPrefs.ring_color_self
-	_stamina_color = col
-
-
-# ── Read by IceRingField each frame (stamina gauge) ─────────────────────────
-func stamina_gauge_visible() -> bool:
-	return _stamina_visible
-
-
-func stamina_gauge_fill() -> float:
-	return _stamina_fill
-
-
-func stamina_gauge_color() -> Color:
-	return _stamina_color
-
-
-# The gauge's 12 o'clock is camera screen-UP, not a body direction.
-func stamina_gauge_up() -> Vector2:
-	return -_cached_screen_down
-
-
-# Concentric with the slot ring, so it reads the same rendered pose the ring
-# does — a raw read here would slide the gauge out of its own ring at speed.
-func stamina_gauge_center() -> Vector2:
-	var pos: Vector3 = _skater.render_transform().origin
-	return Vector2(pos.x, pos.z)
 
 
 # Screen-down + chevron direction depend only on the local camera's orientation.
@@ -573,7 +485,6 @@ func set_world_hud_hidden(hidden: bool) -> void:
 	if hidden:
 		_hidden_for_replay = true
 		_ring_visible = false
-		_stamina_visible = false
 		_name_label.visible = false
 		_slapper_indicator_on = false
 		_slapper_arrow_on = false
@@ -699,8 +610,6 @@ func apply_ghost(ghost: bool) -> void:
 	var hud_hidden: bool = _force_world_hud_hidden or _hidden_for_replay
 	_ring_visible = not ghost and not hud_hidden
 	_name_label.visible = not ghost and not hud_hidden
-	# The stamina ring is left alone: like the beacon, it stays useful while
-	# ghosted (sprinting back to tag up), and its own show logic re-gates it.
 	# The slapper indicator reads _skater.is_ghost directly (see slapper_visible),
 	# so ghosting needs no latch of its own here.
 	# set_ghost() writes _skater.is_ghost before calling here, so the gate sees

@@ -13,14 +13,12 @@ func _ctx(self_pos: Vector3, skaters: Array, carrier_pid: int,
 	var s := SkaterNetworkState.new()
 	s.position = self_pos
 	s.velocity = self_vel
-	s.stamina = 1.0
 	snap.skater_states[1] = s
 	var team_map: Dictionary = {1: TEAM_ID}
 	for e: Array in skaters:
 		var sk := SkaterNetworkState.new()
 		sk.position = e[2]
 		sk.velocity = e[3] if e.size() > 3 else Vector3.ZERO
-		sk.stamina = 1.0
 		snap.skater_states[e[0]] = sk
 		team_map[e[0]] = e[1]
 	var puck := PuckNetworkState.new()
@@ -49,19 +47,17 @@ func _ctx(self_pos: Vector3, skaters: Array, carrier_pid: int,
 
 # ── The urgency fix: recovering is a MODE, not a position ────────────────────
 
-func test_a_beaten_tracker_sprints_instead_of_positioning() -> void:
+func test_a_beaten_tracker_races_instead_of_positioning() -> void:
 	# The reported symptom: a human collects the puck in the NZ and skates past
 	# bots "lazily marking men". A peer still up-ice runs NO argmax — he gets a
-	# lane point and a forced sprint.
+	# lane point at full pace.
 	var ctx: RoleContext = _ctx(Vector3(-6.0, 0.0, -14.0), [
 		[10, 1, Vector3(0.0, 0.0, 2.0), Vector3(0.0, 0.0, 7.0)],
 		[11, 1, Vector3(5.0, 0.0, 3.0), Vector3(0.0, 0.0, 7.0)],
 	], 10)
 	var d: RoleDecision = AIRoleTrack.decide(
 			ctx, AIRoleSlots.Slot.TRACK_MID_STRONG)
-	assert_true(d.sprint_override,
-			"a tracker behind the play sprints, unconditionally")
-	assert_true(d.arrive_at_speed, "and does not brake into his lane point")
+	assert_true(d.arrive_at_speed, "a beaten tracker does not brake into his lane point")
 
 
 func test_a_recovering_tracker_heads_home_not_at_his_man() -> void:
@@ -96,7 +92,6 @@ func test_a_home_tracker_stops_at_the_circle_tops() -> void:
 			[[10, 1, Vector3(0.0, 0.0, 10.0), Vector3(0.0, 0.0, 6.0)]], 10)
 	var d: RoleDecision = AIRoleTrack.decide(
 			ctx, AIRoleSlots.Slot.TRACK_MID_STRONG)
-	assert_false(d.sprint_override, "a tracker who is home stops sprinting")
 	var depth: float = OUR_NET_Z - d.target_position.z
 	assert_almost_eq(depth, AIZoneCoverage.HOUSE_TOP_DEPTH_M
 			- AIRoleTrack.CIRCLE_TOP_INSET_M, 1.0,
@@ -121,7 +116,6 @@ func test_track_puck_chases_the_carrier_at_full_pace() -> void:
 	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, -6.0),
 			[[10, 1, Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 7.0)]], 10)
 	var d: RoleDecision = AIRoleTrack.decide(ctx, AIRoleSlots.Slot.TRACK_PUCK)
-	assert_true(d.sprint_override, "F1 back runs the carrier down")
 	assert_true(d.has_aim_override, "stick on the puck, not on open ice")
 
 
@@ -235,8 +229,7 @@ func test_a_tracker_already_goal_side_holds_a_gap_instead_of_running_the_hip() -
 	# from a man you are chasing. For a tracker who is already goal-side it is a
 	# step-up — the election hands this slot to whoever reaches the puck soonest,
 	# which in a shape that is home means somebody in FRONT of the play. So the
-	# hip's gap is bounded by the gap ladder, and the sprint override (which
-	# exists because a backchecker is behind by definition) stands down.
+	# hip's gap is bounded by the gap ladder.
 	var carrier := Vector3(0.0, 0.0, 0.0)
 	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, 20.0),
 			[[10, 1, carrier, Vector3(0.0, 0.0, 7.0)]], 10)
@@ -246,13 +239,11 @@ func test_a_tracker_already_goal_side_holds_a_gap_instead_of_running_the_hip() -
 	var gap: float = d.target_position.distance_to(carrier)
 	assert_gt(gap, AIRoleTrack.HIP_GOAL_SIDE_M * 2.0,
 			"a tracker in front of the play still ran at the hip; gap %.2f m" % gap)
-	assert_false(d.sprint_override,
-			"a tracker who is already back is not sprinting a recovery")
 
 
 func test_a_tracker_behind_the_play_still_runs_the_hip_down() -> void:
 	# The other side of the same bound: a genuine backchecker is unchanged — the
-	# depth term is nil, so he gets the hip and the sprint override.
+	# depth term is nil, so he gets the hip.
 	var carrier := Vector3(0.0, 0.0, 0.0)
 	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, -6.0),
 			[[10, 1, carrier, Vector3(0.0, 0.0, 7.0)]], 10)
@@ -260,4 +251,3 @@ func test_a_tracker_behind_the_play_still_runs_the_hip_down() -> void:
 	assert_almost_eq(d.target_position.distance_to(carrier),
 			AIRoleTrack.HIP_GOAL_SIDE_M, 0.1,
 			"the backchecker's target is still the hip")
-	assert_true(d.sprint_override, "and he is still sprinting to catch him")

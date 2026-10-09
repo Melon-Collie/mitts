@@ -52,19 +52,20 @@ func _movement_cfg() -> SkaterMovementRules.MovementConfig:
 	cfg.reverse_skid_fraction = 0.75
 	cfg.turn_accel = 9.0
 	cfg.max_turn_rate = 6.0
-	cfg.tight_turn_multiplier = 2.0
-	cfg.tight_turn_decel = 3.0
-	cfg.tight_turn_align_angle = 0.5
 	cfg.power_knee_speed = 3.0
 	cfg.backward_max_speed_multiplier = 0.75
 	cfg.puck_carry_speed_multiplier = 0.9
 	cfg.backward_thrust_multiplier = 0.5
 	cfg.crossover_thrust_multiplier = 0.7
 	cfg.friction_drag = 0.2
-	cfg.sprint_thrust_multiplier = 1.2
-	cfg.sprint_max_speed_multiplier = 1.25
-	cfg.sprint_carry_penalty_bypass = 0.7
 	cfg.lateral_grip = 0.85
+	cfg.stance_grip_mult = 2.0
+	cfg.stance_scrape = 1.0 / 3.0
+	cfg.stance_stride_mult = 0.6
+	cfg.stance_max_speed_mult = 0.85
+	cfg.stance_shuffle_mult = 1.2
+	cfg.commit_grip_mult = 0.6
+	cfg.commit_stride_mult = 0.5
 	return cfg
 
 
@@ -76,7 +77,7 @@ func test_movement_gdscript_vs_native() -> void:
 	var cfg: SkaterMovementRules.MovementConfig = _movement_cfg()
 	var native: RefCounted = ClassDB.instantiate(&"NativeSkaterMovement")
 	native.configure(cfg)
-	native.set_stagger_params(1.0, 0.5)
+	native.set_stagger_params(1.0, 0.5, 0.4)
 	var result := SkaterMovementRules.ForwardResult.new()
 	var vel := Vector3(3.0, 0.0, -4.0)
 	var input := Vector2(0.4, -0.9)
@@ -84,11 +85,12 @@ func test_movement_gdscript_vs_native() -> void:
 	var t0: int = Time.get_ticks_usec()
 	for _i: int in REPS:
 		var _v: Vector3 = SkaterMovementRules.apply_movement(
-				vel, input, 0.3, true, false, DELTA, cfg, false)
+				vel, input, 0.3, true, false, DELTA, cfg, SkaterMovementRules.Posture.STANCE)
 	var gd_us: int = Time.get_ticks_usec() - t0
 	t0 = Time.get_ticks_usec()
 	for _i: int in REPS:
-		var _v: Vector3 = native.apply_movement(vel, input, 0.3, true, false, DELTA, false)
+		var _v: Vector3 = native.apply_movement(vel, input, 0.3, true, false, DELTA,
+				SkaterMovementRules.Posture.STANCE)
 	_report("apply_movement (1 tick)", gd_us, Time.get_ticks_usec() - t0, REPS)
 
 	for spec: Array in [[24, 500], [240, 100]]:
@@ -97,12 +99,13 @@ func test_movement_gdscript_vs_native() -> void:
 		t0 = Time.get_ticks_usec()
 		for _i: int in reps:
 			SkaterMovementRules.integrate_forward(Vector3.ZERO, vel, input, 0.3,
-					false, false, false, cfg, DELTA, ticks, 30, result, 0.4, null)
+					false, false, SkaterMovementRules.Posture.UPRIGHT, cfg, DELTA, ticks, 30,
+					result, 0.4, null)
 		gd_us = Time.get_ticks_usec() - t0
 		t0 = Time.get_ticks_usec()
 		for _i: int in reps:
 			native.integrate_forward(Vector3.ZERO, vel, input, 0.3,
-					false, false, false, DELTA, ticks, 30, 0.4, false)
+					false, false, SkaterMovementRules.Posture.UPRIGHT, DELTA, ticks, 30, 0.4, false)
 		_report("integrate_forward %d ticks (batched)" % ticks,
 				gd_us, Time.get_ticks_usec() - t0, reps)
 

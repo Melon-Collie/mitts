@@ -327,8 +327,8 @@ var body_check_brace_resistance: float = 0.4
 # Set by the controller each tick via hit_committed below (re-derived from
 # input.hit_held, so it survives reconcile with no wire cost).
 var hit_passive_transfer_mult: float = 0.3
-# True this tick when the attacker is committing a check (hit button held +
-# stamina available). Written by SkaterController._apply_movement from the
+# True this tick when the attacker is committing a check (hit button held,
+# locomotion not suppressed). Written by SkaterController._apply_movement from the
 # replicated input.hit_held; read in _resolve_player_collisions to pick between
 # full and passive transfer. Not itself on the wire — the aggressor is always the
 # locally-simulated body wherever the resolver reads it (host sims all, a client
@@ -407,11 +407,11 @@ var stick_knob_mesh: MeshInstance3D = null
 signal body_checked_player(victim: Skater, impact_force: float, hit_direction: Vector3)
 signal body_check_impulse_applied(impulse: Vector3)
 # Fired ON THE VICTIM with the transfer impulse (m/s, world space) it just
-# absorbed — magnitude for the stagger/stamina debuff, direction for the recoil
+# absorbed — magnitude for the stagger debuff, direction for the recoil
 # lean. Distinct from body_check_impulse_applied (which fires for BOTH roles —
 # the attacker's restitution bounce and the victim's transfer — and feeds the
 # reconcile velocity buffer): this one is victim-only, so the controller can apply
-# the stagger/stamina debuff without mistaking a delivered hit's bounce-back for
+# the stagger debuff without mistaking a delivered hit's bounce-back for
 # being hit. Host-authoritative consumers gate on is_host; see
 # SkaterController._on_body_check_received.
 signal body_check_received(impulse: Vector3)
@@ -1573,7 +1573,7 @@ func apply_knockdown_leg_overlay(pose: KnockdownFallRules.SprawlPose,
 
 # ── Rendered pose seam (on-ice HUD, ice VFX) ─────────────────────────────────
 # Where this skater is being DRAWN this frame. Anything placed onto the body at
-# render rate — slot ring, chevrons, name plate, stamina gauge, slapper reticle —
+# render rate — slot ring, chevrons, name plate, slapper reticle —
 # reads this rather than `global_transform`, the post-tick pose up to a tick of
 # travel away.
 #
@@ -2573,27 +2573,6 @@ func chevron_field_apex() -> Vector2:
 	return _hud.chevron_apex()
 
 
-# ── Stamina gauge (read by IceRingField, drawn by the ice shader) ────────────
-func stamina_field_visible() -> bool:
-	return _hud.stamina_gauge_visible()
-
-
-func stamina_field_fill() -> float:
-	return _hud.stamina_gauge_fill()
-
-
-func stamina_field_color() -> Color:
-	return _hud.stamina_gauge_color()
-
-
-func stamina_field_up() -> Vector2:
-	return _hud.stamina_gauge_up()
-
-
-func stamina_field_center() -> Vector2:
-	return _hud.stamina_gauge_center()
-
-
 # ── Slapper indicator (read by IceRingField, drawn by the ice shader) ────────
 func slapper_field_visible() -> bool:
 	return _hud.slapper_visible()
@@ -2654,7 +2633,7 @@ func set_ring_relation_resolver(resolver: Callable) -> void:
 	_hud.set_ring_relation_resolver(resolver)
 
 
-# Latch all per-skater HUD chrome (slot ring, name label, stamina ring,
+# Latch all per-skater HUD chrome (slot ring, name label,
 # chevron, slapper indicator/ring) off. Used by the offline replay viewer and
 # live spectator mode: the broadcast / chase / free cameras frame the rink
 # from angles the flat ring decals weren't designed for, and the top-down POV

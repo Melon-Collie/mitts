@@ -37,7 +37,7 @@ const _PSI_SMOOTH_EASE: float = 15.0
 
 # NativeSkaterGait.locomote flag bits.
 const _NATIVE_BRAKE: int = 1
-const _NATIVE_SPRINT: int = 2
+const _NATIVE_STANCE: int = 2
 const _NATIVE_PLANTED: int = 4
 
 var _skater: Skater = null
@@ -60,6 +60,7 @@ var _native: RefCounted = null
 # with the channels it owns. The block holds the legs over every additive
 # layer; a blocker who gets run over goes down, so the knockdown is last.
 var _faceoff := GaitFaceoffLayer.new()
+var _stance := GaitStanceLayer.new()
 var _shot := GaitShotLayer.new()
 var _check := GaitCheckLayer.new()
 var _lift := GaitStickLiftLayer.new()
@@ -67,7 +68,7 @@ var _celebration := GaitCelebrationLayer.new()
 var _stagger := GaitStaggerLayer.new()
 var _block := GaitBlockLayer.new()
 var _knockdown := GaitKnockdownLayer.new()
-var _layers: Array[GaitLayer] = [_faceoff, _shot, _check, _lift, _celebration,
+var _layers: Array[GaitLayer] = [_faceoff, _stance, _shot, _check, _lift, _celebration,
 		_stagger, _block, _knockdown]
 # Per-stage subsets of _layers in the same order, each beside its layers' bits
 # in the pass's active mask (built in setup).
@@ -293,7 +294,7 @@ func apply(delta: float) -> void:
 			qvel.x * qvel.x + qvel.z * qvel.z < 0.0025
 			and _skater.move_intent.length_squared() <= 0.0025
 			and not _skater.brake_intent
-			and not _controller.sprint_active)
+			and not _controller.stance_active)
 	if quiet:
 		for layer: GaitLayer in _layers:
 			if not layer.is_quiet():
@@ -333,8 +334,8 @@ func apply(delta: float) -> void:
 		var flags: int = 0
 		if _skater.brake_intent:
 			flags |= _NATIVE_BRAKE
-		if _controller.sprint_active:
-			flags |= _NATIVE_SPRINT
+		if _controller.stance_active:
+			flags |= _NATIVE_STANCE
 		if _block.planted:
 			flags |= _NATIVE_PLANTED
 		_native.locomote(delta, _skater.velocity, _skater.move_intent,

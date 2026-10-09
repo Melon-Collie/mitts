@@ -423,10 +423,8 @@ gear and a big weak skater feels bad in the TURN rather than glued to the ice.
 Hands has no lever by constitution — "your hands are you" — so the blade caps
 derive from lever geometry rather than a fidelity table: the long lever sweeps
 but cannot cut back, the short lever is the scalpel. Shot means "what a charge
-buys you, and how fast you can charge it", never the uncharged snap. Stamina is
-height-flavoured metabolism with no attribute touching it: small is short
-repeatable bursts, big is one long drive then a slow refill. Full detail lives in
-`Scripts/domain/state/CLAUDE.md`.
+buys you, and how fast you can charge it", never the uncharged snap. Full detail
+lives in `Scripts/domain/state/CLAUDE.md`.
 
 `apply_attributes` is **idempotent**: it captures baseline values on first call
 and recomputes from those baselines every time, so repeated applies (the
@@ -487,8 +485,8 @@ Two things the split alone would get wrong, both handled in the easing:
 
 ### Overlays are layers, and the order is the priority
 
-Everything the gait lays on the stroke — the faceoff stance, the shot loads and
-kick, the check commit and drive, the stick lift, the celebration bounce, the
+Everything the gait lays on the stroke — the faceoff stance, the loaded skating
+stance (Shift), the shot loads and kick, the check commit and drive, the stick lift, the celebration bounce, the
 stagger, the block and the knockdown — is a `GaitLayer`
 (`Scripts/controllers/gait/`). The coordinator runs them lowest priority first
 over the locomotion pose in a `GaitPose`, one stage at a time:

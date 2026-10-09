@@ -10,7 +10,7 @@ extends RefCounted
 # 1. World state  (STATE_RATE = 60 Hz, unreliable_ordered) — single flat
 #    PackedByteArray, sized once and written at offsets (see encode_world_state):
 #      u16 ws_sequence, u32 host_capture_time (0.1ms units), u8 num_skaters
-#      [u32 peer_id, skater_bytes(56), u8 queue_depth] × num_skaters
+#      [u32 peer_id, skater_bytes(55), u8 queue_depth] × num_skaters
 #      puck_bytes(13)
 #      u8 num_goalies, [goalie_bytes(43)] × num_goalies
 #      u8 score0, u8 score1, u8 phase, u8 period, u16 time_remaining
@@ -21,15 +21,15 @@ extends RefCounted
 #    dropped at send rather than split across datagrams.
 #
 #    Quantization layout:
-#      Skater  (56 B): pos s16/s8/s16@1cm, vel 3×s16@0.02m/s,
+#      Skater  (55 B): pos s16/s8/s16@1cm, vel 3×s16@0.02m/s,
 #                      blade 3×s16@1cm, top_hand 3×s16@1cm,
 #                      facing u16 (0–TAU→0–65535), upper_body_rot s16 (−π–π→−32767–32767),
 #                      facing_angular_velocity s16@PI*10 rad/s, upper_body_angular_velocity s16@PI*10 rad/s,
 #                      last_processed_ts f32,
-#                      flags u8 (shot_state[2:0]+elevation_level[4:3]+ghost[5]+blade_up[6]+sprint_locked[7]),
-#                      shot_charge u8, stamina u8, stagger_timer u8@0.01s,
+#                      flags u8 (shot_state[2:0]+elevation_level[4:3]+ghost[5]+blade_up[6], bit 7 spare),
+#                      shot_charge u8, stagger_timer u8@0.01s,
 #                      knockdown_timer u8@0.01s,
-#                      intent u8 (move octant[2:0]+moving[3]+brake[4] v15, sprint[5] v16, hit_commit[6] v28),
+#                      intent u8 (move octant[2:0]+moving[3]+brake[4] v15, stance[5] v65, hit_commit[6] v28),
 #                      balance_tilt 2×s16@π/32767 rad, balance_tilt_vel 2×s16@20/32767 rad/s (v61),
 #                      torso_lean 2×s16 + posture_lean s16, all @π/32767 rad (v62),
 #                      recoil_dir u8 (bearing 0–TAU→0–256, 0 = backward) (v63)
@@ -73,7 +73,7 @@ const WS_SEQUENCE_OFFSET: int = 0     # u16
 const WS_HOST_TIME_OFFSET: int = 2    # u32, 0.1 ms units
 const WS_SKATER_COUNT_OFFSET: int = 6  # u8
 const WS_HEADER_SIZE: int = 7
-const SKATER_STATE_BYTES: int = 56  # inner skater state block; every encode/decode
+const SKATER_STATE_BYTES: int = 55  # inner skater state block; every encode/decode
                                     # site must read it from here, or a grown block
                                     # silently truncates instead of failing
 # Wire range of the balance lean's spring rate, rad/s.
@@ -439,11 +439,11 @@ func decode_stats(data: Array) -> void:
 
 # ── Quantization helpers ──────────────────────────────────────────────────────
 
-# Skater: SKATER_STATE_BYTES (56) bytes
+# Skater: SKATER_STATE_BYTES (55) bytes
 # Offsets: pos(0..4) vel(5..10) blade(11..16) top_hand(17..22)
 #          facing(23..24) ubrot(25..26) fav(27..28) ubav(29..30) lp_ts(31..34)
-#          flags(35) charge(36) stamina(37) stagger(38) knockdown(39) intent(40)
-#          tilt(41..44) tilt_vel(45..48) torso(49..52) posture(53..54) recoil(55)
+#          flags(35) charge(36) stagger(37) knockdown(38) intent(39)
+#          tilt(40..43) tilt_vel(44..47) torso(48..51) posture(52..53) recoil(54)
 # Writes the skater block into `b` at `o`, returning the next offset. Godot 4
 # passes Packed arrays to functions BY REFERENCE, so these writes land in the
 # caller's buffer — that is what lets the hot path fill one pre-sized packet
@@ -471,16 +471,13 @@ static func _write_skater_quantized(b: PackedByteArray, o: int, s: SkaterNetwork
 	b.encode_u32(o, roundi(maxf(s.last_processed_host_timestamp, 0.0) * Constants.TIME_WIRE_SCALE)); o += 4
 	# Flags byte: bits 0-2 shot_state (8 SkaterStateMachine.State values — FULL;
 	# a ninth costs a repack),
-	# bits 3-4 elevation_level (0..2), bit 5 ghost, bit 6 blade_up,
-	# bit 7 sprint_locked.
+	# bits 3-4 elevation_level (0..2), bit 5 ghost, bit 6 blade_up, bit 7 spare.
 	var flags: int = (s.shot_state & 0x07) \
 			| ((clampi(s.elevation_level, 0, 3) & 0x3) << 3) \
 			| (0x20 if s.is_ghost else 0) \
-			| (0x40 if s.blade_up else 0) \
-			| (0x80 if s.sprint_locked else 0)
+			| (0x40 if s.blade_up else 0)
 	b.encode_u8(o, flags); o += 1
 	b.encode_u8(o, clampi(roundi(s.shot_charge * 255.0), 0, 255)); o += 1
-	b.encode_u8(o, clampi(roundi(s.stamina * 255.0), 0, 255)); o += 1
 	# Body-check stagger seconds remaining, u8 @ 0.01 s (0..2.55 s covers
 	# stagger_max_seconds 1.0 with headroom). Without it the client victim's
 	# predicted stagger is wiped to 0 on the next reconcile — full-thrust replay
@@ -491,20 +488,20 @@ static func _write_skater_quantized(b: PackedByteArray, o: int, s: SkaterNetwork
 	# without it the local victim's predicted knockdown is wiped on the next reconcile.
 	b.encode_u8(o, clampi(roundi(s.knockdown_timer * 100.0), 0, 255)); o += 1
 	# Movement-intent byte (v15): bits [0..2] move-direction octant, bit [3]
-	# moving, bit [4] brake held, bit [5] sprint active (v16), bit [6] hit-commit
+	# moving, bit [4] brake held, bit [5] stance active (v65), bit [6] hit-commit
 	# (v28, the body-check brace/delivery signal), bit [7] wrister address side
 	# (v56 — which face of the still puck the frozen blade addresses during a
 	# wrister aim; meaningful only while shot_state == WRISTER_AIM, garbage
 	# otherwise). WASD is 8-way, so the octant quantization is lossless; the
 	# gait reads intent (glide / crossover anticipation / brake-gated hockey
-	# stop / sprint stride) on client-rendered remotes from this.
+	# stop / stance) on client-rendered remotes from this.
 	var intent: int = 0
 	if s.move_intent.length_squared() > 0.0025:
 		var oct: int = wrapi(roundi(atan2(s.move_intent.x, s.move_intent.y) / (PI / 4.0)), 0, 8)
 		intent = oct | 0x08
 	if s.brake_intent:
 		intent |= 0x10
-	if s.sprint_active:
+	if s.stance_active:
 		intent |= 0x20
 	if s.hit_committed:
 		intent |= 0x40
@@ -584,9 +581,7 @@ static func _decode_skater_quantized(b: PackedByteArray, offset: int = 0) -> Ska
 	s.elevation_level = (flags >> 3) & 0x3
 	s.is_ghost = (flags & 0x20) != 0
 	s.blade_up = (flags & 0x40) != 0
-	s.sprint_locked = (flags & 0x80) != 0
 	s.shot_charge = b.decode_u8(o) / 255.0; o += 1
-	s.stamina = b.decode_u8(o) / 255.0; o += 1
 	s.stagger_timer = b.decode_u8(o) / 100.0; o += 1
 	s.knockdown_timer = b.decode_u8(o) / 100.0; o += 1
 	var intent: int = b.decode_u8(o)
@@ -596,7 +591,7 @@ static func _decode_skater_quantized(b: PackedByteArray, offset: int = 0) -> Ska
 	else:
 		s.move_intent = Vector2.ZERO
 	s.brake_intent = (intent & 0x10) != 0
-	s.sprint_active = (intent & 0x20) != 0
+	s.stance_active = (intent & 0x20) != 0
 	s.hit_committed = (intent & 0x40) != 0
 	s.wrister_address_side = 1 if (intent & 0x80) != 0 else -1
 	o += 1

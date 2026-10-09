@@ -19,9 +19,8 @@ static constexpr double PSI_RATE_EASE = 10.0;
 static constexpr double PSI_SMOOTH_EASE = 15.0;
 // PivotRules.RELEASE_MARGIN.
 static constexpr double PIVOT_RELEASE_MARGIN = 8.0 * Math_PI / 180.0;
-// SkaterMovementRules.GRIP_MIN_SPEED / TIGHT_TURN_TAPER.
+// SkaterMovementRules.GRIP_MIN_SPEED.
 static constexpr double GRIP_MIN_SPEED = 0.5;
-static constexpr double TIGHT_TURN_TAPER = Math_PI * 0.25;
 // LocomotionRules._INTENT_MIN_SQ.
 static constexpr double INTENT_MIN_SQ = 0.0025;
 
@@ -81,15 +80,6 @@ static inline double angle_diff(double from, double to) {
 }
 
 // ── Pure rules ──
-
-// SkaterMovementRules.tight_turn_weight
-static double tight_turn_weight(double steer_abs, double align_angle) {
-	double w = mind(steer_abs / maxd(align_angle, 0.001), 1.0);
-	if (steer_abs > Math_PI * 0.5) {
-		w *= maxd(0.0, 1.0 - (steer_abs - Math_PI * 0.5) / TIGHT_TURN_TAPER);
-	}
-	return w;
-}
 
 // HockeyStopRules.stop_yaw
 static double hockey_stop_yaw(const Vector3 &local_velocity, double side, double max_yaw) {
@@ -184,7 +174,7 @@ void NativeSkaterGait::reset() {
 	intensity = 0.0;
 	effort = 0.0;
 	turn_rate = 0.0;
-	sprint = 0.0;
+	loaded = 0.0;
 	stop_yaw = 0.0;
 	stop_latched = false;
 	have_prev_velocity = false;
@@ -213,7 +203,7 @@ void NativeSkaterGait::reset() {
 void NativeSkaterGait::locomote(double delta, const Vector3 &velocity, const Vector2 &intent,
 		const Basis &basis, int64_t flags, double hold) {
 	sense(delta, velocity, intent, basis, (flags & FLAG_BRAKE) != 0,
-			(flags & FLAG_SPRINT) != 0, (flags & FLAG_PLANTED) != 0, hold);
+			(flags & FLAG_STANCE) != 0, (flags & FLAG_PLANTED) != 0, hold);
 	const double fwd = align_and_pivot(delta, velocity, basis);
 	strokes(delta, fwd);
 }
@@ -221,14 +211,14 @@ void NativeSkaterGait::locomote(double delta, const Vector3 &velocity, const Vec
 // ── SkaterLocomotion ──
 
 void NativeSkaterGait::sense(double delta, const Vector3 &vel, const Vector2 &intent,
-		const Basis &basis, bool brake, bool sprint_active, bool planted, double hold) {
+		const Basis &basis, bool brake, bool stance_active, bool planted, double hold) {
 	const Config &c = cfg;
 	ground_speed = Vector2(vel.x, vel.z).length();
 	speed_t = clampd(ground_speed / maxd(c.max_speed, 0.001), 0.0, 1.0);
 	sample_velocity(delta, vel);
 	effort = lerpd(effort, fd_effort_target, c.stride_effort_speed * delta);
 	turn_rate = lerpd(turn_rate, fd_turn, c.carve_engage_speed * delta);
-	sprint = lerpd(sprint, (sprint_active && !planted) ? 1.0 : 0.0,
+	loaded = lerpd(loaded, (stance_active && !planted) ? 1.0 : 0.0,
 			c.locomotion_blend_speed * delta);
 
 	// LocomotionRules.classify
@@ -259,10 +249,9 @@ void NativeSkaterGait::sense(double delta, const Vector3 &vel, const Vector2 &in
 			if (brake) {
 				if (has_input) {
 					const double steer = travel.angle_to(intent);
-					out.tight = tight_turn_weight(std::abs(steer), c.tight_turn_align_angle);
 					out.side = steer != 0.0 ? sgn(steer) : 1.0;
 				}
-				out.stop = 1.0 - out.tight;
+				out.stop = 1.0;
 			} else if (!has_input) {
 				out.glide = 1.0;
 			} else {
@@ -277,7 +266,11 @@ void NativeSkaterGait::sense(double delta, const Vector3 &vel, const Vector2 &in
 					out.backward = fore * fore + across_t * across_t;
 				} else {
 					out.stride = fore * fore;
-					out.crossover = across_t * across_t;
+					if (stance_active) {
+						out.tight = across_t * across_t;
+					} else {
+						out.crossover = across_t * across_t;
+					}
 				}
 			}
 		}
@@ -316,7 +309,7 @@ void NativeSkaterGait::sense(double delta, const Vector3 &vel, const Vector2 &in
 	}
 	intensity = lerpd(intensity, target_intensity * (1.0 - hold), c.stride_intensity_speed * delta);
 
-	push_scale = clampd(1.0 + effort * c.stride_push_gain, c.stride_glide_floor, c.stride_push_ceiling) * (1.0 + sprint * c.sprint_stride_gain);
+	push_scale = clampd(1.0 + effort * c.stride_push_gain, c.stride_glide_floor, c.stride_push_ceiling) * (1.0 + loaded * c.stance_stride_gain);
 	cruise_gear = speed_t * (1.0 - clampd(effort, 0.0, 1.0));
 
 	const double ceiling = maxd(c.stride_cadence_max_rate, 0.001);
@@ -455,7 +448,6 @@ void NativeSkaterGait::strokes(double delta, double fwd) {
 	weight_shift_vel += shift_accel * delta;
 	weight_shift += weight_shift_vel * delta;
 	trunk_roll += deg_to_rad(c.weight_shift_deg) * weight_shift;
-	trunk_pitch += -deg_to_rad(c.sprint_lean_deg) * sprint * (1.0 - mix.stop - mix.skid);
 }
 
 void NativeSkaterGait::stroke(double w, double push, double rock, double flare, double tuck,
@@ -473,7 +465,7 @@ void NativeSkaterGait::stroke(double w, double push, double rock, double flare, 
 
 void NativeSkaterGait::stance_of(double s) {
 	const Config &c = cfg;
-	const double stroke_sit = clampd(intensity / maxd(c.stance_full_speed_fraction, 0.01), 0.0, 1.0) * clampd(1.0 + effort * c.stance_push_gain, 0.0, 1.35) * (1.0 + sprint * c.sprint_stance_gain) * (1.0 + c.cadence_glide_stance_gain * cruise_gear);
+	const double stroke_sit = clampd(intensity / maxd(c.stance_full_speed_fraction, 0.01), 0.0, 1.0) * clampd(1.0 + effort * c.stance_push_gain, 0.0, 1.35) * (1.0 + loaded * c.stance_sit_gain) * (1.0 + c.cadence_glide_stance_gain * cruise_gear);
 	const double stride_sit = maxd(stroke_sit, c.dig_in_stance * start * (intensity > 0.01 ? 1.0 : 0.0));
 	stance = (mix.stride + mix.backward + mix.shuffle) * stride_sit + mix.crossover * maxd(stroke_sit, c.carve_stance) + mix.glide * maxd(stroke_sit, c.glide_stance * speed_t) + mix.tight * c.tight_turn_stance + mix.stop * c.hockey_stop_stance + mix.skid * c.reversal_stance;
 	bob = c.stride_bob_m * intensity * (1.0 - s * s) * (mix.stride + mix.backward + mix.crossover);

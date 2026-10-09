@@ -213,51 +213,48 @@ func test_puck_round_trip_preserves_elevated_y() -> void:
 	assert_almost_eq(decoded.velocity.z, orig.velocity.z, 0.021)
 
 
-# ── Skater flags byte: shot_state | elevation_level | ghost | blade_up | lock ─
+# ── Skater flags byte: shot_state | elevation_level | ghost | blade_up ────────
 # All share the single flags byte (bits 0-2 shot_state, bits 3-4 the 2-bit
-# elevation_level, then 0x20/0x40/0x80). This exercises every combination so a
-# new bit can't silently clobber a neighbour.
+# elevation_level, then 0x20/0x40). This exercises every combination so a new
+# bit can't silently clobber a neighbour.
 
 func test_skater_flags_round_trip_all_combinations() -> void:
 	for shot_state: int in [0, 3, 6]:
 		for elevation_level: int in [0, 1, 2]:
 			for ghost: bool in [false, true]:
 				for blade_up: bool in [false, true]:
-					for sprint_locked: bool in [false, true]:
-						var s := SkaterNetworkState.new()
-						s.shot_state      = shot_state
-						s.elevation_level = elevation_level
-						s.is_ghost        = ghost
-						s.blade_up        = blade_up
-						s.sprint_locked   = sprint_locked
-						var enc: PackedByteArray = WorldStateCodec._encode_skater_quantized(s)
-						var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(enc)
-						var ctx := "shot=%d elev=%d ghost=%s up=%s lock=%s" % [shot_state, elevation_level, ghost, blade_up, sprint_locked]
-						assert_eq(dec.shot_state, shot_state, ctx)
-						assert_eq(dec.elevation_level, elevation_level, ctx)
-						assert_eq(dec.is_ghost, ghost, ctx)
-						assert_eq(dec.blade_up, blade_up, ctx)
-						assert_eq(dec.sprint_locked, sprint_locked, ctx)
+					var s := SkaterNetworkState.new()
+					s.shot_state      = shot_state
+					s.elevation_level = elevation_level
+					s.is_ghost        = ghost
+					s.blade_up        = blade_up
+					var enc: PackedByteArray = WorldStateCodec._encode_skater_quantized(s)
+					var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(enc)
+					var ctx := "shot=%d elev=%d ghost=%s up=%s" % [shot_state, elevation_level, ghost, blade_up]
+					assert_eq(dec.shot_state, shot_state, ctx)
+					assert_eq(dec.elevation_level, elevation_level, ctx)
+					assert_eq(dec.is_ghost, ghost, ctx)
+					assert_eq(dec.blade_up, blade_up, ctx)
 
 
 func test_skater_move_intent_round_trips_all_octants() -> void:
 	# The intent byte (v15) quantizes the WASD vector to 8 directions —
-	# lossless for keyboard input. Every octant + brake + sprint (v16) + idle
+	# lossless for keyboard input. Every octant + brake + stance (v65) + idle
 	# round-trips, and the flag bits can't clobber each other.
 	for oct: int in range(8):
 		var a: float = float(oct) * (PI / 4.0)
 		var s := SkaterNetworkState.new()
 		s.move_intent = Vector2(sin(a), cos(a))
 		s.brake_intent = (oct % 2 == 0)
-		s.sprint_active = (oct % 3 == 0)
-		s.hit_committed = (oct % 2 == 1)  # v28 bit [6]; interleaved so it can't alias brake/sprint
+		s.stance_active = (oct % 3 == 0)
+		s.hit_committed = (oct % 2 == 1)  # v28 bit [6]; interleaved so it can't alias brake/stance
 		s.wrister_address_side = 1 if oct % 3 == 1 else -1  # v56 bit [7]
 		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
 				WorldStateCodec._encode_skater_quantized(s))
 		assert_almost_eq(dec.move_intent.x, s.move_intent.x, 0.001, "octant %d x" % oct)
 		assert_almost_eq(dec.move_intent.y, s.move_intent.y, 0.001, "octant %d y" % oct)
 		assert_eq(dec.brake_intent, s.brake_intent, "octant %d brake" % oct)
-		assert_eq(dec.sprint_active, s.sprint_active, "octant %d sprint" % oct)
+		assert_eq(dec.stance_active, s.stance_active, "octant %d stance" % oct)
 		assert_eq(dec.hit_committed, s.hit_committed, "octant %d hit-commit" % oct)
 		assert_eq(dec.wrister_address_side, s.wrister_address_side,
 				"octant %d wrister address" % oct)
@@ -292,23 +289,12 @@ func test_skater_idle_intent_round_trips_zero() -> void:
 	var s := SkaterNetworkState.new()
 	s.move_intent = Vector2.ZERO
 	s.brake_intent = true
-	s.sprint_active = true
+	s.stance_active = true
 	var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
 			WorldStateCodec._encode_skater_quantized(s))
 	assert_eq(dec.move_intent, Vector2.ZERO)
 	assert_true(dec.brake_intent)
-	assert_true(dec.sprint_active)
-
-
-func test_skater_stamina_quantizes_within_tolerance() -> void:
-	# Stamina rides as a u8 (0..1 → 0..255), so worst-case quantization error is
-	# ~1/255. Round-trip a spread of values through the real wire path.
-	for v: float in [0.0, 0.25, 0.5, 0.73, 1.0]:
-		var s := SkaterNetworkState.new()
-		s.stamina = v
-		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
-				WorldStateCodec._encode_skater_quantized(s))
-		assert_almost_eq(dec.stamina, v, 1.0 / 255.0, "stamina %f round-trips within u8 tolerance" % v)
+	assert_true(dec.stance_active)
 
 
 # The balance lean places the UpperBody frame the wire's blade and hand are
@@ -415,7 +401,7 @@ func _make_skater(x: float) -> SkaterNetworkState:
 	var s := SkaterNetworkState.new()
 	s.position = Vector3(x, 0.5, -x)
 	s.velocity = Vector3(1.0, 0.0, -2.0)
-	s.stamina = 0.5
+	s.stagger_timer = 0.5
 	return s
 
 
@@ -571,11 +557,10 @@ func _sample_skater() -> SkaterNetworkState:
 	s.facing = Vector2(0.0, 1.0)
 	s.upper_body_rotation_y = 0.5
 	s.shot_charge = 0.5
-	s.stamina = 0.75
 	s.stagger_timer = 0.2
 	s.knockdown_timer = 0.1
 	s.move_intent = Vector2(0.0, 1.0)
-	s.sprint_active = true
+	s.stance_active = true
 	return s
 
 

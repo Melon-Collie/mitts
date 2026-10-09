@@ -362,6 +362,7 @@ const POKE_EVADE_MIN_SELF_SPEED_M_S: float = 2.0
 # pulls us back on line without the bot losing its play. 150 ms ≈
 # PHYSICS_TICK × 3/20 ticks.
 const POKE_EVADE_ACTIVE_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 3 / 20   # ~150 ms
+const POKE_EVADE_ACTIVE_S: float = float(POKE_EVADE_ACTIVE_TICKS) / _PhysicsConstants.PHYSICS_TICK
 # Cooldown after evade ends, blocks immediate retrigger. Persistent
 # threats (defender hanging in our face) would otherwise loop us
 # into a constant cut — the cooldown forces us to commit back to
@@ -444,13 +445,6 @@ const OFFSIDE_HOLD_BUFFER_M: float = 1.0
 # the lane has rotated. Short window; long leads put the lane in the
 # wrong zone entirely.
 const SHOT_LANE_LEAD_TIME_S: float = 0.25
-
-# Half-width (m) of the corridor in front of the carrier checked for opponents
-# when deciding a breakaway sprint (see _carry_has_open_lane). An opponent
-# inside this perpendicular distance of the carrier→net line counts as in the
-# way. ~1 m wider than the poke-threat radius so the burst only fires with
-# genuine open ice, not when a defender is one stride off the lane.
-const BREAKAWAY_CORRIDOR_M: float = 3.0
 
 # Blade-reach radius. Inside this distance the bot's stick can already
 # reach the puck where it actually is, so the blade IK should aim at
@@ -659,6 +653,8 @@ var _pivot_braking: bool = false
 # Arrival-brake hysteresis (AISteering.should_arrival_brake) — held across
 # ticks so the brake key doesn't strobe while speed sheds on approach.
 var _arrival_braking: bool = false
+# Stance-turn hysteresis (AISteering.stance_carves_to).
+var _stance_turning: bool = false
 
 # Identity / orientation
 var _peer_id: int = 0
@@ -801,10 +797,6 @@ var _last_carry_anchor: Vector3 = Vector3.ZERO
 # tracks last tick's puck.carrier_peer_id so we can detect the
 # transition into "loose".
 var _engagement_cooldown: int = 0
-# Per-tick sprint reference for CHASE (the puck normally; the drive-through
-# point during a live 50/50 contest so arrival easing doesn't bleed the
-# committed speed). Reset after each _state_chase_puck tick.
-var _chase_sprint_ref: Vector3 = Vector3.INF
 var _prev_carrier_peer_id: int = -1
 
 # Set when CARRY commits to SHOOT_PRESSED; consumed by _state_shoot_pressed
@@ -932,11 +924,6 @@ var _pass_aim_dir_locked: Vector3 = Vector3.ZERO
 # behave exactly as before capabilities are applied. Cross-player reasoning
 # (opponent ETA/reach, the loose-puck election) stays on the shared defaults.
 var _self_max_speed: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
-# Sprint ceiling multiplier — the chase walk races at the
-# stamina-gated sprint cap (BotSprintRules.race_speed), because the body
-# sprints its chases (_resolve_sprint) and a cruise-priced walk aimed at
-# intercept points the sprinting body overruns.
-var _self_sprint_mult: float = AISkaterCaps.LEAGUE_SPRINT_SPEED_MULT
 var _self_wrister_shot_speed: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 var _self_loft_tans: Vector3 = AIActionScoring.DEFAULT_LOFT_TANS
 var _self_lateral_grip: float = 1.0
@@ -1034,8 +1021,7 @@ const ONE_TIMER_ANCHOR_ARRIVE_M: float = 0.6
 # receiver — the any-angle deflect threshold is Puck.deflect_min_speed
 # (22 m/s relative) — so a receiver skating INTO a feed stacks its own
 # closing on top and knocks down a tape pass. Above this the chase brakes to
-# shed its own closing (the skating half of soft hands) and never sprints at
-# the feed. Sits BETWEEN the magnet solve and the deflect threshold: bot
+# shed its own closing (the skating half of soft hands). Sits BETWEEN the magnet solve and the deflect threshold: bot
 # passes are launched to arrive at exactly PASS_TARGET_CLOSING (20) in the
 # receiver's frame, so a ceiling at-or-under 20 would brake the receiver on
 # every clean feed — only genuinely hot arrivals trip the give (a charging
@@ -1305,20 +1291,16 @@ var _plays_rush_pass_lanes: bool = true
 # seam-directed poke-evade deke. False = naive forward carry — the puck stays
 # presented ahead of the body, so a straight poke-check works (the beginner tier).
 var _protects_the_puck: bool = true
-# Sprint is decided alongside move_vector on full-dispatch ticks; skipped
-# throttle ticks reuse this cached value so sprint_held doesn't flicker off at
-# 60 Hz (which would halve the burst and strobe the facing turn-rate penalty).
-# Also serves as the `was_sprinting` hysteresis input to BotSprintRules.
-var _cached_sprint_held: bool = false
 # The FINISHER raises the blade (stick_lift_held) to tip an elevated incoming
 # shot, but that flag is only set on dispatch ticks. Cache + replay it on skipped
 # ticks or blade_up strobes at 1-in-dispatch_period and never reaches the raised
 # pose at Normal/Easy (the lift blend never leaves ~0).
 var _cached_stick_lift_held: bool = false
-# Same for the brake (pivot / arrival / brake-steering stops, tight turns) and
-# the body-check commit: set only on dispatch ticks, so without the replay a
+# Same for the brake (pivot / arrival stops), the stance (pivot cuts) and the
+# body-check commit: set only on dispatch ticks, so without the replay a
 # lower tier — dispatching every 6–9 ticks — would hold them for one tick in N.
 var _cached_brake: bool = false
+var _cached_stance_held: bool = false
 var _cached_hit_held: bool = false
 # Updated inside `_step_mouse_toward` so skipped ticks can re-step
 # toward the most recently decided target without re-running the
@@ -1422,7 +1404,6 @@ func apply_capabilities(caps: AISkaterCaps) -> void:
 	if caps == null:
 		return
 	_self_max_speed = caps.max_speed
-	_self_sprint_mult = caps.sprint_speed_mult
 	_chase_max_accel = caps.max_accel
 	_blade_reach = caps.blade_span + BLADE_REACH_BUFFER_M
 	_receive_body_offset = caps.blade_span - RECEIVE_BODY_INSET_M
@@ -1816,9 +1797,9 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 	if not is_press_state and _dispatch_skip_counter > 0:
 		_dispatch_skip_counter -= 1
 		input.move_vector = _cached_move_vector
-		input.sprint_held = _cached_sprint_held
 		input.stick_lift_held = _cached_stick_lift_held
 		input.brake = _cached_brake
+		input.stance_held = _cached_stance_held
 		input.hit_held = _cached_hit_held
 		# Aim runs at the physics rate even though the DECISION is throttled:
 		# while chasing, re-derive the reception blade target from current
@@ -1853,8 +1834,8 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 					_cached_aim_max_speed, _cached_aim_arc_rate)
 		return
 	# FAR-FROM-PLAY DISPATCH LOD: an OFF_PUCK bot beyond FAR_PLAY_LOD_RADIUS_M
-	# of the puck runs the full state handler (steering recompute, sprint
-	# resolver, role predicates) at HALF the dispatch rate — the shell-level
+	# of the puck runs the full state handler (steering recompute, role
+	# predicates) at HALF the dispatch rate — the shell-level
 	# twin of the role-argmax far LOD below, and the flat majority of the 5v5
 	# AI bill (8-ish post-holders paying battle rates to hold formation). Same
 	# approach-physics grounding as the argmax LOD (see FAR_PLAY_LOD_RADIUS_M),
@@ -1896,12 +1877,9 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 			_state_one_timer_pressed(input, snapshot, self_pos, have_puck)
 
 	_cached_move_vector = input.move_vector
-	# Mirror move_vector caching: press states leave sprint_held false (zeroed
-	# each tick by SkaterAgent), so a shot/charge cleanly drops the cache to
-	# false and the next OFF_PUCK/CARRY tick re-engages from a fresh state.
-	_cached_sprint_held = input.sprint_held
 	_cached_stick_lift_held = input.stick_lift_held
 	_cached_brake = input.brake
+	_cached_stance_held = input.stance_held
 	_cached_hit_held = input.hit_held
 
 
@@ -1925,8 +1903,6 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 		# Velocity-matched seek: redirect cross-drift onto the line back to the
 		# tag-up point rather than orbiting it (same as the role stations).
 		_apply_steering(input, snapshot, self_pos, tag_up, false, _self_max_speed)
-		# Race back to the blue line to clear the offside as fast as possible.
-		_resolve_sprint(input, self_state, self_pos, tag_up, false, false)
 		_arm_off_puck_live_aim(tag_up, FACE_TRAVEL_TAG_UP_NEAR_M)
 		input.mouse_world_pos = _step_mouse_face(_ready_stance_aim(
 				self_pos, tag_up, snapshot, FACE_TRAVEL_TAG_UP_NEAR_M))
@@ -2054,32 +2030,11 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 				_self_max_speed, decision.target_velocity,
 				decision.engaged_peer_id)
 		if decision.commit_check:
-			# Body-check commit: drive THROUGH the carrier at max closing
-			# velocity. Force sprint even at short range — the gap gate would
-			# otherwise ease off near contact, softening the hit. Respect the
-			# hard exhaustion lockout.
-			input.sprint_held = self_state != null and not self_state.sprint_locked
-			# Commit to the check with the Hit button too — this is what delivers the
-			# FULL transfer AIBodyCheck's predicted_impulse assumed (an uncommitted
-			# drive lands only the passive fraction), and braces the checker against
-			# the collision. Stamina-gated in the controller like sprint, so setting it
-			# while gassed is a harmless no-op there.
+			# Body-check commit: drive THROUGH the carrier with the Hit button
+			# held — this is what delivers the FULL transfer AIBodyCheck's
+			# predicted_impulse assumed (an uncommitted drive lands only the
+			# passive fraction), and braces the checker against the collision.
 			input.hit_held = true
-		else:
-			# Sprint to close a long gap to the role's destination — backcheck
-			# racing home, forecheck closing from depth, breakout up-ice. The gap
-			# gate keeps a bot camped near its anchor (or a pre-aimed FINISHER) off
-			# the throttle; the turn gate keeps it from sprinting into a sharp cut.
-			#
-			# A tracking role overrides both gates (RoleDecision.sprint_override):
-			# a backchecker is behind the play by definition and the entire job is
-			# closing that distance, so easing off as the gap narrows — or as the
-			# recovery lane bends — is precisely wrong. The hard exhaustion lockout
-			# still applies, so this can never sprint a gassed bot.
-			if decision.sprint_override:
-				input.sprint_held = self_state != null and not self_state.sprint_locked
-			else:
-				_resolve_sprint(input, self_state, self_pos, decision.target_position, false, false)
 		# Deflection routine: FINISHER raises its blade to tip an incoming
 		# ELEVATED on-net shot (a grounded blade flies under it). Off-puck
 		# only — the controller ignores voluntary lifts while carrying. The
@@ -2455,13 +2410,11 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 	var recv: int = _try_shot_reception(input, snapshot, self_pos)
 	if recv == _RECV_ONE_TIME:
 		return
-	_chase_sprint_ref = snapshot.puck_state.position
 	# An INBOUND fast loose puck (a feed coming AT us) is a reception, not a
 	# race: the catch gate judges the puck's speed in OUR frame
 	# (PuckReceptionRules, #373), so our own closing speed stacks onto the
-	# puck's pace — sprinting at the feed (or skating hard into it) turns a
-	# tape pass into a knock-down. Read the geometry once: the sprint gate
-	# and the give-brake below both use it.
+	# puck's pace — skating hard into the feed turns a tape pass into a
+	# knock-down.
 	var give_brake: bool = false
 	if snapshot.puck_state.carrier_peer_id == -1:
 		var pv: Vector3 = snapshot.puck_state.velocity
@@ -2471,7 +2424,6 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 			var inbound: bool = pv.x * (self_pos.x - pp.x) \
 					+ pv.z * (self_pos.z - pp.z) > 0.0
 			if inbound:
-				_chase_sprint_ref = self_pos   # gap 0 — sprint stays off
 				var sv: Vector3 = Vector3.ZERO
 				var give_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 				if give_state != null:
@@ -2498,17 +2450,8 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 		var self_state2: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 		if self_state2 != null:
 			self_vel_3d = self_state2.velocity
-		# Race at the sprint-aware cap — the body sprints this chase
-		# (_resolve_sprint below), so a cruise-priced walk aimed at points
-		# the sprinting body overruns.
-		var race_cap: float = _self_max_speed
-		if self_state2 != null:
-			race_cap = BotSprintRules.race_speed(
-					_self_max_speed, _self_sprint_mult,
-					self_state2.stamina, self_state2.sprint_locked,
-					Vector2(puck_pos.x - self_pos.x, puck_pos.z - self_pos.z).length())
 		var target: Vector3 = _lead_intercept(
-				self_pos, self_vel_3d, puck_pos, snapshot.puck_state.velocity, race_cap)
+				self_pos, self_vel_3d, puck_pos, snapshot.puck_state.velocity)
 		# Angling: when an OPPONENT carries the puck, shade the intercept
 		# toward OUR net so we approach on the inside lane and force them
 		# outside. Loose pucks get the raw intercept — there's no carrier
@@ -2557,9 +2500,6 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 				# committing the body through the frame.
 				if AIActionScoring.carry_path_blocked_by_net(puck_pos, target):
 					target = puck_pos
-				# Sprint gate reads the overshoot too — the easing that slows a
-				# clean solo pickup must not bleed speed out of a contest.
-				_chase_sprint_ref = target
 		elif carrier_pid == -1:
 			# BLADE-FIRST pickup route: steer the BODY to a point one carry
 			# cradle SHORT of the intercept along the approach line, so the bot
@@ -2598,8 +2538,6 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 		var chase_on_ice: Vector2 = GameRules.clamp_to_rink_inner(
 				Vector2(target.x, target.z), BODY_WALL_MARGIN_M)
 		target = Vector3(chase_on_ice.x, 0.0, chase_on_ice.y)
-		if contested:
-			_chase_sprint_ref = target   # the gap the sprint gate reads
 		_apply_steering(input, snapshot, self_pos, target)
 		if give_brake:
 			input.brake = true   # give with the puck — shed our own closing
@@ -2622,14 +2560,6 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 				# unaffected: inside _blade_reach the reception helper aims direct at
 				# the puck itself.
 			input.mouse_world_pos = _step_mouse_face(target)
-	# Sprint to win the race to a loose / contested puck. Gap is measured to
-	# the puck itself — the arrival easing inside ~1.5 m slows a clean solo
-	# pickup — EXCEPT through a live contest, where the gap reads the drive-
-	# through point instead so the bot arrives with its speed. Resolved after
-	# both steering paths above so the turn gate sees the final heading.
-	var chase_self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
-	_resolve_sprint(input, chase_self_state, self_pos, _chase_sprint_ref, false, false)
-	_chase_sprint_ref = Vector3.INF
 
 	# Transitions: chase ends as soon as someone has the puck, OR we're
 	# no longer the closest teammate (let the new closest take over).
@@ -2741,8 +2671,8 @@ func _pass_receive_aim_and_steer(input: InputState, snapshot: WorldSnapshot, sel
 	# Commit. Receive IN STRIDE by default — brake only when waiting is
 	# geometrically unavoidable. Settling buys nothing for the catch itself
 	# (#373's relative frame: running with or across a magnet-pace feed keeps the
-	# closing speed inside the catchable band — a perpendicular crossing at full
-	# sprint adds ~2 m/s over the puck's own pace) and it kills the rush: a
+	# closing speed inside the catchable band — a perpendicular crossing at top
+	# speed adds ~2 m/s over the puck's own pace) and it kills the rush: a
 	# stopped receiver pays full re-acceleration after the catch. The one case
 	# that NEEDS the brake is arriving so early that continued motion carries the
 	# blade past the meet before the puck shows up — so ask that directly: keep
@@ -3155,14 +3085,6 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		# Pre-aim states (SHOOT/PASS pending) skip this — they have
 		# their own steering targets that the cut would override.
 		_poke_evade_modulate_steering(input, snapshot, self_pos)
-		# Breakaway burst: a carrier only sprints with a clear lane to the net
-		# (carrying drains stamina ~1.6× faster and the wide turn radius wrecks
-		# dangling, so it's reckless in traffic). Resolved after the poke-evade
-		# cut so the turn gate sees the real heading. Pre-aim / shot / pass
-		# branches below never sprint — sprint_held stays false (zeroed each
-		# tick), so a wind-up is always at full agility.
-		_resolve_sprint(input, self_state, self_pos, _last_carry_anchor,
-				true, _carry_has_open_lane(snapshot, self_pos))
 	elif _intended_action == State.SHOOT_PRESSED:
 		var hv: Vector3 = Vector3.ZERO
 		if self_state != null:
@@ -4543,15 +4465,15 @@ func _apply_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 			opp_repel, steer_vels, _scratch_teammate_steer_vels,
 			match_self_vel, velocity_match_speed, anchor_velocity)
 
-	# Brake-pivot: if our current velocity is roughly opposite the desired
-	# direction (~180° transition), stopping hard beats carving a wide arc.
-	# The bot presses the REAL brake key and keeps move_vector on the exit
-	# direction — the input shape a human uses — so the physics gets the
-	# hockey stop and the cosmetic layer reads a genuine stop into a dig-in
-	# restart. Past the pivot angle the braking stick is behind the skater,
-	# which the movement rules treat as a stop (only a sliver of tight-turn
-	# toward the exit), and the stride resumes toward it once the brake
-	# releases (hysteresis + speed floor in AISteering.should_brake).
+	# Brake-pivot: if our current velocity is far off the desired direction,
+	# carving a wide arc loses. The bot keeps move_vector on the exit direction —
+	# the input shape a human uses — and either digs the turn in the stance
+	# (exit still in front, AISteering.pivot_cuts_in_stance) or presses the REAL
+	# brake key for a hockey stop (exit behind), so the cosmetic layer reads a
+	# genuine cut or a genuine stop into a dig-in restart. The stride resumes
+	# toward the exit once the pivot releases (hysteresis + speed floor in
+	# AISteering.should_brake). Short of a pivot, any turn onto the anchor the
+	# upright edges can't make is carved in the stance (stance_carves_to).
 	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 	if self_state != null:
 		var v: Vector3 = self_state.velocity
@@ -4567,7 +4489,13 @@ func _apply_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 					self_pos, anchor, Vector2(v.x, v.z), _arrival_braking)
 		else:
 			_arrival_braking = false
-		input.brake = _pivot_braking or _arrival_braking
+		var pivot_cut: bool = _pivot_braking \
+				and AISteering.pivot_cuts_in_stance(desired, Vector2(v.x, v.z))
+		input.brake = (_pivot_braking and not pivot_cut) or _arrival_braking
+		_stance_turning = not input.brake and AISteering.stance_carves_to(
+				self_pos, anchor, desired, Vector2(v.x, v.z), _upright_lateral_accel(),
+				_blade_reach, _stance_turning)
+		input.stance_held = pivot_cut or _stance_turning
 		# Body-level offside guard: keep an attacking non-carrier from
 		# skating its body across the attacking blue line before the puck
 		# (instant ghost in ARCADE). Applied after the brake-pivot so the
@@ -4577,26 +4505,6 @@ func _apply_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 				desired, self_pos, v, _own_goal_dir,
 				snapshot.puck_state.position.z, carrier == _peer_id)
 	input.move_vector = desired
-
-
-# Decide whether to hold sprint this tick and write it onto `input`. Reads the
-# bot's own stamina + lockout from the perception snapshot (both replicated on
-# SkaterNetworkState) and the live steering output, then defers to the pure
-# BotSprintRules gate. `target` is the steering destination the closing gap is
-# measured against; `carrying` / `breakaway` gate the carrier case. Must be
-# called AFTER _apply_steering / _apply_brake_steering so input.move_vector is
-# the final heading the turn gate evaluates.
-func _resolve_sprint(input: InputState, self_state: SkaterNetworkState,
-		self_pos: Vector3, target: Vector3, carrying: bool, breakaway: bool) -> void:
-	if self_state == null:
-		input.sprint_held = false
-		return
-	var gap: float = Vector2(target.x - self_pos.x, target.z - self_pos.z).length()
-	var vel_xz := Vector2(self_state.velocity.x, self_state.velocity.z)
-	input.sprint_held = BotSprintRules.should_sprint(
-			_cached_sprint_held, gap, vel_xz, input.move_vector,
-			self_state.stamina, self_state.sprint_locked, carrying, breakaway,
-			self_state.facing)
 
 
 # Opponent peer ids, read straight from the per-frame roster cache published by
@@ -4612,33 +4520,6 @@ func _opponent_ids(snapshot: WorldSnapshot) -> Array:
 		if pid != _peer_id and _team_id_by_peer.get(pid, -1) != _team_id:
 			_scratch_opp_ids.append(pid)
 	return _scratch_opp_ids
-
-
-# True iff the carrier has a clear lane to the attacking goal — no opponent
-# skater ahead of it (toward the net) inside a narrow corridor. A clean
-# breakaway is the one case a carrier sprints: open ice means the wide turn
-# radius doesn't bite and the burst beats the backcheck to the net. Goalies
-# aren't in skater_states, so they never block the lane (the goalie is the
-# thing you're skating in on). Conservative by design — false positives would
-# have the carrier sprint into traffic and lose the agility to dangle.
-func _carry_has_open_lane(snapshot: WorldSnapshot, self_pos: Vector3) -> bool:
-	var to_net: Vector3 = _attacking_goal_pos - self_pos
-	to_net.y = 0.0
-	var dist_net: float = to_net.length()
-	if dist_net < 0.01:
-		return false
-	var net_dir: Vector3 = to_net / dist_net
-	for pid: int in _opponent_ids(snapshot):
-		var opp_pos: Vector3 = snapshot.skater_states[pid].position
-		var to_opp: Vector3 = opp_pos - self_pos
-		to_opp.y = 0.0
-		var along: float = to_opp.dot(net_dir)
-		if along <= 0.0 or along > dist_net:
-			continue  # behind us, or past the net — not in the lane
-		var perp: float = (to_opp - net_dir * along).length()
-		if perp < BREAKAWAY_CORRIDOR_M:
-			return false
-	return true
 
 
 # Returns the opposing goalie's CURRENT world position. Used as input
@@ -5072,8 +4953,12 @@ func _stickhandle_offset(snapshot: WorldSnapshot, self_pos: Vector3, forward_dir
 #     carrier driving at a waiting defender closes the gap too, so it triggers
 #     the deke (only a defender neither approaching nor being approached is skipped).
 func _poke_evade_modulate_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3) -> void:
+	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
+	if self_state == null:
+		return
+	var vel_xz := Vector2(self_state.velocity.x, self_state.velocity.z)
 	if _poke_evade_active_ticks > 0:
-		_drive_poke_evade_cut(input, self_pos)
+		_drive_poke_evade_cut(input, self_pos, vel_xz)
 		# Decrement by the dispatch span (this runs once per dispatch, but the
 		# window is sized in physics ticks) so the cut lasts its intended wall time
 		# instead of dispatch_period× longer at Normal/Easy.
@@ -5088,10 +4973,6 @@ func _poke_evade_modulate_steering(input: InputState, snapshot: WorldSnapshot, s
 	if _poke_evade_cooldown_ticks > 0:
 		_poke_evade_cooldown_ticks = maxi(0, _poke_evade_cooldown_ticks - _dispatch_period_ticks)
 		return
-	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
-	if self_state == null:
-		return
-	var vel_xz := Vector2(self_state.velocity.x, self_state.velocity.z)
 	var speed: float = vel_xz.length()
 	if speed < POKE_EVADE_MIN_SELF_SPEED_M_S:
 		# Too slow for the lateral cut (it would read as a wiggle) — but the
@@ -5099,7 +4980,7 @@ func _poke_evade_modulate_steering(input: InputState, snapshot: WorldSnapshot, s
 		# container parked in front, nobody moving. Commit the deke when the
 		# carrier's re-eval says the fake manufactures an opening.
 		if _carrier.deke_go:
-			_start_deke(input, self_pos)
+			_start_deke(input, self_pos, vel_xz)
 		return
 	var forward: Vector2 = vel_xz / speed
 	# Puck pos approximation — same carry-arm offset the stickhandle
@@ -5149,7 +5030,7 @@ func _poke_evade_modulate_steering(input: InputState, snapshot: WorldSnapshot, s
 		# When the carrier's re-eval says a fake would MANUFACTURE an
 		# opening that doesn't exist (deke_go), commit the deke here.
 		if _carrier.deke_go:
-			_start_deke(input, self_pos)
+			_start_deke(input, self_pos, vel_xz)
 		return
 	# Maneuver pick, latched for the whole window — priority by what each
 	# answers: a BRAKE CHECK when the carrier's last re-eval read the braked
@@ -5166,7 +5047,7 @@ func _poke_evade_modulate_steering(input: InputState, snapshot: WorldSnapshot, s
 	# already handles.
 	var braking: bool = _carrier.brake_check_favored
 	if not braking and _carrier.deke_go:
-		_start_deke(input, self_pos)
+		_start_deke(input, self_pos, vel_xz)
 		return
 	var cut_dir: Vector2 = _seam_cut_direction(self_pos)
 	if cut_dir == Vector2.ZERO and not braking:
@@ -5175,7 +5056,7 @@ func _poke_evade_modulate_steering(input: InputState, snapshot: WorldSnapshot, s
 	_poke_evade_dir = cut_dir
 	_poke_evade_active_ticks = POKE_EVADE_BRAKE_TICKS if braking \
 			else POKE_EVADE_ACTIVE_TICKS
-	_drive_poke_evade_cut(input, self_pos)
+	_drive_poke_evade_cut(input, self_pos, vel_xz)
 
 
 # The latched deke direction: toward the carrier's DIRECTED evasion seam — the
@@ -5203,13 +5084,13 @@ func _seam_cut_direction(self_pos: Vector3) -> Vector2:
 # phases; the drive below splits them on the remaining ticks. Directions come
 # from the carrier's manufactured-opening read (same axis frame as the eval,
 # so the gesture performed is the gesture priced).
-func _start_deke(input: InputState, self_pos: Vector3) -> void:
+func _start_deke(input: InputState, self_pos: Vector3, vel_xz: Vector2) -> void:
 	_poke_evade_deking = true
 	_deke_fake_dir = _carrier.deke_fake_dir
 	_deke_cut_dir = _carrier.deke_cut_dir
 	_poke_evade_dir = Vector2.ZERO
 	_poke_evade_active_ticks = DEKE_FAKE_TICKS + DEKE_CUT_TICKS
-	_drive_poke_evade_cut(input, self_pos)
+	_drive_poke_evade_cut(input, self_pos, vel_xz)
 
 
 # One active-window tick of the committed maneuver. DEKE: thrust the fake
@@ -5221,20 +5102,31 @@ func _start_deke(input: InputState, self_pos: Vector3) -> void:
 # the instant the window releases; the beaten checker no longer registers in
 # the threat-gated repel, so the exit bursts straight past him. CUT: the seam
 # direction latched at trigger (guaranteed non-zero — a directionless evade
-# never triggers).
-func _drive_poke_evade_cut(input: InputState, self_pos: Vector3) -> void:
+# never triggers). Both cuts dig in the stance when the upright edges can't turn
+# onto them inside their window (AISteering.stance_cuts_onto).
+func _drive_poke_evade_cut(input: InputState, self_pos: Vector3, vel_xz: Vector2) -> void:
 	if _poke_evade_deking:
-		input.move_vector = _deke_fake_dir \
-				if _poke_evade_active_ticks > DEKE_CUT_TICKS else _deke_cut_dir
+		var cutting: bool = _poke_evade_active_ticks <= DEKE_CUT_TICKS
+		input.move_vector = _deke_cut_dir if cutting else _deke_fake_dir
+		input.stance_held = cutting and AISteering.stance_cuts_onto(
+				_deke_cut_dir, vel_xz, _upright_lateral_accel(), AICarrySpace.DEKE_CUT_S)
 		return
 	if _poke_evade_braking:
 		input.brake = true
+		input.stance_held = false
 		var exit := Vector2(_last_carry_anchor.x - self_pos.x,
 				_last_carry_anchor.z - self_pos.z)
 		if exit.length_squared() > 0.01:
 			input.move_vector = exit.normalized()
 		return
 	input.move_vector = _poke_evade_dir
+	input.stance_held = AISteering.stance_cuts_onto(_poke_evade_dir, vel_xz,
+			_upright_lateral_accel(), POKE_EVADE_ACTIVE_S)
+
+
+# What the upright edges can turn: the movement core's turn_accel × our grip.
+func _upright_lateral_accel() -> float:
+	return GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2 * _self_lateral_grip
 
 
 # The deke's carry-cursor override: sell the fake WITH THE PUCK — the
@@ -5382,15 +5274,14 @@ func _shot_aim_point(snapshot: WorldSnapshot, self_pos: Vector3,
 #     if assigned, else the puck). Real defenders watch the threat as
 #     they settle into coverage.
 #
-# The near threshold matches the sprint-engage gap (BotSprintRules.
-# GAP_ENGAGE_M): a move long enough to sprint is a committed skate —
-# face the travel direction for full thrust; anything shorter is
-# positioning, and positioning happens eyes-on-the-play (crossovers /
-# shuffles), like a real off-puck player. A tighter threshold leaves
+# The near threshold is ~0.6 s of skating at top speed: a move that long is
+# a committed skate — face the travel direction for full thrust; anything
+# shorter is positioning, and positioning happens eyes-on-the-play
+# (crossovers / shuffles), like a real off-puck player. A tighter threshold leaves
 # station-keeping bots forever "far" from a continuously drifting role
 # anchor, visibly looking away from the play.
 const READY_STANCE_AIM_FORWARD_M: float = 2.0
-const FACE_THREAT_NEAR_ANCHOR_M: float = BotSprintRules.GAP_ENGAGE_M
+const FACE_THREAT_NEAR_ANCHOR_M: float = 6.0
 # Debounce band around FACE_THREAT_NEAR_ANCHOR_M for the far→anchor / near→threat
 # aim flip (see _compute_desired_aim_dir). A bot must cross this far past the
 # threshold before the aim direction switches, so orbiting at the boundary
@@ -5404,7 +5295,7 @@ const FACE_NEAR_ANCHOR_HYSTERESIS_M: float = 0.75
 const FACE_THREAT_MIN_DIST_M: float = 0.3
 const FACE_THREAT_MIN_DIST_HYSTERESIS_M: float = 0.15
 # Tag-up override: a ghosted bot racing back to the blue line faces its
-# travel direction until nearly there — the tag-up is a sprint, not
+# travel direction until nearly there — the tag-up is a race, not
 # positioning, so it keeps a tight face-travel threshold.
 const FACE_TRAVEL_TAG_UP_NEAR_M: float = 2.0
 
@@ -5846,8 +5737,7 @@ static func _shade_intercept_goal_side(target: Vector3, our_net: Vector3) -> Vec
 # time_to_arrive prices the cross-momentum shed as the delay it physically is, and
 # is net-aware besides — a private walk can aim a route through the cage.
 #
-# `vmax` overrides the speed cap for the race walk (< 0 → the cruise
-# _self_max_speed). The chase passes its sprint-aware race cap.
+# `vmax` overrides the speed cap for the race walk (< 0 → _self_max_speed).
 func _lead_intercept(self_pos: Vector3, self_vel: Vector3, puck_pos: Vector3,
 		puck_vel: Vector3, vmax: float = -1.0) -> Vector3:
 	var cap: float = vmax if vmax > 0.0 else _self_max_speed

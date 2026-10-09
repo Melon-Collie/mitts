@@ -119,11 +119,11 @@ static func zero_input(input: InputState, delta: float, host_timestamp: float) -
 	input.slap_pressed = false
 	input.slap_held = false
 	input.brake = false
-	# Sprint defaults off every tick. The scratch buffer is reused, so a state
-	# that set sprint_held last tick would otherwise leak it into a state that
-	# doesn't touch it (e.g. a press state). The SM re-decides it each full
-	# dispatch via _resolve_sprint and restores the cache on throttled ticks.
-	input.sprint_held = false
+	# The stance defaults off every tick. The scratch buffer is reused, so a
+	# state that set stance_held last tick would otherwise leak it into a state
+	# that doesn't touch it (e.g. a press state). The SM re-decides it each full
+	# dispatch and restores the cache on throttled ticks.
+	input.stance_held = false
 	# Loft defaults flat every tick — the level is absolute per input frame
 	# (no sticky controller state), so press states just set the level they
 	# want on the ticks they want it.
@@ -131,8 +131,8 @@ static func zero_input(input: InputState, delta: float, host_timestamp: float) -
 	input.block_held = false
 	input.stick_lift_held = false
 	# Hit commit defaults off every tick (reused scratch): only the body-check
-	# commit branch sets it, so a leaked true would keep a bot bracing / draining
-	# stamina after the check is over.
+	# commit branch sets it, so a leaked true would keep a bot bracing, off its
+	# edges, after the check is over.
 	input.hit_held = false
 	# Fire-once edge: PASS_PRESSED's one-tick release path (the dump) sets it on its
 	# release tick and nothing else clears it, so a latched true would fire an

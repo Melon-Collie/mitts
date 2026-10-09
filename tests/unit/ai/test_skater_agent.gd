@@ -18,7 +18,7 @@ func test_zero_input_resets_every_field_the_sm_can_set() -> void:
 	input.slap_pressed = true
 	input.slap_held = true
 	input.brake = true
-	input.sprint_held = true
+	input.stance_held = true
 	input.elevation_level = 2
 	input.block_held = true
 	input.stick_lift_held = true
@@ -36,7 +36,7 @@ func test_zero_input_resets_every_field_the_sm_can_set() -> void:
 	assert_false(input.slap_pressed)
 	assert_false(input.slap_held)
 	assert_false(input.brake)
-	assert_false(input.sprint_held)
+	assert_false(input.stance_held)
 	assert_eq(input.elevation_level, 0)
 	assert_false(input.block_held)
 	assert_false(input.stick_lift_held)

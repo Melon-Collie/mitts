@@ -49,7 +49,7 @@ var _helmet_base_euler: Vector3 = Vector3.ZERO
 var _face_gear_attach: BoneAttachment3D = null
 var _face_gear_mesh: MeshInstance3D = null
 
-# The gait's trunk texture (stride sway, weight shift, sprint and check leans,
+# The gait's trunk texture (stride sway, weight shift, stance and check leans,
 # the stagger wobble), applied to the shell bones on top of the spine. The
 # helmet rides only part of it — players hold the head steady while the
 # shoulders work under it — roll hard-damped because it is the oscillating

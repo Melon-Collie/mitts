@@ -4,8 +4,8 @@ extends GutTest
 # GDScript reference SkaterMovementRules. apply_movement is stateless, so this
 # is a wide random sweep; integrate_forward additionally checks the native
 # internal loop (N ticks behind one boundary crossing) against the GDScript
-# loop, including the stagger-decay thrust path and the transient cfg.thrust
-# restore. Goes pending when the extension isn't built.
+# loop, including the stagger-decay thrust and grip path and the transient
+# cfg.thrust restore. Goes pending when the extension isn't built.
 
 const TOLERANCE: float = 0.001
 const FUZZ_ITERATIONS: int = 2000
@@ -36,19 +36,24 @@ func _random_cfg() -> SkaterMovementRules.MovementConfig:
 	cfg.reverse_skid_fraction = _rng.randf_range(0.3, 1.0)
 	cfg.turn_accel = _rng.randf_range(4.0, 14.0)
 	cfg.max_turn_rate = _rng.randf_range(2.0, 10.0)
-	cfg.tight_turn_multiplier = _rng.randf_range(1.0, 3.0)
-	cfg.tight_turn_decel = _rng.randf_range(0.5, 6.0)
-	cfg.tight_turn_align_angle = _rng.randf_range(0.1, 1.0)
 	cfg.puck_carry_speed_multiplier = _rng.randf_range(0.7, 1.0)
 	cfg.backward_thrust_multiplier = _rng.randf_range(0.3, 0.8)
 	cfg.crossover_thrust_multiplier = _rng.randf_range(0.5, 0.9)
 	cfg.backward_max_speed_multiplier = _rng.randf_range(0.5, 1.0)
 	cfg.friction_drag = _rng.randf_range(0.0, 0.5)
-	cfg.sprint_thrust_multiplier = _rng.randf_range(1.0, 1.4)
-	cfg.sprint_max_speed_multiplier = _rng.randf_range(1.0, 1.4)
-	cfg.sprint_carry_penalty_bypass = _rng.randf_range(0.0, 1.0)
 	cfg.lateral_grip = 1.0 if _rng.randf() < 0.3 else _rng.randf_range(0.3, 1.2)
+	cfg.stance_grip_mult = _rng.randf_range(1.0, 3.0)
+	cfg.stance_scrape = _rng.randf_range(0.0, 0.8)
+	cfg.stance_stride_mult = _rng.randf_range(0.3, 1.0)
+	cfg.stance_max_speed_mult = _rng.randf_range(0.6, 1.0)
+	cfg.stance_shuffle_mult = _rng.randf_range(0.8, 1.6)
+	cfg.commit_grip_mult = _rng.randf_range(0.3, 1.0)
+	cfg.commit_stride_mult = _rng.randf_range(0.3, 1.0)
 	return cfg
+
+
+func _random_posture() -> SkaterMovementRules.Posture:
+	return _rng.randi_range(0, 2) as SkaterMovementRules.Posture
 
 
 func _native_from(cfg: SkaterMovementRules.MovementConfig) -> RefCounted:
@@ -71,13 +76,14 @@ func test_apply_movement_matches_native() -> void:
 		var facing: float = _rng.randf_range(-PI, PI)
 		var has_puck: bool = _rng.randf() < 0.5
 		var brake: bool = _rng.randf() < 0.25
-		var sprint: bool = _rng.randf() < 0.3
+		var posture: SkaterMovementRules.Posture = _random_posture()
 		var delta: float = 1.0 / 120.0 if _rng.randf() < 0.8 else _rng.randf_range(0.004, 0.05)
+		var grip_scale: float = 1.0 if _rng.randf() < 0.5 else _rng.randf_range(0.5, 1.0)
 
 		var gd: Vector3 = SkaterMovementRules.apply_movement(
-				vel, input, facing, has_puck, brake, delta, cfg, sprint)
-		var cpp: Vector3 = native.apply_movement(
-				vel, input, facing, has_puck, brake, delta, sprint)
+				vel, input, facing, has_puck, brake, delta, cfg, posture, grip_scale)
+		var cpp: Vector3 = native.apply_movement_staggered(
+				vel, input, facing, has_puck, brake, delta, posture, cfg.thrust, grip_scale)
 		var err: float = gd.distance_to(cpp)
 		if err > TOLERANCE:
 			fail_test("apply_movement diverged at iter %d: gd=%s cpp=%s err=%f" % [i, gd, cpp, err])
@@ -93,7 +99,8 @@ func test_integrate_forward_matches_native() -> void:
 		var cfg: SkaterMovementRules.MovementConfig = _random_cfg()
 		var native: RefCounted = _native_from(cfg)
 		var body_cfg := BodyCheckRules.Config.new()
-		native.set_stagger_params(body_cfg.max_stagger_seconds, body_cfg.max_thrust_penalty)
+		native.set_stagger_params(body_cfg.max_stagger_seconds, body_cfg.max_thrust_penalty,
+				body_cfg.max_grip_penalty)
 
 		var pos := Vector3(_rng.randf_range(-10.0, 10.0), 0.0, _rng.randf_range(-20.0, 20.0))
 		var vel := Vector3(_rng.randf_range(-8.0, 8.0), 0.0, _rng.randf_range(-8.0, 8.0))
@@ -101,7 +108,7 @@ func test_integrate_forward_matches_native() -> void:
 		var facing: float = _rng.randf_range(-PI, PI)
 		var has_puck: bool = _rng.randf() < 0.5
 		var brake: bool = _rng.randf() < 0.15
-		var sprint: bool = _rng.randf() < 0.3
+		var posture: SkaterMovementRules.Posture = _random_posture()
 		var dt: float = 1.0 / 120.0
 		var ticks: int = _rng.randi_range(0, 60)
 		var decay: int = 0 if _rng.randf() < 0.4 else _rng.randi_range(5, 40)
@@ -109,9 +116,9 @@ func test_integrate_forward_matches_native() -> void:
 		var pre_thrust: float = cfg.thrust
 
 		SkaterMovementRules.integrate_forward(pos, vel, input, facing, has_puck,
-				brake, sprint, cfg, dt, ticks, decay, result, stagger,
+				brake, posture, cfg, dt, ticks, decay, result, stagger,
 				body_cfg if stagger > 0.0 else null)
-		native.integrate_forward(pos, vel, input, facing, has_puck, brake, sprint,
+		native.integrate_forward(pos, vel, input, facing, has_puck, brake, posture,
 				dt, ticks, decay, stagger, stagger > 0.0)
 
 		assert_eq(cfg.thrust, pre_thrust, "cfg.thrust restored after integrate_forward")

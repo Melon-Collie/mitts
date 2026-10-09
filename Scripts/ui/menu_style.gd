@@ -112,8 +112,7 @@ const HUD_LINE_THICK := 0.045              # heavier stroke for symbols (arrow, 
 # same regardless of which jersey each side wears. Blue-vs-red is
 # colorblind-safe; self is green — a third primary that stays clearly apart from
 # both the team blue and enemy red (anything adjacent to team blue, cyan
-# included, is easy to confuse mid-rush) and stays apart from the amber/red the
-# stamina ring uses for its low/locked states. These are only DEFAULTS: each is
+# included, is easy to confuse mid-rush). These are only DEFAULTS: each is
 # user-pickable (Options → Game → Ring Colors), and PlayerPrefs.ring_color_*
 # holds the live values that SkaterHUDCoordinator reads. The self color also
 # drives the overhead self-beacon so the on-ice ring and the floating marker

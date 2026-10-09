@@ -44,10 +44,9 @@ var pass_target_peer_id: int = -1
 var is_one_timer_ready: bool = false
 
 # Body-check commit. The state machine steers at `check_target` (the body
-# intercept) and forces sprint so the bot drives THROUGH the carrier at max
-# closing velocity — the emergent collision delivers the hit. `target_position`
-# carries the same point so steering and sprint agree even if a consumer ignores
-# the flag.
+# intercept) and holds the Hit button so the bot drives THROUGH the carrier — the
+# emergent collision delivers the hit. `target_position` carries the same point
+# so steering agrees even if a consumer ignores the flag.
 var commit_check: bool = false
 var check_target: Vector3 = Vector3.ZERO
 
@@ -77,13 +76,6 @@ var locked_man_pid: int = -1
 # about to overshoot and brakes, killing momentum. The body-level offside brake
 # still applies, so arriving at speed never carries the bot offside.
 var arrive_at_speed: bool = false
-
-# FORCE the sprint on, bypassing the state machine's gap gate. That gate keeps a
-# bot camped near its station off the throttle; a backchecker is the opposite
-# case — he is behind the play and the whole job is closing that distance, so
-# easing off as the gap narrows is exactly wrong. The hard exhaustion lockout
-# still applies, so this can never sprint a gassed bot.
-var sprint_override: bool = false
 
 # An offensive station kept its forward stand this dispatch (the pinch read said
 # we have control). Round-tripped into RoleContext.prev_held_forward_stand so the

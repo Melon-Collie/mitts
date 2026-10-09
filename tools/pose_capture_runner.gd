@@ -71,7 +71,7 @@ const CAM_AIM: Vector3 = Vector3(0.0, -0.05, 0.0)
 # only, which is what makes "press, then hold" expressible as two segments.
 #
 # Spec keys: move (Vector2, world), aim (Vector3, RELATIVE to the skater —
-# absolute would swing as the body translates), sprint, shoot, slap, block,
+# absolute would swing as the body translates), stance, shoot, slap, block,
 # deflect, hit, brake (bool), loft (int elevation level). Pose keys beyond
 # name/puck/steps: cam (offset), cam_aim (the point it looks at, relative to the
 # skater like cam), cam_ahead (metres down the travel line),
@@ -85,11 +85,13 @@ const POSES: Array = [
 	# multiples of each other, so the stride lands at a different point in its
 	# cycle rather than at the same phase twice.
 	{"name": "stride_away", "puck": false, "steps": [
-		[64, {"move": Vector2(0.0, -1.0), "sprint": true, "aim": Vector3(0.0, 0.0, -3.0)}],
+		[64, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
 	]},
 	{"name": "stride_lateral", "puck": false, "steps": [
-		[97, {"move": Vector2(1.0, 0.0), "sprint": true, "aim": Vector3(2.0, 0.0, 1.5)}],
+		[97, {"move": Vector2(1.0, 0.0), "aim": Vector3(2.0, 0.0, 1.5)}],
 	]},
+	# The loaded stance held at a standstill — the crouch on its own.
+	{"name": "stance_rest", "puck": false, "steps": [[40, {"stance": true}]]},
 	# Arm IK near its ROM limit: the cursor sits well across the body, so the
 	# reach lean and the backhand ROM clamp both engage.
 	{"name": "cross_body_reach", "puck": true, "steps": [
@@ -141,20 +143,40 @@ const POSES: Array = [
 		[30, {"move": Vector2(-0.7, -0.7), "aim": Vector3(0.0, 0.0, -3.0)}],
 	]},
 	{"name": "turn_carve_hard", "puck": false, "readout": true, "cam_ahead": 3.2, "steps": [
-		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[210, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
 		[45, {"move": Vector2(1.0, 0.0), "aim": Vector3(2.2, 0.0, -2.2)}],
 	]},
 	{"name": "turn_tight", "puck": false, "readout": true, "cam_ahead": 3.2, "steps": [
-		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
-		[30, {"move": Vector2(1.0, 0.0), "brake": true, "aim": Vector3(2.2, 0.0, -2.2)}],
+		[210, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[30, {"move": Vector2(1.0, 0.0), "stance": true, "aim": Vector3(2.2, 0.0, -2.2)}],
 	]},
 	{"name": "turn_tight_game", "puck": false, "game_cam": true, "steps": [
-		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
-		[30, {"move": Vector2(1.0, 0.0), "brake": true, "aim": Vector3(2.2, 0.0, -2.2)}],
+		[210, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[30, {"move": Vector2(1.0, 0.0), "stance": true, "aim": Vector3(2.2, 0.0, -2.2)}],
 	]},
 	{"name": "turn_tight_exit", "puck": false, "readout": true, "cam_ahead": 3.2, "steps": [
-		[240, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
-		[70, {"move": Vector2(1.0, 0.0), "brake": true, "aim": Vector3(3.0, 0.0, -0.5)}],
+		[210, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[70, {"move": Vector2(1.0, 0.0), "stance": true, "aim": Vector3(3.0, 0.0, -0.5)}],
+	]},
+	# The same reads from the game camera, where a pose has to work: from above,
+	# the stance has to read by WIDTH, the commit by being tall and narrow.
+	{"name": "rest_game", "puck": false, "game_cam": true, "steps": [[40, {}]]},
+	{"name": "stance_rest_game", "puck": false, "game_cam": true,
+			"steps": [[40, {"stance": true}]]},
+	{"name": "skate_game", "puck": false, "game_cam": true, "steps": [
+		[150, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+	]},
+	{"name": "stance_skate_game", "puck": false, "game_cam": true, "steps": [
+		[120, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[40, {"move": Vector2(0.0, -1.0), "stance": true, "aim": Vector3(0.0, 0.0, -3.0)}],
+	]},
+	{"name": "carve_game", "puck": false, "game_cam": true, "steps": [
+		[210, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[30, {"move": Vector2(1.0, 0.0), "aim": Vector3(2.2, 0.0, -2.2)}],
+	]},
+	{"name": "hit_commit_game", "puck": false, "game_cam": true, "steps": [
+		[120, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[40, {"move": Vector2(0.0, -1.0), "hit": true, "aim": Vector3(0.0, 0.0, -3.0)}],
 	]},
 	{"name": "shot_block", "puck": false, "steps": [
 		[30, {"block": true, "aim": Vector3(0.0, 0.0, -3.0)}],
@@ -385,6 +407,9 @@ func _build_actor() -> void:
 	_skater.set_uniform(TeamColorRegistry.get_colors(5, 0))
 	_skater.set_jersey_info("POSE", 8)
 	_skater.apply_appearance(attrs)
+	# The overhead self-beacon is chrome the camera can pass straight through,
+	# and the tiles are for the body.
+	_skater.set_world_hud_hidden(true)
 
 	_controller = SkaterController.new()
 	add_child(_controller)
@@ -606,7 +631,7 @@ func _fill_input(input: InputState, spec: Dictionary, first: bool) -> void:
 	input.host_timestamp += DT
 	input.move_vector = move
 	input.mouse_world_pos = _skater.global_position + aim
-	input.sprint_held = spec.get("sprint", false)
+	input.stance_held = spec.get("stance", false)
 	input.hit_held = spec.get("hit", false)
 	input.brake = spec.get("brake", false)
 	input.block_held = spec.get("block", false)

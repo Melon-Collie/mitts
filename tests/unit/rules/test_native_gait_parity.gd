@@ -186,7 +186,7 @@ func _drive_skating(steps: int, label: String) -> bool:
 			else:
 				_skater.move_intent = Vector2.from_angle(_rng.randf_range(-PI, PI))
 			_skater.brake_intent = _rng.randf() < 0.15
-			_controller.sprint_active = _rng.randf() < 0.2
+			_controller.stance_active = _rng.randf() < 0.2
 		segment -= 1
 		# Velocity steps on roughly two of three passes, toward the intent.
 		if _rng.randf() < 0.66:
@@ -295,7 +295,7 @@ func test_reset_settle_and_reconfigure_parity() -> void:
 	_skater.velocity = Vector3.ZERO
 	_skater.move_intent = Vector2.ZERO
 	_skater.brake_intent = false
-	_controller.sprint_active = false
+	_controller.stance_active = false
 	for _i: int in 200:
 		if not _step(1.0 / 120.0, "settling"):
 			return

@@ -34,7 +34,6 @@ func _snapshot(pos: Vector3, vel: Vector3, facing: Vector2,
 	st.velocity = vel
 	st.facing = facing
 	st.blade_contact_world = pos
-	st.stamina = 1.0
 	snap.skater_states[CARRIER] = st
 	# Optional backchecker (team 1) applying pressure so the carry isn't free.
 	if defender.is_finite():
@@ -42,7 +41,6 @@ func _snapshot(pos: Vector3, vel: Vector3, facing: Vector2,
 		d.position = defender
 		d.velocity = vel   # keeping pace on the backcheck
 		d.blade_contact_world = defender
-		d.stamina = 1.0
 		snap.skater_states[2] = d
 	snap.puck_state = PuckNetworkState.new()
 	snap.puck_state.position = pos

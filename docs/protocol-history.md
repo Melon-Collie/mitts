@@ -293,3 +293,9 @@ here whenever you bump, in the same format.
 #      claim-carried input_lead_ms may now reach INPUT_LEAD_SEC + 100 ms (was
 #      + 50 ms), and the host rebuilds a remote's lead from its own ping for the
 #      one-timer and release anchors. No byte layout changed.
+# v65: sprint and stamina removed for the skating stance
+#      (docs/skating-stance-plan.md). Skater block 56 -> 55 bytes: the u8
+#      stamina is gone and the flags byte's sprint_locked bit 7 is spare. Intent
+#      bit 5 now carries stance_active (was sprint_active) and input flag bit
+#      [4] stance_held (was sprint_held); both now feed the forward prediction
+#      as the posture, with hit_commit. Replay FORMAT_VERSION 11.

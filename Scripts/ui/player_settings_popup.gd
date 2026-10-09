@@ -26,7 +26,7 @@ signal preferred_color_changed(color_slot: int)
 
 # Hover tooltips. Headline effects only.
 const _HEIGHT_TOOLTIP: String = "Frame length: reach, stick length, and the speed/agility/shot baselines.\nSmall = shiftier with quicker turns; big = longer reach & harder shot."
-const _WEIGHT_TOOLTIP: String = "Frame mass, bounded by your height.\nLean = quicker first step, fast stamina recovery, easier to move.\nHeavy = harder hits & harder to move, deep but slow-refilling tank."
+const _WEIGHT_TOOLTIP: String = "Frame mass, bounded by your height.\nLean = quicker first step, sharper turns, easier to move.\nHeavy = harder hits & harder to move, wider turns."
 const _POSITION_TOOLTIP: String = "Preferred position — where a lobby seats you when you join.\nIn 3v3 the wings and D pair up on their side: LW/LD take the left,\nRW/RD the right. A taken seat falls back to the first open one."
 # Dropdown display order (hockey-natural, wings around the C) → position
 # index (PlayerRules.POSITION_NAMES order), with the display keys in lockstep.

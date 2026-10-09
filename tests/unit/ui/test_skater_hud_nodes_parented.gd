@@ -2,8 +2,8 @@ extends GutTest
 
 # The per-skater world HUD, as it now exists.
 #
-# The flat-on-ice half has left the node tree: the slot ring, elevation chevrons,
-# the slapper one-timer indicator and the stamina gauge are ice-shader uniforms.
+# The flat-on-ice half has left the node tree: the slot ring, elevation chevrons
+# and the slapper one-timer indicator are ice-shader uniforms.
 # What stays a node is what cannot be painted on the ice — the name plate, which
 # is world-sized text standing up off the surface, and the self-beacon, which
 # floats above the head. The beacon is additionally built LAZILY, only on the
@@ -14,9 +14,8 @@ extends GutTest
 #   • Parenting. An unparented Node3D is not obviously broken: it constructs
 #     fine, keeps its local transform, and stays silent until something writes
 #     its global_position, which then fails with "Condition !is_inside_tree() is
-#     true" and returns identity. The stamina ring shipped that way for a build
-#     — the gauge simply never appeared, and the only symptom was an error line
-#     in a log nobody was reading. Checking names in the subtree rather than the
+#     true" and returns identity — the mark simply never appears, and the only
+#     symptom is an error line in a log nobody reads. Checking names in the subtree rather than the
 #     coordinator's own references is deliberate: the references would be
 #     non-null in exactly the broken case.
 #

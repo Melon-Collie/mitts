@@ -66,7 +66,7 @@ func before_all() -> void:
 	_input.delta = 1.0 / 120.0
 	_input.move_vector = Vector2(0.4, -0.9)
 	_input.mouse_world_pos = Vector3(3.4, 0.0, 5.2)
-	_input.sprint_held = true
+	_input.stance_held = true
 
 
 func after_all() -> void:

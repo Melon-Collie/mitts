@@ -1099,25 +1099,6 @@ static func _attacker_behind(ctx: RoleContext, stand: Vector3,
 	return false
 
 
-# Sprint-aware SELF cap for a defensive race — the backchecking body sprints
-# (an explicit BotSprintRules use case), so a cruise-priced reach under-reaches
-# every long recovery and the stand it bounds sags earlier than the legs it
-# models. Race length ≈ the trip home; pool/lockout from our own replicated
-# state. Consumed by the step-up clamp below.
-static func self_race_vmax(ctx: RoleContext) -> float:
-	if ctx.snapshot == null:
-		return ctx.self_max_speed
-	var s: SkaterNetworkState = ctx.snapshot.skater_states.get(ctx.peer_id)
-	if s == null:
-		return ctx.self_max_speed
-	var caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.peer_id)
-	var mult: float = caps.sprint_speed_mult if caps != null \
-			else AISkaterCaps.LEAGUE_SPRINT_SPEED_MULT
-	return BotSprintRules.race_speed(
-			ctx.self_max_speed, mult, s.stamina, s.sprint_locked,
-			xz_distance(ctx.self_pos, ctx.defending_goal_pos))
-
-
 # ── Last-man step-up discipline ──────────────────────────────────────────────
 # The last-man step-up bound, shared by the two roles that own a carrier:
 # PRESSURE's cut-off and RUSH_D1's gap stand (AIRoleRushD._settable_gap). The
@@ -1199,7 +1180,7 @@ static func settable_stand_depth(ctx: RoleContext, threat_pos: Vector3,
 	if spare <= 0.0 or closing <= 0.01:
 		return desired_depth
 	var v_cap: float = approach_speed_cap(
-			spare, closing, self_race_vmax(ctx), ctx.self_max_accel)
+			spare, closing, ctx.self_max_speed, ctx.self_max_accel)
 	# The stand IS the brake trigger for that speed: a body at the cap begins
 	# braking v²/2B short of its target, so putting the target exactly there
 	# regulates him onto the cap instead of past it.
@@ -1332,17 +1313,7 @@ static func loose_puck_race_lost(
 	var step_dt: float = AILoosePuckChase.RACE_LOOKAHEAD_S \
 			/ float(AILoosePuckChase.RACE_STEPS)
 	var margin: float = AILoosePuckChase.setup_margin(puck_vel)
-	# Sprint-aware self cap: same seam as the election (race_vmax), fed by
-	# our own replicated stamina/lockout when the caller identifies us.
 	var self_vmax: float = maxf(self_max_speed, 1.0)
-	var self_state: SkaterNetworkState = snapshot.skater_states.get(self_pid)
-	if self_state != null:
-		var self_caps: AISkaterCaps = caps_by_peer.get(self_pid)
-		var self_mult: float = self_caps.sprint_speed_mult if self_caps != null \
-				else AISkaterCaps.LEAGUE_SPRINT_SPEED_MULT
-		self_vmax = BotSprintRules.race_speed(
-				self_vmax, self_mult, self_state.stamina, self_state.sprint_locked,
-				Vector2(puck_pos.x - self_pos.x, puck_pos.z - self_pos.z).length())
 	var my_eta: float = AILoosePuckChase.path_intercept_time(
 			traj, step_dt, puck_pos, self_pos, self_vel, self_vmax, margin)
 	var best_opp_eta: float = INF
@@ -1353,14 +1324,13 @@ static func loose_puck_race_lost(
 		var s: SkaterNetworkState = snapshot.skater_states[pid]
 		# The race is only lost to an opponent actually RUNNING it — standing on
 		# the intercept point already, or genuinely closing on it. The ETA model
-		# only prices a hypothetical sprint-from-now, so without this test a
+		# only prices a hypothetical full-speed run from now, so without this test a
 		# flat-footed body well off the puck's line vetoes the chase.
 		#
 		# The question is per-path, not per-position: a rim's downstream
 		# interceptor legitimately waits still and reads as committed because the
 		# puck's own line runs through his contest band.
-		var speed: float = AILoosePuckChase.race_vmax(
-				s, caps_by_peer.get(pid), puck_pos)
+		var speed: float = AILoosePuckChase.race_vmax(caps_by_peer.get(pid))
 		var t: float = AILoosePuckChase.path_intercept_time(
 				traj, step_dt, puck_pos, s.position, s.velocity, speed, margin)
 		var meet: Vector3 = AILoosePuckChase.path_intercept_point(

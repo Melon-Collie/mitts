@@ -42,8 +42,8 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	# Commit to a body check when it is a real, reachable, separating hit.
 	# PRESSURE always has support behind it — the MARK pair in DZONE, F2/F3 on
 	# the forecheck — so the commit risk is acceptable. Driving at the body
-	# intercept is the whole input; the state machine forces sprint so the
-	# closing collision delivers the hit.
+	# intercept is the whole input; the state machine holds the Hit button so
+	# the closing collision delivers the hit.
 	var check: AIBodyCheck.Result = AIRoleHelpers.evaluate_body_check(ctx)
 	if check.commit:
 		d.commit_check = true

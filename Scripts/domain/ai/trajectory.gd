@@ -88,7 +88,7 @@ static func _step(p: Vector3, v: Vector3, dt: float,
 	# Top-speed cap (a skater can't be accelerated past its own max_speed).
 	# 0 = uncapped (default, all non-pass callers). Only ever REDUCES an over-
 	# cap speed, so passing a cap ≥ the body's current speed never slows a
-	# body already moving faster (e.g. sprinting) — see AIPassLead.
+	# body already moving faster (e.g. off a body-check boost) — see AIPassLead.
 	if max_speed_m_s > 0.0:
 		var v_cap_mag: float = sqrt(v.x * v.x + v.z * v.z)
 		if v_cap_mag > max_speed_m_s:

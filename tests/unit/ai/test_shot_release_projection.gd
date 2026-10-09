@@ -69,6 +69,7 @@ func _measure(shooter_pos: Vector3, shooter_vel: Vector3,
 		var s = h._skater(SHOOTER)
 		var agent = s.agent
 		var held_before: bool = s.input.shoot_held
+		var releases_before: int = h.releases.size()
 		h.step()
 		if agent == null:
 			continue
@@ -85,8 +86,11 @@ func _measure(shooter_pos: Vector3, shooter_vel: Vector3,
 					+ agent._shot_release_offset_locked
 			probe.aim_dir = agent._shoot_aim_dir_locked
 			probe.aim_point = agent._shot_aim_locked
-		# Release edge: the charge was held and has now dropped.
-		if armed and held_before and not s.input.shoot_held:
+		# Release edge: the charge was held and has now dropped AND the puck
+		# actually left — a press bailed as the carrier lost the puck drops the
+		# button too, one tick after locking an anchor a full charge ahead.
+		if armed and held_before and not s.input.shoot_held \
+				and h.releases.size() > releases_before:
 			probe.actual_body = s.pos
 			probe.blade = s.blade
 			probe.released_dir = agent._shoot_aim_dir_locked

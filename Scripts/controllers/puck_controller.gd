@@ -855,7 +855,7 @@ func notify_claim_rejected() -> void:
 # the post-loss reattach lockout, and no other skater is contesting on our
 # rendered view. The speed gate reads ABSOLUTE puck speed even though the host's
 # receive decision is receiver-relative: worst case the relative speed is
-# absolute + max sprint (~8 + ~12.7), still under deflect_min_speed (22), so
+# absolute + top skating speed (~8 + ~10.7), still under deflect_min_speed (22), so
 # "below pickup_max_speed ⇒ host grants" holds at every attribute level. Visual only — the carry state machine engages on the host's
 # confirming notify_local_pickup, not here.
 func try_provisional_pickup(local_skater: Skater) -> void:

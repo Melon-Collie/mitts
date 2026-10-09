@@ -3642,36 +3642,24 @@ static func counter_rush_cost(
 		opponent_vels: Array[Vector3],
 		opponent_caps: Array,
 		mate_etas: Array[float] = [],
-		threat_by_cover: Array[float] = [],
-		opponent_stamina: Array[float] = []) -> float:
+		threat_by_cover: Array[float] = []) -> float:
 	if not loss_point.is_finite() or loss_prob <= 0.0 or opponents.is_empty():
 		return 0.0
 	var counter_point: Vector3 = counter_point_for(our_net)
 
-	# Fastest opponent: collect the loss, then carry to the counter point —
-	# SPRINTING it (the collect is a loose-puck race, the carry the breakaway
-	# sprint), at his stamina-gated race cap. `opponent_stamina` carries the
-	# pool with the exhaustion lockout folded in as 0.0 (race_speed reads
-	# both as cruise); missing → 1.0, the fresh worst case a danger term
-	# defaults to.
+	# Fastest opponent: collect the loss, then carry to the counter point at
+	# his top speed.
 	var carry_dist: float = loss_point.distance_to(counter_point)
 	var t_counter: float = INF
 	var t_collect_best: float = INF
 	var has_vels: bool = opponent_vels.size() == opponents.size()
 	var has_caps: bool = opponent_caps.size() == opponents.size()
-	var has_stam: bool = opponent_stamina.size() == opponents.size()
 	for i: int in opponents.size():
 		var speed: float = SKATER_REF_SPEED_M_S
-		var sprint_mult: float = AISkaterCaps.LEAGUE_SPRINT_SPEED_MULT
 		if has_caps:
 			var caps: AISkaterCaps = opponent_caps[i]
 			if caps != null:
 				speed = caps.max_speed
-				sprint_mult = caps.sprint_speed_mult
-		var collect_dist: float = opponents[i].distance_to(loss_point)
-		speed = BotSprintRules.race_speed(speed, sprint_mult,
-				opponent_stamina[i] if has_stam else 1.0, false,
-				collect_dist + carry_dist)
 		var vel: Vector3 = opponent_vels[i] if has_vels else Vector3.ZERO
 		var t_collect: float = time_to_arrive(opponents[i], loss_point, vel, speed)
 		if t_collect < t_collect_best:
@@ -3692,19 +3680,15 @@ static func counter_rush_cost(
 	# the stretch man at centre turns it into a ~4 s strike.
 	for j: int in opponents.size():
 		var j_speed: float = SKATER_REF_SPEED_M_S
-		var j_mult: float = AISkaterCaps.LEAGUE_SPRINT_SPEED_MULT
 		if has_caps:
 			var j_caps: AISkaterCaps = opponent_caps[j]
 			if j_caps != null:
 				j_speed = j_caps.max_speed
-				j_mult = j_caps.sprint_speed_mult
 		var j_carry: float = opponents[j].distance_to(counter_point)
 		# The feed only helps when the outlet is genuinely AHEAD of the
 		# lug — skip receivers whose own carry isn't shorter.
 		if j_carry >= carry_dist:
 			continue
-		j_speed = BotSprintRules.race_speed(j_speed, j_mult,
-				opponent_stamina[j] if has_stam else 1.0, false, j_carry)
 		var t_pf: float = t_collect_best \
 				+ loss_point.distance_to(opponents[j]) \
 						/ GameRules.DEFAULT_WRISTER_POWER_MAX_M_S \

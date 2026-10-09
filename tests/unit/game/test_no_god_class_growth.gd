@@ -49,7 +49,7 @@ const _SIZE_SLACK: int = 40
 const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +3: the wrister wind-up side reads the trailer's relative motion over the
 	# charge (#740), not just where he stands at the commit.
-	"res://Scripts/ai/skater_agent_state_machine.gd": 6182,
+	"res://Scripts/ai/skater_agent_state_machine.gd": 6072,
 	"res://Scripts/game/game_manager.gd": 5597,
 	"res://Scripts/domain/ai/action_scoring.gd": 4458,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
@@ -63,8 +63,8 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +162: the rim pass. The path search lives in AIRimPass; what stays here is
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
-	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3917,
-	"res://Scripts/controllers/skater_controller.gd": 3426,
+	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3910,
+	"res://Scripts/controllers/skater_controller.gd": 3332,
 	"res://Scripts/actors/skater.gd": 2697,
 	"res://Scripts/networking/network_manager.gd": 2824,
 	"res://Scripts/game/tutorial_manager.gd": 2101,
@@ -72,7 +72,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/controllers/puck_controller.gd": 1520,
 	"res://Scripts/actors/hockey_rink.gd": 1472,
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 1436,
-	"res://Scripts/game/player_prefs.gd": 1370,
+	"res://Scripts/game/player_prefs.gd": 1390,
 	"res://Scripts/actors/skater_mesh_builder.gd": 1406,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1357,
 	"res://Scripts/ui/career_stats_screen.gd": 1271,
@@ -96,7 +96,7 @@ const _API_SLACK: int = 3
 
 const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/networking/network_manager.gd": 200,
-	"res://Scripts/actors/skater.gd": 143,
+	"res://Scripts/actors/skater.gd": 138,
 	"res://Scripts/domain/ai/action_scoring.gd": 68,
 	"res://Scripts/game/game_manager.gd": 61,
 	"res://Scripts/domain/state/player_attributes.gd": 53,
@@ -106,7 +106,6 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/actors/puck.gd": 40,
 	"res://Scripts/domain/state/game_state_machine.gd": 38,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 36,
-	"res://Scripts/actors/skater_hud_coordinator.gd": 30,
 	"res://Scripts/actors/skater_mesh_builder.gd": 29,
 	"res://Scripts/controllers/puck_controller.gd": 27,
 	"res://Scripts/game/shot_on_goal_tracker.gd": 26,

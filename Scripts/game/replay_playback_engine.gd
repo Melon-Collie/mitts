@@ -65,7 +65,7 @@ static func apply_interpolated_snapshot(
 		interp.is_ghost = ts.is_ghost
 		# Cosmetic-state carry-through: every replicated field the render side
 		# consumes (gait intent, stick flex, blade scoop, stagger stumble,
-		# stamina/sprint pools) rides along, so playback poses from the
+		# stance) rides along, so playback poses from the
 		# RECORDED values instead of fresh-state defaults (file viewer) or
 		# whatever live play left on the actors (goal replay). Discrete reads
 		# take the newest bracket end, like is_ghost; scalars lerp.
@@ -77,10 +77,8 @@ static func apply_interpolated_snapshot(
 		interp.blade_up = ts.blade_up
 		interp.shot_state = ts.shot_state
 		interp.elevation_level = ts.elevation_level
-		interp.sprint_locked = ts.sprint_locked
 		interp.shot_charge = lerpf(fs.shot_charge, ts.shot_charge, t)
-		interp.stamina = lerpf(fs.stamina, ts.stamina, t)
-		interp.sprint_active = ts.sprint_active
+		interp.stance_active = ts.stance_active
 		interp.wrister_address_side = ts.wrister_address_side
 		interp.recoil_dir = ts.recoil_dir
 		interp.stagger_timer = lerpf(fs.stagger_timer, ts.stagger_timer, t)

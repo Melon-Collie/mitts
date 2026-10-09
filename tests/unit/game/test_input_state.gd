@@ -27,7 +27,7 @@ func test_round_trip_preserves_all_fields() -> void:
 	s.elevation_level  = 2
 	s.block_held       = true
 	s.stick_lift_held  = true
-	s.sprint_held      = true
+	s.stance_held      = true
 	s.stick_lift_pressed = true
 	s.quick_pass_pressed = true
 	s.hit_held           = true
@@ -50,7 +50,7 @@ func test_round_trip_preserves_all_fields() -> void:
 	assert_eq(r.elevation_level, s.elevation_level)
 	assert_eq(r.block_held,      s.block_held)
 	assert_eq(r.stick_lift_held, s.stick_lift_held)
-	assert_eq(r.sprint_held,     s.sprint_held)
+	assert_eq(r.stance_held,     s.stance_held)
 	assert_eq(r.stick_lift_pressed, s.stick_lift_pressed)
 	assert_eq(r.quick_pass_pressed, s.quick_pass_pressed)
 	assert_eq(r.hit_held,           s.hit_held)
@@ -69,19 +69,19 @@ func test_stick_lift_back_compat_defaults_false() -> void:
 	var s := InputState.new()
 	s.stick_lift_held = true
 	var short_array: Array = s.to_array()
-	short_array.resize(16)  # drop stick_lift_held + sprint_held
+	short_array.resize(16)  # drop stick_lift_held + stance_held
 	var r := InputState.from_array(short_array)
 	assert_false(r.stick_lift_held, "missing stick_lift_held index should default false")
 
 
 func test_sprint_back_compat_defaults_false() -> void:
-	# A short array missing sprint_held (index 18) must decode with sprint off.
+	# A short array missing stance_held (index 18) must decode with the stance off.
 	var s := InputState.new()
-	s.sprint_held = true
+	s.stance_held = true
 	var short_array: Array = s.to_array()
-	short_array.resize(17)  # drop sprint_held, keep stick_lift_held
+	short_array.resize(17)  # drop stance_held, keep stick_lift_held
 	var r := InputState.from_array(short_array)
-	assert_false(r.sprint_held, "missing sprint_held index should default false")
+	assert_false(r.stance_held, "missing stance_held index should default false")
 
 
 # ── Binary (bytes) round-trip ─────────────────────────────────────────────────
@@ -101,7 +101,7 @@ func test_bytes_round_trip_preserves_all_fields() -> void:
 	s.elevation_level  = 1
 	s.block_held       = true
 	s.stick_lift_held  = true
-	s.sprint_held      = true
+	s.stance_held      = true
 	s.stick_lift_pressed = true
 	s.quick_pass_pressed = true
 	s.hit_held           = true
@@ -124,7 +124,7 @@ func test_bytes_round_trip_preserves_all_fields() -> void:
 	assert_eq(r.elevation_level, s.elevation_level)
 	assert_eq(r.block_held,      s.block_held)
 	assert_eq(r.stick_lift_held, s.stick_lift_held)
-	assert_eq(r.sprint_held,     s.sprint_held)
+	assert_eq(r.stance_held,     s.stance_held)
 	assert_eq(r.stick_lift_pressed, s.stick_lift_pressed)
 	assert_eq(r.quick_pass_pressed, s.quick_pass_pressed)
 	assert_eq(r.hit_held,           s.hit_held)
@@ -239,7 +239,7 @@ func _fully_populated_input() -> InputState:
 	s.mouse_screen_pos   = Vector2(-320.0, 240.0)
 	s.shoot_pressed      = true
 	s.slap_held          = true
-	s.sprint_held        = true
+	s.stance_held        = true
 	s.brake              = true
 	s.elevation_level    = 2
 	s.block_held         = true

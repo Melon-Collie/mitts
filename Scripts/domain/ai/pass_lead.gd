@@ -68,7 +68,7 @@ static func lead(shooter_pos: Vector3, receiver: SkaterNetworkState,
 		a = a.normalized() * max_accel
 	# ...and can't be led past its own top speed. Cap at the LARGER of the
 	# receiver's max_speed and its current speed, so a receiver already moving
-	# faster (mid-sprint — sprint raises the real cap) is never under-led, while
+	# faster (a body-check boost, say) is never under-led, while
 	# the accel term can't push a cruising receiver beyond what it can reach.
 	var speed_cap: float = maxf(
 			_speed_xz(receiver.velocity),

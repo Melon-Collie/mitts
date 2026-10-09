@@ -109,6 +109,9 @@ func test_3v3_high_forward_keeps_a_wall_clear_in_easy() -> void:
 # line, going nowhere — the bottled carrier a strong-side D pinches on. The
 # whole exchange should happen: the RD steps down the wall onto him, a forward
 # rotates up to the RD's point, and the LD slides to the middle of the line.
+# The pinch waits on its cover (a forward able to take the point in time), and
+# F2_WEAK starts on the weak-side breakout lane, so the exchange runs ~4 s: the
+# point is covered at ~4.0 s.
 func test_5v5_strong_d_pinches_and_the_rotation_covers_him() -> void:
 	var h = Harness.new()
 	h.team_size = 5
@@ -131,7 +134,7 @@ func test_5v5_strong_d_pinches_and_the_rotation_covers_him() -> void:
 	var ld_middle: bool = false
 	var strong_point := Vector3(AIRoleDefenseman.DP_STRONG_LANE_X_M, 0.0,
 			-(GameRules.BLUE_LINE_Z + AIRoleDefenseman.DP_LINE_INSET_M))
-	for _i: int in int(3.0 / Harness.DT):
+	for _i: int in int(4.5 / Harness.DT):
 		h.step()
 		var rd_depth: float = -h.skater_pos(5).z - GameRules.BLUE_LINE_Z
 		rd_deepest = maxf(rd_deepest, rd_depth)

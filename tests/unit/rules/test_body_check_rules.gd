@@ -1,10 +1,10 @@
 extends GutTest
 
-# BodyCheckRules — pure stagger/stamina-bite math for body checks. The victim
-# impulse magnitude drives a 0..1 intensity that scales both the stagger window
-# and the stamina drain; the per-tick thrust penalty eases back as the timer
-# decays. These tests pin the normalization, the endpoints, and the coupling
-# between hit strength and recovery-window length.
+# BodyCheckRules — pure stagger math for body checks. The victim impulse
+# magnitude drives a 0..1 intensity that scales the stagger window; the per-tick
+# thrust and grip penalties ease back as the timer decays. These tests pin the
+# normalization, the endpoints, and the coupling between hit strength and
+# recovery-window length.
 
 var _cfg: BodyCheckRules.Config
 
@@ -13,8 +13,8 @@ func before_each() -> void:
 	_cfg.min_impulse = 3.0
 	_cfg.ref_impulse = 9.0
 	_cfg.max_stagger_seconds = 1.0
-	_cfg.max_stamina_drain = 0.35
 	_cfg.max_thrust_penalty = 0.5
+	_cfg.max_grip_penalty = 0.4
 	_cfg.knockdown_impulse = 11.0
 	_cfg.knockdown_ref_impulse = 16.0
 	_cfg.min_knockdown_seconds = 0.7
@@ -81,28 +81,6 @@ func test_stagger_scales_with_strength() -> void:
 	assert_gt(hard, medium, "harder hit → longer recovery window")
 
 
-# ── incremental_stamina_drain ─────────────────────────────────────────────────
-
-func test_clean_hit_from_settled_bites_full_intensity() -> void:
-	# prev_stagger_timer 0 → full intensity-scaled drain (same as a from-zero bite).
-	assert_almost_eq(BodyCheckRules.incremental_stamina_drain(0.0, 3.0, _cfg), 0.0, 0.0001, "min → no drain")
-	assert_almost_eq(BodyCheckRules.incremental_stamina_drain(0.0, 9.0, _cfg), 0.35, 0.0001, "full → max drain")
-	assert_almost_eq(BodyCheckRules.incremental_stamina_drain(0.0, 6.0, _cfg), 0.175, 0.0001, "midpoint → half drain")
-
-func test_no_drain_when_hit_not_harder_than_residual() -> void:
-	# A full hit lands a 1.0s window; a follow-up no harder than the residual bites nothing.
-	assert_almost_eq(BodyCheckRules.incremental_stamina_drain(1.0, 9.0, _cfg), 0.0, 0.0001,
-			"equal-strength re-hit during stagger → no extra drain")
-	assert_almost_eq(BodyCheckRules.incremental_stamina_drain(0.6, 6.0, _cfg), 0.0, 0.0001,
-			"weaker re-hit than residual → no extra drain")
-
-func test_sustained_contact_only_tops_up() -> void:
-	# A full hit (add=1.0s) one decay-tick into an existing 0.99s stagger charges
-	# only the 0.01s top-up: (1.0-0.99)/1.0 * 0.35.
-	assert_almost_eq(BodyCheckRules.incremental_stamina_drain(0.99, 9.0, _cfg), 0.0035, 0.0001,
-			"sustained contact bites only the incremental severity")
-
-
 # ── thrust_mult ───────────────────────────────────────────────────────────────
 
 func test_thrust_unpenalized_when_not_staggered() -> void:
@@ -121,6 +99,18 @@ func test_thrust_penalty_eases_back_as_timer_decays() -> void:
 func test_thrust_mult_clamps_overlong_timer() -> void:
 	# a timer past the reference window still caps the penalty at the peak
 	assert_almost_eq(BodyCheckRules.thrust_mult(5.0, _cfg), 0.5, 0.0001, "over-window timer caps at peak penalty")
+
+
+# ── grip_mult ─────────────────────────────────────────────────────────────────
+
+func test_grip_unpenalized_when_not_staggered() -> void:
+	assert_almost_eq(BodyCheckRules.grip_mult(0.0, _cfg), 1.0, 0.0001, "no stagger → full grip")
+
+func test_grip_penalty_follows_the_thrust_shape() -> void:
+	# full window → 1 - 0.4; half window → 1 - 0.2; over-window caps at the peak
+	assert_almost_eq(BodyCheckRules.grip_mult(1.0, _cfg), 0.6, 0.0001, "full stagger → peak grip penalty")
+	assert_almost_eq(BodyCheckRules.grip_mult(0.5, _cfg), 0.8, 0.0001, "decayed stagger → partial penalty")
+	assert_almost_eq(BodyCheckRules.grip_mult(5.0, _cfg), 0.6, 0.0001, "over-window timer caps at peak penalty")
 
 
 # ── puck_strip_impulse ──────────────────────────────────────────────────────────

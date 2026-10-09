@@ -71,7 +71,8 @@ func test_interpolated_snapshot_carries_movement_intent() -> void:
 	var newer := _slot(0, false, Vector3.ONE)
 	newer.move_intent = Vector2(0.0, 1.0)
 	newer.brake_intent = true
-	newer.sprint_active = true
+	newer.stance_active = true
+	newer.hit_committed = true
 	_seed_two_slots(10.0, older, 10.1, newer)
 	var snap: WorldSnapshot = sbm.get_state_at(10.05)
 	var s: SkaterNetworkState = snap.get_skater_state(PEER)
@@ -79,7 +80,8 @@ func test_interpolated_snapshot_carries_movement_intent() -> void:
 	assert_eq(s.move_intent, Vector2(0.0, 1.0),
 		"interpolated rewind must carry the newer endpoint's move_intent")
 	assert_true(s.brake_intent, "brake_intent must survive interpolation")
-	assert_true(s.sprint_active, "sprint_active must survive interpolation")
+	assert_true(s.stance_active, "stance_active must survive interpolation")
+	assert_true(s.hit_committed, "hit_committed must survive interpolation — it picks the posture")
 
 
 func test_interpolated_snapshot_still_interpolates_position() -> void:

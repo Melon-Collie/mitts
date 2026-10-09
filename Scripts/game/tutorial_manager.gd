@@ -4,8 +4,7 @@ extends Node
 # Step IDs live in TutorialRegistry (to avoid a preload cycle); re-exported
 # here so the rest of this file reads like the original constant references.
 const STEP_SKATE:       int = TutorialRegistry.STEP_SKATE
-const STEP_SPRINT:      int = TutorialRegistry.STEP_SPRINT
-const STEP_STAMINA:     int = TutorialRegistry.STEP_STAMINA
+const STEP_STANCE:      int = TutorialRegistry.STEP_STANCE
 const STEP_BRAKE:       int = TutorialRegistry.STEP_BRAKE
 const STEP_STICKHANDLE: int = TutorialRegistry.STEP_STICKHANDLE
 const STEP_DEFLECT:     int = TutorialRegistry.STEP_DEFLECT
@@ -44,7 +43,8 @@ class TutorialStep:
 # Duration thresholds for sustained-hold steps
 const _SKATE_HOLD:           float = 1.5
 const _BRAKE_HOLD:           float = 1.0
-const _SPRINT_HOLD:          float = 1.0
+# Heading the stance step wants carved in one go — a real cut, not a drift.
+const _STANCE_CUT_RAD:       float = PI * 0.5
 # Shot block: puck comes from the offensive zone toward the player's goal.
 # 14 m/s is a paced-down "wrister" feel — fast enough to feel like a shot,
 # slow enough that a learner has time to read it and crouch into the lane.
@@ -215,7 +215,9 @@ var _complete_flash_timer: float = 0.0
 var _wrister_aim_start:  float = -1.0   # -1 when not in WRISTER_AIM
 var _cross_ice_dot_x:          float = 6.0   # set in _begin_step based on handedness
 var _offside_ghost_seen:       bool  = false
-var _stamina_exhaust_seen:     bool  = false
+var _stance_turned:            float = 0.0
+var _stance_prev_heading:      float = 0.0
+var _stance_heading_valid:     bool  = false
 var _stickhandle_crossings:    int   = 0
 var _stickhandle_side:         int   = 0     # -1 / +1 once the blade commits to a side
 var _drop_seen:                bool  = false # DROP_PUCK: nudge fired, waiting on re-pickup
@@ -421,7 +423,7 @@ func _keyboard_key_tokens() -> Dictionary:
 			PlayerPrefs.action_display("move_left"),
 			PlayerPrefs.action_display("move_down"),
 			PlayerPrefs.action_display("move_right")],
-		"sprint":         PlayerPrefs.action_display("sprint"),
+		"stance":         PlayerPrefs.action_display("stance"),
 		"brake":          PlayerPrefs.action_display("brake"),
 		"hit":            PlayerPrefs.action_display("hit"),
 		"shoot":          PlayerPrefs.action_display("shoot"),
@@ -442,7 +444,7 @@ func _keyboard_key_tokens() -> Dictionary:
 func _pad_key_tokens() -> Dictionary:
 	return {
 		"move_keys":      "Left Stick",
-		"sprint":         ControllerGlyphs.joy_label(PlayerPrefs.pad_button("sprint")),
+		"stance":         ControllerGlyphs.joy_label(PlayerPrefs.pad_button("stance")),
 		"brake":          ControllerGlyphs.joy_label(PlayerPrefs.pad_button("brake")),
 		"hit":            ControllerGlyphs.joy_label(PlayerPrefs.pad_button("hit")),
 		"shoot":          ControllerGlyphs.trigger_label(true),
@@ -497,21 +499,16 @@ func _step_def_for(step_id: int) -> TutorialStep:
 				"Skate",
 				"Press {move_keys} to skate around the ice.",
 				"Hold a direction to build up speed — you keep gliding when you let go.")
-		STEP_SPRINT:
+		STEP_STANCE:
 			return _step(
-				"Sprint",
-				"Hold {sprint} while skating to sprint for a burst of speed.",
-				"Sprinting widens your turn radius — use it in straight-line bursts.")
-		STEP_STAMINA:
-			return _step(
-				"Stamina",
-				"Sprint burns the stamina ring around your skater. Hold {sprint} and keep sprinting until it runs dry — go ahead, gas out.",
-				"The ring hides while it's full and turns amber when you're low. Carrying the puck drains it faster.")
+				"Stance",
+				"Get some speed, then hold {stance} to drop into a low stance and cut hard toward a new direction with {move_keys}.",
+				"The stance digs your edges in for tight cuts but chops your stride — let go of {stance} to accelerate away.")
 		STEP_BRAKE:
 			return _step(
 				"Brake",
 				"Hold {brake} to brake hard and stop quickly.",
-				"It kills your speed in any direction — stop on a dime to change lanes or hold your ground.")
+				"It stops you whatever direction you're pressing — stop on a dime to change lanes or hold your ground.")
 		STEP_STICKHANDLE:
 			return _step(
 				"Stickhandling",
@@ -651,7 +648,7 @@ func _current_step_id() -> int:
 # The device hot-swap skips them so it can't clobber the beat-specific text; their
 # next live-copy beat re-picks with the now-current device via _pick.
 func _step_has_live_copy(step_id: int) -> bool:
-	return step_id == STEP_STAMINA or step_id == STEP_OFFSIDES \
+	return step_id == STEP_OFFSIDES \
 		or step_id == STEP_SHOOT_TARGETS or step_id == STEP_RECEIVE
 
 
@@ -675,8 +672,8 @@ func _on_device_changed(_is_gamepad: bool) -> void:
 # the player-locked camera, which centers on the skater rather than zooming
 # out to chase a stashed or nearby puck.
 func _step_uses_locked_camera(step_id: int) -> bool:
-	return step_id == STEP_SKATE or step_id == STEP_SPRINT \
-		or step_id == STEP_STAMINA or step_id == STEP_BRAKE \
+	return step_id == STEP_SKATE or step_id == STEP_STANCE \
+		or step_id == STEP_BRAKE \
 		or step_id == STEP_STICKHANDLE or step_id == STEP_DROP_PUCK
 
 
@@ -692,7 +689,8 @@ func _begin_step(index: int) -> void:
 	_feed_flight_time       = 0.0
 	_wrister_aim_start      = -1.0
 	_offside_ghost_seen     = false
-	_stamina_exhaust_seen   = false
+	_stance_turned          = 0.0
+	_stance_heading_valid   = false
 	_stickhandle_crossings  = 0
 	_stickhandle_side       = 0
 	_drop_seen              = false
@@ -713,14 +711,13 @@ func _begin_step(index: int) -> void:
 	GameManager.set_tutorial_offsides_active(step_id == STEP_OFFSIDES)
 
 	match step_id:
-		STEP_SKATE, STEP_SPRINT, STEP_STAMINA:
-			# Open ice, puck stashed out of the way — sprint and stamina both
-			# read cleanest puck-free (carrying changes the drain rate).
+		STEP_SKATE, STEP_STANCE:
+			# Open ice, puck stashed out of the way.
 			_local_controller.teleport_to(Vector3(0.0, 1.0, 5.0))
 			_place_puck(Vector3(100.0, _ICE_Y, 100.0))  # out of the way
 
 		STEP_BRAKE:
-			pass  # player is already on the ice from the stamina/sprint steps
+			pass  # player is already on the ice from the stance step
 
 		STEP_STICKHANDLE:
 			# Puck dropped just ahead for a natural pickup; crossings are then
@@ -1121,29 +1118,20 @@ func _process(delta: float) -> void:
 			else:
 				_step_timer = 0.0
 
-		STEP_SPRINT:
-			# sprint_active is the resolved per-tick truth: sprint held, moving,
-			# stamina available, not locked out. Hold it for a beat to complete.
-			if _local_controller.sprint_active:
-				_step_timer += delta
-				if _step_timer >= _SPRINT_HOLD:
+		STEP_STANCE:
+			# One real cut: the travel heading carved through _STANCE_CUT_RAD in
+			# the stance, at speed. stance_active is the resolved per-tick truth.
+			var travel := Vector2(_skater.velocity.x, _skater.velocity.z)
+			if _local_controller.stance_active and travel.length() > 2.5:
+				var heading: float = travel.angle()
+				if _stance_heading_valid:
+					_stance_turned += absf(angle_difference(_stance_prev_heading, heading))
+				_stance_prev_heading = heading
+				_stance_heading_valid = true
+				if _stance_turned >= _STANCE_CUT_RAD:
 					_complete_step()
 			else:
-				_step_timer = 0.0
-
-		STEP_STAMINA:
-			# Two beats: gas out (the exhaustion lockout latches), then recover
-			# (the lockout releases once the pool refills past half).
-			if not _stamina_exhaust_seen:
-				if _local_controller.is_sprint_exhausted():
-					_stamina_exhaust_seen = true
-					_set_live_copy(
-						"Stamina",
-						"You're gassed — sprint is locked out while the ring flashes red. Keep skating: it unlocks once stamina refills past half.",
-						"Plain skating is free — stamina only drains while you sprint.")
-			else:
-				if not _local_controller.is_sprint_exhausted():
-					_complete_step()
+				_stance_heading_valid = false
 
 		STEP_BRAKE:
 			# is_braced is true whenever the brake is held, with or without a direction
