@@ -385,7 +385,15 @@ func seat_on_ice(hips: Transform3D) -> Vector3:
 	var to_body: Transform3D = _skater.mesh_root.transform * _skeleton.transform
 	var hips_body: Transform3D = to_body * hips
 	var ground: float
-	if _sprawled:
+	var resting: bool = _plant[0] <= 0.0 and _plant[1] <= 0.0 \
+			and _plant_eased[0] == 0.0 and _plant_eased[1] == 0.0
+	if _sprawled or resting:
+		# The bones are the pose to seat: the sprawl's, or the gait's own while
+		# the stroke places both feet and nothing is easing back.
+		if resting:
+			_write_seat(0, 0.0)
+			_write_seat(1, 0.0)
+			_seat_version = pose_version
 		ground = minf(_runner_low(hips_body, 0), _runner_low(hips_body, 1))
 	else:
 		_plant_feet(hips_body)
