@@ -727,6 +727,31 @@ func test_shoot_pressed_front_pressure_cancels_via_slap() -> void:
 	assert_true(i.slap_pressed)
 
 
+func _trailer_side_at_commit(trailer_vel: Vector3) -> float:
+	# A trailer directly behind the shooter, within stick reach, moving across
+	# at `trailer_vel`. Team 0 attacks -Z, so the aim is -Z and the forehand
+	# side is x = -handedness sign. A fresh bot per call: tick 0 is the pick.
+	before_each()
+	sm._state = Agent.State.SHOOT_PRESSED
+	var s := _self_snap(Vector3.ZERO, true)
+	_add_skater(s, OPP_ID, Vector3(0, 0, 1.0))
+	s.skater_states[OPP_ID].velocity = trailer_vel
+	sm.dispatch(InputState.new(), s)  # tick 0 picks and locks the side
+	return sm._shoot_side_sign
+
+
+func test_wind_up_side_reads_a_trailer_drifting_onto_the_forehand() -> void:
+	# Directly behind at the commit, but sliding onto the forehand over the
+	# charge: the wind-up would draw the puck back into his stick (#740).
+	var forehand_x: float = -sm._handedness_perp_sign
+	assert_eq(_trailer_side_at_commit(Vector3(forehand_x * 4.0, 0, 0)), -1.0,
+			"a trailer arriving on the forehand during the charge flips it to the backhand")
+	assert_eq(_trailer_side_at_commit(Vector3.ZERO), 1.0,
+			"a trailer staying directly behind leaves the forehand wind-up")
+	assert_eq(_trailer_side_at_commit(Vector3(-forehand_x * 4.0, 0, 0)), 1.0,
+			"one drifting to the backhand side leaves the forehand wind-up")
+
+
 func test_shoot_pressed_ignores_rear_pressure() -> void:
 	# The bail is forward-only: a backchecker behind the shooter (toward our own
 	# net, +Z for team 0) can't disrupt the windup and must not cancel a clean shot.
@@ -1202,6 +1227,22 @@ func test_pass_pressed_dump_in_charges_flat_at_the_searched_pace() -> void:
 			break
 	assert_true(released, "the charged dump-in releases within the charge budget")
 	assert_false(sm._dump_target.is_finite(), "releasing clears the dump target")
+
+
+func test_pass_pressed_rim_charges_flat_at_its_searched_pace() -> void:
+	# The rim pass (AIRimPass) walks its path at a searched pace, so like the
+	# dump-in it must leave FLAT at that pace on the charged path — the quick
+	# release's fixed pace would die in the first corner.
+	sm._state = Agent.State.PASS_PRESSED
+	sm._dump_target = Vector3(20, 0, 0)
+	sm._dump_is_rim = true
+	sm._dump_launch_speed = 26.4
+	var i := InputState.new()
+	sm.dispatch(i, _self_snap(Vector3.ZERO, true))
+	assert_false(i.quick_pass_pressed, "a rim does NOT take the one-tick path")
+	assert_eq(i.elevation_level, ShotMechanics.ELEVATION_FLAT, "a rim rides the ice")
+	assert_true(sm._pass_should_charge, "the rim charges")
+	assert_eq(sm._pass_target_speed, 26.4, "…at the pace its search walked")
 
 
 func test_pass_pressed_dump_clear_stays_a_one_tick_release() -> void:

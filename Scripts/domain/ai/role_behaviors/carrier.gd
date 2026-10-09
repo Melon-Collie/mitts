@@ -478,10 +478,11 @@ var last_carry_anchor: Vector3 = Vector3.ZERO
 # outside any reach.
 const DUMP_AIM_STANDOFF_M: float = 20.0
 
-# Set when intent commits to DUMP: the world spot to fire the puck at (no
-# receiver), and the delivery kind — a soft flip (dump-and-chase into the OZ
-# corner), a FLAT rim up our own wall (5v5 — the bank-pass delivery the wall
-# winger meets; breakout plan §B), or the HIGH chip clear (neither flag).
+# Set when intent commits to DUMP: the world spot to fire the puck at, and the
+# delivery kind — a soft flip (dump-and-chase into the OZ corner), a FLAT rim
+# (the rim PASS: the boards carry it to a teammate, see AIRimPass), or the HIGH
+# chip clear (neither flag). A rim is chosen as a pass and released as a dump,
+# because its aim is a bearing into the boards rather than the receiver.
 # Read by the state machine's dump release.
 var dump_target: Vector3 = Vector3.INF
 var dump_is_soft: bool = false
@@ -578,6 +579,15 @@ var _phase_shoot_score: float = -1.0
 var _phase_best_pass_peer: int = -1
 var _phase_best_pass_score: float = -1.0
 var _phase_best_pass_saucer: bool = false
+# The winning pass's rim launch bearing, ZERO when it is a straight feed.
+var _phase_best_pass_rim_dir: Vector3 = Vector3.ZERO
+# The best launch _rim_launch_for found, and its path reads.
+var _rim_k: int = -1
+var _rim_t: float = 0.0
+var _rim_lane: float = 0.0
+var _rim_miss: float = 0.0
+# The winning pass's rim pace, carried to the release with its bearing.
+var _phase_best_pass_rim_pace: float = 0.0
 # Opposing-goalie env captured alongside the winning shot sample, so the
 # commit's loft/aim/power solve reads the same goalie the score saw:
 var _shot_env_unsettled: float = 0.0
@@ -848,6 +858,7 @@ func reset() -> void:
 	last_carry_anchor = Vector3.ZERO
 	dump_target = Vector3.INF
 	dump_is_soft = false
+	dump_is_rim = false
 	dump_launch_speed = AIActionScoring.PASS_SPEED_M_S
 	protect_offset = Vector3.ZERO
 	protect_gain = 0.0
@@ -884,6 +895,7 @@ func clear_intent() -> void:
 	pass_should_saucer = false
 	dump_target = Vector3.INF
 	dump_is_soft = false
+	dump_is_rim = false
 	dump_launch_speed = AIActionScoring.PASS_SPEED_M_S
 	_pick_action_cooldown = 0
 	_ticks_since_pick = 0
@@ -1341,6 +1353,8 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 	_phase_best_pass_peer = best_pass[0]
 	_phase_best_pass_score = best_pass[1]
 	_phase_best_pass_saucer = best_pass[2]
+	_phase_best_pass_rim_dir = best_pass[3]
+	_phase_best_pass_rim_pace = best_pass[4]
 
 
 # COMMIT phase of the compete: the CARRY candidate argmax, the DUMP read, and
@@ -1368,6 +1382,7 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	var best_pass_peer: int = _phase_best_pass_peer
 	var best_pass_score: float = _phase_best_pass_score
 	var best_pass_saucer: bool = _phase_best_pass_saucer
+	var best_pass_rim_dir: Vector3 = _phase_best_pass_rim_dir
 
 	# Top-level CARRY — the best candidate _best_carry builds, each scored
 	# uniformly as score_at(candidate, projected_opps) × path_clear × time_decay.
@@ -1430,7 +1445,8 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	# fire on every re-eval and the bot would never fire.
 	if intended_action == INTENT_SHOOT and shoot_score > 0.0:
 		shoot_score *= 1.0 + AIActionScoring.ACTION_HYSTERESIS_MARGIN_FRAC
-	elif intended_action == INTENT_PASS and best_pass_score > 0.0:
+	elif (intended_action == INTENT_PASS or (intended_action == INTENT_DUMP
+			and dump_is_rim)) and best_pass_score > 0.0:
 		best_pass_score *= 1.0 + AIActionScoring.ACTION_HYSTERESIS_MARGIN_FRAC
 
 	# Debug snapshot of the per-tick scores for the floating label.
@@ -1583,7 +1599,17 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 			and not staggered:
 		_hold_elapsed_s = 0.0
 		new_intent = fire_intent
-		if new_intent == INTENT_PASS:
+		if new_intent == INTENT_PASS and best_pass_rim_dir != Vector3.ZERO:
+			# The rim: chosen as a pass, released as a FLAT charged dump along
+			# its bearing at its searched pace (the aim is the boards, not the
+			# receiver).
+			new_intent = INTENT_DUMP
+			pass_target_peer_id = best_pass_peer
+			dump_target = puck_now + best_pass_rim_dir * DUMP_AIM_STANDOFF_M
+			dump_is_soft = false
+			dump_is_rim = true
+			dump_launch_speed = _phase_best_pass_rim_pace
+		elif new_intent == INTENT_PASS:
 			pass_target_peer_id = best_pass_peer
 			# Every pass is a paced wrister now (the #363 pure-mouse-speed model
 			# makes release pace reliable, so there's no reason to keep the fixed-
@@ -1864,6 +1890,20 @@ func _compute_best_pass(ctx: RoleContext, self_facing_xz: Vector2,
 	# back out of it (mirrors the carry-side exclusion in _score_move_candidate).
 	var carrier_in_oz: bool = AIActionScoring.in_offensive_zone(self_pos, attacking_goal)
 	var pass_origin: Vector3 = _pass_origin(ctx)
+	var best_pass_rim_dir := Vector3.ZERO
+	var best_pass_rim_pace: float = 0.0
+	# Rim launches are receiver-independent: searched once per eval, and only
+	# once some receiver's flat lane is contested enough to want one (-1 =
+	# not searched yet).
+	var rim_count: int = -1
+	# The eval's best rim candidate: receiver, launch, and its path reads.
+	var rim_rank: float = 0.0
+	var rim_peer: int = -1
+	var rim_space: float = -1.0
+	var rim_k: int = -1
+	var rim_t: float = 0.0
+	var rim_lane: float = 0.0
+	var rim_miss: float = 0.0
 	for peer_id: int in teammate_ids:
 		var receiver_state: SkaterNetworkState = snapshot.skater_states[peer_id]
 		if receiver_state.is_ghost:
@@ -1954,6 +1994,28 @@ func _compute_best_pass(ctx: RoleContext, self_facing_xz: Vector2,
 			if s_saucer > s:
 				s = s_saucer
 				use_saucer = true
+		# Like the saucer, the rim competes only when the flat feed is contested:
+		# with the lane clear there is nothing for the boards to carry it past.
+		# Its candidate is only RANKED here (see _rim_launch_for); the one best
+		# rim of the eval is priced after the loop.
+		if rim_count != 0 \
+				and _last_flat_variant_lane < AIActionScoring.SAUCER_SKIP_WHEN_LANE_CLEAR:
+			if rim_count < 0:
+				rim_count = AIRimPass.build(pass_origin, ctx.self_wrister_shot_speed,
+						ctx.defending_goal_pos.z, _scratch_opponents,
+						_scratch_opponent_vels, _scratch_opponent_caps,
+						_goalie_now(ctx), _scratch_our_defenders)
+			var rank: float = _rim_launch_for(ctx, receiver_state, receiver_omega,
+					receiver_caps, carrier_in_oz) \
+					* _cached_option_value(receiver_state.position)
+			if rank > rim_rank:
+				rim_rank = rank
+				rim_peer = peer_id
+				rim_space = receiver_space
+				rim_k = _rim_k
+				rim_t = _rim_t
+				rim_lane = _rim_lane
+				rim_miss = _rim_miss
 		# Smart-ping PASS_TO_ME / IM_OPEN: the pinger asked for the puck (see
 		# PING_PASS_EV_MULT — bias, not force; a dead lane still scores 0).
 		if peer_id == ctx.ping_pass_target_peer and s > 0.0:
@@ -1962,7 +2024,100 @@ func _compute_best_pass(ctx: RoleContext, self_facing_xz: Vector2,
 			best_pass_score = s
 			best_pass_peer = peer_id
 			best_pass_saucer = use_saucer
-	return [best_pass_peer, best_pass_score, best_pass_saucer]
+	if rim_peer != -1:
+		var rim_state: SkaterNetworkState = snapshot.skater_states[rim_peer]
+		var rim_caps: AISkaterCaps = ctx.caps_by_peer.get(rim_peer)
+		var floor_ev: float = best_pass_score
+		if rim_peer == ctx.ping_pass_target_peer:
+			floor_ev /= PING_PASS_EV_MULT
+		var rotation_time: float = _facing_rotation_time(self_facing_xz,
+				ctx.self_pos, ctx.self_pos + AIRimPass.dirs[rim_k],
+				ctx.self_reach_cone_half_angle, ctx.self_facing_turn_rate)
+		var s_rim: float = _pass_ev(ctx, AIRimPass.meet_point(rim_k, rim_t),
+				AIRimPass.paces[rim_k], rim_t,
+				rim_t + SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S,
+				rim_t + rotation_time, our_goalie, rim_caps, rim_lane, rim_miss,
+				rim_state.velocity, rim_space, floor_ev,
+				AIRimPass.dirs[rim_k], AIRimPass.opp_meet[rim_k])
+		if rim_peer == ctx.ping_pass_target_peer and s_rim > 0.0:
+			s_rim *= PING_PASS_EV_MULT
+		if s_rim > best_pass_score:
+			best_pass_score = s_rim
+			best_pass_peer = rim_peer
+			best_pass_saucer = false
+			best_pass_rim_dir = AIRimPass.dirs[rim_k]
+			best_pass_rim_pace = AIRimPass.paces[rim_k]
+	return [best_pass_peer, best_pass_score, best_pass_saucer, best_pass_rim_dir,
+			best_pass_rim_pace]
+
+
+# How surely and soon the best RIM reaches `receiver_state` (completion × the
+# delay discount, 0.0 when none does), with that launch's path reads left in
+# _rim_k / _rim_t / _rim_lane / _rim_miss. The rim's own path quantities: the
+# meet point and time on the walked path, the race against the soonest opponent
+# on that path as the lane, and the passer's aim error spread over its length.
+#
+# A RANK, not a price. _compute_best_pass weighs it by the receiver's cached spot
+# value and pays the full _pass_ev only for the eval's single best rim: the full
+# EV is the hot path's dominant cost and would otherwise run per receiver (and
+# per launch). Launches that reach one receiver meet him within a stride of each
+# other, so his value is common to them and cannot reorder them.
+#
+# Zone rules mirror the straight feed's: a carrier in the zone keeps the puck in
+# it (every point up to the meet stays inside the line), and one outside it does
+# not rim the puck into it (the receiver would be offside of a puck that was not
+# carried in).
+func _rim_launch_for(ctx: RoleContext, receiver_state: SkaterNetworkState,
+		receiver_omega: float, receiver_caps: AISkaterCaps,
+		carrier_in_oz: bool) -> float:
+	var speed: float = receiver_caps.max_speed if receiver_caps != null \
+			else AIActionScoring.SKATER_REF_SPEED_M_S
+	var catch_radius: float = receiver_caps.handle_reach if receiver_caps != null \
+			else AIActionScoring.EVADE_CARRY_HANDLE_M
+	var receiver_speed: float = Vector2(
+			receiver_state.velocity.x, receiver_state.velocity.z).length()
+	var best_sure: float = 0.0
+	for k: int in AIRimPass.count:
+		var t: float = AIRimPass.meet_time(k, receiver_state.position,
+				receiver_state.velocity, speed)
+		if t == INF:
+			continue
+		if not AIRimPass.catchable(k, t, receiver_state.velocity):
+			continue
+		if carrier_in_oz:
+			if not AIRimPass.stays_in_zone(k, t, ctx.attacking_goal_pos,
+					OZ_RECEIVE_LINE_BUFFER_M):
+				continue
+		elif AIActionScoring.in_offensive_zone(
+				AIRimPass.meet_point(k, t), ctx.attacking_goal_pos):
+			continue
+		var miss_prob: float = AIActionScoring.pass_miss_prob(
+				AIRimPass.path_length(k, t), ctx.self_pass_aim_error_rad,
+				catch_radius, AIActionScoring.receiver_heading_uncertainty_m(
+						receiver_speed, receiver_omega, t))
+		var sure: float = (1.0 - miss_prob) * AIActionScoring.delay_discount(t)
+		# Exact prune before the opponent race (the costly read): the lane is at
+		# most 1, so a launch already beaten unraced cannot win raced.
+		if sure <= best_sure:
+			continue
+		var lane: float = AIRimPass.race_completion(k, t)
+		sure *= lane
+		if sure > best_sure:
+			best_sure = sure
+			_rim_k = k
+			_rim_t = t
+			_rim_lane = lane
+			_rim_miss = miss_prob
+	return best_sure
+
+
+# The pass-option cache's spot value for the receiver standing at `pos` (0.0 when
+# he is not in it — an illegal or ghosted receiver).
+func _cached_option_value(pos: Vector3) -> float:
+	for i: int in _scratch_option_receiver_pos.size():
+		if _scratch_option_receiver_pos[i] == pos:
+			return _scratch_option_receiver_val[i]
+	return 0.0
 
 
 # EV of ONE pass variant (flat, or saucer at a possibly-reduced launch
@@ -2116,7 +2271,9 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 		miss_prob: float = AIActionScoring.PASS_MISS_BASE_PROB,
 		receiver_vel: Vector3 = Vector3.ZERO,
 		receiver_space: float = -1.0,
-		useless_below: float = -INF) -> float:
+		useless_below: float = -INF,
+		rim_dir: Vector3 = Vector3.ZERO,
+		rim_loss_point: Vector3 = Vector3.INF) -> float:
 	var self_pos: Vector3 = ctx.self_pos
 	# The pass flies from the PUCK (the blade), not the body — judge the lane
 	# the puck actually travels. From behind the net the two differ by up to a
@@ -2125,10 +2282,12 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# the receiver scoring / loss-point terms below.)
 	var origin: Vector3 = _pass_origin(ctx)
 	# Hard zeros: net-blocker (segment crosses a net body) and own-DZ
-	# slot crossing (intercepted = goal-against).
-	if AIActionScoring.pass_lane_blocked_by_net(origin, receiver_spot):
+	# slot crossing (intercepted = goal-against). A rim's path is not this
+	# segment — AIRimPass checked each of its legs instead.
+	var is_rim: bool = rim_dir != Vector3.ZERO
+	if not is_rim and AIActionScoring.pass_lane_blocked_by_net(origin, receiver_spot):
 		return 0.0
-	if AIActionScoring.pass_crosses_own_slot(
+	if not is_rim and AIActionScoring.pass_crosses_own_slot(
 			origin, receiver_spot, ctx.own_goal_dir * GameRules.GOAL_LINE_Z):
 		return 0.0
 	if lane < 0.0:
@@ -2151,7 +2310,8 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# holding while the forechecker closes degrades every pass it is
 	# still holding.
 	var release_clean: float = AIActionScoring.release_contest_clean(
-			AIActionScoring.release_point_toward(self_pos, receiver_spot),
+			AIActionScoring.release_point_toward(self_pos,
+					self_pos + rim_dir if is_rim else receiver_spot),
 			_scratch_opponents, _scratch_opponent_caps)
 	_project_opponents_to(ctx, flight_t, _scratch_opponents_pass)
 	# A receiver streaking netward backs the keeper in over the feed's flight,
@@ -2255,9 +2415,11 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 			origin, 1.0 - release_clean, ctx.defending_goal_pos, our_goalie,
 			GameRules.NET_HALF_WIDTH, _scratch_our_defenders,
 			_scratch_our_defender_caps)
-	var loss_point: Vector3 = AIActionScoring.lane_loss_point(
-			self_pos, receiver_spot, _scratch_opponents_release, pass_speed,
-			_scratch_opponent_vels, _scratch_opponent_caps)
+	# A rim is lost where the soonest opponent meets its path.
+	var loss_point: Vector3 = rim_loss_point if is_rim and rim_loss_point.is_finite() \
+			else AIActionScoring.lane_loss_point(
+					self_pos, receiver_spot, _scratch_opponents_release, pass_speed,
+					_scratch_opponent_vels, _scratch_opponent_caps)
 	cost += AIActionScoring.turnover_cost(
 			loss_point, release_clean * (1.0 - lane), ctx.defending_goal_pos,
 			our_goalie, GameRules.NET_HALF_WIDTH, _scratch_our_defenders,

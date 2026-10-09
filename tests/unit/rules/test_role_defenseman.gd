@@ -401,3 +401,195 @@ func test_dback_sags_off_the_line_against_a_threat_already_behind_it() -> void:
 	var d: RoleDecision = AIRoleDefenseman.decide(ctx, AIRoleSlots.Slot.DBACK_L)
 	assert_gt(d.target_position.z, GameRules.BLUE_LINE_Z + 0.5,
 			"the back pair sags home rather than stand into a breakaway")
+
+
+# ── FORECHECK keep-ins: their clear up my wall ───────────────────────────────
+
+func test_dp_keeps_their_wall_clear_in_at_the_line() -> void:
+	# Their D rims it up the +x wall out of his corner. The strong-side D of the
+	# line pair steps to the boards at the line instead of holding his lane.
+	var ctx: RoleContext = _make_ctx(Vector3(6.7, 0.0, -8.29),
+			[[10, 1, Vector3(8.0, 0.0, -24.0)]], -1,
+			Vector3(11.8, 0.0, -22.0))
+	ctx.snapshot.puck_state.velocity = Vector3(0.0, 0.0, 10.0)
+	var d: RoleDecision = AIRoleDefenseman.decide(ctx, AIRoleSlots.Slot.DP_STRONG)
+	assert_gt(d.target_position.x, 9.0, "the keep-in stand is out in the wall lane")
+	assert_almost_eq(d.target_position.z, -(GameRules.BLUE_LINE_Z + 0.5), 0.01,
+			"...at the line")
+
+
+func test_weak_dp_keeps_a_clear_in_on_his_own_wall() -> void:
+	# A clear up the weak wall is the weak D's to keep in — it is still the line.
+	var ctx: RoleContext = _make_ctx(Vector3(-5.0, 0.0, -8.29),
+			[[10, 1, Vector3(-8.0, 0.0, -24.0)]], -1,
+			Vector3(-11.8, 0.0, -22.0))
+	ctx.snapshot.puck_state.velocity = Vector3(0.0, 0.0, 10.0)
+	var d: RoleDecision = AIRoleDefenseman.decide(ctx, AIRoleSlots.Slot.DP_WEAK)
+	assert_lt(d.target_position.x, -9.0, "the weak D kills it on his wall")
+
+
+# ── The pinch (#711) and the rotation behind it (#737) ───────────────────────
+
+class StubStrategy extends TeamStrategyView:
+	var slots: Dictionary = {}
+
+	func get_slot(peer_id: int) -> int:
+		return slots.get(peer_id, AIRoleSlots.Slot.NONE)
+
+
+const PARTNER := 3
+const FILLER := 4
+const WALL_CARRIER := 10
+
+
+# Me (peer 1) on DP_STRONG at the strong line stand, my partner on DP_WEAK, a
+# forward on F2_WEAK in the middle lane, and their carrier bottled on my wall
+# a few metres inside their line.
+func _pinch_ctx(partner_pos: Vector3 = Vector3(-5.0, 0.0, -8.29),
+		filler: bool = true, carrier_vel: Vector3 = Vector3.ZERO,
+		carrier_pos: Vector3 = Vector3(11.5, 0.0, -12.5)) -> RoleContext:
+	var skaters: Array = [
+		[PARTNER, TEAM_ID, partner_pos],
+		[WALL_CARRIER, 1, carrier_pos, carrier_vel],
+		[11, 1, Vector3(-3.0, 0.0, -22.0)],
+	]
+	if filler:
+		skaters.append([FILLER, TEAM_ID, Vector3(0.0, 0.0, -11.0)])
+	var ctx: RoleContext = _make_ctx(Vector3(6.7, 0.0, -8.29), skaters, WALL_CARRIER)
+	var strategy := StubStrategy.new()
+	strategy.slots = {1: AIRoleSlots.Slot.DP_STRONG,
+			PARTNER: AIRoleSlots.Slot.DP_WEAK, FILLER: AIRoleSlots.Slot.F2_WEAK}
+	ctx.team_brain = strategy
+	return ctx
+
+
+func test_the_pinch_depth_is_where_f2_strong_takes_the_wall() -> void:
+	assert_almost_eq(AIRoleDefenseman.PINCH_MAX_DEPTH_M,
+			GameRules.GOAL_LINE_Z - AIRoleForecheck.F2_STRONG_DEPTH_OFF_GOAL_M
+					- GameRules.BLUE_LINE_Z, 0.01,
+			"the D's wall ends where F2_STRONG's half-wall post begins")
+
+
+func test_strong_d_pinches_a_bottled_wall_carrier_with_cover() -> void:
+	var ctx: RoleContext = _pinch_ctx()
+	var d: RoleDecision = AIRoleDefenseman.decide(ctx, AIRoleSlots.Slot.DP_STRONG)
+	assert_true(d.pressures_puck, "the pinch is a pressurer on the carrier")
+	assert_lt(d.target_position.z, -(GameRules.BLUE_LINE_Z + 2.0),
+			"...down the wall, off the line; got %s" % d.target_position)
+
+
+func test_no_pinch_without_a_forward_to_fill() -> void:
+	var ctx: RoleContext = _pinch_ctx(Vector3(-5.0, 0.0, -8.29), false)
+	var d: RoleDecision = AIRoleDefenseman.decide(ctx, AIRoleSlots.Slot.DP_STRONG)
+	assert_false(d.pressures_puck, "nobody can fill my point — hold the line")
+	assert_almost_eq(d.target_position.z,
+			-(GameRules.BLUE_LINE_Z + AIRoleDefenseman.DP_LINE_INSET_M), 0.6)
+
+
+func test_never_both_d_pinch() -> void:
+	# My partner is already down his wall: I am the only D on the line.
+	var ctx: RoleContext = _pinch_ctx(Vector3(-10.0, 0.0, -16.0))
+	var d: RoleDecision = AIRoleDefenseman.decide(ctx, AIRoleSlots.Slot.DP_STRONG)
+	assert_false(d.pressures_puck, "never both D")
+
+
+func test_no_pinch_on_a_carrier_already_skating_out() -> void:
+	var ctx: RoleContext = _pinch_ctx(Vector3(-5.0, 0.0, -8.29), true,
+			Vector3(0.0, 0.0, 7.0))
+	var d: RoleDecision = AIRoleDefenseman.decide(ctx, AIRoleSlots.Slot.DP_STRONG)
+	assert_false(d.pressures_puck, "he is on his way out — the line is the play")
+
+
+func test_no_pinch_into_the_corner() -> void:
+	# Below the half-wall the wall is F2_STRONG's.
+	var ctx: RoleContext = _pinch_ctx(Vector3(-5.0, 0.0, -8.29), true,
+			Vector3.ZERO, Vector3(11.0, 0.0, -21.0))
+	var d: RoleDecision = AIRoleDefenseman.decide(ctx, AIRoleSlots.Slot.DP_STRONG)
+	assert_false(d.pressures_puck, "the corner is not the D's")
+
+
+func test_the_weak_d_never_pinches() -> void:
+	# Same bottled carrier, but on the weak D's wall and him on DP_WEAK.
+	var ctx: RoleContext = _pinch_ctx(Vector3(6.7, 0.0, -8.29), true,
+			Vector3.ZERO, Vector3(-11.5, 0.0, -12.5))
+	ctx.self_pos = Vector3(-5.0, 0.0, -8.29)
+	ctx.snapshot.skater_states[1].position = ctx.self_pos
+	var d: RoleDecision = AIRoleDefenseman.decide(ctx, AIRoleSlots.Slot.DP_WEAK)
+	assert_false(d.pressures_puck, "the weak-side D is the safety")
+
+
+func test_f2_weak_fills_the_point_while_the_strong_d_is_down_the_wall() -> void:
+	# The forecheck half of the rotation, read from the forward's side.
+	var ctx: RoleContext = _make_ctx(Vector3(0.0, 0.0, -11.0), [
+		[2, TEAM_ID, Vector3(11.0, 0.0, -14.0)],         # strong D, pinched
+		[3, TEAM_ID, Vector3(-5.0, 0.0, -8.29)],
+		[10, 1, Vector3(11.8, 0.0, -14.5)],
+	], 10)
+	ctx.self_is_defense = false
+	var strategy := StubStrategy.new()
+	strategy.slots = {1: AIRoleSlots.Slot.F2_WEAK, 2: AIRoleSlots.Slot.DP_STRONG,
+			3: AIRoleSlots.Slot.DP_WEAK}
+	ctx.team_brain = strategy
+	var d: RoleDecision = AIRoleForecheck.decide_f2(ctx, false)
+	var stand: Vector3 = AIRoleDefenseman.strong_point_stand(
+			ctx, AIRoleSlots.Slot.DP_STRONG)
+	assert_lt(d.target_position.distance_to(stand), 0.6,
+			"F2_WEAK takes the vacated strong point; got %s" % d.target_position)
+	# And the weak D slides to the middle of the line.
+	ctx.self_pos = Vector3(-5.0, 0.0, -8.29)
+	ctx.self_is_defense = true
+	ctx.peer_id = 3
+	var w: RoleDecision = AIRoleDefenseman.decide(ctx, AIRoleSlots.Slot.DP_WEAK)
+	assert_almost_eq(w.target_position.x, 0.0, 0.3,
+			"the weak D holds the middle of the line")
+
+
+func test_high_slot_fills_the_point_while_the_strong_d_battles_low() -> void:
+	# O-zone: our strong point chased a loose puck into the corner.
+	var ctx: RoleContext = _make_ctx(Vector3(0.0, 0.0, -16.0), [
+		[2, TEAM_ID, Vector3(10.5, 0.0, -22.0)],         # strong point, deep
+		[3, TEAM_ID, Vector3(-4.5, 0.0, -9.3)],
+		[10, 1, Vector3(9.0, 0.0, -23.0)],
+	], -1, Vector3(11.0, 0.0, -23.0))
+	ctx.self_is_defense = false
+	var strategy := StubStrategy.new()
+	strategy.slots = {1: AIRoleSlots.Slot.HIGH_SLOT, 2: AIRoleSlots.Slot.POINT_STRONG,
+			3: AIRoleSlots.Slot.POINT_WEAK}
+	ctx.team_brain = strategy
+	var d: RoleDecision = AIRoleHighSlot.decide(ctx)
+	var stand: Vector3 = AIRoleDefenseman.strong_point_stand(
+			ctx, AIRoleSlots.Slot.POINT_STRONG)
+	assert_lt(d.target_position.distance_to(stand), 1.0,
+			"F3 rotates up to the strong point; got %s" % d.target_position)
+
+
+func test_high_slot_stays_home_while_the_strong_point_only_sinks() -> void:
+	# The staggered pair's normal wall slide is not a vacated point.
+	var ctx: RoleContext = _make_ctx(Vector3(0.0, 0.0, -16.0), [
+		[2, TEAM_ID, Vector3(7.5, 0.0, -15.5)],          # sunk two rows: legal
+		[3, TEAM_ID, Vector3(-4.5, 0.0, -9.3)],
+		[5, TEAM_ID, Vector3(10.0, 0.0, -23.0)],         # our carrier, low
+	], 5)
+	ctx.self_is_defense = false
+	var strategy := StubStrategy.new()
+	strategy.slots = {1: AIRoleSlots.Slot.HIGH_SLOT, 2: AIRoleSlots.Slot.POINT_STRONG,
+			3: AIRoleSlots.Slot.POINT_WEAK, 5: AIRoleSlots.Slot.CARRIER}
+	ctx.team_brain = strategy
+	var d: RoleDecision = AIRoleHighSlot.decide(ctx)
+	assert_gt(-d.target_position.z, GameRules.GOAL_LINE_Z - 11.5,
+			"F3 keeps the high slot; got %s" % d.target_position)
+
+
+func test_point_reads_a_rim_still_coming_around_the_end_boards() -> void:
+	# Fired around the end boards from behind their net: it is not on the side
+	# wall yet, but its path comes up the +x wall to the line. The straight
+	# heading points across the rink; only the path says it is mine.
+	var ctx: RoleContext = _make_ctx(Vector3(9.5, 0.0, -9.3),
+			[[2, TEAM_ID, Vector3(0.0, 0.0, -20.0)]], -1,
+			Vector3(2.0, 0.0, -28.6))
+	ctx.snapshot.puck_state.velocity = Vector3(18.0, 0.0, 0.0)
+	var d: RoleDecision = AIRoleDefenseman.decide(ctx, AIRoleSlots.Slot.POINT_STRONG)
+	assert_gt(d.target_position.x, 10.0,
+			"the rim around the boards is read before it reaches the wall; got %s"
+			% d.target_position)
+	assert_true(d.arrive_at_speed, "...and met in stride")
