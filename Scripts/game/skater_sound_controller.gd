@@ -1,15 +1,19 @@
 class_name SkaterSoundController
-extends Node
+# Node3D, not Node: a 3D player only inherits its parent's transform through a
+# Node3D chain, so under a plain Node every stride would sound from the origin.
+extends Node3D
 
 # Tunable thresholds
 const _SKATE_START_SPEED: float = 0.5      # m/s XZ to start loop
 const _SKATE_MAX_SPEED: float = 10.0       # m/s XZ for full volume
-const _SKATE_MIN_VOL_DB: float = -24.0
-const _SKATE_MAX_VOL_DB: float = 0.0
+const _SKATE_MIN_VOL_DB: float = -28.6
+const _SKATE_MAX_VOL_DB: float = -4.6
 const _SKATE_MIN_PITCH: float = 0.85
 const _SKATE_MAX_PITCH: float = 1.15
 
 const _BRAKE_MIN_SPEED: float = 1.5        # must be moving this fast for brake sound
+# Where the softest stickhandling tap bottoms out.
+const _TAP_FLOOR_DB: float = -12.0
 
 # Last skate-loop blend factor pushed to the player (see _update_skate_loop).
 # -1 forces the first write.
@@ -24,6 +28,19 @@ func setup(skater: Skater) -> void:
 	_skater = skater
 	_skate_player = _make_player("res://Sounds/skate_loop.ogg")
 	_brake_player = _make_player("res://Sounds/skate_brake.wav")
+	_brake_player.volume_db = SoundManager.level_db(SoundManager.Sound.SKATE_BRAKE)
+	skater.carry_caught.connect(_on_carry_caught)
+
+
+# The puck strikes the blade at about the stroke's speed, so the tap's amplitude
+# follows it, full at the stroke speed the carry model calls a full push.
+static func tap_volume_db(stroke_speed: float, full_stroke_speed: float) -> float:
+	return clampf(linear_to_db(maxf(stroke_speed, 0.0) / full_stroke_speed), _TAP_FLOOR_DB, 0.0)
+
+
+func _on_carry_caught(stroke_speed: float) -> void:
+	SoundManager.play_world(SoundManager.Sound.STICK_TAP, _skater.get_blade_contact_global(),
+			tap_volume_db(stroke_speed, _skater.carry_stroke_full_speed), 0.06)
 
 
 # A skater's own emitters are ordinary world sounds — same SFX bus, so the SFX
@@ -82,5 +99,4 @@ func _update_brake(speed: float) -> void:
 	if _brake_player.stream == null or _brake_player.playing:
 		return
 	if _skater.is_braking and speed >= _BRAKE_MIN_SPEED:
-		_brake_player.global_position = _skater.global_position
 		_brake_player.play()

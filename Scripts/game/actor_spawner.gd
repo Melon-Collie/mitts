@@ -61,6 +61,8 @@ func spawn_goalie_pair(puck: Puck, is_server: bool, profile: GoalieSkillProfile 
 	_scene_root.add_child(bottom_controller)
 	top_controller.setup(top, puck, -GameRules.GOAL_LINE_Z, is_server, profile)
 	bottom_controller.setup(bottom, puck, GameRules.GOAL_LINE_Z, is_server, profile)
+	_attach_goalie_sound(top_controller, top)
+	_attach_goalie_sound(bottom_controller, bottom)
 	return {
 		"top_goalie": top,
 		"bottom_goalie": bottom,
@@ -81,7 +83,14 @@ func spawn_single_goalie(puck: Puck, goal_line_z: float, is_server: bool,
 	var controller := GoalieController.new()
 	_scene_root.add_child(controller)
 	controller.setup(goalie, puck, goal_line_z, is_server, profile)
+	_attach_goalie_sound(controller, goalie)
 	return {"goalie": goalie, "controller": controller}
+
+
+func _attach_goalie_sound(controller: GoalieController, goalie: Goalie) -> void:
+	var sound := GoalieSoundController.new()
+	goalie.add_child(sound)
+	sound.setup(controller, goalie)
 
 # ── Local player (skater + LocalController) ──────────────────────────────────
 # Returns { "skater": Skater, "controller": LocalController }. Caller is

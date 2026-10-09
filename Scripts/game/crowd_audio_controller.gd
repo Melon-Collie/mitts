@@ -13,9 +13,9 @@ extends Node
 
 @export var ambient_stream_path: String = "res://Sounds/crowd_ambient.wav"
 @export var cheer_stream_path: String = "res://Sounds/crowd_cheer.wav"
-@export var ambient_volume_db: float = -22.0
-@export var cheer_volume_db: float = -7.0
-@export var duck_volume_db: float = -10.0
+@export var ambient_volume_db: float = -26.2
+@export var cheer_volume_db: float = -2.5
+@export var duck_volume_db: float = -14.2
 @export var duck_recover_time: float = 4.0
 # Stoppage "settle": a brief murmur swell above ambient when the whistle blows,
 # easing back to baseline — so a whistle doesn't drop into dead air. Smaller and
@@ -52,13 +52,7 @@ func _ready() -> void:
 	add_child(_ambient_player)
 
 	if ResourceLoader.exists(ambient_stream_path):
-		var stream: AudioStream = load(ambient_stream_path)
-		# Defensive: if the .ogg wasn't marked looping in the import dock,
-		# nudge it here so the ambient doesn't go silent after one play.
-		if stream is AudioStreamOggVorbis:
-			(stream as AudioStreamOggVorbis).loop = true
-		_ambient_player.stream = stream
-		_ambient_player.finished.connect(_on_ambient_finished)
+		_ambient_player.stream = load(ambient_stream_path)
 		_ambient_player.play()
 
 	if ResourceLoader.exists(cheer_stream_path):
@@ -79,13 +73,6 @@ func _ready() -> void:
 		for sig: String in ["icing_called", "offside_called", "puck_out_of_play"]:
 			if gm.has_signal(sig):
 				gm.connect(sig, settle)
-
-
-# Safety net: a properly-looping AudioStream won't emit `finished`, but this
-# catches the case where the import-dock loop flag wasn't set on the file.
-func _on_ambient_finished() -> void:
-	if _ambient_player != null and _ambient_player.stream != null:
-		_ambient_player.play()
 
 
 func _on_goal_scored(_scoring_team: Variant, _scorer: String, _a1: String, _a2: String) -> void:

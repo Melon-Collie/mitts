@@ -62,6 +62,18 @@ func is_down() -> bool:
 			or current == State.COILING \
 			or current == State.SLIDING
 
+# Pads flat on the ice: both in every full-down stance (the post seals and the
+# cover included), one in a half butterfly. RECOVERING counts as up — the legs
+# are already rising off the ice.
+static func pads_on_ice(state: State) -> int:
+	match state:
+		State.BUTTERFLY, State.SLIDING, State.COILING, State.RVH_LEFT, State.RVH_RIGHT, \
+				State.VH_LEFT, State.VH_RIGHT, State.COVERING, State.CATCHING_DOWN:
+			return 2
+		State.HALF_BUTTERFLY_LEFT, State.HALF_BUTTERFLY_RIGHT:
+			return 1
+	return 0
+
 # Upright = goalie can drop to butterfly / engage RVH from this state. Both
 # STANDING and READY qualify; RECOVERING does not (it's the vulnerable
 # stand-up window).

@@ -52,7 +52,7 @@ static func dispatch_with_records(event: Dictionary, records: Dictionary) -> voi
 
 	match kind:
 		"puck_boards":
-			SoundManager.play_world(SoundManager.Sound.PUCK_BOARDS, pos, volume_db, 0.05)
+			SoundManager.play_world(SoundManager.board_contact_sound(pos), pos, volume_db, 0.05)
 		"puck_goal_body":
 			SoundManager.play_world(SoundManager.Sound.PUCK_GOAL_BODY, pos, volume_db, 0.06)
 		"puck_deflection":
@@ -76,7 +76,7 @@ static func dispatch_with_records(event: Dictionary, records: Dictionary) -> voi
 		"shot":
 			var is_slapper: bool = bool(event.get("is_slapper", false))
 			var sound: SoundManager.Sound = SoundManager.Sound.SHOT_SLAPPER if is_slapper else SoundManager.Sound.SHOT_WRISTER
-			SoundManager.play_world(sound, pos, 0.0, 0.04)
+			SoundManager.play_world(sound, pos, SoundManager.shot_volume_db(speed), 0.04)
 		"body_check":
 			# "speed" carries the recorded impact_force; scale sound + burst by it
 			# the same way live play does (SkaterVFX.check_*). The thud is gated to
@@ -113,7 +113,7 @@ static func dispatch_with_records(event: Dictionary, records: Dictionary) -> voi
 			# case never fires from GoalReplayDriver. File replay does have
 			# goal entries in the .mreplay event stream (GameManager.
 			# _on_goal_for_replay_event), so they wake the horn here.
-			SoundManager.play_crowd(SoundManager.Sound.GOAL_HORN, -6.0)
+			SoundManager.play_crowd(SoundManager.Sound.GOAL_HORN)
 		_:
 			pass  # unknown kind — silently skip so future schema additions don't crash old viewers
 
