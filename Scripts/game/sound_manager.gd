@@ -42,6 +42,7 @@ enum Sound {
 	PERIOD_BUZZER,
 	BODY_CHECK,
 	FACEOFF_WHISTLE,
+	PUCK_GLASS,
 }
 
 const _SOUND_PATHS: Dictionary = {
@@ -57,12 +58,13 @@ const _SOUND_PATHS: Dictionary = {
 	Sound.PUCK_POST:        "res://Sounds/puck_post.wav",
 	Sound.PUCK_GOAL_BODY:   "res://Sounds/puck_goal_body.wav",
 	Sound.PUCK_DEFLECTION:  "res://Sounds/puck_deflection.wav",
-	Sound.PUCK_BODY_BLOCK:  "res://Sounds/puck_body_block.ogg",
+	Sound.PUCK_BODY_BLOCK:  "res://Sounds/puck_goalie.wav",
 	Sound.PUCK_STRIP:       "res://Sounds/puck_strip.wav",
 	Sound.STICK_LIFT:       "res://Sounds/stick_lift.wav",
 	Sound.PERIOD_BUZZER:    "res://Sounds/period_buzzer.wav",
 	Sound.BODY_CHECK:       "res://Sounds/body_check.ogg",
 	Sound.FACEOFF_WHISTLE:  "res://Sounds/faceoff_whistle.wav",
+	Sound.PUCK_GLASS:       "res://Sounds/puck_glass.wav",
 }
 
 # Every file above is mastered to one reference loudness
@@ -77,6 +79,7 @@ const _MIX_DB: Dictionary = {
 	Sound.SHOT_SLAPPER:     2.0,
 	Sound.SHOT_WRISTER:     2.0,
 	Sound.PUCK_BOARDS:      0.0,
+	Sound.PUCK_GLASS:       0.0,
 	Sound.PUCK_GOALIE:      0.0,
 	Sound.PUCK_POST:        0.0,
 	Sound.PUCK_GOAL_BODY:   0.0,
@@ -102,6 +105,14 @@ const _UNDER_REFERENCE_DB: Dictionary = {
 	Sound.PUCK_GOALIE:     4.1,
 	Sound.PUCK_STRIP:      2.8,
 	Sound.PUCK_GOAL_BODY:  1.3,
+	Sound.PUCK_BODY_BLOCK: 4.1,
+	Sound.PUCK_GLASS:      7.1,
+}
+
+# A cue reusing another's recording, pitched to read as a different target:
+# a body is a softer, heavier stop than a goalie pad.
+const _BASE_PITCH: Dictionary = {
+	Sound.PUCK_BODY_BLOCK: 0.85,
 }
 
 const _UI_POOL_SIZE: int = 4
@@ -222,7 +233,7 @@ func play_ui(sound: Sound, volume_db: float = 0.0, pitch_variance: float = 0.0) 
 		if not p.playing:
 			p.stream = stream
 			p.volume_db = volume_db + level_db(sound)
-			p.pitch_scale = randf_range(1.0 - pitch_variance, 1.0 + pitch_variance) if pitch_variance > 0.0 else 1.0
+			p.pitch_scale = _BASE_PITCH.get(sound, 1.0) * (randf_range(1.0 - pitch_variance, 1.0 + pitch_variance) if pitch_variance > 0.0 else 1.0)
 			p.play()
 			return
 
@@ -235,7 +246,7 @@ func play_crowd(sound: Sound, volume_db: float = 0.0, pitch_variance: float = 0.
 		if not p.playing:
 			p.stream = stream
 			p.volume_db = volume_db + level_db(sound)
-			p.pitch_scale = randf_range(1.0 - pitch_variance, 1.0 + pitch_variance) if pitch_variance > 0.0 else 1.0
+			p.pitch_scale = _BASE_PITCH.get(sound, 1.0) * (randf_range(1.0 - pitch_variance, 1.0 + pitch_variance) if pitch_variance > 0.0 else 1.0)
 			p.play()
 			return
 
@@ -259,7 +270,7 @@ func play_world(sound: Sound, position: Vector3, volume_db: float = 0.0, pitch_v
 			voice = p
 	voice.stream = stream
 	voice.volume_db = volume_db + level_db(sound)
-	voice.pitch_scale = randf_range(1.0 - pitch_variance, 1.0 + pitch_variance) * pitch_scale if pitch_variance > 0.0 else pitch_scale
+	voice.pitch_scale = _BASE_PITCH.get(sound, 1.0) * (randf_range(1.0 - pitch_variance, 1.0 + pitch_variance) * pitch_scale if pitch_variance > 0.0 else pitch_scale)
 	voice.global_position = position
 	voice.play()
 
@@ -268,6 +279,11 @@ func play_world(sound: Sound, position: Vector3, volume_db: float = 0.0, pitch_v
 # make-up for a file mastered under the reference.
 static func level_db(sound: Sound) -> float:
 	return _MIX_DB[sound] + _UNDER_REFERENCE_DB.get(sound, 0.0)
+
+
+# Above the dasher's cap rail the puck is striking glass, not boards.
+static func board_contact_sound(contact: Vector3) -> Sound:
+	return Sound.PUCK_GLASS if contact.y > GameRules.BOARD_TOP_HEIGHT else Sound.PUCK_BOARDS
 
 
 # A release's amplitude scales with the puck's launch speed (m/s), so its level

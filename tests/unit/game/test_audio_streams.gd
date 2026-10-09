@@ -39,6 +39,18 @@ func test_shot_level_is_bounded() -> void:
 	assert_eq(SoundManager.shot_volume_db(60.0), 0.0, "one-timer bonus power never boosts past full")
 
 
+func test_cues_sharing_a_file_share_its_make_up_gain() -> void:
+	# The shortfall is a property of the file, so two cues playing it need the
+	# same entry or one of them plays off its mix level.
+	var paths: Dictionary = SoundManager._SOUND_PATHS
+	var under: Dictionary = SoundManager._UNDER_REFERENCE_DB
+	for a: int in paths:
+		for b: int in paths:
+			if a < b and paths[a] == paths[b]:
+				assert_eq(under.get(a, 0.0), under.get(b, 0.0), "%s and %s share %s" % [
+						SoundManager.Sound.keys()[a], SoundManager.Sound.keys()[b], paths[a]])
+
+
 func test_every_cue_has_a_mix_level() -> void:
 	for sound: int in SoundManager.Sound.values():
 		assert_true(SoundManager._MIX_DB.has(sound),
@@ -52,7 +64,7 @@ func test_the_mix_keeps_its_order() -> void:
 	var S := SoundManager.Sound
 	assert_gt(mix[S.GOAL_HORN], mix[S.PERIOD_BUZZER], "the horn is the biggest moment")
 	assert_gt(mix[S.PERIOD_BUZZER], mix[S.FACEOFF_WHISTLE], "the whistle sits under the buzzer")
-	var contacts: Array = [S.PUCK_BOARDS, S.PUCK_GOALIE, S.PUCK_POST, S.PUCK_GOAL_BODY,
+	var contacts: Array = [S.PUCK_BOARDS, S.PUCK_GLASS, S.PUCK_GOALIE, S.PUCK_POST, S.PUCK_GOAL_BODY,
 			S.PUCK_DEFLECTION, S.PUCK_BODY_BLOCK, S.PUCK_STRIP, S.STICK_LIFT, S.BODY_CHECK]
 	for contact: int in contacts:
 		for shot: int in [S.SHOT_SLAPPER, S.SHOT_WRISTER]:
@@ -63,3 +75,10 @@ func test_the_mix_keeps_its_order() -> void:
 		if sound != S.UI_HOVER and sound != S.UI_CLICK:
 			assert_gt(mix[sound], mix[S.UI_CLICK], "menus sit under everything in play")
 	assert_gt(mix[S.UI_CLICK], mix[S.UI_HOVER], "hover under click")
+
+
+func test_a_board_contact_above_the_cap_rail_is_glass() -> void:
+	var top: float = GameRules.BOARD_TOP_HEIGHT
+	assert_eq(SoundManager.board_contact_sound(Vector3(29.0, 0.02, 3.0)), SoundManager.Sound.PUCK_BOARDS, "rimmed along the ice")
+	assert_eq(SoundManager.board_contact_sound(Vector3(29.0, top - 0.05, 3.0)), SoundManager.Sound.PUCK_BOARDS, "just under the rail")
+	assert_eq(SoundManager.board_contact_sound(Vector3(29.0, top + 0.05, 3.0)), SoundManager.Sound.PUCK_GLASS, "just over the rail")

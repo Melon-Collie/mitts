@@ -1665,7 +1665,7 @@ func _wire_sound_signals() -> void:
 	if NetworkManager.is_host:
 		puck.puck_hit_boards.connect(func() -> void:
 			var spd: float = puck.linear_velocity.length()
-			SoundManager.play_world(SoundManager.Sound.PUCK_BOARDS, puck.get_puck_position(), _puck_speed_volume(spd), 0.05)
+			SoundManager.play_world(SoundManager.board_contact_sound(puck.get_puck_position()), puck.get_puck_position(), _puck_speed_volume(spd), 0.05)
 			puck.fire_board_impact_vfx(spd)
 			NetworkManager.send_board_hit_to_all(puck.get_puck_position())
 			_record_replay_audio_event("puck_boards", puck.get_puck_position(), spd))
@@ -1715,7 +1715,7 @@ func _wire_sound_signals() -> void:
 				_local_net_cue_at = NetworkManager.local_time())
 		puck_controller.predicted_board_contact.connect(
 			func(pos: Vector3, spd: float) -> void:
-				SoundManager.play_world(SoundManager.Sound.PUCK_BOARDS, pos, _puck_speed_volume(spd), 0.05)
+				SoundManager.play_world(SoundManager.board_contact_sound(pos), pos, _puck_speed_volume(spd), 0.05)
 				if puck != null:
 					puck.fire_board_impact_vfx(spd)
 				_local_boards_cue_at = NetworkManager.local_time())
@@ -1756,7 +1756,7 @@ func _wire_sound_signals() -> void:
 			if _cue_is_echo(_local_boards_cue_at):
 				return
 			var spd: float = puck.linear_velocity.length() if puck != null else 0.0
-			SoundManager.play_world(SoundManager.Sound.PUCK_BOARDS, pos, _puck_speed_volume(spd), 0.05)
+			SoundManager.play_world(SoundManager.board_contact_sound(pos), pos, _puck_speed_volume(spd), 0.05)
 			if puck != null:
 				puck.fire_board_impact_vfx(spd))
 	NetworkManager.goal_body_hit_received.connect(

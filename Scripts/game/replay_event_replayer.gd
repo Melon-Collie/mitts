@@ -52,7 +52,7 @@ static func dispatch_with_records(event: Dictionary, records: Dictionary) -> voi
 
 	match kind:
 		"puck_boards":
-			SoundManager.play_world(SoundManager.Sound.PUCK_BOARDS, pos, volume_db, 0.05)
+			SoundManager.play_world(SoundManager.board_contact_sound(pos), pos, volume_db, 0.05)
 		"puck_goal_body":
 			SoundManager.play_world(SoundManager.Sound.PUCK_GOAL_BODY, pos, volume_db, 0.06)
 		"puck_deflection":
