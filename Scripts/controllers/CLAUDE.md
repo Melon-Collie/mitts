@@ -491,7 +491,10 @@ Things the split alone would get wrong, handled where noted:
   the travel has come round to a held key the stick lands on alternate sides
   of it tick to tick, and a pose keyed to that swapped its legs every frame.
   The carve and the tight turn ease signed like the crossover, so a reversal
-  slides the legs through centre. `test_gait_turn_continuity.gd` holds it.
+  slides the legs through centre. Their lead is along travel, so the legs
+  carry it by travel's share of the hips' forward axis, never its sign: with
+  the cursor ahead and the momentum swung behind, travel crosses the hips and
+  a sign swaps the skates in a frame. `test_gait_turn_continuity.gd` holds both.
 - **The cadence is the stroking states' own.** The stride phase advances at the
   stroking states' rate averaged over them alone, so a crossover sharing the
   mix with a carve fades in amplitude, never in tempo.

@@ -285,7 +285,10 @@ choreography from coaching material, and are to be judged on the strips.
   teleporting in stance turns). `turning` is signed, the side comes from it,
   and the carve and tight turn ease signed like the crossover, so a reversal
   slides through centre; the worst per-frame leg step through the keyboard
-  reversals is now the standstill start's 0.09 rad.
+  reversals is now the standstill start's 0.09 rad. The lead is carried by
+  travel's share of the hips' forward axis rather than its sign, which swapped
+  the skates once wherever travel crossed the hips (stance, cursor ahead,
+  W → W+A → A → A+S).
 - **The carve's legs** are joint-space until Phase 4: inside skate leading
   (`carve_lead_deg`), the inside knee light, the stance floored at
   `carve_stance`, counted as an edge state for the ice marks and the plant.

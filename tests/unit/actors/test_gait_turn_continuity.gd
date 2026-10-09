@@ -4,12 +4,17 @@ extends GutTest
 # and in the stance. Once the travel has come round to a held key the stick sits
 # on alternate sides of it from tick to tick; a turning pose keyed to that side
 # swapped its leading skate every frame (0.41–0.44 rad steps on a hip, measured),
-# where the stroke itself never moves a joint more than ~0.1 rad a frame.
+# where the stroke itself never moves a joint more than ~0.1 rad a frame. The
+# same swap happened once wherever travel crossed the hips' lateral axis, which
+# a joint bound is too coarse for, so that case is held on the skate's path.
 
 const DT: float = 1.0 / 120.0
 const LegBone = SkaterMeshBuilder.LegBone
 const PIVOTS: Array[int] = [LegBone.LEG_L, LegBone.SHIN_L, LegBone.LEG_R, LegBone.SHIN_R]
 const MAX_STEP_RAD: float = 0.2
+# Largest change in a skate's per-frame travel (body-relative) between two
+# frames. The swap measured 0.044 m; the stroke and every key press stay ≤ 0.031.
+const MAX_SKATE_JERK_M: float = 0.025
 const UP := Vector2(0.0, -1.0)
 const KEY_D := Vector2(1.0, 0.0)
 const KEY_A := Vector2(-1.0, 0.0)
@@ -122,3 +127,59 @@ func test_the_turn_inside_is_the_curve() -> void:
 	for _t: int in 60:
 		_step(input, KEY_A, true)
 	assert_eq(_controller._skating.locomotion_mix().side, -1.0, "turning left")
+
+
+# The user's repro: the cursor held straight ahead, the stance held, W → W+A → A
+# → A+S. The hips turn toward the sideways travel; as A+S takes the momentum
+# behind, they square back up and travel crosses their lateral axis.
+func test_momentum_swinging_behind_the_hips_never_jumps_a_skate() -> void:
+	var input := InputState.new()
+	var segments: Array = [[120, UP], [60, KEY_WA], [60, KEY_A], [90, Vector2(-0.70710678, 0.70710678)]]
+	var last: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+	var moved: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+	var worst: float = 0.0
+	var tick: int = 0
+	for seg: Array in segments:
+		for _t: int in int(seg[0]):
+			input.move_vector = seg[1]
+			input.stance_held = true
+			input.mouse_world_pos = _skater.global_position + Vector3(UP.x, 0.0, UP.y) * 6.0
+			input.mouse_world_pos.y = 0.0
+			input.delta = DT
+			_controller._process_input(input, DT)
+			_skater._physics_process(DT)
+			_skater._process(DT)
+			tick += 1
+			for side: int in 2:
+				var p: Vector3 = _skate_offset(side)
+				var d: Vector3 = p - last[side]
+				if tick > 3:
+					worst = maxf(worst, (d - moved[side]).length())
+				moved[side] = d
+				last[side] = p
+	assert_lt(worst, MAX_SKATE_JERK_M, "worst skate jerk %.3f m/frame" % worst)
+
+
+func _skate_offset(side: int) -> Vector3:
+	var sk: Skeleton3D = _skater._legs._skeleton
+	var bone: int = LegBone.SKATE_L if side == 0 else LegBone.SKATE_R
+	var t: Transform3D = sk.global_transform * sk.get_bone_global_pose(SkaterLegRig._OFFSET + bone)
+	return t.origin - _skater.global_position
+
+
+# The turning states lead along travel, so the lead is continuous in the hips'
+# forward speed: just ahead of the lateral axis and just behind it pose alike.
+func test_the_turning_lead_is_continuous_across_the_hips() -> void:
+	var loco: SkaterLocomotion = _controller._skating._locomotion
+	loco.mix.clear()
+	loco.mix.tight = 0.5
+	loco._tight_signed = -0.5
+	loco.mix.carve = 0.4
+	loco._carve_signed = 0.4
+	loco._ground_speed = 5.0
+	loco.strokes(DT, 0.05)
+	var ahead := Vector4(loco.l_pitch, loco.r_pitch, loco.l_tuck, loco.r_tuck)
+	loco.strokes(DT, -0.05)
+	var behind := Vector4(loco.l_pitch, loco.r_pitch, loco.l_tuck, loco.r_tuck)
+	for i: int in 4:
+		assert_almost_eq(ahead[i], behind[i], 0.01, "channel %d" % i)

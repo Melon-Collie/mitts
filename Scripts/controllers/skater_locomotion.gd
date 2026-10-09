@@ -195,11 +195,16 @@ func sense(delta: float, planted: bool, hold: float) -> void:
 
 
 # The stroke each state skates, blended by the mix. `fwd` is the hip-frame
-# forward velocity: the tight turn's inside foot is the side of the turn as the
-# legs face it.
+# forward velocity.
 func strokes(delta: float, fwd: float) -> void:
 	var c: SkaterController = _controller
 	_clear_strokes()
+	# The turning states' inside skate leads along TRAVEL; the legs can only
+	# lead along the hips, so the lead is travel's share of the hips' forward
+	# axis (the cosine, signed). Skated backward to the hips it changes legs, and
+	# with travel straight across them it is zero. Never reduce it to a sign:
+	# that swaps the leading skate in one frame wherever the hips cross travel.
+	var along: float = clampf(fwd / maxf(_ground_speed, 0.1), -1.0, 1.0)
 	var skew: float = clampf(c.stride_skew + c.glide_hold_skew * cruise_gear, 0.0, 0.95)
 	var s: float = sin(stride_phase - skew * sin(stride_phase))
 	var phase_opp: float = stride_phase + PI
@@ -292,7 +297,7 @@ func strokes(delta: float, fwd: float) -> void:
 			l_tuck += inside_tuck
 
 	# Tight turn: both blades dug in, the inside skate leading.
-	var tight_in: float = _tight_signed * signf(fwd)
+	var tight_in: float = _tight_signed * along
 	if absf(tight_in) > 0.001:
 		var split: float = deg_to_rad(c.tight_turn_split_deg) * tight_in
 		r_pitch += split
@@ -301,7 +306,7 @@ func strokes(delta: float, fwd: float) -> void:
 	# Carve: both blades on the edges the lean puts them on, the inside skate
 	# leading, the weight on the outside one — the inside knee tucks light. The
 	# inside is the signed weight's sign, so a reversal slides through centre.
-	var carve_in: float = _carve_signed * signf(fwd)
+	var carve_in: float = _carve_signed * along
 	if absf(carve_in) > 0.001:
 		var lead: float = deg_to_rad(c.carve_lead_deg) * carve_in
 		r_pitch += lead
