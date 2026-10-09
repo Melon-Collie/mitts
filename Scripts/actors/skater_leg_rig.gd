@@ -18,6 +18,13 @@ extends RefCounted
 # of nothing else.
 
 const _OFFSET: int = SkaterBodySkeleton.LEG_BONE_OFFSET
+# Ice height in the skater's own frame: the origin rides FACEOFF_SPAWN_HEIGHT
+# above it (Y-axis locked), so this holds wherever the skater stands — a preview
+# placed off the rink included — and the height attribute's scaling about the
+# ice plane keeps it a fixed point.
+const _ICE_IN_BODY := -GameRules.FACEOFF_SPAWN_HEIGHT
+const _RUNNER_TOE := Vector3(0.0, SkaterMeshBuilder.RUNNER_TOE_Y, SkaterMeshBuilder.BLADE_ICE_Z)
+const _RUNNER_HEEL := Vector3(0.0, SkaterMeshBuilder.RUNNER_HEEL_Y, SkaterMeshBuilder.BLADE_ICE_Z)
 
 var _skater: Skater
 var _skeleton: Skeleton3D = null
@@ -57,6 +64,10 @@ var _gait_knee_r: float = 0.0
 # intensity by it, so a loaded edge bites visibly harder than a glide.
 var _edge_load_l: float = 0.0
 var _edge_load_r: float = 0.0
+
+# Bumped on every leg bone write, so a reader that solves against the legs
+# (the spine's contact seat) can tell its cached answer went stale.
+var pose_version: int = 0
 
 
 func setup(skater: Skater) -> void:
@@ -115,6 +126,7 @@ func build(skeleton: Skeleton3D) -> void:
 
 
 func _repose_bone(bone: int) -> void:
+	pose_version += 1
 	_skeleton.set_bone_pose(_OFFSET + bone, Transform3D(
 			_basis[bone].scaled_local(_scale[bone]), _pos[bone]))
 
@@ -213,6 +225,7 @@ func _rest_on_ice(leg: int, foot: int, skate: int) -> void:
 		var axis: Vector3 = (to_body.basis * _skeleton.get_bone_global_pose(
 				_skeleton.get_bone_parent(_OFFSET + leg)).basis).inverse() * axis_body
 		var pose: Transform3D = _skeleton.get_bone_pose(_OFFSET + leg)
+		pose_version += 1
 		_skeleton.set_bone_pose(_OFFSET + leg, Transform3D(
 				Basis(axis.normalized(), phi) * pose.basis, pose.origin))
 
@@ -234,6 +247,7 @@ func _lowest_corner(to_body: Transform3D, foot: int, skate: int) -> Vector3:
 
 
 func _pose_pivot(bone: int, euler: Vector3) -> void:
+	pose_version += 1
 	_skeleton.set_bone_pose(_OFFSET + bone, Transform3D(Basis.from_euler(euler), _pos[bone]))
 
 
@@ -279,8 +293,38 @@ func _pose_foot(bone: int, leg: Vector3, knee: float, shin_base: Vector3,
 			* Basis.from_euler(Vector3(0.0, shin_base.y, shin_base.z))
 	var give_back: Basis = (posed.inverse() * level).orthonormalized()
 	var basis: Basis = Basis.IDENTITY.slerp(give_back, weight) * _basis[bone]
+	pose_version += 1
 	_skeleton.set_bone_pose(_OFFSET + bone,
 			Transform3D(basis.scaled_local(_scale[bone]), _pos[bone]))
+
+
+# ── Ice contact ──────────────────────────────────────────────────────────────
+
+# The skeleton-space translation that seats the lower of the two runners on the
+# ice, for the HIPS bone at `hips` (its parent is the skeleton root). The gait
+# poses joints, not feet, and the crouch it pays as a drop covers the stance
+# alone — the push's extension, the splay, the tucks and the lean each move the
+# blade too — so the body is placed from where the blades actually are. The
+# lower blade is the one the weight is on; its runner edge is a segment, so its
+# lowest point is an end.
+#
+# Reads only local bone poses, so it never forces the skeleton's global pose
+# update mid-frame.
+func ice_contact_offset(hips: Transform3D) -> Vector3:
+	var to_body: Transform3D = _skater.mesh_root.transform * _skeleton.transform
+	var hips_body: Transform3D = to_body * hips
+	var low: float = minf(
+			_runner_low(hips_body, SkaterMeshBuilder.LegBone.LEG_L,
+					SkaterMeshBuilder.LegBone.SHIN_L, SkaterMeshBuilder.LegBone.FOOT_L),
+			_runner_low(hips_body, SkaterMeshBuilder.LegBone.LEG_R,
+					SkaterMeshBuilder.LegBone.SHIN_R, SkaterMeshBuilder.LegBone.FOOT_R))
+	return to_body.basis.inverse() * Vector3(0.0, _ICE_IN_BODY - low, 0.0)
+
+
+func _runner_low(hips_body: Transform3D, leg: int, shin: int, foot: int) -> float:
+	var boot: Transform3D = hips_body * _skeleton.get_bone_pose(_OFFSET + leg) \
+			* _skeleton.get_bone_pose(_OFFSET + shin) * _skeleton.get_bone_pose(_OFFSET + foot)
+	return minf((boot * _RUNNER_TOE).y, (boot * _RUNNER_HEEL).y)
 
 
 # ── Ice VFX seams ────────────────────────────────────────────────────────────

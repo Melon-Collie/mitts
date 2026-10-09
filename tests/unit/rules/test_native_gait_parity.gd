@@ -21,7 +21,7 @@ class CaptureSkater extends Skater:
 	var cap := PackedFloat64Array()
 
 	func _init() -> void:
-		cap.resize(17)
+		cap.resize(18)
 
 	func set_leg_swing(left_pitch: float, left_roll: float, left_knee: float,
 			right_pitch: float, right_roll: float, right_knee: float,
@@ -43,9 +43,10 @@ class CaptureSkater extends Skater:
 		cap[10] = left
 		cap[11] = right
 
-	func set_skating_crouch_drop(drop: float, frame_drop: float = 0.0) -> void:
+	func set_skating_crouch_drop(drop: float, frame_drop: float = 0.0, plant: float = 1.0) -> void:
 		cap[12] = drop
 		cap[16] = frame_drop
+		cap[17] = plant
 
 	func set_trunk_texture(pitch_add: float, roll_add: float) -> void:
 		cap[13] = pitch_add
@@ -70,7 +71,7 @@ class StubGameState extends Node:
 
 const _CAP_NAMES: Array[String] = ["l_pitch", "l_roll", "l_knee", "r_pitch", "r_roll",
 		"r_knee", "l_yaw", "r_yaw", "flat_l", "flat_r", "edge_l", "edge_r", "crouch",
-		"trunk_pitch", "trunk_roll", "address", "frame_drop"]
+		"trunk_pitch", "trunk_roll", "address", "frame_drop", "plant"]
 
 var _rng := RandomNumberGenerator.new()
 var _skater: CaptureSkater = null

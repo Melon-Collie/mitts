@@ -285,15 +285,19 @@ func test_the_centre_takes_a_draw_grip_and_gives_it_back() -> void:
 	assert_gt(_hand_spread(centre), _hand_spread(winger) + 0.1,
 			"the centre's hands must come apart on the shaft for the draw")
 
-	# The drop releases the address, and the hands ease back with it.
+	# The drop releases the address, and the hands ease back with it — to the
+	# grip a winger released from the same countdown holds, since the carry grip
+	# slides with where the visible shoulder can reach (BottomHandIK
+	# .reachable_grip) and so is only comparable pose for pose.
 	_state.faceoff_prep = false
 	var input := InputState.new()
 	input.delta = DT
 	input.mouse_world_pos = Vector3(0.0, 0.0, -1.0)
 	for _i: int in SETTLE_TICKS:
-		centre.skater.velocity = Vector3.ZERO
-		centre.apply_blade_aim_only(input, DT)
-		centre.skater._process(DT)
+		for c: SkaterController in [winger, centre]:
+			c.skater.velocity = Vector3.ZERO
+			c.apply_blade_aim_only(input, DT)
+			c.skater._process(DT)
 	assert_almost_eq(_hand_spread(centre), _hand_spread(winger), 0.02,
 			"and go back to a carry grip once the puck is live")
 
@@ -319,23 +323,40 @@ func test_the_centre_sets_a_wider_base_than_the_players_behind_him() -> void:
 			"the centre's feet must set wide, not stack under a deep squat")
 
 
-# Against a skater standing on the same spot, because both hold LEVEL boots and
-# a level boot's blade hangs a fixed depth below the pivot measured here — so
-# equal pivot heights are equal blade heights. (A skate left to tilt with its
-# shin, which is every other pose in the game, is not comparable this way.)
+# Measured on the runners themselves, against the ice. The body is seated on
+# the lower blade (SkaterLegRig.ice_contact_offset), so that one is on the ice
+# by construction; what this holds is the other. The fore/aft stagger lifts one
+# boot against the other by a few centimetres, and a seat that moves the whole
+# body cannot answer two legs moving opposite ways — that residual is the
+# tolerance. The splay and the fold move both legs together, so anything past it
+# is one of those two left unpaid.
+const _STAGGER_RESIDUAL_M: float = 0.03
+
+
 func test_the_wide_base_keeps_both_skates_on_the_ice() -> void:
-	var standing: SkaterController = _controller(true)
 	var centre: SkaterController = _controller(true)
 	_run_prep(centre, Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 4.0))
-	# The tolerance is the fore/aft stagger's own residual: it swings the boot
-	# pivot down on the trailing leg and up on the leading one by about a
-	# centimetre each, and a single body drop cannot answer two legs moving
-	# opposite ways. The splay and the fold, which move both together, must be
-	# paid exactly — so anything past this is one of those two, not the stagger.
-	for left: bool in [true, false]:
-		assert_almost_eq(centre.skater.blade_mark_position(left).y,
-				standing.skater.blade_mark_position(left).y, 0.02,
-				"the address must not sink its skates through the ice, or float them")
+	var left: float = _runner_height(centre, true)
+	var right: float = _runner_height(centre, false)
+	assert_almost_eq(minf(left, right), 0.0, 0.006,
+			"the address stands on the ice, not in it or above it")
+	assert_lt(maxf(left, right), _STAGGER_RESIDUAL_M,
+			"and neither skate floats off it past the stagger")
+
+
+# Lowest runner vertex of one skate, metres above the ice.
+func _runner_height(c: SkaterController, left: bool) -> float:
+	var rig: Skeleton3D = c.skater.mesh_root.get_node("BodyRig") as Skeleton3D
+	var bone: int = SkaterBodySkeleton.LEG_BONE_OFFSET \
+			+ (SkaterMeshBuilder.LegBone.FOOT_L if left else SkaterMeshBuilder.LegBone.FOOT_R)
+	var xf: Transform3D = c.skater.global_transform * c.skater.mesh_root.transform \
+			* rig.transform * rig.get_bone_global_pose(bone)
+	var runner := SkaterMeshBuilder.shared_boot_assembly().surface_get_arrays(
+			SkaterMeshBuilder.BOOT_SURF_RUNNER)[Mesh.ARRAY_VERTEX] as PackedVector3Array
+	var lowest: float = INF
+	for v: Vector3 in runner:
+		lowest = minf(lowest, (xf * v).y)
+	return lowest
 
 
 # The other half of standing a body up over splayed, deeply folded legs: the

@@ -652,6 +652,8 @@ var _default_lower_body_y: float = 0.0
 # positions (_place_upper_frame of UpperBody's alone, off its cached parts).
 var _skating_crouch_drop: float = 0.0
 var _frame_drop: float = 0.0
+# Share of the blade contact seat the visible hips take (set_skating_crouch_drop).
+var _plant: float = 1.0
 # The balance lean, world XZ radians, stepped in the physics tick
 # (SkaterController._advance_balance) and replicated; and the translation it
 # gives each gameplay frame (_update_lean_shift).
@@ -1616,13 +1618,6 @@ func set_faceoff_address(blend: float) -> void:
 	_faceoff_address = blend
 
 
-# Sets the gait's crouch (metres): `drop` lowers the visible body, so the flexed
-# legs keep the skates planted, and `frame_drop` of it also lowers the gameplay
-# frames. The gait computes the crouch at render rate, so the skating crouch and
-# its stride bob stay out of the frames the hands and blade hang from — gameplay
-# geometry must not depend on frame rate. Only the held poses (block, faceoff,
-# knockdown) hand the frame their drop, because their hands are posed in a
-# frame that has gone down with the body.
 # Whether the camera can see this skater this frame (SkaterCameraCull). The rig's
 # work is mesh, so a skater out of frame skips it — but the gait still computes,
 # because a held pose's crouch moves the gameplay frame (set_skating_crouch_drop).
@@ -1633,10 +1628,21 @@ func on_camera() -> bool:
 	return _on_camera
 
 
-func set_skating_crouch_drop(drop: float, frame_drop: float = 0.0) -> void:
-	if is_equal_approx(_skating_crouch_drop, drop) and is_equal_approx(_frame_drop, frame_drop):
+# Sets the gait's crouch (metres): `drop` lowers the visible body, and
+# `frame_drop` of it also lowers the gameplay frames. The gait computes the
+# crouch at render rate, so the skating crouch and its stride bob stay out of the
+# frames the hands and blade hang from — gameplay geometry must not depend on
+# frame rate. Only the held poses (block, faceoff, knockdown) hand the frame
+# their drop, because their hands are posed in a frame that has gone down with
+# the body. `plant` is how much the visible hips are then re-seated so the lower
+# blade stands on the ice (SkaterLegRig.ice_contact_offset): all of it on
+# skates, none of it for a body lying on the ice, which the sprawl seats.
+func set_skating_crouch_drop(drop: float, frame_drop: float = 0.0, plant: float = 1.0) -> void:
+	if is_equal_approx(_skating_crouch_drop, drop) and is_equal_approx(_frame_drop, frame_drop) \
+			and is_equal_approx(_plant, plant):
 		return
 	_skating_crouch_drop = drop
+	_plant = plant
 	# The stride's bob lowers the body alone; only a held pose's share moves the
 	# frames, so the every-frame case re-seats the skeleton and nothing else.
 	if not is_equal_approx(_frame_drop, frame_drop):
@@ -1646,9 +1652,22 @@ func set_skating_crouch_drop(drop: float, frame_drop: float = 0.0) -> void:
 		_spine.update()
 
 
-# How far the visible body sits below the gameplay frames (SkaterSpineRig).
+# How far the crouch puts the visible body below the gameplay frames, before
+# the contact seat (SkaterSpineRig).
 func body_drop_below_frame() -> float:
 	return _skating_crouch_drop - _frame_drop
+
+
+func ground_plant() -> float:
+	return _plant
+
+
+func leg_pose_version() -> int:
+	return _legs.pose_version
+
+
+func ice_contact_offset(hips: Transform3D) -> Vector3:
+	return _legs.ice_contact_offset(hips)
 
 
 # Skeleton height offset (m), set by SkaterAppearanceCoordinator.apply:

@@ -12,7 +12,7 @@ delegates to.
 
 | holder | class | what it owns |
 |---|---|---|
-| `_legs` | `SkaterLegRig` | the leg bones, the gait written onto them, the ankles' give-back against it, and the ice VFX's two reads (skate mark position, edge load) |
+| `_legs` | `SkaterLegRig` | the leg bones, the gait written onto them, the ankles' give-back against it, where that puts the blades against the ice (the contact seat), and the ice VFX's two reads (skate mark position, edge load) |
 | `_arms` | `SkaterArmRig` | the upper bones: torso, pelvis, helmet, deltoid caps, both arms by IK, the trunk texture, the face gear |
 | `_spine` | `SkaterSpineRig` | the four bones that join them (hips, waist, spine, neck) and the balance lean |
 | `_stick` | `SkaterStickRig` | the shaft pose, the knob, and the cosmetic flex/whip |
@@ -134,7 +134,14 @@ Six rules the rigs sit inside, all easy to break from in here:
 - **The crouch is the body's, not the frame's.** The visible body sits
   `Skater.body_drop_below_frame()` under `LowerBody`, applied at the HIPS bone,
   so the skating crouch and its bob never move the frame the hands hang from;
-  only a held pose's share lowers the frame itself.
+  only a held pose's share lowers the frame itself. The spine then seats the
+  hips so the lower runner stands on the ice (`SkaterLegRig
+  .ice_contact_offset`, by the gait's `plant` share, which the knockdown takes
+  to zero): the crouch solve pays for the stance alone, while the push, splay,
+  tucks and lean move the blades too, so the hips are placed from where the
+  blades are. The spine reads the legs' `pose_version` in its cache key for
+  that reason.
+  `test_blades_stand_on_the_ice.gd`.
 - **Nothing in the skeleton is written back into `UpperBody` or `LowerBody`.**
   The blade and shoulder markers hang under `UpperBody`, so writing it at render
   rate would move gameplay geometry. The chain reads both frames and writes

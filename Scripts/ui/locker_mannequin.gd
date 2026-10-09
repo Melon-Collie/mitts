@@ -54,9 +54,8 @@ const _KNEE_DY: float = -0.31
 # Boot frame, straight off FootL/R's scene basis: local −Y is the toe and local
 # +Z is down, so this lands the toe on −Z (the way the rig faces) sole-down.
 const _BOOT_ROT := Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0))
-# The runner bottoms out this far below the boot origin — the pre-lift contact
-# (boot-local z 0.080) plus the stance lift.
-const _BLADE_ICE_M: float = 0.080 + SkaterMeshBuilder.SKATE_LIFT_M
+# The runner bottoms out this far below the boot origin.
+const _BLADE_ICE_M: float = SkaterMeshBuilder.BLADE_ICE_Z
 # The ice plane in rig-local coordinates. Everything scales about it.
 const _ICE_Y: float = _LEG_Y + _BOOT_DY - _BLADE_ICE_M
 

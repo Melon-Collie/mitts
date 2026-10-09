@@ -393,7 +393,7 @@ func apply(delta: float) -> void:
 	if _skater.on_camera():
 		p.publish_legs(_skater)
 	else:
-		_skater.set_skating_crouch_drop(p.drop, p.frame_drop())
+		_skater.set_skating_crouch_drop(p.drop, p.frame_drop(), p.plant)
 	crouch_drop = p.drop
 	frame_drop = p.frame_drop()
 	# Trunk inertia: filter the summed texture, then lay the wobble back on top

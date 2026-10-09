@@ -37,6 +37,9 @@ var stance_shin: float = 0.0
 # it at 0 (Skater.set_skating_crouch_drop).
 var drop: float = 0.0
 var frame_share: float = 0.0
+# Share of the blade contact seat the visible body takes (Skater
+# .set_skating_crouch_drop): whole on skates, none for a body on the ice.
+var plant: float = 1.0
 
 var l_pitch: float = 0.0
 var l_roll: float = 0.0
@@ -88,6 +91,7 @@ func seed_legs(loco: SkaterLocomotion, yaw_l: float, yaw_r: float) -> void:
 	l_yaw = yaw_l
 	r_yaw = yaw_r
 	frame_share = 0.0
+	plant = 1.0
 	knee_extend_l = 0.0
 	knee_extend_r = 0.0
 	foot_flat_l = 0.0
@@ -160,6 +164,7 @@ func load_native(native: RefCounted) -> void:
 	wobble_pitch = 0.0
 	wobble_roll = 0.0
 	frame_share = 0.0
+	plant = 1.0
 
 
 func frame_drop() -> float:
@@ -170,4 +175,4 @@ func publish_legs(skater: Skater) -> void:
 	skater.set_leg_swing(l_pitch, l_roll, l_knee, r_pitch, r_roll, r_knee, l_yaw, r_yaw)
 	skater.set_edge_loads(edge_l, edge_r)
 	skater.set_ankle_flatten(foot_flat_l, foot_flat_r)
-	skater.set_skating_crouch_drop(drop, frame_drop())
+	skater.set_skating_crouch_drop(drop, frame_drop(), plant)
