@@ -20,6 +20,14 @@ func test_the_sfx_bus_exists_before_anything_asks_for_it() -> void:
 	assert_gt(AudioServer.get_bus_index("SFX"), -1, "SoundManager created the SFX bus")
 
 
+func test_the_master_bus_is_limited() -> void:
+	var master: int = AudioServer.get_bus_index("Master")
+	var limited: bool = false
+	for i: int in AudioServer.get_bus_effect_count(master):
+		limited = limited or AudioServer.get_bus_effect(master, i) is AudioEffectHardLimiter
+	assert_true(limited, "make-up gain on under-reference cues relies on the Master limiter")
+
+
 func test_a_skater_emitter_matches_the_shared_world_pool() -> void:
 	var pool: Array[AudioStreamPlayer3D] = SoundManager._pool_3d
 	assert_gt(pool.size(), 0, "the shared world pool is built")

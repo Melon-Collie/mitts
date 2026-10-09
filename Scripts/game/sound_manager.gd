@@ -95,8 +95,13 @@ const _MIX_DB: Dictionary = {
 # limited their attack past normalize_sfx.MAX_LIMIT_DB; the tool's report gives
 # the number when a file is re-mastered.
 const _UNDER_REFERENCE_DB: Dictionary = {
-	Sound.UI_CLICK:    5.0,
-	Sound.PUCK_PICKUP: 2.3,
+	Sound.UI_CLICK:        5.0,
+	Sound.PUCK_PICKUP:     2.3,
+	Sound.PUCK_DEFLECTION: 6.9,
+	Sound.STICK_LIFT:      6.9,
+	Sound.PUCK_GOALIE:     4.1,
+	Sound.PUCK_STRIP:      2.8,
+	Sound.PUCK_GOAL_BODY:  1.3,
 }
 
 const _UI_POOL_SIZE: int = 4
@@ -162,6 +167,18 @@ func _ensure_buses() -> void:
 			AudioServer.add_bus(idx)
 			AudioServer.set_bus_name(idx, bus_name)
 			AudioServer.set_bus_send(idx, "Master")
+	_ensure_master_limiter()
+
+
+# Short transients mastered under the reference get make-up gain, and a world cue
+# under a close replay camera skips most of the distance falloff, so peaks can
+# pass full scale; the limiter catches them instead of the output clipping.
+func _ensure_master_limiter() -> void:
+	var master: int = AudioServer.get_bus_index("Master")
+	for i: int in AudioServer.get_bus_effect_count(master):
+		if AudioServer.get_bus_effect(master, i) is AudioEffectHardLimiter:
+			return
+	AudioServer.add_bus_effect(master, AudioEffectHardLimiter.new())
 
 
 func _load_streams() -> void:
