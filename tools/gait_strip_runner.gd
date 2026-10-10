@@ -25,6 +25,9 @@ const BUILD_WEIGHT_LB: int = 201
 # cover one.
 const SCENARIOS: Array[Dictionary] = [
 	{"name": "stride", "warm": 240, "step": 12},
+	# From a standstill, the stick held up-ice from the first tick: the start's
+	# chop lengthening into the stride over its first second.
+	{"name": "start", "warm": 1, "step": 15},
 	{"name": "stance", "warm": 240, "step": 12},
 	# The stick held 45° off travel: a driven arc, the crossover's case.
 	{"name": "turn45", "warm": 200, "step": 10},

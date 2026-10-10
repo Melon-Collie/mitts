@@ -498,6 +498,14 @@ Things the split alone would get wrong, handled where noted:
 - **The cadence is the stroking states' own.** The stride phase advances at the
   stroking states' rate averaged over them alone, so a crossover sharing the
   mix with a carve fades in amplitude, never in tempo.
+- **Speed sets the tempo, and acceleration quickens it.** The speed law
+  saturates at a cruising ceiling. Driving hard steps faster at any speed
+  (`accel_cadence_rate` × `effort`), past that ceiling, because each push gives
+  only so much. A start is quick short steps that lengthen into the stride as
+  the acceleration tapers off. A floor that fades with speed alone cannot draw
+  that: the physics reaches its fade in ~0.4 s, and the cruise tempo takes
+  over while the skater is still gaining speed. `test_gait_step_events.gd`
+  holds the shape.
 - **The glide is the remainder.**
 
 The legs are solved from where the ankles go (`LegIK`): `GaitPose.seed_legs`

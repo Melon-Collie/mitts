@@ -436,7 +436,8 @@ void NativeSkaterGait::sense(double delta, const Vector3 &vel, const Vector2 &in
 
 	const double ceiling = maxd(c.stride_cadence_max_rate, 0.001);
 	double stride_rate = ceiling * std::tanh(ground_speed * c.stride_cadence / ceiling) * (1.0 - c.cadence_cruise_falloff * cruise_gear);
-	stride_rate = maxd(stride_rate, c.dig_in_cadence_rate * start);
+	stride_rate = maxd(stride_rate, maxd(c.dig_in_cadence_rate * start,
+			c.accel_cadence_rate * clampd(effort, 0.0, 1.0)));
 	const double cross_rate = maxd(std::abs(turn_rate) * c.crossover_phase_per_turn, stride_rate);
 	double rate = 0.0;
 	if (stroking > 0.001) {

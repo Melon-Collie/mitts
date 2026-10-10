@@ -409,6 +409,7 @@ var lower_body_lag_speed: float = 5.0
 # Procedural leg gait — see SkaterSkatingCoordinator. All cosmetic.
 var stride_cadence: float = 1.4          # low-speed slope: radians of stride phase per metre skated
 var stride_cadence_max_rate: float = 6.5  # rad/s ceiling the cadence saturates toward (caps top-speed leg turnover)
+var accel_cadence_rate: float = 18.0      # rad/s stride rate at full effort (stride_effort_ref_accel), any speed
 var carve_ref_turn_rate: float = 1.6   # rad/s of travel turn that reads as a full carve (pivot veto, glide tuck)
 var carve_min_speed: float = 2.5       # m/s floor — slow turns are steps, not crossovers
 var carve_engage_speed: float = 5.0    # turn-rate smoothing rate

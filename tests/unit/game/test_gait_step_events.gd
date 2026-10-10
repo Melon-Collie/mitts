@@ -20,6 +20,7 @@ var _skater: Skater = null
 var _controller: SkaterController = null
 var _events: Array[Array] = []
 var _touches: Array[Array] = []
+var _tick: int = 0
 
 
 func before_each() -> void:
@@ -64,6 +65,7 @@ func _skate(ticks: int, move: Vector2, arc: bool = false) -> int:
 		_controller._process_input(input, DT)
 		_skater.global_position += _skater.velocity * DT
 		_skater._process(DT)
+		_tick += 1
 		var now: float = _controller._skating.stride_phase
 		if now < phase - PI:
 			wraps += 1
@@ -149,3 +151,27 @@ func test_the_first_push_of_a_start_is_heard_and_digs() -> void:
 	gut.p("push level: start %.2f, cruise %.2f" % [start, cruise])
 	assert_gt(start, 0.05, "the start's first push is heard")
 	assert_gt(cruise, 0.05, "the cruise pushes")
+
+
+# A start steps quick and short, and its steps lengthen into the stride as the
+# acceleration tapers off; a tempo keyed to speed alone draws it as one long
+# push and then a cruise.
+func test_a_start_chops_and_lengthens_into_the_stride() -> void:
+	var times: Array[float] = []
+	_skater.skate_pushed.connect(func(_l: bool, _s: float, _d: float) -> void:
+		times.append(_tick * DT))
+	_tick = 0
+	_skate(480, Vector2(0.0, -1.0))
+	var gaps: Array[String] = []
+	for i: int in range(1, times.size()):
+		gaps.append("%.2f" % (times[i] - times[i - 1]))
+	gut.p("start: pushes at %s s; gaps %s" % [str(times), " ".join(gaps)])
+	var early: int = 0
+	for t: float in times:
+		if t < 1.0:
+			early += 1
+	assert_gte(early, 4, "four or more pushes in the start's first second")
+	assert_lt(times[2] - times[1], 0.35, "an early step is quick")
+	assert_gt(times[times.size() - 1] - times[times.size() - 2], times[2] - times[1] + 0.2,
+			"and the cruise's steps are longer")
+

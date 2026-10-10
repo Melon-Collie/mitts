@@ -31,7 +31,7 @@ namespace mitts {
 
 // Every SkaterController tunable the core reads, by its exact property name.
 #define MITTS_GAIT_TUNABLES(X) \
-	X(backpedal_chest_deg) X(cadence_cruise_falloff) X(cadence_glide_stance_gain) \
+	X(accel_cadence_rate) X(backpedal_chest_deg) X(cadence_cruise_falloff) X(cadence_glide_stance_gain) \
 	X(carve_engage_speed) X(carve_lead_m) X(carve_min_speed) X(carve_ref_turn_rate) \
 	X(carve_stance) X(ccut_front_m) X(ccut_out_m) X(ccut_return_share) X(ccut_toe_deg) \
 	X(crossover_back_m) X(crossover_commit_speed) X(crossover_cross_m) \

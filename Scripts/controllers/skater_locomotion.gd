@@ -200,11 +200,15 @@ func sense(delta: float, planted: bool, hold: float) -> void:
 	# Cadence: each striding state's own rate, weighted. Straight-line strides
 	# saturate toward a ceiling (speed comes from longer strides, not faster
 	# ones) and slow further at cruise; crossovers step per radian of heading
-	# change; side-steps and the start chop work under the speed law.
+	# change; side-steps and the start chop work under the speed law. Driving
+	# hard steps quicker at any speed, past the ceiling: a push gives only so
+	# much, so an acceleration takes more of them, and the steps lengthen into
+	# the speed law's as it tapers off.
 	var ceiling: float = maxf(c.stride_cadence_max_rate, 0.001)
 	var stride_rate: float = ceiling * tanh(_ground_speed * c.stride_cadence / ceiling) \
 			* (1.0 - c.cadence_cruise_falloff * cruise_gear)
-	stride_rate = maxf(stride_rate, c.dig_in_cadence_rate * _start)
+	stride_rate = maxf(stride_rate, maxf(c.dig_in_cadence_rate * _start,
+			c.accel_cadence_rate * clampf(effort, 0.0, 1.0)))
 	var cross_rate: float = maxf(absf(turn_rate) * c.crossover_phase_per_turn, stride_rate)
 	# Averaged over the stroking states alone: a crossover sharing the mix with a
 	# carve, or a stride with a glide, fades in amplitude, never in tempo.
