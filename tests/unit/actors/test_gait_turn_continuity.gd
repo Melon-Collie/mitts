@@ -177,9 +177,9 @@ func test_the_turning_lead_is_continuous_across_the_hips() -> void:
 	loco.mix.carve = 0.4
 	loco._carve_signed = 0.4
 	loco._ground_speed = 5.0
-	loco.strokes(DT, 0.05)
+	loco.strokes(DT, Vector2(0.0, 0.05))
 	var ahead := Vector4(loco.l_pitch, loco.r_pitch, loco.l_tuck, loco.r_tuck)
-	loco.strokes(DT, -0.05)
+	loco.strokes(DT, Vector2(0.0, -0.05))
 	var behind := Vector4(loco.l_pitch, loco.r_pitch, loco.l_tuck, loco.r_tuck)
 	for i: int in 4:
 		assert_almost_eq(ahead[i], behind[i], 0.01, "channel %d" % i)

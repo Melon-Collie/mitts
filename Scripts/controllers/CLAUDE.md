@@ -503,13 +503,15 @@ Things the split alone would get wrong, handled where noted:
 The legs are solved from where the ankles go (`LegIK`): `GaitPose.seed_legs`
 places each ankle from the stroke's joints on the stance, lays on the states
 authored as where their skates go, and solves the leg to it; the layers lay
-their joint offsets on that. Three states are authored that way
+their joint offsets on that. Five states are authored that way
 (`SkaterLocomotion.authored`): the stride (`_stride_path`, out and back from
 under the hips, toe turned out), the crossover (`_crossover_path`, the stride's
 phase law with its own landings: the outside skate lands crossed over and
 pushes back out, the inside one pushes under the body, so they cross every
-step) and the carve (both down, the inside skate leading). Three things make
-them stand on the ice:
+step), the carve (both down, the inside skate leading), the hockey stop
+(`_stop_path`, both planted wide along travel with the hips sitting back of
+them, turned square across it) and the skid (`_skid_path`, a snowplow). Three
+things make them stand on the ice:
 
 - **They sit as low as their pushes need.** A leg can only reach so far out at
   the hip height it is at, so the crouch moves, by the authored share, toward
@@ -523,14 +525,17 @@ them stand on the ice:
   lower body and tip with the balance lean about the ice under the body, so
   their targets are turned through that tilt (`GaitPose.ice`, `lean`): the
   skate stays where it was put and the body goes over it, so a turn's bank
-  puts both blades on their edges.
+  puts both blades on their edges. The stop and skid scrape along with the
+  body instead (`SkaterLocomotion.sliding`): they keep their place under the
+  hips and the lean only lays them level, or a stop's lean would pull the hips
+  off its front skate.
 - **They aim the runner, not the ankle.** Their blades lie flat along their length
   on whatever edge the leg rolls them to (the ankle's level give-back), and an
   edge raises a runner toward its ankle, so the ankle comes down by what the
   edge takes off and the leg is solved again.
 
-The other states are still the joint stroke's until the plan's Phases 4b and
-4c.
+The other states (backward, side-step, tight turn) are still the joint
+stroke's until the plan's Phase 4c.
 
 ### Overlays are layers, and the order is the priority
 

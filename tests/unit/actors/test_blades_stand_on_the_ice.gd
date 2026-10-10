@@ -21,6 +21,10 @@ const RECOVERY_LIFT_MIN_M: float = 0.015
 # skates (the hockey stop's onset, the stiffest, ~0.08), below a contact solve
 # that hops between answers and pops a leg (0.14 and up).
 const MAX_JOINT_STEP_RAD: float = 0.1
+# A skate pushing moves back at least this much a tick (~0.12 m/s): a push runs
+# several millimetres a tick, and a recovery lifting off can still drift back a
+# hair as it settles.
+const PUSH_BACK_MIN_M: float = 0.001
 
 
 class StubGameState extends Node:
@@ -123,7 +127,7 @@ func _skate(steer: Callable, measure_from: int = WARMUP_TICKS) -> Vector4:
 		for side: int in 2:
 			var at: Vector3 = _skate_in_body(side == 0)
 			var moved: Vector3 = at - skate_at[side]
-			if i > measure_from and moved.z > 0.0 and moved.x * at.x > 0.0:
+			if i > measure_from and moved.z > PUSH_BACK_MIN_M and moved.x * at.x > 0.0:
 				_push_float = maxf(_push_float, left if side == 0 else right)
 			skate_at[side] = at
 	return Vector4(lo, hi, up_lo, up_hi)

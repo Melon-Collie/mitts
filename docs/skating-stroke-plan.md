@@ -373,11 +373,11 @@ choreography from coaching material, and are to be judged on the strips.
 Rendered from 6.5 m/s after Phase 3, the stop reads as standing sideways, not
 digging in:
 
-- **The feet stay close.** The hips turn across travel (`stop_yaw`, capped at
-  70°), but the legs only scissor 14° fore-aft and roll 12° the same way, so
-  the skates stay about hip width apart, nearly stacked. A stop plants them
-  wide — about shoulder width — spaced along the line of travel, both across
-  it.
+- **The feet stay close.** *Wrong, measured in 4b:* the skates were already
+  0.37 m apart along the travel; from behind, the camera looks down that line
+  and hides it. What did differ is below. (The hips turn across travel,
+  `stop_yaw`, capped at 70°; the legs scissored 14° fore-aft and rolled 12°
+  the same way.)
 - **The edges barely bite.** The knees bend moderately and the shins stand
   near vertical, so neither blade goes far onto its edge. A stop sits back
   against the momentum over two hard edges, the front knee deep.
@@ -419,3 +419,40 @@ the plant nothing to correct. The side latch and the hips' turn stay. The skid
   popped a gliding leg as a stride faded, so both now move by that share; and
   the limit was pulling in near-straight joint-space legs it should never have
   touched.
+
+## §16 Phase 4b as built
+
+- **The stop** is authored as where its skates go (`SkaterLocomotion._stop_path`):
+  both planted 0.10 m out past their hips along the travel and set 0.28 m
+  toward it, so the hips sit back of both, the skate on the travel side 0.05 m
+  ahead. The legs turn the blades the last of the way square across the
+  travel that the hips' 70° cap leaves, measured in the frame the hips are
+  turning to, so they never make up the turn still to come.
+- **Measured** a quarter second into a stop from 9.5 m/s
+  (`test_hockey_stop_pose.gd`), against the joint stop it replaced:
+
+  | | before | after |
+  |---|---|---|
+  | edges | back skate −24°, front −9..+2° (the edges that catch) | +7..+23°, both dig |
+  | blades off square to travel | 26–29° | ≤ 11° |
+  | second-foot plant's knee correction | 0.70 rad | 0.05 rad |
+  | apart along travel | 0.37 m | 0.35 m |
+
+- **The skid** is a snowplow (`_skid_path`): skates 0.16 m out past their hips
+  and 0.10 m toward the travel, toes in 20°, both blades on their inside edges
+  (0.50 m apart, 8°+).
+- **Not in the design: the stop's skates slide.** §3 has every authored skate
+  turned back through the lean about the ice under the body, so it stays put
+  while the body goes over it. A stop's skates scrape along with the body, and
+  holding them put as the lean built pulled the hips off the front skate until
+  it was out of reach. The stop and skid (`SkaterLocomotion.sliding`) keep
+  their place under the hips; the lean only lays them level.
+- **Not in the design: the blade's heading is the leg's yaw.** The level
+  give-back laid the blade's length flat along whatever heading the chain gave
+  it, and a bent leg's roll turns that heading; it now lays it along the yaw,
+  keeping the edge (`SkaterLegRig._foot_pose`, `GaitPose._runner_depth`). This
+  is §3's "yaw from the blade's toe direction", and it touches the stride and
+  the crossover too.
+- **Fixed on the way:** the reach limit measured depth and reach in the hips'
+  frame; it now measures them against the ice (a leaned-back body otherwise
+  read a front skate as too deep and pulled it in).

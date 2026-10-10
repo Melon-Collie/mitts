@@ -369,14 +369,17 @@ func _foot_pose(bone: int, leg: Vector3, knee: float, shin_base: Vector3,
 	var posed: Basis = Basis.from_euler(leg) * shin
 	var target: Basis = posed
 	if level > 0.0:
-		# The least turn that lays the blade's length (the boot's −Z) level on
-		# the ice, which leaves its roll about that length as the chain set it.
-		var along: Vector3 = _ice * posed * Vector3.FORWARD
-		var flat := Vector3(along.x, 0.0, along.z)
-		var axis: Vector3 = along.cross(flat)
-		if flat.length_squared() > 1e-8 and axis.length_squared() > 1e-12:
-			target = _ice.inverse() * Basis(axis.normalized(), along.angle_to(flat) * level) \
-					* _ice * posed
+		# The blade's length (the boot's −Z) laid level on the ice along the
+		# leg's heading — its yaw, whatever the roll and fold of a bent leg did
+		# to it — and its down kept as square to that length as the chain left
+		# it, which keeps the edge.
+		var heading: Vector3 = _ice * Basis(Vector3.UP, leg.y) * Vector3.FORWARD
+		var along := Vector3(heading.x, 0.0, heading.z)
+		var down: Vector3 = _ice * posed * Vector3.DOWN
+		down -= along * down.dot(along) / maxf(along.length_squared(), 1e-12)
+		if along.length_squared() > 1e-8 and down.length_squared() > 1e-8:
+			var laid := Basis.looking_at(along, -down)
+			target = posed.slerp(_ice.inverse() * laid, level)
 	if weight > 0.0:
 		var square: Basis = Basis.from_euler(Vector3(0.0, leg.y, 0.0)) \
 				* Basis.from_euler(Vector3(0.0, shin_base.y, shin_base.z))

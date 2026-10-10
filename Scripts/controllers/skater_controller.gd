@@ -537,13 +537,15 @@ var faceoff_center_reach_fraction: float = 1.1
 var faceoff_draw_peak_decay: float = 12.0
 var faceoff_draw_window: float = 1.0
 # Hockey stop — the brake with the stick in line turns the lower body across
-# the travel direction (legs sideways, torso still on the play) with a
-# scissored, edge-rolled stance; the side latches as it comes on
+# the travel direction (legs sideways, torso still on the play) on a wide base
+# of two planted, edged skates; the side latches as it comes on
 # (HockeyStopRules.latch_side).
 var hockey_stop_min_speed: float = 3.0   # m/s floor — no stop pose from a shuffle
 var hockey_stop_max_yaw_deg: float = 70.0  # lower-body turn cap across travel
-var hockey_stop_split_deg: float = 14.0  # leading/trailing leg scissor
-var hockey_stop_edge_deg: float = 12.0   # shared leg roll — edges biting
+# The stop as where its skates go (SkaterLocomotion._stop_path), metres.
+var hockey_stop_spread_m: float = 0.10   # each skate out past its hip: a wide base along travel
+var hockey_stop_lead_m: float = 0.28     # both skates set toward travel: the hips sit back of them
+var hockey_stop_stagger_m: float = 0.05  # the skate on the travel side a little ahead
 var hockey_stop_stance: float = 0.9      # stance floor while stopping (deep knees)
 # Tight turn (brake held with the stick off travel): two blades dug in under a
 # deep sit, inside skate leading, no crossovers — the bank does the leaning.
@@ -589,9 +591,12 @@ var dig_in_intensity: float = 0.85       # stride intensity floor while digging 
 var dig_in_cadence_rate: float = 4.5     # rad/s stride-phase floor — quick chop from a standstill
 var dig_in_chop: float = 0.35            # push-amplitude cut at full dig (short strides)
 var dig_in_stance: float = 0.7           # stance floor — power comes from bent knees
-# Skid: the stick against travel — fighting momentum to go the other way.
+# Skid: the stick against travel — fighting momentum to go the other way, a
+# snowplow (SkaterLocomotion._skid_path).
 var reversal_stance: float = 0.85        # stance floor — sits down hard into the plant
-var reversal_plant_deg: float = 8.0      # wide-V outward leg plant
+var reversal_spread_m: float = 0.16      # each skate out past its hip
+var reversal_lead_m: float = 0.10        # both skates set toward travel
+var reversal_toe_in_deg: float = 20.0    # toes turned in, both blades on their inside edges
 # Shuffle: lateral push from a standstill — hips stay square, legs side-step.
 var shuffle_intensity: float = 0.6       # stride intensity floor while side-stepping
 var shuffle_cadence_rate: float = 3.0    # rad/s stride-phase floor for the steps

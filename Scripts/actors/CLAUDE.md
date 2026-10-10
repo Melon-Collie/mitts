@@ -122,9 +122,10 @@ inside the jersey at the resulting angle.
 Most of the gait still poses joints rather than feet, and its crouch pays for
 the stance alone; the splay, the stagger and the lean all move the blades too.
 So the body is placed from where the blades are (`SkaterLegRig.seat_on_ice`,
-called by the spine as it places the hips). The stride is the exception: it is
-authored as where its skates go, on the ice (`Scripts/controllers/CLAUDE.md`),
-and only needs the seat to stand it up.
+called by the spine as it places the hips). The authored states (stride,
+crossover, carve, stop, skid) are the exception: they are authored as where
+their skates go, on the ice (`Scripts/controllers/CLAUDE.md`), and only need the
+seat to stand them up.
 
 - **Both feet, then the body.** The lower runner is the support. The other's
   knee is re-solved (the thigh counter-pitched as `GaitPose.seed_legs` does,
@@ -142,10 +143,11 @@ and only needs the seat to stand it up.
   seat itself (`plant`), and while the sprawl owns the legs the seat does not
   re-pose them.
 - **The ankle gives back two ways** (`SkaterLegRig.set_ankle_flatten`): the
-  whole chain's rotation, which squares the boot (the held poses), or only the
-  blade's tilt along its length against the ice, which leaves it on whatever
-  edge the leg rolled it to (the stride, so a push drives its whole inside edge
-  rather than rocking onto its heel). The second levels against the ice, not
+  whole chain's rotation, which squares the boot (the held poses), or the
+  blade laid flat on the ice along the leg's heading (its yaw), left on
+  whatever edge the leg rolled it to (the authored states, so a push drives its
+  whole inside edge rather than rocking onto its heel, and a stop's blades sit
+  square across the travel). The second levels against the ice, not
   the hips, so the gait passes the hips' tilt with it.
 - **Height is not monotone in the knee.** The ankle is otherwise rigid, so a
   blade tilts with its shin and its lowest point is a tip; near

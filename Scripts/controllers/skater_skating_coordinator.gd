@@ -357,9 +357,9 @@ func tilt_hips(p: GaitPose) -> void:
 
 
 # ── Hip-to-travel alignment and the pivot ─────────────────────────────────────
-# Returns the forward speed in the yawed hip frame, which the stroke needs (the
-# tight turn's inside foot is the side of the turn as the legs face it).
-func _align_to_travel(delta: float) -> float:
+# Returns the travel velocity in the yawed hip frame, (right, forward), which the
+# stroke needs (the turning states lead along travel as the legs face it).
+func _align_to_travel(delta: float) -> Vector2:
 	var vel: Vector3 = _skater.velocity
 	# Ground speed only — vertical velocity never feeds the stride.
 	var ground_speed: float = Vector2(vel.x, vel.z).length()
@@ -502,5 +502,6 @@ func _align_to_travel(delta: float) -> float:
 	_hip_align_yaw = lerpf(_hip_align_yaw, align_target, align_speed * delta)
 	travel_align_yaw = _hip_align_yaw * (1.0 - mix.stop)
 	# Forward speed in the yawed hip frame: v_hip = RotY(−ψ) · v_local.
-	return -(local_vel.x * sin(travel_align_yaw) + local_vel.z * cos(travel_align_yaw))
+	return Vector2(local_vel.x * cos(travel_align_yaw) - local_vel.z * sin(travel_align_yaw),
+			-(local_vel.x * sin(travel_align_yaw) + local_vel.z * cos(travel_align_yaw)))
 
