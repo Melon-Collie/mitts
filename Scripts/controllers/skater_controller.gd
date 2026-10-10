@@ -1716,12 +1716,14 @@ func _render_pose_update(delta: float) -> void:
 # recoil direction, off the tipping-body solve. Reads only replicated /
 # re-derived state (timer, window total, entry shove, recoil dir), so every
 # machine renders the same fall while the gameplay body underneath keeps its
-# deterministic slide. Cheap while upright — Skater.set_knockdown_fall
-# early-outs at zero↔zero tilt.
+# deterministic slide. Upright, it only settles the rig back level.
 func _apply_knockdown_fall() -> void:
 	var kd_t: float = clampf(
 			knockdown_timer / maxf(knockdown_getup_seconds, 0.001), 0.0, 1.0)
 	var tilt: float = knockdown_fall_tilt()
+	if tilt == 0.0 and kd_t <= 0.0:
+		skater.set_knockdown_fall(Vector3.UP, 0.0)
+		return
 	# Fall direction is the recoil direction (body frame); the tilt axis is its
 	# horizontal perpendicular, so positive tilt tips the head the way the hit
 	# shoved. Falling backward lands face-up, forward face-down — the read
