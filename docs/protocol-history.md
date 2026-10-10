@@ -299,3 +299,7 @@ here whenever you bump, in the same format.
 #      bit 5 now carries stance_active (was sprint_active) and input flag bit
 #      [4] stance_held (was sprint_held); both now feed the forward prediction
 #      as the posture, with hit_commit. Replay FORMAT_VERSION 11.
+# v66: GoalieStateMachine.State.HANDLING (16) — the goalie with the puck on his
+#      stick — is a new value of the goalie block's u8 state_enum. No byte
+#      layout changed; an older peer has no pose for the value. A replay written
+#      by this build draws HANDLING as the fallback stance in an older reader.

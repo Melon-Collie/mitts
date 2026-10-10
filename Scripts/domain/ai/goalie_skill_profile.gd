@@ -134,6 +134,11 @@ var read_converge_s: float
 # Butterfly push-off speed (m/s) — the slide to a post or across the crease. A
 # weaker goalie's push is softer, so he loses the race to the post on a wrap.
 var slide_push_speed_mps: float
+# Whether he prices a forechecker by where he is GOING when deciding what to do
+# with the puck on his stick (GoalieOutlet). A perception gate, not a fudge: the
+# goalie who doesn't read it sees every body standing still, so he throws the
+# pass a closing forechecker steps into.
+var handling_reads_motion: bool
 
 
 func _init(p_arm_reaction_delay_s: float, p_cross_crease_react_delay_s: float,
@@ -146,7 +151,8 @@ func _init(p_arm_reaction_delay_s: float, p_cross_crease_react_delay_s: float,
 		p_butterfly_drop_s: float, p_five_hole_base_m: float,
 		p_read_lag_s: float = 0.13,
 		p_read_converge_s: float = 0.13,
-		p_slide_push_speed_mps: float = 2.8) -> void:
+		p_slide_push_speed_mps: float = 2.8,
+		p_handling_reads_motion: bool = true) -> void:
 	arm_reaction_delay_s = p_arm_reaction_delay_s
 	cross_crease_react_delay_s = p_cross_crease_react_delay_s
 	poke_radius_m = p_poke_radius_m
@@ -166,6 +172,7 @@ func _init(p_arm_reaction_delay_s: float, p_cross_crease_react_delay_s: float,
 	butterfly_drop_s = p_butterfly_drop_s
 	five_hole_base_m = p_five_hole_base_m
 	slide_push_speed_mps = p_slide_push_speed_mps
+	handling_reads_motion = p_handling_reads_motion
 
 
 # Hard == the GoalieController @export defaults verbatim, so applying Hard is a
@@ -198,7 +205,7 @@ static func normal() -> GoalieSkillProfile:
 static func easy() -> GoalieSkillProfile:
 	return GoalieSkillProfile.new(0.45, 0.40, 0.08, 0.70, 0.35,
 			0.90, 0.60, 2.4, 2.4, 5.0, 6.0, INF,
-			0.30, 0.16, 0.32, 0.06, 0.16, 0.30, 1.8)
+			0.30, 0.16, 0.32, 0.06, 0.16, 0.30, 1.8, false)
 
 
 static func for_difficulty(difficulty: int) -> GoalieSkillProfile:

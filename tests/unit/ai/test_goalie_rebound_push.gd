@@ -35,6 +35,8 @@ var _puck: Node = null
 var _shooter: Skater = null
 var _ctrl: GoalieController = null
 var _h: RefCounted = null
+# Whether the last `_rebound` ended with the puck on his stick.
+var _played: bool = false
 
 
 func before_each() -> void:
@@ -66,10 +68,14 @@ func _rebound(spot: Vector3, wait_s: float) -> void:
 	_shooter.global_position = spot + Vector3(0.0, 0.0, 0.4)
 	_shooter.velocity = Vector3.ZERO
 	_shooter.current_shot_state = SkaterStateMachine.State.SKATING_WITHOUT_PUCK
+	_played = false
 	for _i: int in int(wait_s / DT):
 		_puck.global_position = spot
 		_puck.linear_velocity = Vector3.ZERO
 		_ctrl._physics_process(DT)
+		if _ctrl._sm.current == GoalieStateMachine.State.HANDLING:
+			_played = true
+			return
 
 
 func _square_x(spot: Vector3) -> float:
@@ -93,9 +99,11 @@ func test_he_pushes_to_square_not_to_the_post() -> void:
 		_rebound(spot, 0.8)
 		var off: float = absf(_ctrl._current_x - _square_x(spot))
 		var covered: bool = _ctrl._sm.current == GoalieStateMachine.State.COVERING
-		gut.p("rebound at %s: %.2f m off square, covered %s" % [spot, off, covered])
-		# One inside his reach he smothers instead, which ends the play.
-		assert_true(off < 0.12 or covered, "square to the rebound at %s" % spot)
+		gut.p("rebound at %s: %.2f m off square, covered %s, played %s"
+				% [spot, off, covered, _played])
+		# One inside his reach he smothers, or gets his stick on and plays, which
+		# ends the play either way.
+		assert_true(off < 0.12 or covered or _played, "square to the rebound at %s" % spot)
 
 
 func test_report_put_backs() -> void:

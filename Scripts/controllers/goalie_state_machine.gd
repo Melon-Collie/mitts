@@ -18,22 +18,23 @@ extends RefCounted
 # crease when every sweep lane is covered — the real cover/freeze, resolved by
 # ruleset (NHL: whistle + defensive-zone faceoff; ARCADE: short hold, then a
 # live release).
-# PLAYING_PUCK is the tier-1 behind-net rim stop: skate out around the post,
-# paddle-down stop at the boards behind the net, skate back — "stop it, leave
-# it, get back", gated by an ultra-conservative go/no-go race.
+# PLAYING_PUCK is the behind-net rim trip: skate out around the post, stop the
+# rim at the boards behind the net, skate back — gated by an ultra-conservative
+# go/no-go race. The stop hands him the puck (HANDLING) before he goes back.
 # CATCHING / CATCHING_DOWN are the glove catch-and-hold: the puck is pinned in
 # the glove (squeeze-and-look), split into upright and butterfly variants so
 # clients' state-keyed body/head heights render the right silhouette. Same
-# ruleset-split resolution as COVERING when held under pressure; an
-# unpressured catch quick-drops and plays on (the real delay-of-game
-# incentive).
+# ruleset-split resolution as COVERING when held under pressure; when the hold
+# ends he puts the puck on his stick and plays it (HANDLING).
+# HANDLING is the puck on his stick: upright and planted, turning up ice, until
+# he passes or clears it or a stick takes it off him.
 # HALF_BUTTERFLY_* is one pad down (the goalie-local side named) and the other
 # leg still loaded on its skate: the reach of a flat pad on one side, with a leg
 # left to push and rise on.
 enum State {
 	STANDING, BUTTERFLY, RECOVERING, RVH_LEFT, RVH_RIGHT, READY, SLIDING, COILING,
 	VH_LEFT, VH_RIGHT, COVERING, PLAYING_PUCK, CATCHING, CATCHING_DOWN,
-	HALF_BUTTERFLY_LEFT, HALF_BUTTERFLY_RIGHT,
+	HALF_BUTTERFLY_LEFT, HALF_BUTTERFLY_RIGHT, HANDLING,
 }
 
 signal transitioned(prev: State, new: State)

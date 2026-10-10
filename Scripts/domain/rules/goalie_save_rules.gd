@@ -79,14 +79,13 @@ const MATERIALS: Array[float] = [
 # face under gravity, which is why it is a walking pace and takes its DIRECTION
 # from the contact normal rather than from any goalie-frame constant.
 #
-# IT IS COUPLED TO THE CREASE SWEEP, and that coupling is the whole reason the
-# number matters. The sweep can only take a puck that is still within
-# GoalieCreaseClear.reach after GoalieController.clear_dwell has elapsed, which
-# measured out at roughly 2 m/s from a chest-save stand-off — above that the puck
-# is out of his reach before the dwell completes and the second beat never fires,
-# leaving the puck loose in the paint, which is the opposite of a dead play.
-# test_a_trapped_chest_puck_is_still_there_for_the_sweep holds the pair together;
-# do not raise this without reading it.
+# IT IS COUPLED TO HIS STICK, and that coupling is the whole reason the number
+# matters. He only reaches for a puck slower than GoalieCreaseClear
+# .max_puck_speed, and only gains it while it is still inside his blade's reach —
+# faster, and it drifts out of reach before the stick gets there, leaving it
+# loose in the paint, which is the opposite of a dead play.
+# test_a_trapped_chest_puck_is_slow_enough_to_play holds the speed half;
+# test_chest_trap_clears_his_own_stick measures the whole sequence live.
 const CHEST_TRAP_DROP_M_S: float = 1.0
 
 

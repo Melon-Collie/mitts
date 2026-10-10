@@ -2866,15 +2866,18 @@ func _enrich_snapshot_for_ai(snap: WorldSnapshot) -> void:
 		# the teammate who actually arrives first keeps the role unless
 		# a challenger clearly beats them, instead of the raw-nearest bot
 		# flickering frame-to-frame.
+		# The puck on our own goalie's stick is his to play, not ours to race
+		# him for; their forecheck still elects a chaser for it.
+		var team_playable: bool = puck_playable and not _goalie_has_puck(team_id)
 		var best_pid: int = AILoosePuckChase.elect(
 				snap.skater_states, ids, puck_pos, puck_vel,
 				_prev_chase_by_team.get(team_id, -1), _registry.caps_by_peer,
-				puck_playable, human_ids, camped_ids)
+				team_playable, human_ids, camped_ids)
 		# Smart-ping GET_PUCK: a live retrieval order replaces the natural
 		# election for its duration — the ordered bot chases (the state
 		# machine's decline gates are bypassed for it too) and nobody else
 		# doubles up on the puck.
-		if puck_playable and team_id >= 0 and team_id < team_brains.size():
+		if team_playable and team_id >= 0 and team_id < team_brains.size():
 			# Mirrored, not read live — the worker advances + expires the ping
 			# directives this comes from (see AICoordinator).
 			var pinged_chaser: int = _ai_coordinator.ping_chase_peer(team_id)
@@ -3188,6 +3191,13 @@ func _on_puck_touched_by_goalie(goalie: Goalie) -> void:
 	var defending_team_id: int = _defending_team_id_for_goalie(goalie)
 	_shot_tracker.on_goalie_touch(defending_team_id)
 	_stats_sync_gate.mark_dirty()
+
+
+func _goalie_has_puck(team_id: int) -> bool:
+	for gc: GoalieController in goalie_controllers:
+		if gc != null and gc.team_id == team_id and gc.is_handling_puck():
+			return true
+	return false
 
 
 func _defending_team_id_for_goalie(goalie: Goalie) -> int:

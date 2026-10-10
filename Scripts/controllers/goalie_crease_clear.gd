@@ -6,13 +6,10 @@ extends RefCounted
 # where the puck is and whether it can be played.
 #
 # The real hierarchy (USA Hockey "Controlling Rebounds"): COVER under pressure,
-# SWEEP when there is time to play it, leave it only with clear teammate
-# possession. The sweep is only the correct clear when a corner exit lane is OPEN,
-# so the cover triggers exactly when the lane model says every sweep would feed an
-# opponent's stick AND an opponent is on the puck. The catch is the same family
-# from the other end: a controlled glove save PINS the puck, and resolves by
-# pressure — held under pressure it freezes the play, unpressured it look-and-drops
-# and plays on (the real delay-of-game incentive).
+# PLAY it when there is time. The corner sweep is only the correct clear when an
+# exit lane is OPEN, so the cover triggers exactly when the lane model says every
+# sweep would feed an opponent's stick AND an opponent is on the puck. Otherwise
+# he reaches for it and plays it off his stick (GoaliePuckHandling).
 #
 # ── Boundary ─────────────────────────────────────────────────────────────────
 # GEOMETRY AND PREDICATES ONLY. This answers questions and owns the timer FIELDS
@@ -45,18 +42,16 @@ var direction_sign: int = 1
 var catches_left: bool = true
 var lane_cfg: GoalieBehaviorRules.SweepLaneConfig = null
 
-# ── Sweep state ──────────────────────────────────────────────────────────────
-# `windup_timer` counts the backswing; when it expires the caller performs the
-# STRIKE (the moment the blade snaps through the puck and the clear velocity is
-# applied) and `anim_timer` runs the follow-through. `anim_dir` is the
-# goalie-local lateral sign of the send. `pending_cover_release` marks a windup
-# begun from the COVERING hold: its strike also unlocks the pinned puck.
+# ── Release state ────────────────────────────────────────────────────────────
+# `windup_timer` counts the cover release's backswing; when it expires the caller
+# performs the STRIKE. `anim_timer` runs the follow-through of any release (the
+# cover's strike, or a pass / clear off his stick); `anim_dir` is the
+# goalie-local lateral sign of the send. `clear_cooldown_timer` holds off the
+# next reach after a release.
 var clear_cooldown_timer: float = 0.0
-var dwell_timer: float = 0.0
 var windup_timer: float = 0.0
 var anim_timer: float = 0.0
 var anim_dir: float = 0.0
-var pending_cover_release: bool = false
 
 # ── Cover state ──────────────────────────────────────────────────────────────
 var cover_secured: bool = false
@@ -73,11 +68,9 @@ var catch_hold_timer: float = 0.0
 
 func reset() -> void:
 	clear_cooldown_timer = 0.0
-	dwell_timer = 0.0
 	windup_timer = 0.0
 	anim_timer = 0.0
 	anim_dir = 0.0
-	pending_cover_release = false
 	cover_secured = false
 	cover_reach_timer = 0.0
 	cover_hold_timer = 0.0
@@ -100,22 +93,6 @@ func is_clearable_geometry(puck_pos: Vector3, puck_speed: float,
 	if puck_speed > max_puck_speed:
 		return false
 	return goalie_pos.distance_to(puck_pos) <= reach
-
-
-# Is the loose puck still there for the STRIKE to hit? Mirrors the clearable
-# window with a little sweep-reach slack — someone may have moved it during the
-# windup.
-const STRIKE_REACH_SLACK_M: float = 0.3
-
-func is_strikeable_geometry(puck_pos: Vector3, puck_speed: float,
-		goalie_pos: Vector3) -> bool:
-	if (puck_pos.z - goal_line_z) * direction_sign <= 0.0:
-		return false
-	if puck_pos.y > max_height:
-		return false
-	if puck_speed > max_puck_speed:
-		return false
-	return goalie_pos.distance_to(puck_pos) <= reach + STRIKE_REACH_SLACK_M
 
 
 func natural_exit(puck_pos: Vector3, forced_side: float) -> Vector3:
@@ -184,20 +161,3 @@ func tick_body_rest(delta: float, puck_pos: Vector3, puck_speed: float,
 		return false
 	body_rest_dwell_timer = 0.0
 	return true
-
-
-# ── Catch-and-hold (glove) ───────────────────────────────────────────────────
-
-# A caught puck is set down past the blade's face along his facing. Anywhere
-# between blade and skates, his first step back toward his line drives the
-# blade's back face into it and rakes it goalward through his pads. The blade
-# box's depth along his facing is at most (thickness + height) / 2 at any tilt.
-const CATCH_DROP_AHEAD_OF_BLADE_M: float = GameRules.PUCK_COLLISION_RADIUS \
-		+ 0.5 * (GoalieStickRules.BLADE_THICKNESS_M + GoalieStickRules.BLADE_HEIGHT_M)
-
-static func catch_drop_spot(blade_pos: Vector3, facing: Vector3,
-		ice_height: float) -> Vector3:
-	var flat := Vector3(facing.x, 0.0, facing.z).normalized()
-	var spot: Vector3 = blade_pos + flat * CATCH_DROP_AHEAD_OF_BLADE_M
-	spot.y = ice_height
-	return spot

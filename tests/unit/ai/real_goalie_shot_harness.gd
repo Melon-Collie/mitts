@@ -564,8 +564,8 @@ var rebound_goal: bool = false
 var rebound_caught: bool = false
 # He pinned it (glove hold or cover smother) — the goalie owns the transform.
 var rebound_held: bool = false
-# He played it away with the stick: the crease sweep fired and changed the puck's
-# velocity out from under the integration.
+# He played it away with the stick: a release off his blade (or the cover's
+# sweep) changed the puck's velocity out from under the integration.
 var rebound_swept: bool = false
 # Every goalie part the puck met, in order, for the whole tracked flight — not
 # just the first. The save is a SEQUENCE, and what a rebound touches on its way
@@ -626,17 +626,23 @@ func fire_tracking_rebound(shooter: Vector3, aim: Vector3, loft_level: int,
 		_puck.linear_velocity = vel
 		_ctrl._physics_process(DT)
 		# READ THE GOALIE BACK before integrating. He plays the puck through the
-		# same API the host drive honours — apply_goalie_sweep writes
-		# linear_velocity, cover and the glove hold set motion_pinned — so an
-		# instrument that re-imposes its own `vel` every tick simply deletes the
-		# clear and then reports that the puck sat in the crease.
+		# same API the host drive honours — a release writes linear_velocity, the
+		# cover, the glove hold and his stick set motion_pinned — so an instrument
+		# that re-imposes its own `vel` every tick simply deletes the play and then
+		# reports that the puck sat in the crease.
 		if _puck.motion_pinned:
+			if _ctrl._sm.current == GoalieStateMachine.State.HANDLING:
+				# On his stick: he owns where it is, there is no flight to integrate.
+				pos = _puck.global_position
+				vel = _puck.linear_velocity
+				continue
 			rebound_held = true
 			rebound_pos = _puck.global_position
 			rebound_speed = 0.0
 			return outcome if touched else SAVE
 		if _puck.linear_velocity.distance_to(vel) > 0.01:
 			rebound_swept = true
+			pos = _puck.global_position
 			vel = _puck.linear_velocity
 		_tick.touched_post = false
 		_tick.touched_net = false

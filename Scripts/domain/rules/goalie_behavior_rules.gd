@@ -849,8 +849,8 @@ static func reachable_lateral_distance(max_speed: float, accel: float, t: float)
 
 
 # ── Behind-net puck play: the race primitives ────────────────────────────────
-# Doctrine (why the GO decision is this conservative, and why he never carries
-# or passes) is in Scripts/controllers/CLAUDE.md. These are the clocks it needs.
+# Doctrine (why the GO decision is this conservative) is in
+# Scripts/controllers/CLAUDE.md. These are the clocks it needs.
 
 # Travel time from rest over `dist` with an accel ramp to `max_speed` — the
 # inverse of reachable_lateral_distance, for the skate out/back legs.

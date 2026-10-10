@@ -27,6 +27,10 @@ var opponents: PackedVector3Array = PackedVector3Array()
 # backdoor depth cap asks, per weak-side threat, whether one of these is on him;
 # a covered one-timer man is not the same play as a free one.
 var teammates: PackedVector3Array = PackedVector3Array()
+# Index-matched velocities of the two lists above — the goalie's own outlet read
+# prices a forechecker by where he is going, not just where he is.
+var opponent_vels: PackedVector3Array = PackedVector3Array()
+var teammate_vels: PackedVector3Array = PackedVector3Array()
 # Non-ghost opposing positions EXCLUDING the puck carrier — the backdoor depth cap
 # asks about the weak-side one-timer threat, which by definition is not the passer.
 var off_puck_opponents: PackedVector3Array = PackedVector3Array()
@@ -71,6 +75,8 @@ func ensure(frame: int, skaters: Array, team_id: int, puck_pos: Vector3,
 	opponents.clear()
 	off_puck_opponents.clear()
 	teammates.clear()
+	opponent_vels.clear()
+	teammate_vels.clear()
 	screeners.clear()
 	nearest_opponent_dist = INF
 	nearest_teammate_dist = INF
@@ -85,9 +91,11 @@ func ensure(frame: int, skaters: Array, team_id: int, puck_pos: Vector3,
 			screeners.append(skater.global_position)
 		if opposing:
 			opponents.append(skater.global_position)
+			opponent_vels.append(skater.velocity)
 			if skater != carrier:
 				off_puck_opponents.append(skater.global_position)
 			nearest_opponent_dist = minf(nearest_opponent_dist, dist)
 		else:
 			teammates.append(skater.global_position)
+			teammate_vels.append(skater.velocity)
 			nearest_teammate_dist = minf(nearest_teammate_dist, dist)

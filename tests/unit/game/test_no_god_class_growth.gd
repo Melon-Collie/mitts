@@ -50,7 +50,9 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +3: the wrister wind-up side reads the trailer's relative motion over the
 	# charge (#740), not just where he stands at the commit.
 	"res://Scripts/ai/skater_agent_state_machine.gd": 6072,
-	"res://Scripts/game/game_manager.gd": 5597,
+	# +10: the puck on a goalie's stick is withheld from his own team's chase
+	# election.
+	"res://Scripts/game/game_manager.gd": 5607,
 	"res://Scripts/domain/ai/action_scoring.gd": 4458,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
@@ -59,7 +61,10 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +7: the puck-velocity estimate is bounded by the puck's own speed limit.
 	# It is a one-tick finite difference feeding a positional decision, so a
 	# teleport read as travel moved the tracked threat metres in a tick.
-	"res://Scripts/controllers/goalie_controller.gd": 4901,
+	# +56: the puck on his stick — the HANDLING lifecycle (gain, pin, release,
+	# loss and the steal read) wired into the tick. The decision lives in
+	# GoaliePuckHandling / GoalieOutlet; the loose-puck sweep it replaced is gone.
+	"res://Scripts/controllers/goalie_controller.gd": 4957,
 	# +162: the rim pass. The path search lives in AIRimPass; what stays here is
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
@@ -80,7 +85,9 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/ui/lobby_manager.gd": 1247,
 	"res://Scripts/actors/puck.gd": 1041,
 	"res://Scripts/ui/side_menu.gd": 995,
-	"res://Scripts/controllers/goalie_body_config_builder.gd": 1072,
+	# +4: HANDLING (the puck on his stick) is a stance with its own pose row and
+	# resting body / head heights.
+	"res://Scripts/controllers/goalie_body_config_builder.gd": 1076,
 	"res://Scripts/ui/network_debug_overlay.gd": 956,
 	"res://Scripts/networking/network_telemetry.gd": 957,
 	"res://Scripts/controllers/local_controller.gd": 932,

@@ -1,10 +1,10 @@
 class_name GoaliePuckPlay
 extends RefCounted
 
-# Behind-net puck play — the tier-1 conservative rim stop (extracted from
-# GoalieController, #519). Doctrine — "stop it, leave it, get back", and why the
+# Behind-net puck play — the conservative rim stop (extracted from
+# GoalieController, #519). Doctrine — "stop it, play it, get back", and why the
 # GO race is this conservative — is in Scripts/controllers/CLAUDE.md. This object
-# implements it.
+# implements the trip; the stop hands the puck to GoaliePuckHandling.
 #
 # ── Boundary ─────────────────────────────────────────────────────────────────
 # This object owns the trip's DECISION, GEOMETRY and PHASE. It deliberately does
@@ -242,11 +242,11 @@ const RIM_WAIT_SLACK_S: float = 0.6
 
 # Per-tick trip logic. OUT: skate the waypoint path, aborting on any shrinking
 # race. STOP: paddle down, trap the rim when it arrives (a rim that never shows
-# times out). RETURN: home via the waypoint, then hand back. The stopped puck is
-# left where it lies — "stop it, leave it, get back" — for the breakout D.
+# times out). RETURN: home via the waypoint, then hand back.
 #
-# Sets `wants_trap` when the controller should kill the rim dead at the paddle,
-# and `arrived_home` when the trip is over. Both are cleared on entry each tick.
+# Sets `wants_trap` when the rim reaches his stick (the controller hands it to
+# GoaliePuckHandling, which sends him home once he has played it), and
+# `arrived_home` when the trip is over. Both are cleared on entry each tick.
 func advance(delta: float, goalie_pos: Vector3, puck_pos: Vector3,
 		puck_speed: float, puck_carried: bool, opponents: PackedVector3Array) -> void:
 	wants_trap = false

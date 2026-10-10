@@ -14,7 +14,9 @@ execute; they never reach up. Goalie *math* is pure and lives in
 | `goalie_body_config_builder.gd` | pose solve into a shared scratch config |
 | `goalie_shot_reaction.gd` | the read pipeline (delays, belief, convergence) |
 | `goalie_puck_play.gd` | behind-net trip decision, geometry, phase |
-| `goalie_crease_clear.gd` | loose-puck sweep / cover |
+| `goalie_puck_handling.gd` | the puck on his stick: hold, pressure, release |
+| `domain/ai/goalie_outlet.gd` | what to do with it: pass or clear, priced (pure) |
+| `goalie_crease_clear.gd` | loose-puck reach, corner sweep, cover |
 | `goalie_slide_behavior.gd` | committed slides and post seals |
 | `goalie_world_view.gd` | the perception surface |
 | `domain/rules/goalie_behavior_rules.gd` | reads, depth, races (pure) |
@@ -360,14 +362,52 @@ the down pad measures flat through the replicated pads, and the up leg keeps a
 standing leg's drop and the arm's reach.
 `test_goalie_half_butterfly.gd` holds it.
 
+## The puck on his stick
+
+He plays the puck the way a skater does: he gets it on his blade, holds it,
+and releases it with a real pass or clear — and a stick can take it off him.
+Three things hand it to him: the end of an unpressured glove hold, a slow
+loose puck in the crease his blade gets to (the skater pickup radius, from the
+blade's carry point — nothing moves a puck his stick has not reached), and the
+rim stop behind the net. Covers are not a source: a pressured catch and the
+smother keep their freeze / hold-and-release.
+
+**He is not a `Puck.carrier`.** Every carrier path downstream — the wire's
+`carrier_idx`, the client carry pins, the claim resolvers' forward prediction,
+stats — names the carrier by a registry peer id, and a goalie has none. So the
+puck stays carrier-less to the netcode and is pinned to his blade's carry point
+with `motion_pinned`, the glove hold's mechanism, but NOT `pickup_locked`. That
+is what makes him strippable for free: an opposing blade on it is an ordinary
+pickup of a loose puck, through the host loop for bots and the lag-compensated
+claim for humans. Two consequences hold the arrangement together:
+
+- **Anything that writes the pinned puck's velocity takes it off him.** He
+  writes the blade's velocity every tick and compares next tick; a deflect, a
+  body block, any stick is a different number. Overwriting it instead would
+  make every touch but a clean pickup silently do nothing.
+- **He reads a steal before he pokes at it.** A takeaway at his blade leaves the
+  thief's carried puck inside his poke radius, so without the reaction-delay
+  lockout every steal is undone on the same tick.
+
+The decision is `GoalieOutlet`, in the carrier's own turnover currency: a pass
+keeps the puck with its completion probability and loses it where the lane is
+cut; a clear is a pure concession, as the carrier's clear is. He waits on the
+read beat, then releases the best option — except that while a pass exists but
+is not yet the best, he holds it for a teammate to get open, up to the hold
+limit or until a forechecker forces it. The release is `ShotMechanics`, fed
+exactly as a bot feeds it, so a goalie pass and a skater pass to the same tape
+leave the blade identically. The tier lever is perception: Easy does not read
+the forecheckers' motion.
+
+`test_goalie_puck_handling.gd` holds all of it.
+
 ## Behind-net puck play — the doctrine
 
-**"Stop it, leave it, get back."** The goalie leaves his net ONLY to trap a rim
-behind it. He never carries and never passes: the misplay-prone tiers of real
-puck handling are deliberately absent, because an AI turnover behind the net is
-the most frustrating failure a goalie can produce. A pure stop has no turnover
-mode — the only failure available is a bad GO decision, which is exactly what the
-races pin.
+**"Stop it, play it, get back."** The goalie leaves his net ONLY to stop a rim
+behind it. The stop hands him the puck, he plays it off his stick, and he
+skates home. Getting there is the part with a turnover mode nobody can recover
+from — caught behind the net with the cage empty — so the GO decision is
+exactly what the races pin.
 
 Everything about the decision is deliberately conservative:
 
@@ -382,8 +422,8 @@ Everything about the decision is deliberately conservative:
   getting caught out;
 - the trip routes around the post via a waypoint — never through the net.
 
-Only the HARD tier plays the puck at all (`puck_play_go_margin` is INF below it);
-timid puck play is a real weaker-goalie trait.
+Only the HARD tier goes behind the net at all (`puck_play_go_margin` is INF
+below it); timid puck play is a real weaker-goalie trait.
 
 ## Difficulty
 

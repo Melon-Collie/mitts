@@ -97,17 +97,17 @@ var standing_sweep_x_extension: float = 0.06
 var paddle_sweep_max_yaw_deg: float = 65.0
 var paddle_sweep_y_drop: float = 0.08
 var paddle_sweep_x_extension: float = 0.10
-# Clear-sweep follow-through magnitudes (set from controller). The blade swings
-# laterally toward the send corner + forward out of the crease, yawing to face
-# the follow-through, scaled by the sin-curved sweep_anim_progress.
+# Release follow-through magnitudes (set from controller), for any release off
+# his stick. The blade swings toward the send side + out of the crease, yawing
+# to face the follow-through, scaled by the sin-curved sweep_anim_progress.
 var sweep_anim_x_extension: float = 0.14
 var sweep_anim_z_extension: float = 0.18
 var sweep_anim_max_yaw_deg: float = 40.0
 # Windup (backswing) magnitudes — the blade cocks AWAY from the send corner
 # and slightly back toward the body before the strike, so the clear reads as
 # the stick sweeping THROUGH the puck (velocity applies at the strike moment,
-# not at the decision — see GoalieController._begin_sweep / _strike_pending_
-# sweep). Yaw sign is opposite the follow-through's.
+# not at the decision — see GoalieController._begin_cover_release). Yaw sign is
+# opposite the follow-through's.
 var sweep_windup_x_extension: float = 0.12
 var sweep_windup_z_pull: float = 0.06
 var sweep_windup_max_yaw_deg: float = 25.0
@@ -303,6 +303,8 @@ func build(inputs: Inputs) -> GoalieBodyConfig:
 			_set_catching_pose(c, inputs, false)
 		GoalieStateMachine.State.CATCHING_DOWN:
 			_set_catching_pose(c, inputs, true)
+		GoalieStateMachine.State.HANDLING:
+			_set_ready_pose(c, inputs)
 	# Head tracking applies in every state (eyes on the puck through freezes,
 	# around the post in RVH, while down). Only yaw — the per-state head
 	# position/pitch stays authored.
@@ -338,6 +340,7 @@ static func resting_body_position_for_state(state: int) -> Vector3:
 		GoalieStateMachine.State.CATCHING_DOWN:                   return Vector3(0.0, DOWN_BODY_Y_M, 0.0)
 		GoalieStateMachine.State.HALF_BUTTERFLY_LEFT:             return Vector3(-HALF_BODY_SHIFT_M, HALF_BODY_Y_M, -0.02)
 		GoalieStateMachine.State.HALF_BUTTERFLY_RIGHT:            return Vector3( HALF_BODY_SHIFT_M, HALF_BODY_Y_M, -0.02)
+		GoalieStateMachine.State.HANDLING:                        return Vector3(0.0,  1.06, -0.05)
 	return Vector3(0.0, 1.22, 0.0)
 
 static func resting_head_position_for_state(state: int) -> Vector3:
@@ -358,6 +361,7 @@ static func resting_head_position_for_state(state: int) -> Vector3:
 		GoalieStateMachine.State.CATCHING_DOWN:                   return Vector3(0.0, DOWN_HEAD_Y_M, -0.06)
 		GoalieStateMachine.State.HALF_BUTTERFLY_LEFT:             return Vector3(-HALF_BODY_SHIFT_M, HALF_HEAD_Y_M, -0.12)
 		GoalieStateMachine.State.HALF_BUTTERFLY_RIGHT:            return Vector3( HALF_BODY_SHIFT_M, HALF_HEAD_Y_M, -0.12)
+		GoalieStateMachine.State.HANDLING:                        return Vector3(0.0,  1.62, -0.22)
 	return Vector3(0.0, 1.79, -0.04)
 
 
