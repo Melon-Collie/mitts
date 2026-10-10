@@ -173,9 +173,11 @@ var push_l: float = 0.0
 var push_r: float = 0.0
 var push_strength: float = 0.0
 # The stop's and the skid's weights this pass (LocomotionRules.Mix), for the
-# scrape they make.
+# scrape they make, and the share of the edges' grip the turn is using
+# (SkaterLocomotion.turning, unsigned), for the carve.
 var stop_weight: float = 0.0
 var skid_weight: float = 0.0
+var turn_load: float = 0.0
 # Whether the push each leg is in has been heard yet.
 var _push_heard_l: bool = false
 var _push_heard_r: bool = false
@@ -258,6 +260,7 @@ func reset_to_rest() -> void:
 	_push_heard_r = false
 	stop_weight = 0.0
 	skid_weight = 0.0
+	turn_load = 0.0
 	if _native != null:
 		_native.reset()
 	for layer: GaitLayer in _layers:
@@ -364,9 +367,10 @@ func apply(delta: float) -> void:
 		authored = demand.y
 		var push: Vector4 = _native.get_push()
 		_sense_pushes(push.x, push.y, push.z)
-		var scrape: Vector2 = _native.get_scrape()
-		stop_weight = scrape.x
-		skid_weight = scrape.y
+		var heard: Vector4 = _native.get_sound()
+		stop_weight = heard.x
+		skid_weight = heard.y
+		turn_load = heard.z
 	else:
 		# Which skating state the skater is in and the stroke it skates
 		# (SkaterLocomotion). Shooting sets the feet and the pivot glides through
@@ -379,6 +383,7 @@ func apply(delta: float) -> void:
 		_sense_pushes(_locomotion.l_push, _locomotion.r_push, _locomotion.push_strength())
 		stop_weight = _locomotion.mix.stop
 		skid_weight = _locomotion.mix.skid
+		turn_load = absf(_locomotion.turning)
 		# The pivot sits too: the open-hip glide and the step-around are both
 		# done on bent knees.
 		stance = maxf(_locomotion.stance, _controller.pivot_stance * _pivot_blend)

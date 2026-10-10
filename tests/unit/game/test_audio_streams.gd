@@ -4,11 +4,15 @@ extends GutTest
 # stops looping just goes quiet, and a cue at the wrong level just sounds flat.
 
 
-# The stop's scrape is held for as long as the stop sheds speed, so it loops.
-func test_the_scrape_loops() -> void:
-	var stream := load("res://Sounds/skate_scrape.wav") as AudioStreamWAV
-	assert_not_null(stream)
-	assert_ne(stream.loop_mode, AudioStreamWAV.LOOP_DISABLED, "skate_scrape.wav.import must set a loop mode")
+# The stop's scrape, the glide and the carve are held for as long as the gait
+# holds them, so they loop.
+func test_the_held_skating_sounds_loop() -> void:
+	for sound: int in [SoundManager.Sound.SKATE_SCRAPE, SoundManager.Sound.SKATE_GLIDE,
+			SoundManager.Sound.SKATE_CARVE]:
+		var path: String = SoundManager._SOUND_PATHS[sound]
+		var stream := load(path) as AudioStreamWAV
+		assert_not_null(stream, path)
+		assert_ne(stream.loop_mode, AudioStreamWAV.LOOP_DISABLED, "%s.import must set a loop mode" % path)
 
 
 # A push sounds from the skate that made it, so its takes are mono one-shots: a
@@ -83,8 +87,9 @@ func test_the_mix_keeps_its_order() -> void:
 		for shot: int in [S.SHOT_SLAPPER, S.SHOT_WRISTER]:
 			assert_gt(mix[shot], mix[contact], "shots over puck contacts")
 		for quiet: int in [S.PUCK_PICKUP, S.SKATE_BRAKE, S.STICK_TAP, S.GOALIE_PAD_DROP, S.GOALIE_PAD_SLIDE,
-				S.SKATE_PUSH, S.SKATE_SCRAPE]:
+				S.SKATE_PUSH, S.SKATE_SCRAPE, S.SKATE_CARVE, S.SKATE_GLIDE]:
 			assert_gt(mix[contact], mix[quiet], "puck contacts over the quieter body and stick sounds")
+	assert_gt(mix[S.SKATE_CARVE], mix[S.SKATE_GLIDE], "the glide is a bed under the edges")
 	for sound: int in S.values():
 		if sound != S.UI_HOVER and sound != S.UI_CLICK:
 			assert_gt(mix[sound], mix[S.UI_CLICK], "menus sit under everything in play")

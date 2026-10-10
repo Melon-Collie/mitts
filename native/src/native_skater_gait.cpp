@@ -955,8 +955,8 @@ Vector4 NativeSkaterGait::get_push() const {
 			intensity * push_scale * (mix.stride + mix.crossover + mix.backward + mix.shuffle), 0.0);
 }
 
-Vector2 NativeSkaterGait::get_scrape() const {
-	return Vector2(mix.stop, mix.skid);
+Vector4 NativeSkaterGait::get_sound() const {
+	return Vector4(mix.stop, mix.skid, std::abs(turning), 0.0);
 }
 
 PackedFloat64Array NativeSkaterGait::get_mix() const {
@@ -988,7 +988,7 @@ void NativeSkaterGait::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_seed"), &NativeSkaterGait::get_seed);
 	ClassDB::bind_method(D_METHOD("get_trunk"), &NativeSkaterGait::get_trunk);
 	ClassDB::bind_method(D_METHOD("get_push"), &NativeSkaterGait::get_push);
-	ClassDB::bind_method(D_METHOD("get_scrape"), &NativeSkaterGait::get_scrape);
+	ClassDB::bind_method(D_METHOD("get_sound"), &NativeSkaterGait::get_sound);
 	ClassDB::bind_method(D_METHOD("get_mix"), &NativeSkaterGait::get_mix);
 }
 

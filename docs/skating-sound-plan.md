@@ -33,9 +33,10 @@ nothing new on the wire.
    `SkaterLocomotion.push_strength` (intensity × push scale × the stroking
    states' share). `SkaterSoundController` plays a take at that skate on a
    player of its own per foot, its level following strength.
-2. **The stop and the skid** as a sustained scrape over the stop's weight and
-   deceleration, with an onset bite.
-3. **Glide and carve beds**, two loops whose levels follow speed and edge load.
+2. **The stop and the skid** (built) as a sustained scrape over the stop's
+   weight and deceleration, with an onset bite.
+3. **Glide and carve beds** (built), two loops whose levels follow speed and
+   edge load.
 4. **Polish**: touchdowns, the start's chop, the mix of the local skater's own
    skating against everyone else's, a voice budget for six skaters.
 
@@ -50,8 +51,8 @@ placeholders are cut from the old stride recording.
 | Cue | Placeholder | Wanted |
 |---|---|---|
 | `skate_push_01..06.wav` | the stride, re-pitched ±10% and tilted ±3 dB, 400 ms from 3 ms before the bite | 6–10 pushes, mono, ~300–500 ms, cut 3 ms before the bite |
-| glide bed (phase 3) | — | a seamless 2–4 s loop of a coasting glide |
-| carve (phase 3) | — | a seamless 2–4 s loop of a held edge |
+| `skate_glide.wav` | band-limited noise (2.5–9 kHz), 4 s, its spectrum filtered round the circle so the loop has no seam | a seamless 2–4 s loop of a coasting glide, mono, loop on in its `.import` |
+| `skate_carve.wav` | grains of the stride's scrape tail, overlap-added round a 3 s circle | a seamless 2–4 s loop of a held edge, mono, loop on in its `.import` |
 | `skate_brake.wav` (the stop's bite) | the original | a short bite as the blades dig in, mono |
 | `skate_scrape.wav` (the stop's sustain) | grains of `skate_brake.wav`'s steady scrape, overlap-added round a 2 s circle so the loop has no seam | a seamless 2–4 s loop of a held stop's spray, mono, loop on in its `.import` (`edit/loop_mode=2`) |
 
@@ -73,22 +74,43 @@ placeholders are cut from the old stride recording.
   alternate, and a coasting skater makes no push.
 - Level: full at strength 1 (a flat-out stride), −14 dB at the floor; the cue
   sits at −6 in the mix, with the quieter body and stick sounds.
-- The fixed-clock loop is gone, so a glide is silent until phase 3.
+- The fixed-clock loop is gone; phase 3's glide bed took over its hiss.
 
 ## Phase 2 as built
 
 - The gait publishes the stop's and the skid's weights (`stop_weight`,
-  `skid_weight` on the coordinator; `NativeSkaterGait.get_scrape`; held by
-  `test_native_gait_parity.gd`), read through `SkaterController.skate_scrape`
+  `skid_weight` on the coordinator; `NativeSkaterGait.get_sound`; held by
+  `test_native_gait_parity.gd`), read through `SkaterController.skate_sound`
   as `GoalieSoundController` reads `GoalieController.stance`.
 - The scrape's amplitude is the share of the legs shedding speed — the stop
   whole, the skid at half — times speed against 8 m/s; under −30 dB it stops.
   The bite plays once as the stop's weight passes half at 1.5 m/s or more, and
   re-arms when the stop lets go.
-- Measured (`test_skate_scrape_sound.gd`): a stop from speed bites once and
+- Measured (`test_skate_loops.gd`): a stop from speed bites once and
   scrapes up to −1.7 dB for ~0.9 s, silent once stopped; the skid scrapes to
   −7.5 dB without a bite; a stride does not scrape.
 - The stop's sound follows the gait's stop rather than the brake button: it
   comes in with the legs turning across, and the shot block's plant (which sets
   `is_braking` for its spray) no longer plays the brake.
+
+## Phase 3 as built
+
+- The gait publishes the edges' load in a turn (`turn_load` on the
+  coordinator, `SkaterLocomotion.turning` unsigned: the share of the edge's
+  grip the travel's curve uses; the third channel of
+  `NativeSkaterGait.get_sound`), read with the stop's weights through
+  `SkaterController.skate_sound`.
+- The glide hisses at speed against 10 m/s, given up by the stop's weight, so
+  a stop is all scrape. It plays under every push: the pushes ride on it.
+- The carve is the turn load times speed against 8 m/s, its pitch rising up to
+  8% as the edge loads. A crossover loads the edge too, so it carves under its
+  pushes.
+- The scrape, the glide and the carve share one held-loop path: under −30 dB a
+  loop stops, and a level or pitch is written only when it moves.
+- Mix: the carve at −8, the glide at −10, under the pushes and the scrape and
+  over the menu click.
+- Measured (`test_skate_loops.gd`): a stride glides at −0.1 dB and neither
+  scrapes nor carves; a coasting curve held from speed carves at −0.4 dB
+  through all of it, pitched up 7.8%; a stopped skater neither scrapes nor
+  glides.
 

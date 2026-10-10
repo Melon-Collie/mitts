@@ -12,8 +12,18 @@ const _BITE_MIN_SPEED: float = 1.5
 # against the speed it is full at; below the floor it stops.
 const _SKID_SCRAPE_SHARE: float = 0.5
 const _SCRAPE_FULL_SPEED: float = 8.0
-const _SCRAPE_FLOOR_DB: float = -30.0
+# The glide's hiss is the runners sliding, so it follows speed, full at this,
+# and is given up by the share of the legs turned across into a stop.
+const _GLIDE_FULL_SPEED: float = 10.0
+# The carve is an edge holding a curve: the share of its grip the curve uses
+# (the gait's turn load), times speed against the speed it is full at. A held
+# edge brightens as it loads.
+const _CARVE_FULL_SPEED: float = 8.0
+const _CARVE_PITCH_RISE: float = 0.08
+# A held loop below this stops.
+const _LOOP_FLOOR_DB: float = -30.0
 const _LEVEL_EPSILON_DB: float = 0.1
+const _PITCH_EPSILON: float = 0.002
 # Where the softest stickhandling tap bottoms out.
 const _TAP_FLOOR_DB: float = -12.0
 # A push's level follows the stroke's strength (Skater.skate_pushed), full at
@@ -27,7 +37,8 @@ var _skater: Skater = null
 var _controller: SkaterController = null
 var _brake_player: AudioStreamPlayer3D = null
 var _scrape_player: AudioStreamPlayer3D = null
-var _scrape_db: float = -INF
+var _glide_player: AudioStreamPlayer3D = null
+var _carve_player: AudioStreamPlayer3D = null
 var _bite_armed: bool = true
 # One per skate, so a push never cuts off the other foot's tail.
 var _push_players: Array[AudioStreamPlayer3D] = []
@@ -39,6 +50,8 @@ func setup(skater: Skater, controller: SkaterController) -> void:
 	_brake_player = _make_player("res://Sounds/skate_brake.wav")
 	_brake_player.volume_db = SoundManager.level_db(SoundManager.Sound.SKATE_BRAKE)
 	_scrape_player = _make_player("res://Sounds/skate_scrape.wav")
+	_glide_player = _make_player("res://Sounds/skate_glide.wav")
+	_carve_player = _make_player("res://Sounds/skate_carve.wav")
 	_push_players = [_make_player(""), _make_player("")]
 	skater.carry_caught.connect(_on_carry_caught)
 	skater.skate_pushed.connect(_on_skate_pushed)
@@ -59,6 +72,18 @@ static func push_volume_db(strength: float) -> float:
 static func scrape_volume_db(scrape: Vector2, speed: float) -> float:
 	var amount: float = (scrape.x + _SKID_SCRAPE_SHARE * scrape.y) \
 			* clampf(speed / _SCRAPE_FULL_SPEED, 0.0, 1.0)
+	return linear_to_db(amount) if amount > 0.0 else -INF
+
+
+# The glide's level at `speed` (m/s) with the stop's weight `stop`.
+static func glide_volume_db(speed: float, stop: float) -> float:
+	var amount: float = clampf(speed / _GLIDE_FULL_SPEED, 0.0, 1.0) * (1.0 - clampf(stop, 0.0, 1.0))
+	return linear_to_db(amount) if amount > 0.0 else -INF
+
+
+# The carve's level for the gait's turn load (0..1) at `speed` (m/s).
+static func carve_volume_db(turn_load: float, speed: float) -> float:
+	var amount: float = clampf(turn_load, 0.0, 1.0) * clampf(speed / _CARVE_FULL_SPEED, 0.0, 1.0)
 	return linear_to_db(amount) if amount > 0.0 else -INF
 
 
@@ -102,9 +127,15 @@ func _process(_delta: float) -> void:
 		return
 	var vel: Vector3 = _skater.velocity
 	var speed: float = Vector2(vel.x, vel.z).length()
-	var scrape: Vector2 = _controller.skate_scrape()
-	_update_bite(scrape.x, speed)
-	_update_scrape(scrape_volume_db(scrape, speed))
+	var heard: Vector3 = _controller.skate_sound()
+	_update_bite(heard.x, speed)
+	_hold_loop(_scrape_player, SoundManager.Sound.SKATE_SCRAPE,
+			scrape_volume_db(Vector2(heard.x, heard.y), speed))
+	_hold_loop(_glide_player, SoundManager.Sound.SKATE_GLIDE, glide_volume_db(speed, heard.x))
+	if _hold_loop(_carve_player, SoundManager.Sound.SKATE_CARVE, carve_volume_db(heard.z, speed)):
+		var pitch: float = 1.0 + _CARVE_PITCH_RISE * clampf(heard.z, 0.0, 1.0)
+		if absf(pitch - _carve_player.pitch_scale) > _PITCH_EPSILON:
+			_carve_player.pitch_scale = pitch
 
 
 # Once per stop, as its weight passes half: re-armed when the stop lets go.
@@ -117,18 +148,20 @@ func _update_bite(stop: float, speed: float) -> void:
 	_bite_armed = false
 
 
-func _update_scrape(level_db: float) -> void:
-	if _scrape_player.stream == null:
-		return
-	if level_db < _SCRAPE_FLOOR_DB:
-		if _scrape_player.playing:
-			_scrape_player.stop()
-		_scrape_db = -INF
-		return
-	# Guarded: the setter pushes through to the audio server, and a held stop
-	# re-sent identical values every frame.
-	if absf(level_db - _scrape_db) > _LEVEL_EPSILON_DB:
-		_scrape_db = level_db
-		_scrape_player.volume_db = SoundManager.level_db(SoundManager.Sound.SKATE_SCRAPE) + level_db
-	if not _scrape_player.playing:
-		_scrape_player.play()
+# Plays `player`'s loop at the cue's level plus `level_db`, or stops it under
+# the floor; true while it plays.
+func _hold_loop(player: AudioStreamPlayer3D, sound: SoundManager.Sound, level_db: float) -> bool:
+	if player.stream == null:
+		return false
+	if level_db < _LOOP_FLOOR_DB:
+		if player.playing:
+			player.stop()
+		return false
+	var db: float = SoundManager.level_db(sound) + level_db
+	# Guarded: the setter pushes through to the audio server, and a held loop
+	# would re-send identical values every frame.
+	if absf(db - player.volume_db) > _LEVEL_EPSILON_DB:
+		player.volume_db = db
+	if not player.playing:
+		player.play()
+	return true
