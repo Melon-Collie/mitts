@@ -901,7 +901,7 @@ Vector3 NativeSkaterGait::within(const Vector3 &target, double limit) const {
 }
 
 // GaitPose.solve_stance, seed_legs and seed_trunk, with no layer between them.
-void NativeSkaterGait::solve(double p_stance, const Basis &p_lean, const Basis &p_ice) {
+void NativeSkaterGait::solve(double p_stance, double p_width, const Basis &p_lean, const Basis &p_ice) {
 	lean = p_lean;
 	ice = p_ice;
 	stance_hip = deg_to_rad(cfg.stance_hip_deg) * p_stance;
@@ -916,8 +916,8 @@ void NativeSkaterGait::solve(double p_stance, const Basis &p_lean, const Basis &
 	place(leg_r, stance_hip - (knee_r + stance_knee) * shin_frac, pivot_yaw_r, r_roll, knee_r);
 	foot_level = authored > 0.001 ? authored : 0.0;
 	gripping = foot_level > 0.0 ? clampd(1.0 - sliding / foot_level, 0.0, 1.0) : 1.0;
-	reach(leg_l, l_dx, l_dy, l_dz, pivot_yaw_l + l_yaw, foot_level, -1.0);
-	reach(leg_r, r_dx, r_dy, r_dz, pivot_yaw_r + r_yaw, foot_level, 1.0);
+	reach(leg_l, l_dx - p_width, l_dy, l_dz, pivot_yaw_l + l_yaw, foot_level, -1.0);
+	reach(leg_r, r_dx + p_width, r_dy, r_dz, pivot_yaw_r + r_yaw, foot_level, 1.0);
 	plant = plant_share(intensity, edge_floor);
 
 	edge_l = clampd(maxd(l_push * intensity, edge_floor), 0.0, 1.0);
@@ -972,7 +972,7 @@ void NativeSkaterGait::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("locomote", "delta", "velocity", "intent", "basis", "flags", "hold"),
 			&NativeSkaterGait::locomote);
 	ClassDB::bind_method(D_METHOD("get_channels"), &NativeSkaterGait::get_channels);
-	ClassDB::bind_method(D_METHOD("solve", "stance", "lean", "ice"), &NativeSkaterGait::solve);
+	ClassDB::bind_method(D_METHOD("solve", "stance", "width", "lean", "ice"), &NativeSkaterGait::solve);
 	ClassDB::bind_method(D_METHOD("get_leg_l"), &NativeSkaterGait::get_leg_l);
 	ClassDB::bind_method(D_METHOD("get_leg_r"), &NativeSkaterGait::get_leg_r);
 	ClassDB::bind_method(D_METHOD("get_stance"), &NativeSkaterGait::get_stance);

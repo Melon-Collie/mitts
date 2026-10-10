@@ -536,8 +536,9 @@ edge sway and, out of a turn, a light inside knee. Three things make them stand 
   edge raises a runner toward its ankle, so the ankle comes down by what the
   edge takes off and the leg is solved again.
 
-The pose is now authored where the eye reads it; Phase 5 of the plan ports it
-back to C++.
+A layer that widens the base does it the same way: `GaitLayer.stance_width`
+is an ankle offset the solve reaches on the ice, so the loaded stance widens a
+stroke's path rather than rolling the solved legs off it.
 
 ### Overlays are layers, and the order is the priority
 
@@ -550,7 +551,7 @@ over the locomotion pose in a `GaitPose`, one stage at a time:
 | Stage | Composition | Why it sits there |
 |---|---|---|
 | `HOLD` | max with the pivot's | how much the layer sets the feet |
-| `FLOOR` | max over the stance | a floor, so order cannot matter |
+| `FLOOR` | max over the stance and the width | a floor, so order cannot matter |
 | `LEGS` | additive on the joints | before the knee solve: the fore-aft compensation must see it |
 | `TRUNK` | additive texture; sinks; `wobble` | `wobble` skips the trunk inertia filter |
 | `OVERRIDE` | lerp owned channels to the layer's pose | last, so it takes everything beneath |

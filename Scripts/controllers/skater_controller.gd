@@ -608,7 +608,7 @@ var glide_inside_tuck_deg: float = 10.0  # inside-leg knee tuck — weight on th
 var stance_stride_gain: float = -0.3     # stride amplitude change at full stance
 var stance_sit_gain: float = 0.35        # extra stroke crouch in the stance
 var stance_crouch: float = 1.7           # crouch floor in the stance (× stance_hip_deg)
-var stance_width_deg: float = 11.0       # each leg splayed out from the hip
+var stance_width_m: float = 0.125        # each skate set out from under its hip
 var stance_chest_deg: float = 26.0       # chest folded over the knees (trunk texture)
 # Cadence "gears" — grounded in on-ice biomechanics: from acceleration to
 # sustained max velocity real skaters DROP stride frequency and lengthen the

@@ -229,9 +229,10 @@ public:
 	// (stride_phase, stop_yaw, travel_align_yaw, pivot_hold)
 	godot::Vector4 get_channels() const;
 
-	// GaitPose.solve_stance and seed_legs at `stance`, on the hips' tilt against
-	// the ice (GaitPose.lean / ice), and the stroke's seed_trunk values.
-	void solve(double p_stance, const godot::Basis &p_lean, const godot::Basis &p_ice);
+	// GaitPose.solve_stance and seed_legs at `stance` and `width`, on the hips'
+	// tilt against the ice (GaitPose.lean / ice), and the stroke's seed_trunk
+	// values.
+	void solve(double p_stance, double p_width, const godot::Basis &p_lean, const godot::Basis &p_ice);
 	godot::Vector4 get_leg_l() const;   // (pitch, roll, knee, yaw)
 	godot::Vector4 get_leg_r() const;
 	godot::Vector4 get_stance() const;  // (stance_hip, stance_knee, stance_shin, drop)

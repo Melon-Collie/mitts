@@ -196,6 +196,14 @@ func test_backward_c_cuts_stand_on_the_ice() -> void:
 		inp.mouse_world_pos = Vector3(0.0, 0.0, -6.0)))
 
 
+# The stance's wide base on a stroke: C-cuts skated in the loaded stance.
+func test_stance_c_cuts_stand_on_the_ice() -> void:
+	_assert_both_on_ice("stance c-cuts", _skate(func(inp: InputState, _i: int, _v: Vector3) -> void:
+		inp.move_vector = Vector2(0.0, 1.0)
+		inp.stance_held = true
+		inp.mouse_world_pos = Vector3(0.0, 0.0, -6.0)))
+
+
 func test_crossovers_stand_on_the_ice() -> void:
 	var contact: Vector4 = _skate(func(inp: InputState, i: int, v: Vector3) -> void:
 		var travel := Vector2(v.x, v.z)

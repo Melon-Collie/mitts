@@ -513,3 +513,22 @@ the plant nothing to correct. The side latch and the hips' turn stay. The skid
   top of the authored path, and a stroke is not planted. §5's follow-up
   (author the stance's width as foot positions) is the fix.
 
+
+## §19 The stance's width, on the ice
+
+- **The loaded stance's wide base is a width, not a roll.** `GaitStanceLayer`
+  rolled each solved leg out by `stance_width_deg` and paid the cosine as drop,
+  which holds only for a leg hanging under its hip: on an authored stroke the
+  roll swung each skate about its hip from wherever the path had put it, and a
+  stroke is not planted, so C-cuts in the stance lifted one blade 13 mm
+  (steady) to 50 mm (slowing out of a tight turn). The layer now reports
+  `stance_width()` in the FLOOR stage (`stance_width_m`, 0.125 m — what the
+  11° splay put each ankle out at the stance crouch), and `seed_legs` / the
+  port's `solve` lay it on each ankle before the solve, in the ice frame with
+  every authored offset. The stance no longer has a LEGS stage.
+- Measured: stance C-cuts' higher blade −0.1 mm (`test_blades_stand_on_the_ice
+  .gd`); the skates 0.28 m further apart than upright (`test_gait_layers.gd`).
+  From the strip the base reads as wide as it did; the shins stand a touch
+  straighter, since the legs now reach out rather than roll.
+- The faceoff address still splays in joint space; it is skated from a
+  standstill, where nothing is authored.

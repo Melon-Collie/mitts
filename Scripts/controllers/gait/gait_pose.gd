@@ -133,8 +133,9 @@ func solve_stance(hip: float) -> void:
 # the stance flex both knees carry and the glide's joint-space texture (its sway
 # and its light inside knee, the thigh counter-pitched by the small-angle FK
 # term Δpitch = −Δknee · L_shin / L_leg so a tucked knee lifts the foot without
-# dragging it fore-aft); the authored states lay their offsets on that.
-func seed_legs(loco: SkaterLocomotion, yaw_l: float, yaw_r: float) -> void:
+# dragging it fore-aft); the authored states lay their offsets on that, and both
+# skates go `width` further out from under their hips (GaitLayer.stance_width).
+func seed_legs(loco: SkaterLocomotion, yaw_l: float, yaw_r: float, width: float = 0.0) -> void:
 	var knee_l: float = -(stance_knee + loco.l_tuck)
 	var knee_r: float = -(stance_knee + loco.r_tuck)
 	_place(leg_l, stance_hip - (knee_l + stance_knee) * _shin_frac(), yaw_l, loco.l_roll, knee_l)
@@ -146,8 +147,8 @@ func seed_legs(loco: SkaterLocomotion, yaw_l: float, yaw_r: float) -> void:
 	# Of the authored share, the part whose skates grip the ice the body goes
 	# over, against the part that scrapes along with it.
 	_gripping = clampf(1.0 - loco.sliding / authored, 0.0, 1.0) if authored > 0.0 else 1.0
-	_reach(leg_l, loco.l_dx, loco.l_dy, loco.l_dz, yaw_l + loco.l_yaw, foot_level_l, -1.0)
-	_reach(leg_r, loco.r_dx, loco.r_dy, loco.r_dz, yaw_r + loco.r_yaw, foot_level_r, 1.0)
+	_reach(leg_l, loco.l_dx - width, loco.l_dy, loco.l_dz, yaw_l + loco.l_yaw, foot_level_l, -1.0)
+	_reach(leg_r, loco.r_dx + width, loco.r_dy, loco.r_dz, yaw_r + loco.r_yaw, foot_level_r, 1.0)
 	l_pitch = leg_l.pitch
 	l_roll = leg_l.roll
 	l_knee = leg_l.knee

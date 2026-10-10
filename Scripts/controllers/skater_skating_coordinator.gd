@@ -355,21 +355,23 @@ func apply(delta: float) -> void:
 			stance = maxf(stance, lerpf(stance, reach_sit, authored))
 
 	# ── Stance and pose ────────────────────────────────────────────────────────
+	var width: float = 0.0
 	if active:
 		for i: int in _floor_layers.size():
 			if active & _floor_bits[i]:
 				stance = maxf(stance, _floor_layers[i].stance_floor())
+				width = maxf(width, _floor_layers[i].stance_width())
 	if authored > 0.001:
 		tilt_hips(p)
 	else:
 		p.lean = Basis.IDENTITY
 		p.ice = Basis.IDENTITY
 	if _native != null:
-		_native.solve(stance, p.lean, p.ice)
+		_native.solve(stance, width, p.lean, p.ice)
 		p.load_native_legs(_native)
 	else:
 		p.solve_stance(deg_to_rad(_controller.stance_hip_deg) * stance)
-		p.seed_legs(_locomotion, _pivot_yaw_l, _pivot_yaw_r)
+		p.seed_legs(_locomotion, _pivot_yaw_l, _pivot_yaw_r, width)
 	if active:
 		for i: int in _leg_layers.size():
 			if active & _leg_bits[i]:

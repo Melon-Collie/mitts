@@ -66,14 +66,14 @@ func test_the_stance_widens_lowers_and_folds_without_moving_the_blade() -> void:
 		_coord.apply(DT)
 	var upright_drop: float = _coord.crouch_drop
 	var upright_pitch: float = _coord.trunk_pitch_add
-	var upright_splay: float = _skater._legs._gait_leg_r.z - _skater._legs._gait_leg_l.z
+	var upright_width: float = _skates_apart()
 	var frame: Transform3D = _skater.upper_body.transform
 	_controller.stance_active = true
 	for _i: int in 60:
 		_coord.apply(DT)
-	var splay: float = _skater._legs._gait_leg_r.z - _skater._legs._gait_leg_l.z
-	assert_gt(splay - upright_splay, deg_to_rad(_controller.stance_width_deg) * 1.5,
-			"both legs splay into the wide base (%.3f rad wider)" % (splay - upright_splay))
+	var widened: float = _skates_apart() - upright_width
+	assert_gt(widened, _controller.stance_width_m * 1.5,
+			"both skates go out into the wide base (%.3f m wider)" % widened)
 	assert_gt(_coord.crouch_drop, upright_drop + 0.02, "the stance sits the hips down")
 	assert_lt(_coord.trunk_pitch_add, upright_pitch - 0.2, "the chest folds over the knees")
 	assert_true(_skater.upper_body.transform.is_equal_approx(frame),
@@ -82,6 +82,14 @@ func test_the_stance_widens_lowers_and_folds_without_moving_the_blade() -> void:
 	for _i: int in 120:
 		_coord.apply(DT)
 	assert_almost_eq(_coord.crouch_drop, upright_drop, 0.005, "letting go stands back up")
+
+
+# How far apart the skates are drawn across the body, metres.
+func _skates_apart() -> float:
+	var sk: Skeleton3D = _skater._legs._skeleton
+	var l: Vector3 = sk.get_bone_global_pose(SkaterLegRig._OFFSET + SkaterMeshBuilder.LegBone.FOOT_L).origin
+	var r: Vector3 = sk.get_bone_global_pose(SkaterLegRig._OFFSET + SkaterMeshBuilder.LegBone.FOOT_R).origin
+	return absf(r.x - l.x)
 
 
 func test_knockdown_takes_the_check_commit_with_it() -> void:

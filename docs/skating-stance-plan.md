@@ -9,8 +9,9 @@ plan as written:
   `NativeSkaterGait`) draws what the stance does to the STROKE — shorter strides,
   a deeper sit — and `LocomotionRules.classify` skates the stance's turning share
   as the `tight` state instead of crossovers. The POSTURE over it is
-  `GaitStanceLayer` (`FLOOR | LEGS | TRUNK`): a crouch floor (`stance_crouch`),
-  both legs splayed into a wide base (`stance_width_deg`) and the chest folded
+  `GaitStanceLayer` (`FLOOR | TRUNK`): a crouch floor (`stance_crouch`),
+  both skates set out into a wide base (`stance_width_m`, an ankle offset the
+  leg solve reaches on the ice — see skating-stroke-plan §19) and the chest folded
   over the knees on the trunk texture (`stance_chest_deg`), so the blade never
   moves. Width is what reads from the top-down game camera. The check commit
   stands tall instead (`hit_commit_crouch_m` 0.03), so the two postures read
