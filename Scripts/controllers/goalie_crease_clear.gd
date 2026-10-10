@@ -172,10 +172,6 @@ func cover_escaped(dist: float, puck_speed: float, puck_height: float) -> bool:
 			or puck_height > cover_escape_height
 
 
-# Run the reach race. Returns REACH_PENDING while the glove is still travelling,
-# REACH_SECURED on the tick it lands with the puck still under it, or REACH_LOST
-# if it landed and the puck had slipped out of the secure radius.
-
 func tick_body_rest(delta: float, puck_pos: Vector3, puck_speed: float,
 		goalie_pos: Vector3) -> bool:
 	if not GoalieBehaviorRules.puck_resting_on_goalie(
@@ -191,3 +187,17 @@ func tick_body_rest(delta: float, puck_pos: Vector3, puck_speed: float,
 
 
 # ── Catch-and-hold (glove) ───────────────────────────────────────────────────
+
+# A caught puck is set down past the blade's face along his facing. Anywhere
+# between blade and skates, his first step back toward his line drives the
+# blade's back face into it and rakes it goalward through his pads. The blade
+# box's depth along his facing is at most (thickness + height) / 2 at any tilt.
+const CATCH_DROP_AHEAD_OF_BLADE_M: float = GameRules.PUCK_COLLISION_RADIUS \
+		+ 0.5 * (GoalieStickRules.BLADE_THICKNESS_M + GoalieStickRules.BLADE_HEIGHT_M)
+
+static func catch_drop_spot(blade_pos: Vector3, facing: Vector3,
+		ice_height: float) -> Vector3:
+	var flat := Vector3(facing.x, 0.0, facing.z).normalized()
+	var spot: Vector3 = blade_pos + flat * CATCH_DROP_AHEAD_OF_BLADE_M
+	spot.y = ice_height
+	return spot

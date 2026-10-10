@@ -2713,17 +2713,17 @@ func _tick_catch(delta: float) -> void:
 		_drop_caught_puck()
 
 
-# Set the caught puck down at the feet and rejoin play through the recovery
-# window. The dropped puck is an ordinary loose puck again — the crease-clear
-# machinery (dwell → lane-aware windup-strike, or another cover if the lanes
-# are jammed) handles what happens next.
+# Set the caught puck down in front of his stick and rejoin play through the
+# recovery window. The dropped puck is an ordinary loose puck again — the
+# crease-clear machinery (dwell → lane-aware windup-strike, or another cover if
+# the lanes are jammed) handles what happens next.
 func _drop_caught_puck() -> void:
 	puck.pickup_locked = false
 	puck.motion_pinned = false  # releasing the glove pin — the drive owns it again
 	_clear.catch_secured = false
-	puck.set_puck_position(Vector3(
-			goalie.global_position.x, puck.ice_height,
-			goalie.global_position.z + float(_direction_sign) * 0.45))
+	puck.set_puck_position(GoalieCreaseClear.catch_drop_spot(
+			goalie.get_blade_world_position(), -goalie.global_transform.basis.z,
+			puck.ice_height))
 	puck.set_puck_velocity(Vector3.ZERO)
 	_sm.transition_to(State.RECOVERING)
 	_sm.recovery_timer = 0.0
