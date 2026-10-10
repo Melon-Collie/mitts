@@ -20,6 +20,14 @@ func test_the_sfx_bus_exists_before_anything_asks_for_it() -> void:
 	assert_gt(AudioServer.get_bus_index("SFX"), -1, "SoundManager created the SFX bus")
 
 
+func test_the_master_bus_is_limited() -> void:
+	var master: int = AudioServer.get_bus_index("Master")
+	var limited: bool = false
+	for i: int in AudioServer.get_bus_effect_count(master):
+		limited = limited or AudioServer.get_bus_effect(master, i) is AudioEffectHardLimiter
+	assert_true(limited, "make-up gain on under-reference cues relies on the Master limiter")
+
+
 func test_a_skater_emitter_matches_the_shared_world_pool() -> void:
 	var pool: Array[AudioStreamPlayer3D] = SoundManager._pool_3d
 	assert_gt(pool.size(), 0, "the shared world pool is built")
@@ -30,6 +38,21 @@ func test_a_skater_emitter_matches_the_shared_world_pool() -> void:
 		assert_eq(p.unit_size, mine.unit_size, "same falloff anchor")
 		assert_eq(p.max_distance, mine.max_distance, "same (absent) cutoff")
 		assert_eq(p.attenuation_model, mine.attenuation_model, "same attenuation model")
+
+
+func test_a_skater_emitter_sounds_from_the_skater() -> void:
+	# A 3D player under a non-Node3D parent keeps its own world transform, so the
+	# controller between skater and emitter has to pass the transform through or
+	# every stride sounds from the origin.
+	var skater_stand_in := Node3D.new()
+	add_child_autofree(skater_stand_in)
+	skater_stand_in.global_position = Vector3(12.0, 0.0, -7.0)
+	var controller := SkaterSoundController.new()
+	skater_stand_in.add_child(controller)
+	var mine: AudioStreamPlayer3D = controller._make_player("res://Sounds/skate_loop.ogg")
+	assert_eq(mine.global_position, skater_stand_in.global_position, "emitter sits on the skater")
+	skater_stand_in.global_position = Vector3(-20.0, 0.0, 4.0)
+	assert_eq(mine.global_position, skater_stand_in.global_position, "and follows it")
 
 
 func test_no_world_emitter_is_cut_off_by_distance() -> void:

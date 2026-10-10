@@ -42,6 +42,10 @@ enum Sound {
 	PERIOD_BUZZER,
 	BODY_CHECK,
 	FACEOFF_WHISTLE,
+	PUCK_GLASS,
+	STICK_TAP,
+	GOALIE_PAD_DROP,
+	GOALIE_PAD_SLIDE,
 }
 
 const _SOUND_PATHS: Dictionary = {
@@ -57,12 +61,76 @@ const _SOUND_PATHS: Dictionary = {
 	Sound.PUCK_POST:        "res://Sounds/puck_post.wav",
 	Sound.PUCK_GOAL_BODY:   "res://Sounds/puck_goal_body.wav",
 	Sound.PUCK_DEFLECTION:  "res://Sounds/puck_deflection.wav",
-	Sound.PUCK_BODY_BLOCK:  "res://Sounds/puck_body_block.ogg",
+	Sound.PUCK_BODY_BLOCK:  "res://Sounds/puck_goalie.wav",
 	Sound.PUCK_STRIP:       "res://Sounds/puck_strip.wav",
 	Sound.STICK_LIFT:       "res://Sounds/stick_lift.wav",
 	Sound.PERIOD_BUZZER:    "res://Sounds/period_buzzer.wav",
 	Sound.BODY_CHECK:       "res://Sounds/body_check.ogg",
 	Sound.FACEOFF_WHISTLE:  "res://Sounds/faceoff_whistle.wav",
+	Sound.PUCK_GLASS:       "res://Sounds/puck_glass.wav",
+	Sound.STICK_TAP:        "res://Sounds/stick_tap_%02d.wav",
+	Sound.GOALIE_PAD_DROP:  "res://Sounds/goalie_pad_drop.wav",
+	Sound.GOALIE_PAD_SLIDE: "res://Sounds/goalie_pad_slide.wav",
+}
+
+# Cues recorded as several takes: the path above is a pattern numbered from 1,
+# and each play draws a take other than the last one, so a run of the same cue
+# never repeats a sample back to back.
+const _TAKE_COUNTS: Dictionary = {
+	Sound.STICK_TAP: 15,
+}
+
+# Every file above is mastered to one reference loudness
+# (tools/normalize_sfx.py), so this table is the mix: each cue's level against
+# the others before distance and the call site's own modifiers (puck speed, shot
+# power, save bumps). Arena cues play without distance falloff, while a world
+# cue at the live camera's range loses about 8 dB (see WORLD_UNIT_SIZE).
+const _MIX_DB: Dictionary = {
+	Sound.GOAL_HORN:        4.0,
+	Sound.PERIOD_BUZZER:    0.0,
+	Sound.FACEOFF_WHISTLE: -2.0,
+	Sound.SHOT_SLAPPER:     2.0,
+	Sound.SHOT_WRISTER:     2.0,
+	Sound.PUCK_BOARDS:      0.0,
+	Sound.PUCK_GLASS:       0.0,
+	Sound.PUCK_GOALIE:      0.0,
+	Sound.PUCK_POST:        0.0,
+	Sound.PUCK_GOAL_BODY:   0.0,
+	Sound.PUCK_DEFLECTION:  0.0,
+	Sound.PUCK_BODY_BLOCK:  0.0,
+	Sound.PUCK_STRIP:       0.0,
+	Sound.STICK_LIFT:       0.0,
+	Sound.BODY_CHECK:       0.0,
+	Sound.PUCK_PICKUP:     -6.0,
+	Sound.SKATE_BRAKE:     -4.0,
+	Sound.GOALIE_PAD_DROP: -3.0,
+	Sound.GOALIE_PAD_SLIDE: -4.0,
+	Sound.STICK_TAP:       -6.0,
+	Sound.UI_CLICK:       -12.0,
+	Sound.UI_HOVER:       -18.0,
+}
+
+# Files the mastering left under the reference because reaching it would have
+# limited their attack past normalize_sfx.MAX_LIMIT_DB; the tool's report gives
+# the number when a file is re-mastered.
+const _UNDER_REFERENCE_DB: Dictionary = {
+	Sound.UI_CLICK:        5.0,
+	Sound.PUCK_PICKUP:     2.3,
+	Sound.PUCK_DEFLECTION: 6.9,
+	Sound.STICK_LIFT:      6.9,
+	Sound.PUCK_GOALIE:     4.1,
+	Sound.PUCK_STRIP:      2.8,
+	Sound.PUCK_GOAL_BODY:  1.3,
+	Sound.PUCK_BODY_BLOCK: 4.1,
+	Sound.PUCK_GLASS:      7.1,
+	Sound.STICK_TAP:      10.0,
+	Sound.GOALIE_PAD_DROP: 11.0,
+}
+
+# A cue reusing another's recording, pitched to read as a different target:
+# a body is a softer, heavier stop than a goalie pad.
+const _BASE_PITCH: Dictionary = {
+	Sound.PUCK_BODY_BLOCK: 0.85,
 }
 
 const _UI_POOL_SIZE: int = 4
@@ -99,7 +167,14 @@ const _CROWD_POOL_SIZE: int = 4
 const WORLD_UNIT_SIZE: float = 6.0
 const NO_DISTANCE_CUTOFF: float = 0.0
 
+# Where a feather pass bottoms out — still audible next to the passer.
+const _SHOT_VOLUME_FLOOR_DB: float = -18.0
+# The launch speed a shot cue is loudest at: the league's hardest shot.
+const _SHOT_FULL_POWER_M_S: float = GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S
+
 var _streams: Dictionary = {}
+var _takes: Dictionary = {}       # Sound -> Array[AudioStream], multi-take cues only
+var _last_take: Dictionary = {}   # Sound -> index played last
 var _pool_ui: Array[AudioStreamPlayer] = []      # UI bus — hover, click
 var _pool_sfx_2d: Array[AudioStreamPlayer] = []  # SFX bus — non-spatial gameplay cues
 var _pool_3d: Array[AudioStreamPlayer3D] = []    # SFX bus — all world sounds
@@ -123,13 +198,44 @@ func _ensure_buses() -> void:
 			AudioServer.add_bus(idx)
 			AudioServer.set_bus_name(idx, bus_name)
 			AudioServer.set_bus_send(idx, "Master")
+	_ensure_master_limiter()
+
+
+# Short transients mastered under the reference get make-up gain, and a world cue
+# under a close replay camera skips most of the distance falloff, so peaks can
+# pass full scale; the limiter catches them instead of the output clipping.
+func _ensure_master_limiter() -> void:
+	var master: int = AudioServer.get_bus_index("Master")
+	for i: int in AudioServer.get_bus_effect_count(master):
+		if AudioServer.get_bus_effect(master, i) is AudioEffectHardLimiter:
+			return
+	AudioServer.add_bus_effect(master, AudioEffectHardLimiter.new())
 
 
 func _load_streams() -> void:
 	for sound: int in _SOUND_PATHS:
 		var path: String = _SOUND_PATHS[sound]
-		if ResourceLoader.exists(path):
+		if _TAKE_COUNTS.has(sound):
+			var takes: Array[AudioStream] = []
+			for i: int in _TAKE_COUNTS[sound]:
+				if ResourceLoader.exists(path % (i + 1)):
+					takes.append(load(path % (i + 1)))
+			if not takes.is_empty():
+				_takes[sound] = takes
+				_last_take[sound] = -1
+		elif ResourceLoader.exists(path):
 			_streams[sound] = load(path)
+
+
+func _stream_for(sound: Sound) -> AudioStream:
+	if not _takes.has(sound):
+		return _streams.get(sound)
+	var takes: Array[AudioStream] = _takes[sound]
+	var pick: int = randi() % takes.size()
+	if takes.size() > 1 and pick == _last_take[sound]:
+		pick = (pick + 1 + randi() % (takes.size() - 1)) % takes.size()
+	_last_take[sound] = pick
+	return takes[pick]
 
 
 func _build_pools() -> void:
@@ -159,43 +265,72 @@ func _build_pools() -> void:
 
 
 func play_ui(sound: Sound, volume_db: float = 0.0, pitch_variance: float = 0.0) -> void:
-	var stream: AudioStream = _streams.get(sound)
+	var stream: AudioStream = _stream_for(sound)
 	if stream == null:
 		return
 	for p: AudioStreamPlayer in _pool_ui:
 		if not p.playing:
 			p.stream = stream
-			p.volume_db = volume_db
-			p.pitch_scale = randf_range(1.0 - pitch_variance, 1.0 + pitch_variance) if pitch_variance > 0.0 else 1.0
+			p.volume_db = volume_db + level_db(sound)
+			p.pitch_scale = _BASE_PITCH.get(sound, 1.0) * (randf_range(1.0 - pitch_variance, 1.0 + pitch_variance) if pitch_variance > 0.0 else 1.0)
 			p.play()
 			return
 
 
 func play_crowd(sound: Sound, volume_db: float = 0.0, pitch_variance: float = 0.0) -> void:
-	var stream: AudioStream = _streams.get(sound)
+	var stream: AudioStream = _stream_for(sound)
 	if stream == null:
 		return
 	for p: AudioStreamPlayer in _pool_crowd:
 		if not p.playing:
 			p.stream = stream
-			p.volume_db = volume_db
-			p.pitch_scale = randf_range(1.0 - pitch_variance, 1.0 + pitch_variance) if pitch_variance > 0.0 else 1.0
+			p.volume_db = volume_db + level_db(sound)
+			p.pitch_scale = _BASE_PITCH.get(sound, 1.0) * (randf_range(1.0 - pitch_variance, 1.0 + pitch_variance) if pitch_variance > 0.0 else 1.0)
 			p.play()
 			return
 
 
+# A full pool steals the voice furthest into its clip rather than dropping the
+# new cue: in a scramble the fresh contact is the one the player is watching,
+# and the oldest voice is mostly tail by then.
 func play_world(sound: Sound, position: Vector3, volume_db: float = 0.0, pitch_variance: float = 0.0, pitch_scale: float = 1.0) -> void:
-	var stream: AudioStream = _streams.get(sound)
+	var stream: AudioStream = _stream_for(sound)
 	if stream == null:
 		return
+	var voice: AudioStreamPlayer3D = null
+	var oldest_s: float = -1.0
 	for p: AudioStreamPlayer3D in _pool_3d:
 		if not p.playing:
-			p.stream = stream
-			p.volume_db = volume_db
-			p.pitch_scale = randf_range(1.0 - pitch_variance, 1.0 + pitch_variance) * pitch_scale if pitch_variance > 0.0 else pitch_scale
-			p.global_position = position
-			p.play()
-			return
+			voice = p
+			break
+		var played_s: float = p.get_playback_position()
+		if played_s > oldest_s:
+			oldest_s = played_s
+			voice = p
+	voice.stream = stream
+	voice.volume_db = volume_db + level_db(sound)
+	voice.pitch_scale = _BASE_PITCH.get(sound, 1.0) * (randf_range(1.0 - pitch_variance, 1.0 + pitch_variance) * pitch_scale if pitch_variance > 0.0 else pitch_scale)
+	voice.global_position = position
+	voice.play()
+
+
+# The gain a cue plays at before any situational modifier: its mix level, plus
+# make-up for a file mastered under the reference.
+static func level_db(sound: Sound) -> float:
+	return _MIX_DB[sound] + _UNDER_REFERENCE_DB.get(sound, 0.0)
+
+
+# Above the dasher's cap rail the puck is striking glass, not boards.
+static func board_contact_sound(contact: Vector3) -> Sound:
+	return Sound.PUCK_GLASS if contact.y > GameRules.BOARD_TOP_HEIGHT else Sound.PUCK_BOARDS
+
+
+# A release's amplitude scales with the puck's launch speed (m/s), so its level
+# is that ratio in dB against the hardest shot in the league. Wrister and
+# slapper files are mastered alike, so speed alone sets them apart. Power past
+# it (a one-timer's bonus) holds at full.
+static func shot_volume_db(power: float) -> float:
+	return clampf(linear_to_db(maxf(power, 0.0) / _SHOT_FULL_POWER_M_S), _SHOT_VOLUME_FLOOR_DB, 0.0)
 
 
 # Connects hover and click sounds to a button. Call after creating each Button node.

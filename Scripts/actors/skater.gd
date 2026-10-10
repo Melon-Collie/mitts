@@ -425,6 +425,9 @@ signal body_check_received(impulse: Vector3)
 # host_timestamp exceeds reconcile_position_threshold on nearly every moving
 # tick. Emitted for every skater; only the local controller connects.
 signal post_move_integrated()
+# A carry hop landed: the blade face caught the puck on its new side. Cosmetic,
+# on every peer; `stroke_speed` (m/s) is the push that started the hop.
+signal carry_caught(stroke_speed: float)
 # Mirrors SkaterStateMachine.State for the current carrier. Updated each tick
 # by Local/RemoteController so the goalie AI can read shot-state tells (e.g.
 # SLAPPER_CHARGE_WITH_PUCK windup) without reaching across controller boundaries.
@@ -690,6 +693,7 @@ var _heel_cradle: float = 0.0
 # Remaining phase (1→0) of the current transit hop; see
 # get_carry_transit_factor.
 var _transit_hop: float = 0.0
+var _hop_stroke_speed: float = 0.0
 # Eased catch/release blade-geometry blends (0→1), advanced by
 # _update_carry_contact: stroke-speed toe ride and the heel-first catch
 # transient fired when a hop lands. Both feed the mesh seat slide in
@@ -1941,6 +1945,7 @@ func _update_carry_contact(delta: float) -> void:
 					# so a fast dangle bounces per stroke instead of hovering.
 					if _transit_hop <= 0.0:
 						_transit_hop = 1.0
+						_hop_stroke_speed = absf(v_perp)
 			var pull: float = CarryContactRules.pull_gesture(
 					v_in, carry_pull_ramp_min, carry_pull_ramp_max)
 			var forehand_w: float = CarryContactRules.forehand_weight(
@@ -1962,6 +1967,7 @@ func _update_carry_contact(delta: float) -> void:
 		# The hop just landed on the far face: the catch. Heel-first, rolling
 		# back to the carry seat as the blend decays.
 		_catch_heel_blend = 1.0
+		carry_caught.emit(_hop_stroke_speed)
 	var new_drag: float = move_toward(_toe_drag_gesture, drag_target, carry_gesture_ease * delta)
 	var new_cradle: float = move_toward(_heel_cradle, cradle_target, carry_gesture_ease * delta)
 	var new_stroke: float = move_toward(
@@ -2079,6 +2085,7 @@ func _update_wrister_address(delta: float) -> void:
 			and _wrister_address_side != reference:
 		if _transit_hop <= 0.0:
 			_transit_hop = 1.0
+			_hop_stroke_speed = carry_flip_speed
 	var new_addr: float = _address_factor
 	if _wrister_address_side != 0:
 		new_addr = move_toward(
