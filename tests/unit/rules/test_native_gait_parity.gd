@@ -150,7 +150,8 @@ func _step(delta: float, label: String) -> bool:
 		if not _close(want[i], got[i], "%s step %d %s" % [label, _steps, _CAP_NAMES[i]]):
 			return false
 	var pub_names: Array[String] = ["stop_yaw", "travel_align_yaw", "pivot_hold",
-			"faceoff_blend", "shot_hip_yaw", "crouch_drop", "push_l", "push_r", "push_strength"]
+			"faceoff_blend", "shot_hip_yaw", "crouch_drop", "push_l", "push_r", "push_strength", "stop_weight",
+			"skid_weight"]
 	for i: int in pub_names.size():
 		if not _close(want_pub[i], got_pub[i], "%s step %d %s" % [label, _steps, pub_names[i]]):
 			return false
@@ -168,7 +169,8 @@ func _step(delta: float, label: String) -> bool:
 
 func _published(c: SkaterSkatingCoordinator) -> PackedFloat64Array:
 	return PackedFloat64Array([c.stop_yaw_offset, c.travel_align_yaw, c.pivot_hold,
-			c.faceoff_blend, c.shot_hip_yaw, c.crouch_drop, c.push_l, c.push_r, c.push_strength])
+			c.faceoff_blend, c.shot_hip_yaw, c.crouch_drop, c.push_l, c.push_r, c.push_strength, c.stop_weight,
+			c.skid_weight])
 
 
 func _close(want: float, got: float, where: String) -> bool:

@@ -4,6 +4,13 @@ extends GutTest
 # stops looping just goes quiet, and a cue at the wrong level just sounds flat.
 
 
+# The stop's scrape is held for as long as the stop sheds speed, so it loops.
+func test_the_scrape_loops() -> void:
+	var stream := load("res://Sounds/skate_scrape.wav") as AudioStreamWAV
+	assert_not_null(stream)
+	assert_ne(stream.loop_mode, AudioStreamWAV.LOOP_DISABLED, "skate_scrape.wav.import must set a loop mode")
+
+
 # A push sounds from the skate that made it, so its takes are mono one-shots: a
 # stereo take would place at the skater rather than the foot, and a looping one
 # would never stop.
@@ -76,7 +83,7 @@ func test_the_mix_keeps_its_order() -> void:
 		for shot: int in [S.SHOT_SLAPPER, S.SHOT_WRISTER]:
 			assert_gt(mix[shot], mix[contact], "shots over puck contacts")
 		for quiet: int in [S.PUCK_PICKUP, S.SKATE_BRAKE, S.STICK_TAP, S.GOALIE_PAD_DROP, S.GOALIE_PAD_SLIDE,
-				S.SKATE_PUSH]:
+				S.SKATE_PUSH, S.SKATE_SCRAPE]:
 			assert_gt(mix[contact], mix[quiet], "puck contacts over the quieter body and stick sounds")
 	for sound: int in S.values():
 		if sound != S.UI_HOVER and sound != S.UI_CLICK:

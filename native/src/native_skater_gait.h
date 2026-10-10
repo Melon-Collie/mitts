@@ -240,6 +240,8 @@ public:
 	godot::Vector4 get_trunk() const;   // (bob, trunk_pitch, trunk_roll, 0)
 	// (l_push, r_push, push strength, 0): SkaterLocomotion.push_strength().
 	godot::Vector4 get_push() const;
+	// (mix.stop, mix.skid): the scrape the stop and the skid make.
+	godot::Vector2 get_scrape() const;
 
 	// Diagnostics (allocates): the eased mix, in LocomotionRules.Mix field
 	// order — glide, stride, crossover, carve, backward, shuffle, skid, tight,

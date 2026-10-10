@@ -47,6 +47,7 @@ enum Sound {
 	GOALIE_PAD_DROP,
 	GOALIE_PAD_SLIDE,
 	SKATE_PUSH,
+	SKATE_SCRAPE,
 }
 
 const _SOUND_PATHS: Dictionary = {
@@ -73,6 +74,7 @@ const _SOUND_PATHS: Dictionary = {
 	Sound.GOALIE_PAD_DROP:  "res://Sounds/goalie_pad_drop.wav",
 	Sound.GOALIE_PAD_SLIDE: "res://Sounds/goalie_pad_slide.wav",
 	Sound.SKATE_PUSH:       "res://Sounds/skate_push_%02d.wav",
+	Sound.SKATE_SCRAPE:     "res://Sounds/skate_scrape.wav",
 }
 
 # Cues recorded as several takes: the path above is a pattern numbered from 1,
@@ -110,6 +112,7 @@ const _MIX_DB: Dictionary = {
 	Sound.GOALIE_PAD_SLIDE: -4.0,
 	Sound.STICK_TAP:       -6.0,
 	Sound.SKATE_PUSH:      -6.0,
+	Sound.SKATE_SCRAPE:    -6.0,
 	Sound.UI_CLICK:       -12.0,
 	Sound.UI_HOVER:       -18.0,
 }

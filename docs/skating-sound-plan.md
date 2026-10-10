@@ -52,7 +52,8 @@ placeholders are cut from the old stride recording.
 | `skate_push_01..06.wav` | the stride, re-pitched ±10% and tilted ±3 dB, 400 ms from 3 ms before the bite | 6–10 pushes, mono, ~300–500 ms, cut 3 ms before the bite |
 | glide bed (phase 3) | — | a seamless 2–4 s loop of a coasting glide |
 | carve (phase 3) | — | a seamless 2–4 s loop of a held edge |
-| stop (phase 2) | `skate_brake.wav` | a bite plus a sustain loop, or 3–4 stops of different lengths |
+| `skate_brake.wav` (the stop's bite) | the original | a short bite as the blades dig in, mono |
+| `skate_scrape.wav` (the stop's sustain) | grains of `skate_brake.wav`'s steady scrape, overlap-added round a 2 s circle so the loop has no seam | a seamless 2–4 s loop of a held stop's spray, mono, loop on in its `.import` (`edit/loop_mode=2`) |
 
 ## Phase 1 as built
 
@@ -73,3 +74,21 @@ placeholders are cut from the old stride recording.
 - Level: full at strength 1 (a flat-out stride), −14 dB at the floor; the cue
   sits at −6 in the mix, with the quieter body and stick sounds.
 - The fixed-clock loop is gone, so a glide is silent until phase 3.
+
+## Phase 2 as built
+
+- The gait publishes the stop's and the skid's weights (`stop_weight`,
+  `skid_weight` on the coordinator; `NativeSkaterGait.get_scrape`; held by
+  `test_native_gait_parity.gd`), read through `SkaterController.skate_scrape`
+  as `GoalieSoundController` reads `GoalieController.stance`.
+- The scrape's amplitude is the share of the legs shedding speed — the stop
+  whole, the skid at half — times speed against 8 m/s; under −30 dB it stops.
+  The bite plays once as the stop's weight passes half at 1.5 m/s or more, and
+  re-arms when the stop lets go.
+- Measured (`test_skate_scrape_sound.gd`): a stop from speed bites once and
+  scrapes up to −1.7 dB for ~0.9 s, silent once stopped; the skid scrapes to
+  −7.5 dB without a bite; a stride does not scrape.
+- The stop's sound follows the gait's stop rather than the brake button: it
+  comes in with the legs turning across, and the shot block's plant (which sets
+  `is_braking` for its spray) no longer plays the brake.
+

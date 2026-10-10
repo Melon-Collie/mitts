@@ -1949,6 +1949,11 @@ func _advance_balance(tick_start_velocity: Vector3, delta: float) -> void:
 func get_shot_state() -> int:
 	return _sm.get_state()
 
+
+# The gait's (stop, skid) weights this render pass, for the scrape they make.
+func skate_scrape() -> Vector2:
+	return Vector2(_skating.stop_weight, _skating.skid_weight)
+
 func apply_network_state(_net_state: SkaterNetworkState, _host_ts: float) -> void:
 	pass  # overridden by RemoteController on client
 
