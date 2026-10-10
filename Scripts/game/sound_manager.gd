@@ -46,6 +46,7 @@ enum Sound {
 	STICK_TAP,
 	GOALIE_PAD_DROP,
 	GOALIE_PAD_SLIDE,
+	SKATE_PUSH,
 }
 
 const _SOUND_PATHS: Dictionary = {
@@ -71,6 +72,7 @@ const _SOUND_PATHS: Dictionary = {
 	Sound.STICK_TAP:        "res://Sounds/stick_tap_%02d.wav",
 	Sound.GOALIE_PAD_DROP:  "res://Sounds/goalie_pad_drop.wav",
 	Sound.GOALIE_PAD_SLIDE: "res://Sounds/goalie_pad_slide.wav",
+	Sound.SKATE_PUSH:       "res://Sounds/skate_push_%02d.wav",
 }
 
 # Cues recorded as several takes: the path above is a pattern numbered from 1,
@@ -78,6 +80,7 @@ const _SOUND_PATHS: Dictionary = {
 # never repeats a sample back to back.
 const _TAKE_COUNTS: Dictionary = {
 	Sound.STICK_TAP: 15,
+	Sound.SKATE_PUSH: 6,
 }
 
 # Every file above is mastered to one reference loudness
@@ -106,6 +109,7 @@ const _MIX_DB: Dictionary = {
 	Sound.GOALIE_PAD_DROP: -3.0,
 	Sound.GOALIE_PAD_SLIDE: -4.0,
 	Sound.STICK_TAP:       -6.0,
+	Sound.SKATE_PUSH:      -6.0,
 	Sound.UI_CLICK:       -12.0,
 	Sound.UI_HOVER:       -18.0,
 }
@@ -125,6 +129,7 @@ const _UNDER_REFERENCE_DB: Dictionary = {
 	Sound.PUCK_GLASS:      7.1,
 	Sound.STICK_TAP:      10.0,
 	Sound.GOALIE_PAD_DROP: 11.0,
+	Sound.SKATE_PUSH:      4.9,
 }
 
 # A cue reusing another's recording, pitched to read as a different target:
@@ -225,6 +230,12 @@ func _load_streams() -> void:
 				_last_take[sound] = -1
 		elif ResourceLoader.exists(path):
 			_streams[sound] = load(path)
+
+
+# The stream a cue plays next — for an emitter of its own (a skater's), drawn as
+# the pools draw it.
+func take(sound: Sound) -> AudioStream:
+	return _stream_for(sound)
 
 
 func _stream_for(sound: Sound) -> AudioStream:

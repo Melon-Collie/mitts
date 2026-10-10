@@ -10,7 +10,7 @@ extends GutTest
 func _skater_emitter() -> AudioStreamPlayer3D:
 	var controller := SkaterSoundController.new()
 	autofree(controller)
-	return controller._make_player("res://Sounds/skate_loop.ogg")
+	return controller._make_player("res://Sounds/skate_brake.wav")
 
 
 func test_the_sfx_bus_exists_before_anything_asks_for_it() -> void:
@@ -49,7 +49,7 @@ func test_a_skater_emitter_sounds_from_the_skater() -> void:
 	skater_stand_in.global_position = Vector3(12.0, 0.0, -7.0)
 	var controller := SkaterSoundController.new()
 	skater_stand_in.add_child(controller)
-	var mine: AudioStreamPlayer3D = controller._make_player("res://Sounds/skate_loop.ogg")
+	var mine: AudioStreamPlayer3D = controller._make_player("res://Sounds/skate_brake.wav")
 	assert_eq(mine.global_position, skater_stand_in.global_position, "emitter sits on the skater")
 	skater_stand_in.global_position = Vector3(-20.0, 0.0, 4.0)
 	assert_eq(mine.global_position, skater_stand_in.global_position, "and follows it")

@@ -505,6 +505,12 @@ func _shuffle_path(w: float, side: float, a: float, s: float, s_opp: float,
 	push_reach = maxf(push_reach, step)
 
 
+# How hard the stroking states push, for the push sounds: the stroke's amplitude
+# by their share of the mix (0 coasting, ~1 striding flat out, more driving hard).
+func push_strength() -> float:
+	return intensity * push_scale * (mix.stride + mix.crossover + mix.backward + mix.shuffle)
+
+
 # How engaged the stroke is, 0..1: its intensity against the share of top speed
 # the crouch fully engages at.
 func _engaged() -> float:

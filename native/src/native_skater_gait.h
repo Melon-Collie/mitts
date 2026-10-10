@@ -238,6 +238,8 @@ public:
 	godot::Vector4 get_stance() const;  // (stance_hip, stance_knee, stance_shin, drop)
 	godot::Vector4 get_seed() const;    // (foot_level, plant share, edge_l, edge_r)
 	godot::Vector4 get_trunk() const;   // (bob, trunk_pitch, trunk_roll, 0)
+	// (l_push, r_push, push strength, 0): SkaterLocomotion.push_strength().
+	godot::Vector4 get_push() const;
 
 	// Diagnostics (allocates): the eased mix, in LocomotionRules.Mix field
 	// order — glide, stride, crossover, carve, backward, shuffle, skid, tight,

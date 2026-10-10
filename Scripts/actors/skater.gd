@@ -428,6 +428,10 @@ signal post_move_integrated()
 # A carry hop landed: the blade face caught the puck on its new side. Cosmetic,
 # on every peer; `stroke_speed` (m/s) is the push that started the hop.
 signal carry_caught(stroke_speed: float)
+# A skate's push began (SkaterSkatingCoordinator, from the gait): cosmetic, on
+# every peer, never in reconcile replay. `strength` is
+# SkaterLocomotion.push_strength — ~1 striding flat out, more driving hard.
+signal skate_pushed(left: bool, strength: float)
 # Mirrors SkaterStateMachine.State for the current carrier. Updated each tick
 # by Local/RemoteController so the goalie AI can read shot-state tells (e.g.
 # SLAPPER_CHARGE_WITH_PUCK windup) without reaching across controller boundaries.

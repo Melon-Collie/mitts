@@ -35,6 +35,13 @@ const _PSI_RATE_EASE: float = 10.0
 # the rate detector keeps reading raw ψ.
 const _PSI_SMOOTH_EASE: float = 15.0
 
+# A leg's push weight past this is a push under way: it is exactly 0 while the
+# leg is not pushing, so the first pass above it is the push's onset.
+const _PUSH_ONSET: float = 0.001
+# A stroke weaker than this (push_strength) makes no sound: the residue of a
+# stroke easing out, not a push.
+const _PUSH_MIN_STRENGTH: float = 0.05
+
 # NativeSkaterGait.locomote flag bits.
 const _NATIVE_BRAKE: int = 1
 const _NATIVE_STANCE: int = 2
@@ -159,6 +166,15 @@ var _pivot_yaw_r: float = 0.0
 # sum — two writers tracking the same rotation on different clocks is a
 # wobble, not a pose.
 var pivot_hold: float = 0.0
+# Each leg's push this pass (SkaterLocomotion.l_push / r_push) and how hard the
+# stroke pushes (SkaterLocomotion.push_strength); a push's onset emits
+# Skater.skate_pushed.
+var push_l: float = 0.0
+var push_r: float = 0.0
+var push_strength: float = 0.0
+# Whether the push each leg is in has been heard yet.
+var _push_heard_l: bool = false
+var _push_heard_r: bool = false
 
 
 func setup(skater: Skater, sm: SkaterStateMachine, controller: SkaterController) -> void:
@@ -231,6 +247,11 @@ func locomotion_mix() -> LocomotionRules.Mix:
 # dot mid-stride carrying the previous shift's leg swing.
 func reset_to_rest() -> void:
 	_locomotion.reset()
+	push_l = 0.0
+	push_r = 0.0
+	push_strength = 0.0
+	_push_heard_l = false
+	_push_heard_r = false
 	if _native != null:
 		_native.reset()
 	for layer: GaitLayer in _layers:
@@ -335,6 +356,8 @@ func apply(delta: float) -> void:
 		pivot_hold = channels.w
 		stance = demand.x
 		authored = demand.y
+		var push: Vector4 = _native.get_push()
+		_sense_pushes(push.x, push.y, push.z)
 	else:
 		# Which skating state the skater is in and the stroke it skates
 		# (SkaterLocomotion). Shooting sets the feet and the pivot glides through
@@ -344,6 +367,7 @@ func apply(delta: float) -> void:
 		stop_yaw_offset = _locomotion.stop_yaw
 		_locomotion.strokes(delta, _align_to_travel(delta))
 		authored = _locomotion.authored
+		_sense_pushes(_locomotion.l_push, _locomotion.r_push, _locomotion.push_strength())
 		# The pivot sits too: the open-hip glide and the step-around are both
 		# done on bent knees.
 		stance = maxf(_locomotion.stance, _controller.pivot_stance * _pivot_blend)
@@ -408,6 +432,26 @@ func apply(delta: float) -> void:
 	trunk_roll_add = _trunk_roll_s + p.wobble_roll
 	if _skater.on_camera():
 		_skater.set_trunk_texture(trunk_pitch_add, trunk_roll_add)
+
+
+# Each push is heard once, on every peer, from the same replicated state the
+# legs skate: as it starts, or — a start's first push begins before the stroke
+# has any strength — as soon as the stroke is strong enough to be heard.
+func _sense_pushes(left: float, right: float, strength: float) -> void:
+	push_strength = strength
+	push_l = left
+	push_r = right
+	_push_heard_l = _hear_push(true, left, strength, _push_heard_l)
+	_push_heard_r = _hear_push(false, right, strength, _push_heard_r)
+
+
+func _hear_push(left: bool, push: float, strength: float, heard: bool) -> bool:
+	if push <= _PUSH_ONSET:
+		return false
+	if not heard and strength > _PUSH_MIN_STRENGTH:
+		_skater.skate_pushed.emit(left, strength)
+		return true
+	return heard
 
 
 func _native_flags() -> int:

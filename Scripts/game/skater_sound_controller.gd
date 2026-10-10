@@ -3,33 +3,29 @@ class_name SkaterSoundController
 # Node3D chain, so under a plain Node every stride would sound from the origin.
 extends Node3D
 
-# Tunable thresholds
-const _SKATE_START_SPEED: float = 0.5      # m/s XZ to start loop
-const _SKATE_MAX_SPEED: float = 10.0       # m/s XZ for full volume
-const _SKATE_MIN_VOL_DB: float = -28.6
-const _SKATE_MAX_VOL_DB: float = -4.6
-const _SKATE_MIN_PITCH: float = 0.85
-const _SKATE_MAX_PITCH: float = 1.15
-
 const _BRAKE_MIN_SPEED: float = 1.5        # must be moving this fast for brake sound
 # Where the softest stickhandling tap bottoms out.
 const _TAP_FLOOR_DB: float = -12.0
+# A push's level follows the stroke's strength (Skater.skate_pushed), full at
+# this — a flat-out stride — and no quieter than the floor; a hard drive past it
+# holds at full.
+const _PUSH_FULL_STRENGTH: float = 1.0
+const _PUSH_FLOOR_DB: float = -14.0
+const _PUSH_PITCH_VARIANCE: float = 0.04
 
-# Last skate-loop blend factor pushed to the player (see _update_skate_loop).
-# -1 forces the first write.
-const _LEVEL_EPSILON: float = 0.002
-var _skate_level: float = -1.0
 var _skater: Skater = null
-var _skate_player: AudioStreamPlayer3D = null
 var _brake_player: AudioStreamPlayer3D = null
+# One per skate, so a push never cuts off the other foot's tail.
+var _push_players: Array[AudioStreamPlayer3D] = []
 
 
 func setup(skater: Skater) -> void:
 	_skater = skater
-	_skate_player = _make_player("res://Sounds/skate_loop.ogg")
 	_brake_player = _make_player("res://Sounds/skate_brake.wav")
 	_brake_player.volume_db = SoundManager.level_db(SoundManager.Sound.SKATE_BRAKE)
+	_push_players = [_make_player(""), _make_player("")]
 	skater.carry_caught.connect(_on_carry_caught)
+	skater.skate_pushed.connect(_on_skate_pushed)
 
 
 # The puck strikes the blade at about the stroke's speed, so the tap's amplitude
@@ -38,9 +34,25 @@ static func tap_volume_db(stroke_speed: float, full_stroke_speed: float) -> floa
 	return clampf(linear_to_db(maxf(stroke_speed, 0.0) / full_stroke_speed), _TAP_FLOOR_DB, 0.0)
 
 
+static func push_volume_db(strength: float) -> float:
+	return clampf(linear_to_db(maxf(strength, 0.0) / _PUSH_FULL_STRENGTH), _PUSH_FLOOR_DB, 0.0)
+
+
 func _on_carry_caught(stroke_speed: float) -> void:
 	SoundManager.play_world(SoundManager.Sound.STICK_TAP, _skater.get_blade_contact_global(),
 			tap_volume_db(stroke_speed, _skater.carry_stroke_full_speed), 0.06)
+
+
+# Sounds from the skate that bit, where the gait draws it.
+func _on_skate_pushed(left: bool, strength: float) -> void:
+	var p: AudioStreamPlayer3D = _push_players[0 if left else 1]
+	p.stream = SoundManager.take(SoundManager.Sound.SKATE_PUSH)
+	if p.stream == null:
+		return
+	p.global_position = _skater.blade_mark_position(left)
+	p.volume_db = SoundManager.level_db(SoundManager.Sound.SKATE_PUSH) + push_volume_db(strength)
+	p.pitch_scale = randf_range(1.0 - _PUSH_PITCH_VARIANCE, 1.0 + _PUSH_PITCH_VARIANCE)
+	p.play()
 
 
 # A skater's own emitters are ordinary world sounds — same SFX bus, so the SFX
@@ -54,7 +66,7 @@ func _make_player(path: String) -> AudioStreamPlayer3D:
 	p.max_distance = SoundManager.NO_DISTANCE_CUTOFF
 	p.unit_size = SoundManager.WORLD_UNIT_SIZE
 	p.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
-	if ResourceLoader.exists(path):
+	if path != "" and ResourceLoader.exists(path):
 		p.stream = load(path)
 	add_child(p)
 	return p
@@ -66,33 +78,8 @@ func _make_player(path: String) -> AudioStreamPlayer3D:
 func _process(_delta: float) -> void:
 	if _skater == null:
 		return
-
 	var vel: Vector3 = _skater.velocity
-	var speed: float = Vector2(vel.x, vel.z).length()
-
-	_update_skate_loop(speed)
-	_update_brake(speed)
-
-
-func _update_skate_loop(speed: float) -> void:
-	if _skate_player.stream == null:
-		return
-	if speed > _SKATE_START_SPEED:
-		var t: float = clampf(
-			(speed - _SKATE_START_SPEED) / (_SKATE_MAX_SPEED - _SKATE_START_SPEED), 0.0, 1.0)
-		# Guarded on the blend factor rather than the derived values: both setters
-		# push through to the audio server, and a skater holding a steady speed
-		# (or pinned at the 0/1 ends of the ramp) re-sent identical values every
-		# frame. The epsilon is far below audible resolution on both ramps.
-		if absf(t - _skate_level) > _LEVEL_EPSILON:
-			_skate_level = t
-			_skate_player.volume_db = lerpf(_SKATE_MIN_VOL_DB, _SKATE_MAX_VOL_DB, t)
-			_skate_player.pitch_scale = lerpf(_SKATE_MIN_PITCH, _SKATE_MAX_PITCH, t)
-		if not _skate_player.playing:
-			_skate_player.play()
-	else:
-		if _skate_player.playing:
-			_skate_player.stop()
+	_update_brake(Vector2(vel.x, vel.z).length())
 
 
 func _update_brake(speed: float) -> void:
