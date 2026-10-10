@@ -862,12 +862,12 @@ func _process(delta: float) -> void:
 		# (on_camera).
 		if render_pose_update.is_valid():
 			render_pose_update.call(delta)
-		# _blade_tilt_dirty is ORed in because an elevation blend step changes the
-		# blade tilt without moving any marker, so _rig_pose_changed can't see it
-		# (see _update_blade_elevation). Left set while hidden or off camera so the
-		# pose is rebuilt on the first frame it is drawn.
-		var spine_moved: bool = _on_camera and _spine.update()
-		if _on_camera and (_rig_pose_changed() or spine_moved or _blade_tilt_dirty):
+		# Neither the spine, the trunk texture nor the blade's elevation moves a
+		# marker; each flags its own move until the next rebuild, off camera too.
+		if _on_camera:
+			_spine.update()
+		if _on_camera and (_rig_pose_changed() or _spine.take_moved() or _arms.take_retextured() \
+				or _blade_tilt_dirty):
 			_blade_tilt_dirty = false
 			update_stick_mesh()
 			update_arm_mesh()

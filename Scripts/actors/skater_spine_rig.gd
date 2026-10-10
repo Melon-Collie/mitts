@@ -53,6 +53,9 @@ var _in_drop: float = 0.0
 var _in_shoulder_y: float = 0.0
 var _in_plant: float = 0.0
 var _in_legs: int = -1
+# Moved since the mesh pass last asked (take_moved): the render pass solves the
+# spine early, from the crouch, so the arms cannot read it off update()'s answer.
+var _moved_unseen: bool = true
 
 
 func setup(skater: Skater) -> void:
@@ -166,4 +169,12 @@ func update() -> bool:
 	_skeleton.set_bone_pose(SkaterBodySkeleton.WAIST_BONE, waist)
 	_skeleton.set_bone_pose(SkaterBodySkeleton.SPINE_BONE, spine)
 	_skeleton.set_bone_pose(SkaterBodySkeleton.NECK_BONE, neck)
+	_moved_unseen = true
 	return true
+
+
+# Whether any of the four bones moved since the last call.
+func take_moved() -> bool:
+	var moved: bool = _moved_unseen
+	_moved_unseen = false
+	return moved
