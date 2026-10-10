@@ -2,7 +2,8 @@
 
 C++ ports of per-tick math kernels, registered as `Native*` classes
 (`NativeTopHandIK`, `NativeBottomHandIK`, `NativeSkaterMovement`,
-`NativePuckStep`, `NativeBladeDangle`, `NativeArmRig`, `NativeSkaterGait`). The
+`NativePuckStep`, `NativeBladeDangle`, `NativeArmRig`, `NativeSkaterGait`,
+`NativeLegChain`). The
 GDScript originals (in `Scripts/domain/rules/`, `Scripts/controllers/` and
 `Scripts/actors/`) remain the behavioral
 reference; each ported kernel is pinned to its reference by a seeded fuzz test
@@ -135,6 +136,16 @@ without a built binary, loses performance, never correctness — CI builds it):
   fuzz (`tests/unit/rules/test_native_gait_parity.gd`) drives the overlays too.
   Tunables load by name in `configure(controller)`, re-run from
   `SkaterController.apply_attributes`.
+
+- **Leg chain** — `SkaterLegRig`'s contact seat (render rate, every drawn
+  skater): the second-foot plant walks a knee out from the gait's pose,
+  evaluating the leg chain to the runner a dozen to two dozen times a frame
+  (`_plant_feet`, `_chain_low`), and every ankle write lays the blade
+  (`_foot_pose`). The rig mirrors the leg's rest geometry and the gait's pose
+  into the kernel and keeps the bone writes. Measured with
+  `benchmarks/test_skater_frame_benchmark.gd`: the seat from 17–36 µs to 7–10
+  in the glide, the turns and the stop.
+  `tests/unit/rules/test_native_leg_chain_parity.gd`.
 
 - **Arm rig** — `SkaterArmRig._update_arm` (render rate, every drawn skater,
   both arms): `pose` runs the whole arm and **writes the bones itself** — the

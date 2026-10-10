@@ -120,6 +120,9 @@ var _plant_ext := PackedFloat32Array([0.0, 0.0])
 # The fore-aft compensation GaitPose.seed_legs counter-pitches a knee change
 # by — shin over leg, from this rig's own segment offsets.
 var _shin_frac: float = 0.0
+# NativeLegChain (native/README.md): the chain, the ankles and the plant solve
+# the seat evaluates; null without the extension, and the GDScript runs.
+var _native: RefCounted = null
 
 
 func setup(skater: Skater) -> void:
@@ -162,6 +165,11 @@ func build(skeleton: Skeleton3D) -> void:
 
 	for bone: int in count:
 		_repose_bone(bone)
+	if ClassDB.class_exists(&"NativeLegChain"):
+		_native = ClassDB.instantiate(&"NativeLegChain")
+		_native.configure(_RUNNER_TOE, _RUNNER_HEEL, Vector4(_PLANT_SLACK_M,
+				_PLANT_FOLD_LIMIT_RAD, _PLANT_STEP_RAD, _PLANT_WALK_STEPS), _shin_frac)
+		_sync_native_sides()
 	# Freed only after every offset is read — the whole point of the subtree.
 	# free() rather than queue_free(): a deferred free renders the scene's
 	# placeholder primitives through the real legs for the frame it waits. Safe
@@ -178,6 +186,13 @@ func build(skeleton: Skeleton3D) -> void:
 	_mesh.skin = SkaterMeshBuilder.shared_leg_skin()
 	_mesh.skeleton = NodePath("..")
 	_skeleton.add_child(_mesh)
+
+
+func _sync_native_sides() -> void:
+	for side: int in 2:
+		var foot: int = _FOOT_BONES[side]
+		_native.set_side(side, _pos[_LEG_BONES[side]], _pos[_SHIN_BONES[side]], _pos[foot],
+				_basis[foot], _scale[foot], _shin_base_euler[side])
 
 
 func _repose_bone(bone: int) -> void:
@@ -206,6 +221,8 @@ func set_swing(left_pitch: float, left_roll: float, left_knee: float,
 	_gait_knee_l = left_knee
 	_gait_knee_r = right_knee
 	_sprawled = false
+	if _native != null:
+		_native.set_pose(_gait_leg_l, left_knee, _gait_leg_r, right_knee)
 	# Yaw rides the hip pivot's free Y slot: YXZ euler order puts it outermost,
 	# so the leg externally rotates about vertical and the shin + boot carry it
 	# — the mohawk open hip. Defaults keep the pre-yaw callers unchanged.
@@ -340,6 +357,8 @@ func set_ankle_flatten(left: float, right: float, level_l: float = 0.0,
 	_level_l = level_l
 	_level_r = level_r
 	_ice = ice
+	if _native != null:
+		_native.set_ankles(left, right, level_l, level_r, ice)
 	var square: bool = is_zero_approx(left) and is_zero_approx(right) \
 			and is_zero_approx(level_l) and is_zero_approx(level_r)
 	if square and not _ankles_posed:
@@ -354,8 +373,16 @@ func set_ankle_flatten(left: float, right: float, level_l: float = 0.0,
 func _pose_foot(bone: int, leg: Vector3, knee: float, shin_base: Vector3,
 		weight: float, level: float = 0.0) -> void:
 	pose_version += 1
-	_skeleton.set_bone_pose(_OFFSET + bone,
-			_foot_pose(bone, leg, knee, shin_base, weight, level))
+	_skeleton.set_bone_pose(_OFFSET + bone, _foot_pose_any(bone, leg, knee, shin_base, weight, level))
+
+
+# _foot_pose, from the port where it runs.
+func _foot_pose_any(bone: int, leg: Vector3, knee: float, shin_base: Vector3,
+		weight: float, level: float) -> Transform3D:
+	if _native != null:
+		return _native.foot_pose(0 if bone == SkaterMeshBuilder.LegBone.FOOT_L else 1,
+				leg, knee, weight, level)
+	return _foot_pose(bone, leg, knee, shin_base, weight, level)
 
 
 func _foot_pose(bone: int, leg: Vector3, knee: float, shin_base: Vector3,
@@ -430,15 +457,20 @@ func seat_on_ice(hips: Transform3D) -> Vector3:
 			_seat_version = pose_version
 		ground = minf(_runner_low(hips_body, 0), _runner_low(hips_body, 1))
 	else:
-		_plant_feet(hips_body)
+		if _native != null:
+			var ext: Vector2 = _native.plant(hips_body, _plant[0], _plant[1])
+			_plant_ext[0] = ext.x
+			_plant_ext[1] = ext.y
+		else:
+			_plant_feet(hips_body)
 		var reach: float = _PLANT_RATE_RAD_S * _plant_dt
 		_plant_dt = 0.0
 		for side: int in 2:
 			_plant_eased[side] = move_toward(_plant_eased[side], _plant_ext[side], reach)
 			_write_seat(side, _plant_eased[side])
 		_seat_version = pose_version
-		ground = minf(_chain_low(hips_body, 0, _plant_eased[0]),
-				_chain_low(hips_body, 1, _plant_eased[1]))
+		ground = minf(_chain_low_any(hips_body, 0, _plant_eased[0]),
+				_chain_low_any(hips_body, 1, _plant_eased[1]))
 	return to_body.basis.inverse() * Vector3(0.0, _ICE_IN_BODY - ground, 0.0)
 
 
@@ -557,6 +589,12 @@ func _chain(side: int, ext: float) -> Transform3D:
 					_level_l if side == 0 else _level_r)
 
 
+func _chain_low_any(hips_body: Transform3D, side: int, ext: float) -> float:
+	if _native != null:
+		return _native.chain_low(hips_body, side, ext)
+	return _chain_low(hips_body, side, ext)
+
+
 func _chain_low(hips_body: Transform3D, side: int, ext: float) -> float:
 	var boot: Transform3D = hips_body * _chain(side, ext)
 	return minf((boot * _RUNNER_TOE).y, (boot * _RUNNER_HEEL).y)
@@ -589,7 +627,7 @@ func _write_seat(side: int, ext: float) -> void:
 	_skeleton.set_bone_pose(_OFFSET + shin_bone,
 			Transform3D(Basis.from_euler(Vector3(knee, base.y, base.z)), _pos[shin_bone]))
 	_skeleton.set_bone_pose(_OFFSET + foot_bone,
-			_foot_pose(foot_bone, leg, knee, base, _ankle_l if side == 0 else _ankle_r,
+			_foot_pose_any(foot_bone, leg, knee, base, _ankle_l if side == 0 else _ankle_r,
 					_level_l if side == 0 else _level_r))
 
 
@@ -632,11 +670,15 @@ func mark_position(left: bool) -> Vector3:
 func set_bone_scale(bone: int, part_scale: Vector3) -> void:
 	_scale[bone] = part_scale
 	_repose_bone(bone)
+	if _native != null:
+		_sync_native_sides()
 
 
 func set_bone_position(bone: int, pos: Vector3) -> void:
 	_pos[bone] = pos
 	_repose_bone(bone)
+	if _native != null:
+		_sync_native_sides()
 
 
 # Read seams for the gait tests: the rotation the gait wrote and the position the

@@ -155,6 +155,12 @@ seat to stand them up.
   from the gait's own knee in its role's direction (the reaching leg extends,
   the support folds) to the NEAREST crossing, interpolating the closest point
   when there is none — never a sampled or far root, which hops between frames.
+- **It runs in C++ where the extension is built** (`NativeLegChain`): the
+  plant's walk, the chain it evaluates and the ankle pose. Change
+  `_plant_feet`, `_solve_knee`, `_refine`, `_extremum`, `_chain` or
+  `_foot_pose` and the port changes with it, or
+  `test_native_leg_chain_parity.gd` fails; the rig mirrors its rest geometry
+  and the gait's pose into the kernel on every write that changes them.
 - **The correction eases.** The right answer itself jumps when the support
   hands from one foot to the other, so the knee change moves at most
   `_PLANT_RATE_RAD_S`, from the render delta the gait passes with the plant.
