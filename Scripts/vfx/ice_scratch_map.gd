@@ -305,7 +305,9 @@ func _live_skaters() -> Array:
 	if tree.get_node_count_in_group("skaters") != _skaters_cache.size():
 		_skaters_cache = tree.get_nodes_in_group("skaters")
 		return _skaters_cache
-	for n: Node in _skaters_cache:
+	# Variant, not Node: a typed loop variable errors on assigning the freed
+	# entry before is_instance_valid can see it.
+	for n: Variant in _skaters_cache:
 		if not is_instance_valid(n):
 			_skaters_cache = tree.get_nodes_in_group("skaters")
 			break
