@@ -223,7 +223,9 @@ Each phase pushed for local testing at its end.
 | 1 | native gait retired; §1 classifier | crossovers only through driven turns; coasting turns ride the edges |
 | 2 | §3 leg solve with every state's foot paths taken from today's strokes by forward kinematics (the framework, pose-identical) | none (strips identical) |
 | 3 | §2 stride and glide re-authored | the wide, out-and-back push |
-| 4 | §2 crossover and carve, then backward / shuffle / tight / stop / skid | crossovers that cross; consistent turns |
+| 4a | §2 crossover and carve | crossovers that cross; carves on the edges |
+| 4b | §2 stop and skid (§14) | a wide, dug-in stop on both edges |
+| 4c | §2 backward, shuffle, tight turn | consistent turns and C-cuts |
 | 5 | native re-port, new parity fuzz, plant solve measured and retired if redundant, docs | cost back |
 
 Phase 1 stands alone and is the quickest win, which is why it goes first and
@@ -365,3 +367,55 @@ choreography from coaching material, and are to be judged on the strips.
   benchmark's run-to-run noise is ±10 µs): each stride leg is solved twice for
   its runner and the rig levels both blades. Gliding is within the noise. The
   Phase 5 port is where it comes back.
+
+## §14 The stop, before 4b
+
+Rendered from 6.5 m/s after Phase 3, the stop reads as standing sideways, not
+digging in:
+
+- **The feet stay close.** The hips turn across travel (`stop_yaw`, capped at
+  70°), but the legs only scissor 14° fore-aft and roll 12° the same way, so
+  the skates stay about hip width apart, nearly stacked. A stop plants them
+  wide — about shoulder width — spaced along the line of travel, both across
+  it.
+- **The edges barely bite.** The knees bend moderately and the shins stand
+  near vertical, so neither blade goes far onto its edge. A stop sits back
+  against the momentum over two hard edges, the front knee deep.
+- **Contact is corrected, not authored.** The stop is where the second-foot
+  plant made its largest knee corrections (up to 1.08 rad).
+
+4b authors it as where the skates go, with Phase 3's machinery: both skates
+planted wide along travel and flat on their blades, the crouch and spacing
+set so the front knee sits deep, and the edges coming from the body sitting
+back over planted feet (the ice frame) rather than a fixed roll — so the
+deceleration lean digs them in. Both blades on the ice by construction leaves
+the plant nothing to correct. The side latch and the hips' turn stay. The skid
+(pulling against travel at speed) is the same family and goes with it.
+
+## §15 Phase 4a as built
+
+- **The crossover** is the stride's phase law on each leg, half a cycle apart,
+  with landings and extensions of its own (`SkaterLocomotion._crossover_path`):
+  the outside skate lands 0.30 m inside its hip and pushes back out 0.12 m past
+  it, its recovery the over-step, lifted 8 cm and passing in front; the inside
+  skate lands 0.05 m inside its hip and pushes 0.25 m under the body, recovering
+  from behind. Measured through a held arc at 5 m/s: the outside skate crosses
+  the inside one on every step, by up to 0.22 m.
+- **Not in the design: which beats alternate.** §2's two beats are the two
+  pushes, and they ride opposite halves of the cycle; the over-step rides the
+  inside skate's under-push, as it does on the ice. The old joint crossover put
+  the over-step and the under-push on opposite halves, and its test said so;
+  the test now pins the pushes.
+- **The crossing does not shrink with speed.** Its lateral reach is the
+  stroke's engagement (intensity against the crouch's full-speed share), full
+  well below top speed; scaled by intensity alone, a 5 m/s arc never crossed.
+- **The carve** is both skates down at hip width, the inside one 0.20 m ahead
+  (`carve_lead_m`); the bank puts them on their edges through the ice frame.
+  The old inside-knee tuck went: both skates are on the ice.
+- **Fixed on the way**, all in Phase 3's solve: the reach limit could drive a
+  target's depth past the leg and collapse its reach out from under the hip
+  (a 0.25 rad pop as a crossed skate landed), so the depth eases in first; the
+  limit and the stride's crouch demand switched on with the authored share and
+  popped a gliding leg as a stride faded, so both now move by that share; and
+  the limit was pulling in near-straight joint-space legs it should never have
+  touched.

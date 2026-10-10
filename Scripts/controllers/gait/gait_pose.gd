@@ -39,6 +39,11 @@ const REACH_MAX: float = 0.99
 # in. Near straight the knee turns fast per centimetre of reach, so a hard stop
 # would halt it mid-swing; eased, it slows into the limit instead.
 const REACH_EASE_M: float = 0.06
+# The depth eases over this band into this much short of the whole reach, so a
+# target too deep to stand on keeps room to reach out from under the hip
+# (√(2·reach·spare), ~0.12 m).
+const DEPTH_EASE_M: float = 0.02
+const DEPTH_SPARE_M: float = 0.01
 
 # This build's leg height multiplier (SkaterController.apply_attributes).
 var leg_scale: float = 1.0
@@ -77,7 +82,8 @@ var knee_extend_r: float = 0.0
 var foot_flat_l: float = 0.0
 var foot_flat_r: float = 0.0
 # How much each blade is laid flat along its length on its edge (the same seam):
-# the states authored as where the skates go keep their blades on the ice.
+# the states authored as where the skates go (SkaterLocomotion.authored) keep
+# their blades on the ice.
 var foot_level_l: float = 0.0
 var foot_level_r: float = 0.0
 # Per-blade edge load for the ice VFX, 0..1.
@@ -144,7 +150,7 @@ func seed_legs(loco: SkaterLocomotion, yaw_l: float, yaw_r: float, release: floa
 	_place(leg_r, stance_hip + loco.r_pitch - (knee_r + stance_knee) * _shin_frac(),
 			yaw_r, loco.r_roll, knee_r)
 	# Below the shared blend floor a share is a residue of an ease, not a pose.
-	var authored: float = loco.mix.stride if loco.mix.stride > 0.001 else 0.0
+	var authored: float = loco.authored if loco.authored > 0.001 else 0.0
 	foot_level_l = authored
 	foot_level_r = authored
 	_reach(leg_l, loco.l_dx, loco.l_dy, loco.l_dz, yaw_l + loco.l_yaw, foot_level_l, -1.0)
@@ -191,10 +197,11 @@ func _reach(leg: LegIK.Leg, dx: float, dy: float, dz: float, yaw: float, level: 
 			sqrt(leg.x * leg.x + leg.y * leg.y + leg.z * leg.z))
 	leg.yaw = yaw
 	if level <= 0.0:
+		# The joints' own ankle: reachable by construction, so solved as it is.
 		leg.x += dx * leg_scale
 		leg.y += dy * leg_scale
 		leg.z += dz * leg_scale
-		_solve_within(leg, reach)
+		LegIK.solve(leg, leg_scale * THIGH_LEN, leg_scale * SHIN_LEN)
 		return
 	var depth: float = _runner_depth(leg, ice)
 	# The hips' origin above the ice: the pivot hangs HIP_DROP below it, the
@@ -210,22 +217,36 @@ func _reach(leg: LegIK.Leg, dx: float, dy: float, dz: float, yaw: float, level: 
 		leg.x = target.x
 		leg.y = target.y
 		leg.z = target.z
-		_solve_within(leg, reach)
+		_solve_within(leg, reach, level)
 		lift = (_runner_depth(leg, ice) - depth) * level
 
 
-# The target brought within `reach` at its own height: its distance out from
-# under the hip eases into the most that height allows (an exponential knee,
-# continuous in value and slope where it starts).
-func _solve_within(leg: LegIK.Leg, reach: float) -> void:
+# The target brought within `reach`. Its depth eases in first, short of the
+# whole reach, so a target below what the leg can stand on never takes all of
+# it; then its distance out from under the hip eases into what that depth
+# leaves. Each eases exponentially, continuous in value and slope where it
+# starts, so the knee slows into the limit rather than halting there, and a
+# target past it lands the skate a little short rather than standing the leg
+# straight under the hip. The easing moves the target by `level`, the authored
+# share, so it fades in with that share rather than switching on.
+func _solve_within(leg: LegIK.Leg, reach: float, level: float) -> void:
+	var y: float = -_ease_into(-leg.y, reach - DEPTH_SPARE_M * leg_scale, DEPTH_EASE_M * leg_scale)
+	var keep: float = 1.0
 	var out: float = sqrt(leg.x * leg.x + leg.z * leg.z)
-	var most: float = sqrt(maxf(reach * reach - leg.y * leg.y, 0.0))
-	var ease: float = REACH_EASE_M * leg_scale
-	if out > most - ease and out > 0.0:
-		var keep: float = (most - ease * exp((most - ease - out) / ease)) / out
-		leg.x *= maxf(keep, 0.0)
-		leg.z *= maxf(keep, 0.0)
+	if out > 0.0:
+		keep = _ease_into(out, sqrt(maxf(reach * reach - y * y, 0.0)),
+				REACH_EASE_M * leg_scale) / out
+	leg.y = lerpf(leg.y, y, level)
+	leg.x *= lerpf(1.0, keep, level)
+	leg.z *= lerpf(1.0, keep, level)
 	LegIK.solve(leg, leg_scale * THIGH_LEN, leg_scale * SHIN_LEN)
+
+
+# `value` eased into `limit` over the last `band` before it.
+static func _ease_into(value: float, limit: float, band: float) -> float:
+	if value <= limit - band:
+		return value
+	return limit - band * exp((limit - band - value) / band)
 
 
 # How far the runner's edge hangs below the ankle, measured on the ice (`ice`

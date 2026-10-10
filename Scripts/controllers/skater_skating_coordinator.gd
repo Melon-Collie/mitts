@@ -284,10 +284,12 @@ func apply(delta: float) -> void:
 	# The pivot sits too: the open-hip glide and the step-around are both done on
 	# bent knees.
 	var stance: float = maxf(_locomotion.stance, _controller.pivot_stance * _pivot_blend)
-	# The stride sits as low as its push needs to reach the ice.
-	if _locomotion.push_reach > 0.0:
-		stance = maxf(stance, minf(GaitPose.reach_hip(_locomotion.push_reach),
-				deg_to_rad(_controller.stride_sit_max_deg)) / deg_to_rad(_controller.stance_hip_deg))
+	# The authored strokes sit as low as their pushes need to reach the ice, by
+	# their share, so the sit fades with them.
+	if _locomotion.authored > 0.001:
+		var reach_sit: float = minf(GaitPose.reach_hip(_locomotion.push_reach),
+				deg_to_rad(_controller.stride_sit_max_deg)) / deg_to_rad(_controller.stance_hip_deg)
+		stance = maxf(stance, lerpf(stance, reach_sit, _locomotion.authored))
 
 	# ── Stance and pose ────────────────────────────────────────────────────────
 	if active:
@@ -295,7 +297,7 @@ func apply(delta: float) -> void:
 			if active & _floor_bits[i]:
 				stance = maxf(stance, _floor_layers[i].stance_floor())
 	p.solve_stance(deg_to_rad(_controller.stance_hip_deg) * stance)
-	if _locomotion.mix.stride > 0.001:
+	if _locomotion.authored > 0.001:
 		tilt_hips(p)
 	else:
 		p.lean = Basis.IDENTITY

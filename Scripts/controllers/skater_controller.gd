@@ -411,33 +411,30 @@ var lower_body_lag_speed: float = 5.0
 var stride_cadence: float = 1.4          # low-speed slope: radians of stride phase per metre skated
 var stride_cadence_max_rate: float = 6.5  # rad/s ceiling the cadence saturates toward (caps top-speed leg turnover)
 var stride_roll_deg: float = 7.0          # side-to-side leg rock amplitude (fwd/back)
-# Forward push amplitude (fore/aft). Raised 6 → 10 when the knee fore-aft
-# compensation landed: the old visible "reach" was mostly the knee-release
-# artifact kicking the skate forward mid-stroke, so once the foot started
-# tracking the thigh-design curve the honest stride needed a bigger wave to
-# cover the same ground (with the correct slow-recovery / fast-push timing).
-var stride_pitch_deg: float = 10.0
 var stride_back_pitch_deg: float = 6.0    # backward C-cut amplitude (reaches forward)
 var crossover_lean_deg: float = 6.0       # side-step: lean into the step
 var crossover_scissor_deg: float = 8.0    # side-step: legs scissor laterally
-# Crossovers — how a skater turns at speed. Roles are fixed by the turn's side:
-# the outside leg lifts and steps across (over_*, clearance), the inside leg
-# extends beneath the body (under_roll). carve_stride_fade is the share of the
-# straight stride the crossover replaces.
 var carve_ref_turn_rate: float = 1.6   # rad/s of travel turn that reads as a full carve (pivot veto, glide tuck)
 var carve_min_speed: float = 2.5       # m/s floor — slow turns are steps, not crossovers
 var carve_engage_speed: float = 5.0    # turn-rate smoothing rate
-var carve_over_roll_deg: float = 24.0  # crossing (outside) leg roll across the body
-var carve_under_roll_deg: float = 16.0 # inside leg under-push roll
-var carve_over_pitch_deg: float = 8.0  # crossing leg also steps AHEAD
-var carve_clearance_knee_deg: float = 28.0  # lift while crossing the planted leg
-var carve_stride_fade: float = 0.7     # fraction of fore/aft stride removed at full carve
+# Crossovers as a foot path (SkaterLocomotion._crossover_path), metres from
+# under each skate's own hip at full stroke intensity: lateral toward the turn's
+# inside, so the outside skate lands crossed over and the inside one pushes
+# under the body.
+var crossover_cross_m: float = 0.30    # outside skate lands this far inside its hip
+var crossover_out_m: float = 0.12      # outside skate pushes back out this far past its hip
+var crossover_side_m: float = 0.05     # inside skate lands this far inside its hip
+var crossover_under_m: float = 0.25    # inside skate pushes under the body this far
+var crossover_back_m: float = 0.12     # both pushes end this far behind the hips
+var crossover_land_fwd_m: float = 0.05 # both land this far ahead of the hips
+var crossover_lift_m: float = 0.08     # recovery lift: the over-step clears the inside shin
+var crossover_pass_m: float = 0.08     # the over-step passes in front, the inside recovery behind
 # Crossover cadence: the over-step and under-push alternate halves of the
 # cycle (two-beat), and the feet step per radian of heading change rather than
 # by straight-line speed.
 var crossover_phase_per_turn: float = 7.0  # stride-phase rad per rad of heading change
 var carve_stance: float = 0.75         # stance floor at full carve — sit low to hold the edges
-var carve_lead_deg: float = 8.0        # the carve's inside skate leads (the tight turn's split, milder)
+var carve_lead_m: float = 0.20         # the carve's inside skate leads the outside one
 # Gliding — releasing all movement keys settles the legs to rest (the stride
 # is input-gated, v15 intent byte) while this floor keeps working knees under
 # a coasting skater, scaled by speed.

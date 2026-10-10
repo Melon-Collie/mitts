@@ -59,7 +59,7 @@ var r_ext: float = 0.0
 # Extra knee fold per leg: recovery tuck, crossover clearance, glide inside tuck.
 var l_tuck: float = 0.0
 var r_tuck: float = 0.0
-# The states authored as where the skates go (the stride): each ankle's offset
+# The states authored as where the skates go (`authored`): each ankle's offset
 # from where the joint strokes above put it, hip-pivot frame, metres at leg_scale
 # 1 (+X right, +Y up, −Z forward), and the leg's yaw (positive turns it toward
 # −X). GaitPose lays them on before the leg solve.
@@ -74,10 +74,13 @@ var r_yaw: float = 0.0
 # The stride's push per leg 0..1, for the edge load.
 var l_push: float = 0.0
 var r_push: float = 0.0
-# How far out from under its hip the stride's push reaches at full extension,
-# metres at leg_scale 1: the crouch has to let a leg get there (GaitPose
-# .reach_hip).
+# How far out from under its hip an authored stroke's skate reaches on the ice,
+# metres at leg_scale 1, at that stroke's own amplitude: the crouch has to let a
+# leg get there (GaitPose.reach_hip), by the authored share.
 var push_reach: float = 0.0
+# The share of the mix authored as where the skates go (the stride, the
+# crossover and the carve): GaitPose stands those on the ice.
+var authored: float = 0.0
 # Crouch engagement before the overlays' floors; vertical body bob (m).
 var stance: float = 0.0
 var bob: float = 0.0
@@ -256,34 +259,9 @@ func strokes(delta: float, fwd: float) -> void:
 				s, s_opp, cs, cs_opp, ext_l, ext_r, bias)
 		trunk_pitch += deg_to_rad(c.backpedal_chest_deg) * w
 
-	# Crossovers: fixed roles by the turn's side, two-beat — the outside leg
-	# lifts and steps across in front on one half of the cycle, the inside leg
-	# extends in an under-push beneath the body on the other — over a residual
-	# of the straight stride.
 	w = mix.crossover
 	if w > 0.001:
-		var residual: float = 1.0 - c.carve_stride_fade
-		_stroke(w, deg_to_rad(c.stride_pitch_deg) * amp * residual, 0.0, 0.0,
-				deg_to_rad(c.stride_knee_deg) * amp * residual,
-				s, s_opp, cs, cs_opp, ext_l, ext_r, bias)
-		var over: float = maxf(s, 0.0)
-		var under: float = maxf(-s, 0.0)
-		var over_roll: float = deg_to_rad(c.carve_over_roll_deg) * intensity * over * w
-		var under_roll: float = deg_to_rad(c.carve_under_roll_deg) * intensity * under * w
-		var over_pitch: float = deg_to_rad(c.carve_over_pitch_deg) * intensity * over * w
-		var clearance: float = deg_to_rad(c.carve_clearance_knee_deg) * intensity * maxf(cs, 0.0) * w
-		if _cross_signed > 0.0:
-			l_roll += over_roll
-			l_pitch += over_pitch
-			l_tuck += clearance
-			r_roll -= under_roll
-			r_ext = maxf(r_ext, under * w)
-		else:
-			r_roll -= over_roll
-			r_pitch += over_pitch
-			r_tuck += clearance
-			l_roll += under_roll
-			l_ext = maxf(l_ext, under * w)
+		_crossover_path(w, signf(_cross_signed), amp, s, s_opp, cs, cs_opp)
 
 	# Side-step: a scissor 180° out of phase between the legs, leaning into the
 	# step.
@@ -317,17 +295,14 @@ func strokes(delta: float, fwd: float) -> void:
 		r_pitch += split
 		l_pitch -= split
 
-	# Carve: both blades on the edges the lean puts them on, the inside skate
-	# leading, the weight on the outside one — the inside knee tucks light. The
+	# Carve: both skates down at hip width, the inside one leading; the lean
+	# puts them on their edges (GaitPose stands them on the ice under it). The
 	# inside is the signed weight's sign, so a reversal slides through centre.
 	var carve_in: float = _carve_signed * along
 	if absf(carve_in) > 0.001:
-		var lead: float = deg_to_rad(c.carve_lead_deg) * carve_in
-		r_pitch += lead
-		l_pitch -= lead
-		var light: float = deg_to_rad(c.glide_inside_tuck_deg)
-		r_tuck += light * maxf(carve_in, 0.0)
-		l_tuck += light * maxf(-carve_in, 0.0)
+		var lead: float = 0.5 * c.carve_lead_m * carve_in
+		r_dz -= lead
+		l_dz += lead
 
 	# Hockey stop, in the TURNED leg frame (stop_yaw turns the hips across):
 	# the leading leg braces ahead, the trailing one tucks behind, both rolled
@@ -351,6 +326,7 @@ func strokes(delta: float, fwd: float) -> void:
 
 	_stance(s)
 	edge_floor = mix.stop + mix.tight + mix.carve
+	authored = mix.stride + mix.crossover + mix.carve
 
 	# Trunk: sway over the loaded leg on the stride fundamental (the trunk is
 	# too massive to carry the stroke's snap), a damped spring that lets the
@@ -393,7 +369,54 @@ func _stride_path(w: float, a: float, s: float, s_opp: float, cs: float, cs_opp:
 	r_yaw -= w * toe * p_r
 	l_push = maxf(l_push, w * maxf(-s, 0.0))
 	r_push = maxf(r_push, w * maxf(-s_opp, 0.0))
-	push_reach = maxf(push_reach, w * Vector2(out, c.stride_push_back_m * a).length())
+	push_reach = maxf(push_reach, Vector2(out, c.stride_push_back_m * a).length())
+
+
+# Crossovers, as where the skates go: the stride's phase law on each leg, half
+# a cycle apart, with landings and extensions of their own, `side` the turn's
+# inside (+1 right). The outside skate lands crossed over to the inside and
+# pushes back out along the ice, and its recovery is the over-step, lifted and
+# passing in front. The inside skate lands at its own side and pushes under the
+# body, and recovers back out from behind. Half a cycle apart, the outside lands
+# crossed while the inside is under the body, so they cross every step: the
+# over-step rides the inside skate's under-push, and the two pushes alternate.
+# The crossing is the stroke's engagement (`_engaged`), which is full well below
+# top speed, so a crossover crosses at any pace; how far back each push goes is
+# the amplitude `a`.
+func _crossover_path(w: float, side: float, a: float, s: float, s_opp: float,
+		cs: float, cs_opp: float) -> void:
+	var c: SkaterController = _controller
+	var e: float = _engaged()
+	var cross: float = c.crossover_cross_m * e
+	var out: float = c.crossover_out_m * e
+	var lands: float = c.crossover_side_m * e
+	var under: float = c.crossover_under_m * e
+	var land: float = -c.crossover_land_fwd_m * a
+	var travel: float = (c.crossover_back_m + c.crossover_land_fwd_m) * a
+	var lift: float = c.crossover_lift_m * e
+	var clear: float = c.crossover_pass_m * e
+	# Per leg: 0 at the landing, 1 at full extension.
+	var p_l: float = 0.5 * (1.0 - s)
+	var p_r: float = 0.5 * (1.0 - s_opp)
+	var up_l: float = maxf(cs, 0.0)
+	var up_r: float = maxf(cs_opp, 0.0)
+	# The left skate is the outside one in a right turn.
+	var left_out: bool = side > 0.0
+	var l_from: float = cross if left_out else lands
+	var l_to: float = out if left_out else under
+	var r_from: float = lands if left_out else cross
+	var r_to: float = under if left_out else out
+	l_dx += w * side * (l_from * (1.0 - p_l) - l_to * p_l)
+	r_dx += w * side * (r_from * (1.0 - p_r) - r_to * p_r)
+	l_dz += w * (land + travel * p_l + clear * up_l * (-1.0 if left_out else 1.0))
+	r_dz += w * (land + travel * p_r + clear * up_r * (1.0 if left_out else -1.0))
+	l_dy += w * lift * up_l
+	r_dy += w * lift * up_r
+	l_push = maxf(l_push, w * maxf(-s, 0.0))
+	r_push = maxf(r_push, w * maxf(-s_opp, 0.0))
+	push_reach = maxf(push_reach, maxf(Vector2(cross, c.crossover_land_fwd_m * a).length(),
+			maxf(Vector2(out, c.crossover_back_m * a).length(),
+					Vector2(under, c.crossover_back_m * a).length())))
 
 
 # One leg-pair stroke, weighted: fore/aft push (rear-biased), in-phase edge rock,
@@ -411,11 +434,17 @@ func _stroke(w: float, push: float, rock: float, flare: float, tuck: float,
 	r_tuck += w * tuck * maxf(cs_opp, 0.0)
 
 
+# How engaged the stroke is, 0..1: its intensity against the share of top speed
+# the crouch fully engages at.
+func _engaged() -> float:
+	return clampf(intensity / maxf(_controller.stance_full_speed_fraction, 0.01), 0.0, 1.0)
+
+
 # Crouch engagement per state: the striding states sit with speed and effort,
 # the dug-edge states sit deep, the glide keeps working knees at speed.
 func _stance(s: float) -> void:
 	var c: SkaterController = _controller
-	var stroke: float = clampf(intensity / maxf(c.stance_full_speed_fraction, 0.01), 0.0, 1.0) \
+	var stroke: float = _engaged() \
 			* clampf(1.0 + effort * c.stance_push_gain, 0.0, 1.35) \
 			* (1.0 + loaded * c.stance_sit_gain) \
 			* (1.0 + c.cadence_glide_stance_gain * cruise_gear)
@@ -515,6 +544,7 @@ func _clear_strokes() -> void:
 	l_push = 0.0
 	r_push = 0.0
 	push_reach = 0.0
+	authored = 0.0
 	trunk_pitch = 0.0
 	trunk_roll = 0.0
 	bob = 0.0

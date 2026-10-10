@@ -503,26 +503,34 @@ Things the split alone would get wrong, handled where noted:
 The legs are solved from where the ankles go (`LegIK`): `GaitPose.seed_legs`
 places each ankle from the stroke's joints on the stance, lays on the states
 authored as where their skates go, and solves the leg to it; the layers lay
-their joint offsets on that. The stride is authored that way
-(`SkaterLocomotion._stride_path`): out and back from under the hips, toe
-turned out, landing ahead of them. Three things make it stand on the ice:
+their joint offsets on that. Three states are authored that way
+(`SkaterLocomotion.authored`): the stride (`_stride_path`, out and back from
+under the hips, toe turned out), the crossover (`_crossover_path`, the stride's
+phase law with its own landings: the outside skate lands crossed over and
+pushes back out, the inside one pushes under the body, so they cross every
+step) and the carve (both down, the inside skate leading). Three things make
+them stand on the ice:
 
-- **It sits as low as its push needs.** A leg can only reach so far out at the
-  hip height it is at, so the stride asks for the crouch that lets the push's
-  full extension reach the ice (`GaitPose.reach_hip`, capped at
-  `stride_sit_max_deg`), and the reach eases in near full stretch rather than
-  halting the knee mid-swing. Driving hard reads deeper and wider than
-  cruising for that reason, not by a separate tunable.
-- **It is authored on the ice, not on the hips.** The hips pitch with the
+- **They sit as low as their pushes need.** A leg can only reach so far out at
+  the hip height it is at, so the crouch moves, by the authored share, toward
+  the one that lets the furthest skate reach the ice (`GaitPose.reach_hip`,
+  capped at `stride_sit_max_deg`). The reach eases in near full stretch rather
+  than halting the knee mid-swing, depth first so a target too deep to stand on
+  never stands the leg straight under the hip. Driving hard reads deeper and
+  wider than cruising for that reason, not by a separate tunable. Every one of
+  those corrections moves by the authored share, so none switches on.
+- **They are authored on the ice, not on the hips.** The hips pitch with the
   lower body and tip with the balance lean about the ice under the body, so
-  the stride's targets are turned through that tilt (`GaitPose.ice`, `lean`):
-  the skate stays where it was put and the body goes over it.
-- **It aims the runner, not the ankle.** Its blades lie flat along their length
+  their targets are turned through that tilt (`GaitPose.ice`, `lean`): the
+  skate stays where it was put and the body goes over it, so a turn's bank
+  puts both blades on their edges.
+- **They aim the runner, not the ankle.** Their blades lie flat along their length
   on whatever edge the leg rolls them to (the ankle's level give-back), and an
   edge raises a runner toward its ankle, so the ankle comes down by what the
   edge takes off and the leg is solved again.
 
-The other states are still the joint stroke's until the plan's Phase 4.
+The other states are still the joint stroke's until the plan's Phases 4b and
+4c.
 
 ### Overlays are layers, and the order is the priority
 
