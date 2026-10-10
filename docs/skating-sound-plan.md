@@ -24,12 +24,13 @@ nothing new on the wire.
 | Glide bed | the steel's hiss while coasting | speed |
 | Carve | a louder, brighter sustained edge | the edges' load in a turn (the carve, the tight turn, a crossover's under-push) |
 | Stop | a bite, then a spray that lasts the deceleration | `mix.stop` × the speed being shed; the skid softer |
-| Touches | small blade touchdowns | a lifted skate landing |
+| Touches | small blade touchdowns | a lifted skate landing (`SkaterLocomotion.l_dy` / `r_dy` back to 0) |
+| Start | a short, hard dig per push | a push from near a standstill against the acceleration it makes |
 
 ## Phases
 
 1. **Pushes on the gait** (built). The coordinator emits
-   `Skater.skate_pushed(left, strength)` on each push's onset; strength is
+   `Skater.skate_pushed(left, strength, dig)` on each push's onset; strength is
    `SkaterLocomotion.push_strength` (intensity × push scale × the stroking
    states' share). `SkaterSoundController` plays a take at that skate on a
    player of its own per foot, its level following strength.
@@ -37,8 +38,8 @@ nothing new on the wire.
    weight and deceleration, with an onset bite.
 3. **Glide and carve beds** (built), two loops whose levels follow speed and
    edge load.
-4. **Polish**: touchdowns, the start's chop, the mix of the local skater's own
-   skating against everyone else's, a voice budget for six skaters.
+4. **Polish** (built): touchdowns, the start's chop, the mix of the local
+   skater's own skating against everyone else's, a voice budget for the lobby.
 
 ## Recordings
 
@@ -53,6 +54,8 @@ placeholders are cut from the old stride recording.
 | `skate_push_01..06.wav` | the stride, re-pitched ±10% and tilted ±3 dB, 400 ms from 3 ms before the bite | 6–10 pushes, mono, ~300–500 ms, cut 3 ms before the bite |
 | `skate_glide.wav` | band-limited noise (2.5–9 kHz), 4 s, its spectrum filtered round the circle so the loop has no seam | a seamless 2–4 s loop of a coasting glide, mono, loop on in its `.import` |
 | `skate_carve.wav` | grains of the stride's scrape tail, overlap-added round a 3 s circle | a seamless 2–4 s loop of a held edge, mono, loop on in its `.import` |
+| `skate_dig_01..04.wav` | push takes 1–5, re-pitched down 6–12%, saturated, 200 ms decaying over 60 ms | 4–6 hard digs from a standstill, mono, ~150–250 ms, cut 3 ms before the bite |
+| `skate_touch_01..04.wav` | push takes, re-pitched up 12–24%, thinned, 80 ms decaying over 14 ms | 4–6 blades set down on the ice, mono, ~50–100 ms |
 | `skate_brake.wav` (the stop's bite) | the original | a short bite as the blades dig in, mono |
 | `skate_scrape.wav` (the stop's sustain) | grains of `skate_brake.wav`'s steady scrape, overlap-added round a 2 s circle so the loop has no seam | a seamless 2–4 s loop of a held stop's spray, mono, loop on in its `.import` (`edit/loop_mode=2`) |
 
@@ -61,16 +64,11 @@ placeholders are cut from the old stride recording.
 - Each push is heard once. A leg's push weight is exactly 0 while it is not
   pushing (`max(-s, 0)` per stroking state), so a push is under way from the
   first pass above 0.001, whatever the frame rate, and is heard on the first
-  pass of it the stroke is past 0.05 strength. That is its onset, except at a
-  start, whose first push begins at zero strength and is heard ~75 ms in once
-  the stroke has some.
-- A start's first pushes are quiet (strength ~0.06 against ~1 at cruise): the
-  stroke's intensity eases up from zero, so the dig-in sounds as small as it
-  is drawn. A start's crunch is phase 4's.
+  pass of it the stroke (or, since phase 4, a start's dig) is past 0.05.
 - Both gait paths publish the same channels (`push_l`, `push_r`,
   `push_strength` on the coordinator; `NativeSkaterGait.get_push`), and
   `test_native_gait_parity.gd` compares them.
-- `test_gait_push_events.gd`: each leg pushes once per stride cycle, the legs
+- `test_gait_step_events.gd`: each leg pushes once per stride cycle, the legs
   alternate, and a coasting skater makes no push.
 - Level: full at strength 1 (a flat-out stride), −14 dB at the floor; the cue
   sits at −6 in the mix, with the quieter body and stick sounds.
@@ -113,4 +111,43 @@ placeholders are cut from the old stride recording.
   scrapes nor carves; a coasting curve held from speed carves at −0.4 dB
   through all of it, pitched up 7.8%; a stopped skater neither scrapes nor
   glides.
+
+## Phase 4 as built
+
+- **Landings.** The gait publishes each skate's lift (`lift_l`, `lift_r` on the
+  coordinator; `NativeSkaterGait.get_lift`). A lift is exactly 0 on the ice, so
+  a skate has landed once it is back under 0.5 mm, and is heard if it rose past
+  3 mm (`Skater.skate_touched(left, lift)`, the highest lift since the last
+  landing). Its level follows that height, full at 30 mm (a crossover's
+  over-step), down to −18 dB. Measured (`test_gait_step_events.gd`): each skate
+  lands once a cycle striding (lifts to 22 mm) and in crossovers (30 mm), and
+  never coasting.
+- **The start.** A push also carries the start's dig
+  (`SkaterLocomotion.dig_strength`: how near a standstill, times the forward
+  acceleration against `stride_effort_ref_accel`, times the share of stride and
+  backward the classifier is skating toward). A push is heard once either is
+  past 0.05, and plays a dig take while the dig outweighs the stroke. A start's
+  first push is heard at its onset at 0.96 dig. Its stroke strength there is
+  0.00, which is why phase 1 heard it late and quiet.
+- **The gait draws a start as one push.** From rest to 5.4 m/s the right leg
+  pushes once, for ~0.75 s (`dig_in_cadence_rate` 4.5 rad/s), so a start is
+  heard as one dig and then the stride. Chopping it into quick steps is a gait
+  change, and the dig sound follows it without change.
+- **Steps share a player per skate.** A push, a dig and a landing are the same
+  blade, so each new step takes over that skate's player. A landing comes three
+  quarters of a cycle after its push, so a push's tail is rarely cut.
+- **Your own skating in front.** Another skater's steps, glide and carve play
+  6 dB under the local skater's (`Skater.is_local_skater`). Stops play full
+  for everyone, since a stop is an event. A spectator has no local skater, so
+  everything sits at the lower level.
+- **The voice budget.** Only held loops are budgeted: one-shots end on their
+  own, but the scrape, glide and carve run as long as the gait holds them, up
+  to 30 in 5v5. Each controller writes how loud each of its loops arrives at
+  the listener (the cue's level plus the camera's inverse-distance falloff)
+  into a lobby-wide table each frame, and plays a loop only while it is among
+  the 8 loudest. A playing loop ranks 3 dB louder, so two near-equal loops do
+  not trade places every frame. A controller takes a slot in the table on
+  entering the tree and gives it back on leaving.
+- Mix: the dig at −4 (with the stop's bite), the landing at −11 (under the
+  push, over the menu click).
 

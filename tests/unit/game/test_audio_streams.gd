@@ -15,16 +15,18 @@ func test_the_held_skating_sounds_loop() -> void:
 		assert_ne(stream.loop_mode, AudioStreamWAV.LOOP_DISABLED, "%s.import must set a loop mode" % path)
 
 
-# A push sounds from the skate that made it, so its takes are mono one-shots: a
+# A step sounds from the skate that made it, so its takes are mono one-shots: a
 # stereo take would place at the skater rather than the foot, and a looping one
 # would never stop.
-func test_the_push_takes_are_mono_one_shots() -> void:
-	var path: String = SoundManager._SOUND_PATHS[SoundManager.Sound.SKATE_PUSH]
-	for i: int in SoundManager._TAKE_COUNTS[SoundManager.Sound.SKATE_PUSH]:
-		var stream := load(path % (i + 1)) as AudioStreamWAV
-		assert_not_null(stream, "take %d loads" % (i + 1))
-		assert_false(stream.stereo, "take %d is mono" % (i + 1))
-		assert_eq(stream.loop_mode, AudioStreamWAV.LOOP_DISABLED, "take %d is a one-shot" % (i + 1))
+func test_the_step_takes_are_mono_one_shots() -> void:
+	for sound: int in [SoundManager.Sound.SKATE_PUSH, SoundManager.Sound.SKATE_DIG,
+			SoundManager.Sound.SKATE_TOUCH]:
+		var path: String = SoundManager._SOUND_PATHS[sound]
+		for i: int in SoundManager._TAKE_COUNTS[sound]:
+			var stream := load(path % (i + 1)) as AudioStreamWAV
+			assert_not_null(stream, "%s loads" % (path % (i + 1)))
+			assert_false(stream.stereo, "%s is mono" % (path % (i + 1)))
+			assert_eq(stream.loop_mode, AudioStreamWAV.LOOP_DISABLED, "%s is a one-shot" % (path % (i + 1)))
 
 
 func test_the_crowd_bed_loops() -> void:
@@ -87,9 +89,11 @@ func test_the_mix_keeps_its_order() -> void:
 		for shot: int in [S.SHOT_SLAPPER, S.SHOT_WRISTER]:
 			assert_gt(mix[shot], mix[contact], "shots over puck contacts")
 		for quiet: int in [S.PUCK_PICKUP, S.SKATE_BRAKE, S.STICK_TAP, S.GOALIE_PAD_DROP, S.GOALIE_PAD_SLIDE,
-				S.SKATE_PUSH, S.SKATE_SCRAPE, S.SKATE_CARVE, S.SKATE_GLIDE]:
+				S.SKATE_PUSH, S.SKATE_SCRAPE, S.SKATE_CARVE, S.SKATE_GLIDE, S.SKATE_DIG, S.SKATE_TOUCH]:
 			assert_gt(mix[contact], mix[quiet], "puck contacts over the quieter body and stick sounds")
 	assert_gt(mix[S.SKATE_CARVE], mix[S.SKATE_GLIDE], "the glide is a bed under the edges")
+	assert_gt(mix[S.SKATE_PUSH], mix[S.SKATE_TOUCH], "a step lands softer than it pushes")
+	assert_gt(mix[S.SKATE_DIG], mix[S.SKATE_PUSH], "a start digs harder than a stride pushes")
 	for sound: int in S.values():
 		if sound != S.UI_HOVER and sound != S.UI_CLICK:
 			assert_gt(mix[sound], mix[S.UI_CLICK], "menus sit under everything in play")

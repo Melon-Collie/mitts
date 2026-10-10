@@ -38,9 +38,13 @@ const _PSI_SMOOTH_EASE: float = 15.0
 # A leg's push weight past this is a push under way: it is exactly 0 while the
 # leg is not pushing, so the first pass above it is the push's onset.
 const _PUSH_ONSET: float = 0.001
-# A stroke weaker than this (push_strength) makes no sound: the residue of a
-# stroke easing out, not a push.
+# A stroke weaker than this (push_strength, or a start's dig_strength) makes no
+# sound: the residue of a stroke easing out, not a push.
 const _PUSH_MIN_STRENGTH: float = 0.05
+# A skate's lift is exactly 0 on the ice, so it has landed once back under this;
+# a step that never rose past the minimum was a shuffle of the blade, not a lift.
+const _TOUCH_DOWN_M: float = 0.0005
+const _TOUCH_MIN_LIFT_M: float = 0.003
 
 # NativeSkaterGait.locomote flag bits.
 const _NATIVE_BRAKE: int = 1
@@ -167,11 +171,16 @@ var _pivot_yaw_r: float = 0.0
 # wobble, not a pose.
 var pivot_hold: float = 0.0
 # Each leg's push this pass (SkaterLocomotion.l_push / r_push) and how hard the
-# stroke pushes (SkaterLocomotion.push_strength); a push's onset emits
-# Skater.skate_pushed.
+# stroke pushes and a start digs (push_strength, dig_strength); a push's onset
+# emits Skater.skate_pushed.
 var push_l: float = 0.0
 var push_r: float = 0.0
 var push_strength: float = 0.0
+var push_dig: float = 0.0
+# Each skate's lift off the ice this pass, m (SkaterLocomotion.l_dy / r_dy); a
+# landing emits Skater.skate_touched.
+var lift_l: float = 0.0
+var lift_r: float = 0.0
 # The stop's and the skid's weights this pass (LocomotionRules.Mix), for the
 # scrape they make, and the share of the edges' grip the turn is using
 # (SkaterLocomotion.turning, unsigned), for the carve.
@@ -181,6 +190,9 @@ var turn_load: float = 0.0
 # Whether the push each leg is in has been heard yet.
 var _push_heard_l: bool = false
 var _push_heard_r: bool = false
+# The highest each skate has lifted since it last landed.
+var _lift_peak_l: float = 0.0
+var _lift_peak_r: float = 0.0
 
 
 func setup(skater: Skater, sm: SkaterStateMachine, controller: SkaterController) -> void:
@@ -256,8 +268,13 @@ func reset_to_rest() -> void:
 	push_l = 0.0
 	push_r = 0.0
 	push_strength = 0.0
+	push_dig = 0.0
 	_push_heard_l = false
 	_push_heard_r = false
+	lift_l = 0.0
+	lift_r = 0.0
+	_lift_peak_l = 0.0
+	_lift_peak_r = 0.0
 	stop_weight = 0.0
 	skid_weight = 0.0
 	turn_load = 0.0
@@ -366,7 +383,9 @@ func apply(delta: float) -> void:
 		stance = demand.x
 		authored = demand.y
 		var push: Vector4 = _native.get_push()
-		_sense_pushes(push.x, push.y, push.z)
+		_sense_pushes(push.x, push.y, push.z, push.w)
+		var lift: Vector2 = _native.get_lift()
+		_sense_touches(lift.x, lift.y)
 		var heard: Vector4 = _native.get_sound()
 		stop_weight = heard.x
 		skid_weight = heard.y
@@ -380,7 +399,9 @@ func apply(delta: float) -> void:
 		stop_yaw_offset = _locomotion.stop_yaw
 		_locomotion.strokes(delta, _align_to_travel(delta))
 		authored = _locomotion.authored
-		_sense_pushes(_locomotion.l_push, _locomotion.r_push, _locomotion.push_strength())
+		_sense_pushes(_locomotion.l_push, _locomotion.r_push, _locomotion.push_strength(),
+				_locomotion.dig_strength())
+		_sense_touches(_locomotion.l_dy, _locomotion.r_dy)
 		stop_weight = _locomotion.mix.stop
 		skid_weight = _locomotion.mix.skid
 		turn_load = absf(_locomotion.turning)
@@ -453,21 +474,38 @@ func apply(delta: float) -> void:
 # Each push is heard once, on every peer, from the same replicated state the
 # legs skate: as it starts, or — a start's first push begins before the stroke
 # has any strength — as soon as the stroke is strong enough to be heard.
-func _sense_pushes(left: float, right: float, strength: float) -> void:
+func _sense_pushes(left: float, right: float, strength: float, dig: float) -> void:
 	push_strength = strength
+	push_dig = dig
 	push_l = left
 	push_r = right
-	_push_heard_l = _hear_push(true, left, strength, _push_heard_l)
-	_push_heard_r = _hear_push(false, right, strength, _push_heard_r)
+	_push_heard_l = _hear_push(true, left, _push_heard_l)
+	_push_heard_r = _hear_push(false, right, _push_heard_r)
 
 
-func _hear_push(left: bool, push: float, strength: float, heard: bool) -> bool:
+func _hear_push(left: bool, push: float, heard: bool) -> bool:
 	if push <= _PUSH_ONSET:
 		return false
-	if not heard and strength > _PUSH_MIN_STRENGTH:
-		_skater.skate_pushed.emit(left, strength)
+	if not heard and maxf(push_strength, push_dig) > _PUSH_MIN_STRENGTH:
+		_skater.skate_pushed.emit(left, push_strength, push_dig)
 		return true
 	return heard
+
+
+func _sense_touches(left: float, right: float) -> void:
+	lift_l = left
+	lift_r = right
+	_lift_peak_l = _hear_touch(true, left, _lift_peak_l)
+	_lift_peak_r = _hear_touch(false, right, _lift_peak_r)
+
+
+# The skate's peak lift since it last landed, emitting the landing.
+func _hear_touch(left: bool, lift: float, peak: float) -> float:
+	if lift > _TOUCH_DOWN_M:
+		return maxf(peak, lift)
+	if peak > _TOUCH_MIN_LIFT_M:
+		_skater.skate_touched.emit(left, peak)
+	return 0.0
 
 
 func _native_flags() -> int:

@@ -952,7 +952,12 @@ Vector4 NativeSkaterGait::get_trunk() const {
 
 Vector4 NativeSkaterGait::get_push() const {
 	return Vector4(l_push, r_push,
-			intensity * push_scale * (mix.stride + mix.crossover + mix.backward + mix.shuffle), 0.0);
+			intensity * push_scale * (mix.stride + mix.crossover + mix.backward + mix.shuffle),
+			start * clampd(fd_effort_target, 0.0, 1.0) * (target.stride + target.backward));
+}
+
+Vector2 NativeSkaterGait::get_lift() const {
+	return Vector2(l_dy, r_dy);
 }
 
 Vector4 NativeSkaterGait::get_sound() const {
@@ -988,6 +993,7 @@ void NativeSkaterGait::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_seed"), &NativeSkaterGait::get_seed);
 	ClassDB::bind_method(D_METHOD("get_trunk"), &NativeSkaterGait::get_trunk);
 	ClassDB::bind_method(D_METHOD("get_push"), &NativeSkaterGait::get_push);
+	ClassDB::bind_method(D_METHOD("get_lift"), &NativeSkaterGait::get_lift);
 	ClassDB::bind_method(D_METHOD("get_sound"), &NativeSkaterGait::get_sound);
 	ClassDB::bind_method(D_METHOD("get_mix"), &NativeSkaterGait::get_mix);
 }

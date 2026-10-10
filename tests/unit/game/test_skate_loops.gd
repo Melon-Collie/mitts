@@ -56,6 +56,7 @@ func before_each() -> void:
 	_controller.set_physics_process(false)
 	_controller._pose.facing = Vector2(0.0, -1.0)
 	_skater.set_facing(Vector2(0.0, -1.0))
+	_skater.is_local_skater = true
 	_sound = SkaterSoundController.new()
 	_skater.add_child(_sound)
 	_sound.setup(_skater, _controller)
@@ -88,9 +89,9 @@ func _skate(ticks: int, move: Vector2, brake: bool = false, arc: bool = false) -
 		if biting and not was_biting:
 			bites += 1
 		was_biting = biting
-		scrape.sample(_sound._scrape_player, SoundManager.Sound.SKATE_SCRAPE)
-		glide.sample(_sound._glide_player, SoundManager.Sound.SKATE_GLIDE)
-		carve.sample(_sound._carve_player, SoundManager.Sound.SKATE_CARVE)
+		scrape.sample(_sound._loops[SkaterSoundController.Loop.SCRAPE], SoundManager.Sound.SKATE_SCRAPE)
+		glide.sample(_sound._loops[SkaterSoundController.Loop.GLIDE], SoundManager.Sound.SKATE_GLIDE)
+		carve.sample(_sound._loops[SkaterSoundController.Loop.CARVE], SoundManager.Sound.SKATE_CARVE)
 
 
 func test_a_stop_bites_once_and_scrapes_until_it_has_stopped() -> void:
@@ -130,10 +131,10 @@ func test_a_held_curve_carves() -> void:
 	_skate(300, Vector2(0.0, -1.0))
 	_skate(120, Vector2.ZERO, false, true)
 	gut.p("carve: loudest %.1f dB over %d of 120 ticks, pitch %.3f"
-			% [carve.loudest, carve.ticks, _sound._carve_player.pitch_scale])
+			% [carve.loudest, carve.ticks, _sound._loops[SkaterSoundController.Loop.CARVE].pitch_scale])
 	assert_gt(carve.ticks, 60, "the edge is heard through the curve")
 	assert_gt(carve.loudest, -12.0, "loaded, and loud with it")
-	assert_gt(_sound._carve_player.pitch_scale, 1.0, "a loaded edge brightens")
+	assert_gt(_sound._loops[SkaterSoundController.Loop.CARVE].pitch_scale, 1.0, "a loaded edge brightens")
 
 
 func test_the_scrape_follows_the_speed_shed() -> void:
@@ -159,3 +160,37 @@ func test_the_carve_follows_the_edge_load() -> void:
 			SkaterSoundController.carve_volume_db(0.3, 8.0), "a loaded edge is louder")
 	assert_gt(SkaterSoundController.carve_volume_db(0.8, 8.0),
 			SkaterSoundController.carve_volume_db(0.8, 3.0), "and faster is louder")
+
+
+func test_another_skaters_skating_sits_under_your_own() -> void:
+	_skate(360, Vector2(0.0, -1.0))
+	var own: float = glide.loudest
+	_skater.is_local_skater = false
+	_skate(60, Vector2(0.0, -1.0))
+	gut.p("glide: own %.1f dB, another's %.1f dB" % [own, glide.loudest])
+	assert_almost_eq(glide.loudest, own + SkaterSoundController._OTHERS_DB, 0.5,
+			"another skater's glide sits under your own")
+
+
+func test_the_loudest_loops_hold_the_budget() -> void:
+	var heard := PackedFloat32Array([-3.0, -INF, -10.0, -1.0, -10.0])
+	assert_true(SkaterSoundController.within_budget(heard, 3, 2), "the loudest plays")
+	assert_true(SkaterSoundController.within_budget(heard, 0, 2), "the next does")
+	assert_false(SkaterSoundController.within_budget(heard, 2, 2), "the third waits")
+	assert_true(SkaterSoundController.within_budget(heard, 2, 3), "a tie goes to the lower index")
+	assert_false(SkaterSoundController.within_budget(heard, 4, 3), "and only one of them")
+
+
+# Each controller holds a slot in the lobby's loop table while it is in the
+# tree, and gives it back on leaving, so the table never fills with the dead.
+func test_a_controller_gives_its_loop_slot_back() -> void:
+	var slot: int = _sound._slot
+	var other := SkaterSoundController.new()
+	add_child(other)
+	assert_ne(other._slot, slot, "two controllers, two slots")
+	var size: int = SkaterSoundController._heard.size()
+	other.free()
+	var again := SkaterSoundController.new()
+	add_child_autofree(again)
+	assert_eq(SkaterSoundController._heard.size(), size, "a freed slot is reused")
+

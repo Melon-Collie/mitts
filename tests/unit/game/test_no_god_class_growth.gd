@@ -65,7 +65,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# commit that releases a winning rim as a flat charged dump.
 	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3910,
 	"res://Scripts/controllers/skater_controller.gd": 3338,
-	"res://Scripts/actors/skater.gd": 2711,
+	"res://Scripts/actors/skater.gd": 2712,
 	"res://Scripts/networking/network_manager.gd": 2824,
 	"res://Scripts/game/tutorial_manager.gd": 2101,
 	"res://Scripts/controllers/skater_ik_coordinator.gd": 938,

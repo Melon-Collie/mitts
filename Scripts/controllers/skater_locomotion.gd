@@ -511,6 +511,15 @@ func push_strength() -> float:
 	return intensity * push_scale * (mix.stride + mix.crossover + mix.backward + mix.shuffle)
 
 
+# How hard a start digs in, for its chop: the acceleration the physics is making
+# against the one that reads as full effort, by how near a standstill it is and
+# the share of the states that start from one. The share is the one being
+# skated toward, not the eased mix: a start's first push is under way before
+# the stride has eased in, and it is the hardest one.
+func dig_strength() -> float:
+	return _start * clampf(_fd_effort_target, 0.0, 1.0) * (_target.stride + _target.backward)
+
+
 # How engaged the stroke is, 0..1: its intensity against the share of top speed
 # the crouch fully engages at.
 func _engaged() -> float:

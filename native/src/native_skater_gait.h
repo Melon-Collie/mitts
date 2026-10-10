@@ -238,8 +238,11 @@ public:
 	godot::Vector4 get_stance() const;  // (stance_hip, stance_knee, stance_shin, drop)
 	godot::Vector4 get_seed() const;    // (foot_level, plant share, edge_l, edge_r)
 	godot::Vector4 get_trunk() const;   // (bob, trunk_pitch, trunk_roll, 0)
-	// (l_push, r_push, push strength, 0): SkaterLocomotion.push_strength().
+	// (l_push, r_push, push strength, dig strength): SkaterLocomotion
+	// .push_strength() and .dig_strength().
 	godot::Vector4 get_push() const;
+	// (l_dy, r_dy): each skate's lift off the ice, m.
+	godot::Vector2 get_lift() const;
 	// (mix.stop, mix.skid, |turning|, 0): what the blades make heard — the stop
 	// and the skid's scrape, the edges' load in a turn.
 	godot::Vector4 get_sound() const;
