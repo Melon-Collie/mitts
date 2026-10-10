@@ -334,27 +334,40 @@ func strokes(delta: float, travel: Vector2) -> void:
 # the recovery keep the stroke's own timing (the skew makes the push the fast
 # half). Both skates shift under the body toward the support leg in phase (the
 # rock), the body riding over the leg it stands on. `a` is the amplitude.
+#
+# From low speed the skates push from a V. A skate's track over the ice is the
+# leg driving it out at `vee_push_speed` while the body carries it forward at
+# the ground speed, and its blade lies along that track, so the slower the body
+# the further out it turns (up to `vee_toe_max_deg`), held through the stroke,
+# with the push square to the blade. The V hands back to the authored stroke by
+# the speed its track comes down to the stride's own toe-out.
 func _stride_path(w: float, a: float, s: float, s_opp: float, cs: float, cs_opp: float) -> void:
 	var c: SkaterController = _controller
 	var rock: float = c.stride_rock_m * a * s
 	var p_l: float = 0.5 * (1.0 - s)
 	var p_r: float = 0.5 * (1.0 - s_opp)
-	var out: float = c.stride_push_out_m * a
+	var toe_full: float = deg_to_rad(c.stride_toe_out_deg)
+	var vee_max: float = deg_to_rad(c.vee_toe_max_deg)
+	var vee: float = minf(atan2(c.vee_push_speed, _ground_speed), vee_max)
+	var k: float = clampf((vee - toe_full) / maxf(vee_max - toe_full, 0.001), 0.0, 1.0)
+	var push: float = Vector2(c.stride_push_out_m, c.stride_push_back_m).length() * a
+	var out: float = lerpf(c.stride_push_out_m * a, push * cos(vee), k)
+	var back: float = lerpf(c.stride_push_back_m * a, push * sin(vee), k)
 	var land: float = -c.stride_land_fwd_m * a
-	var travel: float = (c.stride_push_back_m + c.stride_land_fwd_m) * a
+	var travel: float = back + c.stride_land_fwd_m * a
 	var lift: float = c.stride_lift_m * a
-	var toe: float = deg_to_rad(c.stride_toe_out_deg) * minf(a, 1.0)
+	var toe: float = toe_full * minf(a, 1.0)
 	l_dx += w * (rock - out * p_l)
 	r_dx += w * (rock + out * p_r)
 	l_dz += w * (land + travel * p_l)
 	r_dz += w * (land + travel * p_r)
 	l_dy += w * lift * maxf(cs, 0.0)
 	r_dy += w * lift * maxf(cs_opp, 0.0)
-	l_yaw += w * toe * p_l
-	r_yaw -= w * toe * p_r
+	l_yaw += w * lerpf(toe * p_l, vee, k)
+	r_yaw -= w * lerpf(toe * p_r, vee, k)
 	l_push = maxf(l_push, w * maxf(-s, 0.0))
 	r_push = maxf(r_push, w * maxf(-s_opp, 0.0))
-	push_reach = maxf(push_reach, Vector2(out, c.stride_push_back_m * a).length())
+	push_reach = maxf(push_reach, Vector2(out, back).length())
 
 
 # Crossovers, as where the skates go: the stride's phase law on each leg, half

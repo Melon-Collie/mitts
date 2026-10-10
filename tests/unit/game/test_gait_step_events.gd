@@ -175,3 +175,26 @@ func test_a_start_chops_and_lengthens_into_the_stride() -> void:
 	assert_gt(times[times.size() - 1] - times[times.size() - 2], times[2] - times[1] + 0.2,
 			"and the cruise's steps are longer")
 
+
+# A start pushes from a V: the skates turn well out while the body is slow and
+# close to the stride's own toe-out as it builds speed.
+func test_a_start_pushes_from_a_v_that_closes_into_the_stride() -> void:
+	var start_toe: float = _widest_toe_out(48)
+	_skate(600, Vector2(0.0, -1.0))
+	var cruise_toe: float = _widest_toe_out(240)
+	gut.p("toe-out: start %.0f°, cruise %.0f° (stride's own %.0f°)"
+			% [rad_to_deg(start_toe), rad_to_deg(cruise_toe), _controller.stride_toe_out_deg])
+	assert_gt(start_toe, deg_to_rad(_controller.stride_toe_out_deg + 10.0), "the start's skates turn out in a V")
+	assert_lt(cruise_toe, deg_to_rad(_controller.stride_toe_out_deg + 2.0),
+			"at cruise the stride's own toe-out")
+
+
+# The furthest either skate turns out over `ticks` of striding, rad.
+func _widest_toe_out(ticks: int) -> float:
+	var widest: float = 0.0
+	var pose: GaitPose = _controller._skating._pose
+	for _i: int in ticks:
+		_skate(1, Vector2(0.0, -1.0))
+		widest = maxf(widest, maxf(pose.l_yaw, -pose.r_yaw))
+	return widest
+

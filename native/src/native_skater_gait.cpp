@@ -546,22 +546,28 @@ void NativeSkaterGait::stride_path(double w, double a, double s, double s_opp, d
 	const double rock = c.stride_rock_m * a * s;
 	const double p_l = 0.5 * (1.0 - s);
 	const double p_r = 0.5 * (1.0 - s_opp);
-	const double out = c.stride_push_out_m * a;
+	const double toe_full = deg_to_rad(c.stride_toe_out_deg);
+	const double vee_max = deg_to_rad(c.vee_toe_max_deg);
+	const double vee = mind(std::atan2(c.vee_push_speed, ground_speed), vee_max);
+	const double k = clampd((vee - toe_full) / maxd(vee_max - toe_full, 0.001), 0.0, 1.0);
+	const double push = Vector2(c.stride_push_out_m, c.stride_push_back_m).length() * a;
+	const double out = lerpd(c.stride_push_out_m * a, push * std::cos(vee), k);
+	const double back = lerpd(c.stride_push_back_m * a, push * std::sin(vee), k);
 	const double land = -c.stride_land_fwd_m * a;
-	const double travel = (c.stride_push_back_m + c.stride_land_fwd_m) * a;
+	const double travel = back + c.stride_land_fwd_m * a;
 	const double lift = c.stride_lift_m * a;
-	const double toe = deg_to_rad(c.stride_toe_out_deg) * mind(a, 1.0);
+	const double toe = toe_full * mind(a, 1.0);
 	l_dx += w * (rock - out * p_l);
 	r_dx += w * (rock + out * p_r);
 	l_dz += w * (land + travel * p_l);
 	r_dz += w * (land + travel * p_r);
 	l_dy += w * lift * maxd(cs, 0.0);
 	r_dy += w * lift * maxd(cs_opp, 0.0);
-	l_yaw += w * toe * p_l;
-	r_yaw -= w * toe * p_r;
+	l_yaw += w * lerpd(toe * p_l, vee, k);
+	r_yaw -= w * lerpd(toe * p_r, vee, k);
 	l_push = maxd(l_push, w * maxd(-s, 0.0));
 	r_push = maxd(r_push, w * maxd(-s_opp, 0.0));
-	push_reach = maxd(push_reach, Vector2(out, c.stride_push_back_m * a).length());
+	push_reach = maxd(push_reach, Vector2(out, back).length());
 }
 
 void NativeSkaterGait::crossover_path(double w, double side, double a, double s, double s_opp,

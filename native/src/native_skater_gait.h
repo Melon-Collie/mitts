@@ -55,7 +55,7 @@ namespace mitts {
 	X(stride_lift_m) X(stride_push_back_m) X(stride_push_ceiling) X(stride_push_gain) \
 	X(stride_push_out_m) X(stride_rock_m) X(stride_sit_max_deg) X(stride_skew) \
 	X(stride_sway_deg) X(stride_toe_out_deg) X(tight_turn_lead_m) X(tight_turn_stance) \
-	X(turn_accel) X(weight_shift_deg) X(weight_spring_damping) \
+	X(turn_accel) X(vee_push_speed) X(vee_toe_max_deg) X(weight_shift_deg) X(weight_spring_damping) \
 	X(weight_spring_stiffness)
 
 class NativeSkaterGait : public godot::RefCounted {

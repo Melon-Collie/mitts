@@ -513,7 +513,8 @@ places each ankle from the stroke's joints on the stance, lays on the states
 authored as where their skates go, and solves the leg to it; the layers lay
 their joint offsets on that. Every state but the glide is authored that way
 (`SkaterLocomotion.authored`): the stride (`_stride_path`, out and back from
-under the hips, toe turned out), the crossover (`_crossover_path`, the stride's
+under the hips, toe turned out; from low speed, out of a V, since the blade lies
+along a track that the body's speed lays back), the crossover (`_crossover_path`, the stride's
 phase law with its own landings: the outside skate lands crossed over and
 pushes back out, the inside one pushes under the body, so they cross every
 step), the carve and the tight turn (both down, the inside skate leading), the
