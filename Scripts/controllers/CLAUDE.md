@@ -576,14 +576,19 @@ celebration's raised stick, the block's torso lean) are not layers: they move
 the gameplay frame and the blade, so they stay in the pose coordinators at
 physics rate.
 
-### The gait is GDScript while the stroke is rebuilt
+### The gait's numeric core is native
 
-The gait has no native port during the stroke rebuild
-(`docs/skating-stroke-plan.md`): every phase reshapes the code a port would
-mirror, so the port returns in the plan's last phase, with a new parity fuzz
-driving every overlay as well as the skating. Measured before the port was
-retired, skating cost ~51 µs per skater per frame in GDScript against ~29
-native (one run of the gait benchmark), most of the gap the locomotion and the solve.
+Where the extension is built, `NativeSkaterGait` runs `SkaterLocomotion`, the
+alignment and pivot read, the reach sit and `GaitPose`'s stance and leg solve;
+the coordinator reads the hips' tilt off the skater, runs the layers over the
+pose the port loads into `GaitPose`, and publishes. The GDScript is the
+reference and the fallback: change `skater_locomotion.gd`, `_align_to_travel`,
+the reach sit or `GaitPose.solve_stance` / `seed_legs` / `seed_trunk` and the
+port changes with it, or `test_native_gait_parity.gd` fails. A layer must read
+only what `load_native_legs` / `load_native_trunk` fill — the leg solve's own
+state (`GaitPose.leg_l`, `_gripping`) and `_locomotion`'s fields stay stale on
+the native path, as does every alignment and pivot field but the published
+ones (`travel_align_yaw`, `pivot_hold`).
 
 ### Pose the hand, not the blade
 

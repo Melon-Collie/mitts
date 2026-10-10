@@ -13,6 +13,9 @@ extends RefCounted
 #
 # Runs at render rate, guarded against reconcile replay by its caller, so it may
 # own no timer that gameplay reads.
+#
+# Mirrored in C++ by NativeSkaterGait (native/src/native_skater_gait.cpp);
+# test_native_gait_parity.gd fails if the two drift. Change both or neither.
 
 # Acceleration and turn rate are sampled over the time since velocity last
 # changed (it only steps on physics ticks), held at most this long.

@@ -9,6 +9,10 @@ extends RefCounted
 # entirely from replicated state, so it costs zero network state: remote skaters
 # animate identically from what interpolation already hands them.
 #
+# Where the extension is built, the locomotion, the alignment and pivot read and
+# the leg solve run in NativeSkaterGait instead (see the numeric-core section of
+# Scripts/controllers/CLAUDE.md); the layers shape its pose here either way.
+#
 # Runs on real render ticks only — SkaterController guards the call with
 # `not is_replaying` so reconcile re-simulation doesn't over-spin the gait.
 
@@ -31,6 +35,11 @@ const _PSI_RATE_EASE: float = 10.0
 # the rate detector keeps reading raw ψ.
 const _PSI_SMOOTH_EASE: float = 15.0
 
+# NativeSkaterGait.locomote flag bits.
+const _NATIVE_BRAKE: int = 1
+const _NATIVE_STANCE: int = 2
+const _NATIVE_PLANTED: int = 4
+
 var _skater: Skater = null
 var _sm: SkaterStateMachine = null
 var _controller: SkaterController = null  # tunables live on the controller
@@ -41,6 +50,9 @@ var _settled: bool = false
 
 var _locomotion := SkaterLocomotion.new()
 var _pose := GaitPose.new()
+# NativeSkaterGait (native/README.md); null when the extension is absent, and the
+# GDScript runs.
+var _native: RefCounted = null
 
 # The overlays, lowest priority first — the order IS the priority: an additive
 # stage lays on everything before it, an override takes everything before it
@@ -79,6 +91,8 @@ var leg_scale: float = 1.0:
 	set(value):
 		leg_scale = value
 		_pose.leg_scale = value
+		if _native != null:
+			_native.set_leg_scale(value)
 
 
 # (thigh, shin, foot offset) for this build, metres — the knockdown sprawl
@@ -172,11 +186,44 @@ func setup(skater: Skater, sm: SkaterStateMachine, controller: SkaterController)
 		if stages & GaitLayer.Stage.OVERRIDE:
 			_override_layers.append(layer)
 			_override_bits.append(bit)
+	if ClassDB.class_exists(&"NativeSkaterGait"):
+		_native = ClassDB.instantiate(&"NativeSkaterGait")
+		native_reconfigure()
 
 
-# The eased locomotion weights. Diagnostics: read, never stored.
+# Reloads the native port's tunables and leg scale from the controller. Called
+# from setup and from SkaterController.apply_attributes, which rewrites the
+# tunables the config was read from.
+func native_reconfigure() -> void:
+	if _native == null:
+		return
+	var missing: String = _native.configure(_controller)
+	if missing != "":
+		# Running the port on stale values would be a silent fork: fall back, loudly.
+		push_error("NativeSkaterGait disabled — controller tunables missing: %s" % missing)
+		_native = null
+		return
+	_native.set_leg_scale(leg_scale)
+
+
+# The eased locomotion weights, from whichever path runs. Diagnostics: read,
+# never stored; the native read allocates.
 func locomotion_mix() -> LocomotionRules.Mix:
-	return _locomotion.mix
+	if _native == null:
+		return _locomotion.mix
+	var m: PackedFloat64Array = _native.get_mix()
+	var out := LocomotionRules.Mix.new()
+	out.glide = m[0]
+	out.stride = m[1]
+	out.crossover = m[2]
+	out.carve = m[3]
+	out.backward = m[4]
+	out.shuffle = m[5]
+	out.skid = m[6]
+	out.tight = m[7]
+	out.stop = m[8]
+	out.side = m[9]
+	return out
 
 
 # Snaps the gait back to a clean standstill and plants the legs at their rest
@@ -184,6 +231,8 @@ func locomotion_mix() -> LocomotionRules.Mix:
 # dot mid-stride carrying the previous shift's leg swing.
 func reset_to_rest() -> void:
 	_locomotion.reset()
+	if _native != null:
+		_native.reset()
 	for layer: GaitLayer in _layers:
 		layer.reset()
 	stride_phase = 0.0
@@ -274,41 +323,62 @@ func apply(delta: float) -> void:
 			if active & _hold_bits[i]:
 				hold = maxf(hold, _hold_layers[i].stride_hold())
 
-	# Which skating state the skater is in and the stroke it skates
-	# (SkaterLocomotion). Shooting sets the feet and the pivot glides through its
-	# transit, so both hold the stroke; the block takes the legs outright.
-	_locomotion.sense(delta, _block.planted, hold)
-	stride_phase = _locomotion.stride_phase
-	stop_yaw_offset = _locomotion.stop_yaw
-	_locomotion.strokes(delta, _align_to_travel(delta))
-	# The pivot sits too: the open-hip glide and the step-around are both done on
-	# bent knees.
-	var stance: float = maxf(_locomotion.stance, _controller.pivot_stance * _pivot_blend)
-	# The authored strokes sit as low as their pushes need to reach the ice, by
-	# their share, so the sit fades with them.
-	if _locomotion.authored > 0.001:
-		var reach_sit: float = minf(GaitPose.reach_hip(_locomotion.push_reach),
-				deg_to_rad(_controller.stride_sit_max_deg)) / deg_to_rad(_controller.stance_hip_deg)
-		stance = maxf(stance, lerpf(stance, reach_sit, _locomotion.authored))
+	var stance: float
+	var authored: float
+	if _native != null:
+		var demand: Vector2 = _native.locomote(delta, _skater.velocity, _skater.move_intent,
+				_skater.global_transform.basis, _native_flags(), hold)
+		var channels: Vector4 = _native.get_channels()
+		stride_phase = channels.x
+		stop_yaw_offset = channels.y
+		travel_align_yaw = channels.z
+		pivot_hold = channels.w
+		stance = demand.x
+		authored = demand.y
+	else:
+		# Which skating state the skater is in and the stroke it skates
+		# (SkaterLocomotion). Shooting sets the feet and the pivot glides through
+		# its transit, so both hold the stroke; the block takes the legs outright.
+		_locomotion.sense(delta, _block.planted, hold)
+		stride_phase = _locomotion.stride_phase
+		stop_yaw_offset = _locomotion.stop_yaw
+		_locomotion.strokes(delta, _align_to_travel(delta))
+		authored = _locomotion.authored
+		# The pivot sits too: the open-hip glide and the step-around are both
+		# done on bent knees.
+		stance = maxf(_locomotion.stance, _controller.pivot_stance * _pivot_blend)
+		# The authored strokes sit as low as their pushes need to reach the ice,
+		# by their share, so the sit fades with them.
+		if authored > 0.001:
+			var reach_sit: float = minf(GaitPose.reach_hip(_locomotion.push_reach),
+					deg_to_rad(_controller.stride_sit_max_deg)) / deg_to_rad(_controller.stance_hip_deg)
+			stance = maxf(stance, lerpf(stance, reach_sit, authored))
 
 	# ── Stance and pose ────────────────────────────────────────────────────────
 	if active:
 		for i: int in _floor_layers.size():
 			if active & _floor_bits[i]:
 				stance = maxf(stance, _floor_layers[i].stance_floor())
-	p.solve_stance(deg_to_rad(_controller.stance_hip_deg) * stance)
-	if _locomotion.authored > 0.001:
+	if authored > 0.001:
 		tilt_hips(p)
 	else:
 		p.lean = Basis.IDENTITY
 		p.ice = Basis.IDENTITY
-	p.seed_legs(_locomotion, _pivot_yaw_l, _pivot_yaw_r)
+	if _native != null:
+		_native.solve(stance, p.lean, p.ice)
+		p.load_native_legs(_native)
+	else:
+		p.solve_stance(deg_to_rad(_controller.stance_hip_deg) * stance)
+		p.seed_legs(_locomotion, _pivot_yaw_l, _pivot_yaw_r)
 	if active:
 		for i: int in _leg_layers.size():
 			if active & _leg_bits[i]:
 				_leg_layers[i].shape_legs(p)
 	p.extend_knees()
-	p.seed_trunk(_locomotion)
+	if _native != null:
+		p.load_native_trunk(_native)
+	else:
+		p.seed_trunk(_locomotion)
 	if active:
 		for i: int in _trunk_layers.size():
 			if active & _trunk_bits[i]:
@@ -338,6 +408,17 @@ func apply(delta: float) -> void:
 		_skater.set_trunk_texture(trunk_pitch_add, trunk_roll_add)
 
 
+func _native_flags() -> int:
+	var flags: int = 0
+	if _skater.brake_intent:
+		flags |= _NATIVE_BRAKE
+	if _controller.stance_active:
+		flags |= _NATIVE_STANCE
+	if _block.planted:
+		flags |= _NATIVE_PLANTED
+	return flags
+
+
 # The hips' tilt against the ice, turned to their heading (GaitPose.lean / ice):
 # the spine tips them by the balance lean (Skater.balance_tilt) in skeleton
 # space over their yaw and the lower body's pitch (SkaterSpineRig), the twist
@@ -359,6 +440,8 @@ func tilt_hips(p: GaitPose) -> void:
 # ── Hip-to-travel alignment and the pivot ─────────────────────────────────────
 # Returns the travel velocity in the yawed hip frame, (right, forward), which the
 # stroke needs (the turning states lead along travel as the legs face it).
+# Mirrored by NativeSkaterGait.align_and_pivot; test_native_gait_parity.gd fails
+# if the two drift.
 func _align_to_travel(delta: float) -> Vector2:
 	var vel: Vector3 = _skater.velocity
 	# Ground speed only — vertical velocity never feeds the stride.

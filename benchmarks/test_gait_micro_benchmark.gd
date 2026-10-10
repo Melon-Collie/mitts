@@ -191,6 +191,36 @@ func test_gait_cost_by_state() -> void:
 	assert_true(_results.size() > 0, "benchmark produced rows")
 
 
+# The native core against its GDScript reference, state by state. Both rows
+# include everything the port leaves in GDScript — the layers, the publish
+# writes into the rig — so the gap is what the port saves, not its own cost.
+func test_gait_native_vs_gdscript() -> void:
+	var native: RefCounted = _controller._skating._native
+	if native == null:
+		pending("native extension not built — see native/README.md")
+		return
+	var delta: float = 1.0 / 120.0
+	_results.clear()
+	for spec: Array in [
+			["skating", _skate_forward],
+			["gliding", _glide],
+			["hockey stop", _hockey_stop],
+			["shot-blocking (a layer shapes the pose)", _blocking],
+		]:
+		var setter: Callable = spec[1]
+		for path: String in ["native", "GDScript"]:
+			_controller._skating._native = native if path == "native" else null
+			_controller._skating.reset_to_rest()
+			setter.call()
+			for _w: int in 240:
+				_controller._skating.apply(delta)
+			_bench("%s — %s" % [spec[0], path], func() -> void:
+				_controller._skating.apply(delta))
+	_controller._skating._native = native
+	_print_results()
+	assert_true(_results.size() > 0, "benchmark produced rows")
+
+
 # The settled early-out, verified: a quiet skater settles after _SETTLE_SECONDS
 # and any input wakes the full pass the same frame. Guards the by-state rows
 # above — a silently-broken settle would re-measure the full at-rest pass and

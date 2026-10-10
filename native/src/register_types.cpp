@@ -5,6 +5,7 @@
 #include "native_bottom_hand_ik.h"
 #include "native_gif_encoder.h"
 #include "native_puck_step.h"
+#include "native_skater_gait.h"
 #include "native_skater_movement.h"
 #include "native_top_hand_ik.h"
 
@@ -25,6 +26,7 @@ void initialize_mitts_native_module(ModuleInitializationLevel p_level) {
 	ClassDB::register_class<mitts::NativePuckStep>();
 	ClassDB::register_class<mitts::NativeBladeDangle>();
 	ClassDB::register_class<mitts::NativeArmRig>();
+	ClassDB::register_class<mitts::NativeSkaterGait>();
 	ClassDB::register_class<mitts::NativeGifEncoder>();
 }
 

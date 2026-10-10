@@ -5,6 +5,9 @@ extends RefCounted
 # crouch, then every GaitLayer in priority order. Scratch — the coordinator owns
 # one and refills it each pass. Leg angles are hip-frame radians; knee values
 # are the total fold, negative folding the shin back under the body.
+#
+# The stroke's pose (solve_stance, seed_legs, seed_trunk) is mirrored by
+# NativeSkaterGait.solve; test_native_gait_parity.gd fails if the two drift.
 
 # MESH-NATIVE leg segment spans from Scenes/Skater.tscn — hip pivot to knee
 # pivot (LegL → ShinL) and knee pivot to skate sole (ShinL → FootL). The knee
@@ -161,6 +164,50 @@ func seed_legs(loco: SkaterLocomotion, yaw_l: float, yaw_r: float) -> void:
 	knee_extend_r = 0.0
 	foot_flat_l = 0.0
 	foot_flat_r = 0.0
+
+
+# What solve_stance and seed_legs set, from the pose NativeSkaterGait.solve
+# settled on. The leg solve's own state (leg_l, leg_r) stays in the port.
+func load_native_legs(native: RefCounted) -> void:
+	var stance: Vector4 = native.get_stance()
+	var left: Vector4 = native.get_leg_l()
+	var right: Vector4 = native.get_leg_r()
+	var seed: Vector4 = native.get_seed()
+	stance_hip = stance.x
+	stance_knee = stance.y
+	stance_shin = stance.z
+	drop = stance.w
+	l_pitch = left.x
+	l_roll = left.y
+	l_knee = left.z
+	l_yaw = left.w
+	r_pitch = right.x
+	r_roll = right.y
+	r_knee = right.z
+	r_yaw = right.w
+	foot_level_l = seed.x
+	foot_level_r = seed.x
+	plant_l = seed.y
+	plant_r = seed.y
+	frame_share = 0.0
+	plant = 1.0
+	knee_extend_l = 0.0
+	knee_extend_r = 0.0
+	foot_flat_l = 0.0
+	foot_flat_r = 0.0
+
+
+# What seed_trunk sets, from the same pose.
+func load_native_trunk(native: RefCounted) -> void:
+	var trunk: Vector4 = native.get_trunk()
+	var seed: Vector4 = native.get_seed()
+	drop += trunk.x
+	trunk_pitch = trunk.y
+	trunk_roll = trunk.z
+	wobble_pitch = 0.0
+	wobble_roll = 0.0
+	edge_l = seed.z
+	edge_r = seed.w
 
 
 # The ankle the stroke's joints put the leg at.

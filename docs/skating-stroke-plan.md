@@ -188,13 +188,11 @@ but not part of this plan.
 
 ## §6 Native and cost
 
-`NativeSkaterGait` ports the classifier, the strokes and the pose solve today,
-and `test_native_gait_parity.gd` fuzzes it against the GDScript. As in the
-animation rebuild, the native gait is **retired during Phases 1–4** (GDScript
-only — measured ~+25 µs per skater per frame skating, ~0.25 ms a frame for ten)
-and re-ported in Phase 5 with a new parity fuzz. The leg solve is a handful of
-trig per leg; the target is to finish at or under today's native skating cost
-(38 µs per skater per frame, minimum of three runs).
+As in the animation rebuild, the native gait is **retired during Phases 1–4**
+(GDScript only — measured ~+25 µs per skater per frame skating, ~0.25 ms a frame
+for ten) and re-ported in Phase 5 with a new parity fuzz (§18). The leg solve is
+a handful of trig per leg; the target is to finish at or under the old native
+skating cost (38 µs per skater per frame, minimum of three runs).
 
 ## §7 Invariants, as tests
 
@@ -479,3 +477,39 @@ the plant nothing to correct. The side latch and the hips' turn stay. The skid
   than the stride, and two left the second blade 7 mm up.
 - **The strip renderer** gained a `back` scenario (the stick held back with the
   cursor up-ice).
+
+## §18 Phase 5 as built
+
+- **`NativeSkaterGait`** (`native/src/`) ports the whole numeric core:
+  `SkaterLocomotion` with the classifier and the rules it calls, the
+  coordinator's alignment and pivot read and the reach sit (`locomote`), and
+  `GaitPose`'s stance and leg solve — LegIK, the ice frame, the runner depth,
+  the reach limit — with the trunk seed (`solve`). The coordinator still reads
+  the hips' tilt off the skater and hands it in.
+- **Every pass runs the port.** The layers shape the pose the port loads into
+  `GaitPose` (`load_native_legs` before the leg layers, `load_native_trunk`
+  after `extend_knees`, since the stance and faceoff splays read the drop
+  before the bob), so the old port's fallback — mirroring the stroke back and
+  solving in GDScript whenever a layer shaped the legs, i.e. whenever the
+  stance was held — is gone.
+- **Parity** (`test_native_gait_parity.gd`): five scenarios, every step
+  compared — the random fuzz with hip lean and pitch, held curves both ways in
+  and out of the stance, the pivot, every overlay, and reset, settle and
+  reconfigure. Worst |Δ| 3×10⁻⁶ rad against a 10⁻³ gate; each of the eight
+  states is asserted to reach a weight past 0.5, and a 2 mm change to one
+  reach constant fails every scenario within its first steps.
+- **Cost** (`test_gait_native_vs_gdscript`, µs per skater per frame, minimum of
+  three runs, native / GDScript): skating 31.6 / 90.9, gliding 17.0 / 43.8,
+  hockey stop 19.5 / 72.8, a layer shaping the pose 23.0 / 54.5. Skating is
+  under the 38 µs target.
+- **The second-foot plant stays.** Measured on the live rig with it switched
+  off: rest, the glide, the still stance, the stride and the C-cuts lean on it
+  for nothing, but the carve's second blade floats 9 mm without it and the
+  stop's 50 mm (2 mm with it, a 0.38 rad correction). The glide's sway and
+  inside tuck and the overlays still pose joints, and the stop's onset hands
+  the support from one skate to the other.
+- **Found, not fixed:** C-cuts skated in the loaded stance lift one blade up to
+  5 cm, plant or no plant — the stance layer splays the legs in joint space on
+  top of the authored path, and a stroke is not planted. §5's follow-up
+  (author the stance's width as foot positions) is the fix.
+

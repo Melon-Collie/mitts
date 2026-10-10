@@ -1433,6 +1433,7 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	_cached_block_move_cfg = null
 	_cached_wrister_cfg = null
 	_cached_slapper_cfg = null
+	_skating.native_reconfigure()
 	skater.apply_appearance(attrs)
 
 
