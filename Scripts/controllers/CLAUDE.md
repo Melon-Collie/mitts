@@ -503,15 +503,17 @@ Things the split alone would get wrong, handled where noted:
 The legs are solved from where the ankles go (`LegIK`): `GaitPose.seed_legs`
 places each ankle from the stroke's joints on the stance, lays on the states
 authored as where their skates go, and solves the leg to it; the layers lay
-their joint offsets on that. Five states are authored that way
+their joint offsets on that. Every state but the glide is authored that way
 (`SkaterLocomotion.authored`): the stride (`_stride_path`, out and back from
 under the hips, toe turned out), the crossover (`_crossover_path`, the stride's
 phase law with its own landings: the outside skate lands crossed over and
 pushes back out, the inside one pushes under the body, so they cross every
-step), the carve (both down, the inside skate leading), the hockey stop
-(`_stop_path`, both planted wide along travel with the hips sitting back of
-them, turned square across it) and the skid (`_skid_path`, a snowplow). Three
-things make them stand on the ice:
+step), the carve and the tight turn (both down, the inside skate leading), the
+hockey stop (`_stop_path`, both planted wide along travel with the hips sitting
+back of them, turned square across it), the skid (`_skid_path`, a snowplow),
+backward C-cuts (`_ccut_path`, out and ahead and back in) and the side-step
+(`_shuffle_path`, a sideways scissor). The glide is the stance with a joint-space
+edge sway and, out of a turn, a light inside knee. Three things make them stand on the ice:
 
 - **They sit as low as their pushes need.** A leg can only reach so far out at
   the hip height it is at, so the crouch moves, by the authored share, toward
@@ -534,8 +536,8 @@ things make them stand on the ice:
   edge raises a runner toward its ankle, so the ankle comes down by what the
   edge takes off and the leg is solved again.
 
-The other states (backward, side-step, tight turn) are still the joint
-stroke's until the plan's Phase 4c.
+The pose is now authored where the eye reads it; Phase 5 of the plan ports it
+back to C++.
 
 ### Overlays are layers, and the order is the priority
 

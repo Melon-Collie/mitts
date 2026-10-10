@@ -49,16 +49,11 @@ var stop_side: float = 1.0
 var stop_yaw: float = 0.0
 var _stop_yaw_full: float = 0.0
 
-# Stroke layers, hip frame, radians; the coordinator adds the stance and the
-# overlays and resolves the knees.
-var l_pitch: float = 0.0
-var r_pitch: float = 0.0
+# The glide's joint-space texture, hip frame, radians: its edge sway as a leg
+# roll and, out of a turn, its light inside knee as extra fold; GaitPose places
+# the ankle from them on the stance.
 var l_roll: float = 0.0
 var r_roll: float = 0.0
-# Push extension 0..1 per leg — the knee release and the edge load read it.
-var l_ext: float = 0.0
-var r_ext: float = 0.0
-# Extra knee fold per leg: recovery tuck, crossover clearance, glide inside tuck.
 var l_tuck: float = 0.0
 var r_tuck: float = 0.0
 # The states authored as where the skates go (`authored`): each ankle's offset
@@ -243,40 +238,24 @@ func strokes(delta: float, travel: Vector2) -> void:
 			* (1.0 - skew * cos(stride_phase)) / (1.0 + skew)
 	var cs_opp: float = cos(phase_opp - skew * sin(phase_opp)) \
 			* (1.0 - skew * cos(phase_opp)) / (1.0 + skew)
-	var ext_l: float = maxf(-s, 0.0)
-	var ext_r: float = maxf(-s_opp, 0.0)
 	var amp: float = intensity * push_scale
-	var bias: float = c.stride_rear_bias
 
 	var w: float = mix.stride
 	if w > 0.001:
 		_stride_path(w, amp * (1.0 - c.dig_in_chop * _start), s, s_opp, cs, cs_opp)
 
-	# Backward: C-cuts. The push reverses and shrinks (the long pull is out
-	# front), the edge rock and the out-and-in sweep widen, and the blades stay
-	# down through the recovery.
 	w = mix.backward
 	if w > 0.001:
-		var push_b: float = -deg_to_rad(c.stride_back_pitch_deg) * amp * (1.0 - c.backpedal_pitch_fade)
-		_stroke(w, push_b,
-				deg_to_rad(c.stride_roll_deg + c.backpedal_ccut_roll_deg) * amp,
-				deg_to_rad(c.stride_abduction_deg + c.backpedal_ccut_sweep_deg) * amp,
-				deg_to_rad(c.stride_knee_deg) * amp * (1.0 - c.backpedal_tuck_fade),
-				s, s_opp, cs, cs_opp, ext_l, ext_r, bias)
+		_ccut_path(w, amp, s, s_opp, cs, cs_opp)
 		trunk_pitch += deg_to_rad(c.backpedal_chest_deg) * w
 
 	w = mix.crossover
 	if w > 0.001:
 		_crossover_path(w, signf(_cross_signed), amp, s, s_opp, cs, cs_opp)
 
-	# Side-step: a scissor 180° out of phase between the legs, leaning into the
-	# step.
 	w = mix.shuffle
 	if w > 0.001:
-		var lean: float = mix.side * deg_to_rad(c.crossover_lean_deg) * intensity
-		var scissor: float = deg_to_rad(c.crossover_scissor_deg) * amp
-		l_roll += w * (lean + s * scissor)
-		r_roll += w * (lean + s_opp * scissor)
+		_shuffle_path(w, mix.side, amp, s, s_opp, cs, cs_opp)
 
 	# Glide: both blades down, a lazy edge-to-edge sway far below stride cadence,
 	# and coming out of a turn the inside knee tucks light — weight on the
@@ -294,12 +273,14 @@ func strokes(delta: float, travel: Vector2) -> void:
 		else:
 			l_tuck += inside_tuck
 
-	# Tight turn: both blades dug in, the inside skate leading.
+	# Tight turn: both skates down, the inside one leading, dug onto their edges
+	# by the bank (GaitPose stands them on the ice under it).
 	var tight_in: float = _tight_signed * along
 	if absf(tight_in) > 0.001:
-		var split: float = deg_to_rad(c.tight_turn_split_deg) * tight_in
-		r_pitch += split
-		l_pitch -= split
+		var split: float = 0.5 * c.tight_turn_lead_m * tight_in
+		r_dz -= split
+		l_dz += split
+		push_reach = maxf(push_reach, 0.5 * c.tight_turn_lead_m)
 
 	# Carve: both skates down at hip width, the inside one leading; the lean
 	# puts them on their edges (GaitPose stands them on the ice under it). The
@@ -323,7 +304,7 @@ func strokes(delta: float, travel: Vector2) -> void:
 	_stance(s)
 	edge_floor = mix.stop + mix.tight + mix.carve
 	sliding = mix.stop + mix.skid
-	authored = mix.stride + mix.crossover + mix.carve + sliding
+	authored = 1.0 - mix.glide
 
 	# Trunk: sway over the loaded leg on the stride fundamental (the trunk is
 	# too massive to carry the stroke's snap), a damped spring that lets the
@@ -478,19 +459,47 @@ func _skid_path(w: float, along: Vector2) -> void:
 	push_reach = maxf(push_reach, Vector2(spread + lead, 0.0).length())
 
 
-# One leg-pair stroke, weighted: fore/aft push (rear-biased), in-phase edge rock,
-# V-flare of the extending leg, push extension, recovery tuck.
-func _stroke(w: float, push: float, rock: float, flare: float, tuck: float,
-		s: float, s_opp: float, cs: float, cs_opp: float,
-		ext_l: float, ext_r: float, bias: float) -> void:
-	l_pitch += w * (s - bias) * push
-	r_pitch += w * (s_opp - bias) * push
-	l_roll += w * (s * rock - flare * ext_l)
-	r_roll += w * (s * rock + flare * ext_r)
-	l_ext = maxf(l_ext, w * ext_l)
-	r_ext = maxf(r_ext, w * ext_r)
-	l_tuck += w * tuck * maxf(cs, 0.0)
-	r_tuck += w * tuck * maxf(cs_opp, 0.0)
+# Backward C-cuts, as where the skates go. Skating backward the push goes ahead
+# of the hips: each skate sweeps out and forward and curls back in, drawing a C
+# out front, then returns close to centre with its blade still down. The toe
+# turns out as the C starts and in as it ends. `p` runs from 0 under the hips to
+# 1 at the C's end; the push is the stroke's falling half, its return the
+# rising one, and the bulge is zero at both ends, where they hand over.
+func _ccut_path(w: float, a: float, s: float, s_opp: float, cs: float, cs_opp: float) -> void:
+	var c: SkaterController = _controller
+	var out: float = c.ccut_out_m * a
+	var front: float = c.ccut_front_m * a
+	var toe: float = deg_to_rad(c.ccut_toe_deg) * minf(a, 1.0)
+	var p_l: float = 0.5 * (1.0 - s)
+	var p_r: float = 0.5 * (1.0 - s_opp)
+	var bulge_l: float = sin(PI * p_l) * (1.0 if cs <= 0.0 else c.ccut_return_share)
+	var bulge_r: float = sin(PI * p_r) * (1.0 if cs_opp <= 0.0 else c.ccut_return_share)
+	l_dx -= w * out * bulge_l
+	r_dx += w * out * bulge_r
+	l_dz -= w * front * p_l
+	r_dz -= w * front * p_r
+	l_yaw += w * toe * cos(PI * p_l)
+	r_yaw -= w * toe * cos(PI * p_r)
+	l_push = maxf(l_push, w * maxf(-cs, 0.0))
+	r_push = maxf(r_push, w * maxf(-cs_opp, 0.0))
+	push_reach = maxf(push_reach, Vector2(out, front).length())
+
+
+# The side-step, as where the skates go: the skates scissor sideways half a
+# cycle apart, each stepping toward the travel (`side`, +1 right) with a lift and
+# pushing back away from it along the ice.
+func _shuffle_path(w: float, side: float, a: float, s: float, s_opp: float,
+		cs: float, cs_opp: float) -> void:
+	var c: SkaterController = _controller
+	var step: float = c.shuffle_step_m * a
+	var lift: float = c.shuffle_lift_m * a
+	l_dx += w * side * step * s
+	r_dx += w * side * step * s_opp
+	l_dy += w * lift * maxf(cs, 0.0)
+	r_dy += w * lift * maxf(cs_opp, 0.0)
+	l_push = maxf(l_push, w * maxf(-cs, 0.0))
+	r_push = maxf(r_push, w * maxf(-cs_opp, 0.0))
+	push_reach = maxf(push_reach, step)
 
 
 # How engaged the stroke is, 0..1: its intensity against the share of top speed
@@ -584,12 +593,8 @@ func _sample_velocity(delta: float, vel: Vector3) -> void:
 
 
 func _clear_strokes() -> void:
-	l_pitch = 0.0
-	r_pitch = 0.0
 	l_roll = 0.0
 	r_roll = 0.0
-	l_ext = 0.0
-	r_ext = 0.0
 	l_tuck = 0.0
 	r_tuck = 0.0
 	l_dx = 0.0

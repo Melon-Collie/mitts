@@ -37,6 +37,8 @@ const SCENARIOS: Array[Dictionary] = [
 	{"name": "tap", "warm": 200, "step": 10},
 	{"name": "glide", "warm": 300, "step": 12},
 	{"name": "stop", "warm": 200, "step": 6},
+	# The stick held back with the cursor up-ice: skating backward, C-cuts.
+	{"name": "back", "warm": 240, "step": 12},
 ]
 
 
@@ -198,8 +200,12 @@ func _steer(input: InputState) -> void:
 			if turning:
 				move = Vector2.ZERO
 				input.brake = true
+	var aim: Vector2 = travel
+	if String(_scenarios[_index]["name"]) == "back":
+		move = -up_ice
+		aim = up_ice
 	input.move_vector = move
-	input.mouse_world_pos = _skater.global_position + Vector3(travel.x, 0.0, travel.y) * 4.0
+	input.mouse_world_pos = _skater.global_position + Vector3(aim.x, 0.0, aim.y) * 4.0
 	input.mouse_world_pos.y = 0.0
 	input.delta = DT
 	input.host_timestamp += DT

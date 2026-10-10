@@ -406,14 +406,9 @@ var lower_body_lag_max_deg: float = 20.0
 var lower_body_lag_speed: float = 5.0
 
 # ── Skating Stride Tuning ─────────────────────────────────────────────────────
-# Procedural leg gait — see SkaterSkatingCoordinator. All cosmetic. Forward,
-# backward, and lateral (crossover) gaits blend by direction of travel.
+# Procedural leg gait — see SkaterSkatingCoordinator. All cosmetic.
 var stride_cadence: float = 1.4          # low-speed slope: radians of stride phase per metre skated
 var stride_cadence_max_rate: float = 6.5  # rad/s ceiling the cadence saturates toward (caps top-speed leg turnover)
-var stride_roll_deg: float = 7.0          # side-to-side leg rock amplitude (fwd/back)
-var stride_back_pitch_deg: float = 6.0    # backward C-cut amplitude (reaches forward)
-var crossover_lean_deg: float = 6.0       # side-step: lean into the step
-var crossover_scissor_deg: float = 8.0    # side-step: legs scissor laterally
 var carve_ref_turn_rate: float = 1.6   # rad/s of travel turn that reads as a full carve (pivot veto, glide tuck)
 var carve_min_speed: float = 2.5       # m/s floor — slow turns are steps, not crossovers
 var carve_engage_speed: float = 5.0    # turn-rate smoothing rate
@@ -439,15 +434,8 @@ var carve_lead_m: float = 0.20         # the carve's inside skate leads the outs
 # is input-gated, v15 intent byte) while this floor keeps working knees under
 # a coasting skater, scaled by speed.
 var glide_stance: float = 0.5
-var stride_knee_deg: float = 18.0         # recovery tuck depth of the swinging (unloaded) knee
 var stride_intensity_speed: float = 6.0   # how fast the legs ease in/out of motion
 var stride_skew: float = 0.3              # push/recovery asymmetry of the stroke (0 = pure sine)
-# Shifts the leg-pitch stroke behind the body: the push extends (1+bias)× the
-# amplitude back while the recovery reaches only (1−bias)× ahead, so the
-# returning skate lands under the hips instead of kicking out in front.
-# 0 = symmetric metronome (the old forward-kick look).
-var stride_rear_bias: float = 0.45
-var stride_abduction_deg: float = 10.0    # outward flare of the extending leg (the skating "V" push)
 # The forward stride as a foot path (SkaterLocomotion._stride_path), metres of
 # ankle travel per unit of stroke amplitude (intensity · push_scale, ~1 at
 # cruise, up to stride_push_ceiling driving hard), at full extension.
@@ -480,7 +468,6 @@ var stride_push_ceiling: float = 1.5      # max amplitude scale when driving har
 var stance_hip_deg: float = 22.0            # static hip flex at full stance
 var stance_full_speed_fraction: float = 0.45  # fraction of max_speed at which the crouch fully engages
 var stance_push_gain: float = 0.35          # effort deepens (push) / shallows (glide) the stance
-var stance_knee_release: float = 0.85       # fraction of stance knee flex released at full push extension
 # Faceoff ready stance — during the FACEOFF_PREP countdown the speed-driven
 # crouch is floored at faceoff_stance (players are at a standstill, so the
 # intensity envelope alone would leave them bolt upright) and the feet
@@ -550,7 +537,7 @@ var hockey_stop_stance: float = 0.9      # stance floor while stopping (deep kne
 # Tight turn (brake held with the stick off travel): two blades dug in under a
 # deep sit, inside skate leading, no crossovers — the bank does the leaning.
 var tight_turn_stance: float = 0.9       # stance floor while digging the turn
-var tight_turn_split_deg: float = 12.0   # inside skate leads, outside trails
+var tight_turn_lead_m: float = 0.30      # inside skate leads the outside one
 # Hip-to-travel alignment — the lower body yaws toward the direction of
 # MOTION (torso keeps facing the cursor) so the legs stride along travel
 # instead of flailing through the crossover/backward blends whenever cursor
@@ -597,16 +584,19 @@ var reversal_stance: float = 0.85        # stance floor — sits down hard into 
 var reversal_spread_m: float = 0.16      # each skate out past its hip
 var reversal_lead_m: float = 0.10        # both skates set toward travel
 var reversal_toe_in_deg: float = 20.0    # toes turned in, both blades on their inside edges
-# Shuffle: lateral push from a standstill — hips stay square, legs side-step.
+# Shuffle: lateral push from a standstill — hips stay square, legs side-step
+# (SkaterLocomotion._shuffle_path), metres per unit of stroke amplitude.
 var shuffle_intensity: float = 0.6       # stride intensity floor while side-stepping
 var shuffle_cadence_rate: float = 3.0    # rad/s stride-phase floor for the steps
-# Backward skating: C-cuts. The blades never leave the ice — the push is a
-# lateral out-and-in sweep of one leg at a time, not a fore/aft pump with a
-# recovery lift.
-var backpedal_ccut_roll_deg: float = 6.0 # extra shared edge rock under the C-cuts
-var backpedal_ccut_sweep_deg: float = 8.0  # extra per-leg out-and-in flare of the pushing leg
-var backpedal_tuck_fade: float = 0.75    # recovery-tuck lift removed at full C-cut (blades stay down)
-var backpedal_pitch_fade: float = 0.4    # fore/aft pump removed at full C-cut (the push is the sweep)
+var shuffle_step_m: float = 0.15         # each skate's sideways scissor either side of its hip
+var shuffle_lift_m: float = 0.05         # a step's lift toward the travel
+# Backward skating: C-cuts (SkaterLocomotion._ccut_path), metres per unit of
+# stroke amplitude. The blades stay on the ice: each push sweeps out and ahead
+# and curls back in, drawing the C.
+var ccut_out_m: float = 0.20             # how far out the C bulges
+var ccut_front_m: float = 0.20           # how far ahead of the hips it ends
+var ccut_return_share: float = 0.25      # how much of the bulge the return keeps, close to centre
+var ccut_toe_deg: float = 25.0           # toe out as the C starts, in as it ends
 var backpedal_chest_deg: float = 4.0     # chest-up trunk pitch over the C-cuts
 # Glide enrichment: coasting (no keys) sways weight edge-to-edge, and a carve
 # released into a glide exits the turn weighted on its outside leg.

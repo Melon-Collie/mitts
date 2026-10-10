@@ -104,7 +104,8 @@ display-less test cannot assert. `tools/skater_matrix.gd` is its sibling for
 proportions and paint across builds — one static pose, five bodies.
 
 **To see a STROKE, render a strip.** `.claude/hooks/render-strip.sh [scenarios]`
-skates scripted inputs (a stride, a held arc, keyboard turns, taps, a stop)
+skates scripted inputs (a stride, a held arc, keyboard turns, taps, a stop,
+backward)
 through the real controller and captures a frame every few ticks from behind,
 beside and ahead, printing the locomotion mix per frame — which state the legs
 skated, and when it came on (`tools/gait_strip_runner.gd`). A held pose cannot

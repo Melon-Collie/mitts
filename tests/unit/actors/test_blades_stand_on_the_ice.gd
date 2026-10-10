@@ -189,6 +189,13 @@ func test_glide_stands_on_the_ice() -> void:
 
 # A held turn at speed: crossovers under the full balance lean, the crossing
 # skate stepped over.
+# C-cuts keep both blades on the ice: the push sweeps out and back in along it.
+func test_backward_c_cuts_stand_on_the_ice() -> void:
+	_assert_both_on_ice("c-cuts", _skate(func(inp: InputState, _i: int, _v: Vector3) -> void:
+		inp.move_vector = Vector2(0.0, 1.0)
+		inp.mouse_world_pos = Vector3(0.0, 0.0, -6.0)))
+
+
 func test_crossovers_stand_on_the_ice() -> void:
 	var contact: Vector4 = _skate(func(inp: InputState, i: int, v: Vector3) -> void:
 		var travel := Vector2(v.x, v.z)

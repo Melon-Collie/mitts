@@ -64,7 +64,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
 	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3910,
-	"res://Scripts/controllers/skater_controller.gd": 3340,
+	"res://Scripts/controllers/skater_controller.gd": 3330,
 	"res://Scripts/actors/skater.gd": 2700,
 	"res://Scripts/networking/network_manager.gd": 2824,
 	"res://Scripts/game/tutorial_manager.gd": 2101,

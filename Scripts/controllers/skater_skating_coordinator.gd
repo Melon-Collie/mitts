@@ -302,7 +302,7 @@ func apply(delta: float) -> void:
 	else:
 		p.lean = Basis.IDENTITY
 		p.ice = Basis.IDENTITY
-	p.seed_legs(_locomotion, _pivot_yaw_l, _pivot_yaw_r, _controller.stance_knee_release)
+	p.seed_legs(_locomotion, _pivot_yaw_l, _pivot_yaw_r)
 	if active:
 		for i: int in _leg_layers.size():
 			if active & _leg_bits[i]:

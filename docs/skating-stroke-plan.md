@@ -456,3 +456,26 @@ the plant nothing to correct. The side latch and the hips' turn stay. The skid
 - **Fixed on the way:** the reach limit measured depth and reach in the hips'
   frame; it now measures them against the ice (a leaned-back body otherwise
   read a front skate as too deep and pulled it in).
+
+## §17 Phase 4c as built
+
+- **Backward C-cuts** (`SkaterLocomotion._ccut_path`): each push sweeps out from
+  under its hip and ahead of the hips — skating backward, the body moves away
+  from it — bulging 0.20 m out and ending 0.20 m ahead per unit of amplitude,
+  the toe out as the C starts and in as it ends; the return comes back close
+  to centre with the blade still down. Both blades stay on the ice
+  (`test_blades_stand_on_the_ice.gd`); measured, a C reaches 0.13 m past the
+  hip and 0.22 m ahead (`test_gait_backward_and_sidestep.gd`).
+- **The side-step** (`_shuffle_path`) scissors the skates sideways half a cycle
+  apart, lifting each as it steps toward the travel. The lean into the step is
+  the balance lean's, not a fixed roll. The classifier only side-steps from a
+  dead start, so its test drives the path directly.
+- **The tight turn** is the carve's shape with its own lead
+  (`tight_turn_lead_m`), dug onto its edges by the bank.
+- **The joint stroke is gone** (`_stroke`, the push extension and its knee
+  release, and their tunables). What is left in joint space is the glide's edge
+  sway and inside knee, and the overlays.
+- **The runner correction runs three passes**: a C-cut tips its blades further
+  than the stride, and two left the second blade 7 mm up.
+- **The strip renderer** gained a `back` scenario (the stick held back with the
+  cursor up-ice).

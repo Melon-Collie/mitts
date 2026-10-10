@@ -126,31 +126,16 @@ func solve_stance(hip: float) -> void:
 
 
 # The stroke on the solved stance, before any layer shapes the legs: where it
-# puts each ankle, and the leg solve that reaches it.
-#
-# Knee flex — three layers that read as one leg working. (1) The stance flex,
-# the seated base both knees carry. (2) Push extension: the loaded leg
-# straightens as it extends back (`release` of the stance flex gone at full
-# extension and full stroke intensity) — the power stroke. (3) The locomotion
-# state's own folds: recovery tuck, crossover clearance, the glide's inside
-# tuck.
-#
-# Then the fore-aft compensation. The dynamic knee layers exist for LIFT and
-# leg-length texture, but each also drags the FOOT fore-aft: uncompensated,
-# unfolding mid-push shoves the skate forward against the thigh's backward
-# sweep, so measured AT THE SKATE the stride's fast phase comes out FORWARD —
-# the inverse of a real push (test_gait_stroke_profile pins the corrected
-# profile). The thigh counter-pitches by the small-angle FK term
-# (Δpitch = −Δknee · L_shin / L_leg), so the foot tracks the thigh's curve —
-# slow recovery, fast push — while the knee keeps its full range.
-func seed_legs(loco: SkaterLocomotion, yaw_l: float, yaw_r: float, release: float) -> void:
-	var r: float = release * loco.intensity
-	var knee_l: float = -(stance_knee * (1.0 - r * loco.l_ext) + loco.l_tuck)
-	var knee_r: float = -(stance_knee * (1.0 - r * loco.r_ext) + loco.r_tuck)
-	_place(leg_l, stance_hip + loco.l_pitch - (knee_l + stance_knee) * _shin_frac(),
-			yaw_l, loco.l_roll, knee_l)
-	_place(leg_r, stance_hip + loco.r_pitch - (knee_r + stance_knee) * _shin_frac(),
-			yaw_r, loco.r_roll, knee_r)
+# puts each ankle, and the leg solve that reaches it. The ankle is placed from
+# the stance flex both knees carry and the glide's joint-space texture (its sway
+# and its light inside knee, the thigh counter-pitched by the small-angle FK
+# term Δpitch = −Δknee · L_shin / L_leg so a tucked knee lifts the foot without
+# dragging it fore-aft); the authored states lay their offsets on that.
+func seed_legs(loco: SkaterLocomotion, yaw_l: float, yaw_r: float) -> void:
+	var knee_l: float = -(stance_knee + loco.l_tuck)
+	var knee_r: float = -(stance_knee + loco.r_tuck)
+	_place(leg_l, stance_hip - (knee_l + stance_knee) * _shin_frac(), yaw_l, loco.l_roll, knee_l)
+	_place(leg_r, stance_hip - (knee_r + stance_knee) * _shin_frac(), yaw_r, loco.r_roll, knee_r)
 	# Below the shared blend floor a share is a residue of an ease, not a pose.
 	var authored: float = loco.authored if loco.authored > 0.001 else 0.0
 	foot_level_l = authored
@@ -196,7 +181,7 @@ func _place(leg: LegIK.Leg, pitch: float, yaw: float, roll: float, knee: float) 
 # stop) keeps its place under the hips, and the lean only lays it level. Its blade lies flat along its length (foot_level_*), so what it aims
 # at the ice is the runner: the ankle comes down by whatever height the edge the
 # leg rolls the blade onto takes off the boot, and the leg is solved again —
-# twice, since the ankle's height moves the edge. `side` is −1 for the left leg.
+# until it settles, since the ankle's height moves the edge. `side` is −1 for the left leg.
 func _reach(leg: LegIK.Leg, dx: float, dy: float, dz: float, yaw: float, level: float,
 		side: float) -> void:
 	leg.yaw = yaw
@@ -218,7 +203,7 @@ func _reach(leg: LegIK.Leg, dx: float, dy: float, dz: float, yaw: float, level: 
 	var shift: Vector3 = (lean * Vector3(0.0, above, 0.0) - Vector3(0.0, above, 0.0)) * _gripping
 	var aim := Vector3(leg.x + dx * leg_scale, leg.y + dy * leg_scale, leg.z + dz * leg_scale)
 	var lift: float = 0.0
-	for _pass: int in 2:
+	for _pass: int in 3:
 		var on_ice: Vector3 = aim + Vector3(0.0, lift, 0.0)
 		var target: Vector3 = on_ice.lerp(ice.inverse() * (pivot + on_ice - shift) - pivot, level)
 		target = frame.inverse() * _within(frame * target, reach)
@@ -313,17 +298,16 @@ static func _shin_frac() -> float:
 
 
 # The stroke's bob, trunk texture and edge loads, before the trunk layers. The
-# edge load is the push half-wave (which already carries the crossover
-# under-stroke) scaled by stroke engagement, floored by the dug edges of the
-# stop and the tight turn.
+# edge load is each skate's push scaled by stroke engagement, floored by the
+# dug edges of the stop, the tight turn and the carve.
 func seed_trunk(loco: SkaterLocomotion) -> void:
 	drop += loco.bob
 	trunk_pitch = loco.trunk_pitch
 	trunk_roll = loco.trunk_roll
 	wobble_pitch = 0.0
 	wobble_roll = 0.0
-	edge_l = clampf(maxf(maxf(loco.l_ext, loco.l_push) * loco.intensity, loco.edge_floor), 0.0, 1.0)
-	edge_r = clampf(maxf(maxf(loco.r_ext, loco.r_push) * loco.intensity, loco.edge_floor), 0.0, 1.0)
+	edge_l = clampf(maxf(loco.l_push * loco.intensity, loco.edge_floor), 0.0, 1.0)
+	edge_r = clampf(maxf(loco.r_push * loco.intensity, loco.edge_floor), 0.0, 1.0)
 
 
 # Both feet on the ice while the stroke is idle, and through the dug-edge
