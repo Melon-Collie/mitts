@@ -68,7 +68,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/actors/skater.gd": 2700,
 	"res://Scripts/networking/network_manager.gd": 2824,
 	"res://Scripts/game/tutorial_manager.gd": 2101,
-	"res://Scripts/controllers/skater_ik_coordinator.gd": 925,
+	"res://Scripts/controllers/skater_ik_coordinator.gd": 938,
 	"res://Scripts/controllers/puck_controller.gd": 1520,
 	"res://Scripts/actors/hockey_rink.gd": 1472,
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 1436,

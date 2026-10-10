@@ -38,13 +38,21 @@ func _timed(key: String, fn: Callable) -> void:
 	_sum[key] = _sum.get(key, 0) + (Time.get_ticks_usec() - t0)
 
 
+# Brings the skater back to centre ice before the boards or a net: the blade's
+# board, net and wall clamps cost what they cost in open ice, not pinned at the
+# end of a long straight. A jump in position leaves velocity and pose alone.
+func _keep_on_open_ice(sk: Skater) -> void:
+	if absf(sk.global_position.x) > 7.0 or absf(sk.global_position.z) > 16.0:
+		sk.global_position = Vector3(0.0, sk.global_position.y, 0.0)
+
+
 func _frame(label: String, steer: Callable) -> void:
 	var puck: Puck = load("res://Scenes/Puck.tscn").instantiate() as Puck
 	add_child_autofree(puck)
 	puck.global_position = Vector3(40.0, 0.0, 40.0)
 	var sk: Skater = load("res://Scenes/Skater.tscn").instantiate() as Skater
 	add_child_autofree(sk)
-	sk.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 20.0)
+	sk.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
 	sk.set_process(false)
 	sk.set_physics_process(false)
 	var state := StubGameState.new()
@@ -60,6 +68,7 @@ func _frame(label: String, steer: Callable) -> void:
 	for i: int in WARMUP + FRAMES:
 		if i == WARMUP:
 			_sum = {}
+		_keep_on_open_ice(sk)
 		steer.call(input, i, sk.velocity)
 		input.mouse_world_pos += sk.global_position
 		input.mouse_world_pos.y = 0.0

@@ -142,3 +142,54 @@ func test_bottom_hand_solve_matches_native() -> void:
 					i, gd, cpp, err, cfg.backhand_angle])
 			return
 	pass_test("%d bottom-hand fuzz cases within %f" % [FUZZ_ITERATIONS, TOLERANCE])
+
+
+class StubGameState extends Node:
+	func is_host() -> bool:
+		return true
+
+	func is_movement_locked() -> bool:
+		return false
+
+
+# The coordinator's three-pass solve onto the ice under a leaned upper body
+# (SkaterIKCoordinator._solve_top_hand), native in one call (solve_on_ice)
+# against its GDScript loop, on a live skater: the lean, the board limit and a
+# lifted blade all fuzzed.
+func test_solve_on_ice_matches_the_coordinator_loop() -> void:
+	if _native_missing():
+		return
+	var puck: Puck = load("res://Scenes/Puck.tscn").instantiate() as Puck
+	add_child_autofree(puck)
+	var sk: Skater = load("res://Scenes/Skater.tscn").instantiate() as Skater
+	add_child_autofree(sk)
+	sk.set_process(false)
+	sk.set_physics_process(false)
+	var state := StubGameState.new()
+	add_child_autofree(state)
+	var c := SkaterController.new()
+	add_child_autofree(c)
+	c.setup(sk, puck, state)
+	c.set_process(false)
+	c.set_physics_process(false)
+	var ik: SkaterIKCoordinator = c._ik
+	var native: RefCounted = ik._native_top
+	assert_not_null(native, "the coordinator runs the native solver")
+	var worst: float = 0.0
+	for i: int in FUZZ_ITERATIONS:
+		sk.upper_body.rotation = Vector3(_rng.randf_range(-0.5, 0.5),
+				_rng.randf_range(-PI, PI), _rng.randf_range(-0.4, 0.4))
+		sk.is_left_handed = _rng.randf() < 0.5
+		var target: Vector2 = _random_target()
+		var sign_val: float = -1.0 if sk.is_left_handed else 1.0
+		var reach: float = INF if _rng.randf() < 0.67 else _rng.randf_range(0.2, 2.0)
+		ik._native_top = native
+		var got: TopHandIK.Result = ik._solve_top_hand(target, sign_val, reach)
+		var hand: Vector3 = got.hand
+		var blade: Vector3 = got.blade
+		ik._native_top = null
+		var want: TopHandIK.Result = ik._solve_top_hand(target, sign_val, reach)
+		worst = maxf(worst, maxf(hand.distance_to(want.hand), blade.distance_to(want.blade)))
+	ik._native_top = native
+	gut.p("%d leaned solves: worst %s m" % [FUZZ_ITERATIONS, String.num_scientific(worst)])
+	assert_lt(worst, TOLERANCE, "the one-call solve matches the coordinator's loop")

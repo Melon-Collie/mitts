@@ -112,9 +112,13 @@ without a built binary, loses performance, never correctness — CI builds it):
   `LagCompRewind.forward_predict_skater` (host claim rewind) — both through
   the SAME per-skater instance (`SkaterController.native_movement()`), which
   is what keeps render == rewind.
-- **Blade IK** — `SkaterIKCoordinator` (`project_blade`, the 3-pass
-  `_solve_top_hand`, `update_bottom_hand`); config syncs inside the cached-
-  config builders, so `invalidate_configs()` covers both representations.
+- **Blade IK** — `SkaterIKCoordinator` (`project_blade`, `update_bottom_hand`,
+  and `_solve_top_hand`'s three passes onto the leaned ice as one
+  `solve_on_ice` call, its per-tick config in the arguments rather than set
+  property by property each pass); the rest of the config syncs inside the
+  cached-config builders, so `invalidate_configs()` covers both
+  representations. `test_native_ik_parity.gd` holds `solve_on_ice` against
+  the coordinator's own GDScript loop.
 - **Blade dangle** — `SkaterIKCoordinator.apply_blade_from_mouse` step 2 (the
   stateful speed-cap / arrive-law smoother, `NativeBladeDangle.advance`);
   reset/seed forward from `reset_blade_smoothing` / `seed_blade_smoothing`,
