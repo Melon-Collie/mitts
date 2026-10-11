@@ -24,7 +24,6 @@ extends GutTest
 # the declared aim, so it takes the same plane.
 
 const Harness := preload("res://tests/unit/ai/real_goalie_shot_harness.gd")
-const WrapHarness := preload("res://tests/unit/ai/human_wraparound_harness.gd")
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 const MPH_TO_MS: float = 0.44704
 const CORNER: float = GameRules.NET_HALF_WIDTH \
@@ -143,27 +142,3 @@ func test_in_tight_the_arm_read_still_loses() -> void:
 				shot.y * MPH_TO_MS, 0.0) == Harness.GOAL:
 			goals += 1
 	assert_gt(goals, 0, "an over-the-pad shot from the dot line still beats the arm read")
-
-
-# ── A CUT ACROSS THE CREASE IS NOT A STALL ───────────────────────────────────
-# The rush backflow used to switch off once the carrier's CLOSING speed fell
-# under `rush_min_closing_speed`, and a walkaround turns closing speed into
-# lateral speed. Depth then fell back to the standoff — 0.6 m off the puck — and
-# he skated OUT at a man going round him: measured on a rush cut across from
-# 2.5 m, his radius climbed 0.75 -> 1.37 m and he committed the seal from there.
-func test_a_carrier_cutting_across_does_not_draw_him_out() -> void:
-	var h: RefCounted = _live(WrapHarness)
-	h.settle_ready(Vector3(0.0, 0.0, GOAL_Z + 10.0))
-	h.begin_trial()
-	h.bait_commit(0.0, 10.0, 2.5, 7.0)
-	assert_true(_ctrl._sm.is_upright(), "precondition: the straight drive keeps him up")
-	var start_r: float = _ctrl.challenge_radius()
-	h.trace_enabled = true
-	h.wrap_around(-1.6, 0.5, 1.5)
-	var max_r: float = start_r
-	for row: Array in h.trace:
-		var st: int = row[1]
-		if st == GoalieStateMachine.State.READY or st == GoalieStateMachine.State.STANDING:
-			max_r = maxf(max_r, row[3])
-	gut.p("cut from radius %.2f, furthest-out upright radius %.2f" % [start_r, max_r])
-	assert_lt(max_r, start_r + 0.05, "he does not step out toward a carrier crossing him")

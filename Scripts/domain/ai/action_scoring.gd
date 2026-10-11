@@ -614,8 +614,10 @@ static var _rush_cfg_planning: GoalieBehaviorRules.RushRetreatConfig = _build_pl
 # Closing speed below which the live keeper keeps his challenge instead of
 # backing in (`rush_min_closing_speed` export default) — a stalled carrier does
 # not retreat him. The live keeper also holds the backflow for a carrier CROSSING
-# him at this speed; fed closing speed only, the planner does not see that, which
-# like the caps in planned_goalie_depth only ever pulls him deeper.
+# him at this speed, and for the one who backed him in once he stops inside the
+# hash marks. Fed closing speed only, the planner sees neither, but both keep him
+# near the depth the drive left him at, which is what this retreat-only read
+# holds when closing is low.
 const GOALIE_RUSH_MIN_CLOSING_M_S: float = 1.5
 # Skating speed in and out of the crease (`depth_max_speed` export default) —
 # the rate cap on ordinary chart depth changes. A genuine rush retreat is
@@ -716,8 +718,7 @@ static func planned_goalie_depth(
 	# Same model the live keeper solves — ceiling gated on the play being in-zone,
 	# floored, and bounded by the physical standoff. The caps the planner cannot
 	# see (the lateral tracking cap, the backdoor re-square race, room to see
-	# around a screen, a net-front tip, the backflow held for a crossing carrier)
-	# only ever pull him DEEPER, and the retreat-only `minf` below already means this never
+	# around a screen, a net-front tip) only ever pull him DEEPER, and the retreat-only `minf` below already means this never
 	# challenges him out, so omitting them stays on the conservative side.
 	var c := _depth_cfg_planning
 	c.ceiling_radius = _planning_ceiling if dist <= GOALIE_ZONE_DEPTH_M \

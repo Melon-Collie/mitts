@@ -349,9 +349,10 @@ var loose_puck_velocity_lead_time: float = 0.0
 # `rush_arrive_depth` as the attacker reaches the crease, retreating at a rate
 # MATCHED to the attacker's closing speed (GoalieBehaviorRules.rush_retreat_rate)
 # so the challenge gap is a modeled read rather than lerp lag. A slow walk-in
-# below `rush_min_closing_speed` keeps the challenge and a stalled rush lets the
-# chart re-challenge, so decelerating strands the goalie out at challenge depth
-# while a speed rush arrives on a goalie already at depth.
+# below `rush_min_closing_speed` keeps the challenge and a rush that stalls
+# outside `rush_mid_distance` lets the chart re-challenge, so decelerating there
+# strands the goalie out at challenge depth while a speed rush arrives on a
+# goalie already at depth.
 var rush_engage_distance: float = 8.0
 var rush_mid_distance: float = 4.5
 var rush_arrive_distance: float = 1.5
@@ -911,6 +912,8 @@ var _move_read_cfg: GoalieBehaviorRules.MovementReadConfig
 var _beaten_wide_cfg: GoalieBehaviorRules.BeatenWideConfig
 var _backdoor_cfg: GoalieBehaviorRules.BackdoorThreatConfig
 var _rush_cfg: GoalieBehaviorRules.RushRetreatConfig
+# The carrier whose rush (or cut) last drove the backflow; null once it lets go.
+var _rush_backed_in_by: Skater = null
 var _sweep_lane_cfg: GoalieBehaviorRules.SweepLaneConfig
 
 # ── Runtime (controller-local) ────────────────────────────────────────────────
@@ -1453,6 +1456,7 @@ func reset_to_crease() -> void:
 	_current_depth = depth_defensive
 	_current_x = _goal_center_x
 	_target_x = _goal_center_x
+	_rush_backed_in_by = null
 	_five_hole_openness = 0.0
 	_reading_pinned_windup = false
 	_reading_planted_windup = false
@@ -3139,25 +3143,35 @@ func _recovery_loses_the_crossing_race() -> bool:
 # Rush backflow: a CLOSING opposing carrier inside the engage range
 # retreats the goalie along the taught curve at a rate MATCHED to the closing
 # speed — a real backward C-cut instead of lerp lag. A carrier CROSSING him holds
-# the curve too, at the ordinary settle rate: released there, depth falls back to
-# the standoff and walks him OUT at a man going around him. Only a stalled carrier,
-# or one backing off, leaves the constraint unset (INF) and falls back to the chart.
+# the curve too, at the ordinary settle rate, and so does the carrier who backed
+# him in if he stops inside the hash marks: released there, depth falls back to
+# the standoff and walks him OUT at a man who can go around him. Ground given is
+# not retaken; a carrier who never rushed him, one backing off, or one stalled
+# outside the hash marks (a set shooter) leaves the constraint unset (INF) and
+# falls back to the chart.
 func _fill_rush_constraint(c: GoalieDepthSolver.Constraints) -> void:
 	c.rush_radius = INF
 	c.rush_rate = 0.0
 	var carrier: Skater = puck.get_carrier()
 	if carrier == null or (team_id != -1 and carrier.get_team_id() == team_id):
+		_rush_backed_in_by = null
 		return
 	var cdx: float = carrier.global_position.x - _goal_center_x
 	var cdz: float = carrier.global_position.z - _goal_line_z
 	var cdist: float = sqrt(cdx * cdx + cdz * cdz)
 	if cdist >= rush_engage_distance or cdist <= 0.001:
+		_rush_backed_in_by = null
 		return
 	var closing: float = -(carrier.velocity.x * cdx + carrier.velocity.z * cdz) / cdist
 	var crossing: float = absf(carrier.velocity.x * cdz - carrier.velocity.z * cdx) / cdist
-	if closing < rush_min_closing_speed \
-			and (crossing < rush_min_closing_speed or closing < 0.0):
+	var driving: bool = closing >= rush_min_closing_speed \
+			or (crossing >= rush_min_closing_speed and closing >= 0.0)
+	var held: bool = carrier == _rush_backed_in_by and cdist <= rush_mid_distance \
+			and closing > -rush_min_closing_speed
+	if not driving and not held:
+		_rush_backed_in_by = null
 		return
+	_rush_backed_in_by = carrier
 	c.rush_radius = GoalieBehaviorRules.rush_retreat_depth(cdist, _rush_cfg)
 	c.rush_rate = GoalieBehaviorRules.rush_retreat_rate(cdist, closing, _rush_cfg)
 
