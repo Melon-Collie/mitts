@@ -42,12 +42,19 @@ func test_balanced_never_thins_a_near_skater_on_a_60_hz_frame() -> void:
 	assert_eq(_due_count(SkaterAnimationLod.new(), 60, 5.0, false), 60)
 
 
-func test_a_rate_equal_to_the_frame_rate_poses_every_frame() -> void:
-	# Balanced's mid tier is 60 Hz. Frame times never sum to it exactly and the
-	# table is float32, so without slack a steady 60 fps skipped every other frame.
+func test_a_tier_rate_dividing_the_frame_rate_keeps_its_cadence() -> void:
+	# Balanced's mid tier is 60 Hz; at 120 fps that is exactly every other frame.
+	# Frame times never sum to the interval exactly and the table is float32, so
+	# without slack the pass slipped to every third frame now and then.
 	SkaterAnimationLod.detail = SkaterAnimationLod.DETAIL_BALANCED
 	var mid: float = (SkaterAnimationLod.NEAR_M + SkaterAnimationLod.FAR_M) * 0.5
-	assert_eq(_due_count(SkaterAnimationLod.new(0.37), 600, mid, false), 600)
+	var lod := SkaterAnimationLod.new()
+	var n: int = 0
+	for _f: int in 1200:
+		if lod.due(1.0 / 120.0, mid, false):
+			n += 1
+			lod.consumed()
+	assert_eq(n, 600, "every other frame, exactly")
 
 
 func test_the_local_player_and_a_cameraless_frame_are_never_thinned() -> void:
