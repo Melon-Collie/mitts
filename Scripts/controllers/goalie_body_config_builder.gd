@@ -164,7 +164,7 @@ class Inputs:
 	var puck_position: Vector3 = Vector3.ZERO
 	var puck_velocity_est: Vector3 = Vector3.ZERO
 	# The goal line `shot_impact_x` / `prelean_impact_x` are crossings of, and the
-	# body's yaw — together they place a shot line in his own frame.
+	# body's yaw — together they place the puck and a shot line in his own frame.
 	var goal_line_z: float = 0.0
 	var goalie_yaw: float = 0.0
 	# Active blade intent — set by the controller when there's a close-range
@@ -586,13 +586,11 @@ func _set_covering_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 	c.body_rot      = Vector3(-32.0, 0.0, 0.0)
 	c.head_pos      = Vector3(0.0, DOWN_BODY_Y_M + 0.34, -0.28)
 	c.head_rot      = Vector3.ZERO
-	# Glove to the puck (goalie-local; same frame convention as the reach math).
-	var puck_local_x: float = clampf(
-			(inputs.puck_position.x - inputs.current_x) * -inputs.direction_sign,
+	# Glove to the puck.
+	var puck_local: Vector2 = _puck_local(inputs)
+	var puck_local_x: float = clampf(puck_local.x,
 			glove_max_x_outward, absf(glove_max_x_outward))
-	var puck_local_z: float = clampf(
-			(inputs.puck_position.z - inputs.goalie_z) * -inputs.direction_sign,
-			-0.95, -0.10)
+	var puck_local_z: float = clampf(puck_local.y, -0.95, -0.10)
 	c.glove_pos     = Vector3(puck_local_x, 0.09, puck_local_z)
 	c.glove_rot     = Vector3(-70.0, 0.0, 0.0)
 	# The blocker comes over the back of the glove, paddle laid across the top.
@@ -756,22 +754,25 @@ func _mirror_hands(c: GoalieBodyConfig) -> void:
 	c.blocker_pos = Vector3(-tmp_pos.x, tmp_pos.y, tmp_pos.z)
 	c.blocker_rot = tmp_rot
 
-# Move glove or blocker toward projected impact during an elevated shot.
-# Lateral target is GOALIE-relative (`shot_impact_x - current_x`), not goal-
-# relative — the hands live in the goalie's body-local frame. The intercept is
-# computed at the goalie's actual z-plane, not the goal line: the goalie sits
-# forward of the goal line (~0.4-1.2 m) so the puck passes through the glove's
-# plane before reaching the goal. Falls back to the goal-line impact value
-# if the intercept can't be computed.
+# The puck in his body frame (x right, y = local z, negative in front), turned
+# by his real yaw — he is squared to the shooter, not facing straight out, so
+# reading the world offset as local puts an angled puck off to one side.
+static func _puck_local(inputs: Inputs) -> Vector2:
+	var right := Vector2(cos(inputs.goalie_yaw), -sin(inputs.goalie_yaw))
+	var fwd := Vector2(-sin(inputs.goalie_yaw), -cos(inputs.goalie_yaw))
+	var d := Vector2(inputs.puck_position.x - inputs.current_x,
+			inputs.puck_position.z - inputs.goalie_z)
+	return Vector2(d.dot(right), -d.dot(fwd))
+
+
 # Closed-loop blade aim: the assembly yaw that lands the stick BLADE on the
 # wrist→puck line (GoalieStickRules.yaw_to_target), at the tilt the hand's
 # height will give it. Caller clamps via `max_yaw_deg`.
 func _blade_yaw_to_puck(
 		c: GoalieBodyConfig, inputs: Inputs, max_yaw_deg: float) -> float:
-	var px: float = (inputs.puck_position.x - inputs.current_x) * -inputs.direction_sign
-	var pz: float = (inputs.puck_position.z - inputs.goalie_z) * -inputs.direction_sign
+	var p: Vector2 = _puck_local(inputs)
 	return GoalieStickRules.yaw_to_target(
-			c.blocker_pos.x, c.blocker_pos.z, px, pz,
+			c.blocker_pos.x, c.blocker_pos.z, p.x, p.y,
 			GoalieStickRules.tilt_for_blade_on_ice(c.blocker_pos.y, c.blocker_rot.z),
 			max_yaw_deg)
 
@@ -831,8 +832,7 @@ func _apply_blade_intent_for_upright_state(c: GoalieBodyConfig, inputs: Inputs) 
 func _apply_standing_sweep(c: GoalieBodyConfig, inputs: Inputs) -> void:
 	if inputs.reacting_to_shot:
 		return
-	var puck_local_x: float = (inputs.puck_position.x - inputs.current_x) * -inputs.direction_sign
-	var side: float = signf(puck_local_x)
+	var side: float = signf(_puck_local(inputs).x)
 	# Extend the wrist toward the puck side FIRST, then solve the blade yaw
 	# from the extended wrist — order matters, the solve reads blocker_pos.
 	c.blocker_pos = Vector3(
@@ -853,8 +853,7 @@ func _apply_standing_sweep(c: GoalieBodyConfig, inputs: Inputs) -> void:
 func _apply_paddle_sweep(c: GoalieBodyConfig, inputs: Inputs) -> void:
 	if inputs.reacting_to_shot:
 		return
-	var puck_local_x: float = (inputs.puck_position.x - inputs.current_x) * -inputs.direction_sign
-	var side: float = signf(puck_local_x)
+	var side: float = signf(_puck_local(inputs).x)
 	# Extend + drop the wrist first, then solve the blade yaw from the
 	# extended wrist (the solve reads blocker_pos).
 	c.blocker_pos = Vector3(

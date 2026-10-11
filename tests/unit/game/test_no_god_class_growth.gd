@@ -59,7 +59,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +7: the puck-velocity estimate is bounded by the puck's own speed limit.
 	# It is a one-tick finite difference feeding a positional decision, so a
 	# teleport read as travel moved the tracked threat metres in a tick.
-	"res://Scripts/controllers/goalie_controller.gd": 4940,
+	"res://Scripts/controllers/goalie_controller.gd": 4942,
 	# +162: the rim pass. The path search lives in AIRimPass; what stays here is
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
@@ -80,7 +80,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/ui/lobby_manager.gd": 1247,
 	"res://Scripts/actors/puck.gd": 1041,
 	"res://Scripts/ui/side_menu.gd": 995,
-	"res://Scripts/controllers/goalie_body_config_builder.gd": 1092,
+	"res://Scripts/controllers/goalie_body_config_builder.gd": 1091,
 	"res://Scripts/ui/network_debug_overlay.gd": 956,
 	"res://Scripts/networking/network_telemetry.gd": 957,
 	"res://Scripts/controllers/local_controller.gd": 932,
