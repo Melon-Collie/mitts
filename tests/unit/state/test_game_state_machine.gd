@@ -498,6 +498,14 @@ func test_defender_checking_an_attacker_plays_on() -> void:
 	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.NONE,
 			"the defending team can't buy a whistle by hitting an attacker")
 
+func test_defender_bumping_his_own_carrier_plays_on() -> void:
+	sm.register_remote_assigned_player(100, 0, 1)
+	sm.register_remote_assigned_player(101, 1, 1)
+	_nhl_offside_setup()
+	sm.notify_offside_contact(101, 100, 100)
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.NONE,
+			"only an offending-team aggressor can end the delay by contact")
+
 func test_offside_contact_away_from_the_puck_plays_on() -> void:
 	sm.register_remote_assigned_player(100, 0, 1)
 	sm.register_remote_assigned_player(101, 1, 1)
