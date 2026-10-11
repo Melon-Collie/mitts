@@ -642,6 +642,56 @@ func test_carrier_in_ozone_never_passes_out_to_a_neutral_zone_teammate() -> void
 			"an in-zone teammate in scoring ice IS a legal pass target, worth firing")
 
 
+# ─── zone valve: it's the PUCK that takes the zone ──────────────────────────
+
+func test_carrier_whose_puck_has_entered_never_drops_it_back_out() -> void:
+	# Carrying in up the wall at speed: the puck rides a stick's reach ahead, so
+	# it crosses the blue line before the body does. A trailer in neutral ice
+	# with open ice ahead is the bait. Three moments are checked: puck already in
+	# with the body still outside, and the puck still outside but due in by the
+	# time a pass would leave the blade. A drop pass in either one sends the
+	# puck back out.
+	var v := Vector3(0, 0, -7.0)
+	for puck_z: float in [-7.9, -7.1]:
+		var self_pos := Vector3(-8.0, 0, puck_z + 1.1)
+		var skaters: Array = [
+				[1, TEAM_ID, self_pos, false, v],
+				[2, TEAM_ID, Vector3(2.0, 0, self_pos.z + 5.0), false, v],   # NZ trailer
+				[3, 1, Vector3(-7.5, 0, puck_z - 2.5), false, Vector3(0, 0, -6.0)],
+				[4, 1, Vector3(3.0, 0, self_pos.z - 9.0), false, Vector3(0, 0, -5.0)],
+		]
+		var ctx: RoleContext = _make_ctx(self_pos, skaters)
+		ctx.self_velocity = v
+		ctx.snapshot.puck_state.position = Vector3(-8.0, 0, puck_z)
+		assert_false(AIActionScoring.in_offensive_zone(self_pos, ctx.attacking_goal_pos),
+				"precondition: the body has not crossed the line")
+		var c := AIRoleCarrier.new()
+		c.decide(ctx)
+		c.decide(ctx)
+		assert_ne(c.intended_action, AIRoleCarrier.INTENT_PASS,
+				"puck at z %.1f: no drop pass back across the line" % puck_z)
+		assert_eq(c.debug_pass_score, 0.0,
+				"puck at z %.1f: the neutral-zone trailer is not a legal receiver" % puck_z)
+
+	# Control: a step further back the puck cannot reach the line before
+	# release, so the zone is not yet taken and the same trailer is a live drop.
+	var back_pos := Vector3(-8.0, 0, -4.0)
+	var back_skaters: Array = [
+			[1, TEAM_ID, back_pos, false, v],
+			[2, TEAM_ID, Vector3(2.0, 0, back_pos.z + 5.0), false, v],
+			[3, 1, Vector3(-7.5, 0, back_pos.z - 3.6), false, Vector3(0, 0, -6.0)],
+			[4, 1, Vector3(3.0, 0, back_pos.z - 9.0), false, Vector3(0, 0, -5.0)],
+	]
+	var back_ctx: RoleContext = _make_ctx(back_pos, back_skaters)
+	back_ctx.self_velocity = v
+	back_ctx.snapshot.puck_state.position = back_pos + Vector3(0, 0, -1.1)
+	var c_back := AIRoleCarrier.new()
+	c_back.decide(back_ctx)
+	c_back.decide(back_ctx)
+	assert_gt(c_back.debug_pass_score, 0.0,
+			"before the zone is taken the trailer is a legal receiver")
+
+
 # ─── O-zone shot selection: don't fire the long shot on entry ────────────────
 
 func test_carrier_entering_ozone_drives_the_slot_over_a_long_shot() -> void:
