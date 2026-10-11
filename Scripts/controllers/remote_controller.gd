@@ -146,17 +146,21 @@ func _physics_process(delta: float) -> void:
 #  - Host-simulating this client's real inputs (_is_host): it has a live cursor
 #    aim and apply_facing already wrote the leg-yaw, so head-track like a local.
 #  - Client-rendering an interpolated remote: no cursor aim (skip head), and
-#    apply_facing never ran, so mirror the gait's leg-yaw channels here.
+#    apply_facing never ran, so mirror the gait's leg-yaw channels here — every
+#    frame, since the gait reads LowerBody back.
 func _render_pose_update(delta: float) -> void:
 	if skater == null or _self_posing:
 		return
 	_skating.apply(delta)
 	_apply_knockdown_fall()
-	if _is_host:
-		_pose.apply_head_tracking_aim(_current_aim_world, delta)
-	else:
+	if not _is_host:
 		skater.set_lower_body_lag(
 				_skating.stop_yaw_offset + _skating.travel_align_yaw + _skating.shot_hip_yaw)
+	# The head and the off hand are mesh (Skater.on_camera).
+	if not skater.on_camera():
+		return
+	if _is_host:
+		_pose.apply_head_tracking_aim(_current_aim_world, delta)
 	if _celebration_timer <= 0.0:
 		_ik.update_bottom_hand()
 
