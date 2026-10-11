@@ -84,12 +84,14 @@ func test_no_rig_writes_the_skaters_own_state() -> void:
 	# and a second writer for either is a netcode bug with a cosmetic disguise.
 	var skater_fields: PackedStringArray = _self_written(
 			FileAccess.get_file_as_string(_SKATER))
+	assert_false(skater_fields.is_empty(), "found the fields Skater writes")
 	var assign := RegEx.create_from_string(
 			"_skater\\.([a-z_][a-z_0-9]*)\\s*(?:=(?!=)|\\+=|-=|\\*=)\\s")
 	for holder: String in ["_legs", "_arms", "_stick", "_draw"]:
 		var path: String = _COLLABORATORS[holder]
-		for m: RegExMatch in assign.search_all(
-				_strip(FileAccess.get_file_as_string(path))):
+		var src: String = _strip(FileAccess.get_file_as_string(path))
+		assert_false(src.is_empty(), "read %s" % path)
+		for m: RegExMatch in assign.search_all(src):
 			assert_false(skater_fields.has(m.get_string(1)),
 					"%s writes _skater.%s, a field Skater writes too"
 							% [path, m.get_string(1)])

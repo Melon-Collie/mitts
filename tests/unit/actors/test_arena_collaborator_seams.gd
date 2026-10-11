@@ -36,6 +36,10 @@ const _TIERS: Array[Array] = [
 	["ArenaDeckMesh", "ArenaCrowd", "ArenaSeating", "ArenaRinkside", "ArenaSignage"],
 ]
 
+# Fewer files than this means the scan missed the directory, and every
+# "nobody writes X" test below would pass by reading nothing.
+const _MIN_COLLABORATOR_FILES: int = 7
+
 var _sources: Dictionary = {}
 
 
@@ -47,7 +51,8 @@ func before_all() -> void:
 	for f: String in dir.get_files():
 		if f.ends_with(".gd"):
 			_sources[f] = _strip(FileAccess.get_file_as_string("%s/%s" % [_ARENA_DIR, f]))
-	assert_gt(_sources.size(), 6, "expected the arena collaborators to be found")
+	assert_gte(_sources.size(), _MIN_COLLABORATOR_FILES,
+			"expected the arena collaborators to be found")
 
 
 func _strip(src: String) -> String:
@@ -77,6 +82,8 @@ func test_no_collaborator_writes_the_spec() -> void:
 	# `_spec.field = ...` anywhere below ArenaStands. Assigning a field is
 	# deciding when it changes, and when a bowl param changes is exactly what the
 	# node's export setters own — they are what schedules the rebuild.
+	assert_gte(_sources.size(), _MIN_COLLABORATOR_FILES,
+			"the scan reached the arena collaborators")
 	var assign := RegEx.create_from_string(
 			"_spec\\.([a-z_0-9]+)\\s*(?:=(?!=)|\\+=|-=|\\*=)\\s")
 	for file: String in _sources:
@@ -94,6 +101,7 @@ func test_arena_stands_never_writes_a_collaborator_field() -> void:
 	# them. `_crowd.something = x` here would put the crowd's lifecycle in two
 	# places, which is what killed GoalieCreaseClear's extraction.
 	var src: String = _strip(FileAccess.get_file_as_string(_STANDS))
+	assert_false(src.is_empty(), "read %s" % _STANDS)
 	for holder: String in _HOLDERS:
 		var re := RegEx.create_from_string(
 				"%s\\.([a-z_][a-z_0-9]*)\\s*(?:=(?!=)|\\+=|-=)\\s" % holder)
