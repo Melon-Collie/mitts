@@ -13,7 +13,7 @@ var _blend: float = 0.0
 
 
 func stages() -> int:
-	return Stage.FLOOR | Stage.LEGS | Stage.TRUNK
+	return Stage.FLOOR | Stage.TRUNK
 
 
 func reset() -> void:
@@ -34,16 +34,9 @@ func stance_floor() -> float:
 	return _controller.stance_crouch * _blend
 
 
-# Both legs splay into the wide base. The splay rotates the whole leg chain, so
-# its vertical span is span·cos(splay) and the body pays the deficit as extra
-# drop, or the skates ride up off the ice.
-func shape_legs(p: GaitPose) -> void:
-	if _blend <= 0.001:
-		return
-	var splay: float = deg_to_rad(_controller.stance_width_deg) * _blend
-	p.l_roll -= splay
-	p.r_roll += splay
-	p.drop += (p.leg_length() - p.drop) * (1.0 - cos(splay))
+# Both skates out into the wide base, on whatever path the stroke skates.
+func stance_width() -> float:
+	return _controller.stance_width_m * _blend
 
 
 # The chest folds over the knees on the trunk TEXTURE, not the torso lean: the

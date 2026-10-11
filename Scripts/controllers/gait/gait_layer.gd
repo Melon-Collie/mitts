@@ -53,6 +53,13 @@ func stance_floor() -> float:
 	return 0.0
 
 
+# How far out from under its hip this layer sets each skate, at least, metres
+# at leg_scale 1: a width the leg solve reaches on the ice, so it widens a
+# stroke's path as well as the stance.
+func stance_width() -> float:
+	return 0.0
+
+
 # After the stance solve, before the knee solve: offsets on the leg joints.
 func shape_legs(_p: GaitPose) -> void:
 	pass

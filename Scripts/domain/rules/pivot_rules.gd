@@ -10,9 +10,6 @@ class_name PivotRules
 # coordinated carve rotates both together (ψ barely moves) while a pivot whips
 # the facing against travel. All functions are stateless; the caller owns the
 # engage latch, the sense latch, and the smoothing, mirroring HockeyStopRules.
-#
-# Mirrored in C++ by NativeSkaterGait (native/src/native_skater_gait.cpp);
-# test_native_gait_parity.gd fails if the two drift. Change both or neither.
 
 # Release hysteresis beyond the band edges, so the read never flickers when ψ
 # hovers at a boundary. Completion exits through the far edge, an abort back

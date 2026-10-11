@@ -428,6 +428,11 @@ signal post_move_integrated()
 # A carry hop landed: the blade face caught the puck on its new side. Cosmetic,
 # on every peer; `stroke_speed` (m/s) is the push that started the hop.
 signal carry_caught(stroke_speed: float)
+# A skate's push began or a lifted one landed (SkaterSkatingCoordinator, from the
+# gait; cosmetic, every peer, never in replay): SkaterLocomotion.push_strength,
+# dig_strength, and the landing skate's highest lift, m.
+signal skate_pushed(left: bool, strength: float, dig: float)
+signal skate_touched(left: bool, lift: float)
 # Mirrors SkaterStateMachine.State for the current carrier. Updated each tick
 # by Local/RemoteController so the goalie AI can read shot-state tells (e.g.
 # SLAPPER_CHARGE_WITH_PUCK windup) without reaching across controller boundaries.
@@ -655,6 +660,8 @@ var _default_lower_body_y: float = 0.0
 # positions (_place_upper_frame of UpperBody's alone, off its cached parts).
 var _skating_crouch_drop: float = 0.0
 var _frame_drop: float = 0.0
+# Share of the blade contact seat the visible hips take (set_skating_crouch_drop).
+var _plant: float = 1.0
 # The balance lean, world XZ radians, stepped in the physics tick
 # (SkaterController._advance_balance) and replicated; and the translation it
 # gives each gameplay frame (_update_lean_shift).
@@ -864,12 +871,12 @@ func _process(delta: float) -> void:
 		# (on_camera).
 		if render_pose_update.is_valid():
 			render_pose_update.call(delta)
-		# _blade_tilt_dirty is ORed in because an elevation blend step changes the
-		# blade tilt without moving any marker, so _rig_pose_changed can't see it
-		# (see _update_blade_elevation). Left set while hidden or off camera so the
-		# pose is rebuilt on the first frame it is drawn.
-		var spine_moved: bool = _on_camera and _spine.update()
-		if _on_camera and (_rig_pose_changed() or spine_moved or _blade_tilt_dirty):
+		# Neither the spine, the trunk texture nor the blade's elevation moves a
+		# marker; each flags its own move until the next rebuild, off camera too.
+		if _on_camera:
+			_spine.update()
+		if _on_camera and (_rig_pose_changed() or _spine.take_moved() or _arms.take_retextured() \
+				or _blade_tilt_dirty):
 			_blade_tilt_dirty = false
 			update_stick_mesh()
 			update_arm_mesh()
@@ -1609,8 +1616,13 @@ func edge_load(left: bool) -> float:
 	return _legs.edge_load(left)
 
 
-func set_ankle_flatten(left: float, right: float) -> void:
-	_legs.set_ankle_flatten(left, right)
+func set_ankle_flatten(left: float, right: float, level_l: float = 0.0,
+		level_r: float = 0.0, ice: Basis = Basis.IDENTITY) -> void:
+	_legs.set_ankle_flatten(left, right, level_l, level_r, ice)
+
+
+func set_leg_contact(plant_l: float, plant_r: float, dt: float) -> void:
+	_legs.set_contact(plant_l, plant_r, dt)
 
 
 # How far into his faceoff address this centre is, 0..1 (zero for everyone
@@ -1620,13 +1632,6 @@ func set_faceoff_address(blend: float) -> void:
 	_faceoff_address = blend
 
 
-# Sets the gait's crouch (metres): `drop` lowers the visible body, so the flexed
-# legs keep the skates planted, and `frame_drop` of it also lowers the gameplay
-# frames. The gait computes the crouch at render rate, so the skating crouch and
-# its stride bob stay out of the frames the hands and blade hang from — gameplay
-# geometry must not depend on frame rate. Only the held poses (block, faceoff,
-# knockdown) hand the frame their drop, because their hands are posed in a
-# frame that has gone down with the body.
 # Whether the camera can see this skater this frame (SkaterCameraCull). The rig's
 # work is mesh, so a skater out of frame skips it — but the gait still computes,
 # because a held pose's crouch moves the gameplay frame (set_skating_crouch_drop).
@@ -1637,10 +1642,21 @@ func on_camera() -> bool:
 	return _on_camera
 
 
-func set_skating_crouch_drop(drop: float, frame_drop: float = 0.0) -> void:
-	if is_equal_approx(_skating_crouch_drop, drop) and is_equal_approx(_frame_drop, frame_drop):
+# Sets the gait's crouch (metres): `drop` lowers the visible body, and
+# `frame_drop` of it also lowers the gameplay frames. The gait computes the
+# crouch at render rate, so the skating crouch and its stride bob stay out of the
+# frames the hands and blade hang from — gameplay geometry must not depend on
+# frame rate. Only the held poses (block, faceoff, knockdown) hand the frame
+# their drop, because their hands are posed in a frame that has gone down with
+# the body. `plant` is how much the visible hips are then re-seated so the lower
+# blade stands on the ice (SkaterLegRig.seat_on_ice): all of it on skates, none
+# of it for a body lying on the ice, which the sprawl seats.
+func set_skating_crouch_drop(drop: float, frame_drop: float = 0.0, plant: float = 1.0) -> void:
+	if is_equal_approx(_skating_crouch_drop, drop) and is_equal_approx(_frame_drop, frame_drop) \
+			and is_equal_approx(_plant, plant):
 		return
 	_skating_crouch_drop = drop
+	_plant = plant
 	# The stride's bob lowers the body alone; only a held pose's share moves the
 	# frames, so the every-frame case re-seats the skeleton and nothing else.
 	if not is_equal_approx(_frame_drop, frame_drop):
@@ -1650,9 +1666,22 @@ func set_skating_crouch_drop(drop: float, frame_drop: float = 0.0) -> void:
 		_spine.update()
 
 
-# How far the visible body sits below the gameplay frames (SkaterSpineRig).
+# How far the crouch puts the visible body below the gameplay frames, before
+# the contact seat (SkaterSpineRig).
 func body_drop_below_frame() -> float:
 	return _skating_crouch_drop - _frame_drop
+
+
+func ground_plant() -> float:
+	return _plant
+
+
+func leg_pose_version() -> int:
+	return _legs.pose_version
+
+
+func seat_on_ice(hips: Transform3D) -> Vector3:
+	return _legs.seat_on_ice(hips)
 
 
 # Skeleton height offset (m), set by SkaterAppearanceCoordinator.apply:

@@ -77,6 +77,9 @@ var _girdle: PackedVector3Array = PackedVector3Array([Vector3.ZERO, Vector3.ZERO
 var _trunk_texture_head := Basis.IDENTITY
 var _trunk_texture_pitch: float = 0.0
 var _trunk_texture_roll: float = 0.0
+# The texture moved the shoulders the arms root on since the mesh pass last
+# asked (take_retextured).
+var _retextured: bool = false
 
 
 func setup(skater: Skater) -> void:
@@ -444,12 +447,20 @@ static func up_for_look_at(direction: Vector3) -> Vector3:
 
 # ── Trunk texture and head ───────────────────────────────────────────────────
 
+# Whether the trunk texture moved the shoulders since the last call.
+func take_retextured() -> bool:
+	var moved: bool = _retextured
+	_retextured = false
+	return moved
+
+
 func set_trunk_texture(pitch_add: float, roll_add: float) -> void:
 	if is_equal_approx(pitch_add, _trunk_texture_pitch) \
 			and is_equal_approx(roll_add, _trunk_texture_roll):
 		return
 	_trunk_texture_pitch = pitch_add
 	_trunk_texture_roll = roll_add
+	_retextured = true
 	_trunk_texture = Basis.from_euler(Vector3(pitch_add, 0.0, roll_add))
 	_trunk_texture_head = Basis.from_euler(Vector3(
 			pitch_add * helmet_pitch_follow, 0.0, roll_add * helmet_roll_follow))

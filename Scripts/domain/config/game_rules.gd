@@ -171,6 +171,15 @@ static func clamp_to_rink_inner(world_xz: Vector2, margin: float = 0.0) -> Vecto
 			return Vector2(world_xz.x, sign(world_xz.y) * half_l)
 	return world_xz
 
+# Distance from an interior point to the nearest point of the inner rink
+# boundary in any direction — the rounded box's exact signed distance, negated:
+# negative outside. No ray from the point meets the boards any sooner.
+static func distance_to_rink_inner(world_xz: Vector2) -> float:
+	var qx: float = absf(world_xz.x) - CORNER_CENTER_X
+	var qz: float = absf(world_xz.y) - CORNER_CENTER_Z
+	return INNER_CORNER_RADIUS - Vector2(maxf(qx, 0.0), maxf(qz, 0.0)).length() \
+			- minf(maxf(qx, qz), 0.0)
+
 # Distance from an interior point to the inner rink boundary along `dir_xz` (a
 # unit world-XZ direction) — how much room the point has before it runs into the
 # boards on that heading. Shares the boundary clamp_to_rink_inner projects onto,

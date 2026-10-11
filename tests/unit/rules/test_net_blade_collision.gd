@@ -334,3 +334,53 @@ func test_limit_holds_for_the_other_end() -> void:
 	assert_lt(_cast(from, Vector2(0.0, -GL - 0.45)), INF, "-Z end bounds the same way")
 	assert_true(is_inf(_cast(Vector2(0.0, -GL + 1.2), Vector2(0.0, -GL - 0.5))),
 			"-Z mouth is open the same way")
+
+
+# ray_to_net skips the cage for a ray leaving the near end from in front of
+# it; wherever it does, the full face and post tests must find nothing either.
+func test_the_net_ray_skips_only_rays_that_miss() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 0x4E455452  # "NETR"
+	var skipped: int = 0
+	for i: int in 20000:
+		var origin := Vector2(rng.randf_range(-6.0, 6.0),
+				rng.randf_range(-30.0, 30.0) if i % 2 == 0
+				else signf(rng.randf() - 0.5) * rng.randf_range(24.0, 28.5))
+		var dir := Vector2.from_angle(rng.randf_range(-PI, PI))
+		var y: float = rng.randf_range(0.0, 1.2)
+		var clearance: float = rng.randf_range(0.0, 0.1)
+		var full: float = minf(NetGeometry.ray_to_solid_face(origin, dir, y),
+				NetGeometry.ray_to_post(origin, dir, clearance))
+		var got: float = NetGeometry.ray_to_net(origin, dir, y, clearance)
+		if is_inf(got) and not is_inf(full):
+			fail_test("ray %d from %s along %s skipped a hit at %.4f" % [i, origin, dir, full])
+			return
+		if not is_inf(got) and got != full:
+			fail_test("ray %d: %.6f, the full test %.6f" % [i, got, full])
+			return
+		if is_inf(got) and dir.y * signf(NetGeometry.near_end_z(origin.y)) <= 0.0:
+			skipped += 1
+	gut.p("%d of 20000 rays skipped the cage" % skipped)
+	assert_gt(skipped, 5000, "the early-out covers the rays heading away")
+
+
+# distance_to_near_net bounds every ray to the near net from below: the reach
+# limit skips its ray on it.
+func test_the_near_net_distance_bounds_every_ray() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 0x4E455444  # "NETD"
+	var hits: int = 0
+	for i: int in 20000:
+		var origin := Vector2(rng.randf_range(-4.0, 4.0),
+				signf(rng.randf() - 0.5) * rng.randf_range(20.0, 29.0))
+		var dir := Vector2.from_angle(rng.randf_range(-PI, PI))
+		var clearance: float = rng.randf_range(0.0, 0.1)
+		var t: float = NetGeometry.ray_to_net(origin, dir, rng.randf_range(0.0, 1.2), clearance)
+		if is_inf(t):
+			continue
+		hits += 1
+		var d: float = NetGeometry.distance_to_near_net(origin, clearance)
+		if t < d - 0.0001:
+			fail_test("a ray from %s meets the net at %.4f inside the bound %.4f" % [origin, t, d])
+			return
+	assert_gt(hits, 500, "the fuzz hit the net")

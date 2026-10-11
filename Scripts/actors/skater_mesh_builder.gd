@@ -230,12 +230,15 @@ const BLADE_STEEL_COLOR := Color(0.62, 0.66, 0.70)
 # so the skate stack raises both body roots (applied in Skater._ready before
 # the default-height captures — the same root-raise mechanism the height
 # attribute uses) and the blade assembly reaches this much deeper than the
-# old foot-sphere ice contact (z 0.080), keeping the steel on y = 0. The
-# height attribute's root scaling still uses FACEOFF_SPAWN_HEIGHT as its ice
-# height, so the lift's unscaled share leaves <3 mm of contact error at the
-# extreme builds — visually nil.
+# old foot-sphere ice contact (z 0.080). The authored chain still bottoms out
+# ~3 cm above the ice; what puts the steel on it is the visible hips' contact
+# solve (SkaterLegRig.seat_on_ice), not this number.
 const SKATE_LIFT_M: float = 0.04
-const _BLADE_ICE_Z: float = 0.080 + SKATE_LIFT_M
+# The runner's bottom edge in the FOOT bone's frame (toe −Y, +Z down): the line
+# the blade touches the ice along, and what the contact solve seats on it.
+const BLADE_ICE_Z: float = 0.080 + SKATE_LIFT_M
+const RUNNER_TOE_Y: float = -0.088
+const RUNNER_HEEL_Y: float = 0.098
 # Skate accent stripe (see shared_skate_stripe): band height, its center on
 # the collar's local Y, and a radius just proud of the collar's sidewall at
 # that height (~0.085) so the band never z-fights the lathe under it.
@@ -1284,8 +1287,8 @@ static func _build_skate_blade() -> ArrayMesh:
 	var runner := SurfaceTool.new()
 	runner.begin(Mesh.PRIMITIVE_TRIANGLES)
 	runner.set_smooth_group(-1)
-	_box(runner, Vector3(-0.0035, -0.088, 0.090),
-			Vector3(0.0035, 0.098, _BLADE_ICE_Z))
+	_box(runner, Vector3(-0.0035, RUNNER_TOE_Y, 0.090),
+			Vector3(0.0035, RUNNER_HEEL_Y, BLADE_ICE_Z))
 	runner.generate_normals()
 	runner.commit(m)
 	return m

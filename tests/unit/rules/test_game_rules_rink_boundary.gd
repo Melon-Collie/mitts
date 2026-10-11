@@ -230,3 +230,23 @@ func test_not_over_net_footprint_in_open_ice() -> void:
 	assert_false(GameRules.is_over_net_footprint(
 			Vector2(0.0, GameRules.GOAL_LINE_Z - 2.0)),
 			"out in front of the goal line is not the net frame")
+
+
+# distance_to_rink_inner is a true lower bound on every ray's exit and the
+# nearest exit itself: the reach limit skips its ray on it.
+func test_the_rink_distance_bounds_every_ray_and_is_tight() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 0x52494E4B  # "RINK"
+	var worst_gap: float = 0.0
+	for i: int in 400:
+		var p := Vector2(rng.randf_range(-12.8, 12.8), rng.randf_range(-29.8, 29.8))
+		if GameRules.clamp_to_rink_inner(p) != p:
+			continue
+		var d: float = GameRules.distance_to_rink_inner(p)
+		var nearest: float = INF
+		for k: int in 720:
+			var t: float = GameRules.ray_to_rink_inner(p, Vector2.from_angle(TAU * k / 720.0))
+			assert_true(t >= d - 0.0001, "a ray from %s exits at %.4f inside the bound %.4f" % [p, t, d])
+			nearest = minf(nearest, t)
+		worst_gap = maxf(worst_gap, nearest - d)
+	assert_lt(worst_gap, 0.01, "the bound is the nearest exit (worst gap %.4f m)" % worst_gap)

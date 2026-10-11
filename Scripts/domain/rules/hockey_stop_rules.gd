@@ -9,9 +9,6 @@ class_name HockeyStopRules
 # Conventions: skater local frame with −Z forward, +X right. Yaw values are
 # lower-body rotation.y offsets, where POSITIVE rotation.y turns the legs
 # toward −X (left).
-#
-# Mirrored in C++ by NativeSkaterGait (native/src/native_skater_gait.cpp);
-# test_native_gait_parity.gd fails if the two drift. Change both or neither.
 
 # Which hip leads the stop, latched ONCE at engagement (travel direction
 # wobbles during the skid; re-deriving per tick would flip the legs

@@ -2795,7 +2795,7 @@ func _on_player_spawned(record: PlayerRecord) -> void:
 		)
 	var snd := SkaterSoundController.new()
 	record.skater.add_child(snd)
-	snd.setup(record.skater)
+	snd.setup(record.skater, record.controller)
 
 
 func _on_registry_player_added(record: PlayerRecord) -> void:
