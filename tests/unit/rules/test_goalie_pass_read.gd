@@ -49,3 +49,24 @@ func test_a_reception_past_the_horizon_is_ignored() -> void:
 
 func test_a_stopped_puck_is_not_a_pass() -> void:
 	assert_false(_find(Vector3.ZERO, Vector3.ZERO, [Vector3(0, 0, 1)]))
+
+
+func test_the_reception_names_its_stick_and_when_the_puck_passes_it() -> void:
+	assert_true(_find(Vector3.ZERO, Vector3(0, 0, 10),
+			[Vector3(5, 0, 0), Vector3(0.5, 0, 6)]))
+	assert_eq(_out.receiver, 1, "index into the receivers it was given")
+	assert_almost_eq(_out.pass_time, 0.6, 0.001, "closest approach to the blade")
+	assert_lt(_out.time, _out.pass_time, "he can play it before it reaches him")
+
+
+func test_a_miss_names_no_stick() -> void:
+	assert_false(_find(Vector3.ZERO, Vector3(0, 0, 10), [Vector3(REACH + 0.1, 0, 5)]))
+	assert_eq(_out.receiver, -1)
+	assert_true(is_inf(_out.pass_time))
+
+
+func test_he_waits_on_a_stick_only_while_the_answer_still_lands_after_it() -> void:
+	assert_true(GoaliePassRead.can_wait_out(0.45, 0.20, 0.20),
+			"a stick in the slot leaves the drop its time")
+	assert_false(GoaliePassRead.can_wait_out(0.45, 0.35, 0.20),
+			"a net-front stick does not: the shot through it is played as a shot")

@@ -351,6 +351,27 @@ stick on the shooter's line needs nothing, since challenging covers it. A
 BLOCK on tip risk is the pre-commit trap above and stays out.
 `test_goalie_tip_threat.gd` holds it.
 
+**A pass is not a shot while a stick can still take it.** Passes fire
+`puck_released` like any shot, so a feed whose line runs on at the net reads as
+a low shot, and a goalie who drops for it hands the receiver the top of the net.
+Two rules keep him up until going down is clearly the answer:
+
+- **The leg drop waits on a stick ahead** (`_drop_waits_on_a_stick`) while the
+  puck, once past that blade, still leaves the drop its time before the goal
+  line (`GoaliePassRead.can_wait_out`). Only the drop: he has been on the line
+  since the release, and a puck that slides past untouched is the line he
+  already read. A doorstep stick leaves no such time, so a shot through it drops
+  him exactly as before — the tip doctrine above is untouched.
+- **The pass read's drop-and-slide answers a one-timer, and waits for one** — a
+  receiver loaded before the feed (`SkaterStateMachine.state_loads_one_timer`).
+  One who is not has to catch it and shoot again, which is a save made standing,
+  so he walks to square on his feet and keeps reading; a late load is still
+  answered. The cross-crease fork's pads-first branch asks the same thing.
+
+A caught puck also ends the old shot's drop: the freeze outlives the catch by
+its clear delay, and the carrier is the block-or-react question's from then on.
+`test_goalie_pass_is_not_a_shot.gd` holds all of it.
+
 **Three low-save shapes, picked off the converged read.** On a pad face he
 stays standing. Wide of one standing pad, inside a flat pad's reach and low
 enough for it, he goes to the HALF-butterfly: that pad down, the other leg
