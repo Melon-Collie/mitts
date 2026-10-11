@@ -590,12 +590,10 @@ var cover_escape_height: float = 0.9          # m — above the collapsed torso 
 # ── Catch-and-hold (glove) ────────────────────────────────────────────────────
 # A controlled GLOVE save pins the puck into the glove instead of dropping it
 # dead at the feet. Held UNDER PRESSURE it freezes the play on the same
-# `puck_covered` rails as the smother; an UNPRESSURED catch quick-drops after a
-# beat and plays on — the real delay-of-game incentive. The drop places the puck
-# at the goalie's feet, where the dwell → lane-aware windup-strike clear takes
-# over.
+# `puck_covered` rails as the smother; an UNPRESSURED catch is held only a beat —
+# the real delay-of-game incentive.
 var catch_hold_pressure_radius: float = 2.5  # m — opponent inside this → hold/freeze
-var catch_quick_drop_s: float = 0.4           # s — unpressured look-and-drop beat
+var catch_quick_drop_s: float = 0.4           # s — unpressured hold before he plays it out
 
 # Clear-sweep animation. The sweep imparts the clearing velocity instantly; on
 # its own the puck just shoots to the corner with no stick motion, which reads
@@ -2499,8 +2497,8 @@ func _try_clear_loose_puck(delta: float) -> void:
 # the follow-through countdown in _update_goalie_poke. `planned_vel` only
 # picks the windup's visual direction — the strike re-solves the lane-aware
 # exit against the live world.
-func _begin_sweep(planned_vel: Vector3, cover_release: bool) -> void:
-	_clear.pending_cover_release = cover_release
+func _begin_sweep(planned_vel: Vector3, pinned_release: bool) -> void:
+	_clear.pending_pinned_release = pinned_release
 	_clear.windup_timer = sweep_windup_s
 	_clear.dwell_timer = 0.0
 	_clear.set_send_dir(planned_vel)
@@ -2512,20 +2510,22 @@ func _begin_sweep(planned_vel: Vector3, cover_release: bool) -> void:
 # The strike: the backswing has snapped through — impart the clear velocity
 # NOW, at the moment the blade visually meets the puck. The exit is re-solved
 # lane-aware against the live world (the puck may have drifted during the
-# windup, and a lane may have opened/closed). A cover-release strike also
-# unlocks the pinned puck and stands the goalie up; a plain clear whose puck
-# got whacked away or grabbed during the windup WHIFFS — the follow-through
-# still plays, an honest missed sweep.
+# windup, and a lane may have opened/closed). A pinned-release strike (out of a
+# cover or catch hold) also unlocks the pinned puck and stands the goalie up; a
+# plain clear whose puck got whacked away or grabbed during the windup WHIFFS —
+# the follow-through still plays, an honest missed sweep.
 func _strike_pending_sweep() -> void:
-	var cover_release: bool = _clear.pending_cover_release
-	_clear.pending_cover_release = false
+	var pinned_release: bool = _clear.pending_pinned_release
+	_clear.pending_pinned_release = false
 	_clear.anim_timer = sweep_anim_duration
-	if cover_release:
+	if pinned_release:
 		puck.pickup_locked = false
 		puck.motion_pinned = false  # releasing the pin — the drive owns it again
-		_clear.cover_secured = false
 		_apply_strike_velocity()
-		_clear.cover_cooldown_timer = cover_cooldown_s
+		if _sm.current == State.COVERING:
+			_clear.cover_cooldown_timer = cover_cooldown_s
+		_clear.cover_secured = false
+		_clear.catch_secured = false
 		_sm.transition_to(State.RECOVERING)
 		_sm.recovery_timer = 0.0
 		return
@@ -2659,7 +2659,7 @@ func _tick_cover(delta: float) -> void:
 	_clear.cover_hold_timer -= delta
 	if _clear.cover_hold_timer <= 0.0:
 		# Hold over — wind up the release sweep while the glove still pins the
-		# puck; the strike (cover_release = true) unlocks it as the blade snaps
+		# puck; the strike (pinned_release = true) unlocks it as the blade snaps
 		# through, so the release visibly comes off the stick.
 		var planned: Vector3 = _pick_clear_velocity()
 		if planned == Vector3.ZERO:
@@ -2673,8 +2673,8 @@ func _tick_cover(delta: float) -> void:
 # physics writes are deferred to the first _tick_catch). Enter the squeeze:
 # upright or down variant by the goalie's current stance; hold length and the
 # freeze resolution by pressure — held under pressure it rides the same
-# `puck_covered` rails as the smother, unpressured it look-and-drops and plays
-# on (the real delay-of-game incentive).
+# `puck_covered` rails as the smother, unpressured it is held only a beat (the
+# real delay-of-game incentive).
 func _on_puck_caught(contacted: Goalie) -> void:
 	if contacted != goalie or not is_server:
 		return
@@ -2693,8 +2693,7 @@ func _on_puck_caught(contacted: Goalie) -> void:
 # style RigidBody freeze plus pickup_locked (blade paths and bots treat it as
 # dead) — and fires the freeze resolution if the catch was pressured. Every
 # tick re-pins the puck to the glove's world position so it rides the squeeze
-# pose; when the hold expires the goalie sets it down at his feet and plays on
-# (the existing dwell → lane-aware clear takes over).
+# pose; when the hold expires he plays it out (_play_out_caught_puck).
 func _tick_catch(delta: float) -> void:
 	if not is_server:
 		return
@@ -2707,26 +2706,27 @@ func _tick_catch(delta: float) -> void:
 		puck.set_puck_velocity(Vector3.ZERO)
 		if _clear.catch_pressured:
 			puck_covered.emit(team_id)
+	if _clear.windup_timer > 0.0:
+		return  # set down and pinned — the strike unlocks it and stands him up
 	puck.set_puck_position(goalie.get_glove_world_position())
 	_clear.catch_hold_timer -= delta
 	if _clear.catch_hold_timer <= 0.0:
-		_drop_caught_puck()
+		_play_out_caught_puck()
 
 
-# Set the caught puck down at the feet and rejoin play through the recovery
-# window. The dropped puck is an ordinary loose puck again — the crease-clear
-# machinery (dwell → lane-aware windup-strike, or another cover if the lanes
-# are jammed) handles what happens next.
-func _drop_caught_puck() -> void:
-	puck.pickup_locked = false
-	puck.motion_pinned = false  # releasing the glove pin — the drive owns it again
-	_clear.catch_secured = false
-	puck.set_puck_position(Vector3(
-			goalie.global_position.x, puck.ice_height,
-			goalie.global_position.z + float(_direction_sign) * 0.45))
+# Set the puck down, still pinned, and sweep it out through the cover's own
+# release. Never leave it loose: a loose puck sits in the blue paint through the
+# stand-up and the crease clear's dwell, and with an attacker in range that is a
+# tap-in through the five-hole.
+func _play_out_caught_puck() -> void:
+	# The stand-up after the strike floors him at `min_challenge_depth` in one tick.
+	puck.set_puck_position(_clear.catch_set_down_point(goalie, puck.ice_height,
+			min_challenge_depth))
 	puck.set_puck_velocity(Vector3.ZERO)
-	_sm.transition_to(State.RECOVERING)
-	_sm.recovery_timer = 0.0
+	var planned: Vector3 = _pick_clear_velocity()
+	if planned == Vector3.ZERO:
+		planned = _natural_clear_velocity(0.0)
+	_begin_sweep(planned, true)
 
 
 # ── Behind-net puck play (delegated to GoaliePuckPlay) ───────────────────────
@@ -2784,7 +2784,7 @@ func _abort_cover() -> void:
 		# A wound-up release dies with the cover; give the stick its collision
 		# back (no strike/follow-through will run the countdown for us).
 		_clear.windup_timer = 0.0
-		_clear.pending_cover_release = false
+		_clear.pending_pinned_release = false
 		if _clear.anim_timer <= 0.0:
 			goalie.set_stick_collision_enabled(true)
 	_clear.cover_cooldown_timer = cover_cooldown_s

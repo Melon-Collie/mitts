@@ -11,8 +11,9 @@ extends RefCounted
 # so the cover triggers exactly when the lane model says every sweep would feed an
 # opponent's stick AND an opponent is on the puck. The catch is the same family
 # from the other end: a controlled glove save PINS the puck, and resolves by
-# pressure — held under pressure it freezes the play, unpressured it look-and-drops
-# and plays on (the real delay-of-game incentive).
+# pressure — held under pressure it freezes the play, unpressured it is held only a
+# beat (the real delay-of-game incentive). Either hold, where nothing whistles it,
+# ends the way the cover's does: set down on the blade and swept out.
 #
 # ── Boundary ─────────────────────────────────────────────────────────────────
 # GEOMETRY AND PREDICATES ONLY. This answers questions and owns the timer FIELDS
@@ -49,14 +50,14 @@ var lane_cfg: GoalieBehaviorRules.SweepLaneConfig = null
 # `windup_timer` counts the backswing; when it expires the caller performs the
 # STRIKE (the moment the blade snaps through the puck and the clear velocity is
 # applied) and `anim_timer` runs the follow-through. `anim_dir` is the
-# goalie-local lateral sign of the send. `pending_cover_release` marks a windup
-# begun from the COVERING hold: its strike also unlocks the pinned puck.
+# goalie-local lateral sign of the send. `pending_pinned_release` marks a windup
+# begun from a cover or catch hold: its strike also unlocks the pinned puck.
 var clear_cooldown_timer: float = 0.0
 var dwell_timer: float = 0.0
 var windup_timer: float = 0.0
 var anim_timer: float = 0.0
 var anim_dir: float = 0.0
-var pending_cover_release: bool = false
+var pending_pinned_release: bool = false
 
 # ── Cover state ──────────────────────────────────────────────────────────────
 var cover_secured: bool = false
@@ -77,7 +78,7 @@ func reset() -> void:
 	windup_timer = 0.0
 	anim_timer = 0.0
 	anim_dir = 0.0
-	pending_cover_release = false
+	pending_pinned_release = false
 	cover_secured = false
 	cover_reach_timer = 0.0
 	cover_hold_timer = 0.0
@@ -124,6 +125,42 @@ func natural_exit(puck_pos: Vector3, forced_side: float) -> Vector3:
 			puck_pos, goal_center_x, direction_sign,
 			lateral_weight, forward_weight, exit_speed,
 			center_deadband, default_side, forced_side)
+
+
+# Where a caught puck is set down to be swept: straight out from the goal line,
+# just past the furthest of his parts that reach the ice. Measured off his live
+# collision boxes, since the pose decides how far forward the pads sit and how
+# far a turned body swings them out. Every exit runs corner-ward AND out of the
+# crease, so from here the swept puck only moves away from him; set down at his
+# skates, or on a blade turned toward a sharp-angle shooter, the far-corner exit
+# runs back through his own pads and they kick it in. `floor_depth` is the depth
+# the stand-up will lift him to before the puck is clear.
+func catch_set_down_point(goalie: Goalie, ice_height: float, floor_depth: float) -> Vector3:
+	var shapes: Array[CollisionShape3D] = goalie.get_collision_parts()
+	var bodies: Array[Node] = goalie.get_collision_part_bodies()
+	var halves: PackedVector3Array = goalie.get_collision_part_half_extents()
+	var puck_top: float = ice_height + GameRules.PUCK_COLLISION_RADIUS
+	var out: float = 0.0
+	for i: int in shapes.size():
+		var cs: CollisionShape3D = shapes[i]
+		var half: Vector3 = halves[i]
+		if cs.disabled or half.x < 0.0:
+			continue
+		var body: CollisionObject3D = bodies[i] as CollisionObject3D
+		if body != null and body.collision_layer == 0:
+			continue
+		var xf: Transform3D = cs.global_transform
+		var reach_y: float = absf(xf.basis.x.y) * half.x + absf(xf.basis.y.y) * half.y \
+				+ absf(xf.basis.z.y) * half.z
+		if xf.origin.y - reach_y > puck_top:
+			continue
+		var reach_z: float = absf(xf.basis.x.z) * half.x + absf(xf.basis.y.z) * half.y \
+				+ absf(xf.basis.z.z) * half.z
+		out = maxf(out, (xf.origin.z - goal_line_z) * direction_sign + reach_z)
+	var at: Vector3 = goalie.global_position
+	var lift: float = maxf(floor_depth - (at.z - goal_line_z) * direction_sign, 0.0)
+	out += lift + GameRules.PUCK_COLLISION_RADIUS
+	return Vector3(at.x, ice_height, goal_line_z + direction_sign * out)
 
 
 # Lane-aware corner pick: the natural side if its exit lane is clear of opposing
