@@ -26,6 +26,9 @@ class_name AILoosePuckChase
 # geometrically-similar bots without making the role stale when a
 # genuinely better-placed teammate appears.
 const HYSTERESIS_S: float = 0.2
+# Default for teammate_first_to_puck's tag_up_peers — a shared empty map, so
+# callers that omit it allocate nothing.
+const _NO_PEERS: Dictionary = {}
 
 # ── Path race ────────────────────────────────────────────────────────────────
 # EVERY loose puck races on its friction + board-aware predicted path: at each
@@ -166,17 +169,21 @@ static func race_trajectory(puck_pos: Vector3, puck_vel: Vector3) -> Array[Vecto
 # Cross-player callers (the election, which must rank every bot on one shared
 # baseline) leave it at the league default; a bot solving its OWN chase passes
 # its attribute-scaled max_accel, exactly as time_to_arrive documents.
+#
+# `playable_from` (race_playable_time) is when the puck is back down where a
+# grounded blade can play it: nothing earlier on the path is makeable, so a
+# popped or flipped puck is met where it lands rather than under its flight.
 static func path_intercept_time(traj: Array[Vector3], step_dt: float,
 		puck_pos: Vector3, skater_pos: Vector3, skater_vel: Vector3,
 		max_speed: float, margin: float = KILL_SETUP_MARGIN_S,
 		accel: float = AIActionScoring.SHED_ACCEL_DEFAULT_M_S2,
-		reach: float = 0.0) -> float:
+		reach: float = 0.0, playable_from: float = 0.0) -> float:
 	if traj.is_empty():
 		return INF
 	for i: int in traj.size():
 		var t_step: float = (i + 1) * step_dt
 		var t_set: float = t_step - margin
-		if t_set <= 0.0:
+		if t_set <= 0.0 or t_step < playable_from:
 			continue
 		# Exact prune: even at a flying top-speed start, ETA ≥ (dist − reach) /
 		# v_max — skip the full phase-model call when that bound alone misses T.
@@ -197,17 +204,28 @@ static func path_intercept_time(traj: Array[Vector3], step_dt: float,
 		# and the election falls through to its peer-id tie-break.
 		# Linear-interpolate the arrival slack s(t) = (t − margin) − ETA(t)
 		# across the step it changes sign in. Exact for a settled puck: s is
-		# then linear in t, so the crossing IS the skater's ETA.
+		# then linear in t, so the crossing IS the skater's ETA. The step's
+		# left end is pulled up to the landing when the puck comes down in it.
 		var prev_t: float = i * step_dt
 		var prev_point: Vector3 = traj[i - 1] if i > 0 else puck_pos
+		if playable_from > prev_t:
+			prev_t = playable_from
+			prev_point = path_intercept_point(traj, step_dt, puck_pos, prev_t)
 		var prev_slack: float = (prev_t - margin) - _reach_eta(
 				skater_pos, prev_point, skater_vel, max_speed, accel, reach)
 		if prev_slack >= 0.0:
 			return prev_t   # already makeable at the left endpoint
 		return prev_t + (t_step - prev_t) * (-prev_slack / (t_set - eta - prev_slack))
-	var horizon: float = traj.size() * step_dt
+	var horizon: float = maxf(traj.size() * step_dt, playable_from)
 	return maxf(horizon, _reach_eta(
 			skater_pos, traj[-1], skater_vel, max_speed, accel, reach))
+
+
+# The `playable_from` every race read of this puck passes: when it is back on
+# the blade plane (AITrajectory.time_until_on_blade_plane). The walk itself is
+# planar; the flight only decides how early the path can be met.
+static func race_playable_time(puck_pos: Vector3, puck_vel: Vector3) -> float:
+	return AITrajectory.time_until_on_blade_plane(puck_pos, puck_vel)
 
 
 # ETA for the BLADE to touch `point`, rather than for the body to land on it.
@@ -282,18 +300,28 @@ static func puck_comes_to_reach(
 	var band2: float = band * band
 	var traj: Array[Vector3] = race_trajectory(puck_pos, puck_vel)
 	var step_dt: float = RACE_LOOKAHEAD_S / float(RACE_STEPS)
+	# A puck flying through the band is over the stick, not in it: only the
+	# path from its landing on counts.
+	var t_play: float = race_playable_time(puck_pos, puck_vel)
 	var prev: Vector3 = puck_pos
 	for i: int in traj.size():
-		var f: float = _segment_meet_fraction(prev, traj[i], self_pos)
-		var meet := Vector3(prev.x + (traj[i].x - prev.x) * f, 0.0,
-				prev.z + (traj[i].z - prev.z) * f)
+		var t0: float = i * step_dt
+		var start: Vector3 = prev
 		prev = traj[i]
+		if t0 + step_dt < t_play:
+			continue
+		if t0 < t_play:
+			start = path_intercept_point(traj, step_dt, puck_pos, t_play)
+		var seg_t0: float = maxf(t0, t_play)
+		var f: float = _segment_meet_fraction(start, traj[i], self_pos)
+		var meet := Vector3(start.x + (traj[i].x - start.x) * f, 0.0,
+				start.z + (traj[i].z - start.z) * f)
 		var dx: float = meet.x - self_pos.x
 		var dz: float = meet.z - self_pos.z
 		if dx * dx + dz * dz > band2:
 			continue
 		if AIActionScoring.time_to_arrive(self_pos, meet, self_vel, max_speed) \
-				<= (i + f) * step_dt:
+				<= seg_t0 + (t0 + step_dt - seg_t0) * f:
 			return true
 	return false
 
@@ -319,13 +347,14 @@ const YIELD_CONTEST_M: float = 0.7
 # blade means the field is absent and we simply don't yield.
 static func teammate_first_to_puck(
 		skater_states: Dictionary, teammate_ids: Array, self_pid: int,
-		self_blade: Vector3, puck_pos: Vector3) -> bool:
+		self_blade: Vector3, puck_pos: Vector3,
+		tag_up_peers: Dictionary = _NO_PEERS) -> bool:
 	var mine: float = _xz_dist(self_blade, puck_pos)
 	for pid: int in teammate_ids:
 		if pid == self_pid:
 			continue
 		var s: SkaterNetworkState = skater_states.get(pid)
-		if s == null or s.is_ghost:
+		if s == null or s.is_ghost or tag_up_peers.has(pid):
 			continue
 		var blade: Vector3 = s.blade_contact_world
 		if blade == Vector3.ZERO:
@@ -411,6 +440,7 @@ static func elect(
 	var traj: Array[Vector3] = race_trajectory(puck_pos, puck_vel)
 	var step_dt: float = RACE_LOOKAHEAD_S / float(RACE_STEPS)
 	var margin: float = setup_margin(puck_vel)
+	var t_play: float = race_playable_time(puck_pos, puck_vel)
 	var best_pid: int = -1
 	var best_t: float = INF
 	for pid: int in teammate_ids:
@@ -426,7 +456,8 @@ static func elect(
 		# genuinely reaches a loose puck first. Missing caps → league default.
 		var max_speed: float = race_vmax(caps_by_peer.get(pid))
 		var t: float = path_intercept_time(traj, step_dt, puck_pos,
-				s.position, s.velocity, max_speed, margin)
+				s.position, s.velocity, max_speed, margin,
+				AIActionScoring.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
 		# Incumbent hysteresis: challengers pay HYSTERESIS_S, so the
 		# current chaser keeps the role unless beaten by the margin.
 		if pid != prev_elected:
@@ -456,6 +487,7 @@ static func best_intercept_time(
 	var traj: Array[Vector3] = race_trajectory(puck_pos, puck_vel)
 	var step_dt: float = RACE_LOOKAHEAD_S / float(RACE_STEPS)
 	var margin: float = setup_margin(puck_vel)
+	var t_play: float = race_playable_time(puck_pos, puck_vel)
 	var best_t: float = INF
 	for pid: int in ids:
 		var s: SkaterNetworkState = skater_states.get(pid)
@@ -463,7 +495,8 @@ static func best_intercept_time(
 			continue
 		var max_speed: float = race_vmax(caps_by_peer.get(pid))
 		var t: float = path_intercept_time(traj, step_dt, puck_pos,
-				s.position, s.velocity, max_speed, margin)
+				s.position, s.velocity, max_speed, margin,
+				AIActionScoring.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
 		if t < best_t:
 			best_t = t
 	return best_t

@@ -1313,9 +1313,11 @@ static func loose_puck_race_lost(
 	var step_dt: float = AILoosePuckChase.RACE_LOOKAHEAD_S \
 			/ float(AILoosePuckChase.RACE_STEPS)
 	var margin: float = AILoosePuckChase.setup_margin(puck_vel)
+	var t_play: float = AILoosePuckChase.race_playable_time(puck_pos, puck_vel)
 	var self_vmax: float = maxf(self_max_speed, 1.0)
 	var my_eta: float = AILoosePuckChase.path_intercept_time(
-			traj, step_dt, puck_pos, self_pos, self_vel, self_vmax, margin)
+			traj, step_dt, puck_pos, self_pos, self_vel, self_vmax, margin,
+			AIActionScoring.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
 	var best_opp_eta: float = INF
 	var best_opp_meet: Vector3 = puck_pos
 	for pid: int in snapshot.skater_states:
@@ -1332,7 +1334,8 @@ static func loose_puck_race_lost(
 		# puck's own line runs through his contest band.
 		var speed: float = AILoosePuckChase.race_vmax(caps_by_peer.get(pid))
 		var t: float = AILoosePuckChase.path_intercept_time(
-				traj, step_dt, puck_pos, s.position, s.velocity, speed, margin)
+				traj, step_dt, puck_pos, s.position, s.velocity, speed, margin,
+				AIActionScoring.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
 		var meet: Vector3 = AILoosePuckChase.path_intercept_point(
 				traj, step_dt, puck_pos, t)
 		var committed: bool = AILoosePuckChase.path_enters_band(traj, puck_pos,

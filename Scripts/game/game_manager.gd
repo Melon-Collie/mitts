@@ -125,6 +125,11 @@ var _last_emitted_clock_secs: int = -1
 # never tick the SM but still need to fire their local intro cosmetics.
 var _seen_first_prep: bool = false
 var _last_ghost_state: Dictionary = {}  # peer_id -> bool, host only
+# NHL delayed offside: peers who must get back to the blue line
+# (GameStateMachine.must_tag_up). Filled by the host's diff in
+# _apply_ghost_state, and on clients by notify_offside_state. Read by the HUD
+# banner, the teammate markers and the bots.
+var _tag_up_peers: Dictionary[int, bool] = {}
 # Reused peer_id -> position scratch for the per-tick ghost-state and icing
 # checks (host only). The domain calls read it synchronously and never retain
 # it; each call site clears + refills before use.
@@ -505,6 +510,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.poke_claim_received.connect(_on_poke_claim_received)
 	NetworkManager.stick_lift_claim_received.connect(_on_stick_lift_claim_received)
 	NetworkManager.ghost_state_received.connect(_on_ghost_state_received)
+	NetworkManager.offside_state_received.connect(_on_offside_state_received)
 	NetworkManager.hit_claim_received.connect(_on_hit_claim_received)
 	NetworkManager.input_batch_received.connect(_on_input_batch_received)
 	NetworkManager.spectator_demoted_received.connect(_on_spectator_demoted_received)
@@ -841,19 +847,18 @@ func _flush_pending_faceoff_win() -> void:
 		_sync_stats_to_clients()
 
 
-# Host-only: any skater-skater contact can end an active NHL delayed offside
-# (Rule 83.3 — an offside attacker touching, or about to touch, the defending
-# puck carrier ends the delay; contact is the deterministic stand-in for the
-# linesman's "about to" judgment, applied to any defender, not just the
-# carrier). Resolves the victim's peer_id and hands both off to the domain,
-# which no-ops unless one side is the currently-flagged offending team.
+# Host-only: a body check can end an active NHL delayed offside — see
+# GameStateMachine.notify_offside_contact for which contacts count.
 func _on_skater_contact_for_offside(attacker_peer_id: int, victim: Skater) -> void:
 	if _state_machine == null or _registry == null:
 		return
 	var victim_peer_id: int = _registry.resolve_peer_id(victim)
 	if victim_peer_id == -1:
 		return
-	_state_machine.notify_offside_contact(attacker_peer_id, victim_peer_id)
+	var carrier_peer_id: int = -1
+	if puck != null and puck.carrier != null:
+		carrier_peer_id = _registry.resolve_peer_id(puck.carrier)
+	_state_machine.notify_offside_contact(attacker_peer_id, victim_peer_id, carrier_peer_id)
 	_consume_pending_faceoff()
 
 
@@ -907,6 +912,8 @@ func _check_goal_crossing() -> void:
 		return
 	for goal: HockeyGoal in goals:
 		goal.check_goal_crossing(_goal_tracker.segment_start, _goal_tracker.segment_end)
+	# A goal during an NHL delayed offside is whistled offside instead.
+	_consume_pending_faceoff()
 
 
 func _apply_ghost_state(delta: float) -> void:
@@ -934,6 +941,7 @@ func _apply_ghost_state(delta: float) -> void:
 	var ghosts: Dictionary = _state_machine.compute_ghost_state(
 			positions, carrier_peer_id, puck.global_position, delta, _ghosts_scratch)
 	_state_machine.update_delayed_offside(positions, puck.global_position, carrier_peer_id)
+	_consume_pending_faceoff()
 	for peer_id in ghosts:
 		var r: PlayerRecord = _registry.get_record(peer_id)
 		if r != null:
@@ -948,6 +956,10 @@ func _apply_ghost_state(delta: float) -> void:
 			if new_ghost != _last_ghost_state.get(peer_id, false):
 				_last_ghost_state[peer_id] = new_ghost
 				NetworkManager.send_ghost_state_to_all(peer_id, new_ghost)
+			var tag_up: bool = _state_machine.must_tag_up(peer_id, positions[peer_id].z)
+			if tag_up != _tag_up_peers.has(peer_id):
+				_set_tag_up(peer_id, tag_up)
+				NetworkManager.send_offside_state_to_all(peer_id, tag_up)
 
 
 # ── Network Callbacks ─────────────────────────────────────────────────────────
@@ -1458,6 +1470,8 @@ func _wire_subsystems() -> void:
 	# sync_existing_players) — no double-fire risk.
 	_registry.player_added.connect(_on_replay_player_joined_event)
 	_registry.player_removed.connect(_on_replay_player_left_event)
+	_registry.player_removed.connect(
+			func(r: PlayerRecord) -> void: _tag_up_peers.erase(r.peer_id))
 
 	_state_buffer_manager = StateBufferManager.new()
 	_state_buffer_manager.setup(_registry, goalie_controllers)
@@ -2785,8 +2799,8 @@ func _on_player_spawned(record: PlayerRecord) -> void:
 	# closure only routes the contact into the credit/claim path
 	# (_on_hit_landed → HitClaimResolver).
 	if NetworkManager.is_host:
-		# NHL delayed offside: any skater-skater contact can end it (Rule 83.3),
-		# not just a puck touch — see notify_offside_contact. Host-only: the host
+		# NHL delayed offside: a check on the defending carrier can end it
+		# (Rule 83.3) — see notify_offside_contact. Host-only: the host
 		# simulates every skater, so this fires reliably for any pair regardless
 		# of who's local, unlike prediction-only contact events.
 		record.skater.body_checked_player.connect(
@@ -2819,6 +2833,9 @@ func _on_registry_player_added(record: PlayerRecord) -> void:
 func _enrich_snapshot_for_ai(snap: WorldSnapshot) -> void:
 	snap.teammate_ids_by_team.clear()
 	snap.closest_to_puck_by_team.clear()
+	snap.tag_up_peers.clear()
+	for pid: int in _tag_up_peers:
+		snap.tag_up_peers[pid] = true
 	if _registry == null:
 		return
 	var team_map: Dictionary = _registry.team_id_by_peer
@@ -2969,6 +2986,25 @@ func _on_server_puck_picked_up_by(peer_id: int) -> void:
 	# both teams' possession state and the previous-carrier-team's
 	# CARRIER slot is now stale.
 	_force_retick_team_brains()
+
+
+func _on_offside_state_received(peer_id: int, tag_up: bool) -> void:
+	_set_tag_up(peer_id, tag_up)
+
+
+func _set_tag_up(peer_id: int, tag_up: bool) -> void:
+	if tag_up:
+		_tag_up_peers[peer_id] = true
+	else:
+		_tag_up_peers.erase(peer_id)
+	var record: PlayerRecord = _registry.get_record(peer_id) if _registry != null else null
+	if record != null and record.skater != null:
+		record.skater.offside_marked = tag_up
+
+
+func _clear_tag_up_peers() -> void:
+	for peer_id: int in _tag_up_peers.keys():
+		_set_tag_up(peer_id, false)
 
 
 func _on_ghost_state_received(peer_id: int, is_ghost: bool) -> void:
@@ -3138,11 +3174,9 @@ func _on_possession_established(peer_id: int, team_id: int) -> void:
 	if _turnover_tracker != null \
 			and _turnover_tracker.on_possession_established(peer_id):
 		_stats_sync_gate.mark_dirty()
-	# NHL/ARCADE offside: the defending team ESTABLISHING possession (this
-	# same signal — held it or made a deliberate play, not a raw touch) voids
-	# an active offside in their own zone. Reuses the identical "control"
-	# standard stat attribution already uses rather than a looser one keyed
-	# off a bare puck.carrier assignment.
+	# ARCADE offside: the defending team ESTABLISHING possession (this same
+	# signal — held it or made a deliberate play, not a raw touch) clears the
+	# offending team's ghosts in their own zone.
 	if _state_machine != null and puck != null:
 		_state_machine.notify_possession_established(team_id, puck.global_position.z)
 		_consume_pending_faceoff()
@@ -4442,6 +4476,7 @@ func on_scene_exit() -> void:
 	_pending_remote_spawns = []
 	_reserved_slots.clear()
 	_last_ghost_state.clear()
+	_tag_up_peers.clear()
 	teams.clear()
 	puck = null
 	goals.clear()
@@ -4578,6 +4613,7 @@ func _apply_reset() -> void:
 	_seen_first_prep = false  # next prep is a rematch's opening faceoff
 	_last_emitted_clock_secs = -1
 	_last_ghost_state.clear()
+	_clear_tag_up_peers()
 	_hit_claim.reset_throttle()
 	_deferred_claims.clear()
 	_puck_oob_timer = 0.0
@@ -5272,7 +5308,13 @@ func tutorial_give_puck(record: PlayerRecord) -> void:
 		return
 	if puck.carrier != null:
 		puck.drop()
-	puck_controller.apply_lag_comp_pickup(record.skater)
+	puck_controller.apply_scripted_grant(record.skater)
+
+
+# Tutorial-only: park the puck loose and at rest at `pos` this frame.
+func tutorial_place_puck(pos: Vector3) -> void:
+	if puck_controller != null:
+		puck_controller.stage_scripted(pos)
 
 
 # Spawn an AI-controlled bot in scripted/puppet mode for tutorial
@@ -5560,6 +5602,11 @@ func get_period_duration() -> float:
 
 func get_num_periods() -> int:
 	return _state_machine.num_periods if _state_machine != null else GameRules.NUM_PERIODS
+
+
+# Whether peer_id must get back to the blue line under NHL delayed offside.
+func must_tag_up(peer_id: int) -> bool:
+	return _tag_up_peers.has(peer_id)
 
 
 func get_rule_set() -> int:

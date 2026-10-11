@@ -92,6 +92,10 @@ var _skater: Skater
 # skater's INTERPOLATED pose, so handing the result to the interpolator as well
 # would lag it a tick behind the body it is labelling.
 var _name_label: Label3D = null
+var _player_name: String = ""
+# Latched Skater.offside_marked: the plate reads OFFSIDE in place of the name,
+# for the local player's teammates only.
+var _offside_marked: bool = false
 
 # Overhead self-beacon. LAZY — null until the ring-relation resolver reports
 # SELF, and freed again if it stops (see _apply_self_beacon_relation), so exactly
@@ -216,6 +220,9 @@ func update(delta: float) -> void:
 		_update_beacon_visibility()
 
 	_refresh_screen_down_cache_if_camera_changed()
+	if _skater.offside_marked != _offside_marked:
+		_offside_marked = _skater.offside_marked
+		_apply_name_plate()
 
 	var render_pos: Vector3 = _skater.render_transform().origin
 	if _name_label.visible:
@@ -289,7 +296,15 @@ func _refresh_screen_down_cache_if_camera_changed() -> void:
 
 
 func set_player_name(p_name: String) -> void:
-	_name_label.text = p_name
+	_player_name = p_name
+	_apply_name_plate()
+
+
+func _apply_name_plate() -> void:
+	var offside: bool = _offside_marked and _ring_relation_cached == RingRelation.TEAMMATE
+	_name_label.text = tr(&"INFRACTION_OFFSIDE") if offside else _player_name
+	var col: Color = MenuStyle.DANGER if offside else MenuStyle.HUD_ICE
+	_name_label.modulate = Color(col.r, col.g, col.b, MenuStyle.HUD_OPACITY)
 
 
 # Shows the smart-ping chat bubble above this skater's head. Called (via the
@@ -352,6 +367,8 @@ func _refresh_ring_color() -> void:
 	_ring_relation_cached = relation
 	_ring_color_cached = col
 	_apply_self_beacon_relation(relation)
+	if _offside_marked:
+		_apply_name_plate()
 
 
 # Show the overhead beacon only when this skater is the local player's own, and

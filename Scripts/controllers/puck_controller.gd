@@ -388,6 +388,27 @@ func apply_lag_comp_pickup(skater: Skater) -> void:
 	_on_puck_picked_up(skater)
 
 
+# Host-only scripted teleports (tutorial staging). Each restarts next tick's
+# sweep where the puck landed: the swept pickup / poke / block tests read the
+# puck's travel since last tick, and a teleport is not travel — swept, the jump
+# hits whatever lies along it (an opposing blade strips a fresh grant straight
+# back; any blade collects a puck being parked).
+
+# The pickup path above, then the puck lands on the new blade at once.
+func apply_scripted_grant(skater: Skater) -> void:
+	apply_lag_comp_pickup(skater)
+	if puck.carrier != skater:
+		return
+	puck.set_puck_position(puck.pinned_position())
+	_prev_puck_pos = puck.get_puck_position()
+
+
+# Parks the puck loose and at rest at `pos`, dropping any carrier.
+func stage_scripted(pos: Vector3) -> void:
+	puck.stage_at(pos)
+	_prev_puck_pos = puck.get_puck_position()
+
+
 # Lag-comp counterpart to apply_lag_comp_pickup for the deflect verdict: the
 # claim's rewound state ran PuckReceptionRules.should_receive and decided the
 # contact should redirect the puck, not corral it. Same idempotency philosophy —
@@ -470,13 +491,19 @@ func apply_contested_pickup(
 		return
 	var perp_sign: float = 1.0 if randf() > 0.5 else -1.0
 	var fallback := Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0))
-	puck.set_puck_velocity(PuckCollisionRules.contested_pickup_velocity(
+	var exit: Vector3 = PuckCollisionRules.contested_pickup_velocity(
 			_contest_blade_velocity(skater_a, blade_vel_a),
 			_contest_blade_velocity(skater_b, blade_vel_b),
 			blade_pos_a, blade_pos_b,
 			contest_min_speed, contest_max_speed,
 			contest_deadlock_speed, contest_deadlock_threshold,
-			perp_sign, fallback))
+			perp_sign, fallback)
+	# Raw blade velocities, not the draw crest: the hop is the squeeze the blades
+	# actually made, and a well-timed draw must not earn a bigger pop.
+	exit.y = PuckCollisionRules.pinch_lift_speed(blade_vel_a, blade_vel_b,
+			blade_pos_a, blade_pos_b, puck.pinch_lift_threshold,
+			puck.pinch_lift_gain, puck.pinch_lift_max_speed)
+	puck.set_puck_velocity(exit)
 	puck.set_skater_cooldown(skater_a, puck.reattach_cooldown)
 	puck.set_skater_cooldown(skater_b, puck.reattach_cooldown)
 	# The draw is resolved — stop retaining the swipe crest so it can't leak into a

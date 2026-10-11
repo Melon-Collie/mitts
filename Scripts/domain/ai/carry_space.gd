@@ -481,9 +481,10 @@ static func carry_safety(from: Vector3, to: Vector3, arrival_time: float,
 # reach balloons with time (maneuver ∝ time²), so a far destination reads as
 # "more covered", but a puck stripped mid-route never reaches it — the mid-point
 # strip happens first. Mirrors lane_loss_point for passes; from == to is a stand.
+# `covered_only`: how far the carry GETS — nothing covered reaches `to`.
 static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
-		opponent_caps: Array = [], apply_escape: bool = false) -> Vector3:
+		opponent_caps: Array = [], apply_escape: bool = false, covered_only: bool = false) -> Vector3:
 	var carry_dir := Vector2.ZERO
 	var carry_speed: float = 0.0
 	if apply_escape and arrival_time > 0.0:
@@ -588,8 +589,8 @@ static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 	var c_end: float = reach_clearance(to, arrival_time, opponents, opponent_vels,
 			opponent_caps, minf(arrival_time, CARRY_LUNGE_WINDOW_S),
 			carry_dir, carry_speed)
-	if c_end < 0.0:
-		return to    # clear mid-route, covered at the destination
+	if c_end < 0.0 or covered_only:
+		return to    # covered at the destination, or nothing covered at all
 	# Neither covered (a low strip probability anyway): the tighter of the two.
 	return mid if c_mid <= c_end else to
 
