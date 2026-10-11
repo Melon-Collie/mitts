@@ -101,6 +101,26 @@ func test_a_loose_rebound_at_his_feet_keeps_him_down() -> void:
 			"a puck a stick can already touch keeps him down regardless of possession")
 
 
+func test_a_man_standing_near_a_rebound_does_not_pin_him_down() -> void:
+	# Down after a save, the puck loose 4 m from an opponent who is not skating
+	# at it. Priced at top speed from a standstill he "arrives" inside the
+	# stand-up, so the goalie lay there for as long as the man stood there. Raced
+	# as he is actually moving, he cannot touch it before the goalie is up.
+	var worst: float = GoalieSaveSelection.contest_time(4.0, STICK,
+			GameRules.DEFAULT_SKATER_MAX_SPEED_M_S)
+	var seen: float = GoalieSaveSelection.contest_time_seen(4.0, STICK, 0.0,
+			GameRules.DEFAULT_SKATER_MAX_SPEED_M_S, GameRules.DEFAULT_SKATER_THRUST_M_S2)
+	assert_true(GoalieSaveSelection.should_hold_seal(_s(worst + 0.1, worst), 0.35),
+			"the worst case would hold him")
+	assert_false(GoalieSaveSelection.should_hold_seal(_s(seen + 0.1, seen), 0.35),
+			"a standing man 4 m off the puck lets him up")
+	# The same man already skating at it does hold him: that one is coming.
+	var crashing: float = GoalieSaveSelection.contest_time_seen(4.0, STICK, 9.0,
+			GameRules.DEFAULT_SKATER_MAX_SPEED_M_S, GameRules.DEFAULT_SKATER_THRUST_M_S2)
+	assert_true(GoalieSaveSelection.should_hold_seal(_s(crashing + 0.1, crashing), 0.35),
+			"a man crashing the rebound keeps him sealed")
+
+
 func test_a_teammate_corralling_under_pressure_is_still_traffic() -> void:
 	# His own defenceman has it, but an opponent is a stick away. Possession does
 	# not make it readable — one poke and it is a shot from two metres.

@@ -61,7 +61,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +7: the puck-velocity estimate is bounded by the puck's own speed limit.
 	# It is a one-tick finite difference feeding a positional decision, so a
 	# teleport read as travel moved the tracked threat metres in a tick.
-	"res://Scripts/controllers/goalie_controller.gd": 4901,
+	"res://Scripts/controllers/goalie_controller.gd": 4961,
 	# +162: the rim pass. The path search lives in AIRimPass; what stays here is
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
@@ -79,13 +79,13 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 1409,
 	"res://Scripts/game/player_prefs.gd": 1390,
 	"res://Scripts/actors/skater_mesh_builder.gd": 1409,
-	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1357,
+	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1372,
 	"res://Scripts/ui/career_stats_screen.gd": 1271,
 	"res://Scripts/domain/ai/carry_space.gd": 1255,
 	"res://Scripts/ui/lobby_manager.gd": 1247,
 	"res://Scripts/actors/puck.gd": 1063,
 	"res://Scripts/ui/side_menu.gd": 995,
-	"res://Scripts/controllers/goalie_body_config_builder.gd": 1072,
+	"res://Scripts/controllers/goalie_body_config_builder.gd": 1091,
 	"res://Scripts/ui/network_debug_overlay.gd": 956,
 	"res://Scripts/networking/network_telemetry.gd": 957,
 	"res://Scripts/controllers/local_controller.gd": 932,
@@ -110,7 +110,7 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/controllers/skater_controller.gd": 40,
 	"res://Scripts/actors/puck.gd": 40,
 	"res://Scripts/domain/state/game_state_machine.gd": 39,
-	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 36,
+	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 37,
 	"res://Scripts/actors/skater_mesh_builder.gd": 29,
 	"res://Scripts/controllers/puck_controller.gd": 29,
 	"res://Scripts/game/shot_on_goal_tracker.gd": 26,

@@ -620,8 +620,11 @@ static var _depth_cfg_planning: GoalieDepthSolver.Constraints = _build_planning_
 static var _planning_ceiling: float = 1.75
 static var _rush_cfg_planning: GoalieBehaviorRules.RushRetreatConfig = _build_planning_rush_cfg()
 # Closing speed below which the live keeper keeps his challenge instead of
-# backing in (`rush_min_closing_speed` export default) — a stalled or lateral
-# carrier does not retreat him.
+# backing in (`rush_min_closing_speed` export default) — a stalled carrier does
+# not retreat him. The live keeper also holds the backflow for a carrier CROSSING
+# him, and for the one who backed him in once he stops inside the hash marks; the
+# planner sees neither, but both keep him near the depth the drive left him at,
+# which is what this retreat-only read holds when closing is low.
 const GOALIE_RUSH_MIN_CLOSING_M_S: float = 1.5
 # Skating speed in and out of the crease (`depth_max_speed` export default) —
 # the rate cap on ordinary chart depth changes. A genuine rush retreat is
