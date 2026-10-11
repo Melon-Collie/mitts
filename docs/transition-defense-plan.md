@@ -315,6 +315,14 @@ Modifiers, in this order:
 3. **Pace** — a small correction for a carrier genuinely flying, capped at half a stick.
    Demoted from the driver to a modifier.
 
+   > **Superseded by the stride ramp.** Pace now enters only as the *ramp cushion*: the
+   > ground the carrier gains while this defender builds to his speed
+   > (`AIRoleRushD.ramp_cushion_m`). It is nil for a defender already riding the rush, so
+   > the ladder still sets the steady-state gap, and it is bounded by the house gate. A
+   > flat-footed defender against a flying carrier concedes more than the whole ladder,
+   > which the half-stick correction could not see. Detail: `Scripts/domain/ai/CLAUDE.md`
+   > → "Pace enters through the stride ramp".
+
 ### The gap-up trigger (new)
 
 The concept the developer named as missing. A defender attacks — closes to stick range on
@@ -327,6 +335,11 @@ an angle, skating forward — when the carrier's speed advantage is gone:
 
 Every input is directly observable. This is "defend by skating forward" — the modern
 doctrine — and it is what makes a 1-on-1 feel contested instead of conceded.
+
+> **Revised for the stride ramp.** "Not up to speed" is no longer read off his pace: the
+> fresh-reception trigger is gone, and the low-closing trigger also requires that he cannot
+> build speed past us (ramp cushion under a stick). A defender in the carrier's lane whose
+> retreat cannot hold a gap steps up to meet him. See `AIRoleRushD.should_gap_up`.
 
 ### Angling (new)
 

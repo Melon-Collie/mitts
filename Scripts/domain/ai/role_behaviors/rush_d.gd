@@ -13,10 +13,13 @@ class_name AIRoleRushD
 #     the passing lane; with only one D back, RUSH_D1 inherits that job.
 #
 # ── Gap control ──────────────────────────────────────────────────────────────
-# The gap is a LADDER ON ICE REMAINING, and pace is a small correction on top of
-# it — never the other way around: sizing the gap off the carrier's pace alone
-# holds the offensive blue line's gap all the way back to your own net, which is
-# the sag.
+# The gap is a LADDER ON ICE REMAINING, plus the RAMP CUSHION: the ground the
+# carrier gains while this body builds to his speed (ramp_cushion_m). The ladder
+# is the gap between two bodies already travelling together; the cushion is what
+# it costs to become one, and it is nil once you are. Sizing the gap off the
+# carrier's pace ALONE holds the offensive blue line's gap all the way back to
+# your own net, which is the sag — the cushion cannot, because a defender riding
+# the rush at its pace has nothing left to build.
 #
 # Modifiers must be able to run BOTH ways — something has to be able to say
 # CLOSE THE GAP, not just widen it — and they read the team's shared numbers
@@ -42,24 +45,14 @@ const GAP_RUNG_STICKS: float = 1.0
 # D tighten the gap and stand up; without it, default conservative").
 const BACKPRESSURE_TIGHTEN_S: float = 1.5
 
-# Pace correction ceiling: a carrier genuinely flying earns a little cushion,
-# but never more than half a stick. Demoted from driver to correction.
-const PACE_CORRECTION_MAX_STICKS: float = 0.5
-# Closing speed at which the pace correction is fully applied — a hard NHL
-# stride, so anything short of full flight buys proportionally less.
-const PACE_FULL_M_S: float = 8.0
-
 # ── Gap-up trigger ───────────────────────────────────────────────────────────
 # When the carrier's speed advantage is gone, ATTACK — close to stick range on
 # an angle, skating forward. This is the modern read ("defend by skating
-# forward, kill the rush early") and the single concept the pace model could not
-# express: it treated a slow carrier as merely less dangerous, never as an
-# opportunity.
+# forward, kill the rush early").
 #
-# Three observable triggers, any of which means he cannot beat us wide right now:
-const GAP_UP_CLOSING_M_S: float = 3.0    # he isn't coming at pace
-# He just received it and hasn't built speed — the classic moment to step up.
-const GAP_UP_FRESH_RECEIVE_M_S: float = 4.5
+# He isn't coming at pace — and, under the stride ramp, he can't BUILD it past us
+# either (see should_gap_up):
+const GAP_UP_CLOSING_M_S: float = 3.0
 # Steered inside this of the boards: no room left to take outside.
 const GAP_UP_WALL_M: float = 2.0
 
@@ -108,14 +101,15 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 	var dist: float = ap.net_dist
 	var closing: float = ap.closing
 
-	var gap: float = _gap_for(ctx, read, carrier_pos, closing)
+	var cushion: float = ramp_cushion_m(ctx, ap, read.carrier_peer)
+	var gap: float = _gap_for(ctx, read, carrier_pos, cushion)
 	gap = minf(gap, dist)   # never project the stand past the net
 
 	# GAP UP: his speed advantage is gone, so stop retreating and take the ice.
 	# Closing to stick range on an angle IS the attack. It is exempt from the
 	# step-up bound below, because the bound prices exactly the risk the gap-up's
 	# triggers rule out — being beaten by pace you cannot match.
-	var gapping_up: bool = should_gap_up(ctx, read, carrier_pos, closing)
+	var gapping_up: bool = should_gap_up(ctx, read, ap, cushion)
 	# The stand rides him, so the trip ends with this body already travelling at
 	# the rush's pace at the ladder's gap. That is what gap control IS, and it is
 	# also what stands the approach bound down — see _settable_gap.
@@ -182,25 +176,78 @@ static func _ladder_sticks(threat_pos: Vector3, own_goal_dir: float) -> float:
 			GAP_MIN_STICKS, GAP_MAX_STICKS)
 
 
-# The pace correction, in stick lengths — capped, so it can never be the driver.
-static func _pace_sticks(closing: float) -> float:
-	return PACE_CORRECTION_MAX_STICKS * clampf(closing / PACE_FULL_M_S, 0.0, 1.0)
-
-
-# The ladder gap in metres WITHOUT the shared read's numbers/backpressure rungs.
-# Public so the lost-race pre-contain can stand where RUSH_D1 is going to want
-# it: two different formulas leave the declining chaser planted somewhere the gap
-# defender has to correct off the moment possession flips. The rungs are
-# deliberately excluded — a NEUTRAL chaser has no rush posture to read yet.
+# The ladder gap in metres WITHOUT the shared read's numbers/backpressure rungs,
+# plus the ramp cushion (ramp_cushion_m). Public so the lost-race pre-contain can
+# stand where RUSH_D1 is going to want it: two different formulas leave the
+# declining chaser planted somewhere the gap defender has to correct off the
+# moment possession flips. The rungs are deliberately excluded — a NEUTRAL
+# chaser has no rush posture to read yet.
 static func ladder_gap_m(threat_pos: Vector3, own_goal_dir: float,
-		stick: float, closing: float) -> float:
-	return (_ladder_sticks(threat_pos, own_goal_dir) + _pace_sticks(closing)) \
-			* maxf(stick, 0.5)
+		stick: float, cushion_m: float) -> float:
+	return _with_cushion(_ladder_sticks(threat_pos, own_goal_dir) \
+			* maxf(stick, 0.5), cushion_m, threat_pos, own_goal_dir)
+
+
+# The cushion deepens the stand only as far as the house gate: it is the price
+# of a retreat race that finishes there (ramp_cushion_m), so it never pushes a
+# stand past it. The ladder alone still applies inside, where it is the in-zone
+# "on him" gap.
+static func _with_cushion(ladder_m: float, cushion_m: float,
+		threat_pos: Vector3, own_goal_dir: float) -> float:
+	var dz: float = own_goal_dir * GameRules.GOAL_LINE_Z - threat_pos.z
+	var ice_to_gate: float = sqrt(threat_pos.x * threat_pos.x + dz * dz) \
+			- AIZoneCoverage.HOUSE_TOP_DEPTH_M
+	return maxf(ladder_m, minf(ladder_m + cushion_m, ice_to_gate))
+
+
+# The ground the threat gains on this body while it builds to his speed, both
+# driving flat out down `ap.dir_net` from now (AIStrideRamp.head_start). Our
+# momentum the other way is braked out first, so a defender still drifting
+# up-ice from the attack owes that too.
+#
+# The race finishes at the HOUSE GATE (the top of the circles — AIRushRead's
+# finish line for the same race). Past it there is no ice left to build speed
+# in, and standing up is the in-zone ladder's job: so the horizon is his trip to
+# the gate, and the head start is never more than the ice he has left to it.
+# Without that bound a defender already home read a flying carrier as metres of
+# cushion to concede and was walked into his own crease; _with_cushion holds the
+# stand itself to the same line.
+#
+# This is the gap's honest pace term. The ladder describes two bodies already
+# travelling together; a standing defender against a carrier at 9 m/s concedes
+# ~5.5 m before he is one, which is more than the whole 3-stick ladder. Once he
+# rides the rush at its pace the cushion is nil and the ladder alone sets the
+# gap, so it cannot hold an O-zone gap at our own net the way pace-sizing did.
+#
+# Along the line only: lateral momentum has its own redirect cost, which this
+# does not price. `threat_peer` -1 (a loose puck) prices a league skater. Caps
+# carry no puck-carry speed cap, so a carrier is priced at his free top speed —
+# a slight over-read of the cushion, in the safe direction.
+static func ramp_cushion_m(ctx: RoleContext, ap: AICarrierApproach,
+		threat_peer: int) -> float:
+	var caps: AISkaterCaps = ctx.caps_by_peer.get(threat_peer) \
+			if threat_peer != -1 else null
+	var lead_vmax: float = caps.max_speed if caps != null \
+			else AIActionScoring.SKATER_REF_SPEED_M_S
+	var lead_accel: float = caps.max_accel if caps != null \
+			else AIActionScoring.SHED_ACCEL_DEFAULT_M_S2
+	var lead_v: float = ap.carrier_vel.x * ap.dir_net.x \
+			+ ap.carrier_vel.z * ap.dir_net.z
+	var self_v: float = ctx.self_velocity.x * ap.dir_net.x \
+			+ ctx.self_velocity.z * ap.dir_net.z
+	var ice_to_gate: float = ap.net_dist - AIZoneCoverage.HOUSE_TOP_DEPTH_M
+	if ice_to_gate <= 0.0:
+		return 0.0
+	var horizon: float = AIStrideRamp.time_to_cover(
+			maxf(lead_v, 0.0), ice_to_gate, lead_vmax, lead_accel)
+	return minf(AIStrideRamp.head_start(lead_v, lead_vmax, lead_accel,
+			self_v, ctx.self_max_speed, ctx.self_max_accel,
+			AIActionScoring.REVERSAL_BRAKE_DECEL_M_S2, horizon), ice_to_gate)
 
 
 # The gap ladder plus its modifiers, in metres.
 static func _gap_for(ctx: RoleContext, read: AIRushRead, carrier_pos: Vector3,
-		closing: float) -> float:
+		cushion_m: float) -> float:
 	var sticks: float = _ladder_sticks(carrier_pos, ctx.own_goal_dir)
 
 	# Numbers. EVEN_OR_UP is licence to challenge; DOWN_TWO_PLUS buys time for
@@ -217,10 +264,33 @@ static func _gap_for(ctx: RoleContext, read: AIRushRead, carrier_pos: Vector3,
 		sticks -= GAP_RUNG_STICKS
 
 	sticks = clampf(sticks, GAP_MIN_STICKS, GAP_MAX_STICKS)
-	return (sticks + _pace_sticks(closing)) * stick_m(ctx)
+	return _with_cushion(sticks * stick_m(ctx), cushion_m, carrier_pos,
+			ctx.own_goal_dir)
 
 
-# Is his speed advantage gone? Any of the three observable triggers.
+# Is his speed advantage gone?
+#
+# He is not coming at pace, AND he cannot build it past us: whatever he does
+# from here, he gains less than a stick on us before we are travelling at his
+# speed (`cushion_m`, ramp_cushion_m), so from one stick off him he never gets
+# outside our reach. His pace alone cannot answer this under the stride ramp: a
+# standing defender stepped up on a fresh receiver is beaten by the burst, and
+# one already backing off at that pace is not. The race alone cannot either: a
+# defender riding a full-speed rush has nothing to build, but the ladder's
+# cushion is there for the cut, not the burst.
+#
+# And when the retreat cannot hold a gap — by the time I am up to his speed he
+# has eaten all but a stick of the ice I own — retreating only decides where he
+# reaches me, and I would meet him turning. If I stand in his lane, his path runs
+# through my reach and meeting him now, skating at him, is the contest I can
+# still win: step up. Off his lane I keep retreating; a step-up across to him is
+# a second lost race, spent skating sideways while he builds speed.
+# (tests/unit/ai/test_nz_turnover_recovery.gd measures both halves.)
+#
+# The race only means something while he is coming at us. A carrier not
+# advancing on our net has no rush to beat us with — the ladder has no domain
+# (see AIRolePressure: the forechecker's F1, a D retrieving behind his own
+# line) — and he is attacked outright, as is one steered to the wall.
 #
 # Public because AIRolePressure asks the identical question. The two roles that
 # own a carrier already share the gap LADDER; they have to share the read that
@@ -228,26 +298,24 @@ static func _gap_for(ctx: RoleContext, read: AIRushRead, carrier_pos: Vector3,
 # and for the forechecking F1 (which dispatches into PRESSURE) the ladder never
 # applied in the first place. See AIRolePressure.decide.
 static func should_gap_up(ctx: RoleContext, read: AIRushRead,
-		carrier_pos: Vector3, closing: float) -> bool:
+		ap: AICarrierApproach, cushion_m: float) -> bool:
 	# Never step up into a rush we're outnumbered against — that is the one case
 	# where being beaten is a goal rather than a scoring chance.
 	if read.numbers == AIRushRead.Numbers.DOWN_TWO_PLUS:
 		return false
-	if closing < GAP_UP_CLOSING_M_S:
+	if ap.closing < AIRushRead.REGROUP_CLOSING_M_S:
 		return true
 	# Steered to the wall: no outside left to give him.
-	if GameRules.INNER_HALF_WIDTH - absf(carrier_pos.x) < GAP_UP_WALL_M:
+	if GameRules.INNER_HALF_WIDTH - absf(ap.carrier_pos.x) < GAP_UP_WALL_M:
 		return true
-	# Fresh reception — he has the puck but not his legs yet. Requires REAL
-	# acceleration data: a missing entry defaults to zero, which would read as
-	# "he isn't accelerating" and fire the trigger on no evidence at all. An
-	# unknown carrier is treated as up to speed, which is the safe direction.
-	if read.carrier_peer != -1 and closing < GAP_UP_FRESH_RECEIVE_M_S \
-			and ctx.acceleration_by_peer.has(read.carrier_peer):
-		var acc: Vector3 = ctx.acceleration_by_peer[read.carrier_peer]
-		if acc.length_squared() < 1.0:
-			return true
-	return false
+	var stick: float = stick_m(ctx)
+	if ap.closing < GAP_UP_CLOSING_M_S and cushion_m < stick:
+		return true
+	var dx: float = ctx.self_pos.x - ap.carrier_pos.x
+	var dz: float = ctx.self_pos.z - ap.carrier_pos.z
+	var depth: float = dx * ap.dir_net.x + dz * ap.dir_net.z
+	var off_lane: float = absf(dx * ap.dir_net.z - dz * ap.dir_net.x)
+	return depth < cushion_m + stick and off_lane <= stick
 
 
 # ── Step-up discipline ───────────────────────────────────────────────────────

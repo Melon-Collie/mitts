@@ -343,8 +343,11 @@ func test_the_stand_is_the_gap_ladder() -> void:
 	# (§6) is a function of ICE REMAINING and reads ~1 stick in our own zone.
 	var ctx: Dictionary = _rush_ctx(true, 7.0)
 	var d: RoleDecision = AIRolePressure.decide(ctx["ctx"])
+	var ap := AICarrierApproach.new()
+	AIRoleHelpers.fill_approach(ctx["ctx"], ctx["carrier"], Vector3(0.0, 0.0, 7.0), ap)
 	var want: float = AIRoleRushD.ladder_gap_m(
-			ctx["carrier"], 1.0, ctx["ctx"].self_blade_reach, 7.0)
+			ctx["carrier"], 1.0, ctx["ctx"].self_blade_reach,
+			AIRoleRushD.ramp_cushion_m(ctx["ctx"], ap, 200))
 	assert_almost_eq(_stand_depth(d, ctx["carrier"]), want, 1.2,
 			"the cut-off distance is the gap ladder; wanted ~%.2f m" % want)
 

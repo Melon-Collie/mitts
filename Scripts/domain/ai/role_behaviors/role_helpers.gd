@@ -404,9 +404,8 @@ static func fill_approach(ctx: RoleContext, subject_pos: Vector3,
 #
 # FALSE when an opponent has already won it. `d` then gets the PRE-CONTAIN stand:
 # the closing verb applied to the puck — the gap ladder's distance goal-side of
-# it, angled off the middle, with the puck's own closing speed toward our net
-# standing in for a rush's pace. A puck still running at our end keeps the
-# cushion; a dead settle is met tight. The angle is what makes the handoff exact:
+# it, angled off the middle, its pace standing in for the rush's in the ramp
+# cushion: a puck still running at our end keeps it, a dead settle is met tight. The angle is what makes the handoff exact:
 # an unangled pre-contain is a spot RUSH_D1 must then correct off, in the
 # direction that concedes the middle.
 static func chase_puck(ctx: RoleContext, d: RoleDecision) -> bool:
@@ -426,7 +425,8 @@ static func chase_puck(ctx: RoleContext, d: RoleDecision) -> bool:
 		d.target_position = puck_pos   # on our own goal line — just go
 		return true
 	d.target_position = carrier_stand(ap, AIRoleRushD.ladder_gap_m(
-			puck_pos, ctx.own_goal_dir, ctx.self_blade_reach, ap.closing))
+			puck_pos, ctx.own_goal_dir, ctx.self_blade_reach,
+			AIRoleRushD.ramp_cushion_m(ctx, ap, -1)))
 	return false
 
 

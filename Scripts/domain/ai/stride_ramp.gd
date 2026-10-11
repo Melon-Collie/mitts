@@ -9,6 +9,10 @@ class_name AIStrideRamp
 # over a 0→top ramp. Measured (tests/unit/ai/test_time_to_arrive_calibration.gd).
 const EFFICIENCY: float = 1.0
 
+# Samples over the head-start horizon. The peak is where the two speeds meet, so
+# the grid's error there is second order: ~2 cm over a 4 s horizon.
+const HEAD_START_SAMPLES: int = 24
+
 
 # `accel_m_s2` is the skater's standing-start push; EFFICIENCY nets out
 # the glide losses. time_to_cover is distance → time, distance_in its inverse;
@@ -46,6 +50,41 @@ static func distance_to_speed(speed: float, accel_m_s2: float) -> float:
 	if v <= knee:
 		return v * v / (2.0 * a)
 	return knee * knee / (2.0 * a) + (v * v * v - knee * knee * knee) / (3.0 * a * knee)
+
+
+# The most ground a skater starting along a line at `lead_v0` gains on one
+# starting at `chase_v0`, both driving flat out along it from now, within
+# `horizon_s`. A negative start is momentum the wrong way, braked out at
+# `brake_m_s2` before the stride begins. Peaks where the chaser matches the
+# lead's speed; the horizon bounds a lead the chaser never matches.
+static func head_start(lead_v0: float, lead_vmax: float, lead_accel: float,
+		chase_v0: float, chase_vmax: float, chase_accel: float,
+		brake_m_s2: float, horizon_s: float) -> float:
+	if horizon_s <= 0.0:
+		return 0.0
+	var best: float = 0.0
+	var step: float = horizon_s / float(HEAD_START_SAMPLES)
+	for i: int in range(1, HEAD_START_SAMPLES + 1):
+		var t: float = step * float(i)
+		var gained: float = signed_distance_in(lead_v0, t, lead_vmax,
+				lead_accel, brake_m_s2) - signed_distance_in(
+				chase_v0, t, chase_vmax, chase_accel, brake_m_s2)
+		best = maxf(best, gained)
+	return best
+
+
+# distance_in that also takes a start against the line (`v0 < 0`): that
+# momentum brakes out at `brake_m_s2`, losing ground, then the ramp starts from
+# rest. Signed: ground lost is negative.
+static func signed_distance_in(v0: float, time: float, vmax: float,
+		accel_m_s2: float, brake_m_s2: float) -> float:
+	if v0 >= 0.0:
+		return distance_in(v0, time, vmax, accel_m_s2)
+	var t_brake: float = -v0 / maxf(brake_m_s2, 0.001)
+	if time <= t_brake:
+		return v0 * time + 0.5 * brake_m_s2 * time * time
+	return -v0 * v0 / (2.0 * maxf(brake_m_s2, 0.001)) \
+			+ distance_in(0.0, time - t_brake, vmax, accel_m_s2)
 
 
 static func distance_in(v0: float, time: float, vmax: float,
