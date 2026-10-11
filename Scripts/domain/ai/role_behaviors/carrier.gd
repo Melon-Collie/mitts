@@ -3636,7 +3636,7 @@ func _receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 		return 0.0
 	var reached: Vector3 = AICarrySpace.carry_strip_point(
 			receiver_spot, target, reach_time,
-			_scratch_opponents, _scratch_opponent_vels, _scratch_opponent_caps, true)
+			_scratch_opponents, _scratch_opponent_vels, _scratch_opponent_caps, true, true)
 	var t: float = reach_time if reached == target \
 			else AIActionScoring.time_to_arrive(
 					receiver_spot, reached, receiver_vel, recv_speed, recv_accel)

@@ -692,6 +692,34 @@ func test_carrier_whose_puck_has_entered_never_drops_it_back_out() -> void:
 			"before the zone is taken the trailer is a legal receiver")
 
 
+# ─── drive-in: a clear drive is credited all the way ────────────────────────
+
+func test_a_defender_who_never_covers_the_drive_costs_it_nothing() -> void:
+	# Carrier at speed up the wall toward the line, the defender retreating ahead.
+	# At 5 m and at 8 m he never gets a stick on the drive, so the drive-in (the
+	# shot the carrier skates into) must be the same: the full drive to the net,
+	# not a drive stopped halfway because halfway was the closer sample.
+	var v := Vector3(0, 0, -7.0)
+	var self_pos := Vector3(-8.0, 0, -4.5)
+	var drive: Array[float] = []
+	for gap: float in [5.0, 8.0]:
+		var skaters: Array = [
+				[1, TEAM_ID, self_pos, false, v],
+				[3, 1, Vector3(-7.5, 0, self_pos.z - 1.1 - gap), false, Vector3(0, 0, -6.0)],
+				[4, 1, Vector3(3.0, 0, self_pos.z - 9.0), false, Vector3(0, 0, -5.0)],
+		]
+		var ctx: RoleContext = _make_ctx(self_pos, skaters)
+		ctx.self_velocity = v
+		var c := AIRoleCarrier.new()
+		c.decide(ctx)
+		drive.append(c._receiver_drive_in_value(ctx, self_pos,
+				AIActionScoring.WRISTER_SHOT_SPEED_M_S, null, v))
+	assert_gt(drive[1], 0.0, "precondition: the drive is worth something")
+	assert_almost_eq(drive[0], drive[1], 0.005,
+			"a defender 5 m ahead who never covers the drive costs it nothing (%.3f vs %.3f)"
+			% [drive[0], drive[1]])
+
+
 # ─── O-zone shot selection: don't fire the long shot on entry ────────────────
 
 func test_carrier_entering_ozone_drives_the_slot_over_a_long_shot() -> void:
@@ -1155,20 +1183,24 @@ func test_staggered_carrier_holds_instead_of_firing() -> void:
 
 # ─── settle doubt: a fresh carrier's bar for giving the puck up ──────────────
 
-# The same pressured breakout, with the outlet standing in ice of two different
-# qualities. Both are legal passes that fire on tick one with no doubt; the
-# strong one is worth ~5.7x PASS_MIN_VALUE, the weak one ~1.7x.
+# The same pressured breakout, with the outlet in two different situations. Both
+# are legal passes that fire on tick one with no doubt; the strong one is worth
+# ~8x PASS_MIN_VALUE, the weak one ~1.9x. The weak outlet is still sliding into
+# the far corner, so his drive up the wall has to brake that out first.
 func _settle_skaters(self_pos: Vector3, outlet: Vector3) -> Array:
+	var outlet_vel: Vector3 = _MARGINAL_OUTLET_VEL if outlet == _MARGINAL_OUTLET \
+			else Vector3.ZERO
 	return [
 			[1, TEAM_ID, self_pos],
-			[2, TEAM_ID, outlet],
+			[2, TEAM_ID, outlet, false, outlet_vel],
 			[3, 1, Vector3(1.5, 0, 18.0)],        # forechecker
 			[4, 1, Vector3(3.0, 0, 17.5)],        # forechecker
 	]
 
 
 const _STRONG_OUTLET := Vector3(11, 0, 11)    # open, up the strong wall
-const _MARGINAL_OUTLET := Vector3(13, 0, 24)  # pinned deep in the far corner
+const _MARGINAL_OUTLET := Vector3(13, 0, 23)  # deep in the far corner
+const _MARGINAL_OUTLET_VEL := Vector3(0, 0, 6.0)   # …and still sliding into it
 
 
 func _settle_ctx(self_pos: Vector3, outlet: Vector3) -> RoleContext:
