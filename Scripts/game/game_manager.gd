@@ -5275,6 +5275,12 @@ func tutorial_give_puck(record: PlayerRecord) -> void:
 	puck_controller.apply_scripted_grant(record.skater)
 
 
+# Tutorial-only: park the puck loose and at rest at `pos` this frame.
+func tutorial_place_puck(pos: Vector3) -> void:
+	if puck_controller != null:
+		puck_controller.stage_scripted(pos)
+
+
 # Spawn an AI-controlled bot in scripted/puppet mode for tutorial
 # demonstrations — an opponent on team 1 (default) or a teammate on team 0
 # for the passing drills. The bot uses the same spawn path as normal bots (so

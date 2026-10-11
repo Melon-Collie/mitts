@@ -714,7 +714,7 @@ func _begin_step(index: int) -> void:
 		STEP_SKATE, STEP_STANCE:
 			# Open ice, puck stashed out of the way.
 			_local_controller.teleport_to(Vector3(0.0, 1.0, 5.0))
-			_place_puck(Vector3(100.0, _ICE_Y, 100.0))  # out of the way
+			GameManager.tutorial_place_puck(Vector3(100.0, _ICE_Y, 100.0))  # out of the way
 
 		STEP_BRAKE:
 			pass  # player is already on the ice from the stance step
@@ -723,7 +723,7 @@ func _begin_step(index: int) -> void:
 			# Puck dropped just ahead for a natural pickup; crossings are then
 			# counted from the blade's side-to-side travel while carrying.
 			_local_controller.teleport_to(Vector3(0.0, 1.0, 2.0), Vector2(0.0, -1.0))
-			_place_puck(Vector3(0.0, _ICE_Y, 0.5))
+			GameManager.tutorial_place_puck(Vector3(0.0, _ICE_Y, 0.5))
 			_update_stickhandle_objective()
 
 		STEP_DEFLECT, STEP_BLADE_LIFT:
@@ -743,7 +743,7 @@ func _begin_step(index: int) -> void:
 
 		STEP_DROP_PUCK:
 			_local_controller.teleport_to(Vector3(0.0, 1.0, 2.0), Vector2(0.0, -1.0))
-			_place_puck(Vector3(0.0, _ICE_Y, 0.5))
+			GameManager.tutorial_place_puck(Vector3(0.0, _ICE_Y, 0.5))
 			_on_nudge_callable = func(_velocity: Vector3) -> void:
 				if _current_step_id() == STEP_DROP_PUCK:
 					_drop_seen = true
@@ -822,10 +822,7 @@ func _begin_step(index: int) -> void:
 			_puck.puck_stripped.connect(_on_stickcheck_callable)
 
 		STEP_BODY_CHECK:
-			_place_puck(Vector3(100.0, _ICE_Y, 100.0))
-			# The puck is parked far off-rink for this step; the cooldown keeps the
-			# just-dropped skater from re-collecting it before the body-check rep starts.
-			_puck.set_skater_cooldown(_skater, 0.5)
+			GameManager.tutorial_place_puck(Vector3(100.0, _ICE_Y, 100.0))
 			# Two hits from different approach lines (_BODY_CHECK_SPOTS).
 			_update_rep_objective()
 			_stage_rep()
@@ -837,7 +834,7 @@ func _begin_step(index: int) -> void:
 			# Place player deep in offensive zone (past far blue line, -Z direction)
 			_local_controller.teleport_to(Vector3(0.0, 1.0, -12.0))
 			# Puck in neutral zone — player is immediately offside
-			_place_puck(Vector3(0.0, _ICE_Y, 0.0))
+			GameManager.tutorial_place_puck(Vector3(0.0, _ICE_Y, 0.0))
 
 		STEP_SHOOT_WRIST, STEP_SHOOT_SLAP:
 			# Open net, puck on the stick in the slot. Type-gated completion
@@ -1016,7 +1013,7 @@ func _on_skip() -> void:
 	if step_id == STEP_SHOT_BLOCK or step_id == STEP_DEFLECT \
 			or step_id == STEP_BLADE_LIFT or step_id == STEP_RECEIVE \
 			or step_id == STEP_ONE_TIMER:
-		_place_puck(Vector3(100.0, _ICE_Y, 100.0))  # clear the in-flight puck
+		GameManager.tutorial_place_puck(Vector3(100.0, _ICE_Y, 100.0))  # clear the in-flight puck
 	if _step_uses_puppet(step_id):
 		_free_puppet()
 	_complete_step()
@@ -1324,16 +1321,6 @@ func _restage_one_timer_when_safe() -> void:
 
 
 # ── Staging helpers ───────────────────────────────────────────────────────────
-
-# Places the puck at a position with zero velocity.
-# Does NOT use Puck.reset() (which schedules a deferred reset via _pending_reset;
-# the tutorial needs the position to land immediately).
-func _place_puck(pos: Vector3) -> void:
-	if _puck.carrier != null:
-		_puck.drop()
-	_puck.set_puck_position(pos)
-	_puck.linear_velocity = Vector3.ZERO
-
 
 # Fires the puck the feeder bot is holding at the player's CURRENT position
 # (deflect / blade-lift / shot-block / one-timer / receive feeds). The puck
@@ -1872,11 +1859,8 @@ func _stage_puck_for_player() -> void:
 	_puck.remove_skater_cooldown(_skater)
 	_shot_live = false
 	_pass_live = false
-	if _puck.carrier != null:
-		_puck.drop()
-	_puck.set_puck_position(Vector3(_skater.global_position.x, _ICE_Y,
+	GameManager.tutorial_place_puck(Vector3(_skater.global_position.x, _ICE_Y,
 			_skater.global_position.z - _STAGE_PUCK_AHEAD))
-	_puck.linear_velocity = Vector3.ZERO
 
 
 # Clears all shooting-drill state: targets, the wall, the tutorial goalie, the

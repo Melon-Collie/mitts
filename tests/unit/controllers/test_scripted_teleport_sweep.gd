@@ -1,11 +1,13 @@
 extends GutTest
 
-# A scripted grant (the tutorial's tutorial_give_puck) teleports the puck onto a
-# carrier who may be across the rink. The host's swept interaction tests read the
-# puck's travel since last tick, so a grant that leaves the sweep origin behind
-# has the next tick sweep the whole jump — and an opposing blade at the far end
-# strips the puck straight back off. This drives the real present-time detection
-# (PuckController._check_interactions) with the puck starting on that blade.
+# The tutorial teleports the puck two ways: a grant onto a carrier who may be
+# across the rink (tutorial_give_puck), and parking it loose somewhere
+# (tutorial_place_puck). The host's swept interaction tests read the puck's travel
+# since last tick, so a teleport that leaves the sweep origin behind has the next
+# tick sweep the whole jump — an opposing blade at the far end strips a grant
+# straight back off, and any blade there collects a parked puck. This drives the
+# real present-time detection (PuckController._check_interactions) with the puck
+# starting on that blade.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
@@ -70,3 +72,28 @@ func test_a_scripted_grant_lands_the_puck_on_the_blade() -> void:
 	_pc.apply_scripted_grant(_receiver)
 	assert_eq(_puck.get_puck_position(), _puck.pinned_position(),
 			"the puck should land on the new carrier's blade in the same call")
+
+
+# Far off-rink, where the tutorial parks the puck between steps.
+const _PARKED: Vector3 = Vector3(100.0, 0.05, 100.0)
+
+
+func test_a_bare_park_is_collected_along_its_jump() -> void:
+	# The control for the park, same purpose as the grant's: the puck lands a
+	# hundred metres from anyone, so only the swept jump can reach the bystander.
+	_puck.stage_at(_PARKED)
+	_pc._check_interactions()
+	assert_eq(_puck.carrier, _bystander, "sweeping the jump should hand the puck to the bystander's blade")
+
+
+func test_a_scripted_park_stays_parked() -> void:
+	_pc.stage_scripted(_PARKED)
+	_pc._check_interactions()
+	assert_null(_puck.carrier, "a parked puck must not be collected by blades along the jump")
+	assert_eq(_puck.get_puck_position(), _PARKED, "the puck should land where it was parked")
+
+
+func test_a_scripted_park_drops_the_carrier() -> void:
+	_pc.apply_scripted_grant(_receiver)
+	_pc.stage_scripted(_PARKED)
+	assert_null(_puck.carrier, "parking takes the puck off whoever held it")

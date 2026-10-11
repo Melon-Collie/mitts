@@ -50,7 +50,8 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +3: the wrister wind-up side reads the trailer's relative motion over the
 	# charge (#740), not just where he stands at the commit.
 	"res://Scripts/ai/skater_agent_state_machine.gd": 6072,
-	"res://Scripts/game/game_manager.gd": 5597,
+	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
+	"res://Scripts/game/game_manager.gd": 5603,
 	"res://Scripts/domain/ai/action_scoring.gd": 4458,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
@@ -67,11 +68,12 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/controllers/skater_controller.gd": 3341,
 	"res://Scripts/actors/skater.gd": 2712,
 	"res://Scripts/networking/network_manager.gd": 2824,
-	"res://Scripts/game/tutorial_manager.gd": 2101,
+	"res://Scripts/game/tutorial_manager.gd": 2073,
 	"res://Scripts/controllers/skater_ik_coordinator.gd": 938,
-	# +12: apply_scripted_grant — the tutorial's teleport grant restarts the
-	# swept interaction tests at the new blade instead of sweeping the jump.
-	"res://Scripts/controllers/puck_controller.gd": 1532,
+	# +21: apply_scripted_grant / stage_scripted — the tutorial's teleports
+	# restart the swept interaction tests where the puck lands instead of
+	# sweeping the jump.
+	"res://Scripts/controllers/puck_controller.gd": 1541,
 	"res://Scripts/actors/hockey_rink.gd": 1472,
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 1436,
 	"res://Scripts/game/player_prefs.gd": 1390,
@@ -100,7 +102,7 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/networking/network_manager.gd": 200,
 	"res://Scripts/actors/skater.gd": 142,
 	"res://Scripts/domain/ai/action_scoring.gd": 68,
-	"res://Scripts/game/game_manager.gd": 61,
+	"res://Scripts/game/game_manager.gd": 62,
 	"res://Scripts/domain/state/player_attributes.gd": 53,
 	"res://Scripts/networking/network_telemetry.gd": 53,
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 48,
@@ -109,7 +111,7 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/domain/state/game_state_machine.gd": 38,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 36,
 	"res://Scripts/actors/skater_mesh_builder.gd": 29,
-	"res://Scripts/controllers/puck_controller.gd": 28,
+	"res://Scripts/controllers/puck_controller.gd": 29,
 	"res://Scripts/game/shot_on_goal_tracker.gd": 26,
 	"res://Scripts/actors/goalie.gd": 26,
 }
