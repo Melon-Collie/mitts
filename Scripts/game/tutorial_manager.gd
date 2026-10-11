@@ -1145,7 +1145,8 @@ func _process(delta: float) -> void:
 		STEP_STICKHANDLE:
 			_stickhandle_tick()
 
-		STEP_DEFLECT, STEP_BLADE_LIFT:
+		STEP_DEFLECT, STEP_BLADE_LIFT, STEP_SHOT_BLOCK:
+			# The block itself completes via the puck_body_blocked handler.
 			_feed_watch_tick(delta)
 
 		STEP_DROP_PUCK:
@@ -1158,27 +1159,21 @@ func _process(delta: float) -> void:
 		STEP_STICK_LIFT:
 			# If the player knocked the puck loose without a lift (a stray
 			# poke), give it back to the puppet so they can try the lift again
-			# — as soon as it's dead or clearly out of the contest, not once it
-			# fully settles (a poked-away puck glides for many seconds). A
-			# successful lift completes the step in the strip handler, after
-			# which _complete_flash_timer short-circuits _process.
-			if _puck.carrier == null and _puppet_record != null \
-					and is_instance_valid(_puppet_record.skater):
-				var puck_v: float = _puck.get_puck_velocity().length()
-				var puck_dist: float = _puck.get_puck_position().distance_to(
-						_puppet_record.skater.global_position)
-				if puck_v < _FEED_DEAD_SPEED or puck_dist > _REPIN_GONE_DISTANCE:
+			# — as soon as the player collects it, it's dead, or it's clearly
+			# out of the contest, not once it fully settles (a poked-away puck
+			# glides for many seconds). A successful lift completes the step in
+			# the strip handler, after which _complete_flash_timer
+			# short-circuits _process.
+			if _puppet_record != null and is_instance_valid(_puppet_record.skater):
+				if _puck.carrier == _skater:
+					_hud.set_alert(_fmt("You took it without a lift. Keep loft on HIGH and hold {stick_lift} under their stick to pop it free."))
 					GameManager.tutorial_give_puck(_puppet_record)
-
-		STEP_SHOT_BLOCK:
-			# Re-fire if the shot is decisively over without a block — passed
-			# the player, died short, or got blocked/deflected away at pace.
-			# The puck reloads onto the shooter's stick for the standard
-			# between-attempts beat; the timer's own gate stops this branch
-			# retriggering during the wait. The block itself completes via
-			# the puck_body_blocked handler.
-			if _prefire_timer < 0.0 and _puck.carrier == null and _feed_missed(delta):
-				_restage_feed_on_bot()
+				elif _puck.carrier == null:
+					var puck_v: float = _puck.get_puck_velocity().length()
+					var puck_dist: float = _puck.get_puck_position().distance_to(
+							_puppet_record.skater.global_position)
+					if puck_v < _FEED_DEAD_SPEED or puck_dist > _REPIN_GONE_DISTANCE:
+						GameManager.tutorial_give_puck(_puppet_record)
 
 		STEP_ONE_TIMER:
 			# Re-fire if the cross-ice pass is decisively over (hit boards,
@@ -1270,16 +1265,21 @@ func _feed_missed(delta: float) -> bool:
 	return to_puck.length() > _FEED_GONE_DISTANCE and vel.dot(to_puck) > 0.0
 
 
-# Watch loop for the deflect / blade-lift feeds: re-fire when the feed is
-# decisively missed, and take back a puck the player caught by mistake (the
-# corrective moment — these steps are about NOT receiving).
+# Watch loop for the deflect / blade-lift / shot-block feeds: re-fire when the
+# feed is decisively missed, and take back a puck the player caught by mistake
+# (the corrective moment — these steps are about NOT receiving). The take-back
+# matters most for the shot block: a carrier can't enter the blocking stance,
+# so a caught shot would otherwise strand the step.
 func _feed_watch_tick(delta: float) -> void:
 	if _puck.carrier == _skater:
-		# Caught it instead of deflecting. Take it back, explain, re-feed.
-		if _current_step_id() == STEP_DEFLECT:
-			_hud.set_alert(_fmt("You caught that one — hold {stick_lift} before it arrives to deflect instead."))
-		else:
-			_hud.set_alert(_fmt("It got under your blade. Keep loft on HIGH and {stick_lift} held — meet the lob in the air."))
+		# Caught the feed instead of playing it. Take it back, explain, re-feed.
+		match _current_step_id():
+			STEP_DEFLECT:
+				_hud.set_alert(_fmt("You caught that one — hold {stick_lift} before it arrives to deflect instead."))
+			STEP_BLADE_LIFT:
+				_hud.set_alert(_fmt("It got under your blade. Keep loft on HIGH and {stick_lift} held — meet the lob in the air."))
+			STEP_SHOT_BLOCK:
+				_hud.set_alert(_fmt("You caught that one — hold {block} before the shot arrives so it hits your body, not your stick."))
 		_restage_feed_on_bot()
 		return
 	if _prefire_timer < 0.0 and _puck.carrier == null and _feed_missed(delta):

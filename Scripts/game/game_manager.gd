@@ -5272,7 +5272,7 @@ func tutorial_give_puck(record: PlayerRecord) -> void:
 		return
 	if puck.carrier != null:
 		puck.drop()
-	puck_controller.apply_lag_comp_pickup(record.skater)
+	puck_controller.apply_scripted_grant(record.skater)
 
 
 # Spawn an AI-controlled bot in scripted/puppet mode for tutorial

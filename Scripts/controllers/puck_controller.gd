@@ -388,6 +388,18 @@ func apply_lag_comp_pickup(skater: Skater) -> void:
 	_on_puck_picked_up(skater)
 
 
+# Host-only scripted grant (tutorial staging): the pickup path above, then the
+# puck lands on the new blade at once and next tick's sweep starts there. The
+# grant is a teleport, not travel — swept, the jump hits whatever lies along it,
+# and an opposing blade on that line reads as a poke that strips it straight back.
+func apply_scripted_grant(skater: Skater) -> void:
+	apply_lag_comp_pickup(skater)
+	if puck.carrier != skater:
+		return
+	puck.set_puck_position(puck.pinned_position())
+	_prev_puck_pos = puck.get_puck_position()
+
+
 # Lag-comp counterpart to apply_lag_comp_pickup for the deflect verdict: the
 # claim's rewound state ran PuckReceptionRules.should_receive and decided the
 # contact should redirect the puck, not corral it. Same idempotency philosophy —

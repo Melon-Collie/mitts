@@ -69,7 +69,9 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/networking/network_manager.gd": 2824,
 	"res://Scripts/game/tutorial_manager.gd": 2101,
 	"res://Scripts/controllers/skater_ik_coordinator.gd": 938,
-	"res://Scripts/controllers/puck_controller.gd": 1520,
+	# +12: apply_scripted_grant — the tutorial's teleport grant restarts the
+	# swept interaction tests at the new blade instead of sweeping the jump.
+	"res://Scripts/controllers/puck_controller.gd": 1532,
 	"res://Scripts/actors/hockey_rink.gd": 1472,
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 1436,
 	"res://Scripts/game/player_prefs.gd": 1390,
@@ -107,7 +109,7 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/domain/state/game_state_machine.gd": 38,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 36,
 	"res://Scripts/actors/skater_mesh_builder.gd": 29,
-	"res://Scripts/controllers/puck_controller.gd": 27,
+	"res://Scripts/controllers/puck_controller.gd": 28,
 	"res://Scripts/game/shot_on_goal_tracker.gd": 26,
 	"res://Scripts/actors/goalie.gd": 26,
 }
