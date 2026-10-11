@@ -172,6 +172,13 @@ static func must_commit_now(s: Situation) -> bool:
 # away, the exact absurdity `must_commit_now` exists to prevent on the way down.
 # Coaching consensus agrees from the other side: a rebound beyond a couple of
 # stick lengths is answered by recovering to the feet, not by holding the ice.
+#
+# The caller builds THIS situation on the contest race he can see — each
+# opponent skating from the velocity he has (`contest_time_seen`) — not on the
+# instant-full-speed worst case. Over-stating the threat is right for going down,
+# where a false alarm costs nothing; here it costs `stand_up_time`, and it holds
+# him under any opponent within a stick plus 0.35 s of top speed of a loose puck,
+# moving or not, for as long as he stands there.
 static func should_hold_seal(s: Situation, stand_up_time: float) -> bool:
 	if s.lateral_race_lost:
 		return true
@@ -202,3 +209,12 @@ static func contest_time(dist: float, stick_reach: float,
 	if close_speed <= 0.001:
 		return INF
 	return gap / close_speed
+
+
+# `contest_time` run on what the goalie can see: the body skates from
+# `speed_toward` (its velocity along the line to the puck) rather than starting
+# at top speed.
+static func contest_time_seen(dist: float, stick_reach: float, speed_toward: float,
+		max_speed: float, accel: float) -> float:
+	return GoalieBehaviorRules.travel_time_from_speed(
+			dist - stick_reach, speed_toward, max_speed, accel)

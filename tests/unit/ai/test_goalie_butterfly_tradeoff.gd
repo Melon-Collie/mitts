@@ -31,7 +31,7 @@ extends GutTest
 # 0.50 to 1.55 m, with NO arm-length constraint and NO shoulder anchor. The hand
 # is placed in goalie-ROOT-local space and the root does not drop when he does,
 # so y = 1.55 is reachable from the butterfly exactly as it is from the feet.
-# `_apply_elevated_shot_reaction` is called identically from STANDING, READY,
+# `_apply_shot_hand_reaction` is called identically from STANDING, READY,
 # BUTTERFLY, COILING and SLIDING.
 #
 # The ONLY cost of being down is that the resting glove sits lower (0.90 m

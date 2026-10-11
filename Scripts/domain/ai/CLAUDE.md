@@ -346,6 +346,32 @@ The house-gate floor that was tried first is gone: with the ladder the defender
 settles at the tops of the circles anyway, as a consequence of gapping rather than
 as a clamp, and the floor only widened the gap past what the ladder asked for.
 
+### Pace enters through the stride ramp, and only there
+
+The ladder is the gap between two bodies already travelling together. Under the
+stride ramp a defender who is not yet one concedes ground while he builds speed —
+a standing body against a 9 m/s carrier gives up ~5.5 m, more than the whole
+3-stick ladder. That head start is `AIRoleRushD.ramp_cushion_m`
+(`AIStrideRamp.head_start`: both drive flat out down the line from their current
+velocities, his up-ice momentum braked out first), and every ladder reader adds
+it. It is nil for a defender riding the rush at its pace, which is why it cannot
+bring back the sag a pace-sized gap produced.
+
+The race finishes at the HOUSE GATE, `AIRushRead`'s finish line for the same
+race: the horizon is his trip there, the head start is capped at the ice he has
+left to it, and the cushion never pushes a stand past it (`_with_cushion`). An
+uncapped cushion walked a defender already home into his own crease
+(`test_defensive_routing`).
+
+The gap-up reads the same race. "His speed advantage is gone" means he is not
+coming at pace AND cannot build it past us (cushion under a stick); pace alone
+stepped a standing defender up on a fresh receiver who then burst past him. And
+when the retreat cannot hold a gap — the cushion eats all but a stick of the ice
+he owns — a defender IN the carrier's lane steps up to meet him rather than be
+reached while turning; off the lane he keeps retreating.
+`tests/unit/ai/test_nz_turnover_recovery.gd` scores this against the best a body
+could do: a straight-line retreat on the same ramp.
+
 ### The ladder has a domain: the carrier has to be coming at us
 
 It measures ice remaining before he reaches our blue line, which is a RETREAT
@@ -358,9 +384,10 @@ poke jab reaches ~1.9 m, leaving a committed body check as the only engagement,
 which the easiest tier disables outright.
 
 The domain read is the shared `AIRoleRushD.should_gap_up`, not a zone test. Its
-"closing < 3 m/s" trigger is satisfied by construction by a D retrieving behind
-his own goal line, so the two carrier-owning roles agree at the TRANS_DEFENSE →
-DZONE handoff exactly as they already do on the ladder itself.
+"not advancing on our net" clause (`AIRushRead.REGROUP_CLOSING_M_S`) is satisfied
+by construction by a D retrieving behind his own goal line, so the two
+carrier-owning roles agree at the TRANS_DEFENSE → DZONE handoff exactly as they
+already do on the ladder itself.
 
 ## Determinism
 

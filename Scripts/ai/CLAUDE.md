@@ -96,3 +96,15 @@ rim squirts through.
 stick-reach toward our own net so the approach arrives on the inside lane and the
 carrier's only escape is outside; a straight-line chase lets them cut to the
 middle. Loose pucks get the raw intercept — there is no carrier to angle off.
+
+## Who may play the puck
+
+"Can this skater legally touch the puck right now?" is
+`WorldSnapshot.is_out_of_play(peer_id)` — a ghost, or a skater owing an NHL
+delayed-offside tag-up (`tag_up_peers`, whose touch would whistle the play).
+Don't read `is_ghost` alone for it: under NHL nobody is ghosted for offside.
+The bot answer to being out of play is the tag-up override in
+`_state_off_puck`; a carrier with a teammate out of play holds the puck short
+of the blue line (`offside_brake` on the puck), since carrying it in is an
+immediate whistle. The coverage reads in `role_helpers.gd` still read
+`is_ghost` on purpose — an NHL offside skater is physically on the ice.

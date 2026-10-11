@@ -1253,6 +1253,21 @@ func test_travel_time_inverts_reachable_distance() -> void:
 	var d_long: float = GoalieBehaviorRules.reachable_lateral_distance(3.8, 14.0, t_long)
 	assert_almost_eq(GoalieBehaviorRules.travel_time_from_rest(d_long, 3.8, 14.0), t_long, 0.001)
 
+func test_travel_time_from_speed_prices_the_momentum_a_body_already_has() -> void:
+	# From rest it is the from-rest clock; already moving it is quicker; moving
+	# away it pays the stop first.
+	var rest: float = GoalieBehaviorRules.travel_time_from_rest(2.7, 10.0, 10.5)
+	assert_almost_eq(GoalieBehaviorRules.travel_time_from_speed(2.7, 0.0, 10.0, 10.5), rest, 1e-6)
+	assert_almost_eq(rest, sqrt(2.0 * 2.7 / 10.5), 1e-6, "inside the ramp: 1/2 a t^2")
+	# At top speed already: plain distance over speed.
+	assert_almost_eq(GoalieBehaviorRules.travel_time_from_speed(2.7, 10.0, 10.0, 10.5),
+			0.27, 1e-6)
+	var toward: float = GoalieBehaviorRules.travel_time_from_speed(2.7, 5.0, 10.0, 10.5)
+	assert_almost_eq(toward, (sqrt(25.0 + 2.0 * 10.5 * 2.7) - 5.0) / 10.5, 1e-6)
+	assert_lt(toward, rest)
+	var away: float = GoalieBehaviorRules.travel_time_from_speed(2.7, -3.0, 10.0, 10.5)
+	assert_gt(away, rest + 3.0 / 10.5, "moving away costs the stop, then the run back")
+
 func test_puck_play_race_needs_full_trip_plus_margin() -> void:
 	# t_play = 1.0 out + 0.25 beat + 1.0 back = 2.25 s; margin 0.9 → the
 	# sprinting opponent must be > 3.15 s away (34.7 m at 11 m/s).

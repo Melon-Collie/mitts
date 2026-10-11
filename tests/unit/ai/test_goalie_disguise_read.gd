@@ -239,7 +239,7 @@ func test_disguise_delta() -> void:
 	#
 	#    ── UPDATE: WRONG CORNER NOW CONVERTS TOO (2026-07) ─────────────────────
 #    It used to cost reach without converting, and the cause was not the arm's
-#    budget: _apply_elevated_shot_reaction OVERWROTE the read belief with the
+#    budget: _apply_shot_hand_reaction OVERWROTE the read belief with the
 #    live puck trajectory, so the hands went to the true intercept every tick
 #    while the legs used the belief. Lateral deception measured at exactly zero
 #    — telegraphed, step look-off and swept look-off gave identical goals AND

@@ -299,3 +299,7 @@ here whenever you bump, in the same format.
 #      bit 5 now carries stance_active (was sprint_active) and input flag bit
 #      [4] stance_held (was sprint_held); both now feed the forward prediction
 #      as the posture, with hit_commit. Replay FORMAT_VERSION 11.
+# v66: added notify_offside_state(peer_id, must_tag_up) RPC — the host tells
+#      every peer when an NHL-ruleset player starts or stops owing a tag-up, for
+#      the offside banner and teammate name plates (NHL never ghosts, so
+#      is_ghost could not carry it).

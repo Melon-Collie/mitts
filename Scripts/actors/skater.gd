@@ -635,6 +635,9 @@ var _faceoff_address: float = 0.0
 # resolved blade_up off the wire).
 var _forced_lift_timer: float = 0.0
 var is_ghost: bool = false
+# NHL delayed offside: this skater must tag up. Written by GameManager; the HUD
+# coordinator shows it on the name plate to the local player's teammates.
+var offside_marked: bool = false
 # True while this skater is knocked down by a hard body check (knockdown_timer > 0
 # on its controller). Set by SkaterController each tick; read by the puck pickup
 # election so a downed player can't magnet the puck, the same way is_ghost gates it.

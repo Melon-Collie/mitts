@@ -33,3 +33,41 @@ func test_power_phase_is_slower_than_constant_accel() -> void:
 func test_cruise_after_top_speed() -> void:
 	var t1: float = AIStrideRamp.time_to_cover(VMAX, VMAX * 2.0, VMAX, ACCEL)
 	assert_almost_eq(t1, 2.0, 1e-6, "already at top speed: pure cruise")
+
+
+func test_speed_is_the_rate_of_the_distance() -> void:
+	# speed_at and distance_in describe one ramp: the distance's finite
+	# difference is the speed, through the knee and the cap, and through a
+	# wrong-way start being braked out.
+	var h: float = 0.0005
+	for v0: float in [-4.0, -1.0, 0.0, 1.5, 2.6, 5.0, 9.0]:
+		for t: float in [0.05, 0.2, 0.6, 1.2, 2.5]:
+			var dd: float = (AIStrideRamp.signed_distance_in(v0, t + h, 10.0, 10.5, 9.0)
+					- AIStrideRamp.signed_distance_in(v0, t - h, 10.0, 10.5, 9.0)) / (2.0 * h)
+			assert_almost_eq(AIStrideRamp.signed_speed_at(v0, t, 10.0, 10.5, 9.0),
+					dd, 0.02, "v0=%.1f t=%.2f" % [v0, t])
+
+
+func test_head_start_matches_a_fine_sweep() -> void:
+	# The crossing search against brute force: the most ground gained over a
+	# 1 ms sweep of the horizon, on seeded starts — moving, standing, wrong-way,
+	# a faster chaser, a faster lead, different builds.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261011
+	for _i: int in 200:
+		var lv: float = rng.randf_range(-3.0, 10.0)
+		var cv: float = rng.randf_range(-6.0, 10.0)
+		var lmax: float = rng.randf_range(8.5, 10.8)
+		var cmax: float = rng.randf_range(8.5, 10.8)
+		var la: float = rng.randf_range(8.0, 12.0)
+		var ca: float = rng.randf_range(8.0, 12.0)
+		var hz: float = rng.randf_range(0.2, 4.0)
+		var brute: float = 0.0
+		var t: float = 0.0
+		while t <= hz:
+			brute = maxf(brute, AIStrideRamp.signed_distance_in(lv, t, lmax, la, 9.0)
+					- AIStrideRamp.signed_distance_in(cv, t, cmax, ca, 9.0))
+			t += 0.001
+		assert_almost_eq(AIStrideRamp.head_start(lv, lmax, la, cv, cmax, ca, 9.0, hz),
+				brute, 0.01, "lead %.2f/%.1f chase %.2f/%.1f horizon %.2f"
+						% [lv, lmax, cv, cmax, hz])

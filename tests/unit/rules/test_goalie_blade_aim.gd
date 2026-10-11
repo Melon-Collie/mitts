@@ -48,6 +48,27 @@ func test_active_blade_lands_on_the_puck_line() -> void:
 			"…and pointing AT the puck, not away from it")
 
 
+# Squared to an angled shooter he is TURNED, and the stick must aim in that
+# frame: turning the goalie and the puck together leaves every stick pose
+# exactly as it was. Read without the yaw, a puck 2 m out at 30 deg sat a metre
+# off to one side of where it was, and the blade aimed there.
+func test_turning_the_whole_scene_leaves_the_stick_pose_alone() -> void:
+	var puck_local := Vector3(-0.14, 0.0, -0.48)
+	for flag: String in ["blade_intent_active", "standing_sweep_active"]:
+		var straight := _standing_inputs(puck_local)
+		straight.set(flag, true)
+		var want: float = _builder().build(straight).blocker_rot.y
+		for yaw: float in [0.52, -0.7, PI + 0.4]:
+			var at := Vector3(3.0, 0.0, -20.0)
+			var turned := _standing_inputs(at + Basis(Vector3.UP, yaw) * puck_local)
+			turned.current_x = at.x
+			turned.goalie_z = at.z
+			turned.goalie_yaw = yaw
+			turned.set(flag, true)
+			assert_almost_eq(_builder().build(turned).blocker_rot.y, want, 0.01,
+					"%s, turned %.2f rad: the same stick pose" % [flag, yaw])
+
+
 func test_far_side_puck_clamps_at_the_intent_cap() -> void:
 	# A puck far out on the blocker side — the blade hangs toward the glove side
 	# of the hand — needs more yaw than the assembly allows: the solve saturates

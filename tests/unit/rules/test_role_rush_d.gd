@@ -99,6 +99,8 @@ func test_gap_tightens_as_the_carrier_approaches_our_blue_line() -> void:
 		var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, 16.0),
 				[[10, 1, c, vel]], 10,
 				AIRushRead.Numbers.DOWN_ONE)   # neutral rung: no tighten/loosen
+		# Travelling with the rush, so no ramp cushion: the ladder alone.
+		ctx.self_velocity = vel
 		var d: RoleDecision = AIRoleRushD.decide(ctx, AIRoleSlots.Slot.RUSH_D1)
 		gaps.append(_gap(d, c, vel))
 	assert_gt(gaps[0], gaps[1], "gap shrinks from their blue line to the red line")
@@ -109,24 +111,83 @@ func test_gap_tightens_as_the_carrier_approaches_our_blue_line() -> void:
 
 
 func test_pace_alone_cannot_produce_the_old_sag() -> void:
-	# Same spot on the ice, wildly different closing speeds. Pace is now a
-	# correction capped at half a stick, so it can no longer be the driver.
+	# Same spot on the ice, wildly different closing speeds, and the defender
+	# already travelling with each rush. Pace only buys cushion through the
+	# stride ramp, and a body riding the rush at its pace has nothing left to
+	# build — so the ladder alone sets the gap and pace cannot be the driver.
 	var carrier := Vector3(0.0, 0.0, 4.0)
+	var slow_v := Vector3(0.0, 0.0, 4.0)
+	var fast_v := Vector3(0.0, 0.0, 9.0)
 	var slow_ctx: RoleContext = _ctx(Vector3(0.0, 0.0, 16.0),
-			[[10, 1, carrier, Vector3(0.0, 0.0, 4.0)]], 10,
-			AIRushRead.Numbers.DOWN_ONE)
+			[[10, 1, carrier, slow_v]], 10, AIRushRead.Numbers.DOWN_ONE)
+	slow_ctx.self_velocity = slow_v
 	var fast_ctx: RoleContext = _ctx(Vector3(0.0, 0.0, 16.0),
-			[[10, 1, carrier, Vector3(0.0, 0.0, 9.0)]], 10,
-			AIRushRead.Numbers.DOWN_ONE)
+			[[10, 1, carrier, fast_v]], 10, AIRushRead.Numbers.DOWN_ONE)
+	fast_ctx.self_velocity = fast_v
 	var slow: float = _gap(
-			AIRoleRushD.decide(slow_ctx, AIRoleSlots.Slot.RUSH_D1), carrier,
-			Vector3(0.0, 0.0, 4.0))
+			AIRoleRushD.decide(slow_ctx, AIRoleSlots.Slot.RUSH_D1), carrier, slow_v)
 	var fast: float = _gap(
-			AIRoleRushD.decide(fast_ctx, AIRoleSlots.Slot.RUSH_D1), carrier,
-			Vector3(0.0, 0.0, 9.0))
-	assert_lt(absf(fast - slow), AIRoleRushD.PACE_CORRECTION_MAX_STICKS * STICK + 0.01,
-			"pace moves the gap by at most half a stick; slow=%.2f fast=%.2f"
+			AIRoleRushD.decide(fast_ctx, AIRoleSlots.Slot.RUSH_D1), carrier, fast_v)
+	assert_lt(absf(fast - slow), 0.5 * STICK,
+			"riding the rush, pace barely moves the gap; slow=%.2f fast=%.2f"
 			% [slow, fast])
+
+
+func test_a_standing_defender_gives_a_flying_carrier_the_ramp() -> void:
+	# The other half: the same carrier at 9 m/s against a defender standing
+	# still. He concedes the stride ramp's head start before he can travel with
+	# the rush, so the stand sits that much deeper than the riding one.
+	var carrier := Vector3(0.0, 0.0, 0.0)
+	var vel := Vector3(0.0, 0.0, 9.0)
+	var riding: RoleContext = _ctx(Vector3(0.0, 0.0, 16.0),
+			[[10, 1, carrier, vel]], 10, AIRushRead.Numbers.DOWN_ONE)
+	riding.self_velocity = vel
+	var standing: RoleContext = _ctx(Vector3(0.0, 0.0, 16.0),
+			[[10, 1, carrier, vel]], 10, AIRushRead.Numbers.DOWN_ONE)
+	var ice_to_gate: float = OUR_NET_Z - AIZoneCoverage.HOUSE_TOP_DEPTH_M
+	var ramp: float = minf(AIStrideRamp.head_start(9.0,
+			AIActionScoring.SKATER_REF_SPEED_M_S,
+			AIActionScoring.SHED_ACCEL_DEFAULT_M_S2, 0.0,
+			standing.self_max_speed, standing.self_max_accel,
+			AIActionScoring.REVERSAL_BRAKE_DECEL_M_S2,
+			AIStrideRamp.time_to_cover(9.0, ice_to_gate,
+					AIActionScoring.SKATER_REF_SPEED_M_S,
+					AIActionScoring.SHED_ACCEL_DEFAULT_M_S2)), ice_to_gate)
+	assert_gt(ramp, STICK, "a flat start against 9 m/s concedes real ice")
+	var deeper: float = \
+			_gap(AIRoleRushD.decide(standing, AIRoleSlots.Slot.RUSH_D1), carrier, vel) \
+			- _gap(AIRoleRushD.decide(riding, AIRoleSlots.Slot.RUSH_D1), carrier, vel)
+	assert_almost_eq(deeper, ramp, 0.3,
+			"the standing defender's stand is deeper by the ramp's head start")
+
+
+func test_momentum_up_ice_costs_more_cushion_than_standing() -> void:
+	# A defender still drifting up-ice from the attack has to brake that out
+	# before the stride can start — he owes more than one standing still.
+	var carrier := Vector3(0.0, 0.0, 0.0)
+	var vel := Vector3(0.0, 0.0, 6.0)
+	var standing: RoleContext = _ctx(Vector3(0.0, 0.0, 16.0),
+			[[10, 1, carrier, vel]], 10, AIRushRead.Numbers.DOWN_ONE)
+	var drifting: RoleContext = _ctx(Vector3(0.0, 0.0, 16.0),
+			[[10, 1, carrier, vel]], 10, AIRushRead.Numbers.DOWN_ONE)
+	drifting.self_velocity = Vector3(0.0, 0.0, -3.0)
+	var ap := AICarrierApproach.new()
+	AIRoleHelpers.fill_approach(standing, carrier, vel, ap)
+	assert_gt(AIRoleRushD.ramp_cushion_m(drifting, ap, 10),
+			AIRoleRushD.ramp_cushion_m(standing, ap, 10) + 1.0,
+			"up-ice momentum is ice the defender owes")
+
+
+func test_no_cushion_once_the_carrier_is_inside_the_house_gate() -> void:
+	# The race finishes at the top of the circles; inside it the in-zone ladder
+	# stands him up, however flat the defender is.
+	var carrier := Vector3(0.0, 0.0, OUR_NET_Z - AIZoneCoverage.HOUSE_TOP_DEPTH_M + 1.0)
+	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, OUR_NET_Z - 3.0),
+			[[10, 1, carrier, Vector3(0.0, 0.0, 9.0)]], 10)
+	var ap := AICarrierApproach.new()
+	AIRoleHelpers.fill_approach(ctx, carrier, Vector3(0.0, 0.0, 9.0), ap)
+	assert_eq(AIRoleRushD.ramp_cushion_m(ctx, ap, 10), 0.0,
+			"no retreat race is left inside the house gate")
 
 
 # ── Numbers ──────────────────────────────────────────────────────────────────

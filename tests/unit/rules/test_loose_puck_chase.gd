@@ -599,6 +599,17 @@ func test_a_ghosted_teammate_is_not_yielded_to() -> void:
 			"a ghosted teammate can't play the puck, so he isn't first to it")
 
 
+func test_a_teammate_owing_a_tag_up_is_not_yielded_to() -> void:
+	var puck := Vector3.ZERO
+	var states := {
+		100: _blade(Vector3(0, 0, 1.5), Vector3(0, 0, 0.6)),
+		101: _blade(Vector3(0, 0, -1.0), Vector3(0, 0, -0.1)),
+	}
+	assert_false(AILoosePuckChase.teammate_first_to_puck(
+			states, [100, 101], 100, states[100].blade_contact_world, puck, {101: true}),
+			"his touch would whistle a delayed offside, so he isn't first to it")
+
+
 func test_missing_blade_field_does_not_yield() -> void:
 	# blade_contact_world is host-only; an absent value must not be read as a
 	# blade parked at the origin (which would sit on a puck at the origin).
