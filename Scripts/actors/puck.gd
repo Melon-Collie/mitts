@@ -82,6 +82,14 @@ signal puck_hit_goal_body  # uncarried puck struck net panel or skirt (non-pipe 
 @export var poke_strip_max_speed: float = 9.0
 @export var poke_carrier_vel_blend: float = 0.5
 @export var poke_checker_cooldown: float = 0.1
+# Pinch hop for every stick-on-stick contest — pokes here, contested pickups via
+# PuckController (PuckCollisionRules.pinch_lift_speed). Closing speed in m/s: one
+# blade at max_blade_speed (10) into a still one barely lifts (~5 cm apex, the
+# blade plane); two committed stabs (13+) hit the cap, a ~13 cm hop that is
+# above the blade plane for ~0.25 s.
+var pinch_lift_threshold: float = 5.0
+var pinch_lift_gain: float = 0.2
+var pinch_lift_max_speed: float = 1.6
 # Delivered victim-impulse (BodyCheckRules.puck_strip_impulse — the REAL applied
 # knockback |Δv|, via SkaterCollisionRules.victim_kick) needed to knock the puck
 # off the carrier. Deliberately EQUAL to the full-check point on the stagger ladder
@@ -608,6 +616,12 @@ func apply_poke_check(checker_skater: Skater) -> void:
 			poke_strip_min_speed,
 			poke_strip_max_speed,
 			fallback_dir)
+	# The checker's PRE-sweep blade: a poke is detected on the swept segment, so
+	# the live blade may already be past the puck, flipping the squeeze line.
+	linear_velocity.y = _pinch_lift(checker_skater.blade_world_velocity,
+			ex_carrier.blade_world_velocity,
+			checker_skater.get_prev_blade_contact_global(),
+			ex_carrier.get_blade_contact_global())
 	_set_cooldown(ex_carrier, reattach_cooldown)
 	_set_cooldown(checker_skater, poke_checker_cooldown)
 	puck_stripped.emit(ex_carrier, checker_skater)
@@ -649,10 +663,18 @@ func apply_goalie_poke_check(blade_pos: Vector3, blade_vel: Vector3) -> void:
 			poke_strip_min_speed,
 			poke_strip_max_speed,
 			fallback_dir)
+	linear_velocity.y = _pinch_lift(blade_vel, ex_carrier.blade_world_velocity,
+			blade_pos, ex_carrier.get_blade_contact_global())
 	_set_cooldown(ex_carrier, reattach_cooldown)
 	# No skater checker — a goalie strip earns no player takeaway credit.
 	puck_stripped.emit(ex_carrier, null)
 	puck_released.emit()
+
+func _pinch_lift(checker_vel: Vector3, carrier_vel: Vector3,
+		checker_pos: Vector3, carrier_pos: Vector3) -> float:
+	return PuckCollisionRules.pinch_lift_speed(checker_vel, carrier_vel,
+			checker_pos, carrier_pos,
+			pinch_lift_threshold, pinch_lift_gain, pinch_lift_max_speed)
 
 
 # Goalie loose-puck sweep / clear. The poke check (apply_goalie_poke_check)

@@ -470,13 +470,19 @@ func apply_contested_pickup(
 		return
 	var perp_sign: float = 1.0 if randf() > 0.5 else -1.0
 	var fallback := Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0))
-	puck.set_puck_velocity(PuckCollisionRules.contested_pickup_velocity(
+	var exit: Vector3 = PuckCollisionRules.contested_pickup_velocity(
 			_contest_blade_velocity(skater_a, blade_vel_a),
 			_contest_blade_velocity(skater_b, blade_vel_b),
 			blade_pos_a, blade_pos_b,
 			contest_min_speed, contest_max_speed,
 			contest_deadlock_speed, contest_deadlock_threshold,
-			perp_sign, fallback))
+			perp_sign, fallback)
+	# Raw blade velocities, not the draw crest: the hop is the squeeze the blades
+	# actually made, and a well-timed draw must not earn a bigger pop.
+	exit.y = PuckCollisionRules.pinch_lift_speed(blade_vel_a, blade_vel_b,
+			blade_pos_a, blade_pos_b, puck.pinch_lift_threshold,
+			puck.pinch_lift_gain, puck.pinch_lift_max_speed)
+	puck.set_puck_velocity(exit)
 	puck.set_skater_cooldown(skater_a, puck.reattach_cooldown)
 	puck.set_skater_cooldown(skater_b, puck.reattach_cooldown)
 	# The draw is resolved — stop retaining the swipe crest so it can't leak into a
