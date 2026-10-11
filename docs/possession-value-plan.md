@@ -1,7 +1,7 @@
 # Possession value — the shot pays for the puck it spends
 
-Status: **proposed**. Nothing landed. Bar form agreed; the open questions in §10
-are still open.
+Status: **planned**. Nothing landed. Bar form agreed; the four design decisions are
+settled in §10.
 
 **Scope.** The in-zone carrier's decision whether a shot is worth releasing
 (`AIRoleCarrier._pick_commit_phase`). Both 3v3 and 5v5. Passes, the dump, carry
@@ -112,11 +112,13 @@ V = r · ∫ exp(−(h + 1/τ) · t) dt  =  r / (h + 1/τ)
   **measured** (§6), and it stands in the same relation to `V` as `XG_SLOT_REF`
   stands to `position_potential`.
 - **`h`: the hazard of losing the puck, per second.** It is read from what the
-  carrier already perceives. `current_safety` (`_phase_current_safety`) is the
-  probability of keeping the puck over `AICarrySpace.EVADE_HORIZON_S` at the
-  best-clearance seam. That is the "can I keep it at all" read, so a charger I can
-  dance out of does not count as danger. Under constant hazard,
-  `h = −ln(safety) / EVADE_HORIZON_S`.
+  carrier already perceives. The possession is lost only if **every** way of keeping
+  it fails, so `h` reads the carrier's **best retention option**, not where he stands:
+  the higher of `current_safety` (`_phase_current_safety`, the best-clearance seam
+  over `AICarrySpace.EVADE_HORIZON_S`) and the safety of the best route the carry
+  search already scored, with the retreat ring included. A charger I can dance out of
+  does not count as danger, and neither does a container I can peel away from. Under
+  constant hazard, `h = −ln(safety) / EVADE_HORIZON_S`.
 - **`τ = READ_VALIDITY_TAU_S`**: the existing read-validity discount, so `V` is
   bounded by `r · τ` even when `h → 0`. No new patience dial is introduced, and τ
   stays the one place "how much do I trust the future" is set.
@@ -202,13 +204,16 @@ routing stays purely xG-driven, exactly as it is today.
 | Fire hysteresis | none |
 | Reception one-timers | none: they do not pass through this bar |
 | Shoot-for-tip | qualifies against the same bar; Phase C's lower `P_lose` with a man on the shot line helps it, which is correct |
-| Cognition gates | No tier-scaled constant enters the model. If Easy should differ, the allowed lever is input removal: Easy does not see `V` and keeps the fixed bar (§10 Q3) |
+| Difficulty tiers | Every tier runs the same model; tiers differ only through their existing knobs (§10, decision 3) |
 
 The `SHOT_MIN_VALUE` comment states a second job: stopping a **contained** carrier
-from trading the puck for a point shot. A contained carrier has low safety, so high
-`h`, small `V` and a *looser* bar. This is the one place the new model could move in
-the wrong direction. §8 pins it with a fixture, and if it fails the fallback is to
-keep 0.05 as a floor (§10 Q2).
+from trading the puck for a point shot. Read off where he stands, a contained carrier
+has low safety, so high `h`, small `V` and a *looser* bar: the wrong direction. That
+is why `h` reads the best retention option (§3.2). A contained carrier with the
+retreat ring open still keeps the puck by peeling out, so his `V` stays high and the
+point shot stays barred. §8 pins this with fixture 3. If it still fails, there is no
+fallback floor: that is a missing perception, and it comes back as a finding (§10,
+decision 2).
 
 ## 6. Measurement — Phase A, no behavior change
 
@@ -233,10 +238,13 @@ decision).
 - **Bot sims, now.** Report-only scenarios on the duel harness, alongside
   `benchmarks/test_breakout_harness.gd`, for a 3v3 and a 5v5 roster. This gives
   `r = Σ xG / Σ OZ seconds` and `P_lose` per team size immediately.
-- **Real play, later.** `shot_events` already logs `x`, `z`, `outcome` and the release
-  context #577 needs, but not what happened next. A `next_control` column
-  (`'ours' | 'theirs' | 'whistle'`) is one new migration plus the logging site. This is
-  the source #577 is waiting on, so both plans gain from it (§10 Q4).
+- **Real play, starting now.** `shot_events` already logs `x`, `z`, `outcome` and the
+  release context #577 needs, but not what happened next. Phase A adds a
+  `next_control` column (`'ours' | 'theirs' | 'whistle'`, null while unresolved): a
+  new migration under `supabase/migrations/` plus the logging site. Phase B does
+  **not** wait on it; it calibrates from the sims. The column exists so real data is
+  accumulating by the time it is needed to recalibrate, and #577 is waiting on the
+  same data (§10, decision 1).
 
 **The scorecard**, recorded before Phase B and re-run after each phase:
 
@@ -255,9 +263,9 @@ fudge.
 
 | Phase | Content | Behavior change |
 |---|---|---|
-| **A** | Tracker + harness scenarios + baseline scorecard. Optional `next_control` migration. | none |
-| **B** | `AIPossessionValue` (pure, static, engine-free). `h` from `current_safety`, measured constant `r` and `P_lose` per team size, `C` from `turnover_cost`. Replaces `SHOT_MIN_VALUE` at the one call site. | yes; playtest |
-| **C** | Per-shot `P_lose`: net-front race + outcome mix by save surface. | yes; playtest |
+| **A** | Tracker + harness scenarios + baseline scorecard. `next_control` migration and logging. | none |
+| **B** | `AIPossessionValue` (pure, static, engine-free). `h` from the best retention option, measured constant `r` and `P_lose` per team size, `C` from `turnover_cost`. Replaces `SHOT_MIN_VALUE` at the one call site. | yes; **playtested on its own** |
+| **C** | Per-shot `P_lose`: net-front race + outcome mix by save surface. | yes; separate playtest |
 | **D** *(optional)* | State-dependent `r` from cached teammate spot values. | yes |
 
 ### Where the code goes
@@ -304,8 +312,9 @@ fudge.
 1. A mid-range look with support set and no pressure **holds**; the same look with a
    forechecker closing **fires**.
 2. A doorstep look **fires** with `V` at its ceiling, so obvious chances stay instant.
-3. A contained carrier at the point does **not** fire a clean point shot. This is the
-   `SHOT_MIN_VALUE` comment's original job; if it fails, see §10 Q2.
+3. A contained carrier at the point with the retreat ring open does **not** fire a
+   clean point shot. This is the `SHOT_MIN_VALUE` comment's original job, held by the
+   best-retention-option read (§5).
 4. *(Phase C)* A point shot with a net-front teammate **fires**; the same shot with
    nobody there **holds**. This is F6's behavioral acceptance criterion.
 
@@ -329,15 +338,35 @@ the point with traffic. The shot-opportunity audit
   bots. If they are bad at cycling, `r` is low and patience understates itself. Real
   play data (§6, `next_control`) corrects this once it exists.
 
-## 10. Open questions
+- **Phase B's fixed `P_lose` moves point shots uniformly.** Until Phase C, retention
+  does not depend on traffic, so if the measured `P_lose` comes in below the implied
+  0.7, point shots get cheaper *with or without* a net-front man. The scorecard splits
+  point shots by net-front presence so the B playtest can tell this apart from the
+  patience change.
 
-1. **Phase A data source:** bot sims only for now, or also add the `next_control`
-   column to `shot_events` so real play starts accumulating (and #577 gains the same
-   data)?
-2. **The contained carrier:** if fixture 3 fails, keep `0.05` as a floor under the new
-   bar, or treat it as evidence that `h` should read containment differently?
-3. **Tiers:** should Easy keep the fixed bar (input removal), or run the same model
-   and differ only through its existing knobs?
-4. **Phase B shipping:** is a constant-`P_lose` Phase B worth a playtest on its own, or
-   should B and C land together, so the point-shot half of F6 arrives with the
-   patience half?
+## 10. Decisions
+
+Settled before implementation, with the reasoning, so a later reader can tell a
+decision from an accident.
+
+1. **Data: sims now, and the `next_control` column now too.** Phase B calibrates from
+   bot sims because they exist today. The column costs one migration and one logging
+   site, and real data only accumulates from the day it ships, so it goes in during
+   Phase A rather than when it is finally needed. #577 is blocked on the same data,
+   so the column pays twice.
+2. **Contained carrier: fix the read, no floor.** A `0.05` floor under the new bar is
+   exactly the corrective gate the AI doctrine forbids. It would keep the old constant
+   alive to cover a model that is not seeing something. What the model was missing is
+   that a contained carrier keeps the puck by peeling out, so `h` reads the best
+   retention option (§3.2). If fixture 3 still fails with that read, it is reported
+   as a finding, not patched.
+3. **Tiers: one model for every tier.** Keeping the fixed bar for Easy would preserve
+   `SHOT_MIN_VALUE` as a second code path for one tier. It would also deny Easy the
+   readable half of the change: shooting with traffic, holding with support. Easy
+   already has a selectivity dial (settle doubt) and a conversion dial (shot aim
+   error). If Easy turns out too patient, the lever is input removal (Easy does not
+   perceive `V`), added then with a reason.
+4. **Ship B on its own, then C.** B is the patience change that was asked for. A
+   playtest of B alone can attribute what it shows; a combined B+C playtest could not
+   say which half made the zone feel different. The risk is noted in §9: a fixed
+   `P_lose` moves point shots uniformly until C. The scorecard is split to catch it.
