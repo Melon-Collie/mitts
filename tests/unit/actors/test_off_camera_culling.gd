@@ -120,3 +120,37 @@ func test_an_unseen_skater_skips_the_rig_and_catches_up_when_seen() -> void:
 	var elbow: Vector3 = body.get_bone_pose(UpperBone.TOP_ELBOW).origin
 	assert_lt(absf(elbow.distance_to(hand) - c.skater.forearm_length), 0.01,
 			"and the forearm spans elbow to hand again")
+
+
+
+# A frame the animation LOD thins is off camera to the rig, so it inherits the
+# same guarantee: thinning changes when the mesh is posed, never the gameplay.
+func _track_thinned() -> Array[Vector3]:
+	_camera.look_at(Vector3.ZERO, Vector3.FORWARD)
+	var c: SkaterController = _rig(Vector3.ZERO)
+	var input := InputState.new()
+	var out: Array[Vector3] = []
+	var skipped: int = 0
+	for f: int in 90:
+		var block: bool = f >= 40
+		_frame(c, input, Vector2.ZERO if block else Vector2(0.0, -1.0), block)
+		if not c.skater.on_camera():
+			skipped += 1
+		out.append(c.skater.upper_body.position)
+		out.append(c.skater.get_blade_position())
+	assert_gt(skipped, 30, "the far skater was thinned (%d of 90 frames skipped)" % skipped)
+	c.skater.free()
+	return out
+
+
+func test_thinning_the_animation_does_not_move_the_gameplay_frames() -> void:
+	var saved: int = SkaterAnimationLod.detail
+	SkaterAnimationLod.detail = SkaterAnimationLod.DETAIL_FULL
+	var full: Array[Vector3] = _track(true)
+	SkaterAnimationLod.detail = SkaterAnimationLod.DETAIL_LOW
+	var thinned: Array[Vector3] = _track_thinned()
+	SkaterAnimationLod.detail = saved
+	var worst: float = 0.0
+	for i: int in full.size():
+		worst = maxf(worst, full[i].distance_to(thinned[i]))
+	assert_lt(worst, 1e-5, "UpperBody and the blade sit the same at any detail (worst %f)" % worst)

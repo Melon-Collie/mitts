@@ -129,3 +129,51 @@ func test_integrate_forward_matches_native() -> void:
 					i, pos_err, vel_err, ticks])
 			return
 	pass_test("400 integrate_forward fuzz cases within %f" % TOLERANCE)
+
+
+func test_integrate_forward_resumes_like_the_reference() -> void:
+	# `first_tick` resumes a run at its absolute index: the native and GDScript
+	# resumes agree, and each is bit-identical to its own uninterrupted run.
+	if _native_missing():
+		return
+	var result := SkaterMovementRules.ForwardResult.new()
+	for i: int in 200:
+		var cfg: SkaterMovementRules.MovementConfig = _random_cfg()
+		var native: RefCounted = _native_from(cfg)
+		var body_cfg := BodyCheckRules.Config.new()
+		native.set_stagger_params(body_cfg.max_stagger_seconds, body_cfg.max_thrust_penalty,
+				body_cfg.max_grip_penalty)
+		var vel := Vector3(_rng.randf_range(-8.0, 8.0), 0.0, _rng.randf_range(-8.0, 8.0))
+		var input := Vector2(_rng.randf_range(-1.0, 1.0), _rng.randf_range(-1.0, 1.0))
+		var facing: float = _rng.randf_range(-PI, PI)
+		var posture: SkaterMovementRules.Posture = _random_posture()
+		var dt: float = 1.0 / 120.0
+		var ticks: int = _rng.randi_range(2, 30)
+		var split: int = _rng.randi_range(1, ticks - 1)
+		var decay: int = 0 if _rng.randf() < 0.4 else _rng.randi_range(5, 40)
+		var stagger: float = 0.0 if _rng.randf() < 0.5 else _rng.randf_range(0.05, 1.0)
+		var bc: BodyCheckRules.Config = body_cfg if stagger > 0.0 else null
+
+		native.integrate_forward(Vector3.ZERO, vel, input, facing, false, false, posture,
+				dt, ticks, decay, stagger, stagger > 0.0)
+		var whole_pos: Vector3 = native.get_forward_position()
+		var whole_vel: Vector3 = native.get_forward_velocity()
+		native.integrate_forward(Vector3.ZERO, vel, input, facing, false, false, posture,
+				dt, split, decay, stagger, stagger > 0.0)
+		native.integrate_forward(native.get_forward_position(), native.get_forward_velocity(),
+				input, facing, false, false, posture,
+				dt, ticks - split, decay, stagger, stagger > 0.0, split)
+		if native.get_forward_position() != whole_pos or native.get_forward_velocity() != whole_vel:
+			fail_test("native resume diverged from its whole run at iter %d" % i)
+			return
+
+		SkaterMovementRules.integrate_forward(Vector3.ZERO, vel, input, facing, false,
+				false, posture, cfg, dt, split, decay, result, stagger, bc)
+		SkaterMovementRules.integrate_forward(result.position, result.velocity, input, facing,
+				false, false, posture, cfg, dt, ticks - split, decay, result, stagger, bc, split)
+		var err: float = maxf(result.position.distance_to(whole_pos),
+				result.velocity.distance_to(whole_vel))
+		if err > TOLERANCE:
+			fail_test("resumed GDScript vs native diverged at iter %d: err=%f" % [i, err])
+			return
+	pass_test("200 resumed integrate_forward cases")

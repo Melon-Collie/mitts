@@ -23,6 +23,8 @@ var _shadow_quality_btn: OptionButton = null
 var _crowd_density_btn: OptionButton = null
 var _ice_scratches_check: CheckButton = null
 var _puck_shadow_check: CheckButton = null
+var _player_shadows_check: CheckButton = null
+var _animation_detail_btn: OptionButton = null
 var _fog_check: CheckButton = null
 var _reflections_check: CheckButton = null
 var _ao_check: CheckButton = null
@@ -186,6 +188,21 @@ func _build_content() -> void:
 	SoundManager.wire_button(_puck_shadow_check)
 	_puck_shadow_check.toggled.connect(func(_p: bool) -> void: _notify_changed())
 	add_child(_field_row("Puck Shadow", _puck_shadow_check))
+
+	_player_shadows_check = CheckButton.new()
+	_player_shadows_check.set_pressed_no_signal(PlayerPrefs.player_shadows_enabled)
+	SoundManager.wire_button(_player_shadows_check)
+	_player_shadows_check.toggled.connect(func(_p: bool) -> void: _notify_changed())
+	add_child(_field_row(tr("OPTIONS_PLAYER_SHADOWS"), _player_shadows_check))
+
+	_animation_detail_btn = OptionButton.new()
+	_animation_detail_btn.custom_minimum_size = Vector2(180, 40)
+	_animation_detail_btn.add_theme_font_size_override("font_size", 15)
+	for key: String in ["OPTIONS_DETAIL_LOW", "OPTIONS_DETAIL_BALANCED", "OPTIONS_DETAIL_FULL"]:
+		_animation_detail_btn.add_item(tr(key))
+	_animation_detail_btn.selected = PlayerPrefs.animation_detail
+	_animation_detail_btn.item_selected.connect(func(_i: int) -> void: _notify_changed())
+	add_child(_field_row(tr("OPTIONS_ANIMATION_DETAIL"), _animation_detail_btn))
 
 	# Atmosphere passes, heaviest first. Fog and reflections are the GPU-costly
 	# ones; ambient occlusion is cheap. All default on (the intended arena look).
@@ -355,6 +372,8 @@ func read_controls() -> Dictionary:
 		"crowd_density": _crowd_density_btn.selected,
 		"ice_scratches_enabled": _ice_scratches_check.button_pressed,
 		"puck_shadow_enabled": _puck_shadow_check.button_pressed,
+		"player_shadows_enabled": _player_shadows_check.button_pressed,
+		"animation_detail": _animation_detail_btn.selected,
 		"volumetric_fog_enabled": _fog_check.button_pressed,
 		"reflections_enabled": _reflections_check.button_pressed,
 		"ambient_occlusion_enabled": _ao_check.button_pressed,
@@ -379,6 +398,8 @@ func apply_values(v: Dictionary) -> void:
 	_crowd_density_btn.selected = v.crowd_density
 	_ice_scratches_check.set_pressed_no_signal(v.ice_scratches_enabled)
 	_puck_shadow_check.set_pressed_no_signal(v.puck_shadow_enabled)
+	_player_shadows_check.set_pressed_no_signal(v.player_shadows_enabled)
+	_animation_detail_btn.selected = v.animation_detail
 	_fog_check.set_pressed_no_signal(v.volumetric_fog_enabled)
 	_reflections_check.set_pressed_no_signal(v.reflections_enabled)
 	_ao_check.set_pressed_no_signal(v.ambient_occlusion_enabled)

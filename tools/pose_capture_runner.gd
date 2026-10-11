@@ -305,6 +305,8 @@ var _puck: Puck = null
 
 
 func begin(record_baseline: bool, only: String = "") -> void:
+	# Every frame posed, whatever Animation Detail the local prefs carry.
+	SkaterAnimationLod.detail = SkaterAnimationLod.DETAIL_FULL
 	_record_baseline = record_baseline
 	_poses = POSES.filter(func(p: Dictionary) -> bool:
 			return only == "" or String(p["name"]).contains(only))

@@ -172,11 +172,11 @@ void NativeSkaterMovement::integrate_forward(
 		double facing_rotation_y,
 		bool has_puck, bool brake, int64_t posture,
 		double dt, int64_t ticks, int64_t intent_decay_ticks,
-		double stagger_timer, bool use_stagger) {
+		double stagger_timer, bool use_stagger, int64_t first_tick) {
 	Vector3 pos = position;
 	Vector3 vel = velocity;
 	const int64_t n = MAX(ticks, (int64_t)0);
-	for (int64_t i = 0; i < n; i++) {
+	for (int64_t i = first_tick; i < first_tick + n; i++) {
 		Vector2 decayed_input = move_input;
 		if (intent_decay_ticks > 0) {
 			decayed_input = move_input * (real_t)CLAMP(
@@ -215,8 +215,8 @@ void NativeSkaterMovement::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("integrate_forward",
 			"position", "velocity", "move_input", "facing_rotation_y",
 			"has_puck", "brake", "posture", "dt", "ticks",
-			"intent_decay_ticks", "stagger_timer", "use_stagger"),
-			&NativeSkaterMovement::integrate_forward);
+			"intent_decay_ticks", "stagger_timer", "use_stagger", "first_tick"),
+			&NativeSkaterMovement::integrate_forward, DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("get_forward_position"),
 			&NativeSkaterMovement::get_forward_position);
 	ClassDB::bind_method(D_METHOD("get_forward_velocity"),

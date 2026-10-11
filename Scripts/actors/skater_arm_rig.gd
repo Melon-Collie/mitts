@@ -520,6 +520,7 @@ func apply_face_gear() -> void:
 		# bone_idx after add_child — the setter binds against the parent skeleton.
 		_face_gear_attach.bone_idx = SkaterMeshBuilder.UpperBone.HELMET
 		_face_gear_mesh = MeshInstance3D.new()
+		_face_gear_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_face_gear_attach.add_child(_face_gear_mesh)
 	_face_gear_mesh.mesh = mesh
 
