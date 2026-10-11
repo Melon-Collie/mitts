@@ -4,7 +4,7 @@ extends GutTest
 # check the split's riskiest piece needs.
 #
 # Skater keeps every @export tuning var and every marker — the gameplay geometry
-# the claim resolvers clamp against — and hands them to eight RefCounted
+# the claim resolvers clamp against — and hands them to RefCounted
 # collaborators that own the cosmetic rigs, the paint, the world HUD and the
 # faceoff clock. What makes that seam hold is that the traffic runs ONE way:
 # a collaborator reads the node's tuning and writes only its own state, and the
@@ -26,6 +26,8 @@ const _COLLABORATORS: Dictionary = {
 	"_uniform": "res://Scripts/actors/skater_uniform_coordinator.gd",
 	"_hud": "res://Scripts/actors/skater_hud_coordinator.gd",
 	"_appearance": "res://Scripts/actors/skater_appearance_coordinator.gd",
+	"_shadow": "res://Scripts/actors/skater_shadow_proxy.gd",
+	"_anim_lod": "res://Scripts/actors/skater_animation_lod.gd",
 }
 
 

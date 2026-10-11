@@ -432,6 +432,7 @@ func _rebuild_blade() -> void:
 		return  # bare blade — no tape node at all
 	_blade_tape = MeshInstance3D.new()
 	_blade_tape.name = "BladeTape"
+	_blade_tape.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_blade_tape.mesh = tape_mesh
 	_blade_tape.material_override = UniformPaint.solid(
 			TapeColorRegistry.resolve(_skater.tape_config.blade_color, _team_accent),
@@ -528,6 +529,7 @@ func _rebuild_stick_knob() -> void:
 	_skater.stick_knob_mesh = null
 	var m := MeshInstance3D.new()
 	m.name = "StickKnob"
+	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	m.mesh = SkaterMeshBuilder.shared_knob()
 	m.material_override = UniformPaint.solid(color, UniformPaint.ROUGH_CLOTH)
 	_skater.stick_knob_mesh = m

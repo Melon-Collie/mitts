@@ -67,7 +67,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# commit that releases a winning rim as a flat charged dump.
 	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3916,
 	"res://Scripts/controllers/skater_controller.gd": 3341,
-	"res://Scripts/actors/skater.gd": 2715,
+	"res://Scripts/actors/skater.gd": 2712,
 	"res://Scripts/networking/network_manager.gd": 2824,
 	"res://Scripts/game/tutorial_manager.gd": 2073,
 	"res://Scripts/controllers/skater_ik_coordinator.gd": 938,
@@ -77,7 +77,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/controllers/puck_controller.gd": 1547,
 	"res://Scripts/actors/hockey_rink.gd": 1472,
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 1409,
-	"res://Scripts/game/player_prefs.gd": 1390,
+	"res://Scripts/game/player_prefs.gd": 1400,
 	"res://Scripts/actors/skater_mesh_builder.gd": 1409,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1372,
 	"res://Scripts/ui/career_stats_screen.gd": 1271,

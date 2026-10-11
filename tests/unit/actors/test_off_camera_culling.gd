@@ -6,11 +6,15 @@ extends GutTest
 
 const DT: float = 1.0 / 120.0
 const UpperBone = SkaterMeshBuilder.UpperBone
+const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
+const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 
 
 class StubGameState extends Node:
+	var host: bool = true
+
 	func is_host() -> bool:
-		return true
+		return host
 
 	func is_movement_locked() -> bool:
 		return false
@@ -29,10 +33,10 @@ func before_each() -> void:
 
 
 func _rig(pos: Vector3) -> SkaterController:
-	var puck: Puck = load("res://Scenes/Puck.tscn").instantiate() as Puck
+	var puck: Puck = PUCK_SCENE.instantiate() as Puck
 	add_child_autofree(puck)
 	puck.global_position = Vector3(300.0, 0.0, 300.0)
-	var sk: Skater = load("res://Scenes/Skater.tscn").instantiate() as Skater
+	var sk: Skater = SKATER_SCENE.instantiate() as Skater
 	add_child_autofree(sk)
 	sk.global_position = Vector3(pos.x, GameRules.FACEOFF_SPAWN_HEIGHT, pos.z)
 	sk.set_process(false)
@@ -120,3 +124,81 @@ func test_an_unseen_skater_skips_the_rig_and_catches_up_when_seen() -> void:
 	var elbow: Vector3 = body.get_bone_pose(UpperBone.TOP_ELBOW).origin
 	assert_lt(absf(elbow.distance_to(hand) - c.skater.forearm_length), 0.01,
 			"and the forearm spans elbow to hand again")
+
+
+
+# A frame the animation LOD thins is off camera to the rig, so it inherits the
+# same guarantee: thinning changes when the mesh is posed, never the gameplay.
+func _track_thinned() -> Array[Vector3]:
+	_camera.look_at(Vector3.ZERO, Vector3.FORWARD)
+	var c: SkaterController = _rig(Vector3.ZERO)
+	var input := InputState.new()
+	var out: Array[Vector3] = []
+	var skipped: int = 0
+	for f: int in 90:
+		var block: bool = f >= 40
+		_frame(c, input, Vector2.ZERO if block else Vector2(0.0, -1.0), block)
+		if not c.skater.on_camera():
+			skipped += 1
+		out.append(c.skater.upper_body.position)
+		out.append(c.skater.get_blade_position())
+	assert_gt(skipped, 30, "the far skater was thinned (%d of 90 frames skipped)" % skipped)
+	c.skater.free()
+	return out
+
+
+func test_thinning_the_animation_does_not_move_the_gameplay_frames() -> void:
+	var saved: int = SkaterAnimationLod.detail
+	SkaterAnimationLod.detail = SkaterAnimationLod.DETAIL_FULL
+	var full: Array[Vector3] = _track(true)
+	SkaterAnimationLod.detail = SkaterAnimationLod.DETAIL_LOW
+	var thinned: Array[Vector3] = _track_thinned()
+	SkaterAnimationLod.detail = saved
+	var worst: float = 0.0
+	for i: int in full.size():
+		worst = maxf(worst, full[i].distance_to(thinned[i]))
+	assert_lt(worst, 1e-5, "UpperBody and the blade sit the same at any detail (worst %f)" % worst)
+
+
+
+# A remote body is posed by RemoteController's own render hook, on the host (a
+# client's real inputs) and on a client (an interpolated body) alike. Its off
+# hand is mesh like everyone else's, so off camera it waits too.
+func _remote(host: bool) -> RemoteController:
+	var puck: Puck = PUCK_SCENE.instantiate() as Puck
+	add_child_autofree(puck)
+	puck.global_position = Vector3(300.0, 0.0, 300.0)
+	var sk: Skater = SKATER_SCENE.instantiate() as Skater
+	add_child_autofree(sk)
+	sk.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
+	sk.set_process(false)
+	sk.set_physics_process(false)
+	var state := StubGameState.new()
+	state.host = host
+	add_child_autofree(state)
+	var rc := RemoteController.new()
+	add_child_autofree(rc)
+	rc.setup(sk, puck, state)
+	rc.set_process(false)
+	rc.set_physics_process(false)
+	return rc
+
+
+func _off_hand_after_blade_moves(rc: RemoteController) -> Vector3:
+	var sk: Skater = rc.skater
+	sk.set_blade_position(sk.get_blade_position() + Vector3(0.4, 0.0, -0.3))
+	sk._process(2.0 * DT)
+	return sk.bottom_hand.position
+
+
+func test_a_remote_off_hand_waits_off_camera() -> void:
+	for host: bool in [false, true]:
+		_camera.look_at(Vector3(0.0, 30.0, 100.0), Vector3.UP)
+		var rc: RemoteController = _remote(host)
+		rc.skater._process(2.0 * DT)
+		var before: Vector3 = rc.skater.bottom_hand.position
+		assert_eq(_off_hand_after_blade_moves(rc), before,
+				"off camera the off hand is not re-solved (host %s)" % host)
+		_camera.look_at(Vector3.ZERO, Vector3.FORWARD)
+		assert_ne(_off_hand_after_blade_moves(rc), before,
+				"in frame it follows the blade again (host %s)" % host)

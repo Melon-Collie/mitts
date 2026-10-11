@@ -110,3 +110,49 @@ func test_ghost_flag_survives_the_projection() -> void:
 	rc._state_buffer.append(entry)
 	var s: SkaterNetworkState = rc.sample_state_at(10.05)
 	assert_true(s.is_ghost, "ghost flag carried through the forward projection")
+
+
+func _driven_state(pos: Vector3, vel: Vector3) -> SkaterNetworkState:
+	var s := _state(pos, vel)
+	s.move_intent = Vector2(0.7, 0.7)
+	s.stagger_timer = 0.06
+	return s
+
+
+func test_a_replay_walk_matches_fresh_samples_exactly() -> void:
+	# Replay samples one snapshot a tick further per input, resuming the last
+	# projection. Every step must equal a cold sample of the same instant.
+	var walked := _controller()
+	var entry := BufferedSkaterState.new()
+	entry.timestamp = 10.0
+	entry.state = _driven_state(Vector3(1.0, 0.0, 2.0), Vector3(2.0, 0.0, 5.0))
+	walked._state_buffer.append(entry)
+	for k: int in range(1, 19):
+		var t: float = 10.0 + TICK * float(k)
+		var cold := _controller()
+		cold._state_buffer.append(entry)
+		var expect: SkaterNetworkState = cold.sample_state_at(t)
+		var got: SkaterNetworkState = walked.sample_state_at(t)
+		assert_eq(got.position, expect.position, "tick %d position" % k)
+		assert_eq(got.velocity, expect.velocity, "tick %d velocity" % k)
+
+
+func test_a_new_snapshot_restarts_the_projection() -> void:
+	# The resume is keyed on the snapshot: once a newer one lands, the sample
+	# projects from it, not from the previous run.
+	var rc := _controller()
+	_buffer(rc, 10.0, Vector3.ZERO, Vector3(0.0, 0.0, 6.0))
+	rc.sample_state_at(10.0 + TICK * 6.0)
+	_buffer(rc, 10.0 + TICK * 2.0, Vector3(0.0, 0.0, 3.0), Vector3.ZERO)
+	var s: SkaterNetworkState = rc.sample_state_at(10.0 + TICK * 7.0)
+	assert_almost_eq(s.position.z, 3.0, 0.001, "a stationary new snapshot does not move")
+
+
+func test_an_earlier_request_restarts_the_projection() -> void:
+	var walked := _controller()
+	var cold := _controller()
+	_buffer(walked, 10.0, Vector3.ZERO, Vector3(0.0, 0.0, 6.0))
+	cold._state_buffer.append(walked._state_buffer[0])
+	walked.sample_state_at(10.0 + TICK * 9.0)
+	var got: Vector3 = walked.sample_state_at(10.0 + TICK * 4.0).position
+	assert_eq(got, cold.sample_state_at(10.0 + TICK * 4.0).position)

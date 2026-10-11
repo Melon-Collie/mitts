@@ -275,6 +275,9 @@ var shadow_quality: int = SHADOW_QUALITY_HIGH
 var crowd_density: int = CROWD_DENSITY_HIGH
 var ice_scratches_enabled: bool = true
 var puck_shadow_enabled: bool = true
+# CPU knobs, applied in apply_video: see SkaterShadowProxy and SkaterAnimationLod.
+var player_shadows_enabled: bool = true
+var animation_detail: int = SkaterAnimationLod.DETAIL_BALANCED
 # Arena atmosphere effects (applied to the WorldEnvironment in apply_video). The
 # .tscn ships their parameters; these bools gate the expensive passes so low-end
 # machines can drop them. Fog defaults OFF: a hockey rink is bright and evenly
@@ -547,6 +550,8 @@ func save() -> void:
 	cfg.set_value("video", "crowd_density", crowd_density)
 	cfg.set_value("video", "ice_scratches_enabled", ice_scratches_enabled)
 	cfg.set_value("video", "puck_shadow_enabled", puck_shadow_enabled)
+	cfg.set_value("video", "player_shadows_enabled", player_shadows_enabled)
+	cfg.set_value("video", "animation_detail", animation_detail)
 	cfg.set_value("video", "volumetric_fog_enabled", volumetric_fog_enabled)
 	cfg.set_value("video", "reflections_enabled", reflections_enabled)
 	cfg.set_value("video", "ambient_occlusion_enabled", ambient_occlusion_enabled)
@@ -850,6 +855,8 @@ func apply_video() -> void:
 	root.scaling_3d_mode = scaling_3d_mode as Viewport.Scaling3DMode
 	root.scaling_3d_scale = render_scale
 	_apply_anti_aliasing(root)
+	SkaterAnimationLod.detail = animation_detail
+	SkaterShadowProxy.set_enabled(player_shadows_enabled)
 	var scene: Node = Engine.get_main_loop().current_scene
 	if scene == null:
 		return
@@ -1188,6 +1195,9 @@ func _load() -> void:
 		crowd_density = clamp(cfg.get_value("video", "crowd_density", CROWD_DENSITY_HIGH), 0, CROWD_DENSITY_LABELS.size() - 1)
 		ice_scratches_enabled = cfg.get_value("video", "ice_scratches_enabled", true)
 		puck_shadow_enabled = cfg.get_value("video", "puck_shadow_enabled", true)
+		player_shadows_enabled = cfg.get_value("video", "player_shadows_enabled", true)
+		animation_detail = clampi(int(cfg.get_value("video", "animation_detail",
+				SkaterAnimationLod.DETAIL_BALANCED)), 0, SkaterAnimationLod.DETAIL_FULL)
 		volumetric_fog_enabled = cfg.get_value("video", "volumetric_fog_enabled", false)
 		reflections_enabled = cfg.get_value("video", "reflections_enabled", true)
 		ambient_occlusion_enabled = cfg.get_value("video", "ambient_occlusion_enabled", true)
