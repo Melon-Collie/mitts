@@ -2032,7 +2032,9 @@ func _is_ready_situation() -> bool:
 #
 # `lateral_race_lost` is an INPUT rather than a branch, because a lost lateral
 # race is a coverage fact, not a timing one.
-func _build_save_situation() -> GoalieSaveSelection.Situation:
+# `staying_down` races the opponents as he can SEE them moving; going down keeps
+# the worst case (GoalieSaveSelection.should_hold_seal says why).
+func _build_save_situation(staying_down: bool = false) -> GoalieSaveSelection.Situation:
 	var s := _save_situation
 	var puck_pos: Vector3 = puck.global_position
 	# PRICE THE SHOT FROM WHERE IT WILL ACTUALLY BE RELEASED. A slapper charge
@@ -2059,9 +2061,12 @@ func _build_save_situation() -> GoalieSaveSelection.Situation:
 	# opponent reaching a teammate's puck does — which is why this is a race to
 	# the PUCK rather than a possession check.
 	_ensure_view()
-	s.time_to_contest = GoalieSaveSelection.contest_time(
-			_view.nearest_opponent_dist, GameRules.DEFAULT_STICK_LENGTH_M,
-			GameRules.DEFAULT_SKATER_MAX_SPEED_M_S)
+	if staying_down:
+		s.time_to_contest = _seen_contest_time(puck_pos)
+	else:
+		s.time_to_contest = GoalieSaveSelection.contest_time(
+				_view.nearest_opponent_dist, GameRules.DEFAULT_STICK_LENGTH_M,
+				GameRules.DEFAULT_SKATER_MAX_SPEED_M_S)
 	# Soonest the puck can be ON him: when it can next be LAUNCHED, plus the
 	# flight from where it sits. Three launch cases, and the middle one is the
 	# patience half of react-vs-block:
@@ -2160,7 +2165,24 @@ func _should_hold_seal() -> bool:
 	if _lunge_active_timer > 0.0:
 		return false
 	return GoalieSaveSelection.should_hold_seal(
-			_build_save_situation(), recovery_duration)
+			_build_save_situation(true), recovery_duration)
+
+
+# Soonest an opponent's stick reaches the puck, each one skating from the velocity
+# he actually has.
+func _seen_contest_time(puck_pos: Vector3) -> float:
+	var soonest: float = INF
+	for i: int in _view.opponents.size():
+		var to_puck: Vector3 = puck_pos - _view.opponents[i]
+		to_puck.y = 0.0
+		var dist: float = to_puck.length()
+		var toward: float = 0.0
+		if dist > 0.001:
+			toward = _view.opponent_velocities[i].dot(to_puck) / dist
+		soonest = minf(soonest, GoalieSaveSelection.contest_time_seen(dist,
+				GameRules.DEFAULT_STICK_LENGTH_M, toward,
+				GameRules.DEFAULT_SKATER_MAX_SPEED_M_S, GameRules.DEFAULT_SKATER_THRUST_M_S2))
+	return soonest
 
 
 func _should_block() -> bool:
