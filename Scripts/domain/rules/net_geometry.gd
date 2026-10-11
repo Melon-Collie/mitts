@@ -16,6 +16,9 @@ class_name NetGeometry
 # under the crossbar, because a real NHL goal is shallow at the top shelf.
 # Negative — the twine gets shallower as it rises.
 const BACK_SLOPE: float = (GameRules.NET_TOP_DEPTH - GameRules.NET_DEPTH) / GameRules.NET_HEIGHT
+# Room beyond the posts' reach a ray heading away from the near end must start
+# at for ray_to_net to skip the cage, metres.
+const _AWAY_MARGIN: float = 0.01
 
 # Goal-line Z of whichever end `z` is nearer to, signed.
 static func near_end_z(z: float) -> float:
@@ -191,20 +194,25 @@ static func ray_to_solid_face(origin_xz: Vector2, dir_xz: Vector2, y: float) -> 
 static func ray_to_post(origin_xz: Vector2, dir_xz: Vector2, clearance: float) -> float:
 	var end_z: float = near_end_z(origin_xz.y)
 	var r: float = GameRules.NET_POST_RADIUS + clearance
-	var best: float = INF
-	for side: float in [-1.0, 1.0]:
-		var m: Vector2 = origin_xz - Vector2(side * GameRules.NET_HALF_WIDTH, end_z)
-		var b: float = m.dot(dir_xz)
-		var c: float = m.length_squared() - r * r
-		if c < 0.0:
-			return 0.0  # already touching this pipe
-		var disc: float = b * b - c
-		if disc < 0.0:
-			continue
-		var t: float = -b - sqrt(disc)
-		if t >= 0.0:
-			best = minf(best, t)
-	return best
+	var left: float = _ray_to_pipe(origin_xz, dir_xz, Vector2(-GameRules.NET_HALF_WIDTH, end_z), r)
+	if left == 0.0:
+		return 0.0
+	return minf(left, _ray_to_pipe(origin_xz, dir_xz, Vector2(GameRules.NET_HALF_WIDTH, end_z), r))
+
+
+# Distance along the ray to the circle of radius `r` about `center`: 0 already
+# inside it, INF when it misses or lies behind.
+static func _ray_to_pipe(origin_xz: Vector2, dir_xz: Vector2, center: Vector2, r: float) -> float:
+	var m: Vector2 = origin_xz - center
+	var b: float = m.dot(dir_xz)
+	var c: float = m.length_squared() - r * r
+	if c < 0.0:
+		return 0.0
+	var disc: float = b * b - c
+	if disc < 0.0:
+		return INF
+	var t: float = -b - sqrt(disc)
+	return t if t >= 0.0 else INF
 
 
 # True when the straight path `a` → `b` runs through something SOLID in the near
@@ -283,8 +291,28 @@ static func _overlaps(p: Vector2, q: Vector2) -> bool:
 	return maxf(p.x, q.x) <= minf(p.y, q.y)
 
 
+# Distance from `origin_xz` to the box holding the near end's net — the cage to
+# its back frame and the post pipes with `clearance` — 0 inside it. Neither ray
+# test below meets that net any sooner.
+static func distance_to_near_net(origin_xz: Vector2, clearance: float) -> float:
+	var s: float = signf(near_end_z(origin_xz.y))
+	var r: float = GameRules.NET_POST_RADIUS + clearance
+	var half_x: float = maxf(cavity_half_width(), GameRules.NET_HALF_WIDTH + r)
+	var u_lo: float = GameRules.GOAL_LINE_Z - r
+	var u_hi: float = GameRules.GOAL_LINE_Z + maxf(GameRules.NET_DEPTH, GameRules.NET_TOP_DEPTH)
+	var u: float = origin_xz.y * s
+	return Vector2(maxf(absf(origin_xz.x) - half_x, 0.0),
+			maxf(maxf(u_lo - u, u - u_hi), 0.0)).length()
+
 # The nearer of the two: whichever part of the net the aim line meets first.
+# Both read only the near end's net, so a ray from in front of it heading away
+# from that end meets neither — every point on it stays further out than the
+# posts' reach (with _AWAY_MARGIN to spare, so rounding cannot say otherwise).
 static func ray_to_net(origin_xz: Vector2, dir_xz: Vector2, y: float, clearance: float) -> float:
+	var s: float = signf(near_end_z(origin_xz.y))
+	if dir_xz.y * s <= 0.0 and origin_xz.y * s \
+			< GameRules.GOAL_LINE_Z - GameRules.NET_POST_RADIUS - clearance - _AWAY_MARGIN:
+		return INF
 	return minf(
 			ray_to_solid_face(origin_xz, dir_xz, y),
 			ray_to_post(origin_xz, dir_xz, clearance))

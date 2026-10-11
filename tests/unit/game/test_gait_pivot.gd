@@ -105,5 +105,5 @@ func test_coordinated_carve_does_not_trip_the_pivot() -> void:
 		_skater.velocity = Vector3(dir.x, 0.0, dir.y) * 6.0
 		_skater.set_facing(dir)
 		_coord.apply(DT)
-	assert_almost_eq(_coord._pivot_blend, 0.0, 0.05,
+	assert_almost_eq(_coord.pivot_hold, 0.0, 0.05,
 			"facing and travel rotating together is a carve, not a pivot")

@@ -18,8 +18,7 @@ extends GutTest
 # parts overlap.
 #
 # The gait is timed in several STATES, since it branches on intent, planting,
-# braking and shot state, and on both of its paths: NativeSkaterGait where the
-# extension is built, and the GDScript reference it falls back to.
+# braking and shot state.
 
 const REPS: int = 3000
 

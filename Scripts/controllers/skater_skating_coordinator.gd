@@ -10,8 +10,8 @@ extends RefCounted
 # animate identically from what interpolation already hands them.
 #
 # Where the extension is built, the locomotion, the alignment and pivot read and
-# the pose solve run in NativeSkaterGait instead (see the numeric-core section
-# of Scripts/controllers/CLAUDE.md); the layers run here either way.
+# the leg solve run in NativeSkaterGait instead (see the numeric-core section of
+# Scripts/controllers/CLAUDE.md); the layers shape its pose here either way.
 #
 # Runs on real render ticks only — SkaterController guards the call with
 # `not is_replaying` so reconcile re-simulation doesn't over-spin the gait.
@@ -35,6 +35,17 @@ const _PSI_RATE_EASE: float = 10.0
 # the rate detector keeps reading raw ψ.
 const _PSI_SMOOTH_EASE: float = 15.0
 
+# A leg's push weight past this is a push under way: it is exactly 0 while the
+# leg is not pushing, so the first pass above it is the push's onset.
+const _PUSH_ONSET: float = 0.001
+# A stroke weaker than this (push_strength, or a start's dig_strength) makes no
+# sound: the residue of a stroke easing out, not a push.
+const _PUSH_MIN_STRENGTH: float = 0.05
+# A skate's lift is exactly 0 on the ice, so it has landed once back under this;
+# a step that never rose past the minimum was a shuffle of the blade, not a lift.
+const _TOUCH_DOWN_M: float = 0.0005
+const _TOUCH_MIN_LIFT_M: float = 0.003
+
 # NativeSkaterGait.locomote flag bits.
 const _NATIVE_BRAKE: int = 1
 const _NATIVE_STANCE: int = 2
@@ -50,9 +61,8 @@ var _settled: bool = false
 
 var _locomotion := SkaterLocomotion.new()
 var _pose := GaitPose.new()
-# NativeSkaterGait, the C++ port of the locomotion, the alignment and pivot
-# read, and the pose solve (native/README.md); null when the extension is
-# absent, and the GDScript runs.
+# NativeSkaterGait (native/README.md); null when the extension is absent, and the
+# GDScript runs.
 var _native: RefCounted = null
 
 # The overlays, lowest priority first — the order IS the priority: an additive
@@ -82,9 +92,6 @@ var _floor_bits := PackedInt32Array()
 var _leg_bits := PackedInt32Array()
 var _trunk_bits := PackedInt32Array()
 var _override_bits := PackedInt32Array()
-# The layers that shape the pose (any stage past the floor): while one is
-# active, the pass solves the pose in GaitPose rather than natively.
-var _shape_bits: int = 0
 
 # Height multiplier for this build's legs, set by SkaterController
 # .apply_attributes alongside the skeleton scaling (the appearance pass
@@ -99,12 +106,11 @@ var leg_scale: float = 1.0:
 			_native.set_leg_scale(value)
 
 
-# This build's (thigh, shin) segment lengths in metres — the knockdown sprawl
-# solve (SkaterController._apply_knockdown_fall) shares the leg geometry the
-# crouch solve uses, served from the one place that owns it.
-# (thigh, shin, foot offset) for this build — KnockdownFallRules.buckle_angles.
+# (thigh, shin, foot offset) for this build, metres — the knockdown sprawl
+# (KnockdownFallRules.buckle_angles) shares the leg geometry the crouch solve
+# uses. The build lengthens the leg, not the boot.
 func leg_segment_lengths() -> Vector3:
-	return Vector3(GaitPose.THIGH_LEN, GaitPose.SHIN_LEN, GaitPose.FOOT_FWD) * leg_scale
+	return Vector3(GaitPose.THIGH_LEN * leg_scale, GaitPose.SHIN_LEN * leg_scale, GaitPose.FOOT_FWD)
 
 
 # How far the centre's faceoff address drops his body (GaitFaceoffLayer).
@@ -164,6 +170,29 @@ var _pivot_yaw_r: float = 0.0
 # sum — two writers tracking the same rotation on different clocks is a
 # wobble, not a pose.
 var pivot_hold: float = 0.0
+# Each leg's push this pass (SkaterLocomotion.l_push / r_push) and how hard the
+# stroke pushes and a start digs (push_strength, dig_strength); a push's onset
+# emits Skater.skate_pushed.
+var push_l: float = 0.0
+var push_r: float = 0.0
+var push_strength: float = 0.0
+var push_dig: float = 0.0
+# Each skate's lift off the ice this pass, m (SkaterLocomotion.l_dy / r_dy); a
+# landing emits Skater.skate_touched.
+var lift_l: float = 0.0
+var lift_r: float = 0.0
+# The stop's and the skid's weights this pass (LocomotionRules.Mix), for the
+# scrape they make, and the share of the edges' grip the turn is using
+# (SkaterLocomotion.turning, unsigned), for the carve.
+var stop_weight: float = 0.0
+var skid_weight: float = 0.0
+var turn_load: float = 0.0
+# Whether the push each leg is in has been heard yet.
+var _push_heard_l: bool = false
+var _push_heard_r: bool = false
+# The highest each skate has lifted since it last landed.
+var _lift_peak_l: float = 0.0
+var _lift_peak_r: float = 0.0
 
 
 func setup(skater: Skater, sm: SkaterStateMachine, controller: SkaterController) -> void:
@@ -191,8 +220,6 @@ func setup(skater: Skater, sm: SkaterStateMachine, controller: SkaterController)
 		if stages & GaitLayer.Stage.OVERRIDE:
 			_override_layers.append(layer)
 			_override_bits.append(bit)
-		if stages & (GaitLayer.Stage.LEGS | GaitLayer.Stage.TRUNK | GaitLayer.Stage.OVERRIDE):
-			_shape_bits |= bit
 	if ClassDB.class_exists(&"NativeSkaterGait"):
 		_native = ClassDB.instantiate(&"NativeSkaterGait")
 		native_reconfigure()
@@ -206,16 +233,15 @@ func native_reconfigure() -> void:
 		return
 	var missing: String = _native.configure(_controller)
 	if missing != "":
-		# A renamed or removed tunable desynced the port's table — running it on
-		# stale values would be a silent fork. Fall back, loudly.
+		# Running the port on stale values would be a silent fork: fall back, loudly.
 		push_error("NativeSkaterGait disabled — controller tunables missing: %s" % missing)
 		_native = null
 		return
 	_native.set_leg_scale(leg_scale)
 
 
-# The eased locomotion weights, from whichever path runs. Diagnostics only: the
-# native read allocates.
+# The eased locomotion weights, from whichever path runs. Diagnostics: read,
+# never stored; the native read allocates.
 func locomotion_mix() -> LocomotionRules.Mix:
 	if _native == null:
 		return _locomotion.mix
@@ -224,12 +250,13 @@ func locomotion_mix() -> LocomotionRules.Mix:
 	out.glide = m[0]
 	out.stride = m[1]
 	out.crossover = m[2]
-	out.backward = m[3]
-	out.shuffle = m[4]
-	out.skid = m[5]
-	out.tight = m[6]
-	out.stop = m[7]
-	out.side = m[8]
+	out.carve = m[3]
+	out.backward = m[4]
+	out.shuffle = m[5]
+	out.skid = m[6]
+	out.tight = m[7]
+	out.stop = m[8]
+	out.side = m[9]
 	return out
 
 
@@ -238,6 +265,19 @@ func locomotion_mix() -> LocomotionRules.Mix:
 # dot mid-stride carrying the previous shift's leg swing.
 func reset_to_rest() -> void:
 	_locomotion.reset()
+	push_l = 0.0
+	push_r = 0.0
+	push_strength = 0.0
+	push_dig = 0.0
+	_push_heard_l = false
+	_push_heard_r = false
+	lift_l = 0.0
+	lift_r = 0.0
+	_lift_peak_l = 0.0
+	_lift_peak_r = 0.0
+	stop_weight = 0.0
+	skid_weight = 0.0
+	turn_load = 0.0
 	if _native != null:
 		_native.reset()
 	for layer: GaitLayer in _layers:
@@ -265,6 +305,7 @@ func reset_to_rest() -> void:
 	_pivot_yaw_r = 0.0
 	if _skater != null:
 		_skater.set_leg_swing(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+		_skater.set_leg_contact(1.0, 1.0, INF)
 		_skater.set_skating_crouch_drop(0.0)
 		_skater.set_trunk_texture(0.0, 0.0)
 		_skater.set_edge_loads(0.0, 0.0)
@@ -330,22 +371,25 @@ func apply(delta: float) -> void:
 				hold = maxf(hold, _hold_layers[i].stride_hold())
 
 	var stance: float
+	var authored: float
 	if _native != null:
-		var flags: int = 0
-		if _skater.brake_intent:
-			flags |= _NATIVE_BRAKE
-		if _controller.stance_active:
-			flags |= _NATIVE_STANCE
-		if _block.planted:
-			flags |= _NATIVE_PLANTED
-		_native.locomote(delta, _skater.velocity, _skater.move_intent,
-				_skater.global_transform.basis, flags, hold)
+		var demand: Vector2 = _native.locomote(delta, _skater.velocity, _skater.move_intent,
+				_skater.global_transform.basis, _native_flags(), hold)
 		var channels: Vector4 = _native.get_channels()
 		stride_phase = channels.x
 		stop_yaw_offset = channels.y
 		travel_align_yaw = channels.z
 		pivot_hold = channels.w
-		stance = _native.get_base_stance()
+		stance = demand.x
+		authored = demand.y
+		var push: Vector4 = _native.get_push()
+		_sense_pushes(push.x, push.y, push.z, push.w)
+		var lift: Vector2 = _native.get_lift()
+		_sense_touches(lift.x, lift.y)
+		var heard: Vector4 = _native.get_sound()
+		stop_weight = heard.x
+		skid_weight = heard.y
+		turn_load = heard.z
 	else:
 		# Which skating state the skater is in and the stroke it skates
 		# (SkaterLocomotion). Shooting sets the feet and the pivot glides through
@@ -354,46 +398,64 @@ func apply(delta: float) -> void:
 		stride_phase = _locomotion.stride_phase
 		stop_yaw_offset = _locomotion.stop_yaw
 		_locomotion.strokes(delta, _align_to_travel(delta))
-		# The pivot sits too: the open-hip glide and the step-around are both done
-		# on bent knees.
+		authored = _locomotion.authored
+		_sense_pushes(_locomotion.l_push, _locomotion.r_push, _locomotion.push_strength(),
+				_locomotion.dig_strength())
+		_sense_touches(_locomotion.l_dy, _locomotion.r_dy)
+		stop_weight = _locomotion.mix.stop
+		skid_weight = _locomotion.mix.skid
+		turn_load = absf(_locomotion.turning)
+		# The pivot sits too: the open-hip glide and the step-around are both
+		# done on bent knees.
 		stance = maxf(_locomotion.stance, _controller.pivot_stance * _pivot_blend)
+		# The authored strokes sit as low as their pushes need to reach the ice,
+		# by their share, so the sit fades with them.
+		if authored > 0.001:
+			var reach_sit: float = minf(GaitPose.reach_hip(_locomotion.push_reach),
+					deg_to_rad(_controller.stride_sit_max_deg)) / deg_to_rad(_controller.stance_hip_deg)
+			stance = maxf(stance, lerpf(stance, reach_sit, authored))
 
 	# ── Stance and pose ────────────────────────────────────────────────────────
+	var width: float = 0.0
 	if active:
 		for i: int in _floor_layers.size():
 			if active & _floor_bits[i]:
 				stance = maxf(stance, _floor_layers[i].stance_floor())
-	if _native != null and not (active & _shape_bits):
-		_native.solve(stance)
-		p.load_native(_native)
+				width = maxf(width, _floor_layers[i].stance_width())
+	if authored > 0.001:
+		tilt_hips(p)
 	else:
-		if _native != null:
-			_locomotion.mirror_native(_native)
-			var drive: Vector4 = _native.get_stroke_drive()
-			_pivot_yaw_l = drive.y
-			_pivot_yaw_r = drive.z
+		p.lean = Basis.IDENTITY
+		p.ice = Basis.IDENTITY
+	if _native != null:
+		_native.solve(stance, width, p.lean, p.ice)
+		p.load_native_legs(_native)
+	else:
 		p.solve_stance(deg_to_rad(_controller.stance_hip_deg) * stance)
-		p.seed_legs(_locomotion, _pivot_yaw_l, _pivot_yaw_r)
-		if active:
-			for i: int in _leg_layers.size():
-				if active & _leg_bits[i]:
-					_leg_layers[i].shape_legs(p)
-		p.solve_knees(_locomotion, _controller.stance_knee_release)
+		p.seed_legs(_locomotion, _pivot_yaw_l, _pivot_yaw_r, width)
+	if active:
+		for i: int in _leg_layers.size():
+			if active & _leg_bits[i]:
+				_leg_layers[i].shape_legs(p)
+	p.extend_knees()
+	if _native != null:
+		p.load_native_trunk(_native)
+	else:
 		p.seed_trunk(_locomotion)
-		if active:
-			for i: int in _trunk_layers.size():
-				if active & _trunk_bits[i]:
-					_trunk_layers[i].shape_trunk(p)
-			for i: int in _override_layers.size():
-				if active & _override_bits[i]:
-					_override_layers[i].override(p)
+	if active:
+		for i: int in _trunk_layers.size():
+			if active & _trunk_bits[i]:
+				_trunk_layers[i].shape_trunk(p)
+		for i: int in _override_layers.size():
+			if active & _override_bits[i]:
+				_override_layers[i].override(p)
 
 	_skater.set_faceoff_address(_faceoff.address)
 	# Off camera the legs and trunk are mesh nobody draws; the crouch is not.
 	if _skater.on_camera():
-		p.publish_legs(_skater)
+		p.publish_legs(_skater, delta)
 	else:
-		_skater.set_skating_crouch_drop(p.drop, p.frame_drop())
+		_skater.set_skating_crouch_drop(p.drop, p.frame_drop(), p.plant)
 	crouch_drop = p.drop
 	frame_drop = p.frame_drop()
 	# Trunk inertia: filter the summed texture, then lay the wobble back on top
@@ -409,12 +471,78 @@ func apply(delta: float) -> void:
 		_skater.set_trunk_texture(trunk_pitch_add, trunk_roll_add)
 
 
+# Each push is heard once, on every peer, from the same replicated state the
+# legs skate: as it starts, or — a start's first push begins before the stroke
+# has any strength — as soon as the stroke is strong enough to be heard.
+func _sense_pushes(left: float, right: float, strength: float, dig: float) -> void:
+	push_strength = strength
+	push_dig = dig
+	push_l = left
+	push_r = right
+	_push_heard_l = _hear_push(true, left, _push_heard_l)
+	_push_heard_r = _hear_push(false, right, _push_heard_r)
+
+
+func _hear_push(left: bool, push: float, heard: bool) -> bool:
+	if push <= _PUSH_ONSET:
+		return false
+	if not heard and maxf(push_strength, push_dig) > _PUSH_MIN_STRENGTH:
+		_skater.skate_pushed.emit(left, push_strength, push_dig)
+		return true
+	return heard
+
+
+func _sense_touches(left: float, right: float) -> void:
+	lift_l = left
+	lift_r = right
+	_lift_peak_l = _hear_touch(true, left, _lift_peak_l)
+	_lift_peak_r = _hear_touch(false, right, _lift_peak_r)
+
+
+# The skate's peak lift since it last landed, emitting the landing.
+func _hear_touch(left: bool, lift: float, peak: float) -> float:
+	if lift > _TOUCH_DOWN_M:
+		return maxf(peak, lift)
+	if peak > _TOUCH_MIN_LIFT_M:
+		_skater.skate_touched.emit(left, peak)
+	return 0.0
+
+
+func _native_flags() -> int:
+	var flags: int = 0
+	if _skater.brake_intent:
+		flags |= _NATIVE_BRAKE
+	if _controller.stance_active:
+		flags |= _NATIVE_STANCE
+	if _block.planted:
+		flags |= _NATIVE_PLANTED
+	return flags
+
+
+# The hips' tilt against the ice, turned to their heading (GaitPose.lean / ice):
+# the spine tips them by the balance lean (Skater.balance_tilt) in skeleton
+# space over their yaw and the lower body's pitch (SkaterSpineRig), the twist
+# limit aside.
+func tilt_hips(p: GaitPose) -> void:
+	var lower: Vector3 = _skater.lower_body.rotation
+	var pitch := Basis(Vector3.RIGHT, lower.x)
+	p.lean = Basis.IDENTITY
+	var tilt: Vector2 = _skater.balance_tilt()
+	if tilt != Vector2.ZERO:
+		var tilt3: Vector3 = _skater.global_transform.basis.inverse() * Vector3(tilt.x, 0.0, tilt.y)
+		var theta: float = tilt3.length()
+		if theta > 1e-4:
+			var heading := Basis(Vector3.UP, lower.y)
+			p.lean = heading.inverse() * Basis(Vector3.UP.cross(tilt3 / theta), theta) * heading
+	p.ice = p.lean * pitch
+
+
 # ── Hip-to-travel alignment and the pivot ─────────────────────────────────────
-# Returns the forward speed in the yawed hip frame, which the stroke needs (the
-# tight turn's inside foot is the side of the turn as the legs face it).
+# Returns the travel velocity in the yawed hip frame, (right, forward), which the
+# stroke needs (the turning states lead along travel as the legs face it).
 # Mirrored by NativeSkaterGait.align_and_pivot; test_native_gait_parity.gd fails
 # if the two drift.
-func _align_to_travel(delta: float) -> float:
+func _align_to_travel(delta: float) -> Vector2:
 	var vel: Vector3 = _skater.velocity
 	# Ground speed only — vertical velocity never feeds the stride.
 	var ground_speed: float = Vector2(vel.x, vel.z).length()
@@ -557,5 +685,6 @@ func _align_to_travel(delta: float) -> float:
 	_hip_align_yaw = lerpf(_hip_align_yaw, align_target, align_speed * delta)
 	travel_align_yaw = _hip_align_yaw * (1.0 - mix.stop)
 	# Forward speed in the yawed hip frame: v_hip = RotY(−ψ) · v_local.
-	return -(local_vel.x * sin(travel_align_yaw) + local_vel.z * cos(travel_align_yaw))
+	return Vector2(local_vel.x * cos(travel_align_yaw) - local_vel.z * sin(travel_align_yaw),
+			-(local_vel.x * sin(travel_align_yaw) + local_vel.z * cos(travel_align_yaw)))
 

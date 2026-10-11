@@ -1,32 +1,30 @@
 extends GutTest
 
-# The gait's rotations and the sizing seam's positions live on the leg rig's
-# bones now, not on Node3Ds — see Skater.leg_bone_euler / leg_bone_position.
-const _LEG_L: int = SkaterMeshBuilder.LegBone.LEG_L
-const _LEG_R: int = SkaterMeshBuilder.LegBone.LEG_R
-const _SHIN_L: int = SkaterMeshBuilder.LegBone.SHIN_L
-const _SHIN_R: int = SkaterMeshBuilder.LegBone.SHIN_R
-
-# Gait stroke profile — the FOOT must push back faster than it recovers
-# forward. Real skating is a slow forward recovery and an explosive
-# backward push; the thigh-pitch wave gets this right by construction
-# (stride_skew warps the sine), but the foot's fore-aft motion also folds
-# in the knee (recovery tuck + push extension), and mistimed knee travel
-# can concentrate the foot's forward motion into a fast late snap — which
-# reads as a forward KICK from behind, where the feet are the visible part
-# of the gait. This pins the profile the eye actually sees.
+# The stride measured where the eye reads it, at the skates. A skating push is
+# explosive and goes out and back; the recovery is slower and comes back in under
+# the hips. So, on the skate bones in the lower body's frame:
+#  - the push (backward) is the fast phase, not the forward recovery;
+#  - the stride covers ground fore and aft;
+#  - the pushing skate goes out from the body's midline, wider the harder the
+#    skater drives, and comes back in under the hips between pushes.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
+const LegBone = SkaterMeshBuilder.LegBone
 const DT: float = 1.0 / 120.0
 const WARMUP_TICKS: int = 240  # let intensity/effort envelopes settle
 const MEASURE_TICKS: int = 480 # 4 s — several full cycles at steady state
-const THIGH_LEN: float = 0.31
-const SHIN_LEN: float = 0.45
 
 
-# Steady-state cruise straight up-ice; returns per-tick [foot_fwd_l, foot_fwd_r]
-# — the feet's forward (−Z body frame) offsets from the hip, in metres.
-func _run_cruise() -> Array:
+class Stroke:
+	# Per tick, per skate: fore-aft (−Z forward) and lateral distance from the
+	# midline, metres.
+	var fwd: Array[PackedFloat32Array] = [PackedFloat32Array(), PackedFloat32Array()]
+	var out: Array[PackedFloat32Array] = [PackedFloat32Array(), PackedFloat32Array()]
+
+
+# Straight up-ice at `speed`, the stick held; `accel` m/s² of forward
+# acceleration fed to the gait's effort read (0 = steady cruise).
+func _run(speed: float, accel: float) -> Stroke:
 	var skater: Skater = SKATER_SCENE.instantiate() as Skater
 	add_child_autofree(skater)
 	skater.set_physics_process(false)
@@ -37,68 +35,62 @@ func _run_cruise() -> Array:
 	var coord := SkaterSkatingCoordinator.new()
 	coord.setup(skater, sm, controller)
 	skater.set_facing(Vector2(0.0, -1.0))
-	skater.velocity = Vector3(0.0, 0.0, -6.0)
-	# The stride is input-gated (v15 intent byte): without held movement
-	# intent the gait is the GLIDE, not the stride — stamp it like a held key.
 	skater.move_intent = Vector2(0.0, -1.0)
-
-
-	for _i: int in WARMUP_TICKS:
+	var stroke := Stroke.new()
+	for i: int in WARMUP_TICKS + MEASURE_TICKS:
+		# Past top speed the gait's speed share saturates, so a speed that keeps
+		# rising reads as driving at full stride.
+		skater.velocity = Vector3(0.0, 0.0, -(speed + accel * DT * float(i)))
 		coord.apply(DT)
-	var samples: Array = []
-	for _i: int in MEASURE_TICKS:
-		coord.apply(DT)
-		samples.append([
-			_foot_forward(skater.leg_bone_euler(_LEG_L).x, skater.leg_bone_euler(_SHIN_L).x),
-			_foot_forward(skater.leg_bone_euler(_LEG_R).x, skater.leg_bone_euler(_SHIN_R).x),
-			skater.leg_bone_euler(_LEG_L).x, skater.leg_bone_euler(_LEG_R).x,
-		])
-	return samples
-
-
-# Sagittal-plane foot position: thigh pitched `pitch` from vertical (positive
-# = forward), shin folded a further `knee` (negative = heel back). Forward
-# offset of the skate from the hip pivot.
-func _foot_forward(pitch: float, knee: float) -> float:
-	return THIGH_LEN * sin(pitch) + SHIN_LEN * sin(pitch + knee)
+		skater._process(DT)
+		if i < WARMUP_TICKS:
+			continue
+		var sk: Skeleton3D = skater._legs._skeleton
+		for side: int in 2:
+			var bone: int = LegBone.SKATE_L if side == 0 else LegBone.SKATE_R
+			var p: Vector3 = sk.get_bone_global_pose(SkaterLegRig._OFFSET + bone).origin
+			stroke.fwd[side].append(-p.z)
+			stroke.out[side].append(absf(p.x))
+	return stroke
 
 
 func test_foot_push_is_faster_than_recovery() -> void:
-	var samples: Array = _run_cruise()
-	var peak_fwd: float = 0.0   # fastest forward foot speed (recovery)
-	var peak_back: float = 0.0  # fastest backward foot speed (the push)
+	var stroke := _run(6.0, 0.0)
+	var peak_fwd: float = 0.0   # fastest forward skate speed (recovery)
+	var peak_back: float = 0.0  # fastest backward skate speed (the push)
 	var swing_min: float = INF
 	var swing_max: float = -INF
-	for i: int in range(1, samples.size()):
-		for leg: int in 2:
-			var v: float = (samples[i][leg] - samples[i - 1][leg]) / DT
+	for side: int in 2:
+		var f: PackedFloat32Array = stroke.fwd[side]
+		for i: int in range(1, f.size()):
+			var v: float = (f[i] - f[i - 1]) / DT
 			peak_fwd = maxf(peak_fwd, v)
 			peak_back = maxf(peak_back, -v)
-			swing_min = minf(swing_min, samples[i][leg])
-			swing_max = maxf(swing_max, samples[i][leg])
-	gut.p("foot: fwd peak %.3f m/s, back peak %.3f m/s, ratio back/fwd %.2f, swing %.0f cm (%.2f..%.2f)"
-			% [peak_fwd, peak_back, peak_back / maxf(peak_fwd, 0.001),
-			(swing_max - swing_min) * 100.0, swing_min, swing_max])
-	assert_gt(peak_back, peak_fwd,
-			"the push must be the fast phase: foot peak backward speed (%.3f) should exceed peak forward speed (%.3f)"
-			% [peak_back, peak_fwd])
-	assert_gt(swing_max - swing_min, 0.14,
-			"the stride must still cover ground — fore-aft foot swing collapsed to %.0f cm"
-			% [(swing_max - swing_min) * 100.0])
+			swing_min = minf(swing_min, f[i])
+			swing_max = maxf(swing_max, f[i])
+	gut.p("skate: fwd peak %.3f m/s, back peak %.3f m/s, ratio back/fwd %.2f, swing %.0f cm"
+			% [peak_fwd, peak_back, peak_back / maxf(peak_fwd, 0.001), (swing_max - swing_min) * 100.0])
+	assert_gt(peak_back, peak_fwd, "the push is the fast phase")
+	assert_gt(swing_max - swing_min, 0.14, "the stride covers ground fore and aft")
 
 
-func test_thigh_push_is_faster_than_recovery() -> void:
-	# Same guard on the THIGH pitch — the other limb segment the eye reads.
-	var samples: Array = _run_cruise()
-	var peak_fwd: float = 0.0
-	var peak_back: float = 0.0
-	for i: int in range(1, samples.size()):
-		for leg: int in 2:
-			var v: float = (samples[i][2 + leg] - samples[i - 1][2 + leg]) / DT
-			peak_fwd = maxf(peak_fwd, v)
-			peak_back = maxf(peak_back, -v)
-	gut.p("thigh: fwd peak %.3f rad/s, back peak %.3f rad/s, ratio back/fwd %.2f"
-			% [peak_fwd, peak_back, peak_back / maxf(peak_fwd, 0.001)])
-	assert_gt(peak_back, peak_fwd,
-			"thigh backswing (%.3f rad/s) should beat its forward swing (%.3f rad/s)"
-			% [peak_back, peak_fwd])
+# The width the stride pushes to, against the hip width it lands at.
+func _width(stroke: Stroke) -> Vector2:
+	var widest: float = 0.0
+	var narrowest: float = INF
+	for side: int in 2:
+		for o: float in stroke.out[side]:
+			widest = maxf(widest, o)
+			narrowest = minf(narrowest, o)
+	return Vector2(narrowest, widest)
+
+
+func test_the_push_goes_out_and_comes_back_under_the_hips() -> void:
+	var cruise: Vector2 = _width(_run(6.0, 0.0))
+	var driving: Vector2 = _width(_run(9.5, 9.0))
+	gut.p("from the midline: cruising at 6 m/s %.2f..%.2f m, driving at 9.5 m/s %.2f..%.2f m"
+			% [cruise.x, cruise.y, driving.x, driving.y])
+	assert_lt(cruise.x, 0.2, "lands back under the hips")
+	assert_gt(cruise.y, 0.28, "a cruising push goes out past hip width")
+	assert_gt(driving.y, 0.42, "a hard push goes wide")
+	assert_gt(driving.y, cruise.y + 0.08, "harder drive, wider push")

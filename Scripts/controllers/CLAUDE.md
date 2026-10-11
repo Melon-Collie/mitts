@@ -460,28 +460,94 @@ whose rotation carries the blade markers and is therefore gameplay geometry.
 
 ### The legs skate a state, and the state is the physics' decision
 
-`SkaterLocomotion` owns the locomotion half: glide, stride, crossover,
+`SkaterLocomotion` owns the locomotion half: glide, stride, crossover, carve,
 backward, shuffle, skid, tight turn and stop. Which one is not re-guessed from
-how the velocity happened to change; it is the split the movement model makes
-(`LocomotionRules`, a pure function of velocity, move intent, brake and facing
-— all replicated). The stick's component along travel is a stride, against it a
-skid, across it a turn — and the squares of those cosine and sine terms sum to
-one, so the same split is directly the crossfade. Each state owns its legs
-outright while it holds weight; nothing fades against anything else, which is
-what the old intent channels (dig-in, reversal, shuffle, backpedal, carve
-intent, glide) had to do and is where their flail came from.
+how the stick happens to point; it is what the movement model is doing
+(`LocomotionRules`, a pure function of velocity, move intent, brake, facing and
+the measured turn — all derived from replicated state). Two quantities decide
+it: whether the skater is **driving** (the stick's component along travel,
+which is what the physics thrusts by; against travel it is a skid) and how much
+of the edge's grip the travel's curve is **using** (centripetal acceleration
+over `turn_accel · lateral_grip`). Driving straight is a stride, driving
+through a turn a crossover, coasting straight a glide, coasting round a turn a
+carve. A stick held straight across travel turns the skater with no thrust, so
+it is carved, never crossed over. Each state owns its legs outright while it
+holds weight; nothing fades against anything else.
 
-Two things the split alone would get wrong, both handled in the easing:
+Things the split alone would get wrong, handled where noted:
 
-- **Crossovers commit, corrections do not.** A steering tap at speed does turn
+- **Crossovers commit, corrections do not.** A steering tap at speed does curve
   the travel, but skaters correct a line on their edges and cross over only
   through a held turn. The crossover eases in slower than anything else, and
-  SIGNED — taps alternating sides have to pass through zero, so they cancel
-  while a turn held to one side commits. `test_body_chain.gd` holds both
-  halves.
-- **The glide is the remainder.** Whatever the other states have not yet
-  taken, including the not-yet-committed part of a turn, is skated as a glide
-  on the edges.
+  SIGNED — taps alternating sides have to pass through zero, so they cancel —
+  and the part of a turn not yet committed is skated as a carve.
+  `test_body_chain.gd` holds both halves and the coasting carve.
+- **The weights say whether, not how hard.** From half the thrust
+  (`LocomotionRules.DRIVE_FULL`, a stick 60° off travel) the legs are pushing;
+  how hard is the stroke's amplitude, which follows the measured acceleration.
+  A linear split made a 45° arc half carve.
+- **A turn's inside is the curve, never the stick.** `turning` is signed by
+  the way the travel curves, and the classifier takes the side from it. Once
+  the travel has come round to a held key the stick lands on alternate sides
+  of it tick to tick, and a pose keyed to that swapped its legs every frame.
+  The carve and the tight turn ease signed like the crossover, so a reversal
+  slides the legs through centre. Their lead is along travel, so the legs
+  carry it by travel's share of the hips' forward axis, never its sign: with
+  the cursor ahead and the momentum swung behind, travel crosses the hips and
+  a sign swaps the skates in a frame. `test_gait_turn_continuity.gd` holds both.
+- **The cadence is the stroking states' own.** The stride phase advances at the
+  stroking states' rate averaged over them alone, so a crossover sharing the
+  mix with a carve fades in amplitude, never in tempo.
+- **Speed sets the tempo, and acceleration quickens it.** The speed law
+  saturates at a cruising ceiling. Driving hard steps faster at any speed
+  (`accel_cadence_rate` × `effort`), past that ceiling, because each push gives
+  only so much. A start is quick short steps that lengthen into the stride as
+  the acceleration tapers off. A floor that fades with speed alone cannot draw
+  that: the physics reaches its fade in ~0.4 s, and the cruise tempo takes
+  over while the skater is still gaining speed. `test_gait_step_events.gd`
+  holds the shape.
+- **The glide is the remainder.**
+
+The legs are solved from where the ankles go (`LegIK`): `GaitPose.seed_legs`
+places each ankle from the stroke's joints on the stance, lays on the states
+authored as where their skates go, and solves the leg to it; the layers lay
+their joint offsets on that. Every state but the glide is authored that way
+(`SkaterLocomotion.authored`): the stride (`_stride_path`, out and back from
+under the hips, toe turned out; from low speed, out of a V, since the blade lies
+along a track that the body's speed lays back), the crossover (`_crossover_path`, the stride's
+phase law with its own landings: the outside skate lands crossed over and
+pushes back out, the inside one pushes under the body, so they cross every
+step), the carve and the tight turn (both down, the inside skate leading), the
+hockey stop (`_stop_path`, both planted wide along travel with the hips sitting
+back of them, turned square across it), the skid (`_skid_path`, a snowplow),
+backward C-cuts (`_ccut_path`, out and ahead and back in) and the side-step
+(`_shuffle_path`, a sideways scissor). The glide is the stance with a joint-space
+edge sway and, out of a turn, a light inside knee. Three things make them stand on the ice:
+
+- **They sit as low as their pushes need.** A leg can only reach so far out at
+  the hip height it is at, so the crouch moves, by the authored share, toward
+  the one that lets the furthest skate reach the ice (`GaitPose.reach_hip`,
+  capped at `stride_sit_max_deg`). The reach eases in near full stretch rather
+  than halting the knee mid-swing, depth first so a target too deep to stand on
+  never stands the leg straight under the hip. Driving hard reads deeper and
+  wider than cruising for that reason, not by a separate tunable. Every one of
+  those corrections moves by the authored share, so none switches on.
+- **They are authored on the ice, not on the hips.** The hips pitch with the
+  lower body and tip with the balance lean about the ice under the body, so
+  their targets are turned through that tilt (`GaitPose.ice`, `lean`): the
+  skate stays where it was put and the body goes over it, so a turn's bank
+  puts both blades on their edges. The stop and skid scrape along with the
+  body instead (`SkaterLocomotion.sliding`): they keep their place under the
+  hips and the lean only lays them level, or a stop's lean would pull the hips
+  off its front skate.
+- **They aim the runner, not the ankle.** Their blades lie flat along their length
+  on whatever edge the leg rolls them to (the ankle's level give-back), and an
+  edge raises a runner toward its ankle, so the ankle comes down by what the
+  edge takes off and the leg is solved again.
+
+A layer that widens the base does it the same way: `GaitLayer.stance_width`
+is an ankle offset the solve reaches on the ice, so the loaded stance widens a
+stroke's path rather than rolling the solved legs off it.
 
 ### Overlays are layers, and the order is the priority
 
@@ -494,7 +560,7 @@ over the locomotion pose in a `GaitPose`, one stage at a time:
 | Stage | Composition | Why it sits there |
 |---|---|---|
 | `HOLD` | max with the pivot's | how much the layer sets the feet |
-| `FLOOR` | max over the stance | a floor, so order cannot matter |
+| `FLOOR` | max over the stance and the width | a floor, so order cannot matter |
 | `LEGS` | additive on the joints | before the knee solve: the fore-aft compensation must see it |
 | `TRUNK` | additive texture; sinks; `wobble` | `wobble` skips the trunk inertia filter |
 | `OVERRIDE` | lerp owned channels to the layer's pose | last, so it takes everything beneath |
@@ -502,8 +568,9 @@ over the locomotion pose in a `GaitPose`, one stage at a time:
 The override is what makes the priority real. It lerps the channels it owns
 toward its own pose by its weight, so the stroke and every additive layer below
 it fade with no layer knowing about another. The block owns the legs, the drop
-and the ankles; the knockdown, last, owns the legs, the drop, the mohawk yaw,
-the edges, the trunk and the wobble. **A layer never suppresses another with a
+and the ankles, and unplants its kneeling leg; the knockdown, last, owns the
+legs, the drop, the plants (the blade contact seat, `Scripts/actors/CLAUDE.md`),
+the mohawk yaw, the edges, the trunk and the wobble. **A layer never suppresses another with a
 `(1 − other.weight)` factor** — if one must win, it is an override above the
 other. `test_gait_layers.gd` holds the order and the knockdown's mask.
 
@@ -519,21 +586,19 @@ celebration's raised stick, the block's torso lean) are not layers: they move
 the gameplay frame and the blade, so they stay in the pose coordinators at
 physics rate.
 
-### The numeric core is native; the layers are not
+### The gait's numeric core is native
 
-`NativeSkaterGait` ports the part that runs every frame for every skater —
-`SkaterLocomotion`, the coordinator's alignment and pivot read
-(`_align_to_travel`), and `GaitPose`'s solve — and the GDScript stays the
-reference it is fuzzed against (`test_native_gait_parity.gd`). **Change both or
-neither.** The layers are not ported: they are idle most frames, and they are
-where the feel tuning happens. A pass one of them shapes therefore crosses back
-— the port's stroke is mirrored into `SkaterLocomotion` and `GaitPose` solves —
-which is why the parity fuzz drives every overlay, not just skating.
-
-On the native path the GDScript `SkaterLocomotion` does not advance, so nothing
-outside the coordinator may read its state: `locomotion_mix()` answers for
-whichever path runs. Measured skating, per skater per frame: 46 µs GDScript,
-21 µs native, of which the rig writes are about 15.
+Where the extension is built, `NativeSkaterGait` runs `SkaterLocomotion`, the
+alignment and pivot read, the reach sit and `GaitPose`'s stance and leg solve;
+the coordinator reads the hips' tilt off the skater, runs the layers over the
+pose the port loads into `GaitPose`, and publishes. The GDScript is the
+reference and the fallback: change `skater_locomotion.gd`, `_align_to_travel`,
+the reach sit or `GaitPose.solve_stance` / `seed_legs` / `seed_trunk` and the
+port changes with it, or `test_native_gait_parity.gd` fails. A layer must read
+only what `load_native_legs` / `load_native_trunk` fill — the leg solve's own
+state (`GaitPose.leg_l`, `_gripping`) and `_locomotion`'s fields stay stale on
+the native path, as does every alignment and pivot field but the published
+ones (`travel_align_yaw`, `pivot_hold`).
 
 ### Pose the hand, not the blade
 

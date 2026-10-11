@@ -51,6 +51,11 @@ var _in_trunk_tilt := Vector2.ZERO
 var _in_fold: float = 0.0
 var _in_drop: float = 0.0
 var _in_shoulder_y: float = 0.0
+var _in_plant: float = 0.0
+var _in_legs: int = -1
+# Moved since the mesh pass last asked (take_moved): the render pass solves the
+# spine early, from the crouch, so the arms cannot read it off update()'s answer.
+var _moved_unseen: bool = true
 
 
 func setup(skater: Skater) -> void:
@@ -76,10 +81,13 @@ func update() -> bool:
 	var trunk_tilt_in: Vector2 = _skater.trunk_tilt()
 	var drop: float = _skater.body_drop_below_frame()
 	var shoulder_y: float = _skater.shoulder.position.y
+	var plant: float = _skater.ground_plant()
+	var legs: int = _skater.leg_pose_version()
 	if hip == _in_hip and trunk == _in_trunk and fold == _in_fold \
 			and lower.position == _in_lower_pos and skater_basis == _in_basis \
 			and tilt_in == _in_tilt and trunk_tilt_in == _in_trunk_tilt \
-			and drop == _in_drop and shoulder_y == _in_shoulder_y:
+			and drop == _in_drop and shoulder_y == _in_shoulder_y \
+			and plant == _in_plant and legs == _in_legs:
 		return false
 	_in_hip = hip
 	_in_trunk = trunk
@@ -90,6 +98,8 @@ func update() -> bool:
 	_in_trunk_tilt = trunk_tilt_in
 	_in_drop = drop
 	_in_shoulder_y = shoulder_y
+	_in_plant = plant
+	_in_legs = legs
 	var twist: float = clampf(angle_difference(hip.y, trunk.y), -TWIST_LIMIT, TWIST_LIMIT)
 	var hip_basis := Basis.from_euler(Vector3(hip.x, trunk.y - twist, 0.0))
 	var waist_yaw: float = twist * WAIST_TWIST_SHARE
@@ -112,9 +122,13 @@ func update() -> bool:
 		trunk_lean = Basis(trunk_axis, trunk_theta)
 	# LowerBody already carries the lean's shift; the visible hips sit below it
 	# by the part of the crouch the gameplay frame does not take
-	# (Skater.set_skating_crouch_drop).
+	# (Skater.set_skating_crouch_drop), then are seated on the blades
+	# (SkaterLegRig.seat_on_ice, which also plants the second foot).
 	var hips := Transform3D(lean * hip_basis,
 			lower.position - Vector3(0.0, drop, 0.0))
+	var seat: Vector3 = _skater.seat_on_ice(hips)
+	if plant > 0.0:
+		hips.origin += seat * plant
 	var waist := Transform3D(waist_basis, Vector3.ZERO)
 
 	# Relative to the hips, the trunk folds about THEIR axis by the share of the
@@ -155,4 +169,12 @@ func update() -> bool:
 	_skeleton.set_bone_pose(SkaterBodySkeleton.WAIST_BONE, waist)
 	_skeleton.set_bone_pose(SkaterBodySkeleton.SPINE_BONE, spine)
 	_skeleton.set_bone_pose(SkaterBodySkeleton.NECK_BONE, neck)
+	_moved_unseen = true
 	return true
+
+
+# Whether any of the four bones moved since the last call.
+func take_moved() -> bool:
+	var moved: bool = _moved_unseen
+	_moved_unseen = false
+	return moved

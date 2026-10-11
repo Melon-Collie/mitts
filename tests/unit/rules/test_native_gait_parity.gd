@@ -5,12 +5,12 @@ extends GutTest
 # the port, one with its handle nulled so it runs SkaterLocomotion, the
 # alignment and pivot read and GaitPose — and every step both publish into a
 # CaptureSkater whose pose writes land in fields instead of bones. The port
-# carries ~50 floats of smoothed state, so parity is checked EVERY step: a
+# carries ~60 floats of smoothed state, so parity is checked EVERY step: a
 # divergence compounds and trips within a few frames of where it happens.
 #
-# The overlay layers run in GDScript on both sides, so the overlay scenarios
-# check the other half of the boundary: a pass a layer shapes solves the pose in
-# GaitPose from the port's stroke.
+# The overlay layers run in GDScript on both sides, shaping the pose each side
+# solved, so the overlay scenario checks that the port loads everything a layer
+# reads.
 
 const State = SkaterStateMachine.State
 const TOLERANCE: float = 0.001
@@ -21,7 +21,7 @@ class CaptureSkater extends Skater:
 	var cap := PackedFloat64Array()
 
 	func _init() -> void:
-		cap.resize(17)
+		cap.resize(22)
 
 	func set_leg_swing(left_pitch: float, left_roll: float, left_knee: float,
 			right_pitch: float, right_roll: float, right_knee: float,
@@ -35,17 +35,25 @@ class CaptureSkater extends Skater:
 		cap[6] = left_yaw
 		cap[7] = right_yaw
 
-	func set_ankle_flatten(left: float, right: float) -> void:
+	func set_ankle_flatten(left: float, right: float, level_l: float = 0.0,
+			level_r: float = 0.0, _ice: Basis = Basis.IDENTITY) -> void:
 		cap[8] = left
 		cap[9] = right
+		cap[20] = level_l
+		cap[21] = level_r
 
 	func set_edge_loads(left: float, right: float) -> void:
 		cap[10] = left
 		cap[11] = right
 
-	func set_skating_crouch_drop(drop: float, frame_drop: float = 0.0) -> void:
+	func set_skating_crouch_drop(drop: float, frame_drop: float = 0.0, plant: float = 1.0) -> void:
 		cap[12] = drop
 		cap[16] = frame_drop
+		cap[17] = plant
+
+	func set_leg_contact(plant_l: float, plant_r: float, _dt: float) -> void:
+		cap[18] = plant_l
+		cap[19] = plant_r
 
 	func set_trunk_texture(pitch_add: float, roll_add: float) -> void:
 		cap[13] = pitch_add
@@ -70,7 +78,8 @@ class StubGameState extends Node:
 
 const _CAP_NAMES: Array[String] = ["l_pitch", "l_roll", "l_knee", "r_pitch", "r_roll",
 		"r_knee", "l_yaw", "r_yaw", "flat_l", "flat_r", "edge_l", "edge_r", "crouch",
-		"trunk_pitch", "trunk_roll", "address", "frame_drop"]
+		"trunk_pitch", "trunk_roll", "address", "frame_drop", "plant", "plant_l",
+		"plant_r", "level_l", "level_r"]
 
 var _rng := RandomNumberGenerator.new()
 var _skater: CaptureSkater = null
@@ -81,6 +90,9 @@ var _nat: SkaterSkatingCoordinator = null
 var _worst: float = 0.0
 var _worst_where: String = ""
 var _steps: int = 0
+# The heaviest weight each state reached, so a fuzz that never skated a state
+# cannot pass as parity on it.
+var _seen: Dictionary = {}
 
 
 func before_each() -> void:
@@ -114,6 +126,7 @@ func before_each() -> void:
 	_worst = 0.0
 	_worst_where = ""
 	_steps = 0
+	_seen = {}
 
 
 func _native_missing() -> bool:
@@ -137,17 +150,27 @@ func _step(delta: float, label: String) -> bool:
 		if not _close(want[i], got[i], "%s step %d %s" % [label, _steps, _CAP_NAMES[i]]):
 			return false
 	var pub_names: Array[String] = ["stop_yaw", "travel_align_yaw", "pivot_hold",
-			"faceoff_blend", "shot_hip_yaw", "crouch_drop"]
+			"faceoff_blend", "shot_hip_yaw", "crouch_drop", "push_l", "push_r", "push_strength", "stop_weight",
+			"skid_weight", "turn_load", "push_dig", "lift_l", "lift_r"]
 	for i: int in pub_names.size():
 		if not _close(want_pub[i], got_pub[i], "%s step %d %s" % [label, _steps, pub_names[i]]):
 			return false
+	var mix_want: LocomotionRules.Mix = _ref.locomotion_mix()
+	var mix_got: LocomotionRules.Mix = _nat.locomotion_mix()
+	for field: String in ["glide", "stride", "crossover", "carve", "backward", "shuffle", "skid",
+			"tight", "stop", "side"]:
+		if not _close(mix_want.get(field), mix_got.get(field),
+				"%s step %d mix.%s" % [label, _steps, field]):
+			return false
+		_seen[field] = maxf(_seen.get(field, 0.0), mix_got.get(field))
 	return _close(0.0, angle_difference(_ref.stride_phase, _nat.stride_phase),
 			"%s step %d stride_phase" % [label, _steps])
 
 
 func _published(c: SkaterSkatingCoordinator) -> PackedFloat64Array:
 	return PackedFloat64Array([c.stop_yaw_offset, c.travel_align_yaw, c.pivot_hold,
-			c.faceoff_blend, c.shot_hip_yaw, c.crouch_drop])
+			c.faceoff_blend, c.shot_hip_yaw, c.crouch_drop, c.push_l, c.push_r, c.push_strength, c.stop_weight,
+			c.skid_weight, c.turn_load, c.push_dig, c.lift_l, c.lift_r])
 
 
 func _close(want: float, got: float, where: String) -> bool:
@@ -177,6 +200,7 @@ func _drive_skating(steps: int, label: String) -> bool:
 	var vel := Vector3(_rng.randf_range(-4.0, 4.0), 0.0, _rng.randf_range(-4.0, 4.0))
 	var heading: float = _rng.randf_range(-PI, PI)
 	var segment: int = 0
+	var tilt := Vector2.ZERO
 	for _i: int in steps:
 		if segment <= 0:
 			segment = _rng.randi_range(10, 90)
@@ -184,9 +208,15 @@ func _drive_skating(steps: int, label: String) -> bool:
 			if r < 0.15:
 				_skater.move_intent = Vector2.ZERO
 			else:
-				_skater.move_intent = Vector2.from_angle(_rng.randf_range(-PI, PI))
+				_skater.move_intent = Vector2.from_angle(_rng.randf_range(-PI, PI)) \
+						* _rng.randf_range(0.3, 1.0)
 			_skater.brake_intent = _rng.randf() < 0.15
 			_controller.stance_active = _rng.randf() < 0.2
+			# The hips lean into the turn and pitch over it; the ice frame the
+			# authored states stand the skates on follows both.
+			tilt = Vector2(_rng.randf_range(-0.35, 0.35), _rng.randf_range(-0.35, 0.35))
+			_skater.lower_body.rotation = Vector3(_rng.randf_range(-0.3, 0.3),
+					_rng.randf_range(-0.8, 0.8), 0.0)
 		segment -= 1
 		# Velocity steps on roughly two of three passes, toward the intent.
 		if _rng.randf() < 0.66:
@@ -198,6 +228,7 @@ func _drive_skating(steps: int, label: String) -> bool:
 			if _rng.randf() < 0.01:
 				vel = Vector3.ZERO
 		_skater.velocity = vel
+		_skater.set_balance_tilt(tilt)
 		# Facing wanders, with occasional fast swings across the travel line —
 		# the pivot's trigger.
 		heading += _rng.randf_range(-0.05, 0.05)
@@ -214,6 +245,39 @@ func test_skating_parity() -> void:
 		return
 	if _drive_skating(4000, "skating"):
 		_report("skating")
+	_assert_skated(["stride", "backward", "shuffle", "skid", "stop"])
+
+
+# Held curves, both ways and reversed: the stick ahead of travel drives through
+# them in crossovers, across it coasts round on carved edges, and in the stance
+# both dig in. The hips lean into the curve.
+func test_turn_parity() -> void:
+	if _native_missing():
+		return
+	var heading: float = 0.0
+	for turn: Array in [[2.4, PI * 0.25, false], [-2.4, -PI * 0.25, false],
+			[2.0, PI * 0.5, false], [-2.0, -PI * 0.5, false], [2.4, PI * 0.3, true],
+			[-2.4, -PI * 0.3, true]]:
+		var rate: float = turn[0]
+		_controller.stance_active = turn[2]
+		_skater.set_balance_tilt(Vector2(signf(rate) * 0.25, 0.0))
+		for _i: int in 360:
+			var delta: float = _random_delta()
+			heading += rate * delta
+			var travel := Vector2(sin(heading), -cos(heading))
+			_skater.velocity = Vector3(travel.x, 0.0, travel.y) * 7.0
+			_skater.move_intent = travel.rotated(turn[1])
+			_skater.set_facing(travel)
+			if not _step(delta, "turn %.1f" % rate):
+				return
+	_report("turns")
+	_assert_skated(["crossover", "carve", "tight"])
+
+
+func _assert_skated(fields: Array[String]) -> void:
+	gut.p("heaviest weights: %s" % _seen)
+	for field: String in fields:
+		assert_gt(_seen.get(field, 0.0), 0.5, "the fuzz skated %s" % field)
 
 
 func test_pivot_parity() -> void:
@@ -253,6 +317,7 @@ func test_overlay_parity() -> void:
 		_skater.blade_up = _rng.randf() < 0.15
 		_skater.is_left_handed = _rng.randf() < 0.5
 		_skater.is_faceoff_center = _rng.randf() < 0.5
+		_controller.stance_active = _rng.randf() < 0.3
 		_state.faceoff_prep = _rng.randf() < 0.12
 		if _rng.randf() < 0.15:
 			_controller.set("_knockdown_total", 1.2)
@@ -268,6 +333,7 @@ func test_overlay_parity() -> void:
 			_nat.start_check_drive(hit, power)
 		_skater.move_intent = Vector2.ZERO if r > 0.8 \
 				else Vector2.from_angle(_rng.randf_range(-PI, PI))
+		_skater.set_balance_tilt(Vector2(_rng.randf_range(-0.3, 0.3), _rng.randf_range(-0.3, 0.3)))
 		for _i: int in _rng.randi_range(20, 80):
 			var delta: float = _random_delta()
 			vel = (vel + Vector3(_skater.move_intent.x, 0.0, _skater.move_intent.y) * 0.1) \
@@ -302,7 +368,8 @@ func test_reset_settle_and_reconfigure_parity() -> void:
 	assert_true(_nat._settled and _ref._settled, "both sides settled")
 	# Attribute scaling rewrites tunables; the port reloads them.
 	_controller.max_speed *= 1.1
-	_controller.stride_pitch_deg *= 0.9
+	_controller.lateral_grip *= 0.9
+	_controller.stride_push_out_m *= 0.9
 	_nat.native_reconfigure()
 	_ref.leg_scale = 1.07
 	_nat.leg_scale = 1.07

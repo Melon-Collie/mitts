@@ -15,6 +15,9 @@ extends RefCounted
 # controller's @export tunables and writes blade/hand positions onto Skater.
 
 const State = SkaterStateMachine.State
+# How far past the blade's whole reach the boards and the near net must be for
+# the reach limit to cast no ray, metres: float room on the limit it skips.
+const _OPEN_ICE_MARGIN_M: float = 0.05
 
 # ── References ────────────────────────────────────────────────────────────────
 var _skater: Skater = null
@@ -82,13 +85,12 @@ func setup(skater: Skater, controller: SkaterController,
 	if ClassDB.class_exists(&"NativeTopHandIK"):
 		_native_top = ClassDB.instantiate(&"NativeTopHandIK")
 		# Stale-binary guard, one level finer than NativeKernels' class census:
-		# max_blade_reach was ADDED to an existing kernel, so a binary predating it
-		# still registers the class and passes that check. Writing the property
-		# would then quietly no-op and the boards would stop bounding blade reach —
-		# wrong behaviour that looks like working behaviour. Fall back to GDScript,
-		# which is slower and correct, rather than fast and silently wrong.
-		if not _native_top.has_method(&"set_max_blade_reach"):
-			push_warning("NativeTopHandIK predates max_blade_reach — "
+		# solve_on_ice is the newest thing ADDED to an existing kernel, so a binary
+		# predating it still registers the class and passes that check. Fall back
+		# to GDScript, which is slower and correct, rather than call a method the
+		# binary does not have.
+		if not _native_top.has_method(&"solve_on_ice"):
+			push_warning("NativeTopHandIK predates solve_on_ice — "
 					+ "using the GDScript solver. Rebuild native/ (bash native/build.sh).")
 			_native_top = null
 		else:
@@ -468,6 +470,15 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 # where this binds). The exact heel/toe clamp downstream remains the backstop —
 # this limit exists so that clamp has almost nothing left to correct.
 func _board_reach_limit(target_blade_xz: Vector2, shoulder_world: Vector3) -> float:
+	var origin := Vector2(shoulder_world.x, shoulder_world.z)
+	# Open ice: a limit past the blade's whole reach poses it exactly as no limit
+	# does (TopHandIK clamps to its ROM first), so no ray is cast.
+	var clear: float = minf(GameRules.distance_to_rink_inner(origin),
+			NetGeometry.distance_to_near_net(origin, _controller.net_blade_half_thickness))
+	if clear > _controller.stick_length \
+			+ maxf(_controller.rom_forehand_reach_max, _controller.rom_backhand_reach_max) \
+			+ _OPEN_ICE_MARGIN_M:
+		return INF
 	var aim_local := Vector3(
 			target_blade_xz.x - _skater.shoulder.position.x,
 			0.0,
@@ -478,7 +489,6 @@ func _board_reach_limit(target_blade_xz: Vector2, shoulder_world: Vector3) -> fl
 	var dir := Vector2(aim_world.x, aim_world.z)
 	if dir.length_squared() < 0.000001:
 		return INF
-	var origin := Vector2(shoulder_world.x, shoulder_world.z)
 	var unit: Vector2 = dir.normalized()
 	# The net is the second obstacle on this aim line, and it earns the same
 	# treatment as the boards: bound the REACH so the stick is never aimed through
@@ -524,19 +534,22 @@ func _solve_top_hand(desired_blade_xz: Vector2, blade_side_sign: float,
 	var blade_y: float = blade_y_local()
 	var shoulder: Vector3 = address_shoulder(_skater.shoulder.position)
 	var ik: TopHandIK.Result = _ik_result
-	for i in 3:
-		if _native_top != null:
+	if _native_top != null:
+		if _cached_top_cfg == null:
 			_ik_config(blade_y, max_blade_reach)
-			_native_top.solve(shoulder, desired_blade_xz, blade_side_sign)
-			ik.hand = _native_top.get_hand()
-			ik.blade = _native_top.get_blade()
-		else:
-			TopHandIK.solve(
-					shoulder,
-					desired_blade_xz,
-					blade_side_sign,
-					_ik_config(blade_y, max_blade_reach),
-					ik)
+		var lean: Vector3 = _skater.upper_body.rotation
+		_native_top.solve_on_ice(shoulder, desired_blade_xz, blade_side_sign, blade_y,
+				lean.x, lean.z, max_blade_reach, solve_stick_length(), _address_hand_ceiling())
+		ik.hand = _native_top.get_hand()
+		ik.blade = _native_top.get_blade()
+		return ik
+	for i in 3:
+		TopHandIK.solve(
+				shoulder,
+				desired_blade_xz,
+				blade_side_sign,
+				_ik_config(blade_y, max_blade_reach),
+				ik)
 		blade_y = blade_y_lean_corrected(ik.blade.x, ik.blade.z)
 	return ik
 

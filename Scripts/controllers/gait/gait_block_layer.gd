@@ -58,18 +58,19 @@ func override(p: GaitPose) -> void:
 	const FOOT: float = GaitPose.FOOT_FWD
 	var kneel_hip: float = deg_to_rad(_controller.block_kneel_hip_deg)
 	var kneel_shin: float = deg_to_rad(_controller.block_kneel_shin_deg)
-	var hip_h: float = p.leg_scale * (THIGH * cos(kneel_hip)
-			+ SHIN * cos(kneel_shin) + FOOT * sin(kneel_shin))
+	var hip_h: float = p.leg_scale * (THIGH * cos(kneel_hip) + SHIN * cos(kneel_shin)) \
+			+ FOOT * sin(kneel_shin)
 	var ext_knee: float = deg_to_rad(_controller.block_extend_knee_deg)
-	var ext_len: float = p.leg_scale * (THIGH + SHIN * cos(ext_knee) + FOOT * sin(ext_knee))
+	var ext_len: float = p.leg_scale * (THIGH + SHIN * cos(ext_knee)) + FOOT * sin(ext_knee)
 	var ext_roll: float = acos(clampf(hip_h / maxf(ext_len, 0.001), -1.0, 1.0))
 	var down_knee: float = -(kneel_hip + kneel_shin)
 	# The extended leg rolls AWAY from the body (left toward −X, right toward
 	# +X), and its ankle gives back what that leg took, so its blade lies flat
 	# instead of swinging up onto an edge under a leg splayed 60° out of
 	# vertical. The kneeling leg keeps its fold — that skate is up on its toe by
-	# design.
+	# design, so it is not planted; the extended one is solved onto the ice.
 	if p.stick_side > 0.0:
+		p.plant_r = lerpf(p.plant_r, 0.0, _blend)
 		p.foot_flat_l = _blend
 		p.foot_flat_r = 0.0
 		p.r_pitch = lerpf(p.r_pitch, kneel_hip, _blend)
@@ -79,6 +80,7 @@ func override(p: GaitPose) -> void:
 		p.l_roll = lerpf(p.l_roll, -ext_roll, _blend)
 		p.l_knee = lerpf(p.l_knee, -ext_knee, _blend)
 	else:
+		p.plant_l = lerpf(p.plant_l, 0.0, _blend)
 		p.foot_flat_r = _blend
 		p.foot_flat_l = 0.0
 		p.l_pitch = lerpf(p.l_pitch, kneel_hip, _blend)
