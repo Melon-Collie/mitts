@@ -2095,12 +2095,18 @@ func _build_save_situation(staying_down: bool = false) -> GoalieSaveSelection.Si
 	# shot that will not come from where he committed. Same split the tracking read
 	# makes (_reading_pinned_windup vs _reading_planted_windup), and counting
 	# WRISTER_AIM here is what test_goalie_disguise_read prices.
+	#
+	# STAYING down, the pin is enough. That is no pre-commit — he is already down
+	# — and rising costs `recovery_duration` blind, which a loaded shot from the
+	# rebound he just gave up is there to punish.
 	var carrier: Skater = puck.get_carrier()
 	var hostile_carrier: bool = carrier != null \
 			and (team_id == -1 or carrier.get_team_id() != team_id)
+	var declared: bool = hostile_carrier and (carrier.current_shot_state
+			== SkaterStateMachine.State.SLAPPER_CHARGE_WITH_PUCK
+			or (staying_down and SkaterStateMachine.state_pins_puck(carrier.current_shot_state)))
 	var launch: float = 0.0
-	if hostile_carrier and carrier.current_shot_state \
-			!= SkaterStateMachine.State.SLAPPER_CHARGE_WITH_PUCK:
+	if hostile_carrier and not declared:
 		launch = INF
 	elif not hostile_carrier:
 		launch = s.time_to_contest
@@ -2159,11 +2165,11 @@ func _build_save_situation(staying_down: bool = false) -> GoalieSaveSelection.Si
 # AND for staying down, so he cannot pop up into a situation he would have
 # dropped for.
 # The staying-down twin of `_should_block`, sharing its lunge precedence: a
-# committed poke is a save selection already made, and the seal must not undo it
-# either.
+# committed poke is a save selection already made. Down, it is made FROM the
+# butterfly, so the stand-up is what would undo it, and he holds.
 func _should_hold_seal() -> bool:
 	if _lunge_active_timer > 0.0:
-		return false
+		return true
 	return GoalieSaveSelection.should_hold_seal(
 			_build_save_situation(true), recovery_duration)
 
