@@ -27,6 +27,10 @@ var accel_by_peer: Dictionary[int, Vector3] = {}          # peer_id -> smoothed 
 # receiver is hard to lead, so a feed to one is priced as riskier in the pass EV
 # (see AIActionScoring.receiver_heading_uncertainty_m). Read via `.get(pid, 0.0)`.
 var heading_omega_by_peer: Dictionary[int, float] = {}    # peer_id -> smoothed turn rate
+# NHL delayed offside: peers who must get back to the blue line, from
+# GameManager.must_tag_up. A touch by one whistles the play, so the AI treats
+# them like a ghost. Empty on rewind snapshots and outside NHL.
+var tag_up_peers: Dictionary[int, bool] = {}
 
 # Bot reaction-delay support. `puck_state.carrier_peer_id` on the AI snapshot
 # carries the DEBOUNCED (delayed) carrier so all AI consumers react to
@@ -38,3 +42,12 @@ var real_puck_carrier_peer_id: int = -1
 
 func get_skater_state(peer_id: int) -> SkaterNetworkState:
 	return skater_states.get(peer_id)
+
+
+# Whether peer_id can't legally play the puck right now: ghosted, or must tag
+# up under NHL delayed offside.
+func is_out_of_play(peer_id: int) -> bool:
+	if tag_up_peers.has(peer_id):
+		return true
+	var s: SkaterNetworkState = skater_states.get(peer_id)
+	return s != null and s.is_ghost

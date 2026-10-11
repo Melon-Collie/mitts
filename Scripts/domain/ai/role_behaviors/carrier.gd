@@ -1102,7 +1102,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 	var in_oz_now: bool = _zone_taken(ctx)
 	for pid: int in _scratch_teammate_ids:
 		var tm: SkaterNetworkState = snapshot.skater_states[pid]
-		if tm.is_ghost:
+		if snapshot.is_out_of_play(pid):
 			continue
 		if in_oz_now and not AIActionScoring.in_offensive_zone(
 				tm.position, attacking_goal, OZ_RECEIVE_LINE_BUFFER_M):
@@ -1902,7 +1902,7 @@ func _compute_best_pass(ctx: RoleContext, self_facing_xz: Vector2,
 	var rim_miss: float = 0.0
 	for peer_id: int in teammate_ids:
 		var receiver_state: SkaterNetworkState = snapshot.skater_states[peer_id]
-		if receiver_state.is_ghost:
+		if snapshot.is_out_of_play(peer_id):
 			continue
 		if carrier_in_oz and not AIActionScoring.in_offensive_zone(
 				receiver_state.position, attacking_goal):
@@ -3719,14 +3719,14 @@ func _best_developing_feed(ctx: RoleContext) -> float:
 	for pid: int in _scratch_teammate_ids:
 		var slot: int = ctx.team_brain.get_slot(pid)
 		var tm: SkaterNetworkState = ctx.snapshot.skater_states.get(pid)
-		if tm == null:
+		# A mate who can't legally play the puck can't receive: the live pass
+		# scoring skips them, so holding for one would wait forever.
+		if tm == null or ctx.snapshot.is_out_of_play(pid):
 			continue
 		var feed: float = 0.0
 		if slot == AIRoleSlots.Slot.FINISHER:
-			# Ghosted (offside) finisher can't receive — the live pass
-			# scoring skips ghosts, so holding for one would be waiting
-			# for a feed we're never allowed to make. Already-flagged —
-			# the normal pass scoring feeds it; nothing to wait for.
+			# A one-timer-flagged finisher is already fed by the normal
+			# pass scoring; nothing to wait for.
 			#
 			# The play that WILL exist, not just the one that does: a
 			# finisher still skating to his staging spot is valued at the
@@ -3748,7 +3748,7 @@ func _best_developing_feed(ctx: RoleContext) -> float:
 			var spot := Vector3(
 					tm.position.x + fin_vel.x * OUTLET_DEVELOP_WINDOW_S, 0.0,
 					tm.position.z + fin_vel.z * OUTLET_DEVELOP_WINDOW_S)
-			if tm.is_ghost or ctx.team_brain.is_one_timer_ready(pid) \
+			if ctx.team_brain.is_one_timer_ready(pid) \
 					or not AIActionScoring.in_offensive_zone(
 							spot, ctx.attacking_goal_pos, OZ_RECEIVE_LINE_BUFFER_M) \
 					or not AIRoleHelpers.is_legal_position(spot):
@@ -3801,8 +3801,6 @@ func _best_developing_feed(ctx: RoleContext) -> float:
 func _developing_outlet_feed(ctx: RoleContext, tm: SkaterNetworkState,
 		our_goalie: Vector3, self_facing_xz: Vector2,
 		receiver_caps: AISkaterCaps = null) -> float:
-	if tm.is_ghost:
-		return 0.0
 	var vel: Vector3 = tm.velocity
 	if vel.x * vel.x + vel.z * vel.z \
 			< OUTLET_DEVELOP_MIN_SPEED_M_S * OUTLET_DEVELOP_MIN_SPEED_M_S:

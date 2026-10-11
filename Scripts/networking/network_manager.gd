@@ -65,6 +65,7 @@ signal local_puck_stolen(was_stick_lift: bool)
 signal carrier_puck_dropped
 signal remote_carrier_changed(new_carrier_peer_id: int)
 signal ghost_state_received(peer_id: int, is_ghost: bool)
+signal offside_state_received(peer_id: int, must_tag_up: bool)
 signal goal_received(scoring_team_id: int, score0: int, score1: int, scorer_name: String, assist1_name: String, assist2_name: String)
 signal puck_out_of_play_received
 signal icing_called_received
@@ -1978,6 +1979,18 @@ func notify_ghost_state(peer_id: int, is_ghost: bool) -> void:
 	NetworkSimManager.send(
 		func(pid: int, g: bool) -> void: ghost_state_received.emit(pid, g),
 		[peer_id, is_ghost], true)
+
+# NHL delayed offside never ghosts, so is_ghost can't carry it: this is the
+# host's GameStateMachine.must_tag_up flag for one peer, on every change.
+func send_offside_state_to_all(peer_id: int, must_tag_up: bool) -> void:
+	for remote_id: int in connected_peer_ids():
+		notify_offside_state.rpc_id(remote_id, peer_id, must_tag_up)
+
+@rpc("authority", "reliable")
+func notify_offside_state(peer_id: int, must_tag_up: bool) -> void:
+	NetworkSimManager.send(
+		func(pid: int, t: bool) -> void: offside_state_received.emit(pid, t),
+		[peer_id, must_tag_up], true)
 
 func send_carrier_changed_to_all(new_carrier_peer_id: int) -> void:
 	var seq: int = _event_log.record(
