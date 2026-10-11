@@ -37,6 +37,14 @@ const EMPTY_CAPS: Array = []
 
 static func _static_init() -> void:
 	EMPTY_VEC3.make_read_only()
+	XG_SLOT_REF = AIShotValue.for_release(
+			Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z + SLOT_RADIUS_M),
+			Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z), 0.0)
+
+# xG of a clean look from the slot ring, head-on, against a set keeper: the
+# situation position_potential reads as 1.0, measured on the live shot model.
+# It converts an in-zone xG value into position_potential's unit.
+static var XG_SLOT_REF: float = 0.0
 
 # SLOT_RADIUS_M is the platform width — positions within this distance
 # of the goal are all peak-value. Tuning: up (8 m) makes the gradient

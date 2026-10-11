@@ -2668,3 +2668,20 @@ func test_predicted_hands_sink_when_unsettled() -> void:
 	assert_almost_eq(moving.x, HANDS_READY.x, 0.001, "laterals travel with the body")
 	assert_false(AIActionScoring.predicted_goalie_hands(Vector4.INF, 1.0).is_finite(),
 			"absent pose passes through")
+
+
+# XG_SLOT_REF converts in-zone xG into position_potential's unit, so it must be
+# the xG of exactly the situation potential reads as 1.0: the slot ring, head-on,
+# nothing in the way, a set keeper.
+func test_xg_slot_ref_is_the_xg_of_potentials_full_value() -> void:
+	var goal := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
+	var ring := Vector3(0.0, 0.0, goal.z + AIActionScoring.SLOT_RADIUS_M)
+	var none: Array[Vector3] = []
+	assert_almost_eq(AIActionScoring.position_potential(ring, goal, none), 1.0, 0.0001,
+			"potential's full value sits on the slot ring, head-on")
+	assert_almost_eq(AIActionScoring.potential_realization_discount(ring, goal), 1.0, 0.0001,
+			"…with nothing left to skate")
+	assert_almost_eq(AIActionScoring.XG_SLOT_REF,
+			AIShotValue.for_release(ring, goal, 0.0), 0.000001,
+			"XG_SLOT_REF is the xG of that same look")
+	assert_gt(AIActionScoring.XG_SLOT_REF, 0.0, "and it is a real number, not the unset default")

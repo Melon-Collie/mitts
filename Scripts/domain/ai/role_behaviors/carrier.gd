@@ -634,6 +634,8 @@ var _scratch_opponents_path: Array[Vector3] = []
 # second leg's reach read, then refilled at destination arrival for that
 # leg's lane/pressure read.
 var _scratch_opponents_cont: Array[Vector3] = []
+# Opponents at the start of an entry continuation (_receiver_drive_in_value).
+var _scratch_opponents_entry: Array[Vector3] = []
 var _scratch_teammate_ids: Array[int] = []
 # Our skaters excluding the carrier — the defenders that reduce the
 # opponent's threat in the turnover-cost term (the carrier just got
@@ -3253,6 +3255,15 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 			_scratch_opponents_path, cand_goalie,
 			ctx.self_wrister_shot_speed, cand_unsettled, ctx.self_aim_spread_rad,
 			cand_displacement)
+	# ENTRY CONTINUATION: from outside the zone an in-zone candidate is worth what
+	# a carrier there does next, which its own shot xG badly understates just
+	# inside the line. The drive-in from the candidate, priced in the in-zone
+	# regime and starting when we arrive, is that next play.
+	if AIActionScoring.in_offensive_zone(candidate, ctx.attacking_goal_pos) \
+			and not AIActionScoring.in_offensive_zone(self_pos, ctx.attacking_goal_pos):
+		dest_score = maxf(dest_score, _entry_value(_receiver_drive_in_value(
+				ctx, candidate, ctx.self_wrister_shot_speed,
+				ctx.caps_by_peer.get(ctx.peer_id), arrive_vel, candidate, local_time)))
 	var keep_prob: float = safety
 	var cost: float = 0.0
 	# A fully safe route pays no turnover cost at all — skip localizing a
@@ -3308,7 +3319,8 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 # loop is already decided and skips wholesale.
 #
 # There is no second speculative carry leg here: separating "cut in behind the
-# beaten man" from "orbit the perimeter" is already in the one-ply value seam.
+# beaten man" from "orbit the perimeter" is already in the one-ply value seam
+# (and the entry continuation, for a carrier outside the zone).
 func _upgrade_candidate_two_ply(ctx: RoleContext, i: int) -> float:
 	var candidate: Vector3 = _beam_pos[i]
 	var dest_score: float = _beam_dest[i]
@@ -3422,29 +3434,20 @@ func _score_wheel_candidate(ctx: RoleContext, dest: Vector3,
 
 # Position-value scorer at `pos`, evaluated from the carrier at `from_pos`.
 #
-#   carrier in the offensive zone:  score_shoot(pos) only
-#   carrier outside the zone:        max(score_shoot(pos), position_potential(pos))
+#   carrier in the zone:            shot xG at `pos`
+#   carrier outside, `pos` outside: max(shot xG, position_potential × realization)
+#   carrier outside, `pos` inside:  shot xG at `pos`, converted (_entry_value)
 #
-# The regime is gated on the CARRIER (from_pos), not on `pos`. This is the whole
-# trick that lets the two value scales coexist without a bridging floor: a carrier
-# already in the zone reads real, goalie-aware shot danger for every (in-zone,
-# valve-guaranteed) candidate — the O-zone is xG's domain, a strictly better read
-# than any positional proxy, and it drives the bot to the slot rather than a
-# "high-potential" spot that doesn't score. A carrier OUTSIDE prices every
-# candidate — including an entry target across the blue line — on the position_
-# potential scale, whose closeness gradient climbs toward the slot, so driving into
-# the zone out-scores staying out. Because of offsides the two never need to be
-# compared: the only in-vs-out choice is the carry into the zone, made entirely in
-# potential currency. The max with score_shoot lets a genuinely open entry look
-# (a breakaway) still register its shot value on the way in.
+# Two value scales, keyed on the CARRIER: in the zone xG drives the bot to the
+# slot, outside it the potential map's closeness gradient drives it toward the
+# zone. An outside carrier compares the two only when an option crosses the line
+# (his own carry, a receiver's drive, a pass entry), so an in-zone spot is
+# always priced by the goal-based scale and converted into potential's unit; the
+# carry search adds the in-zone continuation on top (_score_move_candidate_base).
 #
-# The potential branch pays the realization discount (see
-# AIActionScoring.potential_realization_discount): potential is future
-# value that still has to be skated to the slot, so it decays over that
-# remaining travel exactly like every other future action. Leave stand-still's
-# potential undecayed and it strictly beats a step toward the net in open ice —
-# the blue-line freeze. Applied uniformly here so carry candidates, stand-still,
-# and pass receivers all price potential in the same currency.
+# The potential branch pays the realization discount: it is future value that
+# still has to be skated to the slot. Undecayed, stand-still strictly beats a step
+# toward the net in open ice (the blue-line freeze).
 #
 # `opps` should already be projected to the time the actor will be
 # at `pos` (caller's responsibility — score_pass does this for
@@ -3528,7 +3531,16 @@ func _score_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 			pos, attacking_goal, opps)
 	var realization: float = AIActionScoring.potential_realization_discount(
 			pos, attacking_goal)
+	if AIActionScoring.in_offensive_zone(pos, attacking_goal):
+		return _entry_value(shoot_s)
 	return maxf(shoot_s, potential_s * realization)
+
+
+# An in-zone xG value as an out-of-zone carrier reads it, in position_potential's
+# unit. Capped at a clean slot look, potential's own ceiling, which also keeps the
+# [0, 1] bound the carry candidates' ceiling prunes rely on.
+static func _entry_value(in_zone_xg: float) -> float:
+	return minf(in_zone_xg / AIActionScoring.XG_SLOT_REF, 1.0)
 
 
 # The pass OPTION a carry candidate opens: the best cached receiver value
@@ -3575,25 +3587,20 @@ func _candidate_pass_option(ctx: RoleContext, candidate: Vector3,
 	return best
 
 
-# The value of an open pass receiver DRIVING IN: the best value they can reach by
-# carrying toward the net, not just a one-timer / potential from where they catch it.
-# Models "a wide-open man walks into a better chance" (OZ) and "an ahead man with a
-# clear path skates it into the zone" (NZ/DZ) — both of which the score_at above
-# omits (OZ is shot-only; a static receiver isn't credited for advancing).
+# The value of a man DRIVING IN from `receiver_spot`: the best value he reaches by
+# carrying toward the net, up to RECEIVER_DRIVE_MAX_M and only as far as the path
+# stays clear (carry_strip_point). Value = score_at(reached) × keep × decay(time to
+# reach it), on the same reach/clearance machinery as the carrier's own carry, so
+# both sides of a pass are valued alike. One carry, leaf value, no recursion.
+# Serves pass receivers, the carrier's own floor, and the entry continuation.
 #
-# The reach is the REACHABLE SET, not a fixed step: the receiver carries toward the
-# net up to RECEIVER_DRIVE_MAX_M, but only as far as the path stays clear — a defender
-# in the way strips it early (carry_strip_point), a very clear lane lets it run the
-# whole way. So a teammate a little farther back with a WIDE-OPEN path is credited
-# for the deep spot they can reach, while a covered one earns nothing. Value =
-# score_at(reached spot) × keep-probability × decay(time to reach it); the pass-flight
-# decay is applied to the max() by the caller. Goalie squared to the reached spot, and
-# the whole thing uses the SAME reach/clearance/score machinery as the carrier's own
-# carry candidates, so both sides of the pass are valued consistently. Bounded — one
-# carry, leaf value, no further passing — so no recursion. Reuses _scratch_opponents_pass.
+# `start_s` > 0 prices a drive that begins that far in the future (the entry
+# continuation after a carry candidate): defenders are read where they will be
+# then, and `from_pos` names whose regime values the reached spot.
 func _receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 		receiver_shot_speed: float, receiver_caps: AISkaterCaps,
-		receiver_vel: Vector3 = Vector3.ZERO) -> float:
+		receiver_vel: Vector3 = Vector3.ZERO, from_pos: Vector3 = Vector3.INF,
+		start_s: float = 0.0) -> float:
 	var to_net_x: float = ctx.attacking_goal_pos.x - receiver_spot.x
 	var to_net_z: float = ctx.attacking_goal_pos.z - receiver_spot.z
 	var d: float = sqrt(to_net_x * to_net_x + to_net_z * to_net_z)
@@ -3612,47 +3619,40 @@ func _receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 			else ctx.self_max_speed
 	var recv_accel: float = receiver_caps.max_accel if receiver_caps != null \
 			else ctx.self_max_accel
-	# MOMENTUM-HONEST drive time (the calibrated phase model): a receiver
-	# already streaking netward carries his pace into the drive; one
-	# RETREATING must brake the retreat out and ramp from rest, paying the
-	# reversal in real time (and thus decay). A plain `reach / max_speed` credits a
-	# receiver back-pedalling out of the zone with the same instant full-speed drive
-	# as a streaker — one blindness that both over-values the backpass to a
-	# retreating man and under-values the stretch feed to one in stride.
+	# Momentum-honest: a man in stride carries his pace into the drive, one curling
+	# back brakes it out first. Never `reach / max_speed`.
 	var reach_time: float = AIActionScoring.time_to_arrive(
 			receiver_spot, target, receiver_vel, recv_speed, recv_accel)
-	# Reachable-set safety + strip point over the drive, using the SAME current-opponent
-	# reach model the carrier's carry uses (carry_clearance/strip project the defenders
-	# in by their velocity + closing reach). A clear lane keeps ~1 and reaches `target`;
-	# a defender in the way drops keep and pulls the reached spot back to the strip.
-	# apply_escape: driving in past a man you out-skate is winnable, not a wall —
-	# the same read the carrier's own carry candidates use (the drive-in credit that
-	# floors the carry is exactly "the shot I skate into by beating my man").
+	# A clear lane keeps ~1 and reaches `target`; a defender in the way drops keep and
+	# stops the drive where he covers it. apply_escape: a man you out-skate is
+	# beatable, not a wall, as for the carrier's own candidates.
+	var opps: Array[Vector3] = _scratch_opponents
+	if start_s > 0.0:
+		_project_opponents_to(ctx, start_s, _scratch_opponents_entry)
+		opps = _scratch_opponents_entry
 	var keep: float = AICarrySpace.carry_safety(
 			receiver_spot, target, reach_time,
-			_scratch_opponents, _scratch_opponent_vels, _scratch_opponent_caps,
-			true)
+			opps, _scratch_opponent_vels, _scratch_opponent_caps, true)
 	if keep <= 0.0:
 		return 0.0
 	var reached: Vector3 = AICarrySpace.carry_strip_point(
 			receiver_spot, target, reach_time,
-			_scratch_opponents, _scratch_opponent_vels, _scratch_opponent_caps, true, true)
+			opps, _scratch_opponent_vels, _scratch_opponent_caps, true, true)
 	var t: float = reach_time if reached == target \
 			else AIActionScoring.time_to_arrive(
 					receiver_spot, reached, receiver_vel, recv_speed, recv_accel)
-	_project_opponents_to(ctx, t, _scratch_opponents_pass)
+	_project_opponents_to(ctx, start_s + t, _scratch_opponents_pass)
 	# The keeper backs in over the receiver's drive exactly as he does over the
 	# carrier's own (planning depth model) — both sides of the carry-vs-pass
 	# compete must read the same keeper, or the feed inherits a phantom wall.
 	var goalie: Vector3 = AIActionScoring.goalie_squared_pos(
-			_goalie_now(ctx), ctx.attacking_goal_pos, reached, t,
+			_goalie_now(ctx), ctx.attacking_goal_pos, reached, start_s + t,
 			(receiver_spot.distance_to(ctx.attacking_goal_pos)
 					- reached.distance_to(ctx.attacking_goal_pos)) / maxf(t, 0.001))
-	# score_at, not score_shoot: OZ → goalie-aware shot from the reached spot; NZ/DZ →
-	# position potential of the reached spot (advanced toward the zone). Same regime
-	# the carrier's own carry candidates use, so the ahead man on the clear path is
-	# credited for continuing the rush exactly as the carrier would credit itself.
-	var advanced: float = _score_at(ctx, reached, ctx.self_pos,
+	# score_at, so the reached spot is priced in the same regime as the carrier's own
+	# candidates.
+	var advanced: float = _score_at(ctx, reached,
+			from_pos if from_pos.is_finite() else ctx.self_pos,
 			_scratch_opponents_pass, goalie, receiver_shot_speed, 0.0)
 	return advanced * keep * AIActionScoring.delay_discount(t)
 

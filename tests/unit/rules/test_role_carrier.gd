@@ -298,7 +298,7 @@ func test_lightly_impeded_carrier_moves_it_to_the_open_man() -> void:
 	# geometry this test used to assert a pass on.
 	var net := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
 	var carrier := Vector3(0.0, 0.0, 2.0)
-	var mate := Vector3(7.0, 0.0, -8.0)          # ahead AND wide — a real entry man
+	var mate := Vector3(7.0, 0.0, -6.5)          # ahead AND wide, still onside — a real entry man
 	var g := GoalieNetworkState.new()
 	g.position_x = 0.0
 	g.position_z = net.z + 1.3
@@ -690,6 +690,59 @@ func test_carrier_whose_puck_has_entered_never_drops_it_back_out() -> void:
 	c_back.decide(back_ctx)
 	assert_gt(c_back.debug_pass_score, 0.0,
 			"before the zone is taken the trailer is a legal receiver")
+
+
+# ─── the entry: being in the zone outranks staying out ──────────────────────
+
+func _entry_ctx(body_z: float, skaters_extra: Array) -> RoleContext:
+	var v := Vector3(0, 0, -7.0)
+	var self_pos := Vector3(-8.0, 0, body_z)
+	var skaters: Array = [
+			[1, TEAM_ID, self_pos, false, v],
+			[2, TEAM_ID, Vector3(2.0, 0, body_z + 5.0), false, v],   # trailer
+	]
+	skaters.append_array(skaters_extra)
+	var ctx: RoleContext = _make_ctx(self_pos, skaters)
+	ctx.self_velocity = v
+	ctx.snapshot.puck_state.position = self_pos + Vector3(0, 0, -1.1)
+	var g := GoalieNetworkState.new()
+	g.position_z = -GameRules.GOAL_LINE_Z + 1.0
+	ctx.snapshot.goalie_states[1 - TEAM_ID] = g
+	return ctx
+
+
+func test_carrier_with_room_at_the_line_carries_in_over_the_drop_pass() -> void:
+	# Up the wall at speed, 4.3 m short of the line, the defender gapping 3.5 m
+	# ahead and the trailer open in the middle. The carrier can get into the zone
+	# with the puck, and what he does from there is worth more than the trailer's
+	# drive from 5 m further back.
+	var ctx: RoleContext = _entry_ctx(-3.0, [
+			[3, 1, Vector3(-7.5, 0, -7.6), false, Vector3(0, 0, -6.0)],
+			[4, 1, Vector3(3.0, 0, -12.0), false, Vector3(0, 0, -5.0)],
+	])
+	var c := AIRoleCarrier.new()
+	c.decide(ctx)
+	c.decide(ctx)
+	assert_gt(c.debug_pass_score, 0.0, "precondition: the drop to the trailer is a live option")
+	assert_eq(c.intended_action, AIRoleCarrier.INTENT_CARRY,
+			"with room to enter, the carrier takes the zone himself (pass %.3f vs carry %.3f)"
+			% [c.debug_pass_score, c.debug_carry_score])
+
+
+func test_smothered_carrier_at_the_line_still_drops_it_to_the_trailer() -> void:
+	# Same rush, but a checker is on his hip and another seals the line ahead:
+	# there is no entry for him to make, and the open trailer's is the play.
+	var ctx: RoleContext = _entry_ctx(-4.5, [
+			[3, 1, Vector3(-6.2, 0, -5.3), false, Vector3(0, 0, -7.0)],
+			[4, 1, Vector3(-7.0, 0, -7.5), false, Vector3(0, 0, -2.0)],
+	])
+	var c := AIRoleCarrier.new()
+	c.decide(ctx)
+	c.decide(ctx)
+	assert_eq(c.intended_action, AIRoleCarrier.INTENT_PASS,
+			"no entry of his own: the trailer gets it (pass %.3f vs carry %.3f)"
+			% [c.debug_pass_score, c.debug_carry_score])
+	assert_eq(c.debug_pass_peer_id, 2, "…to the trailer")
 
 
 # ─── drive-in: a clear drive is credited all the way ────────────────────────

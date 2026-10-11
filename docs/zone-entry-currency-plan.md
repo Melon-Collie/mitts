@@ -1,183 +1,95 @@
-# Zone Entry Currency — Design Doc
+# Zone Entry Currency — Design Record
 
-Status: **revised after measurement, awaiting a decision**. Nothing here is
-implemented. Decided so far: anchor = a clean slot look (§3), the giveaway
-bars bind everywhere (§5), both 3v3 and 5v5 at once (both are first-class
-modes). §3a records why the first version of §3 does not do what it claimed.
+Status: **implemented** (both 3v3 and 5v5; the code is shared).
 
 ## 1. The problem
 
 Playtest: bots take the zone, then drop the puck back to a trailer. The pass
-back out of the zone was a valve bug (fixed: `_zone_taken` keys on the puck).
-But the bots still *want* that pass. In the repro scene (carrier at speed up
-the left wall ~3 m short of the line, a defender gapping him at 2.5 m, the
-trailer 5 m behind in the middle) the drop scores **0.47** against **0.39**
-for carrying, and entering the zone earns nothing in that number.
+back out of the zone was a valve bug (fixed separately: `_zone_taken` keys the
+pass valve on the puck). But the bots still *wanted* the drop. In the repro
+scene (carrier at speed up the left wall a few metres short of the line, a
+defender gapping him, the trailer 5 m behind in the middle) the drop out-scored
+carrying in half the cells of the entry grid.
 
-Two things in the value model make the blue line invisible:
+The carrier values ice on two scales, keyed on his own body:
 
-- **Outside the zone, value is `position_potential`**: closeness × projected
-  goal-mouth width × release openness, on a 0–1 scale, discounted by travel to
-  the slot ring (`potential_realization_discount`). It is smooth across the
-  whole rink (~2%/m), so crossing the line with control is worth what any
-  other metre is worth. The angle term also rates the middle above the wall
-  (0.71 vs 0.63 at the line), so a trailer 5 m back in the middle is worth as
-  much as the carrier on the wall at the line.
-- **The regime is keyed on the carrier's BODY** (`_score_at`'s `from_pos`).
-  While he is outside, every spot is priced on the potential map, including
-  in-zone spots. Once his body crosses, everything is priced in xG
-  (`AIShotValue`), and the same carry drops from ~0.4 to ~0.14. The two scales
-  are never compared inside one eval (CLAUDE.md: "the two scales never need to
-  be compared"), which is true. But it means an out-of-zone carrier cannot
-  see what entering is worth in the currency it will be judged in one tick
-  later.
+- **In the zone:** xG through the value seam (`AIShotValue`).
+- **Outside:** `position_potential` × realization, a 0–1 map smooth across the
+  whole rink, with no step at the blue line.
 
-## 2. What does NOT work, and why
+Because of offsides, an outside player only ever prices an in-zone spot when an
+option **crosses the line**: his own carry, a receiver's drive after a pass, or
+a pass whose catch lands just inside (a teammate already in the zone is offside
+and is not a receiver). Those spots were priced on the potential map too, so
+entering was worth what any other metre is worth, and the trailer's drive into
+the zone was priced on the same optimistic map as the carrier's.
 
-**Price in-zone candidates in xG while the carrier is still outside** (the
-first idea floated). The out-of-zone candidates would stay on the potential
-scale (~0.4–0.6) and the in-zone ones would drop to xG (~0.02–0.14), so every
-in-zone option would lose to staying out. Bots would stop entering. Mixing
-the scales inside one compete is exactly what the current split avoids. The
-fix has to put both sides in **one unit**.
+## 2. The design
 
-## 3. Proposal: give `position_potential` its unit
+Keep the two-zone model. Change only how an outside player prices an in-zone
+spot:
 
-`position_potential` already *has* a unit; it just isn't written down. By its
-own construction it is 1.0 exactly when the carrier is **at the slot ring
-(`SLOT_RADIUS_M`), square to the net, release uncontested**. That is the spot
-`potential_realization_discount` measures the remaining travel to. So a value
-of `p` means "a fraction `p` of a clean slot look, cashed after the
-realization delay".
+1. **An in-zone spot is priced by the goal-based scale**, converted into
+   potential's unit (`AIRoleCarrier._entry_value`):
 
-The conversion is therefore a measurement, not a tunable:
+   ```
+   entry_value(xg) = min(xg / XG_SLOT_REF, 1.0)
+   ```
 
-```
-XG_SLOT_REF = AIShotValue.for_release(slot ring, head-on, set keeper, SHOT)
-value_out(pos) = position_potential(pos) × realization(pos) × XG_SLOT_REF
-```
+   `XG_SLOT_REF` (`AIActionScoring`, computed at static init) is the xG of the
+   situation `position_potential` reads as 1.0: the slot ring, head-on, nothing
+   in the way, a set keeper. It measures **0.174** on the live model and moves
+   if the shot model moves. The cap is potential's own ceiling, and keeps the
+   [0, 1] bound the carry candidates' ceiling prunes rely on.
+   `test_xg_slot_ref_is_the_xg_of_potentials_full_value` holds the anchor.
 
-`XG_SLOT_REF` is computed from the live xG model at static init, never typed
-in (it measures 0.174 on the live model, §3a). It moves if the shot
-model moves, which is the point: the out-of-zone map stays denominated in
-whatever the in-zone currency says a slot look is worth.
+2. **An in-zone carry candidate gets the entry continuation.** Converted alone,
+   a spot just inside the line is worth only its shot, about a quarter of the
+   potential just outside it, so entering would look like a loss. A carrier who
+   gets there with the puck is worth what he does next: the drive-in from the
+   candidate, priced in the in-zone regime and starting when he arrives
+   (`_receiver_drive_in_value` with `from_pos` and `start_s`), converted the same
+   way. It runs in the beam's first pass so in-zone candidates are ranked on it.
 
-## 3a. Measured: the conversion alone does not value the entry
+Everything else outside the zone (breakout and regroup passes, stand-still,
+dumps, the giveaway bars, turnover costs) stays in potential currency and never
+sees the conversion.
 
-`XG_SLOT_REF` measures **0.174** on the live model. With it, the converted
-out-of-zone value and the in-zone xG on either side of the line:
+The carrier's continuation and a trailer's drive are now the same kind of read
+(a carry into the zone, valued by the goal-based scale at its end), so the drop
+wins only when the trailer's entry genuinely beats the carrier's.
 
-| spot | in zone | converted out-of-zone value | xG of a shot from here |
-|---|---|---|---|
-| wall (x = −8), 0.3 m outside | no | 0.078 | 0.019 |
-| wall, 0.2 m inside | yes | 0.080 | 0.019 |
-| middle (x = 0), 0.3 m outside | no | 0.092 | 0.029 |
-| middle, 0.2 m inside | yes | 0.094 | 0.030 |
+## 3. What was tried and rejected
 
-That rules out both ways of wiring it:
+- **Pricing in-zone spots in xG without conversion:** in-zone values (~0.02–0.14)
+  lose to every out-of-zone value (~0.4); bots stop entering.
+- **Converting the whole out-of-zone map to xG** (`position_potential` ×
+  `XG_SLOT_REF` everywhere, costs and bars included): a uniform rescale leaves
+  the entry decision unchanged, and the giveaway bars then bind on breakout
+  passes (an open outlet from our own zone is worth 0.01–0.03 xG), which needed
+  its own patch. Unnecessary once it was clear the scales only meet at the entry.
+- **max(potential, converted xG) for in-zone spots:** the potential map wins
+  everywhere, so the goal-based scale never actually applies.
 
-- **Key the regime on the candidate spot** (the first version of this section):
-  just inside the line a spot is worth its shot xG, ~0.02–0.03, while the
-  spot just outside is worth ~0.08–0.09. Entering would look about **4x
-  worse** than staying out, so bots would stall at the line. This is the §2
-  failure again, only smaller.
-- **Keep the regime keyed on the carrier's body** and just convert units:
-  every out-of-zone option is scaled by the same constant, so the carry vs
-  drop-pass comparison at the line comes out the same as today. Only the
-  absolute bars and the costs move.
+## 4. Measured
 
-The underlying reason: once in the zone, a carrier is judged by his **best
-next play** (the carry search, one beat ahead), not by the xG of shooting from
-where he stands. From just inside the line that measured ~0.14 in the repro
-scene, against ~0.08 for the converted value just outside. That step up is the
-real value of entering. Neither wiring lets an out-of-zone carrier see it,
-because an in-zone spot priced from outside gets its shot xG, not its
-continuation.
+Entry grid (carrier at −8 on the left wall moving 7 m/s, trailer 5 m behind at
+x = 2; carrier body 1–4.5 m short of the line; defender gap 2.5–8 m):
 
-## 3b. What the conversion DOES fix: costs and benefits in different units
+| | drop pass wins |
+|---|---|
+| before | 6 of 12 cells |
+| after | 0 of 12 cells |
 
-The carrier's turnover costs come from `threat_surface_shoot`, which is
-`max(hole-geometry shot, raw position_potential)`, while its in-zone benefits
-are xG. In the offensive zone that overprices every turnover. A strip at
-z = −15 costs `loss_prob × ~0.24` (raw potential toward our net, no
-realization discount), against benefits of 0.02–0.15 xG. A 10% strip risk
-there is charged about as much as a whole perimeter look is worth. That
-pushes every in-zone decision toward the safe option: the pass back to the
-point over the drive, holding over attacking a defender. It is likely part of
-why the bots bail out in the zone generally, separate from the entry itself.
+A smothered carrier (a checker on his hip, another sealing the line) still drops
+it to the open trailer in all 4 cells tried. Both directions are pinned in
+`test_role_carrier.gd`.
 
-Converting the cost side to the same xG unit (§4) fixes that on its own, in
-both zones.
+## 5. Known gap (not part of this change)
 
-## 3c. Valuing the entry: price an in-zone spot by its continuation
-
-To let an out-of-zone carrier see the step up, an in-zone candidate (or a
-receiver's drive that reaches the zone) priced from outside should be worth
-what a carrier there could do next, not the shot from that spot. The
-drive-in is already exactly that read (the best xG reachable by skating on,
-times keep, times delay), and it is now credited honestly. So:
-
-```
-in-zone spot, carrier outside:  value = max(xG(spot), drive_in_xG(spot))
-```
-
-The cost is one drive-in per in-zone candidate. It would run only in the
-beam's second pass (the 5 best candidates), the same budget the pass-option
-read already uses, and only while the carrier is outside the zone and close
-enough that his candidates reach in.
-
-## 4. Every consumer has to move together
-
-A uniform rescale of one side of a compete is a silent re-weighting. These
-read `position_potential` today and must all convert in the same change:
-
-| site | what it prices | why it must convert |
-|---|---|---|
-| `AIRoleCarrier._score_at` (+ its hot-path skip) | carry candidates, pass receivers, drive-in | the change itself |
-| `AIRoleCarrier._best_carry` stand-still | holding ground out of zone | same compete |
-| `AIActionScoring.turnover_cost` (via `threat_surface_shoot`) | the opponent's value at a loss point | must be in the benefit's unit (§3b). Convert inside `turnover_cost` only; the defensive roles' `threat_surface_*` reads rank men against each other and keep their own scale |
-| `AIActionScoring.counter_rush_cost` | the 5v5 counter-rush exposure | hole-geometry `score_shoot` today; same reason |
-| `AIRoleCarrier._best_dump` gain, `solve_dump_in` ceiling | dump-in recovery value | dump-vs-carry exactness (the realization telescoping in `_best_dump`) |
-| `AIRoleBreakout`, `AIRoleOutlet` | off-puck spot choice | argmax over spots only, so a uniform scale is a no-op there; verify, don't convert blindly |
-
-## 5. Consequences to expect (and measure)
-
-- **The giveaway bars start to bind outside the zone.** `PASS_MIN_VALUE`
-  (0.02) and `SHOT_MIN_VALUE` (0.05) are xG-scaled. On the potential scale
-  (~0.4) they were irrelevant out of zone; on `value_out` (~0.03–0.07) a
-  marginal neutral-zone pass now has to clear a real bar. That is arguably
-  correct (one currency, one bar), and it pushes toward carrying. But it is a
-  behavior change across the whole neutral zone and breakout, not just at the
-  line.
-- **Settle doubt starts to bite outside the zone** for the same reason.
-- **Hysteresis is proportional**, so it is unaffected. `retention_hopeless`
-  reads signs, so it is unaffected.
-- **Hot path:** in-zone candidates and receivers from an out-of-zone carrier
-  now run `score_shoot_value` where the skip used to return potential. That
-  is a bounded number of candidates near the line, but it is a hot-path change,
-  so the benchmarks run before and after.
-
-## 6. Measurements before merging
-
-1. **The entry fixture** (from this investigation: carrier on the wall, trailer
-   in the middle, gaps 2.5–8 m, bodies 1–4.5 m short of the line). Report
-   carry vs drop at each cell, before and after. Success: the drop wins only
-   where the trailer is genuinely the better play (carrier covered, trailer
-   with a real lane), not across the board.
-2. **Rush sims** (`test_rush_sim.gd`, `test_real_rush_sim.gd`): controlled
-   entry rate, dump-in share, passes per entry.
-3. **Breakout and NZ fixtures** in `test_role_carrier.gd`, `test_role_breakout.gd`:
-   expect movement where the bars now bind; review each case rather than
-   re-pin blindly.
-4. **Benchmarks** (`-gdir=res://benchmarks`): per-tick p95/max, carrier eval cost.
-5. A local playtest, since entries are a feel thing a fixture can't fully judge.
-
-## 7. Decision needed
-
-1. **§3b alone**: convert units, including costs, regime still keyed on the
-   carrier. Fixes the cost/benefit mismatch everywhere, makes the bars bind
-   outside the zone, but barely changes the entry decision.
-2. **§3b + §3c** (recommended): the above, plus in-zone spots priced by their
-   continuation from outside. This is the version that should actually value
-   the entry. It costs one drive-in per beam row near the line.
-3. Hold, and play-test the valve and drive-in fixes first.
+In the zone, the carrier's turnover costs come from `threat_surface_shoot`
+(raw `position_potential` toward our net plus hole geometry) while his gains
+are xG, so in-zone turnovers are overpriced roughly tenfold (a strip at the top
+of the zone costs `loss_prob × ~0.24` against gains of 0.02–0.15). That biases
+in-zone play toward the safe option. It is unrelated to the entry and is its own
+fix.
