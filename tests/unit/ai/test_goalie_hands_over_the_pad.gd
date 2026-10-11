@@ -20,7 +20,8 @@ extends GutTest
 # shooter, so the goal-line x overstates how far wide of him the puck passes.
 # Aimed there the blocker reaches past the puck and takes the stick with it —
 # from 12 m and 5 m wide that cost 17/216 once the hands did answer, against
-# 0/216 aimed at his own plane.
+# 0/216 aimed at his own plane. The wind-up pre-lean drifts the same hand toward
+# the declared aim, so it takes the same plane.
 
 const Harness := preload("res://tests/unit/ai/real_goalie_shot_harness.gd")
 const WrapHarness := preload("res://tests/unit/ai/human_wraparound_harness.gd")
@@ -76,15 +77,36 @@ func test_the_hand_aims_where_the_believed_line_crosses_his_plane() -> void:
 	var goalie: Vector2 = Vector2(0.0, GOAL_Z) + to_shooter * 1.72
 	var yaw: float = atan2(-to_shooter.x, -to_shooter.y)
 	for impact: float in [-CORNER, 0.0, CORNER]:
-		var got: float = GoalieBodyConfigBuilder._believed_local_x_at_body(
-				_hand_inputs(yaw, goalie, shooter, impact))
+		var got: float = GoalieBodyConfigBuilder._local_x_at_body(
+				_hand_inputs(yaw, goalie, shooter, impact), impact)
 		assert_almost_eq(got, _oracle_local_x(yaw, goalie, shooter, impact), 0.001,
 				"impact %+.2f: the hand target is the crossing of his own plane" % impact)
 	# The far post is much nearer his body there than at the goal line.
-	var far: float = GoalieBodyConfigBuilder._believed_local_x_at_body(
-			_hand_inputs(yaw, goalie, shooter, -CORNER))
+	var far: float = GoalieBodyConfigBuilder._local_x_at_body(
+			_hand_inputs(yaw, goalie, shooter, -CORNER), -CORNER)
 	assert_lt(absf(far), absf(-CORNER - goalie.x) - 0.3,
 			"from an angle the goal-line x overstates the reach by a lot")
+
+
+func test_the_windup_prelean_drifts_toward_the_same_plane() -> void:
+	var shooter := Vector2(5.0, GOAL_Z + 12.0)
+	var to_shooter: Vector2 = (shooter - Vector2(0.0, GOAL_Z)).normalized()
+	var goalie: Vector2 = Vector2(0.0, GOAL_Z) + to_shooter * 1.72
+	var yaw: float = atan2(-to_shooter.x, -to_shooter.y)
+	var builder := GoalieBodyConfigBuilder.new()
+	for impact: float in [-CORNER, CORNER]:
+		var inputs := _hand_inputs(yaw, goalie, shooter, 0.0)
+		inputs.state = GoalieStateMachine.State.READY
+		inputs.prelean_active = true
+		inputs.prelean_directional = true
+		inputs.prelean_strength = 1.0
+		inputs.prelean_impact_x = impact
+		inputs.prelean_impact_y = 0.9
+		var cfg: GoalieBodyConfig = builder.build(inputs)
+		var want: float = _oracle_local_x(yaw, goalie, shooter, impact)
+		var hand_x: float = cfg.glove_pos.x if want <= 0.0 else cfg.blocker_pos.x
+		assert_almost_eq(hand_x, want, 0.001,
+				"pre-lean toward %+.2f lands the hand on his own plane's crossing" % impact)
 
 
 func test_unscreened_wristers_from_above_the_circles_meet_a_hand() -> void:

@@ -163,8 +163,8 @@ class Inputs:
 	# the position-derived `_puck_velocity_est` estimate.
 	var puck_position: Vector3 = Vector3.ZERO
 	var puck_velocity_est: Vector3 = Vector3.ZERO
-	# The goal line the read belief's `shot_impact_x` is a crossing of, and the
-	# body's yaw — together they place the believed line in his own frame.
+	# The goal line `shot_impact_x` / `prelean_impact_x` are crossings of, and the
+	# body's yaw — together they place a shot line in his own frame.
 	var goal_line_z: float = 0.0
 	var goalie_yaw: float = 0.0
 	# Active blade intent — set by the controller when there's a close-range
@@ -918,7 +918,7 @@ func _apply_sweep_anim(c: GoalieBodyConfig, inputs: Inputs) -> void:
 
 
 # Pre-lean toward a charging shot's predicted impact — a PARTIAL version of the
-# elevated reach, applied while the goalie is still upright and reading the
+# shot hand reach, applied while the goalie is still upright and reading the
 # windup (before any release / reaction). Skipped once reacting: the real
 # reaction reach runs next and owns the arms. Directional lean drifts the
 # relevant hand `prelean_strength` of the way to the predicted corner plus a
@@ -939,7 +939,7 @@ func _apply_prelean(c: GoalieBodyConfig, inputs: Inputs) -> void:
 		return
 	# Convert predicted world impact into goalie-local X (+Z-defending goalie is
 	# rotated PI in world, so local +X is global -X — same as the reach math).
-	var impact_local_x: float = (inputs.prelean_impact_x - inputs.current_x) * -inputs.direction_sign
+	var impact_local_x: float = _local_x_at_body(inputs, inputs.prelean_impact_x)
 	var target_y: float = _reachable_hand_y(inputs.prelean_impact_y, c)
 	# Partial body lean toward the reach side (same sign convention as the reach).
 	var lean_factor: float = clampf(absf(impact_local_x) / maxf(body_lean_reach_norm, 0.001), 0.0, 1.0)
@@ -981,7 +981,7 @@ func _apply_shot_hand_reaction(c: GoalieBodyConfig, inputs: Inputs) -> void:
 		if dt_to_plane > 0.0:
 			intercept_y = maxf(inputs.puck_position.y + inputs.puck_velocity_est.y * dt_to_plane \
 					- 0.5 * 9.8 * dt_to_plane * dt_to_plane, 0.0)
-	var impact_local_x: float = _believed_local_x_at_body(inputs)
+	var impact_local_x: float = _local_x_at_body(inputs, inputs.shot_impact_x)
 	var target_y: float = _reachable_hand_y(intercept_y, c)
 	# Body lean toward the reach side. Magnitude scales with reach distance,
 	# capped at `body_lean_max_deg`. +Z rotation tilts top toward -X (lean
@@ -1009,17 +1009,17 @@ func _apply_shot_hand_reaction(c: GoalieBodyConfig, inputs: Inputs) -> void:
 	else:
 		_reach_blocker(c, impact_local_x, target_y)
 
-# Goalie-local x where the believed line crosses his own frontal plane — the
-# spot a hand has to be to meet it. The belief is a GOAL-LINE crossing, and from
-# an angle he stands out from that line turned square to the shooter, so the
+# Goalie-local x where the line from the puck to `impact_x` on the goal line
+# crosses his own frontal plane — the spot a hand has to be to meet it. From an
+# angle he stands out from the goal line turned square to the shooter, so the
 # goal-line x overstates how far wide of his body the puck passes; reaching for
 # it puts the hand (and, on the blocker side, the stick with it) past the puck.
-static func _believed_local_x_at_body(inputs: Inputs) -> float:
+static func _local_x_at_body(inputs: Inputs, impact_x: float) -> float:
 	var right := Vector2(cos(inputs.goalie_yaw), -sin(inputs.goalie_yaw))
 	var fwd := Vector2(-sin(inputs.goalie_yaw), -cos(inputs.goalie_yaw))
 	var body := Vector2(inputs.current_x, inputs.goalie_z)
 	var from := Vector2(inputs.puck_position.x, inputs.puck_position.z)
-	var to := Vector2(inputs.shot_impact_x, inputs.goal_line_z)
+	var to := Vector2(impact_x, inputs.goal_line_z)
 	var line: Vector2 = to - from
 	var hit: Vector2 = to
 	var closing: float = line.dot(fwd)
