@@ -12,7 +12,7 @@ delegates to.
 
 | holder | class | what it owns |
 |---|---|---|
-| `_legs` | `SkaterLegRig` | the leg bones, the gait written onto them, the ankles' give-back against it, and the ice VFX's two reads (skate mark position, edge load) |
+| `_legs` | `SkaterLegRig` | the leg bones, the gait written onto them, the ankles' give-back against it, where that puts the blades against the ice (the contact seat), and the ice VFX's two reads (skate mark position, edge load) |
 | `_arms` | `SkaterArmRig` | the upper bones: torso, pelvis, helmet, deltoid caps, both arms by IK, the trunk texture, the face gear |
 | `_spine` | `SkaterSpineRig` | the four bones that join them (hips, waist, spine, neck) and the balance lean |
 | `_stick` | `SkaterStickRig` | the shaft pose, the knob, and the cosmetic flex/whip |
@@ -117,6 +117,63 @@ inside the jersey at the resulting angle.
 `tests/unit/actors/test_body_chain.gd` holds the chain and
 `test_pelvis_fills_the_seat.gd` the seat.
 
+## The blades stand on the ice
+
+Most of the gait still poses joints rather than feet, and its crouch pays for
+the stance alone; the splay, the stagger and the lean all move the blades too.
+So the body is placed from where the blades are (`SkaterLegRig.seat_on_ice`,
+called by the spine as it places the hips). The authored states (stride,
+crossover, carve, stop, skid) are the exception: they are authored as where
+their skates go, on the ice (`Scripts/controllers/CLAUDE.md`), and only need the
+seat to stand them up.
+
+- **Both feet, then the body.** The lower runner is the support. The other's
+  knee is re-solved (the thigh counter-pitched as `GaitPose.seed_legs` does,
+  so the foot keeps its fore-aft place) to bring its runner down to the
+  support's; where it cannot reach — a braced front leg already straight — the
+  support folds to meet it, the skater sitting deeper on the back leg. Then the
+  hips translate to put the support on the ice; a translation moves both feet,
+  so that step is exact.
+- **The plant is for two-footed stances.** The gait publishes how much each
+  foot is held (`GaitPose.plant_share`): fully while the stroke is idle (rest,
+  glide, the faceoff set) and through the dug-edge states (stop, tight turn),
+  none while the stroke is driving — a stride's push and recovery are where the
+  stroke puts the feet, and holding them down there fights its geometry. The
+  block unplants its kneeling leg; the knockdown unplants both and fades the
+  seat itself (`plant`), and while the sprawl owns the legs the seat does not
+  re-pose them.
+- **The ankle gives back two ways** (`SkaterLegRig.set_ankle_flatten`): the
+  whole chain's rotation, which squares the boot (the held poses), or the
+  blade laid flat on the ice along the leg's heading (its yaw), left on
+  whatever edge the leg rolled it to (the authored states, so a push drives its
+  whole inside edge rather than rocking onto its heel, and a stop's blades sit
+  square across the travel). The second levels against the ice, not
+  the hips, so the gait passes the hips' tilt with it.
+- **Height is not monotone in the knee.** The ankle is otherwise rigid, so a
+  blade tilts with its shin and its lowest point is a tip; near
+  straight, unbending rocks the boot and lifts that tip. The solve walks out
+  from the gait's own knee in its role's direction (the reaching leg extends,
+  the support folds) to the NEAREST crossing, interpolating the closest point
+  when there is none — never a sampled or far root, which hops between frames.
+- **It runs in C++ where the extension is built** (`NativeLegChain`): the
+  plant's walk, the chain it evaluates and the ankle pose. Change
+  `_plant_feet`, `_solve_knee`, `_refine`, `_extremum`, `_chain` or
+  `_foot_pose` and the port changes with it, or
+  `test_native_leg_chain_parity.gd` fails; the rig mirrors its rest geometry
+  and the gait's pose into the kernel on every write that changes them.
+- **The correction eases.** The right answer itself jumps when the support
+  hands from one foot to the other, so the knee change moves at most
+  `_PLANT_RATE_RAD_S`, from the render delta the gait passes with the plant.
+- **The seat's writes are a function of its inputs**, so they do not bump the
+  legs' `pose_version`, which the spine keys its cache on.
+
+`test_blades_stand_on_the_ice.gd` drives every locomotion state through the
+render pass, measures the runner mesh against the ice and bounds every leg
+pivot's per-tick step; `test_faceoff_prep_pose.gd` holds the centre's address
+on both blades; `test_gait_stroke_profile.gd` catches a plant that bleeds into
+the stride; `test_leg_ik_mirrors_the_rig.gd` holds the gait's model of the leg
+and the boot against these bones.
+
 ## Cosmetic vs. gameplay, and the render clock
 
 Everything in the four rigs is cosmetic and derived. Nothing gameplay reads
@@ -134,7 +191,8 @@ Six rules the rigs sit inside, all easy to break from in here:
 - **The crouch is the body's, not the frame's.** The visible body sits
   `Skater.body_drop_below_frame()` under `LowerBody`, applied at the HIPS bone,
   so the skating crouch and its bob never move the frame the hands hang from;
-  only a held pose's share lowers the frame itself.
+  only a held pose's share lowers the frame itself. Then the hips are seated on
+  the blades (below).
 - **Nothing in the skeleton is written back into `UpperBody` or `LowerBody`.**
   The blade and shoulder markers hang under `UpperBody`, so writing it at render
   rate would move gameplay geometry. The chain reads both frames and writes

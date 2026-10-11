@@ -38,6 +38,10 @@ func override(p: GaitPose) -> void:
 	# A held pose: the brace is posed in a frame that has gone down with the
 	# body (GaitPose.frame_share).
 	p.frame_share = maxf(p.frame_share, weight)
+	# The body lies on the ice, not on its blades; the sprawl seats the legs.
+	p.plant = lerpf(p.plant, 0.0, weight)
+	p.plant_l = lerpf(p.plant_l, 0.0, weight)
+	p.plant_r = lerpf(p.plant_r, 0.0, weight)
 	p.drop = lerpf(p.drop, _controller.knockdown_pose_drop_m, weight)
 	p.l_pitch = lerpf(p.l_pitch, 0.0, weight)
 	p.r_pitch = lerpf(p.r_pitch, 0.0, weight)

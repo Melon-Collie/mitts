@@ -2,7 +2,8 @@
 
 C++ ports of per-tick math kernels, registered as `Native*` classes
 (`NativeTopHandIK`, `NativeBottomHandIK`, `NativeSkaterMovement`,
-`NativePuckStep`, `NativeBladeDangle`, `NativeSkaterGait`, `NativeArmRig`). The
+`NativePuckStep`, `NativeBladeDangle`, `NativeArmRig`, `NativeSkaterGait`,
+`NativeLegChain`). The
 GDScript originals (in `Scripts/domain/rules/`, `Scripts/controllers/` and
 `Scripts/actors/`) remain the behavioral
 reference; each ported kernel is pinned to its reference by a seeded fuzz test
@@ -53,8 +54,11 @@ well under one in C++). Three consequences worth knowing:
   would report a gate that never ran as green.
 - `bin/` — build output, gitignored. Every machine builds its own.
   `bin/.built-from` records the commit the binary was built from; the git hooks
-  compare it against the working tree (`.githooks/native-stale-check.sh`), since
-  a kernel built from other sources drops to the GDScript fallback silently.
+  compare it against the working tree (`.githooks/native-stale-check.sh`). A
+  kernel's `configure` only catches a binary that reads a tunable the scripts no
+  longer have, and drops to the GDScript fallback silently. A binary older than
+  a tunable or method it lacks passes, then runs without the tunable or errors
+  on the missing call, so the hook's warning is the only one.
 
 ## Building
 
@@ -111,9 +115,13 @@ without a built binary, loses performance, never correctness — CI builds it):
   `LagCompRewind.forward_predict_skater` (host claim rewind) — both through
   the SAME per-skater instance (`SkaterController.native_movement()`), which
   is what keeps render == rewind.
-- **Blade IK** — `SkaterIKCoordinator` (`project_blade`, the 3-pass
-  `_solve_top_hand`, `update_bottom_hand`); config syncs inside the cached-
-  config builders, so `invalidate_configs()` covers both representations.
+- **Blade IK** — `SkaterIKCoordinator` (`project_blade`, `update_bottom_hand`,
+  and `_solve_top_hand`'s three passes onto the leaned ice as one
+  `solve_on_ice` call, its per-tick config in the arguments rather than set
+  property by property each pass); the rest of the config syncs inside the
+  cached-config builders, so `invalidate_configs()` covers both
+  representations. `test_native_ik_parity.gd` holds `solve_on_ice` against
+  the coordinator's own GDScript loop.
 - **Blade dangle** — `SkaterIKCoordinator.apply_blade_from_mouse` step 2 (the
   stateful speed-cap / arrive-law smoother, `NativeBladeDangle.advance`);
   reset/seed forward from `reset_blade_smoothing` / `seed_blade_smoothing`,
@@ -126,13 +134,25 @@ without a built binary, loses performance, never correctness — CI builds it):
 - **Swept-OBB atom** — `GoalieContactDetector.nearest` (host saves + client
   goalie-stop prediction).
 - **Gait core** — `SkaterSkatingCoordinator.apply` (render rate, every skater):
-  `locomote` runs `SkaterLocomotion`, the hip alignment and the pivot read in
-  one call, and `solve` the `GaitPose` solve. The overlay layers stay GDScript;
-  a pass one of them shapes solves the pose in `GaitPose` from the port's
-  stroke (`get_stroke_*`), so the parity fuzz
-  (`tests/unit/rules/test_native_gait_parity.gd`) drives the overlays too.
+  `locomote` runs `SkaterLocomotion`, the hip alignment and pivot read and the
+  reach sit in one call, and `solve` the `GaitPose` stance and leg solve (LegIK,
+  the ice frame, the runner depth) on the hips' tilt the coordinator reads off
+  the skater. The overlay layers stay GDScript and shape the pose the port
+  loads into `GaitPose` (`load_native_legs` before the leg layers,
+  `load_native_trunk` after them), so every pass runs the port and the parity
+  fuzz (`tests/unit/rules/test_native_gait_parity.gd`) drives the overlays too.
   Tunables load by name in `configure(controller)`, re-run from
   `SkaterController.apply_attributes`.
+
+- **Leg chain** — `SkaterLegRig`'s contact seat (render rate, every drawn
+  skater): the second-foot plant walks a knee out from the gait's pose,
+  evaluating the leg chain to the runner a dozen to two dozen times a frame
+  (`_plant_feet`, `_chain_low`), and every ankle write lays the blade
+  (`_foot_pose`). The rig mirrors the leg's rest geometry and the gait's pose
+  into the kernel and keeps the bone writes. Measured with
+  `benchmarks/test_skater_frame_benchmark.gd`: the seat from 17–36 µs to 7–10
+  in the glide, the turns and the stop.
+  `tests/unit/rules/test_native_leg_chain_parity.gd`.
 
 - **Arm rig** — `SkaterArmRig._update_arm` (render rate, every drawn skater,
   both arms): `pose` runs the whole arm and **writes the bones itself** — the

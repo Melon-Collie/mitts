@@ -552,3 +552,33 @@ func test_a_raised_hand_keeps_its_height() -> void:
 	assert_gt(res.hand.y, HAND_REST_Y + 0.1, "the finish's raised hand survives")
 	assert_lte(res.hand.y, HAND_Y_MAX + 0.0005, "and stays under the ceiling")
 	assert_almost_eq(res.hand.distance_to(res.blade), STICK_LENGTH, 0.0005, "rigid")
+
+
+# A reach limit at or past the stick plus the hand's longest ROM reach poses
+# the blade as no limit does — SkaterIKCoordinator skips the board ray on open
+# ice on it — and one short of it does bind.
+func test_a_limit_past_the_whole_reach_is_no_limit() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 0x5245414B  # "REAK"
+	var bound: float = STICK_LENGTH + maxf(FORE_REACH, BACK_REACH) + 0.05
+	var free := TopHandIK.Result.new()
+	var capped := TopHandIK.Result.new()
+	var worst: float = 0.0
+	var bound_short: int = 0
+	for i: int in 4000:
+		var cfg: TopHandIK.Config = _cfg()
+		var shoulder: Vector3 = _righty_shoulder() if i % 2 == 0 else _lefty_shoulder()
+		var sign_val: float = 1.0 if i % 2 == 0 else -1.0
+		var target := Vector2.from_angle(rng.randf_range(-PI, PI)) * rng.randf_range(0.0, 8.0)
+		cfg.max_blade_reach = INF
+		TopHandIK.solve(shoulder, target, sign_val, cfg, free)
+		cfg.max_blade_reach = bound * rng.randf_range(1.0, 4.0)
+		TopHandIK.solve(shoulder, target, sign_val, cfg, capped)
+		worst = maxf(worst, maxf(free.blade.distance_to(capped.blade),
+				free.hand.distance_to(capped.hand)))
+		cfg.max_blade_reach = 1.0
+		TopHandIK.solve(shoulder, target, sign_val, cfg, capped)
+		if free.blade.distance_to(capped.blade) > 0.01:
+			bound_short += 1
+	assert_lt(worst, 0.00001, "a limit past the whole reach changes nothing (worst %f m)" % worst)
+	assert_gt(bound_short, 100, "while one inside it binds")

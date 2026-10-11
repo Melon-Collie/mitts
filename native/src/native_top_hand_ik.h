@@ -50,6 +50,21 @@ public:
 			const godot::Vector3 &shoulder,
 			const godot::Vector2 &desired_blade_xz,
 			double blade_side_sign);
+	// SkaterIKCoordinator._solve_top_hand: three solves, each from the blade
+	// height the previous one's blade lands at on the ice under the upper body's
+	// pitch and roll (blade_y_lean_corrected), with the per-tick config in the
+	// call rather than set property by property. `blade_y_base` is
+	// blade_y_local(): the ice in upper-body height, before the lean.
+	void solve_on_ice(
+			const godot::Vector3 &shoulder,
+			const godot::Vector2 &desired_blade_xz,
+			double blade_side_sign,
+			double blade_y_base,
+			double pitch,
+			double roll,
+			double p_max_blade_reach,
+			double p_stick_length,
+			double p_hand_y_max);
 
 	godot::Vector3 get_hand() const { return hand; }
 	godot::Vector3 get_blade() const { return blade; }

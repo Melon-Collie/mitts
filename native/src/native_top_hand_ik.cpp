@@ -92,6 +92,36 @@ void NativeTopHandIK::solve(
 	}
 }
 
+void NativeTopHandIK::solve_on_ice(
+		const Vector3 &shoulder,
+		const Vector2 &desired_blade_xz,
+		double blade_side_sign,
+		double blade_y_base,
+		double pitch,
+		double roll,
+		double p_max_blade_reach,
+		double p_stick_length,
+		double p_hand_y_max) {
+	max_blade_reach = p_max_blade_reach;
+	stick_length = p_stick_length;
+	hand_y_max = p_hand_y_max;
+	double cp = Math::cos(pitch);
+	double cr = Math::cos(roll);
+	if (cp < 0.001) {
+		cp = 0.001;
+	}
+	if (cr < 0.001) {
+		cr = 0.001;
+	}
+	const double sp = Math::sin(pitch);
+	const double sr = Math::sin(roll);
+	blade_y = blade_y_base;
+	for (int pass = 0; pass < 3; pass++) {
+		solve(shoulder, desired_blade_xz, blade_side_sign);
+		blade_y = (blade_y_base + (double)blade.z * sp - (double)blade.x * sr * cp) / (cp * cr);
+	}
+}
+
 Vector2 NativeTopHandIK::clamp_aim_to_rom(const Vector2 &aim_dir, double blade_side_sign) const {
 	const double angle_to_forehand =
 			Math::atan2((double)aim_dir.x, (double)-aim_dir.y) * blade_side_sign;
@@ -115,6 +145,9 @@ void NativeTopHandIK::_bind_methods() {
 			&NativeTopHandIK::project_blade);
 	ClassDB::bind_method(D_METHOD("solve", "shoulder", "desired_blade_xz", "blade_side_sign"),
 			&NativeTopHandIK::solve);
+	ClassDB::bind_method(D_METHOD("solve_on_ice", "shoulder", "desired_blade_xz", "blade_side_sign",
+								 "blade_y_base", "pitch", "roll", "max_blade_reach", "stick_length", "hand_y_max"),
+			&NativeTopHandIK::solve_on_ice);
 	ClassDB::bind_method(D_METHOD("get_hand"), &NativeTopHandIK::get_hand);
 	ClassDB::bind_method(D_METHOD("get_blade"), &NativeTopHandIK::get_blade);
 
