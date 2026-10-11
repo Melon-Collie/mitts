@@ -133,9 +133,8 @@ func natural_exit(puck_pos: Vector3, forced_side: float) -> Vector3:
 # far a turned body swings them out. Every exit runs corner-ward AND out of the
 # crease, so from here the swept puck only moves away from him; set down at his
 # skates, or on a blade turned toward a sharp-angle shooter, the far-corner exit
-# runs back through his own pads and they kick it in. `floor_depth` is the depth
-# the stand-up will lift him to before the puck is clear.
-func catch_set_down_point(goalie: Goalie, ice_height: float, floor_depth: float) -> Vector3:
+# runs back through his own pads and they kick it in.
+func catch_set_down_point(goalie: Goalie, ice_height: float) -> Vector3:
 	var shapes: Array[CollisionShape3D] = goalie.get_collision_parts()
 	var bodies: Array[Node] = goalie.get_collision_part_bodies()
 	var halves: PackedVector3Array = goalie.get_collision_part_half_extents()
@@ -157,10 +156,8 @@ func catch_set_down_point(goalie: Goalie, ice_height: float, floor_depth: float)
 		var reach_z: float = absf(xf.basis.x.z) * half.x + absf(xf.basis.y.z) * half.y \
 				+ absf(xf.basis.z.z) * half.z
 		out = maxf(out, (xf.origin.z - goal_line_z) * direction_sign + reach_z)
-	var at: Vector3 = goalie.global_position
-	var lift: float = maxf(floor_depth - (at.z - goal_line_z) * direction_sign, 0.0)
-	out += lift + GameRules.PUCK_COLLISION_RADIUS
-	return Vector3(at.x, ice_height, goal_line_z + direction_sign * out)
+	out += GameRules.PUCK_COLLISION_RADIUS
+	return Vector3(goalie.global_position.x, ice_height, goal_line_z + direction_sign * out)
 
 
 # Lane-aware corner pick: the natural side if its exit lane is clear of opposing

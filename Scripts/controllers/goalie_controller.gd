@@ -2719,9 +2719,7 @@ func _tick_catch(delta: float) -> void:
 # stand-up and the crease clear's dwell, and with an attacker in range that is a
 # tap-in through the five-hole.
 func _play_out_caught_puck() -> void:
-	# The stand-up after the strike floors him at `min_challenge_depth` in one tick.
-	puck.set_puck_position(_clear.catch_set_down_point(goalie, puck.ice_height,
-			min_challenge_depth))
+	puck.set_puck_position(_clear.catch_set_down_point(goalie, puck.ice_height))
 	puck.set_puck_velocity(Vector3.ZERO)
 	var planned: Vector3 = _pick_clear_velocity()
 	if planned == Vector3.ZERO:
@@ -3220,7 +3218,7 @@ func _update_position(delta: float) -> void:
 			# floor it so the pads stay in front of the line. `_current_depth`
 			# (the arc RADIUS) is intentionally not touched — only the realised
 			# Z position is clamped, so the next tick keeps tracing the arc.
-			new_z = _front_of_line_z(pair.y)
+			new_z = _front_of_line_z(pair.y, prev_z, delta)
 		State.BUTTERFLY:
 			# Idle butterfly is a shot-facing stance: never sit so deep the pads
 			# straddle behind the goal line. Floor the committed depth itself (not
@@ -3330,8 +3328,9 @@ func _update_position(delta: float) -> void:
 # line is at least `min_challenge_depth` — keeps the pad face ahead of the
 # goal-line plane in the shot-facing states. Only the states where sitting on
 # the line is wrong call this; post-integrated / slide-seal / behind-net play
-# never does (see the export doc-block).
-func _front_of_line_z(z: float) -> float:
+# never does (see the export doc-block). Entering from below the floor (planted
+# on the line) he steps up to it from `prev_z` at shuffle pace, never teleports.
+func _front_of_line_z(z: float, prev_z: float, delta: float) -> float:
 	# The floor exists for a goalie OUT challenging. Once the arc solve has given
 	# up the challenge and converged on the post seal (out_seal_blend -> 1) the
 	# correct depth is the seal's own, so fade the floor to it rather than holding
@@ -3339,9 +3338,10 @@ func _front_of_line_z(z: float) -> float:
 	var floor_depth: float = lerpf(
 			min_challenge_depth, minf(rvh_depth, min_challenge_depth), _arc_cfg.out_seal_blend)
 	var perp: float = (z - _goal_line_z) * _direction_sign
-	if perp < floor_depth:
-		return _goal_line_z + _direction_sign * floor_depth
-	return z
+	if perp >= floor_depth:
+		return z
+	var stepped: float = (prev_z - _goal_line_z) * _direction_sign + shuffle_speed * delta
+	return _goal_line_z + _direction_sign * minf(floor_depth, maxf(perp, stepped))
 
 # 2D arc tracing for STANDING/RECOVERING. Target is the arc point at the
 # current radius; choose lateral speed by 2D distance so X and Z move at the
