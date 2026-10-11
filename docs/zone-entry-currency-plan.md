@@ -81,8 +81,17 @@ x = 2; carrier body 1–4.5 m short of the line; defender gap 2.5–8 m):
 | before | 6 of 12 cells |
 | after | 0 of 12 cells |
 
+The two halves do different jobs, measured by switching the continuation off:
+
+- **Pricing in-zone spots by the goal-based scale** is what removes the drop:
+  the trailer's drive into the zone is no longer valued on the optimistic
+  potential map. With the continuation off the drop still wins 0 of 12.
+- **The continuation** is what makes the carrier enter. Without it his plan
+  stops just short of the line (anchor z ≈ −6.8 against the line at −7.29) and
+  he hovers; with it the plan crosses (z ≈ −10.8).
+
 A smothered carrier (a checker on his hip, another sealing the line) still drops
-it to the open trailer in all 4 cells tried. Both directions are pinned in
+it to the open trailer in all 4 cells tried. All three claims are pinned in
 `test_role_carrier.gd`.
 
 ## 5. Follow-up: in-zone turnover costs in the same unit

@@ -729,6 +729,23 @@ func test_carrier_with_room_at_the_line_carries_in_over_the_drop_pass() -> void:
 			% [c.debug_pass_score, c.debug_carry_score])
 
 
+func test_carrier_with_room_plans_across_the_line_not_up_to_it() -> void:
+	# Keeping the puck is not enough: a carrier who only values in-zone ice by the
+	# shot he would have just inside the line plans to stop short of it and hovers
+	# there. The entry continuation (what he does once in) is what takes his plan
+	# into the zone.
+	var ctx: RoleContext = _entry_ctx(-4.5, [
+			[3, 1, Vector3(-7.5, 0, -9.1), false, Vector3(0, 0, -6.0)],
+			[4, 1, Vector3(3.0, 0, -13.5), false, Vector3(0, 0, -5.0)],
+	])
+	var c := AIRoleCarrier.new()
+	c.decide(ctx)
+	c.decide(ctx)
+	assert_eq(c.intended_action, AIRoleCarrier.INTENT_CARRY, "he keeps the puck")
+	assert_true(AIActionScoring.in_offensive_zone(c.last_carry_anchor, ctx.attacking_goal_pos),
+			"…and his plan crosses the line (anchor z %.1f)" % c.last_carry_anchor.z)
+
+
 func test_smothered_carrier_at_the_line_still_drops_it_to_the_trailer() -> void:
 	# Same rush, but a checker is on his hip and another seals the line ahead:
 	# there is no entry for him to make, and the open trailer's is the play.
@@ -743,6 +760,38 @@ func test_smothered_carrier_at_the_line_still_drops_it_to_the_trailer() -> void:
 			"no entry of his own: the trailer gets it (pass %.3f vs carry %.3f)"
 			% [c.debug_pass_score, c.debug_carry_score])
 	assert_eq(c.debug_pass_peer_id, 2, "…to the trailer")
+
+
+# ─── turnover costs are priced in the unit of the gains ─────────────────────
+
+func test_an_in_zone_carrier_prices_a_turnover_in_xg() -> void:
+	# A strip at the top of the zone hands the opponent a puck 40 m from our net.
+	# In the zone the carrier's gains are xG, so that loss must be priced as the
+	# opponent's possession promise in xG; outside, the gains are on the potential
+	# scale and so is the cost. Same loss point, two carriers.
+	var loss := Vector3(-4.0, 0.0, -15.0)
+	var our_net := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z)
+	var defenders: Array[Vector3] = []
+	var expected_xg: float = AIActionScoring.position_potential(loss, our_net, defenders) \
+			* AIActionScoring.potential_realization_discount(loss, our_net) \
+			* AIActionScoring.XG_SLOT_REF
+	var our_goalie := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z - 0.8)
+
+	var inside := Vector3(-8.0, 0.0, -16.0)
+	var c_in := AIRoleCarrier.new()
+	var ctx_in: RoleContext = _make_ctx(inside)
+	c_in.decide(ctx_in)
+	assert_almost_eq(c_in._turnover_cost(ctx_in, loss, 1.0, our_goalie), expected_xg, 0.0005,
+			"in the zone a turnover costs the opponent's xG promise there")
+
+	var outside := Vector3(-8.0, 0.0, -4.0)
+	var c_out := AIRoleCarrier.new()
+	var ctx_out: RoleContext = _make_ctx(outside)
+	c_out.decide(ctx_out)
+	assert_almost_eq(c_out._turnover_cost(ctx_out, loss, 1.0, our_goalie),
+			AIActionScoring.threat_surface_shoot(loss, our_net, our_goalie,
+					GameRules.NET_HALF_WIDTH, defenders), 0.0005,
+			"outside the zone it stays on the potential scale, like the gains")
 
 
 # ─── drive-in: a clear drive is credited all the way ────────────────────────
