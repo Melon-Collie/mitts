@@ -85,11 +85,14 @@ A smothered carrier (a checker on his hip, another sealing the line) still drops
 it to the open trailer in all 4 cells tried. Both directions are pinned in
 `test_role_carrier.gd`.
 
-## 5. Known gap (not part of this change)
+## 5. Follow-up: in-zone turnover costs in the same unit
 
-In the zone, the carrier's turnover costs come from `threat_surface_shoot`
-(raw `position_potential` toward our net plus hole geometry) while his gains
-are xG, so in-zone turnovers are overpriced roughly tenfold (a strip at the top
-of the zone costs `loss_prob × ~0.24` against gains of 0.02–0.15). That biases
-in-zone play toward the safe option. It is unrelated to the entry and is its own
-fix.
+The in-zone carrier's turnover costs came from `threat_surface_shoot` (raw
+`position_potential` toward our net plus hole geometry) while his gains were
+xG, overpricing in-zone turnovers roughly tenfold: a strip at the top of the
+zone cost `loss_prob × ~0.24` against gains of 0.02–0.15, and pass values in an
+in-zone fixture sat near 0.0006 because the interception cost almost cancelled
+them. `turnover_cost` and `counter_rush_cost` now take `in_xg`, which the carrier
+sets while it is in the zone; the same fixture's passes read 0.0125–0.015. No
+decision in the fixture flipped; the entry grid is unaffected (its carrier is
+outside the zone).

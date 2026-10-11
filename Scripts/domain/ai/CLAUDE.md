@@ -32,6 +32,16 @@ is a permanent veto on the other two rather than a mispriced hold. The hole
 geometry is still the truth for *executing* a committed shot (aim, loft, power);
 it is not the ranking currency.
 
+The turnover COST is in the same currency as the gains it is subtracted from.
+`AIActionScoring.turnover_cost` (and `counter_rush_cost`) take `in_xg` for a
+carrier in the offensive zone: the opponent's value at the loss point is then his
+shot xG through the seam, or his possession promise (`position_potential` ×
+realization × `XG_SLOT_REF`). Outside the zone the gains are on the potential
+scale and so is `threat_surface_shoot`. Mixing them (raw potential costs against
+xG gains) overpriced every in-zone turnover about tenfold and nearly cancelled
+every in-zone pass. `AIRoleCarrier._turnover_cost` picks the unit; a cost memo
+must only ever hold one.
+
 The giveaway bars (`SHOT_MIN_VALUE` 0.05, `PASS_MIN_VALUE` 0.02) are scale-bound
 to that seam — an honest NHL-calibrated goal probability where a clean mid-slot
 look is ~0.12. They are not transferable to the hole-geometry score, which would

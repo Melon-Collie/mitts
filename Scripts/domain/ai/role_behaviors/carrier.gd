@@ -2407,31 +2407,21 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	var benefit: float = receiver_value * completion * time_decay
 	# Poked at the release: the puck squirts loose at the blade — the most
 	# expensive loss point a breakout pass has.
-	var cost: float = AIActionScoring.turnover_cost(
-			origin, 1.0 - release_clean, ctx.defending_goal_pos, our_goalie,
-			GameRules.NET_HALF_WIDTH, _scratch_our_defenders,
-			_scratch_our_defender_caps)
+	var cost: float = _turnover_cost(ctx, origin,
+			1.0 - release_clean, our_goalie)
 	# A rim is lost where the soonest opponent meets its path.
 	var loss_point: Vector3 = rim_loss_point if is_rim and rim_loss_point.is_finite() \
 			else AIActionScoring.lane_loss_point(
 					self_pos, receiver_spot, _scratch_opponents_release, pass_speed,
 					_scratch_opponent_vels, _scratch_opponent_caps)
-	cost += AIActionScoring.turnover_cost(
-			loss_point, release_clean * (1.0 - lane), ctx.defending_goal_pos,
-			our_goalie, GameRules.NET_HALF_WIDTH, _scratch_our_defenders,
-			_scratch_our_defender_caps)
-	cost += AIActionScoring.turnover_cost(
-			AIActionScoring.pass_miss_loss_point(self_pos, receiver_spot),
-			release_clean * lane * miss_prob, ctx.defending_goal_pos,
-			our_goalie, GameRules.NET_HALF_WIDTH, _scratch_our_defenders,
-			_scratch_our_defender_caps)
+	cost += _turnover_cost(ctx, loss_point,
+			release_clean * (1.0 - lane), our_goalie)
+	cost += _turnover_cost(ctx, AIActionScoring.pass_miss_loss_point(self_pos, receiver_spot),
+			release_clean * lane * miss_prob, our_goalie)
 	# Reception strip: the puck dies AT the receiver, in whatever traffic he was
 	# about to catch it in.
-	cost += AIActionScoring.turnover_cost(
-			receiver_spot, release_clean * clean_lane * (1.0 - reception_safety),
-			ctx.defending_goal_pos, our_goalie,
-			GameRules.NET_HALF_WIDTH, _scratch_our_defenders,
-			_scratch_our_defender_caps)
+	cost += _turnover_cost(ctx, receiver_spot,
+			release_clean * clean_lane * (1.0 - reception_safety), our_goalie)
 	# Transition exposure (5v5): each loss mode also prices the COUNTER-RUSH
 	# it hands over — the carrier stays at self_pos through a pass, so his
 	# own recovery race starts from here (plan §6).
@@ -2440,6 +2430,17 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	cost += _counter_exposure_cost(ctx, receiver_spot,
 			clean_lane * (1.0 - reception_safety), self_pos, our_goalie)
 	return benefit - cost
+
+
+# turnover_cost in the unit of this carrier's gains: xG once he is in the zone,
+# the potential scale outside it (see AIActionScoring.turnover_cost).
+func _turnover_cost(ctx: RoleContext, loss_point: Vector3, loss_prob: float,
+		our_goalie: Vector3) -> float:
+	return AIActionScoring.turnover_cost(
+			loss_point, loss_prob, ctx.defending_goal_pos, our_goalie,
+			GameRules.NET_HALF_WIDTH, _scratch_our_defenders,
+			_scratch_our_defender_caps,
+			AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos))
 
 
 # Transition-exposure cost of losing the puck at `loss_point` with
@@ -2462,7 +2463,8 @@ func _counter_exposure_cost(ctx: RoleContext, loss_point: Vector3,
 			GameRules.NET_HALF_WIDTH, _scratch_our_defenders,
 			recover_from, ctx.self_max_speed,
 			_scratch_opponents, _scratch_opponent_vels, _scratch_opponent_caps,
-			_scratch_exposure_mate_etas, _scratch_exposure_threat_memo)
+			_scratch_exposure_mate_etas, _scratch_exposure_threat_memo,
+			AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos))
 
 
 # Rotation time: how long the bot needs to rotate facing to point at
@@ -2604,10 +2606,8 @@ func _best_carry(ctx: RoleContext, shoot_now_score: float,
 	var stand_safety: float = AICarrySpace.carry_safety(
 			stand_puck_pos, stand_puck_pos, AICarrySpace.EVADE_HORIZON_S,
 			_scratch_opponents, _scratch_opponent_vels, _scratch_opponent_caps)
-	var stand_cost: float = AIActionScoring.turnover_cost(
-			stand_puck_pos, 1.0 - stand_safety, ctx.defending_goal_pos,
-			our_goalie, GameRules.NET_HALF_WIDTH, _scratch_our_defenders,
-			_scratch_our_defender_caps)
+	var stand_cost: float = _turnover_cost(ctx, stand_puck_pos,
+			1.0 - stand_safety, our_goalie)
 	stand_cost += _counter_exposure_cost(ctx, stand_puck_pos,
 			1.0 - stand_safety, self_pos, our_goalie)
 	var stand_total: float = stand_score * stand_safety - stand_cost
@@ -2846,17 +2846,14 @@ const CLEAR_PRICE_TIE_BAND: float = 0.001
 # told about — one number, one currency (see
 # AIActionScoring.dump_clear_candidates).
 func _dump_concession(ctx: RoleContext, spot: Vector3, our_goalie: Vector3,
-		defending_goal: Vector3, known_recovery: float = -1.0) -> Vector2:
+		known_recovery: float = -1.0) -> Vector2:
 	var recovery: float = known_recovery
 	if recovery < 0.0:
 		recovery = AIActionScoring.chase_recovery(
 				spot, _scratch_our_chasers, _scratch_opponents,
 				_scratch_our_chaser_vels, _scratch_opponent_vels)
 	var loss: float = 1.0 - recovery
-	var concede: float = AIActionScoring.turnover_cost(
-			spot, loss, defending_goal, our_goalie,
-			GameRules.NET_HALF_WIDTH, _scratch_our_defenders,
-			_scratch_our_defender_caps)
+	var concede: float = _turnover_cost(ctx, spot, loss, our_goalie)
 	concede += _counter_exposure_cost(ctx, spot, loss, ctx.self_pos, our_goalie)
 	return Vector2(concede, recovery)
 
@@ -2961,7 +2958,7 @@ func _best_dump(ctx: RoleContext, our_goalie: Vector3) -> Array:
 			var spot: Vector3 = _scratch_clear_spots[i]
 			var spot_priced := Vector2(0.0, rec)
 			if rec < 1.0:
-				spot_priced = _dump_concession(ctx, spot, our_goalie, defending_goal, rec)
+				spot_priced = _dump_concession(ctx, spot, our_goalie, rec)
 			var price: float = -spot_priced.x
 			var miss: float = absf(spot.z - target_z)
 			if price <= best_price - CLEAR_PRICE_TIE_BAND:
@@ -2989,7 +2986,7 @@ func _best_dump(ctx: RoleContext, our_goalie: Vector3) -> Array:
 		if launch == Vector3.ZERO:
 			return [-INF, Vector3.INF, false, false, Vector3.INF, 0.0]
 		settle = _scratch_dump_landing[0]
-		priced = _dump_concession(ctx, settle, our_goalie, defending_goal)
+		priced = _dump_concession(ctx, settle, our_goalie)
 
 	# Everything below prices the RESTING spot.
 	var recovery: float = priced.y
@@ -3278,10 +3275,8 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 		var strip_point: Vector3 = AICarrySpace.carry_strip_point(
 				cur_puck_pos, cand_puck_pos, local_time,
 				_scratch_opponents, _scratch_opponent_vels, _scratch_opponent_caps, true)
-		cost = AIActionScoring.turnover_cost(
-				strip_point, 1.0 - keep_prob, ctx.defending_goal_pos,
-				our_goalie, GameRules.NET_HALF_WIDTH, _scratch_our_defenders,
-				_scratch_our_defender_caps)
+		cost = _turnover_cost(ctx, strip_point,
+			1.0 - keep_prob, our_goalie)
 		# Transition exposure (5v5): a strip on this route also hands over the
 		# counter-rush. The carrier's recovery race starts from the CANDIDATE —
 		# the spot this carry commits him to (plan §6: the one-up-one-back read).
@@ -3424,10 +3419,8 @@ func _score_wheel_candidate(ctx: RoleContext, dest: Vector3,
 		strip_point = AICarrySpace.carry_strip_point(
 				apex_puck, dest_puck, t2, _scratch_opponents_cont,
 				_scratch_opponent_vels, _scratch_opponent_caps, true)
-	var cost: float = AIActionScoring.turnover_cost(
-			strip_point, 1.0 - keep, ctx.defending_goal_pos,
-			our_goalie, GameRules.NET_HALF_WIDTH, _scratch_our_defenders,
-			_scratch_our_defender_caps)
+	var cost: float = _turnover_cost(ctx, strip_point,
+			1.0 - keep, our_goalie)
 	cost += _counter_exposure_cost(ctx, strip_point, 1.0 - keep, dest, our_goalie)
 	return benefit - cost
 

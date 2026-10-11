@@ -3543,29 +3543,21 @@ static func threat_surface_pass(
 	return maxf(pass_score, lane * positional)
 
 
-# Expected turnover cost — the defensive half of the carrier's
-# expected-value model. The value of having the puck (score_at / pass
-# upside) is one side; this is the other: the possession value the
-# OPPONENT gains if we lose the puck at `loss_point`, weighted by the
-# probability of losing it.
+# Expected turnover cost — the defensive half of the carrier's expected-value
+# model: the possession value the OPPONENT gains if we lose the puck at
+# `loss_point`, times the probability of losing it. "Don't turn it over where it
+# hurts" falls out of geometry: small far from our net, large in front of it.
 #
-#   turnover_cost = loss_prob × threat_surface_shoot(loss_point → our net)
+# The cost must be in the unit of the gains it competes with, or one side wins by
+# scale alone. `in_xg` is for a carrier in the offensive zone, whose gains are
+# xG: the opponent's value is then his shot xG through the value seam, or his
+# possession promise (potential × realization × XG_SLOT_REF) where no shot cashes
+# it. Otherwise the gains are on the potential scale, and so is
+# threat_surface_shoot.
 #
-# The benefit (us shooting their net) and the cost (them shooting ours)
-# are scored with the SAME threat surface — score_shoot-shaped value of
-# possessing the puck at a location. Because both sides share one
-# (uncalibrated but consistent) surface, any miscalibration factor is
-# common to both terms and cancels in the argmax: the exchange rate
-# between a goal-for and a goal-against is exactly 1, so there is NO
-# aversion weight. "Don't turn it over where it hurts" then falls out of
-# geometry alone — threat_surface_shoot is ~0 when loss_point is far
-# from / wide of our net (offensive-zone turnover) and large in front of
-# it (own-zone turnover), so the cost self-localizes with no zone flag.
-#
-# `our_defenders` are our skaters (excluding the carrier, who just got
-# beat); they reduce the opponent's threat exactly as in the defensive
-# roles. Returns 0 when there's no loss location (INF) or no loss
-# probability.
+# `our_defenders` are our skaters (excluding the carrier, who just got beat); they
+# block the opponent's lane and contest his release. Returns 0 when there is no
+# loss location (INF) or no loss probability.
 static func turnover_cost(
 		loss_point: Vector3,
 		loss_prob: float,
@@ -3573,14 +3565,27 @@ static func turnover_cost(
 		our_goalie_pos: Vector3,
 		net_half_width: float,
 		our_defenders: Array[Vector3],
-		defender_caps: Array = EMPTY_CAPS) -> float:
+		defender_caps: Array = EMPTY_CAPS,
+		in_xg: bool = false) -> float:
 	if not loss_point.is_finite():
 		return 0.0
 	if loss_prob <= 0.0:
 		return 0.0
-	return loss_prob * threat_surface_shoot(
-			loss_point, our_net, our_goalie_pos, net_half_width, our_defenders,
-			defender_caps)
+	if not in_xg:
+		return loss_prob * threat_surface_shoot(
+				loss_point, our_net, our_goalie_pos, net_half_width, our_defenders,
+				defender_caps)
+	var value: float = position_potential(loss_point, our_net, our_defenders, defender_caps) \
+			* potential_realization_discount(loss_point, our_net) * XG_SLOT_REF
+	# Outside our zone with the keeper home his shot xG beats that promise by at
+	# most a long shot's logistic tail, ~0.003 at the far end
+	# (test_in_xg_turnover_shot_skip_is_safe), so the shot read is skipped there.
+	if in_offensive_zone(loss_point, our_net) \
+			or our_goalie_pos.distance_to(our_net) >= THREAT_GOALIE_HOME_M:
+		value = maxf(value, score_shoot_value(
+				loss_point, our_net, our_goalie_pos, 0.0, net_half_width,
+				our_defenders, WRISTER_SHOT_SPEED_M_S, defender_caps))
+	return loss_prob * value
 
 
 # ── Transition-exposure: the counter-rush cost (5v5-gated at the caller) ─────
@@ -3650,7 +3655,8 @@ static func counter_rush_cost(
 		opponent_vels: Array[Vector3],
 		opponent_caps: Array,
 		mate_etas: Array[float] = [],
-		threat_by_cover: Array[float] = []) -> float:
+		threat_by_cover: Array[float] = [],
+		in_xg: bool = false) -> float:
 	if not loss_point.is_finite() or loss_prob <= 0.0 or opponents.is_empty():
 		return 0.0
 	var counter_point: Vector3 = counter_point_for(our_net)
@@ -3745,19 +3751,24 @@ static func counter_rush_cost(
 	# pass a -1-seeded scratch (`threat_by_cover`, indexed by cover count,
 	# reset each compete) and the ~25 candidate calls collapse to ≤ a
 	# handful of real score_shoot evaluations.
+	#
+	# `in_xg` prices the shot through the value seam, for a carrier whose gains are
+	# xG (see turnover_cost). A memo must only ever hold one unit.
 	var cover_count: int = _scratch_counter_cover.size()
-	var threat: float
+	var threat: float = -1.0
 	if cover_count < threat_by_cover.size():
 		threat = threat_by_cover[cover_count]
-		if threat < 0.0:
+	if threat < 0.0:
+		if in_xg:
+			threat = score_shoot_value(
+					counter_point, our_net, our_goalie_pos, 0.0, net_half_width,
+					_scratch_counter_cover)
+		else:
 			threat = score_shoot(
 					counter_point, our_net, our_goalie_pos, net_half_width,
 					_scratch_counter_cover)
+		if cover_count < threat_by_cover.size():
 			threat_by_cover[cover_count] = threat
-	else:
-		threat = score_shoot(
-				counter_point, our_net, our_goalie_pos, net_half_width,
-				_scratch_counter_cover)
 	return loss_prob * threat * delay_discount(t_counter)
 
 
