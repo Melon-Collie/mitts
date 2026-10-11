@@ -54,8 +54,11 @@ well under one in C++). Three consequences worth knowing:
   would report a gate that never ran as green.
 - `bin/` — build output, gitignored. Every machine builds its own.
   `bin/.built-from` records the commit the binary was built from; the git hooks
-  compare it against the working tree (`.githooks/native-stale-check.sh`), since
-  a kernel built from other sources drops to the GDScript fallback silently.
+  compare it against the working tree (`.githooks/native-stale-check.sh`). A
+  kernel's `configure` only catches a binary that reads a tunable the scripts no
+  longer have, and drops to the GDScript fallback silently. A binary older than
+  a tunable or method it lacks passes, then runs without the tunable or errors
+  on the missing call, so the hook's warning is the only one.
 
 ## Building
 
