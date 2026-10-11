@@ -769,8 +769,8 @@ F3's high-slot float sits ~8 m further up-ice. So the points read no support and
 any man who gets behind them (correct — they *are* the last layer), while F3 reads the
 points as his support and holds his float (correct — the layer behind him is home). The
 turnover-conscious forward is `HIGH_SLOT` / `F3_HIGH`, the designated first man back;
-`SUPPORT` / `TRAILER` already prices turnover risk natively via `counter_rush_cost` and is
-untouched by §13.
+`SUPPORT` / `TRAILER` prices turnover risk natively via `counter_rush_cost`, and (since the
+stride-ramp revision below) also counts numbers like the other last layers.
 
 *Contested control deliberately does not send a station home on its own.* Backing off with
 nobody behind you is precisely the out-of-the-play failure being fixed — the retreat buys
@@ -780,6 +780,20 @@ no coverage and costs the attack a body.
 a D and must not read as a man who has beaten him. The grounded span is the **cover
 envelope** (a goal-side stand plus a stick), with an extra stick of hysteresis while
 holding.
+
+> **Revised for the stride ramp.** "Behind" is now measured as a *race*: each attacker's
+> distance to our net less the head start he gains on this station while it builds to his
+> pace (`AIRoleRushD.race_depth_to_net`, the same `AIRoleRushD.head_start_on_me` the rush
+> gap uses). A man level with a standing station at 8 m/s is already past it by the time it
+> is moving; read off where he stands, the station reacted after he was gone. A stationary
+> or drifting man reads as before, so the cover envelope still separates "level" from
+> "beaten" (a one-stick envelope was tried and re-opened the coverage-jitter retreat).
+>
+> **SUPPORT now counts numbers too.** In 3v3 it is the 1-1-1's "help" player, the team's only
+> high body, and its counter cost prices a loss *at the carrier* — it cannot see a man
+> already leaving the zone, who is the one a turnover gets fed to. It holds its stand under
+> the same read and restores the numbers layer when someone gets behind it.
+> `tests/unit/ai/test_counter_layer.gd` measures both modes against a breaking man.
 
 **C. The retreat floor becomes numbers-restoring, not home.** Back off only as far as
 restores the numbers layer, then stop. Replaces `station_retreat_floor` on the offensive

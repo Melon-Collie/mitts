@@ -225,17 +225,25 @@ static func _with_cushion(ladder_m: float, cushion_m: float,
 # a slight over-read of the cushion, in the safe direction.
 static func ramp_cushion_m(ctx: RoleContext, ap: AICarrierApproach,
 		threat_peer: int) -> float:
+	return head_start_on_me(ctx, ap.dir_net, ap.carrier_vel, ap.net_dist,
+			threat_peer)
+
+
+# ramp_cushion_m's race for any threat: `dir_net` his line to our net,
+# `net_dist` his ice to it. Also what "behind me" means to an offensive station
+# (race_depth_to_net).
+static func head_start_on_me(ctx: RoleContext, dir_net: Vector3,
+		threat_vel: Vector3, net_dist: float, threat_peer: int) -> float:
 	var caps: AISkaterCaps = ctx.caps_by_peer.get(threat_peer) \
 			if threat_peer != -1 else null
 	var lead_vmax: float = caps.max_speed if caps != null \
 			else AIActionScoring.SKATER_REF_SPEED_M_S
 	var lead_accel: float = caps.max_accel if caps != null \
 			else AIActionScoring.SHED_ACCEL_DEFAULT_M_S2
-	var lead_v: float = ap.carrier_vel.x * ap.dir_net.x \
-			+ ap.carrier_vel.z * ap.dir_net.z
-	var self_v: float = ctx.self_velocity.x * ap.dir_net.x \
-			+ ctx.self_velocity.z * ap.dir_net.z
-	var ice_to_gate: float = ap.net_dist - AIZoneCoverage.HOUSE_TOP_DEPTH_M
+	var lead_v: float = threat_vel.x * dir_net.x + threat_vel.z * dir_net.z
+	var self_v: float = ctx.self_velocity.x * dir_net.x \
+			+ ctx.self_velocity.z * dir_net.z
+	var ice_to_gate: float = net_dist - AIZoneCoverage.HOUSE_TOP_DEPTH_M
 	if ice_to_gate <= 0.0:
 		return 0.0
 	var horizon: float = AIStrideRamp.time_to_cover(
@@ -244,6 +252,24 @@ static func ramp_cushion_m(ctx: RoleContext, ap: AICarrierApproach,
 			self_v, ctx.self_max_speed, ctx.self_max_accel,
 			AIActionScoring.REVERSAL_BRAKE_DECEL_M_S2, horizon), ice_to_gate)
 
+
+# How far from our net an attacker is, as this body has to race him: his
+# distance less the ground he gains on us while we build to his pace
+# (AIRoleRushD.head_start_on_me). "Behind me" is a race under the stride ramp —
+# a man level with a standing station at 8 m/s is already past it by the time
+# it is moving — so counting numbers off where he stands reads him late.
+static func race_depth_to_net(ctx: RoleContext, pid: int) -> float:
+	var s: SkaterNetworkState = ctx.snapshot.skater_states.get(pid)
+	if s == null:
+		return INF
+	var our_net: Vector3 = ctx.defending_goal_pos
+	var d: float = AIRoleHelpers.xz_distance(s.position, our_net)
+	if d < 0.001:
+		return 0.0
+	var dir_net := Vector3((our_net.x - s.position.x) / d, 0.0,
+			(our_net.z - s.position.z) / d)
+	return maxf(d - head_start_on_me(ctx, dir_net, s.velocity, d,
+			pid), 0.0)
 
 # The gap ladder plus its modifiers, in metres.
 static func _gap_for(ctx: RoleContext, read: AIRushRead, carrier_pos: Vector3,

@@ -940,17 +940,16 @@ static func _we_possess(ctx: RoleContext) -> bool:
 
 
 # The numbers-restoring retreat: only as far back as puts us goal-side of the
-# deepest attacker who is currently behind our stand — "count numbers, and if any
-# are behind you, deal with it". When nobody is behind the stand there is nothing
-# to restore and the stand itself is the floor, so this never walks a station home
-# for a threat that does not exist.
+# deepest attacker behind our stand as we race him (AIRoleRushD.race_depth_to_net)
+# — "count numbers, and if any are behind you, deal with it". With nobody behind
+# the stand it is its own floor: no station is walked home for a phantom.
 static func numbers_floor(ctx: RoleContext, stand: Vector3) -> Vector3:
 	var read: AIRushRead = ctx.rush_read
 	var our_net: Vector3 = ctx.defending_goal_pos
 	var stand_d: float = xz_distance(stand, our_net)
 	var deepest: float = stand_d
-	for lead: Vector3 in read.attacker_leads:
-		var d: float = xz_distance(lead, our_net)
+	for i: int in read.attackers.size():
+		var d: float = AIRoleRushD.race_depth_to_net(ctx, read.attackers[i])
 		if d < deepest:
 			deepest = d
 	if deepest >= stand_d:
@@ -1080,7 +1079,7 @@ static func home_layer_behind_me(ctx: RoleContext) -> bool:
 	return false
 
 
-# Is any attacker currently deeper (nearer our net) than `stand`?
+# Is any attacker deeper (nearer our net) than `stand`, as we have to race him?
 static func _attacker_behind(ctx: RoleContext, stand: Vector3,
 		was_holding: bool = false) -> bool:
 	var our_net: Vector3 = ctx.defending_goal_pos
@@ -1093,10 +1092,11 @@ static func _attacker_behind(ctx: RoleContext, stand: Vector3,
 	var margin: float = AIRushRead.cover_envelope_m()
 	if was_holding:
 		margin += BEHIND_HOLD_EXTRA_M
-	for lead: Vector3 in ctx.rush_read.attacker_leads:
-		if xz_distance(lead, our_net) < stand_d - margin:
+	for pid: int in ctx.rush_read.attackers:
+		if AIRoleRushD.race_depth_to_net(ctx, pid) < stand_d - margin:
 			return true
 	return false
+
 
 
 # ── Last-man step-up discipline ──────────────────────────────────────────────
