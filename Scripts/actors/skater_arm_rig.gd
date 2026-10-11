@@ -470,7 +470,19 @@ func set_trunk_texture(pitch_add: float, roll_add: float) -> void:
 	repose_bone(SkaterMeshBuilder.UpperBone.SHOULDER_R)
 
 
+# The head's lerp toward its aim never lands exactly, so it would re-pose the
+# helmet (and dirty the whole skeleton) every frame of an idle skater. Writes
+# land only once the angle has moved this far (rad) from the last one written,
+# so the drawn head is never further than this from the asked-for one.
+const HEAD_ANGLE_EPS_RAD: float = 0.0001
+
+var _head_angle_written: float = INF
+
+
 func set_head_angle(angle: float) -> void:
+	if absf(angle - _head_angle_written) < HEAD_ANGLE_EPS_RAD:
+		return
+	_head_angle_written = angle
 	_basis[SkaterMeshBuilder.UpperBone.HELMET] = Basis.from_euler(
 			Vector3(_helmet_base_euler.x, angle, _helmet_base_euler.z))
 	repose_bone(SkaterMeshBuilder.UpperBone.HELMET)
