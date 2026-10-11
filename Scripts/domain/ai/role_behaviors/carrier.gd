@@ -3852,23 +3852,17 @@ func _puck_pos_at(body_pos: Vector3, attacking_goal: Vector3) -> Vector3:
 	return body_pos + to_goal * (inv * SkaterAgentStateMachine.CARRY_BLADE_AIM_FORWARD_M)
 
 
-# True once this carrier has taken the offensive zone, for the pass valve. The
-# offside line reads the PUCK, and the carried puck leads the body by up to a
-# stick's reach, so a body-only test leaves a window where the puck is in and a
-# pass back to a trailer in neutral ice is still on the board. The puck is read
-# where it leaves the blade — carried on at our velocity over the release windup
-# — so a feed committed on the line cannot cross it mid-windup either.
+# The pass valve's read: the offside line reads the PUCK, which leads the body,
+# so the zone is taken once the body, the puck, or the puck at release is in.
 func _zone_taken(ctx: RoleContext) -> bool:
-	if AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos):
+	var goal: Vector3 = ctx.attacking_goal_pos
+	if AIActionScoring.in_offensive_zone(ctx.self_pos, goal):
 		return true
 	if ctx.snapshot.puck_state == null:
 		return false
 	var puck: Vector3 = ctx.snapshot.puck_state.position
-	if AIActionScoring.in_offensive_zone(puck, ctx.attacking_goal_pos):
-		return true
-	var at_release: Vector3 = puck \
-			+ ctx.self_velocity * SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S
-	return AIActionScoring.in_offensive_zone(at_release, ctx.attacking_goal_pos)
+	return AIActionScoring.in_offensive_zone(puck, goal) or AIActionScoring.in_offensive_zone(
+			puck + ctx.self_velocity * SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S, goal)
 
 
 # OZ slot anchor — recursion terminator and a permanent carry
