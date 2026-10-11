@@ -5757,7 +5757,8 @@ func _lead_intercept(self_pos: Vector3, self_vel: Vector3, puck_pos: Vector3,
 	# moving the metric it was meant to help by 0.02.
 	var t: float = AILoosePuckChase.path_intercept_time(
 			traj, step_dt, puck_pos, self_pos, self_vel, cap,
-			AILoosePuckChase.setup_margin(puck_vel), _chase_max_accel, _blade_reach)
+			AILoosePuckChase.setup_margin(puck_vel), _chase_max_accel, _blade_reach,
+			AILoosePuckChase.race_playable_time(puck_pos, puck_vel))
 	# The TIME is reach-aware; the steering target is not pulled back onto the
 	# reach circle. Where the blade can first touch the puck is the right answer
 	# to "am I in this race"; the body should still drive at the meeting point

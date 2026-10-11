@@ -455,6 +455,19 @@ static func is_puck_airborne(pos: Vector3, vel: Vector3,
 	return pos.y > rest_height + _AIRBORNE_POS_EPS_M or absf(vel.y) > _AIRBORNE_VY_EPS_M_S
 
 
+# Seconds until a puck is back under the blade plane for good (GameRules.
+# PUCK_AIRBORNE_HEIGHT_M above rest — the gate PuckReceptionRules.
+# blade_can_interact holds a grounded blade to), i.e. the descending root of
+# y(t) = y0 + vy·t − ½gt² at that height. 0 for a puck that never rises above it.
+static func time_until_on_blade_plane(pos: Vector3, vel: Vector3,
+		rest_height: float = PUCK_REST_HEIGHT_M) -> float:
+	var h: float = pos.y - rest_height - GameRules.PUCK_AIRBORNE_HEIGHT_M
+	var disc: float = vel.y * vel.y + 2.0 * GameRules.GRAVITY_M_S2 * h
+	if disc <= 0.0 or (h <= 0.0 and vel.y <= 0.0):
+		return 0.0
+	return maxf((vel.y + sqrt(disc)) / GameRules.GRAVITY_M_S2, 0.0)
+
+
 # ── Released-puck landing, closed form ───────────────────────────────────────
 # Where a released puck comes to REST, and whether it crossed a goal line on the
 # way. The dump eval wants both: it prices its concession (chase_recovery /

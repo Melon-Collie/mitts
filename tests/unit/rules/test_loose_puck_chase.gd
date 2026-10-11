@@ -681,3 +681,62 @@ func test_sub_step_margin_decides_the_election() -> void:
 	var pid: int = AILoosePuckChase.elect(
 			states, [100, 200], Vector3.ZERO, Vector3.ZERO, -1)
 	assert_eq(pid, 200, "half a metre of real separation beats the peer-id tie-break")
+
+
+# ── Airborne pucks are met where they land ───────────────────────────────────
+# A grounded blade cannot play a puck above the blade plane, so the race reads
+# no step of the path before the puck is back down on it.
+
+const _REST_Y: float = AITrajectory.PUCK_REST_HEIGHT_M
+const _STEP_DT: float = AILoosePuckChase.RACE_LOOKAHEAD_S / float(AILoosePuckChase.RACE_STEPS)
+
+
+func test_blade_plane_time_is_the_descending_root() -> void:
+	var g: float = GameRules.GRAVITY_M_S2
+	var h: float = GameRules.PUCK_AIRBORNE_HEIGHT_M
+	var popped: float = AITrajectory.time_until_on_blade_plane(
+			Vector3(0, _REST_Y, 0), Vector3(3, 1.6, 0))
+	assert_almost_eq(popped, (1.6 + sqrt(1.6 * 1.6 - 2.0 * g * h)) / g, 0.0001,
+			"a pinch at the hop cap is over the blade for ~0.29 s")
+	assert_eq(AITrajectory.time_until_on_blade_plane(
+			Vector3(0, _REST_Y, 0), Vector3(3, 0, 0)), 0.0, "a sliding puck is playable now")
+	assert_eq(AITrajectory.time_until_on_blade_plane(
+			Vector3(0, _REST_Y, 0), Vector3(3, 0.8, 0)), 0.0,
+			"a flutter that never clears the plane never leaves the blade's reach")
+	assert_gt(AITrajectory.time_until_on_blade_plane(
+			Vector3(0, 0.5, 0), Vector3(3, -1.0, 0)), 0.0,
+			"a puck still coming down from height is not yet playable")
+
+
+func test_popped_puck_intercept_waits_for_the_landing() -> void:
+	# The chaser's own steer, which counts his stick: beside the pop, the
+	# blind read has the stick on the puck now, under its flight.
+	var pos := Vector3(0, _REST_Y, 0)
+	var vel := Vector3(3.5, 1.6, 0)
+	var t_play: float = AILoosePuckChase.race_playable_time(pos, vel)
+	var traj: Array[Vector3] = AILoosePuckChase.race_trajectory(pos, vel)
+	var skater := Vector3(0.3, 0, 0.3)
+	var reach: float = 1.0
+	var blind: float = AILoosePuckChase.path_intercept_time(traj, _STEP_DT, pos,
+			skater, Vector3.ZERO, REF, 0.0,
+			AIActionScoring.SHED_ACCEL_DEFAULT_M_S2, reach)
+	assert_lt(blind, t_play, "without the flight the read plays it under the pop")
+	var t: float = AILoosePuckChase.path_intercept_time(traj, _STEP_DT, pos,
+			skater, Vector3.ZERO, REF, 0.0,
+			AIActionScoring.SHED_ACCEL_DEFAULT_M_S2, reach, t_play)
+	assert_almost_eq(t, t_play, 0.0001, "met the instant it is back on the blade plane")
+	var meet: Vector3 = AILoosePuckChase.path_intercept_point(traj, _STEP_DT, pos, t)
+	assert_gt(meet.x, 0.8, "steered to where it lands, a metre downstream")
+
+
+func test_reach_band_ignores_a_puck_flying_over_the_stick() -> void:
+	# A flip whose whole pass through this bot's band is in the air, landing
+	# well beyond it.
+	var over: bool = AILoosePuckChase.puck_comes_to_reach(
+			Vector3(-1, _REST_Y, 0), Vector3(10, 5, 0),
+			Vector3(3, 0, 0), Vector3.ZERO, REF, 0.5)
+	assert_false(over, "a puck over the stick is not coming to it")
+	var flat: bool = AILoosePuckChase.puck_comes_to_reach(
+			Vector3(-1, _REST_Y, 0), Vector3(10, 0, 0),
+			Vector3(3, 0, 0), Vector3.ZERO, REF, 0.5)
+	assert_true(flat, "the same puck along the ice is")

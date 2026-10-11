@@ -49,7 +49,7 @@ const _SIZE_SLACK: int = 40
 const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +3: the wrister wind-up side reads the trailer's relative motion over the
 	# charge (#740), not just where he stands at the commit.
-	"res://Scripts/ai/skater_agent_state_machine.gd": 6072,
+	"res://Scripts/ai/skater_agent_state_machine.gd": 6073,
 	"res://Scripts/game/game_manager.gd": 5597,
 	"res://Scripts/domain/ai/action_scoring.gd": 4458,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
@@ -71,7 +71,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/controllers/skater_ik_coordinator.gd": 925,
 	"res://Scripts/controllers/puck_controller.gd": 1526,
 	"res://Scripts/actors/hockey_rink.gd": 1472,
-	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 1436,
+	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 1409,
 	"res://Scripts/game/player_prefs.gd": 1390,
 	"res://Scripts/actors/skater_mesh_builder.gd": 1406,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1357,
