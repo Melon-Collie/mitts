@@ -3,10 +3,10 @@ extends Node
 
 # Local-player infraction banner. Shown whenever the local skater is ghosted
 # for a reason the player can clear themselves (offside or crease violation),
-# or — under NHL rules, which never ghost for offside — while the host holds
-# them in the delayed-offside set. Names the infraction and the action that
-# lifts it. Driven each frame from the local skater's own position; icing (a
-# whole-team ghost) keeps its own toast.
+# or — under NHL rules, which never ghost for offside — while the host says
+# they must tag up, or they carry the puck with a teammate who must. Names the
+# infraction and the action that lifts it. Driven each frame from the local
+# skater's own position; icing (a whole-team ghost) keeps its own toast.
 
 var _root: Control = null
 var _reason_label: Label = null
@@ -71,8 +71,15 @@ func update() -> void:
 	if skater == null or record.team == null:
 		_hide()
 		return
-	if GameManager.is_local_delayed_offside():
-		_show(tr(&"INFRACTION_OFFSIDE"), tr(&"GHOST_OFFSIDE_INSTRUCTION"))
+	if GameManager.must_tag_up(record.peer_id):
+		# Back at the line but still flagged: the rest of the team hasn't cleared.
+		var waiting: bool = InfractionRules.has_tagged_up(
+				skater.global_position.z, record.team.team_id)
+		_show(tr(&"INFRACTION_OFFSIDE"), tr(&"GHOST_OFFSIDE_WAIT_INSTRUCTION")
+				if waiting else tr(&"GHOST_OFFSIDE_INSTRUCTION"))
+		return
+	if GameManager.get_puck_carrier() == skater and _teammate_must_tag_up(record):
+		_show(tr(&"INFRACTION_TEAMMATE_OFFSIDE"), tr(&"GHOST_TEAMMATE_OFFSIDE_INSTRUCTION"))
 		return
 	if not skater.is_ghost:
 		_hide()
@@ -117,6 +124,15 @@ func update() -> void:
 			_root.visible = false
 		return
 	_show(reason, instruction)
+
+
+func _teammate_must_tag_up(local: PlayerRecord) -> bool:
+	var players: Dictionary[int, PlayerRecord] = GameManager.get_players()
+	for peer_id: int in players:
+		if peer_id != local.peer_id and players[peer_id].team == local.team \
+				and GameManager.must_tag_up(peer_id):
+			return true
+	return false
 
 
 func _hide() -> void:

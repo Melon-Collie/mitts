@@ -72,15 +72,13 @@ var _icing_timer: float = 0.0
 # ── Offsides ─────────────────────────────────────────────────────────────────
 # ARCADE path: peer IDs currently serving an offside ghost. Cleared per-peer
 # by tagging up (crossing back into neutral zone) or a dead-puck phase, or
-# team-wide by _void_offside_for_team when the defending team gains clean
-# possession (notify_possession_established) — ARCADE's ghost emulates the
-# same NHL rule as the delayed-offside path below, it just never produces a
-# stoppage.
+# team-wide by _void_arcade_offside_for_team when the defending team gains
+# clean possession (notify_possession_established) — an ARCADE flow rule that
+# lets a ghost rejoin play without skating all the way back.
 var _offside_peer_ids: Dictionary = {}
-# NHL delayed-offside path: peers who entered their attacking zone before the
-# puck and have not yet tagged up. Tracked separately so we don't ghost them.
-# Cleared per-peer by tagging up, or team-wide by _void_offside_for_team when
-# the defending team gains clean possession (notify_possession_established).
+# NHL delayed-offside path: peer_id -> team_id for peers who entered their
+# attacking zone before the puck. Tracked separately so we don't ghost them.
+# See update_delayed_offside for how they clear (Rule 83.3).
 var _delayed_offside_peer_ids: Dictionary = {}
 # Set to a team_id when there is at least one offside peer on that team AND
 # the puck is in their attacking zone — i.e. an NHL delayed-offside is active
@@ -89,6 +87,8 @@ var delayed_offside_team_id: int = -1
 # Stashed at update_delayed_offside time so notify_puck_touch can build the
 # offside faceoff dot without re-receiving the puck position.
 var _last_puck_x: float = 0.0
+# Per-team "everyone is back at the line" accumulator for update_delayed_offside.
+var _all_tagged_up_scratch: Array[bool] = [true, true]
 
 # ── Crease protection ─────────────────────────────────────────────────────────
 # peer_id → seconds the skater has continuously dwelt inside a goalie crease.
@@ -136,6 +136,11 @@ func on_goal_scored(defending_team_id: int) -> int:
 	if current_phase != GamePhase.Phase.PLAYING:
 		return -1
 	var scoring_team_id: int = 1 - defending_team_id
+	# A goal can't count for a team whose delayed offside is up: the play is
+	# whistled offside instead (pending faceoff for the caller to consume).
+	if rule_set == GameRules.RuleSet.NHL and delayed_offside_team_id == scoring_team_id:
+		_fire_offside_whistle()
+		return -1
 	scores[scoring_team_id] += 1
 	period_scores[scoring_team_id][current_period - 1] += 1
 	last_scoring_team_id = scoring_team_id
@@ -197,18 +202,16 @@ func notify_puck_carried(carrier_team_id: int, carrier_z: float, carrier_x: floa
 # must NOT void an offside — real hockey requires the defending team to gain
 # genuine "possession and control," not just touch the puck, and this reuses
 # the codebase's one existing notion of "control" rather than inventing a
-# looser one. Voids an active offside in team_id's own (defensive) zone —
-# same rule for both presets: NHL clears the pending delayed-offside/whistle
-# state; ARCADE clears the ghost outright, since its instant ghost emulates
-# the same underlying rule and just never produces a stoppage.
-# Previously-flagged attackers become fully onside without needing to tag up;
-# a fresh violation can only occur off a later, genuine new zone entry.
+# looser one. ARCADE only: clears the offending team's ghosts in team_id's own
+# (defensive) zone, so they rejoin play without skating back. NHL has no such
+# nullifier — Rule 83.3 clears a delayed offside only on a team-wide tag-up or
+# the puck leaving the zone (update_delayed_offside).
 func notify_possession_established(team_id: int, puck_z: float) -> void:
-	if _offside_peer_ids.is_empty() and _delayed_offside_peer_ids.is_empty():
+	if rule_set != GameRules.RuleSet.ARCADE or _offside_peer_ids.is_empty():
 		return
 	var offending_team_id: int = 1 - team_id
 	if _puck_in_attacking_zone(offending_team_id, puck_z):
-		_void_offside_for_team(offending_team_id)
+		_void_arcade_offside_for_team(offending_team_id)
 
 # Host-side: called when a loose puck is touched by any player (deflection,
 # body block, poke check, body check strip). Clears the icing tracker so the
@@ -332,12 +335,13 @@ func compute_ghost_state(
 	return result
 
 
-# Host-side (NHL only): tracks delayed-offside state. An attacker who entered
-# their attacking zone before the puck is added to the offside set and stays
-# until they tag up at the blue line. delayed_offside_team_id flips on while
-# at least one such peer is offside AND the puck is in their attacking zone;
-# it clears when everyone tags up or the puck leaves the zone (defenders
-# clear). The whistle itself fires from notify_puck_touch.
+# Host-side (NHL only): tracks delayed-offside state (Rule 83.3). An attacker
+# who enters their attacking zone before the puck is flagged. While the puck
+# is outside that zone a flagged peer clears by tagging up on their own — they
+# are simply no longer ahead of it. Once the puck is in (delayed_offside_team_id
+# set) the delay only clears when the WHOLE team is back at the line in the
+# same tick, or the puck leaves the zone. The whistle fires here when the
+# offending team carries the puck in, and from notify_puck_touch on a touch.
 func update_delayed_offside(
 		player_positions: Dictionary,
 		puck_position: Vector3,
@@ -351,36 +355,56 @@ func update_delayed_offside(
 	var puck_z: float = puck_position.z
 	_last_puck_x = puck_position.x
 
-	# Add new offside peers; remove ones who have tagged up. A peer stays in
-	# the set even after the puck enters the zone — they must physically cross
-	# back into neutral to clear.
+	var all_tagged_up: Array[bool] = _all_tagged_up_scratch
+	all_tagged_up[0] = true
+	all_tagged_up[1] = true
 	for peer_id in player_positions:
 		if not players.has(peer_id):
 			continue
-		var slot: Dictionary = players[peer_id]
+		var team_id: int = players[peer_id].team_id
+		if team_id != 0 and team_id != 1:
+			continue
 		var pos_z: float = player_positions[peer_id].z
+		var tagged_up: bool = InfractionRules.has_tagged_up(pos_z, team_id)
+		if not tagged_up:
+			all_tagged_up[team_id] = false
 		if _delayed_offside_peer_ids.has(peer_id):
-			if InfractionRules.has_tagged_up(pos_z, slot.team_id):
+			if tagged_up and not _puck_in_attacking_zone(team_id, puck_z):
 				_delayed_offside_peer_ids.erase(peer_id)
 		else:
 			var is_carrier: bool = peer_id == puck_carrier_peer_id
-			if InfractionRules.is_offside(pos_z, slot.team_id, puck_z, is_carrier):
-				_delayed_offside_peer_ids[peer_id] = slot.team_id
+			if InfractionRules.is_offside(pos_z, team_id, puck_z, is_carrier):
+				_delayed_offside_peer_ids[peer_id] = team_id
 
-	# A team's delayed offside is active once the puck reaches their attacking
-	# zone (touch by them is now a whistle). Walk the set and take the first
-	# team whose zone the puck is in.
 	delayed_offside_team_id = -1
-	for tid in _delayed_offside_peer_ids.values():
+	for peer_id in _delayed_offside_peer_ids:
+		var tid: int = _delayed_offside_peer_ids[peer_id]
 		if _puck_in_attacking_zone(tid, puck_z):
 			delayed_offside_team_id = tid
 			break
+	if delayed_offside_team_id == -1:
+		return
+	if all_tagged_up[delayed_offside_team_id]:
+		_clear_delayed_offside_for_team(delayed_offside_team_id)
+		return
+	# Carrying the puck in while a teammate is offside is an immediate whistle.
+	if players.has(puck_carrier_peer_id) \
+			and players[puck_carrier_peer_id].team_id == delayed_offside_team_id:
+		_fire_offside_whistle()
 
 
-# Whether peer_id is in the NHL delayed-offside set — in their attacking zone
-# ahead of the puck and not yet tagged up. Always false outside NHL.
-func is_delayed_offside(peer_id: int) -> bool:
-	return _delayed_offside_peer_ids.has(peer_id)
+# Whether peer_id must get back to the blue line under NHL delayed offside:
+# flagged offside themselves, or still inside the zone while their team's
+# delayed offside is up (the whole team has to clear together). Always false
+# outside NHL.
+func must_tag_up(peer_id: int, pos_z: float) -> bool:
+	if _delayed_offside_peer_ids.has(peer_id):
+		return true
+	if delayed_offside_team_id == -1 or not players.has(peer_id):
+		return false
+	var team_id: int = players[peer_id].team_id
+	return team_id == delayed_offside_team_id \
+			and not InfractionRules.has_tagged_up(pos_z, team_id)
 
 
 static func _puck_in_attacking_zone(team_id: int, puck_z: float) -> bool:
@@ -390,21 +414,13 @@ static func _puck_in_attacking_zone(team_id: int, puck_z: float) -> bool:
 		return puck_z > GameRules.BLUE_LINE_Z
 
 
-# Clears every peer flagged offside for team_id, in whichever of the two
-# ghost dicts the active ruleset uses (only one is ever populated at a time)
-# — ARCADE's instant per-player ghost or NHL's delayed-offside set — and
-# drops the active NHL flag if it belonged to that team. Called from
-# notify_possession_established when the defending team gains clean
-# possession — real hockey voids the whole offside then, not just the
-# current instant, so previously-flagged players don't need to physically
-# tag up anymore; a
-# later genuine zone clear-and-reentry is a fresh violation, tracked
-# independently by compute_ghost_state / update_delayed_offside re-flagging
-# them if still positioned in the zone.
-func _void_offside_for_team(team_id: int) -> void:
+func _void_arcade_offside_for_team(team_id: int) -> void:
 	for peer_id in _offside_peer_ids.keys():
 		if players.has(peer_id) and players[peer_id].team_id == team_id:
 			_offside_peer_ids.erase(peer_id)
+
+
+func _clear_delayed_offside_for_team(team_id: int) -> void:
 	for peer_id in _delayed_offside_peer_ids.keys():
 		if _delayed_offside_peer_ids[peer_id] == team_id:
 			_delayed_offside_peer_ids.erase(peer_id)
@@ -419,31 +435,22 @@ func notify_puck_touch(peer_id: int) -> void:
 	_whistle_delayed_offside_if_offending_team(peer_id)
 
 
-# Host-side (NHL only): called on any meaningful skater-skater contact
-# (closing-velocity collision — see Skater._resolve_player_collisions).
-# Real hockey ends a delayed off-side not just on a puck touch but also when
-# an attacking player "forces the defending puck carrier further back" or
-# "is about to make physical contact" with them (Rule 83.3) — both are
-# linesman judgment calls with no clean deterministic equivalent, so this
-# collapses them to one concrete, no-intent-reading trigger: any contact
-# between the offending team and the defending team while the delayed
-# offside is active whistles it, same as a puck touch. Deliberately broader
-# than "the puck carrier specifically" — an offside attacker throwing their
-# body around shouldn't be free to do so just because they haven't touched
-# the puck yet. Requires two DIFFERENT teams (a same-team bump never
-# whistles); which peer is which within the pair doesn't matter.
-func notify_offside_contact(peer_a: int, peer_b: int) -> void:
+# Host-side (NHL only): called when aggressor_peer body-checks victim_peer.
+# Rule 83.3 stops play when an attacker forces the defending puck carrier back
+# or is about to make contact with him; contact is the deterministic stand-in
+# for that linesman judgment. So it whistles only when the aggressor is on the
+# offending team and the victim is the defending carrier — a defender bumping
+# an attacker, or contact away from the puck, plays on.
+func notify_offside_contact(aggressor_peer: int, victim_peer: int, carrier_peer_id: int) -> void:
 	if rule_set != GameRules.RuleSet.NHL:
 		return
-	if delayed_offside_team_id == -1:
+	if delayed_offside_team_id == -1 or victim_peer != carrier_peer_id:
 		return
-	if not players.has(peer_a) or not players.has(peer_b):
+	if not players.has(aggressor_peer) or not players.has(victim_peer):
 		return
-	var team_a: int = players[peer_a].team_id
-	var team_b: int = players[peer_b].team_id
-	if team_a == team_b:
+	if players[aggressor_peer].team_id != delayed_offside_team_id:
 		return
-	if team_a != delayed_offside_team_id and team_b != delayed_offside_team_id:
+	if players[victim_peer].team_id == delayed_offside_team_id:
 		return
 	_fire_offside_whistle()
 

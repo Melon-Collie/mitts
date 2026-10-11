@@ -26,6 +26,9 @@ class_name AILoosePuckChase
 # geometrically-similar bots without making the role stale when a
 # genuinely better-placed teammate appears.
 const HYSTERESIS_S: float = 0.2
+# Default for teammate_first_to_puck's tag_up_peers — a shared empty map, so
+# callers that omit it allocate nothing.
+const _NO_PEERS: Dictionary = {}
 
 # ── Path race ────────────────────────────────────────────────────────────────
 # EVERY loose puck races on its friction + board-aware predicted path: at each
@@ -344,13 +347,14 @@ const YIELD_CONTEST_M: float = 0.7
 # blade means the field is absent and we simply don't yield.
 static func teammate_first_to_puck(
 		skater_states: Dictionary, teammate_ids: Array, self_pid: int,
-		self_blade: Vector3, puck_pos: Vector3) -> bool:
+		self_blade: Vector3, puck_pos: Vector3,
+		tag_up_peers: Dictionary = _NO_PEERS) -> bool:
 	var mine: float = _xz_dist(self_blade, puck_pos)
 	for pid: int in teammate_ids:
 		if pid == self_pid:
 			continue
 		var s: SkaterNetworkState = skater_states.get(pid)
-		if s == null or s.is_ghost:
+		if s == null or s.is_ghost or tag_up_peers.has(pid):
 			continue
 		var blade: Vector3 = s.blade_contact_world
 		if blade == Vector3.ZERO:

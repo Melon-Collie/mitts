@@ -368,6 +368,7 @@ func _stabilize_snapshot(src: WorldSnapshot) -> void:
 		ws.puck_state = null
 	_copy_accel(src.accel_by_peer, ws.accel_by_peer)
 	_copy_omega(src.heading_omega_by_peer, ws.heading_omega_by_peer)
+	_copy_tag_up(src.tag_up_peers, ws.tag_up_peers)
 
 
 func _copy_skater_states(src: Dictionary, dst: Dictionary[int, SkaterNetworkState]) -> void:
@@ -412,6 +413,12 @@ func _copy_accel(src: Dictionary, dst: Dictionary[int, Vector3]) -> void:
 
 
 func _copy_omega(src: Dictionary, dst: Dictionary[int, float]) -> void:
+	dst.clear()
+	for k: int in src:
+		dst[k] = src[k]
+
+
+func _copy_tag_up(src: Dictionary, dst: Dictionary[int, bool]) -> void:
 	dst.clear()
 	for k: int in src:
 		dst[k] = src[k]

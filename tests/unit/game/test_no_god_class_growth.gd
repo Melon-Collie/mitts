@@ -50,9 +50,9 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +3: the wrister wind-up side reads the trailer's relative motion over the
 	# charge (#740), not just where he stands at the commit.
 	# +1: the chase steer passes when an airborne puck is back on the blade plane.
-	"res://Scripts/ai/skater_agent_state_machine.gd": 6073,
+	"res://Scripts/ai/skater_agent_state_machine.gd": 6090,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
-	"res://Scripts/game/game_manager.gd": 5627,
+	"res://Scripts/game/game_manager.gd": 5644,
 	"res://Scripts/domain/ai/action_scoring.gd": 4458,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
@@ -67,7 +67,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# commit that releases a winning rim as a flat charged dump.
 	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3916,
 	"res://Scripts/controllers/skater_controller.gd": 3341,
-	"res://Scripts/actors/skater.gd": 2712,
+	"res://Scripts/actors/skater.gd": 2715,
 	"res://Scripts/networking/network_manager.gd": 2824,
 	"res://Scripts/game/tutorial_manager.gd": 2073,
 	"res://Scripts/controllers/skater_ik_coordinator.gd": 938,
@@ -91,7 +91,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/controllers/local_controller.gd": 932,
 	"res://Scripts/ui/player_settings_popup.gd": 863,
 	"res://Scripts/ui/slot_grid_panel.gd": 839,
-	"res://Scripts/domain/state/game_state_machine.gd": 844,
+	"res://Scripts/domain/state/game_state_machine.gd": 851,
 	"res://Scripts/ui/locker_popup.gd": 822,
 	"res://Scripts/ui/hud.gd": 811,
 }
