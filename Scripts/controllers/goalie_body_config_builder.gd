@@ -299,10 +299,9 @@ func build(inputs: Inputs) -> GoalieBodyConfig:
 			_apply_sweep_anim(c, inputs)
 		GoalieStateMachine.State.PLAYING_PUCK:
 			_set_puck_play_pose(c, inputs)
-		GoalieStateMachine.State.CATCHING:
-			_set_catching_pose(c, inputs, false)
-		GoalieStateMachine.State.CATCHING_DOWN:
-			_set_catching_pose(c, inputs, true)
+		GoalieStateMachine.State.CATCHING, GoalieStateMachine.State.CATCHING_DOWN:
+			_set_catching_pose(c, inputs, inputs.state == GoalieStateMachine.State.CATCHING_DOWN)
+			_apply_sweep_anim(c, inputs)  # the play-out windup, as from the smother
 	# Head tracking applies in every state (eyes on the puck through freezes,
 	# around the post in RVH, while down). Only yaw — the per-state head
 	# position/pitch stays authored.
