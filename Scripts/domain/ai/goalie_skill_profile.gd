@@ -41,7 +41,7 @@ enum Difficulty {
 	HARD = 2,     # the ceiling — exactly today's tuned goalie
 }
 
-# Glove/blocker read latency (s) before the elevated-shot reach starts.
+# Glove/blocker read latency (s) before the shot hand reach starts.
 var arm_reaction_delay_s: float
 # Back-door read latency (s) before the standing cross-crease drive engages.
 var cross_crease_react_delay_s: float
@@ -62,7 +62,7 @@ var move_read_scramble_delay_s: float
 # the goalie deeper in the net, giving up shooting angle.
 var depth_aggressive_m: float
 var depth_base_m: float
-# Glove / blocker reach speed cap (m/s) during elevated-shot saves. Lower → can't
+# Glove / blocker reach speed cap (m/s) during shot hand saves. Lower → can't
 # pull the corner back.
 var glove_react_max_speed_mps: float
 var blocker_react_max_speed_mps: float

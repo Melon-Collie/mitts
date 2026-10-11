@@ -810,7 +810,7 @@ var react_hand_y_max: float = 1.55
 # 1.06 + 0.49 = 1.55, the human upright ceiling, so only the down postures give
 # anything up. See GoalieBodyConfigBuilder._reachable_hand_y.
 var arm_reach_above_chest: float = 0.49
-# Glove arm reach. The glove (in `_apply_elevated_shot_reaction`) moves
+# Glove arm reach. The glove (in `_apply_shot_hand_reaction`) moves
 # toward the shot's lateral impact point clamped within these bounds, so
 # the goalie actively extends the arm to make catch saves rather than
 # just rotating the wrist in place. Inward bound stops cross-body reach
@@ -1234,7 +1234,7 @@ func snap_to_standing_pose(open_five_hole: bool = false) -> void:
 	_pose_inputs.five_hole_openness = pad_open
 	_pose_inputs.reading_pinned_windup = false
 	_pose_inputs.reacting_to_shot = false
-	_pose_inputs.shot_is_elevated = false
+	_pose_inputs.hands_answer_shot = false
 	_pose_inputs.current_x = _current_x
 	_pose_inputs.goalie_z = goalie.global_position.z
 	_pose_inputs.direction_sign = _direction_sign
@@ -1596,7 +1596,7 @@ func _update_tracking(delta: float) -> void:
 	# A pickup with a non-null carrier arms the clear timer if not yet armed.
 	if _reaction.tick_freeze(delta, puck.get_carrier() != null):
 		return
-	# Re-project impact position each frame so the elevated-shot reach stays
+	# Re-project impact position each frame so the shot hand reach stays
 	# accurate as the puck travels (handles bounces, deflections affecting
 	# trajectory). Does NOT clear the freeze if re-projection fails — that would
 	# release it mid-flight on shots that arc over the net or drift wide before
@@ -1696,9 +1696,9 @@ func _compute_threat_position(delta: float = 0.0) -> Vector3:
 
 # ── Shot Timer ────────────────────────────────────────────────────────────────
 # `_reaction.shot_timer` is the goalie's processing delay after shot release —
-# the beat between "I see the shot" and "I act on the prediction". Gates the
-# butterfly drop (low shots) AND the arm reach (elevated shots, see
-# `GoalieBodyConfigBuilder._apply_elevated_shot_reaction`).
+# the beat between "I see the shot" and "I act on the prediction". It gates the
+# butterfly drop on low shots; the arm reach runs on its own `arm_timer` (see
+# `GoalieBodyConfigBuilder._apply_shot_hand_reaction`).
 func _update_shot_timer(delta: float) -> void:
 	_reaction.tick_processing_timers(delta)
 	# Blocking drop for fully-screened releases: counts down the base leg read,
@@ -3108,9 +3108,10 @@ func _recovery_loses_the_crossing_race() -> bool:
 
 # Rush backflow: a CLOSING opposing carrier inside the engage range
 # retreats the goalie along the taught curve at a rate MATCHED to the closing
-# speed — a real backward C-cut instead of lerp lag. Only engages while genuinely
-# closing; a stalled or lateral carrier leaves the constraint unset (INF) and falls
-# back to the chart plus the ordinary settle.
+# speed — a real backward C-cut instead of lerp lag. A carrier CROSSING him holds
+# the curve too, at the ordinary settle rate: released there, depth falls back to
+# the standoff and walks him OUT at a man going around him. Only a stalled carrier,
+# or one backing off, leaves the constraint unset (INF) and falls back to the chart.
 func _fill_rush_constraint(c: GoalieDepthSolver.Constraints) -> void:
 	c.rush_radius = INF
 	c.rush_rate = 0.0
@@ -3123,7 +3124,9 @@ func _fill_rush_constraint(c: GoalieDepthSolver.Constraints) -> void:
 	if cdist >= rush_engage_distance or cdist <= 0.001:
 		return
 	var closing: float = -(carrier.velocity.x * cdx + carrier.velocity.z * cdz) / cdist
-	if closing < rush_min_closing_speed:
+	var crossing: float = absf(carrier.velocity.x * cdz - carrier.velocity.z * cdx) / cdist
+	if closing < rush_min_closing_speed \
+			and (crossing < rush_min_closing_speed or closing < 0.0):
 		return
 	c.rush_radius = GoalieBehaviorRules.rush_retreat_depth(cdist, _rush_cfg)
 	c.rush_rate = GoalieBehaviorRules.rush_retreat_rate(cdist, closing, _rush_cfg)
@@ -3863,7 +3866,7 @@ func _update_body_parts(delta: float) -> void:
 	_pose_inputs.blocking_seal = _blocking_seal
 	_pose_inputs.reading_pinned_windup = _reading_pinned_windup
 	_pose_inputs.reacting_to_shot = _reaction.reacting
-	_pose_inputs.shot_is_elevated = _reaction.is_elevated
+	_pose_inputs.hands_answer_shot = _hands_answer_shot()
 	_pose_inputs.shot_impact_x = _reaction.impact_x
 	_pose_inputs.shot_impact_y = _reaction.impact_y
 	_pose_inputs.current_x = _current_x
@@ -3874,6 +3877,8 @@ func _update_body_parts(delta: float) -> void:
 	_pose_inputs.arm_reaction_pending = _reaction.arm_pending()
 	_pose_inputs.puck_position = puck.global_position
 	_pose_inputs.puck_velocity_est = _puck_velocity_est
+	_pose_inputs.goal_line_z = _goal_line_z
+	_pose_inputs.goalie_yaw = goalie.get_goalie_rotation_y()
 	_pose_inputs.blade_intent_active = _is_blade_intent_active()
 	_pose_inputs.lunge_progress = _lunge_progress()
 	_pose_inputs.sweep_anim_progress = _sweep_anim_progress()
@@ -3913,7 +3918,7 @@ func _update_body_parts(delta: float) -> void:
 		lerp_t = recovery_lerp_speed * delta
 	else:
 		lerp_t = part_lerp_speed * delta
-	# Pace the elevated-shot arm reach so the glove/blocker arrive WITH the puck
+	# Pace the shot hand reach so the glove/blocker arrive WITH the puck
 	# instead of sprinting to the intercept and waiting. needed_speed = distance
 	# remaining ÷ time-to-puck-arrival, capped at the per-arm max. On close-range
 	# shots with little time, max speed is used (graceful fail if the arm can't
@@ -3922,7 +3927,7 @@ func _update_body_parts(delta: float) -> void:
 	# goalie precognitively beating the puck to the spot.
 	var glove_max_step: float = -1.0
 	var blocker_max_step: float = -1.0
-	if _reaction.reacting and _reaction.is_elevated:
+	if _hands_answer_shot():
 		var dt_to_plane: float = -1.0
 		if absf(_puck_velocity_est.z) > 0.001:
 			var t: float = (goalie.global_position.z - puck.global_position.z) / _puck_velocity_est.z
@@ -3940,6 +3945,12 @@ func _update_body_parts(delta: float) -> void:
 			glove_max_step = glove_react_max_speed * delta
 			blocker_max_step = blocker_react_max_speed * delta
 	goalie.apply_body_config(config, lerp_t, glove_max_step, blocker_max_step)
+
+# A hand takes any shot read over the flat pad top; `elevated_threshold` only
+# decides whether the legs seal.
+func _hands_answer_shot() -> bool:
+	return _reaction.reacting and (_reaction.is_elevated
+			or _reaction.impact_y > GoalieAnatomy.pad_span(true).y)
 
 # Would the declared shot actually hit the net? The aim shade is a POSITIONAL
 # commit — the goalie physically travels toward a predicted crossing — so it has
@@ -4609,7 +4620,7 @@ func _on_puck_released() -> void:
 	# RVH / VH are post-hug coverage with committed poses — no glove reach is wired
 	# (they save by geometry: the blocking-stance trade) and the goalie is already
 	# committed to the puck-side post. Every other state (STANDING, READY,
-	# BUTTERFLY, SLIDING, RECOVERING) supports the elevated-shot arm reach via the
+	# BUTTERFLY, SLIDING, RECOVERING) supports the shot hand reach via the
 	# body-config builder, so the freeze starts from any of them — gating this on
 	# `is_upright()` silently drops every reaction to a shot fired while down.
 	if _sm.is_post_integrated() or _sm.current == State.PLAYING_PUCK:
