@@ -298,7 +298,7 @@ func test_lightly_impeded_carrier_moves_it_to_the_open_man() -> void:
 	# geometry this test used to assert a pass on.
 	var net := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
 	var carrier := Vector3(0.0, 0.0, 2.0)
-	var mate := Vector3(7.0, 0.0, -8.0)          # ahead AND wide — a real entry man
+	var mate := Vector3(7.0, 0.0, -6.5)          # ahead AND wide, still onside — a real entry man
 	var g := GoalieNetworkState.new()
 	g.position_x = 0.0
 	g.position_z = net.z + 1.3
@@ -640,6 +640,186 @@ func test_carrier_in_ozone_never_passes_out_to_a_neutral_zone_teammate() -> void
 	c2.decide(ctx_in)
 	assert_gt(c2.debug_pass_score, AIRoleCarrier.PASS_MIN_VALUE,
 			"an in-zone teammate in scoring ice IS a legal pass target, worth firing")
+
+
+# ─── zone valve: it's the PUCK that takes the zone ──────────────────────────
+
+func test_carrier_whose_puck_has_entered_never_drops_it_back_out() -> void:
+	# Carrying in up the wall at speed: the puck rides a stick's reach ahead, so
+	# it crosses the blue line before the body does. A trailer in neutral ice
+	# with open ice ahead is the bait. Three moments are checked: puck already in
+	# with the body still outside, and the puck still outside but due in by the
+	# time a pass would leave the blade. A drop pass in either one sends the
+	# puck back out.
+	var v := Vector3(0, 0, -7.0)
+	for puck_z: float in [-7.9, -7.1]:
+		var self_pos := Vector3(-8.0, 0, puck_z + 1.1)
+		var skaters: Array = [
+				[1, TEAM_ID, self_pos, false, v],
+				[2, TEAM_ID, Vector3(2.0, 0, self_pos.z + 5.0), false, v],   # NZ trailer
+				[3, 1, Vector3(-7.5, 0, puck_z - 2.5), false, Vector3(0, 0, -6.0)],
+				[4, 1, Vector3(3.0, 0, self_pos.z - 9.0), false, Vector3(0, 0, -5.0)],
+		]
+		var ctx: RoleContext = _make_ctx(self_pos, skaters)
+		ctx.self_velocity = v
+		ctx.snapshot.puck_state.position = Vector3(-8.0, 0, puck_z)
+		assert_false(AIActionScoring.in_offensive_zone(self_pos, ctx.attacking_goal_pos),
+				"precondition: the body has not crossed the line")
+		var c := AIRoleCarrier.new()
+		c.decide(ctx)
+		c.decide(ctx)
+		assert_ne(c.intended_action, AIRoleCarrier.INTENT_PASS,
+				"puck at z %.1f: no drop pass back across the line" % puck_z)
+		assert_eq(c.debug_pass_score, 0.0,
+				"puck at z %.1f: the neutral-zone trailer is not a legal receiver" % puck_z)
+
+	# Control: a step further back the puck cannot reach the line before
+	# release, so the zone is not yet taken and the same trailer is a live drop.
+	var back_pos := Vector3(-8.0, 0, -4.0)
+	var back_skaters: Array = [
+			[1, TEAM_ID, back_pos, false, v],
+			[2, TEAM_ID, Vector3(2.0, 0, back_pos.z + 5.0), false, v],
+			[3, 1, Vector3(-7.5, 0, back_pos.z - 3.6), false, Vector3(0, 0, -6.0)],
+			[4, 1, Vector3(3.0, 0, back_pos.z - 9.0), false, Vector3(0, 0, -5.0)],
+	]
+	var back_ctx: RoleContext = _make_ctx(back_pos, back_skaters)
+	back_ctx.self_velocity = v
+	back_ctx.snapshot.puck_state.position = back_pos + Vector3(0, 0, -1.1)
+	var c_back := AIRoleCarrier.new()
+	c_back.decide(back_ctx)
+	c_back.decide(back_ctx)
+	assert_gt(c_back.debug_pass_score, 0.0,
+			"before the zone is taken the trailer is a legal receiver")
+
+
+# ─── the entry: being in the zone outranks staying out ──────────────────────
+
+func _entry_ctx(body_z: float, skaters_extra: Array) -> RoleContext:
+	var v := Vector3(0, 0, -7.0)
+	var self_pos := Vector3(-8.0, 0, body_z)
+	var skaters: Array = [
+			[1, TEAM_ID, self_pos, false, v],
+			[2, TEAM_ID, Vector3(2.0, 0, body_z + 5.0), false, v],   # trailer
+	]
+	skaters.append_array(skaters_extra)
+	var ctx: RoleContext = _make_ctx(self_pos, skaters)
+	ctx.self_velocity = v
+	ctx.snapshot.puck_state.position = self_pos + Vector3(0, 0, -1.1)
+	var g := GoalieNetworkState.new()
+	g.position_z = -GameRules.GOAL_LINE_Z + 1.0
+	ctx.snapshot.goalie_states[1 - TEAM_ID] = g
+	return ctx
+
+
+func test_carrier_with_room_at_the_line_carries_in_over_the_drop_pass() -> void:
+	# Up the wall at speed, 4.3 m short of the line, the defender gapping 3.5 m
+	# ahead and the trailer open in the middle. The carrier can get into the zone
+	# with the puck, and what he does from there is worth more than the trailer's
+	# drive from 5 m further back.
+	var ctx: RoleContext = _entry_ctx(-3.0, [
+			[3, 1, Vector3(-7.5, 0, -7.6), false, Vector3(0, 0, -6.0)],
+			[4, 1, Vector3(3.0, 0, -12.0), false, Vector3(0, 0, -5.0)],
+	])
+	var c := AIRoleCarrier.new()
+	c.decide(ctx)
+	c.decide(ctx)
+	assert_gt(c.debug_pass_score, 0.0, "precondition: the drop to the trailer is a live option")
+	assert_eq(c.intended_action, AIRoleCarrier.INTENT_CARRY,
+			"with room to enter, the carrier takes the zone himself (pass %.3f vs carry %.3f)"
+			% [c.debug_pass_score, c.debug_carry_score])
+
+
+func test_carrier_with_room_plans_across_the_line_not_up_to_it() -> void:
+	# Keeping the puck is not enough: a carrier who only values in-zone ice by the
+	# shot he would have just inside the line plans to stop short of it and hovers
+	# there. The entry continuation (what he does once in) is what takes his plan
+	# into the zone.
+	var ctx: RoleContext = _entry_ctx(-4.5, [
+			[3, 1, Vector3(-7.5, 0, -9.1), false, Vector3(0, 0, -6.0)],
+			[4, 1, Vector3(3.0, 0, -13.5), false, Vector3(0, 0, -5.0)],
+	])
+	var c := AIRoleCarrier.new()
+	c.decide(ctx)
+	c.decide(ctx)
+	assert_eq(c.intended_action, AIRoleCarrier.INTENT_CARRY, "he keeps the puck")
+	assert_true(AIActionScoring.in_offensive_zone(c.last_carry_anchor, ctx.attacking_goal_pos),
+			"…and his plan crosses the line (anchor z %.1f)" % c.last_carry_anchor.z)
+
+
+func test_smothered_carrier_at_the_line_still_drops_it_to_the_trailer() -> void:
+	# Same rush, but a checker is on his hip and another seals the line ahead:
+	# there is no entry for him to make, and the open trailer's is the play.
+	var ctx: RoleContext = _entry_ctx(-4.5, [
+			[3, 1, Vector3(-6.2, 0, -5.3), false, Vector3(0, 0, -7.0)],
+			[4, 1, Vector3(-7.0, 0, -7.5), false, Vector3(0, 0, -2.0)],
+	])
+	var c := AIRoleCarrier.new()
+	c.decide(ctx)
+	c.decide(ctx)
+	assert_eq(c.intended_action, AIRoleCarrier.INTENT_PASS,
+			"no entry of his own: the trailer gets it (pass %.3f vs carry %.3f)"
+			% [c.debug_pass_score, c.debug_carry_score])
+	assert_eq(c.debug_pass_peer_id, 2, "…to the trailer")
+
+
+# ─── turnover costs are priced in the unit of the gains ─────────────────────
+
+func test_an_in_zone_carrier_prices_a_turnover_in_xg() -> void:
+	# A strip at the top of the zone hands the opponent a puck 40 m from our net.
+	# In the zone the carrier's gains are xG, so that loss must be priced as the
+	# opponent's possession promise in xG; outside, the gains are on the potential
+	# scale and so is the cost. Same loss point, two carriers.
+	var loss := Vector3(-4.0, 0.0, -15.0)
+	var our_net := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z)
+	var defenders: Array[Vector3] = []
+	var expected_xg: float = AIActionScoring.position_potential(loss, our_net, defenders) \
+			* AIActionScoring.potential_realization_discount(loss, our_net) \
+			* AIActionScoring.XG_SLOT_REF
+	var our_goalie := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z - 0.8)
+
+	var inside := Vector3(-8.0, 0.0, -16.0)
+	var c_in := AIRoleCarrier.new()
+	var ctx_in: RoleContext = _make_ctx(inside)
+	c_in.decide(ctx_in)
+	assert_almost_eq(c_in._turnover_cost(ctx_in, loss, 1.0, our_goalie), expected_xg, 0.0005,
+			"in the zone a turnover costs the opponent's xG promise there")
+
+	var outside := Vector3(-8.0, 0.0, -4.0)
+	var c_out := AIRoleCarrier.new()
+	var ctx_out: RoleContext = _make_ctx(outside)
+	c_out.decide(ctx_out)
+	assert_almost_eq(c_out._turnover_cost(ctx_out, loss, 1.0, our_goalie),
+			AIActionScoring.threat_surface_shoot(loss, our_net, our_goalie,
+					GameRules.NET_HALF_WIDTH, defenders), 0.0005,
+			"outside the zone it stays on the potential scale, like the gains")
+
+
+# ─── drive-in: a clear drive is credited all the way ────────────────────────
+
+func test_a_defender_who_never_covers_the_drive_costs_it_nothing() -> void:
+	# Carrier at speed up the wall toward the line, the defender retreating ahead.
+	# At 5 m and at 8 m he never gets a stick on the drive, so the drive-in (the
+	# shot the carrier skates into) must be the same: the full drive to the net,
+	# not a drive stopped halfway because halfway was the closer sample.
+	var v := Vector3(0, 0, -7.0)
+	var self_pos := Vector3(-8.0, 0, -4.5)
+	var drive: Array[float] = []
+	for gap: float in [5.0, 8.0]:
+		var skaters: Array = [
+				[1, TEAM_ID, self_pos, false, v],
+				[3, 1, Vector3(-7.5, 0, self_pos.z - 1.1 - gap), false, Vector3(0, 0, -6.0)],
+				[4, 1, Vector3(3.0, 0, self_pos.z - 9.0), false, Vector3(0, 0, -5.0)],
+		]
+		var ctx: RoleContext = _make_ctx(self_pos, skaters)
+		ctx.self_velocity = v
+		var c := AIRoleCarrier.new()
+		c.decide(ctx)
+		drive.append(c._receiver_drive_in_value(ctx, self_pos,
+				AIActionScoring.WRISTER_SHOT_SPEED_M_S, null, v))
+	assert_gt(drive[1], 0.0, "precondition: the drive is worth something")
+	assert_almost_eq(drive[0], drive[1], 0.005,
+			"a defender 5 m ahead who never covers the drive costs it nothing (%.3f vs %.3f)"
+			% [drive[0], drive[1]])
 
 
 # ─── O-zone shot selection: don't fire the long shot on entry ────────────────
@@ -1105,20 +1285,24 @@ func test_staggered_carrier_holds_instead_of_firing() -> void:
 
 # ─── settle doubt: a fresh carrier's bar for giving the puck up ──────────────
 
-# The same pressured breakout, with the outlet standing in ice of two different
-# qualities. Both are legal passes that fire on tick one with no doubt; the
-# strong one is worth ~5.7x PASS_MIN_VALUE, the weak one ~1.7x.
+# The same pressured breakout, with the outlet in two different situations. Both
+# are legal passes that fire on tick one with no doubt; the strong one is worth
+# ~8x PASS_MIN_VALUE, the weak one ~1.9x. The weak outlet is still sliding into
+# the far corner, so his drive up the wall has to brake that out first.
 func _settle_skaters(self_pos: Vector3, outlet: Vector3) -> Array:
+	var outlet_vel: Vector3 = _MARGINAL_OUTLET_VEL if outlet == _MARGINAL_OUTLET \
+			else Vector3.ZERO
 	return [
 			[1, TEAM_ID, self_pos],
-			[2, TEAM_ID, outlet],
+			[2, TEAM_ID, outlet, false, outlet_vel],
 			[3, 1, Vector3(1.5, 0, 18.0)],        # forechecker
 			[4, 1, Vector3(3.0, 0, 17.5)],        # forechecker
 	]
 
 
 const _STRONG_OUTLET := Vector3(11, 0, 11)    # open, up the strong wall
-const _MARGINAL_OUTLET := Vector3(13, 0, 24)  # pinned deep in the far corner
+const _MARGINAL_OUTLET := Vector3(13, 0, 23)  # deep in the far corner
+const _MARGINAL_OUTLET_VEL := Vector3(0, 0, 6.0)   # …and still sliding into it
 
 
 func _settle_ctx(self_pos: Vector3, outlet: Vector3) -> RoleContext:
@@ -2865,8 +3049,9 @@ func test_spun_off_carrier_attacks_the_opening() -> void:
 	# "Not argmax-over-noise" means the plan has to beat DOING NOTHING by a
 	# real margin — stand-still is the noise floor, and it is in the compete
 	# already. An absolute bar could only ever encode the currency's scale.
+	# (Measured 1.78x once the strip cost is in xG, the unit of the gains.)
 	var stand_score: float = c._score_move_candidate(ctx, self_pos, our_goalie)
-	assert_gt(cut_score, stand_score * 2.0,
+	assert_gt(cut_score, stand_score * 1.5,
 			"…and it is a real plan, not argmax-over-noise — multiples of standing still; %f vs %f"
 			% [cut_score, stand_score])
 

@@ -136,6 +136,29 @@ func test_strip_point_is_destination_when_that_is_the_tight_end() -> void:
 	assert_almost_eq(strip.z, 10.0, 0.01, "strip localizes to the covered destination")
 
 
+func test_covered_only_carry_reaches_its_destination_when_nothing_covers_it() -> void:
+	# A defender well off the route covers neither sample. As a strip LOCATION the
+	# tighter sample still answers (the default); as how far the carry GETS, it
+	# gets all the way.
+	var from := Vector3(0, 0, 0)
+	var to := Vector3(0, 0, 10)
+	var opps: Array[Vector3] = [Vector3(5, 0, 5)]
+	var vels: Array[Vector3] = [Vector3.ZERO]
+	assert_almost_eq(AICarrySpace.carry_safety(from, to, 1.4, opps, vels), 1.0, 0.001,
+			"precondition: the route is clear")
+	assert_almost_eq(AICarrySpace.carry_strip_point(from, to, 1.4, opps, vels).z, 5.0, 0.01,
+			"the strip location is still the tighter sample")
+	assert_almost_eq(AICarrySpace.carry_strip_point(
+			from, to, 1.4, opps, vels, [], false, true).z, 10.0, 0.01,
+			"a clear carry reaches its destination")
+
+	# A defender ON the route still stops it there.
+	var on_route: Array[Vector3] = [Vector3(0, 0, 5)]
+	assert_almost_eq(AICarrySpace.carry_strip_point(
+			from, to, 1.4, on_route, vels, [], false, true).z, 5.0, 0.01,
+			"a covered mid-route still ends the carry mid-route")
+
+
 func test_strip_point_of_a_stand_is_the_spot_itself() -> void:
 	var spot := Vector3(3, 0, 7)
 	var opps: Array[Vector3] = [Vector3(4, 0, 7)]

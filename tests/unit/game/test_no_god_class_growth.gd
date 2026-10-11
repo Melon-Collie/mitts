@@ -64,7 +64,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +162: the rim pass. The path search lives in AIRimPass; what stays here is
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
-	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3910,
+	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3916,
 	"res://Scripts/controllers/skater_controller.gd": 3341,
 	"res://Scripts/actors/skater.gd": 2712,
 	"res://Scripts/networking/network_manager.gd": 2824,

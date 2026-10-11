@@ -3,8 +3,8 @@
 Context for Claude about the Mitts project — a 3v3/5v5 hockey game in Godot 4.6.2
 (GDScript, 3D), online multiplayer, one player per machine with their own camera
 and local simulation. Prioritizes feel over realism: deep stickhandling, multiple
-shot types, satisfying puck physics. 3v3 (position-free rovers) is the default;
-5v5 is lobby-selectable and adds the forward/defense split.
+shot types, satisfying puck physics. 3v3 (position-free rovers) and 5v5 (the
+forward/defense split) are both first-class modes, picked in the lobby.
 
 ## Where the detail lives
 
