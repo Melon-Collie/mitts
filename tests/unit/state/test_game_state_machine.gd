@@ -374,6 +374,28 @@ func test_delayed_offside_activates_when_puck_enters_zone() -> void:
 		{1: Vector3(0, 1, -10)}, Vector3(0, 0, -10), -1)
 	assert_eq(sm.delayed_offside_team_id, 0)
 
+func test_is_delayed_offside_tracks_the_peer_until_tag_up() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
+	sm.register_remote_assigned_player(1, 0, 0)
+	sm.register_remote_assigned_player(2, 1, 0)
+	assert_false(sm.is_delayed_offside(1))
+	sm.update_delayed_offside(
+			{1: Vector3(0, 1, -10), 2: Vector3(0, 1, 0)}, Vector3(0, 0, 0), -1)
+	assert_true(sm.is_delayed_offside(1), "ahead of the puck into the zone flags the peer")
+	assert_false(sm.is_delayed_offside(2), "an onside peer is never flagged")
+	sm.update_delayed_offside(
+			{1: Vector3(0, 1, -10), 2: Vector3(0, 1, 0)}, Vector3(0, 0, -10), -1)
+	assert_true(sm.is_delayed_offside(1), "the puck following in does not clear the flag")
+	sm.update_delayed_offside(
+			{1: Vector3(0, 1, 0), 2: Vector3(0, 1, 0)}, Vector3(0, 0, -10), -1)
+	assert_false(sm.is_delayed_offside(1), "tagging up clears the flag")
+
+func test_is_delayed_offside_never_set_outside_nhl() -> void:
+	sm.rule_set = GameRules.RuleSet.ARCADE
+	sm.register_remote_assigned_player(1, 0, 0)
+	sm.update_delayed_offside({1: Vector3(0, 1, -10)}, Vector3(0, 0, 0), -1)
+	assert_false(sm.is_delayed_offside(1))
+
 func test_delayed_offside_clears_when_attacker_tags_up() -> void:
 	sm.rule_set = GameRules.RuleSet.NHL
 	sm.register_remote_assigned_player(1, 0, 0)

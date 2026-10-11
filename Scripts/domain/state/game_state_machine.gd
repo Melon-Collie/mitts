@@ -377,6 +377,12 @@ func update_delayed_offside(
 			break
 
 
+# Whether peer_id is in the NHL delayed-offside set — in their attacking zone
+# ahead of the puck and not yet tagged up. Always false outside NHL.
+func is_delayed_offside(peer_id: int) -> bool:
+	return _delayed_offside_peer_ids.has(peer_id)
+
+
 static func _puck_in_attacking_zone(team_id: int, puck_z: float) -> bool:
 	if team_id == 0:
 		return puck_z < -GameRules.BLUE_LINE_Z

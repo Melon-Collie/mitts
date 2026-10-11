@@ -65,6 +65,7 @@ signal local_puck_stolen(was_stick_lift: bool)
 signal carrier_puck_dropped
 signal remote_carrier_changed(new_carrier_peer_id: int)
 signal ghost_state_received(peer_id: int, is_ghost: bool)
+signal local_offside_state_received(is_offside: bool)
 signal goal_received(scoring_team_id: int, score0: int, score1: int, scorer_name: String, assist1_name: String, assist2_name: String)
 signal puck_out_of_play_received
 signal icing_called_received
@@ -1978,6 +1979,19 @@ func notify_ghost_state(peer_id: int, is_ghost: bool) -> void:
 	NetworkSimManager.send(
 		func(pid: int, g: bool) -> void: ghost_state_received.emit(pid, g),
 		[peer_id, is_ghost], true)
+
+# NHL delayed offside never ghosts, so the flag has no other route to the
+# offending player's banner. Only that player reads it.
+func send_offside_state(peer_id: int, is_offside: bool) -> void:
+	if not is_real_peer(peer_id):
+		return
+	notify_offside_state.rpc_id(peer_id, is_offside)
+
+@rpc("authority", "reliable")
+func notify_offside_state(is_offside: bool) -> void:
+	NetworkSimManager.send(
+		func(o: bool) -> void: local_offside_state_received.emit(o),
+		[is_offside], true)
 
 func send_carrier_changed_to_all(new_carrier_peer_id: int) -> void:
 	var seq: int = _event_log.record(

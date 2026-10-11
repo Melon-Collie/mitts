@@ -3,8 +3,10 @@ extends Node
 
 # Local-player infraction banner. Shown whenever the local skater is ghosted
 # for a reason the player can clear themselves (offside or crease violation),
-# naming the infraction and the action that lifts it. Driven each frame from the
-# local skater's own position; icing (a whole-team ghost) keeps its own toast.
+# or — under NHL rules, which never ghost for offside — while the host holds
+# them in the delayed-offside set. Names the infraction and the action that
+# lifts it. Driven each frame from the local skater's own position; icing (a
+# whole-team ghost) keeps its own toast.
 
 var _root: Control = null
 var _reason_label: Label = null
@@ -66,10 +68,14 @@ func update() -> void:
 		return
 	var record: PlayerRecord = GameManager.get_local_player()
 	var skater: Skater = record.skater if record != null else null
-	if skater == null or record.team == null or not skater.is_ghost:
-		if _root.visible:
-			_root.visible = false
-		_was_offside = false
+	if skater == null or record.team == null:
+		_hide()
+		return
+	if GameManager.is_local_delayed_offside():
+		_show(tr(&"INFRACTION_OFFSIDE"), tr(&"GHOST_OFFSIDE_INSTRUCTION"))
+		return
+	if not skater.is_ghost:
+		_hide()
 		return
 	var pos: Vector3 = skater.global_position
 	var team_id: int = record.team.team_id
@@ -110,6 +116,16 @@ func update() -> void:
 		if _root.visible:
 			_root.visible = false
 		return
+	_show(reason, instruction)
+
+
+func _hide() -> void:
+	if _root.visible:
+		_root.visible = false
+	_was_offside = false
+
+
+func _show(reason: String, instruction: String) -> void:
 	if _reason_label.text != reason:
 		_reason_label.text = reason
 	if _instr_label.text != instruction:

@@ -125,6 +125,10 @@ var _last_emitted_clock_secs: int = -1
 # never tick the SM but still need to fire their local intro cosmetics.
 var _seen_first_prep: bool = false
 var _last_ghost_state: Dictionary = {}  # peer_id -> bool, host only
+var _last_offside_state: Dictionary = {}  # peer_id -> bool, host only
+# The local player's NHL delayed-offside flag — set directly on the host,
+# by notify_offside_state on a client. Read by the HUD offside banner.
+var _local_delayed_offside: bool = false
 # Reused peer_id -> position scratch for the per-tick ghost-state and icing
 # checks (host only). The domain calls read it synchronously and never retain
 # it; each call site clears + refills before use.
@@ -505,6 +509,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.poke_claim_received.connect(_on_poke_claim_received)
 	NetworkManager.stick_lift_claim_received.connect(_on_stick_lift_claim_received)
 	NetworkManager.ghost_state_received.connect(_on_ghost_state_received)
+	NetworkManager.local_offside_state_received.connect(_on_local_offside_state_received)
 	NetworkManager.hit_claim_received.connect(_on_hit_claim_received)
 	NetworkManager.input_batch_received.connect(_on_input_batch_received)
 	NetworkManager.spectator_demoted_received.connect(_on_spectator_demoted_received)
@@ -948,6 +953,13 @@ func _apply_ghost_state(delta: float) -> void:
 			if new_ghost != _last_ghost_state.get(peer_id, false):
 				_last_ghost_state[peer_id] = new_ghost
 				NetworkManager.send_ghost_state_to_all(peer_id, new_ghost)
+			var offside: bool = _state_machine.is_delayed_offside(peer_id)
+			if offside != _last_offside_state.get(peer_id, false):
+				_last_offside_state[peer_id] = offside
+				if r.is_local:
+					_local_delayed_offside = offside
+				else:
+					NetworkManager.send_offside_state(peer_id, offside)
 
 
 # ── Network Callbacks ─────────────────────────────────────────────────────────
@@ -2971,6 +2983,10 @@ func _on_server_puck_picked_up_by(peer_id: int) -> void:
 	_force_retick_team_brains()
 
 
+func _on_local_offside_state_received(is_offside: bool) -> void:
+	_local_delayed_offside = is_offside
+
+
 func _on_ghost_state_received(peer_id: int, is_ghost: bool) -> void:
 	if _registry == null:
 		return
@@ -4442,6 +4458,8 @@ func on_scene_exit() -> void:
 	_pending_remote_spawns = []
 	_reserved_slots.clear()
 	_last_ghost_state.clear()
+	_last_offside_state.clear()
+	_local_delayed_offside = false
 	teams.clear()
 	puck = null
 	goals.clear()
@@ -4578,6 +4596,8 @@ func _apply_reset() -> void:
 	_seen_first_prep = false  # next prep is a rematch's opening faceoff
 	_last_emitted_clock_secs = -1
 	_last_ghost_state.clear()
+	_last_offside_state.clear()
+	_local_delayed_offside = false
 	_hit_claim.reset_throttle()
 	_deferred_claims.clear()
 	_puck_oob_timer = 0.0
@@ -5566,6 +5586,10 @@ func get_period_duration() -> float:
 
 func get_num_periods() -> int:
 	return _state_machine.num_periods if _state_machine != null else GameRules.NUM_PERIODS
+
+
+func is_local_delayed_offside() -> bool:
+	return _local_delayed_offside
 
 
 func get_rule_set() -> int:
