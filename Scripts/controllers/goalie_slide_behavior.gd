@@ -41,6 +41,9 @@ var velocity_x: float = 0.0
 # along these. Persist so animation hooks (pose builder) can read `dir` even
 # after velocity decays to 0.
 var dir: float = 0.0           # ±1, committed slide direction
+# ±1, the side the body turns toward: the sealed post's for a seal, which a
+# body already outside the seal spot reaches by travelling the other way.
+var facing_dir: float = 0.0
 var arc_t: float = 0.0         # 0→1 progress along the committed span
 # start_x/start_depth are the SLIDE-PHASE start — i.e. the body's position
 # after the coil completes. coil_start_x/coil_start_depth are where the body
@@ -70,6 +73,7 @@ var event_lockout: float = 0.0
 func reset() -> void:
 	velocity_x = 0.0
 	dir = 0.0
+	facing_dir = 0.0
 	arc_t = 0.0
 	start_x = 0.0
 	start_depth = 0.0
@@ -94,6 +98,7 @@ func enter_fresh_butterfly() -> void:
 	event_lockout = 0.0
 	coil_timer = 0.0
 	dir = 0.0
+	facing_dir = 0.0
 	arc_t = 0.0
 	velocity_x = 0.0
 
@@ -149,7 +154,7 @@ const MIN_COMMIT_TRAVEL_M: float = 0.05
 # lateral-only reasoning about a 2D path that `advance_slide` documents.
 func commit_slide(current_x: float, current_depth: float, target_x: float, net_half_width: float,
 		coil_end_x: float, coil_end_depth: float, turned: bool = false,
-		hold_depth: bool = false) -> bool:
+		hold_depth: bool = false, facing: float = 0.0) -> bool:
 	var commit_dir: float = signf(target_x - current_x)
 	# Extremity is measured against the SLIDE CLAMP LIMIT (the puck-side
 	# post-pad-edge, where target_x is already clamped to), not the post
@@ -182,6 +187,7 @@ func commit_slide(current_x: float, current_depth: float, target_x: float, net_h
 	coil_start_depth = current_depth
 	cooldown_timer = 0.0
 	dir = commit_dir
+	facing_dir = facing if facing != 0.0 else commit_dir
 	arc_t = 0.0
 	# Slide phase begins where the coil left off — the body has already
 	# rotated around the pivot foot to (coil_end_x, coil_end_depth) by the

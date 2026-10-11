@@ -220,6 +220,12 @@ swung out from the line, and a wrap slides in behind it; a radius that ignored
 the turn called him sealed. Sitting on the seal spot turned wrong still coils,
 because the coil is what turns the pad onto the post.
 
+**The coil turns him toward the post he seals, not the way he travels.** A cut
+across the crease leaves him tracking the carrier, outside the seal spot, so he
+reaches it by moving back toward the middle; turning that way pointed the
+sealing pad at the other post. `GoalieSlideBehavior.facing_dir` carries the post
+side, `dir` the travel.
+
 The one sanctioned commit is the **beaten-wide post seal** — and it is sanctioned
 because it is not a prediction. Its gate is positional (the puck is already past
 his standing sealing reach on the side it went), so it fires on an accomplished
@@ -267,13 +273,13 @@ beaten-wide seal from 0.78 m of challenge radius, it travels 0.08 m sideways and
 Two things follow that are easy to get backwards:
 
 - **"He commits too far out" describes the symptom, not the cause.** A commit
-  baited earlier is beaten LESS, because the extra time is time he spends
-  finishing the retreat. What beats him is being caught mid-transit — which is
-  what the live log's `goalie_radius` column is really reporting when it
-  correlates with conversion.
+  baited earlier is beaten no more than a late one, because the extra time is
+  time he spends finishing the retreat — which is what the live log's
+  `goalie_radius` column is really reporting when it correlates with conversion.
 - **The seal answers a puck that keeps going, not one that comes back across.**
-  A carrier who cuts back into the space he left is met by a re-commit that
-  arrives; a carrier who continues to the side the puck was pulled to is not.
+  A carrier who continues to the side the puck was pulled to finds him sealed and
+  facing the post; one who cuts back into the space he left catches him
+  re-committing the other way, and that is the move that scores.
 
 `test_human_wraparound.gd` holds all of it, and the same file records the two
 things the instrument does NOT reproduce (it starts from a fully settled keeper,
@@ -406,14 +412,15 @@ Whenever the bots' shot model reads the same quantity as a goalie knob, the two
 must be synced (`AIActionScoring.set_goalie_profile`) or the bots score against a
 goalie they do not face. See the AI MIRROR note in `goalie_skill_profile.gd`.
 
-**On a breakaway walkaround the ladder comes from the push.** Measured as open
-aim points out of seven at a fixed release: EASY 5, NORMAL 2, HARD 2. He seals
-the post on the wrap, so the play is a race to it: depth sets how far he has to
-retreat and the tiered butterfly push (`slide_push_speed_mps`, softer the weaker
-the goalie, like every other movement speed) sets how fast. The read latencies,
-the drop time, the five-hole, the poke and the toe-out do not touch it. Depth
-cuts the wrong way — a goalie who challenges the rush harder is easier to walk
-around — and the push is what keeps the ladder the right way up.
+**On a breakaway the ladder lives on the cutback, and comes from the push.**
+Every tier seals the walk-around (0 of 7 aim points). Cutting back across opens
+EASY 5, NORMAL 3, HARD 3: a race to re-commit, where depth sets how far he has
+to come back and the tiered butterfly push (`slide_push_speed_mps`, softer the
+weaker the goalie, like every other movement speed) sets how fast. The read
+latencies, the drop time, the five-hole and the poke do not touch it; the toe-out
+moves it by one. Depth cuts the wrong way — a goalie who challenges the rush
+harder is easier to beat back across — and the push is what keeps the ladder the
+right way up.
 
 Pulling `depth_base_m` in is not free — it concedes the centre-lane rush from
 5 m, which is what challenge depth exists for. `test_goalie_breakaway_ladder.gd`

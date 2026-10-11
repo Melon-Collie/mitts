@@ -3667,13 +3667,18 @@ func _commit_slide_toward(coverage_x: float) -> void:
 	var puck_side: float = signf(coverage_x - _current_x)
 	if puck_side == 0.0:
 		return
-	_commit_slide_to(_goal_center_x + puck_side * (net_half_width - _post_edge_reach()))
+	_commit_slide_to(_goal_center_x + puck_side * (net_half_width - _post_edge_reach()),
+			false, puck_side)
 
 
 # Commit the pivot slide to a lateral destination already inside the seal band.
-func _commit_slide_to(seal_target: float, hold_depth: bool = false) -> void:
+# `post_side` names the sealed post. It is not always the way he travels: a body
+# already outside the seal spot reaches it by moving back toward the middle, and
+# turning that way would point the sealing pad at the other post.
+func _commit_slide_to(seal_target: float, hold_depth: bool = false,
+		post_side: float = 0.0) -> void:
 	var slide_rot: float = deg_to_rad(slide_max_rotation_deg)
-	var side: float = signf(seal_target - _current_x)
+	var side: float = post_side if post_side != 0.0 else signf(seal_target - _current_x)
 	if side == 0.0:
 		return
 	# From the half-butterfly the push leg is already loaded: no coil to rotate
@@ -3685,7 +3690,7 @@ func _commit_slide_to(seal_target: float, hold_depth: bool = false) -> void:
 	# collaborator, which owns both endpoints (see commit_slide).
 	if not _slide.commit_slide(_current_x, _current_depth, seal_target,
 			net_half_width, seal_end.x, seal_end.y,
-			absf(_turn_from_seal(side)) > SEAL_FACING_TOLERANCE_RAD, hold_depth):
+			absf(_turn_from_seal(side)) > SEAL_FACING_TOLERANCE_RAD, hold_depth, side):
 		return
 	_slide_start_rotation_y = goalie.get_goalie_rotation_y()
 	_blocking_seal = false
@@ -3804,10 +3809,10 @@ func _update_facing(delta: float) -> void:
 		# is the fixed cos()-coupled value the seal target was computed
 		# against — using atan2-based facing here would let rotation vary by
 		# slide steepness and break the seal geometry. Convention:
-		# deviation = direction_sign * _slide.dir * slide_rot, verified
+		# deviation = direction_sign * _slide.facing_dir * slide_rot, verified
 		# against the standing facing code for both goal sides.
 		var base_angle: float = PI if _direction_sign == 1 else 0.0
-		var deviation: float = _direction_sign * _slide.dir * deg_to_rad(slide_max_rotation_deg)
+		var deviation: float = _direction_sign * _slide.facing_dir * deg_to_rad(slide_max_rotation_deg)
 		var target_y: float = base_angle + deviation
 		var coil_progress: float = clampf(
 				1.0 - _slide.coil_timer / _slide.coil_duration, 0.0, 1.0) \
@@ -3821,7 +3826,7 @@ func _update_facing(delta: float) -> void:
 		# A slide pushed from the half-butterfly skipped the coil, so it turns
 		# into the angle here at the coil's own rate; after a coil it is there.
 		var base_angle: float = PI if _direction_sign == 1 else 0.0
-		var deviation: float = _direction_sign * _slide.dir * deg_to_rad(slide_max_rotation_deg)
+		var deviation: float = _direction_sign * _slide.facing_dir * deg_to_rad(slide_max_rotation_deg)
 		var turn: float = deg_to_rad(slide_max_rotation_deg) / maxf(slide_coil_duration, 0.001) * delta
 		var cur: float = goalie.get_goalie_rotation_y()
 		goalie.set_goalie_rotation_y(cur + clampf(
