@@ -5272,7 +5272,13 @@ func tutorial_give_puck(record: PlayerRecord) -> void:
 		return
 	if puck.carrier != null:
 		puck.drop()
-	puck_controller.apply_lag_comp_pickup(record.skater)
+	puck_controller.apply_scripted_grant(record.skater)
+
+
+# Tutorial-only: park the puck loose and at rest at `pos` this frame.
+func tutorial_place_puck(pos: Vector3) -> void:
+	if puck_controller != null:
+		puck_controller.stage_scripted(pos)
 
 
 # Spawn an AI-controlled bot in scripted/puppet mode for tutorial
