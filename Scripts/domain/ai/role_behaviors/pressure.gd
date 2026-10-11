@@ -84,11 +84,13 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	#
 	# The domain read is the shared should_gap_up ("his speed advantage is gone,
 	# so stop retreating and take the ice") rather than a zone test bolted on
-	# here: its closing < 3 m/s trigger is satisfied by construction by a D
-	# retrieving behind his own goal line, so the two carrier-owning roles agree
+	# here: its not-advancing-on-our-net clause is satisfied by construction by a
+	# D retrieving behind his own goal line, so the two carrier-owning roles agree
 	# at the TRANS_DEFENSE → DZONE handoff as they already do on the ladder.
+	var cushion: float = AIRoleRushD.ramp_cushion_m(
+			ctx, ap, ctx.rush_read.carrier_peer)
 	var gapping_up: bool = AIRoleRushD.should_gap_up(
-			ctx, ctx.rush_read, carrier_pos, closing_now)
+			ctx, ctx.rush_read, ap, cushion)
 	# Difficulty pace knob: ctx.pursuit_standoff_m widens the gap so easier bots
 	# sag off the carrier and concede time/space (0.0 = the doctrine gap). It
 	# still applies while gapping up — conceding physicality is the pace axis's
@@ -98,7 +100,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		gap += AIRoleRushD.GAP_MIN_STICKS * AIRoleRushD.stick_m(ctx)
 	else:
 		gap += AIRoleRushD.ladder_gap_m(
-				carrier_pos, ctx.own_goal_dir, ctx.self_blade_reach, closing_now)
+				carrier_pos, ctx.own_goal_dir, ctx.self_blade_reach, cushion)
 	# ── AND THE STAND IS ANGLED ───────────────────────────────────────────────
 	# The same shared closing geometry RUSH_D1 uses: the gap up the carrier→our
 	# -net line, shaded to the INSIDE so his retreat path is steered to the

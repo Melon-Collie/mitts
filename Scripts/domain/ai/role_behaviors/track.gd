@@ -81,8 +81,7 @@ static func _decide_puck(ctx: RoleContext) -> RoleDecision:
 		# NOT angled, unlike the stands AIRoleHelpers.carrier_stand produces: a
 		# backchecker is behind the play and catching up, so he has no inside to
 		# take — shading one would only lengthen the chase.
-		hip = carrier_pos + ap.dir_net * _hip_gap(
-				ctx, carrier_pos, ap.dir_net, ap.carrier_vel, ap.net_dist)
+		hip = carrier_pos + ap.dir_net * _hip_gap(ctx, ap, read.carrier_peer)
 
 	# Caught him: finish the check if it is a real, separating one. Gated on
 	# already being goal-side — see CHECK_GOAL_SIDE_MARGIN_M.
@@ -132,17 +131,16 @@ static func _decide_puck(ctx: RoleContext) -> RoleDecision:
 #     to go and meet him;
 #   · goal-side by more than the ladder — close to the ladder's gap and no
 #     further, which is a defender's gap rather than a run at the puck.
-static func _hip_gap(ctx: RoleContext, lead: Vector3, dir_net: Vector3,
-		carrier_vel: Vector3, dist: float) -> float:
-	var own_depth: float = (ctx.self_pos.x - lead.x) * dir_net.x \
-			+ (ctx.self_pos.z - lead.z) * dir_net.z
+static func _hip_gap(ctx: RoleContext, ap: AICarrierApproach,
+		carrier_peer: int) -> float:
+	var own_depth: float = (ctx.self_pos.x - ap.carrier_pos.x) * ap.dir_net.x \
+			+ (ctx.self_pos.z - ap.carrier_pos.z) * ap.dir_net.z
 	if own_depth <= HIP_GOAL_SIDE_M:
 		return HIP_GOAL_SIDE_M
-	var closing: float = maxf(
-			carrier_vel.x * dir_net.x + carrier_vel.z * dir_net.z, 0.0)
 	var ladder: float = AIRoleRushD.ladder_gap_m(
-			lead, ctx.own_goal_dir, ctx.self_blade_reach, closing)
-	return minf(minf(own_depth, maxf(ladder, HIP_GOAL_SIDE_M)), dist)
+			ap.carrier_pos, ctx.own_goal_dir, ctx.self_blade_reach,
+			AIRoleRushD.ramp_cushion_m(ctx, ap, carrier_peer))
+	return minf(minf(own_depth, maxf(ladder, HIP_GOAL_SIDE_M)), ap.net_dist)
 
 
 # ── TRACK_MID: back through the middle, stop at the circle tops ──────────────

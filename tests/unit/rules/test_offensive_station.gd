@@ -133,12 +133,13 @@ func test_retreat_stops_at_the_numbers_layer_not_at_home() -> void:
 			[[10, lurker, lurker_vel]], 2)
 	var t: Vector3 = AIRoleHelpers.offensive_station_target(ctx, stand, false)
 	var net := Vector3(0.0, 0.0, OUR_NET_Z)
-	# Compare against his LED point — the read leads threats, so that is the
-	# layer the floor is actually built off.
-	var led: Vector3 = AIRoleHelpers.lead_threat(lurker, lurker_vel, 1.0)
+	# Compare against where he is as this station has to RACE him — his ice
+	# less the head start he gains while it builds to his pace — because that
+	# is the layer the floor is built off.
+	var layer_d: float = AIRoleRushD.race_depth_to_net(ctx, 10)
 	assert_lt(t.distance_to(net), stand.distance_to(net),
 			"the station does retreat toward home")
-	assert_gt(t.distance_to(net), led.distance_to(net) - 4.0,
+	assert_gt(t.distance_to(net), layer_d - 4.0,
 			"but stops at the numbers layer, not deeper; got %s" % t)
 	var home: Vector3 = AIRoleHelpers.station_retreat_floor(ctx, stand)
 	assert_gt(t.distance_to(net), home.distance_to(net) + 4.0,
