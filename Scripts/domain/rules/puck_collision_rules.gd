@@ -252,3 +252,20 @@ static func contested_pickup_velocity(
 			along = Vector3(1.0, 0.0, 0.0)
 	var perp := Vector3(-along.z, 0.0, along.x).normalized()
 	return perp * perp_sign * deadlock_speed
+
+
+# Upward launch speed (m/s) for a puck squeezed between two blades — the pinched
+# seed escaping up off the ice. The squeeze is the blades' horizontal closing
+# speed along the line between their contact points; only what exceeds
+# `threshold` lifts, scaled by `gain` and capped at `max_speed`. Blades parting,
+# sliding past each other, or sharing a contact point squeeze nothing and return
+# 0. Adds only the vertical: the horizontal exit stays the contest's or poke's.
+static func pinch_lift_speed(
+		blade_a_vel: Vector3, blade_b_vel: Vector3,
+		blade_a_pos: Vector3, blade_b_pos: Vector3,
+		threshold: float, gain: float, max_speed: float) -> float:
+	var along := Vector3(blade_a_pos.x - blade_b_pos.x, 0.0, blade_a_pos.z - blade_b_pos.z)
+	if along.length_squared() < 0.000001:
+		return 0.0
+	var closing: float = (blade_b_vel - blade_a_vel).dot(along.normalized())
+	return clampf((closing - threshold) * gain, 0.0, max_speed)

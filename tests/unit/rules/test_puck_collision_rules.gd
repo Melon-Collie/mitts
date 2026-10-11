@@ -329,3 +329,52 @@ func test_contested_deadlock_coincident_blades_uses_fallback() -> void:
 		Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO,
 		3.0, 9.0, 3.0, 0.5, 1.0, Vector3(0, 0, 1))
 	assert_almost_eq(result.length(), 3.0, 0.01, "coincident deadlock still squirts at deadlock_speed")
+
+
+# ── pinch_lift_speed ─────────────────────────────────────────────────────────
+# Upward pop from two blades squeezing the puck. Args: (a_vel, b_vel, a_pos,
+# b_pos, threshold, gain, max_speed). Blades sit 0.2 m apart on X throughout.
+
+const _PINCH_A_POS := Vector3(0.1, 0, 0)
+const _PINCH_B_POS := Vector3(-0.1, 0, 0)
+
+func _pinch(a_vel: Vector3, b_vel: Vector3) -> float:
+	return PuckCollisionRules.pinch_lift_speed(
+		a_vel, b_vel, _PINCH_A_POS, _PINCH_B_POS, 5.0, 0.2, 1.6)
+
+func test_pinch_head_on_stabs_hit_the_cap() -> void:
+	assert_almost_eq(_pinch(Vector3(-8, 0, 0), Vector3(8, 0, 0)), 1.6, 0.001,
+		"16 m/s of closing is past the cap")
+
+func test_pinch_scales_with_closing_past_threshold() -> void:
+	assert_almost_eq(_pinch(Vector3(-10, 0, 0), Vector3.ZERO), 1.0, 0.001,
+		"(10 − 5) × 0.2 — one blade driving into a still one")
+	assert_almost_eq(_pinch(Vector3(-4, 0, 0), Vector3.ZERO), 0.0, 0.001,
+		"a squeeze under the threshold stays on the ice")
+
+func test_pinch_parting_blades_do_not_lift() -> void:
+	# Two centers pulling the draw back to their own sides.
+	assert_eq(_pinch(Vector3(8, 0, 0), Vector3(-8, 0, 0)), 0.0)
+
+func test_pinch_blades_sliding_past_do_not_lift() -> void:
+	# Hard sweeps across the blade-to-blade line squeeze nothing.
+	assert_eq(_pinch(Vector3(0, 0, 9), Vector3(0, 0, -9)), 0.0)
+
+func test_pinch_shared_skating_does_not_lift() -> void:
+	# Both blades carried the same way at speed: no relative closing.
+	assert_eq(_pinch(Vector3(-9, 0, 0), Vector3(-9, 0, 0)), 0.0)
+
+func test_pinch_ignores_vertical_blade_motion() -> void:
+	assert_eq(_pinch(Vector3(0, -12, 0), Vector3(0, 12, 0)), 0.0)
+
+func test_pinch_is_symmetric_in_the_contestants() -> void:
+	var ab: float = PuckCollisionRules.pinch_lift_speed(Vector3(-7, 0, 1),
+		Vector3(3, 0, 0), _PINCH_A_POS, _PINCH_B_POS, 5.0, 0.2, 1.6)
+	var ba: float = PuckCollisionRules.pinch_lift_speed(Vector3(3, 0, 0),
+		Vector3(-7, 0, 1), _PINCH_B_POS, _PINCH_A_POS, 5.0, 0.2, 1.6)
+	assert_almost_eq(ab, ba, 0.0001)
+	assert_gt(ab, 0.0)
+
+func test_pinch_coincident_blades_do_not_lift() -> void:
+	assert_eq(PuckCollisionRules.pinch_lift_speed(Vector3(-9, 0, 0),
+		Vector3(9, 0, 0), Vector3.ZERO, Vector3.ZERO, 5.0, 0.2, 1.6), 0.0)
