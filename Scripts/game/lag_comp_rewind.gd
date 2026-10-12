@@ -225,16 +225,22 @@ static func _integrate_skater(snap: SkaterNetworkState, ctrl: SkaterController,
 				snap.stagger_timer, true)
 		scratch.position = nm.get_forward_position()
 		scratch.velocity = nm.get_forward_velocity()
-		return true
-	SkaterMovementRules.integrate_forward(
-			snap.position, snap.velocity,
-			WorldStateCodec.quantize_move_intent(snap.move_intent),
-			atan2(snap.facing.x, snap.facing.y), false,
-			snap.brake_intent,
-			SkaterMovementRules.posture_of(snap.stance_active, snap.hit_committed),
-			ctrl.get_movement_config(), 1.0 / float(Constants.PHYSICS_TICK),
-			ticks, Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, scratch,
-			snap.stagger_timer, ctrl.get_body_check_config())
+	else:
+		SkaterMovementRules.integrate_forward(
+				snap.position, snap.velocity,
+				WorldStateCodec.quantize_move_intent(snap.move_intent),
+				atan2(snap.facing.x, snap.facing.y), false,
+				snap.brake_intent,
+				SkaterMovementRules.posture_of(snap.stance_active, snap.hit_committed),
+				ctrl.get_movement_config(), 1.0 / float(Constants.PHYSICS_TICK),
+				ticks, Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, scratch,
+				snap.stagger_timer, ctrl.get_body_check_config())
+	# The board pin, as the client render applies it (RemoteController).
+	if snap.pin_timer > 0.0 and ctrl.skater != null:
+		BoardPinRules.forward_correction(scratch,
+				BoardPinRules.wall_normal(snap.position, ctrl.skater.collision_radius(),
+						BoardPinRules.PIN_WALL_MARGIN_M),
+				snap.pin_timer, snap.pin_strength, float(ticks) / float(Constants.PHYSICS_TICK))
 	return true
 
 

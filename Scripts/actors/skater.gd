@@ -415,6 +415,9 @@ signal body_check_impulse_applied(impulse: Vector3)
 # being hit. Host-authoritative consumers gate on is_host; see
 # SkaterController._on_body_check_received.
 signal body_check_received(impulse: Vector3)
+# Host-only: a committed checker drove this skater into the boards this tick
+# (BoardPinRules.pin_holds), at `strength`. SkaterController refreshes its pin.
+signal board_pinned(strength: float)
 # Fired at the END of _physics_process, AFTER integration + collision resolution
 # + the containment clamps have settled this tick's position and velocity. The
 # local player's controller uses it to capture its reconcile prediction snapshot
@@ -1076,13 +1079,40 @@ func _resolve_player_collisions() -> void:
 			var other_delta: Vector3 = other.velocity - other_vel_before
 			if other_delta.length_squared() > 0.0001:
 				other.body_check_impulse_applied.emit(other_delta)
-				other.body_check_received.emit(other_delta)
+				other.body_check_received.emit(
+						_backstopped(other, other_delta, n, atk_transfer * brace))
+		# Board pin: whichever side is driving the other into the wall, the
+		# resolver runs once per pair.
+		if is_host_machine:
+			_check_board_pin(self, other, n)
+			_check_board_pin(other, self, -n)
 		# Credit / claim path — only on a real (closing) hit, NOT gated by authority
 		# (must fire on the attacker's own machine and the host for lag-comp
 		# validation, Lever A). impact_force keeps the weight × closing convention
 		# BodyCheckRules.puck_strip_impulse reconstructs the strip magnitude from.
 		if _collision_result.impulse_applied:
 			body_checked_player.emit(other, weight * _collision_result.closing_speed, n)
+
+
+# The hit the victim's stagger reads: his own Δv, or the whole closing speed the
+# transfer carried when the boards are behind him (BoardPinRules). The knockback
+# itself is untouched; this only scores how hard it landed.
+func _backstopped(victim: Skater, delta_v: Vector3, n: Vector3, transfer: float) -> Vector3:
+	var wall_out: Vector2 = BoardPinRules.wall_normal(victim.global_position,
+			victim.collision_radius(), BoardPinRules.BACKSTOP_MARGIN_M)
+	var strength: float = BoardPinRules.backstop_hit_strength(delta_v.length(),
+			_collision_result.closing_speed, transfer, Vector2(n.x, n.z), wall_out)
+	return n * strength if strength > delta_v.length() else delta_v
+
+
+func _check_board_pin(defender: Skater, victim: Skater, dir: Vector3) -> void:
+	var delivering: bool = defender.hit_committed \
+			and not SkaterStateMachine.state_has_puck(defender.current_shot_state)
+	var wall_out: Vector2 = BoardPinRules.wall_normal(victim.global_position,
+			victim.collision_radius(), BoardPinRules.PIN_WALL_MARGIN_M)
+	if BoardPinRules.pin_holds(delivering, Vector2(dir.x, dir.z), defender.velocity,
+			defender.move_intent, wall_out):
+		victim.board_pinned.emit(BoardPinRules.pin_strength(defender.weight, victim.weight))
 
 
 # Holds the body inside the rink by projecting its XZ onto the inner board

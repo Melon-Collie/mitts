@@ -236,6 +236,14 @@ stick reaches — and only when the coverer's free stick could not have stopped 
 man's shaft in reach. A tied attacker pulls his stick straight away from the one
 holding it. Both halves are the `ties_sticks` cognition gate, closed on Easy.
 
+**On the boards, the checker's extra is holding the pin** (`apply_board_play`, every
+tick after dispatch): a man pinned in contact stays driven in only while the puck
+is his or at his feet and a teammate can reach it inside the pin's cap — the pin
+buys a teammate the puck, so without one it buys nothing and the checker lets go.
+It rides the PACE physicality knob (`check_aggression`, zero on Easy), not a
+cognition gate. A pinned bot works along the wall away from its checker, which is
+what wears a pin down.
+
 Still unfactored: **hold a post** — the per-role fallbacks and their anchor
 constants. The open question is whether it should be a verb at all: if the
 assigner always names a man, the carrier, or the puck, there is no fourth state

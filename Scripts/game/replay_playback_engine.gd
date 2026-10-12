@@ -78,6 +78,8 @@ static func apply_interpolated_snapshot(
 		interp.stick_check_phase = ts.stick_check_phase
 		interp.stick_check_elapsed = ts.stick_check_elapsed
 		interp.stick_tied = ts.stick_tied
+		interp.pin_timer = ts.pin_timer
+		interp.pin_strength = ts.pin_strength
 		interp.shot_state = ts.shot_state
 		interp.elevation_level = ts.elevation_level
 		interp.shot_charge = lerpf(fs.shot_charge, ts.shot_charge, t)

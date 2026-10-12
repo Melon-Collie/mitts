@@ -973,6 +973,7 @@ var _shot_pose: SkaterShotPoseCoordinator = SkaterShotPoseCoordinator.new()
 var _skating: SkaterSkatingCoordinator = SkaterSkatingCoordinator.new()
 var _ik: SkaterIKCoordinator = SkaterIKCoordinator.new()
 var _stick_check: SkaterStickCheck = SkaterStickCheck.new()
+var _pin: SkaterBoardPin = SkaterBoardPin.new()
 var last_processed_host_timestamp: float = 0.0
 var has_puck: bool = false
 var is_replaying: bool = false
@@ -1123,6 +1124,7 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	process_physics_priority = -1  # Run before Skater's integration step
 	skater.body_checked_player.connect(_on_body_checked_player)
 	skater.body_check_received.connect(_on_body_check_received)
+	skater.board_pinned.connect(_pin.hold)
 	_ik.setup(skater, self, _skating)
 	_shot_pose.setup(skater, _sm, _aiming, _ik, self)
 	var _cb := SkaterStateMachine.Callbacks.new()
@@ -1928,6 +1930,8 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.stick_check_phase = _stick_check.phase
 	state.stick_check_elapsed = _stick_check.elapsed
 	state.stick_tied = skater.stick_tied
+	state.pin_timer = _pin.timer
+	state.pin_strength = _pin.strength
 	# Host-only shaft segment for stick-lift claim resolution (paired with
 	# blade_contact_world). World-space grip point — the wire top_hand_position
 	# is upper-body-local and can't be used for host-side world geometry.
@@ -2001,6 +2005,7 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	skater.blade_up = state.blade_up
 	skater.stick_check_phase = state.stick_check_phase
 	skater.stick_tied = state.stick_tied
+	_pin.adopt(state.pin_timer, state.pin_strength)
 	# Intent feeds the gait's input-driven reads below (glide / dig-in /
 	# crossovers / brake stop) — stamp it like the live controllers do, so
 	# playback strides match live play instead of reading zero (file viewer)
@@ -2275,6 +2280,7 @@ func teleport_to(pos: Vector3, facing: Vector2 = Vector2.ZERO) -> void:
 	skater.hit_committed = false
 	_stick_check.reset()
 	skater.stick_check_phase = _stick_check.phase
+	_pin.reset()
 	stagger_timer = 0.0
 	balance_tilt_vel = Vector2.ZERO
 	skater.set_balance_tilt(Vector2.ZERO)
@@ -3059,7 +3065,28 @@ func one_timer_would_connect() -> bool:
 			one_timer_contact_back_time(), one_timer_leniency_time)
 
 
+# Pinned against the boards (BoardPinRules), the host's to start and end. The
+# frozen-puck read asks; a stoppage or a squirted puck lets go.
+func is_pinned() -> bool:
+	return _pin.is_pinned()
+
+
+func release_pin() -> void:
+	_pin.release()
+
+
+# The host's pin at the ack, stepped on by the replay — the stagger rail.
+func _adopt_pin(state: SkaterNetworkState) -> void:
+	_pin.adopt(state.pin_timer, state.pin_strength)
+
+
 func _apply_movement(input: InputState, delta: float) -> void:
+	# The pin bleeds the slide along the wall before anything else moves, and runs
+	# down through a knockdown or a planted stance like the stagger does.
+	skater.velocity = _pin.step(skater.velocity,
+			BoardPinRules.wall_normal(skater.global_position, skater.collision_radius(),
+					BoardPinRules.PIN_WALL_MARGIN_M),
+			input.move_vector, _is_host and not is_replaying, delta)
 	# Brake held — drives hockey stop VFX (gated on speed in skater_vfx.gd).
 	skater.is_braking = input.brake
 	skater.is_braced = input.brake
@@ -3088,9 +3115,11 @@ func _apply_movement(input: InputState, delta: float) -> void:
 	# The commit wins over the stance: being caught upright is its whole cost.
 	# Mirrored to the skater so the collision resolver reads full-vs-passive
 	# transfer. Deterministic from the input, so reconcile replay reproduces both.
-	hit_active = not locomotion_suppressed and input.hit_held
+	# A pinned skater has neither: he is pressed into the glass.
+	hit_active = not locomotion_suppressed and input.hit_held and not _pin.is_pinned()
 	skater.hit_committed = hit_active
-	stance_active = not locomotion_suppressed and input.stance_held and not hit_active
+	stance_active = not locomotion_suppressed and input.stance_held and not hit_active \
+			and not _pin.is_pinned()
 	# Body-check stagger decays deterministically every tick (including during a
 	# planted charge/block and through reconcile replay), so the penalties ease
 	# back on their own. Decayed before the suppression early-out so a player

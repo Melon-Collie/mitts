@@ -144,6 +144,30 @@ func test_interpolated_snapshot_carries_stagger_timer() -> void:
 		"interpolated rewind must carry the newer endpoint's stagger_timer")
 
 
+
+func test_interpolated_snapshot_carries_the_stick_and_pin_state() -> void:
+	# The lift resolver accepts only a claimant rewound in HOOK, the tie resolver
+	# only one in TIE, the pickup and poke resolvers refuse a tied or raised blade,
+	# and the rewind's forward prediction reads the pin — all off this snapshot.
+	var older := _slot(0, false, Vector3.ZERO)
+	var newer := _slot(0, false, Vector3.ONE)
+	newer.blade_up = true
+	newer.stick_check_phase = StickCheckRules.Phase.HOOK
+	newer.stick_check_elapsed = 0.05
+	newer.stick_tied = true
+	newer.pin_timer = 0.12
+	newer.pin_strength = 0.6
+	_seed_two_slots(10.0, older, 10.1, newer)
+	var s: SkaterNetworkState = sbm.get_state_at(10.05).get_skater_state(PEER)
+	assert_not_null(s)
+	assert_true(s.blade_up)
+	assert_eq(s.stick_check_phase, StickCheckRules.Phase.HOOK)
+	assert_almost_eq(s.stick_check_elapsed, 0.05, 1e-6)
+	assert_true(s.stick_tied)
+	assert_almost_eq(s.pin_timer, 0.12, 1e-6)
+	assert_almost_eq(s.pin_strength, 0.6, 1e-6)
+
+
 # ── cold-ring path (query BEFORE oldest) ────────────────────────────────────
 
 func test_query_before_oldest_answers_with_the_oldest_sample() -> void:

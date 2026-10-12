@@ -309,3 +309,8 @@ here whenever you bump, in the same format.
 #      byte's spare bit 7 carries stick_tied, so the byte is full and the block
 #      stays 56 bytes. New RPC receive_stick_tie_claim. The replay format is
 #      unchanged: bit 7 was always written 0.
+# v68: board play (docs/defensive-play-plan.md, Phase 3). Skater block 56 -> 58
+#      bytes: pin_timer u8@0.01 s and pin_strength u8@1/255, which the forward
+#      prediction reads on the render and the rewind (BoardPinRules
+#      .forward_correction). New RPC notify_puck_frozen_called. Replay
+#      FORMAT_VERSION 13.

@@ -50,9 +50,9 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +3: the wrister wind-up side reads the trailer's relative motion over the
 	# charge (#740), not just where he stands at the commit.
 	# +1: the chase steer passes when an airborne puck is back on the blade plane.
-	"res://Scripts/ai/skater_agent_state_machine.gd": 6249,
+	"res://Scripts/ai/skater_agent_state_machine.gd": 6333,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
-	"res://Scripts/game/game_manager.gd": 5633,
+	"res://Scripts/game/game_manager.gd": 5678,
 	"res://Scripts/domain/ai/action_scoring.gd": 4458,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
@@ -66,9 +66,9 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
 	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3916,
-	"res://Scripts/controllers/skater_controller.gd": 3369,
-	"res://Scripts/actors/skater.gd": 2726,
-	"res://Scripts/networking/network_manager.gd": 2824,
+	"res://Scripts/controllers/skater_controller.gd": 3398,
+	"res://Scripts/actors/skater.gd": 2756,
+	"res://Scripts/networking/network_manager.gd": 2828,
 	"res://Scripts/game/tutorial_manager.gd": 2073,
 	"res://Scripts/controllers/skater_ik_coordinator.gd": 938,
 	# +21: apply_scripted_grant / stage_scripted — the tutorial's teleports
@@ -88,26 +88,26 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/controllers/goalie_body_config_builder.gd": 1072,
 	"res://Scripts/ui/network_debug_overlay.gd": 956,
 	"res://Scripts/networking/network_telemetry.gd": 957,
-	"res://Scripts/controllers/local_controller.gd": 936,
+	"res://Scripts/controllers/local_controller.gd": 937,
 	"res://Scripts/ui/player_settings_popup.gd": 863,
 	"res://Scripts/ui/slot_grid_panel.gd": 839,
 	"res://Scripts/domain/state/game_state_machine.gd": 838,
 	"res://Scripts/ui/locker_popup.gd": 822,
-	"res://Scripts/ui/hud.gd": 811,
+	"res://Scripts/ui/hud.gd": 817,
 }
 
 const _API_LIMIT: int = 25
 const _API_SLACK: int = 3
 
 const _API_ALLOWANCE: Dictionary[String, int] = {
-	"res://Scripts/networking/network_manager.gd": 202,
+	"res://Scripts/networking/network_manager.gd": 204,
 	"res://Scripts/actors/skater.gd": 142,
 	"res://Scripts/domain/ai/action_scoring.gd": 68,
 	"res://Scripts/game/game_manager.gd": 62,
 	"res://Scripts/domain/state/player_attributes.gd": 53,
 	"res://Scripts/networking/network_telemetry.gd": 53,
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 48,
-	"res://Scripts/controllers/skater_controller.gd": 40,
+	"res://Scripts/controllers/skater_controller.gd": 42,
 	"res://Scripts/actors/puck.gd": 41,
 	"res://Scripts/domain/state/game_state_machine.gd": 38,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 36,

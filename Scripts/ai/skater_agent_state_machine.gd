@@ -5339,6 +5339,90 @@ func _tie_yank_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 			_blade_reach)
 
 
+# The boards, every physics tick after dispatch (BoardPinRules). A pinned bot works
+# along the wall, away from the man holding it — the drive that wears a pin down.
+# A bot with a man pinned keeps driving him in while a teammate can get to the
+# puck inside the pin's life: pin and support, the one-for-one trade.
+func apply_board_play(input: InputState, snapshot: WorldSnapshot) -> void:
+	if snapshot == null or snapshot.puck_state == null:
+		return
+	var me: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
+	if me == null:
+		return
+	if me.pin_timer > 0.0:
+		var out: Vector2 = BoardPinRules.wall_normal(me.position, GameRules.OFFSIDE_LINE_SLACK,
+				BoardPinRules.PIN_WALL_MARGIN_M)
+		if out != Vector2.ZERO:
+			input.move_vector = _pin_escape_dir(snapshot, me, out)
+		return
+	if _check_aggression <= 0.0 or _state != State.OFF_PUCK:
+		return
+	var man_pid: int = _pinned_man_in_contact(snapshot, me)
+	if man_pid == -1 or not _support_reaches_the_puck(snapshot, man_pid):
+		return
+	var man: SkaterNetworkState = snapshot.skater_states[man_pid]
+	input.hit_held = true
+	var d := Vector2(man.position.x - me.position.x, man.position.z - me.position.z)
+	if d.length_squared() > 1e-6:
+		input.move_vector = d.normalized()
+
+
+func _pin_escape_dir(snapshot: WorldSnapshot, me: SkaterNetworkState, out: Vector2) -> Vector2:
+	var along := Vector2(-out.y, out.x)
+	var nearest := Vector2.ZERO
+	var best_d: float = INF
+	for pid: int in snapshot.skater_states:
+		if _team_id_by_peer.get(pid, -1) == _team_id:
+			continue
+		var opp: SkaterNetworkState = snapshot.skater_states[pid]
+		var rel := Vector2(opp.position.x - me.position.x, opp.position.z - me.position.z)
+		if rel.length() < best_d:
+			best_d = rel.length()
+			nearest = rel
+	return -along if nearest.dot(along) > 0.0 else along
+
+
+# The nearest opponent pinned and still in body contact with us, or -1. Contact is
+# two canonical body half-widths plus the pin's own wall margin of give.
+func _pinned_man_in_contact(snapshot: WorldSnapshot, me: SkaterNetworkState) -> int:
+	var contact: float = GameRules.OFFSIDE_LINE_SLACK * 2.0 + BoardPinRules.PIN_WALL_MARGIN_M
+	var best: int = -1
+	var best_d: float = contact
+	for pid: int in snapshot.skater_states:
+		if _team_id_by_peer.get(pid, -1) == _team_id:
+			continue
+		var opp: SkaterNetworkState = snapshot.skater_states[pid]
+		if opp.pin_timer <= 0.0:
+			continue
+		var d: float = Vector2(opp.position.x - me.position.x, opp.position.z - me.position.z).length()
+		if d <= best_d:
+			best_d = d
+			best = pid
+	return best
+
+
+# The puck is his or at his feet, and a teammate of ours can be on it before the
+# pin's cap — at his top speed, the momentum-blind upper bound of how soon.
+func _support_reaches_the_puck(snapshot: WorldSnapshot, man_pid: int) -> bool:
+	var puck: PuckNetworkState = snapshot.puck_state
+	var man: SkaterNetworkState = snapshot.skater_states[man_pid]
+	if puck.carrier_peer_id != man_pid:
+		if puck.carrier_peer_id != -1:
+			return false
+		var reach: float = FrozenPuckRules.REACH_M + GameRules.OFFSIDE_LINE_SLACK
+		if Vector2(puck.position.x - man.position.x, puck.position.z - man.position.z).length() > reach:
+			return false
+	for pid: int in snapshot.skater_states:
+		if pid == _peer_id or _team_id_by_peer.get(pid, -1) != _team_id:
+			continue
+		var mate: SkaterNetworkState = snapshot.skater_states[pid]
+		var caps: AISkaterCaps = _caps_by_peer.get(pid)
+		var top: float = caps.max_speed if caps != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
+		if mate.position.distance_to(puck.position) <= top * BoardPinRules.PIN_MAX_S:
+			return true
+	return false
+
+
 # Holds the stick-check button for a lift or a tie the dispatch started. Runs
 # every physics tick after dispatch, throttled or not, so the hold is continuous.
 func apply_stick_lift_input(input: InputState) -> void:

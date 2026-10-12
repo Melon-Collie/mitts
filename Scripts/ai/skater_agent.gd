@@ -55,6 +55,7 @@ func tick(snapshot: WorldSnapshot, delta: float, host_timestamp: float) -> Input
 	zero_input(_scratch_input, delta, host_timestamp)
 	_sm.dispatch(_scratch_input, snapshot)
 	_sm.apply_stick_lift_input(_scratch_input)
+	_sm.apply_board_play(_scratch_input, snapshot)
 	return _scratch_input
 
 

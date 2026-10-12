@@ -10,18 +10,18 @@ extends RefCounted
 # 1. World state  (STATE_RATE = 60 Hz, unreliable_ordered) — single flat
 #    PackedByteArray, sized once and written at offsets (see encode_world_state):
 #      u16 ws_sequence, u32 host_capture_time (0.1ms units), u8 num_skaters
-#      [u32 peer_id, skater_bytes(56), u8 queue_depth] × num_skaters
+#      [u32 peer_id, skater_bytes(58), u8 queue_depth] × num_skaters
 #      puck_bytes(13)
 #      u8 num_goalies, [goalie_bytes(43)] × num_goalies
 #      u8 score0, u8 score1, u8 phase, u8 period, u16 time_remaining
 #
-#    Total for 6 players + 2 goalies: 485 bytes (10 players: 733) — stays in a
+#    Total for 6 players + 2 goalies: 497 bytes (10 players: 753) — stays in a
 #    single packet, well under Steam's ~1200-byte unreliable cap. This matters: Steam (unlike ENet)
 #    does NOT fragment unreliable messages, so an oversized snapshot would be
 #    dropped at send rather than split across datagrams.
 #
 #    Quantization layout:
-#      Skater  (56 B): pos s16/s8/s16@1cm, vel 3×s16@0.02m/s,
+#      Skater  (58 B): pos s16/s8/s16@1cm, vel 3×s16@0.02m/s,
 #                      blade 3×s16@1cm, top_hand 3×s16@1cm,
 #                      facing u16 (0–TAU→0–65535), upper_body_rot s16 (−π–π→−32767–32767),
 #                      facing_angular_velocity s16@PI*10 rad/s, upper_body_angular_velocity s16@PI*10 rad/s,
@@ -33,7 +33,8 @@ extends RefCounted
 #                      balance_tilt 2×s16@π/32767 rad, balance_tilt_vel 2×s16@20/32767 rad/s (v61),
 #                      torso_lean 2×s16 + posture_lean s16, all @π/32767 rad (v62),
 #                      recoil_dir u8 (bearing 0–TAU→0–256, 0 = backward) (v63),
-#                      stick_check u8 (phase[2:0] + ticks elapsed[7:3]) (v66)
+#                      stick_check u8 (phase[2:0] + ticks elapsed[7:3]) (v66),
+#                      pin_timer u8@0.01s, pin_strength u8@1/255 (v68)
 #      Puck    (13 B): pos s16/s16/s16@1cm, vel 3×s16@0.02m/s, carrier_idx u8 (0xFF=none)
 #      Goalie  (43 B): root (12 B) + pose (31 B). Root:
 #                      pos_x/z s16@1cm, rot_y s16@π/32767, state u8, fho u8,
@@ -74,7 +75,7 @@ const WS_SEQUENCE_OFFSET: int = 0     # u16
 const WS_HOST_TIME_OFFSET: int = 2    # u32, 0.1 ms units
 const WS_SKATER_COUNT_OFFSET: int = 6  # u8
 const WS_HEADER_SIZE: int = 7
-const SKATER_STATE_BYTES: int = 56  # inner skater state block; every encode/decode
+const SKATER_STATE_BYTES: int = 58  # inner skater state block; every encode/decode
                                     # site must read it from here, or a grown block
                                     # silently truncates instead of failing
 # Wire range of the balance lean's spring rate, rad/s.
@@ -440,12 +441,12 @@ func decode_stats(data: Array) -> void:
 
 # ── Quantization helpers ──────────────────────────────────────────────────────
 
-# Skater: SKATER_STATE_BYTES (56) bytes
+# Skater: SKATER_STATE_BYTES (58) bytes
 # Offsets: pos(0..4) vel(5..10) blade(11..16) top_hand(17..22)
 #          facing(23..24) ubrot(25..26) fav(27..28) ubav(29..30) lp_ts(31..34)
 #          flags(35) charge(36) stagger(37) knockdown(38) intent(39)
 #          tilt(40..43) tilt_vel(44..47) torso(48..51) posture(52..53) recoil(54)
-#          stick_check(55)
+#          stick_check(55) pin_timer(56) pin_strength(57)
 # Writes the skater block into `b` at `o`, returning the next offset. Godot 4
 # passes Packed arrays to functions BY REFERENCE, so these writes land in the
 # caller's buffer — that is what lets the hot path fill one pre-sized packet
@@ -528,6 +529,8 @@ static func _write_skater_quantized(b: PackedByteArray, o: int, s: SkaterNetwork
 	# peaks near 13°, so a half step tilts the torso by well under 0.2°.
 	b.encode_u8(o, posmod(roundi(atan2(s.recoil_dir.x, s.recoil_dir.y) / TAU * 256.0), 256)); o += 1
 	b.encode_u8(o, StickCheckRules.pack(s.stick_check_phase, s.stick_check_elapsed)); o += 1
+	b.encode_u8(o, clampi(roundi(s.pin_timer * 100.0), 0, 255)); o += 1
+	b.encode_u8(o, clampi(roundi(s.pin_strength * 255.0), 0, 255)); o += 1
 	return o
 
 
@@ -610,9 +613,11 @@ static func _decode_skater_quantized(b: PackedByteArray, offset: int = 0) -> Ska
 	s.posture_lean = b.decode_s16(o) / 32767.0 * PI; o += 2
 	var recoil_bearing: float = b.decode_u8(o) / 256.0 * TAU; o += 1
 	s.recoil_dir = Vector2(sin(recoil_bearing), cos(recoil_bearing))
-	var stick_check: int = b.decode_u8(o)
+	var stick_check: int = b.decode_u8(o); o += 1
 	s.stick_check_phase = StickCheckRules.unpack_phase(stick_check)
 	s.stick_check_elapsed = StickCheckRules.unpack_elapsed(stick_check)
+	s.pin_timer = b.decode_u8(o) / 100.0; o += 1
+	s.pin_strength = b.decode_u8(o) / 255.0
 	return s
 
 

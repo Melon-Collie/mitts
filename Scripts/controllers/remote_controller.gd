@@ -484,8 +484,8 @@ func _predict_sample_forward(newest: SkaterNetworkState, dt: float) -> void:
 				SkaterMovementRules.posture_of(newest.stance_active, newest.hit_committed),
 				1.0 / float(Constants.PHYSICS_TICK), ticks,
 				Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, newest.stagger_timer, true)
-		_sample_scratch.position = nm.get_forward_position()
-		_sample_scratch.velocity = nm.get_forward_velocity()
+		_fp_result.position = nm.get_forward_position()
+		_fp_result.velocity = nm.get_forward_velocity()
 	else:
 		SkaterMovementRules.integrate_forward(
 				newest.position, newest.velocity, newest.move_intent,
@@ -494,8 +494,20 @@ func _predict_sample_forward(newest: SkaterNetworkState, dt: float) -> void:
 				_movement_config(), 1.0 / float(Constants.PHYSICS_TICK), ticks,
 				Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, _fp_result,
 				newest.stagger_timer, _body_check_config())
-		_sample_scratch.position = _fp_result.position
-		_sample_scratch.velocity = _fp_result.velocity
+	_correct_forward_for_pin(newest, float(ticks) / float(Constants.PHYSICS_TICK))
+	_sample_scratch.position = _fp_result.position
+	_sample_scratch.velocity = _fp_result.velocity
+
+# Applies a snapshot's board pin to the forward integration in _fp_result — the
+# same correction LagCompRewind applies host-side (render == rewind).
+func _correct_forward_for_pin(snap: SkaterNetworkState, window_s: float) -> void:
+	if snap.pin_timer <= 0.0:
+		return
+	BoardPinRules.forward_correction(_fp_result,
+			BoardPinRules.wall_normal(snap.position, skater.collision_radius(),
+					BoardPinRules.PIN_WALL_MARGIN_M),
+			snap.pin_timer, snap.pin_strength, window_s)
+
 
 func _interpolate(delta: float) -> void:
 	# Shared delay (NetworkManager) keeps the goalie and other remotes on the same
@@ -534,6 +546,8 @@ func _interpolate(delta: float) -> void:
 		interpolated.stick_check_phase = newest.stick_check_phase
 		interpolated.stick_check_elapsed = newest.stick_check_elapsed
 		interpolated.stick_tied = newest.stick_tied
+		interpolated.pin_timer = newest.pin_timer
+		interpolated.pin_strength = newest.pin_strength
 		interpolated.shot_state = newest.shot_state
 		interpolated.shot_charge = newest.shot_charge
 		interpolated.stagger_timer = newest.stagger_timer
@@ -575,6 +589,8 @@ func _interpolate(delta: float) -> void:
 		interpolated.stick_check_phase = to_state.stick_check_phase
 		interpolated.stick_check_elapsed = to_state.stick_check_elapsed
 		interpolated.stick_tied = to_state.stick_tied
+		interpolated.pin_timer = to_state.pin_timer
+		interpolated.pin_strength = to_state.pin_strength
 		interpolated.shot_state = to_state.shot_state
 		# Charge is a scalar — lerp it so the remote's stick-flex load bow
 		# grows smoothly through the drag instead of stepping per broadcast.
@@ -636,8 +652,8 @@ func _interpolate(delta: float) -> void:
 							interpolated.hit_committed),
 					1.0 / float(Constants.PHYSICS_TICK), fp_ticks,
 					Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, fp_stagger, true)
-			interpolated.position = nm.get_forward_position()
-			interpolated.velocity = nm.get_forward_velocity()
+			_fp_result.position = nm.get_forward_position()
+			_fp_result.velocity = nm.get_forward_velocity()
 		else:
 			SkaterMovementRules.integrate_forward(
 					interpolated.position, interpolated.velocity, interpolated.move_intent,
@@ -649,8 +665,11 @@ func _interpolate(delta: float) -> void:
 					1.0 / float(Constants.PHYSICS_TICK), fp_ticks,
 					Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, _fp_result,
 					fp_stagger, _body_check_config())
-			interpolated.position = _fp_result.position
-			interpolated.velocity = _fp_result.velocity
+		# The interpolated base, as the host's rewind reads it (pin fields from the
+		# newer endpoint, the position interpolated).
+		_correct_forward_for_pin(interpolated, float(fp_ticks) / float(Constants.PHYSICS_TICK))
+		interpolated.position = _fp_result.position
+		interpolated.velocity = _fp_result.velocity
 	# Forward-prediction quality: the pre-damp error the smoother is about to
 	# absorb on this body (fp error + correction pressure). Teleport-scale
 	# distances (faceoff/goal resets — anything the snap guard hard-snaps) are
@@ -745,6 +764,7 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	skater.blade_up = state.blade_up
 	skater.stick_check_phase = state.stick_check_phase
 	skater.stick_tied = state.stick_tied
+	_adopt_pin(state)
 	skater.current_shot_state = state.shot_state
 	# Wrister address, gated on the aim state — the wire bit is garbage
 	# otherwise. The skater's address pass adopts it so a spectated shooter's

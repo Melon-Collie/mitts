@@ -114,6 +114,7 @@ signal puck_out_of_play()
 # inside _consume_pending_faceoff; clients emit from the RPC handler.
 signal icing_called()
 signal goalie_freeze_called()
+signal puck_frozen_called()
 signal offside_called()
 
 # ── Domain state ──────────────────────────────────────────────────────────────
@@ -253,6 +254,7 @@ var _codec: WorldStateCodec = null
 var _shot_tracker: ShotOnGoalTracker = null
 var _hit_tracker: HitTracker = null
 var _stick_ties: StickTieTracker = null
+var _frozen_puck := FrozenPuckRules.State.new()
 var _turnover_tracker: TurnoverTracker = null
 var _possession_tracker: PossessionTracker = null
 var _advanced_stats_tracker: AdvancedStatsTracker = null
@@ -487,6 +489,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.puck_out_of_play_received.connect(_on_puck_out_of_play_received)
 	NetworkManager.icing_called_received.connect(_on_icing_called_received)
 	NetworkManager.goalie_freeze_called_received.connect(_on_goalie_freeze_called_received)
+	NetworkManager.puck_frozen_called_received.connect(puck_frozen_called.emit)
 	NetworkManager.offside_called_received.connect(_on_offside_called_received)
 	NetworkManager.faceoff_positions_received.connect(_on_faceoff_positions_received)
 	NetworkManager.game_reset_received.connect(on_game_reset)
@@ -642,6 +645,7 @@ func _physics_process(delta: float) -> void:
 	_check_goal_crossing()
 	_check_puck_out_of_bounds(delta)
 	_check_puck_stuck_on_net(delta)
+	_check_frozen_puck(delta)
 	_apply_ghost_state(delta)
 	_shot_tracker.tick(delta)
 	_hit_tracker.tick(delta)
@@ -810,6 +814,47 @@ func _whistle_goalie_freeze(covering_team_id: int) -> void:
 	goalie_freeze_called.emit()
 	NetworkManager.notify_goalie_freeze_called_to_all()
 	_whistle_and_faceoff(GameRules.icing_faceoff_dot(covering_team_id, puck.global_position.x))
+
+
+# Host-only: a puck trapped on the boards under a pinned skater (FrozenPuckRules).
+# NHL whistles it and faces off at the nearest dot; elsewhere the puck squirts
+# free along the wall and the pins on it let go.
+func _check_frozen_puck(delta: float) -> void:
+	if _state_machine.current_phase != GamePhase.Phase.PLAYING:
+		_frozen_puck.clear()
+		return
+	var puck_pos: Vector3 = puck.global_position
+	var pinned: Skater = null
+	var carrier_pinned: bool = false
+	var players: Dictionary[int, PlayerRecord] = _registry.all()
+	for pid: int in players:
+		var rec: PlayerRecord = players[pid]
+		var ctrl: SkaterController = rec.controller as SkaterController
+		if rec.skater == null or ctrl == null or not ctrl.is_pinned():
+			continue
+		if rec.skater == puck.carrier:
+			carrier_pinned = true
+		var reach: float = FrozenPuckRules.REACH_M + rec.skater.collision_radius()
+		if Vector2(rec.skater.global_position.x - puck_pos.x,
+				rec.skater.global_position.z - puck_pos.z).length() <= reach:
+			pinned = rec.skater
+	var trapped: bool = pinned != null and (puck.carrier == null or carrier_pinned) \
+			and puck.linear_velocity.length() < FrozenPuckRules.SPEED_MAX_M_S \
+			and FrozenPuckRules.near_boards(puck_pos)
+	if not FrozenPuckRules.step(_frozen_puck, puck_pos, trapped, delta):
+		return
+	if _state_machine.rule_set == GameRules.RuleSet.NHL:
+		puck_frozen_called.emit()
+		NetworkManager.notify_puck_frozen_called_to_all()
+		_whistle_and_faceoff(GameRules.nearest_faceoff_dot(Vector2(puck_pos.x, puck_pos.z)))
+		return
+	if puck.carrier != null:
+		return
+	puck.linear_velocity = FrozenPuckRules.squirt_velocity(puck_pos, pinned.global_position)
+	for pid: int in players:
+		var ctrl: SkaterController = players[pid].controller as SkaterController
+		if ctrl != null:
+			ctrl.release_pin()
 
 
 # Host: any transition out of live play (whistle prep, goal, period horn,

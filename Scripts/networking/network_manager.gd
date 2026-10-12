@@ -69,6 +69,7 @@ signal goal_received(scoring_team_id: int, score0: int, score1: int, scorer_name
 signal puck_out_of_play_received
 signal icing_called_received
 signal goalie_freeze_called_received
+signal puck_frozen_called_received
 signal offside_called_received
 signal faceoff_positions_received(positions: Array)
 signal game_reset_received(new_game_id: String)
@@ -2094,6 +2095,14 @@ func notify_icing_called_to_all() -> void:
 @rpc("authority", "reliable")
 func notify_icing_called() -> void:
 	NetworkSimManager.send(func() -> void: icing_called_received.emit(), [], true)
+
+func notify_puck_frozen_called_to_all() -> void:
+	for peer_id in connected_peer_ids():
+		notify_puck_frozen_called.rpc_id(peer_id)
+
+@rpc("authority", "reliable")
+func notify_puck_frozen_called() -> void:
+	NetworkSimManager.send(func() -> void: puck_frozen_called_received.emit(), [], true)
 
 func notify_goalie_freeze_called_to_all() -> void:
 	for peer_id: int in connected_peer_ids():

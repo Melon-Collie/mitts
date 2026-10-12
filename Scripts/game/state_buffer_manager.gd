@@ -255,6 +255,17 @@ func _interpolate_skater(peer_id: int, ts: float) -> SkaterNetworkState:
 	# endpoint vs lerp differ by <= one broadcast interval of decay — sub-mm.)
 	result.stagger_timer = to_s.stagger_timer
 	result.recoil_dir = to_s.recoil_dir
+	# The claim resolvers' stick gates read these off the rewound claimant — the
+	# lift phase (only HOOK lifts, only TIE ties), the tie and the raised blade —
+	# and the forward prediction reads the pin. All discrete or newer-endpoint,
+	# for the same reason as shot_state: a default here passes or refuses every
+	# interpolated rewind regardless of what the claimant was doing.
+	result.blade_up = to_s.blade_up
+	result.stick_check_phase = to_s.stick_check_phase
+	result.stick_check_elapsed = to_s.stick_check_elapsed
+	result.stick_tied = to_s.stick_tied
+	result.pin_timer = to_s.pin_timer
+	result.pin_strength = to_s.pin_strength
 	result.host_timestamp = ts
 	return result
 

@@ -563,9 +563,10 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# charge timers).
 	stagger_timer = server_state.stagger_timer
 	stagger_recoil_dir = server_state.recoil_dir
-	# The lift phase rides the same rail: the host's at the ack, stepped on by
-	# the replayed inputs.
+	# The lift phase and the board pin ride the same rail: the host's at the ack,
+	# stepped on by the replayed inputs.
 	_adopt_stick_check(server_state)
+	_adopt_pin(server_state)
 	# The balance and torso leans ride the same rail: the host's values at the
 	# ack, then the replay steps them forward through the unacked inputs.
 	balance_tilt_vel = server_state.balance_tilt_vel

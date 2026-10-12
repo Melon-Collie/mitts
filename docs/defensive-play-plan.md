@@ -1,6 +1,6 @@
 # Defensive play — stick check, stick tie, board pin
 
-Status: **Phases 1 and 2 implemented** (v66, v67), playtest pending. Phases 3–4 proposed. Each
+Status: **Phases 1–3 implemented** (v66–v68), playtest pending. Phase 4 is candidates. Each
 phase is meant to ship as its own PR, with its own protocol bump and playtest.
 
 ## Decisions banked
@@ -233,6 +233,16 @@ PRESSURE chooses between the poke jab and a lift by what the bot can actually se
   velocity itself doesn't change; the wall already clamps it.
 
 ### 3b. The pin
+- **As built.** The pin is a short grip (`PIN_GRIP_S` 0.15 s) the host refreshes on
+  every tick the checker still drives — the stagger rail, so it replays and
+  reconciles deterministically — with the 2 s cap and the escape drain on a
+  host-only budget (`SkaterBoardPin`). Its velocity effect is a GDScript post-step
+  after the ported movement kernel, and the forward prediction applies one shared
+  correction to the integrated result (`BoardPinRules.forward_correction`) rather
+  than a term inside `integrate_forward`: the movement kernels have C++ ports gated
+  by parity tests, and the pin is not part of them. The "stride scaled by
+  (1 − strength)" half is folded into the along-wall bleed, which out-decelerates a
+  stride at any strength worth the name.
 - **Onset (host-authoritative).**
   - The defender is committed (`hit_committed`) and touching an opponent's disc.
     Carrier or not, it doesn't matter.
@@ -280,6 +290,11 @@ PRESSURE chooses between the poke jab and a lift by what the bot can actually se
   shoulder in). It is cosmetic only, and checked with `render-poses.sh`.
 
 ### 3c. Frozen puck
+- **As built.** The whistle follows the goalie-freeze stoppage (its own signal,
+  RPC and toast, `_whistle_and_faceoff` at `nearest_faceoff_dot`) instead of a new
+  `FaceoffReason`, which belongs to the domain-flagged icing/offside stoppages. In
+  ARCADE a puck still carried by the pinned skater is left to the existing
+  wall-squeeze release; only a loose one squirts.
 - **The rule.** `FrozenPuckRules` (pure) accumulates time while all of these hold:
   - the puck is loose, or carried by a pinned skater;
   - it is within `FROZEN_BOARD_MARGIN` of the boards and slower than `FROZEN_SPEED`;

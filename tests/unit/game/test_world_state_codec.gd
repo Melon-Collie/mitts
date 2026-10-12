@@ -523,6 +523,16 @@ func test_skater_stick_tied_round_trips_beside_every_flag() -> void:
 		assert_eq(dec.elevation_level, 3)
 
 
+func test_skater_pin_round_trips() -> void:
+	var s := SkaterNetworkState.new()
+	s.pin_timer = 0.13
+	s.pin_strength = 0.62
+	var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+			WorldStateCodec._encode_skater_quantized(s))
+	assert_almost_eq(dec.pin_timer, 0.13, 0.005)
+	assert_almost_eq(dec.pin_strength, 0.62, 1.0 / 255.0)
+
+
 func test_skater_stagger_round_trips() -> void:
 	# stagger_timer was never on the wire, so a client victim's predicted stagger
 	# was wiped to 0 on the next reconcile. u8 @0.01s must now round-trip it.
