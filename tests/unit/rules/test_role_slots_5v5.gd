@@ -335,6 +335,24 @@ func test_home_side_bias_settles_symmetric_d_pair() -> void:
 	assert_eq(a[5], AIRoleSlots.Slot.DBACK_R, "RD rests on the right post")
 
 
+func test_home_side_bias_mirrors_for_the_team_defending_minus_z() -> void:
+	# Team 1 faces +Z, so its left is +X: the LD rests on the +X post (DBACK_R),
+	# the RD on -X (DBACK_L) — the mirror of the team-0 rest above.
+	var skaters: Array = [
+		[1, 1, Vector3(0, 0, 8)],
+		[2, 1, Vector3(9, 0, 6)],
+		[3, 1, Vector3(-9, 0, 6)],
+		[4, 1, Vector3(0, 0, -7.29)],  # LD dead-center on our blue line
+		[5, 1, Vector3(0, 0, -8.0)],   # RD dead-center, a hair deeper
+	]
+	var snap: WorldSnapshot = _make_snapshot(skaters, -1, 3.0)
+	var a: Dictionary = AIRoleSlots5.assign(snap, 1, -OUR_NET_Z,
+			AIPossessionState.State.NEUTRAL, _resolver(skaters), {}, 1.0, {},
+			_positions())
+	assert_eq(a[4], AIRoleSlots.Slot.DBACK_R, "team 1's LD rests on the +X post")
+	assert_eq(a[5], AIRoleSlots.Slot.DBACK_L, "team 1's RD rests on the -X post")
+
+
 func test_kinematic_advantage_overrides_home_bias() -> void:
 	# The pair has fully exchanged sides mid-play: RD is far left, LD far
 	# right. The 0.35 s rest bias must not drag them across each other.
