@@ -160,6 +160,11 @@ TOAST_PLAYER_JOINED,joined,se unió
 TOAST_PLAYER_LEFT,left,salió
 TOAST_PUCK_OUT_OF_PLAY,PUCK OUT OF PLAY,DISCO FUERA DE JUEGO
 TOAST_ICING,ICING,DESPEJE PROHIBIDO
+ICING_RACE_TITLE,ICING?,¿DESPEJE PROHIBIDO?
+ICING_RACE_ATTACK,Beat them to the faceoff dots to wave it off,Llega primero a los puntos de saque para anularlo
+ICING_RACE_DEFEND,Reach the faceoff dots first for the whistle,Llega primero a los puntos de saque para que piten
+ICING_RACE_WATCH,Race to the end-zone faceoff dots,Carrera a los puntos de saque de la zona
+ICING_WAVED_OFF,ICING WAVED OFF,DESPEJE PROHIBIDO ANULADO
 TOAST_GOALIE_FREEZE,GOALIE FREEZES IT,EL PORTERO LO CONGELA
 SPECTATING,SPECTATING,ESPECTADOR
 REPORT_BUG,Report Bug,Reportar error

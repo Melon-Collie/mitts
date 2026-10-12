@@ -5,7 +5,7 @@ extends RefCounted
 # whether it crossed the far goal line from behind the red line, and the race to
 # the end-zone dots that decides it. The puck stays live while the race runs.
 # GameStateMachine owns one, gates it on rule set and phase, and turns an ICING
-# call into the pending faceoff; it calls end_race() once it has read the call.
+# call into the pending faceoff; it calls end_race(call) once it has read it.
 
 # Last touch: the carrier's blade, a deflection, a strip, a goalie save. -1 is
 # an unknown toucher, which cannot ice.
@@ -16,6 +16,10 @@ var last_touch_x: float = 0.0
 var pending_team_id: int = -1
 # X of the offending release — the icing faceoff is on that side.
 var pending_release_x: float = 0.0
+# How the last race ended — NONE when a stoppage or reset ended it uncalled.
+var last_call: InfractionRules.IcingCall = InfractionRules.IcingCall.NONE
+# Counts races opened, so a watcher sees one that opened and ended in one tick.
+var races_opened: int = 0
 var _pending_time: float = 0.0
 
 
@@ -24,7 +28,9 @@ func reset() -> void:
 	end_race()
 
 
-func end_race() -> void:
+func end_race(call: InfractionRules.IcingCall = InfractionRules.IcingCall.NONE) -> void:
+	if pending_team_id != -1:
+		last_call = call
 	pending_team_id = -1
 	_pending_time = 0.0
 
@@ -59,6 +65,8 @@ func update(puck_z: float, positions: Dictionary, velocities: Dictionary,
 			return InfractionRules.IcingCall.NONE
 		pending_team_id = offender
 		pending_release_x = last_touch_x
+		last_call = InfractionRules.IcingCall.NONE
+		races_opened += 1
 		_pending_time = 0.0
 		last_touch_team_id = -1
 	if _pending_time >= GameRules.ICING_RACE_MAX_S:

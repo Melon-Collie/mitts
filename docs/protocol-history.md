@@ -303,3 +303,6 @@ here whenever you bump, in the same format.
 #      every peer when an NHL-ruleset player starts or stops owing a tag-up, for
 #      the offside banner and teammate name plates (NHL never ghosts, so
 #      is_ghost could not carry it).
+# v67: added notify_icing_race(icing_team_id, waved_off) RPC — the host tells
+#      every peer when an NHL hybrid-icing race opens and how it ended, for the
+#      icing race banner.

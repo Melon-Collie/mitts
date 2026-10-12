@@ -363,6 +363,23 @@ func test_teammate_deflection_past_the_red_line_is_not_icing() -> void:
 	sm.check_icing_for_loose_puck(-30.0)
 	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.NONE)
 
+func test_race_records_how_it_ended() -> void:
+	# GameManager announces the race to every peer from these two fields.
+	_open_race()
+	assert_eq(sm.icing.races_opened, 1)
+	sm.notify_puck_carried(0, -27.0, 3.0)
+	assert_eq(sm.icing.last_call, InfractionRules.IcingCall.WAVED_OFF)
+	sm.notify_puck_carried(0, 5.0)
+	_race_tick(Vector3(0, 0, -15.0), Vector3(0, 0, -9.0),
+			Vector3(0, 0, -_DOT_Z - 0.5), Vector3(0, 0, -5.0))
+	assert_eq(sm.icing.races_opened, 2, "a second race opened")
+	assert_eq(sm.icing.last_call, InfractionRules.IcingCall.ICING)
+
+func test_race_cut_short_by_a_stoppage_ends_uncalled() -> void:
+	_open_race()
+	sm.begin_faceoff_prep()
+	assert_eq(sm.icing.last_call, InfractionRules.IcingCall.NONE)
+
 func test_icing_not_triggered_during_dead_puck_phase() -> void:
 	sm.rule_set = GameRules.RuleSet.NHL
 	sm.on_goal_scored(1)  # → GOAL_CELEBRATION (still not PLAYING — icing path returns early)

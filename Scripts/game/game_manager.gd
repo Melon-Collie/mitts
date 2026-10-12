@@ -115,6 +115,10 @@ signal puck_out_of_play()
 signal icing_called()
 signal goalie_freeze_called()
 signal offside_called()
+# Emitted on every peer when an NHL icing race opens (icing_team_id) or ends
+# (-1, waved_off saying how). Hosts emit from _announce_icing_race; clients
+# from the RPC handler.
+signal icing_race_changed(icing_team_id: int, waved_off: bool)
 
 # ── Domain state ──────────────────────────────────────────────────────────────
 var _state_machine: GameStateMachine = null
@@ -136,6 +140,9 @@ var _tag_up_peers: Dictionary[int, bool] = {}
 var _positions_scratch: Dictionary = {}
 # Its velocity twin, for the icing race.
 var _velocities_scratch: Dictionary = {}
+# The icing race last announced to every peer (host only) — see _announce_icing_race.
+var _announced_icing_team: int = -1
+var _announced_icing_races: int = 0
 # The ghost-state result half of the same pair — _apply_ghost_state consumes the
 # map in the same call it is filled and never retains it.
 var _ghosts_scratch: Dictionary = {}
@@ -491,6 +498,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.goal_received.connect(_on_goal_received)
 	NetworkManager.puck_out_of_play_received.connect(_on_puck_out_of_play_received)
 	NetworkManager.icing_called_received.connect(_on_icing_called_received)
+	NetworkManager.icing_race_received.connect(icing_race_changed.emit)
 	NetworkManager.goalie_freeze_called_received.connect(_on_goalie_freeze_called_received)
 	NetworkManager.offside_called_received.connect(_on_offside_called_received)
 	NetworkManager.faceoff_positions_received.connect(_on_faceoff_positions_received)
@@ -901,6 +909,22 @@ func _update_host_puck_tracking() -> void:
 	var icing_team: int = _state_machine.icing.pending_team_id
 	for gc: GoalieController in goalie_controllers:
 		gc.set_icing_hold(icing_team != -1 and gc.team_id != icing_team)
+	_announce_icing_race()
+
+
+# Host: tell every peer when an icing race opens or ends. The race counter
+# catches one that opened and ended inside a single tick.
+func _announce_icing_race() -> void:
+	var icing: IcingRace = _state_machine.icing
+	if icing.pending_team_id == _announced_icing_team \
+			and icing.races_opened == _announced_icing_races:
+		return
+	_announced_icing_team = icing.pending_team_id
+	_announced_icing_races = icing.races_opened
+	var waved_off: bool = icing.pending_team_id == -1 \
+			and icing.last_call == InfractionRules.IcingCall.WAVED_OFF
+	icing_race_changed.emit(icing.pending_team_id, waved_off)
+	NetworkManager.send_icing_race_to_all(icing.pending_team_id, waved_off)
 
 
 # Host-only swept goal detection. Feeds each goal the puck-center segment from
