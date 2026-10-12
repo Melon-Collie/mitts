@@ -595,6 +595,10 @@ var blade_up: bool = false
 # controller and replicated. Its raised phases lift the blade like blade_up, but
 # the stick plays no puck while busy — the hook is the only thing it can do.
 var stick_check_phase: int = 0
+# An opponent's stick is tied up with this one (StickTieTracker, host-only
+# writer; replicated). A tied blade catches nothing — every puck it touches
+# bobbles off — and pokes and lifts nothing.
+var stick_tied: bool = false
 # Deliberate-deflect intent: true while a human player holds the shoot button
 # (LMB) WITHOUT carrying the puck — a committed "redirect this, don't catch it."
 # Set each tick by the controller (see SkaterController._wants_deflect); read

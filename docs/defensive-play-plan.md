@@ -1,6 +1,6 @@
 # Defensive play — stick check, stick tie, board pin
 
-Status: **Phase 1 implemented** (v66), playtest pending. Phases 2–4 proposed. Each
+Status: **Phases 1 and 2 implemented** (v66, v67), playtest pending. Phases 3–4 proposed. Each
 phase is meant to ship as its own PR, with its own protocol bump and playtest.
 
 ## Decisions banked
@@ -92,8 +92,9 @@ reproduces it. `StickCheckRules.step` is the whole table.
 | `RECOVER` | still held at `HOOK_MAX_S` | `RECOVER_S` 0.22 | up, then down | no |
 | `REARM` | end of DROP | `REARM_S` 0.25 | normal | yes; a new press is ignored |
 
-(Phase 2 adds `TIE`: still held at the end of the hook with a non-carrier's shaft in
-reach.)
+Phase 2 adds `TIE`: still held at the end of the hook (`HOOK_MAX_S`), the stick stays
+out; letting go DROPs, and `TIE_MAX_S` 1.5 s ends in RECOVER. Like every other phase it
+reads only the button — which stick it ties is the host's (below).
 
 - **A whiff costs something.** The stick is out of play from the press to the drop,
   and the next lift waits for the rearm. Holding the stick up too long costs the
@@ -149,7 +150,12 @@ PRESSURE chooses between the poke jab and a lift by what the bot can actually se
 ## Phase 2 — stick tie
 
 ### Rules
-- **Engage.** At the end of HOOK, with the button held, the lifter's blade is within
+- **As built:** the defender's TIE phase is input-driven (held past the hook) and
+  carries no target; the host's `StickTieTracker` latches a victim at any tick of
+  the TIE phase, not only its first, so a stick held out can find a shaft. The tied
+  flag rides the skater flags byte's spare bit 7 rather than a `tied_by` index —
+  nothing on a client needs to know who tied whom.
+- **Engage.** In the TIE phase, the defender's blade is within
   `TIE_ENGAGE_RADIUS` (= `STICK_LIFT_RADIUS`) of a non-carrying opponent's hand→blade
   shaft, over or under it.
 - **Effect on the victim (tied).** Every reception path becomes a deflect through

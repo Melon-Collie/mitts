@@ -304,3 +304,8 @@ here whenever you bump, in the same format.
 #      stick_check_pressed spend the last of the u16. Skater block 55 -> 56
 #      bytes: one u8 packing the lift phase (bits 0-2) and the whole ticks spent
 #      in it (bits 3-7). Replay FORMAT_VERSION 12.
+# v67: the stick tie (docs/defensive-play-plan.md, Phase 2). The lift phase
+#      gains TIE (value 6, its elapsed packed in 8-tick units); the skater flags
+#      byte's spare bit 7 carries stick_tied, so the byte is full and the block
+#      stays 56 bytes. New RPC receive_stick_tie_claim. The replay format is
+#      unchanged: bit 7 was always written 0.

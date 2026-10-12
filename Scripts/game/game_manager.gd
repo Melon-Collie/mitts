@@ -252,6 +252,7 @@ var _registry: PlayerRegistry = null
 var _codec: WorldStateCodec = null
 var _shot_tracker: ShotOnGoalTracker = null
 var _hit_tracker: HitTracker = null
+var _stick_ties: StickTieTracker = null
 var _turnover_tracker: TurnoverTracker = null
 var _possession_tracker: PossessionTracker = null
 var _advanced_stats_tracker: AdvancedStatsTracker = null
@@ -262,6 +263,7 @@ var _client_shot_events: Array[ShotEvent] = []
 var _pickup_claim: PickupClaimResolver = null
 var _poke_claim: PokeClaimResolver = null
 var _stick_lift_claim: StickLiftClaimResolver = null
+var _stick_tie_claim: StickTieClaimResolver = null
 var _hit_claim: HitClaimResolver = null
 var _phase_coord: PhaseCoordinator = null
 var _swap_coord: SlotSwapCoordinator = null
@@ -504,6 +506,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.pickup_claim_rejected_received.connect(_on_pickup_claim_rejected)
 	NetworkManager.poke_claim_received.connect(_on_poke_claim_received)
 	NetworkManager.stick_lift_claim_received.connect(_on_stick_lift_claim_received)
+	NetworkManager.stick_tie_claim_received.connect(_on_stick_tie_claim_received)
 	NetworkManager.ghost_state_received.connect(_on_ghost_state_received)
 	NetworkManager.hit_claim_received.connect(_on_hit_claim_received)
 	NetworkManager.input_batch_received.connect(_on_input_batch_received)
@@ -561,6 +564,8 @@ func _physics_process(delta: float) -> void:
 	# blade-from-mouse call. Runs on host AND clients before the host gate
 	# below since IK clamping happens everywhere.
 	_refresh_goalie_data_cache()
+	if _stick_tie_claim != null:
+		_stick_tie_claim.maybe_send_claim()
 	if not NetworkManager.is_host or puck == null or _state_machine == null:
 		return
 	# Goal replay temporarily owns actor positions on the host. Skip the live
@@ -640,6 +645,7 @@ func _physics_process(delta: float) -> void:
 	_apply_ghost_state(delta)
 	_shot_tracker.tick(delta)
 	_hit_tracker.tick(delta)
+	_stick_ties.tick(not _state_machine.is_movement_locked())
 	_possession_tracker.tick(delta)
 	# Release before _pickup_claim.tick so a claim coming due this frame can still
 	# arm the contest window on the frame it lands.
@@ -1518,6 +1524,11 @@ func _wire_subsystems() -> void:
 
 	_hit_tracker = HitTracker.new()
 	_hit_tracker.setup(_registry)
+	if _stick_ties != null:
+		_stick_ties.clear()
+	_stick_ties = StickTieTracker.new()
+	_stick_ties.setup(_registry, func() -> Skater: return puck.carrier if puck != null else null,
+			NetworkManager.local_time)
 	_hit_tracker.impact_landed.connect(_on_impact_landed)
 	_hit_tracker.hit_credited.connect(_on_hit_credited)
 
@@ -1573,6 +1584,10 @@ func _wire_subsystems() -> void:
 
 	_stick_lift_claim = StickLiftClaimResolver.new()
 	_stick_lift_claim.setup(_registry, _state_buffer_manager, get_puck, _get_puck_controller)
+
+	_stick_tie_claim = StickTieClaimResolver.new()
+	_stick_tie_claim.setup(_registry, _state_buffer_manager,
+			func() -> StickTieTracker: return _stick_ties, _get_puck_controller)
 
 	_hit_claim = HitClaimResolver.new()
 	_hit_claim.setup(_registry, _state_buffer_manager, _hit_tracker, _get_puck_controller)
@@ -3018,6 +3033,17 @@ func _on_stick_lift_claim_received(peer_id: int, host_timestamp: float, interp_d
 			_state_buffer_manager.newest_host_timestamp(),
 			_stick_lift_claim.receive_claim,
 			[peer_id, host_timestamp, interp_delay_ms, input_lead_ms, expected_carrier_peer_id, blade_curr])
+
+
+func _on_stick_tie_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float,
+		input_lead_ms: float, target_peer_id: int, blade_curr: Vector3) -> void:
+	if not NetworkManager.is_host:
+		return
+	_deferred_claims.submit(
+			LagCompRewind.self_view_time(host_timestamp, input_lead_ms),
+			_state_buffer_manager.newest_host_timestamp(),
+			_stick_tie_claim.receive_claim,
+			[peer_id, host_timestamp, interp_delay_ms, input_lead_ms, target_peer_id, blade_curr])
 
 
 func _on_server_puck_released_by_carrier(peer_id: int) -> void:
@@ -4488,7 +4514,11 @@ func on_scene_exit() -> void:
 	_pickup_claim = null
 	_poke_claim = null
 	_stick_lift_claim = null
+	_stick_tie_claim = null
 	_hit_claim = null
+	if _stick_ties != null:
+		_stick_ties.clear()
+	_stick_ties = null
 	_phase_coord = null
 	_swap_coord = null
 	if _debug_overlay:

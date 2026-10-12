@@ -551,7 +551,7 @@ func _find_contesting_corraller(first: Skater, skaters: Array, puck_curr: Vector
 		# blade_up / deflect_intent already withdraw the stick; a committed body-check
 		# and a stick lift in progress do the same (stick off the ice — no corral).
 		if skater.blade_up or skater.deflect_intent or skater.hit_committed \
-				or StickCheckRules.is_stick_busy(skater.stick_check_phase):
+				or skater.stick_tied or StickCheckRules.is_stick_busy(skater.stick_check_phase):
 			continue
 		if not PuckReceptionRules.blade_can_interact(skater.blade_up, puck_airborne):
 			continue
@@ -626,7 +626,8 @@ func _check_interactions() -> void:
 								STICK_LIFT_RADIUS))
 						break
 					continue
-				if skater.blade_up or StickCheckRules.is_stick_busy(skater.stick_check_phase):
+				if skater.blade_up or skater.stick_tied \
+						or StickCheckRules.is_stick_busy(skater.stick_check_phase):
 					continue
 				var blade_prev: Vector3 = skater.get_prev_blade_contact_global()
 				if PuckInteractionRules.check_poke(_prev_puck_pos, puck_curr,
@@ -674,6 +675,10 @@ func _check_interactions() -> void:
 				if not PuckInteractionRules.check_pickup(_prev_puck_pos, puck_curr,
 						blade_prev, blade_curr, PICKUP_RADIUS):
 					continue
+				# A tied blade receives nothing: whatever reaches it bobbles off.
+				if skater.stick_tied:
+					puck.apply_tied_bobble(skater)
+					break
 				# A committed deflect (Q held, any reachable level) or a forced-up
 				# blade (opponent stick-lift meeting an airborne puck) tips the puck
 				# off the blade face — the SAME path a too-fast puck takes naturally,
@@ -913,7 +918,8 @@ func try_provisional_pickup(local_skater: Skater) -> void:
 		return
 	# Committed to a body check — stick's off the ice (mirrors the host's
 	# hit_committed pickup gate), so don't pin a puck the host won't grant.
-	if local_skater.hit_committed or StickCheckRules.is_stick_busy(local_skater.stick_check_phase):
+	if local_skater.hit_committed or local_skater.stick_tied \
+			or StickCheckRules.is_stick_busy(local_skater.stick_check_phase):
 		return
 	if _is_pickup_contested(local_skater):
 		return

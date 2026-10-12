@@ -533,6 +533,7 @@ func _interpolate(delta: float) -> void:
 		interpolated.blade_up = newest.blade_up
 		interpolated.stick_check_phase = newest.stick_check_phase
 		interpolated.stick_check_elapsed = newest.stick_check_elapsed
+		interpolated.stick_tied = newest.stick_tied
 		interpolated.shot_state = newest.shot_state
 		interpolated.shot_charge = newest.shot_charge
 		interpolated.stagger_timer = newest.stagger_timer
@@ -573,6 +574,7 @@ func _interpolate(delta: float) -> void:
 		interpolated.blade_up = to_state.blade_up
 		interpolated.stick_check_phase = to_state.stick_check_phase
 		interpolated.stick_check_elapsed = to_state.stick_check_elapsed
+		interpolated.stick_tied = to_state.stick_tied
 		interpolated.shot_state = to_state.shot_state
 		# Charge is a scalar — lerp it so the remote's stick-flex load bow
 		# grows smoothly through the drag instead of stepping per broadcast.
@@ -742,6 +744,7 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	# any reader (AI off-puck, VFX) on spectated remotes.
 	skater.blade_up = state.blade_up
 	skater.stick_check_phase = state.stick_check_phase
+	skater.stick_tied = state.stick_tied
 	skater.current_shot_state = state.shot_state
 	# Wrister address, gated on the aim state — the wire bit is garbage
 	# otherwise. The skater's address pass adopts it so a spectated shooter's

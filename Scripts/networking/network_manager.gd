@@ -111,6 +111,7 @@ signal goalie_hit_received(position: Vector3)
 signal deflection_received(position: Vector3)
 signal body_block_received(position: Vector3)
 signal puck_strip_received(position: Vector3)
+signal stick_tie_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float, input_lead_ms: float, target_peer_id: int, blade_curr: Vector3)
 signal stick_lift_received(position: Vector3)
 # Distinct from stick_lift_received on purpose: a nudge (self-tap) is its own
 # gameplay event, so it carries its own cue and can be re-sounded independently
@@ -1677,6 +1678,26 @@ func receive_stick_lift_claim(host_timestamp: float, interp_delay_ms: float, inp
 		NetworkTelemetry.record_claim_stamp_reject()
 		return
 	stick_lift_claim_received.emit(peer_id, host_timestamp, interp_delay_ms, input_lead_ms, expected_carrier_peer_id, blade_curr)
+
+func send_stick_tie_claim(host_timestamp: float, interp_delay_ms: float, target_peer_id: int,
+		blade_curr: Vector3) -> void:
+	NetworkSimManager.send(
+		func(ts: float, idms: float, ilms: float, tpid: int, bc: Vector3) -> void:
+			receive_stick_tie_claim.rpc_id(1, ts, idms, ilms, tpid, bc),
+		[host_timestamp, interp_delay_ms, get_input_lead_ms(), target_peer_id, blade_curr], true)
+
+@rpc("any_peer", "reliable")
+func receive_stick_tie_claim(host_timestamp: float, interp_delay_ms: float, input_lead_ms: float,
+		target_peer_id: int, blade_curr: Vector3) -> void:
+	if not is_host:
+		return
+	var peer_id: int = multiplayer.get_remote_sender_id()
+	if not _rate_ok(peer_id, _CLAIM_RATE_CAP_PER_S, _claim_rate_window_start, _claim_rate_count):
+		return
+	if not LagCompRewind.is_claim_stamp_plausible(local_time(), host_timestamp, float(get_peer_ping_ms(peer_id))):
+		NetworkTelemetry.record_claim_stamp_reject()
+		return
+	stick_tie_claim_received.emit(peer_id, host_timestamp, interp_delay_ms, input_lead_ms, target_peer_id, blade_curr)
 
 func send_hit_claim(victim_peer_id: int, host_timestamp: float, interp_delay_ms: float) -> void:
 	NetworkSimManager.send(

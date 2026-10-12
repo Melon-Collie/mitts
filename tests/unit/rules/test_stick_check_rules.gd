@@ -51,11 +51,18 @@ func test_a_tap_still_gets_the_minimum_hook() -> void:
 	assert_eq(int(s.x), Phase.HOOK, "the hook is held open to HOOK_MIN_S")
 
 
-func test_holding_past_the_cap_ends_in_recover() -> void:
+func test_holding_past_the_hook_becomes_a_tie() -> void:
 	var s: Vector2 = _run(Phase.IDLE, 0.0, 1, true, true)
 	s = _run(int(s.x), s.y, _ticks(StickCheckRules.RISE_S), true)
 	s = _run(int(s.x), s.y, _ticks(StickCheckRules.HOOK_MAX_S), true)
-	assert_eq(int(s.x), Phase.RECOVER, "a stick held up too long is out of the play")
+	assert_eq(int(s.x), Phase.TIE, "held past the hook, the stick stays out as a tie")
+	s = _run(int(s.x), s.y, 1, false)
+	assert_eq(int(s.x), Phase.DROP, "letting go of a tie drops the blade")
+
+
+func test_a_tie_held_to_its_cap_ends_in_recover() -> void:
+	var s: Vector2 = _run(Phase.TIE, 0.0, _ticks(StickCheckRules.TIE_MAX_S), true)
+	assert_eq(int(s.x), Phase.RECOVER, "a stick held out too long is out of the play")
 	s = _run(int(s.x), s.y, _ticks(StickCheckRules.RECOVER_S), true)
 	assert_eq(int(s.x), Phase.IDLE)
 
@@ -73,7 +80,7 @@ func test_an_interruption_ends_any_phase() -> void:
 		assert_eq(int(s.x), Phase.IDLE, "phase %d" % phase)
 
 
-func test_only_rise_hook_and_recover_take_the_stick_off_the_puck() -> void:
+func test_only_the_lifting_phases_take_the_stick_off_the_puck() -> void:
 	var busy: Array[int] = []
 	var raised: Array[int] = []
 	for phase: int in Phase.values():
@@ -81,21 +88,25 @@ func test_only_rise_hook_and_recover_take_the_stick_off_the_puck() -> void:
 			busy.append(phase)
 		if StickCheckRules.is_blade_raised(phase):
 			raised.append(phase)
-	assert_eq(busy, [Phase.RISE, Phase.HOOK, Phase.RECOVER] as Array[int],
+	assert_eq(busy, [Phase.RISE, Phase.HOOK, Phase.RECOVER, Phase.TIE] as Array[int],
 			"the drop plays the puck: it is the take")
-	assert_eq(raised, [Phase.RISE, Phase.HOOK] as Array[int])
+	assert_eq(raised, [Phase.RISE, Phase.HOOK, Phase.TIE] as Array[int])
 
 
 func test_every_phase_fits_the_wire() -> void:
 	# The u8 packs whole ticks in five bits; a phase that ran longer would
-	# reconcile to the wrong point in it.
+	# reconcile to the wrong point in it. (The tie has its own coarser unit.)
 	for seconds: float in [StickCheckRules.RISE_S, StickCheckRules.HOOK_MAX_S,
 			StickCheckRules.DROP_S, StickCheckRules.RECOVER_S, StickCheckRules.REARM_S]:
 		assert_lte(roundi(seconds * 120.0), 31, "%.2f s" % seconds)
 	for phase: int in Phase.values():
 		var b: int = StickCheckRules.pack(phase, 0.1)
 		assert_eq(StickCheckRules.unpack_phase(b), phase)
-		assert_almost_eq(StickCheckRules.unpack_elapsed(b), 0.1, 0.5 / 120.0)
+		var tol: float = 4.0 / 120.0 if phase == Phase.TIE else 0.5 / 120.0
+		assert_almost_eq(StickCheckRules.unpack_elapsed(b), 0.1, tol)
+	# The tie counts in coarser units, out past its whole length.
+	var tie: int = StickCheckRules.pack(Phase.TIE, StickCheckRules.TIE_MAX_S)
+	assert_almost_eq(StickCheckRules.unpack_elapsed(tie), StickCheckRules.TIE_MAX_S, 4.0 / 120.0)
 
 
 func test_hook_quality_grades_by_distance_to_the_shaft() -> void:

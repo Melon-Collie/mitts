@@ -26,6 +26,8 @@ var blade_up: bool = false
 # and the local reconcile adopts it before replay.
 var stick_check_phase: int = 0
 var stick_check_elapsed: float = 0.0
+# Skater.stick_tied: host-authoritative, applied every broadcast like is_ghost.
+var stick_tied: bool = false
 # Body-check stagger: seconds of thrust/grip-penalty recovery remaining on the
 # victim. Replicated so the local player's reconcile can snap it to the host
 # baseline before replay — same treatment as velocity — and it decays
@@ -120,6 +122,7 @@ func to_array() -> Array:
 		recoil_dir,
 		stick_check_phase,
 		stick_check_elapsed,
+		stick_tied,
 	]
 
 func copy_from(s: SkaterNetworkState) -> void:
@@ -151,6 +154,7 @@ func copy_from(s: SkaterNetworkState) -> void:
 	recoil_dir = s.recoil_dir
 	stick_check_phase = s.stick_check_phase
 	stick_check_elapsed = s.stick_check_elapsed
+	stick_tied = s.stick_tied
 	host_timestamp = s.host_timestamp
 	blade_contact_world = s.blade_contact_world
 	top_hand_world = s.top_hand_world
@@ -197,4 +201,6 @@ static func from_array(data: Array) -> SkaterNetworkState:
 	if data.size() > 27:
 		state.stick_check_phase = data[26]
 		state.stick_check_elapsed = data[27]
+	if data.size() > 28:
+		state.stick_tied = data[28]
 	return state

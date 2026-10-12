@@ -1571,10 +1571,10 @@ func _wants_deflect(input: InputState) -> bool:
 
 # A lift starts only from plain puckless skating: a puck on the blade, a shot, a
 # block or a check owns the stick. Any of those arriving mid-lift ends it, as
-# does an opponent's lift on this stick.
+# does an opponent's lift or tie on this stick.
 func _advance_stick_check(input: InputState, delta: float) -> void:
 	var stick_taken: bool = has_puck or skater.hit_committed or skater.is_knocked_down \
-			or skater.is_forced_lift_active() \
+			or skater.is_forced_lift_active() or skater.stick_tied \
 			or _sm.get_state() != State.SKATING_WITHOUT_PUCK
 	_stick_check.advance(input.stick_check_pressed, input.stick_check_held,
 			not stick_taken, stick_taken, delta)
@@ -1927,6 +1927,7 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.blade_up = skater.blade_up
 	state.stick_check_phase = _stick_check.phase
 	state.stick_check_elapsed = _stick_check.elapsed
+	state.stick_tied = skater.stick_tied
 	# Host-only shaft segment for stick-lift claim resolution (paired with
 	# blade_contact_world). World-space grip point — the wire top_hand_position
 	# is upper-body-local and can't be used for host-side world geometry.
@@ -1999,6 +2000,7 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	skater.velocity = state.velocity
 	skater.blade_up = state.blade_up
 	skater.stick_check_phase = state.stick_check_phase
+	skater.stick_tied = state.stick_tied
 	# Intent feeds the gait's input-driven reads below (glide / dig-in /
 	# crossovers / brake stop) — stamp it like the live controllers do, so
 	# playback strides match live play instead of reading zero (file viewer)
@@ -2986,7 +2988,8 @@ func _try_one_timer_release(input: InputState) -> Dictionary:
 	var zone_world: Vector3 = skater.get_slapper_zone_global_position()
 	var zone_xz := Vector2(zone_world.x, zone_world.z)
 	var puck_xz := Vector2(view.position.x, view.position.z)
-	if not ShotReleaseRules.one_timer_connects(
+	# A tied stick swings through nothing: the tie holds the blade off the line.
+	if skater.stick_tied or not ShotReleaseRules.one_timer_connects(
 			zone_xz, slapper_zone_radius, puck_xz,
 			Vector2(view.velocity.x, view.velocity.z),
 			view.position.y > puck.ice_height + GameRules.PUCK_AIRBORNE_HEIGHT_M,

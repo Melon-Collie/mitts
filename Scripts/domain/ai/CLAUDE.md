@@ -228,6 +228,14 @@ path) and the shaft's liftable point is still in reach. Both are geometry the bo
 can see, and the lift is a `lifts_sticks` cognition gate, closed on Easy so a
 shielded puck genuinely protects it against a beginner tier.
 
+**A covering role's extra is the stick tie** (`AIStickTieRead`), and its price is
+its own stick. The man is tied only while the puck is coming to him — a loose
+puck whose path reaches his blade, or his carrier with a pass lane no defender's
+stick reaches — and only when the coverer's free stick could not have stopped it
+(the feed's path stays out of his reach; the lane read counts him too), with the
+man's shaft in reach. A tied attacker pulls his stick straight away from the one
+holding it. Both halves are the `ties_sticks` cognition gate, closed on Easy.
+
 Still unfactored: **hold a post** — the per-role fallbacks and their anchor
 constants. The open question is whether it should be a verb at all: if the
 assigner always names a man, the carrier, or the puck, there is no fourth state

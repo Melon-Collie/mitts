@@ -503,7 +503,24 @@ func test_skater_stick_check_round_trips_every_phase() -> void:
 		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
 				WorldStateCodec._encode_skater_quantized(s))
 		assert_eq(dec.stick_check_phase, phase, "phase %d" % phase)
-		assert_almost_eq(dec.stick_check_elapsed, 0.1, 0.5 / 120.0, "elapsed, phase %d" % phase)
+		var tol: float = 4.0 / 120.0 if phase == StickCheckRules.Phase.TIE else 0.5 / 120.0
+		assert_almost_eq(dec.stick_check_elapsed, 0.1, tol, "elapsed, phase %d" % phase)
+
+
+func test_skater_stick_tied_round_trips_beside_every_flag() -> void:
+	for tied: bool in [false, true]:
+		var s := SkaterNetworkState.new()
+		s.stick_tied = tied
+		s.is_ghost = true
+		s.blade_up = true
+		s.shot_state = 7
+		s.elevation_level = 3
+		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+				WorldStateCodec._encode_skater_quantized(s))
+		assert_eq(dec.stick_tied, tied)
+		assert_true(dec.is_ghost and dec.blade_up, "the neighbouring bits survive")
+		assert_eq(dec.shot_state, 7)
+		assert_eq(dec.elevation_level, 3)
 
 
 func test_skater_stagger_round_trips() -> void:

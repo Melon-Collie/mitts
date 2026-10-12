@@ -294,7 +294,7 @@ func _physics_process(delta: float) -> void:
 			# host confirm re-pinned it to the ice zone — the host catches the feed and
 			# it arrives through the puck sync.
 			if in_range and not skater.deflect_intent and _sm.get_state() != State.SLAPPER_CHARGE_WITHOUT_PUCK \
-					and not StickCheckRules.is_stick_busy(skater.stick_check_phase) and _pickup_claim_floor <= 0.0 and (rising_edge or _claim_cooldown <= 0.0):
+					and not skater.stick_tied and not StickCheckRules.is_stick_busy(skater.stick_check_phase) and _pickup_claim_floor <= 0.0 and (rising_edge or _claim_cooldown <= 0.0):
 				_pickup_claim_floor = _PICKUP_CLAIM_FLOOR_S
 				_claim_cooldown = _CLAIM_COOLDOWN_S
 				# Report the ADAPTED interp delay (get_interpolation_delay) — the value
@@ -345,7 +345,8 @@ func _physics_process(delta: float) -> void:
 					in_poke_range = PuckInteractionRules.check_blade_under_stick(
 							blade_pos_for_claim, c_hand, c_blade,
 							PuckController.STICK_LIFT_RADIUS, PuckController.STICK_LIFT_UNDER_MARGIN)
-				elif not skater.blade_up and not StickCheckRules.is_stick_busy(skater.stick_check_phase):
+				elif not skater.blade_up and not skater.stick_tied \
+						and not StickCheckRules.is_stick_busy(skater.stick_check_phase):
 					in_poke_range = puck.global_position.distance_to(blade_pos_for_claim) <= PuckController.POKE_RADIUS \
 							and not PuckInteractionRules.net_between(blade_pos_for_claim, puck.global_position)
 			var rising_poke_edge: bool = in_poke_range and not _was_in_poke_range
@@ -405,6 +406,9 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 		var puck_z: float = puck.global_position.z if puck != null else 0.0
 		if not InfractionRules.is_offside(skater.global_position.z, _team_id, puck_z, has_puck):
 			skater.set_ghost(false)
+	# A tie is the host's call alone (StickTieTracker), so it lands every
+	# broadcast rather than only on a reconcile.
+	skater.stick_tied = server_state.stick_tied
 	if _game_state.is_movement_locked():
 		# Dead-puck phase: don't reconcile. on_faceoff_positions is the reliable
 		# source of truth for teleport positions; world-state snapshots may lag behind

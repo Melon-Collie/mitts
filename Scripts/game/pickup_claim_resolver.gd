@@ -279,8 +279,9 @@ func receive_claim(peer_id: int, host_timestamp: float, _interp_delay_ms: float,
 	if skater_snap.hit_committed:
 		NetworkManager.send_pickup_claim_nack(peer_id)
 		return
-	# Mid stick lift the blade is hooking, not playing the puck.
-	if StickCheckRules.is_stick_busy(skater_snap.stick_check_phase):
+	# Mid stick lift the blade is hooking, not playing the puck; a tied one
+	# bobbles everything it touches, which the present-time loop applies.
+	if skater_snap.stick_tied or StickCheckRules.is_stick_busy(skater_snap.stick_check_phase):
 		NetworkManager.send_pickup_claim_nack(peer_id)
 		return
 	# Client-authoritative blade ("aim") — the claim carries the geometry the

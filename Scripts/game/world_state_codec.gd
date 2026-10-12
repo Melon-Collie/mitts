@@ -26,7 +26,7 @@ extends RefCounted
 #                      facing u16 (0–TAU→0–65535), upper_body_rot s16 (−π–π→−32767–32767),
 #                      facing_angular_velocity s16@PI*10 rad/s, upper_body_angular_velocity s16@PI*10 rad/s,
 #                      last_processed_ts f32,
-#                      flags u8 (shot_state[2:0]+elevation_level[4:3]+ghost[5]+blade_up[6], bit 7 spare),
+#                      flags u8 (shot_state[2:0]+elevation_level[4:3]+ghost[5]+blade_up[6]+stick_tied[7] v67),
 #                      shot_charge u8, stagger_timer u8@0.01s,
 #                      knockdown_timer u8@0.01s,
 #                      intent u8 (move octant[2:0]+moving[3]+brake[4] v15, stance[5] v65, hit_commit[6] v28),
@@ -473,11 +473,13 @@ static func _write_skater_quantized(b: PackedByteArray, o: int, s: SkaterNetwork
 	b.encode_u32(o, roundi(maxf(s.last_processed_host_timestamp, 0.0) * Constants.TIME_WIRE_SCALE)); o += 4
 	# Flags byte: bits 0-2 shot_state (8 SkaterStateMachine.State values — FULL;
 	# a ninth costs a repack),
-	# bits 3-4 elevation_level (0..2), bit 5 ghost, bit 6 blade_up, bit 7 spare.
+	# bits 3-4 elevation_level (0..2), bit 5 ghost, bit 6 blade_up, bit 7
+	# stick_tied (v67) — the byte is now full.
 	var flags: int = (s.shot_state & 0x07) \
 			| ((clampi(s.elevation_level, 0, 3) & 0x3) << 3) \
 			| (0x20 if s.is_ghost else 0) \
-			| (0x40 if s.blade_up else 0)
+			| (0x40 if s.blade_up else 0) \
+			| (0x80 if s.stick_tied else 0)
 	b.encode_u8(o, flags); o += 1
 	b.encode_u8(o, clampi(roundi(s.shot_charge * 255.0), 0, 255)); o += 1
 	# Body-check stagger seconds remaining, u8 @ 0.01 s (0..2.55 s covers
@@ -584,6 +586,7 @@ static func _decode_skater_quantized(b: PackedByteArray, offset: int = 0) -> Ska
 	s.elevation_level = (flags >> 3) & 0x3
 	s.is_ghost = (flags & 0x20) != 0
 	s.blade_up = (flags & 0x40) != 0
+	s.stick_tied = (flags & 0x80) != 0
 	s.shot_charge = b.decode_u8(o) / 255.0; o += 1
 	s.stagger_timer = b.decode_u8(o) / 100.0; o += 1
 	s.knockdown_timer = b.decode_u8(o) / 100.0; o += 1

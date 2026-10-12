@@ -528,6 +528,18 @@ func apply_blade_deflect(skater: Skater) -> void:
 	_set_cooldown(skater, bobble_cooldown if is_bobble else deflect_cooldown)
 	_queue_contact_event(ContactEvent.LOOSE_TOUCH, skater)
 
+# A tied blade's touch: the same deflect off the face, laid flat and cut to
+# StickCheckRules.TIE_BOBBLE_RETAIN of its pace, so the puck dies at the tied
+# player's feet. Deterministic — the face decides where, the tie decides how far.
+func apply_tied_bobble(skater: Skater) -> void:
+	var v: Vector3 = PuckCollisionRules.deflect_velocity(
+			linear_velocity, skater.get_blade_face_normal(linear_velocity),
+			deflect_normal_restitution, deflect_normal_restitution_min,
+			deflect_tangential_retain, deflect_speed_ref)
+	linear_velocity = Vector3(v.x, 0.0, v.z) * StickCheckRules.TIE_BOBBLE_RETAIN
+	_set_cooldown(skater, bobble_cooldown)
+	_queue_contact_event(ContactEvent.LOOSE_TOUCH, skater)
+
 # `contact_normal` is the outward horizontal normal at the swept contact —
 # PuckInteractionRules.body_block_contact_normal, taken on the same segment the
 # block was detected against. The caller owns it because only the caller has the
