@@ -88,8 +88,9 @@ raycasts or shape queries anywhere. The **goalie is not a physics body** at all
 2. **Puck gravity / ballistic arc** — airborne loft shots and saucer passes
    (`vy -= g·dt`, land at ice height). The one genuinely non-trivial integration. No
    spin (angular velocity is locked/zeroed — nothing to reproduce there).
-3. **Puck-vs-static restitution** — bounces off boards (`bounce 0.4`), goal pipes
-   (`0.55`), net panels (`0.05`), goalie pads (`0.2`) / stick (`0.4`). The meatiest
+3. **Puck-vs-static restitution** — bounces off boards and goal pipes (the frozen
+   puck's rigid-wall COR, `PuckRestitution`), net panels (`0.05`), goalie gear (a
+   fraction of that COR per surface, `GoalieSaveRules.MATERIALS`). The meatiest
    piece — but board *escapes* (`PuckCollisionRules.board_rescue_velocity`) and
    controlled saves (`GoalieSaveRules` deaden, applied in `_integrate_forces`) are
    **already analytic**; this is extending existing analytic reflection to be the

@@ -21,8 +21,8 @@ func test_head_on_post_reflects_with_restitution() -> void:
 	var hit: bool = PuckGeometryCollision.resolve_posts(pos, vel, R, res)
 	assert_true(hit, "puck driven into the post contacts it")
 	assert_lt(res.velocity.z, 0.0, "velocity reversed away from the post")
-	assert_almost_eq(res.velocity.z, -10.0 * PuckGeometryCollision.POST_RESTITUTION, 0.01,
-			"normal component rebounds at POST_RESTITUTION (0.55)")
+	assert_almost_eq(res.velocity.z, -10.0 * PuckRestitution.rigid_wall(10.0), 0.01,
+			"normal component rebounds at the rigid-wall COR for a 10 m/s hit")
 
 
 func test_puck_ejected_flush_against_post() -> void:
@@ -86,14 +86,14 @@ func test_glancing_hit_keeps_tangential_pace() -> void:
 # ── Crossbar (Y-Z circle; unreachable at today's loft but authored for future tuning) ──
 
 func test_crossbar_reflects_a_rising_puck_down() -> void:
-	# A puck rising straight into the crossbar underside rebounds downward at POST_RESTITUTION.
+	# A puck rising straight into the crossbar underside rebounds downward off the iron.
 	var pos := Vector3(0.0, GameRules.NET_HEIGHT - 0.09, GameRules.GOAL_LINE_Z)
 	var res := PuckGeometryCollision.Result.new()
 	var hit: bool = PuckGeometryCollision.resolve_crossbar(pos, Vector3(0, 12, 0), R, res)
 	assert_true(hit, "puck driven up into the crossbar contacts it")
 	assert_lt(res.velocity.y, 0.0, "rebounds downward off the bar")
-	assert_almost_eq(res.velocity.y, -12.0 * PuckGeometryCollision.POST_RESTITUTION, 0.01,
-			"vertical rebounds at POST_RESTITUTION")
+	assert_almost_eq(res.velocity.y, -12.0 * PuckRestitution.rigid_wall(12.0), 0.01,
+			"vertical rebounds at the rigid-wall COR for a 12 m/s hit")
 
 
 func test_crossbar_keeps_along_bar_x_channel() -> void:

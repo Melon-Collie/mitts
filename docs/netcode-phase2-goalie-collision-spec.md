@@ -33,7 +33,7 @@ The collision parts (~9 OBBs):
 
 Each is a `CollisionShape3D` with a `BoxShape3D`: world transform = the shape's
 `global_transform` (driven by the pose), half-extents = `BoxShape3D.size × 0.5`, plus
-the per-surface restitution material (`goalie_pad` 0.2, `goalie_stick` 0.4).
+the per-surface material row in `GoalieSaveRules.MATERIALS`.
 
 **The response is already analytic.** `GoalieSaveRules` (deaden / steer / rebound) and
 the save-deaden path already decide what happens *after* a goalie contact — the current

@@ -23,7 +23,7 @@ func _stepped_landing(origin: Vector3, vel: Vector3, seconds: float) -> Vector3:
 	# validation below certifies agreement with a puck nobody simulates.
 	return AITrajectory.predict_final(
 			origin, vel, int(seconds / STEP_DT), STEP_DT,
-			GameRules.PUCK_ICE_DECEL_M_S2, GameRules.PUCK_BOARD_BOUNCE,
+			GameRules.PUCK_ICE_DECEL_M_S2, GameRules.PUCK_BOARD_COR_SCALE,
 			Vector3.ZERO, 0.0, GameRules.PUCK_BOARD_FRICTION,
 			GameRules.PUCK_COLLISION_RADIUS)
 

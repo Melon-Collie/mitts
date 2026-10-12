@@ -92,7 +92,7 @@ pass-lead, chase intercepts, pass-in-flight reception, and rebound prediction. I
 physics:
 - **Coulomb ice friction** — `decel = GameRules.PUCK_ICE_DECEL_M_S2`, velocity
   decelerated opposite its direction, clamped at 0 (`trajectory.gd:113-126`).
-- **Board reflection at the rounded-corner contact** — `bounce = GameRules.PUCK_BOARD_BOUNCE`
+- **Board reflection at the rounded-corner contact** — `bounce = GameRules.PUCK_BOARD_COR_SCALE`
   (0.4), reflecting the outward velocity component
   about the inward normal from `clamp_to_rink_inner` (`trajectory.gd:100-111`).
 
@@ -205,7 +205,7 @@ real data lands):
   `AITrajectory` already nails constant-decel).
 - **Post-bounce max divergence < ~0.25 m** and **bounce-angle error < ~5°**, settling
   back toward free-flight drift within the post-bounce window → matchable by tuning
-  `PUCK_BOARD_BOUNCE` / the reflection; **GO**.
+  `PUCK_BOARD_COR_SCALE` / the reflection; **GO**.
 - **Post-bounce divergence in the metre range or bounce-angle error > ~15°**, not
   closing with restitution tuning → Jolt is resolving the carom with something the
   analytic reflect can't reproduce (contact manifold, sub-tick timing) → **NO-GO** for
@@ -238,5 +238,5 @@ go/no-go call. The whole "is the AAA puck worth it" question resolves in that re
 
 A short divergence report from a real shooting session: free-flight drift, post-bounce
 max divergence, bounce-angle error distribution, and the GO/NO-GO call against the
-thresholds above — plus, if GO, which parameter (`PUCK_BOARD_BOUNCE`, friction) needs
+thresholds above — plus, if GO, which parameter (`PUCK_BOARD_COR_SCALE`, friction) needs
 what nudge to tighten the match for Phase 1.
