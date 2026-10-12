@@ -117,16 +117,18 @@ func test_defending_boards_winger_joins_the_stack_in_5v5() -> void:
 
 func test_attacking_wingers_hold_the_hash_marks_in_5v5() -> void:
 	# The stack is a DEFENDING shape: at the same dot the attacking team's
-	# wingers keep the table's hash-mark spots at any team size.
-	var p: Vector3 = PlayerRules.faceoff_position(1, 2, _END_DOT_T0, -1.0, 5)
+	# wingers keep the table's hash-mark spots at any team size. Team 1's LW
+	# (slot 1) plays +x.
+	var p: Vector3 = PlayerRules.faceoff_position(1, 1, _END_DOT_T0, -1.0, 5)
 	assert_almost_eq(p, Vector3(_END_DOT_T0.x + 4.7,
 			GameRules.FACEOFF_SPAWN_HEIGHT, _END_DOT_T0.y - 0.9),
 			Vector3.ONE * 0.001)
 
 func test_attacking_points_hold_the_blue_line() -> void:
 	# Team 1 attacks +Z: at team 0's D-zone dot its D pair plays the points.
-	var strong: Vector3 = PlayerRules.faceoff_position(1, 4, _END_DOT_T0)
-	var weak: Vector3 = PlayerRules.faceoff_position(1, 3, _END_DOT_T0)
+	# Facing +Z, team 1's LD (slot 3) is the +x D, so he is strong on the +x dot.
+	var strong: Vector3 = PlayerRules.faceoff_position(1, 3, _END_DOT_T0)
+	var weak: Vector3 = PlayerRules.faceoff_position(1, 4, _END_DOT_T0)
 	var line_z: float = GameRules.BLUE_LINE_Z + GameRules.FACEOFF_END_POINT_INSIDE_M
 	assert_almost_eq(strong.z, line_z, 0.001, "strong point just inside the blue line")
 	assert_almost_eq(weak.z, line_z, 0.001, "weak point on the same line")
@@ -135,14 +137,14 @@ func test_attacking_points_hold_the_blue_line() -> void:
 			"weak point covers the middle of the line")
 
 func test_end_zone_alignment_mirrors_for_team_1() -> void:
-	# Team 1 defending at its own -x/-z dot: the LD (identity -x) is strong
-	# (wall); the RD takes the stack's inside shoulder; the LW (identity -x,
-	# the boards winger there) takes the outside shoulder in 5v5.
+	# Team 1 defending at its own -x/-z dot. Facing +Z its right side is -x, so
+	# the RD is strong (wall); the LD takes the stack's inside shoulder; the RW
+	# (the boards winger there) takes the outside shoulder in 5v5.
 	var dot := Vector2(-GameRules.END_ZONE_FACEOFF_DOT_X,
 			-GameRules.ICING_FACEOFF_DOT_Z)
-	var wall: Vector3 = PlayerRules.faceoff_position(1, 3, dot)
-	var stack_d: Vector3 = PlayerRules.faceoff_position(1, 4, dot)
-	var stack_w: Vector3 = PlayerRules.faceoff_position(1, 1, dot, -1.0, 5)
+	var wall: Vector3 = PlayerRules.faceoff_position(1, 4, dot)
+	var stack_d: Vector3 = PlayerRules.faceoff_position(1, 3, dot)
+	var stack_w: Vector3 = PlayerRules.faceoff_position(1, 2, dot, -1.0, 5)
 	assert_almost_eq(wall.x,
 			-(GameRules.INNER_HALF_WIDTH - GameRules.FACEOFF_END_WALL_INSET_M), 0.001)
 	assert_almost_eq(wall.z, dot.y - GameRules.FACEOFF_END_WALL_ONSIDE_M, 0.001)
@@ -309,6 +311,26 @@ func test_position_names_cover_the_full_lineup() -> void:
 	assert_eq(PlayerRules.position_name(3), "LD")
 	assert_eq(PlayerRules.position_name(4), "RD")
 	assert_eq(PlayerRules.position_name(5), "", "out-of-range slot has no position")
+
+func test_home_sides_are_the_players_own_left_and_right() -> void:
+	# Team 0 defends +Z and faces -Z: left is -X. Team 1 faces +Z: left is +X.
+	for team_id: int in [0, 1]:
+		var own_dir: float = PlayerRules.own_goal_dir(team_id)
+		var left_x: float = -1.0 if team_id == 0 else 1.0
+		assert_eq(PlayerRules.home_side_x(0, own_dir), 0.0, "C plays the middle")
+		for slot: int in [1, 3]:
+			assert_eq(PlayerRules.home_side_x(slot, own_dir), left_x,
+					"team %d slot %d is a left-side position" % [team_id, slot])
+		for slot: int in [2, 4]:
+			assert_eq(PlayerRules.home_side_x(slot, own_dir), -left_x,
+					"team %d slot %d is a right-side position" % [team_id, slot])
+
+func test_faceoff_table_lines_up_on_each_positions_home_side() -> void:
+	for team_id: int in [0, 1]:
+		for slot: int in range(PlayerRules.MAX_PER_TEAM):
+			assert_eq(signf(GameRules.FACEOFF_OFFSETS[team_id][slot].x),
+					PlayerRules.home_side_x(slot, PlayerRules.own_goal_dir(team_id)),
+					"team %d slot %d faceoff spot is on its home side" % [team_id, slot])
 
 func test_defense_slots_are_3_and_4() -> void:
 	for slot: int in [0, 1, 2]:

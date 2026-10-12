@@ -254,8 +254,8 @@ var offsides_enforced: bool = true
 # (transition exposure) — 3v3 behavior is untouched at 3.
 var team_size: int = GameRules.DEFAULT_TEAM_SIZE
 # Whether this bot's lobby position is a defenseman (LD/RD), and its home
-# side sign (-1 = left, +1 = right, 0 = center). Feed the defensive-
-# responsibility anchor (AIZoneCoverage.defensive_anchor).
+# side as a world-X sign (PlayerRules.home_side_x; 0 = center). Feed the
+# defensive-responsibility anchor (AIZoneCoverage.defensive_anchor).
 var self_is_defense: bool = false
 var self_home_side: float = 0.0
 

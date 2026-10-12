@@ -2223,7 +2223,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 		ctx.team_size = _current_strategy.get_team_size()
 		var lobby_slot: int = _current_strategy.position_of(_peer_id)
 		ctx.self_is_defense = PlayerRules.is_defense_slot(lobby_slot)
-		ctx.self_home_side = _home_side_of(lobby_slot)
+		ctx.self_home_side = PlayerRules.home_side_x(lobby_slot, _own_goal_dir)
 		# Live smart-ping directives on this bot (see AIPingDirectives). The
 		# reused ctx instance must be re-stamped every build — a stale ping
 		# field would keep obeying an expired order.
@@ -2244,18 +2244,6 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 		ctx.self_is_defense = false
 		ctx.self_home_side = 0.0
 	return ctx
-
-
-# Home side sign of a lobby position: LW/LD rest on -X, RW/RD on +X, C
-# center. World X is side-stable for both teams (see AIRoleSlots5).
-func _home_side_of(lobby_slot: int) -> float:
-	match lobby_slot:
-		1, 3:
-			return -1.0
-		2, 4:
-			return 1.0
-		_:
-			return 0.0
 
 
 # Routes the bot's current slot to its role-behavior module. Returns a
