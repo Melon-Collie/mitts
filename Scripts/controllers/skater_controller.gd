@@ -1573,7 +1573,7 @@ func _wants_deflect(input: InputState) -> bool:
 
 # A lift starts only from plain puckless skating: a puck on the blade, a shot, a
 # block or a check owns the stick. Any of those arriving mid-lift ends it, as
-# does an opponent's lift or tie on this stick.
+# does an opponent's lift on this stick, or a tie, which holds the stick itself.
 func _advance_stick_check(input: InputState, delta: float) -> void:
 	var stick_taken: bool = has_puck or skater.hit_committed or skater.is_knocked_down \
 			or skater.is_forced_lift_active() or skater.stick_tied \
@@ -1581,6 +1581,7 @@ func _advance_stick_check(input: InputState, delta: float) -> void:
 	_stick_check.advance(input.stick_check_pressed, input.stick_check_held,
 			not stick_taken, stick_taken, delta)
 	skater.stick_check_phase = _stick_check.phase
+	skater.stick_check_held = input.stick_check_held
 
 
 # Adopts the host's lift phase ahead of a reconcile replay, which steps it on.

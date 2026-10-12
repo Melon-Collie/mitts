@@ -254,6 +254,7 @@ var _codec: WorldStateCodec = null
 var _shot_tracker: ShotOnGoalTracker = null
 var _hit_tracker: HitTracker = null
 var _stick_ties: StickTieTracker = null
+var _stick_tie_draw := StickTieDraw.new()
 var _frozen_puck := FrozenPuckRules.State.new()
 var _turnover_tracker: TurnoverTracker = null
 var _possession_tracker: PossessionTracker = null
@@ -534,6 +535,9 @@ func _process(delta: float) -> void:
 	# Cosmetic, both roles: skaters "step off the ice" at their bench door
 	# during the period-break skate-off (see _update_period_break_hiding).
 	_update_period_break_hiding()
+	# Cosmetic, every peer: tied sticks drawn meeting, and the clack.
+	if _registry != null:
+		_stick_tie_draw.update(_registry.skaters(), _registry.team_id_by_skater)
 	if not NetworkManager.is_host or _state_machine == null:
 		return
 	if NetworkManager.is_replay_mode():
@@ -1572,8 +1576,7 @@ func _wire_subsystems() -> void:
 	if _stick_ties != null:
 		_stick_ties.clear()
 	_stick_ties = StickTieTracker.new()
-	_stick_ties.setup(_registry, func() -> Skater: return puck.carrier if puck != null else null,
-			NetworkManager.local_time)
+	_stick_ties.setup(_registry, func() -> Skater: return puck.carrier if puck != null else null)
 	_hit_tracker.impact_landed.connect(_on_impact_landed)
 	_hit_tracker.hit_credited.connect(_on_hit_credited)
 

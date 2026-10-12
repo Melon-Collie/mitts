@@ -314,3 +314,9 @@ here whenever you bump, in the same format.
 #      prediction reads on the render and the rewind (BoardPinRules
 #      .forward_correction). New RPC notify_puck_frozen_called. Replay
 #      FORMAT_VERSION 13.
+# v69: the stick tie becomes two sticks tied together (docs/defensive-play-plan.md,
+#      Tie revision). The lift phase drops RECOVER, so REARM and TIE move down
+#      one (TIE is 5), and TIE's elapsed packs in whole ticks like every other
+#      phase. stick_tied is now set on both tied players, whose blades the
+#      reconcile replays under the tie's speed cap. No byte layout changed.
+#      Replay FORMAT_VERSION 14.

@@ -138,17 +138,66 @@ func test_a_bot_ties_nobody_with_the_puck_nowhere_near_the_man() -> void:
 	assert_false(sm._stick_tie_aim(s, me, s.skater_states[SELF_ID], _covering_the_man()).is_finite())
 
 
-func test_a_tied_bot_pulls_its_stick_away() -> void:
+func test_a_tied_bot_the_feed_is_coming_to_pulls_its_stick_away() -> void:
 	var s: WorldSnapshot = _feed_snap()
 	var me: SkaterNetworkState = s.skater_states[SELF_ID]
 	me.position = Vector3(3.0, 0.0, 0.0)
+	me.top_hand_world = Vector3(3.0, 1.0, -0.3)
 	me.blade_contact_world = Vector3(3.0, 0.03, -1.2)
 	me.stick_tied = true
+	s.puck_state.position = Vector3(3.0, 0.0, 10.0)
 	var tier: SkaterNetworkState = s.skater_states[OPP_ID]
-	tier.stick_check_phase = StickCheckRules.Phase.TIE
+	tier.stick_tied = true
 	tier.blade_contact_world = Vector3(2.6, 0.03, -1.2)
 	var aim: Vector3 = sm._tie_yank_aim(s, me.position, me)
 	assert_true(aim.is_finite())
 	assert_gt(aim.x, me.blade_contact_world.x, "away from the stick holding it")
 	sm._ties_sticks = false
 	assert_false(sm._tie_yank_aim(s, me.position, me).is_finite(), "the beginner tier just waits")
+
+
+func test_a_tied_bot_the_feed_is_not_for_holds_on() -> void:
+	var s: WorldSnapshot = _feed_snap()
+	var me: SkaterNetworkState = s.skater_states[SELF_ID]
+	me.position = Vector3(3.0, 0.0, 0.0)
+	me.top_hand_world = Vector3(3.0, 1.0, -0.3)
+	me.blade_contact_world = Vector3(3.0, 0.03, -1.2)
+	me.stick_tied = true
+	s.puck_state.position = Vector3(-6.0, 0.0, 10.0)
+	s.skater_states[OPP_ID].stick_tied = true
+	assert_false(sm._tie_yank_aim(s, me.position, me).is_finite(), "no pull")
+	sm._state = SkaterAgentStateMachine.State.OFF_PUCK
+	var input := InputState.new()
+	sm.apply_stick_lift_input(input)
+	assert_true(input.stick_check_held, "it holds the defender's stick out of the play")
+	assert_false(input.stick_check_pressed, "the tie is already made: no new lift")
+
+
+func test_a_covering_bot_keeps_holding_the_tie_it_made() -> void:
+	var s: WorldSnapshot = _feed_snap()
+	var x: float = 0.9 + (sm._blade_reach + sm._stick_lift_reach) * 0.5
+	var me := Vector3(x, 0.0, -0.6)
+	s.skater_states[SELF_ID].position = me
+	s.skater_states[SELF_ID].stick_tied = true
+	s.skater_states[OPP_ID].stick_tied = true
+	assert_true(sm._stick_tie_aim(s, me, s.skater_states[SELF_ID], _covering_the_man()).is_finite(),
+			"his man tied with him is the tie this read keeps alive")
+	var input := InputState.new()
+	sm.apply_stick_lift_input(input)
+	assert_true(input.stick_check_held)
+	assert_false(input.stick_check_pressed)
+
+
+func test_a_bot_holding_a_tie_follows_the_mans_stick_late() -> void:
+	var s: WorldSnapshot = _feed_snap()
+	var man: SkaterNetworkState = s.skater_states[OPP_ID]
+	var first: Vector3 = sm._step_tie_follow(man)
+	man.top_hand_world += Vector3(1.0, 0.0, 0.0)
+	man.blade_contact_world += Vector3(1.0, 0.0, 0.0)
+	var ticks: int = roundi(StickCheckRules.TIE_LAG_BUDGET_S * 120.0)
+	var follow: Vector3 = first
+	for _i: int in ticks:
+		follow = sm._step_tie_follow(man)
+	var moved: float = follow.x - first.x
+	assert_gt(moved, 0.5, "it gets most of the way there inside the lag budget")
+	assert_lt(moved, 0.75, "but not at once: a bot reads a pull as late as a human holder")

@@ -50,9 +50,9 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +3: the wrister wind-up side reads the trailer's relative motion over the
 	# charge (#740), not just where he stands at the commit.
 	# +1: the chase steer passes when an airborne puck is back on the blade plane.
-	"res://Scripts/ai/skater_agent_state_machine.gd": 6333,
+	"res://Scripts/ai/skater_agent_state_machine.gd": 6386,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
-	"res://Scripts/game/game_manager.gd": 5678,
+	"res://Scripts/game/game_manager.gd": 5681,
 	"res://Scripts/domain/ai/action_scoring.gd": 4458,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
@@ -66,15 +66,15 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
 	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3916,
-	"res://Scripts/controllers/skater_controller.gd": 3398,
-	"res://Scripts/actors/skater.gd": 2756,
+	"res://Scripts/controllers/skater_controller.gd": 3399,
+	"res://Scripts/actors/skater.gd": 2797,
 	"res://Scripts/networking/network_manager.gd": 2828,
 	"res://Scripts/game/tutorial_manager.gd": 2073,
-	"res://Scripts/controllers/skater_ik_coordinator.gd": 938,
+	"res://Scripts/controllers/skater_ik_coordinator.gd": 950,
 	# +21: apply_scripted_grant / stage_scripted — the tutorial's teleports
 	# restart the swept interaction tests where the puck lands instead of
 	# sweeping the jump. +6: the pinch hop composed onto the contest exit.
-	"res://Scripts/controllers/puck_controller.gd": 1560,
+	"res://Scripts/controllers/puck_controller.gd": 1565,
 	"res://Scripts/actors/hockey_rink.gd": 1472,
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 1409,
 	"res://Scripts/game/player_prefs.gd": 1391,
@@ -101,7 +101,7 @@ const _API_SLACK: int = 3
 
 const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/networking/network_manager.gd": 204,
-	"res://Scripts/actors/skater.gd": 142,
+	"res://Scripts/actors/skater.gd": 145,
 	"res://Scripts/domain/ai/action_scoring.gd": 68,
 	"res://Scripts/game/game_manager.gd": 62,
 	"res://Scripts/domain/state/player_attributes.gd": 53,

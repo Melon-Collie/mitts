@@ -1,31 +1,27 @@
 class_name StickTieTracker
 extends RefCounted
 
-# Host-only owner of every stick tie: which defender's TIE-phase stick holds
-# which opponent's shaft. The defender's phase is input-driven and knows nothing
-# of a target (StickCheckRules); this is where a target is found, held and let
-# go, and the only writer of Skater.stick_tied, which replicates.
+# Host-only owner of every stick tie: two opponents' sticks tied together, off
+# the ice and slowed. A skater's TIE phase is input-driven and knows nothing of a
+# target (StickCheckRules); this is where a tie is found, held and let go, and
+# the only writer of Skater.stick_tied, which replicates and is set on BOTH
+# players.
 #
-# A tie latches by present-time geometry here, or through a client's lag-comp
-# claim (StickTieClaimResolver → try_engage). It holds while the defender stays in
-# TIE with the blade inside the hold radius of the victim's shaft, and breaks on
-# separation, release, a knockdown, the victim gaining the puck, or a stoppage —
-# after which the pair waits out TIE_COOLDOWN_S.
+# A tie latches when a skater in TIE, off the shared cooldown, has their stick
+# touching a non-carrying opponent's (present-time here, or through a client's
+# lag-comp claim, StickTieClaimResolver → try_engage). It holds while either of
+# the two holds the stick-check button and the sticks stay within
+# TIE_SEPARATION_M, and breaks otherwise, on a knockdown or a ghost, when either
+# gains the puck, or at a stoppage. A break puts both on the shared cooldown.
 
 var _registry: PlayerRegistry = null
 var _carrier_getter: Callable = Callable()   # () -> Skater (null when loose)
-var _now_getter: Callable = Callable()       # () -> float, host seconds
-var _hold_radius: float = StickCheckRules.tie_hold_radius(Constants.NETWORK_INTERPOLATION_DELAY)
-var _victim_by_defender: Dictionary = {}     # Skater -> Skater
-# "defender_id:victim_id" -> host time the pair may tie again. Written only when
-# a tie breaks, so the string key costs nothing per tick.
-var _cooldown_until: Dictionary = {}
+var _partner: Dictionary = {}                # Skater -> Skater, both directions
 
 
-func setup(registry: PlayerRegistry, carrier_getter: Callable, now_getter: Callable) -> void:
+func setup(registry: PlayerRegistry, carrier_getter: Callable) -> void:
 	_registry = registry
 	_carrier_getter = carrier_getter
-	_now_getter = now_getter
 
 
 func tick(live: bool) -> void:
@@ -34,63 +30,68 @@ func tick(live: bool) -> void:
 	if not live:
 		clear()
 		return
-	if not _victim_by_defender.is_empty():
+	if not _partner.is_empty():
 		_hold_or_break()
-	for defender: Skater in _registry.skaters():
-		if defender.stick_check_phase == StickCheckRules.Phase.TIE \
-				and not _victim_by_defender.has(defender):
-			var victim: Skater = _nearest_tieable(defender)
+	for skater: Skater in _registry.skaters():
+		if _can_initiate(skater):
+			var victim: Skater = _nearest_tieable(skater)
 			if victim != null:
-				_link(defender, victim)
+				_link(skater, victim)
 
 
-# The claim path's entry. Re-checks the present: the defender still tying and
-# free, the victim tieable — the rewound geometry is the resolver's to judge.
-func try_engage(defender: Skater, victim: Skater) -> bool:
-	if defender.stick_check_phase != StickCheckRules.Phase.TIE \
-			or _victim_by_defender.has(defender) or not _tieable(defender, victim):
+# The claim path's entry. Re-checks the present: the initiator still reaching in
+# TIE and free, the victim tieable — the rewound geometry is the resolver's.
+func try_engage(initiator: Skater, victim: Skater) -> bool:
+	if not _can_initiate(initiator) or not _tieable(initiator, victim):
 		return false
-	_link(defender, victim)
+	_link(initiator, victim)
 	return true
 
 
-func victim_of(defender: Skater) -> Skater:
-	return _victim_by_defender.get(defender, null)
+func partner_of(skater: Skater) -> Skater:
+	return _partner.get(skater, null)
 
 
+# A stoppage: every tie lets go, with no cooldown (play restarts anyway).
 func clear() -> void:
-	for defender: Skater in _victim_by_defender:
-		var victim: Skater = _victim_by_defender[defender]
-		if is_instance_valid(victim):
-			victim.stick_tied = false
-	_victim_by_defender.clear()
+	for skater: Skater in _partner:
+		if is_instance_valid(skater):
+			skater.stick_tied = false
+	_partner.clear()
+
+
+func _can_initiate(skater: Skater) -> bool:
+	return skater.stick_check_phase == StickCheckRules.Phase.TIE and not skater.stick_tied \
+			and not skater.is_stick_check_cooling() and not skater.is_knocked_down \
+			and not skater.is_ghost
 
 
 func _hold_or_break() -> void:
 	var carrier: Skater = _carrier_getter.call() if _carrier_getter.is_valid() else null
-	for defender: Skater in _victim_by_defender.keys():
-		var victim: Skater = _victim_by_defender[defender]
-		if not is_instance_valid(defender) or not is_instance_valid(victim):
-			_victim_by_defender.erase(defender)
-			if is_instance_valid(victim):
-				victim.stick_tied = false
+	for a: Skater in _partner.keys():
+		if not _partner.has(a):
+			continue  # its pair already broke this pass
+		var b: Skater = _partner[a]
+		if not is_instance_valid(a) or not is_instance_valid(b):
+			_drop(a)
+			_drop(b)
 			continue
-		var holds: bool = defender.stick_check_phase == StickCheckRules.Phase.TIE \
-				and not defender.is_knocked_down and not victim.is_knocked_down \
-				and not defender.is_ghost and not victim.is_ghost \
-				and victim != carrier \
-				and _shaft_distance(defender, victim) <= _hold_radius
+		var holds: bool = (a.stick_check_held or b.stick_check_held) \
+				and not a.is_knocked_down and not b.is_knocked_down \
+				and not a.is_ghost and not b.is_ghost \
+				and a != carrier and b != carrier \
+				and _stick_gap(a, b) <= StickCheckRules.TIE_SEPARATION_M
 		if not holds:
-			_break(defender, victim)
+			_break(a, b)
 
 
-func _nearest_tieable(defender: Skater) -> Skater:
+func _nearest_tieable(initiator: Skater) -> Skater:
 	var best: Skater = null
-	var best_d: float = StickCheckRules.TIE_ENGAGE_RADIUS_M
+	var best_d: float = StickCheckRules.TIE_CONTACT_M
 	for victim: Skater in _registry.skaters():
-		if not _tieable(defender, victim):
+		if not _tieable(initiator, victim):
 			continue
-		var d: float = _shaft_distance(defender, victim)
+		var d: float = _stick_gap(initiator, victim)
 		if d <= best_d:
 			best_d = d
 			best = victim
@@ -98,43 +99,39 @@ func _nearest_tieable(defender: Skater) -> Skater:
 
 
 # Geometry is the caller's: an opponent who is not carrying (a carrier's stick is
-# lifted, not tied), not already tied, not down or ghosted, and off cooldown.
-func _tieable(defender: Skater, victim: Skater) -> bool:
-	if victim == defender or victim.stick_tied or victim.is_knocked_down or victim.is_ghost:
+# lifted, not tied), not already tied, and not down or ghosted.
+func _tieable(initiator: Skater, victim: Skater) -> bool:
+	if victim == initiator or victim.stick_tied or victim.is_knocked_down or victim.is_ghost:
 		return false
-	if defender.is_knocked_down or defender.is_ghost:
-		return false
-	var d_team: int = _registry.team_id_by_skater.get(defender, -1)
+	var i_team: int = _registry.team_id_by_skater.get(initiator, -1)
 	var v_team: int = _registry.team_id_by_skater.get(victim, -1)
-	if d_team == -1 or v_team == -1 or d_team == v_team:
+	if i_team == -1 or v_team == -1 or i_team == v_team:
 		return false
 	var carrier: Skater = _carrier_getter.call() if _carrier_getter.is_valid() else null
-	if victim == carrier:
-		return false
-	var until: float = _cooldown_until.get(_pair_key(defender, victim), -1.0)
-	return _now() >= until
+	return victim != carrier
 
 
-func _link(defender: Skater, victim: Skater) -> void:
-	_victim_by_defender[defender] = victim
-	victim.stick_tied = true
+func _link(a: Skater, b: Skater) -> void:
+	_partner[a] = b
+	_partner[b] = a
+	a.stick_tied = true
+	b.stick_tied = true
 
 
-func _break(defender: Skater, victim: Skater) -> void:
-	_victim_by_defender.erase(defender)
-	victim.stick_tied = false
-	_cooldown_until[_pair_key(defender, victim)] = _now() + StickCheckRules.TIE_COOLDOWN_S
+func _break(a: Skater, b: Skater) -> void:
+	_drop(a)
+	_drop(b)
+	a.start_stick_check_cooldown()
+	b.start_stick_check_cooldown()
 
 
-func _shaft_distance(defender: Skater, victim: Skater) -> float:
-	return PuckInteractionRules.distance_to_shaft(defender.get_blade_contact_global(),
-			victim.upper_body_to_global(victim.get_top_hand_position()),
-			victim.get_blade_contact_global())
+func _drop(skater: Skater) -> void:
+	_partner.erase(skater)
+	if is_instance_valid(skater):
+		skater.stick_tied = false
 
 
-func _pair_key(defender: Skater, victim: Skater) -> String:
-	return "%d:%d" % [defender.get_instance_id(), victim.get_instance_id()]
-
-
-func _now() -> float:
-	return _now_getter.call() if _now_getter.is_valid() else 0.0
+static func _stick_gap(a: Skater, b: Skater) -> float:
+	return StickCheckRules.stick_gap(
+			a.upper_body_to_global(a.get_top_hand_position()), a.get_blade_contact_global(),
+			b.upper_body_to_global(b.get_top_hand_position()), b.get_blade_contact_global())

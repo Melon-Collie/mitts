@@ -1017,6 +1017,14 @@ var _stick_lift_press_pending: bool = false
 # dispatch keeps the read alive, and the press re-sends whenever the stick is idle.
 var _stick_tie_holding: bool = false
 var _stick_tie_press_pending: bool = false
+# A tied attacker who is not the feed's target holds on, keeping the defender's
+# stick tied up and out of the play (no press: the tie is already made).
+var _stick_tie_holding_on: bool = false
+# Where a tying defender's blade follows the man's stick: his stick as the bot
+# reads it, lagged by the network budget a human holder plays under
+# (StickCheckRules.TIE_LAG_BUDGET_S), so a bot holding a tie is beaten by the
+# same pulls a human would be. INF until a tie reach starts.
+var _tie_follow: Vector3 = Vector3.INF
 # Our team's bodies for the tie's lane read, refilled per full dispatch.
 var _tie_defender_scratch: Array[Vector3] = []
 
@@ -5272,23 +5280,38 @@ func _stick_tie_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 	var man: SkaterNetworkState = null
 	if _ties_sticks and decision != null and decision.locked_man_pid != -1:
 		man = snapshot.skater_states.get(decision.locked_man_pid)
-	if man == null or not _man_is_a_live_target(snapshot, self_pos, decision.locked_man_pid, man) \
+	# A man tied up by someone else is already out of the play; one tied with US
+	# is the tie this read keeps alive.
+	var self_tied: bool = self_state != null and self_state.stick_tied
+	if man == null or (man.stick_tied and not self_tied) \
+			or not _man_is_a_live_target(snapshot, self_pos, decision.locked_man_pid, man) \
 			or not AIStickTieRead.shaft_in_reach(self_pos, man.top_hand_world,
 					man.blade_contact_world, _stick_lift_reach):
 		_stick_tie_holding = false
+		_tie_follow = Vector3.INF
 		return Vector3.INF
 	_stick_tie_holding = true
-	_stick_tie_press_pending = self_state == null \
-			or self_state.stick_check_phase == StickCheckRules.Phase.IDLE
-	return man.top_hand_world.lerp(man.blade_contact_world, 0.5)
+	_stick_tie_press_pending = not self_tied and (self_state == null \
+			or self_state.stick_check_phase == StickCheckRules.Phase.IDLE)
+	return _step_tie_follow(man)
+
+
+# One physics tick of the lagged follow onto the man's stick (see _tie_follow).
+func _step_tie_follow(man: SkaterNetworkState) -> Vector3:
+	var stick_mid: Vector3 = man.top_hand_world.lerp(man.blade_contact_world, 0.5)
+	if not _tie_follow.is_finite():
+		_tie_follow = stick_mid
+		return _tie_follow
+	var k: float = 1.0 - exp(-1.0 / (float(_PhysicsConstants.PHYSICS_TICK)
+			* StickCheckRules.TIE_LAG_BUDGET_S))
+	_tie_follow += (stick_mid - _tie_follow) * k
+	return _tie_follow
 
 
 # The puck is coming to him — a loose puck whose path reaches his blade, or his
 # carrier with an open lane — and we could not have got a stick on it ourselves.
 func _man_is_a_live_target(snapshot: WorldSnapshot, self_pos: Vector3, man_pid: int,
 		man: SkaterNetworkState) -> bool:
-	if man.stick_tied:
-		return false
 	var puck: PuckNetworkState = snapshot.puck_state
 	var carrier_pid: int = puck.carrier_peer_id
 	if carrier_pid == man_pid:
@@ -5312,31 +5335,58 @@ func _man_is_a_live_target(snapshot: WorldSnapshot, self_pos: Vector3, man_pid: 
 			_tie_defender_scratch, _blade_reach)
 
 
-# Our stick is tied while our team has the puck or it is loose: pull it away from
-# the stick holding it. INF when there is nothing to pull free from.
+# Our stick is tied while our team has the puck or it is loose. If the feed is
+# coming to us, pull the stick away from the one holding it; otherwise hold on,
+# keeping that defender's stick out of the play (_stick_tie_holding_on). INF when
+# there is nothing to pull free from, or when holding on.
 func _tie_yank_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 		self_state: SkaterNetworkState) -> Vector3:
+	_stick_tie_holding_on = false
 	if not _ties_sticks or self_state == null or not self_state.stick_tied:
 		return Vector3.INF
 	var carrier_pid: int = snapshot.puck_state.carrier_peer_id
 	if carrier_pid != -1 and _team_id_by_peer.get(carrier_pid, -1) != _team_id:
 		return Vector3.INF
-	var tier_blade: Vector3 = Vector3.INF
+	# The partner is the tied opponent whose stick is nearest ours.
+	var tier: SkaterNetworkState = null
 	var best_d: float = INF
 	for pid: int in snapshot.skater_states:
 		if _team_id_by_peer.get(pid, -1) == _team_id:
 			continue
 		var opp: SkaterNetworkState = snapshot.skater_states[pid]
-		if opp.stick_check_phase != StickCheckRules.Phase.TIE:
+		if not opp.stick_tied:
 			continue
-		var d: float = opp.blade_contact_world.distance_to(self_state.blade_contact_world)
+		var d: float = StickCheckRules.stick_gap(self_state.top_hand_world,
+				self_state.blade_contact_world, opp.top_hand_world, opp.blade_contact_world)
 		if d < best_d:
 			best_d = d
-			tier_blade = opp.blade_contact_world
-	if not tier_blade.is_finite():
+			tier = opp
+	if tier == null:
 		return Vector3.INF
-	return AIStickTieRead.yank_aim(self_pos, self_state.blade_contact_world, tier_blade,
-			_blade_reach)
+	if not _feed_is_coming_to(snapshot, self_state):
+		_stick_tie_holding_on = true
+		return Vector3.INF
+	return AIStickTieRead.yank_aim(self_pos, self_state.blade_contact_world,
+			tier.blade_contact_world, _blade_reach)
+
+
+# The puck is on its way to us: a loose puck whose path reaches our blade, or a
+# teammate carrying with an open lane to us past the opponents' sticks.
+func _feed_is_coming_to(snapshot: WorldSnapshot, self_state: SkaterNetworkState) -> bool:
+	var puck: PuckNetworkState = snapshot.puck_state
+	if puck.carrier_peer_id == -1:
+		return AIStickTieRead.path_passes_within(puck.position, puck.velocity,
+				self_state.blade_contact_world,
+				PuckController.PICKUP_RADIUS + AIStickTieRead.RECEIVER_STEP_M)
+	var carrier: SkaterNetworkState = snapshot.skater_states.get(puck.carrier_peer_id)
+	if carrier == null or puck.carrier_peer_id == _peer_id:
+		return false
+	_tie_defender_scratch.clear()
+	for pid: int in snapshot.skater_states:
+		if _team_id_by_peer.get(pid, -1) != _team_id:
+			_tie_defender_scratch.append(snapshot.skater_states[pid].position)
+	return AIStickTieRead.lane_open(carrier.position, self_state.position,
+			_tie_defender_scratch, _blade_reach)
 
 
 # The boards, every physics tick after dispatch (BoardPinRules). A pinned bot works
@@ -5426,6 +5476,9 @@ func _support_reaches_the_puck(snapshot: WorldSnapshot, man_pid: int) -> bool:
 # Holds the stick-check button for a lift or a tie the dispatch started. Runs
 # every physics tick after dispatch, throttled or not, so the hold is continuous.
 func apply_stick_lift_input(input: InputState) -> void:
+	if _stick_tie_holding_on and _state == State.OFF_PUCK:
+		input.stick_check_held = true
+		return
 	if _stick_tie_holding and _stick_lift_hold_ticks <= 0:
 		input.stick_check_held = true
 		input.stick_check_pressed = _stick_tie_press_pending
@@ -5716,7 +5769,7 @@ func _off_puck_live_aim(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 		var man: SkaterNetworkState = snapshot.skater_states.get(
 				_cached_role_decision.locked_man_pid)
 		if man != null:
-			return man.top_hand_world.lerp(man.blade_contact_world, 0.5)
+			return _step_tie_follow(man)
 	if _off_puck_aim_live:
 		return _ready_stance_aim(
 				self_pos, _off_puck_aim_anchor, snapshot, _off_puck_aim_near_m)

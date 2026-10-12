@@ -81,7 +81,7 @@ func test_a_forced_up_stick_cannot_lift_back() -> void:
 
 
 func test_a_stick_mid_lift_pokes_nothing() -> void:
-	for phase: int in [Phase.RISE, Phase.RECOVER]:
+	for phase: int in [Phase.RISE, Phase.TIE]:
 		_checker.stick_check_phase = phase
 		_blade_on_the_puck()
 		_pc._check_interactions()
@@ -116,9 +116,28 @@ func test_a_cleaner_hook_holds_the_stick_up_longer() -> void:
 	_pc._check_interactions()
 	var clean: float = _carrier._forced_lift_timer
 	_carrier._forced_lift_timer = 0.0
+	_checker._stick_check_cooldown = 0.0
 	_puck.set_carrier(_carrier)
 	_puck.remove_skater_cooldown(_carrier)
 	_blade_under_the_shaft(0.4)
 	_pc._check_interactions()
 	assert_null(_puck.carrier, "a hook at the rim still lands")
 	assert_gt(clean, _carrier._forced_lift_timer, "a hook square under the shaft earns more")
+
+
+func test_a_landed_lift_puts_the_lifter_on_the_shared_cooldown() -> void:
+	_checker.stick_check_phase = Phase.HOOK
+	_blade_under_the_shaft(0.1)
+	_pc._check_interactions()
+	assert_true(_checker.is_stick_check_cooling(),
+			"a lift held on into TIE can't tie the stick it just lifted")
+
+
+func test_a_cooling_hook_lifts_nothing() -> void:
+	_checker.start_stick_check_cooldown()
+	_checker.stick_check_phase = Phase.HOOK
+	_blade_under_the_shaft(0.1)
+	_pc._check_interactions()
+	assert_eq(_puck.carrier, _carrier, "the host's own detection refuses it")
+	_pc.apply_lag_comp_stick_lift(_checker, _carrier, 1.0)
+	assert_eq(_puck.carrier, _carrier, "and so does a client's claim")

@@ -1,11 +1,10 @@
 # Defensive play — stick check, stick tie, board pin
 
-Status: **Phases 1–3 implemented** (v66–v68), playtest pending. Two revisions are
-planned, not built:
-- **The pin** becomes a locked position contest (*Pin revision*), replacing 3b's
-  grip-and-budget pin.
-- **The tie** becomes two sticks tied together, off the ice and slowed, held by
-  either player (*Tie revision*).
+Status: **Phases 1–3 implemented** (v66–v68), playtest pending.
+- **The tie revision is built** (v69): two sticks tied together, off the ice and
+  slowed, held by either player (*Tie revision*).
+- **The pin revision is planned, not built:** a locked position contest
+  (*Pin revision*), replacing 3b's grip-and-budget pin.
 
 Phase 4 is candidates. Each phase is meant to ship as its own PR, with its own protocol
 bump and playtest.
@@ -445,7 +444,27 @@ the revision, not after it. Check it with `render-poses.sh`.
 - **The puck kick.** While locked, directional input nudges the puck along the wall,
   EA's version of a pinned player playing it with their skates.
 
-## Tie revision — two sticks tied together (planned)
+## Tie revision — two sticks tied together (built, v69)
+
+**As built.**
+- "Touching" is measured in plan view (XZ), top hand→blade on both sticks. Two
+  sticks the camera shows crossing touch, whatever their heights. The old
+  blade→shaft test was 3D, but in 3D a blade under the middle of a shaft is half a
+  metre below it.
+- `RECOVER` is gone from the phase machine. It existed only for the tie's cap.
+- When a tie latches, the initiator's own phase is interrupted to IDLE like any
+  other stick-taking event. `stick_tied` alone then raises, slows and busies the
+  stick (`blade_held_up` and `uses_lift_height` take it as an argument).
+- A bot holding a tie follows the man's stick through a lag of
+  `TIE_LAG_BUDGET_S`, so it is beaten by the same jukes a human holder would be.
+  Without it, a bot reads sticks at host-present and would mirror a pull perfectly.
+- The tied blade's slow cap is `SkaterIKCoordinator._blade_speed_cap`. It is
+  re-synced into the native dangle's config on the tied edge, with no kernel
+  change.
+- `StickTieDraw` is the drawn lock and the clack. It slides each tied blade's
+  mesh, not the marker, by half the gap toward a shared meeting point.
+- The bot's juke is not built. A tied attacker the feed is coming to pulls
+  straight away, which a good holder follows.
 
 ### Why
 As built, the tie takes away the result, not the stick. The victim's blade moves
@@ -641,7 +660,7 @@ must still grow, its ratchet entry is bumped in the same diff.
 | `STICK_CHECK_COOLDOWN_S` | 0.75 | per player, shared by lifts and ties |
 | `TIE_CONTACT_M` | 0.08 | stick to stick, shaft thickness plus IK slack |
 | `TIE_BLADE_SPEED_M_S` | 1.5 | both blades while tied (free: 10) |
-| `TIE_SEPARATION_M` | 0.7 | ≥ 0.08 + 2 × 1.5 × 0.2 s |
+| `TIE_SEPARATION_M` | 0.68 | = 0.08 + 2 × 1.5 × 0.2 s, derived in code |
 | `TIE_HOLD_RADIUS` | engage + blade travel over the interp window + IK slack | derive, don't pick |
 | `PIN_WALL_MARGIN` | 0.25 m | |
 | `PIN_MAX_S` / `PIN_IMMUNITY_S` | 2.0 / 1.0 | the revision raises the cap to 3.0 |

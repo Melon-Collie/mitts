@@ -3,8 +3,9 @@ extends RefCounted
 
 # Host-only resolver for client-initiated stick-tie claims with lag compensation,
 # plus the client-side send. Mirrors StickLiftClaimResolver with a non-carrier
-# target: the claimant, in the TIE phase of a stick check, has their blade within
-# reach of an opponent's hand→blade shaft as they saw it.
+# target: the claimant, in the TIE phase of a stick check, has their stick
+# touching an opponent's stick as they saw it (StickCheckRules.stick_gap, plan
+# view, top hand→blade on both).
 #
 # Flow:
 #   receive_claim(peer_id, host_ts, interp_delay, input_lead, target_peer_id,
@@ -14,15 +15,18 @@ extends RefCounted
 #       shifted by its forward-predicted displacement (LagCompRewind
 #       .forward_predict_skater, as the lift resolver does); reject if the target
 #       was carrying then (a carrier's stick is lifted, not tied)
-#     → rewind the claimant to self_view_time; reject a ghost or one not in TIE
-#     → ClaimantView-clamp the client blade, and reject unless it is within
-#       StickCheckRules.TIE_ENGAGE_RADIUS_M of the rewound shaft
-#     → StickTieTracker.try_engage, which re-checks the present (idempotent)
+#     → rewind the claimant to self_view_time; reject a ghost, one not in TIE, or
+#       one already tied
+#     → ClaimantView-clamp the client blade, and reject unless the claimant's
+#       stick (rewound top hand → clamped blade) is within
+#       StickCheckRules.TIE_CONTACT_M of the rewound stick
+#     → StickTieTracker.try_engage, which re-checks the present, the shared
+#       cooldown among it (idempotent)
 #
 # The shared claim-resolver contract is in Scripts/game/CLAUDE.md.
 
-# A claimant in reach of an untied stick re-sends no faster than this, so a held
-# tie the host refused is retried a few times a second rather than every tick.
+# A claimant touching an untied stick re-sends no faster than this, so a tie the
+# host refused is retried a few times a second rather than every tick.
 const _RESEND_S: float = 0.15
 
 var _registry: PlayerRegistry = null
@@ -42,8 +46,8 @@ func setup(registry: PlayerRegistry, state_buffer: StateBufferManager,
 	_puck_controller_getter = puck_controller_getter
 
 
-# Client side, every tick: while the local skater's stick is out in TIE, claim
-# the first untied, non-carrying opponent whose rendered shaft is in reach.
+# Client side, every tick: while the local skater's untied stick is out in TIE,
+# claim the first untied, non-carrying opponent whose rendered stick it touches.
 func maybe_send_claim() -> void:
 	if NetworkManager.is_host or not NetworkManager.is_clock_ready() or _registry == null:
 		return
@@ -51,7 +55,7 @@ func maybe_send_claim() -> void:
 	if local == null or local.skater == null or local.skater.is_ghost:
 		return
 	var me: Skater = local.skater
-	if me.stick_check_phase != StickCheckRules.Phase.TIE:
+	if me.stick_check_phase != StickCheckRules.Phase.TIE or me.stick_tied:
 		return
 	var now: float = NetworkManager.local_time()
 	if now - _last_sent_at < _RESEND_S:
@@ -61,6 +65,7 @@ func maybe_send_claim() -> void:
 	var carrier_pid: int = pc.get_client_carrier_peer_id() if pc != null else -1
 	var my_team: int = _registry.team_id_by_skater.get(me, -1)
 	var blade: Vector3 = me.get_blade_contact_global()
+	var hand: Vector3 = me.upper_body_to_global(me.get_top_hand_position())
 	var players: Dictionary[int, PlayerRecord] = _registry.all()
 	for pid: int in players:
 		var rec: PlayerRecord = players[pid]
@@ -68,10 +73,10 @@ func maybe_send_claim() -> void:
 			continue
 		if _registry.team_id_by_skater.get(rec.skater, -1) == my_team:
 			continue
-		var d: float = PuckInteractionRules.distance_to_shaft(blade,
+		var d: float = StickCheckRules.stick_gap(hand, blade,
 				rec.skater.upper_body_to_global(rec.skater.get_top_hand_position()),
 				rec.skater.get_blade_contact_global())
-		if d <= StickCheckRules.TIE_ENGAGE_RADIUS_M:
+		if d <= StickCheckRules.TIE_CONTACT_M:
 			_last_sent_at = now
 			# The adapted interp delay positioned the rendered shaft this frame; see
 			# the pickup claim send in LocalController.
@@ -123,14 +128,14 @@ func receive_claim(peer_id: int, host_timestamp: float, interp_delay_ms: float,
 	var attacker_snap: SkaterNetworkState = blade_snap.get_skater_state(peer_id)
 	if attacker_snap == null or attacker_snap.is_ghost:
 		return
-	if attacker_snap.stick_check_phase != StickCheckRules.Phase.TIE:
+	if attacker_snap.stick_check_phase != StickCheckRules.Phase.TIE or attacker_snap.stick_tied:
 		return
 	if not _claimant.resolve(_registry, peer_id, attacker_snap,
 			record.controller as SkaterController,
 			blade_rewind_time, _state_buffer.newest_host_timestamp()):
 		return
 	var attacker_blade: Vector3 = _claimant.clamp_blade(client_blade_curr, attacker_snap)
-	if PuckInteractionRules.distance_to_shaft(attacker_blade, shaft_top, shaft_blade) \
-			> StickCheckRules.TIE_ENGAGE_RADIUS_M:
+	if StickCheckRules.stick_gap(attacker_snap.top_hand_world, attacker_blade,
+			shaft_top, shaft_blade) > StickCheckRules.TIE_CONTACT_M:
 		return
 	ties.try_engage(record.skater, target.skater)

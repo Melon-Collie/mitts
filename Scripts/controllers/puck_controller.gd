@@ -450,14 +450,17 @@ func apply_lag_comp_stick_lift(checker: Skater, expected_ex_carrier: Skater,
 		return
 	if puck.carrier == checker:
 		return
-	if puck.carrier != expected_ex_carrier:
+	if puck.carrier != expected_ex_carrier or checker.is_stick_check_cooling():
 		return
 	_land_stick_lift(checker, quality)
 
 
 # Both detection paths land here: the carrier's blade is forced up for as long
-# as the hook earned, and the puck carries on without it.
+# as the hook earned, and the puck carries on without it. The lifter goes on the
+# shared stick-check cooldown, so the same press held into TIE can't tie the
+# stick it just lifted.
 func _land_stick_lift(checker: Skater, quality: float) -> void:
+	checker.start_stick_check_cooldown()
 	var forced_s: float = StickCheckRules.forced_lift_seconds(quality)
 	puck.carrier.force_blade_lift(forced_s)
 	_processing_stick_lift_s = forced_s
@@ -617,7 +620,7 @@ func _check_interactions() -> void:
 				# blade up and strips the puck. A stick mid-lift or otherwise up
 				# (a raised deflect, a forced pop) pokes nothing — it's off the ice.
 				if skater.stick_check_phase == StickCheckRules.Phase.HOOK:
-					if PuckInteractionRules.check_blade_under_stick(
+					if not skater.is_stick_check_cooling() and PuckInteractionRules.check_blade_under_stick(
 							blade_curr, carrier_hand, carrier_blade,
 							STICK_LIFT_RADIUS, STICK_LIFT_UNDER_MARGIN):
 						_land_stick_lift(skater, StickCheckRules.hook_quality(
@@ -668,7 +671,9 @@ func _check_interactions() -> void:
 				# and a passive receiver share this one gate: FLAT/LOW play the ice
 				# (a saucer flies over), HIGH plays the air. The loft level changes
 				# the redirect DIRECTION, not which plane it reaches.
-				if not PuckReceptionRules.blade_can_interact(skater.blade_up, puck_airborne):
+				# A tied stick is held off the ice, so it plays the air like a raised one.
+				if not PuckReceptionRules.blade_can_interact(skater.blade_up or skater.stick_tied,
+						puck_airborne):
 					continue
 				var blade_curr: Vector3 = skater.get_blade_contact_global()
 				var blade_prev: Vector3 = skater.get_prev_blade_contact_global()

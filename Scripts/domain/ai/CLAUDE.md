@@ -233,8 +233,13 @@ its own stick. The man is tied only while the puck is coming to him — a loose
 puck whose path reaches his blade, or his carrier with a pass lane no defender's
 stick reaches — and only when the coverer's free stick could not have stopped it
 (the feed's path stays out of his reach; the lane read counts him too), with the
-man's shaft in reach. A tied attacker pulls his stick straight away from the one
-holding it. Both halves are the `ties_sticks` cognition gate, closed on Easy.
+man's shaft in reach, and he holds it while that stays true. His blade follows
+the man's stick through a lag of `StickCheckRules.TIE_LAG_BUDGET_S` — what a human
+holder sees it late by over the network — so a bot holding a tie is beaten by the
+same jukes a human would be, not mirrored instantly. A tied attacker the feed is
+coming to pulls his stick straight away from the one holding it; one it isn't
+coming to holds on, keeping that defender's stick out of the play. Both halves are
+the `ties_sticks` cognition gate, closed on Easy.
 
 **On the boards, the checker's extra is holding the pin** (`apply_board_play`, every
 tick after dispatch): a man pinned in contact stays driven in only while the puck

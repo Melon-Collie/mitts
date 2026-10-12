@@ -35,6 +35,8 @@ const _BLADE_FOLLOW_PITCH_MAX_DEG: float = 100.0
 const _BLADE_ELEVATED_EXTRA_LOFT_DEG: float = 16.0   # axial twist (handedness-signed)
 const _BLADE_ELEVATED_EXTRA_LIFT_DEG: float = 4.0    # about X (small touch of toe-lift)
 const _BLADE_ELEVATION_BLEND_SPEED: float = 6.0      # blend units/sec (full swing in ~0.17 s)
+# How fast a tied blade's drawn slide (StickTieDraw) eases on and off.
+const _TIE_DRAW_EASE_M_S: float = 2.0
 # Toe-drag read. The shaft only steepens past its lie in TopHandIK's CLOSE
 # regime (the hand rising to shorten the stick's horizontal run) — in the FAR
 # regime the hand rides at rest height and the shaft holds the lie exactly, so
@@ -379,6 +381,11 @@ var body_block_height: float = 0.7
 # runs at render rate, so the node lookup is resolved once in
 # _rebuild_blade_mesh rather than per frame.
 var _blade_mesh_instance: MeshInstance3D = null
+# Where a tied blade is drawn toward its partner's (StickTieDraw, world XZ): a
+# mesh-only slide like the address and reception slides, eased so a break lets
+# the blade back rather than popping it.
+var _tie_draw_target: Vector3 = Vector3.ZERO
+var _tie_draw_offset: Vector3 = Vector3.ZERO
 var _blade_mesh_curve_sign: float = 0.0
 
 # Top hand: the moving IK output. Positioned by the controller each tick.
@@ -598,10 +605,15 @@ var blade_up: bool = false
 # controller and replicated. Its raised phases lift the blade like blade_up, but
 # the stick plays no puck while busy — the hook is the only thing it can do.
 var stick_check_phase: int = 0
-# An opponent's stick is tied up with this one (StickTieTracker, host-only
-# writer; replicated). A tied blade catches nothing — every puck it touches
-# bobbles off — and pokes and lifts nothing.
+# Tied up with an opponent's stick (StickTieTracker, host-only writer;
+# replicated), set on both players. A tied stick is off the ice and slowed: it
+# catches nothing (an airborne puck that reaches it bobbles off), and pokes,
+# lifts and ties nothing.
 var stick_tied: bool = false
+# The stick-check button as this skater's last input held it, stamped by the
+# controller. Read only by the host's StickTieTracker (either player holding keeps
+# a tie); never replicated.
+var stick_check_held: bool = false
 # Deliberate-deflect intent: true while a human player holds the shoot button
 # (LMB) WITHOUT carrying the puck — a committed "redirect this, don't catch it."
 # Set each tick by the controller (see SkaterController._wants_deflect); read
@@ -646,6 +658,9 @@ var _faceoff_address: float = 0.0
 # so a forced lift dislodges a carried puck. Stays 0 on clients (they read the
 # resolved blade_up off the wire).
 var _forced_lift_timer: float = 0.0
+# The shared stick-check cooldown (StickCheckRules.STICK_CHECK_COOLDOWN_S):
+# host-side only, like the forced lift; started by a landed lift and a tie ending.
+var _stick_check_cooldown: float = 0.0
 var is_ghost: bool = false
 # True while this skater is knocked down by a hard body check (knockdown_timer > 0
 # on its controller). Set by SkaterController each tick; read by the puck pickup
@@ -968,6 +983,7 @@ func _physics_process(delta: float) -> void:
 	clamp_body_to_goalies()
 	_update_blade_elevation(delta)
 	_forced_lift_timer = maxf(_forced_lift_timer - delta, 0.0)
+	_stick_check_cooldown = maxf(_stick_check_cooldown - delta, 0.0)
 	_update_blade_lift(delta)
 	_update_commit_stance(delta)
 	_update_carry_contact(delta)
@@ -1365,7 +1381,21 @@ func _apply_blade_tilt() -> void:
 			(_stroke_toe_blend * carry_stroke_toe_u
 					- _catch_heel_blend * carry_catch_heel_u
 					+ _aim_seat_offset_u()) * blade_length) \
-			+ _reception_give_dir * (_reception_give_blend * reception_give_max)
+			+ _reception_give_dir * (_reception_give_blend * reception_give_max) \
+			+ _tie_draw_local()
+
+
+func set_tie_draw_offset(world_offset: Vector3) -> void:
+	_tie_draw_target = world_offset
+
+
+# The tie's draw slide in the Blade marker's frame, which the mesh hangs in.
+func _tie_draw_local() -> Vector3:
+	_tie_draw_offset = _tie_draw_offset.move_toward(_tie_draw_target,
+			_TIE_DRAW_EASE_M_S * get_process_delta_time())
+	if _tie_draw_offset == Vector3.ZERO:
+		return Vector3.ZERO
+	return blade.global_transform.basis.inverse() * _tie_draw_offset
 
 
 # (Re)generates the procedural curved blade mesh (and the tape band riding it,
@@ -1526,7 +1556,8 @@ const _CHECK_LEAD_SPEED: float = 5.0
 # the whole stick rises off the ice instead of snapping. Called from
 # _physics_process.
 func _update_blade_lift(delta: float) -> void:
-	var target: float = 1.0 if StickCheckRules.blade_held_up(blade_up, stick_check_phase) else 0.0
+	var target: float = 1.0 if StickCheckRules.blade_held_up(blade_up, stick_check_phase, stick_tied) \
+			else 0.0
 	var speed: float = _BLADE_DROP_BLEND_SPEED \
 			if stick_check_phase == StickCheckRules.Phase.DROP else _BLADE_LIFT_BLEND_SPEED
 	_blade_lift_blend = move_toward(_blade_lift_blend, target, speed * delta)
@@ -1592,6 +1623,16 @@ func force_blade_lift(duration: float) -> void:
 
 func is_forced_lift_active() -> bool:
 	return _forced_lift_timer > 0.0
+
+
+# While it runs, this skater's hook lifts nothing and their stick latches no tie.
+# Host-side only; the press itself is never gated, so no client predicts it.
+func start_stick_check_cooldown() -> void:
+	_stick_check_cooldown = StickCheckRules.STICK_CHECK_COOLDOWN_S
+
+
+func is_stick_check_cooling() -> bool:
+	return _stick_check_cooldown > 0.0
 
 
 # ── Facing ────────────────────────────────────────────────────────────────────

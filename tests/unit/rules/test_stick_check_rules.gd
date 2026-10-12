@@ -60,11 +60,9 @@ func test_holding_past_the_hook_becomes_a_tie() -> void:
 	assert_eq(int(s.x), Phase.DROP, "letting go of a tie drops the blade")
 
 
-func test_a_tie_held_to_its_cap_ends_in_recover() -> void:
-	var s: Vector2 = _run(Phase.TIE, 0.0, _ticks(StickCheckRules.TIE_MAX_S), true)
-	assert_eq(int(s.x), Phase.RECOVER, "a stick held out too long is out of the play")
-	s = _run(int(s.x), s.y, _ticks(StickCheckRules.RECOVER_S), true)
-	assert_eq(int(s.x), Phase.IDLE)
+func test_a_tie_reaches_for_as_long_as_it_is_held() -> void:
+	var s: Vector2 = _run(Phase.TIE, 0.0, _ticks(5.0), true)
+	assert_eq(int(s.x), Phase.TIE, "a tie has no time limit; only the button ends it")
 
 
 func test_a_press_is_ignored_until_rearmed() -> void:
@@ -88,25 +86,48 @@ func test_only_the_lifting_phases_take_the_stick_off_the_puck() -> void:
 			busy.append(phase)
 		if StickCheckRules.is_blade_raised(phase):
 			raised.append(phase)
-	assert_eq(busy, [Phase.RISE, Phase.HOOK, Phase.RECOVER, Phase.TIE] as Array[int],
+	assert_eq(busy, [Phase.RISE, Phase.HOOK, Phase.TIE] as Array[int],
 			"the drop plays the puck: it is the take")
 	assert_eq(raised, [Phase.RISE, Phase.HOOK, Phase.TIE] as Array[int])
 
 
+func test_a_tied_stick_is_held_up_at_the_lift_height_whatever_its_phase() -> void:
+	for phase: int in Phase.values():
+		assert_true(StickCheckRules.blade_held_up(false, phase, true), "phase %d" % phase)
+		assert_true(StickCheckRules.uses_lift_height(phase, true), "phase %d" % phase)
+	assert_false(StickCheckRules.blade_held_up(false, Phase.IDLE, false))
+	assert_false(StickCheckRules.uses_lift_height(Phase.REARM, false))
+
+
 func test_every_phase_fits_the_wire() -> void:
-	# The u8 packs whole ticks in five bits; a phase that ran longer would
-	# reconcile to the wrong point in it. (The tie has its own coarser unit.)
+	# The u8 packs whole ticks in five bits; a timed phase that ran longer would
+	# reconcile to the wrong point in it. The tie has no timed edge, so its count
+	# saturating is harmless.
 	for seconds: float in [StickCheckRules.RISE_S, StickCheckRules.HOOK_MAX_S,
-			StickCheckRules.DROP_S, StickCheckRules.RECOVER_S, StickCheckRules.REARM_S]:
+			StickCheckRules.DROP_S, StickCheckRules.REARM_S]:
 		assert_lte(roundi(seconds * 120.0), 31, "%.2f s" % seconds)
 	for phase: int in Phase.values():
 		var b: int = StickCheckRules.pack(phase, 0.1)
 		assert_eq(StickCheckRules.unpack_phase(b), phase)
-		var tol: float = 4.0 / 120.0 if phase == Phase.TIE else 0.5 / 120.0
-		assert_almost_eq(StickCheckRules.unpack_elapsed(b), 0.1, tol)
-	# The tie counts in coarser units, out past its whole length.
-	var tie: int = StickCheckRules.pack(Phase.TIE, StickCheckRules.TIE_MAX_S)
-	assert_almost_eq(StickCheckRules.unpack_elapsed(tie), StickCheckRules.TIE_MAX_S, 4.0 / 120.0)
+		assert_almost_eq(StickCheckRules.unpack_elapsed(b), 0.1, 0.5 / 120.0)
+	var long_tie: int = StickCheckRules.pack(Phase.TIE, 3.0)
+	assert_eq(StickCheckRules.unpack_phase(long_tie), Phase.TIE)
+
+
+func test_stick_gap_is_plan_view_segment_to_segment() -> void:
+	var up := Vector3(0.0, 1.0, 0.0)
+	# Crossing in plan view touches, whatever the heights.
+	assert_eq(StickCheckRules.stick_gap(Vector3(-1, 0, 0) + up, Vector3(1, 0, 0),
+			Vector3(0, 0, -1), Vector3(0, 0, 1) + up), 0.0)
+	# Parallel sticks half a metre apart.
+	assert_almost_eq(StickCheckRules.stick_gap(Vector3(0, 1, 0), Vector3(1, 0, 0),
+			Vector3(0, 0, 0.5), Vector3(1, 0, 0.5)), 0.5, 1e-6)
+	# End to end along one line.
+	assert_almost_eq(StickCheckRules.stick_gap(Vector3(0, 0, 0), Vector3(1, 0, 0),
+			Vector3(1.3, 0, 0), Vector3(2, 0, 0)), 0.3, 1e-6)
+	# A blade tip beside the middle of a shaft.
+	assert_almost_eq(StickCheckRules.stick_gap(Vector3(0, 0, 2), Vector3(0, 0, 0.2),
+			Vector3(-1, 0, 0), Vector3(1, 0, 0)), 0.2, 1e-6)
 
 
 func test_hook_quality_grades_by_distance_to_the_shaft() -> void:
