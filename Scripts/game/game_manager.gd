@@ -134,6 +134,8 @@ var _tag_up_peers: Dictionary[int, bool] = {}
 # checks (host only). The domain calls read it synchronously and never retain
 # it; each call site clears + refills before use.
 var _positions_scratch: Dictionary = {}
+# Its velocity twin, for the icing race.
+var _velocities_scratch: Dictionary = {}
 # The ghost-state result half of the same pair — _apply_ghost_state consumes the
 # map in the same call it is filled and never retains it.
 var _ghosts_scratch: Dictionary = {}
@@ -887,12 +889,18 @@ func _update_host_puck_tracking() -> void:
 		var carrier_team: Team = _registry.resolve_team(puck.carrier)
 		if carrier_team != null:
 			_state_machine.notify_puck_carried(carrier_team.team_id,
-					puck.carrier.global_position.z, puck.carrier.global_position.x)
+					puck.global_position.z, puck.global_position.x)
 	elif _state_machine.current_phase == GamePhase.Phase.PLAYING:
 		_registry.fill_positions_by_peer_id(_positions_scratch)
+		_registry.fill_velocities_by_peer_id(_velocities_scratch)
 		_state_machine.check_icing_for_loose_puck(
-				puck.global_position.z, _positions_scratch)
-		_consume_pending_faceoff()
+				puck.global_position.z, _positions_scratch, _velocities_scratch)
+	_consume_pending_faceoff()
+	# A goalie who plays an iced puck waves the icing off, so the defending one
+	# stays home while the race runs.
+	var icing_team: int = _state_machine.icing.pending_team_id
+	for gc: GoalieController in goalie_controllers:
+		gc.set_icing_hold(icing_team != -1 and gc.team_id != icing_team)
 
 
 # Host-only swept goal detection. Feeds each goal the puck-center segment from
@@ -3146,7 +3154,8 @@ func _on_server_puck_stripped_from(peer_id: int, stripper_peer_id: int) -> void:
 		_turnover_tracker.note_strip(peer_id, stripper_peer_id)
 	if _possession_tracker != null:
 		_possession_tracker.on_puck_lost(peer_id)
-	_state_machine.notify_icing_contact()
+	_state_machine.notify_icing_touch(_registry.resolve_team_id_for_peer(stripper_peer_id),
+			puck.global_position.z, puck.global_position.x)
 	if not record.is_local:
 		# Tell the victim's client whether this was a stick lift so it can pop
 		# their own blade up locally (their prediction never saw the host force).
@@ -3201,7 +3210,8 @@ func _on_server_puck_touched_while_loose(peer_id: int) -> void:
 	# A loose-puck touch during FACEOFF (deflect / body redirect) makes the puck
 	# live — end the faceoff so a goal off the deflection counts (see P2-2).
 	_phase_coord.on_puck_touched_live()
-	_state_machine.notify_icing_contact()
+	_state_machine.notify_icing_touch(_registry.resolve_team_id_for_peer(peer_id),
+			puck.global_position.z, puck.global_position.x)
 	# Deflection or body-block by an offending-team attacker also counts as a
 	# touch that whistles a delayed offside.
 	_state_machine.notify_puck_touch(peer_id)
@@ -3222,6 +3232,9 @@ func _on_puck_touched_by_goalie(goalie: Goalie) -> void:
 	var defending_team_id: int = _defending_team_id_for_goalie(goalie)
 	_shot_tracker.on_goalie_touch(defending_team_id)
 	_stats_sync_gate.mark_dirty()
+	# A goalie touch only ever waves icing off, so no whistle fires mid-tick here.
+	_state_machine.notify_icing_touch(defending_team_id,
+			puck.global_position.z, puck.global_position.x, true)
 
 
 func _defending_team_id_for_goalie(goalie: Goalie) -> int:

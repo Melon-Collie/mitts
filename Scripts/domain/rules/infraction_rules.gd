@@ -2,7 +2,8 @@ class_name InfractionRules
 
 # Pure rules for hockey infractions that trigger ghost mode.
 # Offside: skater in attacking zone before the puck.
-# Icing: puck shot from own half past the opponent's goal line.
+# Icing: puck shot from own half past the opponent's goal line, then the hybrid
+# race to the end-zone dots (IcingRace runs it).
 #
 # Team 0 attacks toward -Z (defends +Z goal at z = +GoalLineZ).
 # Team 1 attacks toward +Z (defends -Z goal at z = -GoalLineZ).
@@ -27,13 +28,49 @@ static func is_offside(
 		# Team 1 attacking zone: z > BlueLineZ
 		return skater_z > line and puck_z <= GameRules.BLUE_LINE_Z
 
-# Hybrid icing race: returns true if the defending team wins (icing confirmed).
-# icing_min_dist:     closest icing-team player's distance to the crossed goal line.
-# defending_min_dist: closest defending-team player's distance to the crossed goal line.
-# Ties go to the defending team (icing called).
-static func defending_wins_icing_race(
-		icing_min_dist: float, defending_min_dist: float) -> bool:
-	return defending_min_dist <= icing_min_dist
+enum IcingCall { NONE, ICING, WAVED_OFF }
+
+# Seconds until a skater's body reaches the end-zone dot line of the end
+# `offender_team_id` iced toward; 0 once on or past it. Straight-line along the
+# rink's length from the skater's current speed toward that end, at the league
+# default thrust and top speed — lateral motion and the skater's own build are
+# not modelled.
+static func time_to_icing_dot_line(skater_z: float, skater_vz: float, offender_team_id: int) -> float:
+	var end_sign: float = -1.0 if offender_team_id == 0 else 1.0
+	var remaining: float = GameRules.ICING_FACEOFF_DOT_Z - skater_z * end_sign
+	if remaining <= 0.0:
+		return 0.0
+	var v_max: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
+	var a: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
+	var v: float = minf(skater_vz * end_sign, v_max)
+	var t_top: float = (v_max - v) / a
+	var d_top: float = (v_max * v_max - v * v) / (2.0 * a)
+	if remaining <= d_top:
+		return (sqrt(v * v + 2.0 * a * remaining) - v) / a
+	return t_top + (remaining - d_top) / v_max
+
+
+# Whether an icing-team skater is in the race: at the dots already, or skating
+# at the end hard enough to be going for the puck.
+static func is_racing_icing(skater_z: float, skater_vz: float, offender_team_id: int) -> bool:
+	var end_sign: float = -1.0 if offender_team_id == 0 else 1.0
+	return skater_z * end_sign >= GameRules.ICING_FACEOFF_DOT_Z \
+			or skater_vz * end_sign >= GameRules.ICING_RACE_PURSUIT_SPEED_M_S
+
+
+# Hybrid icing: the race is decided the instant the first skater reaches the
+# end-zone dots (each team's best `time_to_icing_dot_line`). A defender there
+# first, or level, is icing; an attacker there first waves it off only if he
+# leads by ICING_RACE_CLEAR_MARGIN_S — too close to call is icing. NONE while
+# nobody has reached the dots.
+static func judge_icing_race(icing_eta: float, defending_eta: float) -> IcingCall:
+	if defending_eta <= 0.0:
+		return IcingCall.ICING
+	if icing_eta > 0.0:
+		return IcingCall.NONE
+	if defending_eta >= GameRules.ICING_RACE_CLEAR_MARGIN_S:
+		return IcingCall.WAVED_OFF
+	return IcingCall.ICING
 
 # Returns true when a player who was serving an offside has crossed back into
 # the neutral zone or their own zone — i.e. they have "tagged up" at the line.
@@ -49,18 +86,22 @@ static func has_tagged_up(skater_z: float, team_id: int) -> bool:
 		return skater_z <= line
 
 # Detects a potential icing crossing. Returns the offending team id (0 or 1),
-# or -1 if no icing condition is present. The caller applies the hybrid-icing
-# race check to decide whether to confirm or wave off.
+# or -1 if no icing condition is present. `last_touch_z` is the PUCK's Z where
+# that team last touched it; a puck touching the red line then has gained the
+# line, so it must sit wholly behind the paint. The puck must also be wholly
+# past the goal line. The caller runs the hybrid race to confirm or wave off.
 static func check_icing(
-		last_carrier_team_id: int,
-		last_carrier_z: float,
+		last_touch_team_id: int,
+		last_touch_z: float,
 		puck_z: float) -> int:
-	if last_carrier_team_id == -1:
+	if last_touch_team_id == -1:
 		return -1
-	# Team 0: released from z > 0 (own half), puck now past -GoalLineZ
-	if last_carrier_team_id == 0 and last_carrier_z > 0.0 and puck_z < -GameRules.GOAL_LINE_Z:
+	var behind_red: float = GameRules.THICK_LINE_WIDTH_M * 0.5 + GameRules.PUCK_COLLISION_RADIUS
+	var past_goal: float = GameRules.GOAL_LINE_Z + GameRules.PUCK_COLLISION_RADIUS
+	# Team 0: released from its own half (+Z), puck now past -GoalLineZ
+	if last_touch_team_id == 0 and last_touch_z > behind_red and puck_z < -past_goal:
 		return 0
-	# Team 1: released from z < 0 (own half), puck now past +GoalLineZ
-	if last_carrier_team_id == 1 and last_carrier_z < 0.0 and puck_z > GameRules.GOAL_LINE_Z:
+	# Team 1: released from its own half (-Z), puck now past +GoalLineZ
+	if last_touch_team_id == 1 and last_touch_z < -behind_red and puck_z > past_goal:
 		return 1
 	return -1

@@ -620,9 +620,9 @@ static func _bounce_velocity(v: Vector2, inward_normal: Vector2) -> Vector2:
 #
 # `ice_line_z` / `ice_line_dir` (+1 = the line sits at greater z) name a line to
 # time the crossing of; pass dir = 0.0 to skip it. TIME is the point of this,
-# not the bare fact of crossing: hybrid icing is a RACE judged at the moment the
-# puck crosses the goal line (GameStateMachine.check_icing_for_loose_puck —
-# each team's closest body to the end-zone dot, ties to the defence). A puck
+# not the bare fact of crossing: hybrid icing is a RACE that starts when the
+# puck crosses the goal line and is judged when the first skater reaches the
+# end-zone dots (IcingRace — ties to the defence). A puck
 # that takes long enough to get there is one the forecheck wins, and a won race
 # is not an infraction at all, it is a dump-in with pressure arriving. So what
 # the dump eval needs is the clock, and a delivery earns its legality by taking

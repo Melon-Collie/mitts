@@ -1212,6 +1212,10 @@ func apply_skill_profile(profile: GoalieSkillProfile) -> void:
 func set_skater_getter(getter: Callable) -> void:
 	_skater_getter = getter
 
+# Host: an icing race is running in this goalie's end (GameManager, per tick).
+func set_icing_hold(held: bool) -> void:
+	_puck_play.icing_hold = held
+
 # Static-drill five-hole opening (only the frozen "beat the goalie" tutorial
 # goalie uses these — zero blast radius on real gameplay). A real standing goalie
 # rests the paddle on the ice in front of the pads, which sits right over the

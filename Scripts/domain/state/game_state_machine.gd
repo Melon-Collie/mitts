@@ -5,7 +5,7 @@ extends RefCounted
 #   - current phase + timer
 #   - scores
 #   - player slot registry (peer_id → {team_slot, team_id})
-#   - icing state + last carrier tracking
+#   - icing (IcingRace) and the stoppage it calls
 #   - ghost computation (uses InfractionRules + dead-puck check)
 #
 # The state machine exists on both host and client. On the host, GameManager
@@ -61,13 +61,8 @@ var players: Dictionary[int, Dictionary] = {}
 var reserved_slots: Array[Dictionary] = []
 
 # ── Icing ────────────────────────────────────────────────────────────────────
-var last_carrier_team_id: int = -1
-var last_carrier_z: float = 0.0
-# Last carrier's X — used to pick the side of the offending team's defensive
-# zone for the NHL icing faceoff dot.
-var last_carrier_x: float = 0.0
-var icing_team_id: int = -1
-var _icing_timer: float = 0.0
+# Host-side; read-only outside this class (GameManager reads pending_team_id).
+var icing: IcingRace = IcingRace.new()
 
 # ── Offsides ─────────────────────────────────────────────────────────────────
 # ARCADE path: peer IDs currently serving an offside ghost. Cleared per-peer
@@ -122,7 +117,7 @@ static func _make_period_scores(count: int) -> Array[Array]:
 # Returns true if the phase changed this tick, so GameManager knows to fire
 # phase-entry side effects.
 func tick(delta: float) -> bool:
-	_tick_icing(delta)
+	icing.tick(delta)
 	return _tick_phase(delta)
 
 
@@ -182,16 +177,11 @@ func _end_faceoff_if_active() -> bool:
 	_set_phase(GamePhase.Phase.PLAYING)
 	return true
 
-# Host-side: called every physics frame while the puck has a carrier. Tracks
-# carrier info for icing detection. Any pickup clears active icing (opponent
-# pickup instantly resets; same-team pickup just refreshes the tracker).
-func notify_puck_carried(carrier_team_id: int, carrier_z: float, carrier_x: float = 0.0) -> void:
-	last_carrier_team_id = carrier_team_id
-	last_carrier_z = carrier_z
-	last_carrier_x = carrier_x
-	if icing_team_id != -1 and carrier_team_id != icing_team_id:
-		icing_team_id = -1
-		_icing_timer = 0.0
+# Host-side: called every physics frame while the puck has a carrier, with the
+# PUCK's position (the blade) — the icing release point. A pickup during an
+# icing race decides it (IcingRace.note_touch).
+func notify_puck_carried(carrier_team_id: int, puck_z: float, puck_x: float = 0.0) -> void:
+	_apply_icing_call(icing.note_touch(carrier_team_id, puck_z, puck_x, false))
 
 
 # Host-side: called when PossessionTracker fires possession_established for
@@ -213,49 +203,30 @@ func notify_possession_established(team_id: int, puck_z: float) -> void:
 	if _puck_in_attacking_zone(offending_team_id, puck_z):
 		_void_arcade_offside_for_team(offending_team_id)
 
-# Host-side: called when a loose puck is touched by any player (deflection,
-# body block, poke check, body check strip). Clears the icing tracker so the
-# touch is not counted as an intentional ice.
-func notify_icing_contact() -> void:
-	last_carrier_team_id = -1
+# Host-side: a loose puck was touched — a skater's deflection or body block, a
+# strip (the stripper's team), or a goalie's save (`by_goalie`). `team_id` -1 is
+# an unknown toucher. The touch moves the icing release point, and during an
+# icing race decides it.
+func notify_icing_touch(team_id: int, puck_z: float, puck_x: float, by_goalie: bool = false) -> void:
+	_apply_icing_call(icing.note_touch(team_id, puck_z, puck_x, by_goalie))
 
-# Host-side: called every physics frame when the puck is loose. Detects icing
-# and applies the hybrid-icing race: compares each team's closest player to the
-# crossed goal line. Icing is confirmed immediately if the defending team wins;
-# waved off if the icing team's player is closer.
-func check_icing_for_loose_puck(
-		puck_z: float, player_positions: Dictionary = {}) -> void:
-	if rule_set != GameRules.RuleSet.NHL:
+# Host-side: called every physics frame when the puck is loose. Opens the
+# hybrid icing race when the puck crosses the far goal line and judges it until
+# it is decided (IcingRace.update). NHL only.
+func check_icing_for_loose_puck(puck_z: float, player_positions: Dictionary = {},
+		player_velocities: Dictionary = {}) -> void:
+	if rule_set != GameRules.RuleSet.NHL or current_phase != GamePhase.Phase.PLAYING:
 		return
-	if current_phase != GamePhase.Phase.PLAYING:
-		return
-	if icing_team_id != -1:
-		return
-	var offender: int = InfractionRules.check_icing(last_carrier_team_id, last_carrier_z, puck_z)
-	if offender == -1:
-		return
+	_apply_icing_call(icing.update(puck_z, player_positions, player_velocities, players))
 
-	# Hybrid icing race: find each team's closest player to the end-zone faceoff dot.
-	var dot_z: float = -GameRules.ICING_FACEOFF_DOT_Z if offender == 0 else GameRules.ICING_FACEOFF_DOT_Z
-	var icing_min_dist: float = INF
-	var defending_min_dist: float = INF
-	for peer_id in player_positions:
-		if not players.has(peer_id):
-			continue
-		var team_id: int = players[peer_id].team_id
-		var dist: float = abs(player_positions[peer_id].z - dot_z)
-		if team_id == offender:
-			icing_min_dist = min(icing_min_dist, dist)
-		else:
-			defending_min_dist = min(defending_min_dist, dist)
 
-	if InfractionRules.defending_wins_icing_race(icing_min_dist, defending_min_dist):
-		icing_team_id = offender
-		_icing_timer = GameRules.ICING_GHOST_DURATION
-		pending_faceoff_dot = GameRules.icing_faceoff_dot(offender, last_carrier_x)
+func _apply_icing_call(call: InfractionRules.IcingCall) -> void:
+	if call == InfractionRules.IcingCall.NONE:
+		return
+	if call == InfractionRules.IcingCall.ICING and current_phase == GamePhase.Phase.PLAYING:
+		pending_faceoff_dot = GameRules.icing_faceoff_dot(icing.pending_team_id, icing.pending_release_x)
 		pending_faceoff_reason = FaceoffReason.ICING
-
-	last_carrier_team_id = -1
+	icing.end_race()
 
 # Host-side: compute ghost state for all players into `result` as
 # {peer_id: should_ghost}. Runs every host tick, so the caller owns the
@@ -307,13 +278,6 @@ func compute_ghost_state(
 				if InfractionRules.is_offside(pos_z, slot.team_id, puck_position.z, is_carrier):
 					_offside_peer_ids[peer_id] = true
 					ghost = true
-		# NOTE: icing does NOT ghost the offending team. `icing_team_id` is set in
-		# check_icing_for_loose_puck and drives the whistle + faceoff via
-		# pending_faceoff_dot/reason, but begin_faceoff_prep clears it in the SAME
-		# host tick the icing is called — before this ghost pass runs — so a ghost
-		# branch keyed on it here could never fire. Icing is a whistle-and-faceoff
-		# rule (NHL only), not a ghost. (`_icing_timer` stays as a fallback clear
-		# and is unit-tested at the SM level.)
 		# Crease protection (ARCADE only — see GameRules.CREASE_DWELL_DURATION).
 		# The puck CARRIER is exempt: net drives, wraparounds, and jam plays are
 		# the point of carrying the puck to the net, so a carrier never draws
@@ -618,9 +582,7 @@ func reset_all() -> void:
 	period_scores = _make_period_scores(num_periods)
 	current_period = 1
 	time_remaining = period_duration
-	icing_team_id = -1
-	_icing_timer = 0.0
-	last_carrier_team_id = -1
+	icing.reset()
 	_offside_peer_ids.clear()
 	_delayed_offside_peer_ids.clear()
 	delayed_offside_team_id = -1
@@ -649,9 +611,7 @@ func apply_config(p_num_periods: int, p_period_duration: float, p_ot_enabled: bo
 # stoppages leave it at 0 and every phase entry resets it.
 func begin_faceoff_prep(dot_xz: Vector2 = GameRules.CENTER_ICE_DOT,
 		extra_prep_time: float = 0.0) -> void:
-	icing_team_id = -1
-	_icing_timer = 0.0
-	last_carrier_team_id = -1
+	icing.reset()
 	_offside_peer_ids.clear()
 	_delayed_offside_peer_ids.clear()
 	delayed_offside_team_id = -1
@@ -837,15 +797,6 @@ func _advance_period() -> void:
 	if period_scores[0].size() < current_period:
 		period_scores[0].append(0)
 		period_scores[1].append(0)
-	icing_team_id = -1
-	_icing_timer = 0.0
-	last_carrier_team_id = -1
+	icing.reset()
 	active_faceoff_dot = GameRules.CENTER_ICE_DOT
 	_set_phase(GamePhase.Phase.FACEOFF_PREP)
-
-func _tick_icing(delta: float) -> void:
-	if icing_team_id == -1:
-		return
-	_icing_timer -= delta
-	if _icing_timer <= 0.0:
-		icing_team_id = -1

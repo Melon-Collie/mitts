@@ -456,7 +456,18 @@ const NET_STUCK_MAX_SPEED: float = 0.6       # m/s — below this the puck count
 const NET_STUCK_PLAYABLE_HEIGHT: float = 0.30  # m above ice; at/under → drop to ice, over → whistle
 
 # ── Infractions ───────────────────────────────────────────────────────────────
-const ICING_GHOST_DURATION: float = 3.0  # seconds team stays ghosted after icing (ARCADE/legacy path)
+# Centre red line and blue lines: 12 in in the NHL book. A puck touching the
+# red line has "gained the line" and cannot be iced.
+const THICK_LINE_WIDTH_M: float = 0.3
+# Hybrid icing race (NHL Rule 81). A race too close to call at the end-zone dots
+# is icing: the attacker must reach the dots this far ahead of the nearest
+# defender to wave it off — about a stride at race pace.
+const ICING_RACE_CLEAR_MARGIN_S: float = 0.2
+# An icing-team skater closing on the end slower than this isn't racing; with
+# nobody racing, icing is whistled as the puck crosses.
+const ICING_RACE_PURSUIT_SPEED_M_S: float = 3.0
+# Nobody has reached the dots this long after the crossing: whistle it.
+const ICING_RACE_MAX_S: float = 4.0
 # Crease protection — ARCADE-only anti-camp mechanic, not a real NHL rule. A
 # field skater (carrier exempt — see compute_ghost_state) who lingers in a
 # goalie crease this long is ghosted (loses puck/body interaction) until they
@@ -484,7 +495,7 @@ const NEUTRAL_ZONE_FACEOFF_DOT_Z: float = BLUE_LINE_Z - 1.524   # 5.766
 #   OFF    — no offsides, no icing, no crease protection (free-for-all).
 #   ARCADE — offsides ghost the offending player; icing is ignored; crease
 #            camping (anti-cheese, not a real rule) ghosts after a dwell timer.
-#   NHL    — full stoppage rules: icing blows the whistle after the hybrid race,
+#   NHL    — full stoppage rules: icing runs the hybrid race to the end-zone dots,
 #            offsides run delayed (no ghost) and whistle on offending-team touch.
 #            No crease protection — see CREASE_DWELL_DURATION for why.
 enum RuleSet { OFF, ARCADE, NHL }

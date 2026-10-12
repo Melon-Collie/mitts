@@ -52,7 +52,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +1: the chase steer passes when an airborne puck is back on the blade plane.
 	"res://Scripts/ai/skater_agent_state_machine.gd": 6090,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
-	"res://Scripts/game/game_manager.gd": 5644,
+	"res://Scripts/game/game_manager.gd": 5657,
 	"res://Scripts/domain/ai/action_scoring.gd": 4458,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
@@ -61,7 +61,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +7: the puck-velocity estimate is bounded by the puck's own speed limit.
 	# It is a one-tick finite difference feeding a positional decision, so a
 	# teleport read as travel moved the tracked threat metres in a tick.
-	"res://Scripts/controllers/goalie_controller.gd": 5010,
+	"res://Scripts/controllers/goalie_controller.gd": 5014,
 	# +162: the rim pass. The path search lives in AIRimPass; what stays here is
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
@@ -91,7 +91,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/controllers/local_controller.gd": 932,
 	"res://Scripts/ui/player_settings_popup.gd": 863,
 	"res://Scripts/ui/slot_grid_panel.gd": 839,
-	"res://Scripts/domain/state/game_state_machine.gd": 851,
+	"res://Scripts/domain/state/game_state_machine.gd": 802,
 	"res://Scripts/ui/locker_popup.gd": 822,
 	"res://Scripts/ui/hud.gd": 811,
 }
