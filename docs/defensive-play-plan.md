@@ -63,8 +63,9 @@ Two defects found during the survey; Phase 1 fixes both by construction:
     `RemoteController` ORs edges across inputs it drops.
   - **After this the u16 flag field is full.** The next input bit grows the record
     from 24 to 25 bytes.
-- **Defaults:** see open questions 1–2. Every pad face, shoulder and stick button is
-  already taken.
+- **Defaults:** X on the pad. It was freed when the loft moved to D-pad up/down and
+  the ping to D-pad left (pad scheme 2, already landed with a one-time migration of
+  saved binds). The KBM default is open question 1.
 
 ### The stick-check state machine
 `SkaterStickCheck` is a RefCounted collaborator on `SkaterController`. It exclusively
@@ -158,7 +159,7 @@ PRESSURE chooses between the poke jab and a lift by what the bot can actually se
   - the `TIE_MAX_S` 1.5 s cap runs out, after which a `TIE_COOLDOWN_S` 0.75 s cooldown
     stops the same defender chaining ties on the same victim.
 
-  v1 is pure geometry, with no attribute term (open question 3).
+  v1 is pure geometry, with no attribute term (open question 2).
 
 ### Netcode
 - **Engagement is a claim.** `StickTieClaimResolver` follows the full contract in
@@ -234,7 +235,7 @@ PRESSURE chooses between the poke jab and a lift by what the bot can actually se
   wall-squeeze release. A pinned non-carrier can still play the puck.
 - **The defender.** Holding Ctrl and driving in maintains the pin; letting go of
   either ends it. The commit keeps their stick off the ice, and that is the bargain: a
-  one-for-one trade that frees your partner to dig the puck out (open question 4).
+  one-for-one trade that frees your partner to dig the puck out (open question 3).
 - **Escape.**
   - The timer drains at `1 + escape_drive · (1 − pin_strength) · PIN_ESCAPE_RATE`.
     Driving along the wall, and especially reversing against the slide, gets out
@@ -283,7 +284,8 @@ PRESSURE chooses between the poke jab and a lift by what the bot can actually se
 
 - **Bots block shots.** The C verb has never been used by a bot.
 - **Dive / sprawl poke.** The last-ditch full extension on a 2-on-1 or a breakaway,
-  paid for with a knockdown. It needs an input; nothing is free on the pad.
+  paid for with a knockdown. It needs an input; Y is the one pad face button left
+  free.
 - **Net-front box-out.** The pin's sustained-contact model in open ice, moving a
   screener out of the goalie's sightline. It would feed the goalie's screen read.
 - **Deliberately out:** hooking, holding and interference. Without a penalty system
@@ -333,17 +335,12 @@ must still grow, its ratchet entry is bumped in the same diff.
 
 ## Open questions
 
-1. **Pad binding.** Every face, shoulder and stick button is taken, and the D-pad sits
-   under the thumb that skates.
-   - (a) Stick check takes RB, and deflect moves somewhere else.
-   - (b) A chord, LB+RB.
-   - (c) Back paddles only (Deck, Elite).
-2. **KBM default.** F is recommended: an index-finger reach, and `save_goal_clip` only
+1. **KBM default.** F is recommended: an index-finger reach, and `save_goal_clip` only
    uses it during the goal cinematic. X and mouse thumb buttons are the alternatives.
    Check the rebind conflict validator either way.
-3. **Tie strength.** Pure geometry in v1, or does Weight resist a yank? Geometry is
+2. **Tie strength.** Pure geometry in v1, or does Weight resist a yank? Geometry is
    recommended until it has been playtested.
-4. **Pin and stick.** Can the pinning defender dig with their stick? Recommended: no.
+3. **Pin and stick.** Can the pinning defender dig with their stick? Recommended: no.
    The commit keeps it off, which keeps the pin a one-for-one trade.
 
 ## Starting values
