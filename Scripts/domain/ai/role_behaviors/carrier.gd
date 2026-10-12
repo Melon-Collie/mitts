@@ -37,22 +37,37 @@ const INTENT_PASS: int = 3
 const INTENT_DUMP: int = 5
 
 # ── Giveaway floors: least value worth releasing the puck for ────────────────
-# Both are DENOMINATED IN THE SEAM'S CURRENCY (AIShotValue → XGBaseline), an
-# NHL-calibrated goal probability where a clean mid-slot look is ~0.12 — not the
-# hole-geometry score, which saturates at 1.0.
+# Tactical floors, not evaluation curves. Both are DENOMINATED IN THE SEAM'S
+# CURRENCY (AIShotValue → XGBaseline): an honest NHL-calibrated goal
+# probability, where a clean mid-slot look is ~0.12 and no real spot reaches
+# 0.5. They are scale-bound to that model and move if it does — neither is
+# transferable to the hole-geometry score, which saturates at 1.0 and would
+# read these as a twentieth as strict.
 #
-# They differ because a shot and a pass forfeit different things. A SHOT hands
-# the puck over unless it goes in or comes back, so its floor is what the
-# possession it spends is worth right now: AIPossessionValue.shot_bar, read in
-# _shot_bar. A PASS that connects KEEPS possession, and the odds of it not
-# connecting are already priced by its lane term, so its floor only rejects a
-# release into nothing — a numerical residual on a dead lane, never a real
-# outlet (a receiver at centre ice is worth ~0.017 as a shooter and is still the
-# right play).
+# There are TWO because a shot and a pass forfeit different things.
+#
+# A SHOT hands the puck to the other team unless it goes in, so what it must
+# out-value is the possession itself. Read the number through the baseline to
+# see what it bans: a clear-lane shot straight on reaches 0.05 at about 14 m,
+# so this is "nothing from beyond the top of the circles unless traffic, a
+# screen, or a displaced keeper lifts it". Both halves matter — the distance
+# bound stops a CONTAINED carrier trading the puck for a point shot instead of
+# working it, and the lift keeps a genuine point blast through a screen legal.
+const SHOT_MIN_VALUE: float = 0.05
+# A PASS that connects KEEPS possession — it changes whose stick, not whose
+# team — and the odds of it not connecting are already priced by the lane term
+# inside the pass score. So the possession is not what a pass is spending, and
+# holding a pass to the shot's bar would veto every breakout and regroup feed
+# (a receiver at centre ice is worth ~0.017 as a shooter and is still the right
+# play). This bar only rejects a release into nothing: a numerical residual on
+# a dead lane, never a real outlet.
 const PASS_MIN_VALUE: float = 0.02
-# There is deliberately no bar for the DUMP: it is not chosen on merits but is
-# what is left when the carry is worth nothing and no release qualifies (the
-# residual block in _pick_commit_phase).
+# There is deliberately no third bar for the DUMP. A shot clears SHOT_MIN_VALUE
+# and a pass PASS_MIN_VALUE because each is a RELEASE chosen on its merits, and a
+# release that merely ties the carry must not win. The dump is not chosen on
+# merits at all — it is what is left when the carry is worth nothing and no
+# release qualifies (see the residual block in _pick_commit_phase), so there is
+# nothing for a bar to gate.
 
 # ── Settle doubt: how sure a FRESH carrier has to be to give the puck up ──────
 # A bot that has only just gained the puck has not read the ice yet, so for a
@@ -86,18 +101,6 @@ func _settle_penalty(ctx: RoleContext) -> float:
 # handicaps both signs.
 static func _settle_handicap(value: float, penalty: float) -> float:
 	return value - penalty * absf(value)
-
-
-# The shot's giveaway floor (see AIPossessionValue): what holding the puck is
-# worth at the carrier's best retention hazard, charged at the share of missed
-# shots we do not get back, plus the opponent's value where he collects one —
-# at our attacking net, where a save or a wide shot ends up.
-func _shot_bar(ctx: RoleContext, our_goalie: Vector3) -> float:
-	var possession: float = AIPossessionValue.continuation_value(
-			AIPossessionValue.xg_rate(ctx.team_size), _phase_retention_hazard)
-	var opp_value: float = _turnover_cost(ctx, ctx.attacking_goal_pos, 1.0, our_goalie)
-	return AIPossessionValue.shot_bar(
-			possession, AIPossessionValue.P_LOSE_PRIOR, opp_value)
 
 # Minimum forward distance (m) the PUCK must sit in front of the goal-line plane
 # for a direct shot to be scored at all — below it (on/behind the line, or right
@@ -572,10 +575,6 @@ var _full_eval_pending: bool = true
 # Fire-phase products consumed by the commit phase (instance fields so a
 # sliced eval hands them across the dispatch boundary):
 var _phase_current_safety: float = 0.0
-# Loss hazard (1/s) of the carrier's best way to keep the puck: the lowest of
-# standing (current safety) and every carry route the search read a safety for.
-# Possession is lost only if every one of them fails. Feeds _shot_bar.
-var _phase_retention_hazard: float = 0.0
 var _phase_shoot_score: float = -1.0
 var _phase_best_pass_peer: int = -1
 var _phase_best_pass_score: float = -1.0
@@ -751,7 +750,6 @@ var _beam_prune_bound: float = -INF
 # Populated every re-eval; the state machine forwards these to its
 # own debug_* fields for AIController / floating label.
 var debug_shoot_score: float = 0.0
-var debug_shot_bar: float = 0.0
 var debug_pass_score: float = 0.0
 var debug_pass_peer_id: int = 0
 var debug_carry_score: float = 0.0
@@ -1186,7 +1184,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 	# micro-bench's out-of-zone carrier the saving is ~26 us of a ~1850 us
 	# compete (~1.4%, inside the run-to-run noise), because the carry beam
 	# dominates that number. Do not cite this as a perf win. The giveaway bar
-	# (_shot_bar) already made a own-zone shot unreachable in practice, but
+	# (SHOT_MIN_VALUE) already made a own-zone shot unreachable in practice, but
 	# only by arithmetic that runs downstream of two multipliers — the fire
 	# hysteresis and the smart-ping SHOOT bias — both of which scale a live
 	# score upward before the bar is checked. With the score never computed there
@@ -1404,8 +1402,6 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	# candidate generator — so the profile costs nothing extra.
 	var forward_space: float = _carrier_forward_clearance(ctx)
 
-	_phase_retention_hazard = AIPossessionValue.hazard(
-			current_safety, AICarrySpace.EVADE_HORIZON_S)
 	var carry_result: Array = _best_carry(
 			ctx, raw_shoot_score, directed_seam)
 	var carry_score: float = carry_result[0]
@@ -1473,7 +1469,7 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	var settle_penalty: float = _settle_penalty(ctx)
 
 	# Best fire option — the best of those that clear their OWN giveaway bar
-	# (_shot_bar / PASS_MIN_VALUE). Qualifying each option before the max
+	# (SHOT_MIN_VALUE / PASS_MIN_VALUE). Qualifying each option before the max
 	# rather than after it is what keeps the two bars independent: taking the
 	# max first would let a mediocre shot mask a perfectly legal outlet pass and
 	# veto the whole fire leg, so raising the shot's bar would silently suppress
@@ -1486,8 +1482,7 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	# option instead of de-selecting it (again, see _settle_penalty).
 	var fire_score: float = -INF
 	var fire_intent: int = best_shot_intent
-	debug_shot_bar = _shot_bar(ctx, our_goalie)
-	if _settle_handicap(best_shot_score, settle_penalty) > debug_shot_bar:
+	if _settle_handicap(best_shot_score, settle_penalty) > SHOT_MIN_VALUE:
 		fire_score = best_shot_score
 	if _settle_handicap(best_pass_score, settle_penalty) > PASS_MIN_VALUE \
 			and best_pass_score > fire_score:
@@ -1507,10 +1502,9 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	# clear, not fling a hopeless shot away, and a CONTAINED one must work the puck
 	# rather than trade it for a point shot. A bare `> 0` is nowhere near enough: on
 	# the seam's NHL-calibrated scale a long clear-lane look still scores a real few
-	# percent, which beats a contained carry's own honest value. The shot's bar is
-	# what the possession it spends is worth, PASS_MIN_VALUE only rejects a release
-	# into nothing; a genuine in-range shot scores well above its bar and still wins
-	# ties.
+	# percent, which beats a contained carry's own honest value. SHOT_MIN_VALUE is
+	# what a possession is worth, PASS_MIN_VALUE only rejects a release into
+	# nothing; a genuine in-range shot scores well above its bar and still wins ties.
 	#
 	# ALSO: don't START a fire while staggered. A body check knocks the
 	# bot off-balance (thrust penalty on stagger_timer); winding up a
@@ -3158,10 +3152,6 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 			cur_puck_pos, cand_puck_pos, local_time,
 			_scratch_opponents, _scratch_opponent_vels, _scratch_opponent_caps,
 			true)
-	# Read before the value prune below: a route too poor to win the carry can
-	# still be the safest way to keep the puck.
-	_phase_retention_hazard = minf(_phase_retention_hazard, AIPossessionValue.hazard(
-			safety, maxf(local_time, AICarrySpace.EVADE_HORIZON_S)))
 	if lane * decay * safety <= best_so_far:
 		return -INF
 	# The candidate's shot is taken ARRIVING AT PACE, not from a dead stop —
