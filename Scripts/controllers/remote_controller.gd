@@ -301,6 +301,7 @@ func _drain_backlog(now: float) -> void:
 			next.slap_pressed = next.slap_pressed or stale.slap_pressed
 			next.stick_lift_pressed = next.stick_lift_pressed or stale.stick_lift_pressed
 			next.quick_pass_pressed = next.quick_pass_pressed or stale.quick_pass_pressed
+			next.stick_check_pressed = next.stick_check_pressed or stale.stick_check_pressed
 		if overdue <= _DRAIN_TELEMETRY_MAX_S:
 			NetworkTelemetry.record_input_drain()
 
@@ -530,6 +531,8 @@ func _interpolate(delta: float) -> void:
 		interpolated.is_ghost = newest.is_ghost
 		interpolated.elevation_level = newest.elevation_level
 		interpolated.blade_up = newest.blade_up
+		interpolated.stick_check_phase = newest.stick_check_phase
+		interpolated.stick_check_elapsed = newest.stick_check_elapsed
 		interpolated.shot_state = newest.shot_state
 		interpolated.shot_charge = newest.shot_charge
 		interpolated.stagger_timer = newest.stagger_timer
@@ -568,6 +571,8 @@ func _interpolate(delta: float) -> void:
 		interpolated.is_ghost = to_state.is_ghost
 		interpolated.elevation_level = to_state.elevation_level
 		interpolated.blade_up = to_state.blade_up
+		interpolated.stick_check_phase = to_state.stick_check_phase
+		interpolated.stick_check_elapsed = to_state.stick_check_elapsed
 		interpolated.shot_state = to_state.shot_state
 		# Charge is a scalar — lerp it so the remote's stick-flex load bow
 		# grows smoothly through the drag instead of stepping per broadcast.
@@ -736,6 +741,7 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	# replicated blade_position above; this keeps skater.blade_up correct for
 	# any reader (AI off-puck, VFX) on spectated remotes.
 	skater.blade_up = state.blade_up
+	skater.stick_check_phase = state.stick_check_phase
 	skater.current_shot_state = state.shot_state
 	# Wrister address, gated on the aim state — the wire bit is garbage
 	# otherwise. The skater's address pass adopts it so a spectated shooter's

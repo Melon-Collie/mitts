@@ -216,8 +216,8 @@ var follow_through_facing_recover_speed: float = 18.0
 # scene. This also means crouching (block stance) doesn't pull the blade
 # through the ice — the local Y compensates automatically.
 var blade_height: float = 0.03
-# World-space height the blade rises to when lifted (stick-lift / Q held, or a
-# forced pop from an opponent's stick lift). A lifted blade clears grounded
+# World-space height the blade rises to when lifted (a raised deflect, a stick
+# lift, or a forced pop from an opponent's lift). A lifted blade clears grounded
 # pucks and sticks — it only meets airborne pucks, to tip them. Eased in via
 # Skater._blade_lift_blend and consumed by SkaterIKCoordinator.blade_y_local().
 #
@@ -326,7 +326,7 @@ var max_blade_accel: float = 250.0
 var blade_inertia_exponent: float = 1.6
 
 # ── Nudge (self-tap, nutmeg setup) ────────────────────────────────────────────
-# Tap stick-lift (Q) while carrying in plain SKATING_WITH_PUCK to push the puck a
+# Tap the deflect button (Q) while carrying in plain SKATING_WITH_PUCK to push the puck a
 # tiny amount off the blade — a self-pass for threading the puck between a
 # defender's legs (the body block only covers the torso now, so a grounded puck
 # slips under). The released puck inherits the skater's horizontal velocity plus
@@ -972,6 +972,7 @@ var _pose: SkaterPoseCoordinator = SkaterPoseCoordinator.new()
 var _shot_pose: SkaterShotPoseCoordinator = SkaterShotPoseCoordinator.new()
 var _skating: SkaterSkatingCoordinator = SkaterSkatingCoordinator.new()
 var _ik: SkaterIKCoordinator = SkaterIKCoordinator.new()
+var _stick_check: SkaterStickCheck = SkaterStickCheck.new()
 var last_processed_host_timestamp: float = 0.0
 var has_puck: bool = false
 var is_replaying: bool = false
@@ -1556,8 +1557,8 @@ func _sync_knockdown_meta(prev_timer: float) -> void:
 # Whether this skater is committing to a deliberate deflect this tick. Base
 # behaviour (human players, local and remote-on-host): holding the DEFLECT button
 # (stick_lift / Q) without the puck. The loft level (scroll) then shapes it —
-# FLAT grounded redirect, LOW grounded tip up, HIGH knock an airborne puck down /
-# stick-lift (reach follows blade_can_interact; direction from Puck.apply_blade_deflect).
+# FLAT grounded redirect, LOW grounded tip up, HIGH knock an airborne puck down
+# (reach follows blade_can_interact; direction from Puck.apply_blade_deflect).
 # AIController
 # overrides this to always-false — bots don't deliberate-deflect; their
 # one-timers hold the SLAP button off-puck (the real slapper charge + pickup
@@ -1566,6 +1567,24 @@ func _sync_knockdown_meta(prev_timer: float) -> void:
 # release edge can never fire on a caught feed).
 func _wants_deflect(input: InputState) -> bool:
 	return input.stick_lift_held and not has_puck
+
+
+# A lift starts only from plain puckless skating: a puck on the blade, a shot, a
+# block or a check owns the stick. Any of those arriving mid-lift ends it, as
+# does an opponent's lift on this stick.
+func _advance_stick_check(input: InputState, delta: float) -> void:
+	var stick_taken: bool = has_puck or skater.hit_committed or skater.is_knocked_down \
+			or skater.is_forced_lift_active() \
+			or _sm.get_state() != State.SKATING_WITHOUT_PUCK
+	_stick_check.advance(input.stick_check_pressed, input.stick_check_held,
+			not stick_taken, stick_taken, delta)
+	skater.stick_check_phase = _stick_check.phase
+
+
+# Adopts the host's lift phase ahead of a reconcile replay, which steps it on.
+func _adopt_stick_check(state: SkaterNetworkState) -> void:
+	_stick_check.adopt(state.stick_check_phase, state.stick_check_elapsed)
+	skater.stick_check_phase = _stick_check.phase
 
 
 func _process_input(input: InputState, delta: float) -> void:
@@ -1600,15 +1619,15 @@ func _process_input(input: InputState, delta: float) -> void:
 
 	# Blade lift (off the ice) is a CONSEQUENCE of deflecting at an AIR loft: MID
 	# rides the low-air pivot, HIGH the high one, so the raised blade reaches
-	# airborne pucks and can hook under an opponent's shaft (the stick lift, which
-	# wants HIGH's reach). FLAT/LOW deflects keep the blade grounded so they can
+	# airborne pucks; it never lifts a stick, which is the stick-check button's
+	# (_advance_stick_check). FLAT/LOW deflects keep the blade grounded so they can
 	# still meet pucks on the ice (a LOW deflect tips a grounded shot UP). A forced
 	# lift (an opponent hooked under your stick) overrides regardless of possession
 	# and is what dislodges a carried puck.
 	skater.blade_up = (skater.deflect_intent and _elevation_level >= ShotMechanics.ELEVATION_MID) \
 			or skater.is_forced_lift_active()
 
-	# Nudge: a stick-lift TAP while carrying pushes the puck off the blade as a
+	# Nudge: a deflect-button TAP while carrying pushes the puck off the blade as a
 	# soft self-pass (nutmeg setup). Edge-triggered and gated to plain carry so
 	# it never fires mid-charge; the is_replaying guard inside keeps it from
 	# re-emitting during reconcile (same discipline as _do_release).
@@ -1636,6 +1655,7 @@ func _process_input(input: InputState, delta: float) -> void:
 	# previously never stamped it, so host-rendered client skaters froze at a
 	# stale shot state.
 	skater.current_shot_state = _sm.get_state() as int
+	_advance_stick_check(input, delta)
 	# Save blade/hand world positions before upper body rotation. After the body
 	# rotates toward the blade, re-expressing these in the new local frame gives
 	# the bottom-hand IK the post-rotation geometry — so arm reach is evaluated
@@ -1905,6 +1925,8 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.is_ghost = skater.is_ghost
 	state.elevation_level = skater.elevation_level
 	state.blade_up = skater.blade_up
+	state.stick_check_phase = _stick_check.phase
+	state.stick_check_elapsed = _stick_check.elapsed
 	# Host-only shaft segment for stick-lift claim resolution (paired with
 	# blade_contact_world). World-space grip point — the wire top_hand_position
 	# is upper-body-local and can't be used for host-side world geometry.
@@ -1976,6 +1998,7 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	skater.visual_offset = Vector3.ZERO
 	skater.velocity = state.velocity
 	skater.blade_up = state.blade_up
+	skater.stick_check_phase = state.stick_check_phase
 	# Intent feeds the gait's input-driven reads below (glide / dig-in /
 	# crossovers / brake stop) — stamp it like the live controllers do, so
 	# playback strides match live play instead of reading zero (file viewer)
@@ -2248,6 +2271,8 @@ func teleport_to(pos: Vector3, facing: Vector2 = Vector2.ZERO) -> void:
 	stance_active = false
 	hit_active = false
 	skater.hit_committed = false
+	_stick_check.reset()
+	skater.stick_check_phase = _stick_check.phase
 	stagger_timer = 0.0
 	balance_tilt_vel = Vector2.ZERO
 	skater.set_balance_tilt(Vector2.ZERO)

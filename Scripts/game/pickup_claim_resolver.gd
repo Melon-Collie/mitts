@@ -279,6 +279,10 @@ func receive_claim(peer_id: int, host_timestamp: float, _interp_delay_ms: float,
 	if skater_snap.hit_committed:
 		NetworkManager.send_pickup_claim_nack(peer_id)
 		return
+	# Mid stick lift the blade is hooking, not playing the puck.
+	if StickCheckRules.is_stick_busy(skater_snap.stick_check_phase):
+		NetworkManager.send_pickup_claim_nack(peer_id)
+		return
 	# Client-authoritative blade ("aim") — the claim carries the geometry the
 	# client actually reached with (see the header). The host still owns the BODY,
 	# and ClaimantView is what pins the client's points to it.

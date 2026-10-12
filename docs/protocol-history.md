@@ -299,3 +299,8 @@ here whenever you bump, in the same format.
 #      bit 5 now carries stance_active (was sprint_active) and input flag bit
 #      [4] stance_held (was sprint_held); both now feed the forward prediction
 #      as the posture, with hit_commit. Replay FORMAT_VERSION 11.
+# v66: the stick lift moves to its own button (docs/defensive-play-plan.md,
+#      Phase 1). Input flag bits [14] stick_check_held and [15]
+#      stick_check_pressed spend the last of the u16. Skater block 55 -> 56
+#      bytes: one u8 packing the lift phase (bits 0-2) and the whole ticks spent
+#      in it (bits 3-7). Replay FORMAT_VERSION 12.

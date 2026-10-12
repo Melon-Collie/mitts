@@ -75,6 +75,8 @@ static func apply_interpolated_snapshot(
 		interp.brake_intent = ts.brake_intent
 		interp.hit_committed = ts.hit_committed
 		interp.blade_up = ts.blade_up
+		interp.stick_check_phase = ts.stick_check_phase
+		interp.stick_check_elapsed = ts.stick_check_elapsed
 		interp.shot_state = ts.shot_state
 		interp.elevation_level = ts.elevation_level
 		interp.shot_charge = lerpf(fs.shot_charge, ts.shot_charge, t)

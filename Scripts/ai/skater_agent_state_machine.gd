@@ -426,6 +426,15 @@ const POKE_JAB_ACTIVE_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 12   # ~80 m
 # Cooldown after a jab so the bot commits back to gap control between
 # attempts instead of mashing the carrier's puck every tick.
 const POKE_JAB_COOLDOWN_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 3 / 8   # ~375 ms
+# A lift chosen over the jab (AIStickLiftRead) holds the button through the rise
+# and then hooks for as long as a jab sweeps, so it reads as the same reach-in.
+# Ends well inside StickCheckRules.HOOK_MAX_S, so the blade takes the fast drop.
+const STICK_LIFT_HOLD_TICKS: int = ceili(
+		StickCheckRules.RISE_S * _PhysicsConstants.PHYSICS_TICK) + POKE_JAB_ACTIVE_TICKS
+var _stick_lift_reach: float = (
+		GameRules.DEFAULT_STICK_LENGTH_M
+		+ GameRules.DEFAULT_BLADE_LENGTH_M
+		+ GameRules.STICK_LIFT_RADIUS_M)
 
 # Longest a one-timer-ready stance is held across a carrier gap (pass/shot in
 # flight) before it's dropped so the FINISHER resumes normal play. A real pass
@@ -999,6 +1008,11 @@ var _deke_cut_dir: Vector2 = Vector2.ZERO
 # is a discrete reach-in, not a permanent stick-on-puck.
 var _poke_jab_active_ticks: int = 0
 var _poke_jab_cooldown_ticks: int = 0
+# Physics ticks left holding the stick-check button for a lift, and whether its
+# press edge is still to send. Counted per physics tick in apply_stick_lift_input,
+# since the button must be held on the throttled ticks too.
+var _stick_lift_hold_ticks: int = 0
+var _stick_lift_press_pending: bool = false
 
 # One-timer readiness mirrored from the most recent OFF_PUCK role
 # decision. Also published to TeamBrain (so the carrier reads it
@@ -1291,6 +1305,8 @@ var _plays_rush_pass_lanes: bool = true
 # seam-directed poke-evade deke. False = naive forward carry — the puck stays
 # presented ahead of the body, so a straight poke-check works (the beginner tier).
 var _protects_the_puck: bool = true
+# _lifts_sticks gates the jab-or-lift read (AIStickLiftRead). False = jab only.
+var _lifts_sticks: bool = true
 # The FINISHER raises the blade (stick_lift_held) to tip an elevated incoming
 # shot, but that flag is only set on dispatch ticks. Cache + replay it on skipped
 # ticks or blade_up strobes at 1-in-dispatch_period and never reaches the raised
@@ -1408,6 +1424,7 @@ func apply_capabilities(caps: AISkaterCaps) -> void:
 	_blade_reach = caps.blade_span + BLADE_REACH_BUFFER_M
 	_receive_body_offset = caps.blade_span - RECEIVE_BODY_INSET_M
 	_poke_jab_reach = caps.blade_span + GameRules.POKE_RADIUS_M
+	_stick_lift_reach = caps.blade_span + GameRules.STICK_LIFT_RADIUS_M
 	_self_wrister_shot_speed = caps.wrister_shot_speed
 	_self_loft_tans = caps.loft_tans
 	_self_lateral_grip = caps.lateral_grip
@@ -1511,6 +1528,7 @@ func apply_profile(profile: BotSkillProfile) -> void:
 	_angles_the_chase = profile.angles_the_chase
 	_plays_rush_pass_lanes = profile.plays_rush_pass_lanes
 	_protects_the_puck = profile.protects_the_puck
+	_lifts_sticks = profile.lifts_sticks
 	# Execution error for LIVE bots (raw test agents stay deterministic):
 	# per-tier, split shot-vs-pass — the shot error is the tier's scoring
 	# dial, the pass error stays small so passes keep connecting. Timing
@@ -5171,7 +5189,7 @@ func _poke_jab_aim(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 		if _poke_jab_active_ticks <= 0:
 			_poke_jab_active_ticks = 0
 			_poke_jab_cooldown_ticks = POKE_JAB_COOLDOWN_TICKS
-		return _carrier_puck_pos(snapshot)
+		return _jab_target(snapshot)
 	if _poke_jab_cooldown_ticks > 0:
 		_poke_jab_cooldown_ticks = maxi(0, _poke_jab_cooldown_ticks - _dispatch_period_ticks)
 		return Vector3.INF
@@ -5184,12 +5202,47 @@ func _poke_jab_aim(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 	if carrier_pid == -1 or _team_id_by_peer.get(carrier_pid, -1) == _team_id:
 		return Vector3.INF
 	var puck_pos: Vector3 = snapshot.puck_state.position
+	var carrier_state: SkaterNetworkState = snapshot.skater_states.get(carrier_pid)
+	# Read before the jab's reach: the shaft runs back toward a carrier's hands, so
+	# from behind it is in reach while the puck out front is not. The body
+	# half-width that blocks the jab is the skater collision disc
+	# (GameRules.OFFSIDE_LINE_SLACK, the canonical half-width).
+	if _lifts_sticks and carrier_state != null and AIStickLiftRead.prefers_lift(
+			self_pos, carrier_state.position, puck_pos,
+			carrier_state.top_hand_world, carrier_state.blade_contact_world,
+			_stick_lift_reach, GameRules.OFFSIDE_LINE_SLACK):
+		_stick_lift_hold_ticks = STICK_LIFT_HOLD_TICKS
+		_stick_lift_press_pending = true
+		_poke_jab_active_ticks = STICK_LIFT_HOLD_TICKS
+		return _jab_target(snapshot)
 	var dx: float = puck_pos.x - self_pos.x
 	var dz: float = puck_pos.z - self_pos.z
 	if dx * dx + dz * dz > _poke_jab_reach * _poke_jab_reach:
 		return Vector3.INF
 	_poke_jab_active_ticks = POKE_JAB_ACTIVE_TICKS
 	return puck_pos
+
+
+# Where the reach-in aims: under the carrier's shaft while a lift is held, then
+# the puck — the dropping blade comes down onto it, which is the take.
+func _jab_target(snapshot: WorldSnapshot) -> Vector3:
+	if _stick_lift_hold_ticks > 0 and snapshot.puck_state != null:
+		var cs: SkaterNetworkState = snapshot.skater_states.get(
+				snapshot.puck_state.carrier_peer_id)
+		if cs != null:
+			return AIStickLiftRead.shaft_lift_point(cs.top_hand_world, cs.blade_contact_world)
+	return _carrier_puck_pos(snapshot)
+
+
+# Holds the stick-check button for a lift the dispatch started. Runs every
+# physics tick after dispatch, throttled or not, so the hold is continuous.
+func apply_stick_lift_input(input: InputState) -> void:
+	if _stick_lift_hold_ticks <= 0:
+		return
+	input.stick_check_held = true
+	input.stick_check_pressed = _stick_lift_press_pending
+	_stick_lift_press_pending = false
+	_stick_lift_hold_ticks -= 1
 
 
 # True if our current brain slot is an on-puck defensive pressurer —
@@ -5459,7 +5512,7 @@ func _arm_off_puck_live_aim(anchor: Vector3, near_anchor_m: float) -> void:
 # only the blade TARGET re-derives every physics tick.
 func _off_puck_live_aim(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 	if _off_puck_jab_live:
-		return _carrier_puck_pos(snapshot)
+		return _jab_target(snapshot)
 	if _off_puck_aim_live:
 		return _ready_stance_aim(
 				self_pos, _off_puck_aim_anchor, snapshot, _off_puck_aim_near_m)
@@ -6053,6 +6106,8 @@ func _set_state(s: State) -> void:
 			_deke_cut_dir = Vector2.ZERO
 			_poke_jab_active_ticks = 0
 			_poke_jab_cooldown_ticks = 0
+			_stick_lift_hold_ticks = 0
+			_stick_lift_press_pending = false
 			_carrier.clear_intent()
 		_state = s
 		_ticks_in_state = 0

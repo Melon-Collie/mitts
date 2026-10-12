@@ -495,6 +495,17 @@ func test_decode_for_replay_rejects_overrun_goalie_count() -> void:
 
 # ── v10 wire additions ────────────────────────────────────────────────────────
 
+func test_skater_stick_check_round_trips_every_phase() -> void:
+	for phase: int in StickCheckRules.Phase.values():
+		var s := SkaterNetworkState.new()
+		s.stick_check_phase = phase
+		s.stick_check_elapsed = 0.1
+		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+				WorldStateCodec._encode_skater_quantized(s))
+		assert_eq(dec.stick_check_phase, phase, "phase %d" % phase)
+		assert_almost_eq(dec.stick_check_elapsed, 0.1, 0.5 / 120.0, "elapsed, phase %d" % phase)
+
+
 func test_skater_stagger_round_trips() -> void:
 	# stagger_timer was never on the wire, so a client victim's predicted stagger
 	# was wiped to 0 on the next reconcile. u8 @0.01s must now round-trip it.

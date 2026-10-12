@@ -61,7 +61,7 @@ signal slot_assigned(team_slot: int, team_id: int, jersey_color: Color, helmet_c
 signal remote_skater_spawn_requested(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String, jersey_number: int, attributes: PlayerAttributes)
 signal existing_players_synced(player_data: Array)
 signal local_puck_pickup_confirmed
-signal local_puck_stolen(was_stick_lift: bool)
+signal local_puck_stolen(forced_lift_s: float)
 signal carrier_puck_dropped
 signal remote_carrier_changed(new_carrier_peer_id: int)
 signal ghost_state_received(peer_id: int, is_ghost: bool)
@@ -1995,21 +1995,23 @@ func notify_carrier_changed(event_seq: int, new_carrier_peer_id: int) -> void:
 				remote_carrier_changed.emit(id),
 		[event_seq, new_carrier_peer_id], true)
 
-func send_puck_stolen(victim_peer_id: int, was_stick_lift: bool = false) -> void:
+# `forced_lift_s` is how long a stick lift holds the victim's blade up (0 for
+# any other strip); it rides as whole milliseconds.
+func send_puck_stolen(victim_peer_id: int, forced_lift_s: float = 0.0) -> void:
 	if not is_real_peer(victim_peer_id):
 		return  # AI bot or sentinel — see send_puck_picked_up rationale.
+	var forced_lift_ms: int = roundi(forced_lift_s * 1000.0)
 	var seq: int = _event_log.record(
-			SnapshotEventLog.EventType.STOLEN, victim_peer_id,
-			1 if was_stick_lift else 0, local_time())
-	notify_puck_stolen.rpc_id(victim_peer_id, seq, was_stick_lift)
+			SnapshotEventLog.EventType.STOLEN, victim_peer_id, forced_lift_ms, local_time())
+	notify_puck_stolen.rpc_id(victim_peer_id, seq, forced_lift_ms)
 
 @rpc("authority", "reliable")
-func notify_puck_stolen(event_seq: int, was_stick_lift: bool) -> void:
+func notify_puck_stolen(event_seq: int, forced_lift_ms: int) -> void:
 	NetworkSimManager.send(
-		func(seq: int, wsl: bool) -> void:
+		func(seq: int, ms: int) -> void:
 			if _event_log.try_apply_reliable(seq):
-				local_puck_stolen.emit(wsl),
-		[event_seq, was_stick_lift], true)
+				local_puck_stolen.emit(ms / 1000.0),
+		[event_seq, forced_lift_ms], true)
 
 func notify_goal_to_all(scoring_team_id: int, score0: int, score1: int, scorer_name: String, assist1_name: String, assist2_name: String) -> void:
 	for peer_id in connected_peer_ids():
@@ -2041,7 +2043,7 @@ func _dispatch_snapshot_event(type: int, arg: int) -> void:
 		SnapshotEventLog.EventType.PICKED_UP:
 			local_puck_pickup_confirmed.emit()
 		SnapshotEventLog.EventType.STOLEN:
-			local_puck_stolen.emit(arg != 0)
+			local_puck_stolen.emit(arg / 1000.0)
 		SnapshotEventLog.EventType.DROPPED:
 			carrier_puck_dropped.emit()
 

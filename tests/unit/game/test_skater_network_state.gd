@@ -25,6 +25,8 @@ func test_round_trip_preserves_all_wire_fields() -> void:
 	s.move_intent                 = Vector2(0.0, -1.0)
 	s.brake_intent                = true
 	s.stance_active               = true
+	s.stick_check_phase           = StickCheckRules.Phase.HOOK
+	s.stick_check_elapsed         = 0.05
 
 	var r := SkaterNetworkState.from_array(s.to_array())
 
@@ -47,20 +49,23 @@ func test_round_trip_preserves_all_wire_fields() -> void:
 	assert_eq(r.move_intent, s.move_intent)
 	assert_eq(r.brake_intent, s.brake_intent)
 	assert_eq(r.stance_active, s.stance_active)
+	assert_eq(r.stick_check_phase, s.stick_check_phase)
+	assert_almost_eq(r.stick_check_elapsed, s.stick_check_elapsed, 0.00001)
 
 
 func test_array_length_sentinel() -> void:
 	# Field-count sentinel — if a field is added without updating to_array /
 	# from_array, this catches the mismatch before it becomes a silent bug.
-	# 26: position, velocity, blade_position, top_hand_position,
+	# 28: position, velocity, blade_position, top_hand_position,
 	# upper_body_rotation_y, facing, last_processed_host_timestamp,
 	# is_ghost, shot_state, shot_charge, facing_angular_velocity,
 	# upper_body_angular_velocity, elevation_level, blade_up,
 	# stagger_timer, move_intent, brake_intent, stance_active, knockdown_timer,
 	# hit_committed, wrister_address_side, balance_tilt, balance_tilt_vel,
-	# torso_lean, posture_lean, recoil_dir.
+	# torso_lean, posture_lean, recoil_dir, stick_check_phase,
+	# stick_check_elapsed.
 	var s := SkaterNetworkState.new()
-	assert_eq(s.to_array().size(), 26)
+	assert_eq(s.to_array().size(), 28)
 
 
 func test_blade_up_back_compat_defaults_false() -> void:

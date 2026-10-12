@@ -304,7 +304,7 @@ var _contact_latch_goalie: bool = false
 # a synchronous emit gives them.
 #
 # puck_stripped / puck_released stay synchronous: their listeners read call-scoped
-# transient state on the same stack (PuckController.is_processing_stick_lift, the
+# transient state on the same stack (PuckController.stick_lift_forced_seconds, the
 # queued release velocity read by the dump-release check, the goalie reaction
 # back-date consumed by _on_puck_released).
 #
@@ -631,15 +631,15 @@ func apply_poke_check(checker_skater: Skater) -> void:
 # a lifted stick just leaves the puck where it was being carried — so it keeps
 # travelling in the carrier's direction at the carrier's speed, as if the carry
 # simply continued without the stick on it. Horizontal only; a stationary
-# carrier's puck stays put (the reattach cooldown still denies an instant
-# re-grab). Same cooldowns + signals as apply_poke_check so the carrier-clear,
+# carrier's puck stays put. The ex-carrier can't re-grab for `regrab_cooldown`,
+# and the lifter gets no checker cooldown at all: their blade dropping back onto
+# the puck is the take. Same signals as apply_poke_check so the carrier-clear,
 # stats, and victim-notify paths fire identically.
-func apply_stick_lift_strip(checker_skater: Skater) -> void:
+func apply_stick_lift_strip(checker_skater: Skater, regrab_cooldown: float) -> void:
 	var ex_carrier: Skater = carrier  # capture before clear_carrier()
 	clear_carrier()
 	linear_velocity = Vector3(ex_carrier.velocity.x, 0.0, ex_carrier.velocity.z)
-	_set_cooldown(ex_carrier, reattach_cooldown)
-	_set_cooldown(checker_skater, poke_checker_cooldown)
+	_set_cooldown(ex_carrier, maxf(reattach_cooldown, regrab_cooldown))
 	puck_stripped.emit(ex_carrier, checker_skater)
 	puck_released.emit()
 # Goalie counterpart to apply_poke_check. A Goalie is not a Skater (no

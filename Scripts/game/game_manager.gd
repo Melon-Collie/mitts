@@ -1687,7 +1687,7 @@ func _wire_sound_signals() -> void:
 		puck_controller.puck_stripped_from.connect(func(_pid: int, _stripper: int) -> void:
 			var spd: float = puck.linear_velocity.length()
 			var pos: Vector3 = puck.get_puck_position()
-			if puck_controller.is_processing_stick_lift():
+			if puck_controller.stick_lift_forced_seconds() > 0.0:
 				# Distinct stick-lift cue instead of the generic puck-strip thud.
 				SoundManager.play_world(SoundManager.Sound.STICK_LIFT, pos, _puck_speed_volume(spd), 0.06)
 				puck.fire_stick_lift_vfx()
@@ -3112,9 +3112,9 @@ func _on_server_puck_stripped_from(peer_id: int, stripper_peer_id: int) -> void:
 		_possession_tracker.on_puck_lost(peer_id)
 	_state_machine.notify_icing_contact()
 	if not record.is_local:
-		# Tell the victim's client whether this was a stick lift so it can pop
-		# their own blade up locally (their prediction never saw the host force).
-		NetworkManager.send_puck_stolen(peer_id, puck_controller.is_processing_stick_lift())
+		# Tell the victim's client how long a stick lift holds their blade up, so it
+		# pops it locally (their prediction never saw the host force).
+		NetworkManager.send_puck_stolen(peer_id, puck_controller.stick_lift_forced_seconds())
 
 
 # Host: a defender poke-checked the carrier. Record the poker as the most recent
@@ -3747,7 +3747,7 @@ func on_local_player_picked_up_puck() -> void:
 		puck_controller.notify_local_pickup(record.skater)
 
 
-func on_local_player_puck_stolen(was_stick_lift: bool = false) -> void:
+func on_local_player_puck_stolen(forced_lift_s: float = 0.0) -> void:
 	var local_record := _registry.get_local() if _registry != null else null
 	if local_record != null:
 		local_record.controller.on_puck_released_network()
@@ -3755,8 +3755,8 @@ func on_local_player_puck_stolen(was_stick_lift: bool = false) -> void:
 		# Stick-lift victim cue: pop our own blade up so the strip reads as a
 		# lift on our screen too (the host forced it, but our local prediction
 		# of our own skater never saw that). Reuses the exact lift mechanic.
-		if was_stick_lift and local_record.skater != null:
-			local_record.skater.force_blade_lift(PuckController.STICK_LIFT_FORCED_LIFT_S)
+		if forced_lift_s > 0.0 and local_record.skater != null:
+			local_record.skater.force_blade_lift(forced_lift_s)
 
 
 # ── Goal received (client-side RPC) ──────────────────────────────────────────

@@ -442,3 +442,5 @@ func _zero_script_input(delta: float) -> void:
 	_script_input.elevation_level = 0
 	_script_input.block_held = false
 	_script_input.stick_lift_held = false
+	_script_input.stick_check_held = false
+	_script_input.stick_check_pressed = false

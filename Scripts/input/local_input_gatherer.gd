@@ -60,6 +60,7 @@ var _pending_shoot_pressed: bool = false
 var _pending_slap_pressed: bool = false
 var _pending_stick_lift_pressed: bool = false
 var _pending_quick_pass_pressed: bool = false
+var _pending_stick_check_pressed: bool = false
 # Loft mode (0 flat / 1 low saucer / 2 high), stepped by scroll-wheel events (or
 # the pad d-pad) in _process and stamped ABSOLUTE into every gathered frame.
 # Living here — not as sticky controller state — makes it plain input: reconcile
@@ -119,6 +120,7 @@ var _pad_shoot_held: bool = false
 var _pad_slap_held: bool = false
 var _prev_pad_stick_lift: bool = false
 var _prev_pad_quick_pass: bool = false
+var _prev_pad_stick_check: bool = false
 var _prev_pad_elev_up: bool = false
 var _prev_pad_elev_down: bool = false
 
@@ -187,6 +189,8 @@ func _process(delta: float) -> void:
 		_pending_stick_lift_pressed = true
 	if Input.is_action_just_pressed("quick_pass"):
 		_pending_quick_pass_pressed = true
+	if Input.is_action_just_pressed("stick_check"):
+		_pending_stick_check_pressed = true
 
 # Rising-edge detection for the pad's press-type inputs, mirroring the mouse
 # action just_pressed latch above. Triggers (wrister/slapshot) edge on the
@@ -229,6 +233,10 @@ func _accumulate_gamepad_edges(delta: float) -> void:
 	if quick_pass_now and not _prev_pad_quick_pass:
 		_pending_quick_pass_pressed = true
 	_prev_pad_quick_pass = quick_pass_now
+	var stick_check_now: bool = _pad_held("stick_check")
+	if stick_check_now and not _prev_pad_stick_check:
+		_pending_stick_check_pressed = true
+	_prev_pad_stick_check = stick_check_now
 	var up_now: bool = _pad_held("elevation_up")
 	if up_now and not _prev_pad_elev_up:
 		_elevation_level = mini(_elevation_level + 1, InputState.MAX_ELEVATION_LEVEL)
@@ -283,6 +291,7 @@ func gather() -> InputState:
 		state.stance_held = _pad_held("stance")
 		state.block_held = _pad_held("block")
 		state.stick_lift_held = _pad_held("stick_lift")
+		state.stick_check_held = _pad_held("stick_check")
 		state.hit_held = _pad_held("hit")
 		# COMMITTED WRISTER: aim comes from the cursor position (parked in the stick
 		# direction in _update_pad_cursor → origin→cursor is the shot line), power from
@@ -299,6 +308,7 @@ func gather() -> InputState:
 		state.stance_held = Input.is_action_pressed("stance")
 		state.block_held = Input.is_action_pressed("block")
 		state.stick_lift_held = Input.is_action_pressed("stick_lift")
+		state.stick_check_held = Input.is_action_pressed("stick_check")
 		state.hit_held = Input.is_action_pressed("hit")
 	# Edge flags come from the pending latch (set in _process for whichever source
 	# is active), so the physics-tick / input-frame cadence mismatch is bridged the
@@ -308,6 +318,7 @@ func gather() -> InputState:
 	state.elevation_level = _elevation_level
 	state.stick_lift_pressed = _pending_stick_lift_pressed
 	state.quick_pass_pressed = _pending_quick_pass_pressed
+	state.stick_check_pressed = _pending_stick_check_pressed
 	state.host_timestamp = NetworkManager.estimated_host_time()
 	_last_mouse_world_pos = state.mouse_world_pos
 	_last_mouse_screen_pos = state.mouse_screen_pos
@@ -316,6 +327,7 @@ func gather() -> InputState:
 	_pending_slap_pressed = false
 	_pending_stick_lift_pressed = false
 	_pending_quick_pass_pressed = false
+	_pending_stick_check_pressed = false
 	return state
 
 # Movement vector. Mouse+keyboard reads the WASD action vector; the pad adds the

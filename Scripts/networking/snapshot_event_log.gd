@@ -22,7 +22,7 @@ extends RefCounted
 enum EventType {
 	CARRIER_CHANGED = 0,  # arg = new carrier peer_id (-1 = none), broadcast
 	PICKED_UP = 1,        # targeted at the granted carrier, no arg
-	STOLEN = 2,           # targeted at the victim, arg = was_stick_lift (0/1)
+	STOLEN = 2,           # targeted at the victim, arg = stick-lift forced lift ms (0 = not a lift)
 	DROPPED = 3,          # targeted at the ex-carrier (goal reset), no arg
 }
 

@@ -584,12 +584,17 @@ var _blade_elevation_blend: float = 0.0
 # Set when an elevation blend step changes the blade tilt, consumed by the
 # render-rate rig pass in _process. See _update_blade_elevation.
 var _blade_tilt_dirty: bool = false
-# True when the blade is lifted off the ice — own stick-lift (Q held while not
-# carrying) or a forced pop from an opponent hooking under this stick. Set each
+# True when the blade is lifted off the ice — own raised deflect (Q held at MID
+# or HIGH loft, not carrying) or a forced pop from an opponent hooking under
+# this stick. A stick lift raises the blade through stick_check_phase. Set each
 # tick by the controller; read host-side by PuckController's interaction gate
 # and replicated so remotes/AI can read it. A lifted blade only meets airborne
 # pucks (to tip them); it clears grounded pucks and sticks.
 var blade_up: bool = false
+# The stick-lift phase (StickCheckRules.Phase), stamped each tick by the
+# controller and replicated. Its raised phases lift the blade like blade_up, but
+# the stick plays no puck while busy — the hook is the only thing it can do.
+var stick_check_phase: int = 0
 # Deliberate-deflect intent: true while a human player holds the shoot button
 # (LMB) WITHOUT carrying the puck — a committed "redirect this, don't catch it."
 # Set each tick by the controller (see SkaterController._wants_deflect); read
@@ -1470,6 +1475,9 @@ func _update_blade_elevation(delta: float) -> void:
 # Blend units/sec for the blade-lift ease (~0.08 s for a full lift). Snappier
 # than the elevation blend — a stick lift is a deliberate, quick action.
 const _BLADE_LIFT_BLEND_SPEED: float = 12.0
+# A lift's drop comes down inside StickCheckRules.DROP_S, so the blade is back
+# at puck height while the victim's is still forced up.
+const _BLADE_DROP_BLEND_SPEED: float = 24.0
 # Ease rate for the commit-stance stick raise (units/sec). A touch slower than the
 # blade lift so the stick "loads up" into the check rather than snapping.
 const _COMMIT_LIFT_BLEND_SPEED: float = 9.0
@@ -1484,9 +1492,11 @@ const _CHECK_LEAD_SPEED: float = 5.0
 # the whole stick rises off the ice instead of snapping. Called from
 # _physics_process.
 func _update_blade_lift(delta: float) -> void:
-	var target: float = 1.0 if blade_up else 0.0
-	_blade_lift_blend = move_toward(
-			_blade_lift_blend, target, _BLADE_LIFT_BLEND_SPEED * delta)
+	var target: float = 1.0 if StickCheckRules.blade_held_up(blade_up, stick_check_phase) else 0.0
+	var speed: float = _BLADE_DROP_BLEND_SPEED \
+			if stick_check_phase == StickCheckRules.Phase.DROP else _BLADE_LIFT_BLEND_SPEED
+	_blade_lift_blend = move_toward(_blade_lift_blend, target, speed * delta)
+
 
 
 # Eased 0→1 lift factor consumed by SkaterIKCoordinator.blade_y_local().

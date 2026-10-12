@@ -79,22 +79,21 @@ func test_a_blocking_checker_does_not_poke() -> void:
 	assert_eq(_puck.carrier, _carrier, "a committed block should take no puck off a carrier")
 
 
-func test_a_lifted_blade_strips_the_carrier() -> void:
+func test_a_hooking_blade_strips_the_carrier() -> void:
 	# The control for the lift branch, same purpose as the poke control above.
 	_checker.current_shot_state = State.SKATING_WITHOUT_PUCK
-	_checker.blade_up = true
+	_checker.stick_check_phase = StickCheckRules.Phase.HOOK
 	_hook_blade_under_the_carrier_shaft()
 	_pc._check_interactions()
 	assert_null(_puck.carrier, "a blade hooked under the shaft should lift it and strip")
 
 
 func test_a_blocking_checker_does_not_stick_lift() -> void:
-	# blade_up is still written from input during a block (holding deflect at an
-	# air loft), so the lift branch is reachable on stance alone — the gate has
-	# to come first.
+	# The block ends a lift on the controller's next tick, but the host's loop
+	# can run between the two — the stance gate has to come first.
 	_checker.current_shot_state = State.SHOT_BLOCKING
 	_checker.set_block_stance(true)
-	_checker.blade_up = true
+	_checker.stick_check_phase = StickCheckRules.Phase.HOOK
 	_hook_blade_under_the_carrier_shaft()
 	_pc._check_interactions()
 	assert_eq(_puck.carrier, _carrier, "a committed block should lift no stick either")

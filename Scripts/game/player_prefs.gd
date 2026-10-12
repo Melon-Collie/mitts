@@ -179,7 +179,7 @@ const AA_LABELS: Array[String] = [
 const REBINDABLE_ACTIONS: PackedStringArray = [
 	"move_up", "move_down", "move_left", "move_right", "stance", "brake",
 	"shoot", "quick_pass", "slapshot", "hit", "block", "elevation_up", "elevation_down",
-	"stick_lift", "smart_ping",
+	"stick_lift", "stick_check", "smart_ping",
 ]
 
 # Gamepad button rebinds. Only the DISCRETE buttons are remappable — the sticks
@@ -191,7 +191,7 @@ const REBINDABLE_ACTIONS: PackedStringArray = [
 # load, so pad_button() always resolves, and LocalInputGatherer reads it live —
 # a rebind applies without a respawn, like the gamepad toggle itself.
 const PAD_REBINDABLE_ACTIONS: PackedStringArray = [
-	"block", "brake", "hit", "stick_lift", "stance", "quick_pass",
+	"block", "brake", "hit", "stick_lift", "stick_check", "stance", "quick_pass",
 	"elevation_up", "elevation_down", "smart_ping",
 ]
 const PAD_DEFAULT_BUTTONS: Dictionary = {
@@ -201,6 +201,7 @@ const PAD_DEFAULT_BUTTONS: Dictionary = {
 	# steering stick; the check commit is held only for the beat before contact.
 	"stance": JOY_BUTTON_LEFT_SHOULDER,
 	"stick_lift": JOY_BUTTON_RIGHT_SHOULDER,
+	"stick_check": JOY_BUTTON_X,
 	"hit": JOY_BUTTON_LEFT_STICK,
 	"quick_pass": JOY_BUTTON_RIGHT_STICK,
 	# Set before a play rather than inside one, so they can take the D-pad (menus

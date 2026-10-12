@@ -220,6 +220,14 @@ The election of WHICH body runs the race is not part of the verb and stays in
 `AILoosePuckChase` / `GameManager` — the verb answers "do I go", the election
 answers "am I the one who may".
 
+**The reach-in is the pressurer's extra, and it is a jab or a lift.** Whichever
+role owns the carrier reaches in when the puck is inside its stick; the jab aims
+the blade through the puck, and `AIStickLiftRead` turns it into a stick lift
+exactly when the carrier's body stands on the line to the puck (the jab has no
+path) and the shaft's liftable point is still in reach. Both are geometry the bot
+can see, and the lift is a `lifts_sticks` cognition gate, closed on Easy so a
+shielded puck genuinely protects it against a beginner tier.
+
 Still unfactored: **hold a post** — the per-role fallbacks and their anchor
 constants. The open question is whether it should be a verb at all: if the
 assigner always names a man, the carrier, or the puck, there is no fourth state

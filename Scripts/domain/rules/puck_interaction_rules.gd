@@ -125,6 +125,13 @@ static func check_blade_under_stick(
 	return att_blade.y < contact.y - under_margin
 
 
+# How far the attacker's blade sits from the victim's hand→blade shaft — the
+# distance check_blade_under_stick thresholds, for grading a hook that landed.
+static func distance_to_shaft(att_blade: Vector3, vic_hand: Vector3,
+		vic_blade: Vector3) -> float:
+	return att_blade.distance_to(_closest_point_on_segment(att_blade, vic_hand, vic_blade))
+
+
 # Closest point on segment a→b to point p. Degenerates to `a` for a zero-length
 # segment.
 static func _closest_point_on_segment(p: Vector3, a: Vector3, b: Vector3) -> Vector3:

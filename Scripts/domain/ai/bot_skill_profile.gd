@@ -157,6 +157,11 @@ var plays_rush_pass_lanes: bool
 # straight-line poke-check genuinely works.
 var protects_the_puck: bool
 
+# COGNITION: an on-puck defender reads a shielded puck and lifts the carrier's
+# stick instead of jabbing through his body (AIStickLiftRead). False = jab only,
+# so shielding the puck from a beginner bot genuinely protects it.
+var lifts_sticks: bool
+
 
 func _init(p_carrier_reaction_delay_s: float,
 		p_dispatch_period_ticks: int,
@@ -168,7 +173,8 @@ func _init(p_carrier_reaction_delay_s: float,
 		p_reads_goalie_motion: bool, p_holds_for_developing_feeds: bool,
 		p_angles_the_chase: bool, p_plays_rush_pass_lanes: bool,
 		p_protects_the_puck: bool,
-		p_reads_receiver_commitment: bool) -> void:
+		p_reads_receiver_commitment: bool,
+		p_lifts_sticks: bool) -> void:
 	carrier_reaction_delay_s = p_carrier_reaction_delay_s
 	dispatch_period_ticks = p_dispatch_period_ticks
 	shot_aim_error_rad = p_shot_aim_error_rad
@@ -186,6 +192,7 @@ func _init(p_carrier_reaction_delay_s: float,
 	angles_the_chase = p_angles_the_chase
 	plays_rush_pass_lanes = p_plays_rush_pass_lanes
 	protects_the_puck = p_protects_the_puck
+	lifts_sticks = p_lifts_sticks
 
 
 # Hard reads as a very strong human rather than a frame-perfect robot: ~50 ms
@@ -199,7 +206,7 @@ func _init(p_carrier_reaction_delay_s: float,
 static func hard() -> BotSkillProfile:
 	return BotSkillProfile.new(0.05, 2, 0.01, 0.01, 0.10, 0.0, 0.25,
 			0.0, 1.0, 1.0, 1.0,
-			true, true, true, true, true, true)
+			true, true, true, true, true, true, true)
 
 
 # Normal is the beatable tier, pushed firmly off the Hard ceiling: a ~220 ms
@@ -224,7 +231,7 @@ static func hard() -> BotSkillProfile:
 static func normal() -> BotSkillProfile:
 	return BotSkillProfile.new(0.22, 6, 0.04, 0.015, 0.16, 0.60, 0.30,
 			0.75, 0.85, 0.65, 0.6,
-			true, true, true, true, true, true)
+			true, true, true, true, true, true, true)
 
 
 # Easy is the newcomer floor: a ~340 ms reaction (visibly human-slow) and a slow
@@ -245,7 +252,7 @@ static func normal() -> BotSkillProfile:
 static func easy() -> BotSkillProfile:
 	return BotSkillProfile.new(0.34, 9, 0.055, 0.0225, 0.24, 0.85, 0.55,
 			3.0, 0.75, 0.0, 0.2,
-			false, false, false, false, false, false)
+			false, false, false, false, false, false, false)
 
 
 static func for_difficulty(difficulty: int) -> BotSkillProfile:

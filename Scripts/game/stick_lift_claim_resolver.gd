@@ -2,10 +2,10 @@ class_name StickLiftClaimResolver
 extends RefCounted
 
 # Host-only resolver for client-initiated stick-lift claims with lag compensation.
-# Mirrors PokeClaimResolver: the attacker (claimant) holds Q with their blade
-# lifted and hooks it under an opposing carrier's stick shaft to pop it up and
-# dislodge the puck. Like poke, there's no contest window — first valid claim
-# wins, the carrier loses the puck either way.
+# Mirrors PokeClaimResolver: the attacker (claimant), in the HOOK phase of a
+# stick lift (StickCheckRules), hooks their blade under an opposing carrier's
+# stick shaft to pop it up and dislodge the puck. Like poke, there's no contest
+# window — first valid claim wins, the carrier loses the puck either way.
 #
 # Flow:
 #   receive_claim(peer_id, host_ts, interp_delay, expected_carrier_peer_id,
@@ -18,9 +18,10 @@ extends RefCounted
 #       (LagCompRewind.forward_predict_skater — the claimant rendered the
 #       carrier intent-integrated toward present, and the shaft rides the
 #       carrier's body); reach-clamp the CLIENT-sent attacker blade to that body
+#     → reject unless the rewound claimant was in HOOK
 #     → reject if PuckInteractionRules.check_blade_under_stick fails against that
 #       geometry (attacker's blade within radius of the shaft AND below it)
-#     → apply_lag_comp_stick_lift (idempotent)
+#     → apply_lag_comp_stick_lift (idempotent), with the hook's quality
 #
 # The shared claim-resolver contract is in Scripts/game/CLAUDE.md; the pieces of
 # it that are the same on every resolver live in LagCompRewind.claim_is_fresh
@@ -132,6 +133,10 @@ func receive_claim(peer_id: int, host_timestamp: float,
 	# actually held at send time.
 	if attacker_snap.shot_state == SkaterStateMachine.State.SHOT_BLOCKING:
 		return
+	# Only the hook lifts. Judged at the rewound instant too: the phase steps from
+	# the claimant's own inputs, so the host's buffered copy is the one they had.
+	if attacker_snap.stick_check_phase != StickCheckRules.Phase.HOOK:
+		return
 	# The attacker's blade is client-authoritative aim, bounded by ClaimantView.
 	# The victim's shaft stays REMOTE-view — host-reconstructed above.
 	if not _claimant.resolve(_registry, peer_id, attacker_snap,
@@ -151,4 +156,6 @@ func receive_claim(peer_id: int, host_timestamp: float,
 		return
 	# Pass the intended victim through so apply guards against the carrier having
 	# changed (X → Z) between claim send and apply. Looked up above.
-	pc.apply_lag_comp_stick_lift(record.skater, expected_record.skater)
+	pc.apply_lag_comp_stick_lift(record.skater, expected_record.skater,
+			StickCheckRules.hook_quality(PuckInteractionRules.distance_to_shaft(
+					attacker_blade, shaft_top, shaft_blade), PuckController.STICK_LIFT_RADIUS))

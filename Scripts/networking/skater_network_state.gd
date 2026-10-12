@@ -21,6 +21,11 @@ var elevation_level: int = 0
 # needs the resolved "is the blade up" answer for rendering and the
 # on-ice/off-ice interaction gate.
 var blade_up: bool = false
+# The stick-lift phase (StickCheckRules.Phase) and seconds into it. Remotes pose
+# the raised blade from it, the lift resolver checks the claimant was hooking,
+# and the local reconcile adopts it before replay.
+var stick_check_phase: int = 0
+var stick_check_elapsed: float = 0.0
 # Body-check stagger: seconds of thrust/grip-penalty recovery remaining on the
 # victim. Replicated so the local player's reconcile can snap it to the host
 # baseline before replay — same treatment as velocity — and it decays
@@ -113,6 +118,8 @@ func to_array() -> Array:
 		torso_lean,
 		posture_lean,
 		recoil_dir,
+		stick_check_phase,
+		stick_check_elapsed,
 	]
 
 func copy_from(s: SkaterNetworkState) -> void:
@@ -142,6 +149,8 @@ func copy_from(s: SkaterNetworkState) -> void:
 	torso_lean = s.torso_lean
 	posture_lean = s.posture_lean
 	recoil_dir = s.recoil_dir
+	stick_check_phase = s.stick_check_phase
+	stick_check_elapsed = s.stick_check_elapsed
 	host_timestamp = s.host_timestamp
 	blade_contact_world = s.blade_contact_world
 	top_hand_world = s.top_hand_world
@@ -185,4 +194,7 @@ static func from_array(data: Array) -> SkaterNetworkState:
 		state.posture_lean = data[24]
 	if data.size() > 25:
 		state.recoil_dir = data[25]
+	if data.size() > 27:
+		state.stick_check_phase = data[26]
+		state.stick_check_elapsed = data[27]
 	return state

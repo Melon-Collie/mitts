@@ -293,7 +293,8 @@ func _physics_process(delta: float) -> void:
 			# to the raised wind-up blade (snapping it overhead for a frame) until the
 			# host confirm re-pinned it to the ice zone — the host catches the feed and
 			# it arrives through the puck sync.
-			if in_range and not skater.deflect_intent and _sm.get_state() != State.SLAPPER_CHARGE_WITHOUT_PUCK and _pickup_claim_floor <= 0.0 and (rising_edge or _claim_cooldown <= 0.0):
+			if in_range and not skater.deflect_intent and _sm.get_state() != State.SLAPPER_CHARGE_WITHOUT_PUCK \
+					and not StickCheckRules.is_stick_busy(skater.stick_check_phase) and _pickup_claim_floor <= 0.0 and (rising_edge or _claim_cooldown <= 0.0):
 				_pickup_claim_floor = _PICKUP_CLAIM_FLOOR_S
 				_claim_cooldown = _CLAIM_COOLDOWN_S
 				# Report the ADAPTED interp delay (get_interpolation_delay) — the value
@@ -336,15 +337,15 @@ func _physics_process(delta: float) -> void:
 			var in_poke_range: bool = false
 			var is_lift: bool = false
 			if carrier_team != _team_id and carrier_team != -1:
-				if skater.blade_up:
-					# Lifted blade — hook under the carrier's shaft for a stick lift.
+				if skater.stick_check_phase == StickCheckRules.Phase.HOOK:
+					# Hooking — under the carrier's shaft for a stick lift.
 					is_lift = true
 					var c_hand: Vector3 = view_carrier.upper_body_to_global(view_carrier.get_top_hand_position())
 					var c_blade: Vector3 = view_carrier.get_blade_contact_global()
 					in_poke_range = PuckInteractionRules.check_blade_under_stick(
 							blade_pos_for_claim, c_hand, c_blade,
 							PuckController.STICK_LIFT_RADIUS, PuckController.STICK_LIFT_UNDER_MARGIN)
-				else:
+				elif not skater.blade_up and not StickCheckRules.is_stick_busy(skater.stick_check_phase):
 					in_poke_range = puck.global_position.distance_to(blade_pos_for_claim) <= PuckController.POKE_RADIUS \
 							and not PuckInteractionRules.net_between(blade_pos_for_claim, puck.global_position)
 			var rising_poke_edge: bool = in_poke_range and not _was_in_poke_range
@@ -558,6 +559,9 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# charge timers).
 	stagger_timer = server_state.stagger_timer
 	stagger_recoil_dir = server_state.recoil_dir
+	# The lift phase rides the same rail: the host's at the ack, stepped on by
+	# the replayed inputs.
+	_adopt_stick_check(server_state)
 	# The balance and torso leans ride the same rail: the host's values at the
 	# ack, then the replay steps them forward through the unacked inputs.
 	balance_tilt_vel = server_state.balance_tilt_vel

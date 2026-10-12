@@ -822,10 +822,9 @@ func blade_y_local() -> float:
 	# IK solves from it) rises off the ice. blend is 0 in all shot/carry states
 	# (blade_up is gated off then), so this is a no-op except during a lift.
 	# The lift TARGET follows the deflect mode: MID plays the low air, every
-	# other lifted state (HIGH deflect, stick-lift, forced pop) the high plane.
-	var lift_target: float = _controller.blade_lift_height_mid \
-			if _skater.elevation_level == ShotMechanics.ELEVATION_MID \
-			else _controller.blade_lift_height
+	# other lifted state (HIGH deflect, a stick lift, forced pop) the high plane.
+	var lift_target: float = _controller.blade_lift_height_mid if _skater.elevation_level == ShotMechanics.ELEVATION_MID \
+			and not StickCheckRules.uses_lift_height(_skater.stick_check_phase) else _controller.blade_lift_height
 	var lift: float = _skater.get_blade_lift_blend() * lift_target
 	# Plus the commit-stance stick raise: a body-check commit pulls the stick off
 	# the ice as a readable tell. Gameplay-inert (the blade is already withdrawn

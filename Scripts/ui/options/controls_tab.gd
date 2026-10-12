@@ -18,7 +18,8 @@ const _REBINDABLE_ACTIONS: Array = [
 	{"action": "block",          "label": "Block"},
 	{"action": "elevation_up",   "label": "Elevation Up"},
 	{"action": "elevation_down", "label": "Elevation Down"},
-	{"action": "stick_lift",     "label": "Deflect / Lift"},
+	{"action": "stick_lift",     "label": "Deflect"},
+	{"action": "stick_check",    "label": "CONTROLS_STICK_LIFT"},
 	{"action": "smart_ping",     "label": "Smart Ping"},
 ]
 
@@ -28,7 +29,8 @@ const _PAD_REBINDABLE: Array = [
 	{"action": "block",          "label": "Block"},
 	{"action": "brake",          "label": "Brake"},
 	{"action": "hit",            "label": "Hit"},
-	{"action": "stick_lift",     "label": "Deflect / Lift"},
+	{"action": "stick_lift",     "label": "Deflect"},
+	{"action": "stick_check",    "label": "CONTROLS_STICK_LIFT"},
 	{"action": "stance",         "label": "Stance"},
 	{"action": "quick_pass",     "label": "Quick Pass"},
 	{"action": "elevation_up",   "label": "Loft Up"},
@@ -127,7 +129,7 @@ func _build_content() -> void:
 		btn.pressed.connect(_on_bind_btn_pressed.bind(action))
 		SoundManager.wire_button(btn)
 		_binding_btns[action] = btn
-		grid.add_child(_field_row(entry.label, btn))
+		grid.add_child(_field_row(tr(entry.label), btn))
 
 	# Gamepad button rebinds — a parallel grid. The pad scheme reads its buttons
 	# directly (not through InputMap), so these are their own binding namespace and
@@ -155,7 +157,7 @@ func _build_content() -> void:
 		btn.pressed.connect(_on_pad_bind_btn_pressed.bind(action))
 		SoundManager.wire_button(btn)
 		_pad_binding_btns[action] = btn
-		pad_grid.add_child(_field_row(entry.label, btn))
+		pad_grid.add_child(_field_row(tr(entry.label), btn))
 
 	_conflict_label = Label.new()
 	_conflict_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

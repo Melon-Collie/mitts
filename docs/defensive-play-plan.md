@@ -1,7 +1,7 @@
 # Defensive play — stick check, stick tie, board pin
 
-Status: **proposed**. Nothing here is implemented. Each phase is meant to ship as its
-own PR, with its own protocol bump and playtest.
+Status: **Phase 1 implemented** (v66), playtest pending. Phases 2–4 proposed. Each
+phase is meant to ship as its own PR, with its own protocol bump and playtest.
 
 ## Decisions banked
 
@@ -16,6 +16,16 @@ own PR, with its own protocol bump and playtest.
   committed pins them.
 - **The frozen-puck whistle is NHL-only.** In ARCADE, a trapped puck squirts free at
   the same threshold instead.
+- **A lift's sequence follows the lifter's button alone, never whether the hook
+  landed.** Online, the host settles a landing only when the lift claim resolves,
+  after it has already run the lifter's inputs past the hook, so any branch on the
+  outcome disagrees with the client for that window and refuses the lifter's own
+  pickup. Input-driven, host and client step identical phases and nothing rolls
+  back.
+- **Defaults: F on the keyboard, X on the pad.** The pad's loft moved to D-pad
+  up/down and the ping to D-pad left to free it (pad scheme 2).
+- **Ties are pure geometry in v1** (no Weight term until playtested), and **a
+  pinning defender's stick stays off the ice** (the pin is a one-for-one trade).
 - **The bots learn each verb in the phase that adds it,** not afterwards. Today they
   never block and never stick-lift on defense, so in a lobby that is mostly bots a
   human-only verb barely shows up.
@@ -63,34 +73,39 @@ Two defects found during the survey; Phase 1 fixes both by construction:
     `RemoteController` ORs edges across inputs it drops.
   - **After this the u16 flag field is full.** The next input bit grows the record
     from 24 to 25 bytes.
-- **Defaults:** X on the pad. It was freed when the loft moved to D-pad up/down and
-  the ping to D-pad left (pad scheme 2, already landed with a one-time migration of
-  saved binds). The KBM default is open question 1.
+- **Defaults:** F on the keyboard (`save_goal_clip` shares it only during the goal
+  cinematic), X on the pad. X was freed when the loft moved to D-pad up/down and the
+  ping to D-pad left (pad scheme 2, with a one-time migration of saved binds). The
+  UI calls it "Stick Lift"; the tutorial already calls the poke a stick check.
 
 ### The stick-check state machine
 `SkaterStickCheck` is a RefCounted collaborator on `SkaterController`. It exclusively
 owns the phase and its timer, and it is driven only by inputs, so reconcile replay
-reproduces it.
+reproduces it. `StickCheckRules.step` is the whole table.
 
 | phase | entered by | lasts | blade | stick plays puck? |
 |---|---|---|---|---|
 | `IDLE` | — | — | normal | yes |
-| `RISE` | `stick_check_pressed`, not carrying, not committed/blocking | `LIFT_RISE_S` 0.06 | rising | no |
-| `HOOK` | end of RISE | `LIFT_HOOK_S` 0.14 | up; tests opposing shafts every tick | no |
-| `TIE` | end of HOOK with the button still held and a non-carrier's shaft in reach (Phase 2) | held, up to `TIE_MAX_S` | on the victim's shaft | no |
-| `DROP` | a hook that landed on a carrier | `LIFT_DROP_S` 0.05 | forced down fast | **yes, with priority** |
-| `RECOVER` | HOOK ends without landing | `LIFT_RECOVER_S` 0.22 | up, then down | no |
+| `RISE` | `stick_check_pressed`, not carrying, not committed/blocking, not forced up | `RISE_S` 0.06 | rising | no |
+| `HOOK` | end of RISE | while held, at least `HOOK_MIN_S` 0.04, at most `HOOK_MAX_S` 0.14 | up; tests opposing shafts every tick | no |
+| `DROP` | released inside the hook window | `DROP_S` 0.05 | forced down fast | **yes** — the take |
+| `RECOVER` | still held at `HOOK_MAX_S` | `RECOVER_S` 0.22 | up, then down | no |
+| `REARM` | end of DROP | `REARM_S` 0.25 | normal | yes; a new press is ignored |
 
-- **A whiff costs something.** The hook plus the recovery is about a third of a second
-  with no poke and no reception. That is the commitment that keeps a lift from being
-  spammed. Today the held-Q lift tests every tick for free.
+(Phase 2 adds `TIE`: still held at the end of the hook with a non-carrier's shaft in
+reach.)
+
+- **A whiff costs something.** The stick is out of play from the press to the drop,
+  and the next lift waits for the rearm. Holding the stick up too long costs the
+  slow recovery. Today the held-Q lift tests every tick for free.
 - **Only the HOOK phase can lift.** `blade_up` keeps meaning "can reach airborne
   pucks". The shaft test in `PuckController._check_interactions` moves from
   `if skater.blade_up` to "this skater is in HOOK". So a raised Q blade and a
   forcibly lifted blade skip the poke and lift nothing, which fixes the victim quirk.
-- **`stick_check_phase` joins `SkaterNetworkState` (u8).** Remotes need it for the
-  pose. The resolver needs it to check that the claimant was in HOOK at their rewound
-  instant, which closes the missing `blade_up` check.
+- **`stick_check_phase` joins `SkaterNetworkState`**, packed with its elapsed ticks
+  in one u8. Remotes need it for the pose. The resolver needs it to check that the
+  claimant was in HOOK at their rewound instant, which closes the missing
+  `blade_up` check, and the local reconcile adopts it before replay.
 
 ### Lift-and-take
 - **The hook's quality scales the victim's forced lift.**
@@ -101,11 +116,11 @@ reproduces it.
   - The victim's re-grab cooldown becomes forced lift + 0.1 s, so they can't grab it
     back before their blade is down.
 - **The lifter takes the puck.** On success:
-  - The lifter goes straight to `DROP`, and `poke_checker_cooldown` is waived for them.
+  - The lifter carries no cooldown at all (`poke_checker_cooldown` is not set).
   - The puck keeps the carrier's velocity, as today.
-  - The lifter's blade is the one that hooked the shaft near the puck, so it comes
-    down on the puck within `LIFT_DROP_S` and the ordinary proximity pickup takes it.
-    No possession is ever awarded.
+  - The lifter's blade hooked the shaft near the puck, so letting go brings it down
+    on the puck within `DROP_S` and the ordinary proximity pickup takes it. No
+    possession is ever awarded.
 - **Both detection paths share one rule.** The host's present-time detection (bots and
   the host player) and the client-claim path (`StickLiftClaimResolver`) both call
   `StickCheckRules`. The victim's cosmetic re-lift notify (`notify_puck_stolen`)
@@ -159,7 +174,7 @@ PRESSURE chooses between the poke jab and a lift by what the bot can actually se
   - the `TIE_MAX_S` 1.5 s cap runs out, after which a `TIE_COOLDOWN_S` 0.75 s cooldown
     stops the same defender chaining ties on the same victim.
 
-  v1 is pure geometry, with no attribute term (open question 2).
+  v1 is pure geometry, with no attribute term (decided: geometry only).
 
 ### Netcode
 - **Engagement is a claim.** `StickTieClaimResolver` follows the full contract in
@@ -235,7 +250,7 @@ PRESSURE chooses between the poke jab and a lift by what the bot can actually se
   wall-squeeze release. A pinned non-carrier can still play the puck.
 - **The defender.** Holding Ctrl and driving in maintains the pin; letting go of
   either ends it. The commit keeps their stick off the ice, and that is the bargain: a
-  one-for-one trade that frees your partner to dig the puck out (open question 3).
+  one-for-one trade that frees your partner to dig the puck out (decided).
 - **Escape.**
   - The timer drains at `1 + escape_drive · (1 − pin_strength) · PIN_ESCAPE_RATE`.
     Driving along the wall, and especially reversing against the slide, gets out
@@ -335,23 +350,19 @@ must still grow, its ratchet entry is bumped in the same diff.
 
 ## Open questions
 
-1. **KBM default.** F is recommended: an index-finger reach, and `save_goal_clip` only
-   uses it during the goal cinematic. X and mouse thumb buttons are the alternatives.
-   Check the rebind conflict validator either way.
-2. **Tie strength.** Pure geometry in v1, or does Weight resist a yank? Geometry is
-   recommended until it has been playtested.
-3. **Pin and stick.** Can the pinning defender dig with their stick? Recommended: no.
-   The commit keeps it off, which keeps the pin a one-for-one trade.
+None outstanding. The KBM default, tie strength and the pinning defender's stick
+were settled before Phase 1 (see *Decisions banked*).
 
 ## Starting values
 
 | name | value | note |
 |---|---|---|
-| `LIFT_RISE_S` | 0.06 | blade up from the ice |
-| `LIFT_HOOK_S` | 0.14 | window in which a hook can land |
-| `LIFT_DROP_S` | 0.05 | blade back down after a landed hook |
-| `LIFT_RECOVER_S` | 0.22 | the whiff's price |
-| `LIFT_FORCED_MIN_S` / `MAX_S` | 0.4 / 0.9 | victim's forced lift by hook quality |
+| `RISE_S` | 0.06 | blade up from the ice |
+| `HOOK_MIN_S` / `HOOK_MAX_S` | 0.04 / 0.14 | window in which a hook can land |
+| `DROP_S` | 0.05 | blade back down on release |
+| `RECOVER_S` | 0.22 | the price of holding the stick up too long |
+| `REARM_S` | 0.25 | before the next lift |
+| `FORCED_LIFT_MIN_S` / `MAX_S` | 0.4 / 0.9 | victim's forced lift by hook quality |
 | `TIE_MAX_S` / `TIE_COOLDOWN_S` | 1.5 / 0.75 | |
 | `TIE_HOLD_RADIUS` | engage + blade travel over the interp window + IK slack | derive, don't pick |
 | `PIN_WALL_MARGIN` | 0.25 m | |

@@ -28,14 +28,8 @@ const POKE_RADIUS: float = GameRules.POKE_RADIUS_M
 @export var contest_draw_timing_min_weight: float = 0.7
 # Stick-lift geometry: how close the attacker's (lifted) blade must be to the
 # carrier's hand→blade shaft, and how far below it, to hook under and pop it up.
-# Slightly wider than POKE_RADIUS — the lifted blade meets the shaft up off the
-# ice rather than the puck on it.
-const STICK_LIFT_RADIUS: float = 0.45
+const STICK_LIFT_RADIUS: float = GameRules.STICK_LIFT_RADIUS_M
 const STICK_LIFT_UNDER_MARGIN: float = 0.0
-# How long a forced stick-lift keeps the victim's blade popped up after the hook
-# lands — enough to read as a lift and to deny an instant re-grab on top of the
-# reattach cooldown apply_stick_lift_strip already sets.
-const STICK_LIFT_FORCED_LIFT_S: float = 0.4
 
 @export var extrapolation_max_ms: float = 50.0
 # Below this speed (m/s) the along-track decomposition in PuckHandoffRules is
@@ -159,11 +153,11 @@ var _pred_cue_boards_prev: bool = false
 var _pred_cue_goalie_prev: bool = false
 var _pred_cue_frame_ms: int = -10_000
 const _PRED_CUE_STALE_MS: int = 250
-# Scoped true only while a stick-lift strip is being applied, so the synchronous
-# puck_stripped_from handlers (sound + victim notify) can tell a stick lift apart
-# from a poke/body-check strip and pick the right cue. Read via
-# is_processing_stick_lift(); always reset immediately after apply_stick_lift_strip.
-var _processing_stick_lift: bool = false
+# The victim's forced lift, set only while a stick-lift strip is being applied,
+# so the synchronous puck_stripped_from handlers (sound + victim notify) can tell
+# a stick lift apart from a poke/body-check strip and send its length. Read via
+# stick_lift_forced_seconds(); always zeroed right after apply_stick_lift_strip.
+var _processing_stick_lift_s: float = 0.0
 
 # Reused scratch objects for the per-tick interpolation lookup + output.
 var _scratch_bracket := BufferedStateInterpolator.BracketResult.new()
@@ -448,23 +442,31 @@ func apply_lag_comp_poke(checker: Skater, expected_ex_carrier: Skater) -> void:
 
 # Called after StickLiftClaimResolver validates a client stick-lift claim
 # against the state buffer. Same idempotency guards as apply_lag_comp_poke
-# (carrier null / claimant became carrier / carrier changed). On success the
-# victim's blade is popped up and the puck is stripped via the poke path.
-func apply_lag_comp_stick_lift(checker: Skater, expected_ex_carrier: Skater) -> void:
+# (carrier null / claimant became carrier / carrier changed). `quality` is the
+# hook's, judged on the rewound geometry.
+func apply_lag_comp_stick_lift(checker: Skater, expected_ex_carrier: Skater,
+		quality: float) -> void:
 	if not is_instance_valid(checker) or puck.carrier == null:
 		return
 	if puck.carrier == checker:
 		return
 	if puck.carrier != expected_ex_carrier:
 		return
-	puck.carrier.force_blade_lift(STICK_LIFT_FORCED_LIFT_S)
-	_processing_stick_lift = true
-	puck.apply_stick_lift_strip(checker)
-	_processing_stick_lift = false
+	_land_stick_lift(checker, quality)
 
 
-func is_processing_stick_lift() -> bool:
-	return _processing_stick_lift
+# Both detection paths land here: the carrier's blade is forced up for as long
+# as the hook earned, and the puck carries on without it.
+func _land_stick_lift(checker: Skater, quality: float) -> void:
+	var forced_s: float = StickCheckRules.forced_lift_seconds(quality)
+	puck.carrier.force_blade_lift(forced_s)
+	_processing_stick_lift_s = forced_s
+	puck.apply_stick_lift_strip(checker, forced_s + StickCheckRules.REGRAB_MARGIN_S)
+	_processing_stick_lift_s = 0.0
+
+
+func stick_lift_forced_seconds() -> float:
+	return _processing_stick_lift_s
 
 
 # Two blades reach the same loose puck at once (near-simultaneous client claims,
@@ -547,8 +549,9 @@ func _find_contesting_corraller(first: Skater, skaters: Array, puck_curr: Vector
 				or skater.current_shot_state == SkaterStateMachine.State.FOLLOW_THROUGH:
 			continue
 		# blade_up / deflect_intent already withdraw the stick; a committed body-check
-		# does the same (stick off the ice — no corral).
-		if skater.blade_up or skater.deflect_intent or skater.hit_committed:
+		# and a stick lift in progress do the same (stick off the ice — no corral).
+		if skater.blade_up or skater.deflect_intent or skater.hit_committed \
+				or StickCheckRules.is_stick_busy(skater.stick_check_phase):
 			continue
 		if not PuckReceptionRules.blade_can_interact(skater.blade_up, puck_airborne):
 			continue
@@ -610,19 +613,20 @@ func _check_interactions() -> void:
 				if skater.current_shot_state == SkaterStateMachine.State.SHOT_BLOCKING:
 					continue
 				var blade_curr: Vector3 = skater.get_blade_contact_global()
-				if skater.blade_up:
-					# Stick lift: the attacker's lifted blade hooked under the
-					# carrier's shaft pops their blade up and strips the puck. A
-					# lifted blade pokes nothing the normal way (it's off the ice),
-					# so it's stick-lift-or-skip for this checker.
+				# Stick lift: a hooking blade under the carrier's shaft pops their
+				# blade up and strips the puck. A stick mid-lift or otherwise up
+				# (a raised deflect, a forced pop) pokes nothing — it's off the ice.
+				if skater.stick_check_phase == StickCheckRules.Phase.HOOK:
 					if PuckInteractionRules.check_blade_under_stick(
 							blade_curr, carrier_hand, carrier_blade,
 							STICK_LIFT_RADIUS, STICK_LIFT_UNDER_MARGIN):
-						carrier_skater.force_blade_lift(STICK_LIFT_FORCED_LIFT_S)
-						_processing_stick_lift = true
-						puck.apply_stick_lift_strip(skater)
-						_processing_stick_lift = false
+						_land_stick_lift(skater, StickCheckRules.hook_quality(
+								PuckInteractionRules.distance_to_shaft(
+										blade_curr, carrier_hand, carrier_blade),
+								STICK_LIFT_RADIUS))
 						break
+					continue
+				if skater.blade_up or StickCheckRules.is_stick_busy(skater.stick_check_phase):
 					continue
 				var blade_prev: Vector3 = skater.get_prev_blade_contact_global()
 				if PuckInteractionRules.check_poke(_prev_puck_pos, puck_curr,
@@ -653,6 +657,9 @@ func _check_interactions() -> void:
 				# dampening still applies via the body collision path).
 				if skater.current_shot_state == SkaterStateMachine.State.SHOT_BLOCKING \
 						or skater.current_shot_state == SkaterStateMachine.State.FOLLOW_THROUGH:
+					continue
+				# Mid-lift the stick is hooking, not playing the puck.
+				if StickCheckRules.is_stick_busy(skater.stick_check_phase):
 					continue
 				# Reach gate — grounded blade ↔ grounded puck, lifted blade ↔
 				# airborne puck. blade_up already encodes the deflect level's plane
@@ -906,7 +913,7 @@ func try_provisional_pickup(local_skater: Skater) -> void:
 		return
 	# Committed to a body check — stick's off the ice (mirrors the host's
 	# hit_committed pickup gate), so don't pin a puck the host won't grant.
-	if local_skater.hit_committed:
+	if local_skater.hit_committed or StickCheckRules.is_stick_busy(local_skater.stick_check_phase):
 		return
 	if _is_pickup_contested(local_skater):
 		return
