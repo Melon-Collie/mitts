@@ -261,6 +261,13 @@ Two failures bracket it, both measured, and either is easy to re-introduce:
 `should_hold_seal` does not cover this on its own: the seal question asks whether
 a SHOT can beat him, and a walkaround is not a shot yet.
 
+A LOOSE puck is in the race only while an opponent can reach it before he is
+back up (`_seen_contest_time` against `recovery_duration`). A rebound steered to
+the corner keeps its pace to the boards, so reading its slide alone held him
+down 3.7-5 s with nobody near it; a puck no stick can play during the rise is
+not a shot he can be caught standing up into. `test_goalie_rebound_rise.gd`
+holds it.
+
 ### The committed slide is a retreat, and its budget is depth
 
 `_post_edge_reach` puts the body at `net_half_width − pad_edge · cos(slide

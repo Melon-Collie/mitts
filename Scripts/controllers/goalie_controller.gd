@@ -3156,10 +3156,18 @@ func _threat_lateral_speed_x() -> float:
 # carries its own lateral rate through that whole window unopposed. Hold when
 # that travel exceeds what his standing pad covers — getting up would hand back
 # more net than staying down concedes. Every term is one he can see.
+#
+# A loose puck is only a threat once a stick reaches it, so one that no opponent
+# can reach before he is back up loses him nothing, however fast it slides: a
+# rebound steered to the corner keeps its pace to the boards.
 func _recovery_loses_the_crossing_race() -> bool:
 	var carrier: Skater = puck.get_carrier()
 	if carrier != null and team_id != -1 and carrier.get_team_id() == team_id:
 		return false
+	if carrier == null:
+		_ensure_view()
+		if _seen_contest_time(puck.global_position) > recovery_duration:
+			return false
 	return absf(_threat_lateral_speed_x()) * recovery_duration > pad_local_offset
 
 
