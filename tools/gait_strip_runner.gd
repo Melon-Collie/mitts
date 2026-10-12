@@ -43,7 +43,7 @@ const SCENARIOS: Array[Dictionary] = [
 	# The stick held back with the cursor up-ice: skating backward, C-cuts.
 	{"name": "back", "warm": 240, "step": 12},
 	# Brake and D from a standstill with the cursor up-ice: the shuffle.
-	{"name": "shuffle", "warm": 60, "step": 18},
+	{"name": "shuffle", "warm": 60, "step": 6},
 ]
 
 

@@ -592,12 +592,12 @@ var reversal_stance: float = 0.85        # stance floor — sits down hard into 
 var reversal_spread_m: float = 0.16      # each skate out past its hip
 var reversal_lead_m: float = 0.10        # both skates set toward travel
 var reversal_toe_in_deg: float = 20.0    # toes turned in, both blades on their inside edges
-# Side-step (from a standstill, or the brake's shuffle): hips square, legs scissor
-# sideways (SkaterLocomotion._shuffle_path), metres per unit of stroke amplitude.
+# Side-step (from a standstill, or the brake's shuffle): hips square, legs step
+# together (SkaterLocomotion._shuffle_path), the cadence set by the ground speed.
 var shuffle_intensity: float = 0.6       # stride intensity floor while side-stepping
 var shuffle_cadence_rate: float = 3.0    # rad/s stride-phase floor for the steps
-var shuffle_step_m: float = 0.15         # each skate's sideways scissor either side of its hip
-var shuffle_lift_m: float = 0.05         # a step's lift toward the travel
+var shuffle_step_m: float = 0.10         # half a step at shuffle_lateral_speed, bounded by the leg's outer reach
+var shuffle_lift_m: float = 0.05         # a full step's lift
 # Backward skating: C-cuts (SkaterLocomotion._ccut_path), metres per unit of
 # stroke amplitude. The blades stay on the ice: each push sweeps out and ahead
 # and curls back in, drawing the C.

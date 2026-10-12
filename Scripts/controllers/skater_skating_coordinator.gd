@@ -102,6 +102,7 @@ var leg_scale: float = 1.0:
 	set(value):
 		leg_scale = value
 		_pose.leg_scale = value
+		_locomotion.leg_scale = value
 		if _native != null:
 			_native.set_leg_scale(value)
 

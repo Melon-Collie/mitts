@@ -23,6 +23,9 @@ const _FD_WINDOW_MAX: float = 0.1
 
 var _skater: Skater = null
 var _controller: SkaterController = null
+# The build's leg length over the authored one (SkaterSkatingCoordinator.leg_scale):
+# the authored skate offsets land this much further on the ice.
+var leg_scale: float = 1.0
 
 # Eased state weights (read by the coordinator; written only here).
 var mix := LocomotionRules.Mix.new()
@@ -216,7 +219,7 @@ func sense(delta: float, planted: bool, hold: float) -> void:
 	var rate: float = 0.0
 	if stroking > 0.001:
 		rate = ((mix.stride + mix.backward) * stride_rate + mix.crossover * cross_rate
-				+ mix.shuffle * c.shuffle_cadence_rate) / stroking
+				+ mix.shuffle * _shuffle_rate()) / stroking
 	stride_phase = wrapf(stride_phase + rate * (1.0 - hold) * delta, 0.0, TAU)
 	if mix.glide > 0.01:
 		_glide_phase = wrapf(_glide_phase + TAU * c.glide_sway_hz * mix.glide * delta, 0.0, TAU)
@@ -263,7 +266,7 @@ func strokes(delta: float, travel: Vector2) -> void:
 
 	w = mix.shuffle
 	if w > 0.001:
-		_shuffle_path(w, mix.side, amp, s, s_opp, cs, cs_opp)
+		_shuffle_path(w, mix.side)
 
 	# Glide: both blades down, a lazy edge-to-edge sway far below stride cadence,
 	# and coming out of a turn the inside knee tucks light — weight on the
@@ -506,21 +509,67 @@ func _ccut_path(w: float, a: float, s: float, s_opp: float, cs: float, cs_opp: f
 	push_reach = maxf(push_reach, Vector2(out, front).length())
 
 
-# The side-step, as where the skates go: the skates scissor sideways half a
-# cycle apart, each stepping toward the travel (`side`, +1 right) with a lift and
-# pushing back away from it along the ice.
-func _shuffle_path(w: float, side: float, a: float, s: float, s_opp: float,
-		cs: float, cs_opp: float) -> void:
+# The side-step, as where the skates go: step-together, the skates half a cycle
+# apart, `side` the travel's (+1 right). A side-stepping blade points along the
+# facing, so its edge grips across the travel and it cannot glide: each skate
+# spends half the cycle planted, sliding back under the moving hips at exactly
+# the ground speed (the cadence makes it so, `_shuffle_rate`), and half lifted,
+# stepping back out toward the travel. Each is set out from under its hip by
+# half a step, so the base closes a step inside hip width as the trailing skate
+# lands and opens three steps outside it as the leading one does — a leg reaches
+# further out than in, and the outer reach is what bounds the step.
+func _shuffle_path(w: float, side: float) -> void:
 	var c: SkaterController = _controller
-	var step: float = c.shuffle_step_m * a
-	var lift: float = c.shuffle_lift_m * a
-	l_dx += w * side * step * s
-	r_dx += w * side * step * s_opp
-	l_dy += w * lift * maxf(cs, 0.0)
-	r_dy += w * lift * maxf(cs_opp, 0.0)
-	l_push = maxf(l_push, w * maxf(-cs, 0.0))
-	r_push = maxf(r_push, w * maxf(-cs_opp, 0.0))
-	push_reach = maxf(push_reach, step)
+	var step: float = _shuffle_step() * _engaged()
+	var lift: float = c.shuffle_lift_m * step / maxf(c.shuffle_step_m, 0.001)
+	var q: float = stride_phase / TAU
+	var q_opp: float = fmod(q + 0.5, 1.0)
+	l_dx += w * step * (side * _step_sweep(q) - 0.5)
+	r_dx += w * step * (side * _step_sweep(q_opp) + 0.5)
+	l_dy += w * lift * _step_lift(q)
+	r_dy += w * lift * _step_lift(q_opp)
+	if q < 0.5:
+		l_push = maxf(l_push, w)
+	else:
+		r_push = maxf(r_push, w)
+	push_reach = maxf(push_reach, 1.5 * step)
+
+
+# A side-step's half-length, metres at leg_scale 1: the full step at the
+# shuffle's top speed, shortening with the square root of the speed below it so
+# the cadence carries the rest — the way any gait trades length for rate.
+func _shuffle_step() -> float:
+	var c: SkaterController = _controller
+	return c.shuffle_step_m * sqrt(clampf(
+			_ground_speed / maxf(c.shuffle_lateral_speed, 0.001), 0.0, 1.0))
+
+
+# The side-step's phase rate, rad/s: a planted skate sweeps two steps back
+# under the hips in half a cycle, which at the ground speed is π·v / (2·step).
+func _shuffle_rate() -> float:
+	var c: SkaterController = _controller
+	var step: float = _shuffle_step() * leg_scale
+	if step < 1e-4:
+		return c.shuffle_cadence_rate
+	return maxf(c.shuffle_cadence_rate, PI * _ground_speed / (2.0 * step))
+
+
+# A side-stepping skate across its hip over one cycle `q` (0..1), toward the
+# travel positive: planted for the first half, sweeping back at a constant rate
+# from +1 to −1; lifted for the second, stepping back out. The step is the cubic
+# that leaves and lands at the planted sweep's own rate, so the skate comes off
+# and onto the ice at rest on it.
+static func _step_sweep(q: float) -> float:
+	if q < 0.5:
+		return 1.0 - 4.0 * q
+	var u: float = 2.0 * q - 1.0
+	return ((-8.0 * u + 12.0) * u - 2.0) * u - 1.0
+
+
+static func _step_lift(q: float) -> float:
+	if q < 0.5:
+		return 0.0
+	return sin(PI * (2.0 * q - 1.0))
 
 
 # How hard the stroking states push, for the push sounds: the stroke's amplitude

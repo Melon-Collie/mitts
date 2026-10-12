@@ -198,8 +198,9 @@ private:
 	void stop_path(double w, const godot::Vector2 &along, const godot::Vector2 &turned);
 	void skid_path(double w, const godot::Vector2 &along);
 	void ccut_path(double w, double a, double s, double s_opp, double cs, double cs_opp);
-	void shuffle_path(double w, double side, double a, double s, double s_opp,
-			double cs, double cs_opp);
+	void shuffle_path(double w, double side);
+	double shuffle_step() const;
+	double shuffle_rate() const;
 	double engaged() const;
 	void stance_of(double s);
 	void ease_mix(double delta);
