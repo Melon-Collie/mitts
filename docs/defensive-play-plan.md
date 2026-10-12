@@ -21,7 +21,12 @@ bump and playtest.
   Phase 3), where there are no boards to pin against. The pin owns the wall; the tie
   owns the slot and the crease. Two sticks tied together, off the ice and slowed. It
   holds while either player keeps holding the button and the sticks stay together,
-  with no time limit (see *Tie revision*).
+  with no time limit (see *Tie revision*). It is allowed anywhere on the ice: its
+  cost, your own stick tied up too, keeps it where it pays.
+- **Lifts and ties share one cooldown** (`STICK_CHECK_COOLDOWN_S`), per player, since
+  they are one button. A landed lift starts it for the lifter, and a tie ending starts
+  it for both players. While it runs, that player's hook lands no lift and their
+  stick latches no tie.
 - **Ties are pure geometry in v1** (no Weight term until playtested), and **a
   pinning defender's stick stays off the ice** (the pin is a one-for-one trade).
 - **The pin is a locked position contest, not a stun** (decided after Phase 3; see
@@ -467,7 +472,8 @@ the play a pin can't make, because there's no wall behind the forward.
   `TIE_SEPARATION_M`. It also ends on a knockdown or a stoppage, and if the victim
   gains the puck.
   - There is no time limit.
-  - After it ends, the same pair can't re-tie for `TIE_COOLDOWN_S` 0.75 s.
+  - When it ends, both players go on the shared stick-check cooldown (below), so
+    neither can re-tie or lift straight away.
 - **Escaping a holder** is a contest at equal speed. Both sticks are capped the same,
   so a gap opens only when the holder misreads where the escaper is pulling. Once a
   gap opens it never closes while the escaper keeps going, so a few good jukes add up.
@@ -477,8 +483,25 @@ the play a pin can't make, because there's no wall behind the forward.
   stick. The initiator letting go walks their phase out to DROP/REARM as usual, while
   `stick_tied` keeps their stick up if the victim is still holding. A tied player
   can't start a new lift (`stick_taken` already includes `stick_tied`).
-- **Retired from Phase 2:** `TIE_MAX_S`, the blade→shaft hold radius, and
-  "tied" meaning the victim alone.
+- **The shared stick-check cooldown.** There is one per-player timer,
+  `STICK_CHECK_COOLDOWN_S` 0.75 s, for both verbs on the button.
+  - **Started by:** a lift landing (the lifter), and a tie ending (both players).
+  - **What it blocks:** while it runs, that player's HOOK lifts nothing and their stick
+    latches no tie.
+  - **What it doesn't block:** the press itself still raises the stick, as a whiff,
+    and ordinary puck play is unaffected. The lift-and-take's pickup is untouched,
+    because the lifter carries no pickup cooldown.
+  - **Why it gates outcomes rather than the press:** it is host-authoritative, since
+    both of its starts are host events. Gating outcomes means no client ever has to
+    predict it. Gating the press would put a late-arriving timer in front of an
+    input-driven phase machine, and the press would mispredict.
+  - **It settles the lift-into-tie overlap.** A lift held past the hook can't tie the
+    player it just lifted, because the landed lift put the lifter on the cooldown.
+  - `REARM_S` stays: it is the input-driven price of every drop, landed or not.
+  - **Wire:** the timer is host-only. It doesn't replicate, because nothing on a
+    client reads it.
+- **Retired from Phase 2:** `TIE_MAX_S`, the blade→shaft hold radius, the per-pair
+  `TIE_COOLDOWN_S`, and "tied" meaning the victim alone.
 
 ### Netcode
 - **Onset is a claim**, as today (`StickTieClaimResolver`): the victim's stick is
@@ -528,7 +551,9 @@ the play a pin can't make, because there's no wall behind the forward.
   - stick↔stick contact geometry;
   - the end conditions (both released, separation, knockdown, stoppage);
   - either player's hold keeps it;
-  - the cooldown;
+  - the shared cooldown: started by a landed lift and by a tie ending, blocking both
+    verbs for both players, and not blocking the press or puck play;
+  - a lift held into TIE does not tie the player it lifted;
   - the separation inequality.
 - Both blades raised, slowed and busy; a pass to either player passes under or dies.
 - Prediction: a tied client's own blade path matches the host's under the cap.
@@ -592,13 +617,6 @@ must still grow, its ratchet entry is bumped in the same diff.
 
 ## Open questions
 
-- **Is the tie gated to the net-front zone, or allowed anywhere?** Its job is the
-  net front, but nothing yet stops it elsewhere: a winger tied up at the blue line
-  when a cross-ice pass comes. A zone gate makes the purpose explicit. Leaving it
-  open lets the cost (the defender's own stick is out of play too) keep it rare.
-- **Can a stick that is forced up by a lift be tied?** The proposal is no: a lift
-  held through to the TIE phase would otherwise tie the player it just lifted,
-  which wastes the lifter's own take.
 - **The pin and tie revisions' numbers** (below) are starting values, held to their latency
   inequalities, and tuned from break-reason telemetry.
 
@@ -612,7 +630,8 @@ must still grow, its ratchet entry is bumped in the same diff.
 | `RECOVER_S` | 0.22 | the price of holding the stick up too long |
 | `REARM_S` | 0.25 | before the next lift |
 | `FORCED_LIFT_MIN_S` / `MAX_S` | 0.4 / 0.9 | victim's forced lift by hook quality |
-| `TIE_MAX_S` / `TIE_COOLDOWN_S` | 1.5 / 0.75 | the revision drops the cap and keeps the cooldown |
+| `TIE_MAX_S` / `TIE_COOLDOWN_S` | 1.5 / 0.75 | the revision drops both: no cap, and the shared cooldown below |
+| `STICK_CHECK_COOLDOWN_S` | 0.75 | per player, shared by lifts and ties |
 | `TIE_CONTACT_M` | 0.08 | stick to stick, shaft thickness plus IK slack |
 | `TIE_BLADE_SPEED_M_S` | 1.5 | both blades while tied (free: 10) |
 | `TIE_SEPARATION_M` | 0.7 | ≥ 0.08 + 2 × 1.5 × 0.2 s |
