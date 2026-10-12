@@ -974,6 +974,9 @@ var _pass_reception := GoaliePassRead.Reception.new()
 var _pass_read_timer: float = 0.0
 var _pass_read_responded: bool = false
 var _pass_situation := GoalieSaveSelection.Situation.new()
+# The leg drop's read of the same line (`_drop_waits_on_a_stick`): any stick
+# before the goal line, not only one in shooting range.
+var _drop_reception := GoaliePassRead.Reception.new()
 # Shot-commit window: counts down after the goalie last read a charging shot
 # from a slot shooter. While > 0 the cross-crease desperation push is suppressed
 # (the goalie committed to the shot and is late on the back door).
@@ -1722,12 +1725,17 @@ func _update_shot_timer(delta: float) -> void:
 					_enter_butterfly(true)
 	if not _reaction.low_drop_ready(_sm.is_upright()):
 		return
+	# A caught puck is not the shot he read; while the freeze clears, the carrier
+	# is the block-or-react question's, not this drop's.
+	if puck.get_carrier() != null:
+		return
 	# The reaction freeze + arm tracking begin at release; only the leg drop waits
 	# for the puck to close within `drop_max_time_to_impact`, because passes fire
 	# puck_released like any quick-shot. `low_drop_ready` is a level signal, so the
 	# drop fires on whichever tick the puck first becomes imminent.
 	var ttg: float = _puck_time_to_goal_line()
-	if ttg >= 0.0 and ttg <= drop_max_time_to_impact and not _standing_pads_meet_it(ttg):
+	if ttg >= 0.0 and ttg <= drop_max_time_to_impact and not _standing_pads_meet_it(ttg) \
+			and not _drop_waits_on_a_stick(ttg):
 		var half: float = _half_butterfly_side(ttg)
 		if half != 0.0:
 			_blocking_seal = false
@@ -1735,6 +1743,21 @@ func _update_shot_timer(delta: float) -> void:
 					else State.HALF_BUTTERFLY_LEFT)
 		else:
 			_enter_butterfly()
+
+# A puck an opposing stick can still take is not on him yet: a pass whose line
+# runs on at the net reads as a low shot, and dropping for it hands the receiver
+# the top of the net. Holds the legs until the puck is past that blade, for as
+# long as a drop still lands after it (GoaliePassRead.can_wait_out). Only the
+# drop: he has been on this line since the release, and a puck that slides past
+# the stick untouched is the line he already read.
+func _drop_waits_on_a_stick(ttg: float) -> bool:
+	_ensure_view()
+	if not GoaliePassRead.find_reception(puck.global_position, _loose_puck_velocity(),
+			_view.opponents, GameRules.DEFAULT_STICK_LENGTH_M, ttg, _drop_reception):
+		return false
+	return GoaliePassRead.can_wait_out(ttg, _drop_reception.pass_time,
+			butterfly_drop_speed)
+
 
 # A low shot he has READ ONTO A PAD FACE is a stand-up save. Standing, the pads
 # are a column from the ice to the pad-top seam; rolled flat they are 0.28 m tall
@@ -3133,10 +3156,18 @@ func _threat_lateral_speed_x() -> float:
 # carries its own lateral rate through that whole window unopposed. Hold when
 # that travel exceeds what his standing pad covers — getting up would hand back
 # more net than staying down concedes. Every term is one he can see.
+#
+# A loose puck is only a threat once a stick reaches it, so one that no opponent
+# can reach before he is back up loses him nothing, however fast it slides: a
+# rebound steered to the corner keeps its pace to the boards.
 func _recovery_loses_the_crossing_race() -> bool:
 	var carrier: Skater = puck.get_carrier()
 	if carrier != null and team_id != -1 and carrier.get_team_id() == team_id:
 		return false
+	if carrier == null:
+		_ensure_view()
+		if _seen_contest_time(puck.global_position) > recovery_duration:
+			return false
 	return absf(_threat_lateral_speed_x()) * recovery_duration > pad_local_offset
 
 
@@ -4178,6 +4209,10 @@ func _commit_cross_crease_response() -> void:
 					_cross_crease_target_x, puck.global_position.x,
 					_loose_puck_velocity().x, _current_x, pad_local_offset,
 					backdoor_release_time, t_push_speed, lateral_accel)
+	# Pads-first answers the one-timer; a receiver who must catch it first is
+	# beaten to the spot on the feet.
+	if race_lost and _pass_reception.found and not _receiver_loaded():
+		race_lost = false
 	if race_lost:
 		# Fresh butterfly entry snaps `_current_depth` to true perpendicular
 		# depth (radius→perp unit fix-up in _on_sm_transitioned) before the
@@ -4208,8 +4243,7 @@ func _update_pass_read(delta: float, carrier: Skater) -> void:
 		return
 	_pass_read_timer += delta
 	if _pass_read_live() and not _pass_read_responded:
-		_pass_read_responded = true
-		_respond_to_pass_read()
+		_pass_read_responded = _respond_to_pass_read()
 
 
 func _pass_read_live() -> bool:
@@ -4249,15 +4283,22 @@ func _find_pass_reception() -> bool:
 #     swing — standing transit is the wrong posture for the same reason as on a
 #     cross-crease pass (`_commit_cross_crease_response`).
 #
-# Committing early is not a free read: the sealed goalie concedes the top of the
-# net, and a receiver who holds the puck instead of one-timing it walks around him.
-func _respond_to_pass_read() -> void:
+# Both answer a ONE-TIMER, so neither is taken until the receiver is loaded for
+# one: committing is not a free read — the sealed goalie concedes the top of the
+# net — and a receiver who is not loaded has to catch it and shoot again, which
+# is a save he makes on his feet. Until then he walks to square and keeps
+# reading, so a receiver who loads late in the feed is still answered.
+#
+# Returns whether the read is settled; false keeps it open for the next tick.
+func _respond_to_pass_read() -> bool:
 	if _cross_crease_react_timer > 0.0 or _cross_crease_timer > 0.0:
-		return
+		return true
 	if not (_sm.is_upright() or _sm.is_post_integrated()):
-		return
+		return true
 	if _slide.event_lockout > 0.0:
-		return
+		return true
+	if not _receiver_loaded():
+		return false
 	var square_x: float = _square_x_at_body_radius(_pass_reception.point)
 	var s := _pass_situation
 	s.time_to_contest = _pass_reception.time
@@ -4271,10 +4312,18 @@ func _respond_to_pass_read() -> void:
 		var needed: float = absf(square_x - _current_x) - pad_local_offset
 		if needed <= 0.0 or needed <= GoalieBehaviorRules.reachable_lateral_distance(
 				t_push_speed, lateral_accel, _pass_reception.time + backdoor_release_time):
-			return
+			return true
 	_enter_butterfly()
 	_commit_slide_to(_slide.clamp_lateral_target(square_x, _goal_center_x,
 			net_half_width, _post_edge_reach()))
+	return true
+
+
+# Is the stick the pass read found loaded for a one-timer?
+func _receiver_loaded() -> bool:
+	_ensure_view()
+	return _pass_reception.found \
+			and _view.opponent_one_timer_loaded[_pass_reception.receiver] == 1
 
 
 # The arc x square to `threat` at the radius he is actually standing at — from

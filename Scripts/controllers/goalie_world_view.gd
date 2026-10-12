@@ -25,6 +25,9 @@ extends RefCounted
 var opponents: PackedVector3Array = PackedVector3Array()
 # Their velocities, index-matched to `opponents`.
 var opponent_velocities: PackedVector3Array = PackedVector3Array()
+# 1 where that opponent is loaded for a one-timer
+# (SkaterStateMachine.state_loads_one_timer), index-matched to `opponents`.
+var opponent_one_timer_loaded: PackedByteArray = PackedByteArray()
 # Non-ghost skaters on the GOALIE'S OWN team — his defensive coverage. The
 # backdoor depth cap asks, per weak-side threat, whether one of these is on him;
 # a covered one-timer man is not the same play as a free one.
@@ -72,6 +75,7 @@ func ensure(frame: int, skaters: Array, team_id: int, puck_pos: Vector3,
 	_frame = frame
 	opponents.clear()
 	opponent_velocities.clear()
+	opponent_one_timer_loaded.clear()
 	off_puck_opponents.clear()
 	teammates.clear()
 	screeners.clear()
@@ -89,6 +93,8 @@ func ensure(frame: int, skaters: Array, team_id: int, puck_pos: Vector3,
 		if opposing:
 			opponents.append(skater.global_position)
 			opponent_velocities.append(skater.velocity)
+			opponent_one_timer_loaded.append(1 if SkaterStateMachine.state_loads_one_timer(
+					skater.current_shot_state) else 0)
 			if skater != carrier:
 				off_puck_opponents.append(skater.global_position)
 			nearest_opponent_dist = minf(nearest_opponent_dist, dist)

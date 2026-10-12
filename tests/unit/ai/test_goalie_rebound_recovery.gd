@@ -6,7 +6,7 @@ extends GutTest
 # of a loose rebound as about to touch it. Measured on a pad save from 8 m with
 # the rebound sliding out and a man standing 4 m off it, not moving: he never
 # got up — 2.5 s and counting — and any later shot met him on the ice. Raced as
-# that man is actually moving, he is up in 0.5 s. A man crashing the rebound
+# that man is actually moving, he is up in 0.42 s. A man crashing the rebound
 # still keeps him down.
 #
 # And once that man HAS the puck: an undeclared carrier is no shot yet, so he
