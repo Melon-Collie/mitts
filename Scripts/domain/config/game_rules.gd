@@ -41,6 +41,12 @@ const FACEOFF_SKATE_IN_MAX_DURATION: float = 3.1   # s, longest stoppage glide
 # Post-goal and stoppage skate-ins hold the "2 → 1 → DROP" countdown until the
 # last skater arrives, plus this beat so the line reads as set before the "2".
 const FACEOFF_SET_BEAT: float = 0.25
+# The puck hangs this far above the dot (metres over its resting height) through
+# the countdown — a linesman's waist-high release — and is thrown down to land
+# on the drop: released FACEOFF_PUCK_DROP_TIME early at the speed that covers
+# the height in that time, so the puck reaches the ice as it goes live.
+const FACEOFF_PUCK_HOLD_HEIGHT: float = 1.0
+const FACEOFF_PUCK_DROP_TIME: float = 0.2
 # Post-goal staged skate-ins all cover the same setback, so a fixed duration
 # would move everyone in eerie lockstep. Vary each player's glide time by ±this
 # fraction (deterministically, per player + goal count) so they arrive staggered

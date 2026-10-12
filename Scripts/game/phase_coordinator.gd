@@ -208,7 +208,7 @@ func handle_phase_entered() -> void:
 func _enter_faceoff_prep(puck: Puck) -> void:
 	var dot: Vector2 = _state_machine.active_faceoff_dot
 	if puck != null:
-		puck.reset(dot)
+		puck.reset(dot, GameRules.FACEOFF_PUCK_HOLD_HEIGHT)
 		puck.pickup_locked = true
 	for gc: GoalieController in _goalie_controllers_getter.call():
 		gc.reset_to_crease()
@@ -267,9 +267,29 @@ func _enter_faceoff_prep(puck: Puck) -> void:
 	faceoff_prep_announced.emit()
 
 
+# Host, every frame after the phase tick: throws the held puck down once the
+# drop is FACEOFF_PUCK_DROP_TIME away, at the speed that lands it on the drop
+# from however much time is actually left.
+func update_faceoff_drop() -> void:
+	if _state_machine.current_phase != GamePhase.Phase.FACEOFF_PREP:
+		return
+	var t_left: float = _state_machine.faceoff_prep_time_until_drop()
+	if t_left <= GameRules.FACEOFF_PUCK_DROP_TIME:
+		_throw_held_puck(_get_puck(), t_left)
+
+
+func _throw_held_puck(puck: Puck, t_left: float) -> void:
+	if puck == null:
+		return
+	puck.drop_held(FaceoffDrawRules.drop_throw_speed(
+			GameRules.FACEOFF_PUCK_HOLD_HEIGHT, t_left, GameRules.GRAVITY_M_S2))
+
+
 func _enter_faceoff(puck: Puck) -> void:
 	if puck == null:
 		return
+	# A frame hitch can carry the prep past the throw; the puck still drops.
+	_throw_held_puck(puck, 0.0)
 	puck.pickup_locked = false
 	# The drop: stamp it on the centers so the draw's timing bonus is measured from
 	# here (see FaceoffDrawRules.timing_weight). The stamp is the shared host clock

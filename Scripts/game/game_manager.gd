@@ -539,6 +539,7 @@ func _process(delta: float) -> void:
 		return
 	if _state_machine.tick(delta):
 		_phase_coord.handle_phase_entered()
+	_phase_coord.update_faceoff_drop()
 	if _state_machine.current_phase == GamePhase.Phase.PLAYING:
 		var secs: int = int(_state_machine.time_remaining)
 		if secs != _last_emitted_clock_secs:
