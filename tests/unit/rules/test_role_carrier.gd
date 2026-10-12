@@ -1287,8 +1287,11 @@ func test_staggered_carrier_holds_instead_of_firing() -> void:
 
 # The same pressured breakout, with the outlet in two different situations. Both
 # are legal passes that fire on tick one with no doubt; the strong one is worth
-# ~8x PASS_MIN_VALUE, the weak one ~1.9x. The weak outlet is still sliding into
-# the far corner, so his drive up the wall has to brake that out first.
+# ~11x PASS_MIN_VALUE, the weak one ~1.9x — inside the 1x-2.5x window Normal's
+# doubt holds. The weak outlet is still sliding into the far corner, so his drive
+# up the wall has to brake that out first. Both values are future value and so
+# scale with READ_VALIDITY_TAU_S against a fixed bar: re-size the weak one's depth
+# when that moves, never its slide (past 6 m/s the lane dies outright).
 func _settle_skaters(self_pos: Vector3, outlet: Vector3) -> Array:
 	var outlet_vel: Vector3 = _MARGINAL_OUTLET_VEL if outlet == _MARGINAL_OUTLET \
 			else Vector3.ZERO
@@ -1301,7 +1304,7 @@ func _settle_skaters(self_pos: Vector3, outlet: Vector3) -> Array:
 
 
 const _STRONG_OUTLET := Vector3(11, 0, 11)    # open, up the strong wall
-const _MARGINAL_OUTLET := Vector3(13, 0, 23)  # deep in the far corner
+const _MARGINAL_OUTLET := Vector3(13, 0, 24.5)  # deep in the far corner
 const _MARGINAL_OUTLET_VEL := Vector3(0, 0, 6.0)   # …and still sliding into it
 
 
