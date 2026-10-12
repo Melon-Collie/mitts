@@ -159,7 +159,8 @@ func sense(delta: float, planted: bool, hold: float) -> void:
 	var basis: Basis = _skater.global_transform.basis
 	var facing := Vector2(-basis.z.x, -basis.z.z)
 	LocomotionRules.classify(Vector2(vel.x, vel.z), _skater.move_intent,
-			_skater.brake_intent, c.stance_active, facing, turning, _target)
+			_skater.brake_intent, maxf(c.shuffle_lateral_speed, c.shuffle_step_speed),
+			c.stance_active, facing, turning, _target)
 	# A brake below the stop's speed floor is no skid, and a turn below the carve
 	# floor is steps, not crossovers.
 	if _ground_speed < c.hockey_stop_min_speed:

@@ -299,3 +299,9 @@ here whenever you bump, in the same format.
 #      bit 5 now carries stance_active (was sprint_active) and input flag bit
 #      [4] stance_held (was sprint_held); both now feed the forward prediction
 #      as the posture, with hit_commit. Replay FORMAT_VERSION 11.
+# v66: the brake's shuffle. Brake + stick at or under the shuffle ceiling now
+#      steps the skater toward a facing-frame ellipse of speeds
+#      (SkaterMovementRules.shuffle_velocity) where it used to plant, so an
+#      older peer predicts a plant where the host shuffles. No byte layout
+#      changed; replay FORMAT_VERSION unchanged (replays carry states, not
+#      inputs).

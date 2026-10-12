@@ -19,8 +19,10 @@ class_name LocomotionRules
 #
 # In the loaded stance the turning part is skated with both blades dug in
 # (TIGHT) rather than crossed over or carved; the brake is a stop whatever the
-# stick says. Below grip speed, where the push is free in any direction, the
-# split is against facing instead of travel.
+# stick says. Below grip speed, where the push is free in any direction, and in
+# the shuffle (brake and stick at or under `shuffle_ceiling`,
+# SkaterMovementRules.shuffle_ceiling), the split is against facing instead of
+# travel.
 #
 # Frame: XZ-plane vectors as Vector2(x, z).
 
@@ -67,17 +69,19 @@ const DRIVE_FULL: float = 0.5
 # is that sign, never the stick's: once the travel has come round to the stick,
 # the stick sits on alternate sides of it from tick to tick, and a turning pose
 # keyed to that would swap its legs every frame.
-static func classify(velocity: Vector2, intent: Vector2, brake: bool, stance: bool,
-		facing: Vector2, turning: float, out: Mix) -> void:
+static func classify(velocity: Vector2, intent: Vector2, brake: bool,
+		shuffle_ceiling: float, stance: bool, facing: Vector2, turning: float,
+		out: Mix) -> void:
 	out.clear()
 	var speed: float = velocity.length()
 	var has_input: bool = intent.length_squared() > _INTENT_MIN_SQ
-	if speed <= SkaterMovementRules.GRIP_MIN_SPEED:
+	if speed <= SkaterMovementRules.GRIP_MIN_SPEED \
+			or (brake and has_input and speed <= shuffle_ceiling):
 		if not has_input:
 			out.glide = 1.0
 			return
-		# Free push from a standstill: a start, a side-step or a backward push,
-		# by where the stick points against the body.
+		# Free push from a standstill or a shuffle: a step ahead, a side-step or
+		# a step back, by where the stick points against the body.
 		var dir: Vector2 = intent.normalized()
 		var ahead: float = facing.dot(dir)
 		var across: float = facing.cross(dir)

@@ -19,6 +19,11 @@ var max_speed: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 var move_deadzone: float = 0.1
 var stop_decel: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
 var reverse_skid_fraction: float = GameRules.DEFAULT_SKATER_REVERSE_SKID_FRACTION
+# The shuffle (brake + stick near a standstill). Pickup is per-build (agility)
+# and stays under thrust, the acceleration ceiling remote prediction is sized for.
+var shuffle_lateral_speed: float = 1.5
+var shuffle_step_speed: float = 0.8
+var shuffle_accel: float = 8.0
 var turn_accel: float = GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2
 var max_turn_rate: float = GameRules.DEFAULT_SKATER_MAX_TURN_RATE_RAD_S
 # Edge grip; per-build value = base × agility_mult in apply_attributes, and the
@@ -537,7 +542,7 @@ var hockey_stop_spread_m: float = 0.10   # each skate out past its hip: a wide b
 var hockey_stop_lead_m: float = 0.28     # both skates set toward travel: the hips sit back of them
 var hockey_stop_stagger_m: float = 0.05  # the skate on the travel side a little ahead
 var hockey_stop_stance: float = 0.9      # stance floor while stopping (deep knees)
-# Tight turn (brake held with the stick off travel): two blades dug in under a
+# Tight turn (the stance with the travel curving): two blades dug in under a
 # deep sit, inside skate leading, no crossovers — the bank does the leaning.
 var tight_turn_stance: float = 0.9       # stance floor while digging the turn
 var tight_turn_lead_m: float = 0.30      # inside skate leads the outside one
@@ -587,8 +592,8 @@ var reversal_stance: float = 0.85        # stance floor — sits down hard into 
 var reversal_spread_m: float = 0.16      # each skate out past its hip
 var reversal_lead_m: float = 0.10        # both skates set toward travel
 var reversal_toe_in_deg: float = 20.0    # toes turned in, both blades on their inside edges
-# Shuffle: lateral push from a standstill — hips stay square, legs side-step
-# (SkaterLocomotion._shuffle_path), metres per unit of stroke amplitude.
+# Side-step (from a standstill, or the brake's shuffle): hips square, legs scissor
+# sideways (SkaterLocomotion._shuffle_path), metres per unit of stroke amplitude.
 var shuffle_intensity: float = 0.6       # stride intensity floor while side-stepping
 var shuffle_cadence_rate: float = 3.0    # rad/s stride-phase floor for the steps
 var shuffle_step_m: float = 0.15         # each skate's sideways scissor either side of its hip
@@ -1178,6 +1183,7 @@ var _base_max_speed:                    float = 0.0
 var _base_facing_drag_speed:            float = 0.0
 var _base_facing_drag_speed_braking:    float = 0.0
 var _base_stop_decel:                   float = 0.0
+var _base_shuffle_accel:                float = 0.0
 var _base_friction_drag:                float = 0.0
 var _base_lateral_grip:                 float = 0.0
 var _base_min_wrister_power:            float = 0.0
@@ -1282,6 +1288,7 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	facing_drag_speed           = _base_facing_drag_speed           * m_agility
 	facing_drag_speed_braking   = _base_facing_drag_speed_braking   * m_agility
 	stop_decel                  = _base_stop_decel                  * m_agility
+	shuffle_accel               = _base_shuffle_accel               * m_agility
 	# Lateral grip is where agility's turn promise physically lands: it scales the
 	# turn authority in the movement core, so the emergent turn radius
 	# v²/(turn_accel·grip) genuinely widens for a heavy/tall build and tightens for a
@@ -1446,6 +1453,7 @@ func _capture_attribute_bases() -> void:
 	_base_facing_drag_speed            = facing_drag_speed
 	_base_facing_drag_speed_braking    = facing_drag_speed_braking
 	_base_stop_decel                   = stop_decel
+	_base_shuffle_accel                = shuffle_accel
 	_base_friction_drag                = friction_drag
 	_base_lateral_grip                 = lateral_grip
 	_base_min_wrister_power            = min_wrister_power
@@ -3191,6 +3199,9 @@ func _build_movement_config() -> SkaterMovementRules.MovementConfig:
 	cfg.stance_stride_mult = stance_stride_mult
 	cfg.stance_max_speed_mult = stance_max_speed_mult
 	cfg.stance_shuffle_mult = stance_shuffle_mult
+	cfg.shuffle_lateral_speed = shuffle_lateral_speed
+	cfg.shuffle_step_speed = shuffle_step_speed
+	cfg.shuffle_accel = shuffle_accel
 	cfg.commit_grip_mult = commit_grip_mult
 	cfg.commit_stride_mult = commit_stride_mult
 	return cfg

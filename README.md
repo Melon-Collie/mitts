@@ -40,7 +40,7 @@ Use the in-game **Report Bug** button (bottom-right corner) — it attaches your
 | **Q (hold, no puck)** | Deflect — redirect an incoming puck off the blade instead of catching it (at high loft it doubles as a stick-lift) |
 | **Q (tap, with puck)** | Nudge / self-pass |
 | **Shift (hold)** | Stance — drop low and dig your edges in for tight cuts; choppier, slower strides while held |
-| **Space** | Hockey stop |
+| **Space** | Hockey stop — held near a standstill, WASD shuffles you in short steps to hold and adjust a spot (the net front) |
 | **Ctrl (hold)** | Commit a body check — full hit, stick off the ice, weaker edges while held |
 | **C (hold)** | Shot-block stance — drop to a knee in the lane |
 | **The other shot button (during a wind-up)** | Cancel the shot — bail a wrister or slapshot wind-up without firing |

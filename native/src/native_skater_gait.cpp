@@ -341,7 +341,9 @@ void NativeSkaterGait::sense(double delta, const Vector3 &vel, const Vector2 &in
 		Mix &out = target;
 		const double speed = velocity2.length();
 		const bool has_input = intent.length_squared() > INTENT_MIN_SQ;
-		if (speed <= GRIP_MIN_SPEED) {
+		if (speed <= GRIP_MIN_SPEED
+				|| (brake && has_input
+						&& speed <= maxd(c.shuffle_lateral_speed, c.shuffle_step_speed))) {
 			if (!has_input) {
 				out.glide = 1.0;
 				break;

@@ -497,6 +497,97 @@ func test_brake_is_a_stop_whatever_the_stick_says() -> void:
 			assert_almost_eq(v.z, 0.0, 1e-6, "the brake never turns — " + ctx)
 
 
+# ── Brake + stick near a standstill: the shuffle ─────────────────────────────
+
+const FACING_UP := 0.0                      # facing −Z
+const STICK_RIGHT := Vector2(1, 0)          # across facing
+const STICK_AHEAD := Vector2(0, -1)
+
+
+func _shuffle_cfg() -> SkaterMovementRules.MovementConfig:
+	var cfg := _clean_cfg()
+	cfg.shuffle_lateral_speed = 1.5
+	cfg.shuffle_step_speed = 0.8
+	cfg.shuffle_accel = 8.0
+	return cfg
+
+
+func _brake_for(v: Vector3, stick: Vector2, seconds: float,
+		cfg: SkaterMovementRules.MovementConfig) -> Vector3:
+	for i: int in roundi(seconds / DT):
+		v = SkaterMovementRules.apply_movement(v, stick, FACING_UP, false, true, DT, cfg)
+	return v
+
+
+func test_brake_and_stick_from_a_standstill_side_steps_at_the_lateral_cap() -> void:
+	var cfg := _shuffle_cfg()
+	var v: Vector3 = _brake_for(Vector3.ZERO, STICK_RIGHT, 1.0, cfg)
+	assert_almost_eq(v.x, cfg.shuffle_lateral_speed, 1e-4)
+	assert_almost_eq(v.z, 0.0, 1e-6, "straight across, no drift")
+
+
+func test_steps_ahead_and_back_are_smaller_than_side_steps() -> void:
+	var cfg := _shuffle_cfg()
+	assert_almost_eq(_speed(_brake_for(Vector3.ZERO, STICK_AHEAD, 1.0, cfg)),
+			cfg.shuffle_step_speed, 1e-4, "ahead")
+	assert_almost_eq(_speed(_brake_for(Vector3.ZERO, -STICK_AHEAD, 1.0, cfg)),
+			cfg.shuffle_step_speed, 1e-4, "back")
+	var diag: float = _speed(_brake_for(Vector3.ZERO, (STICK_RIGHT + STICK_AHEAD).normalized(),
+			1.0, cfg))
+	assert_between(diag, cfg.shuffle_step_speed, cfg.shuffle_lateral_speed,
+			"a diagonal sits on the ellipse between the two")
+
+
+func test_the_shuffle_speed_follows_the_stick() -> void:
+	var cfg := _shuffle_cfg()
+	assert_almost_eq(_brake_for(Vector3.ZERO, STICK_RIGHT * 0.5, 1.0, cfg).x,
+			cfg.shuffle_lateral_speed * 0.5, 1e-4)
+
+
+# Every velocity change stays under the acceleration ceiling remote prediction
+# is sized for (Scripts/networking/CLAUDE.md, the one render clock).
+func test_the_shuffle_picks_up_at_its_accel() -> void:
+	var cfg := _shuffle_cfg()
+	var v := Vector3(-cfg.shuffle_lateral_speed, 0, 0)
+	for i: int in 60:
+		var next: Vector3 = SkaterMovementRules.apply_movement(
+				v, STICK_RIGHT, FACING_UP, false, true, DT, cfg)
+		assert_lt((next - v).length(), cfg.shuffle_accel * DT + 1e-5, "tick %d" % i)
+		v = next
+	assert_gt(v.x, 0.0, "a reversal comes back through zero to the other side")
+
+
+func test_letting_go_of_the_stick_plants_the_shuffle() -> void:
+	var cfg := _shuffle_cfg()
+	var v: Vector3 = _brake_for(Vector3(cfg.shuffle_lateral_speed, 0, 0), Vector2.ZERO,
+			cfg.shuffle_lateral_speed / cfg.stop_decel + DT, cfg)
+	assert_eq(v, Vector3.ZERO, "planted inside a stop's time from the lateral cap")
+
+
+func test_above_the_shuffle_the_brake_is_still_the_hockey_stop() -> void:
+	var cfg := _shuffle_cfg()
+	var v: Vector3 = SkaterMovementRules.apply_movement(
+			Vector3(0, 0, -8), STICK_RIGHT, FACING_UP, false, true, DT, cfg)
+	assert_almost_eq(v.z, -8.0 + cfg.stop_decel * DT, 1e-4)
+	assert_almost_eq(v.x, 0.0, 1e-6, "the stop never turns")
+
+
+# A stop with the stick still held runs into the shuffle at its tail: held ahead,
+# the skater ends stepping ahead; held across, side-stepping.
+func test_a_stop_with_the_stick_held_ends_in_the_shuffle() -> void:
+	var cfg := _shuffle_cfg()
+	assert_almost_eq(_brake_for(Vector3(0, 0, -8), STICK_AHEAD, 2.0, cfg).z,
+			-cfg.shuffle_step_speed, 1e-4)
+	var across: Vector3 = _brake_for(Vector3(0, 0, -8), STICK_RIGHT, 2.0, cfg)
+	assert_almost_eq(across.x, cfg.shuffle_lateral_speed, 1e-4)
+	assert_almost_eq(across.z, 0.0, 1e-4)
+
+
+func test_an_unconfigured_shuffle_leaves_the_brake_a_plant() -> void:
+	var v: Vector3 = _brake_for(Vector3.ZERO, STICK_RIGHT, 0.5, _clean_cfg())
+	assert_eq(v, Vector3.ZERO)
+
+
 # ── Backward skating ─────────────────────────────────────────────────────────
 
 func test_backward_top_speed_is_capped() -> void:
