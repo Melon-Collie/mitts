@@ -47,8 +47,8 @@ namespace mitts {
 	X(pivot_depth_ramp_deg) X(pivot_min_speed) X(pivot_mohawk_deg) X(pivot_rate_min) \
 	X(pivot_stance) X(pivot_step_begin) X(pivot_yaw_speed) X(reversal_lead_m) \
 	X(reversal_spread_m) X(reversal_stance) X(reversal_toe_in_deg) \
-	X(shuffle_cadence_rate) X(shuffle_intensity) X(shuffle_lateral_speed) \
-	X(shuffle_lift_m) X(shuffle_step_m) X(shuffle_step_speed) \
+	X(shuffle_blend_speed) X(shuffle_intensity) X(shuffle_lateral_speed) \
+	X(shuffle_lift_m) X(shuffle_stance) X(shuffle_step_distance) X(shuffle_step_speed) \
 	X(stance_full_speed_fraction) X(stance_hip_deg) X(stance_push_gain) \
 	X(stance_sit_gain) X(stance_stride_gain) X(stride_bob_m) X(stride_cadence) \
 	X(stride_cadence_max_rate) X(stride_effort_ref_accel) X(stride_effort_speed) \
@@ -144,6 +144,9 @@ private:
 	double trunk_pitch = 0.0;
 	double trunk_roll = 0.0;
 	bool stop_latched = false;
+	bool stepping = false;
+	godot::Vector2 step_dir = godot::Vector2(1.0, 0.0);
+	double step_hold = 0.0;
 	double cross_signed = 0.0;
 	double carve_signed = 0.0;
 	double tight_signed = 0.0;
@@ -198,9 +201,8 @@ private:
 	void stop_path(double w, const godot::Vector2 &along, const godot::Vector2 &turned);
 	void skid_path(double w, const godot::Vector2 &along);
 	void ccut_path(double w, double a, double s, double s_opp, double cs, double cs_opp);
-	void shuffle_path(double w, double side);
-	double shuffle_step() const;
-	double shuffle_rate() const;
+	void shuffle_path(double w, const godot::Vector2 &dir);
+	void sense_step(const godot::Vector2 &facing, const godot::Vector2 &intent, bool brake);
 	double engaged() const;
 	void stance_of(double s);
 	void ease_mix(double delta);

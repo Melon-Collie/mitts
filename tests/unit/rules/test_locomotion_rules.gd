@@ -9,14 +9,13 @@ extends GutTest
 const UP_ICE := Vector2(0.0, -1.0)   # travelling −Z, facing −Z
 const RIGHT := Vector2(1.0, 0.0)     # the traveller's right when going −Z
 const DIAGONAL := Vector2(0.70710678, -0.70710678)  # 45° right of up-ice
-const SHUFFLE_CEILING: float = 1.5
 
 var _mix := LocomotionRules.Mix.new()
 
 
 func _classify(vel: Vector2, intent: Vector2, turning: float = 0.0, brake: bool = false,
 		facing: Vector2 = UP_ICE, stance: bool = false) -> LocomotionRules.Mix:
-	LocomotionRules.classify(vel, intent, brake, SHUFFLE_CEILING, stance, facing, turning, _mix)
+	LocomotionRules.classify(vel, intent, brake, stance, facing, turning, _mix)
 	assert_almost_eq(_total(_mix), 1.0, 1e-5, "the weights are a crossfade")
 	return _mix
 
@@ -131,22 +130,3 @@ func test_from_a_standstill_the_stick_against_the_body_decides() -> void:
 	assert_eq(m.side, 1.0)
 	assert_almost_eq(_classify(Vector2.ZERO, -UP_ICE).backward, 1.0, 1e-5, "a backward push")
 	assert_almost_eq(_classify(Vector2.ZERO, Vector2.ZERO).glide, 1.0, 1e-5, "standing")
-
-
-# The shuffle is the free push's split carried up to its ceiling: the brake and
-# a stick at a shuffle's pace step against the body, where the same travel
-# without the brake is skated along its heading.
-func test_the_shuffle_steps_against_the_body() -> void:
-	var m := _classify(RIGHT * 1.2, RIGHT, 0.0, true)
-	assert_almost_eq(m.shuffle, 1.0, 1e-5, "a side-step")
-	assert_eq(m.side, 1.0)
-	assert_almost_eq(_classify(UP_ICE * 0.7, UP_ICE, 0.0, true).stride, 1.0, 1e-5,
-			"a step ahead")
-	assert_almost_eq(_classify(-UP_ICE * 0.7, -UP_ICE, 0.0, true).backward, 1.0, 1e-5,
-			"a step back")
-	assert_almost_eq(_classify(RIGHT * 1.2, RIGHT).stride, 1.0, 1e-5,
-			"without the brake the same travel is skated")
-	assert_almost_eq(_classify(RIGHT * 1.2, Vector2.ZERO, 0.0, true).stop, 1.0, 1e-5,
-			"the brake alone stops")
-	assert_almost_eq(_classify(RIGHT * (SHUFFLE_CEILING + 0.5), RIGHT, 0.0, true).stop,
-			1.0, 1e-5, "above the ceiling the brake stops")

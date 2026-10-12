@@ -20,6 +20,10 @@ extends RefCounted
 # Acceleration and turn rate are sampled over the time since velocity last
 # changed (it only steps on physics ticks), held at most this long.
 const _FD_WINDOW_MAX: float = 0.1
+# A stick this far out reads as a step's direction (LocomotionRules' floor).
+const _STEP_INTENT_MIN_SQ: float = 0.0025
+# Below this ground speed (m/s) a step of the shuffle has come to rest.
+const _STEP_REST_SPEED: float = 0.05
 
 var _skater: Skater = null
 var _controller: SkaterController = null
@@ -95,6 +99,13 @@ var trunk_pitch: float = 0.0
 var trunk_roll: float = 0.0
 
 var _stop_latched: bool = false
+# A step of the brake's shuffle is under way (`_sense_step`): it starts on the
+# stick with the brake held at a shuffle's pace and lasts until the body is
+# still, so the steps' own slowing is skated as a step and a hockey stop's tail
+# is not. `_step_dir` is its direction in the hips' frame, (right, forward).
+var _stepping: bool = false
+var _step_dir := Vector2(1.0, 0.0)
+var _hold: float = 0.0
 # The turning states' weights with their side as the sign: eased as one number,
 # so a turn that changes side has to pass through zero on the way, and the legs
 # posed from it slide through centre rather than swapping.
@@ -133,6 +144,7 @@ func reset() -> void:
 	loaded = 0.0
 	stop_yaw = 0.0
 	_stop_latched = false
+	_stepping = false
 	_have_prev_velocity = false
 	_fd_time = 0.0
 	_fd_effort_target = 0.0
@@ -161,9 +173,10 @@ func sense(delta: float, planted: bool, hold: float) -> void:
 
 	var basis: Basis = _skater.global_transform.basis
 	var facing := Vector2(-basis.z.x, -basis.z.z)
+	_hold = hold
 	LocomotionRules.classify(Vector2(vel.x, vel.z), _skater.move_intent,
-			_skater.brake_intent, maxf(c.shuffle_lateral_speed, c.shuffle_step_speed),
-			c.stance_active, facing, turning, _target)
+			_skater.brake_intent, c.stance_active, facing, turning, _target)
+	_sense_step(facing)
 	# A brake below the stop's speed floor is no skid, and a turn below the carve
 	# floor is steps, not crossovers.
 	if _ground_speed < c.hockey_stop_min_speed:
@@ -219,7 +232,8 @@ func sense(delta: float, planted: bool, hold: float) -> void:
 	var rate: float = 0.0
 	if stroking > 0.001:
 		rate = ((mix.stride + mix.backward) * stride_rate + mix.crossover * cross_rate
-				+ mix.shuffle * _shuffle_rate()) / stroking
+				+ mix.shuffle * TAU * _ground_speed / maxf(c.shuffle_step_distance, 0.001)) \
+				/ stroking
 	stride_phase = wrapf(stride_phase + rate * (1.0 - hold) * delta, 0.0, TAU)
 	if mix.glide > 0.01:
 		_glide_phase = wrapf(_glide_phase + TAU * c.glide_sway_hz * mix.glide * delta, 0.0, TAU)
@@ -266,7 +280,7 @@ func strokes(delta: float, travel: Vector2) -> void:
 
 	w = mix.shuffle
 	if w > 0.001:
-		_shuffle_path(w, mix.side)
+		_shuffle_path(w, _step_dir if _stepping else Vector2(mix.side, 0.0))
 
 	# Glide: both blades down, a lazy edge-to-edge sway far below stride cadence,
 	# and coming out of a turn the inside knee tucks light — weight on the
@@ -509,49 +523,75 @@ func _ccut_path(w: float, a: float, s: float, s_opp: float, cs: float, cs_opp: f
 	push_reach = maxf(push_reach, Vector2(out, front).length())
 
 
-# The side-step, as where the skates go: step-together, the skates half a cycle
-# apart, `side` the travel's (+1 right). A side-stepping blade points along the
-# facing, so its edge grips across the travel and it cannot glide: each skate
-# spends half the cycle planted, sliding back under the moving hips at exactly
-# the ground speed (the cadence makes it so, `_shuffle_rate`), and half lifted,
-# stepping back out toward the travel. Each is set out from under its hip by
-# half a step, so the base closes a step inside hip width as the trailing skate
-# lands and opens three steps outside it as the leading one does — a leg reaches
-# further out than in, and the outer reach is what bounds the step.
-func _shuffle_path(w: float, side: float) -> void:
+# The side-step, as where the skates go: step-together along `dir` (the hips'
+# frame, (right, forward)), the leading skate the one on the travel's side. A
+# side-stepping blade points along the facing, so its edge grips across the
+# travel and it cannot glide: each skate spends half the cycle planted, sliding
+# back under the moving hips, and half lifted, stepping past them. The cycle is
+# laid over the ground (`shuffle_step_distance` a cycle), so the planted skate
+# holds the ice at any speed and one press of the shuffle (ShuffleStepShaper) is
+# one cycle: from the skates under the hips, the leading one steps out and the
+# trailing one in after it, back under the hips. The base opens a whole step
+# wide between, which is what the shuffle's deep sit (shuffle_stance) is for.
+func _shuffle_path(w: float, dir: Vector2) -> void:
 	var c: SkaterController = _controller
-	var step: float = _shuffle_step() * _engaged()
-	var lift: float = c.shuffle_lift_m * step / maxf(c.shuffle_step_m, 0.001)
+	var step: float = c.shuffle_step_distance / (4.0 * leg_scale) * (1.0 - _hold)
+	var lift: float = c.shuffle_lift_m * (1.0 - _hold)
 	var q: float = stride_phase / TAU
-	var q_opp: float = fmod(q + 0.5, 1.0)
-	l_dx += w * step * (side * _step_sweep(q) - 0.5)
-	r_dx += w * step * (side * _step_sweep(q_opp) + 0.5)
-	l_dy += w * lift * _step_lift(q)
-	r_dy += w * lift * _step_lift(q_opp)
-	if q < 0.5:
-		l_push = maxf(l_push, w)
+	var q_lead: float = fmod(q + 0.5, 1.0)
+	var lead: float = w * step * (_step_sweep(q_lead) + 1.0)
+	var trail: float = w * step * (_step_sweep(q) - 1.0)
+	var lead_lift: float = w * lift * _step_lift(q_lead)
+	var trail_lift: float = w * lift * _step_lift(q)
+	if dir.x >= 0.0:
+		r_dx += dir.x * lead
+		r_dz -= dir.y * lead
+		r_dy += lead_lift
+		l_dx += dir.x * trail
+		l_dz -= dir.y * trail
+		l_dy += trail_lift
+		if q < 0.5:
+			l_push = maxf(l_push, w)
+		else:
+			r_push = maxf(r_push, w)
 	else:
-		r_push = maxf(r_push, w)
-	push_reach = maxf(push_reach, 1.5 * step)
+		l_dx += dir.x * lead
+		l_dz -= dir.y * lead
+		l_dy += lead_lift
+		r_dx += dir.x * trail
+		r_dz -= dir.y * trail
+		r_dy += trail_lift
+		if q < 0.5:
+			r_push = maxf(r_push, w)
+		else:
+			l_push = maxf(l_push, w)
+	push_reach = maxf(push_reach, 2.0 * step)
 
 
-# A side-step's half-length, metres at leg_scale 1: the full step at the
-# shuffle's top speed, shortening with the square root of the speed below it so
-# the cadence carries the rest — the way any gait trades length for rate.
-func _shuffle_step() -> float:
+# Starts, holds and ends a step of the brake's shuffle. A step starts on the
+# stick at a shuffle's pace with the brake held, from the base closed (the
+# cycle's start); it holds through its own slowing and ends when the body is
+# still or the brake lets go. A hockey stop's tail never had the stick, so it
+# never starts one.
+func _sense_step(facing: Vector2) -> void:
 	var c: SkaterController = _controller
-	return c.shuffle_step_m * sqrt(clampf(
-			_ground_speed / maxf(c.shuffle_lateral_speed, 0.001), 0.0, 1.0))
-
-
-# The side-step's phase rate, rad/s: a planted skate sweeps two steps back
-# under the hips in half a cycle, which at the ground speed is π·v / (2·step).
-func _shuffle_rate() -> float:
-	var c: SkaterController = _controller
-	var step: float = _shuffle_step() * leg_scale
-	if step < 1e-4:
-		return c.shuffle_cadence_rate
-	return maxf(c.shuffle_cadence_rate, PI * _ground_speed / (2.0 * step))
+	var intent: Vector2 = _skater.move_intent
+	var has_input: bool = intent.length_squared() > _STEP_INTENT_MIN_SQ
+	var ceiling: float = maxf(c.shuffle_lateral_speed, c.shuffle_step_speed)
+	var holds: bool = _skater.brake_intent and _ground_speed <= ceiling \
+			and (has_input or (_stepping and _ground_speed > _STEP_REST_SPEED))
+	if not holds:
+		_stepping = false
+		return
+	if not _stepping:
+		_stepping = true
+		stride_phase = 0.0
+	if has_input:
+		var right := Vector2(-facing.y, facing.x)
+		_step_dir = Vector2(intent.dot(right), intent.dot(facing)).normalized()
+	_target.clear()
+	_target.shuffle = 1.0
+	_target.side = 1.0 if _step_dir.x >= 0.0 else -1.0
 
 
 # A side-stepping skate across its hip over one cycle `q` (0..1), toward the
@@ -602,7 +642,8 @@ func _stance(s: float) -> void:
 			* (1.0 + loaded * c.stance_sit_gain) \
 			* (1.0 + c.cadence_glide_stance_gain * cruise_gear)
 	var stride_sit: float = maxf(stroke, c.dig_in_stance * _start * (1.0 if intensity > 0.01 else 0.0))
-	stance = (mix.stride + mix.backward + mix.shuffle) * stride_sit \
+	stance = (mix.stride + mix.backward) * stride_sit \
+			+ mix.shuffle * c.shuffle_stance \
 			+ mix.crossover * maxf(stroke, c.carve_stance) \
 			+ mix.glide * maxf(stroke, c.glide_stance * _speed_t) \
 			+ mix.carve * c.carve_stance \
@@ -627,7 +668,9 @@ func _ease_mix(delta: float) -> void:
 	_carve_signed = lerpf(_carve_signed, (_target.carve + uncommitted) * _target.side, k)
 	mix.carve = absf(_carve_signed)
 	mix.backward = lerpf(mix.backward, _target.backward, k)
-	mix.shuffle = lerpf(mix.shuffle, _target.shuffle, k)
+	# A step of the shuffle is short, and its cycle is laid from its first
+	# centimetre: it comes on quicker than anything else.
+	mix.shuffle = lerpf(mix.shuffle, _target.shuffle, minf(c.shuffle_blend_speed * delta, 1.0))
 	mix.skid = lerpf(mix.skid, _target.skid, k)
 	_tight_signed = lerpf(_tight_signed, _target.tight * _target.side, k)
 	mix.tight = absf(_tight_signed)

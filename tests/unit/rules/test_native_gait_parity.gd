@@ -280,24 +280,28 @@ func _assert_skated(fields: Array[String]) -> void:
 		assert_gt(_seen.get(field, 0.0), 0.5, "the fuzz skated %s" % field)
 
 
-# The brake's shuffle: the stick across the facing, the body side-stepping at
-# speeds up to the shuffle's cap and back down, both ways — the step law and
-# its speed-set cadence.
+# The brake's shuffle: steps in every direction, each a press of the stick, the
+# body's own slowing with it released, and the rest between — the step latch,
+# its phase reset and the step laid over the ground.
 func test_shuffle_parity() -> void:
 	if _native_missing():
 		return
 	_skater.set_facing(Vector2(0.0, -1.0))
 	_skater.brake_intent = true
 	var ok: bool = true
-	for side: float in [1.0, -1.0]:
-		for speed: float in [0.3, 0.8, 1.5, 1.1, 0.5]:
-			_skater.move_intent = Vector2(side, 0.0) * minf(speed / 1.5 + 0.2, 1.0)
-			_skater.velocity = Vector3(side * speed, 0.0, 0.0)
-			for _i: int in 90:
-				if not _step(_random_delta(), "shuffle"):
-					ok = false
-					break
-			if not ok:
+	for stick: Vector2 in [Vector2(1.0, 0.0), Vector2(-1.0, 0.0), Vector2(0.0, -1.0),
+			Vector2(0.0, 1.0), Vector2(0.7071, 0.7071)]:
+		var vel := Vector3.ZERO
+		for i: int in 150:
+			var pressed: bool = i < 30
+			_skater.move_intent = stick if pressed else Vector2.ZERO
+			if pressed:
+				vel = vel.move_toward(Vector3(stick.x, 0.0, stick.y) * 1.2, 0.07)
+			else:
+				vel = vel.move_toward(Vector3.ZERO, 0.075)
+			_skater.velocity = vel
+			if not _step(_random_delta(), "shuffle"):
+				ok = false
 				break
 		if not ok:
 			break

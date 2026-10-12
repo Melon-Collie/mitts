@@ -1,17 +1,23 @@
 extends GutTest
 
-# The brake's shuffle, measured on the live rig: a side-stepping blade points
-# along the facing, so its edge grips across the travel and it cannot glide.
-# Whichever skate is down has to hold its place on the ice while the body moves
-# over it, at any shuffle speed; the cadence is what makes that so
-# (SkaterLocomotion._shuffle_rate).
+# The brake's shuffle, measured on the live rig: one press is one step-together
+# (ShuffleStepShaper, SkaterLocomotion._shuffle_path). Each skate lifts once —
+# the leading one out, the trailing one in after it — and a blade pointed along
+# the facing cannot glide across the travel, so whichever skate is down holds
+# its place on the ice while the body moves over it. What slip is left (about a
+# fifth of the body's speed to the side, a tenth ahead and back) is the planted
+# boot rolling with the splayed leg and the lean carrying the hips past it.
+# Both are counted only while the body moves: the blade seat's own settle after
+# a sideways move (SkaterLegRig) is not a step.
 
 const DT: float = 1.0 / 120.0
 const LegBone = SkaterMeshBuilder.LegBone
-const SETTLE_TICKS: int = 120
-const MEASURE_TICKS: int = 120
-# A boot this close to its lowest point over the window is on the ice, metres.
-const DOWN_BAND_M: float = 0.008
+const SETTLE_TICKS: int = 60
+const PRESS_TICKS: int = 6
+const AFTER_TICKS: int = 120
+# A boot this far above where it stood is off the ice; this close, on it. Metres.
+const LIFTED_M: float = 0.02
+const DOWN_M: float = 0.006
 
 
 class StubGameState extends Node:
@@ -24,6 +30,7 @@ class StubGameState extends Node:
 
 var _skater: Skater = null
 var _controller: SkaterController = null
+var _shaper: ShuffleStepShaper = null
 
 
 func before_each() -> void:
@@ -44,14 +51,19 @@ func before_each() -> void:
 	_controller.set_physics_process(false)
 	_controller._pose.facing = Vector2(0.0, -1.0)
 	_skater.set_facing(Vector2(0.0, -1.0))
+	_shaper = ShuffleStepShaper.new()
 
 
-func _step(input: InputState, stick: Vector2) -> void:
+func _step(stick: Vector2) -> void:
+	var input := InputState.new()
 	input.move_vector = stick
 	input.brake = true
 	input.mouse_world_pos = _skater.global_position + Vector3(0.0, 0.0, -6.0)
 	input.mouse_world_pos.y = 0.0
 	input.delta = DT
+	_shaper.shape(input, _skater.global_position, _skater.velocity,
+			_controller.shuffle_step_distance, _controller.stop_decel,
+			SkaterMovementRules.shuffle_ceiling(_controller._movement_config()))
 	_controller._process_input(input, DT)
 	_skater.global_position += _skater.velocity * DT
 	_skater._process(DT)
@@ -63,45 +75,58 @@ func _boot(left: bool) -> Vector3:
 			SkaterBodySkeleton.LEG_BONE_OFFSET + (LegBone.FOOT_L if left else LegBone.FOOT_R))).origin
 
 
-# Mean sideways speed over the ice of each skate while it is down, against the
-# body's own, for a shuffle to the right at `stick`.
-func _planted_slip(stick: Vector2) -> Vector2:
-	var input := InputState.new()
+# One press toward `stick`: how many times each boot lifts, how fast a boot on
+# the ice slides over it against the body's own speed, and how far the body went.
+func _press(stick: Vector2) -> void:
 	for _i: int in SETTLE_TICKS:
-		_step(input, stick)
-	var local: Array[PackedVector3Array] = [PackedVector3Array(), PackedVector3Array()]
-	var world: Array[PackedVector3Array] = [PackedVector3Array(), PackedVector3Array()]
-	var body_speed: float = 0.0
-	for _i: int in MEASURE_TICKS:
-		_step(input, stick)
-		body_speed += _skater.velocity.x / MEASURE_TICKS
+		_step(Vector2.ZERO)
+	var start: Vector3 = _skater.global_position
+	var rest: Array[float] = [_boot(true).y, _boot(false).y]
+	var prev: Array[Vector3] = [_skater.global_transform * _boot(true),
+			_skater.global_transform * _boot(false)]
+	var up: Array[bool] = [false, false]
+	var lifts: Array[int] = [0, 0]
+	var slid: float = 0.0
+	var carried: float = 0.0
+	for i: int in PRESS_TICKS + AFTER_TICKS:
+		_step(stick if i < PRESS_TICKS else Vector2.ZERO)
+		var body_move: float = _skater.velocity.length() * DT
 		for k: int in 2:
-			var boot: Vector3 = _boot(k == 0)
-			local[k].append(boot)
-			world[k].append(_skater.global_transform * boot)
-	var slip := Vector2.ZERO
-	for k: int in 2:
-		var lowest: float = INF
-		for p: Vector3 in local[k]:
-			lowest = minf(lowest, p.y)
-		var travel: float = 0.0
-		var ticks: int = 0
-		for i: int in range(1, MEASURE_TICKS):
-			if local[k][i].y < lowest + DOWN_BAND_M and local[k][i - 1].y < lowest + DOWN_BAND_M:
-				travel += absf(world[k][i].x - world[k][i - 1].x)
-				ticks += 1
-		assert_gt(ticks, MEASURE_TICKS / 4, "skate %d spends a share of the cycle down" % k)
-		slip[k] = travel / maxf(ticks * DT, DT) / maxf(body_speed, 0.001)
-	gut.p("shuffle at %.2f m/s: planted skates slide at %.0f%% / %.0f%% of it"
-			% [body_speed, slip.x * 100.0, slip.y * 100.0])
-	return slip
+			var local: Vector3 = _boot(k == 0)
+			var world: Vector3 = _skater.global_transform * local
+			var height: float = local.y - rest[k]
+			if body_move < 0.0005:
+				prev[k] = world
+				continue
+			if not up[k] and height > LIFTED_M:
+				up[k] = true
+				lifts[k] += 1
+			elif up[k] and height < DOWN_M:
+				up[k] = false
+			if height < DOWN_M:
+				slid += Vector2(world.x - prev[k].x, world.z - prev[k].z).length()
+				carried += body_move
+			prev[k] = world
+	var moved := Vector2(_skater.global_position.x - start.x, _skater.global_position.z - start.z)
+	var slip: float = slid / maxf(carried, 0.001)
+	gut.p("step %s: moved %.3f m, lifts L%d R%d, planted skates slide at %.0f%% of the body"
+			% [stick, moved.length(), lifts[0], lifts[1], slip * 100.0])
+	assert_almost_eq(moved.length(), _controller.shuffle_step_distance, 0.02, "one step's distance")
+	assert_eq(lifts, [1, 1] as Array[int], "each skate steps once")
+	assert_lt(slip, 0.2, "the skate on the ice holds it")
 
 
-func test_a_planted_skate_holds_the_ice_at_the_top_shuffle_speed() -> void:
-	var slip: Vector2 = _planted_slip(Vector2(1.0, 0.0))
-	assert_lt(maxf(slip.x, slip.y), 0.15)
+func test_a_press_to_the_side_is_one_step_together() -> void:
+	_press(Vector2(1.0, 0.0))
 
 
-func test_a_planted_skate_holds_the_ice_at_a_half_stick_shuffle() -> void:
-	var slip: Vector2 = _planted_slip(Vector2(0.5, 0.0))
-	assert_lt(maxf(slip.x, slip.y), 0.15)
+func test_a_press_to_the_other_side_is_one_step_together() -> void:
+	_press(Vector2(-1.0, 0.0))
+
+
+func test_a_press_ahead_is_one_step_together() -> void:
+	_press(Vector2(0.0, -1.0))
+
+
+func test_a_press_back_is_one_step_together() -> void:
+	_press(Vector2(0.0, 1.0))

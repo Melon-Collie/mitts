@@ -24,6 +24,7 @@ var reverse_skid_fraction: float = GameRules.DEFAULT_SKATER_REVERSE_SKID_FRACTIO
 var shuffle_lateral_speed: float = 1.5
 var shuffle_step_speed: float = 0.8
 var shuffle_accel: float = 8.0
+var shuffle_step_distance: float = 0.4  # m a press steps (ShuffleStepShaper), one step-together
 var turn_accel: float = GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2
 var max_turn_rate: float = GameRules.DEFAULT_SKATER_MAX_TURN_RATE_RAD_S
 # Edge grip; per-build value = base × agility_mult in apply_attributes, and the
@@ -593,11 +594,11 @@ var reversal_spread_m: float = 0.16      # each skate out past its hip
 var reversal_lead_m: float = 0.10        # both skates set toward travel
 var reversal_toe_in_deg: float = 20.0    # toes turned in, both blades on their inside edges
 # Side-step (from a standstill, or the brake's shuffle): hips square, legs step
-# together (SkaterLocomotion._shuffle_path), the cadence set by the ground speed.
+# together (SkaterLocomotion._shuffle_path), one cycle per shuffle_step_distance.
 var shuffle_intensity: float = 0.6       # stride intensity floor while side-stepping
-var shuffle_cadence_rate: float = 3.0    # rad/s stride-phase floor for the steps
-var shuffle_step_m: float = 0.10         # half a step at shuffle_lateral_speed, bounded by the leg's outer reach
-var shuffle_lift_m: float = 0.05         # a full step's lift
+var shuffle_blend_speed: float = 20.0    # ease rate of the side-step's weight
+var shuffle_lift_m: float = 0.05         # a step's lift
+var shuffle_stance: float = 1.6          # stance floor — skated low, for the leg a full step and the lean stretch
 # Backward skating: C-cuts (SkaterLocomotion._ccut_path), metres per unit of
 # stroke amplitude. The blades stay on the ice: each push sweeps out and ahead
 # and curls back in, drawing the C.
