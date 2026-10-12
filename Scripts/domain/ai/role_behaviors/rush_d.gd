@@ -138,6 +138,7 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 
 	d.target_position = _clamp_to_house(ctx, stand)
 	d.target_velocity = ride
+	set_house_retreat_floor(ctx, ap, d)
 	# The arrival brake is an ICE-frame read, so it only reaches this role when
 	# there is no man to ride (a loose puck) — a moving stand stands it down
 	# outright. There a stand sweeping toward us at the play's pace is not a
@@ -227,6 +228,24 @@ static func ramp_cushion_m(ctx: RoleContext, ap: AICarrierApproach,
 		threat_peer: int) -> float:
 	return head_start_on_me(ctx, ap.dir_net, ap.carrier_vel, ap.net_dist,
 			threat_peer)
+
+
+# Ends a ridden retreat at the HOUSE GATE for a defender still in front of the
+# carrier he owns — the same finish line the ladder's retreat race is priced to
+# (ramp_cushion_m). Inside it there is no ice left to build speed in, so riding
+# him on toward our net only decides where the shot comes from with us in our
+# own crease; standing him up is the in-zone ladder's job. Once he is level with
+# us the floor lifts, because a beaten defender has to chase.
+static func set_house_retreat_floor(ctx: RoleContext, ap: AICarrierApproach,
+		d: RoleDecision) -> void:
+	if d.target_velocity == Vector3.ZERO or ap.dir_net == Vector3.ZERO:
+		return
+	var depth: float = (ctx.self_pos.x - ap.carrier_pos.x) * ap.dir_net.x \
+			+ (ctx.self_pos.z - ap.carrier_pos.z) * ap.dir_net.z
+	if depth <= 0.0:
+		return
+	d.retreat_floor_center = ctx.defending_goal_pos
+	d.retreat_floor_radius_m = AIZoneCoverage.HOUSE_TOP_DEPTH_M
 
 
 # ramp_cushion_m's race for any threat: `dir_net` his line to our net,

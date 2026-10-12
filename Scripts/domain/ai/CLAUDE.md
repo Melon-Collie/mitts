@@ -342,9 +342,17 @@ Three things had to be true together, and each is load-bearing:
   already is, so a pressurer being walked backwards is forbidden from closing on
   the man walking him. A loose puck keeps it.
 
-The house-gate floor that was tried first is gone: with the ladder the defender
-settles at the tops of the circles anyway, as a consequence of gapping rather than
-as a clamp, and the floor only widened the gap past what the ladder asked for.
+A house-gate floor on the STAND is wrong: it only widens the gap past what the
+ladder asks for. The floor belongs on the ROUTE instead
+(`AIRoleRushD.set_house_retreat_floor`). A ride has no terminating condition, so
+a defender already inside the gate — goal-side of his own stand, with the stand
+coming at him — was fed the carrier's net-ward velocity and backed into his own
+crease at a 5–7 m gap however the ladder placed the stand. The floor caps the
+route's commanded speed toward our net at what the arrival brake could still shed
+before the gate (lateral ride untouched), and only while he is in front of the
+carrier: level or beaten, it lifts and he chases. It is the same finish line the
+retreat race is priced to (below), so the ladder and the route now agree on where
+retreating stops and standing him up begins.
 
 ### Pace enters through the stride ramp, and only there
 
