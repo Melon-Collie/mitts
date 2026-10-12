@@ -1090,8 +1090,8 @@ const SHED_ACCEL_DEFAULT_M_S2: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
 # CONSTANT-HAZARD process — at each instant a fixed probability the read stops
 # holding — so it is exactly geometric, exp(-t / τ). It is NOT a shaped curve; the
 # ONLY free parameter is the hazard timescale τ = READ_VALIDITY_TAU_S, the mean
-# time a read stays roughly valid. (A per-second form like pow(0.8, t) is the same
-# model written opaquely: 0.8/s is exp(-1/4.5 s). Prefer the τ form — it names the
+# time a read stays roughly valid. (A per-second form like pow(0.82, t) is the same
+# model written opaquely: 0.82/s ≈ exp(-1/5 s). Prefer the τ form — it names the
 # physical quantity.)
 #
 # τ is an honest AGGREGATE, not a derived quantity: plausible physical
@@ -1105,10 +1105,11 @@ const SHED_ACCEL_DEFAULT_M_S2: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
 #
 # Calibration caveat (from the value sweep): the unit suite guards the IMPATIENT
 # edge (breakouts / developing feeds / walkouts start failing below ~0.7/s ↔
-# τ ≈ 2.8 s). The PATIENT edge is pinned at the parameter level by
-# test_delay_discount_bounds_patience (patience can't be cranked to "the future
-# is free") — but whether a longer τ PLAYS better is a feel judgment, a playtest
-# call the suite can't settle.
+# τ ≈ 2.8 s). The PATIENT edge is guarded too: from τ ≈ 5.5 s a D is walked into
+# his own house in test_defensive_routing (τ prices the defensive reads as well),
+# and by 6 s the settle-doubt and stretch-outlet fixtures flip; the parameter-level
+# bound is test_delay_discount_bounds_patience. Inside that band, whether a longer
+# τ PLAYS better is a feel judgment, a playtest call the suite can't settle.
 #
 # ACTION_HYSTERESIS_MARGIN_FRAC — once a fire intent is set, that intent's
 # (positive) score is scaled by (1 + this) when re-scored, so a challenger must
@@ -1126,10 +1127,9 @@ const SHED_ACCEL_DEFAULT_M_S2: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
 # PASS), so the bot may switch to fire the moment fire scores higher. Raise toward
 # 0.30 if intent flickers visibly; lower toward 0.05 if it feels too sticky.
 # Mean seconds a tactical read stays roughly valid (the hazard timescale above).
-# τ ≈ 4.5 s ↔ a ~0.80 per-second discount — the patient end of the range, favouring
-# developing plays. See the sweep caveat above: this side is judged by feel, not by
-# the suite.
-const READ_VALIDITY_TAU_S: float = 4.5
+# τ = 5 s ↔ a ~0.82 per-second discount — the most patient value the suite holds
+# (see the caveat above), favouring developing plays.
+const READ_VALIDITY_TAU_S: float = 5.0
 const ACTION_HYSTERESIS_MARGIN_FRAC: float = 0.15
 
 
