@@ -271,6 +271,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	# net while perfectly gapped off a carrier who is also leaving.
 	if found:
 		d.target_velocity = AIRoleHelpers.stand_ride_velocity(ctx)
+		AIRoleRushD.set_house_retreat_floor(ctx, ap, d)
 		# And the gap we just sized is ours to hold — see engaged_peer_id.
 		if ctx.snapshot != null and ctx.snapshot.puck_state != null:
 			var pid: int = ctx.snapshot.puck_state.carrier_peer_id

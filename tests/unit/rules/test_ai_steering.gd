@@ -331,6 +331,54 @@ func test_velocity_match_matches_seek_on_a_straight_approach() -> void:
 	assert_gt(matched.y, 0.5, "still driving toward the anchor")
 
 
+# ── Retreat floor on a ridden stand ──────────────────────────────────────────
+# The +Z net. A defender inside the house gate, goal-side of a stand that rides a
+# carrier driving at the net: the frame read alone backs him toward his crease.
+
+const FLOOR_NET := Vector3(0, 0, GameRules.GOAL_LINE_Z)
+const FLOOR_RADIUS: float = AIZoneCoverage.HOUSE_TOP_DEPTH_M
+const RUSH := Vector3(0, 0, 8.3)
+
+
+func _ride_move(self_pos: Vector3, anchor: Vector3, anchor_vel: Vector3,
+		floor_radius: float) -> Vector2:
+	return AISteering.compute_move_vector(
+			self_pos, anchor, NO_OPS, NO_OPS, NO_LANE, NO_LANE, RINK_X, RINK_Z,
+			AISteering.OPPONENT_REPEL_WEIGHT, NO_OPS, NO_OPS, Vector3.ZERO,
+			MATCH_SPEED, anchor_vel, FLOOR_NET, floor_radius)
+
+
+func test_a_ride_backs_a_defender_inside_the_gate_toward_his_net() -> void:
+	# The premise the floor exists for.
+	var self_pos := FLOOR_NET - Vector3(0, 0, 6.7)
+	var free := _ride_move(self_pos, self_pos - Vector3(0, 0, 5.7), RUSH, 0.0)
+	assert_gt(free.y, 0.1, "the frame read alone retreats him toward his own net")
+
+
+func test_the_retreat_floor_holds_him_inside_the_gate() -> void:
+	var self_pos := FLOOR_NET - Vector3(0, 0, 6.7)
+	var held := _ride_move(self_pos, self_pos - Vector3(0, 0, 5.7), RUSH, FLOOR_RADIUS)
+	assert_lt(held.y, 0.001, "no net-ward thrust inside the floor")
+
+
+func test_the_retreat_floor_keeps_the_lateral_ride() -> void:
+	var self_pos := FLOOR_NET - Vector3(0, 0, 6.7)
+	var held := _ride_move(self_pos, self_pos - Vector3(0, 0, 5.7),
+			RUSH + Vector3(3.0, 0, 0), FLOOR_RADIUS)
+	assert_gt(held.x, 0.1, "he still tracks the carrier across the ice")
+
+
+func test_the_retreat_floor_is_inert_far_from_it() -> void:
+	# 26 m off the net the stopping-distance allowance (~17 m/s) is above any pace
+	# the ride asks for, so the route is exactly the unfloored one.
+	var self_pos := Vector3(0, 0, 0)
+	var anchor := Vector3(0, 0, -5.7)
+	var free := _ride_move(self_pos, anchor, RUSH, 0.0)
+	var floored := _ride_move(self_pos, anchor, RUSH, FLOOR_RADIUS)
+	assert_almost_eq(floored.x, free.x, 0.0001)
+	assert_almost_eq(floored.y, free.y, 0.0001)
+
+
 # net detour tests — route a bot pinned behind a goal line out around
 # the post. The +Z net sits at +GOAL_LINE_Z; "behind" it is z > GOAL_LINE_Z.
 # A post-span bot (|x| < NET_HALF_WIDTH + margin) with an anchor on the
