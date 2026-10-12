@@ -1,7 +1,9 @@
 # Defensive play — stick check, stick tie, board pin
 
-Status: **Phases 1–3 implemented** (v66–v68), playtest pending. Phase 4 is candidates. Each
-phase is meant to ship as its own PR, with its own protocol bump and playtest.
+Status: **Phases 1–3 implemented** (v66–v68), playtest pending. **The pin is being
+redesigned** as a locked position contest (*Pin revision*, below — planned, not built);
+it replaces 3b's grip-and-budget pin when it lands. Phase 4 is candidates. Each phase is
+meant to ship as its own PR, with its own protocol bump and playtest.
 
 ## Decisions banked
 
@@ -26,6 +28,12 @@ phase is meant to ship as its own PR, with its own protocol bump and playtest.
   up/down and the ping to D-pad left to free it (pad scheme 2).
 - **Ties are pure geometry in v1** (no Weight term until playtested), and **a
   pinning defender's stick stays off the ice** (the pin is a one-for-one trade).
+- **The pin is a locked position contest, not a stun** (decided after Phase 3; see
+  *Pin revision*):
+  - a victim holding Ctrl is braced and cannot be pinned;
+  - once a pin connects, neither player's stick plays the puck;
+  - both slide along the wall on the direction keys, and the victim is free once
+    their body is no longer lined up with the pinner's.
 - **The bots learn each verb in the phase that adds it,** not afterwards. Today they
   never block and never stick-lift on defense, so in a lobby that is mostly bots a
   human-only verb barely shows up.
@@ -194,11 +202,8 @@ PRESSURE chooses between the poke jab and a lift by what the bot can actually se
 - **Known asymmetry.** The defender sees the victim's blade an interpolation delay
   late, which favours the victim. The hold radius absorbs it, and break-reason
   telemetry measures it before tuning.
-- **Wire.** `tied_by` (s8 slot index, −1 for none) on `SkaterNetworkState`. The
-  defender's side is the reverse lookup.
-  - The victim's client gates its provisional pickup on it.
-  - Whether the client's one-timer prediction needs the gate too is an item to verify
-    against the release-seed path.
+- **Wire.** `stick_tied`, bit 7 of the skater flags byte (see *As built*).
+  - The victim's client gates its provisional pickup and its one-timer on it.
 - **New RPC pair:** `send_stick_tie_claim` / `receive_stick_tie_claim`.
 
 ### Bots
@@ -232,62 +237,38 @@ PRESSURE chooses between the poke jab and a lift by what the bot can actually se
   (`Scripts/networking/CLAUDE.md`, body-check contact geometry). The knockback
   velocity itself doesn't change; the wall already clamps it.
 
-### 3b. The pin
-- **As built.** The pin is a short grip (`PIN_GRIP_S` 0.15 s) the host refreshes on
-  every tick the checker still drives — the stagger rail, so it replays and
-  reconciles deterministically — with the 2 s cap and the escape drain on a
-  host-only budget (`SkaterBoardPin`). Its velocity effect is a GDScript post-step
-  after the ported movement kernel, and the forward prediction applies one shared
-  correction to the integrated result (`BoardPinRules.forward_correction`) rather
-  than a term inside `integrate_forward`: the movement kernels have C++ ports gated
-  by parity tests, and the pin is not part of them. The "stride scaled by
-  (1 − strength)" half is folded into the along-wall bleed, which out-decelerates a
-  stride at any strength worth the name.
-- **Onset (host-authoritative).**
-  - The defender is committed (`hit_committed`) and touching an opponent's disc.
-    Carrier or not, it doesn't matter.
-  - The victim's disc is within `PIN_WALL_MARGIN` ≈ 0.25 m of the boards.
-  - The defender's drive (velocity or move intent along the inward wall normal) is at
-    least `PIN_DRIVE_MIN`.
+### 3b. The pin (as built in v68 — to be replaced by the *Pin revision*)
+- **Onset (host-authoritative, `Skater._check_board_pin`).**
+  - The defender is committed (`hit_committed`, not carrying) and touching an
+    opponent. Carrier or not, it doesn't matter.
+  - The victim's disc is within `PIN_WALL_MARGIN` 0.25 m of the boards, and the
+    contact is within 45° of square into them.
+  - The defender drives into the wall: velocity of at least `PIN_DRIVE_MIN_M_S` 1 m/s,
+    or move intent of at least `PIN_DRIVE_MIN_INTENT` 0.5, along the outward normal.
   - The victim is not inside `PIN_IMMUNITY_S` 1.0 s of their last pin.
-- **State on the victim.**
-  - `pin_timer`, capped at `PIN_MAX_S` 2.0 s, and `pinned_by`.
-  - The wall normal is derived from the victim's position
-    (`GameRules.clamp_to_rink_inner`), so it never goes on the wire.
-  - `pin_strength` = m_defender / (m_defender + m_victim), which is the Weight
-    attribute through mass.
-- **Effect on the victim.** It lives in `SkaterMovementRules`, so `integrate_forward`
-  reproduces it:
-  - their speed along the wall bleeds off in proportion to `pin_strength`;
-  - their stride along the wall is scaled by (1 − `pin_strength`);
-  - stance and check commit are off.
-
-  A pinned carrier keeps the stick, the board-shield facing and the existing
-  wall-squeeze release. A pinned non-carrier can still play the puck.
-- **The defender.** Holding Ctrl and driving in maintains the pin; letting go of
-  either ends it. The commit keeps their stick off the ice, and that is the bargain: a
-  one-for-one trade that frees your partner to dig the puck out (decided).
-- **Escape.**
-  - The timer drains at `1 + escape_drive · (1 − pin_strength) · PIN_ESCAPE_RATE`.
-    Driving along the wall, and especially reversing against the slide, gets out
-    faster.
-  - The pin also ends if the defender is knocked down, at the cap, or when the
-    defender's drive falls below the minimum.
-- **Netcode.**
-  - `pin_timer` (u8, quantized) and `pinned_by` (s8) go on `SkaterNetworkState`.
-  - Both are fed to `integrate_forward` on the render and on the rewind, following
-    `stagger_timer` exactly. A pin applied as a raw velocity clamp would break the
-    shared render clock (`Scripts/networking/CLAUDE.md`, the discontinuous-velocity
-    rule).
-  - The victim's own client snaps and re-derives the pin through reconcile, like
-    stagger.
-- **Bots.**
-  - The checker holds the pin while a teammate's arrival time at the puck is less than
-    the time left on the pin ("pin and support"). The chase election already sends
-    the teammate to the puck.
-  - A pinned bot works to escape.
-- **Pose.** Optionally, `GaitPinLayer` (victim chest to the glass, defender driving a
-  shoulder in). It is cosmetic only, and checked with `render-poses.sh`.
+- **State (`SkaterBoardPin`).** A grip timer of `PIN_GRIP_S` 0.15 s that the host
+  refreshes every tick the defender still drives, and decays everywhere else like
+  `stagger_timer`. The 2 s cap (`PIN_MAX_S`) and the escape drain sit on a host-only
+  budget. `pin_strength` = m_defender / (m_defender + m_victim). The wall normal is
+  derived from the victim's position and never goes on the wire.
+- **Effect on the victim.** A GDScript post-step after the movement kernel (the
+  kernels have C++ ports held by parity tests, and the pin is not part of them) bleeds their
+  along-wall speed at `PIN_HOLD_DECEL_M_S2` 14 m/s² × strength (more than a stride
+  can push); stance and check commit are off. A pinned carrier keeps the stick, and a
+  pinned non-carrier can still play the puck. The defender's commit keeps their own
+  stick off the ice.
+- **Escape.** The budget drains at `1 + escape_drive · (1 − pin_strength) ·
+  PIN_ESCAPE_RATE`, where `escape_drive` is the victim's move intent along the wall.
+  Pushing flat out roughly halves the pin; it never wins it outright.
+- **Netcode.** `pin_timer` (u8 at 0.01 s) and `pin_strength` (u8) on
+  `SkaterNetworkState`. The victim's own client re-derives the pin through reconcile
+  like stagger. Remote renders and the host rewind apply the same
+  `BoardPinRules.forward_correction` to the forward prediction (render == rewind).
+- **Bots** (`apply_board_play`). A bot whose man is pinned and still in contact keeps
+  driving while a teammate's arrival time at the puck beats the time left on the pin
+  ("pin and support"). A pinned bot pushes along the wall, away from the nearest
+  opponent.
+- **Not built:** the `GaitPinLayer` pose.
 
 ### 3c. Frozen puck
 - **As built.** The whistle follows the goalie-freeze stoppage (its own signal,
@@ -301,8 +282,8 @@ PRESSURE chooses between the poke jab and a lift by what the bot can actually se
   - a pinned skater's disc is within `FROZEN_REACH` of it.
 
   Moving more than `FROZEN_SLOP` from its anchor resets the count.
-- **NHL.** At `FROZEN_PUCK_S` ≈ 2.0 s there is a whistle, with a new
-  `FaceoffReason.FROZEN` at `GameRules.nearest_faceoff_dot(puck_xz)`.
+- **NHL.** At `FROZEN_PUCK_S` ≈ 2.0 s there is a whistle and a faceoff at
+  `GameRules.nearest_faceoff_dot(puck_xz)` (see *As built*).
 - **ARCADE.** At the same threshold the pin ends and the puck squirts along the wall,
   away from the pinned body, at `FROZEN_SQUIRT_SPEED`.
 - **To verify:** how it interacts with delayed offside and with the icing tag-up in
@@ -315,6 +296,146 @@ PRESSURE chooses between the poke jab and a lift by what the bot can actually se
   - a backstop hit staggers longer than the same closing speed in open ice;
   - parity of the three-party hit geometry with the backstop;
   - the frozen puck whistles in NHL and squirts in ARCADE.
+
+## Pin revision — a locked position contest (planned)
+
+### Why
+3b's pin is a stun with a timer. The victim can't move along the wall at all, and
+pushing as hard as they can only halves the pin, so escaping it is mashing, not winning
+it. Meanwhile a pinned carrier keeps full control of the puck, so the pin rarely wins the
+puck either.
+
+**What's taught.** The pin is the last step of the checking progression (Hockey Canada:
+angling, then stick check, then body contact, then body check). The cues:
+- "stick on puck, body on body", then "eliminate their hands with body contact";
+- "pressure on both hips … seal the player to the boards".
+
+It is held by position, from the inside, hips on hips. It breaks when the victim's hips
+get past the pinner's. Its purpose is to separate the player from the puck, or hold
+them until support arrives: one player makes contact, the other picks up the puck. The
+taught escape is to accept the contact and roll off. Don't pin as the last player back.
+Officials whistle once nobody can play the puck and the battle has stopped going
+anywhere.
+
+**What other games do.** EA NHL (NHL 10 onward; still "Board Pin" on Triangle in NHL 25)
+locks both players into a pin from a dedicated button. Neither stick plays the puck.
+Each side kicks it with the bumpers, a teammate pokes it out, and it becomes a scrum.
+Players credited it with making the dump-and-forecheck game work. The complaints were
+penalties for hitting a player on the wall when you meant to pin him, and that a pinned
+player can't be hit.
+
+So the redesign keeps EA's "both sticks out, support decides it". It resolves the pin
+by movement on both sides instead of a canned state, which keeps both players in
+control the whole time.
+
+### Rules
+- **Onset.** Everything in 3b still applies: committed, in contact, victim within
+  `PIN_WALL_MARGIN`, square to and driving into the wall, outside immunity. One new
+  gate:
+  - **the victim is not braced.** A victim holding Ctrl (`hit_committed`, carrying or
+    not) can't be pinned. Ctrl is already both sides of contact: the victim's commit
+    cuts the impulse it takes (`body_check_brace_resistance`). Bracing is not free,
+    because the COMMIT posture costs grip and stride, so a carrier who skates the whole
+    wall braced skates it worse.
+- **Locked.** Once a pin connects, both players are locked:
+  - **Neither stick plays the puck.** No catch, pickup, provisional pin, poke, lift,
+    tie or shot. This is the same gate `stick_tied` and `is_stick_busy` already sit on.
+  - **A pinned carrier loses the puck.** It is released at their own velocity and
+    sits loose at both players' feet. Whichever side's support gets there first wins
+    it; otherwise the frozen-puck rule (3c) decides.
+  - **The victim's stance and commit are off.** The pinner must keep holding Ctrl.
+- **The contest.** Both players slide along the wall on their direction keys.
+  - **Along-wall speed is capped for both.**
+    - The victim's cap is `PIN_SLIDE_VICTIM_M_S` × 2·(1 − `pin_strength`), so a
+      heavier pinner slows them and a lighter one doesn't.
+    - The pinner's cap is `PIN_SLIDE_PINNER_M_S`, higher than the victim's, so a
+      pinner who reads the victim correctly can always keep up.
+  - **Escape:** the victim's along-wall offset from the pinner,
+    |(p_victim − p_pinner) · wall tangent|, passes `PIN_ESCAPE_OFFSET_M`. Either side
+    counts, so a pinner who over-commits to a fake frees the victim the other way.
+    The victim wins by changing direction faster than the pinner reads it, or by a
+    weight edge. The pinner wins by reading the slide and not over-chasing.
+  - **Movement away from the wall** is the bodies' business, as today: the clamp and
+    the pinner's body hold the victim in.
+- **Ends.**
+  - the escape offset is reached;
+  - the pinner lets go of Ctrl, or their body separates from the victim by more than
+    `PIN_SEPARATION_M` beyond contact;
+  - either player is knocked down;
+  - a stoppage, or the ARCADE squirt;
+  - the cap `PIN_MAX_S`, raised to 3.0 s so that, with the puck trapped, the 2.0 s
+    frozen whistle lands first.
+
+  Every end starts the victim's `PIN_IMMUNITY_S` 1.0 s.
+- **Retired from 3b:** the grip timer refreshed by drive, the 14 m/s² along-wall
+  bleed, and the escape-drain budget.
+
+### Latency is the design constraint
+The pinner sees the victim late: the victim's upload, the interpolation delay
+(75 ms), the pinner's download, and then the pinner's own reaction. Before the
+pinner's answer reaches the host, add their upload. A reversal therefore buys the
+victim an along-wall head start of about 2 × v_victim × D. Here D is the pinner's
+whole reaction-plus-network delay, budgeted at 0.4 s: 0.25 s human reaction plus
+0.15 s network.
+
+- **The rule:** `PIN_ESCAPE_OFFSET_M` ≥ 2 × `PIN_SLIDE_VICTIM_M_S` (at equal weight)
+  × 0.4 s. One reversal read with ordinary lag doesn't free the victim on its own;
+  two chained, or a reversal the pinner misreads, does.
+- **A test holds this inequality**, so retuning either number can't hand the contest
+  to ping.
+- **Break-reason telemetry** (escape, release, cap, frozen) measures it in play
+  before any number moves.
+
+### Netcode
+- **Wire.** `pin_partner` (s8 slot, −1 none) plus a role bit (pinner or pinned) on
+  both locked players. These replace `pin_timer` and `pin_strength`: strength
+  derives from the two skaters' weights, and the offset from their positions.
+  The cap's elapsed time is host-only.
+- **Prediction.** Each client predicts its own locked movement, a speed cap read off
+  replicated state, so the only snaps are onset and end, through reconcile like
+  stagger.
+- **Remotes.** Remote renders and the host rewind apply the same cap to the
+  forward prediction (render == rewind), replacing
+  `BoardPinRules.forward_correction`'s bleed.
+- **Host authority.** Onset, the escape test and every end are host-present.
+- **Native kernels.** The cap stays a post-step outside them, as in 3b.
+
+### Bots
+- **When to pin** (the taught doctrine, as a grounded read):
+  - pin when your support's arrival time at the puck beats the opponents' support;
+  - in your own end, pin to kill the play when a whistle is worth more than the
+    puck;
+  - don't pin as the last skater back.
+- **Pinner.** Mirror the victim's along-wall velocity, read through the bot's
+  `BotSkillProfile` reaction delay, plus a correction toward zero offset.
+- **Pinned.** Reverse when the pinner commits to the slide (its along-wall velocity
+  matches the bot's own). It is a deterministic read of the pinner, not a timer or
+  RNG.
+- **Bracing.** A carrier bot at the wall braces when a committed checker is closing
+  square on it. It is gated per difficulty, like the other physical verbs.
+
+### Pose
+`GaitPinLayer` for both players: victim chest to the glass, pinner driving a shoulder
+in, both sticks off the puck. A pin you can't see reads as a bug, so this ships with
+the revision, not after it. Check it with `render-poses.sh`.
+
+### Tests
+- `BoardPinRules`:
+  - the brace gate;
+  - the slide caps by strength;
+  - the escape offset on both sides;
+  - every end reason;
+  - the latency inequality.
+- **Integration:**
+  - a pinned carrier's puck goes loose;
+  - neither locked stick catches a pass;
+  - a scripted reversal escapes a lagged mirror only when chained;
+  - the frozen whistle beats the cap.
+- The existing render == rewind forward-prediction parity, with the cap.
+
+### Later
+- **The puck kick.** While locked, directional input nudges the puck along the wall,
+  EA's version of a pinned player playing it with their skates.
 
 ## Phase 4 — candidates, not committed
 
@@ -332,8 +453,9 @@ PRESSURE chooses between the poke jab and a lift by what the bot can actually se
 | phase | input | `SkaterNetworkState` | RPC |
 |---|---|---|---|
 | 1 | `0x4000` held, `0x8000` pressed (u16 full) | `stick_check_phase` u8 | `notify_puck_stolen` + forced-lift duration |
-| 2 | — | `tied_by` s8 | `send/receive_stick_tie_claim` |
-| 3 | — | `pin_timer` u8, `pinned_by` s8 | — |
+| 2 | — | `stick_tied`, flags bit 7 | `send/receive_stick_tie_claim` |
+| 3 | — | `pin_timer` u8, `pin_strength` u8 | `notify_puck_frozen_called` |
+| pin revision | — | `pin_partner` s8 + role bit, replacing `pin_timer` / `pin_strength` | — |
 
 Each phase bumps `BuildInfo.PROTOCOL_VERSION` and gets an entry in
 `docs/protocol-history.md`.
@@ -353,11 +475,12 @@ must still grow, its ratchet entry is bumped in the same diff.
 | new file | owns |
 |---|---|
 | `Scripts/domain/rules/stick_check_rules.gd` | the phase table, `hook_quality`, the forced-lift curve, tie engage/hold/break |
-| `Scripts/domain/rules/board_pin_rules.gd` | pin onset, strength, escape drain |
+| `Scripts/domain/rules/board_pin_rules.gd` | pin onset, strength, escape (the revision: brace gate, slide caps, escape offset) |
 | `Scripts/domain/rules/frozen_puck_rules.gd` | the frozen-puck accumulator |
 | `Scripts/controllers/skater_stick_check.gd` | the per-skater phase and its timer |
 | `Scripts/game/stick_tie_claim_resolver.gd` | the tie claim |
-| `Scripts/game/defensive_contact_tracker.gd` | host-side tie maintenance and pin onset; owns the pairs outright |
+| `Scripts/game/stick_tie_tracker.gd` | host-side tie latch, hold and break; the only writer of `stick_tied` |
+| `Scripts/controllers/skater_board_pin.gd` | the victim's pin state (the revision moves it onto both locked players) |
 
 ## Docs that change when each phase lands
 
@@ -371,8 +494,19 @@ must still grow, its ratchet entry is bumped in the same diff.
 
 ## Open questions
 
-None outstanding. The KBM default, tie strength and the pinning defender's stick
-were settled before Phase 1 (see *Decisions banked*).
+- **Does the stick tie survive as its own action?** As built, it takes away the
+  result, not the stick. The victim's blade moves freely, but catches, pokes and
+  one-timers quietly don't register. There's also no real escape, and a tie
+  near the victim's hands can't be broken, because the distance is measured to
+  the whole hand→blade shaft. The coaching cue "stick on puck, body on body" puts
+  taking away the hands inside body contact, which the locked pin now does. The
+  options:
+  - give the tie an escape the victim drives (a budget their blade speed drains,
+    lower shaft only) and a visible lock;
+  - narrow it to the net front (tips and one-timers only);
+  - retire it into the pin.
+- **The pin revision's numbers** (below) are starting values, held to the latency
+  inequality, and tuned from break-reason telemetry.
 
 ## Starting values
 
@@ -387,5 +521,9 @@ were settled before Phase 1 (see *Decisions banked*).
 | `TIE_MAX_S` / `TIE_COOLDOWN_S` | 1.5 / 0.75 | |
 | `TIE_HOLD_RADIUS` | engage + blade travel over the interp window + IK slack | derive, don't pick |
 | `PIN_WALL_MARGIN` | 0.25 m | |
-| `PIN_MAX_S` / `PIN_IMMUNITY_S` | 2.0 / 1.0 | |
+| `PIN_MAX_S` / `PIN_IMMUNITY_S` | 2.0 / 1.0 | the revision raises the cap to 3.0 |
+| `PIN_SLIDE_VICTIM_M_S` | 0.6 | at equal weight; × 2·(1 − strength) |
+| `PIN_SLIDE_PINNER_M_S` | 0.9 | above the victim's, so a correct read keeps up |
+| `PIN_ESCAPE_OFFSET_M` | 0.5 | ≥ 2 × 0.6 × 0.4 s; a hip's width at the 0.35 m body radius |
+| `PIN_SEPARATION_M` | 0.15 | beyond contact |
 | `FROZEN_PUCK_S` | 2.0 | |
