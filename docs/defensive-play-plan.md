@@ -349,8 +349,8 @@ control the whole time.
   - **Along-wall speed is capped for both.**
     - The victim's cap is `PIN_SLIDE_VICTIM_M_S` × 2·(1 − `pin_strength`), so a
       heavier pinner slows them and a lighter one doesn't.
-    - The pinner's cap is `PIN_SLIDE_PINNER_M_S`, higher than the victim's, so a
-      pinner who reads the victim correctly can always keep up.
+    - The pinner's cap is `PIN_SLIDE_PINNER_M_S`, higher than the victim's fastest,
+      so a pinner who reads the victim correctly can always keep up.
   - **Escape:** the victim's along-wall offset from the pinner,
     |(p_victim − p_pinner) · wall tangent|, passes `PIN_ESCAPE_OFFSET_M`. Either side
     counts, so a pinner who over-commits to a fake frees the victim the other way.
@@ -373,17 +373,24 @@ control the whole time.
 
 ### Latency is the design constraint
 The pinner sees the victim late: the victim's upload, the interpolation delay
-(75 ms), the pinner's download, and then the pinner's own reaction. Before the
-pinner's answer reaches the host, add their upload. A reversal therefore buys the
-victim an along-wall head start of about 2 × v_victim × D. Here D is the pinner's
-whole reaction-plus-network delay, budgeted at 0.4 s: 0.25 s human reaction plus
-0.15 s network.
+(75 ms), and the pinner's download. Before the pinner's answer reaches the host, add
+their upload. A reversal therefore buys the victim an along-wall head start of
+about 2 × v_victim × D. Here D is the network part of the pinner's delay, budgeted at
+0.2 s, the same budget the tie uses.
 
-- **The rule:** `PIN_ESCAPE_OFFSET_M` ≥ 2 × `PIN_SLIDE_VICTIM_M_S` (at equal weight)
-  × 0.4 s. One reversal read with ordinary lag doesn't free the victim on its own;
-  two chained, or a reversal the pinner misreads, does.
-- **A test holds this inequality**, so retuning either number can't hand the contest
-  to ping.
+Human reaction is deliberately left out. Reading a reversal is the skill, so a
+pinner who reacts slowly loses the pin, and one who reads it early keeps it. This is
+the starting point; if pins prove too easy to slip, a reaction allowance is the first
+lever.
+
+- **The rule:** `PIN_ESCAPE_OFFSET_M` ≥ 2 × v_victim_max × 0.2 s, where v_victim_max
+  is the victim's fastest cap. That is a light pinner on a heavy victim:
+  - the weight band is 162–264 lb, so the lowest strength is 162 / 426 ≈ 0.38;
+  - the victim's cap there is `PIN_SLIDE_VICTIM_M_S` × 2 × 0.62 = 1.24 × that speed.
+
+  Ping alone never frees the victim; a reversal the pinner reads late does.
+- **A test holds this inequality** over the real weight band, so retuning any of the
+  numbers can't hand the contest to ping.
 - **Break-reason telemetry** (escape, release, cap, frozen) measures it in play
   before any number moves.
 
@@ -638,8 +645,8 @@ must still grow, its ratchet entry is bumped in the same diff.
 | `TIE_HOLD_RADIUS` | engage + blade travel over the interp window + IK slack | derive, don't pick |
 | `PIN_WALL_MARGIN` | 0.25 m | |
 | `PIN_MAX_S` / `PIN_IMMUNITY_S` | 2.0 / 1.0 | the revision raises the cap to 3.0 |
-| `PIN_SLIDE_VICTIM_M_S` | 0.6 | at equal weight; × 2·(1 − strength) |
-| `PIN_SLIDE_PINNER_M_S` | 0.9 | above the victim's, so a correct read keeps up |
-| `PIN_ESCAPE_OFFSET_M` | 0.5 | ≥ 2 × 0.6 × 0.4 s; a hip's width at the 0.35 m body radius |
+| `PIN_SLIDE_VICTIM_M_S` | 1.0 | at equal weight; × 2·(1 − strength), so 0.76–1.24 across the weight band |
+| `PIN_SLIDE_PINNER_M_S` | 1.4 | above the victim's fastest cap, so a correct read keeps up |
+| `PIN_ESCAPE_OFFSET_M` | 0.5 | ≥ 2 × 1.24 × 0.2 s; a hip's width at the 0.35 m body radius |
 | `PIN_SEPARATION_M` | 0.15 | beyond contact |
 | `FROZEN_PUCK_S` | 2.0 | |
