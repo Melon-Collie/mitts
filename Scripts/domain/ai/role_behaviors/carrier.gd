@@ -2127,6 +2127,7 @@ func _cached_option_value(pos: Vector3) -> float:
 #   - Carrier in OZ → lead must sit OZ_RECEIVE_LINE_BUFFER_M inside the
 #     blue line (see the constant's doc — a tape at the line loses the
 #     zone on routine reception slop).
+#   - Carrier outside with a delayed offside up → lead must stay outside.
 #   - Saucer only: the lead must leave the flip landing runway
 #     (airborne carry + SAUCER_LANDING_RUN_M — a closing receiver can
 #     shrink the solved lead under what the current distance allowed),
@@ -2158,6 +2159,10 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 		return 0.0
 	if carrier_in_oz and not AIActionScoring.in_offensive_zone(
 			receiver, ctx.attacking_goal_pos, OZ_RECEIVE_LINE_BUFFER_M):
+		return 0.0
+	# A delayed offside is up: a feed caught in the zone is a touch that whistles.
+	if ctx.zone_entry_blocked and not carrier_in_oz \
+			and AIActionScoring.in_offensive_zone(receiver, ctx.attacking_goal_pos):
 		return 0.0
 	var lane: float
 	# Derived execution-miss (see AIActionScoring.pass_miss_prob): this bot's own
@@ -2894,6 +2899,13 @@ func _best_dump(ctx: RoleContext, our_goalie: Vector3) -> Array:
 		return [-INF, Vector3.INF, false, false, Vector3.INF, 0.0]
 
 	var origin: Vector3 = _pass_origin(ctx)
+	if not in_own_zone:
+		# Icing reads the PUCK, which sits a stick off the body: a dump-in from a
+		# body past centre can still leave from behind the red line. And with a
+		# teammate owing a tag-up, a dumped puck is one nobody may touch.
+		if ctx.zone_entry_blocked or (ctx.icing_enforced and InfractionRules.behind_red_line(
+				origin.z, signf(attacking_goal.z))):
+			return [-INF, Vector3.INF, false, false, Vector3.INF, 0.0]
 	# Our chasers = teammates + ourselves; theirs = the opponents already gathered.
 	_scratch_our_chasers.clear()
 	_scratch_our_chaser_vels.clear()
@@ -3111,6 +3123,13 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 	if AIActionScoring.in_offensive_zone(self_pos, ctx.attacking_goal_pos) \
 			and not AIActionScoring.in_offensive_zone(
 					candidate, ctx.attacking_goal_pos, OZ_RETREAT_LINE_BUFFER_M):
+		return -INF
+	# Its NHL mirror: with a teammate owing a tag-up, carrying in is whistled at
+	# once. Judged on the body, so stand-still (outside) always survives; the last
+	# stick of puck lead is the steering's offside brake on the puck.
+	if ctx.zone_entry_blocked \
+			and AIActionScoring.in_offensive_zone(candidate, ctx.attacking_goal_pos) \
+			and not AIActionScoring.in_offensive_zone(self_pos, ctx.attacking_goal_pos):
 		return -INF
 	# The cage is a wall: a candidate whose straight route runs through either
 	# net frame is unreachable as priced (the time/lane/safety math below all
@@ -3594,6 +3613,10 @@ func _receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 		receiver_shot_speed: float, receiver_caps: AISkaterCaps,
 		receiver_vel: Vector3 = Vector3.ZERO, from_pos: Vector3 = Vector3.INF,
 		start_s: float = 0.0) -> float:
+	# A delayed offside is up: driving in from outside the zone is not on.
+	if ctx.zone_entry_blocked \
+			and not AIActionScoring.in_offensive_zone(receiver_spot, ctx.attacking_goal_pos):
+		return 0.0
 	var to_net_x: float = ctx.attacking_goal_pos.x - receiver_spot.x
 	var to_net_z: float = ctx.attacking_goal_pos.z - receiver_spot.z
 	var d: float = sqrt(to_net_x * to_net_x + to_net_z * to_net_z)

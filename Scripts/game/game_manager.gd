@@ -2894,9 +2894,10 @@ func _enrich_snapshot_for_ai(snap: WorldSnapshot) -> void:
 		var ids: Array = snap.teammate_ids_by_team[team_id]
 		# Election-side eligibility (see AILoosePuckChase.elect): humans
 		# can't be assigned by an election (they only suppress the bots
-		# while demonstrably playing the puck), and a one-timer camper has
-		# opted out of loose-puck work (its camp veto would refuse the
-		# chase while nobody else was elected — the frozen-team pickup).
+		# while demonstrably playing the puck), and a one-timer camper — or a
+		# bot that may not touch the puck (ghosted, or owing an NHL tag-up) —
+		# has opted out of loose-puck work (its veto would refuse the chase
+		# while nobody else was elected — the frozen-team pickup).
 		# Cleared per team rather than allocated: elect() reads both inline and
 		# retains neither, and neither reaches the snapshot the worker sees.
 		var human_ids: Array = _human_ids_scratch
@@ -2909,7 +2910,8 @@ func _enrich_snapshot_for_ai(snap: WorldSnapshot) -> void:
 			var rec: PlayerRecord = _registry.get_record(pid)
 			if rec != null and not rec.is_bot:
 				human_ids.append(pid)
-			elif brain != null and brain.is_one_timer_ready(pid):
+			elif snap.is_out_of_play(pid) \
+					or (brain != null and brain.is_one_timer_ready(pid)):
 				camped_ids.append(pid)
 		# Momentum-aware + hysteretic election (see AILoosePuckChase):
 		# the teammate who actually arrives first keeps the role unless

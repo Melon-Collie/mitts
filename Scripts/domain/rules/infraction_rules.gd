@@ -85,23 +85,27 @@ static func has_tagged_up(skater_z: float, team_id: int) -> bool:
 	else:
 		return skater_z <= line
 
+# Whether a puck at `puck_z` sits wholly behind the red line for a team
+# attacking toward `attack_dir` (-1 = team 0, +1 = team 1) — the only spot an
+# icing can be released from. Touching the paint has gained the line.
+static func behind_red_line(puck_z: float, attack_dir: float) -> bool:
+	return puck_z * attack_dir < -(GameRules.THICK_LINE_WIDTH_M * 0.5
+			+ GameRules.PUCK_COLLISION_RADIUS)
+
+
 # Detects a potential icing crossing. Returns the offending team id (0 or 1),
 # or -1 if no icing condition is present. `last_touch_z` is the PUCK's Z where
-# that team last touched it; a puck touching the red line then has gained the
-# line, so it must sit wholly behind the paint. The puck must also be wholly
-# past the goal line. The caller runs the hybrid race to confirm or wave off.
+# that team last touched it (behind_red_line), and the puck must be wholly past
+# the goal line. The caller runs the hybrid race to confirm or wave off.
 static func check_icing(
 		last_touch_team_id: int,
 		last_touch_z: float,
 		puck_z: float) -> int:
-	if last_touch_team_id == -1:
+	if last_touch_team_id != 0 and last_touch_team_id != 1:
 		return -1
-	var behind_red: float = GameRules.THICK_LINE_WIDTH_M * 0.5 + GameRules.PUCK_COLLISION_RADIUS
-	var past_goal: float = GameRules.GOAL_LINE_Z + GameRules.PUCK_COLLISION_RADIUS
-	# Team 0: released from its own half (+Z), puck now past -GoalLineZ
-	if last_touch_team_id == 0 and last_touch_z > behind_red and puck_z < -past_goal:
-		return 0
-	# Team 1: released from its own half (-Z), puck now past +GoalLineZ
-	if last_touch_team_id == 1 and last_touch_z < -behind_red and puck_z > past_goal:
-		return 1
+	var attack_dir: float = -1.0 if last_touch_team_id == 0 else 1.0
+	if not behind_red_line(last_touch_z, attack_dir):
+		return -1
+	if puck_z * attack_dir > GameRules.GOAL_LINE_Z + GameRules.PUCK_COLLISION_RADIUS:
+		return last_touch_team_id
 	return -1

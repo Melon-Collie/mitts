@@ -547,6 +547,33 @@ func test_carrying_in_with_an_offside_teammate_whistles_at_once() -> void:
 			{1: Vector3(0, 1, -10), 2: Vector3(0, 1, -9)}, Vector3(0, 0, -10), 2)
 	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.OFFSIDE)
 
+func test_defenders_bringing_the_puck_in_leave_attackers_onside() -> void:
+	# An attacker left deep after the defenders cleared it is flagged; the
+	# defenders then carry it back into their own zone. Offside needs the
+	# attacking team to take the puck in, so nothing is called.
+	sm.rule_set = GameRules.RuleSet.NHL
+	sm.register_remote_assigned_player(1, 0, 0)    # team 0 attacker
+	sm.register_remote_assigned_player(100, 0, 1)  # team 1 defender
+	sm.update_delayed_offside(
+			{1: Vector3(0, 1, -10), 100: Vector3(0, 1, 0)}, Vector3(0, 0, 0), 100)
+	assert_true(sm.must_tag_up(1, -10.0))
+	sm.notify_puck_carried(1, -9.0)
+	sm.update_delayed_offside(
+			{1: Vector3(0, 1, -10), 100: Vector3(0, 1, -9)}, Vector3(0, 0, -10), 100)
+	assert_eq(sm.delayed_offside_team_id, -1, "the defending team brought it in")
+	assert_false(sm.must_tag_up(1, -10.0), "the attacker is onside")
+
+func test_attackers_shooting_the_puck_in_is_a_delayed_offside() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
+	sm.register_remote_assigned_player(1, 0, 0)  # offside teammate
+	sm.register_remote_assigned_player(2, 1, 0)  # dumper, still outside
+	sm.update_delayed_offside(
+			{1: Vector3(0, 1, -10), 2: Vector3(0, 1, 0)}, Vector3(0, 0, 0), -1)
+	sm.notify_icing_touch(0, 0.0, 0.0)  # released by team 0
+	sm.update_delayed_offside(
+			{1: Vector3(0, 1, -10), 2: Vector3(0, 1, 0)}, Vector3(0, 0, -10), -1)
+	assert_eq(sm.delayed_offside_team_id, 0)
+
 func test_carrying_in_alone_is_onside() -> void:
 	sm.rule_set = GameRules.RuleSet.NHL
 	sm.register_remote_assigned_player(2, 1, 0)

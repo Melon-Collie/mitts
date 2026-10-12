@@ -2257,6 +2257,34 @@ func test_no_dump_in_own_side_neutral_zone() -> void:
 			"no dump from the own-side neutral zone")
 
 
+# ─── NHL icing and delayed offside ────────────────────────────────────────────
+
+func test_delayed_offside_closes_the_zone_to_the_carry() -> void:
+	var self_pos := Vector3(0, 0, -5)  # neutral ice, attacking -Z
+	var ctx := _make_ctx(self_pos)
+	var c := AIRoleCarrier.new()
+	c._build_action_opponents_lists(ctx)
+	var goalie: Vector3 = AIRoleHelpers.resolve_our_goalie_pos(ctx)
+	var in_zone := Vector3(0, 0, -9)
+	assert_gt(c._score_move_candidate_base(ctx, in_zone, goalie), -INF,
+			"an open entry is a candidate")
+	ctx.zone_entry_blocked = true
+	assert_eq(c._score_move_candidate_base(ctx, in_zone, goalie), -INF,
+			"with a teammate owing a tag-up, carrying in would be whistled")
+
+
+func test_delayed_offside_takes_the_dump_in_off_the_table() -> void:
+	var self_pos := Vector3(2, 0, -4)
+	var ctx: RoleContext = _make_ctx(self_pos, [
+			[1, TEAM_ID, self_pos],
+			[3, 1, Vector3(2, 0, -5)]])
+	ctx.zone_entry_blocked = true
+	var c := AIRoleCarrier.new()
+	c._build_action_opponents_lists(ctx)
+	var dump: Array = c._best_dump(ctx, AIRoleHelpers.resolve_our_goalie_pos(ctx))
+	assert_eq(dump[0], -INF, "a dumped puck nobody may touch is no dump-in")
+
+
 func test_no_dump_once_in_the_offensive_zone() -> void:
 	# Already established in the OZ — the valve keeps the puck in, and there's no
 	# dump. Even swarmed, it cycles/holds rather than dumping it away.

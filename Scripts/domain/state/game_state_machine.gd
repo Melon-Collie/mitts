@@ -84,6 +84,9 @@ var delayed_offside_team_id: int = -1
 var _last_puck_x: float = 0.0
 # Per-team "everyone is back at the line" accumulator for update_delayed_offside.
 var _all_tagged_up_scratch: Array[bool] = [true, true]
+# Team that last touched the puck (-1 unknown): only the attacking team bringing
+# the puck in can put itself offside.
+var _last_touch_team_id: int = -1
 
 # ── Crease protection ─────────────────────────────────────────────────────────
 # peer_id → seconds the skater has continuously dwelt inside a goalie crease.
@@ -181,6 +184,7 @@ func _end_faceoff_if_active() -> bool:
 # PUCK's position (the blade) — the icing release point. A pickup during an
 # icing race decides it (IcingRace.note_touch).
 func notify_puck_carried(carrier_team_id: int, puck_z: float, puck_x: float = 0.0) -> void:
+	_last_touch_team_id = carrier_team_id
 	_apply_icing_call(icing.note_touch(carrier_team_id, puck_z, puck_x, false))
 
 
@@ -208,6 +212,7 @@ func notify_possession_established(team_id: int, puck_z: float) -> void:
 # an unknown toucher. The touch moves the icing release point, and during an
 # icing race decides it.
 func notify_icing_touch(team_id: int, puck_z: float, puck_x: float, by_goalie: bool = false) -> void:
+	_last_touch_team_id = team_id
 	_apply_icing_call(icing.note_touch(team_id, puck_z, puck_x, by_goalie))
 
 # Host-side: called every physics frame when the puck is loose. Opens the
@@ -318,6 +323,7 @@ func update_delayed_offside(
 		return
 	var puck_z: float = puck_position.z
 	_last_puck_x = puck_position.x
+	var prev_offside_team: int = delayed_offside_team_id
 
 	var all_tagged_up: Array[bool] = _all_tagged_up_scratch
 	all_tagged_up[0] = true
@@ -347,6 +353,12 @@ func update_delayed_offside(
 			delayed_offside_team_id = tid
 			break
 	if delayed_offside_team_id == -1:
+		return
+	# The puck just came in, but the defending team brought it: the attackers
+	# ahead of it are onside — an offside needs the attacking team to take it in.
+	if delayed_offside_team_id != prev_offside_team and _last_touch_team_id != -1 \
+			and _last_touch_team_id != delayed_offside_team_id:
+		_clear_delayed_offside_for_team(delayed_offside_team_id)
 		return
 	if all_tagged_up[delayed_offside_team_id]:
 		_clear_delayed_offside_for_team(delayed_offside_team_id)
@@ -583,6 +595,7 @@ func reset_all() -> void:
 	current_period = 1
 	time_remaining = period_duration
 	icing.reset()
+	_last_touch_team_id = -1
 	_offside_peer_ids.clear()
 	_delayed_offside_peer_ids.clear()
 	delayed_offside_team_id = -1
@@ -612,6 +625,7 @@ func apply_config(p_num_periods: int, p_period_duration: float, p_ot_enabled: bo
 func begin_faceoff_prep(dot_xz: Vector2 = GameRules.CENTER_ICE_DOT,
 		extra_prep_time: float = 0.0) -> void:
 	icing.reset()
+	_last_touch_team_id = -1
 	_offside_peer_ids.clear()
 	_delayed_offside_peer_ids.clear()
 	delayed_offside_team_id = -1
