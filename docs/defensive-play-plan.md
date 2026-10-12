@@ -4,7 +4,8 @@ Status: **Phases 1–3 implemented** (v66–v68), playtest pending. Two revision
 planned, not built:
 - **The pin** becomes a locked position contest (*Pin revision*), replacing 3b's
   grip-and-budget pin.
-- **The tie** gets an escape the victim drives and a visible lock (*Tie revision*).
+- **The tie** becomes two sticks tied together, off the ice and slowed, held by
+  either player (*Tie revision*).
 
 Phase 4 is candidates. Each phase is meant to ship as its own PR, with its own protocol
 bump and playtest.
@@ -18,22 +19,9 @@ bump and playtest.
   hold is a stick tie, which only matters against a player without the puck.
 - **The tie stays its own action, and its home is the net front** (decided after
   Phase 3), where there are no boards to pin against. The pin owns the wall; the tie
-  owns the slot and the crease. It gets an escape the victim drives with their own
-  hands, and a lock you can see (see *Tie revision*).
-- **A tie denies all reception.** Any puck that reaches a tied blade bobbles: no catch,
-  no one-timer, no tip.
-- **Only a committed checker (Ctrl) pins.** Driving an opponent into the boards while
-  committed pins them.
-- **The frozen-puck whistle is NHL-only.** In ARCADE, a trapped puck squirts free at
-  the same threshold instead.
-- **A lift's sequence follows the lifter's button alone, never whether the hook
-  landed.** Online, the host settles a landing only when the lift claim resolves,
-  after it has already run the lifter's inputs past the hook, so any branch on the
-  outcome disagrees with the client for that window and refuses the lifter's own
-  pickup. Input-driven, host and client step identical phases and nothing rolls
-  back.
-- **Defaults: F on the keyboard, X on the pad.** The pad's loft moved to D-pad
-  up/down and the ping to D-pad left to free it (pad scheme 2).
+  owns the slot and the crease. Two sticks tied together, off the ice and slowed. It
+  holds while either player keeps holding the button and the sticks stay together,
+  with no time limit (see *Tie revision*).
 - **Ties are pure geometry in v1** (no Weight term until playtested), and **a
   pinning defender's stick stays off the ice** (the pin is a one-for-one trade).
 - **The pin is a locked position contest, not a stun** (decided after Phase 3; see
@@ -445,78 +433,107 @@ the revision, not after it. Check it with `render-poses.sh`.
 - **The puck kick.** While locked, directional input nudges the puck along the wall,
   EA's version of a pinned player playing it with their skates.
 
-## Tie revision — an escape in the victim's hands (planned)
+## Tie revision — two sticks tied together (planned)
 
 ### Why
 As built, the tie takes away the result, not the stick. The victim's blade moves
 exactly as they steer it, but catches, pokes and one-timers quietly don't register.
-That is control that lies to you, in the one place Mitts most wants the player to
-feel in control: their hands. Two more gaps:
-- **The only escape is geometry.** Separate past the hold radius, ~0.8 m.
-- **A tie near the hands can't be broken.** The distance is measured to the whole
-  hand→blade shaft, and the top-hand end barely moves however the blade sweeps.
+That is control that lies to you, in the one place Mitts most wants the player to feel
+in control: their hands. The only escape is distance, and a tie near the hands can't be
+broken at all.
 
-It is on the right axis, though: hands against hands. The fix is to make the hands
-the way out.
+The revision makes the tie a physical state both players can see and both can fight:
+two sticks tied together, off the ice. Its home is the net front: a defender ties up a
+forward's stick so a pass across or a point shot can't be tipped or one-timed. That's
+the play a pin can't make, because there's no wall behind the forward.
 
-**Its job** is the net front. When a pass comes across or a shot comes from the
-point, the defender ties up the forward's stick so they can't tip it or one-time it.
-That is the play a pin can't make, because there's no wall behind the forward.
-
-### Rules
-- **The escape is a budget the victim's hands drain.**
-  - The tie runs on the existing `TIE_MAX_S` 1.5 s cap. The host drains it at
-    `1 + TIE_ESCAPE_RATE · clamp(v_rel / max_blade_speed, 0, 1)`.
-  - `v_rel` is the victim's blade speed relative to their own body, so stickhandling
-    counts and skating away doesn't (skating away is already the separation break).
-  - At `TIE_ESCAPE_RATE` 3, working the stick flat out breaks a fresh tie in about
-    0.4 s. A victim who stands still is held for the full 1.5 s.
-  - There is no attribute term. Hands has no lever by constitution, and ties stay
-    geometry plus input.
-- **That gives the net front a timing game.** The forward wants a free stick when the
-  feed arrives, so they break the tie just before it. Break early and the defender
-  has time to re-tie (after `TIE_COOLDOWN_S` 0.75 s); break late and the pass dies on
-  a tied blade.
-- **Only the lower shaft ties.** Engage and hold are measured to the victim's bottom
-  hand→blade segment (the `BottomHand` marker), not top hand→blade. That's where a
-  real tie-up goes, and it makes every tie breakable by the blade.
-- **The rest is unchanged:**
-  - engage on any TIE-phase tick within `TIE_ENGAGE_RADIUS`;
-  - hold within the derived `TIE_HOLD_RADIUS`;
-  - break on release, knockdown, the victim gaining the puck, separation or the cap;
-  - a tied blade bobbles every reception.
-
-### Visible
-- **The defender's stick draws locked on the victim's lower shaft.** The stick rig
-  puts the drawn blade on the nearest shaft point at render rate; the gameplay blade
-  marker stays where the cursor put it.
-  - A remote finds the pair itself: a defender in TIE and the nearest `stick_tied`
-    opponent within the hold radius. There's no new wire field.
-- **A stick-on-stick clack** plays on latch and on break. These are the two moments a
-  tie changes hands.
-- Check it with `render-poses.sh` (add a tie pose to its list).
+### The mechanic
+- **Initiate.** Hold the stick-check button (past the hook, the TIE phase) while your
+  stick touches the stick of an opponent who doesn't have the puck. "Touching" means
+  stick against stick: segment to segment, top hand to blade on both, within
+  `TIE_CONTACT_M`.
+- **Tied.** Both players are tied up together:
+  - **both sticks lift off the ice** (`blade_held_up` reads `stick_tied`), so neither
+    can catch, pick up, poke, lift or tip. A grounded puck passes under a raised
+    blade; an airborne one that hits it dies flat (the existing bobble);
+  - **both sticks are slowed.** Each blade chases its own cursor at
+    `TIE_BLADE_SPEED_M_S` instead of `max_blade_speed`. Sticks pushing against each
+    other move slowly, so pulling free takes a deliberate pull, not a flick.
+- **Either player can keep it going.** The tie holds while at least one of the two is
+  holding the stick-check button and the sticks stay within `TIE_SEPARATION_M`.
+  - The victim holding on is a real choice: a forward who ties up the defender's
+    stick, so it's out of the play when a pass goes to a teammate.
+- **It ends** when neither player is holding, or when the sticks pull apart past
+  `TIE_SEPARATION_M`. It also ends on a knockdown or a stoppage, and if the victim
+  gains the puck.
+  - There is no time limit.
+  - After it ends, the same pair can't re-tie for `TIE_COOLDOWN_S` 0.75 s.
+- **Escaping a holder** is a contest at equal speed. Both sticks are capped the same,
+  so a gap opens only when the holder misreads where the escaper is pulling. Once a
+  gap opens it never closes while the escaper keeps going, so a few good jukes add up.
+  A holder who reads well keeps the tie.
+- **The input phase machine stays input-only.** The tie is no longer the TIE phase's
+  state. `stick_tied` is set on BOTH players and is what raises, slows and busies the
+  stick. The initiator letting go walks their phase out to DROP/REARM as usual, while
+  `stick_tied` keeps their stick up if the victim is still holding. A tied player
+  can't start a new lift (`stick_taken` already includes `stick_tied`).
+- **Retired from Phase 2:** `TIE_MAX_S`, the blade→shaft hold radius, and
+  "tied" meaning the victim alone.
 
 ### Netcode
-- **The budget is host-only.** It reads the victim's replicated blade.
-- **The victim's client** already gates on `stick_tied`, so an escape lands as the
-  bit clearing — the same as every other break.
-- **The visible lock** comes from replicated phase plus `stick_tied`, so it costs
-  nothing on the wire.
+- **Onset is a claim**, as today (`StickTieClaimResolver`): the victim's stick is
+  rewound to what the initiator saw (`remote_view_time`), and the initiator's own
+  stick is taken at self-view. Only the geometry changes, from blade→shaft to
+  stick↔stick. Bots and the host's own player engage host-present in
+  `StickTieTracker`.
+- **Holding is host-present.** Every tick, the tracker reads both players' held flags
+  from their inputs (a host-only `stick_check_held` on the skater, not replicated)
+  and the distance between the two sticks.
+- **The separation allowance is sized to the lag.** It covers a juke read late
+  because of the network: about 0.2 s, the interpolation delay plus a typical trip.
+  It does not cover a late human reaction, because reading a juke is the skill.
+  - The rule: `TIE_SEPARATION_M` ≥ `TIE_CONTACT_M` + 2 × `TIE_BLADE_SPEED_M_S` × 0.2 s.
+  - A test holds the inequality.
+- **Your own stick is predicted exactly while tied.** The slow cap is a function of
+  your own input plus the replicated `stick_tied` bit, so nothing in your blade's path
+  depends on the other player's late input. The only snaps are at the edges, through
+  the blade's existing reconcile adoption:
+  - at onset, your client learns the cap one round trip late, so your blade snaps
+    back by however far it moved at full speed in that window;
+  - at the end, your blade feels sticky for one round trip.
+
+  A true coupling, where one stick drags the other, is ruled out: your own stick would
+  mispredict every tick.
+- **Drawing it.** Each screen sees contact slightly differently, so the rig draws the
+  two blades meeting at a shared contact point, bent within the allowance and lifted.
+  The gameplay blade markers are untouched.
+  - A remote finds the pair from replicated state: tied opponents nearest each
+    other. If that ever proves ambiguous, add a partner slot (s8) on the wire.
+- **Feedback.** A stick-on-stick clack on latch and on break.
+- **Wire.** `stick_tied` (flags bit 7) is now set on both players. There is no other
+  field change.
 
 ### Bots
 - **Defense.** The net-front defender (MARK, the 5v5 zone coverers) ties the man in
-  front when a pass or a point shot is live. Their existing comparison, intercept
-  versus deny, stays.
-- **Offense.** A tied finisher works the stick free when a feed is coming. The
-  existing `_tie_yank_aim` becomes a wiggle timed to the pass's arrival, read off
-  the pass in flight or the carrier's lane to them. It is not a constant shake.
+  front when a pass or a point shot is live, and holds while it stays live. Their
+  existing comparison, intercept with a free stick versus deny by tying, stays.
+- **Offense.**
+  - A tied forward who is the likely target of a pass works free: a juke read off
+    the pass in flight or the carrier's lane to them, timed to its arrival.
+  - A tied forward who is not the target holds on, keeping the defender's stick out
+    of the play.
 
 ### Tests
-- The drain rate at rest and at full blade speed.
-- Body-relative blade speed: skating doesn't drain the budget.
-- The lower-shaft geometry: a blade at the top hand neither engages nor holds.
-- A wiggled tie breaks before the cap; a still one runs to the cap.
-- The remote's pair lookup finds the right defender.
+- Rules:
+  - stick↔stick contact geometry;
+  - the end conditions (both released, separation, knockdown, stoppage);
+  - either player's hold keeps it;
+  - the cooldown;
+  - the separation inequality.
+- Both blades raised, slowed and busy; a pass to either player passes under or dies.
+- Prediction: a tied client's own blade path matches the host's under the cap.
+- The claim resolver keeps passing the contract test.
+- The remote pair lookup.
 
 ## Phase 4 — candidates, not committed
 
@@ -582,8 +599,8 @@ must still grow, its ratchet entry is bumped in the same diff.
 - **Can a stick that is forced up by a lift be tied?** The proposal is no: a lift
   held through to the TIE phase would otherwise tie the player it just lifted,
   which wastes the lifter's own take.
-- **The pin revision's numbers** (below) are starting values, held to the latency
-  inequality, and tuned from break-reason telemetry.
+- **The pin and tie revisions' numbers** (below) are starting values, held to their latency
+  inequalities, and tuned from break-reason telemetry.
 
 ## Starting values
 
@@ -595,8 +612,10 @@ must still grow, its ratchet entry is bumped in the same diff.
 | `RECOVER_S` | 0.22 | the price of holding the stick up too long |
 | `REARM_S` | 0.25 | before the next lift |
 | `FORCED_LIFT_MIN_S` / `MAX_S` | 0.4 / 0.9 | victim's forced lift by hook quality |
-| `TIE_MAX_S` / `TIE_COOLDOWN_S` | 1.5 / 0.75 | |
-| `TIE_ESCAPE_RATE` | 3.0 | full-speed stickhandling breaks a fresh tie in ~0.4 s |
+| `TIE_MAX_S` / `TIE_COOLDOWN_S` | 1.5 / 0.75 | the revision drops the cap and keeps the cooldown |
+| `TIE_CONTACT_M` | 0.08 | stick to stick, shaft thickness plus IK slack |
+| `TIE_BLADE_SPEED_M_S` | 1.5 | both blades while tied (free: 10) |
+| `TIE_SEPARATION_M` | 0.7 | ≥ 0.08 + 2 × 1.5 × 0.2 s |
 | `TIE_HOLD_RADIUS` | engage + blade travel over the interp window + IK slack | derive, don't pick |
 | `PIN_WALL_MARGIN` | 0.25 m | |
 | `PIN_MAX_S` / `PIN_IMMUNITY_S` | 2.0 / 1.0 | the revision raises the cap to 3.0 |
