@@ -2027,7 +2027,8 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 		_apply_steering(input, snapshot, self_pos, decision.target_position,
 				not decision.commit_check and not decision.arrive_at_speed,
 				_self_max_speed, decision.target_velocity,
-				decision.engaged_peer_id)
+				decision.engaged_peer_id, decision.retreat_floor_center,
+				decision.retreat_floor_radius_m)
 		if decision.commit_check:
 			# Body-check commit: drive THROUGH the carrier with the Hit button
 			# held — this is what delivers the FULL transfer AIBodyCheck's
@@ -4364,7 +4365,9 @@ func _pass_aim_point(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 func _apply_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		anchor: Vector3, arrive: bool = false, velocity_match_speed: float = 0.0,
 		anchor_velocity: Vector3 = Vector3.ZERO,
-		engaged_peer_id: int = -1) -> void:
+		engaged_peer_id: int = -1,
+		retreat_floor_center: Vector3 = Vector3.ZERO,
+		retreat_floor_radius: float = 0.0) -> void:
 	# Standard potential-field steering with brake-pivot.
 	# Use the per-team roster published by GameManager._enrich_snapshot_for_ai
 	# instead of re-partitioning snapshot.skater_states every physics tick.
@@ -4452,7 +4455,8 @@ func _apply_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 			lane_start, lane_end,
 			GameRules.RINK_HALF_WIDTH, GameRules.RINK_HALF_LENGTH,
 			opp_repel, steer_vels, _scratch_teammate_steer_vels,
-			match_self_vel, velocity_match_speed, anchor_velocity)
+			match_self_vel, velocity_match_speed, anchor_velocity,
+			retreat_floor_center, retreat_floor_radius)
 
 	# Brake-pivot: if our current velocity is far off the desired direction,
 	# carving a wide arc loses. The bot keeps move_vector on the exit direction —
