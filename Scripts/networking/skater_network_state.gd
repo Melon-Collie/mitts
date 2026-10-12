@@ -28,10 +28,11 @@ var stick_check_phase: int = 0
 var stick_check_elapsed: float = 0.0
 # Skater.stick_tied: host-authoritative, applied every broadcast like is_ghost.
 var stick_tied: bool = false
-# Board pin (SkaterBoardPin): the grip seconds left and its strength. Fed to the
-# forward prediction (BoardPinRules.forward_correction) on the render and the
-# rewind, and snapped by the local reconcile like stagger_timer.
-var pin_timer: float = 0.0
+# Board pin (BoardPinTracker): the role (BoardPinRules.Role) and the pinner's
+# weight share. Host-authoritative, applied every broadcast like stick_tied, and
+# fed to the forward prediction (BoardPinRules.forward_cap) on the render and the
+# rewind.
+var pin_role: int = 0
 var pin_strength: float = 0.0
 # Body-check stagger: seconds of thrust/grip-penalty recovery remaining on the
 # victim. Replicated so the local player's reconcile can snap it to the host
@@ -128,7 +129,7 @@ func to_array() -> Array:
 		stick_check_phase,
 		stick_check_elapsed,
 		stick_tied,
-		pin_timer,
+		pin_role,
 		pin_strength,
 	]
 
@@ -162,7 +163,7 @@ func copy_from(s: SkaterNetworkState) -> void:
 	stick_check_phase = s.stick_check_phase
 	stick_check_elapsed = s.stick_check_elapsed
 	stick_tied = s.stick_tied
-	pin_timer = s.pin_timer
+	pin_role = s.pin_role
 	pin_strength = s.pin_strength
 	host_timestamp = s.host_timestamp
 	blade_contact_world = s.blade_contact_world
@@ -213,6 +214,6 @@ static func from_array(data: Array) -> SkaterNetworkState:
 	if data.size() > 28:
 		state.stick_tied = data[28]
 	if data.size() > 30:
-		state.pin_timer = data[29]
+		state.pin_role = data[29]
 		state.pin_strength = data[30]
 	return state

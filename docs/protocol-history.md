@@ -320,3 +320,10 @@ here whenever you bump, in the same format.
 #      phase. stick_tied is now set on both tied players, whose blades the
 #      reconcile replays under the tie's speed cap. No byte layout changed.
 #      Replay FORMAT_VERSION 14.
+# v70: the board pin becomes a locked position contest (docs/defensive-play-plan.md,
+#      Pin revision). Skater byte 56 carries pin_role (BoardPinRules.Role) where
+#      pin_timer was; byte 57 is still pin_strength. Both locked players carry
+#      their role. The forward prediction applies BoardPinRules.forward_cap (the
+#      role's along-wall slide cap) on the render and the rewind, in place of
+#      forward_correction's bleed. The block stays 58 bytes. Replay
+#      FORMAT_VERSION 15.

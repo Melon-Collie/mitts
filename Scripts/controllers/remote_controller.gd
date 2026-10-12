@@ -501,12 +501,12 @@ func _predict_sample_forward(newest: SkaterNetworkState, dt: float) -> void:
 # Applies a snapshot's board pin to the forward integration in _fp_result — the
 # same correction LagCompRewind applies host-side (render == rewind).
 func _correct_forward_for_pin(snap: SkaterNetworkState, window_s: float) -> void:
-	if snap.pin_timer <= 0.0:
+	if snap.pin_role == BoardPinRules.Role.NONE:
 		return
-	BoardPinRules.forward_correction(_fp_result,
-			BoardPinRules.wall_normal(snap.position, skater.collision_radius(),
-					BoardPinRules.PIN_WALL_MARGIN_M),
-			snap.pin_timer, snap.pin_strength, window_s)
+	BoardPinRules.forward_cap(_fp_result,
+			BoardPinRules.locked_wall_normal(snap.position, skater.collision_radius(),
+					snap.pin_role),
+			BoardPinRules.slide_cap(snap.pin_role, snap.pin_strength), window_s)
 
 
 func _interpolate(delta: float) -> void:
@@ -546,7 +546,7 @@ func _interpolate(delta: float) -> void:
 		interpolated.stick_check_phase = newest.stick_check_phase
 		interpolated.stick_check_elapsed = newest.stick_check_elapsed
 		interpolated.stick_tied = newest.stick_tied
-		interpolated.pin_timer = newest.pin_timer
+		interpolated.pin_role = newest.pin_role
 		interpolated.pin_strength = newest.pin_strength
 		interpolated.shot_state = newest.shot_state
 		interpolated.shot_charge = newest.shot_charge
@@ -589,7 +589,7 @@ func _interpolate(delta: float) -> void:
 		interpolated.stick_check_phase = to_state.stick_check_phase
 		interpolated.stick_check_elapsed = to_state.stick_check_elapsed
 		interpolated.stick_tied = to_state.stick_tied
-		interpolated.pin_timer = to_state.pin_timer
+		interpolated.pin_role = to_state.pin_role
 		interpolated.pin_strength = to_state.pin_strength
 		interpolated.shot_state = to_state.shot_state
 		# Charge is a scalar — lerp it so the remote's stick-flex load bow

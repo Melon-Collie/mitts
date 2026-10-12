@@ -554,7 +554,8 @@ func _find_contesting_corraller(first: Skater, skaters: Array, puck_curr: Vector
 		# blade_up / deflect_intent already withdraw the stick; a committed body-check
 		# and a stick lift in progress do the same (stick off the ice — no corral).
 		if skater.blade_up or skater.deflect_intent or skater.hit_committed \
-				or skater.stick_tied or StickCheckRules.is_stick_busy(skater.stick_check_phase):
+				or skater.stick_tied or skater.pin_role != BoardPinRules.Role.NONE \
+				or StickCheckRules.is_stick_busy(skater.stick_check_phase):
 			continue
 		if not PuckReceptionRules.blade_can_interact(skater.blade_up, puck_airborne):
 			continue
@@ -629,7 +630,7 @@ func _check_interactions() -> void:
 								STICK_LIFT_RADIUS))
 						break
 					continue
-				if skater.blade_up or skater.stick_tied \
+				if skater.blade_up or skater.stick_tied or skater.pin_role != BoardPinRules.Role.NONE \
 						or StickCheckRules.is_stick_busy(skater.stick_check_phase):
 					continue
 				var blade_prev: Vector3 = skater.get_prev_blade_contact_global()
@@ -662,8 +663,10 @@ func _check_interactions() -> void:
 				if skater.current_shot_state == SkaterStateMachine.State.SHOT_BLOCKING \
 						or skater.current_shot_state == SkaterStateMachine.State.FOLLOW_THROUGH:
 					continue
-				# Mid-lift the stick is hooking, not playing the puck.
-				if StickCheckRules.is_stick_busy(skater.stick_check_phase):
+				# Mid-lift the stick is hooking, not playing the puck; locked in a
+				# pin, it is out of the play altogether.
+				if StickCheckRules.is_stick_busy(skater.stick_check_phase) \
+						or skater.pin_role != BoardPinRules.Role.NONE:
 					continue
 				# Reach gate — grounded blade ↔ grounded puck, lifted blade ↔
 				# airborne puck. blade_up already encodes the deflect level's plane
@@ -924,6 +927,7 @@ func try_provisional_pickup(local_skater: Skater) -> void:
 	# Committed to a body check — stick's off the ice (mirrors the host's
 	# hit_committed pickup gate), so don't pin a puck the host won't grant.
 	if local_skater.hit_committed or local_skater.stick_tied \
+			or local_skater.pin_role != BoardPinRules.Role.NONE \
 			or StickCheckRules.is_stick_busy(local_skater.stick_check_phase):
 		return
 	if _is_pickup_contested(local_skater):

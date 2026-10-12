@@ -3,7 +3,7 @@
 Status: **Phases 1–3 implemented** (v66–v68), playtest pending.
 - **The tie revision is built** (v69): two sticks tied together, off the ice and
   slowed, held by either player (*Tie revision*).
-- **The pin revision is planned, not built:** a locked position contest
+- **The pin revision is built** (v70): a locked position contest
   (*Pin revision*), replacing 3b's grip-and-budget pin.
 
 Phase 4 is candidates. Each phase is meant to ship as its own PR, with its own protocol
@@ -237,7 +237,7 @@ PRESSURE chooses between the poke jab and a lift by what the bot can actually se
   (`Scripts/networking/CLAUDE.md`, body-check contact geometry). The knockback
   velocity itself doesn't change; the wall already clamps it.
 
-### 3b. The pin (as built in v68 — to be replaced by the *Pin revision*)
+### 3b. The pin (as built in v68 — replaced by the *Pin revision* in v70)
 - **Onset (host-authoritative, `Skater._check_board_pin`).**
   - The defender is committed (`hit_committed`, not carrying) and touching an
     opponent. Carrier or not, it doesn't matter.
@@ -297,7 +297,30 @@ PRESSURE chooses between the poke jab and a lift by what the bot can actually se
   - parity of the three-party hit geometry with the backstop;
   - the frozen puck whistles in NHL and squirts in ARCADE.
 
-## Pin revision — a locked position contest (planned)
+## Pin revision — a locked position contest (built, v70)
+
+**As built.**
+- **Onset moves to a host tracker.** `BoardPinTracker` makes the contact test itself:
+  bodies touching within `PIN_CONTACT_SLACK_M`. It is also the only writer of
+  `pin_role` and `pin_strength` on both players. `Skater._resolve_player_collisions`
+  keeps only the backstop hit; its `board_pinned` signal and `SkaterBoardPin` are
+  gone.
+- **The pinner finds the boards a body further out**
+  (`BoardPinRules.locked_wall_normal`). The victim's own wall test also ends the pin
+  if he is pushed off it, past `PIN_WALL_RELEASE_M`.
+- **The pinner keeps the commit**, and letting go of it ends the pin. Only the
+  victim's commit and stance are off.
+- **The wire carries the role and strength only, with no partner slot.** The cap and
+  the pose each read their own skater's role and wall.
+- **Bot reversals have a floor.** A pinned bot reverses no more often than
+  `PIN_REVERSAL_MIN_TICKS` (about 150 ms), so one reversal lands before the next.
+- **Bot gates.** A carrier bot braces behind the `protects_the_puck` cognition
+  gate. Holding a pin rides `check_aggression`.
+- **The pose is modest:** a sit (`pin_stance`) and a lean into the wall, 12° pressed
+  and 18° driving. It is rendered in `tools/pose_capture_runner.gd` as `pin_pinned`
+  and `pin_pinner`. That runner now turns off the off-camera cull. Every pose is
+  framed by moving the camera after its ticks, so a pose placed away from the last
+  one was culled while posed and drawn unposed.
 
 ### Why
 3b's pin is a stun with a timer. The victim can't move along the wall at all, and
@@ -668,4 +691,6 @@ must still grow, its ratchet entry is bumped in the same diff.
 | `PIN_SLIDE_PINNER_M_S` | 1.4 | above the victim's fastest cap, so a correct read keeps up |
 | `PIN_ESCAPE_OFFSET_M` | 0.5 | ≥ 2 × 1.24 × 0.2 s; a hip's width at the 0.35 m body radius |
 | `PIN_SEPARATION_M` | 0.15 | beyond contact |
+| `PIN_CONTACT_SLACK_M` | 0.05 | bodies count as touching within this |
+| `PIN_WALL_RELEASE_M` | 0.5 | a victim pushed further off the wall is free |
 | `FROZEN_PUCK_S` | 2.0 | |

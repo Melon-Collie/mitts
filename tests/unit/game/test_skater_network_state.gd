@@ -28,7 +28,7 @@ func test_round_trip_preserves_all_wire_fields() -> void:
 	s.stick_check_phase           = StickCheckRules.Phase.HOOK
 	s.stick_check_elapsed         = 0.05
 	s.stick_tied                  = true
-	s.pin_timer                   = 0.12
+	s.pin_role                    = BoardPinRules.Role.PINNED
 	s.pin_strength                = 0.6
 
 	var r := SkaterNetworkState.from_array(s.to_array())
@@ -55,7 +55,7 @@ func test_round_trip_preserves_all_wire_fields() -> void:
 	assert_eq(r.stick_check_phase, s.stick_check_phase)
 	assert_almost_eq(r.stick_check_elapsed, s.stick_check_elapsed, 0.00001)
 	assert_eq(r.stick_tied, s.stick_tied)
-	assert_almost_eq(r.pin_timer, s.pin_timer, 0.00001)
+	assert_eq(r.pin_role, s.pin_role)
 	assert_almost_eq(r.pin_strength, s.pin_strength, 0.00001)
 
 
@@ -69,7 +69,7 @@ func test_array_length_sentinel() -> void:
 	# stagger_timer, move_intent, brake_intent, stance_active, knockdown_timer,
 	# hit_committed, wrister_address_side, balance_tilt, balance_tilt_vel,
 	# torso_lean, posture_lean, recoil_dir, stick_check_phase,
-	# stick_check_elapsed, stick_tied, pin_timer, pin_strength.
+	# stick_check_elapsed, stick_tied, pin_role, pin_strength.
 	var s := SkaterNetworkState.new()
 	assert_eq(s.to_array().size(), 31)
 

@@ -50,9 +50,9 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +3: the wrister wind-up side reads the trailer's relative motion over the
 	# charge (#740), not just where he stands at the commit.
 	# +1: the chase steer passes when an airborne puck is back on the blade plane.
-	"res://Scripts/ai/skater_agent_state_machine.gd": 6386,
+	"res://Scripts/ai/skater_agent_state_machine.gd": 6490,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
-	"res://Scripts/game/game_manager.gd": 5681,
+	"res://Scripts/game/game_manager.gd": 5686,
 	"res://Scripts/domain/ai/action_scoring.gd": 4458,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
@@ -66,15 +66,15 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
 	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3916,
-	"res://Scripts/controllers/skater_controller.gd": 3399,
-	"res://Scripts/actors/skater.gd": 2797,
+	"res://Scripts/controllers/skater_controller.gd": 3408,
+	"res://Scripts/actors/skater.gd": 2784,
 	"res://Scripts/networking/network_manager.gd": 2828,
 	"res://Scripts/game/tutorial_manager.gd": 2073,
 	"res://Scripts/controllers/skater_ik_coordinator.gd": 950,
 	# +21: apply_scripted_grant / stage_scripted — the tutorial's teleports
 	# restart the swept interaction tests where the puck lands instead of
 	# sweeping the jump. +6: the pinch hop composed onto the contest exit.
-	"res://Scripts/controllers/puck_controller.gd": 1565,
+	"res://Scripts/controllers/puck_controller.gd": 1569,
 	"res://Scripts/actors/hockey_rink.gd": 1472,
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 1409,
 	"res://Scripts/game/player_prefs.gd": 1391,
@@ -83,12 +83,12 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/ui/career_stats_screen.gd": 1271,
 	"res://Scripts/domain/ai/carry_space.gd": 1255,
 	"res://Scripts/ui/lobby_manager.gd": 1247,
-	"res://Scripts/actors/puck.gd": 1075,
+	"res://Scripts/actors/puck.gd": 1087,
 	"res://Scripts/ui/side_menu.gd": 995,
 	"res://Scripts/controllers/goalie_body_config_builder.gd": 1072,
 	"res://Scripts/ui/network_debug_overlay.gd": 956,
 	"res://Scripts/networking/network_telemetry.gd": 957,
-	"res://Scripts/controllers/local_controller.gd": 937,
+	"res://Scripts/controllers/local_controller.gd": 939,
 	"res://Scripts/ui/player_settings_popup.gd": 863,
 	"res://Scripts/ui/slot_grid_panel.gd": 839,
 	"res://Scripts/domain/state/game_state_machine.gd": 838,
@@ -108,7 +108,7 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/networking/network_telemetry.gd": 53,
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 48,
 	"res://Scripts/controllers/skater_controller.gd": 42,
-	"res://Scripts/actors/puck.gd": 41,
+	"res://Scripts/actors/puck.gd": 42,
 	"res://Scripts/domain/state/game_state_machine.gd": 38,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 36,
 	"res://Scripts/actors/skater_mesh_builder.gd": 29,

@@ -2,15 +2,15 @@ extends GutTest
 
 # Skater contact against the boards (Skater._resolve_player_collisions with
 # BoardPinRules): the same committed check lands harder on a victim with the
-# boards behind him, and a committed checker driving him in pins him. Real
-# Skater scenes, resolved by hand from the checker's side.
+# boards behind him. (The pin's onset is BoardPinTracker's — see
+# test_board_pin_tracker.gd.) Real Skater scenes, resolved by hand from the
+# checker's side.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 
 var _checker: Skater = null
 var _victim: Skater = null
 var _received: Array[Vector3] = []
-var _pins: Array[float] = []
 
 
 func before_each() -> void:
@@ -24,9 +24,7 @@ func before_each() -> void:
 	_checker.hit_committed = true
 	_checker.current_shot_state = SkaterStateMachine.State.SKATING_WITHOUT_PUCK
 	_received.clear()
-	_pins.clear()
 	_victim.body_check_received.connect(func(i: Vector3) -> void: _received.append(i))
-	_victim.board_pinned.connect(func(s: float) -> void: _pins.append(s))
 
 
 func _spawn() -> Skater:
@@ -60,17 +58,3 @@ func test_a_check_into_the_boards_lands_harder_than_in_open_ice() -> void:
 	_check_at(_wall_x(), 6.0)
 	assert_eq(_received.size(), 1)
 	assert_gt(_received[0].length(), open_ice * 1.2, "the boards take the recoil")
-
-
-func test_a_committed_drive_into_the_boards_pins_the_victim() -> void:
-	_check_at(_wall_x(), 2.0)
-	assert_eq(_pins.size(), 1, "pinned")
-	assert_almost_eq(_pins[0], BoardPinRules.pin_strength(_checker.weight, _victim.weight), 1e-6)
-
-
-func test_no_pin_in_open_ice_or_without_the_commit() -> void:
-	_check_at(0.0, 2.0)
-	assert_eq(_pins.size(), 0, "no boards, no pin")
-	_checker.hit_committed = false
-	_check_at(_wall_x(), 2.0)
-	assert_eq(_pins.size(), 0, "an uncommitted bump pins nobody")

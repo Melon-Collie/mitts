@@ -1,7 +1,7 @@
 extends GutTest
 
-# BoardPinRules and FrozenPuckRules: the boards as a backstop, the pin's onset
-# and wear, and the frozen puck's count.
+# BoardPinRules and FrozenPuckRules: the boards as a backstop, the pin's onset,
+# its slide caps and escape, and the frozen puck's count.
 
 const R: float = 0.35
 var _side_x: float = GameRules.INNER_HALF_WIDTH   # the +x side boards' inner face
@@ -15,6 +15,14 @@ func test_the_wall_normal_points_out_only_near_the_boards() -> void:
 	assert_eq(BoardPinRules.wall_normal(_at_the_wall(0.05), R, 0.25), Vector2(1.0, 0.0))
 	assert_eq(BoardPinRules.wall_normal(_at_the_wall(1.0), R, 0.25), Vector2.ZERO)
 	assert_eq(BoardPinRules.wall_normal(Vector3.ZERO, R, 0.25), Vector2.ZERO)
+
+
+func test_the_pinner_finds_the_wall_a_body_off_it() -> void:
+	var pinner_gap: float = 0.05 + 2.0 * R + 0.05
+	assert_eq(BoardPinRules.locked_wall_normal(_at_the_wall(pinner_gap), R,
+			BoardPinRules.Role.PINNER), Vector2(1.0, 0.0))
+	assert_eq(BoardPinRules.locked_wall_normal(_at_the_wall(pinner_gap), R,
+			BoardPinRules.Role.PINNED), Vector2.ZERO, "the victim's wall is the one he is against")
 
 
 func test_a_hit_square_into_the_boards_lands_its_whole_closing_speed() -> void:
@@ -32,17 +40,22 @@ func test_a_hit_square_into_the_boards_lands_its_whole_closing_speed() -> void:
 func test_a_pin_needs_a_committed_drive_into_the_wall() -> void:
 	var out := Vector2(1.0, 0.0)
 	var into := Vector2(1.0, 0.0)
-	assert_true(BoardPinRules.pin_holds(true, into, Vector3(1.5, 0, 0), Vector2.ZERO, out))
-	assert_true(BoardPinRules.pin_holds(true, into, Vector3.ZERO, Vector2(1.0, 0.0), out),
+	assert_true(BoardPinRules.pin_holds(true, false, into, Vector3(1.5, 0, 0), Vector2.ZERO, out))
+	assert_true(BoardPinRules.pin_holds(true, false, into, Vector3.ZERO, Vector2(1.0, 0.0), out),
 			"pressed flat against him, the stick held into the wall still drives")
-	assert_false(BoardPinRules.pin_holds(false, into, Vector3(1.5, 0, 0), Vector2.ZERO, out),
+	assert_false(BoardPinRules.pin_holds(false, false, into, Vector3(1.5, 0, 0), Vector2.ZERO, out),
 			"not committed")
-	assert_false(BoardPinRules.pin_holds(true, into, Vector3.ZERO, Vector2.ZERO, out),
+	assert_false(BoardPinRules.pin_holds(true, false, into, Vector3.ZERO, Vector2.ZERO, out),
 			"not driving")
-	assert_false(BoardPinRules.pin_holds(true, Vector2(0.0, 1.0), Vector3(1.5, 0, 0),
+	assert_false(BoardPinRules.pin_holds(true, false, Vector2(0.0, 1.0), Vector3(1.5, 0, 0),
 			Vector2.ZERO, out), "pushing along the wall is not pinning")
-	assert_false(BoardPinRules.pin_holds(true, into, Vector3(1.5, 0, 0), Vector2.ZERO,
+	assert_false(BoardPinRules.pin_holds(true, false, into, Vector3(1.5, 0, 0), Vector2.ZERO,
 			Vector2.ZERO), "no wall")
+
+
+func test_a_braced_victim_cannot_be_pinned() -> void:
+	assert_false(BoardPinRules.pin_holds(true, true, Vector2(1.0, 0.0), Vector3(1.5, 0, 0),
+			Vector2.ZERO, Vector2(1.0, 0.0)), "holding his own commit braces him")
 
 
 func test_the_heavier_body_pins_harder() -> void:
@@ -50,33 +63,71 @@ func test_the_heavier_body_pins_harder() -> void:
 	assert_gt(BoardPinRules.pin_strength(1.2, 0.8), 0.5)
 
 
-func test_working_along_the_wall_wears_the_pin_down_faster() -> void:
-	var out := Vector2(1.0, 0.0)
-	assert_eq(BoardPinRules.escape_drive(Vector2(0.0, 1.0), out), 1.0)
-	assert_eq(BoardPinRules.escape_drive(Vector2(1.0, 0.0), out), 0.0, "into the wall is no escape")
-	assert_eq(BoardPinRules.budget_drain_rate(0.0, 0.5), 1.0)
-	assert_gt(BoardPinRules.budget_drain_rate(1.0, 0.3), BoardPinRules.budget_drain_rate(1.0, 0.7),
-			"a weaker pin wears faster")
+func test_the_slide_caps_by_role_and_weight() -> void:
+	var Role = BoardPinRules.Role
+	assert_almost_eq(BoardPinRules.slide_cap(Role.PINNED, 0.5),
+			BoardPinRules.PIN_SLIDE_VICTIM_M_S, 1e-6, "equal weight: the stated speed")
+	assert_lt(BoardPinRules.slide_cap(Role.PINNED, 0.6), BoardPinRules.slide_cap(Role.PINNED, 0.4),
+			"a heavier pinner slows him")
+	assert_eq(BoardPinRules.slide_cap(Role.PINNER, 0.5), BoardPinRules.PIN_SLIDE_PINNER_M_S)
+	assert_eq(BoardPinRules.slide_cap(Role.NONE, 0.5), INF)
 
 
-func test_the_pin_bleeds_only_the_slide_along_the_wall() -> void:
+# Across the real weight band, the pinner's cap beats the victim's fastest, and
+# the escape offset covers a reversal the pinner reads late by the network lag.
+func test_the_escape_holds_against_ping_across_the_weight_band() -> void:
+	var lightest: int = 100000
+	var heaviest: int = 0
+	for h: int in range(PlayerAttributes.HEIGHT_MIN, PlayerAttributes.HEIGHT_MAX + 1):
+		lightest = mini(lightest, PlayerAttributes.weight_min(h))
+		heaviest = maxi(heaviest, PlayerAttributes.weight_max(h))
+	var weakest: float = BoardPinRules.pin_strength(float(lightest), float(heaviest))
+	var fastest_victim: float = BoardPinRules.slide_cap(BoardPinRules.Role.PINNED, weakest)
+	assert_gt(BoardPinRules.PIN_SLIDE_PINNER_M_S, fastest_victim,
+			"a pinner who reads the slide keeps up with the fastest victim")
+	assert_gte(BoardPinRules.PIN_ESCAPE_OFFSET_M,
+			2.0 * fastest_victim * BoardPinRules.PIN_LAG_BUDGET_S - 1e-6,
+			"ping alone never frees the victim")
+
+
+func test_the_escape_is_either_side() -> void:
 	var out := Vector2(1.0, 0.0)
-	var v: Vector3 = BoardPinRules.apply_pin(Vector3(0.5, 0.0, 3.0), out, 1.0, 0.1)
-	assert_almost_eq(v.z, 3.0 - BoardPinRules.PIN_HOLD_DECEL_M_S2 * 0.1, 1e-5)
+	var pinner := Vector3(5.0, 0.0, 0.0)
+	var past := BoardPinRules.PIN_ESCAPE_OFFSET_M + 0.05
+	assert_false(BoardPinRules.escaped(BoardPinRules.along_wall_offset(
+			pinner + Vector3(0.7, 0.0, 0.3), pinner, out)))
+	assert_true(BoardPinRules.escaped(BoardPinRules.along_wall_offset(
+			pinner + Vector3(0.7, 0.0, past), pinner, out)))
+	assert_true(BoardPinRules.escaped(BoardPinRules.along_wall_offset(
+			pinner + Vector3(0.7, 0.0, -past), pinner, out)), "an over-chasing pinner frees him too")
+
+
+func test_the_cap_clamps_only_the_slide_along_the_wall() -> void:
+	var out := Vector2(1.0, 0.0)
+	var v: Vector3 = BoardPinRules.apply_slide_cap(Vector3(0.5, 0.2, 3.0), out, 1.0)
+	assert_almost_eq(v.z, 1.0, 1e-5)
 	assert_eq(v.x, 0.5, "the push into the wall is the wall's business")
+	assert_almost_eq(v.y, 0.2, 1e-6)
+	var slow: Vector3 = BoardPinRules.apply_slide_cap(Vector3(0.0, 0.0, -0.4), out, 1.0)
+	assert_eq(slow, Vector3(0.0, 0.0, -0.4), "under the cap, untouched")
 
 
-func test_the_forward_correction_slows_a_pinned_slide() -> void:
+func test_the_forward_cap_matches_the_live_cap() -> void:
 	var r := SkaterMovementRules.ForwardResult.new()
 	r.position = Vector3(10.0, 0.0, 1.0)
 	r.velocity = Vector3(0.0, 0.0, 3.0)
-	BoardPinRules.forward_correction(r, Vector2(1.0, 0.0), 0.15, 0.5, 0.1)
-	assert_lt(r.velocity.z, 3.0)
-	assert_lt(r.position.z, 1.0, "and it covers less ground")
+	BoardPinRules.forward_cap(r, Vector2(1.0, 0.0), 1.0, 0.1)
+	assert_almost_eq(r.velocity.z, 1.0, 1e-5)
+	assert_almost_eq(r.position.z, 1.0 - 2.0 * 0.1, 1e-5, "the excess travel is taken back")
 	var free := SkaterMovementRules.ForwardResult.new()
 	free.velocity = Vector3(0.0, 0.0, 3.0)
-	BoardPinRules.forward_correction(free, Vector2(1.0, 0.0), 0.0, 0.5, 0.1)
-	assert_eq(free.velocity.z, 3.0, "no grip, no correction")
+	BoardPinRules.forward_cap(free, Vector2(1.0, 0.0), INF, 0.1)
+	assert_eq(free.velocity.z, 3.0, "unlocked, no correction")
+
+
+func test_the_cap_outlasts_the_frozen_puck_count() -> void:
+	assert_gt(BoardPinRules.PIN_MAX_S, FrozenPuckRules.FROZEN_S,
+			"with the puck trapped, the whistle lands before the pin gives out")
 
 
 func test_a_trapped_puck_freezes_after_its_count() -> void:

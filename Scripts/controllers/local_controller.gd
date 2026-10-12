@@ -294,7 +294,8 @@ func _physics_process(delta: float) -> void:
 			# host confirm re-pinned it to the ice zone — the host catches the feed and
 			# it arrives through the puck sync.
 			if in_range and not skater.deflect_intent and _sm.get_state() != State.SLAPPER_CHARGE_WITHOUT_PUCK \
-					and not skater.stick_tied and not StickCheckRules.is_stick_busy(skater.stick_check_phase) and _pickup_claim_floor <= 0.0 and (rising_edge or _claim_cooldown <= 0.0):
+					and not skater.stick_tied and skater.pin_role == BoardPinRules.Role.NONE \
+					and not StickCheckRules.is_stick_busy(skater.stick_check_phase) and _pickup_claim_floor <= 0.0 and (rising_edge or _claim_cooldown <= 0.0):
 				_pickup_claim_floor = _PICKUP_CLAIM_FLOOR_S
 				_claim_cooldown = _CLAIM_COOLDOWN_S
 				# Report the ADAPTED interp delay (get_interpolation_delay) — the value
@@ -346,6 +347,7 @@ func _physics_process(delta: float) -> void:
 							blade_pos_for_claim, c_hand, c_blade,
 							PuckController.STICK_LIFT_RADIUS, PuckController.STICK_LIFT_UNDER_MARGIN)
 				elif not skater.blade_up and not skater.stick_tied \
+						and skater.pin_role == BoardPinRules.Role.NONE \
 						and not StickCheckRules.is_stick_busy(skater.stick_check_phase):
 					in_poke_range = puck.global_position.distance_to(blade_pos_for_claim) <= PuckController.POKE_RADIUS \
 							and not PuckInteractionRules.net_between(blade_pos_for_claim, puck.global_position)
@@ -409,6 +411,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# A tie is the host's call alone (StickTieTracker), so it lands every
 	# broadcast rather than only on a reconcile.
 	skater.stick_tied = server_state.stick_tied
+	_adopt_pin(server_state)
 	if _game_state.is_movement_locked():
 		# Dead-puck phase: don't reconcile. on_faceoff_positions is the reliable
 		# source of truth for teleport positions; world-state snapshots may lag behind
@@ -563,10 +566,9 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# charge timers).
 	stagger_timer = server_state.stagger_timer
 	stagger_recoil_dir = server_state.recoil_dir
-	# The lift phase and the board pin ride the same rail: the host's at the ack,
-	# stepped on by the replayed inputs.
+	# The lift phase rides the same rail: the host's at the ack, stepped on by the
+	# replayed inputs.
 	_adopt_stick_check(server_state)
-	_adopt_pin(server_state)
 	# The balance and torso leans ride the same rail: the host's values at the
 	# ack, then the replay steps them forward through the unacked inputs.
 	balance_tilt_vel = server_state.balance_tilt_vel

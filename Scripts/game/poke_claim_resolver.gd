@@ -138,6 +138,7 @@ func receive_claim(peer_id: int, host_timestamp: float,
 	# A stick mid-lift or held up pokes nothing (the same withdrawal as the
 	# present-time loop).
 	if skater_snap.blade_up or skater_snap.stick_tied \
+			or skater_snap.pin_role != BoardPinRules.Role.NONE \
 			or StickCheckRules.is_stick_busy(skater_snap.stick_check_phase):
 		return
 	# The attacker's blade is client-authoritative aim; ClaimantView is what bounds

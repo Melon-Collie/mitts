@@ -647,6 +647,18 @@ func apply_poke_check(checker_skater: Skater) -> void:
 # and the lifter gets no checker cooldown at all: their blade dropping back onto
 # the puck is the take. Same signals as apply_poke_check so the carrier-clear,
 # stats, and victim-notify paths fire identically.
+# A carrier pinned to the boards loses the puck where it is: it goes on at his
+# speed and sits loose at both players' feet, for whichever side's support gets
+# there first. The pinner is credited, as the defender who made the play.
+func apply_pin_strip(pinner: Skater) -> void:
+	var ex_carrier: Skater = carrier
+	clear_carrier()
+	linear_velocity = Vector3(ex_carrier.velocity.x, 0.0, ex_carrier.velocity.z)
+	_set_cooldown(ex_carrier, reattach_cooldown)
+	puck_stripped.emit(ex_carrier, pinner)
+	puck_released.emit()
+
+
 func apply_stick_lift_strip(checker_skater: Skater, regrab_cooldown: float) -> void:
 	var ex_carrier: Skater = carrier  # capture before clear_carrier()
 	clear_carrier()

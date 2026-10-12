@@ -264,7 +264,7 @@ func _interpolate_skater(peer_id: int, ts: float) -> SkaterNetworkState:
 	result.stick_check_phase = to_s.stick_check_phase
 	result.stick_check_elapsed = to_s.stick_check_elapsed
 	result.stick_tied = to_s.stick_tied
-	result.pin_timer = to_s.pin_timer
+	result.pin_role = to_s.pin_role
 	result.pin_strength = to_s.pin_strength
 	result.host_timestamp = ts
 	return result

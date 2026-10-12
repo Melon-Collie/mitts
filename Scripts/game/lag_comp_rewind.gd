@@ -236,11 +236,12 @@ static func _integrate_skater(snap: SkaterNetworkState, ctrl: SkaterController,
 				ticks, Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, scratch,
 				snap.stagger_timer, ctrl.get_body_check_config())
 	# The board pin, as the client render applies it (RemoteController).
-	if snap.pin_timer > 0.0 and ctrl.skater != null:
-		BoardPinRules.forward_correction(scratch,
-				BoardPinRules.wall_normal(snap.position, ctrl.skater.collision_radius(),
-						BoardPinRules.PIN_WALL_MARGIN_M),
-				snap.pin_timer, snap.pin_strength, float(ticks) / float(Constants.PHYSICS_TICK))
+	if snap.pin_role != BoardPinRules.Role.NONE and ctrl.skater != null:
+		BoardPinRules.forward_cap(scratch,
+				BoardPinRules.locked_wall_normal(snap.position, ctrl.skater.collision_radius(),
+						snap.pin_role),
+				BoardPinRules.slide_cap(snap.pin_role, snap.pin_strength),
+				float(ticks) / float(Constants.PHYSICS_TICK))
 	return true
 
 

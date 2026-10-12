@@ -242,12 +242,17 @@ coming to holds on, keeping that defender's stick out of the play. Both halves a
 the `ties_sticks` cognition gate, closed on Easy.
 
 **On the boards, the checker's extra is holding the pin** (`apply_board_play`, every
-tick after dispatch): a man pinned in contact stays driven in only while the puck
-is his or at his feet and a teammate can reach it inside the pin's cap — the pin
-buys a teammate the puck, so without one it buys nothing and the checker lets go.
-It rides the PACE physicality knob (`check_aggression`, zero on Easy), not a
-cognition gate. A pinned bot works along the wall away from its checker, which is
-what wears a pin down.
+tick after dispatch), and the hold follows what is coached: keep the commit while
+our support beats theirs to the puck (the same momentum-blind top-speed bound for
+both sides), or in our own end to kill the play; never as the last man back
+outside it. Locked, the pinner drives into the wall and mirrors the victim's slide
+through a lag of `BoardPinRules.PIN_LAG_BUDGET_S` — what a human pinner reads it
+late by — so a bot is beaten by the same reversals a human would be. It rides the
+PACE physicality knob (`check_aggression`, zero on Easy), not a cognition gate. A
+pinned bot slides along the wall and reverses when its pinner commits to following
+(his along-wall speed our way past half our cap), no sooner than a reversal can
+land. A carrier at the wall braces (holds the commit) when a committed checker
+closes on him square into the boards — the `protects_the_puck` cognition gate.
 
 Still unfactored: **hold a post** — the per-role fallbacks and their anchor
 constants. The open question is whether it should be a verb at all: if the

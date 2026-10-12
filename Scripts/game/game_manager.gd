@@ -254,6 +254,7 @@ var _codec: WorldStateCodec = null
 var _shot_tracker: ShotOnGoalTracker = null
 var _hit_tracker: HitTracker = null
 var _stick_ties: StickTieTracker = null
+var _board_pins: BoardPinTracker = null
 var _stick_tie_draw := StickTieDraw.new()
 var _frozen_puck := FrozenPuckRules.State.new()
 var _turnover_tracker: TurnoverTracker = null
@@ -654,6 +655,7 @@ func _physics_process(delta: float) -> void:
 	_shot_tracker.tick(delta)
 	_hit_tracker.tick(delta)
 	_stick_ties.tick(not _state_machine.is_movement_locked())
+	_board_pins.tick(not _state_machine.is_movement_locked())
 	_possession_tracker.tick(delta)
 	# Release before _pickup_claim.tick so a claim coming due this frame can still
 	# arm the contest window on the frame it lands.
@@ -829,20 +831,15 @@ func _check_frozen_puck(delta: float) -> void:
 		return
 	var puck_pos: Vector3 = puck.global_position
 	var pinned: Skater = null
-	var carrier_pinned: bool = false
-	var players: Dictionary[int, PlayerRecord] = _registry.all()
-	for pid: int in players:
-		var rec: PlayerRecord = players[pid]
-		var ctrl: SkaterController = rec.controller as SkaterController
-		if rec.skater == null or ctrl == null or not ctrl.is_pinned():
+	for s: Skater in _registry.skaters():
+		if s.pin_role == BoardPinRules.Role.NONE:
 			continue
-		if rec.skater == puck.carrier:
-			carrier_pinned = true
-		var reach: float = FrozenPuckRules.REACH_M + rec.skater.collision_radius()
-		if Vector2(rec.skater.global_position.x - puck_pos.x,
-				rec.skater.global_position.z - puck_pos.z).length() <= reach:
-			pinned = rec.skater
-	var trapped: bool = pinned != null and (puck.carrier == null or carrier_pinned) \
+		var reach: float = FrozenPuckRules.REACH_M + s.collision_radius()
+		if Vector2(s.global_position.x - puck_pos.x, s.global_position.z - puck_pos.z).length() \
+				<= reach:
+			pinned = s
+	# A pinned carrier loses the puck as the pin starts, so a trapped puck is loose.
+	var trapped: bool = pinned != null and puck.carrier == null \
 			and puck.linear_velocity.length() < FrozenPuckRules.SPEED_MAX_M_S \
 			and FrozenPuckRules.near_boards(puck_pos)
 	if not FrozenPuckRules.step(_frozen_puck, puck_pos, trapped, delta):
@@ -852,13 +849,14 @@ func _check_frozen_puck(delta: float) -> void:
 		NetworkManager.notify_puck_frozen_called_to_all()
 		_whistle_and_faceoff(GameRules.nearest_faceoff_dot(Vector2(puck_pos.x, puck_pos.z)))
 		return
-	if puck.carrier != null:
-		return
 	puck.linear_velocity = FrozenPuckRules.squirt_velocity(puck_pos, pinned.global_position)
-	for pid: int in players:
-		var ctrl: SkaterController = players[pid].controller as SkaterController
-		if ctrl != null:
-			ctrl.release_pin()
+	_board_pins.release(pinned)
+
+
+# Host: the pin just locked a carrier against the boards — his puck goes loose.
+func _strip_pinned_carrier(victim: Skater, pinner: Skater) -> void:
+	if puck != null and puck.carrier == victim:
+		puck.apply_pin_strip(pinner)
 
 
 # Host: any transition out of live play (whistle prep, goal, period horn,
@@ -1577,6 +1575,10 @@ func _wire_subsystems() -> void:
 		_stick_ties.clear()
 	_stick_ties = StickTieTracker.new()
 	_stick_ties.setup(_registry, func() -> Skater: return puck.carrier if puck != null else null)
+	if _board_pins != null:
+		_board_pins.clear()
+	_board_pins = BoardPinTracker.new()
+	_board_pins.setup(_registry, NetworkManager.local_time, _strip_pinned_carrier)
 	_hit_tracker.impact_landed.connect(_on_impact_landed)
 	_hit_tracker.hit_credited.connect(_on_hit_credited)
 
@@ -4567,6 +4569,9 @@ func on_scene_exit() -> void:
 	if _stick_ties != null:
 		_stick_ties.clear()
 	_stick_ties = null
+	if _board_pins != null:
+		_board_pins.clear()
+	_board_pins = null
 	_phase_coord = null
 	_swap_coord = null
 	if _debug_overlay:

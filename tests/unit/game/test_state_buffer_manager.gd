@@ -155,7 +155,7 @@ func test_interpolated_snapshot_carries_the_stick_and_pin_state() -> void:
 	newer.stick_check_phase = StickCheckRules.Phase.HOOK
 	newer.stick_check_elapsed = 0.05
 	newer.stick_tied = true
-	newer.pin_timer = 0.12
+	newer.pin_role = BoardPinRules.Role.PINNER
 	newer.pin_strength = 0.6
 	_seed_two_slots(10.0, older, 10.1, newer)
 	var s: SkaterNetworkState = sbm.get_state_at(10.05).get_skater_state(PEER)
@@ -164,7 +164,7 @@ func test_interpolated_snapshot_carries_the_stick_and_pin_state() -> void:
 	assert_eq(s.stick_check_phase, StickCheckRules.Phase.HOOK)
 	assert_almost_eq(s.stick_check_elapsed, 0.05, 1e-6)
 	assert_true(s.stick_tied)
-	assert_almost_eq(s.pin_timer, 0.12, 1e-6)
+	assert_eq(s.pin_role, BoardPinRules.Role.PINNER)
 	assert_almost_eq(s.pin_strength, 0.6, 1e-6)
 
 
