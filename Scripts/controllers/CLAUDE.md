@@ -659,7 +659,12 @@ bugs all came from treating it as one.
 **The walk-in is skating.** While `begin_approach`'s glide is live the skater is
 covering ground, so `is_faceoff_ready()` is false and the gait plays an ordinary
 stride — a floored crouch and staggered feet laid over a running stride read as
-a limp. The ready stance eases in as the glide hands back.
+a limp. The ready stance eases in as the glide hands back. It is not physical,
+though: skater contact is off while movement is locked
+(`Skater.contact_suspended_provider`, fed `is_movement_locked` at setup), so
+a glide crossing the centre neither checks him into the drop nor shoves him off
+the dot. The countdown waits for the last glide to land
+(`PhaseCoordinator.last_prep_preroll`).
 
 **Set at the dot is two stances, not one.** The players lined up behind the dot
 hold a ready stance. The centre taking the draw holds an *address*: knees well

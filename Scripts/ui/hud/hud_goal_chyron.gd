@@ -221,8 +221,8 @@ func on_replay_stopped() -> void:
 	# (e.g. FACEOFF) appears at rest.
 	# Skip the hide if the faceoff countdown is already up: on clients the
 	# host's faceoff_positions RPC can land before our local replay's outro
-	# ends, in which case the countdown is already showing "FACEOFF IN 2" and
-	# hiding the wrapper here would erase it.
+	# ends, in which case the countdown banner is already up and hiding the
+	# wrapper here would erase it.
 	if _countdown_tween != null and _countdown_tween.is_valid():
 		return
 	_wrapper.visible = false

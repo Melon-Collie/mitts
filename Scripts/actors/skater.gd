@@ -523,6 +523,9 @@ func get_team_id() -> int:
 # _resolve_player_collisions iterates it (skipping self) to resolve skater-vs-
 # skater contact. Empty Callable (tutorial dummy / test) → no resolution.
 var _skater_collision_provider: Callable = Callable()
+# `() -> bool`, true while contact is off: the locked phases, whose bodies are
+# frozen or on a scripted glide that crossing another is not a check.
+var contact_suspended_provider: Callable = Callable()
 # Stable, machine-consistent id (the owning peer_id) set by PlayerRegistry on
 # spawn. Used ONLY to break exact head-on ties in the aggressor gate — it must be
 # identical on every machine (get_instance_id() is per-process and would let host
@@ -995,6 +998,8 @@ func _resolve_player_collisions() -> void:
 	# (SkaterNetworkState), so every machine skips the same pairs and the aggressor
 	# gate below stays deterministic.
 	if is_ghost:
+		return
+	if contact_suspended_provider.is_valid() and bool(contact_suspended_provider.call()):
 		return
 	var others: Array = _skater_collision_provider.call()
 	if others == null:
