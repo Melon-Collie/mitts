@@ -5,8 +5,9 @@ Status: **Phases 1–3 implemented** (v70–v72), playtest pending.
   slowed, held by either player (*Tie revision*).
 - **The pin revision is built** (v74): a locked position contest
   (*Pin revision*), replacing 3b's grip-and-budget pin.
+- **Phase 4 is planned:** bots block shots, and the dive.
 
-Phase 4 is candidates. Each phase is meant to ship as its own PR, with its own protocol
+Each phase is meant to ship as its own PR, with its own protocol
 bump and playtest.
 
 ## Decisions banked
@@ -609,12 +610,61 @@ the play a pin can't make, because there's no wall behind the forward.
 - The claim resolver keeps passing the contract test.
 - The remote pair lookup.
 
-## Phase 4 — candidates, not committed
+## Phase 4 — the shot block, for bots and as a dive (planned)
 
-- **Bots block shots.** The C verb has never been used by a bot.
-- **Dive / sprawl poke.** The last-ditch full extension on a 2-on-1 or a breakaway,
-  paid for with a knockdown. It needs an input; Y is the one pad face button left
-  free.
+### 4a. Bots block shots
+The C verb has never been used by a bot. A blocker decides from what it can see:
+- **It is in the lane.** Its body is on the line from the shooter's release point to
+  the net, between them.
+- **A shot is coming.** The shooter is in a wind-up: the replicated shot state is
+  WRISTER_AIM or a slapper charge.
+- **The shot will stay low.** The block owns the ice and concedes the air, and the
+  shooter's loft level is replicated (`elevation_level`). So a bot reads the same
+  tell a human goalie or defender can, and doesn't block a shot that is going high.
+- **It isn't blinding its own goalie.** The goalie already models how much room it
+  needs to see around a screen (`GoalieScreenDepth`). A block close in front of
+  him, which he could otherwise see around, costs more than it buys.
+- **Gating.** A cognition gate in `BotSkillProfile`, closed on Easy, like the
+  other physical verbs.
+
+### 4b. The dive (Shift + C; LB + A on a pad)
+The defenseman's 2-on-1 play: down on the ice across the pass lane, stick out.
+- **No lunge.** The body keeps the momentum it had and slides on along the ice the
+  way it was going, shedding speed at the downed body's friction
+  (`knockdown_friction`). The cursor decides how the body is **laid out**, toward
+  the cursor from where it went down, not where it moves. There is no velocity
+  discontinuity, so nothing new breaks the render clock.
+- **What it blocks.** A long, low capsule from the body out along the layout to the
+  stick's reach, sealed from the ice up to a low height. It stops a puck along the
+  ice, shot or pass. A saucer or a lifted shot goes over, the same trade as the
+  standing block.
+- **The stick stays live.** The blade is laid out toward the cursor along the ice
+  and still plays the puck.
+- **Cost.** Committed: no thrust while down, then the knockdown get-up. A carrier
+  who reads it early skates around it.
+- **Pose.** The knockdown sprawl and get-up, laid along the layout direction
+  rather than a hit's.
+- **Netcode.**
+  - The start is input-driven, so the diver predicts his own dive exactly.
+  - Remotes need the dive state, its layout bearing (one byte, like `recoil_dir`)
+    and its elapsed time.
+  - The shot-state field is full at 8 values in 3 bits, so the dive costs a repack
+    of the flags byte or a byte of its own, plus a protocol bump.
+  - The block capsule is host geometry, like the standing block's cylinder.
+- **Forward prediction.** A downed body slides with no thrust. So for a diving (or
+  knocked-down) remote, the render and the rewind must extrapolate the
+  friction-only slide from the snapshot instead of running `integrate_forward` on
+  its replicated intent. That is one shared post-step like the pin's forward cap,
+  so the native kernels stay untouched.
+- **Bots.** The 2-on-1 defender dives when the pass across is the threat, his body
+  can't otherwise reach the lane in time, and the carrier is inside shooting range.
+  This read is gated per tier too.
+- **Open:**
+  - can the diver's stick catch the puck, or only knock it away? The proposal is
+    knock away only: deflect, no reception;
+  - how long down? The proposal is the knockdown's get-up, about 1 s.
+
+### Further candidates, not committed
 - **Net-front box-out.** The pin's sustained-contact model in open ice, moving a
   screener out of the goalie's sightline. It would feed the goalie's screen read.
 - **Deliberately out:** hooking, holding and interference. Without a penalty system
