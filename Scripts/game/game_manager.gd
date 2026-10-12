@@ -283,7 +283,13 @@ var shape_tally := AIPossessionShapeTally.new()
 # Live breakout-outcome tally (F6 overlay) — the in-game counterpart of the
 # breakout harness, so its staged verdicts can be checked against real play.
 var breakout_episodes := AIBreakoutEpisodeTracker.new()
-# Both tallies sample at the 120 Hz host tick, so they stay OFF until asked for:
+# Live offensive-zone possession tally (F6 overlay): the real-play rates the
+# possession-value model needs (docs/possession-value-plan.md §6).
+var oz_possessions := AIOzPossessionTracker.new()
+# The current release is a SHOT the OZ tally has not seen. Its first trajectory
+# read consumes it, so a mid-flight deflection re-read is not a second shot.
+var _oz_unread_shot: bool = false
+# The tallies sample at the 120 Hz host tick, so they stay OFF until asked for:
 # the overlay only exists in a debug build, and the first F6 press latches this.
 # It never un-latches — closing the panel would otherwise punch a hole in the
 # denominator and quietly corrupt every share it reports.
@@ -626,9 +632,11 @@ func _physics_process(delta: float) -> void:
 							_ai_coordinator.brain_state(brain.team_id), delta,
 							_ai_coordinator.brain_coverage_downgraded(brain.team_id))
 					if tally_puck != null:
-						breakout_episodes.tick(brain.team_id,
-								GameRules.GOAL_LINE_Z if brain.team_id == 0
-										else -GameRules.GOAL_LINE_Z,
+						var own_goal_z: float = GameRules.GOAL_LINE_Z \
+								if brain.team_id == 0 else -GameRules.GOAL_LINE_Z
+						breakout_episodes.tick(brain.team_id, own_goal_z,
+								tally_puck.position, carrier_team, delta)
+						oz_possessions.tick(brain.team_id, -own_goal_z,
 								tally_puck.position, carrier_team, delta)
 		if _registry != null:
 			t_section = Time.get_ticks_usec()
@@ -834,6 +842,7 @@ func _on_stoppage_flush_stat_trackers(phase: GamePhase.Phase) -> void:
 	# A whistled play is not a bottled-in breakout — resolve any open episode
 	# as STOPPAGE rather than letting it age into the TIMEOUT bucket.
 	breakout_episodes.close_on_stoppage()
+	oz_possessions.close_on_stoppage()
 
 
 # Host: play stopped before anyone established possession off a faceoff, so
@@ -1658,6 +1667,7 @@ func _wire_subsystems() -> void:
 	add_child(_debug_overlay)
 	shape_tally.reset()
 	breakout_episodes.reset()
+	oz_possessions.reset()
 	shape_tally_armed = false
 	# Dev-only surface: no overlay in a shipped build, so F6 can never arm the
 	# per-tick sampling there (same gate NetworkDebugOverlay's toasts use).
@@ -3600,8 +3610,10 @@ func _start_pending_shot_from_carrier() -> void:
 	# mouth and logs as a missed shot attempt from the passer's own end (#579).
 	# The controller latched it just before emitting puck_release_requested.
 	var shooter: PlayerRecord = _registry.get_record(shooter_peer_id)
+	_oz_unread_shot = false
 	if shooter != null and shooter.controller != null:
 		_shot_tracker.note_release_intent(shooter.controller.last_release_was_shot)
+		_oz_unread_shot = shooter.controller.last_release_was_shot
 
 
 # Re-reads the pending shot's on-net flag from the puck's live ballistic
@@ -3683,6 +3695,22 @@ func _note_shot_trajectory() -> void:
 				Vector4.INF, Vector4.INF, AIActionScoring.DEFAULT_LOFT_TANS,
 				_shot_release_spread())
 		_shot_tracker.note_xg(xg)
+		if _oz_unread_shot and shape_tally_armed:
+			oz_possessions.note_shot(shooter_team, xg, pos, directed_line_z,
+					_teammate_at_net_front(shooter_team, directed_line_z))
+	_oz_unread_shot = false
+
+
+# Whether a skater on `team_id` other than the pending shooter stands in the
+# net-front box of the net at `goal_line_z` (AIOzPossessionTracker.is_net_front).
+func _teammate_at_net_front(team_id: int, goal_line_z: float) -> bool:
+	var shooter_peer_id: int = _shot_tracker.get_shooter_peer_id()
+	for s: Skater in _registry.skaters():
+		if _registry.resolve_team_id(s) == team_id \
+				and _registry.resolve_peer_id(s) != shooter_peer_id \
+				and AIOzPossessionTracker.is_net_front(s.global_position, goal_line_z):
+			return true
+	return false
 
 
 # The pending shot's release-difficulty spread — the "can you hit it" half of the

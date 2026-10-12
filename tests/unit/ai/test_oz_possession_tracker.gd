@@ -159,3 +159,15 @@ func test_long_range_shots_split_by_net_front_presence() -> void:
 func test_every_outcome_has_a_name() -> void:
 	for outcome: int in AIOzPossessionTracker.OUTCOME_COUNT:
 		assert_ne(AIOzPossessionTracker.outcome_name(outcome), "?")
+
+
+func test_loss_rate_counts_turnovers_and_exits_not_shots() -> void:
+	_run(DEEP, TEAM, 121)   # 1 s
+	_run(DEEP, OPP, 1)      # turnover
+	_run(DEEP, TEAM, 121)   # 1 s
+	_run(OUT, TEAM, 1)      # exit, after one more sample of exposure
+	_run(DEEP, TEAM, 121)   # 1 s
+	_t.note_shot(TEAM, 0.1, Vector3(0.0, 0.0, DEEP), GOAL_Z, false)
+	var exposure: float = _t.seconds(TEAM)
+	assert_almost_eq(_t.loss_rate(TEAM), 2.0 / exposure, 1e-6,
+			"two losses over the controlled time; the shot is not one")

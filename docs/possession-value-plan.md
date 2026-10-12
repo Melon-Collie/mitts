@@ -1,7 +1,9 @@
 # Possession value — the shot pays for the puck it spends
 
-Status: **Phase A landed** (measurement, no behavior change; §6). Bar form agreed;
-the four design decisions are settled in §10.
+Status: **Phase A landed** (measurement, no behavior change; §6). **Phase B is
+parked** pending real-play loss rates (§6.1): it was built and measured, and its
+`h` read needs real data before it can be chosen. Bar form agreed; the design
+decisions are settled in §10.
 
 **Scope.** The in-zone carrier's decision whether a shot is worth releasing
 (`AIRoleCarrier._pick_commit_phase`). Both 3v3 and 5v5. Passes, the dump, carry
@@ -295,15 +297,48 @@ without a net-front man. Goals per OZ possession needs real goals, so it is a
 playtest and logged-play number. In the sims, xG per episode stands in for it.
 
 **Gate before Phase B:** passed for `r` (see above). `P_lose` has no measurement
-until logged games accumulate. Phase B either waits for it or starts from a stated
-prior; that is a decision for the user (§10).
+until logged games accumulate; Phase B was built on the 0.7 prior (§6.1).
+
+### 6.1 Phase B finding: the retention read is not the loss rate
+
+Phase B was built as planned and measured, then parked (commit `48957c6`, reverted
+in the next commit; restore it by reverting the revert). The finding:
+
+- **`h` read from the best retention option is ~0 almost everywhere.** Some carry
+  route nearly always reads fully safe over its own duration, so `V` sits at its
+  `r·τ` ceiling. The bar becomes a near-flat 0.17 xG (3v3) / 0.14 (5v5), against
+  today's 0.05. It only drops when the carrier is swarmed with no safe route.
+- **The realized loss rate is nowhere near 0.** In the Phase A harness, controlled
+  possession ended in a turnover or exit at about 0.4/s (3v3 0.44, 5v5 0.39,
+  pooled). Plugging that in as `h` puts the bar back at about 0.05, which would
+  mean today's constant was roughly right.
+- **The harness with Phase B's bar** (vs the Phase A baseline): xG per shot rose
+  25–65% in every row, but 5v5 Normal took 34 → 20 shots with turnovers 30 → 41,
+  and long-range shots went 8 → 0.
+
+The two readings disagree by a factor of ~3 in the bar, and the harness cannot
+settle it, because its possessions die unrealistically fast (half end in a
+turnover within ~1.5 s). So the real loss rate is measured from play first:
+`AIOzPossessionTracker` is sampled live behind the F6 overlay (debug builds),
+which shows per team `r`, the loss rate `h`, shots and xG per shot, and who had
+the puck after each shot that did not score (`next_control`, i.e. `P_lose`). F7
+dumps the numbers to `user://shape_tally.json` under `oz_possession`.
+
+What the live numbers decide:
+
+- **Real `h` well below ~0.4/s** (possessions last several seconds): the safe-route
+  read is closer to truth, and Phase B as built is the right shape. Recalibrate `r`
+  from live play and restore it.
+- **Real `h` near ~0.4/s**: the bar is about right today. Patience then comes from
+  the one-ply compete instead (option D, a wider developing-play hold), and the
+  point-shot half from Phase C's per-shot `P_lose`.
 
 ## 7. Phases
 
 | Phase | Content | Behavior change |
 |---|---|---|
 | **A** *(landed)* | Tracker + harness scenarios + baseline scorecard. `next_control` migration and logging. | none |
-| **B** | `AIPossessionValue` (pure, static, engine-free). `h` from the best retention option, `r` per team size from the sims, `P_lose` from logged play (or a stated prior until it accumulates), `C` from `turnover_cost`. Replaces `SHOT_MIN_VALUE` at the one call site. | yes; **playtested on its own** |
+| **B** *(parked, §6.1)* | `AIPossessionValue` (pure, static, engine-free). `h` from the best retention option, `r` per team size from the sims, `P_lose` from logged play (or a stated prior until it accumulates), `C` from `turnover_cost`. Replaces `SHOT_MIN_VALUE` at the one call site. | yes; **playtested on its own** |
 | **C** | Per-shot `P_lose`: net-front race + outcome mix by save surface. | yes; separate playtest |
 | **D** *(optional)* | State-dependent `r` from cached teammate spot values. | yes |
 
@@ -375,9 +410,8 @@ the point with traffic. The shot-opportunity audit
   pressure is lower still. It is a modelling choice to know about, not a bug.
 - **Bots training on bots.** A sim-measured `r` is the rate the bots manage against
   bots. If they are bad at cycling, `r` is low and patience understates itself.
-  Logged play cannot correct it yet: `shot_events` records shots, not possession
-  time. Sampling `AIOzPossessionTracker` live from `GameManager`, the way the
-  breakout tracker is, would.
+  `shot_events` records shots, not possession time, so the correction comes from
+  the live tally behind the F6 overlay (§6.1).
 
 - **Phase B's fixed `P_lose` moves point shots uniformly.** Until Phase C, retention
   does not depend on traffic, so if the measured `P_lose` comes in below the implied

@@ -140,6 +140,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.keycode == KEY_F8:
 		GameManager.shape_tally.reset()
 		GameManager.breakout_episodes.reset()
+		GameManager.oz_possessions.reset()
 		_flash("✓ Tallies reset")
 		get_viewport().set_input_as_handled()
 
@@ -149,7 +150,12 @@ func _unhandled_input(event: InputEvent) -> void:
 # on platform/session), stdout (survives in the console log), and a file under
 # user:// whose absolute path the toast reports so it can be opened directly.
 func _dump() -> void:
-	var json: String = JSON.stringify(GameManager.shape_tally.to_dict(), "\t")
+	var data: Dictionary = GameManager.shape_tally.to_dict()
+	data["oz_possession"] = GameManager.oz_possessions.to_dict("live")
+	for team_id: int in AIOzPossessionTracker.TEAM_COUNT:
+		data["oz_possession"]["team_%d" % team_id]["after_shots"] = \
+				_after_shot_counts(team_id)
+	var json: String = JSON.stringify(data, "\t")
 	# Each sink is reported on its own, so a partial failure names itself.
 	DisplayServer.clipboard_set(json)
 	var clip_ok: bool = DisplayServer.clipboard_get() == json
@@ -167,6 +173,22 @@ func _dump() -> void:
 			ProjectSettings.globalize_path(path) if file_ok else "FAILED"]
 	_flash("✓ Dump: " + _dump_status)
 	_refresh()
+
+
+# Resolved next_control of `team_id`'s shots that did not score, this game.
+func _after_shot_counts(team_id: int) -> Dictionary:
+	var out: Dictionary = {"ours": 0, "theirs": 0, "whistle": 0}
+	for e: ShotEvent in GameManager.get_shot_events():
+		if e.team_id != team_id or e.outcome == ShotEvent.Outcome.GOAL:
+			continue
+		match e.next_control:
+			ShotEvent.NextControl.OURS:
+				out["ours"] += 1
+			ShotEvent.NextControl.THEIRS:
+				out["theirs"] += 1
+			ShotEvent.NextControl.WHISTLE:
+				out["whistle"] += 1
+	return out
 
 
 func _flash(msg: String) -> void:
@@ -259,6 +281,25 @@ func _refresh() -> void:
 					COL_HOME if team_id == 0 else COL_AWAY,
 					"HOME" if team_id == 0 else "AWAY",
 					n, " · ".join(parts)])
+	# The possession-value inputs (docs/possession-value-plan.md §6): r and the
+	# loss rate h from the live OZ tally, and who had the puck after each shot
+	# that did not score (shot_events.next_control), which is P_lose.
+	var oz: AIOzPossessionTracker = GameManager.oz_possessions
+	if oz != null:
+		for team_id: int in AIOzPossessionTracker.TEAM_COUNT:
+			var n: int = oz.total(team_id)
+			if n == 0:
+				continue
+			var after: Dictionary = _after_shot_counts(team_id)
+			summary.append(("[color=#%s]· %s OZ possession (n=%d, %.0fs) — r %.3f xG/s · "
+					+ "loss %.2f/s · %d shots %.3f xG/shot · after a miss: ours %d · theirs %d · "
+					+ "whistle %d[/color]") % [
+					COL_HOME if team_id == 0 else COL_AWAY,
+					"HOME" if team_id == 0 else "AWAY", n, oz.seconds(team_id),
+					oz.xg_rate(team_id), oz.loss_rate(team_id),
+					oz.count(team_id, AIOzPossessionTracker.Outcome.SHOT),
+					oz.mean_xg_per_shot(team_id),
+					after["ours"], after["theirs"], after["whistle"]])
 	if _dump_status != "":
 		summary.append("[color=#%s]· last dump — %s[/color]" % [
 				COL_DIM, _dump_status])

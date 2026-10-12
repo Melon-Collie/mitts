@@ -173,5 +173,25 @@ func test_renders_the_breakout_outcome_block() -> void:
 			"the live breakout block is rendered")
 	assert_string_contains(txt, "clean-exit 1",
 			"and carries the harness's own outcome labels")
+
+
+# ── Live OZ possession ───────────────────────────────────────────────────────
+
+func test_renders_the_oz_possession_block() -> void:
+	_with_brains()
+	GameManager.shape_tally.accumulate(0, AIPossessionState.State.OZONE, 5.0)
+	var oz := AIOzPossessionTracker.new()
+	var prev: AIOzPossessionTracker = GameManager.oz_possessions
+	GameManager.oz_possessions = oz
+	var deep := Vector3(0, 0, -(GameRules.BLUE_LINE_Z + 6.0))
+	for _i: int in 121:
+		oz.tick(0, -GameRules.GOAL_LINE_Z, deep, 0, 1.0 / 120.0)
+	oz.note_shot(0, 0.1, deep, -GameRules.GOAL_LINE_Z, false)
+	_overlay._refresh()
+	var txt: String = _text()
+	GameManager.oz_possessions = prev
+	assert_string_contains(txt, "HOME OZ possession",
+			"the live OZ possession block is rendered")
+	assert_string_contains(txt, "r 0.100 xG/s", "with the measured rate")
 	assert_lt(txt.find("HOME breakouts"), txt.find("[table=7]"),
 			"above the table, so it cannot be clipped")

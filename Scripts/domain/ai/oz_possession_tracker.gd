@@ -1,11 +1,12 @@
 class_name AIOzPossessionTracker
 extends RefCounted
 
-# Offensive-zone possession tally — the Phase A instrument of
-# docs/possession-value-plan.md. Its headline is `xg_rate`: the xG a team's
-# controlled offensive-zone possession produces per second, the `r` in the
-# possession-value model. A debug instrument: nothing reads it back into a
-# decision.
+# Offensive-zone possession tally — the measurement instrument of
+# docs/possession-value-plan.md. Its two headlines are the possession model's
+# inputs: `xg_rate`, the xG controlled offensive-zone possession produces per
+# second (`r`), and `loss_rate`, how fast that possession is lost (`h`). Sampled
+# by the OZ harness and, behind the F6 overlay, by live play. A debug
+# instrument: nothing reads it back into a decision.
 #
 # ── An EPISODE is one stretch of CONTROLLED possession in the zone ───────────
 # Starts when OUR carrier has the puck ESTABLISHED in the attacking zone (past
@@ -185,6 +186,16 @@ func xg_rate(team_id: int) -> float:
 	return xg_sum(team_id) / s if s > 0.0 else 0.0
 
 
+# Episodes that ended by losing the zone (a turnover or an exit) per second of
+# controlled possession — the possession's realized loss hazard `h`. A shot is
+# not a loss here: what follows it is P_lose, measured separately.
+func loss_rate(team_id: int) -> float:
+	var s: float = seconds(team_id)
+	if s <= 0.0:
+		return 0.0
+	return float(count(team_id, Outcome.TURNOVER) + count(team_id, Outcome.EXIT)) / s
+
+
 func mean_xg_per_shot(team_id: int) -> float:
 	var n: int = count(team_id, Outcome.SHOT)
 	return xg_sum(team_id) / float(n) if n > 0 else 0.0
@@ -234,6 +245,7 @@ func to_dict(mode_label: String) -> Dictionary:
 			"seconds": seconds(team_id),
 			"xg": xg_sum(team_id),
 			"xg_per_s": xg_rate(team_id),
+			"loss_per_s": loss_rate(team_id),
 			"xg_per_shot": mean_xg_per_shot(team_id),
 			"long_shots_net_front": long_range_shots(team_id, true),
 			"long_shots_clear": long_range_shots(team_id, false),
