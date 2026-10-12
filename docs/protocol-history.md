@@ -303,3 +303,6 @@ here whenever you bump, in the same format.
 #      every peer when an NHL-ruleset player starts or stops owing a tag-up, for
 #      the offside banner and teammate name plates (NHL never ghosts, so
 #      is_ghost could not carry it).
+# v67: notify_faceoff_positions(positions, preroll) — the host now holds the
+#      faceoff countdown until the last skater has skated in, and sends that
+#      hold, since a client cannot measure remote skaters' glides itself.

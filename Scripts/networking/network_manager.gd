@@ -71,7 +71,7 @@ signal puck_out_of_play_received
 signal icing_called_received
 signal goalie_freeze_called_received
 signal offside_called_received
-signal faceoff_positions_received(positions: Array)
+signal faceoff_positions_received(positions: Array, preroll: float)
 signal game_reset_received(new_game_id: String)
 signal stats_received(data: Array)
 # The game's final stats, sent once at the horn — a client's cue that its own
@@ -2101,13 +2101,14 @@ func notify_offside_called_to_all() -> void:
 func notify_offside_called() -> void:
 	NetworkSimManager.send(func() -> void: offside_called_received.emit(), [], true)
 
-func send_faceoff_positions(positions: Array) -> void:
+func send_faceoff_positions(positions: Array, preroll: float) -> void:
 	for peer_id in connected_peer_ids():
-		notify_faceoff_positions.rpc_id(peer_id, positions)
+		notify_faceoff_positions.rpc_id(peer_id, positions, preroll)
 
 @rpc("authority", "reliable")
-func notify_faceoff_positions(positions: Array) -> void:
-	NetworkSimManager.send(func(p: Array) -> void: faceoff_positions_received.emit(p), [positions], true)
+func notify_faceoff_positions(positions: Array, preroll: float) -> void:
+	NetworkSimManager.send(func(p: Array, r: float) -> void: faceoff_positions_received.emit(p, r),
+			[positions, preroll], true)
 
 func notify_reset_to_all(new_game_id: String = "") -> void:
 	for peer_id in connected_peer_ids():

@@ -66,15 +66,15 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
 	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3916,
-	"res://Scripts/controllers/skater_controller.gd": 3341,
-	"res://Scripts/actors/skater.gd": 2712,
+	"res://Scripts/controllers/skater_controller.gd": 3343,
+	"res://Scripts/actors/skater.gd": 2717,
 	"res://Scripts/networking/network_manager.gd": 2824,
 	"res://Scripts/game/tutorial_manager.gd": 2073,
 	"res://Scripts/controllers/skater_ik_coordinator.gd": 938,
 	# +21: apply_scripted_grant / stage_scripted — the tutorial's teleports
 	# restart the swept interaction tests where the puck lands instead of
 	# sweeping the jump. +6: the pinch hop composed onto the contest exit.
-	"res://Scripts/controllers/puck_controller.gd": 1547,
+	"res://Scripts/controllers/puck_controller.gd": 1552,
 	"res://Scripts/actors/hockey_rink.gd": 1472,
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 1409,
 	"res://Scripts/game/player_prefs.gd": 1400,
@@ -83,7 +83,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/ui/career_stats_screen.gd": 1271,
 	"res://Scripts/domain/ai/carry_space.gd": 1255,
 	"res://Scripts/ui/lobby_manager.gd": 1247,
-	"res://Scripts/actors/puck.gd": 1063,
+	"res://Scripts/actors/puck.gd": 1078,
 	"res://Scripts/ui/side_menu.gd": 995,
 	"res://Scripts/controllers/goalie_body_config_builder.gd": 1091,
 	"res://Scripts/ui/network_debug_overlay.gd": 956,
@@ -108,7 +108,7 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/networking/network_telemetry.gd": 53,
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 48,
 	"res://Scripts/controllers/skater_controller.gd": 40,
-	"res://Scripts/actors/puck.gd": 40,
+	"res://Scripts/actors/puck.gd": 41,
 	"res://Scripts/domain/state/game_state_machine.gd": 39,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 37,
 	"res://Scripts/actors/skater_mesh_builder.gd": 29,

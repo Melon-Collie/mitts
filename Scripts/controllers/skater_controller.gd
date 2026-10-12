@@ -1122,6 +1122,8 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	process_physics_priority = -1  # Run before Skater's integration step
 	skater.body_checked_player.connect(_on_body_checked_player)
 	skater.body_check_received.connect(_on_body_check_received)
+	if game_state.has_method("is_movement_locked"):
+		skater.contact_suspended_provider = game_state.is_movement_locked
 	_ik.setup(skater, self, _skating)
 	_shot_pose.setup(skater, _sm, _aiming, _ik, self)
 	var _cb := SkaterStateMachine.Callbacks.new()

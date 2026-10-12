@@ -225,8 +225,7 @@ static func faceoff_staging_position(target: Vector3, dot_xz: Vector2, team_id: 
 
 # Glide time for a skater covering `distance` metres to its dot at the target
 # skate pace, clamped to [min_dur, max_dur]. A close player skates in briefly
-# and settles; a far one takes the full window. max_dur is set by the caller
-# from the extended prep window so everyone arrives before the drop.
+# and settles; a far one is capped at the caller's longest glide.
 static func skate_in_duration(distance: float, min_dur: float, max_dur: float) -> float:
 	var raw: float = distance / maxf(GameRules.FACEOFF_SKATE_IN_SPEED, 0.01)
 	return clampf(raw, min_dur, max_dur)

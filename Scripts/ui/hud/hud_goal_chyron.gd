@@ -33,6 +33,11 @@ var _wash_label: Label = null
 var _wash_tween: Tween = null
 
 var _countdown_tween: Tween = null
+# Drains across the numbered countdown and empties on the drop, so a swing can be
+# timed between the whole seconds the label shows.
+var _sweep_track: Control = null
+var _sweep_fill: ColorRect = null
+var _sweep_tween: Tween = null
 var _pending_intro_secs: float = 0.0
 var _pending_skate_secs: float = 0.0
 var _pending_period_intro_secs: float = 0.0
@@ -94,6 +99,17 @@ func build(scale_root: Control) -> void:
 	_phase_label = HudChrome.lbl("", 44, MenuStyle.BROADCAST_CREAM)
 	_phase_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(_phase_label)
+
+	_sweep_track = Control.new()
+	_sweep_track.custom_minimum_size = Vector2(0.0, 6.0)
+	_sweep_track.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_sweep_track.visible = false
+	vbox.add_child(_sweep_track)
+	_sweep_fill = ColorRect.new()
+	_sweep_fill.color = MenuStyle.BROADCAST_CREAM
+	_sweep_fill.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_sweep_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_sweep_track.add_child(_sweep_fill)
 
 	# Hero row for goal phase: the scorer's name, big and bold. Color is
 	# overridden per-goal to the scoring team's secondary color.
@@ -221,8 +237,8 @@ func on_replay_stopped() -> void:
 	# (e.g. FACEOFF) appears at rest.
 	# Skip the hide if the faceoff countdown is already up: on clients the
 	# host's faceoff_positions RPC can land before our local replay's outro
-	# ends, in which case the countdown is already showing "FACEOFF IN 2" and
-	# hiding the wrapper here would erase it.
+	# ends, in which case the countdown banner is already up and hiding the
+	# wrapper here would erase it.
 	if _countdown_tween != null and _countdown_tween.is_valid():
 		return
 	_wrapper.visible = false
@@ -340,38 +356,50 @@ func start_faceoff_countdown() -> void:
 			matchup_intro_dismissed.emit()
 			if _wrapper != null:
 				_wrapper.visible = true
-			if _phase_label != null:
-				_phase_label.text = _faceoff_in(2))
+			_begin_numbered_countdown(prep))
 	elif period_card > 0.0:
 		# Period-start card over the camera sweep + bench skate-on, then the
 		# normal countdown lands on the extended drop.
 		_phase_label.text = HudChrome.period_intro_title(period_num)
 		t.tween_interval(period_card)
-		t.tween_callback(func() -> void:
-			if _phase_label != null:
-				_phase_label.text = _faceoff_in(2))
+		t.tween_callback(_begin_numbered_countdown.bind(prep))
 	elif skate > 0.0:
 		# Players are skating in — hold on a plain banner, then start the numbered
 		# countdown so it ends on the extended drop.
 		_phase_label.text = tr(&"FACEOFF")
 		t.tween_interval(skate)
-		t.tween_callback(func() -> void:
-			if _phase_label != null:
-				_phase_label.text = _faceoff_in(2))
+		t.tween_callback(_begin_numbered_countdown.bind(prep))
 	else:
-		_phase_label.text = _faceoff_in(2)
-	# Half-second tween to "1" mid-window if prep >= 2s; final "DROP!" sits in
-	# the FACEOFF phase entry. Steps are evenly split so 2.0s → ~1.0s per beat.
+		_begin_numbered_countdown(prep)
+	# "1" lands mid-window; "DROP!" sits in the FACEOFF phase entry.
 	t.tween_interval(prep * 0.5)
 	t.tween_callback(func() -> void:
 		if _phase_label != null:
 			_phase_label.text = _faceoff_in(1))
 	_countdown_tween = t
 
+# "FACEOFF IN 2" and the sweep, which drains to empty on the drop.
+func _begin_numbered_countdown(prep: float) -> void:
+	if _phase_label != null:
+		_phase_label.text = _faceoff_in(2)
+	if _sweep_fill == null:
+		return
+	if _sweep_tween != null and _sweep_tween.is_valid():
+		_sweep_tween.kill()
+	_sweep_track.visible = true
+	_sweep_fill.anchor_right = 1.0
+	_sweep_tween = create_tween()
+	_sweep_tween.tween_property(_sweep_fill, "anchor_right", 0.0, prep)
+
 func stop_faceoff_countdown() -> void:
 	if _countdown_tween != null and _countdown_tween.is_valid():
 		_countdown_tween.kill()
 	_countdown_tween = null
+	if _sweep_tween != null and _sweep_tween.is_valid():
+		_sweep_tween.kill()
+	_sweep_tween = null
+	if _sweep_track != null:
+		_sweep_track.visible = false
 	# The matchup screen lives under this tween's watch (its dismissal is a
 	# tween callback), so an interrupted countdown must take it down too.
 	matchup_intro_dismissed.emit()
