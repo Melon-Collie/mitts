@@ -32,9 +32,9 @@ void NativePuckStep::set_rink_geometry(double p_inner_half_width, double p_inner
 	corner_center_z = p_corner_center_z;
 }
 
-void NativePuckStep::set_puck_params(double p_board_bounce, double p_board_friction,
+void NativePuckStep::set_puck_params(double p_board_cor_scale, double p_board_friction,
 		double p_ice_decel, double p_gravity, double p_rest_height) {
-	board_bounce = p_board_bounce;
+	board_cor_scale = p_board_cor_scale;
 	board_friction = p_board_friction;
 	ice_decel = p_ice_decel;
 	gravity = p_gravity;
@@ -45,7 +45,7 @@ void NativePuckStep::set_net_geometry(double p_goal_line_z, double p_net_half_wi
 		double p_net_post_radius, double p_net_depth, double p_net_back_half_width,
 		double p_net_height, double p_net_crown_half_width,
 		double p_net_mouth_corner_radius, double p_net_top_depth,
-		double p_puck_half_height, double p_post_restitution, double p_net_restitution) {
+		double p_puck_half_height, double p_post_cor_scale, double p_net_restitution) {
 	goal_line_z = p_goal_line_z;
 	net_half_width = p_net_half_width;
 	net_post_radius = p_net_post_radius;
@@ -56,8 +56,16 @@ void NativePuckStep::set_net_geometry(double p_goal_line_z, double p_net_half_wi
 	net_mouth_corner_radius = p_net_mouth_corner_radius;
 	net_top_depth = p_net_top_depth;
 	puck_half_height = p_puck_half_height;
-	post_restitution = p_post_restitution;
+	post_cor_scale = p_post_cor_scale;
 	net_restitution = p_net_restitution;
+}
+
+void NativePuckStep::set_restitution_curve(double p_cor_slow, double p_slow_speed,
+		double p_cor_fast, double p_fast_speed) {
+	cor_slow = p_cor_slow;
+	cor_slow_speed = p_slow_speed;
+	cor_fast = p_cor_fast;
+	cor_fast_speed = p_fast_speed;
 }
 
 void NativePuckStep::set_substep_params(double p_range_z, double p_substep_m, int64_t p_max_substeps) {
@@ -99,6 +107,14 @@ Vector2 NativePuckStep::clamp_to_rink_inner(const Vector2 &world_xz, double marg
 	return world_xz;
 }
 
+// ── PuckRestitution.rigid_wall ───────────────────────────────────────────────
+
+double NativePuckStep::rigid_wall_cor(double normal_speed) const {
+	const double t = CLAMP((normal_speed - cor_slow_speed) / (cor_fast_speed - cor_slow_speed),
+			0.0, 1.0);
+	return cor_slow + (cor_fast - cor_slow) * t;
+}
+
 // ── PuckCollisionRules.deflect_velocity (defaults: no falloff, full tangent) ─
 
 Vector3 NativePuckStep::deflect_velocity_h(const Vector3 &incoming, const Vector3 &normal,
@@ -129,10 +145,22 @@ Vector3 NativePuckStep::reflect_3d(const Vector3 &vel, const Vector3 &normal, do
 	return vel - n * (real_t)((1.0 + restitution) * vn);
 }
 
+// ── PuckGeometryCollision.reflect_off_pipe ───────────────────────────────────
+
+Vector3 NativePuckStep::reflect_off_pipe(const Vector3 &vel, const Vector3 &normal) const {
+	const Vector3 n = normal.normalized();
+	const double vn = vel.dot(n);
+	if (vn >= 0.0) {
+		return vel;
+	}
+	const double e = post_cor_scale * rigid_wall_cor(-vn);
+	return vel - n * (real_t)((1.0 + e) * vn);
+}
+
 // ── AITrajectory._step ───────────────────────────────────────────────────────
 
 void NativePuckStep::step_core(Vector3 &p, Vector3 &v, double dt,
-		double decel, double bounce, const Vector3 &accel,
+		double decel, double cor_scale, const Vector3 &accel,
 		double max_speed_cap, double b_friction, double board_margin) const {
 	if (accel != Vector3()) {
 		v += accel * (real_t)dt;
@@ -149,19 +177,20 @@ void NativePuckStep::step_core(Vector3 &p, Vector3 &v, double dt,
 
 	// The puck caroms on its EDGE — see AITrajectory._step's board_margin.
 	const Vector2 clamped_xz = clamp_to_rink_inner(Vector2(p.x, p.z), board_margin);
-	if (bounce > 0.0) {
+	if (cor_scale > 0.0) {
 		const Vector2 outward(p.x - clamped_xz.x, p.z - clamped_xz.y);
 		if ((double)outward.length_squared() > 1e-9) {
 			const Vector2 n = outward.normalized();
 			Vector2 v_xz(v.x, v.z);
 			const double vn = (double)v_xz.dot(n);
 			if (vn > 0.0) {
-				v_xz -= n * (real_t)((1.0 + bounce) * vn);
+				const double e = cor_scale * rigid_wall_cor(vn);
+				v_xz -= n * (real_t)((1.0 + e) * vn);
 				if (b_friction > 0.0) {
 					const Vector2 v_tan = v_xz - n * v_xz.dot(n);
 					const double t_speed = v_tan.length();
 					if (t_speed > 1e-6) {
-						const double drop = MIN(b_friction * (1.0 + bounce) * vn,
+						const double drop = MIN(b_friction * (1.0 + e) * vn,
 								t_speed * BOARD_TANGENTIAL_MAX_LOSS);
 						const double new_t = MAX(t_speed - drop, 0.0);
 						v_xz += v_tan * (real_t)(new_t / t_speed - 1.0);
@@ -197,11 +226,11 @@ void NativePuckStep::step_puck_3d(Vector3 &p, Vector3 &v, double dt, double ice_
 	const bool airborne = (double)p.y > ice_height + AIRBORNE_POS_EPS_M ||
 			Math::abs((double)v.y) > AIRBORNE_VY_EPS_M_S;
 	if (!airborne) {
-		step_core(p, v, dt, ice_decel, board_bounce, Vector3(), 0.0, board_friction,
+		step_core(p, v, dt, ice_decel, board_cor_scale, Vector3(), 0.0, board_friction,
 				puck_radius);
 		return;
 	}
-	step_core(p, v, dt, 0.0, board_bounce,
+	step_core(p, v, dt, 0.0, board_cor_scale,
 			Vector3(0.0f, (real_t)-gravity, 0.0f), 0.0, board_friction, puck_radius);
 	if ((double)p.y <= ice_height) {
 		p.y = (real_t)ice_height;
@@ -239,7 +268,9 @@ bool NativePuckStep::resolve_one_post(Vector3 &p, Vector3 &v, double puck_radius
 	const Vector2 n = offset / (real_t)d;
 	const Vector3 n3(n.x, 0.0f, n.y);
 	const Vector2 ejected = post_xz + n * (real_t)combined_r;
-	const Vector3 reflected_h = deflect_velocity_h(v, n3, post_restitution);
+	const double e = post_cor_scale *
+			rigid_wall_cor(Math::abs((double)v.x * (double)n.x + (double)v.z * (double)n.y));
+	const Vector3 reflected_h = deflect_velocity_h(v, n3, e);
 	p = Vector3(ejected.x, p.y, ejected.y);
 	v = Vector3(reflected_h.x, v.y, reflected_h.z);
 	return true;
@@ -300,7 +331,7 @@ bool NativePuckStep::resolve_crossbar_bends(Vector3 &p, Vector3 &v, double puck_
 	}
 	const Vector3 n = offset / (real_t)d;
 	p = axis + n * (real_t)combined_r;
-	v = reflect_3d(v, n, post_restitution);
+	v = reflect_off_pipe(v, n);
 	return true;
 }
 
@@ -318,7 +349,7 @@ bool NativePuckStep::resolve_crossbar(Vector3 &p, Vector3 &v, double puck_radius
 	const Vector2 n = dyz / (real_t)d;
 	const Vector2 ejected = Vector2((real_t)net_height, (real_t)end_z) + n * (real_t)combined_r;
 	p = Vector3(p.x, ejected.x, ejected.y);
-	v = reflect_3d(v, Vector3(0.0f, n.x, n.y), post_restitution);
+	v = reflect_off_pipe(v, Vector3(0.0f, n.x, n.y));
 	return true;
 }
 
@@ -615,14 +646,17 @@ void NativePuckStep::_bind_methods() {
 			"corner_center_x", "corner_center_z"),
 			&NativePuckStep::set_rink_geometry);
 	ClassDB::bind_method(D_METHOD("set_puck_params",
-			"board_bounce", "board_friction", "ice_decel", "gravity", "rest_height"),
+			"board_cor_scale", "board_friction", "ice_decel", "gravity", "rest_height"),
 			&NativePuckStep::set_puck_params);
 	ClassDB::bind_method(D_METHOD("set_net_geometry",
 			"goal_line_z", "net_half_width", "net_post_radius", "net_depth",
 			"net_back_half_width", "net_height", "net_crown_half_width",
 			"net_mouth_corner_radius",
-			"net_top_depth", "puck_half_height", "post_restitution", "net_restitution"),
+			"net_top_depth", "puck_half_height", "post_cor_scale", "net_restitution"),
 			&NativePuckStep::set_net_geometry);
+	ClassDB::bind_method(D_METHOD("set_restitution_curve",
+			"cor_slow", "slow_speed", "cor_fast", "fast_speed"),
+			&NativePuckStep::set_restitution_curve);
 	ClassDB::bind_method(D_METHOD("set_substep_params", "range_z", "substep_m", "max_substeps"),
 			&NativePuckStep::set_substep_params);
 	ClassDB::bind_method(D_METHOD("frame_substeps", "pos_z", "speed", "dt"),

@@ -409,9 +409,12 @@ const PUCK_ICE_DECEL_M_S2: float = ICE_FRICTION * GRAVITY_M_S2
 # a grounded stick, and where it must land to be receivable) agrees with
 # the live interaction gate.
 const PUCK_AIRBORNE_HEIGHT_M: float = 0.05
-# Board restitution coefficient — sole authority, applied by the analytic carom.
-# Tune the rim's liveliness here; nothing else describes the boards.
-const PUCK_BOARD_BOUNCE: float = 0.4
+# Fraction of the frozen puck's rigid-wall COR (PuckRestitution.rigid_wall) the
+# boards keep — sole authority, applied by the analytic carom. 1.0: a dasher board
+# is rigid next to a frozen puck, so the puck's own losses set the rebound. That
+# lands in the 30–40% band a kickplate patent (US8696478) calls desirable for
+# high-level hockey.
+const PUCK_BOARD_COR_SCALE: float = 1.0
 # Board kinetic friction coefficient. On a carom the boards bleed tangential speed
 # via Coulomb friction proportional to the normal impulse — this is what stops a
 # hard rim-around from circling the rink forever (ice friction alone is far too
