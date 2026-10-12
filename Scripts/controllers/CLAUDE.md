@@ -525,7 +525,14 @@ backward C-cuts (`_ccut_path`, out and ahead and back in) and the side-step
 glide, so each skate holds its place on the ice while the hips pass over it,
 and the cycle is laid over the ground so one shuffle press is one cycle; the
 brake's steps latch in `_sense_step`, `test_shuffle_steps.gd`). The glide is the stance with a joint-space
-edge sway and, out of a turn, a light inside knee. Three things make them stand on the ice:
+edge sway and, out of a turn, a light inside knee; as it comes still it stands on
+the ice like the authored states (`SkaterLocomotion.on_ice`, `1 − glide × speed`)
+on soft knees (`rest_stance`), so a standing skater's lean settles over two
+planted blades instead of rolling one off the ice — no knee change can put a
+blade back down there (`test_blades_stand_on_the_ice.gd`, the stop from the
+side). The reach sit still follows `authored`, the strokes' own share, and each
+stroke's reach counts by its weight in it, so nothing switches on as a state
+fades. Three things make them stand on the ice:
 
 - **They sit as low as their pushes need.** A leg can only reach so far out at
   the hip height it is at, so the crouch moves, by the authored share, toward

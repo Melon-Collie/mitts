@@ -48,7 +48,7 @@ namespace mitts {
 	X(pivot_stance) X(pivot_step_begin) X(pivot_yaw_speed) X(reversal_lead_m) \
 	X(reversal_spread_m) X(reversal_stance) X(reversal_toe_in_deg) \
 	X(shuffle_blend_speed) X(shuffle_intensity) X(shuffle_lateral_speed) \
-	X(shuffle_lift_m) X(shuffle_stance) X(shuffle_step_distance) X(shuffle_step_speed) \
+	X(rest_stance) X(shuffle_lift_m) X(shuffle_stance) X(shuffle_step_distance) X(shuffle_step_speed) \
 	X(stance_full_speed_fraction) X(stance_hip_deg) X(stance_push_gain) \
 	X(stance_sit_gain) X(stance_stride_gain) X(stride_bob_m) X(stride_cadence) \
 	X(stride_cadence_max_rate) X(stride_effort_ref_accel) X(stride_effort_speed) \
@@ -137,6 +137,7 @@ private:
 	double r_push = 0.0;
 	double push_reach = 0.0;
 	double authored = 0.0;
+	double on_ice = 0.0;
 	double sliding = 0.0;
 	double stance = 0.0;
 	double bob = 0.0;
@@ -145,6 +146,7 @@ private:
 	double trunk_roll = 0.0;
 	bool stop_latched = false;
 	bool stepping = false;
+	godot::Vector2 last_travel = godot::Vector2(0.0, 1.0);
 	godot::Vector2 step_dir = godot::Vector2(1.0, 0.0);
 	double step_hold = 0.0;
 	double cross_signed = 0.0;
@@ -227,7 +229,7 @@ public:
 
 	// SkaterLocomotion.sense, the coordinator's alignment and pivot read, then
 	// SkaterLocomotion.strokes in the aligned hip frame. Returns (the stance
-	// floored by the pivot's and the reach sit's, the authored share).
+	// floored by the pivot's and the reach sit's, the share on the ice).
 	godot::Vector2 locomote(double delta, const godot::Vector3 &velocity, const godot::Vector2 &intent,
 			const godot::Basis &basis, int64_t flags, double hold);
 	// (stride_phase, stop_yaw, travel_align_yaw, pivot_hold)

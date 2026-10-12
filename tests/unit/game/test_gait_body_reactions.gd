@@ -85,6 +85,8 @@ func test_stick_lift_pops_chest_and_releases() -> void:
 
 
 func test_celebration_bounces_knees_and_timer_ages() -> void:
+	_tick(60)
+	var standing: float = _skater.leg_bone_euler(_SHIN_L).x
 	_controller.start_celebration(1.5)
 	var min_shin: float = INF
 	var max_shin_late: float = -INF
@@ -92,11 +94,12 @@ func test_celebration_bounces_knees_and_timer_ages() -> void:
 		_controller.tick_celebration(DT)  # physics-rate aging (was owned by the gait)
 		_coord.apply(DT)
 		min_shin = minf(min_shin, _skater.leg_bone_euler(_SHIN_L).x)
-		if i > 36:  # past the ramp — the pump should return near straight between hops
+		if i > 36:  # past the ramp — the pump should return to standing between hops
 			max_shin_late = maxf(max_shin_late, _skater.leg_bone_euler(_SHIN_L).x)
-	assert_lt(min_shin, -0.25,
-			"the celebration should pump the knees (deepest %.3f rad)" % min_shin)
-	assert_gt(max_shin_late, -0.1,
+	assert_lt(min_shin, standing - 0.25,
+			"the celebration should pump the knees (deepest %.3f rad, standing %.3f)"
+			% [min_shin, standing])
+	assert_gt(max_shin_late, standing - 0.1,
 			"the pump should release between hops, not hold a squat")
 	# The controllers age the timer at physics rate now (tick_celebration), on
 	# every path including wire-fed remotes. A few grace ticks absorb the

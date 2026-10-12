@@ -441,6 +441,7 @@ var carve_lead_m: float = 0.20         # the carve's inside skate leads the outs
 # is input-gated, v15 intent byte) while this floor keeps working knees under
 # a coasting skater, scaled by speed.
 var glide_stance: float = 0.5
+var rest_stance: float = 0.4        # stance floor standing still: soft knees, never locked
 var stride_intensity_speed: float = 6.0   # how fast the legs ease in/out of motion
 var stride_skew: float = 0.3              # push/recovery asymmetry of the stroke (0 = pure sine)
 # The forward stride as a foot path (SkaterLocomotion._stride_path), metres of
@@ -887,7 +888,7 @@ var check_drive_stance: float = 0.6       # legs drive under the hit — the fin
 var stick_lift_trunk_deg: float = 3.0     # slight chest-up pop while working under a stick
 var stick_lift_stance: float = 0.2        # coiled working posture while the blade is up
 var stick_lift_blend_speed: float = 10.0  # how fast the lift read engages/releases
-var celebration_leg_stance: float = 0.6   # knee-pump depth of the celebration bounce
+var celebration_leg_stance: float = 0.6   # knee-pump depth of the celebration bounce, below standing
 
 # ── Celebration Tuning ────────────────────────────────────────────────────────
 # Cosmetic raised-stick goal celebration (SkaterShotPoseCoordinator.

@@ -82,13 +82,18 @@ var r_yaw: float = 0.0
 var l_push: float = 0.0
 var r_push: float = 0.0
 # How far out from under its hip an authored stroke's skate reaches on the ice,
-# metres at leg_scale 1, at that stroke's own amplitude: the crouch has to let a
-# leg get there (GaitPose.reach_hip), by the authored share.
+# metres at leg_scale 1, at that stroke's own amplitude and by its share of the
+# authored mix: the crouch has to let a leg get there (GaitPose.reach_hip), by
+# the authored share.
 var push_reach: float = 0.0
-# The share of the mix authored as where the skates go: GaitPose stands those on
-# the ice. `sliding` is the part of it whose skates scrape along with the body
-# (the stop and the skid) rather than gripping the ice it goes over.
+# The share of the mix authored as where the skates go, whose pushes the crouch
+# sits for. `on_ice` is the share GaitPose stands on the ice: those, and the
+# glide as it comes still — skates under the hips stay put while the lean
+# settles over them, where a coasting glide's legs ride its joint-space sway.
+# `sliding` is the part of it whose skates scrape along with the body (the stop
+# and the skid) rather than gripping the ice it goes over.
 var authored: float = 0.0
+var on_ice: float = 0.0
 var sliding: float = 0.0
 # Crouch engagement before the overlays' floors; vertical body bob (m).
 var stance: float = 0.0
@@ -104,6 +109,7 @@ var _stop_latched: bool = false
 # still, so the steps' own slowing is skated as a step and a hockey stop's tail
 # is not. `_step_dir` is its direction in the hips' frame, (right, forward).
 var _stepping: bool = false
+var _last_travel := Vector2(0.0, 1.0)
 var _step_dir := Vector2(1.0, 0.0)
 var _hold: float = 0.0
 # The turning states' weights with their side as the sign: eased as one number,
@@ -143,8 +149,10 @@ func reset() -> void:
 	turning = 0.0
 	loaded = 0.0
 	stop_yaw = 0.0
+	_stop_yaw_full = 0.0
 	_stop_latched = false
 	_stepping = false
+	_last_travel = Vector2(0.0, 1.0)
 	_have_prev_velocity = false
 	_fd_time = 0.0
 	_fd_effort_target = 0.0
@@ -196,8 +204,11 @@ func sense(delta: float, planted: bool, hold: float) -> void:
 		stop_side = HockeyStopRules.latch_side(local_vel)
 	elif _target.stop < 0.1:
 		_stop_latched = false
-	_stop_yaw_full = HockeyStopRules.stop_yaw(local_vel, stop_side,
-			deg_to_rad(c.hockey_stop_max_yaw_deg))
+	# At rest there is no travel to turn across, and the stop is still fading
+	# out: it keeps the turn it had rather than swinging the legs in one frame.
+	if local_vel.x * local_vel.x + local_vel.z * local_vel.z > 1e-6:
+		_stop_yaw_full = HockeyStopRules.stop_yaw(local_vel, stop_side,
+				deg_to_rad(c.hockey_stop_max_yaw_deg))
 	stop_yaw = _stop_yaw_full * mix.stop if mix.stop > 0.001 else 0.0
 
 	# The start: first strides from a standstill are short, quick chops, fading
@@ -305,7 +316,7 @@ func strokes(delta: float, travel: Vector2) -> void:
 		var split: float = 0.5 * c.tight_turn_lead_m * tight_in
 		r_dz -= split
 		l_dz += split
-		push_reach = maxf(push_reach, 0.5 * c.tight_turn_lead_m)
+		push_reach = maxf(push_reach, absf(tight_in) * 0.5 * c.tight_turn_lead_m)
 
 	# Carve: both skates down at hip width, the inside one leading; the lean
 	# puts them on their edges (GaitPose stands them on the ice under it). The
@@ -317,19 +328,30 @@ func strokes(delta: float, travel: Vector2) -> void:
 		l_dz += lead
 
 	w = mix.stop
+	# The stop and the skid are laid along the travel, and both are still
+	# fading out when the body comes to rest: past that they keep the last
+	# travel there was, or their skates jump in the tick the speed reaches zero.
+	if travel.length_squared() > 1e-6:
+		_last_travel = travel.normalized()
+	var laid: Vector2 = travel if travel.length_squared() > 1e-6 else _last_travel
 	if w > 0.001:
 		# The legs' frame is the aligned one turned by the stop (the lower body
 		# sums both); travel in it, (right, back).
-		_stop_path(w, _in_legs(travel, stop_yaw), _in_legs(travel, _stop_yaw_full))
+		_stop_path(w, _in_legs(laid, stop_yaw), _in_legs(laid, _stop_yaw_full))
 
 	w = mix.skid
 	if w > 0.001:
-		_skid_path(w, Vector2(travel.x, -travel.y))
+		_skid_path(w, Vector2(laid.x, -laid.y))
 
 	_stance(s)
 	edge_floor = mix.stop + mix.tight + mix.carve
 	sliding = mix.stop + mix.skid
 	authored = 1.0 - mix.glide
+	# Each state's reach counted by its share of the authored mix: a state fading
+	# out stops asking the crouch for its reach as it goes, never in one frame.
+	if authored > 0.001:
+		push_reach /= authored
+	on_ice = 1.0 - mix.glide * _speed_t
 
 	# Trunk: sway over the loaded leg on the stride fundamental (the trunk is
 	# too massive to carry the stroke's snap), a damped spring that lets the
@@ -385,7 +407,7 @@ func _stride_path(w: float, a: float, s: float, s_opp: float, cs: float, cs_opp:
 	r_yaw -= w * lerpf(toe * p_r, vee, k)
 	l_push = maxf(l_push, w * maxf(-s, 0.0))
 	r_push = maxf(r_push, w * maxf(-s_opp, 0.0))
-	push_reach = maxf(push_reach, Vector2(out, back).length())
+	push_reach = maxf(push_reach, w * Vector2(out, back).length())
 
 
 # Crossovers, as where the skates go: the stride's phase law on each leg, half
@@ -430,7 +452,7 @@ func _crossover_path(w: float, side: float, a: float, s: float, s_opp: float,
 	r_dy += w * lift * up_r
 	l_push = maxf(l_push, w * maxf(-s, 0.0))
 	r_push = maxf(r_push, w * maxf(-s_opp, 0.0))
-	push_reach = maxf(push_reach, maxf(Vector2(cross, c.crossover_land_fwd_m * a).length(),
+	push_reach = maxf(push_reach, w * maxf(Vector2(cross, c.crossover_land_fwd_m * a).length(),
 			maxf(Vector2(out, c.crossover_back_m * a).length(),
 					Vector2(under, c.crossover_back_m * a).length())))
 
@@ -475,7 +497,7 @@ func _stop_path(w: float, along: Vector2, turned: Vector2) -> void:
 	var square: float = clampf(atan2(-across.x, -across.y), -PI * 0.5, PI * 0.5)
 	l_yaw += w * square
 	r_yaw += w * square
-	push_reach = maxf(push_reach, Vector2(spread + lead, stagger).length())
+	push_reach = maxf(push_reach, w * Vector2(spread + lead, stagger).length())
 
 
 # The skid — the stick pulled against travel at speed — as a snowplow: both
@@ -494,7 +516,7 @@ func _skid_path(w: float, along: Vector2) -> void:
 	var toe_in: float = deg_to_rad(c.reversal_toe_in_deg)
 	l_yaw -= w * toe_in
 	r_yaw += w * toe_in
-	push_reach = maxf(push_reach, Vector2(spread + lead, 0.0).length())
+	push_reach = maxf(push_reach, w * Vector2(spread + lead, 0.0).length())
 
 
 # Backward C-cuts, as where the skates go. Skating backward the push goes ahead
@@ -520,7 +542,7 @@ func _ccut_path(w: float, a: float, s: float, s_opp: float, cs: float, cs_opp: f
 	r_yaw -= w * toe * cos(PI * p_r)
 	l_push = maxf(l_push, w * maxf(-cs, 0.0))
 	r_push = maxf(r_push, w * maxf(-cs_opp, 0.0))
-	push_reach = maxf(push_reach, Vector2(out, front).length())
+	push_reach = maxf(push_reach, w * Vector2(out, front).length())
 
 
 # The side-step, as where the skates go: step-together along `dir` (the hips'
@@ -565,7 +587,7 @@ func _shuffle_path(w: float, dir: Vector2) -> void:
 			r_push = maxf(r_push, w)
 		else:
 			l_push = maxf(l_push, w)
-	push_reach = maxf(push_reach, 2.0 * step)
+	push_reach = maxf(push_reach, w * 2.0 * step)
 
 
 # Starts, holds and ends a step of the brake's shuffle. A step starts on the
@@ -645,7 +667,7 @@ func _stance(s: float) -> void:
 	stance = (mix.stride + mix.backward) * stride_sit \
 			+ mix.shuffle * c.shuffle_stance \
 			+ mix.crossover * maxf(stroke, c.carve_stance) \
-			+ mix.glide * maxf(stroke, c.glide_stance * _speed_t) \
+			+ mix.glide * maxf(stroke, maxf(c.glide_stance * _speed_t, c.rest_stance)) \
 			+ mix.carve * c.carve_stance \
 			+ mix.tight * c.tight_turn_stance \
 			+ mix.stop * c.hockey_stop_stance \
@@ -737,6 +759,7 @@ func _clear_strokes() -> void:
 	r_push = 0.0
 	push_reach = 0.0
 	authored = 0.0
+	on_ice = 0.0
 	sliding = 0.0
 	trunk_pitch = 0.0
 	trunk_roll = 0.0

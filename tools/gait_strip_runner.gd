@@ -44,6 +44,9 @@ const SCENARIOS: Array[Dictionary] = [
 	{"name": "back", "warm": 240, "step": 12},
 	# Brake held, D pressed once with the cursor up-ice: one step of the shuffle.
 	{"name": "shuffle", "warm": 2, "step": 7},
+	# A push to the side and the brake: standing while the lean settles, both
+	# blades on the ice.
+	{"name": "sidestop", "warm": 40, "step": 15},
 ]
 
 
@@ -216,6 +219,10 @@ func _steer(input: InputState) -> void:
 			move = Vector2(1.0, 0.0) if _tick < 6 else Vector2.ZERO
 			aim = up_ice
 			input.brake = true
+		"sidestop":
+			move = Vector2(1.0, 0.0) if _tick < 20 else Vector2.ZERO
+			aim = up_ice
+			input.brake = _tick >= 20
 	input.move_vector = move
 	if input.brake:
 		_shuffle_steps.shape(input, _skater.global_position, _skater.velocity,
