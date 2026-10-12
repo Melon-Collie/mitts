@@ -931,3 +931,117 @@ func test_shots_on_goal_changed_signal_fires() -> void:
 	tracker.on_shot_started(10)
 	tracker.on_goalie_touch(1)
 	assert_signal_emitted_with_parameters(tracker, "shots_on_goal_changed", [1, 0])
+
+
+# ── Next control (shot_events.next_control) ──────────────────────────────────
+# Who had the puck next after a shot that did not score: the retention term of
+# docs/possession-value-plan.md. "Next" is the next ESTABLISHED possession, a
+# later shot, or the whistle.
+
+func _saved_shot(shooter: int) -> ShotEvent:
+	watch_signals(tracker)
+	tracker.on_shot_started(shooter)
+	tracker.note_trajectory(true)
+	tracker.on_goalie_touch(1)
+	return _last_event()
+
+
+func test_a_shot_starts_unresolved() -> void:
+	_add_player(10, 0)
+	assert_eq(_saved_shot(10).next_control, ShotEvent.NextControl.UNRESOLVED)
+
+
+func test_our_established_possession_after_a_save_is_ours() -> void:
+	_add_player(10, 0)
+	_add_player(11, 0)
+	var e := _saved_shot(10)
+	tracker.on_pickup(11)
+	tracker.on_possession_established(11)
+	assert_eq(e.next_control, ShotEvent.NextControl.OURS)
+
+
+func test_their_established_possession_after_a_save_is_theirs() -> void:
+	_add_player(10, 0)
+	_add_player(20, 1)
+	var e := _saved_shot(10)
+	tracker.on_pickup(20)
+	tracker.on_possession_established(20)
+	assert_eq(e.next_control, ShotEvent.NextControl.THEIRS)
+
+
+func test_a_touch_is_not_control() -> void:
+	# A defender batting at the rebound has not got it; the answer waits for an
+	# established possession.
+	_add_player(10, 0)
+	_add_player(11, 0)
+	_add_player(20, 1)
+	var e := _saved_shot(10)
+	tracker.on_pickup(20)
+	assert_eq(e.next_control, ShotEvent.NextControl.UNRESOLVED,
+			"a pickup alone resolves nothing")
+	tracker.on_pickup(11)
+	tracker.on_possession_established(11)
+	assert_eq(e.next_control, ShotEvent.NextControl.OURS)
+
+
+func test_a_stoppage_first_is_a_whistle() -> void:
+	_add_player(10, 0)
+	var e := _saved_shot(10)
+	tracker.on_play_stopped()
+	assert_eq(e.next_control, ShotEvent.NextControl.WHISTLE)
+
+
+func test_a_rebound_put_back_answers_the_first_shot() -> void:
+	# A put-back never establishes possession first, so the second shot itself
+	# says who had it.
+	_add_player(10, 0)
+	_add_player(11, 0)
+	var first := _saved_shot(10)
+	tracker.on_deflection(11)
+	tracker.on_goalie_touch(1)
+	assert_eq(first.next_control, ShotEvent.NextControl.OURS)
+	assert_eq(_last_event().next_control, ShotEvent.NextControl.UNRESOLVED,
+			"and the put-back waits for its own answer")
+
+
+func test_the_first_answer_sticks() -> void:
+	_add_player(10, 0)
+	_add_player(20, 1)
+	var e := _saved_shot(10)
+	tracker.on_possession_established(20)
+	tracker.on_play_stopped()
+	assert_eq(e.next_control, ShotEvent.NextControl.THEIRS)
+
+
+func test_a_goal_has_no_next_control() -> void:
+	_add_player(10, 0)
+	var e := _saved_shot(10)
+	tracker.on_goal_confirmed(10)           # grazed the keeper and went in
+	tracker.on_play_stopped()
+	assert_eq(e.outcome, ShotEvent.Outcome.GOAL)
+	assert_eq(e.next_control, ShotEvent.NextControl.UNRESOLVED,
+			"the goal relabel stops it waiting")
+	assert_null(e.to_dict()["next_control"])
+
+
+func test_a_block_waits_for_the_next_possession() -> void:
+	_add_player(10, 0)
+	_add_player(20, 1)
+	watch_signals(tracker)
+	tracker.on_shot_started(10)
+	tracker.note_trajectory(true)
+	tracker.on_block(20)
+	var e := _last_event()
+	assert_eq(e.outcome, ShotEvent.Outcome.BLOCKED)
+	tracker.on_possession_established(20)
+	assert_eq(e.next_control, ShotEvent.NextControl.THEIRS)
+
+
+func test_reset_drops_an_open_next_control() -> void:
+	_add_player(10, 0)
+	_add_player(11, 0)
+	var e := _saved_shot(10)
+	tracker.reset_all()
+	tracker.on_possession_established(11)
+	assert_eq(e.next_control, ShotEvent.NextControl.UNRESOLVED,
+			"a finished game's shot is not answered by the next game's possession")

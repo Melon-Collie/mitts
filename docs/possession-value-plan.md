@@ -1,7 +1,7 @@
 # Possession value — the shot pays for the puck it spends
 
-Status: **planned**. Nothing landed. Bar form agreed; the four design decisions are
-settled in §10.
+Status: **Phase A landed** (measurement, no behavior change; §6). Bar form agreed;
+the four design decisions are settled in §10.
 
 **Scope.** The in-zone carrier's decision whether a shot is worth releasing
 (`AIRoleCarrier._pick_commit_phase`). Both 3v3 and 5v5. Passes, the dump, carry
@@ -217,54 +217,93 @@ decision 2).
 
 ## 6. Measurement — Phase A, no behavior change
 
-Two quantities (`r` and `P_lose`) and a before/after scorecard need a measurement
-that does not yet exist.
+Status: **landed.** Two quantities (`r` and `P_lose`) and a before/after scorecard,
+from two sources, because no single one can measure both.
 
-**The instrument:** `AIOzPossessionTracker`, a debug tally modelled on
-`AIBreakoutEpisodeTracker` (episodes, outcome classes, nothing reads it back into a
-decision).
+### `r` — bot sims
 
-- **An episode** starts when the puck is established in the offensive zone under our
-  possession.
-- **It ends on:** puck leaves the zone, opponent establishes possession, whistle, or
-  goal.
-- **It records:** duration; each shot attempt with its seam `xG` at release and its
-  outcome (goal / saved / missed / blocked / whistle); and, for each non-goal shot,
-  who controls the puck next inside a short window (us / them / whistle → faceoff
-  result).
+**The instrument:** `AIOzPossessionTracker` (`Scripts/domain/ai/`), a tally modelled
+on `AIBreakoutEpisodeTracker`. Nothing reads it back into a decision.
 
-**Where it runs:**
+- **An episode** is one stretch of *controlled* zone possession. It starts when our
+  carrier has the puck established in the zone (2 m past the blue line). Loose time
+  inside it (a pass in flight, a bobble) still counts.
+- **It ends on:** our shot, an opponent carrying it in the zone, the puck leaving
+  the zone, or a stoppage. **It ends at the shot** whatever happens after, so
+  `r = Σ xG / Σ episode seconds` measures the rate of xG per second of holding the
+  puck. It does not depend on how often the puck comes back, which is `P_lose`'s
+  job.
+- **It records:** seconds, each shot's xG, and shots from beyond the tops of the
+  circles split by whether a teammate stood in the net-front box
+  (`AIZoneCoverage`'s box).
 
-- **Bot sims, now.** Report-only scenarios on the duel harness, alongside
-  `benchmarks/test_breakout_harness.gd`, for a 3v3 and a 5v5 roster. This gives
-  `r = Σ xG / Σ OZ seconds` and `P_lose` per team size immediately.
-- **Real play, starting now.** `shot_events` already logs `x`, `z`, `outcome` and the
-  release context #577 needs, but not what happened next. Phase A adds a
-  `next_control` column (`'ours' | 'theirs' | 'whistle'`, null while unresolved): a
-  new migration under `supabase/migrations/` plus the logging site. Phase B does
-  **not** wait on it; it calibrates from the sims. The column exists so real data is
-  accumulating by the time it is needed to recalibrate, and #577 is waiting on the
-  same data (§10, decision 1).
+**The harness:** `benchmarks/test_oz_possession_harness.gd`, on the duel harness
+(real decisions, real movement), for 3v3 and 5v5 at Hard and Normal. Three staged
+attacks per size (zone entry, low cycle, point or high slot), 12 jitters × 2
+mirrors, one episode per trial, 15 s limit. Shot xG is the shooter's own seam value
+at release, the currency the bar will be compared in.
 
-**The scorecard**, recorded before Phase B and re-run after each phase:
+**What the sims cannot give is `P_lose`.** The duel harness has no net and no
+keeper behavior: a released shot slides on to the end boards. The two real-goalie
+harnesses stop at the first contact or fire one shot per run. None models a save
+followed by the next possession, so any retention number from them would be an
+artifact.
 
-- OZ possession seconds per game
-- shot attempts per OZ minute
-- mean xG per attempt
-- point shots with and without a net-front man
-- **goals per OZ possession** (the real success criterion; patience that does not
-  move it is cosmetic)
+### `P_lose` — logged play
 
-**Gate:** compare the measured `r` and `P_lose` against §3.2's implied numbers before
-writing Phase B. A large disagreement is a finding to discuss, not a constant to
-fudge.
+`shot_events.next_control` (`'ours' | 'theirs' | 'whistle'`, null for a goal or an
+unresolved shot) is resolved host-side by `ShotOnGoalTracker`. The answer is
+whichever comes first: the next ESTABLISHED possession (`PossessionTracker`, so a
+touch is not control), a later shot by either team (a put-back never establishes
+first), or a stoppage. It is a stored-row column only. Clients never post shot rows,
+so it stays off the wire and `PROTOCOL_VERSION` is unchanged. Migration
+`20261012000100_shot_events_next_control.sql`. #577 is waiting on the same data.
+
+`P_lose` per shot is then `theirs` plus the lost share of `whistle`. That share is
+the faceoff loss rate, a separate draw this column does not record.
+
+### Baseline (2026-10-12)
+
+| row | episodes | ends: shot / turnover / exit | mean episode | shots | `r` (xG/s) | xG/shot | long-range shots (net-front / clear) |
+|---|---|---|---|---|---|---|---|
+| 3v3 Hard | 69 | 16 / 37 / 16 | 1.6 s | 16 | 0.042 | 0.29 | 0 / 1 |
+| 3v3 Normal | 71 | 22 / 38 / 11 | 1.7 s | 22 | 0.055 | 0.31 | 1 / 1 |
+| 5v5 Hard | 72 | 21 / 38 / 13 | 1.4 s | 21 | 0.028 | 0.14 | 1 / 4 |
+| 5v5 Normal | 72 | 34 / 30 / 8 | 1.7 s | 34 | 0.042 | 0.15 | 1 / 7 |
+
+How to read it:
+
+- **Against the gate.** The measured `r` is 0.028–0.055, against the 0.024 that
+  today's `SHOT_MIN_VALUE` implies (§3.2, at safety 0.95). That is the same order of
+  magnitude, 1.2–2.3× higher. A higher `r` means a higher bar, so the measurement
+  points the same way as the symptom: today's bar is somewhat too loose. It is not a
+  disagreement large enough to question the model.
+- **Noise.** 16–34 shots per row. `r` varies 0.005–0.12 across scenarios, and the
+  zone-entry rush dominates it (xG/shot 0.3 in 3v3). The rows are a ballpark, not a
+  fit. Phase B should not take a second significant figure from them.
+- **Harness bias, both ways.** Episodes are short (1.4–1.7 s) and half end in a
+  turnover. The duel harness has no body contact and a fixed release pace, so its
+  possessions die faster than real ones. That inflates `h`, which does not enter `r`
+  directly, but it also cuts short the slow cycles that produce low-xG looks. The
+  static keeper never moves, which may flatter xG/shot.
+- **The point shot barely exists.** 5–8 long-range shots per 5v5 row, almost none
+  with a net-front man. That is F6's symptom, measured.
+
+**The scorecard**, re-run after each phase: the harness rows above, plus from logged
+play once `next_control` has accumulated: retention after shots, and shots with and
+without a net-front man. Goals per OZ possession needs real goals, so it is a
+playtest and logged-play number. In the sims, xG per episode stands in for it.
+
+**Gate before Phase B:** passed for `r` (see above). `P_lose` has no measurement
+until logged games accumulate. Phase B either waits for it or starts from a stated
+prior; that is a decision for the user (§10).
 
 ## 7. Phases
 
 | Phase | Content | Behavior change |
 |---|---|---|
-| **A** | Tracker + harness scenarios + baseline scorecard. `next_control` migration and logging. | none |
-| **B** | `AIPossessionValue` (pure, static, engine-free). `h` from the best retention option, measured constant `r` and `P_lose` per team size, `C` from `turnover_cost`. Replaces `SHOT_MIN_VALUE` at the one call site. | yes; **playtested on its own** |
+| **A** *(landed)* | Tracker + harness scenarios + baseline scorecard. `next_control` migration and logging. | none |
+| **B** | `AIPossessionValue` (pure, static, engine-free). `h` from the best retention option, `r` per team size from the sims, `P_lose` from logged play (or a stated prior until it accumulates), `C` from `turnover_cost`. Replaces `SHOT_MIN_VALUE` at the one call site. | yes; **playtested on its own** |
 | **C** | Per-shot `P_lose`: net-front race + outcome mix by save surface. | yes; separate playtest |
 | **D** *(optional)* | State-dependent `r` from cached teammate spot values. | yes |
 
@@ -335,8 +374,10 @@ the point with traffic. The shot-opportunity audit
   the error is in the safe direction: pressure tends to build, so the true `V` under
   pressure is lower still. It is a modelling choice to know about, not a bug.
 - **Bots training on bots.** A sim-measured `r` is the rate the bots manage against
-  bots. If they are bad at cycling, `r` is low and patience understates itself. Real
-  play data (§6, `next_control`) corrects this once it exists.
+  bots. If they are bad at cycling, `r` is low and patience understates itself.
+  Logged play cannot correct it yet: `shot_events` records shots, not possession
+  time. Sampling `AIOzPossessionTracker` live from `GameManager`, the way the
+  breakout tracker is, would.
 
 - **Phase B's fixed `P_lose` moves point shots uniformly.** Until Phase C, retention
   does not depend on traffic, so if the measured `P_lose` comes in below the implied
@@ -349,11 +390,12 @@ the point with traffic. The shot-opportunity audit
 Settled before implementation, with the reasoning, so a later reader can tell a
 decision from an accident.
 
-1. **Data: sims now, and the `next_control` column now too.** Phase B calibrates from
-   bot sims because they exist today. The column costs one migration and one logging
-   site, and real data only accumulates from the day it ships, so it goes in during
-   Phase A rather than when it is finally needed. #577 is blocked on the same data,
-   so the column pays twice.
+1. **Data: sims for `r`, logged play for `P_lose`.** `r` calibrates from bot sims
+   because they exist today. `P_lose` cannot: Phase A found that no harness models a
+   save followed by the next possession (§6). So `next_control` is the only source,
+   not a later refinement. Real data only accumulates from the day it ships, which is
+   why it went in during Phase A. #577 is blocked on the same data, so the column
+   pays twice.
 2. **Contained carrier: fix the read, no floor.** A `0.05` floor under the new bar is
    exactly the corrective gate the AI doctrine forbids. It would keep the old constant
    alive to cover a model that is not seeing something. What the model was missing is

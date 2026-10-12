@@ -106,6 +106,10 @@ var _pending_one_timer: bool = false
 # see on_goal_confirmed). Listeners keep the same object, so the re-label reaches
 # the buffered log. Null whenever nothing has resolved for the pending shot.
 var _pending_event: ShotEvent = null
+# The last resolved non-goal shot whose NEXT CONTROL (ShotEvent.next_control) is
+# still open. Outlives clear_pending on purpose: the pickup that clears the
+# pending shot is a touch, and the answer is the next ESTABLISHED possession.
+var _awaiting_control: ShotEvent = null
 
 var _registry: PlayerRegistry = null
 var _state_machine: GameStateMachine = null
@@ -133,6 +137,7 @@ func on_pickup(peer_id: int) -> void:
 # The current carrier ESTABLISHED possession (PossessionTracker). Upgrade
 # their history entry so an opposing goal's assist chain breaks on it.
 func on_possession_established(peer_id: int) -> void:
+	_resolve_next_control_by(peer_id)
 	for i: int in _recent_carriers.size():
 		if _recent_carriers[i] == peer_id:
 			_recent_carrier_possession[i] = true
@@ -399,6 +404,8 @@ func on_goal_confirmed(scorer_peer_id: int, origin: Vector3 = Vector3.ZERO) -> v
 	if _pending_event != null and _shot_on_goal_counted:
 		_pending_event.outcome = ShotEvent.Outcome.GOAL
 		_pending_event.on_net = true
+		if _awaiting_control == _pending_event:
+			_awaiting_control = null
 		return
 	if _shooter_peer_id == -1:
 		_pending_origin = origin
@@ -474,6 +481,14 @@ func pending_is_one_timer() -> bool:
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
+# Play stopped. A shot still waiting on its next control is resolved as a
+# whistle — the faceoff that follows is a separate draw, not a possession.
+func on_play_stopped() -> void:
+	if _awaiting_control != null:
+		_awaiting_control.next_control = ShotEvent.NextControl.WHISTLE
+		_awaiting_control = null
+
+
 func clear_pending() -> void:
 	_shooter_peer_id = -1
 	_pending_remaining = -1.0
@@ -495,6 +510,7 @@ func reset_all() -> void:
 	_recent_carriers.clear()
 	_recent_carrier_possession.clear()
 	clear_pending()
+	_awaiting_control = null
 	if _state_machine != null:
 		_state_machine.team_shots[0] = 0
 		_state_machine.team_shots[1] = 0
@@ -506,6 +522,7 @@ func clear_state() -> void:
 	_recent_carriers.clear()
 	_recent_carrier_possession.clear()
 	clear_pending()
+	_awaiting_control = null
 
 
 # Returns a carrier from `recent_carriers` on `scoring_team_id`. Used when the
@@ -568,6 +585,19 @@ func _credit_peer() -> int:
 	return _shooter_peer_id
 
 
+# The shot awaiting its next control is answered by whichever team `peer_id`
+# plays for.
+func _resolve_next_control_by(peer_id: int) -> void:
+	if _awaiting_control == null or _registry == null:
+		return
+	var team: int = _registry.resolve_team_id_for_peer(peer_id)
+	if team == -1:
+		return
+	_awaiting_control.next_control = ShotEvent.NextControl.OURS \
+			if team == _awaiting_control.team_id else ShotEvent.NextControl.THEIRS
+	_awaiting_control = null
+
+
 func _same_team(a: int, b: int) -> bool:
 	if _registry == null:
 		return false
@@ -601,6 +631,10 @@ func _build_event(credit_peer: int, outcome: int) -> ShotEvent:
 			_pending_origin, _pending_xg, outcome, shot_type,
 			on_net, period, clock_s)
 	_pending_event = e
+	# A new shot answers the previous one: the shooter's team had the puck (a
+	# rebound put-back never establishes possession first).
+	_resolve_next_control_by(credit_peer)
+	_awaiting_control = e if outcome != ShotEvent.Outcome.GOAL else null
 	if _pending_ctx.size() == 8:
 		e.goalie_stance = _pending_ctx[0]
 		e.goalie_unset = _pending_ctx[1]

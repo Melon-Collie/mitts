@@ -52,7 +52,8 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +1: the chase steer passes when an airborne puck is back on the blade plane.
 	"res://Scripts/ai/skater_agent_state_machine.gd": 6090,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
-	"res://Scripts/game/game_manager.gd": 5644,
+	# +2: a stoppage resolves the shot tracker's open next_control as a whistle.
+	"res://Scripts/game/game_manager.gd": 5646,
 	"res://Scripts/domain/ai/action_scoring.gd": 4458,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
@@ -113,7 +114,9 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 37,
 	"res://Scripts/actors/skater_mesh_builder.gd": 29,
 	"res://Scripts/controllers/puck_controller.gd": 29,
-	"res://Scripts/game/shot_on_goal_tracker.gd": 26,
+	# +1: on_play_stopped — a stoppage answers a shot's open next_control, the
+	# same hook HitTracker takes.
+	"res://Scripts/game/shot_on_goal_tracker.gd": 27,
 	"res://Scripts/actors/goalie.gd": 26,
 }
 

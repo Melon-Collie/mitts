@@ -13,8 +13,14 @@ enum Outcome { GOAL, SAVED, MISSED, BLOCKED }
 # redirects — are ONE_TIMER and TIP.
 enum ShotType { SHOT, ONE_TIMER, TIP }
 
+# Who had the puck next after a shot that did not score — the retention term
+# (P_lose) of docs/possession-value-plan.md. "Next" is the next ESTABLISHED
+# possession (PossessionTracker), or the whistle if play stopped first.
+enum NextControl { UNRESOLVED, OURS, THEIRS, WHISTLE }
+
 const _OUTCOME_KEY: Array[String] = ["goal", "saved", "missed", "blocked"]
 const _TYPE_KEY: Array[String] = ["shot", "one_timer", "tip"]
+const _NEXT_CONTROL_KEY: Array[String] = ["", "ours", "theirs", "whistle"]
 
 var shooter_peer: int = -1
 var team_id: int = -1
@@ -47,6 +53,11 @@ var screen_delay: float = 0.0      # s the shot was hidden from him, 0 = clear s
 var shooter_speed: float = 0.0     # m/s at release — a stationary shot is rare in play
 var since_last_save_s: float = -1.0  # s since this goalie's last save, -1 = none yet
 var puck_lateral_speed: float = 0.0  # |vx| of the release — deke / cross-seam finish
+
+# Resolved by ShotOnGoalTracker after the shot, on the host's buffered event. A
+# stored-row column only: it is not on the wire, because clients never post shot
+# rows and their shot map does not read it.
+var next_control: int = NextControl.UNRESOLVED
 
 
 # Params carry the p_ prefix so they don't shadow the fields they assign (the
@@ -133,6 +144,9 @@ static func from_row(row: Dictionary) -> ShotEvent:
 	e.shooter_speed = float(row.get("shooter_speed", 0.0))
 	e.since_last_save_s = float(row.get("since_last_save_s", -1.0))
 	e.puck_lateral_speed = float(row.get("puck_lateral_speed", 0.0))
+	var nc: Variant = row.get("next_control")
+	e.next_control = maxi(_NEXT_CONTROL_KEY.find(String(nc)), 0) if nc is String \
+			else NextControl.UNRESOLVED
 	return e
 
 
@@ -170,6 +184,15 @@ func type_key() -> String:
 	return _TYPE_KEY[shot_type] if shot_type >= 0 and shot_type < _TYPE_KEY.size() else "shot"
 
 
+# The stored value: null for a goal (nothing to retain) and for a shot still
+# unresolved when the log was posted.
+func next_control_key() -> Variant:
+	if outcome == Outcome.GOAL or next_control <= NextControl.UNRESOLVED \
+			or next_control >= _NEXT_CONTROL_KEY.size():
+		return null
+	return _NEXT_CONTROL_KEY[next_control]
+
+
 # Supabase row (shot_events table). steam_id + game_id are stamped by the poster
 # (GameManager maps shooter_peer → steam at game-over); everything else is here.
 func to_dict() -> Dictionary:
@@ -191,4 +214,5 @@ func to_dict() -> Dictionary:
 		"shooter_speed": snappedf(shooter_speed, 0.01),
 		"since_last_save_s": snappedf(since_last_save_s, 0.01),
 		"puck_lateral_speed": snappedf(puck_lateral_speed, 0.01),
+		"next_control": next_control_key(),
 	}

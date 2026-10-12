@@ -172,3 +172,38 @@ func test_pre_context_row_decodes_to_neutral_defaults() -> void:
 	assert_eq(e.goalie_unset, 0.0, "reads as set")
 	assert_eq(e.screen_delay, 0.0, "reads as clear sight")
 	assert_eq(e.since_last_save_s, -1.0, "no prior save this game")
+
+
+# ── Next control ─────────────────────────────────────────────────────────────
+
+func test_next_control_is_stored_as_text() -> void:
+	var e := ShotEvent.make(7, 0, Vector3.ZERO, 0.1,
+			ShotEvent.Outcome.SAVED, ShotEvent.ShotType.SHOT, true, 1, 0.0)
+	assert_null(e.to_dict()["next_control"], "unresolved is null, not a word")
+	e.next_control = ShotEvent.NextControl.THEIRS
+	assert_eq(e.to_dict()["next_control"], "theirs")
+	assert_eq(ShotEvent.from_row(e.to_dict()).next_control,
+			ShotEvent.NextControl.THEIRS, "and reads back")
+
+
+func test_a_goal_stores_no_next_control() -> void:
+	var e := ShotEvent.make(7, 0, Vector3.ZERO, 0.3,
+			ShotEvent.Outcome.GOAL, ShotEvent.ShotType.SHOT, true, 1, 0.0)
+	e.next_control = ShotEvent.NextControl.WHISTLE
+	assert_null(e.to_dict()["next_control"], "nothing to retain after a goal")
+
+
+func test_next_control_stays_off_the_wire() -> void:
+	# Clients never post shot rows, so widening the wire record would cost a
+	# protocol bump for nothing.
+	var e := ShotEvent.make(7, 0, Vector3.ZERO, 0.1,
+			ShotEvent.Outcome.SAVED, ShotEvent.ShotType.SHOT, true, 1, 0.0)
+	e.next_control = ShotEvent.NextControl.OURS
+	assert_eq(e.to_array().size(), ShotEvent.WIRE_SIZE)
+
+
+func test_a_row_without_next_control_reads_unresolved() -> void:
+	assert_eq(ShotEvent.from_row({"outcome": "saved"}).next_control,
+			ShotEvent.NextControl.UNRESOLVED)
+	assert_eq(ShotEvent.from_row({"next_control": null}).next_control,
+			ShotEvent.NextControl.UNRESOLVED)

@@ -827,6 +827,8 @@ func _on_stoppage_flush_stat_trackers(phase: GamePhase.Phase) -> void:
 	_flush_pending_faceoff_win()
 	if _hit_tracker != null:
 		_hit_tracker.on_play_stopped()
+	if _shot_tracker != null:
+		_shot_tracker.on_play_stopped()
 	if _possession_tracker != null:
 		_possession_tracker.reset()
 	# A whistled play is not a bottled-in breakout — resolve any open episode

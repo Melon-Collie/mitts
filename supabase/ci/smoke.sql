@@ -85,6 +85,26 @@ begin
 end
 $$;
 
+-- shot_events.next_control: the three values the game writes are accepted, and
+-- anything else is refused. A separate game id, so recent_games_for's shot count
+-- above is untouched.
+do $$
+begin
+    insert into public.shot_events (game_id, steam_id, team_id, x, z, xg, outcome, next_control)
+    values ('22222222-2222-2222-2222-222222222222', 1001, 0, 0, -20, 0.05, 'saved', 'ours'),
+           ('22222222-2222-2222-2222-222222222222', 1001, 0, 0, -20, 0.05, 'missed', 'theirs'),
+           ('22222222-2222-2222-2222-222222222222', 1001, 0, 0, -20, 0.05, 'saved', 'whistle'),
+           ('22222222-2222-2222-2222-222222222222', 1001, 0, 0, -20, 0.05, 'goal', null);
+    begin
+        insert into public.shot_events (game_id, steam_id, team_id, x, z, xg, outcome, next_control)
+        values ('22222222-2222-2222-2222-222222222222', 1001, 0, 0, -20, 0.05, 'saved', 'nobody');
+        raise exception 'shot_events accepted next_control = ''nobody''';
+    exception when check_violation then
+        null;
+    end;
+end
+$$;
+
 -- ── Security posture ─────────────────────────────────────────────────────────
 -- Two classes of view, and the difference is deliberate:
 --   career_totals / shot_heatmap    — readable with the anon key (leaderboard).
