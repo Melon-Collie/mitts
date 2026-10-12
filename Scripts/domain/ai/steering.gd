@@ -695,7 +695,9 @@ static func should_arrival_brake(self_pos: Vector3, anchor: Vector3,
 # steering with a hard brake away from the line (a full reverse skid on
 # the depth axis, lateral intent preserved), so the body stops short
 # instead of ghosting. Releases the instant the puck crosses the line
-# (offside risk gone) or the bot is already retreating.
+# (offside risk gone) or the bot is already retreating — unless `hold_line`:
+# under an NHL delayed offside the team must stay out until everyone has
+# tagged up, so the puck being in does not open the line.
 #
 # `own_goal_dir` is +1 when our net is at +Z (we attack -Z) and -1 when
 # our net is at -Z (we attack +Z). The attacking blue line sits at
@@ -707,12 +709,13 @@ static func offside_brake(
 		self_velocity: Vector3,
 		own_goal_dir: float,
 		puck_z: float,
-		is_carrier: bool) -> Vector2:
+		is_carrier: bool,
+		hold_line: bool = false) -> Vector2:
 	if is_carrier:
 		return desired
 	var attack_dir: float = -own_goal_dir
 	# Puck already across the attacking blue line → entering is legal now.
-	if attack_dir * puck_z > GameRules.BLUE_LINE_Z:
+	if not hold_line and attack_dir * puck_z > GameRules.BLUE_LINE_Z:
 		return desired
 	# Only a concern when actually moving toward the attacking zone.
 	var v_toward: float = attack_dir * self_velocity.z

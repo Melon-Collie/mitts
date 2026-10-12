@@ -2260,6 +2260,34 @@ func test_no_dump_in_own_side_neutral_zone() -> void:
 			"no dump from the own-side neutral zone")
 
 
+# ─── NHL icing and delayed offside ────────────────────────────────────────────
+
+func test_delayed_offside_closes_the_zone_to_the_carry() -> void:
+	var self_pos := Vector3(0, 0, -5)  # neutral ice, attacking -Z
+	var ctx := _make_ctx(self_pos)
+	var c := AIRoleCarrier.new()
+	c._build_action_opponents_lists(ctx)
+	var goalie: Vector3 = AIRoleHelpers.resolve_our_goalie_pos(ctx)
+	var in_zone := Vector3(0, 0, -9)
+	assert_gt(c._score_move_candidate_base(ctx, in_zone, goalie), -INF,
+			"an open entry is a candidate")
+	ctx.zone_entry_blocked = true
+	assert_eq(c._score_move_candidate_base(ctx, in_zone, goalie), -INF,
+			"with a teammate owing a tag-up, carrying in would be whistled")
+
+
+func test_delayed_offside_takes_the_dump_in_off_the_table() -> void:
+	var self_pos := Vector3(2, 0, -4)
+	var ctx: RoleContext = _make_ctx(self_pos, [
+			[1, TEAM_ID, self_pos],
+			[3, 1, Vector3(2, 0, -5)]])
+	ctx.zone_entry_blocked = true
+	var c := AIRoleCarrier.new()
+	c._build_action_opponents_lists(ctx)
+	var dump: Array = c._best_dump(ctx, AIRoleHelpers.resolve_our_goalie_pos(ctx))
+	assert_eq(dump[0], -INF, "a dumped puck nobody may touch is no dump-in")
+
+
 func test_no_dump_once_in_the_offensive_zone() -> void:
 	# Already established in the OZ — the valve keeps the puck in, and there's no
 	# dump. Even swarmed, it cycles/holds rather than dumping it away.
@@ -3428,7 +3456,27 @@ func test_a_blocked_breakout_lane_is_rimmed_round_the_boards() -> void:
 	assert_ne(c._phase_best_pass_rim_dir, Vector3.ZERO,
 			"...by the boards, not through the forechecker")
 	assert_gt(c._phase_best_pass_rim_pace, AIActionScoring.PASS_SPEED_M_S,
-			"a rim is fired hard — the corner bleeds pace")
+			"a rim needs more than quick-pass pace — the corner bleeds it")
+
+
+func test_a_rim_is_fired_as_soft_as_the_race_allows() -> void:
+	var ctx := _rim_breakout_ctx(true)
+	var c := AIRoleCarrier.new()
+	c._pick_fire_phase(ctx)
+	var best: float = 0.0
+	for k: int in AIRimPass.count:
+		best = maxf(best, c._rim_sure_by_k[k])
+	var softest: float = INF
+	var hardest: float = 0.0
+	for k: int in AIRimPass.count:
+		if c._rim_sure_by_k[k] >= best * AIRoleCarrier.RIM_SOFT_SHARE:
+			softest = minf(softest, AIRimPass.paces[k])
+			hardest = maxf(hardest, AIRimPass.paces[k])
+	gut.p("  rim fired at %.1f m/s (near-best band %.1f..%.1f)"
+			% [c._phase_best_pass_rim_pace, softest, hardest])
+	assert_gt(best, 0.0, "some rim reaches the winger")
+	assert_eq(c._phase_best_pass_rim_pace, softest,
+			"the softest launch nearly as sure as the best is the one fired")
 
 
 func test_a_rim_commits_as_a_flat_charged_release_along_its_bearing() -> void:

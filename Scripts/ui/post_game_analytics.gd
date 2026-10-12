@@ -309,8 +309,8 @@ func _totals_from_events(events: Array[ShotEvent]) -> Array[Dictionary]:
 # them. (The map/flow read the event list; both derive from the same shots.)
 func _team_totals() -> Array[Dictionary]:
 	var out: Array[Dictionary] = [
-		{"goals": 0, "sog": 0, "corsi": 0, "fenwick": 0, "xg": 0.0, "xg_base": 0.0},
-		{"goals": 0, "sog": 0, "corsi": 0, "fenwick": 0, "xg": 0.0, "xg_base": 0.0},
+		{"goals": 0, "sog": 0, "corsi": 0, "fenwick": 0, "xg": 0.0, "xg_base": 0.0, "icings": 0},
+		{"goals": 0, "sog": 0, "corsi": 0, "fenwick": 0, "xg": 0.0, "xg_base": 0.0, "icings": 0},
 	]
 	var players: Dictionary[int, PlayerRecord] = GameManager.get_players()
 	for peer_id: int in players:
@@ -325,6 +325,7 @@ func _team_totals() -> Array[Dictionary]:
 		out[t]["fenwick"] = int(out[t]["fenwick"]) \
 				+ (rec.stats.shot_attempts - rec.stats.shot_attempts_blocked)
 		out[t]["xg"] = float(out[t]["xg"]) + rec.stats.xg_for
+		out[t]["icings"] = int(out[t]["icings"]) + rec.stats.icings
 	for t: int in 2:
 		out[t]["sog"] = GameManager.get_team_shots(t)
 	return out
@@ -350,6 +351,11 @@ func _build_tape_rows(totals: Array[Dictionary]) -> void:
 	# hard the shot is to finish. Seeing both makes that gap visible per game.
 	_add_tape_row("xG (location model)", float(totals[0]["xg_base"]),
 			float(totals[1]["xg_base"]), "%.2f", true)
+	# Live game only (a past game's shot list has no icings), and only where
+	# icing is called.
+	if totals[0].has("icings") and GameManager.get_rule_set() == GameRules.RuleSet.NHL:
+		_add_tape_row(tr(&"TAPE_ICINGS"), float(totals[0]["icings"]),
+				float(totals[1]["icings"]), "%d", false)
 
 
 # One head-to-head row: centred label (advanced rows carry a small tag), the two

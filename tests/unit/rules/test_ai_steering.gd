@@ -601,6 +601,17 @@ func test_offside_brake_noop_when_puck_already_across() -> void:
 	assert_eq(v, desired, "no brake once the puck has entered the zone")
 
 
+func test_offside_brake_holds_the_line_during_a_delayed_offside() -> void:
+	# NHL delayed offside: a teammate owes a tag-up, so the puck being in does
+	# not open the line — nobody may enter until the whole team is out.
+	var desired := Vector2(0.0, -1.0)
+	var pos := Vector3(0.0, 0.0, -5.0)
+	var vel := Vector3(0.0, 0.0, -8.0)
+	var puck_across: float = -GameRules.BLUE_LINE_Z - 2.0
+	var v := AISteering.offside_brake(desired, pos, vel, TEAM0_DIR, puck_across, false, true)
+	assert_gt(v.y, 0.0, "the line stays shut while the team's delayed offside is up")
+
+
 func test_offside_brake_noop_when_moving_away_from_line() -> void:
 	# Retreating toward our own end (v toward zone <= 0) → leave the
 	# steering alone so the bot can tag back / recover.

@@ -245,6 +245,11 @@ const OZ_RETREAT_LINE_BUFFER_M: float = GameRules.DEFAULT_STICK_LENGTH_M + 1.0
 # receiver (catch while braking to stay onside), so they're excluded as
 # targets, not just discounted.
 const OZ_RECEIVE_LINE_BUFFER_M: float = GameRules.DEFAULT_STICK_LENGTH_M + 0.7
+# A rim is fired as soft as the race allows: any launch reaching the receiver at
+# least this share as surely as the best one may be picked, and the softest of
+# those is. Doctrine, not a measurement — a soft rim is easier to stop, and one
+# that gets by him dies sooner (under NHL rules, short of an icing).
+const RIM_SOFT_SHARE: float = 0.9
 
 # The local step a carry candidate is never placed inside: the floor on the
 # beat-scaled forward radii, and the horizon the space fan is sampled over.
@@ -586,6 +591,12 @@ var _rim_k: int = -1
 var _rim_t: float = 0.0
 var _rim_lane: float = 0.0
 var _rim_miss: float = 0.0
+# Per-launch reads for one receiver (index-matched to AIRimPass' scratch, -1 =
+# not a candidate), so the softest near-best launch can be picked after the scan.
+var _rim_sure_by_k: PackedFloat64Array = PackedFloat64Array()
+var _rim_t_by_k: PackedFloat64Array = PackedFloat64Array()
+var _rim_lane_by_k: PackedFloat64Array = PackedFloat64Array()
+var _rim_miss_by_k: PackedFloat64Array = PackedFloat64Array()
 # The winning pass's rim pace, carried to the release with its bearing.
 var _phase_best_pass_rim_pace: float = 0.0
 # Opposing-goalie env captured alongside the winning shot sample, so the
@@ -2047,9 +2058,10 @@ func _compute_best_pass(ctx: RoleContext, self_facing_xz: Vector2,
 			best_pass_rim_pace]
 
 
-# How surely and soon the best RIM reaches `receiver_state` (completion × the
-# delay discount, 0.0 when none does), with that launch's path reads left in
-# _rim_k / _rim_t / _rim_lane / _rim_miss. The rim's own path quantities: the
+# How surely and soon a RIM reaches `receiver_state` (completion × the delay
+# discount, 0.0 when none does) — the softest launch within RIM_SOFT_SHARE of the
+# surest — with that launch's path reads left in _rim_k / _rim_t / _rim_lane /
+# _rim_miss. The rim's own path quantities: the
 # meet point and time on the walked path, the race against the soonest opponent
 # on that path as the lane, and the passer's aim error spread over its length.
 #
@@ -2072,8 +2084,14 @@ func _rim_launch_for(ctx: RoleContext, receiver_state: SkaterNetworkState,
 			else AIActionScoring.EVADE_CARRY_HANDLE_M
 	var receiver_speed: float = Vector2(
 			receiver_state.velocity.x, receiver_state.velocity.z).length()
+	if _rim_sure_by_k.size() != AIRimPass.MAX_LAUNCHES:
+		_rim_sure_by_k.resize(AIRimPass.MAX_LAUNCHES)
+		_rim_t_by_k.resize(AIRimPass.MAX_LAUNCHES)
+		_rim_lane_by_k.resize(AIRimPass.MAX_LAUNCHES)
+		_rim_miss_by_k.resize(AIRimPass.MAX_LAUNCHES)
 	var best_sure: float = 0.0
 	for k: int in AIRimPass.count:
+		_rim_sure_by_k[k] = -1.0
 		var t: float = AIRimPass.meet_time(k, receiver_state.position,
 				receiver_state.velocity, speed)
 		if t == INF:
@@ -2093,18 +2111,33 @@ func _rim_launch_for(ctx: RoleContext, receiver_state: SkaterNetworkState,
 						receiver_speed, receiver_omega, t))
 		var sure: float = (1.0 - miss_prob) * AIActionScoring.delay_discount(t)
 		# Exact prune before the opponent race (the costly read): the lane is at
-		# most 1, so a launch already beaten unraced cannot win raced.
-		if sure <= best_sure:
+		# most 1, so a launch that cannot reach the soft band unraced cannot raced.
+		if sure < best_sure * RIM_SOFT_SHARE:
 			continue
 		var lane: float = AIRimPass.race_completion(k, t)
 		sure *= lane
-		if sure > best_sure:
-			best_sure = sure
-			_rim_k = k
-			_rim_t = t
-			_rim_lane = lane
-			_rim_miss = miss_prob
-	return best_sure
+		_rim_sure_by_k[k] = sure
+		_rim_t_by_k[k] = t
+		_rim_lane_by_k[k] = lane
+		_rim_miss_by_k[k] = miss_prob
+		best_sure = maxf(best_sure, sure)
+	if best_sure <= 0.0:
+		return 0.0
+	# Fire it as soft as the race allows: among the launches nearly as sure as the
+	# best, the softest — easier to stop, and a missed one dies sooner.
+	var pick: int = -1
+	for k: int in AIRimPass.count:
+		var sure_k: float = _rim_sure_by_k[k]
+		if sure_k < best_sure * RIM_SOFT_SHARE:
+			continue
+		if pick == -1 or AIRimPass.paces[k] < AIRimPass.paces[pick] \
+				or (AIRimPass.paces[k] == AIRimPass.paces[pick] and sure_k > _rim_sure_by_k[pick]):
+			pick = k
+	_rim_k = pick
+	_rim_t = _rim_t_by_k[pick]
+	_rim_lane = _rim_lane_by_k[pick]
+	_rim_miss = _rim_miss_by_k[pick]
+	return _rim_sure_by_k[pick]
 
 
 # The pass-option cache's spot value for the receiver standing at `pos` (0.0 when
@@ -2127,6 +2160,7 @@ func _cached_option_value(pos: Vector3) -> float:
 #   - Carrier in OZ → lead must sit OZ_RECEIVE_LINE_BUFFER_M inside the
 #     blue line (see the constant's doc — a tape at the line loses the
 #     zone on routine reception slop).
+#   - Carrier outside with a delayed offside up → lead must stay outside.
 #   - Saucer only: the lead must leave the flip landing runway
 #     (airborne carry + SAUCER_LANDING_RUN_M — a closing receiver can
 #     shrink the solved lead under what the current distance allowed),
@@ -2158,6 +2192,10 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 		return 0.0
 	if carrier_in_oz and not AIActionScoring.in_offensive_zone(
 			receiver, ctx.attacking_goal_pos, OZ_RECEIVE_LINE_BUFFER_M):
+		return 0.0
+	# A delayed offside is up: a feed caught in the zone is a touch that whistles.
+	if ctx.zone_entry_blocked and not carrier_in_oz \
+			and AIActionScoring.in_offensive_zone(receiver, ctx.attacking_goal_pos):
 		return 0.0
 	var lane: float
 	# Derived execution-miss (see AIActionScoring.pass_miss_prob): this bot's own
@@ -2894,6 +2932,13 @@ func _best_dump(ctx: RoleContext, our_goalie: Vector3) -> Array:
 		return [-INF, Vector3.INF, false, false, Vector3.INF, 0.0]
 
 	var origin: Vector3 = _pass_origin(ctx)
+	if not in_own_zone:
+		# Icing reads the PUCK, which sits a stick off the body: a dump-in from a
+		# body past centre can still leave from behind the red line. And with a
+		# teammate owing a tag-up, a dumped puck is one nobody may touch.
+		if ctx.zone_entry_blocked or (ctx.icing_enforced and InfractionRules.behind_red_line(
+				origin.z, signf(attacking_goal.z))):
+			return [-INF, Vector3.INF, false, false, Vector3.INF, 0.0]
 	# Our chasers = teammates + ourselves; theirs = the opponents already gathered.
 	_scratch_our_chasers.clear()
 	_scratch_our_chaser_vels.clear()
@@ -3111,6 +3156,13 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 	if AIActionScoring.in_offensive_zone(self_pos, ctx.attacking_goal_pos) \
 			and not AIActionScoring.in_offensive_zone(
 					candidate, ctx.attacking_goal_pos, OZ_RETREAT_LINE_BUFFER_M):
+		return -INF
+	# Its NHL mirror: with a teammate owing a tag-up, carrying in is whistled at
+	# once. Judged on the body, so stand-still (outside) always survives; the last
+	# stick of puck lead is the steering's offside brake on the puck.
+	if ctx.zone_entry_blocked \
+			and AIActionScoring.in_offensive_zone(candidate, ctx.attacking_goal_pos) \
+			and not AIActionScoring.in_offensive_zone(self_pos, ctx.attacking_goal_pos):
 		return -INF
 	# The cage is a wall: a candidate whose straight route runs through either
 	# net frame is unreachable as priced (the time/lane/safety math below all
@@ -3594,6 +3646,10 @@ func _receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 		receiver_shot_speed: float, receiver_caps: AISkaterCaps,
 		receiver_vel: Vector3 = Vector3.ZERO, from_pos: Vector3 = Vector3.INF,
 		start_s: float = 0.0) -> float:
+	# A delayed offside is up: driving in from outside the zone is not on.
+	if ctx.zone_entry_blocked \
+			and not AIActionScoring.in_offensive_zone(receiver_spot, ctx.attacking_goal_pos):
+		return 0.0
 	var to_net_x: float = ctx.attacking_goal_pos.x - receiver_spot.x
 	var to_net_z: float = ctx.attacking_goal_pos.z - receiver_spot.z
 	var d: float = sqrt(to_net_x * to_net_x + to_net_z * to_net_z)

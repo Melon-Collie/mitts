@@ -306,3 +306,8 @@ here whenever you bump, in the same format.
 # v67: notify_faceoff_positions(positions, preroll) — the host now holds the
 #      faceoff countdown until the last skater has skated in, and sends that
 #      hold, since a client cannot measure remote skaters' glides itself.
+# v68: added notify_icing_race(icing_team_id, waved_off) RPC — the host tells
+#      every peer when an NHL hybrid-icing race opens and how it ended, for the
+#      icing race banner.
+# v69: PlayerStats gained `icings` (appended to to_array), so the stats player
+#      record is 19 values (peer_id + 18).

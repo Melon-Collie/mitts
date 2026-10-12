@@ -248,6 +248,14 @@ var prev_role_target: Vector3 = Vector3.INF
 # blue line (his earliest legal touch). Stamped per ctx build from the state
 # machine's latched rule_set.
 var offsides_enforced: bool = true
+# NHL only: an untouched release from behind the red line that reaches their
+# goal line is icing (the dump-in reads it).
+var icing_enforced: bool = false
+# NHL delayed offside: a teammate owes a tag-up, so the puck may not enter the
+# attacking zone — carried in it is whistled at once, and passed or dumped in
+# nobody can touch it until the whole team is back out. Read by the carrier to
+# keep its carries, feeds and dumps out of the zone.
+var zone_entry_blocked: bool = false
 
 # ── 5v5 position identity ────────────────────────────────────────────────────
 # Latched match team size (TeamBrain.team_size). Gates the 5v5-only reads

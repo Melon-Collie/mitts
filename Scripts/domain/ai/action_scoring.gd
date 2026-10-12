@@ -4243,8 +4243,8 @@ static func _segment_crosses_aabb_xz(
 # than by aiming at a hand-placed target and pricing the concession there.
 #
 # The two dumps want opposite things and are scored separately:
-#   DZ CLEAR — get it out, and do not ice it. Hybrid icing is a race timed from
-#     the goal-line crossing, so a delivery that never reaches the line cannot
+#   DZ CLEAR — get it out, and do not ice it. Hybrid icing is a race that starts
+#     at the goal-line crossing, so a delivery that never reaches the line cannot
 #     be iced at all; a steep bank into the near boards buys that, because the
 #     contact sheds 37-60% where a glancing rim sheds ~5% AND the carom bends
 #     the path. Legality is bought by the PATH, which matters because the

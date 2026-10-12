@@ -108,3 +108,11 @@ The bot answer to being out of play is the tag-up override in
 of the blue line (`offside_brake` on the puck), since carrying it in is an
 immediate whistle. The coverage reads in `role_helpers.gd` still read
 `is_ghost` on purpose — an NHL offside skater is physically on the ice.
+
+A teammate owing a tag-up is a TEAM state, not a personal one: until the whole team
+is out, nobody may enter (`offside_brake`'s `hold_line` keeps the line shut
+even once the puck is in), and the carrier keeps its carries, feeds and
+dump-ins out of the zone (`RoleContext.zone_entry_blocked`). The brake runs on
+every tick, decided or not — a throttled bot still moves on its cached vector.
+An out-of-play bot is also never the elected loose-puck chaser: it would refuse
+the chase while nobody else was sent.

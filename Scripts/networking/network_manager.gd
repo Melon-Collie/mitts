@@ -69,6 +69,7 @@ signal offside_state_received(peer_id: int, must_tag_up: bool)
 signal goal_received(scoring_team_id: int, score0: int, score1: int, scorer_name: String, assist1_name: String, assist2_name: String)
 signal puck_out_of_play_received
 signal icing_called_received
+signal icing_race_received(icing_team_id: int, waved_off: bool)
 signal goalie_freeze_called_received
 signal offside_called_received
 signal faceoff_positions_received(positions: Array, preroll: float)
@@ -2084,6 +2085,18 @@ func notify_icing_called_to_all() -> void:
 @rpc("authority", "reliable")
 func notify_icing_called() -> void:
 	NetworkSimManager.send(func() -> void: icing_called_received.emit(), [], true)
+
+# NHL hybrid icing: a race opened (icing_team_id) or ended (-1, and whether it
+# was waved off), so every peer can show the race the host is judging.
+func send_icing_race_to_all(icing_team_id: int, waved_off: bool) -> void:
+	for peer_id: int in connected_peer_ids():
+		notify_icing_race.rpc_id(peer_id, icing_team_id, waved_off)
+
+@rpc("authority", "reliable")
+func notify_icing_race(icing_team_id: int, waved_off: bool) -> void:
+	NetworkSimManager.send(
+		func(t: int, w: bool) -> void: icing_race_received.emit(t, w),
+		[icing_team_id, waved_off], true)
 
 func notify_goalie_freeze_called_to_all() -> void:
 	for peer_id: int in connected_peer_ids():

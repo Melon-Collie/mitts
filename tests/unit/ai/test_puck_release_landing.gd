@@ -203,7 +203,7 @@ func test_the_crossing_read_is_direction_aware() -> void:
 
 
 # ── The crossing CLOCK ───────────────────────────────────────────────────────
-# Hybrid icing is a race judged when the puck reaches the goal line, so what
+# Hybrid icing is a race that starts when the puck reaches the goal line, so what
 # decides a clear's legality is how long it takes to get there — not how far it
 # goes. These pin the clock the dump eval races against.
 

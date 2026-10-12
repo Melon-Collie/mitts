@@ -34,7 +34,7 @@ extends GutTest
 #
 # Two entries in the API table are deliberate and will never come down, and it
 # is worth knowing which before trying:
-#   · network_manager.gd (202) — 113 are receive_*/send_*/notify_*. Godot
+#   · network_manager.gd (204) — 115 are receive_*/send_*/notify_*. Godot
 #     dispatches @rpc by name on the node, so that IS the wire protocol.
 #   · player_attributes.gd (53) — one accessor per body dial, by design.
 #
@@ -50,9 +50,9 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +3: the wrister wind-up side reads the trailer's relative motion over the
 	# charge (#740), not just where he stands at the commit.
 	# +1: the chase steer passes when an airborne puck is back on the blade plane.
-	"res://Scripts/ai/skater_agent_state_machine.gd": 6090,
+	"res://Scripts/ai/skater_agent_state_machine.gd": 6093,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
-	"res://Scripts/game/game_manager.gd": 5644,
+	"res://Scripts/game/game_manager.gd": 5704,
 	"res://Scripts/domain/ai/action_scoring.gd": 4458,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
@@ -61,11 +61,11 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +7: the puck-velocity estimate is bounded by the puck's own speed limit.
 	# It is a one-tick finite difference feeding a positional decision, so a
 	# teleport read as travel moved the tracked threat metres in a tick.
-	"res://Scripts/controllers/goalie_controller.gd": 5010,
+	"res://Scripts/controllers/goalie_controller.gd": 5014,
 	# +162: the rim pass. The path search lives in AIRimPass; what stays here is
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
-	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3916,
+	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3970,
 	"res://Scripts/controllers/skater_controller.gd": 3343,
 	"res://Scripts/actors/skater.gd": 2717,
 	"res://Scripts/networking/network_manager.gd": 2824,
@@ -91,16 +91,16 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/controllers/local_controller.gd": 932,
 	"res://Scripts/ui/player_settings_popup.gd": 863,
 	"res://Scripts/ui/slot_grid_panel.gd": 839,
-	"res://Scripts/domain/state/game_state_machine.gd": 851,
+	"res://Scripts/domain/state/game_state_machine.gd": 816,
 	"res://Scripts/ui/locker_popup.gd": 822,
-	"res://Scripts/ui/hud.gd": 811,
+	"res://Scripts/ui/hud.gd": 816,
 }
 
 const _API_LIMIT: int = 25
 const _API_SLACK: int = 3
 
 const _API_ALLOWANCE: Dictionary[String, int] = {
-	"res://Scripts/networking/network_manager.gd": 202,
+	"res://Scripts/networking/network_manager.gd": 204,
 	"res://Scripts/actors/skater.gd": 142,
 	"res://Scripts/domain/ai/action_scoring.gd": 68,
 	"res://Scripts/game/game_manager.gd": 63,
