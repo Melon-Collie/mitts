@@ -62,7 +62,8 @@ static func release_shared_material() -> void:
 
 
 # Shared material — crowd.gdshader reads the per-instance MultiMesh color for
-# albedo and animates sway/hop from INSTANCE_CUSTOM + the excitement uniform. One
+# albedo (its alpha flags a bare head), shades it by height on the figure, and
+# animates sway/hop from INSTANCE_CUSTOM + the excitement uniform. One
 # material across both MultiMeshes and across rebuilds, so excitement state
 # persists and a single uniform write drives the whole bowl. Cull disabled like
 # the terrace material: culling back faces on individual spectators leaves
@@ -73,6 +74,10 @@ static func shared_material() -> ShaderMaterial:
 		_crowd_material = ShaderMaterial.new()
 		_crowd_material.shader = load(_CROWD_SHADER_PATH)
 		_crowd_material.set_shader_parameter("excitement", 0.0)
+		var body_top: float = ArenaFigureMesh.BODY_Y_LIFT + ArenaFigureMesh.BODY_SIZE.y
+		_crowd_material.set_shader_parameter("body_top_y", body_top)
+		_crowd_material.set_shader_parameter("head_base_y",
+				body_top + ArenaFigureMesh.NECK_GAP * 0.5)
 	return _crowd_material
 
 
@@ -275,8 +280,11 @@ func pick_colors(rng: RandomNumberGenerator,
 	if team_loyalty.a > 0.0 and rng.randf() < _spec.team_cap_ratio:
 		head = _shade(team_loyalty, rng)
 	else:
-		head = ArenaFigureMesh.HEAD_PALETTE[
-				rng.randi() % ArenaFigureMesh.HEAD_PALETTE.size()]
+		var tone: int = rng.randi() % ArenaFigureMesh.HEAD_PALETTE.size()
+		head = ArenaFigureMesh.HEAD_PALETTE[tone]
+		# Alpha 0 tells crowd.gdshader there is skin on top, to crown with hair.
+		if tone < ArenaFigureMesh.BARE_HEAD_TONES:
+			head.a = 0.0
 	return [body, head]
 
 

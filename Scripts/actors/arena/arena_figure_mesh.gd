@@ -62,6 +62,8 @@ const HEAD_PALETTE: Array[Color] = [
 	Color(0.32, 0.22, 0.16),  # brown hair
 	Color(0.78, 0.74, 0.68),  # grey hair / pale cap
 ]
+# The leading HEAD_PALETTE entries that are bare skin; the rest are hair or a cap.
+const BARE_HEAD_TONES: int = 5
 
 
 # Body box, origin at the figure's base. Lifted 2 mm off the tread so the bottom

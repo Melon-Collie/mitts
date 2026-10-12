@@ -75,9 +75,9 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# restart the swept interaction tests where the puck lands instead of
 	# sweeping the jump. +6: the pinch hop composed onto the contest exit.
 	"res://Scripts/controllers/puck_controller.gd": 1547,
-	"res://Scripts/actors/hockey_rink.gd": 1472,
+	"res://Scripts/actors/hockey_rink.gd": 1469,
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 1409,
-	"res://Scripts/game/player_prefs.gd": 1400,
+	"res://Scripts/game/player_prefs.gd": 1403,
 	"res://Scripts/actors/skater_mesh_builder.gd": 1409,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1372,
 	"res://Scripts/ui/career_stats_screen.gd": 1271,

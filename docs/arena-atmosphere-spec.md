@@ -13,11 +13,20 @@ pass is reverted.
 
 - **SSR** (screen-space reflections) on the ice — skaters reflect on the sheet,
   sharpest viewed across the ice. Default on.
+- **Bowl reflection probe** (`ArenaReflection`, built by `ArenaStands`) — one
+  box-projected probe over the bowl, captured once, so the ice, the glass and
+  the gear reflect the stands, which SSR cannot: from the top-down camera they
+  are off screen. It draws only the `REFLECTED_STATIC` layer (the arena root's
+  geometry and lights, never the actors), dims with the house-lights cue, and
+  re-shoots after every bowl rebuild. Shares the Reflections toggle with SSR.
+- **Rink glass** (`Shaders/rink_glass.gdshader`) — premultiplied alpha, so the
+  probe's reflection shows at full strength over a faint tint; Fresnel blocking
+  toward grazing, a smudged low band, a green top edge.
 - **SSAO** (contact shadows) — grounds skaters/goal to the ice. Default on
   (it was silently *off* before — the `.tscn` set `ssao_radius`/`ssao_intensity`
   but never `ssao_enabled`).
-- **Ice roughness tune** — `ice_roughness_head_on` 0.20 → 0.15 in
-  `hockey_rink.gd` so reflections hold together looking down.
+- **Ice roughness** — `ice_roughness_head_on` (0.35) in `hockey_rink.gd`, low
+  enough that reflections hold together looking down.
 - Bright even lighting **restored** to the original values (ambient `0.25`, bowl
   fills `0.25`, glow threshold `1.3`).
 - **Volumetric fog** kept as an **opt-in** toggle, **default off**, thin density
@@ -37,6 +46,7 @@ tell me what to nudge** — every value here is a one-line change.
 
 - `volumetric_fog_enabled` ← `volumetric_fog_enabled` pref (default **false**)
 - `ssr_enabled` ← `reflections_enabled` pref (default true)
+- `ArenaReflection.visible` ← `reflections_enabled` too
 - `ssao_enabled` ← `ambient_occlusion_enabled` pref (default true)
 - `sdfgi_enabled` ← `gi_mode` (default `OFF`)
 - adjustment LUT, shadows, AA

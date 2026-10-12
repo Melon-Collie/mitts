@@ -211,3 +211,28 @@ func test_a_seat_clears_the_largest_occupant() -> void:
 			"and stops short of its neighbour, or the row reads as one bench")
 	assert_gt(ArenaSeating.BACK_OFFSET, widest * 0.5,
 			"the backrest clears the deepest body a roll can produce")
+
+
+func test_only_bare_skin_is_flagged_for_hair() -> void:
+	# crowd.gdshader crowns a head with hair when its paint alpha is 0, so the
+	# flag must land on exactly the skin tones — never a cap, never hair.
+	var spec := ArenaBowlSpec.new()
+	var path := ArenaBowlPath.new(spec)
+	var crowd := ArenaCrowd.new(spec, path, ArenaBowlRake.new(spec, path))
+	var skin: Array[Color] = []
+	for i: int in ArenaFigureMesh.BARE_HEAD_TONES:
+		skin.append(ArenaFigureMesh.HEAD_PALETTE[i])
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var flagged: int = 0
+	for i: int in 2000:
+		var picked: Array[Color] = crowd.pick_colors(rng)
+		assert_eq(picked[0].a, 1.0, "a body is never flagged")
+		var head: Color = picked[1]
+		var opaque := Color(head.r, head.g, head.b, 1.0)
+		if head.a == 0.0:
+			flagged += 1
+			assert_true(skin.has(opaque), "flagged head %s must be a skin tone" % head)
+		else:
+			assert_false(skin.has(opaque), "unflagged head %s must not be skin" % head)
+	assert_gt(flagged, 0, "some of the crowd is bare-headed")

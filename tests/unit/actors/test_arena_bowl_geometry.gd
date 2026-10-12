@@ -249,3 +249,24 @@ func test_disabling_vomitories_closes_every_wall() -> void:
 	assert_false(rake.in_vomitory(0.0), "no portals means no doorways anywhere")
 	assert_eq(rake.fascia_portal_head(), -INF,
 			"and no lintel height for the fascia to make room for")
+
+
+# ── Interior volume ──────────────────────────────────────────────────────────
+
+func test_interior_bounds_reach_the_shell_and_hold_the_ice() -> void:
+	# The reflection probe is fitted to this box with box projection on, so the
+	# box IS where the probe assumes the building's walls are: out to the shell
+	# in plan, up to the shell's top edge, and with the ice clear of the floor.
+	var spec: ArenaBowlSpec = _spec()
+	var rake: ArenaBowlRake = _rake(spec)
+	var margin: float = 1.5
+	var box: AABB = rake.interior_bounds(margin)
+	assert_almost_eq(box.end.x, spec.rink_width * 0.5 + rake.shell_offset(), 0.001,
+			"the box's side wall must be the shell")
+	assert_almost_eq(box.end.z, spec.rink_length * 0.5 + rake.shell_offset(), 0.001,
+			"the box's end wall must be the shell")
+	assert_almost_eq(box.end.y, rake.top_tread_y() + spec.shell_height, 0.001,
+			"the box's ceiling must be the shell's top edge")
+	assert_almost_eq(box.position.y, -margin, 0.001, "the floor sits margin under the ice")
+	assert_almost_eq(box.get_center().x, 0.0, 0.001, "the box is centred on the rink")
+	assert_almost_eq(box.get_center().z, 0.0, 0.001, "the box is centred on the rink")
