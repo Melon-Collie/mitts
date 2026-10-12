@@ -37,6 +37,12 @@ static func timing_weight(since_drop: float, miss_window_s: float,
 	var t: float = clampf(since_drop / miss_window_s, 0.0, 1.0)
 	return lerpf(1.0 + bonus, min_weight, t)
 
+# Downward launch speed (m/s, positive = down) that drops a puck `height` metres
+# in `time` seconds under `gravity`. Zero when gravity alone already covers it.
+static func drop_throw_speed(height: float, time: float, gravity: float) -> float:
+	var t: float = maxf(time, 0.001)
+	return maxf((height - 0.5 * gravity * t * t) / t, 0.0)
+
 # Draw heading for a bot center: pull toward its own zone, angled to the backhand
 # side so the puck goes to the backhand winger (who lines up back and to that
 # side). back_dir is the horizontal vector from the dot toward the center's own

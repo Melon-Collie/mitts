@@ -400,15 +400,15 @@ func test_evaluator_costs() -> void:
 	var legal_vel := Vector3(0.0, 0.0, -6.6)
 	_bench("predict_final (puck, 40 steps @ 50ms = 2.0 s)", func() -> void:
 		AITrajectory.predict_final(from, rim_vel, 40, 0.05,
-				GameRules.PUCK_ICE_DECEL_M_S2, GameRules.PUCK_BOARD_BOUNCE,
+				GameRules.PUCK_ICE_DECEL_M_S2, GameRules.PUCK_BOARD_COR_SCALE,
 				Vector3.ZERO, 0.0, GameRules.PUCK_BOARD_FRICTION))
 	_bench("predict_final (puck, 120 steps @ 50ms = 6.0 s)", func() -> void:
 		AITrajectory.predict_final(from, rim_vel, 120, 0.05,
-				GameRules.PUCK_ICE_DECEL_M_S2, GameRules.PUCK_BOARD_BOUNCE,
+				GameRules.PUCK_ICE_DECEL_M_S2, GameRules.PUCK_BOARD_COR_SCALE,
 				Vector3.ZERO, 0.0, GameRules.PUCK_BOARD_FRICTION))
 	_bench("predict_final (puck, 270 steps @ 50ms = full runout)", func() -> void:
 		AITrajectory.predict_final(from, legal_vel, 270, 0.05,
-				GameRules.PUCK_ICE_DECEL_M_S2, GameRules.PUCK_BOARD_BOUNCE,
+				GameRules.PUCK_ICE_DECEL_M_S2, GameRules.PUCK_BOARD_COR_SCALE,
 				Vector3.ZERO, 0.0, GameRules.PUCK_BOARD_FRICTION))
 
 	gut.p("")

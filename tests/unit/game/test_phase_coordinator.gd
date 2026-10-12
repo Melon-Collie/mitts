@@ -18,6 +18,18 @@ var _drop_calls: int
 var _drop_return: int
 
 
+# Records the skate-in it was handed instead of gliding a body.
+class StubController extends SkaterController:
+	var durations: Array[float] = []
+
+	func begin_approach(_start: Vector3, _target: Vector3, _settle_facing: Vector2,
+			duration: float, _initial_velocity: Vector3 = Vector3.ZERO) -> void:
+		durations.append(duration)
+
+	func faceoff_center_distance() -> float:
+		return 1.0
+
+
 func before_each() -> void:
 	sm = GameStateMachine.new()
 	registry = PlayerRegistry.new()
@@ -191,7 +203,7 @@ func test_on_goal_received_applies_score_and_emits() -> void:
 
 func test_on_faceoff_positions_advances_phase_and_announces() -> void:
 	sm.current_phase = GamePhase.Phase.GOAL_CELEBRATION
-	coord.on_faceoff_positions([])
+	coord.on_faceoff_positions([], 0.0)
 	assert_eq(sm.current_phase, GamePhase.Phase.FACEOFF_PREP)
 	assert_signal_emitted_with_parameters(coord, "phase_changed", [GamePhase.Phase.FACEOFF_PREP])
 	assert_signal_emitted(coord, "faceoff_prep_announced")
@@ -199,9 +211,70 @@ func test_on_faceoff_positions_advances_phase_and_announces() -> void:
 
 func test_on_faceoff_positions_when_already_in_faceoff_only_announces() -> void:
 	sm.current_phase = GamePhase.Phase.FACEOFF
-	coord.on_faceoff_positions([])
+	coord.on_faceoff_positions([], 0.0)
 	assert_signal_not_emitted(coord, "phase_changed")
 	assert_signal_emitted(coord, "faceoff_prep_announced")
+
+
+# ── The countdown waits for the last skater ──────────────────────────────────
+
+func _add_skating_player(peer_id: int, team_id: int, is_local: bool = false) -> StubController:
+	var record: PlayerRecord = _add_player(peer_id, team_id, is_local)
+	var c := StubController.new()
+	autofree(c)
+	record.controller = c
+	return c
+
+
+func _assert_prep_holds_until_last_arrival(controllers: Array[StubController]) -> void:
+	var last: float = 0.0
+	for c: StubController in controllers:
+		assert_eq(c.durations.size(), 1, "every skater skates in")
+		last = maxf(last, c.durations[0])
+	assert_almost_eq(coord.last_prep_preroll, last + GameRules.FACEOFF_SET_BEAT, 0.0001,
+			"the countdown starts once the last skater is set")
+	assert_almost_eq(sm.faceoff_prep_time_until_drop(),
+			coord.last_prep_preroll + GameRules.FACEOFF_PREP_DURATION, 0.0001,
+			"the drop is a full countdown after that")
+	assert_signal_emitted_with_parameters(coord, "faceoff_positions_ready",
+			[get_signal_parameters(coord, "faceoff_positions_ready")[0], coord.last_prep_preroll])
+
+
+func test_stoppage_prep_holds_the_countdown_until_the_last_arrival() -> void:
+	var cs: Array[StubController] = [_add_skating_player(10, 0), _add_skating_player(11, 1)]
+	sm.begin_faceoff_prep()
+	coord.handle_phase_entered()
+	_assert_prep_holds_until_last_arrival(cs)
+
+
+func test_post_goal_prep_holds_the_countdown_until_the_slowest_arrival() -> void:
+	var cs: Array[StubController] = [
+			_add_skating_player(10, 0), _add_skating_player(11, 0),
+			_add_skating_player(12, 1), _add_skating_player(13, 1)]
+	coord._staged_faceoff_pending = true
+	sm.begin_faceoff_prep()
+	coord.handle_phase_entered()
+	var spread: bool = false
+	for c: StubController in cs:
+		spread = spread or not is_equal_approx(c.durations[0], cs[0].durations[0])
+	assert_true(spread, "staggered arrivals, so the hold is the slowest one, not any one")
+	_assert_prep_holds_until_last_arrival(cs)
+
+
+func test_client_takes_the_hosts_hold() -> void:
+	sm.current_phase = GamePhase.Phase.PLAYING
+	coord.on_faceoff_positions([], 2.75)
+	assert_eq(coord.last_prep_preroll, 2.75)
+
+
+func test_client_skate_in_never_outlasts_the_hosts_hold() -> void:
+	# The local start is the predicted body, which can sit further out than the
+	# host measured from; the glide is clipped so the "2" still finds it set.
+	var c: StubController = _add_skating_player(10, 0, true)
+	sm.current_phase = GamePhase.Phase.PLAYING
+	coord.on_faceoff_positions([10, 0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.5], 0.5)
+	assert_eq(c.durations.size(), 1)
+	assert_lte(c.durations[0], 0.5 - GameRules.FACEOFF_SET_BEAT + 0.0001)
 
 
 # ── Period break → period-start bench intro ──────────────────────────────────
@@ -240,8 +313,8 @@ func test_prep_without_break_is_not_period_intro() -> void:
 	sm.begin_faceoff_prep()
 	coord.handle_phase_entered()
 	assert_false(coord.last_prep_was_period_intro)
-	assert_eq(coord.last_prep_preroll, GameRules.FACEOFF_SKATE_PREP_EXTRA,
-			"a plain stoppage faceoff keeps the skate-in pre-roll")
+	assert_eq(coord.last_prep_preroll, GameRules.FACEOFF_SET_BEAT,
+			"a plain stoppage faceoff with nobody to skate in holds just the set beat")
 
 
 func test_period_break_flag_is_consumed_by_one_prep() -> void:

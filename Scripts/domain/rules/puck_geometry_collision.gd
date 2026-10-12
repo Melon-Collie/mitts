@@ -18,9 +18,10 @@ class_name PuckGeometryCollision
 # Pure / static — headless-testable, allocation-free on the per-tick path (fills a caller-
 # owned Result rather than returning a fresh object).
 
-# Restitution the analytic reflections apply. These are the authoritative values — the puck
-# never reaches the engine solver, so the goal bodies' PhysicsMaterial overrides are not read.
-const POST_RESTITUTION: float = 0.55  # goal pipe (posts + crossbar) — a live ping off the iron
+# The analytic reflections' authoritative values — the puck never reaches the engine solver.
+# The goal pipe is 2-3/8" steel, rigid next to a frozen puck, so it keeps the puck's whole
+# rigid-wall COR (PuckRestitution.rigid_wall at the normal impact speed).
+const POST_COR_SCALE: float = 1.0
 const NET_RESTITUTION: float = 0.05   # net panels — twine absorbs, the puck drops
 
 
@@ -44,8 +45,19 @@ static func reflect_3d(vel: Vector3, normal: Vector3, restitution: float) -> Vec
 	return vel - (1.0 + restitution) * vn * n
 
 
+# reflect_3d off the goal iron: restitution is the rigid-wall COR at this impact's
+# normal speed.
+static func reflect_off_pipe(vel: Vector3, normal: Vector3) -> Vector3:
+	var n: Vector3 = normal.normalized()
+	var vn: float = vel.dot(n)
+	if vn >= 0.0:
+		return vel
+	var e: float = POST_COR_SCALE * PuckRestitution.rigid_wall(-vn)
+	return vel - (1.0 + e) * vn * n
+
+
 # Resolve a puck against the two goal posts at whichever end it's near. On contact, eject the
-# disc flush against the post and reflect the into-post velocity with POST_RESTITUTION
+# disc flush against the post and reflect the into-post velocity off the iron
 # (tangential kept — pipes are near-frictionless). Returns true and fills `result` on a hit;
 # returns false and leaves the puck untouched otherwise. Testing only the near end keeps this
 # to two circle checks on the per-tick path.
@@ -86,7 +98,8 @@ static func _resolve_one_post(pos: Vector3, vel: Vector3, puck_radius: float,
 	# Eject flush against the post, then reflect the horizontal velocity with restitution
 	# (deflect_velocity is horizontal-only, so carry the vertical channel through unchanged).
 	var ejected: Vector2 = post_xz + n * combined_r
-	var reflected_h: Vector3 = PuckCollisionRules.deflect_velocity(vel, n3, POST_RESTITUTION)
+	var e: float = POST_COR_SCALE * PuckRestitution.rigid_wall(absf(vel.x * n.x + vel.z * n.y))
+	var reflected_h: Vector3 = PuckCollisionRules.deflect_velocity(vel, n3, e)
 	result.position = Vector3(ejected.x, pos.y, ejected.y)
 	result.velocity = Vector3(reflected_h.x, vel.y, reflected_h.z)
 	result.hit = true
@@ -95,7 +108,7 @@ static func _resolve_one_post(pos: Vector3, vel: Vector3, puck_radius: float,
 
 # Resolve a puck against the CROSSBAR — a horizontal pipe (axis along X) at y = NET_HEIGHT,
 # z = ±GOAL_LINE_Z, spanning |x| <= NET_CROWN_HALF_WIDTH. The test is 2D in the Y-Z plane:
-# circle (puck) vs circle (pipe). Reflects the Y-Z velocity at POST_RESTITUTION, keeping the
+# circle (puck) vs circle (pipe). Reflects the Y-Z velocity off the iron, keeping the
 # along-bar X channel. Launched loft tops out under the bar (~1.14 m vs the 1.19 m
 # underside), but deflections / goalie rebounds can arrive higher, so this does fire in
 # live play. Puck treated as a sphere of
@@ -116,7 +129,7 @@ static func resolve_crossbar(pos: Vector3, vel: Vector3, puck_radius: float, res
 	var n := dyz / d  # (y, z)
 	var ejected: Vector2 = Vector2(GameRules.NET_HEIGHT, end_z) + n * combined_r
 	result.position = Vector3(pos.x, ejected.x, ejected.y)
-	result.velocity = reflect_3d(vel, Vector3(0.0, n.x, n.y), POST_RESTITUTION)
+	result.velocity = reflect_off_pipe(vel, Vector3(0.0, n.x, n.y))
 	result.hit = true
 	return true
 
@@ -128,8 +141,8 @@ static func resolve_crossbar(pos: Vector3, vel: Vector3, puck_radius: float, res
 #
 # The test is sphere-vs-torus reduced to a point test: find the nearest point on
 # the bend's centre-line (NetGeometry.closest_point_on_bend) and treat the pipe as
-# that point's tube radius. Reflects at POST_RESTITUTION like the rest of the
-# iron, through the true 3D normal — a corner ping deflects up and sideways, which
+# that point's tube radius. Reflects off the iron like the rest of the
+# frame, through the true 3D normal — a corner ping deflects up and sideways, which
 # a horizontal-only deflect could not express.
 static func resolve_crossbar_bends(
 		pos: Vector3, vel: Vector3, puck_radius: float, result: Result) -> bool:
@@ -155,7 +168,7 @@ static func resolve_crossbar_bends(
 		return false
 	var n: Vector3 = offset / d
 	result.position = axis + n * combined_r
-	result.velocity = reflect_3d(vel, n, POST_RESTITUTION)
+	result.velocity = reflect_off_pipe(vel, n)
 	result.hit = true
 	return true
 

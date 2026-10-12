@@ -264,7 +264,7 @@ func test_center_on_dot_falls_back_to_straight_back() -> void:
 	assert_almost_eq(s1.z, -GameRules.FACEOFF_STAGING_SETBACK, 0.001)
 
 # ── skate_in_duration ────────────────────────────────────────────────────────
-# Distance-scaled glide time for period / stoppage skate-ins, clamped to a range.
+# Distance-scaled glide time for stoppage skate-ins, clamped to a range.
 
 func test_skate_in_duration_scales_with_distance() -> void:
 	# A mid-range distance at the target pace, inside the clamp band.
@@ -276,7 +276,7 @@ func test_skate_in_duration_floors_close_distance() -> void:
 	assert_eq(PlayerRules.skate_in_duration(0.0, 1.25, 3.0), 1.25)
 
 func test_skate_in_duration_caps_far_distance() -> void:
-	# 100 m would need ~11 s; the cap keeps everyone set before the drop.
+	# 100 m would need ~11 s; the cap keeps a far skate from holding the game up.
 	assert_eq(PlayerRules.skate_in_duration(100.0, 1.25, 3.0), 3.0)
 
 # ── stagger01 ────────────────────────────────────────────────────────────────

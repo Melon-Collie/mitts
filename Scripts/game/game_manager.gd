@@ -52,11 +52,10 @@ signal body_check_broadcast(force: float)
 # host-extended by `duration`, so listeners (camera sweep, HUD matchup card,
 # crowd buzz) have that long before the normal faceoff countdown begins.
 signal pregame_intro_started(duration: float)
-# Fired (before faceoff_prep_announced) on a period / stoppage faceoff whose
-# prep is extended so players skate in from where play stopped. `delay` is the
-# seconds the HUD should hold before the "2 → 1 → DROP" countdown so it lands on
-# the real (extended) drop. 0-delay faceoffs (opening intro, post-goal) don't
-# fire this. Host and client both fire it, deriving `delay` locally.
+# Fired (before faceoff_prep_announced) on a post-goal / stoppage faceoff, whose
+# prep is held until the last skater arrives. `delay` is the seconds the HUD
+# holds before the "2 → 1 → DROP" countdown (PhaseCoordinator.last_prep_preroll).
+# The bench intros ride their own signals instead.
 signal faceoff_skate_in_started(delay: float)
 # Fired on every peer when END_OF_PERIOD begins — the between-period break.
 # Skaters skate off to their bench doors over the window (PhaseCoordinator.
@@ -554,6 +553,7 @@ func _process(delta: float) -> void:
 		return
 	if _state_machine.tick(delta):
 		_phase_coord.handle_phase_entered()
+	_phase_coord.update_faceoff_drop()
 	if _state_machine.current_phase == GamePhase.Phase.PLAYING:
 		var secs: int = int(_state_machine.time_remaining)
 		if secs != _last_emitted_clock_secs:
@@ -3862,9 +3862,9 @@ func _on_goal_received(scoring_team_id: int, score0: int, score1: int,
 			scorer_name, assist1_name, assist2_name)
 
 
-func _on_faceoff_positions_received(positions: Array) -> void:
+func _on_faceoff_positions_received(positions: Array, preroll: float) -> void:
 	if _phase_coord != null:
-		_phase_coord.on_faceoff_positions(positions)
+		_phase_coord.on_faceoff_positions(positions, preroll)
 
 
 func _on_puck_out_of_play_received() -> void:
@@ -4177,8 +4177,8 @@ func _on_faceoff_prep_announced_from_coord() -> void:
 		period_intro_started.emit(
 				_phase_coord.period_after_break, GameRules.PERIOD_INTRO_DURATION)
 	elif _phase_coord != null and _phase_coord.last_prep_preroll > 0.0:
-		# Period / stoppage skate-in: hold the countdown for the skate window so
-		# it lands on the extended drop. Guarded by the intro branch above so the
+		# Post-goal / stoppage skate-in: hold the countdown until everyone is set
+		# so it lands on the extended drop. Guarded by the intro branch above so the
 		# opening faceoff never double-counts (its pre-roll is the intro's).
 		faceoff_skate_in_started.emit(_phase_coord.last_prep_preroll)
 	faceoff_prep_announced.emit()

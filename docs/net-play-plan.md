@@ -22,8 +22,8 @@ them constantly around the crease.
 
 `PuckGeometryCollision` (loose puck) models the real cage, carefully:
 
-- posts and crossbar as pipes at their true `NET_POST_RADIUS` 0.030, ringing at
-  `POST_RESTITUTION` 0.55;
+- posts and crossbar as pipes at their true `NET_POST_RADIUS` 0.030, ringing at the
+  frozen puck's rigid-wall COR (`PuckRestitution`, 0.35 slow → 0.27 at shot speed);
 - side twine as vertical planes at the post line, `NET_HALF_WIDTH` 0.915 —
   `_cavity_half_width` carries an explicit comment that widening these to
   `NET_BACK_HALF_WIDTH` was a **bug**, because "the real cage doesn't flare";
@@ -44,7 +44,7 @@ Where those two disagree:
 | Side twine | 0.915 | **1.015** | 10 cm outside the visible mesh |
 | Back twine at the ice | 1.02 | 1.12 | 10 cm |
 | Back twine at y = 0.6 m | ~0.79 | **1.12** | **33 cm** |
-| Posts | pipes, ring at 0.55 | nothing — a box corner | — |
+| Posts | pipes, ring at the rigid-wall COR | nothing — a box corner | — |
 
 The side row is the sharpest: the buffer puts the blade's side wall at 1.015,
 which is within half a centimetre of the 1.02 trapezoid flare that the loose-puck
@@ -172,7 +172,7 @@ The important detail is *how* it comes off. Not `_do_release` with a generic
 `goalie_strip_power` shove — the puck should leave along its **own reflection off
 the pipe**, which `PuckGeometryCollision.resolve_posts` already computes:
 eject flush against the cylinder, reflect the into-post component at
-`POST_RESTITUTION` 0.55, keep the tangential (pipes are near-frictionless). So
+the rigid-wall COR, keep the tangential (pipes are near-frictionless). So
 the strip velocity is not a new number to tune; it is the collision the loose
 puck would have had, which is the whole thesis of this document applied to the
 one case where the puck stops being carried.
@@ -182,7 +182,7 @@ Consequences worth stating:
 - It gives the goalie's post seal a free ally at exactly the moment it should
   have one, without buffing the goalie's *reads* at all — the doctrine
   constraint in §5.3 is untouched, because iron is not a save.
-- The rebound is live (0.55 off the pipe), so a ring is a loose puck in a
+- The rebound is live (~0.3 off the pipe), so a ring is a loose puck in a
   dangerous area, not a whistle. Ringing iron should create a scramble.
 - It applies to the jam too: prying against the post and catching pipe ends the
   jam and squirts the puck.

@@ -18,7 +18,9 @@ signal period_synced(new_period: int)
 signal clock_updated(time_remaining: float)
 signal game_over
 signal stats_need_sync
-signal faceoff_positions_ready(positions: Array)  # host → broadcast to clients
+# Host → broadcast to clients. `preroll` is last_prep_preroll: the host measured
+# every skater's glide, which a client cannot (it never sees remotes' starts).
+signal faceoff_positions_ready(positions: Array, preroll: float)
 # Fires once per faceoff on the side that actually places skaters at the dot:
 # the host emits it in _enter_faceoff_prep (alongside faceoff_positions_ready);
 # the client emits it from on_faceoff_positions after the reliable RPC lands.
@@ -103,12 +105,11 @@ var period_after_break: int = 0
 # play stopped.
 var _staged_faceoff_pending: bool = false
 
-# Cosmetic countdown pre-roll (seconds) the HUD should wait before the "2 → 1 →
-# DROP" beat for the faceoff just placed — the skate-in window extension for
-# period / stoppage faceoffs, 0 otherwise (the opening intro's pre-roll rides
-# its own pregame_intro_started path). Set in _enter_faceoff_prep / on_faceoff_
-# positions before faceoff_prep_announced fires; GameManager reads it there and
-# relays it to the HUD. Both host and client derive it identically.
+# Seconds before the "2 → 1 → DROP" countdown for the faceoff just placed: the
+# last post-goal / stoppage skater's arrival plus FACEOFF_SET_BEAT, 0 for the
+# bench intros (they hold on their own signals). The host measures it and
+# extends the prep by it; clients take it off the faceoff RPC. Set before
+# faceoff_prep_announced fires; GameManager relays it to the HUD there.
 var last_prep_preroll: float = 0.0
 
 # True when the faceoff just placed is a period-start bench intro (consumed
@@ -207,7 +208,7 @@ func handle_phase_entered() -> void:
 func _enter_faceoff_prep(puck: Puck) -> void:
 	var dot: Vector2 = _state_machine.active_faceoff_dot
 	if puck != null:
-		puck.reset(dot)
+		puck.reset(dot, GameRules.FACEOFF_PUCK_HOLD_HEIGHT)
 		puck.pickup_locked = true
 	for gc: GoalieController in _goalie_controllers_getter.call():
 		gc.reset_to_crease()
@@ -221,18 +222,13 @@ func _enter_faceoff_prep(puck: Puck) -> void:
 	var period_intro: bool = _consume_period_break(is_intro)
 	var staged: bool = _consume_staged_faceoff(is_intro or period_intro)
 	var from_bench: bool = is_intro or period_intro
-	# Period / stoppage faceoffs (no bench intro, no post-goal replay cut) skate
-	# in from where play stopped over a distance-scaled window; extend the prep
-	# so a far player isn't forced into a dash, and pre-roll the HUD countdown.
 	var skate_in: bool = not from_bench and not staged
-	if skate_in:
-		_state_machine.set_faceoff_prep_extra(GameRules.FACEOFF_SKATE_PREP_EXTRA)
-	elif period_intro:
+	if period_intro:
 		# Period-start bench intro: hold the prep like the opening faceoff so
 		# the camera sweep + skate-on play out before the countdown.
 		_state_machine.set_faceoff_prep_extra(GameRules.PERIOD_INTRO_DURATION)
-	last_prep_preroll = GameRules.FACEOFF_SKATE_PREP_EXTRA if skate_in else 0.0
 	last_prep_was_period_intro = period_intro
+	var last_arrival: float = 0.0
 	var positions: Array = []
 	for peer_id: int in _registry.all():
 		var record: PlayerRecord = _registry.get_record(peer_id)
@@ -256,19 +252,44 @@ func _enter_faceoff_prep(puck: Puck) -> void:
 		var facing: Vector2 = PlayerRules.faceoff_facing(record.team.team_id)
 		var start: Vector3 = _approach_start_for(record, pos, dot, from_bench, staged)
 		var duration: float = _faceoff_approach_duration(peer_id, start, pos, from_bench, skate_in, staged)
+		last_arrival = maxf(last_arrival, duration)
 		# Skate-in flows out of live momentum (start == current position); intro /
 		# staged relocate to a fresh start, so they snap from rest.
 		var v0: Vector3 = record.skater.velocity if skate_in and record.skater != null \
 				else Vector3.ZERO
 		record.controller.begin_approach(start, pos, facing, duration, v0)
 		positions.append_array([peer_id, pos.x, pos.y, pos.z])
-	faceoff_positions_ready.emit(positions)
+	last_prep_preroll = 0.0
+	if skate_in or staged:
+		last_prep_preroll = last_arrival + GameRules.FACEOFF_SET_BEAT
+		_state_machine.set_faceoff_prep_extra(last_prep_preroll)
+	faceoff_positions_ready.emit(positions, last_prep_preroll)
 	faceoff_prep_announced.emit()
+
+
+# Host, every frame after the phase tick: throws the held puck down once the
+# drop is FACEOFF_PUCK_DROP_TIME away, at the speed that lands it on the drop
+# from however much time is actually left.
+func update_faceoff_drop() -> void:
+	if _state_machine.current_phase != GamePhase.Phase.FACEOFF_PREP:
+		return
+	var t_left: float = _state_machine.faceoff_prep_time_until_drop()
+	if t_left <= GameRules.FACEOFF_PUCK_DROP_TIME:
+		_throw_held_puck(_get_puck(), t_left)
+
+
+func _throw_held_puck(puck: Puck, t_left: float) -> void:
+	if puck == null:
+		return
+	puck.drop_held(FaceoffDrawRules.drop_throw_speed(
+			GameRules.FACEOFF_PUCK_HOLD_HEIGHT, t_left, GameRules.GRAVITY_M_S2))
 
 
 func _enter_faceoff(puck: Puck) -> void:
 	if puck == null:
 		return
+	# A frame hitch can carry the prep past the throw; the puck still drops.
+	_throw_held_puck(puck, 0.0)
 	puck.pickup_locked = false
 	# The drop: stamp it on the centers so the draw's timing bonus is measured from
 	# here (see FaceoffDrawRules.timing_weight). The stamp is the shared host clock
@@ -494,7 +515,7 @@ func on_goal_received(
 	_capture_goal_moment_frame()
 
 
-func on_faceoff_positions(positions: Array) -> void:
+func on_faceoff_positions(positions: Array, preroll: float) -> void:
 	var local_peer_id: int = _registry.get_local().peer_id if _registry.get_local() != null else -1
 	# Remote skaters skate in via interpolation of the host's approach motion; the
 	# client only drives its OWN skater's skate-in locally. Same intro / period /
@@ -506,9 +527,7 @@ func on_faceoff_positions(positions: Array) -> void:
 	var staged: bool = _consume_staged_faceoff(is_intro or period_intro)
 	var from_bench: bool = is_intro or period_intro
 	var skate_in: bool = not from_bench and not staged
-	# The host owns the drop timer; the client only needs the same pre-roll for
-	# its cosmetic countdown (derived from the same fixed extra, so it matches).
-	last_prep_preroll = GameRules.FACEOFF_SKATE_PREP_EXTRA if skate_in else 0.0
+	last_prep_preroll = preroll
 	last_prep_was_period_intro = period_intro
 	var i: int = 0
 	while i < positions.size():
@@ -535,6 +554,11 @@ func on_faceoff_positions(positions: Array) -> void:
 					record, pos, GameRules.CENTER_ICE_DOT, from_bench, staged)
 			var duration: float = _faceoff_approach_duration(
 					peer_id, start, pos, from_bench, skate_in, staged)
+			if preroll > 0.0:
+				# Our own start is the predicted body, a little off the one the
+				# host measured from; never let it arrive after the countdown.
+				duration = minf(duration,
+						maxf(preroll - GameRules.FACEOFF_SET_BEAT, 0.001))
 			var v0: Vector3 = record.skater.velocity if skate_in and record.skater != null \
 					else Vector3.ZERO
 			record.controller.begin_approach(start, pos, facing, duration, v0)
@@ -612,15 +636,12 @@ func _faceoff_approach_duration(peer_id: int, start: Vector3, target: Vector3,
 	return _approach_duration(from_bench)
 
 
-# Distance-scaled glide time for a stoppage skate-in: the planar start→
-# dot distance at the target skate pace, floored at the base faceoff duration and
-# capped so the skater is set FACEOFF_SKATE_SETTLE before the drop (the extended
-# window's skate room). Everyone thus arrives before the puck drops.
+# Distance-scaled glide time for a stoppage skate-in: the planar start→dot
+# distance at the target skate pace, floored at the base faceoff duration.
 func _skate_in_duration(start: Vector3, target: Vector3) -> float:
 	var dist: float = Vector2(start.x - target.x, start.z - target.z).length()
-	var max_dur: float = GameRules.FACEOFF_PREP_DURATION \
-			+ GameRules.FACEOFF_SKATE_PREP_EXTRA - GameRules.FACEOFF_SKATE_SETTLE
-	return PlayerRules.skate_in_duration(dist, GameRules.FACEOFF_APPROACH_DURATION, max_dur)
+	return PlayerRules.skate_in_duration(dist, GameRules.FACEOFF_APPROACH_DURATION,
+			GameRules.FACEOFF_SKATE_IN_MAX_DURATION)
 
 
 func _get_puck() -> Puck:
