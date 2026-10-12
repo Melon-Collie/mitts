@@ -143,6 +143,10 @@ var _velocities_scratch: Dictionary = {}
 # The icing race last announced to every peer (host only) — see _announce_icing_race.
 var _announced_icing_team: int = -1
 var _announced_icing_races: int = 0
+# Who released the puck that opened the current icing race — credited the icing
+# at the whistle (host only).
+var _icing_releaser: int = -1
+var _icing_races_seen: int = 0
 # The ghost-state result half of the same pair — _apply_ghost_state consumes the
 # map in the same call it is filled and never retains it.
 var _ghosts_scratch: Dictionary = {}
@@ -884,12 +888,26 @@ func _consume_pending_faceoff() -> void:
 	var dot: Vector2 = _state_machine.pending_faceoff_dot
 	match reason:
 		GameStateMachine.FaceoffReason.ICING:
+			_credit_icing()
 			icing_called.emit()
 			NetworkManager.notify_icing_called_to_all()
 		GameStateMachine.FaceoffReason.OFFSIDE:
 			offside_called.emit()
 			NetworkManager.notify_offside_called_to_all()
 	_whistle_and_faceoff(dot)
+
+
+# Host: an icing was whistled — count it against the player whose release
+# opened the race, and log who it was (bot or human) for playtest reading.
+func _credit_icing() -> void:
+	var rec: PlayerRecord = _registry.get_record(_icing_releaser) if _registry != null else null
+	if rec == null or rec.stats == null:
+		print("[icing] releaser unknown")
+		return
+	rec.stats.icings += 1
+	_stats_sync_gate.mark_dirty()
+	print("[icing] %s (%s, team %d)" % [rec.player_name, "bot" if rec.is_bot else "human",
+			rec.team.team_id if rec.team != null else -1])
 
 
 func _update_host_puck_tracking() -> void:
@@ -903,6 +921,9 @@ func _update_host_puck_tracking() -> void:
 		_registry.fill_velocities_by_peer_id(_velocities_scratch)
 		_state_machine.check_icing_for_loose_puck(
 				puck.global_position.z, _positions_scratch, _velocities_scratch)
+		if _state_machine.icing.races_opened != _icing_races_seen:
+			_icing_races_seen = _state_machine.icing.races_opened
+			_icing_releaser = _shot_tracker.get_last_toucher() if _shot_tracker != null else -1
 	_consume_pending_faceoff()
 	# A goalie who plays an iced puck waves the icing off, so the defending one
 	# stays home while the race runs.

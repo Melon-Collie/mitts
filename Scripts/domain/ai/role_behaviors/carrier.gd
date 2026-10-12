@@ -245,6 +245,11 @@ const OZ_RETREAT_LINE_BUFFER_M: float = GameRules.DEFAULT_STICK_LENGTH_M + 1.0
 # receiver (catch while braking to stay onside), so they're excluded as
 # targets, not just discounted.
 const OZ_RECEIVE_LINE_BUFFER_M: float = GameRules.DEFAULT_STICK_LENGTH_M + 0.7
+# A rim is fired as soft as the race allows: any launch reaching the receiver at
+# least this share as surely as the best one may be picked, and the softest of
+# those is. Doctrine, not a measurement — a soft rim is easier to stop, and one
+# that gets by him dies sooner (under NHL rules, short of an icing).
+const RIM_SOFT_SHARE: float = 0.9
 
 # The local step a carry candidate is never placed inside: the floor on the
 # beat-scaled forward radii, and the horizon the space fan is sampled over.
@@ -586,6 +591,12 @@ var _rim_k: int = -1
 var _rim_t: float = 0.0
 var _rim_lane: float = 0.0
 var _rim_miss: float = 0.0
+# Per-launch reads for one receiver (index-matched to AIRimPass' scratch, -1 =
+# not a candidate), so the softest near-best launch can be picked after the scan.
+var _rim_sure_by_k: PackedFloat64Array = PackedFloat64Array()
+var _rim_t_by_k: PackedFloat64Array = PackedFloat64Array()
+var _rim_lane_by_k: PackedFloat64Array = PackedFloat64Array()
+var _rim_miss_by_k: PackedFloat64Array = PackedFloat64Array()
 # The winning pass's rim pace, carried to the release with its bearing.
 var _phase_best_pass_rim_pace: float = 0.0
 # Opposing-goalie env captured alongside the winning shot sample, so the
@@ -2047,9 +2058,10 @@ func _compute_best_pass(ctx: RoleContext, self_facing_xz: Vector2,
 			best_pass_rim_pace]
 
 
-# How surely and soon the best RIM reaches `receiver_state` (completion × the
-# delay discount, 0.0 when none does), with that launch's path reads left in
-# _rim_k / _rim_t / _rim_lane / _rim_miss. The rim's own path quantities: the
+# How surely and soon a RIM reaches `receiver_state` (completion × the delay
+# discount, 0.0 when none does) — the softest launch within RIM_SOFT_SHARE of the
+# surest — with that launch's path reads left in _rim_k / _rim_t / _rim_lane /
+# _rim_miss. The rim's own path quantities: the
 # meet point and time on the walked path, the race against the soonest opponent
 # on that path as the lane, and the passer's aim error spread over its length.
 #
@@ -2072,8 +2084,14 @@ func _rim_launch_for(ctx: RoleContext, receiver_state: SkaterNetworkState,
 			else AIActionScoring.EVADE_CARRY_HANDLE_M
 	var receiver_speed: float = Vector2(
 			receiver_state.velocity.x, receiver_state.velocity.z).length()
+	if _rim_sure_by_k.size() != AIRimPass.MAX_LAUNCHES:
+		_rim_sure_by_k.resize(AIRimPass.MAX_LAUNCHES)
+		_rim_t_by_k.resize(AIRimPass.MAX_LAUNCHES)
+		_rim_lane_by_k.resize(AIRimPass.MAX_LAUNCHES)
+		_rim_miss_by_k.resize(AIRimPass.MAX_LAUNCHES)
 	var best_sure: float = 0.0
 	for k: int in AIRimPass.count:
+		_rim_sure_by_k[k] = -1.0
 		var t: float = AIRimPass.meet_time(k, receiver_state.position,
 				receiver_state.velocity, speed)
 		if t == INF:
@@ -2093,18 +2111,33 @@ func _rim_launch_for(ctx: RoleContext, receiver_state: SkaterNetworkState,
 						receiver_speed, receiver_omega, t))
 		var sure: float = (1.0 - miss_prob) * AIActionScoring.delay_discount(t)
 		# Exact prune before the opponent race (the costly read): the lane is at
-		# most 1, so a launch already beaten unraced cannot win raced.
-		if sure <= best_sure:
+		# most 1, so a launch that cannot reach the soft band unraced cannot raced.
+		if sure < best_sure * RIM_SOFT_SHARE:
 			continue
 		var lane: float = AIRimPass.race_completion(k, t)
 		sure *= lane
-		if sure > best_sure:
-			best_sure = sure
-			_rim_k = k
-			_rim_t = t
-			_rim_lane = lane
-			_rim_miss = miss_prob
-	return best_sure
+		_rim_sure_by_k[k] = sure
+		_rim_t_by_k[k] = t
+		_rim_lane_by_k[k] = lane
+		_rim_miss_by_k[k] = miss_prob
+		best_sure = maxf(best_sure, sure)
+	if best_sure <= 0.0:
+		return 0.0
+	# Fire it as soft as the race allows: among the launches nearly as sure as the
+	# best, the softest — easier to stop, and a missed one dies sooner.
+	var pick: int = -1
+	for k: int in AIRimPass.count:
+		var sure_k: float = _rim_sure_by_k[k]
+		if sure_k < best_sure * RIM_SOFT_SHARE:
+			continue
+		if pick == -1 or AIRimPass.paces[k] < AIRimPass.paces[pick] \
+				or (AIRimPass.paces[k] == AIRimPass.paces[pick] and sure_k > _rim_sure_by_k[pick]):
+			pick = k
+	_rim_k = pick
+	_rim_t = _rim_t_by_k[pick]
+	_rim_lane = _rim_lane_by_k[pick]
+	_rim_miss = _rim_miss_by_k[pick]
+	return _rim_sure_by_k[pick]
 
 
 # The pass-option cache's spot value for the receiver standing at `pos` (0.0 when

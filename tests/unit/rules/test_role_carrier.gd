@@ -3453,7 +3453,27 @@ func test_a_blocked_breakout_lane_is_rimmed_round_the_boards() -> void:
 	assert_ne(c._phase_best_pass_rim_dir, Vector3.ZERO,
 			"...by the boards, not through the forechecker")
 	assert_gt(c._phase_best_pass_rim_pace, AIActionScoring.PASS_SPEED_M_S,
-			"a rim is fired hard — the corner bleeds pace")
+			"a rim needs more than quick-pass pace — the corner bleeds it")
+
+
+func test_a_rim_is_fired_as_soft_as_the_race_allows() -> void:
+	var ctx := _rim_breakout_ctx(true)
+	var c := AIRoleCarrier.new()
+	c._pick_fire_phase(ctx)
+	var best: float = 0.0
+	for k: int in AIRimPass.count:
+		best = maxf(best, c._rim_sure_by_k[k])
+	var softest: float = INF
+	var hardest: float = 0.0
+	for k: int in AIRimPass.count:
+		if c._rim_sure_by_k[k] >= best * AIRoleCarrier.RIM_SOFT_SHARE:
+			softest = minf(softest, AIRimPass.paces[k])
+			hardest = maxf(hardest, AIRimPass.paces[k])
+	gut.p("  rim fired at %.1f m/s (near-best band %.1f..%.1f)"
+			% [c._phase_best_pass_rim_pace, softest, hardest])
+	assert_gt(best, 0.0, "some rim reaches the winger")
+	assert_eq(c._phase_best_pass_rim_pace, softest,
+			"the softest launch nearly as sure as the best is the one fired")
 
 
 func test_a_rim_commits_as_a_flat_charged_release_along_its_bearing() -> void:

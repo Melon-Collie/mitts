@@ -165,6 +165,7 @@ ICING_RACE_ATTACK,Beat them to the faceoff dots to wave it off,Llega primero a l
 ICING_RACE_DEFEND,Reach the faceoff dots first for the whistle,Llega primero a los puntos de saque para que piten
 ICING_RACE_WATCH,Race to the end-zone faceoff dots,Carrera a los puntos de saque de la zona
 ICING_WAVED_OFF,ICING WAVED OFF,DESPEJE PROHIBIDO ANULADO
+TAPE_ICINGS,Icings,Despejes prohibidos
 TOAST_GOALIE_FREEZE,GOALIE FREEZES IT,EL PORTERO LO CONGELA
 SPECTATING,SPECTATING,ESPECTADOR
 REPORT_BUG,Report Bug,Reportar error

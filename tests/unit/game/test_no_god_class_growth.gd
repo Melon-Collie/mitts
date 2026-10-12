@@ -52,7 +52,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +1: the chase steer passes when an airborne puck is back on the blade plane.
 	"res://Scripts/ai/skater_agent_state_machine.gd": 6090,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
-	"res://Scripts/game/game_manager.gd": 5683,
+	"res://Scripts/game/game_manager.gd": 5704,
 	"res://Scripts/domain/ai/action_scoring.gd": 4458,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
@@ -65,7 +65,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +162: the rim pass. The path search lives in AIRimPass; what stays here is
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
-	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3937,
+	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3970,
 	"res://Scripts/controllers/skater_controller.gd": 3341,
 	"res://Scripts/actors/skater.gd": 2712,
 	"res://Scripts/networking/network_manager.gd": 2824,

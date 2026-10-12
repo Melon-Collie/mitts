@@ -306,3 +306,5 @@ here whenever you bump, in the same format.
 # v67: added notify_icing_race(icing_team_id, waved_off) RPC — the host tells
 #      every peer when an NHL hybrid-icing race opens and how it ended, for the
 #      icing race banner.
+# v68: PlayerStats gained `icings` (appended to to_array), so the stats player
+#      record is 19 values (peer_id + 18).
