@@ -176,6 +176,7 @@ var _expired_cooldowns: Array[int] = []
 var _is_server: bool = false
 var _pending_reset: bool = false
 var _pending_reset_xz: Vector2 = Vector2.ZERO
+var _pending_reset_height: float = 0.0
 # Full velocity queued by release()/nudge() for the analytic drive's next tick
 # (get_release_velocity returns it until consumed), so same-frame consumers of
 # the puck_released signal — and the drive itself — see the full XYZ launch
@@ -329,6 +330,7 @@ var _replay_hold: bool = false
 # transform, so the loose puck should keep coasting (bounce in the net after a goal,
 # slide after the buzzer). Only motion_pinned and _replay_hold freeze the drive.
 var motion_pinned: bool = false
+var _held: bool = false
 
 
 # Raised by the goal / post-game replay drivers for the playback's duration: the
@@ -421,6 +423,7 @@ func stage_at(pos: Vector3) -> void:
 	global_position = pos
 	linear_velocity = Vector3.ZERO
 	_pending_elevation_vel = Vector3.ZERO
+	_held = false
 	# Drop the interpolation history so the restage isn't drawn as a smear from
 	# wherever the puck was (see SkaterController.teleport_to).
 	reset_physics_interpolation()
@@ -779,8 +782,12 @@ func drop() -> void:
 		_set_cooldown(ex_carrier, reattach_cooldown)
 	puck_released.emit()
 
-func reset(at_xz: Vector2 = Vector2.ZERO) -> void:
+# `hold_height` > 0 stages the puck that far above the ice and holds it there,
+# immune to every contact, until drop_held throws it down (the faceoff drop).
+func reset(at_xz: Vector2 = Vector2.ZERO, hold_height: float = 0.0) -> void:
 	carrier = null
+	_pending_reset_height = maxf(hold_height, 0.0)
+	_held = hold_height > 0.0
 	_cooldown_timers.clear()
 	linear_velocity = Vector3.ZERO
 	# Discard any release velocity queued this frame — a faceoff / whistle reset
@@ -789,6 +796,13 @@ func reset(at_xz: Vector2 = Vector2.ZERO) -> void:
 	_pending_reset = true
 	_pending_reset_xz = at_xz
 	puck_released.emit()
+
+func drop_held(down_speed: float) -> void:
+	if not _held:
+		return
+	_held = false
+	linear_velocity = Vector3(0.0, -down_speed, 0.0)
+
 
 func is_airborne() -> bool:
 	return position.y > ice_height + GameRules.PUCK_AIRBORNE_HEIGHT_M
@@ -823,7 +837,8 @@ func _drive_analytic(dt: float) -> void:
 	# Faceoff / reset staging.
 	if _pending_reset:
 		_pending_reset = false
-		global_position = Vector3(_pending_reset_xz.x, ice_height, _pending_reset_xz.y)
+		global_position = Vector3(_pending_reset_xz.x, ice_height + _pending_reset_height,
+				_pending_reset_xz.y)
 		linear_velocity = Vector3.ZERO
 		_pending_reset_xz = Vector2.ZERO
 		# Faceoff / whistle staging is a jump, not motion — see stage_at.
@@ -836,7 +851,7 @@ func _drive_analytic(dt: float) -> void:
 	# pin every tick, re-detecting the held puck inside the glove box and re-firing
 	# puck_touched_goalie at 120 Hz. pickup_locked is deliberately NOT a freeze
 	# condition — see motion_pinned.
-	if motion_pinned or _replay_hold:
+	if motion_pinned or _replay_hold or _held:
 		_contact_latch_goalie = false
 		_contact_latch_post = false
 		_contact_latch_net = false

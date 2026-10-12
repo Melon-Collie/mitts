@@ -205,6 +205,10 @@ class ForwardResult:
 # SAME snapshot field through the same formula, so render == rewind holds.
 # cfg.thrust is transiently scaled and restored (the caller may pass a shared
 # cached config). Omit (0 / null) to integrate unstaggered.
+# `first_tick` resumes a run: `position` / `velocity` must then be the result of
+# the first `first_tick` ticks from the same snapshot, and the call is
+# bit-identical to the tail of one uninterrupted run, because the decay and the
+# stagger read the absolute tick index.
 static func integrate_forward(
 		position: Vector3,
 		velocity: Vector3,
@@ -219,12 +223,13 @@ static func integrate_forward(
 		intent_decay_ticks: int,
 		result: ForwardResult,
 		stagger_timer: float = 0.0,
-		body_check_cfg: BodyCheckRules.Config = null) -> void:
+		body_check_cfg: BodyCheckRules.Config = null,
+		first_tick: int = 0) -> void:
 	var pos: Vector3 = position
 	var vel: Vector3 = velocity
 	var n: int = maxi(ticks, 0)
 	var base_thrust: float = cfg.thrust
-	for i in n:
+	for i in range(first_tick, first_tick + n):
 		# Rocket-League-style input decay: a held intent is less likely to still be
 		# held further into the prediction, so fade the assumed move_input linearly to
 		# 0 over intent_decay_ticks. The far ticks coast on friction instead of

@@ -1177,7 +1177,12 @@ func _predict_loose(delta: float) -> bool:
 		if age > Constants.PUCK_PREDICT_MAX_S:
 			NetworkTelemetry.record_puck_predict_fallback()
 		return false
-	_run_prediction(source.state.position, source.state.velocity, render_t - source.timestamp)
+	# A dead puck at rest in the air is the faceoff puck in the linesman's hand,
+	# not a ballistic one — predicting it would drop it between every snapshot.
+	var held: bool = puck.pickup_locked and source.state.velocity.is_zero_approx() \
+			and source.state.position.y > puck.ice_height + GameRules.PUCK_AIRBORNE_HEIGHT_M
+	_run_prediction(source.state.position, source.state.velocity,
+			0.0 if held else render_t - source.timestamp)
 	is_extrapolating = false  # prediction is the mode, not a buffer underrun
 	if NetworkTelemetry.instance:
 		NetworkTelemetry.instance.puck_mode = "predicted_hold" if _sim_stopped else "predicted"

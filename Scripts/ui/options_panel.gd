@@ -96,6 +96,8 @@ func _snapshot() -> Dictionary:
 		"crowd_density": PlayerPrefs.crowd_density,
 		"ice_scratches_enabled": PlayerPrefs.ice_scratches_enabled,
 		"puck_shadow_enabled": PlayerPrefs.puck_shadow_enabled,
+		"player_shadows_enabled": PlayerPrefs.player_shadows_enabled,
+		"animation_detail": PlayerPrefs.animation_detail,
 		"volumetric_fog_enabled": PlayerPrefs.volumetric_fog_enabled,
 		"reflections_enabled": PlayerPrefs.reflections_enabled,
 		"ambient_occlusion_enabled": PlayerPrefs.ambient_occlusion_enabled,
@@ -280,6 +282,8 @@ func _on_apply_pressed() -> void:
 	PlayerPrefs.crowd_density = c.crowd_density
 	PlayerPrefs.ice_scratches_enabled = c.ice_scratches_enabled
 	PlayerPrefs.puck_shadow_enabled = c.puck_shadow_enabled
+	PlayerPrefs.player_shadows_enabled = c.player_shadows_enabled
+	PlayerPrefs.animation_detail = c.animation_detail
 	PlayerPrefs.volumetric_fog_enabled = c.volumetric_fog_enabled
 	PlayerPrefs.reflections_enabled = c.reflections_enabled
 	PlayerPrefs.ambient_occlusion_enabled = c.ambient_occlusion_enabled
@@ -384,6 +388,8 @@ func _defaults() -> Dictionary:
 		"crowd_density": PlayerPrefs.CROWD_DENSITY_HIGH,
 		"ice_scratches_enabled": true,
 		"puck_shadow_enabled": true,
+		"player_shadows_enabled": true,
+		"animation_detail": SkaterAnimationLod.DETAIL_BALANCED,
 		"volumetric_fog_enabled": false,
 		"reflections_enabled": true,
 		"ambient_occlusion_enabled": true,

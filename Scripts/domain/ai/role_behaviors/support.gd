@@ -100,8 +100,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		station = carrier_pos + Vector3(
 				0.0, 0.0, ctx.own_goal_dir * AIRoleHelpers.SEARCH_STEP_M)
 	if not AIRoleHelpers.station_needs_refinement(ctx.self_pos, station):
-		d.target_position = station
-		return d
+		return _hold_or_restore_numbers(ctx, d, station)
 
 	var candidates: Array[Vector3] = _generate_candidates(ctx, carrier_pos)
 	AIRoleHelpers.append_incumbent(ctx, candidates)
@@ -140,7 +139,22 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 			best_score = score
 			best_pos = c
 
-	d.target_position = best_pos
+	return _hold_or_restore_numbers(ctx, d, best_pos)
+
+
+# The help player counts numbers like every other last layer
+# (AIRoleHelpers.may_hold_forward_stand): with nobody behind him and a man past
+# his stand, he gives the stand up for the numbers layer. The counter cost above
+# prices a loss AT the carrier; it cannot see a man already leaving the zone,
+# which is the one a turnover gets fed to.
+static func _hold_or_restore_numbers(ctx: RoleContext, d: RoleDecision,
+		stand: Vector3) -> RoleDecision:
+	d.target_position = stand
+	if AIActionScoring.in_offensive_zone(stand, ctx.attacking_goal_pos) \
+			and not AIRoleHelpers.may_hold_forward_stand(
+					ctx, ctx.prev_held_forward_stand, stand):
+		d.target_position = AIRoleHelpers.numbers_floor(ctx, stand)
+	d.held_forward_stand = d.target_position.distance_to(stand) < 0.5
 	return d
 
 

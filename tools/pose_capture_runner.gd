@@ -315,6 +315,8 @@ var _puck: Puck = null
 
 
 func begin(record_baseline: bool, only: String = "") -> void:
+	# Every frame posed, whatever Animation Detail the local prefs carry.
+	SkaterAnimationLod.detail = SkaterAnimationLod.DETAIL_FULL
 	_record_baseline = record_baseline
 	# Every pose is framed by moving the camera AFTER its ticks, so while it is
 	# posed the camera still frames the last one; the off-camera cull would skip

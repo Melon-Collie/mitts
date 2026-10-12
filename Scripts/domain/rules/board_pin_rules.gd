@@ -134,6 +134,16 @@ static func apply_slide_cap(vel: Vector3, wall_out: Vector2, cap: float) -> Vect
 	return Vector3(v.x, vel.y, v.y)
 
 
+# forward_cap for a body locked in `role` at `pos` (a snapshot's): the one call the
+# client render and the host rewind both make.
+static func forward_cap_locked(result: SkaterMovementRules.ForwardResult, pos: Vector3,
+		body_radius: float, role: int, strength: float, window_s: float) -> void:
+	if role == Role.NONE:
+		return
+	forward_cap(result, locked_wall_normal(pos, body_radius, role), slide_cap(role, strength),
+			window_s)
+
+
 # The lock over a forward prediction of `window_s` from a snapshot, as one
 # correction to the integrated `result` (filled in place): the along-wall speed
 # clamped to the cap, and the travel the excess would have covered taken back.

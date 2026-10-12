@@ -5,20 +5,21 @@ class_name AITrajectory
 # Callers either pluck a single step (man-to-man lead) or scan the
 # whole array (intercept search, lane prediction).
 #
-# Two physics models, picked via the `decel_m_s2` and `bounce_factor`
+# Two physics models, picked via the `decel_m_s2` and `board_cor_scale`
 # parameters:
 #
-# - Skater / generic body (decel = 0, bounce = 0): constant velocity
+# - Skater / generic body (decel = 0, board_cor_scale = 0): constant velocity
 #   with rink CLAMPING. A skater hugging the boards isn't actually
 #   at pos + vel × 0.5s — they bounce / scrape — and an unclamped
 #   lead would put the defender's anchor inside the boards. Clamp is
 #   the safe approximation.
 #
-# - Puck (decel = PUCK_ICE_DECEL, bounce = PUCK_BOARD_BOUNCE):
+# - Puck (decel = PUCK_ICE_DECEL, board_cor_scale = PUCK_BOARD_COR_SCALE):
 #   Coulomb friction decelerates the velocity opposite to its
 #   direction each step (matching how ICE_FRICTION × gravity slows a
 #   sliding puck), and board contact REFLECTS the perpendicular
-#   velocity component scaled by the restitution coefficient. The
+#   velocity component scaled by board_cor_scale × the puck's rigid-wall
+#   COR at that normal speed (PuckRestitution.rigid_wall). The
 #   `predict_puck_at` convenience wires these directly from
 #   GameRules so callers don't have to remember the constants.
 #
@@ -27,7 +28,7 @@ class_name AITrajectory
 static func predict(pos: Vector3, vel: Vector3,
 		steps: int, dt: float,
 		decel_m_s2: float = 0.0,
-		bounce_factor: float = 0.0,
+		board_cor_scale: float = 0.0,
 		accel: Vector3 = Vector3.ZERO,
 		max_speed_m_s: float = 0.0,
 		board_friction: float = 0.0,
@@ -37,7 +38,7 @@ static func predict(pos: Vector3, vel: Vector3,
 	var v: Vector3 = vel
 	for i: int in range(steps):
 		var stepped: Transform3D = _step(
-				p, v, dt, decel_m_s2, bounce_factor, accel, max_speed_m_s, board_friction,
+				p, v, dt, decel_m_s2, board_cor_scale, accel, max_speed_m_s, board_friction,
 				board_margin)
 		p = stepped.origin
 		v = stepped.basis.x
@@ -53,7 +54,7 @@ static func predict(pos: Vector3, vel: Vector3,
 static func predict_final(pos: Vector3, vel: Vector3,
 		steps: int, dt: float,
 		decel_m_s2: float = 0.0,
-		bounce_factor: float = 0.0,
+		board_cor_scale: float = 0.0,
 		accel: Vector3 = Vector3.ZERO,
 		max_speed_m_s: float = 0.0,
 		board_friction: float = 0.0,
@@ -62,7 +63,7 @@ static func predict_final(pos: Vector3, vel: Vector3,
 	var v: Vector3 = vel
 	for i: int in range(steps):
 		var stepped: Transform3D = _step(
-				p, v, dt, decel_m_s2, bounce_factor, accel, max_speed_m_s, board_friction,
+				p, v, dt, decel_m_s2, board_cor_scale, accel, max_speed_m_s, board_friction,
 				board_margin)
 		p = stepped.origin
 		v = stepped.basis.x
@@ -75,7 +76,7 @@ static func predict_final(pos: Vector3, vel: Vector3,
 # and predict_final() unpack from this, so the array and endpoint-only paths use
 # identical physics.
 static func _step(p: Vector3, v: Vector3, dt: float,
-		decel_m_s2: float, bounce_factor: float,
+		decel_m_s2: float, board_cor_scale: float,
 		accel: Vector3, max_speed_m_s: float,
 		board_friction: float = 0.0,
 		board_margin: float = 0.0) -> Transform3D:
@@ -112,15 +113,15 @@ static func _step(p: Vector3, v: Vector3, dt: float,
 	# The margin also moves the CONTACT inward by the same amount, which is
 	# physically right: a puck caroms when its edge meets the board, not its centre.
 	var clamped_xz: Vector2 = GameRules.clamp_to_rink_inner(Vector2(p.x, p.z), board_margin)
-	if bounce_factor > 0.0:
+	if board_cor_scale > 0.0:
 		var outward := Vector2(p.x - clamped_xz.x, p.z - clamped_xz.y)
 		if outward.length_squared() > 1e-9:
 			var n := outward.normalized()
 			var v_xz := Vector2(v.x, v.z)
 			var vn: float = v_xz.dot(n)
 			if vn > 0.0:  # moving outward into the boards
-				# Reflect the normal (into-board) component with restitution.
-				v_xz -= (1.0 + bounce_factor) * vn * n
+				var e: float = board_cor_scale * PuckRestitution.rigid_wall(vn)
+				v_xz -= (1.0 + e) * vn * n
 				# Board friction (Coulomb): bleed the ALONG-board (tangential) speed by an
 				# amount proportional to the normal impulse — what actually kills a hard
 				# rim-around. A glancing carom (small vn) barely slows; a square hit sheds
@@ -133,7 +134,7 @@ static func _step(p: Vector3, v: Vector3, dt: float,
 					var t_speed: float = v_tan.length()
 					if t_speed > 1e-6:
 						var drop: float = minf(
-								board_friction * (1.0 + bounce_factor) * vn,
+								board_friction * (1.0 + e) * vn,
 								t_speed * GameRules.PUCK_BOARD_TANGENTIAL_MAX_LOSS)
 						var new_t: float = maxf(t_speed - drop, 0.0)
 						v_xz += v_tan * (new_t / t_speed - 1.0)
@@ -209,7 +210,7 @@ static func predict_puck(pos: Vector3, vel: Vector3,
 		steps: int, dt: float) -> Array[Vector3]:
 	return predict(pos, vel, steps, dt,
 			GameRules.PUCK_ICE_DECEL_M_S2,
-			GameRules.PUCK_BOARD_BOUNCE,
+			GameRules.PUCK_BOARD_COR_SCALE,
 			Vector3.ZERO, 0.0, GameRules.PUCK_BOARD_FRICTION,
 			GameRules.PUCK_COLLISION_RADIUS)
 
@@ -220,7 +221,7 @@ static func predict_puck_at(pos: Vector3, vel: Vector3, lead_time_s: float,
 		return pos
 	var dt: float = lead_time_s / float(steps)
 	return predict_final(pos, vel, steps, dt,
-			GameRules.PUCK_ICE_DECEL_M_S2, GameRules.PUCK_BOARD_BOUNCE,
+			GameRules.PUCK_ICE_DECEL_M_S2, GameRules.PUCK_BOARD_COR_SCALE,
 			Vector3.ZERO, 0.0, GameRules.PUCK_BOARD_FRICTION,
 			GameRules.PUCK_COLLISION_RADIUS)
 
@@ -237,7 +238,7 @@ static func predict_puck_at(pos: Vector3, vel: Vector3, lead_time_s: float,
 # and goalie/net/pipe collision live in step_puck_3d and the collision rules.
 static func step_puck(pos: Vector3, vel: Vector3, dt: float) -> Transform3D:
 	return _step(pos, vel, dt,
-			GameRules.PUCK_ICE_DECEL_M_S2, GameRules.PUCK_BOARD_BOUNCE,
+			GameRules.PUCK_ICE_DECEL_M_S2, GameRules.PUCK_BOARD_COR_SCALE,
 			Vector3.ZERO, 0.0, GameRules.PUCK_BOARD_FRICTION,
 			GameRules.PUCK_COLLISION_RADIUS)
 
@@ -436,7 +437,7 @@ static func step_puck_3d(pos: Vector3, vel: Vector3, dt: float,
 	# Ballistic step: reuse _step (which reflects XZ off the rounded-corner boards and
 	# preserves Y) with a downward gravity accel and zero ice friction.
 	var stepped: Transform3D = _step(pos, vel, dt,
-			0.0, GameRules.PUCK_BOARD_BOUNCE,
+			0.0, GameRules.PUCK_BOARD_COR_SCALE,
 			Vector3(0.0, -GameRules.GRAVITY_M_S2, 0.0), 0.0, GameRules.PUCK_BOARD_FRICTION,
 			GameRules.PUCK_COLLISION_RADIUS)
 	var p: Vector3 = stepped.origin
@@ -586,22 +587,22 @@ static func _first_board_hit(p: Vector2, dir: Vector2, max_t: float,
 
 # Velocity after a board contact, using the same restitution + Coulomb
 # tangential bleed as the stepped model (AITrajectory._step) so the closed form
-# can never disagree with the walk: the normal component reverses scaled by
-# PUCK_BOARD_BOUNCE, and the along-board component sheds in proportion to the
-# NORMAL impulse. That proportionality is why bounce COUNT is not a speed
+# can never disagree with the walk: the normal component reverses scaled by the
+# boards' COR at that normal speed, and the along-board component sheds in
+# proportion to the NORMAL impulse. That proportionality is why bounce COUNT is not a speed
 # proxy — a glancing rim keeps nearly all its speed however many times it
 # grazes, while one square hit sheds most of it.
 static func _bounce_velocity(v: Vector2, inward_normal: Vector2) -> Vector2:
 	var vn: float = v.dot(inward_normal)
 	if vn >= 0.0:
 		return v
-	var out: Vector2 = v - (1.0 + GameRules.PUCK_BOARD_BOUNCE) * vn * inward_normal
+	var e: float = GameRules.PUCK_BOARD_COR_SCALE * PuckRestitution.rigid_wall(-vn)
+	var out: Vector2 = v - (1.0 + e) * vn * inward_normal
 	var v_tan: Vector2 = out - out.dot(inward_normal) * inward_normal
 	var t_speed: float = v_tan.length()
 	if t_speed > 1e-6:
 		var drop: float = minf(
-				GameRules.PUCK_BOARD_FRICTION
-						* (1.0 + GameRules.PUCK_BOARD_BOUNCE) * absf(vn),
+				GameRules.PUCK_BOARD_FRICTION * (1.0 + e) * absf(vn),
 				t_speed * GameRules.PUCK_BOARD_TANGENTIAL_MAX_LOSS)
 		out += v_tan * (maxf(t_speed - drop, 0.0) / t_speed - 1.0)
 	return out
@@ -620,9 +621,9 @@ static func _bounce_velocity(v: Vector2, inward_normal: Vector2) -> Vector2:
 #
 # `ice_line_z` / `ice_line_dir` (+1 = the line sits at greater z) name a line to
 # time the crossing of; pass dir = 0.0 to skip it. TIME is the point of this,
-# not the bare fact of crossing: hybrid icing is a RACE judged at the moment the
-# puck crosses the goal line (GameStateMachine.check_icing_for_loose_puck —
-# each team's closest body to the end-zone dot, ties to the defence). A puck
+# not the bare fact of crossing: hybrid icing is a RACE that starts when the
+# puck crosses the goal line and is judged when the first skater reaches the
+# end-zone dots (IcingRace — ties to the defence). A puck
 # that takes long enough to get there is one the forecheck wins, and a won race
 # is not an infraction at all, it is a dump-in with pressure arriving. So what
 # the dump eval needs is the clock, and a delivery earns its legality by taking

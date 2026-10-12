@@ -299,28 +299,40 @@ here whenever you bump, in the same format.
 #      bit 5 now carries stance_active (was sprint_active) and input flag bit
 #      [4] stance_held (was sprint_held); both now feed the forward prediction
 #      as the posture, with hit_commit. Replay FORMAT_VERSION 11.
-# v66: the stick lift moves to its own button (docs/defensive-play-plan.md,
+# v66: added notify_offside_state(peer_id, must_tag_up) RPC — the host tells
+#      every peer when an NHL-ruleset player starts or stops owing a tag-up, for
+#      the offside banner and teammate name plates (NHL never ghosts, so
+#      is_ghost could not carry it).
+# v67: notify_faceoff_positions(positions, preroll) — the host now holds the
+#      faceoff countdown until the last skater has skated in, and sends that
+#      hold, since a client cannot measure remote skaters' glides itself.
+# v68: added notify_icing_race(icing_team_id, waved_off) RPC — the host tells
+#      every peer when an NHL hybrid-icing race opens and how it ended, for the
+#      icing race banner.
+# v69: PlayerStats gained `icings` (appended to to_array), so the stats player
+#      record is 19 values (peer_id + 18).
+# v70: the stick lift moves to its own button (docs/defensive-play-plan.md,
 #      Phase 1). Input flag bits [14] stick_check_held and [15]
 #      stick_check_pressed spend the last of the u16. Skater block 55 -> 56
 #      bytes: one u8 packing the lift phase (bits 0-2) and the whole ticks spent
 #      in it (bits 3-7). Replay FORMAT_VERSION 12.
-# v67: the stick tie (docs/defensive-play-plan.md, Phase 2). The lift phase
+# v71: the stick tie (docs/defensive-play-plan.md, Phase 2). The lift phase
 #      gains TIE (value 6, its elapsed packed in 8-tick units); the skater flags
 #      byte's spare bit 7 carries stick_tied, so the byte is full and the block
 #      stays 56 bytes. New RPC receive_stick_tie_claim. The replay format is
 #      unchanged: bit 7 was always written 0.
-# v68: board play (docs/defensive-play-plan.md, Phase 3). Skater block 56 -> 58
+# v72: board play (docs/defensive-play-plan.md, Phase 3). Skater block 56 -> 58
 #      bytes: pin_timer u8@0.01 s and pin_strength u8@1/255, which the forward
 #      prediction reads on the render and the rewind (BoardPinRules
 #      .forward_correction). New RPC notify_puck_frozen_called. Replay
 #      FORMAT_VERSION 13.
-# v69: the stick tie becomes two sticks tied together (docs/defensive-play-plan.md,
+# v73: the stick tie becomes two sticks tied together (docs/defensive-play-plan.md,
 #      Tie revision). The lift phase drops RECOVER, so REARM and TIE move down
 #      one (TIE is 5), and TIE's elapsed packs in whole ticks like every other
 #      phase. stick_tied is now set on both tied players, whose blades the
 #      reconcile replays under the tie's speed cap. No byte layout changed.
 #      Replay FORMAT_VERSION 14.
-# v70: the board pin becomes a locked position contest (docs/defensive-play-plan.md,
+# v74: the board pin becomes a locked position contest (docs/defensive-play-plan.md,
 #      Pin revision). Skater byte 56 carries pin_role (BoardPinRules.Role) where
 #      pin_timer was; byte 57 is still pin_strength. Both locked players carry
 #      their role. The forward prediction applies BoardPinRules.forward_cap (the

@@ -1,9 +1,9 @@
 # Defensive play — stick check, stick tie, board pin
 
-Status: **Phases 1–3 implemented** (v66–v68), playtest pending.
-- **The tie revision is built** (v69): two sticks tied together, off the ice and
+Status: **Phases 1–3 implemented** (v70–v72), playtest pending.
+- **The tie revision is built** (v73): two sticks tied together, off the ice and
   slowed, held by either player (*Tie revision*).
-- **The pin revision is built** (v70): a locked position contest
+- **The pin revision is built** (v74): a locked position contest
   (*Pin revision*), replacing 3b's grip-and-budget pin.
 
 Phase 4 is candidates. Each phase is meant to ship as its own PR, with its own protocol
@@ -237,7 +237,7 @@ PRESSURE chooses between the poke jab and a lift by what the bot can actually se
   (`Scripts/networking/CLAUDE.md`, body-check contact geometry). The knockback
   velocity itself doesn't change; the wall already clamps it.
 
-### 3b. The pin (as built in v68 — replaced by the *Pin revision* in v70)
+### 3b. The pin (as built in v72 — replaced by the *Pin revision* in v74)
 - **Onset (host-authoritative, `Skater._check_board_pin`).**
   - The defender is committed (`hit_committed`, not carrying) and touching an
     opponent. Carrier or not, it doesn't matter.
@@ -297,7 +297,7 @@ PRESSURE chooses between the poke jab and a lift by what the bot can actually se
   - parity of the three-party hit geometry with the backstop;
   - the frozen puck whistles in NHL and squirts in ARCADE.
 
-## Pin revision — a locked position contest (built, v70)
+## Pin revision — a locked position contest (built, v74)
 
 **As built.**
 - **Onset moves to a host tracker.** `BoardPinTracker` makes the contact test itself:
@@ -467,7 +467,7 @@ the revision, not after it. Check it with `render-poses.sh`.
 - **The puck kick.** While locked, directional input nudges the puck along the wall,
   EA's version of a pinned player playing it with their skates.
 
-## Tie revision — two sticks tied together (built, v69)
+## Tie revision — two sticks tied together (built, v73)
 
 **As built.**
 - "Touching" is measured in plan view (XZ), top hand→blade on both sticks. Two

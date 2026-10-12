@@ -19,6 +19,14 @@ var target_position: Vector3 = Vector3.ZERO
 # rides a man matches his velocity forever.
 var target_velocity: Vector3 = Vector3.ZERO
 
+# Where a ridden retreat ends: the route never commands speed toward
+# `retreat_floor_center` it could not shed before the circle of
+# `retreat_floor_radius_m` (0 = no floor). The ride above has no terminating
+# condition of its own, so a stand that rides a man toward our net would carry
+# the body into the crease with it.
+var retreat_floor_center: Vector3 = Vector3.ZERO
+var retreat_floor_radius_m: float = 0.0
+
 # Optional aim override: `aim_world_pos` replaces the state machine's default
 # mouse target (the ready-stance look-at toward `target_position`). Used by
 # FINISHER's tip path to point the blade at the goal during a deflection.

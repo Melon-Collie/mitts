@@ -435,6 +435,12 @@ func fill_positions_by_peer_id(out: Dictionary) -> void:
 		out[peer_id] = _players[peer_id].skater.global_position
 
 
+func fill_velocities_by_peer_id(out: Dictionary) -> void:
+	out.clear()
+	for peer_id: int in _players:
+		out[peer_id] = _players[peer_id].skater.velocity
+
+
 # ── Stats ─────────────────────────────────────────────────────────────────────
 
 func reset_all_stats() -> void:

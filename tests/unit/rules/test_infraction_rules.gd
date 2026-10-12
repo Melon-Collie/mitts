@@ -136,13 +136,58 @@ func test_team_1_icing_from_own_half() -> void:
 func test_team_1_no_icing_from_attacking_half() -> void:
 	assert_eq(InfractionRules.check_icing(1, 5.0, 30.0), -1)
 
+func test_puck_on_the_red_line_has_gained_the_line() -> void:
+	# Any part of the puck on the paint nullifies; wholly behind it does not.
+	var touching: float = GameRules.THICK_LINE_WIDTH_M * 0.5 + GameRules.PUCK_COLLISION_RADIUS
+	assert_eq(InfractionRules.check_icing(0, touching - 0.01, -30.0), -1)
+	assert_eq(InfractionRules.check_icing(0, touching + 0.01, -30.0), 0)
+	assert_eq(InfractionRules.check_icing(1, -touching + 0.01, 30.0), -1)
+	assert_eq(InfractionRules.check_icing(1, -touching - 0.01, 30.0), 1)
+
+func test_puck_must_wholly_cross_the_goal_line() -> void:
+	var on_line: float = GameRules.GOAL_LINE_Z
+	assert_eq(InfractionRules.check_icing(0, 5.0, -on_line), -1)
+	assert_eq(InfractionRules.check_icing(0, 5.0, -on_line - GameRules.PUCK_COLLISION_RADIUS - 0.01), 0)
+
 # ── Hybrid icing race ─────────────────────────────────────────────────────────
 
-func test_defending_wins_when_closer() -> void:
-	assert_true(InfractionRules.defending_wins_icing_race(10.0, 5.0))
+func test_skater_at_the_dots_has_arrived() -> void:
+	assert_eq(InfractionRules.time_to_icing_dot_line(-GameRules.ICING_FACEOFF_DOT_Z, 0.0, 0), 0.0)
+	assert_eq(InfractionRules.time_to_icing_dot_line(GameRules.ICING_FACEOFF_DOT_Z + 1.0, 0.0, 1), 0.0)
 
-func test_icing_waved_off_when_attacker_closer() -> void:
-	assert_false(InfractionRules.defending_wins_icing_race(5.0, 10.0))
+func test_eta_is_full_speed_travel_for_a_skater_at_top_speed() -> void:
+	var v: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
+	assert_almost_eq(InfractionRules.time_to_icing_dot_line(
+			-GameRules.ICING_FACEOFF_DOT_Z + 10.0, -v, 0), 10.0 / v, 0.0001)
 
-func test_defending_wins_on_tie() -> void:
-	assert_true(InfractionRules.defending_wins_icing_race(5.0, 5.0))
+func test_eta_charges_skating_the_wrong_way() -> void:
+	var z: float = -GameRules.ICING_FACEOFF_DOT_Z + 6.0
+	var at_rest: float = InfractionRules.time_to_icing_dot_line(z, 0.0, 0)
+	var coming: float = InfractionRules.time_to_icing_dot_line(z, -6.0, 0)
+	var going_away: float = InfractionRules.time_to_icing_dot_line(z, 6.0, 0)
+	assert_lt(coming, at_rest)
+	assert_gt(going_away, at_rest, "turning round costs time")
+
+func test_racing_means_at_the_dots_or_skating_at_the_end() -> void:
+	var pace: float = GameRules.ICING_RACE_PURSUIT_SPEED_M_S
+	assert_true(InfractionRules.is_racing_icing(-10.0, -pace, 0))
+	assert_false(InfractionRules.is_racing_icing(-10.0, -pace + 0.5, 0))
+	assert_true(InfractionRules.is_racing_icing(-GameRules.ICING_FACEOFF_DOT_Z, 0.0, 0))
+	assert_true(InfractionRules.is_racing_icing(10.0, pace, 1))
+
+func test_race_undecided_until_someone_reaches_the_dots() -> void:
+	assert_eq(InfractionRules.judge_icing_race(0.5, 0.4), InfractionRules.IcingCall.NONE)
+
+func test_defender_at_the_dots_is_icing() -> void:
+	assert_eq(InfractionRules.judge_icing_race(0.3, 0.0), InfractionRules.IcingCall.ICING)
+
+func test_level_at_the_dots_is_icing() -> void:
+	assert_eq(InfractionRules.judge_icing_race(0.0, 0.0), InfractionRules.IcingCall.ICING)
+
+func test_attacker_clear_at_the_dots_waves_off() -> void:
+	assert_eq(InfractionRules.judge_icing_race(0.0, GameRules.ICING_RACE_CLEAR_MARGIN_S),
+			InfractionRules.IcingCall.WAVED_OFF)
+
+func test_attacker_barely_ahead_is_too_close_to_call() -> void:
+	assert_eq(InfractionRules.judge_icing_race(0.0, GameRules.ICING_RACE_CLEAR_MARGIN_S - 0.01),
+			InfractionRules.IcingCall.ICING)

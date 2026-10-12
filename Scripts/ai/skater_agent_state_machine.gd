@@ -1831,12 +1831,10 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 		_accel_ref = _accel_by_peer
 		_omega_ref = _heading_omega_by_peer
 
-	# When we're ghosted (offside, can't interact with the puck), chase
-	# behavior is degenerate — we'd skate at a puck we can't pick up. Drop
-	# to OFF_PUCK so the tag-up override in _state_off_puck routes us back
-	# to the blue line. The host clears is_ghost via has_tagged_up once we
-	# cross over.
-	if self_state.is_ghost and _state == State.CHASE_PUCK:
+	# When we can't legally play the puck (ghosted, or must tag up under NHL
+	# delayed offside), chase behavior is degenerate. Drop to OFF_PUCK so the
+	# tag-up override in _state_off_puck routes us back to the blue line.
+	if snapshot.is_out_of_play(_peer_id) and _state == State.CHASE_PUCK:
 		_set_state(State.OFF_PUCK)
 
 	# Decision throttle: outside press states, re-run the full state
@@ -1850,7 +1848,8 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 			or _state == State.ONE_TIMER_PRESSED)
 	if not is_press_state and _dispatch_skip_counter > 0:
 		_dispatch_skip_counter -= 1
-		input.move_vector = _cached_move_vector
+		input.move_vector = _offside_guard(_cached_move_vector, snapshot, self_pos,
+				self_state.velocity, have_puck)
 		input.stick_lift_held = _cached_stick_lift_held
 		input.brake = _cached_brake
 		input.stance_held = _cached_stance_held
@@ -1951,10 +1950,10 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 	_off_puck_tie_live = false
 	_off_puck_yank_live = false
 
-	# Tag-up override: when ghosted (offside), bot must clear back across
-	# the blue line before doing anything else. Highest-priority override
-	# above all slot logic — bypasses role dispatch entirely.
-	if self_state != null and self_state.is_ghost:
+	# Tag-up override: when ghosted or owing an NHL tag-up, bot must clear
+	# back across the blue line before doing anything else. Highest-priority
+	# override above all slot logic — bypasses role dispatch entirely.
+	if self_state != null and snapshot.is_out_of_play(_peer_id):
 		var tag_up: Vector3 = _tag_up_anchor(self_pos)
 		# Velocity-matched seek: redirect cross-drift onto the line back to the
 		# tag-up point rather than orbiting it (same as the role stations).
@@ -2084,7 +2083,8 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 		_apply_steering(input, snapshot, self_pos, decision.target_position,
 				not decision.commit_check and not decision.arrive_at_speed,
 				_self_max_speed, decision.target_velocity,
-				decision.engaged_peer_id)
+				decision.engaged_peer_id, decision.retreat_floor_center,
+				decision.retreat_floor_radius_m)
 		if decision.commit_check:
 			# Body-check commit: drive THROUGH the carrier with the Hit button
 			# held — this is what delivers the FULL transfer AIBodyCheck's
@@ -2279,6 +2279,8 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	# until he tags up at the blue line). Latched like the match's other
 	# rules; stamped every build since the ctx instance is reused.
 	ctx.offsides_enforced = rule_set != GameRules.RuleSet.OFF
+	ctx.icing_enforced = rule_set == GameRules.RuleSet.NHL
+	ctx.zone_entry_blocked = _teammate_must_tag_up(snapshot)
 	if _current_strategy != null:
 		ctx.strong_x = _current_strategy.strong_x()
 		ctx.assigned_threat_peer = _current_strategy.assigned_threat(_peer_id)
@@ -2295,7 +2297,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 		ctx.team_size = _current_strategy.get_team_size()
 		var lobby_slot: int = _current_strategy.position_of(_peer_id)
 		ctx.self_is_defense = PlayerRules.is_defense_slot(lobby_slot)
-		ctx.self_home_side = _home_side_of(lobby_slot)
+		ctx.self_home_side = PlayerRules.home_side_x(lobby_slot, _own_goal_dir)
 		# Live smart-ping directives on this bot (see AIPingDirectives). The
 		# reused ctx instance must be re-stamped every build — a stale ping
 		# field would keep obeying an expired order.
@@ -2316,18 +2318,6 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 		ctx.self_is_defense = false
 		ctx.self_home_side = 0.0
 	return ctx
-
-
-# Home side sign of a lobby position: LW/LD rest on -X, RW/RD on +X, C
-# center. World X is side-stable for both teams (see AIRoleSlots5).
-func _home_side_of(lobby_slot: int) -> float:
-	match lobby_slot:
-		1, 3:
-			return -1.0
-		2, 4:
-			return 1.0
-		_:
-			return 0.0
 
 
 # Routes the bot's current slot to its role-behavior module. Returns a
@@ -4445,7 +4435,9 @@ func _pass_aim_point(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 func _apply_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		anchor: Vector3, arrive: bool = false, velocity_match_speed: float = 0.0,
 		anchor_velocity: Vector3 = Vector3.ZERO,
-		engaged_peer_id: int = -1) -> void:
+		engaged_peer_id: int = -1,
+		retreat_floor_center: Vector3 = Vector3.ZERO,
+		retreat_floor_radius: float = 0.0) -> void:
 	# Standard potential-field steering with brake-pivot.
 	# Use the per-team roster published by GameManager._enrich_snapshot_for_ai
 	# instead of re-partitioning snapshot.skater_states every physics tick.
@@ -4533,7 +4525,8 @@ func _apply_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 			lane_start, lane_end,
 			GameRules.RINK_HALF_WIDTH, GameRules.RINK_HALF_LENGTH,
 			opp_repel, steer_vels, _scratch_teammate_steer_vels,
-			match_self_vel, velocity_match_speed, anchor_velocity)
+			match_self_vel, velocity_match_speed, anchor_velocity,
+			retreat_floor_center, retreat_floor_radius)
 
 	# Brake-pivot: if our current velocity is far off the desired direction,
 	# carving a wide arc loses. The bot keeps move_vector on the exit direction —
@@ -4566,15 +4559,27 @@ func _apply_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 				self_pos, anchor, desired, Vector2(v.x, v.z), _upright_lateral_accel(),
 				_blade_reach, _stance_turning)
 		input.stance_held = pivot_cut or _stance_turning
-		# Body-level offside guard: keep an attacking non-carrier from
-		# skating its body across the attacking blue line before the puck
-		# (instant ghost in ARCADE). Applied after the brake-pivot so the
-		# hard constraint wins. The role-level target filter can't hold a
-		# momentum-driven body to the line on its own.
-		desired = AISteering.offside_brake(
-				desired, self_pos, v, _own_goal_dir,
-				snapshot.puck_state.position.z, carrier == _peer_id)
+		# Applied after the brake-pivot so the hard constraint wins.
+		desired = _offside_guard(desired, snapshot, self_pos, v, carrier == _peer_id)
 	input.move_vector = desired
+
+
+# Body-level offside guard: keep an attacking non-carrier from skating its body
+# across the attacking blue line before the puck (instant ghost in ARCADE). The
+# role-level target filter can't hold a momentum-driven body to the line on its
+# own. A carrier with a teammate owing an NHL tag-up holds the PUCK short of the
+# line the same way — carrying it in would be whistled offside at once — and
+# every other skater holds the line even once the puck is in, since the delayed
+# offside clears only when the whole team is out. Run on every tick, decided or
+# not: between decisions the body keeps moving on the cached move vector.
+func _offside_guard(desired: Vector2, snapshot: WorldSnapshot, self_pos: Vector3,
+		v: Vector3, is_carrier: bool) -> Vector2:
+	var puck_pos: Vector3 = snapshot.puck_state.position
+	var team_offside: bool = _teammate_must_tag_up(snapshot)
+	var hold_entry: bool = is_carrier and team_offside
+	return AISteering.offside_brake(
+			desired, puck_pos if hold_entry else self_pos, v, _own_goal_dir,
+			puck_pos.z, is_carrier and not hold_entry, team_offside)
 
 
 # Opponent peer ids, read straight from the per-frame roster cache published by
@@ -6090,11 +6095,26 @@ func _opponent_within_forward(snapshot: WorldSnapshot, self_pos: Vector3,
 # host clears `is_ghost` via `InfractionRules.has_tagged_up` once the
 # bot crosses the blue line. OFFSIDE_HOLD_BUFFER_M makes the destination
 # meaningfully past the line so we don't oscillate at the boundary.
+# Already tagged up but still held (NHL: the rest of the team hasn't cleared
+# the zone) → wait just outside the ATTACKING blue line instead.
 func _tag_up_anchor(self_pos: Vector3) -> Vector3:
+	if InfractionRules.has_tagged_up(self_pos.z, _team_id):
+		var hold_z: float = -_own_goal_dir * (GameRules.BLUE_LINE_Z - OFFSIDE_HOLD_BUFFER_M)
+		return Vector3(self_pos.x, 0.0, hold_z)
 	# Our own blue line is at +z for team 0, -z for team 1. NZ side of
 	# it means slightly less depth (toward midrink, away from own goal).
 	var z: float = _own_goal_dir * (GameRules.BLUE_LINE_Z - OFFSIDE_HOLD_BUFFER_M)
 	return Vector3(self_pos.x, 0.0, z)
+
+
+func _teammate_must_tag_up(snapshot: WorldSnapshot) -> bool:
+	if snapshot.tag_up_peers.is_empty() or not snapshot.teammate_ids_by_team.has(_team_id):
+		return false
+	var mates: Array = snapshot.teammate_ids_by_team[_team_id]
+	for pid: int in mates:
+		if pid != _peer_id and snapshot.tag_up_peers.has(pid):
+			return true
+	return false
 
 
 # Clamp an anchor to the playable rink with a small margin so steering
@@ -6187,11 +6207,11 @@ func _post_puck_lost_state(snapshot: WorldSnapshot) -> State:
 	if snapshot.puck_state.carrier_peer_id != -1:
 		return State.OFF_PUCK
 	var s: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
-	# Bots that are still ghosted (offside / icing penalty) must stay
-	# OFF_PUCK — without this check, the next tick transitions them to
-	# CHASE_PUCK and the dispatch-time guard catches it, but for one
-	# tick they think they're chasing.
-	if s == null or s.is_ghost:
+	# Bots that can't legally play the puck must stay OFF_PUCK — without this
+	# check, the next tick transitions them to CHASE_PUCK and the
+	# dispatch-time guard catches it, but for one tick they think they're
+	# chasing.
+	if s == null or snapshot.is_out_of_play(_peer_id):
 		return State.OFF_PUCK
 	return State.CHASE_PUCK if _is_closest_teammate_to_puck_at(snapshot, s.position) else State.OFF_PUCK
 
@@ -6270,7 +6290,7 @@ func _loose_puck_in_reach_band(snapshot: WorldSnapshot, self_pos: Vector3) -> bo
 			and snapshot.closest_to_puck_by_team.get(_team_id, -1) == -1:
 		return false
 	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
-	if self_state == null or self_state.is_ghost:
+	if self_state == null or snapshot.is_out_of_play(_peer_id):
 		return false
 	# Never let the band walk us into a contested pickup with our own man: if a
 	# teammate's blade is already first to it, the puck is his.
@@ -6298,7 +6318,7 @@ func _teammate_first_to_puck(snapshot: WorldSnapshot, puck_pos: Vector3) -> bool
 		return false
 	return AILoosePuckChase.teammate_first_to_puck(
 			snapshot.skater_states, mates, _peer_id,
-			self_state.blade_contact_world, puck_pos)
+			self_state.blade_contact_world, puck_pos, snapshot.tag_up_peers)
 
 
 # Returns true if this bot is the closest teammate to the current

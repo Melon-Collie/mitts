@@ -159,7 +159,9 @@ static func compute_move_vector(
 		teammate_velocities: Array[Vector3] = [],
 		self_velocity: Vector3 = Vector3.ZERO,
 		velocity_match_speed: float = 0.0,
-		anchor_velocity: Vector3 = Vector3.ZERO) -> Vector2:
+		anchor_velocity: Vector3 = Vector3.ZERO,
+		retreat_floor_center: Vector3 = Vector3.ZERO,
+		retreat_floor_radius: float = 0.0) -> Vector2:
 	var force_x: float = 0.0
 	var force_z: float = 0.0
 
@@ -180,7 +182,8 @@ static func compute_move_vector(
 		# genuinely needs no thrust to stay on.
 		var pursue: Vector2 = _moving_frame_pursuit(
 				to_anchor, anchor_dist, anchor_velocity, self_velocity,
-				velocity_match_speed)
+				velocity_match_speed, retreat_floor_center - self_pos,
+				retreat_floor_radius)
 		force_x += pursue.x
 		force_z += pursue.y
 	elif anchor_dist > ANCHOR_DEADBAND:
@@ -338,7 +341,8 @@ static func is_rideable_anchor(anchor: Vector3) -> bool:
 # Pure value math, no allocation.
 static func _moving_frame_pursuit(to_anchor: Vector3, anchor_dist: float,
 		anchor_velocity: Vector3, self_velocity: Vector3,
-		v_max: float) -> Vector2:
+		v_max: float, to_floor: Vector3 = Vector3.ZERO,
+		floor_radius: float = 0.0) -> Vector2:
 	var des_x: float = anchor_velocity.x
 	var des_z: float = anchor_velocity.z
 	if anchor_dist > 0.001:
@@ -359,6 +363,21 @@ static func _moving_frame_pursuit(to_anchor: Vector3, anchor_dist: float,
 		var inv: float = closing * inv_d
 		des_x += to_anchor.x * inv
 		des_z += to_anchor.z * inv
+	# The retreat floor (RoleDecision.retreat_floor_*): no more speed toward its
+	# centre than the arrival brake could still shed before the circle — the
+	# stopping-distance law of should_arrival_brake, applied to the command.
+	# Only the toward-floor component is capped, so the lateral ride survives.
+	if floor_radius > 0.0:
+		var floor_dist: float = sqrt(to_floor.x * to_floor.x + to_floor.z * to_floor.z)
+		if floor_dist > 0.001:
+			var ux: float = to_floor.x / floor_dist
+			var uz: float = to_floor.z / floor_dist
+			var toward: float = des_x * ux + des_z * uz
+			var allowed: float = sqrt(2.0 * ARRIVAL_BRAKE_DECEL_M_S2
+					* maxf(floor_dist - floor_radius, 0.0))
+			if toward > allowed:
+				des_x -= ux * (toward - allowed)
+				des_z -= uz * (toward - allowed)
 	# We cannot skate faster than we can skate. Clamping the SUM (rather than the
 	# closing term) keeps the best available heading: flat out along the line that
 	# serves both errands, which as the gap closes rotates off pursuit and onto the
@@ -676,7 +695,9 @@ static func should_arrival_brake(self_pos: Vector3, anchor: Vector3,
 # steering with a hard brake away from the line (a full reverse skid on
 # the depth axis, lateral intent preserved), so the body stops short
 # instead of ghosting. Releases the instant the puck crosses the line
-# (offside risk gone) or the bot is already retreating.
+# (offside risk gone) or the bot is already retreating — unless `hold_line`:
+# under an NHL delayed offside the team must stay out until everyone has
+# tagged up, so the puck being in does not open the line.
 #
 # `own_goal_dir` is +1 when our net is at +Z (we attack -Z) and -1 when
 # our net is at -Z (we attack +Z). The attacking blue line sits at
@@ -688,12 +709,13 @@ static func offside_brake(
 		self_velocity: Vector3,
 		own_goal_dir: float,
 		puck_z: float,
-		is_carrier: bool) -> Vector2:
+		is_carrier: bool,
+		hold_line: bool = false) -> Vector2:
 	if is_carrier:
 		return desired
 	var attack_dir: float = -own_goal_dir
 	# Puck already across the attacking blue line → entering is legal now.
-	if attack_dir * puck_z > GameRules.BLUE_LINE_Z:
+	if not hold_line and attack_dir * puck_z > GameRules.BLUE_LINE_Z:
 		return desired
 	# Only a concern when actually moving toward the attacking zone.
 	var v_toward: float = attack_dir * self_velocity.z

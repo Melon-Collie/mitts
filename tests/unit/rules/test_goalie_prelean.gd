@@ -11,8 +11,8 @@ extends GutTest
 #   - the non-directional fallback only raises the hands (no lateral drift),
 #   - it no-ops when inactive / zero-strength / already reacting.
 #
-# Coordinates use the +Z-defending goalie convention (direction_sign = +1, the
-# pose's local +X = world -X), goalie centered at current_x = 0.
+# Coordinates use the direction_sign = +1 goalie (yaw PI, the pose's local +X =
+# world -X), centered at current_x = 0 with the shooter straight out in front.
 
 const State := GoalieStateMachine.State
 
@@ -26,6 +26,10 @@ func _base_inputs() -> GoalieBodyConfigBuilder.Inputs:
 	i.state = State.STANDING
 	i.current_x = 0.0
 	i.direction_sign = 1
+	i.goalie_yaw = PI
+	i.goal_line_z = 0.0
+	i.goalie_z = 1.5
+	i.puck_position = Vector3(0.0, 0.0, 8.0)
 	i.prelean_active = true
 	i.prelean_directional = true
 	i.prelean_strength = 0.35

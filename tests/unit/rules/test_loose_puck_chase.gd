@@ -402,10 +402,11 @@ func test_reach_band_is_not_tripped_by_a_puck_too_fast_to_meet() -> void:
 func test_reach_band_survives_a_coarse_walk_step() -> void:
 	# At 15 m/s the path walk samples every 3.75 m, so a point-sampled band test
 	# steps clean OVER a bot the puck passes a metre from. The segment-wise read
-	# catches the crossing between samples. (Puck seeded a half-step back so the
-	# crossing lands mid-segment.)
+	# catches the crossing between samples. (Puck seeded two and a half steps
+	# back so the crossing lands mid-segment at ~0.6 s — late enough that the bot,
+	# 0.44 s from the line, can make it.)
 	var comes: bool = AILoosePuckChase.puck_comes_to_reach(
-			Vector3(-1.9, 0, 0), Vector3(15, 0, 0),
+			Vector3(-9.4, 0, 0), Vector3(15, 0, 0),
 			Vector3(0, 0, 1.0), Vector3.ZERO, REF, 1.8)
 	assert_true(comes, "the crossing is found between walk samples, not just on them")
 
@@ -597,6 +598,17 @@ func test_a_ghosted_teammate_is_not_yielded_to() -> void:
 	assert_false(AILoosePuckChase.teammate_first_to_puck(
 			states, [100, 101], 100, states[100].blade_contact_world, puck),
 			"a ghosted teammate can't play the puck, so he isn't first to it")
+
+
+func test_a_teammate_owing_a_tag_up_is_not_yielded_to() -> void:
+	var puck := Vector3.ZERO
+	var states := {
+		100: _blade(Vector3(0, 0, 1.5), Vector3(0, 0, 0.6)),
+		101: _blade(Vector3(0, 0, -1.0), Vector3(0, 0, -0.1)),
+	}
+	assert_false(AILoosePuckChase.teammate_first_to_puck(
+			states, [100, 101], 100, states[100].blade_contact_world, puck, {101: true}),
+			"his touch would whistle a delayed offside, so he isn't first to it")
 
 
 func test_missing_blade_field_does_not_yield() -> void:

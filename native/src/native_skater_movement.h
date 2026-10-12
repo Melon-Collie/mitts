@@ -88,7 +88,7 @@ public:
 			double facing_rotation_y,
 			bool has_puck, bool brake, int64_t posture,
 			double dt, int64_t ticks, int64_t intent_decay_ticks,
-			double stagger_timer, bool use_stagger);
+			double stagger_timer, bool use_stagger, int64_t first_tick);
 
 	godot::Vector3 get_forward_position() const { return fwd_position; }
 	godot::Vector3 get_forward_velocity() const { return fwd_velocity; }

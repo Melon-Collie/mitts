@@ -36,6 +36,10 @@ var boards_inset: float = 0.7        # m — stop point this far inside the end 
 var post_clearance: float = 0.55     # m — waypoint this far outside the post
 var stride_cadence: float = 2.4      # rad of stride phase per METRE travelled
 
+# Set by the controller while an icing race runs in this goalie's end: playing
+# the iced puck would wave the icing off, so no trip starts.
+var icing_hold: bool = false
+
 # ── Geometry (set once by the controller at setup) ───────────────────────────
 var goal_line_z: float = 0.0
 var goal_center_x: float = 0.0
@@ -104,7 +108,7 @@ func _front_of_goal_m(z: float) -> float:
 func may_consider(puck_pos: Vector3, puck_vel: Vector3) -> bool:
 	if is_inf(go_margin):
 		return false   # tier gate: only the top skill profile plays the puck
-	if cooldown_timer > 0.0:
+	if cooldown_timer > 0.0 or icing_hold:
 		return false
 	# Behind the goal line only, and genuinely rimming (speed window).
 	if _front_of_goal_m(puck_pos.z) >= 0.0:

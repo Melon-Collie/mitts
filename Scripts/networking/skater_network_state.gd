@@ -133,6 +133,18 @@ func to_array() -> Array:
 		pin_strength,
 	]
 
+# The stick-play and pin fields, which are discrete: a reader between two
+# snapshots (interpolation, the rewind buffer, replay playback) takes them whole
+# from one, never blends them.
+func copy_stick_play_from(s: SkaterNetworkState) -> void:
+	blade_up = s.blade_up
+	stick_check_phase = s.stick_check_phase
+	stick_check_elapsed = s.stick_check_elapsed
+	stick_tied = s.stick_tied
+	pin_role = s.pin_role
+	pin_strength = s.pin_strength
+
+
 func copy_from(s: SkaterNetworkState) -> void:
 	position = s.position
 	velocity = s.velocity

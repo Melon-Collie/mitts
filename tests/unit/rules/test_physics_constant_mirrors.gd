@@ -4,11 +4,10 @@ extends GutTest
 # something outside themselves. A silent drift here is what caused the historical
 # 10× ice-friction bug (model 0.1 vs live 0.01).
 #
-# The board pair (PUCK_BOARD_BOUNCE / PUCK_BOARD_FRICTION) used to be guarded
-# here against Physics/boards.tres. That resource is gone: the boards carry no
-# collider, so nothing consumed the material and the constants are now the sole
-# authority — there is no second value left to drift from. What remains below is
-# the derivation and the one project setting the constants must agree with.
+# The board pair (PUCK_BOARD_COR_SCALE / PUCK_BOARD_FRICTION) has no mirror to
+# drift from — the boards carry no collider, so the constants are the sole
+# authority. What remains below is the derivation and the one project setting the
+# constants must agree with.
 
 
 func test_puck_ice_decel_derives_from_ice_friction_and_gravity() -> void:

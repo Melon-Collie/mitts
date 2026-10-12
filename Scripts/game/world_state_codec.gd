@@ -26,15 +26,15 @@ extends RefCounted
 #                      facing u16 (0–TAU→0–65535), upper_body_rot s16 (−π–π→−32767–32767),
 #                      facing_angular_velocity s16@PI*10 rad/s, upper_body_angular_velocity s16@PI*10 rad/s,
 #                      last_processed_ts f32,
-#                      flags u8 (shot_state[2:0]+elevation_level[4:3]+ghost[5]+blade_up[6]+stick_tied[7] v67),
+#                      flags u8 (shot_state[2:0]+elevation_level[4:3]+ghost[5]+blade_up[6]+stick_tied[7] v71),
 #                      shot_charge u8, stagger_timer u8@0.01s,
 #                      knockdown_timer u8@0.01s,
 #                      intent u8 (move octant[2:0]+moving[3]+brake[4] v15, stance[5] v65, hit_commit[6] v28),
 #                      balance_tilt 2×s16@π/32767 rad, balance_tilt_vel 2×s16@20/32767 rad/s (v61),
 #                      torso_lean 2×s16 + posture_lean s16, all @π/32767 rad (v62),
 #                      recoil_dir u8 (bearing 0–TAU→0–256, 0 = backward) (v63),
-#                      stick_check u8 (phase[2:0] + ticks elapsed[7:3]) (v66),
-#                      pin_role u8 (BoardPinRules.Role), pin_strength u8@1/255 (v70)
+#                      stick_check u8 (phase[2:0] + ticks elapsed[7:3]) (v70),
+#                      pin_role u8 (BoardPinRules.Role), pin_strength u8@1/255 (v74)
 #      Puck    (13 B): pos s16/s16/s16@1cm, vel 3×s16@0.02m/s, carrier_idx u8 (0xFF=none)
 #      Goalie  (43 B): root (12 B) + pose (31 B). Root:
 #                      pos_x/z s16@1cm, rot_y s16@π/32767, state u8, fho u8,
@@ -84,7 +84,7 @@ const SKATER_BLOCK_SIZE: int = SKATER_STATE_BYTES + 5  # + u32 peer_id + u8 queu
 const PUCK_BLOCK_SIZE: int = 13    # 12B pos+vel + 1B carrier_idx
 const GOALIE_BLOCK_SIZE: int = 43  # 12 root + 31 pose (glove/blocker offsets are s16-wide)
 const GAME_STATE_BLOCK_SIZE: int = 6  # 4×u8 + u16 time_remaining
-const STATS_PLAYER_RECORD_SIZE: int = 18  # peer_id + PlayerStats.to_array() (17)
+const STATS_PLAYER_RECORD_SIZE: int = 19  # peer_id + PlayerStats.to_array() (18)
 
 var _ws_sequence: int = 0
 var _last_period: int = -1
@@ -475,7 +475,7 @@ static func _write_skater_quantized(b: PackedByteArray, o: int, s: SkaterNetwork
 	# Flags byte: bits 0-2 shot_state (8 SkaterStateMachine.State values — FULL;
 	# a ninth costs a repack),
 	# bits 3-4 elevation_level (0..2), bit 5 ghost, bit 6 blade_up, bit 7
-	# stick_tied (v67) — the byte is now full.
+	# stick_tied (v71) — the byte is now full.
 	var flags: int = (s.shot_state & 0x07) \
 			| ((clampi(s.elevation_level, 0, 3) & 0x3) << 3) \
 			| (0x20 if s.is_ghost else 0) \

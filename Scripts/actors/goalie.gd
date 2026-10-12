@@ -153,7 +153,7 @@ func get_goalie_rotation_y() -> float:
 	return rotation.y
 
 # Current body-local position of the glove and blocker assembly. Read by the
-# controller to pace the elevated-shot reach so the arm arrives WITH the puck
+# controller to pace the shot hand reach so the arm arrives WITH the puck
 # rather than sprinting to the destination at max speed and sitting idle until
 # impact. Returned in goalie-local space (the same space the config targets
 # live in) so the caller can `distance_to(config.glove_pos)` directly.

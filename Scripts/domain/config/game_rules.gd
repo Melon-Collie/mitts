@@ -19,12 +19,10 @@ const PREGAME_INTRO_DURATION: float = 8.0
 # shorter beat).
 const PERIOD_INTRO_DURATION: float = 4.0
 # Skate-in glide durations (see SkaterController.begin_approach). Players skate
-# from a start point to the faceoff dot instead of teleport-snapping. Each stays
-# comfortably shorter than its prep window so everyone is set on the dot before
-# the drop: a normal faceoff arrives with ~0.75 s of countdown to settle + aim;
-# a period-start intro arrives just as the "2 → 1 → DROP" countdown begins, and
-# the opening intro's longer matchup hold leaves the skaters set at the dot for
-# its back half (the skate happens under the camera sweep + matchup screen).
+# from a start point to the faceoff dot instead of teleport-snapping. The two
+# bench intros hold the prep for their own presentation (camera sweep, matchup
+# or period card), which outlasts INTRO_APPROACH_DURATION, so everyone is set
+# before their countdown begins.
 const FACEOFF_APPROACH_DURATION: float = 1.25
 const INTRO_APPROACH_DURATION: float   = 3.6
 # Post-goal faceoffs stage the skate-in from this far behind the dot (toward the
@@ -34,24 +32,25 @@ const INTRO_APPROACH_DURATION: float   = 3.6
 # long "skate back" is elided into the replay's dead time. See
 # PhaseCoordinator._approach_start_for / PlayerRules.faceoff_staging_position.
 const FACEOFF_STAGING_SETBACK: float   = 6.0
-# Stoppage faceoffs have no replay camera cut to hide a staging snap,
-# so players skate in honestly from where play stopped. The prep window is
-# extended by FACEOFF_SKATE_PREP_EXTRA (added before the "2 → 1 → DROP"
-# countdown) so a far player covers the distance at ~FACEOFF_SKATE_IN_SPEED
-# instead of a teleport-fast dash; per-player glide time scales with distance
-# and is capped so everyone is set before the drop. Both host (prep timer) and
-# client (cosmetic countdown) derive the same fixed extra locally from the
-# faceoff kind, so it never goes on the wire. Icing (nearly the whole rink to
-# cover) still skates briskly since the window can't stretch to the full length,
-# but it reads as a hard skate rather than a snap.
-const FACEOFF_SKATE_IN_SPEED: float    = 9.0   # m/s target skate pace
-const FACEOFF_SKATE_PREP_EXTRA: float  = 1.5   # s added to the prep before the countdown
-const FACEOFF_SKATE_SETTLE: float      = 0.4   # s a skater should be set before the drop
+# Stoppage faceoffs have no replay camera cut to hide a staging snap, so players
+# skate in honestly from where play stopped, the glide time scaled by distance
+# at FACEOFF_SKATE_IN_SPEED and capped so a far skate (icing: nearly the whole
+# rink) reads as a hard skate rather than holding the game up.
+const FACEOFF_SKATE_IN_SPEED: float        = 9.0   # m/s target skate pace
+const FACEOFF_SKATE_IN_MAX_DURATION: float = 3.1   # s, longest stoppage glide
+# Post-goal and stoppage skate-ins hold the "2 → 1 → DROP" countdown until the
+# last skater arrives, plus this beat so the line reads as set before the "2".
+const FACEOFF_SET_BEAT: float = 0.25
+# The puck hangs this far above the dot (metres over its resting height) through
+# the countdown — a linesman's waist-high release — and is thrown down to land
+# on the drop: released FACEOFF_PUCK_DROP_TIME early at the speed that covers
+# the height in that time, so the puck reaches the ice as it goes live.
+const FACEOFF_PUCK_HOLD_HEIGHT: float = 1.0
+const FACEOFF_PUCK_DROP_TIME: float = 0.2
 # Post-goal staged skate-ins all cover the same setback, so a fixed duration
 # would move everyone in eerie lockstep. Vary each player's glide time by ±this
 # fraction (deterministically, per player + goal count) so they arrive staggered
-# at slightly different speeds. Kept small enough that the slowest still lands
-# before the drop (base 1.25 s × 1.3 = 1.6 s < the 2 s post-goal prep).
+# at slightly different speeds.
 const FACEOFF_STAGGER_FRACTION: float  = 0.3
 const FACEOFF_TIMEOUT: float       = 10.0
 const PERIOD_DURATION: float       = 4.0 * 60.0   # 240 s per period
@@ -410,9 +409,12 @@ const PUCK_ICE_DECEL_M_S2: float = ICE_FRICTION * GRAVITY_M_S2
 # a grounded stick, and where it must land to be receivable) agrees with
 # the live interaction gate.
 const PUCK_AIRBORNE_HEIGHT_M: float = 0.05
-# Board restitution coefficient — sole authority, applied by the analytic carom.
-# Tune the rim's liveliness here; nothing else describes the boards.
-const PUCK_BOARD_BOUNCE: float = 0.4
+# Fraction of the frozen puck's rigid-wall COR (PuckRestitution.rigid_wall) the
+# boards keep — sole authority, applied by the analytic carom. 1.0: a dasher board
+# is rigid next to a frozen puck, so the puck's own losses set the rebound. That
+# lands in the 30–40% band a kickplate patent (US8696478) calls desirable for
+# high-level hockey.
+const PUCK_BOARD_COR_SCALE: float = 1.0
 # Board kinetic friction coefficient. On a carom the boards bleed tangential speed
 # via Coulomb friction proportional to the normal impulse — this is what stops a
 # hard rim-around from circling the rink forever (ice friction alone is far too
@@ -456,7 +458,18 @@ const NET_STUCK_MAX_SPEED: float = 0.6       # m/s — below this the puck count
 const NET_STUCK_PLAYABLE_HEIGHT: float = 0.30  # m above ice; at/under → drop to ice, over → whistle
 
 # ── Infractions ───────────────────────────────────────────────────────────────
-const ICING_GHOST_DURATION: float = 3.0  # seconds team stays ghosted after icing (ARCADE/legacy path)
+# Centre red line and blue lines: 12 in in the NHL book. A puck touching the
+# red line has "gained the line" and cannot be iced.
+const THICK_LINE_WIDTH_M: float = 0.3
+# Hybrid icing race (NHL Rule 81). A race too close to call at the end-zone dots
+# is icing: the attacker must reach the dots this far ahead of the nearest
+# defender to wave it off — about a stride at race pace.
+const ICING_RACE_CLEAR_MARGIN_S: float = 0.2
+# An icing-team skater closing on the end slower than this isn't racing; with
+# nobody racing, icing is whistled as the puck crosses.
+const ICING_RACE_PURSUIT_SPEED_M_S: float = 3.0
+# Nobody has reached the dots this long after the crossing: whistle it.
+const ICING_RACE_MAX_S: float = 4.0
 # Crease protection — ARCADE-only anti-camp mechanic, not a real NHL rule. A
 # field skater (carrier exempt — see compute_ghost_state) who lingers in a
 # goalie crease this long is ghosted (loses puck/body interaction) until they
@@ -484,7 +497,7 @@ const NEUTRAL_ZONE_FACEOFF_DOT_Z: float = BLUE_LINE_Z - 1.524   # 5.766
 #   OFF    — no offsides, no icing, no crease protection (free-for-all).
 #   ARCADE — offsides ghost the offending player; icing is ignored; crease
 #            camping (anti-cheese, not a real rule) ghosts after a dwell timer.
-#   NHL    — full stoppage rules: icing blows the whistle after the hybrid race,
+#   NHL    — full stoppage rules: icing runs the hybrid race to the end-zone dots,
 #            offsides run delayed (no ghost) and whistle on offending-team touch.
 #            No crease protection — see CREASE_DWELL_DURATION for why.
 enum RuleSet { OFF, ARCADE, NHL }
@@ -666,7 +679,9 @@ const NEUTRAL_ZONE_FACEOFF_DOTS: Array[Vector2] = [
 
 # Per-team, per-slot XZ offsets from whichever dot is active. Team 0 stands on
 # the +Z side of the dot, team 1 on -Z (preserves team 0 = +Z half convention).
-# Indexed by [team_id][team_slot]. Center on the dot line (slot 0); wingers
+# Indexed by [team_id][team_slot]. The X signs follow PlayerRules.home_side_x —
+# the teams face opposite ways, so team 1's left (LW/LD) is +X.
+# Center on the dot line (slot 0); wingers
 # stand ON THE CIRCLE'S EDGE at the hash marks, nearly level with the dot
 # (±4.7 wide, 0.9 back — just outside the 4.57 m circle), so opposing wingers
 # line up nose-to-nose ~1.8 m apart across the dot, the real alignment.
@@ -680,8 +695,8 @@ const NEUTRAL_ZONE_FACEOFF_DOTS: Array[Vector2] = [
 const FACEOFF_OFFSETS: Array = [
 	[Vector2( 0.0,  1.5), Vector2(-4.7,  0.9), Vector2( 4.7,  0.9),
 			Vector2(-2.4,  7.0), Vector2( 2.4,  7.0)],  # team 0
-	[Vector2( 0.0, -1.5), Vector2(-4.7, -0.9), Vector2( 4.7, -0.9),
-			Vector2(-2.4, -7.0), Vector2( 2.4, -7.0)],  # team 1
+	[Vector2( 0.0, -1.5), Vector2( 4.7, -0.9), Vector2(-4.7, -0.9),
+			Vector2( 2.4, -7.0), Vector2(-2.4, -7.0)],  # team 1
 ]
 
 # ── End-zone draw alignment (5v5; see PlayerRules.faceoff_position) ──────────

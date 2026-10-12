@@ -530,6 +530,9 @@ func get_team_id() -> int:
 # _resolve_player_collisions iterates it (skipping self) to resolve skater-vs-
 # skater contact. Empty Callable (tutorial dummy / test) → no resolution.
 var _skater_collision_provider: Callable = Callable()
+# `() -> bool`, true while contact is off: the locked phases, whose bodies are
+# frozen or on a scripted glide that crossing another is not a check.
+var contact_suspended_provider: Callable = Callable()
 # Stable, machine-consistent id (the owning peer_id) set by PlayerRegistry on
 # spawn. Used ONLY to break exact head-on ties in the aggressor gate — it must be
 # identical on every machine (get_instance_id() is per-process and would let host
@@ -664,6 +667,9 @@ var _forced_lift_timer: float = 0.0
 # host-side only, like the forced lift; started by a landed lift and a tie ending.
 var _stick_check_cooldown: float = 0.0
 var is_ghost: bool = false
+# NHL delayed offside: this skater must tag up. Written by GameManager; the HUD
+# coordinator shows it on the name plate to the local player's teammates.
+var offside_marked: bool = false
 # True while this skater is knocked down by a hard body check (knockdown_timer > 0
 # on its controller). Set by SkaterController each tick; read by the puck pickup
 # election so a downed player can't magnet the puck, the same way is_ghost gates it.
@@ -792,6 +798,8 @@ var _draw: SkaterDrawTracker = SkaterDrawTracker.new()
 var _uniform: SkaterUniformCoordinator
 var _hud: SkaterHUDCoordinator
 var _appearance: SkaterAppearanceCoordinator
+var _shadow: SkaterShadowProxy = SkaterShadowProxy.new()
+var _anim_lod := SkaterAnimationLod.new(fposmod(float(get_instance_id()) * 0.618034, 1.0))
 var _trunk_fold: float = 0.0
 
 
@@ -855,6 +863,7 @@ func _ready() -> void:
 
 	_stick = SkaterStickRig.new()
 	_stick.setup(self)
+	_shadow.build(body, stick_mesh, blade.get_node_or_null("MeshInstance3D") as MeshInstance3D)
 
 	_uniform = SkaterUniformCoordinator.new()
 	_uniform.setup(self)
@@ -873,31 +882,22 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	# Cosmetic mesh pass at render rate. The stick and arm meshes are pure
 	# write-only functions of the marker positions (top_hand, blade, shoulder,
-	# bottom_hand) the physics-rate controllers and interpolators maintain —
-	# nothing reads the mesh transforms back — so one pass per rendered frame,
-	# after every physics tick for that frame has finalized the markers, is
-	# exactly the work the screen consumes. On the tick instead, ~75% of it
-	# draws to nobody and reconcile re-runs it once per replayed input, a hitch
-	# arriving exactly when the network is already degraded. The rebuild is
-	# skipped when hidden or when no marker moved (dirty flag); stick flex is
-	# time/state-driven, so it runs every frame regardless (own shader-write
-	# guard) and a mid-shot whip never freezes on an otherwise-static pose.
+	# bottom_hand) the physics-rate controllers and interpolators maintain, so one
+	# pass per rendered frame, after the frame's ticks have finalized the markers,
+	# is exactly the work the screen consumes; on the tick, reconcile would re-run
+	# it once per replayed input. Stick flex is time/state-driven, so it runs
+	# every frame regardless (own shader-write guard).
 	#
-	# render_pose_update's pose — gait, head tracking, off-hand IK — is genuinely
-	# time-driven, so project-wide physics interpolation resamples it at the tick
-	# rate and draws it a tick late. Accepted: the gait is a few-Hz oscillation
-	# and a tick of latency on a cosmetic pose is invisible. Do NOT opt these
-	# nodes out to win that back — an opted-out child renders against the body's
-	# post-tick position while the body renders interpolated, separating the two
-	# by up to a tick of travel, and the stick visibly leaves the hands at speed.
+	# render_pose_update's pose is time-driven, so physics interpolation draws it
+	# a tick late. Do NOT opt these nodes out to win that back — an opted-out
+	# child renders against the body's post-tick position while the body renders
+	# interpolated, and the stick visibly leaves the hands at speed.
 	if is_visible_in_tree():
-		_on_camera = SkaterCameraCull.sees(self)
-		# Cosmetic pose (leg gait / head / off-hand IK) at render rate, before the
-		# marker-driven mesh rebuild that consumes it. Skipped entirely when hidden
-		# — an off-screen skater needs no animated pose. Gameplay-relevant pose
-		# (facing, upper-body twist, blade IK) already ran in the physics tick.
-		# Off camera the hook still runs, for the part of the gait that is not mesh
-		# (on_camera).
+		# The mesh is posed when the camera sees him and his animation LOD is
+		# due; any other frame is off camera to the rig, which still runs the
+		# gait for the part of it that is not mesh.
+		var seen: bool = SkaterCameraCull.sees(self)
+		_on_camera = seen and _anim_lod.due(delta, SkaterCameraCull.distance(self), is_local_skater)
 		if render_pose_update.is_valid():
 			render_pose_update.call(delta)
 		# Neither the spine, the trunk texture nor the blade's elevation moves a
@@ -910,13 +910,11 @@ func _process(delta: float) -> void:
 			update_stick_mesh()
 			update_arm_mesh()
 			update_bottom_arm_mesh()
+		if _on_camera or not seen:
+			_anim_lod.consumed()
 	_stick.update_flex(delta)
 	# World HUD (ring, name, chevrons, beacon) at RENDER rate: ~10 top_level node
-	# transforms per skater that nothing reads back and no gameplay depends on,
-	# so the physics rate would buy nothing and running here aligns them with the
-	# pose actually being drawn. Its internal timers (ping bubble, ring recolour)
-	# are wall-clock accumulators over delta, so the tick source changes when they
-	# fire by less than a frame, not how long they last.
+	# transforms per skater that nothing reads back, aligned with the pose drawn.
 	if not CosmeticFreeze.hud:
 		_hud.update(delta)
 
@@ -1031,6 +1029,8 @@ func _resolve_player_collisions() -> void:
 	# gate below stays deterministic.
 	if is_ghost:
 		return
+	if contact_suspended_provider.is_valid() and bool(contact_suspended_provider.call()):
+		return
 	var others: Array = _skater_collision_provider.call()
 	if others == null:
 		return
@@ -1044,6 +1044,9 @@ func _resolve_player_collisions() -> void:
 		var d: Vector3 = other.global_position - global_position
 		d.y = 0.0
 		var dist: float = d.length()
+		# Exactly the resolver's own no-overlap test, so a skip changes nothing.
+		if dist >= my_radius + other.collision_radius():
+			continue
 		var n: Vector3 = Vector3(1.0, 0.0, 0.0) if dist < 0.0001 else d / dist
 		# Aggressor gate — resolve each pair EXACTLY once, from the side moving toward
 		# the other more. agg_metric = (v_self + v_other)·n: > 0 → self is
@@ -1694,7 +1697,7 @@ func set_ankle_flatten(left: float, right: float, level_l: float = 0.0,
 
 
 func set_leg_contact(plant_l: float, plant_r: float, dt: float) -> void:
-	_legs.set_contact(plant_l, plant_r, dt)
+	_legs.set_contact(plant_l, plant_r, maxf(dt, _anim_lod.span))
 
 
 # How far into his faceoff address this centre is, 0..1 (zero for everyone
@@ -1704,9 +1707,10 @@ func set_faceoff_address(blend: float) -> void:
 	_faceoff_address = blend
 
 
-# Whether the camera can see this skater this frame (SkaterCameraCull). The rig's
-# work is mesh, so a skater out of frame skips it — but the gait still computes,
-# because a held pose's crouch moves the gameplay frame (set_skating_crouch_drop).
+# Whether this frame re-poses the mesh: the camera sees this skater
+# (SkaterCameraCull) and his animation LOD is due. The rig's work is mesh, so
+# any other frame skips it — but the gait still computes, because a held pose's
+# crouch moves the gameplay frame (set_skating_crouch_drop).
 var _on_camera: bool = true
 
 
@@ -2599,6 +2603,7 @@ func set_ghost(ghost: bool) -> void:
 	is_ghost = ghost
 	_uniform.apply_ghost(ghost)
 	_hud.apply_ghost(ghost)
+	_shadow.set_ghost(ghost)
 
 
 # ── Shot-Block Stance ─────────────────────────────────────────────────────────

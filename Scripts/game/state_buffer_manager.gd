@@ -260,12 +260,7 @@ func _interpolate_skater(peer_id: int, ts: float) -> SkaterNetworkState:
 	# and the forward prediction reads the pin. All discrete or newer-endpoint,
 	# for the same reason as shot_state: a default here passes or refuses every
 	# interpolated rewind regardless of what the claimant was doing.
-	result.blade_up = to_s.blade_up
-	result.stick_check_phase = to_s.stick_check_phase
-	result.stick_check_elapsed = to_s.stick_check_elapsed
-	result.stick_tied = to_s.stick_tied
-	result.pin_role = to_s.pin_role
-	result.pin_strength = to_s.pin_strength
+	result.copy_stick_play_from(to_s)
 	result.host_timestamp = ts
 	return result
 
