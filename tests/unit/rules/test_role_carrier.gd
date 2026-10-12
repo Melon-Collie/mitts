@@ -1134,7 +1134,7 @@ func test_release_sampling_finds_the_backhand_tuck_beside_the_net() -> void:
 			"…moving the release out in front of the crease")
 	assert_lt(c._shot_sample_speed, ctx.self_wrister_shot_speed - 0.01,
 			"…priced at the backhand's penalized pace")
-	assert_gt(c.debug_shoot_score, AIRoleCarrier.SHOT_MIN_VALUE,
+	assert_gt(c.debug_shoot_score, c.debug_shot_bar,
 			"…and it turns a nothing angle into a committable look; got %f"
 			% c.debug_shoot_score)
 
