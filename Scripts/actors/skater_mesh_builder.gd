@@ -521,7 +521,7 @@ static func _build_helmet_assembly() -> ArrayMesh:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.append_from(_shared("head", _build_head), 0,
 			Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, -_HEAD_FORWARD_M)))
-	st.append_from(_shared("neck", _build_neck), 0, Transform3D.IDENTITY)
+	st.append_from(SkaterFaceMesh.untinted(_shared("neck", _build_neck)), 0, Transform3D.IDENTITY)
 	st.commit(m)
 	m.surface_set_material(HELMET_SURF_SKIN, _make_skin_mat())
 	return m
@@ -798,9 +798,15 @@ static func _build_torso() -> ArrayMesh:
 			_TORSO_REAR_SWAY)
 
 
-# Head ball at HEAD_RADIUS, sitting _HEAD_FORWARD_M ahead of the helmet center.
+# Head ball at HEAD_RADIUS, sitting _HEAD_FORWARD_M ahead of the helmet center,
+# with its face (SkaterFaceMesh) — every vertex carries the tint the skin
+# material multiplies, white but for the face's darker features.
 static func _build_head() -> ArrayMesh:
-	return _build_ball(HEAD_RADIUS, 10, 5, 1.0)
+	var st := SurfaceTool.new()
+	st.append_from(SkaterFaceMesh.untinted(_build_ball(HEAD_RADIUS, 10, 5, 1.0)), 0, Transform3D.IDENTITY)
+	st.append_from(SkaterFaceMesh.build(HEAD_RADIUS, 10, 5), 0, Transform3D.IDENTITY)
+	return st.commit()
+
 
 
 # Shared part accessors for out-of-game figures (the lobby's bench dummies, the
@@ -1062,6 +1068,7 @@ static func _make_skin_mat() -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = SkinToneRegistry.color_for(SkinToneRegistry.DEFAULT_INDEX)
 	mat.roughness = 0.85
+	mat.vertex_color_use_as_albedo = true   # the face's features
 	BodyRim.apply(mat)
 	return mat
 
