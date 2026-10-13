@@ -32,9 +32,9 @@ const _TORSO_PROFILE: Array[Vector2] = [
 	Vector2(0.245, 0.218),
 	Vector2(0.130, 0.214),   # chest
 	Vector2(0.000, 0.194),   # waist tuck
-	Vector2(-0.150, 0.206),
-	Vector2(-0.230, 0.218),
-	Vector2(-0.275, 0.228),  # jersey hem flare
+	Vector2(-0.150, 0.204),
+	Vector2(-0.230, 0.214),
+	Vector2(-0.275, 0.222),  # jersey hem flare
 ]
 # Rear (+Z is the back) shift per _TORSO_PROFILE ring — the hockey-butt sway:
 # the seat builds through the lower back and peaks at the hem that drapes
@@ -81,9 +81,9 @@ const _THIGH_PROFILE: Array[Vector2] = [
 	Vector2(0.190, 0.137),
 	Vector2(0.130, 0.150),   # the hip pivot — the dome's equator
 	Vector2(0.050, 0.150),   # breezers: no taper below the hip — the thigh guard holds them out
-	Vector2(-0.080, 0.156),
-	Vector2(-0.125, 0.156),
-	Vector2(-0.150, 0.138),  # the leg hem, turned in over the shin guard
+	Vector2(-0.080, 0.152),
+	Vector2(-0.125, 0.152),
+	Vector2(-0.150, 0.136),  # the leg hem, turned in over the shin guard
 ]
 const _SOCK_PROFILE: Array[Vector2] = [
 	Vector2(0.150, 0.088),
@@ -185,7 +185,7 @@ const _GLOVE_FIST_STATIONS: Array[Vector3] = [
 # skater side (_update_cuff_transform / _update_stick_knob offset along the
 # bone by half the height), so they live here with the geometry they measure.
 const _ARM_TAPER: float = 0.88   # distal end radius fraction (top of mesh = proximal)
-const CUFF_HEIGHT_M: float = 0.06
+const CUFF_HEIGHT_M: float = 0.10
 const KNOB_HEIGHT_M: float = 0.05
 const _KNOB_TOP_RADIUS: float = 0.035
 const _KNOB_BOTTOM_RADIUS: float = 0.03
@@ -757,12 +757,15 @@ static func _fist_loop_center(loop: PackedVector3Array) -> Vector3:
 	return Vector3(0.0, loop[0].y, 0.0)
 
 
-# Glove cuff ring: unit radius, CUFF_HEIGHT_M tall (real height baked — the
-# cuff's along-bone placement offsets by it, only the radius scales).
+# Glove cuff: a gauntlet, unit radius at the wrist (−Y, the hand end) flaring
+# open toward the elbow, CUFF_HEIGHT_M tall (real height baked — the cuff's
+# along-bone placement offsets by it, only the radius scales).
+const _CUFF_FLARE: float = 1.3
 static func shared_cuff() -> ArrayMesh:
 	return _shared("cuff", func() -> ArrayMesh:
 		var h: float = CUFF_HEIGHT_M * 0.5
-		var profile: Array[Vector2] = [Vector2(h, 1.0), Vector2(-h, 1.0)]
+		var profile: Array[Vector2] = [
+			Vector2(h, _CUFF_FLARE), Vector2(-h * 0.3, 1.08), Vector2(-h, 1.0)]
 		return _build_lathe(profile, _LEG_SIDES, 1.0, 1.0))
 
 

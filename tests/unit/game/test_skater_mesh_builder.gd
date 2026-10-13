@@ -73,8 +73,10 @@ func _parts() -> Array[PartSpec]:
 				Vector3(2.2, 1.0, 2.0), false, SkaterMeshBuilder.FIST_PART_BACK),
 		PartSpec.new("glove_fingers", SkaterMeshBuilder.shared_glove_fist(),
 				Vector3(2.2, 1.0, 2.0), false, SkaterMeshBuilder.FIST_PART_FINGERS),
+		# The gauntlet flares past its unit wrist ring toward the elbow.
 		PartSpec.new("cuff", SkaterMeshBuilder.shared_cuff(),
-				Vector3(2.0, SkaterMeshBuilder.CUFF_HEIGHT_M, 2.0), true),
+				Vector3(2.0 * SkaterMeshBuilder._CUFF_FLARE, SkaterMeshBuilder.CUFF_HEIGHT_M,
+						2.0 * SkaterMeshBuilder._CUFF_FLARE), true),
 		PartSpec.new("knob", SkaterMeshBuilder.shared_knob(),
 				Vector3(0.07, SkaterMeshBuilder.KNOB_HEIGHT_M, 0.07), true),
 		# The pelvis replaces no primitive — it is the seat the rig never had, and
