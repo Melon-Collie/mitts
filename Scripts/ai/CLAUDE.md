@@ -29,10 +29,10 @@ Adding a behaviour is four steps:
      │                       │                       │
      │  picks up puck        │  picks up puck        │
      ▼                       ▼                       │
-    CARRY ──[in OZ + quiet-eye expired]──► SHOOT_PRESSED
+    CARRY ───[shot wins + aim in cone]───► SHOOT_PRESSED
      ▲                                          │
      └──────────────────────────────────────────┘
-             (next tick, release fires)
+             (release fires when the charge ends)
 ```
 
 **Off-puck behaviour does not live here.** Each `TeamBrain` slot maps to a role
