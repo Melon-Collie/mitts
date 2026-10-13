@@ -15,25 +15,28 @@ extends SkaterMeshBuilder
 # The body must keep three goalie_jersey.gdshader contracts: a flat +Z back
 # region (normal.z > 0.9 gates the nameplate projection), a flat top face
 # (normal.y > 0.9 gates the yoke), and the box's full ±0.36 object-Y span
-# (stripes map over it). The sweep below tapers WIDTH only — depth stays
-# constant so every back facet keeps its exact +Z normal.
+# (stripes map over it). The sweep below varies the width and the FRONT's
+# depth only — the back depth stays constant so every back facet keeps its
+# exact +Z normal.
 
 # Body cross-section (replaces the 0.52 × 0.72 × 0.28 BoxMesh): flat back,
 # chamfered front. The block is torso THROUGH hips — standing, its bottom
 # (body y 1.22 − 0.36 = 0.86) sits exactly at pad-top level — so the one
-# solid is styled as BOTH garments: chest, a waist pinch, then a hip flare
-# back out to the full box for the pants bulk. The jersey shader paints the
+# solid is styled as BOTH garments: chest, a waist pinch, then the pants
+# flaring past the box at the hips, as a goalie's do. The jersey shader paints the
 # band below the hip line as the kit's pants color (goalie_jersey.gdshader
 # pants_start), splitting the garments by color where the silhouette splits
-# them by shape. Stations are (y, width multiplier); depth is fixed.
+# them by shape. Stations are (y, width multiplier, front-depth multiplier);
+# the back depth is fixed (see above), so the pants' bulk goes forward.
 const _BODY_HALF_W: float = 0.26
 const _BODY_HALF_D: float = 0.14
-const _BODY_STATIONS: Array[Vector2] = [
-	Vector2(0.36, 1.0),     # shoulder line — chest-protector caps carry the widest read
-	Vector2(0.18, 0.98),    # chest
-	Vector2(-0.02, 0.93),   # waist pinch
-	Vector2(-0.16, 1.0),    # hip crest — pants bulk back out to the yoke's width
-	Vector2(-0.36, 0.97),
+const _BODY_STATIONS: Array[Vector3] = [
+	Vector3(0.36, 1.0, 1.0),     # shoulder line — chest-protector caps carry the widest read
+	Vector3(0.18, 0.98, 1.0),    # chest
+	Vector3(-0.02, 0.93, 1.0),   # waist pinch
+	Vector3(-0.16, 1.0, 1.0),    # hip crest — pants bulk back out to the yoke's width
+	Vector3(-0.24, 1.20, 1.18),  # goalie pants: wider and deeper than the jersey
+	Vector3(-0.36, 1.14, 1.12),
 ]
 
 # Leg pad (replaces the 0.28 × 0.84 × 0.2 BoxMesh), sculpted inside that box: a
@@ -79,7 +82,8 @@ const _PAD_CHANNEL_TINT := Color(0.45, 0.45, 0.47)
 # than it is wide, with a domed cranium, a brow standing proud over the face
 # opening, cheeks that narrow toward a chin running well below where a skater's
 # helmet stops and jutting forward, and the back tucking in to the neck. From
-# the side that is the mask's S-profile; from the front, a long shield. It
+# the side that is the mask's S-profile; from the front, a long shield. The
+# backplate comes down to the nape, over the neck guard behind and beside. It
 # overruns the 0.26 m head collider by the chin, which the save geometry
 # does not need to follow.
 # Front/back asymmetric, so it's a loop sweep rather than a lathe. The goalie
@@ -94,8 +98,8 @@ const _MASK_STATIONS: Array[Vector4] = [
 	Vector4(0.000, 0.120, 0.140, 0.128),    # eye line, set back under the brow
 	Vector4(-0.050, 0.114, 0.124, 0.134),   # cheeks
 	Vector4(-0.100, 0.098, 0.094, 0.138),   # jaw: the back tucks, the chin holds
-	Vector4(-0.145, 0.072, 0.050, 0.132),   # chin
-	Vector4(-0.178, 0.040, 0.020, 0.112),   # chin point
+	Vector4(-0.145, 0.072, 0.085, 0.132),   # chin; the backplate down to the nape
+	Vector4(-0.178, 0.040, 0.060, 0.112),   # chin point
 ]
 const _MASK_SEGS: int = 12
 
@@ -149,11 +153,13 @@ const _DANGLER_HALF_T: float = 0.006
 # one fixed body-local tube runs shoulders → mask chin everywhere. Set back
 # of the spine line so the mask front overhangs it — the neck sits BEHIND a
 # real mask, never flush with its face.
-const _NECK_TOP_Y: float = 0.50    # body-local; buries into the mask chin
-const _NECK_BOT_Y: float = 0.30    # below the body top (0.36) — no visible seam
-const _NECK_RADIUS_TOP: float = 0.070
-const _NECK_RADIUS_BOT: float = 0.080  # flares toward the shoulders
-const _NECK_BACK_OFFSET: float = 0.025  # body-local +Z (rearward)
+# Slim enough to stay inside the mask's chin and backplate wherever they reach
+# down, so only the short span between the mask and the collar shows.
+const _NECK_TOP_Y: float = 0.46    # body-local; buries into the mask chin
+const _NECK_BOT_Y: float = 0.32    # below the body top (0.36) — no visible seam
+const _NECK_RADIUS_TOP: float = 0.050
+const _NECK_RADIUS_BOT: float = 0.062  # flares toward the shoulders
+const _NECK_BACK_OFFSET: float = 0.020  # body-local +Z (rearward)
 const _NECK_COLOR := Color(0.10, 0.10, 0.11)
 
 # Catch glove: a trapper's hand, built as its silhouette rather than as the
@@ -233,7 +239,8 @@ const _BLOCKER_FIST_TINT := Color(0.78, 0.78, 0.80)
 
 # Hip connector tube radius — baked into the shared connector mesh; the
 # per-frame stretch in Goalie._point_connector scales the basis Y column only.
-const HIP_CONNECTOR_RADIUS: float = 0.08
+# Thick enough to read as the pants' thigh guards hanging down onto the pads.
+const HIP_CONNECTOR_RADIUS: float = 0.105
 
 
 # Swaps every scene-primitive goalie part for its cached low-poly build.
@@ -391,8 +398,8 @@ static func _build_body() -> ArrayMesh:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_smooth_group(-1)  # flat shading — see SkaterMeshBuilder doc block
 	var loops: Array[PackedVector3Array] = []
-	for s: Vector2 in _BODY_STATIONS:
-		loops.append(_body_loop(s.x, s.y))
+	for s: Vector3 in _BODY_STATIONS:
+		loops.append(_body_loop(s.x, s.y, s.z))
 	_sweep_loops(st, loops)
 	_loop_cap(st, loops[0], Vector3(0.0, _BODY_STATIONS[0].x, 0.0), true)     # top (yoke)
 	_loop_cap(st, loops[loops.size() - 1],
@@ -403,20 +410,21 @@ static func _build_body() -> ArrayMesh:
 
 # 8-point chest cross-section, CCW seen from +Y (the sweep-loop contract):
 # generous flat back segment at +Z for the nameplate, wide chamfers rounding
-# the front. Width multiplier scales x only — see the class doc block.
-static func _body_loop(y: float, w_mult: float) -> PackedVector3Array:
+# the front. Width multiplier scales x only and front multiplier the front's
+# depth only — see the class doc block.
+static func _body_loop(y: float, w_mult: float, front_mult: float) -> PackedVector3Array:
 	var hw: float = _BODY_HALF_W * w_mult
 	var hd: float = _BODY_HALF_D
 	var pts := PackedVector3Array()
 	pts.resize(8)
-	pts[0] = Vector3(-0.13 * w_mult, y, -hd)   # front-left
-	pts[1] = Vector3(-hw, y, -0.05)
+	pts[0] = Vector3(-0.13 * w_mult, y, -hd * front_mult)   # front-left
+	pts[1] = Vector3(-hw, y, -0.05 * front_mult)
 	pts[2] = Vector3(-hw, y, 0.08)
 	pts[3] = Vector3(-0.21 * w_mult, y, hd)    # back-left
 	pts[4] = Vector3(0.21 * w_mult, y, hd)     # back-right
 	pts[5] = Vector3(hw, y, 0.08)
-	pts[6] = Vector3(hw, y, -0.05)
-	pts[7] = Vector3(0.13 * w_mult, y, -hd)    # front-right
+	pts[6] = Vector3(hw, y, -0.05 * front_mult)
+	pts[7] = Vector3(0.13 * w_mult, y, -hd * front_mult)    # front-right
 	return pts
 
 
