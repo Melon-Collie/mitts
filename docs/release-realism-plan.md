@@ -237,6 +237,14 @@ who loads the puck, not just have the rule switched on.
   the puck (a forehand pulled beside the stick hip is loaded before the body
   moves). The as-is hold is scored first and ties keep it. The tip read fires
   from the faster of the as-is hold and the pocket.
+- **Each hold is priced at its keep** (`AIShotHolds.price_keep`): the odds the
+  puck survives the route the blade walks to it (a chord across the front, or
+  around the body to a hold behind it) and the charge there, against every
+  opponent's reachable stick. A stick sweeps its own reach faster than a pull
+  crosses it, so a route dragging the puck nearer a man is read where it passes
+  him closest as a puck parked there. Without it a trailing backchecker stripped
+  HARD at +25° in `test_real_rush_sim.gd`: the two side holds near-tied, the bot
+  flipped between them, and the pull across ran the puck through his stick.
 - **Passes:** the launch-pace solve is capped at the pocket's share
   (`_pass_launch_cap`), on both the scored and the fired pass.
 - **Not priced yet:** a pass's pull time (the back-wedge rotation charge,

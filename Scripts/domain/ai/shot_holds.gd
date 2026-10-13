@@ -34,6 +34,8 @@ var facing_turn_rate: float = 6.0
 var offset: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO]
 var share: Array[float] = [1.0, 1.0, 1.0, 1.0]
 var pull_s: Array[float] = [0.0, 0.0, 0.0, 0.0]
+# price_keep's odds the puck is still on the blade when each hold fires.
+var keep: Array[float] = [1.0, 1.0, 1.0, 1.0]
 var count: int = 0
 # solve_pass's hold and the share the press waits for.
 var pass_offset: Vector2 = Vector2.ZERO
@@ -110,6 +112,69 @@ func solve_shot(aim: Vector2, puck_offset: Vector2, velocity: Vector2,
 		FacingRules.solve(_facing, facing, dir, velocity, false, false, facing_cfg)
 		_fill_pulled(count, dir, aim, _facing.target, facing)
 		count += 1
+
+
+# Odds each solve_shot hold keeps the puck from `self_pos` (world) skating at
+# `velocity`: the blade carries it along the route the cursor walks (a chord
+# across the front, or around the body to a hold behind `facing`), then it sits
+# at the hold through `charge_s`, against every opponent's reachable stick
+# (AICarrySpace). A stick sweeps its own reach faster than a pull crosses it, so
+# a route that drags the puck nearer a man than it started is read where it
+# passes closest to him as a puck sitting there.
+# Fills keep[k] for every listed hold.
+func price_keep(self_pos: Vector3, velocity: Vector2, facing: Vector2, charge_s: float,
+		opponents: Array[Vector3], opponent_vels: Array[Vector3],
+		opponent_caps: Array) -> void:
+	var has_caps: bool = opponent_caps.size() == opponents.size()
+	for k: int in count:
+		var t_end: float = pull_s[k] + charge_s
+		var k_keep: float = AICarrySpace.clearance_to_safety(AICarrySpace.reach_clearance(
+				_world(self_pos, offset[k], velocity, t_end), t_end,
+				opponents, opponent_vels, opponent_caps,
+				minf(t_end, AICarrySpace.CARRY_LUNGE_WINDOW_S)))
+		if pull_s[k] > 0.0 and k_keep > 0.0:
+			var t_mid: float = pull_s[k] * 0.5
+			var mid: Vector2 = _route_mid(k, facing)
+			k_keep = minf(k_keep, AICarrySpace.transit_clearance_to_safety(
+					AICarrySpace.reach_clearance(_world(self_pos, mid, velocity, t_mid), t_mid,
+							opponents, opponent_vels, opponent_caps)))
+			for i: int in opponents.size():
+				if k_keep <= 0.0:
+					break
+				var man := Vector2(opponents[i].x - self_pos.x, opponents[i].z - self_pos.z) \
+						+ (Vector2(opponent_vels[i].x, opponent_vels[i].z) - velocity) * t_mid
+				var route_gap: float = minf(_segment_gap(man, offset[0], mid),
+						_segment_gap(man, mid, offset[k]))
+				if route_gap >= man.distance_to(offset[0]):
+					continue
+				var caps: AISkaterCaps = opponent_caps[i] if has_caps else null
+				var stick: float = caps.blade_span if caps != null \
+						else AICarrySpace.EVADE_STICK_REACH_M
+				k_keep = minf(k_keep, AICarrySpace.clearance_to_safety(route_gap - stick))
+		keep[k] = k_keep
+
+
+# Halfway along the pull to hold `k`: the chord's midpoint, or for a hold behind
+# the body the arc's, the short way round at the hold's reach.
+func _route_mid(k: int, facing: Vector2) -> Vector2:
+	var from: Vector2 = offset[0]
+	var to: Vector2 = offset[k]
+	if to.dot(facing) >= 0.0 or from.length() < MIN_OFFSET_M:
+		return (from + to) * 0.5
+	return from.normalized().rotated(from.angle_to(to) * 0.5) * to.length()
+
+
+static func _segment_gap(p: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab: Vector2 = b - a
+	var len_sq: float = ab.length_squared()
+	if len_sq < 0.000001:
+		return p.distance_to(a)
+	return p.distance_to(a + ab * clampf((p - a).dot(ab) / len_sq, 0.0, 1.0))
+
+
+static func _world(self_pos: Vector3, off: Vector2, velocity: Vector2, t: float) -> Vector3:
+	return Vector3(self_pos.x + off.x + velocity.x * t, 0.0,
+			self_pos.z + off.y + velocity.y * t)
 
 
 # A pulled hold along `dir`. The cursor on it turns the body toward `body`, but

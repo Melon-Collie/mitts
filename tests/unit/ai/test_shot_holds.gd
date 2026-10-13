@@ -68,3 +68,64 @@ func test_a_pass_the_puck_cannot_carry_goes_to_the_pocket() -> void:
 	assert_ne(_h.pass_offset, AHEAD * 0.9)
 	assert_almost_eq(_h.pass_offset.length(), _h.handle_reach, 0.001)
 	assert_almost_eq(_h.pass_share, 0.9, 0.001, "capped at what the feed needs")
+
+
+# ── price_keep: the odds the puck is still on the blade at the press ─────────
+
+const _NO_CAPS: Array = []
+
+
+func _keep_with(man: Vector3, puck_offset: Vector2) -> void:
+	_h.solve_shot(AHEAD, puck_offset, Vector2.ZERO, AHEAD)
+	var men: Array[Vector3] = [man]
+	var vels: Array[Vector3] = [Vector3.ZERO]
+	_h.price_keep(Vector3.ZERO, Vector2.ZERO, AHEAD, 0.135, men, vels, _NO_CAPS)
+
+
+func _hold_toward(x_sign: float) -> int:
+	for k: int in range(1, _h.count):
+		if _h.offset[k].x * x_sign > 0.5:
+			return k
+	return -1
+
+
+func test_nobody_near_keeps_every_hold() -> void:
+	_h.solve_shot(AHEAD, RIGHT * 0.9, Vector2.ZERO, AHEAD)
+	var none: Array[Vector3] = []
+	_h.price_keep(Vector3.ZERO, Vector2.ZERO, AHEAD, 0.135, none, none, _NO_CAPS)
+	for k: int in _h.count:
+		assert_almost_eq(_h.keep[k], 1.0, 0.001)
+
+
+func test_a_hold_beside_a_trailing_checker_keeps_less_than_the_far_side() -> void:
+	_keep_with(Vector3(1.0, 0.0, 2.0), AHEAD * 0.9)
+	var near: int = _hold_toward(1.0)
+	var far: int = _hold_toward(-1.0)
+	assert_gt(near, 0)
+	assert_gt(far, 0)
+	assert_lt(_h.keep[near], _h.keep[far], "his stick reaches the hold on his side")
+
+
+func test_a_pull_dragged_past_a_checker_reads_as_the_puck_parked_there() -> void:
+	# Directly behind the body: the pull across the front from one side to the
+	# other passes nearer him than either end. His stick sweeps its reach faster
+	# than the puck crosses it, so the route is worth no more than the puck
+	# sitting at its closest pass. Fast hands and no charge keep the press inside
+	# his reaction, so neither end gives him time to close.
+	var h := AIShotHolds.new()
+	h.blade_speed = 40.0
+	var behind: float = 2.0
+	var facing: Vector2 = AHEAD.rotated(-0.2)   # the far side's hold is in front
+	h.solve_shot(AHEAD, RIGHT * 0.9, Vector2.ZERO, facing)
+	var men: Array[Vector3] = [Vector3(0.0, 0.0, behind)]
+	var vels: Array[Vector3] = [Vector3.ZERO]
+	h.price_keep(Vector3.ZERO, Vector2.ZERO, facing, 0.0, men, vels, _NO_CAPS)
+	var across: int = -1
+	for k: int in range(1, h.count):
+		if h.offset[k].x < -0.5:
+			across = k
+	assert_gt(across, 0)
+	var parked: float = AICarrySpace.clearance_to_safety(
+			behind - AICarrySpace.EVADE_STICK_REACH_M)
+	assert_gt(h.keep[0], parked + 0.1, "both ends sit further off him")
+	assert_almost_eq(h.keep[across], parked, 0.001)

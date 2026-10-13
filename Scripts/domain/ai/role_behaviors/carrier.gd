@@ -115,10 +115,11 @@ const SHOT_MIN_FORWARD_OF_LINE_M: float = 0.3
 # The shoot-now eval prices each hold AIShotHolds names (the puck where it is,
 # the loaded pocket, a reach to either side of the shot line) at the pace its
 # load allows, from where the pull puts the release, with the pull's time in the
-# goalie's budget. The as-is hold is scored first and the compare is strictly
-# greater, so a tie keeps the release that needs no pull. Carry candidates and
-# pass receivers keep the full-pace read: they are projections a beat ahead, and
-# the pocket is where the carry will put the puck.
+# goalie's budget, at the odds the puck survives the pull and the charge
+# (AIShotHolds.price_keep). The as-is hold is scored first and the compare is
+# strictly greater, so a tie keeps the release that needs no pull. Carry
+# candidates and pass receivers keep the full-pace read: they are projections a
+# beat ahead, and the pocket is where the carry will put the puck.
 
 # Winning hold from the last shoot-now sweep: the release/goalie/pace the
 # SHOOT commit's loft/aim must be computed against (so the executed shot is the
@@ -1252,6 +1253,10 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 				Vector2(puck_now.x - self_pos.x, puck_now.z - self_pos.z),
 				Vector2(horizontal_velocity.x, horizontal_velocity.z),
 				snapshot.skater_states[ctx.peer_id].facing)
+		_holds.price_keep(self_pos, Vector2(horizontal_velocity.x, horizontal_velocity.z),
+				snapshot.skater_states[ctx.peer_id].facing,
+				SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S, _scratch_opponents,
+				_scratch_opponent_vels, _scratch_opponent_caps)
 	_phase_shoot_score = -1.0
 	for k: int in _holds.count:
 		if shot_unavailable:
@@ -1307,7 +1312,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 				release, attacking_goal, sample_goalie, shot_disp,
 				GameRules.NET_HALF_WIDTH, _scratch_opponents_release,
 				sample_speed, _scratch_opponent_caps, ShotEvent.ShotType.SHOT,
-				ctx.self_loft_tans.z)
+				ctx.self_loft_tans.z) * _holds.keep[k]
 		if s > _phase_shoot_score:
 			_phase_shoot_score = s
 			_shot_sample_release = release
@@ -1339,7 +1344,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 			var tip_s: float = AIActionScoring.tip_ev(
 					tip_release, tip_man, attacking_goal, goalie_now,
 					GameRules.NET_HALF_WIDTH, _scratch_opponents_release,
-					tip_speed, _scratch_opponent_caps)
+					tip_speed, _scratch_opponent_caps) * _holds.keep[tip_k]
 			if tip_s > _phase_shoot_score:
 				_phase_shoot_score = tip_s
 				_shot_sample_release = tip_release
