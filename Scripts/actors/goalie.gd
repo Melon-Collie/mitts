@@ -37,13 +37,25 @@ extends Node3D
 # reach at a real bend (GoalieAnatomy.hand_depth_for_bend).
 const _ARM_UPPER_LEN: float = GoalieAnatomy.ARM_UPPER_M
 const _ARM_FOREARM_LEN: float = GoalieAnatomy.ARM_FOREARM_M
-const _ARM_RADIUS: float = 0.16
-const _SHOULDER_SPHERE_RADIUS: float = 0.10
-const _ELBOW_SPHERE_RADIUS: float = 0.08
+# A chest protector's arms are padded: a thick bicep, an elbow cap, and a
+# forearm pad tapering to the wrist.
+const _UPPER_ARM_RADIUS: float = 0.09
+const _FOREARM_RADIUS: float = 0.075
+const _ELBOW_SPHERE_RADIUS: float = 0.09
+# Shoulder floaters: the broad caps a chest protector carries over each
+# shoulder, set outboard and up of the joint so they stand past the trunk and
+# above the collar, which is the goalie's shoulder line from the top-down
+# camera. Semi-axes in the body's frame; tilt with the trunk.
+const _FLOATER_SEMI_AXES := Vector3(0.13, 0.10, 0.125)
+const _FLOATER_OUTSET := Vector3(0.02, 0.03, 0.0)
+# The glove forearm ends here, in the Glove's frame, rather than at its origin:
+# behind the trapper's heel, where the cuff opening takes a real forearm, so
+# the arm meets the back of the hand instead of running through its thumb.
+const _GLOVE_CUFF_IN_GLOVE := Vector3(0.0, -0.03, 0.07)
 # How far outboard of the shoulder joint the elbow must be before it may hang
 # back past it: to the trunk's side face, plus the arm's own thickness.
 const _ELBOW_CLEARS_TRUNK_M: float = GoalieAnatomy.TORSO_BOX_WIDTH_M * 0.5 \
-		- GoalieAnatomy.SHOULDER_OFFSET.x + _ARM_RADIUS * 0.5
+		- GoalieAnatomy.SHOULDER_OFFSET.x + _UPPER_ARM_RADIUS
 
 var _uniform_coordinator: GoalieUniformCoordinator
 # Dynamic visual nodes — public for GoalieUniformCoordinator access.
@@ -67,7 +79,7 @@ var blocker_elbow_sphere: MeshInstance3D = null
 var _last_body_xform: Transform3D
 var _last_left_pad_pos: Vector3 = Vector3.INF
 var _last_right_pad_pos: Vector3
-var _last_glove_pos: Vector3
+var _last_glove_xform: Transform3D = Transform3D()
 var _last_block_arm_pos: Vector3
 
 
@@ -412,17 +424,17 @@ func _init_connectors() -> void:
 
 
 func _init_arm_bones() -> void:
-	glove_upper_arm = _make_arm_bone()
+	glove_upper_arm = _make_arm_bone(_UPPER_ARM_RADIUS)
 	add_child(glove_upper_arm)
-	glove_forearm = _make_arm_bone()
+	glove_forearm = _make_arm_bone(_FOREARM_RADIUS)
 	add_child(glove_forearm)
-	blocker_upper_arm = _make_arm_bone()
+	blocker_upper_arm = _make_arm_bone(_UPPER_ARM_RADIUS)
 	add_child(blocker_upper_arm)
-	blocker_forearm = _make_arm_bone()
+	blocker_forearm = _make_arm_bone(_FOREARM_RADIUS)
 	add_child(blocker_forearm)
-	glove_shoulder_sphere = _make_sphere_mesh(_SHOULDER_SPHERE_RADIUS)
+	glove_shoulder_sphere = _make_sphere_mesh(1.0)
 	add_child(glove_shoulder_sphere)
-	blocker_shoulder_sphere = _make_sphere_mesh(_SHOULDER_SPHERE_RADIUS)
+	blocker_shoulder_sphere = _make_sphere_mesh(1.0)
 	add_child(blocker_shoulder_sphere)
 	glove_elbow_sphere = _make_sphere_mesh(_ELBOW_SPHERE_RADIUS)
 	add_child(glove_elbow_sphere)
@@ -510,10 +522,9 @@ static func _up_for_look_at(direction: Vector3) -> Vector3:
 # apply it). X/Y are the arm THICKNESS; Z is the length _update_arm_bone() rewrites
 # per tick — each writer reads the other's components back rather than overwriting
 # the whole vector. Same rig contract as Skater._resolve_or_create_bone_mesh.
-func _make_arm_bone() -> Node3D:
+func _make_arm_bone(radius: float) -> Node3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = SkaterMeshBuilder.shared_arm_bone_z()
-	var radius: float = _ARM_RADIUS * 0.5
 	mi.scale = Vector3(radius, radius, 1.0)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return mi
@@ -552,15 +563,18 @@ func _update_connectors() -> void:
 	_point_connector(right_hip_connector,
 		_body.position + _body.basis * Vector3(0.10, -0.30, 0.0),
 		_right_pad.position)
-	# Shoulder spheres follow the body pivot each frame.
+	# Shoulder floaters follow the body pivot each frame, and tilt with it.
 	var glove_shoulder: Vector3 = _body.position + _body.basis * Vector3(
 			-GoalieAnatomy.SHOULDER_OFFSET.x, GoalieAnatomy.SHOULDER_OFFSET.y, 0.0)
 	var blocker_shoulder: Vector3 = _body.position + _body.basis * GoalieAnatomy.SHOULDER_OFFSET
-	glove_shoulder_sphere.position = glove_shoulder
-	blocker_shoulder_sphere.position = blocker_shoulder
+	var floater_basis: Basis = _body.basis.scaled_local(_FLOATER_SEMI_AXES)
+	glove_shoulder_sphere.transform = Transform3D(floater_basis, glove_shoulder
+			+ _body.basis * Vector3(-_FLOATER_OUTSET.x, _FLOATER_OUTSET.y, _FLOATER_OUTSET.z))
+	blocker_shoulder_sphere.transform = Transform3D(floater_basis,
+			blocker_shoulder + _body.basis * _FLOATER_OUTSET)
 	# Glove arm: shoulder on body's left side (goalie's catch hand).
 	_update_arm_ik(glove_upper_arm, glove_forearm,
-		glove_shoulder, _glove.position, Vector3.LEFT,
+		glove_shoulder, _glove.position + _glove.basis * _GLOVE_CUFF_IN_GLOVE, Vector3.LEFT,
 		glove_elbow_sphere)
 	# Blocker arm: forearm connects directly to BlockArm (wrist position of the
 	# blocker pad + hand mesh assembly).
@@ -578,13 +592,13 @@ func _connectors_pose_changed() -> bool:
 	if _body.transform == _last_body_xform \
 			and _left_pad.position == _last_left_pad_pos \
 			and _right_pad.position == _last_right_pad_pos \
-			and _glove.position == _last_glove_pos \
+			and _glove.transform == _last_glove_xform \
 			and _block_arm.position == _last_block_arm_pos:
 		return false
 	_last_body_xform = _body.transform
 	_last_left_pad_pos = _left_pad.position
 	_last_right_pad_pos = _right_pad.position
-	_last_glove_pos = _glove.position
+	_last_glove_xform = _glove.transform
 	_last_block_arm_pos = _block_arm.position
 	return true
 
