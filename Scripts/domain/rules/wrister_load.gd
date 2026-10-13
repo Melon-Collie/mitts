@@ -28,7 +28,7 @@ class Config:
 	var max_twist_rad: float = deg_to_rad(67.0)
 	# How far off the torso a hand holds the puck round its home side, and round
 	# the other side.
-	var home_reach_rad: float = deg_to_rad(90.0)
+	var home_reach_rad: float = deg_to_rad(120.0)
 	var away_reach_rad: float = deg_to_rad(30.0)
 
 

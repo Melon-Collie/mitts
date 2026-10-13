@@ -641,11 +641,11 @@ var max_wrister_power: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 var backhand_power_coefficient: float = 0.75
 var max_charge_direction_variance: float = 35.0
 # ── Wrister load (WristerLoad): what the torso can put into a human's shot ──
-# The release's power is capped at lerp(wrister_unloaded_power,
-# max_wrister_power, load), so a shot the torso can't drive leaves near this.
-var wrister_unloaded_power: float = 4.0
+# Release cap: max_wrister_power × lerp(this, 1, load). With no turn behind it,
+# the arms, wrists and stick flex still carry a real snap.
+var wrister_unloaded_share: float = 0.6
 var wrister_full_load_arc_deg: float = 45.0
-var wrister_home_reach_deg: float = 90.0
+var wrister_home_reach_deg: float = 120.0
 var wrister_away_reach_deg: float = 30.0
 # ── Wrister power model (ShotMechanics.wrister_power_t) ──
 # Power is a feel-curve over the release speed signal (cursor speed for humans,
@@ -2794,7 +2794,7 @@ func _wrister_is_backhand(input: InputState) -> bool:
 func _wrister_load_cap(is_backhand: bool) -> float:
 	if not wrister_load_active:
 		return INF
-	var cap: float = lerpf(wrister_unloaded_power, max_wrister_power, wrister_load.load)
+	var cap: float = max_wrister_power * lerpf(wrister_unloaded_share, 1.0, wrister_load.load)
 	return cap * backhand_power_coefficient if is_backhand else cap
 
 func _release_wrister(input: InputState) -> void:

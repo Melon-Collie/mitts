@@ -31,6 +31,14 @@ func test_forehand_forward_from_the_stick_side_is_full() -> void:
 			"a lefty's forehand winds the torso round to the left")
 
 
+func test_puck_behind_the_stick_hip_is_fully_loaded() -> void:
+	# The coached load: the puck drawn back behind the back foot.
+	var behind := Vector3(-0.9 * sin(deg_to_rad(120.0)), 0.0, -0.9 * cos(deg_to_rad(120.0)))
+	var r := _solve(behind, TO_12, LEFTY)
+	assert_false(r.is_backhand)
+	assert_almost_eq(r.load, 1.0, 0.001)
+
+
 func test_backhand_from_out_on_the_stick_side_is_weak() -> void:
 	var r := _solve(AT_9, TO_6, LEFTY)
 	assert_true(r.is_backhand, "a lefty sweeping 9 → 6 is turning the backhand way")

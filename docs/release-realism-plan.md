@@ -64,15 +64,18 @@ at the release by `SkaterController._solve_wrister_load`. In the hips' frame:
   `wrister_full_load_arc_deg` (45°) of it, linear to nothing on the line through
   the puck.
 - **Coil:** the width of the torso yaws, inside the ±67° twist limit, that keep the
-  frozen puck in the hand's reach — `wrister_home_reach_deg` (90°) round the
+  frozen puck in the hand's reach — `wrister_home_reach_deg` (120°, so the puck drawn back behind the
+  back foot is a full load) round the
   hand's home side (stick side for a forehand, off side for a backhand),
   `wrister_away_reach_deg` (30°) round the other. A forehand from straight beside
   the body is the full share. So the crossed-arms forehand (lefty: puck at 3,
   toward 6) and its mirror, a backhand from out on the stick side (puck at 9,
   toward 6), are both weak.
-- **The cap:** `min(cursor-speed power, lerp(wrister_unloaded_power,
-  max_wrister_power, alignment × coil))`, × the backhand coefficient. The goalie's
-  predicted shot takes the same cap.
+- **The cap:** `min(cursor-speed power, max_wrister_power ×
+  lerp(wrister_unloaded_share, 1, alignment × coil))`, × the backhand coefficient.
+  With no turn behind it a shot still carries 60% (the arms, wrists and stick
+  flex — measured trunk-rotation gains are a few m/s on a 25–33 m/s shot). The
+  goalie's predicted shot takes the same cap.
 - **The puck is the pinned origin** carried along by any skating since the pin —
   never the blade's contact point, which swings with the torso's wind-up.
 - **The pose is the gauge.** The aim pose winds the torso from squared on the aim
