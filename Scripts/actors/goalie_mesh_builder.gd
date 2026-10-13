@@ -19,11 +19,11 @@ extends SkaterMeshBuilder
 # depth only — the back depth stays constant so every back facet keeps its
 # exact +Z normal.
 
-# Body cross-section (replaces the 0.52 × 0.72 × 0.28 BoxMesh): flat back,
-# chamfered front. The block is torso THROUGH hips — standing, its bottom
-# (body y 1.22 − 0.36 = 0.86) sits exactly at pad-top level — so the one
-# solid is styled as BOTH garments: chest, a waist pinch, then the pants
-# flaring past the box at the hips, as a goalie's do. The jersey shader paints the
+# Body cross-section: flat back, chamfered front. The block is torso THROUGH
+# hips — standing, its bottom (body y 1.22 − 0.36 = 0.86) sits exactly at
+# pad-top level — so the one solid is styled as BOTH garments: chest, a waist
+# pinch, then the pants flaring at the hips, as a goalie's do (the collider is
+# as wide as the flare). The jersey shader paints the
 # band below the hip line as the kit's pants color (goalie_jersey.gdshader
 # pants_start), splitting the garments by color where the silhouette splits
 # them by shape. Stations are (y, width multiplier, front-depth multiplier);
@@ -135,16 +135,6 @@ const _CAGE_COLOR := Color(0.86, 0.86, 0.88)
 # whose centroid lies within this half-angle of the +Z back axis.
 const _BACKPLATE_HALF_ANGLE_DEG: float = 62.0
 const _BACKPLATE_TINT := Color(0.66, 0.66, 0.68)
-# Throat guard ("dangler"): a plate hanging from the chin in front of the neck
-# guard, which otherwise reads as a bare stick under the mask from the front.
-# Stations top→bottom in the mask's frame: (y, half-width, front −Z reach of
-# the plate's face). It tucks up behind the chin rim and hangs a touch forward.
-const _DANGLER_STATIONS: Array[Vector3] = [
-	Vector3(-0.150, 0.034, 0.100),
-	Vector3(-0.235, 0.032, 0.112),
-	Vector3(-0.255, 0.020, 0.112),
-]
-const _DANGLER_HALF_T: float = 0.006
 
 # NECK guard tube — a fixed-color child of the BODY mesh (created once by
 # apply_goalie; the uniform coordinator repaints only the meshes it owns),
@@ -534,11 +524,6 @@ static func _blocker_tint(centroid: Vector3, normal: Vector3) -> Color:
 
 static func _ensure_extras(goalie: Goalie) -> void:
 	var head: MeshInstance3D = goalie.head_mesh
-	if head != null and head.get_node_or_null("Dangler") == null:
-		var dangler := MeshInstance3D.new()
-		dangler.name = "Dangler"
-		dangler.mesh = _shared("goalie_dangler", _build_dangler)
-		head.add_child(dangler)
 	if head != null and head.get_node_or_null("Cage") == null:
 		var cage := MeshInstance3D.new()
 		cage.name = "Cage"
@@ -695,28 +680,6 @@ static func _mask_section(y: float) -> Vector2:
 			var f: float = inverse_lerp(a.x, b.x, y)
 			return Vector2(lerpf(a.y, b.y, f), lerpf(a.w, b.w, f))
 	return Vector2(0.001, 0.001)
-
-
-# Painted with the mask (GoalieUniformCoordinator), so it bakes plain white
-# vertex colour for the mask material's vertex-colour albedo.
-static func _build_dangler() -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	st.set_smooth_group(-1)  # flat shading — see SkaterMeshBuilder doc block
-	var loops: Array[PackedVector3Array] = []
-	for s: Vector3 in _DANGLER_STATIONS:
-		var loop: PackedVector3Array = _octagon_loop(s.x, s.y, _DANGLER_HALF_T, 0.7, 0.5)
-		for k in loop.size():
-			loop[k] += Vector3(0.0, 0.0, _DANGLER_HALF_T - s.z)
-		loops.append(loop)
-	_sweep_loops(st, loops)
-	var top: Vector3 = _DANGLER_STATIONS[0]
-	var bottom: Vector3 = _DANGLER_STATIONS[_DANGLER_STATIONS.size() - 1]
-	_loop_cap(st, loops[0], Vector3(0.0, top.x, -(top.z - _DANGLER_HALF_T)), true)
-	_loop_cap(st, loops[loops.size() - 1],
-			Vector3(0.0, bottom.x, -(bottom.z - _DANGLER_HALF_T)), false)
-	st.generate_normals()
-	return _tinted(st.commit(), Color.WHITE)
 
 
 # Egg-shaped cross-section: _ring's trig (θ = 0 at +Z, CCW from +Y — same

@@ -68,9 +68,6 @@ func apply_uniform(colors: Dictionary) -> void:
 	var mask_mat: StandardMaterial3D = UniformPaint.solid(uniform.helmet, UniformPaint.ROUGH_HELMET)
 	mask_mat.vertex_color_use_as_albedo = true
 	_goalie.head_mesh.material_override = mask_mat
-	var dangler := _goalie.head_mesh.get_node_or_null("Dangler") as MeshInstance3D
-	if dangler != null:
-		dangler.material_override = mask_mat
 
 	var pads_mat: StandardMaterial3D = UniformPaint.solid(colors.goalie_pads, _ROUGH_PADS)
 	pads_mat.vertex_color_use_as_albedo = true

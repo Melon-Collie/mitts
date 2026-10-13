@@ -588,9 +588,9 @@ func _update_connectors() -> void:
 		return
 	if not _connectors_pose_changed():
 		return
-	# Anchor offsets are body-local against the 0.52 × 0.72 torso box in
-	# Goalie.tscn (half-height 0.36): hips near the box bottom, shoulders a
-	# hand's width below the box top — keep in sync if the box resizes.
+	# Anchor offsets are body-local against the torso box in Goalie.tscn
+	# (half-height 0.36): hips near the box bottom, shoulders a hand's width
+	# below the box top.
 	_point_connector(left_hip_connector,
 		_body.position + _body.basis * Vector3(-0.10, -0.30, 0.0),
 		_left_pad.position)

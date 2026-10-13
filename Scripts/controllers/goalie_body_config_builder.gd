@@ -499,7 +499,7 @@ func _set_butterfly_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 func _set_down_hands(c: GoalieBodyConfig, glove_y: float) -> void:
 	c.blocker_pos = Vector3(DOWN_BLOCKER_X_M, DOWN_HAND_Y_M, DOWN_BLOCKER_Z_M)
 	c.blocker_rot = Vector3(0.0, 0.0, STICK_ROLL)
-	c.glove_pos = Vector3(-0.42, glove_y, 0.0)
+	c.glove_pos = Vector3(READY_GLOVE.x, glove_y, 0.0)
 	c.glove_pos.z = _hand_depth(c, -1.0, c.glove_pos.x, glove_y, BEND_DOWN_DEG)
 	c.glove_rot = Vector3.ZERO
 

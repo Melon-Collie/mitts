@@ -10,12 +10,12 @@ const _EPS: float = 0.005  # envelope tolerance, metres
 
 
 # label → [mesh, max AABB size]. Envelopes come from the primitives in
-# Goalie.tscn: body box 0.52×0.72×0.28 (the pants flare past it to 0.62 wide, 0.31 deep), pad box 0.28×0.84×0.2, blocker box
+# Goalie.tscn: body box 0.62×0.72×0.28 (the pants' flare runs 0.31 deep), pad box 0.28×0.84×0.2, blocker box
 # 0.2×0.39×0.05. The mask, the trapper and the collider-free parts (fist,
-# dangler, cage) are drawn as the gear they are rather than as their
+# cage) are drawn as the gear they are rather than as their
 # colliders, and are bounded at that size: the mask a goalie's (its head box is
 # sized to it), the trapper's hand (its 0.25 × 0.32 box likewise), the cage the
-# face opening it frames (brow to chin, plus its wire).
+# face opening it frames (brow to cheek, plus its wire).
 # The connector tube is unit-sized (its stretch is basis scale).
 func _parts() -> Dictionary:
 	return {
@@ -23,10 +23,9 @@ func _parts() -> Dictionary:
 		"mask": [GoalieMeshBuilder._build_mask(), Vector3(0.24, 0.33, 0.29)],
 		"pad": [GoalieMeshBuilder._build_pad(), Vector3(0.28, 0.84, 0.20)],
 		"trapper": [GoalieMeshBuilder._build_trapper(), Vector3(0.25, 0.29, 0.13)],
-		"cage": [GoalieMeshBuilder._build_cage(), Vector3(0.15, 0.20, 0.07)],
+		"cage": [GoalieMeshBuilder._build_cage(), Vector3(0.15, 0.14, 0.07)],
 		"blocker": [GoalieMeshBuilder._build_blocker(), Vector3(0.20, 0.39, 0.05)],
 		"blocker_hand": [GoalieMeshBuilder._build_blocker_hand(), Vector3(0.10, 0.12, 0.08)],
-		"dangler": [GoalieMeshBuilder._build_dangler(), Vector3(0.07, 0.11, 0.03)],
 		"connector": [GoalieMeshBuilder.shared_connector_tube(), Vector3(0.21, 1.0, 0.21)],
 	}
 

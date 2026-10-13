@@ -29,8 +29,8 @@ class_name GoalieAnatomy
 # Leg pad: 0.28 x 0.84 x 0.2 (LeftPad / RightPad).
 const PAD_BOX_WIDTH_M: float = 0.28
 const PAD_BOX_HEIGHT_M: float = 0.84
-# Torso: 0.52 x 0.72 x 0.28 (Body).
-const TORSO_BOX_WIDTH_M: float = 0.52
+# Torso: 0.62 x 0.72 x 0.28 (Body) — as wide as the pants' flare.
+const TORSO_BOX_WIDTH_M: float = 0.62
 const TORSO_BOX_HEIGHT_M: float = 0.72
 # Glove: 0.25 x 0.32 x 0.2 (Glove) — taller than wide, as the trapper is —
 # centred this far above the hand point, where the trapper's pocket is.
@@ -47,10 +47,6 @@ const BUTTERFLY_PAD_HALF_WIDTH_M: float = 0.42
 # Furthest the glove hand travels outboard on a full reach
 # (GoalieBodyConfigBuilder.glove_max_x_outward, sign-stripped).
 const GLOVE_MAX_X_OUTWARD_M: float = 0.85
-# Resting hand lateral offsets in the READY stance (that builder's
-# c.glove_pos.x / c.blocker_pos.x).
-const GLOVE_REST_X_M: float = 0.42
-const BLOCKER_REST_X_M: float = 0.44
 
 
 static func butterfly_pad_edge_half_width() -> float:
