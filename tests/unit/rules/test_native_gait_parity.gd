@@ -280,6 +280,42 @@ func _assert_skated(fields: Array[String]) -> void:
 		assert_gt(_seen.get(field, 0.0), 0.5, "the fuzz skated %s" % field)
 
 
+# The shuffle's step, both ways it starts: a push from rest to the side or back
+# that skates on (one step, then the stroke), a tap — pushed, then braked to
+# rest — and the brake held with the stick, which starts none; in every
+# direction, with the rest between.
+func test_shuffle_parity() -> void:
+	if _native_missing():
+		return
+	_skater.set_facing(Vector2(0.0, -1.0))
+	var ok: bool = true
+	for mode: String in ["hold", "tap", "braked"]:
+		for stick: Vector2 in [Vector2(1.0, 0.0), Vector2(-1.0, 0.0), Vector2(0.0, -1.0),
+				Vector2(0.0, 1.0), Vector2(0.7071, 0.7071)]:
+			var vel := Vector3.ZERO
+			for i: int in 150:
+				var pushing: bool = i < (90 if mode == "hold" else 30)
+				_skater.move_intent = stick if pushing else Vector2.ZERO
+				_skater.brake_intent = mode == "braked" or (mode == "tap" and not pushing)
+				if pushing:
+					var top: float = 4.0 if mode == "hold" else 1.6
+					vel = vel.move_toward(Vector3(stick.x, 0.0, stick.y) * top, 0.08)
+				else:
+					vel = vel.move_toward(Vector3.ZERO, 0.075)
+				_skater.velocity = vel
+				if not _step(_random_delta(), "shuffle %s" % mode):
+					ok = false
+					break
+			if not ok:
+				break
+		if not ok:
+			break
+	_skater.brake_intent = false
+	if ok:
+		_report("shuffle")
+	_assert_skated(["shuffle", "stride"])
+
+
 func test_pivot_parity() -> void:
 	if _native_missing():
 		return

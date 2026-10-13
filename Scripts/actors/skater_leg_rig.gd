@@ -475,10 +475,13 @@ func seat_on_ice(hips: Transform3D) -> Vector3:
 
 
 # Fills _plant_ext with each leg's knee extension from the gait pose. The lower
-# runner
-# is the support; the other is brought down to it, and where it cannot reach
-# that far, the support folds to meet it — a skater sits deeper on the back leg
-# to get a braced front blade onto the ice.
+# runner is the support; the other is brought down to it, and where it cannot
+# reach that far, the support folds to meet it — a skater sits deeper on the
+# back leg to get a braced front blade onto the ice. Only where folding starts
+# by raising the support's runner, though: from a straight knee it first tips
+# the rigid blade down, and the ice past that dip is a fold far out of all
+# proportion to the gap (45° for the few millimetres a settling lean leaves
+# between straight legs), so the gap stays.
 func _plant_feet(hips_body: Transform3D) -> void:
 	_plant_ext[0] = 0.0
 	_plant_ext[1] = 0.0
@@ -493,7 +496,8 @@ func _plant_feet(hips_body: Transform3D) -> void:
 	var e_other: float = _solve_knee(hips_body, other, h_sup, h_other, 1.0)
 	var reached: float = _chain_low(hips_body, other, e_other)
 	var e_sup: float = 0.0
-	if reached - h_sup > _PLANT_SLACK_M:
+	if reached - h_sup > _PLANT_SLACK_M \
+			and _chain_low(hips_body, sup, -_PLANT_STEP_RAD) > h_sup:
 		e_sup = _solve_knee(hips_body, sup, reached, h_sup, -1.0)
 	_plant_ext[other] = e_other * _plant[other]
 	_plant_ext[sup] = e_sup * _plant[sup]

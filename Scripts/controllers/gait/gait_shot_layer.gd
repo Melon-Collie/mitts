@@ -42,12 +42,6 @@ func reset() -> void:
 	_kick_env = 0.0
 
 
-# Re-stamps the transition latch with the live state. reset() clears it to 0,
-# which reads as a transition on the next pass.
-func sync_state() -> void:
-	_prev_state = _skater.current_shot_state
-
-
 func is_quiet() -> bool:
 	var s: int = _skater.current_shot_state
 	return (s == State.SKATING_WITH_PUCK or s == State.SKATING_WITHOUT_PUCK) \

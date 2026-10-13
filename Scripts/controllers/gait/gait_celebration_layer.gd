@@ -1,7 +1,7 @@
 class_name GaitCelebrationLayer
 extends GaitLayer
 
-# The celebration bounce: the knees pump between straight and seated (the body
+# The celebration bounce: the knees pump between standing and seated (the body
 # drop follows, so it reads as a hop bob) — 3 pumps across the window, double
 # the raised-stick pose's bob rate. Gated to plain skating like that pose
 # (SkaterController's celebration block) so it never fights a follow-through
@@ -36,4 +36,4 @@ func stance_floor() -> float:
 	var ramp: float = clampf(progress / 0.2, 0.0, 1.0)
 	ramp = ramp * ramp * (3.0 - 2.0 * ramp)
 	var pump: float = 0.5 - 0.5 * cos(progress * TAU * 3.0)
-	return _controller.celebration_leg_stance * ramp * pump
+	return _controller.rest_stance + _controller.celebration_leg_stance * ramp * pump

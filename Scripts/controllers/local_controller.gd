@@ -28,6 +28,7 @@ signal hit_received(impulse: Vector3)
 
 @onready var camera: GameCamera = null
 var _gatherer: LocalInputGatherer = null
+var _shuffle_steps := ShuffleStepShaper.new()
 var _current_input: InputState = InputState.new()
 var _input_history: Array[InputState] = []
 # Per-tick prediction snapshots keyed by input.host_timestamp.
@@ -156,6 +157,7 @@ func apply_network_state(state: SkaterNetworkState, _host_ts: float) -> void:
 
 func teleport_to(pos: Vector3, facing: Vector2 = Vector2.ZERO) -> void:
 	super.teleport_to(pos, facing)
+	_shuffle_steps.reset()
 	_input_history.clear()
 	_prediction_history.clear()
 	_last_reconcile_ack_ts = 0.0
@@ -244,6 +246,8 @@ func _physics_process(delta: float) -> void:
 	if NetworkManager.is_clock_ready():
 		gathered.host_timestamp = NetworkManager.estimated_input_stamp_time()
 	var input: InputState = gathered
+	_shuffle_steps.shape(input, skater.global_position, skater.velocity, skater.get_facing(),
+			shuffle_step_distance, stop_decel)
 	_current_input = input
 	_input_history.append(_current_input)
 	# Cap scales with RTT so sustained high-loss can't grow the buffer unboundedly:
