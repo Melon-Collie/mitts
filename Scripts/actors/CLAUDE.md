@@ -133,7 +133,11 @@ seat to stand them up.
   knee is re-solved (the thigh counter-pitched as `GaitPose.seed_legs` does,
   so the foot keeps its fore-aft place) to bring its runner down to the
   support's; where it cannot reach — a braced front leg already straight — the
-  support folds to meet it, the skater sitting deeper on the back leg. Then the
+  support folds to meet it, the skater sitting deeper on the back leg — only
+  where folding starts by raising the support's runner. From a straight knee
+  the fold first tips the rigid blade down, so the nearest crossing is a fold
+  out of all proportion to the gap; the gap stays instead
+  (`test_blades_stand_on_the_ice.gd`, the stop from the side). Then the
   hips translate to put the support on the ice; a translation moves both feet,
   so that step is exact.
 - **The plant is for two-footed stances.** The gait publishes how much each

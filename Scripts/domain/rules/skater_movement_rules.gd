@@ -162,6 +162,12 @@ static func apply_movement(
 	return velocity
 
 
+# cos 45°: a push from rest at least this far ahead of facing is a start, never
+# a shuffle step — a skater pushes off forward (W+D included). Read by the
+# input's tap (ShuffleStepShaper) and the gait's step (SkaterLocomotion).
+const SHUFFLE_AHEAD_COS: float = 0.707
+
+
 # The posture the replicated bits name. A committed check wins over the stance;
 # every path that integrates a skater from its broadcast state resolves through
 # here, so the live sim, the client render and the host rewind agree.

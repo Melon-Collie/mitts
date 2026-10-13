@@ -32,7 +32,7 @@ Use the in-game **Report Bug** button (bottom-right corner) — it attaches your
 
 | Input | Action |
 |-------|--------|
-| **WASD** | Skate |
+| **WASD** | Skate — from a standstill, a tap to the side or back is one shuffle step (0.4 m) to hold and adjust a spot (the net front); hold to skate |
 | **Mouse** | Blade position |
 | **E** | Quick pass — instant snap toward the cursor |
 | **Left click (hold + flick)** | Wrister — the drag direction is your aim, and how fast the cursor is moving when you release is your power |

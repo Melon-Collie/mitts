@@ -3,8 +3,10 @@ extends GutTest
 # The backward C-cut and the side-step, measured where they are drawn.
 #  - Skating backward, each push sweeps out from under its hip and ahead of the
 #    hips (the body moving away from it), drawing the C out front.
-#  - The side-step scissors the skates sideways, half a cycle apart, lifting a
-#    skate as it steps toward the travel and pushing it back along the ice.
+#  - The side-step steps the skates together, half a cycle apart: a skate on
+#    the ice only ever sweeps back away from the travel under the passing hips,
+#    and the lifted half is what carries it back out toward the travel.
+#    (Planted skates holding the ice: test_shuffle_steps.gd.)
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const LegBone = SkaterMeshBuilder.LegBone
@@ -57,22 +59,23 @@ func test_a_side_step_lifts_toward_the_travel_and_pushes_away() -> void:
 	loco.mix.side = 1.0
 	loco.intensity = 0.6
 	loco.push_scale = 1.0
+	loco._ground_speed = 1.5
 	var prev_x: float = 0.0
-	var lifted_toward: int = 0
-	var lifted_away: int = 0
+	var lifted_travel: float = 0.0
+	var planted_toward: int = 0
 	var span := Vector2(INF, -INF)
-	for i: int in 64:
-		loco.stride_phase = TAU * float(i) / 64.0
+	for i: int in 65:
+		loco.stride_phase = TAU * float(i % 64) / 64.0
 		loco.strokes(DT, Vector2.ZERO)
-		if i > 0 and loco.l_dy > 0.005:
-			if loco.l_dx > prev_x:
-				lifted_toward += 1
-			else:
-				lifted_away += 1
+		if i > 0:
+			if loco.l_dy > 0.0:
+				lifted_travel += loco.l_dx - prev_x
+			elif loco.l_dx > prev_x + 1e-6:
+				planted_toward += 1
 		prev_x = loco.l_dx
 		span = Vector2(minf(span.x, loco.l_dx), maxf(span.y, loco.l_dx))
-	gut.p("side-step: skate swings %.2f..%.2f m, lifted %d samples stepping right, %d stepping left"
-			% [span.x, span.y, lifted_toward, lifted_away])
-	assert_gt(span.y - span.x, 0.12, "the skate scissors sideways")
-	assert_gt(lifted_toward, 0, "it lifts stepping toward the travel")
-	assert_eq(lifted_away, 0, "and pushes back away from it along the ice")
+	gut.p("side-step: skate swings %.2f..%.2f m, carried %.2f m toward the travel lifted"
+			% [span.x, span.y, lifted_travel])
+	assert_gt(span.y - span.x, 0.18, "the skate steps sideways")
+	assert_gt(lifted_travel, 0.18, "it lifts stepping toward the travel")
+	assert_eq(planted_toward, 0, "and on the ice only pushes back away from it")

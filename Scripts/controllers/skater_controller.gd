@@ -19,6 +19,7 @@ var max_speed: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 var move_deadzone: float = 0.1
 var stop_decel: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
 var reverse_skid_fraction: float = GameRules.DEFAULT_SKATER_REVERSE_SKID_FRACTION
+var shuffle_step_distance: float = 0.4  # m a press steps (ShuffleStepShaper), one step-together
 var turn_accel: float = GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2
 var max_turn_rate: float = GameRules.DEFAULT_SKATER_MAX_TURN_RATE_RAD_S
 # Edge grip; per-build value = base × agility_mult in apply_attributes, and the
@@ -435,6 +436,7 @@ var carve_lead_m: float = 0.20         # the carve's inside skate leads the outs
 # is input-gated, v15 intent byte) while this floor keeps working knees under
 # a coasting skater, scaled by speed.
 var glide_stance: float = 0.5
+var rest_stance: float = 0.4        # stance floor standing still: soft knees, never locked
 var stride_intensity_speed: float = 6.0   # how fast the legs ease in/out of motion
 var stride_skew: float = 0.3              # push/recovery asymmetry of the stroke (0 = pure sine)
 # The forward stride as a foot path (SkaterLocomotion._stride_path), metres of
@@ -537,7 +539,7 @@ var hockey_stop_spread_m: float = 0.10   # each skate out past its hip: a wide b
 var hockey_stop_lead_m: float = 0.28     # both skates set toward travel: the hips sit back of them
 var hockey_stop_stagger_m: float = 0.05  # the skate on the travel side a little ahead
 var hockey_stop_stance: float = 0.9      # stance floor while stopping (deep knees)
-# Tight turn (brake held with the stick off travel): two blades dug in under a
+# Tight turn (the stance with the travel curving): two blades dug in under a
 # deep sit, inside skate leading, no crossovers — the bank does the leaning.
 var tight_turn_stance: float = 0.9       # stance floor while digging the turn
 var tight_turn_lead_m: float = 0.30      # inside skate leads the outside one
@@ -587,12 +589,12 @@ var reversal_stance: float = 0.85        # stance floor — sits down hard into 
 var reversal_spread_m: float = 0.16      # each skate out past its hip
 var reversal_lead_m: float = 0.10        # both skates set toward travel
 var reversal_toe_in_deg: float = 20.0    # toes turned in, both blades on their inside edges
-# Shuffle: lateral push from a standstill — hips stay square, legs side-step
-# (SkaterLocomotion._shuffle_path), metres per unit of stroke amplitude.
+# Side-step (a push from rest to the side or back): hips square, legs step
+# together (SkaterLocomotion._shuffle_path), one cycle per shuffle_step_distance.
 var shuffle_intensity: float = 0.6       # stride intensity floor while side-stepping
-var shuffle_cadence_rate: float = 3.0    # rad/s stride-phase floor for the steps
-var shuffle_step_m: float = 0.15         # each skate's sideways scissor either side of its hip
-var shuffle_lift_m: float = 0.05         # a step's lift toward the travel
+var shuffle_blend_speed: float = 20.0    # ease rate of the side-step's weight
+var shuffle_lift_m: float = 0.05         # a step's lift
+var shuffle_stance: float = 1.6          # stance floor — skated low, for the leg a full step and the lean stretch
 # Backward skating: C-cuts (SkaterLocomotion._ccut_path), metres per unit of
 # stroke amplitude. The blades stay on the ice: each push sweeps out and ahead
 # and curls back in, drawing the C.
@@ -881,7 +883,7 @@ var check_drive_stance: float = 0.6       # legs drive under the hit — the fin
 var stick_lift_trunk_deg: float = 3.0     # slight chest-up pop while working under a stick
 var stick_lift_stance: float = 0.2        # coiled working posture while the blade is up
 var stick_lift_blend_speed: float = 10.0  # how fast the lift read engages/releases
-var celebration_leg_stance: float = 0.6   # knee-pump depth of the celebration bounce
+var celebration_leg_stance: float = 0.6   # knee-pump depth of the celebration bounce, below standing
 
 # ── Celebration Tuning ────────────────────────────────────────────────────────
 # Cosmetic raised-stick goal celebration (SkaterShotPoseCoordinator.

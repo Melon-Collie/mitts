@@ -150,7 +150,7 @@ Vector2 NativeLegChain::plant(const Transform3D &hips_body, double plant_l, doub
 	const double e_other = solve_knee(hips_body, other, h_sup, h_other, 1.0);
 	const double reached = low(hips_body, other, e_other);
 	double e_sup = 0.0;
-	if (reached - h_sup > slack) {
+	if (reached - h_sup > slack && low(hips_body, sup, -first_step) > h_sup) {
 		e_sup = solve_knee(hips_body, sup, reached, h_sup, -1.0);
 	}
 	ext[other] = (float)(e_other * plants[other]);

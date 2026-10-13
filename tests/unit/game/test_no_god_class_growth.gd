@@ -66,7 +66,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
 	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3970,
-	"res://Scripts/controllers/skater_controller.gd": 3343,
+	"res://Scripts/controllers/skater_controller.gd": 3345,
 	"res://Scripts/actors/skater.gd": 2717,
 	"res://Scripts/networking/network_manager.gd": 2824,
 	"res://Scripts/game/tutorial_manager.gd": 2073,
@@ -88,7 +88,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/controllers/goalie_body_config_builder.gd": 1091,
 	"res://Scripts/ui/network_debug_overlay.gd": 956,
 	"res://Scripts/networking/network_telemetry.gd": 957,
-	"res://Scripts/controllers/local_controller.gd": 932,
+	"res://Scripts/controllers/local_controller.gd": 935,
 	"res://Scripts/ui/player_settings_popup.gd": 863,
 	"res://Scripts/ui/slot_grid_panel.gd": 839,
 	"res://Scripts/domain/state/game_state_machine.gd": 816,

@@ -102,6 +102,7 @@ var leg_scale: float = 1.0:
 	set(value):
 		leg_scale = value
 		_pose.leg_scale = value
+		_locomotion.leg_scale = value
 		if _native != null:
 			_native.set_leg_scale(value)
 
@@ -322,14 +323,16 @@ func apply(delta: float) -> void:
 
 	# ── Settled early-out ──────────────────────────────────────────────────────
 	# At true rest the converged gait pose is static: with no inputs, no speed
-	# and every layer's trigger idle, every smoothed channel decays to zero and
-	# the pass rewrites the same rest pose every frame — the fixed cost the
+	# and every layer's trigger idle, every smoothed channel settles and the pass
+	# rewrites the same rest pose every frame — the fixed cost the
 	# micro-benchmark's "at rest" row measures. Detect the steady state from the
 	# same replicated inputs the pass itself reads (so remotes settle too), and
 	# once quiet has held for _SETTLE_SECONDS — long past every ease/spring's
-	# convergence, residuals far below perception — snap to the exact rest pose
-	# once (reset_to_rest) and hold. Any input, speed, timer, or state change
-	# fails `quiet` and the full pass runs again the same frame.
+	# convergence, residuals far below perception — stop running the pass and
+	# hold the pose it converged to. Never snap to the bind pose instead: the
+	# rest stance's knees are bent, so the snap and the next move would each pop
+	# a leg. Any input, speed, timer, or state change fails `quiet` and the full
+	# pass runs again the same frame.
 	var qvel: Vector3 = _skater.velocity
 	var quiet: bool = (
 			qvel.x * qvel.x + qvel.z * qvel.z < 0.0025
@@ -344,12 +347,7 @@ func apply(delta: float) -> void:
 	if quiet:
 		_settle_timer = minf(_settle_timer + delta, _SETTLE_SECONDS)
 		if _settle_timer >= _SETTLE_SECONDS:
-			if not _settled:
-				_settled = true
-				reset_to_rest()
-				# reset_to_rest clears the shot-transition latch; re-stamp it or
-				# `quiet` fails every other frame and the settle never holds.
-				_shot.sync_state()
+			_settled = true
 			return
 	else:
 		_settle_timer = 0.0
@@ -371,7 +369,7 @@ func apply(delta: float) -> void:
 				hold = maxf(hold, _hold_layers[i].stride_hold())
 
 	var stance: float
-	var authored: float
+	var on_ice: float
 	if _native != null:
 		var demand: Vector2 = _native.locomote(delta, _skater.velocity, _skater.move_intent,
 				_skater.global_transform.basis, _native_flags(), hold)
@@ -381,7 +379,7 @@ func apply(delta: float) -> void:
 		travel_align_yaw = channels.z
 		pivot_hold = channels.w
 		stance = demand.x
-		authored = demand.y
+		on_ice = demand.y
 		var push: Vector4 = _native.get_push()
 		_sense_pushes(push.x, push.y, push.z, push.w)
 		var lift: Vector2 = _native.get_lift()
@@ -398,7 +396,8 @@ func apply(delta: float) -> void:
 		stride_phase = _locomotion.stride_phase
 		stop_yaw_offset = _locomotion.stop_yaw
 		_locomotion.strokes(delta, _align_to_travel(delta))
-		authored = _locomotion.authored
+		on_ice = _locomotion.on_ice
+		var authored: float = _locomotion.authored
 		_sense_pushes(_locomotion.l_push, _locomotion.r_push, _locomotion.push_strength(),
 				_locomotion.dig_strength())
 		_sense_touches(_locomotion.l_dy, _locomotion.r_dy)
@@ -422,7 +421,7 @@ func apply(delta: float) -> void:
 			if active & _floor_bits[i]:
 				stance = maxf(stance, _floor_layers[i].stance_floor())
 				width = maxf(width, _floor_layers[i].stance_width())
-	if authored > 0.001:
+	if on_ice > 0.001:
 		tilt_hips(p)
 	else:
 		p.lean = Basis.IDENTITY

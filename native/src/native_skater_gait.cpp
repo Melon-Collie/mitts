@@ -33,6 +33,10 @@ static constexpr double PIVOT_RELEASE_MARGIN = 8.0 * Math_PI / 180.0;
 static constexpr double GRIP_MIN_SPEED = 0.5;
 // LocomotionRules._INTENT_MIN_SQ / DRIVE_FULL.
 static constexpr double INTENT_MIN_SQ = 0.0025;
+// SkaterLocomotion._STEP_REST_SPEED.
+static constexpr double STEP_REST_SPEED = 0.05;
+// SkaterMovementRules.SHUFFLE_AHEAD_COS.
+static constexpr double SHUFFLE_AHEAD_COS = 0.707;
 static constexpr double DRIVE_FULL = 0.5;
 
 // ── GDScript @GlobalScope semantics (double precision) ──
@@ -93,6 +97,22 @@ static inline double angle_diff(double from, double to) {
 static inline double smoothstep01(double s) {
 	s = clampd(s, 0.0, 1.0);
 	return s * s * (3.0 - 2.0 * s);
+}
+
+// SkaterLocomotion._step_sweep / _step_lift.
+static double step_sweep(double q) {
+	if (q < 0.5) {
+		return 1.0 - 4.0 * q;
+	}
+	const double u = 2.0 * q - 1.0;
+	return ((-8.0 * u + 12.0) * u - 2.0) * u - 1.0;
+}
+
+static double step_lift(double q) {
+	if (q < 0.5) {
+		return 0.0;
+	}
+	return std::sin(Math_PI * (2.0 * q - 1.0));
 }
 
 // ── Pure rules ──
@@ -280,7 +300,10 @@ void NativeSkaterGait::reset() {
 	turning = 0.0;
 	loaded = 0.0;
 	stop_yaw = 0.0;
+	stop_yaw_full = 0.0;
 	stop_latched = false;
+	stepping = false;
+	last_travel = Vector2(0.0, 1.0);
 	have_prev_velocity = false;
 	fd_time = 0.0;
 	fd_effort_target = 0.0;
@@ -315,7 +338,7 @@ Vector2 NativeSkaterGait::locomote(double delta, const Vector3 &velocity, const 
 		const double reach_sit = mind(reach_hip(push_reach), deg_to_rad(cfg.stride_sit_max_deg)) / deg_to_rad(cfg.stance_hip_deg);
 		base = maxd(base, lerpd(base, reach_sit, authored));
 	}
-	return Vector2(base, authored);
+	return Vector2(base, on_ice);
 }
 
 // ── SkaterLocomotion ──
@@ -398,6 +421,8 @@ void NativeSkaterGait::sense(double delta, const Vector3 &vel, const Vector2 &in
 			out.carve = coast * t;
 		}
 	} while (false);
+	step_hold = hold;
+	sense_step(facing, intent, brake, delta);
 	if (ground_speed < c.hockey_stop_min_speed) {
 		target.glide += target.stop;
 		target.stop = 0.0;
@@ -419,7 +444,9 @@ void NativeSkaterGait::sense(double delta, const Vector3 &vel, const Vector2 &in
 	} else if (target.stop < 0.1) {
 		stop_latched = false;
 	}
-	stop_yaw_full = hockey_stop_yaw(local_vel, stop_side, deg_to_rad(c.hockey_stop_max_yaw_deg));
+	if (local_vel.x * local_vel.x + local_vel.z * local_vel.z > 1e-6) {
+		stop_yaw_full = hockey_stop_yaw(local_vel, stop_side, deg_to_rad(c.hockey_stop_max_yaw_deg));
+	}
 	stop_yaw = mix.stop > 0.001 ? stop_yaw_full * mix.stop : 0.0;
 
 	start = clampd(1.0 - ground_speed / maxd(c.dig_in_fade_speed, 0.001), 0.0, 1.0);
@@ -441,7 +468,7 @@ void NativeSkaterGait::sense(double delta, const Vector3 &vel, const Vector2 &in
 	const double cross_rate = maxd(std::abs(turn_rate) * c.crossover_phase_per_turn, stride_rate);
 	double rate = 0.0;
 	if (stroking > 0.001) {
-		rate = ((mix.stride + mix.backward) * stride_rate + mix.crossover * cross_rate + mix.shuffle * c.shuffle_cadence_rate) / stroking;
+		rate = ((mix.stride + mix.backward) * stride_rate + mix.crossover * cross_rate + mix.shuffle * Math_TAU * ground_speed / maxd(c.shuffle_step_distance, 0.001)) / stroking;
 	}
 	stride_phase = wrapd(stride_phase + rate * (1.0 - hold) * delta, 0.0, Math_TAU);
 	if (mix.glide > 0.01) {
@@ -483,7 +510,7 @@ void NativeSkaterGait::strokes(double delta, const Vector2 &travel) {
 
 	w = mix.shuffle;
 	if (w > 0.001) {
-		shuffle_path(w, mix.side, amp, s, s_opp, cs, cs_opp);
+		shuffle_path(w, stepping ? step_dir : Vector2(mix.side, 0.0));
 	}
 
 	w = mix.glide * speed_t;
@@ -506,7 +533,7 @@ void NativeSkaterGait::strokes(double delta, const Vector2 &travel) {
 		const double split = 0.5 * c.tight_turn_lead_m * tight_in;
 		r_dz -= split;
 		l_dz += split;
-		push_reach = maxd(push_reach, 0.5 * c.tight_turn_lead_m);
+		push_reach = maxd(push_reach, std::abs(tight_in) * 0.5 * c.tight_turn_lead_m);
 	}
 
 	const double carve_in = carve_signed * along;
@@ -516,20 +543,29 @@ void NativeSkaterGait::strokes(double delta, const Vector2 &travel) {
 		l_dz += lead;
 	}
 
+	// SkaterLocomotion.strokes: the stop and the skid keep the last travel.
+	if (travel.length_squared() > 1e-6) {
+		last_travel = travel.normalized();
+	}
+	const Vector2 laid = travel.length_squared() > 1e-6 ? travel : last_travel;
 	w = mix.stop;
 	if (w > 0.001) {
-		stop_path(w, in_legs(travel, stop_yaw), in_legs(travel, stop_yaw_full));
+		stop_path(w, in_legs(laid, stop_yaw), in_legs(laid, stop_yaw_full));
 	}
 
 	w = mix.skid;
 	if (w > 0.001) {
-		skid_path(w, Vector2(travel.x, -travel.y));
+		skid_path(w, Vector2(laid.x, -laid.y));
 	}
 
 	stance_of(s);
 	edge_floor = mix.stop + mix.tight + mix.carve;
 	sliding = mix.stop + mix.skid;
 	authored = 1.0 - mix.glide;
+	if (authored > 0.001) {
+		push_reach /= authored;
+	}
+	on_ice = 1.0 - mix.glide * speed_t;
 
 	const double fore_aft = mix.stride + mix.backward + mix.crossover;
 	const double s_fund = std::sin(stride_phase);
@@ -567,7 +603,7 @@ void NativeSkaterGait::stride_path(double w, double a, double s, double s_opp, d
 	r_yaw -= w * lerpd(toe * p_r, vee, k);
 	l_push = maxd(l_push, w * maxd(-s, 0.0));
 	r_push = maxd(r_push, w * maxd(-s_opp, 0.0));
-	push_reach = maxd(push_reach, Vector2(out, back).length());
+	push_reach = maxd(push_reach, w * Vector2(out, back).length());
 }
 
 void NativeSkaterGait::crossover_path(double w, double side, double a, double s, double s_opp,
@@ -599,7 +635,7 @@ void NativeSkaterGait::crossover_path(double w, double side, double a, double s,
 	r_dy += w * lift * up_r;
 	l_push = maxd(l_push, w * maxd(-s, 0.0));
 	r_push = maxd(r_push, w * maxd(-s_opp, 0.0));
-	push_reach = maxd(push_reach, maxd(Vector2(cross, c.crossover_land_fwd_m * a).length(),
+	push_reach = maxd(push_reach, w * maxd(Vector2(cross, c.crossover_land_fwd_m * a).length(),
 			maxd(Vector2(out, c.crossover_back_m * a).length(),
 					Vector2(under, c.crossover_back_m * a).length())));
 }
@@ -623,7 +659,7 @@ void NativeSkaterGait::stop_path(double w, const Vector2 &along, const Vector2 &
 	const double square = clampd(std::atan2((double)-across.x, (double)-across.y), -Math_PI * 0.5, Math_PI * 0.5);
 	l_yaw += w * square;
 	r_yaw += w * square;
-	push_reach = maxd(push_reach, Vector2(spread + lead, stagger).length());
+	push_reach = maxd(push_reach, w * Vector2(spread + lead, stagger).length());
 }
 
 void NativeSkaterGait::skid_path(double w, const Vector2 &along) {
@@ -638,7 +674,7 @@ void NativeSkaterGait::skid_path(double w, const Vector2 &along) {
 	const double toe_in = deg_to_rad(c.reversal_toe_in_deg);
 	l_yaw -= w * toe_in;
 	r_yaw += w * toe_in;
-	push_reach = maxd(push_reach, Vector2(spread + lead, 0.0).length());
+	push_reach = maxd(push_reach, w * Vector2(spread + lead, 0.0).length());
 }
 
 void NativeSkaterGait::ccut_path(double w, double a, double s, double s_opp, double cs, double cs_opp) {
@@ -658,21 +694,78 @@ void NativeSkaterGait::ccut_path(double w, double a, double s, double s_opp, dou
 	r_yaw -= w * toe * std::cos(Math_PI * p_r);
 	l_push = maxd(l_push, w * maxd(-cs, 0.0));
 	r_push = maxd(r_push, w * maxd(-cs_opp, 0.0));
-	push_reach = maxd(push_reach, Vector2(out, front).length());
+	push_reach = maxd(push_reach, w * Vector2(out, front).length());
 }
 
-void NativeSkaterGait::shuffle_path(double w, double side, double a, double s, double s_opp,
-		double cs, double cs_opp) {
+void NativeSkaterGait::shuffle_path(double w, const Vector2 &dir) {
 	const Config &c = cfg;
-	const double step = c.shuffle_step_m * a;
-	const double lift = c.shuffle_lift_m * a;
-	l_dx += w * side * step * s;
-	r_dx += w * side * step * s_opp;
-	l_dy += w * lift * maxd(cs, 0.0);
-	r_dy += w * lift * maxd(cs_opp, 0.0);
-	l_push = maxd(l_push, w * maxd(-cs, 0.0));
-	r_push = maxd(r_push, w * maxd(-cs_opp, 0.0));
-	push_reach = maxd(push_reach, step);
+	const double step = c.shuffle_step_distance / (4.0 * leg_scale) * (1.0 - step_hold);
+	const double lift = c.shuffle_lift_m * (1.0 - step_hold);
+	const double q = stride_phase / Math_TAU;
+	const double q_lead = std::fmod(q + 0.5, 1.0);
+	const double lead = w * step * (step_sweep(q_lead) + 1.0);
+	const double trail = w * step * (step_sweep(q) - 1.0);
+	const double lead_lift = w * lift * step_lift(q_lead);
+	const double trail_lift = w * lift * step_lift(q);
+	const double dx = dir.x;
+	const double dy = dir.y;
+	if (dx >= 0.0) {
+		r_dx += dx * lead;
+		r_dz -= dy * lead;
+		r_dy += lead_lift;
+		l_dx += dx * trail;
+		l_dz -= dy * trail;
+		l_dy += trail_lift;
+		if (q < 0.5) {
+			l_push = maxd(l_push, w);
+		} else {
+			r_push = maxd(r_push, w);
+		}
+	} else {
+		l_dx += dx * lead;
+		l_dz -= dy * lead;
+		l_dy += lead_lift;
+		r_dx += dx * trail;
+		r_dz -= dy * trail;
+		r_dy += trail_lift;
+		if (q < 0.5) {
+			r_push = maxd(r_push, w);
+		} else {
+			l_push = maxd(l_push, w);
+		}
+	}
+	push_reach = maxd(push_reach, w * 2.0 * step);
+}
+
+// SkaterLocomotion._sense_step
+void NativeSkaterGait::sense_step(const Vector2 &facing, const Vector2 &intent, bool brake, double delta) {
+	const Config &c = cfg;
+	const bool has_input = intent.length_squared() > INTENT_MIN_SQ;
+	if (stepping) {
+		step_travel += ground_speed * delta;
+		const bool holds = brake
+				? ground_speed > STEP_REST_SPEED
+				: (has_input && step_travel < c.shuffle_step_distance);
+		if (!holds) {
+			stepping = false;
+			return;
+		}
+	} else {
+		if (brake || !has_input || ground_speed > GRIP_MIN_SPEED
+				|| (double)intent.normalized().dot(facing) >= SHUFFLE_AHEAD_COS) {
+			return;
+		}
+		stepping = true;
+		step_travel = 0.0;
+		stride_phase = 0.0;
+	}
+	if (has_input) {
+		const Vector2 right(-facing.y, facing.x);
+		step_dir = Vector2(intent.dot(right), intent.dot(facing)).normalized();
+	}
+	target.clear();
+	target.shuffle = 1.0;
+	target.side = step_dir.x >= 0.0 ? 1.0 : -1.0;
 }
 
 double NativeSkaterGait::engaged() const {
@@ -683,7 +776,7 @@ void NativeSkaterGait::stance_of(double s) {
 	const Config &c = cfg;
 	const double stroke_sit = engaged() * clampd(1.0 + effort * c.stance_push_gain, 0.0, 1.35) * (1.0 + loaded * c.stance_sit_gain) * (1.0 + c.cadence_glide_stance_gain * cruise_gear);
 	const double stride_sit = maxd(stroke_sit, c.dig_in_stance * start * (intensity > 0.01 ? 1.0 : 0.0));
-	stance = (mix.stride + mix.backward + mix.shuffle) * stride_sit + mix.crossover * maxd(stroke_sit, c.carve_stance) + mix.glide * maxd(stroke_sit, c.glide_stance * speed_t) + mix.carve * c.carve_stance + mix.tight * c.tight_turn_stance + mix.stop * c.hockey_stop_stance + mix.skid * c.reversal_stance;
+	stance = (mix.stride + mix.backward) * stride_sit + mix.shuffle * c.shuffle_stance + mix.crossover * maxd(stroke_sit, c.carve_stance) + mix.glide * maxd(stroke_sit, maxd(c.glide_stance * speed_t, c.rest_stance)) + mix.carve * c.carve_stance + mix.tight * c.tight_turn_stance + mix.stop * c.hockey_stop_stance + mix.skid * c.reversal_stance;
 	bob = c.stride_bob_m * intensity * (1.0 - s * s) * (mix.stride + mix.backward + mix.crossover);
 }
 
@@ -698,7 +791,7 @@ void NativeSkaterGait::ease_mix(double delta) {
 	carve_signed = lerpd(carve_signed, (target.carve + uncommitted) * target.side, k);
 	mix.carve = std::abs(carve_signed);
 	mix.backward = lerpd(mix.backward, target.backward, k);
-	mix.shuffle = lerpd(mix.shuffle, target.shuffle, k);
+	mix.shuffle = lerpd(mix.shuffle, target.shuffle, mind(c.shuffle_blend_speed * delta, 1.0));
 	mix.skid = lerpd(mix.skid, target.skid, k);
 	tight_signed = lerpd(tight_signed, target.tight * target.side, k);
 	mix.tight = std::abs(tight_signed);
@@ -764,6 +857,7 @@ void NativeSkaterGait::clear_strokes() {
 	r_push = 0.0;
 	push_reach = 0.0;
 	authored = 0.0;
+	on_ice = 0.0;
 	sliding = 0.0;
 	trunk_pitch = 0.0;
 	trunk_roll = 0.0;
@@ -921,7 +1015,7 @@ void NativeSkaterGait::solve(double p_stance, double p_width, const Basis &p_lea
 	const double knee_r = -(stance_knee + r_tuck);
 	place(leg_l, stance_hip - (knee_l + stance_knee) * shin_frac, pivot_yaw_l, l_roll, knee_l);
 	place(leg_r, stance_hip - (knee_r + stance_knee) * shin_frac, pivot_yaw_r, r_roll, knee_r);
-	foot_level = authored > 0.001 ? authored : 0.0;
+	foot_level = on_ice > 0.001 ? on_ice : 0.0;
 	gripping = foot_level > 0.0 ? clampd(1.0 - sliding / foot_level, 0.0, 1.0) : 1.0;
 	reach(leg_l, l_dx - p_width, l_dy, l_dz, pivot_yaw_l + l_yaw, foot_level, -1.0);
 	reach(leg_r, r_dx + p_width, r_dy, r_dz, pivot_yaw_r + r_yaw, foot_level, 1.0);
