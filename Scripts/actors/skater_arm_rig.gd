@@ -80,6 +80,9 @@ var _trunk_texture_roll: float = 0.0
 # The texture moved the shoulders the arms root on since the mesh pass last
 # asked (take_retextured).
 var _retextured: bool = false
+# The jersey hem's lag, and whether the bone is drawn anywhere but at rest.
+var _hem := SkaterJerseyHem.new()
+var _hem_shown: bool = false
 
 
 func setup(skater: Skater) -> void:
@@ -468,6 +471,23 @@ func set_trunk_texture(pitch_add: float, roll_add: float) -> void:
 	repose_bone(SkaterMeshBuilder.UpperBone.HELMET)
 	repose_bone(SkaterMeshBuilder.UpperBone.SHOULDER_L)
 	repose_bone(SkaterMeshBuilder.UpperBone.SHOULDER_R)
+
+
+# Swings the jersey hem on the balance lean. The lag steps every frame, so a
+# skater the camera picks up mid-swing is mid-swing; the bone is written only when
+# drawn, and once more on settling so the hem comes back to rest.
+func update_hem(delta: float, on_camera: bool) -> void:
+	var tilt: Vector2 = _skater.balance_tilt()
+	var local: Vector3 = _skater.upper_body.global_basis.orthonormalized().inverse() \
+			* Vector3(tilt.x, 0.0, tilt.y)
+	var moving: bool = _hem.advance(delta, Vector2(local.x, local.z))
+	if on_camera and (moving or _hem_shown):
+		_skeleton.set_bone_pose(SkaterBodySkeleton.HEM_BONE, _hem.pose())
+		_hem_shown = moving
+
+
+func hem_swing() -> Vector2:
+	return _hem.swing()
 
 
 # The head's lerp toward its aim never lands exactly, so it would re-pose the

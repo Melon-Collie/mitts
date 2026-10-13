@@ -589,7 +589,8 @@ static func shared_arm_bone_z() -> ArrayMesh:
 # a subtree and pushes a global to the RenderingServer).
 #
 # Four properties make a pose write mean a plain local transform, and all four
-# have to hold: every vertex is weighted 1.0 to a single bone, the bone rests
+# have to hold: every vertex is weighted 1.0 to a single bone (the jersey's hem is
+# the one exception — SkaterJerseyHem), the bone rests
 # are identity, the skin binds are identity, and each part's geometry is left in
 # its own local space. A skinned vertex is then exactly `bone_pose * v`.
 #
@@ -615,6 +616,8 @@ enum UpperBone {
 	PELVIS,
 }
 const UPPER_BONE_COUNT: int = 15
+# The upper skin's bind for SkaterBodySkeleton.HEM_BONE, after the parts' own.
+const UPPER_HEM_BIND: int = UPPER_BONE_COUNT
 
 # Surfaces. One per bone for the first thirteen; the helmet is the exception,
 # carrying the shell and the head/neck skin as two surfaces of one bone (they
@@ -677,7 +680,8 @@ static func shared_upper_skin_mesh() -> ArrayMesh:
 		_append_skinned_surface(m, fist, UpperBone.BOTTOM_HAND, FIST_PART_BACK)
 		_append_skinned_surface(m, cuff, UpperBone.TOP_CUFF)
 		_append_skinned_surface(m, cuff, UpperBone.BOTTOM_CUFF)
-		_append_skinned_surface(m, _shared("torso", _build_torso), UpperBone.TORSO)
+		SkaterJerseyHem.append_torso(m, _shared("torso", _build_torso), UpperBone.TORSO,
+				UPPER_HEM_BIND)
 		_append_skinned_surface(m, helmet, UpperBone.HELMET, HELMET_SURF_SHELL)
 		_append_skinned_surface(m, helmet, UpperBone.HELMET, HELMET_SURF_SKIN)
 		_append_skinned_surface(m, shoulder, UpperBone.SHOULDER_L)
@@ -696,6 +700,7 @@ static func shared_upper_skin() -> Skin:
 		_upper_skin = Skin.new()
 		for i: int in UPPER_BONE_COUNT:
 			_upper_skin.add_bind(i, Transform3D.IDENTITY)
+		_upper_skin.add_bind(SkaterBodySkeleton.HEM_BONE, Transform3D.IDENTITY)
 	return _upper_skin
 
 

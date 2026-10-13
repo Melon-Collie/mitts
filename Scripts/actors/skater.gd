@@ -872,6 +872,7 @@ func _process(delta: float) -> void:
 		# marker; each flags its own move until the next rebuild, off camera too.
 		if _on_camera:
 			_spine.update()
+		_arms.update_hem(delta, _on_camera)
 		if _on_camera and (_rig_pose_changed() or _spine.take_moved() or _arms.take_retextured() \
 				or _blade_tilt_dirty):
 			_blade_tilt_dirty = false
