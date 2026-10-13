@@ -8,16 +8,11 @@ extends GutTest
 # dispatch_period_ticks) vs the MODEL (the shoot-vs-carry EV balance).
 #
 # FINDINGS (the prints are the deliverable; see the trailing asserts):
-#   - NOT the lag. Hard runs the fastest dispatch, spends the WHOLE pass in
-#     point-blank range, and still fires ~0 shots — because carry EV (~0.5-0.96)
-#     dominates shoot EV (~0.25). Instant dispatch wouldn't change that.
-#   - It's the shoot-vs-carry balance, and it's CONFOUNDED by the static goalie:
-#     a keeper that sits at 0.8 m and never challenges makes "walk it in" read as
-#     a free tap-in, so carry wins. Pressure (a backchecker) drops carry toward
-#     shoot but doesn't flip it here.
-#   - So a valid study of this decision needs the REAL goalie in a temporal loop
-#     (option A). The static-goalie harness structurally can't produce the true
-#     balance — the challenging goalie is exactly what makes the shot the play.
+#   - NOT the lag. The shoot-vs-carry balance decided it: "walk it in" read as a
+#     free tap-in, so carry won and no shot was taken on the pass.
+#   - That was the value seam not seeing the keeper's body in tight. Since it
+#     does (AIShotValue.body_logit), walking in is priced behind his pads and the
+#     unpressured flyby takes its shot. A backchecker still drops the carry.
 
 const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
 const DT: float = 1.0 / 120.0
@@ -145,16 +140,13 @@ func test_flyby_shot_by_tier_and_facing() -> void:
 	var free: Dictionary = _run_flyby(start, vel, ticks, BotSkillProfile.hard(), true, 0.0)
 	var pressed: Dictionary = _run_flyby(start, vel, ticks, BotSkillProfile.hard(), true, 1.6)
 	assert_gt(free["slot_ticks"], 0, "the carrier passes through point-blank shot range")
-	# (1) NOT the lag: Hard's fast dispatch spends the whole pass in range and still
-	# doesn't shoot, because carry EV dominates shoot EV.
-	# Under the make-probability currency both saturate at certainty in
-	# tight — the compete is then decided by the discount terms, so the
-	# doctrine claim is "the carry never reads WORSE than the shot".
-	assert_gte(free["peak_carry"], free["peak_shoot"],
-			"unpressured, carry EV never reads worse than the point-blank shot")
+	# (1) Walking it in is no free tap-in: the shot reads at least as well, and
+	# the pass gets it off.
+	assert_gte(free["peak_shoot"], free["peak_carry"],
+			"unpressured, the flyby shot out-reads walking it in")
+	assert_gt(free["shots"], 0, "…and it is taken")
 	# (2) Pressure is what shifts it: a backchecker collapses the carry's value.
 	assert_lt(pressed["peak_carry"], free["peak_carry"],
 			"a backchecker drops the carry EV toward the shot")
-	# (3) The static goalie is the confound: it never challenges, so 'walk it in'
-	# reads as a free tap-in. A valid shoot-vs-carry study needs the REAL goalie in
-	# the loop (option A) — this probe can't produce the true balance on its own.
+	# (3) The keeper here is static: a valid study of how often the shot scores
+	# needs the real goalie in the loop (test_bot_vs_goalie_conversion.gd).

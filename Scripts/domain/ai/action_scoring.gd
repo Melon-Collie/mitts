@@ -205,9 +205,9 @@ const GRAVITY_M_S2: float = 9.8   # engine default the airborne puck falls under
 # Scoring cavity top: NET_HEIGHT − post radius − puck half-height, less a
 # whisker — mirrors goal detection's under-the-bar bound.
 const HIGH_BAND_CEILING_M: float = 1.17
-# The M92 (league-neutral) ladder — the default wherever a build isn't known
-# (defensive reads of opponents, unwired tests).
-const DEFAULT_LOFT_TANS: Vector3 = Vector3(0.1405, 0.3153, 0.4452)
+# The league M92 ladder (GameRules): the default wherever a build isn't known.
+const DEFAULT_LOFT_TANS: Vector3 = Vector3(GameRules.DEFAULT_LOFT_TAN_LOW,
+		GameRules.DEFAULT_LOFT_TAN_MID, GameRules.DEFAULT_LOFT_TAN_HIGH)
 
 
 # Arrival height (m above launch) of a set-angle arc at `dist`:
