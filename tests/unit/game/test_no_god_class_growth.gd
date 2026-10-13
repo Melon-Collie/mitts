@@ -66,7 +66,9 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
 	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3970,
-	"res://Scripts/controllers/skater_controller.gd": 3499,
+	# +27: the dive takes the knockdown's fall its own way — a thrown tip rate,
+	# no rebound, legs long — through the fall config and drop the down pose reads.
+	"res://Scripts/controllers/skater_controller.gd": 3526,
 	"res://Scripts/actors/skater.gd": 2795,
 	"res://Scripts/networking/network_manager.gd": 2855,
 	"res://Scripts/game/tutorial_manager.gd": 2073,
@@ -110,7 +112,8 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/domain/state/player_attributes.gd": 53,
 	"res://Scripts/networking/network_telemetry.gd": 53,
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 48,
-	"res://Scripts/controllers/skater_controller.gd": 40,
+	# +1: knockdown_drop_m, which the gait's crumple and the sprawl's buckle share.
+	"res://Scripts/controllers/skater_controller.gd": 41,
 	"res://Scripts/actors/puck.gd": 43,
 	"res://Scripts/domain/state/game_state_machine.gd": 39,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 37,

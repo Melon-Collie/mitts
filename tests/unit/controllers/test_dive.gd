@@ -101,3 +101,53 @@ func test_a_carrier_does_not_dive() -> void:
 	_c._sm.set_state(SkaterStateMachine.State.SKATING_WITH_PUCK)
 	_c._process_input(_dive_input(true, true, _c.skater.global_position + Vector3(3, 0, 0)), DT)
 	assert_false(_c.skater.is_diving)
+
+
+func _dive_ticks(ticks: int) -> void:
+	for _i: int in ticks:
+		_c._process_input(_dive_input(true, true, _c.skater.global_position + Vector3(3, 0, 0)), DT)
+
+
+func test_the_dive_lands_and_lies_still_until_the_get_up() -> void:
+	_skate(90)
+	var lie: float = deg_to_rad(DiveRules.LIE_DEG)
+	var prev: float = 0.0
+	var landed_at: float = -1.0
+	var ticks: int = ceili((DiveRules.DOWN_S - _c.knockdown_getup_seconds) / DT) - 1
+	for i: int in ticks:
+		_dive_ticks(1)
+		var tilt: float = _c.knockdown_fall_tilt()
+		assert_gte(tilt, prev - 1e-5, "no rebound off the ice (tick %d)" % i)
+		prev = tilt
+		if landed_at < 0.0 and is_equal_approx(tilt, lie):
+			landed_at = (i + 1) * DT
+	assert_gt(landed_at, 0.0, "he reaches the ice")
+	assert_lt(landed_at, 0.4, "a thrown fall, on the ice early enough to lie there")
+
+
+func test_the_dive_goes_down_long_not_crumpled() -> void:
+	_skate(90)
+	_dive_ticks(8)
+	assert_eq(_c.knockdown_drop_m(), 0.0, "no buckle: the legs stay long off the skates")
+	assert_lt(_c.knockdown_fold_rad(), deg_to_rad(3.0),
+			"no curl leaving the skates (a hit curls knockdown_fold_deg)")
+	_dive_ticks(50)
+	assert_almost_eq(_c.knockdown_fold_rad(), PI / 2.0 - _c.knockdown_fall_tilt(), 1e-4,
+			"on the ice the trunk lies flat")
+
+
+func test_the_lean_settles_while_down() -> void:
+	_skate(40)
+	var lean: float = _c.skater.balance_tilt().length()
+	assert_gt(lean, deg_to_rad(5.0), "the control: leaning into the start")
+	_dive_ticks(ceili(DiveRules.DOWN_S / DT) - 2)
+	assert_lt(_c.skater.balance_tilt().length(), deg_to_rad(4.0),
+			"the slide's friction tips nothing: the lean has settled by the get-up")
+
+
+func test_the_top_hand_stays_off_the_ice() -> void:
+	_skate(90)
+	for i: int in ceili((DiveRules.DOWN_S - _c.knockdown_getup_seconds) / DT):
+		_dive_ticks(1)
+		var hand: Vector3 = _c.skater.upper_body_to_global(_c.skater.get_top_hand_position())
+		assert_gte(hand.y, DiveRules.HAND_HEIGHT_M * 0.5, "tick %d" % i)
