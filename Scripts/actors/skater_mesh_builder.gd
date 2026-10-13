@@ -28,13 +28,13 @@ extends RefCounted
 # from Scenes/Skater.tscn) so nothing pokes through ice, boards, or gear that
 # was tuned around the primitive silhouettes.
 const _TORSO_PROFILE: Array[Vector2] = [
-	Vector2(0.275, 0.158),   # trap line — stays wide so the deltoid caps emerge from it
-	Vector2(0.245, 0.198),
-	Vector2(0.130, 0.208),   # chest
-	Vector2(0.000, 0.196),   # waist tuck
-	Vector2(-0.150, 0.204),
-	Vector2(-0.230, 0.214),
-	Vector2(-0.275, 0.222),  # jersey hem flare
+	Vector2(0.275, 0.192),   # trap line — the shoulder pads' shelf, wide enough to meet the caps
+	Vector2(0.245, 0.218),
+	Vector2(0.130, 0.214),   # chest
+	Vector2(0.000, 0.194),   # waist tuck
+	Vector2(-0.150, 0.206),
+	Vector2(-0.230, 0.218),
+	Vector2(-0.275, 0.228),  # jersey hem flare
 ]
 # Rear (+Z is the back) shift per _TORSO_PROFILE ring — the hockey-butt sway:
 # the seat builds through the lower back and peaks at the hem that drapes
@@ -80,9 +80,10 @@ const _THIGH_PROFILE: Array[Vector2] = [
 	Vector2(0.240, 0.102),
 	Vector2(0.190, 0.137),
 	Vector2(0.130, 0.150),   # the hip pivot — the dome's equator
-	Vector2(0.050, 0.139),
-	Vector2(-0.080, 0.129),
-	Vector2(-0.150, 0.118),
+	Vector2(0.050, 0.150),   # breezers: no taper below the hip — the thigh guard holds them out
+	Vector2(-0.080, 0.156),
+	Vector2(-0.125, 0.156),
+	Vector2(-0.150, 0.138),  # the leg hem, turned in over the shin guard
 ]
 const _SOCK_PROFILE: Array[Vector2] = [
 	Vector2(0.150, 0.088),
