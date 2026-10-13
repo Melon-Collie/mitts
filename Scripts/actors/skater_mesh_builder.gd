@@ -1044,6 +1044,10 @@ static func _build_cage() -> ArrayMesh:
 	for off: float in _CAGE_V_BAR_OFFSETS:
 		_sphere_patch(st, _CAGE_RADIUS, _CAGE_V0, _CAGE_V1,
 				PI + off - dth, PI + off + dth, 4, 1)
+	# The frame's sides, closing the outline the top and bottom bars run along.
+	for side: float in [-1.0, 1.0]:
+		var edge: float = PI + side * (_CAGE_HALF_ARC - dth)
+		_sphere_patch(st, _CAGE_RADIUS, _CAGE_V0, _CAGE_V1, edge - dth, edge + dth, 4, 1)
 	st.generate_normals()
 	return st.commit()
 

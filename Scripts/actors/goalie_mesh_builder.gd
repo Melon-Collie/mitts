@@ -115,15 +115,18 @@ const _CAGE_TINT := Color(0.22, 0.22, 0.24)
 const _CAGE_HALF_ANGLE_DEG: float = 36.0
 const _CAGE_TOP_Y: float = 0.030
 const _CAGE_BOT_Y: float = -0.125
-# The cage: bars standing proud of the opening, light against its dark, so the
-# face reads as a goalie's cage from the broadcast angles. Vertical bars at
-# these x, horizontal bars at these y, all at _CAGE_PROUD in front of the
-# mask's front reach at their height. Mask-local metres.
-const _CAGE_BAR_XS: Array[float] = [-0.042, -0.014, 0.014, 0.042]
-const _CAGE_BAR_YS: Array[float] = [0.018, -0.030, -0.078]
-const _CAGE_HALF_X: float = 0.066
+# The cage fills the opening out to its edge: a frame on the edge (the tinted
+# facets' outline, ±_CAGE_EDGE_DEG about the front, brow station to chin
+# station) and bars evenly between, all _CAGE_PROUD off the mask's surface so
+# the grid follows its curve both ways. Mask-local metres.
+const _CAGE_EDGE_DEG: float = 30.0
+const _CAGE_EDGE_TOP_Y: float = 0.035
+const _CAGE_EDGE_BOT_Y: float = -0.145
+const _CAGE_BAR_DEGS: Array[float] = [-18.0, -6.0, 6.0, 18.0]
+const _CAGE_BAR_YS: Array[float] = [-0.010, -0.055, -0.100]
 const _CAGE_PROUD: float = 0.012
-const _CAGE_BAR_HALF: float = 0.004
+const _CAGE_BAR_HALF: float = 0.0035
+const _CAGE_FRAME_HALF: float = 0.005
 const _CAGE_COLOR := Color(0.86, 0.86, 0.88)
 # The backplate: a real mask is two shells, the painted front and a plate
 # strapped over the back of the head. Tinting the rear facets darker draws the
@@ -621,44 +624,77 @@ static func _bake_facet_tint(mesh: ArrayMesh, tint_of: Callable) -> ArrayMesh:
 	return out
 
 
-# The cage's bars as box segments between their crossings, each set _CAGE_PROUD
-# in front of the mask's surface at its ends, so the grid follows the face's
-# curve both ways rather than standing off it as a flat plate.
+# The cage's frame and bars, each a run of square-section wire along the mask.
 static func _build_cage() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_smooth_group(-1)  # flat shading — see SkaterMeshBuilder doc block
-	var ys: Array[float] = [_CAGE_TOP_Y]
-	ys.append_array(_CAGE_BAR_YS)
-	ys.append(_CAGE_BOT_Y + 0.015)
-	var xs: Array[float] = [-_CAGE_HALF_X]
-	xs.append_array(_CAGE_BAR_XS)
-	xs.append(_CAGE_HALF_X)
-	var t: float = _CAGE_BAR_HALF
-	for x: float in _CAGE_BAR_XS:
-		for i in ys.size() - 1:
-			var z: float = minf(_mask_front_z(x, ys[i]), _mask_front_z(x, ys[i + 1])) - _CAGE_PROUD
-			_box(st, Vector3(x - t, ys[i + 1], z - t), Vector3(x + t, ys[i], z + t))
+	var e: float = _CAGE_EDGE_DEG
+	for deg: float in _CAGE_BAR_DEGS:
+		_cage_run(st, Vector2(deg, _CAGE_EDGE_TOP_Y), Vector2(deg, _CAGE_EDGE_BOT_Y), _CAGE_BAR_HALF)
 	for y: float in _CAGE_BAR_YS:
-		for i in xs.size() - 1:
-			var z: float = minf(_mask_front_z(xs[i], y), _mask_front_z(xs[i + 1], y)) - _CAGE_PROUD
-			_box(st, Vector3(xs[i], y - t, z - t), Vector3(xs[i + 1], y + t, z + t))
+		_cage_run(st, Vector2(-e, y), Vector2(e, y), _CAGE_BAR_HALF)
+	var frame: Array[Vector2] = [Vector2(-e, _CAGE_EDGE_TOP_Y), Vector2(e, _CAGE_EDGE_TOP_Y),
+			Vector2(e, _CAGE_EDGE_BOT_Y), Vector2(-e, _CAGE_EDGE_BOT_Y)]
+	for k: int in 4:
+		_cage_run(st, frame[k], frame[(k + 1) % 4], _CAGE_FRAME_HALF)
 	st.generate_normals()
 	return st.commit()
 
 
-# The mask's front surface z at (x, y): its front reach at that height,
-# interpolated between stations, set back elliptically toward the sides.
-static func _mask_front_z(x: float, y: float) -> float:
+# Wire from (degrees off the front, y) `from` to `to`, in short straight pieces
+# so it bends with the mask; each piece runs a half-width past its ends so the
+# joints close. Open-ended: every end is buried in the frame or a corner.
+static func _cage_run(st: SurfaceTool, from: Vector2, to: Vector2, half: float) -> void:
+	const PIECES: int = 6
+	for i: int in PIECES:
+		var a: Vector2 = from.lerp(to, float(i) / PIECES)
+		var b: Vector2 = from.lerp(to, float(i + 1) / PIECES)
+		var pa: Vector3 = _cage_point(a.x, a.y)
+		var pb: Vector3 = _cage_point(b.x, b.y)
+		var along: Vector3 = (pb - pa).normalized()
+		var out: Vector3 = (pa + pb).normalized()
+		out = (out - along * out.dot(along)).normalized()
+		var side: Vector3 = along.cross(out)
+		pa -= along * half
+		pb += along * half
+		var ring: Array[Vector3] = [out + side, out - side, -out - side, -out + side]
+		for k: int in 4:
+			var u: Vector3 = ring[k] * half
+			var w: Vector3 = ring[(k + 1) % 4] * half
+			_wire_quad(st, pa + u, pb + u, pb + w, pa + w, ring[k] + ring[(k + 1) % 4])
+
+
+# A quad wound to face `out` (front faces are clockwise: normal (c − a) × (b − a)).
+static func _wire_quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3,
+		out: Vector3) -> void:
+	if (c - a).cross(b - a).dot(out) < 0.0:
+		var t: Vector3 = b
+		b = d
+		d = t
+	for v: Vector3 in [a, b, c, a, c, d]:
+		st.set_uv(Vector2.ZERO)
+		st.add_vertex(v)
+
+
+# The mask's surface at `deg` off its front and height y, stood _CAGE_PROUD off
+# it along the egg section's normal.
+static func _cage_point(deg: float, y: float) -> Vector3:
+	var sec: Vector2 = _mask_section(y)
+	var th: float = deg_to_rad(deg)
+	var normal := Vector3(sin(th) / sec.x, 0.0, -cos(th) / sec.y).normalized()
+	return Vector3(sin(th) * sec.x, y, -cos(th) * sec.y) + normal * _CAGE_PROUD
+
+
+# (lateral rx, front reach) at height y, between stations.
+static func _mask_section(y: float) -> Vector2:
 	for i in _MASK_STATIONS.size() - 1:
 		var a: Vector4 = _MASK_STATIONS[i]
 		var b: Vector4 = _MASK_STATIONS[i + 1]
 		if y <= a.x and y >= b.x:
 			var f: float = inverse_lerp(a.x, b.x, y)
-			var rx: float = lerpf(a.y, b.y, f)
-			var front: float = lerpf(a.w, b.w, f)
-			return -front * sqrt(maxf(1.0 - (x / rx) * (x / rx), 0.0))
-	return 0.0
+			return Vector2(lerpf(a.y, b.y, f), lerpf(a.w, b.w, f))
+	return Vector2(0.001, 0.001)
 
 
 # Painted with the mask (GoalieUniformCoordinator), so it bakes plain white
