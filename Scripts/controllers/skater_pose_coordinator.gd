@@ -219,11 +219,14 @@ func apply_facing(input: InputState, delta: float) -> void:
 			# permanently strand facing when the mouse wrapped around.
 			# The one exception is a skater facing their travel whose cursor has gone
 			# behind it: turning to it is how they skate backward, so it turns.
-			var facing_target: Vector2 = _facing_toward(to_mouse.normalized(), input.brake)
+			FacingRules.solve(_facing_rule, facing, to_mouse.normalized(),
+					Vector2(_skater.velocity.x, _skater.velocity.z), input.brake,
+					_controller.stance_active, _controller.facing_rules)
+			var facing_target: Vector2 = _facing_rule.target
 			var mouse_body_angle: float = facing.angle_to(to_mouse.normalized())
 			var ik_gate: float = deg_to_rad(_controller.rom_backhand_angle_max_deg + _controller.upper_body_max_twist_deg)
 			var behind_gate: bool = abs(mouse_body_angle) >= ik_gate
-			if behind_gate and not _turning_to_cursor_behind:
+			if behind_gate and not _facing_rule.turning_to_cursor_behind:
 				ik_locked_side = int(sign(mouse_body_angle))
 			else:
 				ik_locked_side = 0
@@ -261,57 +264,8 @@ func apply_facing(input: InputState, delta: float) -> void:
 
 	apply_lower_body_yaw(delta)
 
-# The speed band over which the stance hands facing from the cursor back to travel.
-const _STANCE_SQUARE_BLEND_M_S: float = 0.5
-
-# Set by _facing_toward each tick: a moving skater's cursor has fallen behind the
-# travel cone, so facing turns round to it even past the unreachable-wedge freeze.
-var _turning_to_cursor_behind: bool = false
-
-# Where facing heads for a cursor at `cursor_dir`. A human skating faces where they
-# skate — the hips go with the stride, and the torso twist and arm reach carry the
-# puck out at the side — so the target blends from the cursor to the travel
-# direction with speed. Two bands, picked by which of the two the body faces now:
-# taking up the travel needs real skating speed (facing_travel_engage_*), so a
-# side-step tap stays squared; keeping it holds down to a crawl
-# (facing_travel_min/full_speed), so a coast keeps its line. It squares to the cursor as it always did
-# when the cursor falls behind the travel cone (skating backward while watching
-# the play), when braking, and for bots, whose decisions still assume facing
-# follows their cursor. The stance (Shift) squares to the cursor too, but only
-# below facing_stance_square_max_speed — opening up to a man or a pass is a
-# low-speed move, and at speed squaring would swing the hips off the line and turn
-# the stride into a shuffle. The cone's hysteresis is stateless — read off
-# whichever of the two the body faces now — so reconcile replay agrees.
-func _facing_toward(cursor_dir: Vector2, brake: bool) -> Vector2:
-	_turning_to_cursor_behind = false
-	if brake or _controller.is_ai_controlled():
-		return cursor_dir
-	var travel := Vector2(_skater.velocity.x, _skater.velocity.z)
-	var speed: float = travel.length()
-	if speed < 0.001:
-		return cursor_dir
-	travel /= speed
-	var following: bool = absf(facing.angle_to(travel)) <= absf(facing.angle_to(cursor_dir))
-	var share: float
-	if following:
-		share = smoothstep(_controller.facing_travel_min_speed,
-				_controller.facing_travel_full_speed, speed)
-	else:
-		share = smoothstep(_controller.facing_travel_engage_min_speed,
-				_controller.facing_travel_engage_full_speed, speed)
-	if _controller.stance_active:
-		var square_max: float = _controller.facing_stance_square_max_speed
-		share = minf(share, smoothstep(square_max - _STANCE_SQUARE_BLEND_M_S, square_max, speed))
-	if share <= 0.0:
-		return cursor_dir
-	var hysteresis: float = _controller.facing_travel_cone_hysteresis_deg
-	if not following:
-		hysteresis = -hysteresis
-	var cone: float = deg_to_rad(_controller.facing_travel_cone_deg + hysteresis)
-	if absf(travel.angle_to(cursor_dir)) > cone:
-		_turning_to_cursor_behind = true
-		return cursor_dir
-	return cursor_dir.slerp(travel, share)
+# Where facing heads this tick (FacingRules); a caller-owned scratch.
+var _facing_rule: FacingRules.Result = FacingRules.Result.new()
 
 
 # Sole writer of the lower body's yaw. Decays the facing-driven turn lag and

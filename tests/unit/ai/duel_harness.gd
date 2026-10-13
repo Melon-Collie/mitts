@@ -148,6 +148,8 @@ var airborne_ticks: int = 0
 const LANDING_SPEED_KEEP: float = 0.6
 var ticks: int = 0
 var move_cfg: SkaterMovementRules.MovementConfig
+var _facing_cfg: FacingRules.Config
+var _facing_rule := FacingRules.Result.new()
 # Rolling puck positions for the puppets' reaction-delayed read.
 var _puck_history: Array[Vector3] = []
 # peer_id -> tick until which that peer can't re-catch its own release.
@@ -191,6 +193,7 @@ func _init() -> void:
 	# harness can't drift from what the bodies actually run.
 	var ctrl := SkaterController.new()
 	move_cfg = ctrl.get_movement_config()
+	_facing_cfg = ctrl.facing_rules
 	ctrl.free()
 	move_cfg.puck_carry_speed_multiplier = 0.86
 
@@ -356,7 +359,15 @@ func step() -> void:
 		var to_mouse := Vector2(s.input.mouse_world_pos.x - s.pos.x,
 				s.input.mouse_world_pos.z - s.pos.z)
 		if to_mouse.length() > move_cfg.move_deadzone:
-			s.facing = s.facing.lerp(to_mouse.normalized(), FACING_DRAG * DT).normalized()
+			# The game's own facing rule (FacingRules), so a bot here faces where
+			# it would in a match: its travel once skating, its cursor otherwise.
+			FacingRules.solve(_facing_rule, s.facing, to_mouse.normalized(),
+					Vector2(s.vel.x, s.vel.z), s.input.brake, s.input.stance_held,
+					_facing_cfg)
+			if _facing_rule.turning_to_cursor_behind:
+				s.facing = s.facing.slerp(_facing_rule.target, minf(FACING_DRAG * DT, 1.0))
+			else:
+				s.facing = s.facing.lerp(_facing_rule.target, FACING_DRAG * DT).normalized()
 		var rot_y: float = atan2(-s.facing.x, -s.facing.y)
 		s.vel = SkaterMovementRules.apply_movement(
 				s.vel, s.input.move_vector, rot_y, carrier_id == s.peer_id,

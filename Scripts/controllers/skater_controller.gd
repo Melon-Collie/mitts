@@ -203,14 +203,9 @@ var knockdown_sprawl_splay_deg: float = 18.0
 # Good range: 1.0 (very lazy) – 3.0 (snappy).
 var facing_drag_speed: float = 5.0
 var facing_drag_speed_braking: float = 10.0
-# A skating human faces their travel (SkaterPoseCoordinator._facing_toward).
-var facing_travel_engage_min_speed: float = 1.6
-var facing_travel_engage_full_speed: float = 2.4
-var facing_travel_min_speed: float = 0.5
-var facing_travel_full_speed: float = 1.5
-var facing_travel_cone_deg: float = 120.0
-var facing_travel_cone_hysteresis_deg: float = 15.0
-var facing_stance_square_max_speed: float = 3.0
+# Where a skating skater's body heads (FacingRules); its tunables are the
+# config's defaults.
+var facing_rules: FacingRules.Config = FacingRules.Config.new()
 # Facing RECOVERY rate during the shot follow-through. The coil freezes facing at
 # the wind-up cursor position (it must — the coil is the torso twisting relative
 # to the planted lower body), so at release the body is squared to where the aim

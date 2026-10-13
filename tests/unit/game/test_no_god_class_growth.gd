@@ -50,7 +50,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +3: the wrister wind-up side reads the trailer's relative motion over the
 	# charge (#740), not just where he stands at the commit.
 	# +1: the chase steer passes when an airborne puck is back on the blade plane.
-	"res://Scripts/ai/skater_agent_state_machine.gd": 6537,
+	"res://Scripts/ai/skater_agent_state_machine.gd": 6542,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
 	"res://Scripts/game/game_manager.gd": 5787,
 	"res://Scripts/domain/ai/action_scoring.gd": 4458,
@@ -66,7 +66,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
 	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3970,
-	"res://Scripts/controllers/skater_controller.gd": 3531,
+	"res://Scripts/controllers/skater_controller.gd": 3526,
 	"res://Scripts/actors/skater.gd": 2795,
 	"res://Scripts/networking/network_manager.gd": 2855,
 	"res://Scripts/game/tutorial_manager.gd": 2067,

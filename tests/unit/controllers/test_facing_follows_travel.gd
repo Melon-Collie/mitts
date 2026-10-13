@@ -1,7 +1,7 @@
 extends GutTest
 
 # A skating human faces their travel rather than the cursor
-# (SkaterPoseCoordinator._facing_toward), driven through the live controller.
+# (FacingRules), driven through the live controller.
 # Facing starts toward −Z; the skater is held at a set velocity each tick so the
 # speed under test is the speed the rule reads.
 

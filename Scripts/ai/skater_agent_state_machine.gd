@@ -4027,6 +4027,11 @@ func _state_one_timer_pressed(input: InputState, snapshot: WorldSnapshot, self_p
 		_apply_steering(input, snapshot, self_pos, line_anchor)
 	else:
 		_apply_brake_steering(input, snapshot, self_pos)
+	# Open up to the net through the wait, as a shooter loading a one-timer does:
+	# skating, the body faces its travel (FacingRules), and only the stance
+	# squares it to the cursor — so without it the square-up gate below waits
+	# out its backstop and the press-tick snap whips the body round.
+	input.stance_held = true
 	# AIM FROM THE RELEASE POINT, NOT THE CURRENT BODY. The slapper direction
 	# locks at the press tick and NEVER re-steers (release_slapper fires the
 	# frozen locked_slapper_dir), yet the bot may enter this state up to

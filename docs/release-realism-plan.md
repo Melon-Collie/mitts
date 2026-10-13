@@ -167,7 +167,7 @@ stops being fixed.
 ## Phase 3 — bots onto the human toolkit — **draft for review**
 
 Humans now play under two rules bots are exempt from: facing follows travel
-(`SkaterPoseCoordinator._facing_toward`) and the wrist shot's load
+(`FacingRules`) and the wrist shot's load
 (`WristerLoad`). Both are pure functions of state the bot already has, so the
 work is not new physics. It is teaching the bot to play inside them: its
 decisions price them and its execution respects them. No bot-only gates.
@@ -182,25 +182,27 @@ forward pass at 60% (about 19.8 m/s). That is below the 20 m/s pass target
 reach. So the bot has to carry and release like a player who loads the puck,
 not just have the rule switched on.
 
-### 3a. Facing
+### 3a. Facing (as built, playtest pending)
 
-Drop the `is_ai_controlled()` exemption, then fix what assumed the body turns to
-the cursor at any speed:
-
-- **Turning by moving the cursor** stops working at speed: the commit cone's arc
-  fallback (`_aim_needs_no_rotation` / ARC, SM:3192–3442) never converges for an
-  aim inside 120° of travel, and `facing_turn_rate` in `AISkaterCaps` no longer
-  predicts anything. At speed, an aim within the 157° reach of the travel is
-  already reachable, so it commits from there; one past it turns the body round
-  (the cursor-behind rule). Below the engage band the old arc still applies.
-- **Square-up reads become speed-aware:** O-zone square (SM:4782–4821), the
-  one-timer square-up (`ONE_TIME_MAX_SQUARE_UP_RAD`, `_one_timer_aim_settled`),
-  reception squaring, and face-the-threat while skating laterally all relied on
-  the body following the cursor. Each either slows into the band, brakes, or
-  uses the stance below 3 m/s, which is what a human does.
-- **FACE THE ROUTE becomes automatic,** and the stickhandle and protect caps
-  (sized for body wag) can widen, since offsets now move the blade, not the body.
-- `_facing_rotation_time` already reads actual facing and stays correct.
+- **One rule, one home.** The facing target is `FacingRules`, a pure domain rule
+  (tests: `test_facing_rules.gd`). `SkaterPoseCoordinator` calls it for every
+  skater — the bot exemption is gone — and so does the bot test harness
+  (`duel_harness.gd`), which used to model facing as "always toward the cursor".
+  The tunables live on `SkaterController.facing_rules`.
+- **What the bot code turned out to need.** The full bot suite (duels, rushes,
+  defensive routing, coverage, board play) passes with the harness skating under
+  the real rule. The assumptions the map flagged mostly hold:
+  - the Aim-B2 commit cone reads actual facing, so an aim within 132° of the
+    travel commits at once, and an aim behind sends the cursor past the 120°
+    travel cone, which turns the body round to it;
+  - O-ZONE SQUARE still points the cursor at the goalie; at speed the hips follow
+    the travel while the torso turns up to 67° to the net, which is the real
+    shooter's posture.
+- **The one-timer wait holds the stance.** Skating onto the feed line, the body
+  faces its travel, so the square-up gate would wait out its 0.2 s backstop and
+  the slap snap would whip the body round. The bot now opens up as a human does:
+  the stance, which squares to the cursor below 3 m/s.
+- **Left for the slap-shot pass:** the slapper's entry snap itself.
 
 ### 3b. Carry and release with the puck loaded
 
