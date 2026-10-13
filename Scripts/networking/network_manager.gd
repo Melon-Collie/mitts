@@ -65,12 +65,14 @@ signal local_puck_stolen(was_stick_lift: bool)
 signal carrier_puck_dropped
 signal remote_carrier_changed(new_carrier_peer_id: int)
 signal ghost_state_received(peer_id: int, is_ghost: bool)
+signal offside_state_received(peer_id: int, must_tag_up: bool)
 signal goal_received(scoring_team_id: int, score0: int, score1: int, scorer_name: String, assist1_name: String, assist2_name: String)
 signal puck_out_of_play_received
 signal icing_called_received
+signal icing_race_received(icing_team_id: int, waved_off: bool)
 signal goalie_freeze_called_received
 signal offside_called_received
-signal faceoff_positions_received(positions: Array)
+signal faceoff_positions_received(positions: Array, preroll: float)
 signal game_reset_received(new_game_id: String)
 signal stats_received(data: Array)
 # The game's final stats, sent once at the horn — a client's cue that its own
@@ -1979,6 +1981,18 @@ func notify_ghost_state(peer_id: int, is_ghost: bool) -> void:
 		func(pid: int, g: bool) -> void: ghost_state_received.emit(pid, g),
 		[peer_id, is_ghost], true)
 
+# NHL delayed offside never ghosts, so is_ghost can't carry it: this is the
+# host's GameStateMachine.must_tag_up flag for one peer, on every change.
+func send_offside_state_to_all(peer_id: int, must_tag_up: bool) -> void:
+	for remote_id: int in connected_peer_ids():
+		notify_offside_state.rpc_id(remote_id, peer_id, must_tag_up)
+
+@rpc("authority", "reliable")
+func notify_offside_state(peer_id: int, must_tag_up: bool) -> void:
+	NetworkSimManager.send(
+		func(pid: int, t: bool) -> void: offside_state_received.emit(pid, t),
+		[peer_id, must_tag_up], true)
+
 func send_carrier_changed_to_all(new_carrier_peer_id: int) -> void:
 	var seq: int = _event_log.record(
 			SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL,
@@ -2072,6 +2086,18 @@ func notify_icing_called_to_all() -> void:
 func notify_icing_called() -> void:
 	NetworkSimManager.send(func() -> void: icing_called_received.emit(), [], true)
 
+# NHL hybrid icing: a race opened (icing_team_id) or ended (-1, and whether it
+# was waved off), so every peer can show the race the host is judging.
+func send_icing_race_to_all(icing_team_id: int, waved_off: bool) -> void:
+	for peer_id: int in connected_peer_ids():
+		notify_icing_race.rpc_id(peer_id, icing_team_id, waved_off)
+
+@rpc("authority", "reliable")
+func notify_icing_race(icing_team_id: int, waved_off: bool) -> void:
+	NetworkSimManager.send(
+		func(t: int, w: bool) -> void: icing_race_received.emit(t, w),
+		[icing_team_id, waved_off], true)
+
 func notify_goalie_freeze_called_to_all() -> void:
 	for peer_id: int in connected_peer_ids():
 		notify_goalie_freeze_called.rpc_id(peer_id)
@@ -2088,13 +2114,14 @@ func notify_offside_called_to_all() -> void:
 func notify_offside_called() -> void:
 	NetworkSimManager.send(func() -> void: offside_called_received.emit(), [], true)
 
-func send_faceoff_positions(positions: Array) -> void:
+func send_faceoff_positions(positions: Array, preroll: float) -> void:
 	for peer_id in connected_peer_ids():
-		notify_faceoff_positions.rpc_id(peer_id, positions)
+		notify_faceoff_positions.rpc_id(peer_id, positions, preroll)
 
 @rpc("authority", "reliable")
-func notify_faceoff_positions(positions: Array) -> void:
-	NetworkSimManager.send(func(p: Array) -> void: faceoff_positions_received.emit(p), [positions], true)
+func notify_faceoff_positions(positions: Array, preroll: float) -> void:
+	NetworkSimManager.send(func(p: Array, r: float) -> void: faceoff_positions_received.emit(p, r),
+			[positions, preroll], true)
 
 func notify_reset_to_all(new_game_id: String = "") -> void:
 	for peer_id in connected_peer_ids():

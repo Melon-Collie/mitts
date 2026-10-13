@@ -220,6 +220,12 @@ swung out from the line, and a wrap slides in behind it; a radius that ignored
 the turn called him sealed. Sitting on the seal spot turned wrong still coils,
 because the coil is what turns the pad onto the post.
 
+**The coil turns him toward the post he seals, not the way he travels.** A cut
+across the crease leaves him tracking the carrier, outside the seal spot, so he
+reaches it by moving back toward the middle; turning that way pointed the
+sealing pad at the other post. `GoalieSlideBehavior.facing_dir` carries the post
+side, `dir` the travel.
+
 The one sanctioned commit is the **beaten-wide post seal** — and it is sanctioned
 because it is not a prediction. Its gate is positional (the puck is already past
 his standing sealing reach on the side it went), so it fires on an accomplished
@@ -255,6 +261,13 @@ Two failures bracket it, both measured, and either is easy to re-introduce:
 `should_hold_seal` does not cover this on its own: the seal question asks whether
 a SHOT can beat him, and a walkaround is not a shot yet.
 
+A LOOSE puck is in the race only while an opponent can reach it before he is
+back up (`_seen_contest_time` against `recovery_duration`). A rebound steered to
+the corner keeps its pace to the boards, so reading its slide alone held him
+down 3.7-5 s with nobody near it; a puck no stick can play during the rise is
+not a shot he can be caught standing up into. `test_goalie_rebound_rise.gd`
+holds it.
+
 ### The committed slide is a retreat, and its budget is depth
 
 `_post_edge_reach` puts the body at `net_half_width − pad_edge · cos(slide
@@ -267,13 +280,13 @@ beaten-wide seal from 0.78 m of challenge radius, it travels 0.08 m sideways and
 Two things follow that are easy to get backwards:
 
 - **"He commits too far out" describes the symptom, not the cause.** A commit
-  baited earlier is beaten LESS, because the extra time is time he spends
-  finishing the retreat. What beats him is being caught mid-transit — which is
-  what the live log's `goalie_radius` column is really reporting when it
-  correlates with conversion.
+  baited earlier is beaten no more than a late one, because the extra time is
+  time he spends finishing the retreat — which is what the live log's
+  `goalie_radius` column is really reporting when it correlates with conversion.
 - **The seal answers a puck that keeps going, not one that comes back across.**
-  A carrier who cuts back into the space he left is met by a re-commit that
-  arrives; a carrier who continues to the side the puck was pulled to is not.
+  A carrier who continues to the side the puck was pulled to finds him sealed and
+  facing the post; one who cuts back into the space he left catches him
+  re-committing the other way, and that is the move that scores.
 
 `test_human_wraparound.gd` holds all of it, and the same file records the two
 things the instrument does NOT reproduce (it starts from a fully settled keeper,
@@ -345,6 +358,27 @@ stick on the shooter's line needs nothing, since challenging covers it. A
 BLOCK on tip risk is the pre-commit trap above and stays out.
 `test_goalie_tip_threat.gd` holds it.
 
+**A pass is not a shot while a stick can still take it.** Passes fire
+`puck_released` like any shot, so a feed whose line runs on at the net reads as
+a low shot, and a goalie who drops for it hands the receiver the top of the net.
+Two rules keep him up until going down is clearly the answer:
+
+- **The leg drop waits on a stick ahead** (`_drop_waits_on_a_stick`) while the
+  puck, once past that blade, still leaves the drop its time before the goal
+  line (`GoaliePassRead.can_wait_out`). Only the drop: he has been on the line
+  since the release, and a puck that slides past untouched is the line he
+  already read. A doorstep stick leaves no such time, so a shot through it drops
+  him exactly as before — the tip doctrine above is untouched.
+- **The pass read's drop-and-slide answers a one-timer, and waits for one** — a
+  receiver loaded before the feed (`SkaterStateMachine.state_loads_one_timer`).
+  One who is not has to catch it and shoot again, which is a save made standing,
+  so he walks to square on his feet and keeps reading; a late load is still
+  answered. The cross-crease fork's pads-first branch asks the same thing.
+
+A caught puck also ends the old shot's drop: the freeze outlives the catch by
+its clear delay, and the carrier is the block-or-react question's from then on.
+`test_goalie_pass_is_not_a_shot.gd` holds all of it.
+
 **Three low-save shapes, picked off the converged read.** On a pad face he
 stays standing. Wide of one standing pad, inside a flat pad's reach and low
 enough for it, he goes to the HALF-butterfly: that pad down, the other leg
@@ -359,6 +393,17 @@ The bot shot model does NOT read them as down (`GoalieNetworkState.is_down`):
 the down pad measures flat through the replicated pads, and the up leg keeps a
 standing leg's drop and the arm's reach.
 `test_goalie_half_butterfly.gd` holds it.
+
+**`elevated_threshold` forks the LEGS, not the hands.** Under it he drops, and
+flat the pads are 0.28 m tall, so a corner shot at 0.3-0.6 m clears them wide
+of the trunk. The hands take every shot read over the flat pad top, after the
+arm read — the band the bots' shot model already charges to the arms
+(`AIActionScoring._delay_at_height`). Left to the legs alone, that band was the
+one way a set keeper lost clean shots from range. The hand aims where the
+believed line crosses HIS plane, not the goal line: from an angle he stands out
+on the shooter's line, and the goal-line x sends the blocker, and the stick on
+it, past the puck. `test_goalie_hands_over_the_pad.gd` holds both, and that the
+arm read still loses in tight.
 
 ## Behind-net puck play — the doctrine
 
@@ -395,14 +440,15 @@ Whenever the bots' shot model reads the same quantity as a goalie knob, the two
 must be synced (`AIActionScoring.set_goalie_profile`) or the bots score against a
 goalie they do not face. See the AI MIRROR note in `goalie_skill_profile.gd`.
 
-**On a breakaway walkaround the ladder comes from the push.** Measured as open
-aim points out of seven at a fixed release: EASY 5, NORMAL 2, HARD 2. He seals
-the post on the wrap, so the play is a race to it: depth sets how far he has to
-retreat and the tiered butterfly push (`slide_push_speed_mps`, softer the weaker
-the goalie, like every other movement speed) sets how fast. The read latencies,
-the drop time, the five-hole, the poke and the toe-out do not touch it. Depth
-cuts the wrong way — a goalie who challenges the rush harder is easier to walk
-around — and the push is what keeps the ladder the right way up.
+**On a breakaway the ladder lives on the cutback, and comes from the push.**
+Every tier seals the walk-around (0 of 7 aim points). Cutting back across opens
+EASY 5, NORMAL 3, HARD 3: a race to re-commit, where depth sets how far he has
+to come back and the tiered butterfly push (`slide_push_speed_mps`, softer the
+weaker the goalie, like every other movement speed) sets how fast. The read
+latencies, the drop time, the five-hole and the poke do not touch it; the toe-out
+moves it by one. Depth cuts the wrong way — a goalie who challenges the rush
+harder is easier to beat back across — and the push is what keeps the ladder the
+right way up.
 
 Pulling `depth_base_m` in is not free — it concedes the centre-lane rush from
 5 m, which is what challenge depth exists for. `test_goalie_breakaway_ladder.gd`
@@ -651,7 +697,12 @@ bugs all came from treating it as one.
 **The walk-in is skating.** While `begin_approach`'s glide is live the skater is
 covering ground, so `is_faceoff_ready()` is false and the gait plays an ordinary
 stride — a floored crouch and staggered feet laid over a running stride read as
-a limp. The ready stance eases in as the glide hands back.
+a limp. The ready stance eases in as the glide hands back. It is not physical,
+though: skater contact is off while movement is locked
+(`Skater.contact_suspended_provider`, fed `is_movement_locked` at setup), so
+a glide crossing the centre neither checks him into the drop nor shoves him off
+the dot. The countdown waits for the last glide to land
+(`PhaseCoordinator.last_prep_preroll`).
 
 **Set at the dot is two stances, not one.** The players lined up behind the dot
 hold a ready stance. The centre taking the draw holds an *address*: knees well

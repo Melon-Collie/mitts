@@ -179,8 +179,8 @@ static func anchor_of(slot: int, strong_x: float, own_goal_z: float,
 # (plan §5: shared by the zone roles' geometry, the defenseman's retreat
 # bounds, and the transition-exposure back-cover read). A defenseman's post
 # is the dot lane at his own blue line; a forward's is the high (F3) ice
-# just up-ice of it. `side_sign` is the player's home side (-1 = L, +1 = R,
-# 0 = C/unknown → middle).
+# just up-ice of it. `side_sign` is the player's home side as a world-X sign
+# (PlayerRules.home_side_x; 0 = C/unknown → middle).
 static func defensive_anchor(is_defense: bool, side_sign: float,
 		own_goal_z: float) -> Vector3:
 	var own_dir: float = signf(own_goal_z)

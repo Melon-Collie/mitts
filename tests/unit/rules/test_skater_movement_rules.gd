@@ -377,6 +377,28 @@ func test_integrate_forward_zero_stagger_matches_unstaggered() -> void:
 		false, false, SkaterMovementRules.Posture.UPRIGHT, _default_cfg(), 1.0 / 120.0, 9, 0, zeroed, 0.0, bc_cfg)
 	assert_eq(zeroed.position, plain.position, "zero stagger is a no-op")
 
+func test_integrate_forward_resumed_is_bit_identical() -> void:
+	# A reconcile replay asks for the same snapshot one tick further per input
+	# and resumes the previous run. Decay and stagger read the absolute tick, so
+	# the resumed tail must equal one uninterrupted run exactly, not nearly.
+	var bc_cfg := BodyCheckRules.Config.new()
+	bc_cfg.max_stagger_seconds = 1.0
+	bc_cfg.max_thrust_penalty = 0.6
+	var whole := SkaterMovementRules.ForwardResult.new()
+	var part := SkaterMovementRules.ForwardResult.new()
+	var mv := Vector2(0.6, -0.8)
+	var vel := Vector3(3.0, 0.0, -2.0)
+	SkaterMovementRules.integrate_forward(Vector3.ZERO, vel, mv, 0.4, false, false,
+		SkaterMovementRules.Posture.UPRIGHT, _default_cfg(), DT, 17, 12, whole, 0.08, bc_cfg)
+	var pos := Vector3.ZERO
+	for t: int in 17:
+		SkaterMovementRules.integrate_forward(pos, vel, mv, 0.4, false, false,
+			SkaterMovementRules.Posture.UPRIGHT, _default_cfg(), DT, 1, 12, part, 0.08, bc_cfg, t)
+		pos = part.position
+		vel = part.velocity
+	assert_eq(part.position, whole.position, "resumed position is exact")
+	assert_eq(part.velocity, whole.velocity, "resumed velocity is exact")
+
 # ── Stride power ─────────────────────────────────────────────────────────────
 
 func test_stride_fades_above_the_power_knee() -> void:

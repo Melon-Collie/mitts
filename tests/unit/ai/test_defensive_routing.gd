@@ -36,8 +36,8 @@ extends GutTest
 #
 #                                      parked-point route   moving frame + ladder
 #   in-zone time with nobody goal-side       5% (worst 48%)     0% (worst 0%)
-#   closest approach to own net, worst       0.1 m              6.8 m
-#   inside offset at the zone entry         +1.65 m            +0.79 m
+#   closest approach to own net, worst       0.1 m              7.5 m
+#   inside offset at the zone entry         +1.65 m            +1.04 m
 #
 # The inside offset does NOT improve and is not claimed to: the parked-point route
 # reads a LARGER shade because it is measured off a body standing still a long way
@@ -210,20 +210,26 @@ func test_a_defender_with_a_trip_to_make_still_arrives_in_shape() -> void:
 # stack against a carrier who simply drives the middle, the pressurer rode a
 # constant ~6 m cushion from the tops of the circles to his own GOAL LINE and
 # never contested anything: you could walk him into his own net by skating at
-# him. AIRolePressure's house-gate floor is the fix.
+# him. The fix is the route's RETREAT FLOOR at the house gate
+# (AIRoleRushD.set_house_retreat_floor): while he is still in front of the
+# carrier, the ride may not carry him inside it.
 #
-#   Over the 9-start sweep below:                    no floor  →  with it
-#     defender's closest approach to his own net, mean   3.6 m      7.3 m
-#     worst single start                                 0.1 m      5.5 m
+#   Over the 9-start sweep below:              ladder only  →  retreat floor
+#     defender's closest approach to his own net, mean   7.3 m        9.5 m
+#     worst single start                                 4.1 m        7.5 m
+#
+# The ladder alone settles a defender who starts up-ice at the gate, but one
+# already inside it (the z=-14 and z=-20 rows) rode the carrier further in from
+# wherever he stood; a more patient carrier who drives deeper before shooting
+# walked him under the bar.
 #
 # The bar BOUNDS THE PATHOLOGY, not the tuning (this file's assertion philosophy).
-# What it has to catch is a defender standing in his own crease — the 0.1 m
-# reading, which is the reported defect — so it sits well above that and below
-# what the floor actually delivers. Pinning it nearer the house gate would be
-# pinning the floor's exact depth, which is a different and more brittle claim:
-# the floor releases once the carrier is inside the gate (a corner battle is a
-# place a pressurer belongs), so following him down from there is correct and
-# this reading is legitimately below the gate.
+# What it has to catch is a defender standing in his own crease, so it sits well
+# above that and below what the floor delivers. Pinning it at the house gate
+# would be pinning the floor's exact depth, which is a more brittle claim: the
+# floor lifts once the carrier is level with him (a beaten defender chases), and
+# a defender who starts inside the gate holds where he stands rather than
+# stepping out to it, so this reading is legitimately below the gate.
 const MIN_CONCEDED_DEPTH_M: float = 4.0
 
 

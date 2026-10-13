@@ -299,7 +299,19 @@ here whenever you bump, in the same format.
 #      bit 5 now carries stance_active (was sprint_active) and input flag bit
 #      [4] stance_held (was sprint_held); both now feed the forward prediction
 #      as the posture, with hit_commit. Replay FORMAT_VERSION 11.
-# v66: the brake's shuffle. Brake + stick at or under the shuffle ceiling now
+# v66: added notify_offside_state(peer_id, must_tag_up) RPC — the host tells
+#      every peer when an NHL-ruleset player starts or stops owing a tag-up, for
+#      the offside banner and teammate name plates (NHL never ghosts, so
+#      is_ghost could not carry it).
+# v67: notify_faceoff_positions(positions, preroll) — the host now holds the
+#      faceoff countdown until the last skater has skated in, and sends that
+#      hold, since a client cannot measure remote skaters' glides itself.
+# v68: added notify_icing_race(icing_team_id, waved_off) RPC — the host tells
+#      every peer when an NHL hybrid-icing race opens and how it ended, for the
+#      icing race banner.
+# v69: PlayerStats gained `icings` (appended to to_array), so the stats player
+#      record is 19 values (peer_id + 18).
+# v70: the brake's shuffle. Brake + stick at or under the shuffle ceiling now
 #      steps the skater toward a facing-frame ellipse of speeds
 #      (SkaterMovementRules.shuffle_velocity) where it used to plant, so an
 #      older peer predicts a plant where the host shuffles. No byte layout

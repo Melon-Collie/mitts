@@ -71,33 +71,29 @@ static func deflect_velocity(
 # deliberate channel (deflect_loft_speed); a body has no such channel and its
 # faces are tilted, so the vertical has to come out of the contact itself.
 #
-# Identical model otherwise, and identical for the same reason: ONE contact
-# model means a glance off a pad and a glance off a blade cannot disagree about
-# what a glance is. `e` eases from `soft` toward `hard` as the impact speed
-# climbs to `speed_ref` — the puck's own COR falling with impact speed — so a
-# hard shot retains a smaller FRACTION while still rebounding faster in absolute
-# terms, which is why hard shots make dangerous rebounds and soft ones die.
+# Identical decomposition otherwise, and for the same reason: ONE contact model
+# means a glance off a pad and a glance off a blade cannot disagree about what a
+# glance is. The normal rebound is `cor_scale` × the frozen puck's rigid-wall COR
+# at the NORMAL impact speed (PuckRestitution.rigid_wall), so a hard shot retains
+# a smaller FRACTION while still rebounding faster in absolute terms — which is
+# why hard shots make dangerous rebounds and soft ones die.
 #
 # `normal` points out of the surface, toward the puck. A separating puck is
 # returned unchanged, so re-testing a puck already ejected off a face never
-# re-reflects it. With `retain` 1.0 and no speed falloff this reduces exactly to
-# PuckGeometryCollision.reflect_3d.
+# re-reflects it. With `retain` 1.0 this is PuckGeometryCollision.reflect_off_pipe
+# scaled by `cor_scale`.
 static func deflect_velocity_3d(
 		incoming: Vector3,
 		normal: Vector3,
-		normal_restitution: float,
-		normal_restitution_min: float,
-		tangential_retain: float,
-		speed_ref: float) -> Vector3:
+		cor_scale: float,
+		tangential_retain: float) -> Vector3:
 	if normal.length_squared() < 0.000001:
 		return incoming
 	var n: Vector3 = normal.normalized()
 	var vn: float = incoming.dot(n)
 	if vn >= 0.0:
 		return incoming
-	var hard: float = clampf(incoming.length() / speed_ref, 0.0, 1.0) \
-			if speed_ref > 0.0001 else 0.0
-	var e: float = lerpf(normal_restitution, normal_restitution_min, hard)
+	var e: float = cor_scale * PuckRestitution.rigid_wall(-vn)
 	var v_normal: Vector3 = vn * n            # into the face (vn < 0)
 	var v_tangent: Vector3 = incoming - v_normal
 	return v_tangent * tangential_retain - v_normal * e

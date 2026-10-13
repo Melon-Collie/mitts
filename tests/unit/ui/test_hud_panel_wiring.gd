@@ -21,7 +21,7 @@ func _panel(field: StringName) -> Object:
 
 func test_ready_builds_every_panel() -> void:
 	for field: StringName in [&"_scorebug", &"_chyron", &"_prompts", &"_ghost_banner",
-			&"_stat_feed", &"_votes"]:
+			&"_icing_race", &"_stat_feed", &"_votes"]:
 		assert_not_null(_panel(field), "HUD._ready must build %s" % field)
 
 
@@ -64,6 +64,17 @@ func test_clip_prompt_state_reaches_the_prompts() -> void:
 	GameManager.goal_clip_available_changed.emit(true)
 	GameManager.goal_clip_state_changed.emit(GoalClipExporter.State.IDLE)
 	assert_true(true, "clip prompt signal signatures accept their emits")
+
+
+func test_icing_race_reaches_its_banner() -> void:
+	var banner: HudIcingRace = _panel(&"_icing_race") as HudIcingRace
+	GameManager.icing_race_changed.emit(0, false)
+	assert_true(banner.is_showing(), "an open race raises the banner")
+	assert_eq(banner.title_text(), tr(&"ICING_RACE_TITLE"))
+	GameManager.icing_race_changed.emit(-1, true)
+	assert_eq(banner.title_text(), tr(&"ICING_WAVED_OFF"), "a waved-off race shows the washout")
+	GameManager.icing_race_changed.emit(-1, false)
+	assert_false(banner.is_showing(), "a race ended by the whistle hands over to the toast")
 
 
 func test_rematch_votes_reach_the_tally() -> void:

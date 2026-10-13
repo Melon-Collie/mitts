@@ -37,41 +37,29 @@ class_name GoalieSaveRules
 enum SavePart { STICK, PAD, BLOCKER, CHEST, GLOVE, MASK }
 
 # ── Materials ────────────────────────────────────────────────────────────────
-# Three numbers per surface, flat, indexed by SavePart × STRIDE: the restitution
-# against a SLOW puck, the restitution at/above SPEED_REF_M_S, and how much of a
-# glance along the face survives.
+# Two numbers per surface, flat, indexed by SavePart × STRIDE: the fraction of
+# the frozen puck's rigid-wall COR the surface keeps (PuckRestitution.rigid_wall,
+# so the speed falloff is the puck's own measured behaviour), and how much of a
+# glance along the face survives. A fraction above 1.0 would make gear livelier
+# than a steel wall, which no gear is.
 #
-# The speed falloff is the puck's own measured behaviour, not a shaping curve:
-# COR drops roughly linearly with impact speed (0.50 at 15 mph to 0.34 at 85
-# against a rigid plate; a frozen game-temperature puck plateaus near 0.27 — WSU
-# Sports Science Lab, "Experimental Characterization of Ice Hockey Sticks and
-# Pucks"). Every surface here is softer than that rigid plate, so every row sits
-# under it.
-#
-# THE ORDERING IS THE PHYSICAL CLAIM, not the digits. Stiffest to softest: a
-# composite paddle is the hardest thing on him; a blocker is a board behind thin
-# foam; a leg pad is thick foam over a stiff core, built to absorb; a chest
-# protector is foam over a torso that gives; and softest of all is a glove the
-# hand did not close on, which is a floppy leather pocket. Move a row and you are
-# asserting something about the equipment — keep the order.
-#
-# What used to be here instead: a speed threshold that switched between a
-# scripted cornerward exit and a reflection. Nothing physical happens to a pad at
-# 28 m/s, and the scripted branch kept 82% of pad rebounds in the slot because a
-# constant vector cannot know where the shot came from
-# (test_goalie_rebound_destination).
-const MAT_STRIDE: int = 3
-const MAT_SOFT: int = 0    # restitution against a slow puck
-const MAT_HARD: int = 1    # restitution at/above SPEED_REF_M_S
-const MAT_TANGENTIAL: int = 2
-const SPEED_REF_M_S: float = 30.0
+# Nothing has measured puck rebound off goalie gear, so THE ORDERING IS THE
+# PHYSICAL CLAIM, not the digits. Stiffest to softest: a composite paddle is the
+# hardest thing on him; a blocker is a board behind thin foam; a leg pad is thick
+# foam over a stiff core, built to absorb; a chest protector is foam over a
+# torso that gives; and softest of all is a glove the hand did not close on,
+# which is a floppy leather pocket. Move a row and you are asserting something
+# about the equipment — keep the order.
+const MAT_STRIDE: int = 2
+const MAT_COR_SCALE: int = 0
+const MAT_TANGENTIAL: int = 1
 const MATERIALS: Array[float] = [
-	0.50, 0.30, 0.85,   # STICK   — composite paddle, the stiffest surface on him
-	0.35, 0.15, 0.80,   # PAD     — thick foam over a stiff core, built to absorb
-	0.45, 0.25, 0.80,   # BLOCKER — a board behind thin foam
-	0.15, 0.05, 0.65,   # CHEST   — foam over a torso that gives with the shot
-	0.12, 0.05, 0.60,   # GLOVE   — softest of all: a leather pocket he did not close
-	0.45, 0.25, 0.80,   # MASK    — a hard shell with a little foam and a head behind it
+	0.90, 0.85,   # STICK   — composite paddle, the stiffest surface on him
+	0.55, 0.80,   # PAD     — thick foam over a stiff core, built to absorb
+	0.80, 0.80,   # BLOCKER — a board behind thin foam
+	0.25, 0.65,   # CHEST   — foam over a torso that gives with the shot
+	0.20, 0.60,   # GLOVE   — softest of all: a leather pocket he did not close
+	0.80, 0.80,   # MASK    — a hard shell with a little foam and a head behind it
 ]
 
 # How fast a trapped puck slides off the chest and onto the ice. NOT a rebound —
@@ -188,10 +176,8 @@ static func rebound_velocity(
 	var surface_normal_vel: Vector3 = n * surface_velocity.dot(n)
 	return surface_normal_vel + PuckCollisionRules.deflect_velocity_3d(
 			incoming - surface_normal_vel, contact_normal,
-			MATERIALS[base + MAT_SOFT],
-			MATERIALS[base + MAT_HARD],
-			MATERIALS[base + MAT_TANGENTIAL],
-			SPEED_REF_M_S)
+			MATERIALS[base + MAT_COR_SCALE],
+			MATERIALS[base + MAT_TANGENTIAL])
 
 
 # Is the struck surface one the goalie is actually PRESENTING to the puck?

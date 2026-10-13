@@ -8,10 +8,11 @@ class_name AIRimPass
 # caroms, the same walk the chase election races on, at the same resolution, so
 # the receiver the rim is priced to reach is the one the election will send.
 #
-# Rims are fired HARD — the boards and the corner arcs bleed pace on every
-# contact — so the search runs a pace ladder up to the passer's own wrister max
-# and keeps only arrivals the receiver can catch: the puck's speed in his frame
-# under the deflect threshold.
+# The boards and the corner arcs bleed pace on every contact, so the search runs
+# a pace ladder from a soft rim up to the passer's own wrister max and keeps only
+# arrivals the receiver can catch: the puck's speed in his frame under the
+# deflect threshold. The carrier fires the softest launch that still reaches him
+# (AIRoleCarrier._rim_launch_for).
 #
 # This file is the path half: which launches are rims, where each one goes, and
 # who reaches it first. What a rim is WORTH stays in the carrier's pass EV
@@ -24,9 +25,11 @@ class_name AIRimPass
 # survives is priced on the race along its own path.
 
 # Bearings sampled around the passer, and the pace ladder (fractions of the
-# passer's wrister max) each surviving bearing is walked at.
+# passer's wrister max) each surviving bearing is walked at. Ascending: a softer
+# rim's path is a prefix of a harder one's on the same bearing, which is what
+# lets build() stop a bearing at the first pace whose path is blocked.
 const BEARINGS: int = 16
-const PACE_FRACS: Array[float] = [0.7, 1.0]
+const PACE_FRACS: Array[float] = [0.45, 0.7, 1.0]
 # The bank must come within this distance of the release: a rim is fired INTO
 # the boards beside the passer, not a long dump that happens to find them.
 const BANK_MAX_M: float = 10.0
@@ -34,7 +37,7 @@ const BANK_MAX_M: float = 10.0
 # into the middle (a bank pass across the zone, not a rim).
 const GLANCE_MAX_RAD: float = deg_to_rad(40.0)
 # At most this many launches survive the bounds (scratch is preallocated).
-const MAX_LAUNCHES: int = 12
+const MAX_LAUNCHES: int = 18
 # Aim distance handed to the release: the quick release fires toward a point,
 # and any point down the bearing is the same release.
 const AIM_DISTANCE_M: float = 20.0
@@ -138,7 +141,7 @@ static func build(from: Vector3, max_pace: float, own_goal_z: float,
 			if count >= MAX_LAUNCHES:
 				break
 			if not _walk(count, dir * (max_pace * frac), own_goal_z):
-				break   # a leg through a net or our slot is so at every pace
+				break   # a leg blocked here is blocked at every harder pace too
 			dirs[count] = dir
 			paces[count] = max_pace * frac
 			_opp_raced[count] = false

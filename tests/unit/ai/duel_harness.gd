@@ -110,6 +110,10 @@ class SimSkater:
 	var script_path: Array[Vector3] = []
 	var script_speed: float = 0.0
 	var script_idx: int = 0
+	# True: the scripted skater drives its path through the real movement model
+	# (stride ramp, power knee) facing its travel, instead of the flat-accel
+	# P-control — for a fixture whose question is a race against it.
+	var script_skates: bool = false
 
 
 var skaters: Array[SimSkater] = []
@@ -492,6 +496,9 @@ func _script_step(s: SimSkater) -> void:
 		s.script_idx = (s.script_idx + 1) % s.script_path.size()
 		target = s.script_path[s.script_idx]
 		err = Vector3(target.x - s.pos.x, 0.0, target.z - s.pos.z)
+	if s.script_skates:
+		_script_skate(s, err)
+		return
 	var desired: Vector3 = (err * PUPPET_GAIN).limit_length(s.script_speed)
 	s.vel += (desired - s.vel).limit_length(PUPPET_ACCEL_M_S2 * DT)
 	s.pos += s.vel * DT
@@ -499,6 +506,23 @@ func _script_step(s: SimSkater) -> void:
 	var to_net := Vector2(-s.pos.x, attacked_net_z - s.pos.z)
 	if to_net.length() > 0.05:
 		s.facing = to_net.normalized()
+	s.prev_blade = s.blade
+	s.blade = s.pos + Vector3(s.facing.x, 0.0, s.facing.y) * SCRIPT_CARRY_REACH_M
+
+
+# The real stride toward the waypoint, facing travel, never past script_speed:
+# full drive while under it, a glide once there.
+func _script_skate(s: SimSkater, err: Vector3) -> void:
+	var dir := Vector2(err.x, err.z)
+	if dir.length() > 0.001:
+		dir = dir.normalized()
+		s.facing = dir
+	var move: Vector2 = dir if Vector2(s.vel.x, s.vel.z).length() < s.script_speed \
+			else Vector2.ZERO
+	s.vel = SkaterMovementRules.apply_movement(s.vel, move,
+			atan2(-s.facing.x, -s.facing.y), carrier_id == s.peer_id, false, DT,
+			move_cfg)
+	s.pos += s.vel * DT
 	s.prev_blade = s.blade
 	s.blade = s.pos + Vector3(s.facing.x, 0.0, s.facing.y) * SCRIPT_CARRY_REACH_M
 

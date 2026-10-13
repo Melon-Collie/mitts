@@ -79,6 +79,8 @@ var _images: Array[Image] = []
 
 
 func begin(only: String) -> void:
+	# Every frame posed, whatever Animation Detail the local prefs carry.
+	SkaterAnimationLod.detail = SkaterAnimationLod.DETAIL_FULL
 	for s: Dictionary in SCENARIOS:
 		if only == "" or only.split(",").has(String(s["name"])):
 			_scenarios.append(s)

@@ -23,6 +23,11 @@ class Reception:
 	var point: Vector3 = Vector3.ZERO
 	# Seconds until it gets there.
 	var time: float = INF
+	# Seconds until it passes his blade — the closest approach. Until then the
+	# stick can still take it; after it, a puck still running is past him.
+	var pass_time: float = INF
+	# Index of the receiving stick in the `receivers` array.
+	var receiver: int = -1
 
 
 # First opposing stick the puck's line reaches, within `max_time`. Fills `out`
@@ -32,12 +37,15 @@ static func find_reception(puck_pos: Vector3, puck_vel: Vector3,
 		out: Reception) -> bool:
 	out.found = false
 	out.time = INF
+	out.pass_time = INF
+	out.receiver = -1
 	var speed_sq: float = puck_vel.x * puck_vel.x + puck_vel.z * puck_vel.z
 	if speed_sq < 0.0001:
 		return false
 	var speed: float = sqrt(speed_sq)
 	var reach_sq: float = stick_reach * stick_reach
-	for r: Vector3 in receivers:
+	for i: int in receivers.size():
+		var r: Vector3 = receivers[i]
 		var rx: float = r.x - puck_pos.x
 		var rz: float = r.z - puck_pos.z
 		var t_closest: float = (rx * puck_vel.x + rz * puck_vel.z) / speed_sq
@@ -54,6 +62,17 @@ static func find_reception(puck_pos: Vector3, puck_vel: Vector3,
 			continue
 		out.found = true
 		out.time = t_touch
+		out.pass_time = t_closest
+		out.receiver = i
 		out.point = Vector3(puck_pos.x + puck_vel.x * t_touch, puck_pos.y,
 				puck_pos.z + puck_vel.z * t_touch)
 	return out.found
+
+
+# Can the goalie wait to see whether the stick takes it? Yes while the puck,
+# once past the blade at `pass_time`, still leaves `answer_time` before it
+# reaches the goal line at `time_to_goal`. A net-front stick leaves no such time,
+# so a shot through it is played as a shot.
+static func can_wait_out(time_to_goal: float, pass_time: float,
+		answer_time: float) -> bool:
+	return time_to_goal - pass_time >= answer_time

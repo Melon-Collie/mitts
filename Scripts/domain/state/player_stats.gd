@@ -61,6 +61,10 @@ var shot_attempts_blocked: int = 0
 # counters above; a float, unlike the integer counters. Blocked attempts are
 # excluded (xG is on unblocked/Fenwick shots). Goals − xg_for is finishing.
 var xg_for: float = 0.0
+# NHL icings this player's release caused (credited at the whistle to whoever
+# released the puck that opened the race). Broadcast like the counters above;
+# absent from to_dict() — the career_stats table has no column for it.
+var icings: int = 0
 # Tracked locally on every peer (game_manager._physics_process) rather than
 # host-authoritative + broadcast like the counters above. Each peer's own
 # value is what ships to Supabase, since report() runs per-peer at game-over.
@@ -75,7 +79,7 @@ func to_array() -> Array:
 	return [goals, assists, shots_on_goal, hits, shots_blocked,
 			hits_taken, takeaways, giveaways, faceoff_wins, faceoff_losses,
 			game_winning_goals, one_timer_goals, tip_goals, ot_goals,
-			shot_attempts, shot_attempts_blocked, xg_for]
+			shot_attempts, shot_attempts_blocked, xg_for, icings]
 
 static func from_array(a: Array) -> PlayerStats:
 	var s := PlayerStats.new()
@@ -105,6 +109,7 @@ func update_from_array(a: Array) -> void:
 	shot_attempts = a[14]
 	shot_attempts_blocked = a[15]
 	xg_for = a[16]
+	icings = a[17]
 
 func to_dict() -> Dictionary:
 	return {

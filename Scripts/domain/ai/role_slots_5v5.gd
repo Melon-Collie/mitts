@@ -296,12 +296,12 @@ static func _specs_for_state(state: int, own_goal_z: float, strong_x: float,
 			var point_strong := SlotSpec.make(AIRoleSlots.Slot.POINT_STRONG, Group.D,
 					Vector3(strong_x * GameRules.END_ZONE_FACEOFF_DOT_X, 0.0,
 							opp_blue_z - own_dir * _POINT_INSET_M),
-					_side_home_d(strong_x))
+					_side_home_d(strong_x, own_goal_z))
 			point_strong.lateral_race = true
 			var point_weak := SlotSpec.make(AIRoleSlots.Slot.POINT_WEAK, Group.D,
 					Vector3(-strong_x * _POINT_WEAK_X_M, 0.0,
 							opp_blue_z - own_dir * _POINT_INSET_M),
-					_side_home_d(-strong_x))
+					_side_home_d(-strong_x, own_goal_z))
 			point_weak.lateral_race = true
 			return [
 				point_strong,
@@ -319,12 +319,12 @@ static func _specs_for_state(state: int, own_goal_z: float, strong_x: float,
 			var dp_strong := SlotSpec.make(AIRoleSlots.Slot.DP_STRONG, Group.D,
 					Vector3(strong_x * GameRules.END_ZONE_FACEOFF_DOT_X, 0.0,
 							opp_blue_z + own_dir * _DP_STAND_BACK_M),
-					_side_home_d(strong_x))
+					_side_home_d(strong_x, own_goal_z))
 			dp_strong.lateral_race = true
 			var dp_weak := SlotSpec.make(AIRoleSlots.Slot.DP_WEAK, Group.D,
 					Vector3(-strong_x * _DP_WEAK_X_M, 0.0,
 							opp_blue_z + own_dir * _DP_STAND_BACK_M),
-					_side_home_d(-strong_x))
+					_side_home_d(-strong_x, own_goal_z))
 			dp_weak.lateral_race = true
 			return [
 				SlotSpec.make(AIRoleSlots.Slot.F1_PRESSURE, Group.F, puck_pos),
@@ -333,7 +333,7 @@ static func _specs_for_state(state: int, own_goal_z: float, strong_x: float,
 				SlotSpec.make(AIRoleSlots.Slot.F2_STRONG, Group.F,
 						Vector3(strong_x * (half_w - _F2_WALL_INSET_M), 0.0,
 								opp_goal_z + own_dir * _F2_STRONG_DEPTH_M),
-						_side_home_f(strong_x)),
+						_side_home_f(strong_x, own_goal_z)),
 				SlotSpec.make(AIRoleSlots.Slot.F2_WEAK, Group.F,
 						Vector3(0.0, 0.0, opp_blue_z - own_dir * _F2_WEAK_LEAD_M)),
 			]
@@ -343,11 +343,11 @@ static func _specs_for_state(state: int, own_goal_z: float, strong_x: float,
 				# Puck-side D takes the battle (race to the puck, D-scoped);
 				# far D fronts the net.
 				SlotSpec.make(AIRoleSlots.Slot.ZONE_D_STRONG, Group.D, puck_pos,
-						_side_home_d(strong_x)),
+						_side_home_d(strong_x, own_goal_z)),
 				SlotSpec.make(AIRoleSlots.Slot.ZONE_D_WEAK, Group.D,
 						Vector3(-strong_x * 1.0, 0.0,
 								own_goal_z - own_dir * _ZONE_NET_FRONT_M),
-						_side_home_d(-strong_x)),
+						_side_home_d(-strong_x, own_goal_z)),
 				SlotSpec.make(AIRoleSlots.Slot.ZONE_C, Group.F,
 						Vector3(strong_x * 1.5, 0.0,
 								own_goal_z - own_dir * _ZONE_SLOT_DEPTH_M),
@@ -355,11 +355,11 @@ static func _specs_for_state(state: int, own_goal_z: float, strong_x: float,
 				SlotSpec.make(AIRoleSlots.Slot.ZONE_W_STRONG, Group.F,
 						Vector3(strong_x * _ZONE_WALL_X_M, 0.0,
 								own_goal_z - own_dir * _ZONE_WALL_DEPTH_M),
-						_side_home_f(strong_x)),
+						_side_home_f(strong_x, own_goal_z)),
 				SlotSpec.make(AIRoleSlots.Slot.ZONE_W_WEAK, Group.F,
 						Vector3(-strong_x * _ZONE_WEAK_X_M, 0.0,
 								own_goal_z - own_dir * _ZONE_WEAK_DEPTH_M),
-						_side_home_f(-strong_x)),
+						_side_home_f(-strong_x, own_goal_z)),
 			]
 
 		AIPossessionState.State.BREAKOUT:
@@ -384,19 +384,21 @@ static func _specs_for_state(state: int, own_goal_z: float, strong_x: float,
 				SlotSpec.make(AIRoleSlots.Slot.TRACK_PUCK, Group.F, puck_pos),
 				SlotSpec.make(AIRoleSlots.Slot.TRACK_MID_STRONG, Group.F,
 						mid_gate + Vector3(strong_x * _TRACK_MID_SPLIT_M, 0.0, 0.0),
-						_side_home_f(strong_x)),
+						_side_home_f(strong_x, own_goal_z)),
 				SlotSpec.make(AIRoleSlots.Slot.TRACK_MID_WEAK, Group.F,
 						mid_gate - Vector3(strong_x * _TRACK_MID_SPLIT_M, 0.0, 0.0),
-						_side_home_f(-strong_x)),
+						_side_home_f(-strong_x, own_goal_z)),
 			]
 
 		AIPossessionState.State.TRANS_OFFENSE:
 			return [
 				SlotSpec.make(AIRoleSlots.Slot.DVALVE, Group.D, our_net),
 				SlotSpec.make(AIRoleSlots.Slot.WIDE_L, Group.F,
-						Vector3(-(half_w - _WIDE_LANE_INSET_M), 0.0, puck_pos.z), 1),
+						Vector3(-(half_w - _WIDE_LANE_INSET_M), 0.0, puck_pos.z),
+						_side_home_f(-1.0, own_goal_z)),
 				SlotSpec.make(AIRoleSlots.Slot.WIDE_R, Group.F,
-						Vector3(half_w - _WIDE_LANE_INSET_M, 0.0, puck_pos.z), 2),
+						Vector3(half_w - _WIDE_LANE_INSET_M, 0.0, puck_pos.z),
+						_side_home_f(1.0, own_goal_z)),
 				# The trailer cross-fills by construction: it's the leftover
 				# F when a D carries, the activating D when a forward does.
 				SlotSpec.make(AIRoleSlots.Slot.TRAILER, Group.ANY,
@@ -409,15 +411,17 @@ static func _specs_for_state(state: int, own_goal_z: float, strong_x: float,
 				# global (ANY), so a D nearest a faceoff scrum still takes it.
 				SlotSpec.make(AIRoleSlots.Slot.CHASE, Group.ANY, puck_pos),
 				SlotSpec.make(AIRoleSlots.Slot.DBACK_L, Group.D,
-						Vector3(-_DBACK_X_M, 0.0, our_blue_z), 3),
+						Vector3(-_DBACK_X_M, 0.0, our_blue_z), _side_home_d(-1.0, own_goal_z)),
 				SlotSpec.make(AIRoleSlots.Slot.DBACK_R, Group.D,
-						Vector3(_DBACK_X_M, 0.0, our_blue_z), 4),
+						Vector3(_DBACK_X_M, 0.0, our_blue_z), _side_home_d(1.0, own_goal_z)),
 				SlotSpec.make(AIRoleSlots.Slot.FLANK_L, Group.F,
 						Vector3(puck_pos.x - _FLANK_SPREAD_M, 0.0,
-								puck_pos.z + own_dir * _FLANK_TRAIL_M), 1),
+								puck_pos.z + own_dir * _FLANK_TRAIL_M),
+						_side_home_f(-1.0, own_goal_z)),
 				SlotSpec.make(AIRoleSlots.Slot.FLANK_R, Group.F,
 						Vector3(puck_pos.x + _FLANK_SPREAD_M, 0.0,
-								puck_pos.z + own_dir * _FLANK_TRAIL_M), 2),
+								puck_pos.z + own_dir * _FLANK_TRAIL_M),
+						_side_home_f(1.0, own_goal_z)),
 			]
 
 	var empty: Array[SlotSpec] = []
@@ -432,13 +436,13 @@ static func _breakout_post_specs(own_goal_z: float, own_dir: float,
 				Vector3(0.0, 0.0, own_goal_z - own_dir * 1.0)),
 		SlotSpec.make(AIRoleSlots.Slot.BREAKOUT_STRONG, Group.F,
 				Vector3(strong_x * (half_w - 2.0), 0.0, our_blue_z),
-				_side_home_f(strong_x)),
+				_side_home_f(strong_x, own_goal_z)),
 		SlotSpec.make(AIRoleSlots.Slot.BREAKOUT_C, Group.F,
 				Vector3(0.0, 0.0, own_goal_z - own_dir * _BREAKOUT_SWING_DEPTH_M),
 				0),
 		SlotSpec.make(AIRoleSlots.Slot.BREAKOUT_STRETCH, Group.F,
 				Vector3(-strong_x * (half_w - _STRETCH_WALL_INSET_M), 0.0, 0.0),
-				_side_home_f(-strong_x)),
+				_side_home_f(-strong_x, own_goal_z)),
 	]
 
 
@@ -454,16 +458,15 @@ static func _rush_axis(our_net: Vector3, puck_pos: Vector3) -> Vector3:
 	return Vector3(dx / d, 0.0, dz / d)
 
 
-# Home identity for a side-signed D slot: LD (lobby slot 3) rests on the -X
-# side, RD (4) on +X. World X is side-stable for both teams (the lobby grid
-# and FACEOFF_OFFSETS put the L slots at -X regardless of attack direction).
-static func _side_home_d(side_x: float) -> int:
-	return 3 if side_x < 0.0 else 4
+# Home identity for a side-signed D slot: the lobby D (LD 3 / RD 4) whose home
+# side (PlayerRules.home_side_x) is the slot's world-X side.
+static func _side_home_d(side_x: float, own_goal_z: float) -> int:
+	return 3 if side_x * PlayerRules.home_side_x(3, own_goal_z) > 0.0 else 4
 
 
-# Same for the side-signed F wall slots: LW (1) rests -X, RW (2) +X.
-static func _side_home_f(side_x: float) -> int:
-	return 1 if side_x < 0.0 else 2
+# Same for the side-signed F wall slots: LW (1) / RW (2).
+static func _side_home_f(side_x: float, own_goal_z: float) -> int:
+	return 1 if side_x * PlayerRules.home_side_x(1, own_goal_z) > 0.0 else 2
 
 
 # ── Election ─────────────────────────────────────────────────────────────────

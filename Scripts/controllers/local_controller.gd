@@ -831,6 +831,9 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_held: bool) -> void:
 		var d: Vector3 = opos - skater.global_position
 		d.y = 0.0
 		var dist: float = d.length()
+		# Exactly the resolver's own no-overlap test, so a skip changes nothing.
+		if dist >= skater.collision_radius() + other.collision_radius():
+			continue
 		var n: Vector3 = Vector3(1.0, 0.0, 0.0) if dist < 0.0001 else d / dist
 		# Aggressor gate from the local player's perspective — identical rule to the
 		# live resolver (sum of velocities along the axis, tie-broken by the stable id).

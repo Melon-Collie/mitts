@@ -620,8 +620,11 @@ static var _depth_cfg_planning: GoalieDepthSolver.Constraints = _build_planning_
 static var _planning_ceiling: float = 1.75
 static var _rush_cfg_planning: GoalieBehaviorRules.RushRetreatConfig = _build_planning_rush_cfg()
 # Closing speed below which the live keeper keeps his challenge instead of
-# backing in (`rush_min_closing_speed` export default) — a stalled or lateral
-# carrier does not retreat him.
+# backing in (`rush_min_closing_speed` export default) — a stalled carrier does
+# not retreat him. The live keeper also holds the backflow for a carrier CROSSING
+# him, and for the one who backed him in once he stops inside the hash marks; the
+# planner sees neither, but both keep him near the depth the drive left him at,
+# which is what this retreat-only read holds when closing is low.
 const GOALIE_RUSH_MIN_CLOSING_M_S: float = 1.5
 # Skating speed in and out of the crease (`depth_max_speed` export default) —
 # the rate cap on ordinary chart depth changes. A genuine rush retreat is
@@ -1087,8 +1090,8 @@ const SHED_ACCEL_DEFAULT_M_S2: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
 # CONSTANT-HAZARD process — at each instant a fixed probability the read stops
 # holding — so it is exactly geometric, exp(-t / τ). It is NOT a shaped curve; the
 # ONLY free parameter is the hazard timescale τ = READ_VALIDITY_TAU_S, the mean
-# time a read stays roughly valid. (A per-second form like pow(0.8, t) is the same
-# model written opaquely: 0.8/s is exp(-1/4.5 s). Prefer the τ form — it names the
+# time a read stays roughly valid. (A per-second form like pow(0.85, t) is the same
+# model written opaquely: 0.85/s ≈ exp(-1/6 s). Prefer the τ form — it names the
 # physical quantity.)
 #
 # τ is an honest AGGREGATE, not a derived quantity: plausible physical
@@ -1102,10 +1105,11 @@ const SHED_ACCEL_DEFAULT_M_S2: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
 #
 # Calibration caveat (from the value sweep): the unit suite guards the IMPATIENT
 # edge (breakouts / developing feeds / walkouts start failing below ~0.7/s ↔
-# τ ≈ 2.8 s). The PATIENT edge is pinned at the parameter level by
-# test_delay_discount_bounds_patience (patience can't be cranked to "the future
-# is free") — but whether a longer τ PLAYS better is a feel judgment, a playtest
-# call the suite can't settle.
+# τ ≈ 2.8 s); test_delay_discount_bounds_patience bounds the PATIENT one (τ < ~6.3
+# s). Inside that band whether a longer τ PLAYS better is a playtest call. Every
+# future-valued score grows with τ against ABSOLUTE giveaway bars, so a longer τ
+# also lets settle doubt hold fewer marginal releases (test_role_carrier's
+# settle-doubt outlet is sized for the current value).
 #
 # ACTION_HYSTERESIS_MARGIN_FRAC — once a fire intent is set, that intent's
 # (positive) score is scaled by (1 + this) when re-scored, so a challenger must
@@ -1123,10 +1127,9 @@ const SHED_ACCEL_DEFAULT_M_S2: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
 # PASS), so the bot may switch to fire the moment fire scores higher. Raise toward
 # 0.30 if intent flickers visibly; lower toward 0.05 if it feels too sticky.
 # Mean seconds a tactical read stays roughly valid (the hazard timescale above).
-# τ ≈ 4.5 s ↔ a ~0.80 per-second discount — the patient end of the range, favouring
-# developing plays. See the sweep caveat above: this side is judged by feel, not by
-# the suite.
-const READ_VALIDITY_TAU_S: float = 4.5
+# τ = 6 s ↔ a ~0.85 per-second discount — near the patience ceiling (see the
+# caveat above), favouring developing plays.
+const READ_VALIDITY_TAU_S: float = 6.0
 const ACTION_HYSTERESIS_MARGIN_FRAC: float = 0.15
 
 
@@ -4240,8 +4243,8 @@ static func _segment_crosses_aabb_xz(
 # than by aiming at a hand-placed target and pricing the concession there.
 #
 # The two dumps want opposite things and are scored separately:
-#   DZ CLEAR — get it out, and do not ice it. Hybrid icing is a race timed from
-#     the goal-line crossing, so a delivery that never reaches the line cannot
+#   DZ CLEAR — get it out, and do not ice it. Hybrid icing is a race that starts
+#     at the goal-line crossing, so a delivery that never reaches the line cannot
 #     be iced at all; a steep bank into the near boards buys that, because the
 #     contact sheds 37-60% where a glancing rim sheds ~5% AND the carom bends
 #     the path. Legality is bought by the PATH, which matters because the

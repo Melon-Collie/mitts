@@ -1287,8 +1287,11 @@ func test_staggered_carrier_holds_instead_of_firing() -> void:
 
 # The same pressured breakout, with the outlet in two different situations. Both
 # are legal passes that fire on tick one with no doubt; the strong one is worth
-# ~8x PASS_MIN_VALUE, the weak one ~1.9x. The weak outlet is still sliding into
-# the far corner, so his drive up the wall has to brake that out first.
+# ~11x PASS_MIN_VALUE, the weak one ~1.9x — inside the 1x-2.5x window Normal's
+# doubt holds. The weak outlet is still sliding into the far corner, so his drive
+# up the wall has to brake that out first. Both values are future value and so
+# scale with READ_VALIDITY_TAU_S against a fixed bar: re-size the weak one's depth
+# when that moves, never its slide (past 6 m/s the lane dies outright).
 func _settle_skaters(self_pos: Vector3, outlet: Vector3) -> Array:
 	var outlet_vel: Vector3 = _MARGINAL_OUTLET_VEL if outlet == _MARGINAL_OUTLET \
 			else Vector3.ZERO
@@ -1301,7 +1304,7 @@ func _settle_skaters(self_pos: Vector3, outlet: Vector3) -> Array:
 
 
 const _STRONG_OUTLET := Vector3(11, 0, 11)    # open, up the strong wall
-const _MARGINAL_OUTLET := Vector3(13, 0, 23)  # deep in the far corner
+const _MARGINAL_OUTLET := Vector3(13, 0, 24.5)  # deep in the far corner
 const _MARGINAL_OUTLET_VEL := Vector3(0, 0, 6.0)   # …and still sliding into it
 
 
@@ -2255,6 +2258,34 @@ func test_no_dump_in_own_side_neutral_zone() -> void:
 	c.decide(_make_ctx(self_pos, skaters))
 	assert_ne(c.intended_action, AIRoleCarrier.INTENT_DUMP,
 			"no dump from the own-side neutral zone")
+
+
+# ─── NHL icing and delayed offside ────────────────────────────────────────────
+
+func test_delayed_offside_closes_the_zone_to_the_carry() -> void:
+	var self_pos := Vector3(0, 0, -5)  # neutral ice, attacking -Z
+	var ctx := _make_ctx(self_pos)
+	var c := AIRoleCarrier.new()
+	c._build_action_opponents_lists(ctx)
+	var goalie: Vector3 = AIRoleHelpers.resolve_our_goalie_pos(ctx)
+	var in_zone := Vector3(0, 0, -9)
+	assert_gt(c._score_move_candidate_base(ctx, in_zone, goalie), -INF,
+			"an open entry is a candidate")
+	ctx.zone_entry_blocked = true
+	assert_eq(c._score_move_candidate_base(ctx, in_zone, goalie), -INF,
+			"with a teammate owing a tag-up, carrying in would be whistled")
+
+
+func test_delayed_offside_takes_the_dump_in_off_the_table() -> void:
+	var self_pos := Vector3(2, 0, -4)
+	var ctx: RoleContext = _make_ctx(self_pos, [
+			[1, TEAM_ID, self_pos],
+			[3, 1, Vector3(2, 0, -5)]])
+	ctx.zone_entry_blocked = true
+	var c := AIRoleCarrier.new()
+	c._build_action_opponents_lists(ctx)
+	var dump: Array = c._best_dump(ctx, AIRoleHelpers.resolve_our_goalie_pos(ctx))
+	assert_eq(dump[0], -INF, "a dumped puck nobody may touch is no dump-in")
 
 
 func test_no_dump_once_in_the_offensive_zone() -> void:
@@ -3425,7 +3456,27 @@ func test_a_blocked_breakout_lane_is_rimmed_round_the_boards() -> void:
 	assert_ne(c._phase_best_pass_rim_dir, Vector3.ZERO,
 			"...by the boards, not through the forechecker")
 	assert_gt(c._phase_best_pass_rim_pace, AIActionScoring.PASS_SPEED_M_S,
-			"a rim is fired hard — the corner bleeds pace")
+			"a rim needs more than quick-pass pace — the corner bleeds it")
+
+
+func test_a_rim_is_fired_as_soft_as_the_race_allows() -> void:
+	var ctx := _rim_breakout_ctx(true)
+	var c := AIRoleCarrier.new()
+	c._pick_fire_phase(ctx)
+	var best: float = 0.0
+	for k: int in AIRimPass.count:
+		best = maxf(best, c._rim_sure_by_k[k])
+	var softest: float = INF
+	var hardest: float = 0.0
+	for k: int in AIRimPass.count:
+		if c._rim_sure_by_k[k] >= best * AIRoleCarrier.RIM_SOFT_SHARE:
+			softest = minf(softest, AIRimPass.paces[k])
+			hardest = maxf(hardest, AIRimPass.paces[k])
+	gut.p("  rim fired at %.1f m/s (near-best band %.1f..%.1f)"
+			% [c._phase_best_pass_rim_pace, softest, hardest])
+	assert_gt(best, 0.0, "some rim reaches the winger")
+	assert_eq(c._phase_best_pass_rim_pace, softest,
+			"the softest launch nearly as sure as the best is the one fired")
 
 
 func test_a_rim_commits_as_a_flat_charged_release_along_its_bearing() -> void:

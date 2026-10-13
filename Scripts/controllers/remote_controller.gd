@@ -146,17 +146,21 @@ func _physics_process(delta: float) -> void:
 #  - Host-simulating this client's real inputs (_is_host): it has a live cursor
 #    aim and apply_facing already wrote the leg-yaw, so head-track like a local.
 #  - Client-rendering an interpolated remote: no cursor aim (skip head), and
-#    apply_facing never ran, so mirror the gait's leg-yaw channels here.
+#    apply_facing never ran, so mirror the gait's leg-yaw channels here — every
+#    frame, since the gait reads LowerBody back.
 func _render_pose_update(delta: float) -> void:
 	if skater == null or _self_posing:
 		return
 	_skating.apply(delta)
 	_apply_knockdown_fall()
-	if _is_host:
-		_pose.apply_head_tracking_aim(_current_aim_world, delta)
-	else:
+	if not _is_host:
 		skater.set_lower_body_lag(
 				_skating.stop_yaw_offset + _skating.travel_align_yaw + _skating.shot_hip_yaw)
+	# The head and the off hand are mesh (Skater.on_camera).
+	if not skater.on_camera():
+		return
+	if _is_host:
+		_pose.apply_head_tracking_aim(_current_aim_world, delta)
 	if _celebration_timer <= 0.0:
 		_ik.update_bottom_hand()
 
@@ -461,6 +465,18 @@ func sample_state_at(host_time: float) -> SkaterNetworkState:
 const _SAMPLE_PREDICT_MAX_S: float = 0.15
 
 
+# The last projection `_predict_sample_forward` made: the snapshot and config it
+# ran from, how many ticks it covered, and where it ended. A reconcile replay asks
+# for the same snapshot one tick further per replayed input, so the next request
+# resumes here instead of re-integrating from the snapshot. Holding the snapshot
+# keeps it alive, so identity cannot alias a newer one.
+var _fwd_from: SkaterNetworkState = null
+var _fwd_cfg: SkaterMovementRules.MovementConfig = null
+var _fwd_ticks: int = 0
+var _fwd_position: Vector3 = Vector3.ZERO
+var _fwd_velocity: Vector3 = Vector3.ZERO
+
+
 # Advances `_sample_scratch` from `newest` by `dt` using the shared movement
 # integration — the same primitive/decay/has_puck=false convention as
 # `_interpolate`'s stage-3 lead and `LagCompRewind.forward_predict_skater`, so all
@@ -474,27 +490,41 @@ func _predict_sample_forward(newest: SkaterNetworkState, dt: float) -> void:
 	var ticks: int = roundi(dt * float(Constants.PHYSICS_TICK))
 	if ticks <= 0:
 		return
+	var cfg: SkaterMovementRules.MovementConfig = _movement_config()
+	var first_tick: int = 0
+	var pos: Vector3 = newest.position
+	var vel: Vector3 = newest.velocity
+	if newest == _fwd_from and cfg == _fwd_cfg and _fwd_ticks <= ticks:
+		first_tick = _fwd_ticks
+		pos = _fwd_position
+		vel = _fwd_velocity
 	var heading: float = atan2(newest.facing.x, newest.facing.y)
 	var nm: RefCounted = native_movement()
 	if nm != null:
 		nm.integrate_forward(
-				newest.position, newest.velocity, newest.move_intent,
+				pos, vel, newest.move_intent,
 				heading, false, newest.brake_intent,
 				SkaterMovementRules.posture_of(newest.stance_active, newest.hit_committed),
-				1.0 / float(Constants.PHYSICS_TICK), ticks,
-				Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, newest.stagger_timer, true)
+				1.0 / float(Constants.PHYSICS_TICK), ticks - first_tick,
+				Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, newest.stagger_timer, true,
+				first_tick)
 		_sample_scratch.position = nm.get_forward_position()
 		_sample_scratch.velocity = nm.get_forward_velocity()
 	else:
 		SkaterMovementRules.integrate_forward(
-				newest.position, newest.velocity, newest.move_intent,
+				pos, vel, newest.move_intent,
 				heading, false, newest.brake_intent,
 				SkaterMovementRules.posture_of(newest.stance_active, newest.hit_committed),
-				_movement_config(), 1.0 / float(Constants.PHYSICS_TICK), ticks,
+				cfg, 1.0 / float(Constants.PHYSICS_TICK), ticks - first_tick,
 				Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, _fp_result,
-				newest.stagger_timer, _body_check_config())
+				newest.stagger_timer, _body_check_config(), first_tick)
 		_sample_scratch.position = _fp_result.position
 		_sample_scratch.velocity = _fp_result.velocity
+	_fwd_from = newest
+	_fwd_cfg = cfg
+	_fwd_ticks = ticks
+	_fwd_position = _sample_scratch.position
+	_fwd_velocity = _sample_scratch.velocity
 
 func _interpolate(delta: float) -> void:
 	# Shared delay (NetworkManager) keeps the goalie and other remotes on the same

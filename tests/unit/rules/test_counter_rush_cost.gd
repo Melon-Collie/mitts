@@ -10,6 +10,8 @@ const OUR_NET := Vector3(0.0, 0.0, NET_Z)
 const OUR_GOALIE := Vector3(0.0, 0.0, NET_Z - 0.6)
 # A loss deep in the offensive zone.
 const LOSS_POINT := Vector3(6.0, 0.0, -20.0)
+# How much sooner a stretch outlet must bring the counter home to count as one.
+const STRETCH_LEAD_S: float = 0.5
 
 
 func _cost(teammates: Array[Vector3], self_pos: Vector3,
@@ -113,5 +115,9 @@ func test_stretch_outlet_makes_the_deep_loss_dearer() -> void:
 	var partner: Array[Vector3] = [Vector3(-4.0, 0.0, -2.0)]
 	var with_stretch: float = _cost(partner, d1_deep, opponents_stretch)
 	var with_trailer: float = _cost(partner, d1_deep, opponents_trailer)
-	assert_gt(with_stretch, with_trailer * 1.15,
-			"a live stretch outlet raises the deep carry's price")
+	# Same covering set either way, so the whole difference is the CLOCK: the
+	# stretch counter must be at least half a second sooner (it measures ~0.83 s).
+	# Stated in time, not as a cost ratio, because the ratio is exp(dt / tau) and
+	# moves with READ_VALIDITY_TAU_S while the behavior does not.
+	assert_gt(with_stretch * AIActionScoring.delay_discount(STRETCH_LEAD_S),
+			with_trailer, "a live stretch outlet raises the deep carry's price")

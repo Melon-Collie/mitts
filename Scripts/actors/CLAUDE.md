@@ -20,6 +20,8 @@ delegates to.
 | `_uniform` | `SkaterUniformCoordinator` | the paint |
 | `_hud` | `SkaterHUDCoordinator` | the world HUD (ring, plate, chevrons, beacon) |
 | `_appearance` | `SkaterAppearanceCoordinator` | per-attribute visual scaling |
+| `_shadow` | `SkaterShadowProxy` | the figure's shadow: one shadow-only surface on the body skeleton, cast in place of the ~38 surfaces of the two rig meshes |
+| `_anim_lod` | `SkaterAnimationLod` | how often the mesh is re-posed, by camera distance and the Animation Detail setting |
 
 ## The seam
 
@@ -205,6 +207,10 @@ Six rules the rigs sit inside, all easy to break from in here:
   (`Skater.on_camera`, `SkaterCameraCull`'s sphere against the frustum) skips the leg, trunk and
   sprawl writes, the head, the off hand and the spine/arm/stick rebuild — about
   two thirds of his render pass — and rebuilds on the first frame he is drawn.
+  A frame his animation LOD thins (`SkaterAnimationLod`, far from the camera at
+  a lower Animation Detail) is off camera in exactly this sense, so it inherits
+  the same guarantee; the plant's ease is then charged the whole span since the
+  last pass (`SkaterAnimationLod.span`), not one frame.
   The gait itself still computes, because a held pose's crouch moves the
   gameplay frame: whether the host can see a blocker must not move his hands.
   `test_off_camera_culling.gd` holds that, and `ClipFrameCapture` turns culling

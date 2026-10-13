@@ -855,17 +855,32 @@ static func reachable_lateral_distance(max_speed: float, accel: float, t: float)
 # Travel time from rest over `dist` with an accel ramp to `max_speed` — the
 # inverse of reachable_lateral_distance, for the skate out/back legs.
 static func travel_time_from_rest(dist: float, max_speed: float, accel: float) -> float:
+	return travel_time_from_speed(dist, 0.0, max_speed, accel)
+
+
+# Travel time over `dist` for a body already moving at `speed_toward` along it
+# (negative = moving away, which costs the stop first), ramping at `accel` to
+# `max_speed`.
+static func travel_time_from_speed(dist: float, speed_toward: float, max_speed: float,
+		accel: float) -> float:
 	if dist <= 0.0:
 		return 0.0
 	if max_speed <= 0.0:
 		return INF
+	var v: float = minf(speed_toward, max_speed)
 	if accel <= 0.0:
-		return dist / max_speed
-	var t_ramp: float = max_speed / accel
-	var d_ramp: float = 0.5 * accel * t_ramp * t_ramp
-	if dist <= d_ramp:
-		return sqrt(2.0 * dist / accel)
-	return t_ramp + (dist - d_ramp) / max_speed
+		return dist / max_speed if v >= max_speed or v <= 0.0 else dist / v
+	var t: float = 0.0
+	var d: float = dist
+	if v < 0.0:
+		t = -v / accel
+		d += v * v / (2.0 * accel)
+		v = 0.0
+	var t_ramp: float = (max_speed - v) / accel
+	var d_ramp: float = v * t_ramp + 0.5 * accel * t_ramp * t_ramp
+	if d <= d_ramp:
+		return t + (sqrt(v * v + 2.0 * accel * d) - v) / accel
+	return t + t_ramp + (d - d_ramp) / max_speed
 
 
 # Soonest a defender `dist` from a body can get a stick on him, starting FROM

@@ -31,6 +31,25 @@ static func is_defense_slot(team_slot: int) -> bool:
 	return team_slot >= FIRST_DEFENSE_SLOT
 
 
+# The world-X side a position plays: -1, +1, or 0 for the center. Left and right
+# are the player's own, facing the net he attacks, so the two ends mirror: the
+# team defending +Z faces -Z and has its left on -X; the team defending -Z has
+# its left on +X. `own_goal_z` only contributes its sign.
+static func home_side_x(team_slot: int, own_goal_z: float) -> float:
+	match team_slot:
+		1, 3:
+			return -signf(own_goal_z)
+		2, 4:
+			return signf(own_goal_z)
+		_:
+			return 0.0
+
+
+# Team 0 defends +Z, team 1 −Z (the team-side convention faceoff_facing documents).
+static func own_goal_dir(team_id: int) -> float:
+	return 1.0 if team_id == 0 else -1.0
+
+
 # The lobby slot a player's preferred position (a POSITION_NAMES index) maps
 # to at a given team size. 5v5 seats the position directly; 3v3 fields no D
 # slots, so the wing/defense pairs merge onto their side — LW and LD hold the
@@ -96,20 +115,16 @@ static func faceoff_position(team_id: int, team_slot: int,
 
 
 # The D pair's end-zone draw placement (see the FACEOFF_END_* doc in
-# GameRules). "Strong" is the D whose identity side (the sign of his legacy
-# table offset — LD −x, RD +x, both teams) matches the dot's side of the ice,
-# so the pair never crosses over: DEFENDING, the strong D holds the WALL
-# (boards, level with the dot) and the weak D takes the inside spot of the
-# goal-side STACK; ATTACKING, the strong D points up directly above the dot
+# GameRules). "Strong" is the D whose home side (home_side_x) matches the dot's
+# side of the ice, so the pair never crosses over: DEFENDING, the strong D holds
+# the WALL (boards, level with the dot) and the weak D takes the inside spot of
+# the goal-side STACK; ATTACKING, the strong D points up directly above the dot
 # just inside the blue line and the weak D takes the middle of the line.
 static func _end_zone_d_position(team_id: int, team_slot: int,
 		dot_xz: Vector2) -> Vector3:
-	# Own-net direction: team 0 defends +Z, team 1 −Z (the team-side
-	# convention faceoff_facing documents).
-	var own_dir: float = 1.0 if team_id == 0 else -1.0
+	var own_dir: float = own_goal_dir(team_id)
 	var boards: float = signf(dot_xz.x)
-	var identity: float = signf(GameRules.FACEOFF_OFFSETS[team_id][team_slot].x)
-	var strong: bool = identity == boards
+	var strong: bool = home_side_x(team_slot, own_dir) == boards
 	if signf(dot_xz.y) == own_dir:
 		# Defensive-zone draw: wall-and-stack.
 		if strong:
@@ -138,11 +153,11 @@ static func _end_zone_d_position(team_id: int, team_slot: int,
 # wingers hold the hash marks) and the inside winger.
 static func _end_zone_stack_winger_position(team_id: int, team_slot: int,
 		dot_xz: Vector2) -> Vector3:
-	var own_dir: float = 1.0 if team_id == 0 else -1.0
+	var own_dir: float = own_goal_dir(team_id)
 	if signf(dot_xz.y) != own_dir:
 		return Vector3.INF
 	var boards: float = signf(dot_xz.x)
-	if signf(GameRules.FACEOFF_OFFSETS[team_id][team_slot].x) != boards:
+	if home_side_x(team_slot, own_dir) != boards:
 		return Vector3.INF
 	return Vector3(
 			dot_xz.x + boards * GameRules.FACEOFF_END_STACK_HALF_SEP_M,
@@ -210,8 +225,7 @@ static func faceoff_staging_position(target: Vector3, dot_xz: Vector2, team_id: 
 
 # Glide time for a skater covering `distance` metres to its dot at the target
 # skate pace, clamped to [min_dur, max_dur]. A close player skates in briefly
-# and settles; a far one takes the full window. max_dur is set by the caller
-# from the extended prep window so everyone arrives before the drop.
+# and settles; a far one is capped at the caller's longest glide.
 static func skate_in_duration(distance: float, min_dur: float, max_dur: float) -> float:
 	var raw: float = distance / maxf(GameRules.FACEOFF_SKATE_IN_SPEED, 0.01)
 	return clampf(raw, min_dur, max_dur)
