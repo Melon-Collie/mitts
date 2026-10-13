@@ -185,7 +185,7 @@ const _GLOVE_FIST_STATIONS: Array[Vector3] = [
 # skater side (_update_cuff_transform / _update_stick_knob offset along the
 # bone by half the height), so they live here with the geometry they measure.
 const _ARM_TAPER: float = 0.88   # distal end radius fraction (top of mesh = proximal)
-const CUFF_HEIGHT_M: float = 0.10
+const CUFF_HEIGHT_M: float = 0.08
 const KNOB_HEIGHT_M: float = 0.05
 const _KNOB_TOP_RADIUS: float = 0.035
 const _KNOB_BOTTOM_RADIUS: float = 0.03
@@ -757,16 +757,21 @@ static func _fist_loop_center(loop: PackedVector3Array) -> Vector3:
 	return Vector3(0.0, loop[0].y, 0.0)
 
 
-# Glove cuff: a gauntlet, unit radius at the wrist (−Y, the hand end) flaring
-# open toward the elbow, CUFF_HEIGHT_M tall (real height baked — the cuff's
-# along-bone placement offsets by it, only the radius scales).
-const _CUFF_FLARE: float = 1.3
+# Glove cuff: the fist's chamfered box section, posed in the fist's frame. x/z
+# are multiples of the cuff radius; its height is real (CUFF_HEIGHT_M), since the
+# along-bone placement offsets by it.
+const _CUFF_STATIONS: Array[Vector3] = [
+	Vector3(0.5, 0.94, 0.86),    # open end, toward the elbow
+	Vector3(-0.5, 0.88, 0.80),   # wrist end, against the back of the fist
+]
 static func shared_cuff() -> ArrayMesh:
 	return _shared("cuff", func() -> ArrayMesh:
-		var h: float = CUFF_HEIGHT_M * 0.5
-		var profile: Array[Vector2] = [
-			Vector2(h, _CUFF_FLARE), Vector2(-h * 0.3, 1.08), Vector2(-h, 1.0)]
-		return _build_lathe(profile, _LEG_SIDES, 1.0, 1.0))
+		var loops: Array[PackedVector3Array] = []
+		for c: Vector3 in _CUFF_STATIONS:
+			loops.append(_octagon_loop(c.x * CUFF_HEIGHT_M, c.y, c.z, 0.6, 0.55))
+		var m := ArrayMesh.new()
+		_commit_sweep_segment(m, loops, 0, loops.size() - 1, _fist_loop_center)
+		return m)
 
 
 # Butt-end knob at its real dimensions (never rescaled).

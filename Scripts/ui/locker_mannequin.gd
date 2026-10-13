@@ -65,7 +65,7 @@ const _ELBOW_RADIUS: float = 0.082
 const _HAND_RADIUS: float = 0.064
 const _CUFF_RADIUS: float = 0.065
 # How far up the forearm the cuff ring sits from the fist's center.
-const _CUFF_OFFSET_M: float = 0.095
+const _CUFF_OFFSET_M: float = 0.085
 # Arm segments at the rig's own lengths (Skater.upper_arm_length /
 # forearm_length), NOT derived from how far the grip happens to be: the two
 # hands sit at very different distances from their shoulders, so a
