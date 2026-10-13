@@ -4,8 +4,8 @@ extends GutTest
 # slides along the wall and reverses when its pinner commits to following; a
 # pinning bot holds the commit only while the pin is worth it — support that
 # beats theirs, or its own end to kill the play, never as the last man back — and
-# mirrors the slide through the network lag; a carrier at the wall braces against
-# a committed checker closing square.
+# mirrors the slide through the network lag; a carrier at the wall gets out of a
+# committed checker's line when it can beat him there, and braces when it can't.
 
 const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
 const Role = BoardPinRules.Role
@@ -162,10 +162,26 @@ func _carrier_snap(checker_vel: Vector3, committed: bool) -> WorldSnapshot:
 	return s
 
 
-func test_a_carrier_at_the_wall_braces_against_a_committed_checker_closing_square() -> void:
+func test_a_carrier_caught_by_a_fast_square_drive_braces() -> void:
 	var input := InputState.new()
 	sm.apply_board_play(input, _carrier_snap(Vector3(4.0, 0.0, 0.0), true))
-	assert_true(input.hit_held, "braced, he can be hit but not pinned")
+	assert_true(input.hit_held, "no time to get out: braced, he can be hit but not pinned")
+
+
+func test_a_carrier_with_time_skates_out_of_a_slow_drive_instead() -> void:
+	var input := InputState.new()
+	sm.apply_board_play(input, _carrier_snap(Vector3(0.5, 0.0, 0.0), true))
+	assert_false(input.hit_held, "bracing costs the legs; he doesn't pay it")
+	assert_almost_eq(absf(input.move_vector.y), 1.0, 1e-5, "along the wall, out of the line")
+
+
+func test_a_carrier_already_moving_along_the_wall_keeps_going_out_of_it() -> void:
+	var s: WorldSnapshot = _carrier_snap(Vector3(4.0, 0.0, 0.0), true)
+	s.skater_states[SELF_ID].velocity = Vector3(0.0, 0.0, 3.0)
+	var input := InputState.new()
+	sm.apply_board_play(input, s)
+	assert_false(input.hit_held, "his speed along the wall beats the drive")
+	assert_gt(input.move_vector.y, 0.9, "the way he was already going")
 
 
 func test_no_brace_against_an_uncommitted_or_glancing_checker() -> void:

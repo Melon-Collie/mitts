@@ -442,8 +442,13 @@ lever.
 - **Pinned.** Reverse when the pinner commits to the slide (its along-wall velocity
   matches the bot's own). It is a deterministic read of the pinner, not a timer or
   RNG.
-- **Bracing.** A carrier bot at the wall braces when a committed checker is closing
-  square on it. It is gated per difficulty, like the other physical verbs.
+- **Bracing is the last resort.** A carrier bot at the wall with a committed checker
+  coming square first tries to get out of his line along the wall. It braces only
+  when that can't beat him there (`AIPinThreatRead`: time to contact against the
+  time to slide past the offset where his hit stops being square). Read through
+  the tier's perception delay, a fast square drive catches it still thinking it
+  has time, and a slow approach gives it time to leave. It is gated per
+  difficulty, like the other physical verbs.
 
 ### Pose
 `GaitPinLayer` for both players: victim chest to the glass, pinner driving a shoulder

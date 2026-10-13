@@ -4,11 +4,11 @@ extends RefCounted
 const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 # Board play: how hard a pinner keeps driving into the wall against how hard he
 # slides (unit-free weights of one move vector), the offset at which his slide is
-# full, how close a committed checker has to be before a carrier braces, and the
-# least time between a pinned bot's reversals (one must land before the next).
+# full, how close a committed checker has to be before a carrier answers him, and
+# the least time between a pinned bot's reversals (one must land before the next).
 const PIN_MIRROR_DRIVE: float = 0.7
 const PIN_MIRROR_GAIN_M: float = 0.3
-const PIN_BRACE_RANGE_M: float = 2.5
+const PIN_THREAT_RANGE_M: float = 2.5
 const PIN_REVERSAL_MIN_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 3 / 20   # ~150 ms
 
 # Per-bot AI state machine. SkaterAgent owns the InputState scratch buffer and
@@ -5419,8 +5419,9 @@ func _feed_is_coming_to(snapshot: WorldSnapshot, self_state: SkaterNetworkState)
 #   through the same network lag a human pinner reads it with.
 # - Locked as the pinned: slide along the wall, and reverse when the pinner commits
 #   to following — the juke that gets a body past his.
-# - Carrying at the wall with a committed checker closing square: brace (hold the
-#   commit), which cannot be pinned.
+# - Carrying at the wall with a committed checker coming square: get out of his
+#   line along the wall if that beats him there, else brace (hold the commit),
+#   which cannot be pinned (AIPinThreatRead).
 func apply_board_play(input: InputState, snapshot: WorldSnapshot) -> void:
 	if snapshot == null or snapshot.puck_state == null:
 		return
@@ -5444,8 +5445,8 @@ func apply_board_play(input: InputState, snapshot: WorldSnapshot) -> void:
 			return
 	_pin_follow = Vector3.INF
 	_pin_slide_sign = 0.0
-	if _state == State.CARRY and _protects_the_puck and _pin_threat_closing(snapshot, me):
-		input.hit_held = true
+	if _state == State.CARRY and _protects_the_puck:
+		_answer_pin_threat(input, snapshot, me)
 
 
 # The pinned man: the PINNED opponent nearest us, or -1.
@@ -5562,12 +5563,17 @@ func _nearest_opponent_state(snapshot: WorldSnapshot, me: SkaterNetworkState) ->
 	return best
 
 
-# A committed opponent closing on us square into the boards we are against.
-func _pin_threat_closing(snapshot: WorldSnapshot, me: SkaterNetworkState) -> bool:
+# The most urgent committed opponent coming square into the boards we are
+# against, answered: skate out of his line along the wall if that is done before
+# he arrives, else brace. Nothing when there is none.
+func _answer_pin_threat(input: InputState, snapshot: WorldSnapshot,
+		me: SkaterNetworkState) -> void:
 	var out: Vector2 = BoardPinRules.wall_normal(me.position, GameRules.OFFSIDE_LINE_SLACK,
 			BoardPinRules.PIN_WALL_RELEASE_M)
 	if out == Vector2.ZERO:
-		return false
+		return
+	var threat: SkaterNetworkState = null
+	var ttc: float = INF
 	for pid: int in snapshot.skater_states:
 		if _team_id_by_peer.get(pid, -1) == _team_id:
 			continue
@@ -5576,15 +5582,26 @@ func _pin_threat_closing(snapshot: WorldSnapshot, me: SkaterNetworkState) -> boo
 			continue
 		var to_me := Vector2(me.position.x - opp.position.x, me.position.z - opp.position.z)
 		var dist: float = to_me.length()
-		if dist > PIN_BRACE_RANGE_M or dist < 1e-4:
+		if dist > PIN_THREAT_RANGE_M or dist < 1e-4 \
+				or (to_me / dist).dot(out) < BoardPinRules.BACKSTOP_MIN_INTO_WALL:
 			continue
-		var dir: Vector2 = to_me / dist
-		var closing: float = Vector2(opp.velocity.x - me.velocity.x,
-				opp.velocity.z - me.velocity.z).dot(dir)
-		if closing >= BoardPinRules.PIN_DRIVE_MIN_M_S \
-				and dir.dot(out) >= BoardPinRules.BACKSTOP_MIN_INTO_WALL:
-			return true
-	return false
+		var t: float = AIPinThreatRead.time_to_contact(me.position, me.velocity,
+				opp.position, opp.velocity)
+		if threat == null or t < ttc:
+			threat = opp
+			ttc = t
+	if threat == null:
+		return
+	var along := Vector2(-out.y, out.x)
+	var offset: float = BoardPinRules.along_wall_offset(me.position, threat.position, out)
+	var along_vel: float = Vector2(me.velocity.x, me.velocity.z).dot(along)
+	var dir_sign: float = AIPinThreatRead.escape_sign(offset, along_vel)
+	var escape_s: float = AIPinThreatRead.escape_time(offset, along_vel, _chase_max_accel,
+			dir_sign)
+	if AIPinThreatRead.answer(ttc, escape_s) == AIPinThreatRead.Answer.ESCAPE:
+		input.move_vector = along * dir_sign
+	else:
+		input.hit_held = true
 
 
 # Shot blocks and the 2-on-1 dive (SkaterAgentShotBlock), every physics tick

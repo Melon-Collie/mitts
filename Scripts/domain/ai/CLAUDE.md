@@ -251,8 +251,14 @@ late by — so a bot is beaten by the same reversals a human would be. It rides 
 PACE physicality knob (`check_aggression`, zero on Easy), not a cognition gate. A
 pinned bot slides along the wall and reverses when its pinner commits to following
 (his along-wall speed our way past half our cap), no sooner than a reversal can
-land. A carrier at the wall braces (holds the commit) when a committed checker
-closes on him square into the boards — the `protects_the_puck` cognition gate.
+land. A carrier at the wall with a committed checker coming square answers him
+as coached, bracing last (`AIPinThreatRead`): he skates out of the checker's line
+along the wall if he gets past the offset where the hit stops being square before
+contact, and holds the commit only when he can't. Bracing costs the commit's grip
+and stride, so it is never free insurance. Read through the tier's perception
+delay, a fast square drive catches him still thinking he has time, and a slow
+approach — which used to pin a braced-on-sight bot at a crawl — gives him time to
+leave. The `protects_the_puck` cognition gate.
 
 **Any defender's extra is the shot block** (`AIShotBlockRead`, applied by
 `SkaterAgentShotBlock` every tick after dispatch). He drops into it when an
