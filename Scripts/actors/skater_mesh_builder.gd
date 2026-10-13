@@ -663,7 +663,7 @@ static func shared_upper_skin_mesh() -> ArrayMesh:
 	return _shared("upper_skin", func() -> ArrayMesh:
 		var m := ArrayMesh.new()
 		var bone: ArrayMesh = shared_arm_bone_z()
-		var ball: ArrayMesh = shared_joint_ball()
+		var ball: ArrayMesh = shared_elbow_pad()
 		var fist: ArrayMesh = shared_glove_fist()
 		var cuff: ArrayMesh = shared_cuff()
 		var helmet: ArrayMesh = shared_helmet_assembly()
@@ -740,6 +740,18 @@ static func _append_skinned_surface(target: ArrayMesh, src: ArrayMesh, bone: int
 static func shared_joint_ball() -> ArrayMesh:
 	return _shared("joint_ball", func() -> ArrayMesh:
 		return _build_ball(1.0, 8, 4, 1.0))
+
+
+# Elbow pad, unit radius: a ball drawn out to a cap at +Y, which the arm rig
+# points out of the bend (SkaterArmRig._pose_elbow) — the point a sleeve shows
+# over a hockey elbow pad.
+const _ELBOW_PAD_PROFILE: Array[Vector2] = [
+	Vector2(1.22, 0.32), Vector2(1.02, 0.78), Vector2(0.62, 1.0), Vector2(0.1, 1.02),
+	Vector2(-0.45, 0.9), Vector2(-0.82, 0.55), Vector2(-0.98, 0.18),
+]
+static func shared_elbow_pad() -> ArrayMesh:
+	return _shared("elbow_pad", func() -> ArrayMesh:
+		return _build_lathe(_ELBOW_PAD_PROFILE, _LEG_SIDES, 1.0, 1.0))
 
 
 # Gloved fist (see _GLOVE_FIST_STATIONS): the BACK of the hand on surface 0

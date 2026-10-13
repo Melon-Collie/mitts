@@ -221,7 +221,7 @@ func _build() -> void:
 		_boots.append(_part(SkaterMeshBuilder.shared_boot_assembly()))
 		_upper_arms.append(_part(SkaterMeshBuilder.shared_arm_bone()))
 		_forearms.append(_part(SkaterMeshBuilder.shared_arm_bone()))
-		_elbows.append(_part(SkaterMeshBuilder.shared_joint_ball()))
+		_elbows.append(_part(SkaterMeshBuilder.shared_elbow_pad()))
 		_hands.append(_part(SkaterMeshBuilder.shared_glove_fist()))
 		_cuffs.append(_part(SkaterMeshBuilder.shared_cuff()))
 
@@ -502,8 +502,12 @@ func _pose_arms(is_left_handed: bool, shoulder_x: float, shoulder_y: float,
 		var elbow: Vector3 = _solve_elbow(shoulder, hand, pole, upper, fore)
 		_seat_bone(_upper_arms[i], shoulder, elbow, _ARM_RADIUS * m_upper_arm)
 		_seat_bone(_forearms[i], elbow, hand, _ARM_RADIUS * m_forearm)
+		# The pad's point out of the bend, as the live rig poses it.
+		var out: Vector3 = TwoBoneIK.bend_direction(shoulder, hand, pole)
+		var along: Vector3 = (hand - shoulder).normalized()
+		var pad := Basis(along, out, along.cross(out)) if out != Vector3.ZERO else Basis.IDENTITY
 		_elbows[i].transform = Transform3D(
-				Basis.from_scale(Vector3.ONE * _ELBOW_RADIUS * m_upper_arm), elbow)
+				pad.scaled_local(Vector3.ONE * _ELBOW_RADIUS * m_upper_arm), elbow)
 		# The fist's local +Y runs back toward the elbow — the live rig's
 		# convention, so the block's faces track the forearm. Both this and the
 		# cuff scale their basis COLUMNS: Basis.scaled() would scale in the

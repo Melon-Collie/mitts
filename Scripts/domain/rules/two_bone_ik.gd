@@ -40,13 +40,23 @@ static func solve_elbow(
 	var h_sq: float = upper_len * upper_len - foot_t * foot_t
 	var h: float = sqrt(maxf(h_sq, 0.0))
 	var foot: Vector3 = shoulder + axis * foot_t
+	return foot + bend_direction(shoulder, hand, pole_world) * h
 
-	# Project pole onto plane perpendicular to axis.
+
+# The unit direction solve_elbow pushes the elbow off the shoulder→hand line:
+# the pole, squared to that line — which way the elbow's point faces. Zero when
+# the hand sits on the shoulder.
+static func bend_direction(shoulder: Vector3, hand: Vector3, pole_world: Vector3) -> Vector3:
+	var d_vec: Vector3 = hand - shoulder
+	var d: float = d_vec.length()
+	if d < 0.0001:
+		return Vector3.ZERO
+	var axis: Vector3 = d_vec / d
 	var pole_dir: Vector3 = pole_world - axis * pole_world.dot(axis)
 	if pole_dir.length() < 0.0001:
 		var fallback: Vector3 = Vector3.DOWN if absf(axis.y) < 0.9 else Vector3.FORWARD
 		pole_dir = fallback - axis * fallback.dot(axis)
-	return foot + pole_dir.normalized() * h
+	return pole_dir.normalized()
 
 
 # Where an arm roots once the shoulder girdle has given: a hand past `arm_len`

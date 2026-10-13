@@ -67,6 +67,9 @@ func _parts() -> Array[PartSpec]:
 				Vector3(0.21, 0.28, 0.21), false),
 		PartSpec.new("arm_bone", SkaterMeshBuilder.shared_arm_bone(),
 				Vector3(2.0, 1.0, 2.0), true),
+		# The elbow pad's cap runs past the unit ball on the side the bend faces.
+		PartSpec.new("elbow_pad", SkaterMeshBuilder.shared_elbow_pad(),
+				Vector3(2.05, 2.21, 2.05), true),
 		PartSpec.new("joint_ball", SkaterMeshBuilder.shared_joint_ball(),
 				Vector3(2.0, 2.0, 2.0), false),
 		PartSpec.new("glove_back", SkaterMeshBuilder.shared_glove_fist(),

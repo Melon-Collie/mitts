@@ -203,13 +203,13 @@ func _update_arm(arm: int, marker_local: Vector3, hand_local: Vector3, pole_sign
 	# posed in (the spine's, before the trunk texture rotates it).
 	_girdle[side_i] = _trunk_texture.transposed() \
 			* (spine.basis.inverse() * (shoulder_s - spine * _textured_shoulder(marker_local)))
+	var pole_s: Vector3 = spine.basis * _arm_pole(marker_local, pole_sign)
 	var elbow_s: Vector3 = TwoBoneIK.solve_elbow(shoulder_s, hand_s,
-			_skater.upper_arm_length, _skater.forearm_length,
-			spine.basis * _arm_pole(marker_local, pole_sign))
+			_skater.upper_arm_length, _skater.forearm_length, pole_s)
 	_pose_bone(upper, shoulder_s, elbow_s)
 	_pose_bone(forearm, elbow_s, hand_s)
 	_pose_cuff(cuff, elbow_s, hand_s)
-	_pose_ball(elbow_bone, elbow_s)
+	_pose_elbow(elbow_bone, shoulder_s, elbow_s, hand_s, pole_s)
 	_pose_glove(glove, elbow_s, hand_s)
 	_orient_shoulder_cap(marker_local, spine.affine_inverse() * shoulder_s,
 			spine.affine_inverse() * elbow_s)
@@ -356,8 +356,14 @@ func _pose_bone(part: int, a: Vector3, b: Vector3) -> void:
 			center))
 
 
-func _pose_ball(part: int, pos: Vector3) -> void:
-	_skeleton.set_bone_pose(part, Transform3D(Basis.IDENTITY.scaled(_thickness[part]), pos))
+# The elbow pad (SkaterMeshBuilder.shared_elbow_pad) points its +Y out of the
+# bend, the way the IK pushed the elbow, with its X along the arm.
+func _pose_elbow(part: int, shoulder: Vector3, elbow: Vector3, hand: Vector3,
+		pole: Vector3) -> void:
+	var out: Vector3 = TwoBoneIK.bend_direction(shoulder, hand, pole)
+	var along: Vector3 = (hand - shoulder).normalized()
+	var basis := Basis(along, out, along.cross(out)) if out != Vector3.ZERO else Basis.IDENTITY
+	_skeleton.set_bone_pose(part, Transform3D(basis.scaled_local(_thickness[part]), elbow))
 
 
 # Positions the gloved fist at the hand and aligns its long (local Y) axis with
