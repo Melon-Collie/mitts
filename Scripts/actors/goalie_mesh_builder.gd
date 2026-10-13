@@ -21,19 +21,28 @@ extends SkaterMeshBuilder
 # Body cross-section (replaces the 0.52 × 0.72 × 0.28 BoxMesh): flat back,
 # chamfered front. The block is torso THROUGH hips — standing, its bottom
 # (body y 1.22 − 0.36 = 0.86) sits exactly at pad-top level — so the one
-# solid is styled as BOTH garments: chest, a waist pinch, then a hip flare
-# back out to the full box for the pants bulk. The jersey shader paints the
-# band below the hip line as the kit's pants color (goalie_jersey.gdshader
-# pants_start), splitting the garments by color where the silhouette splits
-# them by shape. Stations are (y, width multiplier); depth is fixed.
+# solid is styled as BOTH garments: the chest protector's front stepped into
+# plates (a chest plate, then two belly segments, each break a facet edge the
+# light catches), the jersey hem flaring over the pants, and the pants bulk
+# below. The jersey shader paints from the hem's underside down as the kit's
+# pants color (goalie_jersey.gdshader pants_start), splitting the garments by
+# color where the silhouette splits them by shape.
+# Stations are (y, width multiplier, front-depth multiplier); the back depth is
+# fixed (see the class doc block).
 const _BODY_HALF_W: float = 0.26
 const _BODY_HALF_D: float = 0.14
-const _BODY_STATIONS: Array[Vector2] = [
-	Vector2(0.36, 1.0),     # shoulder line — chest-protector caps carry the widest read
-	Vector2(0.18, 0.98),    # chest
-	Vector2(-0.02, 0.93),   # waist pinch
-	Vector2(-0.16, 1.0),    # hip crest — pants bulk back out to the yoke's width
-	Vector2(-0.36, 0.97),
+const _BODY_STATIONS: Array[Vector3] = [
+	Vector3(0.36, 1.00, 0.90),     # collar line, the chest protector's top edge
+	Vector3(0.30, 1.00, 1.00),     # chest plate
+	Vector3(0.14, 0.98, 1.00),
+	Vector3(0.12, 0.97, 0.88),     # break
+	Vector3(0.04, 0.95, 0.97),     # belly segment
+	Vector3(0.02, 0.94, 0.86),     # break
+	Vector3(-0.08, 0.94, 0.95),    # belly segment
+	Vector3(-0.13, 0.97, 0.98),    # jersey hem, flared over the pants
+	Vector3(-0.158, 0.88, 0.84),   # pants waist, tucked under the hem
+	Vector3(-0.20, 1.00, 1.00),    # pants bulk
+	Vector3(-0.36, 0.97, 0.97),
 ]
 
 # Leg pad (replaces the 0.28 × 0.84 × 0.2 BoxMesh), sculpted inside that box: a
@@ -110,6 +119,23 @@ const _CAGE_TINT := Color(0.32, 0.32, 0.34)
 const _CAGE_HALF_ANGLE_DEG: float = 36.0
 const _CAGE_TOP_Y: float = 0.035     # brow line — cranium stays kit color
 const _CAGE_BOT_Y: float = -0.128    # excludes the chin-cap fan
+# The backplate: a real mask is two shells, the painted front and a plate
+# strapped over the back of the head. Tinting the rear facets darker draws the
+# seam between them, and from the top-down camera it is what says which way
+# the keeper is looking — the crown reads light in front, dark behind. Facets
+# whose centroid lies within this half-angle of the +Z back axis.
+const _BACKPLATE_HALF_ANGLE_DEG: float = 62.0
+const _BACKPLATE_TINT := Color(0.66, 0.66, 0.68)
+# Throat guard ("dangler"): a plate hanging from the chin in front of the neck
+# guard, which otherwise reads as a bare stick under the mask from the front.
+# Stations top→bottom in the mask's frame: (y, half-width, front −Z reach of
+# the plate's face). It tucks up behind the chin rim and hangs a touch forward.
+const _DANGLER_STATIONS: Array[Vector3] = [
+	Vector3(-0.100, 0.034, 0.104),
+	Vector3(-0.185, 0.032, 0.118),
+	Vector3(-0.205, 0.020, 0.118),
+]
+const _DANGLER_HALF_T: float = 0.006
 
 # NECK guard tube — a fixed-color child of the BODY mesh (created once by
 # apply_goalie; the uniform coordinator repaints only the meshes it owns),
@@ -148,6 +174,12 @@ const _GLOVE_POCKET_PROFILE: Array[Vector2] = [
 	Vector2(-0.040, 0.110),
 	Vector2(-0.055, 0.098),   # front lip, curling in behind the rim
 ]
+# Paint is one material over the whole glove, so its three pieces are told
+# apart by baked tint: the pocket a deep shade inside the lighter rim, which is
+# what makes the face read as an open trapper rather than a disc, and the cuff
+# between them.
+const _GLOVE_POCKET_TINT := Color(0.60, 0.60, 0.62)
+const _GLOVE_CUFF_TINT := Color(0.84, 0.84, 0.86)
 const _GLOVE_CUFF_HALF_W: float = 0.075
 const _GLOVE_CUFF_HALF_D: float = 0.032
 const _GLOVE_CUFF_HALF_H: float = 0.070
@@ -348,8 +380,8 @@ static func _build_body() -> ArrayMesh:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_smooth_group(-1)  # flat shading — see SkaterMeshBuilder doc block
 	var loops: Array[PackedVector3Array] = []
-	for s: Vector2 in _BODY_STATIONS:
-		loops.append(_body_loop(s.x, s.y))
+	for s: Vector3 in _BODY_STATIONS:
+		loops.append(_body_loop(s.x, s.y, s.z))
 	_sweep_loops(st, loops)
 	_loop_cap(st, loops[0], Vector3(0.0, _BODY_STATIONS[0].x, 0.0), true)     # top (yoke)
 	_loop_cap(st, loops[loops.size() - 1],
@@ -360,20 +392,21 @@ static func _build_body() -> ArrayMesh:
 
 # 8-point chest cross-section, CCW seen from +Y (the sweep-loop contract):
 # generous flat back segment at +Z for the nameplate, wide chamfers rounding
-# the front. Width multiplier scales x only — see the class doc block.
-static func _body_loop(y: float, w_mult: float) -> PackedVector3Array:
+# the front. Width multiplier scales x only and front multiplier the front's
+# depth only — see the class doc block.
+static func _body_loop(y: float, w_mult: float, front_mult: float) -> PackedVector3Array:
 	var hw: float = _BODY_HALF_W * w_mult
 	var hd: float = _BODY_HALF_D
 	var pts := PackedVector3Array()
 	pts.resize(8)
-	pts[0] = Vector3(-0.13 * w_mult, y, -hd)   # front-left
-	pts[1] = Vector3(-hw, y, -0.05)
+	pts[0] = Vector3(-0.13 * w_mult, y, -hd * front_mult)   # front-left
+	pts[1] = Vector3(-hw, y, -0.05 * front_mult)
 	pts[2] = Vector3(-hw, y, 0.08)
 	pts[3] = Vector3(-0.21 * w_mult, y, hd)    # back-left
 	pts[4] = Vector3(0.21 * w_mult, y, hd)     # back-right
 	pts[5] = Vector3(hw, y, 0.08)
-	pts[6] = Vector3(hw, y, -0.05)
-	pts[7] = Vector3(0.13 * w_mult, y, -hd)    # front-right
+	pts[6] = Vector3(hw, y, -0.05 * front_mult)
+	pts[7] = Vector3(0.13 * w_mult, y, -hd * front_mult)    # front-right
 	return pts
 
 
@@ -478,6 +511,12 @@ static func _blocker_tint(centroid: Vector3, normal: Vector3) -> Color:
 
 
 static func _ensure_extras(goalie: Goalie) -> void:
+	var head: MeshInstance3D = goalie.head_mesh
+	if head != null and head.get_node_or_null("Dangler") == null:
+		var dangler := MeshInstance3D.new()
+		dangler.name = "Dangler"
+		dangler.mesh = _shared("goalie_dangler", _build_dangler)
+		head.add_child(dangler)
 	var body: MeshInstance3D = goalie.body_mesh
 	if body == null or body.get_node_or_null("Neck") != null:
 		return
@@ -510,17 +549,24 @@ static func _build_mask() -> ArrayMesh:
 	_loop_cap(st, loops[loops.size() - 1],
 			Vector3(0.0, _MASK_STATIONS[_MASK_STATIONS.size() - 1].x, 0.0), false)
 	st.generate_normals()
-	return _bake_facet_tint(st.commit(), _cage_tint)
+	return _bake_facet_tint(st.commit(), _mask_tint)
 
 
 # Cage facets: between brow and chin, within the cage's half-angle of the −Z
-# front axis.
-static func _cage_tint(centroid: Vector3, _normal: Vector3) -> Color:
+# front axis. Backplate facets: within its half-angle of the +Z back axis.
+static func _mask_tint(centroid: Vector3, _normal: Vector3) -> Color:
 	var flat: float = Vector2(centroid.x, centroid.z).length()
+	if flat < 0.001:
+		return Color.WHITE
+	if centroid.z / flat > cos(deg_to_rad(_BACKPLATE_HALF_ANGLE_DEG)):
+		return _BACKPLATE_TINT
 	var in_cage: bool = centroid.y < _CAGE_TOP_Y and centroid.y > _CAGE_BOT_Y \
-			and flat > 0.001 \
 			and -centroid.z / flat > cos(deg_to_rad(_CAGE_HALF_ANGLE_DEG))
 	return _CAGE_TINT if in_cage else Color.WHITE
+
+
+static func _tinted(mesh: ArrayMesh, color: Color) -> ArrayMesh:
+	return _bake_facet_tint(mesh, func(_c: Vector3, _n: Vector3) -> Color: return color)
 
 
 # Rebuilds the committed surface with per-facet vertex colors from
@@ -544,6 +590,28 @@ static func _bake_facet_tint(mesh: ArrayMesh, tint_of: Callable) -> ArrayMesh:
 	var out := ArrayMesh.new()
 	out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return out
+
+
+# Painted with the mask (GoalieUniformCoordinator), so it bakes plain white
+# vertex colour for the mask material's vertex-colour albedo.
+static func _build_dangler() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)  # flat shading — see SkaterMeshBuilder doc block
+	var loops: Array[PackedVector3Array] = []
+	for s: Vector3 in _DANGLER_STATIONS:
+		var loop: PackedVector3Array = _octagon_loop(s.x, s.y, _DANGLER_HALF_T, 0.7, 0.5)
+		for k in loop.size():
+			loop[k] += Vector3(0.0, 0.0, _DANGLER_HALF_T - s.z)
+		loops.append(loop)
+	_sweep_loops(st, loops)
+	var top: Vector3 = _DANGLER_STATIONS[0]
+	var bottom: Vector3 = _DANGLER_STATIONS[_DANGLER_STATIONS.size() - 1]
+	_loop_cap(st, loops[0], Vector3(0.0, top.x, -(top.z - _DANGLER_HALF_T)), true)
+	_loop_cap(st, loops[loops.size() - 1],
+			Vector3(0.0, bottom.x, -(bottom.z - _DANGLER_HALF_T)), false)
+	st.generate_normals()
+	return _tinted(st.commit(), Color.WHITE)
 
 
 # Egg-shaped cross-section: _ring's trig (θ = 0 at +Z, CCW from +Y — same
@@ -590,14 +658,14 @@ static func _build_glove_ring() -> ArrayMesh:
 		loops.append(pts)
 	_sweep_loops(st, loops)
 	st.generate_normals()
-	return st.commit()
+	return _tinted(st.commit(), Color.WHITE)
 
 
 # Rounded pot behind the rim, its flat −Y cap the catch face the shooter
 # sees; the profile's front lip curls in so the rim hoop overlaps it.
 static func _build_glove_pocket() -> ArrayMesh:
-	return _build_lathe(_GLOVE_POCKET_PROFILE, 10,
-			_GLOVE_RING_X_SCALE, _GLOVE_RING_Z_SCALE)
+	return _tinted(_build_lathe(_GLOVE_POCKET_PROFILE, 10,
+			_GLOVE_RING_X_SCALE, _GLOVE_RING_Z_SCALE), _GLOVE_POCKET_TINT)
 
 
 static func _build_blocker_hand() -> ArrayMesh:
@@ -615,8 +683,7 @@ static func _build_blocker_hand() -> ArrayMesh:
 	_loop_cap(st, loops[0], Vector3(0.0, h.y, 0.0), true)
 	_loop_cap(st, loops[loops.size() - 1], Vector3(0.0, -h.y, 0.0), false)
 	st.generate_normals()
-	return _bake_facet_tint(st.commit(),
-			func(_c: Vector3, _n: Vector3) -> Color: return _BLOCKER_FIST_TINT)
+	return _tinted(st.commit(), _BLOCKER_FIST_TINT)
 
 
 # Chamfered wrist block on the unrotated glove-origin node (parent frame:
@@ -640,4 +707,4 @@ static func _build_glove_cuff() -> ArrayMesh:
 	_loop_cap(st, loops[0], Vector3(0.0, _GLOVE_CUFF_HALF_H, 0.01), true)
 	_loop_cap(st, loops[1], Vector3(0.0, -_GLOVE_CUFF_HALF_H, 0.01), false)
 	st.generate_normals()
-	return st.commit()
+	return _tinted(st.commit(), _GLOVE_CUFF_TINT)

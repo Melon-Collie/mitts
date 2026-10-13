@@ -12,7 +12,8 @@ const _EPS: float = 0.005  # envelope tolerance, metres
 # label → [mesh, max AABB size]. Envelopes come from the primitives in
 # Goalie.tscn: body box 0.52×0.72×0.28, head sphere r 0.17 h 0.26, pad box
 # 0.28×0.84×0.2, blocker box 0.2×0.39×0.05. The blocker's fist has no collider
-# and is bounded at the glove-behind-the-board it is drawn as. The trapper
+# and is bounded at the glove-behind-the-board it is drawn as, and the throat
+# dangler, also collider-free, at the plate it is. The trapper
 # parts (rim / pocket / cuff) are sculpted past their original primitives on
 # purpose but must stay near the glove's 0.25×0.25×0.2 collision box. The connector tube is unit-sized (its stretch is basis scale).
 func _parts() -> Dictionary:
@@ -25,6 +26,7 @@ func _parts() -> Dictionary:
 		"glove_cuff": [GoalieMeshBuilder._build_glove_cuff(), Vector3(0.16, 0.15, 0.09)],
 		"blocker": [GoalieMeshBuilder._build_blocker(), Vector3(0.20, 0.39, 0.05)],
 		"blocker_hand": [GoalieMeshBuilder._build_blocker_hand(), Vector3(0.10, 0.12, 0.08)],
+		"dangler": [GoalieMeshBuilder._build_dangler(), Vector3(0.07, 0.11, 0.03)],
 		"connector": [GoalieMeshBuilder.shared_connector_tube(), Vector3(0.16, 1.0, 0.16)],
 	}
 

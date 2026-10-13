@@ -20,9 +20,9 @@ const _MAX_STRIPES: int = 5
 const _JERSEY_SHADER: Shader = preload("res://Assets/Shaders/goalie_jersey.gdshader")
 
 # Where the jersey ends and the pants band begins on the body solid, in the
-# shader's normalized height (0 = collar, 1 = bottom). 0.72 lands just above
-# the mesh's hip-crest station (body-local y −0.16) so the color split rides
-# the silhouette split.
+# shader's normalized height (0 = collar, 1 = bottom). 0.72 is body-local y
+# −0.158, the pants-waist station tucked under the jersey hem, so the color
+# split rides the silhouette split.
 const _PANTS_START_NORM_Y: float = 0.72
 
 
@@ -68,6 +68,9 @@ func apply_uniform(colors: Dictionary) -> void:
 	var mask_mat: StandardMaterial3D = UniformPaint.solid(uniform.helmet, UniformPaint.ROUGH_HELMET)
 	mask_mat.vertex_color_use_as_albedo = true
 	_goalie.head_mesh.material_override = mask_mat
+	var dangler := _goalie.head_mesh.get_node_or_null("Dangler") as MeshInstance3D
+	if dangler != null:
+		dangler.material_override = mask_mat
 
 	var pads_mat: StandardMaterial3D = UniformPaint.solid(colors.goalie_pads, _ROUGH_PADS)
 	pads_mat.vertex_color_use_as_albedo = true
