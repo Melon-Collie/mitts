@@ -151,3 +151,12 @@ func test_the_top_hand_stays_off_the_ice() -> void:
 		_dive_ticks(1)
 		var hand: Vector3 = _c.skater.upper_body_to_global(_c.skater.get_top_hand_position())
 		assert_gte(hand.y, DiveRules.HAND_HEIGHT_M * 0.5, "tick %d" % i)
+
+
+func test_the_slide_carries_its_momentum_through_the_window() -> void:
+	_skate(90)
+	var before: float = _c.skater.velocity.length()
+	_dive_ticks(ceili(DiveRules.DOWN_S / DT) - 2)
+	assert_true(_c.skater.is_knocked_down, "the control: still down")
+	assert_gt(_c.skater.velocity.length(), before - 2.5,
+			"gear on ice takes a couple of m/s over the second down, not the whole slide")

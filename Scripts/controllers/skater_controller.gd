@@ -158,7 +158,7 @@ var knockdown_impulse: float = 1.8         # m/s victim impulse above which a hi
 var knockdown_ref_impulse: float = 3.1     # m/s impulse of a maximal (longest) knockdown
 var knockdown_min_seconds: float = 0.7     # down time of a just-barely knockdown
 var knockdown_max_seconds: float = 1.5     # down time of a maximal hit
-var knockdown_friction: float = 8.0        # m/s² the downed body sheds speed while sliding
+var knockdown_friction: float = 2.0  # m/s² a downed body sheds sliding on its gear: μ ≈ 0.2, padded nylon on ice
 # Knockdown pose (cosmetic): a downed player FALLS — the knees buckle into the
 # collapse crouch that matches the gait's drop, the whole cosmetic rig tips
 # about the skates in the hit direction under a tipping-body model
