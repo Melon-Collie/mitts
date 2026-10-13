@@ -148,6 +148,7 @@ private:
 	bool stepping = false;
 	godot::Vector2 last_travel = godot::Vector2(0.0, 1.0);
 	godot::Vector2 step_dir = godot::Vector2(1.0, 0.0);
+	double step_travel = 0.0;
 	double step_hold = 0.0;
 	double cross_signed = 0.0;
 	double carve_signed = 0.0;
@@ -204,7 +205,7 @@ private:
 	void skid_path(double w, const godot::Vector2 &along);
 	void ccut_path(double w, double a, double s, double s_opp, double cs, double cs_opp);
 	void shuffle_path(double w, const godot::Vector2 &dir);
-	void sense_step(const godot::Vector2 &facing, const godot::Vector2 &intent, bool brake);
+	void sense_step(const godot::Vector2 &facing, const godot::Vector2 &intent, bool brake, double delta);
 	double engaged() const;
 	void stance_of(double s);
 	void ease_mix(double delta);

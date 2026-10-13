@@ -35,6 +35,8 @@ static constexpr double GRIP_MIN_SPEED = 0.5;
 static constexpr double INTENT_MIN_SQ = 0.0025;
 // SkaterLocomotion._STEP_REST_SPEED.
 static constexpr double STEP_REST_SPEED = 0.05;
+// SkaterMovementRules.SHUFFLE_AHEAD_COS.
+static constexpr double SHUFFLE_AHEAD_COS = 0.707;
 static constexpr double DRIVE_FULL = 0.5;
 
 // ── GDScript @GlobalScope semantics (double precision) ──
@@ -420,7 +422,7 @@ void NativeSkaterGait::sense(double delta, const Vector3 &vel, const Vector2 &in
 		}
 	} while (false);
 	step_hold = hold;
-	sense_step(facing, intent, brake);
+	sense_step(facing, intent, brake, delta);
 	if (ground_speed < c.hockey_stop_min_speed) {
 		target.glide += target.stop;
 		target.stop = 0.0;
@@ -736,18 +738,27 @@ void NativeSkaterGait::shuffle_path(double w, const Vector2 &dir) {
 }
 
 // SkaterLocomotion._sense_step
-void NativeSkaterGait::sense_step(const Vector2 &facing, const Vector2 &intent, bool brake) {
+void NativeSkaterGait::sense_step(const Vector2 &facing, const Vector2 &intent, bool brake, double delta) {
 	const Config &c = cfg;
 	const bool has_input = intent.length_squared() > INTENT_MIN_SQ;
 	const double ceiling = maxd(c.shuffle_lateral_speed, c.shuffle_step_speed);
-	const bool holds = brake && ground_speed <= ceiling
-			&& (has_input || (stepping && ground_speed > STEP_REST_SPEED));
-	if (!holds) {
-		stepping = false;
-		return;
-	}
-	if (!stepping) {
+	if (stepping) {
+		step_travel += ground_speed * delta;
+		const bool holds = brake
+				? (ground_speed > STEP_REST_SPEED || (has_input && ground_speed <= ceiling))
+				: (has_input && step_travel < c.shuffle_step_distance);
+		if (!holds) {
+			stepping = false;
+			return;
+		}
+	} else {
+		const bool from_rest = has_input && ground_speed <= GRIP_MIN_SPEED
+				&& (double)intent.normalized().dot(facing) < SHUFFLE_AHEAD_COS;
+		if (!(from_rest || (brake && has_input && ground_speed <= ceiling))) {
+			return;
+		}
 		stepping = true;
+		step_travel = 0.0;
 		stride_phase = 0.0;
 	}
 	if (has_input) {

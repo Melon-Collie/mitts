@@ -569,8 +569,9 @@ back of them, turned square across it), the skid (`_skid_path`, a snowplow),
 backward C-cuts (`_ccut_path`, out and ahead and back in) and the side-step
 (`_shuffle_path`, step-together in any direction: a side-stepping blade cannot
 glide, so each skate holds its place on the ice while the hips pass over it,
-and the cycle is laid over the ground so one shuffle press is one cycle; the
-brake's steps latch in `_sense_step`, `test_shuffle_steps.gd`). The glide is the stance with a joint-space
+and the cycle is laid over the ground so one tap is one cycle; a push from
+rest to the side or back latches a step in `_sense_step` — braked it holds to
+rest, unbraked it is one step and then the stroke's, `test_shuffle_steps.gd`). The glide is the stance with a joint-space
 edge sway and, out of a turn, a light inside knee; as it comes still it stands on
 the ice like the authored states (`SkaterLocomotion.on_ice`, `1 − glide × speed`)
 on soft knees (`rest_stance`), so a standing skater's lean settles over two

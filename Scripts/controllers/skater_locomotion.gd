@@ -104,13 +104,13 @@ var trunk_pitch: float = 0.0
 var trunk_roll: float = 0.0
 
 var _stop_latched: bool = false
-# A step of the brake's shuffle is under way (`_sense_step`): it starts on the
-# stick with the brake held at a shuffle's pace and lasts until the body is
-# still, so the steps' own slowing is skated as a step and a hockey stop's tail
-# is not. `_step_dir` is its direction in the hips' frame, (right, forward).
+# A step of the shuffle is under way (`_sense_step`). `_step_dir` is its
+# direction in the hips' frame, (right, forward); `_step_travel` the ground it
+# has covered, metres.
 var _stepping: bool = false
 var _last_travel := Vector2(0.0, 1.0)
 var _step_dir := Vector2(1.0, 0.0)
+var _step_travel: float = 0.0
 var _hold: float = 0.0
 # The turning states' weights with their side as the sign: eased as one number,
 # so a turn that changes side has to pass through zero on the way, and the legs
@@ -184,7 +184,7 @@ func sense(delta: float, planted: bool, hold: float) -> void:
 	_hold = hold
 	LocomotionRules.classify(Vector2(vel.x, vel.z), _skater.move_intent,
 			_skater.brake_intent, c.stance_active, facing, turning, _target)
-	_sense_step(facing)
+	_sense_step(facing, delta)
 	# A brake below the stop's speed floor is no skid, and a turn below the carve
 	# floor is steps, not crossovers.
 	if _ground_speed < c.hockey_stop_min_speed:
@@ -590,23 +590,35 @@ func _shuffle_path(w: float, dir: Vector2) -> void:
 	push_reach = maxf(push_reach, w * 2.0 * step)
 
 
-# Starts, holds and ends a step of the brake's shuffle. A step starts on the
-# stick at a shuffle's pace with the brake held, from the base closed (the
-# cycle's start); it holds through its own slowing and ends when the body is
-# still or the brake lets go. A hockey stop's tail never had the stick, so it
-# never starts one.
-func _sense_step(facing: Vector2) -> void:
+# Starts, holds and ends a step of the shuffle. A step starts on a push from
+# rest to the side or back (the tap and the start alike, ShuffleStepShaper) or
+# on the stick with the brake at a shuffle's pace (a bot's shuffle), from the
+# base closed (the cycle's start). Under the brake it holds through its own
+# slowing and ends at rest; pushing on without it, it is one step and then the
+# stroke's — a held start skates its first step-together and hands over at the
+# base closed again. A hockey stop's tail never had the stick, so it never
+# starts one.
+func _sense_step(facing: Vector2, delta: float) -> void:
 	var c: SkaterController = _controller
 	var intent: Vector2 = _skater.move_intent
 	var has_input: bool = intent.length_squared() > _STEP_INTENT_MIN_SQ
+	var braked: bool = _skater.brake_intent
 	var ceiling: float = maxf(c.shuffle_lateral_speed, c.shuffle_step_speed)
-	var holds: bool = _skater.brake_intent and _ground_speed <= ceiling \
-			and (has_input or (_stepping and _ground_speed > _STEP_REST_SPEED))
-	if not holds:
-		_stepping = false
-		return
-	if not _stepping:
+	if _stepping:
+		_step_travel += _ground_speed * delta
+		var holds: bool = (_ground_speed > _STEP_REST_SPEED
+				or (has_input and _ground_speed <= ceiling)) if braked \
+				else (has_input and _step_travel < c.shuffle_step_distance)
+		if not holds:
+			_stepping = false
+			return
+	else:
+		var from_rest: bool = has_input and _ground_speed <= SkaterMovementRules.GRIP_MIN_SPEED \
+				and intent.normalized().dot(facing) < SkaterMovementRules.SHUFFLE_AHEAD_COS
+		if not (from_rest or (braked and has_input and _ground_speed <= ceiling)):
+			return
 		_stepping = true
+		_step_travel = 0.0
 		stride_phase = 0.0
 	if has_input:
 		var right := Vector2(-facing.y, facing.x)

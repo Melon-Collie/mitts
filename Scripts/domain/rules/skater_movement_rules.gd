@@ -180,6 +180,12 @@ static func apply_movement(
 	return velocity
 
 
+# cos 45°: a push from rest at least this far ahead of facing is a start, never
+# a shuffle step — a skater pushes off forward (W+D included). Read by the
+# input's tap (ShuffleStepShaper) and the gait's step (SkaterLocomotion).
+const SHUFFLE_AHEAD_COS: float = 0.707
+
+
 # The speed at and below which the brake shuffles rather than stops.
 static func shuffle_ceiling(cfg: MovementConfig) -> float:
 	return maxf(cfg.shuffle_lateral_speed, cfg.shuffle_step_speed)
