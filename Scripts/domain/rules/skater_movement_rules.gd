@@ -11,10 +11,9 @@ class_name SkaterMovementRules
 # toward top speed), the component against travel is a skid (a skater must stop
 # before pushing the other way), and the stick's angle off travel turns the
 # velocity at an edge-limited rate (turn radius v²/(turn_accel·grip)). The brake
-# is a hockey stop whatever the stick says, down to the shuffle's speed; there
-# it plants the skater, and the stick steps the planted body around
-# (`shuffle_velocity`). Below GRIP_MIN_SPEED there is no heading to respect and
-# the push is free in any direction (first steps).
+# is a hockey stop whatever the stick says. Below GRIP_MIN_SPEED there is no
+# heading to respect and the push is free in any direction (first steps,
+# net-front shuffles).
 
 # How the skater is loaded over the skates. The caller resolves which one holds;
 # a committed check wins over the stance.
@@ -52,13 +51,6 @@ class MovementConfig:
 	var stance_stride_mult: float = 1.0          # along-travel stride scale
 	var stance_max_speed_mult: float = 1.0       # where the stance's stride stops adding
 	var stance_shuffle_mult: float = 1.0         # sideways free push below GRIP_MIN_SPEED
-	# The shuffle — the brake held at a shuffle's pace. Its top speed is an
-	# ellipse about facing: side-steps reach shuffle_lateral_speed, steps ahead
-	# or back shuffle_step_speed (m/s). The larger is where the brake stops
-	# being a stop. shuffle_accel (m/s²) is the steps' pickup.
-	var shuffle_lateral_speed: float = 0.0
-	var shuffle_step_speed: float = 0.0
-	var shuffle_accel: float = 0.0
 	# Posture.COMMIT — loaded on a shoulder for a check, off the edges.
 	var commit_grip_mult: float = 1.0
 	var commit_stride_mult: float = 1.0
@@ -111,16 +103,6 @@ static func apply_movement(
 
 	var horiz := Vector2(velocity.x, velocity.z)
 	var speed: float = horiz.length()
-	if brake and speed <= shuffle_ceiling(cfg):
-		var target := Vector2.ZERO
-		var rate: float = cfg.stop_decel
-		if has_input:
-			target = shuffle_velocity(move_input, facing_dir, cfg)
-			rate = cfg.shuffle_accel
-		horiz = horiz.move_toward(target, rate * delta)
-		velocity.x = horiz.x
-		velocity.z = horiz.y
-		return velocity
 	if speed <= GRIP_MIN_SPEED:
 		if brake:
 			horiz = horiz.move_toward(Vector2.ZERO, cfg.stop_decel * delta)
@@ -184,24 +166,6 @@ static func apply_movement(
 # a shuffle step — a skater pushes off forward (W+D included). Read by the
 # input's tap (ShuffleStepShaper) and the gait's step (SkaterLocomotion).
 const SHUFFLE_AHEAD_COS: float = 0.707
-
-
-# The speed at and below which the brake shuffles rather than stops.
-static func shuffle_ceiling(cfg: MovementConfig) -> float:
-	return maxf(cfg.shuffle_lateral_speed, cfg.shuffle_step_speed)
-
-
-# The velocity the shuffle steps toward for this stick: along the stick, at the
-# speed the facing-frame ellipse gives that direction, scaled by how far the
-# stick is pushed. `facing_dir` and `move_input` are XZ (x, z).
-static func shuffle_velocity(move_input: Vector2, facing_dir: Vector2,
-		cfg: MovementConfig) -> Vector2:
-	if cfg.shuffle_lateral_speed <= 0.0 or cfg.shuffle_step_speed <= 0.0:
-		return Vector2.ZERO
-	var dir: Vector2 = move_input.normalized()
-	var ahead: float = facing_dir.dot(dir) / cfg.shuffle_step_speed
-	var across: float = facing_dir.cross(dir) / cfg.shuffle_lateral_speed
-	return dir * (minf(move_input.length(), 1.0) / sqrt(ahead * ahead + across * across))
 
 
 # The posture the replicated bits name. A committed check wins over the stance;

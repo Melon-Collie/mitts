@@ -10,8 +10,8 @@ extends RefCounted
 # and the stick is the player's from there. A press ahead (within 45° of facing,
 # SkaterMovementRules.SHUFFLE_AHEAD_COS) is always a start.
 #
-# The player's own brake is the stop and nothing else: under it the stick never
-# reaches the movement model, so a hockey stop is a stop whatever the stick says.
+# The player's own brake cancels a step and otherwise passes through untouched,
+# stick and all, as a bot's does.
 #
 # It runs on the input before anything records or sends it, so the host, the
 # reconcile replay and every remote see an ordinary stick and brake; nothing
@@ -55,7 +55,6 @@ func shape(input: InputState, position: Vector3, velocity: Vector3, facing: Vect
 	_pressed = raw.length() > (RELEASE if was_pressed else PRESS)
 	if input.brake:
 		_phase = Phase.NONE
-		input.move_vector = Vector2.ZERO
 		return
 	var pos := Vector2(position.x, position.z)
 	var vel := Vector2(velocity.x, velocity.z)

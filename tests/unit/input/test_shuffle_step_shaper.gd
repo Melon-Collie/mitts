@@ -3,8 +3,8 @@ extends GutTest
 # ShuffleStepShaper through the real movement model: from a standstill, a tap to
 # the side or back is one step of shuffle_step_distance that plants, whatever
 # the direction or the build's brake; a press held past the tap window is the
-# plain start, to the tick; a press ahead always skates; and under the player's
-# own brake the stick never moves the skater.
+# plain start, to the tick; a press ahead always skates; and the player's own
+# brake passes through as it is.
 
 const DT: float = 1.0 / 120.0
 const FACING_UP: float = 0.0   # facing −Z
@@ -115,8 +115,8 @@ func test_a_hold_is_a_start_that_loses_nothing() -> void:
 			raw_pos += raw_vel * DT
 		assert_false(braked, "stick %s: no step's brake" % stick)
 		assert_eq(_pos, raw_pos, "stick %s: the same start as with no shaping" % stick)
-		assert_gt(_vel.length(), SkaterMovementRules.shuffle_ceiling(_cfg),
-				"stick %s: skating past the shuffle's pace" % stick)
+		assert_gt(_vel.length(), SkaterMovementRules.GRIP_MIN_SPEED,
+				"stick %s: skating, past a walking pace" % stick)
 
 
 func test_a_press_while_moving_skates() -> void:
@@ -126,9 +126,12 @@ func test_a_press_while_moving_skates() -> void:
 	assert_eq(input.move_vector, RIGHT)
 
 
-func test_under_the_player_s_brake_the_stick_does_not_step() -> void:
+func test_the_player_s_brake_and_stick_pass_through() -> void:
+	var input: InputState = _tick(RIGHT, true)
+	assert_true(input.brake)
+	assert_eq(input.move_vector, RIGHT, "the same input a bot sends")
 	_hold(RIGHT, 1.0, true)
-	assert_eq(_pos, Vector3.ZERO)
+	assert_eq(_pos, Vector3.ZERO, "and a brake from rest stays put")
 
 
 func test_a_key_held_before_the_brake_lets_go_is_no_press() -> void:
@@ -137,8 +140,8 @@ func test_a_key_held_before_the_brake_lets_go_is_no_press() -> void:
 	assert_false(input.brake, "releasing Space with the key down is no tap")
 
 
-# Under the brake the stick never reaches the movement model, so a stop with a
-# key still down stops straight and stays stopped.
+# A stop with a key still down starts no step: it stops straight and stays
+# stopped.
 func test_a_hockey_stop_with_the_stick_held_is_a_stop() -> void:
 	_vel = Vector3(0.0, 0.0, -8.0)
 	_hold(RIGHT, 2.0, true)

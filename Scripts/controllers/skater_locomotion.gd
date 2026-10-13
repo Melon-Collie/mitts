@@ -590,32 +590,27 @@ func _shuffle_path(w: float, dir: Vector2) -> void:
 	push_reach = maxf(push_reach, w * 2.0 * step)
 
 
-# Starts, holds and ends a step of the shuffle. A step starts on a push from
-# rest to the side or back (the tap and the start alike, ShuffleStepShaper) or
-# on the stick with the brake at a shuffle's pace (a bot's shuffle), from the
-# base closed (the cycle's start). Under the brake it holds through its own
-# slowing and ends at rest; pushing on without it, it is one step and then the
-# stroke's — a held start skates its first step-together and hands over at the
-# base closed again. A hockey stop's tail never had the stick, so it never
-# starts one.
+# Starts, holds and ends a step of the shuffle. A step starts on an unbraked
+# push from rest to the side or back (the tap and the start alike,
+# ShuffleStepShaper), from the base closed (the cycle's start). Once the brake
+# is on (a tap's settle) it holds through its own slowing and ends at rest;
+# pushing on without it, it is one step and then the stroke's — a held start
+# skates its first step-together and hands over at the base closed again.
 func _sense_step(facing: Vector2, delta: float) -> void:
 	var c: SkaterController = _controller
 	var intent: Vector2 = _skater.move_intent
 	var has_input: bool = intent.length_squared() > _STEP_INTENT_MIN_SQ
 	var braked: bool = _skater.brake_intent
-	var ceiling: float = maxf(c.shuffle_lateral_speed, c.shuffle_step_speed)
 	if _stepping:
 		_step_travel += _ground_speed * delta
-		var holds: bool = (_ground_speed > _STEP_REST_SPEED
-				or (has_input and _ground_speed <= ceiling)) if braked \
+		var holds: bool = _ground_speed > _STEP_REST_SPEED if braked \
 				else (has_input and _step_travel < c.shuffle_step_distance)
 		if not holds:
 			_stepping = false
 			return
 	else:
-		var from_rest: bool = has_input and _ground_speed <= SkaterMovementRules.GRIP_MIN_SPEED \
-				and intent.normalized().dot(facing) < SkaterMovementRules.SHUFFLE_AHEAD_COS
-		if not (from_rest or (braked and has_input and _ground_speed <= ceiling)):
+		if braked or not has_input or _ground_speed > SkaterMovementRules.GRIP_MIN_SPEED \
+				or intent.normalized().dot(facing) >= SkaterMovementRules.SHUFFLE_AHEAD_COS:
 			return
 		_stepping = true
 		_step_travel = 0.0

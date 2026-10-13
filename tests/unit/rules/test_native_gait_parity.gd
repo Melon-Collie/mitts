@@ -282,7 +282,8 @@ func _assert_skated(fields: Array[String]) -> void:
 
 # The shuffle's step, both ways it starts: a push from rest to the side or back
 # that skates on (one step, then the stroke), a tap — pushed, then braked to
-# rest — and a bot's braked shuffle; in every direction, with the rest between.
+# rest — and the brake held with the stick, which starts none; in every
+# direction, with the rest between.
 func test_shuffle_parity() -> void:
 	if _native_missing():
 		return

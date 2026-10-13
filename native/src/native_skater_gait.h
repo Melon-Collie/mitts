@@ -47,8 +47,8 @@ namespace mitts {
 	X(pivot_depth_ramp_deg) X(pivot_min_speed) X(pivot_mohawk_deg) X(pivot_rate_min) \
 	X(pivot_stance) X(pivot_step_begin) X(pivot_yaw_speed) X(reversal_lead_m) \
 	X(reversal_spread_m) X(reversal_stance) X(reversal_toe_in_deg) \
-	X(shuffle_blend_speed) X(shuffle_intensity) X(shuffle_lateral_speed) \
-	X(rest_stance) X(shuffle_lift_m) X(shuffle_stance) X(shuffle_step_distance) X(shuffle_step_speed) \
+	X(shuffle_blend_speed) X(shuffle_intensity) \
+	X(rest_stance) X(shuffle_lift_m) X(shuffle_stance) X(shuffle_step_distance) \
 	X(stance_full_speed_fraction) X(stance_hip_deg) X(stance_push_gain) \
 	X(stance_sit_gain) X(stance_stride_gain) X(stride_bob_m) X(stride_cadence) \
 	X(stride_cadence_max_rate) X(stride_effort_ref_accel) X(stride_effort_speed) \

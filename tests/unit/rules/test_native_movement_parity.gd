@@ -49,9 +49,6 @@ func _random_cfg() -> SkaterMovementRules.MovementConfig:
 	cfg.stance_shuffle_mult = _rng.randf_range(0.8, 1.6)
 	cfg.commit_grip_mult = _rng.randf_range(0.3, 1.0)
 	cfg.commit_stride_mult = _rng.randf_range(0.3, 1.0)
-	cfg.shuffle_lateral_speed = _rng.randf_range(0.8, 2.5)
-	cfg.shuffle_step_speed = _rng.randf_range(0.4, 1.5)
-	cfg.shuffle_accel = _rng.randf_range(4.0, 12.0)
 	return cfg
 
 
@@ -72,11 +69,7 @@ func test_apply_movement_matches_native() -> void:
 	for i: int in FUZZ_ITERATIONS:
 		var cfg: SkaterMovementRules.MovementConfig = _random_cfg()
 		var native: RefCounted = _native_from(cfg)
-		# A third of the cases near a standstill, where the shuffle and the free
-		# push live.
-		var vel_range: float = 3.0 if _rng.randf() < 0.33 else 14.0
-		var vel := Vector3(_rng.randf_range(-vel_range, vel_range), 0.0,
-				_rng.randf_range(-vel_range, vel_range))
+		var vel := Vector3(_rng.randf_range(-14.0, 14.0), 0.0, _rng.randf_range(-14.0, 14.0))
 		var input := Vector2.ZERO
 		if _rng.randf() < 0.85:
 			input = Vector2(_rng.randf_range(-1.0, 1.0), _rng.randf_range(-1.0, 1.0))

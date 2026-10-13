@@ -20,8 +20,7 @@ class_name LocomotionRules
 # In the loaded stance the turning part is skated with both blades dug in
 # (TIGHT) rather than crossed over or carved; the brake is a stop whatever the
 # stick says. Below grip speed, where the push is free in any direction, the
-# split is against facing instead of travel. (The brake's shuffle is skated as
-# steps on top of this, SkaterLocomotion._sense_step.)
+# split is against facing instead of travel.
 #
 # Frame: XZ-plane vectors as Vector2(x, z).
 

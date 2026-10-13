@@ -81,25 +81,6 @@ Vector3 NativeSkaterMovement::apply_movement_internal(
 
 	Vector2 horiz(velocity.x, velocity.z);
 	double speed = horiz.length();
-	// SkaterMovementRules.shuffle_ceiling / shuffle_velocity.
-	if (brake && speed <= MAX(cfg.shuffle_lateral_speed, cfg.shuffle_step_speed)) {
-		Vector2 target;
-		double rate = cfg.stop_decel;
-		if (has_input) {
-			rate = cfg.shuffle_accel;
-			if (cfg.shuffle_lateral_speed > 0.0 && cfg.shuffle_step_speed > 0.0) {
-				const Vector2 dir = move_input.normalized();
-				const double ahead = (double)facing_dir.dot(dir) / cfg.shuffle_step_speed;
-				const double across = (double)facing_dir.cross(dir) / cfg.shuffle_lateral_speed;
-				target = dir * (real_t)(MIN((double)move_input.length(), 1.0)
-						/ Math::sqrt(ahead * ahead + across * across));
-			}
-		}
-		horiz = horiz.move_toward(target, (real_t)(rate * delta));
-		velocity.x = horiz.x;
-		velocity.z = horiz.y;
-		return velocity;
-	}
 	if (speed <= GRIP_MIN_SPEED) {
 		if (brake) {
 			horiz = horiz.move_toward(Vector2(), (real_t)(cfg.stop_decel * delta));

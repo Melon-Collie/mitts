@@ -311,9 +311,3 @@ here whenever you bump, in the same format.
 #      icing race banner.
 # v69: PlayerStats gained `icings` (appended to to_array), so the stats player
 #      record is 19 values (peer_id + 18).
-# v70: the brake's shuffle. Brake + stick at or under the shuffle ceiling now
-#      steps the skater toward a facing-frame ellipse of speeds
-#      (SkaterMovementRules.shuffle_velocity) where it used to plant, so an
-#      older peer predicts a plant where the host shuffles. No byte layout
-#      changed; replay FORMAT_VERSION unchanged (replays carry states, not
-#      inputs).

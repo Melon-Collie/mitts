@@ -741,20 +741,18 @@ void NativeSkaterGait::shuffle_path(double w, const Vector2 &dir) {
 void NativeSkaterGait::sense_step(const Vector2 &facing, const Vector2 &intent, bool brake, double delta) {
 	const Config &c = cfg;
 	const bool has_input = intent.length_squared() > INTENT_MIN_SQ;
-	const double ceiling = maxd(c.shuffle_lateral_speed, c.shuffle_step_speed);
 	if (stepping) {
 		step_travel += ground_speed * delta;
 		const bool holds = brake
-				? (ground_speed > STEP_REST_SPEED || (has_input && ground_speed <= ceiling))
+				? ground_speed > STEP_REST_SPEED
 				: (has_input && step_travel < c.shuffle_step_distance);
 		if (!holds) {
 			stepping = false;
 			return;
 		}
 	} else {
-		const bool from_rest = has_input && ground_speed <= GRIP_MIN_SPEED
-				&& (double)intent.normalized().dot(facing) < SHUFFLE_AHEAD_COS;
-		if (!(from_rest || (brake && has_input && ground_speed <= ceiling))) {
+		if (brake || !has_input || ground_speed > GRIP_MIN_SPEED
+				|| (double)intent.normalized().dot(facing) >= SHUFFLE_AHEAD_COS) {
 			return;
 		}
 		stepping = true;
