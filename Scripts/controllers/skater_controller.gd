@@ -158,7 +158,7 @@ var knockdown_impulse: float = 1.8         # m/s victim impulse above which a hi
 var knockdown_ref_impulse: float = 3.1     # m/s impulse of a maximal (longest) knockdown
 var knockdown_min_seconds: float = 0.7     # down time of a just-barely knockdown
 var knockdown_max_seconds: float = 1.5     # down time of a maximal hit
-var knockdown_friction: float = 8.0        # m/s² the downed body sheds speed while sliding
+var knockdown_friction: float = 2.0  # m/s² a downed body sheds sliding on its gear: μ ≈ 0.2, padded nylon on ice
 # Knockdown pose (cosmetic): a downed player FALLS — the knees buckle into the
 # collapse crouch that matches the gait's drop, the whole cosmetic rig tips
 # about the skates in the hit direction under a tipping-body model
@@ -1781,7 +1781,7 @@ func _apply_knockdown_fall() -> void:
 	# solved pose instead leaves the boots under the ice part-way. The scatter
 	# alone eases out with the get-up envelope.
 	KnockdownFallRules.sprawl_into(_sprawl_scratch, knockdown_elapsed(),
-			_knockdown_entry_speed, stagger_recoil_dir, knockdown_pose_drop_m * share,
+			_fall_entry_speed(), stagger_recoil_dir, knockdown_drop_m() * share,
 			legs, _fall_config(), KnockdownFallRules.getup_scale(kd_t))
 	skater.apply_knockdown_leg_overlay(_sprawl_scratch, share)
 
@@ -1819,7 +1819,8 @@ func _apply_fall_tilt(kd_t: float) -> bool:
 			Vector2(dir_world.x, dir_world.z), obstacle)
 	var d: Vector3 = skater.global_transform.basis.inverse() \
 			* Vector3(safe_dir.x, 0.0, safe_dir.y)
-	skater.set_knockdown_fall(Vector3.UP.cross(d), tilt)
+	var carry: Vector3 = -d * DiveRules.com_carry_m(tilt) if _diving() else Vector3.ZERO
+	skater.set_knockdown_fall(Vector3.UP.cross(d), tilt, carry)
 	return true
 
 
@@ -1834,13 +1835,19 @@ func knockdown_elapsed() -> float:
 # How much of the down pose holds (0..1): full while more than
 # knockdown_getup_seconds remain, easing out over that tail, and ramped in over
 # the buckle window. The gait's crumple sinks the body by this share of
-# knockdown_pose_drop_m, and the legs buckle to exactly that share.
+# knockdown_drop_m(), and the legs buckle to exactly that share.
 func knockdown_pose_weight() -> float:
 	var kd_t: float = clampf(
 			knockdown_timer / maxf(knockdown_getup_seconds, 0.001), 0.0, 1.0)
 	if kd_t <= 0.0:
 		return 0.0
 	return kd_t * KnockdownFallRules.entry_ramp(knockdown_elapsed(), _fall_config())
+
+
+# How far the down pose sinks the body. None for a dive: it goes down long off
+# its skates rather than crumpling onto them.
+func knockdown_drop_m() -> float:
+	return 0.0 if _diving() else knockdown_pose_drop_m
 
 
 # Current whole-body fall tilt (radians): the tipping-body solve scaled by the
@@ -1853,7 +1860,7 @@ func knockdown_fall_tilt() -> float:
 	if kd_t <= 0.0:
 		return 0.0
 	return KnockdownFallRules.tilt_at(
-			knockdown_elapsed(), _knockdown_entry_speed, _fall_config()) \
+			knockdown_elapsed(), _fall_entry_speed(), _fall_config()) \
 			* KnockdownFallRules.getup_scale(kd_t)
 
 
@@ -1863,8 +1870,9 @@ func knockdown_fall_tilt() -> float:
 # gait's crumple. SkaterPoseCoordinator scales it by kd_t and decomposes it
 # along the recoil direction.
 func knockdown_fold_rad() -> float:
-	return KnockdownFallRules.fold_at(knockdown_fall_tilt(),
-			deg_to_rad(knockdown_fold_deg), _fall_config()) \
+	# A diver stretches out along the layout; only a hit curls.
+	var curl: float = 0.0 if _diving() else deg_to_rad(knockdown_fold_deg)
+	return KnockdownFallRules.fold_at(knockdown_fall_tilt(), curl, _fall_config()) \
 			* KnockdownFallRules.entry_ramp(knockdown_elapsed(), _fall_config())
 
 
@@ -1891,9 +1899,10 @@ func _apply_dive_layout() -> void:
 	_apply_fall_tilt(kd_t)
 	var layout := Vector3(skater.dive_layout.x, 0.0, skater.dive_layout.y)
 	var shoulder: Vector3 = skater.upper_body_to_global(skater.shoulder.position)
-	# The arm reaches down for the ice first and out along it as the body lies.
+	# The arm reaches down for the ice first and out along it as the body lies,
+	# and up to it from a shoulder lying lower: the hand stays just off the ice.
 	var reach: float = DIVE_ARM_STRETCH * (skater.upper_arm_length + skater.forearm_length)
-	var down: float = clampf(shoulder.y - DiveRules.HAND_HEIGHT_M, 0.0, reach)
+	var down: float = clampf(shoulder.y - DiveRules.HAND_HEIGHT_M, -reach, reach)
 	var hand_world: Vector3 = shoulder + layout * sqrt(reach * reach - down * down) \
 			+ Vector3.DOWN * down
 	var drop: float = hand_world.y - blade_height
@@ -2046,13 +2055,16 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 # movement produced (BalanceRules.balance_tilt), through the critically damped
 # spring. Measured across _apply_movement alone, so a body check's impulse —
 # applied after the tick, in the skater's integration — never enters it, and a
-# reconcile that snaps velocity replays it exactly.
+# reconcile that snaps velocity replays it exactly. A body down on the ice
+# balances on nothing, so its slide's friction tips nothing and the lean settles.
 func _advance_balance(tick_start_velocity: Vector3, delta: float) -> void:
 	if delta <= 0.0:
 		return
 	var dv: Vector3 = skater.velocity - tick_start_velocity
-	var target: Vector2 = BalanceRules.balance_tilt(Vector2(dv.x, dv.z) / delta,
-			deg_to_rad(skater.balance_lean_cap_deg))
+	var target := Vector2.ZERO
+	if knockdown_timer <= 0.0:
+		target = BalanceRules.balance_tilt(Vector2(dv.x, dv.z) / delta,
+				deg_to_rad(skater.balance_lean_cap_deg))
 	var s: Vector4 = BalanceRules.spring_step(skater.balance_tilt(), balance_tilt_vel,
 			target, skater.balance_omega, delta)
 	balance_tilt_vel = Vector2(s.z, s.w)
@@ -3193,7 +3205,12 @@ func _apply_movement(input: InputState, delta: float) -> void:
 			_sm.get_state() == State.SKATING_WITHOUT_PUCK and not has_puck,
 			knockdown_timer > 0.0):
 		_start_dive(input)
-	knockdown_timer = maxf(knockdown_timer - delta, 0.0)
+	# A diver holding block stays lying there: the timer holds where the get-up
+	# would begin, and letting go starts it.
+	var down_floor: float = 0.0
+	if skater.is_diving and input.block_held and knockdown_timer >= knockdown_getup_seconds:
+		down_floor = knockdown_getup_seconds
+	knockdown_timer = maxf(knockdown_timer - delta, down_floor)
 	skater.is_knocked_down = knockdown_timer > 0.0
 	if not skater.is_knocked_down:
 		skater.is_diving = false
@@ -3374,9 +3391,11 @@ func _body_check_config() -> BodyCheckRules.Config:
 	return _cached_body_check_cfg
 
 # Knockdown-fall config is flat (not attribute-scaled) — lazily built once for
-# the controller's lifetime, same pattern as the body-check config above. Read
-# every rendered frame while a skater is down (_apply_knockdown_fall).
+# the controller's lifetime, same pattern as the body-check config above, with
+# the dive's alongside it. Read every rendered frame while a skater is down
+# (_apply_knockdown_fall).
 var _cached_fall_cfg: KnockdownFallRules.Config = null
+var _cached_dive_fall_cfg: KnockdownFallRules.Config = null
 
 func _fall_config() -> KnockdownFallRules.Config:
 	if _cached_fall_cfg == null:
@@ -3390,7 +3409,21 @@ func _fall_config() -> KnockdownFallRules.Config:
 		_cached_fall_cfg.max_entry_omega = knockdown_fall_max_entry_omega
 		_cached_fall_cfg.sprawl_in_seconds = knockdown_sprawl_in_seconds
 		_cached_fall_cfg.sprawl_splay = deg_to_rad(knockdown_sprawl_splay_deg)
-	return _cached_fall_cfg
+		_cached_dive_fall_cfg = DiveRules.fall_config(_cached_fall_cfg)
+	return _cached_dive_fall_cfg if _diving() else _cached_fall_cfg
+
+
+# The shove the fall's tip rate is seeded from: the hit's, or for a dive the
+# diver's own throw (DiveRules.TIP_RATE_RAD_S), whatever he was skating at.
+func _fall_entry_speed() -> float:
+	if _diving():
+		return DiveRules.TIP_RATE_RAD_S * _fall_config().com_height
+	return _knockdown_entry_speed
+
+
+# The down pose is read by the gait before a skater is attached.
+func _diving() -> bool:
+	return skater != null and skater.is_diving
 
 
 # Scratch for the sprawl solve — refilled every rendered frame while a skater

@@ -16,6 +16,8 @@ const VIEWS: int = 3
 const OUT_DIR: String = "user://gait_strip"
 # Ticks of straight skating before a turning scenario turns.
 const TURN_AT: int = 180
+# Ticks the dive holds block, past which it gets up.
+const DIVE_HOLD: int = 110
 # One build for every strip, as the pose capture does.
 const BUILD_HEIGHT_IN: int = 73
 const BUILD_WEIGHT_LB: int = 201
@@ -49,6 +51,9 @@ const SCENARIOS: Array[Dictionary] = [
 	# A push to the side and the brake: standing while the lean settles, both
 	# blades on the ice.
 	{"name": "sidestop", "warm": 40, "step": 15},
+	# Skating up-ice, then the dive (stance + block) laid out to the right,
+	# across the travel, held DIVE_HOLD ticks: down, the slide, and the get-up.
+	{"name": "dive", "warm": TURN_AT + 2, "step": 22},
 ]
 
 
@@ -229,6 +234,11 @@ func _steer(input: InputState) -> void:
 			move = Vector2(1.0, 0.0) if _tick < 20 else Vector2.ZERO
 			aim = up_ice
 			input.brake = _tick >= 20
+		"dive":
+			input.stance_held = turning and _tick <= TURN_AT + DIVE_HOLD
+			input.block_held = input.stance_held
+			if turning:
+				aim = Vector2(1.0, 0.0)
 	input.move_vector = move
 	if String(_scenarios[_index]["name"]) in ["shuffle", "sidehold", "sidestop"]:
 		_shuffle_steps.shape(input, _skater.global_position, _skater.velocity,

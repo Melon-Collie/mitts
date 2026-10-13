@@ -2403,7 +2403,7 @@ var _knockdown_fall_tilt: float = 0.0
 var _fall_pivot_shift: Vector3 = Vector3.ZERO
 
 
-func set_knockdown_fall(axis: Vector3, tilt: float) -> void:
+func set_knockdown_fall(axis: Vector3, tilt: float, carry: Vector3 = Vector3.ZERO) -> void:
 	if tilt == 0.0 and _knockdown_fall_tilt == 0.0:
 		return
 	_knockdown_fall_tilt = tilt
@@ -2417,9 +2417,9 @@ func set_knockdown_fall(axis: Vector3, tilt: float) -> void:
 		var tip := Basis(axis.normalized(), tilt)
 		mesh_root.basis = tip
 		# Rotating about the ice point P (ice is world Y = 0) instead of the
-		# origin is the rotation plus the shift P − tip·P.
+		# origin is the rotation plus the shift P − tip·P; `carry` moves it after.
 		var pivot := Vector3(0.0, -global_position.y, 0.0)
-		_fall_pivot_shift = pivot - tip * pivot
+		_fall_pivot_shift = pivot - tip * pivot + carry
 	_place_mesh_root()
 
 
