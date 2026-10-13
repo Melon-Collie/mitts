@@ -92,11 +92,12 @@ const _OPEN_FLOOR: float = (GameRules.PUCK_COLLISION_RADIUS * GameRules.PUCK_COL
 # Open mouth a set keeper leaves from the slot distance, by whole degree of
 # bearing off the goal normal (_build_reference).
 static var _open_ref := PackedFloat32Array()
-# The set keeper's silhouette, piecewise in height: how far he covers to his
-# glove side and his blocker side up to each top (_build_silhouette).
-static var _cover_top := PackedFloat32Array()
-static var _cover_glove := PackedFloat32Array()
-static var _cover_blocker := PackedFloat32Array()
+# The set keeper's silhouette in each stance (0 standing, 1 down), piecewise in
+# height: how far he covers to his glove side and his blocker side up to each
+# top (_build_silhouettes).
+static var _cover_top: Array[PackedFloat32Array] = []
+static var _cover_glove: Array[PackedFloat32Array] = []
+static var _cover_blocker: Array[PackedFloat32Array] = []
 
 
 # THE ENTRY POINT. Probability that a shot released at `release` toward
@@ -106,7 +107,9 @@ static var _cover_blocker := PackedFloat32Array()
 static func for_release(release: Vector3, attacking_goal: Vector3,
 		displacement_m: float,
 		shot_type: int = ShotEvent.ShotType.SHOT,
-		into_post_seal: bool = false, keeper_depth_m: float = -1.0) -> float:
+		into_post_seal: bool = false, keeper_depth_m: float = -1.0,
+		loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH,
+		shot_speed_m_s: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S) -> float:
 	# No shot exists from on or behind the goal line — the mouth faces away, and
 	# every downstream consumer relies on this being hard zero rather than a
 	# small number the argmax can be lured by.
@@ -119,7 +122,8 @@ static func for_release(release: Vector3, attacking_goal: Vector3,
 			displacement_m, 0.0, MAX_USEFUL_DISPLACEMENT_M)
 	if into_post_seal:
 		logit += POST_SEAL_LOGIT
-	logit += body_logit(release, attacking_goal, displacement_m, keeper_depth_m)
+	logit += body_logit(release, attacking_goal, displacement_m, keeper_depth_m,
+			loft_tan_high, shot_speed_m_s)
 	return XGBaseline.sigmoid(logit)
 
 
@@ -129,15 +133,19 @@ static func for_release(release: Vector3, attacking_goal: Vector3,
 # prices how much more of an oblique mouth he covers; this is only the closing
 # in. He is the keeper the displacement term reads, off his square by
 # `displacement_m`, `keeper_depth_m` out from the goal centre where the caller
-# knows it, else at the depth a set keeper holds for this puck. On a
+# knows it, else at the depth a set keeper holds for this puck. The shooter's
+# own steepest rung and pace set how high he can get the puck from here; the
+# reference is the league's. On a
 # post-sealed look it prices his body on the shot line and POST_SEAL_LOGIT the
 # near half he walls; in tight the body alone already shuts it.
 static func body_logit(release: Vector3, attacking_goal: Vector3,
-		displacement_m: float, keeper_depth_m: float = -1.0) -> float:
+		displacement_m: float, keeper_depth_m: float = -1.0,
+		loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH,
+		shot_speed_m_s: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S) -> float:
 	if _open_ref.is_empty():
 		_build_reference(attacking_goal)
 	var open: float = maxf(open_mouth_fraction(release, attacking_goal, displacement_m,
-			keeper_depth_m), _OPEN_FLOOR)
+			keeper_depth_m, loft_tan_high, shot_speed_m_s), _OPEN_FLOOR)
 	var bearing: float = rad_to_deg(absf(atan2(release.x - attacking_goal.x,
 			absf(release.z - attacking_goal.z))))
 	var i: int = mini(int(bearing), _open_ref.size() - 2)
@@ -149,12 +157,14 @@ static func body_logit(release: Vector3, attacking_goal: Vector3,
 # keeper `offset_m` off the shot line and `keeper_depth_m` out (body_logit). His structural silhouette (GoalieAnatomy)
 # is projected from the puck onto the goal line at _BODY_SAMPLES heights: from
 # in tight he is close to the eye and the mouth is far, so his pads alone fill
-# it. Each height is covered by the stance that covers it better, as the live
-# keeper drops for the low shot and stands for the high one, and a height the
-# league's steepest loft rung cannot reach from here is not open. Which way he
-# is off his square is not known, so both mirror images are averaged.
+# it. He is in whichever stance, standing or down, each with its own hands,
+# leaves this look the least, a height the shooter's steepest loft rung cannot
+# reach at his pace is not open, and which way he is off his square is not
+# known, so both mirror images are averaged.
 static func open_mouth_fraction(release: Vector3, attacking_goal: Vector3,
-		offset_m: float, keeper_depth_m: float = -1.0) -> float:
+		offset_m: float, keeper_depth_m: float = -1.0,
+		loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH,
+		shot_speed_m_s: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S) -> float:
 	var to_goal := Vector2(attacking_goal.x - release.x, attacking_goal.z - release.z)
 	var l_net: float = to_goal.length()
 	if l_net < 0.001:
@@ -168,18 +178,24 @@ static func open_mouth_fraction(release: Vector3, attacking_goal: Vector3,
 	# A width across the shot line lands this much wider on the goal line.
 	var oblique: float = scale / maxf(absf(to_goal.y) / l_net, 0.1)
 	if _cover_top.is_empty():
-		_build_silhouette()
-	var reach: float = AIActionScoring.DEFAULT_LOFT_TANS.z * l_net
-	var open: float = _open_across(scale, oblique, offset_m, reach)
-	if absf(offset_m) > 0.001:
-		open = 0.5 * (open + _open_across(scale, oblique, -offset_m, reach))
+		_build_silhouettes()
+	var reach: float = arrival_height(l_net, shot_speed_m_s, loft_tan_high)
+	var open: float = INF
+	for stance: int in 2:
+		var o: float = _open_across(stance, scale, oblique, offset_m, reach)
+		if absf(offset_m) > 0.001:
+			o = 0.5 * (o + _open_across(stance, scale, oblique, -offset_m, reach))
+		open = minf(open, o)
 	return open / (2.0 * GameRules.NET_HALF_WIDTH * float(_BODY_SAMPLES))
 
 
-# Open width summed over the sampled heights, the keeper `offset_m` toward his
-# blocker side.
-static func _open_across(scale: float, oblique: float, offset_m: float,
+# Open width summed over the sampled heights, the keeper in `stance` and
+# `offset_m` toward his blocker side.
+static func _open_across(stance: int, scale: float, oblique: float, offset_m: float,
 		reach: float) -> float:
+	var tops: PackedFloat32Array = _cover_top[stance]
+	var gloves: PackedFloat32Array = _cover_glove[stance]
+	var blockers: PackedFloat32Array = _cover_blocker[stance]
 	var half: float = GameRules.NET_HALF_WIDTH
 	var open: float = 0.0
 	for j: int in _BODY_SAMPLES:
@@ -189,10 +205,10 @@ static func _open_across(scale: float, oblique: float, offset_m: float,
 		var y_keeper: float = y_net / scale
 		var glove: float = 0.0
 		var blocker: float = 0.0
-		for k: int in _cover_top.size():
-			if y_keeper <= _cover_top[k]:
-				glove = _cover_glove[k]
-				blocker = _cover_blocker[k]
+		for k: int in tops.size():
+			if y_keeper <= tops[k]:
+				glove = gloves[k]
+				blocker = blockers[k]
 				break
 		var lo: float = maxf((offset_m - glove) * oblique, -half)
 		var hi: float = minf((offset_m + blocker) * oblique, half)
@@ -225,45 +241,65 @@ static func displacement_deficit_m(keeper_pos: Vector3,
 	return maxf(0.0, need - AIActionScoring.goalie_lateral_reach(move_time))
 
 
-# The better of his two stances' structural cover at each height, plus each
-# READY hand at rest across its own box's height, as a table of tops between the
-# parts' edges. The gap between his trunk or pads and either hand is narrower
-# than a puck, so a hand covers from the midline out. Built from the ice up, so
-# a puck under the pads' bottom edge reads the pads.
-static func _build_silhouette() -> void:
-	var hand: float = GoalieAnatomy.hand_vertical_half_extent()
-	var glove_span := Vector2(GoalieAnatomy.GLOVE_REST_Y_M - hand,
-			GoalieAnatomy.GLOVE_REST_Y_M + hand)
-	var blocker_y: float = GoalieStickRules.upright_wrist_y()
-	var blocker_span := Vector2(blocker_y - hand, blocker_y + hand)
-	var glove_reach: float = GoalieAnatomy.GLOVE_REST_X_M + hand
-	var blocker_reach: float = GoalieAnatomy.BLOCKER_REST_X_M + hand
-	var edges: Array[float] = [glove_span.x, glove_span.y, blocker_span.x, blocker_span.y]
+# Each stance's structural cover at each height, plus its hands where they rest
+# across their own box's height, as a table of tops between the parts' edges.
+# The gap between his trunk or pads and either hand is narrower than a puck, so
+# a hand covers from the midline out. Built from the ice up, so a puck under
+# the pads' bottom edge reads the pads.
+static func _build_silhouettes() -> void:
+	var tops: Array[PackedFloat32Array] = []
+	var gloves: Array[PackedFloat32Array] = []
+	var blockers: Array[PackedFloat32Array] = []
 	for down: bool in [false, true]:
-		for span: Vector2 in [GoalieAnatomy.pad_span(down), GoalieAnatomy.torso_span(down),
-				GoalieAnatomy.head_span(down)]:
-			edges.append(span.x)
-			edges.append(span.y)
+		var glove := Vector2(GoalieAnatomy.GLOVE_REST_X_M,
+				GoalieAnatomy.DOWN_GLOVE_Y_M if down else GoalieAnatomy.GLOVE_REST_Y_M)
+		var blocker := Vector2(
+				GoalieAnatomy.DOWN_BLOCKER_X_M if down else GoalieAnatomy.BLOCKER_REST_X_M,
+				GoalieAnatomy.DOWN_BLOCKER_Y_M if down else GoalieStickRules.upright_wrist_y())
+		var table: Array[PackedFloat32Array] = _stance_silhouette(down, glove, blocker)
+		tops.append(table[0])
+		gloves.append(table[1])
+		blockers.append(table[2])
+	_cover_glove = gloves
+	_cover_blocker = blockers
+	_cover_top = tops
+
+
+# One stance's (tops, glove-side, blocker-side) table; each hand as (x, y).
+static func _stance_silhouette(down: bool, glove: Vector2,
+		blocker: Vector2) -> Array[PackedFloat32Array]:
+	var hand: float = GoalieAnatomy.hand_vertical_half_extent()
+	var edges: Array[float] = [glove.y - hand, glove.y + hand, blocker.y - hand,
+			blocker.y + hand]
+	for span: Vector2 in [GoalieAnatomy.pad_span(down), GoalieAnatomy.torso_span(down),
+			GoalieAnatomy.head_span(down)]:
+		edges.append(span.x)
+		edges.append(span.y)
 	edges.sort()
 	var tops := PackedFloat32Array()
-	var gloves := PackedFloat32Array()
-	var blockers := PackedFloat32Array()
+	var glove_side := PackedFloat32Array()
+	var blocker_side := PackedFloat32Array()
 	var bottom: float = 0.0
 	for top: float in edges:
 		if top <= bottom:
 			continue
-		var mid: float = maxf((bottom + top) * 0.5, GoalieAnatomy.pad_span(false).x)
-		var body: float = maxf(GoalieAnatomy.structural_cover_half_width_at(mid, false),
-				GoalieAnatomy.structural_cover_half_width_at(mid, true))
+		var mid: float = maxf((bottom + top) * 0.5, GoalieAnatomy.pad_span(down).x)
+		var body: float = GoalieAnatomy.structural_cover_half_width_at(mid, down)
 		tops.append(top)
-		gloves.append(maxf(body, glove_reach) if mid >= glove_span.x and mid <= glove_span.y
+		glove_side.append(maxf(body, glove.x + hand) if absf(mid - glove.y) <= hand
 				else body)
-		blockers.append(maxf(body, blocker_reach)
-				if mid >= blocker_span.x and mid <= blocker_span.y else body)
+		blocker_side.append(maxf(body, blocker.x + hand) if absf(mid - blocker.y) <= hand
+				else body)
 		bottom = top
-	_cover_glove = gloves
-	_cover_blocker = blockers
-	_cover_top = tops
+	return [tops, glove_side, blocker_side]
+
+
+# Height a shot launched at `tan_a` arrives at `dist` metres on, at `speed`:
+#   h = d·tan − g·d²·(1 + tan²) / (2p²)
+static func arrival_height(dist: float, speed: float, tan_a: float) -> float:
+	var p: float = maxf(speed, 1.0)
+	return dist * tan_a - GameRules.GRAVITY_M_S2 * dist * dist * (1.0 + tan_a * tan_a) \
+			/ (2.0 * p * p)
 
 
 static func _build_reference(attacking_goal: Vector3) -> void:

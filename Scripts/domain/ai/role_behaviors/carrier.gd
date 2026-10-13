@@ -1112,7 +1112,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		_scratch_option_receiver_pos.append(tm.position)
 		_scratch_option_receiver_val.append(_score_at(
 				ctx, tm.position, self_pos, _scratch_opponents, tm_goalie,
-				tm_shot_speed, 0.0))
+				tm_shot_speed, 0.0, 0.0, 0.0, _loft_high(tm_caps)))
 	# The same option read at the CURRENT puck spot — the baseline candidates'
 	# option credit is measured against (see _score_move_candidate): an option
 	# already available from here belongs to the live pass in the fire
@@ -1306,7 +1306,8 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var s: float = AIActionScoring.score_shoot_value(
 				release, attacking_goal, sample_goalie, shot_disp,
 				GameRules.NET_HALF_WIDTH, _scratch_opponents_release,
-				sample_speed, _scratch_opponent_caps)
+				sample_speed, _scratch_opponent_caps, ShotEvent.ShotType.SHOT,
+				ctx.self_loft_tans.z)
 		if s > _phase_shoot_score:
 			_phase_shoot_score = s
 			_shot_sample_release = release
@@ -2354,7 +2355,7 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	var receiver_value: float = _score_at(ctx, receiver_spot, self_pos,
 			_scratch_opponents_pass, receiver_goalie,
 			receiver_shot_speed, receiver_unsettled, 0.0,
-			receiver_displacement)
+			receiver_displacement, _loft_high(receiver_caps))
 	# An OPEN receiver isn't limited to a one-timer from where they catch it — they
 	# can carry into a better look, exactly like the carrier's own best_carry. In the
 	# offensive zone the plain score_at above is shot-ONLY (xG's domain), so a
@@ -3285,7 +3286,7 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 	var dest_score: float = _score_at(ctx, cand_release, self_pos,
 			_scratch_opponents_path, cand_goalie,
 			ctx.self_wrister_shot_speed, cand_unsettled, ctx.self_aim_spread_rad,
-			cand_displacement)
+			cand_displacement, ctx.self_loft_tans.z)
 	# ENTRY CONTINUATION: from outside the zone an in-zone candidate is worth what
 	# a carrier there does next, which its own shot xG badly understates just
 	# inside the line. The drive-in from the candidate, priced in the in-zone
@@ -3438,7 +3439,8 @@ func _score_wheel_candidate(ctx: RoleContext, dest: Vector3,
 	_project_opponents_to(ctx, t1 + t2, _scratch_opponents_cont)
 	var dest_score: float = _score_at(ctx, dest, self_pos,
 			_scratch_opponents_cont, _goalie_now(ctx),
-			ctx.self_wrister_shot_speed, 0.0, ctx.self_aim_spread_rad)
+			ctx.self_wrister_shot_speed, 0.0, ctx.self_aim_spread_rad, 0.0,
+			ctx.self_loft_tans.z)
 	var benefit: float = dest_score * ceiling
 	if keep >= 1.0:
 		return benefit
@@ -3483,13 +3485,19 @@ func _score_wheel_candidate(ctx: RoleContext, dest: Vector3,
 # evaluate THIS bot's future shot, so they pass its attribute-scaled speed; the
 # receiver eval (score from a teammate's spot) keeps the default since we don't
 # carry teammates' attributes — same cross-player boundary as elsewhere.
+# The steepest loft rung a player's blade has, the league's when unknown.
+static func _loft_high(caps: AISkaterCaps) -> float:
+	return caps.loft_tans.z if caps != null else GameRules.DEFAULT_LOFT_TAN_HIGH
+
+
 func _score_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 		opps: Array[Vector3],
 		predicted_goalie_pos: Vector3,
 		shot_speed_m_s: float = AIActionScoring.WRISTER_SHOT_SPEED_M_S,
 		goalie_unsettled_factor: float = 0.0,
 		_aim_spread_rad: float = 0.0,
-		keeper_displacement_m: float = 0.0) -> float:
+		keeper_displacement_m: float = 0.0,
+		loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH) -> float:
 	var attacking_goal: Vector3 = ctx.attacking_goal_pos
 	# All the carrier's opponent arrays (path / pass / stand projections) are built
 	# in the same snapshot order as _scratch_opponent_caps, so the defenders in the
@@ -3541,7 +3549,7 @@ func _score_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 	var shoot_s: float = AIActionScoring.score_shoot_value(
 			pos, attacking_goal, predicted_goalie_pos, keeper_displacement_m,
 			GameRules.NET_HALF_WIDTH, opps, shot_speed_m_s,
-			_scratch_opponent_caps)
+			_scratch_opponent_caps, ShotEvent.ShotType.SHOT, loft_tan_high)
 	if AIActionScoring.in_offensive_zone(from_pos, attacking_goal):
 		# PURE xG in the offensive zone — position_potential (the progression
 		# value map) is not consulted here; once a goalie is in play a real shot
@@ -3684,7 +3692,8 @@ func _receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 	# candidates.
 	var advanced: float = _score_at(ctx, reached,
 			from_pos if from_pos.is_finite() else ctx.self_pos,
-			_scratch_opponents_pass, goalie, receiver_shot_speed, 0.0)
+			_scratch_opponents_pass, goalie, receiver_shot_speed, 0.0, 0.0, 0.0,
+			_loft_high(receiver_caps))
 	return advanced * keep * AIActionScoring.delay_discount(t)
 
 

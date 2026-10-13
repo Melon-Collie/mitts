@@ -2182,7 +2182,8 @@ static func score_shoot_value(
 		opponents: Array[Vector3],
 		shot_speed_m_s: float = WRISTER_SHOT_SPEED_M_S,
 		opponent_caps: Array = [],
-		shot_type: int = ShotEvent.ShotType.SHOT) -> float:
+		shot_type: int = ShotEvent.ShotType.SHOT,
+		loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH) -> float:
 	if (shooter.z - attacking_goal.z) * -signf(attacking_goal.z) < 0.001:
 		return 0.0
 	shooter = release_ahead_of_goalie(shooter, attacking_goal, predicted_goalie_pos)
@@ -2193,7 +2194,8 @@ static func score_shoot_value(
 	var quality: float = AIShotValue.for_release(
 			shooter, attacking_goal, keeper_displacement_m, shot_type,
 			seal_x != 0.0, Vector2(predicted_goalie_pos.x - attacking_goal.x,
-					predicted_goalie_pos.z - attacking_goal.z).length())
+					predicted_goalie_pos.z - attacking_goal.z).length(),
+			loft_tan_high, shot_speed_m_s)
 	if quality <= 0.0:
 		return 0.0
 	var aim: Vector3 = AIShotAim.compute_open_net_aim(

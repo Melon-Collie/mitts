@@ -116,13 +116,10 @@ var sweep_windup_max_yaw_deg: float = 25.0
 # of the pads rather than reaching out over them.
 const BLOCK_HAND_Z_M: float = -0.40
 # Down-stance hands (see _set_down_hands).
-const DOWN_BLOCKER_X_M: float = 0.40
+const DOWN_BLOCKER_X_M: float = GoalieAnatomy.DOWN_BLOCKER_X_M
 const DOWN_BLOCKER_Z_M: float = -0.20
-# The glove held out at belly height.
-const DOWN_GLOVE_Y_M: float = GoalieAnatomy.TORSO_CENTER_Y_BUTTERFLY_M
-# Just above the flat pads' tops.
-const DOWN_HAND_Y_M: float = GoalieAnatomy.PAD_CENTER_Y_BUTTERFLY_M \
-		+ GoalieAnatomy.PAD_BOX_WIDTH_M * 0.5 + 0.125
+const DOWN_GLOVE_Y_M: float = GoalieAnatomy.DOWN_GLOVE_Y_M
+const DOWN_HAND_Y_M: float = GoalieAnatomy.DOWN_BLOCKER_Y_M
 
 # The butterfly trunk and head (GoalieAnatomy: sitting on the flat pads).
 const DOWN_BODY_Y_M: float = GoalieAnatomy.TORSO_CENTER_Y_BUTTERFLY_M
@@ -487,7 +484,7 @@ func _set_butterfly_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 func _set_down_hands(c: GoalieBodyConfig, glove_y: float) -> void:
 	c.blocker_pos = Vector3(DOWN_BLOCKER_X_M, DOWN_HAND_Y_M, DOWN_BLOCKER_Z_M)
 	c.blocker_rot = Vector3(0.0, 0.0, STICK_ROLL)
-	c.glove_pos = Vector3(-0.42, glove_y, 0.0)
+	c.glove_pos = Vector3(-GoalieAnatomy.GLOVE_REST_X_M, glove_y, 0.0)
 	c.glove_pos.z = _hand_depth(c, -1.0, c.glove_pos.x, glove_y, BEND_DOWN_DEG)
 	c.glove_rot = Vector3.ZERO
 

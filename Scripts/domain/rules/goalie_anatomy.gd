@@ -79,6 +79,14 @@ const TORSO_CENTER_Y_BUTTERFLY_M: float = PAD_CENTER_Y_BUTTERFLY_M \
 const HEAD_CENTER_Y_BUTTERFLY_M: float = TORSO_CENTER_Y_BUTTERFLY_M + NECK_M
 
 
+# The hands down in the save stances (GoalieBodyConfigBuilder._set_down_hands):
+# the blocker just above the flat pads' tops, the glove out at belly height.
+const DOWN_BLOCKER_X_M: float = 0.40
+const DOWN_BLOCKER_Y_M: float = PAD_CENTER_Y_BUTTERFLY_M + PAD_BOX_WIDTH_M * 0.5 \
+		+ GLOVE_BOX_WIDTH_M * 0.5
+const DOWN_GLOVE_Y_M: float = TORSO_CENTER_Y_BUTTERFLY_M
+
+
 # Vertical extent (bottom, top) of a part, as a Vector2 so callers can test a
 # height against it without allocating.
 static func _span(center_y: float, height: float) -> Vector2:

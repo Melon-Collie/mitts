@@ -951,18 +951,20 @@ func test_1v1_lateral_cut_beats_the_aggressive_goalie() -> void:
 			"…and it's a real chance, not a floor-scraper; got %f" % cb.debug_shoot_score)
 
 	# Flat-footed vs the same 2 m over-challenge: the keeper is only ~1 m off
-	# the puck, so a blade-reach relocation swings the arc faster than his push
-	# covers — the hold sweep prices the pull-around and the 1v1
-	# finishes BY HAND instead of needing to skate the cut first. The commit
-	# must carry the relocation: the straight fire into his chest is smothered.
+	# the puck, and from 3 m the steepest rung gets the puck no higher than his
+	# pads, so no hold the blade can reach standing still beats him. The play is
+	# a carry, and never one into his chest.
 	var flat := _make_ctx(self_pos)
 	flat.snapshot.goalie_states[1 - TEAM_ID] = _squared_goalie(self_pos, net, 2.0)
 	var c2 := AIRoleCarrier.new()
 	c2.decide(flat)
-	assert_eq(c2.intended_action, AIRoleCarrier.INTENT_SHOOT,
-			"flat-footed vs an overcommitted challenge, the pull-around fires")
-	assert_gt(c2.shot_hold_offset.length(), 0.3,
-			"…and it is the relocated release, never a straight fire into the smother")
+	assert_lt(c2.debug_shoot_score, AIRoleCarrier.SHOT_MIN_VALUE,
+			"flat-footed vs an overcommitted challenge, there is no shot; got %f"
+			% c2.debug_shoot_score)
+	assert_eq(c2.intended_action, AIRoleCarrier.INTENT_CARRY, "…so the 1v1 carries")
+	assert_false(absf(c2.last_carry_anchor.x) < 1.2
+			and c2.last_carry_anchor.z < self_pos.z,
+			"…and not straight in at him (anchor %s)" % c2.last_carry_anchor)
 
 
 func test_mid_cut_hold_never_out_prices_the_same_instants_fire() -> void:
@@ -993,25 +995,23 @@ func test_mid_cut_hold_never_out_prices_the_same_instants_fire() -> void:
 
 
 func test_standstill_1v1_winds_up_the_cut() -> void:
-	# Re-anchored by the #27 compete restructure: IN TIGHT (3 m, keeper at a
-	# 1.3 m challenge) the calibrated make-probability surface is honest that
-	# a free release with the relocation sampler beats the challenge — the
-	# 1v1 FIRES, same doctrine as the 2 m over-challenge pull-around test
-	# above. (The old expectation of a setup carry here was written under the
-	# soft-make curve that under-priced direct windows in tight.) The wind-up
-	# bootstrap this test pins lives AT RANGE below, where no direct window
-	# exists and the carry must still commit a real advancing plan.
+	# IN TIGHT (3 m, keeper at a 1.3 m challenge), standing still: the steepest
+	# rung gets the puck to ~0.5 m from here, under the pads he covers the mouth
+	# with (AIShotValue.body_logit), so the shot is thin and the carry back to
+	# the slot, where the rung clears him, beats it. The wind-up bootstrap this
+	# test pins lives AT RANGE below, where the carry must still commit a real
+	# advancing plan.
 	var net := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
 	var self_pos := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z + 3.0)
 	var ctx := _make_ctx(self_pos)
 	ctx.snapshot.goalie_states[1 - TEAM_ID] = _squared_goalie(self_pos, net, 1.3)
 	var c := AIRoleCarrier.new()
 	c.decide(ctx)
-	assert_eq(c.intended_action, AIRoleCarrier.INTENT_SHOOT,
-			"in tight, the honest window past a 1.3 m challenge is taken")
-	assert_gt(c.debug_shoot_score, 0.3,
-			"…and it is a real chance, not a floor-scraper; got %f"
-			% c.debug_shoot_score)
+	assert_eq(c.intended_action, AIRoleCarrier.INTENT_CARRY,
+			"in tight and standing, the shot into a 1.3 m challenge is not the play")
+	assert_gt(c.debug_carry_score, c.debug_shoot_score,
+			"…the carry to where the puck clears him beats it; %f vs %f"
+			% [c.debug_carry_score, c.debug_shoot_score])
 
 	# Ever-receding-cut guard at RANGE: no phantom IMMEDIATE window out there
 	# (the reach budget covers the keeper's full deploy), and what the carry
@@ -1030,8 +1030,8 @@ func test_standstill_1v1_winds_up_the_cut() -> void:
 	# The currency's ceiling is a property of whichever shot model is wired in;
 	# "no real window at range" is a statement about range, so it has to be
 	# measured against a range that DOES open one.
-	assert_lt(cf.debug_shoot_score, c.debug_shoot_score * 0.5,
-			"…because range opens a fraction of the window 3 m does; %f vs %f"
+	assert_lt(cf.debug_shoot_score, c.debug_shoot_score,
+			"…because range opens less of the window than 3 m does; %f vs %f"
 			% [cf.debug_shoot_score, c.debug_shoot_score])
 	assert_gt(cf.debug_carry_score, cf.debug_shoot_score,
 			"…and the priced plan (drive to the shooting band) beats flinging it")
@@ -1098,7 +1098,9 @@ func test_shot_holds_relocate_toward_the_open_side() -> void:
 	# Goalie displaced onto the carrier's BACKHAND side (RH default: forehand is
 	# +x when attacking -z; mirrored carrier at -1.2 with the goalie at -1.1):
 	# the full-reach FOREHAND pull opens the far side wider than the puck's
-	# own spot sees, and beside the stick hip it is fully loaded.
+	# own spot sees, and beside the stick hip it is fully loaded. From 3 m out,
+	# standing, it still cannot get the puck over him, so whether it is taken is
+	# not this test's claim.
 	var pos := Vector3(-1.2, 0.0, -23.5)
 	var ctx := _make_ctx(pos)
 	var g := GoalieNetworkState.new()
@@ -1110,21 +1112,14 @@ func test_shot_holds_relocate_toward_the_open_side() -> void:
 	assert_gt(c.shoot_now_hold.x, 0.3,
 			"the winning hold relocates the release toward the open (forehand) side")
 	assert_almost_eq(c._shot_sample_share, 1.0, 0.001, "…loaded, at full pace")
-	# "A genuine chance" stated as behaviour rather than as a number: the
-	# relocated look has to WIN the compete against every carry and pass
-	# alternative from this spot. That is the same claim, and it survives the
-	# shot model being swapped underneath it.
-	assert_eq(c.intended_action, AIRoleCarrier.INTENT_SHOOT,
-			"…and the relocated look is a genuine chance — it is taken")
 
 
 
-func test_shot_holds_find_the_tuck_beside_the_net() -> void:
+func test_a_standstill_tuck_hands_the_keeper_the_time_to_follow() -> void:
 	# Carrier tight beside the net at a dead-sharp angle, goalie holding the near
-	# post: the best hold is the tuck, a blade-reach out in front of the crease,
-	# priced at the pace its load carries there. Standing still it is no
-	# committable look against a keeper set on that post — the backhand's turn
-	# gives him time to follow — so the score is not asserted here.
+	# post. The tuck, a blade-reach out in front of the crease, pays the
+	# backhand's turn standing still, which gives him time to follow, so it never
+	# out-prices firing from where the puck is.
 	var pos := Vector3(2.4, 0.0, -25.6)
 	var ctx := _make_ctx(pos)
 	var g := GoalieNetworkState.new()
@@ -1133,11 +1128,10 @@ func test_shot_holds_find_the_tuck_beside_the_net() -> void:
 	ctx.snapshot.goalie_states[1 - TEAM_ID] = g
 	var c := AIRoleCarrier.new()
 	c.decide(ctx)
-	assert_gt(c.shoot_now_hold.z, 0.3,
-			"the tuck moves the release out in front of the crease")
+	assert_lt(c.shoot_now_hold.z, 0.3, "the winning hold is not the tuck")
 	assert_almost_eq(c._shot_sample_speed,
 			ctx.self_wrister_shot_speed * c._shot_sample_share, 0.001,
-			"…priced at the pace its load carries there")
+			"…and it is priced at the pace its load carries there")
 
 
 func test_shot_commit_carries_the_winning_hold() -> void:
@@ -1200,10 +1194,11 @@ func test_slot_look_is_calibrated_and_displacement_beats_the_set_keeper() -> voi
 	bc.decide(bctx)
 	# "First-class look, not a modest window" against the 8.5 m band this test
 	# already scores — a RATIO, so it says something about the shape of the
-	# surface rather than about where the currency happens to top out. Just
-	# under twice: from 4.6 m the set keeper's body already trims the mouth.
-	assert_gt(sc.debug_shoot_score, bc.debug_shoot_score * 1.9,
-			"the dead slot is worth nearly twice the mid-range band; %f vs %f"
+	# surface rather than about where the currency happens to top out. Over one
+	# and a half: from 4.6 m the set keeper's body trims the mouth the league
+	# rung can reach.
+	assert_gt(sc.debug_shoot_score, bc.debug_shoot_score * 1.6,
+			"the dead slot is worth well over the mid-range band; %f vs %f"
 			% [sc.debug_shoot_score, bc.debug_shoot_score])
 	var dctx := _make_ctx(band)
 	dctx.snapshot.goalie_states[1 - TEAM_ID] = _squared_goalie(wide, net, 1.3)
@@ -1356,17 +1351,21 @@ func test_a_marginal_outlet_pays_the_settle_doubt() -> void:
 
 
 func test_an_obvious_shot_beats_the_settle_doubt_outright() -> void:
-	# The in-tight 1v1 (test_standstill_1v1_winds_up_the_cut), no pressure: a
-	# doorstep look is worth many times SHOT_MIN_VALUE, so a raised bar is nothing
-	# to it. This is the open backdoor tap-in the flat gate used to swallow.
-	var net := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
-	var self_pos := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z + 3.0)
+	# The open backdoor tap-in the flat gate used to swallow: from the slot with
+	# the keeper stranded on the far post, no pressure, the look is worth many
+	# times SHOT_MIN_VALUE, so a raised bar is nothing to it.
+	var self_pos := Vector3(-1.0, 0.0, -GameRules.GOAL_LINE_Z + 4.5)
 	var ctx := _make_ctx(self_pos)
-	ctx.snapshot.goalie_states[1 - TEAM_ID] = _squared_goalie(self_pos, net, 1.3)
+	var g := GoalieNetworkState.new()
+	g.position_x = 1.2
+	g.position_z = -GameRules.GOAL_LINE_Z + 0.5
+	ctx.snapshot.goalie_states[1 - TEAM_ID] = g
 	ctx.settle_penalty_frac = 0.6
 	ctx.settle_penalty_tau_s = 0.3
 	var c := AIRoleCarrier.new()
 	c.decide(ctx)
+	assert_gt(c.debug_shoot_score, AIRoleCarrier.SHOT_MIN_VALUE * 4.0,
+			"sanity: the look is obvious; got %f" % c.debug_shoot_score)
 	assert_eq(c.intended_action, AIRoleCarrier.INTENT_SHOOT,
 			"an obvious shot fires on tick one despite a deep settle doubt")
 
