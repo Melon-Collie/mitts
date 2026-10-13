@@ -29,7 +29,7 @@ Adding a behaviour is four steps:
      │                       │                       │
      │  picks up puck        │  picks up puck        │
      ▼                       ▼                       │
-    CARRY ───[shot wins + aim in cone]───► SHOOT_PRESSED
+    CARRY ───[shot wins + puck loaded]───► SHOOT_PRESSED
      ▲                                          │
      └──────────────────────────────────────────┘
              (release fires when the charge ends)

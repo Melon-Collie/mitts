@@ -980,7 +980,6 @@ var _wrister_pred_scratch: ShotMechanics.ShotResult = ShotMechanics.ShotResult.n
 # The wrist shot's load, re-solved every aim tick and at the release from the
 # replayed input, so it needs no reconcile save. Read by the aim pose.
 var wrister_load: WristerLoad.Result = WristerLoad.Result.new()
-var wrister_load_active: bool = false
 # How far the aim pose winds toward wrister_load.wound_yaw: the power the shot
 # would release with now, as a share of the full band.
 var wrister_coil: float = 0.0
@@ -1261,6 +1260,9 @@ func build_ai_caps() -> AISkaterCaps:
 	caps.loft_tans = Vector3(loft_tan_low, loft_tan_mid, loft_tan_high)
 	caps.lateral_grip = lateral_grip
 	caps.backhand_power_coefficient = backhand_power_coefficient
+	caps.wrister_load = _wrister_load_config()
+	caps.facing_rules = facing_rules
+	caps.wrister_unloaded_share = wrister_unloaded_share
 	caps.reception_ceiling_mult = skater.reception_ceiling_mult
 	# Handle reach scales with the blade lever: max_blade_speed / its base is
 	# exactly the lever ratio (attributes v4 — reach + stick length), so a
@@ -2745,22 +2747,11 @@ func _wrister_aim_dir(input: InputState) -> Vector3:
 # puck sits still where the shot fires from while the torso coils toward the
 # cursor. Routed through the state machine's apply_wrister_aim_blade callback.
 func _apply_wrister_aim_blade(input: InputState, delta: float) -> void:
-	# Bots commit a scored lateral release offset (bot_wrister_origin_offset): freeze
-	# the puck THERE, not at the centered carry pose. A centered freeze rides into the
-	# goalie's poke radius on a breakaway and the shot whiffs; the scorer priced an
-	# off-the-poke-line release (release_pos), so hold the blade toward that world spot
-	# — the speed cap eases the puck out over the coil. Humans (and a bot with no
-	# committed offset) leave it ZERO → freeze at the current blade pose.
-	var hold_target: Vector3 = Vector3.INF
-	var offset: Vector3 = input.bot_wrister_origin_offset
-	if offset.length_squared() > 0.0001:
-		hold_target = skater.global_position + offset
-		hold_target.y = 0.0
 	# Feed the live aim line so the frozen blade visibly addresses the side of
 	# the puck the shot will push from (Skater.set_wrister_address). Re-read
 	# per tick: an aim swung across the stick line re-addresses on the spot.
 	skater.set_wrister_address(_wrister_aim_dir(input))
-	_ik.apply_blade_from_mouse(input, delta, true, hold_target)
+	_ik.apply_blade_from_mouse(input, delta, true)
 
 # Bearing the stroke-travel tracker seeds from at charge start: origin→cursor,
 # the SHOT LINE. MUST mirror _update_wrister_charge's bearing so the first step
@@ -2774,13 +2765,9 @@ func _wrister_swing_seed(input: InputState, origin_world: Vector3) -> Vector3:
 	bearing.y = 0.0
 	return bearing
 
-# Solves wrister_load for this tick's aim and records whether it governs the
-# shot: a human's does; a bot commits its own hand and power, and its scoring
-# does not price the load. Call before _wrister_is_backhand / _wrister_load_cap.
+# Solves wrister_load for this tick's aim, for humans and bots alike. Call before
+# _wrister_load_cap and before reading wrister_load.is_backhand (the hand).
 func _solve_wrister_load(input: InputState) -> void:
-	wrister_load_active = input.bot_wrister_aim_dir.length_squared() <= 0.0001
-	if not wrister_load_active:
-		return
 	# The frozen puck rides along with the skater from its pin. Not the blade's
 	# contact point, which swings with the torso's wind-up.
 	var pin: Vector3 = _aiming.wrister_origin_world - _aiming.wrister_origin_skater_pos
@@ -2788,24 +2775,17 @@ func _solve_wrister_load(input: InputState) -> void:
 	WristerLoad.solve(wrister_load, to_local * Vector3(pin.x, 0.0, pin.z),
 			to_local * _wrister_aim_dir(input), skater.is_left_handed, _wrister_load_config())
 
-# Forehand/backhand for the wrister: the bot's commit, or for a human the way the
-# torso has to turn to drive the shot.
-func _wrister_is_backhand(input: InputState) -> bool:
-	return wrister_load.is_backhand if wrister_load_active else input.bot_wrister_backhand
-
 # The most a release can carry once the load is applied.
 func _wrister_load_cap(is_backhand: bool) -> float:
-	if not wrister_load_active:
-		return INF
-	var cap: float = max_wrister_power * lerpf(wrister_unloaded_share, 1.0, wrister_load.load)
-	return cap * backhand_power_coefficient if is_backhand else cap
+	return max_wrister_power * WristerLoad.power_share(wrister_load.load, is_backhand,
+			wrister_unloaded_share, backhand_power_coefficient)
 
 func _release_wrister(input: InputState) -> void:
 	_solve_wrister_load(input)
 	if has_puck:
 		var blade_world: Vector3 = _ik.last_target_blade_world
 		var aim_dir: Vector3 = _wrister_aim_dir(input)
-		var is_backhand: bool = _wrister_is_backhand(input)
+		var is_backhand: bool = wrister_load.is_backhand
 		# LMB is always a charged wrister now — the quick pass lives on its own
 		# button (_fire_quick_pass). A bare tap here fires a min-charge wrister.
 		last_release_hand = "BH" if is_backhand else "FH"
@@ -2834,8 +2814,7 @@ func _release_wrister(input: InputState) -> void:
 	# shot the torso couldn't load finishes small — the finish IS the power readout.
 	var release_power_t: float = ShotMechanics.wrister_power_t(
 			_wrister_sweep_speed(input), _wrister_config(), _wrister_stroke_travel())
-	if wrister_load_active:
-		release_power_t = minf(release_power_t, wrister_load.load)
+	release_power_t = minf(release_power_t, wrister_load.load)
 	_sm.follow_through_power = lerpf(wrister_follow_through_min_power, 1.0, release_power_t)
 	_sm.set_state(State.FOLLOW_THROUGH)
 	_sm.follow_through_timer = follow_through_duration
@@ -2979,7 +2958,7 @@ func _update_wrister_charge(input: InputState) -> void:
 	# that it runs on the authoritative sim, not that it is limited to host shooters.
 	var charge_aim_dir: Vector3 = _wrister_aim_dir(input)
 	_solve_wrister_load(input)
-	var is_backhand: bool = _wrister_is_backhand(input)
+	var is_backhand: bool = wrister_load.is_backhand
 	# Re-solves every tick while charging (+ per replayed input on reconcile), so
 	# fill a reused scratch instead of allocating a ShotResult each time.
 	var pred := ShotMechanics.release_wrister(
@@ -2988,9 +2967,8 @@ func _update_wrister_charge(input: InputState) -> void:
 			_wrister_config(), charge_aim_dir, false,
 			_wrister_sweep_speed(input), _wrister_stroke_travel(), _wrister_pred_scratch)
 	pred.power = minf(pred.power, _wrister_load_cap(is_backhand))
-	if wrister_load_active:
-		wrister_coil = minf(wrister_load.load, ShotMechanics.wrister_power_t(
-				_wrister_sweep_speed(input), _wrister_config(), _wrister_stroke_travel()))
+	wrister_coil = minf(wrister_load.load, ShotMechanics.wrister_power_t(
+			_wrister_sweep_speed(input), _wrister_config(), _wrister_stroke_travel()))
 	skater.predicted_shot_velocity = pred.direction * pred.power
 	# shot_charge carries the release-now SPEED (normalized predicted power over
 	# the min→max band) — the pure mouse-speed model, so it always matches the

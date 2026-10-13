@@ -107,3 +107,12 @@ static func _torso_lo(puck_bearing: float, is_backhand: bool, cfg: Config) -> fl
 static func _torso_hi(puck_bearing: float, is_backhand: bool, cfg: Config) -> float:
 	var off_side_reach: float = cfg.home_reach_rad if is_backhand else cfg.away_reach_rad
 	return minf(cfg.max_twist_rad, puck_bearing + off_side_reach)
+
+
+# The share of max_wrister_power a release can carry: the turn buys the top of
+# the band, while the arms, wrists and stick flex alone still carry
+# `unloaded_share` of it; a backhand pays its coefficient on top.
+static func power_share(load: float, is_backhand: bool, unloaded_share: float,
+		backhand_coefficient: float) -> float:
+	var share: float = lerpf(unloaded_share, 1.0, load)
+	return share * backhand_coefficient if is_backhand else share

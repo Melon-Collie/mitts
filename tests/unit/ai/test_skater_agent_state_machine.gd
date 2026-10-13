@@ -727,29 +727,26 @@ func test_shoot_pressed_front_pressure_cancels_via_slap() -> void:
 	assert_true(i.slap_pressed)
 
 
-func _trailer_side_at_commit(trailer_vel: Vector3) -> float:
-	# A trailer directly behind the shooter, within stick reach, moving across
-	# at `trailer_vel`. Team 0 attacks -Z, so the aim is -Z and the forehand
-	# side is x = -handedness sign. A fresh bot per call: tick 0 is the pick.
+func _wind_up_side_with_puck_at(puck_offset: Vector3) -> float:
+	# A fresh right-handed bot per call, facing its attack (-Z): tick 0 reads
+	# the hand from where the puck sits and locks the wind-up side.
 	before_each()
 	sm._state = Agent.State.SHOOT_PRESSED
 	var s := _self_snap(Vector3.ZERO, true)
-	_add_skater(s, OPP_ID, Vector3(0, 0, 1.0))
-	s.skater_states[OPP_ID].velocity = trailer_vel
-	sm.dispatch(InputState.new(), s)  # tick 0 picks and locks the side
+	s.skater_states[SELF_ID].facing = Vector2(0.0, -1.0)
+	s.puck_state.position = puck_offset
+	sm.dispatch(InputState.new(), s)
 	return sm._shoot_side_sign
 
 
-func test_wind_up_side_reads_a_trailer_drifting_onto_the_forehand() -> void:
-	# Directly behind at the commit, but sliding onto the forehand over the
-	# charge: the wind-up would draw the puck back into his stick (#740).
-	var forehand_x: float = -sm._handedness_perp_sign
-	assert_eq(_trailer_side_at_commit(Vector3(forehand_x * 4.0, 0, 0)), -1.0,
-			"a trailer arriving on the forehand during the charge flips it to the backhand")
-	assert_eq(_trailer_side_at_commit(Vector3.ZERO), 1.0,
-			"a trailer staying directly behind leaves the forehand wind-up")
-	assert_eq(_trailer_side_at_commit(Vector3(-forehand_x * 4.0, 0, 0)), 1.0,
-			"one drifting to the backhand side leaves the forehand wind-up")
+func test_wind_up_side_is_the_hand_the_puck_gives() -> void:
+	# The blade freezes where the press finds the puck, so the hand is the
+	# load's: beside the stick hip a shot ahead is a forehand, beside the other
+	# hip a backhand, and the cosmetic wind-up is drawn on that side.
+	assert_eq(_wind_up_side_with_puck_at(Vector3(0.9, 0.0, 0.0)), 1.0,
+			"a puck beside a right-hander's stick hip winds up on the forehand")
+	assert_eq(_wind_up_side_with_puck_at(Vector3(-0.9, 0.0, 0.0)), -1.0,
+			"one beside the other hip winds up on the backhand")
 
 
 func test_shoot_pressed_ignores_rear_pressure() -> void:
@@ -1413,10 +1410,10 @@ func test_carry_holds_intent_against_carrier_flip() -> void:
 	var stub := _stub_carry(AIRoleCarrier.INTENT_CARRY)  # carrier now wants CARRY
 	sm._intended_action = Agent.State.SHOOT_PRESSED       # but we're mid-pre-aim
 	sm._intent_wait_ticks = 0
-	# Freeze the cursor far from the aim so convergence can't fire this tick.
-	sm._mouse_max_speed_m_s = 0.0001
-	sm._mouse_pos = Vector3(50, 0, 50)
-	sm._mouse_pos_initialized = true
+	# Priced at full load with the puck still unloaded at the body, so the press
+	# can't fire this tick.
+	sm._locked_pre_aim_point = Vector3(0, 0, -20)
+	sm._shot_hold_share_locked = 1.0
 	sm.dispatch(InputState.new(), _self_snap(Vector3.ZERO, true))
 	assert_eq(sm._intended_action, Agent.State.SHOOT_PRESSED,
 			"a carrier CARRY flip does not cancel the pending shot")

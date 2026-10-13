@@ -113,11 +113,11 @@ func _set_shot_state(state: int) -> void:
 # smoothed blade and the blade the skater ended up with. Returns false (after
 # failing the test) on divergence so callers can bail out of long loops.
 func _step(mouse: Vector3, delta: float, label: String,
-		hold_blade: bool = false, hold_target: Vector3 = Vector3.INF) -> bool:
+		hold_blade: bool = false) -> bool:
 	var input := InputState.new()
 	input.mouse_world_pos = mouse
-	_ref._ik.apply_blade_from_mouse(input, delta, hold_blade, hold_target)
-	_nat._ik.apply_blade_from_mouse(input, delta, hold_blade, hold_target)
+	_ref._ik.apply_blade_from_mouse(input, delta, hold_blade)
+	_nat._ik.apply_blade_from_mouse(input, delta, hold_blade)
 	_step_count += 1
 
 	var where: String = "%s @ step %d" % [label, _step_count]
@@ -198,11 +198,6 @@ func test_wrister_aim_paths_match() -> void:
 	# Freeze hold (human): target == current blade, near-zero step bookkeeping.
 	for i: int in 60:
 		if not _step(center + Vector3(1.0, 0.0, -2.0), DELTA, "aim hold", true):
-			return
-	# Bot hold toward a scored release spot (finite hold_target_world).
-	var release: Vector3 = center + Vector3(-0.8, 0.0, -1.3)
-	for i: int in 90:
-		if not _step(center, DELTA, "bot hold", true, release):
 			return
 	_set_shot_state(State.SKATING_WITHOUT_PUCK)
 	# Exit: the inertia model must resume from a coherent velocity on both sides.
@@ -292,9 +287,6 @@ func test_chaos_fuzz_matches() -> void:
 		var aiming: bool = _rng.randf() < 0.25
 		_set_shot_state(State.WRISTER_AIM if aiming else State.SKATING_WITHOUT_PUCK)
 		var hold: bool = aiming and _rng.randf() < 0.5
-		var hold_target: Vector3 = Vector3.INF
-		if hold and _rng.randf() < 0.5:
-			hold_target = pos + Vector3(_rng.randf_range(-1.0, 1.0), 0.0, _rng.randf_range(-1.5, -0.5))
 		if _rng.randf() < 0.06:
 			_ref._ik.reset_blade_smoothing()
 			_nat._ik.reset_blade_smoothing()
@@ -311,7 +303,7 @@ func test_chaos_fuzz_matches() -> void:
 			pos += vel * maxf(delta, 0.0) if delta > 0.0 else Vector3.ZERO
 			yaw += yaw_rate * delta
 			_place(pos, yaw)
-			if not _step(pos + mouse_off, delta, "chaos", hold, hold_target):
+			if not _step(pos + mouse_off, delta, "chaos", hold):
 				return
 			steps_done += 1
 	pass_test("%d chaos steps in lockstep within %f" % [steps_done, TOLERANCE])

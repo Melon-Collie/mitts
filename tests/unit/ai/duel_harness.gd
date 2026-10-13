@@ -381,14 +381,10 @@ func step() -> void:
 			s.wrister_active = true
 			s.wrister_hold = s.blade - s.pos
 		if s.wrister_active:
-			# The wrister charge holds the puck where the shot fires from
-			# (SkaterController._apply_wrister_aim_blade): a bot's committed
-			# release offset off the body, else the blade frozen body-relative.
-			# The wind-up cursor is cosmetic and never moves the puck, and the
-			# release tick still fires from the hold.
-			var off: Vector3 = s.input.bot_wrister_origin_offset
-			desired = s.pos + (Vector3(off.x, 0.0, off.z)
-					if off.length_squared() > 0.0001 else s.wrister_hold)
+			# The wrister charge freezes the blade body-relative where the press
+			# found it (SkaterController._apply_wrister_aim_blade). The wind-up
+			# cursor never moves the puck, and the release fires from the hold.
+			desired = s.pos + s.wrister_hold
 			s.wrister_active = in_charge
 		else:
 			var to_cursor: Vector3 = s.input.mouse_world_pos - s.pos

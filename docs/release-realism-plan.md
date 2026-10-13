@@ -1,8 +1,8 @@
 # Release realism — where, when and which way the puck can leave the stick
 
-Status: **Phase 1 built for humans, playtest pending** — the wrist shot's load
-(*Phase 1*, as built). The hard cone this plan first proposed was dropped for it.
-Phases 2–4 are still drafts. Each phase is meant to ship as its own PR with its
+Status: **Phases 1 and 3 built, playtest pending** — the wrist shot's load
+(*Phase 1*) and the bots onto it (*Phase 3*). The hard cone this plan first
+proposed was dropped for the load. Phases 2 and 4 are still drafts. Each phase is meant to ship as its own PR with its
 own playtest.
 
 ## Decisions banked
@@ -37,12 +37,7 @@ own playtest.
 | release direction | anything, including straight behind; backhand ×0.75, dodged by sweeping the forehand way | prices zero turn cost anywhere within ±157° of facing (`_facing_rotation_time`); commits with no turn inside 132° (Aim-B2); every pass fires as a forehand |
 | time to full power | ~50 ms: the cursor-speed EMA saturates in about six ticks on a fast flick | a fixed 125 ms (`BOT_WRISTER_CHARGE_TICKS`), plus a 0–0.24 s timing hold; always full power |
 | after a catch | a full-power release can fire on the first carrying tick | same |
-| where the puck leaves | wherever the blade sat at the press, frozen | one of three lateral offsets (`RELEASE_SAMPLE_FRACS` 0 / +1 / −1 × ~0.88 m), then eased there *during the frozen hold* at the 60 m/s on-axis aim budget, which no human can do |
-
-The last row is a straight bot advantage. `_apply_wrister_aim_blade` gives a bot a
-`hold_target`, and `SkaterIKCoordinator`'s `WRISTER_AIM` branch moves the blade
-toward it with on-axis motion uncapped to 60 m/s. A human's blade cannot move
-during that state at all.
+| where the puck leaves | wherever the blade sat at the press, frozen | the same since Phase 3; before it, one of three lateral offsets eased there *during the frozen hold* at a 60 m/s on-axis aim budget no human has |
 
 The point-blank drive follows from two things:
 - **The ranking value rises all the way into the crease.** `AIShotValue` is
@@ -55,7 +50,7 @@ The point-blank drive follows from two things:
   blade out to that offset from a body that has skated another `v × 0.135 s`, so
   the real release can sit beside the pads.
 
-## Phase 1 — the wrist shot's load (as built, humans only)
+## Phase 1 — the wrist shot's load (as built)
 
 `WristerLoad` (`Scripts/domain/rules/wrister_load.gd`), solved every aim tick and
 at the release by `SkaterController._solve_wrister_load`. In the hips' frame:
@@ -96,8 +91,7 @@ Things to watch in the playtest:
 - **The cursor-sweep hand read is removed.** The load names the hand, so
   `ChargeTracking` keeps only the stroke travel and the variance reset.
 
-Bots are untouched: they commit hand and power, and their scoring does not price
-the load. They join in Phase 3.
+Bots play under the same load since Phase 3.
 
 ## Phase 2 — release load (shared) — **needs a decision**
 
@@ -164,23 +158,21 @@ stops being fixed.
 - The shot-outcome sim (`test_shot_sim.gd`) re-run, with the change in bot goal
   rate reported.
 
-## Phase 3 — bots onto the human toolkit — **draft for review**
+## Phase 3 — bots onto the human toolkit (as built, playtest pending)
 
-Humans now play under two rules bots are exempt from: facing follows travel
-(`FacingRules`) and the wrist shot's load
-(`WristerLoad`). Both are pure functions of state the bot already has, so the
-work is not new physics. It is teaching the bot to play inside them: its
-decisions price them and its execution respects them. No bot-only gates.
+Phase 1 put humans under two rules bots were exempt from: facing follows
+travel (`FacingRules`) and the wrist shot's load (`WristerLoad`). Both are pure
+functions of state the bot already has, so the work was not new physics. It was
+teaching the bot to play inside them: its decisions price them and its execution
+respects them. No bot-only gates.
 
-**The finding that shapes it.** A bot carries and pre-aims with the puck about
-1.3 m straight out on the line to its target (`CARRY_BLADE_AIM_FORWARD_M`; the
-carry ring points at the goal, the route or the shot aim). A shot or pass fired
-at that target runs radial to the body, which the load scores as zero:
-switching the cap on as bots play today caps nearly every centred shot and
-forward pass at 60% (about 19.8 m/s). That is below the 20 m/s pass target
-(`PASS_TARGET_CLOSING_M_S`), and every shot is priced at a pace it would not
-reach. So the bot has to carry and release like a player who loads the puck,
-not just have the rule switched on.
+**The finding that shaped it.** A bot carried and pre-aimed with the puck about
+1.3 m straight out on the line to its target (`CARRY_BLADE_AIM_FORWARD_M`). A
+shot or pass fired at that target runs radial to the body, which the load scores
+as zero: switching the cap on alone would have capped nearly every centred shot
+and forward pass at 60% (about 19.8 m/s), below the 20 m/s pass target
+(`PASS_TARGET_CLOSING_M_S`). So the bot had to carry and release like a player
+who loads the puck, not just have the rule switched on.
 
 ### 3a. Facing (as built, playtest pending)
 
@@ -204,31 +196,65 @@ not just have the rule switched on.
   the stance, which squares to the cursor below 3 m/s.
 - **Left for the slap-shot pass:** the slapper's entry snap itself.
 
-### 3b. Carry and release with the puck loaded
+### 3b. Carry and release with the puck loaded (as built, playtest pending)
 
-- **The carry pocket.** When a shot or pass is in prospect, the carry cursor holds
-  the puck on the hand's home side (out beside or behind the stick-side hip for a
-  forehand), not out on the target line. Getting it there is a real stickhandle at
-  the bot's blade speed.
-- **The release is whatever the puck's position gives.** The bot presses from
-  where the puck is, with the hand and the cap the load names. `RELEASE_SAMPLE_FRACS`,
-  `bot_wrister_origin_offset`, the 60 m/s on-axis easing and `bot_wrister_backhand`
-  all go; the controller applies `WristerLoad` to bots exactly as to humans.
-- **This is the old Phase 3** (bots release from where the puck is) with a reason
-  for where the puck should be.
+- **One rule for both.** The controller applies `WristerLoad` to bots exactly as
+  to humans: the hand and the cap come from where the puck sits at the press.
+  `RELEASE_SAMPLE_FRACS`, `bot_wrister_origin_offset`, `bot_wrister_backhand` and
+  the 60 m/s on-axis ease are gone.
+- **The bot's load configs are its body's.** `AISkaterCaps` carries the
+  controller's `WristerLoad.Config`, `FacingRules.Config` and unloaded share, so
+  the bot prices and executes under the numbers its body fires with.
+- **The pocket.** `WristerPocket` (pure; `test_wrister_pocket.gd`) names where to
+  hold the puck so a release toward an aim loads best: the aim turned a quarter
+  turn either way and an eighth either side of each, each read in the frame the
+  body will face with the cursor there (`FacingRules`). At speed that is beside
+  the stick hip; at rest the body turns side-on with the puck in front.
+- **Carrying to it.** While a shot look dominates, the fire-tracking carry holds
+  the puck at the shoot-now sweep's winning hold (below), so the press usually
+  finds it already there. Pre-aim for a shot, a charged pass or a dump-in / rim
+  carries the puck to its hold and presses once the live load reaches the share
+  it was priced at (`_load_ready`, 0.05 slack, the old 0.5 s timeout as the
+  backstop). The Aim-B2 reach-cone commit stays for the one-tick quick release
+  only: a charged release fires along its committed aim from wherever the puck
+  sits, so it waits on neither the aim nor the body.
+- **A pass holds the puck where it is** when that already carries the feed's
+  pace, else goes to the pocket for it (`_lock_pass_hold`). A backhand pass's
+  power is committed over the backhand coefficient so it leaves at the solved
+  pace.
+- **The wind-up is drawn on the load's hand.** The poke-avoidance side flip went
+  with it: the frozen blade never drew the puck into a defender's stick.
 
-### 3c. Pricing in the same currency
+### 3c. Pricing in the same currency (as built)
 
-- **Shots:** the shoot-now sweep prices candidate releases at the load-capped pace
-  for that puck bearing and aim, plus the pull's real time. That pace drives the
-  flight time, the goalie read, the rung choice and the value, so a centred
-  stand-still rip is priced as the 60% shot it is.
-- **Passes:** the pass pace solve is capped the same way. A feed the bot cannot
-  load (a forward pass with the puck straight out) is a slower pass, which the
-  lane model already punishes, or it is worth pulling the puck to the pocket first.
-- **Carry candidates and teammates' shots** keep the full-pace read for now:
-  they are projections a beat ahead, and the pocket is where the carry will put
-  the puck.
+- **Shots: a hold sweep.** The shoot-now eval prices up to four holds — the puck
+  where it is, the best-loaded pocket, and a reach out to either side of the
+  shot line — each at the pace its load allows, from where the pull puts the
+  release, with the pull's time in the goalie's budget. The side reaches are
+  the old lateral relocations (the pull-across, the backhand tuck), now at the
+  load's honest pace rather than a flat backhand coefficient. A pull costs the
+  blade's travel, or the body's turn onto the cursor when the turn is what loads
+  the puck (a forehand pulled beside the stick hip is loaded before the body
+  moves). The as-is hold is scored first and ties keep it. The tip read fires
+  from the faster of the as-is hold and the pocket.
+- **Passes:** the launch-pace solve is capped at the pocket's share
+  (`_pass_launch_cap`), on both the scored and the fired pass.
+- **Not priced yet:** a pass's pull time (the back-wedge rotation charge,
+  `_facing_rotation_time`, still stands in for it there, though a charged pass
+  no longer turns for its aim), and the rim and dump-in pace ladders (still
+  searched up to the full wrister). The bot pulls to the pocket for them at
+  execution, so the pace holds; only the time is unpriced.
+- **Carry candidates and teammates' shots** keep the full-pace read: they are
+  projections a beat ahead, and the pocket is where the carry will put the puck.
+- **Measured — open, needs a decision before the playtest.** Point-blank
+  conversion against the live keeper (`test_bot_vs_goalie_conversion.gd`, 63
+  rushes per goalie tier) went from HARD 6% / NORMAL 19% / EASY 33% to 51% /
+  41% / 40%. The side holds are now really pulled to before the press (mean
+  release-to-keeper 0.42 → 0.88 m) where the old offset was mostly never
+  delivered, and every release outside a down keeper's pad edge scored (13 of
+  13). Without the side reaches (as-is and pocket only) it is 16% / 17.5% / 13%.
+  Either way the goalie-tier ladder flattens. This is Phase 4's problem, now
+  with the release the bot really takes.
 
 ### Order and tests
 
@@ -249,10 +275,11 @@ playtest.
 The aim is that driving into a set keeper stops being the optimum, without a
 positional gate. Two pieces:
 
-1. **Score the executed release.** Phase 3 does this. After it, the lateral
-   offset that let a scored doorstep become a release beside the pads no longer
-   exists. The depth-only `release_ahead_of_goalie` stays as the degenerate-
-   geometry guard it is documented as.
+1. **Score the executed release.** Phase 3 does this: a side hold is pulled to
+   before the press and priced from there, at its load's pace, so a release
+   beside the pads is one the bot really skates and stickhandles to rather than
+   one eased out during the frozen hold. The depth-only `release_ahead_of_goalie`
+   stays as the degenerate-geometry guard it is documented as.
 2. **Let the seam see the keeper's body in tight.** The public xG form is fitted on
    shots whose doorstep share is mostly rebounds and displaced keepers, so its
    point-blank value is mostly *those*. That is why it reads ~0.8 from 0.9 m.

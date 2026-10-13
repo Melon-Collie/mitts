@@ -28,28 +28,26 @@ enum State {
 # matching X-inset lives on AIRoleHelpers.RINK_INSET_M (single source).
 const RINK_Z_INSET: float = 1.0
 
-# CARRY pre-aims before it fires: on picking an action it points the mouse at
-# that action's aim direction and waits for the motion-limited cursor to
-# converge. Without it the press state's first tick fires with the mouse still
-# mid-traversal from CARRY's previous target, so a quick-shot pass leaves at
-# whatever angle the mouse happened to be at.
+# CARRY pre-aims before it fires. A quick release points the mouse at its aim
+# direction and waits for the motion-limited cursor to converge; without it the
+# press state's first tick fires with the mouse still mid-traversal from CARRY's
+# previous target, so a quick pass leaves at whatever angle the mouse happened to
+# be at. A charged release instead carries the puck to its hold and waits for the
+# load (_load_ready).
 #
 # "Converged" is a distance on the CARRY_BLADE_AIM_FORWARD_M ring, so it is
 # really an ANGLE: 0.10 at the 1.3 m ring is ~±4.4°. A slop budget for moving
 # aim targets (receiver leads, goalie shadow drift).
 const AIM_CONVERGED_DIST_M: float = 0.10
 
-# Commit-then-aim margin. The blade physically reaches anywhere inside the reach
-# cone (_self_reach_cone_half_angle, ROM + torso twist ≈ 157°) from the FROZEN
-# facing, so a shot/pass whose aim already falls inside the cone needs NO body
-# rotation — the bot commits to the charge immediately and the blade swings to the
-# aim while the body holds its heading (WRISTER_AIM freezes facing). Only aims in
-# the narrow back wedge still pre-rotate the body. This margin pulls the
-# immediate-commit boundary inside the hard cone edge so the wind-up sweep (which
-# draws the blade BACK past the aim before releasing through it) and the torso
-# twist have headroom over the short ~125 ms charge. Feel knob, hand-set: widen
-# toward 0 if bots leave easy reachable aims on the table, tighten if a wide aim's
-# blade visibly lags the release.
+# Commit-then-aim margin for the quick release. The blade physically reaches
+# anywhere inside the reach cone (_self_reach_cone_half_angle, ROM + torso twist
+# ≈ 157°) from the current facing, so a quick pass whose aim already falls inside
+# the cone needs NO body rotation and commits at once. Only aims in the narrow
+# back wedge still pre-rotate the body. This margin pulls the immediate-commit
+# boundary inside the hard cone edge. Feel knob, hand-set: widen toward 0 if bots
+# leave easy reachable aims on the table, tighten if a wide aim's blade visibly
+# lags the release.
 const AIM_COMMIT_CONE_MARGIN_RAD: float = deg_to_rad(25.0)
 
 # Default / floor for the pre-aim convergence timeout — the safety net for
@@ -550,24 +548,14 @@ const BOT_WRISTER_LOOKAHEAD_S: float = (
 # line is offset perpendicular to aim_dir). 0.15 m is small enough to
 # stay inside ROM even at the bot's max charge target, but large enough
 # that the wind-up reads as a forehand pose rather than a straight
-# back-to-front jab through the body's centerline. Cosmetic: the hand the
-# shot is charged as is the bot's commit (bot_wrister_backhand), and a
-# flipped (backhand-side) windup is drawn for a backhand commit.
+# back-to-front jab through the body's centerline. Cosmetic: the hand is the
+# load's, from where the puck sits, and a backhand is drawn on the backhand side.
 const BOT_WRISTER_SIDE_OFFSET_M: float = 0.15
 
-# Side-selection for wrister wind-up — defender within poke reach
-# AND clearly on the forehand side flips the wind-up to backhand.
-# Models the OPPONENT defender's stick-reach for a poke check
-# (stick + small overhang), resolved per defender from _caps_by_peer
-# so a long-stick threat flips the wind-up at his real reach; this
-# constant is the league fallback for unresolvable peers. The lateral
-# threshold ensures we only flip when the defender is laterally on
-# the forehand side, not directly in front (where the forehand still
-# clears their stick).
-const BOT_POKE_REACH_BUFFER_M: float = 0.2
-const BOT_FOREHAND_STICK_REACH_M: float = (
-		GameRules.DEFAULT_STICK_LENGTH_M + BOT_POKE_REACH_BUFFER_M)
-const BOT_FOREHAND_LATERAL_THRESHOLD_M: float = 0.3
+# How far short of the priced share the live load may be when a charged
+# release presses: the aim the pre-aim checks is the locked hole, a few degrees
+# off the line the share was priced along.
+const LOAD_READY_SHARE_SLACK: float = 0.05
 
 # ── Unified mouse motion ─────────────────────────────────────────────────────
 # Every state's `input.mouse_world_pos` goes through `_step_mouse_toward`, which
@@ -828,14 +816,19 @@ var _shot_aim_locked: Vector3 = Vector3.INF
 # full rip from range); flat commits carry 1.0. Fed to input.bot_wrister_power_t.
 var _shot_power_committed: float = 1.0
 
-# Mirrored from `_carrier.shot_release_offset` — the winning release-offset
-# sample (world offset relative to the projected release; ZERO = un-relocated).
-# Folded into the wind-up endpoint offsets at charge start so the blade carries
-# the puck to the sampled spot, and into the locked aim direction so the shot
-# fires at the hole FROM that spot. Its lateral side also owns the wind-up side
-# sign and the committed hand (a backhand-side offset is charged as the
-# backhand the sampler priced).
-var _shot_release_offset_locked: Vector3 = Vector3.ZERO
+# Mirrored from `_carrier.shot_hold_offset` / `shot_hold_share`: where the puck
+# sits off the body (world XZ) at the press of the hold the shot was priced
+# from, and the share of pace its load gives there. Pre-aim carries the puck to
+# it and presses once the live load reaches the share (_load_ready).
+var _shot_hold_offset_locked: Vector3 = Vector3.ZERO
+var _shot_hold_share_locked: float = 1.0
+# The same for a charged pass or dump, solved at its intent transition
+# (_lock_pass_hold): the puck stays where it is when its load already carries
+# the pace, else it goes to the pocket for the feed.
+var _pass_hold_offset: Vector3 = Vector3.ZERO
+var _pass_hold_share: float = 0.0
+# Configured from this bot's context each dispatch (_build_role_context).
+var _holds := AIShotHolds.new()
 
 # Last-resort DUMP target, mirrored from `_carrier.dump_target` at commit and
 # frozen through pre-aim + release (like the shot aim/loft above). INF → not
@@ -880,10 +873,8 @@ var _shoot_aim_target: Vector3 = Vector3.ZERO
 # and would give a garbage origin→cursor. Built as release_pos → aim_point, with
 # the execution error folded in.
 var _shoot_aim_dir_locked: Vector3 = Vector3.ZERO
-# Wind-up side decision for SHOOT_PRESSED: +1 = forehand, -1 = backhand.
-# Captured at tick 0 (based on forehand-side pressure) and locked for the
-# charge so the swing doesn't flip mid-press if a defender shuffles in
-# and out of stick reach. PASS_PRESSED hardcodes +1 (no backhand passes).
+# Wind-up side for SHOOT_PRESSED: +1 = forehand, -1 = backhand — the hand the
+# load reads from the puck's spot at tick 0, locked for the charge.
 var _shoot_side_sign: float = 1.0
 # Locked steering destination for the wind-up. Captured ONCE at charge tick 0
 # (projected release position) and held for the charge so the body has a STABLE
@@ -918,6 +909,9 @@ var _pass_target_speed: float = AIActionScoring.PASS_SPEED_M_S
 # the tape, i.e. a genuinely soft flip in close quarters.
 var _pass_should_saucer: bool = false
 var _pass_charge_tick: int = 0
+# The charged pass's committed power fraction, solved at its tick 0 for the hand
+# the puck's spot gives (_pass_power_t).
+var _pass_power_committed: float = 1.0
 # Wind-up endpoint OFFSETS (relative to self_pos) for the charged pass —
 # same geometry pattern as the SHOOT_PRESSED fields, but aim_dir points at the
 # receiver lead and the target charge is derived from _pass_target_speed so the
@@ -951,8 +945,9 @@ var _self_handle_reach: float = 0.9
 # apply_capabilities runs.
 var _self_reach_cone_half_angle: float = deg_to_rad(157.0)
 var _self_facing_turn_rate: float = 6.0
-# Release-offset sampling inputs (see RoleContext.self_blade_speed /
-# .self_backhand_power_coefficient). League baselines until apply_capabilities.
+# The wrist shot's load as this bot's body fires it (see RoleContext's
+# self_wrister_* block; the load and facing configs go straight onto
+# _role_ctx). League baselines until apply_capabilities.
 var _self_blade_speed: float = 10.0
 var _self_backhand_coefficient: float = 0.75
 
@@ -1468,6 +1463,9 @@ func apply_capabilities(caps: AISkaterCaps) -> void:
 	_self_facing_turn_rate = caps.facing_turn_rate
 	_self_blade_speed = caps.blade_speed
 	_self_backhand_coefficient = caps.backhand_power_coefficient
+	_role_ctx.self_wrister_unloaded_share = caps.wrister_unloaded_share
+	_role_ctx.self_wrister_load = caps.wrister_load
+	_role_ctx.self_facing_rules = caps.facing_rules
 	# Aim at the bot's REAL blade speed: the synthesized aim cursor slews
 	# at the same rate the blade is physically clamped to, so aiming looks exactly
 	# as fast as its hands are — no artificial per-difficulty slew. Difficulty comes
@@ -1486,9 +1484,12 @@ func apply_capabilities(caps: AISkaterCaps) -> void:
 # cursor speed (pure mouse-speed model). min power is the league baseline: the
 # controller holds min_wrister at base for every build (soft-touch floor is
 # universal).
-func _pass_power_t() -> float:
+# `hand_coefficient` is the share the release's hand fires at (the backhand
+# coefficient on a backhand), so the commit asks for the pace over it.
+func _pass_power_t(hand_coefficient: float = 1.0) -> float:
 	return clampf(
-			(_pass_target_speed - GameRules.DEFAULT_WRISTER_POWER_MIN_M_S)
+			(_pass_target_speed / maxf(hand_coefficient, 0.05)
+					- GameRules.DEFAULT_WRISTER_POWER_MIN_M_S)
 			/ maxf(_self_wrister_shot_speed - GameRules.DEFAULT_WRISTER_POWER_MIN_M_S, 0.001),
 			0.0, 1.0)
 
@@ -2258,6 +2259,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	ctx.self_facing_turn_rate = _self_facing_turn_rate
 	ctx.self_blade_speed = _self_blade_speed
 	ctx.self_backhand_power_coefficient = _self_backhand_coefficient
+	_holds.configure_from(ctx)
 	ctx.self_forehand_perp_sign = _handedness_perp_sign
 	ctx.self_stagger_timer = self_state.stagger_timer if self_state != null else 0.0
 	ctx.pursuit_standoff_m = _pursuit_standoff_m
@@ -3040,7 +3042,8 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		_shot_loft_level = ShotMechanics.ELEVATION_FLAT
 		_shot_aim_locked = Vector3.INF
 		_shot_power_committed = 1.0
-		_shot_release_offset_locked = Vector3.ZERO
+		_shot_hold_offset_locked = Vector3.ZERO
+		_shot_hold_share_locked = 1.0
 		_locked_pre_aim_point = Vector3.INF
 		_dump_target = Vector3.INF
 		_set_state(_post_puck_lost_state(snapshot))
@@ -3075,7 +3078,8 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		_shot_loft_level = _carrier.shot_loft_level
 		_shot_aim_locked = _carrier.shot_aim_point
 		_shot_power_committed = _carrier.shot_power_t
-		_shot_release_offset_locked = _carrier.shot_release_offset
+		_shot_hold_offset_locked = _carrier.shot_hold_offset
+		_shot_hold_share_locked = _carrier.shot_hold_share
 		# Freeze the dump target the same way — captured at commit, held through
 		# pre-aim and the release. (The always-fresh mirror above resets the pass
 		# fields every tick; the dump carries its aim in _dump_target instead, so
@@ -3120,6 +3124,7 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 							else _shot_aim_point(snapshot, self_pos))
 				State.PASS_PRESSED:
 					_locked_pre_aim_point = _pass_aim_point(snapshot, self_pos)
+					_lock_pass_hold(snapshot, self_pos, self_state)
 		_intended_action = new_intent
 
 	# Steering depends on which action is locked.
@@ -3189,19 +3194,22 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		var dz: float = _mouse_pos.z - mouse_target.z
 		var aim_dist: float = sqrt(dx * dx + dz * dz)
 		var aim_converged: bool = aim_dist < AIM_CONVERGED_DIST_M
-		# Commit-then-aim (Aim-B2): if the aim already sits inside the blade reach
-		# cone of the CURRENT facing, the blade can swing to it with the body frozen
-		# — commit to the charge NOW instead of arcing the mouse (and dragging the
-		# body) all the way around to it. This is what stops the bot pivoting its
-		# whole body toward a reachable lateral pass / off-wing shot. Back-wedge aims
+		# Commit-then-aim (Aim-B2): if a quick release's aim already sits inside the
+		# blade reach cone of the CURRENT facing, commit NOW instead of arcing the
+		# mouse (and dragging the body) all the way around to it. This is what stops
+		# the bot pivoting its whole body toward a reachable lateral pass. Back-wedge aims
 		# (outside the cone) fail this and fall through to the arc-and-converge path,
 		# which rotates the body just until the aim swings into the cone and then
 		# this fires. self_state guards a rare null snapshot entry (keep old timing).
 		var aim_reachable_no_turn: bool = self_state != null and _aim_needs_no_rotation(
 				self_state.facing,
 				Vector2(mouse_target.x - self_pos.x, mouse_target.z - self_pos.z))
-		if aim_converged or aim_reachable_no_turn \
-				or _intent_wait_ticks >= _intent_max_wait_ticks:
+		# A charged release fires along its committed aim from wherever the puck
+		# sits, so it waits on neither: it presses once the puck carries the
+		# share of pace it was priced at.
+		var ready: bool = _load_ready(snapshot, self_pos, self_state) \
+				if _release_is_charged(_intended_action) else (aim_converged or aim_reachable_no_turn)
+		if ready or _intent_wait_ticks >= _intent_max_wait_ticks:
 			_set_state(_intended_action)
 			_intended_action = State.CARRY
 			_intent_wait_ticks = 0
@@ -3219,6 +3227,64 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 			# _intent_max_wait_ticks is sized in physics ticks, so a per-run +1 would
 			# stretch the pre-aim bail timeout by the dispatch period at low tiers.
 			_intent_wait_ticks += _dispatch_period_ticks
+
+
+# True when `intent` fires as a charged wrister (a shot, a charged pass, or a
+# dump-in / rim) rather than the one-tick quick release.
+func _release_is_charged(intent: State) -> bool:
+	if intent == State.SHOOT_PRESSED:
+		return true
+	if intent != State.PASS_PRESSED:
+		return false
+	if _dump_target.is_finite():
+		return _dump_is_soft or _dump_is_rim
+	return _pass_should_charge
+
+
+# The carried puck's offset off the body, world XZ.
+func _puck_offset(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector2:
+	if snapshot.puck_state == null:
+		return Vector2.ZERO
+	var p: Vector3 = snapshot.puck_state.position
+	return Vector2(p.x - self_pos.x, p.z - self_pos.z)
+
+
+# Share of this bot's pace a charged release toward `aim_world` carries with the
+# puck where it is and the body as it faces now. The hand is left in _holds.
+func _share_as_is(snapshot: WorldSnapshot, self_pos: Vector3,
+		self_state: SkaterNetworkState, aim_world: Vector3) -> float:
+	var puck: Vector2 = _puck_offset(snapshot, self_pos)
+	var aim := Vector2(aim_world.x - self_pos.x, aim_world.z - self_pos.z) - puck
+	return _holds.share_at(puck, aim, self_state.facing)
+
+
+# Where a charged pass or dump holds the puck at the press, solved once at the
+# intent transition like the pre-aim point (AIShotHolds.solve_pass).
+func _lock_pass_hold(snapshot: WorldSnapshot, self_pos: Vector3,
+		self_state: SkaterNetworkState) -> void:
+	_pass_hold_share = 0.0
+	if self_state == null or not _release_is_charged(State.PASS_PRESSED):
+		return
+	var pace: float = _dump_launch_speed if _dump_target.is_finite() else _pass_target_speed
+	var puck: Vector2 = _puck_offset(snapshot, self_pos)
+	_holds.solve_pass(Vector2(_locked_pre_aim_point.x - self_pos.x,
+			_locked_pre_aim_point.z - self_pos.z) - puck, puck,
+			Vector2(self_state.velocity.x, self_state.velocity.z), self_state.facing,
+			pace / maxf(_self_wrister_shot_speed, 0.001))
+	_pass_hold_offset = Vector3(_holds.pass_offset.x, 0.0, _holds.pass_offset.y)
+	_pass_hold_share = _holds.pass_share
+
+
+# True once the puck carries the share of pace the locked charged release was
+# priced at, read live (the body's facing freezes at the press).
+func _load_ready(snapshot: WorldSnapshot, self_pos: Vector3,
+		self_state: SkaterNetworkState) -> bool:
+	if self_state == null or not _locked_pre_aim_point.is_finite():
+		return true
+	var priced: float = _shot_hold_share_locked if _intended_action == State.SHOOT_PRESSED \
+			else _pass_hold_share
+	return _share_as_is(snapshot, self_pos, self_state, _locked_pre_aim_point) \
+			>= priced - LOAD_READY_SHARE_SLACK
 
 
 # True when `aim_dir` (world XZ, from the bot to its aim point) already falls
@@ -3262,11 +3328,15 @@ func _aim_target_for_intent(snapshot: WorldSnapshot, self_pos: Vector3) -> Vecto
 	# Falls back to a fresh compute if the lock is missing.
 	match _intended_action:
 		State.PASS_PRESSED:
+			if _release_is_charged(_intended_action) and _pass_hold_share > 0.0:
+				return self_pos + _pass_hold_offset
 			var target: Vector3 = (_locked_pre_aim_point
 					if _locked_pre_aim_point.is_finite()
 					else _pass_aim_point(snapshot, self_pos))
 			return _aim_ring_toward(self_pos, target)
 		State.SHOOT_PRESSED:
+			if _shot_hold_offset_locked != Vector3.ZERO:
+				return self_pos + _shot_hold_offset_locked
 			var target: Vector3 = (_locked_pre_aim_point
 					if _locked_pre_aim_point.is_finite()
 					else _shot_aim_point(snapshot, self_pos))
@@ -3549,9 +3619,10 @@ func _state_shoot_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: 
 		# anchoring the aim_dir lookup on the projected release matches.
 		# Same projected release the steering anchor uses — captured just above
 		# this tick, so reuse it rather than recomputing the projection — PLUS
-		# the committed release offset: the blade carries the puck to the
-		# sampled spot, so that's where the shot actually leaves from.
-		var release_pos: Vector3 = _shoot_release_anchor + _shot_release_offset_locked
+		# the puck's offset: the blade freezes it there, so that's where the
+		# shot actually leaves from.
+		var puck_off: Vector2 = _puck_offset(snapshot, self_pos)
+		var release_pos: Vector3 = _shoot_release_anchor + Vector3(puck_off.x, 0.0, puck_off.y)
 		# Read aim_point directly (not just direction) so we can pass aim
 		# distance into _wind_up_endpoint_offsets for side-offset compensation.
 		# Prefer the carrier's locked hole aim — the exact hole the shot's score
@@ -3580,44 +3651,11 @@ func _state_shoot_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: 
 		var forehand_perp_init: Vector3 = Vector3(
 				aim_dir_init.z * _handedness_perp_sign, 0.0, -aim_dir_init.x * _handedness_perp_sign)
 
-		# Pick wind-up side. A committed release offset OWNS the side: the
-		# sampler already priced its lateral side (a backhand-side offset was
-		# scored at backhand pace), so the sweep must run on that side and commit
-		# that hand to charge the same shot — poke-avoidance must
-		# not flip it to the opposite side of a relocation the score depends
-		# on. Otherwise forehand by default, flipped to backhand if a defender
-		# is within stick reach AND clearly on the forehand side at any point of
-		# the charge (relative motion projected to mid-way and release, so a
-		# trailer drifting up onto the forehand counts) — they'd poke the puck
-		# off a forehand wind-up. Locked for the charge: no mid-swing oscillation.
-		var offset_side_dot: float = _shot_release_offset_locked.x * forehand_perp_init.x \
-				+ _shot_release_offset_locked.z * forehand_perp_init.z
-		if _shot_release_offset_locked.length_squared() > 0.0001:
-			_shoot_side_sign = 1.0 if offset_side_dot >= 0.0 else -1.0
-		else:
-			_shoot_side_sign = 1.0
-			var self_vel: Vector3 = snapshot.skater_states[_peer_id].velocity \
-					if snapshot.skater_states.has(_peer_id) else Vector3.ZERO
-			for peer_id: int in snapshot.skater_states:
-				if _shoot_side_sign < 0.0:
-					break
-				if peer_id == _peer_id or _team_id_by_peer.get(peer_id, -1) == _team_id:
-					continue
-				var opp: SkaterNetworkState = snapshot.skater_states[peer_id]
-				# THIS defender's poke reach — his real stick + the overhang
-				# buffer, league fallback when his build isn't wired.
-				var opp_caps: AISkaterCaps = _caps_by_peer.get(peer_id)
-				var reach: float = BOT_FOREHAND_STICK_REACH_M if opp_caps == null \
-						else opp_caps.stick_reach + BOT_POKE_REACH_BUFFER_M
-				for k: int in 3:
-					var t: float = 0.5 * float(k) * BOT_WRISTER_LOOKAHEAD_S
-					var rel_x: float = opp.position.x - self_pos.x + (opp.velocity.x - self_vel.x) * t
-					var rel_z: float = opp.position.z - self_pos.z + (opp.velocity.z - self_vel.z) * t
-					if rel_x * rel_x + rel_z * rel_z <= reach * reach \
-							and rel_x * forehand_perp_init.x + rel_z * forehand_perp_init.z \
-									> BOT_FOREHAND_LATERAL_THRESHOLD_M:
-						_shoot_side_sign = -1.0
-						break
+		# Wind-up side: the hand the load reads from where the puck sits.
+		_shoot_side_sign = 1.0
+		if self_state != null:
+			_share_as_is(snapshot, self_pos, self_state, aim_point)
+			_shoot_side_sign = -1.0 if _holds.is_backhand else 1.0
 
 		# Wind-up endpoint OFFSETS captured at tick 0 (relative to self_pos)
 		# and held constant for the charge. Sized to the COSMETIC wind-up span
@@ -3625,15 +3663,11 @@ func _state_shoot_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: 
 		# shot draws the whole span. Each tick the lerp is anchored at CURRENT
 		# self_pos so the endpoints float with the bot — both world positions
 		# move forward at the bot's locomotion speed, leaving the blade's
-		# rel-skater motion as pure aim_dir lerp at the target rate. The
-		# committed release offset translates BOTH endpoints (the sweep runs
-		# through the sampled spot; direction — and thus the shot — unchanged),
-		# and the blade drags the puck there over the charge's early ticks, the
-		# blade-travel time the sampler priced into the goalie's budget.
+		# rel-skater motion as pure aim_dir lerp at the target rate.
 		var shot_span: float = BOT_WRISTER_WIND_UP_SPAN_M * _shot_power_committed
 		var endpoints: Dictionary = _wind_up_endpoint_offsets(aim_dir_init, aim_distance, shot_span, _shoot_side_sign)
-		_shoot_wind_up_start = endpoints.start + _shot_release_offset_locked
-		_shoot_aim_target = endpoints.target + _shot_release_offset_locked
+		_shoot_wind_up_start = endpoints.start
+		_shoot_aim_target = endpoints.target
 		# Snap the smoothed cursor straight to the wind-up start world pos.
 		# Without this, _step_mouse_toward needs several ticks to bridge the
 		# gap from the pre-aim cursor (a ring radius ahead of the bot) to the wind-up start
@@ -3669,18 +3703,10 @@ func _state_shoot_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: 
 	# synthesized sweep speed) so the bot deterministically fires the shot the
 	# scorer actually evaluated.
 	input.bot_wrister_power_t = _shot_power_committed
-	# Commit the aim direction and hand DIRECTLY (the fake cursor is purely the
-	# cosmetic wind-up coil): the controller shoots the positional wrister along
-	# this for bots and reads forehand/backhand from the committed side, not the
-	# near-body cursor sweep. Set every tick so it's live on the release tick.
+	# Commit the aim direction DIRECTLY (the fake cursor is purely the cosmetic
+	# wind-up coil); the hand is the load's, from where the puck sits. Set every
+	# tick so it's live on the release tick.
 	input.bot_wrister_aim_dir = _shoot_aim_dir_locked
-	input.bot_wrister_backhand = _shoot_side_sign < 0.0
-	# Freeze the puck at the SCORED lateral offset, not the centered carry pose.
-	# The wrister freeze pins the puck where the blade holds it; centered, that
-	# rides into the goalie's poke radius on a breakaway and the shot whiffs.
-	# The scorer priced an offset release (release_pos = anchor + this) — honor it
-	# so the puck freezes off the poke line where the scorer put it.
-	input.bot_wrister_origin_offset = _shot_release_offset_locked
 
 	if _shoot_charge_tick < BOT_WRISTER_CHARGE_TICKS + _shoot_release_hold_ticks:
 		# Still charging (or hanging on the sampled late-release hold —
@@ -3698,15 +3724,11 @@ func _state_shoot_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: 
 		#
 		# RE-DERIVE the direction from where the puck ACTUALLY is. The aim was
 		# locked at press entry against a PREDICTED release (the projected body
-		# plus the scored offset) while the puck leaves from the live blade, and
-		# the two disagree in two ways that both put shots off the net:
-		#   - with no committed release offset the blade is frozen at the CURRENT
-		#     carry pose, most of a stick off-centre (measured 1.2-1.8 m from the
-		#     assumed release, against 0.12-0.72 m when an offset was committed);
-		#   - on a sharp-angle look the shot runs nearly parallel to the goal
-		#     line, so even 15 cm of release DEPTH error swings the crossing
-		#     point over half a metre (measured: a 0.16 m gap became a 0.64 m
-		#     miss from the side of the net).
+		# plus the puck's offset) while the puck leaves from the live blade, and
+		# on a sharp-angle look the shot runs nearly parallel to the goal line,
+		# so even 15 cm of release DEPTH error swings the crossing point over
+		# half a metre (measured: a 0.16 m gap became a 0.64 m miss from the
+		# side of the net).
 		# This is not re-deciding: the aim POINT and the committed execution
 		# error both stay locked, so a shuffling goalie still cannot flip the
 		# chosen arc mid-swing. It aims at the same target from where the puck
@@ -3932,11 +3954,18 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 		var aim_distance: float = sweep.length()
 		var aim_dir_init: Vector3 = sweep.normalized() if aim_distance > 0.01 else Vector3(0.0, 0.0, 1.0)
 		_pass_aim_dir_locked = aim_dir_init
-		var pass_span: float = BOT_WRISTER_WIND_UP_SPAN_M * maxf(_pass_power_t(), 0.35)
-		# Pass always sweeps on the forehand side — no defender-aware
-		# side flip like SHOOT_PRESSED (passes don't justify backhand power
-		# penalty trade-offs the same way).
-		var endpoints: Dictionary = _wind_up_endpoint_offsets(aim_dir_init, aim_distance, pass_span, +1.0)
+		# The hand is the load's, from where the puck sits; a backhand fires at
+		# the build's backhand share, so its commit asks for the pace over it.
+		var self_state0: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
+		var backhand: bool = false
+		if self_state0 != null:
+			_share_as_is(snapshot, self_pos, self_state0, clean_pass_aim)
+			backhand = _holds.is_backhand
+		_pass_power_committed = _pass_power_t(
+				_self_backhand_coefficient if backhand else 1.0)
+		var pass_span: float = BOT_WRISTER_WIND_UP_SPAN_M * maxf(_pass_power_committed, 0.35)
+		var endpoints: Dictionary = _wind_up_endpoint_offsets(aim_dir_init, aim_distance, pass_span,
+				-1.0 if backhand else 1.0)
 		_pass_wind_up_start = endpoints.start
 		_pass_aim_target = endpoints.target
 		# Snap the smoothed cursor to the wind-up start — same reasoning as
@@ -3962,11 +3991,10 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 	input.mouse_screen_pos = Vector2(sweep_dir_3d.x, sweep_dir_3d.z) * float(_pass_charge_tick)
 	# Pass power: the fraction of the bot's own wrister band that hits the
 	# distance-adaptive target speed. The controller reads this directly.
-	input.bot_wrister_power_t = _pass_power_t()
-	# Commit the pass aim directly (forehand — no backhand passes); the cursor is
-	# purely the cosmetic wind-up. Set every tick so it's live on the release tick.
+	input.bot_wrister_power_t = _pass_power_committed
+	# Commit the pass aim directly; the cursor is purely the cosmetic wind-up, and
+	# the hand is the load's. Set every tick so it's live on the release tick.
 	input.bot_wrister_aim_dir = _pass_aim_dir_locked
-	input.bot_wrister_backhand = false
 
 	if _pass_charge_tick < BOT_WRISTER_CHARGE_TICKS:
 		input.shoot_held = true
@@ -4646,10 +4674,10 @@ func _predict_goalie_at(snapshot: WorldSnapshot, release_time_s: float,
 # rotating toward each one twists the body back and forth. Passes still pre-aim
 # inside the press-state handler.
 #
-# CRITICAL: the returned point must sit CARRY_BLADE_AIM_FORWARD_M from the bot,
-# matching the pre-aim ring _aim_target_for_intent uses. If the two distances
-# differ, the mouse target jumps ~8 m at commit and the motion-limited cursor
-# blows past INTENT_MAX_WAIT_TICKS, timing out pre-aim entirely.
+# CRITICAL: the returned point must be where _aim_target_for_intent's pre-aim
+# will put the cursor (the shot's hold, else the CARRY_BLADE_AIM_FORWARD_M
+# ring). If the two differ, the mouse target jumps at commit and the
+# motion-limited cursor can blow past INTENT_MAX_WAIT_TICKS, timing out pre-aim.
 func _carry_aim_track_fire(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 	const FIRE_AIM_THRESHOLD: float = 0.05
 	# Debounce band for the aim-mode flip below. ABSOLUTE, deliberately
@@ -4683,6 +4711,10 @@ func _carry_aim_track_fire(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector
 	_carry_tracking_fire = should_track
 	if not should_track:
 		return _carry_mouse_aim(snapshot, self_pos)
+	# Hold the puck where the live shot look fires from, so the press finds it
+	# loaded.
+	if _carrier.shoot_now_hold != Vector3.ZERO:
+		return self_pos + _carrier.shoot_now_hold
 	return _aim_ring_toward(self_pos, _shot_aim_point(snapshot, self_pos))
 
 

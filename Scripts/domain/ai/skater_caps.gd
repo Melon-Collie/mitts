@@ -94,9 +94,16 @@ var reception_ceiling_mult: float = 1.0
 
 # Backhand power coefficient (= SkaterController.backhand_power_coefficient — a
 # flat mechanic: backhand technique is the human, leaned only by the blade-curve
-# gear). The release-offset sampler prices a backhand-side release at this
-# fraction of the wrister pace. Default mirrors the controller's 0.75.
+# gear). Part of the wrist shot's load cap (WristerLoad.power_share). Default
+# mirrors the controller's 0.75.
 var backhand_power_coefficient: float = 0.75
+
+# The wrist shot's load (= SkaterController's own config objects and
+# wrister_unloaded_share), so a bot prices and executes a release under the
+# rules its body fires it with. Defaults mirror the controller's.
+var wrister_load: WristerLoad.Config = WristerLoad.Config.new()
+var facing_rules: FacingRules.Config = FacingRules.Config.new()
+var wrister_unloaded_share: float = 0.6
 
 # Body-check delivery: the attacker impulse coefficient. The victim impulse is
 # `approach × (attacker_weight / victim_weight) × transfer` (see

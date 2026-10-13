@@ -267,13 +267,13 @@ func _mode_line(label: String, b: Array) -> void:
 			b[2] / float(maxi(shots, 1))])
 
 
-# ── MODE 1, measured off the bot's OWN release-offset sweep ─────────────────
-# The carrier scores three release points (`RELEASE_SAMPLE_FRACS` = no
-# relocation / full forehand reach / full backhand reach) and commits the best.
-# The mode play produces is the flanking pair: the bot arrives on top of a keeper
-# who is already DOWN, and the forehand and backhand release points sit on
-# OPPOSITE sides of his butterfly, so one of them is outside his coverage and the
-# net is open however he is squared.
+# ── MODE 1, measured off the bot's OWN hold sweep ───────────────────────────
+# The carrier prices the holds it can pull the puck to before the press (where
+# it is, the loaded pocket, a reach to either side of the shot line) and commits
+# the best. The mode play produces is the flanking pair: the bot arrives on top
+# of a keeper who is already DOWN, and the two side holds sit on OPPOSITE sides
+# of his butterfly, so one of them is outside his coverage and the net is open
+# however he is squared.
 #
 # So the classifier is the bot's own decision rather than a scripted approach:
 # a FLANK release is one it relocated the puck for, and mode 1 is a flank
@@ -347,7 +347,7 @@ func test_report_the_flank_release_at_a_down_keeper() -> void:
 					100.0 * float(outside_goals) / float(maxi(outside, 1)),
 					inside_n, inside_goals,
 					100.0 * float(inside_goals) / float(maxi(inside_n, 1))])
-	gut.p("── mode 1: the release-offset sweep, by what it produced ──")
+	gut.p("── mode 1: the hold sweep, by what it produced ──")
 	var keys: Array = cells.keys()
 	keys.sort()
 	for k: String in keys:

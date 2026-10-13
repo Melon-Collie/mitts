@@ -521,7 +521,7 @@ func _run_pose() -> void:
 			var root: Vector3 = _skater._arms.arm_root((pair[1] as Node3D).position, hand_local)
 			print("    %s arm reach %.2f" % [pair[0],
 					root.distance_to(_skater.upper_body.transform * hand_local) / arm])
-		if _controller.wrister_load_active:
+		if _controller.get_shot_state() == SkaterStateMachine.State.WRISTER_AIM:
 			var pin: Vector3 = _controller._aiming.wrister_origin_world \
 					- _controller._aiming.wrister_origin_skater_pos
 			var puck_local: Vector3 = _skater.global_transform.basis.inverse() * pin

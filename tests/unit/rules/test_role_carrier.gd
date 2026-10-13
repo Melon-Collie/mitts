@@ -917,6 +917,8 @@ func test_1v1_lateral_cut_beats_the_aggressive_goalie() -> void:
 	var cutting := _make_ctx(self_pos)
 	cutting.self_velocity = Vector3(6.0, 0.0, 0.0)
 	cutting.snapshot.skater_states[1].velocity = cutting.self_velocity
+	# At that pace the body faces its travel (FacingRules), as it would in play.
+	cutting.snapshot.skater_states[1].facing = Vector2(1.0, 0.0)
 	cutting.snapshot.goalie_states[1 - TEAM_ID] = _squared_goalie(self_pos, net, 2.0)
 	var c := AIRoleCarrier.new()
 	c.decide(cutting)
@@ -936,6 +938,7 @@ func test_1v1_lateral_cut_beats_the_aggressive_goalie() -> void:
 	var beaten := _make_ctx(Vector3(1.8, 0.0, -GameRules.GOAL_LINE_Z + 3.0))
 	beaten.self_velocity = Vector3(6.0, 0.0, 0.0)
 	beaten.snapshot.skater_states[1].velocity = beaten.self_velocity
+	beaten.snapshot.skater_states[1].facing = Vector2(1.0, 0.0)
 	var lagged := GoalieNetworkState.new()
 	lagged.position_x = 0.7   # still chasing — lost the arc race to the cut
 	lagged.position_z = -GameRules.GOAL_LINE_Z + 2.0
@@ -949,7 +952,7 @@ func test_1v1_lateral_cut_beats_the_aggressive_goalie() -> void:
 
 	# Flat-footed vs the same 2 m over-challenge: the keeper is only ~1 m off
 	# the puck, so a blade-reach relocation swings the arc faster than his push
-	# covers — the release-offset sampler prices the pull-around and the 1v1
+	# covers — the hold sweep prices the pull-around and the 1v1
 	# finishes BY HAND instead of needing to skate the cut first. The commit
 	# must carry the relocation: the straight fire into his chest is smothered.
 	var flat := _make_ctx(self_pos)
@@ -958,7 +961,7 @@ func test_1v1_lateral_cut_beats_the_aggressive_goalie() -> void:
 	c2.decide(flat)
 	assert_eq(c2.intended_action, AIRoleCarrier.INTENT_SHOOT,
 			"flat-footed vs an overcommitted challenge, the pull-around fires")
-	assert_gt(c2.shot_release_offset.length(), 0.3,
+	assert_gt(c2.shot_hold_offset.length(), 0.3,
 			"…and it is the relocated release, never a straight fire into the smother")
 
 
@@ -1089,13 +1092,13 @@ func _squared_goalie(self_pos: Vector3, net: Vector3, depth: float) -> GoalieNet
 	return gs
 
 
-# ─── release-offset sampling (see AIRoleCarrier.RELEASE_SAMPLE_FRACS) ────────
+# ─── where the shot is held (see AIRoleCarrier "Where the shot is held") ─────
 
-func test_release_sampling_relocates_toward_the_open_side() -> void:
+func test_shot_holds_relocate_toward_the_open_side() -> void:
 	# Goalie displaced onto the carrier's BACKHAND side (RH default: forehand is
 	# +x when attacking -z; mirrored carrier at -1.2 with the goalie at -1.1):
-	# the full-reach FOREHAND relocation opens the far side wider than the
-	# simple release sees, at no pace penalty — the sampler should pick it.
+	# the full-reach FOREHAND pull opens the far side wider than the puck's
+	# own spot sees, and beside the stick hip it is fully loaded.
 	var pos := Vector3(-1.2, 0.0, -23.5)
 	var ctx := _make_ctx(pos)
 	var g := GoalieNetworkState.new()
@@ -1104,9 +1107,9 @@ func test_release_sampling_relocates_toward_the_open_side() -> void:
 	ctx.snapshot.goalie_states[1 - TEAM_ID] = g
 	var c := AIRoleCarrier.new()
 	c.decide(ctx)
-	assert_gt(c._shot_sample_offset.x, 0.3,
-			"the winning sample relocates the release toward the open (forehand) side")
-	assert_false(c._shot_sample_backhand, "…on the forehand, at full pace")
+	assert_gt(c.shoot_now_hold.x, 0.3,
+			"the winning hold relocates the release toward the open (forehand) side")
+	assert_almost_eq(c._shot_sample_share, 1.0, 0.001, "…loaded, at full pace")
 	# "A genuine chance" stated as behaviour rather than as a number: the
 	# relocated look has to WIN the compete against every carry and pass
 	# alternative from this spot. That is the same claim, and it survives the
@@ -1116,7 +1119,7 @@ func test_release_sampling_relocates_toward_the_open_side() -> void:
 
 
 
-func test_release_sampling_finds_the_backhand_tuck_beside_the_net() -> void:
+func test_shot_holds_find_the_tuck_beside_the_net() -> void:
 	# Carrier tight beside the net at a dead-sharp angle, goalie holding the near
 	# post: the simple release has nothing, but relocating the puck a blade-reach
 	# toward the front of the crease — a BACKHAND-side move for this wing —
@@ -1129,21 +1132,21 @@ func test_release_sampling_finds_the_backhand_tuck_beside_the_net() -> void:
 	ctx.snapshot.goalie_states[1 - TEAM_ID] = g
 	var c := AIRoleCarrier.new()
 	c.decide(ctx)
-	assert_true(c._shot_sample_backhand, "the tuck is a backhand-side relocation")
-	assert_gt(c._shot_sample_offset.z, 0.3,
-			"…moving the release out in front of the crease")
-	assert_lt(c._shot_sample_speed, ctx.self_wrister_shot_speed - 0.01,
-			"…priced at the backhand's penalized pace")
+	assert_gt(c.shoot_now_hold.z, 0.3,
+			"the tuck moves the release out in front of the crease")
+	assert_almost_eq(c._shot_sample_speed,
+			ctx.self_wrister_shot_speed * c._shot_sample_share, 0.001,
+			"…priced at the pace its load carries there")
 	assert_gt(c.debug_shoot_score, AIRoleCarrier.SHOT_MIN_VALUE,
 			"…and it turns a nothing angle into a committable look; got %f"
 			% c.debug_shoot_score)
 
 
-func test_release_sampling_commit_carries_the_winning_offset() -> void:
-	# The mid-cut fire (same snapshot as the 1v1 beaten beat): whatever sample
+func test_shot_commit_carries_the_winning_hold() -> void:
+	# The mid-cut fire (same snapshot as the 1v1 beaten beat): whatever hold
 	# wins the sweep is exactly what the commit exposes to the state machine —
-	# offset, or ZERO for the simple release. The executed shot must be the
-	# scored one.
+	# where the puck sits at the press and the share its load carries there.
+	# The executed shot must be the scored one.
 	var pos := Vector3(1.8, 0.0, -GameRules.GOAL_LINE_Z + 3.0)
 	var ctx := _make_ctx(pos)
 	ctx.self_velocity = Vector3(6.0, 0.0, 0.0)
@@ -1155,8 +1158,9 @@ func test_release_sampling_commit_carries_the_winning_offset() -> void:
 	var c := AIRoleCarrier.new()
 	c.decide(ctx)
 	assert_eq(c.intended_action, AIRoleCarrier.INTENT_SHOOT, "the mid-cut window fires")
-	assert_eq(c.shot_release_offset, c._shot_sample_offset,
-			"the commit exposes exactly the winning sample's offset")
+	assert_eq(c.shot_hold_offset, c.shoot_now_hold,
+			"the commit exposes exactly the winning hold")
+	assert_eq(c.shot_hold_share, c._shot_sample_share, "…and the share it was priced at")
 
 
 func test_wide_angle_shot_is_not_taken_against_a_squared_goalie() -> void:
