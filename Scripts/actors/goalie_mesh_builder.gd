@@ -96,34 +96,34 @@ const _MASK_STATIONS: Array[Vector4] = [
 	Vector4(0.035, 0.118, 0.140, 0.142),    # brow, proud over the opening
 	Vector4(0.000, 0.120, 0.140, 0.128),    # eye line, set back under the brow
 	Vector4(-0.050, 0.114, 0.124, 0.134),   # cheeks
+	Vector4(-0.075, 0.106, 0.109, 0.136),   # the cage's bottom edge (on the cheek-jaw line)
 	Vector4(-0.100, 0.098, 0.094, 0.138),   # jaw: the back tucks, the chin holds
 	Vector4(-0.145, 0.072, 0.085, 0.132),   # chin; the backplate down to the nape
 	Vector4(-0.178, 0.040, 0.060, 0.112),   # chin point
 ]
 const _MASK_SEGS: int = 12
 
-# The face opening is COLOR: front facets between brow and chin bake a dark
-# vertex tint under the kit's helmet paint, and the cage's bars (a separate,
-# fixed-colour mesh) stand in front of it. Whole facets tint at once —
-# centroid tests, so the opening's edge lands on facet edges and stays crisp
-# under flat shading.
+# The face opening is COLOR: front facets from the brow to the cheeks bake a dark
+# vertex tint under the kit's helmet paint, with the shell's chin below, and the
+# cage's bars (a separate, fixed-colour mesh) stand in front of it. Whole facets
+# tint at once — centroid tests, so the edge lands on facet edges and stays crisp.
 const _CAGE_TINT := Color(0.22, 0.22, 0.24)
 # Opening = facets whose centroid lies within this half-angle of the −Z front
 # axis (the θ grid is station-independent, so the same facet columns tint at
 # every height — 36° keeps the middle two of the six front columns). Vertical
-# span: under the brow to above the chin.
+# span: under the brow to the cheek-jaw station.
 const _CAGE_HALF_ANGLE_DEG: float = 36.0
 const _CAGE_TOP_Y: float = 0.030
-const _CAGE_BOT_Y: float = -0.125
+const _CAGE_BOT_Y: float = -0.075
 # The cage fills the opening out to its edge: a frame on the edge (the tinted
-# facets' outline, ±_CAGE_EDGE_DEG about the front, brow station to chin
+# facets' outline, ±_CAGE_EDGE_DEG about the front, brow station to cheek-jaw
 # station) and bars evenly between, all _CAGE_PROUD off the mask's surface so
 # the grid follows its curve both ways. Mask-local metres.
 const _CAGE_EDGE_DEG: float = 30.0
 const _CAGE_EDGE_TOP_Y: float = 0.035
-const _CAGE_EDGE_BOT_Y: float = -0.145
+const _CAGE_EDGE_BOT_Y: float = -0.075
 const _CAGE_BAR_DEGS: Array[float] = [-18.0, -6.0, 6.0, 18.0]
-const _CAGE_BAR_YS: Array[float] = [-0.010, -0.055, -0.100]
+const _CAGE_BAR_YS: Array[float] = [-0.002, -0.038]
 const _CAGE_PROUD: float = 0.012
 const _CAGE_BAR_HALF: float = 0.0035
 const _CAGE_FRAME_HALF: float = 0.005
