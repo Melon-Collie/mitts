@@ -28,6 +28,7 @@ const DT: float = 1.0 / 120.0
 
 var _skater: Skater = null
 var _coord: SkaterSkatingCoordinator = null
+var _controller: SkaterController = null
 
 
 func before_each() -> void:
@@ -35,11 +36,11 @@ func before_each() -> void:
 	add_child_autofree(_skater)
 	_skater.set_physics_process(false)
 	_skater.set_process(false)
-	var controller: SkaterController = SkaterController.new()
-	autofree(controller)
+	_controller = SkaterController.new()
+	autofree(_controller)
 	var sm := SkaterStateMachine.new()
 	_coord = SkaterSkatingCoordinator.new()
-	_coord.setup(_skater, sm, controller)
+	_coord.setup(_skater, sm, _controller)
 	# Standstill, no intent — every stride channel is quiet, so the leg pose is
 	# purely the shot stance under test.
 	_skater.set_facing(Vector2(0.0, -1.0))
@@ -56,6 +57,8 @@ func test_wrister_load_settles_over_back_leg() -> void:
 	var rest_body_y: float = _visible_body_y()
 	_skater.current_shot_state = State.WRISTER_AIM
 	_skater.shot_charge = 1.0
+	# A forehand wind-up: the torso turned round toward the stick side.
+	_skater.set_upper_body_rotation(1.0)
 	_tick(180)  # 1.5 s — load blend fully settled
 	# Foot stagger: the stick-side (left) foot drops back behind the front foot.
 	assert_lt(_skater.leg_bone_euler(_LEG_L).x, _skater.leg_bone_euler(_LEG_R).x - 0.05,
@@ -64,11 +67,21 @@ func test_wrister_load_settles_over_back_leg() -> void:
 	# Weight over the stick side: shared roll toward −X (the lefty's stick side).
 	assert_lt(_skater.leg_bone_euler(_LEG_L).z, -0.01, "legs should roll toward the stick side")
 	assert_lt(_skater.leg_bone_euler(_LEG_R).z, -0.01, "legs should roll toward the stick side")
-	# Hips coil with the load — stick-side (−X) hip back reads as positive yaw.
-	assert_gt(_coord.shot_hip_yaw, 0.01, "hips should coil into the load")
+	# Hips open with the torso's wind-up — stick-side (−X) hip back reads as
+	# positive yaw — by their share of it.
+	assert_almost_eq(_coord.shot_hip_yaw, _controller.wrister_load_hip_share * 1.0, 0.01,
+			"hips should follow the torso's wind-up")
 	# The load sits into the shot — the stance crouch drops the body.
 	assert_lt(_visible_body_y(), rest_body_y - 0.005,
 			"the load stance should sink the body")
+
+
+func test_backhand_wind_up_opens_the_hips_the_other_way() -> void:
+	_skater.current_shot_state = State.WRISTER_AIM
+	_skater.shot_charge = 1.0
+	_skater.set_upper_body_rotation(-1.0)
+	_tick(180)
+	assert_lt(_coord.shot_hip_yaw, -0.01, "a backhand coil turns the hips toward the off side")
 
 
 func test_release_kicks_back_leg_and_transfers_weight() -> void:
