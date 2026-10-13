@@ -258,8 +258,11 @@ const _STANCE_SQUARE_BLEND_M_S: float = 0.5
 
 # Where facing heads for a cursor at `cursor_dir`. A human skating faces where they
 # skate — the hips go with the stride, and the torso twist and arm reach carry the
-# puck out at the side — so above facing_travel_min_speed the target blends from
-# the cursor to the travel direction. It squares to the cursor as it always did
+# puck out at the side — so the target blends from the cursor to the travel
+# direction with speed. Two bands, picked by which of the two the body faces now:
+# taking up the travel needs real skating speed (facing_travel_engage_*), so a
+# side-step tap stays squared; keeping it holds down to a crawl
+# (facing_travel_min/full_speed), so a coast keeps its line. It squares to the cursor as it always did
 # when the cursor falls behind the travel cone (skating backward while watching
 # the play), when braking, and for bots, whose decisions still assume facing
 # follows their cursor. The stance (Shift) squares to the cursor too, but only
@@ -272,16 +275,24 @@ func _facing_toward(cursor_dir: Vector2, brake: bool) -> Vector2:
 		return cursor_dir
 	var travel := Vector2(_skater.velocity.x, _skater.velocity.z)
 	var speed: float = travel.length()
-	var share: float = smoothstep(_controller.facing_travel_min_speed,
-			_controller.facing_travel_full_speed, speed)
+	if speed < 0.001:
+		return cursor_dir
+	travel /= speed
+	var following: bool = absf(facing.angle_to(travel)) <= absf(facing.angle_to(cursor_dir))
+	var share: float
+	if following:
+		share = smoothstep(_controller.facing_travel_min_speed,
+				_controller.facing_travel_full_speed, speed)
+	else:
+		share = smoothstep(_controller.facing_travel_engage_min_speed,
+				_controller.facing_travel_engage_full_speed, speed)
 	if _controller.stance_active:
 		var square_max: float = _controller.facing_stance_square_max_speed
 		share = minf(share, smoothstep(square_max - _STANCE_SQUARE_BLEND_M_S, square_max, speed))
 	if share <= 0.0:
 		return cursor_dir
-	travel = travel.normalized()
 	var hysteresis: float = _controller.facing_travel_cone_hysteresis_deg
-	if absf(facing.angle_to(travel)) > absf(facing.angle_to(cursor_dir)):
+	if not following:
 		hysteresis = -hysteresis
 	var cone: float = deg_to_rad(_controller.facing_travel_cone_deg + hysteresis)
 	if absf(travel.angle_to(cursor_dir)) > cone:
