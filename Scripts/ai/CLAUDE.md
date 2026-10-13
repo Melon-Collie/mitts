@@ -74,8 +74,16 @@ hand the live brain in directly, which is legal because `TeamBrain` *is a*
 bot's real Hands blade speed — is the one motion limit on it, exactly the limit a
 human's blade plays under. A second smoothing stage in the agent is a trap:
 straight-line world blending chord-cuts the state machine's shaped cursor paths
-(the arc, the reach-cone clamp) across the body on big flips, and can trip the
-pose IK gate's facing freeze.
+(the arc, the reach-cone clamp, the front route) across the body on big flips,
+and can trip the pose IK gate's facing freeze.
+
+**A carried puck never goes through the skater.** A reach to a spot in front of
+the body (the carry cursor, and pre-aim's pull to a charged release's hold) walks
+`BladeRoute`: straight when that line clears the body, else the shortest way that
+stays a body-plus-puck radius off it, around the side the skater faces. A spot
+behind the body is a turn-around and keeps the arc. The shot-hold pricing
+(`AIShotHolds`) measures the pull on the same route, so what the carrier prices
+is the path the cursor walks.
 
 ## Reception doctrine
 

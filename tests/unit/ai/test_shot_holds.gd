@@ -10,8 +10,13 @@ const RIGHT := Vector2(1.0, 0.0)
 var _h := AIShotHolds.new()
 
 
+# The pull's blade time, along the route the cursor walks: BladeRoute to a hold
+# in front of the body (every test here faces AHEAD), the chord to one behind.
 func _blade_s(k: int) -> float:
-	return _h.offset[k].distance_to(_h.offset[0]) / _h.blade_speed
+	var route: float = _h.offset[k].distance_to(_h.offset[0]) \
+			if _h.offset[k].dot(AHEAD) < 0.0 \
+			else BladeRoute.length(_h.offset[0], _h.offset[k], AHEAD)
+	return route / _h.blade_speed
 
 
 func test_the_puck_where_it_is_comes_first_at_its_own_share() -> void:
@@ -106,26 +111,43 @@ func test_a_hold_beside_a_trailing_checker_keeps_less_than_the_far_side() -> voi
 	assert_lt(_h.keep[near], _h.keep[far], "his stick reaches the hold on his side")
 
 
-func test_a_pull_dragged_past_a_checker_reads_as_the_puck_parked_there() -> void:
-	# Directly behind the body: the pull across the front from one side to the
-	# other passes nearer him than either end. His stick sweeps its reach faster
-	# than the puck crosses it, so the route is worth no more than the puck
-	# sitting at its closest pass. Fast hands and no charge keep the press inside
-	# his reaction, so neither end gives him time to close.
+# Fast hands and no charge keep the press inside a man's reaction, so neither
+# end of the pull gives him time to close: only the route decides.
+func _quick_pull_across(man: Vector3) -> AIShotHolds:
 	var h := AIShotHolds.new()
 	h.blade_speed = 40.0
-	var behind: float = 2.0
 	var facing: Vector2 = AHEAD.rotated(-0.2)   # the far side's hold is in front
 	h.solve_shot(AHEAD, RIGHT * 0.9, Vector2.ZERO, facing)
-	var men: Array[Vector3] = [Vector3(0.0, 0.0, behind)]
+	var men: Array[Vector3] = [man]
 	var vels: Array[Vector3] = [Vector3.ZERO]
 	h.price_keep(Vector3.ZERO, Vector2.ZERO, facing, 0.0, men, vels, _NO_CAPS)
-	var across: int = -1
+	return h
+
+
+func _across(h: AIShotHolds) -> int:
 	for k: int in range(1, h.count):
 		if h.offset[k].x < -0.5:
-			across = k
+			return k
+	return -1
+
+
+func test_a_pull_round_the_front_spares_a_checker_behind() -> void:
+	var h: AIShotHolds = _quick_pull_across(Vector3(0.0, 0.0, 2.0))
+	var across: int = _across(h)
+	assert_gt(across, 0)
+	assert_almost_eq(h.keep[across], h.keep[0], 0.001,
+			"the far side sits as far off him as the near one, and the route stays clear")
+
+
+func test_a_pull_round_the_front_past_a_checker_ahead_reads_as_the_puck_parked_there() -> void:
+	# His stick sweeps its reach faster than the puck crosses it, so the route is
+	# worth no more than the puck sitting where it passes him closest: in front
+	# of the skates, inside his reach.
+	var ahead: float = 2.0
+	var h: AIShotHolds = _quick_pull_across(Vector3(0.0, 0.0, -ahead))
+	var across: int = _across(h)
 	assert_gt(across, 0)
 	var parked: float = AICarrySpace.clearance_to_safety(
-			behind - AICarrySpace.EVADE_STICK_REACH_M)
+			ahead - BladeRoute.CLEAR_M - AICarrySpace.EVADE_STICK_REACH_M)
 	assert_gt(h.keep[0], parked + 0.1, "both ends sit further off him")
-	assert_almost_eq(h.keep[across], parked, 0.001)
+	assert_lte(h.keep[across], parked + 0.05)

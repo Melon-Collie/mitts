@@ -12,13 +12,17 @@ extends RefCounted
 # (WristerPocket), and a reach out to either side of the shot line, which moves
 # the whole tangent-cone geometry around a goalie in tight (the pull-across, the
 # backhand tuck) at whatever pace the load leaves there. A pull costs its real
-# time: the blade's travel, or the body's turn onto the cursor when the turn is
-# what loads the puck (a forehand pulled beside the stick hip is loaded before
-# the body moves). A pulled hold sits at the handling reach; the load reads its
-# bearing, not its distance. All vectors are world XZ, offsets off the body.
+# time: the blade's travel along the route it walks, or the body's turn onto the
+# cursor when the turn is what loads the puck (a forehand pulled beside the stick
+# hip is loaded before the body moves). A pulled hold sits at the handling reach;
+# the load reads its bearing, not its distance. All vectors are world XZ, offsets
+# off the body.
 
 # A puck this near the body's centre has no bearing to load from.
 const MIN_OFFSET_M: float = 0.05
+# Segments the route to a hold is read in (an even count, so one point is its
+# midpoint) for its closest pass by a man.
+const ROUTE_SEGMENTS: int = 4
 
 var is_left_handed: bool = false
 var load_cfg: WristerLoad.Config = WristerLoad.Config.new()
@@ -47,6 +51,7 @@ var pocket_result := WristerPocket.Result.new()
 
 var _facing := FacingRules.Result.new()
 var _load := WristerLoad.Result.new()
+var _route := PackedVector2Array()
 
 
 func configure_from(ctx: RoleContext) -> void:
@@ -115,9 +120,9 @@ func solve_shot(aim: Vector2, puck_offset: Vector2, velocity: Vector2,
 
 
 # Odds each solve_shot hold keeps the puck from `self_pos` (world) skating at
-# `velocity`: the blade carries it along the route the cursor walks (a chord
-# across the front, or around the body to a hold behind `facing`), then it sits
-# at the hold through `charge_s`, against every opponent's reachable stick
+# `velocity`: the blade carries it along the route the cursor walks (BladeRoute
+# to a hold in front, around the body to one behind `facing`), then it sits at
+# the hold through `charge_s`, against every opponent's reachable stick
 # (AICarrySpace). A stick sweeps its own reach faster than a pull crosses it, so
 # a route that drags the puck nearer a man than it started is read where it
 # passes closest to him as a puck sitting there.
@@ -134,17 +139,17 @@ func price_keep(self_pos: Vector3, velocity: Vector2, facing: Vector2, charge_s:
 				minf(t_end, AICarrySpace.CARRY_LUNGE_WINDOW_S)))
 		if pull_s[k] > 0.0 and k_keep > 0.0:
 			var t_mid: float = pull_s[k] * 0.5
-			var mid: Vector2 = _route_mid(k, facing)
+			_fill_route(k, facing)
 			k_keep = minf(k_keep, AICarrySpace.transit_clearance_to_safety(
-					AICarrySpace.reach_clearance(_world(self_pos, mid, velocity, t_mid), t_mid,
-							opponents, opponent_vels, opponent_caps)))
+					AICarrySpace.reach_clearance(
+							_world(self_pos, _route[ROUTE_SEGMENTS / 2], velocity, t_mid),
+							t_mid, opponents, opponent_vels, opponent_caps)))
 			for i: int in opponents.size():
 				if k_keep <= 0.0:
 					break
 				var man := Vector2(opponents[i].x - self_pos.x, opponents[i].z - self_pos.z) \
 						+ (Vector2(opponent_vels[i].x, opponent_vels[i].z) - velocity) * t_mid
-				var route_gap: float = minf(_segment_gap(man, offset[0], mid),
-						_segment_gap(man, mid, offset[k]))
+				var route_gap: float = _route_gap(man)
 				if route_gap >= man.distance_to(offset[0]):
 					continue
 				var caps: AISkaterCaps = opponent_caps[i] if has_caps else null
@@ -154,14 +159,39 @@ func price_keep(self_pos: Vector3, velocity: Vector2, facing: Vector2, charge_s:
 		keep[k] = k_keep
 
 
-# Halfway along the pull to hold `k`: the chord's midpoint, or for a hold behind
-# the body the arc's, the short way round at the hold's reach.
-func _route_mid(k: int, facing: Vector2) -> Vector2:
+func _fill_route(k: int, facing: Vector2) -> void:
+	_route.resize(ROUTE_SEGMENTS + 1)
+	for j: int in ROUTE_SEGMENTS + 1:
+		_route[j] = _route_point(k, facing, float(j) / ROUTE_SEGMENTS)
+
+
+func _route_gap(p: Vector2) -> float:
+	var gap: float = INF
+	for j: int in ROUTE_SEGMENTS:
+		gap = minf(gap, _segment_gap(p, _route[j], _route[j + 1]))
+	return gap
+
+
+func _route_behind(k: int, facing: Vector2) -> bool:
+	return offset[k].dot(facing) < 0.0 and offset[0].length() >= MIN_OFFSET_M
+
+
+func _route_length(k: int, facing: Vector2) -> float:
+	if _route_behind(k, facing):
+		return offset[0].distance_to(offset[k])
+	return BladeRoute.length(offset[0], offset[k], facing)
+
+
+# The point a fraction `frac` along the pull to hold `k`: BladeRoute to a hold in
+# front, the short way round the body to one behind.
+func _route_point(k: int, facing: Vector2, frac: float) -> Vector2:
 	var from: Vector2 = offset[0]
 	var to: Vector2 = offset[k]
-	if to.dot(facing) >= 0.0 or from.length() < MIN_OFFSET_M:
-		return (from + to) * 0.5
-	return from.normalized().rotated(from.angle_to(to) * 0.5) * to.length()
+	if _route_behind(k, facing):
+		return from.normalized().rotated(from.angle_to(to) * frac) \
+				* lerpf(from.length(), to.length(), frac)
+	return BladeRoute.point_along(from, to, facing,
+			BladeRoute.length(from, to, facing) * frac)
 
 
 static func _segment_gap(p: Vector2, a: Vector2, b: Vector2) -> float:
@@ -182,7 +212,7 @@ static func _world(self_pos: Vector3, off: Vector2, velocity: Vector2, t: float)
 func _fill_pulled(k: int, dir: Vector2, aim: Vector2, body: Vector2,
 		facing: Vector2) -> void:
 	offset[k] = dir * handle_reach
-	var blade_s: float = offset[k].distance_to(offset[0]) / maxf(blade_speed, 0.1)
+	var blade_s: float = _route_length(k, facing) / maxf(blade_speed, 0.1)
 	var share_now: float = share_at(offset[k], aim, facing)
 	var share_turned: float = share_at(offset[k], aim, body)
 	if share_now >= share_turned - 0.001 or facing.length_squared() < 0.0001:

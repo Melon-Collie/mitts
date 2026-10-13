@@ -2059,6 +2059,41 @@ func test_arc_step_front_reach_takes_short_way_despite_short_side_threat() -> vo
 	assert_eq(sm._arc_protect_sign, 0.0, "no long-way commitment latched for a front reach")
 
 
+func test_front_reach_across_the_body_walks_around_the_front() -> void:
+	# Puck on the right hip, its spot on the far side and in front: the straight
+	# line runs through the skater, so the cursor walks BladeRoute round the side
+	# he faces, never inside the body, at the slew, and arrives.
+	sm._current_self_pos = Vector3.ZERO
+	sm._current_self_state = _self_state(Vector2(0, -1))
+	sm._mouse_max_speed_m_s = 10.0   # a real Hands blade speed
+	var step_max: float = 10.0 * Agent.MOUSE_TICK_DELTA
+	sm._mouse_pos = Vector3(0.9, 0, 0)
+	sm._mouse_pos_initialized = true
+	var target := Vector3(-0.9, 0, -0.1)
+	assert_true(BladeRoute.crosses_body(Vector2(0.9, 0), Vector2(-0.9, -0.1)))
+	var prev: Vector3 = sm._mouse_pos
+	var went_front: bool = false
+	for _i: int in 120:
+		var r: Vector3 = sm._step_mouse_front(target)
+		assert_gte(Vector2(r.x, r.z).length(), BladeRoute.CLEAR_M - 0.001, "never through the body")
+		assert_lte(r.distance_to(prev), step_max + 1e-5, "at the slew")
+		went_front = went_front or r.z < -BladeRoute.CLEAR_M + 0.01
+		prev = r
+	assert_true(went_front, "round the side he faces")
+	assert_almost_eq(prev.distance_to(target), 0.0, 1e-4)
+
+
+func test_front_reach_that_clears_the_body_steps_direct() -> void:
+	sm._current_self_pos = Vector3.ZERO
+	sm._current_self_state = _self_state(Vector2(0, -1))
+	sm._mouse_pos = Vector3(0.9, 0, 0)
+	sm._mouse_pos_initialized = true
+	var front: Vector3 = sm._step_mouse_front(Vector3(0, 0, -0.9))
+	sm._mouse_pos = Vector3(0.9, 0, 0)
+	var direct: Vector3 = sm._step_mouse_toward(Vector3(0, 0, -0.9))
+	assert_almost_eq(front.distance_to(direct), 0.0, 1e-6)
+
+
 func test_arc_step_shortest_way_in_open_ice() -> void:
 	var self_pos := Vector3.ZERO
 	var s := _protect_snap(self_pos, Vector3(0, 0, -30))
