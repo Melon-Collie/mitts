@@ -2776,11 +2776,12 @@ func _solve_wrister_load(input: InputState) -> void:
 	wrister_load_active = input.bot_wrister_aim_dir.length_squared() <= 0.0001
 	if not wrister_load_active:
 		return
+	# The frozen puck rides along with the skater from its pin. Not the blade's
+	# contact point, which swings with the torso's wind-up.
+	var pin: Vector3 = _aiming.wrister_origin_world - _aiming.wrister_origin_skater_pos
 	var to_local: Basis = skater.global_transform.basis.inverse()
-	WristerLoad.solve(wrister_load,
-			to_local * (skater.get_blade_contact_global() - skater.global_position),
-			to_local * _wrister_aim_dir(input),
-			skater.is_left_handed, _wrister_load_config())
+	WristerLoad.solve(wrister_load, to_local * Vector3(pin.x, 0.0, pin.z),
+			to_local * _wrister_aim_dir(input), skater.is_left_handed, _wrister_load_config())
 
 # Forehand/backhand for the wrister: the bot's commit, or for a human the way the
 # torso has to turn to drive the shot.

@@ -102,17 +102,18 @@ const POSES: Array = [
 		[10, {"aim": Vector3(0.4, 0.0, -2.0)}],
 		[45, {"aim": Vector3(1.4, 0.0, -3.0), "shoot": true}],
 	]},
-	# The wind-up is the load (WristerLoad). The puck pulled out to the stick side
-	# and aimed ahead is the full forehand coil; aimed ahead with the puck straight
-	# in front there is nothing to drive, so the torso stays squared.
-	{"name": "wrister_loaded", "puck": true, "steps": [
-		[30, {"aim": Vector3(0.0, 0.0, -2.5)}],
+	# The wind-up is the load (WristerLoad). This skater starts facing +Z and
+	# shoots left: the puck pulled out to the stick side (+X) and aimed ahead is
+	# the full forehand coil; aimed ahead with the puck straight in front there is
+	# nothing to drive, so the torso stays squared.
+	{"name": "wrister_loaded", "puck": true, "readout": true, "steps": [
+		[60, {"aim": Vector3(0.0, 0.0, 2.5)}],
 		[8, {"aim": Vector3(2.5, 0.0, 0.0)}],
-		[40, {"aim": Vector3(0.0, 0.0, -3.0), "shoot": true}],
+		[40, {"aim": Vector3(0.0, 0.0, 3.0), "shoot": true}],
 	]},
-	{"name": "wrister_unloaded", "puck": true, "steps": [
-		[30, {"aim": Vector3(0.0, 0.0, -2.5)}],
-		[40, {"aim": Vector3(0.0, 0.0, -3.5), "shoot": true}],
+	{"name": "wrister_unloaded", "puck": true, "readout": true, "steps": [
+		[60, {"aim": Vector3(0.0, 0.0, 2.5)}],
+		[40, {"aim": Vector3(0.0, 0.0, 3.5), "shoot": true}],
 	]},
 	# Released, then held long enough for the follow-through the state machine
 	# plays out to be the pose on screen.
@@ -501,6 +502,16 @@ func _run_pose() -> void:
 				rad_to_deg(_controller._skating.trunk_roll_add),
 				rad_to_deg(_skater._legs._gait_leg_l.z), rad_to_deg(_skater._legs._gait_leg_r.z),
 				_controller._skating.crouch_drop])
+		if _controller.wrister_load_active:
+			var pin: Vector3 = _controller._aiming.wrister_origin_world \
+					- _controller._aiming.wrister_origin_skater_pos
+			var puck_local: Vector3 = _skater.global_transform.basis.inverse() * pin
+			print("    wrister: load %.2f %s | puck %.0f° off facing | wound %.0f°, torso %.0f°" % [
+					_controller.wrister_load.load,
+					"BH" if _controller.wrister_load.is_backhand else "FH",
+					rad_to_deg(atan2(-puck_local.x, -puck_local.z)),
+					rad_to_deg(_controller.wrister_load.wound_yaw),
+					_skater.upper_body.rotation_degrees.y])
 	if pose.has("faceoff"):
 		_run_faceoff(pose["faceoff"] as Dictionary)
 	print("  %s reach: worst %.2f of arm length (frame %.2f)" % [
