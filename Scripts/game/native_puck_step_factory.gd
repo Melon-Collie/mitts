@@ -13,6 +13,9 @@ class_name NativePuckStepFactory
 
 # Argument count of set_net_geometry once the mouth-corner bends landed.
 const NET_GEOMETRY_ARITY: int = 12
+# Argument count of set_restitution_curve. A binary without it would read the
+# boards' and iron's COR SCALE (1.0) as a flat restitution — perfectly elastic.
+const RESTITUTION_CURVE_ARITY: int = 4
 
 
 # Argument count of a ClassDB-bound method, or -1 when the class does not expose it.
@@ -39,8 +42,9 @@ static func make_configured() -> RefCounted:
 	# probing an internal C++ helper reports false on every binary ever built and
 	# disables the kernel outright. Runs once per puck spawn, so the method-list
 	# walk is not on any hot path.
-	if _bound_arity(native, &"set_net_geometry") != NET_GEOMETRY_ARITY:
-		push_warning("NativePuckStep predates the mouth-corner bends — "
+	if _bound_arity(native, &"set_net_geometry") != NET_GEOMETRY_ARITY \
+			or _bound_arity(native, &"set_restitution_curve") != RESTITUTION_CURVE_ARITY:
+		push_warning("NativePuckStep predates the current puck model — "
 				+ "using the GDScript puck step. Rebuild native/ (bash native/build.sh); "
 				+ "if you just did, restart the editor so the reload takes.")
 		return null
@@ -49,7 +53,7 @@ static func make_configured() -> RefCounted:
 			GameRules.INNER_CORNER_RADIUS,
 			GameRules.CORNER_CENTER_X, GameRules.CORNER_CENTER_Z)
 	native.set_puck_params(
-			GameRules.PUCK_BOARD_BOUNCE, GameRules.PUCK_BOARD_FRICTION,
+			GameRules.PUCK_BOARD_COR_SCALE, GameRules.PUCK_BOARD_FRICTION,
 			GameRules.PUCK_ICE_DECEL_M_S2, GameRules.GRAVITY_M_S2,
 			AITrajectory.PUCK_REST_HEIGHT_M)
 	native.set_net_geometry(
@@ -59,8 +63,11 @@ static func make_configured() -> RefCounted:
 			GameRules.NET_CROWN_HALF_WIDTH, GameRules.NET_MOUTH_CORNER_RADIUS,
 			GameRules.NET_TOP_DEPTH,
 			GameRules.PUCK_COLLISION_HALF_HEIGHT,
-			PuckGeometryCollision.POST_RESTITUTION,
+			PuckGeometryCollision.POST_COR_SCALE,
 			PuckGeometryCollision.NET_RESTITUTION)
+	native.set_restitution_curve(
+			PuckRestitution.COR_SLOW, PuckRestitution.SLOW_SPEED_M_S,
+			PuckRestitution.COR_FAST, PuckRestitution.FAST_SPEED_M_S)
 	native.set_substep_params(
 			PuckAuthorityRules.FRAME_SUBSTEP_RANGE_Z,
 			PuckAuthorityRules.FRAME_SUBSTEP_M,

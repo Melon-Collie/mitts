@@ -35,6 +35,8 @@ const _BLADE_FOLLOW_PITCH_MAX_DEG: float = 100.0
 const _BLADE_ELEVATED_EXTRA_LOFT_DEG: float = 16.0   # axial twist (handedness-signed)
 const _BLADE_ELEVATED_EXTRA_LIFT_DEG: float = 4.0    # about X (small touch of toe-lift)
 const _BLADE_ELEVATION_BLEND_SPEED: float = 6.0      # blend units/sec (full swing in ~0.17 s)
+# How fast a tied blade's drawn slide (StickTieDraw) eases on and off.
+const _TIE_DRAW_EASE_M_S: float = 2.0
 # Toe-drag read. The shaft only steepens past its lie in TopHandIK's CLOSE
 # regime (the hand rising to shorten the stick's horizontal run) — in the FAR
 # regime the hand rides at rest height and the shaft holds the lie exactly, so
@@ -379,6 +381,11 @@ var body_block_height: float = 0.7
 # runs at render rate, so the node lookup is resolved once in
 # _rebuild_blade_mesh rather than per frame.
 var _blade_mesh_instance: MeshInstance3D = null
+# Where a tied blade is drawn toward its partner's (StickTieDraw, world XZ): a
+# mesh-only slide like the address and reception slides, eased so a break lets
+# the blade back rather than popping it.
+var _tie_draw_target: Vector3 = Vector3.ZERO
+var _tie_draw_offset: Vector3 = Vector3.ZERO
 var _blade_mesh_curve_sign: float = 0.0
 
 # Top hand: the moving IK output. Positioned by the controller each tick.
@@ -523,6 +530,9 @@ func get_team_id() -> int:
 # _resolve_player_collisions iterates it (skipping self) to resolve skater-vs-
 # skater contact. Empty Callable (tutorial dummy / test) → no resolution.
 var _skater_collision_provider: Callable = Callable()
+# `() -> bool`, true while contact is off: the locked phases, whose bodies are
+# frozen or on a scripted glide that crossing another is not a check.
+var contact_suspended_provider: Callable = Callable()
 # Stable, machine-consistent id (the owning peer_id) set by PlayerRegistry on
 # spawn. Used ONLY to break exact head-on ties in the aggressor gate — it must be
 # identical on every machine (get_instance_id() is per-process and would let host
@@ -584,12 +594,37 @@ var _blade_elevation_blend: float = 0.0
 # Set when an elevation blend step changes the blade tilt, consumed by the
 # render-rate rig pass in _process. See _update_blade_elevation.
 var _blade_tilt_dirty: bool = false
-# True when the blade is lifted off the ice — own stick-lift (Q held while not
-# carrying) or a forced pop from an opponent hooking under this stick. Set each
+# True when the blade is lifted off the ice — own raised deflect (Q held at MID
+# or HIGH loft, not carrying) or a forced pop from an opponent hooking under
+# this stick. A stick lift raises the blade through stick_check_phase. Set each
 # tick by the controller; read host-side by PuckController's interaction gate
 # and replicated so remotes/AI can read it. A lifted blade only meets airborne
 # pucks (to tip them); it clears grounded pucks and sticks.
 var blade_up: bool = false
+# The stick-lift phase (StickCheckRules.Phase), stamped each tick by the
+# controller and replicated. Its raised phases lift the blade like blade_up, but
+# the stick plays no puck while busy — the hook is the only thing it can do.
+var stick_check_phase: int = 0
+# Tied up with an opponent's stick (StickTieTracker, host-only writer;
+# replicated), set on both players. A tied stick is off the ice and slowed: it
+# catches nothing (an airborne puck that reaches it bobbles off), and pokes,
+# lifts and ties nothing.
+var stick_tied: bool = false
+# The stick-check button as this skater's last input held it, stamped by the
+# controller. Read only by the host's StickTieTracker (either player holding keeps
+# a tie); never replicated.
+var stick_check_held: bool = false
+# Locked in a board pin (BoardPinTracker, host-only writer; replicated): the role
+# (BoardPinRules.Role) and the pinner's share of the pair's weight. Both locked
+# players' sticks play no puck, and each slides along the wall at its role's cap.
+var pin_role: int = BoardPinRules.Role.NONE
+var pin_strength: float = 0.0
+# Down in a dive (DiveRules): set with the down timer by the controller on every
+# machine that simulates or applies the skater, and replicated. A diving body is
+# down like a knocked-down one, but its stick still knocks the puck away and its
+# body blocks low along `dive_layout` (world XZ, unit), the way it is laid out.
+var is_diving: bool = false
+var dive_layout: Vector2 = Vector2(0.0, -1.0)
 # Deliberate-deflect intent: true while a human player holds the shoot button
 # (LMB) WITHOUT carrying the puck — a committed "redirect this, don't catch it."
 # Set each tick by the controller (see SkaterController._wants_deflect); read
@@ -634,6 +669,9 @@ var _faceoff_address: float = 0.0
 # so a forced lift dislodges a carried puck. Stays 0 on clients (they read the
 # resolved blade_up off the wire).
 var _forced_lift_timer: float = 0.0
+# The shared stick-check cooldown (StickCheckRules.STICK_CHECK_COOLDOWN_S):
+# host-side only, like the forced lift; started by a landed lift and a tie ending.
+var _stick_check_cooldown: float = 0.0
 var is_ghost: bool = false
 # NHL delayed offside: this skater must tag up. Written by GameManager; the HUD
 # coordinator shows it on the name plate to the local player's teammates.
@@ -952,6 +990,7 @@ func _physics_process(delta: float) -> void:
 	clamp_body_to_goalies()
 	_update_blade_elevation(delta)
 	_forced_lift_timer = maxf(_forced_lift_timer - delta, 0.0)
+	_stick_check_cooldown = maxf(_stick_check_cooldown - delta, 0.0)
 	_update_blade_lift(delta)
 	_update_commit_stance(delta)
 	_update_carry_contact(delta)
@@ -996,6 +1035,8 @@ func _resolve_player_collisions() -> void:
 	# (SkaterNetworkState), so every machine skips the same pairs and the aggressor
 	# gate below stays deterministic.
 	if is_ghost:
+		return
+	if contact_suspended_provider.is_valid() and bool(contact_suspended_provider.call()):
 		return
 	var others: Array = _skater_collision_provider.call()
 	if others == null:
@@ -1066,13 +1107,25 @@ func _resolve_player_collisions() -> void:
 			var other_delta: Vector3 = other.velocity - other_vel_before
 			if other_delta.length_squared() > 0.0001:
 				other.body_check_impulse_applied.emit(other_delta)
-				other.body_check_received.emit(other_delta)
+				other.body_check_received.emit(
+						_backstopped(other, other_delta, n, atk_transfer * brace))
 		# Credit / claim path — only on a real (closing) hit, NOT gated by authority
 		# (must fire on the attacker's own machine and the host for lag-comp
 		# validation, Lever A). impact_force keeps the weight × closing convention
 		# BodyCheckRules.puck_strip_impulse reconstructs the strip magnitude from.
 		if _collision_result.impulse_applied:
 			body_checked_player.emit(other, weight * _collision_result.closing_speed, n)
+
+
+# The hit the victim's stagger reads: his own Δv, or the whole closing speed the
+# transfer carried when the boards are behind him (BoardPinRules). The knockback
+# itself is untouched; this only scores how hard it landed.
+func _backstopped(victim: Skater, delta_v: Vector3, n: Vector3, transfer: float) -> Vector3:
+	var wall_out: Vector2 = BoardPinRules.wall_normal(victim.global_position,
+			victim.collision_radius(), BoardPinRules.BACKSTOP_MARGIN_M)
+	var strength: float = BoardPinRules.backstop_hit_strength(delta_v.length(),
+			_collision_result.closing_speed, transfer, Vector2(n.x, n.z), wall_out)
+	return n * strength if strength > delta_v.length() else delta_v
 
 
 # Holds the body inside the rink by projecting its XZ onto the inner board
@@ -1325,7 +1378,21 @@ func _apply_blade_tilt() -> void:
 			(_stroke_toe_blend * carry_stroke_toe_u
 					- _catch_heel_blend * carry_catch_heel_u
 					+ _aim_seat_offset_u()) * blade_length) \
-			+ _reception_give_dir * (_reception_give_blend * reception_give_max)
+			+ _reception_give_dir * (_reception_give_blend * reception_give_max) \
+			+ _tie_draw_local()
+
+
+func set_tie_draw_offset(world_offset: Vector3) -> void:
+	_tie_draw_target = world_offset
+
+
+# The tie's draw slide in the Blade marker's frame, which the mesh hangs in.
+func _tie_draw_local() -> Vector3:
+	_tie_draw_offset = _tie_draw_offset.move_toward(_tie_draw_target,
+			_TIE_DRAW_EASE_M_S * get_process_delta_time())
+	if _tie_draw_offset == Vector3.ZERO:
+		return Vector3.ZERO
+	return blade.global_transform.basis.inverse() * _tie_draw_offset
 
 
 # (Re)generates the procedural curved blade mesh (and the tape band riding it,
@@ -1469,6 +1536,9 @@ func _update_blade_elevation(delta: float) -> void:
 # Blend units/sec for the blade-lift ease (~0.08 s for a full lift). Snappier
 # than the elevation blend — a stick lift is a deliberate, quick action.
 const _BLADE_LIFT_BLEND_SPEED: float = 12.0
+# A lift's drop comes down inside StickCheckRules.DROP_S, so the blade is back
+# at puck height while the victim's is still forced up.
+const _BLADE_DROP_BLEND_SPEED: float = 24.0
 # Ease rate for the commit-stance stick raise (units/sec). A touch slower than the
 # blade lift so the stick "loads up" into the check rather than snapping.
 const _COMMIT_LIFT_BLEND_SPEED: float = 9.0
@@ -1483,9 +1553,12 @@ const _CHECK_LEAD_SPEED: float = 5.0
 # the whole stick rises off the ice instead of snapping. Called from
 # _physics_process.
 func _update_blade_lift(delta: float) -> void:
-	var target: float = 1.0 if blade_up else 0.0
-	_blade_lift_blend = move_toward(
-			_blade_lift_blend, target, _BLADE_LIFT_BLEND_SPEED * delta)
+	var target: float = 1.0 if StickCheckRules.blade_held_up(blade_up, stick_check_phase, stick_tied) \
+			else 0.0
+	var speed: float = _BLADE_DROP_BLEND_SPEED \
+			if stick_check_phase == StickCheckRules.Phase.DROP else _BLADE_LIFT_BLEND_SPEED
+	_blade_lift_blend = move_toward(_blade_lift_blend, target, speed * delta)
+
 
 
 # Eased 0→1 lift factor consumed by SkaterIKCoordinator.blade_y_local().
@@ -1547,6 +1620,16 @@ func force_blade_lift(duration: float) -> void:
 
 func is_forced_lift_active() -> bool:
 	return _forced_lift_timer > 0.0
+
+
+# While it runs, this skater's hook lifts nothing and their stick latches no tie.
+# Host-side only; the press itself is never gated, so no client predicts it.
+func start_stick_check_cooldown() -> void:
+	_stick_check_cooldown = StickCheckRules.STICK_CHECK_COOLDOWN_S
+
+
+func is_stick_check_cooling() -> bool:
+	return _stick_check_cooldown > 0.0
 
 
 # ── Facing ────────────────────────────────────────────────────────────────────
@@ -2321,7 +2404,7 @@ var _knockdown_fall_tilt: float = 0.0
 var _fall_pivot_shift: Vector3 = Vector3.ZERO
 
 
-func set_knockdown_fall(axis: Vector3, tilt: float) -> void:
+func set_knockdown_fall(axis: Vector3, tilt: float, carry: Vector3 = Vector3.ZERO) -> void:
 	if tilt == 0.0 and _knockdown_fall_tilt == 0.0:
 		return
 	_knockdown_fall_tilt = tilt
@@ -2335,9 +2418,9 @@ func set_knockdown_fall(axis: Vector3, tilt: float) -> void:
 		var tip := Basis(axis.normalized(), tilt)
 		mesh_root.basis = tip
 		# Rotating about the ice point P (ice is world Y = 0) instead of the
-		# origin is the rotation plus the shift P − tip·P.
+		# origin is the rotation plus the shift P − tip·P; `carry` moves it after.
 		var pivot := Vector3(0.0, -global_position.y, 0.0)
-		_fall_pivot_shift = pivot - tip * pivot
+		_fall_pivot_shift = pivot - tip * pivot + carry
 	_place_mesh_root()
 
 

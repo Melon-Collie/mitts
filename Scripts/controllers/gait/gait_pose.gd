@@ -141,12 +141,12 @@ func seed_legs(loco: SkaterLocomotion, yaw_l: float, yaw_r: float, width: float 
 	_place(leg_l, stance_hip - (knee_l + stance_knee) * _shin_frac(), yaw_l, loco.l_roll, knee_l)
 	_place(leg_r, stance_hip - (knee_r + stance_knee) * _shin_frac(), yaw_r, loco.r_roll, knee_r)
 	# Below the shared blend floor a share is a residue of an ease, not a pose.
-	var authored: float = loco.authored if loco.authored > 0.001 else 0.0
-	foot_level_l = authored
-	foot_level_r = authored
-	# Of the authored share, the part whose skates grip the ice the body goes
+	var on_ice: float = loco.on_ice if loco.on_ice > 0.001 else 0.0
+	foot_level_l = on_ice
+	foot_level_r = on_ice
+	# Of the share on the ice, the part whose skates grip the ice the body goes
 	# over, against the part that scrapes along with it.
-	_gripping = clampf(1.0 - loco.sliding / authored, 0.0, 1.0) if authored > 0.0 else 1.0
+	_gripping = clampf(1.0 - loco.sliding / on_ice, 0.0, 1.0) if on_ice > 0.0 else 1.0
 	_reach(leg_l, loco.l_dx - width, loco.l_dy, loco.l_dz, yaw_l + loco.l_yaw, foot_level_l, -1.0)
 	_reach(leg_r, loco.r_dx + width, loco.r_dy, loco.r_dz, yaw_r + loco.r_yaw, foot_level_r, 1.0)
 	l_pitch = leg_l.pitch

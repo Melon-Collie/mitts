@@ -162,6 +162,12 @@ static func apply_movement(
 	return velocity
 
 
+# cos 45°: a push from rest at least this far ahead of facing is a start, never
+# a shuffle step — a skater pushes off forward (W+D included). Read by the
+# input's tap (ShuffleStepShaper) and the gait's step (SkaterLocomotion).
+const SHUFFLE_AHEAD_COS: float = 0.707
+
+
 # The posture the replicated bits name. A committed check wins over the stance;
 # every path that integrates a skater from its broadcast state resolves through
 # here, so the live sim, the client render and the host rewind agree.
@@ -177,6 +183,25 @@ static func posture_of(stance_active: bool, hit_committed: bool) -> Posture:
 class ForwardResult:
 	var position: Vector3 = Vector3.ZERO
 	var velocity: Vector3 = Vector3.ZERO
+
+
+# A downed body (a knockdown or a dive) forward-predicted `window_s` from a
+# snapshot: no thrust, only the slide shedding `friction` m/s² for as long as it
+# stays down (`down_s`), then coasting on what is left. Fills `result` in place.
+# The render and the rewind both use it for a downed snapshot in place of
+# integrate_forward, which would skate the body on its last replicated intent.
+static func slide_forward(result: ForwardResult, pos: Vector3, vel: Vector3,
+		friction: float, down_s: float, window_s: float) -> void:
+	var v := Vector2(vel.x, vel.z)
+	var speed: float = v.length()
+	var t_slide: float = clampf(minf(window_s, down_s), 0.0, INF)
+	var t_moving: float = minf(t_slide, speed / friction) if friction > 0.0 else t_slide
+	var dist: float = speed * t_moving - 0.5 * friction * t_moving * t_moving
+	var end_speed: float = maxf(speed - friction * t_slide, 0.0)
+	dist += end_speed * maxf(window_s - t_slide, 0.0)
+	var dir: Vector2 = v / speed if speed > 1e-6 else Vector2.ZERO
+	result.position = pos + Vector3(dir.x, 0.0, dir.y) * dist
+	result.velocity = Vector3(dir.x * end_speed, vel.y, dir.y * end_speed)
 
 
 # Forward-integrate a skater's position + velocity from a snapshot through `ticks`

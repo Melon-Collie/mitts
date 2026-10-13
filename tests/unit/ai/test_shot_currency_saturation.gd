@@ -39,8 +39,9 @@ extends GutTest
 #      for moving him could exist.
 #
 #   C. …and it is worth a lot. Against the live keeper, the same in-tight shot
-#      converts 2–4x better when he is caught wide. That is real value the
-#      compete has no way to see.
+#      from dead centre converts 0–4% against him set and 73% with him caught
+#      where a 4 m decoy left him. That is real value the compete has no way to
+#      see.
 #
 # The companion defect is in test_slot_shot_value_truth.gd: where this surface
 # saturates at 1.000 it is also wrong by +1.00, because the keeper's STICK is
@@ -203,8 +204,10 @@ func test_report_unsettling_the_keeper_is_unrewardable() -> void:
 # ── C. What unsettling him is actually worth against the live keeper ─────────
 # Settle him on a threat off to one side, then fire from the middle — the
 # keeper is caught where the decoy left him, which is what a cross-crease play
-# or a hard lateral drive actually produces.
-func _fire_grid(spot: Vector3) -> Dictionary:
+# or a hard lateral drive actually produces. `pose` re-poses him before EVERY
+# shot: the harness stops at first contact and leaves him wherever the last save
+# put him, so a grid fired back to back measures the previous save, not the row.
+func _fire_grid(spot: Vector3, pose: Callable) -> Dictionary:
 	var goals: int = 0
 	var shots: int = 0
 	var row := ""
@@ -215,6 +218,7 @@ func _fire_grid(spot: Vector3) -> Dictionary:
 			var cell := "s"
 			for speed: float in FIRE_SPEEDS:
 				shots += 1
+				pose.call()
 				if _h.fire_at(spot, aim, loft, speed, 0.0) == Harness.GOAL:
 					cell = "G"
 					goals += 1
@@ -223,8 +227,8 @@ func _fire_grid(spot: Vector3) -> Dictionary:
 	return {"row": row, "goals": goals, "shots": shots}
 
 
-func _report_grid(label: String, spot: Vector3) -> float:
-	var r: Dictionary = _fire_grid(spot)
+func _report_grid(label: String, spot: Vector3, pose: Callable) -> float:
+	var r: Dictionary = _fire_grid(spot, pose)
 	var rate: float = float(r["goals"]) / maxf(float(r["shots"]), 1.0)
 	gut.p("    %-26s |%s|  %2d goals / %2d shots  (%.1f%%)"
 			% [label, r["row"], r["goals"], r["shots"], 100.0 * rate])
@@ -237,13 +241,11 @@ func test_report_a_moved_keeper_is_genuinely_easier_to_beat() -> void:
 	for d: float in [3.0, 4.0, 5.0]:
 		var spot := Vector3(0.0, 0.0, GOAL_Z + d)
 		gut.p("  shooting from dead centre, %.1f m out:" % d)
-		var _unused: Vector3 = _settled(spot)
-		var set_rate: float = _report_grid("SET on the shooter", spot)
+		var set_rate: float = _report_grid("SET on the shooter", spot, _settled.bind(spot))
 		var moved: float = 0.0
 		for decoy_x: float in [4.0, -4.0]:
-			_ctrl.reset_to_crease()
-			_h.settle(Vector3(decoy_x, 0.0, GOAL_Z + d), SETTLE_TICKS)
-			moved += _report_grid("caught wide (%+.0f m decoy)" % decoy_x, spot)
+			moved += _report_grid("caught wide (%+.0f m decoy)" % decoy_x, spot,
+					_settled.bind(Vector3(decoy_x, 0.0, GOAL_Z + d)))
 		moved *= 0.5
 		gut.p("    -> catching him moving is worth %.1fx the set-keeper rate"
 				% (moved / maxf(set_rate, 0.0001)))

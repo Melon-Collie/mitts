@@ -176,6 +176,7 @@ var _expired_cooldowns: Array[int] = []
 var _is_server: bool = false
 var _pending_reset: bool = false
 var _pending_reset_xz: Vector2 = Vector2.ZERO
+var _pending_reset_height: float = 0.0
 # Full velocity queued by release()/nudge() for the analytic drive's next tick
 # (get_release_velocity returns it until consumed), so same-frame consumers of
 # the puck_released signal — and the drive itself — see the full XYZ launch
@@ -304,7 +305,7 @@ var _contact_latch_goalie: bool = false
 # a synchronous emit gives them.
 #
 # puck_stripped / puck_released stay synchronous: their listeners read call-scoped
-# transient state on the same stack (PuckController.is_processing_stick_lift, the
+# transient state on the same stack (PuckController.stick_lift_forced_seconds, the
 # queued release velocity read by the dump-release check, the goalie reaction
 # back-date consumed by _on_puck_released).
 #
@@ -329,6 +330,7 @@ var _replay_hold: bool = false
 # transform, so the loose puck should keep coasting (bounce in the net after a goal,
 # slide after the buzzer). Only motion_pinned and _replay_hold freeze the drive.
 var motion_pinned: bool = false
+var _held: bool = false
 
 
 # Raised by the goal / post-game replay drivers for the playback's duration: the
@@ -421,6 +423,7 @@ func stage_at(pos: Vector3) -> void:
 	global_position = pos
 	linear_velocity = Vector3.ZERO
 	_pending_elevation_vel = Vector3.ZERO
+	_held = false
 	# Drop the interpolation history so the restage isn't drawn as a smear from
 	# wherever the puck was (see SkaterController.teleport_to).
 	reset_physics_interpolation()
@@ -528,6 +531,18 @@ func apply_blade_deflect(skater: Skater) -> void:
 	_set_cooldown(skater, bobble_cooldown if is_bobble else deflect_cooldown)
 	_queue_contact_event(ContactEvent.LOOSE_TOUCH, skater)
 
+# A tied blade's touch: the same deflect off the face, laid flat and cut to
+# StickCheckRules.TIE_BOBBLE_RETAIN of its pace, so the puck dies at the tied
+# player's feet. Deterministic — the face decides where, the tie decides how far.
+func apply_tied_bobble(skater: Skater) -> void:
+	var v: Vector3 = PuckCollisionRules.deflect_velocity(
+			linear_velocity, skater.get_blade_face_normal(linear_velocity),
+			deflect_normal_restitution, deflect_normal_restitution_min,
+			deflect_tangential_retain, deflect_speed_ref)
+	linear_velocity = Vector3(v.x, 0.0, v.z) * StickCheckRules.TIE_BOBBLE_RETAIN
+	_set_cooldown(skater, bobble_cooldown)
+	_queue_contact_event(ContactEvent.LOOSE_TOUCH, skater)
+
 # `contact_normal` is the outward horizontal normal at the swept contact —
 # PuckInteractionRules.body_block_contact_normal, taken on the same segment the
 # block was detected against. The caller owns it because only the caller has the
@@ -631,15 +646,27 @@ func apply_poke_check(checker_skater: Skater) -> void:
 # a lifted stick just leaves the puck where it was being carried — so it keeps
 # travelling in the carrier's direction at the carrier's speed, as if the carry
 # simply continued without the stick on it. Horizontal only; a stationary
-# carrier's puck stays put (the reattach cooldown still denies an instant
-# re-grab). Same cooldowns + signals as apply_poke_check so the carrier-clear,
+# carrier's puck stays put. The ex-carrier can't re-grab for `regrab_cooldown`,
+# and the lifter gets no checker cooldown at all: their blade dropping back onto
+# the puck is the take. Same signals as apply_poke_check so the carrier-clear,
 # stats, and victim-notify paths fire identically.
-func apply_stick_lift_strip(checker_skater: Skater) -> void:
-	var ex_carrier: Skater = carrier  # capture before clear_carrier()
+# A carrier pinned to the boards loses the puck where it is: it goes on at his
+# speed and sits loose at both players' feet, for whichever side's support gets
+# there first. The pinner is credited, as the defender who made the play.
+func apply_pin_strip(pinner: Skater) -> void:
+	var ex_carrier: Skater = carrier
 	clear_carrier()
 	linear_velocity = Vector3(ex_carrier.velocity.x, 0.0, ex_carrier.velocity.z)
 	_set_cooldown(ex_carrier, reattach_cooldown)
-	_set_cooldown(checker_skater, poke_checker_cooldown)
+	puck_stripped.emit(ex_carrier, pinner)
+	puck_released.emit()
+
+
+func apply_stick_lift_strip(checker_skater: Skater, regrab_cooldown: float) -> void:
+	var ex_carrier: Skater = carrier  # capture before clear_carrier()
+	clear_carrier()
+	linear_velocity = Vector3(ex_carrier.velocity.x, 0.0, ex_carrier.velocity.z)
+	_set_cooldown(ex_carrier, maxf(reattach_cooldown, regrab_cooldown))
 	puck_stripped.emit(ex_carrier, checker_skater)
 	puck_released.emit()
 # Goalie counterpart to apply_poke_check. A Goalie is not a Skater (no
@@ -755,8 +782,12 @@ func drop() -> void:
 		_set_cooldown(ex_carrier, reattach_cooldown)
 	puck_released.emit()
 
-func reset(at_xz: Vector2 = Vector2.ZERO) -> void:
+# `hold_height` > 0 stages the puck that far above the ice and holds it there,
+# immune to every contact, until drop_held throws it down (the faceoff drop).
+func reset(at_xz: Vector2 = Vector2.ZERO, hold_height: float = 0.0) -> void:
 	carrier = null
+	_pending_reset_height = maxf(hold_height, 0.0)
+	_held = hold_height > 0.0
 	_cooldown_timers.clear()
 	linear_velocity = Vector3.ZERO
 	# Discard any release velocity queued this frame — a faceoff / whistle reset
@@ -765,6 +796,13 @@ func reset(at_xz: Vector2 = Vector2.ZERO) -> void:
 	_pending_reset = true
 	_pending_reset_xz = at_xz
 	puck_released.emit()
+
+func drop_held(down_speed: float) -> void:
+	if not _held:
+		return
+	_held = false
+	linear_velocity = Vector3(0.0, -down_speed, 0.0)
+
 
 func is_airborne() -> bool:
 	return position.y > ice_height + GameRules.PUCK_AIRBORNE_HEIGHT_M
@@ -799,7 +837,8 @@ func _drive_analytic(dt: float) -> void:
 	# Faceoff / reset staging.
 	if _pending_reset:
 		_pending_reset = false
-		global_position = Vector3(_pending_reset_xz.x, ice_height, _pending_reset_xz.y)
+		global_position = Vector3(_pending_reset_xz.x, ice_height + _pending_reset_height,
+				_pending_reset_xz.y)
 		linear_velocity = Vector3.ZERO
 		_pending_reset_xz = Vector2.ZERO
 		# Faceoff / whistle staging is a jump, not motion — see stage_at.
@@ -812,7 +851,7 @@ func _drive_analytic(dt: float) -> void:
 	# pin every tick, re-detecting the held puck inside the glove box and re-firing
 	# puck_touched_goalie at 120 Hz. pickup_locked is deliberately NOT a freeze
 	# condition — see motion_pinned.
-	if motion_pinned or _replay_hold:
+	if motion_pinned or _replay_hold or _held:
 		_contact_latch_goalie = false
 		_contact_latch_post = false
 		_contact_latch_net = false

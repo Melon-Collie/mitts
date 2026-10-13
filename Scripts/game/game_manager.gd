@@ -52,11 +52,10 @@ signal body_check_broadcast(force: float)
 # host-extended by `duration`, so listeners (camera sweep, HUD matchup card,
 # crowd buzz) have that long before the normal faceoff countdown begins.
 signal pregame_intro_started(duration: float)
-# Fired (before faceoff_prep_announced) on a period / stoppage faceoff whose
-# prep is extended so players skate in from where play stopped. `delay` is the
-# seconds the HUD should hold before the "2 → 1 → DROP" countdown so it lands on
-# the real (extended) drop. 0-delay faceoffs (opening intro, post-goal) don't
-# fire this. Host and client both fire it, deriving `delay` locally.
+# Fired (before faceoff_prep_announced) on a post-goal / stoppage faceoff, whose
+# prep is held until the last skater arrives. `delay` is the seconds the HUD
+# holds before the "2 → 1 → DROP" countdown (PhaseCoordinator.last_prep_preroll).
+# The bench intros ride their own signals instead.
 signal faceoff_skate_in_started(delay: float)
 # Fired on every peer when END_OF_PERIOD begins — the between-period break.
 # Skaters skate off to their bench doors over the window (PhaseCoordinator.
@@ -114,7 +113,12 @@ signal puck_out_of_play()
 # inside _consume_pending_faceoff; clients emit from the RPC handler.
 signal icing_called()
 signal goalie_freeze_called()
+signal puck_frozen_called()
 signal offside_called()
+# Emitted on every peer when an NHL icing race opens (icing_team_id) or ends
+# (-1, waved_off saying how). Hosts emit from _announce_icing_race; clients
+# from the RPC handler.
+signal icing_race_changed(icing_team_id: int, waved_off: bool)
 
 # ── Domain state ──────────────────────────────────────────────────────────────
 var _state_machine: GameStateMachine = null
@@ -134,6 +138,15 @@ var _tag_up_peers: Dictionary[int, bool] = {}
 # checks (host only). The domain calls read it synchronously and never retain
 # it; each call site clears + refills before use.
 var _positions_scratch: Dictionary = {}
+# Its velocity twin, for the icing race.
+var _velocities_scratch: Dictionary = {}
+# The icing race last announced to every peer (host only) — see _announce_icing_race.
+var _announced_icing_team: int = -1
+var _announced_icing_races: int = 0
+# Who released the puck that opened the current icing race — credited the icing
+# at the whistle (host only).
+var _icing_releaser: int = -1
+var _icing_races_seen: int = 0
 # The ghost-state result half of the same pair — _apply_ghost_state consumes the
 # map in the same call it is filled and never retains it.
 var _ghosts_scratch: Dictionary = {}
@@ -257,6 +270,10 @@ var _registry: PlayerRegistry = null
 var _codec: WorldStateCodec = null
 var _shot_tracker: ShotOnGoalTracker = null
 var _hit_tracker: HitTracker = null
+var _stick_ties: StickTieTracker = null
+var _board_pins: BoardPinTracker = null
+var _stick_tie_draw := StickTieDraw.new()
+var _frozen_puck := FrozenPuckRules.State.new()
 var _turnover_tracker: TurnoverTracker = null
 var _possession_tracker: PossessionTracker = null
 var _advanced_stats_tracker: AdvancedStatsTracker = null
@@ -267,6 +284,7 @@ var _client_shot_events: Array[ShotEvent] = []
 var _pickup_claim: PickupClaimResolver = null
 var _poke_claim: PokeClaimResolver = null
 var _stick_lift_claim: StickLiftClaimResolver = null
+var _stick_tie_claim: StickTieClaimResolver = null
 var _hit_claim: HitClaimResolver = null
 var _phase_coord: PhaseCoordinator = null
 var _swap_coord: SlotSwapCoordinator = null
@@ -489,7 +507,9 @@ func _wire_network_signals() -> void:
 	NetworkManager.goal_received.connect(_on_goal_received)
 	NetworkManager.puck_out_of_play_received.connect(_on_puck_out_of_play_received)
 	NetworkManager.icing_called_received.connect(_on_icing_called_received)
+	NetworkManager.icing_race_received.connect(icing_race_changed.emit)
 	NetworkManager.goalie_freeze_called_received.connect(_on_goalie_freeze_called_received)
+	NetworkManager.puck_frozen_called_received.connect(puck_frozen_called.emit)
 	NetworkManager.offside_called_received.connect(_on_offside_called_received)
 	NetworkManager.faceoff_positions_received.connect(_on_faceoff_positions_received)
 	NetworkManager.game_reset_received.connect(on_game_reset)
@@ -509,6 +529,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.pickup_claim_rejected_received.connect(_on_pickup_claim_rejected)
 	NetworkManager.poke_claim_received.connect(_on_poke_claim_received)
 	NetworkManager.stick_lift_claim_received.connect(_on_stick_lift_claim_received)
+	NetworkManager.stick_tie_claim_received.connect(_on_stick_tie_claim_received)
 	NetworkManager.ghost_state_received.connect(_on_ghost_state_received)
 	NetworkManager.offside_state_received.connect(_on_offside_state_received)
 	NetworkManager.hit_claim_received.connect(_on_hit_claim_received)
@@ -534,12 +555,16 @@ func _process(delta: float) -> void:
 	# Cosmetic, both roles: skaters "step off the ice" at their bench door
 	# during the period-break skate-off (see _update_period_break_hiding).
 	_update_period_break_hiding()
+	# Cosmetic, every peer: tied sticks drawn meeting, and the clack.
+	if _registry != null:
+		_stick_tie_draw.update(_registry.skaters(), _registry.team_id_by_skater)
 	if not NetworkManager.is_host or _state_machine == null:
 		return
 	if NetworkManager.is_replay_mode():
 		return
 	if _state_machine.tick(delta):
 		_phase_coord.handle_phase_entered()
+	_phase_coord.update_faceoff_drop()
 	if _state_machine.current_phase == GamePhase.Phase.PLAYING:
 		var secs: int = int(_state_machine.time_remaining)
 		if secs != _last_emitted_clock_secs:
@@ -567,6 +592,8 @@ func _physics_process(delta: float) -> void:
 	# blade-from-mouse call. Runs on host AND clients before the host gate
 	# below since IK clamping happens everywhere.
 	_refresh_goalie_data_cache()
+	if _stick_tie_claim != null:
+		_stick_tie_claim.maybe_send_claim()
 	if not NetworkManager.is_host or puck == null or _state_machine == null:
 		return
 	# Goal replay temporarily owns actor positions on the host. Skip the live
@@ -643,9 +670,12 @@ func _physics_process(delta: float) -> void:
 	_check_goal_crossing()
 	_check_puck_out_of_bounds(delta)
 	_check_puck_stuck_on_net(delta)
+	_check_frozen_puck(delta)
 	_apply_ghost_state(delta)
 	_shot_tracker.tick(delta)
 	_hit_tracker.tick(delta)
+	_stick_ties.tick(not _state_machine.is_movement_locked())
+	_board_pins.tick(not _state_machine.is_movement_locked())
 	_possession_tracker.tick(delta)
 	# Release before _pickup_claim.tick so a claim coming due this frame can still
 	# arm the contest window on the frame it lands.
@@ -812,6 +842,43 @@ func _whistle_goalie_freeze(covering_team_id: int) -> void:
 	_whistle_and_faceoff(GameRules.icing_faceoff_dot(covering_team_id, puck.global_position.x))
 
 
+# Host-only: a puck trapped on the boards under a pinned skater (FrozenPuckRules).
+# NHL whistles it and faces off at the nearest dot; elsewhere the puck squirts
+# free along the wall and the pins on it let go.
+func _check_frozen_puck(delta: float) -> void:
+	if _state_machine.current_phase != GamePhase.Phase.PLAYING:
+		_frozen_puck.clear()
+		return
+	var puck_pos: Vector3 = puck.global_position
+	var pinned: Skater = null
+	for s: Skater in _registry.skaters():
+		if s.pin_role == BoardPinRules.Role.NONE:
+			continue
+		var reach: float = FrozenPuckRules.REACH_M + s.collision_radius()
+		if Vector2(s.global_position.x - puck_pos.x, s.global_position.z - puck_pos.z).length() \
+				<= reach:
+			pinned = s
+	# A pinned carrier loses the puck as the pin starts, so a trapped puck is loose.
+	var trapped: bool = pinned != null and puck.carrier == null \
+			and puck.linear_velocity.length() < FrozenPuckRules.SPEED_MAX_M_S \
+			and FrozenPuckRules.near_boards(puck_pos)
+	if not FrozenPuckRules.step(_frozen_puck, puck_pos, trapped, delta):
+		return
+	if _state_machine.rule_set == GameRules.RuleSet.NHL:
+		puck_frozen_called.emit()
+		NetworkManager.notify_puck_frozen_called_to_all()
+		_whistle_and_faceoff(GameRules.nearest_faceoff_dot(Vector2(puck_pos.x, puck_pos.z)))
+		return
+	puck.linear_velocity = FrozenPuckRules.squirt_velocity(puck_pos, pinned.global_position)
+	_board_pins.release(pinned)
+
+
+# Host: the pin just locked a carrier against the boards — his puck goes loose.
+func _strip_pinned_carrier(victim: Skater, pinner: Skater) -> void:
+	if puck != null and puck.carrier == victim:
+		puck.apply_pin_strip(pinner)
+
+
 # Host: any transition out of live play (whistle prep, goal, period horn,
 # game over) is a stoppage for stat attribution — resolve a still-pending
 # draw via the last-toucher fallback and clear pending hits + release grace
@@ -874,6 +941,7 @@ func _consume_pending_faceoff() -> void:
 	var dot: Vector2 = _state_machine.pending_faceoff_dot
 	match reason:
 		GameStateMachine.FaceoffReason.ICING:
+			_credit_icing()
 			icing_called.emit()
 			NetworkManager.notify_icing_called_to_all()
 		GameStateMachine.FaceoffReason.OFFSIDE:
@@ -882,17 +950,55 @@ func _consume_pending_faceoff() -> void:
 	_whistle_and_faceoff(dot)
 
 
+# Host: an icing was whistled — count it against the player whose release
+# opened the race, and log who it was (bot or human) for playtest reading.
+func _credit_icing() -> void:
+	var rec: PlayerRecord = _registry.get_record(_icing_releaser) if _registry != null else null
+	if rec == null or rec.stats == null:
+		print("[icing] releaser unknown")
+		return
+	rec.stats.icings += 1
+	_stats_sync_gate.mark_dirty()
+	print("[icing] %s (%s, team %d)" % [rec.player_name, "bot" if rec.is_bot else "human",
+			rec.team.team_id if rec.team != null else -1])
+
+
 func _update_host_puck_tracking() -> void:
 	if puck.carrier != null:
 		var carrier_team: Team = _registry.resolve_team(puck.carrier)
 		if carrier_team != null:
 			_state_machine.notify_puck_carried(carrier_team.team_id,
-					puck.carrier.global_position.z, puck.carrier.global_position.x)
+					puck.global_position.z, puck.global_position.x)
 	elif _state_machine.current_phase == GamePhase.Phase.PLAYING:
 		_registry.fill_positions_by_peer_id(_positions_scratch)
+		_registry.fill_velocities_by_peer_id(_velocities_scratch)
 		_state_machine.check_icing_for_loose_puck(
-				puck.global_position.z, _positions_scratch)
-		_consume_pending_faceoff()
+				puck.global_position.z, _positions_scratch, _velocities_scratch)
+		if _state_machine.icing.races_opened != _icing_races_seen:
+			_icing_races_seen = _state_machine.icing.races_opened
+			_icing_releaser = _shot_tracker.get_last_toucher() if _shot_tracker != null else -1
+	_consume_pending_faceoff()
+	# A goalie who plays an iced puck waves the icing off, so the defending one
+	# stays home while the race runs.
+	var icing_team: int = _state_machine.icing.pending_team_id
+	for gc: GoalieController in goalie_controllers:
+		gc.set_icing_hold(icing_team != -1 and gc.team_id != icing_team)
+	_announce_icing_race()
+
+
+# Host: tell every peer when an icing race opens or ends. The race counter
+# catches one that opened and ended inside a single tick.
+func _announce_icing_race() -> void:
+	var icing: IcingRace = _state_machine.icing
+	if icing.pending_team_id == _announced_icing_team \
+			and icing.races_opened == _announced_icing_races:
+		return
+	_announced_icing_team = icing.pending_team_id
+	_announced_icing_races = icing.races_opened
+	var waved_off: bool = icing.pending_team_id == -1 \
+			and icing.last_call == InfractionRules.IcingCall.WAVED_OFF
+	icing_race_changed.emit(icing.pending_team_id, waved_off)
+	NetworkManager.send_icing_race_to_all(icing.pending_team_id, waved_off)
 
 
 # Host-only swept goal detection. Feeds each goal the puck-center segment from
@@ -1532,6 +1638,14 @@ func _wire_subsystems() -> void:
 
 	_hit_tracker = HitTracker.new()
 	_hit_tracker.setup(_registry)
+	if _stick_ties != null:
+		_stick_ties.clear()
+	_stick_ties = StickTieTracker.new()
+	_stick_ties.setup(_registry, func() -> Skater: return puck.carrier if puck != null else null)
+	if _board_pins != null:
+		_board_pins.clear()
+	_board_pins = BoardPinTracker.new()
+	_board_pins.setup(_registry, NetworkManager.local_time, _strip_pinned_carrier)
 	_hit_tracker.impact_landed.connect(_on_impact_landed)
 	_hit_tracker.hit_credited.connect(_on_hit_credited)
 
@@ -1587,6 +1701,10 @@ func _wire_subsystems() -> void:
 
 	_stick_lift_claim = StickLiftClaimResolver.new()
 	_stick_lift_claim.setup(_registry, _state_buffer_manager, get_puck, _get_puck_controller)
+
+	_stick_tie_claim = StickTieClaimResolver.new()
+	_stick_tie_claim.setup(_registry, _state_buffer_manager,
+			func() -> StickTieTracker: return _stick_ties, _get_puck_controller)
 
 	_hit_claim = HitClaimResolver.new()
 	_hit_claim.setup(_registry, _state_buffer_manager, _hit_tracker, _get_puck_controller)
@@ -1701,7 +1819,7 @@ func _wire_sound_signals() -> void:
 		puck_controller.puck_stripped_from.connect(func(_pid: int, _stripper: int) -> void:
 			var spd: float = puck.linear_velocity.length()
 			var pos: Vector3 = puck.get_puck_position()
-			if puck_controller.is_processing_stick_lift():
+			if puck_controller.stick_lift_forced_seconds() > 0.0:
 				# Distinct stick-lift cue instead of the generic puck-strip thud.
 				SoundManager.play_world(SoundManager.Sound.STICK_LIFT, pos, _puck_speed_volume(spd), 0.06)
 				puck.fire_stick_lift_vfx()
@@ -2862,9 +2980,10 @@ func _enrich_snapshot_for_ai(snap: WorldSnapshot) -> void:
 		var ids: Array = snap.teammate_ids_by_team[team_id]
 		# Election-side eligibility (see AILoosePuckChase.elect): humans
 		# can't be assigned by an election (they only suppress the bots
-		# while demonstrably playing the puck), and a one-timer camper has
-		# opted out of loose-puck work (its camp veto would refuse the
-		# chase while nobody else was elected — the frozen-team pickup).
+		# while demonstrably playing the puck), and a one-timer camper — or a
+		# bot that may not touch the puck (ghosted, or owing an NHL tag-up) —
+		# has opted out of loose-puck work (its veto would refuse the chase
+		# while nobody else was elected — the frozen-team pickup).
 		# Cleared per team rather than allocated: elect() reads both inline and
 		# retains neither, and neither reaches the snapshot the worker sees.
 		var human_ids: Array = _human_ids_scratch
@@ -2877,7 +2996,8 @@ func _enrich_snapshot_for_ai(snap: WorldSnapshot) -> void:
 			var rec: PlayerRecord = _registry.get_record(pid)
 			if rec != null and not rec.is_bot:
 				human_ids.append(pid)
-			elif brain != null and brain.is_one_timer_ready(pid):
+			elif snap.is_out_of_play(pid) \
+					or (brain != null and brain.is_one_timer_ready(pid)):
 				camped_ids.append(pid)
 		# Momentum-aware + hysteretic election (see AILoosePuckChase):
 		# the teammate who actually arrives first keeps the role unless
@@ -3056,6 +3176,17 @@ func _on_stick_lift_claim_received(peer_id: int, host_timestamp: float, interp_d
 			[peer_id, host_timestamp, interp_delay_ms, input_lead_ms, expected_carrier_peer_id, blade_curr])
 
 
+func _on_stick_tie_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float,
+		input_lead_ms: float, target_peer_id: int, blade_curr: Vector3) -> void:
+	if not NetworkManager.is_host:
+		return
+	_deferred_claims.submit(
+			LagCompRewind.self_view_time(host_timestamp, input_lead_ms),
+			_state_buffer_manager.newest_host_timestamp(),
+			_stick_tie_claim.receive_claim,
+			[peer_id, host_timestamp, interp_delay_ms, input_lead_ms, target_peer_id, blade_curr])
+
+
 func _on_server_puck_released_by_carrier(peer_id: int) -> void:
 	var record: PlayerRecord = _registry.get_record(peer_id)
 	if record == null:
@@ -3146,11 +3277,12 @@ func _on_server_puck_stripped_from(peer_id: int, stripper_peer_id: int) -> void:
 		_turnover_tracker.note_strip(peer_id, stripper_peer_id)
 	if _possession_tracker != null:
 		_possession_tracker.on_puck_lost(peer_id)
-	_state_machine.notify_icing_contact()
+	_state_machine.notify_icing_touch(_registry.resolve_team_id_for_peer(stripper_peer_id),
+			puck.global_position.z, puck.global_position.x)
 	if not record.is_local:
-		# Tell the victim's client whether this was a stick lift so it can pop
-		# their own blade up locally (their prediction never saw the host force).
-		NetworkManager.send_puck_stolen(peer_id, puck_controller.is_processing_stick_lift())
+		# Tell the victim's client how long a stick lift holds their blade up, so it
+		# pops it locally (their prediction never saw the host force).
+		NetworkManager.send_puck_stolen(peer_id, puck_controller.stick_lift_forced_seconds())
 
 
 # Host: a defender poke-checked the carrier. Record the poker as the most recent
@@ -3201,7 +3333,8 @@ func _on_server_puck_touched_while_loose(peer_id: int) -> void:
 	# A loose-puck touch during FACEOFF (deflect / body redirect) makes the puck
 	# live — end the faceoff so a goal off the deflection counts (see P2-2).
 	_phase_coord.on_puck_touched_live()
-	_state_machine.notify_icing_contact()
+	_state_machine.notify_icing_touch(_registry.resolve_team_id_for_peer(peer_id),
+			puck.global_position.z, puck.global_position.x)
 	# Deflection or body-block by an offending-team attacker also counts as a
 	# touch that whistles a delayed offside.
 	_state_machine.notify_puck_touch(peer_id)
@@ -3222,6 +3355,9 @@ func _on_puck_touched_by_goalie(goalie: Goalie) -> void:
 	var defending_team_id: int = _defending_team_id_for_goalie(goalie)
 	_shot_tracker.on_goalie_touch(defending_team_id)
 	_stats_sync_gate.mark_dirty()
+	# A goalie touch only ever waves icing off, so no whistle fires mid-tick here.
+	_state_machine.notify_icing_touch(defending_team_id,
+			puck.global_position.z, puck.global_position.x, true)
 
 
 func _defending_team_id_for_goalie(goalie: Goalie) -> int:
@@ -3781,7 +3917,7 @@ func on_local_player_picked_up_puck() -> void:
 		puck_controller.notify_local_pickup(record.skater)
 
 
-func on_local_player_puck_stolen(was_stick_lift: bool = false) -> void:
+func on_local_player_puck_stolen(forced_lift_s: float = 0.0) -> void:
 	var local_record := _registry.get_local() if _registry != null else null
 	if local_record != null:
 		local_record.controller.on_puck_released_network()
@@ -3789,8 +3925,8 @@ func on_local_player_puck_stolen(was_stick_lift: bool = false) -> void:
 		# Stick-lift victim cue: pop our own blade up so the strip reads as a
 		# lift on our screen too (the host forced it, but our local prediction
 		# of our own skater never saw that). Reuses the exact lift mechanic.
-		if was_stick_lift and local_record.skater != null:
-			local_record.skater.force_blade_lift(PuckController.STICK_LIFT_FORCED_LIFT_S)
+		if forced_lift_s > 0.0 and local_record.skater != null:
+			local_record.skater.force_blade_lift(forced_lift_s)
 
 
 # ── Goal received (client-side RPC) ──────────────────────────────────────────
@@ -3802,9 +3938,9 @@ func _on_goal_received(scoring_team_id: int, score0: int, score1: int,
 			scorer_name, assist1_name, assist2_name)
 
 
-func _on_faceoff_positions_received(positions: Array) -> void:
+func _on_faceoff_positions_received(positions: Array, preroll: float) -> void:
 	if _phase_coord != null:
-		_phase_coord.on_faceoff_positions(positions)
+		_phase_coord.on_faceoff_positions(positions, preroll)
 
 
 func _on_puck_out_of_play_received() -> void:
@@ -4117,8 +4253,8 @@ func _on_faceoff_prep_announced_from_coord() -> void:
 		period_intro_started.emit(
 				_phase_coord.period_after_break, GameRules.PERIOD_INTRO_DURATION)
 	elif _phase_coord != null and _phase_coord.last_prep_preroll > 0.0:
-		# Period / stoppage skate-in: hold the countdown for the skate window so
-		# it lands on the extended drop. Guarded by the intro branch above so the
+		# Post-goal / stoppage skate-in: hold the countdown until everyone is set
+		# so it lands on the extended drop. Guarded by the intro branch above so the
 		# opening faceoff never double-counts (its pre-roll is the intro's).
 		faceoff_skate_in_started.emit(_phase_coord.last_prep_preroll)
 	faceoff_prep_announced.emit()
@@ -4523,7 +4659,14 @@ func on_scene_exit() -> void:
 	_pickup_claim = null
 	_poke_claim = null
 	_stick_lift_claim = null
+	_stick_tie_claim = null
 	_hit_claim = null
+	if _stick_ties != null:
+		_stick_ties.clear()
+	_stick_ties = null
+	if _board_pins != null:
+		_board_pins.clear()
+	_board_pins = null
 	_phase_coord = null
 	_swap_coord = null
 	if _debug_overlay:

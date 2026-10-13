@@ -587,7 +587,9 @@ func test_point_reads_a_rim_still_coming_around_the_end_boards() -> void:
 	var ctx: RoleContext = _make_ctx(Vector3(9.5, 0.0, -9.3),
 			[[2, TEAM_ID, Vector3(0.0, 0.0, -20.0)]], -1,
 			Vector3(2.0, 0.0, -28.6))
-	ctx.snapshot.puck_state.velocity = Vector3(18.0, 0.0, 0.0)
+	# Hard enough to reach the line inside the 3 s race walk with the corner's
+	# losses paid; an 18 m/s rim dies ~1 m short of it.
+	ctx.snapshot.puck_state.velocity = Vector3(20.0, 0.0, 0.0)
 	var d: RoleDecision = AIRoleDefenseman.decide(ctx, AIRoleSlots.Slot.POINT_STRONG)
 	assert_gt(d.target_position.x, 10.0,
 			"the rim around the boards is read before it reaches the wall; got %s"

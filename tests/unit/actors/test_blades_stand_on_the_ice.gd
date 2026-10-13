@@ -44,6 +44,9 @@ var _joint_step: float = 0.0
 # Over the last _skate's measured ticks, the highest a skate's runner rode while
 # that skate was pushing: moving back and out from under the body.
 var _push_float: float = 0.0
+# The largest knee correction the seat made over the last _skate's measured
+# ticks, radians.
+var _plant_max: float = 0.0
 var _runner := PackedVector3Array()
 
 
@@ -102,6 +105,7 @@ func _skate(steer: Callable, measure_from: int = WARMUP_TICKS) -> Vector4:
 	last.resize(pivots.size())
 	_joint_step = 0.0
 	_push_float = 0.0
+	_plant_max = 0.0
 	var skate_at: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 	for i: int in WARMUP_TICKS + MEASURE_TICKS:
 		steer.call(input, i, _skater.velocity)
@@ -118,6 +122,8 @@ func _skate(steer: Callable, measure_from: int = WARMUP_TICKS) -> Vector4:
 			last[k] = euler
 		if i < measure_from:
 			continue
+		var eased: PackedFloat32Array = _skater._legs._plant_eased
+		_plant_max = maxf(_plant_max, maxf(absf(eased[0]), absf(eased[1])))
 		var left: float = _runner_height(true)
 		var right: float = _runner_height(false)
 		lo = minf(lo, minf(left, right))
@@ -223,6 +229,23 @@ func test_hockey_stop_stands_on_the_ice() -> void:
 		inp.move_vector = Vector2.ZERO if stopping else Vector2(0.0, -1.0)
 		inp.brake = stopping
 		inp.mouse_world_pos = Vector3(0.0, 0.0, -6.0), WARMUP_TICKS + 30))
+
+
+# Stopped after a move to the side, the balance lean rolls the body back against
+# the stop and settles over a second or so, a blade's height of roll on the
+# straight legs of the rest stance. The higher leg cannot reach further and
+# folding the support from straight first tips its rigid blade down, so a fold
+# there could only find the ice far past that dip, and folded 45° to meet a few
+# millimetres. The seat leaves that gap, the roll's to close as it settles.
+func test_a_stop_from_the_side_does_not_fold_a_leg() -> void:
+	var contact: Vector4 = _skate(func(inp: InputState, i: int, _v: Vector3) -> void:
+		var pushing: bool = i >= WARMUP_TICKS and i < WARMUP_TICKS + 20
+		inp.move_vector = Vector2(1.0, 0.0) if pushing else Vector2.ZERO
+		inp.brake = i >= WARMUP_TICKS + 20
+		inp.mouse_world_pos = Vector3(0.0, 0.0, -6.0), WARMUP_TICKS + 40)
+	gut.p("stop from the side: seat correction peaks at %.3f rad" % _plant_max)
+	_assert_on_ice("stop from the side", contact)
+	assert_lt(_plant_max, 0.25, "the plant only trims")
 
 
 # The seat moves the visible body only: the gameplay frames the hands and

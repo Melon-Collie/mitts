@@ -140,7 +140,7 @@ func test_predict_final_matches_predict_endpoint() -> void:
 		[Vector3(0, 0, 0), Vector3(3, 0, -2), 6, 0.1, 0.0, 0.0, Vector3.ZERO, 0.0],
 		[Vector3(1, 0, 1), Vector3(5, 0, 4), 6, 0.1, 0.0, 0.0, Vector3(2, 0, -1), 6.0],
 		[Vector3(GameRules.INNER_HALF_WIDTH - 0.5, 0, 0), Vector3(20, 0, 3), 6, 1.0 / 12.0,
-			GameRules.PUCK_ICE_DECEL_M_S2, GameRules.PUCK_BOARD_BOUNCE, Vector3.ZERO, 0.0],
+			GameRules.PUCK_ICE_DECEL_M_S2, GameRules.PUCK_BOARD_COR_SCALE, Vector3.ZERO, 0.0],
 	]
 	for c: Array in cases:
 		var traj: Array[Vector3] = AITrajectory.predict(c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7])

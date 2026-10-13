@@ -42,7 +42,7 @@ func override(p: GaitPose) -> void:
 	p.plant = lerpf(p.plant, 0.0, weight)
 	p.plant_l = lerpf(p.plant_l, 0.0, weight)
 	p.plant_r = lerpf(p.plant_r, 0.0, weight)
-	p.drop = lerpf(p.drop, _controller.knockdown_pose_drop_m, weight)
+	p.drop = lerpf(p.drop, _controller.knockdown_drop_m(), weight)
 	p.l_pitch = lerpf(p.l_pitch, 0.0, weight)
 	p.r_pitch = lerpf(p.r_pitch, 0.0, weight)
 	p.l_roll = lerpf(p.l_roll, 0.0, weight)

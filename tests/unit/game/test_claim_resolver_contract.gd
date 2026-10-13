@@ -47,7 +47,8 @@ func _strip(src: String) -> String:
 # nothing over an empty dictionary.
 func test_every_resolver_is_discovered() -> void:
 	for expected: String in ["pickup_claim_resolver.gd", "poke_claim_resolver.gd",
-			"stick_lift_claim_resolver.gd", "hit_claim_resolver.gd"]:
+			"stick_lift_claim_resolver.gd", "stick_tie_claim_resolver.gd",
+			"hit_claim_resolver.gd"]:
 		assert_true(_sources.has(expected), "%s should be discovered as a claim resolver" % expected)
 
 
@@ -103,14 +104,14 @@ func test_any_resolver_that_reads_the_reported_delay_bounds_it_first() -> void:
 # Bullet: "A claim resolves on the input stream's timeline, not on packet
 # arrival" — every reject condition is evaluated at RELEASE from
 # DeferredClaimQueue, so a resolver may not cache anything at the signal
-# boundary. GameManager parking all four claims is what makes that true; a fifth
-# wired straight from its signal to its resolver would adjudicate on arrival
-# with nothing failing.
+# boundary. GameManager parking every claim is what makes that true; one wired
+# straight from its signal to its resolver would adjudicate on arrival with
+# nothing failing.
 func test_no_claim_is_adjudicated_on_arrival() -> void:
 	var gm: String = _strip(FileAccess.get_file_as_string("res://Scripts/game/game_manager.gd"))
 	assert_false(gm.is_empty(), "could not read game_manager.gd")
 	var handlers: PackedStringArray = _claim_handlers(gm)
-	assert_eq(handlers.size(), 4,
+	assert_eq(handlers.size(), _sources.size(),
 			"expected one _on_*_claim_received handler per resolver, found %d" % handlers.size())
 	for body: String in handlers:
 		var head: String = body.split("\n")[0]

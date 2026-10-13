@@ -57,9 +57,8 @@ static func is_directed_at_net(puck_pos: Vector3, puck_vel: Vector3, goal_line_z
 #
 # The centre red line is z = 0 by construction (rink centred on the origin, goal
 # lines at ±GameRules.GOAL_LINE_Z), so "own half" reduces to the release sitting
-# on the opposite side of centre from the net being shot at — the same convention
-# InfractionRules.check_icing uses for the icing release. A release exactly ON the
-# line is legal (the product is 0, not negative).
+# on the opposite side of centre from the net being shot at. A release exactly ON
+# the line is legal (the product is 0, not negative).
 #
 # Safe to make absolute because there is no goalie-pull mechanic: goalies spawn
 # for every match, so the empty-net shot from deep that a real scorer WOULD credit

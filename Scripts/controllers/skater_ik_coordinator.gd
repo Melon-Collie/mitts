@@ -76,6 +76,8 @@ var _native_bottom: RefCounted = null
 # _blade_dangle_vel, the init flag) — only _smoothed_blade_world is mirrored
 # back, because the hand solve below the block reads it.
 var _native_dangle: RefCounted = null
+# The tie state the dangle config was last synced for (the blade cap follows it).
+var _dangle_synced_tied: bool = false
 
 func setup(skater: Skater, controller: SkaterController,
 		skating: SkaterSkatingCoordinator) -> void:
@@ -111,11 +113,19 @@ func invalidate_configs() -> void:
 # configs), so they sync here — covered by the same invalidate_configs moment
 # that rebuilds the config objects on apply_attributes.
 func _sync_dangle_config() -> void:
+	_dangle_synced_tied = _skater != null and _skater.stick_tied
 	if _native_dangle != null:
 		_native_dangle.set_config(
-				_controller.max_blade_speed,
+				_blade_speed_cap(),
 				_controller.wrister_on_axis_blade_speed,
 				_controller.max_blade_accel)
+
+
+# Two tied sticks push against each other: both blades chase at the tie's speed.
+func _blade_speed_cap() -> float:
+	if _skater != null and _skater.stick_tied:
+		return minf(_controller.max_blade_speed, StickCheckRules.TIE_BLADE_SPEED_M_S)
+	return _controller.max_blade_speed
 
 # Drop the smoothed-blade baseline so the next solve re-seeds it deterministically
 # from the first replayed input (the init branch in apply_blade_from_mouse snaps
@@ -236,6 +246,8 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 	#    would drag while skating and, once skating speed exceeds the cap, never
 	#    catch up. So carry the smoothed blade along with the skater's translation
 	#    first, then cap only the residual dangle relative to the player.
+	if _skater.stick_tied != _dangle_synced_tied:
+		_sync_dangle_config()
 	if _native_dangle != null:
 		# Native port of the block below (native/src/native_blade_dangle.cpp).
 		# It owns the smoothing state; the returned smoothed blade is mirrored
@@ -255,7 +267,7 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 		_prev_skater_pos = skater_pos
 		var step: Vector3 = target_blade_world - _smoothed_blade_world
 		step.y = 0.0
-		var max_step: float = _controller.max_blade_speed * delta
+		var max_step: float = _blade_speed_cap() * delta
 		if max_step > 0.0:
 			# During a wrister aim, uncap blade motion ALONG the shot axis — the
 			# wind-back-and-snap that makes the shot feel responsive regardless of
@@ -304,7 +316,7 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 				var desired := Vector3.ZERO
 				if dist > 0.00001:
 					var arrive_speed: float = minf(
-							_controller.max_blade_speed, sqrt(2.0 * accel * dist))
+							_blade_speed_cap(), sqrt(2.0 * accel * dist))
 					desired = step * (arrive_speed / dist)
 				_blade_dangle_vel = _blade_dangle_vel.move_toward(desired, accel * delta)
 				var move: Vector3 = _blade_dangle_vel * delta
@@ -822,9 +834,9 @@ func blade_y_local() -> float:
 	# IK solves from it) rises off the ice. blend is 0 in all shot/carry states
 	# (blade_up is gated off then), so this is a no-op except during a lift.
 	# The lift TARGET follows the deflect mode: MID plays the low air, every
-	# other lifted state (HIGH deflect, stick-lift, forced pop) the high plane.
-	var lift_target: float = _controller.blade_lift_height_mid \
-			if _skater.elevation_level == ShotMechanics.ELEVATION_MID \
+	# other lifted state (HIGH deflect, a stick lift, forced pop) the high plane.
+	var lift_target: float = _controller.blade_lift_height_mid if _skater.elevation_level == ShotMechanics.ELEVATION_MID \
+			and not StickCheckRules.uses_lift_height(_skater.stick_check_phase, _skater.stick_tied) \
 			else _controller.blade_lift_height
 	var lift: float = _skater.get_blade_lift_blend() * lift_target
 	# Plus the commit-stance stick raise: a body-check commit pulls the stick off

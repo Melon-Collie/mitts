@@ -6,7 +6,7 @@ extends Node
 # or — under NHL rules, which never ghost for offside — while the host says
 # they must tag up, or they carry the puck with a teammate who must. Names the
 # infraction and the action that lifts it. Driven each frame from the local
-# skater's own position; icing (a whole-team ghost) keeps its own toast.
+# skater's own position. Icing has its own banner (HudIcingRace).
 
 var _root: Control = null
 var _reason_label: Label = null
@@ -118,8 +118,7 @@ func update() -> void:
 		reason = tr(&"INFRACTION_CREASE")
 		instruction = tr(&"GHOST_CREASE_INSTRUCTION")
 	else:
-		# Any other ghost cause (e.g. a whole-team icing ghost) surfaces through
-		# its own toast — no per-player recovery action to prompt here.
+		# Any other ghost cause has no per-player recovery action to prompt.
 		if _root.visible:
 			_root.visible = false
 		return

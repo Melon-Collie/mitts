@@ -2,6 +2,14 @@ class_name SkaterAgentStateMachine
 extends RefCounted
 
 const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
+# Board play: how hard a pinner keeps driving into the wall against how hard he
+# slides (unit-free weights of one move vector), the offset at which his slide is
+# full, how close a committed checker has to be before a carrier answers him, and
+# the least time between a pinned bot's reversals (one must land before the next).
+const PIN_MIRROR_DRIVE: float = 0.7
+const PIN_MIRROR_GAIN_M: float = 0.3
+const PIN_THREAT_RANGE_M: float = 2.5
+const PIN_REVERSAL_MIN_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 3 / 20   # ~150 ms
 
 # Per-bot AI state machine. SkaterAgent owns the InputState scratch buffer and
 # the AIController glue; this owns identity, state transitions, and per-state
@@ -426,6 +434,15 @@ const POKE_JAB_ACTIVE_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 12   # ~80 m
 # Cooldown after a jab so the bot commits back to gap control between
 # attempts instead of mashing the carrier's puck every tick.
 const POKE_JAB_COOLDOWN_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 3 / 8   # ~375 ms
+# A lift chosen over the jab (AIStickLiftRead) holds the button through the rise
+# and then hooks for as long as a jab sweeps, so it reads as the same reach-in.
+# Ends well inside StickCheckRules.HOOK_MAX_S, so the blade takes the fast drop.
+const STICK_LIFT_HOLD_TICKS: int = ceili(
+		StickCheckRules.RISE_S * _PhysicsConstants.PHYSICS_TICK) + POKE_JAB_ACTIVE_TICKS
+var _stick_lift_reach: float = (
+		GameRules.DEFAULT_STICK_LENGTH_M
+		+ GameRules.DEFAULT_BLADE_LENGTH_M
+		+ GameRules.STICK_LIFT_RADIUS_M)
 
 # Longest a one-timer-ready stance is held across a carrier gap (pass/shot in
 # flight) before it's dropped so the FINISHER resumes normal play. A real pass
@@ -999,6 +1016,31 @@ var _deke_cut_dir: Vector2 = Vector2.ZERO
 # is a discrete reach-in, not a permanent stick-on-puck.
 var _poke_jab_active_ticks: int = 0
 var _poke_jab_cooldown_ticks: int = 0
+# Physics ticks left holding the stick-check button for a lift, and whether its
+# press edge is still to send. Counted per physics tick in apply_stick_lift_input,
+# since the button must be held on the throttled ticks too.
+var _stick_lift_hold_ticks: int = 0
+var _stick_lift_press_pending: bool = false
+# A tie held on the covered man (AIStickTieRead): the button stays down while the
+# dispatch keeps the read alive, and the press re-sends whenever the stick is idle.
+var _stick_tie_holding: bool = false
+var _stick_tie_press_pending: bool = false
+# A tied attacker who is not the feed's target holds on, keeping the defender's
+# stick tied up and out of the play (no press: the tie is already made).
+var _stick_tie_holding_on: bool = false
+# Where a tying defender's blade follows the man's stick: his stick as the bot
+# reads it, lagged by the network budget a human holder plays under
+# (StickCheckRules.TIE_LAG_BUDGET_S), so a bot holding a tie is beaten by the
+# same pulls a human would be. INF until a tie reach starts.
+var _tie_follow: Vector3 = Vector3.INF
+# Our team's bodies for the tie's lane read, refilled per full dispatch.
+var _tie_defender_scratch: Array[Vector3] = []
+# Board play (apply_board_play). As the pinner, where the man is read to be
+# (lagged like a human's read, INF when not pinning). As the pinned, which way we
+# slide along the wall (0 when not pinned) and the ticks until we may reverse.
+var _pin_follow: Vector3 = Vector3.INF
+var _pin_slide_sign: float = 0.0
+var _pin_flip_ticks: int = 0
 
 # One-timer readiness mirrored from the most recent OFF_PUCK role
 # decision. Also published to TeamBrain (so the carrier reads it
@@ -1291,6 +1333,14 @@ var _plays_rush_pass_lanes: bool = true
 # seam-directed poke-evade deke. False = naive forward carry — the puck stays
 # presented ahead of the body, so a straight poke-check works (the beginner tier).
 var _protects_the_puck: bool = true
+# _lifts_sticks gates the jab-or-lift read (AIStickLiftRead). False = jab only.
+var _lifts_sticks: bool = true
+# _ties_sticks gates both halves of the stick battle: tying a covered man's stick
+# and yanking one's own free. False = neither.
+var _ties_sticks: bool = true
+# _blocks_shots gates the standing block and the 2-on-1 dive (_shot_block).
+var _blocks_shots: bool = true
+var _shot_block := SkaterAgentShotBlock.new()
 # The FINISHER raises the blade (stick_lift_held) to tip an elevated incoming
 # shot, but that flag is only set on dispatch ticks. Cache + replay it on skipped
 # ticks or blade_up strobes at 1-in-dispatch_period and never reaches the raised
@@ -1339,6 +1389,10 @@ var _off_puck_aim_near_m: float = 0.0
 # puck segment test, so a staircased stab can skip a contact a live one catches.
 # The jab's active/cooldown counters still advance on the dispatch cadence only.
 var _off_puck_jab_live: bool = false
+# Same live re-aim for a held tie (the man's shaft) and for a tied attacker's
+# yank (away from the stick holding his).
+var _off_puck_tie_live: bool = false
+var _off_puck_yank_live: bool = false
 # Latched side of the far/near aim flip (see _compute_desired_aim_dir). True =
 # NEAR (aiming the threat/puck), false = FAR (aiming the anchor). Debounced by
 # FACE_NEAR_ANCHOR_HYSTERESIS_M so boundary-camping doesn't chatter the blade.
@@ -1408,6 +1462,7 @@ func apply_capabilities(caps: AISkaterCaps) -> void:
 	_blade_reach = caps.blade_span + BLADE_REACH_BUFFER_M
 	_receive_body_offset = caps.blade_span - RECEIVE_BODY_INSET_M
 	_poke_jab_reach = caps.blade_span + GameRules.POKE_RADIUS_M
+	_stick_lift_reach = caps.blade_span + GameRules.STICK_LIFT_RADIUS_M
 	_self_wrister_shot_speed = caps.wrister_shot_speed
 	_self_loft_tans = caps.loft_tans
 	_self_lateral_grip = caps.lateral_grip
@@ -1456,6 +1511,7 @@ func setup(peer_id: int, team_id: int, brain: TeamBrain, team_id_by_peer: Dictio
 	_team_brain = brain
 	_team_id_by_peer = team_id_by_peer
 	_caps_by_peer = caps_by_peer
+	_shot_block.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_is_left_handed = is_left_handed
 	# Frame pacing: stagger this bot's dispatch and role-argmax phases by
 	# peer id, so a full roster doesn't run every expensive re-eval on the
@@ -1511,6 +1567,9 @@ func apply_profile(profile: BotSkillProfile) -> void:
 	_angles_the_chase = profile.angles_the_chase
 	_plays_rush_pass_lanes = profile.plays_rush_pass_lanes
 	_protects_the_puck = profile.protects_the_puck
+	_lifts_sticks = profile.lifts_sticks
+	_ties_sticks = profile.ties_sticks
+	_blocks_shots = profile.blocks_shots
 	# Execution error for LIVE bots (raw test agents stay deterministic):
 	# per-tier, split shot-vs-pass — the shot error is the tier's scoring
 	# dial, the pass error stays small so passes keep connecting. Timing
@@ -1794,7 +1853,8 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 			or _state == State.ONE_TIMER_PRESSED)
 	if not is_press_state and _dispatch_skip_counter > 0:
 		_dispatch_skip_counter -= 1
-		input.move_vector = _cached_move_vector
+		input.move_vector = _offside_guard(_cached_move_vector, snapshot, self_pos,
+				self_state.velocity, have_puck)
 		input.stick_lift_held = _cached_stick_lift_held
 		input.brake = _cached_brake
 		input.stance_held = _cached_stance_held
@@ -1892,6 +1952,8 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 	# leave both off so they keep the throttled cached-target path.
 	_off_puck_aim_live = false
 	_off_puck_jab_live = false
+	_off_puck_tie_live = false
+	_off_puck_yank_live = false
 
 	# Tag-up override: when ghosted or owing an NHL tag-up, bot must clear
 	# back across the blue line before doing anything else. Highest-priority
@@ -2026,7 +2088,8 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 		_apply_steering(input, snapshot, self_pos, decision.target_position,
 				not decision.commit_check and not decision.arrive_at_speed,
 				_self_max_speed, decision.target_velocity,
-				decision.engaged_peer_id)
+				decision.engaged_peer_id, decision.retreat_floor_center,
+				decision.retreat_floor_radius_m)
 		if decision.commit_check:
 			# Body-check commit: drive THROUGH the carrier with the Hit button
 			# held — this is what delivers the FULL transfer AIBodyCheck's
@@ -2096,9 +2159,23 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 		var jab_aim: Vector3 = Vector3.INF
 		if not would_be_ready:
 			jab_aim = _poke_jab_aim(snapshot, self_pos)
-		if jab_aim.is_finite():
+		# The stick battle: a tied attacker pulls his stick free before anything
+		# else it could be doing, and a defender with no jab ties his man.
+		var yank_aim: Vector3 = _tie_yank_aim(snapshot, self_pos, self_state)
+		var tie_aim: Vector3 = Vector3.INF
+		if not jab_aim.is_finite():
+			tie_aim = _stick_tie_aim(snapshot, self_pos, self_state, decision)
+		else:
+			_stick_tie_holding = false
+		if yank_aim.is_finite():
+			_off_puck_yank_live = true
+			input.mouse_world_pos = _step_mouse_face(yank_aim)
+		elif jab_aim.is_finite():
 			_off_puck_jab_live = true
 			input.mouse_world_pos = _step_mouse_face(jab_aim)
+		elif tie_aim.is_finite():
+			_off_puck_tie_live = true
+			input.mouse_world_pos = _step_mouse_face(tie_aim)
 		elif would_be_ready:
 			input.mouse_world_pos = _step_mouse_face(_shot_aim_point(snapshot, self_pos, 0.0))
 		elif decision.has_aim_override:
@@ -2207,6 +2284,8 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	# until he tags up at the blue line). Latched like the match's other
 	# rules; stamped every build since the ctx instance is reused.
 	ctx.offsides_enforced = rule_set != GameRules.RuleSet.OFF
+	ctx.icing_enforced = rule_set == GameRules.RuleSet.NHL
+	ctx.zone_entry_blocked = _teammate_must_tag_up(snapshot)
 	if _current_strategy != null:
 		ctx.strong_x = _current_strategy.strong_x()
 		ctx.assigned_threat_peer = _current_strategy.assigned_threat(_peer_id)
@@ -2223,7 +2302,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 		ctx.team_size = _current_strategy.get_team_size()
 		var lobby_slot: int = _current_strategy.position_of(_peer_id)
 		ctx.self_is_defense = PlayerRules.is_defense_slot(lobby_slot)
-		ctx.self_home_side = _home_side_of(lobby_slot)
+		ctx.self_home_side = PlayerRules.home_side_x(lobby_slot, _own_goal_dir)
 		# Live smart-ping directives on this bot (see AIPingDirectives). The
 		# reused ctx instance must be re-stamped every build — a stale ping
 		# field would keep obeying an expired order.
@@ -2244,18 +2323,6 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 		ctx.self_is_defense = false
 		ctx.self_home_side = 0.0
 	return ctx
-
-
-# Home side sign of a lobby position: LW/LD rest on -X, RW/RD on +X, C
-# center. World X is side-stable for both teams (see AIRoleSlots5).
-func _home_side_of(lobby_slot: int) -> float:
-	match lobby_slot:
-		1, 3:
-			return -1.0
-		2, 4:
-			return 1.0
-		_:
-			return 0.0
 
 
 # Routes the bot's current slot to its role-behavior module. Returns a
@@ -4373,7 +4440,9 @@ func _pass_aim_point(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 func _apply_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		anchor: Vector3, arrive: bool = false, velocity_match_speed: float = 0.0,
 		anchor_velocity: Vector3 = Vector3.ZERO,
-		engaged_peer_id: int = -1) -> void:
+		engaged_peer_id: int = -1,
+		retreat_floor_center: Vector3 = Vector3.ZERO,
+		retreat_floor_radius: float = 0.0) -> void:
 	# Standard potential-field steering with brake-pivot.
 	# Use the per-team roster published by GameManager._enrich_snapshot_for_ai
 	# instead of re-partitioning snapshot.skater_states every physics tick.
@@ -4461,7 +4530,8 @@ func _apply_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 			lane_start, lane_end,
 			GameRules.RINK_HALF_WIDTH, GameRules.RINK_HALF_LENGTH,
 			opp_repel, steer_vels, _scratch_teammate_steer_vels,
-			match_self_vel, velocity_match_speed, anchor_velocity)
+			match_self_vel, velocity_match_speed, anchor_velocity,
+			retreat_floor_center, retreat_floor_radius)
 
 	# Brake-pivot: if our current velocity is far off the desired direction,
 	# carving a wide arc loses. The bot keeps move_vector on the exit direction —
@@ -4494,19 +4564,27 @@ func _apply_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 				self_pos, anchor, desired, Vector2(v.x, v.z), _upright_lateral_accel(),
 				_blade_reach, _stance_turning)
 		input.stance_held = pivot_cut or _stance_turning
-		# Body-level offside guard: keep an attacking non-carrier from
-		# skating its body across the attacking blue line before the puck
-		# (instant ghost in ARCADE). Applied after the brake-pivot so the
-		# hard constraint wins. The role-level target filter can't hold a
-		# momentum-driven body to the line on its own. A carrier with a
-		# teammate owing an NHL tag-up holds the PUCK short of the line the
-		# same way — carrying it in would be whistled offside at once.
-		var puck_pos: Vector3 = snapshot.puck_state.position
-		var hold_entry: bool = carrier == _peer_id and _teammate_must_tag_up(snapshot)
-		desired = AISteering.offside_brake(
-				desired, puck_pos if hold_entry else self_pos, v, _own_goal_dir,
-				puck_pos.z, carrier == _peer_id and not hold_entry)
+		# Applied after the brake-pivot so the hard constraint wins.
+		desired = _offside_guard(desired, snapshot, self_pos, v, carrier == _peer_id)
 	input.move_vector = desired
+
+
+# Body-level offside guard: keep an attacking non-carrier from skating its body
+# across the attacking blue line before the puck (instant ghost in ARCADE). The
+# role-level target filter can't hold a momentum-driven body to the line on its
+# own. A carrier with a teammate owing an NHL tag-up holds the PUCK short of the
+# line the same way — carrying it in would be whistled offside at once — and
+# every other skater holds the line even once the puck is in, since the delayed
+# offside clears only when the whole team is out. Run on every tick, decided or
+# not: between decisions the body keeps moving on the cached move vector.
+func _offside_guard(desired: Vector2, snapshot: WorldSnapshot, self_pos: Vector3,
+		v: Vector3, is_carrier: bool) -> Vector2:
+	var puck_pos: Vector3 = snapshot.puck_state.position
+	var team_offside: bool = _teammate_must_tag_up(snapshot)
+	var hold_entry: bool = is_carrier and team_offside
+	return AISteering.offside_brake(
+			desired, puck_pos if hold_entry else self_pos, v, _own_goal_dir,
+			puck_pos.z, is_carrier and not hold_entry, team_offside)
 
 
 # Opponent peer ids, read straight from the per-frame roster cache published by
@@ -5173,7 +5251,7 @@ func _poke_jab_aim(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 		if _poke_jab_active_ticks <= 0:
 			_poke_jab_active_ticks = 0
 			_poke_jab_cooldown_ticks = POKE_JAB_COOLDOWN_TICKS
-		return _carrier_puck_pos(snapshot)
+		return _jab_target(snapshot)
 	if _poke_jab_cooldown_ticks > 0:
 		_poke_jab_cooldown_ticks = maxi(0, _poke_jab_cooldown_ticks - _dispatch_period_ticks)
 		return Vector3.INF
@@ -5186,12 +5264,373 @@ func _poke_jab_aim(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 	if carrier_pid == -1 or _team_id_by_peer.get(carrier_pid, -1) == _team_id:
 		return Vector3.INF
 	var puck_pos: Vector3 = snapshot.puck_state.position
+	var carrier_state: SkaterNetworkState = snapshot.skater_states.get(carrier_pid)
+	# Read before the jab's reach: the shaft runs back toward a carrier's hands, so
+	# from behind it is in reach while the puck out front is not. The body
+	# half-width that blocks the jab is the skater collision disc
+	# (GameRules.OFFSIDE_LINE_SLACK, the canonical half-width).
+	if _lifts_sticks and carrier_state != null and AIStickLiftRead.prefers_lift(
+			self_pos, carrier_state.position, puck_pos,
+			carrier_state.top_hand_world, carrier_state.blade_contact_world,
+			_stick_lift_reach, GameRules.OFFSIDE_LINE_SLACK):
+		_stick_lift_hold_ticks = STICK_LIFT_HOLD_TICKS
+		_stick_lift_press_pending = true
+		_poke_jab_active_ticks = STICK_LIFT_HOLD_TICKS
+		return _jab_target(snapshot)
 	var dx: float = puck_pos.x - self_pos.x
 	var dz: float = puck_pos.z - self_pos.z
 	if dx * dx + dz * dz > _poke_jab_reach * _poke_jab_reach:
 		return Vector3.INF
 	_poke_jab_active_ticks = POKE_JAB_ACTIVE_TICKS
 	return puck_pos
+
+
+# Where the reach-in aims: under the carrier's shaft while a lift is held, then
+# the puck — the dropping blade comes down onto it, which is the take.
+func _jab_target(snapshot: WorldSnapshot) -> Vector3:
+	if _stick_lift_hold_ticks > 0 and snapshot.puck_state != null:
+		var cs: SkaterNetworkState = snapshot.skater_states.get(
+				snapshot.puck_state.carrier_peer_id)
+		if cs != null:
+			return AIStickLiftRead.shaft_lift_point(cs.top_hand_world, cs.blade_contact_world)
+	return _carrier_puck_pos(snapshot)
+
+
+# Ties the covered man's stick when the puck is coming to him and nothing else
+# would stop it (AIStickTieRead). Returns where the blade goes — onto his shaft —
+# or INF, and keeps _stick_tie_holding in step for the per-tick button.
+func _stick_tie_aim(snapshot: WorldSnapshot, self_pos: Vector3,
+		self_state: SkaterNetworkState, decision: RoleDecision) -> Vector3:
+	var man: SkaterNetworkState = null
+	if _ties_sticks and decision != null and decision.locked_man_pid != -1:
+		man = snapshot.skater_states.get(decision.locked_man_pid)
+	# A man tied up by someone else is already out of the play; one tied with US
+	# is the tie this read keeps alive.
+	var self_tied: bool = self_state != null and self_state.stick_tied
+	if man == null or (man.stick_tied and not self_tied) \
+			or not _man_is_a_live_target(snapshot, self_pos, decision.locked_man_pid, man) \
+			or not AIStickTieRead.shaft_in_reach(self_pos, man.top_hand_world,
+					man.blade_contact_world, _stick_lift_reach):
+		_stick_tie_holding = false
+		_tie_follow = Vector3.INF
+		return Vector3.INF
+	_stick_tie_holding = true
+	_stick_tie_press_pending = not self_tied and (self_state == null \
+			or self_state.stick_check_phase == StickCheckRules.Phase.IDLE)
+	return _step_tie_follow(man)
+
+
+# One physics tick of the lagged follow onto the man's stick (see _tie_follow).
+func _step_tie_follow(man: SkaterNetworkState) -> Vector3:
+	var stick_mid: Vector3 = man.top_hand_world.lerp(man.blade_contact_world, 0.5)
+	if not _tie_follow.is_finite():
+		_tie_follow = stick_mid
+		return _tie_follow
+	var k: float = 1.0 - exp(-1.0 / (float(_PhysicsConstants.PHYSICS_TICK)
+			* StickCheckRules.TIE_LAG_BUDGET_S))
+	_tie_follow += (stick_mid - _tie_follow) * k
+	return _tie_follow
+
+
+# The puck is coming to him — a loose puck whose path reaches his blade, or his
+# carrier with an open lane — and we could not have got a stick on it ourselves.
+func _man_is_a_live_target(snapshot: WorldSnapshot, self_pos: Vector3, man_pid: int,
+		man: SkaterNetworkState) -> bool:
+	var puck: PuckNetworkState = snapshot.puck_state
+	var carrier_pid: int = puck.carrier_peer_id
+	if carrier_pid == man_pid:
+		return false
+	if carrier_pid == -1:
+		return AIStickTieRead.path_passes_within(puck.position, puck.velocity,
+				man.blade_contact_world,
+				PuckController.PICKUP_RADIUS + AIStickTieRead.RECEIVER_STEP_M) \
+				and not AIStickTieRead.path_passes_within(puck.position, puck.velocity,
+						self_pos, _blade_reach)
+	if _team_id_by_peer.get(carrier_pid, -1) == _team_id:
+		return false
+	var carrier: SkaterNetworkState = snapshot.skater_states.get(carrier_pid)
+	if carrier == null:
+		return false
+	_tie_defender_scratch.clear()
+	for pid: int in snapshot.skater_states:
+		if _team_id_by_peer.get(pid, -1) == _team_id:
+			_tie_defender_scratch.append(snapshot.skater_states[pid].position)
+	return AIStickTieRead.lane_open(carrier.position, man.position,
+			_tie_defender_scratch, _blade_reach)
+
+
+# Our stick is tied while our team has the puck or it is loose. If the feed is
+# coming to us, pull the stick away from the one holding it; otherwise hold on,
+# keeping that defender's stick out of the play (_stick_tie_holding_on). INF when
+# there is nothing to pull free from, or when holding on.
+func _tie_yank_aim(snapshot: WorldSnapshot, self_pos: Vector3,
+		self_state: SkaterNetworkState) -> Vector3:
+	_stick_tie_holding_on = false
+	if not _ties_sticks or self_state == null or not self_state.stick_tied:
+		return Vector3.INF
+	var carrier_pid: int = snapshot.puck_state.carrier_peer_id
+	if carrier_pid != -1 and _team_id_by_peer.get(carrier_pid, -1) != _team_id:
+		return Vector3.INF
+	# The partner is the tied opponent whose stick is nearest ours.
+	var tier: SkaterNetworkState = null
+	var best_d: float = INF
+	for pid: int in snapshot.skater_states:
+		if _team_id_by_peer.get(pid, -1) == _team_id:
+			continue
+		var opp: SkaterNetworkState = snapshot.skater_states[pid]
+		if not opp.stick_tied:
+			continue
+		var d: float = StickCheckRules.stick_gap(self_state.top_hand_world,
+				self_state.blade_contact_world, opp.top_hand_world, opp.blade_contact_world)
+		if d < best_d:
+			best_d = d
+			tier = opp
+	if tier == null:
+		return Vector3.INF
+	if not _feed_is_coming_to(snapshot, self_state):
+		_stick_tie_holding_on = true
+		return Vector3.INF
+	return AIStickTieRead.yank_aim(self_pos, self_state.blade_contact_world,
+			tier.blade_contact_world, _blade_reach)
+
+
+# The puck is on its way to us: a loose puck whose path reaches our blade, or a
+# teammate carrying with an open lane to us past the opponents' sticks.
+func _feed_is_coming_to(snapshot: WorldSnapshot, self_state: SkaterNetworkState) -> bool:
+	var puck: PuckNetworkState = snapshot.puck_state
+	if puck.carrier_peer_id == -1:
+		return AIStickTieRead.path_passes_within(puck.position, puck.velocity,
+				self_state.blade_contact_world,
+				PuckController.PICKUP_RADIUS + AIStickTieRead.RECEIVER_STEP_M)
+	var carrier: SkaterNetworkState = snapshot.skater_states.get(puck.carrier_peer_id)
+	if carrier == null or puck.carrier_peer_id == _peer_id:
+		return false
+	_tie_defender_scratch.clear()
+	for pid: int in snapshot.skater_states:
+		if _team_id_by_peer.get(pid, -1) != _team_id:
+			_tie_defender_scratch.append(snapshot.skater_states[pid].position)
+	return AIStickTieRead.lane_open(carrier.position, self_state.position,
+			_tie_defender_scratch, _blade_reach)
+
+
+# The boards, every physics tick after dispatch (BoardPinRules).
+# - Locked as the pinner: hold the commit only while the pin is worth it
+#   (_pin_worth_holding), driving into the wall and mirroring the victim's slide
+#   through the same network lag a human pinner reads it with.
+# - Locked as the pinned: slide along the wall, and reverse when the pinner commits
+#   to following — the juke that gets a body past his.
+# - Carrying at the wall with a committed checker coming square: get out of his
+#   line along the wall if that beats him there, else brace (hold the commit),
+#   which cannot be pinned (AIPinThreatRead).
+func apply_board_play(input: InputState, snapshot: WorldSnapshot) -> void:
+	if snapshot == null or snapshot.puck_state == null:
+		return
+	var me: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
+	if me == null:
+		return
+	match me.pin_role:
+		BoardPinRules.Role.PINNED:
+			input.move_vector = _pinned_slide(snapshot, me)
+			return
+		BoardPinRules.Role.PINNER:
+			var man_pid: int = _my_pinned_man(snapshot, me)
+			if man_pid == -1 or _check_aggression <= 0.0 \
+					or not _pin_worth_holding(snapshot, me, man_pid):
+				# Let go: the dispatch may still be holding the commit for a hit.
+				input.hit_held = false
+				_pin_follow = Vector3.INF
+				return
+			input.hit_held = true
+			input.move_vector = _pinner_mirror(snapshot.skater_states[man_pid], me)
+			return
+	_pin_follow = Vector3.INF
+	_pin_slide_sign = 0.0
+	if _state == State.CARRY and _protects_the_puck:
+		_answer_pin_threat(input, snapshot, me)
+
+
+# The pinned man: the PINNED opponent nearest us, or -1.
+func _my_pinned_man(snapshot: WorldSnapshot, me: SkaterNetworkState) -> int:
+	var best: int = -1
+	var best_d: float = INF
+	for pid: int in snapshot.skater_states:
+		if _team_id_by_peer.get(pid, -1) == _team_id:
+			continue
+		var opp: SkaterNetworkState = snapshot.skater_states[pid]
+		if opp.pin_role != BoardPinRules.Role.PINNED:
+			continue
+		var d: float = opp.position.distance_to(me.position)
+		if d < best_d:
+			best_d = d
+			best = pid
+	return best
+
+
+# What is taught: pin while our support beats theirs to the puck, or in our own
+# end to kill the play; never as the last skater back outside our own end.
+func _pin_worth_holding(snapshot: WorldSnapshot, me: SkaterNetworkState, man_pid: int) -> bool:
+	var own_end: bool = _own_goal_dir * me.position.z > GameRules.BLUE_LINE_Z
+	if not own_end and _last_back(snapshot, me):
+		return false
+	var puck_pos: Vector3 = snapshot.puck_state.position
+	var ours: float = _team_arrival_s(snapshot, puck_pos, _team_id, man_pid)
+	var theirs: float = _team_arrival_s(snapshot, puck_pos,
+			_team_id_by_peer.get(man_pid, -1), man_pid)
+	return ours <= theirs or own_end
+
+
+# No teammate stands between us and our own net.
+func _last_back(snapshot: WorldSnapshot, me: SkaterNetworkState) -> bool:
+	var net := Vector3(0.0, 0.0, _own_goal_dir * GameRules.GOAL_LINE_Z)
+	var mine: float = me.position.distance_to(net)
+	for pid: int in snapshot.skater_states:
+		if pid == _peer_id or _team_id_by_peer.get(pid, -1) != _team_id:
+			continue
+		if snapshot.skater_states[pid].position.distance_to(net) < mine:
+			return false
+	return true
+
+
+# The soonest a skater of `team` (not us, not the locked man) reaches `at` at top
+# speed — the momentum-blind bound, the same for both sides.
+func _team_arrival_s(snapshot: WorldSnapshot, at: Vector3, team: int, man_pid: int) -> float:
+	var best: float = INF
+	for pid: int in snapshot.skater_states:
+		if pid == _peer_id or pid == man_pid or _team_id_by_peer.get(pid, -1) != team:
+			continue
+		var caps: AISkaterCaps = _caps_by_peer.get(pid)
+		var top: float = caps.max_speed if caps != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
+		best = minf(best, snapshot.skater_states[pid].position.distance_to(at) / maxf(top, 0.1))
+	return best
+
+
+# Drive into the wall, and slide toward where the man is read to be: his body
+# followed through a lag of BoardPinRules.PIN_LAG_BUDGET_S, so a bot pinner is
+# beaten by the same reversals a human pinner would be.
+func _pinner_mirror(man: SkaterNetworkState, me: SkaterNetworkState) -> Vector2:
+	if not _pin_follow.is_finite():
+		_pin_follow = man.position
+	else:
+		var k: float = 1.0 - exp(-1.0 / (float(_PhysicsConstants.PHYSICS_TICK)
+				* BoardPinRules.PIN_LAG_BUDGET_S))
+		_pin_follow += (man.position - _pin_follow) * k
+	var out: Vector2 = BoardPinRules.wall_normal(man.position, GameRules.OFFSIDE_LINE_SLACK,
+			BoardPinRules.PIN_WALL_RELEASE_M)
+	if out == Vector2.ZERO:
+		return Vector2.ZERO
+	var along := Vector2(-out.y, out.x)
+	var offset: float = BoardPinRules.along_wall_offset(_pin_follow, me.position, out)
+	return (out * PIN_MIRROR_DRIVE + along * clampf(offset / PIN_MIRROR_GAIN_M, -1.0, 1.0)) \
+			.normalized()
+
+
+# Slide along the wall, reversing whenever the pinner has committed to following
+# the slide (his along-wall speed our way, past half our cap) and the last
+# reversal has had time to land.
+func _pinned_slide(snapshot: WorldSnapshot, me: SkaterNetworkState) -> Vector2:
+	var out: Vector2 = BoardPinRules.wall_normal(me.position, GameRules.OFFSIDE_LINE_SLACK,
+			BoardPinRules.PIN_WALL_RELEASE_M)
+	if out == Vector2.ZERO:
+		return Vector2.ZERO
+	var along := Vector2(-out.y, out.x)
+	var pinner: SkaterNetworkState = _nearest_opponent_state(snapshot, me)
+	if _pin_slide_sign == 0.0:
+		var rel := Vector2.ZERO if pinner == null else Vector2(
+				pinner.position.x - me.position.x, pinner.position.z - me.position.z)
+		_pin_slide_sign = -1.0 if rel.dot(along) > 0.0 else 1.0
+		_pin_flip_ticks = 0
+	_pin_flip_ticks = maxi(_pin_flip_ticks - 1, 0)
+	if pinner != null and _pin_flip_ticks == 0:
+		var pv: float = Vector2(pinner.velocity.x, pinner.velocity.z).dot(along)
+		var cap: float = BoardPinRules.slide_cap(BoardPinRules.Role.PINNED, me.pin_strength)
+		if signf(pv) == _pin_slide_sign and absf(pv) >= 0.5 * cap:
+			_pin_slide_sign = -_pin_slide_sign
+			_pin_flip_ticks = PIN_REVERSAL_MIN_TICKS
+	return along * _pin_slide_sign
+
+
+func _nearest_opponent_state(snapshot: WorldSnapshot, me: SkaterNetworkState) -> SkaterNetworkState:
+	var best: SkaterNetworkState = null
+	var best_d: float = INF
+	for pid: int in snapshot.skater_states:
+		if _team_id_by_peer.get(pid, -1) == _team_id:
+			continue
+		var opp: SkaterNetworkState = snapshot.skater_states[pid]
+		var d: float = opp.position.distance_to(me.position)
+		if d < best_d:
+			best_d = d
+			best = opp
+	return best
+
+
+# The most urgent committed opponent coming square into the boards we are
+# against, answered: skate out of his line along the wall if that is done before
+# he arrives, else brace. Nothing when there is none.
+func _answer_pin_threat(input: InputState, snapshot: WorldSnapshot,
+		me: SkaterNetworkState) -> void:
+	var out: Vector2 = BoardPinRules.wall_normal(me.position, GameRules.OFFSIDE_LINE_SLACK,
+			BoardPinRules.PIN_WALL_RELEASE_M)
+	if out == Vector2.ZERO:
+		return
+	var threat: SkaterNetworkState = null
+	var ttc: float = INF
+	for pid: int in snapshot.skater_states:
+		if _team_id_by_peer.get(pid, -1) == _team_id:
+			continue
+		var opp: SkaterNetworkState = snapshot.skater_states[pid]
+		if not opp.hit_committed:
+			continue
+		var to_me := Vector2(me.position.x - opp.position.x, me.position.z - opp.position.z)
+		var dist: float = to_me.length()
+		if dist > PIN_THREAT_RANGE_M or dist < 1e-4 \
+				or (to_me / dist).dot(out) < BoardPinRules.BACKSTOP_MIN_INTO_WALL:
+			continue
+		var t: float = AIPinThreatRead.time_to_contact(me.position, me.velocity,
+				opp.position, opp.velocity)
+		if threat == null or t < ttc:
+			threat = opp
+			ttc = t
+	if threat == null:
+		return
+	var along := Vector2(-out.y, out.x)
+	var offset: float = BoardPinRules.along_wall_offset(me.position, threat.position, out)
+	var along_vel: float = Vector2(me.velocity.x, me.velocity.z).dot(along)
+	var dir_sign: float = AIPinThreatRead.escape_sign(offset, along_vel)
+	var escape_s: float = AIPinThreatRead.escape_time(offset, along_vel, _chase_max_accel,
+			dir_sign)
+	if AIPinThreatRead.answer(ttc, escape_s) == AIPinThreatRead.Answer.ESCAPE:
+		input.move_vector = along * dir_sign
+	else:
+		input.hit_held = true
+
+
+# Shot blocks and the 2-on-1 dive (SkaterAgentShotBlock), every physics tick
+# after dispatch, so a held block is continuous. A carrier never blocks.
+func apply_shot_block(input: InputState, snapshot: WorldSnapshot) -> void:
+	if not _blocks_shots or _state == State.CARRY:
+		return
+	var rush: AIRushRead = _current_strategy.get_rush_read() if _current_strategy != null \
+			else _inert_rush_read
+	_shot_block.apply(input, snapshot, _own_goal_dir, rush, _blade_reach, _chase_max_accel)
+
+
+# Holds the stick-check button for a lift or a tie the dispatch started. Runs
+# every physics tick after dispatch, throttled or not, so the hold is continuous.
+func apply_stick_lift_input(input: InputState) -> void:
+	if _stick_tie_holding_on and _state == State.OFF_PUCK:
+		input.stick_check_held = true
+		return
+	if _stick_tie_holding and _stick_lift_hold_ticks <= 0:
+		input.stick_check_held = true
+		input.stick_check_pressed = _stick_tie_press_pending
+		_stick_tie_press_pending = false
+		return
+	if _stick_lift_hold_ticks <= 0:
+		return
+	input.stick_check_held = true
+	input.stick_check_pressed = _stick_lift_press_pending
+	_stick_lift_press_pending = false
+	_stick_lift_hold_ticks -= 1
 
 
 # True if our current brain slot is an on-puck defensive pressurer —
@@ -5460,8 +5899,18 @@ func _arm_off_puck_live_aim(anchor: Vector3, near_anchor_m: float) -> void:
 # override — those keep the throttled cached path). The DECISION stays throttled;
 # only the blade TARGET re-derives every physics tick.
 func _off_puck_live_aim(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
+	if _off_puck_yank_live:
+		var me: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
+		var yank: Vector3 = _tie_yank_aim(snapshot, self_pos, me)
+		if yank.is_finite():
+			return yank
 	if _off_puck_jab_live:
-		return _carrier_puck_pos(snapshot)
+		return _jab_target(snapshot)
+	if _off_puck_tie_live and _cached_role_decision != null:
+		var man: SkaterNetworkState = snapshot.skater_states.get(
+				_cached_role_decision.locked_man_pid)
+		if man != null:
+			return _step_tie_follow(man)
 	if _off_puck_aim_live:
 		return _ready_stance_aim(
 				self_pos, _off_puck_aim_anchor, snapshot, _off_puck_aim_near_m)
@@ -6028,6 +6477,7 @@ func _set_state(s: State) -> void:
 	if s != _state:
 		if s != State.OFF_PUCK:
 			_prev_locked_man_pid = -1
+			_stick_tie_holding = false
 		# Wrister charge resets on every SHOOT_PRESSED entry — fresh
 		# sweep direction, fresh tick count. SkaterStateMachine seeds the
 		# charge tracker from the blade's current position at the entry edge.
@@ -6070,6 +6520,8 @@ func _set_state(s: State) -> void:
 			_deke_cut_dir = Vector2.ZERO
 			_poke_jab_active_ticks = 0
 			_poke_jab_cooldown_ticks = 0
+			_stick_lift_hold_ticks = 0
+			_stick_lift_press_pending = false
 			_carrier.clear_intent()
 		_state = s
 		_ticks_in_state = 0

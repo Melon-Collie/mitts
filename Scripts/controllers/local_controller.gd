@@ -28,6 +28,7 @@ signal hit_received(impulse: Vector3)
 
 @onready var camera: GameCamera = null
 var _gatherer: LocalInputGatherer = null
+var _shuffle_steps := ShuffleStepShaper.new()
 var _current_input: InputState = InputState.new()
 var _input_history: Array[InputState] = []
 # Per-tick prediction snapshots keyed by input.host_timestamp.
@@ -156,6 +157,7 @@ func apply_network_state(state: SkaterNetworkState, _host_ts: float) -> void:
 
 func teleport_to(pos: Vector3, facing: Vector2 = Vector2.ZERO) -> void:
 	super.teleport_to(pos, facing)
+	_shuffle_steps.reset()
 	_input_history.clear()
 	_prediction_history.clear()
 	_last_reconcile_ack_ts = 0.0
@@ -244,6 +246,8 @@ func _physics_process(delta: float) -> void:
 	if NetworkManager.is_clock_ready():
 		gathered.host_timestamp = NetworkManager.estimated_input_stamp_time()
 	var input: InputState = gathered
+	_shuffle_steps.shape(input, skater.global_position, skater.velocity, skater.get_facing(),
+			shuffle_step_distance, stop_decel)
 	_current_input = input
 	_input_history.append(_current_input)
 	# Cap scales with RTT so sustained high-loss can't grow the buffer unboundedly:
@@ -261,7 +265,9 @@ func _physics_process(delta: float) -> void:
 	_pickup_claim_floor = maxf(_pickup_claim_floor - delta, 0.0)
 	_poke_cooldown = maxf(_poke_cooldown - delta, 0.0)
 	_poke_claim_floor = maxf(_poke_claim_floor - delta, 0.0)
-	if not _is_host and NetworkManager.is_clock_ready() and not skater.is_ghost and not puck.pickup_locked and _sm.get_state() != State.SHOT_BLOCKING:
+	# Down, only a diver's stick plays (and only to poke: see the pickup gate).
+	if not _is_host and NetworkManager.is_clock_ready() and not skater.is_ghost and not puck.pickup_locked and _sm.get_state() != State.SHOT_BLOCKING \
+			and (not skater.is_knocked_down or skater.is_diving):
 		var blade_pos_for_claim: Vector3 = skater.get_blade_contact_global()
 		# Branch on the CLIENT-side carrier view (PuckController, driven by the
 		# carrier events). Never gate this on puck.carrier: it is host-only and
@@ -293,7 +299,10 @@ func _physics_process(delta: float) -> void:
 			# to the raised wind-up blade (snapping it overhead for a frame) until the
 			# host confirm re-pinned it to the ice zone — the host catches the feed and
 			# it arrives through the puck sync.
-			if in_range and not skater.deflect_intent and _sm.get_state() != State.SLAPPER_CHARGE_WITHOUT_PUCK and _pickup_claim_floor <= 0.0 and (rising_edge or _claim_cooldown <= 0.0):
+			if in_range and not skater.deflect_intent and _sm.get_state() != State.SLAPPER_CHARGE_WITHOUT_PUCK \
+					and not skater.stick_tied and skater.pin_role == BoardPinRules.Role.NONE \
+					and not skater.is_knocked_down \
+					and not StickCheckRules.is_stick_busy(skater.stick_check_phase) and _pickup_claim_floor <= 0.0 and (rising_edge or _claim_cooldown <= 0.0):
 				_pickup_claim_floor = _PICKUP_CLAIM_FLOOR_S
 				_claim_cooldown = _CLAIM_COOLDOWN_S
 				# Report the ADAPTED interp delay (get_interpolation_delay) — the value
@@ -336,15 +345,17 @@ func _physics_process(delta: float) -> void:
 			var in_poke_range: bool = false
 			var is_lift: bool = false
 			if carrier_team != _team_id and carrier_team != -1:
-				if skater.blade_up:
-					# Lifted blade — hook under the carrier's shaft for a stick lift.
+				if skater.stick_check_phase == StickCheckRules.Phase.HOOK:
+					# Hooking — under the carrier's shaft for a stick lift.
 					is_lift = true
 					var c_hand: Vector3 = view_carrier.upper_body_to_global(view_carrier.get_top_hand_position())
 					var c_blade: Vector3 = view_carrier.get_blade_contact_global()
 					in_poke_range = PuckInteractionRules.check_blade_under_stick(
 							blade_pos_for_claim, c_hand, c_blade,
 							PuckController.STICK_LIFT_RADIUS, PuckController.STICK_LIFT_UNDER_MARGIN)
-				else:
+				elif not skater.blade_up and not skater.stick_tied \
+						and skater.pin_role == BoardPinRules.Role.NONE \
+						and not StickCheckRules.is_stick_busy(skater.stick_check_phase):
 					in_poke_range = puck.global_position.distance_to(blade_pos_for_claim) <= PuckController.POKE_RADIUS \
 							and not PuckInteractionRules.net_between(blade_pos_for_claim, puck.global_position)
 			var rising_poke_edge: bool = in_poke_range and not _was_in_poke_range
@@ -404,6 +415,10 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 		var puck_z: float = puck.global_position.z if puck != null else 0.0
 		if not InfractionRules.is_offside(skater.global_position.z, _team_id, puck_z, has_puck):
 			skater.set_ghost(false)
+	# A tie is the host's call alone (StickTieTracker), so it lands every
+	# broadcast rather than only on a reconcile.
+	skater.stick_tied = server_state.stick_tied
+	_adopt_pin(server_state)
 	if _game_state.is_movement_locked():
 		# Dead-puck phase: don't reconcile. on_faceoff_positions is the reliable
 		# source of truth for teleport positions; world-state snapshots may lag behind
@@ -558,6 +573,9 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# charge timers).
 	stagger_timer = server_state.stagger_timer
 	stagger_recoil_dir = server_state.recoil_dir
+	# The lift phase rides the same rail: the host's at the ack, stepped on by the
+	# replayed inputs.
+	_adopt_stick_check(server_state)
 	# The balance and torso leans ride the same rail: the host's values at the
 	# ack, then the replay steps them forward through the unacked inputs.
 	balance_tilt_vel = server_state.balance_tilt_vel
@@ -572,11 +590,13 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	var prev_kd: float = knockdown_timer
 	knockdown_timer = server_state.knockdown_timer
 	skater.is_knocked_down = knockdown_timer > 0.0
+	skater.is_diving = server_state.diving
 	_sync_knockdown_meta(prev_kd)
 	# Snap facing for replay accuracy — facing drives the direction of travel,
 	# so the replay must start from the server's facing to reproduce the trajectory.
 	_pose.facing = server_state.facing
 	skater.set_facing(_pose.facing)
+	_sync_dive_layout()
 	# IK lock side is relative to the old facing; reset so the gate re-evaluates
 	# cleanly from the snapped facing on the first post-reconcile frame.
 	_pose.ik_locked_side = 0

@@ -23,7 +23,7 @@ func _stepped_landing(origin: Vector3, vel: Vector3, seconds: float) -> Vector3:
 	# validation below certifies agreement with a puck nobody simulates.
 	return AITrajectory.predict_final(
 			origin, vel, int(seconds / STEP_DT), STEP_DT,
-			GameRules.PUCK_ICE_DECEL_M_S2, GameRules.PUCK_BOARD_BOUNCE,
+			GameRules.PUCK_ICE_DECEL_M_S2, GameRules.PUCK_BOARD_COR_SCALE,
 			Vector3.ZERO, 0.0, GameRules.PUCK_BOARD_FRICTION,
 			GameRules.PUCK_COLLISION_RADIUS)
 
@@ -203,7 +203,7 @@ func test_the_crossing_read_is_direction_aware() -> void:
 
 
 # ── The crossing CLOCK ───────────────────────────────────────────────────────
-# Hybrid icing is a race judged when the puck reaches the goal line, so what
+# Hybrid icing is a race that starts when the puck reaches the goal line, so what
 # decides a clear's legality is how long it takes to get there — not how far it
 # goes. These pin the clock the dump eval races against.
 

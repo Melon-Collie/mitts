@@ -7,7 +7,8 @@ const BYTES_SIZE: int = 24
 #         flags: shoot_pressed[0] shoot_held[1] slap_pressed[2] slap_held[3]
 #         stance_held[4] brake[5] elevation_level[6..7] block_held[8]
 #         stick_lift_held[9] stick_lift_pressed[10] quick_pass_pressed[11]
-#         hit_held[12] commit_wrister_power[13]
+#         hit_held[12] commit_wrister_power[13] stick_check_held[14]
+#         stick_check_pressed[15] — every bit spent; the next flag grows the record
 
 # Highest legal loft level (ShotMechanics.ELEVATION_HIGH = 3). The 2-bit wire
 # field spans exactly 0..3, so decode's clamp to this is belt-and-braces.
@@ -45,6 +46,11 @@ var quick_pass_pressed: bool = false
 # intent over a window. Replicated, so reconcile replay re-derives the check's
 # full-vs-passive transfer and its skating cost with no extra wire state.
 var hit_held: bool = false
+# The stick check (F / pad X): a press starts a lift attempt and the hold keeps
+# its hook open (SkaterStickCheck). The press has its own bit for the same reason
+# stick_lift_pressed does — RemoteController carries edges across a drain.
+var stick_check_held: bool = false
+var stick_check_pressed: bool = false
 # Committed wrister power fraction (0..1): the controller converts it to the
 # equivalent cursor speed (ShotMechanics.wrister_speed_for_power_t) so a committed
 # shooter drives the SAME pure-mouse power model deterministically. Set by bots at
@@ -126,6 +132,8 @@ func to_array() -> Array:
 		hit_held,
 		commit_wrister_power,
 		bot_wrister_power_t,
+		stick_check_held,
+		stick_check_pressed,
 	]
 
 func to_bytes() -> PackedByteArray:
@@ -164,7 +172,8 @@ func write_bytes(b: PackedByteArray, offset: int) -> void:
 		((clampi(elevation_level, 0, MAX_ELEVATION_LEVEL) & 0x3) << 6) |
 		(0x100 if block_held     else 0) | (0x200 if stick_lift_held else 0) |
 		(0x400 if stick_lift_pressed else 0) | (0x800 if quick_pass_pressed else 0) |
-		(0x1000 if hit_held else 0) | (0x2000 if commit_wrister_power else 0))
+		(0x1000 if hit_held else 0) | (0x2000 if commit_wrister_power else 0) |
+		(0x4000 if stick_check_held else 0) | (0x8000 if stick_check_pressed else 0))
 	b.encode_u16(offset + 21, flags)
 	# Committed wrister power as a u8 (0..1 in 1/255 steps). Only meaningful while
 	# the commit flag above is set; a mouse sender leaves the default and the host
@@ -203,6 +212,8 @@ static func from_bytes(b: PackedByteArray, offset: int = 0) -> InputState:
 	s.quick_pass_pressed = (flags & 0x800) != 0
 	s.hit_held           = (flags & 0x1000) != 0
 	s.commit_wrister_power = (flags & 0x2000) != 0
+	s.stick_check_held     = (flags & 0x4000) != 0
+	s.stick_check_pressed  = (flags & 0x8000) != 0
 	s.bot_wrister_power_t = float(b.decode_u8(offset + 23)) / 255.0
 	return s
 
@@ -234,4 +245,7 @@ static func from_array(data: Array) -> InputState:
 	if data.size() > 22:
 		state.commit_wrister_power = data[21]
 		state.bot_wrister_power_t = clampf(data[22], 0.0, 1.0)
+	if data.size() > 24:
+		state.stick_check_held = data[23]
+		state.stick_check_pressed = data[24]
 	return state

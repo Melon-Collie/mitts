@@ -68,18 +68,19 @@ func test_time_until_drop_zero_outside_prep() -> void:
 	assert_eq(sm.faceoff_prep_time_until_drop(), 0.0, "no pending drop once the puck is live")
 
 func test_set_faceoff_prep_extra_extends_the_drop() -> void:
-	# Period / stoppage skate-in: PhaseCoordinator measures distances after entry
-	# and pushes the drop out so a far player can skate in rather than dash.
+	# Post-goal / stoppage skate-in: PhaseCoordinator measures the glides after
+	# entry and pushes the drop out until the last skater is set.
+	var hold: float = 1.5
 	sm.begin_faceoff_prep()
-	sm.set_faceoff_prep_extra(GameRules.FACEOFF_SKATE_PREP_EXTRA)
+	sm.set_faceoff_prep_extra(hold)
 	assert_almost_eq(sm.faceoff_prep_time_until_drop(),
-			GameRules.FACEOFF_PREP_DURATION + GameRules.FACEOFF_SKATE_PREP_EXTRA, 0.001,
-			"the skate-in extra defers the drop")
+			GameRules.FACEOFF_PREP_DURATION + hold, 0.001,
+			"the skate-in hold defers the drop")
 	# And the window actually holds that long before the puck goes live.
 	sm.tick(GameRules.FACEOFF_PREP_DURATION + 0.01)
 	assert_eq(sm.current_phase, GamePhase.Phase.FACEOFF_PREP,
-			"still prepping — the extra keeps the puck locked")
-	sm.tick(GameRules.FACEOFF_SKATE_PREP_EXTRA)
+			"still prepping — the hold keeps the puck locked")
+	sm.tick(hold)
 	assert_eq(sm.current_phase, GamePhase.Phase.FACEOFF, "drops after the extended window")
 
 func test_set_faceoff_prep_extra_is_noop_outside_prep() -> void:
@@ -254,62 +255,158 @@ func test_reset_all_clears_reservations() -> void:
 	assert_eq(sm.reserved_slots.size(), 0, "a fresh match starts with no held slots")
 
 # ── Icing ────────────────────────────────────────────────────────────────────
-# Icing detection only runs in NHL rule mode; tests force it explicitly.
+# Icing detection only runs in NHL rule mode; tests force it explicitly. Team 0
+# ices toward -Z, so its race is judged at the dot line z = -ICING_FACEOFF_DOT_Z.
 
-func test_icing_triggered_by_loose_puck_past_goal_line() -> void:
+const _DOT_Z: float = GameRules.ICING_FACEOFF_DOT_Z
+
+func _nhl_with_two_skaters() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
+	sm.register_remote_assigned_player(1, 0, 0)    # peer 1 → team 0 (icing team)
+	sm.register_remote_assigned_player(100, 0, 1)  # peer 100 → team 1 (defending)
+
+# Team 0 ices it from its own half; both skaters are racing, neither at the dots.
+func _open_race() -> void:
+	_nhl_with_two_skaters()
+	sm.notify_puck_carried(0, 5.0)
+	_race_tick(Vector3(0, 0, -10.0), Vector3(0, 0, -9.0),
+			Vector3(0, 0, -15.0), Vector3(0, 0, -5.0))
+
+func _race_tick(icer_pos: Vector3, icer_vel: Vector3, defender_pos: Vector3, defender_vel: Vector3) -> void:
+	sm.check_icing_for_loose_puck(-30.0, {1: icer_pos, 100: defender_pos},
+			{1: icer_vel, 100: defender_vel})
+
+func test_uncontested_icing_is_whistled_on_the_crossing() -> void:
 	sm.rule_set = GameRules.RuleSet.NHL
 	sm.notify_puck_carried(0, 5.0)
 	sm.check_icing_for_loose_puck(-30.0)
-	assert_eq(sm.icing_team_id, 0)
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.ICING,
+			"nobody racing for it — icing on the crossing")
 
-func test_icing_expires_after_timer() -> void:
+func test_race_keeps_the_puck_live_until_someone_reaches_the_dots() -> void:
+	_open_race()
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.NONE,
+			"a race is running — no whistle yet")
+	assert_eq(sm.icing.pending_team_id, 0)
+
+func test_defender_first_to_the_dots_is_icing() -> void:
+	_open_race()
+	_race_tick(Vector3(0, 0, -15.0), Vector3(0, 0, -9.0),
+			Vector3(0, 0, -_DOT_Z - 0.5), Vector3(0, 0, -5.0))
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.ICING)
+	assert_eq(sm.icing.pending_team_id, -1)
+
+func test_attacker_clear_at_the_dots_waves_it_off() -> void:
+	_open_race()
+	_race_tick(Vector3(0, 0, -_DOT_Z - 0.5), Vector3(0, 0, -9.0),
+			Vector3(0, 0, -12.0), Vector3(0, 0, -4.0))
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.NONE,
+			"attacker won the race clearly — waved off")
+	assert_eq(sm.icing.pending_team_id, -1, "the race is over")
+
+func test_too_close_to_call_is_icing() -> void:
+	_open_race()
+	# Defender a quarter metre short of the line at full pace: ~0.03 s behind.
+	_race_tick(Vector3(0, 0, -_DOT_Z - 0.5), Vector3(0, 0, -9.0),
+			Vector3(0, 0, -_DOT_Z + 0.25), Vector3(0, 0, -9.0))
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.ICING)
+
+func test_icing_team_pulling_up_is_whistled() -> void:
+	_open_race()
+	_race_tick(Vector3(0, 0, -10.0), Vector3.ZERO,
+			Vector3(0, 0, -15.0), Vector3(0, 0, -5.0))
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.ICING,
+			"nobody on the icing team is racing any more")
+
+func test_race_nobody_finishes_is_whistled_after_the_cap() -> void:
+	_open_race()
+	sm.tick(GameRules.ICING_RACE_MAX_S + 0.01)
+	_race_tick(Vector3(0, 0, -10.0), Vector3(0, 0, -9.0),
+			Vector3(0, 0, -15.0), Vector3(0, 0, -5.0))
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.ICING)
+
+func test_defending_pickup_during_the_race_is_icing() -> void:
+	_open_race()
+	sm.notify_puck_carried(1, -27.0, 3.0)
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.ICING)
+
+func test_icing_team_pickup_during_the_race_waves_it_off() -> void:
+	_open_race()
+	sm.notify_puck_carried(0, -27.0, 3.0)
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.NONE)
+	assert_eq(sm.icing.pending_team_id, -1)
+
+func test_goalie_playing_the_iced_puck_waves_it_off() -> void:
+	_open_race()
+	sm.notify_icing_touch(1, -27.0, 0.0, true)
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.NONE)
+	assert_eq(sm.icing.pending_team_id, -1)
+
+func test_goalie_save_before_the_line_is_not_icing() -> void:
 	sm.rule_set = GameRules.RuleSet.NHL
 	sm.notify_puck_carried(0, 5.0)
+	sm.notify_icing_touch(1, -25.0, 0.5, true)  # team 1's goalie kicks it wide
 	sm.check_icing_for_loose_puck(-30.0)
-	assert_eq(sm.icing_team_id, 0)
-	sm.tick(GameRules.ICING_GHOST_DURATION + 0.01)
-	assert_eq(sm.icing_team_id, -1)
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.NONE,
+			"the defending team touched it before the goal line")
 
-func test_icing_cleared_by_opponent_pickup() -> void:
+func test_teammate_deflection_in_own_half_is_still_icing() -> void:
 	sm.rule_set = GameRules.RuleSet.NHL
-	sm.notify_puck_carried(0, 5.0)
+	sm.notify_puck_carried(0, 10.0)
+	sm.notify_icing_touch(0, 3.0, 0.0)
 	sm.check_icing_for_loose_puck(-30.0)
-	assert_eq(sm.icing_team_id, 0)
-	sm.notify_puck_carried(1, -10.0)  # team 1 picks up
-	assert_eq(sm.icing_team_id, -1)
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.ICING)
 
-func test_icing_not_cleared_by_offending_team_pickup() -> void:
+func test_teammate_deflection_past_the_red_line_is_not_icing() -> void:
 	sm.rule_set = GameRules.RuleSet.NHL
-	sm.notify_puck_carried(0, 5.0)
+	sm.notify_puck_carried(0, 10.0)
+	sm.notify_icing_touch(0, -3.0, 0.0)
 	sm.check_icing_for_loose_puck(-30.0)
-	assert_eq(sm.icing_team_id, 0)
-	sm.notify_puck_carried(0, -10.0)  # offending team picks up — should NOT clear
-	assert_eq(sm.icing_team_id, 0, "icing must not clear when offending team picks up puck")
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.NONE)
+
+func test_race_records_how_it_ended() -> void:
+	# GameManager announces the race to every peer from these two fields.
+	_open_race()
+	assert_eq(sm.icing.races_opened, 1)
+	sm.notify_puck_carried(0, -27.0, 3.0)
+	assert_eq(sm.icing.last_call, InfractionRules.IcingCall.WAVED_OFF)
+	sm.notify_puck_carried(0, 5.0)
+	_race_tick(Vector3(0, 0, -15.0), Vector3(0, 0, -9.0),
+			Vector3(0, 0, -_DOT_Z - 0.5), Vector3(0, 0, -5.0))
+	assert_eq(sm.icing.races_opened, 2, "a second race opened")
+	assert_eq(sm.icing.last_call, InfractionRules.IcingCall.ICING)
+
+func test_race_cut_short_by_a_stoppage_ends_uncalled() -> void:
+	_open_race()
+	sm.begin_faceoff_prep()
+	assert_eq(sm.icing.last_call, InfractionRules.IcingCall.NONE)
 
 func test_icing_not_triggered_during_dead_puck_phase() -> void:
 	sm.rule_set = GameRules.RuleSet.NHL
 	sm.on_goal_scored(1)  # → GOAL_CELEBRATION (still not PLAYING — icing path returns early)
 	sm.notify_puck_carried(0, 5.0)
 	sm.check_icing_for_loose_puck(-30.0)
-	assert_eq(sm.icing_team_id, -1, "icing only detects during PLAYING")
+	assert_eq(sm.icing.pending_team_id, -1, "icing only detects during PLAYING")
 
 func test_icing_not_triggered_from_attacking_half() -> void:
 	sm.rule_set = GameRules.RuleSet.NHL
 	sm.notify_puck_carried(0, -5.0)  # already past center
 	sm.check_icing_for_loose_puck(-30.0)
-	assert_eq(sm.icing_team_id, -1)
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.NONE)
 
 func test_arcade_mode_skips_icing_detection() -> void:
 	sm.rule_set = GameRules.RuleSet.ARCADE
 	sm.notify_puck_carried(0, 5.0)
 	sm.check_icing_for_loose_puck(-30.0)
-	assert_eq(sm.icing_team_id, -1, "ARCADE must not detect icing")
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.NONE,
+			"ARCADE must not detect icing")
 
 func test_off_mode_skips_icing_detection() -> void:
 	sm.rule_set = GameRules.RuleSet.OFF
 	sm.notify_puck_carried(0, 5.0)
 	sm.check_icing_for_loose_puck(-30.0)
-	assert_eq(sm.icing_team_id, -1, "OFF must not detect icing")
+	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.NONE,
+			"OFF must not detect icing")
 
 # ── NHL icing → pending faceoff ──────────────────────────────────────────────
 
@@ -451,6 +548,33 @@ func test_carrying_in_with_an_offside_teammate_whistles_at_once() -> void:
 			{1: Vector3(0, 1, -10), 2: Vector3(0, 1, -9)}, Vector3(0, 0, -10), 2)
 	assert_eq(sm.consume_pending_faceoff(), GameStateMachine.FaceoffReason.OFFSIDE)
 
+func test_defenders_bringing_the_puck_in_leave_attackers_onside() -> void:
+	# An attacker left deep after the defenders cleared it is flagged; the
+	# defenders then carry it back into their own zone. Offside needs the
+	# attacking team to take the puck in, so nothing is called.
+	sm.rule_set = GameRules.RuleSet.NHL
+	sm.register_remote_assigned_player(1, 0, 0)    # team 0 attacker
+	sm.register_remote_assigned_player(100, 0, 1)  # team 1 defender
+	sm.update_delayed_offside(
+			{1: Vector3(0, 1, -10), 100: Vector3(0, 1, 0)}, Vector3(0, 0, 0), 100)
+	assert_true(sm.must_tag_up(1, -10.0))
+	sm.notify_puck_carried(1, -9.0)
+	sm.update_delayed_offside(
+			{1: Vector3(0, 1, -10), 100: Vector3(0, 1, -9)}, Vector3(0, 0, -10), 100)
+	assert_eq(sm.delayed_offside_team_id, -1, "the defending team brought it in")
+	assert_false(sm.must_tag_up(1, -10.0), "the attacker is onside")
+
+func test_attackers_shooting_the_puck_in_is_a_delayed_offside() -> void:
+	sm.rule_set = GameRules.RuleSet.NHL
+	sm.register_remote_assigned_player(1, 0, 0)  # offside teammate
+	sm.register_remote_assigned_player(2, 1, 0)  # dumper, still outside
+	sm.update_delayed_offside(
+			{1: Vector3(0, 1, -10), 2: Vector3(0, 1, 0)}, Vector3(0, 0, 0), -1)
+	sm.notify_icing_touch(0, 0.0, 0.0)  # released by team 0
+	sm.update_delayed_offside(
+			{1: Vector3(0, 1, -10), 2: Vector3(0, 1, 0)}, Vector3(0, 0, -10), -1)
+	assert_eq(sm.delayed_offside_team_id, 0)
+
 func test_carrying_in_alone_is_onside() -> void:
 	sm.rule_set = GameRules.RuleSet.NHL
 	sm.register_remote_assigned_player(2, 1, 0)
@@ -571,51 +695,6 @@ func test_arcade_does_not_track_delayed_offside() -> void:
 	assert_eq(sm.delayed_offside_team_id, -1,
 			"ARCADE uses per-player ghost only — no delayed offside tracking")
 
-# ── Hybrid icing race ────────────────────────────────────────────────────────
-
-func test_icing_waved_off_when_icing_team_closer() -> void:
-	sm.rule_set = GameRules.RuleSet.NHL
-	sm.register_remote_assigned_player(1, 0, 0)   # peer 1 → team 0
-	sm.register_remote_assigned_player(100, 0, 1) # peer 100 → team 1
-	sm.notify_puck_carried(0, 5.0)
-	# Dot at z = -ICING_FACEOFF_DOT_Z (for team 0 icing toward -Z).
-	# Peer 1 (team 0, icing team) at z = -25 → closer to dot
-	# Peer 100 (team 1, defending) at z = 0 → farther from dot
-	sm.check_icing_for_loose_puck(-30.0, {1: Vector3(0, 1, -25.0), 100: Vector3(0, 1, 0.0)})
-	assert_eq(sm.icing_team_id, -1, "icing team closer → waved off")
-
-func test_icing_confirmed_when_defending_team_closer() -> void:
-	sm.rule_set = GameRules.RuleSet.NHL
-	sm.register_remote_assigned_player(1, 0, 0)
-	sm.register_remote_assigned_player(100, 0, 1)
-	sm.notify_puck_carried(0, 5.0)
-	# Dot at z = -ICING_FACEOFF_DOT_Z (for team 0 icing toward -Z).
-	# Peer 1 at z = 5 is on the wrong side of centre; peer 100 at z = -24 is
-	# right by the dot.
-	sm.check_icing_for_loose_puck(-30.0, {1: Vector3(0, 1, 5.0), 100: Vector3(0, 1, -24.0)})
-	assert_eq(sm.icing_team_id, 0, "defending team closer → icing confirmed")
-
-func test_icing_confirmed_when_defending_team_slightly_closer() -> void:
-	sm.rule_set = GameRules.RuleSet.NHL
-	sm.register_remote_assigned_player(1, 0, 0)
-	sm.register_remote_assigned_player(100, 0, 1)
-	sm.notify_puck_carried(0, 5.0)
-	# Dot at z = -ICING_FACEOFF_DOT_Z (for team 0 icing toward -Z).
-	# Peer 100 at z = -20 sits a hair past the dot; peer 1 at centre is far.
-	sm.check_icing_for_loose_puck(-30.0, {1: Vector3(0, 1, 0.0), 100: Vector3(0, 1, -20.0)})
-	assert_eq(sm.icing_team_id, 0, "defending team slightly closer → icing confirmed")
-
-func test_icing_waved_off_team1_symmetric() -> void:
-	sm.rule_set = GameRules.RuleSet.NHL
-	sm.register_remote_assigned_player(1, 0, 0)   # team 0
-	sm.register_remote_assigned_player(100, 0, 1) # team 1
-	sm.register_remote_assigned_player(200, 1, 0) # team 0
-	sm.notify_puck_carried(1, -5.0)
-	# Dot at z = +ICING_FACEOFF_DOT_Z (for team 1 icing toward +Z). Peer 100 is
-	# close to the dot; peer 1 is back at centre.
-	sm.check_icing_for_loose_puck(30.0, {1: Vector3(0, 1, 0.0), 100: Vector3(0, 1, 25.0)})
-	assert_eq(sm.icing_team_id, -1, "team 1 icing, waved off — attacker closer")
-
 # ── Ghost computation ────────────────────────────────────────────────────────
 
 func test_ghost_empty_when_no_players() -> void:
@@ -677,15 +756,10 @@ func test_mere_carry_does_not_void_arcade_ghost() -> void:
 	assert_true(ghosts[1], "a bare carry must not void the ghost — only established possession does")
 
 func test_icing_does_not_ghost_the_team() -> void:
-	# P2-7: icing is a whistle-and-faceoff rule, NOT a team ghost. Even with an
-	# active icing_team_id, compute_ghost_state must not ghost the offending team —
-	# in the real game begin_faceoff_prep clears icing_team_id in the same tick, so
-	# the old team-wide ghost never applied. This asserts the corrected behavior.
-	sm.rule_set = GameRules.RuleSet.NHL
-	sm.register_remote_assigned_player(1, 0, 0)  # team 0
-	sm.notify_puck_carried(0, 5.0)
-	sm.check_icing_for_loose_puck(-30.0)
-	assert_eq(sm.icing_team_id, 0, "icing is still detected (drives the whistle + faceoff)")
+	# Icing is a whistle-and-faceoff rule, not a team ghost: a running race must
+	# not ghost the offending team.
+	_open_race()
+	assert_eq(sm.icing.pending_team_id, 0)
 	var ghosts: Dictionary = sm.compute_ghost_state(
 		{1: Vector3(0, 1, 0)},      # position that wouldn't be offside
 		-1, Vector3.ZERO)
@@ -802,12 +876,11 @@ func test_reset_scores_zeros_both_teams() -> void:
 	assert_eq(sm.scores[1], 0)
 
 func test_begin_faceoff_prep_clears_icing() -> void:
-	sm.rule_set = GameRules.RuleSet.NHL
-	sm.notify_puck_carried(0, 5.0)
-	sm.check_icing_for_loose_puck(-30.0)
-	assert_eq(sm.icing_team_id, 0)
+	_open_race()
+	assert_eq(sm.icing.pending_team_id, 0)
 	sm.begin_faceoff_prep()
-	assert_eq(sm.icing_team_id, -1)
+	assert_eq(sm.icing.pending_team_id, -1)
+	assert_eq(sm.icing.last_touch_team_id, -1)
 	assert_eq(sm.current_phase, GamePhase.Phase.FACEOFF_PREP)
 
 # ── Remote state application ────────────────────────────────────────────────

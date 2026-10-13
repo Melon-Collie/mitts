@@ -17,6 +17,7 @@ var _scorebug: HudScorebug = null
 var _chyron: HudGoalChyron = null
 var _prompts: HudPrompts = null
 var _ghost_banner: HudGhostBanner = null
+var _icing_race: HudIcingRace = null
 var _stat_feed: HudStatFeed = HudStatFeed.new()
 var _votes: HudRematchVotes = HudRematchVotes.new()
 
@@ -69,6 +70,9 @@ func _ready() -> void:
 	_ghost_banner = HudGhostBanner.new()
 	add_child(_ghost_banner)
 	_ghost_banner.build(_scale_root)
+	_icing_race = HudIcingRace.new()
+	add_child(_icing_race)
+	_icing_race.build(_scale_root)
 	_build_bug_icon()
 	_prompts = HudPrompts.new()
 	add_child(_prompts)
@@ -149,7 +153,9 @@ func _ready() -> void:
 	GameManager.player_left.connect(func(n: String, c: Color) -> void: _toast_stack.push_pair(n, tr(&"TOAST_PLAYER_LEFT"), c))
 	GameManager.puck_out_of_play.connect(_on_puck_out_of_play)
 	GameManager.icing_called.connect(_on_icing_called)
+	GameManager.icing_race_changed.connect(_icing_race.on_icing_race_changed)
 	GameManager.goalie_freeze_called.connect(_on_goalie_freeze_called)
+	GameManager.puck_frozen_called.connect(_on_puck_frozen_called)
 	GameManager.offside_called.connect(_on_offside_called)
 	GameManager.local_player_hit.connect(_on_local_player_hit)
 	# Arrives just before faceoff_prep_announced on the opening faceoff; the
@@ -645,6 +651,11 @@ func _on_icing_called() -> void:
 func _on_goalie_freeze_called() -> void:
 	if _toast_stack != null:
 		_toast_stack.push(tr(&"TOAST_GOALIE_FREEZE"), MenuStyle.BROADCAST_CREAM)
+
+
+func _on_puck_frozen_called() -> void:
+	if _toast_stack != null:
+		_toast_stack.push(tr(&"TOAST_PUCK_FROZEN"), MenuStyle.BROADCAST_CREAM)
 
 
 func _on_offside_called() -> void:

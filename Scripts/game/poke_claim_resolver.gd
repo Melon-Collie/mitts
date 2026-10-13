@@ -135,6 +135,15 @@ func receive_claim(peer_id: int, host_timestamp: float,
 	# while blocking (LocalController), but the grant is decided here.
 	if skater_snap.shot_state == SkaterStateMachine.State.SHOT_BLOCKING:
 		return
+	# A stick mid-lift or held up pokes nothing (the same withdrawal as the
+	# present-time loop).
+	if skater_snap.blade_up or skater_snap.stick_tied \
+			or skater_snap.pin_role != BoardPinRules.Role.NONE \
+			or StickCheckRules.is_stick_busy(skater_snap.stick_check_phase):
+		return
+	# Down pokes nothing, except a diver's stick laid out along the ice.
+	if skater_snap.knockdown_timer > 0.0 and not skater_snap.diving:
+		return
 	# The attacker's blade is client-authoritative aim; ClaimantView is what bounds
 	# it against the host's own body and blade reconstruction.
 	if not _claimant.resolve(_registry, peer_id, skater_snap,

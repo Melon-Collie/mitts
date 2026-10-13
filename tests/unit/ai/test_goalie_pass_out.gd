@@ -20,11 +20,13 @@ extends GutTest
 #   behind-R -> slot L     0.31    7      2 far side    0.06    4      0
 #   corner-R -> slot C     0.24    8      2 far side    0.00    10     3
 #
-# Re-measured once the hands moved (out in front at a real bend, and the
-# butterfly blocker down to just above the pads): 9 / 5 / 12, 26 in all. The
-# extra goals are all in the top two rows — a lower blocker concedes more over a
-# butterfly, which is that stance's real trade. No flat shot scores on any of
-# the three.
+# Now 8 / 5 / 10, 23 in all, every one in the top three rows — a lower blocker
+# concedes more over a butterfly, which is that stance's real trade. No flat
+# shot scores on any of the three.
+#
+# The receiver is loaded for the one-timer through the feed: the drop-and-slide
+# answers a one-timer and waits for one (test_goalie_pass_is_not_a_shot.gd holds
+# the receiver who is not loaded, and is played standing).
 #
 # Before, the block-or-react clock priced the pass as a loose puck at his feet
 # (a launch from where the puck WAS, not where it would be received) and dropped
@@ -77,15 +79,16 @@ func before_each() -> void:
 
 
 # Settle him on the post against a carrier at `passer`, then march a pass to a
-# receiver at `receiver` and hold through the swing. One skater plays both
-# parts: the passer's body leaves with the puck, the receiver's arrives.
+# receiver at `receiver`, loaded for the one-timer, and hold through the swing.
+# One skater plays both parts: the passer's body leaves with the puck, the
+# receiver's arrives.
 func _pass_out(passer: Vector3, receiver: Vector3) -> void:
 	_ctrl.reset_to_crease()
 	_h.settle(passer, 240)
 	_puck.clear_carrier()
 	_shooter.global_position = receiver
 	_shooter.velocity = Vector3.ZERO
-	_shooter.current_shot_state = SkaterStateMachine.State.SKATING_WITHOUT_PUCK
+	_shooter.current_shot_state = SkaterStateMachine.State.SLAPPER_CHARGE_WITHOUT_PUCK
 	var vel: Vector3 = (receiver - passer).normalized() * PASS_SPEED
 	var flight_ticks: int = int(passer.distance_to(receiver) / PASS_SPEED / DT)
 	var pos: Vector3 = passer
