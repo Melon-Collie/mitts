@@ -1,11 +1,11 @@
 extends GutTest
 
-# The brake's shuffle, measured on the live rig: one press is one step-together
-# (ShuffleStepShaper, SkaterLocomotion._shuffle_path). Each skate lifts once —
+# The shuffle, measured on the live rig: one tap from a standstill is one
+# step-together (ShuffleStepShaper, SkaterLocomotion._shuffle_path). Each skate lifts once —
 # the leading one out, the trailing one in after it — and a blade pointed along
 # the facing cannot glide across the travel, so whichever skate is down holds
 # its place on the ice while the body moves over it. What slip is left (about a
-# fifth of the body's speed to the side, a tenth to a sixth ahead and back) is the
+# fifth of the body's speed to the side, a sixth back) is the
 # planted boot rolling with the splayed leg, the lean carrying the hips past it,
 # and a few millimetres as the stance drops into the shuffle's sit at the start.
 # Both are counted only while the body moves: the blade seat's own settle after
@@ -58,13 +58,12 @@ func before_each() -> void:
 func _step(stick: Vector2) -> void:
 	var input := InputState.new()
 	input.move_vector = stick
-	input.brake = true
+	input.brake = false
 	input.mouse_world_pos = _skater.global_position + Vector3(0.0, 0.0, -6.0)
 	input.mouse_world_pos.y = 0.0
 	input.delta = DT
-	_shaper.shape(input, _skater.global_position, _skater.velocity,
-			_controller.shuffle_step_distance, _controller.stop_decel,
-			SkaterMovementRules.shuffle_ceiling(_controller._movement_config()))
+	_shaper.shape(input, _skater.global_position, _skater.velocity, _skater.get_facing(),
+			_controller.shuffle_step_distance, _controller.stop_decel)
 	_controller._process_input(input, DT)
 	_skater.global_position += _skater.velocity * DT
 	_skater._process(DT)
@@ -123,10 +122,6 @@ func test_a_press_to_the_side_is_one_step_together() -> void:
 
 func test_a_press_to_the_other_side_is_one_step_together() -> void:
 	_press(Vector2(-1.0, 0.0))
-
-
-func test_a_press_ahead_is_one_step_together() -> void:
-	_press(Vector2(0.0, -1.0))
 
 
 func test_a_press_back_is_one_step_together() -> void:

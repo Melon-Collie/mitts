@@ -32,7 +32,7 @@ Use the in-game **Report Bug** button (bottom-right corner) — it attaches your
 
 | Input | Action |
 |-------|--------|
-| **WASD** | Skate |
+| **WASD** | Skate — from a standstill, a tap to the side or back is one shuffle step (0.4 m) to hold and adjust a spot (the net front); hold to skate |
 | **Mouse** | Blade position |
 | **E** | Quick pass — instant snap toward the cursor |
 | **Left click (hold + flick)** | Wrister — the drag direction is your aim, and how fast the cursor is moving when you release is your power |
@@ -40,7 +40,7 @@ Use the in-game **Report Bug** button (bottom-right corner) — it attaches your
 | **Q (hold, no puck)** | Deflect — redirect an incoming puck off the blade instead of catching it (at high loft it doubles as a stick-lift) |
 | **Q (tap, with puck)** | Nudge / self-pass |
 | **Shift (hold)** | Stance — drop low and dig your edges in for tight cuts; choppier, slower strides while held |
-| **Space** | Hockey stop — held near a standstill, each WASD press is one shuffle step (0.4 m) to hold and adjust a spot (the net front) |
+| **Space** | Hockey stop |
 | **Ctrl (hold)** | Commit a body check — full hit, stick off the ice, weaker edges while held |
 | **C (hold)** | Shot-block stance — drop to a knee in the lane |
 | **The other shot button (during a wind-up)** | Cancel the shot — bail a wrister or slapshot wind-up without firing |
