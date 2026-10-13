@@ -399,7 +399,8 @@ static func _cover_at_height(arrival_y: float, t_read: float, goalie_down: bool,
 			var dx_a: float = goalie_hands.x * float(side)
 			var dx_b: float = goalie_hands.z * float(side)
 			var hand_lat: float = dx_a
-			var hand_y: float = goalie_hands.y
+			# The glove's box sits above its hand point (the pocket); the blocker's does not.
+			var hand_y: float = goalie_hands.y + GoalieAnatomy.GLOVE_BOX_OFFSET_Y_M
 			if dx_b > dx_a:
 				hand_lat = dx_b
 				hand_y = goalie_hands.w

@@ -284,7 +284,7 @@ var animation_detail: int = SkaterAnimationLod.DETAIL_BALANCED
 # as haze — so it's an opt-in subtle-atmosphere toggle. SSR (ice reflections)
 # and SSAO (contact shadows) read well top-down and default on.
 var volumetric_fog_enabled: bool = false
-var reflections_enabled: bool = true       # screen-space reflections on the ice
+var reflections_enabled: bool = true       # SSR on the ice + the bowl's reflection probe
 var ambient_occlusion_enabled: bool = true # SSAO contact shadows
 var scaling_3d_mode: int = SCALING_3D_BILINEAR
 var render_scale: float = 1.0
@@ -871,6 +871,9 @@ func apply_video() -> void:
 		we.environment.volumetric_fog_enabled = volumetric_fog_enabled
 		we.environment.ssr_enabled = reflections_enabled
 		we.environment.ssao_enabled = ambient_occlusion_enabled
+	var reflection := scene.find_child("ArenaReflection", true, false) as ReflectionProbe
+	if reflection != null:
+		reflection.visible = reflections_enabled
 	_apply_shadow_quality(scene)
 	var stands := scene.find_child("ArenaStands", true, false) as Node3D
 	if stands != null:

@@ -31,6 +31,22 @@ Vector3 reach_root(const Vector3 &shoulder, const Vector3 &hand, double arm_len,
 	return shoulder + d_vec / (real_t)d * (real_t)Math::min(over, slack);
 }
 
+// TwoBoneIK.bend_direction.
+Vector3 bend_direction(const Vector3 &shoulder, const Vector3 &hand, const Vector3 &pole_world) {
+	const Vector3 d_vec = hand - shoulder;
+	const double d = d_vec.length();
+	if (d < 0.0001) {
+		return Vector3();
+	}
+	const Vector3 axis = d_vec / (real_t)d;
+	Vector3 pole_dir = pole_world - axis * pole_world.dot(axis);
+	if (pole_dir.length() < 0.0001) {
+		const Vector3 fallback = Math::abs(axis.y) < 0.9 ? Vector3(0, -1, 0) : Vector3(0, 0, -1);
+		pole_dir = fallback - axis * fallback.dot(axis);
+	}
+	return pole_dir.normalized();
+}
+
 // TwoBoneIK.solve_elbow.
 Vector3 solve_elbow(const Vector3 &shoulder, const Vector3 &hand, double upper_len,
 		double forearm_len, const Vector3 &pole_world) {
@@ -46,12 +62,7 @@ Vector3 solve_elbow(const Vector3 &shoulder, const Vector3 &hand, double upper_l
 	const double h_sq = upper_len * upper_len - foot_t * foot_t;
 	const double h = Math::sqrt(Math::max(h_sq, 0.0));
 	const Vector3 foot = shoulder + axis * (real_t)foot_t;
-	Vector3 pole_dir = pole_world - axis * pole_world.dot(axis);
-	if (pole_dir.length() < 0.0001) {
-		const Vector3 fallback = Math::abs(axis.y) < 0.9 ? Vector3(0, -1, 0) : Vector3(0, 0, -1);
-		pole_dir = fallback - axis * fallback.dot(axis);
-	}
-	return foot + pole_dir.normalized() * (real_t)h;
+	return foot + bend_direction(shoulder, hand, pole_world) * (real_t)h;
 }
 
 // SkaterArmRig._pose_bone, for a non-degenerate span.
@@ -137,8 +148,8 @@ bool NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Basis 
 	const Vector3 rooted = spine.xform(
 			trunk_texture.xform(marker + check_load_offset(lead, side, half_width)));
 	const Vector3 shoulder_s = reach_root(rooted, hand_s, lengths.z, lengths.w);
-	const Vector3 elbow_s = solve_elbow(shoulder_s, hand_s, upper_len, forearm_len,
-			spine.basis.xform(tucked_pole(pole, lead, side)));
+	const Vector3 pole_s = spine.basis.xform(tucked_pole(pole, lead, side));
+	const Vector3 elbow_s = solve_elbow(shoulder_s, hand_s, upper_len, forearm_len, pole_s);
 	const Vector3 forearm_span = hand_s - elbow_s;
 	const double forearm_length = forearm_span.length();
 	// The GDScript path's held-pose branches (any degenerate part) read the
@@ -158,8 +169,11 @@ bool NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Basis 
 	const Basis along = Basis::looking_at(dir, up_for_look_at(dir)) * twist;
 	skeleton->set_bone_pose(bone_cuff,
 			Transform3D(along.scaled_local(thick_cuff), hand_s - dir * (real_t)cuff_back));
-	// _pose_ball.
-	skeleton->set_bone_pose(bone_elbow, Transform3D(Basis().scaled(thick_elbow), elbow_s));
+	// _pose_elbow.
+	const Vector3 out = bend_direction(shoulder_s, hand_s, pole_s);
+	const Vector3 arm_axis = (hand_s - shoulder_s).normalized();
+	const Basis pad = out == Vector3() ? Basis() : Basis(arm_axis, out, arm_axis.cross(out));
+	skeleton->set_bone_pose(bone_elbow, Transform3D(pad.scaled_local(thick_elbow), elbow_s));
 	// _pose_glove (its direction is normalized(), the same unit vector).
 	const Vector3 glove_dir = forearm_span.normalized();
 	const Basis glove_basis = Basis::looking_at(glove_dir, up_for_look_at(glove_dir)) * twist;

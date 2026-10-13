@@ -158,7 +158,8 @@ func test_the_wire_reads_the_half_side_by_side() -> void:
 
 func test_the_shot_model_covers_the_down_side_and_not_the_up_side() -> void:
 	# Net frame: the right pad down flat, the left one standing.
-	var pads := Vector4(-0.26, deg_to_rad(-10.0), 0.42, deg_to_rad(90.0))
+	var pads := Vector4(-GoalieBodyConfigBuilder.READY_PAD_X_M,
+			deg_to_rad(-GoalieBodyConfigBuilder.READY_PAD_ROLL_DEG), 0.42, deg_to_rad(90.0))
 	var t_read: float = 0.05
 	var down_side: float = AIActionScoring._cover_at_height(
 			0.05, t_read, false, 1, Vector4.INF, pads)

@@ -57,6 +57,9 @@ make it there.
 **Changing a value that is already there is Claude's to do** — a transform, a
 size, a number on an existing line. It invents no identifier and reorders
 nothing; run the suite afterwards, since the scene is instantiated all over it.
+So is giving an existing node the position or scale it lacks: a `transform =`
+line goes first in the node block, ahead of its other properties, and names no
+identifier.
 
 **Deleting is not that, and is Claude's to do**: a property line, a whole node
 block, or a sub-resource nothing references any more. A delete invents no
@@ -105,7 +108,7 @@ proportions and paint across builds — one static pose, five bodies.
 
 **To see a STROKE, render a strip.** `.claude/hooks/render-strip.sh [scenarios]`
 skates scripted inputs (a start, a stride, a held arc, keyboard turns, taps, a
-stop, backward)
+stop, backward, a dive)
 through the real controller and captures a frame every few ticks from behind,
 beside and ahead, printing the locomotion mix per frame — which state the legs
 skated, and when it came on (`tools/gait_strip_runner.gd`). A held pose cannot

@@ -806,10 +806,10 @@ var elevated_threshold: float = GoalieAnatomy.butterfly_cover_ceiling()
 var react_hand_y_min: float = 0.50
 var react_hand_y_max: float = 1.55
 # Reach height ABOVE THE CHEST ANCHOR — the posture cost of being down. Each pose
-# authors a `body_pos.y` (READY 1.06, STANDING 1.22, BUTTERFLY 0.64) and the hand
-# ceiling is that plus this, capped by `react_hand_y_max`. DERIVED, not chosen:
-# 1.06 + 0.49 = 1.55, the human upright ceiling, so only the down postures give
-# anything up. See GoalieBodyConfigBuilder._reachable_hand_y.
+# authors a `body_pos.y` (READY 0.96, STANDING 1.22, BUTTERFLY 0.64) and the hand
+# ceiling is that plus this, capped by `react_hand_y_max`. READY's 0.96 + 0.49 =
+# 1.45 clears the 1.22 m crossbar, so upright the whole net is in reach and only
+# the down postures give anything up. See GoalieBodyConfigBuilder._reachable_hand_y.
 var arm_reach_above_chest: float = 0.49
 # Glove arm reach. The glove (in `_apply_shot_hand_reaction`) moves
 # toward the shot's lateral impact point clamped within these bounds, so

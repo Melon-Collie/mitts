@@ -9,9 +9,24 @@ extends RefCounted
 # is LAID OUT (the fall direction), and so where the low block lies and where
 # the stick reaches.
 
-# Down for this long, the get-up included (SkaterController.knockdown_getup_seconds
-# eases out over its tail).
+# Down at least this long, the get-up included (SkaterController
+# .knockdown_getup_seconds eases out over its tail); block held keeps him lying
+# there until it is let go.
 const DOWN_S: float = 1.0
+# The fall is thrown, not taken: the diver leaves his skates at the hardest hit's
+# tip rate (the knockdown's knockdown_fall_max_entry_omega) whatever his speed,
+# after a push this long, and lands without a rebound — on purpose, onto his
+# hands and side. At those numbers he is on the ice a third of a second in,
+# leaving the lie its time before the get-up.
+const TIP_RATE_RAD_S: float = 4.2
+const PUSH_S: float = 0.05
+# Lying tilt about the blades: the legs stay long, so the hips (~0.92 m above
+# the blades standing) rest on the side of the pelvis ~0.15 m up — acos(0.15 / 0.92).
+const LIE_DEG: float = 80.6
+# His belt (the centre of mass of a body laid out long) keeps the line he was
+# skating as he tips: nothing on the ice holds the skates back, so they go out
+# from under him the far side of it.
+const COM_HEIGHT_M: float = 0.95
 # The lying body and its stick as one low block: a capsule from the skates out
 # along the layout to the blade, sealed from the ice to about a lying body's
 # height. A puck over it goes through — the same trade as the standing block.
@@ -33,6 +48,39 @@ const BLOCK_LENGTH_M: float = HAND_REACH_M + GameRules.DEFAULT_STICK_LENGTH_M
 static func starts(stance_held: bool, block_held: bool, skating_without_puck: bool,
 		down: bool) -> bool:
 	return stance_held and block_held and skating_without_puck and not down
+
+
+# The knockdown's fall model as a dive takes it (the constants above); the rest
+# of the model is the knockdown's own.
+static func fall_config(knockdown: KnockdownFallRules.Config) -> KnockdownFallRules.Config:
+	var cfg := KnockdownFallRules.Config.new()
+	cfg.buckle_seconds = PUSH_S
+	cfg.fall_accel = knockdown.fall_accel
+	cfg.settle_angle = deg_to_rad(LIE_DEG)
+	cfg.restitution = 0.0
+	cfg.rest_omega = knockdown.rest_omega
+	cfg.com_height = COM_HEIGHT_M
+	cfg.max_entry_omega = TIP_RATE_RAD_S
+	cfg.sprawl_in_seconds = knockdown.sprawl_in_seconds
+	cfg.sprawl_splay = knockdown.sprawl_splay
+	return cfg
+
+
+# How far the tipped body has carried back from his skates along the layout, at
+# `tilt` radians: what keeps the belt over his line.
+static func com_carry_m(tilt: float) -> float:
+	return COM_HEIGHT_M * sin(tilt)
+
+
+# Lying, the skates are this far behind his line, and the block runs from them
+# BLOCK_LENGTH_M out along the layout.
+static func feet_back_m() -> float:
+	return com_carry_m(deg_to_rad(LIE_DEG))
+
+
+# How far past his line the dive reaches across a lane.
+static func reach_m() -> float:
+	return BLOCK_LENGTH_M - feet_back_m()
 
 
 # The layout (unit XZ, world) toward the cursor; along `fallback` when the cursor

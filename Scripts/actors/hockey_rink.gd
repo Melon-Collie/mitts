@@ -1162,14 +1162,11 @@ func _add_ice_ads(mat: ShaderMaterial) -> void:
 	mat.set_shader_parameter("ads_enabled", true)
 
 
-func _make_glass_material() -> StandardMaterial3D:
-	var mat := StandardMaterial3D.new()
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.albedo_color = glass_color
-	mat.roughness = 0.05
-	mat.metallic = 0.0
-	mat.metallic_specular = 1.0
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+func _make_glass_material() -> ShaderMaterial:
+	var mat := ShaderMaterial.new()
+	mat.shader = preload("res://Shaders/rink_glass.gdshader")
+	mat.set_shader_parameter("tint", glass_color)
+	mat.set_shader_parameter("pane_bottom_y", wall_height + GLASS_LIFT)
 	return mat
 
 func _make_solid_material(color: Color, emission_energy: float = 0.0) -> StandardMaterial3D:

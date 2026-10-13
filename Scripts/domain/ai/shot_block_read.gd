@@ -84,7 +84,7 @@ static func puck_coming_through(self_pos: Vector3, puck_pos: Vector3,
 # Where a 2-on-1 defender dives to take away the pass from `carrier` to
 # `receiver`, or INF when he should not: the lane is past what he can reach on
 # his feet before the pass gets there, and inside what the dive lays across
-# (DiveRules.BLOCK_LENGTH_M). Standing he has his stick plus what he can skate
+# (DiveRules.reach_m()). Standing he has his stick plus what he can skate
 # toward the lane while the pass travels to it, from rest across it.
 static func dive_point(self_pos: Vector3, self_vel: Vector3, carrier: Vector3,
 		receiver: Vector3, stick_reach: float, accel: float, pass_speed: float) -> Vector3:
@@ -100,7 +100,7 @@ static func dive_point(self_pos: Vector3, self_vel: Vector3, carrier: Vector3,
 	var q: Vector2 = a + ab * t
 	var to_lane: Vector2 = q - p
 	var d: float = to_lane.length()
-	if d > DiveRules.BLOCK_LENGTH_M:
+	if d > DiveRules.reach_m():
 		return Vector3.INF
 	var t_pass: float = (q - a).length() / maxf(pass_speed, 0.1)
 	var closing: float = 0.0 if d < 1e-4 \

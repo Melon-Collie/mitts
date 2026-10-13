@@ -65,7 +65,7 @@ const _ELBOW_RADIUS: float = 0.082
 const _HAND_RADIUS: float = 0.064
 const _CUFF_RADIUS: float = 0.065
 # How far up the forearm the cuff ring sits from the fist's center.
-const _CUFF_OFFSET_M: float = 0.075
+const _CUFF_OFFSET_M: float = 0.085
 # Arm segments at the rig's own lengths (Skater.upper_arm_length /
 # forearm_length), NOT derived from how far the grip happens to be: the two
 # hands sit at very different distances from their shoulders, so a
@@ -221,7 +221,7 @@ func _build() -> void:
 		_boots.append(_part(SkaterMeshBuilder.shared_boot_assembly()))
 		_upper_arms.append(_part(SkaterMeshBuilder.shared_arm_bone()))
 		_forearms.append(_part(SkaterMeshBuilder.shared_arm_bone()))
-		_elbows.append(_part(SkaterMeshBuilder.shared_joint_ball()))
+		_elbows.append(_part(SkaterMeshBuilder.shared_elbow_pad()))
 		_hands.append(_part(SkaterMeshBuilder.shared_glove_fist()))
 		_cuffs.append(_part(SkaterMeshBuilder.shared_cuff()))
 
@@ -502,8 +502,12 @@ func _pose_arms(is_left_handed: bool, shoulder_x: float, shoulder_y: float,
 		var elbow: Vector3 = _solve_elbow(shoulder, hand, pole, upper, fore)
 		_seat_bone(_upper_arms[i], shoulder, elbow, _ARM_RADIUS * m_upper_arm)
 		_seat_bone(_forearms[i], elbow, hand, _ARM_RADIUS * m_forearm)
+		# The pad's point out of the bend, as the live rig poses it.
+		var out: Vector3 = TwoBoneIK.bend_direction(shoulder, hand, pole)
+		var along: Vector3 = (hand - shoulder).normalized()
+		var pad := Basis(along, out, along.cross(out)) if out != Vector3.ZERO else Basis.IDENTITY
 		_elbows[i].transform = Transform3D(
-				Basis.from_scale(Vector3.ONE * _ELBOW_RADIUS * m_upper_arm), elbow)
+				pad.scaled_local(Vector3.ONE * _ELBOW_RADIUS * m_upper_arm), elbow)
 		# The fist's local +Y runs back toward the elbow — the live rig's
 		# convention, so the block's faces track the forearm. Both this and the
 		# cuff scale their basis COLUMNS: Basis.scaled() would scale in the
@@ -597,7 +601,7 @@ func _paint_body(colors: Dictionary, skin_tone: int) -> void:
 
 	_paint_texture(_torso, 0, UniformPaint.h_stripes(
 			jersey.base, jersey.stripes, jersey.yoke), _CLOTH_ROUGH)
-	_paint(_pelvis, 0, uniform.pants.base, _CLOTH_ROUGH)
+	_paint(_pelvis, 0, uniform.pants.base, UniformPaint.ROUGH_NYLON)
 	_paint(_helmet, SkaterMeshBuilder.HELMET_SURF_SHELL, uniform.helmet, _HELMET_ROUGH)
 	_paint(_helmet, SkaterMeshBuilder.HELMET_SURF_SKIN,
 			SkinToneRegistry.color_for(skin_tone), _CLOTH_ROUGH)
@@ -611,8 +615,8 @@ func _paint_body(colors: Dictionary, skin_tone: int) -> void:
 		_paint(_shoulders[i], 0, uniform.shoulders.color, _CLOTH_ROUGH)
 		# The knee takes the pants BASE solid — the rink paints it apart from
 		# the thigh, whose side stripe would ring a ball.
-		_paint(_thighs[i], 0, uniform.pants.base, _CLOTH_ROUGH)
-		_paint(_knees[i], 0, uniform.pants.base, _CLOTH_ROUGH)
+		_paint(_thighs[i], 0, uniform.pants.base, UniformPaint.ROUGH_NYLON)
+		_paint(_knees[i], 0, uniform.pants.base, UniformPaint.ROUGH_NYLON)
 		if sock_tex != null:
 			_paint_texture(_socks[i], 0, sock_tex, _CLOTH_ROUGH)
 		else:
@@ -661,9 +665,9 @@ func _paint_gear(gear: GearStyleConfig, colors: Dictionary) -> void:
 		_paint(_boots[i], SkaterMeshBuilder.BOOT_SURF_LACES, lace, _CLOTH_ROUGH)
 		_paint(_collars[i], SkaterMeshBuilder.SKATE_SURF_COLLAR, collar, _LEATHER_ROUGH)
 		_paint(_collars[i], SkaterMeshBuilder.SKATE_SURF_STRIPE, stripe, _LEATHER_ROUGH)
-		_paint(_hands[i], SkaterMeshBuilder.FIST_PART_BACK, body, _CLOTH_ROUGH)
-		_paint(_hands[i], SkaterMeshBuilder.FIST_PART_FINGERS, fingers, _CLOTH_ROUGH)
-		_paint(_cuffs[i], 0, cuff, _CLOTH_ROUGH)
+		_paint(_hands[i], SkaterMeshBuilder.FIST_PART_BACK, body, UniformPaint.ROUGH_GLOVE)
+		_paint(_hands[i], SkaterMeshBuilder.FIST_PART_FINGERS, fingers, UniformPaint.ROUGH_GLOVE)
+		_paint(_cuffs[i], 0, cuff, UniformPaint.ROUGH_GLOVE)
 
 	# Face gear is a fixed look with no kit zones — the rink's own mesh and
 	# material, and a null mesh for bare.

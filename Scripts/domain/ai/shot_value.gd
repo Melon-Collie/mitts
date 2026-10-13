@@ -242,19 +242,21 @@ static func displacement_deficit_m(keeper_pos: Vector3,
 
 
 # Each stance's structural cover at each height, plus its hands where they rest
-# across their own box's height, as a table of tops between the parts' edges.
-# The gap between his trunk or pads and either hand is narrower than a puck, so
-# a hand covers from the midline out. Built from the ice up, so a puck under
-# the pads' bottom edge reads the pads.
+# across their own boxes' height (the glove's sits above its hand point, on the
+# pocket), as a table of tops between the parts' edges. The gap between his
+# trunk or pads and either hand is narrower than a puck, so a hand covers from
+# the midline out. Built from the ice up, so a puck under the pads' bottom edge
+# reads the pads.
 static func _build_silhouettes() -> void:
 	var tops: Array[PackedFloat32Array] = []
 	var gloves: Array[PackedFloat32Array] = []
 	var blockers: Array[PackedFloat32Array] = []
 	for down: bool in [false, true]:
-		var glove := Vector2(GoalieAnatomy.GLOVE_REST_X_M,
-				GoalieAnatomy.DOWN_GLOVE_Y_M if down else GoalieAnatomy.GLOVE_REST_Y_M)
+		var glove := Vector2(GoalieAnatomy.READY_GLOVE_X_M,
+				(GoalieAnatomy.DOWN_GLOVE_Y_M if down else GoalieAnatomy.READY_GLOVE_Y_M)
+				+ GoalieAnatomy.GLOVE_BOX_OFFSET_Y_M)
 		var blocker := Vector2(
-				GoalieAnatomy.DOWN_BLOCKER_X_M if down else GoalieAnatomy.BLOCKER_REST_X_M,
+				GoalieAnatomy.DOWN_BLOCKER_X_M if down else GoalieStickRules.READY_WRIST_X_M,
 				GoalieAnatomy.DOWN_BLOCKER_Y_M if down else GoalieStickRules.upright_wrist_y())
 		var table: Array[PackedFloat32Array] = _stance_silhouette(down, glove, blocker)
 		tops.append(table[0])
@@ -265,12 +267,14 @@ static func _build_silhouettes() -> void:
 	_cover_top = tops
 
 
-# One stance's (tops, glove-side, blocker-side) table; each hand as (x, y).
+# One stance's (tops, glove-side, blocker-side) table; each hand box's centre as
+# (x, y).
 static func _stance_silhouette(down: bool, glove: Vector2,
 		blocker: Vector2) -> Array[PackedFloat32Array]:
-	var hand: float = GoalieAnatomy.hand_vertical_half_extent()
-	var edges: Array[float] = [glove.y - hand, glove.y + hand, blocker.y - hand,
-			blocker.y + hand]
+	var tall: float = GoalieAnatomy.hand_vertical_half_extent()
+	var wide: float = GoalieAnatomy.GLOVE_BOX_WIDTH_M * 0.5
+	var edges: Array[float] = [glove.y - tall, glove.y + tall, blocker.y - tall,
+			blocker.y + tall]
 	for span: Vector2 in [GoalieAnatomy.pad_span(down), GoalieAnatomy.torso_span(down),
 			GoalieAnatomy.head_span(down)]:
 		edges.append(span.x)
@@ -286,9 +290,9 @@ static func _stance_silhouette(down: bool, glove: Vector2,
 		var mid: float = maxf((bottom + top) * 0.5, GoalieAnatomy.pad_span(down).x)
 		var body: float = GoalieAnatomy.structural_cover_half_width_at(mid, down)
 		tops.append(top)
-		glove_side.append(maxf(body, glove.x + hand) if absf(mid - glove.y) <= hand
+		glove_side.append(maxf(body, glove.x + wide) if absf(mid - glove.y) <= tall
 				else body)
-		blocker_side.append(maxf(body, blocker.x + hand) if absf(mid - blocker.y) <= hand
+		blocker_side.append(maxf(body, blocker.x + wide) if absf(mid - blocker.y) <= tall
 				else body)
 		bottom = top
 	return [tops, glove_side, blocker_side]

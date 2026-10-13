@@ -53,7 +53,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/ai/skater_agent_state_machine.gd": 6574,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
 	"res://Scripts/game/game_manager.gd": 5787,
-	"res://Scripts/domain/ai/action_scoring.gd": 4475,
+	"res://Scripts/domain/ai/action_scoring.gd": 4476,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
 	# Scripts/controllers/CLAUDE.md rather than inline, and the tunable
@@ -66,8 +66,11 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
 	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3970,
-	"res://Scripts/controllers/skater_controller.gd": 3526,
-	"res://Scripts/actors/skater.gd": 2795,
+	# +33: the dive takes the knockdown's fall its own way — a thrown tip rate,
+	# no rebound, legs long, the belt kept on his line — and stays down while
+	# block is held. +5: a bot's caps carry its wrist-shot load and facing configs.
+	"res://Scripts/controllers/skater_controller.gd": 3537,
+	"res://Scripts/actors/skater.gd": 2796,
 	"res://Scripts/networking/network_manager.gd": 2855,
 	"res://Scripts/game/tutorial_manager.gd": 2067,
 	"res://Scripts/controllers/skater_ik_coordinator.gd": 950,
@@ -75,17 +78,17 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# restart the swept interaction tests where the puck lands instead of
 	# sweeping the jump. +6: the pinch hop composed onto the contest exit.
 	"res://Scripts/controllers/puck_controller.gd": 1589,
-	"res://Scripts/actors/hockey_rink.gd": 1472,
+	"res://Scripts/actors/hockey_rink.gd": 1469,
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 1409,
-	"res://Scripts/game/player_prefs.gd": 1401,
-	"res://Scripts/actors/skater_mesh_builder.gd": 1409,
+	"res://Scripts/game/player_prefs.gd": 1404,
+	"res://Scripts/actors/skater_mesh_builder.gd": 1446,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1372,
 	"res://Scripts/ui/career_stats_screen.gd": 1271,
 	"res://Scripts/domain/ai/carry_space.gd": 1255,
 	"res://Scripts/ui/lobby_manager.gd": 1247,
 	"res://Scripts/actors/puck.gd": 1102,
 	"res://Scripts/ui/side_menu.gd": 995,
-	"res://Scripts/controllers/goalie_body_config_builder.gd": 1091,
+	"res://Scripts/controllers/goalie_body_config_builder.gd": 1106,
 	"res://Scripts/ui/network_debug_overlay.gd": 956,
 	"res://Scripts/networking/network_telemetry.gd": 957,
 	"res://Scripts/controllers/local_controller.gd": 949,
@@ -110,11 +113,12 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/domain/state/player_attributes.gd": 53,
 	"res://Scripts/networking/network_telemetry.gd": 53,
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 48,
-	"res://Scripts/controllers/skater_controller.gd": 40,
+	# +1: knockdown_drop_m, which the gait's crumple and the sprawl's buckle share.
+	"res://Scripts/controllers/skater_controller.gd": 41,
 	"res://Scripts/actors/puck.gd": 43,
 	"res://Scripts/domain/state/game_state_machine.gd": 39,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 37,
-	"res://Scripts/actors/skater_mesh_builder.gd": 29,
+	"res://Scripts/actors/skater_mesh_builder.gd": 30,
 	"res://Scripts/controllers/puck_controller.gd": 29,
 	"res://Scripts/game/shot_on_goal_tracker.gd": 26,
 	"res://Scripts/actors/goalie.gd": 26,

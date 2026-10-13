@@ -757,12 +757,12 @@ func _check_body_blocks(skaters: Array, puck_curr: Vector3, now: float) -> bool:
 		var axis := Vector2(skater.global_position.x, skater.global_position.z)
 		var reach: float = skater.get_body_block_radius() + GameRules.PUCK_COLLISION_RADIUS
 		var y_range: Vector2 = skater.get_body_block_y_range()
-		# A diver lies along his layout with his stick out past him: the block is
-		# the point of that low line nearest the puck's path, not a cylinder at
-		# his skates.
+		# A diver lies along his layout across his line, skates behind it and stick
+		# out past him: the block is the point of that low line nearest the puck's
+		# path, not a cylinder at his skates.
 		if skater.is_diving:
-			axis = DiveRules.block_point(_prev_puck_pos, puck_curr, axis,
-					axis + skater.dive_layout * DiveRules.BLOCK_LENGTH_M)
+			axis = DiveRules.block_point(_prev_puck_pos, puck_curr, axis - skater.dive_layout
+					* DiveRules.feet_back_m(), axis + skater.dive_layout * DiveRules.reach_m())
 			reach = DiveRules.BODY_RADIUS_M + GameRules.PUCK_COLLISION_RADIUS
 			y_range = Vector2(0.0, DiveRules.SEAL_HEIGHT_M)
 		if PuckInteractionRules.check_body_block(

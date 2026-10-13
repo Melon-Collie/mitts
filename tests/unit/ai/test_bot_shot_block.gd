@@ -128,31 +128,31 @@ func _dive(s: WorldSnapshot, rush: AIRushRead) -> InputState:
 
 
 func test_the_last_defender_dives_across_a_pass_he_cannot_reach() -> void:
-	var input: InputState = _dive(_rush_snap(Vector3(0.5, 0.0, 17.0), 19.0),
+	var input: InputState = _dive(_rush_snap(Vector3(0.5, 0.0, 17.8), 19.0),
 			_rush(AIRushRead.Numbers.DOWN_ONE))
 	assert_true(input.stance_held and input.block_held, "the dive chord")
 	assert_gt(input.mouse_world_pos.z, 19.0, "laid out across the lane, toward it")
 
 
 func test_no_dive_outside_shooting_range() -> void:
-	var input: InputState = _dive(_rush_snap(Vector3(0.5, 0.0, 10.0), 12.0),
+	var input: InputState = _dive(_rush_snap(Vector3(0.5, 0.0, 10.8), 12.0),
 			_rush(AIRushRead.Numbers.DOWN_ONE))
 	assert_false(input.block_held)
 
 
 func test_no_dive_at_even_numbers() -> void:
-	var input: InputState = _dive(_rush_snap(Vector3(0.5, 0.0, 17.0), 19.0),
+	var input: InputState = _dive(_rush_snap(Vector3(0.5, 0.0, 17.8), 19.0),
 			_rush(AIRushRead.Numbers.EVEN_OR_UP))
 	assert_false(input.block_held)
 
 
 func test_no_dive_when_a_teammate_is_nearer_the_lane() -> void:
-	var s: WorldSnapshot = _rush_snap(Vector3(0.5, 0.0, 17.0), 19.0)
+	var s: WorldSnapshot = _rush_snap(Vector3(0.5, 0.0, 17.8), 19.0)
 	s.skater_states[MATE_ID].position = Vector3(0.0, 0.0, 19.0)
 	assert_false(_dive(s, _rush(AIRushRead.Numbers.DOWN_ONE)).block_held)
 
 
 func test_a_downed_bot_does_nothing() -> void:
-	var s: WorldSnapshot = _rush_snap(Vector3(0.5, 0.0, 17.0), 19.0)
+	var s: WorldSnapshot = _rush_snap(Vector3(0.5, 0.0, 17.8), 19.0)
 	s.skater_states[SELF_ID].knockdown_timer = 0.5
 	assert_false(_dive(s, _rush(AIRushRead.Numbers.DOWN_ONE)).block_held)

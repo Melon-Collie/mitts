@@ -10,21 +10,23 @@ const _EPS: float = 0.005  # envelope tolerance, metres
 
 
 # label → [mesh, max AABB size]. Envelopes come from the primitives in
-# Goalie.tscn: body box 0.52×0.72×0.28, head sphere r 0.17 h 0.26, pad box
-# 0.28×0.84×0.2, blocker box 0.2×0.3×0.05, hand sphere r 0.05. The trapper
-# parts (rim / pocket / cuff) are sculpted past their original primitives on
-# purpose but must stay near the glove's 0.25×0.25×0.2 collision box. The connector tube is unit-sized (its stretch is basis scale).
+# Goalie.tscn: body box 0.62×0.72×0.28 (the pants' flare runs 0.31 deep), pad box 0.28×0.84×0.2, blocker box
+# 0.2×0.39×0.05. The mask, the trapper and the collider-free parts (fist,
+# cage) are drawn as the gear they are rather than as their
+# colliders, and are bounded at that size: the mask a goalie's (its head box is
+# sized to it), the trapper's hand (its 0.25 × 0.32 box likewise), the cage the
+# face opening it frames (brow to cheek, plus its wire).
+# The connector tube is unit-sized (its stretch is basis scale).
 func _parts() -> Dictionary:
 	return {
-		"body": [GoalieMeshBuilder._build_body(), Vector3(0.52, 0.72, 0.28)],
-		"mask": [GoalieMeshBuilder._build_mask(), Vector3(0.34, 0.26, 0.34)],
+		"body": [GoalieMeshBuilder._build_body(), Vector3(0.63, 0.72, 0.31)],
+		"mask": [GoalieMeshBuilder._build_mask(), Vector3(0.24, 0.33, 0.29)],
 		"pad": [GoalieMeshBuilder._build_pad(), Vector3(0.28, 0.84, 0.20)],
-		"glove_ring": [GoalieMeshBuilder._build_glove_ring(), Vector3(0.30, 0.07, 0.28)],
-		"glove_pocket": [GoalieMeshBuilder._build_glove_pocket(), Vector3(0.24, 0.12, 0.22)],
-		"glove_cuff": [GoalieMeshBuilder._build_glove_cuff(), Vector3(0.16, 0.15, 0.09)],
-		"blocker": [GoalieMeshBuilder._build_blocker(), Vector3(0.20, 0.30, 0.05)],
-		"blocker_hand": [GoalieMeshBuilder._build_blocker_hand(), Vector3(0.10, 0.10, 0.10)],
-		"connector": [GoalieMeshBuilder.shared_connector_tube(), Vector3(0.16, 1.0, 0.16)],
+		"trapper": [GoalieMeshBuilder._build_trapper(), Vector3(0.25, 0.29, 0.13)],
+		"cage": [GoalieMeshBuilder._build_cage(), Vector3(0.15, 0.14, 0.07)],
+		"blocker": [GoalieMeshBuilder._build_blocker(), Vector3(0.20, 0.39, 0.05)],
+		"blocker_hand": [GoalieMeshBuilder._build_blocker_hand(), Vector3(0.10, 0.12, 0.08)],
+		"connector": [GoalieMeshBuilder.shared_connector_tube(), Vector3(0.21, 1.0, 0.21)],
 	}
 
 
@@ -78,6 +80,20 @@ func test_body_keeps_the_jersey_shader_contract() -> void:
 	var aabb: AABB = mesh.get_aabb()
 	assert_almost_eq(aabb.size.y, 0.72, 0.001,
 			"stripes map over object Y — the body must keep the box's full height span")
+
+
+func test_blocker_board_fills_its_collider() -> void:
+	# The board is drawn to the save box it is: a board drawn smaller than its
+	# collider stops pucks short of the paint, and one drawn larger lets them
+	# through it.
+	var g: Node = load("res://Scenes/Goalie.tscn").instantiate()
+	var shape: BoxShape3D = (g.get_node("BlockArm/Blocker/BlockerPadCollider")
+			as CollisionShape3D).shape as BoxShape3D
+	var board: Vector3 = GoalieMeshBuilder._build_blocker().get_aabb().size
+	for axis in 3:
+		assert_almost_eq(board[axis], shape.size[axis], _EPS,
+				"blocker board axis %d must match its collider" % axis)
+	g.free()
 
 
 func _signed_volume(mesh: ArrayMesh) -> float:

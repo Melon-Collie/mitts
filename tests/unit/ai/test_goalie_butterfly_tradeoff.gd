@@ -84,9 +84,9 @@ extends GutTest
 # ── FIXED (2026-07): the reach ceiling is now chest-anchored ─────────────────
 # `_reachable_hand_y` caps the hand at `body_pos.y + arm_reach_above_chest`,
 # where the chest anchor is whatever the pose in play already authored (READY
-# 1.06, STANDING 1.22, BUTTERFLY 0.40). 1.06 + 0.49 = 1.55 — the old flat
-# ceiling — so upright reach is unchanged BY CONSTRUCTION and only the down
-# postures give anything up.
+# 0.96, STANDING 1.22, BUTTERFLY 0.40). READY's 0.96 + 0.49 = 1.45 clears the
+# crossbar, so upright the whole net stays in reach and only the down postures
+# give anything up.
 #
 # WHAT THE FIX ACTUALLY MOVED — exactly two cells, both BUTTERFLY, both with the
 # puck arriving high. Everything else in this instrument is identical:
