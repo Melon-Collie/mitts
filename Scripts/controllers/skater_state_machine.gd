@@ -66,7 +66,7 @@ class Callbacks:
 	# Blade / IK
 	var apply_blade_from_mouse: Callable          # (input: InputState, delta: float)
 	var apply_wrister_aim_blade: Callable         # (input: InputState, delta: float) — holds the blade at the shot origin while the torso coils
-	var wrister_chirality_seed: Callable          # (input: InputState, origin_world: Vector3) -> Vector3 — bearing the swing tracker seeds from; MUST match the vector _update_wrister_charge feeds (origin→cursor, the shot line)
+	var wrister_swing_seed: Callable              # (input: InputState, origin_world: Vector3) -> Vector3 — bearing the stroke tracker seeds from; MUST match the vector _update_wrister_charge feeds (origin→cursor, the shot line)
 	var apply_slapper_blade_position: Callable    # ()
 	var apply_block_blade_position: Callable      # ()
 	var apply_wrister_follow_through: Callable    # ()
@@ -302,18 +302,17 @@ func _enter_wrister_aim(skater: Skater, input: InputState) -> void:
 	# SkaterAimingBehavior.wrister_origin_world. Anchoring here, before the blade
 	# sweeps, is what keeps origin→cursor stable through the stroke.
 	var origin_world: Vector3 = skater.get_blade_contact_global()
-	# Skater position at the pin (XZ): the reference the chirality read's
-	# locomotion compensation measures translation from (ChargeTracking.swing_anchor).
+	# Skater position at the pin (XZ): what the frozen puck and the stroke's
+	# anchor both ride along from (ChargeTracking.swing_anchor, WristerLoad).
 	var origin_skater_pos: Vector3 = skater.global_position
 	origin_skater_pos.y = 0.0
-	# Chirality (FH/BH) baseline: seed from the SAME vector the charge tick will
-	# feed — origin→cursor, the shot line itself — so the first swing_step is
-	# source-to-source and doesn't bank a spurious rotation from a bearing jump.
-	# Computed off the origin captured just above, so the seed and the per-tick
-	# reads share one anchor exactly.
+	# Stroke baseline: seed from the SAME vector the charge tick will feed —
+	# origin→cursor, the shot line itself — so the first step banks no spurious
+	# travel from a bearing jump. Computed off the origin captured just above, so
+	# the seed and the per-tick reads share one anchor exactly.
 	var swing_bearing: Vector3
-	if _cb.wrister_chirality_seed.is_valid():
-		swing_bearing = _cb.wrister_chirality_seed.call(input, origin_world)
+	if _cb.wrister_swing_seed.is_valid():
+		swing_bearing = _cb.wrister_swing_seed.call(input, origin_world)
 	else:
 		swing_bearing = input.mouse_world_pos - origin_world
 	swing_bearing.y = 0.0

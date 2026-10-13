@@ -548,11 +548,9 @@ func _step_def_for(step_id: int) -> TutorialStep:
 			return _step(
 				"Backhand",
 				_pick(
-					"Same wrister, other face of the blade: hold {shoot} and curl the drag across your body, then release — that's the backhand. It comes off softer than your forehand, but in tight it's the release you already have.",
-					"Same wrister, other face of the blade: hold {shoot} and point the stick across your body, then release — that's the backhand. It comes off softer than your forehand, but in tight it's the release you already have."),
-				_pick(
-					"A straight-line drag always reads as forehand — the backhand is the deliberate curl around your body. It won't beat anyone with pace, so pick your spot.",
-					"Pointing straight ahead always reads as forehand — the backhand is aiming back across your body. It won't beat anyone with pace, so pick your spot."))
+					"Same wrister, other face of the blade: pull the puck across to your backhand side, hold {shoot} and drag toward the net, then release — that's the backhand. It comes off softer than your forehand, but in tight it's the release you already have.",
+					"Same wrister, other face of the blade: pull the puck across to your backhand side, hold {shoot} and point the stick at the net, then release — that's the backhand. It comes off softer than your forehand, but in tight it's the release you already have."),
+				"Where the puck sits picks the hand: out on your stick side it's a forehand, across your body it's a backhand. It won't beat anyone with pace, so pick your spot.")
 		STEP_SHOOT_TARGETS:
 			# Live copy is set per-wave by _show_targets_wave; this is the wave-0 default.
 			return _step(
@@ -1510,8 +1508,9 @@ func _on_shooting_shot(_dir: Vector3, _power: float, is_slapper: bool) -> void:
 			_last_shot_qualifies = (not is_slapper) and TutorialShotRules.is_dragged_wrister(
 					_wrist_peak_charge, _WRIST_CHARGE_QUALIFY)
 		STEP_SHOOT_BACKHAND:
-			# The release path classifies every wrister FH/BH from the sweep's
-			# chirality and stamps last_release_hand just before this signal
+			# The release path classifies every wrister FH/BH from the way the
+			# torso turns to drive it (WristerLoad) and stamps last_release_hand
+			# just before this signal
 			# fires ("" for quick passes / slappers — no backhand concept there).
 			_last_shot_qualifies = (not is_slapper) \
 					and _local_controller.last_release_hand == "BH"
@@ -1650,9 +1649,8 @@ func _shooting_tick(delta: float) -> void:
 				# The backhand drill explains why the goal didn't count — a
 				# silent reset there reads as the drill eating a clean finish.
 				if _current_step_id() == STEP_SHOOT_BACKHAND:
-					_hud.set_alert(_pick(
-						"In — but off the forehand. Curl the drag around your body and let it go from the backhand.",
-						"In — but off the forehand. Point the stick back across your body and let it go from the backhand."))
+					_hud.set_alert(
+							"In — but off the forehand. Pull the puck across your body first and let it go from the backhand.")
 				_begin_restage()
 			return
 

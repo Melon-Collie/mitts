@@ -468,8 +468,8 @@ var shot_power_t: float = 1.0
 # where in the blade's handling envelope the puck should sit at release. ZERO for
 # the un-relocated release. The state machine folds it into the wind-up endpoint
 # offsets so the blade actually carries the puck there (a backhand-side offset
-# sweeps in the backhand chirality and pays the real power penalty — priced by
-# the sampler).
+# is committed as a backhand and pays the real power penalty — priced by the
+# sampler).
 var shot_release_offset: Vector3 = Vector3.ZERO
 
 # Cached carry destination from the most recent re-eval. Read by the

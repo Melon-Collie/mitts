@@ -1151,7 +1151,7 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	var _cb := SkaterStateMachine.Callbacks.new()
 	_cb.apply_blade_from_mouse = _ik.apply_blade_from_mouse
 	_cb.apply_wrister_aim_blade = _apply_wrister_aim_blade
-	_cb.wrister_chirality_seed = _wrister_chirality_seed
+	_cb.wrister_swing_seed = _wrister_swing_seed
 	_cb.apply_slapper_blade_position = _shot_pose.apply_slapper_blade_position
 	_cb.apply_block_blade_position = _shot_pose.apply_block_blade_position
 	_cb.apply_wrister_follow_through = _shot_pose.apply_wrister_follow_through
@@ -2759,14 +2759,14 @@ func _apply_wrister_aim_blade(input: InputState, delta: float) -> void:
 	skater.set_wrister_address(_wrister_aim_dir(input))
 	_ik.apply_blade_from_mouse(input, delta, true, hold_target)
 
-# Bearing the swing-chirality tracker seeds from at charge start: origin→cursor,
-# the SHOT LINE. MUST mirror _update_wrister_charge's chirality source so the first
-# swing_step is source-to-source and banks no spurious rotation from a bearing jump.
-# (At the pin the swing_anchor translation is zero, so raw origin→cursor IS that
-# source for both anchor frames.)
-# The origin is passed in (rather than read off _aiming) because the state machine
-# captures it on this same edge, a line before reset_wrister stores it.
-func _wrister_chirality_seed(input: InputState, origin_world: Vector3) -> Vector3:
+# Bearing the stroke-travel tracker seeds from at charge start: origin→cursor,
+# the SHOT LINE. MUST mirror _update_wrister_charge's bearing so the first step
+# banks no spurious travel from a bearing jump. (At the pin the swing_anchor
+# translation is zero, so raw origin→cursor IS that bearing for both anchor
+# frames.) The origin is passed in (rather than read off _aiming) because the
+# state machine captures it on this same edge, a line before reset_wrister
+# stores it.
+func _wrister_swing_seed(input: InputState, origin_world: Vector3) -> Vector3:
 	var bearing: Vector3 = input.mouse_world_pos - origin_world
 	bearing.y = 0.0
 	return bearing
@@ -2942,29 +2942,13 @@ func _update_wrister_charge(input: InputState) -> void:
 	# gated by reachable space (a cursor past the reach limit pins the target →
 	# zero delta) while staying deterministic, so host and client agree on charge.
 	var blade_world: Vector3 = _ik.last_target_blade_world
-	# Chirality (forehand/backhand) source for HUMANS: the signed angular sweep of
-	# the SHOT LINE — origin→cursor — over the stroke (ChargeTracking.swing_step,
-	# the clockwise check). The blade is frozen and can't sweep, so the cursor is
-	# the only sweep, and "bring the puck back on the forehand and shoot forward"
-	# classifies as a forehand by its net rotation (not by which side it started
-	# on). (Bots commit their hand directly — see _wrister_is_backhand — so this is
-	# cosmetic for them.)
-	#
-	# The rotation is measured about the pinned ORIGIN, not about the body. That is
-	# the vector the shot actually fires along (_wrister_aim_dir), so its sweep is
-	# the wrist roll being classified; a body-relative bearing rotates differently
-	# by the ~1 m blade parallax, and for a gamepad — whose cursor is anchored on
-	# the puck so the stick bearing IS the shot line's bearing — measuring about
-	# the body would re-introduce that parallax as swing the player never made.
-	#
-	# For a MOUSE the anchor additionally tracks the skater's translation since the
-	# pin (ChargeTracking.swing_anchor): the mouse's world point rides the
-	# skater-following camera, so about a world-pinned anchor mere skating reads as
-	# swing — retreating drags the cursor toward the origin, where the shrinking
-	# bearing radius amplifies the drift into forehand→backhand misreads. The pad's
-	# shot cursor is world-anchored on the pin itself and needs no compensation;
-	# commit_wrister_power (its wire-visible marker) picks the frame, so host replay
-	# of a remote shooter classifies identically.
+	# The stroke's bearing is the SHOT LINE — origin→cursor, the vector the shot
+	# fires along (_wrister_aim_dir) — measured about the pinned origin rather
+	# than the body, whose ~1 m blade parallax would bank travel nobody swept.
+	# For a mouse the anchor also rides the skater's translation since the pin
+	# (ChargeTracking.swing_anchor), because the cursor's world point rides the
+	# skater-following camera; commit_wrister_power picks the frame, so host
+	# replay of a remote shooter reads identically.
 	var swing_anchor: Vector3 = ChargeTracking.swing_anchor(
 			_aiming.wrister_origin_world, skater.global_position,
 			_aiming.wrister_origin_skater_pos, input.commit_wrister_power)

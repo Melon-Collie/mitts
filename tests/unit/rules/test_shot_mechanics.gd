@@ -69,9 +69,8 @@ func test_wrister_full_speed_sweep_maxes_power() -> void:
 
 func test_wrister_backhand_penalty() -> void:
 	var cfg := _wrister_cfg()
-	# is_backhand is computed by the controller from the swing chirality
-	# (ShotMechanics.is_backhand_from_swing) at release time. These calls
-	# directly express the classification result.
+	# is_backhand is the controller's call (WristerLoad for a human) at release
+	# time. These calls directly express the classification result.
 	var rh_forehand: ShotMechanics.ShotResult = ShotMechanics.release_wrister(
 		Vector3.ZERO, Vector3(10, 0, 0),
 		Vector3(0.5, 0, 0),
@@ -311,39 +310,6 @@ func test_wrister_default_travel_bypasses_gate() -> void:
 		false, 0, cfg, Vector3(1, 0, 0), false, FULL_SWEEP)
 	assert_almost_eq(r.power, cfg.max_wrister_power, 0.01,
 		"default (INF) stroke_travel means no gate")
-
-# ── Forehand/backhand from swing chirality ───────────────────────────────────
-# Convention (empirically flippable): a POSITIVE net swing rotation is a
-# forehand for a right-handed shooter, mirrored for lefties. The classifier
-# reads only the accumulated rotation sign — the sweep geometry that produced
-# it is tested against ChargeTracking.swing_step in test_charge_tracking.
-
-func test_swing_positive_is_forehand_righty_backhand_lefty() -> void:
-	assert_false(ShotMechanics.is_backhand_from_swing(0.8, false),
-		"positive swing is a RH forehand")
-	assert_true(ShotMechanics.is_backhand_from_swing(0.8, true),
-		"positive swing is a LH backhand (mirrored)")
-
-func test_swing_negative_is_backhand_righty_forehand_lefty() -> void:
-	assert_true(ShotMechanics.is_backhand_from_swing(-0.8, false),
-		"negative swing is a RH backhand")
-	assert_false(ShotMechanics.is_backhand_from_swing(-0.8, true),
-		"negative swing is a LH forehand (mirrored)")
-
-func test_swing_deadband_defaults_forehand() -> void:
-	# A small net rotation (a near-straight push) stays forehand for either hand.
-	assert_false(ShotMechanics.is_backhand_from_swing(-0.2, false, 0.35),
-		"RH: rotation inside the deadband defaults forehand")
-	assert_false(ShotMechanics.is_backhand_from_swing(0.2, true, 0.35),
-		"LH: rotation inside the deadband defaults forehand")
-	assert_true(ShotMechanics.is_backhand_from_swing(-0.5, false, 0.35),
-		"RH: rotation past the deadband is a backhand")
-
-func test_swing_zero_is_forehand() -> void:
-	assert_false(ShotMechanics.is_backhand_from_swing(0.0, false),
-		"no rotation → forehand default")
-	assert_false(ShotMechanics.is_backhand_from_swing(0.0, true),
-		"no rotation → forehand default (LH)")
 
 # ── Slapper ──────────────────────────────────────────────────────────────────
 

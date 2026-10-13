@@ -39,7 +39,7 @@ func _make_callbacks() -> SkaterStateMachine.Callbacks:
 	var noop_2: Callable = func(_a: Variant, _b: Variant) -> void: pass
 	cb.apply_blade_from_mouse = noop_2
 	cb.apply_wrister_aim_blade = noop_2
-	cb.wrister_chirality_seed = func(_i: Variant, _o: Variant) -> Vector3: return Vector3.FORWARD
+	cb.wrister_swing_seed = func(_i: Variant, _o: Variant) -> Vector3: return Vector3.FORWARD
 	cb.apply_slapper_blade_position = noop
 	cb.apply_block_blade_position = noop
 	cb.apply_wrister_follow_through = noop

@@ -17,7 +17,7 @@ class_name GamepadAimRules
 ##     shot line is origin→cursor from that same puck, so anchoring there is what
 ##     makes the shot go exactly where the stick points — a held aim, decoupled
 ##     from motion and from camera zoom — and what makes the stick's bearing the
-##     shot line's bearing, so the swing-chirality forehand/backhand read needs no
+##     shot line's bearing, so the load's forehand/backhand read needs no
 ##     gamepad branch. Power rides the TRIGGER's analog travel (below), not the
 ##     stick, so shooting needs no flick, drag timing, or travel gate.
 ##

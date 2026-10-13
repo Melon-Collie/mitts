@@ -500,8 +500,6 @@ var _blade_reach: float = BLADE_REACH_M
 # 0.18 s arm) has barely fired, so a set, squared goalie genuinely covers a
 # straight-on range shot (the bot shouldn't fire it) while lateral lag, point-blank
 # arm-deploy gaps, and the goalie-hole geometry still open the shots it SHOULD take.
-# 15 ticks still lets the charge tracker accumulate the forehand/backhand swing
-# chirality.
 const BOT_WRISTER_CHARGE_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 8   # ~125 ms
 
 # Straight-line span (m) of the synthesized wind-up gesture — how far the bot's
@@ -552,12 +550,9 @@ const BOT_WRISTER_LOOKAHEAD_S: float = (
 # line is offset perpendicular to aim_dir). 0.15 m is small enough to
 # stay inside ROM even at the bot's max charge target, but large enough
 # that the wind-up reads as a forehand pose rather than a straight
-# back-to-front jab through the body's centerline. The forehand/backhand
-# classifier reads the SWING CHIRALITY (the rotational sense of the blade
-# sweep — ShotMechanics.is_backhand_from_swing): a bot windup that sweeps
-# from this forehand-side offset in toward the aim line rotates in the
-# forehand sense, so the shot scores forehand and takes no penalty. A
-# flipped (backhand-side) windup sweeps the other way and reads backhand.
+# back-to-front jab through the body's centerline. Cosmetic: the hand the
+# shot is charged as is the bot's commit (bot_wrister_backhand), and a
+# flipped (backhand-side) windup is drawn for a backhand commit.
 const BOT_WRISTER_SIDE_OFFSET_M: float = 0.15
 
 # Side-selection for wrister wind-up — defender within poke reach
@@ -838,8 +833,8 @@ var _shot_power_committed: float = 1.0
 # Folded into the wind-up endpoint offsets at charge start so the blade carries
 # the puck to the sampled spot, and into the locked aim direction so the shot
 # fires at the hole FROM that spot. Its lateral side also owns the wind-up side
-# sign (a backhand-side offset sweeps in the backhand chirality and pays the
-# real power penalty the sampler priced).
+# sign and the committed hand (a backhand-side offset is charged as the
+# backhand the sampler priced).
 var _shot_release_offset_locked: Vector3 = Vector3.ZERO
 
 # Last-resort DUMP target, mirrored from `_carrier.dump_target` at commit and
@@ -3587,8 +3582,8 @@ func _state_shoot_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: 
 
 		# Pick wind-up side. A committed release offset OWNS the side: the
 		# sampler already priced its lateral side (a backhand-side offset was
-		# scored at backhand pace), so the sweep must run on that side for the
-		# chirality classifier to charge the same shot — poke-avoidance must
+		# scored at backhand pace), so the sweep must run on that side and commit
+		# that hand to charge the same shot — poke-avoidance must
 		# not flip it to the opposite side of a relocation the score depends
 		# on. Otherwise forehand by default, flipped to backhand if a defender
 		# is within stick reach AND clearly on the forehand side at any point of

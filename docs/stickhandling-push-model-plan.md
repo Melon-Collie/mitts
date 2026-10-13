@@ -173,12 +173,12 @@ First cut keyed the side off the swing-chirality *label* mapped to the
 body-relative carry arrangement — wrong whenever the label's natural pose
 disagreed with where the aim line actually sat (the "wrong handedness on some
 shots" report). Geometric trailing-side is handedness-free and cannot land on
-the wrong side of the puck; the chirality classifier keeps its real job (the
-release's backhand power penalty).
+the wrong side of the puck. (The release's hand is no longer a swing read at
+all — it comes from where the puck sits against the aim, `WristerLoad`.)
 
 Mesh-only by design: the marker, pin, release spawn, and the pinned aim
 origin are untouched (`wrister_origin_world` is load-bearing for the
-gamepad's shot-cursor anchor and the chirality bearing, so it must not
+gamepad's shot-cursor anchor and the wrist shot's load, so it must not
 move). On aim exit the address becomes the real carry side, so there is no
 pop.
 

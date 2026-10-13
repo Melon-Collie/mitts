@@ -93,9 +93,8 @@ Things to watch in the playtest:
   Hard shots come from across the facing, or straight after pulling the puck
   wide. If straight-ahead shots feel too weak, the lever is what the body faces
   while carrying, not the load.
-- **The cursor-sweep hand read is no longer used.** `ChargeTracking`'s chirality,
-  `swing_rotation` and `ShotMechanics.is_backhand_from_swing` are dead until this
-  model is kept or reverted.
+- **The cursor-sweep hand read is removed.** The load names the hand, so
+  `ChargeTracking` keeps only the stroke travel and the variance reset.
 
 Bots are untouched: they commit hand and power, and their scoring does not price
 the load. They join in Phase 3.
