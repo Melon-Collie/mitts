@@ -28,14 +28,8 @@ const POKE_RADIUS: float = GameRules.POKE_RADIUS_M
 @export var contest_draw_timing_min_weight: float = 0.7
 # Stick-lift geometry: how close the attacker's (lifted) blade must be to the
 # carrier's hand→blade shaft, and how far below it, to hook under and pop it up.
-# Slightly wider than POKE_RADIUS — the lifted blade meets the shaft up off the
-# ice rather than the puck on it.
-const STICK_LIFT_RADIUS: float = 0.45
+const STICK_LIFT_RADIUS: float = GameRules.STICK_LIFT_RADIUS_M
 const STICK_LIFT_UNDER_MARGIN: float = 0.0
-# How long a forced stick-lift keeps the victim's blade popped up after the hook
-# lands — enough to read as a lift and to deny an instant re-grab on top of the
-# reattach cooldown apply_stick_lift_strip already sets.
-const STICK_LIFT_FORCED_LIFT_S: float = 0.4
 
 @export var extrapolation_max_ms: float = 50.0
 # Below this speed (m/s) the along-track decomposition in PuckHandoffRules is
@@ -159,11 +153,11 @@ var _pred_cue_boards_prev: bool = false
 var _pred_cue_goalie_prev: bool = false
 var _pred_cue_frame_ms: int = -10_000
 const _PRED_CUE_STALE_MS: int = 250
-# Scoped true only while a stick-lift strip is being applied, so the synchronous
-# puck_stripped_from handlers (sound + victim notify) can tell a stick lift apart
-# from a poke/body-check strip and pick the right cue. Read via
-# is_processing_stick_lift(); always reset immediately after apply_stick_lift_strip.
-var _processing_stick_lift: bool = false
+# The victim's forced lift, set only while a stick-lift strip is being applied,
+# so the synchronous puck_stripped_from handlers (sound + victim notify) can tell
+# a stick lift apart from a poke/body-check strip and send its length. Read via
+# stick_lift_forced_seconds(); always zeroed right after apply_stick_lift_strip.
+var _processing_stick_lift_s: float = 0.0
 
 # Reused scratch objects for the per-tick interpolation lookup + output.
 var _scratch_bracket := BufferedStateInterpolator.BracketResult.new()
@@ -448,23 +442,34 @@ func apply_lag_comp_poke(checker: Skater, expected_ex_carrier: Skater) -> void:
 
 # Called after StickLiftClaimResolver validates a client stick-lift claim
 # against the state buffer. Same idempotency guards as apply_lag_comp_poke
-# (carrier null / claimant became carrier / carrier changed). On success the
-# victim's blade is popped up and the puck is stripped via the poke path.
-func apply_lag_comp_stick_lift(checker: Skater, expected_ex_carrier: Skater) -> void:
+# (carrier null / claimant became carrier / carrier changed). `quality` is the
+# hook's, judged on the rewound geometry.
+func apply_lag_comp_stick_lift(checker: Skater, expected_ex_carrier: Skater,
+		quality: float) -> void:
 	if not is_instance_valid(checker) or puck.carrier == null:
 		return
 	if puck.carrier == checker:
 		return
-	if puck.carrier != expected_ex_carrier:
+	if puck.carrier != expected_ex_carrier or checker.is_stick_check_cooling():
 		return
-	puck.carrier.force_blade_lift(STICK_LIFT_FORCED_LIFT_S)
-	_processing_stick_lift = true
-	puck.apply_stick_lift_strip(checker)
-	_processing_stick_lift = false
+	_land_stick_lift(checker, quality)
 
 
-func is_processing_stick_lift() -> bool:
-	return _processing_stick_lift
+# Both detection paths land here: the carrier's blade is forced up for as long
+# as the hook earned, and the puck carries on without it. The lifter goes on the
+# shared stick-check cooldown, so the same press held into TIE can't tie the
+# stick it just lifted.
+func _land_stick_lift(checker: Skater, quality: float) -> void:
+	checker.start_stick_check_cooldown()
+	var forced_s: float = StickCheckRules.forced_lift_seconds(quality)
+	puck.carrier.force_blade_lift(forced_s)
+	_processing_stick_lift_s = forced_s
+	puck.apply_stick_lift_strip(checker, forced_s + StickCheckRules.REGRAB_MARGIN_S)
+	_processing_stick_lift_s = 0.0
+
+
+func stick_lift_forced_seconds() -> float:
+	return _processing_stick_lift_s
 
 
 # Two blades reach the same loose puck at once (near-simultaneous client claims,
@@ -547,8 +552,10 @@ func _find_contesting_corraller(first: Skater, skaters: Array, puck_curr: Vector
 				or skater.current_shot_state == SkaterStateMachine.State.FOLLOW_THROUGH:
 			continue
 		# blade_up / deflect_intent already withdraw the stick; a committed body-check
-		# does the same (stick off the ice — no corral).
-		if skater.blade_up or skater.deflect_intent or skater.hit_committed:
+		# and a stick lift in progress do the same (stick off the ice — no corral).
+		if skater.blade_up or skater.deflect_intent or skater.hit_committed \
+				or skater.stick_tied or skater.pin_role != BoardPinRules.Role.NONE \
+				or StickCheckRules.is_stick_busy(skater.stick_check_phase):
 			continue
 		if not PuckReceptionRules.blade_can_interact(skater.blade_up, puck_airborne):
 			continue
@@ -593,7 +600,9 @@ func _check_interactions() -> void:
 					carrier_skater.get_top_hand_position())
 			var carrier_blade: Vector3 = carrier_skater.get_blade_contact_global()
 			for skater: Skater in skaters:
-				if skater == puck.carrier or skater.is_ghost or skater.is_knocked_down:
+				# Down plays no puck — except a diver's stick, laid out to knock it away.
+				if skater == puck.carrier or skater.is_ghost \
+						or (skater.is_knocked_down and not skater.is_diving):
 					continue
 				var checker_team: int = _team_id_by_skater.get(skater, -1)
 				if not PuckCollisionRules.can_poke_check(carrier_team, checker_team):
@@ -610,19 +619,21 @@ func _check_interactions() -> void:
 				if skater.current_shot_state == SkaterStateMachine.State.SHOT_BLOCKING:
 					continue
 				var blade_curr: Vector3 = skater.get_blade_contact_global()
-				if skater.blade_up:
-					# Stick lift: the attacker's lifted blade hooked under the
-					# carrier's shaft pops their blade up and strips the puck. A
-					# lifted blade pokes nothing the normal way (it's off the ice),
-					# so it's stick-lift-or-skip for this checker.
-					if PuckInteractionRules.check_blade_under_stick(
+				# Stick lift: a hooking blade under the carrier's shaft pops their
+				# blade up and strips the puck. A stick mid-lift or otherwise up
+				# (a raised deflect, a forced pop) pokes nothing — it's off the ice.
+				if skater.stick_check_phase == StickCheckRules.Phase.HOOK:
+					if not skater.is_stick_check_cooling() and PuckInteractionRules.check_blade_under_stick(
 							blade_curr, carrier_hand, carrier_blade,
 							STICK_LIFT_RADIUS, STICK_LIFT_UNDER_MARGIN):
-						carrier_skater.force_blade_lift(STICK_LIFT_FORCED_LIFT_S)
-						_processing_stick_lift = true
-						puck.apply_stick_lift_strip(skater)
-						_processing_stick_lift = false
+						_land_stick_lift(skater, StickCheckRules.hook_quality(
+								PuckInteractionRules.distance_to_shaft(
+										blade_curr, carrier_hand, carrier_blade),
+								STICK_LIFT_RADIUS))
 						break
+					continue
+				if skater.blade_up or skater.stick_tied or skater.pin_role != BoardPinRules.Role.NONE \
+						or StickCheckRules.is_stick_busy(skater.stick_check_phase):
 					continue
 				var blade_prev: Vector3 = skater.get_prev_blade_contact_global()
 				if PuckInteractionRules.check_poke(_prev_puck_pos, puck_curr,
@@ -639,7 +650,8 @@ func _check_interactions() -> void:
 			# On-ice/off-ice gate is invariant across skaters this tick.
 			var puck_airborne: bool = puck.is_airborne()
 			for skater: Skater in skaters:
-				if skater.is_ghost or skater.is_knocked_down or puck.is_on_cooldown_at(skater, now):
+				if skater.is_ghost or (skater.is_knocked_down and not skater.is_diving) \
+						or puck.is_on_cooldown_at(skater, now):
 					continue
 				# Committed to a body check — the stick is off the ice, so no
 				# corral/receive (mirrors the poke + claim + provisional gates).
@@ -654,19 +666,34 @@ func _check_interactions() -> void:
 				if skater.current_shot_state == SkaterStateMachine.State.SHOT_BLOCKING \
 						or skater.current_shot_state == SkaterStateMachine.State.FOLLOW_THROUGH:
 					continue
+				# Mid-lift the stick is hooking, not playing the puck; locked in a
+				# pin, it is out of the play altogether.
+				if StickCheckRules.is_stick_busy(skater.stick_check_phase) \
+						or skater.pin_role != BoardPinRules.Role.NONE:
+					continue
 				# Reach gate — grounded blade ↔ grounded puck, lifted blade ↔
 				# airborne puck. blade_up already encodes the deflect level's plane
 				# (grounded at FLAT/LOW, lifted only at HIGH), so a committed deflect
 				# and a passive receiver share this one gate: FLAT/LOW play the ice
 				# (a saucer flies over), HIGH plays the air. The loft level changes
 				# the redirect DIRECTION, not which plane it reaches.
-				if not PuckReceptionRules.blade_can_interact(skater.blade_up, puck_airborne):
+				# A tied stick is held off the ice, so it plays the air like a raised one.
+				if not PuckReceptionRules.blade_can_interact(skater.blade_up or skater.stick_tied,
+						puck_airborne):
 					continue
 				var blade_curr: Vector3 = skater.get_blade_contact_global()
 				var blade_prev: Vector3 = skater.get_prev_blade_contact_global()
 				if not PuckInteractionRules.check_pickup(_prev_puck_pos, puck_curr,
 						blade_prev, blade_curr, PICKUP_RADIUS):
 					continue
+				# A diver's stick knocks the puck away; he catches nothing from the ice.
+				if skater.is_diving:
+					puck.apply_blade_deflect(skater)
+					break
+				# A tied blade receives nothing: whatever reaches it bobbles off.
+				if skater.stick_tied:
+					puck.apply_tied_bobble(skater)
+					break
 				# A committed deflect (Q held, any reachable level) or a forced-up
 				# blade (opponent stick-lift meeting an airborne puck) tips the puck
 				# off the blade face — the SAME path a too-fast puck takes naturally,
@@ -730,6 +757,14 @@ func _check_body_blocks(skaters: Array, puck_curr: Vector3, now: float) -> bool:
 		var axis := Vector2(skater.global_position.x, skater.global_position.z)
 		var reach: float = skater.get_body_block_radius() + GameRules.PUCK_COLLISION_RADIUS
 		var y_range: Vector2 = skater.get_body_block_y_range()
+		# A diver lies along his layout with his stick out past him: the block is
+		# the point of that low line nearest the puck's path, not a cylinder at
+		# his skates.
+		if skater.is_diving:
+			axis = DiveRules.block_point(_prev_puck_pos, puck_curr, axis,
+					axis + skater.dive_layout * DiveRules.BLOCK_LENGTH_M)
+			reach = DiveRules.BODY_RADIUS_M + GameRules.PUCK_COLLISION_RADIUS
+			y_range = Vector2(0.0, DiveRules.SEAL_HEIGHT_M)
 		if PuckInteractionRules.check_body_block(
 				_prev_puck_pos, puck_curr, axis, reach, y_range.x, y_range.y):
 			puck.on_body_block(skater, PuckInteractionRules.body_block_contact_normal(
@@ -906,7 +941,9 @@ func try_provisional_pickup(local_skater: Skater) -> void:
 		return
 	# Committed to a body check — stick's off the ice (mirrors the host's
 	# hit_committed pickup gate), so don't pin a puck the host won't grant.
-	if local_skater.hit_committed:
+	if local_skater.hit_committed or local_skater.stick_tied \
+			or local_skater.pin_role != BoardPinRules.Role.NONE \
+			or StickCheckRules.is_stick_busy(local_skater.stick_check_phase):
 		return
 	if _is_pickup_contested(local_skater):
 		return

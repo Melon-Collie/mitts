@@ -201,6 +201,23 @@ const POSES: Array = [
 	{"name": "hit_commit_deep", "puck": false, "steps": [
 		[60, {"hit": true, "move": Vector2(0.84, -0.55), "aim": Vector3(1.6, 0.0, 2.4)}],
 	]},
+	# ── Board pin ───────────────────────────────────────────────────────────
+	# Both locked roles against the +x boards, facing them (the boards are not
+	# drawn here; the tiles are for the lean and the sit): the pinned skater
+	# pressed flat to the glass, the pinner a body off it, driving in.
+	# Shot side-on from the ice (the default camera would sit outside the boards).
+	{"name": "pin_pinned", "puck": false, "pin_role": BoardPinRules.Role.PINNED,
+		"cam": Vector3(-0.8, 0.6, 3.2), "steps": [[60, {"aim": Vector3(3.0, 0.0, 0.0)}]]},
+	{"name": "pin_pinner", "puck": false, "pin_role": BoardPinRules.Role.PINNER,
+		"cam": Vector3(-0.8, 0.6, 3.2),
+		"steps": [[60, {"hit": true, "aim": Vector3(3.0, 0.0, 0.0)}]]},
+	# ── Dive ────────────────────────────────────────────────────────────────
+	# Stance + block out of a skate: down and sliding on, laid out across the
+	# line of travel toward the cursor, stick along the ice. Mid-slide.
+	{"name": "dive", "puck": false, "game_cam": true, "steps": [
+		[120, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[40, {"stance": true, "block": true, "aim": Vector3(2.5, 0.0, -1.0)}],
+	]},
 	# ── Knockdown ───────────────────────────────────────────────────────────
 	# A hit hard enough to put the skater down, mid-fall and lying, shoved to
 	# the side and backward. These are the tiles that show where the fall
@@ -308,6 +325,10 @@ func begin(record_baseline: bool, only: String = "") -> void:
 	# Every frame posed, whatever Animation Detail the local prefs carry.
 	SkaterAnimationLod.detail = SkaterAnimationLod.DETAIL_FULL
 	_record_baseline = record_baseline
+	# Every pose is framed by moving the camera AFTER its ticks, so while it is
+	# posed the camera still frames the last one; the off-camera cull would skip
+	# the rig of any pose placed away from there and the tile would draw it unposed.
+	SkaterCameraCull.enabled = false
 	_poses = POSES.filter(func(p: Dictionary) -> bool:
 			return only == "" or String(p["name"]).contains(only))
 	if _poses.is_empty():
@@ -438,6 +459,8 @@ func _run_pose() -> void:
 	_state.faceoff_prep = false
 	if pose.has("knockdown"):
 		_controller._on_body_check_received(pose["knockdown"] as Vector3)
+	if pose.has("pin_role"):
+		_place_for_pin(int(pose["pin_role"]))
 	var steps: Array = pose.get("steps", [])
 	for step: Array in steps:
 		var ticks: int = step[0]
@@ -621,6 +644,19 @@ func _run_faceoff(spec: Dictionary) -> void:
 	print("      dot %.3v stick_horiz %.3f blade %.3v" % [
 			dot, _controller._ik.stick_horiz(),
 			_skater.upper_body_to_global(_skater.get_blade_position())])
+
+
+# Against the +x boards as the role stands there: the pinned skater's edge at the
+# boards, the pinner one body and the lock's give further off.
+func _place_for_pin(role: int) -> void:
+	var r: float = _skater.collision_radius()
+	var gap: float = 0.05
+	if role == BoardPinRules.Role.PINNER:
+		gap += 2.0 * r + BoardPinRules.PIN_CONTACT_SLACK_M
+	_skater.global_position = Vector3(GameRules.INNER_HALF_WIDTH - r - gap,
+			GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
+	_skater.pin_role = role
+	_skater.pin_strength = 0.5
 
 
 func _fill_input(input: InputState, spec: Dictionary, first: bool) -> void:

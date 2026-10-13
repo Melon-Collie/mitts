@@ -71,8 +71,9 @@ newer-write-wins. The cloud file name mirrors the local basename, so
 
 ## Lag-compensated claim resolvers
 
-`PickupClaimResolver`, `PokeClaimResolver`, `StickLiftClaimResolver` and
-`HitClaimResolver` are host-only resolvers for client-initiated claims. Each
+`PickupClaimResolver`, `PokeClaimResolver`, `StickLiftClaimResolver`,
+`StickTieClaimResolver` and `HitClaimResolver` are host-only resolvers for
+client-initiated claims. Each
 documents its own geometry and reject list in its header; this is the contract
 they all share. **A new claim resolver must follow all of it.**
 
@@ -108,7 +109,7 @@ The rest is judgement the seams can't make for you:
   any healthy link, and the *cleaner* the link the wider the gap)
   `StateBufferManager.get_state_at` answers that future query with the newest
   sample and no signal at all (`_find_bracket`'s `ts >= newest` branch).
-  `GameManager` therefore routes all four claim signals through
+  `GameManager` therefore routes every claim signal through
   `DeferredClaimQueue`, which parks a claim until the buffer covers its
   self-view instant. **Every reject condition is consequently evaluated at
   RELEASE, not arrival** — write resolvers accordingly, and don't cache anything
@@ -128,9 +129,9 @@ The rest is judgement the seams can't make for you:
   the claim, claim not fresh, skater missing or ghosted, or the claim targets
   self or a teammate.
 
-There is no contest window on poke / stick-lift / hit — first valid claim wins,
-and simultaneous claims are arbitrated by RPC arrival order (the loser sees
-`carrier == null` and skips). Contested *pickups* are the exception and resolve
+There is no contest window on poke / stick-lift / stick-tie / hit — first valid
+claim wins, and simultaneous claims are arbitrated by RPC arrival order (the
+loser sees `carrier == null`, or a tie already held, and skips). Contested *pickups* are the exception and resolve
 through `PuckCollisionRules.contested_pickup_velocity` instead.
 
 Full rewind and prediction rules: `Scripts/networking/CLAUDE.md`.

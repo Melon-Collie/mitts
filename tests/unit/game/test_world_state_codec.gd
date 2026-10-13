@@ -495,6 +495,56 @@ func test_decode_for_replay_rejects_overrun_goalie_count() -> void:
 
 # ── v10 wire additions ────────────────────────────────────────────────────────
 
+func test_skater_stick_check_round_trips_every_phase() -> void:
+	for phase: int in StickCheckRules.Phase.values():
+		var s := SkaterNetworkState.new()
+		s.stick_check_phase = phase
+		s.stick_check_elapsed = 0.1
+		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+				WorldStateCodec._encode_skater_quantized(s))
+		assert_eq(dec.stick_check_phase, phase, "phase %d" % phase)
+		var tol: float = 4.0 / 120.0 if phase == StickCheckRules.Phase.TIE else 0.5 / 120.0
+		assert_almost_eq(dec.stick_check_elapsed, 0.1, tol, "elapsed, phase %d" % phase)
+
+
+func test_skater_stick_tied_round_trips_beside_every_flag() -> void:
+	for tied: bool in [false, true]:
+		var s := SkaterNetworkState.new()
+		s.stick_tied = tied
+		s.is_ghost = true
+		s.blade_up = true
+		s.shot_state = 7
+		s.elevation_level = 3
+		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+				WorldStateCodec._encode_skater_quantized(s))
+		assert_eq(dec.stick_tied, tied)
+		assert_true(dec.is_ghost and dec.blade_up, "the neighbouring bits survive")
+		assert_eq(dec.shot_state, 7)
+		assert_eq(dec.elevation_level, 3)
+
+
+func test_skater_pin_round_trips() -> void:
+	var s := SkaterNetworkState.new()
+	s.pin_role = BoardPinRules.Role.PINNED
+	s.pin_strength = 0.62
+	var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+			WorldStateCodec._encode_skater_quantized(s))
+	assert_eq(dec.pin_role, BoardPinRules.Role.PINNED)
+	assert_almost_eq(dec.pin_strength, 0.62, 1.0 / 255.0)
+
+
+func test_skater_dive_rides_the_body_lock_byte_beside_the_pin() -> void:
+	for role: int in [BoardPinRules.Role.NONE, BoardPinRules.Role.PINNER, BoardPinRules.Role.PINNED]:
+		for diving: bool in [false, true]:
+			var s := SkaterNetworkState.new()
+			s.pin_role = role
+			s.diving = diving
+			var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+					WorldStateCodec._encode_skater_quantized(s))
+			assert_eq(dec.pin_role, role)
+			assert_eq(dec.diving, diving)
+
+
 func test_skater_stagger_round_trips() -> void:
 	# stagger_timer was never on the wire, so a client victim's predicted stagger
 	# was wiped to 0 on the next reconcile. u8 @0.01s must now round-trip it.

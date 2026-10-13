@@ -220,6 +220,58 @@ The election of WHICH body runs the race is not part of the verb and stays in
 `AILoosePuckChase` / `GameManager` — the verb answers "do I go", the election
 answers "am I the one who may".
 
+**The reach-in is the pressurer's extra, and it is a jab or a lift.** Whichever
+role owns the carrier reaches in when the puck is inside its stick; the jab aims
+the blade through the puck, and `AIStickLiftRead` turns it into a stick lift
+exactly when the carrier's body stands on the line to the puck (the jab has no
+path) and the shaft's liftable point is still in reach. Both are geometry the bot
+can see, and the lift is a `lifts_sticks` cognition gate, closed on Easy so a
+shielded puck genuinely protects it against a beginner tier.
+
+**A covering role's extra is the stick tie** (`AIStickTieRead`), and its price is
+its own stick. The man is tied only while the puck is coming to him — a loose
+puck whose path reaches his blade, or his carrier with a pass lane no defender's
+stick reaches — and only when the coverer's free stick could not have stopped it
+(the feed's path stays out of his reach; the lane read counts him too), with the
+man's shaft in reach, and he holds it while that stays true. His blade follows
+the man's stick through a lag of `StickCheckRules.TIE_LAG_BUDGET_S` — what a human
+holder sees it late by over the network — so a bot holding a tie is beaten by the
+same jukes a human would be, not mirrored instantly. A tied attacker the feed is
+coming to pulls his stick straight away from the one holding it; one it isn't
+coming to holds on, keeping that defender's stick out of the play. Both halves are
+the `ties_sticks` cognition gate, closed on Easy.
+
+**On the boards, the checker's extra is holding the pin** (`apply_board_play`, every
+tick after dispatch), and the hold follows what is coached: keep the commit while
+our support beats theirs to the puck (the same momentum-blind top-speed bound for
+both sides), or in our own end to kill the play; never as the last man back
+outside it. Locked, the pinner drives into the wall and mirrors the victim's slide
+through a lag of `BoardPinRules.PIN_LAG_BUDGET_S` — what a human pinner reads it
+late by — so a bot is beaten by the same reversals a human would be. It rides the
+PACE physicality knob (`check_aggression`, zero on Easy), not a cognition gate. A
+pinned bot slides along the wall and reverses when its pinner commits to following
+(his along-wall speed our way past half our cap), no sooner than a reversal can
+land. A carrier at the wall with a committed checker coming square answers him
+as coached, bracing last (`AIPinThreatRead`): he skates out of the checker's line
+along the wall if he gets past the offset where the hit stops being square before
+contact, and holds the commit only when he can't. Bracing costs the commit's grip
+and stride, so it is never free insurance. Read through the tier's perception
+delay, a fast square drive catches him still thinking he has time, and a slow
+approach — which used to pin a braced-on-sight bot at a crawl — gives him time to
+leave. The `protects_the_puck` cognition gate.
+
+**Any defender's extra is the shot block** (`AIShotBlockRead`, applied by
+`SkaterAgentShotBlock` every tick after dispatch). He drops into it when an
+opponent in our end winds up and we stand on the line from the release to our
+net, the shot is still under the block's seal when it reaches us (his replicated
+loft rung under gravity), and we are not inside the room our goalie needs to see
+around a screen. He stays down while the released puck is still coming through
+us. The last defender on a man-down rush dives across a pass lane past his
+standing reach: his stick, plus what he skates toward the lane while the pass
+travels to it from rest across it. The dive must still reach the lane, and no
+teammate may be nearer it. Both are the `blocks_shots` cognition gate, closed on
+Easy.
+
 Still unfactored: **hold a post** — the per-role fallbacks and their anchor
 constants. The open question is whether it should be a verb at all: if the
 assigner always names a man, the carrier, or the puck, there is no fourth state

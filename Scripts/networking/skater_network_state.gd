@@ -21,6 +21,22 @@ var elevation_level: int = 0
 # needs the resolved "is the blade up" answer for rendering and the
 # on-ice/off-ice interaction gate.
 var blade_up: bool = false
+# The stick-lift phase (StickCheckRules.Phase) and seconds into it. Remotes pose
+# the raised blade from it, the lift resolver checks the claimant was hooking,
+# and the local reconcile adopts it before replay.
+var stick_check_phase: int = 0
+var stick_check_elapsed: float = 0.0
+# Skater.stick_tied: host-authoritative, applied every broadcast like is_ghost.
+var stick_tied: bool = false
+# Board pin (BoardPinTracker): the role (BoardPinRules.Role) and the pinner's
+# weight share. Host-authoritative, applied every broadcast like stick_tied, and
+# fed to the forward prediction (BoardPinRules.forward_cap) on the render and the
+# rewind.
+var pin_role: int = 0
+var pin_strength: float = 0.0
+# Skater.is_diving: a dive's down window rides knockdown_timer and recoil_dir;
+# this says it is a dive (its stick still plays, its body blocks low).
+var diving: bool = false
 # Body-check stagger: seconds of thrust/grip-penalty recovery remaining on the
 # victim. Replicated so the local player's reconcile can snap it to the host
 # baseline before replay — same treatment as velocity — and it decays
@@ -113,7 +129,26 @@ func to_array() -> Array:
 		torso_lean,
 		posture_lean,
 		recoil_dir,
+		stick_check_phase,
+		stick_check_elapsed,
+		stick_tied,
+		pin_role,
+		pin_strength,
+		diving,
 	]
+
+# The stick-play, pin and dive fields, which are discrete: a reader between two
+# snapshots (interpolation, the rewind buffer, replay playback) takes them whole
+# from one, never blends them.
+func copy_stick_play_from(s: SkaterNetworkState) -> void:
+	blade_up = s.blade_up
+	stick_check_phase = s.stick_check_phase
+	stick_check_elapsed = s.stick_check_elapsed
+	stick_tied = s.stick_tied
+	pin_role = s.pin_role
+	pin_strength = s.pin_strength
+	diving = s.diving
+
 
 func copy_from(s: SkaterNetworkState) -> void:
 	position = s.position
@@ -142,6 +177,12 @@ func copy_from(s: SkaterNetworkState) -> void:
 	torso_lean = s.torso_lean
 	posture_lean = s.posture_lean
 	recoil_dir = s.recoil_dir
+	stick_check_phase = s.stick_check_phase
+	stick_check_elapsed = s.stick_check_elapsed
+	stick_tied = s.stick_tied
+	pin_role = s.pin_role
+	pin_strength = s.pin_strength
+	diving = s.diving
 	host_timestamp = s.host_timestamp
 	blade_contact_world = s.blade_contact_world
 	top_hand_world = s.top_hand_world
@@ -185,4 +226,14 @@ static func from_array(data: Array) -> SkaterNetworkState:
 		state.posture_lean = data[24]
 	if data.size() > 25:
 		state.recoil_dir = data[25]
+	if data.size() > 27:
+		state.stick_check_phase = data[26]
+		state.stick_check_elapsed = data[27]
+	if data.size() > 28:
+		state.stick_tied = data[28]
+	if data.size() > 30:
+		state.pin_role = data[29]
+		state.pin_strength = data[30]
+	if data.size() > 31:
+		state.diving = data[31]
 	return state

@@ -537,6 +537,11 @@ const DEFAULT_BLADE_LENGTH_M: float = 0.30
 # reaching into PuckController. PuckController.POKE_RADIUS is the single
 # consumer at the infrastructure side and aliases this value.
 const POKE_RADIUS_M: float = 0.5
+# How close a lifted blade must come to a carrier's hand→blade shaft to hook
+# under it. Slightly wider than POKE_RADIUS_M — the lifted blade meets the shaft
+# up off the ice rather than the puck on it. PuckController.STICK_LIFT_RADIUS
+# aliases it, for the same reason as the poke radius above.
+const STICK_LIFT_RADIUS_M: float = 0.45
 
 # Wrister/slapper/quick-shot puck release speeds. The puck consumes
 # `direction × power` directly as linear velocity (see Puck.release),

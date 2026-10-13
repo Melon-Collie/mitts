@@ -305,6 +305,7 @@ func _drain_backlog(now: float) -> void:
 			next.slap_pressed = next.slap_pressed or stale.slap_pressed
 			next.stick_lift_pressed = next.stick_lift_pressed or stale.stick_lift_pressed
 			next.quick_pass_pressed = next.quick_pass_pressed or stale.quick_pass_pressed
+			next.stick_check_pressed = next.stick_check_pressed or stale.stick_check_pressed
 		if overdue <= _DRAIN_TELEMETRY_MAX_S:
 			NetworkTelemetry.record_input_drain()
 
@@ -508,8 +509,8 @@ func _predict_sample_forward(newest: SkaterNetworkState, dt: float) -> void:
 				1.0 / float(Constants.PHYSICS_TICK), ticks - first_tick,
 				Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, newest.stagger_timer, true,
 				first_tick)
-		_sample_scratch.position = nm.get_forward_position()
-		_sample_scratch.velocity = nm.get_forward_velocity()
+		_fp_result.position = nm.get_forward_position()
+		_fp_result.velocity = nm.get_forward_velocity()
 	else:
 		SkaterMovementRules.integrate_forward(
 				pos, vel, newest.move_intent,
@@ -518,13 +519,28 @@ func _predict_sample_forward(newest: SkaterNetworkState, dt: float) -> void:
 				cfg, 1.0 / float(Constants.PHYSICS_TICK), ticks - first_tick,
 				Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, _fp_result,
 				newest.stagger_timer, _body_check_config(), first_tick)
-		_sample_scratch.position = _fp_result.position
-		_sample_scratch.velocity = _fp_result.velocity
+	# The cache holds the raw integration, so a resumed run continues from it; the
+	# pin's cap is a correction to each window's result, not part of the state.
 	_fwd_from = newest
 	_fwd_cfg = cfg
 	_fwd_ticks = ticks
-	_fwd_position = _sample_scratch.position
-	_fwd_velocity = _sample_scratch.velocity
+	_fwd_position = _fp_result.position
+	_fwd_velocity = _fp_result.velocity
+	_correct_forward(newest, float(ticks) / float(Constants.PHYSICS_TICK))
+	_sample_scratch.position = _fp_result.position
+	_sample_scratch.velocity = _fp_result.velocity
+
+
+# A snapshot's downed slide and board pin over a forward window, on _fp_result —
+# the corrections LagCompRewind makes host-side too (render == rewind).
+func _correct_forward(snap: SkaterNetworkState, window_s: float) -> void:
+	if snap.knockdown_timer > 0.0:
+		SkaterMovementRules.slide_forward(_fp_result, snap.position, snap.velocity,
+				knockdown_friction, snap.knockdown_timer, window_s)
+	if snap.pin_role != BoardPinRules.Role.NONE:
+		BoardPinRules.forward_cap_locked(_fp_result, snap.position, skater.collision_radius(),
+				snap.pin_role, snap.pin_strength, window_s)
+
 
 func _interpolate(delta: float) -> void:
 	# Shared delay (NetworkManager) keeps the goalie and other remotes on the same
@@ -559,7 +575,7 @@ func _interpolate(delta: float) -> void:
 		interpolated.upper_body_angular_velocity = newest.upper_body_angular_velocity
 		interpolated.is_ghost = newest.is_ghost
 		interpolated.elevation_level = newest.elevation_level
-		interpolated.blade_up = newest.blade_up
+		interpolated.copy_stick_play_from(newest)
 		interpolated.shot_state = newest.shot_state
 		interpolated.shot_charge = newest.shot_charge
 		interpolated.stagger_timer = newest.stagger_timer
@@ -597,7 +613,7 @@ func _interpolate(delta: float) -> void:
 		# _apply_state_to_skater writes the scratch's type defaults otherwise.
 		interpolated.is_ghost = to_state.is_ghost
 		interpolated.elevation_level = to_state.elevation_level
-		interpolated.blade_up = to_state.blade_up
+		interpolated.copy_stick_play_from(to_state)
 		interpolated.shot_state = to_state.shot_state
 		# Charge is a scalar — lerp it so the remote's stick-flex load bow
 		# grows smoothly through the drag instead of stepping per broadcast.
@@ -659,8 +675,8 @@ func _interpolate(delta: float) -> void:
 							interpolated.hit_committed),
 					1.0 / float(Constants.PHYSICS_TICK), fp_ticks,
 					Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, fp_stagger, true)
-			interpolated.position = nm.get_forward_position()
-			interpolated.velocity = nm.get_forward_velocity()
+			_fp_result.position = nm.get_forward_position()
+			_fp_result.velocity = nm.get_forward_velocity()
 		else:
 			SkaterMovementRules.integrate_forward(
 					interpolated.position, interpolated.velocity, interpolated.move_intent,
@@ -672,8 +688,11 @@ func _interpolate(delta: float) -> void:
 					1.0 / float(Constants.PHYSICS_TICK), fp_ticks,
 					Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, _fp_result,
 					fp_stagger, _body_check_config())
-			interpolated.position = _fp_result.position
-			interpolated.velocity = _fp_result.velocity
+		# The interpolated base, as the host's rewind reads it (pin fields from the
+		# newer endpoint, the position interpolated).
+		_correct_forward(interpolated, float(fp_ticks) / float(Constants.PHYSICS_TICK))
+		interpolated.position = _fp_result.position
+		interpolated.velocity = _fp_result.velocity
 	# Forward-prediction quality: the pre-damp error the smoother is about to
 	# absorb on this body (fp error + correction pressure). Teleport-scale
 	# distances (faceoff/goal resets — anything the snap guard hard-snaps) are
@@ -753,7 +772,9 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	var prev_kd: float = knockdown_timer
 	knockdown_timer = state.knockdown_timer
 	skater.is_knocked_down = knockdown_timer > 0.0
+	skater.is_diving = state.diving
 	_sync_knockdown_meta(prev_kd)
+	_sync_dive_layout()
 	# The torso's tilt is the frame the wire's blade is local to, so it too
 	# lands before the blade.
 	_pose.apply_wire_lean(state)
@@ -766,6 +787,9 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	# replicated blade_position above; this keeps skater.blade_up correct for
 	# any reader (AI off-puck, VFX) on spectated remotes.
 	skater.blade_up = state.blade_up
+	skater.stick_check_phase = state.stick_check_phase
+	skater.stick_tied = state.stick_tied
+	_adopt_pin(state)
 	skater.current_shot_state = state.shot_state
 	# Wrister address, gated on the aim state — the wire bit is garbage
 	# otherwise. The skater's address pass adopts it so a spectated shooter's

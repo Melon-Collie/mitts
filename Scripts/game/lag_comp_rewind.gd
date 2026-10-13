@@ -225,16 +225,25 @@ static func _integrate_skater(snap: SkaterNetworkState, ctrl: SkaterController,
 				snap.stagger_timer, true)
 		scratch.position = nm.get_forward_position()
 		scratch.velocity = nm.get_forward_velocity()
-		return true
-	SkaterMovementRules.integrate_forward(
-			snap.position, snap.velocity,
-			WorldStateCodec.quantize_move_intent(snap.move_intent),
-			atan2(snap.facing.x, snap.facing.y), false,
-			snap.brake_intent,
-			SkaterMovementRules.posture_of(snap.stance_active, snap.hit_committed),
-			ctrl.get_movement_config(), 1.0 / float(Constants.PHYSICS_TICK),
-			ticks, Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, scratch,
-			snap.stagger_timer, ctrl.get_body_check_config())
+	else:
+		SkaterMovementRules.integrate_forward(
+				snap.position, snap.velocity,
+				WorldStateCodec.quantize_move_intent(snap.move_intent),
+				atan2(snap.facing.x, snap.facing.y), false,
+				snap.brake_intent,
+				SkaterMovementRules.posture_of(snap.stance_active, snap.hit_committed),
+				ctrl.get_movement_config(), 1.0 / float(Constants.PHYSICS_TICK),
+				ticks, Constants.FORWARD_PREDICT_INTENT_DECAY_TICKS, scratch,
+				snap.stagger_timer, ctrl.get_body_check_config())
+	# A downed body slides, and a pinned one is capped, as the client render
+	# applies them (RemoteController._correct_forward).
+	var window_s: float = float(ticks) / float(Constants.PHYSICS_TICK)
+	if snap.knockdown_timer > 0.0:
+		SkaterMovementRules.slide_forward(scratch, snap.position, snap.velocity,
+				ctrl.knockdown_friction, snap.knockdown_timer, window_s)
+	if ctrl.skater != null:
+		BoardPinRules.forward_cap_locked(scratch, snap.position, ctrl.skater.collision_radius(),
+				snap.pin_role, snap.pin_strength, window_s)
 	return true
 
 

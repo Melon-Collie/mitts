@@ -305,7 +305,7 @@ var _contact_latch_goalie: bool = false
 # a synchronous emit gives them.
 #
 # puck_stripped / puck_released stay synchronous: their listeners read call-scoped
-# transient state on the same stack (PuckController.is_processing_stick_lift, the
+# transient state on the same stack (PuckController.stick_lift_forced_seconds, the
 # queued release velocity read by the dump-release check, the goalie reaction
 # back-date consumed by _on_puck_released).
 #
@@ -531,6 +531,18 @@ func apply_blade_deflect(skater: Skater) -> void:
 	_set_cooldown(skater, bobble_cooldown if is_bobble else deflect_cooldown)
 	_queue_contact_event(ContactEvent.LOOSE_TOUCH, skater)
 
+# A tied blade's touch: the same deflect off the face, laid flat and cut to
+# StickCheckRules.TIE_BOBBLE_RETAIN of its pace, so the puck dies at the tied
+# player's feet. Deterministic — the face decides where, the tie decides how far.
+func apply_tied_bobble(skater: Skater) -> void:
+	var v: Vector3 = PuckCollisionRules.deflect_velocity(
+			linear_velocity, skater.get_blade_face_normal(linear_velocity),
+			deflect_normal_restitution, deflect_normal_restitution_min,
+			deflect_tangential_retain, deflect_speed_ref)
+	linear_velocity = Vector3(v.x, 0.0, v.z) * StickCheckRules.TIE_BOBBLE_RETAIN
+	_set_cooldown(skater, bobble_cooldown)
+	_queue_contact_event(ContactEvent.LOOSE_TOUCH, skater)
+
 # `contact_normal` is the outward horizontal normal at the swept contact —
 # PuckInteractionRules.body_block_contact_normal, taken on the same segment the
 # block was detected against. The caller owns it because only the caller has the
@@ -634,15 +646,27 @@ func apply_poke_check(checker_skater: Skater) -> void:
 # a lifted stick just leaves the puck where it was being carried — so it keeps
 # travelling in the carrier's direction at the carrier's speed, as if the carry
 # simply continued without the stick on it. Horizontal only; a stationary
-# carrier's puck stays put (the reattach cooldown still denies an instant
-# re-grab). Same cooldowns + signals as apply_poke_check so the carrier-clear,
+# carrier's puck stays put. The ex-carrier can't re-grab for `regrab_cooldown`,
+# and the lifter gets no checker cooldown at all: their blade dropping back onto
+# the puck is the take. Same signals as apply_poke_check so the carrier-clear,
 # stats, and victim-notify paths fire identically.
-func apply_stick_lift_strip(checker_skater: Skater) -> void:
-	var ex_carrier: Skater = carrier  # capture before clear_carrier()
+# A carrier pinned to the boards loses the puck where it is: it goes on at his
+# speed and sits loose at both players' feet, for whichever side's support gets
+# there first. The pinner is credited, as the defender who made the play.
+func apply_pin_strip(pinner: Skater) -> void:
+	var ex_carrier: Skater = carrier
 	clear_carrier()
 	linear_velocity = Vector3(ex_carrier.velocity.x, 0.0, ex_carrier.velocity.z)
 	_set_cooldown(ex_carrier, reattach_cooldown)
-	_set_cooldown(checker_skater, poke_checker_cooldown)
+	puck_stripped.emit(ex_carrier, pinner)
+	puck_released.emit()
+
+
+func apply_stick_lift_strip(checker_skater: Skater, regrab_cooldown: float) -> void:
+	var ex_carrier: Skater = carrier  # capture before clear_carrier()
+	clear_carrier()
+	linear_velocity = Vector3(ex_carrier.velocity.x, 0.0, ex_carrier.velocity.z)
+	_set_cooldown(ex_carrier, maxf(reattach_cooldown, regrab_cooldown))
 	puck_stripped.emit(ex_carrier, checker_skater)
 	puck_released.emit()
 # Goalie counterpart to apply_poke_check. A Goalie is not a Skater (no

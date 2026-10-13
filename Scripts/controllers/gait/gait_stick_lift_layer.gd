@@ -17,11 +17,14 @@ func reset() -> void:
 
 
 func is_quiet() -> bool:
-	return not _skater.blade_up
+	return not StickCheckRules.blade_held_up(_skater.blade_up, _skater.stick_check_phase,
+			_skater.stick_tied)
 
 
 func advance(delta: float) -> bool:
-	_blend = lerpf(_blend, 1.0 if _skater.blade_up else 0.0,
+	var up: bool = StickCheckRules.blade_held_up(_skater.blade_up, _skater.stick_check_phase,
+			_skater.stick_tied)
+	_blend = lerpf(_blend, 1.0 if up else 0.0,
 			minf(_controller.stick_lift_blend_speed * delta, 1.0))
 	return _blend > 0.001
 

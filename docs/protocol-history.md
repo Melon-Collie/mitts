@@ -311,3 +311,37 @@ here whenever you bump, in the same format.
 #      icing race banner.
 # v69: PlayerStats gained `icings` (appended to to_array), so the stats player
 #      record is 19 values (peer_id + 18).
+# v70: the stick lift moves to its own button (docs/defensive-play-plan.md,
+#      Phase 1). Input flag bits [14] stick_check_held and [15]
+#      stick_check_pressed spend the last of the u16. Skater block 55 -> 56
+#      bytes: one u8 packing the lift phase (bits 0-2) and the whole ticks spent
+#      in it (bits 3-7). Replay FORMAT_VERSION 12.
+# v71: the stick tie (docs/defensive-play-plan.md, Phase 2). The lift phase
+#      gains TIE (value 6, its elapsed packed in 8-tick units); the skater flags
+#      byte's spare bit 7 carries stick_tied, so the byte is full and the block
+#      stays 56 bytes. New RPC receive_stick_tie_claim. The replay format is
+#      unchanged: bit 7 was always written 0.
+# v72: board play (docs/defensive-play-plan.md, Phase 3). Skater block 56 -> 58
+#      bytes: pin_timer u8@0.01 s and pin_strength u8@1/255, which the forward
+#      prediction reads on the render and the rewind (BoardPinRules
+#      .forward_correction). New RPC notify_puck_frozen_called. Replay
+#      FORMAT_VERSION 13.
+# v73: the stick tie becomes two sticks tied together (docs/defensive-play-plan.md,
+#      Tie revision). The lift phase drops RECOVER, so REARM and TIE move down
+#      one (TIE is 5), and TIE's elapsed packs in whole ticks like every other
+#      phase. stick_tied is now set on both tied players, whose blades the
+#      reconcile replays under the tie's speed cap. No byte layout changed.
+#      Replay FORMAT_VERSION 14.
+# v74: the board pin becomes a locked position contest (docs/defensive-play-plan.md,
+#      Pin revision). Skater byte 56 carries pin_role (BoardPinRules.Role) where
+#      pin_timer was; byte 57 is still pin_strength. Both locked players carry
+#      their role. The forward prediction applies BoardPinRules.forward_cap (the
+#      role's along-wall slide cap) on the render and the rewind, in place of
+#      forward_correction's bleed. The block stays 58 bytes. Replay
+#      FORMAT_VERSION 15.
+# v75: the dive (docs/defensive-play-plan.md, Phase 4). Skater byte 56 becomes
+#      the body-lock byte: pin_role in bits 0-1 and diving in bit 2. A dive's
+#      down window rides knockdown_timer and recoil_dir. The forward prediction
+#      of any downed snapshot (knockdown or dive) is now a friction-only slide
+#      (SkaterMovementRules.slide_forward) on the render and the rewind alike,
+#      in place of integrate_forward on its last intent. Replay FORMAT_VERSION 16.

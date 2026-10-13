@@ -431,6 +431,7 @@ func _keyboard_key_tokens() -> Dictionary:
 		"slapshot":       PlayerPrefs.action_display("slapshot"),
 		"block":          PlayerPrefs.action_display("block"),
 		"stick_lift":     PlayerPrefs.action_display("stick_lift"),
+		"stick_check":    PlayerPrefs.action_display("stick_check"),
 		"elevation_up":   PlayerPrefs.action_display("elevation_up"),
 		"elevation_down": PlayerPrefs.action_display("elevation_down"),
 	}
@@ -452,6 +453,7 @@ func _pad_key_tokens() -> Dictionary:
 		"slapshot":       ControllerGlyphs.trigger_label(false),
 		"block":          ControllerGlyphs.joy_label(PlayerPrefs.pad_button("block")),
 		"stick_lift":     ControllerGlyphs.joy_label(PlayerPrefs.pad_button("stick_lift")),
+		"stick_check":    ControllerGlyphs.joy_label(PlayerPrefs.pad_button("stick_check")),
 		"elevation_up":   ControllerGlyphs.joy_label(PlayerPrefs.pad_button("elevation_up")),
 		"elevation_down": ControllerGlyphs.joy_label(PlayerPrefs.pad_button("elevation_down")),
 	}
@@ -620,8 +622,8 @@ func _step_def_for(step_id: int) -> TutorialStep:
 		STEP_STICK_LIFT:
 			return _step(
 				"Stick Lift",
-				"Tap {elevation_up} three times to take your loft all the way to HIGH, get under the opponent's stick, and hold {stick_lift} to lift it — that pops the puck off their blade.",
-				"Same gesture as the blade lift: ride your blade high, slide it beneath their stick, and hold {stick_lift} to knock the puck free.")
+				"Get beside the opponent with your blade under their stick and tap {stick_check} to lift it — the puck comes loose off their blade.",
+				"Let go of {stick_check} and your blade drops straight back onto the puck. Hold it too long and your stick stays up while the puck gets away.")
 		STEP_SHOT_BLOCK:
 			return _step(
 				"Shot Block",
@@ -800,10 +802,10 @@ func _begin_step(index: int) -> void:
 			_update_rep_objective()
 			_stage_rep()
 			_on_stick_lift_callable = func(_ex: Skater) -> void:
-				# A lifted blade can't poke (puck_controller skips the poke path
-				# when blade_up), so a strip while the player's blade is up is a
-				# stick lift. A no-blade poke falls through to the _process re-pin.
-				if _skater.blade_up:
+				# Only the hook phase lifts and it never pokes, so a strip while
+				# the player is hooking is a stick lift. A poke falls through to
+				# the _process re-pin.
+				if _skater.stick_check_phase == StickCheckRules.Phase.HOOK:
 					_complete_rep()
 			_puck.puck_stripped.connect(_on_stick_lift_callable)
 
@@ -1163,7 +1165,7 @@ func _process(delta: float) -> void:
 			# short-circuits _process.
 			if _puppet_record != null and is_instance_valid(_puppet_record.skater):
 				if _puck.carrier == _skater:
-					_hud.set_alert(_fmt("You took it without a lift. Keep loft on HIGH and hold {stick_lift} under their stick to pop it free."))
+					_hud.set_alert(_fmt("You took it without a lift. Get your blade under their stick and tap {stick_check} to pop it free."))
 					GameManager.tutorial_give_puck(_puppet_record)
 				elif _puck.carrier == null:
 					var puck_v: float = _puck.get_puck_velocity().length()
@@ -1556,8 +1558,8 @@ func _expected_elevation() -> int:
 				_: return ShotMechanics.ELEVATION_FLAT
 		STEP_DEFLECT, STEP_SAUCER_PASS:
 			return ShotMechanics.ELEVATION_LOW
-		STEP_BLADE_LIFT, STEP_STICK_LIFT:
-			# The stick lift rides the fully-raised blade, which needs HIGH loft
+		STEP_BLADE_LIFT:
+			# The blade lift rides the fully-raised blade, which needs HIGH loft
 			# (MID lifts only to the low-air pivot; SkaterController: blade_up
 			# requires elevation >= MID). Without HIGH the hold-{stick_lift} has
 			# no reach and no tell — so the step tracks loft like the others.
@@ -1580,12 +1582,6 @@ func _update_elevation_prompt() -> void:
 		_elev_alert_shown = true
 	elif _skater.elevation_level > expected:
 		_hud.set_alert(_fmt("Your loft is too high — tap {elevation_down} to bring it down."))
-		_elev_alert_shown = true
-	elif _current_step_id() == STEP_STICK_LIFT:
-		# Loft correct: unlike the shot steps (which have a visible arc as their
-		# own feedback), the stick lift's raised blade has no tell, so confirm the
-		# loft is set and point them at the gesture.
-		_hud.set_alert(_fmt("Loft's on HIGH — get under his stick and hold {stick_lift}."))
 		_elev_alert_shown = true
 	elif _elev_alert_shown:
 		_hud.clear_alert()

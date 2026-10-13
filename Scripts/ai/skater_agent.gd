@@ -54,6 +54,9 @@ func push_one_timer_ready() -> void:
 func tick(snapshot: WorldSnapshot, delta: float, host_timestamp: float) -> InputState:
 	zero_input(_scratch_input, delta, host_timestamp)
 	_sm.dispatch(_scratch_input, snapshot)
+	_sm.apply_stick_lift_input(_scratch_input)
+	_sm.apply_board_play(_scratch_input, snapshot)
+	_sm.apply_shot_block(_scratch_input, snapshot)
 	return _scratch_input
 
 
@@ -138,6 +141,8 @@ static func zero_input(input: InputState, delta: float, host_timestamp: float) -
 	# release tick and nothing else clears it, so a latched true would fire an
 	# instant quick pass on every subsequent carry tick.
 	input.quick_pass_pressed = false
+	input.stick_check_held = false
+	input.stick_check_pressed = false
 	# Committed wrister aim/hand default to "not committed" every tick (reused
 	# scratch): only the SHOOT/PASS press states set them, and a latched aim_dir
 	# would make the controller read a stale bot aim on an ordinary carry tick.
