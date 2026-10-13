@@ -177,14 +177,14 @@ const ARM_UPPER_M: float = 0.38
 const ARM_FOREARM_M: float = 0.38
 const SHOULDER_OFFSET := Vector3(0.23, 0.24, 0.0)
 
-# The blocker is a glove on the arm (Goalie._seat_blocker): the hand is posed,
-# and the board runs along the forearm's outer side, its finger end at the hand,
-# its face turned out from the shooter by BLOCKER_FACE_OUTWARD_DEG (the angle a
-# goalie holds it at to steer rebounds to the corner). Where the board's centre
-# sits: back from the grip along the forearm, and out off its outer side, clear
-# of the forearm's padding.
-const BLOCKER_BOARD_ALONG_M: float = 0.06
-const BLOCKER_BOARD_OUT_M: float = 0.09
+# The blocker is a glove (Goalie._seat_blocker): the fist grips the shaft at the
+# hand's origin and the board stands on the back of the hand, its length along
+# the shaft, its face turned out from the shooter by BLOCKER_FACE_OUTWARD_DEG
+# (the angle a goalie holds it at to steer rebounds to the corner). The board's
+# centre sits up the shaft from the grip (it covers the fingers above it) and
+# out off the back of the hand.
+const BLOCKER_BOARD_RISE_M: float = 0.095
+const BLOCKER_BOARD_OUT_M: float = 0.05
 const BLOCKER_FACE_OUTWARD_DEG: float = 45.0
 
 

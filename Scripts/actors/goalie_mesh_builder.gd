@@ -148,7 +148,7 @@ const _DANGLER_HALF_T: float = 0.006
 # so it tilts with the trunk's per-stance pitch/lean instead of hanging
 # plumb under a head that never pitches. The body's local +Y axis passes
 # within a few centimetres of the head center in every stance (STANDING
-# 1.79/1.22 @ −4°, READY 1.62/1.06 @ −14°, BUTTERFLY 0.97/0.40 @ −10°), so
+# 1.79/1.22 @ −4°, READY 1.50/0.96 @ −28°, BUTTERFLY 0.97/0.40 @ −10°), so
 # one fixed body-local tube runs shoulders → mask chin everywhere. Set back
 # of the spine line so the mask front overhangs it — the neck sits BEHIND a
 # real mask, never flush with its face.
@@ -312,11 +312,11 @@ static func _merge_stick(goalie: Goalie) -> void:
 
 
 # The fist and board are one rigid glove, so the fist bakes into the board's
-# frame at the grip, where Goalie._seat_blocker holds it: up the board toward
-# its finger end, and in off its back onto the forearm's line.
+# frame at the grip, where Goalie._seat_blocker holds it: down the board, and in
+# off its back.
 static func _merge_blocker(goalie: Goalie) -> void:
 	var hand: MeshInstance3D = goalie.get_node("BlockArm/BlockerHand") as MeshInstance3D
-	var grip_in_board := Vector3(0.0, GoalieAnatomy.BLOCKER_BOARD_ALONG_M,
+	var grip_in_board := Vector3(0.0, -GoalieAnatomy.BLOCKER_BOARD_RISE_M,
 			GoalieAnatomy.BLOCKER_BOARD_OUT_M)
 	_merge_rigid(goalie.blocker_mesh, "goalie_blocker_assembly", [
 		[_shared("goalie_blocker", _build_blocker), goalie.blocker_mesh.transform],

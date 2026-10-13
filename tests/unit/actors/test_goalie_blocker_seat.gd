@@ -1,8 +1,8 @@
 extends GutTest
 
-# The blocker is a glove on the arm: the hand (BlockArm) is posed, and the board
-# runs along the forearm from it, face turned out (Goalie._seat_blocker). It is
-# a save surface, so these hold the seat on both paths that pose a goalie —
+# The blocker is a glove: the hand (BlockArm) is posed, and the board stands on
+# the back of it, along the shaft, face turned out (Goalie._seat_blocker). It
+# is a save surface, so these hold the seat on both paths that pose a goalie —
 # the host's body config and the client/replay network pose.
 
 const State := GoalieStateMachine.State
@@ -27,14 +27,14 @@ func _board_in_goalie(g: Goalie) -> Transform3D:
 func _check_seat(g: Goalie, label: String) -> void:
 	var arm: Node3D = g.get_node("BlockArm")
 	var board: Transform3D = _board_in_goalie(g)
-	var along: Vector3 = (arm.position - g._blocker_elbow).normalized()
-	assert_almost_eq(board.basis.y.normalized().dot(along), 1.0, 1e-4,
-			"%s: the board runs along the forearm, finger end at the hand" % label)
+	var shaft: Vector3 = (arm.basis * Vector3.UP).normalized()
+	assert_almost_eq(board.basis.y.normalized().dot(shaft), 1.0, 1e-4,
+			"%s: the board stands along the shaft" % label)
 	var face: Vector3 = -board.basis.z.normalized()
-	assert_gt(face.x, 0.0, "%s: the board is on the arm's outer side" % label)
-	assert_lt(face.z, 0.0, "%s: and faces the shooter's half" % label)
+	assert_gt(face.x, 0.0, "%s: the board faces out, toward the corner" % label)
+	assert_lt(face.z, 0.0, "%s: and toward the shooter" % label)
 	var grip_in_board: Vector3 = board.affine_inverse() * arm.position
-	assert_almost_eq(grip_in_board, Vector3(0.0, GoalieAnatomy.BLOCKER_BOARD_ALONG_M,
+	assert_almost_eq(grip_in_board, Vector3(0.0, -GoalieAnatomy.BLOCKER_BOARD_RISE_M,
 			GoalieAnatomy.BLOCKER_BOARD_OUT_M), Vector3.ONE * 1e-4,
 			"%s: the grip sits where the fist is baked" % label)
 
@@ -45,15 +45,15 @@ func test_the_board_rides_the_hand_in_every_stance() -> void:
 		_check_seat(_posed(st), GoalieStateMachine.State.keys()[st])
 
 
-func test_the_board_follows_the_elbow() -> void:
+func test_the_board_goes_where_the_hand_goes() -> void:
 	var g: Goalie = _posed(State.READY)
-	var before: Basis = _board_in_goalie(g).basis
 	var arm: Node3D = g.get_node("BlockArm")
+	var before: Vector3 = _board_in_goalie(g).origin
 	var cfg := GoalieBodyConfigBuilder.new().build(GoalieBodyConfigBuilder.Inputs.new())
-	cfg.blocker_pos = arm.position + Vector3(0.12, 0.0, 0.10)
+	cfg.blocker_pos = arm.position + Vector3(0.12, 0.05, -0.10)
 	g.apply_body_config(cfg, 1.0)
-	assert_false(_board_in_goalie(g).basis.is_equal_approx(before),
-			"moving the hand moves the forearm, and the board moves with it")
+	assert_almost_eq(_board_in_goalie(g).origin - before, Vector3(0.12, 0.05, -0.10),
+			Vector3.ONE * 0.02, "the board is carried by the hand")
 	_check_seat(g, "after the reach")
 
 
