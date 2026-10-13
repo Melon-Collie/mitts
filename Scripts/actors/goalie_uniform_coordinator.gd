@@ -20,9 +20,9 @@ const _MAX_STRIPES: int = 5
 const _JERSEY_SHADER: Shader = preload("res://Assets/Shaders/goalie_jersey.gdshader")
 
 # Where the jersey ends and the pants band begins on the body solid, in the
-# shader's normalized height (0 = collar, 1 = bottom). 0.72 is body-local y
-# −0.158, the pants-waist station tucked under the jersey hem, so the color
-# split rides the silhouette split.
+# shader's normalized height (0 = collar, 1 = bottom). 0.72 lands just above
+# the mesh's hip-crest station (body-local y −0.16) so the color split rides
+# the silhouette split.
 const _PANTS_START_NORM_Y: float = 0.72
 
 
