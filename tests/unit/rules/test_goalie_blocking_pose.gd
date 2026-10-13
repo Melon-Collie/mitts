@@ -23,7 +23,8 @@ func test_a_block_is_upright_and_tucked() -> void:
 	var hand_x: float = GoalieAnatomy.torso_half_width() + GoalieAnatomy.GLOVE_BOX_WIDTH_M * 0.5
 	assert_almost_eq(absf(c.glove_pos.x), hand_x, 0.001, "glove flush against the trunk")
 	assert_almost_eq(absf(c.blocker_pos.x), hand_x, 0.001, "blocker flush against the trunk")
-	assert_almost_eq(c.glove_pos.y - GoalieAnatomy.hand_vertical_half_extent(),
+	assert_almost_eq(c.glove_pos.y + GoalieAnatomy.GLOVE_BOX_OFFSET_Y_M
+			- GoalieAnatomy.hand_vertical_half_extent(),
 			GoalieAnatomy.pad_span(true).y, 0.001, "sitting on the pad tops")
 
 

@@ -512,7 +512,8 @@ func _set_down_hands(c: GoalieBodyConfig, glove_y: float) -> void:
 # so the hands sit exactly where that gap is.
 func _tuck_into_block(c: GoalieBodyConfig) -> void:
 	var hand_x: float = GoalieAnatomy.torso_half_width() + GoalieAnatomy.GLOVE_BOX_WIDTH_M * 0.5
-	var hand_y: float = GoalieAnatomy.pad_span(true).y + GoalieAnatomy.hand_vertical_half_extent()
+	var hand_y: float = GoalieAnatomy.pad_span(true).y + GoalieAnatomy.hand_vertical_half_extent() \
+			- GoalieAnatomy.GLOVE_BOX_OFFSET_Y_M
 	c.body_rot = Vector3.ZERO
 	c.glove_pos = Vector3(-hand_x, hand_y, BLOCK_HAND_Z_M)
 	c.blocker_pos.x = hand_x
@@ -960,7 +961,8 @@ func _apply_prelean(c: GoalieBodyConfig, inputs: Inputs) -> void:
 	# Drift the relevant hand a fraction of the way toward the predicted corner.
 	if impact_local_x <= 0.0:
 		var full_x: float = clampf(impact_local_x, glove_max_x_outward, glove_max_x_inward)
-		c.glove_pos = c.glove_pos.lerp(Vector3(full_x, target_y, c.glove_pos.z), s)
+		c.glove_pos = c.glove_pos.lerp(Vector3(full_x,
+				target_y - GoalieAnatomy.GLOVE_BOX_OFFSET_Y_M, c.glove_pos.z), s)
 	else:
 		var full_x: float = clampf(impact_local_x, blocker_max_x_inward, blocker_max_x_outward)
 		c.blocker_pos = c.blocker_pos.lerp(Vector3(full_x, target_y, c.blocker_pos.z), s)
@@ -1016,7 +1018,8 @@ func _apply_shot_hand_reaction(c: GoalieBodyConfig, inputs: Inputs) -> void:
 		pitch_deg = shoulder_pitch_back_max_deg * p
 	c.body_rot = Vector3(c.body_rot.x + pitch_deg, c.body_rot.y, lean_deg)
 	if impact_local_x <= 0.0:
-		_reach_glove(c, impact_local_x, target_y)
+		# The pocket, not the hand point, goes to the puck.
+		_reach_glove(c, impact_local_x, target_y - GoalieAnatomy.GLOVE_BOX_OFFSET_Y_M)
 	else:
 		_reach_blocker(c, impact_local_x, target_y)
 
