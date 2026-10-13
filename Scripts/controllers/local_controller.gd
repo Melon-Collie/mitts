@@ -261,7 +261,9 @@ func _physics_process(delta: float) -> void:
 	_pickup_claim_floor = maxf(_pickup_claim_floor - delta, 0.0)
 	_poke_cooldown = maxf(_poke_cooldown - delta, 0.0)
 	_poke_claim_floor = maxf(_poke_claim_floor - delta, 0.0)
-	if not _is_host and NetworkManager.is_clock_ready() and not skater.is_ghost and not puck.pickup_locked and _sm.get_state() != State.SHOT_BLOCKING:
+	# Down, only a diver's stick plays (and only to poke: see the pickup gate).
+	if not _is_host and NetworkManager.is_clock_ready() and not skater.is_ghost and not puck.pickup_locked and _sm.get_state() != State.SHOT_BLOCKING \
+			and (not skater.is_knocked_down or skater.is_diving):
 		var blade_pos_for_claim: Vector3 = skater.get_blade_contact_global()
 		# Branch on the CLIENT-side carrier view (PuckController, driven by the
 		# carrier events). Never gate this on puck.carrier: it is host-only and
@@ -295,6 +297,7 @@ func _physics_process(delta: float) -> void:
 			# it arrives through the puck sync.
 			if in_range and not skater.deflect_intent and _sm.get_state() != State.SLAPPER_CHARGE_WITHOUT_PUCK \
 					and not skater.stick_tied and skater.pin_role == BoardPinRules.Role.NONE \
+					and not skater.is_knocked_down \
 					and not StickCheckRules.is_stick_busy(skater.stick_check_phase) and _pickup_claim_floor <= 0.0 and (rising_edge or _claim_cooldown <= 0.0):
 				_pickup_claim_floor = _PICKUP_CLAIM_FLOOR_S
 				_claim_cooldown = _CLAIM_COOLDOWN_S
@@ -583,11 +586,13 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	var prev_kd: float = knockdown_timer
 	knockdown_timer = server_state.knockdown_timer
 	skater.is_knocked_down = knockdown_timer > 0.0
+	skater.is_diving = server_state.diving
 	_sync_knockdown_meta(prev_kd)
 	# Snap facing for replay accuracy — facing drives the direction of travel,
 	# so the replay must start from the server's facing to reproduce the trajectory.
 	_pose.facing = server_state.facing
 	skater.set_facing(_pose.facing)
+	_sync_dive_layout()
 	# IK lock side is relative to the old facing; reset so the gate re-evaluates
 	# cleanly from the snapped facing on the first post-reconcile frame.
 	_pose.ik_locked_side = 0

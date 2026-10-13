@@ -254,6 +254,18 @@ pinned bot slides along the wall and reverses when its pinner commits to followi
 land. A carrier at the wall braces (holds the commit) when a committed checker
 closes on him square into the boards — the `protects_the_puck` cognition gate.
 
+**Any defender's extra is the shot block** (`AIShotBlockRead`, applied by
+`SkaterAgentShotBlock` every tick after dispatch). He drops into it when an
+opponent in our end winds up and we stand on the line from the release to our
+net, the shot is still under the block's seal when it reaches us (his replicated
+loft rung under gravity), and we are not inside the room our goalie needs to see
+around a screen. He stays down while the released puck is still coming through
+us. The last defender on a man-down rush dives across a pass lane past his
+standing reach: his stick, plus what he skates toward the lane while the pass
+travels to it from rest across it. The dive must still reach the lane, and no
+teammate may be nearer it. Both are the `blocks_shots` cognition gate, closed on
+Easy.
+
 Still unfactored: **hold a post** — the per-role fallbacks and their anchor
 constants. The open question is whether it should be a verb at all: if the
 assigner always names a man, the carrier, or the puck, there is no fourth state

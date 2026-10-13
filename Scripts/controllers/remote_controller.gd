@@ -526,11 +526,20 @@ func _predict_sample_forward(newest: SkaterNetworkState, dt: float) -> void:
 	_fwd_ticks = ticks
 	_fwd_position = _fp_result.position
 	_fwd_velocity = _fp_result.velocity
-	if newest.pin_role != BoardPinRules.Role.NONE:
-		BoardPinRules.forward_cap_locked(_fp_result, newest.position, skater.collision_radius(),
-				newest.pin_role, newest.pin_strength, float(ticks) / float(Constants.PHYSICS_TICK))
+	_correct_forward(newest, float(ticks) / float(Constants.PHYSICS_TICK))
 	_sample_scratch.position = _fp_result.position
 	_sample_scratch.velocity = _fp_result.velocity
+
+
+# A snapshot's downed slide and board pin over a forward window, on _fp_result —
+# the corrections LagCompRewind makes host-side too (render == rewind).
+func _correct_forward(snap: SkaterNetworkState, window_s: float) -> void:
+	if snap.knockdown_timer > 0.0:
+		SkaterMovementRules.slide_forward(_fp_result, snap.position, snap.velocity,
+				knockdown_friction, snap.knockdown_timer, window_s)
+	if snap.pin_role != BoardPinRules.Role.NONE:
+		BoardPinRules.forward_cap_locked(_fp_result, snap.position, skater.collision_radius(),
+				snap.pin_role, snap.pin_strength, window_s)
 
 
 func _interpolate(delta: float) -> void:
@@ -681,10 +690,7 @@ func _interpolate(delta: float) -> void:
 					fp_stagger, _body_check_config())
 		# The interpolated base, as the host's rewind reads it (pin fields from the
 		# newer endpoint, the position interpolated).
-		if interpolated.pin_role != BoardPinRules.Role.NONE:
-			BoardPinRules.forward_cap_locked(_fp_result, interpolated.position,
-					skater.collision_radius(), interpolated.pin_role, interpolated.pin_strength,
-					float(fp_ticks) / float(Constants.PHYSICS_TICK))
+		_correct_forward(interpolated, float(fp_ticks) / float(Constants.PHYSICS_TICK))
 		interpolated.position = _fp_result.position
 		interpolated.velocity = _fp_result.velocity
 	# Forward-prediction quality: the pre-damp error the smoother is about to
@@ -766,7 +772,9 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	var prev_kd: float = knockdown_timer
 	knockdown_timer = state.knockdown_timer
 	skater.is_knocked_down = knockdown_timer > 0.0
+	skater.is_diving = state.diving
 	_sync_knockdown_meta(prev_kd)
+	_sync_dive_layout()
 	# The torso's tilt is the frame the wire's blade is local to, so it too
 	# lands before the blade.
 	_pose.apply_wire_lean(state)

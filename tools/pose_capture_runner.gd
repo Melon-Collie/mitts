@@ -211,6 +211,13 @@ const POSES: Array = [
 	{"name": "pin_pinner", "puck": false, "pin_role": BoardPinRules.Role.PINNER,
 		"cam": Vector3(-0.8, 0.6, 3.2),
 		"steps": [[60, {"hit": true, "aim": Vector3(3.0, 0.0, 0.0)}]]},
+	# ── Dive ────────────────────────────────────────────────────────────────
+	# Stance + block out of a skate: down and sliding on, laid out across the
+	# line of travel toward the cursor, stick along the ice. Mid-slide.
+	{"name": "dive", "puck": false, "game_cam": true, "steps": [
+		[120, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
+		[40, {"stance": true, "block": true, "aim": Vector3(2.5, 0.0, -1.0)}],
+	]},
 	# ── Knockdown ───────────────────────────────────────────────────────────
 	# A hit hard enough to put the skater down, mid-fall and lying, shoved to
 	# the side and backward. These are the tiles that show where the fall

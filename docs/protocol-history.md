@@ -339,3 +339,9 @@ here whenever you bump, in the same format.
 #      role's along-wall slide cap) on the render and the rewind, in place of
 #      forward_correction's bleed. The block stays 58 bytes. Replay
 #      FORMAT_VERSION 15.
+# v75: the dive (docs/defensive-play-plan.md, Phase 4). Skater byte 56 becomes
+#      the body-lock byte: pin_role in bits 0-1 and diving in bit 2. A dive's
+#      down window rides knockdown_timer and recoil_dir. The forward prediction
+#      of any downed snapshot (knockdown or dive) is now a friction-only slide
+#      (SkaterMovementRules.slide_forward) on the render and the rewind alike,
+#      in place of integrate_forward on its last intent. Replay FORMAT_VERSION 16.

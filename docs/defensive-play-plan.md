@@ -5,7 +5,7 @@ Status: **Phases 1–3 implemented** (v70–v72), playtest pending.
   slowed, held by either player (*Tie revision*).
 - **The pin revision is built** (v74): a locked position contest
   (*Pin revision*), replacing 3b's grip-and-budget pin.
-- **Phase 4 is planned:** bots block shots, and the dive.
+- **Phase 4 is built** (v75): bots block shots, and the dive (*Phase 4*, as built).
 
 Each phase is meant to ship as its own PR, with its own protocol
 bump and playtest.
@@ -418,10 +418,10 @@ lever.
   before any number moves.
 
 ### Netcode
-- **Wire.** `pin_partner` (s8 slot, −1 none) plus a role bit (pinner or pinned) on
-  both locked players. These replace `pin_timer` and `pin_strength`: strength
-  derives from the two skaters' weights, and the offset from their positions.
-  The cap's elapsed time is host-only.
+- **Wire.** `pin_role` (none, pinner or pinned) on both locked players, in the
+  byte `pin_timer` used; `pin_strength` stays, since the victim's slide cap reads
+  it. The offset derives from their positions. The cap's elapsed time is
+  host-only.
 - **Prediction.** Each client predicts its own locked movement, a speed cap read off
   replicated state, so the only snaps are onset and end, through reconcile like
   stagger.
@@ -610,7 +610,7 @@ the play a pin can't make, because there's no wall behind the forward.
 - The claim resolver keeps passing the contract test.
 - The remote pair lookup.
 
-## Phase 4 — the shot block, for bots and as a dive (planned)
+## Phase 4 — the shot block, for bots and as a dive
 
 ### 4a. Bots block shots
 The C verb has never been used by a bot. A blocker decides from what it can see:
@@ -659,10 +659,51 @@ The defenseman's 2-on-1 play: down on the ice across the pass lane, stick out.
 - **Bots.** The 2-on-1 defender dives when the pass across is the threat, his body
   can't otherwise reach the lane in time, and the carrier is inside shooting range.
   This read is gated per tier too.
-- **Open:**
-  - can the diver's stick catch the puck, or only knock it away? The proposal is
-    knock away only: deflect, no reception;
-  - how long down? The proposal is the knockdown's get-up, about 1 s.
+- **Decided:** the diver's stick knocks the puck away and catches nothing, and he
+  is down `DiveRules.DOWN_S` 1.0 s, the get-up included.
+
+### As built
+- **Rules.** `DiveRules`: the start (stance + block from plain puckless skating,
+  not while down), the layout toward the cursor, and the block point on the lying
+  line nearest the puck's path.
+- **The dive rides the knockdown rail.** `SkaterController._start_dive` sets the
+  layout, writes it into `stagger_recoil_dir` (the fall direction) and starts a
+  knockdown with the body's own velocity. `Skater.is_diving` is what turns the
+  downed body into a block and keeps its stick live.
+- **The block.** One low line from the skates to the blade
+  (`DiveRules.BLOCK_LENGTH_M`, the laid-out hand at 1.9 m plus a league-default
+  stick), radius 0.22 m, sealed to 0.3 m. `PuckController._check_body_blocks`
+  takes the point of it nearest the puck's path.
+- **The stick.** The hand is posed and the blade follows one stick length past
+  it, flat on the ice. The arm reaches down for the ice first and out along it as
+  the body lies. The live blade hangs from the tilted rig, so the fall tilt is
+  laid on the tick before the hand and blade are placed in it
+  (`_apply_fall_tilt`), not left to the render pass. A diver's blade touching a
+  loose puck deflects it (`apply_blade_deflect`); pickups and catches are refused.
+  The carrier poke stays open to his stick.
+- **Wire (v75).** The pin's byte becomes the "body lock" byte: `pin_role` in bits
+  0–1, `diving` in bit 2. The layout rides `recoil_dir`, and the down time rides
+  `knockdown_timer`, both already on the wire.
+- **Forward prediction.** `SkaterMovementRules.slide_forward` is applied after
+  the integration for any downed body, on the render
+  (`RemoteController._correct_forward`) and the rewind (`LagCompRewind`) alike.
+- **Fixed on the way.** A knocked-down client could have a pickup or poke claim
+  granted (no gate in `LocalController` or the resolvers), and a downed remote
+  was forward-predicted skating on its last intent.
+- **Bots.** `AIShotBlockRead` (pure) and `SkaterAgentShotBlock` (the agent's
+  collaborator, after dispatch, behind the `blocks_shots` cognition gate,
+  closed on Easy):
+  - **The block:** an opponent in our end is winding up (`WRISTER_AIM` or a
+    slapper charge), we are on the line from his release to our net and clear of
+    his stick, the shot is still under the block's seal when it reaches us (his
+    loft rung under gravity), and we are not inside the room our goalie needs to
+    see around us (`ScreenConfig`). After the release the block holds while the
+    puck is still coming through us.
+  - **The dive:** a man down on the rush (`AIRushRead.numbers == DOWN_ONE`), the
+    carrier below the tops of our circles, and a pass lane to one of his men that
+    is past our stick plus what we skate toward it while the pass travels, but
+    inside the dive's reach. No teammate may be nearer that lane. The cursor goes
+    on the lane.
 
 ### Further candidates, not committed
 - **Net-front box-out.** The pin's sustained-contact model in open ice, moving a
@@ -677,7 +718,8 @@ The defenseman's 2-on-1 play: down on the ice across the pass lane, stick out.
 | 1 | `0x4000` held, `0x8000` pressed (u16 full) | `stick_check_phase` u8 | `notify_puck_stolen` + forced-lift duration |
 | 2 | — | `stick_tied`, flags bit 7 | `send/receive_stick_tie_claim` |
 | 3 | — | `pin_timer` u8, `pin_strength` u8 | `notify_puck_frozen_called` |
-| pin revision | — | `pin_partner` s8 + role bit, replacing `pin_timer` / `pin_strength` | — |
+| pin revision | — | `pin_role` u8 in `pin_timer`'s byte; `pin_strength` kept | — |
+| 4 | — | `diving`, bit 2 of the pin's byte (now the body-lock byte) | — |
 
 Each phase bumps `BuildInfo.PROTOCOL_VERSION` and gets an entry in
 `docs/protocol-history.md`.

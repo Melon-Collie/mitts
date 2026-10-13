@@ -34,7 +34,8 @@ extends RefCounted
 #                      torso_lean 2×s16 + posture_lean s16, all @π/32767 rad (v62),
 #                      recoil_dir u8 (bearing 0–TAU→0–256, 0 = backward) (v63),
 #                      stick_check u8 (phase[2:0] + ticks elapsed[7:3]) (v70),
-#                      pin_role u8 (BoardPinRules.Role), pin_strength u8@1/255 (v74)
+#                      body lock u8 (pin_role[1:0] BoardPinRules.Role (v74) + diving[2] (v75)),
+#                      pin_strength u8@1/255 (v74)
 #      Puck    (13 B): pos s16/s16/s16@1cm, vel 3×s16@0.02m/s, carrier_idx u8 (0xFF=none)
 #      Goalie  (43 B): root (12 B) + pose (31 B). Root:
 #                      pos_x/z s16@1cm, rot_y s16@π/32767, state u8, fho u8,
@@ -446,7 +447,7 @@ func decode_stats(data: Array) -> void:
 #          facing(23..24) ubrot(25..26) fav(27..28) ubav(29..30) lp_ts(31..34)
 #          flags(35) charge(36) stagger(37) knockdown(38) intent(39)
 #          tilt(40..43) tilt_vel(44..47) torso(48..51) posture(52..53) recoil(54)
-#          stick_check(55) pin_role(56) pin_strength(57)
+#          stick_check(55) body_lock(56) pin_strength(57)
 # Writes the skater block into `b` at `o`, returning the next offset. Godot 4
 # passes Packed arrays to functions BY REFERENCE, so these writes land in the
 # caller's buffer — that is what lets the hot path fill one pre-sized packet
@@ -529,7 +530,7 @@ static func _write_skater_quantized(b: PackedByteArray, o: int, s: SkaterNetwork
 	# peaks near 13°, so a half step tilts the torso by well under 0.2°.
 	b.encode_u8(o, posmod(roundi(atan2(s.recoil_dir.x, s.recoil_dir.y) / TAU * 256.0), 256)); o += 1
 	b.encode_u8(o, StickCheckRules.pack(s.stick_check_phase, s.stick_check_elapsed)); o += 1
-	b.encode_u8(o, s.pin_role); o += 1
+	b.encode_u8(o, (s.pin_role & 0x03) | (0x04 if s.diving else 0)); o += 1
 	b.encode_u8(o, clampi(roundi(s.pin_strength * 255.0), 0, 255)); o += 1
 	return o
 
@@ -616,7 +617,9 @@ static func _decode_skater_quantized(b: PackedByteArray, offset: int = 0) -> Ska
 	var stick_check: int = b.decode_u8(o); o += 1
 	s.stick_check_phase = StickCheckRules.unpack_phase(stick_check)
 	s.stick_check_elapsed = StickCheckRules.unpack_elapsed(stick_check)
-	s.pin_role = b.decode_u8(o) if b.decode_u8(o) <= BoardPinRules.Role.PINNED else 0; o += 1
+	var lock: int = b.decode_u8(o); o += 1
+	s.pin_role = lock & 0x03 if (lock & 0x03) <= BoardPinRules.Role.PINNED else 0
+	s.diving = (lock & 0x04) != 0
 	s.pin_strength = b.decode_u8(o) / 255.0
 	return s
 

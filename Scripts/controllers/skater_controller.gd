@@ -188,6 +188,9 @@ var knockdown_fall_max_entry_omega: float = 4.2
 # (KnockdownFallRules.wall_safe_fall_dir), so a fall near the glass or the goal
 # net lies along the obstacle instead of through it.
 var knockdown_fall_body_reach_m: float = 1.9
+# A diver's top arm reaches this share of its length out along the layout,
+# short of locked straight.
+const DIVE_ARM_STRETCH: float = 0.85
 var knockdown_brace_in_seconds: float = 0.15  # arms pull into the brace over this
 # Downed-leg sprawl (KnockdownFallRules.sprawl_into): the scatter window after
 # first ice contact, and the free leg's outward splay at a maximal hit.
@@ -1720,8 +1723,12 @@ func _process_input(input: InputState, delta: float) -> void:
 		# only, like the celebration override above — the wire then carries the
 		# braced pose to spectating machines for free, and blade interactions
 		# are already gated by is_knocked_down so the moved blade feeds nothing.
+		# A diver's stick is the exception: it lies out and still knocks pucks away.
 		if knockdown_timer > 0.0:
-			_apply_knockdown_brace()
+			if skater.is_diving:
+				_apply_dive_layout()
+			else:
+				_apply_knockdown_brace()
 
 
 # Render-rate cosmetic pose pass, registered on the skater and invoked once per
@@ -1754,10 +1761,36 @@ func _render_pose_update(delta: float) -> void:
 func _apply_knockdown_fall() -> void:
 	var kd_t: float = clampf(
 			knockdown_timer / maxf(knockdown_getup_seconds, 0.001), 0.0, 1.0)
+	if not _apply_fall_tilt(kd_t):
+		return
+	if kd_t <= 0.0 or not skater.on_camera():
+		return
+	# Leg sprawl overlay, composed on the gait's crumple (which zeroed the
+	# stride under it). The side pick reads the RAW recoil dir, not the
+	# wall-deflected one — the deflection re-resolves per frame near the glass
+	# and would flip the pinned leg mid-lie. It lands after the tilt, which the
+	# legs read to rest their skates on the ice.
+	if _sprawl_scratch == null:
+		_sprawl_scratch = KnockdownFallRules.SprawlPose.new()
+	var legs: Vector3 = _skating.leg_segment_lengths()
+	var share: float = knockdown_pose_weight()
+	# The buckle is solved from the drop the gait is applying at this instant,
+	# entry and get-up alike: the drop is 1 − cos of the angle, so scaling a
+	# solved pose instead leaves the boots under the ice part-way. The scatter
+	# alone eases out with the get-up envelope.
+	KnockdownFallRules.sprawl_into(_sprawl_scratch, knockdown_elapsed(),
+			_knockdown_entry_speed, stagger_recoil_dir, knockdown_pose_drop_m * share,
+			legs, _fall_config(), KnockdownFallRules.getup_scale(kd_t))
+	skater.apply_knockdown_leg_overlay(_sprawl_scratch, share)
+
+
+# The whole-rig tilt alone; false once upright and level. A pure function of
+# tick state, so the tick may lay it too (a diver's live blade hangs from it).
+func _apply_fall_tilt(kd_t: float) -> bool:
 	var tilt: float = knockdown_fall_tilt()
 	if tilt == 0.0 and kd_t <= 0.0:
 		skater.set_knockdown_fall(Vector3.UP, 0.0)
-		return
+		return false
 	# Fall direction is the recoil direction (body frame); the tilt axis is its
 	# horizontal perpendicular, so positive tilt tips the head the way the hit
 	# shoved. Falling backward lands face-up, forward face-down — the read
@@ -1785,25 +1818,7 @@ func _apply_knockdown_fall() -> void:
 	var d: Vector3 = skater.global_transform.basis.inverse() \
 			* Vector3(safe_dir.x, 0.0, safe_dir.y)
 	skater.set_knockdown_fall(Vector3.UP.cross(d), tilt)
-	if kd_t <= 0.0 or not skater.on_camera():
-		return
-	# Leg sprawl overlay, composed on the gait's crumple (which zeroed the
-	# stride under it). The side pick reads the RAW recoil dir, not the
-	# wall-deflected one — the deflection re-resolves per frame near the glass
-	# and would flip the pinned leg mid-lie. It lands after the tilt, which the
-	# legs read to rest their skates on the ice.
-	if _sprawl_scratch == null:
-		_sprawl_scratch = KnockdownFallRules.SprawlPose.new()
-	var legs: Vector3 = _skating.leg_segment_lengths()
-	var share: float = knockdown_pose_weight()
-	# The buckle is solved from the drop the gait is applying at this instant,
-	# entry and get-up alike: the drop is 1 − cos of the angle, so scaling a
-	# solved pose instead leaves the boots under the ice part-way. The scatter
-	# alone eases out with the get-up envelope.
-	KnockdownFallRules.sprawl_into(_sprawl_scratch, knockdown_elapsed(),
-			_knockdown_entry_speed, stagger_recoil_dir, knockdown_pose_drop_m * share,
-			legs, _fall_config(), KnockdownFallRules.getup_scale(kd_t))
-	skater.apply_knockdown_leg_overlay(_sprawl_scratch, share)
+	return true
 
 
 # Elapsed down-time of the current knockdown (0 when upright) — the fall clock
@@ -1857,6 +1872,62 @@ func knockdown_fold_rad() -> float:
 # ice; face-up and sideways they pull in over the chest, stick low across the
 # body — the guarded curl of a player riding out a hit. A harder hit reaches
 # farther, so the brace varies with the fall like the legs do.
+# A diver's stick lies out along the layout, its blade flat on the ice — the
+# stick that knocks a puck away. The hand reaches on from the lying shoulder and
+# the blade follows one stick length past it (a held pose authored blade-first
+# draws a short stick; Scripts/controllers/CLAUDE.md). On the brace's own clock,
+# so going down and getting up are continuous.
+func _apply_dive_layout() -> void:
+	var kd_t: float = clampf(
+			knockdown_timer / maxf(knockdown_getup_seconds, 0.001), 0.0, 1.0)
+	var brace_t: float = KnockdownFallRules.brace_at(
+			knockdown_elapsed(), kd_t, knockdown_brace_in_seconds)
+	if brace_t <= 0.001:
+		return
+	# The live blade hangs from the tilted rig, so the tilt is laid on the tick
+	# before anything is placed in it, not left to the render pass.
+	_apply_fall_tilt(kd_t)
+	var layout := Vector3(skater.dive_layout.x, 0.0, skater.dive_layout.y)
+	var shoulder: Vector3 = skater.upper_body_to_global(skater.shoulder.position)
+	# The arm reaches down for the ice first and out along it as the body lies.
+	var reach: float = DIVE_ARM_STRETCH * (skater.upper_arm_length + skater.forearm_length)
+	var down: float = clampf(shoulder.y - DiveRules.HAND_HEIGHT_M, 0.0, reach)
+	var hand_world: Vector3 = shoulder + layout * sqrt(reach * reach - down * down) \
+			+ Vector3.DOWN * down
+	var drop: float = hand_world.y - blade_height
+	var span: float = sqrt(maxf(stick_length * stick_length - drop * drop, 0.0))
+	var blade_world: Vector3 = Vector3(hand_world.x, blade_height, hand_world.z) + layout * span
+	var hand_target: Vector3 = skater.upper_body_to_local(hand_world)
+	var blade_target: Vector3 = skater.clamp_blade_to_walls(skater.upper_body_to_local(blade_world))
+	skater.set_top_hand_position(skater.get_top_hand_position().lerp(hand_target, brace_t))
+	skater.set_blade_position(skater.get_blade_position().lerp(blade_target, brace_t))
+
+
+# Goes down in a dive: the knockdown's window and fall, laid out toward the
+# cursor, with no velocity of its own — the body slides on as it was going.
+func _start_dive(input: InputState) -> void:
+	var travel := Vector2(skater.velocity.x, skater.velocity.z)
+	skater.dive_layout = DiveRules.layout_dir(skater.global_position, input.mouse_world_pos,
+			travel if travel.length_squared() > 1e-4 else _pose.facing)
+	var local: Vector3 = skater.global_transform.basis.inverse() \
+			* Vector3(skater.dive_layout.x, 0.0, skater.dive_layout.y)
+	if Vector2(local.x, local.z).length_squared() > 1e-8:
+		stagger_recoil_dir = Vector2(local.x, local.z).normalized()
+	skater.is_diving = true
+	_set_knockdown_from_impulse(DiveRules.DOWN_S, skater.velocity)
+
+
+# A diver's layout in world space, from the replicated fall direction (body
+# frame) and the facing, which holds still while down.
+func _sync_dive_layout() -> void:
+	if not skater.is_diving:
+		return
+	var world: Vector3 = skater.global_transform.basis \
+			* Vector3(stagger_recoil_dir.x, 0.0, stagger_recoil_dir.y)
+	if Vector2(world.x, world.z).length_squared() > 1e-8:
+		skater.dive_layout = Vector2(world.x, world.z).normalized()
+
+
 func _apply_knockdown_brace() -> void:
 	var kd_t: float = clampf(
 			knockdown_timer / maxf(knockdown_getup_seconds, 0.001), 0.0, 1.0)
@@ -1941,6 +2012,7 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.stick_tied = skater.stick_tied
 	state.pin_role = skater.pin_role
 	state.pin_strength = skater.pin_strength
+	state.diving = skater.is_diving
 	# Host-only shaft segment for stick-lift claim resolution (paired with
 	# blade_contact_world). World-space grip point — the wire top_hand_position
 	# is upper-body-local and can't be used for host-side world geometry.
@@ -2048,10 +2120,12 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	var prev_kd: float = knockdown_timer
 	knockdown_timer = state.knockdown_timer
 	skater.is_knocked_down = knockdown_timer > 0.0
+	skater.is_diving = state.diving
 	# Fall metadata off the recorded velocity (stamped above), so a replayed
 	# knockdown falls the way the live one did.
 	_sync_knockdown_meta(prev_kd)
 	skater.set_facing(state.facing)
+	_sync_dive_layout()
 	skater.set_upper_body_rotation(state.upper_body_rotation_y)
 	skater.set_top_hand_position(state.top_hand_position)
 	_pose.apply_wire_lean(state)
@@ -2296,6 +2370,7 @@ func teleport_to(pos: Vector3, facing: Vector2 = Vector2.ZERO) -> void:
 	var was_down: bool = knockdown_timer > 0.0
 	knockdown_timer = 0.0
 	skater.is_knocked_down = false
+	skater.is_diving = false
 	_knockdown_total = 0.0
 	_knockdown_entry_speed = 0.0
 	# The render pass only clears the tilt while it runs, and it's
@@ -2565,6 +2640,10 @@ func faceoff_center_distance() -> float:
 
 
 func _enter_shot_block() -> void:
+	# Down (a knockdown, or a dive with the block still held) is no stance to
+	# block from; a block held through the get-up starts once he is up.
+	if knockdown_timer > 0.0:
+		return
 	_sm.set_state(State.SHOT_BLOCKING)
 	skater.set_block_stance(true)
 	# Square the upper body and clear lean/lag so the choreographed block pose
@@ -3106,8 +3185,16 @@ func _apply_movement(input: InputState, delta: float) -> void:
 	# decays, so the player recovers on every clock while grounded. All
 	# deterministic → reconcile replay reproduces the down window; the flag gates
 	# puck pickup (Skater.is_knocked_down).
+	# The dive goes down on the knockdown's rail ahead of the decay, so its first
+	# tick already slides; the get-up clears it.
+	if DiveRules.starts(input.stance_held, input.block_held,
+			_sm.get_state() == State.SKATING_WITHOUT_PUCK and not has_puck,
+			knockdown_timer > 0.0):
+		_start_dive(input)
 	knockdown_timer = maxf(knockdown_timer - delta, 0.0)
 	skater.is_knocked_down = knockdown_timer > 0.0
+	if not skater.is_knocked_down:
+		skater.is_diving = false
 	if skater.is_knocked_down:
 		stance_active = false
 		hit_active = false

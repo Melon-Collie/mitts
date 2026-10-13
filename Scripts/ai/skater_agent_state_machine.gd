@@ -1338,6 +1338,9 @@ var _lifts_sticks: bool = true
 # _ties_sticks gates both halves of the stick battle: tying a covered man's stick
 # and yanking one's own free. False = neither.
 var _ties_sticks: bool = true
+# _blocks_shots gates the standing block and the 2-on-1 dive (_shot_block).
+var _blocks_shots: bool = true
+var _shot_block := SkaterAgentShotBlock.new()
 # The FINISHER raises the blade (stick_lift_held) to tip an elevated incoming
 # shot, but that flag is only set on dispatch ticks. Cache + replay it on skipped
 # ticks or blade_up strobes at 1-in-dispatch_period and never reaches the raised
@@ -1508,6 +1511,7 @@ func setup(peer_id: int, team_id: int, brain: TeamBrain, team_id_by_peer: Dictio
 	_team_brain = brain
 	_team_id_by_peer = team_id_by_peer
 	_caps_by_peer = caps_by_peer
+	_shot_block.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_is_left_handed = is_left_handed
 	# Frame pacing: stagger this bot's dispatch and role-argmax phases by
 	# peer id, so a full roster doesn't run every expensive re-eval on the
@@ -1565,6 +1569,7 @@ func apply_profile(profile: BotSkillProfile) -> void:
 	_protects_the_puck = profile.protects_the_puck
 	_lifts_sticks = profile.lifts_sticks
 	_ties_sticks = profile.ties_sticks
+	_blocks_shots = profile.blocks_shots
 	# Execution error for LIVE bots (raw test agents stay deterministic):
 	# per-tier, split shot-vs-pass — the shot error is the tier's scoring
 	# dial, the pass error stays small so passes keep connecting. Timing
@@ -5580,6 +5585,16 @@ func _pin_threat_closing(snapshot: WorldSnapshot, me: SkaterNetworkState) -> boo
 				and dir.dot(out) >= BoardPinRules.BACKSTOP_MIN_INTO_WALL:
 			return true
 	return false
+
+
+# Shot blocks and the 2-on-1 dive (SkaterAgentShotBlock), every physics tick
+# after dispatch, so a held block is continuous. A carrier never blocks.
+func apply_shot_block(input: InputState, snapshot: WorldSnapshot) -> void:
+	if not _blocks_shots or _state == State.CARRY:
+		return
+	var rush: AIRushRead = _current_strategy.get_rush_read() if _current_strategy != null \
+			else _inert_rush_read
+	_shot_block.apply(input, snapshot, _own_goal_dir, rush, _blade_reach, _chase_max_accel)
 
 
 # Holds the stick-check button for a lift or a tie the dispatch started. Runs

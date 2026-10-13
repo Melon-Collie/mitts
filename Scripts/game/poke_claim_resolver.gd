@@ -141,6 +141,9 @@ func receive_claim(peer_id: int, host_timestamp: float,
 			or skater_snap.pin_role != BoardPinRules.Role.NONE \
 			or StickCheckRules.is_stick_busy(skater_snap.stick_check_phase):
 		return
+	# Down pokes nothing, except a diver's stick laid out along the ice.
+	if skater_snap.knockdown_timer > 0.0 and not skater_snap.diving:
+		return
 	# The attacker's blade is client-authoritative aim; ClaimantView is what bounds
 	# it against the host's own body and blade reconstruction.
 	if not _claimant.resolve(_registry, peer_id, skater_snap,

@@ -619,6 +619,12 @@ var stick_check_held: bool = false
 # players' sticks play no puck, and each slides along the wall at its role's cap.
 var pin_role: int = BoardPinRules.Role.NONE
 var pin_strength: float = 0.0
+# Down in a dive (DiveRules): set with the down timer by the controller on every
+# machine that simulates or applies the skater, and replicated. A diving body is
+# down like a knocked-down one, but its stick still knocks the puck away and its
+# body blocks low along `dive_layout` (world XZ, unit), the way it is laid out.
+var is_diving: bool = false
+var dive_layout: Vector2 = Vector2(0.0, -1.0)
 # Deliberate-deflect intent: true while a human player holds the shoot button
 # (LMB) WITHOUT carrying the puck — a committed "redirect this, don't catch it."
 # Set each tick by the controller (see SkaterController._wants_deflect); read
