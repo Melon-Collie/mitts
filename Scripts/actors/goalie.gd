@@ -58,6 +58,8 @@ const _GLOVE_CUFF_IN_GLOVE := Vector3(0.0, -0.03, 0.07)
 const _ELBOW_CLEARS_TRUNK_M: float = GoalieAnatomy.TORSO_BOX_WIDTH_M * 0.5 \
 		- GoalieAnatomy.SHOULDER_OFFSET.x + _UPPER_ARM_RADIUS
 
+# The blocker elbow sits back of the shoulder by at least this much.
+const _BLOCKER_ELBOW_BEHIND_M: float = 0.05
 # The blocker arm's elbow from the last _seat_blocker, goalie-local; the drawn
 # arm reads it so it is the arm the board rides.
 var _blocker_elbow: Vector3 = Vector3.ZERO
@@ -477,7 +479,8 @@ func _make_connector_mesh() -> MeshInstance3D:
 
 
 # The blocker is a glove on the arm, not an end point: the hand (BlockArm) is
-# what is posed, the elbow comes out to the side over it, and the board runs
+# what is posed, the elbow comes out to the side over it and back of the
+# shoulder, and the board runs
 # along the forearm's outer side from the hand, face rotated slightly out
 # toward the corner, so it moves and turns with the arm. Runs wherever the hand
 # or the trunk is posed — the host's tick and every client and replay alike —
@@ -488,7 +491,7 @@ func _seat_blocker() -> void:
 	var grip: Vector3 = _block_arm.position
 	_blocker_elbow = TwoBoneIK.solve_elbow_raised(shoulder, grip,
 			_ARM_UPPER_LEN, _ARM_FOREARM_LEN, Vector3.FORWARD, Vector3.RIGHT,
-			_ELBOW_CLEARS_TRUNK_M)
+			_ELBOW_CLEARS_TRUNK_M, _BLOCKER_ELBOW_BEHIND_M)
 	var along: Vector3 = grip - _blocker_elbow   # elbow → fingertips
 	along = along.normalized() if along.length_squared() > 1e-8 else Vector3.DOWN
 	var turn: float = deg_to_rad(GoalieAnatomy.BLOCKER_FACE_OUTWARD_DEG)

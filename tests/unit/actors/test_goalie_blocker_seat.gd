@@ -57,13 +57,17 @@ func test_the_board_goes_where_the_hand_goes() -> void:
 	_check_seat(g, "after the reach")
 
 
-func test_the_ready_forearm_drops_near_vertical() -> void:
-	# The elbow comes out to the side so the forearm, and the board along it,
-	# drop near straight down to the hand.
+func test_the_ready_forearm_drops_near_vertical_from_behind() -> void:
+	# The elbow comes out to the side and back of the shoulder so the forearm,
+	# and the board along it, drop near straight down to the hand.
 	var g: Goalie = _posed(State.READY)
 	var along: Vector3 = ((g.get_node("BlockArm") as Node3D).position - g._blocker_elbow).normalized()
-	assert_lt(rad_to_deg(along.angle_to(Vector3.DOWN)), 30.0,
-			"the ready blocker forearm hangs within 30° of vertical")
+	assert_lt(rad_to_deg(along.angle_to(Vector3.DOWN)), 40.0,
+			"the ready blocker forearm hangs within 40° of vertical")
+	var body: Node3D = g.get_node("Body")
+	var shoulder: Vector3 = body.position + body.basis * GoalieAnatomy.SHOULDER_OFFSET
+	assert_gte(g._blocker_elbow.z - shoulder.z, Goalie._BLOCKER_ELBOW_BEHIND_M - 0.005,
+			"the ready blocker elbow sits back of the shoulder")
 
 
 func test_the_network_pose_seats_the_board_too() -> void:

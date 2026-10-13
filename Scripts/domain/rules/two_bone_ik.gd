@@ -91,10 +91,12 @@ static func solve_elbow_hanging(
 			outward, clear_out, 1.0)
 
 
-# The elbow RAISED over its hand: the highest of the same clear elbows, which
-# drops the forearm as near straight down to the hand as the bones allow — the
-# elbow comes out to the side to make room. A goalie's blocker arm holds it so,
-# the board riding the forearm (Goalie._seat_blocker).
+# The elbow RAISED over its hand: the highest of the same clear elbows that
+# also sits at least `behind` back of the shoulder, which drops the forearm as
+# near straight down to the hand as the bones allow — the elbow comes out to
+# the side and back to make room. A goalie's blocker arm holds it so, the board
+# riding the forearm (Goalie._seat_blocker). If no elbow is that far back, the
+# one nearest it wins.
 static func solve_elbow_raised(
 		shoulder: Vector3,
 		hand: Vector3,
@@ -102,15 +104,17 @@ static func solve_elbow_raised(
 		forearm_len: float,
 		forward: Vector3,
 		outward: Vector3,
-		clear_out: float = INF) -> Vector3:
+		clear_out: float = INF,
+		behind: float = 0.0) -> Vector3:
 	return _solve_elbow_clear(shoulder, hand, upper_len, forearm_len, forward,
-			outward, clear_out, -1.0)
+			outward, clear_out, -1.0, behind)
 
 
-# The clear elbow lowest in `height_sign` × y (1 lowest, −1 highest).
+# The clear elbow lowest in `height_sign` × y (1 lowest, −1 highest). With
+# `behind` finite, an elbow less than that far back of the shoulder is not clear.
 static func _solve_elbow_clear(shoulder: Vector3, hand: Vector3, upper_len: float,
 		forearm_len: float, forward: Vector3, outward: Vector3, clear_out: float,
-		height_sign: float) -> Vector3:
+		height_sign: float, behind_min: float = -INF) -> Vector3:
 	var d_vec: Vector3 = hand - shoulder
 	var d: float = d_vec.length()
 	if d < 0.0001:
@@ -132,7 +136,8 @@ static func _solve_elbow_clear(shoulder: Vector3, hand: Vector3, upper_len: floa
 		var off: Vector3 = e - shoulder
 		var out: float = off.dot(outward)
 		var behind: float = maxf(-off.dot(forward), 0.0) if out < clear_out else 0.0
-		var miss: float = behind + maxf(-out, 0.0)
+		var miss: float = behind + maxf(-out, 0.0) \
+				+ maxf(off.dot(forward) + behind_min, 0.0)
 		var score: float = e.y * height_sign
 		if miss < best_miss - 0.0001 or (absf(miss - best_miss) <= 0.0001 and score < best_score):
 			best_miss = miss
