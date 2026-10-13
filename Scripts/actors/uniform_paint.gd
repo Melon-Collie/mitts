@@ -11,6 +11,8 @@ extends Object
 const ROUGH_CLOTH: float = 0.9
 const ROUGH_HELMET: float = 0.28   # glossy hard plastic
 const ROUGH_SKATE: float = 0.42    # synthetic boot leather
+const ROUGH_NYLON: float = 0.55    # the breezers' satin shell
+const ROUGH_GLOVE: float = 0.6     # glove leather and nylon
 
 # Stripe-texture layout. Godot's cylinder UV puts the curved side in the lower
 # half of V and the two end caps in the upper half, so a stripe pattern is
