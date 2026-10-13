@@ -32,8 +32,9 @@ const PAD_BOX_HEIGHT_M: float = 0.84
 # Torso: 0.52 x 0.72 x 0.28 (Body).
 const TORSO_BOX_WIDTH_M: float = 0.52
 const TORSO_BOX_HEIGHT_M: float = 0.72
-# Glove: 0.25 x 0.25 x 0.2 (Glove).
+# Glove: 0.25 x 0.32 x 0.2 (Glove) — taller than wide, as the trapper is.
 const GLOVE_BOX_WIDTH_M: float = 0.25
+const GLOVE_BOX_HEIGHT_M: float = 0.32
 
 # ── Pose (GoalieController exports / GoalieBodyConfigBuilder stance) ─────────
 # Lateral offset of each pad's centre from the body midline.
@@ -60,7 +61,9 @@ static func torso_half_width() -> float:
 	return TORSO_BOX_WIDTH_M * 0.5
 
 
-const HEAD_BOX_M: float = 0.26
+# Head: 0.24 x 0.32 x 0.28 (Head) — the goalie mask, longer than it is wide.
+const HEAD_BOX_WIDTH_M: float = 0.24
+const HEAD_BOX_HEIGHT_M: float = 0.32
 
 const PAD_CENTER_Y_STANDING_M: float = 0.44
 const TORSO_CENTER_Y_STANDING_M: float = 1.22
@@ -115,14 +118,14 @@ static func butterfly_cover_ceiling() -> float:
 
 static func head_span(down: bool) -> Vector2:
 	if down:
-		return _span(HEAD_CENTER_Y_BUTTERFLY_M, HEAD_BOX_M)
-	return _span(HEAD_CENTER_Y_STANDING_M, HEAD_BOX_M)
+		return _span(HEAD_CENTER_Y_BUTTERFLY_M, HEAD_BOX_HEIGHT_M)
+	return _span(HEAD_CENTER_Y_STANDING_M, HEAD_BOX_HEIGHT_M)
 
 
 # Half the vertical reach of a hand about its own centre — how far off a hand's
 # height a puck can arrive and still meet it.
 static func hand_vertical_half_extent() -> float:
-	return GLOVE_BOX_WIDTH_M * 0.5
+	return GLOVE_BOX_HEIGHT_M * 0.5
 
 
 # Does a hand centred at `hand_y` meet a puck arriving at `arrival_y`?
@@ -149,7 +152,7 @@ static func structural_cover_half_width_at(y: float, down: bool) -> float:
 		cover = maxf(cover, torso_half_width())
 	var head: Vector2 = head_span(down)
 	if y >= head.x and y <= head.y:
-		cover = maxf(cover, HEAD_BOX_M * 0.5)
+		cover = maxf(cover, HEAD_BOX_WIDTH_M * 0.5)
 	return cover
 
 

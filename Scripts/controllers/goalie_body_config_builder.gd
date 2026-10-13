@@ -365,9 +365,9 @@ static func resting_head_position_for_state(state: int) -> Vector3:
 	return Vector3(0.0, 1.79, -0.04)
 
 
-# Vertical anatomy, against the 0.52 × 0.72 torso box and 0.26 head in
+# Vertical anatomy, against the 0.52 × 0.72 torso box and 0.32 head in
 # Goalie.tscn: standing, the torso bottom stays glued to the pad-top seam at
-# 0.86 and the mask tops out at ~1.92 — a 6'3"-class frame on the same scale as
+# 0.86 and the mask tops out at ~1.95 — a 6'3"-class frame on the same scale as
 # the skaters. test_goalie_scene_mirrors.gd holds both those boxes and the
 # pad-top seam the bot shot model reads (GameRules
 # .DEFAULT_GOALIE_PAD_TOP_SEAM_M, the HIGH band's arrival floor) against the

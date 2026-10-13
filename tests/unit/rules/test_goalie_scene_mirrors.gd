@@ -81,9 +81,19 @@ func test_torso_and_glove_boxes_mirror_the_scene() -> void:
 			"TORSO_BOX_WIDTH_M must equal Body's collider width")
 	assert_almost_eq(GoalieAnatomy.TORSO_BOX_HEIGHT_M, torso.y, 1e-6,
 			"TORSO_BOX_HEIGHT_M must equal Body's collider height")
-	assert_almost_eq(GoalieAnatomy.GLOVE_BOX_WIDTH_M,
-			_box("./Glove/CollisionShape3D").x, 1e-6,
+	var glove: Vector3 = _box("./Glove/CollisionShape3D")
+	assert_almost_eq(GoalieAnatomy.GLOVE_BOX_WIDTH_M, glove.x, 1e-6,
 			"GLOVE_BOX_WIDTH_M must equal Glove's collider width")
+	assert_almost_eq(GoalieAnatomy.GLOVE_BOX_HEIGHT_M, glove.y, 1e-6,
+			"GLOVE_BOX_HEIGHT_M must equal Glove's collider height")
+
+
+func test_head_box_mirrors_the_scene() -> void:
+	var head: Vector3 = _box("./Head/CollisionShape3D")
+	assert_almost_eq(GoalieAnatomy.HEAD_BOX_WIDTH_M, head.x, 1e-6,
+			"HEAD_BOX_WIDTH_M must equal Head's collider width")
+	assert_almost_eq(GoalieAnatomy.HEAD_BOX_HEIGHT_M, head.y, 1e-6,
+			"HEAD_BOX_HEIGHT_M must equal Head's collider height")
 
 
 func test_stick_blade_and_paddle_mirror_the_scene() -> void:

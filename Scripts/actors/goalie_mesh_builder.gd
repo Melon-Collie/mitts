@@ -83,9 +83,8 @@ const _PAD_CHANNEL_TINT := Color(0.45, 0.45, 0.47)
 # opening, cheeks that narrow toward a chin running well below where a skater's
 # helmet stops and jutting forward, and the back tucking in to the neck. From
 # the side that is the mask's S-profile; from the front, a long shield. The
-# backplate comes down to the nape, over the neck guard behind and beside. It
-# overruns the 0.26 m head collider by the chin, which the save geometry
-# does not need to follow.
+# backplate comes down to the nape, over the neck guard behind and beside. The
+# head collider (0.24 × 0.32 × 0.28) is sized to it.
 # Front/back asymmetric, so it's a loop sweep rather than a lathe. The goalie
 # faces −Z, so "front" is the −Z half; the head node's own rotation carries
 # the mask's facing. Stations are (y, lateral rx, back +Z reach, front −Z

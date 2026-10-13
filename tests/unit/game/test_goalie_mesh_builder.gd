@@ -13,8 +13,8 @@ const _EPS: float = 0.005  # envelope tolerance, metres
 # Goalie.tscn: body box 0.52×0.72×0.28 (the pants flare past it to 0.62 wide, 0.31 deep), pad box 0.28×0.84×0.2, blocker box
 # 0.2×0.39×0.05. The mask, the trapper and the collider-free parts (fist,
 # dangler, cage) are drawn as the gear they are rather than as their
-# colliders, and are bounded at that size: the mask a goalie's, longer than the
-# 0.26 head box by its chin, the trapper's hand taller than its 0.25 box.
+# colliders, and are bounded at that size: the mask a goalie's (its head box is
+# sized to it), the trapper's hand (its 0.25 × 0.32 box likewise).
 # The connector tube is unit-sized (its stretch is basis scale).
 func _parts() -> Dictionary:
 	return {
