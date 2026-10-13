@@ -1,15 +1,16 @@
 class_name Goalie
 extends Node3D
 
-# `_block_arm` is the root of the blocker-hand assembly: blocker pad + stick
-# (shaft, paddle, blade) all rigidly attached. Driven by a single transform
-# (`blocker_pos` + `blocker_rot` from the body config). The stick geometry
-# is baked into the mesh layout — different states get the blade in the right
-# place via different blocker rotations, not by tracking the blade
-# independently. The Blocker pad and Stick are SEPARATE child StaticBody3Ds
-# under BlockArm — the analytic save resolver identifies the struck part BY NODE
-# NAME (Puck._classify_save_part → GoalieSaveRules.SavePart), so a pad rebound and
-# a stick rebound have to be two nodes. They share the BlockArm transform.
+# `_block_arm` is the blocker HAND: its origin is the grip on the shaft, and the
+# stick (shaft, paddle, blade) hangs rigidly from it. Driven by a single
+# transform (`blocker_pos` + `blocker_rot` from the body config). The stick
+# geometry is baked into the mesh layout — different states get the blade in
+# the right place via different hand rotations, not by tracking the blade
+# independently. The Blocker board rides the forearm from the hand
+# (_seat_blocker). The Blocker and Stick are SEPARATE child
+# StaticBody3Ds under BlockArm — the analytic save resolver identifies the struck
+# part BY NODE NAME (Puck._classify_save_part → GoalieSaveRules.SavePart), so a
+# pad rebound and a stick rebound have to be two nodes.
 @onready var _left_pad: StaticBody3D = $LeftPad
 @onready var _right_pad: StaticBody3D = $RightPad
 @onready var _body: StaticBody3D = $Body
@@ -57,6 +58,11 @@ const _GLOVE_CUFF_IN_GLOVE := Vector3(0.0, -0.03, 0.07)
 const _ELBOW_CLEARS_TRUNK_M: float = GoalieAnatomy.TORSO_BOX_WIDTH_M * 0.5 \
 		- GoalieAnatomy.SHOULDER_OFFSET.x + _UPPER_ARM_RADIUS
 
+# The blocker arm's elbow and the hand it ends at, from the last _seat_blocker,
+# goalie-local. The drawn arm reads them so it is the arm the board rides.
+var _blocker_elbow: Vector3 = Vector3.ZERO
+var _blocker_wrist: Vector3 = Vector3.ZERO
+
 var _uniform_coordinator: GoalieUniformCoordinator
 # Dynamic visual nodes — public for GoalieUniformCoordinator access.
 var left_hip_connector: MeshInstance3D = null
@@ -80,7 +86,7 @@ var _last_body_xform: Transform3D
 var _last_left_pad_pos: Vector3 = Vector3.INF
 var _last_right_pad_pos: Vector3
 var _last_glove_xform: Transform3D = Transform3D()
-var _last_block_arm_pos: Vector3
+var _last_block_arm_xform: Transform3D = Transform3D()
 
 
 func _ready() -> void:
@@ -108,6 +114,7 @@ func _ready() -> void:
 	_init_stick_knob()
 	_init_connectors()
 	_init_arm_bones()
+	_seat_blocker()
 	_setup_uniform_coordinator()
 	var vfx := GoalieVFX.new()
 	vfx.name = "VFX"
@@ -142,18 +149,17 @@ func apply_body_config(config: GoalieBodyConfig, t: float, glove_max_step: float
 	else:
 		_glove.position = _glove.position.move_toward(config.glove_pos, glove_max_step)
 		_glove.rotation_degrees = _lerp_euler_deg(_glove.rotation_degrees, config.glove_rot, t)
-	# Blocker assembly = blocker pad + stick (shaft, paddle, blade) as one
-	# rigid unit. Single transform via `blocker_pos` / `blocker_rot` drives
-	# the whole BlockArm; pad and stick are children that rotate together
-	# (real-world they're physically attached at the wrist). When reaching
-	# for a blocker save the position is rate-limited via `blocker_max_step`
-	# the same way the glove is, so the assembly can't teleport to the
-	# impact point.
+	# The blocker hand, with the stick rigid in it. Single transform via
+	# `blocker_pos` / `blocker_rot`; the board then follows the arm
+	# (_seat_blocker). When reaching for a blocker save the position is
+	# rate-limited via `blocker_max_step` the same way the glove is, so the
+	# hand can't teleport to the impact point.
 	if blocker_max_step < 0.0:
 		_lerp_part(_block_arm, config.blocker_pos, config.blocker_rot, t)
 	else:
 		_block_arm.position = _block_arm.position.move_toward(config.blocker_pos, blocker_max_step)
 		_block_arm.rotation_degrees = _lerp_euler_deg(_block_arm.rotation_degrees, config.blocker_rot, t)
+	_seat_blocker()
 
 func set_goalie_position(x: float, z: float) -> void:
 	global_position = Vector3(x, 0.0, z)
@@ -363,6 +369,7 @@ func apply_network_pose(state: GoalieNetworkState) -> void:
 	_glove.rotation = Vector3(state.glove_pitch, state.glove_yaw, _glove.rotation.z)
 	_block_arm.position = state.blocker_offset
 	_block_arm.rotation = Vector3(state.blocker_pitch, state.blocker_yaw, _block_arm.rotation.z)
+	_seat_blocker()
 
 # Seat the blade at its lie and curve (GoalieStickRules.blade_rotation), which
 # the authored square L does not carry. Applied once at build time: a lie is a
@@ -468,6 +475,32 @@ func _make_connector_mesh() -> MeshInstance3D:
 	mi.mesh = GoalieMeshBuilder.shared_connector_tube()
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return mi
+
+
+# The blocker is a glove on the arm, not an end point: the hand (BlockArm) is
+# what is posed, and the board runs along the forearm's outer side from the
+# hand, its finger end at the fingertips and its face turned out from the
+# shooter, so it moves and turns with the arm. Runs wherever the hand or the
+# trunk is posed — the host's tick and every client and replay alike —
+# because the board is a save surface, and from the arm's own solve so the
+# drawn arm is the one it rides.
+func _seat_blocker() -> void:
+	var shoulder: Vector3 = _body.position + _body.basis * GoalieAnatomy.SHOULDER_OFFSET
+	var grip: Vector3 = _block_arm.position
+	_blocker_elbow = TwoBoneIK.solve_elbow_hanging(shoulder, grip,
+			_ARM_UPPER_LEN, _ARM_FOREARM_LEN, Vector3.FORWARD, Vector3.RIGHT,
+			_ELBOW_CLEARS_TRUNK_M)
+	var along: Vector3 = grip - _blocker_elbow   # elbow → fingertips
+	along = along.normalized() if along.length_squared() > 1e-8 else Vector3.DOWN
+	var turn: float = deg_to_rad(GoalieAnatomy.BLOCKER_FACE_OUTWARD_DEG)
+	var presented := Vector3(sin(turn), 0.0, -cos(turn))
+	var face: Vector3 = presented - along * presented.dot(along)
+	face = face.normalized() if face.length_squared() > 1e-8 else Vector3.RIGHT
+	var board := Basis(along.cross(-face), along, -face)
+	var centre: Vector3 = grip - along * GoalieAnatomy.BLOCKER_BOARD_ALONG_M \
+			+ face * GoalieAnatomy.BLOCKER_BOARD_OUT_M
+	_blocker.transform = _block_arm.transform.affine_inverse() * Transform3D(board, centre)
+	_blocker_wrist = grip
 
 
 # Two-bone arm IK. shoulder_local / hand_local are in goalie-local space;
@@ -576,11 +609,10 @@ func _update_connectors() -> void:
 	_update_arm_ik(glove_upper_arm, glove_forearm,
 		glove_shoulder, _glove.position + _glove.basis * _GLOVE_CUFF_IN_GLOVE, Vector3.LEFT,
 		glove_elbow_sphere)
-	# Blocker arm: forearm connects directly to BlockArm (wrist position of the
-	# blocker pad + hand mesh assembly).
-	_update_arm_ik(blocker_upper_arm, blocker_forearm,
-		blocker_shoulder, _block_arm.position, Vector3.RIGHT,
-		blocker_elbow_sphere)
+	# Blocker arm: the elbow _seat_blocker solved and laid the board along.
+	blocker_elbow_sphere.position = _blocker_elbow
+	_update_arm_bone(blocker_upper_arm, blocker_shoulder, _blocker_elbow)
+	_update_arm_bone(blocker_forearm, _blocker_elbow, _blocker_wrist)
 
 
 # Returns true (and refreshes the snapshot) when any input to `_update_connectors`
@@ -593,13 +625,13 @@ func _connectors_pose_changed() -> bool:
 			and _left_pad.position == _last_left_pad_pos \
 			and _right_pad.position == _last_right_pad_pos \
 			and _glove.transform == _last_glove_xform \
-			and _block_arm.position == _last_block_arm_pos:
+			and _block_arm.transform == _last_block_arm_xform:
 		return false
 	_last_body_xform = _body.transform
 	_last_left_pad_pos = _left_pad.position
 	_last_right_pad_pos = _right_pad.position
 	_last_glove_xform = _glove.transform
-	_last_block_arm_pos = _block_arm.position
+	_last_block_arm_xform = _block_arm.transform
 	return true
 
 
