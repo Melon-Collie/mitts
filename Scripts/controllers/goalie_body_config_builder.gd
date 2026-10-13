@@ -134,6 +134,14 @@ const DOWN_HEAD_Y_M: float = GoalieAnatomy.HEAD_CENTER_Y_BUTTERFLY_M
 const READY_BODY_POS := Vector3(0.0, 0.96, -0.10)
 const READY_BODY_PITCH_DEG: float = -28.0
 const READY_HEAD_POS := Vector3(0.0, 1.50, -0.34)
+# The A-frame: knees in over feet set wider than standing, so the pads close the
+# five-hole high and open it low, where the paddle-down blade guards the ice —
+# a deliberate scoring window just over the blade (beatable realism).
+const READY_PAD_X_M: float = 0.265
+const READY_PAD_ROLL_DEG: float = 15.0
+# The trapper up at the chest, open to the shooter (x, y).
+const READY_GLOVE := Vector2(-0.46, 1.02)
+const READY_BLOCKER_Z_M: float = -0.35
 
 # The half-butterfly body: one knee on the ice, the other leg in the ready
 # crouch, so the hips sit between the two stances' — the butterfly trunk raised
@@ -416,20 +424,17 @@ func _set_standing_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 # it persists the body is already at READY — single smooth rising motion,
 # no up-then-back-down overshoot.
 func _set_ready_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
-	# Engaged stance widens the base past the standing ±0.22 — a real goalie
-	# drops AND spreads. The wider gap is a deliberate scoring window (beatable
-	# realism: the stance opens the five-hole, the paddle-down stick guards it).
-	c.left_pad_pos  = Vector3(-0.26 - inputs.five_hole_openness, 0.44, -0.16)
-	c.left_pad_rot  = Vector3(0.0,  pad_toe_out_standing, -10.0)
-	c.right_pad_pos = Vector3( 0.26 + inputs.five_hole_openness, 0.44, -0.16)
-	c.right_pad_rot = Vector3(0.0, -pad_toe_out_standing,  10.0)
+	c.left_pad_pos  = Vector3(-READY_PAD_X_M - inputs.five_hole_openness, 0.44, -0.16)
+	c.left_pad_rot  = Vector3(0.0,  pad_toe_out_standing, -READY_PAD_ROLL_DEG)
+	c.right_pad_pos = Vector3( READY_PAD_X_M + inputs.five_hole_openness, 0.44, -0.16)
+	c.right_pad_rot = Vector3(0.0, -pad_toe_out_standing,  READY_PAD_ROLL_DEG)
 	c.body_pos      = READY_BODY_POS
 	c.body_rot      = Vector3(READY_BODY_PITCH_DEG, 0.0, 0.0)
 	c.head_pos      = READY_HEAD_POS
 	c.head_rot      = Vector3.ZERO
-	c.blocker_pos   = Vector3( 0.44, GoalieStickRules.upright_wrist_y(), -0.32)
+	c.blocker_pos   = Vector3(GoalieStickRules.READY_WRIST_X_M, GoalieStickRules.upright_wrist_y(), READY_BLOCKER_Z_M)
 	c.blocker_rot   = Vector3(0.0, 0.0, STICK_ROLL)
-	c.glove_pos     = Vector3(-0.42, 0.90, 0.0)
+	c.glove_pos     = Vector3(READY_GLOVE.x, READY_GLOVE.y, 0.0)
 	c.glove_pos.z   = _hand_depth(c, -1.0, c.glove_pos.x, c.glove_pos.y, BEND_READY_DEG)
 	c.glove_rot     = Vector3.ZERO
 	if inputs.reading_pinned_windup:
@@ -521,8 +526,8 @@ func _set_half_butterfly_pose(c: GoalieBodyConfig, inputs: Inputs, down_side: fl
 			else inputs.left_pad_toe_out)
 	var flat_pos := Vector3(down_side * (0.42 + inputs.five_hole_openness), 0.14, -0.20)
 	var flat_rot := Vector3(0.0, -down_side * toe, down_side * 90.0)
-	var up_pos := Vector3(-down_side * (0.26 + inputs.five_hole_openness), 0.44, -0.16)
-	var up_rot := Vector3(0.0, down_side * pad_toe_out_standing, -down_side * 10.0)
+	var up_pos := Vector3(-down_side * (READY_PAD_X_M + inputs.five_hole_openness), 0.44, -0.16)
+	var up_rot := Vector3(0.0, down_side * pad_toe_out_standing, -down_side * READY_PAD_ROLL_DEG)
 	if down_side > 0.0:
 		c.right_pad_pos = flat_pos
 		c.right_pad_rot = flat_rot
