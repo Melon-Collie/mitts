@@ -253,20 +253,30 @@ func apply_facing(input: InputState, delta: float) -> void:
 
 	apply_lower_body_yaw(delta)
 
+# The speed band over which the stance hands facing from the cursor back to travel.
+const _STANCE_SQUARE_BLEND_M_S: float = 0.5
+
 # Where facing heads for a cursor at `cursor_dir`. A human skating faces where they
 # skate — the hips go with the stride, and the torso twist and arm reach carry the
 # puck out at the side — so above facing_travel_min_speed the target blends from
 # the cursor to the travel direction. It squares to the cursor as it always did
 # when the cursor falls behind the travel cone (skating backward while watching
-# the play), when braking, in the stance (Shift), and for bots, whose decisions
-# still assume facing follows their cursor. The cone's hysteresis is stateless —
-# read off whichever of the two the body faces now — so reconcile replay agrees.
+# the play), when braking, and for bots, whose decisions still assume facing
+# follows their cursor. The stance (Shift) squares to the cursor too, but only
+# below facing_stance_square_max_speed — opening up to a man or a pass is a
+# low-speed move, and at speed squaring would swing the hips off the line and turn
+# the stride into a shuffle. The cone's hysteresis is stateless — read off
+# whichever of the two the body faces now — so reconcile replay agrees.
 func _facing_toward(cursor_dir: Vector2, brake: bool) -> Vector2:
-	if brake or _controller.stance_active or _controller.is_ai_controlled():
+	if brake or _controller.is_ai_controlled():
 		return cursor_dir
 	var travel := Vector2(_skater.velocity.x, _skater.velocity.z)
+	var speed: float = travel.length()
 	var share: float = smoothstep(_controller.facing_travel_min_speed,
-			_controller.facing_travel_full_speed, travel.length())
+			_controller.facing_travel_full_speed, speed)
+	if _controller.stance_active:
+		var square_max: float = _controller.facing_stance_square_max_speed
+		share = minf(share, smoothstep(square_max - _STANCE_SQUARE_BLEND_M_S, square_max, speed))
 	if share <= 0.0:
 		return cursor_dir
 	travel = travel.normalized()
