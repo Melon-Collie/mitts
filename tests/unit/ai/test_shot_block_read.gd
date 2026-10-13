@@ -64,7 +64,7 @@ func test_a_released_shot_is_coming_through_only_at_us() -> void:
 func test_the_dive_takes_a_lane_out_of_standing_reach_but_inside_its_own() -> void:
 	var carrier := Vector3(-3.0, 0.0, 19.0)
 	var receiver := Vector3(4.0, 0.0, 21.0)
-	var q: Vector3 = AIShotBlockRead.dive_point(Vector3(0.5, 0.0, 17.0), Vector3.ZERO,
+	var q: Vector3 = AIShotBlockRead.dive_point(Vector3(0.5, 0.0, 17.8), Vector3.ZERO,
 			carrier, receiver, 1.5, 10.0, 20.0)
 	assert_true(q.is_finite(), "out of standing reach, inside the dive")
 	var a := Vector2(carrier.x, carrier.z)
@@ -74,5 +74,5 @@ func test_the_dive_takes_a_lane_out_of_standing_reach_but_inside_its_own() -> vo
 			carrier, receiver, 1.5, 10.0, 20.0).is_finite(), "his stick already takes it")
 	assert_false(AIShotBlockRead.dive_point(Vector3(0.5, 0.0, 14.0), Vector3.ZERO,
 			carrier, receiver, 1.5, 10.0, 20.0).is_finite(), "past the dive")
-	assert_false(AIShotBlockRead.dive_point(Vector3(0.5, 0.0, 17.0), Vector3(0.0, 0.0, 12.0),
+	assert_false(AIShotBlockRead.dive_point(Vector3(0.5, 0.0, 17.8), Vector3(0.0, 0.0, 12.0),
 			carrier, receiver, 1.5, 10.0, 20.0).is_finite(), "skating at it, he gets there")

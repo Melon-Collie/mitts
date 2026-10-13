@@ -66,9 +66,10 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
 	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3970,
-	# +27: the dive takes the knockdown's fall its own way — a thrown tip rate,
-	# no rebound, legs long — through the fall config and drop the down pose reads.
-	"res://Scripts/controllers/skater_controller.gd": 3526,
+	# +33: the dive takes the knockdown's fall its own way — a thrown tip rate,
+	# no rebound, legs long, the belt kept on his line — and stays down while
+	# block is held.
+	"res://Scripts/controllers/skater_controller.gd": 3532,
 	"res://Scripts/actors/skater.gd": 2795,
 	"res://Scripts/networking/network_manager.gd": 2855,
 	"res://Scripts/game/tutorial_manager.gd": 2073,

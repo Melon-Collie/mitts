@@ -80,14 +80,36 @@ func test_the_stick_lies_out_along_the_layout() -> void:
 	assert_lt(contact.y, 0.1, "flat on the ice")
 
 
-func test_a_block_held_through_the_get_up_is_the_standing_block_not_a_second_dive() -> void:
-	var ticks: int = ceili(DiveRules.DOWN_S / DT) + 2
-	for _i: int in ticks:
-		_c._process_input(_dive_input(true, true, _c.skater.global_position + Vector3(3, 0, 0)), DT)
-	assert_false(_c.skater.is_diving, "up again")
-	assert_eq(_c._sm.get_state(), SkaterStateMachine.State.SHOT_BLOCKING)
-	_c._process_input(_dive_input(true, true, _c.skater.global_position + Vector3(3, 0, 0)), DT)
-	assert_false(_c.skater.is_knocked_down, "and no second dive while it stays held")
+func test_block_held_keeps_him_down_and_letting_go_gets_him_up() -> void:
+	_dive_ticks(ceili(3.0 * DiveRules.DOWN_S / DT))
+	assert_true(_c.skater.is_diving, "still down three windows in, block held")
+	assert_almost_eq(_c.knockdown_timer, _c.knockdown_getup_seconds, 1e-6,
+			"held where the get-up would begin")
+	for _i: int in ceili(_c.knockdown_getup_seconds / DT) + 1:
+		_c._process_input(_dive_input(false, false, _c.skater.global_position + Vector3(3, 0, 0)), DT)
+	assert_false(_c.skater.is_knocked_down, "let go, he gets up over the get-up")
+
+
+func test_letting_go_early_still_spends_the_whole_dive() -> void:
+	_dive_ticks(1)
+	for _i: int in ceili((DiveRules.DOWN_S - _c.knockdown_getup_seconds) / DT) - 2:
+		_c._process_input(_dive_input(false, false, _c.skater.global_position + Vector3(3, 0, 0)), DT)
+	assert_true(_c.skater.is_diving, "a dive is at least DOWN_S, whatever the button does")
+
+
+func test_the_belt_keeps_his_line_and_the_skates_go_out_the_far_side() -> void:
+	_skate(90)
+	_dive_ticks(60)
+	assert_almost_eq(_c.knockdown_fall_tilt(), deg_to_rad(DiveRules.LIE_DEG), 1e-4,
+			"the control: lying")
+	var root: Transform3D = _c.skater.mesh_root.global_transform
+	# MeshRoot's local frame is the standing figure's, its origin the skater's.
+	var ice_y: float = -_c.skater.global_position.y
+	var belt: Vector3 = root * Vector3(0.0, ice_y + DiveRules.COM_HEIGHT_M, 0.0) \
+			- _c.skater.global_position
+	var skates: Vector3 = root * Vector3(0.0, ice_y, 0.0) - _c.skater.global_position
+	assert_almost_eq(belt.x, 0.0, 0.05, "his belt lies over the line he was skating")
+	assert_almost_eq(skates.x, -DiveRules.feet_back_m(), 0.05, "his skates out the far side")
 
 
 func test_c_alone_still_blocks_standing() -> void:

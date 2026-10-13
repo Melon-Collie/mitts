@@ -1819,7 +1819,8 @@ func _apply_fall_tilt(kd_t: float) -> bool:
 			Vector2(dir_world.x, dir_world.z), obstacle)
 	var d: Vector3 = skater.global_transform.basis.inverse() \
 			* Vector3(safe_dir.x, 0.0, safe_dir.y)
-	skater.set_knockdown_fall(Vector3.UP.cross(d), tilt)
+	var carry: Vector3 = -d * DiveRules.com_carry_m(tilt) if _diving() else Vector3.ZERO
+	skater.set_knockdown_fall(Vector3.UP.cross(d), tilt, carry)
 	return true
 
 
@@ -3204,7 +3205,12 @@ func _apply_movement(input: InputState, delta: float) -> void:
 			_sm.get_state() == State.SKATING_WITHOUT_PUCK and not has_puck,
 			knockdown_timer > 0.0):
 		_start_dive(input)
-	knockdown_timer = maxf(knockdown_timer - delta, 0.0)
+	# A diver holding block stays lying there: the timer holds where the get-up
+	# would begin, and letting go starts it.
+	var down_floor: float = 0.0
+	if skater.is_diving and input.block_held and knockdown_timer >= knockdown_getup_seconds:
+		down_floor = knockdown_getup_seconds
+	knockdown_timer = maxf(knockdown_timer - delta, down_floor)
 	skater.is_knocked_down = knockdown_timer > 0.0
 	if not skater.is_knocked_down:
 		skater.is_diving = false
