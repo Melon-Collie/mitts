@@ -45,9 +45,11 @@ const BUTTERFLY_PAD_HALF_WIDTH_M: float = 0.42
 # (GoalieBodyConfigBuilder.glove_max_x_outward, sign-stripped).
 const GLOVE_MAX_X_OUTWARD_M: float = 0.85
 # Resting hand lateral offsets in the READY stance (that builder's
-# c.glove_pos.x / c.blocker_pos.x).
+# c.glove_pos.x / c.blocker_pos.x), and the glove's height there. The blocker's
+# is wherever the stick puts it (GoalieStickRules.upright_wrist_y).
 const GLOVE_REST_X_M: float = 0.42
 const BLOCKER_REST_X_M: float = 0.44
+const GLOVE_REST_Y_M: float = 0.90
 
 
 static func butterfly_pad_edge_half_width() -> float:

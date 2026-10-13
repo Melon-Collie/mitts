@@ -19,11 +19,15 @@ func _v(x: float, fwd: float, disp: float = 0.0) -> float:
 	return AIShotValue.for_release(_spot(x, fwd), GOAL, disp)
 
 
-# ── The structural claim: this IS the public model plus one feature ──────────
+# ── The structural claim: this IS the public model plus its features ─────────
 func test_zero_displacement_is_exactly_the_public_baseline() -> void:
+	# Wherever the keeper's body fills no more of the mouth than from the slot.
 	for x: float in [0.0, 3.0, 6.0]:
-		for fwd: float in [2.0, 5.0, 10.0, 18.0]:
+		for fwd: float in [10.0, 18.0]:
 			var spot: Vector3 = _spot(x, fwd)
+			assert_eq(AIShotValue.body_logit(spot, GOAL, 0.0), 0.0,
+					"from range his body is no bigger than from the slot (%.0f, %.0f)"
+							% [x, fwd])
 			assert_almost_eq(
 					AIShotValue.for_release(spot, GOAL, 0.0),
 					XGBaseline.for_shot(spot.x, spot.z, 0, ShotEvent.ShotType.SHOT),
@@ -40,11 +44,36 @@ func test_shot_type_bumps_pass_through() -> void:
 			"a one-timer carries the baseline's bump through the seam")
 
 
+# ── The keeper's body in tight ───────────────────────────────────────────────
+func test_a_set_keepers_body_fills_the_mouth_as_the_shooter_closes() -> void:
+	var prev: float = 1.0
+	for fwd: float in [16.0, 9.0, 6.0, 4.0, 3.0, 2.0]:
+		var open: float = AIShotValue.open_mouth_fraction(_spot(0.0, fwd), GOAL, 0.0)
+		assert_lte(open, prev, "less of the mouth is open from %.0f m" % fwd)
+		prev = open
+	assert_almost_eq(prev, 0.0, 0.001, "from 2 m his pads fill it")
+
+
+func test_the_body_term_only_ever_takes_away() -> void:
+	for x: float in [0.0, 2.0, 5.0]:
+		for fwd: float in [1.0, 2.0, 4.0, 8.0, 16.0]:
+			assert_lte(AIShotValue.body_logit(_spot(x, fwd), GOAL, 0.0), 0.0)
+
+
+func test_a_set_keeper_shuts_the_doorstep_and_a_beaten_one_does_not() -> void:
+	var slot: float = _v(0.0, 6.0)
+	assert_lt(_v(0.0, 2.0), slot * 0.25,
+			"driving into a set keeper is worth a fraction of the slot look")
+	assert_gt(_v(0.0, 2.0, 0.6), slot,
+			"a keeper beaten off his square in tight still concedes the doorstep")
+
+
 # ── Monotonicity: the properties an argmax needs ─────────────────────────────
 func test_closer_is_better_at_every_angle() -> void:
+	# From the slot out; inside it a set keeper's body takes over (above).
 	for x: float in [0.0, 2.0, 5.0]:
 		var prev: float = INF
-		for fwd: float in [2.0, 4.0, 6.0, 9.0, 13.0, 18.0]:
+		for fwd: float in [6.0, 9.0, 13.0, 18.0]:
 			var v: float = _v(x, fwd)
 			assert_lt(v, prev, "value must fall with range (x=%.0f, %.0f m)"
 					% [x, fwd])
@@ -52,7 +81,7 @@ func test_closer_is_better_at_every_angle() -> void:
 
 
 func test_straighter_is_better_at_every_range() -> void:
-	for fwd: float in [3.0, 6.0, 12.0]:
+	for fwd: float in [6.0, 12.0]:
 		var prev: float = INF
 		for x: float in [0.0, 2.0, 4.0, 7.0]:
 			var v: float = _v(x, fwd)

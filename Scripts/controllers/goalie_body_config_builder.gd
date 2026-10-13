@@ -422,7 +422,7 @@ func _set_ready_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 	c.head_rot      = Vector3.ZERO
 	c.blocker_pos   = Vector3( 0.44, GoalieStickRules.upright_wrist_y(), -0.32)
 	c.blocker_rot   = Vector3(0.0, 0.0, STICK_ROLL)
-	c.glove_pos     = Vector3(-0.42, 0.90, 0.0)
+	c.glove_pos     = Vector3(-GoalieAnatomy.GLOVE_REST_X_M, GoalieAnatomy.GLOVE_REST_Y_M, 0.0)
 	c.glove_pos.z   = _hand_depth(c, -1.0, c.glove_pos.x, c.glove_pos.y, BEND_READY_DEG)
 	c.glove_rot     = Vector3.ZERO
 	if inputs.reading_pinned_windup:

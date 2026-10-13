@@ -37,9 +37,8 @@ const EMPTY_CAPS: Array = []
 
 static func _static_init() -> void:
 	EMPTY_VEC3.make_read_only()
-	XG_SLOT_REF = AIShotValue.for_release(
-			Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z + SLOT_RADIUS_M),
-			Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z), 0.0)
+	var goal := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
+	XG_SLOT_REF = AIShotValue.for_release(slot_reference_release(goal), goal, 0.0)
 
 # xG of a clean look from the slot ring, head-on, against a set keeper: the
 # situation position_potential reads as 1.0, measured on the live shot model.
@@ -754,6 +753,21 @@ static func planned_goalie_depth(
 	if target >= now_depth:
 		return now_depth
 	return maxf(now_depth - rate * time_s, target)
+
+
+# Radius a SET keeper holds for a puck `dist` from the goal: the same constraint
+# solve planned_goalie_depth predicts him with, no anticipatory cap binding.
+static func set_goalie_depth(dist: float) -> float:
+	var c := _depth_cfg_planning
+	c.ceiling_radius = _planning_ceiling if dist <= GOALIE_ZONE_DEPTH_M \
+			else GOALIE_RESTING_DEPTH_M
+	c.standoff_cap = dist - GOALIE_CHALLENGE_STANDOFF_M
+	return GoalieDepthSolver.solve_target(c)
+
+
+# The clean slot look XG_SLOT_REF is measured from, for the net at `goal`.
+static func slot_reference_release(goal: Vector3) -> Vector3:
+	return Vector3(goal.x, 0.0, goal.z - signf(goal.z) * SLOT_RADIUS_M)
 
 
 # `goalie_now` relocated to `depth` metres out from the attacked goal line,
@@ -2178,7 +2192,8 @@ static func score_shoot_value(
 	var seal_x: float = derive_post_seal_x_sign(shooter, attacking_goal)
 	var quality: float = AIShotValue.for_release(
 			shooter, attacking_goal, keeper_displacement_m, shot_type,
-			seal_x != 0.0)
+			seal_x != 0.0, Vector2(predicted_goalie_pos.x - attacking_goal.x,
+					predicted_goalie_pos.z - attacking_goal.z).length())
 	if quality <= 0.0:
 		return 0.0
 	var aim: Vector3 = AIShotAim.compute_open_net_aim(
