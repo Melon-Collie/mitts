@@ -102,6 +102,18 @@ const POSES: Array = [
 		[10, {"aim": Vector3(0.4, 0.0, -2.0)}],
 		[45, {"aim": Vector3(1.4, 0.0, -3.0), "shoot": true}],
 	]},
+	# The wind-up is the load (WristerLoad). The puck pulled out to the stick side
+	# and aimed ahead is the full forehand coil; aimed ahead with the puck straight
+	# in front there is nothing to drive, so the torso stays squared.
+	{"name": "wrister_loaded", "puck": true, "steps": [
+		[30, {"aim": Vector3(0.0, 0.0, -2.5)}],
+		[8, {"aim": Vector3(2.5, 0.0, 0.0)}],
+		[40, {"aim": Vector3(0.0, 0.0, -3.0), "shoot": true}],
+	]},
+	{"name": "wrister_unloaded", "puck": true, "steps": [
+		[30, {"aim": Vector3(0.0, 0.0, -2.5)}],
+		[40, {"aim": Vector3(0.0, 0.0, -3.5), "shoot": true}],
+	]},
 	# Released, then held long enough for the follow-through the state machine
 	# plays out to be the pose on screen.
 	{"name": "wrister_follow_through", "puck": true, "steps": [

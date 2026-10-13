@@ -200,16 +200,6 @@ static func slapper_aim_dir(bot_aim_dir: Vector3, mouse_world: Vector3,
 		return bot_aim_dir
 	return Vector3(mouse_world.x - blade_world.x, 0.0, mouse_world.z - blade_world.z)
 
-# Wrister forehand/backhand. BOTS commit the hand (paired with a committed
-# bot_aim_dir); HUMANS read the CURSOR-sweep chirality (is_backhand_from_swing;
-# the blade is frozen so the cursor is the only sweep). See
-# SkaterController._wrister_is_backhand.
-static func wrister_is_backhand(bot_aim_dir: Vector3, bot_backhand: bool,
-		swing_rotation: float, is_left_handed: bool, deadband: float) -> bool:
-	if bot_aim_dir.length_squared() > 0.0001:
-		return bot_backhand
-	return is_backhand_from_swing(swing_rotation, is_left_handed, deadband)
-
 # Wrister release. HARD BINARY — a quick pass and a charged wrister are two
 # distinct releases, with NO blend between them. Which one fires is decided by the
 # INPUT at the call site (not any threshold in here) and passed in as is_quick_pass:
@@ -227,9 +217,8 @@ static func wrister_is_backhand(bot_aim_dir: Vector3, bot_backhand: bool,
 # hold-time classifier fires a wrister on an ordinary tap that lingers a few
 # ticks, when the player expected a snap.
 # Backhand is the caller's call: the controller passes is_backhand — for humans
-# the rotational sense of the CURSOR's bearing sweep over the stroke
-# (is_backhand_from_swing above; the blade is frozen so the cursor is the sweep),
-# for bots the committed hand.
+# the way the torso turns to drive the shot (WristerLoad), for bots the
+# committed hand.
 static func release_wrister(
 		player_pos: Vector3,
 		mouse_world_pos: Vector3,

@@ -374,14 +374,14 @@ func apply_upper_body(delta: float) -> void:
 					if _sm.follow_through_is_slapper else _controller.wrister_follow_through_twist_deg
 			var through: float = blade_side_sign * deg_to_rad(through_deg) * env
 			if not _sm.follow_through_is_slapper:
-				# The coil IS the windup — discharge the through-overshoot INSTANTLY
-				# with the release. env is front-loaded (peaks ~40 ms), but a lerp at
-				# follow_through_twist_lerp_speed needs ~150 ms to converge, so it can
-				# never catch the fast bell — the snap gets muted into a slow rotation
-				# that trails the blade and reads as "release → pause → follow-through."
-				# Drive the angle straight off env instead: ft_aim ≈ the coil angle
-				# (same -angle·ratio formula), so this is continuous at the boundary.
-				upper_body_angle = ft_aim + through
+				# A backhand turns the other way, so it overshoots the other way.
+				if _controller.last_release_hand == "BH":
+					through = -through
+				# The overshoot discharges WITH the release: driven off env, since a
+				# lerp can't catch its ~40 ms bell. The unwind is rate-limited rather
+				# than snapped, because the coil can sit well off the shot line.
+				upper_body_angle = rotate_toward(upper_body_angle, ft_aim + through,
+						deg_to_rad(_controller.wrister_release_unwind_speed_deg) * delta)
 			else:
 				upper_body_angle = lerp_angle(upper_body_angle, ft_aim + through,
 						_controller.follow_through_twist_lerp_speed * delta)
@@ -436,6 +436,13 @@ func apply_upper_body(delta: float) -> void:
 			var blade_angle: float = atan2(local_dir.x, -local_dir.z)
 			var max_twist: float = deg_to_rad(_controller.upper_body_max_twist_deg)
 			target_angle = clampf(-blade_angle * _controller.upper_body_twist_ratio, -max_twist, max_twist)
+		# A human's wrist shot winds the torso up by as much as the shot can load,
+		# from squared on the aim (nothing to drive) to the full wind-up, so the
+		# pose is the power the release can carry.
+		if _sm.get_state() == State.WRISTER_AIM and _controller.has_puck \
+				and _controller.wrister_load_active:
+			target_angle = lerp_angle(target_angle, _controller.wrister_load.wound_yaw,
+					_controller.wrister_load.load)
 		target_lean = compute_upper_body_lean_target(
 				Vector2(_skater.top_hand.position.x, _skater.top_hand.position.z),
 				Vector2(_skater.shoulder.position.x, _skater.shoulder.position.z),

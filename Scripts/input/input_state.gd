@@ -83,11 +83,12 @@ static func quantize_power_t(v: float) -> float:
 # BOT-ONLY, runtime, NOT serialized. The bot's committed shot DIRECTION (world XZ,
 # normalized) for a charged wrister/pass, and its committed forehand/backhand.
 # The human wrister aims POSITIONALLY (origin→cursor) with forehand/backhand read
-# from the cursor's bearing sweep, and a bot's cosmetic near-body wind-up cursor
-# would make both garbage — so a bot commits aim and hand directly, as it already
-# commits power via bot_wrister_power_t. The controller uses them when
-# bot_wrister_aim_dir is non-ZERO (SkaterController._wrister_aim_dir /
-# _wrister_is_backhand). Humans leave aim_dir ZERO → positional.
+# from where the puck sits against that aim (WristerLoad), and a bot's cosmetic
+# near-body wind-up cursor would make both garbage — so a bot commits aim and
+# hand directly, as it already commits power via bot_wrister_power_t. The
+# controller uses them when bot_wrister_aim_dir is non-ZERO
+# (SkaterController._wrister_aim_dir / _wrister_is_backhand). Humans leave
+# aim_dir ZERO → positional.
 var bot_wrister_aim_dir: Vector3 = Vector3.ZERO
 var bot_wrister_backhand: bool = false
 # BOT-ONLY, runtime, NOT serialized. The bot's committed SLAPPER direction (world
