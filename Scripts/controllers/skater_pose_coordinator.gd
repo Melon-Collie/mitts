@@ -230,7 +230,7 @@ func apply_facing(input: InputState, delta: float) -> void:
 				# facing) before reaching the cursor. See follow_through_facing_recover_speed.
 				if s == State.FOLLOW_THROUGH:
 					drag = maxf(drag, _controller.follow_through_facing_recover_speed)
-				var facing_target: Vector2 = to_mouse.normalized()
+				var facing_target: Vector2 = _facing_toward(to_mouse.normalized(), input.brake)
 				# Board shield: a carrier working the wall squares up ALONG it and
 				# protects the puck rather than facing into it. Gated to carrying —
 				# digging a loose puck out of the corner keeps full facing freedom,
@@ -252,6 +252,32 @@ func apply_facing(input: InputState, delta: float) -> void:
 			deg_to_rad(_controller.lower_body_lag_max_deg))
 
 	apply_lower_body_yaw(delta)
+
+# Where facing heads for a cursor at `cursor_dir`. A human skating faces where they
+# skate — the hips go with the stride, and the torso twist and arm reach carry the
+# puck out at the side — so above facing_travel_min_speed the target blends from
+# the cursor to the travel direction. It squares to the cursor as it always did
+# when the cursor falls behind the travel cone (skating backward while watching
+# the play), when braking, in the stance (Shift), and for bots, whose decisions
+# still assume facing follows their cursor. The cone's hysteresis is stateless —
+# read off whichever of the two the body faces now — so reconcile replay agrees.
+func _facing_toward(cursor_dir: Vector2, brake: bool) -> Vector2:
+	if brake or _controller.stance_active or _controller.is_ai_controlled():
+		return cursor_dir
+	var travel := Vector2(_skater.velocity.x, _skater.velocity.z)
+	var share: float = smoothstep(_controller.facing_travel_min_speed,
+			_controller.facing_travel_full_speed, travel.length())
+	if share <= 0.0:
+		return cursor_dir
+	travel = travel.normalized()
+	var hysteresis: float = _controller.facing_travel_cone_hysteresis_deg
+	if absf(facing.angle_to(travel)) > absf(facing.angle_to(cursor_dir)):
+		hysteresis = -hysteresis
+	var cone: float = deg_to_rad(_controller.facing_travel_cone_deg + hysteresis)
+	if absf(travel.angle_to(cursor_dir)) > cone:
+		return cursor_dir
+	return cursor_dir.slerp(travel, share)
+
 
 # Sole writer of the lower body's yaw. Decays the facing-driven turn lag and
 # sums the gait's two published yaw channels onto it — the hockey-stop turn
