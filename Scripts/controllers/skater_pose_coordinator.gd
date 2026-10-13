@@ -436,13 +436,12 @@ func apply_upper_body(delta: float) -> void:
 			var blade_angle: float = atan2(local_dir.x, -local_dir.z)
 			var max_twist: float = deg_to_rad(_controller.upper_body_max_twist_deg)
 			target_angle = clampf(-blade_angle * _controller.upper_body_twist_ratio, -max_twist, max_twist)
-		# A human's wrist shot winds the torso up by as much as the shot can load,
-		# from squared on the aim (nothing to drive) to the full wind-up, so the
-		# pose is the power the release can carry.
+		# A human's wrist shot winds the torso up by the power it would release
+		# with, from squared on the aim (nothing behind it) to the full wind-up.
 		if _sm.get_state() == State.WRISTER_AIM and _controller.has_puck \
 				and _controller.wrister_load_active:
 			target_angle = lerp_angle(target_angle, _controller.wrister_load.wound_yaw,
-					_controller.wrister_load.load)
+					_controller.wrister_coil)
 		target_lean = compute_upper_body_lean_target(
 				Vector2(_skater.top_hand.position.x, _skater.top_hand.position.z),
 				Vector2(_skater.shoulder.position.x, _skater.shoulder.position.z),

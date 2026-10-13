@@ -76,7 +76,9 @@ at the release by `SkaterController._solve_wrister_load`. In the hips' frame:
 - **The puck is the pinned origin** carried along by any skating since the pin —
   never the blade's contact point, which swings with the torso's wind-up.
 - **The pose is the gauge.** The aim pose winds the torso from squared on the aim
-  to the full wind-up by the load; the release unwinds it at
+  toward the full wind-up by the power it would release with now, and the hips
+  turn `wrister_load_hip_share` of the way with it (square hips under a wound
+  torso put the hands over the stick-side thigh); the release unwinds it at
   `wrister_release_unwind_speed_deg` and overshoots the way the hand turns.
 - **No wire change and no reconcile state:** the load is a pure function of the
   pinned origin, the aim and the frozen facing, all of which the host replays.

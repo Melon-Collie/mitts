@@ -853,7 +853,7 @@ var slapper_follow_through_contact_frac: float = 0.22  # first fraction of the t
 var wrister_load_stance: float = 0.55          # crouch floor at full charge (fraction of stance_hip_deg)
 var wrister_load_lean_deg: float = 5.0         # shared leg roll: weight over the stick-side back leg
 var wrister_load_split_deg: float = 8.0        # foot stagger: stick-side foot drops back
-var wrister_load_hip_coil_deg: float = 8.0     # hips coil with the torso, stick-side hip back
+var wrister_load_hip_share: float = 0.85      # share of the torso's wrist-shot wind-up the hips turn with
 var wrister_load_blend_speed: float = 6.0      # how fast the load pose tracks the charge (both shots)
 var wrister_kick_time: float = 0.5             # seconds of weight transfer/kick after release
 var wrister_kick_min_power: float = 0.35       # amplitude floor so snaps and passes still read
@@ -978,6 +978,9 @@ var _wrister_pred_scratch: ShotMechanics.ShotResult = ShotMechanics.ShotResult.n
 # replayed input, so it needs no reconcile save. Read by the aim pose.
 var wrister_load: WristerLoad.Result = WristerLoad.Result.new()
 var wrister_load_active: bool = false
+# How far the aim pose winds toward wrister_load.wound_yaw: the power the shot
+# would release with now, as a share of the full band.
+var wrister_coil: float = 0.0
 # Same scratch for the slapper windup's release-now prediction (_update_slapper_
 # charge) — the goalie pre-leans off it toward a charging slapshot's aimed corner.
 var _slapper_pred_scratch: ShotMechanics.ShotResult = ShotMechanics.ShotResult.new()
@@ -2998,6 +3001,9 @@ func _update_wrister_charge(input: InputState) -> void:
 			_wrister_config(), charge_aim_dir, false,
 			_wrister_sweep_speed(input), _wrister_stroke_travel(), _wrister_pred_scratch)
 	pred.power = minf(pred.power, _wrister_load_cap(is_backhand))
+	if wrister_load_active:
+		wrister_coil = minf(wrister_load.load, ShotMechanics.wrister_power_t(
+				_wrister_sweep_speed(input), _wrister_config(), _wrister_stroke_travel()))
 	skater.predicted_shot_velocity = pred.direction * pred.power
 	# shot_charge carries the release-now SPEED (normalized predicted power over
 	# the min→max band) — the pure mouse-speed model, so it always matches the
