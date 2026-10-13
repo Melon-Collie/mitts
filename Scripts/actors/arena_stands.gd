@@ -282,10 +282,14 @@ const _EXCITE_DECAY_TIME: float = 3.0
 
 # The ceiling rig's housings and its intro cue. Outlives rebuilds (see _ready).
 const _HOUSE_LIGHTS_NAME: StringName = &"ArenaHouseLights"
+# The bowl's reflection probe. Outlives rebuilds too, so the Reflections setting
+# PlayerPrefs.apply_video writes onto it survives one; each rebuild refits it.
+const _REFLECTION_NAME: StringName = &"ArenaReflection"
 
 var _excitement: float = 0.0
 var _excite_tween: Tween = null
 var _house_lights: ArenaHouseLights = null
+var _reflection: ArenaReflection = null
 var _render_targets_freed: bool = false
 # Set while set_crowd_rows writes both row counts, so the two setters don't
 # each trigger a rebuild of their own.
@@ -351,6 +355,12 @@ func _ready() -> void:
 		_house_lights.name = _HOUSE_LIGHTS_NAME
 		add_child(_house_lights)
 		_house_lights.setup(get_parent())
+		_reflection = ArenaReflection.new()
+		_reflection.name = _REFLECTION_NAME
+		add_child(_reflection)
+		_reflection.setup(get_parent())
+		_fit_reflection()
+		_house_lights.attach_reflection(_reflection)
 	# The crowd material is static (see ArenaCrowd.shared_material): a bowl
 	# mid-celebration when the scene changed would otherwise carry its excitement
 	# into the fresh arena. New bowls start at the idle murmur.
@@ -504,7 +514,7 @@ func _rebuild() -> void:
 	# clear it so a genuine later teardown still frees what this build creates.
 	_render_targets_freed = false
 	for child: Node in get_children():
-		if child.name == _HOUSE_LIGHTS_NAME:
+		if child.name == _HOUSE_LIGHTS_NAME or child.name == _REFLECTION_NAME:
 			continue   # survives rebuilds — see _ready
 		child.queue_free()
 	var layout: Dictionary = _get_or_build_layout()
@@ -527,6 +537,12 @@ func _rebuild() -> void:
 		set_process(not Engine.is_editor_hint())
 	if banners_enabled:
 		_signage.add_rafter_banners(self)
+	_fit_reflection()
+
+
+func _fit_reflection() -> void:
+	if is_instance_valid(_reflection) and _rake != null:
+		_reflection.fit(_rake.interior_bounds(ArenaReflection.FLOOR_MARGIN))
 
 
 # Attach the cached crowd MultiMeshes, repainting only if the colors/ratios

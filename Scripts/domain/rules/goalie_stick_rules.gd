@@ -141,7 +141,7 @@ const _REACH_PROBE_YAWS: Array[float] = [-ACTIVE_YAW_CAP_DEG, 0.0, ACTIVE_YAW_CA
 # Blocker wrist lateral offset in the READY stance (GoalieBodyConfigBuilder's
 # `c.blocker_pos.x`). READY rather than STANDING because a keeper set on a
 # shooter is the state the planning cover describes.
-const READY_WRIST_X_M: float = 0.44
+const READY_WRIST_X_M: float = 0.46
 # How far the upright keeper's paddle leans forward off his hand, which puts the
 # blade out in front of his skates and opens its face to the same angle. A
 # stance choice — the flush roll already lays the blade on the ice at any tilt —

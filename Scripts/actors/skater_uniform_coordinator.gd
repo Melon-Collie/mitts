@@ -238,7 +238,7 @@ func apply_uniform(colors: Dictionary) -> void:
 	var pants_block: Dictionary = uniform.pants
 	_paint_pants_thigh(SkaterMeshBuilder.LegSurface.THIGH_L, pants_block, -0.25)
 	_paint_pants_thigh(SkaterMeshBuilder.LegSurface.THIGH_R, pants_block, 0.25)
-	var pants_solid: StandardMaterial3D = UniformPaint.solid(pants_block.base)
+	var pants_solid: StandardMaterial3D = UniformPaint.solid(pants_block.base, UniformPaint.ROUGH_NYLON)
 	for surface: int in [SkaterMeshBuilder.LegSurface.KNEE_L,
 			SkaterMeshBuilder.LegSurface.KNEE_R]:
 		_skater.set_leg_surface_material(surface, pants_solid.duplicate())
@@ -352,11 +352,11 @@ static func _scale_stripes_about_center(
 # U=0.5 by convention) lands on each thigh's outer face.
 func _paint_pants_thigh(surface: int, pants_block: Dictionary, u_offset: float) -> void:
 	if pants_block.stripes.is_empty():
-		_skater.set_leg_surface_material(surface, UniformPaint.solid(pants_block.base))
+		_skater.set_leg_surface_material(surface,
+				UniformPaint.solid(pants_block.base, UniformPaint.ROUGH_NYLON))
 		return
-	var tex: ImageTexture = _make_v_stripes_texture(pants_block.base, pants_block.stripes)
-	var mat := StandardMaterial3D.new()
-	mat.albedo_texture = tex
+	var mat: StandardMaterial3D = UniformPaint.textured(
+			_make_v_stripes_texture(pants_block.base, pants_block.stripes), UniformPaint.ROUGH_NYLON)
 	mat.uv1_offset = Vector3(u_offset, 0.0, 0.0)
 	_skater.set_leg_surface_material(surface, mat)
 
@@ -542,12 +542,12 @@ func _rebuild_stick_knob() -> void:
 # that run and are addressed as surfaces — see the UpperSurface doc block.)
 func _repaint_gloves() -> void:
 	var body_mat: StandardMaterial3D = UniformPaint.solid(
-			_glove_zone_color(GearModelRegistry.GLOVE_BODY))
+			_glove_zone_color(GearModelRegistry.GLOVE_BODY), UniformPaint.ROUGH_GLOVE)
 	_skater.set_upper_surface_material(SkaterMeshBuilder.UpperBone.TOP_HAND, body_mat)
 	_skater.set_upper_surface_material(
 			SkaterMeshBuilder.UpperBone.BOTTOM_HAND, body_mat.duplicate())
 	var finger_mat: StandardMaterial3D = UniformPaint.solid(
-			_glove_zone_color(GearModelRegistry.GLOVE_FINGERS))
+			_glove_zone_color(GearModelRegistry.GLOVE_FINGERS), UniformPaint.ROUGH_GLOVE)
 	_skater.set_upper_surface_material(
 			SkaterMeshBuilder.UpperSurface.TOP_FINGERS, finger_mat)
 	_skater.set_upper_surface_material(
@@ -577,7 +577,7 @@ func _repaint_face_gear() -> void:
 # change is a repaint and a resize — the geometry is permanent, and nothing here
 # frees or recreates a MeshInstance3D.
 func _paint_glove_cuffs(gloves_color: Color) -> void:
-	var mat: StandardMaterial3D = UniformPaint.solid(gloves_color)
+	var mat: StandardMaterial3D = UniformPaint.solid(gloves_color, UniformPaint.ROUGH_GLOVE)
 	_skater.set_upper_surface_material(SkaterMeshBuilder.UpperBone.TOP_CUFF, mat)
 	_skater.set_upper_surface_material(
 			SkaterMeshBuilder.UpperBone.BOTTOM_CUFF, mat.duplicate())

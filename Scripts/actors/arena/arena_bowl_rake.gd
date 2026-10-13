@@ -99,6 +99,18 @@ func top_tread_y() -> float:
 	return lower_top_tread_y()
 
 
+# The volume the bowl encloses, in plan out to the shell wall and in height from
+# just under the ice to the shell's top edge. `floor_margin` drops the floor below
+# the ice (y = 0), so a probe fitted to this box does not fade the ice out as an
+# edge it blends across.
+func interior_bounds(floor_margin: float) -> AABB:
+	var half_x: float = _spec.rink_width * 0.5 + shell_offset()
+	var half_z: float = _spec.rink_length * 0.5 + shell_offset()
+	var top: float = top_tread_y() + _spec.shell_height
+	return AABB(Vector3(-half_x, -floor_margin, -half_z),
+			Vector3(2.0 * half_x, top + floor_margin, 2.0 * half_z))
+
+
 # ── Rinkside wells ───────────────────────────────────────────────────────────
 
 # Floor height of row `row` at `p`. Inside a rinkside furniture cutout every

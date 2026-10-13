@@ -80,6 +80,9 @@ var _trunk_texture_roll: float = 0.0
 # The texture moved the shoulders the arms root on since the mesh pass last
 # asked (take_retextured).
 var _retextured: bool = false
+# The jersey hem's lag, and whether the bone is drawn anywhere but at rest.
+var _hem := SkaterJerseyHem.new()
+var _hem_shown: bool = false
 
 
 func setup(skater: Skater) -> void:
@@ -200,13 +203,13 @@ func _update_arm(arm: int, marker_local: Vector3, hand_local: Vector3, pole_sign
 	# posed in (the spine's, before the trunk texture rotates it).
 	_girdle[side_i] = _trunk_texture.transposed() \
 			* (spine.basis.inverse() * (shoulder_s - spine * _textured_shoulder(marker_local)))
+	var pole_s: Vector3 = spine.basis * _arm_pole(marker_local, pole_sign)
 	var elbow_s: Vector3 = TwoBoneIK.solve_elbow(shoulder_s, hand_s,
-			_skater.upper_arm_length, _skater.forearm_length,
-			spine.basis * _arm_pole(marker_local, pole_sign))
+			_skater.upper_arm_length, _skater.forearm_length, pole_s)
 	_pose_bone(upper, shoulder_s, elbow_s)
 	_pose_bone(forearm, elbow_s, hand_s)
 	_pose_cuff(cuff, elbow_s, hand_s)
-	_pose_ball(elbow_bone, elbow_s)
+	_pose_elbow(elbow_bone, shoulder_s, elbow_s, hand_s, pole_s)
 	_pose_glove(glove, elbow_s, hand_s)
 	_orient_shoulder_cap(marker_local, spine.affine_inverse() * shoulder_s,
 			spine.affine_inverse() * elbow_s)
@@ -353,8 +356,14 @@ func _pose_bone(part: int, a: Vector3, b: Vector3) -> void:
 			center))
 
 
-func _pose_ball(part: int, pos: Vector3) -> void:
-	_skeleton.set_bone_pose(part, Transform3D(Basis.IDENTITY.scaled(_thickness[part]), pos))
+# The elbow pad (SkaterMeshBuilder.shared_elbow_pad) points its +Y out of the
+# bend, the way the IK pushed the elbow, with its X along the arm.
+func _pose_elbow(part: int, shoulder: Vector3, elbow: Vector3, hand: Vector3,
+		pole: Vector3) -> void:
+	var out: Vector3 = TwoBoneIK.bend_direction(shoulder, hand, pole)
+	var along: Vector3 = (hand - shoulder).normalized()
+	var basis := Basis(along, out, along.cross(out)) if out != Vector3.ZERO else Basis.IDENTITY
+	_skeleton.set_bone_pose(part, Transform3D(basis.scaled_local(_thickness[part]), elbow))
 
 
 # Positions the gloved fist at the hand and aligns its long (local Y) axis with
@@ -468,6 +477,23 @@ func set_trunk_texture(pitch_add: float, roll_add: float) -> void:
 	repose_bone(SkaterMeshBuilder.UpperBone.HELMET)
 	repose_bone(SkaterMeshBuilder.UpperBone.SHOULDER_L)
 	repose_bone(SkaterMeshBuilder.UpperBone.SHOULDER_R)
+
+
+# Swings the jersey hem on the balance lean. The lag steps every frame, so a
+# skater the camera picks up mid-swing is mid-swing; the bone is written only when
+# drawn, and once more on settling so the hem comes back to rest.
+func update_hem(delta: float, on_camera: bool) -> void:
+	var tilt: Vector2 = _skater.balance_tilt()
+	var local: Vector3 = _skater.upper_body.global_basis.orthonormalized().inverse() \
+			* Vector3(tilt.x, 0.0, tilt.y)
+	var moving: bool = _hem.advance(delta, Vector2(local.x, local.z))
+	if on_camera and (moving or _hem_shown):
+		_skeleton.set_bone_pose(SkaterBodySkeleton.HEM_BONE, _hem.pose())
+		_hem_shown = moving
+
+
+func hem_swing() -> Vector2:
+	return _hem.swing()
 
 
 # The head's lerp toward its aim never lands exactly, so it would re-pose the

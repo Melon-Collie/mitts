@@ -51,7 +51,7 @@ var react_hand_y_min: float = 0.50
 var react_hand_y_max: float = 1.55
 # How far above the CHEST ANCHOR (`body_pos.y` of the pose in play) either hand
 # can be raised. This is what makes going down cost something: the butterfly's
-# chest sits at 0.64 against READY's 1.06, so the same arm reaches 0.42 m lower
+# chest sits at 0.64 against READY's 0.96, so the same arm reaches 0.32 m lower
 # from the ice than from the feet. See GoalieController.arm_reach_above_chest.
 var arm_reach_above_chest: float = 0.49
 
@@ -128,10 +128,25 @@ const DOWN_HAND_Y_M: float = GoalieAnatomy.PAD_CENTER_Y_BUTTERFLY_M \
 const DOWN_BODY_Y_M: float = GoalieAnatomy.TORSO_CENTER_Y_BUTTERFLY_M
 const DOWN_HEAD_Y_M: float = GoalieAnatomy.HEAD_CENTER_Y_BUTTERFLY_M
 
+# The ready crouch, shared by every stance that stands in it: the trunk leans
+# well forward, bringing the shoulders down and ahead to the hands (the blocker
+# at paddle height), so the arms bend at the elbow instead of hanging straight.
+const READY_BODY_POS := Vector3(0.0, 0.96, -0.10)
+const READY_BODY_PITCH_DEG: float = -28.0
+const READY_HEAD_POS := Vector3(0.0, 1.50, -0.34)
+# The A-frame: knees in over feet set wider than standing, so the pads close the
+# five-hole high and open it low, where the paddle-down blade guards the ice —
+# a deliberate scoring window just over the blade (beatable realism).
+const READY_PAD_X_M: float = 0.265
+const READY_PAD_ROLL_DEG: float = 15.0
+# The trapper up at the chest, open to the shooter (x, y).
+const READY_GLOVE := Vector2(-0.46, 1.02)
+const READY_BLOCKER_Z_M: float = -0.35
+
 # The half-butterfly body: one knee on the ice, the other leg in the ready
 # crouch, so the hips sit between the two stances' — the butterfly trunk raised
 # by half the drop from the ready stance — and lean over the down knee.
-const HALF_BODY_Y_M: float = (DOWN_BODY_Y_M + 1.06) * 0.5
+const HALF_BODY_Y_M: float = (DOWN_BODY_Y_M + READY_BODY_POS.y) * 0.5
 const HALF_HEAD_Y_M: float = HALF_BODY_Y_M + GoalieAnatomy.NECK_M
 const HALF_BODY_SHIFT_M: float = 0.06
 const HALF_BODY_ROLL_DEG: float = 6.0
@@ -327,8 +342,8 @@ func build(inputs: Inputs) -> GoalieBodyConfig:
 static func resting_body_position_for_state(state: int) -> Vector3:
 	match state:
 		GoalieStateMachine.State.STANDING:                        return Vector3(0.0,  1.22,  0.0)
-		GoalieStateMachine.State.READY:                           return Vector3(0.0,  1.06, -0.05)
-		GoalieStateMachine.State.RECOVERING:                      return Vector3(0.0,  1.06, -0.05)
+		GoalieStateMachine.State.READY:                           return READY_BODY_POS
+		GoalieStateMachine.State.RECOVERING:                      return READY_BODY_POS
 		GoalieStateMachine.State.BUTTERFLY:                       return Vector3(0.0, DOWN_BODY_Y_M, 0.0)
 		GoalieStateMachine.State.COILING:                         return Vector3(0.0, DOWN_BODY_Y_M, 0.0)
 		GoalieStateMachine.State.SLIDING:                         return Vector3(0.0, DOWN_BODY_Y_M, 0.0)
@@ -337,8 +352,8 @@ static func resting_body_position_for_state(state: int) -> Vector3:
 		GoalieStateMachine.State.VH_LEFT:                         return Vector3(-0.05, 0.85, 0.02)
 		GoalieStateMachine.State.VH_RIGHT:                        return Vector3( 0.05, 0.85, 0.02)
 		GoalieStateMachine.State.COVERING:                        return Vector3(0.0,  0.48, -0.10)
-		GoalieStateMachine.State.PLAYING_PUCK:                    return Vector3(0.0,  1.06, -0.05)
-		GoalieStateMachine.State.CATCHING:                        return Vector3(0.0,  1.06, -0.05)
+		GoalieStateMachine.State.PLAYING_PUCK:                    return READY_BODY_POS
+		GoalieStateMachine.State.CATCHING:                        return READY_BODY_POS
 		GoalieStateMachine.State.CATCHING_DOWN:                   return Vector3(0.0, DOWN_BODY_Y_M, 0.0)
 		GoalieStateMachine.State.HALF_BUTTERFLY_LEFT:             return Vector3(-HALF_BODY_SHIFT_M, HALF_BODY_Y_M, -0.02)
 		GoalieStateMachine.State.HALF_BUTTERFLY_RIGHT:            return Vector3( HALF_BODY_SHIFT_M, HALF_BODY_Y_M, -0.02)
@@ -347,8 +362,8 @@ static func resting_body_position_for_state(state: int) -> Vector3:
 static func resting_head_position_for_state(state: int) -> Vector3:
 	match state:
 		GoalieStateMachine.State.STANDING:                        return Vector3(0.0,  1.79, -0.04)
-		GoalieStateMachine.State.READY:                           return Vector3(0.0,  1.62, -0.22)
-		GoalieStateMachine.State.RECOVERING:                      return Vector3(0.0,  1.62, -0.22)
+		GoalieStateMachine.State.READY:                           return READY_HEAD_POS
+		GoalieStateMachine.State.RECOVERING:                      return READY_HEAD_POS
 		GoalieStateMachine.State.BUTTERFLY:                       return Vector3(0.0, DOWN_HEAD_Y_M, -0.06)
 		GoalieStateMachine.State.COILING:                         return Vector3(0.0, DOWN_HEAD_Y_M, -0.06)
 		GoalieStateMachine.State.SLIDING:                         return Vector3(0.0, DOWN_HEAD_Y_M, -0.06)
@@ -357,17 +372,17 @@ static func resting_head_position_for_state(state: int) -> Vector3:
 		GoalieStateMachine.State.VH_LEFT:                         return Vector3(-0.05, 1.45, 0.06)
 		GoalieStateMachine.State.VH_RIGHT:                        return Vector3( 0.05, 1.45, 0.06)
 		GoalieStateMachine.State.COVERING:                        return Vector3(0.0,  0.92, -0.28)
-		GoalieStateMachine.State.PLAYING_PUCK:                    return Vector3(0.0,  1.62, -0.22)
-		GoalieStateMachine.State.CATCHING:                        return Vector3(0.0,  1.62, -0.22)
+		GoalieStateMachine.State.PLAYING_PUCK:                    return READY_HEAD_POS
+		GoalieStateMachine.State.CATCHING:                        return READY_HEAD_POS
 		GoalieStateMachine.State.CATCHING_DOWN:                   return Vector3(0.0, DOWN_HEAD_Y_M, -0.06)
 		GoalieStateMachine.State.HALF_BUTTERFLY_LEFT:             return Vector3(-HALF_BODY_SHIFT_M, HALF_HEAD_Y_M, -0.12)
 		GoalieStateMachine.State.HALF_BUTTERFLY_RIGHT:            return Vector3( HALF_BODY_SHIFT_M, HALF_HEAD_Y_M, -0.12)
 	return Vector3(0.0, 1.79, -0.04)
 
 
-# Vertical anatomy, against the 0.52 × 0.72 torso box and 0.26 head in
+# Vertical anatomy, against the 0.52 × 0.72 torso box and 0.32 head in
 # Goalie.tscn: standing, the torso bottom stays glued to the pad-top seam at
-# 0.86 and the mask tops out at ~1.92 — a 6'3"-class frame on the same scale as
+# 0.86 and the mask tops out at ~1.95 — a 6'3"-class frame on the same scale as
 # the skaters. test_goalie_scene_mirrors.gd holds both those boxes and the
 # pad-top seam the bot shot model reads (GameRules
 # .DEFAULT_GOALIE_PAD_TOP_SEAM_M, the HIGH band's arrival floor) against the
@@ -409,20 +424,17 @@ func _set_standing_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 # it persists the body is already at READY — single smooth rising motion,
 # no up-then-back-down overshoot.
 func _set_ready_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
-	# Engaged stance widens the base past the standing ±0.22 — a real goalie
-	# drops AND spreads. The wider gap is a deliberate scoring window (beatable
-	# realism: the stance opens the five-hole, the paddle-down stick guards it).
-	c.left_pad_pos  = Vector3(-0.26 - inputs.five_hole_openness, 0.44, -0.16)
-	c.left_pad_rot  = Vector3(0.0,  pad_toe_out_standing, -10.0)
-	c.right_pad_pos = Vector3( 0.26 + inputs.five_hole_openness, 0.44, -0.16)
-	c.right_pad_rot = Vector3(0.0, -pad_toe_out_standing,  10.0)
-	c.body_pos      = Vector3(0.0,  1.06, -0.05)
-	c.body_rot      = Vector3(-14.0, 0.0, 0.0)
-	c.head_pos      = Vector3(0.0,  1.62, -0.22)
+	c.left_pad_pos  = Vector3(-READY_PAD_X_M - inputs.five_hole_openness, 0.44, -0.16)
+	c.left_pad_rot  = Vector3(0.0,  pad_toe_out_standing, -READY_PAD_ROLL_DEG)
+	c.right_pad_pos = Vector3( READY_PAD_X_M + inputs.five_hole_openness, 0.44, -0.16)
+	c.right_pad_rot = Vector3(0.0, -pad_toe_out_standing,  READY_PAD_ROLL_DEG)
+	c.body_pos      = READY_BODY_POS
+	c.body_rot      = Vector3(READY_BODY_PITCH_DEG, 0.0, 0.0)
+	c.head_pos      = READY_HEAD_POS
 	c.head_rot      = Vector3.ZERO
-	c.blocker_pos   = Vector3( 0.44, GoalieStickRules.upright_wrist_y(), -0.32)
+	c.blocker_pos   = Vector3(GoalieStickRules.READY_WRIST_X_M, GoalieStickRules.upright_wrist_y(), READY_BLOCKER_Z_M)
 	c.blocker_rot   = Vector3(0.0, 0.0, STICK_ROLL)
-	c.glove_pos     = Vector3(-0.42, 0.90, 0.0)
+	c.glove_pos     = Vector3(READY_GLOVE.x, READY_GLOVE.y, 0.0)
 	c.glove_pos.z   = _hand_depth(c, -1.0, c.glove_pos.x, c.glove_pos.y, BEND_READY_DEG)
 	c.glove_rot     = Vector3.ZERO
 	if inputs.reading_pinned_windup:
@@ -487,7 +499,7 @@ func _set_butterfly_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 func _set_down_hands(c: GoalieBodyConfig, glove_y: float) -> void:
 	c.blocker_pos = Vector3(DOWN_BLOCKER_X_M, DOWN_HAND_Y_M, DOWN_BLOCKER_Z_M)
 	c.blocker_rot = Vector3(0.0, 0.0, STICK_ROLL)
-	c.glove_pos = Vector3(-0.42, glove_y, 0.0)
+	c.glove_pos = Vector3(READY_GLOVE.x, glove_y, 0.0)
 	c.glove_pos.z = _hand_depth(c, -1.0, c.glove_pos.x, glove_y, BEND_DOWN_DEG)
 	c.glove_rot = Vector3.ZERO
 
@@ -500,7 +512,8 @@ func _set_down_hands(c: GoalieBodyConfig, glove_y: float) -> void:
 # so the hands sit exactly where that gap is.
 func _tuck_into_block(c: GoalieBodyConfig) -> void:
 	var hand_x: float = GoalieAnatomy.torso_half_width() + GoalieAnatomy.GLOVE_BOX_WIDTH_M * 0.5
-	var hand_y: float = GoalieAnatomy.pad_span(true).y + GoalieAnatomy.hand_vertical_half_extent()
+	var hand_y: float = GoalieAnatomy.pad_span(true).y + GoalieAnatomy.hand_vertical_half_extent() \
+			- GoalieAnatomy.GLOVE_BOX_OFFSET_Y_M
 	c.body_rot = Vector3.ZERO
 	c.glove_pos = Vector3(-hand_x, hand_y, BLOCK_HAND_Z_M)
 	c.blocker_pos.x = hand_x
@@ -514,8 +527,8 @@ func _set_half_butterfly_pose(c: GoalieBodyConfig, inputs: Inputs, down_side: fl
 			else inputs.left_pad_toe_out)
 	var flat_pos := Vector3(down_side * (0.42 + inputs.five_hole_openness), 0.14, -0.20)
 	var flat_rot := Vector3(0.0, -down_side * toe, down_side * 90.0)
-	var up_pos := Vector3(-down_side * (0.26 + inputs.five_hole_openness), 0.44, -0.16)
-	var up_rot := Vector3(0.0, down_side * pad_toe_out_standing, -down_side * 10.0)
+	var up_pos := Vector3(-down_side * (READY_PAD_X_M + inputs.five_hole_openness), 0.44, -0.16)
+	var up_rot := Vector3(0.0, down_side * pad_toe_out_standing, -down_side * READY_PAD_ROLL_DEG)
 	if down_side > 0.0:
 		c.right_pad_pos = flat_pos
 		c.right_pad_rot = flat_rot
@@ -948,7 +961,8 @@ func _apply_prelean(c: GoalieBodyConfig, inputs: Inputs) -> void:
 	# Drift the relevant hand a fraction of the way toward the predicted corner.
 	if impact_local_x <= 0.0:
 		var full_x: float = clampf(impact_local_x, glove_max_x_outward, glove_max_x_inward)
-		c.glove_pos = c.glove_pos.lerp(Vector3(full_x, target_y, c.glove_pos.z), s)
+		c.glove_pos = c.glove_pos.lerp(Vector3(full_x,
+				target_y - GoalieAnatomy.GLOVE_BOX_OFFSET_Y_M, c.glove_pos.z), s)
 	else:
 		var full_x: float = clampf(impact_local_x, blocker_max_x_inward, blocker_max_x_outward)
 		c.blocker_pos = c.blocker_pos.lerp(Vector3(full_x, target_y, c.blocker_pos.z), s)
@@ -1004,7 +1018,8 @@ func _apply_shot_hand_reaction(c: GoalieBodyConfig, inputs: Inputs) -> void:
 		pitch_deg = shoulder_pitch_back_max_deg * p
 	c.body_rot = Vector3(c.body_rot.x + pitch_deg, c.body_rot.y, lean_deg)
 	if impact_local_x <= 0.0:
-		_reach_glove(c, impact_local_x, target_y)
+		# The pocket, not the hand point, goes to the puck.
+		_reach_glove(c, impact_local_x, target_y - GoalieAnatomy.GLOVE_BOX_OFFSET_Y_M)
 	else:
 		_reach_blocker(c, impact_local_x, target_y)
 
@@ -1037,12 +1052,12 @@ static func _local_x_at_body(inputs: Inputs, impact_x: float) -> float:
 # (tests/unit/ai/test_goalie_butterfly_tradeoff.gd measures the trade).
 #
 # Real goaltending's trade is "seal the ice, concede the top". Here it falls out
-# of the chest anchor each pose already authors: READY sits at 1.06 and the
-# butterfly at 0.64, so the same arm reaches 0.42 m lower from the ice.
+# of the chest anchor each pose already authors: READY sits at 0.96 and the
+# butterfly at 0.64, so the same arm reaches 0.32 m lower from the ice.
 #
-# `arm_reach_above_chest` is DERIVED, not chosen — 1.06 + 0.49 = 1.55, the
-# absolute cap, so upright reach is unchanged by construction and only the down
-# postures lose anything. That cap stays as a hard limit on top.
+# `arm_reach_above_chest` puts READY's ceiling at 0.96 + 0.49 = 1.45, above the
+# 1.22 m crossbar, so upright reach covers the whole net and only the down
+# postures lose anything. The absolute cap stays as a hard limit on top.
 func _reachable_hand_y(intercept_y: float, c: GoalieBodyConfig) -> float:
 	var ceiling: float = minf(react_hand_y_max, c.body_pos.y + arm_reach_above_chest)
 	return clampf(intercept_y, react_hand_y_min, maxf(ceiling, react_hand_y_min))

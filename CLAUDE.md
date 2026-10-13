@@ -57,6 +57,9 @@ make it there.
 **Changing a value that is already there is Claude's to do** — a transform, a
 size, a number on an existing line. It invents no identifier and reorders
 nothing; run the suite afterwards, since the scene is instantiated all over it.
+So is giving an existing node the position or scale it lacks: a `transform =`
+line goes first in the node block, ahead of its other properties, and names no
+identifier.
 
 **Deleting is not that, and is Claude's to do**: a property line, a whole node
 block, or a sub-resource nothing references any more. A delete invents no

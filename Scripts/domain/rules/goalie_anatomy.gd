@@ -29,11 +29,14 @@ class_name GoalieAnatomy
 # Leg pad: 0.28 x 0.84 x 0.2 (LeftPad / RightPad).
 const PAD_BOX_WIDTH_M: float = 0.28
 const PAD_BOX_HEIGHT_M: float = 0.84
-# Torso: 0.52 x 0.72 x 0.28 (Body).
-const TORSO_BOX_WIDTH_M: float = 0.52
+# Torso: 0.62 x 0.72 x 0.28 (Body) — as wide as the pants' flare.
+const TORSO_BOX_WIDTH_M: float = 0.62
 const TORSO_BOX_HEIGHT_M: float = 0.72
-# Glove: 0.25 x 0.25 x 0.2 (Glove).
+# Glove: 0.25 x 0.32 x 0.2 (Glove) — taller than wide, as the trapper is —
+# centred this far above the hand point, where the trapper's pocket is.
 const GLOVE_BOX_WIDTH_M: float = 0.25
+const GLOVE_BOX_HEIGHT_M: float = 0.32
+const GLOVE_BOX_OFFSET_Y_M: float = 0.07
 
 # ── Pose (GoalieController exports / GoalieBodyConfigBuilder stance) ─────────
 # Lateral offset of each pad's centre from the body midline.
@@ -44,10 +47,6 @@ const BUTTERFLY_PAD_HALF_WIDTH_M: float = 0.42
 # Furthest the glove hand travels outboard on a full reach
 # (GoalieBodyConfigBuilder.glove_max_x_outward, sign-stripped).
 const GLOVE_MAX_X_OUTWARD_M: float = 0.85
-# Resting hand lateral offsets in the READY stance (that builder's
-# c.glove_pos.x / c.blocker_pos.x).
-const GLOVE_REST_X_M: float = 0.42
-const BLOCKER_REST_X_M: float = 0.44
 
 
 static func butterfly_pad_edge_half_width() -> float:
@@ -60,7 +59,11 @@ static func torso_half_width() -> float:
 	return TORSO_BOX_WIDTH_M * 0.5
 
 
-const HEAD_BOX_M: float = 0.26
+# Head: 0.24 x 0.33 x 0.28 (Head) — the goalie mask, longer than it is wide —
+# centred this far below the head's origin, crown to chin.
+const HEAD_BOX_WIDTH_M: float = 0.24
+const HEAD_BOX_HEIGHT_M: float = 0.33
+const HEAD_BOX_OFFSET_Y_M: float = -0.017
 
 const PAD_CENTER_Y_STANDING_M: float = 0.44
 const TORSO_CENTER_Y_STANDING_M: float = 1.22
@@ -115,14 +118,14 @@ static func butterfly_cover_ceiling() -> float:
 
 static func head_span(down: bool) -> Vector2:
 	if down:
-		return _span(HEAD_CENTER_Y_BUTTERFLY_M, HEAD_BOX_M)
-	return _span(HEAD_CENTER_Y_STANDING_M, HEAD_BOX_M)
+		return _span(HEAD_CENTER_Y_BUTTERFLY_M + HEAD_BOX_OFFSET_Y_M, HEAD_BOX_HEIGHT_M)
+	return _span(HEAD_CENTER_Y_STANDING_M + HEAD_BOX_OFFSET_Y_M, HEAD_BOX_HEIGHT_M)
 
 
 # Half the vertical reach of a hand about its own centre — how far off a hand's
 # height a puck can arrive and still meet it.
 static func hand_vertical_half_extent() -> float:
-	return GLOVE_BOX_WIDTH_M * 0.5
+	return GLOVE_BOX_HEIGHT_M * 0.5
 
 
 # Does a hand centred at `hand_y` meet a puck arriving at `arrival_y`?
@@ -149,7 +152,7 @@ static func structural_cover_half_width_at(y: float, down: bool) -> float:
 		cover = maxf(cover, torso_half_width())
 	var head: Vector2 = head_span(down)
 	if y >= head.x and y <= head.y:
-		cover = maxf(cover, HEAD_BOX_M * 0.5)
+		cover = maxf(cover, HEAD_BOX_WIDTH_M * 0.5)
 	return cover
 
 
@@ -173,6 +176,18 @@ static func standing_pad_takes(rel_x: float, y: float, puck_radius: float) -> bo
 const ARM_UPPER_M: float = 0.38
 const ARM_FOREARM_M: float = 0.38
 const SHOULDER_OFFSET := Vector3(0.23, 0.24, 0.0)
+
+# The blocker is a glove on the arm (Goalie._seat_blocker): the hand is posed,
+# the elbow comes out to the side so the forearm drops near straight down to it
+# (TwoBoneIK.solve_elbow_raised), and the board runs along the forearm's outer
+# side, its finger end at the hand, its face rotated out from the shooter by
+# BLOCKER_FACE_OUTWARD_DEG — "blocker rotated outwards slightly", the coaching
+# cue for steering rebounds to the corner. Where the board's centre sits: back
+# from the grip along the forearm, and out off its outer side, clear of the
+# forearm's padding.
+const BLOCKER_BOARD_ALONG_M: float = 0.06
+const BLOCKER_BOARD_OUT_M: float = 0.09
+const BLOCKER_FACE_OUTWARD_DEG: float = 15.0
 
 
 # Depth (goalie-local z, forward negative) that puts a hand at (`hand_x`,

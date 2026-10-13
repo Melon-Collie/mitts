@@ -89,8 +89,9 @@ func test_the_build_order_is_the_child_order() -> void:
 		"BannerAtlasViewport", "RafterBanners", "RafterBannersBack",
 		# Added by _ready after the rebuild, and deliberately outside it: the
 		# house lights hold a tween and the scene's captured light energies, so a
-		# rebuild mid-cue would drop both and leave the bowl dark.
-		"ArenaHouseLights",
+		# rebuild mid-cue would drop both and leave the bowl dark. The probe
+		# survives too, so the Reflections setting written onto it does.
+		"ArenaHouseLights", "ArenaReflection",
 	], "the rebuild's stage order moved")
 
 

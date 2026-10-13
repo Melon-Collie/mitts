@@ -63,6 +63,9 @@ var _lens_material: StandardMaterial3D = null
 var _environment: Environment = null
 var _base_ambient: float = 0.0
 var _tween: Tween = null
+var _level: float = 1.0
+# The bowl's reflection, captured at full house, so it dims with the lights.
+var _reflection: ArenaReflection = null
 
 
 # `arena_root` is the scene the lights live in — ArenaStands' own parent.
@@ -181,6 +184,12 @@ func _exit_tree() -> void:
 	restore()
 
 
+# ArenaStands owns the probe; on hand-over it takes the house's current level.
+func attach_reflection(probe: ArenaReflection) -> void:
+	_reflection = probe
+	probe.set_house_level(_level)
+
+
 func _kill_tween() -> void:
 	if _tween != null and _tween.is_valid():
 		_tween.kill()
@@ -191,6 +200,9 @@ func _kill_tween() -> void:
 # rather than scaled to it: the spec calls ambient the dominant even fill, and
 # taking it to zero flattens the bowl into silhouette.
 func _set_level(level: float) -> void:
+	_level = level
+	if is_instance_valid(_reflection):
+		_reflection.set_house_level(level)
 	for i: int in _lights.size():
 		_lights[i].light_energy = _base_energy[i] * level
 	if _lens_material != null:

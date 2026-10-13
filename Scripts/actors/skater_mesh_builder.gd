@@ -28,10 +28,10 @@ extends RefCounted
 # from Scenes/Skater.tscn) so nothing pokes through ice, boards, or gear that
 # was tuned around the primitive silhouettes.
 const _TORSO_PROFILE: Array[Vector2] = [
-	Vector2(0.275, 0.158),   # trap line — stays wide so the deltoid caps emerge from it
-	Vector2(0.245, 0.198),
-	Vector2(0.130, 0.208),   # chest
-	Vector2(0.000, 0.196),   # waist tuck
+	Vector2(0.275, 0.192),   # trap line — the shoulder pads' shelf, wide enough to meet the caps
+	Vector2(0.245, 0.218),
+	Vector2(0.130, 0.214),   # chest
+	Vector2(0.000, 0.194),   # waist tuck
 	Vector2(-0.150, 0.204),
 	Vector2(-0.230, 0.214),
 	Vector2(-0.275, 0.222),  # jersey hem flare
@@ -80,9 +80,10 @@ const _THIGH_PROFILE: Array[Vector2] = [
 	Vector2(0.240, 0.102),
 	Vector2(0.190, 0.137),
 	Vector2(0.130, 0.150),   # the hip pivot — the dome's equator
-	Vector2(0.050, 0.139),
-	Vector2(-0.080, 0.129),
-	Vector2(-0.150, 0.118),
+	Vector2(0.050, 0.150),   # breezers: no taper below the hip — the thigh guard holds them out
+	Vector2(-0.080, 0.152),
+	Vector2(-0.125, 0.152),
+	Vector2(-0.150, 0.136),  # the leg hem, turned in over the shin guard
 ]
 const _SOCK_PROFILE: Array[Vector2] = [
 	Vector2(0.150, 0.088),
@@ -184,7 +185,7 @@ const _GLOVE_FIST_STATIONS: Array[Vector3] = [
 # skater side (_update_cuff_transform / _update_stick_knob offset along the
 # bone by half the height), so they live here with the geometry they measure.
 const _ARM_TAPER: float = 0.88   # distal end radius fraction (top of mesh = proximal)
-const CUFF_HEIGHT_M: float = 0.06
+const CUFF_HEIGHT_M: float = 0.08
 const KNOB_HEIGHT_M: float = 0.05
 const _KNOB_TOP_RADIUS: float = 0.035
 const _KNOB_BOTTOM_RADIUS: float = 0.03
@@ -520,7 +521,7 @@ static func _build_helmet_assembly() -> ArrayMesh:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.append_from(_shared("head", _build_head), 0,
 			Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, -_HEAD_FORWARD_M)))
-	st.append_from(_shared("neck", _build_neck), 0, Transform3D.IDENTITY)
+	st.append_from(SkaterFaceMesh.untinted(_shared("neck", _build_neck)), 0, Transform3D.IDENTITY)
 	st.commit(m)
 	m.surface_set_material(HELMET_SURF_SKIN, _make_skin_mat())
 	return m
@@ -588,7 +589,8 @@ static func shared_arm_bone_z() -> ArrayMesh:
 # a subtree and pushes a global to the RenderingServer).
 #
 # Four properties make a pose write mean a plain local transform, and all four
-# have to hold: every vertex is weighted 1.0 to a single bone, the bone rests
+# have to hold: every vertex is weighted 1.0 to a single bone (the jersey's hem is
+# the one exception — SkaterJerseyHem), the bone rests
 # are identity, the skin binds are identity, and each part's geometry is left in
 # its own local space. A skinned vertex is then exactly `bone_pose * v`.
 #
@@ -614,6 +616,8 @@ enum UpperBone {
 	PELVIS,
 }
 const UPPER_BONE_COUNT: int = 15
+# The upper skin's bind for SkaterBodySkeleton.HEM_BONE, after the parts' own.
+const UPPER_HEM_BIND: int = UPPER_BONE_COUNT
 
 # Surfaces. One per bone for the first thirteen; the helmet is the exception,
 # carrying the shell and the head/neck skin as two surfaces of one bone (they
@@ -659,7 +663,7 @@ static func shared_upper_skin_mesh() -> ArrayMesh:
 	return _shared("upper_skin", func() -> ArrayMesh:
 		var m := ArrayMesh.new()
 		var bone: ArrayMesh = shared_arm_bone_z()
-		var ball: ArrayMesh = shared_joint_ball()
+		var ball: ArrayMesh = shared_elbow_pad()
 		var fist: ArrayMesh = shared_glove_fist()
 		var cuff: ArrayMesh = shared_cuff()
 		var helmet: ArrayMesh = shared_helmet_assembly()
@@ -676,7 +680,8 @@ static func shared_upper_skin_mesh() -> ArrayMesh:
 		_append_skinned_surface(m, fist, UpperBone.BOTTOM_HAND, FIST_PART_BACK)
 		_append_skinned_surface(m, cuff, UpperBone.TOP_CUFF)
 		_append_skinned_surface(m, cuff, UpperBone.BOTTOM_CUFF)
-		_append_skinned_surface(m, _shared("torso", _build_torso), UpperBone.TORSO)
+		SkaterJerseyHem.append_torso(m, _shared("torso", _build_torso), UpperBone.TORSO,
+				UPPER_HEM_BIND)
 		_append_skinned_surface(m, helmet, UpperBone.HELMET, HELMET_SURF_SHELL)
 		_append_skinned_surface(m, helmet, UpperBone.HELMET, HELMET_SURF_SKIN)
 		_append_skinned_surface(m, shoulder, UpperBone.SHOULDER_L)
@@ -695,6 +700,7 @@ static func shared_upper_skin() -> Skin:
 		_upper_skin = Skin.new()
 		for i: int in UPPER_BONE_COUNT:
 			_upper_skin.add_bind(i, Transform3D.IDENTITY)
+		_upper_skin.add_bind(SkaterBodySkeleton.HEM_BONE, Transform3D.IDENTITY)
 	return _upper_skin
 
 
@@ -736,6 +742,18 @@ static func shared_joint_ball() -> ArrayMesh:
 		return _build_ball(1.0, 8, 4, 1.0))
 
 
+# Elbow pad, unit radius: a ball drawn out to a cap at +Y, which the arm rig
+# points out of the bend (SkaterArmRig._pose_elbow) — the point a sleeve shows
+# over a hockey elbow pad.
+const _ELBOW_PAD_PROFILE: Array[Vector2] = [
+	Vector2(1.22, 0.32), Vector2(1.02, 0.78), Vector2(0.62, 1.0), Vector2(0.1, 1.02),
+	Vector2(-0.45, 0.9), Vector2(-0.82, 0.55), Vector2(-0.98, 0.18),
+]
+static func shared_elbow_pad() -> ArrayMesh:
+	return _shared("elbow_pad", func() -> ArrayMesh:
+		return _build_lathe(_ELBOW_PAD_PROFILE, _LEG_SIDES, 1.0, 1.0))
+
+
 # Gloved fist (see _GLOVE_FIST_STATIONS): the BACK of the hand on surface 0
 # and the FINGERS on surface 1, each closed at the knuckle ring they share.
 static func shared_glove_fist() -> ArrayMesh:
@@ -756,13 +774,21 @@ static func _fist_loop_center(loop: PackedVector3Array) -> Vector3:
 	return Vector3(0.0, loop[0].y, 0.0)
 
 
-# Glove cuff ring: unit radius, CUFF_HEIGHT_M tall (real height baked — the
-# cuff's along-bone placement offsets by it, only the radius scales).
+# Glove cuff: the fist's chamfered box section, posed in the fist's frame. x/z
+# are multiples of the cuff radius; its height is real (CUFF_HEIGHT_M), since the
+# along-bone placement offsets by it.
+const _CUFF_STATIONS: Array[Vector3] = [
+	Vector3(0.5, 0.94, 0.86),    # open end, toward the elbow
+	Vector3(-0.5, 0.88, 0.80),   # wrist end, against the back of the fist
+]
 static func shared_cuff() -> ArrayMesh:
 	return _shared("cuff", func() -> ArrayMesh:
-		var h: float = CUFF_HEIGHT_M * 0.5
-		var profile: Array[Vector2] = [Vector2(h, 1.0), Vector2(-h, 1.0)]
-		return _build_lathe(profile, _LEG_SIDES, 1.0, 1.0))
+		var loops: Array[PackedVector3Array] = []
+		for c: Vector3 in _CUFF_STATIONS:
+			loops.append(_octagon_loop(c.x * CUFF_HEIGHT_M, c.y, c.z, 0.6, 0.55))
+		var m := ArrayMesh.new()
+		_commit_sweep_segment(m, loops, 0, loops.size() - 1, _fist_loop_center)
+		return m)
 
 
 # Butt-end knob at its real dimensions (never rescaled).
@@ -789,9 +815,15 @@ static func _build_torso() -> ArrayMesh:
 			_TORSO_REAR_SWAY)
 
 
-# Head ball at HEAD_RADIUS, sitting _HEAD_FORWARD_M ahead of the helmet center.
+# Head ball at HEAD_RADIUS, sitting _HEAD_FORWARD_M ahead of the helmet center,
+# with its face (SkaterFaceMesh) — every vertex carries the tint the skin
+# material multiplies, white but for the face's darker features.
 static func _build_head() -> ArrayMesh:
-	return _build_ball(HEAD_RADIUS, 10, 5, 1.0)
+	var st := SurfaceTool.new()
+	st.append_from(SkaterFaceMesh.untinted(_build_ball(HEAD_RADIUS, 10, 5, 1.0)), 0, Transform3D.IDENTITY)
+	st.append_from(SkaterFaceMesh.build(HEAD_RADIUS, 10, 5), 0, Transform3D.IDENTITY)
+	return st.commit()
+
 
 
 # Shared part accessors for out-of-game figures (the lobby's bench dummies, the
@@ -1012,6 +1044,10 @@ static func _build_cage() -> ArrayMesh:
 	for off: float in _CAGE_V_BAR_OFFSETS:
 		_sphere_patch(st, _CAGE_RADIUS, _CAGE_V0, _CAGE_V1,
 				PI + off - dth, PI + off + dth, 4, 1)
+	# The frame's sides, closing the outline the top and bottom bars run along.
+	for side: float in [-1.0, 1.0]:
+		var edge: float = PI + side * (_CAGE_HALF_ARC - dth)
+		_sphere_patch(st, _CAGE_RADIUS, _CAGE_V0, _CAGE_V1, edge - dth, edge + dth, 4, 1)
 	st.generate_normals()
 	return st.commit()
 
@@ -1053,6 +1089,7 @@ static func _make_skin_mat() -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = SkinToneRegistry.color_for(SkinToneRegistry.DEFAULT_INDEX)
 	mat.roughness = 0.85
+	mat.vertex_color_use_as_albedo = true   # the face's features
 	BodyRim.apply(mat)
 	return mat
 

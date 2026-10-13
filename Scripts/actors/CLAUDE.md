@@ -72,6 +72,9 @@ HIPS     on LowerBody (which carries the lean's shift): its yaw and pitch, and
   WAIST  half the trunk's twist — the pelvis (shorts) rides it
     SPINE  the fold about the hips, then the rest of the twist, then the
            reach lean, less the lean the trunk hands back; torso and caps
+      HEM    under the torso: the jersey's loose lower half, swung on a lag of
+             the balance lean (SkaterJerseyHem) — the one blended-weight
+             surface in the rig
       NECK   takes back part of the trunk's lean; the helmet
 arms     roots, solved from the spine's shoulders to the gameplay hands
 ```

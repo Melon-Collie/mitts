@@ -40,13 +40,23 @@ static func solve_elbow(
 	var h_sq: float = upper_len * upper_len - foot_t * foot_t
 	var h: float = sqrt(maxf(h_sq, 0.0))
 	var foot: Vector3 = shoulder + axis * foot_t
+	return foot + bend_direction(shoulder, hand, pole_world) * h
 
-	# Project pole onto plane perpendicular to axis.
+
+# The unit direction solve_elbow pushes the elbow off the shoulder→hand line:
+# the pole, squared to that line — which way the elbow's point faces. Zero when
+# the hand sits on the shoulder.
+static func bend_direction(shoulder: Vector3, hand: Vector3, pole_world: Vector3) -> Vector3:
+	var d_vec: Vector3 = hand - shoulder
+	var d: float = d_vec.length()
+	if d < 0.0001:
+		return Vector3.ZERO
+	var axis: Vector3 = d_vec / d
 	var pole_dir: Vector3 = pole_world - axis * pole_world.dot(axis)
 	if pole_dir.length() < 0.0001:
 		var fallback: Vector3 = Vector3.DOWN if absf(axis.y) < 0.9 else Vector3.FORWARD
 		pole_dir = fallback - axis * fallback.dot(axis)
-	return foot + pole_dir.normalized() * h
+	return pole_dir.normalized()
 
 
 # Where an arm roots once the shoulder girdle has given: a hand past `arm_len`
@@ -87,6 +97,34 @@ static func solve_elbow_hanging(
 		forward: Vector3,
 		outward: Vector3,
 		clear_out: float = INF) -> Vector3:
+	return _solve_elbow_clear(shoulder, hand, upper_len, forearm_len, forward,
+			outward, clear_out, 1.0)
+
+
+# The elbow RAISED over its hand: the highest of the same clear elbows that
+# also sits at least `behind` back of the shoulder, which drops the forearm as
+# near straight down to the hand as the bones allow — the elbow comes out to
+# the side and back to make room. A goalie's blocker arm holds it so, the board
+# riding the forearm (Goalie._seat_blocker). If no elbow is that far back, the
+# one nearest it wins.
+static func solve_elbow_raised(
+		shoulder: Vector3,
+		hand: Vector3,
+		upper_len: float,
+		forearm_len: float,
+		forward: Vector3,
+		outward: Vector3,
+		clear_out: float = INF,
+		behind: float = 0.0) -> Vector3:
+	return _solve_elbow_clear(shoulder, hand, upper_len, forearm_len, forward,
+			outward, clear_out, -1.0, behind)
+
+
+# The clear elbow lowest in `height_sign` × y (1 lowest, −1 highest). With
+# `behind` finite, an elbow less than that far back of the shoulder is not clear.
+static func _solve_elbow_clear(shoulder: Vector3, hand: Vector3, upper_len: float,
+		forearm_len: float, forward: Vector3, outward: Vector3, clear_out: float,
+		height_sign: float, behind_min: float = -INF) -> Vector3:
 	var d_vec: Vector3 = hand - shoulder
 	var d: float = d_vec.length()
 	if d < 0.0001:
@@ -100,7 +138,7 @@ static func solve_elbow_hanging(
 	var e1: Vector3 = (ref - axis * ref.dot(axis)).normalized()
 	var e2: Vector3 = axis.cross(e1)
 	var best: Vector3 = foot
-	var best_y: float = INF
+	var best_score: float = INF
 	var best_miss: float = INF
 	for i: int in _HANG_SAMPLES:
 		var a: float = TAU * float(i) / float(_HANG_SAMPLES)
@@ -108,9 +146,11 @@ static func solve_elbow_hanging(
 		var off: Vector3 = e - shoulder
 		var out: float = off.dot(outward)
 		var behind: float = maxf(-off.dot(forward), 0.0) if out < clear_out else 0.0
-		var miss: float = behind + maxf(-out, 0.0)
-		if miss < best_miss - 0.0001 or (absf(miss - best_miss) <= 0.0001 and e.y < best_y):
+		var miss: float = behind + maxf(-out, 0.0) \
+				+ maxf(off.dot(forward) + behind_min, 0.0)
+		var score: float = e.y * height_sign
+		if miss < best_miss - 0.0001 or (absf(miss - best_miss) <= 0.0001 and score < best_score):
 			best_miss = miss
-			best_y = e.y
+			best_score = score
 			best = e
 	return best
