@@ -81,14 +81,14 @@ size = Vector3(0.38, 0.089, 0.03)
 size = Vector3(0.38, 0.089, 0.03)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_waq38"]
-size = Vector3(0.2, 0.3, 0.05)
+size = Vector3(0.2, 0.39, 0.05)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_u3old"]
 albedo_color = Color(0.806895, 0.160214, 0.779268, 1)
 
 [sub_resource type="BoxMesh" id="BoxMesh_n2fuc"]
 material = SubResource("StandardMaterial3D_u3old")
-size = Vector3(0.2, 0.3, 0.05)
+size = Vector3(0.2, 0.39, 0.05)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_168ps"]
 
@@ -178,7 +178,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.15, -0.67, 0)
 shape = SubResource("BoxShape3D_cwmwh")
 
 [node name="Blocker" type="StaticBody3D" parent="BlockArm" unique_id=415853721]
-transform = Transform3D(0.8660254, -0.5, 0, 0.5, 0.8660254, 0, 0, 0, 1, -0.06, 0.03, -0.05)
+transform = Transform3D(0.8660254, -0.5, 0, 0.5, 0.8660254, 0, 0, 0, 1, -0.0825, 0.069, -0.05)
 
 [node name="BlockerPadCollider" type="CollisionShape3D" parent="BlockArm/Blocker" unique_id=1315615311]
 shape = SubResource("BoxShape3D_waq38")

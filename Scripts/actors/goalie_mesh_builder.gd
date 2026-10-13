@@ -152,11 +152,38 @@ const _GLOVE_CUFF_HALF_W: float = 0.075
 const _GLOVE_CUFF_HALF_D: float = 0.032
 const _GLOVE_CUFF_HALF_H: float = 0.070
 
-# Blocker board (replaces the 0.2 × 0.3 × 0.05 BoxMesh) and hand ball.
+# Blocker: the board (the 0.2 × 0.39 × 0.05 collider box, NHL Rule 11.6's
+# 8 × 16 in at near its limit) strapped to the back of a padded glove whose fist
+# wraps the shaft. The board's face is −Z, toward the shooter; local +X is its
+# outer edge, away from the body. Cross-section features, as fractions of the
+# half-width: the face panel recessed between a narrow inner border and the
+# raised sidewall that runs the outer edge, and the finger-protection section
+# across the top, split from the face by a break.
 const _BLOCKER_HALF_W: float = 0.10
 const _BLOCKER_HALF_D: float = 0.025
-const _BLOCKER_HALF_H: float = 0.15
-const _BLOCKER_HAND_R: float = 0.05
+const _BLOCKER_HALF_H: float = 0.195
+const _BLOCKER_PANEL_INNER_X: float = 0.78
+const _BLOCKER_PANEL_OUTER_X: float = 0.55
+const _BLOCKER_PANEL_RECESS: float = 0.008
+# Stations top→bottom: (y, width multiplier, depth multiplier).
+const _BLOCKER_STATIONS: Array[Vector3] = [
+	Vector3(0.195, 0.90, 0.70),    # finger protection, rolled back at the top
+	Vector3(0.175, 1.00, 1.00),
+	Vector3(0.112, 1.00, 1.00),
+	Vector3(0.100, 0.97, 0.80),    # the break below the finger section
+	Vector3(0.088, 1.00, 1.00),
+	Vector3(-0.175, 1.00, 1.00),
+	Vector3(-0.195, 0.92, 0.80),
+]
+const _BLOCKER_BREAK_Y: float = 0.100
+const _BLOCKER_PANEL_TINT := Color(0.84, 0.84, 0.86)
+const _BLOCKER_BREAK_TINT := Color(0.60, 0.60, 0.62)
+# The glove behind the board, in the BlockArm frame the hand ball sat in (origin
+# at the wrist, where the shaft is gripped): a fist block round the shaft, its
+# back flush with the board's and its palm leather a shade darker than the
+# board so the two pieces read apart.
+const _BLOCKER_FIST_HALF := Vector3(0.050, 0.060, 0.040)
+const _BLOCKER_FIST_TINT := Color(0.78, 0.78, 0.80)
 
 # Hip connector tube radius — baked into the shared connector mesh; the
 # per-frame stretch in Goalie._point_connector scales the basis Y column only.
@@ -408,15 +435,46 @@ static func _build_blocker() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_smooth_group(-1)  # flat shading — see SkaterMeshBuilder doc block
-	var loops: Array[PackedVector3Array] = [
-		_octagon_loop(_BLOCKER_HALF_H, _BLOCKER_HALF_W, _BLOCKER_HALF_D, 0.75, 0.48),
-		_octagon_loop(-_BLOCKER_HALF_H, _BLOCKER_HALF_W, _BLOCKER_HALF_D, 0.75, 0.48),
-	]
+	var loops: Array[PackedVector3Array] = []
+	for s: Vector3 in _BLOCKER_STATIONS:
+		loops.append(_blocker_loop(s.x, _BLOCKER_HALF_W * s.y, _BLOCKER_HALF_D * s.z))
 	_sweep_loops(st, loops)
-	_loop_cap(st, loops[0], Vector3(0.0, _BLOCKER_HALF_H, 0.0), true)
-	_loop_cap(st, loops[1], Vector3(0.0, -_BLOCKER_HALF_H, 0.0), false)
+	_loop_cap(st, loops[0], Vector3(0.0, _BLOCKER_STATIONS[0].x, 0.0), true)
+	_loop_cap(st, loops[loops.size() - 1],
+			Vector3(0.0, _BLOCKER_STATIONS[_BLOCKER_STATIONS.size() - 1].x, 0.0), false)
 	st.generate_normals()
-	return st.commit()
+	return _bake_facet_tint(st.commit(), _blocker_tint)
+
+
+# 10-point board cross-section, CCW seen from +Y, in the _octagon_loop order:
+# the inner (−X) bevel, the flat back, the full-depth rounded sidewall on +X,
+# then back across the face with the panel stepped in between the borders.
+static func _blocker_loop(y: float, hw: float, hd: float) -> PackedVector3Array:
+	var px_in: float = -hw * _BLOCKER_PANEL_INNER_X
+	var px_out: float = hw * _BLOCKER_PANEL_OUTER_X
+	var panel_z: float = -hd + _BLOCKER_PANEL_RECESS * hd / _BLOCKER_HALF_D
+	var pts := PackedVector3Array()
+	pts.resize(10)
+	pts[0] = Vector3(-hw * 0.88, y, -hd * 0.7)
+	pts[1] = Vector3(-hw, y, -hd * 0.1)
+	pts[2] = Vector3(-hw * 0.92, y, hd)
+	pts[3] = Vector3(hw * 0.85, y, hd)
+	pts[4] = Vector3(hw, y, hd * 0.3)
+	pts[5] = Vector3(hw, y, -hd * 0.6)
+	pts[6] = Vector3(hw * 0.78, y, -hd)
+	pts[7] = Vector3(px_out, y, panel_z)
+	pts[8] = Vector3(px_in + hw * 0.06, y, panel_z)
+	pts[9] = Vector3(px_in, y, -hd * 0.85)
+	return pts
+
+
+static func _blocker_tint(centroid: Vector3, normal: Vector3) -> Color:
+	if absf(centroid.y - _BLOCKER_BREAK_Y) < 0.010:
+		return _BLOCKER_BREAK_TINT
+	if normal.z < -0.9 and centroid.x > -_BLOCKER_HALF_W * _BLOCKER_PANEL_INNER_X \
+			and centroid.x < _BLOCKER_HALF_W * _BLOCKER_PANEL_OUTER_X:
+		return _BLOCKER_PANEL_TINT
+	return Color.WHITE
 
 
 static func _ensure_extras(goalie: Goalie) -> void:
@@ -543,7 +601,22 @@ static func _build_glove_pocket() -> ArrayMesh:
 
 
 static func _build_blocker_hand() -> ArrayMesh:
-	return _build_ball(_BLOCKER_HAND_R, 8, 4, 1.0)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)  # flat shading — see SkaterMeshBuilder doc block
+	var h: Vector3 = _BLOCKER_FIST_HALF
+	var loops: Array[PackedVector3Array] = [
+		_octagon_loop(h.y, h.x * 0.85, h.z * 0.85, 0.6, 0.5),
+		_octagon_loop(h.y * 0.6, h.x, h.z, 0.6, 0.5),
+		_octagon_loop(-h.y * 0.6, h.x, h.z, 0.6, 0.5),
+		_octagon_loop(-h.y, h.x * 0.85, h.z * 0.85, 0.6, 0.5),
+	]
+	_sweep_loops(st, loops)
+	_loop_cap(st, loops[0], Vector3(0.0, h.y, 0.0), true)
+	_loop_cap(st, loops[loops.size() - 1], Vector3(0.0, -h.y, 0.0), false)
+	st.generate_normals()
+	return _bake_facet_tint(st.commit(),
+			func(_c: Vector3, _n: Vector3) -> Color: return _BLOCKER_FIST_TINT)
 
 
 # Chamfered wrist block on the unrotated glove-origin node (parent frame:

@@ -1,10 +1,10 @@
 class_name GoalieUniformCoordinator
 extends RefCounted
 
-# Paints the goalie uniform using a custom spatial shader on the body BoxMesh
+# Paints the goalie uniform using a custom spatial shader on the body solid
 # (goalie_jersey.gdshader) rather than the CylinderMesh + JerseyDecal viewport
-# approach used for skaters. The body stays a BoxMesh so the visual silhouette
-# matches the square hitbox of a heavily-padded goalie.
+# approach used for skaters. The body is GoalieMeshBuilder's sculpted solid,
+# held inside the square hitbox of a heavily-padded goalie.
 #
 # Follows the SkaterUniformCoordinator pattern: takes a Goalie reference and
 # reads all mesh refs from its public fields, so adding new visual nodes to
