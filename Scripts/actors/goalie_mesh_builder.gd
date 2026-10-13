@@ -156,51 +156,47 @@ const _NECK_RADIUS_BOT: float = 0.080  # flares toward the shoulders
 const _NECK_BACK_OFFSET: float = 0.025  # body-local +Z (rearward)
 const _NECK_COLOR := Color(0.10, 0.10, 0.11)
 
-# Catch glove: a trapper, built as its silhouette rather than as the hoop and
-# disc of the primitives it replaces. Seen by the shooter it is a tall mitt —
-# the cuff at the bottom, the thumb up the side toward the body, the T-web's
-# notch between thumb and fingers, and the finger stall arching over the top
-# and down the outside — around a deep pocket. In the Glove body's frame,
-# which every stance leaves unrotated: −Z is toward the shooter, the glove
-# hangs on the goalie's −X side so +X is its inner (body) side, and the origin
-# is the wrist the drawn forearm meets. About 0.40 m tall, as a pro trapper is,
-# so it overruns the 0.25 m collider box upward.
+# Catch glove: a trapper's hand, built as its silhouette rather than as the
+# hoop and disc of the primitives it replaces. The drawn forearm is the wrist
+# and cuff, so this starts at its end: seen by the shooter, a mitt rising from
+# a rounded heel at the wrist, the thumb up the side toward the body, the
+# T-web's notch between thumb and fingers, and the finger stall arching over
+# the top and down the outside, around a deep pocket. In the Glove body's
+# frame, which every stance leaves unrotated: −Z is toward the shooter, the
+# glove hangs on the goalie's −X side so +X is its inner (body) side, and the
+# origin is the wrist the drawn forearm meets.
 const _TRAPPER_OUTLINE: Array[Vector2] = [
-	Vector2(0.070, -0.170),    # cuff, inner bottom
-	Vector2(0.080, -0.080),    # heel
-	Vector2(0.120, -0.030),    # thumb base
-	Vector2(0.135, 0.050),
-	Vector2(0.120, 0.120),     # thumb tip
-	Vector2(0.080, 0.150),
-	Vector2(0.055, 0.130),     # the T-web's notch
-	Vector2(0.030, 0.190),
-	Vector2(-0.020, 0.235),    # top of the finger stall
-	Vector2(-0.080, 0.225),
-	Vector2(-0.125, 0.170),
-	Vector2(-0.145, 0.080),    # the stall down the outside
-	Vector2(-0.140, -0.020),
-	Vector2(-0.120, -0.080),
-	Vector2(-0.110, -0.170),   # cuff, outer bottom
+	Vector2(-0.015, -0.070),   # heel, over the forearm's end
+	Vector2(0.060, -0.050),
+	Vector2(0.100, -0.010),    # thumb base
+	Vector2(0.115, 0.060),
+	Vector2(0.100, 0.120),     # thumb tip
+	Vector2(0.065, 0.145),
+	Vector2(0.045, 0.125),     # the T-web's notch
+	Vector2(0.025, 0.180),
+	Vector2(-0.020, 0.215),    # top of the finger stall
+	Vector2(-0.070, 0.205),
+	Vector2(-0.110, 0.155),
+	Vector2(-0.125, 0.075),    # the stall down the outside
+	Vector2(-0.120, -0.005),
+	Vector2(-0.090, -0.050),
 ]
 # Every layer is the outline shrunk toward this point.
-const _TRAPPER_POCKET_CENTER := Vector2(-0.005, 0.040)
+const _TRAPPER_POCKET_CENTER := Vector2(-0.005, 0.070)
 # Layers back to front: (z, outline scale) — the rounded back, the full-width
 # side, the rim's front edge and lip, then down into the pocket.
 const _TRAPPER_LAYERS: Array[Vector2] = [
-	Vector2(0.075, 0.86),
-	Vector2(0.030, 1.00),
-	Vector2(-0.050, 1.00),
-	Vector2(-0.066, 0.82),     # rim lip
-	Vector2(-0.046, 0.64),     # pocket wall
+	Vector2(0.060, 0.84),
+	Vector2(0.025, 1.00),
+	Vector2(-0.045, 1.00),
+	Vector2(-0.060, 0.82),     # rim lip
+	Vector2(-0.040, 0.64),     # pocket wall
 	Vector2(0.000, 0.62),      # pocket floor
 ]
 const _TRAPPER_RIM_LIP_LAYER: int = 3
-# One material paints the whole glove, so its pocket and cuff are told apart
-# from the rim by baked tint: the pocket a deep shade, which is what makes the
-# face read as open, and the cuff between.
+# One material paints the whole glove, so the pocket is told apart from the
+# rim by baked tint: a deep shade, which is what makes the face read as open.
 const _GLOVE_POCKET_TINT := Color(0.58, 0.58, 0.60)
-const _GLOVE_CUFF_TINT := Color(0.82, 0.82, 0.84)
-const _GLOVE_CUFF_TOP_Y: float = -0.095
 
 # Blocker: the board (the 0.2 × 0.39 × 0.05 collider box, NHL Rule 11.6's
 # 8 × 16 in at near its limit) strapped to the back of a padded glove whose fist
@@ -733,15 +729,12 @@ static func _build_trapper() -> ArrayMesh:
 	return _bake_facet_tint(st.commit(), _trapper_tint)
 
 
-# Pocket: the facets behind the rim lip, inside it. Cuff: the band below the
-# heel.
+# Pocket: the facets behind the rim lip, inside it.
 static func _trapper_tint(centroid: Vector3, _normal: Vector3) -> Color:
 	if centroid.z > _TRAPPER_LAYERS[_TRAPPER_RIM_LIP_LAYER].x + 0.002 \
 			and centroid.z < _TRAPPER_LAYERS[1].x \
 			and _inside_rim_lip(centroid):
 		return _GLOVE_POCKET_TINT
-	if centroid.y < _GLOVE_CUFF_TOP_Y:
-		return _GLOVE_CUFF_TINT
 	return Color.WHITE
 
 

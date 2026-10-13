@@ -14,14 +14,14 @@ const _EPS: float = 0.005  # envelope tolerance, metres
 # 0.2×0.39×0.05. The mask, the trapper and the collider-free parts (fist,
 # dangler, cage) are drawn as the gear they are rather than as their
 # colliders, and are bounded at that size: the mask a goalie's, longer than the
-# 0.26 head box by its chin, the trapper a pro's 0.40 m against its 0.25 box.
+# 0.26 head box by its chin, the trapper's hand taller than its 0.25 box.
 # The connector tube is unit-sized (its stretch is basis scale).
 func _parts() -> Dictionary:
 	return {
 		"body": [GoalieMeshBuilder._build_body(), Vector3(0.52, 0.72, 0.28)],
 		"mask": [GoalieMeshBuilder._build_mask(), Vector3(0.24, 0.33, 0.29)],
 		"pad": [GoalieMeshBuilder._build_pad(), Vector3(0.28, 0.84, 0.20)],
-		"trapper": [GoalieMeshBuilder._build_trapper(), Vector3(0.29, 0.41, 0.15)],
+		"trapper": [GoalieMeshBuilder._build_trapper(), Vector3(0.25, 0.29, 0.13)],
 		"cage": [GoalieMeshBuilder._build_cage(), Vector3(0.15, 0.17, 0.06)],
 		"blocker": [GoalieMeshBuilder._build_blocker(), Vector3(0.20, 0.39, 0.05)],
 		"blocker_hand": [GoalieMeshBuilder._build_blocker_hand(), Vector3(0.10, 0.12, 0.08)],
