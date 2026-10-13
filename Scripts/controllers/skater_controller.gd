@@ -645,9 +645,8 @@ var max_charge_direction_variance: float = 35.0
 # max_wrister_power, load), so a shot the torso can't drive leaves near this.
 var wrister_unloaded_power: float = 4.0
 var wrister_full_load_arc_deg: float = 45.0
-var wrister_stick_side_reach_deg: float = 90.0
-var wrister_forehand_cross_reach_deg: float = 30.0
-var wrister_backhand_cross_reach_deg: float = 90.0
+var wrister_home_reach_deg: float = 90.0
+var wrister_away_reach_deg: float = 30.0
 # ── Wrister power model (ShotMechanics.wrister_power_t) ──
 # Power is a feel-curve over the release speed signal (cursor speed for humans,
 # a committed target for bots — see _wrister_sweep_speed). power_curve shapes
@@ -3457,11 +3456,8 @@ func _wrister_load_config() -> WristerLoad.Config:
 		_cached_wrister_load_cfg = WristerLoad.Config.new()
 		_cached_wrister_load_cfg.full_arc_rad = deg_to_rad(wrister_full_load_arc_deg)
 		_cached_wrister_load_cfg.max_twist_rad = deg_to_rad(upper_body_max_twist_deg)
-		_cached_wrister_load_cfg.stick_side_reach_rad = deg_to_rad(wrister_stick_side_reach_deg)
-		_cached_wrister_load_cfg.forehand_cross_reach_rad = \
-				deg_to_rad(wrister_forehand_cross_reach_deg)
-		_cached_wrister_load_cfg.backhand_cross_reach_rad = \
-				deg_to_rad(wrister_backhand_cross_reach_deg)
+		_cached_wrister_load_cfg.home_reach_rad = deg_to_rad(wrister_home_reach_deg)
+		_cached_wrister_load_cfg.away_reach_rad = deg_to_rad(wrister_away_reach_deg)
 	return _cached_wrister_load_cfg
 
 # True for bot controllers (AIController overrides). Bots have no real cursor, so

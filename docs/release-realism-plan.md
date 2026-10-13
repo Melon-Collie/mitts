@@ -1,8 +1,9 @@
 # Release realism — where, when and which way the puck can leave the stick
 
-Status: **draft for review.** No code yet. Each phase is meant to ship as its own
-PR with its own playtest. Phases 1 and 2 change the human toolkit, so each needs
-a protocol bump.
+Status: **Phase 1 built for humans, playtest pending** — the wrist shot's load
+(*Phase 1*, as built). The hard cone this plan first proposed was dropped for it.
+Phases 2–4 are still drafts. Each phase is meant to ship as its own PR with its
+own playtest.
 
 ## Decisions banked
 
@@ -12,12 +13,16 @@ a protocol bump.
   *obey* it: their scoring prices it and their execution respects it. There are no
   bot-only gates. This is the "fix the model, not the behavior" rule in
   `Scripts/domain/ai/CLAUDE.md`, applied to the toolkit itself.
-- **Release direction is a hard cone around the body's facing, and behind it is
-  the drop pass.** Inside the cone, power is the release's own. Outside it, the
-  puck keeps its direction but leaves at drop-pass pace at most: the carrier leaves
-  it for whoever is trailing. There is no taper between the two and no waiting for
-  the body to turn. The slapper is the exception and clamps to the cone's edge,
-  since nobody slaps the puck behind them.
+- **Which way the puck can go hard is decided by the torso, not a cone.** The
+  power a wrist shot can carry is the turn the torso can put into it from where
+  the puck sits: full along the tangent at the puck's bearing, nothing straight
+  out from the body or back through it, and only as much as the wind-up the hand's
+  reach allows. The tangent's sense is the hand. A soft release goes anywhere, so
+  the drop pass needs no exception.
+- **Wrist shots only.** The slapper always fires the same way on the forehand,
+  and the quick pass is deliberately outside how hockey works.
+- **The load is a cap, never a setter.** Cursor speed still chooses the power, so
+  a touch pass from a full wind-up stays soft.
 - **The wrister blade stays frozen through the wind-up.** That feel is settled.
   Power keeps coming from cursor speed. Whatever limits how fast a full-power shot
   comes off the stick has to work *with* a frozen blade, so the dormant
@@ -50,101 +55,45 @@ The point-blank drive follows from two things:
   blade out to that offset from a body that has skated another `v × 0.135 s`, so
   the real release can sit beside the pads.
 
-## Phase 1 — the release cone (shared)
+## Phase 1 — the wrist shot's load (as built, humans only)
 
-### Rule
+`WristerLoad` (`Scripts/domain/rules/wrister_load.gd`), solved every aim tick and
+at the release by `SkaterController._solve_wrister_load`. In the hips' frame:
 
-New pure rule `domain/rules/release_cone.gd` (`ReleaseCone`). It takes:
-- a release direction (world XZ);
-- the skater's facing (`Skater.get_facing()`: the same replicated frame the reach
-  cone is built on, and frozen during `WRISTER_AIM`);
-- handedness.
+- **Alignment:** the shot against the tangent at the puck's bearing. Full within
+  `wrister_full_load_arc_deg` (45°) of it, linear to nothing on the line through
+  the puck.
+- **Coil:** the width of the torso yaws, inside the ±67° twist limit, that keep the
+  frozen puck in the hand's reach — `wrister_home_reach_deg` (90°) round the
+  hand's home side (stick side for a forehand, off side for a backhand),
+  `wrister_away_reach_deg` (30°) round the other. A forehand from straight beside
+  the body is the full share. So the crossed-arms forehand (lefty: puck at 3,
+  toward 6) and its mirror, a backhand from out on the stick side (puck at 9,
+  toward 6), are both weak.
+- **The cap:** `min(cursor-speed power, lerp(wrister_unloaded_power,
+  max_wrister_power, alignment × coil))`, × the backhand coefficient. The goalie's
+  predicted shot takes the same cap.
+- **The puck is the pinned origin** carried along by any skating since the pin —
+  never the blade's contact point, which swings with the torso's wind-up.
+- **The pose is the gauge.** The aim pose winds the torso from squared on the aim
+  to the full wind-up by the load; the release unwinds it at
+  `wrister_release_unwind_speed_deg` and overshoots the way the hand turns.
+- **No wire change and no reconcile state:** the load is a pure function of the
+  pinned origin, the aim and the frozen facing, all of which the host replays.
 
-It answers whether the direction is inside the cone, and for the slapper, the
-direction clamped to the cone's edge. The cone is asymmetric:
+Things to watch in the playtest:
 
-| side | half-angle (start) | why |
-|---|---|---|
-| stick side | 105° | a forehand sweep finishes well out to the side, with the torso open |
-| off side | 80° | across the body is a backhand or a cut-across forehand, and neither reaches as far round |
+- **Facing follows the cursor while carrying**, so the puck tends to settle
+  straight in front of the hips — the no-power spot for a shot where you face.
+  Hard shots come from across the facing, or straight after pulling the puck
+  wide. If straight-ahead shots feel too weak, the lever is what the body faces
+  while carrying, not the load.
+- **The cursor-sweep hand read is no longer used.** `ChargeTracking`'s chirality,
+  `swing_rotation` and `ShotMechanics.is_backhand_from_swing` are dead until this
+  model is kept or reverted.
 
-Both values are feel tunables on `SkaterController` (plain `var`), not constants
-in the rule. They go through `apply_attributes` untouched in v1; whether Agility or
-torso twist should widen them is a later question.
-
-### Outside the cone: the drop pass
-
-A release outside the cone keeps the direction it was aimed in, and its power is
-capped at `drop_pass_max_speed` (about 3.5 m/s to start; a feel tunable).
-- That cap is in the ICE frame. The puck doesn't inherit the carrier's velocity
-  (see *Flagged*), so a capped backward release is what a real drop pass is: the
-  puck is left nearly where it was while the carrier skates on.
-- **The pace is capped, the loft is not.** A drop pass is flat in practice, but a
-  saucer or flip at the rule's pace is self-limiting, so nothing needs to forbid
-  it.
-- **A drop is the one release not affected by Phase 2's load limit.** It has no
-  power to load.
-- **It counts as a forehand.** The backhand coefficient is a pace penalty, and a
-  release whose pace is the cap gains nothing from it.
-
-### Where it applies
-
-- `ShotMechanics.release_wrister`, both branches (charged wrister and quick pass),
-  through one call site in `_release_wrister` / `_fire_quick_pass`. It reads the
-  final direction, so a bot's committed `bot_wrister_aim_dir` becomes a drop
-  exactly like a human's cursor line does.
-- **The slapper: at the press, where its direction is locked** (`_enter_slapper_charge`).
-  The one-timer zone already sits on the stick side, so in practice this only
-  bites on a deliberately behind-the-body slap.
-- **The goalie's read.** `predicted_shot_velocity` is re-solved every aim tick. It
-  must apply the same rule, or the goalie pre-leans toward a full-pace shot that
-  will leave as a drop.
-- **Not the nudge (Q).** It is a self-pass that keeps the skater's own momentum,
-  not a release.
-- **Dumps.** These are charged wristers, so they are covered by the first bullet.
-
-### Human feedback
-
-A wrister aimed past the cone leaves at drop pace, which has to read as a choice
-and not a misfire. If an aim indicator is on screen during `WRISTER_AIM`, it shows
-the drop. Otherwise this is a playtest question (see *Open questions*).
-
-### Bots
-
-- **Pricing.** A receiver outside the release cone is priced two ways, and EV
-  picks between them, as it already does between the flat feed and the saucer:
-  - as a **drop pass** now, at `drop_pass_max_speed`, through the same lane and
-    reception model as any other pass. A slow puck is only clean to a trailer close
-    behind, and the lane model sees that without being told.
-  - as a **full-pace pass after a turn**, with `_facing_rotation_time` charging turn
-    time against the RELEASE cone, not the 157° reach cone.
-  So the trailer drop on a zone entry is something the model can choose, and the
-  full-pace pass behind the back no longer can be.
-- **Commit.** For a full-pace pass, the Aim-B2 cone becomes the release cone less
-  its margin. Past it, the bot turns at its real facing rate before pressing, and
-  the ~1 s timeout re-plans rather than firing a pass that would leave as a drop.
-  A committed drop fires at once; that is what it is for.
-- **Hand.** A pass on the off side is flagged backhand (`bot_wrister_backhand`),
-  so it pays the backhand coefficient like a human's does.
-
-### Netcode
-
-Facing and handedness are replicated, and the host replays the release input, so
-the clamp is a pure function of state both sides already agree on. There is no
-wire field. It still needs a protocol bump: a mixed-version lobby would disagree
-on where every edge-of-cone release goes.
-
-### Tests
-
-- `ReleaseCone` unit test: inside passes through, the edges clamp, the mirror for
-  left-handed is exact, and a degenerate zero direction is handled.
-- A controller test: a human quick pass and a full-power wrister both aimed
-  straight back leave straight back at drop pace, and the goalie's predicted
-  velocity equals the released one.
-- A slapper test: the slapper's locked direction clamps to the cone's edge.
-- Carrier tests: no full-pace pass leaves outside the cone, a receiver behind the
-  carrier prices both the drop and the turn, and a trailer close behind on an
-  entry gets the drop.
+Bots are untouched: they commit hand and power, and their scoring does not price
+the load. They join in Phase 3.
 
 ## Phase 2 — release load (shared) — **needs a decision**
 
@@ -275,18 +224,11 @@ cut, because both now out-value walking into the pads. A deke-the-goalie read
 
 ## Open questions
 
-1. **Phase 2: coil load, reception settle, or both?** Coil load is cheaper and
-   deterministic. Settle is the more physical answer to "they shoot the instant
-   they catch it", but it has the netcode cost above.
-2. **Cone numbers.** 105° stick side and 80° off side are a starting point to
-   playtest, not a measurement.
-3. **Feedback at the edge.** Is the clamped aim line enough, or should an aim past
-   the cone also tint the cursor?
-4. **Drop pass pace.** 3.5 m/s ice-frame is a guess at "left for the trailer".
-   Playtest whether it reads that way at full skating speed.
-5. **Movement.** The request also mentioned how bots *move*. Nothing in this plan
-   touches locomotion. What specifically looks wrong: speed, turning, stopping, or
-   lines?
+1. **Phase 2: does the load still need a clock?** The load already makes the
+   position of the puck cost time (pulling it wide). Whether a wind-up clock or a
+   reception settle is still wanted waits on the Phase 1 playtest.
+2. **Bot movement.** The request also mentioned how bots *move*. Nothing here
+   touches locomotion.
 
 ## Flagged, not in scope
 

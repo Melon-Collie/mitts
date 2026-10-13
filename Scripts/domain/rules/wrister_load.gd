@@ -12,9 +12,11 @@ class_name WristerLoad
 #   COIL — the blade is frozen on the puck while the torso winds up, so the
 #   torso can only turn through the yaws that keep the puck inside that hand's
 #   reach off the torso, and inside the hips' twist limit. The width of that
-#   range is the wind-up available. A forehand cannot hold a puck far across the
-#   body (the arms cross), which is what leaves a cross-body forehand weak; a
-#   backhand can.
+#   range is the wind-up available. Each hand reaches well round its HOME side
+#   (the stick side for a forehand, the off side for a backhand) and only a
+#   little round the other, where the top hand has to cross the body — which is
+#   what leaves a cross-body forehand, and a backhand from out on the stick
+#   side, weak.
 #
 # Everything is in the hips' frame, as YAWS off forward with the stick side
 # positive, so one set of numbers serves both hands.
@@ -24,11 +26,10 @@ class Config:
 	var full_arc_rad: float = deg_to_rad(45.0)
 	# Torso yaw limit off the hips.
 	var max_twist_rad: float = deg_to_rad(67.0)
-	# How far round the stick side, off the torso, either hand holds the puck.
-	var stick_side_reach_rad: float = deg_to_rad(90.0)
-	# How far across the body, off the torso, each hand holds the puck.
-	var forehand_cross_reach_rad: float = deg_to_rad(30.0)
-	var backhand_cross_reach_rad: float = deg_to_rad(90.0)
+	# How far off the torso a hand holds the puck round its home side, and round
+	# the other side.
+	var home_reach_rad: float = deg_to_rad(90.0)
+	var away_reach_rad: float = deg_to_rad(30.0)
 
 
 # Caller-owned result: filled, never allocated, so the per-tick aim path is free.
@@ -81,14 +82,14 @@ static func coil_share(puck_bearing: float, is_backhand: bool, cfg: Config) -> f
 	if cfg.max_twist_rad <= 0.0:
 		return 1.0
 	var width: float = _torso_hi(puck_bearing, is_backhand, cfg) \
-			- _torso_lo(puck_bearing, cfg)
+			- _torso_lo(puck_bearing, is_backhand, cfg)
 	return clampf(width / cfg.max_twist_rad, 0.0, 1.0)
 
 
 # The end of the torso's range the hand winds to: a forehand winds toward the
 # stick side, a backhand toward the off side.
 static func wound_bearing(puck_bearing: float, is_backhand: bool, cfg: Config) -> float:
-	var lo: float = _torso_lo(puck_bearing, cfg)
+	var lo: float = _torso_lo(puck_bearing, is_backhand, cfg)
 	var hi: float = _torso_hi(puck_bearing, is_backhand, cfg)
 	if hi < lo:
 		return 0.0
@@ -96,13 +97,13 @@ static func wound_bearing(puck_bearing: float, is_backhand: bool, cfg: Config) -
 
 
 # Torso yaws that keep the puck within reach: the puck sits at
-# (puck_bearing − torso) off the torso, which must lie inside
-# [−cross_reach, stick_side_reach].
-static func _torso_lo(puck_bearing: float, cfg: Config) -> float:
-	return maxf(-cfg.max_twist_rad, puck_bearing - cfg.stick_side_reach_rad)
+# (puck_bearing − torso) off the torso, which must lie inside the hand's window —
+# [−away, home] for a forehand, [−home, away] for a backhand.
+static func _torso_lo(puck_bearing: float, is_backhand: bool, cfg: Config) -> float:
+	var stick_side_reach: float = cfg.away_reach_rad if is_backhand else cfg.home_reach_rad
+	return maxf(-cfg.max_twist_rad, puck_bearing - stick_side_reach)
 
 
 static func _torso_hi(puck_bearing: float, is_backhand: bool, cfg: Config) -> float:
-	var cross: float = cfg.backhand_cross_reach_rad if is_backhand \
-			else cfg.forehand_cross_reach_rad
-	return minf(cfg.max_twist_rad, puck_bearing + cross)
+	var off_side_reach: float = cfg.home_reach_rad if is_backhand else cfg.away_reach_rad
+	return minf(cfg.max_twist_rad, puck_bearing + off_side_reach)

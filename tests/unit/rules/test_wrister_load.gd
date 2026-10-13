@@ -31,10 +31,15 @@ func test_forehand_forward_from_the_stick_side_is_full() -> void:
 			"a lefty's forehand winds the torso round to the left")
 
 
-func test_backhand_backward_from_the_stick_side_is_full() -> void:
+func test_backhand_from_out_on_the_stick_side_is_weak() -> void:
 	var r := _solve(AT_9, TO_6, LEFTY)
-	assert_true(r.is_backhand)
-	assert_almost_eq(r.load, 1.0, 0.001)
+	assert_true(r.is_backhand, "a lefty sweeping 9 → 6 is turning the backhand way")
+	assert_lt(r.load, 0.15, "the mirror of the crossed-arms forehand")
+
+
+func test_the_two_crossed_cases_mirror_each_other() -> void:
+	var forehand: float = _solve(AT_3, TO_6, LEFTY).load
+	assert_almost_eq(_solve(AT_9, TO_6, LEFTY).load, forehand, 0.001)
 
 
 func test_puck_in_front_shot_forward_carries_nothing() -> void:
