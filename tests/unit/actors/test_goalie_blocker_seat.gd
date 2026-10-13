@@ -1,7 +1,7 @@
 extends GutTest
 
-# The blocker is a glove: the hand (BlockArm) is posed, and the board stands on
-# the back of it, along the shaft, face turned out (Goalie._seat_blocker). It
+# The blocker is a glove on the arm: the hand (BlockArm) is posed, the elbow
+# comes out over it, and the board runs along the forearm (Goalie._seat_blocker). It
 # is a save surface, so these hold the seat on both paths that pose a goalie —
 # the host's body config and the client/replay network pose.
 
@@ -27,14 +27,14 @@ func _board_in_goalie(g: Goalie) -> Transform3D:
 func _check_seat(g: Goalie, label: String) -> void:
 	var arm: Node3D = g.get_node("BlockArm")
 	var board: Transform3D = _board_in_goalie(g)
-	var shaft: Vector3 = (arm.basis * Vector3.UP).normalized()
-	assert_almost_eq(board.basis.y.normalized().dot(shaft), 1.0, 1e-4,
-			"%s: the board stands along the shaft" % label)
+	var along: Vector3 = (arm.position - g._blocker_elbow).normalized()
+	assert_almost_eq(board.basis.y.normalized().dot(along), 1.0, 1e-4,
+			"%s: the board runs along the forearm, finger end at the hand" % label)
 	var face: Vector3 = -board.basis.z.normalized()
-	assert_gt(face.x, 0.0, "%s: the board faces out, toward the corner" % label)
-	assert_lt(face.z, 0.0, "%s: and toward the shooter" % label)
+	assert_gt(face.x, 0.0, "%s: the board is on the arm's outer side" % label)
+	assert_lt(face.z, 0.0, "%s: and faces the shooter's half" % label)
 	var grip_in_board: Vector3 = board.affine_inverse() * arm.position
-	assert_almost_eq(grip_in_board, Vector3(0.0, -GoalieAnatomy.BLOCKER_BOARD_RISE_M,
+	assert_almost_eq(grip_in_board, Vector3(0.0, GoalieAnatomy.BLOCKER_BOARD_ALONG_M,
 			GoalieAnatomy.BLOCKER_BOARD_OUT_M), Vector3.ONE * 1e-4,
 			"%s: the grip sits where the fist is baked" % label)
 
@@ -52,9 +52,18 @@ func test_the_board_goes_where_the_hand_goes() -> void:
 	var cfg := GoalieBodyConfigBuilder.new().build(GoalieBodyConfigBuilder.Inputs.new())
 	cfg.blocker_pos = arm.position + Vector3(0.12, 0.05, -0.10)
 	g.apply_body_config(cfg, 1.0)
-	assert_almost_eq(_board_in_goalie(g).origin - before, Vector3(0.12, 0.05, -0.10),
-			Vector3.ONE * 0.02, "the board is carried by the hand")
+	assert_gt((_board_in_goalie(g).origin - before).length(), 0.05,
+			"the board is carried by the hand, turning with the arm as it goes")
 	_check_seat(g, "after the reach")
+
+
+func test_the_ready_forearm_drops_near_vertical() -> void:
+	# The elbow comes out to the side so the forearm, and the board along it,
+	# drop near straight down to the hand.
+	var g: Goalie = _posed(State.READY)
+	var along: Vector3 = ((g.get_node("BlockArm") as Node3D).position - g._blocker_elbow).normalized()
+	assert_lt(rad_to_deg(along.angle_to(Vector3.DOWN)), 30.0,
+			"the ready blocker forearm hangs within 30° of vertical")
 
 
 func test_the_network_pose_seats_the_board_too() -> void:

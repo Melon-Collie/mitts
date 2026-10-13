@@ -87,6 +87,30 @@ static func solve_elbow_hanging(
 		forward: Vector3,
 		outward: Vector3,
 		clear_out: float = INF) -> Vector3:
+	return _solve_elbow_clear(shoulder, hand, upper_len, forearm_len, forward,
+			outward, clear_out, 1.0)
+
+
+# The elbow RAISED over its hand: the highest of the same clear elbows, which
+# drops the forearm as near straight down to the hand as the bones allow — the
+# elbow comes out to the side to make room. A goalie's blocker arm holds it so,
+# the board riding the forearm (Goalie._seat_blocker).
+static func solve_elbow_raised(
+		shoulder: Vector3,
+		hand: Vector3,
+		upper_len: float,
+		forearm_len: float,
+		forward: Vector3,
+		outward: Vector3,
+		clear_out: float = INF) -> Vector3:
+	return _solve_elbow_clear(shoulder, hand, upper_len, forearm_len, forward,
+			outward, clear_out, -1.0)
+
+
+# The clear elbow lowest in `height_sign` × y (1 lowest, −1 highest).
+static func _solve_elbow_clear(shoulder: Vector3, hand: Vector3, upper_len: float,
+		forearm_len: float, forward: Vector3, outward: Vector3, clear_out: float,
+		height_sign: float) -> Vector3:
 	var d_vec: Vector3 = hand - shoulder
 	var d: float = d_vec.length()
 	if d < 0.0001:
@@ -100,7 +124,7 @@ static func solve_elbow_hanging(
 	var e1: Vector3 = (ref - axis * ref.dot(axis)).normalized()
 	var e2: Vector3 = axis.cross(e1)
 	var best: Vector3 = foot
-	var best_y: float = INF
+	var best_score: float = INF
 	var best_miss: float = INF
 	for i: int in _HANG_SAMPLES:
 		var a: float = TAU * float(i) / float(_HANG_SAMPLES)
@@ -109,8 +133,9 @@ static func solve_elbow_hanging(
 		var out: float = off.dot(outward)
 		var behind: float = maxf(-off.dot(forward), 0.0) if out < clear_out else 0.0
 		var miss: float = behind + maxf(-out, 0.0)
-		if miss < best_miss - 0.0001 or (absf(miss - best_miss) <= 0.0001 and e.y < best_y):
+		var score: float = e.y * height_sign
+		if miss < best_miss - 0.0001 or (absf(miss - best_miss) <= 0.0001 and score < best_score):
 			best_miss = miss
-			best_y = e.y
+			best_score = score
 			best = e
 	return best

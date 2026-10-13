@@ -312,11 +312,11 @@ static func _merge_stick(goalie: Goalie) -> void:
 
 
 # The fist and board are one rigid glove, so the fist bakes into the board's
-# frame at the grip, where Goalie._seat_blocker holds it: down the board, and in
-# off its back.
+# frame at the grip, where Goalie._seat_blocker holds it: up the board toward
+# its finger end, and in off its back onto the forearm's line.
 static func _merge_blocker(goalie: Goalie) -> void:
 	var hand: MeshInstance3D = goalie.get_node("BlockArm/BlockerHand") as MeshInstance3D
-	var grip_in_board := Vector3(0.0, -GoalieAnatomy.BLOCKER_BOARD_RISE_M,
+	var grip_in_board := Vector3(0.0, GoalieAnatomy.BLOCKER_BOARD_ALONG_M,
 			GoalieAnatomy.BLOCKER_BOARD_OUT_M)
 	_merge_rigid(goalie.blocker_mesh, "goalie_blocker_assembly", [
 		[_shared("goalie_blocker", _build_blocker), goalie.blocker_mesh.transform],
