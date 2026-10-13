@@ -217,9 +217,13 @@ func apply_facing(input: InputState, delta: float) -> void:
 			# blade speed cap (SkaterIKCoordinator), not in this lock — earlier
 			# versions tied unlock to "same side it left from", which could
 			# permanently strand facing when the mouse wrapped around.
+			# The one exception is a skater facing their travel whose cursor has gone
+			# behind it: turning to it is how they skate backward, so it turns.
+			var facing_target: Vector2 = _facing_toward(to_mouse.normalized(), input.brake)
 			var mouse_body_angle: float = facing.angle_to(to_mouse.normalized())
 			var ik_gate: float = deg_to_rad(_controller.rom_backhand_angle_max_deg + _controller.upper_body_max_twist_deg)
-			if abs(mouse_body_angle) >= ik_gate:
+			var behind_gate: bool = abs(mouse_body_angle) >= ik_gate
+			if behind_gate and not _turning_to_cursor_behind:
 				ik_locked_side = int(sign(mouse_body_angle))
 			else:
 				ik_locked_side = 0
@@ -230,7 +234,6 @@ func apply_facing(input: InputState, delta: float) -> void:
 				# facing) before reaching the cursor. See follow_through_facing_recover_speed.
 				if s == State.FOLLOW_THROUGH:
 					drag = maxf(drag, _controller.follow_through_facing_recover_speed)
-				var facing_target: Vector2 = _facing_toward(to_mouse.normalized(), input.brake)
 				# Board shield: a carrier working the wall squares up ALONG it and
 				# protects the puck rather than facing into it. Gated to carrying —
 				# digging a loose puck out of the corner keeps full facing freedom,
@@ -243,7 +246,12 @@ func apply_facing(input: InputState, delta: float) -> void:
 									Vector2(_skater.global_position.x, _skater.global_position.z),
 									_controller.board_shield_probe),
 							deg_to_rad(_controller.board_shield_max_deg))
-				facing = facing.lerp(facing_target, drag * delta).normalized()
+				if behind_gate:
+					# Turning round to a cursor near-opposite: a chord lerp between
+					# opposed vectors barely moves, so turn by angle instead.
+					facing = facing.slerp(facing_target, minf(drag * delta, 1.0))
+				else:
+					facing = facing.lerp(facing_target, drag * delta).normalized()
 		_skater.set_facing(facing)
 		var turn_delta: float = angle_difference(prev_angle, _skater.rotation.y)
 		lower_body_lag = clampf(
@@ -255,6 +263,10 @@ func apply_facing(input: InputState, delta: float) -> void:
 
 # The speed band over which the stance hands facing from the cursor back to travel.
 const _STANCE_SQUARE_BLEND_M_S: float = 0.5
+
+# Set by _facing_toward each tick: a moving skater's cursor has fallen behind the
+# travel cone, so facing turns round to it even past the unreachable-wedge freeze.
+var _turning_to_cursor_behind: bool = false
 
 # Where facing heads for a cursor at `cursor_dir`. A human skating faces where they
 # skate — the hips go with the stride, and the torso twist and arm reach carry the
@@ -271,6 +283,7 @@ const _STANCE_SQUARE_BLEND_M_S: float = 0.5
 # the stride into a shuffle. The cone's hysteresis is stateless — read off
 # whichever of the two the body faces now — so reconcile replay agrees.
 func _facing_toward(cursor_dir: Vector2, brake: bool) -> Vector2:
+	_turning_to_cursor_behind = false
 	if brake or _controller.is_ai_controlled():
 		return cursor_dir
 	var travel := Vector2(_skater.velocity.x, _skater.velocity.z)
@@ -296,6 +309,7 @@ func _facing_toward(cursor_dir: Vector2, brake: bool) -> Vector2:
 		hysteresis = -hysteresis
 	var cone: float = deg_to_rad(_controller.facing_travel_cone_deg + hysteresis)
 	if absf(travel.angle_to(cursor_dir)) > cone:
+		_turning_to_cursor_behind = true
 		return cursor_dir
 	return cursor_dir.slerp(travel, share)
 
