@@ -62,13 +62,15 @@ func apply_uniform(colors: Dictionary) -> void:
 	if yoke is Color:
 		_jersey_mat.set_shader_parameter("yoke_color", yoke as Color)
 
-	# The mask mesh bakes its cage as a dark per-facet vertex tint
-	# (GoalieMeshBuilder._bake_cage_tint) — multiply it under the kit paint.
+	# The mask, pads, glove and blocker bake their detail as dark per-facet
+	# vertex tints (GoalieMeshBuilder._bake_facet_tint) — multiply them under
+	# the kit paint.
 	var mask_mat: StandardMaterial3D = UniformPaint.solid(uniform.helmet, UniformPaint.ROUGH_HELMET)
 	mask_mat.vertex_color_use_as_albedo = true
 	_goalie.head_mesh.material_override = mask_mat
 
 	var pads_mat: StandardMaterial3D = UniformPaint.solid(colors.goalie_pads, _ROUGH_PADS)
+	pads_mat.vertex_color_use_as_albedo = true
 	_goalie.left_pad_mesh.material_override = pads_mat
 	_goalie.right_pad_mesh.material_override = pads_mat.duplicate()
 	# The glove (rim + pocket + cuff) and the blocker (board + hand) are each one

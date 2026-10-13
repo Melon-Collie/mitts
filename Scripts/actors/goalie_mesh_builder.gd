@@ -36,22 +36,44 @@ const _BODY_STATIONS: Array[Vector2] = [
 	Vector2(-0.36, 0.97),
 ]
 
-# Leg pad (replaces the 0.28 × 0.84 × 0.2 BoxMesh): chamfered-octagon slab
-# with alternating girth stations — the horizontal roll ridges of a real pad.
-# Depth-symmetric, so the butterfly flare rotations read the same from every
-# side. Stations are (y, girth multiplier) applied to width and depth both.
+# Leg pad (replaces the 0.28 × 0.84 × 0.2 BoxMesh), sculpted inside that box: a
+# tapered thigh rise, the knee stack standing proud of the face, a shin face
+# creased into three vertical panels, the boot at the bottom, an outer roll
+# down both edges, and the leg channel recessed into the back. Symmetric in X,
+# since both pads share one mesh. The front is −Z, toward the shooter in every
+# stance (the butterfly rolls the pad about Z).
 const _PAD_HALF_W: float = 0.14
 const _PAD_HALF_D: float = 0.10
-const _PAD_STATIONS: Array[Vector2] = [
-	Vector2(0.42, 0.94),
-	Vector2(0.32, 1.0),     # thigh roll
-	Vector2(0.22, 0.94),
-	Vector2(0.12, 1.0),     # knee roll
-	Vector2(0.02, 0.94),
-	Vector2(-0.10, 1.0),    # shin roll
-	Vector2(-0.24, 0.97),
-	Vector2(-0.42, 0.90),   # boot channel
+# Stations top→bottom: (y, width multiplier, front reach, back reach), reaches
+# in metres from the pad's centre plane. The knee stack alone reaches the full
+# front depth, so it is the part of the face a shot reads first.
+const _PAD_STATIONS: Array[Vector4] = [
+	Vector4(0.42, 0.80, 0.055, 0.070),    # thigh rise top
+	Vector4(0.30, 0.90, 0.075, 0.085),
+	Vector4(0.25, 0.88, 0.066, 0.090),    # break above the knee
+	Vector4(0.235, 0.97, 0.098, 0.095),   # knee stack
+	Vector4(0.06, 1.00, 0.100, 0.100),
+	Vector4(0.045, 0.92, 0.068, 0.100),   # break below the knee
+	Vector4(0.03, 1.00, 0.086, 0.100),    # shin
+	Vector4(-0.28, 1.00, 0.086, 0.100),
+	Vector4(-0.295, 0.93, 0.070, 0.095),  # boot break
+	Vector4(-0.31, 0.96, 0.092, 0.092),   # boot
+	Vector4(-0.42, 0.86, 0.078, 0.070),   # toe
 ]
+# Cross-section, as fractions of the station's half-width: the creases between
+# the shin face's panels, the edge where the face turns into the outer roll,
+# and the leg channel's half-width.
+const _PAD_PANEL_X: float = 0.30
+const _PAD_FACE_X: float = 0.72
+const _PAD_CHANNEL_X: float = 0.45
+const _PAD_CHANNEL_DEPTH: float = 0.022
+# Creases are COLOR as well as shape, like the mask's cage: a groove's facets
+# bake a dark vertex tint under the pad paint, because a 1 cm step in a
+# flat-shaded solid barely changes its shading from the top-down camera.
+const _PAD_BREAK_YS: Array[float] = [0.25, 0.045, -0.295]
+const _PAD_BREAK_HALF: float = 0.012
+const _PAD_CREASE_TINT := Color(0.62, 0.62, 0.64)
+const _PAD_CHANNEL_TINT := Color(0.45, 0.45, 0.47)
 
 # Mask (replaces the oblate head sphere, r 0.17 × height 0.26). Front/back
 # asymmetric, so it's a loop sweep rather than a lathe: a round cranium, a
@@ -333,14 +355,53 @@ static func _build_pad() -> ArrayMesh:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_smooth_group(-1)  # flat shading — see SkaterMeshBuilder doc block
 	var loops: Array[PackedVector3Array] = []
-	for s: Vector2 in _PAD_STATIONS:
-		loops.append(_octagon_loop(s.x, _PAD_HALF_W * s.y, _PAD_HALF_D * s.y, 0.64, 0.55))
+	for s: Vector4 in _PAD_STATIONS:
+		loops.append(_pad_loop(s.x, _PAD_HALF_W * s.y, s.z, s.w))
 	_sweep_loops(st, loops)
 	_loop_cap(st, loops[0], Vector3(0.0, _PAD_STATIONS[0].x, 0.0), true)
 	_loop_cap(st, loops[loops.size() - 1],
 			Vector3(0.0, _PAD_STATIONS[_PAD_STATIONS.size() - 1].x, 0.0), false)
 	st.generate_normals()
-	return st.commit()
+	return _bake_facet_tint(st.commit(), _pad_tint)
+
+
+# 14-point pad cross-section, CCW seen from +Y (the sweep-loop contract), in the
+# _octagon_loop order: front centre, out along the face to the roll, round the
+# side to the back, across the back with the leg channel cut into it, and back
+# along the other half. The shin face's outer panels angle back from the centre
+# one, so the crease between them is a facet edge.
+static func _pad_loop(y: float, hw: float, front: float, back: float) -> PackedVector3Array:
+	var gx: float = hw * _PAD_PANEL_X
+	var fx: float = hw * _PAD_FACE_X
+	var cx: float = hw * _PAD_CHANNEL_X
+	var channel: float = back - _PAD_CHANNEL_DEPTH
+	var pts := PackedVector3Array()
+	pts.resize(14)
+	pts[0] = Vector3(-gx, y, -front)
+	pts[1] = Vector3(-fx, y, -front * 0.93)
+	pts[2] = Vector3(-hw, y, -front * 0.45)
+	pts[3] = Vector3(-hw, y, back * 0.45)
+	pts[4] = Vector3(-fx, y, back)
+	pts[5] = Vector3(-cx, y, back)
+	pts[6] = Vector3(-cx * 0.75, y, channel)
+	pts[7] = Vector3(cx * 0.75, y, channel)
+	pts[8] = Vector3(cx, y, back)
+	pts[9] = Vector3(fx, y, back)
+	pts[10] = Vector3(hw, y, back * 0.45)
+	pts[11] = Vector3(hw, y, -front * 0.45)
+	pts[12] = Vector3(fx, y, -front * 0.93)
+	pts[13] = Vector3(gx, y, -front)
+	return pts
+
+
+static func _pad_tint(centroid: Vector3, _normal: Vector3) -> Color:
+	if centroid.z > _PAD_HALF_D * 0.5 \
+			and absf(centroid.x) < _PAD_HALF_W * _PAD_CHANNEL_X * 0.9:
+		return _PAD_CHANNEL_TINT
+	for y: float in _PAD_BREAK_YS:
+		if absf(centroid.y - y) < _PAD_BREAK_HALF:
+			return _PAD_CREASE_TINT
+	return Color.WHITE
 
 
 static func _build_blocker() -> ArrayMesh:
@@ -391,24 +452,33 @@ static func _build_mask() -> ArrayMesh:
 	_loop_cap(st, loops[loops.size() - 1],
 			Vector3(0.0, _MASK_STATIONS[_MASK_STATIONS.size() - 1].x, 0.0), false)
 	st.generate_normals()
-	return _bake_cage_tint(st.commit())
+	return _bake_facet_tint(st.commit(), _cage_tint)
 
 
-# Rebuilds the committed surface with per-facet vertex colors: dark on the
-# cage facets, white (= pure kit paint) everywhere else. Flat shading keeps
-# vertices un-shared across facets, so a whole-triangle color never bleeds.
-static func _bake_cage_tint(mesh: ArrayMesh) -> ArrayMesh:
+# Cage facets: between brow and chin, within the cage's half-angle of the −Z
+# front axis.
+static func _cage_tint(centroid: Vector3, _normal: Vector3) -> Color:
+	var flat: float = Vector2(centroid.x, centroid.z).length()
+	var in_cage: bool = centroid.y < _CAGE_TOP_Y and centroid.y > _CAGE_BOT_Y \
+			and flat > 0.001 \
+			and -centroid.z / flat > cos(deg_to_rad(_CAGE_HALF_ANGLE_DEG))
+	return _CAGE_TINT if in_cage else Color.WHITE
+
+
+# Rebuilds the committed surface with per-facet vertex colors from
+# `tint_of(centroid, normal) -> Color`, white being pure paint. Flat shading
+# keeps vertices un-shared across facets, so a whole-triangle color never
+# bleeds. The part's material must enable vertex_color_use_as_albedo, or the
+# tint is silently dropped (test_goalie_paint_reads_the_baked_tints).
+static func _bake_facet_tint(mesh: ArrayMesh, tint_of: Callable) -> ArrayMesh:
 	var arrays: Array = mesh.surface_get_arrays(0)
 	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
 	var colors := PackedColorArray()
 	colors.resize(verts.size())
-	var cos_limit: float = cos(deg_to_rad(_CAGE_HALF_ANGLE_DEG))
 	for i in range(0, verts.size(), 3):
 		var c: Vector3 = (verts[i] + verts[i + 1] + verts[i + 2]) / 3.0
-		var flat: float = Vector2(c.x, c.z).length()
-		var in_cage: bool = c.y < _CAGE_TOP_Y and c.y > _CAGE_BOT_Y \
-				and flat > 0.001 and -c.z / flat > cos_limit
-		var col: Color = _CAGE_TINT if in_cage else Color.WHITE
+		var col: Color = tint_of.call(c, normals[i])
 		colors[i] = col
 		colors[i + 1] = col
 		colors[i + 2] = col
