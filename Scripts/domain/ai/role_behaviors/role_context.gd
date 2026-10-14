@@ -48,7 +48,7 @@ var team_id_by_peer: Dictionary = {}
 var acceleration_by_peer: Dictionary = {}
 
 # Smoothed per-peer heading turn rate (rad/s, signed) — the passer's
-# receiver-commitment read (AIActionScoring.pass_miss_prob). Missing entry = 0.
+# receiver-commitment read (AIPuckLane.pass_miss_prob). Missing entry = 0.
 var heading_omega_by_peer: Dictionary = {}
 
 # Per-peer AISkaterCaps — every player's real build. Live reference to
@@ -69,7 +69,7 @@ var self_lateral_grip: float = 1.0
 # in AIActionScoring._hole_open_angle). 0 = error-free agent.
 var self_aim_spread_rad: float = 0.0
 # Pass release-direction error, radians (BotSkillProfile.pass_aim_error_rad);
-# drives AIActionScoring.pass_miss_prob. 0 = error-free agent (miss = base floor).
+# drives AIPuckLane.pass_miss_prob. 0 = error-free agent (miss = base floor).
 var self_pass_aim_error_rad: float = 0.0
 # Max seconds a release fires LATE (BotSkillProfile.shot_timing_error_s;
 # execution samples uniform [0, max]). The carrier's shot evals hand the goalie

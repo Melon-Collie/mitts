@@ -79,10 +79,10 @@ func test_report_real_goalie_goal_rates_by_loft() -> void:
 		_h.settle(spot, 90)
 		g2 = Vector3(_h._goalie.global_position.x, 0.0, _h._goalie.global_position.z)
 		var pick_aim: Vector3 = AIActionScoring.best_shot_aim(spot, _goal, g2,
-				GameRules.NET_HALF_WIDTH, AIActionScoring.WRISTER_SHOT_SPEED_M_S,
+				GameRules.NET_HALF_WIDTH, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
 				0.0, -1.0, false, spread)
 		var pick_loft: int = AIActionScoring.best_shot_loft(spot, _goal, g2,
-				GameRules.NET_HALF_WIDTH, AIActionScoring.WRISTER_SHOT_SPEED_M_S,
+				GameRules.NET_HALF_WIDTH, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
 				0.0, -1.0, false, 0.0, false, spread)
 		var pick_pt: float = 1.0  # full pace, always (contact-point solve)
 		rng.seed = SEED
@@ -145,10 +145,10 @@ func test_debug_single_shots() -> void:
 		# The bot's own pick.
 		var g2 := Vector3(goalie_set.x, 0.0, goalie_set.z)
 		var aim: Vector3 = AIActionScoring.best_shot_aim(spot, _goal, g2,
-				GameRules.NET_HALF_WIDTH, AIActionScoring.WRISTER_SHOT_SPEED_M_S,
+				GameRules.NET_HALF_WIDTH, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
 				0.0, -1.0, false, 0.0)
 		var loft: int = AIActionScoring.best_shot_loft(spot, _goal, g2,
-				GameRules.NET_HALF_WIDTH, AIActionScoring.WRISTER_SHOT_SPEED_M_S,
+				GameRules.NET_HALF_WIDTH, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
 				0.0, -1.0, false, 0.0, false, 0.0)
 		var pt: float = 1.0  # full pace, always (contact-point solve)
 		_h.settle(spot, 90)

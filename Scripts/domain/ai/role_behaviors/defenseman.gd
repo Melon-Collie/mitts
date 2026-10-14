@@ -138,7 +138,7 @@ static func _decide_point(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 			if AIRoleHelpers.too_close_to_teammate(c, teammates):
 				continue
 			# Walking the line: could I get my point shot through from here?
-			var lane: float = AIActionScoring.lane_clear(
+			var lane: float = AIPuckLane.lane_clear(
 					c, opp_net, opp_positions, shot_speed,
 					AIActionScoring.EMPTY_VEC3, ctx.scratch_opp_caps)
 			var score: float = lane + AIRoleHelpers.incumbent_bonus(ctx, c)

@@ -95,8 +95,8 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 			continue
 		# The speed our carrier would actually fire at — on a long pass, the
 		# charged speed.
-		var pass_speed: float = AIActionScoring.expected_pass_speed(carrier_pos, c)
-		var lane: float = AIActionScoring.lane_clear(
+		var pass_speed: float = AIPuckLane.expected_pass_speed(carrier_pos, c)
+		var lane: float = AIPuckLane.lane_clear(
 				carrier_pos, c, opp_positions, pass_speed,
 				AIActionScoring.EMPTY_VEC3, ctx.scratch_opp_caps)
 		var potential: float = AIActionScoring.position_potential(

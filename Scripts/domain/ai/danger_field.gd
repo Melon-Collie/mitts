@@ -144,7 +144,7 @@ static func _core_quality(pos: Vector3, our_net: Vector3, goalie: Vector3,
 	var seal_x: float = AIActionScoring.derive_post_seal_x_sign(pos, our_net)
 	return AIActionScoring.open_net_danger(
 			pos, our_net, goalie, net_half_width,
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S, 0.0, -1.0, false,
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, -1.0, false,
 			seal_x, seal_x != 0.0)
 
 
@@ -156,7 +156,7 @@ static func _core_margin(pos: Vector3, our_net: Vector3, goalie: Vector3,
 	var seal_x: float = AIActionScoring.derive_post_seal_x_sign(pos, our_net)
 	return AIActionScoring.best_signed_margin(
 			pos, our_net, goalie, net_half_width,
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S, 0.0, -1.0, false,
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, -1.0, false,
 			seal_x, seal_x != 0.0)
 
 

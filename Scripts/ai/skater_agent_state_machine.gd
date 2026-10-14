@@ -545,7 +545,7 @@ var _holds := AIShotHolds.new()
 var _dump_target: Vector3 = Vector3.INF
 var _dump_is_soft: bool = false
 var _dump_is_rim: bool = false
-var _dump_launch_speed: float = AIActionScoring.PASS_SPEED_M_S
+var _dump_launch_speed: float = AIPuckLane.PASS_SPEED_M_S
 
 # Multi-tick wrister charge: shoot_held for BOT_WRISTER_CHARGE_TICKS while the
 # cursor sweeps, so SkaterStateMachine fires a real wrister at release (direction
@@ -582,7 +582,7 @@ var _pass_should_charge: bool = false
 # Mirrored from _carrier.pass_target_speed: the distance-adaptive LAUNCH speed
 # the chosen pass should fire at. Drives both the pass lead (so the fired aim
 # matches the scored one) and the wrister charge fraction the wind-up targets.
-var _pass_target_speed: float = AIActionScoring.PASS_SPEED_M_S
+var _pass_target_speed: float = AIPuckLane.PASS_SPEED_M_S
 # Mirrored from _carrier.pass_should_saucer: PASS_PRESSED lofts the release over a
 # contested mid-lane stick; _pass_target_speed carries the matching (capped) pace.
 var _pass_should_saucer: bool = false
@@ -697,7 +697,7 @@ const ONE_TIMER_ANCHOR_ARRIVE_M: float = 0.6
 
 # "Give with the puck" ceiling on an incoming feed's RECEIVER-FRAME speed: above
 # it the chase brakes to shed its own closing. Must sit between
-# AIActionScoring.PASS_TARGET_CLOSING_M_S (20 — every clean bot feed arrives at
+# AIPuckLane.PASS_TARGET_CLOSING_M_S (20 — every clean bot feed arrives at
 # it) and Puck.deflect_min_speed (22), so only genuinely hot arrivals trip it.
 const RECEIVE_GIVE_CEILING_M_S: float = 21.5
 # Opponent scratch for _try_shot_reception's shot check, separate from steering's
@@ -2156,7 +2156,7 @@ func _try_shot_reception(input: InputState, snapshot: WorldSnapshot, self_pos: V
 	var shot_score: float = AIActionScoring.score_shoot(
 			perp_foot, _attacking_goal_pos, goalie_now,
 			GameRules.NET_HALF_WIDTH, _scratch_shot_opponents,
-			AIActionScoring.PASS_SPEED_M_S, 0.0, _scratch_shot_opponent_caps,
+			AIPuckLane.PASS_SPEED_M_S, 0.0, _scratch_shot_opponent_caps,
 			-1.0, false, 0.0, false, _shot_aim_error_rad)
 	if shot_score < SHOT_RECEPTION_SCORE_GATE:
 		return _RECV_NONE

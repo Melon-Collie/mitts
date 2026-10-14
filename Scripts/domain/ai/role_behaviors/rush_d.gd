@@ -380,7 +380,7 @@ static func _lane_fan_target(ctx: RoleContext, read: AIRushRead,
 	for i: int in receivers.size():
 		# Only leave the shooter for a genuine immediate threat: his finish-if-fed,
 		# with the keeper predicted over the feed's flight, must clear the bar.
-		var feed_speed: float = AIActionScoring.expected_pass_speed(
+		var feed_speed: float = AIPuckLane.expected_pass_speed(
 				carrier_pos, receivers[i])
 		var feed_flight: float = carrier_pos.distance_to(receivers[i]) \
 				/ maxf(feed_speed, 1.0)
@@ -392,7 +392,7 @@ static func _lane_fan_target(ctx: RoleContext, read: AIRushRead,
 		var recv_danger: float = AIActionScoring.score_shoot(
 				receivers[i], our_net, AIActionScoring.feed_keeper_pos,
 				GameRules.NET_HALF_WIDTH,
-				no_defenders, AIActionScoring.WRISTER_SHOT_SPEED_M_S,
+				no_defenders, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
 				AIActionScoring.feed_keeper_unsettled, [], -1.0, false,
 				recv_seal, recv_seal != 0.0, 0.0, [],
 				AIActionScoring.feed_keeper_hands)

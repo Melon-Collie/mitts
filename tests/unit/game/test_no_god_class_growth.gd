@@ -50,7 +50,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/ai/skater_agent_state_machine.gd": 5127,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
 	"res://Scripts/game/game_manager.gd": 5787,
-	"res://Scripts/domain/ai/action_scoring.gd": 3223,
+	"res://Scripts/domain/ai/action_scoring.gd": 2602,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
 	# Scripts/controllers/CLAUDE.md rather than inline, and the tunable
@@ -102,7 +102,7 @@ const _API_SLACK: int = 3
 const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/networking/network_manager.gd": 208,
 	"res://Scripts/actors/skater.gd": 145,
-	"res://Scripts/domain/ai/action_scoring.gd": 62,
+	"res://Scripts/domain/ai/action_scoring.gd": 49,
 	"res://Scripts/game/game_manager.gd": 63,
 	"res://Scripts/domain/state/player_attributes.gd": 53,
 	"res://Scripts/networking/network_telemetry.gd": 53,

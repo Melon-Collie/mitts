@@ -472,11 +472,11 @@ static func carrier_live_option(
 	var best: float = AIActionScoring.score_shoot(
 			carrier_pos, our_net, our_goalie_pos,
 			GameRules.NET_HALF_WIDTH, our_team_excluding_self,
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S, 0.0, our_team_caps)
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, our_team_caps)
 	for receiver: Vector3 in opp_teammates:
 		if best >= abort_above:
 			break
-		var pass_speed: float = AIActionScoring.expected_pass_speed(carrier_pos, receiver)
+		var pass_speed: float = AIPuckLane.expected_pass_speed(carrier_pos, receiver)
 		var flight_s: float = carrier_pos.distance_to(receiver) / maxf(pass_speed, 1.0)
 		var pred_goalie: Vector3 = AIActionScoring.predict_goalie_pos(
 				our_goalie_pos, our_net, flight_s, receiver)
@@ -789,7 +789,7 @@ static func pull_into_play(ctx: RoleContext, target: Vector3) -> Vector3:
 	if not _we_possess(ctx):
 		return target
 	var puck: Vector3 = ctx.snapshot.puck_state.position
-	var reach: float = AIActionScoring.expected_pass_speed(puck, target) \
+	var reach: float = AIPuckLane.expected_pass_speed(puck, target) \
 			* PLAY_CONNECTION_FLIGHT_S
 	var dx: float = target.x - puck.x
 	var dz: float = target.z - puck.z

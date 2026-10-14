@@ -47,7 +47,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		d.held_forward_stand = d.target_position.distance_to(band_center) < 0.5
 		return d
 
-	var pass_speed_ref: float = AIActionScoring.expected_pass_speed(
+	var pass_speed_ref: float = AIPuckLane.expected_pass_speed(
 			carrier_pos, opp_net)
 	var best_pos: Vector3 = ctx.self_pos
 	var best_score: float = -INF
@@ -62,10 +62,10 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 			if AIRoleHelpers.too_close_to_teammate(c, teammates):
 				continue
 			# The seam look: can the carrier feed me here, and can I shoot from here?
-			var feed: float = AIActionScoring.lane_clear(
+			var feed: float = AIPuckLane.lane_clear(
 					carrier_pos, c, opp_positions, pass_speed_ref,
 					AIActionScoring.EMPTY_VEC3, ctx.scratch_opp_caps)
-			var shot: float = AIActionScoring.lane_clear(
+			var shot: float = AIPuckLane.lane_clear(
 					c, opp_net, opp_positions, ctx.self_wrister_shot_speed,
 					AIActionScoring.EMPTY_VEC3, ctx.scratch_opp_caps)
 			var score: float = feed * shot + AIRoleHelpers.incumbent_bonus(ctx, c)

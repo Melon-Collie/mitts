@@ -433,11 +433,11 @@ func test_close_pass_is_a_crisp_charged_wrister() -> void:
 	assert_eq(c.intended_action, AIRoleCarrier.INTENT_PASS, "picks the close outlet")
 	assert_eq(c.pass_target_peer_id, 2)
 	assert_true(c.pass_should_charge, "a pass is always a charged wrister now")
-	assert_gt(c.pass_target_speed, AIActionScoring.PASS_SPEED_M_S,
+	assert_gt(c.pass_target_speed, AIPuckLane.PASS_SPEED_M_S,
 			"a close feed now fires crisp — above the old quick-snap floor")
 	# Backs out of the target arrival at this distance (friction-compensated).
 	assert_almost_eq(c.pass_target_speed,
-			AIActionScoring.pass_launch_speed(self_pos.distance_to(outlet),
+			AIPuckLane.pass_launch_speed(self_pos.distance_to(outlet),
 					GameRules.DEFAULT_WRISTER_POWER_MAX_M_S), 0.1,
 			"fires at the friction-compensated magnet pace")
 
@@ -813,7 +813,7 @@ func test_a_defender_who_never_covers_the_drive_costs_it_nothing() -> void:
 		var c := AIRoleCarrier.new()
 		c.decide(ctx)
 		drive.append(c._receiver_drive_in_value(ctx, self_pos,
-				AIActionScoring.WRISTER_SHOT_SPEED_M_S, null, v))
+				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, null, v))
 	assert_gt(drive[1], 0.0, "precondition: the drive is worth something")
 	assert_almost_eq(drive[0], drive[1], 0.005,
 			"a defender 5 m ahead who never covers the drive costs it nothing (%.3f vs %.3f)"
@@ -835,7 +835,7 @@ func test_the_shot_s_keep_never_discounts_what_the_spot_is_worth_by_position() -
 			* AIActionScoring.potential_realization_discount(pos, goal)
 	for keep: float in [1.0, 0.5, 0.0]:
 		assert_almost_eq(c._score_at(ctx, pos, self_pos, none, pulled,
-				AIActionScoring.WRISTER_SHOT_SPEED_M_S, 0.0, 0.0, 10.0,
+				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, 0.0, 10.0,
 				GameRules.DEFAULT_LOFT_TAN_HIGH, keep), position_value, 1e-6,
 				"keep %.1f" % keep)
 
@@ -847,11 +847,11 @@ func test_in_the_zone_the_keep_discounts_the_shot() -> void:
 	var none: Array[Vector3] = []
 	var keeper := ctx.attacking_goal_pos + Vector3(0.0, 0.0, 1.0)
 	var kept: float = c._score_at(ctx, self_pos, self_pos, none, keeper,
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S, 0.0, 0.0, 0.0,
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, 0.0, 0.0,
 			GameRules.DEFAULT_LOFT_TAN_HIGH, 1.0)
 	assert_gt(kept, 0.0)
 	assert_almost_eq(c._score_at(ctx, self_pos, self_pos, none, keeper,
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S, 0.0, 0.0, 0.0,
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, 0.0, 0.0,
 			GameRules.DEFAULT_LOFT_TAN_HIGH, 0.5), kept * 0.5, 1e-6)
 
 
@@ -1874,7 +1874,7 @@ func test_developing_outlet_beats_the_spot_it_left_behind() -> void:
 	# directly so both sides run identical pricing.
 	var spot := Vector3(9, 0, 16)
 	var dist: float = moving.self_pos.distance_to(spot)
-	var pass_speed: float = AIActionScoring.pass_launch_speed(
+	var pass_speed: float = AIPuckLane.pass_launch_speed(
 			dist, moving.self_wrister_shot_speed, moving.pass_speed_scale)
 	var flight_t: float = clampf(dist / pass_speed, 0.0, AIRoleCarrier.PASS_LEAD_MAX_S)
 	var carrier2 := AIRoleCarrier.new()
@@ -2622,7 +2622,7 @@ func test_committed_saucer_pass_caps_launch_at_the_receivability_bound() -> void
 	assert_eq(c.intended_action, AIRoleCarrier.INTENT_PASS,
 			"pressured carrier feeds the outlet")
 	assert_true(c.pass_should_saucer, "the contested lane picks the saucer")
-	var bound: float = AIActionScoring.saucer_max_launch_speed(
+	var bound: float = AIPuckLane.saucer_max_launch_speed(
 			self_pos.distance_to(receiver))
 	assert_lt(c.pass_target_speed, bound + 0.01,
 			"committed saucer launch is capped so the flip lands before the tape")
@@ -3465,7 +3465,7 @@ func test_a_blocked_breakout_lane_is_rimmed_round_the_boards() -> void:
 	assert_eq(c._phase_best_pass_peer, 2, "the winger is the target")
 	assert_ne(c._phase_best_pass_rim_dir, Vector3.ZERO,
 			"...by the boards, not through the forechecker")
-	assert_gt(c._phase_best_pass_rim_pace, AIActionScoring.PASS_SPEED_M_S,
+	assert_gt(c._phase_best_pass_rim_pace, AIPuckLane.PASS_SPEED_M_S,
 			"a rim needs more than quick-pass pace — the corner bleeds it")
 
 
@@ -3498,7 +3498,7 @@ func test_a_rim_commits_as_a_flat_charged_release_along_its_bearing() -> void:
 	assert_true(c.dump_is_rim, "the dump release fires FLAT as a rim")
 	assert_false(c.dump_is_soft)
 	assert_eq(c.pass_target_peer_id, 2)
-	assert_gt(c.dump_launch_speed, AIActionScoring.PASS_SPEED_M_S)
+	assert_gt(c.dump_launch_speed, AIPuckLane.PASS_SPEED_M_S)
 
 
 func test_an_open_breakout_lane_is_passed_straight() -> void:

@@ -125,7 +125,7 @@ func _settled_keeper(spot: Vector3) -> Vector3:
 # real goalie. Each sample re-settles from a clean crease so trials are
 # independent; the scatter draw is the bot's release error.
 func _measured(spot: Vector3, keeper: Vector3, spread: float) -> float:
-	var speed: float = AIActionScoring.WRISTER_SHOT_SPEED_M_S
+	var speed: float = AIBotMechanics.WRISTER_SHOT_SPEED_M_S
 	var env: Dictionary = _h.shot_env()
 	var aim: Vector3 = AIActionScoring.best_shot_aim(
 			spot, _goal, keeper, GameRules.NET_HALF_WIDTH, speed,
@@ -157,7 +157,7 @@ func _model(spot: Vector3, keeper: Vector3, spread: float) -> float:
 	var env: Dictionary = _h.shot_env()
 	return AIActionScoring.score_shoot(
 			spot, _goal, keeper, GameRules.NET_HALF_WIDTH, [],
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S, 0.0, [],
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, [],
 			env["five"], env["down"], env["seal_x"], env["seal_tall"],
 			spread, [], env["hands"], env["pads"])
 

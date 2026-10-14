@@ -16,7 +16,7 @@ const SMOOTH_ALPHA: float = 0.2
 const CLAMP_M_S2: float = 14.0
 
 # Heading turn rate (rad/s): the passer's read of how committed a receiver is
-# to a direction (AIActionScoring.receiver_heading_uncertainty_m). Filtered a
+# to a direction (AIPuckLane.receiver_heading_uncertainty_m). Filtered a
 # little slower than the accel so it builds and decays over a beat. Below
 # OMEGA_MIN_SPEED_M_S the travel direction is noise, so the raw rate reads 0 —
 # a near-stationary receiver needs no lead, which is "settled". The clamp stops

@@ -39,7 +39,7 @@ const Harness := preload("res://tests/unit/ai/real_goalie_shot_harness.gd")
 
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 const NET_HW: float = GameRules.NET_HALF_WIDTH
-const WRIST: float = AIActionScoring.WRISTER_SHOT_SPEED_M_S
+const WRIST: float = AIBotMechanics.WRISTER_SHOT_SPEED_M_S
 const SAMPLES: int = 16
 const SETTLE_TICKS: int = 120
 const SEED: int = 0x5EED

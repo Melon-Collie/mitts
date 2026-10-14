@@ -458,12 +458,19 @@ The files are split by dependency, not by topic, and the shape is load-bearing:
 a const read across a GDScript `class_name` cycle can fail at PARSE time, which
 takes the whole class down and every static call on it from every file at once.
 
-- **Leaves** read no evaluator: `arrival.gd` (`AIArrival` — the momentum-honest
-  arrival clock `time_to_arrive` and the reference speeds it assumes) and
-  `net_obstacle.gd` (`AINetObstacle` — segment tests against the cages and our
-  own slot).
+- **Leaves** read no evaluator:
+  - `arrival.gd` (`AIArrival`) — the momentum-honest arrival clock
+    `time_to_arrive` and the reference speeds it assumes;
+  - `net_obstacle.gd` (`AINetObstacle`) — segment tests against the cages and
+    our own slot;
+  - `puck_lane.gd` (`AIPuckLane`) — whether a fired puck gets through: the lane,
+    the saucer, the release contest, the pass's launch speed and its own miss;
+  - `bot_mechanics.gd` (`AIBotMechanics`) — the league-default execution
+    constants the evaluators price and the agent executes (blade reach, the
+    carry-cursor ring, the wrister charge and its lookahead).
 - `action_scoring.gd` (`AIActionScoring`) holds the shot geometry and xG,
-  passing, dumping and the difficulty-synced goalie mirror.
+  position value, dumping, turnover pricing and the difficulty-synced goalie
+  mirror.
 - `carry_space.gd` (`AICarrySpace`) holds the carrier's room to operate:
   reachable-set evasion, the safety maps, the crossing sample, controlled space,
   the brake check and the fake-then-cut deke.

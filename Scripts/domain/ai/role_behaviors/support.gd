@@ -89,7 +89,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 			continue
 		if not _is_goal_side_of_carrier(c, carrier_pos, ctx.own_goal_dir):
 			continue
-		var pass_speed: float = AIActionScoring.expected_pass_speed(carrier_pos, c)
+		var pass_speed: float = AIPuckLane.expected_pass_speed(carrier_pos, c)
 		# Pre-armed feed keeper (GoalieBehaviorRules.backdoor_depth_cap).
 		var cand_flight: float = carrier_pos.distance_to(c) / maxf(pass_speed, 1.0)
 		AIActionScoring.resolve_feed_keeper(

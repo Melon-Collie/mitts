@@ -292,12 +292,12 @@ func test_swings_off_a_covered_high_post_to_a_live_outlet() -> void:
 	out_goalie.position_x = net.x + challenge.x
 	out_goalie.position_z = net.z + challenge.z
 	var d: RoleDecision = AIRoleSupport.decide(ctx)
-	var chosen_lane: float = AIActionScoring.lane_clear(
+	var chosen_lane: float = AIPuckLane.lane_clear(
 			carrier_pos, d.target_position, [lane_blocker],
-			AIActionScoring.expected_pass_speed(carrier_pos, d.target_position))
-	var post_lane: float = AIActionScoring.lane_clear(
+			AIPuckLane.expected_pass_speed(carrier_pos, d.target_position))
+	var post_lane: float = AIPuckLane.lane_clear(
 			carrier_pos, high_post, [lane_blocker],
-			AIActionScoring.expected_pass_speed(carrier_pos, high_post))
+			AIPuckLane.expected_pass_speed(carrier_pos, high_post))
 	assert_gt(chosen_lane, post_lane,
 			"the chosen station's feed lane beats the covered high post's;"
 			+ " got %s" % d.target_position)

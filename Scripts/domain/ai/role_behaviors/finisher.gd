@@ -194,8 +194,8 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 	if carrier_pid != -1:
 		carrier_caps = ctx.caps_by_peer.get(carrier_pid)
 	var carrier_shot_speed: float = carrier_caps.wrister_shot_speed \
-			if carrier_caps != null else AIActionScoring.WRISTER_SHOT_SPEED_M_S
-	var carrier_release: Vector3 = AIActionScoring.release_point_toward(
+			if carrier_caps != null else AIBotMechanics.WRISTER_SHOT_SPEED_M_S
+	var carrier_release: Vector3 = AIPuckLane.release_point_toward(
 			carrier_pos, ctx.attacking_goal_pos)
 	var self_caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.peer_id)
 
@@ -217,7 +217,7 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 			continue
 		# The speed our carrier would actually fire at, not a flat constant —
 		# the defenders' reaction time scales with it.
-		var pass_speed: float = AIActionScoring.expected_pass_speed(carrier_pos, c)
+		var pass_speed: float = AIPuckLane.expected_pass_speed(carrier_pos, c)
 		# Predict the goalie over the feed's flight (the FINISHER fires on
 		# contact) and credit his motion, so the cross-seam look scores above a
 		# static strong-side one.

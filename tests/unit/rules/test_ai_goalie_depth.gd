@@ -95,13 +95,13 @@ func test_the_doorstep_drive_stops_reading_as_a_covered_net() -> void:
 	var opps: Array[Vector3] = []
 	var frozen: float = AIActionScoring.score_shoot(
 			release, GOAL, _keeper_at(1.75), GameRules.NET_HALF_WIDTH, opps,
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S)
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S)
 	var retreated: float = AIActionScoring.score_shoot(
 			release, GOAL,
 			_keeper_at(AIActionScoring.planned_goalie_depth(
 					_keeper_at(1.75), GOAL, release, 0.9, 6.0)),
 			GameRules.NET_HALF_WIDTH, opps,
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S)
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S)
 	assert_almost_eq(frozen, 0.0, 0.001,
 			"the frozen keeper walls the doorstep completely")
 	assert_gt(retreated, 0.3,

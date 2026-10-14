@@ -116,7 +116,7 @@ func _cell(spot: Vector3, spread: float) -> Dictionary:
 	_ctrl.reset_to_crease()
 	_h.settle(spot, 120)
 	var g: Vector3 = _goalie.global_position
-	var speed: float = AIActionScoring.WRISTER_SHOT_SPEED_M_S
+	var speed: float = AIBotMechanics.WRISTER_SHOT_SPEED_M_S
 	# THE REPLICATED READ, exactly as gameplay assembles it (carrier.gd's
 	# _shot_env_*): post seal, stance family, five-hole and pose all come off the
 	# live GoalieNetworkState. Scoring against the defaults instead measures the

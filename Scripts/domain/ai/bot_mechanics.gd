@@ -55,3 +55,8 @@ const BOT_WRISTER_LOOKAHEAD_S: float = (
 # handling. Hands scales it (a better handler protects it further out / threads a
 # tighter seam) — callers pass the scaled value; this is the league default.
 const EVADE_CARRY_HANDLE_M: float = 0.9
+
+# The league wrister's release speed (m/s; Puck.release consumes `direction ×
+# power` as linear velocity) — the shot speed a read assumes for a shooter whose
+# build it doesn't know.
+const WRISTER_SHOT_SPEED_M_S: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S

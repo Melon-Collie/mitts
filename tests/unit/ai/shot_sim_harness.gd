@@ -268,14 +268,14 @@ static func run_spot(shooter: Vector3, goal: Vector3, profile: BotSkillProfile,
 	# Would the bot even fire? Real selection, spread- AND unsettled-aware (a
 	# caught-moving goalie opens the window, so more marginal shots clear the bar).
 	var danger: float = AIActionScoring.score_shoot(shooter, goal, goalie, NET_HW, [],
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S, unsettled, [], -1.0, false, 0.0, false, spread)
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, unsettled, [], -1.0, false, 0.0, false, spread)
 	if danger < SHOOT_MIN:
 		counts[NO_SHOT] = samples
 		return counts
 	var aim: Vector3 = AIActionScoring.best_shot_aim(shooter, goal, goalie, NET_HW,
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S, unsettled, -1.0, false, spread)
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, unsettled, -1.0, false, spread)
 	var loft: int = AIActionScoring.best_shot_loft(shooter, goal, goalie, NET_HW,
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S, unsettled, -1.0, false, 0.0, false, spread)
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, unsettled, -1.0, false, 0.0, false, spread)
 	var power_t: float = 1.0  # every hole fires full pace (contact-point solve)
 	for _i: int in samples:
 		var err: float = rng.randf_range(-spread, spread)

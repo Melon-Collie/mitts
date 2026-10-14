@@ -331,7 +331,7 @@ func test_evaluator_costs() -> void:
 	_bench("score_shoot (5 defenders)", func() -> void:
 		AIActionScoring.score_shoot(from, net, goalie, GameRules.NET_HALF_WIDTH, opps))
 	_bench("lane_clear (5 defenders)", func() -> void:
-		AIActionScoring.lane_clear(from, net, opps, 20.0))
+		AIPuckLane.lane_clear(from, net, opps, 20.0))
 	_bench("threat_surface_pass (5 def)", func() -> void:
 		AIActionScoring.threat_surface_pass(from, Vector3(-4, 0, -19), net, goalie,
 				GameRules.NET_HALF_WIDTH, opps))
@@ -372,7 +372,7 @@ func test_evaluator_costs() -> void:
 		AICarrySpace.best_evade_point_toward(from, Vector3(2, 0, -4), net,
 				opps, opp_vels, 0.9))
 	_bench("release_contest_clean (5 def)", func() -> void:
-		AIActionScoring.release_contest_clean(from, opps, opp_caps))
+		AIPuckLane.release_contest_clean(from, opps, opp_caps))
 	_bench("time_to_arrive", func() -> void:
 		AIArrival.time_to_arrive(from, net, Vector3(2, 0, -4)))
 

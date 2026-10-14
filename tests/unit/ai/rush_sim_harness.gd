@@ -130,7 +130,7 @@ static func run_rush(path: Array, goal: Vector3, profile: BotSkillProfile,
 	var goalie := Vector3(state.x, 0.0, state.y)   # (x, 0, z) for the scoring calls
 	var spread: float = profile.shot_aim_error_rad
 	var danger: float = AIActionScoring.score_shoot(shooter, goal, goalie, Shot.NET_HW, [],
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S, unsettled, [], -1.0, false, 0.0, false, spread)
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, unsettled, [], -1.0, false, 0.0, false, spread)
 	if danger < Shot.SHOOT_MIN:
 		counts[Shot.NO_SHOT] = samples
 		return counts
@@ -141,7 +141,7 @@ static func run_rush(path: Array, goal: Vector3, profile: BotSkillProfile,
 			Shot.NET_HW, AIActionScoring.GOALIE_SHADOW_HALF_M,
 			AIShotAim.DEFAULT_CORNER_BIAS, state.z)
 	var loft: int = AIActionScoring.best_shot_loft(shooter, goal, goalie, Shot.NET_HW,
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S, unsettled, -1.0, false, 0.0, false, spread)
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, unsettled, -1.0, false, 0.0, false, spread)
 	var power_t: float = 1.0  # every hole fires full pace (contact-point solve)
 	# The goalie keeps sliding at release velocity: pass his (x, vx) via `state`.
 	for _i: int in samples:

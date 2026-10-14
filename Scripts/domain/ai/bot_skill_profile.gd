@@ -82,7 +82,7 @@ var settle_penalty_tau_s: float
 var pursuit_standoff_m: float
 
 # PACE: multiplier on the pace this bot's passes ARRIVE at (passes only, not
-# shots) — AIActionScoring.pass_launch_speed then solves the launch that delivers
+# shots) — AIPuckLane.pass_launch_speed then solves the launch that delivers
 # it, so a softened feed still reaches the tape and still catches a streaking
 # receiver.
 #

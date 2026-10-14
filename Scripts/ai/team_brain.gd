@@ -330,7 +330,7 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 		# predicted over the feed's flight, no field defenders. Unlike man_value
 		# it carries no lane factor: a contested feed still becomes a tap-in if
 		# it arrives.
-		var feed_speed: float = AIActionScoring.expected_pass_speed(play_ref, mp)
+		var feed_speed: float = AIPuckLane.expected_pass_speed(play_ref, mp)
 		var feed_flight: float = play_ref.distance_to(mp) / maxf(feed_speed, 1.0)
 		# A sharp-angle man fires into the post seal a competent keeper adopts,
 		# so he is not a finish threat the assignment must chase.
@@ -347,7 +347,7 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 				mp, our_net,
 				AIActionScoring.feed_keeper_pos,
 				GameRules.NET_HALF_WIDTH, no_defenders,
-				AIActionScoring.WRISTER_SHOT_SPEED_M_S,
+				AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
 				AIActionScoring.feed_keeper_unsettled,
 				[], -1.0, false, man_seal, man_seal != 0.0, 0.0, [],
 				AIActionScoring.feed_keeper_hands)

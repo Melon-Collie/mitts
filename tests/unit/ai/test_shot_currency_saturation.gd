@@ -51,7 +51,7 @@ extends GutTest
 const Harness := preload("res://tests/unit/ai/real_goalie_shot_harness.gd")
 
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
-const WRIST: float = AIActionScoring.WRISTER_SHOT_SPEED_M_S
+const WRIST: float = AIBotMechanics.WRISTER_SHOT_SPEED_M_S
 const NET_HW: float = GameRules.NET_HALF_WIDTH
 const SETTLE_TICKS: int = 120
 

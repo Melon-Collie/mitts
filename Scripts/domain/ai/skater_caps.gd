@@ -47,7 +47,7 @@ var max_lean_shift: float = 0.0
 
 # Charged wrister release speed (height-derived, leaned by stick flex and blade
 # curve). Shot quality reads it (a harder shot leaves defenders less reaction
-# time), and it caps the hardest pass (AIActionScoring.pass_launch_speed).
+# time), and it caps the hardest pass (AIPuckLane.pass_launch_speed).
 var wrister_shot_speed: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 
 # How fast the blade traverses its ROM to chase the aim cursor (Hands, =
