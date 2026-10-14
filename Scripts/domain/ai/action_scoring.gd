@@ -424,9 +424,9 @@ static func delay_discount(delay_s: float) -> float:
 # zero throws the overlap depth away (test_shot_currency_saturation.gd
 # measures both).
 #
-# This is the BOT'S decision currency only. expected_goals (the post-game
-# analytic) reads the CLAMPED best_open_angle with a context-only spread, never
-# the shooter's skill, so goals-above-expected cannot be circular.
+# Execution geometry for a chosen shot, not the decision currency (shot value).
+# expected_goals reads the CLAMPED best_open_angle with a context-only spread,
+# never the shooter's skill, so goals-above-expected cannot be circular.
 static func open_net_danger(
 		shooter: Vector3, attacking_goal: Vector3, goalie_pos: Vector3,
 		net_half_width: float, shot_speed_m_s: float,

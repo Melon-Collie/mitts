@@ -15,7 +15,8 @@ func setup(peer_id: int, team_id: int, brain: TeamBrain, team_id_by_peer: Dictio
 
 
 # Called by AIController.setup_agent right after setup(), before the first
-# tick. carrier_reaction_delay_s is consumed by GameManager, not here. Null
+# tick. carrier_reaction_delay_s is consumed by GameManager (the debounced
+# carrier) and by the state machine as its chase reaction delay. Null
 # leaves the perfect-bot defaults in place.
 func apply_profile(profile: BotSkillProfile) -> void:
 	if profile == null:

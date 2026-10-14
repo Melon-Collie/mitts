@@ -453,8 +453,8 @@ right way up.
 Pulling `depth_base_m` in is not free — it concedes the centre-lane rush from
 5 m, which is what challenge depth exists for. `test_goalie_breakaway_ladder.gd`
 holds both halves so neither can be improved quietly at the other's expense, and
-1.30 is `CreaseRules.STRAIGHT_DEPTH`, a rink landmark rather than a tuning
-number.
+Hard's 1.30 m base is the taught B position, heels at the crease top — a rink
+landmark rather than a tuning number.
 
 ## SkaterController
 

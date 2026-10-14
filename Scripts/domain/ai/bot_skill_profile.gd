@@ -37,16 +37,13 @@ var dispatch_period_ticks: int
 # shot fall smoothly and monotonically with it on the shot-outcome sim
 # (tests/unit/ai/test_shot_sim.gd).
 #
-# The bot is SELF-HONEST — the same value feeds the score's required-window inset
-# (RoleContext.self_aim_spread_rad), so it aims a window it actually fits and its
-# misses land on the GOALIE. Posts and wides stay rare up to ~0.05 rad and climb
-# past it, where a tier stops looking beaten and starts looking incompetent. Do
-# not feed the score a smaller spread than the hand executes: conversion barely
-# moves, the extra wobble only walks the aim onto the pipe.
-#
-# Its selectivity feedback is weak — it bites only on shots already near the
-# fire bar. Selectivity is what settle_penalty_frac is for; this knob is
-# conversion.
+# Execution only: the carrier's shot value does not read it, so a wobblier tier
+# takes the same shots and misses more of them (#699). The one selection site
+# that still does is the one-timer reception gate (`_try_shot_reception` scores
+# the redirect with it). The aim inset uses it so misses land on the GOALIE;
+# posts and wides stay rare up to ~0.05 rad and climb past it, where a tier
+# stops looking beaten and starts looking incompetent. Selectivity is what
+# settle_penalty_frac is for; this knob is conversion.
 var shot_aim_error_rad: float
 
 # Execution error on PASS releases and the dump, sampled the same way.

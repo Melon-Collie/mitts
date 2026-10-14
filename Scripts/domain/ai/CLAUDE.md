@@ -2,7 +2,9 @@
 
 Scope: `Scripts/domain/ai/` (scoring, role behaviors, skill profiles) and its
 consumers in `Scripts/ai/`. Read this before changing how a bot *decides*
-anything; the per-file comments cover how each piece works.
+anything; the per-file comments cover how each piece works. What the bots
+consider, piece by piece, and where a new feature plugs in is the catalogue in
+`DECISIONS.md` (`test_decisions_inventory_resolves.gd` keeps its citations live).
 
 ## Evaluators model perception, never feel
 
@@ -227,7 +229,9 @@ beaten by the same jukes a human would be. A tied attacker the feed is coming to
 pulls his stick straight away; one it isn't coming to holds on, keeping that
 defender's stick out of the play. Both halves are the `ties_sticks` cognition
 gate, closed on Easy. The tie reads the covered man from
-`RoleDecision.locked_man_pid`.
+`RoleDecision.locked_man_pid`, which today only the 5v5 zone roles set
+(`zone_defense.gd`); MARK, TRACK_MID and RUSH_D2 cover through `cover_threat`,
+which does not, so they never tie (#769).
 
 **On the boards, the checker's extra is holding the pin** (`apply_board_play`,
 every tick after dispatch), and the hold follows what is coached: keep the commit
@@ -783,8 +787,8 @@ remains.
     the candidate, discounted as a future action), credited as the *improvement*
     over the same read at the current spot, so a lane already open belongs to the
     live pass and repositioning earns option value only where it reopens one.
-  - The **retreat ring** (5 back-arc candidates at 2× the local step) is the
-    committed peel-out; backing out to reopen a lane can out-value grinding on a
+  - The **retreat ring** (`_REAR_ANGLES` at two fractions of each bearing's
+    reach) is the committed peel-out; backing out to reopen a lane can out-value grinding on a
     defender.
   - **The net is a carry / blade obstacle** (`carry_path_blocked_by_net` /
     `net_safe_blade_target`): a candidate whose route crosses a cage prunes, two
@@ -829,5 +833,7 @@ remains.
   `CARRY_FIELD_BEARINGS` by control × forward projection, each at two fractions
   of the planning beat). The radius is one `CARRY_PLAN_BEAT_S` of travel at real
   speed — the 3 m local step at a standstill, the blue line at a full stride.
-  Rearward and lateral cardinals stay a fixed local ring (`_REAR_ANGLES`),
-  because the fan only looks where the carrier is trying to go.
+  Rearward and lateral bearings are a separate ring (`_REAR_ANGLES`), each at
+  `CARRY_FIELD_RADII` fractions of its own `beat_reach_along` — never the
+  forward radius, which would grow the rear steps with speed — because the fan
+  only looks where the carrier is trying to go.
