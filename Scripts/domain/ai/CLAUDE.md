@@ -97,7 +97,9 @@ stand-still carry candidate is by construction worth the same as firing from
 where the bot stands, so a handicap inside the fire-vs-carry compete can only be
 a uniform delay — it holds the doorstep tap-in exactly as hard as the hopeless
 point shot, which is the flat "may not commit for N seconds" gate this rule
-exists to rule out.
+exists to rule out. The decay is exp(-t/τ) and never reaches exactly zero: that
+is harmless against an absolute bar, but inside the compete, where stand-still
+ties fire exactly, any residual penalty would suppress firing forever.
 
 ### The rule that keeps cognition gates honest
 

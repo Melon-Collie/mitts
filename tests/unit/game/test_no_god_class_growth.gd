@@ -62,10 +62,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# It is a one-tick finite difference feeding a positional decision, so a
 	# teleport read as travel moved the tracked threat metres in a tick.
 	"res://Scripts/controllers/goalie_controller.gd": 5014,
-	# +162: the rim pass. The path search lives in AIRimPass; what stays here is
-	# the variant's EV (it prices through _pass_ev, an instance method) and the
-	# commit that releases a winning rim as a flat charged dump.
-	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 4012,
+	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3104,
 	# +33: the dive takes the knockdown's fall its own way — a thrown tip rate,
 	# no rebound, legs long, the belt kept on his line — and stays down while
 	# block is held. +5: a bot's caps carry its wrist-shot load and facing configs.
