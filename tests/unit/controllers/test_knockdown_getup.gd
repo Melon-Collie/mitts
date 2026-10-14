@@ -147,3 +147,23 @@ func test_spamming_the_dive_buys_one_per_window() -> void:
 	assert_eq(dives, ceili(5.0 / DiveRules.DOWN_S),
 			"five seconds of mashing is a dive every DOWN_S (%.1f s), the get-up included" \
 			% DiveRules.DOWN_S)
+
+
+# Where the blade is on one knee, the cursor held at `cursor` (offset from him).
+func _blade_on_one_knee(cursor: Vector3) -> Vector3:
+	_controller._on_body_check_received(Vector3(3.0, 0.0, 0.0))
+	var input := InputState.new()
+	input.mouse_world_pos = _skater.global_position + cursor
+	_run_down_to(_tail_at(KnockdownFallRules.GETUP_STEP_END), input)
+	return _skater.get_blade_contact_global() - _skater.global_position
+
+
+func test_the_stick_is_held_out_front_through_the_kneel() -> void:
+	var right: Vector3 = _blade_on_one_knee(Vector3(4.0, 0.0, 0.0))
+	before_each()
+	var left: Vector3 = _blade_on_one_knee(Vector3(-4.0, 0.0, 4.0))
+	assert_lt(right.distance_to(left), 0.02,
+			"the cursor doesn't wave the stick while he gets up (%s vs %s)" % [right, left])
+	var forward: Vector3 = -_skater.global_transform.basis.z
+	assert_gt(left.dot(forward), 0.8, "the blade is out in front of him")
+	assert_lt(left.y + _skater.global_position.y, 0.1, "on the ice")

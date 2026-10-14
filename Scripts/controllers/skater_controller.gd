@@ -195,6 +195,11 @@ var knockdown_fall_body_reach_m: float = 1.9
 # A diver's top arm reaches this share of its length out along the layout,
 # short of locked straight.
 const DIVE_ARM_STRETCH: float = 0.85
+# The get-up's held top hand, from its shoulder: down and forward, metres; the
+# stick's bearing off straight ahead toward the stick side.
+const GETUP_HAND_DROP_M: float = 0.3
+const GETUP_HAND_FWD_M: float = 0.35
+const GETUP_STICK_SPREAD_DEG: float = 25.0
 var knockdown_brace_in_seconds: float = 0.15  # arms pull into the brace over this
 # Downed-leg sprawl (KnockdownFallRules.sprawl_into): the scatter window after
 # first ice contact, and the free leg's outward splay at a maximal hit.
@@ -1749,6 +1754,7 @@ func _process_input(input: InputState, delta: float) -> void:
 				_apply_dive_layout()
 			else:
 				_apply_knockdown_brace()
+			_apply_getup_hold()
 
 
 # Render-rate cosmetic pose pass, registered on the skater and invoked once per
@@ -1981,6 +1987,36 @@ func _apply_knockdown_brace() -> void:
 	blade_target = skater.clamp_blade_to_walls(blade_target)
 	skater.set_top_hand_position(skater.get_top_hand_position().lerp(hand_target, brace_t))
 	skater.set_blade_position(skater.get_blade_position().lerp(blade_target, brace_t))
+
+
+# Getting up, the arms hold the stick rather than dangle it: the top hand in
+# front of the chest, the blade out on the ice ahead on the stick side. It
+# takes over as the brace or the dive's layout lets go and gives the hands back
+# to the live IK as he stands. The hand is posed and the blade derived one stick
+# along the bearing (Scripts/controllers/CLAUDE.md, pose the hand), in the
+# world, because the kneel has taken the frame down with the body.
+func _apply_getup_hold() -> void:
+	var kd_t: float = knockdown_getup_left()
+	var hold: float = (1.0 - KnockdownFallRules.lie_share(kd_t)) \
+			* KnockdownFallRules.stand_hold(kd_t)
+	if hold <= 0.001:
+		return
+	_apply_fall_tilt(kd_t)
+	var side: float = -1.0 if skater.is_left_handed else 1.0
+	# In the facing's frame, which holds still while down; the shoulders keep
+	# turning after the cursor.
+	var body: Basis = skater.global_transform.basis
+	var hand_world: Vector3 = skater.upper_body.global_position + body \
+			* (skater.shoulder.position + Vector3(0.0, -GETUP_HAND_DROP_M, -GETUP_HAND_FWD_M))
+	var spread: float = deg_to_rad(GETUP_STICK_SPREAD_DEG)
+	var bearing: Vector3 = body * Vector3(side * sin(spread), 0.0, -cos(spread))
+	var drop: float = hand_world.y - blade_height
+	var span: float = sqrt(maxf(stick_length * stick_length - drop * drop, 0.0))
+	var blade_world: Vector3 = Vector3(hand_world.x, blade_height, hand_world.z) + bearing * span
+	var hand_target: Vector3 = skater.upper_body_to_local(hand_world)
+	var blade_target: Vector3 = skater.clamp_blade_to_walls(skater.upper_body_to_local(blade_world))
+	skater.set_top_hand_position(skater.get_top_hand_position().lerp(hand_target, hold))
+	skater.set_blade_position(skater.get_blade_position().lerp(blade_target, hold))
 
 
 # Aim-only blade update for FACEOFF_PREP: drives the blade target from the

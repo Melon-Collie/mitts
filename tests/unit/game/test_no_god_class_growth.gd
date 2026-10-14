@@ -70,8 +70,8 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# no rebound, legs long, the belt kept on his line — and stays down while
 	# block is held. +5: a bot's caps carry its wrist-shot load and facing configs.
 	# +10: the staged get-up's one clock (knockdown_getup_left) and the stagger
-	# he finds his legs through once it ends.
-	"res://Scripts/controllers/skater_controller.gd": 3547,
+	# he finds his legs through once it ends. +36: the get-up's stick hold.
+	"res://Scripts/controllers/skater_controller.gd": 3583,
 	"res://Scripts/actors/skater.gd": 2796,
 	"res://Scripts/networking/network_manager.gd": 2855,
 	"res://Scripts/game/tutorial_manager.gd": 2067,
