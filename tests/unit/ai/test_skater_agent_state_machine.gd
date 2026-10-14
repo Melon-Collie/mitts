@@ -7,6 +7,7 @@ extends GutTest
 # actors — everything runs headless off the bot's identity set by setup.
 
 const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
+const Snapshot := preload("res://tests/snapshot.gd")
 
 # peer 1 = self (team 0), peer 2 = teammate (team 0), peers 11/12 = team 1.
 const SELF_ID := 1
@@ -242,6 +243,10 @@ func test_shade_intercept_pulls_toward_our_net() -> void:
 
 
 # ── _lead_intercept (speed-capped kinematic reachability) ────────────────────
+# The solve interpolates arrival slack linearly across a walk step, so its point
+# can sit this far either side of the exact crossing.
+const INTERCEPT_SLACK_S: float = 0.02
+const INTERCEPT_SLACK_M: float = 0.05
 
 func test_lead_intercept_stationary_puck_targets_puck() -> void:
 	# A stationary puck's trajectory never moves; the intercept must be the
@@ -252,29 +257,60 @@ func test_lead_intercept_stationary_puck_targets_puck() -> void:
 	assert_almost_eq(out.z, 0.0, 0.001)
 
 
-func test_lead_intercept_receding_fast_puck_respects_speed_cap() -> void:
-	# From rest, a puck receding at 8 m/s from 6 m ahead. The accel-only
-	# model (½·A·T² reach) claimed an intercept ~1.9 s out — arrival speed
-	# would be ~22 m/s, far past the cap — so the bot aimed at a point it
-	# physically could not make. With the cruise bound the chosen point
-	# must lie at or beyond what an accel-then-cruise sprint actually
-	# covers by the time the puck is there.
+# When the puck's own predicted path (the shared race walk) reaches `z`,
+# for a puck travelling +z.
+func _path_time_at_z(puck_pos: Vector3, puck_vel: Vector3, z: float) -> float:
+	var traj: Array[Vector3] = AILoosePuckChase.race_trajectory(puck_pos, puck_vel)
+	var step_dt: float = AILoosePuckChase.RACE_LOOKAHEAD_S \
+			/ float(AILoosePuckChase.RACE_STEPS)
+	var prev: Vector3 = puck_pos
+	for i: int in traj.size():
+		if traj[i].z >= z:
+			return (i + inverse_lerp(prev.z, traj[i].z, z)) * step_dt
+		prev = traj[i]
+	return INF
+
+
+# Arrival slack at path point `z` for a body starting at the origin from rest,
+# driving straight down +z on the stride ramp: positive when his blade gets
+# there with the set-up margin to spare before the puck does.
+func _straight_line_slack(puck_pos: Vector3, puck_vel: Vector3, z: float) -> float:
+	var blade_t: float = AIStrideRamp.time_to_cover(
+			0.0, z - sm._blade_reach, sm._self_max_speed, sm._chase_max_accel)
+	return _path_time_at_z(puck_pos, puck_vel, z) \
+			- AILoosePuckChase.setup_margin(puck_vel) - blade_t
+
+
+func test_lead_intercept_receding_fast_puck_is_chased_to_where_he_can_make_it() -> void:
+	# From rest, a puck receding at 8 m/s from 6 m ahead. No point he passes on
+	# the way to his target is one his stride ramp gets the blade to in time, and
+	# the target is either a point he can make or, failing every one, the end of
+	# the walk where the puck is collected.
 	var puck_pos := Vector3(0, 0, 6)
 	var puck_vel := Vector3(0, 0, 8)
 	var out: Vector3 = sm._lead_intercept(Vector3.ZERO, Vector3.ZERO, puck_pos, puck_vel)
-	# Old model's pick sat near z≈21 (T≈1.87 s). The speed-honest model
-	# must aim meaningfully deeper (or at the window's end).
-	assert_gt(out.z, 22.0,
-			"speed cap rejects the accel-only phantom intercept at z≈21")
+	for z: float in range(7, int(out.z - 0.5)):
+		assert_lt(_straight_line_slack(puck_pos, puck_vel, z), 0.0,
+				"%.0f m, short of his target, was out of reach" % z)
+	var walk_end: Vector3 = AILoosePuckChase.race_trajectory(puck_pos, puck_vel)[-1]
+	assert_true(_straight_line_slack(puck_pos, puck_vel, out.z) >= -INTERCEPT_SLACK_S
+			or out.distance_to(walk_end) < INTERCEPT_SLACK_M,
+			"he steers to a point he can make, or to the end of the walk")
 
 
-func test_lead_intercept_moving_with_puck_picks_early_point() -> void:
-	# Already at top speed right behind a slower puck: the chase is nearly
-	# won and the intercept should resolve within the first few steps.
+func test_lead_intercept_moving_with_puck_is_where_a_flying_start_closes() -> void:
+	# Already at top speed right behind a slower puck: he meets it no later than
+	# a body holding top speed closes the gap down to his stick on a puck that
+	# never slows.
+	var vmax: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
+	var puck_speed: float = 2.0
+	var gap: float = 2.0
 	var out: Vector3 = sm._lead_intercept(
-			Vector3.ZERO, Vector3(0, 0, GameRules.DEFAULT_SKATER_MAX_SPEED_M_S),
-			Vector3(0, 0, 2), Vector3(0, 0, 2))
-	assert_lt(out.z, 6.0, "closing chase resolves to a near intercept")
+			Vector3.ZERO, Vector3(0, 0, vmax),
+			Vector3(0, 0, gap), Vector3(0, 0, puck_speed))
+	var closed_by: float = maxf(gap - sm._blade_reach, 0.0) / (vmax - puck_speed)
+	assert_lte(out.z, gap + puck_speed * closed_by + INTERCEPT_SLACK_M,
+			"the closing chase resolves where the flying start catches it")
 
 
 func test_lead_intercept_meets_a_puck_arriving_at_him() -> void:
@@ -372,6 +408,18 @@ func test_lead_intercept_agrees_with_the_election() -> void:
 			self_pos, self_vel, puck_pos, puck_vel)
 	assert_almost_eq(steered.distance_to(elected), 0.0, 0.001,
 			"steering target is the election's own intercept point")
+
+
+# The calibrated answers at the reference chases; rewrite with
+# MITTS_UPDATE_SNAPSHOTS=1 (tests/snapshot.gd) and review the diff.
+func test_lead_intercept_calibration_snapshot() -> void:
+	var snap := Snapshot.new("res://tests/unit/ai/snapshots/lead_intercept.txt")
+	snap.record("from rest, puck receding 8 m/s from 6 m: intercept z", sm._lead_intercept(
+			Vector3.ZERO, Vector3.ZERO, Vector3(0, 0, 6), Vector3(0, 0, 8)).z)
+	snap.record("at top speed, puck 2 m ahead at 2 m/s: intercept z", sm._lead_intercept(
+			Vector3.ZERO, Vector3(0, 0, GameRules.DEFAULT_SKATER_MAX_SPEED_M_S),
+			Vector3(0, 0, 2), Vector3(0, 0, 2)).z)
+	snap.verify(self)
 
 
 # ── Slice 2: mouse / aim motion geometry ─────────────────────────────────────
@@ -1510,9 +1558,11 @@ func test_back_wedge_aim_needs_rotation() -> void:
 
 
 func test_commit_cone_boundary() -> void:
-	# Just inside 132° commits without a turn; just outside does not.
-	assert_true(sm._aim_needs_no_rotation(Vector2(0, 1), _aim_dir(130.0)))
-	assert_false(sm._aim_needs_no_rotation(Vector2(0, 1), _aim_dir(134.0)))
+	# The boundary is the bot's reach cone less the commit margin.
+	var edge_deg: float = rad_to_deg(
+			sm._self_reach_cone_half_angle - Agent.AIM_COMMIT_CONE_MARGIN_RAD)
+	assert_true(sm._aim_needs_no_rotation(Vector2(0, 1), _aim_dir(edge_deg - 0.5)))
+	assert_false(sm._aim_needs_no_rotation(Vector2(0, 1), _aim_dir(edge_deg + 0.5)))
 
 
 func test_commit_cone_tracks_the_bots_real_reach() -> void:
@@ -2164,17 +2214,24 @@ func _feed_snap(puck_pos: Vector3, puck_vel: Vector3) -> WorldSnapshot:
 
 
 func test_one_timer_line_anchor_puts_the_slapper_zone_on_the_live_line() -> void:
-	# Team 0 attacks -Z (net straight down -Z from the origin). A hard feed
-	# crossing 1.5 m net-side of the bot along +X: perp foot (0, 0, -1.5),
-	# net_dir (0, 0, -1), RH blade side +X → body = crossing point minus the
-	# slapper ZONE's offset (right·1.0 + net_dir·0.4) = (-1.0, 0, -1.1).
-	var snap := _feed_snap(Vector3(-8, 0, -1.5), Vector3(16, 0, 0))
+	# Team 0 attacks -Z. A hard feed crosses 1.5 m net-side of the bot along +X,
+	# so the point on the line nearest him is (0, 0, -1.5). The slapper zone sits
+	# its offset (Agent.BOT_ONE_TIMER_ZONE_OFFSET_*, in the frame facing the net
+	# from that point, RH blade side) off the body, so the body stands that
+	# offset back from the line.
+	var foot := Vector3(0, 0, -1.5)
+	var snap := _feed_snap(Vector3(-8, 0, foot.z), Vector3(16, 0, 0))
 	var anchor: Vector3 = sm._one_timer_line_anchor(snap, Vector3.ZERO)
 	assert_true(anchor.is_finite(), "a live inbound feed defines a settle anchor")
-	assert_almost_eq(anchor.x, -1.0, 0.01,
-			"body stands a zone-width off the line on the blade side")
-	assert_almost_eq(anchor.z, -1.1, 0.01,
-			"…so the armed slapper ZONE sits exactly ON the line")
+	var to_net: Vector3 = sm._attacking_goal_pos - foot
+	to_net.y = 0.0
+	var f: Vector3 = to_net.normalized()
+	var right := Vector3(-f.z, 0.0, f.x)
+	var zone: Vector3 = anchor + right * Agent.BOT_ONE_TIMER_ZONE_OFFSET_X_M \
+			- f * Agent.BOT_ONE_TIMER_ZONE_OFFSET_Z_M
+	assert_almost_eq(zone.distance_to(foot), 0.0, 0.01,
+			"the armed slapper ZONE sits exactly ON the line")
+	assert_lt(anchor.x, foot.x, "the body stands off the line, away from the blade side")
 
 
 func test_one_timer_line_anchor_defers_to_a_better_positioned_teammate() -> void:

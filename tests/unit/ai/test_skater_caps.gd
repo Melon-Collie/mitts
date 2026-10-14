@@ -2,7 +2,7 @@ extends GutTest
 
 # AISkaterCaps + the wiring that pushes a bot's attribute-scaled
 # capabilities into its state machine. Covers: baseline defaults (so an unwired
-# bot behaves as before), the time_to_arrive ref-speed parameter, score_shoot's
+# bot plans like a league-average body), the time_to_arrive ref-speed parameter, score_shoot's
 # shot-speed sensitivity, and that apply_capabilities derives the state
 # machine's reach gates / self-speeds from the caps.
 
@@ -10,36 +10,36 @@ extends GutTest
 # ── Defaults reproduce the league baseline ──────────────────────────────────
 
 func test_caps_defaults_equal_league_baseline() -> void:
+	# Each default is read off the body that build_ai_caps reads at league
+	# baseline, so a missing caps_by_peer entry plans like an unscaled player.
 	var caps := AISkaterCaps.new()
+	var ctrl: SkaterController = autofree(SkaterController.new())
+	var body: Skater = autofree(Skater.new())
 	assert_almost_eq(caps.max_speed, GameRules.DEFAULT_SKATER_MAX_SPEED_M_S, 0.001)
 	assert_almost_eq(caps.blade_span,
 			GameRules.DEFAULT_STICK_LENGTH_M + GameRules.DEFAULT_BLADE_LENGTH_M, 0.001)
 	assert_almost_eq(caps.stick_reach, GameRules.DEFAULT_STICK_LENGTH_M, 0.001)
 	assert_almost_eq(caps.wrister_shot_speed, GameRules.DEFAULT_WRISTER_POWER_MAX_M_S, 0.001)
-	# Cross-player fields (used once a peer's real build is read) default to the
-	# league baseline too, so a missing caps_by_peer entry reproduces old behaviour.
-	assert_almost_eq(caps.weight, 1.0, 0.001)
+	assert_almost_eq(caps.weight, body.weight, 0.001)
 	assert_almost_eq(caps.body_check_transfer, 0.45, 0.001)
 	assert_almost_eq(caps.handle_reach, AIBotMechanics.EVADE_CARRY_HANDLE_M, 0.001,
 			"handle reach defaults to the league carry-handle reach")
-	assert_almost_eq(caps.blade_speed, 10.0, 0.001,
-			"blade speed defaults to the controller's league max_blade_speed")
-	# Aim geometry (B1): the ±157° blade reach cone (ROM + torso twist) and the
-	# baseline facing turn rate the carrier prices a body rotation against.
-	assert_almost_eq(caps.reach_cone_half_angle, deg_to_rad(157.0), 0.001,
-			"reach cone defaults to the league ROM (90) + torso twist (67)")
-	assert_almost_eq(caps.facing_turn_rate, 6.0, 0.001,
-			"facing turn rate defaults to the baseline 6.0 rad/s")
+	assert_almost_eq(caps.blade_speed, ctrl.max_blade_speed, 0.001,
+			"blade speed defaults to the controller's max_blade_speed")
+	assert_almost_eq(caps.reach_cone_half_angle,
+			deg_to_rad(ctrl.rom_backhand_angle_max_deg + ctrl.upper_body_max_twist_deg), 0.001,
+			"reach cone defaults to the controller's ROM plus torso twist")
 
 
 func test_role_context_self_speeds_default_to_baseline() -> void:
-	# An unwired context (unit tests, no SM populating it) must carry the
-	# baseline so the carrier scores exactly as it did before this change.
+	# An unwired context (unit tests, no SM populating it) plans with the same
+	# body an unset caps describes.
 	var ctx := RoleContext.new()
-	assert_almost_eq(ctx.self_max_speed, GameRules.DEFAULT_SKATER_MAX_SPEED_M_S, 0.001)
-	assert_almost_eq(ctx.self_wrister_shot_speed, GameRules.DEFAULT_WRISTER_POWER_MAX_M_S, 0.001)
-	assert_almost_eq(ctx.self_reach_cone_half_angle, deg_to_rad(157.0), 0.001)
-	assert_almost_eq(ctx.self_facing_turn_rate, 6.0, 0.001)
+	var caps := AISkaterCaps.new()
+	assert_almost_eq(ctx.self_max_speed, caps.max_speed, 0.001)
+	assert_almost_eq(ctx.self_wrister_shot_speed, caps.wrister_shot_speed, 0.001)
+	assert_almost_eq(ctx.self_reach_cone_half_angle, caps.reach_cone_half_angle, 0.001)
+	assert_almost_eq(ctx.self_facing_turn_rate, caps.facing_turn_rate, 0.001)
 
 
 # ── time_to_arrive ref-speed parameter ──────────────────────────────────────

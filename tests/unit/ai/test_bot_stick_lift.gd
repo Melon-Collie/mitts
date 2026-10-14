@@ -5,6 +5,7 @@ extends GutTest
 # (_poke_jab_aim) and its per-tick button hold (apply_stick_lift_input).
 
 const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
+const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 
 const SELF_ID := 1
 const OPP_ID := 11
@@ -189,15 +190,20 @@ func test_a_covering_bot_keeps_holding_the_tie_it_made() -> void:
 
 
 func test_a_bot_holding_a_tie_follows_the_mans_stick_late() -> void:
-	var s: WorldSnapshot = _feed_snap()
-	var man: SkaterNetworkState = s.skater_states[OPP_ID]
-	var first: Vector3 = sm._stick_play.step_tie_follow(man)
+	# A first-order follow whose time constant is the lag budget: it closes
+	# 1 - 1/e of a step in the man's stick over TIE_LAG_BUDGET_S, never at once
+	# and never past it.
+	var play := SkaterAgentStickPlay.new()
+	var man: SkaterNetworkState = _feed_snap().skater_states[OPP_ID]
+	var first: Vector3 = play.step_tie_follow(man)
 	man.top_hand_world += Vector3(1.0, 0.0, 0.0)
 	man.blade_contact_world += Vector3(1.0, 0.0, 0.0)
-	var ticks: int = roundi(StickCheckRules.TIE_LAG_BUDGET_S * 120.0)
-	var follow: Vector3 = first
-	for _i: int in ticks:
-		follow = sm._stick_play.step_tie_follow(man)
-	var moved: float = follow.x - first.x
-	assert_gt(moved, 0.5, "it gets most of the way there inside the lag budget")
-	assert_lt(moved, 0.75, "but not at once: a bot reads a pull as late as a human holder")
+	var ticks: int = roundi(StickCheckRules.TIE_LAG_BUDGET_S * _PhysicsConstants.PHYSICS_TICK)
+	var moved: float = 0.0
+	for i: int in ticks:
+		var now: float = play.step_tie_follow(man).x - first.x
+		assert_true(now > moved and now < 1.0,
+				"tick %d: the follow closes on the stick without reaching it" % i)
+		moved = now
+	assert_almost_eq(moved, 1.0 - exp(-1.0), 0.01,
+			"one lag budget closes 1 - 1/e of the step: a bot reads a pull as late as a human holder")
