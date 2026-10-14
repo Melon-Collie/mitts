@@ -1,29 +1,25 @@
 extends GutTest
 
-# Shot-opportunity audit — a distribution tripwire against shot-starvation.
-#
-# The per-geometry calibration table (test_ai_action_scoring.gd) pins WHICH
-# looks score; this audit pins HOW OFTEN a bot has a committable shot across a
-# broad grid of realistic offensive-zone situations, split by the goalie state
-# that produced them. A SET, SQUARED keeper concedes only the MODEST
-# quick-release band (the puck reaches his body before the drop / glove
-# deploy widens his standing cover — mid-range straight-ish looks), never a
-# strong chance — so the honesty line is that the set column stays capped and
-# strong-free, while the states TEAM PLAY CREATES (displaced keepers off
-# passes/cuts, down keepers, deep-holding keepers) stay committable at
-# healthy rates. If a future model change collapses (or inflates) a column,
-# this file fails before playtest does.
+# Shot-opportunity audit: how much of a broad grid of offensive-zone looks a
+# bot has a committable direct shot from, split by the goalie state that
+# produced the look. The fractions are the snapshot,
+# snapshots/shot_opportunity.txt; the assertions are the orderings any honest
+# keeper model keeps — the states team play creates (a keeper caught off his
+# square, a keeper down) concede more than a set, squared one.
 #
 # Grid: shooters across the OZ fan (lateral x ±6, range 3–14 m), no defenders
 # (the lane/pressure terms are audited elsewhere) — pure keeper-vs-shooter.
 
+const Snapshot := preload("res://tests/snapshot.gd")
+const SNAPSHOT_PATH := "res://tests/unit/rules/snapshots/shot_opportunity.txt"
 const NET := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
-# "Committable" bar for THIS audit's hole-geometry scores. Deliberately NOT
-# AIRoleCarrier.SHOT_MIN_VALUE: that gate is denominated in the seam's
-# NHL-calibrated currency and this file scores with AIActionScoring.score_shoot,
-# which saturates at 1.0 — the two numbers are not comparable and coupling them
-# would make this tripwire move whenever the carrier's tactics are retuned.
+# "Committable" and "strong" bars for THIS audit's hole-geometry scores.
+# Deliberately NOT AIRoleCarrier.SHOT_MIN_VALUE: that gate is denominated in the
+# seam's NHL-calibrated currency and this file scores with
+# AIActionScoring.score_shoot, which saturates at 1.0 — the two numbers are not
+# comparable.
 const FIRE_FLOOR: float = 0.02
+const STRONG_LOOK: float = 0.3
 
 var _shooters: Array[Vector3] = []
 
@@ -48,7 +44,7 @@ func _squared_at(target: Vector3, depth: float) -> Vector3:
 
 # Fraction of the shooter grid whose direct shot clears the fire floor, for a
 # goalie-state generator. `strong_out` (optional 1-element array) receives the
-# fraction clearing 0.3 (a genuine chance, not a floor-scraper).
+# fraction clearing STRONG_LOOK (a genuine chance, not a floor-scraper).
 func _committable_fraction(state: Callable, strong_out: Array = []) -> float:
 	var committable: int = 0
 	var strong: int = 0
@@ -60,7 +56,7 @@ func _committable_fraction(state: Callable, strong_out: Array = []) -> float:
 				args[1], [], args[2], args[3])
 		if s > FIRE_FLOOR:
 			committable += 1
-		if s > 0.3:
+		if s > STRONG_LOOK:
 			strong += 1
 	if not strong_out.is_empty():
 		strong_out[0] = float(strong) / float(_shooters.size())
@@ -68,9 +64,7 @@ func _committable_fraction(state: Callable, strong_out: Array = []) -> float:
 
 
 func test_shot_opportunity_distribution() -> void:
-	# SET + SQUARED at challenge depth: the modest quick-release band — real
-	# looks across the mid-range slice of the fan, but never a strong chance;
-	# a set keeper still has to be MOVED (pass / carry / cut) for those.
+	# SET + SQUARED at challenge depth.
 	var set_strong: Array = [0.0]
 	var set_frac: float = _committable_fraction(func(sh: Vector3) -> Array:
 		return [_squared_at(sh, 1.3), 0.0, -1.0, false],
@@ -95,38 +89,18 @@ func test_shot_opportunity_distribution() -> void:
 	var deep_frac: float = _committable_fraction(func(sh: Vector3) -> Array:
 		return [_squared_at(sh, 0.6), 0.0, -1.0, false])
 
-	print("[shot-audit] committable fractions over %d OZ looks:" % _shooters.size())
-	print("[shot-audit]   set+squared @1.3:  %.0f%%  (strong %.0f%% — intended 0)"
-			% [set_frac * 100.0, set_strong[0] * 100.0])
-	print("[shot-audit]   displaced 3m:      %.0f%%  (strong %.0f%%)"
-			% [displaced_frac * 100.0, displaced_strong[0] * 100.0])
-	print("[shot-audit]   down (leak 0.24m): %.0f%%  (strong %.0f%%)"
-			% [down_frac * 100.0, down_strong[0] * 100.0])
-	print("[shot-audit]   deep @0.6:         %.0f%%" % (deep_frac * 100.0))
+	assert_gt(displaced_frac, set_frac,
+			"a keeper caught 3 m off his square concedes more looks than a set one")
+	assert_gt(down_frac, set_frac,
+			"a down keeper concedes more looks than a set, standing one")
 
-	# The honesty invariants on the set keeper: the quick-release band keeps a
-	# healthy floor (shot-starvation guard — a carrier with space always has a
-	# committable, if modest, look through the mid-range) under a ceiling (so a
-	# future tweak can't quietly re-open firing into set keepers everywhere) —
-	# and NO look at a set squared keeper is ever a strong chance (observed max
-	# ≈ 0.19 over the grid): strong chances require moving him.
-	assert_between(set_frac, 0.2, 0.7,
-			"a set squared keeper concedes the modest mid-range band, no more")
-	# Calibrated currency: the 8 m knife band reads a sub-coin-flip look
-	# against a standing set keeper (the instrument measures the quick
-	# release beating the drop there) — "strong" starts above the coin flip.
-	assert_lt(set_strong[0], 0.5,
-			"…and never a strong chance — those require moving him")
-	# The keep-shooting invariants: the states team play creates must stay
-	# richly committable, or bots go shot-starved in live games.
-	assert_gt(displaced_frac, 0.5,
-			"a keeper caught 3 m off his square is a shot most of the time")
-	# Strong chances concentrate in the in-range slice of the fan (observed
-	# ~17% of ALL looks including 11–14 m samples), so the tripwire sits just
-	# under that: if it drops toward zero, displacement stopped paying.
-	assert_gt(displaced_strong[0], 0.1,
-			"…and a solid slice are genuine chances, not floor-scrapes")
-	assert_gt(down_frac, 0.4,
-			"a down keeper concedes real targets across much of the zone")
-	assert_gt(deep_frac, 0.15,
-			"a keeper parked on his line concedes angle even when set")
+	var snap := Snapshot.new(SNAPSHOT_PATH)
+	snap.record("shooter looks in the grid", _shooters.size())
+	snap.record("set and squared 1.3 m out, committable share", set_frac)
+	snap.record("set and squared 1.3 m out, strong share", set_strong[0])
+	snap.record("displaced 3 m off his square, committable share", displaced_frac)
+	snap.record("displaced 3 m off his square, strong share", displaced_strong[0])
+	snap.record("down and leaking, committable share", down_frac)
+	snap.record("down and leaking, strong share", down_strong[0])
+	snap.record("deep 0.6 m on his line, committable share", deep_frac)
+	snap.verify(self)
