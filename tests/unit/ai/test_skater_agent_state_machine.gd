@@ -1545,9 +1545,9 @@ func test_poke_evade_fires_driving_at_a_stationary_defender() -> void:
 	sm._carrier.evade_seam_world = Vector3(1.5, 0, -1.5)   # a real cut direction
 	var input := InputState.new()
 	sm._poke_evade_modulate_steering(input, snap, Vector3.ZERO)
-	assert_gt(sm._poke_evade_active_ticks, 0,
+	assert_gt(sm._poke_evade.active_ticks, 0,
 			"driving at a stationary defender within poke reach triggers the deke")
-	assert_ne(sm._poke_evade_dir, Vector2.ZERO, "the cut latches the seam direction")
+	assert_ne(sm._poke_evade.cut_seam_dir, Vector2.ZERO, "the cut latches the seam direction")
 
 
 func test_poke_evade_never_triggers_without_a_usable_maneuver() -> void:
@@ -1558,8 +1558,8 @@ func test_poke_evade_never_triggers_without_a_usable_maneuver() -> void:
 	# sm._carrier.evade_seam_world stays INF and brake_check_favored false.
 	var input := InputState.new()
 	sm._poke_evade_modulate_steering(input, snap, Vector3.ZERO)
-	assert_eq(sm._poke_evade_active_ticks, 0, "no seam + no brake read → no evade")
-	assert_eq(sm._poke_evade_cooldown_ticks, 0, "no cooldown burned on a non-maneuver")
+	assert_eq(sm._poke_evade.active_ticks, 0, "no seam + no brake read → no evade")
+	assert_eq(sm._poke_evade.cooldown_ticks, 0, "no cooldown burned on a non-maneuver")
 
 
 func test_poke_evade_brake_check_triggers_without_a_seam() -> void:
@@ -1571,7 +1571,7 @@ func test_poke_evade_brake_check_triggers_without_a_seam() -> void:
 	sm._last_carry_anchor = Vector3(0, 0, -8)
 	var input := InputState.new()
 	sm._poke_evade_modulate_steering(input, snap, Vector3.ZERO)
-	assert_gt(sm._poke_evade_active_ticks, 0, "brake read alone triggers the maneuver")
+	assert_gt(sm._poke_evade.active_ticks, 0, "brake read alone triggers the maneuver")
 	assert_true(input.brake, "the brake check presses the real brake key")
 
 
@@ -1591,8 +1591,8 @@ func _poke_snap(self_vel: Vector3, opp_pos: Vector3, opp_vel: Vector3) -> WorldS
 	snap.puck_state = PuckNetworkState.new()
 	snap.puck_state.carrier_peer_id = SELF_ID
 	snap.puck_state.position = me.position
-	sm._poke_evade_active_ticks = 0
-	sm._poke_evade_cooldown_ticks = 0
+	sm._poke_evade.active_ticks = 0
+	sm._poke_evade.cooldown_ticks = 0
 	return snap
 
 
@@ -1613,11 +1613,11 @@ func test_poke_evade_skips_a_defender_neither_side_is_closing_on() -> void:
 	snap.puck_state = PuckNetworkState.new()
 	snap.puck_state.carrier_peer_id = SELF_ID
 	snap.puck_state.position = me.position
-	sm._poke_evade_active_ticks = 0
-	sm._poke_evade_cooldown_ticks = 0
+	sm._poke_evade.active_ticks = 0
+	sm._poke_evade.cooldown_ticks = 0
 	var input := InputState.new()
 	sm._poke_evade_modulate_steering(input, snap, me.position)
-	assert_eq(sm._poke_evade_active_ticks, 0,
+	assert_eq(sm._poke_evade.active_ticks, 0,
 			"a defender behind the direction of travel, neither closing, gets no deke")
 
 
@@ -2373,22 +2373,22 @@ func test_containment_deke_fakes_then_cuts() -> void:
 	sm._carrier.deke_cut_dir = Vector2(-0.7, -0.7)
 	var i := InputState.new()
 	sm._poke_evade_modulate_steering(i, s, Vector3.ZERO)
-	assert_true(sm._poke_evade_deking, "the containment stalemate commits the deke")
+	assert_true(sm._poke_evade.deking, "the containment stalemate commits the deke")
 	assert_almost_eq(i.move_vector.x, 1.0, 0.01, "fake phase thrusts the sell side")
 	var fake_mouse: Vector3 = sm._deke_mouse_target(Vector3.ZERO)
 	assert_gt(fake_mouse.x, 0.5, "the cursor sells the fake WITH the puck")
 	# Wind the window down to the cut phase.
-	sm._poke_evade_active_ticks = Agent.DEKE_CUT_TICKS
+	sm._poke_evade.active_ticks = SkaterAgentPokeEvade.DEKE_CUT_TICKS
 	var i2 := InputState.new()
 	sm._poke_evade_modulate_steering(i2, s, Vector3.ZERO)
 	assert_lt(i2.move_vector.x, 0.0, "cut phase explodes across")
 	var cut_mouse: Vector3 = sm._deke_mouse_target(Vector3.ZERO)
 	assert_lt(cut_mouse.x, 0.0, "the cursor snaps across for the cut")
 	# Expire → the deliberate deke cooldown arms.
-	sm._poke_evade_active_ticks = 1
+	sm._poke_evade.active_ticks = 1
 	sm._poke_evade_modulate_steering(InputState.new(), s, Vector3.ZERO)
-	assert_false(sm._poke_evade_deking, "the maneuver ends with the window")
-	assert_eq(sm._poke_evade_cooldown_ticks, Agent.DEKE_COOLDOWN_TICKS,
+	assert_false(sm._poke_evade.deking, "the maneuver ends with the window")
+	assert_eq(sm._poke_evade.cooldown_ticks, SkaterAgentPokeEvade.DEKE_COOLDOWN_TICKS,
 			"dekes pace at the longer cooldown")
 
 
@@ -2399,8 +2399,8 @@ func test_no_deke_without_the_carrier_read() -> void:
 	sm._carrier.deke_go = false
 	var i := InputState.new()
 	sm._poke_evade_modulate_steering(i, s, Vector3.ZERO)
-	assert_false(sm._poke_evade_deking)
-	assert_eq(sm._poke_evade_active_ticks, 0)
+	assert_false(sm._poke_evade.deking)
+	assert_eq(sm._poke_evade.active_ticks, 0)
 
 
 # ── Own-net blade discipline (_deflect_safe_aim_dir) ─────────────────────────

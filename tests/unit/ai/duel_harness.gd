@@ -300,10 +300,10 @@ func step() -> void:
 			tick_ai_us += us
 		else:
 			s.agent.dispatch(s.input, snapshot)
-		if s.agent._poke_evade_deking:
+		if s.agent._poke_evade.deking:
 			deke_fired = true
 			dekes_by_peer[s.peer_id] = true
-		if s.agent._poke_evade_active_ticks > 0:
+		if s.agent._poke_evade.active_ticks > 0:
 			evades_by_peer[s.peer_id] = true
 	# Collect one-timer readiness into the brains after dispatch — the write moved
 	# off _set_one_timer_ready for threading (AICoordinator does the same on the

@@ -47,7 +47,7 @@ const _SIZE_LIMIT: int = 800
 const _SIZE_SLACK: int = 40
 
 const _SIZE_ALLOWANCE: Dictionary[String, int] = {
-	"res://Scripts/ai/skater_agent_state_machine.gd": 4930,
+	"res://Scripts/ai/skater_agent_state_machine.gd": 4701,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
 	"res://Scripts/game/game_manager.gd": 5787,
 	"res://Scripts/domain/ai/action_scoring.gd": 2026,

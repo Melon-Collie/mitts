@@ -60,3 +60,11 @@ const EVADE_CARRY_HANDLE_M: float = 0.9
 # power` as linear velocity) — the shot speed a read assumes for a shooter whose
 # build it doesn't know.
 const WRISTER_SHOT_SPEED_M_S: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
+
+
+# How far inside the boards the carry mouse target is clamped
+# (GameRules.clamp_to_rink_inner). The blade IK chases the mouse, and a target at
+# the kickplate slams the stick into the wall and knocks the carried puck loose;
+# one blade length keeps the whole blade off the wall while still working the
+# puck tight along the boards.
+const CARRY_BLADE_WALL_MARGIN_M: float = GameRules.DEFAULT_BLADE_LENGTH_M

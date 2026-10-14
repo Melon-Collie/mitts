@@ -159,12 +159,6 @@ const CARRY_BEHIND_NET_CRADLE_M: float = 0.6
 const CARRY_BEHIND_NET_BAND_M: float = 0.6      # ramp band around the goal line
 const CARRY_BEHIND_NET_LATERAL_M: float = 1.0   # lateral reach past the frame side still cradled
 
-# How far inside the boards the carry mouse target is clamped
-# (GameRules.clamp_to_rink_inner). The blade IK chases the mouse, and a target at
-# the kickplate slams the stick into the wall and knocks the carried puck loose;
-# one blade length keeps the whole blade off the wall while still working the
-# puck tight along the boards.
-const CARRY_BLADE_WALL_MARGIN_M: float = GameRules.DEFAULT_BLADE_LENGTH_M
 
 # Stickhandling: shift the carrier's mouse perpendicular to the attacking-goal
 # aim, AWAY from the nearest opposing blade, measured blade-tip to puck (as the
@@ -211,40 +205,6 @@ const CARRY_PROTECT_MAX_TURN_DEG: float = 90.0
 # (a hard on/off) ramps the blade instead of snapping it. Feel tunable.
 const CARRY_PROTECT_SMOOTH_RATE: float = 8.0
 
-# Poke-evade: when an opponent's blade reaches poke range from the front, commit
-# for a brief window to a full-thrust CUT toward the directed seam, or — when the
-# carrier's re-eval read the braked hold as better — a BRAKE CHECK, so the poke
-# timed for our current trajectory swings through empty ice. Front-hemisphere
-# only: a defender chasing from behind closes faster on a sideways cut.
-const POKE_EVADE_TRIGGER_REACH_M: float = 2.5
-const POKE_EVADE_MIN_CLOSING_VEL_M_S: float = 1.0
-const POKE_EVADE_MIN_SELF_SPEED_M_S: float = 2.0
-# Long enough for a visible cut (lateral velocity reaches a few m/s), short
-# enough that anchor attraction pulls us back on line.
-const POKE_EVADE_ACTIVE_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 3 / 20   # ~150 ms
-const POKE_EVADE_ACTIVE_S: float = float(POKE_EVADE_ACTIVE_TICKS) / _PhysicsConstants.PHYSICS_TICK
-# Cooldown after an evade, so a defender hanging in our face doesn't loop us into
-# a constant cut.
-const POKE_EVADE_COOLDOWN_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 2   # ~500 ms
-# Least distance to the evasion seam that still defines a deke direction; under
-# it the model is saying HOLD, so no evade triggers. There is deliberately no
-# blind-perpendicular fallback: without a seam read (always, on Easy's closed
-# protect gate) there is no deke.
-const POKE_EVADE_SEAM_MIN_DIST_M: float = 0.75
-# BRAKE-CHECK window: the brake is held for the evasion horizon the maneuver was
-# priced over (AICarrySpace.EVADE_HORIZON_S). The exit needs no window: a beaten
-# man drops out of the threat-gated repel, so anchor attraction bursts past him.
-const POKE_EVADE_BRAKE_TICKS: int = int(
-		AICarrySpace.EVADE_HORIZON_S * _PhysicsConstants.PHYSICS_TICK)   # ~400 ms
-
-# FAKE-THEN-CUT deke windows, in ticks, derived from AICarrySpace.DEKE_FAKE_S /
-# DEKE_CUT_S so the gesture performed is the one the eval priced. The cooldown is
-# longer than the plain cut's so dekes read as deliberate, occasional moves.
-const DEKE_FAKE_TICKS: int = int(
-		AICarrySpace.DEKE_FAKE_S * _PhysicsConstants.PHYSICS_TICK)
-const DEKE_CUT_TICKS: int = int(
-		AICarrySpace.DEKE_CUT_S * _PhysicsConstants.PHYSICS_TICK)
-const DEKE_COOLDOWN_TICKS: int = _PhysicsConstants.PHYSICS_TICK   # ~1 s
 
 # ── Defensive poke jab ────────────────────────────────────────────────────────
 # The host strips the carrier when a defender's blade SWEEPS THROUGH the puck
@@ -626,25 +586,6 @@ var _carry_protect_offset_smooth: Vector3 = Vector3.ZERO
 # entry.
 var _carry_has_man: bool = false
 
-# Poke-evade window and cooldown. While active, the evade overrides move_vector.
-# Both reset on CARRY entry.
-var _poke_evade_active_ticks: int = 0
-var _poke_evade_cooldown_ticks: int = 0
-# Cut direction LATCHED at trigger toward the carrier's directed evasion seam —
-# re-reading it per tick would spiral as our own velocity rotates mid-cut.
-# Non-zero whenever a CUT window is active; ZERO otherwise, including a BRAKE
-# window (which steers by _last_carry_anchor).
-var _poke_evade_dir: Vector2 = Vector2.ZERO
-# Maneuver LATCHED at trigger: TRUE = BRAKE CHECK, FALSE = the cut. From the
-# carrier's brake_check_favored mirror.
-var _poke_evade_braking: bool = false
-# Maneuver LATCHED at trigger: the FAKE-THEN-CUT deke. Phase splits on the
-# remaining active ticks (fake while > DEKE_CUT_TICKS, then the cut); both
-# directions latched from the carrier's manufactured-opening read at trigger
-# (a deke re-read mid-gesture would un-sell the fake).
-var _poke_evade_deking: bool = false
-var _deke_fake_dir: Vector2 = Vector2.ZERO
-var _deke_cut_dir: Vector2 = Vector2.ZERO
 
 # Defensive poke-jab window and cooldown (POKE_JAB_*).
 var _poke_jab_active_ticks: int = 0
@@ -892,6 +833,7 @@ var _ties_sticks: bool = true
 var _blocks_shots: bool = true
 var _shot_block := SkaterAgentShotBlock.new()
 var _board_play := SkaterAgentBoardPlay.new()
+var _poke_evade := SkaterAgentPokeEvade.new()
 # The FINISHER's raised blade (stick_lift_held, to tip an elevated shot) is set
 # only on dispatch ticks, so it is replayed on skipped ticks — otherwise it strobes
 # 1-in-dispatch_period and the lift blend never leaves ~0 on the slower tiers.
@@ -1026,6 +968,7 @@ func setup(peer_id: int, team_id: int, brain: TeamBrain, team_id_by_peer: Dictio
 	_caps_by_peer = caps_by_peer
 	_shot_block.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_board_play.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
+	_poke_evade.setup(peer_id, team_id, team_id_by_peer)
 	_is_left_handed = is_left_handed
 	# Stagger this bot's dispatch and role-argmax phases by peer id, so a full
 	# roster doesn't run every expensive re-eval on the SAME physics tick (host
@@ -2504,9 +2447,8 @@ func _aim_ring_toward(self_pos: Vector3, aim_world: Vector3) -> Vector3:
 # The sign is latched until the swing passes halfway or completes, or a per-tick
 # re-read would flip direction mid-sweep.
 const PROTECT_TURN_MIN_SWING_RAD: float = deg_to_rad(100.0)
-# A stick's poke reach off the swept puck (the same reach as
-# POKE_EVADE_TRIGGER_REACH_M).
-const PROTECT_TURN_THREAT_RADIUS_M: float = 2.5
+# A stick's poke reach off the swept puck.
+const PROTECT_TURN_THREAT_RADIUS_M: float = SkaterAgentPokeEvade.POKE_EVADE_TRIGGER_REACH_M
 # The long way must beat the short way's clearance by this much — a marginal
 # gain isn't worth the extra rotation time.
 const PROTECT_TURN_MARGIN_M: float = 0.5
@@ -3667,7 +3609,7 @@ func _carry_mouse_aim(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 	# ...and inside the boards (CARRY_BLADE_WALL_MARGIN_M), clamped after every
 	# offset above, none of which is wall-aware.
 	var on_ice: Vector2 = GameRules.clamp_to_rink_inner(
-			Vector2(target.x, target.z), CARRY_BLADE_WALL_MARGIN_M)
+			Vector2(target.x, target.z), AIBotMechanics.CARRY_BLADE_WALL_MARGIN_M)
 	target.x = on_ice.x
 	target.z = on_ice.y
 	# ...and never THROUGH a net frame: the chord swings around the nearer post.
@@ -3725,186 +3667,21 @@ func _stickhandle_offset(snapshot: WorldSnapshot, self_pos: Vector3, forward_dir
 	return right_axis * magnitude
 
 
-# Poke-evade (see the POKE_EVADE_* constants): overrides steering for a brief
-# committed window — a CUT toward the carrier's directed evasion seam (latched
-# at trigger, _seam_cut_direction; no seam, no cut), a BRAKE CHECK when the
-# carrier's re-eval favours it, or the FAKE-THEN-CUT deke.
-#
-# Lifecycle: while active, drive the maneuver and count down, then start the
-# cooldown; during the cooldown, normal steering; otherwise scan for a trigger.
-#
-# Trigger (ALL must hold): own speed ≥ POKE_EVADE_MIN_SELF_SPEED_M_S (slower is
-# the deke's home, not the cut's); an opposing blade within
-# POKE_EVADE_TRIGGER_REACH_M of our puck, in our FRONT hemisphere by velocity;
-# RELATIVE closing ≥ POKE_EVADE_MIN_CLOSING_VEL_M_S — the carrier driving at a
-# waiting defender counts.
-func _poke_evade_modulate_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3) -> void:
-	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
-	if self_state == null:
-		return
-	var vel_xz := Vector2(self_state.velocity.x, self_state.velocity.z)
-	if _poke_evade_active_ticks > 0:
-		_drive_poke_evade_cut(input, self_pos, vel_xz)
-		# Decrement by the dispatch span: the window is sized in physics ticks.
-		_poke_evade_active_ticks -= _dispatch_period_ticks
-		if _poke_evade_active_ticks <= 0:
-			_poke_evade_active_ticks = 0
-			_poke_evade_cooldown_ticks = DEKE_COOLDOWN_TICKS \
-					if _poke_evade_deking else POKE_EVADE_COOLDOWN_TICKS
-			_poke_evade_braking = false
-			_poke_evade_deking = false
-		return
-	if _poke_evade_cooldown_ticks > 0:
-		_poke_evade_cooldown_ticks = maxi(0, _poke_evade_cooldown_ticks - _dispatch_period_ticks)
-		return
-	var speed: float = vel_xz.length()
-	if speed < POKE_EVADE_MIN_SELF_SPEED_M_S:
-		# Too slow for the cut (it reads as a wiggle), but the standstill duel
-		# against a patient container is the deke's home.
-		if _carrier.deke_go:
-			_start_deke(input, self_pos, vel_xz)
-		return
-	var forward: Vector2 = vel_xz / speed
-	# Same carried-puck point the stickhandle uses.
-	var forward_3d := Vector3(forward.x, 0.0, forward.y)
-	var carry_pos: Vector3 = self_pos + forward_3d * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
-	var trigger_threat: SkaterNetworkState = null
-	for peer_id: int in snapshot.skater_states:
-		if peer_id == _peer_id:
-			continue
-		if _team_id_by_peer.get(peer_id, -1) == _team_id:
-			continue
-		var opp_state: SkaterNetworkState = snapshot.skater_states[peer_id]
-		var threat_pos: Vector3 = opp_state.blade_contact_world
-		if threat_pos == Vector3.ZERO:
-			threat_pos = opp_state.position
-		var blade_to_puck: Vector3 = threat_pos - carry_pos
-		blade_to_puck.y = 0.0
-		if blade_to_puck.length() > POKE_EVADE_TRIGGER_REACH_M:
-			continue
-		# Front hemisphere by our VELOCITY, not facing: the poke is timed for
-		# where we're moving.
-		var to_opp_3d: Vector3 = opp_state.position - self_pos
-		to_opp_3d.y = 0.0
-		var to_opp_len: float = to_opp_3d.length()
-		if to_opp_len < 0.001:
-			continue
-		var to_opp_norm: Vector3 = to_opp_3d / to_opp_len
-		if to_opp_norm.x * forward.x + to_opp_norm.z * forward.y <= 0.0:
-			continue
-		# RELATIVE closing: skating into a stationary defender closes the gap as
-		# surely as one stepping up.
-		var closing: float = (self_state.velocity - opp_state.velocity).dot(to_opp_norm)
-		if closing < POKE_EVADE_MIN_CLOSING_VEL_M_S:
-			continue
-		trigger_threat = opp_state
-		break
-	if trigger_threat == null:
-		# CONTAINMENT trigger: a patient container never closes fast enough to
-		# register as a poke, so the deke commits here when the carrier's
-		# re-eval says a fake would manufacture an opening.
-		if _carrier.deke_go:
-			_start_deke(input, self_pos, vel_xz)
-		return
-	# Maneuver pick, latched for the window: a BRAKE CHECK against committed
-	# pressure; else the deke against patient pressure; else the cut toward
-	# the seam. No usable maneuver means no trigger: the window and cooldown
-	# are only spent on a committed move.
-	var braking: bool = _carrier.brake_check_favored
-	if not braking and _carrier.deke_go:
-		_start_deke(input, self_pos, vel_xz)
-		return
-	var cut_dir: Vector2 = _seam_cut_direction(self_pos)
-	if cut_dir == Vector2.ZERO and not braking:
-		return
-	_poke_evade_braking = braking
-	_poke_evade_dir = cut_dir
-	_poke_evade_active_ticks = POKE_EVADE_BRAKE_TICKS if braking \
-			else POKE_EVADE_ACTIVE_TICKS
-	_drive_poke_evade_cut(input, self_pos, vel_xz)
+# The poke-evade (SkaterAgentPokeEvade), only while carrying with no intent.
+func _poke_evade_modulate_steering(input: InputState, snapshot: WorldSnapshot,
+		self_pos: Vector3) -> void:
+	_poke_evade.modulate(input, snapshot, self_pos, _carrier, _protects_the_puck,
+			_last_carry_anchor, _upright_lateral_accel(), _dispatch_period_ticks)
 
 
-# The cut direction: toward the carrier's DIRECTED evasion seam (from the last
-# re-eval, re-based on the live body). The seam reads every defender's momentum,
-# so a charger's cut resolves behind him and a jockeying defender's past his
-# open side. ZERO when this tier doesn't protect the puck, there is no seam yet,
-# or the seam is underfoot.
-func _seam_cut_direction(self_pos: Vector3) -> Vector2:
-	if not _protects_the_puck:
-		return Vector2.ZERO
-	var seam: Vector3 = _carrier.evade_seam_world
-	if not seam.is_finite():
-		return Vector2.ZERO
-	var to_seam := Vector2(seam.x - self_pos.x, seam.z - self_pos.z)
-	if to_seam.length() < POKE_EVADE_SEAM_MIN_DIST_M:
-		return Vector2.ZERO
-	return to_seam.normalized()
-
-
-# Latch and start the FAKE-THEN-CUT deke: one committed window covering both
-# phases; the drive below splits them on the remaining ticks. Directions come
-# from the carrier's manufactured-opening read (same axis frame as the eval,
-# so the gesture performed is the gesture priced).
-func _start_deke(input: InputState, self_pos: Vector3, vel_xz: Vector2) -> void:
-	_poke_evade_deking = true
-	_deke_fake_dir = _carrier.deke_fake_dir
-	_deke_cut_dir = _carrier.deke_cut_dir
-	_poke_evade_dir = Vector2.ZERO
-	_poke_evade_active_ticks = DEKE_FAKE_TICKS + DEKE_CUT_TICKS
-	_drive_poke_evade_cut(input, self_pos, vel_xz)
-
-
-# One active-window tick of the committed maneuver. DEKE: thrust the fake side,
-# then across to the cut side (the cursor follows — _deke_mouse_target). BRAKE
-# CHECK: the real brake key with move_vector on the exit direction (the live
-# carry anchor), the brake-pivot's input shape. CUT: the latched seam direction.
-# Both cuts dig in the stance when the upright edges can't turn onto them inside
-# their window (AISteering.stance_cuts_onto).
-func _drive_poke_evade_cut(input: InputState, self_pos: Vector3, vel_xz: Vector2) -> void:
-	if _poke_evade_deking:
-		var cutting: bool = _poke_evade_active_ticks <= DEKE_CUT_TICKS
-		input.move_vector = _deke_cut_dir if cutting else _deke_fake_dir
-		input.stance_held = cutting and AISteering.stance_cuts_onto(
-				_deke_cut_dir, vel_xz, _upright_lateral_accel(), AICarrySpace.DEKE_CUT_S)
-		return
-	if _poke_evade_braking:
-		input.brake = true
-		input.stance_held = false
-		var exit := Vector2(_last_carry_anchor.x - self_pos.x,
-				_last_carry_anchor.z - self_pos.z)
-		if exit.length_squared() > 0.01:
-			input.move_vector = exit.normalized()
-		return
-	input.move_vector = _poke_evade_dir
-	input.stance_held = AISteering.stance_cuts_onto(_poke_evade_dir, vel_xz,
-			_upright_lateral_accel(), POKE_EVADE_ACTIVE_S)
+# The deke's carry-cursor override, or INF when no deke is running.
+func _deke_mouse_target(self_pos: Vector3) -> Vector3:
+	return _poke_evade.mouse_target(self_pos)
 
 
 # What the upright edges can turn: the movement core's turn_accel × our grip.
 func _upright_lateral_accel() -> float:
 	return GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2 * _self_lateral_grip
-
-
-# The deke's carry-cursor override: sell the fake WITH THE PUCK — the
-# defender's read tracks the puck, not the chest — then snap it across for
-# the cut; the pull through the wide ROM is the visible toe-drag. INF when no
-# deke is active (the normal carry aim runs). Board + net clamps keep the
-# blade legal against the walls and the cage.
-func _deke_mouse_target(self_pos: Vector3) -> Vector3:
-	if not _poke_evade_deking or _poke_evade_active_ticks <= 0:
-		return Vector3.INF
-	var dir: Vector2 = _deke_fake_dir \
-			if _poke_evade_active_ticks > DEKE_CUT_TICKS else _deke_cut_dir
-	if dir == Vector2.ZERO:
-		return Vector3.INF
-	var target := Vector3(
-			self_pos.x + dir.x * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M, 0.0,
-			self_pos.z + dir.y * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M)
-	var on_ice: Vector2 = GameRules.clamp_to_rink_inner(
-			Vector2(target.x, target.z), CARRY_BLADE_WALL_MARGIN_M)
-	target.x = on_ice.x
-	target.z = on_ice.y
-	return AINetObstacle.net_safe_blade_target(self_pos, target)
 
 
 # Defensive poke jab (or stick lift): the reach-in aim while one is active, else
@@ -4903,13 +4680,7 @@ func _set_state(s: State) -> void:
 			_carry_protect_gain_smooth = 0.0
 			_carry_protect_offset_smooth = Vector3.ZERO
 			_carry_has_man = false
-			_poke_evade_active_ticks = 0
-			_poke_evade_cooldown_ticks = 0
-			_poke_evade_dir = Vector2.ZERO
-			_poke_evade_braking = false
-			_poke_evade_deking = false
-			_deke_fake_dir = Vector2.ZERO
-			_deke_cut_dir = Vector2.ZERO
+			_poke_evade.reset()
 			_poke_jab_active_ticks = 0
 			_poke_jab_cooldown_ticks = 0
 			_stick_lift_hold_ticks = 0
