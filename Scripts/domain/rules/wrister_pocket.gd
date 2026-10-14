@@ -43,13 +43,19 @@ static func solve(out: Result, aim: Vector2, velocity: Vector2, facing: Vector2,
 	if aim.length_squared() < 0.000001:
 		return
 	var aim_dir: Vector2 = aim.normalized()
+	var stick_sign: float = _stick_sign(is_left_handed)
+	var aim_yaw: float = _yaw(aim_dir)
+	# No hold beats this, and a tie keeps the first: the search is done there.
+	var ceiling: float = maxf(1.0, backhand_coefficient)
 	var best: float = -1.0
 	for offset: float in _CANDIDATES:
+		if best >= ceiling:
+			break
 		var pocket: Vector2 = aim_dir.rotated(offset)
 		FacingRules.solve(facing_scratch, facing, pocket, velocity, false, false, facing_cfg)
-		var body: Vector2 = facing_scratch.target
-		WristerLoad.solve(load_scratch, _to_local(pocket, body), _to_local(aim_dir, body),
-				is_left_handed, load_cfg)
+		var body_yaw: float = _yaw(facing_scratch.target)
+		WristerLoad.solve_load(load_scratch, _bearing(_yaw(pocket), body_yaw, stick_sign),
+				_bearing(aim_yaw, body_yaw, stick_sign), load_cfg)
 		var share: float = WristerLoad.power_share(load_scratch.load,
 				load_scratch.is_backhand, unloaded_share, backhand_coefficient)
 		if share > best:
@@ -58,7 +64,7 @@ static func solve(out: Result, aim: Vector2, velocity: Vector2, facing: Vector2,
 			out.is_backhand = load_scratch.is_backhand
 			out.load = load_scratch.load
 			out.power_share = share
-			out.facing = body
+			out.facing = facing_scratch.target
 
 
 # Share of max_wrister_power a release toward `aim` carries with the puck at
@@ -67,13 +73,28 @@ static func solve(out: Result, aim: Vector2, velocity: Vector2, facing: Vector2,
 static func share_at(puck_offset: Vector2, aim: Vector2, facing: Vector2,
 		is_left_handed: bool, load_cfg: WristerLoad.Config, unloaded_share: float,
 		backhand_coefficient: float, load_scratch: WristerLoad.Result) -> float:
-	WristerLoad.solve(load_scratch, _to_local(puck_offset, facing), _to_local(aim, facing),
-			is_left_handed, load_cfg)
+	if aim.length_squared() < 0.000001:
+		load_scratch.is_backhand = false
+		load_scratch.load = 1.0
+	else:
+		var stick_sign: float = _stick_sign(is_left_handed)
+		var body_yaw: float = _yaw(facing)
+		WristerLoad.solve_load(load_scratch, _bearing(_yaw(puck_offset), body_yaw, stick_sign),
+				_bearing(_yaw(aim), body_yaw, stick_sign), load_cfg)
 	return WristerLoad.power_share(load_scratch.load, load_scratch.is_backhand,
 			unloaded_share, backhand_coefficient)
 
 
-# `world` (XZ) in the local frame of a body facing `facing`: forward −Z, right +X.
-static func _to_local(world: Vector2, facing: Vector2) -> Vector3:
-	var yaw: float = atan2(-facing.x, -facing.y)
-	return Vector3(world.x, 0.0, world.y).rotated(Vector3.UP, -yaw)
+# WristerLoad's bearing frame: left-positive yaw, stick side positive.
+static func _stick_sign(is_left_handed: bool) -> float:
+	return 1.0 if is_left_handed else -1.0
+
+
+# Yaw of a world XZ direction, 0 along −Z, left-positive.
+static func _yaw(v: Vector2) -> float:
+	return atan2(-v.x, -v.y)
+
+
+# A direction's bearing off a body at `body_yaw`, in WristerLoad's frame.
+static func _bearing(yaw: float, body_yaw: float, stick_sign: float) -> float:
+	return stick_sign * wrapf(yaw - body_yaw, -PI, PI)

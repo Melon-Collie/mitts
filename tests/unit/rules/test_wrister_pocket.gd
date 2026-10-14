@@ -8,6 +8,8 @@ const LEFT := Vector2(-1.0, 0.0)
 const RIGHT := Vector2(1.0, 0.0)
 const LEFTY: bool = true
 const RIGHTY: bool = false
+const UNLOADED: float = 0.6
+const BACKHAND: float = 0.75
 
 var _load_cfg := WristerLoad.Config.new()
 var _facing_cfg := FacingRules.Config.new()
@@ -65,3 +67,57 @@ func test_right_handed_mirrors() -> void:
 func test_no_aim_leaves_everything_alone() -> void:
 	_solve(Vector2.ZERO, AHEAD * 6.0, LEFTY)
 	assert_almost_eq(_out.power_share, 1.0, 0.001)
+
+
+# ── The bearing path matches the local-frame solve ───────────────────────────
+# The pocket reads the load straight from bearings; this is the long way round
+# it replaced (each vector rotated into the body's frame, WristerLoad.solve on
+# those), held against it on seeded random builds and situations.
+
+func _local(world: Vector2, body: Vector2) -> Vector3:
+	return Vector3(world.x, 0.0, world.y).rotated(Vector3.UP, -atan2(-body.x, -body.y))
+
+
+func _ref_share(puck: Vector2, aim: Vector2, body: Vector2, left: bool,
+		lr: WristerLoad.Result) -> float:
+	WristerLoad.solve(lr, _local(puck, body), _local(aim, body), left, _load_cfg)
+	return WristerLoad.power_share(lr.load, lr.is_backhand, UNLOADED, BACKHAND)
+
+
+func test_the_bearing_path_matches_the_local_frame_solve() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 0x90C7E7
+	var lr := WristerLoad.Result.new()
+	var fr := FacingRules.Result.new()
+	var worst_share: float = 0.0
+	var worst_pocket: float = 0.0
+	var worst_dir: float = 0.0
+	for _i: int in 2000:
+		var aim := Vector2.from_angle(rng.randf_range(-PI, PI))
+		var vel := Vector2.from_angle(rng.randf_range(-PI, PI)) * rng.randf_range(0.0, 9.0)
+		var facing := Vector2.from_angle(rng.randf_range(-PI, PI))
+		var left: bool = rng.randf() < 0.5
+		var puck := Vector2.from_angle(rng.randf_range(-PI, PI)) * rng.randf_range(0.1, 1.3)
+		worst_share = maxf(worst_share, absf(WristerPocket.share_at(puck, aim, facing, left,
+				_load_cfg, UNLOADED, BACKHAND, _load) - _ref_share(puck, aim, facing, left, lr)))
+		WristerPocket.solve(_out, aim, vel, facing, left, _load_cfg, _facing_cfg,
+				UNLOADED, BACKHAND, _facing, _load)
+		var best: float = -1.0
+		var second: float = -1.0
+		var best_dir := Vector2.ZERO
+		for offset: float in WristerPocket._CANDIDATES:
+			var pocket: Vector2 = aim.rotated(offset)
+			FacingRules.solve(fr, facing, pocket, vel, false, false, _facing_cfg)
+			var s: float = _ref_share(pocket, aim, fr.target, left, lr)
+			if s > best:
+				second = best
+				best = s
+				best_dir = pocket
+			elif s > second:
+				second = s
+		worst_pocket = maxf(worst_pocket, absf(_out.power_share - best))
+		if best - second > 1e-4:
+			worst_dir = maxf(worst_dir, _out.dir.distance_to(best_dir))
+	assert_lt(worst_share, 1e-5, "share_at")
+	assert_lt(worst_pocket, 1e-5, "the pocket's share")
+	assert_lt(worst_dir, 1e-5, "the pocket's bearing")

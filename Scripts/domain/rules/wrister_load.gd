@@ -55,15 +55,21 @@ static func solve(out: Result, puck_local: Vector3, aim_local: Vector3,
 	# is positive for both.
 	var stick_sign: float = 1.0 if is_left_handed else -1.0
 	var puck_bearing: float = stick_sign * atan2(-puck_local.x, -puck_local.z)
-	var aim_bearing: float = stick_sign * atan2(-aim_local.x, -aim_local.z)
+	solve_load(out, puck_bearing, stick_sign * atan2(-aim_local.x, -aim_local.z), cfg)
+	out.wound_yaw = stick_sign * wound_bearing(puck_bearing, out.is_backhand, cfg)
 
+
+# The hand and the load alone (no wound yaw), from the puck's and the aim's
+# bearings already in the shooter's frame: left-positive yaw off forward, flipped
+# for a right-hander so the stick side is positive.
+static func solve_load(out: Result, puck_bearing: float, aim_bearing: float,
+		cfg: Config) -> void:
 	# A forehand moves the puck toward the off side (decreasing bearing), so its
 	# tangent at the puck is the bearing a quarter-turn back.
 	var forehand_alignment: float = -sin(aim_bearing - puck_bearing)
 	out.is_backhand = forehand_alignment < 0.0
 	out.load = alignment_share(absf(forehand_alignment), cfg.full_arc_rad) \
 			* coil_share(puck_bearing, out.is_backhand, cfg)
-	out.wound_yaw = stick_sign * wound_bearing(puck_bearing, out.is_backhand, cfg)
 
 
 # |cos| of the angle between the shot and the tangent → 0..1: full inside the
