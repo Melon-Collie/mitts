@@ -156,3 +156,25 @@ func test_a_hanging_elbow_goes_back_only_beside_the_trunk() -> void:
 	var boxed: Vector3 = TwoBoneIK.solve_elbow_hanging(shoulder, hand, 0.38, 0.38,
 			Vector3.FORWARD, Vector3.RIGHT)
 	assert_lte(boxed.z, shoulder.z + 0.001, "with no clearance it may never go back")
+
+
+func test_a_forearm_limit_raises_the_elbow_only_as_far_as_it_needs() -> void:
+	# A hand held high in front: hanging lays the forearm near flat, so the limit
+	# lifts the elbow until the forearm drops to the hand within it.
+	var shoulder := Vector3(0.31, 1.06, 0.0)
+	var hand := Vector3(0.30, 0.68, -0.47)
+	var limit: float = deg_to_rad(60.0)
+	var hung: Vector3 = TwoBoneIK.solve_elbow_hanging(shoulder, hand, 0.38, 0.38,
+			Vector3.FORWARD, Vector3.RIGHT, 0.11)
+	assert_gt((hand - hung).angle_to(Vector3.DOWN), limit, "hanging, the forearm lies flatter")
+	var held: Vector3 = TwoBoneIK.solve_elbow_hanging(shoulder, hand, 0.38, 0.38,
+			Vector3.FORWARD, Vector3.RIGHT, 0.11, limit)
+	assert_lte((hand - held).angle_to(Vector3.DOWN), limit + 0.001, "the limit holds")
+	assert_gt(held.y, hung.y, "by raising the elbow")
+	# A low hand whose hanging forearm is already within the limit is untouched.
+	var low := Vector3(0.46, 0.65, -0.35)
+	var s2 := Vector3(0.23, 1.17, -0.21)
+	assert_eq(TwoBoneIK.solve_elbow_hanging(s2, low, 0.38, 0.38, Vector3.FORWARD,
+			Vector3.RIGHT, 0.11, limit),
+			TwoBoneIK.solve_elbow_hanging(s2, low, 0.38, 0.38, Vector3.FORWARD,
+			Vector3.RIGHT, 0.11), "a hanging elbow that already allows it stays put")

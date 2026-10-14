@@ -191,16 +191,21 @@ const ARM_FOREARM_M: float = 0.38
 const SHOULDER_OFFSET := Vector3(0.23, 0.24, 0.0)
 
 # The blocker is a glove on the arm (Goalie._seat_blocker): the hand is posed,
-# the elbow comes out to the side so the forearm drops near straight down to it
-# (TwoBoneIK.solve_elbow_raised), and the board runs along the forearm's outer
-# side, its finger end at the hand, its face rotated out from the shooter by
-# BLOCKER_FACE_OUTWARD_DEG — "blocker rotated outwards slightly", the coaching
-# cue for steering rebounds to the corner. Where the board's centre sits: back
-# from the grip along the forearm, and out off its outer side, clear of the
-# forearm's padding.
+# the elbow hangs (TwoBoneIK.solve_elbow_hanging), and the board stands on the
+# back of the hand, its finger end at the grip, its face rotated out from the
+# shooter by BLOCKER_FACE_OUTWARD_DEG — "blocker rotated outwards slightly", the
+# coaching cue for steering rebounds to the corner. Where the board's centre
+# sits: back from the grip toward the wrist, and out off the back of the hand,
+# clear of the forearm's padding.
 const BLOCKER_BOARD_ALONG_M: float = 0.06
 const BLOCKER_BOARD_OUT_M: float = 0.09
 const BLOCKER_FACE_OUTWARD_DEG: float = 15.0
+# How far the wrist turns the board off the forearm toward upright: a hand held
+# out in front reaches forward and down, and the wrist stands the board back up
+# square to the shooter. A gripping wrist's flexion, inside its ~80° range. A
+# forearm laid flatter than this cannot stand the board, so the elbow rises
+# instead — which is what a blocker held high does.
+const BLOCKER_WRIST_COCK_MAX_DEG: float = 60.0
 
 
 # Depth (goalie-local z, forward negative) that puts a hand at (`hand_x`,
