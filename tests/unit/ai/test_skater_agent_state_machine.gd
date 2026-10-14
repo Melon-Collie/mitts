@@ -1990,6 +1990,13 @@ func _protect_snap(self_pos: Vector3, opp_pos: Vector3) -> WorldSnapshot:
 	return s
 
 
+func test_a_left_hander_s_holds_read_left_handed_from_the_first_build() -> void:
+	sm._handedness_perp_sign = 1.0
+	var s := _protect_snap(Vector3.ZERO, Vector3(0, 0, -30))
+	sm._build_role_context(s, Vector3.ZERO, s.skater_states[SELF_ID])
+	assert_true(sm._holds.is_left_handed)
+
+
 func test_protect_turn_shortest_in_open_ice() -> void:
 	var s := _protect_snap(Vector3.ZERO, Vector3(0, 0, -30))   # opponent far away
 	# Facing +z (angle 0), target ~172° around via the +x side.

@@ -2260,8 +2260,8 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	ctx.self_blade_speed = _self_blade_speed
 	ctx.self_arc_rate = _mouse_arc_rate_rad_s
 	ctx.self_backhand_power_coefficient = _self_backhand_coefficient
-	_holds.configure_from(ctx)
 	ctx.self_forehand_perp_sign = _handedness_perp_sign
+	_holds.configure_from(ctx)
 	ctx.self_stagger_timer = self_state.stagger_timer if self_state != null else 0.0
 	ctx.pursuit_standoff_m = _pursuit_standoff_m
 	ctx.pass_speed_scale = _pass_speed_scale
