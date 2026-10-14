@@ -123,31 +123,6 @@ const HYSTERESIS_PENALTY_M: float = 1.0
 # there are no anchor constants here for any state.
 
 
-# Returns the list of slots for a given state, in canonical order.
-# CARRIER (if applicable) is the only fixed-resolution slot — all
-# others are filled by the permutation enumeration.
-static func slots_for_state(state: int) -> Array[int]:
-	match state:
-		AIPossessionState.State.DZONE:
-			return [Slot.PRESSURE, Slot.MARK]
-		AIPossessionState.State.OZONE:
-			return [Slot.CARRIER, Slot.FINISHER, Slot.SUPPORT]
-		AIPossessionState.State.TRANS_OFFENSE:
-			return [Slot.CARRIER, Slot.OUTLET, Slot.SUPPORT]
-		AIPossessionState.State.BREAKOUT:
-			return [Slot.CARRIER, Slot.BREAKOUT_STRONG, Slot.BREAKOUT_WEAK]
-		AIPossessionState.State.FORECHECK:
-			return [Slot.F1_PRESSURE, Slot.F2_MID, Slot.F3_HIGH]
-		AIPossessionState.State.TRANS_DEFENSE:
-			return [Slot.RUSH_D1, Slot.TRACK_PUCK, Slot.TRACK_MID]
-		AIPossessionState.State.NEUTRAL:
-			return [Slot.CHASE, Slot.FLANK_L, Slot.FLANK_R]
-		_:
-			return []
-
-
-
-
 # Assigns each teammate to a slot. Returns Dictionary[peer_id, Slot].
 #
 # Per-state semantic-query assignment (every "soonest" below is the

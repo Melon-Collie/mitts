@@ -1579,32 +1579,6 @@ func test_in_motion_toward_slot_scores_higher_than_stationary() -> void:
 			"in-motion bot rushing into slot should score the release-pos spot, beating the stationary same-pos shot")
 
 
-func test_decide_carry_intent_clears_fire_flags() -> void:
-	# Force CARRY intent, verify decide() returns a RoleDecision with
-	# all fire flags false.
-	var c := AIRoleCarrier.new()
-	var ctx: RoleContext = _make_ctx(Vector3(0.0, 0.0, -22.0))
-	c.decide(ctx)  # let _pick_action run once
-	c.intended_action = AIRoleCarrier.INTENT_CARRY  # force CARRY
-	# Don't trigger another _pick_action — bump cooldown back up so
-	# the next decide() is a pure cached return.
-	# (We can't access _pick_action_cooldown directly; just trust that
-	# the next decide() runs another _pick_action which re-decides.
-	# Instead, construct a fresh AIRoleCarrier and inspect after one
-	# decide, then check the returned decision's flags directly.)
-	var d: RoleDecision = c.decide(ctx)
-	# Whichever intent wins, the corresponding flag must be set
-	# correctly and the other flags must be false.
-	if d.shoot_intent:
-		assert_false(d.pass_intent)
-	elif d.pass_intent:
-		assert_false(d.shoot_intent)
-	else:
-		# CARRY case — both fire flags must be false.
-		assert_false(d.shoot_intent)
-		assert_false(d.pass_intent)
-
-
 func test_zero_value_fire_does_not_win_in_own_zone() -> void:
 	# Carrier buried deep in its own end (z = +22, ~48 m from the opp
 	# goal at z = -26.65). Shoot/quick-shot score 0 (far past

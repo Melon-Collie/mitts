@@ -643,7 +643,6 @@ var _mouse_arc_rate_rad_s: float = MOUSE_ARC_RATE_RAD_S
 
 # ── Owned state ──────────────────────────────────────────────────────────────
 var _state: State = State.OFF_PUCK
-var _ticks_in_state: int = 0
 # Previous tick's brake-pivot decision — the hysteresis memory for
 # AISteering.should_brake (engage at BRAKE_PIVOT_ANGLE_DEG, hold until
 # BRAKE_PIVOT_RELEASE_ANGLE_DEG or the speed floor). Self-corrects within a
@@ -1816,7 +1815,6 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 	# reacts to OTHERS' possession changes a beat late.
 	var have_puck: bool = (snapshot.real_puck_carrier_peer_id == _peer_id)
 	_update_loose_reaction_clock(snapshot, input.delta)
-	_ticks_in_state += 1
 	_update_engagement_cooldown(snapshot, self_state)
 	# Per-skater acceleration feeds receiver lead in pass scoring + PASS_PRESSED
 	# aim. Prefer the host's shared per-frame cache (computed once for all bots
@@ -2842,11 +2840,6 @@ static func _board_normal_and_gap(xz: Vector2) -> Vector3:
 	return Vector3(inward.x / inset, probe_margin - inset, inward.y / inset)
 
 
-# Is this point close enough to the boards that the rim is played against them?
-static func _in_wall_band(xz: Vector2) -> bool:
-	return _board_normal_and_gap(xz).y <= WALL_KILL_BAND_M
-
-
 # Pushes a boards-hugging aim point out ONTO the inner wall surface, so the
 # blade seals against the glass instead of leaving the puck a gap behind it.
 # Returns `point` untouched when it isn't inside WALL_KILL_BAND_M.
@@ -3667,9 +3660,6 @@ func _state_shoot_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: 
 		# and held for the charge. A shuffling goalie cannot flip the
 		# chosen arc mid-swing because the endpoint offsets are frozen at
 		# tick 0; no per-tick aim recompute exists.
-		var forehand_perp_init: Vector3 = Vector3(
-				aim_dir_init.z * _handedness_perp_sign, 0.0, -aim_dir_init.x * _handedness_perp_sign)
-
 		# Wind-up side: the hand the load reads from where the puck sits.
 		_shoot_side_sign = 1.0
 		if self_state != null:
@@ -6610,7 +6600,6 @@ func _set_state(s: State) -> void:
 			_stick_lift_press_pending = false
 			_carrier.clear_intent()
 		_state = s
-		_ticks_in_state = 0
 		# Force the next dispatch to run the full state handler so the
 		# new state starts from a fresh decision rather than reusing the
 		# previous state's cached move_vector / aim target.
@@ -6623,6 +6612,5 @@ func _set_state(s: State) -> void:
 
 func _reset_to_off_puck() -> void:
 	_state = State.OFF_PUCK
-	_ticks_in_state = 0
 	_pass_target_peer_id = -1
 	_carrier.reset()

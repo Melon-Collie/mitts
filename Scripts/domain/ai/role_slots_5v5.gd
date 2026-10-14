@@ -108,42 +108,6 @@ static func is_zone_slot(slot: int) -> bool:
 			or slot == AIRoleSlots.Slot.ZONE_W_WEAK
 
 
-# Canonical slot list per state (mirrors AIRoleSlots.slots_for_state).
-static func slots_for_state(state: int) -> Array[int]:
-	match state:
-		AIPossessionState.State.DZONE:
-			return [AIRoleSlots.Slot.ZONE_D_STRONG, AIRoleSlots.Slot.ZONE_D_WEAK,
-					AIRoleSlots.Slot.ZONE_C, AIRoleSlots.Slot.ZONE_W_STRONG,
-					AIRoleSlots.Slot.ZONE_W_WEAK]
-		AIPossessionState.State.OZONE:
-			return [AIRoleSlots.Slot.CARRIER, AIRoleSlots.Slot.POINT_STRONG,
-					AIRoleSlots.Slot.POINT_WEAK, AIRoleSlots.Slot.NET_FRONT,
-					AIRoleSlots.Slot.HIGH_SLOT]
-		AIPossessionState.State.TRANS_OFFENSE:
-			return [AIRoleSlots.Slot.CARRIER, AIRoleSlots.Slot.DVALVE,
-					AIRoleSlots.Slot.WIDE_L, AIRoleSlots.Slot.WIDE_R,
-					AIRoleSlots.Slot.TRAILER]
-		AIPossessionState.State.BREAKOUT:
-			return [AIRoleSlots.Slot.CARRIER, AIRoleSlots.Slot.BREAKOUT_D2,
-					AIRoleSlots.Slot.BREAKOUT_STRONG, AIRoleSlots.Slot.BREAKOUT_C,
-					AIRoleSlots.Slot.BREAKOUT_STRETCH]
-		AIPossessionState.State.FORECHECK:
-			return [AIRoleSlots.Slot.F1_PRESSURE, AIRoleSlots.Slot.DP_STRONG,
-					AIRoleSlots.Slot.DP_WEAK, AIRoleSlots.Slot.F2_STRONG,
-					AIRoleSlots.Slot.F2_WEAK]
-		AIPossessionState.State.TRANS_DEFENSE:
-			return [AIRoleSlots.Slot.RUSH_D1, AIRoleSlots.Slot.RUSH_D2,
-					AIRoleSlots.Slot.TRACK_PUCK,
-					AIRoleSlots.Slot.TRACK_MID_STRONG,
-					AIRoleSlots.Slot.TRACK_MID_WEAK]
-		AIPossessionState.State.NEUTRAL:
-			return [AIRoleSlots.Slot.CHASE, AIRoleSlots.Slot.DBACK_L,
-					AIRoleSlots.Slot.DBACK_R, AIRoleSlots.Slot.FLANK_L,
-					AIRoleSlots.Slot.FLANK_R]
-		_:
-			return []
-
-
 # Assigns each teammate to a 5v5 slot. Same contract as AIRoleSlots.assign
 # plus `position_by_peer` (peer_id → lobby team_slot). Returns
 # Dictionary[peer_id, AIRoleSlots.Slot].

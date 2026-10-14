@@ -112,11 +112,6 @@ var wrister_unloaded_share: float = 0.6
 var weight: float = 1.0
 var body_check_transfer: float = 0.45
 
-# Active brace against being put down. The live collision multiplies a
-# braced victim's absorbed transfer by this; the AI reads it to model how hard a
-# specific OPPONENT is to knock off the puck.
-var body_check_brace: float = 0.4
-
 # How far the carrier holds/protects the puck off its body while HANDLING it —
 # the reach that sets how tight an evasion seam it can thread (best_evade_point).
 # Scaled by Hands via the real dangle lever (max_blade_speed): a faster blade

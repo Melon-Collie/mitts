@@ -255,19 +255,6 @@ static func _best_high_rung(dist: float, shot_speed_m_s: float,
 	return best_level
 
 
-# Horizontal pace of the full-power release on the chosen rung from `dist`,
-# or 0.0 when the band is structurally closed (no rung lands in it).
-static func _high_band_pace(dist: float, shot_speed_m_s: float,
-		loft_tans: Vector3 = DEFAULT_LOFT_TANS, goalie_dist: float = -1.0,
-		goalie_down: bool = false) -> float:
-	var level: int = _best_high_rung(dist, shot_speed_m_s, loft_tans,
-			goalie_dist, goalie_down)
-	if level == ShotMechanics.ELEVATION_FLAT:
-		return 0.0
-	var tan_a: float = loft_tans[level - ShotMechanics.ELEVATION_LOW]
-	return shot_speed_m_s / sqrt(1.0 + tan_a * tan_a)
-
-
 # The rung a hole's shot flies: FLAT along the ice for the low bands, the
 # posture-picked rung for a HIGH hole (ELEVATION_FLAT there means the band is
 # structurally closed — no rung clears his pads without missing high). Callers
@@ -297,19 +284,6 @@ static func _rung_arrival(level: int, dist: float, shot_speed_m_s: float,
 		return 0.0
 	return _arrival_height(dist, shot_speed_m_s,
 			loft_tans[level - ShotMechanics.ELEVATION_LOW])
-
-
-# Horizontal pace (m/s) of a shot at hole band `band` over `dist` to the net —
-# HIGH holes fly the full-pace contact-point arc (0.0 when the band is
-# structurally closed), FLAT bands the committed full pace. The five-hole rides
-# the LOW band. Divides the shooter→goalie gap for the reach budget (t_reach).
-static func _band_pace(band: int, dist: float, shot_speed_m_s: float,
-		loft_tans: Vector3 = DEFAULT_LOFT_TANS, goalie_dist: float = -1.0,
-		goalie_down: bool = false) -> float:
-	if band == HOLE_BAND_HIGH:
-		return _high_band_pace(dist, shot_speed_m_s, loft_tans, goalie_dist,
-				goalie_down)
-	return maxf(shot_speed_m_s, 1.0)
 
 
 # The goalie's covered half-width (m) for a band, given the READ budget
@@ -873,7 +847,6 @@ const LANE_DEFENDER_BODY_RADIUS_M: float = GameRules.OFFSIDE_LINE_SLACK
 # get wrister-charged for more pace — see PASS_CHARGE_SPEED_M_S /
 # expected_pass_speed).
 const WRISTER_SHOT_SPEED_M_S: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
-const SLAPPER_SHOT_SPEED_M_S: float = GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S
 const PASS_SPEED_M_S: float = GameRules.DEFAULT_QUICK_PASS_POWER_M_S
 
 # Target CLOSING speed at reception — the puck's speed in the RECEIVER'S frame
@@ -2957,8 +2930,8 @@ static func _friction_traverse_time(dist: float, v0: float) -> float:
 # Lane-clear factor in [0, 1] for a FIRED puck (shot or pass) — the
 # closest-approach reachability model (see the doc-block above the lane
 # constants). Public because the carrier's pass scoring uses it directly:
-# a pass is a fired puck, so it gets this model rather than the geometric
-# carry-path `path_clearance`.
+# a pass is a fired puck, so it gets this model rather than the carry-path
+# `AICarrySpace.carry_lane_clearance`.
 #
 # `puck_speed_m_s` is the actual speed the puck travels the segment —
 # shots ~30 m/s, passes ~14–20 m/s. Faster pucks leave defenders less
@@ -3283,10 +3256,6 @@ static func potential_realization_discount(pos: Vector3,
 # than conceding at the dump spot. The pieces below are the grounded terms the
 # carrier assembles into that EV (see _best_dump).
 
-# Corner depth from the goal line for a dump-in target (a corner retrieval, not a
-# behind-the-net wrap).
-const DUMP_CORNER_DEPTH_M: float = 3.0
-const DUMP_RINK_INSET_M: float = 0.5
 # The head-start that turns a 50/50 loose-puck race into a near-sure recovery: a
 # stride, expressed as the TIME a stride buys at reference pace, because that is
 # the currency the race below is actually run in. The same physical measurement
@@ -3303,70 +3272,6 @@ const CHASE_CONTEST_MARGIN_S: float = CHASE_CONTEST_MARGIN_M / SKATER_REF_SPEED_
 # line, where a dump-in to the offensive zone can't be icing.
 static func past_center_toward_attack(pos: Vector3, attacking_goal: Vector3) -> bool:
 	return pos.z * signf(attacking_goal.z) > 0.0
-
-
-# How far UP-ICE of the carrier the DZ clear aims along the strong-side wall when
-# that beats centre ice: one full neutral zone of depth (blue line to blue line).
-# An aim DIRECTION, not a settle point — the rim fires toward it and keeps
-# running the boards.
-const DUMP_CLEAR_AHEAD_M: float = 2.0 * GameRules.BLUE_LINE_Z
-
-
-# DZ clear target: the strong-side boards (the side the carrier is on), at
-# whichever is FARTHER up-ice of centre ice and one neutral zone ahead of the
-# carrier. From deep in our end that's the classic centre-ice rim (unchanged);
-# for a carrier just inside the blue line the fixed z=0 point degenerated — the
-# "clear" banged the wall basically sideways, gaining nothing — so the target
-# extends up-ice to keep the clear a genuine forward diagonal from anywhere.
-# `up_ice_dir` is the direction OUT of our end (-own_goal_dir). `carrier_vel`
-# is the carrier's horizontal velocity — the strong side is read at the puck's
-# RELEASE-time lateral position (`_dump_side_sign`), so a carrier crossing centre
-# rims up the wall its momentum commits to instead of flipping to the wall behind
-# its body on the raw x-sign (the "dump sideways/behind me" artifact).
-static func dump_clear_target(carrier_pos: Vector3, up_ice_dir: float,
-		carrier_vel: Vector3 = Vector3.ZERO) -> Vector3:
-	var side: float = _dump_side_sign(carrier_pos, carrier_vel)
-	# Depth measured into OUR half (positive = our side of centre). Centre ice is
-	# 0; one NZ ahead of the carrier may land past centre (negative) — take the
-	# farther up-ice of the two.
-	var own_side_depth: float = -up_ice_dir * carrier_pos.z
-	var target_depth: float = minf(0.0, own_side_depth - DUMP_CLEAR_AHEAD_M)
-	return Vector3(
-			side * (GameRules.RINK_HALF_WIDTH - DUMP_RINK_INSET_M),
-			0.0,
-			-up_ice_dir * target_depth)
-
-
-# The strong-side sign used by the dump targets: the sign of the carrier's
-# lateral position at PUCK RELEASE (position led by velocity over the release
-# lookahead), so the choice of wall/corner is stable through centre ice. A
-# carrier drifting across the red line keeps the wall its momentum commits to
-# instead of flipping to the opposite board on the raw x-sign — the fix for
-# dumps that fired sideways or back across the carrier's body. Falls back to the
-# raw position sign (then +1) when the projected lateral is exactly centred.
-static func _dump_side_sign(carrier_pos: Vector3, carrier_vel: Vector3) -> float:
-	var lateral_at_release: float = carrier_pos.x \
-			+ carrier_vel.x * SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S
-	var side: float = signf(lateral_at_release)
-	if side == 0.0:
-		side = signf(carrier_pos.x)
-	if side == 0.0:
-		side = 1.0
-	return side
-
-
-# Dump-in target: the FAR offensive corner (opposite the carrier's side), near the
-# goal line — forces the defence to turn and retrieve with their back to the play.
-# `carrier_vel` reads the strong side at release time (see `_dump_side_sign`) so
-# the far corner doesn't flip cross-ice as the carrier drifts through centre.
-static func dump_in_target(carrier_pos: Vector3, attacking_goal: Vector3,
-		carrier_vel: Vector3 = Vector3.ZERO) -> Vector3:
-	var far_side: float = -_dump_side_sign(carrier_pos, carrier_vel)
-	var goal_dir: float = signf(attacking_goal.z)
-	return Vector3(
-			far_side * (GameRules.RINK_HALF_WIDTH - DUMP_RINK_INSET_M),
-			0.0,
-			attacking_goal.z - goal_dir * DUMP_CORNER_DEPTH_M)
 
 
 # Probability our team wins the race to a dumped puck: an ARRIVAL race to the
@@ -3499,26 +3404,6 @@ static func threat_local_shoot(
 	# inside the field), live lane/contest terms.
 	return score_shoot_threat_fielded(
 			opp_pos, our_net, our_goalie_pos, net_half_width, defenders,
-			defender_caps)
-
-
-# turnover_cost with the LOCAL threat surface (see threat_local_shoot) —
-# the absolute-price variant for competes that pair it with the
-# counter-rush term carrying the future-danger half.
-static func turnover_cost_local(
-		loss_point: Vector3,
-		loss_prob: float,
-		our_net: Vector3,
-		our_goalie_pos: Vector3,
-		net_half_width: float,
-		our_defenders: Array[Vector3],
-		defender_caps: Array = EMPTY_CAPS) -> float:
-	if not loss_point.is_finite():
-		return 0.0
-	if loss_prob <= 0.0:
-		return 0.0
-	return loss_prob * threat_local_shoot(
-			loss_point, our_net, our_goalie_pos, net_half_width, our_defenders,
 			defender_caps)
 
 

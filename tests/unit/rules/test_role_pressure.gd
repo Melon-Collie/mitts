@@ -71,8 +71,7 @@ func test_commits_body_check_on_reachable_hard_hit() -> void:
 	ctx.self_body_check_transfer = 0.61   # ~ +36% Physical
 	var d: RoleDecision = AIRolePressure.decide(ctx)
 	assert_true(d.commit_check, "heavy pressurer commits to a reachable hit")
-	assert_almost_eq(d.check_target.z, 20.0, 0.5, "drives at the carrier's body")
-	assert_eq(d.target_position, d.check_target, "steering target is the body intercept")
+	assert_almost_eq(d.target_position.z, 20.0, 0.5, "steers at the carrier's body intercept")
 
 
 func test_no_body_check_when_hit_is_soft() -> void:

@@ -89,7 +89,6 @@ static func _decide_puck(ctx: RoleContext) -> RoleDecision:
 		var check: AIBodyCheck.Result = AIRoleHelpers.evaluate_body_check(ctx)
 		if check.commit:
 			d.commit_check = true
-			d.check_target = check.target
 			d.target_position = check.target
 			return d
 

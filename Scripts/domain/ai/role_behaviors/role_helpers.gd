@@ -849,7 +849,7 @@ static func collect_teammates_excluding_self(ctx: RoleContext,
 
 
 # Returns parallel arrays of opponent positions and full state refs.
-# Positions feed AIActionScoring.score_pass / path_clearance; full
+# Positions feed AIActionScoring.score_pass; full
 # states feed AIActionScoring.time_to_arrive (needs velocity for
 # momentum-aware ETA).
 static func collect_opponents(ctx: RoleContext,

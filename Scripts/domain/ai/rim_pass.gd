@@ -38,9 +38,6 @@ const BANK_MAX_M: float = 10.0
 const GLANCE_MAX_RAD: float = deg_to_rad(40.0)
 # At most this many launches survive the bounds (scratch is preallocated).
 const MAX_LAUNCHES: int = 18
-# Aim distance handed to the release: the quick release fires toward a point,
-# and any point down the bearing is the same release.
-const AIM_DISTANCE_M: float = 20.0
 
 # Their keeper's behind-net rim stop, mirrored from GoalieController's puck-play
 # defaults (test_rim_pass.gd holds the two together): the rim pace window he

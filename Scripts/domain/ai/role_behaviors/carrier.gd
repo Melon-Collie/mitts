@@ -733,7 +733,6 @@ var _beam_lane: Array[float] = []
 var _beam_decay: Array[float] = []
 var _beam_safety: Array[float] = []
 var _beam_cost: Array[float] = []
-var _beam_time: Array[float] = []
 # Pass-1 running prune bound: stand-still's secured total, tightened to the
 # BEST one-ply total seen so far. Exact for the argmax even though it can
 # prune candidates out of the beam: a candidate whose ceiling ≤ the best
@@ -806,18 +805,7 @@ func decide(ctx: RoleContext) -> RoleDecision:
 	else:
 		_pick_action_cooldown -= step_ticks
 
-	# Populate and return the reused decision (see the doc-block above). Fire
-	# flags are reset each call so a stale intent from a prior tick can't leak.
 	_decision.target_position = last_carry_anchor
-	_decision.shoot_intent = false
-	_decision.pass_intent = false
-	_decision.pass_target_peer_id = -1
-	match intended_action:
-		INTENT_SHOOT:
-			_decision.shoot_intent = true
-		INTENT_PASS:
-			_decision.pass_intent = true
-			_decision.pass_target_peer_id = pass_target_peer_id
 	return _decision
 
 
@@ -2652,7 +2640,6 @@ func _best_carry(ctx: RoleContext, shoot_now_score: float,
 	_beam_decay.clear()
 	_beam_safety.clear()
 	_beam_cost.clear()
-	_beam_time.clear()
 	_beam_prune_bound = stand_total
 
 	# Behind-the-net ice is playable ice for a carrier ALREADY back there — see
@@ -3347,7 +3334,6 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 	_beam_decay.append(decay)
 	_beam_safety.append(safety)
 	_beam_cost.append(cost)
-	_beam_time.append(local_time)
 	return total
 
 

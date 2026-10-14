@@ -387,10 +387,10 @@ func test_a_puck_that_never_closes_reports_no_gate() -> void:
 	# Running for the far end with the whole rink to cross: nothing inside the
 	# horizon brings it closer than it already is, so there is nothing to set up
 	# for and gate_closes says so.
-	AITrajectory.solve_reception_gate(
+	var in_reach: bool = AITrajectory.solve_reception_gate(
 			Vector3(0, 0, 5), Vector3(0, 0, 20), Vector3.ZERO,
 			_GATE_REACH, _GATE_HORIZON_S, _GATE_STEPS)
-	assert_false(AITrajectory.gate_in_reach)
+	assert_false(in_reach)
 	assert_false(AITrajectory.gate_closes, "a departing puck is not a reception")
 
 

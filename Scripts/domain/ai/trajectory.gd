@@ -288,7 +288,6 @@ static func step_puck(pos: Vector3, vel: Vector3, dt: float) -> Transform3D:
 static var gate_point: Vector3 = Vector3.INF   # where the puck meets the reach
 static var gate_velocity: Vector3 = Vector3.ZERO   # its travel there (post-carom)
 static var gate_time_s: float = 0.0            # when it gets there
-static var gate_in_reach: bool = false         # true = a real entry, not just closest
 # The meet in the BODY's frame — the puck's offset from the body AT the meet,
 # i.e. where the blade has to be relative to the chest when the puck shows up.
 # `gate_point` is the same event in world coordinates, and the two consumers
@@ -311,7 +310,8 @@ static var gate_offset: Vector3 = Vector3.ZERO
 static var gate_closes: bool = false
 
 
-# Returns gate_in_reach. `reach` is the receiver's comfortable blade extension.
+# Returns true when the puck really enters the reach, false when the gate is
+# only its closest approach. `reach` is the receiver's comfortable blade extension.
 # `from_vel` rides the reach circle down the walk for `ride_s` (see above); ZERO
 # reproduces the frozen-body solve exactly.
 #
@@ -331,7 +331,6 @@ static func solve_reception_gate(puck_pos: Vector3, puck_vel: Vector3,
 	gate_point = puck_pos
 	gate_velocity = puck_vel
 	gate_time_s = 0.0
-	gate_in_reach = false
 	gate_closes = false
 	gate_offset = Vector3(puck_pos.x - from_pos.x, 0.0, puck_pos.z - from_pos.z)
 	if steps <= 0 or horizon_s <= 0.0:
@@ -353,7 +352,6 @@ static func solve_reception_gate(puck_pos: Vector3, puck_vel: Vector3,
 	var az: float = p.z - bz
 	var start_sq: float = ax * ax + az * az
 	if start_sq <= reach_sq:
-		gate_in_reach = true
 		gate_closes = true
 		return true
 	var best_sq: float = INF
@@ -385,7 +383,6 @@ static func solve_reception_gate(puck_pos: Vector3, puck_vel: Vector3,
 					gate_offset = Vector3(fx + dx * u, 0.0, fz + dz * u)
 					gate_velocity = v.lerp(qv, u)
 					gate_time_s = (float(i) + u) * dt
-					gate_in_reach = true
 					gate_closes = true
 					return true
 			# Closest approach on this segment, for the no-entry fallback.

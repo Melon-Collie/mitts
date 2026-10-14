@@ -1149,41 +1149,11 @@ const CARRY_PATH_CLEAR_RADIUS_M: float = 1.8
 const LANE_BEATEN_BEHIND_M: float = 0.1
 const LANE_BEATEN_PACE_M_S: float = 0.5
 
-# Public lane-clearance check for CARRY candidates — the bot is
-# physically traveling along this segment, not firing a puck through
-# it, so the reaction-window math from `lane_clear` doesn't apply.
-# A defender anywhere on the path is in the way regardless of flight
-# time. Returns 1.0 if no opponent is within CARRY_PATH_CLEAR_RADIUS_M of
-# the segment, ramps linearly to 0.0 as defender approaches the line.
-# Caller should project opponents forward by the candidate's expected
-# arrival time so the check reflects where defenders WILL BE when
-# the bot gets there.
-static func path_clearance(from: Vector3, to: Vector3,
-		projected_opponents: Array[Vector3]) -> float:
-	var dx: float = to.x - from.x
-	var dz: float = to.z - from.z
-	var line_len_sq: float = dx * dx + dz * dz
-	if line_len_sq < 0.01:
-		return 1.0
-	var min_perp_sq: float = INF
-	for p: Vector3 in projected_opponents:
-		var pdx: float = p.x - from.x
-		var pdz: float = p.z - from.z
-		var t: float = (pdx * dx + pdz * dz) / line_len_sq
-		if t <= 0.0 or t >= 1.0:
-			continue
-		var closest_x: float = from.x + t * dx
-		var closest_z: float = from.z + t * dz
-		var perp_x: float = p.x - closest_x
-		var perp_z: float = p.z - closest_z
-		var perp_sq: float = perp_x * perp_x + perp_z * perp_z
-		if perp_sq < min_perp_sq:
-			min_perp_sq = perp_sq
-	if min_perp_sq == INF:
-		return 1.0
-	var perp: float = sqrt(min_perp_sq)
-	return clampf(perp / CARRY_PATH_CLEAR_RADIUS_M, 0.0, 1.0)
-
+# Clearance of a CARRY path from `from` to `to`, reached in `arrival_time`:
+# 1.0 when no opponent projected to arrival is within CARRY_PATH_CLEAR_RADIUS_M
+# of the segment, ramping linearly to 0.0 on the line. The carrier is skating
+# this segment, not firing a puck through it, so `lane_clear`'s flight-time
+# reach does not apply — a defender anywhere on the path is in the way.
 static func carry_lane_clearance(from: Vector3, to: Vector3, arrival_time: float,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		max_speed: float = 0.0) -> float:
@@ -1198,13 +1168,10 @@ static func carry_lane_clearance(from: Vector3, to: Vector3, arrival_time: float
 		drive_speed = minf(drive_speed, max_speed)
 	var dir_x: float = dx / dist
 	var dir_z: float = dz / dist
-	# Same proximity read as path_clearance (project each defender to arrival and
-	# take the tightest perp to the straight segment) — EXCEPT we first drop a
-	# defender the carrier has genuinely BEATEN: one currently behind the carrier
-	# along the drive AND slower along it, so the carrier is pulling away and it
-	# can't strip a puck driving off. A man AHEAD (a wall, a head-on rush) or one
-	# MATCHING the drive pace is never dropped, so path_clearance's coverage of real
-	# obstacles — the container duel — is untouched; only the beaten trailer is shed.
+	# A defender the carrier has genuinely BEATEN is dropped first: behind along
+	# the drive AND slower along it, so it can't strip a puck driving off. A man
+	# AHEAD (a wall, a head-on rush) or one MATCHING the drive pace is never
+	# dropped.
 	var min_perp_sq: float = INF
 	var n: int = opponents.size()
 	var has_vels: bool = opponent_vels.size() == n
@@ -1231,25 +1198,3 @@ static func carry_lane_clearance(from: Vector3, to: Vector3, arrival_time: float
 	if min_perp_sq == INF:
 		return 1.0
 	return clampf(sqrt(min_perp_sq) / CARRY_PATH_CLEAR_RADIUS_M, 0.0, 1.0)
-
-
-# Momentum-aware time to arrive at `dest` from `from_pos` carrying
-# `from_velocity`. Two components:
-#   1. TRAVEL: dist / (SKATER_REF_SPEED + component of velocity along from→dest) —
-#      a skater already moving toward dest closes faster, one moving away slower.
-#      Clamped at MIN_TRAVEL_SPEED_M_S so reverse candidates stay finite.
-#   2. CROSS-MOMENTUM SHED: |v_perp| / accel — the velocity NOT pointed at dest is
-#      wasted speed the skater must first shed (re-accelerate back into line)
-#      before it truly closes. Controls are facing-agnostic (no turn arc; the
-#      crossover/backward thrust penalties are small), so this is a straight
-#      re-acceleration against the thrust budget, not a curve. Without it a 1-D
-#      projection prices a lateral fly-by's cut as a fast arrival it cannot
-#      actually settle into — the phantom that lets a carrier orbit the slot
-#      instead of shooting (see test_real_rush_sim).
-#
-# Used by AIRoleCarrier._best_carry to price carry candidates (a cut against the
-# grain of momentum costs real time, so the goalie reads square and the honest shot
-# wins), by AIController chase-intercept lookahead for opponent ETA, and by off-puck
-# role behaviors needing a momentum-aware ETA without inventing constants (e.g.,
-# SUPPORT's foot-race-home exposure check uses this for the threat opp's ETA home).
-#

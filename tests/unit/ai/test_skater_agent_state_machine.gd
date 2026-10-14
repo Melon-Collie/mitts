@@ -2537,10 +2537,10 @@ func test_wall_kill_band_catches_a_puck_riding_exactly_on_the_boards() -> void:
 	# flush against the glass has zero gap, moves nowhere, and is the MOST
 	# boards-hugging case there is. It still has to read as a wall play.
 	var flush := Vector2(GameRules.INNER_HALF_WIDTH, 3.0)
-	assert_true(SkaterAgentStateMachine._in_wall_band(flush),
-			"a puck flush on the boards is a wall kill")
-	assert_false(SkaterAgentStateMachine._in_wall_band(Vector2(0.0, 0.0)),
-			"centre ice is not")
+	assert_lte(SkaterAgentStateMachine._board_normal_and_gap(flush).y,
+			SkaterAgentStateMachine.WALL_KILL_BAND_M, "a puck flush on the boards is a wall kill")
+	assert_gt(SkaterAgentStateMachine._board_normal_and_gap(Vector2(0.0, 0.0)).y,
+			SkaterAgentStateMachine.WALL_KILL_BAND_M, "centre ice is not")
 
 
 func test_board_normal_points_into_the_rink() -> void:

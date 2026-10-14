@@ -41,69 +41,6 @@ func _resolver(skaters: Array) -> Dictionary:
 	return team_map
 
 
-# ─── Slot lists ─────────────────────────────────────────────────────────────
-
-func test_slots_for_dzone() -> void:
-	# One PRESSURE on the carrier, the rest MARK a man each.
-	var slots: Array = AIRoleSlots.slots_for_state(AIPossessionState.State.DZONE)
-	assert_true(slots.has(AIRoleSlots.Slot.PRESSURE))
-	assert_true(slots.has(AIRoleSlots.Slot.MARK))
-
-
-func test_slots_for_ozone() -> void:
-	var slots: Array = AIRoleSlots.slots_for_state(AIPossessionState.State.OZONE)
-	assert_true(slots.has(AIRoleSlots.Slot.CARRIER))
-	assert_true(slots.has(AIRoleSlots.Slot.FINISHER))
-	assert_true(slots.has(AIRoleSlots.Slot.SUPPORT))
-
-
-func test_slots_for_trans_do() -> void:
-	var slots: Array = AIRoleSlots.slots_for_state(AIPossessionState.State.TRANS_OFFENSE)
-	assert_true(slots.has(AIRoleSlots.Slot.CARRIER))
-	assert_true(slots.has(AIRoleSlots.Slot.OUTLET))
-	assert_true(slots.has(AIRoleSlots.Slot.SUPPORT))
-
-
-func test_slots_for_breakout() -> void:
-	# BREAKOUT (we possess in our own DZ) uses {CARRIER, BREAKOUT_STRONG,
-	# BREAKOUT_WEAK}: the carrier plus a strong-side-wall outlet and a
-	# weak-side reverse valve.
-	var slots: Array = AIRoleSlots.slots_for_state(AIPossessionState.State.BREAKOUT)
-	assert_true(slots.has(AIRoleSlots.Slot.CARRIER))
-	assert_true(slots.has(AIRoleSlots.Slot.BREAKOUT_STRONG))
-	assert_true(slots.has(AIRoleSlots.Slot.BREAKOUT_WEAK))
-
-
-func test_slots_for_trans_od() -> void:
-	# TRANS_DEFENSE is the layered rush defense compressed to three bodies
-	# (docs/transition-defense-plan.md §5.2): RUSH_D1 in front of the carrier
-	# holding a gap, TRACK_PUCK behind him running him down, TRACK_MID owning
-	# the middle lane. Man-marking is gone from transition — the structure is
-	# lanes and layers, and DZONE's coverage owns the settled three-man problem.
-	var slots: Array = AIRoleSlots.slots_for_state(AIPossessionState.State.TRANS_DEFENSE)
-	assert_true(slots.has(AIRoleSlots.Slot.RUSH_D1))
-	assert_true(slots.has(AIRoleSlots.Slot.TRACK_PUCK))
-	assert_true(slots.has(AIRoleSlots.Slot.TRACK_MID))
-	assert_false(slots.has(AIRoleSlots.Slot.MARK),
-			"transition no longer man-marks")
-	assert_false(slots.has(AIRoleSlots.Slot.PRESSURE),
-			"PRESSURE is not a transition role")
-
-
-func test_slots_for_neutral() -> void:
-	# NEUTRAL has its own role behaviors (CHASE, FLANK_L, FLANK_R)
-	# since the no-carrier scenario calls for "race to puck + hold
-	# support" semantics rather than the inverse-scoring defensive
-	# roles. See test_role_chase.gd / test_role_flank.gd for the
-	# behavior tests.
-	var slots: Array = AIRoleSlots.slots_for_state(AIPossessionState.State.NEUTRAL)
-	assert_true(slots.has(AIRoleSlots.Slot.CHASE))
-	assert_true(slots.has(AIRoleSlots.Slot.FLANK_L))
-	assert_true(slots.has(AIRoleSlots.Slot.FLANK_R))
-
-
-# ─── assign() ───────────────────────────────────────────────────────────────
-
 func test_assign_dzone_distributes_slots() -> void:
 	# PRESSURE = closest to the puck; the other two MARK a man each. Which
 	# marker ends up net-front vs. weak-side is decided downstream by the threat
@@ -218,15 +155,6 @@ func test_assign_breakout_strong_follows_strong_x_sign() -> void:
 	assert_eq(assignments[120], AIRoleSlots.Slot.BREAKOUT_STRONG,
 			"with strong side -X, the -X bot takes the strong outlet")
 	assert_eq(assignments[110], AIRoleSlots.Slot.BREAKOUT_WEAK)
-
-
-func test_slots_for_forecheck() -> void:
-	# FORECHECK (opp possesses in their own DZ) uses {F1_PRESSURE,
-	# F2_MID, F3_HIGH}: the 1-1-1 forecheck. No CARRIER (opp has it).
-	var slots: Array = AIRoleSlots.slots_for_state(AIPossessionState.State.FORECHECK)
-	assert_true(slots.has(AIRoleSlots.Slot.F1_PRESSURE))
-	assert_true(slots.has(AIRoleSlots.Slot.F2_MID))
-	assert_true(slots.has(AIRoleSlots.Slot.F3_HIGH))
 
 
 func test_assign_forecheck_f1_pressures_puck_f3_is_high() -> void:

@@ -103,7 +103,7 @@ func test_shoot_blocked_by_close_on_line_defender() -> void:
 	# they don't need to react, they're already there.)
 	var shooter := Vector3(0.0, 0.0, 15.0)
 	var aim := Vector3(0.0, 0.0, 26.65)
-	var slapper := AIActionScoring.SLAPPER_SHOT_SPEED_M_S
+	var slapper := GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S
 	var clear: float = AIActionScoring.lane_clear(shooter, aim, [], slapper)
 	var close_blocker: Array[Vector3] = [Vector3(-0.1, 0.0, 17.0)]
 	var blocked: float = AIActionScoring.lane_clear(shooter, aim, close_blocker, slapper)
@@ -631,8 +631,8 @@ func test_high_band_is_a_rung_choice_per_ladder() -> void:
 		var deg: Vector3 = gear[1]
 		var tans := Vector3(tan(deg_to_rad(deg.x)), tan(deg_to_rad(deg.y)),
 				tan(deg_to_rad(deg.z)))
-		assert_almost_eq(AIActionScoring._band_pace(1, 2.0, 33.0, tans), 0.0, 0.0001,
-				"%s cannot roof the doorstep" % gear[0])
+		assert_eq(AIActionScoring._best_high_rung(2.0, 33.0, tans),
+				ShotMechanics.ELEVATION_FLAT, "%s cannot roof the doorstep" % gear[0])
 		assert_eq(AIActionScoring._best_high_rung(gear[2], 33.0, tans),
 				ShotMechanics.ELEVATION_HIGH,
 				"%s's toe rung is top-shelf at its home range" % gear[0])
@@ -647,10 +647,10 @@ func test_standing_keeper_on_top_bars_the_point_blank_roof() -> void:
 	# it, so the band is closed and the finish stays flat. (Only the DOWN
 	# goalie, paddle on the ice, concedes the doorstep roof.)
 	var m28 := Vector3(0.14945, 0.34433, 0.53171)
-	assert_almost_eq(AIActionScoring._band_pace(1, 2.0, 33.0, m28, 1.0), 0.0,
-			0.0001, "standing keeper at 1 m: the paddle bars the roof")
-	assert_gt(AIActionScoring._band_pace(1, 2.0, 33.0, m28, 1.0, true), 0.0,
-			"the same look over a DOWN goalie is live")
+	assert_eq(AIActionScoring._best_high_rung(2.0, 33.0, m28, 1.0),
+			ShotMechanics.ELEVATION_FLAT, "standing keeper at 1 m: the paddle bars the roof")
+	assert_ne(AIActionScoring._best_high_rung(2.0, 33.0, m28, 1.0, true),
+			ShotMechanics.ELEVATION_FLAT, "the same look over a DOWN goalie is live")
 
 
 func test_shot_danger_sharp_angle_is_low() -> void:
@@ -929,7 +929,7 @@ func test_realization_discount_matches_delay_discount_currency() -> void:
 			expected, 0.0001)
 
 
-# ── Dumping: zone gates, targets, chase race ──────────────────────────────────
+# ── Dumping: zone gates, chase race ───────────────────────────────────────────
 # GOAL is at +Z, so the attacking side of centre is z > 0.
 
 func test_past_center_toward_attack() -> void:
@@ -941,66 +941,6 @@ func test_past_center_toward_attack() -> void:
 	var neg_goal := Vector3(0, 0, -26.65)
 	assert_true(AIActionScoring.past_center_toward_attack(Vector3(0, 0, -5.0), neg_goal))
 	assert_false(AIActionScoring.past_center_toward_attack(Vector3(0, 0, 5.0), neg_goal))
-
-
-func test_dump_clear_target_is_up_ice_strong_side_boards() -> void:
-	# Carrier on the +x wall, deep in our end (defending -Z → up-ice is +Z).
-	# Target rides the strong-side boards one neutral zone UP-ICE of the carrier.
-	var t: Vector3 = AIActionScoring.dump_clear_target(Vector3(8, 0, -22), 1.0)
-	assert_almost_eq(t.x, GameRules.RINK_HALF_WIDTH - AIActionScoring.DUMP_RINK_INSET_M, 1e-4,
-			"clears up the strong-side (carrier-side) boards")
-	assert_almost_eq(t.z, 0.0, 1e-4,
-			"from deep, centre ice is already a full-forward rim — unchanged")
-	# Carrier on the -x wall → mirror.
-	var t2: Vector3 = AIActionScoring.dump_clear_target(Vector3(-8, 0, -22), 1.0)
-	assert_lt(t2.x, 0.0, "strong side follows the carrier to the -x boards")
-
-
-func test_dump_clear_from_the_blue_line_still_gains_depth() -> void:
-	# The degenerate case the fixed z=0 target produced: a carrier just inside
-	# the blue line near centre-x fired basically SIDEWAYS at the wall. The
-	# carrier-relative target keeps the clear an up-ice diagonal: it must gain
-	# more depth than it gives up laterally.
-	var carrier := Vector3(1.0, 0.0, GameRules.BLUE_LINE_Z + 0.5)  # defending +Z
-	var t: Vector3 = AIActionScoring.dump_clear_target(carrier, -1.0)
-	var up_ice_gain: float = carrier.z - t.z
-	var lateral: float = absf(t.x - carrier.x)
-	assert_gt(up_ice_gain, lateral,
-			"the clear gains more depth than width — up-ice diagonal, not a side-wall bang")
-
-
-func test_dump_in_target_is_far_offensive_corner() -> void:
-	# Attacking +Z, carrier on the +x side → far corner is -x, near the +Z goal line.
-	var t: Vector3 = AIActionScoring.dump_in_target(Vector3(6, 0, 4), GOAL)
-	assert_lt(t.x, 0.0, "far corner is opposite the carrier's side")
-	assert_almost_eq(absf(t.x), GameRules.RINK_HALF_WIDTH - AIActionScoring.DUMP_RINK_INSET_M, 1e-4)
-	assert_almost_eq(t.z, GOAL.z - AIActionScoring.DUMP_CORNER_DEPTH_M, 1e-4,
-			"a corner retrieval short of the goal line, not behind the net")
-
-
-func test_dump_clear_side_follows_momentum_through_centre() -> void:
-	# The "dump sideways / behind me" artifact: a carrier a hair onto the -x side
-	# but skating hard toward the +x wall. The raw x-sign rims BACK across the body
-	# to the -x boards; the release-time lateral read rims up the +x wall the
-	# carrier is actually committed to.
-	var carrier := Vector3(-0.3, 0.0, -22.0)   # defending -Z → up-ice is +Z
-	var vel := Vector3(9.0, 0.0, 0.0)          # committed to the +x wall
-	var t: Vector3 = AIActionScoring.dump_clear_target(carrier, 1.0, vel)
-	assert_gt(t.x, 0.0, "rims up the wall the carrier's momentum commits to, not back across the body")
-	# And it does NOT over-flip: a carrier firmly on the -x wall keeps that wall
-	# even with a little opposite drift.
-	var on_wall := Vector3(-8.0, 0.0, -22.0)
-	var t2: Vector3 = AIActionScoring.dump_clear_target(on_wall, 1.0, Vector3(3.0, 0.0, 0.0))
-	assert_lt(t2.x, 0.0, "a carrier committed to a wall isn't flipped by a small opposite drift")
-
-
-func test_dump_in_far_corner_is_stable_through_centre() -> void:
-	# Same read for the dump-in far corner: a near-centre carrier drifting +x picks
-	# its far corner off the committed lateral, not the raw x-sign.
-	var carrier := Vector3(-0.2, 0.0, 4.0)
-	var vel := Vector3(8.0, 0.0, 0.0)   # drifting onto the +x side
-	var t: Vector3 = AIActionScoring.dump_in_target(carrier, GOAL, vel)
-	assert_lt(t.x, 0.0, "far corner is opposite the momentum-committed side (-x here)")
 
 
 func test_chase_recovery_race() -> void:

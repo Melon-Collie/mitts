@@ -38,25 +38,16 @@ var has_aim_override: bool = false
 # carrying — and consumed by the state machine's OFF_PUCK handler.
 var lift_blade: bool = false
 
-# Fire-intent flags, mutually exclusive in practice — the state machine consumes
-# whichever is true to drive its transition into SHOOT_PRESSED / PASS_PRESSED.
-var shoot_intent: bool = false
-var pass_intent: bool = false
-# Receiver peer_id when pass_intent is set; -1 otherwise.
-var pass_target_peer_id: int = -1
-
 # Off-puck one-timer readiness — camped at the chosen staging spot with mouse and
 # facing pre-aimed at the open net. The state machine forwards it to TeamBrain so
 # the carrier can reward the pass, and gates the CHASE_PUCK fire-on-zone-entry
 # transition on it when the puck arrives.
 var is_one_timer_ready: bool = false
 
-# Body-check commit. The state machine steers at `check_target` (the body
-# intercept) and holds the Hit button so the bot drives THROUGH the carrier — the
-# emergent collision delivers the hit. `target_position` carries the same point
-# so steering agrees even if a consumer ignores the flag.
+# Body-check commit: `target_position` is the body intercept, and the state
+# machine holds the Hit button so the bot drives THROUGH the carrier — the
+# emergent collision delivers the hit.
 var commit_check: bool = false
-var check_target: Vector3 = Vector3.ZERO
 
 # The opponent this decision is deliberately CLOSING ON, or -1. Steering drops
 # him from the off-puck proximity repel, because that force models "keep

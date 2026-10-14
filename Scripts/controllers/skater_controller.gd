@@ -1284,7 +1284,6 @@ func build_ai_caps() -> AISkaterCaps:
 	if skater != null:
 		caps.weight = skater.weight
 		caps.body_check_transfer = skater.body_check_transfer
-		caps.body_check_brace = skater.body_check_brace_resistance
 	return caps
 
 

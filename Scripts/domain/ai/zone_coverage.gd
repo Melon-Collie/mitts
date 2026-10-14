@@ -22,8 +22,6 @@ class_name AIZoneCoverage
 # the geometry mirrors automatically.
 
 # ── The house (researched scoring-chance polygon: posts → dots → circle tops)
-const HOUSE_DOT_X_M: float = 6.71          # end-zone dot lateral
-const HOUSE_DOT_DEPTH_M: float = 6.1       # dots' depth off the goal line
 const HOUSE_TOP_DEPTH_M: float = 10.7      # tops of the circles
 
 # ── Area boundaries (depths off the goal line, lateral half-widths) ─────────
@@ -140,7 +138,6 @@ static func in_area(slot: int, strong_x: float, own_goal_z: float,
 # slides continuously instead of teleporting between stances.
 static func anchor_of(slot: int, strong_x: float, own_goal_z: float,
 		puck_pos: Vector3) -> Vector3:
-	var own_dir: float = signf(own_goal_z)
 	var d_p: float = depth_of(own_goal_z, puck_pos)
 	# 0 = fully collapsed (puck at/below the goal line), 1 = fully extended.
 	var t: float = clampf((d_p - BREATHE_LOW_DEPTH_M)
