@@ -1,11 +1,10 @@
 extends GutTest
 
-# SkaterAgentStateMachine — first slice: the snapshot-driven spatial predicates
-# that gate loose-puck chase and opponent awareness. These read only a
-# fabricated WorldSnapshot plus the bot's identity (_peer_id / _team_id /
-# _team_id_by_peer set by setup), so they run headlessly with no live actors,
-# goalie state, role behaviors, or mouse/aim state. The heavier aim/charge/
-# state-transition surface is deferred to later slices.
+# SkaterAgentStateMachine against fabricated WorldSnapshots: the chase and
+# reception predicates, the cursor and aim geometry, the press states and their
+# wind-ups, the carry handler's transitions (with a stubbed carrier), the
+# dispatch throttle, poke-evade and deke, and the cognition gates. No live
+# actors — everything runs headless off the bot's identity set by setup.
 
 const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
 

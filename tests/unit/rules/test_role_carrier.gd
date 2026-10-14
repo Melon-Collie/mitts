@@ -1,11 +1,9 @@
 extends GutTest
 
-# AIRoleCarrier owns _pick_action's hysteresis state, scratch buffers,
-# and cooldown counter. The geometric scoring (score_shoot, score_pass,
-# path_clearance, position_potential) is already covered in
-# test_ai_action_scoring; these tests cover the lifecycle methods
-# (reset / clear_intent / cooldown) and verify that decide() produces
-# a sensible RoleDecision shape.
+# AIRoleCarrier's compete on fixture snapshots: what it picks (shoot, pass and
+# its variants, carry, dump, hold) and where, plus its lifecycle (reset,
+# clear_intent, cooldown, settle doubt). The evaluators it prices with are
+# covered in test_ai_action_scoring and test_reach_safety.
 
 const OUR_NET_Z: float = 26.65
 const OPP_NET_Z: float = -OUR_NET_Z

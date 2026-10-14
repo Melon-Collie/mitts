@@ -22,24 +22,26 @@ Adding a behaviour is four steps:
 4. Decide where the transition into it happens — usually a check inside
    `_state_carry`.
 
-```
-                     ┌─ no puck ─────────────────────┐
-                     │                               │
-  OFF_PUCK ◄──────────► CHASE_PUCK (F1 only) ────────│
-     │                       │                       │
-     │  picks up puck        │  picks up puck        │
-     ▼                       ▼                       │
-    CARRY ───[shot wins + puck loaded]───► SHOOT_PRESSED
-     ▲                                          │
-     └──────────────────────────────────────────┘
-             (release fires when the charge ends)
-```
+| from | to | when |
+|---|---|---|
+| OFF_PUCK | CHASE_PUCK | a loose puck this bot may play (`_should_chase_loose_puck`), or a pass released its way |
+| OFF_PUCK, CHASE_PUCK | CARRY | it picks up the puck |
+| OFF_PUCK, CHASE_PUCK | ONE_TIMER_PRESSED | a staged finisher's feed arrives (`_try_shot_reception`) |
+| CHASE_PUCK | OFF_PUCK | the chase ends, or the bot is out of play |
+| CARRY | SHOOT_PRESSED, PASS_PRESSED | the carrier's committed intent is ready to release (a dump releases through PASS_PRESSED) |
+| any press state | CARRY | the release fires, or the press bails |
+| CARRY, any press state | `_post_puck_lost_state` | the puck is gone: CHASE_PUCK for the nearest teammate to a loose puck, else OFF_PUCK |
+
+After dispatch, `SkaterAgent.tick` runs three per-tick passes that may overwrite
+the dispatched input: the stick lift, board play (`apply_board_play`) and the
+shot block (`SkaterAgentShotBlock`).
 
 **Off-puck behaviour does not live here.** Each `TeamBrain` slot maps to a role
-module returning a `RoleDecision` (target position, optional aim override, fire
-intents); the state machine only consumes it. `CARRIER` is the exception —
-`_state_carry` dispatches the carrier directly, because it needs its own
-steering rules (hold vs. drift during pre-aim) and its own press transitions.
+module returning a `RoleDecision` (target position and velocity, optional aim
+override, check commit, the man it covers); the state machine only consumes it.
+`CARRIER` is the exception — `_state_carry` dispatches the carrier directly and
+reads its public fields, because it needs its own steering rules (hold vs. drift
+during pre-aim) and its own press transitions.
 
 ## How the brain hands out work
 
