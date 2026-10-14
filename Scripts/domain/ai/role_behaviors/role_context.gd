@@ -160,9 +160,6 @@ var dispatch_period_ticks: int = 1
 # argmax switch-hysteresis (AIRoleHelpers.append_incumbent / incumbent_bonus).
 var prev_role_target: Vector3 = Vector3.INF
 
-# Whether the ruleset enforces offsides (ARCADE or NHL; false only under OFF).
-# Stamped per ctx build; no role reads it.
-var offsides_enforced: bool = true
 # NHL only: an untouched release from behind the red line that reaches their
 # goal line is icing (the dump-in reads it).
 var icing_enforced: bool = false

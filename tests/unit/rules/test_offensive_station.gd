@@ -57,7 +57,6 @@ func _ctx(self_pos: Vector3, ours: Array, theirs: Array, carrier: int,
 	ctx.team_size = 5
 	ctx.self_is_defense = is_defense
 	ctx.self_home_side = 1.0
-	ctx.offsides_enforced = offsides
 	var read := AIRushRead.new()
 	read.fill(snap, TEAM_ID, OUR_NET_Z, team_map, {}, {}, offsides)
 	ctx.rush_read = read

@@ -812,7 +812,7 @@ const DISPATCH_PERIOD_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 60   # ~60 H
 var _dispatch_period_ticks: int = DISPATCH_PERIOD_TICKS
 
 # The match's latched rule set (GameRules.RuleSet), stamped by AIController each
-# tick; sets RoleContext.offsides_enforced / icing_enforced. Defaults to the
+# tick; sets RoleContext.icing_enforced. Defaults to the
 # game's default so unwired contexts (tests) model the standard game.
 var rule_set: int = GameRules.DEFAULT_RULE_SET
 var _dispatch_skip_counter: int = 0
@@ -1692,7 +1692,6 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	ctx.dispatch_period_ticks = _dispatch_period_ticks
 	# Every ctx field below is re-stamped every build: the instance is reused, and
 	# a stale field would carry another match's, brain's or tick's value.
-	ctx.offsides_enforced = rule_set != GameRules.RuleSet.OFF
 	ctx.icing_enforced = rule_set == GameRules.RuleSet.NHL
 	ctx.zone_entry_blocked = _teammate_must_tag_up(snapshot)
 	if _current_strategy != null:

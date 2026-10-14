@@ -273,10 +273,8 @@ func test_off_ruleset_plays_the_cherry_picker_as_live() -> void:
 			[2, TEAM_ID, Vector3(2.0, 0.0, -18.0)],
 			[10, 1, Vector3(1.0, 0.0, 14.0), Vector3(0.0, 0.0, 7.0)],
 	], 2)
-	ctx.offsides_enforced = false
-	# The read is built inside _make_ctx, before this flip — refill it so the
-	# attacker filter sees the OFF ruleset too (production rebuilds it every brain
-	# tick from the latched rule set).
+	# The read is built inside _make_ctx under the default ruleset — refill it for
+	# OFF (production rebuilds it every brain tick from the latched rule set).
 	ctx.rush_read.fill(ctx.snapshot, TEAM_ID, OUR_NET_Z, ctx.team_id_by_peer,
 			{}, {}, false)
 	var d: RoleDecision = AIRoleDefenseman.decide(ctx, AIRoleSlots.Slot.DVALVE)
@@ -393,7 +391,6 @@ func test_dback_sags_off_the_line_against_a_threat_already_behind_it() -> void:
 	var ctx: RoleContext = _make_ctx(Vector3(-4.0, 0.0, 6.0),
 			[[2, 1 - TEAM_ID, Vector3(2.0, 0.0, 13.0), Vector3(0.0, 0.0, 8.0)]],
 			-1, Vector3(0.0, 0.0, -8.0))
-	ctx.offsides_enforced = false
 	# Refill the read for the OFF ruleset — production rebuilds it every brain
 	# tick from the latched rule set.
 	ctx.rush_read.fill(ctx.snapshot, TEAM_ID, OUR_NET_Z, ctx.team_id_by_peer,
