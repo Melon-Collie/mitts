@@ -1,9 +1,9 @@
 # Release realism — where, when and which way the puck can leave the stick
 
-Status: **Phases 1 and 3 built, playtest pending** — the wrist shot's load
-(*Phase 1*) and the bots onto it (*Phase 3*). The hard cone this plan first
-proposed was dropped for the load. Phases 2 and 4 are still drafts. Each phase is meant to ship as its own PR with its
-own playtest.
+Status: **Phases 1, 3 and 4 built and playtested; Phase 2 not needed.** The
+wrist shot's load (*Phase 1*), the bots onto it (*Phase 3*) and the keeper's
+body in the bots' shot model (*Phase 4*). The hard cone this plan first proposed
+was dropped for the load.
 
 ## Decisions banked
 
@@ -93,7 +93,15 @@ Things to watch in the playtest:
 
 Bots play under the same load since Phase 3.
 
-## Phase 2 — release load (shared) — **needs a decision**
+## Phase 2 — a release clock (not needed)
+
+**Not built, and not needed for now.** The question it answers, what stops a
+full-power wrister coming off the stick in 50 ms, is answered by the load: a puck
+out of the pocket fires at a share of its pace, so a full-power release means
+getting it there first, and that pull costs real time for humans and bots alike
+(the blade's travel, round the body when it must go round, the turn when the turn
+is what loads it). Playtested with that, no further clock was wanted. The design
+below stays as the record if one ever is.
 
 What should stop a full-power wrister coming off the stick in 50 ms? It has to
 work with a frozen blade. Two candidates; they compose rather than compete.
@@ -158,7 +166,7 @@ stops being fixed.
 - The shot-outcome sim (`test_shot_sim.gd`) re-run, with the change in bot goal
   rate reported.
 
-## Phase 3 — bots onto the human toolkit (as built, playtest pending)
+## Phase 3 — bots onto the human toolkit (as built)
 
 Phase 1 put humans under two rules bots were exempt from: facing follows
 travel (`FacingRules`) and the wrist shot's load (`WristerLoad`). Both are pure
@@ -174,7 +182,7 @@ and forward pass at 60% (about 19.8 m/s), below the 20 m/s pass target
 (`PASS_TARGET_CLOSING_M_S`). So the bot had to carry and release like a player
 who loads the puck, not just have the rule switched on.
 
-### 3a. Facing (as built, playtest pending)
+### 3a. Facing (as built)
 
 - **One rule, one home.** The facing target is `FacingRules`, a pure domain rule
   (tests: `test_facing_rules.gd`). `SkaterPoseCoordinator` calls it for every
@@ -196,7 +204,7 @@ who loads the puck, not just have the rule switched on.
   the stance, which squares to the cursor below 3 m/s.
 - **Left for the slap-shot pass:** the slapper's entry snap itself.
 
-### 3b. Carry and release with the puck loaded (as built, playtest pending)
+### 3b. Carry and release with the puck loaded (as built)
 
 - **One rule for both.** The controller applies `WristerLoad` to bots exactly as
   to humans: the hand and the cap come from where the puck sits at the press.
@@ -289,7 +297,7 @@ playtest.
   pinned measurements: re-pin only once the new numbers are confirmed as the
   intended ones.
 
-## Phase 4 — point-blank, in the bot model (as built, playtest pending)
+## Phase 4 — point-blank, in the bot model (as built)
 
 The aim is that driving into a set keeper stops being the optimum, without a
 positional gate. Two pieces:
@@ -364,10 +372,7 @@ not in this plan.
 
 ## Open questions
 
-1. **Phase 2: does the load still need a clock?** The load already makes the
-   position of the puck cost time (pulling it wide). Whether a wind-up clock or a
-   reception settle is still wanted waits on the Phase 1 playtest.
-2. **Bot movement.** The request also mentioned how bots *move*. Nothing here
+1. **Bot movement.** The request also mentioned how bots *move*. Nothing here
    touches locomotion.
 
 ## Flagged, not in scope
