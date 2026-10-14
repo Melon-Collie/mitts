@@ -38,7 +38,7 @@ rush up the wall, smothered at the line, trailer open: pick	PASS to 2
 level with a mate at the blue line, symmetric set D: intent	CARRY
 2 m inside the blue line, open, keeper 2 m out: pick	CARRY to (0.0, -21.6)
 fresh entry, finisher driving the house: intent	CARRY
-fresh entry, finisher driving the house: developing feed	0.1525
+fresh entry, finisher driving the house: developing feed	0.1535
 fresh entry, finisher driving the house: shoot-now value	0.0180
 head-on drive at 6 m/s, keeper 1 m out, from 10 m: pick	CARRY to (0.0, -22.6)
 head-on drive at 6 m/s, keeper 1 m out, from 9 m: pick	CARRY to (0.0, -20.6)

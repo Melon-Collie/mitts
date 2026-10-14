@@ -925,7 +925,14 @@ var _velocity_z: float = 0.0
 # Ramped lateral move speed for the upright arc mover. Accelerates toward the
 # desired shuffle / T-push speed at `lateral_accel` so pushes aren't instant;
 # reset to 0 whenever the goalie is set/frozen so the next push starts from rest.
+# Capped by the edge stop into the arc target, read against last tick's target.
 var _move_speed_current: float = 0.0
+var _prev_arc_target_xz: Vector2 = Vector2.ZERO
+# What the arc mover did this tick, for the footwork: driving a T-push, and
+# held down by the edge stop.
+var _arc_t_push: bool = false
+var _arc_braking: bool = false
+var _footwork := GoalieFootwork.new()
 # Signed lateral velocity (m/s) carried INTO the reaction freeze, captured from
 # `_velocity_x` the tick the read commits and bled off at the unset drift decel.
 # Lateral only: depth is a committed, chart-driven quantity and east-west
@@ -1029,8 +1036,8 @@ var _slide_coverage_confirm_timer: float = 0.0
 # solve wants them. A craned head reaches `head_peek_max_offset`; the rate is a
 # neck/shoulder lean, fast next to everything else he does but not instant, so a
 # screen drifting across the solve's refusal threshold doesn't snap the sightline.
-# Host-only — the AI is host-only and the offset is small enough that not putting
-# it on the wire costs clients nothing visible.
+# Host-only. Clients see it as the lean that carries his head there: the pose
+# rolls the trunk by that much, and body roll is on the wire.
 var _eye_offset_x: float = 0.0
 var _eye_peek_target_x: float = 0.0
 # Side of the last peek he took (±1, 0 before any) — the side he keeps on a
@@ -1559,6 +1566,8 @@ func _physics_process(delta: float) -> void:
 	# post-integrated, frozen on a read) relaxes the head back to his midline
 	# instead of leaving it craned wherever the last look left it.
 	_eye_peek_target_x = 0.0
+	_arc_t_push = false
+	_arc_braking = false
 	_update_position(delta)
 	_eye_offset_x = move_toward(_eye_offset_x, _eye_peek_target_x, _HEAD_PEEK_RATE_M_S * delta)
 	_update_facing(delta)
@@ -3512,6 +3521,18 @@ func _move_along_arc(delta: float) -> Vector2:
 	# (a real push-off builds speed), which is part of why it loses the race to a
 	# hard pass.
 	_move_speed_current = move_toward(_move_speed_current, move_speed, lateral_accel * delta)
+	# Brake on the lead edge so he stops ON his spot rather than dead at it — but
+	# against the spot's own motion, so tracking a moving threat carries no lag.
+	var target_closing: float = 0.0
+	if delta_2d > 0.0001 and delta > 0.0:
+		target_closing = maxf(0.0, (target_xz - _prev_arc_target_xz).dot(
+				(target_xz - current) / delta_2d) / delta)
+	_prev_arc_target_xz = target_xz
+	var stop_cap: float = target_closing \
+			+ GoaliePushRules.braking_speed_cap(delta_2d, lateral_accel)
+	_arc_braking = stop_cap < _move_speed_current
+	_arc_t_push = move_speed == t_push_speed
+	_move_speed_current = minf(_move_speed_current, stop_cap)
 	var effective_speed: float = _move_speed_current
 	var step: float = effective_speed * delta
 	var new_xz: Vector2
@@ -3975,6 +3996,11 @@ func _update_body_parts(delta: float) -> void:
 			and _puck_play.is_stopping()
 	_pose_inputs.puck_play_stride_phase = _puck_play.stride_phase
 	_pose_inputs.puck_play_stride_intensity = _puck_play.stride_intensity
+	var yaw: float = goalie.get_goalie_rotation_y()
+	_footwork.advance(delta, _velocity_x * cos(yaw) - _velocity_z * sin(yaw),
+			_arc_t_push, _arc_braking, shuffle_speed)
+	_pose_inputs.footwork = _footwork
+	_pose_inputs.eye_offset_local_x = _eye_offset_x * cos(yaw)
 	_set_pad_toe_out_inputs()
 	_set_prelean_inputs()
 	var config: GoalieBodyConfig = _pose.build(_pose_inputs)
@@ -4314,7 +4340,7 @@ func _respond_to_pass_read() -> bool:
 	var will_block: bool = GoalieSaveSelection.answer_fraction(s) <= 0.0
 	if not will_block:
 		var needed: float = absf(square_x - _current_x) - pad_local_offset
-		if needed <= 0.0 or needed <= GoalieBehaviorRules.reachable_lateral_distance(
+		if needed <= 0.0 or needed <= GoaliePushRules.set_reach(
 				t_push_speed, lateral_accel, _pass_reception.time + backdoor_release_time):
 			return true
 	_enter_butterfly()

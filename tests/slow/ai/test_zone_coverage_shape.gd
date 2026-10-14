@@ -148,8 +148,15 @@ const ZONE_SLOTS: Array[int] = [
 # defender off chasing the puck counted as covering nobody). A pinned
 # measurement, not a bound derived from the model it replaced.
 const UNCOVERED_CEILING: float = 2.4
-# The scripted crossing cutter (measured 0.35), pinned at the same ~0.28 margin.
-const UNCOVERED_CEILING_CROSSING_CUTTER: float = 0.63
+# The scripted crossing cutter (measured 0.80), pinned at the same ~0.28 margin.
+# Nearly all of it is the weak-side point, a man the shot model prices at
+# nothing (worst open danger 0.0000) whom the D sags off; it read 0.35 until the
+# keeper's pushes had to stop on their spot, which moved the planner's backdoor
+# depth and with it which men the partition rates worth a body. The cutter
+# himself — the man this fixture is about — is pinned on his own below.
+const UNCOVERED_CEILING_CROSSING_CUTTER: float = 1.08
+# Share of the D-zone ticks the cutter may go unattended (measured 0 of 480).
+const CUTTER_DROPPED_CEILING: float = 0.05
 # The scripted point shot (measured 0.63), pinned at the same ~0.28 margin.
 const UNCOVERED_CEILING_POINT_SHOT: float = 0.9
 # The man nobody has should not routinely be a prime scoring threat. A loose
@@ -170,6 +177,8 @@ class Result:
 	var uncovered_sum: int = 0
 	var open_danger_sum: float = 0.0
 	var open_danger_worst: float = 0.0
+	# Unattended ticks by attacker peer id.
+	var uncovered_by_man: Dictionary = {}
 
 
 # Runs a 5v5 sim with team 0 attacking and team 1 defending -Z, and reads team
@@ -235,6 +244,7 @@ func _run(attackers: Array, defenders: Array, carrier: int) -> Result:
 			if covered.has(opp):
 				continue
 			r.uncovered_sum += 1
+			r.uncovered_by_man[opp] = int(r.uncovered_by_man.get(opp, 0)) + 1
 			worst = maxf(worst, AIActionScoring.score_shoot_threat_fielded(
 					snap.skater_states[opp].position, our_net, our_net,
 					GameRules.NET_HALF_WIDTH, no_defenders))
@@ -326,3 +336,5 @@ func test_a_man_who_changes_areas_is_handed_off_not_dropped() -> void:
 		1)
 	_report("crossing cutter", r)
 	_assert_shape("crossing cutter", r, UNCOVERED_CEILING_CROSSING_CUTTER)
+	assert_lt(int(r.uncovered_by_man.get(2, 0)) / float(maxi(r.dzone_ticks, 1)),
+			CUTTER_DROPPED_CEILING, "crossing cutter: the cutter himself is dropped in the handoff")

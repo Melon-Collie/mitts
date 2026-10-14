@@ -5,7 +5,7 @@ behind-R -> slot C, MID: goals of 7	3
 behind-R -> slot C, HIGH: goals of 7	4
 behind-R -> slot L, FLAT: goals of 7	0
 behind-R -> slot L, LOW: goals of 7	0
-behind-R -> slot L, MID: goals of 7	1
+behind-R -> slot L, MID: goals of 7	2
 behind-R -> slot L, HIGH: goals of 7	3
 corner-R -> slot C deep, FLAT: goals of 7	0
 corner-R -> slot C deep, LOW: goals of 7	3

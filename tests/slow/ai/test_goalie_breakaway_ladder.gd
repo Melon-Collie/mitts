@@ -41,6 +41,7 @@ const TIERS: Array[int] = [GoalieSkillProfile.Difficulty.EASY,
 		GoalieSkillProfile.Difficulty.NORMAL, GoalieSkillProfile.Difficulty.HARD]
 const LEVER_DEPTH_BASE_M: float = 0.60
 const LEVER_PUSH_MPS: float = 1.8
+const LEVER_EDGES_MPS2: float = 2.4
 const TRADE_BASES: Array[float] = [1.30, 1.00, 0.80, 0.60]
 
 var _h: RefCounted = null
@@ -143,16 +144,19 @@ func test_the_difficulty_ladder_is_not_inverted_on_a_walkaround() -> void:
 			open[GoalieSkillProfile.Difficulty.EASY] as int, "and the ladder separates")
 
 
-# ── 2. DEPTH AND THE PUSH ────────────────────────────────────────────────────
-# The ladder reaches the cutback through how far out he stands and how hard he
-# pushes back across: a keeper sat deeper has less ice to recover, and a softer
-# push loses the race to re-commit.
-func test_depth_and_the_push_move_the_cutback() -> void:
+# ── 2. DEPTH, THE PUSH AND THE EDGES ─────────────────────────────────────────
+# The ladder reaches the cutback through how far out he stands, how hard he
+# pushes back across, and how well his edges stop him set on his spot: a keeper
+# sat deeper has less ice to recover, and a softer push or a softer stop loses
+# the race to re-commit.
+func test_depth_the_push_and_the_edges_move_the_cutback() -> void:
 	var baseline: int = _finish_open({})
 	assert_lt(_finish_open({"depth_base_m": LEVER_DEPTH_BASE_M}), baseline,
 			"a deeper base leaves less net on the cutback")
 	assert_gt(_finish_open({"slide_push_speed_mps": LEVER_PUSH_MPS}), baseline,
 			"a softer push back across leaves more")
+	assert_gt(_finish_open({"lateral_accel_mps2": LEVER_EDGES_MPS2}), baseline,
+			"and so do edges that stop him late")
 
 
 # ── 3. THE TRADE, PRICED ─────────────────────────────────────────────────────
@@ -180,6 +184,8 @@ func test_breakaway_ladder_snapshot() -> void:
 			_finish_open({"depth_base_m": LEVER_DEPTH_BASE_M}))
 	snap.record("HARD, slide push %.1f m/s: cutback open of %d" % [LEVER_PUSH_MPS, n],
 			_finish_open({"slide_push_speed_mps": LEVER_PUSH_MPS}))
+	snap.record("HARD, edges %.1f m/s²: cutback open of %d" % [LEVER_EDGES_MPS2, n],
+			_finish_open({"lateral_accel_mps2": LEVER_EDGES_MPS2}))
 	for base: float in TRADE_BASES:
 		var over := {"depth_base_m": base}
 		snap.record("depth_base %.2f: cutback open of %d" % [base, n], _finish_open(over))

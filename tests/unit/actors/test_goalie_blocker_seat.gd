@@ -1,7 +1,7 @@
 extends GutTest
 
 # The blocker is a glove on the arm: the hand (BlockArm) is posed, the elbow
-# comes out over it, and the board runs along the forearm (Goalie._seat_blocker). It
+# hangs, and the board stands on the back of the hand (Goalie._seat_blocker). It
 # is a save surface, so these hold the seat on both paths that pose a goalie —
 # the host's body config and the client/replay network pose.
 
@@ -27,9 +27,9 @@ func _board_in_goalie(g: Goalie) -> Transform3D:
 func _check_seat(g: Goalie, label: String) -> void:
 	var arm: Node3D = g.get_node("BlockArm")
 	var board: Transform3D = _board_in_goalie(g)
-	var along: Vector3 = (arm.position - g._blocker_elbow).normalized()
+	var along: Vector3 = Goalie._cocked_wrist(arm.position - g._blocker_elbow)
 	assert_almost_eq(board.basis.y.normalized().dot(along), 1.0, 1e-4,
-			"%s: the board runs along the forearm, finger end at the hand" % label)
+			"%s: the board runs along the hand, finger end at the grip" % label)
 	var face: Vector3 = -board.basis.z.normalized()
 	assert_gt(face.x, 0.0, "%s: the board is on the arm's outer side" % label)
 	assert_lt(face.z, 0.0, "%s: and faces the shooter's half" % label)
@@ -57,17 +57,26 @@ func test_the_board_goes_where_the_hand_goes() -> void:
 	_check_seat(g, "after the reach")
 
 
-func test_the_ready_forearm_drops_near_vertical_from_behind() -> void:
-	# The elbow comes out to the side and back of the shoulder so the forearm,
-	# and the board along it, drop near straight down to the hand.
-	var g: Goalie = _posed(State.READY)
-	var along: Vector3 = ((g.get_node("BlockArm") as Node3D).position - g._blocker_elbow).normalized()
-	assert_lt(rad_to_deg(along.angle_to(Vector3.DOWN)), 40.0,
-			"the ready blocker forearm hangs within 40° of vertical")
-	var body: Node3D = g.get_node("Body")
-	var shoulder: Vector3 = body.position + body.basis * GoalieAnatomy.SHOULDER_OFFSET
-	assert_gte(g._blocker_elbow.z - shoulder.z, Goalie._BLOCKER_ELBOW_BEHIND_M - 0.005,
-			"the ready blocker elbow sits back of the shoulder")
+func test_the_elbow_hangs_and_the_board_stands() -> void:
+	# A held-out blocker reaches forward and down from an elbow hung beneath the
+	# shoulder→hand line — not lifted over it into a wing — and the wrist stands
+	# the board back up square to the shooter.
+	for st: int in [State.READY, State.BUTTERFLY]:
+		var label: String = GoalieStateMachine.State.keys()[st]
+		var g: Goalie = _posed(st)
+		var body: Node3D = g.get_node("Body")
+		var shoulder: Vector3 = body.position + body.basis * GoalieAnatomy.SHOULDER_OFFSET
+		var grip: Vector3 = (g.get_node("BlockArm") as Node3D).position
+		assert_lt(g._blocker_elbow.y, (shoulder.y + grip.y) * 0.5,
+				"%s: the elbow hangs below the arm's line" % label)
+	# A hand held high (the post stances) lifts the elbow instead, as far as the
+	# wrist needs.
+	for st: int in [State.READY, State.BUTTERFLY, State.HALF_BUTTERFLY_RIGHT,
+			State.RVH_LEFT, State.RVH_RIGHT, State.VH_LEFT, State.VH_RIGHT]:
+		var label: String = GoalieStateMachine.State.keys()[st]
+		var up: Vector3 = _board_in_goalie(_posed(st)).basis.y.normalized()
+		assert_lt(rad_to_deg(up.angle_to(Vector3.DOWN)), 15.0,
+				"%s: the board stands within 15° of upright" % label)
 
 
 func test_the_network_pose_seats_the_board_too() -> void:

@@ -16,8 +16,10 @@ execute; they never reach up. Goalie *math* is pure and lives in
 | `goalie_puck_play.gd` | behind-net trip decision, geometry, phase |
 | `goalie_crease_clear.gd` | loose-puck sweep / cover |
 | `goalie_slide_behavior.gd` | committed slides and post seals |
+| `goalie_footwork.gd` | upright footwork: shuffle stroke, T-push, edge stop (pad steps over the eased stance) |
 | `goalie_world_view.gd` | the perception surface |
 | `domain/rules/goalie_behavior_rules.gd` | reads, depth, races (pure) |
+| `domain/rules/goalie_push_rules.gd` | the upright push: accelerate, cruise, stop on the spot (pure) |
 | `domain/rules/goalie_save_selection.gd` | block-or-react, as one question |
 | `domain/rules/goalie_pass_read.gd` | where a pass in flight will be shot from |
 | `domain/rules/goalie_screen_depth.gd` | room to see around a screen |
@@ -191,10 +193,13 @@ Two recurring traps, both measured:
   read as elevated is strictly wrong. The block model has no `impact_y`.
 
 **The seal is a commitment with an END, and arriving is what ends it.** The
-verdict clears on `tuck_point_travel <= 0`, so the reach that term subtracts must
-be the one the SEAL uses — `_seal_cover_radius()`, the distance from the seal
-spot to the tuck point — or he lands somewhere his own arrival test still calls
-short and nothing can ever clear it. That reach follows the STANCE (standing
+verdict clears once `tuck_point_travel` is inside a puck's radius, so the reach
+that term subtracts must be the one the SEAL uses — `_seal_cover_radius()`, the
+distance from the seal spot to the tuck point — or he lands somewhere his own
+arrival test still calls short and nothing can ever clear it. The tolerance is
+not slack: an exact `<= 0` cleared only when the knee-shuffle's arc target
+happened to lie past the seal spot, and a seal landing millimetres inside it
+held him down for good. That reach follows the STANCE (standing
 `pad_local_offset`, sealed `_seal_cover_radius()`) and is carried in
 `BeatenWideConfig.cover_radius`, deliberately separate from `reach_half_width`:
 one is arrival, the other is the point of no return, and sharing a number ties
@@ -267,6 +272,33 @@ the corner keeps its pace to the boards, so reading its slide alone held him
 down 3.7-5 s with nobody near it; a puck no stick can play during the rise is
 not a shot he can be caught standing up into. `test_goalie_rebound_rise.gd`
 holds it.
+
+### He stops on his spot, and every race prices the stop
+
+The upright mover brakes on the lead edge into its target
+(`GoaliePushRules.braking_speed_cap`, at `lateral_accel` ×
+`GOALIE_EDGE_STOP_DECEL_RATIO`) instead of halting dead on it. The cap is read
+against the target's own motion, so tracking a moving threat costs no lag; only
+a spot that stops makes him stop.
+
+A goalie is not covering a one-timer until he is set square to it, so every
+re-square race — cross-crease, backdoor depth, beaten-wide onset, the pass read
+— asks `GoaliePushRules.set_reach` (push, cruise and stop), and the bots read
+his repositioning the same way (`AIGoalieModel._goalie_set_reach`, and
+`goalie_push_progress` for where he is at a release). Pricing a race on a push
+that never stops tells the planner he arrives sooner than the mover can
+deliver. The cost is real and deliberate: a short push to a fixed spot takes
+about 1.25× as long.
+
+The SAVE push is the other kind (`GoaliePushRules.cruise_reach`, through
+`goalie_lateral_reach`): a pad moving through a shot's line stops the puck
+whether or not it could stop there. Charging a save the stop made a squared
+keeper read as beaten by shots he kills.
+
+The footwork the legs show during those moves (`GoalieFootwork`) is laid over
+the pads as a per-tick step the actor does not ease: a stroke's cadence is
+faster than `part_lerp_speed`, which would smooth it to a fifth of its size.
+`test_goalie_footwork.gd` holds the stroke, the turn and the overlay.
 
 ### The committed slide is a retreat, and its budget is depth
 
@@ -347,6 +379,14 @@ the room that takes, and nothing for a screen he could not see around from
 anywhere (that release is the blocking drop's). The peek holds the side it chose
 on a dead-on screen (`_peek_side`); left to the sign of a perpendicular near
 zero it flipped every tick. `test_goalie_screen_room.gd` holds both.
+
+**The peek is seen, and it is the eyes the reads use.** On his feet the pose
+leans the trunk from the hips by exactly the roll that carries his head to
+`_eye_offset_x` (`GoalieAnatomy.roll_for_head_shift`); the head rides every lean,
+footwork's included. Only the roll goes on the wire, so the network pose
+rebuilds the head and the trunk's hip pivot from it. Never put the head
+somewhere the sightline is not: a peek you cannot see is one a shooter cannot
+read. `test_goalie_screen_peek_pose.gd` holds it.
 
 **A tip is covered by where he stands, never by a reaction or a pre-commit.**
 Its flight from a net-front blade is shorter than his read, and he is frozen
@@ -444,11 +484,12 @@ goalie they do not face. See the AI MIRROR note in `goalie_skill_profile.gd`.
 Every tier seals the walk-around (0 of 7 aim points). Cutting back across opens
 EASY 5, NORMAL 3, HARD 3: a race to re-commit, where depth sets how far he has
 to come back and the tiered butterfly push (`slide_push_speed_mps`, softer the
-weaker the goalie, like every other movement speed) sets how fast. The read
-latencies, the drop time, the five-hole and the poke do not touch it; the toe-out
-moves it by one. Depth cuts the wrong way — a goalie who challenges the rush
-harder is easier to beat back across — and the push is what keeps the ladder the
-right way up.
+weaker the goalie, like every other movement speed) sets how fast. His edges
+(`lateral_accel_mps2`) move it too, because he brakes onto his spot and a weaker
+edge sets him there later. The read latencies, the drop time, the five-hole and
+the poke do not touch it; the toe-out moves it by one. Depth cuts the wrong way —
+a goalie who challenges the rush harder is easier to beat back across — and the
+push is what keeps the ladder the right way up.
 
 Pulling `depth_base_m` in is not free — it concedes the centre-lane rush from
 5 m, which is what challenge depth exists for. `test_goalie_breakaway_ladder.gd`

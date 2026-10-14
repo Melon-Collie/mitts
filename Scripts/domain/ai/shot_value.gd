@@ -213,7 +213,8 @@ static func _open_across(stance: int, scale: float, oblique: float, offset_m: fl
 # Both halves are measured, not fitted. The demand is the arc-match square for
 # the release point (AIGoalieModel.goalie_arc_match_x, the same solve the
 # live keeper skates); the supply is his real accel-limited T-push over the
-# time he has after his reaction delay (goalie_lateral_reach). Floored at zero:
+# time he has after his reaction delay, braking into the spot as the live mover
+# does (goalie_push_progress). Floored at zero:
 # a keeper who can comfortably get there is simply set, and there is no such
 # thing as negative displacement.
 static func displacement_deficit_m(keeper_pos: Vector3,
@@ -223,7 +224,7 @@ static func displacement_deficit_m(keeper_pos: Vector3,
 			keeper_pos, attacking_goal, release) - keeper_pos.x)
 	var move_time: float = maxf(
 			0.0, time_to_release_s - AIGoalieModel.goalie_leg_delay_s)
-	return maxf(0.0, need - AIGoalieModel.goalie_lateral_reach(move_time))
+	return maxf(0.0, need - AIGoalieModel.goalie_push_progress(need, move_time))
 
 
 # Each stance's structural cover at each height, plus its hands where they rest

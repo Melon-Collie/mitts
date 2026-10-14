@@ -8,8 +8,9 @@ extends GutTest
 # Three invariants hold that, and each one was a defect that produced a permanent
 # 4 Hz coil/slide loop against a carrier who had simply stopped moving:
 #
-#   ARRIVAL MUST BE REACHABLE. The verdict clears on `tuck_point_travel <= 0`,
-#   measured from his live position with his own reach subtracted. That reach has
+#   ARRIVAL MUST BE REACHABLE. The verdict clears once `tuck_point_travel` is
+#   inside a puck's radius, measured from his live position with his own reach
+#   subtracted. That reach has
 #   to be the one the SEAL uses, or he arrives somewhere his own arrival test
 #   still calls short and no amount of sealing can ever clear it.
 #

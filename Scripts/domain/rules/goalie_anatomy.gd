@@ -29,6 +29,7 @@ class_name GoalieAnatomy
 # Leg pad: 0.28 x 0.84 x 0.2 (LeftPad / RightPad).
 const PAD_BOX_WIDTH_M: float = 0.28
 const PAD_BOX_HEIGHT_M: float = 0.84
+const PAD_BOX_DEPTH_M: float = 0.20
 # Torso: 0.62 x 0.72 x 0.28 (Body) — as wide as the pants' flare.
 const TORSO_BOX_WIDTH_M: float = 0.62
 const TORSO_BOX_HEIGHT_M: float = 0.72
@@ -47,11 +48,11 @@ const BUTTERFLY_PAD_HALF_WIDTH_M: float = 0.42
 # Furthest the glove hand travels outboard on a full reach
 # (GoalieBodyConfigBuilder.glove_max_x_outward, sign-stripped).
 const GLOVE_MAX_X_OUTWARD_M: float = 0.85
-# The READY glove (GoalieBodyConfigBuilder.READY_GLOVE): up at the chest, out on
-# the glove side. The READY blocker is wherever the stick puts it
-# (GoalieStickRules.READY_WRIST_X_M, upright_wrist_y).
+# The READY glove (GoalieBodyConfigBuilder.READY_GLOVE): out in front between
+# belt and chest, on the glove side. The READY blocker is wherever the stick
+# puts it (GoalieStickRules.READY_WRIST_X_M, upright_wrist_y).
 const READY_GLOVE_X_M: float = 0.46
-const READY_GLOVE_Y_M: float = 1.02
+const READY_GLOVE_Y_M: float = 0.92
 
 
 static func butterfly_pad_edge_half_width() -> float:
@@ -91,6 +92,34 @@ const DOWN_BLOCKER_X_M: float = 0.40
 const DOWN_BLOCKER_Y_M: float = PAD_CENTER_Y_BUTTERFLY_M + PAD_BOX_WIDTH_M * 0.5 \
 		+ GLOVE_BOX_WIDTH_M * 0.5
 const DOWN_GLOVE_Y_M: float = TORSO_CENTER_Y_BUTTERFLY_M
+
+
+# Height of a pad's centre that rests its lowest corner on the ice, posed at
+# `rot_deg` (Euler, Godot's YXZ: yaw last, so it never changes the height).
+static func pad_center_y_on_ice(rot_deg: Vector3) -> float:
+	var b := Basis.from_euler(rot_deg * (PI / 180.0))
+	var half := Vector3(PAD_BOX_WIDTH_M, PAD_BOX_HEIGHT_M, PAD_BOX_DEPTH_M) * 0.5
+	return absf(b.x.y) * half.x + absf(b.y.y) * half.y + absf(b.z.y) * half.z
+
+
+# The head rides the trunk's sideways lean, pivoting at the hips (the trunk
+# box's bottom): a roll of `roll_deg` (positive tips the chest toward local −x)
+# carries a head at `head_y` this far along local x.
+static func head_shift_for_roll(head_y: float, body_y: float, roll_deg: float) -> float:
+	return -(head_y - body_y + TORSO_BOX_HEIGHT_M * 0.5) * sin(deg_to_rad(roll_deg))
+
+
+# Where the trunk's centre goes for that lean to pivot at the hips: the box
+# turns about its own centre, so it slides back by what that swings its bottom.
+static func trunk_shift_for_roll(roll_deg: float) -> float:
+	return -TORSO_BOX_HEIGHT_M * 0.5 * sin(deg_to_rad(roll_deg))
+
+
+# The inverse of head_shift_for_roll: the lean that carries the head `shift`
+# along local x.
+static func roll_for_head_shift(head_y: float, body_y: float, shift: float) -> float:
+	var lever: float = maxf(head_y - body_y + TORSO_BOX_HEIGHT_M * 0.5, 0.01)
+	return -rad_to_deg(asin(clampf(shift / lever, -1.0, 1.0)))
 
 
 # Vertical extent (bottom, top) of a part, as a Vector2 so callers can test a
@@ -191,16 +220,21 @@ const ARM_FOREARM_M: float = 0.38
 const SHOULDER_OFFSET := Vector3(0.23, 0.24, 0.0)
 
 # The blocker is a glove on the arm (Goalie._seat_blocker): the hand is posed,
-# the elbow comes out to the side so the forearm drops near straight down to it
-# (TwoBoneIK.solve_elbow_raised), and the board runs along the forearm's outer
-# side, its finger end at the hand, its face rotated out from the shooter by
-# BLOCKER_FACE_OUTWARD_DEG — "blocker rotated outwards slightly", the coaching
-# cue for steering rebounds to the corner. Where the board's centre sits: back
-# from the grip along the forearm, and out off its outer side, clear of the
-# forearm's padding.
+# the elbow hangs (TwoBoneIK.solve_elbow_hanging), and the board stands on the
+# back of the hand, its finger end at the grip, its face rotated out from the
+# shooter by BLOCKER_FACE_OUTWARD_DEG — "blocker rotated outwards slightly", the
+# coaching cue for steering rebounds to the corner. Where the board's centre
+# sits: back from the grip toward the wrist, and out off the back of the hand,
+# clear of the forearm's padding.
 const BLOCKER_BOARD_ALONG_M: float = 0.06
 const BLOCKER_BOARD_OUT_M: float = 0.09
 const BLOCKER_FACE_OUTWARD_DEG: float = 15.0
+# How far the wrist turns the board off the forearm toward upright: a hand held
+# out in front reaches forward and down, and the wrist stands the board back up
+# square to the shooter. A gripping wrist's flexion, inside its ~80° range. A
+# forearm laid flatter than this cannot stand the board, so the elbow rises
+# instead — which is what a blocker held high does.
+const BLOCKER_WRIST_COCK_MAX_DEG: float = 60.0
 
 
 # Depth (goalie-local z, forward negative) that puts a hand at (`hand_x`,

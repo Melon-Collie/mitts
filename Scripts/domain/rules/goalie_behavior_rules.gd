@@ -831,29 +831,12 @@ static func screen_peek_offset(
 	return 0.0
 
 
-# ── Standing push kinematics ─────────────────────────────────────────────────
-# Lateral distance a standing goalie covers in `t` seconds pushing from rest:
-# accelerate at `accel` up to `max_speed`, then hold. Mirrors the move_toward
-# ramp in GoalieController._move_along_arc, so race math built on this matches
-# what the live push can actually deliver — the from-rest ramp is a big share of
-# a short race (~v²/2a metres of it).
-static func reachable_lateral_distance(max_speed: float, accel: float, t: float) -> float:
-	if t <= 0.0 or max_speed <= 0.0:
-		return 0.0
-	if accel <= 0.0:
-		return max_speed * t
-	var t_ramp: float = max_speed / accel
-	if t <= t_ramp:
-		return 0.5 * accel * t * t
-	return max_speed * t - 0.5 * max_speed * t_ramp
-
-
 # ── Behind-net puck play: the race primitives ────────────────────────────────
 # Doctrine (why the GO decision is this conservative, and why he never carries
 # or passes) is in Scripts/controllers/CLAUDE.md. These are the clocks it needs.
 
-# Travel time from rest over `dist` with an accel ramp to `max_speed` — the
-# inverse of reachable_lateral_distance, for the skate out/back legs.
+# Travel time from rest over `dist` with an accel ramp to `max_speed`, for the
+# skate out/back legs (no stop: the trip carries on through each leg's end).
 static func travel_time_from_rest(dist: float, max_speed: float, accel: float) -> float:
 	return travel_time_from_speed(dist, 0.0, max_speed, accel)
 
@@ -1009,12 +992,11 @@ static func is_beaten_wide(
 			net_half_width, cfg):
 		return false
 	# The race, on the puck's own clock: its arrival at the tuck point against
-	# the goalie's accel-ramped push to the seal spot.
+	# the goalie's push to the seal spot, stopped on it.
 	var post_x: float = goal_center_x + drive_sign * net_half_width
 	var t_arrive: float = maxf((post_x - puck_position.x) / puck_velocity_x, 0.0)
 	return tuck_point_travel(goalie_position, post_x, goal_line_z, cfg) \
-			> reachable_lateral_distance(
-					cfg.goalie_lateral_speed, cfg.goalie_lateral_accel, t_arrive)
+			> GoaliePushRules.set_reach(cfg.goalie_lateral_speed, cfg.goalie_lateral_accel, t_arrive)
 
 
 # The coverage half of the verdict, with no clock in it: is the puck around him,
@@ -1044,8 +1026,12 @@ static func beaten_wide_holds(
 	var seal_edge_x: float = goalie_position.x + drive_sign * cfg.reach_half_width
 	if (puck_position.x - seal_edge_x) * drive_sign <= 0.0:
 		return false
+	# Arrived once the pad is within a puck's radius of the post spot: nothing
+	# can be tucked through a gap that narrow, and an exact test turns a seal
+	# landing a few millimetres short into one that never ends.
 	var post_x: float = goal_center_x + drive_sign * net_half_width
-	return tuck_point_travel(goalie_position, post_x, goal_line_z, cfg) > 0.0
+	return tuck_point_travel(goalie_position, post_x, goal_line_z, cfg) \
+			> GameRules.PUCK_COLLISION_RADIUS
 
 
 # Metres the goalie still has to travel to seal the tuck point: the true 2D
@@ -1161,7 +1147,7 @@ static func lateral_tracking_cap(
 # Race: time available = puck flight to the crossing point + the receiver's
 # release swing (the read delay was already spent by the caller before asking).
 # Distance needed = lateral gap to the crossing minus standing pad coverage.
-# Lost when the accel-ramped standing push can't cover it in time.
+# Lost when the standing push can't cover it and stop in time.
 static func cross_crease_race_lost(
 		target_x: float,
 		puck_x: float,
@@ -1176,8 +1162,7 @@ static func cross_crease_race_lost(
 		return false  # already covering the crossing point
 	var t_pass: float = absf(target_x - puck_x) / maxf(absf(puck_vx), 0.001)
 	var t_avail: float = t_pass + release_time
-	return needed > reachable_lateral_distance(
-			goalie_lateral_speed, goalie_lateral_accel, t_avail)
+	return needed > GoaliePushRules.set_reach(goalie_lateral_speed, goalie_lateral_accel, t_avail)
 
 
 # ── Backdoor-aware depth cap ─────────────────────────────────────────────────
@@ -1187,7 +1172,7 @@ static func cross_crease_race_lost(
 #   time the play needs   = pass flight (puck→shooter / pass_speed)
 #                           + the receiver's release swing
 #   time the goalie loses = read delay before the push engages
-#   coverable distance    = reachable_lateral_distance over what's left
+#   coverable distance    = GoaliePushRules.set_reach over what's left
 # At challenge radius r along the goal→threat ray, the goalie sits r·sin(θ)
 # off the goal→shooter shot line (θ between the two rays), so the cap solves
 # r·sin(θ) <= coverable — the largest radius from which he still arrives.
@@ -1262,7 +1247,7 @@ static func backdoor_depth_cap(
 	# Already there → the whole flight; arriving with it → nothing; late → nothing.
 	var coverage: float = clampf(t_pass - defender_arrival_time, 0.0, t_pass)
 	var move_time: float = t_pass + cfg.release_time + coverage - cfg.react_delay
-	var coverable: float = reachable_lateral_distance(
+	var coverable: float = GoaliePushRules.set_reach(
 			cfg.goalie_lateral_speed, cfg.goalie_lateral_accel, move_time)
 	return coverable / sin_theta
 

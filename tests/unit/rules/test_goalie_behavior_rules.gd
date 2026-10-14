@@ -842,25 +842,6 @@ func test_sealed_pad_disabled_range_keeps_toe_out() -> void:
 	# square_range 0 disables squaring entirely.
 	assert_almost_eq(GoalieBehaviorRules.sealed_pad_toe_out(0.0, 18.0, 0.0), 18.0, 0.0001)
 
-# ── reachable_lateral_distance ────────────────────────────────────────────────
-# Standing-push kinematics: accelerate from rest at `accel` to `max_speed`,
-# then hold. Mirrors _move_along_arc's move_toward ramp.
-
-func test_reachable_distance_zero_time_is_zero() -> void:
-	assert_almost_eq(GoalieBehaviorRules.reachable_lateral_distance(3.8, 14.0, 0.0), 0.0, 0.0001)
-
-func test_reachable_distance_ramp_phase() -> void:
-	# t=0.1s is inside the ramp (t_ramp = 3.8/14 ≈ 0.271): d = ½·14·0.1² = 0.07.
-	assert_almost_eq(GoalieBehaviorRules.reachable_lateral_distance(3.8, 14.0, 0.1), 0.07, 0.0001)
-
-func test_reachable_distance_past_ramp() -> void:
-	# t=0.5s: d = v·t − v²/(2a) = 1.9 − 0.5157 ≈ 1.3843.
-	assert_almost_eq(GoalieBehaviorRules.reachable_lateral_distance(3.8, 14.0, 0.5), 1.3843, 0.001)
-
-func test_reachable_distance_zero_accel_is_instant_speed() -> void:
-	# accel <= 0 → legacy instant-speed model (v·t).
-	assert_almost_eq(GoalieBehaviorRules.reachable_lateral_distance(3.8, 0.0, 0.5), 1.9, 0.0001)
-
 # ── is_beaten_wide ────────────────────────────────────────────────────────────
 # Race to the tuck point (the post on the side the PUCK is being taken):
 # beaten when the goalie's pad can't reach the seal spot before the puck's own
@@ -981,12 +962,13 @@ func _backdoor_cfg() -> GoalieBehaviorRules.BackdoorThreatConfig:
 
 func test_backdoor_shooter_caps_challenge_depth() -> void:
 	# Carrier wide left (−4, 23), one-timer man at the right post (1.2, 25.2):
-	# 5.65m pass → 0.43s of goalie movement → ~1.13m coverable, nearly
-	# perpendicular lines → cap ≈ 1.13, well under the 1.75 aggressive chart.
+	# 5.65m pass → 0.43s of goalie movement → ~0.84m he can push and stop on,
+	# nearly perpendicular lines → cap ≈ 0.84, well under the 1.75 aggressive
+	# chart.
 	var cap: float = GoalieBehaviorRules.backdoor_depth_cap(
 			Vector3(-4, 0, 23), Vector3(-4, 0, 23), Vector3(1.2, 0, 25.2),
 			26.6, 0.0, -1, INF, _backdoor_cfg())
-	assert_almost_eq(cap, 1.131, 0.02)
+	assert_almost_eq(cap, 0.836, 0.02)
 
 func test_no_cap_without_live_shooter_behind_goal_line() -> void:
 	var cap: float = GoalieBehaviorRules.backdoor_depth_cap(
@@ -1010,11 +992,11 @@ func test_no_cap_for_shooter_on_same_shot_line() -> void:
 
 func test_doorstep_criss_cross_pins_goalie_deep() -> void:
 	# Royal-road pair at the doorstep: puck at (−1.5, 25.3), one-timer man at
-	# (1.2, 25.2). 2.7m pass → goalie still ramping → cap ≈ 0.35.
+	# (1.2, 25.2). 2.7m pass → a push too short to reach speed → cap ≈ 0.22.
 	var cap: float = GoalieBehaviorRules.backdoor_depth_cap(
 			Vector3(-1.5, 0, 25.3), Vector3(-1.5, 0, 25.3), Vector3(1.2, 0, 25.2),
 			26.6, 0.0, -1, INF, _backdoor_cfg())
-	assert_almost_eq(cap, 0.348, 0.02)
+	assert_almost_eq(cap, 0.222, 0.02)
 
 func test_faster_assumed_pass_caps_deeper() -> void:
 	var slow_cap: float = GoalieBehaviorRules.backdoor_depth_cap(
@@ -1041,7 +1023,7 @@ func test_backdoor_cap_symmetric_for_minus_z_goal() -> void:
 	var cap: float = GoalieBehaviorRules.backdoor_depth_cap(
 			Vector3(-4, 0, -23), Vector3(-4, 0, -23), Vector3(1.2, 0, -25.2),
 			-26.6, 0.0, 1, INF, _backdoor_cfg())
-	assert_almost_eq(cap, 1.131, 0.02)
+	assert_almost_eq(cap, 0.836, 0.02)
 
 # ── Coverage: he has defencemen ──────────────────────────────────────────────
 # The 2-on-1 rule — take the shooter, trust your D to take the pass. A defender
@@ -1243,15 +1225,12 @@ func test_clear_unforced_keeps_natural_pick() -> void:
 
 # ── Behind-net puck play (tier-1 conservative rim stop) ───────────────────────
 
-func test_travel_time_inverts_reachable_distance() -> void:
-	# travel_time_from_rest is the inverse of reachable_lateral_distance: the
-	# distance reachable in t takes exactly t to travel.
-	var t_mid: float = 0.2   # inside the accel ramp (ramp ends at 3.8/14 ≈ 0.27)
-	var d_mid: float = GoalieBehaviorRules.reachable_lateral_distance(3.8, 14.0, t_mid)
-	assert_almost_eq(GoalieBehaviorRules.travel_time_from_rest(d_mid, 3.8, 14.0), t_mid, 0.001)
-	var t_long: float = 1.5  # past the ramp, cruising
-	var d_long: float = GoalieBehaviorRules.reachable_lateral_distance(3.8, 14.0, t_long)
-	assert_almost_eq(GoalieBehaviorRules.travel_time_from_rest(d_long, 3.8, 14.0), t_long, 0.001)
+func test_travel_time_from_rest_ramps_then_cruises() -> void:
+	# Inside the ramp (it ends at 3.8/14 ≈ 0.27 s): d = ½·a·t².
+	assert_almost_eq(GoalieBehaviorRules.travel_time_from_rest(0.28, 3.8, 14.0), 0.2, 0.001)
+	# Past it, cruising: d = v·t − v²/(2a).
+	assert_almost_eq(GoalieBehaviorRules.travel_time_from_rest(
+			3.8 * 1.5 - 3.8 * 3.8 / 28.0, 3.8, 14.0), 1.5, 0.001)
 
 func test_travel_time_from_speed_prices_the_momentum_a_body_already_has() -> void:
 	# From rest it is the from-rest clock; already moving it is quicker; moving

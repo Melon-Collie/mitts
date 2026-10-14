@@ -211,29 +211,34 @@ static func at_depth(goalie_now: Vector3, attacking_goal: Vector3,
 			attacking_goal.z - signf(attacking_goal.z) * depth)
 
 
-# Lateral distance a goalie push covers in `move_time` (post-reaction), on the
-# accelerate-then-cruise profile: ½·a·t² until the push reaches t_push speed,
-# linear after. The inverse of goalie_lateral_time.
+# Lateral distance a goalie's save push gets a pad across in `move_time`
+# (post-reaction), against a shot already in flight: accelerate, then hold top
+# speed — a pad moving through the line stops the puck, so it need not stop.
 static func goalie_lateral_reach(move_time: float) -> float:
-	if move_time <= 0.0:
-		return 0.0
-	var t_ramp: float = GOALIE_MAX_LATERAL_SPEED_MPS / goalie_lateral_accel_m_s2
-	if move_time <= t_ramp:
-		return 0.5 * goalie_lateral_accel_m_s2 * move_time * move_time
-	return 0.5 * goalie_lateral_accel_m_s2 * t_ramp * t_ramp \
-			+ GOALIE_MAX_LATERAL_SPEED_MPS * (move_time - t_ramp)
+	return GoaliePushRules.cruise_reach(
+			GOALIE_MAX_LATERAL_SPEED_MPS, goalie_lateral_accel_m_s2, move_time)
 
 
-# Time a goalie push needs to cover `dist` laterally (post-reaction) — the
-# inverse of goalie_lateral_reach.
-static func goalie_lateral_time(dist: float) -> float:
-	if dist <= 0.0:
-		return 0.0
-	var t_ramp: float = GOALIE_MAX_LATERAL_SPEED_MPS / goalie_lateral_accel_m_s2
-	var ramp_dist: float = 0.5 * goalie_lateral_accel_m_s2 * t_ramp * t_ramp
-	if dist <= ramp_dist:
-		return sqrt(2.0 * dist / goalie_lateral_accel_m_s2)
-	return t_ramp + (dist - ramp_dist) / GOALIE_MAX_LATERAL_SPEED_MPS
+# Lateral distance he can re-square across in `move_time` (post-reaction) and be
+# SET on — pushed, cruised and stopped, as the live mover does. Positioning
+# before a release reads this one. The inverse of _goalie_set_time.
+static func _goalie_set_reach(move_time: float) -> float:
+	return GoaliePushRules.set_reach(
+			GOALIE_MAX_LATERAL_SPEED_MPS, goalie_lateral_accel_m_s2, move_time)
+
+
+# How far along a re-square to a spot `need` away he is `move_time` into it
+# (post-reaction) — where the live mover, braking into the spot, has put him.
+static func goalie_push_progress(need: float, move_time: float) -> float:
+	return GoaliePushRules.push_progress(
+			need, GOALIE_MAX_LATERAL_SPEED_MPS, goalie_lateral_accel_m_s2, move_time)
+
+
+# Time a re-square across `dist` takes, stop included (post-reaction) — the
+# inverse of _goalie_set_reach.
+static func _goalie_set_time(dist: float) -> float:
+	return GoaliePushRules.time_to_set(
+			dist, GOALIE_MAX_LATERAL_SPEED_MPS, goalie_lateral_accel_m_s2)
 
 # Shadow half-width used by AIShotAim.compute_open_net_aim for the lane-check
 # aim point — picks a point past the goalie for the lane segment check.
@@ -507,7 +512,8 @@ static func resolve_feed_keeper(
 # for a puck at `puck_pos_at_release` (the shooter for a direct shot, the
 # receiver lead for a pass, the candidate for carry-then-shoot). Depth from
 # planned_goalie_depth; laterally, react-then-push — his leg read delay, then
-# the accelerating push (goalie_lateral_reach) toward the ARC-MATCHING x
+# the accelerating push, braking onto his spot (goalie_push_progress), toward
+# the ARC-MATCHING x
 # (goalie_arc_match_x). Never slide him toward puck.x directly: that is wrong
 # for off-axis shooters and reads diagonal carries as open-net plays.
 static func predict_goalie_pos(
@@ -523,14 +529,11 @@ static func predict_goalie_pos(
 			release_time_s, closing_speed_m_s))
 	var target_x: float = goalie_arc_match_x(based, attacking_goal, puck_pos_at_release)
 	var move_time: float = maxf(0.0, release_time_s - goalie_leg_delay_s)
-	var max_move: float = goalie_lateral_reach(move_time)
 	var dx: float = target_x - based.x
-	var dist_to_target: float = absf(dx)
-	if dist_to_target < 0.001 or max_move <= 0.0:
+	if absf(dx) < 0.001 or move_time <= 0.0:
 		return based
-	if dist_to_target <= max_move:
-		return Vector3(target_x, based.y, based.z)
-	return Vector3(based.x + signf(dx) * max_move, based.y, based.z)
+	return Vector3(based.x + signf(dx) * goalie_push_progress(absf(dx), move_time),
+			based.y, based.z)
 
 
 # Hand height (m) of the SLIDING pose — GoalieBodyConfigBuilder's slide, arms
@@ -572,11 +575,11 @@ static func goalie_unsettled(
 	if need < 0.001:
 		return 0.0  # already squared — no forced motion, fully set
 	var move_time: float = maxf(0.0, release_time_s - goalie_leg_delay_s)
-	var max_move: float = goalie_lateral_reach(move_time)
+	var max_move: float = _goalie_set_reach(move_time)
 	if need >= max_move:
 		return 1.0  # still sliding at release (or hasn't even reacted) — caught moving
 	# Reached the target with time to spare; ramps back to 0 as it re-sets.
-	var slide_time: float = goalie_lateral_time(need)
+	var slide_time: float = _goalie_set_time(need)
 	var settled_for: float = move_time - slide_time
 	return clampf(1.0 - settled_for / GOALIE_SETTLE_REF_S, 0.0, 1.0)
 
