@@ -21,7 +21,12 @@ func test_caps_defaults_equal_league_baseline() -> void:
 	assert_almost_eq(caps.stick_reach, GameRules.DEFAULT_STICK_LENGTH_M, 0.001)
 	assert_almost_eq(caps.wrister_shot_speed, GameRules.DEFAULT_WRISTER_POWER_MAX_M_S, 0.001)
 	assert_almost_eq(caps.weight, body.weight, 0.001)
-	assert_almost_eq(caps.body_check_transfer, 0.45, 0.001)
+	assert_almost_eq(caps.body_check_transfer, body.body_check_transfer, 0.001)
+	# The unwired fallbacks downstream of the caps carry the same default.
+	assert_almost_eq(SkaterAgentStateMachine.new()._self_body_check_transfer,
+			caps.body_check_transfer, 0.001)
+	assert_almost_eq(RoleContext.new().self_body_check_transfer,
+			caps.body_check_transfer, 0.001)
 	assert_almost_eq(caps.handle_reach, AIBotMechanics.EVADE_CARRY_HANDLE_M, 0.001,
 			"handle reach defaults to the league carry-handle reach")
 	assert_almost_eq(caps.blade_speed, ctrl.max_blade_speed, 0.001,

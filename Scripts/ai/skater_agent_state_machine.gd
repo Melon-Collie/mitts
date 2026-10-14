@@ -452,7 +452,7 @@ var _self_lateral_grip: float = 1.0
 # Body-check delivery (mass-emergent), so a defensive role can predict THIS bot's
 # hit strength before committing to a check.
 var _self_weight: float = 1.0
-var _self_body_check_transfer: float = 0.45
+var _self_body_check_transfer: float = 0.65
 var _self_handle_reach: float = 0.9
 # Blade reach cone half-angle (ROM + torso twist) and Agility-scaled facing turn
 # rate, so the carrier prices body rotation at this bot's real reach and speed.

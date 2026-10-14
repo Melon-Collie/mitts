@@ -74,8 +74,8 @@ var settle_penalty_frac: float
 var settle_penalty_tau_s: float
 
 # PACE: extra metres the on-puck PRESSURE defender drops its cut-off line back
-# toward its own net, beyond the ladder's gap. Must stay under a stick length —
-# see normal().
+# toward its own net, beyond the ladder's gap. Under a stick length he can still
+# poke (see normal()); Easy sags well past it on purpose (see easy()).
 var pursuit_standoff_m: float
 
 # PACE: multiplier on the pace this bot's passes ARRIVE at (passes only, not

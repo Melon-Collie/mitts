@@ -85,7 +85,7 @@ var self_loft_tans: Vector3 = Vector3(
 		GameRules.DEFAULT_LOFT_TAN_HIGH)
 # Body-check delivery and current stagger, for AIDefensiveVerbs.evaluate_body_check.
 var self_weight: float = 1.0
-var self_body_check_transfer: float = 0.45
+var self_body_check_transfer: float = 0.65
 var self_stagger_timer: float = 0.0
 # Hands-scaled carry-handle reach, m — how tight a seam best_evade_point threads.
 var self_handle_reach: float = 0.9

@@ -93,7 +93,7 @@ var wrister_unloaded_share: float = 0.6
 # (closing × transfer × m_a / (m_a + m_b)): a heavier player predicts harder
 # hits and commits to checks more readily.
 var weight: float = 1.0
-var body_check_transfer: float = 0.45
+var body_check_transfer: float = 0.65
 
 # How far the carrier holds/protects the puck off its body while HANDLING it —
 # the reach that sets how tight an evasion seam it can thread (best_evade_point).
