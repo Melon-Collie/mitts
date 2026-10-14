@@ -81,9 +81,11 @@ and can trip the pose IK gate's facing freeze.
 the body (the carry cursor, and pre-aim's pull to a charged release's hold) walks
 `BladeRoute`: straight when that line clears the body, else the shortest way that
 stays a body-plus-puck radius off it, around the side the skater faces. A spot
-behind the body is a turn-around and keeps the arc. The shot-hold pricing
-(`AIShotHolds`) measures the pull on the same route, so what the carrier prices
-is the path the cursor walks.
+behind the body is a turn-around and keeps the arc; a swing to a charged
+release's hold walks the hold's own reach and lands on it, where other targets
+stay on the aim ring. The shot-hold pricing (`AIShotHolds`) measures the pull on
+the same route, and times the swing at the bot's arc rate, so what the carrier
+prices is the path the cursor walks.
 
 ## Reception doctrine
 

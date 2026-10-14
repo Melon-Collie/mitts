@@ -12,11 +12,11 @@ extends RefCounted
 # (WristerPocket), and a reach out to either side of the shot line, which moves
 # the whole tangent-cone geometry around a goalie in tight (the pull-across, the
 # backhand tuck) at whatever pace the load leaves there. A pull costs its real
-# time: the blade's travel along the route it walks, or the body's turn onto the
-# cursor when the turn is what loads the puck (a forehand pulled beside the stick
-# hip is loaded before the body moves). A pulled hold sits at the handling reach;
-# the load reads its bearing, not its distance. All vectors are world XZ, offsets
-# off the body.
+# time: the blade's travel along the route it walks (its swing round the body to
+# a hold behind it), or the body's turn onto the cursor when the turn is what
+# loads the puck (a forehand pulled beside the stick hip is loaded before the
+# body moves). A pulled hold sits at the handling reach; the load reads its
+# bearing, not its distance. All vectors are world XZ, offsets off the body.
 
 # A puck this near the body's centre has no bearing to load from.
 const MIN_OFFSET_M: float = 0.05
@@ -32,6 +32,8 @@ var backhand_coefficient: float = 0.75
 var handle_reach: float = 0.9
 var blade_speed: float = 10.0
 var facing_turn_rate: float = 6.0
+# The cursor's swing round the body to a hold behind it (rad/s).
+var arc_rate: float = 7.5
 
 # solve_shot's holds: offset, share of pace, pull time. A quarter-turn that is
 # the pocket itself is not listed twice.
@@ -41,6 +43,11 @@ var pull_s: Array[float] = [0.0, 0.0, 0.0, 0.0]
 # price_keep's odds the puck is still on the blade when each hold fires.
 var keep: Array[float] = [1.0, 1.0, 1.0, 1.0]
 var count: int = 0
+# solve_arrival's hold for a shot from a spot a carry reaches, its share of pace
+# and its odds of keeping the puck through the charge.
+var arrival_offset: Vector2 = Vector2.ZERO
+var arrival_share: float = 1.0
+var arrival_keep: float = 1.0
 # solve_pass's hold and the share the press waits for.
 var pass_offset: Vector2 = Vector2.ZERO
 var pass_share: float = 0.0
@@ -63,6 +70,7 @@ func configure_from(ctx: RoleContext) -> void:
 	handle_reach = ctx.self_handle_reach
 	blade_speed = ctx.self_blade_speed
 	facing_turn_rate = ctx.self_facing_turn_rate
+	arc_rate = ctx.self_arc_rate
 
 
 # Share of pace a release along `aim` carries with the puck at `puck_offset` and
@@ -119,6 +127,39 @@ func solve_shot(aim: Vector2, puck_offset: Vector2, velocity: Vector2,
 		count += 1
 
 
+# The hold a shot on arrival at a carry's spot is taken from: the best-loaded
+# pocket for `aim` at `velocity`, or the reach to the shot line's other side when
+# a man's stick makes the pocket the worse bet (share × keep). Each is kept
+# through `t` from now, the body then at `at` (world), against every opponent's
+# reachable stick (AICarrySpace).
+func solve_arrival(aim: Vector2, velocity: Vector2, facing: Vector2, at: Vector3,
+		t: float, opponents: Array[Vector3], opponent_vels: Array[Vector3],
+		opponent_caps: Array) -> void:
+	pocket(aim, velocity, facing)
+	arrival_offset = pocket_offset()
+	arrival_share = pocket_result.power_share
+	arrival_keep = _dwell_keep(at, arrival_offset, t, opponents, opponent_vels, opponent_caps)
+	if arrival_keep >= 1.0:
+		return
+	var side: float = -1.0 if aim.cross(pocket_result.dir) > 0.0 else 1.0
+	var dir: Vector2 = aim.normalized().rotated(side * PI * 0.5)
+	FacingRules.solve(_facing, facing, dir, velocity, false, false, facing_cfg)
+	var other: Vector2 = dir * handle_reach
+	var other_share: float = share_at(other, aim, _facing.target)
+	var other_keep: float = _dwell_keep(at, other, t, opponents, opponent_vels, opponent_caps)
+	if other_share * other_keep > arrival_share * arrival_keep:
+		arrival_offset = other
+		arrival_share = other_share
+		arrival_keep = other_keep
+
+
+static func _dwell_keep(at: Vector3, off: Vector2, t: float, opponents: Array[Vector3],
+		opponent_vels: Array[Vector3], opponent_caps: Array) -> float:
+	return AICarrySpace.clearance_to_safety(AICarrySpace.reach_clearance(
+			Vector3(at.x + off.x, 0.0, at.z + off.y), t, opponents, opponent_vels,
+			opponent_caps, minf(t, AICarrySpace.CARRY_LUNGE_WINDOW_S)))
+
+
 # Odds each solve_shot hold keeps the puck from `self_pos` (world) skating at
 # `velocity`: the blade carries it along the route the cursor walks (BladeRoute
 # to a hold in front, around the body to one behind `facing`), then it sits at
@@ -133,10 +174,8 @@ func price_keep(self_pos: Vector3, velocity: Vector2, facing: Vector2, charge_s:
 	var has_caps: bool = opponent_caps.size() == opponents.size()
 	for k: int in count:
 		var t_end: float = pull_s[k] + charge_s
-		var k_keep: float = AICarrySpace.clearance_to_safety(AICarrySpace.reach_clearance(
-				_world(self_pos, offset[k], velocity, t_end), t_end,
-				opponents, opponent_vels, opponent_caps,
-				minf(t_end, AICarrySpace.CARRY_LUNGE_WINDOW_S)))
+		var k_keep: float = _dwell_keep(_world(self_pos, Vector2.ZERO, velocity, t_end),
+				offset[k], t_end, opponents, opponent_vels, opponent_caps)
 		if pull_s[k] > 0.0 and k_keep > 0.0:
 			var t_mid: float = pull_s[k] * 0.5
 			_fill_route(k, facing)
@@ -172,14 +211,18 @@ func _route_gap(p: Vector2) -> float:
 	return gap
 
 
-func _route_behind(k: int, facing: Vector2) -> bool:
-	return offset[k].dot(facing) < 0.0 and offset[0].length() >= MIN_OFFSET_M
+static func _behind(from: Vector2, to: Vector2, facing: Vector2) -> bool:
+	return to.dot(facing) < 0.0 and from.length() >= MIN_OFFSET_M
 
 
-func _route_length(k: int, facing: Vector2) -> float:
-	if _route_behind(k, facing):
-		return offset[0].distance_to(offset[k])
-	return BladeRoute.length(offset[0], offset[k], facing)
+# The blade's time pulling the puck from `from` to `to` (offsets off the body
+# facing `facing`): BladeRoute's length at the blade speed to a spot in front;
+# to one behind, the swing round at arc_rate, or the blade's travel if longer.
+func pull_time(from: Vector2, to: Vector2, facing: Vector2) -> float:
+	var speed: float = maxf(blade_speed, 0.1)
+	if not _behind(from, to, facing):
+		return BladeRoute.length(from, to, facing) / speed
+	return maxf(absf(from.angle_to(to)) / maxf(arc_rate, 0.1), from.distance_to(to) / speed)
 
 
 # The point a fraction `frac` along the pull to hold `k`: BladeRoute to a hold in
@@ -187,7 +230,7 @@ func _route_length(k: int, facing: Vector2) -> float:
 func _route_point(k: int, facing: Vector2, frac: float) -> Vector2:
 	var from: Vector2 = offset[0]
 	var to: Vector2 = offset[k]
-	if _route_behind(k, facing):
+	if _behind(from, to, facing):
 		return from.normalized().rotated(from.angle_to(to) * frac) \
 				* lerpf(from.length(), to.length(), frac)
 	return BladeRoute.point_along(from, to, facing,
@@ -212,7 +255,7 @@ static func _world(self_pos: Vector3, off: Vector2, velocity: Vector2, t: float)
 func _fill_pulled(k: int, dir: Vector2, aim: Vector2, body: Vector2,
 		facing: Vector2) -> void:
 	offset[k] = dir * handle_reach
-	var blade_s: float = _route_length(k, facing) / maxf(blade_speed, 0.1)
+	var blade_s: float = pull_time(offset[0], offset[k], facing)
 	var share_now: float = share_at(offset[k], aim, facing)
 	var share_turned: float = share_at(offset[k], aim, body)
 	if share_now >= share_turned - 0.001 or facing.length_squared() < 0.0001:

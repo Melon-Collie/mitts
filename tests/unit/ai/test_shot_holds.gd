@@ -10,13 +10,14 @@ const RIGHT := Vector2(1.0, 0.0)
 var _h := AIShotHolds.new()
 
 
-# The pull's blade time, along the route the cursor walks: BladeRoute to a hold
-# in front of the body (every test here faces AHEAD), the chord to one behind.
+# The pull's blade time, along the route the cursor walks (every test here faces
+# AHEAD): BladeRoute to a hold in front of the body, the swing round to one
+# behind, or the blade's travel if that is longer.
 func _blade_s(k: int) -> float:
-	var route: float = _h.offset[k].distance_to(_h.offset[0]) \
-			if _h.offset[k].dot(AHEAD) < 0.0 \
-			else BladeRoute.length(_h.offset[0], _h.offset[k], AHEAD)
-	return route / _h.blade_speed
+	var travel: float = _h.offset[k].distance_to(_h.offset[0]) / _h.blade_speed
+	if _h.offset[k].dot(AHEAD) < 0.0:
+		return maxf(absf(_h.offset[0].angle_to(_h.offset[k])) / _h.arc_rate, travel)
+	return BladeRoute.length(_h.offset[0], _h.offset[k], AHEAD) / _h.blade_speed
 
 
 func test_the_puck_where_it_is_comes_first_at_its_own_share() -> void:
@@ -53,6 +54,27 @@ func test_a_pull_waits_for_the_turn_only_when_the_turn_loads_it() -> void:
 				if _h.pull_s[k] > _blade_s(k) + 0.0001:
 					assert_gt(_h.share[k], _h.share_at(_h.offset[k], aim, AHEAD),
 							"aim %.0f°: the turn is only waited for when it buys load" % a)
+
+
+func test_a_hold_behind_the_body_waits_for_the_swing_round() -> void:
+	# Aimed 60° off ahead, one side reach sits behind the body: the cursor swings
+	# the puck round to it at arc_rate, slower here than the blade's chord.
+	var h := AIShotHolds.new()
+	h.arc_rate = 2.0
+	h.solve_shot(AHEAD.rotated(deg_to_rad(60.0)), RIGHT * 0.9, Vector2.ZERO, AHEAD)
+	var behind: int = -1
+	for k: int in range(1, h.count):
+		if h.offset[k].dot(AHEAD) < 0.0:
+			behind = k
+	assert_gt(behind, 0)
+	var swing: float = absf(h.offset[0].angle_to(h.offset[behind])) / h.arc_rate
+	assert_gt(swing, h.offset[0].distance_to(h.offset[behind]) / h.blade_speed)
+	assert_gte(h.pull_s[behind], swing - 0.0001)
+
+
+func test_the_swing_rate_defaults_to_the_state_machine_s() -> void:
+	assert_eq(AIShotHolds.new().arc_rate, SkaterAgentStateMachine.MOUSE_ARC_RATE_RAD_S)
+	assert_eq(RoleContext.new().self_arc_rate, SkaterAgentStateMachine.MOUSE_ARC_RATE_RAD_S)
 
 
 func test_the_pocket_beside_the_hip_is_not_listed_twice() -> void:

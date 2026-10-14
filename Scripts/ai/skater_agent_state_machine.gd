@@ -2258,6 +2258,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	ctx.self_reach_cone_half_angle = _self_reach_cone_half_angle
 	ctx.self_facing_turn_rate = _self_facing_turn_rate
 	ctx.self_blade_speed = _self_blade_speed
+	ctx.self_arc_rate = _mouse_arc_rate_rad_s
 	ctx.self_backhand_power_coefficient = _self_backhand_coefficient
 	_holds.configure_from(ctx)
 	ctx.self_forehand_perp_sign = _handedness_perp_sign
@@ -3173,12 +3174,15 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		mouse_target = _aim_target_for_intent(snapshot, self_pos)
 		# ARC pre-aim swing: the convergence/commit logic below reads the arc; the
 		# cached FINAL mouse_target drives the convergence check so the bot fires
-		# only when the body has reached the real aim. A charged release's hold in
-		# front of the body is a carry reach, not an aim, and steps FRONT as one.
-		if _pre_aim_holds_puck() and not _target_is_behind(mouse_target - self_pos, self_state):
-			input.mouse_world_pos = _step_mouse_front(mouse_target)
-		else:
+		# only when the body has reached the real aim. A charged release's hold is
+		# a carry reach, not an aim: FRONT in front of the body, round to the hold
+		# itself behind it.
+		if not _pre_aim_holds_puck():
 			input.mouse_world_pos = _step_mouse_aim(mouse_target)
+		elif _target_is_behind(mouse_target - self_pos, self_state):
+			input.mouse_world_pos = _step_mouse_hold_arc(mouse_target)
+		else:
+			input.mouse_world_pos = _step_mouse_front(mouse_target)
 
 	# If pre-aiming, wait for mouse convergence (or timeout) before
 	# transitioning to the action state. Body facing is no longer
@@ -3469,7 +3473,8 @@ func _target_is_behind(desired_dir: Vector3, self_state: SkaterNetworkState) -> 
 # `_step_mouse_toward`'s straight-line lerp tracks this slowly-moving
 # target with sub-tick error, so the mouse describes the same arc.
 func _arc_step_mouse_target(self_pos: Vector3, final_target: Vector3,
-		self_state: SkaterNetworkState, arc_rate: float) -> Vector3:
+		self_state: SkaterNetworkState, arc_rate: float,
+		ring_radius: float = CARRY_BLADE_AIM_FORWARD_M) -> Vector3:
 	var to_final: Vector3 = final_target - self_pos
 	to_final.y = 0.0
 	if to_final.length_squared() < 0.0001:
@@ -3523,7 +3528,7 @@ func _arc_step_mouse_target(self_pos: Vector3, final_target: Vector3,
 		stepped_angle = current_angle + _arc_protect_sign * max_step
 	else:
 		stepped_angle = current_angle + clampf(diff, -max_step, max_step)
-	return self_pos + Vector3(sin(stepped_angle), 0.0, cos(stepped_angle)) * CARRY_BLADE_AIM_FORWARD_M
+	return self_pos + Vector3(sin(stepped_angle), 0.0, cos(stepped_angle)) * ring_radius
 
 
 # FACE-mode cursor placement: a point on the body ring in the direction the bot
@@ -4753,6 +4758,9 @@ func _step_carry_cursor(input: InputState, snapshot: WorldSnapshot,
 		# prior turn-around so the next ARC swing re-evaluates from scratch.
 		_arc_protect_sign = 0.0
 		input.mouse_world_pos = _step_mouse_front(mouse_target)
+	elif not deke_mouse.is_finite() and _carry_tracking_fire \
+			and _carrier.shoot_now_hold != Vector3.ZERO:
+		input.mouse_world_pos = _step_mouse_hold_arc(mouse_target)
 	else:
 		input.mouse_world_pos = _step_mouse_aim(mouse_target)
 
@@ -5817,10 +5825,13 @@ var _mouse_pos_initialized: bool = false
 #   FRONT  — DIRECT while the line to the target clears the body; when it would
 #            run the puck through the skater, walk BladeRoute around the front at
 #            the slew, measured off the body so the route rides it.
+#   HOLD_ARC — ARC on the target's own ring rather than the aim ring, so a swing
+#            to a charged release's hold behind the body lands on the hold.
 const _STEP_DIRECT: int = 0
 const _STEP_ARC: int = 1
 const _STEP_FACE: int = 2
 const _STEP_FRONT: int = 3
+const _STEP_HOLD_ARC: int = 4
 
 # Headroom below the pose IK gate (_self_reach_cone_half_angle) that a FACE-mode
 # cursor is clamped to, so it never sits exactly on the freeze boundary. Only
@@ -5855,6 +5866,12 @@ func _step_mouse_toward(target: Vector3) -> Vector3:
 # A carried puck's reach to a spot in front of the body (see _STEP_FRONT).
 func _step_mouse_front(target: Vector3) -> Vector3:
 	return _step_mouse_internal(target, _STEP_FRONT, _mouse_max_speed_m_s, _mouse_arc_rate_rad_s)
+
+
+# A carried puck's swing to a charged release's hold behind the body.
+func _step_mouse_hold_arc(target: Vector3) -> Vector3:
+	return _step_mouse_internal(target, _STEP_HOLD_ARC, _mouse_max_speed_m_s,
+			_mouse_arc_rate_rad_s)
 
 
 # Sample this release's execution error from the given per-tier budget —
@@ -5910,6 +5927,10 @@ func _step_mouse_internal(target: Vector3, mode: int,
 	if mode == _STEP_ARC:
 		step_target = _arc_step_mouse_target(
 				_current_self_pos, target, _current_self_state, arc_rate)
+	elif mode == _STEP_HOLD_ARC:
+		step_target = _arc_step_mouse_target(
+				_current_self_pos, target, _current_self_state, arc_rate,
+				Vector2(target.x - _current_self_pos.x, target.z - _current_self_pos.z).length())
 	elif mode == _STEP_FACE:
 		# Snap the cursor to the clamped point (facing_drag_speed does all the
 		# smoothing), so return straight out without the linear slew below.

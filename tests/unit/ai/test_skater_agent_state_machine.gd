@@ -2094,6 +2094,29 @@ func test_front_reach_that_clears_the_body_steps_direct() -> void:
 	assert_almost_eq(front.distance_to(direct), 0.0, 1e-6)
 
 
+func test_a_swing_to_a_hold_behind_lands_on_the_hold_at_the_arc_rate() -> void:
+	# Turn-around to a charged release's hold behind the body: the swing walks
+	# the hold's own reach, not the aim ring, and finishes on it.
+	sm._current_self_pos = Vector3.ZERO
+	sm._current_self_state = _self_state(Vector2(0, -1))
+	sm._mouse_max_speed_m_s = 10.0
+	sm._mouse_arc_rate_rad_s = 5.0
+	sm._mouse_pos = Vector3(0.9, 0, 0)
+	sm._mouse_pos_initialized = true
+	var target := Vector3(-0.6, 0, 0.67)
+	var reach: float = Vector2(target.x, target.z).length()
+	var prev: float = atan2(0.9, 0.0)
+	var r := Vector3.ZERO
+	for _i: int in 120:
+		r = sm._step_mouse_hold_arc(target)
+		var ang: float = atan2(r.x, r.z)
+		assert_lte(absf(wrapf(ang - prev, -PI, PI)), 5.0 * Agent.MOUSE_TICK_DELTA + 1e-4,
+				"at the arc rate")
+		assert_almost_eq(Vector2(r.x, r.z).length(), reach, 0.02, "on the hold's reach")
+		prev = ang
+	assert_almost_eq(r.distance_to(target), 0.0, 1e-4)
+
+
 func test_arc_step_shortest_way_in_open_ice() -> void:
 	var self_pos := Vector3.ZERO
 	var s := _protect_snap(self_pos, Vector3(0, 0, -30))

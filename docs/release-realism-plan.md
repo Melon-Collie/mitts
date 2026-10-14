@@ -217,7 +217,8 @@ who loads the puck, not just have the rule switched on.
   it was priced at (`_load_ready`, 0.05 slack, the old 0.5 s timeout as the
   backstop). The pull goes around the front of the body when the straight line
   to the hold would run through the skater (`BladeRoute`), and is priced on
-  that route. The Aim-B2 reach-cone commit stays for the one-tick quick release
+  that route. A hold behind the body is swung round to at the bot's arc rate,
+  on the hold's own reach, and priced at that swing's time. The Aim-B2 reach-cone commit stays for the one-tick quick release
   only: a charged release fires along its committed aim from wherever the puck
   sits, so it waits on neither the aim nor the body.
 - **A pass holds the puck where it is** when that already carries the feed's
@@ -255,8 +256,12 @@ who loads the puck, not just have the rule switched on.
   no longer turns for its aim), and the rim and dump-in pace ladders (still
   searched up to the full wrister). The bot pulls to the pocket for them at
   execution, so the pace holds; only the time is unpriced.
-- **Carry candidates and teammates' shots** keep the full-pace read: they are
-  projections a beat ahead, and the pocket is where the carry will put the puck.
+- **Carry candidates' shots** on arrival are held where the sweep would hold
+  them: the best pocket for the line at the arrival pace, or the line's other
+  side when a stick covers the pocket, at that hold's pace and keep, plus any
+  pull the carry is too short to make (`AIShotHolds.solve_arrival`). The
+  carrier's own drive-in credit reads the same way. Teammates' shots keep the
+  full-pace read: their hands are not modelled.
 - **Measured** (Phase 4 carries it on). Point-blank
   conversion against the live keeper (`test_bot_vs_goalie_conversion.gd`, 63
   rushes per goalie tier) went from HARD 6% / NORMAL 19% / EASY 33% to 51% /
@@ -327,6 +332,7 @@ positional gate. Two pieces:
      | + real M92 default ladder | 37 / 35 / 40% | 5 of 63 | 0.18 vs 14% | 0.19 vs 39% |
      | + main's goalie changes | 54 / 43 / 40% | 4 of 63 | 0.20 vs 29% | 0.21 vs 57% |
      | + the pull goes round the front | 46 / 35 / 35% | 6 of 63 | 0.20 vs 14% | 0.19 vs 50% |
+     | + behind-the-body swing, carry priced on the hold | 38 / 37 / 29% | 8 of 63 | 0.27 vs 13% | 0.20 vs 42% |
 
      The harness bots never get caps applied, so before the last row they
      priced their own shots on a 24° ladder no stick has. On the real one they

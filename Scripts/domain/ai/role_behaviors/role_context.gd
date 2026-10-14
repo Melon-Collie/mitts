@@ -150,6 +150,9 @@ var self_blade_reach: float = SkaterAgentStateMachine.BLADE_REACH_M
 # turn); only the narrow back wedge pays, at this turn rate.
 var self_reach_cone_half_angle: float = deg_to_rad(157.0)
 var self_facing_turn_rate: float = 6.0
+# How fast the bot's cursor swings the puck round the body to a spot behind it
+# (rad/s; SkaterAgentStateMachine._mouse_arc_rate_rad_s).
+var self_arc_rate: float = 7.5
 # The wrist shot's load, as this bot's body fires it (AISkaterCaps): the
 # Hands-scaled blade traverse speed (pulling the puck to the pocket costs
 # distance/speed), the backhand coefficient and unloaded share of the load cap,
