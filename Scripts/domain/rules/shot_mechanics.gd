@@ -148,29 +148,6 @@ static func wrister_speed_for_power_t(target_power_t: float, cfg: WristerConfig)
 		t = pow(t, 1.0 / cfg.power_curve)
 	return cfg.full_sweep_speed * t
 
-# Forehand vs backhand from the SWING CHIRALITY — the net rotational sense of
-# the blade's sweep around the player over the stroke (ChargeTracking.rotation,
-# radians; + / - is counter-/clockwise about the vertical axis). A forehand and
-# a backhand curl the blade in opposite rotational directions — that IS the
-# distinction (mirror-image wrist rolls) — so the sign of the accumulated swing
-# classifies it. Unlike a travel-direction read this handles a cross-body
-# backhand correctly: an off-side start swept to the stick side nets to the
-# backhand rotation even though it finishes stick-ward.
-#
-# deadband (radians) keeps a near-radial push — a straight-out shot with almost
-# no angular sweep — defaulting to FOREHAND (the strong side you square up on);
-# a backhand is the deliberate rotational commit.
-#
-# SIGN: a positive swing is a forehand for a right-handed shooter, mirrored for
-# lefties (is_left_handed flips it). Absolute chirality sign is empirical, not
-# reliably derivable through the handedness/coordinate conventions — if playtest
-# shows it inverted, flip the `handed` sign here and nowhere else.
-static func is_backhand_from_swing(
-		swing_rotation: float, is_left_handed: bool,
-		deadband: float = 0.0) -> bool:
-	var handed: float = -1.0 if is_left_handed else 1.0
-	return swing_rotation * handed < -deadband
-
 # The wrister's aim DIRECTION (world XZ, un-normalized — release_wrister normalizes).
 # BOTS commit their direction directly (bot_aim_dir non-ZERO — they have no cursor,
 # and their cosmetic near-body wind-up cursor would make origin→cursor garbage);
@@ -200,16 +177,6 @@ static func slapper_aim_dir(bot_aim_dir: Vector3, mouse_world: Vector3,
 		return bot_aim_dir
 	return Vector3(mouse_world.x - blade_world.x, 0.0, mouse_world.z - blade_world.z)
 
-# Wrister forehand/backhand. BOTS commit the hand (paired with a committed
-# bot_aim_dir); HUMANS read the CURSOR-sweep chirality (is_backhand_from_swing;
-# the blade is frozen so the cursor is the only sweep). See
-# SkaterController._wrister_is_backhand.
-static func wrister_is_backhand(bot_aim_dir: Vector3, bot_backhand: bool,
-		swing_rotation: float, is_left_handed: bool, deadband: float) -> bool:
-	if bot_aim_dir.length_squared() > 0.0001:
-		return bot_backhand
-	return is_backhand_from_swing(swing_rotation, is_left_handed, deadband)
-
 # Wrister release. HARD BINARY — a quick pass and a charged wrister are two
 # distinct releases, with NO blend between them. Which one fires is decided by the
 # INPUT at the call site (not any threshold in here) and passed in as is_quick_pass:
@@ -227,9 +194,8 @@ static func wrister_is_backhand(bot_aim_dir: Vector3, bot_backhand: bool,
 # hold-time classifier fires a wrister on an ordinary tap that lingers a few
 # ticks, when the player expected a snap.
 # Backhand is the caller's call: the controller passes is_backhand — for humans
-# the rotational sense of the CURSOR's bearing sweep over the stroke
-# (is_backhand_from_swing above; the blade is frozen so the cursor is the sweep),
-# for bots the committed hand.
+# the way the torso turns to drive the shot (WristerLoad), for bots the
+# committed hand.
 static func release_wrister(
 		player_pos: Vector3,
 		mouse_world_pos: Vector3,

@@ -143,15 +143,10 @@ static func zero_input(input: InputState, delta: float, host_timestamp: float) -
 	input.quick_pass_pressed = false
 	input.stick_check_held = false
 	input.stick_check_pressed = false
-	# Committed wrister aim/hand default to "not committed" every tick (reused
-	# scratch): only the SHOOT/PASS press states set them, and a latched aim_dir
+	# Committed wrister aim defaults to "not committed" every tick (reused
+	# scratch): only the SHOOT/PASS press states set it, and a latched aim_dir
 	# would make the controller read a stale bot aim on an ordinary carry tick.
 	input.bot_wrister_aim_dir = Vector3.ZERO
-	input.bot_wrister_backhand = false
 	# Same for the committed slapper aim: only ONE_TIMER_PRESSED sets it, and a
 	# latched direction would lock a stale line on a later wind-up.
 	input.bot_slapper_aim_dir = Vector3.ZERO
-	# Committed freeze offset defaults to ZERO (centered) every tick: only the
-	# SHOOT press state sets the scored release offset, and a latched value would
-	# pin an ordinary carry tick's puck off to the stale scored spot.
-	input.bot_wrister_origin_offset = Vector3.ZERO

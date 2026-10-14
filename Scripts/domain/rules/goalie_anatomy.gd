@@ -47,6 +47,11 @@ const BUTTERFLY_PAD_HALF_WIDTH_M: float = 0.42
 # Furthest the glove hand travels outboard on a full reach
 # (GoalieBodyConfigBuilder.glove_max_x_outward, sign-stripped).
 const GLOVE_MAX_X_OUTWARD_M: float = 0.85
+# The READY glove (GoalieBodyConfigBuilder.READY_GLOVE): up at the chest, out on
+# the glove side. The READY blocker is wherever the stick puts it
+# (GoalieStickRules.READY_WRIST_X_M, upright_wrist_y).
+const READY_GLOVE_X_M: float = 0.46
+const READY_GLOVE_Y_M: float = 1.02
 
 
 static func butterfly_pad_edge_half_width() -> float:
@@ -78,6 +83,14 @@ const PAD_CENTER_Y_BUTTERFLY_M: float = 0.14
 const TORSO_CENTER_Y_BUTTERFLY_M: float = PAD_CENTER_Y_BUTTERFLY_M \
 		+ PAD_BOX_WIDTH_M * 0.5 + TORSO_BOX_HEIGHT_M * 0.5
 const HEAD_CENTER_Y_BUTTERFLY_M: float = TORSO_CENTER_Y_BUTTERFLY_M + NECK_M
+
+
+# The hands down in the save stances (GoalieBodyConfigBuilder._set_down_hands):
+# the blocker just above the flat pads' tops, the glove out at belly height.
+const DOWN_BLOCKER_X_M: float = 0.40
+const DOWN_BLOCKER_Y_M: float = PAD_CENTER_Y_BUTTERFLY_M + PAD_BOX_WIDTH_M * 0.5 \
+		+ GLOVE_BOX_WIDTH_M * 0.5
+const DOWN_GLOVE_Y_M: float = TORSO_CENTER_Y_BUTTERFLY_M
 
 
 # Vertical extent (bottom, top) of a part, as a Vector2 so callers can test a

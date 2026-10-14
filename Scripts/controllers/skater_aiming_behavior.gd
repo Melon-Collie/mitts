@@ -2,12 +2,6 @@ class_name SkaterAimingBehavior
 extends RefCounted
 
 # ── Wrister charge state ──────────────────────────────────────────────────────
-# Net signed angular sweep of the SHOT LINE about the pinned origin (radians),
-# over the current stroke. Its SIGN is the forehand/backhand chirality
-# (ShotMechanics.is_backhand_from_swing). Accumulated by ChargeTracking, reset
-# with the rest of the stroke on a variance break, and saved/restored across
-# reconcile like cursor_speed_ema.
-var swing_rotation: float = 0.0
 # Cursor (intent) position in SCREEN-space, packed into a Vector3 as
 # (screen.x, 0, screen.y). The charge tracker reads its DIRECTION from
 # the delta of this position frame-over-frame. Screen space is the
@@ -19,13 +13,11 @@ var prev_intent_pos: Vector3 = Vector3.ZERO
 # Previous SHOT-LINE bearing: cursor minus the swing anchor (the pinned wrister
 # origin, locomotion-compensated for a camera-framed cursor —
 # ChargeTracking.swing_anchor), matching the vector the release fires along
-# (SkaterController._wrister_aim_dir). Its signed
-# rotation between ticks is the swing chirality the forehand/backhand read
-# classifies (ChargeTracking.swing_step), and its path length is the stroke travel.
+# (SkaterController._wrister_aim_dir). Its path length is the stroke travel.
 # Measured about the ORIGIN rather than the body: the origin is where the puck sits
-# and where the shot leaves from, so this rotates only when the player actually
-# sweeps their aim — a body-relative bearing would also rotate with the ~1 m blade
-# parallax, which is swing nobody made.
+# and where the shot leaves from, so this moves only when the player actually
+# sweeps their aim — a body-relative bearing would also swing with the ~1 m blade
+# parallax, which is travel nobody made.
 var prev_swing_bearing: Vector3 = Vector3.ZERO
 var prev_blade_dir: Vector3 = Vector3.ZERO
 # EMA of the raw SCREEN-space cursor speed (px/s) — THE wrister power signal.
@@ -50,10 +42,10 @@ var stroke_travel: float = 0.0
 # charge state (set once on the entry edge; restored so replay can't re-perturb).
 var wrister_origin_world: Vector3 = Vector3.ZERO
 # Skater world position (XZ, y = 0) at that same charge-start moment. A mouse
-# cursor's world point rides the skater-following camera, so the chirality /
-# travel bearings measure about the origin translated by the skater's motion
-# since the pin (ChargeTracking.swing_anchor) — this is the pin's reference
-# point. Saved/restored across reconcile alongside wrister_origin_world.
+# cursor's world point rides the skater-following camera, so the travel bearing
+# measures about the origin translated by the skater's motion since the pin
+# (ChargeTracking.swing_anchor), and the load reads the frozen puck the same way
+# (WristerLoad) — this is the pin's reference point. Saved/restored across reconcile alongside wrister_origin_world.
 var wrister_origin_skater_pos: Vector3 = Vector3.ZERO
 # Reused output for ChargeTracking.accumulate_into — a per-controller scratch so
 # the per-tick charge update never allocates. Pure output (fully overwritten each
@@ -75,7 +67,6 @@ var one_timer_retention_timer: float = 0.0
 func reset_wrister(initial_intent_pos: Vector3, initial_swing_bearing: Vector3,
 		initial_origin_world: Vector3 = Vector3.ZERO,
 		initial_origin_skater_pos: Vector3 = Vector3.ZERO) -> void:
-	swing_rotation = 0.0
 	cursor_speed_ema = 0.0
 	stroke_travel = 0.0
 	prev_blade_dir = Vector3.ZERO
@@ -101,9 +92,8 @@ func tick_wrister_charge(
 		var inst_speed: float = screen_delta.length() / delta
 		var a: float = clampf(cursor_speed_smoothing * delta, 0.0, 1.0)
 		cursor_speed_ema = lerpf(cursor_speed_ema, inst_speed, a)
-	# ChargeTracking tracks the swing chirality (forehand/backhand), the
-	# stroke's blade travel (the power-ceiling gate), and the variance-break
-	# reset — power itself is the cursor speed above, not distance.
+	# ChargeTracking tracks the stroke's blade travel (the power-ceiling gate)
+	# and the variance-break reset — power itself is the cursor speed above.
 	# Fill a reused Result scratch instead of allocating a Dictionary every tick
 	# (this runs at 120 Hz while charging, and re-runs per replayed input during
 	# reconcile).
@@ -111,9 +101,8 @@ func tick_wrister_charge(
 			_charge_result,
 			prev_intent_pos, intent_pos,
 			prev_swing_bearing, swing_bearing,
-			prev_blade_dir, max_charge_direction_variance, swing_rotation,
+			prev_blade_dir, max_charge_direction_variance,
 			stroke_travel, max_travel_step)
-	swing_rotation = _charge_result.rotation
 	stroke_travel = _charge_result.travel
 	prev_blade_dir = _charge_result.direction
 	prev_intent_pos = intent_pos

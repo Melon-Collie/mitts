@@ -24,7 +24,6 @@ func before_each() -> void:
 
 func test_initial_state() -> void:
 	assert_almost_eq(ab.cursor_speed_ema, 0.0, 0.001)
-	assert_almost_eq(ab.swing_rotation, 0.0, 0.001)
 	assert_almost_eq(ab.stroke_travel, 0.0, 0.001)
 	assert_eq(ab.prev_intent_pos, Vector3.ZERO)
 	assert_eq(ab.prev_swing_bearing, Vector3.ZERO)
@@ -81,20 +80,11 @@ func test_direction_comes_from_cursor_not_blade() -> void:
 	assert_almost_eq(ab.prev_blade_dir.x, 1.0, 0.001, "direction.x should be +1 (cursor direction)")
 	assert_almost_eq(ab.prev_blade_dir.z, 0.0, 0.001, "direction.z should be 0 (cursor direction, not blade)")
 
-func test_swing_rotation_accumulates_from_blade_bearing() -> void:
-	# Cursor drags a constant +X (no variance break); the blade bearing rotates
-	# a quarter turn, so swing_rotation picks up the signed step.
-	ab.tick_wrister_charge(Vector3(0.5, 0.0, 0.0), Vector3(1.0, 0.0, 0.0), VARIANCE_DEG, DT, SMOOTHING)
-	ab.tick_wrister_charge(Vector3(1.0, 0.0, 0.0), Vector3(0.0, 0.0, 1.0), VARIANCE_DEG, DT, SMOOTHING)
-	assert_almost_eq(ab.swing_rotation, -PI / 2.0, 0.01, "blade quarter-turn accumulates as signed rotation")
-
 func test_reset_wrister_zeroes_state_and_seeds_pos() -> void:
-	ab.swing_rotation = 1.2
 	ab.cursor_speed_ema = 900.0
 	ab.stroke_travel = 0.8
 	ab.prev_blade_dir = Vector3(1, 0, 0)
 	ab.reset_wrister(Vector3(0.2, 0.0, 0.1), Vector3(0.25, 0.0, 0.05))
-	assert_almost_eq(ab.swing_rotation, 0.0, 0.001)
 	assert_almost_eq(ab.cursor_speed_ema, 0.0, 0.001)
 	assert_almost_eq(ab.stroke_travel, 0.0, 0.001)
 	assert_eq(ab.prev_blade_dir, Vector3.ZERO)

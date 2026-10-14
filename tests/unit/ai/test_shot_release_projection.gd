@@ -5,7 +5,7 @@ extends GutTest
 # The bot commits its shot DIRECTION at press entry:
 #
 #   _shoot_release_anchor = self_pos + velocity * BOT_WRISTER_LOOKAHEAD_S
-#   release_pos           = _shoot_release_anchor + _shot_release_offset_locked
+#   release_pos           = _shoot_release_anchor + the puck's offset off the body
 #   _shoot_aim_dir_locked = (aim_point - release_pos).normalized()
 #
 # — a straight-line, constant-velocity projection of where the body will be one
@@ -43,12 +43,10 @@ class Probe:
 	var fired: bool = false
 	var blade: Vector3 = Vector3.ZERO
 	var released_dir: Vector3 = Vector3.ZERO
-	var assumed_release: Vector3 = Vector3.ZERO
 	var aim_dir: Vector3 = Vector3.ZERO
 	var aim_point: Vector3 = Vector3.INF
 	var actual_body: Vector3 = Vector3.ZERO
 	var projected_body: Vector3 = Vector3.ZERO
-	var offset: Vector3 = Vector3.ZERO
 
 
 # Runs a scenario until a shot is released; returns the probe (fired = false if
@@ -80,10 +78,7 @@ func _measure(shooter_pos: Vector3, shooter_vel: Vector3,
 		# locked, so that is the capture edge.
 		if agent._shoot_charge_tick == 1:
 			armed = true
-			probe.offset = agent._shot_release_offset_locked
 			probe.projected_body = agent._shoot_release_anchor
-			probe.assumed_release = agent._shoot_release_anchor \
-					+ agent._shot_release_offset_locked
 			probe.aim_dir = agent._shoot_aim_dir_locked
 			probe.aim_point = agent._shot_aim_locked
 		# Release edge: the charge was held and has now dropped AND the puck
@@ -175,10 +170,9 @@ func test_a_lateral_cut_keeps_its_release_line() -> void:
 # ── Where the shot line actually crosses the goal ────────────────────────────
 # The body projection above is honest, but the puck leaves from the BLADE, and
 # the aim was computed against an assumed release. Live-game instrumentation
-# measured that gap at 1.2-1.8 m whenever no release offset was committed (the
-# blade freezes at the current carry pose), and showed a 0.16 m gap turning into
-# a 0.64 m miss on a sharp-angle look, where the shot runs nearly parallel to the
-# goal line and the crossing point is hypersensitive to release DEPTH.
+# showed a 0.16 m gap between the two turning into a 0.64 m miss on a
+# sharp-angle look, where the shot runs nearly parallel to the goal line and the
+# crossing point is hypersensitive to release DEPTH.
 #
 # The release now re-derives its direction from the live blade to the locked aim
 # point, so the line has to arrive where it was aimed regardless of either.

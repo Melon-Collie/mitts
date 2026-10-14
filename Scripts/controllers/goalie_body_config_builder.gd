@@ -116,13 +116,10 @@ var sweep_windup_max_yaw_deg: float = 25.0
 # of the pads rather than reaching out over them.
 const BLOCK_HAND_Z_M: float = -0.40
 # Down-stance hands (see _set_down_hands).
-const DOWN_BLOCKER_X_M: float = 0.40
+const DOWN_BLOCKER_X_M: float = GoalieAnatomy.DOWN_BLOCKER_X_M
 const DOWN_BLOCKER_Z_M: float = -0.20
-# The glove held out at belly height.
-const DOWN_GLOVE_Y_M: float = GoalieAnatomy.TORSO_CENTER_Y_BUTTERFLY_M
-# Just above the flat pads' tops.
-const DOWN_HAND_Y_M: float = GoalieAnatomy.PAD_CENTER_Y_BUTTERFLY_M \
-		+ GoalieAnatomy.PAD_BOX_WIDTH_M * 0.5 + 0.125
+const DOWN_GLOVE_Y_M: float = GoalieAnatomy.DOWN_GLOVE_Y_M
+const DOWN_HAND_Y_M: float = GoalieAnatomy.DOWN_BLOCKER_Y_M
 
 # The butterfly trunk and head (GoalieAnatomy: sitting on the flat pads).
 const DOWN_BODY_Y_M: float = GoalieAnatomy.TORSO_CENTER_Y_BUTTERFLY_M
@@ -140,7 +137,7 @@ const READY_HEAD_POS := Vector3(0.0, 1.50, -0.34)
 const READY_PAD_X_M: float = 0.265
 const READY_PAD_ROLL_DEG: float = 15.0
 # The trapper up at the chest, open to the shooter (x, y).
-const READY_GLOVE := Vector2(-0.46, 1.02)
+const READY_GLOVE := Vector2(-GoalieAnatomy.READY_GLOVE_X_M, GoalieAnatomy.READY_GLOVE_Y_M)
 const READY_BLOCKER_Z_M: float = -0.35
 
 # The half-butterfly body: one knee on the ice, the other leg in the ready

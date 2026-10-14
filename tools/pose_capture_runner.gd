@@ -72,9 +72,10 @@ const CAM_AIM: Vector3 = Vector3(0.0, -0.05, 0.0)
 #
 # Spec keys: move (Vector2, world), aim (Vector3, RELATIVE to the skater —
 # absolute would swing as the body translates), stance, shoot, slap, block,
-# deflect, hit, brake (bool), loft (int elevation level). Pose keys beyond
-# name/puck/steps: cam (offset), cam_aim (the point it looks at, relative to the
-# skater like cam), cam_ahead (metres down the travel line),
+# deflect, hit, brake (bool), loft (int elevation level), face (Vector3, a
+# facing set on the segment's first tick). Pose keys beyond name/puck/steps:
+# cam (offset), cam_aim (the point it looks at, relative to the skater like
+# cam), cam_ahead (metres down the travel line),
 # game_cam, readout, faceoff, knockdown (a world-space impulse absorbed as a
 # check before the first tick). "readout": true also prints the pose's speed
 # and body lean, which a tile can't be read for.
@@ -101,6 +102,26 @@ const POSES: Array = [
 	{"name": "wrister_aim", "puck": true, "steps": [
 		[10, {"aim": Vector3(0.4, 0.0, -2.0)}],
 		[45, {"aim": Vector3(1.4, 0.0, -3.0), "shoot": true}],
+	]},
+	# The best forehand there is: the puck out at the stick side, shot ahead.
+	# `face` turns the body back to +Z on the press, which the carry alone can't
+	# do — facing follows the cursor out to the puck.
+	{"name": "wrister_nine", "puck": true, "readout": true, "steps": [
+		[60, {"aim": Vector3(2.5, 0.0, 0.0)}],
+		[40, {"aim": Vector3(0.0, 0.0, 3.0), "shoot": true, "face": Vector3(0.0, 0.0, 1.0)}],
+	]},
+	# The wind-up is the load (WristerLoad). This skater starts facing +Z and
+	# shoots left: the puck pulled out to the stick side (+X) and aimed ahead is
+	# the full forehand coil; aimed ahead with the puck straight in front there is
+	# nothing to drive, so the torso stays squared.
+	{"name": "wrister_loaded", "puck": true, "readout": true, "steps": [
+		[60, {"aim": Vector3(0.0, 0.0, 2.5)}],
+		[8, {"aim": Vector3(2.5, 0.0, 0.0)}],
+		[40, {"aim": Vector3(0.0, 0.0, 3.0), "shoot": true}],
+	]},
+	{"name": "wrister_unloaded", "puck": true, "readout": true, "steps": [
+		[60, {"aim": Vector3(0.0, 0.0, 2.5)}],
+		[40, {"aim": Vector3(0.0, 0.0, 3.5), "shoot": true}],
 	]},
 	# Released, then held long enough for the follow-through the state machine
 	# plays out to be the pose on screen.
@@ -465,6 +486,10 @@ func _run_pose() -> void:
 	for step: Array in steps:
 		var ticks: int = step[0]
 		var spec: Dictionary = step[1]
+		if spec.has("face"):
+			var face: Vector3 = spec["face"]
+			_controller._pose.facing = Vector2(face.x, face.z).normalized()
+			_skater.set_facing(_controller._pose.facing)
 		for t: int in ticks:
 			_fill_input(input, spec, t == 0)
 			# Same order as a live tick: the controller runs at physics priority
@@ -489,6 +514,23 @@ func _run_pose() -> void:
 				rad_to_deg(_controller._skating.trunk_roll_add),
 				rad_to_deg(_skater._legs._gait_leg_l.z), rad_to_deg(_skater._legs._gait_leg_r.z),
 				_controller._skating.crouch_drop])
+		var arm: float = _skater.upper_arm_length + _skater.forearm_length
+		for pair: Array in [["top", _skater.shoulder, _skater.top_hand],
+				["bottom", _skater.bottom_shoulder, _skater.bottom_hand]]:
+			var hand_local: Vector3 = (pair[2] as Node3D).position
+			var root: Vector3 = _skater._arms.arm_root((pair[1] as Node3D).position, hand_local)
+			print("    %s arm reach %.2f" % [pair[0],
+					root.distance_to(_skater.upper_body.transform * hand_local) / arm])
+		if _controller.get_shot_state() == SkaterStateMachine.State.WRISTER_AIM:
+			var pin: Vector3 = _controller._aiming.wrister_origin_world \
+					- _controller._aiming.wrister_origin_skater_pos
+			var puck_local: Vector3 = _skater.global_transform.basis.inverse() * pin
+			print("    wrister: load %.2f %s | puck %.0f° off facing | wound %.0f°, torso %.0f°" % [
+					_controller.wrister_load.load,
+					"BH" if _controller.wrister_load.is_backhand else "FH",
+					rad_to_deg(atan2(-puck_local.x, -puck_local.z)),
+					rad_to_deg(_controller.wrister_load.wound_yaw),
+					_skater.upper_body.rotation_degrees.y])
 	if pose.has("faceoff"):
 		_run_faceoff(pose["faceoff"] as Dictionary)
 	print("  %s reach: worst %.2f of arm length (frame %.2f)" % [

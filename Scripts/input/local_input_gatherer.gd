@@ -102,9 +102,8 @@ var _prev_rt_depth: float = 0.0
 #
 # It must be PINNED and not re-read live: the blade travels with the body while the
 # origin stays put, so a live anchor would swing origin→cursor as the player skates
-# (a perpendicular 4 m of travel against a ~6 m cursor is ~33° of aim drift), and
-# that drift also banks into the swing-chirality accumulator as rotation nobody
-# gestured. Vector3.ZERO / invalid falls back to the body anchor.
+# (a perpendicular 4 m of travel against a ~6 m cursor is ~33° of aim drift).
+# Vector3.ZERO / invalid falls back to the body anchor.
 var _pad_shot_anchor_world: Vector3 = Vector3.ZERO
 var _pad_shot_anchor_valid: bool = false
 # Previous-frame pad edge state. The pad is read directly (not through the action
@@ -433,9 +432,8 @@ func _pin_shot_anchor() -> void:
 # roughly 4–13 m of ice under a fixed 480 px), so the bias runs ~4°–15°, flips sign
 # with the carry side and changes with the zoom — about a net width at slot range,
 # and unlearnable because it never holds still. Anchoring on the puck makes
-# origin→cursor the stick direction by construction at any zoom, which is also what
-# makes the swing-chirality read work on a pad: the stick's bearing then IS the
-# shot line's bearing.
+# origin→cursor the stick direction by construction at any zoom: the stick's
+# bearing then IS the shot line's bearing.
 #
 # Falls back to the passed body anchor with no pin (no skater at the edge) or when
 # the pinned point is behind the camera.

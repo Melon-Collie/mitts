@@ -81,15 +81,14 @@ var commit_wrister_power: bool = false
 static func quantize_power_t(v: float) -> float:
 	return float(roundi(clampf(v, 0.0, 1.0) * 255.0)) / 255.0
 # BOT-ONLY, runtime, NOT serialized. The bot's committed shot DIRECTION (world XZ,
-# normalized) for a charged wrister/pass, and its committed forehand/backhand.
-# The human wrister aims POSITIONALLY (origin→cursor) with forehand/backhand read
-# from the cursor's bearing sweep, and a bot's cosmetic near-body wind-up cursor
-# would make both garbage — so a bot commits aim and hand directly, as it already
-# commits power via bot_wrister_power_t. The controller uses them when
-# bot_wrister_aim_dir is non-ZERO (SkaterController._wrister_aim_dir /
-# _wrister_is_backhand). Humans leave aim_dir ZERO → positional.
+# normalized) for a charged wrister/pass. The human wrister aims POSITIONALLY
+# (origin→cursor), and a bot's cosmetic near-body wind-up cursor would make that
+# garbage — so a bot commits the aim directly, as it already commits power via
+# bot_wrister_power_t. The controller uses it when non-ZERO
+# (SkaterController._wrister_aim_dir). The hand is never committed: the load
+# names it from where the puck sits against the aim (WristerLoad), for bots as
+# for humans. Humans leave aim_dir ZERO → positional.
 var bot_wrister_aim_dir: Vector3 = Vector3.ZERO
-var bot_wrister_backhand: bool = false
 # BOT-ONLY, runtime, NOT serialized. The bot's committed SLAPPER direction (world
 # XZ, normalized), read at the press tick and locked for the wind-up (see
 # SkaterController._enter_slapper_charge). The human lock is measured BLADE→cursor,
@@ -99,13 +98,6 @@ var bot_wrister_backhand: bool = false
 # ShotMechanics.slapper_aim_dir). Bots have exactly one slapper — the one-timer —
 # so this is set by ONE_TIMER_PRESSED and nothing else. Humans leave it ZERO.
 var bot_slapper_aim_dir: Vector3 = Vector3.ZERO
-# BOT-ONLY. World XZ offset (from the skater) where the bot wants its puck to
-# FREEZE for the shot — the scored lateral release offset (`_shot_release_offset_locked`).
-# The freeze otherwise pins the puck at the centered carry pose; on a breakaway
-# that rides into the goalie's poke radius and the shot whiffs. Holding the puck
-# at this scored, off-the-poke-line spot (see SkaterController._apply_wrister_aim_blade)
-# restores the offset release the scorer priced. ZERO = centered (human / no offset).
-var bot_wrister_origin_offset: Vector3 = Vector3.ZERO
 
 func to_array() -> Array:
 	return [

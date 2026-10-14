@@ -111,52 +111,44 @@ static func _settle_handicap(value: float, penalty: float) -> float:
 const SHOT_MIN_FORWARD_OF_LINE_M: float = 0.3
 
 
-# ── Release-offset sampling (shoot-now eval) ─────────────────────────────────
-# The shot originates at the PUCK, and the carrier can put the puck anywhere in
-# its blade's handling envelope before releasing — so the shoot-now eval samples
-# a release on each lateral side of the projected puck spot (full forehand
-# reach / none / full backhand reach) and commits the best. This is what buys
-# the in-tight lateral finish (shifting the puck most of a metre moves the whole
-# tangent-cone geometry) and the short-side tuck from beside the net. Two
-# honesty terms, both physical: relocating the puck costs blade-travel time
-# (offset / self_blade_speed), which extends the goalie's tracking window; and a
-# backhand-side release fires at the build's backhand_power_coefficient of full
-# pace (Hands un-penalizes it), so the backhand tuck wins exactly when geometry
-# pays for the pace loss. Iteration order puts the un-relocated release first
-# and the compare is strictly-greater, so ties keep the simple release. Sampled
-# only in the top-level shoot eval (~30 Hz): carry candidates and pass receivers
-# stay single-release — their geometry is a projection anyway, and the winning
-# candidate gets the full sweep the moment it becomes the live shoot-now eval.
-const RELEASE_SAMPLE_FRACS: Array[float] = [0.0, 1.0, -1.0]   # × usable reach; + = forehand
+# ── Where the shot is held (shoot-now eval) ──────────────────────────────────
+# The shoot-now eval prices each hold AIShotHolds names (the puck where it is,
+# the loaded pocket, a reach to either side of the shot line) at the pace its
+# load allows, from where the pull puts the release, with the pull's time in the
+# goalie's budget, at the odds the puck survives the pull and the charge
+# (AIShotHolds.price_keep). The as-is hold is scored first and the compare is
+# strictly greater, so a tie keeps the release that needs no pull. A carry
+# candidate's shot on arrival is held at the best pocket for its line or the
+# other side of it, priced at that hold's pace and keep and charged any pull the
+# carry is too short to make (_arrival_hold_wait). Pass receivers keep the
+# full-pace read: a teammate's hands are not modelled.
 
-# Winning sample from the last shoot-now sweep: the release/goalie/pace the
-# SHOOT commit's loft/aim/power must be computed against (so the executed shot
-# is the one that won the compete), the offset the state machine folds into the
-# wind-up, and whether it's a backhand-side release (drives the power remap).
+# Winning hold from the last shoot-now sweep: the release/goalie/pace the
+# SHOOT commit's loft/aim must be computed against (so the executed shot is the
+# one that won the compete), and the share of pace the load gives it.
 var _shot_sample_release: Vector3 = Vector3.ZERO
 var _shot_sample_goalie: Vector3 = Vector3.ZERO
 var _shot_sample_speed: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
-var _shot_sample_offset: Vector3 = Vector3.ZERO
-var _shot_sample_backhand: bool = false
+var _shot_sample_share: float = 1.0
 # True when the winning shoot read is the TIP rip (AIActionScoring.tip_ev):
 # fired flat at full pace THROUGH the net-front teammate's blade at the net
 # centre — the commit path aims it there instead of at a direct-model hole.
 var _shot_sample_is_tip: bool = false
+# The puck's spot off the body (world XZ) the last shoot-now sweep's winner
+# fires from. Fresh every eval, so the state machine's fire-tracking carry
+# holds the puck there while a shot look is live; ZERO until a sweep scores.
+var shoot_now_hold: Vector3 = Vector3.ZERO
+var _holds := AIShotHolds.new()
 
 
-# Lateral envelope usable for a release offset: the handling reach less the
-# forward carry the frozen blade still holds the puck out at (half the wind-up
-# span ≈ the controllable carry distance), so a puck relocated laterally by this
-# much stays inside ROM. The wrister's blade FREEZES at the release offset rather
-# than sweeping out to a side-offset endpoint, so no ROM is reserved for
-# BOT_WRISTER_SIDE_OFFSET_M: that side offset belongs to the fake wind-up cursor,
-# not the blade, and must not shrink the lateral the scorer can price. Reserving
-# it costs ~0.15 m of priced release the frozen mechanic can genuinely reach, so
-# breakaway shot is scored (and executed) from the wider, honest angle.
-# Pure geometry of real gesture measurements, not a knob.
-static func _usable_release_offset(reach: float) -> float:
-	var half_span: float = SkaterAgentStateMachine.BOT_WRISTER_WIND_UP_SPAN_M * 0.5
-	return sqrt(maxf(reach * reach - half_span * half_span, 0.0))
+# The fastest charged pass along `dir` (world XZ) this bot can load: its pace at
+# the pocket's share, the hold the state machine pulls the puck to first when
+# the puck's own spot can't carry the feed.
+func _pass_launch_cap(ctx: RoleContext, dir: Vector3, facing: Vector2) -> float:
+	_holds.configure_from(ctx)
+	_holds.pocket(Vector2(dir.x, dir.z), Vector2(ctx.self_velocity.x, ctx.self_velocity.z),
+			facing)
+	return ctx.self_wrister_shot_speed * _holds.pocket_result.power_share
 
 
 # ── Smart-ping obedience ─────────────────────────────────────────────────────
@@ -457,20 +449,15 @@ var shot_aim_point: Vector3 = Vector3.INF
 
 # Set alongside shot_loft_level: the release power fraction (0..1 over this
 # bot's wrister band) of that same hole. Every hole fires full power — the
-# contact-point solve adapts the launch angle, not the pace. For a
-# backhand-side release the fraction is pre-compensated for the controller's
-# backhand power penalty, so the executed pace matches the scored one (see
-# the remap at the SHOOT commit).
+# contact-point solve adapts the launch angle, not the pace, and the load caps
+# what full power carries.
 var shot_power_t: float = 1.0
 
-# Set alongside shot_loft_level: the world-space RELEASE OFFSET (relative to the
-# projected release point) of the winning sample from the release-offset sweep —
-# where in the blade's handling envelope the puck should sit at release. ZERO for
-# the un-relocated release. The state machine folds it into the wind-up endpoint
-# offsets so the blade actually carries the puck there (a backhand-side offset
-# sweeps in the backhand chirality and pays the real power penalty — priced by
-# the sampler).
-var shot_release_offset: Vector3 = Vector3.ZERO
+# Set alongside shot_loft_level: where the puck sits off the body (world XZ) at
+# the press of the winning hold, and the share of pace the load gives it there.
+# The state machine carries the puck to it and presses once the load is there.
+var shot_hold_offset: Vector3 = Vector3.ZERO
+var shot_hold_share: float = 1.0
 
 # Cached carry destination from the most recent re-eval. Read by the
 # state machine to drive steering during CARRY.
@@ -863,7 +850,9 @@ func reset() -> void:
 	shot_loft_level = ShotMechanics.ELEVATION_FLAT
 	shot_aim_point = Vector3.INF
 	shot_power_t = 1.0
-	shot_release_offset = Vector3.ZERO
+	shot_hold_offset = Vector3.ZERO
+	shot_hold_share = 1.0
+	shoot_now_hold = Vector3.ZERO
 	last_carry_anchor = Vector3.ZERO
 	dump_target = Vector3.INF
 	dump_is_soft = false
@@ -1126,7 +1115,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		_scratch_option_receiver_pos.append(tm.position)
 		_scratch_option_receiver_val.append(_score_at(
 				ctx, tm.position, self_pos, _scratch_opponents, tm_goalie,
-				tm_shot_speed, 0.0))
+				tm_shot_speed, 0.0, 0.0, 0.0, _loft_high(tm_caps)))
 	# The same option read at the CURRENT puck spot — the baseline candidates'
 	# option credit is measured against (see _score_move_candidate): an option
 	# already available from here belongs to the live pass in the fire
@@ -1244,18 +1233,15 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		_shot_env_seal_x = opp_goalie_state.post_seal_x_sign(attacking_goal.z)
 		_shot_env_seal_tall = opp_goalie_state.is_post_seal_tall()
 
-	# Top-level SHOOT: the release-offset sweep (see RELEASE_SAMPLE_FRACS). Each
-	# sample relocates the projected release across the blade envelope, prices
-	# the relocation's blade-travel time into the goalie's tracking budget and a
-	# backhand-side release at the build's backhand pace, then runs the same
-	# score_shoot the single release ran. Per sample, the goalie at puck ARRIVAL
-	# is react-then-slide from where he ACTUALLY is toward the arc-square of the
-	# release, over everything the shot gives him — the charge lookahead (plus
-	# the relocation) plus the whole flight. Static or long-range releases he
-	# covers square with room to spare; a HARD LATERAL CUT IN TIGHT is a race
-	# his accel-ramped push genuinely loses — and the sweep adds the blade's own
-	# lateral relocation on top of the skating cut. Unsettled stays 0: the
-	# shortfall IS the caught-moving effect, expressed positionally.
+	# Top-level SHOOT: the hold sweep (see "Where the shot is held"). Each hold
+	# prices its release at the pace its load allows and its pull's time into
+	# the goalie's tracking budget, then runs score_shoot_value. Per hold, the
+	# goalie at puck ARRIVAL is react-then-slide from where he ACTUALLY is
+	# toward the arc-square of the release, over everything the shot gives him
+	# — the pull, the charge lookahead and the whole flight. Static or
+	# long-range releases he covers square with room to spare; a HARD LATERAL
+	# CUT IN TIGHT is a race his accel-ramped push genuinely loses. Unsettled
+	# stays 0: the shortfall IS the caught-moving effect, expressed positionally.
 	# _scratch_opponent_caps is index-matched to _scratch_opponents (and thus to
 	# _scratch_opponents_release, built in the same order), so a lane defender's
 	# real reach and speed price the shot lane.
@@ -1263,21 +1249,28 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 	shot_dir.y = 0.0
 	shot_dir = shot_dir.normalized() if shot_dir.length_squared() > 0.0001 \
 			else Vector3(0.0, 0.0, -signf(attacking_goal.z))
-	var forehand_perp: Vector3 = Vector3(shot_dir.z, 0.0, -shot_dir.x) \
-			* ctx.self_forehand_perp_sign
-	var usable_offset: float = _usable_release_offset(ctx.self_handle_reach)
+	if not shot_unavailable:
+		_holds.configure_from(ctx)
+		_holds.solve_shot(Vector2(shot_dir.x, shot_dir.z),
+				Vector2(puck_now.x - self_pos.x, puck_now.z - self_pos.z),
+				Vector2(horizontal_velocity.x, horizontal_velocity.z),
+				snapshot.skater_states[ctx.peer_id].facing)
+		_holds.price_keep(self_pos, Vector2(horizontal_velocity.x, horizontal_velocity.z),
+				snapshot.skater_states[ctx.peer_id].facing,
+				SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S, _scratch_opponents,
+				_scratch_opponent_vels, _scratch_opponent_caps)
 	_phase_shoot_score = -1.0
-	for frac: float in RELEASE_SAMPLE_FRACS:
+	for k: int in _holds.count:
 		if shot_unavailable:
 			break
-		var offset: Vector3 = forehand_perp * (frac * usable_offset)
-		var sample_speed: float = ctx.self_wrister_shot_speed
-		if frac < 0.0:
-			sample_speed *= ctx.self_backhand_power_coefficient
+		var hold := Vector3(_holds.offset[k].x, 0.0, _holds.offset[k].y)
+		var share: float = _holds.share[k]
+		var pull_s: float = _holds.pull_s[k]
+		var sample_speed: float = ctx.self_wrister_shot_speed * share
 		var release: Vector3 = AIActionScoring.release_ahead_of_goalie(
-				wrister_base_release + offset, attacking_goal, goalie_now)
-		var shift_s: float = absf(frac) * usable_offset \
-				/ maxf(ctx.self_blade_speed, 0.1)
+				self_pos + hold + horizontal_velocity
+						* (SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S + pull_s),
+				attacking_goal, goalie_now)
 		var flight_s: float = release.distance_to(attacking_goal) \
 				/ maxf(sample_speed, 1.0)
 		# The goalie's tracking budget includes this bot's EXPECTED release
@@ -1298,7 +1291,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var sample_goalie: Vector3 = goalie_now if _shot_env_seal_x != 0.0 \
 				else AIActionScoring.predict_goalie_pos(
 						goalie_now, attacking_goal,
-						SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S + shift_s
+						SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S + pull_s
 								+ flight_s + ctx.shot_timing_error_s * 0.5,
 						release, shot_closing)
 		# Own traffic screens: the in-zone teammates (_scratch_option_receiver_pos,
@@ -1315,19 +1308,20 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		# once SHOOT has won, below.
 		var shot_disp: float = AIShotValue.displacement_deficit_m(
 				goalie_now, attacking_goal, release,
-				SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S
+				SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S + pull_s
 						+ flight_s + ctx.shot_timing_error_s * 0.5)
 		var s: float = AIActionScoring.score_shoot_value(
 				release, attacking_goal, sample_goalie, shot_disp,
 				GameRules.NET_HALF_WIDTH, _scratch_opponents_release,
-				sample_speed, _scratch_opponent_caps)
+				sample_speed, _scratch_opponent_caps, ShotEvent.ShotType.SHOT,
+				ctx.self_loft_tans.z) * _holds.keep[k]
 		if s > _phase_shoot_score:
 			_phase_shoot_score = s
 			_shot_sample_release = release
 			_shot_sample_goalie = sample_goalie
 			_shot_sample_speed = sample_speed
-			_shot_sample_offset = offset
-			_shot_sample_backhand = frac < 0.0
+			_shot_sample_share = share
+			shoot_now_hold = hold
 
 	# Shoot-for-tip: the same rip at the net can score by DEFLECTION off a
 	# stationed net-front teammate — the point-blast-plus-tipper play. An
@@ -1336,23 +1330,30 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 	# never additively. Scored against the in-zone teammates already gathered
 	# for the pass options; goalie taken set at his current spot (conservative
 	# — the tip's whole edge is the collapsed post-contact read, which the
-	# hole geometry prices via t_reach).
+	# hole geometry prices via t_reach). Fired from the faster hold.
 	_shot_sample_is_tip = false
 	if not shot_unavailable and not _scratch_option_receiver_pos.is_empty():
+		var tip_k: int = 1 if _holds.share[1] > _holds.share[0] else 0
+		var tip_hold := Vector3(_holds.offset[tip_k].x, 0.0, _holds.offset[tip_k].y)
+		var tip_share: float = _holds.share[tip_k]
+		var tip_pull_s: float = _holds.pull_s[tip_k]
 		var tip_release: Vector3 = AIActionScoring.release_ahead_of_goalie(
-				wrister_base_release, attacking_goal, goalie_now)
+				self_pos + tip_hold + horizontal_velocity
+						* (SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S + tip_pull_s),
+				attacking_goal, goalie_now)
+		var tip_speed: float = ctx.self_wrister_shot_speed * tip_share
 		for tip_man: Vector3 in _scratch_option_receiver_pos:
 			var tip_s: float = AIActionScoring.tip_ev(
 					tip_release, tip_man, attacking_goal, goalie_now,
 					GameRules.NET_HALF_WIDTH, _scratch_opponents_release,
-					ctx.self_wrister_shot_speed, _scratch_opponent_caps)
+					tip_speed, _scratch_opponent_caps) * _holds.keep[tip_k]
 			if tip_s > _phase_shoot_score:
 				_phase_shoot_score = tip_s
 				_shot_sample_release = tip_release
 				_shot_sample_goalie = goalie_now
-				_shot_sample_speed = ctx.self_wrister_shot_speed
-				_shot_sample_offset = Vector3.ZERO
-				_shot_sample_backhand = false
+				_shot_sample_speed = tip_speed
+				_shot_sample_share = tip_share
+				shoot_now_hold = tip_hold
 				_shot_sample_is_tip = true
 
 	# Top-level PASS — per teammate, score_at(receiver_lead) × lane × time.
@@ -1439,7 +1440,7 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	# gliding mate with momentum the man holding the puck is denied.
 	var drive_in_value: float = _receiver_drive_in_value(
 			ctx, self_pos, ctx.self_wrister_shot_speed,
-			ctx.caps_by_peer.get(ctx.peer_id), ctx.self_velocity)
+			ctx.caps_by_peer.get(ctx.peer_id), ctx.self_velocity, Vector3.INF, 0.0, true)
 	carry_score = maxf(carry_score, drive_in_value)
 
 	# Hysteresis on FIRE intents only — prevents flicker between two
@@ -1624,7 +1625,7 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 			# makes release pace reliable, so there's no reason to keep the fixed-
 			# power quick snap): distance-adaptive launch speed — a genuinely soft
 			# touch for a close feed, harder (still catchable) for a long one — all
-			# from the one charged release, capped at this bot's own max wrister.
+			# from the one charged release, capped at what its load can carry.
 			var receiver: SkaterNetworkState = ctx.snapshot.skater_states.get(best_pass_peer)
 			if receiver != null:
 				# Receiver-relative launch: fire so the puck lands on the tape at
@@ -1637,8 +1638,9 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 				var pass_dir: Vector3 = to_receiver.normalized()
 				pass_target_speed = AIActionScoring.pass_launch_speed(
 						puck_now.distance_to(receiver.position),
-						ctx.self_wrister_shot_speed, ctx.pass_speed_scale,
-						receiver.velocity, pass_dir)
+						_pass_launch_cap(ctx, pass_dir,
+								ctx.snapshot.skater_states[ctx.peer_id].facing),
+						ctx.pass_speed_scale, receiver.velocity, pass_dir)
 			else:
 				pass_target_speed = AIActionScoring.PASS_SPEED_M_S * ctx.pass_speed_scale
 			pass_should_charge = true
@@ -1665,7 +1667,8 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 			shot_aim_point = Vector3(
 					attacking_goal.x, 0.0, attacking_goal.z)
 			shot_power_t = 1.0
-			shot_release_offset = Vector3.ZERO
+			shot_hold_offset = shoot_now_hold
+			shot_hold_share = _shot_sample_share
 		elif new_intent == INTENT_SHOOT:
 			# Loft AND aim from the same goalie-hole geometry score_shoot used —
 			# the chosen hole's elevation and net-plane target, scored at the
@@ -1696,21 +1699,8 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 			# Full power for every hole: the contact-point solve adapts the
 			# LAUNCH ANGLE, so pace only buys flight time and toe-clamp relief.
 			shot_power_t = 1.0
-			shot_release_offset = _shot_sample_offset
-			if _shot_sample_backhand:
-				# The controller applies backhand_power_coefficient to the FINAL
-				# power, while the sampler already scored at the penalized pace —
-				# so pre-divide: solve the fraction over the full wrister band
-				# whose penalized result is the pace the sample was scored (and
-				# power_t solved) at. Full backhand rip maps back to t = 1.
-				var min_v: float = GameRules.DEFAULT_WRISTER_POWER_MIN_M_S
-				var target_v: float = min_v \
-						+ shot_power_t * maxf(_shot_sample_speed - min_v, 0.0)
-				var coef: float = maxf(ctx.self_backhand_power_coefficient, 0.05)
-				shot_power_t = clampf(
-						(target_v / coef - min_v)
-							/ maxf(ctx.self_wrister_shot_speed - min_v, 0.001),
-						0.0, 1.0)
+			shot_hold_offset = shoot_now_hold
+			shot_hold_share = _shot_sample_share
 	elif retention_hopeless and not staggered:
 		# Last resort, and the ONLY place the delivery search runs: keeping the puck
 		# is worth nothing and no qualified fire exists, so clear our zone or
@@ -1921,8 +1911,8 @@ func _compute_best_pass(ctx: RoleContext, self_facing_xz: Vector2,
 		var receiver_is_one_timer: bool = (ctx.team_brain != null
 				and ctx.team_brain.is_one_timer_ready(peer_id))
 		# Match the speed the state machine will actually fire at: the
-		# distance-adaptive launch speed (capped at this bot's own max
-		# wrister). Threading the actual speed here makes the lead and
+		# distance-adaptive launch speed, capped at the most this bot's
+		# load can carry along the pass (_pass_launch_cap). Threading the actual speed here makes the lead and
 		# opponent projections match reality — without it, a 15 m pass
 		# scored at 14 m/s overestimates defender presence on the line and
 		# leads past the receiver, both of which depress long-pass scores
@@ -1941,8 +1931,8 @@ func _compute_best_pass(ctx: RoleContext, self_facing_xz: Vector2,
 		var scored_pass_dir: Vector3 = to_recv.normalized() \
 				if to_recv.length_squared() > 0.0001 else Vector3.ZERO
 		var pass_speed: float = AIActionScoring.pass_launch_speed(
-				dist, ctx.self_wrister_shot_speed, ctx.pass_speed_scale,
-				receiver_state.velocity, scored_pass_dir)
+				dist, _pass_launch_cap(ctx, scored_pass_dir, self_facing_xz),
+				ctx.pass_speed_scale, receiver_state.velocity, scored_pass_dir)
 		var receiver_accel: Vector3 = ctx.acceleration_by_peer.get(peer_id, Vector3.ZERO)
 		# Receiver's heading turn rate — the commitment read. A commitment-blind
 		# tier (Easy) reads 0, so it prices a turning receiver like a straight one
@@ -2372,7 +2362,7 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	var receiver_value: float = _score_at(ctx, receiver_spot, self_pos,
 			_scratch_opponents_pass, receiver_goalie,
 			receiver_shot_speed, receiver_unsettled, 0.0,
-			receiver_displacement)
+			receiver_displacement, _loft_high(receiver_caps))
 	# An OPEN receiver isn't limited to a one-timer from where they catch it — they
 	# can carry into a better look, exactly like the carrier's own best_carry. In the
 	# offensive zone the plain score_at above is shot-ONLY (xG's domain), so a
@@ -2593,6 +2583,7 @@ func _candidate_ice_legal(candidate: Vector3, allow_behind: bool) -> bool:
 func _best_carry(ctx: RoleContext, shoot_now_score: float,
 		directed_seam: Vector3) -> Array:
 	var self_pos: Vector3 = ctx.self_pos
+	_holds.configure_from(ctx)
 	var attacking_goal: Vector3 = ctx.attacking_goal_pos
 	var own_goal_dir: float = ctx.own_goal_dir
 	# Our goalie feeds the turnover-cost term (how much a strip helps the
@@ -3250,6 +3241,20 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 		# travel model, capped at this bot's real top end.
 		var arrive_speed: float = minf(cand_dist / local_time, ctx.self_max_speed)
 		arrive_vel = to_cand * (arrive_speed / cand_dist)
+	# The shot on arrival is held where the shoot-now sweep would hold it: at the
+	# pace its hold loads for a body arriving at this pace, worth only the odds
+	# the puck is still there at the press, and a pull the carry is too short for
+	# waits at the spot, in the wind-up the keeper races.
+	var cand_wait: float = 0.0
+	var cand_share: float = 1.0
+	var cand_keep: float = 1.0
+	if _shot_reads(ctx, self_pos,
+			candidate + arrive_vel * SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S):
+		cand_wait = _arrival_hold_wait(ctx, candidate, arrive_vel, local_time)
+		cand_share = _holds.arrival_share
+		cand_keep = _holds.arrival_keep
+	var cand_speed: float = ctx.self_wrister_shot_speed * cand_share
+	var cand_windup: float = SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S + cand_wait
 	# The keeper backs in as the carry closes on him (AIActionScoring's planning
 	# depth model): over the carry his depth follows the chart / rush-backflow
 	# curve, so a candidate deeper in the zone meets a keeper who has retreated,
@@ -3261,10 +3266,10 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 			_goalie_now(ctx), ctx.attacking_goal_pos, local_time, candidate,
 			carry_closing)
 	var cand_release: Vector3 = AIActionScoring.release_ahead_of_goalie(
-			candidate + arrive_vel * SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S,
+			candidate + arrive_vel * cand_windup,
 			ctx.attacking_goal_pos, tracked_goalie)
 	var cand_flight: float = cand_release.distance_to(ctx.attacking_goal_pos) \
-			/ maxf(ctx.self_wrister_shot_speed, 1.0)
+			/ maxf(cand_speed, 1.0)
 	# Same expected-lateness budget as the shoot-now sweep (mean of the
 	# uniform hold = max × 0.5): the candidate's future shot is priced at
 	# its median release, so building a lateral cut toward a thin-but-real
@@ -3276,15 +3281,13 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 			candidate, arrive_vel, ctx.attacking_goal_pos)
 	var cand_goalie: Vector3 = AIActionScoring.predict_goalie_pos(
 			tracked_goalie, ctx.attacking_goal_pos,
-			SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S + cand_flight
-					+ ctx.shot_timing_error_s * 0.5,
+			cand_windup + cand_flight + ctx.shot_timing_error_s * 0.5,
 			cand_release, release_closing)
 	var cand_unsettled: float = 0.0
 	if ctx.reads_goalie_motion:
 		cand_unsettled = AIActionScoring.goalie_unsettled(
 				tracked_goalie, ctx.attacking_goal_pos,
-				SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S
-						+ cand_flight + ctx.shot_timing_error_s * 0.5,
+				cand_windup + cand_flight + ctx.shot_timing_error_s * 0.5,
 				cand_release, release_closing)
 	# Displacement at the release: from where he is NOW over everything the
 	# play gives him — carry, wind-up and flight. He tracks throughout, so the
@@ -3296,14 +3299,14 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 	# the future shot INTO the carry as well double-counts that loop, and a max
 	# over K samples is optimistically biased against the shoot and pass legs,
 	# which get one estimate each.
-	var release_t: float = local_time + SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S \
-			+ cand_flight + ctx.shot_timing_error_s * 0.5
+	var release_t: float = local_time + cand_windup + cand_flight \
+			+ ctx.shot_timing_error_s * 0.5
 	var cand_displacement: float = AIShotValue.displacement_deficit_m(
 			_goalie_now(ctx), ctx.attacking_goal_pos, cand_release, release_t)
 	var dest_score: float = _score_at(ctx, cand_release, self_pos,
 			_scratch_opponents_path, cand_goalie,
-			ctx.self_wrister_shot_speed, cand_unsettled, ctx.self_aim_spread_rad,
-			cand_displacement)
+			cand_speed, cand_unsettled, ctx.self_aim_spread_rad,
+			cand_displacement, ctx.self_loft_tans.z, cand_keep)
 	# ENTRY CONTINUATION: from outside the zone an in-zone candidate is worth what
 	# a carrier there does next, which its own shot xG badly understates just
 	# inside the line. The drive-in from the candidate, priced in the in-zone
@@ -3312,7 +3315,7 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 			and not AIActionScoring.in_offensive_zone(self_pos, ctx.attacking_goal_pos):
 		dest_score = maxf(dest_score, _entry_value(_receiver_drive_in_value(
 				ctx, candidate, ctx.self_wrister_shot_speed,
-				ctx.caps_by_peer.get(ctx.peer_id), arrive_vel, candidate, local_time)))
+				ctx.caps_by_peer.get(ctx.peer_id), arrive_vel, candidate, local_time, true)))
 	var keep_prob: float = safety
 	var cost: float = 0.0
 	# A fully safe route pays no turnover cost at all — skip localizing a
@@ -3456,7 +3459,8 @@ func _score_wheel_candidate(ctx: RoleContext, dest: Vector3,
 	_project_opponents_to(ctx, t1 + t2, _scratch_opponents_cont)
 	var dest_score: float = _score_at(ctx, dest, self_pos,
 			_scratch_opponents_cont, _goalie_now(ctx),
-			ctx.self_wrister_shot_speed, 0.0, ctx.self_aim_spread_rad)
+			ctx.self_wrister_shot_speed, 0.0, ctx.self_aim_spread_rad, 0.0,
+			ctx.self_loft_tans.z)
 	var benefit: float = dest_score * ceiling
 	if keep >= 1.0:
 		return benefit
@@ -3475,6 +3479,38 @@ func _score_wheel_candidate(ctx: RoleContext, dest: Vector3,
 			1.0 - keep, our_goalie)
 	cost += _counter_exposure_cost(ctx, strip_point, 1.0 - keep, dest, our_goalie)
 	return benefit - cost
+
+
+# Whether a shot released at `release` by a carrier now at `from_pos` is what
+# _score_at prices the spot by. Outside the zone, from outside it, at a keeper
+# home, the spot is worth its position and the shot (near nothing at that range)
+# is never the better read, so its hold is not worth solving.
+func _shot_reads(ctx: RoleContext, from_pos: Vector3, release: Vector3) -> bool:
+	return AIActionScoring.in_offensive_zone(from_pos, ctx.attacking_goal_pos) \
+			or AIActionScoring.in_offensive_zone(release, ctx.attacking_goal_pos) \
+			or _goalie_now(ctx).distance_to(ctx.attacking_goal_pos) \
+					>= AIActionScoring.THREAT_GOALIE_HOME_M
+
+
+# The hold a carry candidate's shot on arrival is taken from (AIShotHolds
+# .solve_arrival, its share and keep left in _holds), and the wait it owes before
+# the press: the pull there from where the puck sits now, less the `carry_s` the
+# carry gives the hands to make it.
+func _arrival_hold_wait(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3,
+		carry_s: float) -> float:
+	var aim := Vector2(ctx.attacking_goal_pos.x - candidate.x,
+			ctx.attacking_goal_pos.z - candidate.z)
+	if aim.length_squared() < 0.0001:
+		aim = Vector2(0.0, -signf(ctx.attacking_goal_pos.z))
+	var facing: Vector2 = ctx.snapshot.skater_states[ctx.peer_id].facing
+	var windup: float = SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S
+	_holds.solve_arrival(aim.normalized(), Vector2(arrive_vel.x, arrive_vel.z), facing,
+			candidate + arrive_vel * windup, carry_s + windup,
+			_scratch_opponents, _scratch_opponent_vels, _scratch_opponent_caps)
+	var puck: Vector3 = ctx.self_pos if ctx.snapshot.puck_state == null \
+			else ctx.snapshot.puck_state.position
+	var from := Vector2(puck.x - ctx.self_pos.x, puck.z - ctx.self_pos.z)
+	return maxf(0.0, _holds.pull_time(from, _holds.arrival_offset, facing) - carry_s)
 
 
 # Position-value scorer at `pos`, evaluated from the carrier at `from_pos`.
@@ -3501,13 +3537,20 @@ func _score_wheel_candidate(ctx: RoleContext, dest: Vector3,
 # evaluate THIS bot's future shot, so they pass its attribute-scaled speed; the
 # receiver eval (score from a teammate's spot) keeps the default since we don't
 # carry teammates' attributes — same cross-player boundary as elsewhere.
+# The steepest loft rung a player's blade has, the league's when unknown.
+static func _loft_high(caps: AISkaterCaps) -> float:
+	return caps.loft_tans.z if caps != null else GameRules.DEFAULT_LOFT_TAN_HIGH
+
+
 func _score_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 		opps: Array[Vector3],
 		predicted_goalie_pos: Vector3,
 		shot_speed_m_s: float = AIActionScoring.WRISTER_SHOT_SPEED_M_S,
 		goalie_unsettled_factor: float = 0.0,
 		_aim_spread_rad: float = 0.0,
-		keeper_displacement_m: float = 0.0) -> float:
+		keeper_displacement_m: float = 0.0,
+		loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH,
+		shot_keep: float = 1.0) -> float:
 	var attacking_goal: Vector3 = ctx.attacking_goal_pos
 	# All the carrier's opponent arrays (path / pass / stand projections) are built
 	# in the same snapshot order as _scratch_opponent_caps, so the defenders in the
@@ -3556,10 +3599,12 @@ func _score_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 	# path the per-tier scatter dial does not act as the SELECTIVITY lever
 	# BotSkillProfile describes — a wobblier hand does not decline marginal
 	# shots.
+	# `shot_keep`: the odds the shooter still has the puck at the press. It
+	# discounts the shot, never the position value the spot also offers.
 	var shoot_s: float = AIActionScoring.score_shoot_value(
 			pos, attacking_goal, predicted_goalie_pos, keeper_displacement_m,
 			GameRules.NET_HALF_WIDTH, opps, shot_speed_m_s,
-			_scratch_opponent_caps)
+			_scratch_opponent_caps, ShotEvent.ShotType.SHOT, loft_tan_high) * shot_keep
 	if AIActionScoring.in_offensive_zone(from_pos, attacking_goal):
 		# PURE xG in the offensive zone — position_potential (the progression
 		# value map) is not consulted here; once a goalie is in play a real shot
@@ -3641,11 +3686,13 @@ func _candidate_pass_option(ctx: RoleContext, candidate: Vector3,
 #
 # `start_s` > 0 prices a drive that begins that far in the future (the entry
 # continuation after a carry candidate): defenders are read where they will be
-# then, and `from_pos` names whose regime values the reached spot.
+# then, and `from_pos` names whose regime values the reached spot. `own_hands`:
+# the drive is this carrier's, so the shot at its end is held as a carry
+# candidate's is (_arrival_hold_wait); a receiver's hands are not modelled.
 func _receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 		receiver_shot_speed: float, receiver_caps: AISkaterCaps,
 		receiver_vel: Vector3 = Vector3.ZERO, from_pos: Vector3 = Vector3.INF,
-		start_s: float = 0.0) -> float:
+		start_s: float = 0.0, own_hands: bool = false) -> float:
 	# A delayed offside is up: driving in from outside the zone is not on.
 	if ctx.zone_entry_blocked \
 			and not AIActionScoring.in_offensive_zone(receiver_spot, ctx.attacking_goal_pos):
@@ -3698,12 +3745,21 @@ func _receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 			_goalie_now(ctx), ctx.attacking_goal_pos, reached, start_s + t,
 			(receiver_spot.distance_to(ctx.attacking_goal_pos)
 					- reached.distance_to(ctx.attacking_goal_pos)) / maxf(t, 0.001))
+	var regime_from: Vector3 = from_pos if from_pos.is_finite() else ctx.self_pos
+	var shot_speed: float = receiver_shot_speed
+	var hold_keep: float = 1.0
+	var wait: float = 0.0
+	if own_hands and _shot_reads(ctx, regime_from, reached):
+		var arrive_vel: Vector3 = (reached - receiver_spot) / t if t > 0.001 else Vector3.ZERO
+		wait = _arrival_hold_wait(ctx, reached, arrive_vel, start_s + t)
+		shot_speed *= _holds.arrival_share
+		hold_keep = _holds.arrival_keep
 	# score_at, so the reached spot is priced in the same regime as the carrier's own
 	# candidates.
-	var advanced: float = _score_at(ctx, reached,
-			from_pos if from_pos.is_finite() else ctx.self_pos,
-			_scratch_opponents_pass, goalie, receiver_shot_speed, 0.0)
-	return advanced * keep * AIActionScoring.delay_discount(t)
+	var advanced: float = _score_at(ctx, reached, regime_from,
+			_scratch_opponents_pass, goalie, shot_speed, 0.0, 0.0, 0.0,
+			_loft_high(receiver_caps), hold_keep)
+	return advanced * keep * AIActionScoring.delay_discount(t + wait)
 
 
 # How much room the carrier has to OPERATE toward the attacking objective —

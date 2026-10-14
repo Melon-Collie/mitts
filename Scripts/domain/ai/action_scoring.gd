@@ -37,9 +37,8 @@ const EMPTY_CAPS: Array = []
 
 static func _static_init() -> void:
 	EMPTY_VEC3.make_read_only()
-	XG_SLOT_REF = AIShotValue.for_release(
-			Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z + SLOT_RADIUS_M),
-			Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z), 0.0)
+	var goal := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
+	XG_SLOT_REF = AIShotValue.for_release(slot_reference_release(goal), goal, 0.0)
 
 # xG of a clean look from the slot ring, head-on, against a set keeper: the
 # situation position_potential reads as 1.0, measured on the live shot model.
@@ -206,9 +205,9 @@ const GRAVITY_M_S2: float = 9.8   # engine default the airborne puck falls under
 # Scoring cavity top: NET_HEIGHT − post radius − puck half-height, less a
 # whisker — mirrors goal detection's under-the-bar bound.
 const HIGH_BAND_CEILING_M: float = 1.17
-# The M92 (league-neutral) ladder — the default wherever a build isn't known
-# (defensive reads of opponents, unwired tests).
-const DEFAULT_LOFT_TANS: Vector3 = Vector3(0.1405, 0.3153, 0.4452)
+# The league M92 ladder (GameRules): the default wherever a build isn't known.
+const DEFAULT_LOFT_TANS: Vector3 = Vector3(GameRules.DEFAULT_LOFT_TAN_LOW,
+		GameRules.DEFAULT_LOFT_TAN_MID, GameRules.DEFAULT_LOFT_TAN_HIGH)
 
 
 # Arrival height (m above launch) of a set-angle arc at `dist`:
@@ -755,6 +754,21 @@ static func planned_goalie_depth(
 	if target >= now_depth:
 		return now_depth
 	return maxf(now_depth - rate * time_s, target)
+
+
+# Radius a SET keeper holds for a puck `dist` from the goal: the same constraint
+# solve planned_goalie_depth predicts him with, no anticipatory cap binding.
+static func set_goalie_depth(dist: float) -> float:
+	var c := _depth_cfg_planning
+	c.ceiling_radius = _planning_ceiling if dist <= GOALIE_ZONE_DEPTH_M \
+			else GOALIE_RESTING_DEPTH_M
+	c.standoff_cap = dist - GOALIE_CHALLENGE_STANDOFF_M
+	return GoalieDepthSolver.solve_target(c)
+
+
+# The clean slot look XG_SLOT_REF is measured from, for the net at `goal`.
+static func slot_reference_release(goal: Vector3) -> Vector3:
+	return Vector3(goal.x, 0.0, goal.z - signf(goal.z) * SLOT_RADIUS_M)
 
 
 # `goalie_now` relocated to `depth` metres out from the attacked goal line,
@@ -2169,7 +2183,8 @@ static func score_shoot_value(
 		opponents: Array[Vector3],
 		shot_speed_m_s: float = WRISTER_SHOT_SPEED_M_S,
 		opponent_caps: Array = [],
-		shot_type: int = ShotEvent.ShotType.SHOT) -> float:
+		shot_type: int = ShotEvent.ShotType.SHOT,
+		loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH) -> float:
 	if (shooter.z - attacking_goal.z) * -signf(attacking_goal.z) < 0.001:
 		return 0.0
 	shooter = release_ahead_of_goalie(shooter, attacking_goal, predicted_goalie_pos)
@@ -2179,7 +2194,9 @@ static func score_shoot_value(
 	var seal_x: float = derive_post_seal_x_sign(shooter, attacking_goal)
 	var quality: float = AIShotValue.for_release(
 			shooter, attacking_goal, keeper_displacement_m, shot_type,
-			seal_x != 0.0)
+			seal_x != 0.0, Vector2(predicted_goalie_pos.x - attacking_goal.x,
+					predicted_goalie_pos.z - attacking_goal.z).length(),
+			loft_tan_high, shot_speed_m_s)
 	if quality <= 0.0:
 		return 0.0
 	var aim: Vector3 = AIShotAim.compute_open_net_aim(

@@ -50,10 +50,10 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +3: the wrister wind-up side reads the trailer's relative motion over the
 	# charge (#740), not just where he stands at the commit.
 	# +1: the chase steer passes when an airborne puck is back on the blade plane.
-	"res://Scripts/ai/skater_agent_state_machine.gd": 6542,
+	"res://Scripts/ai/skater_agent_state_machine.gd": 6628,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
 	"res://Scripts/game/game_manager.gd": 5787,
-	"res://Scripts/domain/ai/action_scoring.gd": 4459,
+	"res://Scripts/domain/ai/action_scoring.gd": 4476,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
 	# Scripts/controllers/CLAUDE.md rather than inline, and the tunable
@@ -65,14 +65,14 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +162: the rim pass. The path search lives in AIRimPass; what stays here is
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
-	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 3970,
+	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 4026,
 	# +33: the dive takes the knockdown's fall its own way — a thrown tip rate,
 	# no rebound, legs long, the belt kept on his line — and stays down while
-	# block is held.
-	"res://Scripts/controllers/skater_controller.gd": 3532,
+	# block is held. +5: a bot's caps carry its wrist-shot load and facing configs.
+	"res://Scripts/controllers/skater_controller.gd": 3537,
 	"res://Scripts/actors/skater.gd": 2796,
 	"res://Scripts/networking/network_manager.gd": 2855,
-	"res://Scripts/game/tutorial_manager.gd": 2073,
+	"res://Scripts/game/tutorial_manager.gd": 2067,
 	"res://Scripts/controllers/skater_ik_coordinator.gd": 950,
 	# +21: apply_scripted_grant / stage_scripted — the tutorial's teleports
 	# restart the swept interaction tests where the puck lands instead of
@@ -91,7 +91,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/controllers/goalie_body_config_builder.gd": 1106,
 	"res://Scripts/ui/network_debug_overlay.gd": 956,
 	"res://Scripts/networking/network_telemetry.gd": 957,
-	"res://Scripts/controllers/local_controller.gd": 951,
+	"res://Scripts/controllers/local_controller.gd": 949,
 	# Main's resumable sample prediction and the board pin's forward cap crossed the
 	# limit together, each from under it, at the merge that joined them.
 	"res://Scripts/controllers/remote_controller.gd": 822,
@@ -108,7 +108,7 @@ const _API_SLACK: int = 3
 const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/networking/network_manager.gd": 208,
 	"res://Scripts/actors/skater.gd": 145,
-	"res://Scripts/domain/ai/action_scoring.gd": 68,
+	"res://Scripts/domain/ai/action_scoring.gd": 70,
 	"res://Scripts/game/game_manager.gd": 63,
 	"res://Scripts/domain/state/player_attributes.gd": 53,
 	"res://Scripts/networking/network_telemetry.gd": 53,

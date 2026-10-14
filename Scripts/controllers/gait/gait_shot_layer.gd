@@ -20,6 +20,7 @@ const State = SkaterStateMachine.State
 var hip_yaw: float = 0.0
 var _prev_state: int = 0
 var _wrister_load: float = 0.0      # smoothed 0..1 drag-charge engagement
+var _wrister_hip: float = 0.0       # smoothed hip share of the wrister's torso wind-up
 var _slap_load: float = 0.0         # smoothed 0..1 wind-up engagement
 var _kick_t: float = -1.0           # seconds into the release kick; <0 = idle
 var _kick_power: float = 0.0        # load latched at release (min-pop floored)
@@ -35,6 +36,7 @@ func reset() -> void:
 	hip_yaw = 0.0
 	_prev_state = 0
 	_wrister_load = 0.0
+	_wrister_hip = 0.0
 	_slap_load = 0.0
 	_kick_t = -1.0
 	_kick_power = 0.0
@@ -77,6 +79,11 @@ func advance(delta: float) -> bool:
 	var ease: float = minf(_controller.wrister_load_blend_speed * delta, 1.0)
 	_wrister_load = lerpf(_wrister_load,
 			_skater.shot_charge if state == State.WRISTER_AIM else 0.0, ease)
+	# The hips open with the shoulders' wind-up, whichever way it turns: square
+	# hips under a fully wound torso put the hands over the stick-side thigh,
+	# and the shaft runs through it to a puck out at the side.
+	_wrister_hip = lerpf(_wrister_hip, _controller.wrister_load_hip_share
+			* _skater.upper_body.rotation.y if state == State.WRISTER_AIM else 0.0, ease)
 	# shot_charge and the wind-up pose both fill over max_slapper_charge_time
 	# (SkaterController.slapper_wind_up_t), so shot_charge IS the wind-up
 	# progress; sqrt-eased to match the torso coil's front-loaded snap
@@ -102,11 +109,11 @@ func advance(delta: float) -> bool:
 	var stick_side: float = -1.0 if _skater.is_left_handed else 1.0
 	var kick_hip_yaw_deg: float = _controller.slapper_kick_hip_yaw_deg if _kick_is_slap \
 			else _controller.wrister_kick_hip_yaw_deg
-	hip_yaw = -stick_side * (
-				deg_to_rad(_controller.wrister_load_hip_coil_deg) * _wrister_load
-				+ deg_to_rad(_controller.slapper_load_hip_coil_deg) * _slap_load) \
+	hip_yaw = _wrister_hip \
+			- stick_side * deg_to_rad(_controller.slapper_load_hip_coil_deg) * _slap_load \
 			+ stick_side * deg_to_rad(kick_hip_yaw_deg) * _kick_env
-	return _wrister_load > 0.001 or _slap_load > 0.001 or _kick_env > 0.0
+	return _wrister_load > 0.001 or absf(_wrister_hip) > 0.001 or _slap_load > 0.001 \
+			or _kick_env > 0.0
 
 
 # Shooting is a glide: the feet set through the load and drive through the

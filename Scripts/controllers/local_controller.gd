@@ -541,12 +541,11 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# inflates O(N) per broadcast, popping the blade above slapper_wind_up_height.
 	var pre_slapper_charge_timer: float = _aiming.slapper_charge_timer
 	# Same shape of problem as the slapper timer: tick_wrister_charge evolves the
-	# swing rotation and the cursor-speed EMA inside _update_wrister_charge during
+	# stroke travel and the cursor-speed EMA inside _update_wrister_charge during
 	# replay, so without save/restore each reconcile re-runs the unconfirmed
-	# window's swing and perturbs the live power signal. Save the live values and
+	# window's stroke and perturbs the live power signal. Save the live values and
 	# restore after replay; live tick state is the truth, replay's pass through
 	# the same inputs is discarded.
-	var pre_charge_swing_rotation: float = _aiming.swing_rotation
 	var pre_charge_cursor_speed: float = _aiming.cursor_speed_ema
 	var pre_charge_stroke_travel: float = _aiming.stroke_travel
 	var pre_charge_prev_intent_pos: Vector3 = _aiming.prev_intent_pos
@@ -683,7 +682,6 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	_aiming.one_timer_window_timer = pre_one_timer_window_timer
 	_aiming.one_timer_retention_timer = pre_one_timer_retention_timer
 	_aiming.slapper_charge_timer = pre_slapper_charge_timer
-	_aiming.swing_rotation = pre_charge_swing_rotation
 	_aiming.cursor_speed_ema = pre_charge_cursor_speed
 	_aiming.stroke_travel = pre_charge_stroke_travel
 	_aiming.prev_intent_pos = pre_charge_prev_intent_pos

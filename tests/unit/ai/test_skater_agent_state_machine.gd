@@ -727,29 +727,26 @@ func test_shoot_pressed_front_pressure_cancels_via_slap() -> void:
 	assert_true(i.slap_pressed)
 
 
-func _trailer_side_at_commit(trailer_vel: Vector3) -> float:
-	# A trailer directly behind the shooter, within stick reach, moving across
-	# at `trailer_vel`. Team 0 attacks -Z, so the aim is -Z and the forehand
-	# side is x = -handedness sign. A fresh bot per call: tick 0 is the pick.
+func _wind_up_side_with_puck_at(puck_offset: Vector3) -> float:
+	# A fresh right-handed bot per call, facing its attack (-Z): tick 0 reads
+	# the hand from where the puck sits and locks the wind-up side.
 	before_each()
 	sm._state = Agent.State.SHOOT_PRESSED
 	var s := _self_snap(Vector3.ZERO, true)
-	_add_skater(s, OPP_ID, Vector3(0, 0, 1.0))
-	s.skater_states[OPP_ID].velocity = trailer_vel
-	sm.dispatch(InputState.new(), s)  # tick 0 picks and locks the side
+	s.skater_states[SELF_ID].facing = Vector2(0.0, -1.0)
+	s.puck_state.position = puck_offset
+	sm.dispatch(InputState.new(), s)
 	return sm._shoot_side_sign
 
 
-func test_wind_up_side_reads_a_trailer_drifting_onto_the_forehand() -> void:
-	# Directly behind at the commit, but sliding onto the forehand over the
-	# charge: the wind-up would draw the puck back into his stick (#740).
-	var forehand_x: float = -sm._handedness_perp_sign
-	assert_eq(_trailer_side_at_commit(Vector3(forehand_x * 4.0, 0, 0)), -1.0,
-			"a trailer arriving on the forehand during the charge flips it to the backhand")
-	assert_eq(_trailer_side_at_commit(Vector3.ZERO), 1.0,
-			"a trailer staying directly behind leaves the forehand wind-up")
-	assert_eq(_trailer_side_at_commit(Vector3(-forehand_x * 4.0, 0, 0)), 1.0,
-			"one drifting to the backhand side leaves the forehand wind-up")
+func test_wind_up_side_is_the_hand_the_puck_gives() -> void:
+	# The blade freezes where the press finds the puck, so the hand is the
+	# load's: beside the stick hip a shot ahead is a forehand, beside the other
+	# hip a backhand, and the cosmetic wind-up is drawn on that side.
+	assert_eq(_wind_up_side_with_puck_at(Vector3(0.9, 0.0, 0.0)), 1.0,
+			"a puck beside a right-hander's stick hip winds up on the forehand")
+	assert_eq(_wind_up_side_with_puck_at(Vector3(-0.9, 0.0, 0.0)), -1.0,
+			"one beside the other hip winds up on the backhand")
 
 
 func test_shoot_pressed_ignores_rear_pressure() -> void:
@@ -1413,10 +1410,10 @@ func test_carry_holds_intent_against_carrier_flip() -> void:
 	var stub := _stub_carry(AIRoleCarrier.INTENT_CARRY)  # carrier now wants CARRY
 	sm._intended_action = Agent.State.SHOOT_PRESSED       # but we're mid-pre-aim
 	sm._intent_wait_ticks = 0
-	# Freeze the cursor far from the aim so convergence can't fire this tick.
-	sm._mouse_max_speed_m_s = 0.0001
-	sm._mouse_pos = Vector3(50, 0, 50)
-	sm._mouse_pos_initialized = true
+	# Priced at full load with the puck still unloaded at the body, so the press
+	# can't fire this tick.
+	sm._locked_pre_aim_point = Vector3(0, 0, -20)
+	sm._shot_hold_share_locked = 1.0
 	sm.dispatch(InputState.new(), _self_snap(Vector3.ZERO, true))
 	assert_eq(sm._intended_action, Agent.State.SHOOT_PRESSED,
 			"a carrier CARRY flip does not cancel the pending shot")
@@ -1993,6 +1990,13 @@ func _protect_snap(self_pos: Vector3, opp_pos: Vector3) -> WorldSnapshot:
 	return s
 
 
+func test_a_left_hander_s_holds_read_left_handed_from_the_first_build() -> void:
+	sm._handedness_perp_sign = 1.0
+	var s := _protect_snap(Vector3.ZERO, Vector3(0, 0, -30))
+	sm._build_role_context(s, Vector3.ZERO, s.skater_states[SELF_ID])
+	assert_true(sm._holds.is_left_handed)
+
+
 func test_protect_turn_shortest_in_open_ice() -> void:
 	var s := _protect_snap(Vector3.ZERO, Vector3(0, 0, -30))   # opponent far away
 	# Facing +z (angle 0), target ~172° around via the +x side.
@@ -2060,6 +2064,64 @@ func test_arc_step_front_reach_takes_short_way_despite_short_side_threat() -> vo
 	var ang: float = atan2(stepped.x - self_pos.x, stepped.z - self_pos.z)
 	assert_gt(ang, 0.0, "front-hemisphere reach sweeps the short (+) way, no back-orbit spin")
 	assert_eq(sm._arc_protect_sign, 0.0, "no long-way commitment latched for a front reach")
+
+
+func test_front_reach_across_the_body_walks_around_the_front() -> void:
+	# Puck on the right hip, its spot on the far side and in front: the straight
+	# line runs through the skater, so the cursor walks BladeRoute round the side
+	# he faces, never inside the body, at the slew, and arrives.
+	sm._current_self_pos = Vector3.ZERO
+	sm._current_self_state = _self_state(Vector2(0, -1))
+	sm._mouse_max_speed_m_s = 10.0   # a real Hands blade speed
+	var step_max: float = 10.0 * Agent.MOUSE_TICK_DELTA
+	sm._mouse_pos = Vector3(0.9, 0, 0)
+	sm._mouse_pos_initialized = true
+	var target := Vector3(-0.9, 0, -0.1)
+	assert_true(BladeRoute.crosses_body(Vector2(0.9, 0), Vector2(-0.9, -0.1)))
+	var prev: Vector3 = sm._mouse_pos
+	var went_front: bool = false
+	for _i: int in 120:
+		var r: Vector3 = sm._step_mouse_front(target)
+		assert_gte(Vector2(r.x, r.z).length(), BladeRoute.CLEAR_M - 0.001, "never through the body")
+		assert_lte(r.distance_to(prev), step_max + 1e-5, "at the slew")
+		went_front = went_front or r.z < -BladeRoute.CLEAR_M + 0.01
+		prev = r
+	assert_true(went_front, "round the side he faces")
+	assert_almost_eq(prev.distance_to(target), 0.0, 1e-4)
+
+
+func test_front_reach_that_clears_the_body_steps_direct() -> void:
+	sm._current_self_pos = Vector3.ZERO
+	sm._current_self_state = _self_state(Vector2(0, -1))
+	sm._mouse_pos = Vector3(0.9, 0, 0)
+	sm._mouse_pos_initialized = true
+	var front: Vector3 = sm._step_mouse_front(Vector3(0, 0, -0.9))
+	sm._mouse_pos = Vector3(0.9, 0, 0)
+	var direct: Vector3 = sm._step_mouse_toward(Vector3(0, 0, -0.9))
+	assert_almost_eq(front.distance_to(direct), 0.0, 1e-6)
+
+
+func test_a_swing_to_a_hold_behind_lands_on_the_hold_at_the_arc_rate() -> void:
+	# Turn-around to a charged release's hold behind the body: the swing walks
+	# the hold's own reach, not the aim ring, and finishes on it.
+	sm._current_self_pos = Vector3.ZERO
+	sm._current_self_state = _self_state(Vector2(0, -1))
+	sm._mouse_max_speed_m_s = 10.0
+	sm._mouse_arc_rate_rad_s = 5.0
+	sm._mouse_pos = Vector3(0.9, 0, 0)
+	sm._mouse_pos_initialized = true
+	var target := Vector3(-0.6, 0, 0.67)
+	var reach: float = Vector2(target.x, target.z).length()
+	var prev: float = atan2(0.9, 0.0)
+	var r := Vector3.ZERO
+	for _i: int in 120:
+		r = sm._step_mouse_hold_arc(target)
+		var ang: float = atan2(r.x, r.z)
+		assert_lte(absf(wrapf(ang - prev, -PI, PI)), 5.0 * Agent.MOUSE_TICK_DELTA + 1e-4,
+				"at the arc rate")
+		assert_almost_eq(Vector2(r.x, r.z).length(), reach, 0.02, "on the hold's reach")
+		prev = ang
+	assert_almost_eq(r.distance_to(target), 0.0, 1e-4)
 
 
 func test_arc_step_shortest_way_in_open_ice() -> void:

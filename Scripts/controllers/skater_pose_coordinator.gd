@@ -217,9 +217,16 @@ func apply_facing(input: InputState, delta: float) -> void:
 			# blade speed cap (SkaterIKCoordinator), not in this lock — earlier
 			# versions tied unlock to "same side it left from", which could
 			# permanently strand facing when the mouse wrapped around.
+			# The one exception is a skater facing their travel whose cursor has gone
+			# behind it: turning to it is how they skate backward, so it turns.
+			FacingRules.solve(_facing_rule, facing, to_mouse.normalized(),
+					Vector2(_skater.velocity.x, _skater.velocity.z), input.brake,
+					_controller.stance_active, _controller.facing_rules)
+			var facing_target: Vector2 = _facing_rule.target
 			var mouse_body_angle: float = facing.angle_to(to_mouse.normalized())
 			var ik_gate: float = deg_to_rad(_controller.rom_backhand_angle_max_deg + _controller.upper_body_max_twist_deg)
-			if abs(mouse_body_angle) >= ik_gate:
+			var behind_gate: bool = abs(mouse_body_angle) >= ik_gate
+			if behind_gate and not _facing_rule.turning_to_cursor_behind:
 				ik_locked_side = int(sign(mouse_body_angle))
 			else:
 				ik_locked_side = 0
@@ -230,7 +237,6 @@ func apply_facing(input: InputState, delta: float) -> void:
 				# facing) before reaching the cursor. See follow_through_facing_recover_speed.
 				if s == State.FOLLOW_THROUGH:
 					drag = maxf(drag, _controller.follow_through_facing_recover_speed)
-				var facing_target: Vector2 = to_mouse.normalized()
 				# Board shield: a carrier working the wall squares up ALONG it and
 				# protects the puck rather than facing into it. Gated to carrying —
 				# digging a loose puck out of the corner keeps full facing freedom,
@@ -243,7 +249,12 @@ func apply_facing(input: InputState, delta: float) -> void:
 									Vector2(_skater.global_position.x, _skater.global_position.z),
 									_controller.board_shield_probe),
 							deg_to_rad(_controller.board_shield_max_deg))
-				facing = facing.lerp(facing_target, drag * delta).normalized()
+				if behind_gate:
+					# Turning round to a cursor near-opposite: a chord lerp between
+					# opposed vectors barely moves, so turn by angle instead.
+					facing = facing.slerp(facing_target, minf(drag * delta, 1.0))
+				else:
+					facing = facing.lerp(facing_target, drag * delta).normalized()
 		_skater.set_facing(facing)
 		var turn_delta: float = angle_difference(prev_angle, _skater.rotation.y)
 		lower_body_lag = clampf(
@@ -252,6 +263,10 @@ func apply_facing(input: InputState, delta: float) -> void:
 			deg_to_rad(_controller.lower_body_lag_max_deg))
 
 	apply_lower_body_yaw(delta)
+
+# Where facing heads this tick (FacingRules); a caller-owned scratch.
+var _facing_rule: FacingRules.Result = FacingRules.Result.new()
+
 
 # Sole writer of the lower body's yaw. Decays the facing-driven turn lag and
 # sums the gait's two published yaw channels onto it — the hockey-stop turn
@@ -374,14 +389,14 @@ func apply_upper_body(delta: float) -> void:
 					if _sm.follow_through_is_slapper else _controller.wrister_follow_through_twist_deg
 			var through: float = blade_side_sign * deg_to_rad(through_deg) * env
 			if not _sm.follow_through_is_slapper:
-				# The coil IS the windup — discharge the through-overshoot INSTANTLY
-				# with the release. env is front-loaded (peaks ~40 ms), but a lerp at
-				# follow_through_twist_lerp_speed needs ~150 ms to converge, so it can
-				# never catch the fast bell — the snap gets muted into a slow rotation
-				# that trails the blade and reads as "release → pause → follow-through."
-				# Drive the angle straight off env instead: ft_aim ≈ the coil angle
-				# (same -angle·ratio formula), so this is continuous at the boundary.
-				upper_body_angle = ft_aim + through
+				# A backhand turns the other way, so it overshoots the other way.
+				if _controller.last_release_hand == "BH":
+					through = -through
+				# The overshoot discharges WITH the release: driven off env, since a
+				# lerp can't catch its ~40 ms bell. The unwind is rate-limited rather
+				# than snapped, because the coil can sit well off the shot line.
+				upper_body_angle = rotate_toward(upper_body_angle, ft_aim + through,
+						deg_to_rad(_controller.wrister_release_unwind_speed_deg) * delta)
 			else:
 				upper_body_angle = lerp_angle(upper_body_angle, ft_aim + through,
 						_controller.follow_through_twist_lerp_speed * delta)
@@ -436,6 +451,11 @@ func apply_upper_body(delta: float) -> void:
 			var blade_angle: float = atan2(local_dir.x, -local_dir.z)
 			var max_twist: float = deg_to_rad(_controller.upper_body_max_twist_deg)
 			target_angle = clampf(-blade_angle * _controller.upper_body_twist_ratio, -max_twist, max_twist)
+		# A wrist shot winds the torso up by the power it would release
+		# with, from squared on the aim (nothing behind it) to the full wind-up.
+		if _sm.get_state() == State.WRISTER_AIM and _controller.has_puck:
+			target_angle = lerp_angle(target_angle, _controller.wrister_load.wound_yaw,
+					_controller.wrister_coil)
 		target_lean = compute_upper_body_lean_target(
 				Vector2(_skater.top_hand.position.x, _skater.top_hand.position.z),
 				Vector2(_skater.shoulder.position.x, _skater.shoulder.position.z),
