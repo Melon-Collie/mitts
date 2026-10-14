@@ -1,0 +1,538 @@
+class_name AICarrierField
+extends RefCounted
+
+# What the carrier sees for one phase of its compete, and the valuation every
+# one of its searches shares: what a spot is worth, what a turnover there costs,
+# what pass option it opens. AIRoleCarrier owns one, refills it with fill(ctx) at
+# the head of each phase (fill_receivers in the fire phase), and hands it to the
+# searches; nothing but those two writes the lists, so every search in a phase
+# reads the same field. The counter-threat memo and the hold solver are the
+# exceptions: both are scratch the valuations fill as they go.
+
+# ── Transition-exposure appetite (5v5 only — plan §6) ────────────────────────
+# The per-position risk-aversion FEEL scalar on the counter-rush cost: the model
+# does the seeing, this sets the appetite. Forwards discount it because the
+# F3-high rotation is expected to absorb a forward caught deep. 3v3 pays zero.
+const EXPOSURE_APPETITE_DEFENSE: float = 1.0
+const EXPOSURE_APPETITE_FORWARD: float = 0.7
+# Loss probabilities below this skip the counter read entirely (hot-path
+# floor, not a tuning knob: at 4% × a bounded threat the term is noise).
+const EXPOSURE_PROB_FLOOR: float = 0.04
+
+# Receiver drive-in credit (see receiver_drive_in_value): the MAX distance an open
+# man is credited with carrying toward the net (the actual reach is the clear
+# extent of that path), and the closest to the net that drive may end (no credit
+# for a drive into the crease). The max is a horizon cap, finite because opponent
+# projections go stale over a long carry. Feel tunables, not an evaluation curve.
+const RECEIVER_DRIVE_MAX_M: float = 12.0
+const RECEIVER_DRIVE_MIN_NET_DIST_M: float = 3.0
+
+# Forward-pressure discount (see forward_clearance_at). The strip model prices a
+# defender ON the puck but not one sitting in the path the carrier must beat to
+# advance, so without this a lightly-pressured carrier grinds forward instead of
+# moving the puck to an unimpeded teammate. HORIZON is how far ahead the contest
+# is felt; MIN_SCALE is the most a fully-blocked path discounts (never to zero —
+# a carrier with no outlet still carries). Feel tunables; the clearance itself is
+# the grounded read. Applied only to the fire-vs-carry compete and the receiver
+# of a pass, never to the raw carry the dump is judged against.
+const FORWARD_PRESSURE_HORIZON_M: float = 9.0
+const FORWARD_PRESSURE_MIN_SCALE: float = 0.55
+
+# RECEIVE: how far inside the line a pass target must sit when the carrier is
+# in the OZ. The catch plays the puck up to a stick's reach around the body and
+# gives with it (~a stride), so routine reception slop on a line-hugging target
+# takes the puck out. Such feeds are hard reads for a human receiver too, so
+# they're excluded, not discounted.
+const OZ_RECEIVE_LINE_BUFFER_M: float = GameRules.DEFAULT_STICK_LENGTH_M + 0.7
+# Haircut on the pass-OPTION value a carry candidate inherits (see
+# pass_option_from): the option is a coarse read — receiver valued at his
+# CURRENT spot, lane judged against CURRENT defenders — and it still has to
+# survive until the carrier arrives and releases. Tactical haircut; the grounded
+# terms are inside the option itself.
+const PASS_OPTION_DISCOUNT: float = 0.8
+
+# Opponents, index-matched: positions, velocities, AISkaterCaps (entries may be
+# null, so the reachable-set model reads each defender's real reach), and
+# positions advanced by the commit→release windup (BOT_WRISTER_LOOKAHEAD_S) —
+# the shot and the charged pass both leave the blade ~135 ms after the intent
+# commits, so their lanes are priced at release-time defender spots.
+var opponents: Array[Vector3] = []
+var opponent_vels: Array[Vector3] = []
+var opponent_caps: Array[AISkaterCaps] = []
+var opponents_release: Array[Vector3] = []
+# Our skaters excluding the carrier (the man who just lost it covers nothing) —
+# the defenders that reduce the opponent's threat in the turnover-cost term —
+# with their caps and velocities, index-matched.
+var our_defenders: Array[Vector3] = []
+var our_defender_caps: Array[AISkaterCaps] = []
+var our_defender_vels: Array[Vector3] = []
+# Teammate ETAs to the counter point (5v5), candidate-invariant across a phase,
+# and the counter-threat memo by covering-body count, -1-seeded with them.
+var exposure_mate_etas: Array[float] = []
+var exposure_threat_memo: Array[float] = []
+
+# ── Receivers (fill_receivers: the FIRE phase only) ──────────────────────────
+# Read in the fire phase and carried into a sliced commit phase unchanged, since
+# fill() does not touch them. Our teammates, and the pass-OPTION cache: each
+# legal receiver's position and spot value at his CURRENT location, so a
+# candidate's option read only prices the LANE from the candidate.
+var teammate_ids: Array[int] = []
+var receiver_pos: Array[Vector3] = []
+var receiver_val: Array[float] = []
+# The option read at the current puck spot — candidates credit only their
+# improvement over it — and the best cached value × PASS_OPTION_DISCOUNT, the
+# exact upper bound on any candidate's option read.
+var pass_option_at_self: float = 0.0
+var pass_option_ceiling: float = 0.0
+
+# The hold solver every valuation shares: the shoot-now sweep, a carry
+# candidate's shot on arrival, a pass's launch cap. Its results are read back
+# right after each solve, so it is a tool, not a list.
+var holds := AIShotHolds.new()
+# Projection scratch for receiver_drive_in_value: opponents at the start of the
+# drive, and at its end.
+var _entry_buf: Array[Vector3] = []
+var _drive_buf: Array[Vector3] = []
+
+
+func fill(ctx: RoleContext) -> void:
+	opponents.clear()
+	opponent_vels.clear()
+	opponent_caps.clear()
+	opponents_release.clear()
+	our_defenders.clear()
+	our_defender_caps.clear()
+	our_defender_vels.clear()
+	for peer_id: int in ctx.snapshot.skater_states:
+		if peer_id == ctx.peer_id:
+			continue
+		var s: SkaterNetworkState = ctx.snapshot.skater_states[peer_id]
+		if ctx.team_id_by_peer.get(peer_id, -1) != ctx.team_id:
+			opponents.append(s.position)
+			opponent_vels.append(s.velocity)
+			opponent_caps.append(ctx.caps_by_peer.get(peer_id))
+			opponents_release.append(AITrajectory.predict_at(
+					s.position, s.velocity, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S))
+		else:
+			our_defenders.append(s.position)
+			our_defender_caps.append(ctx.caps_by_peer.get(peer_id))
+			our_defender_vels.append(s.velocity)
+	if ctx.team_size >= 5:
+		AIActionScoring.fill_counter_cover_etas(
+				ctx.defending_goal_pos, our_defenders, exposure_mate_etas)
+		exposure_threat_memo.resize(our_defenders.size() + 2)
+		exposure_threat_memo.fill(-1.0)
+
+
+func fill_receivers(ctx: RoleContext, cur_puck_pos: Vector3) -> void:
+	teammate_ids.clear()
+	for peer_id: int in ctx.snapshot.skater_states:
+		if peer_id == ctx.peer_id:
+			continue
+		if ctx.team_id_by_peer.get(peer_id, -1) == ctx.team_id:
+			teammate_ids.append(peer_id)
+
+	# Pass-OPTION cache: each legal receiver's spot value at his CURRENT position
+	# (goalie arc-squared to it). Legality approximates AICarrierPassSearch.search's: no
+	# out-of-play receivers, and an OZ carrier counts only receivers standing
+	# OZ_RECEIVE_LINE_BUFFER_M inside the line (the live pass applies that
+	# buffer to the solved lead instead).
+	receiver_pos.clear()
+	receiver_val.clear()
+	var in_oz_now: bool = zone_taken(ctx)
+	for pid: int in teammate_ids:
+		var tm: SkaterNetworkState = ctx.snapshot.skater_states[pid]
+		if ctx.snapshot.is_out_of_play(pid):
+			continue
+		if in_oz_now and not AIActionScoring.in_offensive_zone(
+				tm.position, ctx.attacking_goal_pos, OZ_RECEIVE_LINE_BUFFER_M):
+			continue
+		var tm_caps: AISkaterCaps = ctx.caps_by_peer.get(pid)
+		var tm_shot_speed: float = tm_caps.wrister_shot_speed if tm_caps != null \
+				else AIBotMechanics.WRISTER_SHOT_SPEED_M_S
+		var tm_goalie: Vector3 = AIGoalieModel.goalie_squared_pos(
+				goalie_now(ctx), ctx.attacking_goal_pos, tm.position)
+		receiver_pos.append(tm.position)
+		receiver_val.append(value_at(
+				ctx, tm.position, ctx.self_pos, opponents, tm_goalie,
+				tm_shot_speed, 0.0, 0.0, loft_high(tm_caps)))
+	# The same option read at the CURRENT puck spot — the baseline a candidate's
+	# option credit is measured against (see AICarrierCarrySearch._upgrade_candidate_two_ply): an
+	# option already available from here belongs to the live pass in the fire
+	# compete, so only the IMPROVEMENT motivates a carry. Subtracting it also
+	# cancels the coarse option model's bias against the fully-priced pass
+	# common-mode.
+	pass_option_at_self = pass_option_from(ctx, cur_puck_pos)
+	# Exact ceiling on ANY candidate's option (lane/miss/decay all ≤ 1); when
+	# it can't improve on the at-self read, the per-candidate option read skips.
+	pass_option_ceiling = 0.0
+	for v: float in receiver_val:
+		if v * PASS_OPTION_DISCOUNT > pass_option_ceiling:
+			pass_option_ceiling = v * PASS_OPTION_DISCOUNT
+
+
+# Every opponent dead-reckoned `time_s` ahead, into `out_buf`, index-matched to
+# `opponents`.
+func project_opponents(time_s: float, out_buf: Array[Vector3]) -> void:
+	out_buf.clear()
+	for i: int in opponents.size():
+		out_buf.append(AITrajectory.predict_at(opponents[i], opponent_vels[i], time_s))
+
+
+func turnover_cost(ctx: RoleContext, loss_point: Vector3, loss_prob: float,
+		our_goalie: Vector3) -> float:
+	return AIActionScoring.turnover_cost(
+			loss_point, loss_prob, ctx.defending_goal_pos, our_goalie,
+			GameRules.NET_HALF_WIDTH, our_defenders, our_defender_caps,
+			AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos))
+
+
+# Transition-exposure cost of losing the puck at `loss_point` with
+# probability `loss_prob`, while this carrier would be recovering from
+# `recover_from` — the additive counter-rush half of the turnover price
+# (AIActionScoring.counter_rush_cost; plan §6). 5v5 only: 3v3 pays zero.
+func counter_exposure_cost(ctx: RoleContext, loss_point: Vector3,
+		loss_prob: float, recover_from: Vector3, our_goalie: Vector3) -> float:
+	if ctx.team_size < 5 or loss_prob <= EXPOSURE_PROB_FLOOR:
+		return 0.0
+	var appetite: float = EXPOSURE_APPETITE_DEFENSE if ctx.self_is_defense \
+			else EXPOSURE_APPETITE_FORWARD
+	return appetite * AIActionScoring.counter_rush_cost(
+			loss_point, loss_prob, ctx.defending_goal_pos, our_goalie,
+			GameRules.NET_HALF_WIDTH, our_defenders,
+			recover_from, ctx.self_max_speed,
+			opponents, opponent_vels, opponent_caps,
+			exposure_mate_etas, exposure_threat_memo,
+			AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos))
+
+
+# ── Stateless reads every search shares ──────────────────────────────────────
+
+# Where the carried puck sits off a body at `body_pos`, a carry-handle toward
+# the attacking goal.
+static func puck_pos_at(body_pos: Vector3, attacking_goal: Vector3) -> Vector3:
+	var to_goal: Vector3 = attacking_goal - body_pos
+	to_goal.y = 0.0
+	var len_sq: float = to_goal.x * to_goal.x + to_goal.z * to_goal.z
+	if len_sq < 0.0001:
+		return body_pos
+	var inv: float = 1.0 / sqrt(len_sq)
+	return body_pos + to_goal * (inv * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M)
+
+
+# The pass valve's read: the offside line reads the PUCK, which leads the body,
+# so the zone is taken once the body, the puck, or the puck at release is in.
+static func zone_taken(ctx: RoleContext) -> bool:
+	var goal: Vector3 = ctx.attacking_goal_pos
+	if AIActionScoring.in_offensive_zone(ctx.self_pos, goal):
+		return true
+	if ctx.snapshot.puck_state == null:
+		return false
+	var puck: Vector3 = ctx.snapshot.puck_state.position
+	return AIActionScoring.in_offensive_zone(puck, goal) or AIActionScoring.in_offensive_zone(
+			puck + ctx.self_velocity * AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, goal)
+
+
+# OZ slot anchor — the long-range carry candidate and the forward axis of the
+# carry search, a fixed depth off the attacking goal line.
+static func slot_anchor(own_goal_dir: float) -> Vector3:
+	var slot_z: float = -own_goal_dir * (GameRules.GOAL_LINE_Z - GameRules.SLOT_DIST_M)
+	return Vector3(0.0, 0.0, slot_z)
+
+
+# Where a pass physically leaves from: the carried puck (up to a stick's reach
+# from the body), falling back to the body center when the snapshot has no
+# puck. Measured from the chest instead, the ~1 m origin error is a systematic
+# over-lead on a close feed.
+static func pass_origin(ctx: RoleContext) -> Vector3:
+	if ctx.snapshot.puck_state != null:
+		return Vector3(
+				ctx.snapshot.puck_state.position.x, 0.0,
+				ctx.snapshot.puck_state.position.z)
+	return ctx.self_pos
+
+
+# The opposing goalie's CURRENT world position; the attacking goal when his
+# state isn't buffered yet.
+static func goalie_now(ctx: RoleContext) -> Vector3:
+	var opp_goalie: GoalieNetworkState = ctx.snapshot.goalie_states.get(1 - ctx.team_id)
+	if opp_goalie == null:
+		return ctx.attacking_goal_pos
+	return Vector3(opp_goalie.position_x, 0.0, opp_goalie.position_z)
+
+
+# AIGoalieModel.predict_goalie_pos from the goalie's current position.
+# `release_time_s` is the time from now until the shot leaves the blade.
+static func predict_goalie_at(ctx: RoleContext, release_time_s: float,
+		puck_pos_at_release: Vector3, closing_speed_m_s: float = 0.0) -> Vector3:
+	return AIGoalieModel.predict_goalie_pos(
+			goalie_now(ctx), ctx.attacking_goal_pos,
+			release_time_s, puck_pos_at_release, closing_speed_m_s)
+
+
+# How unsettled [0,1] the goalie is at that same release. The shot read uses it
+# only to void its keeper-home skip; the seam itself prices a caught-moving
+# keeper by displacement. Cognition gate: a goalie-motion-blind tier
+# (ctx.reads_goalie_motion false) reads 0.
+static func goalie_unsettled_at(ctx: RoleContext, release_time_s: float,
+		puck_pos_at_release: Vector3, closing_speed_m_s: float = 0.0) -> float:
+	if not ctx.reads_goalie_motion:
+		return 0.0
+	return AIGoalieModel.goalie_unsettled(
+			goalie_now(ctx), ctx.attacking_goal_pos,
+			release_time_s, puck_pos_at_release, closing_speed_m_s)
+
+
+# The fastest charged pass along `dir` (world XZ) this bot can load: its pace at
+# the pocket's share, the hold the state machine pulls the puck to first when
+# the puck's own spot can't carry the feed.
+func pass_launch_cap(ctx: RoleContext, dir: Vector3, facing: Vector2) -> float:
+	holds.configure_from(ctx)
+	holds.pocket(Vector2(dir.x, dir.z), Vector2(ctx.self_velocity.x, ctx.self_velocity.z),
+			facing)
+	return ctx.self_wrister_shot_speed * holds.pocket_result.power_share
+
+
+# Whether a shot released at `release` by a carrier now at `from_pos` is what
+# value_at prices the spot by. Outside the zone, from outside it, at a keeper
+# home, the spot is worth its position and the shot (near nothing at that range)
+# is never the better read, so its hold is not worth solving.
+static func shot_reads(ctx: RoleContext, from_pos: Vector3, release: Vector3) -> bool:
+	return AIActionScoring.in_offensive_zone(from_pos, ctx.attacking_goal_pos) \
+			or AIActionScoring.in_offensive_zone(release, ctx.attacking_goal_pos) \
+			or goalie_now(ctx).distance_to(ctx.attacking_goal_pos) \
+					>= AIActionScoring.THREAT_GOALIE_HOME_M
+
+
+# The hold a carry candidate's shot on arrival is taken from (AIShotHolds
+# .solve_arrival, its share and keep left in holds), and the wait it owes before
+# the press: the pull there from where the puck sits now, less the `carry_s` the
+# carry gives the hands to make it.
+func arrival_hold_wait(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3,
+		carry_s: float) -> float:
+	var aim := Vector2(ctx.attacking_goal_pos.x - candidate.x,
+			ctx.attacking_goal_pos.z - candidate.z)
+	if aim.length_squared() < 0.0001:
+		aim = Vector2(0.0, -signf(ctx.attacking_goal_pos.z))
+	var facing: Vector2 = ctx.snapshot.skater_states[ctx.peer_id].facing
+	var windup: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+	holds.solve_arrival(aim.normalized(), Vector2(arrive_vel.x, arrive_vel.z), facing,
+			candidate + arrive_vel * windup, carry_s + windup,
+			opponents, opponent_vels, opponent_caps)
+	var puck: Vector3 = ctx.self_pos if ctx.snapshot.puck_state == null \
+			else ctx.snapshot.puck_state.position
+	var from := Vector2(puck.x - ctx.self_pos.x, puck.z - ctx.self_pos.z)
+	return maxf(0.0, holds.pull_time(from, holds.arrival_offset, facing) - carry_s)
+
+
+# The steepest loft rung a player's blade has, the league's when unknown.
+static func loft_high(caps: AISkaterCaps) -> float:
+	return caps.loft_tans.z if caps != null else GameRules.DEFAULT_LOFT_TAN_HIGH
+
+
+# Position-value scorer at `pos`, evaluated from the carrier at `from_pos`.
+#
+#   carrier in the zone:            shot xG at `pos`
+#   carrier outside, `pos` outside: max(shot xG, position_potential × realization)
+#   carrier outside, `pos` inside:  shot xG at `pos`, converted (entry_value)
+#
+# Two value scales, keyed on the CARRIER — see Scripts/domain/ai/CLAUDE.md →
+# "Positional value". The potential branch pays the realization discount: it is
+# future value that still has to be skated to the slot, and undecayed,
+# stand-still strictly beats a step toward the net in open ice.
+#
+# `opps` must already be projected to the time the actor will be at `pos`, in
+# the same snapshot order as opponent_caps. `shot_speed_m_s` and
+# `loft_tan_high` are the SHOOTER's (this bot's for carry/stand candidates, the
+# receiver's build for a pass). It takes no aim spread: the seam prices the
+# chance, not the shooter. `shot_keep` is the odds the shooter still has the
+# puck at the press; it discounts the shot, never the position value.
+func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
+		opps: Array[Vector3],
+		predicted_goalie_pos: Vector3,
+		shot_speed_m_s: float = AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
+		goalie_unsettled_factor: float = 0.0,
+		keeper_displacement_m: float = 0.0,
+		loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH,
+		shot_keep: float = 1.0) -> float:
+	var attacking_goal: Vector3 = ctx.attacking_goal_pos
+	# Hot-path skip (the same proof threat_surface_shoot runs): with the keeper
+	# HOME and settled, a direct shot from OUTSIDE the attacking zone is dead by
+	# score_shoot's own coverage math, so the potential branch always wins. A
+	# displaced, pulled or unsettled keeper voids the proof and computes fully.
+	var out_of_zone: bool = not AIActionScoring.in_offensive_zone(pos, attacking_goal)
+	if out_of_zone and goalie_unsettled_factor <= 0.0 \
+			and not AIActionScoring.in_offensive_zone(from_pos, attacking_goal) \
+			and predicted_goalie_pos.distance_to(attacking_goal) \
+					< AIActionScoring.THREAT_GOALIE_HOME_M:
+		var potential_nz: float = AIActionScoring.position_potential(
+				pos, attacking_goal, opps)
+		return potential_nz * AIActionScoring.potential_realization_discount(
+				pos, attacking_goal)
+	# THE SEAM (AIShotValue): xG plus a keeper-displacement term. A max over five
+	# holes with structural cliffs cannot supply the small differences a carry
+	# beam consumes. Displacement arrives in metres rather than the 0..1
+	# unsettled scalar, which saturates the moment he is caught moving at all
+	# and cannot say HOW beaten he is. The post seal is derived inside.
+	var shoot_s: float = AIActionScoring.score_shoot_value(
+			pos, attacking_goal, predicted_goalie_pos, keeper_displacement_m,
+			GameRules.NET_HALF_WIDTH, opps, shot_speed_m_s,
+			opponent_caps, ShotEvent.ShotType.SHOT, loft_tan_high) * shot_keep
+	if AIActionScoring.in_offensive_zone(from_pos, attacking_goal):
+		# PURE xG in the offensive zone, with no possession floor: a smooth xG
+		# surface does not go flat where no shot is available right now, so the
+		# gradient is real.
+		return shoot_s
+	var potential_s: float = AIActionScoring.position_potential(
+			pos, attacking_goal, opps)
+	var realization: float = AIActionScoring.potential_realization_discount(
+			pos, attacking_goal)
+	if AIActionScoring.in_offensive_zone(pos, attacking_goal):
+		return entry_value(shoot_s)
+	return maxf(shoot_s, potential_s * realization)
+
+
+# An in-zone xG value as an out-of-zone carrier reads it, in position_potential's
+# unit. Capped at a clean slot look, potential's own ceiling, which also keeps the
+# [0, 1] bound the carry candidates' ceiling prunes rely on.
+static func entry_value(in_zone_xg: float) -> float:
+	return minf(in_zone_xg / AIActionScoring.XG_SLOT_REF, 1.0)
+
+
+# The value of a man DRIVING IN from `receiver_spot`: the value he reaches by
+# carrying toward the net, up to RECEIVER_DRIVE_MAX_M and only as far as the path
+# stays clear (carry_strip_point). Value = value_at(reached) × keep × decay(time
+# to reach it), on the same reach/clearance machinery as the carrier's own carry,
+# so both sides of a pass are valued alike. One straight drive, no search.
+# Serves pass receivers, the carrier's own floor, and the entry continuation.
+#
+# `start_s` > 0 prices a drive that begins that far in the future (the entry
+# continuation after a carry candidate): defenders are read where they will be
+# then, and `from_pos` names whose regime values the reached spot. `own_hands`:
+# the drive is this carrier's, so the shot at its end is held as a carry
+# candidate's is (arrival_hold_wait); a receiver's hands are not modelled.
+func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
+		receiver_shot_speed: float, receiver_caps: AISkaterCaps,
+		receiver_vel: Vector3 = Vector3.ZERO, from_pos: Vector3 = Vector3.INF,
+		start_s: float = 0.0, own_hands: bool = false) -> float:
+	# A delayed offside is up: driving in from outside the zone is not on.
+	if ctx.zone_entry_blocked \
+			and not AIActionScoring.in_offensive_zone(receiver_spot, ctx.attacking_goal_pos):
+		return 0.0
+	var to_net_x: float = ctx.attacking_goal_pos.x - receiver_spot.x
+	var to_net_z: float = ctx.attacking_goal_pos.z - receiver_spot.z
+	var d: float = sqrt(to_net_x * to_net_x + to_net_z * to_net_z)
+	# Already tight to the net: no room to improve by driving.
+	if d <= RECEIVER_DRIVE_MIN_NET_DIST_M + 0.1:
+		return 0.0
+	var reach: float = minf(RECEIVER_DRIVE_MAX_M, d - RECEIVER_DRIVE_MIN_NET_DIST_M)
+	var inv: float = 1.0 / d
+	var dir_x: float = to_net_x * inv
+	var dir_z: float = to_net_z * inv
+	var target := Vector3(
+			receiver_spot.x + dir_x * reach, 0.0, receiver_spot.z + dir_z * reach)
+	if not AIStationSearch.is_legal_position(target):
+		return 0.0
+	var recv_speed: float = receiver_caps.max_speed if receiver_caps != null \
+			else ctx.self_max_speed
+	var recv_accel: float = receiver_caps.max_accel if receiver_caps != null \
+			else ctx.self_max_accel
+	# Momentum-honest: a man in stride carries his pace into the drive, one curling
+	# back brakes it out first. Never `reach / max_speed`.
+	var reach_time: float = AIArrival.time_to_arrive(
+			receiver_spot, target, receiver_vel, recv_speed, recv_accel)
+	# A defender in the way drops keep and stops the drive where he covers it;
+	# apply_escape as for the carrier's own candidates.
+	var opps: Array[Vector3] = opponents
+	if start_s > 0.0:
+		project_opponents(start_s, _entry_buf)
+		opps = _entry_buf
+	var keep: float = AICarrySpace.carry_safety(
+			receiver_spot, target, reach_time,
+			opps, opponent_vels, opponent_caps, true)
+	if keep <= 0.0:
+		return 0.0
+	var reached: Vector3 = AICarrySpace.carry_strip_point(
+			receiver_spot, target, reach_time,
+			opps, opponent_vels, opponent_caps, true, true)
+	var t: float = reach_time if reached == target \
+			else AIArrival.time_to_arrive(
+					receiver_spot, reached, receiver_vel, recv_speed, recv_accel)
+	project_opponents(start_s + t, _drive_buf)
+	# The keeper backs in over the receiver's drive exactly as over the carrier's
+	# own: both sides of the carry-vs-pass compete must read the same keeper.
+	var goalie: Vector3 = AIGoalieModel.goalie_squared_pos(
+			goalie_now(ctx), ctx.attacking_goal_pos, reached, start_s + t,
+			(receiver_spot.distance_to(ctx.attacking_goal_pos)
+					- reached.distance_to(ctx.attacking_goal_pos)) / maxf(t, 0.001))
+	var regime_from: Vector3 = from_pos if from_pos.is_finite() else ctx.self_pos
+	var shot_speed: float = receiver_shot_speed
+	var hold_keep: float = 1.0
+	var wait: float = 0.0
+	if own_hands and shot_reads(ctx, regime_from, reached):
+		var arrive_vel: Vector3 = (reached - receiver_spot) / t if t > 0.001 else Vector3.ZERO
+		wait = arrival_hold_wait(ctx, reached, arrive_vel, start_s + t)
+		shot_speed *= holds.arrival_share
+		hold_keep = holds.arrival_keep
+	var advanced: float = value_at(ctx, reached, regime_from,
+			_drive_buf, goalie, shot_speed, 0.0, 0.0,
+			loft_high(receiver_caps), hold_keep)
+	return advanced * keep * AIActionScoring.delay_discount(t + wait)
+
+
+# The same forward-space read for a pass receiver at `pos` with velocity `vel`
+# and build `caps` (see AICarrierPassSearch._pass_ev), so both sides of a carry-vs-pass compete pay
+# the same toll for the same clogged ice.
+func forward_clearance_at(ctx: RoleContext, pos: Vector3, vel: Vector3,
+		caps: AISkaterCaps) -> float:
+	return AICarrySpace.controlled_space(
+			pos, vel, caps, ctx.attacking_goal_pos, FORWARD_PRESSURE_HORIZON_M,
+			opponents, opponent_vels, opponent_caps)
+
+
+# The pass-option cache's spot value for the receiver standing at `pos` (0.0 when
+# he is not in it — an illegal or out-of-play receiver).
+func receiver_value_at(pos: Vector3) -> float:
+	for i: int in receiver_pos.size():
+		if receiver_pos[i] == pos:
+			return receiver_val[i]
+	return 0.0
+
+
+# The pass OPTION a carry candidate opens: the best cached receiver value
+# reachable through a CLEAR lane from the candidate spot, priced as a future
+# action — lane × completion odds × the pass's flight decay ×
+# PASS_OPTION_DISCOUNT. Without it a contained carrier's retreat earns nothing,
+# since separation's value is the lanes it reopens. Coarse by design (receivers
+# at their CURRENT spots, lanes against CURRENT defenders): it only has to rank
+# spots; the fired pass is fully solved at fire time.
+func pass_option_from(ctx: RoleContext, candidate: Vector3,
+		useless_below: float = 0.0) -> float:
+	var best: float = 0.0
+	for i: int in receiver_pos.size():
+		# Receiver ceiling (exact): lane/miss/decay all ≤ 1.
+		if receiver_val[i] * PASS_OPTION_DISCOUNT \
+				<= maxf(best, useless_below):
+			continue
+		var rpos: Vector3 = receiver_pos[i]
+		if AINetObstacle.pass_lane_blocked_by_net(candidate, rpos):
+			continue
+		if AINetObstacle.pass_crosses_own_slot(
+				candidate, rpos, ctx.own_goal_dir * GameRules.GOAL_LINE_Z):
+			continue
+		var dist: float = candidate.distance_to(rpos)
+		var pass_speed: float = AIPuckLane.pass_launch_speed(
+				dist, ctx.self_wrister_shot_speed, ctx.pass_speed_scale)
+		var lane: float = AIPuckLane.lane_clear(
+				candidate, rpos, opponents, pass_speed,
+				opponent_vels, opponent_caps)
+		if lane <= 0.0:
+			continue
+		var option: float = receiver_val[i] \
+				* lane * (1.0 - AIPuckLane.pass_miss_prob(
+						dist, ctx.self_pass_aim_error_rad)) \
+				* AIActionScoring.delay_discount(dist / maxf(pass_speed, 1.0)) \
+				* PASS_OPTION_DISCOUNT
+		if option > best:
+			best = option
+	return best

@@ -510,7 +510,7 @@ static func compute_clear_velocity(
 
 # ── Sweep-lane reachability ──────────────────────────────────────────────────
 # Can an opponent get a stick on the swept puck's exit path? Same grounded
-# reachability shape as the bot AI's lane model (AIActionScoring.lane_clear),
+# reachability shape as the bot AI's lane model (AIPuckLane.lane_clear),
 # reduced to the goalie's short-range case: opponents treated as static over
 # the short flight, scalar loop over a caller-owned PackedVector3Array (no
 # allocation — this runs at the sweep/cover decision, which can persist for

@@ -4,12 +4,10 @@ extends GutTest
 # FINISHER readiness at its argmax spot → the carrier valuing the feed →
 # zone-entry trigger → ONE_TIMER_PRESSED holding through the pickup → release.
 #
-# Regression guard for the "bots never go for one-timers" bug cluster: the
-# carrier-reaction debounce window right after a pass release (puck reads
-# held-but-fast) used to (a) flip the FINISHER's role decision into reactive
-# tip mode, (b) fail the ready-preserve's loose-puck gate — tearing down
-# readiness on every feed — and (c) block _puck_in_one_timer_zone outright,
-# so the camped one-timer never fired at any difficulty tier.
+# The carrier-reaction debounce window right after a pass release (the puck
+# reads held-but-fast) must not flip the FINISHER into reactive tip mode, fail
+# the ready-preserve's loose-puck gate, or block _puck_in_one_timer_zone: any
+# of the three stops the camped one-timer firing at every difficulty tier.
 
 const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
 
@@ -45,12 +43,9 @@ func _add_goalie(s: WorldSnapshot, team_id: int, pos: Vector3) -> void:
 
 # Settled OZONE cycle: carrier (peer 2) on the right half-wall, FINISHER
 # (peer 1) camped weak-side, the MARK defender caught low at the net-front
-# and DRAWN TO THE PUCK SIDE — the genuinely open cross-seam window. (He
-# used to sit at (-1, -25), which shades the weak-side backdoor lane; the
-# release-contest pressure model reads that half-open seam honestly — the
-# feed EV lands within noise of a reposition carry — so the doctrine this
-# file pins, "open seam + ready man → feed", gets a fixture where the seam
-# is actually open.)
+# and DRAWN TO THE PUCK SIDE — the genuinely open cross-seam window. A MARK
+# low on the weak side shades the backdoor lane, and the release-contest model
+# reads that half-open seam as no better than a reposition carry.
 func _cycle_snap(finisher_pos: Vector3) -> WorldSnapshot:
 	var s := WorldSnapshot.new()
 	_add_skater(s, FINISHER_ID, finisher_pos)
@@ -326,8 +321,9 @@ func test_one_timer_aim_is_locked_from_the_release_point_not_the_body() -> void:
 	var locked: Vector3 = ShotMechanics.slapper_aim_dir(
 			input.bot_slapper_aim_dir, Vector3(30.0, 0.0, 30.0), Vector3.ZERO)
 	var dir := Vector2(locked.x, locked.z).normalized()
-	var release_point: Vector3 = sm._slapper_zone_center(
-			sm._one_timer_line_anchor(s, self_pos))
+	var release_point: Vector3 = sm._one_timer.zone_center(
+			sm._one_timer.line_anchor(s, self_pos, sm._attacking_goal_pos),
+			sm._attacking_goal_pos)
 	assert_true(release_point.is_finite(),
 			"the feed yields a settled release point on its line")
 	var net_z: float = -GameRules.GOAL_LINE_Z  # team 0 attacks -Z
@@ -414,8 +410,9 @@ func test_one_timer_commits_the_release_point_line_not_a_cursor_offset() -> void
 	assert_almost_eq(input.bot_slapper_aim_dir.length(), 1.0, 0.001,
 			"the committed direction is normalized")
 
-	var release_point: Vector3 = sm._slapper_zone_center(
-			sm._one_timer_line_anchor(s, self_pos))
+	var release_point: Vector3 = sm._one_timer.zone_center(
+			sm._one_timer.line_anchor(s, self_pos, sm._attacking_goal_pos),
+			sm._attacking_goal_pos)
 	assert_true(release_point.is_finite(), "the feed yields a settled release point")
 	var net_z: float = -GameRules.GOAL_LINE_Z  # team 0 attacks -Z
 

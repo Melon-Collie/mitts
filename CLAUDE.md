@@ -16,6 +16,7 @@ Deep detail lives next to the code it describes and loads on demand.
 | How the game plays — every mechanic, feel, and its reasoning | `docs/gameplay-design.md` |
 | Networking invariants (RPCs, reconcile, prediction, lag comp) | `Scripts/networking/CLAUDE.md` |
 | Bot AI design rules (evaluators, difficulty axes, determinism) | `Scripts/domain/ai/CLAUDE.md` |
+| Everything a bot perceives and decides, where it lives, its test; where a new bot feature plugs in | `Scripts/domain/ai/DECISIONS.md` |
 | Bot agent wiring (state graph, reception and chase doctrine) | `Scripts/ai/CLAUDE.md` |
 | Goalie doctrine, controller collaborators | `Scripts/controllers/CLAUDE.md` |
 | Player attributes (body dials, gear slots, routing) | `Scripts/domain/state/CLAUDE.md` |
@@ -76,10 +77,11 @@ instantiated all over it, and render if the rig's shape is what changed. Trivial
 and the skater rig offscreen; you cannot run the game.** Use
 `.claude/hooks/run-gut.sh` (wraps `godot --headless -s res://addons/gut/gut_cmdln.gd`,
 honoring `.gutconfig.json`). Pass `gut_cmdln` flags through, e.g.
-`-gdir=res://tests/unit/state`.
+`-gdir=res://tests/unit/state`. A bare run is the default tier (`tests/unit/`);
+the slow tier and the instruments are separate directories (`tests/CLAUDE.md`).
 - **Local:** `GODOT_BIN` (in `.claude/settings.local.json`) points at the Godot
-  executable. Full suite ≈ 15–18 s. **Redirect to a file, don't pipe** — the
-  Windows console exe throttles badly on an MSYS pipe (≈90 s vs ≈18 s):
+  executable. **Redirect to a file, don't pipe** — the Windows console exe
+  throttles badly on an MSYS pipe:
   `bash .claude/hooks/run-gut.sh > "$TMP/gut.log" 2>&1; tail -40 "$TMP/gut.log"`.
 - **Web:** the `SessionStart` hook async-installs Godot; run
   `.claude/hooks/wait-for-godot.sh` once before the first test run, then
@@ -289,6 +291,7 @@ that file can't tell you:
 | New controller behavior | Method on `SkaterController`; `GameManager` calls it, never pokes internals directly |
 | New reconcile logic | `domain/rules/reconciliation_rules.gd` + GUT test |
 | New bot AI evaluator | `domain/ai/action_scoring.gd` (shot, pass, dump, and the shared clocks) or `domain/ai/carry_space.gd` (the carrier's room to operate: evasion, controlled space, deke, brake) + GUT calibration test — build it as a grounded model (see `Scripts/domain/ai/CLAUDE.md`) |
+| New carrier action | A search collaborator in `domain/ai/role_behaviors/` beside `AICarrierPassSearch` / `AICarrierCarrySearch` / `AICarrierDumpSearch`, reading the carrier's `AICarrierField` (shared perception and valuation go there); its candidate in `AIRoleCarrier`'s compete. `test_carrier_collaborator_seams.gd` holds the seam; the full checklist is `Scripts/domain/ai/DECISIONS.md` §8 |
 | Port a hot kernel to C++ | `native/src/` + seeded parity fuzz test + micro-bench row; GDScript original stays as the reference (see `native/README.md`) |
 | New "body dial X scales Y" rule | `PlayerAttributes` (see `Scripts/domain/state/CLAUDE.md`) |
 | New skater cosmetic rig behavior | The rig that owns it under `Scripts/actors/` (`SkaterLegRig` / `SkaterArmRig` / `SkaterStickRig`); it reads `Skater`'s tuning and markers and writes only its own state, and `Skater` delegates rather than reaching in. `test_skater_collaborator_seams.gd` holds the seam (see `Scripts/actors/CLAUDE.md`) |

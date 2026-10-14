@@ -43,8 +43,9 @@ func test_teammate_repel_pushes_away() -> void:
 
 
 func test_opponent_repel_stronger_than_teammate() -> void:
-	# Opponent repel weight 0.6 vs teammate 0.55 — same configuration
-	# should push the bot back harder when the obstacle is an opponent.
+	# The two repels share a shape and radius; AISteering sets the teammate
+	# weight below the opponent's on purpose, so the same body pushes harder
+	# when it is a checker than when it is a linemate.
 	var pos := Vector3(0, 0, 0)
 	var anchor := Vector3(0, 0, 5)
 	var teammate_block: Array[Vector3] = [Vector3(0, 0, 1)]

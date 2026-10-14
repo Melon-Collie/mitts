@@ -6,13 +6,9 @@ extends RefCounted
 # possession episodes into the SAME four outcomes so the two numbers are
 # directly comparable.
 #
-# It exists because the harness is staged. Its trials warm up organically, but
-# the trigger events are still chosen, and one scenario (`cycle-turnover`)
-# resolves identically regardless of jitter — which is either a real AI failure
-# or an artifact of how that trial is set up, and nothing inside the harness can
-# tell those apart. A live tally over ordinary play can: if the harness says 68%
-# cough-up and live play says 68%, the harness is representative and its verdicts
-# can be trusted. If they disagree, the harness is measuring its own staging.
+# The harness's trigger events are staged; when the live tally over ordinary
+# play agrees with it, the harness is representative, and when they disagree it
+# is measuring its own staging.
 #
 # ── An EPISODE is one breakout ATTEMPT, not one zone entry ────────────────────
 # Starts when the puck is ESTABLISHED in our zone (past the blue line by
@@ -35,9 +31,8 @@ extends RefCounted
 #                failure bucket with plays that simply ended.
 #
 # After a COUGH_UP a new episode arms as soon as the opponent loses it again, so
-# one long zone entry can legitimately contain several failed attempts — which is
-# the honest reading, since each is a separate breakout we did not complete.
-
+# one long zone entry can contain several failed attempts, each a separate
+# breakout we did not complete.
 #
 # Hot path: `tick` runs twice per physics tick. Counters are fixed-size packed
 # storage; no allocation.
@@ -47,23 +42,21 @@ const TEAM_COUNT: int = 2
 enum Outcome { CLEAN_EXIT, CLEAR_EXIT, COUGH_UP, TIMEOUT, STOPPAGE }
 const OUTCOME_COUNT: int = 5
 
-# Depth past the blue line before an episode arms. Mirrors the harness's
+# Depth past the blue line before an episode arms. Must match the harness's
 # `BLUE_LINE_Z + 2.0` establishment test; with the exit measured at the line
 # itself this is also the hysteresis band that stops a puck sitting on the line
 # from opening and closing episodes every tick.
 const ESTABLISH_DEPTH_M: float = 2.0
 
-# Bottled-in ceiling. Same value as the harness's LIMIT_S so the TIMEOUT buckets
+# Bottled-in ceiling. Must match the harness's LIMIT_S so the TIMEOUT buckets
 # mean the same thing.
 const LIMIT_S: float = 12.0
 
 # How long after our last carrier an uncarried puck crossing out still counts as
-# CONTROLLED. The harness credits a breakout PASS in flight as a clean exit
-# (180 ticks at 120 Hz); this is that window, approximated from carrier history
-# rather than a release log, since the live tracker has no access to one. The
-# approximation can only mislabel a puck we lost and then had rim out inside the
-# window — rare, and it errs toward crediting us, so a clean-exit READ here is
-# the optimistic bound.
+# CONTROLLED: the harness's 180-tick (120 Hz) pass-in-flight window, approximated
+# from carrier history since the live tracker has no release log. It can only
+# mislabel a puck we lost and then had rim out inside the window, so a clean-exit
+# read here is the optimistic bound.
 const CONTROLLED_RELEASE_S: float = 1.5
 
 # Counts per (team, outcome), team-major.

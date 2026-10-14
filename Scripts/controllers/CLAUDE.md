@@ -437,7 +437,7 @@ value at the controller's authored default, so HARD is the authored goalie by
 construction.
 
 Whenever the bots' shot model reads the same quantity as a goalie knob, the two
-must be synced (`AIActionScoring.set_goalie_profile`) or the bots score against a
+must be synced (`AIGoalieModel.set_goalie_profile`) or the bots score against a
 goalie they do not face. See the AI MIRROR note in `goalie_skill_profile.gd`.
 
 **On a breakaway the ladder lives on the cutback, and comes from the push.**
@@ -453,8 +453,8 @@ right way up.
 Pulling `depth_base_m` in is not free — it concedes the centre-lane rush from
 5 m, which is what challenge depth exists for. `test_goalie_breakaway_ladder.gd`
 holds both halves so neither can be improved quietly at the other's expense, and
-1.30 is `CreaseRules.STRAIGHT_DEPTH`, a rink landmark rather than a tuning
-number.
+Hard's 1.30 m base is the taught B position, heels at the crease top — a rink
+landmark rather than a tuning number.
 
 ## SkaterController
 

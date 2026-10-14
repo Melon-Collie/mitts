@@ -1,6 +1,6 @@
 extends GutTest
 
-# Calibrates AIActionScoring.time_to_arrive — the universal ETA every race,
+# Calibrates AIArrival.time_to_arrive — the universal ETA every race,
 # election, lane, and chase read runs on — against ACTUAL arrival times under
 # the real skating physics (SkaterMovementRules.apply_movement at 120 Hz)
 # driven by the REAL bot steering (AISteering.compute_move_vector's
@@ -69,7 +69,7 @@ func _sim_arrival_s(v0: Vector3, target: Vector3) -> float:
 
 
 func _model_s(v0: Vector3, target: Vector3) -> float:
-	return AIActionScoring.time_to_arrive(
+	return AIArrival.time_to_arrive(
 			Vector3.ZERO, target, v0,
 			GameRules.DEFAULT_SKATER_MAX_SPEED_M_S,
 			GameRules.DEFAULT_SKATER_THRUST_M_S2)
@@ -174,9 +174,9 @@ func test_momentum_direction_ordering() -> void:
 # is bit-identical to the direct model.
 
 func test_open_ice_route_is_exactly_the_direct_model() -> void:
-	var t_pub: float = AIActionScoring.time_to_arrive(
+	var t_pub: float = AIArrival.time_to_arrive(
 			Vector3(-5, 0, 3), Vector3(6, 0, -8), Vector3(2, 0, 1))
-	var t_dir: float = AIActionScoring._time_to_arrive_direct(
+	var t_dir: float = AIArrival._time_to_arrive_direct(
 			Vector3(-5, 0, 3), Vector3(6, 0, -8), Vector3(2, 0, 1))
 	assert_eq(t_pub, t_dir, "open ice never pays the net gate")
 
@@ -186,8 +186,8 @@ func test_cross_cage_route_costs_more_than_the_straight_fiction() -> void:
 	# route rounds a post and must cost strictly more than the fiction.
 	var from := Vector3(2.0, 0, 24.5)
 	var dest := Vector3(-1.5, 0, 28.4)
-	var t: float = AIActionScoring.time_to_arrive(from, dest, Vector3.ZERO)
-	var fiction: float = AIActionScoring._time_to_arrive_direct(
+	var t: float = AIArrival.time_to_arrive(from, dest, Vector3.ZERO)
+	var fiction: float = AIArrival._time_to_arrive_direct(
 			from, dest, Vector3.ZERO)
 	assert_gt(t, fiction, "you cannot skate through the cage")
 	# ...but by a detour, not a catastrophe (the corner waypoint is near).
@@ -199,8 +199,8 @@ func test_behind_net_traverse_prices_the_alley() -> void:
 	# dip through the alley's center, not a trip around a post.
 	var from := Vector3(2.0, 0, 28.0)
 	var dest := Vector3(-2.0, 0, 28.0)
-	var t: float = AIActionScoring.time_to_arrive(from, dest, Vector3.ZERO)
-	var fiction: float = AIActionScoring._time_to_arrive_direct(
+	var t: float = AIArrival.time_to_arrive(from, dest, Vector3.ZERO)
+	var fiction: float = AIArrival._time_to_arrive_direct(
 			from, dest, Vector3.ZERO)
 	assert_lt(t, fiction + 0.6,
 			"a 4 m behind-net skate routes through the alley, not around the world")
@@ -243,11 +243,11 @@ func test_low_grip_redirect_model_tracks_gripped_sim() -> void:
 	var sim_neutral: float = _sim_arrival_s(v0, target)
 	assert_gt(sim_gripped, sim_neutral,
 			"the low-grip body really does arrive later on a redirect")
-	var model_gripped: float = AIActionScoring.time_to_arrive(
+	var model_gripped: float = AIArrival.time_to_arrive(
 			Vector3.ZERO, target, v0,
 			GameRules.DEFAULT_SKATER_MAX_SPEED_M_S,
 			GameRules.DEFAULT_SKATER_THRUST_M_S2, 0.85)
-	var model_neutral: float = AIActionScoring.time_to_arrive(
+	var model_neutral: float = AIArrival.time_to_arrive(
 			Vector3.ZERO, target, v0,
 			GameRules.DEFAULT_SKATER_MAX_SPEED_M_S,
 			GameRules.DEFAULT_SKATER_THRUST_M_S2, 1.0)

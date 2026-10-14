@@ -21,9 +21,17 @@ on:
   workflow_call:
 
 jobs:
+  # The slow tier (tests/slow/: live-goalie and multi-body simulations) runs
+  # beside the default tier on PRs only — pushes to main and the deploy gates
+  # run the default tier. The default tier keeps its job name so required
+  # status checks still match.
   gut:
-    name: GUT Unit Tests
+    name: ${{ matrix.tier == 'unit' && 'GUT Unit Tests' || 'GUT Slow Tests' }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tier: ${{ fromJSON(github.event_name == 'pull_request' && '["unit","slow"]' || '["unit"]') }}
 
     steps:
       - name: Checkout
@@ -99,4 +107,4 @@ jobs:
         env:
           MITTS_REQUIRE_NATIVE: '1'
         run: |
-          ./godot/Godot_v4.6.2-stable_linux.x86_64 --headless -s addons/gut/gut_cmdln.gd -gexit
+          ./godot/Godot_v4.6.2-stable_linux.x86_64 --headless -s addons/gut/gut_cmdln.gd -gdir=res://tests/${{ matrix.tier }}/ -gexit

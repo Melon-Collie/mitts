@@ -170,7 +170,7 @@ func run_rush(start: Vector3, vel: Vector3, profile: BotSkillProfile,
 	# entire mechanism.
 	#
 	# `_shot_sample_release` is that winning point, and the winning hold less
-	# the puck's own spot (`_holds.offset[0]`) is the pull it represents; the pull
+	# the puck's own spot (`_field.holds.offset[0]`) is the pull it represents; the pull
 	# being non-zero is what marks a FLANK release as opposed to a straight one.
 	var l_blade: Vector3 = start
 	var l_gpos: Vector3 = Vector3.INF
@@ -197,7 +197,7 @@ func run_rush(start: Vector3, vel: Vector3, profile: BotSkillProfile,
 						if c0._shot_sample_release != Vector3.INF else s0.blade
 				l_gpos = _goalie.global_position
 				l_offset = c0.shoot_now_hold \
-						- Vector3(c0._holds.offset[0].x, 0.0, c0._holds.offset[0].y)
+						- Vector3(c0._field.holds.offset[0].x, 0.0, c0._field.holds.offset[0].y)
 			continue
 		# GATE ON THE DECISION, NOT ON `intended_action`. The carrier role's
 		# `intended_action` still reads CARRY on the tick it fires a shot — the

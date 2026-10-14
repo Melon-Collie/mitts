@@ -222,6 +222,10 @@ func test_the_mid_tracker_still_picks_up_a_man_who_has_arrived() -> void:
 	assert_gt(d.target_position.x, 2.0,
 			"a man who has entered the tracker's ice is still picked up; got %s"
 			% d.target_position)
+	# A backchecker's stick belongs in the lane: covering a man in transition
+	# publishes no lock, so the agent never ties his stick (see
+	# Scripts/domain/ai/CLAUDE.md → the defensive verbs).
+	assert_eq(d.locked_man_pid, -1, "the mid tracker covers without a stick-tie lock")
 
 
 func test_a_tracker_already_goal_side_holds_a_gap_instead_of_running_the_hip() -> void:

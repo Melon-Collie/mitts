@@ -1046,7 +1046,7 @@ static func _local_x_at_body(inputs: Inputs, impact_x: float) -> float:
 # and a goalie flat on the ice would glove pucks 5 cm under the crossbar exactly
 # as well as a standing one — so committing to the seal would not be a trade at
 # all and the block-vs-react model would have nothing to balance
-# (tests/unit/ai/test_goalie_butterfly_tradeoff.gd measures the trade).
+# (tests/instruments/ai/test_goalie_butterfly_tradeoff.gd measures the trade).
 #
 # Real goaltending's trade is "seal the ice, concede the top". Here it falls out
 # of the chest anchor each pose already authors: READY sits at 0.96 and the

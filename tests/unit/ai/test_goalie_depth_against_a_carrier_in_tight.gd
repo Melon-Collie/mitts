@@ -1,23 +1,14 @@
 extends GutTest
 
 # ── GROUND GIVEN TO A CARRIER IN TIGHT IS NOT RETAKEN ────────────────────────
-# The rush backflow retreats him as a carrier closes. It used to switch off as
-# soon as the carrier's CLOSING speed fell under `rush_min_closing_speed`, and
-# then depth fell back to the standoff — 0.6 m off the puck — so he skated OUT
-# at a man in tight. Two ways a carrier stops closing, both measured on a rush
-# from 10 m at 7 m/s:
-#
-#   cut across the crease from 2.5 m   radius 0.75 -> 1.37 m, then the seal
-#   stop at 2.8 m for 0.6 s            radius 0.78 -> 1.65 m
-#
-# and the walkaround after the stop at 3.5 m opened 1 aim point of 7 against 0
-# with no stop. Held, he stays where the backflow put him. The cost is the
-# honest one: a carrier who rushes, stops at 3-3.5 m and shoots now finds a
-# corner (1/14, from 0/14 against a keeper a metre in front of him). Only the
-# carrier who backed him in is held off: one who walked in slowly and stopped
-# still gets the challenge, and outside the hash marks a stopped carrier is a set
-# shooter and gets it too.
+# The rush backflow retreats him as a carrier closes. When the carrier stops
+# closing — a cut across the crease, or a stop in tight — he holds where the
+# backflow put him instead of falling back to the standoff and skating out at a
+# man in tight. Only the carrier who backed him in is held off: one who walked
+# in and stopped still gets the challenge, and outside the hash marks a stopped
+# carrier is a set shooter and gets it too.
 
+const Snapshot := preload("res://tests/snapshot.gd")
 const Harness := preload("res://tests/unit/ai/human_wraparound_harness.gd")
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 const DT: float = 1.0 / 120.0
@@ -74,7 +65,24 @@ func test_a_carrier_stopping_in_tight_does_not_draw_him_out() -> void:
 
 
 func test_a_carrier_who_never_rushed_him_is_still_challenged() -> void:
-	_h.settle_ready(Vector3(0.0, 0.0, GOAL_Z + 3.0))
-	assert_gt(_ctrl.challenge_radius(), 1.6, "a settled carrier in tight still meets A depth")
-	_h.settle_ready(Vector3(0.0, 0.0, GOAL_Z + 6.1))
-	assert_gt(_ctrl.challenge_radius(), 1.6, "and so does the dot-line shooter")
+	# Only the carrier who backed him in is held off. One who settles in tight
+	# without a rush meets a keeper further out than the rush left him, past
+	# the crease top; and so does a set shooter at the dot line.
+	for dist: float in [3.0, 6.1]:
+		var rushed: float = _rush_to(dist)
+		_h.settle_ready(Vector3(0.0, 0.0, GOAL_Z + dist))
+		var settled: float = _ctrl.challenge_radius()
+		assert_gt(settled, rushed,
+				"%.1f m: a settled carrier draws more depth than one who rushed him there" % dist)
+		assert_gt(settled, CreaseRules.STRAIGHT_DEPTH,
+				"%.1f m: a settled carrier is challenged past the crease top" % dist)
+
+
+# Rewrite with MITTS_UPDATE_SNAPSHOTS=1 (tests/snapshot.gd) and review the diff.
+func test_depth_in_tight_calibration_snapshot() -> void:
+	var snap := Snapshot.new("res://tests/unit/ai/snapshots/goalie_depth_in_tight.txt")
+	for dist: float in [3.0, 6.1]:
+		snap.record("rushed from 10 m at 7 m/s to %.1f m: radius" % dist, _rush_to(dist))
+		_h.settle_ready(Vector3(0.0, 0.0, GOAL_Z + dist))
+		snap.record("settled carrier at %.1f m: radius" % dist, _ctrl.challenge_radius())
+	snap.verify(self)

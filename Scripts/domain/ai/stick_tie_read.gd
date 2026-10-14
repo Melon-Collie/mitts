@@ -31,8 +31,11 @@ static func _closest_time(puck_pos: Vector3, puck_vel: Vector3, point: Vector3,
 static func path_passes_within(puck_pos: Vector3, puck_vel: Vector3, point: Vector3,
 		reach: float, horizon: float = FEED_HORIZON_S) -> bool:
 	var t: float = _closest_time(puck_pos, puck_vel, point, horizon)
-	var at: Vector3 = puck_pos + puck_vel * t
-	return Vector2(at.x - point.x, at.z - point.z).length() <= reach
+	return puck_within(puck_pos + puck_vel * t, point, reach)
+
+
+static func puck_within(puck_pos: Vector3, point: Vector3, reach: float) -> bool:
+	return Vector2(puck_pos.x - point.x, puck_pos.z - point.z).length() <= reach
 
 
 # A carrier's pass lane to the man is open when no defender's stick reaches the

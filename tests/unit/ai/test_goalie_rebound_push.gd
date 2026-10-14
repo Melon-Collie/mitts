@@ -20,11 +20,6 @@ extends GutTest
 const Harness := preload("res://tests/unit/ai/real_goalie_shot_harness.gd")
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 const DT: float = 1.0 / 120.0
-const MAX_AIM: float = GameRules.NET_HALF_WIDTH \
-		- GameRules.NET_POST_RADIUS - GameRules.PUCK_COLLISION_RADIUS
-const LOFTS: Array[int] = [
-	ShotMechanics.ELEVATION_FLAT, ShotMechanics.ELEVATION_LOW, ShotMechanics.ELEVATION_HIGH,
-]
 const SPOTS: Array[Vector3] = [
 	Vector3(1.2, 0.0, GOAL_Z + 2.0), Vector3(-1.2, 0.0, GOAL_Z + 2.0),
 	Vector3(2.0, 0.0, GOAL_Z + 2.5), Vector3(0.7, 0.0, GOAL_Z + 1.6),
@@ -76,18 +71,6 @@ func _square_x(spot: Vector3) -> float:
 	return _ctrl._square_x_at_body_radius(spot)
 
 
-func _goals(wait_s: float) -> int:
-	var goals: int = 0
-	for spot: Vector3 in SPOTS:
-		for loft: int in LOFTS:
-			for ai: int in 7:
-				_rebound(spot, wait_s)
-				var aim := Vector3(lerpf(-MAX_AIM, MAX_AIM, ai / 6.0), 0.0, GOAL_Z)
-				if _h.fire_at(spot, aim, loft, 25.0, 0.0) == Harness.GOAL:
-					goals += 1
-	return goals
-
-
 func test_he_pushes_to_square_not_to_the_post() -> void:
 	for spot: Vector3 in SPOTS:
 		_rebound(spot, 0.8)
@@ -97,13 +80,3 @@ func test_he_pushes_to_square_not_to_the_post() -> void:
 		# One inside his reach he smothers instead, which ends the play.
 		assert_true(off < 0.12 or covered, "square to the rebound at %s" % spot)
 
-
-func test_report_put_backs() -> void:
-	for wait_s: float in [0.4, 0.8]:
-		var row: Array[int] = []
-		for flag: bool in [false, true]:
-			_ctrl.rebound_push = flag
-			row.append(_goals(wait_s))
-		gut.p("put-back after %.1f s: knee shuffle %d, push to square %d of %d"
-				% [wait_s, row[0], row[1], SPOTS.size() * LOFTS.size() * 7])
-	assert_true(true)

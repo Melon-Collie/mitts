@@ -4,7 +4,7 @@ extends GutTest
 # the chase-angle shading that brings a carrier-chase approach in on the
 # inside (net-side) lane so the carrier is funneled toward the boards.
 
-const REACH: float = SkaterAgentStateMachine.BLADE_REACH_M
+const REACH: float = AIBotMechanics.BLADE_REACH_M
 
 
 func test_shade_moves_intercept_toward_our_net() -> void:

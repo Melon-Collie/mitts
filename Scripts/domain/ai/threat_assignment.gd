@@ -1,14 +1,10 @@
 class_name AIThreatAssignment
 
-# Pure "man-on-threat" partition: assigns each backline defender to a
-# DISTINCT opponent it should cover, computed once per brain tick in TeamBrain.
-# Distinctness is the point — defensive roles each minimizing the global-MAX
-# threat all gravitate to the single most dangerous opponent and stack in the
-# slot, leaving the others open.
-#
-# The puck CARRIER is handled separately (PRESSURE / gap-control), so this
-# partitions only the off-puck opponents (the carrier's potential receivers)
-# among the off-puck defenders.
+# Pure "man-on-threat" partition: assigns each defender a DISTINCT opponent to
+# cover, computed once per brain tick in TeamBrain. Distinctness is the point —
+# defensive roles each minimizing the global-MAX threat all gravitate to the
+# single most dangerous opponent and stack in the slot, leaving the others open.
+# The caller decides who the men are (an opponent carrier is not one).
 #
 # ── Objective: maximize covered value, weighted by reachability ──────────────
 # For a defender d and a man m:
@@ -17,60 +13,40 @@ class_name AIThreatAssignment
 # We pick the matching (each man to ≤1 defender, each defender to ≤1 man) that
 # MAXIMIZES the total reward.
 #
-# Why maximize-value, not minimize-distance: minimizing Σ value×time
-# degenerates the moment a man can be left uncovered — "cover nobody" costs 0,
-# which beats any positive travel cost, so the optimizer covers no one. Framed
-# as reward, covering a man PAYS (positive reward), so:
-#   • high-value men attract the closest reachable defender (value × proximity),
-#   • on an odd-man rush (more men than defenders) the two most dangerous
-#     reachable men get covered and the least dangerous is conceded — exactly
-#     the right read when you're outnumbered,
-#   • two defenders never take the same man (distinct-man matching), which is
-#     the whole point.
+# Maximize reward, never minimize Σ value×time: once a man may be left
+# uncovered, "cover nobody" costs 0 and beats any travel cost. As reward, high-
+# value men attract the closest reachable defender, and an outnumbered backline
+# concedes the least dangerous reachable man.
 #
-# time_to_cover is the momentum-aware ETA (AIActionScoring.time_to_arrive) to a
+# time_to_cover is the momentum-aware ETA (AIArrival.time_to_arrive) to a
 # COVER ANCHOR goal-side of the man — the spot that denies his one-timer — not
-# to the man's body. A defender already skating the right way wins the pairing.
+# to the man's body.
 #
-# Hysteresis: keep last tick's assignment unless a fresh matching beats it by
-# HYSTERESIS_MARGIN_FRAC. Without it two defenders swap men every tick when the
-# rewards are close — the same oscillation we're fixing, just faster. Mirrors
-# the strong-side / slot-assignment hysteresis already in the brain.
-#
-# Brute-forced over permutations: the backline is ≤ 4 skaters (5v5's TRANS_DEFENSE
-# MARK crew), so the matching is tiny (≤ 4! orderings). Runs at the 6 Hz brain
+# Brute-forced over permutations: typically four defenders at most (5v5's
+# non-pressuring zone roles), so the matching is tiny. Runs at the 6 Hz brain
 # tick, never the 120 Hz path.
 
 # How far goal-side of the man the cover anchor sits (m). Roughly a stick into
 # the man→net lane: close enough to deny the one-timer, not on top of the body.
 const COVER_DEPTH_M: float = 2.2
 
-# A fresh matching must beat the retained one by this fraction of total reward
-# to trigger a switch. Sticky enough to stop per-tick man-swapping; loose enough
-# that a genuine threat change re-partitions.
+# A fresh matching must beat last tick's by this fraction of total reward to
+# trigger a switch. Sticky enough to stop per-tick man-swapping on close
+# rewards; loose enough that a genuine threat change re-partitions.
 const HYSTERESIS_MARGIN_FRAC: float = 0.15
 
 # ── Net-front (house) override ───────────────────────────────────────────────
 # The value×reachability matching maximizes EXPECTED covered pass-threat, so it
 # can trade an unreachable-but-lethal net-front man for two reachable perimeter
-# men — leaving the house open. Defense doesn't work that way: conceding a
-# backdoor tap-in is categorically worse than conceding a perimeter shot, so
-# whoever can best get to the most dangerous net-front man is pinned to him
-# FIRST, then the rest optimally match. This is a tactical priority ("protect
-# the house"), but the trigger is a real measurement: a man's FINISH danger if
-# fed — score_shoot from his spot with the goalie where he currently is
-# (tracking the carrier, not this off-puck man), so an off-axis net-front man
-# reads as lethal because the net is open to his side. The lane factor is
-# dropped on purpose: a contested feed still becomes a tap-in if it arrives, so
-# the house is covered by consequence, not by feed-likelihood (that's what makes
-# this add something over man_value, which already folds the lane in).
+# men — leaving the house open. Conceding a backdoor tap-in is categorically
+# worse than a perimeter shot, so whoever can best get to the most dangerous
+# net-front man is pinned to him FIRST, then the rest optimally match. The
+# trigger is the man's FINISH danger if fed (`man_danger`), which carries no
+# lane factor: a contested feed still becomes a tap-in if it arrives.
 #
-# The bar is the finish-danger floor that counts as a genuine house threat —
-# below it, trust the efficiency matching. Under the make-probability
-# currency the caller's read (goalie predicted over the feed's flight) is
-# P(goal | clean feed): the canonical net-front man measures ~1.0, a
-# perimeter winger ~0.0 (the keeper re-squares inside the feed's flight), so
-# the bar is "more likely than not".
+# The caller's read is P(goal | clean feed) with the goalie predicted over the
+# feed's flight: the net-front man measures ~1.0, a perimeter winger ~0.0 (the
+# keeper re-squares inside the flight), so the bar is "more likely than not".
 const NET_FRONT_DANGER_BAR: float = 0.5
 
 
@@ -79,12 +55,13 @@ const NET_FRONT_DANGER_BAR: float = 0.5
 #
 # `defender_pos` / `defender_vel` are peer_id -> Vector3 lookups for the
 # backline defenders; `man_pos` is peer_id -> Vector3 for the men;
-# `man_value` is peer_id -> precomputed threat value (the caller scores this via
-# AIActionScoring so this module stays free of scoring-magnitude coupling).
+# `man_value` is peer_id -> precomputed threat value (the caller scores it, so
+# this module stays free of scoring-magnitude coupling).
 # `our_net` anchors the goal-side cover point. `prev` is last tick's
 # defender->man mapping (pass {} on first tick / after a state change).
-# `man_danger` is peer_id -> finish danger if fed (score_shoot from the man's
-# spot); drives the net-front override (empty → override off, pure matching).
+# `man_danger` is peer_id -> finish danger if fed; drives the net-front override
+# (empty → override off, pure matching). `eligible_men` is defender -> set of
+# men it may be given (absent/empty → unrestricted).
 static func assign(
 		defenders: Array[int],
 		defender_pos: Dictionary,
@@ -135,15 +112,10 @@ static func assign(
 		# reaches a further man in time, so it's assigned the harder cover.
 		var d_caps: AISkaterCaps = defender_caps.get(d)
 		var d_speed: float = d_caps.max_speed if d_caps != null \
-				else AIActionScoring.SKATER_REF_SPEED_M_S
-		# ZONE ELIGIBILITY. A defender who owns a patch of ice may only be given
-		# men standing in it — his coverage is defined by the area, not by the
-		# whole rink. Omitting the pair from the row is the whole mechanism:
-		# _best_matching skips men the row does not carry, _matching_reward
-		# already rejects a mapping naming one, and _restrict_prev already drops
-		# a stale pair — so hysteresis and the idle branch need no changes.
-		# An absent/empty entry means "no restriction", which is the man-marking
-		# backline's case and leaves it byte-identical.
+				else AIArrival.SKATER_REF_SPEED_M_S
+		# ZONE ELIGIBILITY. Omitting the pair from the row is the whole
+		# mechanism: _best_matching skips men the row does not carry, and
+		# _matching_reward / _restrict_prev reject a mapping naming one.
 		var allowed: Dictionary = eligible_men.get(d, {})
 		var restricted: bool = not allowed.is_empty()
 		var row: Dictionary = {}
@@ -151,7 +123,7 @@ static func assign(
 			if restricted and not allowed.has(m):
 				continue
 			var anchor: Vector3 = cover_anchor(man_pos.get(m, Vector3.ZERO), our_net)
-			var t: float = AIActionScoring.time_to_arrive(d_pos, anchor, d_vel, d_speed)
+			var t: float = AIArrival.time_to_arrive(d_pos, anchor, d_vel, d_speed)
 			var reach: float = 1.0 / (1.0 + maxf(t, 0.0))
 			row[m] = maxf(man_value.get(m, 0.0), 0.0) * reach
 		reward[d] = row
@@ -190,11 +162,8 @@ static func _most_dangerous_house_man(men: Array[int], man_danger: Dictionary) -
 		var danger: float = man_danger.get(m, 0.0)
 		if danger < NET_FRONT_DANGER_BAR:
 			continue
-		# Ties break to the lower peer id. `men` follows the SNAPSHOT's insertion
-		# order (peer registration), not peer order, so without an explicit
-		# tiebreak the winner of a symmetric pair — two net-front men mirrored
-		# about the slot, which score bit-identically because score_shoot is
-		# x-symmetric — would depend on who joined first.
+		# Ties break to the lower peer id, never `men` order (Scripts/domain/ai/
+		# CLAUDE.md → Determinism).
 		if danger > best_danger or (danger == best_danger and m < best_man):
 			best_danger = danger
 			best_man = m
@@ -229,8 +198,8 @@ static func _pick_house_defender(
 			continue
 		var d_caps: AISkaterCaps = defender_caps.get(d)
 		var d_speed: float = d_caps.max_speed if d_caps != null \
-				else AIActionScoring.SKATER_REF_SPEED_M_S
-		var t: float = AIActionScoring.time_to_arrive(
+				else AIArrival.SKATER_REF_SPEED_M_S
+		var t: float = AIArrival.time_to_arrive(
 				defender_pos.get(d, Vector3.ZERO), anchor,
 				defender_vel.get(d, Vector3.ZERO), d_speed)
 		if t < best_t or (t == best_t and (best_def == -1 or d < best_def)):
@@ -266,13 +235,11 @@ static func _restrict_prev(prev: Dictionary, reward: Dictionary) -> Dictionary:
 	return out
 
 
-# Goal-side cover point for a man: a stick into the man→our-net lane. Clamped
-# so a man already at the net doesn't push the anchor past the goal line, and
-# held in front of the line outright for a man AT/BEHIND it (corner lurker,
-# wraparound walker). min(depth, dist) alone only stops the anchor overshooting
-# the net CENTER, which would station a marker behind the goal line with his
-# man — you front that man from the post, you don't chase him behind your own
-# net (the goalie's RVH owns the wrap).
+# Goal-side cover point for a man: a stick into the man→our-net lane, held in
+# front of the goal line even for a man AT/BEHIND it (corner lurker, wraparound
+# walker) — you front that man from the post, you don't follow him behind your
+# own net (the goalie's RVH owns the wrap). min(depth, dist) alone would only
+# stop the anchor overshooting the net CENTER.
 static func cover_anchor(man: Vector3, our_net: Vector3) -> Vector3:
 	var to_net: Vector3 = our_net - man
 	var dist: float = to_net.length()
@@ -280,7 +247,7 @@ static func cover_anchor(man: Vector3, our_net: Vector3) -> Vector3:
 		return man
 	var depth: float = minf(COVER_DEPTH_M, dist)
 	var anchor: Vector3 = man + (to_net / dist) * depth
-	var line_z: float = GameRules.GOAL_LINE_Z - AIRoleHelpers.GOAL_LINE_BUFFER_M
+	var line_z: float = GameRules.GOAL_LINE_Z - AIStationSearch.GOAL_LINE_BUFFER_M
 	if absf(anchor.z) > line_z:
 		anchor.z = signf(anchor.z) * line_z
 	return anchor
@@ -292,20 +259,12 @@ static func cover_anchor(man: Vector3, our_net: Vector3) -> Vector3:
 # the total (more defenders than men, or no positive-reward man left).
 #
 # Matchings of EXACTLY equal total break to the lower man peer id at the earliest
-# defender they differ on, so the result is a function of the defender/man SETS
-# and not of `men` order — that order is snapshot insertion order (peer
-# registration), not peer order, so a symmetric geometry (two defenders and two
-# men mirrored about x=0, the faceoff net-front) would otherwise resolve by who
-# joined the session first, and a rejoin re-registering mid-session would flip a
-# standing tie. HYSTERESIS_MARGIN_FRAC can't damp that: both matchings score
-# identically, so the retain branch holds and whichever got there first sticks.
-#
-# The tiebreak is local at each level and still yields the lexicographically
-# smallest assignment overall: sub[1] is already lex-minimal among the
-# sub-problem's optima, so max-total-then-lowest-man at the earliest defender
-# composes. Sorting `men` at the caller would also settle it, but it reorders
-# this enumeration and so can move NEAR-tied live assignments too — a behavior
-# change rather than a fix.
+# defender they differ on, so the result depends on the defender/man SETS and
+# not on `men` order (Scripts/domain/ai/CLAUDE.md → Determinism). The tiebreak is
+# local at each level and still yields the lexicographically smallest
+# assignment overall, because sub[1] is already lex-minimal among the
+# sub-problem's optima. Do not sort `men` at the caller instead: that reorders
+# the enumeration and moves NEAR-tied live assignments too.
 static func _best_matching(
 		idx: int, defenders: Array[int], men: Array[int],
 		used: Dictionary, reward: Dictionary) -> Array:
@@ -331,10 +290,8 @@ static func _best_matching(
 			best_map = (sub[1] as Dictionary).duplicate()
 			best_map[d] = m
 			best_man = m
-	# Option B: this defender covers no one (idle). Only relevant when there's
-	# no unused man left, but cheap to always consider for correctness. Strict
-	# `>` so an equal-total cover is kept over idling — a defender on a man is
-	# never worse than the same defender on nobody.
+	# Option B: this defender covers no one (idle). Strict `>` so an equal-total
+	# cover is kept over idling.
 	var sub_idle: Array = _best_matching(idx + 1, defenders, men, used, reward)
 	if sub_idle[0] > best_total:
 		best_total = sub_idle[0]

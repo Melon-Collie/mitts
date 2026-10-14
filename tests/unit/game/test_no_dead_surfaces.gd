@@ -37,8 +37,6 @@ const _ACCEPTED: Dictionary = {
 	# belongs in an issue rather than the tree — these are the open question.
 	"set_broadcast_rate": "self-described hook for future congestion response",
 	"open_invite_overlay": "Steam invite overlay, no UI wired to it yet",
-	"turnover_cost_local": "AI evaluator, not yet wired into a compete",
-	"path_clearance": "AI evaluator, not yet wired into a compete",
 }
 
 const _ENGINE_VIRTUALS: PackedStringArray = [

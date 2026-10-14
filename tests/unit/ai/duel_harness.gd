@@ -40,7 +40,7 @@ const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
 
 const DT: float = 1.0 / 120.0
 # Mirrors of live tuning the plant integrates with (SkaterController export
-# defaults; PuckController.PICKUP_RADIUS; Agent.BLADE_REACH_M).
+# defaults; PuckController.PICKUP_RADIUS; AIBotMechanics.BLADE_REACH_M).
 const FACING_DRAG: float = 5.0
 const MAX_BLADE_SPEED: float = 10.0
 const BLADE_REACH: float = 1.8
@@ -300,10 +300,12 @@ func step() -> void:
 			tick_ai_us += us
 		else:
 			s.agent.dispatch(s.input, snapshot)
-		if s.agent._poke_evade_deking:
+		# Production's last write to the move (SkaterAgent.tick).
+		s.agent.apply_offside_guard(s.input, snapshot)
+		if s.agent._poke_evade.deking:
 			deke_fired = true
 			dekes_by_peer[s.peer_id] = true
-		if s.agent._poke_evade_active_ticks > 0:
+		if s.agent._poke_evade.active_ticks > 0:
 			evades_by_peer[s.peer_id] = true
 	# Collect one-timer readiness into the brains after dispatch — the write moved
 	# off _set_one_timer_ready for threading (AICoordinator does the same on the

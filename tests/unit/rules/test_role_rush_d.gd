@@ -2,10 +2,14 @@ extends GutTest
 
 # AIRoleRushD — the rush D pair (docs/transition-defense-plan.md §5–§6).
 # Team 0 defends +Z and attacks -Z; peer 1 is the bot under test, peer 10 is
-# the opposing carrier. A rush at us travels in +Z.
+# the opposing carrier. A rush at us travels in +Z. The cushions the current
+# ramp gives at the reference fixtures are the snapshot,
+# test_rush_d_cushion_snapshot.
 
+const Snapshot := preload("res://tests/snapshot.gd")
+const SNAPSHOT_PATH := "res://tests/unit/rules/snapshots/role_rush_d.txt"
 const TEAM_ID: int = 0
-const OUR_NET_Z: float = 26.65
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z
 const STICK: float = 2.0
 
 
@@ -146,13 +150,13 @@ func test_a_standing_defender_gives_a_flying_carrier_the_ramp() -> void:
 			[[10, 1, carrier, vel]], 10, AIRushRead.Numbers.DOWN_ONE)
 	var ice_to_gate: float = OUR_NET_Z - AIZoneCoverage.HOUSE_TOP_DEPTH_M
 	var ramp: float = minf(AIStrideRamp.head_start(9.0,
-			AIActionScoring.SKATER_REF_SPEED_M_S,
-			AIActionScoring.SHED_ACCEL_DEFAULT_M_S2, 0.0,
+			AIArrival.SKATER_REF_SPEED_M_S,
+			AIArrival.SHED_ACCEL_DEFAULT_M_S2, 0.0,
 			standing.self_max_speed, standing.self_max_accel,
-			AIActionScoring.REVERSAL_BRAKE_DECEL_M_S2,
+			AIArrival.REVERSAL_BRAKE_DECEL_M_S2,
 			AIStrideRamp.time_to_cover(9.0, ice_to_gate,
-					AIActionScoring.SKATER_REF_SPEED_M_S,
-					AIActionScoring.SHED_ACCEL_DEFAULT_M_S2)), ice_to_gate)
+					AIArrival.SKATER_REF_SPEED_M_S,
+					AIArrival.SHED_ACCEL_DEFAULT_M_S2)), ice_to_gate)
 	assert_gt(ramp, STICK, "a flat start against 9 m/s concedes real ice")
 	var deeper: float = \
 			_gap(AIRoleRushD.decide(standing, AIRoleSlots.Slot.RUSH_D1), carrier, vel) \
@@ -161,21 +165,28 @@ func test_a_standing_defender_gives_a_flying_carrier_the_ramp() -> void:
 			"the standing defender's stand is deeper by the ramp's head start")
 
 
-func test_momentum_up_ice_costs_more_cushion_than_standing() -> void:
-	# A defender still drifting up-ice from the attack has to brake that out
-	# before the stride can start — he owes more than one standing still.
+# The cushion a D 16 m goal-side of a 6 m/s carrier owes, drifting at
+# `up_ice_m_s` away from our net when the rush starts.
+func _cushion(up_ice_m_s: float) -> float:
 	var carrier := Vector3(0.0, 0.0, 0.0)
 	var vel := Vector3(0.0, 0.0, 6.0)
-	var standing: RoleContext = _ctx(Vector3(0.0, 0.0, 16.0),
+	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, 16.0),
 			[[10, 1, carrier, vel]], 10, AIRushRead.Numbers.DOWN_ONE)
-	var drifting: RoleContext = _ctx(Vector3(0.0, 0.0, 16.0),
-			[[10, 1, carrier, vel]], 10, AIRushRead.Numbers.DOWN_ONE)
-	drifting.self_velocity = Vector3(0.0, 0.0, -3.0)
+	ctx.self_velocity = Vector3(0.0, 0.0, -up_ice_m_s)
 	var ap := AICarrierApproach.new()
-	AIRoleHelpers.fill_approach(standing, carrier, vel, ap)
-	assert_gt(AIRoleRushD.ramp_cushion_m(drifting, ap, 10),
-			AIRoleRushD.ramp_cushion_m(standing, ap, 10) + 1.0,
-			"up-ice momentum is ice the defender owes")
+	AIDefensiveVerbs.fill_approach(ctx, carrier, vel, ap)
+	return AIRoleRushD.ramp_cushion_m(ctx, ap, 10)
+
+
+func test_momentum_up_ice_costs_more_cushion_than_standing() -> void:
+	# A defender still drifting up-ice from the attack has to brake that out
+	# before the stride can start — the more he carries, the more he owes.
+	var prev: float = -INF
+	for drift: float in [0.0, 1.0, 2.0, 3.0]:
+		var cushion: float = _cushion(drift)
+		assert_gte(cushion, prev, "up-ice momentum is ice the defender owes (%.0f m/s)" % drift)
+		prev = cushion
+	assert_gt(_cushion(3.0), _cushion(0.0), "drifting up-ice owes more than standing")
 
 
 func test_no_cushion_once_the_carrier_is_inside_the_house_gate() -> void:
@@ -185,7 +196,7 @@ func test_no_cushion_once_the_carrier_is_inside_the_house_gate() -> void:
 	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, OUR_NET_Z - 3.0),
 			[[10, 1, carrier, Vector3(0.0, 0.0, 9.0)]], 10)
 	var ap := AICarrierApproach.new()
-	AIRoleHelpers.fill_approach(ctx, carrier, Vector3(0.0, 0.0, 9.0), ap)
+	AIDefensiveVerbs.fill_approach(ctx, carrier, Vector3(0.0, 0.0, 9.0), ap)
 	assert_eq(AIRoleRushD.ramp_cushion_m(ctx, ap, 10), 0.0,
 			"no retreat race is left inside the house gate")
 
@@ -235,7 +246,7 @@ func test_backpressure_lets_the_d_stand_up() -> void:
 
 # ── The stand rides the carrier ──────────────────────────────────────────────
 # The ladder says where the stand IS. What used to answer "may I take the trip to
-# it?" was a stand-PLACEMENT bound (AIRoleHelpers.settable_stand_depth): hold the
+# it?" was a stand-PLACEMENT bound (AILastManDiscipline.settable_stand_depth): hold the
 # stand back to where a charge would end set, because an ice-frame seek could only
 # ever reach a spot by charging it and braking to zero.
 #
@@ -249,7 +260,7 @@ func test_backpressure_lets_the_d_stand_up() -> void:
 # and a D whose stand is always where he is never closes on anybody.
 #
 # The behavioural half of this — how much up-ice speed he actually carries into
-# the meet — is pinned in tests/unit/ai/test_rush_gap_discipline.gd, which
+# the meet — is pinned in tests/slow/ai/test_rush_gap_discipline.gd, which
 # measures the body over multi-second rushes. That is the only place it can
 # honestly live; a single dispatch cannot see a route. Here we pin the contract
 # the route is built on.
@@ -388,6 +399,8 @@ func test_d2_takes_the_mid_lane_driver() -> void:
 	assert_lt(absf(d.target_position.x), 6.0,
 			"D2 covers the middle driver, not the wall man; got %s"
 			% d.target_position)
+	# A rush D's stick belongs in the lane: no stick-tie lock in transition.
+	assert_eq(d.locked_man_pid, -1, "D2 covers without a stick-tie lock")
 
 
 func test_d2_holds_mid_ice_with_nobody_driving() -> void:
@@ -485,3 +498,10 @@ func test_the_mid_lane_band_is_the_dot_lane() -> void:
 	assert_gt(absf(inside.x), absf(outside.x),
 			"the man inside the dots pulls D2 wider than the one outside them; "
 			+ "got %s vs %s" % [inside, outside])
+
+
+func test_rush_d_cushion_snapshot() -> void:
+	var snap := Snapshot.new(SNAPSHOT_PATH)
+	snap.record("ramp cushion, D standing 16 m off a 6 m/s carrier", _cushion(0.0))
+	snap.record("ramp cushion, same D drifting up-ice at 3 m/s", _cushion(3.0))
+	snap.verify(self)

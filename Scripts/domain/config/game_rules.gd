@@ -600,7 +600,7 @@ const DEFAULT_LOFT_VY_HIGH_M_S: float = 4.65
 const DEFAULT_WRISTER_POWER_CURVE: float = 1.1
 
 # ── Goalie Defaults ───────────────────────────────────────────────────────────
-# Shared between GoalieController @export and AIActionScoring's goalie
+# Shared between GoalieController @export and AIGoalieModel's goalie
 # react-then-slide model. Calibrate together — the AI's prediction must
 # match the live goalie's reflex.
 const DEFAULT_GOALIE_REACTION_DELAY_S: float = 0.13

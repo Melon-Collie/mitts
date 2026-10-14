@@ -238,7 +238,7 @@ So a human can block shots, the game counts them, and the bots simply never do. 
 that is not a garnish — it is a primary defensive action, and the single most common way a
 point shot dies.
 
-There is an asymmetry worth naming: `AIActionScoring.lane_clear` already prices a defender's
+There is an asymmetry worth naming: `AIPuckLane.lane_clear` already prices a defender's
 **stick** in the shot lane, so the *shooter* believes lanes get blocked. The *defender* has no
 corresponding action. The model is half-built.
 

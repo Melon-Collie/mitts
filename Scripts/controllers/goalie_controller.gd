@@ -60,7 +60,7 @@ var t_push_speed: float = GameRules.DEFAULT_GOALIE_T_PUSH_SPEED_M_S
 # Lateral push acceleration (m/s²). The goalie ramps up to shuffle / T-push speed
 # instead of snapping to it, so a quick play can beat him across before he
 # reaches speed. The cross-crease desperation push bypasses this (stays instant).
-# Default sourced from GameRules so AIActionScoring's slide prediction stays in
+# Default sourced from GameRules so AIGoalieModel's slide prediction stays in
 # lockstep.
 var lateral_accel: float = GameRules.DEFAULT_GOALIE_LATERAL_ACCEL_M_S2
 var lateral_threshold: float = 0.3
@@ -78,7 +78,7 @@ var rvh_transition_speed: float = 6.0
 # deliberate baked-in anticipation for playability, and the honest version of it
 # is the pre-armed read (prearmed_reaction_delay). Difficulty-varied
 # (GoalieSkillProfile.reaction_delay_s) and AI-mirrored per tier via
-# AIActionScoring.goalie_leg_delay_s — this default and the scorer's both read
+# AIGoalieModel.goalie_leg_delay_s — this default and the scorer's both read
 # GameRules; change together.
 var reaction_delay: float = GameRules.DEFAULT_GOALIE_REACTION_DELAY_S
 # Arms specifically take longer to react than legs. Legs are reflexive (drop
@@ -364,7 +364,7 @@ var rush_min_closing_speed: float = 1.5
 # the crease rather than continuing to the goal line.
 #
 # CALIBRATED, not derived — it sits between D and C because that is where the
-# anchor sweep in tests/unit/ai/test_goalie_post_lane_drive.gd stops moving the
+# anchor sweep in tests/instruments/ai/test_goalie_post_lane_drive.gd stops moving the
 # control. Below 0.40 the post-lane drive concedes 4x what a centre-lane drive
 # does; at 0.40 they concede alike; past 0.55 he stops being beatable on either.
 var rush_arrive_depth: float = 0.40
@@ -420,7 +420,7 @@ var recovery_duration: float = 0.35         # s spent standing back up
 # closes CONTINUOUSLY through the drop (openness converges during drop_progress),
 # so the effective five-hole seal — gap narrower than the puck — lands well before
 # full completion. Difficulty-varied (GoalieSkillProfile.butterfly_drop_s) and
-# AI-mirrored per tier via AIActionScoring.goalie_butterfly_drop_s; this default
+# AI-mirrored per tier via AIGoalieModel.goalie_butterfly_drop_s; this default
 # mirrors the scorer's GOALIE_BUTTERFLY_DROP_S baseline — change both together.
 var butterfly_drop_speed: float = 0.20      # s for pads to close to floor
 var butterfly_radius: float = 0.40          # arc radius from goal center while down
@@ -854,7 +854,7 @@ var shoulder_pitch_y_range: float = 0.55  # y-distance from neutral that maps to
 # over the stroke rather than the peak. Close top-corner snipes still beat the ARM
 # DELAY (arm_reaction_delay 0.18 s > a slot shot's flight), so this only bounds
 # the range shots a real goalie gloves.
-# AIActionScoring mirrors this as the arm deploy ramp (goalie_arm_deploy_s =
+# AIGoalieModel mirrors this as the arm deploy ramp (goalie_arm_deploy_s =
 # HIGH-band EXT / speed; baseline const GOALIE_ARM_DEPLOY_S, re-derived per tier
 # in set_goalie_profile) — change the baselines together.
 var glove_react_max_speed: float = 5.0
@@ -1169,7 +1169,7 @@ func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: f
 # Overwrite the difficulty-varying @exports from a skill profile. Only the knobs
 # the profile carries are touched; everything else keeps its authored default.
 # The AI-mirrored reads (leg delay, drop time, lateral accel, arm deploy) are
-# kept honest per tier by AIActionScoring.set_goalie_profile, called where
+# kept honest per tier by AIGoalieModel.set_goalie_profile, called where
 # GameManager selects the match's goalie_skill_profile — t_push_speed is the one
 # read knob still fixed across tiers (see GoalieSkillProfile → AI MIRROR).
 # Called from setup() before the cached configs are built.

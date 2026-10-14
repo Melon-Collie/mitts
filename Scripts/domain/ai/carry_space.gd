@@ -1,53 +1,23 @@
 class_name AICarrySpace
 
-# How much room a carrier has to operate, and what he can do with it: the
-# pursuit-evasion half of the carrier's read, split out of AIActionScoring.
-#
-# It separates cleanly because it already was separate. Across six sections and
-# ~1,200 lines it makes no calls the rest of the scorer depends on, touches none
-# of the difficulty-synced goalie statics, and owns its own constants. What it
-# still borrows is named: the shared arrival clock (`time_to_arrive`), the net
-# obstacle test, six reference speeds, and the puck-protect handle the shot side
-# also reads. **The dependency runs one way** — this class reads
-# `AIActionScoring`, never the reverse — and it must stay that way, because a
-# const read across a GDScript `class_name` cycle is a parse error rather than a
-# runtime one.
-#
-# Everything here is a grounded model, per Scripts/domain/ai/CLAUDE.md: a
-# reachable set is real pursuit-evasion geometry, controlled space is measured
-# room rather than a proximity curve, and the deke and brake reads are races run
-# at real accelerations. Keep them that way — a curve fitted to feel right does
-# not belong in this file.
+# How much room a carrier has to operate, and what he can do with it:
+# reachable-set evasion, the safety maps, the crossing sample, controlled space,
+# the brake check and the fake-then-cut deke. It reads the arrival clock and its
+# reference speeds from AIArrival and the net test from AINetObstacle, and never
+# AIActionScoring (test_scoring_split_stays_acyclic.gd).
 
 # ── Reachable-set evasion (pursuit-evasion possession safety) ────────────────
-# Whether a defender threatens the puck is not "how close is he" but "can he get
-# a stick to it given his MOMENTUM and reaction." Each skater is a bounded-accel
-# body: over a short horizon its body rides its velocity to (pos + vel·T) and can
+# Whether a defender threatens the puck is "can he get a stick to it given his
+# MOMENTUM and reaction", not "how close is he". Each skater is a bounded-accel
+# body: over a short horizon it rides its velocity to (pos + vel·T) and can
 # deviate from that line by at most ½·A·(T−reaction)² (a double integrator's
-# reachable set), with the stick reaching further. So a defender's stick can
-# touch anywhere within (maneuver + stick) of his MOMENTUM-projected position.
-#
-# This is what a pure proximity model cannot see: a hard charger's
-# disk rides downrange to where you WERE, leaving the space he vacated wide open
-# (beat him by letting him overshoot); a contained/jockeying defender's disk stays
-# on you (real containment); a stick on the puck stays a strip threat. The carrier
-# evades by placing the puck in his own handling envelope at a point outside every
-# defender disk — the SEAM. Two seam reads share one sampler: the max-clearance
-# seam (best_evade_point) is the honest "can I keep the puck at all" safety read,
-# and the objective-DIRECTED seam (best_evade_point_toward) is the playmaking one
-# — the safe sample with the most progress toward the carry objective, so the
-# deke goes PAST the man toward the spot the carrier wants, and doubles as a
-# carry candidate. prefers_brake_check prices the third maneuver (stop dead, let
-# a committed checker's reach fly past) in the same clearance currency.
+# reachable set), with the stick reaching further. The carrier evades by placing
+# the puck in his handling envelope outside every defender's disk — the SEAM.
 #
 # The BOARDS bound the seam search, not the clearance itself: a wall doesn't
-# strip the puck (a carrier 0.3 m off the boards with no defender in reach is
-# perfectly safe), it removes ESCAPE OPTIONS — the puck can't be handled through
-# it. So the seam samplers intersect the handling envelope with the playing
-# surface (off-surface samples are rejected), and the wall-pincer humans
-# actually use emerges: pinned against the boards, half the envelope is illegal,
-# the best legal seam runs along the wall, and its clearance from the sealing
-# defender is honestly small.
+# strip the puck, it removes escape options. So the seam samplers reject
+# off-surface samples, and a wall-pinned carrier's best seam runs along the wall
+# with honestly small clearance.
 const MANEUVER_ACCEL_M_S2: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
 const EVADE_HORIZON_S: float = 0.40    # a deke/cut's length — the evasion look-ahead
 const EVADE_REACTION_S: float = 0.15   # a defender reads a cut before he can redirect to it
@@ -59,24 +29,18 @@ const EVADE_SAFE_MARGIN_M: float = EVADE_STICK_REACH_M
 # seam is a broad region, not a point.
 const EVADE_SAMPLE_RINGS: Array[float] = [0.4, 0.8, 1.0]
 const EVADE_SAMPLE_ANGLES: int = 12
-# A strip needs the blade ON the puck, so a sample sitting exactly at the edge
-# of a defender's best-case reach (clearance 0) is escapable in the model's own
-# terms — but the model reacts only once (the reaction gate), while a real
-# defender re-reads continuously. One blade-length of air is the physical slop
-# that survives that re-read: the puck stays a blade off his best-case touch.
-# Samples at or above this clearance are treated as genuinely SAFE by the
-# objective-directed seam (progress may be preferred among them); below it,
-# clearance itself is the only currency.
+# The model reacts only once (the reaction gate) while a real defender re-reads
+# continuously, so clearance 0 is not safe: one blade-length of air is the slop
+# that survives the re-read. At or above it a sample is SAFE for the directed
+# seam (progress may be preferred among safe samples); below it, clearance itself
+# is the only currency.
 const EVADE_SAFE_CLEAR_MIN_M: float = GameRules.DEFAULT_BLADE_LENGTH_M
 
 
-# Gap (metres) from a puck point to the nearest board. Negative outside the
-# playing surface — the seam samplers reject those samples (the handling
-# envelope intersected with the rink; see the boards note above). Uses the
-# INNER extents (the surface the puck actually lives on, inside kickplate lip
-# + wall half-thickness), rounded corners included: in a corner quadrant the
-# nearest board is the arc, which the rectangle overshoots by up to ~3.5 m —
-# exactly where a carrier gets pinned.
+# Gap (metres) from a puck point to the nearest board; negative outside the
+# playing surface. INNER extents (the surface the puck lives on), rounded
+# corners included: in a corner quadrant the nearest board is the arc, which a
+# rectangle overshoots by metres exactly where a carrier gets pinned.
 static func board_gap_m(point: Vector3) -> float:
 	var ax: float = absf(point.x)
 	var az: float = absf(point.z)
@@ -95,13 +59,10 @@ static func board_gap_m(point: Vector3) -> float:
 # time_to_arrive phase model in distance form — coast on momentum through the
 # reaction gate, shed excess cross-speed at the measured rate, brake out a
 # retreat (losing ground while braking), then the stride's pursuit ramp
-# (AIStrideRamp.distance_in) — plus the stick span. Measured
-# against a committed defender under the real movement rules + rate-limited
-# blade (the #27 probe): crossing times track reality within ~0.05 s at rest
-# and toward-motion across 2–12 m, where a best-case 0.5·a·t² lunge over-reaches
-# by 3+ m at long windows (the pacified carrier) while UNDER-reaching close-in. Known optimistic spots, same as time_to_arrive's:
-# short perpendicular cuts at speed (the steering miss-loop). The safety maps
-# below carry the residual as a measured probability band.
+# (AIStrideRamp.distance_in) — plus the stick span. Never a best-case 0.5·a·t²
+# lunge: that over-reaches at long windows and under-reaches close in. Optimistic
+# where time_to_arrive is: short perpendicular cuts at speed. The safety maps
+# below carry the residual as a probability band.
 # `abort_below`: exact argmax pruning for sample-scanning callers (the seam
 # search) — once the running worst drops below it, the exact value cannot
 # matter to the caller, so the defender loop stops early. Default −INF scans
@@ -130,7 +91,7 @@ static func reach_clearance(
 	for i: int in n:
 		var accel: float = MANEUVER_ACCEL_M_S2
 		var stick: float = EVADE_STICK_REACH_M
-		var vmax: float = AIActionScoring.SKATER_REF_SPEED_M_S
+		var vmax: float = AIArrival.SKATER_REF_SPEED_M_S
 		var grip: float = 1.0
 		if has_caps:
 			# Per-opponent build — Acceleration (max_accel) sets the ramp, reach
@@ -148,8 +109,7 @@ static func reach_clearance(
 		# ground) — so clearance ≥ dist − speed_ub·time − stick. When even that
 		# floor can't come under the running worst, this defender cannot move
 		# the min and the full model is skipped. L1 speed (≥ L2) keeps the
-		# bound conservative; squared compare avoids the sqrt. In a 5v5 scene
-		# this collapses the far bodies to a handful of flops each.
+		# bound conservative; squared compare avoids the sqrt.
 		var speed_ub: float = maxf(vmax,
 				absf(opponent_vels[i].x) + absf(opponent_vels[i].z))
 		var need: float = worst + speed_ub * time + stick
@@ -204,14 +164,14 @@ static func _reach_clearance_one(point_x: float, point_z: float, time: float,
 		# the edge grip the movement core turns with), then brake out any
 		# retreat (losing ground), then the stride's pursuit ramp.
 		var grip: float = maxf(lateral_grip, 0.001)
-		var tau_p: float = tau - maxf(0.0, v_perp - AIActionScoring.VM_FREE_SHED_M_S * grip) \
-				/ (AIActionScoring.VM_SHED_DECEL_M_S2 * grip)
+		var tau_p: float = tau - maxf(0.0, v_perp - AIArrival.VM_FREE_SHED_M_S * grip) \
+				/ (AIArrival.VM_SHED_DECEL_M_S2 * grip)
 		if tau_p > 0.0:
 			var v0: float = v_along
 			if v0 < 0.0:
-				var t_b: float = minf(-v0 / AIActionScoring.REVERSAL_BRAKE_DECEL_M_S2, tau_p)
-				d = v0 * t_b + 0.5 * AIActionScoring.REVERSAL_BRAKE_DECEL_M_S2 * t_b * t_b
-				v0 += AIActionScoring.REVERSAL_BRAKE_DECEL_M_S2 * t_b
+				var t_b: float = minf(-v0 / AIArrival.REVERSAL_BRAKE_DECEL_M_S2, tau_p)
+				d = v0 * t_b + 0.5 * AIArrival.REVERSAL_BRAKE_DECEL_M_S2 * t_b * t_b
+				v0 += AIArrival.REVERSAL_BRAKE_DECEL_M_S2 * t_b
 				tau_p -= t_b
 			d += AIStrideRamp.distance_in(v0, tau_p, vmax, accel)
 	return dist - d - stick
@@ -220,20 +180,17 @@ static func _reach_clearance_one(point_x: float, point_z: float, time: float,
 # ── The safety maps: measured strip probability over nominal clearance ────────
 # Production contact is a SWEEP standard, not a tip touch: a strip lands when
 # the blade segment passes within the puck-contact radius
-# (PuckController.PICKUP_RADIUS — mirrored by the duel harness), so nominal
-# tip-standard contact actually connects at +POKE_CONTACT_RADIUS_M of
-# clearance. The two maps below are the measured CDFs around that boundary for
-# the two regimes the #27 probe separated:
+# (PuckController.PICKUP_RADIUS), so nominal tip-standard contact connects at
+# +POKE_CONTACT_RADIUS_M of clearance. The two maps are the measured strip
+# bands around that boundary for two regimes:
 #   DWELL (clearance_to_safety) — the puck holds still at the sample (a stand,
-#     a carry's arrival, a reception): contact is deterministic — the probe's
-#     committed defender ALWAYS strips a dwelling puck it nominally reaches —
-#     so the band is just the model's own measured crossing error, ± one blade
-#     length around the contact boundary.
-#   TRANSIT (transit_clearance_to_safety) — the puck is passing through the
-#     sample mid-carry: the defender must MEET a moving target on a
-#     reaction-delayed read, and the staged-carry ensemble shows a wide mixed
-#     band — every carry at or below TRANSIT_STRIP_CLEAR_M was stripped, none
-#     above TRANSIT_SAFE_CLEAR_M was, outcomes mixed between.
+#     a carry's arrival, a reception). A committed defender always strips a
+#     dwelling puck he nominally reaches, so the band is only the model's own
+#     crossing error, ± one blade length around the contact boundary.
+#   TRANSIT (transit_clearance_to_safety) — the puck passes through the sample
+#     mid-carry, and the defender must MEET a moving target on a delayed read:
+#     staged carries at or below TRANSIT_STRIP_CLEAR_M are stripped, none above
+#     TRANSIT_SAFE_CLEAR_M are, outcomes mixed between.
 const POKE_CONTACT_RADIUS_M: float = 0.5
 const DWELL_HALF_BAND_M: float = GameRules.DEFAULT_BLADE_LENGTH_M
 const TRANSIT_STRIP_CLEAR_M: float = -0.4
@@ -250,26 +207,22 @@ static func clearance_to_safety(clearance: float) -> float:
 			0.0, 1.0)
 
 
-# Moving-puck safety: the measured mixed band for a puck traversing the sample
-# at stride (see the map doc above). Lenient relative to the dwell map by
-# construction — outrunning a reaction-delayed pursuit is real protection.
+# Moving-puck safety: the mixed band for a puck traversing the sample at stride.
+# More lenient than the dwell map — outrunning a reaction-delayed pursuit is
+# real protection.
 static func transit_clearance_to_safety(clearance: float) -> float:
 	return clampf((clearance - TRANSIT_STRIP_CLEAR_M)
 			/ (TRANSIT_SAFE_CLEAR_M - TRANSIT_STRIP_CLEAR_M), 0.0, 1.0)
 
 
 # Lunge window for a defender's stick redirect onto a carried puck AT ITS
-# ARRIVAL SPOT — the maneuver-time bound the carry safety/strip reads apply
-# to their END sample only. At the destination the carrier is established and
-# protecting (the evade envelope owns that moment — same reasoning as the
-# pass-reception read's short window), so the defender gets his real lunge,
-# not a full-window t² repositioning that reads every honest-length carry
-# destination as covered near any body (the pacified carrier). The MID
-# sample deliberately keeps the full-window pursuit read: en route the puck
-# traverses the defender's pursuit envelope at stride, where protection is
-# weakest — that asymmetry is what prices "thread the gauntlet" carries as
-# dangerous while leaving a peel-out to open ice safe. Same value as the
-# reception lunge (one poke moment).
+# ARRIVAL SPOT — the maneuver-time bound the carry reads apply to their END
+# sample only. At the destination the carrier is established and protecting,
+# so the defender gets his real lunge, not a full-window t² repositioning that
+# reads every honest-length carry destination as covered. The MID sample keeps
+# the full-window pursuit: en route the puck traverses the pursuit envelope at
+# stride, where protection is weakest — the asymmetry that prices "thread the
+# gauntlet" carries as dangerous while leaving a peel-out to open ice safe.
 const CARRY_LUNGE_WINDOW_S: float = EVADE_HORIZON_S
 
 
@@ -281,8 +234,7 @@ const CARRY_LUNGE_WINDOW_S: float = EVADE_HORIZON_S
 # `apply_escape` turns on reach_clearance's escape-speed gate (see that doc): a
 # defender the carrier is out-skating along this carry can't sustain a strip. The
 # carry direction and pace come from (from, to, arrival_time) — the carrier drives
-# from→to at exactly that pace — so nothing else need be supplied. Default off
-# reproduces the prior model for every non-carry caller.
+# from→to at exactly that pace.
 static func carry_clearance(from: Vector3, to: Vector3, arrival_time: float,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		opponent_caps: Array = [], apply_escape: bool = false) -> float:
@@ -311,36 +263,23 @@ static func carry_clearance(from: Vector3, to: Vector3, arrival_time: float,
 # The mid/end samples can straddle a defender the carry path MEETS between
 # them — a pinch wall just past `from`, a forechecker met in the first
 # quarter — and the strip lands at the meeting moment neither sample sees.
-# The staged-crossing ensemble (probe: committed seeker under the real
-# movement / blade / check_poke rules, sweeping pace 3–12.5 m/s relative ×
-# miss distance × closing geometry) measured the meeting outcome as a pure
-# DISTANCE band on the contact envelope's own radii, NOT a speed effect:
-# every naked crossing whose momentum-line miss distance penetrated the
-# stick circle by more than the poke contact radius was swept, at every
-# tested pace (the presented blade owns that core), while crossings grazing
-# the outer poke-slop ring escaped at pace (blade tracking lag misses the
-# fringe). A dwell-time gate was hypothesized and REJECTED by the
-# measurement — the naked band edges are simply:
-#   core = blade_span − POKE_CONTACT_RADIUS_M   → keep 0 (swept)
+# Measured on staged crossings (a committed seeker under the real movement /
+# blade / poke rules, across pace, miss distance and closing geometry), the
+# meeting outcome is a pure DISTANCE band on the contact envelope's own radii,
+# not a speed or dwell-time effect:
+#   core = blade_span − POKE_CONTACT_RADIUS_M   → keep 0 (swept at any pace)
 #   edge = blade_span                            → keep 1 (grazed at pace)
 #
-# PROTECTION is the second measured half: re-running the ensemble with a
-# protecting carrier (puck ridden on the handle envelope away from the
-# threat) shifted the whole band by CROSSING_PROTECT_SHIFT_M — a lone
-# defender is beaten at almost any crossing geometry (only a tight head-on
-# meeting still strips), which is the duel harness's own emergent truth.
-# The shift is a SHARED, DIRECTIONAL budget: the puck line can displace one
-# way, so threats on one side get the full credit while an OPPOSED pair (the
-# pinch wall, the corralling pincer) split it to nothing — the optimal
-# lateral shift between the per-side worst crossings, bounded by the
-# measured displacement. That single mechanism is why lone containers are
-# beatable while walls are genuinely dangerous.
+# A PROTECTING carrier (puck ridden on the handle envelope away from the
+# threat) shifts the whole band by CROSSING_PROTECT_SHIFT_M. The shift is a
+# SHARED, DIRECTIONAL budget: the puck line can displace one way, so threats on
+# one side get the full credit while an OPPOSED pair (the pinch wall, the
+# corralling pincer) splits it to nothing — the optimal lateral shift between
+# the per-side worst crossings. That is why lone containers are beatable while
+# walls are genuinely dangerous.
 #
-# Slow grazes ARE stripped in reality, but by pursuit, not the meeting —
-# and pursuit is exactly what the mid/end transit samples already price
-# (verified in the ensemble: every slow-graze strip cell reads dead at the
-# mid sample). Only the window INTERIOR is sampled here; the endpoints are
-# the mid/end samples' job.
+# Slow grazes are stripped by pursuit, not the meeting, and pursuit is what the
+# mid/end transit samples price. Only the window INTERIOR is sampled here.
 const CROSSING_PROTECT_SHIFT_M: float = 0.8
 
 
@@ -431,9 +370,8 @@ static func carry_crossing_keep(from: Vector3, to: Vector3, arrival_time: float,
 # (transit band), the END sample a dwelling one (the carrier arrives there),
 # a stand (from == to) dwells at both, and each defender the path MEETS
 # between the fixed samples contributes the measured crossing band
-# (carry_crossing_keep). Callers use this instead of
-# clearance_to_safety(carry_clearance(...)), which forced one map onto both
-# regimes.
+# (carry_crossing_keep). Never clearance_to_safety(carry_clearance(...)): that
+# forces one map onto both regimes.
 static func carry_safety(from: Vector3, to: Vector3, arrival_time: float,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		opponent_caps: Array = [], apply_escape: bool = false) -> float:
@@ -456,9 +394,7 @@ static func carry_safety(from: Vector3, to: Vector3, arrival_time: float,
 				from, arrival_time, opponents, opponent_vels,
 				opponent_caps, minf(arrival_time, CARRY_LUNGE_WINDOW_S))))
 	# Sequential early-outs — each factor can only lower the min, so any zero
-	# skips the remaining defender loops. In a scramble most candidates die at
-	# the first read; the hot-path cost of the three-sample honesty is paid
-	# only by candidates that are actually alive.
+	# skips the remaining defender loops.
 	var crossing: float = carry_crossing_keep(
 			from, to, arrival_time, opponents, opponent_vels, opponent_caps)
 	if crossing <= 0.0:
@@ -595,7 +531,6 @@ static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 	return mid if c_mid <= c_end else to
 
 
-
 # How far along `bearing` this body can actually get within `horizon_s`.
 #
 # From the double-integrator reachable set: with bounded acceleration, the
@@ -606,12 +541,9 @@ static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 # wish.
 #
 # Returns a NEGATIVE value when the ray misses the disc entirely: at that speed
-# the direction is simply not available. That is the formal statement of
-# "travelling quickly forward, the only place you can go is forward", and it
-# falls out of the geometry rather than being asserted — at a standstill the
-# disc is centred on the body and every bearing reaches 0.5*a*T^2, while at
-# pace the centre slides downrange until the rearward and then the lateral
-# bearings fall outside it altogether.
+# the direction is not available. At a standstill the disc is centred on the
+# body and every bearing reaches 0.5*a*T^2; at pace the centre slides downrange
+# until the rearward and then the lateral bearings fall outside it.
 static func beat_reach_along(velocity: Vector3, bearing_x: float,
 		bearing_z: float, accel_m_s2: float, horizon_s: float) -> float:
 	var cx: float = velocity.x * horizon_s
@@ -626,107 +558,59 @@ static func beat_reach_along(velocity: Vector3, bearing_x: float,
 		return -1.0
 	return along + sqrt(disc)
 
+
 # ── Controlled space: how much room a carrier has to OPERATE ─────────────────
-# "How much space do I have" as a measured quantity rather than a corridor test.
+# The fraction of the ice ahead this carrier can reach WITH THE PUCK: a fan of
+# carry paths across the forward cone, each priced by the same carry_safety the
+# real carry candidates use and reached at the same momentum-honest
+# time_to_arrive, area-weighted (polar element ∝ r) and forward-projected
+# (max(0, cos θ), position_potential's foreshortening). Paths, not points, so a
+# defender between two rays is met en route by both (the crossing band) and the
+# fan can stay coarse. Momentum is never a term; it falls out of the honest
+# arrival time. Design and known residual: Scripts/domain/ai/CLAUDE.md →
+# "Controlled space".
 #
-# THE MODEL. Space is the fraction of the ice ahead that this carrier can
-# actually reach WITH THE PUCK. Not "is anyone standing in my lane" — that is a
-# geometry question and it has no clock in it — but "of the destinations in
-# front of me, how many survive the race?" A fan of carry paths is sampled
-# across the forward cone, each priced by the SAME carry_safety the real carry
-# candidates use (crossing band + transit mid + arrival lunge, escape gate on),
-# reached at the SAME momentum-honest time_to_arrive. The result is the
-# area-weighted mean of those keep probabilities, in [0, 1]: 1 = every forward
-# destination is mine, 0 = none of them are.
+# Samples off the playing surface leave BOTH sums rather than reading as
+# pressure: a wall does not strip the puck, it removes options, and pricing the
+# boards here would discount a clean wall carry as if it were covered.
 #
-# WHY A FAN AND NOT A RAY. A single netward ray is a corridor-occupancy test:
-# it cannot tell a defender you will skate past from a wall, it answers the
-# same for a man 3 m ahead and one 8 m ahead (no clock), and it has a hard cliff
-# at the reach boundary — one measured at 0.556 for a defender 1.0 m off the
-# ray and 1.000 at 2.0 m, a 45 cm difference deciding the puck. Sampling an
-# AREA cannot cliff: a defender leaving one path still covers its neighbours in
-# proportion to how much ice he actually takes away.
-#
-# WHY PATHS AND NOT POINTS. Each sample is a carry FROM the carrier TO the
-# destination, so a defender sitting between two rays is not a blind spot — he
-# is met en route by both, and carry_safety's crossing band prices exactly that
-# meeting. This is what lets the fan stay coarse (SPACE_SAMPLE_ANGLES) without
-# leaking coverage between samples.
-#
-# WHAT MOMENTUM BUYS, FOR FREE. time_to_arrive is momentum-honest, so a carrier
-# in stride reaches the far ring sooner, gives the defenders less window, and
-# reads more space than the same carrier standing still — while one skating the
-# other way pays the reversal. Nothing here is a momentum term; it falls out of
-# using the honest arrival time. The escape gate (apply_escape) is what keeps a
-# man the carrier is out-skating from reading as a wall.
-#
-# WEIGHTING. Each sample carries the area it stands for (polar element ∝ r)
-# projected onto the objective direction (max(0, cos θ) — the same
-# foreshortening projection position_potential uses, so lateral ice counts for
-# what it advances). Samples off the playing surface are DROPPED from both
-# sums, not zeroed: a wall does not strip the puck, it removes options, and
-# pricing the boards as pressure here would discount a clean wall carry as if
-# it were covered. (Boards-as-defender is a real read, but it belongs to the
-# option model, not the pressure one.)
-#
-# FAN DENSITY. Measured against a 5×9 reference fan: ANGULAR resolution buys
-# accuracy and radial resolution does not. Three angles alias badly enough to
-# miss a defender 3 m off the ray entirely (reads a clean 1.000); dropping the
-# middle ring costs almost nothing. So the budget goes to angles: 2×7 is one
-# sample cheaper than 3×5 and materially closer to the reference (worst-case
-# error 0.076 → 0.043 at rest, and the defender-dead-ahead-at-speed case
-# −0.079 → +0.015).
-#
-# Known residual: a two-man wall met at speed reads ~0.2 high on any fan this
-# coarse — the samples thread between the pair. That is the asymmetric model's
-# structural blind spot (a min over defenders cannot count bodies), not a
-# density problem: the dense reference is only 0.04 better there.
-#
-# Allocation-free: value-type math over two const tables.
+# Fan density: angular resolution buys accuracy, radial does not, so the budget
+# goes to angles.
 const SPACE_SAMPLE_RINGS: Array[float] = [0.5, 1.0]
-# ±70° in 23° steps. Coarse by design — see "why paths and not points".
+# ±70° in 23° steps. Coarse by design — paths, not points (see the block doc).
 const SPACE_SAMPLE_ANGLES: Array[float] = [
 		-1.2217, -0.8145, -0.4072, 0.0, 0.4072, 0.8145, 1.2217]
 # Rings are STAGGERED by half an angular step, so the two rings sample 14
-# distinct bearings instead of the same 7 twice. Free anti-aliasing: unstaggered,
-# a defender between two rays degrades both of them on both rings, wobbling the
-# sweep ±0.07 and reading a man 1.5 m off the ray as taking MORE space than one
-# dead centre (dead centre blocks one bearing; off-centre blocks two). The
-# half-step offset halves that beat frequency at identical cost.
+# distinct bearings instead of the same 7 twice: free anti-aliasing against a
+# defender between two rays reading as taking more space than one dead centre.
 const SPACE_RING_STAGGER_RAD: float = 0.2036
 
 
 # One sample: the keep probability of carrying from `from` to `sample`, reached
-# at this build's honest momentum-aware arrival time. The per-point control
-# read — exported because the carry candidate scoring and the off-puck roles
-# want the same number for a single spot.
+# at this build's honest momentum-aware arrival time.
 static func control_at(sample: Vector3, from: Vector3, from_vel: Vector3,
 		from_caps: AISkaterCaps, opponents: Array[Vector3],
 		opponent_vels: Array[Vector3], opponent_caps: Array = []) -> float:
-	var speed: float = AIActionScoring.SKATER_REF_SPEED_M_S
+	var speed: float = AIArrival.SKATER_REF_SPEED_M_S
 	var accel: float = MANEUVER_ACCEL_M_S2
 	var grip: float = 1.0
 	if from_caps != null:
 		speed = from_caps.max_speed
 		accel = from_caps.max_accel
 		grip = from_caps.lateral_grip
-	var t: float = AIActionScoring.time_to_arrive(from, sample, from_vel, speed, accel, grip)
+	var t: float = AIArrival.time_to_arrive(from, sample, from_vel, speed, accel, grip)
 	return carry_safety(from, sample, t, opponents, opponent_vels,
 			opponent_caps, true)
 
 
-# The area-weighted controlled fraction of the forward cone (see the block
-# doc). `toward` is the objective the cone points at (the attacking net for the
-# carrier's forward-pressure read); `horizon_m` how far ahead space is felt.
-# Returns 1.0 when the objective is degenerate or every sample is off-ice.
+# The area-weighted controlled fraction of the forward cone, in [0, 1]. `toward`
+# is the objective the cone points at (the attacking net for the carrier's
+# forward-pressure read); `horizon_m` how far ahead space is felt. Returns 1.0
+# when the objective is degenerate or every sample is off-ice.
 # `out_bearing_control`, when sized to SPACE_SAMPLE_ANGLES, is filled with the
 # mean control along each BEARING of the fan (averaged over the rings, off-ice
-# samples skipped, 1.0 where a bearing has no legal sample). That per-bearing
-# profile is the fan's directional shape — which way out of here is open — and
-# it is a free by-product of a read the carrier already pays for every re-eval.
-# AIRoleCarrier generates its forward carry candidates from it instead of from
-# a fixed ring of cardinals; every other caller passes nothing and it costs one
-# untaken branch per sample.
+# samples skipped, 1.0 where a bearing has no legal sample) — which way out of
+# here is open. AIRoleCarrier generates its forward carry candidates from it.
 static func controlled_space(from: Vector3, from_vel: Vector3,
 		from_caps: AISkaterCaps, toward: Vector3, horizon_m: float,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
@@ -754,25 +638,19 @@ static func controlled_space(from: Vector3, from_vel: Vector3,
 		# outer path along a bearing comes back fully controlled, the inner
 		# samples on that same bearing are credited 1.0 without being priced.
 		# They are a strict PREFIX of a path already proven clean: the inner
-		# destination lies on the outer route, reached sooner, so every defender
-		# has strictly less time to get to it, and the outer read's own mid
-		# sample and crossing band already swept the ice between. This is where
-		# the fan's cost actually lives — open ice is the expensive case, because
-		# nothing there trips carry_safety's zero early-outs — so skipping it is
-		# worth more than trimming traffic, where the early-outs already fire.
-		# (The one approximation: the outer read's END sample uses the arrival
-		# lunge window while a priced inner sample would use its own. It can only
-		# make the skip more conservative than the real inner value, never less.)
+		# destination lies on the outer route, reached sooner, and the outer
+		# read's mid sample and crossing band already swept the ice between.
+		# Open ice is where the fan's cost lives (nothing trips carry_safety's
+		# early-outs), so this is the skip that pays.
 		var outer_full: bool = false
 		for k: int in SPACE_SAMPLE_RINGS.size():
 			var ri: int = SPACE_SAMPLE_RINGS.size() - 1 - k
 			var r: float = reach * SPACE_SAMPLE_RINGS[ri]
-			# Alternate rings ride half an angular step over (see the stagger doc).
+			# Alternate rings ride half an angular step over (SPACE_RING_STAGGER_RAD).
 			var stagger: float = SPACE_RING_STAGGER_RAD if ri % 2 == 1 else 0.0
 			var angle: float = SPACE_SAMPLE_ANGLES[bi] + stagger
 			var ca: float = cos(angle)
-			# Forward projection: the same cos foreshortening position_potential
-			# uses. Straight ahead counts fully, ±70° counts about a third.
+			# Forward projection: straight ahead counts fully, ±70° about a third.
 			if ca <= 0.0:
 				continue
 			var sa: float = sin(angle)
@@ -781,14 +659,12 @@ static func controlled_space(from: Vector3, from_vel: Vector3,
 			var sample := Vector3(
 					from.x + dir_x * r, 0.0, from.z + dir_z * r)
 			if board_gap_m(sample) < 0.0:
-				continue   # off the playing surface — see the WEIGHTING note
+				continue   # off the playing surface — see the block doc
 			# A sample whose straight path runs through a cage is not ice this
-			# carrier can take, so it leaves both sums exactly like an off-surface
-			# one. Dropping it also keeps the fan off time_to_arrive's around-the-
-			# net routing, which prices four waypoints on two legs each — an 8x
-			# per-sample cost that fired on the whole fan whenever the carrier
-			# worked near a goal line, and was the fan's worst-tick spike.
-			if AIActionScoring.carry_path_blocked_by_net(from, sample):
+			# carrier can take, so it leaves both sums like an off-surface one —
+			# which also keeps the fan off time_to_arrive's around-the-net
+			# routing, an 8x per-sample cost.
+			if AINetObstacle.carry_path_blocked_by_net(from, sample):
 				continue
 			var c: float = 1.0
 			if not outer_full:
@@ -829,18 +705,11 @@ static func best_evade_point(
 
 
 # The OBJECTIVE-DIRECTED seam: where to put the puck to get PAST the pressure
-# toward the spot the carrier actually wants (`objective` — the live carry
-# anchor). The pure max-clearance seam above answers "where is the puck safest,"
-# which is survival, not playmaking — steered by it alone, a carrier is herded
-# wherever the ice happens to be emptiest (usually sideways or backwards) and
-# never tries to beat his man. This variant is lexicographic in the same
-# grounded currencies: among envelope samples that are genuinely SAFE (outside
-# every defender's momentum-reach by EVADE_SAFE_CLEAR_MIN_M — see that const),
-# take the one with the most PROGRESS toward the objective; only when no safe
-# sample exists does it fall back to pure max clearance (nothing to attack —
-# survive first). A defender overplaying one side thus gets beaten to the other
-# side ON THE WAY FORWARD, and a committed charger's vacated lane is taken as a
-# cut PAST him, not a retreat into open ice.
+# toward the spot the carrier wants (`objective` — the live carry anchor). The
+# max-clearance seam is survival, not playmaking: steered by it alone a carrier
+# is herded wherever the ice is emptiest and never beats his man. Lexicographic:
+# among envelope samples clearing EVADE_SAFE_CLEAR_MIN_M, the most PROGRESS
+# toward the objective; only when none is safe, pure max clearance.
 static func best_evade_point_toward(
 		carrier_pos: Vector3, carrier_vel: Vector3, objective: Vector3,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
@@ -874,16 +743,12 @@ static func best_evade_point_toward(
 #     spot, falling back to max clearance only when nothing in the envelope is
 #     safe.
 #
-# Never AIM with the max-clearance point. It is the point diametrically opposite
-# the checker, and a checker only makes shielding necessary by being in FRONT —
-# so the puck goes to the BACK hip whenever the shield engages and stays there
-# as long as the man is live (measured: 120-180 deg off the carry line at full
-# gain against any defender the carrier is skating toward). That is the "slips
-# through traffic, then keeps carrying it behind him" look, and a puck on the
-# back hip is on neither a shot nor a pass. Directed, the seam grades with the
-# checker's bearing (180 -> 90 -> 0 deg as he steps off the line), so the shield
-# goes exactly as deep as it must — and under a real jam, where nothing is safe,
-# the fallback restores the full far-hip shield.
+# Never AIM with the max-clearance point: it is diametrically opposite the
+# checker, and a checker only makes shielding necessary by being in FRONT, so
+# the puck would sit on the BACK hip — on neither a shot nor a pass — for as
+# long as the man is live. Directed, the seam grades with the checker's bearing,
+# so the shield goes exactly as deep as it must; under a real jam, where nothing
+# is safe, the fallback restores the full far-hip shield.
 static func best_handle_protect_point(
 		carrier_pos: Vector3, carrier_vel: Vector3,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
@@ -968,10 +833,9 @@ static func _best_clear_point(proj_x: float, proj_z: float, env: float,
 # the cut (killing momentum is a real cost the cut doesn't pay), which is the
 # compare `prefers_brake_check` runs.
 
-# How hard the real brake key decelerates the body — same value as
-# AISteering.ARRIVAL_BRAKE_DECEL_M_S2 (kept as a local const so the dependency
-# between the two domain classes stays one-directional: steering reads the
-# evasion consts here, never the reverse).
+# How hard the real brake key decelerates the body (m/s²). A local const rather
+# than a read of AISteering's, so the dependency stays one-way: steering reads
+# the evasion consts here, never the reverse.
 const BRAKE_DECEL_M_S2: float = 10.0
 
 # The braked-hold read must itself be genuinely safe — the same blade-of-air
@@ -1027,7 +891,7 @@ static func prefers_brake_check(
 #
 # The whole read is the existing reachable-set model run against the
 # defender's POST-BITE state: during the fake he reads for EVADE_REACTION_S,
-# then accelerates toward the fake at his real max_accel (per-build caps); at
+# then accelerates toward the fake at his real lateral authority; at
 # the cut his reach starts from that shifted, wrong-way-moving state and is
 # reaction-gated AGAIN before he can redirect. GO iff the cut-side point is
 # covered NOW (nothing to cut into — otherwise the plain seam owns it) but
@@ -1149,41 +1013,11 @@ const CARRY_PATH_CLEAR_RADIUS_M: float = 1.8
 const LANE_BEATEN_BEHIND_M: float = 0.1
 const LANE_BEATEN_PACE_M_S: float = 0.5
 
-# Public lane-clearance check for CARRY candidates — the bot is
-# physically traveling along this segment, not firing a puck through
-# it, so the reaction-window math from `lane_clear` doesn't apply.
-# A defender anywhere on the path is in the way regardless of flight
-# time. Returns 1.0 if no opponent is within CARRY_PATH_CLEAR_RADIUS_M of
-# the segment, ramps linearly to 0.0 as defender approaches the line.
-# Caller should project opponents forward by the candidate's expected
-# arrival time so the check reflects where defenders WILL BE when
-# the bot gets there.
-static func path_clearance(from: Vector3, to: Vector3,
-		projected_opponents: Array[Vector3]) -> float:
-	var dx: float = to.x - from.x
-	var dz: float = to.z - from.z
-	var line_len_sq: float = dx * dx + dz * dz
-	if line_len_sq < 0.01:
-		return 1.0
-	var min_perp_sq: float = INF
-	for p: Vector3 in projected_opponents:
-		var pdx: float = p.x - from.x
-		var pdz: float = p.z - from.z
-		var t: float = (pdx * dx + pdz * dz) / line_len_sq
-		if t <= 0.0 or t >= 1.0:
-			continue
-		var closest_x: float = from.x + t * dx
-		var closest_z: float = from.z + t * dz
-		var perp_x: float = p.x - closest_x
-		var perp_z: float = p.z - closest_z
-		var perp_sq: float = perp_x * perp_x + perp_z * perp_z
-		if perp_sq < min_perp_sq:
-			min_perp_sq = perp_sq
-	if min_perp_sq == INF:
-		return 1.0
-	var perp: float = sqrt(min_perp_sq)
-	return clampf(perp / CARRY_PATH_CLEAR_RADIUS_M, 0.0, 1.0)
-
+# Clearance of a CARRY path from `from` to `to`, reached in `arrival_time`:
+# 1.0 when no opponent projected to arrival is within CARRY_PATH_CLEAR_RADIUS_M
+# of the segment, ramping linearly to 0.0 on the line. The carrier is skating
+# this segment, not firing a puck through it, so `lane_clear`'s flight-time
+# reach does not apply — a defender anywhere on the path is in the way.
 static func carry_lane_clearance(from: Vector3, to: Vector3, arrival_time: float,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		max_speed: float = 0.0) -> float:
@@ -1198,13 +1032,10 @@ static func carry_lane_clearance(from: Vector3, to: Vector3, arrival_time: float
 		drive_speed = minf(drive_speed, max_speed)
 	var dir_x: float = dx / dist
 	var dir_z: float = dz / dist
-	# Same proximity read as path_clearance (project each defender to arrival and
-	# take the tightest perp to the straight segment) — EXCEPT we first drop a
-	# defender the carrier has genuinely BEATEN: one currently behind the carrier
-	# along the drive AND slower along it, so the carrier is pulling away and it
-	# can't strip a puck driving off. A man AHEAD (a wall, a head-on rush) or one
-	# MATCHING the drive pace is never dropped, so path_clearance's coverage of real
-	# obstacles — the container duel — is untouched; only the beaten trailer is shed.
+	# A defender the carrier has genuinely BEATEN is dropped first: behind along
+	# the drive AND slower along it, so it can't strip a puck driving off. A man
+	# AHEAD (a wall, a head-on rush) or one MATCHING the drive pace is never
+	# dropped.
 	var min_perp_sq: float = INF
 	var n: int = opponents.size()
 	var has_vels: bool = opponent_vels.size() == n
@@ -1231,25 +1062,3 @@ static func carry_lane_clearance(from: Vector3, to: Vector3, arrival_time: float
 	if min_perp_sq == INF:
 		return 1.0
 	return clampf(sqrt(min_perp_sq) / CARRY_PATH_CLEAR_RADIUS_M, 0.0, 1.0)
-
-
-# Momentum-aware time to arrive at `dest` from `from_pos` carrying
-# `from_velocity`. Two components:
-#   1. TRAVEL: dist / (SKATER_REF_SPEED + component of velocity along from→dest) —
-#      a skater already moving toward dest closes faster, one moving away slower.
-#      Clamped at MIN_TRAVEL_SPEED_M_S so reverse candidates stay finite.
-#   2. CROSS-MOMENTUM SHED: |v_perp| / accel — the velocity NOT pointed at dest is
-#      wasted speed the skater must first shed (re-accelerate back into line)
-#      before it truly closes. Controls are facing-agnostic (no turn arc; the
-#      crossover/backward thrust penalties are small), so this is a straight
-#      re-acceleration against the thrust budget, not a curve. Without it a 1-D
-#      projection prices a lateral fly-by's cut as a fast arrival it cannot
-#      actually settle into — the phantom that lets a carrier orbit the slot
-#      instead of shooting (see test_real_rush_sim).
-#
-# Used by AIRoleCarrier._best_carry to price carry candidates (a cut against the
-# grain of momentum costs real time, so the goalie reads square and the honest shot
-# wins), by AIController chase-intercept lookahead for opponent ETA, and by off-puck
-# role behaviors needing a momentum-aware ETA without inventing constants (e.g.,
-# SUPPORT's foot-race-home exposure check uses this for the threat opp's ETA home).
-#

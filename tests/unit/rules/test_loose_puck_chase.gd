@@ -6,7 +6,13 @@ extends GutTest
 # over the nearer-right-now bot), and incumbent hysteresis (the current
 # chaser keeps the role unless a challenger clearly beats them).
 
-const REF: float = AIActionScoring.SKATER_REF_SPEED_M_S
+const Snapshot := preload("res://tests/snapshot.gd")
+const SNAPSHOT_PATH := "res://tests/unit/rules/snapshots/loose_puck_chase.txt"
+const REF: float = AIArrival.SKATER_REF_SPEED_M_S
+# A skater parked 20 m down a 15 m/s puck's path along the +X wall.
+const RIM_FROM := Vector3(12, 0, 0)
+const RIM_VEL := Vector3(0, 0, 15)
+const PARKED_IN_PATH := Vector3(12, 0, 20)
 
 
 func _skater(pos: Vector3, vel: Vector3 = Vector3.ZERO) -> SkaterNetworkState:
@@ -172,16 +178,27 @@ func test_rim_elects_downstream_skater_over_tail_chaser() -> void:
 	assert_eq(pid, 200, "the rim's path elects the downstream skater, not the tail-chaser")
 
 
-func test_path_intercept_time_reads_arrival_of_the_puck() -> void:
-	# Skater parked in a fast puck's path: his intercept time is when the
-	# PUCK arrives (~20 m at rim pace → ~1.5 s), not his skate time to the
-	# puck's current spot (20 m from rest ≈ 2.9 s).
-	var traj: Array[Vector3] = AILoosePuckChase.race_trajectory(
-			Vector3(12, 0, 0), Vector3(0, 0, 15))
+func _parked_intercept_time() -> float:
+	var traj: Array[Vector3] = AILoosePuckChase.race_trajectory(RIM_FROM, RIM_VEL)
 	var dt: float = AILoosePuckChase.RACE_LOOKAHEAD_S / float(AILoosePuckChase.RACE_STEPS)
-	var t: float = AILoosePuckChase.path_intercept_time(
-			traj, dt, Vector3(12, 0, 0), Vector3(12, 0, 20), Vector3.ZERO, REF)
-	assert_between(t, 1.0, 2.0, "intercept ≈ the puck's own arrival at the parked skater")
+	return AILoosePuckChase.path_intercept_time(
+			traj, dt, RIM_FROM, PARKED_IN_PATH, Vector3.ZERO, REF)
+
+
+func test_path_intercept_time_reads_arrival_of_the_puck() -> void:
+	# His intercept is when the PUCK reaches him, which beats skating to where
+	# the puck is now.
+	var t: float = _parked_intercept_time()
+	assert_gt(t, 0.0, "the puck still has to travel to him")
+	assert_lt(t, AIArrival.time_to_arrive(PARKED_IN_PATH, RIM_FROM, Vector3.ZERO, REF),
+			"intercept beats skating to the puck's current spot")
+
+
+func test_loose_puck_chase_calibration_snapshot() -> void:
+	var snap := Snapshot.new(SNAPSHOT_PATH)
+	snap.record("skater parked 20 m down a 15 m/s rim, path intercept time",
+			_parked_intercept_time())
+	snap.verify(self)
 
 
 func test_rim_race_not_lost_for_downstream_defender() -> void:
@@ -196,14 +213,14 @@ func test_rim_race_not_lost_for_downstream_defender() -> void:
 	snap.puck_state.velocity = Vector3(0, 0, 15)
 	snap.skater_states[1] = _skater(Vector3(10, 0, 14))
 	snap.skater_states[2] = _skater(Vector3(12, 0, -11.5), Vector3(0, 0, 8))
-	var lost: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost: bool = AILoosePuckChase.loose_puck_race_lost(
 			snap, Vector3(10, 0, 14), Vector3.ZERO, REF,
 			0, {1: 0, 2: 1}, {})
 	assert_false(lost, "the downstream defender's path intercept keeps the race alive")
 	# Control: the same puck SETTLED at the opponent's feet is honestly lost.
 	snap.puck_state.position = Vector3(12, 0, -11.0)
 	snap.puck_state.velocity = Vector3.ZERO
-	var lost_settled: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost_settled: bool = AILoosePuckChase.loose_puck_race_lost(
 			snap, Vector3(10, 0, 14), Vector3.ZERO, REF,
 			0, {1: 0, 2: 1}, {})
 	assert_true(lost_settled, "a settled puck at the opponent's feet is honestly lost")
@@ -329,13 +346,13 @@ func test_race_not_lost_to_an_opponent_ignoring_the_puck() -> void:
 	snap.puck_state.velocity = Vector3.ZERO
 	snap.skater_states[1] = _skater(Vector3(0, 0, 8))     # us
 	snap.skater_states[2] = _skater(Vector3(0, 0, -4))    # idle opponent
-	var lost: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost: bool = AILoosePuckChase.loose_puck_race_lost(
 			snap, Vector3(0, 0, 8), Vector3.ZERO, REF,
 			0, {1: 0, 2: 1}, {})
 	assert_false(lost, "an opponent not running the race can't talk us out of it")
 	# Control: the same opponent actually closing on the puck wins it back.
 	snap.skater_states[2] = _skater(Vector3(0, 0, -4), Vector3(0, 0, 5))
-	var lost_live: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost_live: bool = AILoosePuckChase.loose_puck_race_lost(
 			snap, Vector3(0, 0, 8), Vector3.ZERO, REF,
 			0, {1: 0, 2: 1}, {})
 	assert_true(lost_live, "a committed nearer opponent honestly wins the race")
@@ -354,14 +371,14 @@ func test_rim_race_not_lost_to_an_opponent_off_the_rim_line() -> void:
 	snap.puck_state.velocity = Vector3(8, 0, 0)
 	snap.skater_states[1] = _skater(Vector3(-12, 0, -11))    # us, trailing it
 	snap.skater_states[2] = _skater(Vector3(4, 0, -1))       # idle, mid-ice
-	var lost: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost: bool = AILoosePuckChase.loose_puck_race_lost(
 			snap, Vector3(-12, 0, -11), Vector3.ZERO, REF,
 			0, {1: 0, 2: 1}, {})
 	assert_false(lost, "a body off the rim's line and standing still is no veto")
 	# Control: an opponent parked ON the rim's line downstream IS committed —
 	# standing where the puck is coming to you is the whole play.
 	snap.skater_states[2] = _skater(Vector3(4, 0, -12.5))
-	var lost_on_line: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost_on_line: bool = AILoosePuckChase.loose_puck_race_lost(
 			snap, Vector3(-12, 0, -11), Vector3.ZERO, REF,
 			0, {1: 0, 2: 1}, {})
 	assert_true(lost_on_line, "an opponent standing in the rim's path honestly wins it")
@@ -441,7 +458,7 @@ func test_lost_race_is_still_run_when_a_teammate_is_home() -> void:
 	var teams := {1: 0, 2: 0, 11: 1}
 	# own_goal_dir +1 → our net at +Z, so the teammate at z=2 is goal-side of
 	# a pickup at z=-24.
-	var lost: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost: bool = AILoosePuckChase.loose_puck_race_lost(
 			snap, Vector3(-4, 0, -14), Vector3.ZERO, REF, 0, teams, {}, 1, 1.0)
 	assert_false(lost, "a lost race with support behind us is a forecheck, not a stop")
 
@@ -459,7 +476,7 @@ func test_last_man_still_declines_a_lost_race() -> void:
 	snap.skater_states[11] = _skater(Vector3(-6, 0, -22),
 			Vector3(0, 0, -4))                                      # opponent, winning
 	var teams := {1: 0, 2: 0, 11: 1}
-	var lost: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost: bool = AILoosePuckChase.loose_puck_race_lost(
 			snap, Vector3(-4, 0, -14), Vector3.ZERO, REF, 0, teams, {}, 1, 1.0)
 	assert_true(lost, "the last man with nobody home still pre-contains")
 
@@ -487,7 +504,7 @@ func test_a_puck_rimmed_into_our_own_corner_is_still_chased() -> void:
 	snap.skater_states[11] = _skater(Vector3(10, 0, 23),
 			Vector3(0, 0, 4))                                       # opponent, winning
 	var teams := {1: 0, 2: 0, 3: 0, 11: 1}
-	var lost: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost: bool = AILoosePuckChase.loose_puck_race_lost(
 			snap, Vector3(6, 0, 20), Vector3.ZERO, REF, 0, teams, {}, 1, 1.0)
 	assert_false(lost,
 			"a puck behind our whole team is pressured while the house is covered")
@@ -504,7 +521,7 @@ func test_a_puck_rimmed_into_our_own_corner_is_still_chased() -> void:
 	alone.skater_states[2] = _skater(Vector3(1, 0, -8))             # caught up-ice
 	alone.skater_states[3] = _skater(Vector3(-2, 0, -10))           # caught up-ice
 	alone.skater_states[11] = _skater(Vector3(10, 0, 23), Vector3(0, 0, 4))
-	var lost_alone: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost_alone: bool = AILoosePuckChase.loose_puck_race_lost(
 			alone, Vector3(6, 0, 20), Vector3.ZERO, REF, 0, teams, {}, 1, 1.0)
 	assert_true(lost_alone,
 			"with nobody able to hold the house the last man covers the net front")
@@ -522,7 +539,7 @@ func test_a_ghosted_teammate_is_not_containment() -> void:
 	snap.skater_states[2].is_ghost = true
 	snap.skater_states[11] = _skater(Vector3(-6, 0, -22), Vector3(0, 0, -4))
 	var teams := {1: 0, 2: 0, 11: 1}
-	var lost: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost: bool = AILoosePuckChase.loose_puck_race_lost(
 			snap, Vector3(-4, 0, -14), Vector3.ZERO, REF, 0, teams, {}, 1, 1.0)
 	assert_true(lost, "a ghosted teammate contains nothing")
 
@@ -673,7 +690,7 @@ func test_settled_puck_intercept_equals_the_skaters_eta() -> void:
 			Vector3.ZERO, Vector3.ZERO)
 	var dt: float = AILoosePuckChase.RACE_LOOKAHEAD_S / float(AILoosePuckChase.RACE_STEPS)
 	var from := Vector3(0, 0, 7)
-	var eta: float = AIActionScoring.time_to_arrive(from, Vector3.ZERO, Vector3.ZERO, REF)
+	var eta: float = AIArrival.time_to_arrive(from, Vector3.ZERO, Vector3.ZERO, REF)
 	var t: float = AILoosePuckChase.path_intercept_time(
 			traj, dt, Vector3.ZERO, from, Vector3.ZERO, REF, 0.0)
 	# A settled puck makes the slack exactly linear in t, so the crossing IS
@@ -731,11 +748,11 @@ func test_popped_puck_intercept_waits_for_the_landing() -> void:
 	var reach: float = 1.0
 	var blind: float = AILoosePuckChase.path_intercept_time(traj, _STEP_DT, pos,
 			skater, Vector3.ZERO, REF, 0.0,
-			AIActionScoring.SHED_ACCEL_DEFAULT_M_S2, reach)
+			AIArrival.SHED_ACCEL_DEFAULT_M_S2, reach)
 	assert_lt(blind, t_play, "without the flight the read plays it under the pop")
 	var t: float = AILoosePuckChase.path_intercept_time(traj, _STEP_DT, pos,
 			skater, Vector3.ZERO, REF, 0.0,
-			AIActionScoring.SHED_ACCEL_DEFAULT_M_S2, reach, t_play)
+			AIArrival.SHED_ACCEL_DEFAULT_M_S2, reach, t_play)
 	assert_almost_eq(t, t_play, 0.0001, "met the instant it is back on the blade plane")
 	var meet: Vector3 = AILoosePuckChase.path_intercept_point(traj, _STEP_DT, pos, t)
 	assert_gt(meet.x, 0.8, "steered to where it lands, a metre downstream")
@@ -752,3 +769,20 @@ func test_reach_band_ignores_a_puck_flying_over_the_stick() -> void:
 			Vector3(-1, _REST_Y, 0), Vector3(10, 0, 0),
 			Vector3(3, 0, 0), Vector3.ZERO, REF, 0.5)
 	assert_true(flat, "the same puck along the ice is")
+
+
+# race_trajectory's memo is a static the AI worker owns. The election runs on the
+# main thread every frame, overlapping an in-flight batch, so it — and anything
+# else the host calls outside the worker — must walk its own path.
+func test_the_main_thread_election_never_touches_the_worker_memo() -> void:
+	var src: String = FileAccess.get_file_as_string(
+			"res://Scripts/domain/ai/loose_puck_chase.gd")
+	var start: int = src.find("static func elect(")
+	assert_gt(start, -1, "found the election")
+	var end: int = src.find("\nstatic func ", start + 1)
+	var body: String = src.substr(start, end - start if end != -1 else -1)
+	assert_false(body.contains("race_trajectory("), "elect walks its own path")
+	for path: String in ["res://Scripts/game/game_manager.gd",
+			"res://Scripts/game/ai_coordinator.gd"]:
+		assert_false(FileAccess.get_file_as_string(path).contains("race_trajectory("),
+				"%s runs on the main thread" % path)

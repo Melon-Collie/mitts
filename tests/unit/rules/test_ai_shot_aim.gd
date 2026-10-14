@@ -4,9 +4,9 @@ extends GutTest
 # All inputs in world XZ; net is a horizontal segment at z=net_z spanning
 # x ∈ [-net_half, +net_half].
 
-const NET_HW: float = 0.915
+const NET_HW: float = GameRules.NET_HALF_WIDTH
 const SHADOW_HW: float = 0.5
-const NET_Z: float = 26.65
+const NET_Z: float = GameRules.GOAL_LINE_Z
 
 
 func test_centered_goalie_picks_a_corner() -> void:
@@ -53,31 +53,23 @@ func test_shooter_at_goalie_z_falls_back_to_center() -> void:
 	assert_almost_eq(aim.z, NET_Z, 0.001)
 
 
-func test_default_aims_at_midpoint_and_positive_bias_pulls_to_post() -> void:
-	# Goalie shifted -X — right arc is wider, aim goes right. The DEFAULT bias is
-	# now 0.0 (see DEFAULT_CORNER_BIAS): aim at the honest arc MIDPOINT (max
-	# clearance), so the execution wobble splits misses into saves AND posts
-	# symmetrically instead of throwing the tail onto the iron. A POSITIVE bias
-	# parameter is the old post-snipe — it pulls the aim past the midpoint toward
-	# the open post.
+func test_corner_bias_walks_the_aim_toward_the_open_post() -> void:
+	# Goalie shifted -X, so the right arc is the open one. Raising the bias moves
+	# the aim monotonically from the arc midpoint toward that post, never past the
+	# clean-entry line.
 	var shooter := Vector3(0.0, 0.0, 20.0)
 	var goalie := Vector3(-0.4, 0.0, 26.0)
-	# Compute the arc midpoint manually for comparison.
-	var dz: float = goalie.z - shooter.z
-	var to_net_z: float = NET_Z - shooter.z
-	var t: float = to_net_z / dz
-	var shadow_x: float = shooter.x + t * (goalie.x - shooter.x)
-	var shadow_right: float = clampf(shadow_x + SHADOW_HW, -NET_HW, NET_HW)
-	var midpoint: float = (shadow_right + NET_HW) * 0.5
-	var default_aim: Vector3 = AIShotAim.compute_open_net_aim(
-			shooter, goalie, NET_Z, NET_HW, SHADOW_HW)
-	assert_almost_eq(default_aim.x, midpoint, 0.001,
-			"the default aims at the honest arc midpoint (max clearance)")
-	var post_biased: Vector3 = AIShotAim.compute_open_net_aim(
-			shooter, goalie, NET_Z, NET_HW, SHADOW_HW, 0.3)
-	assert_gt(post_biased.x, midpoint,
-			"a positive bias pulls aim past the arc midpoint toward the post")
-	assert_lte(post_biased.x, NET_HW, "aim still inside the net")
+	var prev: float = -INF
+	for bias: float in [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]:
+		var aim: Vector3 = AIShotAim.compute_open_net_aim(
+				shooter, goalie, NET_Z, NET_HW, SHADOW_HW, bias)
+		assert_gte(aim.x, prev, "more bias never pulls the aim off the post (bias %.1f)" % bias)
+		assert_lte(aim.x, GameRules.NET_ENTRY_HALF_WIDTH + 0.0001,
+				"aim stays inside the clean-entry line (bias %.1f)" % bias)
+		prev = aim.x
+	var midpoint: Vector3 = AIShotAim.compute_open_net_aim(
+			shooter, goalie, NET_Z, NET_HW, SHADOW_HW, 0.0)
+	assert_gt(prev, midpoint.x, "a full bias pulls the aim off the midpoint toward the post")
 
 
 func test_goalie_velocity_biases_aim_to_recovery_side() -> void:
@@ -117,12 +109,13 @@ func test_goalie_velocity_can_flip_arc_choice() -> void:
 			"strong goalie velocity flips arc choice to the recovery side")
 
 
-func test_corner_bias_zero_matches_arc_midpoint() -> void:
-	# corner_bias = 0 reproduces the legacy "midpoint of open arc" behavior.
+func test_the_default_aims_at_the_arc_midpoint() -> void:
+	# The default aims at the open arc's midpoint, so execution wobble splits a
+	# taken shot into saves and posts symmetrically (domain/ai/CLAUDE.md).
 	var shooter := Vector3(0.0, 0.0, 20.0)
 	var goalie := Vector3(-0.4, 0.0, 26.0)
 	var aim: Vector3 = AIShotAim.compute_open_net_aim(
-			shooter, goalie, NET_Z, NET_HW, SHADOW_HW, 0.0)
+			shooter, goalie, NET_Z, NET_HW, SHADOW_HW)
 	var dz: float = goalie.z - shooter.z
 	var to_net_z: float = NET_Z - shooter.z
 	var t: float = to_net_z / dz
@@ -130,7 +123,7 @@ func test_corner_bias_zero_matches_arc_midpoint() -> void:
 	var shadow_right: float = clampf(shadow_x + SHADOW_HW, -NET_HW, NET_HW)
 	var midpoint: float = (shadow_right + NET_HW) * 0.5
 	assert_almost_eq(aim.x, midpoint, 0.001,
-			"corner_bias=0 lands aim at the arc midpoint exactly")
+			"the default lands the aim at the arc midpoint exactly")
 
 
 func test_degenerate_arc_aim_clamps_off_the_post() -> void:

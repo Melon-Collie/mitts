@@ -2,25 +2,18 @@ class_name AIPingDirectives
 extends RefCounted
 
 # Live smart-ping directives for one team's bots — the host-side "obey the
-# ping" bookkeeping. Owned by TeamBrain (same host-only, never-networked shape
-# as its one-timer-ready dict); consumed two ways:
+# ping" bookkeeping, owned by TeamBrain and never networked. Consumed two ways:
 #
-#   - Slot / threat overrides (apply_overrides): COVER_HIM pins the obeying
-#     bot onto the pinged opponent (MARK + a forced threat assignment, the
-#     same shape as AIThreatAssignment's house pin), PRESSURE_CARRIER forces
-#     the obeyer onto the carrier, GET_OPEN sends it to the scoring-threat
-#     slot, DEFEND drops it into man coverage. Applied by TeamBrain after
-#     each slot-assignment tick, so the directive rides the existing role
-#     architecture instead of bypassing it.
+#   - Slot / threat overrides (apply_overrides), applied by TeamBrain after each
+#     slot-assignment tick so a directive rides the role architecture instead
+#     of bypassing it.
 #   - Per-bot queries (move_target_for / chase_peer / shoot_ping_for /
-#     pass_target_for): read every AI dispatch by SkaterAgentStateMachine /
-#     AIRoleCarrier through RoleContext, so obedience is frame-tight while
-#     the directive lives.
+#     pass_target_for), frozen into TeamBrainView and read every dispatch
+#     through RoleContext, so obedience is frame-tight while the directive lives.
 #
-# One live directive per pinger — a fresh ping replaces that player's
-# previous order. Time is an internal clock advanced by TeamBrain.tick's
-# delta (never wall clock), so the class stays deterministic and
-# GUT-testable: tests/unit/ai/test_ping_directives.gd.
+# One live directive per pinger — a fresh ping replaces that player's previous
+# order. Time is an internal clock advanced by TeamBrain.tick's delta (never
+# wall clock), so the class stays deterministic.
 
 class Directive:
 	extends RefCounted
@@ -39,8 +32,8 @@ var _by_pinger: Dictionary = {}
 var _clock: float = 0.0
 
 
-# Advance the internal clock and drop expired directives. Called once per
-# host physics frame from TeamBrain.tick (before its rate-limit gate).
+# Advance the internal clock and drop expired directives. TeamBrain.tick calls
+# it before its rate-limit gate, so expiry runs in host time, not brain ticks.
 func advance(delta: float) -> void:
 	_clock += delta
 	if _by_pinger.is_empty():
@@ -126,9 +119,8 @@ func shoot_ping_for(peer_id: int) -> bool:
 
 
 # The teammate a live PASS_TO_ME / IM_OPEN ping asks the carrying bot to
-# feed, -1 when none. `carrier_peer_id` is the bot asking — its own ping (it
-# can't pass to itself) never matches. First live match wins; simultaneous
-# pings from two humans within one cooldown window are a non-problem.
+# feed, -1 when none. `carrier_peer_id` is the bot asking; its own ping never
+# matches. First live match wins.
 func pass_target_for(carrier_peer_id: int) -> int:
 	if _by_pinger.is_empty():
 		return -1

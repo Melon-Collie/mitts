@@ -8,6 +8,7 @@ extends GutTest
 # read from the GUT log. Deterministic via a fixed RNG seed.
 
 const Sim := preload("res://tests/unit/ai/shot_sim_harness.gd")
+const Snapshot := preload("res://tests/snapshot.gd")
 const SAMPLES: int = 300
 const SEED: int = 0x5EED
 # Goalie states a real shot meets — set, half-caught, and caught mid-slide. Saves
@@ -83,54 +84,28 @@ func test_shot_outcome_distribution_by_tier() -> void:
 
 
 func test_scatter_is_the_conversion_dial() -> void:
-	# What shot_aim_error_rad actually buys, and where it stops working. Two
-	# measured facts, both pinned below:
-	#
-	#  1. GOALS-PER-SHOT falls smoothly and monotonically with scatter. This is
-	#     the per-tier finishing dial, and it is not confounded by selection: the
-	#     SHOOT RATE does not move at all across the whole band, because these
-	#     spots clear the fire bar at any spread. (The selectivity feedback — a
-	#     wider believed spread demands a wider window — is real but only bites on
-	#     shots already near the bar. Tier SELECTIVITY belongs to
-	#     settle_penalty_frac; this knob is conversion.)
-	#
-	#  2. The misses stay ON NET up to ~0.05 and only then start finding iron and
-	#     glass. That is what keeps the bot looking BEATEN rather than incompetent,
-	#     and it comes from the bot being self-honest — the score insets its
-	#     required window by the same spread the hand executes, so it aims a window
-	#     it fits. 0.05 is therefore the ceiling on this dial, not the selectivity
-	#     story that used to be written here. Above it the selection relation also
-	#     INVERTS (the shoot rate climbs, 60% at 0.075 and 67% at 0.090) — a second
-	#     reason that band is not usable, and why the flatness is only asserted
-	#     below it.
-	gut.p("── scatter sweep (Hard build, varied shot_aim_error_rad) ──")
-	const USABLE_CEILING_RAD: float = 0.050
+	# What shot_aim_error_rad buys (BotSkillProfile): goals per shot fall
+	# strictly with scatter, and the shoot rate does not move — scatter is
+	# conversion, not volume. The rates themselves are the snapshot.
+	var snap := Snapshot.new("res://tests/unit/ai/snapshots/shot_sim_scatter.txt")
 	var goal_pcts: Array[float] = []
 	var shoot_pcts: Array[float] = []
-	var on_net_edge: float = -1.0
 	for spread: float in [0.010, 0.020, 0.030, 0.040, 0.050, 0.075, 0.090]:
 		var p := BotSkillProfile.hard()
 		p.shot_aim_error_rad = spread
 		var t: Dictionary = _aggregate(p)
 		var shots: int = t["shots"]
-		var off_net: float = _pct(t[Sim.POST] + t[Sim.WIDE], shots)
+		var shoot_pct: float = _pct(shots, shots + t[Sim.NO_SHOT])
 		goal_pcts.append(_pct(t[Sim.GOAL], shots))
-		if spread <= USABLE_CEILING_RAD:
-			shoot_pcts.append(_pct(shots, shots + t[Sim.NO_SHOT]))
-			on_net_edge = maxf(on_net_edge, off_net)
-		gut.p("spread %.3f (%.1f°)  →  GOAL %5.1f  SAVE %5.1f  POST %5.1f  WIDE %5.1f  (shoot%% %.1f)" % [
-				spread, rad_to_deg(spread),
-				_pct(t[Sim.GOAL], shots), _pct(t[Sim.SAVE], shots),
-				_pct(t[Sim.POST], shots), _pct(t[Sim.WIDE], shots),
-				_pct(shots, shots + t[Sim.NO_SHOT])])
-
+		shoot_pcts.append(shoot_pct)
+		snap.record("spread %.3f: goal %% of shots" % spread, goal_pcts[-1])
+		snap.record("spread %.3f: post or wide %% of shots" % spread,
+				_pct(t[Sim.POST] + t[Sim.WIDE], shots))
+		snap.record("spread %.3f: shoot %%" % spread, shoot_pct)
 	for i: int in range(1, goal_pcts.size()):
 		assert_lt(goal_pcts[i], goal_pcts[i - 1],
 				"more scatter must convert strictly worse (step %d)" % i)
-	# Over the usable band the dial is conversion, not volume.
 	for i: int in range(1, shoot_pcts.size()):
 		assert_almost_eq(shoot_pcts[i], shoot_pcts[0], 0.01,
-				"below the ceiling, scatter does not move the shoot rate (step %d)" % i)
-	# The ceiling itself: below it a miss is a save, not a miss of the net.
-	assert_lt(on_net_edge, 2.0,
-			"up to 0.05 rad the misses stay on net — they are saves, not posts/wides")
+				"scatter does not move the shoot rate (step %d)" % i)
+	snap.verify(self)

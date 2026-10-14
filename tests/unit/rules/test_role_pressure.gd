@@ -5,13 +5,18 @@ extends GutTest
 #   - Goal-side filter rejects wrong-side candidates.
 #   - Argmax picks a position that blocks the shot lane when
 #     carrier has a clear shot.
-#   - Argmax shifts toward a pass-lane when an opp teammate offers
-#     a more dangerous pass than the shot.
 # Underlying score_shoot / score_pass primitives are tested in
-# test_ai_action_scoring.
+# test_ai_action_scoring. Where the argmax currently stands for the reference
+# fixtures is the snapshot, test_pressure_calibration_snapshot.
 
+const Snapshot := preload("res://tests/snapshot.gd")
+const SNAPSHOT_PATH := "res://tests/unit/rules/snapshots/role_pressure.txt"
 const TEAM_ID: int = 0
-const OUR_NET_Z: float = 26.65   # Team 0 defends +Z
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z   # Team 0 defends +Z
+# A lone opposing carrier straight out from our net with a clear shot, and the
+# pressurer off to his side.
+const SHOOTER := Vector3(0, 0, 22)
+const PRESSURER_START := Vector3(8, 0, 18)
 
 
 func _make_ctx(self_pos: Vector3, carrier_pid: int = -1,
@@ -58,9 +63,8 @@ func _make_ctx(self_pos: Vector3, carrier_pid: int = -1,
 
 # ── Body check commit ────────────────────────────────────────────────────────
 
-func test_commits_body_check_on_reachable_hard_hit() -> void:
-	# Carrier 2 m away, head-on; a heavy pressurer predicts a separating
-	# hit and commits — steering at the body intercept, not the cutoff point.
+# A pressurer 2 m from a stationary carrier, head-on, at `transfer`.
+func _head_on_check(transfer: float) -> RoleDecision:
 	var self_pos := Vector3(0, 0, 18)
 	var skaters: Array = [
 			[1, TEAM_ID, self_pos],
@@ -68,26 +72,29 @@ func test_commits_body_check_on_reachable_hard_hit() -> void:
 	]
 	var ctx: RoleContext = _make_ctx(self_pos, 200, skaters)
 	ctx.self_max_speed = 9.0
-	ctx.self_body_check_transfer = 0.61   # ~ +36% Physical
-	var d: RoleDecision = AIRolePressure.decide(ctx)
-	assert_true(d.commit_check, "heavy pressurer commits to a reachable hit")
-	assert_almost_eq(d.check_target.z, 20.0, 0.5, "drives at the carrier's body")
-	assert_eq(d.target_position, d.check_target, "steering target is the body intercept")
+	ctx.self_body_check_transfer = transfer
+	return AIRolePressure.decide(ctx)
 
 
-func test_no_body_check_when_hit_is_soft() -> void:
-	# Same geometry, light pressurer: the hit wouldn't separate, so it
-	# falls through to normal cutoff positioning instead of committing.
-	var self_pos := Vector3(0, 0, 18)
-	var skaters: Array = [
-			[1, TEAM_ID, self_pos],
-			[200, 1 - TEAM_ID, Vector3(0, 0, 20)],
-	]
-	var ctx: RoleContext = _make_ctx(self_pos, 200, skaters)
-	ctx.self_max_speed = 9.0
-	ctx.self_body_check_transfer = 0.29   # ~ -36% Physical
-	var d: RoleDecision = AIRolePressure.decide(ctx)
-	assert_false(d.commit_check, "light pressurer doesn't commit to a soft hit")
+func test_commits_exactly_when_the_hit_would_separate() -> void:
+	# A reachable head-on carrier: the pressurer commits iff the collision
+	# resolver's own kick at his closing speed clears the separating-hit bar, so
+	# a heavy hitter hunts it and a light one keeps containing. Committed, he
+	# steers at the carrier's body, not the cutoff point.
+	var defaults := RoleContext.new()
+	var committed: int = 0
+	for k: int in range(1, 21):
+		var transfer: float = 0.05 * k
+		var d: RoleDecision = _head_on_check(transfer)
+		var kick: float = SkaterCollisionRules.victim_kick(9.0, defaults.self_weight,
+				AIBodyCheck.LEAGUE_VICTIM_WEIGHT, transfer)
+		var separates: bool = kick >= AIBodyCheck.COMMIT_IMPULSE_M_S / defaults.check_aggression
+		assert_eq(d.commit_check, separates,
+				"transfer %.2f (kick %.2f m/s) commits iff the hit separates" % [transfer, kick])
+		if d.commit_check:
+			committed += 1
+			assert_almost_eq(d.target_position.z, 20.0, 0.5, "steers at the carrier's body intercept")
+	assert_between(committed, 1, 19, "the sweep spans both sides of the bar")
 
 
 func test_no_body_check_on_loose_puck() -> void:
@@ -135,63 +142,23 @@ func test_chosen_target_is_goal_side_of_carrier() -> void:
 
 # ── Argmax denies the carrier's best option ─────────────────────────────────
 
-func test_argmax_blocks_shot_lane_when_no_pass_options() -> void:
-	# Solo opp carrier with a clear shot at our net. No opp teammates,
-	# so the carrier's only option is to shoot. PRESSURE should pick
-	# the candidate that most blocks the shot lane — typically the
-	# polar sample directly between carrier and our net.
-	var carrier_pos := Vector3(0, 0, 22)
+func _shot_lane_target() -> Vector3:
 	var skaters: Array = [
-		[1, TEAM_ID, Vector3(8, 0, 18), Vector3.ZERO],   # us, off to the side
-		[200, 1 - TEAM_ID, carrier_pos, Vector3.ZERO],   # opp carrier
+		[1, TEAM_ID, PRESSURER_START, Vector3.ZERO],   # us, off to the side
+		[200, 1 - TEAM_ID, SHOOTER, Vector3.ZERO],     # opp carrier
 	]
-	var ctx: RoleContext = _make_ctx(Vector3(8, 0, 18), 200, skaters)
-	var d: RoleDecision = AIRolePressure.decide(ctx)
-	# Chosen target should be approximately on the carrier→our-net
-	# line. The carrier→net line is along +Z (from z=22 to z=26.65),
-	# so target.x should be near 0 (close to the line in X) and z
-	# should be > carrier.z.
-	assert_true(d.target_position.z >= carrier_pos.z - 0.01,
-			"target is goal-side of carrier (z=%f)" % d.target_position.z)
-	assert_lt(absf(d.target_position.x), 3.5,
-			"target stays close to the shot-lane axis; got x=%f" % d.target_position.x)
+	return AIRolePressure.decide(_make_ctx(PRESSURER_START, 200, skaters)).target_position
 
 
-func test_argmax_shifts_toward_pass_lane_when_pass_dominates() -> void:
-	# Carrier with a back-checker right behind them and an open
-	# teammate to the side. The shot lane is essentially blocked by
-	# our own positioning so the pass becomes the dominant threat.
-	# PRESSURE should shade laterally toward the pass lane between
-	# carrier and the opp teammate.
-	#
-	# Geometry: carrier at (0, 0, 22). Opp teammate at (5, 0, 22) —
-	# same depth, lateral. Pass lane goes along +X. PRESSURE should
-	# shade toward +X relative to a baseline (no-pass-option) setup.
-	var carrier_pos := Vector3(0, 0, 22)
-	var opp_teammate_pos := Vector3(5, 0, 22)
-
-	# Baseline: only the carrier.
-	var skaters_solo: Array = [
-		[1, TEAM_ID, Vector3(0, 0, 18), Vector3.ZERO],
-		[200, 1 - TEAM_ID, carrier_pos, Vector3.ZERO],
-	]
-	var ctx_a: RoleContext = _make_ctx(Vector3(0, 0, 18), 200, skaters_solo)
-	var solo_target: Vector3 = AIRolePressure.decide(ctx_a).target_position
-
-	# With pass option: opp teammate to the +X side.
-	var skaters_pass: Array = [
-		[1, TEAM_ID, Vector3(0, 0, 18), Vector3.ZERO],
-		[200, 1 - TEAM_ID, carrier_pos, Vector3.ZERO],
-		[210, 1 - TEAM_ID, opp_teammate_pos, Vector3.ZERO],
-	]
-	var ctx_b: RoleContext = _make_ctx(Vector3(0, 0, 18), 200, skaters_pass)
-	var pass_target: Vector3 = AIRolePressure.decide(ctx_b).target_position
-
-	# With a +X pass option, PRESSURE should shade toward +X (or at
-	# least no further -X than the solo baseline). Loose assertion:
-	# pass-target.x >= solo-target.x.
-	assert_true(pass_target.x >= solo_target.x - 0.01,
-			"adding +X pass option should not pull PRESSURE further -X; got pass=%s solo=%s" % [pass_target, solo_target])
+func test_argmax_blocks_shot_lane_when_no_pass_options() -> void:
+	# Solo opp carrier with a clear shot at our net and no teammates, so his only
+	# option is to shoot: PRESSURE stands goal-side of him in that shot lane
+	# (between the posts' lines; the lane runs along +Z here).
+	var target: Vector3 = _shot_lane_target()
+	assert_true(target.z >= SHOOTER.z - 0.01,
+			"target is goal-side of carrier (z=%f)" % target.z)
+	assert_lt(absf(target.x), GameRules.NET_HALF_WIDTH,
+			"target stands in the shot lane; got x=%f" % target.x)
 
 
 # ── Target switch-hysteresis ────────────────────────────────────────────────
@@ -254,10 +221,10 @@ func test_standing_target_ignored_when_wrong_side() -> void:
 func test_candidate_set_includes_inner_ring() -> void:
 	# PRESSURE samples at half step too (18 candidates: center + self +
 	# 8 outer + 8 inner) so the cut-off can correct in small moves.
-	var candidates: Array[Vector3] = AIRoleHelpers.generate_candidates_around(
+	var candidates: Array[Vector3] = AIStationSearch.generate_candidates_around(
 			Vector3.ZERO, Vector3(5, 0, 5), true)
 	assert_eq(candidates.size(), 18)
-	var default_set: Array[Vector3] = AIRoleHelpers.generate_candidates_around(
+	var default_set: Array[Vector3] = AIStationSearch.generate_candidates_around(
 			Vector3.ZERO, Vector3(5, 0, 5))
 	assert_eq(default_set.size(), 10, "inner ring is opt-in")
 
@@ -280,7 +247,7 @@ func test_wrong_side_candidates_are_filtered() -> void:
 			"wrong-side candidates must be filtered; chosen target.z=%f vs carrier.z=%f" % [d.target_position.z, carrier_pos.z])
 
 
-# ── The last-man step-up clamp (AIRoleHelpers.settable_stand_depth) ──────────
+# ── The last-man step-up clamp (AILastManDiscipline.settable_stand_depth) ──────────
 # PRESSURE's cut-off sits one stick goal-side of where the carrier is GOING —
 # a challenge position, and the right one while a layer is home behind. As the
 # genuine LAST man it is also a step-up, and a rush at pace is exactly when that
@@ -344,7 +311,7 @@ func test_the_stand_is_the_gap_ladder() -> void:
 	var ctx: Dictionary = _rush_ctx(true, 7.0)
 	var d: RoleDecision = AIRolePressure.decide(ctx["ctx"])
 	var ap := AICarrierApproach.new()
-	AIRoleHelpers.fill_approach(ctx["ctx"], ctx["carrier"], Vector3(0.0, 0.0, 7.0), ap)
+	AIDefensiveVerbs.fill_approach(ctx["ctx"], ctx["carrier"], Vector3(0.0, 0.0, 7.0), ap)
 	var want: float = AIRoleRushD.ladder_gap_m(
 			ctx["carrier"], 1.0, ctx["ctx"].self_blade_reach,
 			AIRoleRushD.ramp_cushion_m(ctx["ctx"], ap, 200))
@@ -408,3 +375,16 @@ func test_a_loose_puck_keeps_the_last_man_bound() -> void:
 	assert_gt(bounded, free,
 			"the last man still holds ice he cannot cover set; %.2f vs %.2f"
 			% [bounded, free])
+
+
+func test_pressure_calibration_snapshot() -> void:
+	var snap := Snapshot.new(SNAPSHOT_PATH)
+	var target: Vector3 = _shot_lane_target()
+	snap.record("lone shooter, pressurer from the side, target x", target.x)
+	snap.record("lone shooter, pressurer from the side, target z", target.z)
+	var lightest: float = NAN
+	for k: int in range(1, 21):
+		if is_nan(lightest) and _head_on_check(0.05 * k).commit_check:
+			lightest = 0.05 * k
+	snap.record("lightest transfer that commits a head-on check from 2 m", lightest)
+	snap.verify(self)

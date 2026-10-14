@@ -3,9 +3,13 @@ extends GutTest
 # AIActionScoring.counter_rush_cost — the transition-exposure term (plan §6).
 # Team 0 defends +Z. The canonical scene: our defenseman weighs a deep
 # O-zone carry; the loss point is in THEIR end (where turnover_cost reads
-# ~0) and the question is who beats the counter-rush home.
+# little) and the question is who beats the counter-rush home. The costs the
+# current calibration gives at the reference scenes are the snapshot,
+# test_counter_rush_calibration_snapshot.
 
-const NET_Z: float = 26.65
+const Snapshot := preload("res://tests/snapshot.gd")
+const SNAPSHOT_PATH := "res://tests/unit/rules/snapshots/counter_rush.txt"
+const NET_Z: float = GameRules.GOAL_LINE_Z
 const OUR_NET := Vector3(0.0, 0.0, NET_Z)
 const OUR_GOALIE := Vector3(0.0, 0.0, NET_Z - 0.6)
 # A loss deep in the offensive zone.
@@ -26,33 +30,67 @@ func _cost(teammates: Array[Vector3], self_pos: Vector3,
 			teammates, self_pos, self_speed, opponents, opp_vels, opp_caps)
 
 
-func test_local_turnover_cost_is_small_at_the_deep_loss() -> void:
-	# The premise: the existing loss-point term reads SMALL for an O-zone
-	# turnover (only position_potential's forward-progress residue) —
-	# that's exactly why the counter term must exist.
+func _local_cost(loss_point: Vector3) -> float:
 	var no_defenders: Array[Vector3] = []
-	var local: float = AIActionScoring.turnover_cost(
-			LOSS_POINT, 1.0, OUR_NET, OUR_GOALIE, GameRules.NET_HALF_WIDTH,
-			no_defenders)
-	assert_lt(local, 0.2, "an O-zone loss point carries little local threat")
+	return AIActionScoring.turnover_cost(
+			loss_point, 1.0, OUR_NET, OUR_GOALIE, GameRules.NET_HALF_WIDTH, no_defenders)
 
 
-func test_one_up_one_back_is_cheap_both_deep_is_expensive() -> void:
-	# THE calibration pin (plan §6): D1 weighs the deep carry with the
-	# checker right on the strip point (that IS the loss scenario the
-	# probability weights). With D2 holding the point — genuinely goal-side
-	# with a head start on the counter — the exposure is a fraction of the
-	# both-D-pinched scene, where the partner races the rush stride for
-	# stride and covers nothing.
+func test_local_turnover_cost_falls_with_distance_from_our_net() -> void:
+	# The premise of the counter term: the loss-point read prices a turnover by
+	# where it happens, so it fades as the loss moves straight up-ice from our
+	# slot and reads little for a loss deep in their end — which is exactly why
+	# the counter must exist.
+	var our_slot := Vector3(0.0, 0.0, NET_Z - GameRules.SLOT_DIST_M)
+	var prev: float = INF
+	for z: float in [our_slot.z, 14.0, 8.0, 0.0, -8.0, -14.0, LOSS_POINT.z]:
+		var cost: float = _local_cost(Vector3(0.0, 0.0, z))
+		assert_lte(cost, prev + 1e-4, "a loss further up-ice never costs more (z %.0f)" % z)
+		prev = cost
+	assert_lt(_local_cost(LOSS_POINT), _local_cost(our_slot),
+			"a deep O-zone loss carries less local threat than one in our slot")
+
+
+# D1 weighs the deep carry with the checker right on the strip point; his
+# partner either holds the point (goal-side with a head start on the counter)
+# or is pinched deep with him.
+func _one_up_one_back() -> Array[float]:
 	var opponents: Array[Vector3] = [Vector3(6.0, 0.0, -19.5)]  # the checker
 	var d1_deep := Vector3(6.0, 0.0, -20.0)
 	var partner_home: Array[Vector3] = [Vector3(-5.0, 0.0, -8.3)]  # at the point
 	var partner_deep: Array[Vector3] = [Vector3(-6.0, 0.0, -21.0)]
-	var covered: float = _cost(partner_home, d1_deep, opponents)
-	var exposed: float = _cost(partner_deep, d1_deep, opponents)
-	assert_gt(exposed, 0.05, "an uncovered counter must carry real cost")
-	assert_lt(covered, exposed * 0.6,
-			"a partner holding the point collapses the exposure")
+	return [_cost(partner_home, d1_deep, opponents), _cost(partner_deep, d1_deep, opponents)]
+
+
+func test_one_up_one_back_is_cheap_both_deep_is_expensive() -> void:
+	var costs: Array[float] = _one_up_one_back()
+	assert_gt(costs[1], 0.0, "an uncovered counter carries a cost")
+	assert_lt(costs[0], costs[1], "a partner holding the point lowers the exposure")
+
+
+# The covering-set contract with the carrier himself as the racer: same loss at
+# centre ice, same collector, no teammates — only where he recovers from moves.
+func _self_cover_cost(recover_from: Vector3) -> float:
+	var net := Vector3(0, 0, NET_Z)
+	var goalie := Vector3(0, 0, NET_Z - 0.8)
+	var opps: Array[Vector3] = [Vector3(1, 0, 1)]     # collector on the puck
+	var vels: Array[Vector3] = [Vector3.ZERO]
+	var no_mates: Array[Vector3] = []
+	return AIActionScoring.counter_rush_cost(
+			Vector3.ZERO, 1.0, net, goalie, GameRules.NET_HALF_WIDTH, no_mates,
+			recover_from, AIArrival.SKATER_REF_SPEED_M_S, opps, vels, [])
+
+
+func test_covering_self_erases_the_counter_from_a_recoverable_spot() -> void:
+	# Standing where he beats the counter home puts him in the covering set;
+	# the further up-ice past the play he stands, the less he can cover.
+	var prev: float = -INF
+	for z: float in [14.0, 8.0, 2.0, -4.0, -10.0, -15.0]:
+		var cost: float = _self_cover_cost(Vector3(0, 0, z))
+		assert_gte(cost, prev - 1e-4, "recovering from further up-ice never costs less (z %.0f)" % z)
+		prev = cost
+	assert_lt(_self_cover_cost(Vector3(0, 0, 14)), _self_cover_cost(Vector3(0, 0, -15)),
+			"a recoverable spot covers the counter that a spot past the play leaves live")
 
 
 func test_a_fast_carrier_covers_himself() -> void:
@@ -121,3 +159,14 @@ func test_stretch_outlet_makes_the_deep_loss_dearer() -> void:
 	# moves with READ_VALIDITY_TAU_S while the behavior does not.
 	assert_gt(with_stretch * AIActionScoring.delay_discount(STRETCH_LEAD_S),
 			with_trailer, "a live stretch outlet raises the deep carry's price")
+
+
+func test_counter_rush_calibration_snapshot() -> void:
+	var snap := Snapshot.new(SNAPSHOT_PATH)
+	snap.record("local turnover cost, deep O-zone loss", _local_cost(LOSS_POINT))
+	var pair: Array[float] = _one_up_one_back()
+	snap.record("deep carry, partner holding the point", pair[0])
+	snap.record("deep carry, partner pinched deep too", pair[1])
+	snap.record("centre-ice loss, carrier recovers from our slot", _self_cover_cost(Vector3(0, 0, 14)))
+	snap.record("centre-ice loss, carrier 15 m past the play", _self_cover_cost(Vector3(0, 0, -15)))
+	snap.verify(self)
