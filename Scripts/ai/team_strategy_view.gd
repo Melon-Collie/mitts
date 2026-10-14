@@ -2,15 +2,10 @@ class_name TeamStrategyView
 extends RefCounted
 
 # Read-only team-strategy surface the AI role behaviors consume during dispatch.
-# Two implementations share it (see docs/ai-threading-plan.md, Phase 3a):
-#   - TeamBrain          — the live strategy node (read directly by unit tests
-#                          and, as a fallback, whenever no frozen view exists).
-#   - TeamBrainView      — a frozen per-tick copy the off-thread dispatch reads,
-#                          so the worker never touches the live brain while the
-#                          main thread mutates it (pings / retick / spawns).
-#
-# RoleContext.team_brain holds one of these. Defaults below are the "no
-# strategy" neutral, matching an unwired context.
+# Implemented by TeamBrain (the live node, read directly when no frozen view
+# exists, e.g. unit tests) and TeamBrainView (the frozen per-batch copy the
+# dispatch normally reads). RoleContext.team_brain holds one of these. The
+# defaults below are the "no strategy" neutral of an unwired context.
 
 func get_slot(_peer_id: int) -> int:
 	return AIRoleSlots.Slot.NONE
@@ -47,10 +42,8 @@ func get_team_size() -> int:
 func get_threat_shoot_base_by_opp() -> Dictionary[int, float]:
 	return {}
 
-# The team's shared transition read (docs/transition-defense-plan.md §4). The
-# neutral default is an inert read — Mode.NONE, no attackers — so an unwired
-# context behaves exactly as it did before the read existed. Shared and never
-# mutated (the same pattern as AIZoneCoverage._scratch_no_defenders).
+# Inert transition read (Mode.NONE, no attackers) for an unwired context.
+# Shared across every instance, so it must never be mutated.
 static var _inert_rush_read := AIRushRead.new()
 
 func get_rush_read() -> AIRushRead:

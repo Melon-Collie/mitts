@@ -1,20 +1,17 @@
 class_name AIRoleSlots5
 
-# 5v5 role-slot assignment — the position-aware sibling of AIRoleSlots
-# (which stays the verbatim 3v3 path; TeamBrain branches on team_size).
-# Design: docs/5v5-ai-plan.md §1–§2.
+# 5v5 role-slot assignment — the position-aware sibling of AIRoleSlots (the
+# 3v3 path; TeamBrain branches on team_size). Design: docs/5v5-ai-plan.md §1–§2.
 #
 # Same election machinery as 3v3 — a momentum-aware soonest-to-arrive race
-# per slot (time_to_arrive at each peer's real Speed cap) with arrival-time
-# hysteresis — but **group-scoped**: every 5v5 slot is tagged F (forwards:
-# lobby slots C/LW/RW), D (defensemen: LD/RD) or ANY, and each slot's race
-# runs inside its group. Your defenseman being nearest the puck no longer
-# vacuums him up-ice into a forward's job; the F/D split is the identity
-# layer 5v5 is built on. Slots elect in a fixed priority order (the most
-# structurally important first), and any slot whose group ran out of bodies
-# — the carrier came from that group, or a human is wandering — CROSS-FILLS
-# from whoever is left, which is what makes "a D activates, a forward covers
-# his point" emergent rather than scripted.
+# per slot with arrival-time hysteresis — but **group-scoped**: every 5v5 slot
+# is tagged F (forwards: lobby slots C/LW/RW), D (defensemen: LD/RD) or ANY, and
+# each slot's race runs inside its group, so a defenseman nearest the puck is
+# not vacuumed up-ice into a forward's job. Slots elect in a fixed priority
+# order (the most structurally important first), and any slot whose group ran
+# out of bodies — the carrier came from that group, or a human is wandering —
+# CROSS-FILLS from whoever is left, which is what makes "a D activates, a
+# forward covers his point" emergent rather than scripted.
 #
 # Strong/weak is emergent (whichever D reaches the strong-side job first
 # wins it; the brain's hysteretic strong_x sets the side), while the lobby's
@@ -33,9 +30,7 @@ class_name AIRoleSlots5
 # rest state is decided by identity, small enough that real momentum wins.
 const POSITION_BIAS_S: float = 0.35
 
-# Same stickiness the 3v3 elections use — REFERENCED, never copied, so the two
-# cannot drift apart. The rationale for the value lives on
-# AIRoleSlots.HYSTERESIS_PENALTY_S.
+# Referenced, never copied; the rationale lives on AIRoleSlots.
 const HYSTERESIS_PENALTY_S: float = AIRoleSlots.HYSTERESIS_PENALTY_S
 
 # ── Election-target geometry (metres, world coords) ─────────────────────────
@@ -148,17 +143,14 @@ static func assign(
 			state, own_goal_z, strong_x, puck_pos)
 
 	# TRANS_DEFENSE gap feasibility: RUSH_D1's D-scoping only holds while a
-	# defenseman can actually do the job — beat the carrier home with enough
-	# time in hand to arrive SET (the brake margin: the seconds a skater at
-	# league top speed needs to shed it, the same set-arrival quantity the
-	# race-home primitives use). A D who is caught up-ice — pinched point,
-	# beaten forecheck line — can chase the rush forever without ever getting
-	# goal-side, and handing him RUSH_D1 anyway is how "everyone marked a man
-	# but nobody picked up the carrier" happened: the threat partition excludes
-	# the carrier because RUSH_D1 nominally owns him. With the deadline, an
-	# infeasible D group defers RUSH_D1 to the cross-fill pass, where the
-	# deepest feasible body — the classic backchecking third-man-high — picks
-	# the rush up instead, and the caught D fall to MARK duty on the trailers.
+	# defenseman can beat the carrier home with time in hand to arrive SET (the
+	# brake margin: the seconds a skater at league top speed needs to shed it,
+	# the same set-arrival quantity the race-home primitives use). A D caught
+	# up-ice can chase the rush forever without getting goal-side, and since
+	# the threat partition excludes the carrier RUSH_D1 nominally owns, nobody
+	# would pick him up. An infeasible D group instead hands RUSH_D1 to the best
+	# body from any group (see pass 1), and the caught D fall to the later
+	# layers.
 	if state == AIPossessionState.State.TRANS_DEFENSE and carrier_pid != -1 \
 			and team_id_by_peer.get(carrier_pid, -1) != team_id \
 			and snapshot.skater_states.has(carrier_pid):
@@ -196,9 +188,8 @@ static func assign(
 		result[pid] = spec.slot
 		assigned[pid] = true
 
-	# Pass 2 — cross-fill: deferred slots take whoever is left, any group.
-	# This is the emergent cover rotation (a D carrier's point falls to the
-	# leftover forward).
+	# Pass 2 — cross-fill: deferred slots take whoever is left, any group (a D
+	# carrier's point falls to the leftover forward).
 	for spec: SlotSpec in deferred:
 		var pid: int = _pick_soonest(snapshot, teammates, assigned,
 				prev_assignments, spec, caps_by_peer, position_by_peer, false)
@@ -207,30 +198,17 @@ static func assign(
 		result[pid] = spec.slot
 		assigned[pid] = true
 
-	# Remainder — peers beyond the spec'd slots. Extra bodies play a real job,
-	# never stand slotless.
+	# Remainder — peers beyond the spec'd slots play a real job, never stand
+	# slotless. The non-possession states spec five slots, so a remainder there
+	# is a genuinely extra body and gets MARK.
 	#
-	# WHICH job depends on the phase, because the two situations that produce a
-	# remainder are opposites. The defensive states all spec five slots, so a
-	# remainder there means a genuinely extra body and MARK is right: it is the
-	# man-marking role, and the threat partition runs in those states so it can
-	# actually be given somebody.
-	#
-	# The OUR-POSSESSION states are the common case and MARK is wrong for them.
-	# They spec only four, because CARRIER is assigned separately and only when
-	# one of ours is really holding the puck — so every pass we make leaves a
-	# body over for the duration of the flight. Measured on the real stack, that
-	# is 46% of our offensive-possession ticks, in episodes averaging 0.40 s.
-	# Handing those a defensive role is doubly wrong: the threat partition does
-	# not run outside DZONE / TRANS_DEFENSE, so MARK can never be assigned a man
-	# there and always falls to its recovery argmax — a defender's read, pointed
-	# at our own end, during our own offensive possession.
-	#
-	# SUPPORT is the job that fits: an off-puck attacker who is a pass option and
-	# a recoverable body, and one that already expects this exact moment — it
-	# orients off resolve_offensive_play_ref, which answers with the puck when
-	# nobody is carrying, so a pass in flight is a situation it flows into rather
-	# than a hole it falls through.
+	# The OUR-POSSESSION states spec only four, because CARRIER is assigned only
+	# while one of ours really holds the puck — so every pass in flight leaves a
+	# body over. That body gets SUPPORT, never MARK: the threat partition does
+	# not run outside DZONE / TRANS_DEFENSE, so MARK would fall to its recovery
+	# argmax, a defender's read pointed at our own end. SUPPORT orients off
+	# resolve_offensive_play_ref, which answers with the puck when nobody
+	# carries, so a pass in flight is a situation it already handles.
 	var attacking: bool = state == AIPossessionState.State.OZONE \
 			or state == AIPossessionState.State.TRANS_OFFENSE \
 			or state == AIPossessionState.State.BREAKOUT
@@ -343,8 +321,7 @@ static func _specs_for_state(state: int, own_goal_z: float, strong_x: float,
 				# races the mid-ice layer behind him.
 				SlotSpec.make(AIRoleSlots.Slot.RUSH_D1, Group.D, our_net),
 				SlotSpec.make(AIRoleSlots.Slot.RUSH_D2, Group.D, mid_gate),
-				# F1 back races the CARRIER — the only man-shaped target here,
-				# because running the puck down is a man-shaped job.
+				# F1 back races the CARRIER — the only man-shaped target here.
 				SlotSpec.make(AIRoleSlots.Slot.TRACK_PUCK, Group.F, puck_pos),
 				SlotSpec.make(AIRoleSlots.Slot.TRACK_MID_STRONG, Group.F,
 						mid_gate + Vector3(strong_x * _TRACK_MID_SPLIT_M, 0.0, 0.0),
@@ -491,13 +468,10 @@ static func _group_of(pid: int, position_by_peer: Dictionary) -> int:
 
 
 # Cross-state hysteresis continuity for the 5v5 slots (the 3v3 sibling is
-# AIRoleSlots._hysteresis_class). Possession flips rename the jobs — the
+# AIRoleSlots._hysteresis_class): possession flips rename the jobs — the
 # strong-side D's corner battle becomes the strong point becomes the
-# forecheck's strong line stand — and exact-enum hysteresis would see no
-# continuity across the rename, reshuffling the pair at every state flip.
-# Mapping each slot to its continuity class keeps the strong-side guy the
-# strong-side guy (and the trailer the trailer) through the rename; the
-# bonus is only HYSTERESIS_PENALTY_S, so real kinematics still swap them.
+# forecheck's strong line stand — and each slot maps to its continuity class so
+# the strong-side guy stays the strong-side guy through the rename.
 static func _hysteresis_class(slot: int) -> int:
 	match slot:
 		AIRoleSlots.Slot.ZONE_D_STRONG, AIRoleSlots.Slot.POINT_STRONG, \

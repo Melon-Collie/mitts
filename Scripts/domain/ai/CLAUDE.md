@@ -156,7 +156,10 @@ Three rules keep the gate honest:
 
 - **Parity, not everybody**, capped at the bodies we have. Requiring every body
   makes four home bots wait on a fifth who is late, and a team genuinely a man
-  short would never satisfy it.
+  short (a human who will not backcheck, a ghosted bot) would never satisfy it.
+  Once the numbers are even the late man joins as a layer for free: the bodies
+  already home win the important jobs in the soonest-to-arrive election, and
+  the straggler inherits the leftover.
 - **Bots only.** A loafing human must not inflate a requirement he will not
   satisfy, nor count toward the cap.
 - **No coverage clause, and no time floor.** Asking whether men are already

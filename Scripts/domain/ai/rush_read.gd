@@ -1,21 +1,12 @@
 class_name AIRushRead
 
-# The team's shared transition-defense perception — ONE read per brain tick.
-# Design: docs/transition-defense-plan.md §4.
-#
-# Transition defense is ALLOCATED and LAYERED, and the aggression of the whole
-# structure is set by one quantity every player on the ice can see: NUMBERS BACK.
-# So it is computed once, here, and shared. Everything downstream — gap depth,
-# whether the D stands up at the line, whether we play the pass or the shooter,
-# whether the team may switch into zone coverage — reads this object rather than
-# deriving a private version, which is what lets one defender's read say
-# "someone else has that man".
+# The team's shared transition-defense perception — ONE read per brain tick,
+# filled by TeamBrain and read by every transition-facing role instead of a
+# private version. Design: docs/transition-defense-plan.md §4.
 #
 # Every field is a quantity a real player perceives: who is coming, who is back,
 # how long until someone gets on the carrier's hip, is everyone accounted for.
-#
-# Cost: one fill per brain tick (6 Hz) over ≤10 skaters, arrays refilled in place
-# (never reallocated) — the hot-path discipline the AI dispatch path uses.
+# Arrays are refilled in place, never reallocated.
 
 enum Mode {
 	NONE,      # we possess, or there's no puck — no rush to read
@@ -64,10 +55,9 @@ const TRACK_HOLD_MARGIN_S: float = 0.35
 # regrouping, and the answer is to stand up at our line, not to retreat.
 const REGROUP_CLOSING_M_S: float = 1.0
 
-# Anticipation for the lead used on attackers (mirrors
-# AIRoleHelpers.DEFENSIVE_ANTICIPATION_S / _MAX_M so the read and the roles that
-# consume it lead men the same way; duplicated rather than imported to keep
-# role_helpers free to depend on this module).
+# Lead on attackers. Must equal AIRoleHelpers.DEFENSIVE_ANTICIPATION_S / _MAX_M
+# so the read and its roles lead men the same way; copied rather than imported
+# because role_helpers depends on this module.
 const ANTICIPATION_S: float = 0.3
 const ANTICIPATION_MAX_M: float = 2.5
 
@@ -101,36 +91,28 @@ var recovery_by_peer: Dictionary[int, int] = {}
 # disable every last-man bound in the game.
 var is_live: bool = false
 var numbers: int = Numbers.EVEN_OR_UP
-# ETA of the nearest peer coming from BEHIND onto the carrier's hip. The repo's
-# own doctrine (docs/5v5-ai-plan.md:548): a backchecker within ~1-2 s lets the D
-# tighten the gap and stand up. INF = no backpressure, default conservative.
+# ETA of the nearest tracking peer onto the carrier's hip: a backchecker within
+# ~1-2 s lets the D tighten the gap and stand up (docs/5v5-ai-plan.md). INF = no
+# backpressure, the conservative default.
 var backpressure_s: float = INF
-# The structure is manned — as many of our bodies have arrived in our defensive
-# zone as there are attackers to cover (capped at the bodies we have). What the
-# DZONE readiness gate consumes; see _coverage_ready for why parity and not
-# everybody.
+# The structure is manned — as many of our bots have arrived in our defensive
+# zone as there are attackers to cover (capped at the bodies we have). The DZONE
+# readiness gate's input.
 var coverage_ready: bool = false
-# Seconds until the puck is CONTESTED — the nearest opponent's momentum-aware ETA
-# to it (docs/transition-defense-plan.md §13). 0.0 when it is already theirs or
-# loose; INF when nobody can get to it.
+# Seconds until our carrier is CONTESTED — the nearest opponent's momentum-aware
+# ETA to him (docs/transition-defense-plan.md §13). 0.0 when the puck is theirs
+# or loose; INF when nobody can get to it. Published and deliberately unread
+# (Scripts/domain/ai/CLAUDE.md → "The three facts a station reads").
 #
-# This is the offensive counterpart of everything above, and the coaching read is
-# the SAME quantity for two different jobs — "the only time a defenseman should be
-# standing on the offensive blue line is when his team has complete control of the
-# puck", and "give close support to a teammate if they are under heavy pressure" —
-# so it is computed once here rather than derived twice and allowed to disagree.
-#
-# Published as a TIME on purpose, and never as a 0..1 probability: `1 -
-# carry_safety` measures as a step function, because it answers the CARRIER's
-# question (can I be poked right now) over a 0.4 s horizon. There is no gradient
-# in it to threshold, and it is far too late for a defenseman 40 m away who needs
-# a head start to back off. A time lets each station compare against its own
-# notice period, which is where that threshold belongs.
+# A TIME, never a 0..1 probability: `1 - carry_safety` is a step function over
+# a 0.4 s horizon, far too late for a defenseman 40 m away. A time lets each
+# reader compare against its own notice period.
 var pressure_eta_s: float = 0.0
 
 
-# Fills this read from the snapshot. `prev` is last tick's read (may be null /
-# self on the first tick) — consulted only for the recovery-race hysteresis.
+# Fills this read from the snapshot. `prev_recovery` is last tick's
+# recovery_by_peer (empty on the first tick), for the recovery-race hysteresis.
+# `bot_peers` empty = every teammate counts toward coverage readiness.
 func fill(snapshot: WorldSnapshot, team_id: int, own_goal_z: float,
 		team_id_by_peer: Dictionary, caps_by_peer: Dictionary,
 		prev_recovery: Dictionary, offsides_enforced: bool = true,
@@ -338,59 +320,18 @@ func _fill_backpressure(snapshot: WorldSnapshot,
 # ── Coverage accounting (drives the DZONE gate — plan §9) ────────────────────
 
 # Envelope inside which a defender OWNS a man: the goal-side cover stand plus a
-# stick. Promoted verbatim from AIRoleContain._teammate_home_on, which used it
-# for the same question ("is a teammate already home on this man?").
+# stick.
 static func cover_envelope_m() -> float:
 	return AIThreatAssignment.COVER_DEPTH_M + SkaterAgentStateMachine.BLADE_REACH_M
 
 
 # ── Coverage readiness (the DZONE handoff gate — plan §9) ────────────────────
 #
-# "Get back, get set, THEN take your man." This answers the FIRST clause only:
-# is the structure manned? It must NOT also ask whether men are already covered.
-# That is a MAN-coverage test gating entry into a ZONE, which covers ice rather
-# than bodies by definition, and a correctly executed zone fails it: measured
-# against AIZoneCoverage's own anchors for a settled cycle, ZONE_W_WEAK sags to
-# the high slot ~8 m off the weak-side winger (4 m envelope) and the strong-side
-# pressure comes from up-ice of the puck. Correct hockey, and not "goal-side" —
-# so the gate can never be satisfied by the shape it gates, and only a time floor
-# is left doing the real work.
-#
-# TWO PARTS, and doctrine sets each one.
-#
-# WHERE: the blue line. "The transition from backcheck to defensive zone coverage
-# happens at the blue line — as you enter your defensive zone, you identify your
-# coverage responsibility." It is also the structure's own footprint (every zone
-# anchor sits ≤11 m off the goal line, well inside our zone's ~19 m), so a correct
-# shape satisfies it by construction rather than by tuning.
-#
-# HOW MANY: parity, not everybody. Doctrine keys the end of backcheck urgency on
-# NUMBERS — F2 "backchecks aggressively until numerical parity is achieved, and then
-# protects the house"; F3 "skates hard to even the numbers if the team is
-# outnumbered". Requiring EVERY body was the mirror image of the bug this whole read
-# was written to fix: instead of five bots each deciding it was the last man back, it
-# made four home bots wait on a fifth who was late. A team-level all-or-nothing
-# driven by the worst individual, either way. Once the numbers are even the home
-# bodies set up and the late man joins as a layer — which the soonest-to-arrive
-# election delivers for free, since the bodies already home win the important jobs
-# and the straggler inherits the leftover.
-#
-# The requirement is capped at the bodies we HAVE (`mini`): you cannot be asked to
-# produce a defender that does not exist. Without the cap, being genuinely a man
-# short — a human who will not backcheck, a ghosted bot — makes parity unreachable
-# and the predicate permanently false. With it, a short-handed team reads "set"
-# once everyone it controls is home, and defends with layers instead of
-# scrambling forever.
-#
-# So the read stays MONOTONE in the recovery it waits on — arrivals only raise the
-# count, and the bar never rises — which is what makes a fallback timer unnecessary
-# rather than load-bearing.
-#
-# BOTS ONLY (`bot_peers`; empty = count every teammate). This is load-bearing in
-# BOTH terms: a loafing human must not inflate the requirement he is not going to
-# satisfy, and must not count toward the bodies-we-have cap either. Gating the bots'
-# shape on a body they cannot steer is the same "wait on someone else" reasoning
-# this whole read replaced; their structure is ready when THEIR bodies are home.
+# Is the structure manned? Parity of home bots against attackers, capped at the
+# bots we have, with no coverage clause (Scripts/domain/ai/CLAUDE.md → "DZONE
+# is a shape, not a location"). "Home" is our blue line: doctrine puts the
+# backcheck-to-coverage handoff there, and every zone anchor sits ≤11 m off the
+# goal line, so a correct shape satisfies it by construction.
 func _coverage_ready(snapshot: WorldSnapshot, team_id: int,
 		team_id_by_peer: Dictionary, own_dir: float,
 		bot_peers: Dictionary) -> bool:

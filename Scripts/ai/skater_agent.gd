@@ -14,31 +14,27 @@ func setup(peer_id: int, team_id: int, brain: TeamBrain, team_id_by_peer: Dictio
 	_sm.setup(peer_id, team_id, brain, team_id_by_peer, is_left_handed, caps_by_peer)
 
 
-# Apply a difficulty skill profile. Called by AIController.setup_agent right
-# after setup(), before the first tick. Forwards the execution knobs to the
-# state machine; the perception-delay knob is consumed globally by GameManager,
-# not here. Null leaves the perfect-bot defaults in place (back-compat).
+# Called by AIController.setup_agent right after setup(), before the first
+# tick. carrier_reaction_delay_s is consumed by GameManager, not here. Null
+# leaves the perfect-bot defaults in place.
 func apply_profile(profile: BotSkillProfile) -> void:
 	if profile == null:
 		return
 	_sm.apply_profile(profile)
 
 
-# Forward this bot's attribute-scaled self-capabilities (speed, accel, reach,
-# shot / pass speed) to the state machine. Called by AIController.apply_attributes
-# on spawn and on free-play picker changes. Null is a no-op (baseline defaults).
+# This bot's attribute-scaled self-capabilities. Called by
+# AIController.apply_attributes on spawn and on free-play picker changes.
 func apply_capabilities(caps: AISkaterCaps) -> void:
 	_sm.apply_capabilities(caps)
 
 
-# The match's latched rule set (GameRules.RuleSet) — drives the AI's
-# offside-aware reads. Stamped by AIController from the game state.
+# The match's latched GameRules.RuleSet, for the offside-aware reads.
 func set_rule_set(rs: int) -> void:
 	_sm.rule_set = rs
 
 
-# Push this agent's one-timer readiness to the shared brain — main-thread only,
-# after dispatch (AI threading Phase 3c). See SkaterAgentStateMachine.
+# Main thread only, after dispatch: the worker never writes team state.
 func push_one_timer_ready() -> void:
 	_sm.push_one_timer_ready()
 
@@ -46,11 +42,8 @@ func push_one_timer_ready() -> void:
 # Returns the InputState for this physics tick. Caller must not retain a
 # reference past the next tick — same scratch buffer is reused.
 #
-# The SM's cursor goes out UNTOUCHED: its slew (the bot's real Hands blade
-# speed) is the one motion limit, exactly the limit a human's blade plays
-# under. Never add a second smoothing stage here — straight-line world blending
-# chord-cuts the SM's shaped cursor paths (arc / reach-cone clamp) across the
-# body on big flips, which can trip the pose IK gate's facing freeze.
+# Never smooth the SM's cursor here (Scripts/ai/CLAUDE.md → "The blade cursor
+# leaves the agent untouched").
 func tick(snapshot: WorldSnapshot, delta: float, host_timestamp: float) -> InputState:
 	zero_input(_scratch_input, delta, host_timestamp)
 	_sm.dispatch(_scratch_input, snapshot)
@@ -77,7 +70,6 @@ func debug_last_decision() -> String:
 
 
 func debug_shoot_score() -> float:
-	# The wrister is the only shot type.
 	return _sm.debug_shoot_score
 
 
@@ -111,6 +103,8 @@ func debug_intent() -> String:
 	return _sm.debug_intent()
 
 
+# Resets every field each tick: the scratch buffer is reused, so a value one
+# state set last tick would otherwise leak into a state that doesn't touch it.
 static func zero_input(input: InputState, delta: float, host_timestamp: float) -> void:
 	input.delta = delta
 	input.host_timestamp = host_timestamp
@@ -122,31 +116,20 @@ static func zero_input(input: InputState, delta: float, host_timestamp: float) -
 	input.slap_pressed = false
 	input.slap_held = false
 	input.brake = false
-	# The stance defaults off every tick. The scratch buffer is reused, so a
-	# state that set stance_held last tick would otherwise leak it into a state
-	# that doesn't touch it (e.g. a press state). The SM re-decides it each full
-	# dispatch and restores the cache on throttled ticks.
+	# The SM re-decides stance each full dispatch and restores its cache on
+	# throttled ticks.
 	input.stance_held = false
-	# Loft defaults flat every tick — the level is absolute per input frame
-	# (no sticky controller state), so press states just set the level they
-	# want on the ticks they want it.
+	# The loft level is absolute per input frame (no sticky controller state).
 	input.elevation_level = 0
 	input.block_held = false
 	input.stick_lift_held = false
-	# Hit commit defaults off every tick (reused scratch): only the body-check
-	# commit branch sets it, so a leaked true would keep a bot bracing, off its
-	# edges, after the check is over.
+	# A leaked true would keep a bot bracing, off its edges, after the check.
 	input.hit_held = false
-	# Fire-once edge: PASS_PRESSED's one-tick release path (the dump) sets it on its
-	# release tick and nothing else clears it, so a latched true would fire an
-	# instant quick pass on every subsequent carry tick.
+	# Fire-once edge: nothing else clears it, so a latched true would fire a
+	# quick pass on every subsequent carry tick.
 	input.quick_pass_pressed = false
 	input.stick_check_held = false
 	input.stick_check_pressed = false
-	# Committed wrister aim defaults to "not committed" every tick (reused
-	# scratch): only the SHOOT/PASS press states set it, and a latched aim_dir
-	# would make the controller read a stale bot aim on an ordinary carry tick.
+	# ZERO = not committed; a latched aim would be read as a stale bot aim.
 	input.bot_wrister_aim_dir = Vector3.ZERO
-	# Same for the committed slapper aim: only ONE_TIMER_PRESSED sets it, and a
-	# latched direction would lock a stale line on a later wind-up.
 	input.bot_slapper_aim_dir = Vector3.ZERO

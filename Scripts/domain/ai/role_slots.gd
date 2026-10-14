@@ -1,50 +1,41 @@
 class_name AIRoleSlots
 
-# Pure-function role slot assignment for the possession-state model. Roles are
-# assigned per brain tick by current kinematics — the peer that would ARRIVE at
-# each slot's reference point soonest wins (momentum-aware time_to_arrive at its
-# real Speed cap, matching AILoosePuckChase and the threat partition), with
-# arrival-time hysteresis. No locking, no sticky state: the bot whose body is
-# already in (or genuinely moving into) the right place gets the role, so roles
-# "stick" naturally as long as nothing kinematic reshuffles. Never rank by raw
-# DISTANCE — that hands PRESSURE/RUSH_D1 to a nearer bot coasting away over a
-# teammate already skating at the carrier.
+# Pure-function 3v3 role slot assignment (5v5 is AIRoleSlots5). Each slot goes
+# to the peer that would ARRIVE at its reference point soonest
+# (momentum-aware time_to_arrive at its real Speed cap, matching
+# AILoosePuckChase and the threat partition), with arrival-time hysteresis.
+# Never rank by raw DISTANCE — that hands PRESSURE/RUSH_D1 to a nearer bot
+# coasting away over a teammate already skating at the carrier.
 #
-# DZONE uses {PRESSURE, MARK×2}: one pressurer on the carrier, two man-markers.
-# The two MARKs are partitioned across the carrier's receivers by TeamBrain's
-# threat assignment (a distinct man each) — which marker sits net-front vs.
-# weak-side is emergent from WHICH man the optimal matcher hands each, not a
-# fixed slot. MARK is DZONE-only.
+# This file assigns slots and nothing else: every role owns its positional
+# target in its behavior module.
 #
-# Mixed teams: humans are teammates and get slot assignments same as
-# bots. The brain doesn't distinguish — humans drive the structure,
-# bots auto-fill the gaps.
+# Humans get slot assignments the same as bots; the brain doesn't distinguish.
 
 enum Slot {
 	NONE,
 	# Shared by multiple states.
-	CARRIER,    # OZONE + TRANS_OFFENSE: peer with the puck.
-	# Defensive: PRESSURE closes the carrier in DZONE (also reused as
-	# FORECHECK's F1). MARK is the off-puck man-marker — the DZONE defenders
-	# NOT on the puck each cover a distinct assigned opponent (threat
-	# partition). Transition uses the rush layers at the bottom of this enum,
-	# never these two. NEUTRAL has no carrier and uses CHASE + FLANK below.
+	CARRIER,    # OZONE + TRANS_OFFENSE + BREAKOUT: peer with the puck.
 	PRESSURE,   # DZONE: puck pressurer, closes the carrier.
-	MARK,       # DZONE: covers an assigned man (threat partition).
+	# DZONE: covers an assigned man (threat partition). Also a COVER_HIM ping's
+	# forced slot and 5v5's spare-body slot outside our possession.
+	MARK,
 	# Offensive roles.
 	FINISHER,   # OZONE: scoring threat near opp net. Roams the slot.
 	OUTLET,     # TRANS_OFFENSE: stretch-pass option at opp blue line.
-	SUPPORT,    # OZONE + TRANS_OFFENSE: weak-side trail / cycle support.
+	# OZONE + TRANS_OFFENSE (and 5v5's spare body while we possess): weak-side
+	# trail / cycle support.
+	SUPPORT,
 	# BREAKOUT (we possess in our OWN DZ). Two outlet options for the
 	# carrier breaking the puck out:
 	BREAKOUT_STRONG,  # strong-side-wall outlet, free to advance up-ice.
 	BREAKOUT_WEAK,    # weak-side reverse valve, stays goal-side of carrier.
 	# FORECHECK (opp possesses in THEIR DZ). Conservative 1-1-1 press:
-	F1_PRESSURE,  # deep puck-pressurer (reuses PRESSURE). Accepts tag-up risk.
+	F1_PRESSURE,  # deep puck-pressurer (runs PRESSURE's behavior).
 	F2_MID,       # mid-lane breakout-pass read, high in the zone.
 	F3_HIGH,      # high safety at the opp blue line; first man back.
 	# NEUTRAL — loose puck, no clear possession. Race + hold shape.
-	CHASE,      # closest peer races to the puck for retrieval.
+	CHASE,      # soonest peer races to the puck for retrieval.
 	FLANK_L,    # left flank, defensive support behind puck.
 	FLANK_R,    # right flank, defensive support behind puck.
 	# ── 5v5-only slots (assigned by AIRoleSlots5; never in the 3v3 sets) ─────
@@ -68,7 +59,7 @@ enum Slot {
 	BREAKOUT_D2,      # D: net-front/opposite post — the D-to-D "over" valve.
 	BREAKOUT_C,       # F: center's low swing — the second outlet.
 	BREAKOUT_STRETCH, # F: weak-side winger — mid-ice cross / stretch option.
-	# TRANS_OFFENSE rush shape (CARRIER fixed; MARK reused in TRANS_DEFENSE).
+	# TRANS_OFFENSE rush shape (CARRIER fixed).
 	WIDE_L,         # F: left wide lane, paced to the carrier.
 	WIDE_R,         # F: right wide lane.
 	TRAILER,        # ANY: high-slot trailer (the activating fourth man).
@@ -76,10 +67,9 @@ enum Slot {
 	# NEUTRAL back shape (CHASE/FLANK reused).
 	DBACK_L,        # D: left goal-side hold inside the dots.
 	DBACK_R,        # D: right goal-side hold.
-	# TRANS_DEFENSE rush defense — the layered replacement for CONTAIN + MARK
-	# (docs/transition-defense-plan.md §5). Both team sizes; 3v3 uses
-	# RUSH_D1 / TRACK_PUCK / TRACK_MID, 5v5 adds RUSH_D2 and splits the mid
-	# trackers strong/weak.
+	# TRANS_DEFENSE layered rush defense (docs/transition-defense-plan.md §5).
+	# 3v3 uses RUSH_D1 / TRACK_PUCK / TRACK_MID; 5v5 adds RUSH_D2 and splits the
+	# mid trackers strong/weak.
 	RUSH_D1,          # D: strong-side D. Owns the carrier — gap ladder + angling.
 	RUSH_D2,          # D: weak-side D. Holds mid-ice, takes the mid-lane drive.
 	TRACK_PUCK,       # F: F1 back. Runs the carrier down through mid-ice.
@@ -90,63 +80,39 @@ enum Slot {
 
 # Hysteresis for the soonest-to-arrive elections: a peer that didn't hold the
 # slot last tick pays this many seconds of effective arrival time to take it.
+# A hand-set STABILITY MARGIN (it damps an argmin, it measures nothing), scaled
+# so the distance it buys — ≈1 m from a standing start, ≈1.8 m at cruise — is
+# ANTI_CROWD_RADIUS_M, the span inside which two bots occupy the same spot.
+# ~1.2 brain ticks, so it outlives the re-election cadence.
 #
-# This is a STABILITY MARGIN, not an evaluator constant — it damps an argmin, it
-# does not measure anything about the situation — so it is hand-set, and the
-# tuning note below is the honest signal of that. What keeps it from being
-# arbitrary is a scale check and a coupling:
-#
-#   SCALE. In seconds so it composes with time_to_arrive directly. The distance
-#   it corresponds to depends on the challenger's speed: ≈1 m from a standing
-#   start, ≈1.8 m at cruise — which lands on ANTI_CROWD_RADIUS_M, the span
-#   inside which two bots count as occupying the same spot. So a challenger has
-#   to be better placed than "we would be standing on each other" before the
-#   slot changes hands, which is the right order of magnitude for the thing it
-#   is preventing. It is also ~1.2 brain ticks (6 Hz), so it outlives the
-#   re-election cadence rather than fighting it.
-#
-#   COUPLING. Deliberately the same margin as AILoosePuckChase.HYSTERESIS_S. The
-#   chase election and the slot elections race the same bodies over the same ETA
-#   model; if their stickiness disagreed, a bot could hold the chase while losing
-#   the slot that assumes it. AIRoleSlots5 references this constant rather than
-#   copying it, for the same reason.
+# Must equal AILoosePuckChase.HYSTERESIS_S: the chase and slot elections race
+# the same bodies over the same ETA model, and if their stickiness disagreed a
+# bot could hold the chase while losing the slot that assumes it.
 const HYSTERESIS_PENALTY_S: float = 0.2
 
-# Hysteresis for the NEUTRAL flank L/R split, which is an X-axis SIDE
-# choice rather than a race — a peer wobbling near center keeps its
-# previous side unless it drifts this far past it. (The slot elections
-# above use the time-based HYSTERESIS_PENALTY_S instead.)
+# Hysteresis for the NEUTRAL flank L/R split, which is an X-axis SIDE choice
+# rather than a race: a peer wobbling near centre keeps its previous side unless
+# it drifts this far past it.
 const HYSTERESIS_PENALTY_M: float = 1.0
-
-# This file assigns slots and nothing else. Every role owns its own positional
-# target in its behavior module, computed per dispatch off in-game references —
-# there are no anchor constants here for any state.
 
 
 # Assigns each teammate to a slot. Returns Dictionary[peer_id, Slot].
 #
-# Per-state semantic-query assignment (every "soonest" below is the
-# momentum-aware time_to_arrive election at each peer's real Speed cap):
-#   DZONE     PRESSURE = soonest to puck;  MARK = remaining two (a man each)
-#   OZONE     CARRIER fixed;  FINISHER = soonest to opp net;  SUPPORT = remaining
-#   TRANS_OFFENSE  CARRIER fixed;  OUTLET = soonest to opp net;  SUPPORT = remaining
-#   TRANS_DEFENSE  RUSH_D1 = last man back (peer soonest to OUR net, momentum-aware);
-#             TRACK_PUCK = soonest to the puck of the rest; TRACK_MID = leftover
-#   NEUTRAL   CHASE = soonest to puck;  FLANK_L / FLANK_R = X-axis split of remaining
+# Per state ("soonest" = the time_to_arrive election):
+#   DZONE          PRESSURE = soonest to puck;  MARK = the rest
+#   OZONE          CARRIER fixed;  FINISHER = soonest to opp net;  SUPPORT = the rest
+#   TRANS_OFFENSE  CARRIER fixed;  OUTLET = soonest to opp net;  SUPPORT = the rest
+#   BREAKOUT       CARRIER fixed;  BREAKOUT_STRONG = soonest to the strong-side
+#                  wall at our blue line;  BREAKOUT_WEAK = the rest
+#   TRANS_DEFENSE  RUSH_D1 = soonest to OUR net;  TRACK_PUCK = soonest to the
+#                  puck of the rest;  TRACK_MID = the rest
+#   FORECHECK      F3_HIGH = soonest to their blue line;  F1_PRESSURE = soonest
+#                  to the puck of the rest;  F2_MID = the rest
+#   NEUTRAL        CHASE = soonest to puck;  FLANK_L / FLANK_R = X-axis split
 #
-# TRANS_DEFENSE encodes the compressed three-layer rush defense: RUSH_D1 goes to
-# the last man back — the peer soonest to our own net (momentum-aware), the
-# deepest line of defense — and owns the carrier on the gap ladder; whoever of
-# the remaining two reaches the puck soonest takes TRACK_PUCK and runs the
-# carrier down from behind; the leftover owns the middle lane. Exactly one peer
-# stands in FRONT of the carrier, so the gap is never double-manned.
-#
-# Hysteresis: each soonest-to-X query adds HYSTERESIS_PENALTY_S to the
-# effective arrival time for peers who didn't hold the slot last tick,
-# so a sticky peer keeps the role unless another arrives meaningfully
-# sooner. `prev_assignments` is last tick's Dictionary[peer_id, Slot];
-# pass {} on the first tick or after a state change. `caps_by_peer` is
-# the live peer→AISkaterCaps map (missing entries → league default).
+# `prev_assignments` is last tick's Dictionary[peer_id, Slot]; pass {} on the
+# first tick. `caps_by_peer` is the live peer→AISkaterCaps map (missing entries
+# → league default).
 static func assign(
 		snapshot: WorldSnapshot,
 		team_id: int,
@@ -160,7 +126,6 @@ static func assign(
 	if snapshot == null:
 		return result
 
-	# Collect our team's peers.
 	var teammates: Array[int] = []
 	for peer_id: int in snapshot.skater_states:
 		if team_id_by_peer.get(peer_id, -1) == team_id:
@@ -185,35 +150,23 @@ static func assign(
 
 	match state:
 		AIPossessionState.State.DZONE:
-			# PRESSURE = soonest to the puck; the other two MARK a man each.
 			# Which marker ends up net-front vs. weak-side is decided by
 			# TeamBrain's threat partition (which man each is assigned), not a
-			# fixed net-front/weak-side slot split.
+			# fixed slot split.
 			_assign_one_then_remainder(
 					snapshot, teammates, fixed_peers, prev_assignments, result,
 					Slot.PRESSURE, puck_pos,
 					Slot.MARK, caps_by_peer)
 
 		AIPossessionState.State.TRANS_DEFENSE:
-			# The layered rush defense, compressed to three bodies
-			# (docs/transition-defense-plan.md §5.2). Same modules 5v5 runs; the
-			# only difference is that with three skaters there is no D pair, so
-			# RUSH_D2's mid-ice layer folds into the single mid tracker.
-			#
-			# TWO bodies on the puck is correct here, and is not two bodies
-			# taking bad angles from the same side: RUSH_D1 is in FRONT of the
-			# carrier holding a gap and TRACK_PUCK is BEHIND him running him
-			# down, which is one rush defended from both ends. It is affordable
-			# because transition
-			# is BOUNDED — the moment the attack becomes a settled three-man
-			# threat that needs a body on each man, the puck is in our zone and
-			# DZONE's coverage takes over. TRANS_DEFENSE's job is to kill the rush,
-			# not to solve coverage.
-			#
-			# RUSH_D1 elects first (most structurally important): the peer
-			# soonest to OUR NET, momentum-aware — the last man back, already in
-			# front of the rush. TRACK_PUCK is then whoever of the remaining two
-			# gets to the puck soonest, and the leftover takes the middle lane.
+			# The layered rush defense compressed to three bodies
+			# (docs/transition-defense-plan.md §5.2): with no D pair, RUSH_D2's
+			# mid-ice layer folds into the single mid tracker. RUSH_D1 elects
+			# first — the last man back, in FRONT of the carrier holding a gap —
+			# and TRACK_PUCK runs him down from BEHIND, so exactly one peer stands
+			# in front of him. Two bodies on the puck is affordable because
+			# transition is bounded: a settled three-man threat is in our zone,
+			# where DZONE's coverage takes over.
 			_assign_pair_then_remainder(
 					snapshot, teammates, fixed_peers, prev_assignments, result,
 					Slot.RUSH_D1, our_net,
@@ -233,12 +186,9 @@ static func assign(
 					Slot.SUPPORT, caps_by_peer)
 
 		AIPossessionState.State.BREAKOUT:
-			# Strong-side outlet goes to whichever non-carrier is nearest
-			# the strong-side-wall breakout spot (strong-side boards at our
-			# blue line); the remaining peer takes the weak-side reverse
-			# valve. `_strong_x` is the brain's hysteretic strong side, so
-			# the strong/weak split doesn't thrash when the D carries the
-			# puck across the middle behind the net.
+			# `_strong_x` is the brain's hysteretic strong side, so the
+			# strong/weak split doesn't thrash when the D carries the puck
+			# across the middle behind the net.
 			var own_dir: float = signf(own_goal_z)
 			var strong_wall := Vector3(
 					_strong_x * GameRules.RINK_HALF_WIDTH, 0.0,
@@ -249,12 +199,8 @@ static func assign(
 					Slot.BREAKOUT_WEAK, caps_by_peer)
 
 		AIPossessionState.State.FORECHECK:
-			# Conservative 1-1-1: F1 pressures the puck deep, F3 is the
-			# high safety at the opp blue line (longest way home), F2 reads
-			# the mid-lane in between. F3 anchored at the opp blue line
-			# gets first claim so the safety is always filled even if the
-			# geometry is awkward; F1 then takes whoever of the remaining
-			# two is closest to the puck, and F2 takes the leftover.
+			# Conservative 1-1-1. F3, the high safety, elects first so the
+			# safety is always filled even when the geometry is awkward.
 			var opp_blue := Vector3(0.0, 0.0, -signf(own_goal_z) * GameRules.BLUE_LINE_Z)
 			_assign_pair_then_remainder(
 					snapshot, teammates, fixed_peers, prev_assignments, result,
@@ -272,11 +218,9 @@ static func assign(
 
 # ── Assignment helpers ──────────────────────────────────────────────────────
 
-# Picks the peer that would ARRIVE at `target_pos` soonest from `teammates`,
-# excluding already-fixed peers, with hysteresis. Momentum-aware: each peer's
-# ETA folds its current velocity in (time_to_arrive) and races at its real
-# Speed cap, so a peer already skating the right way wins the slot over a
-# nearer body coasting away. Returns -1 if no eligible peer.
+# The peer that would ARRIVE at `target_pos` soonest, excluding already-fixed
+# peers, with hysteresis; ties break on the lower peer id. -1 if no eligible
+# peer.
 static func _pick_soonest_with_hysteresis(
 		snapshot: WorldSnapshot,
 		teammates: Array,
@@ -296,10 +240,6 @@ static func _pick_soonest_with_hysteresis(
 				else AIActionScoring.SKATER_REF_SPEED_M_S
 		var t: float = AIActionScoring.time_to_arrive(
 				s.position, target_pos, s.velocity, speed)
-		# Hysteresis: peers who didn't hold this slot (or its cross-state
-		# continuity sibling — see _hysteresis_class) last tick pay
-		# HYSTERESIS_PENALTY_S to take it. Sticky peer keeps the
-		# slot unless another arrives meaningfully sooner.
 		if _hysteresis_class(prev_assignments.get(pid, Slot.NONE)) != _hysteresis_class(slot):
 			t += HYSTERESIS_PENALTY_S
 		if t < best_score or (t == best_score and (best_pid == -1 or pid < best_pid)):
@@ -308,20 +248,11 @@ static func _pick_soonest_with_hysteresis(
 	return best_pid
 
 
-# Cross-state hysteresis continuity. The soonest-to-arrive elections give a
-# peer that HELD a slot last tick a stickiness bonus, keyed on the slot enum —
-# but a possession-state flip renames the slots, so BREAKOUT_STRONG becomes
-# OUTLET and BREAKOUT_WEAK becomes SUPPORT, and an exact-enum match sees NO
-# continuity across the flip. With zero stickiness the two non-carriers'
-# near-tied elections reverse destinations at the handoff and send them on
-# crossing paths into each other. Mapping
-# each slot to its continuity CLASS — the up-ice attacking option
-# (BREAKOUT_STRONG / OUTLET / FINISHER) and the trailing support
-# (BREAKOUT_WEAK / SUPPORT) — lets the peer that was the up-ice guy stay the
-# up-ice guy (and the trailer stay the trailer) through the rename. The bonus
-# is only HYSTERESIS_PENALTY_S, so a genuine kinematic advantage still
-# swaps them; it only settles the near-ties that used to flicker. Every other
-# slot maps to itself (exact-match, unchanged).
+# Cross-state hysteresis continuity. A possession-state flip renames the slots
+# (BREAKOUT_STRONG → OUTLET, RUSH_D1 → PRESSURE, ...), and an exact-enum match
+# would see no continuity across it, so near-tied peers would swap jobs at the
+# handoff and cross paths. Each slot maps to its continuity CLASS; every slot
+# not listed maps to itself.
 static func _hysteresis_class(slot: int) -> int:
 	match slot:
 		Slot.BREAKOUT_STRONG, Slot.OUTLET, Slot.FINISHER:
@@ -337,7 +268,8 @@ static func _hysteresis_class(slot: int) -> int:
 
 
 # Assigns slot1 to soonest-to-target1 peer, slot2 to soonest-to-target2
-# peer, then dumps any remainder into slot_remainder. Used by FORECHECK.
+# peer, then dumps any remainder into slot_remainder. Used by TRANS_DEFENSE and
+# FORECHECK.
 static func _assign_pair_then_remainder(
 		snapshot: WorldSnapshot,
 		teammates: Array,
@@ -391,10 +323,9 @@ static func _assign_one_then_remainder(
 			result[pid_r] = slot_remainder
 
 
-# NEUTRAL: CHASE goes to soonest-to-puck. Remaining peers split on
-# X axis with hysteresis — lowest effective X = FLANK_L, rest = FLANK_R.
-# Hysteresis applied as an X-axis bias toward the previous slot's
-# side, so a peer wobbling near center doesn't flip L/R every tick.
+# NEUTRAL: CHASE goes to soonest-to-puck. Remaining peers split on X with
+# HYSTERESIS_PENALTY_M biasing each toward its previous side — lowest effective
+# X = FLANK_L, rest = FLANK_R.
 static func _assign_chase_and_flanks(
 		snapshot: WorldSnapshot,
 		teammates: Array,

@@ -5,10 +5,8 @@ extends RefCounted
 # team spends in each AIPossessionState shape, and how it gets there.
 #
 # A debug instrument, not a gameplay input: nothing reads it back into a
-# decision. It exists because the shapes are the top-level control flow of the
-# whole bot AI (which roles exist, which evaluators run) and we had no idea of
-# their relative weight. "Is this shape worth the code it costs?" is a question
-# about occupancy, and occupancy was unmeasured.
+# decision. "Is this shape worth the code it costs?" is a question about
+# occupancy.
 #
 # Three numbers per shape, because share alone is misleading:
 #   • SHARE       — fraction of live play in the shape. The headline.
@@ -18,15 +16,14 @@ extends RefCounted
 #   • MEAN SPELL  — seconds per spell, share/entries made legible.
 #
 # Plus the COVERAGE DOWNGRADE: seconds where the raw read said DZONE but
-# TeamBrain held the rush shape because the backcheck wasn't home
-# (AIRushRead.coverage_ready). That is a distinct failure surface from either
-# shape's own occupancy — it is time the in-zone coverage was suppressed — so
-# it is counted separately rather than being invisible inside TRANS_DEFENSE.
+# TeamBrain held the rush shape because the backcheck wasn't home — time the
+# in-zone coverage was suppressed, which would otherwise be invisible inside
+# TRANS_DEFENSE.
 #
 # Sampled per physics tick against each brain's PUBLISHED state, so the tally
 # measures the shape actually being run (post-downgrade), not the raw table
-# lookup. Fixed-size packed storage indexed by
-# team × state: no allocation on a 240 calls/second path.
+# lookup. Fixed-size packed storage indexed by team × state: no allocation on a
+# 240 calls/second path.
 
 const TEAM_COUNT: int = 2
 const STATE_COUNT: int = 7   # AIPossessionState.State member count
@@ -39,12 +36,8 @@ var _entries: PackedInt32Array = PackedInt32Array()
 # Last sampled state per team (-1 = nothing sampled yet), for entry detection.
 var _last_state: PackedInt32Array = PackedInt32Array()
 # Transition counts, team-major then from-major
-# (team * STATE_COUNT^2 + from * STATE_COUNT + to). Which shape a team leaves
-# FOR WHICH other shape is the question spell counts raise but cannot answer: a
-# shape entered 60 times in four minutes is churning, and the fix depends
-# entirely on what it is churning against. A shape pair that swaps role sets
-# wholesale is a real problem; one whose slots are deliberately identical is
-# free.
+# (team * STATE_COUNT^2 + from * STATE_COUNT + to): what a churning shape is
+# churning against, which spell counts alone cannot say.
 var _transitions: PackedInt32Array = PackedInt32Array()
 # Seconds per team spent with the D-zone coverage read suppressed.
 var _downgrade_seconds: PackedFloat64Array = PackedFloat64Array()
@@ -176,9 +169,8 @@ func downgrade_share(team_id: int) -> float:
 	return downgrade_seconds(team_id) / total
 
 
-# Display name for a State enum value. Debug-surface only — deliberately not
-# routed through tr(): the domain layer stays engine-free, and a dev overlay is
-# not a localized surface (same call the network overlay makes).
+# Display name for a State enum value. Deliberately not routed through tr(): the
+# domain layer stays engine-free, and a dev overlay is not a localized surface.
 static func state_name(state: int) -> String:
 	match state:
 		AIPossessionState.State.DZONE:

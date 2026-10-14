@@ -45,30 +45,34 @@ during pre-aim) and its own press transitions.
 
 ## How the brain hands out work
 
-`TeamBrain` is one node per team, ticked by `GameManager._physics_process` on the
-host at ~6 Hz. Each tick it publishes a blackboard the agents read: `state` (the
-`AIPossessionState` shape), `slot_assignments` (peer id → `AIRoleSlots.Slot`),
-`threat_assignments` (the man-on-threat partition), and `rush_read` (the shared
-transition-defence perception).
+`TeamBrain` is one per team, ticked on the host's AI worker thread at the head
+of each batch (`AICoordinator._worker_loop`: tick → `build_view` → every bot's
+decide) at ~6 Hz. Each tick it publishes a blackboard the agents read: `state`
+(the `AIPossessionState` shape), `slot_assignments` (peer id →
+`AIRoleSlots.Slot`), `threat_assignments` (the man-on-threat partition) and
+`threat_shoot_base_by_opp`, `rush_read` (the shared transition-defence
+perception), the one-timer readiness and the ping directives, plus
+`coverage_downgraded` for instrumentation.
 
 **Nothing is locked or sticky.** Every slot is re-elected each tick by a
 momentum-aware soonest-to-arrive race; roles "stick" only because the body
 already in the right place keeps winning, and hysteresis damps the ties.
 
 **Two brains, two cadences.** Team 1's natural tick runs half a period out of
-phase with team 0's so the two computes never land on the same physics frame —
-the host's FPS is set by its worst tick, and two ~250 µs brain ticks stacking is
-a recurring spike for free. Possession events force-retick BOTH brains together,
-so the phase offset has to be re-applied at every forced-tick accumulator reset,
-not just at construction.
+phase with team 0's so the two computes never land in the same batch — a late
+worker batch costs bot quality (the batch's decisions are skipped), and two
+brain ticks stacking is a recurring spike for free. Possession events
+force-retick BOTH brains together, so the phase offset has to be re-applied at
+every forced-tick accumulator reset, not just at construction.
 
 **The agents do not read the live brain.** `TeamBrain.build_view()` freezes the
-blackboard into a `TeamBrainView` once per host frame, after the tick, and
-dispatch reads that — `TeamStrategyView` is the interface both implement. It is
-refilled, never reallocated, and main only refills it after the worker has
-finished reading last frame's copy, which is why no mutex is needed. Unit tests
-hand the live brain in directly, which is legal because `TeamBrain` *is a*
-`TeamStrategyView`.
+blackboard into a `TeamBrainView` after each tick, on the worker, sequenced
+before any decide; dispatch reads that — `TeamStrategyView` is the interface both
+implement. It is refilled, never reallocated, and the main thread never touches
+it, which is why no mutex is needed. Writes the host raises against a brain are
+queued and drained on the main thread only while the worker is idle
+(`AICoordinator._drain_brain_commands`). Unit tests hand the live brain in
+directly, which is legal because `TeamBrain` *is a* `TeamStrategyView`.
 
 ## The blade cursor leaves the agent untouched
 

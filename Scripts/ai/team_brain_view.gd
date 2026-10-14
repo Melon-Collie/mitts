@@ -1,13 +1,10 @@
 class_name TeamBrainView
 extends TeamStrategyView
 
-# Frozen per-tick copy of a TeamBrain's outputs (docs/ai-threading-plan.md,
-# Phase 3a). Built on the main thread by TeamBrain.build_view once per frame,
-# then read by the agent dispatch — in Phase 3c, off the physics thread. Reused
-# per brain (refilled, never reallocated: hot-path allocation discipline), and
-# because main only refills it *after* the worker has finished reading last
-# tick's copy, no mutex or double-buffer is needed (see the plan's concurrency
-# notes).
+# Frozen copy of a TeamBrain's outputs, refilled (never reallocated) by
+# TeamBrain.build_view on the AI worker right after the brain tick and before
+# the agents decide, so no mutex is needed (see Scripts/ai/CLAUDE.md → "The
+# agents do not read the live brain").
 #
 # Storage is public so TeamBrain.build_view can fill it directly; consumers read
 # through the TeamStrategyView interface methods below.
@@ -23,8 +20,7 @@ var ping_move_by_peer: Dictionary[int, Vector3] = {}
 var ping_shoot_by_peer: Dictionary[int, bool] = {}
 var ping_pass_by_peer: Dictionary[int, int] = {}
 var threat_shoot_base: Dictionary[int, float] = {}
-# The frozen transition read. Refilled in place by TeamBrain.build_view via
-# AIRushRead.copy_from — never reallocated, same as the dicts above.
+# Refilled in place via AIRushRead.copy_from.
 var rush: AIRushRead = AIRushRead.new()
 
 
