@@ -12,3 +12,6 @@ var glove_pos: Vector3 = Vector3.ZERO
 var glove_rot: Vector3 = Vector3.ZERO
 var blocker_pos: Vector3 = Vector3.ZERO
 var blocker_rot: Vector3 = Vector3.ZERO
+# The blocker lies over the back of the glove (the smother) rather than
+# standing square to the shooter (Goalie._seat_blocker).
+var blocker_over_glove: bool = false

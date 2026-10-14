@@ -29,6 +29,7 @@ class_name GoalieAnatomy
 # Leg pad: 0.28 x 0.84 x 0.2 (LeftPad / RightPad).
 const PAD_BOX_WIDTH_M: float = 0.28
 const PAD_BOX_HEIGHT_M: float = 0.84
+const PAD_BOX_DEPTH_M: float = 0.20
 # Torso: 0.62 x 0.72 x 0.28 (Body) — as wide as the pants' flare.
 const TORSO_BOX_WIDTH_M: float = 0.62
 const TORSO_BOX_HEIGHT_M: float = 0.72
@@ -47,11 +48,11 @@ const BUTTERFLY_PAD_HALF_WIDTH_M: float = 0.42
 # Furthest the glove hand travels outboard on a full reach
 # (GoalieBodyConfigBuilder.glove_max_x_outward, sign-stripped).
 const GLOVE_MAX_X_OUTWARD_M: float = 0.85
-# The READY glove (GoalieBodyConfigBuilder.READY_GLOVE): up at the chest, out on
-# the glove side. The READY blocker is wherever the stick puts it
-# (GoalieStickRules.READY_WRIST_X_M, upright_wrist_y).
+# The READY glove (GoalieBodyConfigBuilder.READY_GLOVE): out in front between
+# belt and chest, on the glove side. The READY blocker is wherever the stick
+# puts it (GoalieStickRules.READY_WRIST_X_M, upright_wrist_y).
 const READY_GLOVE_X_M: float = 0.46
-const READY_GLOVE_Y_M: float = 1.02
+const READY_GLOVE_Y_M: float = 0.92
 
 
 static func butterfly_pad_edge_half_width() -> float:
@@ -91,6 +92,14 @@ const DOWN_BLOCKER_X_M: float = 0.40
 const DOWN_BLOCKER_Y_M: float = PAD_CENTER_Y_BUTTERFLY_M + PAD_BOX_WIDTH_M * 0.5 \
 		+ GLOVE_BOX_WIDTH_M * 0.5
 const DOWN_GLOVE_Y_M: float = TORSO_CENTER_Y_BUTTERFLY_M
+
+
+# Height of a pad's centre that rests its lowest corner on the ice, posed at
+# `rot_deg` (Euler, Godot's YXZ: yaw last, so it never changes the height).
+static func pad_center_y_on_ice(rot_deg: Vector3) -> float:
+	var b := Basis.from_euler(rot_deg * (PI / 180.0))
+	var half := Vector3(PAD_BOX_WIDTH_M, PAD_BOX_HEIGHT_M, PAD_BOX_DEPTH_M) * 0.5
+	return absf(b.x.y) * half.x + absf(b.y.y) * half.y + absf(b.z.y) * half.z
 
 
 # Vertical extent (bottom, top) of a part, as a Vector2 so callers can test a

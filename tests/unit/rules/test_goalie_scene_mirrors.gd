@@ -73,6 +73,8 @@ func test_pad_box_mirrors_the_scene() -> void:
 				"PAD_BOX_WIDTH_M must equal %s's collider width" % side)
 		assert_almost_eq(GoalieAnatomy.PAD_BOX_HEIGHT_M, size.y, 1e-6,
 				"PAD_BOX_HEIGHT_M must equal %s's collider height" % side)
+		assert_almost_eq(GoalieAnatomy.PAD_BOX_DEPTH_M, size.z, 1e-6,
+				"PAD_BOX_DEPTH_M must equal %s's collider depth" % side)
 
 
 func test_torso_and_glove_boxes_mirror_the_scene() -> void:
