@@ -73,6 +73,13 @@ Measurements against the live goalie that cost seconds — the breakaway ladder,
 the shot value calibration — are the same kind of thing; they live in the slow
 tier until they are turned into properties plus a snapshot.
 
+A model that predicts the live goalie is held against **measured data** rather
+than against itself: `tests/unit/ai/data/shot_odds_truth.txt` is the goalie's
+open set per cell, written by an instrument that drives the real
+`GoalieController` (minutes), and `test_shot_odds_vs_truth.gd` scores the shot
+model against it in milliseconds. The data file is regenerated when the goalie
+changes, never hand-edited; the test's error and concordance bounds are ratchets.
+
 ## Ratchets
 
 `test_no_god_class_growth.gd` is not an assertion about behavior — it is a

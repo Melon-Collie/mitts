@@ -87,16 +87,29 @@ Each step ships with the suite green and is measured against step 1's table.
 
 ### Step 1 — the target
 
-A checked-in **truth table**: live goal rates over a grid of spots × keeper
-states, measured through `real_goalie_shot_harness.gd`, both `best` and
-`picked`. Keeper states sweep phase, not just the two extremes: set; caught by
-a lateral relocation of 1, 2 and 4 m with the shot released at several delays;
-mid-drop; down. Generating it costs minutes, so it lives in `tests/instruments/`
-and is re-run when the goalie changes; the table itself is checked in.
+`tests/unit/ai/data/shot_odds_truth.txt`, a checked-in **truth table** written
+by `tests/instruments/ai/test_shot_odds_truth.gd` through
+`real_goalie_shot_harness.gd`. Per cell (20 release spots × 6 keeper states) it
+records:
 
-A unit test then holds the model against the table cheaply, with no live goalie:
-per-cell error under a bound, and concordance at least what the per-hole model
-scores today. The bound starts loose and tightens as step 2 lands.
+- the keeper's replicated read at DECISION time — what the bot sees;
+- the goalie's open set: FLAT / LOW / HIGH, each fired clean at 24 aims post to
+  post through the bot's own release (charged wrister publishing its aim; a
+  one-timer leaves cold). The release is deterministic, so this is the open set
+  itself, and the odds for any shooter are it spread by his placement scatter;
+- the shot the planner picks from that read, and what it did.
+
+Keeper states: SET (settled, square); a feed from 3 m and from 6 m across, each
+one-timed and caught-then-charged; and a 2 m deke onto the spot before the
+charge. A held windup no longer drops today's keeper (it did in July), so there
+is no down state yet; a save that leaves him down is #785's rebound case.
+Regenerating costs ~16 minutes and is done when the goalie changes.
+
+`tests/unit/ai/test_shot_odds_vs_truth.gd` holds the model against the table
+with no live goalie: the per-hole model fed exactly the carrier's shoot-now
+read, against the measured odds at the same placement scatter. Two ratchets —
+mean |model − truth| and concordance — bank as step 2 improves them. It also
+reports how much of the best odds the planner's own pick keeps.
 
 ### Step 2 — make the per-hole model true
 
@@ -146,6 +159,8 @@ Fewer total shots until #785 gives rebounds their value.
 - Does the post-game xG stat (`AIActionScoring.expected_goals`) move to the same
   model? It is deliberately shooter-blind and separate today; decide when step 3
   lands.
-- Does the reference execution for the currency come from the Hard hand, or a
-  separate league-reference constant? Decide in step 1, from what the table
-  shows.
+- The table's truth is spread by the Hard hand's placement scatter, which is
+  what the currency assumes today. Whether the currency should carry more
+  uncertainty than that — the keeper's reaction varies, a decision is made
+  before the release — is open; the table supports any spread without
+  re-measuring.
