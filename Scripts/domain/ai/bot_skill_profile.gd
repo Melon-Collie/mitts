@@ -39,8 +39,8 @@ var dispatch_period_ticks: int
 #
 # Execution only: the carrier's shot value does not read it, so a wobblier tier
 # takes the same shots and misses more of them (#699). The one selection site
-# that still does is the one-timer reception gate (`_try_shot_reception` scores
-# the redirect with it). The aim inset uses it so misses land on the GOALIE;
+# that still does is the one-timer reception gate (SkaterAgentReception.read_shot
+# scores the redirect with it). The aim inset uses it so misses land on the GOALIE;
 # posts and wides stay rare up to ~0.05 rad and climb past it, where a tier
 # stops looking beaten and starts looking incompetent. Selectivity is what
 # settle_penalty_frac is for; this knob is conversion.

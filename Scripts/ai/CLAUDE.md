@@ -25,6 +25,8 @@ passed per call, and only its own fields written.
 | `SkaterAgentStickPlay` | the jab / lift reach-in, the tie and its pull, the stick-check button |
 | `SkaterAgentBoardPlay` | holding a pin, the pinned slide, a carrier's answer to a square checker |
 | `SkaterAgentShotBlock` | the shot block and the 2-on-1 dive |
+| `SkaterAgentReception` | reading an incoming feed: is it ours, the blade gate, the squared or wall-kill stance, and whether it is a shot reception |
+| `SkaterAgentOneTimer` | the ready finisher's settle anchor on the feed line, the slapper zone, the feed's remaining flight, the press square-up |
 
 The state machine never writes a collaborator's fields, and no collaborator
 names the state machine (`test_agent_collaborator_seams.gd`). A new
@@ -42,7 +44,7 @@ Adding a behaviour is four steps:
 |---|---|---|
 | OFF_PUCK | CHASE_PUCK | a loose puck this bot may play (`_should_chase_loose_puck`), or a pass released its way |
 | OFF_PUCK, CHASE_PUCK | CARRY | it picks up the puck |
-| OFF_PUCK | ONE_TIMER_PRESSED | a ready one-timer man's feed is released on his line or reaches his zone (`_is_one_timer_ready`, `_one_timer_line_anchor`, `_puck_in_one_timer_zone`) |
+| OFF_PUCK | ONE_TIMER_PRESSED | a ready one-timer man's feed is released on his line or reaches his zone (`_is_one_timer_ready`, `SkaterAgentOneTimer.line_anchor`, `_puck_in_one_timer_zone`) |
 | CHASE_PUCK | ONE_TIMER_PRESSED | a ready one-timer man's feed reaches his zone, or a feed he is chasing is worth redirecting (`_try_shot_reception`) |
 | CHASE_PUCK | OFF_PUCK | the chase ends, or the bot is out of play |
 | CARRY | SHOOT_PRESSED, PASS_PRESSED | the carrier's committed intent is ready to release (a dump releases through PASS_PRESSED) |

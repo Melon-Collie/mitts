@@ -637,7 +637,7 @@ remains.
   to me" is whether the path ever **closes**, not a dot product against the
   current velocity — a rim running away down the far wall is closing, it just has
   a corner to turn first. Boards-hugging gates are played as a **wall kill**
-  (`_wall_kill_aim`): the stance side is forced rink-inward and the blade target
+  (`SkaterAgentReception.wall_kill_aim`): the stance side is forced rink-inward and the blade target
   pushed ONTO the wall surface, because a blade parked on the path line leaves
   the gap the puck squirts through.
 

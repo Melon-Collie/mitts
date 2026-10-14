@@ -1,0 +1,394 @@
+class_name SkaterAgentReception
+extends RefCounted
+
+# One bot's reads of an incoming feed (Scripts/ai/CLAUDE.md → Reception
+# doctrine): whether a fast loose puck is a pass to it, where the blade parks to
+# meet it, where the body stands to catch it square (in stride, or against the
+# boards as a wall kill), and whether it is a shot reception — one-time it or
+# catch it facing the net. Reads only: the state machine steers, aims and changes
+# state on the results. Owns nothing but its result fields and scratch.
+
+# Pass-receive setup: stand to the SIDE of a fast puck's path so the blade face
+# is square to the incoming line, maximizing PuckReceptionRules' alignment bonus
+# (up to +8 m/s head-on). The trigger is the deflect threshold: anything slower
+# is collectable at any angle.
+const RECEIVE_TRIGGER_PUCK_SPEED_M_S: float = 14.0
+# Farther than this off the puck's line, the pass isn't ours; sized generously to
+# cover any pass that would realistically end up at this bot.
+const RECEIVE_TRIGGER_LATERAL_M: float = 5.0
+# Sideways stand-off from the path: stick + blade reach less this inset, so the
+# IK isn't at the ROM clamp.
+const RECEIVE_BODY_INSET_M: float = 0.2
+# Bot must reach the body anchor within this fraction of the puck's flight time,
+# else the plain lead-intercept (faster, at a worse angle) wins.
+const RECEIVE_TIMING_MARGIN: float = 0.9
+# Body-centre inset from the boards for any stance built off a boards-hugging
+# puck line — a skater's collision radius, so the shoulder rather than the anchor
+# stops at the glass.
+const BODY_WALL_MARGIN_M: float = 0.5
+# Walk for AITrajectory.solve_reception_gate (the puck's real path, caroms and
+# all). The horizon covers a full corner wrap at rim pace; the walk tests each
+# step as a segment, so 20 steps suffice.
+const RECEIVE_PATH_HORIZON_S: float = 2.0
+const RECEIVE_PATH_STEPS: int = 20
+# A reception gate within this of the boards is played as a wall kill (blade on
+# the glass, body rink-side); outside it the ordinary side-stand runs.
+const WALL_KILL_BAND_M: float = 1.0
+# "Give with the puck" ceiling on an incoming feed's RECEIVER-FRAME speed: above
+# it the receiver brakes to shed its own closing. Must sit between
+# AIPuckLane.PASS_TARGET_CLOSING_M_S (20 — every clean bot feed arrives at
+# it) and Puck.deflect_min_speed (22), so only genuinely hot arrivals trip it.
+const RECEIVE_GIVE_CEILING_M_S: float = 21.5
+
+# ── Shot-aware reception (read_shot) ─────────────────────────────────────────
+# When a pass is incoming and a shot from the reception area is on, the bot
+# either ONE-TIMES it (Mode A) or catches it facing the net (Mode B), instead of
+# the default chase that turns the body to the puck and then back to shoot.
+# Both aim at a net-forward catch point and stand so the puck arrives there.
+#
+# Engages when the puck is a real pass to us and a redirect from the reception
+# point scores >= SHOT_RECEPTION_SCORE_GATE (score_shoot at the soft redirect
+# pace, so this also means "in range with a real look").
+#
+# Mode A needs a LATERAL forehand-side cross-pass, far enough out that skating in
+# buys nothing, with the bot not already driving net-ward, and squared up (the
+# state machine's check, ONE_TIME_MAX_SQUARE_UP_RAD). Lateral is mechanical: the
+# puck must still be RECEIVED for the fire to trigger, and a net-aimed blade is
+# only square to it (alignment ≈ sin(redirect angle)) when it arrives across the
+# body. Mode B otherwise: catch facing the net and let CARRY shoot.
+const SHOT_RECEPTION_SCORE_GATE: float = 0.30
+# Redirect angle = turn from puck-travel direction to net direction at the
+# catch point. The band brackets "lateral enough that a net-aimed blade catches
+# it" — at the 50° edge, alignment = sin(50°) = 0.77 → deflect threshold
+# 14 + 8·0.77 ≈ 20 m/s, comfortably above the charged-pass speed (~19), so a
+# one-timer across the whole band actually receives before it fires; peak is a
+# square cross-seam at 90°.
+const ONE_TIME_MIN_REDIRECT_RAD: float = 0.873      # deg_to_rad(50)
+const ONE_TIME_MAX_REDIRECT_RAD: float = 2.269      # deg_to_rad(130)
+const ONE_TIME_MIN_NET_DIST_M: float = 6.0
+# Net-ward closing speed above which we're committed to driving in (Mode B)
+# rather than stopping to redirect (Mode A).
+const ONE_TIME_MAX_DRIVE_SPEED_M_S: float = 4.0
+# Squared-up cone for committing a Mode A redirect. The one-time press locks the
+# slapper direction from the cursor almost at once (the controller's
+# locked_slapper_dir), so the body must ALREADY face near the net line; beyond
+# this cone the bot catches the feed (Mode B) instead. Generous, since a
+# cross-seam catch is naturally ~net-ward already.
+const ONE_TIME_MAX_SQUARE_UP_RAD: float = 0.960     # deg_to_rad(55)
+
+var _peer_id: int = -1
+var _team_id: int = -1
+var _team_id_by_peer: Dictionary = {}
+var _caps_by_peer: Dictionary = {}
+var _is_left_handed: bool = false
+
+# ── Result of read_pass ──────────────────────────────────────────────────────
+# Where the body stands, whether skating on as we are would carry the blade past
+# the meet (so steer with the arrival brake), whether the feed is hot enough to
+# give with, and where the blade parks.
+var pass_body_anchor: Vector3 = Vector3.ZERO
+var pass_overruns: bool = false
+var pass_give: bool = false
+var pass_blade_aim: Vector3 = Vector3.ZERO
+
+# ── Result of read_shot ──────────────────────────────────────────────────────
+# The net-forward stand, whether the feed's geometry allows a one-time (Mode A,
+# before the squared-up check), and our velocity for the Mode B blade gate.
+var shot_anchor: Vector3 = Vector3.ZERO
+var shot_one_time_geometry: bool = false
+var shot_self_vel: Vector3 = Vector3.ZERO
+
+# Opponent scratch for read_shot's score, caps index-matched (null for unwired
+# peers).
+var _shot_opponents: Array[Vector3] = []
+var _shot_opponent_caps: Array[AISkaterCaps] = []
+
+
+func setup(peer_id: int, team_id: int, team_id_by_peer: Dictionary,
+		caps_by_peer: Dictionary, is_left_handed: bool) -> void:
+	_peer_id = peer_id
+	_team_id = team_id
+	_team_id_by_peer = team_id_by_peer
+	_caps_by_peer = caps_by_peer
+	_is_left_handed = is_left_handed
+
+
+# Comfortable blade extension for a parked reception: the blade span (`blade_reach`
+# less its outward buffer) minus the side-stand inset, off the IK ROM clamp.
+static func gate_reach(blade_reach: float) -> float:
+	return maxf(blade_reach - AIBotMechanics.BLADE_REACH_BUFFER_M - RECEIVE_BODY_INSET_M, 0.4)
+
+
+# Pass-receive stance (the RECEIVE_TRIGGER_* read) into the pass_* results. False
+# when the puck is too slow, going away, too far off its line, or the stance
+# can't be reached in time.
+func read_pass(snapshot: WorldSnapshot, self_pos: Vector3, blade_reach: float,
+		body_offset: float, max_speed: float) -> bool:
+	if snapshot.puck_state.carrier_peer_id != -1:
+		return false
+	var puck_vel: Vector3 = snapshot.puck_state.velocity
+	var puck_speed_sq: float = puck_vel.x * puck_vel.x + puck_vel.z * puck_vel.z
+	if puck_speed_sq < RECEIVE_TRIGGER_PUCK_SPEED_M_S * RECEIVE_TRIGGER_PUCK_SPEED_M_S:
+		return false
+	var puck_pos: Vector3 = snapshot.puck_state.position
+	var self_vel: Vector3 = Vector3.ZERO
+	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
+	if self_state != null:
+		self_vel = self_state.velocity
+	# The crossing point, its time, and the puck's direction then all come off
+	# the puck's real path. Solved as a RENDEZVOUS — the reach circle rides our own
+	# velocity — so the meet is a fixed point both bodies travel toward.
+	AITrajectory.solve_reception_gate(puck_pos, puck_vel, self_pos,
+			gate_reach(blade_reach), RECEIVE_PATH_HORIZON_S, RECEIVE_PATH_STEPS,
+			self_vel, AICarrierPassSearch.PASS_LEAD_MAX_S)
+	# Path-based, not a dot product against the current velocity: a rim running
+	# away down the far wall can still be coming to us around a corner.
+	if not AITrajectory.gate_closes:
+		return false
+	var perp_foot: Vector3 = AITrajectory.gate_point
+	var gate_vel: Vector3 = AITrajectory.gate_velocity
+	var gate_speed: float = sqrt(gate_vel.x * gate_vel.x + gate_vel.z * gate_vel.z)
+	if gate_speed < 0.001:
+		return false
+	var puck_dir: Vector3 = Vector3(gate_vel.x / gate_speed, 0.0, gate_vel.z / gate_speed)
+	# A gate at t≈0 means the puck is already on the blade: nothing to set up.
+	var puck_eta: float = AITrajectory.gate_time_s
+	if puck_eta <= 0.0:
+		return false
+	var perp_off: Vector3 = self_pos - perp_foot
+	perp_off.y = 0.0
+	var perp_dist: float = perp_off.length()
+	if perp_dist > RECEIVE_TRIGGER_LATERAL_M:
+		return false
+	# Stand on our own side of the path (least skating); on the path, either side.
+	var lateral: Vector3
+	if perp_dist > 0.001:
+		lateral = perp_off / perp_dist
+	else:
+		lateral = Vector3(-puck_dir.z, 0.0, puck_dir.x)
+	# WALL KILL (WALL_KILL_BAND_M): against the boards the stance side is forced
+	# inward. The blade's half of the meet (AITrajectory.gate_offset, in the
+	# body's frame) takes the same wall push.
+	var blade_offset: Vector3 = AITrajectory.gate_offset
+	var board: Vector3 = board_normal_and_gap(Vector2(perp_foot.x, perp_foot.z))
+	if board.y <= WALL_KILL_BAND_M:
+		var push := Vector3(-board.x * board.y, 0.0, -board.z * board.y)
+		lateral = Vector3(board.x, 0.0, board.z)
+		perp_foot += push
+		blade_offset += push
+	var body_anchor: Vector3 = perp_foot + lateral * body_offset
+	# The side-stand offset from a boards-hugging line can land in the wall.
+	var anchor_xz: Vector2 = GameRules.clamp_to_rink_inner(
+			Vector2(body_anchor.x, body_anchor.z), BODY_WALL_MARGIN_M)
+	body_anchor = Vector3(anchor_xz.x, 0.0, anchor_xz.y)
+	# Timing gate (RECEIVE_TIMING_MARGIN).
+	var bot_eta: float = AIArrival.time_to_arrive(
+			self_pos, body_anchor, self_vel, max_speed)
+	if bot_eta > puck_eta * RECEIVE_TIMING_MARGIN:
+		return false
+	# Receive IN STRIDE; brake only when skating on as we are would carry the
+	# blade past the meet before the puck gets there. Judged on the unbounded
+	# drift at puck_eta, not on the meet solve, whose ride on our velocity is
+	# bounded (PASS_LEAD_MAX_S) and so can report a meet the body skates past.
+	var drift: Vector3 = self_pos + self_vel * puck_eta
+	pass_overruns = Vector2(drift.x - perp_foot.x, drift.z - perp_foot.z) \
+			.length() > gate_reach(blade_reach)
+	pass_body_anchor = body_anchor
+	# GIVE WITH THE PUCK (RECEIVE_GIVE_CEILING_M_S).
+	pass_give = Vector2(puck_vel.x - self_vel.x, puck_vel.z - self_vel.z) \
+			.length_squared() > RECEIVE_GIVE_CEILING_M_S * RECEIVE_GIVE_CEILING_M_S
+	# PARK the blade at the gate, held in the body's frame (see blade_gate).
+	pass_blade_aim = self_pos + blade_offset
+	return true
+
+
+# The GATE: where the blade waits for an incoming loose puck — the earliest point
+# on the puck's travel line the blade can touch (where the line enters a
+# comfortable-extension circle around the body). Parking there beats tracking the
+# puck's position: the cursor slews at Hands blade speed (~10 m/s baseline) while
+# a pass sweeps past at ~20 m/s, so a blade CHASING the puck lags behind it
+# through the reach envelope and the pass transits untouched. Solved as a
+# rendezvous against our own moving reach, the gate is a fixed world point both
+# bodies are travelling toward, so the cursor holds it at rest and the puck
+# arrives INTO the waiting blade. Falls back to the puck's own position when the
+# puck has already passed our level (chase from behind) or is (near-)stationary.
+static func blade_gate(self_pos: Vector3, self_vel: Vector3,
+		puck_pos: Vector3, puck_vel: Vector3, blade_reach: float) -> Vector3:
+	var speed_sq: float = puck_vel.x * puck_vel.x + puck_vel.z * puck_vel.z
+	if speed_sq < 0.0001:
+		return puck_pos
+	# On the puck's real path, against our own MOVING reach.
+	if not AITrajectory.solve_reception_gate(puck_pos, puck_vel, self_pos,
+			gate_reach(blade_reach), RECEIVE_PATH_HORIZON_S, RECEIVE_PATH_STEPS,
+			self_vel, AICarrierPassSearch.PASS_LEAD_MAX_S):
+		# No touchable point on the path. A puck moving AWAY is chased from
+		# behind; otherwise hold the blade toward the path's closest approach
+		# until the entry point appears.
+		var to_self_x: float = self_pos.x - puck_pos.x
+		var to_self_z: float = self_pos.z - puck_pos.z
+		if puck_vel.x * to_self_x + puck_vel.z * to_self_z <= 0.0:
+			return puck_pos
+	# Held in the body's frame (AITrajectory.gate_offset), so the cursor is a spot
+	# the arm can be at while the body closes. The wall kill is judged at the meet
+	# and carried across as the same displacement.
+	var meet: Vector3 = AITrajectory.gate_point
+	var push: Vector3 = wall_kill_aim(meet) - meet
+	return self_pos + AITrajectory.gate_offset + push
+
+
+# The boards at `xz`: the unit INWARD normal packed in x/z, and the gap to the
+# wall in y (negative off the surface). INF.y when the point is deeper in than
+# the probe reaches — i.e. open ice, no wall to play.
+#
+# Via the rink clamp, so the ROUNDED CORNERS come for free: clamping with a margin
+# wider than the band projects the point onto the shrunk surface, and that
+# displacement is the inward normal with length (margin − gap). Packed into a
+# Vector3 to avoid allocating on the per-tick reception path.
+static func board_normal_and_gap(xz: Vector2) -> Vector3:
+	var probe_margin: float = WALL_KILL_BAND_M + 0.5
+	var inward: Vector2 = GameRules.clamp_to_rink_inner(xz, probe_margin) - xz
+	var inset: float = inward.length()
+	if inset < 0.000001:
+		return Vector3(0.0, INF, 0.0)
+	return Vector3(inward.x / inset, probe_margin - inset, inward.y / inset)
+
+
+# Pushes a boards-hugging aim point out ONTO the inner wall surface, so the
+# blade seals against the glass instead of leaving the puck a gap behind it.
+# Returns `point` untouched when it isn't inside WALL_KILL_BAND_M.
+static func wall_kill_aim(point: Vector3) -> Vector3:
+	var xz := Vector2(point.x, point.z)
+	var board: Vector3 = board_normal_and_gap(xz)
+	if board.y > WALL_KILL_BAND_M:
+		return point
+	# Off the surface entirely (a phantom sample) → gap < 0 → this pulls the aim
+	# back onto the wall, which is exactly where the blade belongs anyway.
+	var on_wall: Vector2 = xz - Vector2(board.x, board.z) * board.y
+	return Vector3(on_wall.x, 0.0, on_wall.y)
+
+
+# Is a fast loose puck (a pass) heading toward us right now — fast, loose, we're
+# AHEAD of it and within the receive lateral of its line? Enters (and holds) CHASE
+# the instant a pass is released our way, so the squared reception has time to
+# set up.
+func incoming_pass(snapshot: WorldSnapshot, self_pos: Vector3) -> bool:
+	if snapshot == null or snapshot.puck_state == null \
+			or snapshot.puck_state.carrier_peer_id != -1:
+		return false
+	var pv: Vector3 = snapshot.puck_state.velocity
+	var speed_sq: float = pv.x * pv.x + pv.z * pv.z
+	if speed_sq < RECEIVE_TRIGGER_PUCK_SPEED_M_S * RECEIVE_TRIGGER_PUCK_SPEED_M_S:
+		return false
+	var speed: float = sqrt(speed_sq)
+	var dir := Vector3(pv.x / speed, 0.0, pv.z / speed)
+	var puck_pos: Vector3 = snapshot.puck_state.position
+	var to_self := Vector3(self_pos.x - puck_pos.x, 0.0, self_pos.z - puck_pos.z)
+	var t: float = to_self.dot(dir)
+	if t <= 0.0:
+		return false
+	var perp_foot: Vector3 = puck_pos + dir * t
+	var perp_dx: float = self_pos.x - perp_foot.x
+	var perp_dz: float = self_pos.z - perp_foot.z
+	var my_d2: float = perp_dx * perp_dx + perp_dz * perp_dz
+	if my_d2 > RECEIVE_TRIGGER_LATERAL_M * RECEIVE_TRIGGER_LATERAL_M:
+		return false
+	# Only the teammate nearest where the puck crosses their level anticipates,
+	# or a fast puck would pull every bot in its lateral band out of position.
+	for pid: int in snapshot.skater_states:
+		if pid == _peer_id or _team_id_by_peer.get(pid, -1) != _team_id:
+			continue
+		var tp: Vector3 = snapshot.skater_states[pid].position
+		var dx: float = tp.x - perp_foot.x
+		var dz: float = tp.z - perp_foot.z
+		if dx * dx + dz * dz < my_d2:
+			return false
+	return true
+
+
+# Shot-aware reception read (the shot-aware block above) into the shot_*
+# results. False when this feed is not a shot reception (the caller runs the
+# normal catch); true with the net-forward stand and whether its geometry allows
+# a one-time.
+func read_shot(snapshot: WorldSnapshot, self_pos: Vector3, blade_reach: float,
+		attacking_goal: Vector3, shot_aim_error_rad: float) -> bool:
+	var puck_state: PuckNetworkState = snapshot.puck_state
+	# Only loose pucks are receivable; held pucks aren't a pass to catch.
+	if puck_state.carrier_peer_id != -1:
+		return false
+	var puck_vel: Vector3 = puck_state.velocity
+	var puck_speed_sq: float = puck_vel.x * puck_vel.x + puck_vel.z * puck_vel.z
+	if puck_speed_sq < RECEIVE_TRIGGER_PUCK_SPEED_M_S * RECEIVE_TRIGGER_PUCK_SPEED_M_S:
+		return false
+	var puck_speed: float = sqrt(puck_speed_sq)
+	var puck_dir: Vector3 = Vector3(puck_vel.x / puck_speed, 0.0, puck_vel.z / puck_speed)
+	var puck_pos: Vector3 = puck_state.position
+	# Foot of perpendicular from self onto the puck's path; t <= 0 means it is
+	# already past us.
+	var to_self: Vector3 = self_pos - puck_pos
+	to_self.y = 0.0
+	var t: float = to_self.dot(puck_dir)
+	if t <= 0.0:
+		return false
+	var perp_foot: Vector3 = puck_pos + puck_dir * t
+	var perp_off: Vector3 = self_pos - perp_foot
+	perp_off.y = 0.0
+	if perp_off.length() > RECEIVE_TRIGGER_LATERAL_M:
+		return false
+	# A fire-on-contact redirect gives the goalie no slide time, so score it at his
+	# CURRENT position and the soft redirect pace, with this bot's own shot spread.
+	_gather_opponents(snapshot)
+	var shot_score: float = AIActionScoring.score_shoot(
+			perp_foot, attacking_goal, _goalie_now(snapshot, attacking_goal),
+			GameRules.NET_HALF_WIDTH, _shot_opponents,
+			AIPuckLane.PASS_SPEED_M_S, 0.0, _shot_opponent_caps,
+			-1.0, false, 0.0, false, shot_aim_error_rad)
+	if shot_score < SHOT_RECEPTION_SCORE_GATE:
+		return false
+	# Net-forward geometry. Anchor = the catch point pulled back one blade-reach
+	# AWAY from the net, so when the bot stands there its net-pointing blade
+	# meets the puck at perp_foot and the puck arrives net-FORWARD of the body
+	# (aiming there keeps facing net-ward, never turning to grab).
+	var to_net: Vector3 = attacking_goal - perp_foot
+	to_net.y = 0.0
+	var net_len: float = to_net.length()
+	if net_len < 0.001:
+		return false
+	var net_dir: Vector3 = to_net / net_len
+	shot_anchor = perp_foot - net_dir * blade_reach
+	# Mode A (one-time) eligibility: lateral redirect (in the band), forehand
+	# side, far enough out, and not already driving hard at the net.
+	var redirect_angle: float = acos(clampf(puck_dir.dot(net_dir), -1.0, 1.0))
+	# Left of the net direction (up × net_dir); RH forehand = -left_dir, LH =
+	# +left_dir (the convention the state machine's handedness also follows).
+	var left_dir: Vector3 = Vector3(net_dir.z, 0.0, -net_dir.x)
+	var forehand_dir: Vector3 = left_dir if _is_left_handed else -left_dir
+	var from_forehand: bool = (puck_pos - self_pos).dot(forehand_dir) > 0.0
+	shot_self_vel = Vector3.ZERO
+	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
+	if self_state != null:
+		shot_self_vel = self_state.velocity
+	var net_ward_speed: float = shot_self_vel.dot(net_dir)
+	shot_one_time_geometry = (redirect_angle >= ONE_TIME_MIN_REDIRECT_RAD
+			and redirect_angle <= ONE_TIME_MAX_REDIRECT_RAD
+			and from_forehand
+			and net_len >= ONE_TIME_MIN_NET_DIST_M
+			and net_ward_speed <= ONE_TIME_MAX_DRIVE_SPEED_M_S)
+	return true
+
+
+func _gather_opponents(snapshot: WorldSnapshot) -> void:
+	_shot_opponents.clear()
+	_shot_opponent_caps.clear()
+	for pid: int in snapshot.skater_states:
+		if pid == _peer_id:
+			continue
+		if _team_id_by_peer.get(pid, -1) != _team_id:
+			_shot_opponents.append(snapshot.skater_states[pid].position)
+			_shot_opponent_caps.append(_caps_by_peer.get(pid))
+
+
+func _goalie_now(snapshot: WorldSnapshot, attacking_goal: Vector3) -> Vector3:
+	var opp_goalie: GoalieNetworkState = snapshot.goalie_states.get(1 - _team_id)
+	if opp_goalie == null:
+		return attacking_goal
+	return Vector3(opp_goalie.position_x, 0.0, opp_goalie.position_z)

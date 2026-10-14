@@ -101,7 +101,7 @@ func test_apply_capabilities_derives_reach_gates_and_speeds() -> void:
 			2.0 + AIBotMechanics.BLADE_REACH_BUFFER_M, 0.001)
 	assert_almost_eq(sm._poke_jab_reach, 2.0 + GameRules.POKE_RADIUS_M, 0.001)
 	assert_almost_eq(sm._receive_body_offset,
-			2.0 - SkaterAgentStateMachine.RECEIVE_BODY_INSET_M, 0.001)
+			2.0 - SkaterAgentReception.RECEIVE_BODY_INSET_M, 0.001)
 	# Scalars pass straight through.
 	assert_almost_eq(sm._self_max_speed, 10.5, 0.001)
 	assert_almost_eq(sm._chase_max_accel, 13.0, 0.001)

@@ -321,8 +321,9 @@ func test_one_timer_aim_is_locked_from_the_release_point_not_the_body() -> void:
 	var locked: Vector3 = ShotMechanics.slapper_aim_dir(
 			input.bot_slapper_aim_dir, Vector3(30.0, 0.0, 30.0), Vector3.ZERO)
 	var dir := Vector2(locked.x, locked.z).normalized()
-	var release_point: Vector3 = sm._slapper_zone_center(
-			sm._one_timer_line_anchor(s, self_pos))
+	var release_point: Vector3 = sm._one_timer.zone_center(
+			sm._one_timer.line_anchor(s, self_pos, sm._attacking_goal_pos),
+			sm._attacking_goal_pos)
 	assert_true(release_point.is_finite(),
 			"the feed yields a settled release point on its line")
 	var net_z: float = -GameRules.GOAL_LINE_Z  # team 0 attacks -Z
@@ -409,8 +410,9 @@ func test_one_timer_commits_the_release_point_line_not_a_cursor_offset() -> void
 	assert_almost_eq(input.bot_slapper_aim_dir.length(), 1.0, 0.001,
 			"the committed direction is normalized")
 
-	var release_point: Vector3 = sm._slapper_zone_center(
-			sm._one_timer_line_anchor(s, self_pos))
+	var release_point: Vector3 = sm._one_timer.zone_center(
+			sm._one_timer.line_anchor(s, self_pos, sm._attacking_goal_pos),
+			sm._attacking_goal_pos)
 	assert_true(release_point.is_finite(), "the feed yields a settled release point")
 	var net_z: float = -GameRules.GOAL_LINE_Z  # team 0 attacks -Z
 

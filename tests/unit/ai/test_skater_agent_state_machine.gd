@@ -1114,16 +1114,6 @@ func test_carry_entry_resets_the_smoothed_shield() -> void:
 	assert_false(sm._carry_has_man, "man-to-beat latch resets on carry entry")
 
 
-func test_one_timer_feed_time_reads_the_remaining_flight() -> void:
-	# Puck 8 m up-line at 16 m/s → my perpendicular foot in 0.5 s: the aim
-	# reads the goalie at feed ARRIVAL, not where he stands mid-re-square.
-	var s := _inbound_feed_snap(Vector3.ZERO, Vector3(-8, 0, -1.5), Vector3(16, 0, 0))
-	assert_almost_eq(sm._one_timer_feed_time_s(s, Vector3.ZERO), 0.5, 0.01)
-	# A dead/held puck reads as arriving now.
-	var dead := _self_snap(Vector3.ZERO, false)
-	assert_almost_eq(sm._one_timer_feed_time_s(dead, Vector3.ZERO), 0.0, 0.001)
-
-
 # ── incoming-feed reception: give with the puck ──────────────────────────────
 
 func test_receiver_gives_with_a_hot_incoming_feed() -> void:
@@ -1131,7 +1121,7 @@ func test_receiver_gives_with_a_hot_incoming_feed() -> void:
 	# judges the puck in the RECEIVER'S frame, so the bot's own closing stacks
 	# onto the puck's — over the receivable ceiling it brakes (sheds its own
 	# closing) and never sprints at the feed.
-	# Staged in OUR half so _try_shot_reception's catch-and-shoot posture
+	# Staged in OUR half so the shot reception's catch-and-shoot posture
 	# (Mode B) never engages — this pins the plain reception path.
 	sm._state = Agent.State.CHASE_PUCK
 	var s := _loose_puck_snap(Vector3(-10, 0, 15))
@@ -1483,7 +1473,7 @@ func test_carry_pre_aim_times_out_and_fires() -> void:
 
 # ── Wrister wind-up handedness (regression: the perp sign was inverted, so bots
 # charged every wrister/pass on the backhand side and paid the backhand penalty).
-# Authoritative reference: _try_shot_reception (~:1581) defines RH forehand as
+# Authoritative reference: SkaterAgentReception.read_shot defines RH forehand as
 # -left_dir where left_dir = Vector3(aim.z, 0, -aim.x); LH mirrors. The wind-up
 # midpoint offset = perp * SIDE_OFFSET (the ±aim*half endpoints cancel), so its
 # projection onto the forehand direction must be positive on the forehand side. ─
@@ -1669,157 +1659,6 @@ func test_poke_evade_skips_a_defender_neither_side_is_closing_on() -> void:
 	sm._poke_evade_modulate_steering(input, snap, me.position)
 	assert_eq(sm._poke_evade.active_ticks, 0,
 			"a defender behind the direction of travel, neither closing, gets no deke")
-
-
-# ── Reception: pass anticipation ────────────────────────────────────────────────
-
-func _pass_snap(puck_pos: Vector3, puck_vel: Vector3, carrier: int) -> WorldSnapshot:
-	var s := WorldSnapshot.new()
-	s.puck_state = PuckNetworkState.new()
-	s.puck_state.position = puck_pos
-	s.puck_state.velocity = puck_vel
-	s.puck_state.carrier_peer_id = carrier
-	return s
-
-
-func test_incoming_pass_to_me_fires_for_a_fast_pass_heading_at_us() -> void:
-	# Loose puck at (0,0,10) ripping toward -Z at magnet pace; self at the origin is
-	# on its line, ahead of it — a pass at us.
-	var s := _pass_snap(Vector3(0, 0, 10), Vector3(0, 0, -21), -1)
-	assert_true(sm._incoming_pass_to_me(s, Vector3.ZERO))
-
-
-func test_incoming_pass_to_me_ignores_slow_carried_or_away_pucks() -> void:
-	# Too slow to be a pass.
-	assert_false(sm._incoming_pass_to_me(
-			_pass_snap(Vector3(0, 0, 10), Vector3(0, 0, -10), -1), Vector3.ZERO),
-			"a slow loose puck isn't a pass to receive")
-	# Carried — not loose.
-	assert_false(sm._incoming_pass_to_me(
-			_pass_snap(Vector3(0, 0, 10), Vector3(0, 0, -21), OPP_ID), Vector3.ZERO),
-			"a carried puck is not an incoming pass")
-	# Heading AWAY (we're behind its travel).
-	assert_false(sm._incoming_pass_to_me(
-			_pass_snap(Vector3(0, 0, 0), Vector3(0, 0, -21), -1), Vector3(0, 0, 10)),
-			"a puck travelling away from us is not incoming")
-	# On the line but too far to the side.
-	assert_false(sm._incoming_pass_to_me(
-			_pass_snap(Vector3(0, 0, 10), Vector3(0, 0, -21), -1),
-			Vector3(Agent.RECEIVE_TRIGGER_LATERAL_M + 2.0, 0, 0)),
-			"a pass whose line runs well wide of us is not ours to receive")
-
-
-func test_incoming_pass_to_me_defers_to_a_closer_teammate() -> void:
-	# A fast puck heading down the line, but a teammate is nearer to where it crosses
-	# our level — they anticipate it, not us, so a shot/pass past several bots doesn't
-	# pull them all out of position.
-	var s := _pass_snap(Vector3(0, 0, 10), Vector3(0, 0, -21), -1)
-	_add_skater(s, SELF_ID, Vector3(3, 0, 0))          # 3 m off the line at our level
-	_add_skater(s, TEAMMATE_ID, Vector3(1, 0, 0))      # closer to the line
-	assert_false(sm._incoming_pass_to_me(s, Vector3(3, 0, 0)),
-			"a teammate nearer the puck's crossing point is the one who receives")
-	# Remove the closer teammate → now it's ours.
-	s.skater_states.erase(TEAMMATE_ID)
-	assert_true(sm._incoming_pass_to_me(s, Vector3(3, 0, 0)))
-
-
-# ── _blade_gate_on_puck_line ─────────────────────────────────────────────────
-# The gate: park the blade at the earliest point on an incoming puck's travel
-# line the blade can touch, instead of chasing the puck's position (which the
-# Hands-capped cursor can't keep up with — the pass transits reach untouched).
-
-func _gate_reach() -> float:
-	# Mirror of the helper's comfortable extension: pickup buffer stripped back
-	# off _blade_reach, then the side-stand inset.
-	return maxf(sm._blade_reach - AIBotMechanics.BLADE_REACH_BUFFER_M
-			- Agent.RECEIVE_BODY_INSET_M, 0.4)
-
-
-func test_blade_gate_parks_on_the_line_at_the_entry_point() -> void:
-	# Puck at origin travelling +X at 20; bot 1 m off the line at x=10. The gate
-	# must sit ON the line (z = 0), BEFORE the perpendicular foot (x < 10) — the
-	# front edge of reach, so the puck is met at the earliest touchable point —
-	# and at the comfortable extension from the body.
-	var self_pos := Vector3(10, 0, 1)
-	var gate: Vector3 = sm._blade_gate_on_puck_line(
-			self_pos, Vector3.ZERO, Vector3.ZERO, Vector3(20, 0, 0))
-	assert_almost_eq(gate.z, 0.0, 0.001, "gate sits on the puck's travel line")
-	assert_lt(gate.x, 10.0, "gate sits ahead of the perpendicular foot (early contact)")
-	assert_almost_eq(self_pos.distance_to(gate), _gate_reach(), 0.001,
-			"gate sits at the blade's comfortable extension")
-
-
-func test_blade_gate_head_on_parks_in_front() -> void:
-	# Bot standing exactly on the line: the gate is a full comfortable reach IN
-	# FRONT of the body, toward the incoming puck — blade out to meet it.
-	var gate: Vector3 = sm._blade_gate_on_puck_line(
-			Vector3(10, 0, 0), Vector3.ZERO, Vector3.ZERO, Vector3(20, 0, 0))
-	assert_almost_eq(gate.z, 0.0, 0.001)
-	assert_almost_eq(gate.x, 10.0 - _gate_reach(), 0.001,
-			"head-on gate is one comfortable reach toward the puck")
-
-
-func test_blade_gate_reaches_toward_the_line_when_still_closing() -> void:
-	# Line runs 3 m to the side — outside reach. Best effort: the perpendicular
-	# foot (nearest point of the line), held while the body closes.
-	var gate: Vector3 = sm._blade_gate_on_puck_line(
-			Vector3(10, 0, 3), Vector3.ZERO, Vector3.ZERO, Vector3(20, 0, 0))
-	assert_almost_eq(gate.x, 10.0, 0.001)
-	assert_almost_eq(gate.z, 0.0, 0.001,
-			"out-of-reach line → aim at its nearest point while closing")
-
-
-func test_blade_gate_chases_a_puck_that_is_genuinely_leaving() -> void:
-	# Puck 5 m up-ice of the bot and running for the far end at pace: nothing on
-	# its board-aware path comes back inside the horizon, so there is no gate to
-	# park at and the fallback is the puck itself (chase from behind).
-	#
-	# "Past our level" is NOT the test — that was the straight-ray model's
-	# version of this invariant, and inside a closed rink it is simply false: a
-	# puck ringing off the wall a metre away is past our level and coming
-	# straight back to us, which is a gate, not a chase. What still means "gone"
-	# is a path that never closes.
-	var puck_pos := Vector3(0, 0, 5)
-	var gate: Vector3 = sm._blade_gate_on_puck_line(
-			Vector3.ZERO, Vector3.ZERO, puck_pos, Vector3(0, 0, 20))
-	assert_eq(gate, puck_pos, "a puck genuinely leaving is chased, not gated")
-
-
-func test_blade_gate_parks_for_a_puck_ringing_back_off_the_boards() -> void:
-	# The other half of the invariant above, and the reason it had to change: a
-	# puck heading INTO the near boards a couple of metres away caroms straight
-	# back through the bot's reach. Board-aware, that is the most gateable puck
-	# on the ice — park the blade and let it come.
-	var self_pos := Vector3(GameRules.INNER_HALF_WIDTH - 2.5, 0, 1)
-	var puck_pos := Vector3(GameRules.INNER_HALF_WIDTH - 1.0, 0, 0)
-	var gate: Vector3 = sm._blade_gate_on_puck_line(
-			self_pos, Vector3.ZERO, puck_pos, Vector3(20, 0, 0))
-	assert_ne(gate, puck_pos, "the carom back into reach is gated, not chased")
-	assert_lt(self_pos.distance_to(gate), _gate_reach() + 0.001,
-			"and the gate sits inside the blade's comfortable extension")
-
-
-func test_blade_gate_clamps_a_corner_rim_line_into_the_rink() -> void:
-	# Rim heading into the corner: the puck's straight continuation exits the
-	# rink (mid-corner its velocity points at the glass), so the un-clamped
-	# perpendicular foot lands PAST the boards — a phantom point the blade
-	# would park on while the real puck curls the arc inside. The gate must
-	# sit on/inside the rink inner surface.
-	var puck_pos := Vector3(12.5, 0, 19.0)          # riding high on the +X wall
-	var puck_vel := Vector3(9.9, 0, 9.9)            # angling into the +X/+Z corner
-	var self_pos := Vector3(12.6, 0, 23.5)          # downstream, waiting on the rim
-	var gate: Vector3 = sm._blade_gate_on_puck_line(self_pos, Vector3.ZERO, puck_pos, puck_vel)
-	var inside: Vector2 = GameRules.clamp_to_rink_inner(Vector2(gate.x, gate.z))
-	assert_almost_eq(inside.distance_to(Vector2(gate.x, gate.z)), 0.0, 0.01,
-			"gate parks on the rink inner surface, not past the glass; got %s"
-			% gate)
-
-
-func test_blade_gate_stationary_puck_is_the_puck() -> void:
-	var puck_pos := Vector3(5, 0, 5)
-	var gate: Vector3 = sm._blade_gate_on_puck_line(
-			Vector3(10, 0, 1), Vector3.ZERO, puck_pos, Vector3.ZERO)
-	assert_eq(gate, puck_pos, "no travel line without velocity — aim at the puck")
 
 
 # ── Receive in stride vs settle ──────────────────────────────────────────────
@@ -2200,76 +2039,6 @@ func test_aim_slew_arc_rate_uses_blade_orbit_radius() -> void:
 			"arc rate never exceeds the IK-gate ceiling")
 
 
-# ── One-timer line settle: the anchor tracks the LIVE feed line ──────────────
-# The physical catch needs the blade contact within the pickup radius of the
-# puck's REAL path; the settle anchor is what puts the net-aimed blade there.
-
-func _feed_snap(puck_pos: Vector3, puck_vel: Vector3) -> WorldSnapshot:
-	var s := WorldSnapshot.new()
-	s.puck_state = PuckNetworkState.new()
-	s.puck_state.position = puck_pos
-	s.puck_state.velocity = puck_vel
-	s.puck_state.carrier_peer_id = -1
-	return s
-
-
-func test_one_timer_line_anchor_puts_the_slapper_zone_on_the_live_line() -> void:
-	# Team 0 attacks -Z. A hard feed crosses 1.5 m net-side of the bot along +X,
-	# so the point on the line nearest him is (0, 0, -1.5). The slapper zone sits
-	# its offset (Agent.BOT_ONE_TIMER_ZONE_OFFSET_*, in the frame facing the net
-	# from that point, RH blade side) off the body, so the body stands that
-	# offset back from the line.
-	var foot := Vector3(0, 0, -1.5)
-	var snap := _feed_snap(Vector3(-8, 0, foot.z), Vector3(16, 0, 0))
-	var anchor: Vector3 = sm._one_timer_line_anchor(snap, Vector3.ZERO)
-	assert_true(anchor.is_finite(), "a live inbound feed defines a settle anchor")
-	var to_net: Vector3 = sm._attacking_goal_pos - foot
-	to_net.y = 0.0
-	var f: Vector3 = to_net.normalized()
-	var right := Vector3(-f.z, 0.0, f.x)
-	var zone: Vector3 = anchor + right * Agent.BOT_ONE_TIMER_ZONE_OFFSET_X_M \
-			- f * Agent.BOT_ONE_TIMER_ZONE_OFFSET_Z_M
-	assert_almost_eq(zone.distance_to(foot), 0.0, 0.01,
-			"the armed slapper ZONE sits exactly ON the line")
-	assert_lt(anchor.x, foot.x, "the body stands off the line, away from the blade side")
-
-
-func test_one_timer_line_anchor_defers_to_a_better_positioned_teammate() -> void:
-	# The feed crosses nearer a teammate — it's theirs; don't get dragged off
-	# the station (mirror of _incoming_pass_to_me's filter).
-	var snap := _feed_snap(Vector3(-8, 0, -1.5), Vector3(16, 0, 0))
-	_add_skater(snap, TEAMMATE_ID, Vector3(0.2, 0, -1.5))   # right at the crossing
-	assert_false(sm._one_timer_line_anchor(snap, Vector3.ZERO).is_finite(),
-			"a teammate nearer the crossing owns the feed")
-
-
-func test_one_timer_line_anchor_follows_a_shifted_feed() -> void:
-	# The same feed released one metre off the anticipated line: the anchor
-	# shifts with it — a live re-read, never a latched prediction.
-	var a1: Vector3 = sm._one_timer_line_anchor(
-			_feed_snap(Vector3(-8, 0, -1.5), Vector3(16, 0, 0)), Vector3.ZERO)
-	var a2: Vector3 = sm._one_timer_line_anchor(
-			_feed_snap(Vector3(-8, 0, -2.5), Vector3(16, 0, 0)), Vector3.ZERO)
-	assert_almost_eq(a2.z - a1.z, -1.0, 0.01,
-			"the settle anchor tracks the feed's actual line")
-
-
-func test_one_timer_line_anchor_ignores_non_feeds() -> void:
-	var held := _feed_snap(Vector3(-8, 0, -1.5), Vector3(16, 0, 0))
-	held.real_puck_carrier_peer_id = 7
-	assert_false(sm._one_timer_line_anchor(held, Vector3.ZERO).is_finite(),
-			"a held puck is not a feed")
-	assert_false(sm._one_timer_line_anchor(
-			_feed_snap(Vector3(-8, 0, -1.5), Vector3(5, 0, 0)), Vector3.ZERO).is_finite(),
-			"a drifting puck is not a feed to settle on")
-	assert_false(sm._one_timer_line_anchor(
-			_feed_snap(Vector3(8, 0, -1.5), Vector3(16, 0, 0)), Vector3.ZERO).is_finite(),
-			"already past our level — the chase owns it")
-	assert_false(sm._one_timer_line_anchor(
-			_feed_snap(Vector3(-8, 0, -7.0), Vector3(16, 0, 0)), Vector3.ZERO).is_finite(),
-			"a feed crossing far away doesn't drag us off the spot")
-
-
 # ── Carry facing follows the route (face where you're going) ─────────────────
 
 func _carry_snap(self_pos: Vector3) -> WorldSnapshot:
@@ -2553,57 +2322,6 @@ func test_carry_freezes_shot_aim_after_commit() -> void:
 	assert_eq(sm.get_state(), Agent.State.CARRY, "still pre-aiming")
 	assert_eq(sm._shot_aim_locked, Vector3(0, 0, -20),
 			"the committed shot aim is frozen — it stops tracking the carrier post-commit")
-
-
-# ── Wall kill: the blade goes ON the glass, not out on the puck's line ───────
-
-func test_wall_kill_puts_the_blade_on_the_boards_for_a_rim() -> void:
-	# A gate riding the boards is played by sealing the blade against the glass
-	# — a blade parked on the path line leaves exactly the gap the puck squirts
-	# through, which is the "can't retrieve off the boards" failure.
-	var on_path := Vector3(GameRules.INNER_HALF_WIDTH - 0.35, 0, 4.0)
-	var aim: Vector3 = SkaterAgentStateMachine._wall_kill_aim(on_path)
-	assert_almost_eq(aim.x, GameRules.INNER_HALF_WIDTH, 0.01,
-			"the blade target seals against the inner wall")
-	assert_almost_eq(aim.z, on_path.z, 0.01, "…without sliding along it")
-
-
-func test_wall_kill_honours_the_rounded_corners() -> void:
-	# In the corner the "wall" is an arc, so a straight per-axis distance would
-	# push the aim to the wrong place. Radially out from the corner centre is
-	# what the clamp gives us.
-	var centre := Vector2(GameRules.CORNER_CENTER_X, GameRules.CORNER_CENTER_Z)
-	var dir: Vector2 = Vector2(1, 1).normalized()
-	var on_path: Vector2 = centre + dir * (GameRules.INNER_CORNER_RADIUS - 0.4)
-	var aim: Vector3 = SkaterAgentStateMachine._wall_kill_aim(
-			Vector3(on_path.x, 0, on_path.y))
-	assert_almost_eq(Vector2(aim.x, aim.z).distance_to(centre),
-			GameRules.INNER_CORNER_RADIUS, 0.01,
-			"the corner aim lands on the arc, not on a phantom straight wall")
-
-
-func test_wall_kill_leaves_open_ice_alone() -> void:
-	var mid := Vector3(0, 0, 0)
-	assert_eq(SkaterAgentStateMachine._wall_kill_aim(mid), mid,
-			"nothing to seal against in open ice")
-
-
-func test_wall_kill_band_catches_a_puck_riding_exactly_on_the_boards() -> void:
-	# The band test must not be inferred from "did the aim move" — a rim already
-	# flush against the glass has zero gap, moves nowhere, and is the MOST
-	# boards-hugging case there is. It still has to read as a wall play.
-	var flush := Vector2(GameRules.INNER_HALF_WIDTH, 3.0)
-	assert_lte(SkaterAgentStateMachine._board_normal_and_gap(flush).y,
-			SkaterAgentStateMachine.WALL_KILL_BAND_M, "a puck flush on the boards is a wall kill")
-	assert_gt(SkaterAgentStateMachine._board_normal_and_gap(Vector2(0.0, 0.0)).y,
-			SkaterAgentStateMachine.WALL_KILL_BAND_M, "centre ice is not")
-
-
-func test_board_normal_points_into_the_rink() -> void:
-	var board: Vector3 = SkaterAgentStateMachine._board_normal_and_gap(
-			Vector2(GameRules.INNER_HALF_WIDTH - 0.4, 3.0))
-	assert_almost_eq(board.y, 0.4, 0.01, "gap to the wall")
-	assert_almost_eq(board.x, -1.0, 0.01, "normal points back toward centre ice")
 
 
 func test_reach_band_yields_to_a_dead_puck() -> void:

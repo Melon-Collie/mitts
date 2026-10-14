@@ -444,7 +444,7 @@ func test_a_puck_ringing_off_the_near_wall_does_close() -> void:
 # solve.
 #
 # The tracked quantity is `gate_offset` — the meet in the BODY's frame, which is
-# what the blade aim consumes (SkaterAgentStateMachine._blade_gate_on_puck_line)
+# what the blade aim consumes (SkaterAgentReception.blade_gate)
 # and therefore what the stick is asked to do. `gate_point`, the same event in
 # world coordinates, feeds the stance instead and legitimately moves.
 func _walk_gate(puck_pos: Vector3, puck_vel: Vector3, body_pos: Vector3,
