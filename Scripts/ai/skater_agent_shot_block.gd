@@ -103,7 +103,7 @@ func _dive_point(snapshot: WorldSnapshot, me: SkaterNetworkState, own_goal_dir: 
 			continue
 		var q: Vector3 = AIShotBlockRead.dive_point(me.position, me.velocity, carrier.position,
 				snapshot.skater_states[pid].position, stick_reach, accel,
-				AIActionScoring.PASS_SPEED_M_S)
+				AIPuckLane.PASS_SPEED_M_S)
 		if q.is_finite() and _nearest_of_ours(snapshot, me, q):
 			return q
 	return Vector3.INF

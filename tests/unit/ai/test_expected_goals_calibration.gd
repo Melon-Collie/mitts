@@ -6,23 +6,15 @@ extends GutTest
 # so this pins the structural properties that follow from that, plus a sanity
 # band against the independent location-only model (XGBaseline).
 #
-# ── Why this no longer calibrates against shot_sim_harness ───────────────────
-# It used to, and that was the bug. The harness's own header says to read
-# RELATIVE deltas as more trustworthy than absolute rates, and tuning an
-# absolute scale against it produced a model that ran ~3.6x hot in playtest
-# (18.25 xG against 5 actual goals) — plus a non-monotonic curve with hard zeros
-# in tight AND from the point. The harness also answers a different question: it
-# measures a BOT firing with the bot's own uniform ±spread, which is
-# self-consistent for the bot's decision model but is not "how likely is this
-# chance to be finished by an arbitrary shooter."
-#
-# The real magnitude fit is against LOGGED GAME OUTCOMES (analytics plan §3.3) —
-# Σ xG ≈ Σ goals, with the on-net fraction calibrating the release spread, since
-# a game produces far more misses than goals. The shot_events table collects
-# exactly that. Until enough games accumulate, these properties + the baseline
-# band are what hold the model honest.
+# Never calibrate its scale against shot_sim_harness: that measures a BOT firing
+# with its own uniform ±spread, which is not "how likely is this chance to be
+# finished by an arbitrary shooter". The magnitude fit is against logged game
+# outcomes (analytics plan §3.3): Σ xG ≈ Σ goals, with the on-net fraction
+# calibrating the release spread. Until enough games accumulate, these
+# properties, the baseline band and the reviewed snapshot hold the model honest.
 
 
+const Snapshot := preload("res://tests/snapshot.gd")
 const SPEED: float = 33.0
 
 # A const initializer can't reference another script's constant, so this is a var.
@@ -90,15 +82,13 @@ func test_wider_release_lowers_xg_monotonically() -> void:
 		prev = xg
 
 
-func test_deke_shot_is_worth_far_less_than_the_same_open_net_settled() -> void:
+func test_deke_shot_is_worth_less_than_the_same_open_net_settled() -> void:
 	# THE playtest case: a forehand-backhand in transition yawns the net open,
 	# but the shot itself is brutal. Same window, different execution.
 	var shooter := Vector3(0.0, 0.0, GOAL.z + 6.0)
 	var beaten := Vector3(0.9, 0.0, GOAL.z + 0.6)
-	var settled: float = _xg(shooter, beaten, _settled())
-	var awkward: float = _xg(shooter, beaten, _awkward())
-	assert_lt(awkward, settled * 0.7,
-			"an awkward release off an open net is worth much less than a settled one")
+	assert_lt(_xg(shooter, beaten, _awkward()), _xg(shooter, beaten, _settled()),
+			"an awkward release off an open net is worth less than a settled one")
 
 
 func test_context_widens_the_release_but_skill_never_enters() -> void:
@@ -121,12 +111,7 @@ func test_more_open_net_is_worth_more() -> void:
 
 # ── Sanity band against the independent location model ──────────────────────
 
-func test_totals_are_within_a_sane_band_of_the_location_model() -> void:
-	# Not equality — the two models answer different questions (ours is
-	# conditional on the goalie's actual position, the baseline is marginal over
-	# all goalie states, and the baseline is NHL-calibrated while Mitts is
-	# arcade). But an order-of-magnitude gap means one of them is broken. Before
-	# the execution term this ran ~7x on beaten-goalie shots.
+func _baseline_ratio() -> float:
 	var settled: float = _settled()
 	var awkward: float = _awkward()
 	var geo_total: float = 0.0
@@ -138,8 +123,26 @@ func test_totals_are_within_a_sane_band_of_the_location_model() -> void:
 		geo_total += 0.5 * _xg(shooter, beaten, settled) \
 				+ 0.5 * _xg(shooter, beaten, awkward)
 		base_total += XGBaseline.for_shot(0.0, GOAL.z + d, 0, ShotEvent.ShotType.SHOT)
-	var ratio: float = geo_total / maxf(base_total, 0.001)
-	gut.p("  geometric %.2f vs baseline %.2f  (ratio %.2fx)"
-			% [geo_total, base_total, ratio])
-	assert_between(ratio, 0.5, 3.0,
+	return geo_total / maxf(base_total, 0.001)
+
+
+func test_totals_are_within_a_sane_band_of_the_location_model() -> void:
+	# Not equality — the two models answer different questions (ours is
+	# conditional on the goalie's actual position, the baseline is marginal over
+	# all goalie states, and the baseline is NHL-calibrated while Mitts is
+	# arcade). But an order-of-magnitude gap means one of them is broken.
+	assert_between(_baseline_ratio(), 0.5, 3.0,
 			"the goalie-aware model stays within a sane band of the location model")
+
+
+# ── The reviewed calibration ─────────────────────────────────────────────────
+# Rewrite with MITTS_UPDATE_SNAPSHOTS=1 (tests/snapshot.gd) and review the diff.
+
+func test_xg_calibration_snapshot() -> void:
+	var snap := Snapshot.new("res://tests/unit/ai/snapshots/xg_calibration.txt")
+	var shooter := Vector3(0.0, 0.0, GOAL.z + 6.0)
+	var beaten := Vector3(0.9, 0.0, GOAL.z + 0.6)
+	snap.record("6 m past a beaten keeper, settled release", _xg(shooter, beaten, _settled()))
+	snap.record("6 m past a beaten keeper, backhand on the move", _xg(shooter, beaten, _awkward()))
+	snap.record("beaten-keeper mix over the location model", _baseline_ratio())
+	snap.verify(self)

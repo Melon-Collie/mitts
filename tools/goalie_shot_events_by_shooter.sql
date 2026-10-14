@@ -52,7 +52,7 @@
 -- ══ SO THERE ARE TWO SEPARATE PROBLEMS ════════════════════════════════════
 -- The human beats him by forcing a commit in tight and finishing around it.
 -- The bots beat him by catching him moving at mid-range. They need different
--- fixes and different instruments; tests/unit/ai/test_bot_vs_goalie_conversion
+-- fixes and different instruments; tests/instruments/ai/test_bot_vs_goalie_conversion
 -- covers the bot half only and there is no instrument for the human half.
 
 with s as (

@@ -284,7 +284,7 @@ a spot that stops makes him stop.
 A goalie is not covering a one-timer until he is set square to it, so every
 re-square race — cross-crease, backdoor depth, beaten-wide onset, the pass read
 — asks `GoaliePushRules.set_reach` (push, cruise and stop), and the bots read
-his repositioning the same way (`AIActionScoring._goalie_set_reach`, and
+his repositioning the same way (`AIGoalieModel._goalie_set_reach`, and
 `goalie_push_progress` for where he is at a release). Pricing a race on a push
 that never stops tells the planner he arrives sooner than the mover can
 deliver. The cost is real and deliberate: a short push to a fixed spot takes
@@ -477,7 +477,7 @@ value at the controller's authored default, so HARD is the authored goalie by
 construction.
 
 Whenever the bots' shot model reads the same quantity as a goalie knob, the two
-must be synced (`AIActionScoring.set_goalie_profile`) or the bots score against a
+must be synced (`AIGoalieModel.set_goalie_profile`) or the bots score against a
 goalie they do not face. See the AI MIRROR note in `goalie_skill_profile.gd`.
 
 **On a breakaway the ladder lives on the cutback, and comes from the push.**
@@ -494,8 +494,8 @@ push is what keeps the ladder the right way up.
 Pulling `depth_base_m` in is not free — it concedes the centre-lane rush from
 5 m, which is what challenge depth exists for. `test_goalie_breakaway_ladder.gd`
 holds both halves so neither can be improved quietly at the other's expense, and
-1.30 is `CreaseRules.STRAIGHT_DEPTH`, a rink landmark rather than a tuning
-number.
+Hard's 1.30 m base is the taught B position, heels at the crease top — a rink
+landmark rather than a tuning number.
 
 ## SkaterController
 
@@ -669,7 +669,9 @@ toward its own pose by its weight, so the stroke and every additive layer below
 it fade with no layer knowing about another. The block owns the legs, the drop
 and the ankles, and unplants its kneeling leg; the knockdown, last, owns the
 legs, the drop, the plants (the blade contact seat, `Scripts/actors/CLAUDE.md`),
-the mohawk yaw, the edges, the trunk and the wobble. **A layer never suppresses another with a
+the mohawk yaw, the edges, the trunk and the wobble — and through the get-up
+it owns the kneel too, solving each thigh so a foot pivot never goes under
+the ice. **A layer never suppresses another with a
 `(1 − other.weight)` factor** — if one must win, it is an override above the
 other. `test_gait_layers.gd` holds the order and the knockdown's mask.
 

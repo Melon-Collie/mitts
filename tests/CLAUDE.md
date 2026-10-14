@@ -1,28 +1,45 @@
 # Test suite
 
-GUT (`addons/gut/`). Tests live under `tests/unit/`, mirroring the source layout
-— `rules/`, `game/`, `ai/`, `state/`, `controllers/`, `ui/`, `input/`.
+GUT (`addons/gut/`). Tests live in three tiers, each mirroring the source
+layout (`rules/`, `game/`, `ai/`, `state/`, `controllers/`, `ui/`, `input/`):
+
+| tier | dir | runs |
+|---|---|---|
+| default | `tests/unit/` | every push and PR, the deploy gates, and a bare `run-gut.sh` |
+| slow | `tests/slow/` | a second CI job on PRs to `main` only |
+| instruments | `tests/instruments/` | never automatically — on demand, read by a person |
 
 ## Running
 
 ```
-bash .claude/hooks/run-gut.sh                          # full suite
+bash .claude/hooks/run-gut.sh                                # default tier
 bash .claude/hooks/run-gut.sh -gdir=res://tests/unit/state   # one directory
-bash .claude/hooks/run-gut.sh -gdir=res://benchmarks         # benchmarks (not in the default suite)
+bash .claude/hooks/run-gut.sh -gdir=res://tests/slow         # slow tier
+bash .claude/hooks/run-gut.sh -gdir=res://tests/instruments  # instruments
+bash .claude/hooks/run-gut.sh -gdir=res://benchmarks         # benchmarks
 ```
 
-Full suite ≈ 15–18 s locally. **On Windows, redirect rather than pipe** — the
-console exe throttles badly on an MSYS pipe (≈90 s vs ≈18 s). On the web, run
-`.claude/hooks/wait-for-godot.sh` once first; piping is fine on Linux.
+**On Windows, redirect rather than pipe** — the console exe throttles badly on
+an MSYS pipe. On the web, run `.claude/hooks/wait-for-godot.sh` once first;
+piping is fine on Linux. Use `-gselect=<script substring>` to run one script
+while iterating. `-gjunit_xml_file=<path>` records every test's time, which is
+how to find what a tier is paying for.
 
-**On the web the full suite is ≈300 s**, not 15–18 — measured, 4179 tests. The
-cost is concentrated in the live-goalie sweeps under `tests/unit/ai/`, which
-drive the real `GoalieController` tick-by-tick over large shot grids. Use
-`-gselect=<script substring>` to run one of them while iterating; the full suite
-is a several-minute commitment there rather than a quick check.
+## Which tier a test goes in
 
-CI runs GUT on every push and PR (`.github/workflows/test.yml`), and the export
-job in `deploy.yml` gates on tests passing.
+**Default** unless it is expensive. A test that drives the real
+`GoalieController` tick by tick over a shot grid, or the duel harness through
+seconds of multi-body skating, costs seconds where a fixture costs
+milliseconds; it goes in `slow/`. Before putting one there, ask whether the
+same claim could be made by a fixture against the model — a cheap property in
+`unit/` beats an expensive one anywhere.
+
+**A test that asserts nothing is an instrument**, whatever it costs: a sweep
+that prints a table and ends `assert_true(true)`. It is a measuring tool for a
+person deciding something, not a gate, so it lives in `instruments/` and is run
+when that decision comes up. A behaviour the instrument motivated gets its own
+cheap assertion in `unit/` (`test_goalie_rebound_push.gd` holds the push;
+`instruments/ai/test_goalie_put_backs.gd` measures what it is worth).
 
 ## What gets a test
 
@@ -33,14 +50,28 @@ extractable; scene-dependent behavior is verified by the user in a local session
 
 ## Calibration and characterisation tests
 
-Some suites are not pass/fail assertions about a single function but **pinned
-measurements** of emergent behavior — the goalie beatability sweeps, the shot
-value/angle tables, the blade lever calibration, the AI action-scoring ordering
-table. They exist to catch silent drift when an upstream number moves.
+A model that is tuned has two kinds of test, and they must not be mixed.
 
-When one fails, the question is *"did the behavior change on purpose?"* — not
-*"which assertion do I loosen?"* Re-pin the table only once you have confirmed
-the new numbers are the intended ones, and say so in the commit.
+**Properties** say what any honest version of the model does, whatever its
+calibration: a monotonicity (a wider angle never scores higher), a bound, an
+ordering that is a physical necessity, an identity (a keeper outside the
+shooting cone concedes the empty net), a comparison against a live constant
+rather than its current value. They are ordinary assertions and a tuning change
+never breaks them unless it breaks the physics. `test_shot_danger_properties.gd`
+is the model.
+
+**Calibration values** — what the model currently says at the doctrine's
+reference looks — are a **snapshot**: rows recorded through `tests/snapshot.gd`
+into a checked-in table beside the test (`tests/unit/rules/snapshots/`). Any
+moved row fails with its pinned and current value. When the move is intended,
+rerun the test with `MITTS_UPDATE_SNAPSHOTS=1`, review the table's diff, and
+say in the commit that the new numbers are the intended ones. Never write a
+tuned threshold (`assert_gt(score, 0.8)`) as an assertion: it is a snapshot row
+that has to be re-pinned by hand.
+
+Measurements against the live goalie that cost seconds — the breakaway ladder,
+the shot value calibration — are the same kind of thing; they live in the slow
+tier until they are turned into properties plus a snapshot.
 
 ## Ratchets
 

@@ -189,21 +189,43 @@ static func sprawl_into(out: SprawlPose, elapsed: float, entry_speed: float,
 		out.l_knee = pin_knee
 
 
-# Get-up envelope: scales the fall tilt (and the arm brace) by the knockdown
-# pose factor kd_t — 1 while fully down, easing to 0 over the getup tail (see
-# the kd_t derivation in SkaterSkatingCoordinator). Smoothstepped so the body
-# leaves the ice and arrives upright without velocity pops at either end.
-static func getup_scale(kd_t: float) -> float:
-	var k: float = clampf(kd_t, 0.0, 1.0)
-	return k * k * (3.0 - 2.0 * k)
+# The get-up, staged over the down window's tail rather than played back as the
+# fall in reverse: up off the ice onto both knees, the free leg's skate planted
+# in front (one knee), then up onto both skates. Each envelope takes kd_t, the
+# tail left (1 while fully down, 0 upright), and is smoothstepped so no stage
+# starts or lands with a pop. Shares of the tail at which a stage is done:
+const GETUP_KNEES_END: float = 0.4
+const GETUP_STEP_END: float = 0.65
+
+
+# How much of the lying pose holds — the fall tilt, the fold, the sprawl and the
+# arm brace: all of it until the tail, gone once he is on his knees.
+static func lie_share(kd_t: float) -> float:
+	return 1.0 - _ease((1.0 - kd_t) / GETUP_KNEES_END)
+
+
+# How far the free leg has stepped up from the kneel to the planted one-knee.
+static func step_share(kd_t: float) -> float:
+	return _ease((1.0 - kd_t - GETUP_KNEES_END) / (GETUP_STEP_END - GETUP_KNEES_END))
+
+
+# How much of the down pose holds while he stands up off the knee: the weight
+# the held pose takes over the live one.
+static func stand_hold(kd_t: float) -> float:
+	return 1.0 - _ease((1.0 - kd_t - GETUP_STEP_END) / (1.0 - GETUP_STEP_END))
+
+
+static func _ease(x: float) -> float:
+	var t: float = clampf(x, 0.0, 1.0)
+	return t * t * (3.0 - 2.0 * t)
 
 
 # Arm-brace blend (0..1): ramps in over brace_in_seconds of down-time — the
-# reflexive pull-in reads as a reaction, not a snap — and releases through the
-# same get-up envelope as the tilt so the hands rejoin the live IK continuously.
+# reflexive pull-in reads as a reaction, not a snap — and lets go as he comes up
+# onto his knees, so the hands rejoin the live IK continuously.
 static func brace_at(elapsed: float, kd_t: float, brace_in_seconds: float) -> float:
 	var ramp: float = clampf(elapsed / maxf(brace_in_seconds, 0.001), 0.0, 1.0)
-	return ramp * getup_scale(kd_t)
+	return ramp * lie_share(kd_t)
 
 
 # Deflects a fall direction (unit, world XZ) so the tipped body cannot lie

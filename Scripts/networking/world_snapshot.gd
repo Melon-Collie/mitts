@@ -25,7 +25,7 @@ var accel_by_peer: Dictionary[int, Vector3] = {}          # peer_id -> smoothed 
 # dead-reckoning shared once from AIAccelerationTracker.heading_omega_by_peer.
 # The passer's "how committed is this receiver to a direction" read — a turning
 # receiver is hard to lead, so a feed to one is priced as riskier in the pass EV
-# (see AIActionScoring.receiver_heading_uncertainty_m). Read via `.get(pid, 0.0)`.
+# (see AIPuckLane.receiver_heading_uncertainty_m). Read via `.get(pid, 0.0)`.
 var heading_omega_by_peer: Dictionary[int, float] = {}    # peer_id -> smoothed turn rate
 # NHL delayed offside: peers who must get back to the blue line, from
 # GameManager.must_tag_up. A touch by one whistles the play, so the AI treats

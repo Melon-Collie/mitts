@@ -353,8 +353,9 @@ Same methodology as the duel harness (#27):
      itself outruns, while the far-side skater whose true intercept is where
      the wrap comes to him read as hopeless and declined. Fast pucks
      (> 4 m/s) now race on the friction + board-aware predicted path
-     (`AILoosePuckChase.race_trajectory` — memoized per puck state, one walk
-     per tick shared by every consumer; `path_intercept_time` with an exact
+     (`AILoosePuckChase.walk_race` — memoized per puck state on the AI worker
+     by `race_trajectory`, the main-thread election walking its own;
+     `path_intercept_time` with an exact
      dist/v_max prune): the election, the brain's RETRIEVAL read, and the
      race-lost decline all inherit it from the same seam, so they can never
      disagree. Pinned in test_loose_puck_chase (rim elects the downstream

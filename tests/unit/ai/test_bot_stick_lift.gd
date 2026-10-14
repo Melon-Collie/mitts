@@ -5,6 +5,7 @@ extends GutTest
 # (_poke_jab_aim) and its per-tick button hold (apply_stick_lift_input).
 
 const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
+const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 
 const SELF_ID := 1
 const OPP_ID := 11
@@ -40,7 +41,7 @@ func _carrier_snap() -> WorldSnapshot:
 func _held_ticks() -> int:
 	var held: int = 0
 	var pressed: int = 0
-	for _i: int in Agent.STICK_LIFT_HOLD_TICKS + 5:
+	for _i: int in SkaterAgentStickPlay.STICK_LIFT_HOLD_TICKS + 5:
 		var input := InputState.new()
 		sm.apply_stick_lift_input(input)
 		held += 1 if input.stick_check_held else 0
@@ -57,7 +58,7 @@ func test_a_shielded_puck_draws_a_lift_from_behind() -> void:
 	var lift_point: Vector3 = AIStickLiftRead.shaft_lift_point(
 			s.skater_states[OPP_ID].top_hand_world, s.skater_states[OPP_ID].blade_contact_world)
 	assert_almost_eq(aim.distance_to(lift_point), 0.0, 1e-4, "it aims under the shaft")
-	assert_eq(_held_ticks(), Agent.STICK_LIFT_HOLD_TICKS, "and holds the button through the hook")
+	assert_eq(_held_ticks(), SkaterAgentStickPlay.STICK_LIFT_HOLD_TICKS, "and holds the button through the hook")
 
 
 func test_an_open_puck_draws_the_jab() -> void:
@@ -79,7 +80,7 @@ func test_the_beginner_tier_only_jabs() -> void:
 
 func test_the_lift_hook_ends_inside_the_fast_drop_window() -> void:
 	# Held past HOOK_MAX_S the lift would end in the slow recovery instead.
-	var hook_s: float = float(Agent.STICK_LIFT_HOLD_TICKS) / 120.0 - StickCheckRules.RISE_S
+	var hook_s: float = float(SkaterAgentStickPlay.STICK_LIFT_HOLD_TICKS) / 120.0 - StickCheckRules.RISE_S
 	assert_gt(hook_s, StickCheckRules.HOOK_MIN_S)
 	assert_lt(hook_s, StickCheckRules.HOOK_MAX_S)
 
@@ -138,6 +139,34 @@ func test_a_bot_ties_nobody_with_the_puck_nowhere_near_the_man() -> void:
 	assert_false(sm._stick_tie_aim(s, me, s.skater_states[SELF_ID], _covering_the_man()).is_finite())
 
 
+func test_a_puck_already_on_his_blade_starts_no_tie() -> void:
+	# Loose for a tick under his own stickhandle or a contested pickup, the puck
+	# sitting on his blade still reads as a path reaching him. It is his puck,
+	# not a feed: tying him then is a stick check on the handler.
+	var s: WorldSnapshot = _feed_snap()
+	s.puck_state.position = s.skater_states[OPP_ID].blade_contact_world
+	s.puck_state.velocity = Vector3(0.0, 0.0, -6.0)
+	var x: float = 0.9 + (sm._blade_reach + sm._stick_lift_reach) * 0.5
+	var me := Vector3(x, 0.0, -0.6)
+	s.skater_states[SELF_ID].position = me
+	assert_false(sm._stick_tie_aim(s, me, s.skater_states[SELF_ID], _covering_the_man()).is_finite(),
+			"a puck already at his blade is not a feed to deny")
+
+
+func test_a_tie_already_made_holds_through_the_arrival() -> void:
+	# The other half: once tied, the feed reaching his blade is the reception
+	# the tie exists to deny, so the hold must not let go as it lands.
+	var s: WorldSnapshot = _feed_snap()
+	s.puck_state.position = Vector3(0.9, 0.0, 0.0)
+	var x: float = 0.9 + (sm._blade_reach + sm._stick_lift_reach) * 0.5
+	var me := Vector3(x, 0.0, -0.6)
+	s.skater_states[SELF_ID].position = me
+	s.skater_states[SELF_ID].stick_tied = true
+	s.skater_states[OPP_ID].stick_tied = true
+	assert_true(sm._stick_tie_aim(s, me, s.skater_states[SELF_ID], _covering_the_man()).is_finite(),
+			"the tie holds while the feed arrives")
+
+
 func test_a_tied_bot_the_feed_is_coming_to_pulls_its_stick_away() -> void:
 	var s: WorldSnapshot = _feed_snap()
 	var me: SkaterNetworkState = s.skater_states[SELF_ID]
@@ -189,15 +218,20 @@ func test_a_covering_bot_keeps_holding_the_tie_it_made() -> void:
 
 
 func test_a_bot_holding_a_tie_follows_the_mans_stick_late() -> void:
-	var s: WorldSnapshot = _feed_snap()
-	var man: SkaterNetworkState = s.skater_states[OPP_ID]
-	var first: Vector3 = sm._step_tie_follow(man)
+	# A first-order follow whose time constant is the lag budget: it closes
+	# 1 - 1/e of a step in the man's stick over TIE_LAG_BUDGET_S, never at once
+	# and never past it.
+	var play := SkaterAgentStickPlay.new()
+	var man: SkaterNetworkState = _feed_snap().skater_states[OPP_ID]
+	var first: Vector3 = play.step_tie_follow(man)
 	man.top_hand_world += Vector3(1.0, 0.0, 0.0)
 	man.blade_contact_world += Vector3(1.0, 0.0, 0.0)
-	var ticks: int = roundi(StickCheckRules.TIE_LAG_BUDGET_S * 120.0)
-	var follow: Vector3 = first
-	for _i: int in ticks:
-		follow = sm._step_tie_follow(man)
-	var moved: float = follow.x - first.x
-	assert_gt(moved, 0.5, "it gets most of the way there inside the lag budget")
-	assert_lt(moved, 0.75, "but not at once: a bot reads a pull as late as a human holder")
+	var ticks: int = roundi(StickCheckRules.TIE_LAG_BUDGET_S * _PhysicsConstants.PHYSICS_TICK)
+	var moved: float = 0.0
+	for i: int in ticks:
+		var now: float = play.step_tie_follow(man).x - first.x
+		assert_true(now > moved and now < 1.0,
+				"tick %d: the follow closes on the stick without reaching it" % i)
+		moved = now
+	assert_almost_eq(moved, 1.0 - exp(-1.0), 0.01,
+			"one lag budget closes 1 - 1/e of the step: a bot reads a pull as late as a human holder")

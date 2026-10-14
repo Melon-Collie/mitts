@@ -6,7 +6,6 @@ extends GutTest
 #   - Bail-out cases (no carrier / opp carrier).
 #   - Anti-crowding filter.
 #   - Argmax actually picks something non-degenerate.
-#   - Exposure penalizes deeper candidates when opps threaten recovery.
 #
 # The geometric details of score_pass / time_to_arrive are already
 # covered in test_ai_action_scoring; we don't re-test them here.
@@ -146,38 +145,8 @@ func test_anti_crowding_avoids_candidates_near_teammates() -> void:
 	var ctx: RoleContext = _make_ctx(Vector3(8, 0, 0), 100, skaters)
 	var d: RoleDecision = AIRoleSupport.decide(ctx)
 	var dist_to_teammate: float = d.target_position.distance_to(crowding_teammate_pos)
-	assert_gt(dist_to_teammate, AIRoleHelpers.ANTI_CROWD_RADIUS_M - 0.01,
+	assert_gt(dist_to_teammate, AIStationSearch.ANTI_CROWD_RADIUS_M - 0.01,
 			"chosen target must clear the anti-crowd radius around the teammate")
-
-
-# ── Exposure: deeper candidates penalized when opps threaten recovery ───────
-
-func test_exposure_pulls_target_higher_when_opp_threatens_recovery() -> void:
-	# Same SUPPORT/carrier setup with and without a back-checking
-	# opp near our blue line. Without the threat, score is dominated
-	# by score_pass. With the threat, exposure penalizes deep
-	# candidates and the chosen position should be no deeper.
-	var support_pos := Vector3(0, 0, -10)
-	var carrier_pos := Vector3(-5, 0, -22)
-
-	var skaters_no_threat: Array = [
-		[1, TEAM_ID, support_pos, Vector3.ZERO],
-		[100, TEAM_ID, carrier_pos, Vector3.ZERO],
-	]
-	var ctx_a: RoleContext = _make_ctx(support_pos, 100, skaters_no_threat)
-	var no_threat_target: Vector3 = AIRoleSupport.decide(ctx_a).target_position
-
-	var skaters_threat: Array = [
-		[1, TEAM_ID, support_pos, Vector3.ZERO],
-		[100, TEAM_ID, carrier_pos, Vector3.ZERO],
-		[200, 1 - TEAM_ID, Vector3(0, 0, OUR_NET_Z - 10), Vector3(0, 0, 8)],
-	]
-	var ctx_b: RoleContext = _make_ctx(support_pos, 100, skaters_threat)
-	var threat_target: Vector3 = AIRoleSupport.decide(ctx_b).target_position
-
-	assert_true(threat_target.z >= no_threat_target.z - 0.01,
-			"opp threatening home should pull SUPPORT no deeper than baseline;"
-			+ " got threat=%s baseline=%s" % [threat_target, no_threat_target])
 
 
 # ── No-opps edge case ───────────────────────────────────────────────────────
@@ -192,35 +161,6 @@ func test_no_opponents_means_no_exposure_penalty() -> void:
 	var d: RoleDecision = AIRoleSupport.decide(ctx)
 	assert_true(absf(d.target_position.x) <= GameRules.RINK_HALF_WIDTH)
 	assert_true(absf(d.target_position.z) <= GameRules.GOAL_LINE_Z)
-
-
-func test_covering_self_erases_the_counter_from_a_recoverable_spot() -> void:
-	# The covering-set contract at SUPPORT's seam (counter_rush_cost with
-	# SUPPORT itself as the per-candidate racer): same loss, same collector —
-	# standing where SUPPORT beats the counter home erases the threat (self
-	# joins the covering set, the counter shot is a blocked look), while
-	# standing past the play leaves it live. This is what replaced the old
-	# my_time/safe_time ramp: who COVERS, not who wins a footrace ratio.
-	var net := Vector3(0, 0, OUR_NET_Z)
-	var goalie := Vector3(0, 0, OUR_NET_Z - 0.8)
-	var loss := Vector3(0, 0, 0)                      # turnover at center ice
-	var opps: Array[Vector3] = [Vector3(1, 0, 1)]     # collector on the puck
-	var vels: Array[Vector3] = [Vector3.ZERO]
-	var no_mates: Array[Vector3] = []
-	var recoverable: float = AIActionScoring.counter_rush_cost(
-			loss, 1.0, net, goalie, GameRules.NET_HALF_WIDTH, no_mates,
-			Vector3(0, 0, 14), AIActionScoring.SKATER_REF_SPEED_M_S,
-			opps, vels, [])
-	var exposed: float = AIActionScoring.counter_rush_cost(
-			loss, 1.0, net, goalie, GameRules.NET_HALF_WIDTH, no_mates,
-			Vector3(0, 0, -15), AIActionScoring.SKATER_REF_SPEED_M_S,
-			opps, vels, [])
-	assert_gt(exposed, 0.25,
-			"a spot past the play leaves the counter live; got %f" % exposed)
-	assert_lt(recoverable, exposed * 0.5,
-			"covering the counter point collapses the threat (one body walls "
-			+ "most of the slot look); recoverable=%f exposed=%f"
-			% [recoverable, exposed])
 
 
 func test_crease_lurker_does_not_zero_the_high_stations() -> void:
@@ -292,12 +232,12 @@ func test_swings_off_a_covered_high_post_to_a_live_outlet() -> void:
 	out_goalie.position_x = net.x + challenge.x
 	out_goalie.position_z = net.z + challenge.z
 	var d: RoleDecision = AIRoleSupport.decide(ctx)
-	var chosen_lane: float = AIActionScoring.lane_clear(
+	var chosen_lane: float = AIPuckLane.lane_clear(
 			carrier_pos, d.target_position, [lane_blocker],
-			AIActionScoring.expected_pass_speed(carrier_pos, d.target_position))
-	var post_lane: float = AIActionScoring.lane_clear(
+			AIPuckLane.expected_pass_speed(carrier_pos, d.target_position))
+	var post_lane: float = AIPuckLane.lane_clear(
 			carrier_pos, high_post, [lane_blocker],
-			AIActionScoring.expected_pass_speed(carrier_pos, high_post))
+			AIPuckLane.expected_pass_speed(carrier_pos, high_post))
 	assert_gt(chosen_lane, post_lane,
 			"the chosen station's feed lane beats the covered high post's;"
 			+ " got %s" % d.target_position)

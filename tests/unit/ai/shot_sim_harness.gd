@@ -108,9 +108,9 @@ enum { GOAL, SAVE, POST, WIDE, NO_SHOT }
 # moving carrier or a live receiver, neither of which this instrument stages.
 static func _depth_constraints(threat_dist: float) -> GoalieDepthSolver.Constraints:
 	var c := GoalieDepthSolver.Constraints.new()
-	c.ceiling_radius = 1.75 if threat_dist <= AIActionScoring.GOALIE_ZONE_DEPTH_M \
-			else AIActionScoring.GOALIE_RESTING_DEPTH_M
-	c.standoff_cap = threat_dist - AIActionScoring.GOALIE_CHALLENGE_STANDOFF_M
+	c.ceiling_radius = 1.75 if threat_dist <= AIGoalieModel.GOALIE_ZONE_DEPTH_M \
+			else AIGoalieModel.GOALIE_RESTING_DEPTH_M
+	c.standoff_cap = threat_dist - AIGoalieModel.GOALIE_CHALLENGE_STANDOFF_M
 	c.floor_radius = 0.10
 	return c
 
@@ -265,17 +265,19 @@ static func run_spot(shooter: Vector3, goal: Vector3, profile: BotSkillProfile,
 	goalie.x = clampf(goalie.x + clampf(unsettled, 0.0, 1.0) * CAUGHT_OFFSET_M,
 			-NET_HW, NET_HW)
 	var spread: float = profile.shot_aim_error_rad
-	# Would the bot even fire? Real selection, spread- AND unsettled-aware (a
-	# caught-moving goalie opens the window, so more marginal shots clear the bar).
+	# Would the bot even fire? Unsettled-aware (a caught-moving goalie opens the
+	# window, so more marginal shots clear the bar) but blind to the hand, as the
+	# live carrier's selection is (#699): the chance decides whether to shoot,
+	# the hand only how it lands.
 	var danger: float = AIActionScoring.score_shoot(shooter, goal, goalie, NET_HW, [],
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S, unsettled, [], -1.0, false, 0.0, false, spread)
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, unsettled, [], -1.0, false, 0.0, false, 0.0)
 	if danger < SHOOT_MIN:
 		counts[NO_SHOT] = samples
 		return counts
 	var aim: Vector3 = AIActionScoring.best_shot_aim(shooter, goal, goalie, NET_HW,
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S, unsettled, -1.0, false, spread)
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, unsettled, -1.0, false, spread)
 	var loft: int = AIActionScoring.best_shot_loft(shooter, goal, goalie, NET_HW,
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S, unsettled, -1.0, false, 0.0, false, spread)
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, unsettled, -1.0, false, 0.0, false, spread)
 	var power_t: float = 1.0  # every hole fires full pace (contact-point solve)
 	for _i: int in samples:
 		var err: float = rng.randf_range(-spread, spread)

@@ -472,7 +472,7 @@ one**. Three consequences, all observed in play:
 ### 5.1a MEASURED: disguise is worth 5 milliseconds
 
 §5.1 was a code-reading claim. It is now instrumented —
-`tests/unit/ai/test_goalie_disguise_read.gd`, built on the real
+`tests/slow/ai/test_goalie_disguise_read.gd`, built on the real
 `GoalieController` + real analytic save loop, driving the **real release path**
 (`hold_windup` publishes a declared aim through `predicted_shot_velocity`, then
 `fire_release` emits `puck_released` so `_on_puck_released` runs and the pre-arm

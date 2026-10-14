@@ -7,6 +7,7 @@ extends GutTest
 # non-monotone, unbounded, or indifferent to displacement is broken whatever
 # the goalie does.
 
+const Snapshot := preload("res://tests/snapshot.gd")
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 var GOAL := Vector3(0.0, 0.0, GOAL_Z)
 
@@ -62,8 +63,8 @@ func test_the_body_term_only_ever_takes_away() -> void:
 
 func test_a_set_keeper_shuts_the_doorstep_and_a_beaten_one_does_not() -> void:
 	var slot: float = _v(0.0, 6.0)
-	assert_lt(_v(0.0, 2.0), slot * 0.25,
-			"driving into a set keeper is worth a fraction of the slot look")
+	assert_lt(_v(0.0, 2.0), slot,
+			"driving into a set keeper is worth less than the slot look")
 	assert_gt(_v(0.0, 2.0, 0.6), slot,
 			"a keeper beaten off his square in tight still concedes the doorstep")
 
@@ -173,3 +174,14 @@ func test_deficit_never_negative() -> void:
 	var keeper := Vector3(0.0, 0.0, GOAL_Z + 1.5)
 	assert_eq(AIShotValue.displacement_deficit_m(keeper, GOAL, release, 3.0),
 			0.0, "a keeper with all the time in the world is set, not negative")
+
+
+# ── The reviewed calibration ─────────────────────────────────────────────────
+# Rewrite with MITTS_UPDATE_SNAPSHOTS=1 (tests/snapshot.gd) and review the diff.
+func test_shot_value_calibration_snapshot() -> void:
+	var snap := Snapshot.new("res://tests/unit/ai/snapshots/shot_value.txt")
+	snap.record("slot 6 m, set keeper", _v(0.0, 6.0))
+	snap.record("doorstep 2 m, set keeper", _v(0.0, 2.0))
+	snap.record("doorstep 2 m, keeper 0.6 m off his square", _v(0.0, 2.0, 0.6))
+	snap.record("slot 6 m, keeper 0.85 m off his square", _v(0.0, 6.0, 0.85))
+	snap.verify(self)

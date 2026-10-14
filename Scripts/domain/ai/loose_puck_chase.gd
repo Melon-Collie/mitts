@@ -1,30 +1,15 @@
 class_name AILoosePuckChase
 
-# Pure-function election of which teammate should chase a loose puck. Two
-# things it must get right, both of which a raw closest-to-puck distance gets
-# wrong and both of which read as "bots are late to loose pucks":
-#
-#   - Velocity / facing. A bot nearer the puck but coasting AWAY is not the one
-#     arriving first. Election uses AIActionScoring.time_to_arrive, which folds
-#     momentum into the estimate.
-#
-#   - Flip-flop hesitation. Two near-equidistant bots will swap "closest" every
-#     frame and each flicker CHASE_PUCK <-> OFF_PUCK, so neither commits and the
-#     puck sits loose. Incumbent hysteresis pins the role to the current chaser
-#     unless a challenger beats them by HYSTERESIS_S.
-#
-# Stateless: the caller owns the per-team `prev_elected` and feeds it back each
-# frame for the hysteresis term. Lives in the domain layer so it's GUT-testable
-# without the engine.
+# Pure-function loose-puck race reads: the per-team chaser election, the
+# incidental reach band and the teammate yield (Scripts/domain/ai/CLAUDE.md →
+# "Loose-puck retrieval is two reads"). The election is momentum-aware (a bot
+# nearer the puck but coasting AWAY is not the one arriving first) and
+# incumbent-hysteretic. Stateless: the caller owns the per-team `prev_elected`
+# and feeds it back each frame.
 
-# Incumbent keeps the chase unless a challenger's intercept time beats
-# it by more than this margin. Units are seconds so it composes with
-# time_to_arrive directly. ≈ 1 m of positional difference at the
-# calibrated ETA's close-range standing-start rate (matches
-# AIRoleSlots.HYSTERESIS_PENALTY_S — re-derived with the phase-model
-# time_to_arrive). Enough to kill frame-to-frame swapping between
-# geometrically-similar bots without making the role stale when a
-# genuinely better-placed teammate appears.
+# Incumbent keeps the chase unless a challenger's intercept time beats it by
+# more than this margin (s) — ≈ 1 m at the calibrated ETA's close-range
+# standing-start rate. Equal to AIRoleSlots.HYSTERESIS_PENALTY_S (see there).
 const HYSTERESIS_S: float = 0.2
 # Default for teammate_first_to_puck's tag_up_peers — a shared empty map, so
 # callers that omit it allocate nothing.
@@ -33,15 +18,8 @@ const _NO_PEERS: Dictionary = {}
 # ── Path race ────────────────────────────────────────────────────────────────
 # EVERY loose puck races on its friction + board-aware predicted path: at each
 # step T of the walk, a skater makes the intercept iff his calibrated ETA to
-# that point fits inside T. A current-position read lies about both ends of the
-# race — the man chasing a puck's tail from a metre back "wins" a race the puck
-# outruns him in, while the skater the puck is travelling TOWARD, whose true
-# intercept is where it comes to him, reads as hopeless and declines.
-#
-# NO speed gate on the walk. A slow puck's path is not approximately its
-# position: ICE_FRICTION 0.05 decelerates a puck at 0.49 m/s², so a 3.9 m/s
-# roller travels 9.5 m inside the race horizon and takes 8 s to settle, and a
-# bounded straight-line lead standing in for it runs through the boards.
+# that point fits inside T. Never gate the walk on puck speed: on 0.05-friction
+# ice a slow roller's path is not approximately its position.
 const RACE_LOOKAHEAD_S: float = 3.0
 # 0.25 s steps. The race read interpolates within the step it crosses in
 # (path_intercept_time), so this is the resolution of the PATH, not of the
@@ -50,20 +28,17 @@ const RACE_STEPS: int = 12
 
 # Above this the puck must be met EARLY — blade swung to the gate and the body
 # set — so its intercept is judged with KILL_SETUP_MARGIN_S of arrival slack.
-# Below it a skater can meet the puck exactly and the intercept converges on
-# its own. This is a statement about the RECEPTION, not about whether the
-# puck's path is worth predicting; see the block above for why those are
-# separate questions.
+# Below it a skater can meet the puck exactly. A statement about the RECEPTION
+# only; every puck's path is walked regardless.
 const FAST_PUCK_SPEED_M_S: float = 4.0
 
 # ── Race commitment (is that body actually going for the puck?) ─────────────
-# First-stride floor: a skater actually running a race for a loose puck
-# exceeds this closing speed toward it within his first strides; below it
-# the body is standing or skating elsewhere — not a collector, whatever his
-# hypothetical ETA says. Two consumers:
+# First-stride floor (m/s): a skater actually running a race for a loose puck
+# exceeds this closing speed toward it within his first strides; below it the
+# body is not a collector, whatever his hypothetical ETA says. Two consumers:
 #   - the election (below): a HUMAN teammate can't be assigned by election,
 #     so he only suppresses the bots while demonstrably playing the puck;
-#   - the chase decline (AIRoleHelpers.loose_puck_race_lost): an opponent
+#   - the chase decline (AILoosePuckChase.loose_puck_race_lost): an opponent
 #     who is NOT running the race must not talk our chaser out of it, or both
 #     teams decline on hypothetical winners and nobody goes.
 const RACE_COMMIT_MIN_CLOSING_M_S: float = 1.0
@@ -84,13 +59,12 @@ static func committed_to_point(s: SkaterNetworkState, point: Vector3) -> bool:
 # On the puck (inside the physical contest band) or genuinely closing on it.
 static func committed_to_race(s: SkaterNetworkState, puck_pos: Vector3) -> bool:
 	return committed_to_point(s, puck_pos)
-# Arrival slack a fast-puck intercept must clear: the reception setup time
-# (swing the blade to the gate on the puck's line and get set — a body
-# arriving dead-even with a rim at pace corrals nothing). Zero slack is a
-# treadmill: steering aims the body where it meets the puck exactly, execution
-# slop misses by a hair, and the read re-solves to a new zero-slack point
-# further along. The margin picks the point far enough along the path that the
-# skater genuinely arrives EARLY and sets — the real wall-kill stance.
+
+
+# Arrival slack (s) a fast-puck intercept must clear: the reception setup time
+# to swing the blade to the gate and get set. Zero slack is a treadmill —
+# execution slop misses the exact meeting point by a hair and the read
+# re-solves to a new one further along.
 const KILL_SETUP_MARGIN_S: float = 0.25
 
 
@@ -99,49 +73,32 @@ static func is_fast_puck(puck_vel: Vector3) -> bool:
 			> FAST_PUCK_SPEED_M_S * FAST_PUCK_SPEED_M_S
 
 
-# Arrival slack a race read must leave itself against this puck. One definition,
-# shared by the election, the race-lost decline and the chase state's own
-# lead-intercept, so they can never disagree about how early a given puck has to
-# be met.
+# Arrival slack a race read must leave itself against this puck — the one
+# definition every race read uses.
 static func setup_margin(puck_vel: Vector3) -> float:
 	return KILL_SETUP_MARGIN_S if is_fast_puck(puck_vel) else 0.0
 
 
 # Race cap for one candidate: his top speed from caps (league default when
-# unset). THE seam through which Speed's separation reaches every race read:
-# the election and the race-lost decline both price with it, so they cannot
-# disagree about who has the extra gear.
+# unset). Every race read prices with it, so they cannot disagree about who has
+# the extra gear.
 static func race_vmax(caps: AISkaterCaps) -> float:
-	return caps.max_speed if caps != null else AIActionScoring.SKATER_REF_SPEED_M_S
+	return caps.max_speed if caps != null else AIArrival.SKATER_REF_SPEED_M_S
 
 
-# ── Why the `reach` argument below is for the SELF read only ────────────────
-# A skater meets a loose puck when his BLADE touches it, not when his navel
-# lands on it, so the intercept a body STEERS to must not charge the last
-# stick-length as travel: without reach the solve pushed the meeting point
-# downstream, and the man who would have swept the puck up on the way past
-# instead read himself as late and aimed further along.
-#
-# The COMPARATIVE reads — the election, best_intercept_time, the race-lost
-# decline — deliberately leave it at 0. Two reasons, and the second is the
-# load-bearing one:
-#   - Reach is nearly common to all racers, so it barely moves a RANKING; it
-#     is the absolute arrival that it corrects.
-#   - It destroys the resolution the election depends on. Every body within a
-#     stick of the puck solves to t = 0, so bots the sub-step interpolation
-#     exists to separate all tie and fall through to the peer-id tie-break —
-#     the exact defect that interpolation was added to fix. Measured, putting
-#     reach in the election left a crossing cutter unattended (D-zone coverage
-#     fixture: 2.49 uncovered attackers/tick against a 2.2 bar).
-# "Is this puck inside my stick" is already its own read (puck_comes_to_reach),
-# which overrides the election rather than competing inside it.
+# The predicted path one race is run over, freshly walked.
+static func walk_race(puck_pos: Vector3, puck_vel: Vector3) -> Array[Vector3]:
+	return AITrajectory.predict_puck(puck_pos, puck_vel, RACE_STEPS,
+			RACE_LOOKAHEAD_S / float(RACE_STEPS))
 
 
-# The shared predicted path for one race — memoized on the exact puck state,
-# because every consumer in one AI tick (both teams' elections, each chaser's
-# race-lost decline, every reach-band read) races the SAME puck: one walk per
-# tick, not one per caller. Callers must treat the returned array as
-# read-only.
+# The AI worker's memo of walk_race, keyed on the exact puck state so every bot
+# racing the same puck in a batch — each chaser's race-lost decline, every
+# reach-band read — shares one walk. Callers must treat the returned array as
+# read-only. WORKER THREAD ONLY: the host's per-frame election runs on the main
+# thread while a batch is in flight, and two threads replacing one static array
+# can free it under a reader, so elect walks its own
+# (test_loose_puck_chase.gd holds that).
 static var _traj_cache_pos: Vector3 = Vector3.INF
 static var _traj_cache_vel: Vector3 = Vector3.INF
 static var _traj_cache: Array[Vector3] = []
@@ -152,8 +109,7 @@ static func race_trajectory(puck_pos: Vector3, puck_vel: Vector3) -> Array[Vecto
 		return _traj_cache
 	_traj_cache_pos = puck_pos
 	_traj_cache_vel = puck_vel
-	_traj_cache = AITrajectory.predict_puck(puck_pos, puck_vel, RACE_STEPS,
-			RACE_LOOKAHEAD_S / float(RACE_STEPS))
+	_traj_cache = walk_race(puck_pos, puck_vel)
 	return _traj_cache
 
 
@@ -170,13 +126,19 @@ static func race_trajectory(puck_pos: Vector3, puck_vel: Vector3) -> Array[Vecto
 # baseline) leave it at the league default; a bot solving its OWN chase passes
 # its attribute-scaled max_accel, exactly as time_to_arrive documents.
 #
+# `reach` lets the SELF read steer to where the blade, not the body, meets the
+# puck. The comparative reads (the election, best_intercept_time, the race-lost
+# decline) must leave it at 0: every body within a stick would solve to t = 0
+# and the election would fall through to its peer-id tie-break. A puck inside
+# the stick is puck_comes_to_reach's read, which overrides the election.
+#
 # `playable_from` (race_playable_time) is when the puck is back down where a
 # grounded blade can play it: nothing earlier on the path is makeable, so a
 # popped or flipped puck is met where it lands rather than under its flight.
 static func path_intercept_time(traj: Array[Vector3], step_dt: float,
 		puck_pos: Vector3, skater_pos: Vector3, skater_vel: Vector3,
 		max_speed: float, margin: float = KILL_SETUP_MARGIN_S,
-		accel: float = AIActionScoring.SHED_ACCEL_DEFAULT_M_S2,
+		accel: float = AIArrival.SHED_ACCEL_DEFAULT_M_S2,
 		reach: float = 0.0, playable_from: float = 0.0) -> float:
 	if traj.is_empty():
 		return INF
@@ -236,14 +198,14 @@ static func race_playable_time(puck_pos: Vector3, puck_vel: Vector3) -> float:
 static func _reach_eta(from_pos: Vector3, point: Vector3, vel: Vector3,
 		max_speed: float, accel: float, reach: float) -> float:
 	if reach <= 0.0:
-		return AIActionScoring.time_to_arrive(from_pos, point, vel, max_speed, accel)
+		return AIArrival.time_to_arrive(from_pos, point, vel, max_speed, accel)
 	var dx: float = point.x - from_pos.x
 	var dz: float = point.z - from_pos.z
 	var d: float = sqrt(dx * dx + dz * dz)
 	if d <= reach:
 		return 0.0
 	var f: float = (d - reach) / d
-	return AIActionScoring.time_to_arrive(from_pos,
+	return AIArrival.time_to_arrive(from_pos,
 			Vector3(from_pos.x + dx * f, point.y, from_pos.z + dz * f),
 			vel, max_speed, accel)
 
@@ -254,13 +216,11 @@ static func _reach_eta(from_pos: Vector3, point: Vector3, vel: Vector3,
 # the time back through this so they can never disagree with the race read that
 # produced it. Times past the horizon resolve at the settled end of the walk.
 #
-# INTERPOLATED, because the time it maps is a sub-step solve: snapping to the
-# nearest sample threw away exactly the precision path_intercept_time exists to
-# recover, and at 0.25 s steps that is up to ~1 m of aim error at rim speeds.
+# Interpolated, never snapped to the nearest sample: the time it maps is a
+# sub-step solve, and snapping is up to ~1 m of aim error at rim speeds.
 # `puck_pos` is the walk's origin (the path point at t=0), so an intercept
-# inside the first step — a puck arriving at a skater who is already there,
-# which is the whole near-puck regime — resolves between the puck's spot NOW
-# and traj[0] rather than being clamped forward onto traj[0].
+# inside the first step — the whole near-puck regime — resolves between the
+# puck's spot NOW and traj[0].
 static func path_intercept_point(traj: Array[Vector3], step_dt: float,
 		puck_pos: Vector3, t: float) -> Vector3:
 	if traj.is_empty():
@@ -320,20 +280,15 @@ static func puck_comes_to_reach(
 		var dz: float = meet.z - self_pos.z
 		if dx * dx + dz * dz > band2:
 			continue
-		if AIActionScoring.time_to_arrive(self_pos, meet, self_vel, max_speed) \
+		if AIArrival.time_to_arrive(self_pos, meet, self_vel, max_speed) \
 				<= seg_t0 + (t0 + step_dt - seg_t0) * f:
 			return true
 	return false
 
 
-# ── Teammate yield (don't stab at your own teammate's puck) ──────────────────
-# The contested-pickup rule stays symmetric — two blades on one loose puck means
-# nobody is awarded it — so a bot keeps its blade OUT when a teammate's is
-# already first to the puck, upstream of the contest rather than inside it.
-#
-# Deadlock-free by construction: yielding requires the OTHER blade to be nearer
-# the puck by more than YIELD_MARGIN_M, and that relation cannot hold in both
-# directions at once, so two bots can never both yield and leave the puck.
+# ── Teammate yield (Scripts/domain/ai/CLAUDE.md → "Teammates don't stab") ───
+# Yielding requires the OTHER blade to be nearer the puck by more than this, a
+# relation that cannot hold in both directions, so two bots never both yield.
 const YIELD_MARGIN_M: float = 0.25
 # How near a teammate's blade must be to the puck to be "on it" at all. Outside
 # this he isn't about to take anything, so he can't make anyone yield. Sized
@@ -407,12 +362,8 @@ static func _segment_meet_fraction(a: Vector3, b: Vector3, pos: Vector3) -> floa
 #   puck_pos/_vel  — loose puck world position and velocity (XZ used)
 #   prev_elected   — last frame's elected chaser for this team (-1 if none)
 #   puck_playable  — false for a DEAD loose puck (goalie smother / phase lock:
-#                    pickup_locked with no carrier). Nobody can play a dead
-#                    puck, so nobody is elected to chase it — every bot falls
-#                    back to its positional role, which is the real behavior
-#                    around a covered puck: attackers peel off the crease, the
-#                    defense resets for the release instead of hovering over a
-#                    puck they can't touch.
+#                    pickup_locked with no carrier). Nobody is elected, so every
+#                    bot plays its positional role around a covered puck.
 #   human_ids      — teammate_ids under HUMAN control. Election can't make a
 #                    human skate, so he suppresses the bots only while he is
 #                    demonstrably playing the puck (committed_to_race).
@@ -434,10 +385,7 @@ static func elect(
 		camped_ids: Array = []) -> int:
 	if not puck_playable:
 		return -1
-	# Every loose puck races on the shared path walk (see the path-race block
-	# above) — memoized on the puck state, so both teams' elections, every
-	# chaser's decline and every reach-band read share ONE walk per tick.
-	var traj: Array[Vector3] = race_trajectory(puck_pos, puck_vel)
+	var traj: Array[Vector3] = walk_race(puck_pos, puck_vel)
 	var step_dt: float = RACE_LOOKAHEAD_S / float(RACE_STEPS)
 	var margin: float = setup_margin(puck_vel)
 	var t_play: float = race_playable_time(puck_pos, puck_vel)
@@ -452,17 +400,13 @@ static func elect(
 		if not human_ids.is_empty() and human_ids.has(pid) \
 				and not committed_to_race(s, puck_pos):
 			continue
-		# Each candidate races at ITS real top speed — a fast skater
-		# genuinely reaches a loose puck first. Missing caps → league default.
 		var max_speed: float = race_vmax(caps_by_peer.get(pid))
 		var t: float = path_intercept_time(traj, step_dt, puck_pos,
 				s.position, s.velocity, max_speed, margin,
-				AIActionScoring.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
-		# Incumbent hysteresis: challengers pay HYSTERESIS_S, so the
-		# current chaser keeps the role unless beaten by the margin.
+				AIArrival.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
 		if pid != prev_elected:
 			t += HYSTERESIS_S
-		# Deterministic tie-break by lower peer_id (matches AIRoleSlots).
+		# Tie-break on the lower peer_id, never iteration order.
 		if t < best_t or (t == best_t and (best_pid == -1 or pid < best_pid)):
 			best_t = t
 			best_pid = pid
@@ -474,10 +418,9 @@ static func elect(
 
 
 # Raw best intercept time (seconds) among `ids` to the loose puck — the
-# race-read half of the election, with no hysteresis and no winner identity.
-# Lets a caller compare OUR best against THEIRS through the same intercept model
-# the election runs, so "who wins the race" and "who is elected to run it" can
-# never disagree. INF when no eligible skater.
+# election's race read with no hysteresis and no winner identity, so a caller can
+# compare OUR best against THEIRS through the same model. INF when no eligible
+# skater.
 static func best_intercept_time(
 		skater_states: Dictionary,
 		ids: Array,
@@ -496,7 +439,96 @@ static func best_intercept_time(
 		var max_speed: float = race_vmax(caps_by_peer.get(pid))
 		var t: float = path_intercept_time(traj, step_dt, puck_pos,
 				s.position, s.velocity, max_speed, margin,
-				AIActionScoring.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
+				AIArrival.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
 		if t < best_t:
 			best_t = t
 	return best_t
+
+
+# Should I decline a loose puck? True when a committed opponent reaches it a
+# clear contest band (CHASE_CONTEST_MARGIN_M) ahead of me AND nobody else contains
+# the counter. Inside the band it is a live 50/50 worth racing.
+#
+# `own_goal_dir` (+1 = our net at +Z) enables the containment read; 0.0 (unit
+# tests only) claims no containment.
+static func loose_puck_race_lost(
+		snapshot: WorldSnapshot, self_pos: Vector3, self_vel: Vector3,
+		self_max_speed: float, team_id: int, team_id_by_peer: Dictionary,
+		caps_by_peer: Dictionary, self_pid: int = -1,
+		own_goal_dir: float = 0.0) -> bool:
+	if snapshot == null or snapshot.puck_state == null:
+		return false
+	var puck_pos: Vector3 = snapshot.puck_state.position
+	# Race the puck's predicted path, never its current position, on the chase
+	# election's own walk so the decline cannot contradict it.
+	var puck_vel: Vector3 = snapshot.puck_state.velocity
+	var traj: Array[Vector3] = AILoosePuckChase.race_trajectory(puck_pos, puck_vel)
+	var step_dt: float = AILoosePuckChase.RACE_LOOKAHEAD_S \
+			/ float(AILoosePuckChase.RACE_STEPS)
+	var margin: float = AILoosePuckChase.setup_margin(puck_vel)
+	var t_play: float = AILoosePuckChase.race_playable_time(puck_pos, puck_vel)
+	var self_vmax: float = maxf(self_max_speed, 1.0)
+	var my_eta: float = AILoosePuckChase.path_intercept_time(
+			traj, step_dt, puck_pos, self_pos, self_vel, self_vmax, margin,
+			AIArrival.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
+	var best_opp_eta: float = INF
+	var best_opp_meet: Vector3 = puck_pos
+	for pid: int in snapshot.skater_states:
+		if team_id_by_peer.get(pid, -1) == team_id:
+			continue
+		var s: SkaterNetworkState = snapshot.skater_states[pid]
+		# Lost only to an opponent RUNNING it: the ETA prices a hypothetical run,
+		# so a flat-footed body off the line would otherwise veto the chase. A
+		# downstream interceptor whose band the puck's path enters counts.
+		var speed: float = AILoosePuckChase.race_vmax(caps_by_peer.get(pid))
+		var t: float = AILoosePuckChase.path_intercept_time(
+				traj, step_dt, puck_pos, s.position, s.velocity, speed, margin,
+				AIArrival.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
+		var meet: Vector3 = AILoosePuckChase.path_intercept_point(
+				traj, step_dt, puck_pos, t)
+		var committed: bool = AILoosePuckChase.path_enters_band(traj, puck_pos,
+				s.position, AIActionScoring.CHASE_CONTEST_MARGIN_M) \
+				or AILoosePuckChase.committed_to_point(s, meet)
+		if not committed:
+			continue
+		if t < best_opp_eta:
+			best_opp_eta = t
+			best_opp_meet = meet
+	if best_opp_eta == INF:
+		return false
+	var contest_window: float = AIActionScoring.CHASE_CONTEST_MARGIN_M \
+			/ maxf(self_max_speed, 1.0)
+	if my_eta <= best_opp_eta + contest_window:
+		return false
+	# Declining buys a pre-contain body, worth it only when nobody else contains.
+	return not _has_containment_behind(snapshot, team_id, team_id_by_peer,
+			self_pid, best_opp_meet, own_goal_dir)
+
+
+# Is someone else covering the counter, so that leaving to chase is free? A live
+# teammate qualifies if he is GOAL-SIDE of the pickup, or can reach the HOUSE GATE
+# inside AIRushRead.LATE_MAN_WINDOW_S — the second because nothing can be
+# goal-side of a puck behind our own goal line.
+#
+# Never re-phrase this as a race to the pickup: behind our goal line the pickup
+# IS our net, so the collector is already home and nobody beats him there.
+static func _has_containment_behind(snapshot: WorldSnapshot, team_id: int,
+		team_id_by_peer: Dictionary, self_pid: int, pickup: Vector3,
+		own_goal_dir: float) -> bool:
+	if own_goal_dir == 0.0:
+		return false
+	var gate := Vector3(0.0, 0.0, own_goal_dir
+			* (GameRules.GOAL_LINE_Z - AIZoneCoverage.HOUSE_TOP_DEPTH_M))
+	for pid: int in snapshot.skater_states:
+		if pid == self_pid or team_id_by_peer.get(pid, -1) != team_id:
+			continue
+		var mate: SkaterNetworkState = snapshot.skater_states[pid]
+		if mate.is_ghost:
+			continue
+		if own_goal_dir * (mate.position.z - pickup.z) \
+				> AIActionScoring.CHASE_CONTEST_MARGIN_M:
+			return true
+		if AIArrival.time_to_arrive(mate.position, gate, mate.velocity) \
+				<= AIRushRead.LATE_MAN_WINDOW_S:
+			return true
+	return false

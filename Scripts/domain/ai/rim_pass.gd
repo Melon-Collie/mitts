@@ -3,21 +3,20 @@ class_name AIRimPass
 # The rim pass: a puck fired into the near boards so the boards carry it to a
 # teammate — up the wall to the half-wall winger, around the end boards to the
 # weak side, behind the net to the partner D. A straight pass prices a line; a
-# rim's lane IS the boards, so it is searched as a RELEASE (bearing at the
-# quick-pass pace) and walked on the puck's predicted path — friction and board
-# caroms, the same walk the chase election races on, at the same resolution, so
-# the receiver the rim is priced to reach is the one the election will send.
+# rim's lane IS the boards, so it is searched as a RELEASE (bearing × pace) and
+# walked on the puck's predicted path — friction and board caroms, the same walk
+# the chase election races on, at the same resolution, so the receiver the rim
+# is priced to reach is the one the election will send.
 #
-# The boards and the corner arcs bleed pace on every contact, so the search runs
-# a pace ladder from a soft rim up to the passer's own wrister max and keeps only
-# arrivals the receiver can catch: the puck's speed in his frame under the
-# deflect threshold. The carrier fires the softest launch that still reaches him
-# (AIRoleCarrier._rim_launch_for).
+# The boards and the corner arcs bleed pace on every contact, so each bearing is
+# walked on a pace ladder up to the passer's own wrister max, and only arrivals
+# the receiver can catch count (catchable). The carrier fires the softest launch
+# that still reaches him (AICarrierPassSearch._rim_launch_for).
 #
 # This file is the path half: which launches are rims, where each one goes, and
-# who reaches it first. What a rim is WORTH stays in the carrier's pass EV
-# (AIRoleCarrier._rim_variant_ev), so it competes with the flat feed and the
-# saucer in one currency.
+# who reaches it first. What a rim is WORTH stays in the carrier's pass compete
+# (AICarrierPassSearch ranks it in _rim_launch_for and prices the best in _pass_ev), in one currency with the
+# flat feed and the saucer.
 #
 # A launch is a rim when its first board contact is near the passer and
 # glancing, so the boards carry it rather than turning it back into the middle.
@@ -38,15 +37,12 @@ const BANK_MAX_M: float = 10.0
 const GLANCE_MAX_RAD: float = deg_to_rad(40.0)
 # At most this many launches survive the bounds (scratch is preallocated).
 const MAX_LAUNCHES: int = 18
-# Aim distance handed to the release: the quick release fires toward a point,
-# and any point down the bearing is the same release.
-const AIM_DISTANCE_M: float = 20.0
 
 # Their keeper's behind-net rim stop, mirrored from GoalieController's puck-play
 # defaults (test_rim_pass.gd holds the two together): the rim pace window he
 # will stop, how early he must be set, the beat he takes stopping it, and the
 # sprint he assumes of the nearest of us. His GO margin is tiered and lives on
-# AIActionScoring.goalie_puck_play_go_margin_s.
+# AIGoalieModel.goalie_puck_play_go_margin_s.
 const KEEPER_RIM_MIN_SPEED_M_S: float = 4.0
 const KEEPER_RIM_MAX_SPEED_M_S: float = 22.0
 const KEEPER_SET_BEAT_S: float = 0.15
@@ -101,11 +97,11 @@ static func _ensure_scratch() -> void:
 		speeds.append(v)
 
 
-# Searches the rim launches from `from` up to `max_pace` and races every
-# opponent on each one. Returns the number of launches (0 when the passer is nowhere near
-# the boards). A launch survives only if no leg of its path runs through a net
-# or across our own slot (`own_goal_z`), which the puck walk itself does not
-# model. `opp_*` are index-matched; caps may be null (league default).
+# Searches the rim launches from `from` up to `max_pace` and holds the
+# opponents for the lazy race (opp_time). Returns the number of launches (0 when
+# the passer is nowhere near the boards). A launch survives only if no leg of its
+# path runs through a net or across our own slot (`own_goal_z`), which the puck
+# walk itself does not model. `opp_*` are index-matched; caps may be null (league default).
 # `keeper_pos` is their goalie (INF = none), and `ours` our other skaters, whom
 # he races home against before he leaves his net.
 static func build(from: Vector3, max_pace: float, own_goal_z: float,
@@ -187,8 +183,8 @@ static func path_length(k: int, t: float) -> float:
 		var t_i: float = float(i + 1) * STEP_DT
 		if t_i >= t:
 			var f: float = clampf((t - float(i) * STEP_DT) / STEP_DT, 0.0, 1.0)
-			return length + AIRoleHelpers.xz_distance(prev, path[i]) * f
-		length += AIRoleHelpers.xz_distance(prev, path[i])
+			return length + AIRoleReads.xz_distance(prev, path[i]) * f
+		length += AIRoleReads.xz_distance(prev, path[i])
 		prev = path[i]
 	return length
 
@@ -234,8 +230,8 @@ static func _walk(k: int, vel: Vector3, own_goal_z: float) -> bool:
 	for i: int in STEPS:
 		var stepped: Transform3D = AITrajectory.step_puck(p, v, STEP_DT)
 		if _leg_near_middle(p, stepped.origin) \
-				and (AIActionScoring.pass_lane_blocked_by_net(p, stepped.origin)
-				or AIActionScoring.pass_crosses_own_slot(p, stepped.origin, own_goal_z)):
+				and (AINetObstacle.pass_lane_blocked_by_net(p, stepped.origin)
+				or AINetObstacle.pass_crosses_own_slot(p, stepped.origin, own_goal_z)):
 			return false
 		p = stepped.origin
 		v = stepped.basis.x
@@ -248,7 +244,7 @@ static func _walk(k: int, vel: Vector3, own_goal_z: float) -> bool:
 # prune for the two segment tests: a leg with both ends on the same side,
 # outside the wider of the two, cannot reach either.
 static func _leg_near_middle(a: Vector3, b: Vector3) -> bool:
-	var half_w: float = maxf(AIActionScoring.OWN_DZ_SLOT_HALF_WIDTH_M,
+	var half_w: float = maxf(AINetObstacle.OWN_DZ_SLOT_HALF_WIDTH_M,
 			GameRules.NET_BACK_HALF_WIDTH + GameRules.PUCK_COLLISION_RADIUS)
 	return not ((a.x > half_w and b.x > half_w) or (a.x < -half_w and b.x < -half_w))
 
@@ -262,7 +258,7 @@ static func _race_opponents(k: int, opp_positions: Array[Vector3],
 	for i: int in opp_positions.size():
 		var caps: AISkaterCaps = opp_caps[i] if i < opp_caps.size() else null
 		var speed: float = caps.max_speed if caps != null \
-				else AIActionScoring.SKATER_REF_SPEED_M_S
+				else AIArrival.SKATER_REF_SPEED_M_S
 		var vel: Vector3 = opp_vels[i] if i < opp_vels.size() else Vector3.ZERO
 		var t: float = AILoosePuckChase.path_intercept_time(path, STEP_DT, origin,
 				opp_positions[i], vel, speed, margin)
@@ -280,7 +276,7 @@ static func _race_opponents(k: int, opp_positions: Array[Vector3],
 # spot. INF when he stays home, which is every rim for a tier that never plays
 # the puck.
 static func _keeper_time(k: int, keeper_pos: Vector3, ours: Array[Vector3]) -> float:
-	var margin: float = AIActionScoring.goalie_puck_play_go_margin_s
+	var margin: float = AIGoalieModel.goalie_puck_play_go_margin_s
 	if not keeper_pos.is_finite() or is_inf(margin):
 		return INF
 	var path: Array[Vector3] = paths[k]
@@ -292,16 +288,16 @@ static func _keeper_time(k: int, keeper_pos: Vector3, ours: Array[Vector3]) -> f
 		if spd[i] < KEEPER_RIM_MIN_SPEED_M_S or spd[i] > KEEPER_RIM_MAX_SPEED_M_S:
 			continue
 		var t_out: float = GoalieBehaviorRules.travel_time_from_rest(
-				maxf(AIRoleHelpers.xz_distance(keeper_pos, p)
-						- AIActionScoring.GOALIE_PUCK_PLAY_REACH_M, 0.0),
-				AIActionScoring.GOALIE_PUCK_PLAY_SPEED_M_S,
-				AIActionScoring.GOALIE_PUCK_PLAY_ACCEL_M_S2)
+				maxf(AIRoleReads.xz_distance(keeper_pos, p)
+						- AIGoalieModel.GOALIE_PUCK_PLAY_REACH_M, 0.0),
+				AIGoalieModel.GOALIE_PUCK_PLAY_SPEED_M_S,
+				AIGoalieModel.GOALIE_PUCK_PLAY_ACCEL_M_S2)
 		var t_i: float = float(i + 1) * STEP_DT
 		if t_out + KEEPER_SET_BEAT_S > t_i:
 			continue
-		var nearest: float = AIRoleHelpers.xz_distance(origin, p)
+		var nearest: float = AIRoleReads.xz_distance(origin, p)
 		for q: Vector3 in ours:
-			nearest = minf(nearest, AIRoleHelpers.xz_distance(q, p))
+			nearest = minf(nearest, AIRoleReads.xz_distance(q, p))
 		if nearest / KEEPER_PRESSURE_SPEED_M_S \
 				> 2.0 * t_out + KEEPER_STOP_BEAT_S + margin:
 			return t_i

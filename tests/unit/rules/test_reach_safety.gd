@@ -5,9 +5,15 @@ extends GutTest
 # proximity. These pin the behaviours the old proximity model couldn't express:
 # a hard charger is evadable (he overshoots), a contained/jockeying defender can't
 # strip a careful carrier, a stick on the puck is a real threat, and handling
-# (how far the carrier holds the puck off his body) threads tighter seams.
+# (how far the carrier holds the puck off his body) threads tighter seams. The
+# safety values the current calibration gives at the reference looks are the
+# snapshot, test_reach_safety_calibration_snapshot.
 
+const Snapshot := preload("res://tests/snapshot.gd")
+const SNAPSHOT_PATH := "res://tests/unit/rules/snapshots/reach_safety.txt"
 const HANDLE: float = 0.9   # base puck-protect reach (Hands scales this)
+# Float noise in a quantity that should be flat.
+const SLACK: float = 1e-4
 
 
 # Carrier's evadability [0,1]: safety at the best seam in his handling envelope.
@@ -48,21 +54,45 @@ func test_bigger_more_agile_defender_covers_more() -> void:
 	assert_gt(vs_small, league, "a smaller, slower defender reaches less → more room")
 
 
-func test_angled_hard_charger_is_evadable() -> void:
-	# Defender charging in from front-left at ~8 m/s. His momentum carries his
-	# reach downrange past the carrier, so the space he vacates is open — beat him
-	# by letting him overshoot.
-	var opps: Array[Vector3] = [Vector3(2.5, 0, 2.5)]
-	var vels: Array[Vector3] = [Vector3(-5.66, 0, -5.66)]
-	assert_gt(_evade(Vector3.ZERO, Vector3(5, 0, 0), opps, vels), 0.8,
-			"a committed angled charger is beaten, not a strip threat")
+# A defender charging at the carrier's lane at `speed` from `start`.
+func _charge(start: Vector3, speed: float) -> float:
+	var opps: Array[Vector3] = [start]
+	var vels: Array[Vector3] = [(Vector3(1.0, 0, 0) - start).normalized() * speed]
+	return _evade(Vector3.ZERO, Vector3(5, 0, 0), opps, vels)
 
 
-func test_straight_on_charger_is_evadable() -> void:
-	var opps: Array[Vector3] = [Vector3(3, 0, 0)]
-	var vels: Array[Vector3] = [Vector3(-8, 0, 0)]
-	assert_gt(_evade(Vector3.ZERO, Vector3(5, 0, 0), opps, vels), 0.8,
-			"a head-on charger at 8 m/s blows past — evadable")
+func test_momentum_overshoot_raises_evadability() -> void:
+	# Over charge speed, evadability is a valley: closing first brings his reach
+	# onto the puck, then his momentum carries it past where the carrier was. Past
+	# the worst speed more pace only takes him further past, and the full charge
+	# reads more evadable than the worst one.
+	for start: Vector3 in [Vector3(3, 0, 0), Vector3(3, 0, 1)]:
+		var row: Array[float] = []
+		for k: int in range(25):
+			row.append(_charge(start, 0.5 * k))
+		var worst: int = row.find(row.min())
+		for i: int in range(1, worst + 1):
+			assert_lte(row[i], row[i - 1] + SLACK,
+					"closing from %s: evadability rises before the worst speed" % start)
+		for i: int in range(worst + 1, row.size()):
+			assert_gte(row[i], row[i - 1] - SLACK,
+					"charging from %s at %.1f m/s: more pace never reads harder to evade"
+					% [start, 0.5 * i])
+		assert_gt(row[row.size() - 1], row[worst],
+				"the committed charger from %s overshoots" % start)
+
+
+func test_approach_lowers_evadability_for_a_standing_carrier() -> void:
+	# No momentum on either side: the nearer a stationary defender's stick, the
+	# less room the seam has.
+	var prev: float = INF
+	for gap: float in [3.0, 2.5, 2.0, 1.6, 1.2, 1.0, 0.8, 0.6, 0.4]:
+		var opps: Array[Vector3] = [Vector3(gap, 0, 0.3)]
+		var vels: Array[Vector3] = [Vector3.ZERO]
+		var safety: float = _evade(Vector3.ZERO, Vector3.ZERO, opps, vels)
+		assert_lte(safety, prev + SLACK, "a defender %.1f m off never leaves more room" % gap)
+		prev = safety
+	assert_lt(prev, 1.0, "a stick at the puck takes room away")
 
 
 func test_stick_on_the_puck_is_a_real_threat() -> void:
@@ -81,14 +111,24 @@ func test_stationary_wall_ahead_is_tight() -> void:
 			"skating into a stationary defender 1.5 m ahead is tight")
 
 
-func test_jockey_cannot_strip_a_careful_carrier() -> void:
-	# A gap-control defender pacing the carrier can CONTAIN (cap progress) but not
-	# strip — the carrier is safe from a poke (he can retreat/hold). Containment is
-	# the offense model's problem (no lane past him), not a safety one.
+# A defender 2.2 m ahead of a 5 m/s carrier, skating with him at `pace`.
+func _jockey(pace: float) -> float:
 	var opps: Array[Vector3] = [Vector3(2.2, 0, 0.2)]
-	var vels: Array[Vector3] = [Vector3(5, 0, 0)]
-	assert_gt(_evade(Vector3.ZERO, Vector3(5, 0, 0), opps, vels), 0.8,
-			"gap-control contains but doesn't strip — safe from the poke")
+	var vels: Array[Vector3] = [Vector3(pace, 0, 0)]
+	return _evade(Vector3.ZERO, Vector3(5, 0, 0), opps, vels)
+
+
+func test_jockey_cannot_strip_a_careful_carrier() -> void:
+	# A gap-control defender pacing the carrier CONTAINS (caps progress) but his
+	# disk does not close on the puck the way a standing one the carrier skates
+	# into does — containment is the offense model's problem, not a safety one.
+	var prev: float = -INF
+	for pace: float in [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]:
+		var safety: float = _jockey(pace)
+		assert_gte(safety, prev - SLACK, "matching more of the carrier's pace never closes him in")
+		prev = safety
+	assert_gt(_jockey(5.0), _jockey(0.0),
+			"the pacer is safer to carry against than the same man standing still")
 
 
 func test_handling_threads_a_tighter_seam() -> void:
@@ -189,22 +229,25 @@ func test_wall_alone_is_harmless_without_a_defender() -> void:
 			Vector3.ZERO, [], []), 1.0)
 
 
-func test_wall_pinned_carrier_reads_far_less_safe_than_open_ice() -> void:
-	# Same 1.5 m defender gap, two placements: pinned against the side wall (the
-	# outside half of the handling envelope is illegal — the classic wall pincer)
-	# vs mid-ice (a full envelope to evade into). The pre-boards model scored
-	# both alike by "evading" INTO the wall; the pinned read must now collapse.
+# The same defender gap with the carrier pinned against the side wall (the
+# outside half of his handling envelope is off the ice) and in open ice.
+func _pinned_and_open(gap: float) -> Array[float]:
 	var pinned_pos := Vector3(GameRules.INNER_HALF_WIDTH - 0.4, 0, 0)
-	var opps_wall: Array[Vector3] = [pinned_pos + Vector3(-1.5, 0, 0)]
-	var opps_open: Array[Vector3] = [Vector3(-1.5, 0, 0)]
+	var opps_wall: Array[Vector3] = [pinned_pos + Vector3(-gap, 0, 0)]
+	var opps_open: Array[Vector3] = [Vector3(-gap, 0, 0)]
 	var vels: Array[Vector3] = [Vector3.ZERO]
-	var pinned: float = _evade(pinned_pos, Vector3.ZERO, opps_wall, vels)
-	var open: float = _evade(Vector3.ZERO, Vector3.ZERO, opps_open, vels)
-	# Bar re-anchored by the #27 pair recalibration: the best wall seam sits
-	# just inside the measured mixed band (more likely stripped than kept),
-	# not at the old map's hard zero — "genuinely unsafe" = below a coin flip.
-	assert_lt(pinned, 0.5, "pinned on the wall with a defender sealing is genuinely unsafe")
-	assert_gt(open, pinned + 0.3, "the identical defender gap in open ice leaves real room")
+	return [_evade(pinned_pos, Vector3.ZERO, opps_wall, vels),
+			_evade(Vector3.ZERO, Vector3.ZERO, opps_open, vels)]
+
+
+func test_wall_pinned_carrier_reads_less_safe_than_open_ice() -> void:
+	# The wall pincer: losing half the envelope never adds room at any gap, and
+	# with the defender 1.5 m off it costs room.
+	for gap: float in [1.0, 1.5, 2.0, 2.5, 3.0]:
+		var both: Array[float] = _pinned_and_open(gap)
+		assert_lte(both[0], both[1] + SLACK, "the wall never adds room at %.1f m" % gap)
+	var at_1_5: Array[float] = _pinned_and_open(1.5)
+	assert_lt(at_1_5[0], at_1_5[1], "pinned at 1.5 m reads less safe than open ice")
 
 
 # ─── best_evade_point_toward: beat the man TOWARD the objective ──────────────
@@ -411,3 +454,17 @@ func test_deke_cuts_away_from_the_second_defender() -> void:
 	assert_eq(AICarrySpace.deke_cut_side(
 			Vector3.ZERO, Vector3.ZERO, 0.9, frame[0], frame[1], 0, opps, vels), -1,
 			"the cut resolves to the unguarded side")
+
+
+func test_reach_safety_calibration_snapshot() -> void:
+	var snap := Snapshot.new(SNAPSHOT_PATH)
+	snap.record("straight-on charger 3 m ahead at 8 m/s", _charge(Vector3(3, 0, 0), 8.0))
+	snap.record("straight-on charger 3 m ahead at 2 m/s", _charge(Vector3(3, 0, 0), 2.0))
+	snap.record("angled charger from (3, 1) at 3 m/s", _charge(Vector3(3, 0, 1), 3.0))
+	snap.record("angled charger from (3, 1) at 8 m/s", _charge(Vector3(3, 0, 1), 8.0))
+	snap.record("jockey pacing a 5 m/s carrier 2.2 m ahead", _jockey(5.0))
+	snap.record("same defender standing still", _jockey(0.0))
+	var wall: Array[float] = _pinned_and_open(1.5)
+	snap.record("wall-pinned carrier, defender 1.5 m off", wall[0])
+	snap.record("open-ice carrier, defender 1.5 m off", wall[1])
+	snap.verify(self)

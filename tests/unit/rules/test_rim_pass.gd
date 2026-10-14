@@ -12,11 +12,11 @@ var _saved_margin: float
 
 
 func before_each() -> void:
-	_saved_margin = AIActionScoring.goalie_puck_play_go_margin_s
+	_saved_margin = AIGoalieModel.goalie_puck_play_go_margin_s
 
 
 func after_each() -> void:
-	AIActionScoring.goalie_puck_play_go_margin_s = _saved_margin
+	AIGoalieModel.goalie_puck_play_go_margin_s = _saved_margin
 
 
 func _build(from: Vector3, opps: Array[Vector3] = [],
@@ -34,16 +34,16 @@ func test_the_keeper_mirror_matches_the_live_goalie() -> void:
 	assert_eq(AIRimPass.KEEPER_SET_BEAT_S, gc.puck_play_set_beat)
 	assert_eq(AIRimPass.KEEPER_STOP_BEAT_S, gc.puck_play_stop_beat)
 	assert_eq(AIRimPass.KEEPER_PRESSURE_SPEED_M_S, gc.puck_play_opponent_speed)
-	assert_eq(AIActionScoring.GOALIE_PUCK_PLAY_SPEED_M_S, gc.puck_play_skate_speed)
-	assert_eq(AIActionScoring.GOALIE_PUCK_PLAY_ACCEL_M_S2, gc.puck_play_skate_accel)
-	assert_eq(AIActionScoring.GOALIE_PUCK_PLAY_REACH_M, gc.puck_play_capture_radius)
+	assert_eq(AIGoalieModel.GOALIE_PUCK_PLAY_SPEED_M_S, gc.puck_play_skate_speed)
+	assert_eq(AIGoalieModel.GOALIE_PUCK_PLAY_ACCEL_M_S2, gc.puck_play_skate_accel)
+	assert_eq(AIGoalieModel.GOALIE_PUCK_PLAY_REACH_M, gc.puck_play_capture_radius)
 
 
 func test_the_go_margin_follows_the_goalie_tier() -> void:
-	AIActionScoring.set_goalie_profile(GoalieSkillProfile.normal())
-	var normal: float = AIActionScoring.goalie_puck_play_go_margin_s
-	AIActionScoring.set_goalie_profile(GoalieSkillProfile.hard())
-	assert_eq(AIActionScoring.goalie_puck_play_go_margin_s,
+	AIGoalieModel.set_goalie_profile(GoalieSkillProfile.normal())
+	var normal: float = AIGoalieModel.goalie_puck_play_go_margin_s
+	AIGoalieModel.set_goalie_profile(GoalieSkillProfile.hard())
+	assert_eq(AIGoalieModel.goalie_puck_play_go_margin_s,
 			GoalieSkillProfile.hard().puck_play_go_margin_s)
 	assert_eq(normal, GoalieSkillProfile.normal().puck_play_go_margin_s)
 
@@ -72,7 +72,7 @@ func test_no_rim_leg_runs_through_a_net() -> void:
 		var path: Array[Vector3] = AIRimPass.paths[k]
 		var prev: Vector3 = AIRimPass.origin
 		for p: Vector3 in path:
-			assert_false(AIActionScoring.pass_lane_blocked_by_net(prev, p),
+			assert_false(AINetObstacle.pass_lane_blocked_by_net(prev, p),
 					"launch %d crosses the cage" % k)
 			prev = p
 
@@ -99,13 +99,13 @@ func test_a_receiver_up_the_wall_meets_the_rim() -> void:
 	var best_t: float = INF
 	for k: int in n:
 		best_t = minf(best_t, AIRimPass.meet_time(k, Vector3(11.5, 0.0, 14.0),
-				Vector3.ZERO, AIActionScoring.SKATER_REF_SPEED_M_S))
+				Vector3.ZERO, AIArrival.SKATER_REF_SPEED_M_S))
 	assert_lt(best_t, INF, "the half-wall winger can meet a rim")
 
 
 func _keeper_stops(margin: float) -> int:
 	# OUR rim around THEIR end boards (team 0 attacks -Z) from the far corner.
-	AIActionScoring.goalie_puck_play_go_margin_s = margin
+	AIGoalieModel.goalie_puck_play_go_margin_s = margin
 	var n: int = _build(Vector3(-11.5, 0.0, -24.0), [], Vector3(0.0, 0.0, -25.8))
 	var stopped: int = 0
 	for k: int in n:

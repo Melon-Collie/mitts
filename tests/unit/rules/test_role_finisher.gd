@@ -7,8 +7,13 @@ extends GutTest
 # Tests cover both modes plus the bail-out cases (null puck,
 # no carrier).
 
+# Where the staging argmax currently puts each fixture is the snapshot,
+# test_finisher_staging_snapshot.
+
+const Snapshot := preload("res://tests/snapshot.gd")
+const SNAPSHOT_PATH := "res://tests/unit/rules/snapshots/role_finisher.txt"
 # Team 0 defends +Z; opp goal at -Z.
-const OUR_NET_Z: float = 26.65
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z
 const OPP_NET_Z: float = -OUR_NET_Z
 const TEAM_ID: int = 0
 
@@ -301,17 +306,16 @@ func _cycle_ctx(skaters: Array) -> RoleContext:
 	return ctx
 
 
-func test_finisher_stages_the_open_backdoor() -> void:
-	# The coverage that genuinely concedes the far post: bumper covered,
-	# the net-front/tip man boxed out goal-side, and the keeper CAUGHT out
-	# challenging the wall carrier beyond his backdoor depth cap (priced at
-	# the real cross-seam feed speed, the cap tops out short of this 2.2 m
-	# challenge) — his re-square covers only cap/r of the lateral gap, so
-	# the far-post one-timer finishes behind him and the cross-seam lane is
-	# the one feed this box leaves open. (Against a HOME, cap-respecting
-	# keeper the pre-armed feed read correctly deflates the backdoor and
-	# the finisher stages the tip/net-front station instead — see
-	# test_finisher_parks_the_tip_station… for that regime.)
+# The coverage that genuinely concedes the far post: bumper covered, the
+# net-front/tip man boxed out goal-side, and the keeper CAUGHT out challenging
+# the wall carrier beyond his backdoor depth cap (priced at the real cross-seam
+# feed speed, the cap tops out short of this 2.2 m challenge) — his re-square
+# covers only cap/r of the lateral gap, so the far-post one-timer finishes
+# behind him and the cross-seam lane is the one feed this box leaves open.
+# (Against a HOME, cap-respecting keeper the pre-armed feed read deflates the
+# backdoor and the finisher stages the tip/net-front station instead — see
+# test_finisher_parks_the_tip_station… for that regime.)
+func _open_backdoor_target() -> Vector3:
 	var ctx: RoleContext = _cycle_ctx([
 			_make_skater(1, TEAM_ID, Vector3(-3.0, 0.0, -20.0)),
 			_make_skater(2, TEAM_ID, Vector3(8.0, 0.0, -20.0)),   # carrier, wall
@@ -323,46 +327,52 @@ func test_finisher_stages_the_open_backdoor() -> void:
 	var challenge: Vector3 = (Vector3(8.0, 0.0, -20.0) - net).normalized() * 2.2
 	out_goalie.position_x = net.x + challenge.x
 	out_goalie.position_z = net.z + challenge.z
-	var d: RoleDecision = AIRoleFinisher.decide(ctx)
-	assert_lt(d.target_position.x, -1.5,
-			"stages beyond the far post, not mid-slot; got %s" % d.target_position)
-	assert_lt(d.target_position.z, -23.0,
-			"…deep at the backdoor, not the high slot; got %s" % d.target_position)
+	return AIRoleFinisher.decide(ctx).target_position
 
 
-func test_finisher_parks_the_tip_station_when_offices_die_and_goalie_sits_deep() -> void:
-	# Point carrier, a full box+1 manning every feed office, and the goalie
-	# pinned deep on his line (what a screened keeper does — buy time). Every
-	# one-timer feed is dead, so the staging argmax takes the TIP/SCREEN
-	# station: ON the carrier→net shot line at crease-edge depth, where the
-	# body screens the goalie and the blade tips the point blast (tip_ev).
-	# With the same crowd but a CHALLENGING goalie the tip through him is
-	# worthless and the finisher stays at a feed office — the station is a
-	# read, not a scripted post (see the challenged-goalie staging tests).
-	# Carrier wide at the point so his rip line clears the office coverers'
-	# shot-block reach — the scenario is "offices dead, rip lane clean", not
-	# "rip through the box" (a body a stride off the line honestly bleeds
-	# both the direct blast and the tip).
-	var carrier := Vector3(6.0, 0.0, -9.0)
+func test_finisher_stages_the_open_backdoor() -> void:
+	var target: Vector3 = _open_backdoor_target()
+	assert_lt(target.x, -GameRules.NET_HALF_WIDTH,
+			"stages beyond the far post, not mid-slot; got %s" % target)
+	assert_lt(absf(target.z - OPP_NET_Z), GameRules.SLOT_DIST_M,
+			"…deep at the backdoor, inside the slot's depth; got %s" % target)
+
+
+# Point carrier, a full box+1 manning every feed office, and the goalie pinned
+# deep on his line (what a screened keeper does — buy time). Carrier wide at
+# the point so his rip line clears the office coverers' shot-block reach — the
+# scenario is "offices dead, rip lane clean", not "rip through the box".
+const TIP_CARRIER := Vector3(6.0, 0.0, -9.0)
+
+
+func _dead_offices_target() -> Vector3:
 	var ctx: RoleContext = _make_ctx(
 			Vector3(-2.0, 0.0, -21.0),
-			carrier, Vector3.ZERO,
+			TIP_CARRIER, Vector3.ZERO,
 			[
 				_make_skater(1, TEAM_ID, Vector3(-2.0, 0.0, -21.0)),
-				_make_skater(2, TEAM_ID, carrier),
+				_make_skater(2, TEAM_ID, TIP_CARRIER),
 				_make_skater(10, 1, Vector3(-2.3, 0.0, -24.6)),   # backdoor cover
 				_make_skater(11, 1, Vector3(-1.2, 0.0, -21.2)),   # bumper cover
 				_make_skater(12, 1, Vector3(2.3, 0.0, -13.1)),    # ON the high-slot feed lane
 			])
 	ctx.snapshot.puck_state.carrier_peer_id = 2
 	ctx.strong_x = 1.0
-	_add_opp_goalie(ctx, carrier, 0.4)
-	var d: RoleDecision = AIRoleFinisher.decide(ctx)
-	var to_c: Vector3 = carrier - ctx.attacking_goal_pos
-	var station: Vector3 = ctx.attacking_goal_pos \
-			+ to_c * (AIRoleFinisher.TIP_STATION_DIST_M / to_c.length())
-	assert_lt(d.target_position.distance_to(station), 0.5,
-			"parks the shot-line tip post; got %s" % d.target_position)
+	_add_opp_goalie(ctx, TIP_CARRIER, 0.4)
+	return AIRoleFinisher.decide(ctx).target_position
+
+
+func test_finisher_parks_the_tip_station_when_offices_die_and_goalie_sits_deep() -> void:
+	# Every one-timer feed is dead, so the staging argmax takes the TIP/SCREEN
+	# station: ON the carrier→net shot line at crease-edge depth, where the body
+	# screens the goalie and the blade tips the point blast (tip_ev). With the
+	# same crowd but a CHALLENGING goalie the tip through him is worthless and
+	# the finisher stays at a feed office — the station is a read, not a post.
+	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+	var to_c: Vector3 = TIP_CARRIER - goal
+	var station: Vector3 = goal + to_c * (AIRoleFinisher.TIP_STATION_DIST_M / to_c.length())
+	var target: Vector3 = _dead_offices_target()
+	assert_lt(target.distance_to(station), 0.5, "parks the shot-line tip post; got %s" % target)
 
 
 func test_finisher_stays_off_a_covered_feed_lane() -> void:
@@ -382,6 +392,9 @@ func test_finisher_stays_off_a_covered_feed_lane() -> void:
 
 
 # ─── RUSH-AWARE STAGING ───────────────────────────────────────────────────
+
+const RUSH_VEL := Vector3(0.0, 0.0, -8.0)
+
 
 func _rush_ctx(carrier_vel: Vector3) -> RoleContext:
 	# Stationary finisher at center-ice depth; a wide strong-side teammate
@@ -424,17 +437,14 @@ func test_rush_stages_finisher_at_a_net_crash() -> void:
 	# blend pulls the generic station in (stage_dist: SLOT_DIST_M →
 	# RUSH_NET_DRIVE_DIST_M), so a rushing carrier stages the FINISHER as a
 	# genuine second attacker at the net — a rebound / backdoor-tap threat.
-	# (No strict rush-vs-cycle depth ordering any more: with the NAMED
-	# stations, an UNCONTESTED set cycle legitimately parks the backdoor —
-	# at the net — too; the invariant is that the rush never strands the
-	# finisher at the perimeter.)
-	var goal_z: float = OPP_NET_Z
+	# There is no rush-vs-cycle depth ordering (an uncontested set cycle may
+	# park the backdoor, at the net, too); the invariant is that the rush never
+	# strands the finisher at the perimeter.
 	var set_pos: Vector3 = AIRoleFinisher.decide(_rush_ctx(Vector3.ZERO)).target_position
-	var rush_pos: Vector3 = AIRoleFinisher.decide(
-			_rush_ctx(Vector3(0.0, 0.0, -8.0))).target_position
-	assert_lt(absf(rush_pos.z - goal_z), 4.5,
-			"a rushing carrier stages the FINISHER crashing the net; got %s"
-			% rush_pos)
+	var rush_pos: Vector3 = AIRoleFinisher.decide(_rush_ctx(RUSH_VEL)).target_position
+	assert_lt(absf(rush_pos.z - OPP_NET_Z), GameRules.SLOT_DIST_M,
+			"a rushing carrier stages the FINISHER inside the slot's depth, crashing the net;"
+			+ " got %s" % rush_pos)
 	assert_lt(set_pos.x, 0.0, "the set cycle still stages weak-side")
 	assert_lt(rush_pos.x, 0.0, "…and the rush crash stays weak-side too")
 
@@ -464,3 +474,19 @@ func test_reactive_fires_on_loose_shots_and_defers_while_the_puck_reads_held() -
 	assert_true(loose.has_aim_override,
 			"reactive TIP fires once the fast on-net puck reads loose")
 	assert_almost_eq(loose.aim_world_pos.z, OPP_NET_Z, 0.001)
+
+
+func test_finisher_staging_snapshot() -> void:
+	var snap := Snapshot.new(SNAPSHOT_PATH)
+	var rows: Dictionary = {
+		"2-on-0, strong-side carrier": AIRoleFinisher.decide(_rush_ctx(Vector3.ZERO)).target_position,
+		"2-on-0, strong-side carrier rushing": AIRoleFinisher.decide(_rush_ctx(RUSH_VEL)).target_position,
+		"cycle, keeper caught out, open backdoor": _open_backdoor_target(),
+		"point carrier, offices dead, deep keeper": _dead_offices_target(),
+	}
+	for key: String in rows:
+		var target: Vector3 = rows[key]
+		snap.record("%s, target x" % key, target.x)
+		snap.record("%s, target z" % key, target.z)
+	snap.record("weak-side stage x, strong side +X", _stage_x_for_strong_side(1.0))
+	snap.verify(self)

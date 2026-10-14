@@ -577,7 +577,7 @@ A body straddling the blue line to pressure the point is not a broken structure.
   construction; the ladder bounds the gap's SIZE but says nothing about the TRIP to it,
   so a D already home with the rush still in neutral ice was charging a stand 10-18 m
   up-ice and getting walked (`AIRoleRushD._settable_gap`,
-  `tests/unit/ai/test_rush_gap_discipline.gd`).
+  `tests/slow/ai/test_rush_gap_discipline.gd`).
 
   `settable_stand_depth` itself has since been re-derived: it was a step-up PLAN
   ("the largest step I could still arrive set at", bisected fresh every dispatch) and is
@@ -793,7 +793,7 @@ holding.
 > high body, and its counter cost prices a loss *at the carrier* — it cannot see a man
 > already leaving the zone, who is the one a turnover gets fed to. It holds its stand under
 > the same read and restores the numbers layer when someone gets behind it.
-> `tests/unit/ai/test_counter_layer.gd` measures both modes against a breaking man.
+> `tests/slow/ai/test_counter_layer.gd` measures both modes against a breaking man.
 
 **C. The retreat floor becomes numbers-restoring, not home.** Back off only as far as
 restores the numbers layer, then stop. Replaces `station_retreat_floor` on the offensive

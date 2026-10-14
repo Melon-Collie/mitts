@@ -47,13 +47,10 @@ const _SIZE_LIMIT: int = 800
 const _SIZE_SLACK: int = 40
 
 const _SIZE_ALLOWANCE: Dictionary[String, int] = {
-	# +3: the wrister wind-up side reads the trailer's relative motion over the
-	# charge (#740), not just where he stands at the commit.
-	# +1: the chase steer passes when an airborne puck is back on the blade plane.
-	"res://Scripts/ai/skater_agent_state_machine.gd": 6628,
+	"res://Scripts/ai/skater_agent_state_machine.gd": 3794,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
 	"res://Scripts/game/game_manager.gd": 5787,
-	"res://Scripts/domain/ai/action_scoring.gd": 4479,
+	"res://Scripts/domain/ai/action_scoring.gd": 2026,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
 	# Scripts/controllers/CLAUDE.md rather than inline, and the tunable
@@ -62,15 +59,16 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# It is a one-tick finite difference feeding a positional decision, so a
 	# teleport read as travel moved the tracked threat metres in a tick.
 	"res://Scripts/controllers/goalie_controller.gd": 5040,
-	# +162: the rim pass. The path search lives in AIRimPass; what stays here is
-	# the variant's EV (it prices through _pass_ev, an instance method) and the
-	# commit that releases a winning rim as a flat charged dump.
-	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 4026,
+	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 1031,
 	# +33: the dive takes the knockdown's fall its own way — a thrown tip rate,
 	# no rebound, legs long, the belt kept on his line — and stays down while
 	# block is held. +5: a bot's caps carry its wrist-shot load and facing configs.
-	"res://Scripts/controllers/skater_controller.gd": 3537,
-	"res://Scripts/actors/skater.gd": 2796,
+	# +10: the staged get-up's one clock (knockdown_getup_left) and the stagger
+	# he finds his legs through once it ends. +36: the get-up's stick hold. +5:
+	# the down flags in one place, a diver's stick dead from the get-up.
+	"res://Scripts/controllers/skater_controller.gd": 3588,
+	# +1: dive_laid_out, the diver's stick and low block until the get-up.
+	"res://Scripts/actors/skater.gd": 2797,
 	"res://Scripts/networking/network_manager.gd": 2855,
 	"res://Scripts/game/tutorial_manager.gd": 2067,
 	"res://Scripts/controllers/skater_ik_coordinator.gd": 950,
@@ -79,12 +77,11 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# sweeping the jump. +6: the pinch hop composed onto the contest exit.
 	"res://Scripts/controllers/puck_controller.gd": 1589,
 	"res://Scripts/actors/hockey_rink.gd": 1469,
-	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 1409,
 	"res://Scripts/game/player_prefs.gd": 1404,
 	"res://Scripts/actors/skater_mesh_builder.gd": 1446,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1357,
 	"res://Scripts/ui/career_stats_screen.gd": 1271,
-	"res://Scripts/domain/ai/carry_space.gd": 1255,
+	"res://Scripts/domain/ai/carry_space.gd": 1065,
 	"res://Scripts/ui/lobby_manager.gd": 1247,
 	"res://Scripts/actors/puck.gd": 1102,
 	"res://Scripts/ui/side_menu.gd": 995,
@@ -108,13 +105,13 @@ const _API_SLACK: int = 3
 const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/networking/network_manager.gd": 208,
 	"res://Scripts/actors/skater.gd": 145,
-	"res://Scripts/domain/ai/action_scoring.gd": 71,
+	"res://Scripts/domain/ai/action_scoring.gd": 36,
 	"res://Scripts/game/game_manager.gd": 63,
 	"res://Scripts/domain/state/player_attributes.gd": 53,
 	"res://Scripts/networking/network_telemetry.gd": 53,
-	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 48,
 	# +1: knockdown_drop_m, which the gait's crumple and the sprawl's buckle share.
-	"res://Scripts/controllers/skater_controller.gd": 41,
+	# +1: knockdown_getup_left, the get-up clock the gait and the torso fold read.
+	"res://Scripts/controllers/skater_controller.gd": 42,
 	"res://Scripts/actors/puck.gd": 43,
 	"res://Scripts/domain/state/game_state_machine.gd": 39,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 36,

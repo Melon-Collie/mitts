@@ -80,11 +80,11 @@ func test_view_mirrors_ping_chase_peer() -> void:
 # the frozen TeamBrainView while the main thread freely mutates the live brain
 # (pings, force-retick, spawn/despawn) — see docs/ai-threading-plan.md.
 #
-#   team_brain.gd:788   _strategy() — reads the view POINTER; build_view only
-#                       swaps it while the worker is idle (AICoordinator).
-#   1592 / 1625         debug_role / debug_pass_slot — called only from
-#                       AIController._refresh_debug_label, on the main thread.
-#   4046                push_one_timer_ready — main-thread collection step.
+#   _strategy()                  reads the view POINTER; build_view only swaps it
+#                                while the worker is idle (AICoordinator).
+#   debug_role / debug_pass_slot called only from
+#                                AIController._refresh_debug_label, on the main thread.
+#   push_one_timer_ready         main-thread collection step.
 #
 # If you are adding a line here, prove it cannot run on the worker. Reads
 # reachable from dispatch() belong on TeamStrategyView and must be frozen into
@@ -92,8 +92,8 @@ func test_view_mirrors_ping_chase_peer() -> void:
 const _SM_PATH := "res://Scripts/ai/skater_agent_state_machine.gd"
 const _ALLOWED_LIVE_BRAIN_LINES: Array[String] = [
 	"var v: TeamBrainView = _team_brain.get_view()",
-	'return "%s: %s" % [_team_state_label(_team_brain.state), _slot_label(_team_brain.get_slot(_peer_id))]',
-	"return _slot_label(_team_brain.get_slot(debug_pass_peer_id))",
+	'return "%s: %s" % [_team_state_label(_team_brain.state), AIRoleSlots.label(_team_brain.get_slot(_peer_id))]',
+	"return AIRoleSlots.label(_team_brain.get_slot(debug_pass_peer_id))",
 	"_team_brain.set_one_timer_ready(_peer_id, _is_one_timer_ready)",
 ]
 

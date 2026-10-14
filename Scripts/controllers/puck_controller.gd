@@ -602,7 +602,7 @@ func _check_interactions() -> void:
 			for skater: Skater in skaters:
 				# Down plays no puck — except a diver's stick, laid out to knock it away.
 				if skater == puck.carrier or skater.is_ghost \
-						or (skater.is_knocked_down and not skater.is_diving):
+						or (skater.is_knocked_down and not skater.dive_laid_out):
 					continue
 				var checker_team: int = _team_id_by_skater.get(skater, -1)
 				if not PuckCollisionRules.can_poke_check(carrier_team, checker_team):
@@ -650,7 +650,7 @@ func _check_interactions() -> void:
 			# On-ice/off-ice gate is invariant across skaters this tick.
 			var puck_airborne: bool = puck.is_airborne()
 			for skater: Skater in skaters:
-				if skater.is_ghost or (skater.is_knocked_down and not skater.is_diving) \
+				if skater.is_ghost or (skater.is_knocked_down and not skater.dive_laid_out) \
 						or puck.is_on_cooldown_at(skater, now):
 					continue
 				# Committed to a body check — the stick is off the ice, so no
@@ -687,7 +687,7 @@ func _check_interactions() -> void:
 						blade_prev, blade_curr, PICKUP_RADIUS):
 					continue
 				# A diver's stick knocks the puck away; he catches nothing from the ice.
-				if skater.is_diving:
+				if skater.dive_laid_out:
 					puck.apply_blade_deflect(skater)
 					break
 				# A tied blade receives nothing: whatever reaches it bobbles off.
@@ -760,7 +760,7 @@ func _check_body_blocks(skaters: Array, puck_curr: Vector3, now: float) -> bool:
 		# A diver lies along his layout across his line, skates behind it and stick
 		# out past him: the block is the point of that low line nearest the puck's
 		# path, not a cylinder at his skates.
-		if skater.is_diving:
+		if skater.dive_laid_out:
 			axis = DiveRules.block_point(_prev_puck_pos, puck_curr, axis - skater.dive_layout
 					* DiveRules.feet_back_m(), axis + skater.dive_layout * DiveRules.reach_m())
 			reach = DiveRules.BODY_RADIUS_M + GameRules.PUCK_COLLISION_RADIUS

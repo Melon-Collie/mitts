@@ -1,26 +1,18 @@
 class_name GoalieSkillProfile
 extends RefCounted
 
-# Per-difficulty bundle of goalie tuning knobs — the sibling of BotSkillProfile,
-# for the AI goalie instead of the AI skaters. Pure domain (no engine APIs, no
-# RNG) so it stays unit-testable and replay-safe. GoalieController.setup() reads
-# a profile and writes these onto its @exports before building its cached rule
-# configs; HARD leaves every value at the controller's authored default, so Hard
-# is *exactly* the authored goalie by construction.
-#
-# Every lever here is a trait a real weaker goalie actually has, so a lower tier
-# still reads as a goalie — tracks the play, squares up, drops butterfly — that
-# gives up the net and can't rob you, rather than as a dumb one. They fall in two
-# groups: read latencies (when he starts moving) and positioning / save levers
-# (how much net he concedes), which is what makes the ladder a real one instead
-# of reaction latency alone.
+# Per-difficulty bundle of goalie tuning knobs — the goalie's counterpart to
+# BotSkillProfile. GoalieController.setup() writes a profile onto its fields
+# before building its cached rule configs; HARD is every value at the
+# controller's authored default, so applying it is a no-op. Every lever must be
+# a trait a real weaker goalie has (Scripts/domain/ai/CLAUDE.md → "The goalie
+# is tiered, but only ever as a weaker goalie").
 #
 # AI MIRROR: the bots' shot/pass scoring predicts the live goalie with the same
 # read model (leg/arm delays, drop time, lateral accel ramp, arm deploy), held as
-# static vars on AIActionScoring and synced from the match's profile via
-# set_goalie_profile wherever GameManager selects goalie_skill_profile. Their
-# defaults are the authored Hard baselines, so unwired contexts (unit tests)
-# score against the Hard goalie.
+# static vars on AIGoalieModel and synced from the match's profile by
+# set_goalie_profile. Their defaults are the Hard baselines, so unwired contexts
+# (unit tests) score against the Hard goalie.
 #
 # FIXED ACROSS TIERS: t_push_speed, the standing T-push TOP speed — no tier
 # varies it, so the scorer keeps it as a const (GOALIE_MAX_LATERAL_SPEED_MPS).
@@ -32,13 +24,13 @@ extends RefCounted
 # To add a knob: add a field + _init param, set it in all three factories, and
 # consume it in GoalieController._apply_skill_profile. If the bots' shot model
 # reads the same quantity (see AI MIRROR), also sync it in
-# AIActionScoring.set_goalie_profile — otherwise the bots keep scoring against
+# AIGoalieModel.set_goalie_profile — otherwise the bots keep scoring against
 # the Hard goalie's version of it.
 
 enum Difficulty {
 	EASY = 0,     # the floor — positionally deep, slow arms, fat rebounds, laggy reads
 	NORMAL = 1,   # the middle — a fair fight, clearly softer than Hard
-	HARD = 2,     # the ceiling — exactly today's tuned goalie
+	HARD = 2,     # the ceiling — exactly the authored goalie
 }
 
 # Glove/blocker read latency (s) before the shot hand reach starts.
@@ -78,7 +70,7 @@ var lateral_accel_mps2: float
 var puck_play_go_margin_s: float
 # Reflexive leg-drop read latency (s) — gates the butterfly drop that seals the
 # five-hole and low ice, so it is the single strongest "reacts, but slower"
-# lever. AI-mirrored (AIActionScoring.goalie_leg_delay_s).
+# lever. AI-mirrored (AIGoalieModel.goalie_leg_delay_s).
 var reaction_delay_s: float
 # Primed (quiet-eye) read latency (s) after watching a visible windup — the
 # floor BOTH reads shortcut to when the goalie is pre-armed. Tiering it matters
@@ -87,49 +79,35 @@ var reaction_delay_s: float
 # newcomers take.
 var prearmed_reaction_delay_s: float
 # Pads-to-floor time (s) once the butterfly commits. AI-mirrored
-# (AIActionScoring.goalie_butterfly_drop_s).
+# (AIGoalieModel.goalie_butterfly_drop_s).
 var butterfly_drop_s: float
 # Standing five-hole pad gap (m of separation each side of center). Higher = a
 # visibly leaky five-hole whenever the paddle is off-centre (tracking, active
 # blade); the drop still seals it, just later.
 var five_hole_base_m: float
 # READ STALENESS (s) — how old the goalie's belief about WHERE the shot is going
-# is when he commits to it. Distinct from every other knob here: the rest set
-# WHEN he starts moving and HOW FAST he moves, all of which assume he knows the
-# destination exactly. This one prices being WRONG. A shooter whose aim is stable
-# through the wind-up is read perfectly at any lag (the stale sample equals the
-# truth); a shooter who swings late beats the read by exactly this much. It also
-# sets how fast he converges onto the true line once the puck is in flight, so a
-# long shot is read correctly and an in-tight one is not.
-# No RNG — the error is a pure function of what the shooter did with their aim.
+# is when he commits to it. The other knobs set WHEN he starts moving and HOW
+# FAST, assuming he knows the destination; this one prices being WRONG. A
+# shooter whose aim is stable through the wind-up is read perfectly at any lag;
+# one who swings late beats the read by exactly this much. It also sets how fast
+# he converges onto the true line once the puck is in flight, so a long shot is
+# read correctly and an in-tight one is not. No RNG.
 #
-# TUNING BAND. Measured against the height-deception sweep
-# (tests/unit/ai/test_goalie_disguise_read.gd), goals out of 14 when the wind-up
-# sells a low shot and the release goes high: 0.00 -> 6, 0.04 -> 7, 0.10 -> 11,
-# and flat above that. So the responsive band is roughly 0-0.10 s and the tiers
-# are anchored inside it; past ~0.10 the goalie is already fully committed to the
-# wrong read and more staleness buys the shooter nothing. Values above the band
-# are not "harder to beat", they are just indistinguishable.
+# The height-deception sweep (tests/slow/ai/test_goalie_disguise_read.gd)
+# responds over roughly 0–0.10 s and is flat above: past that the goalie is
+# already fully committed to the wrong read, so more staleness buys the shooter
+# nothing.
 var read_lag_s: float
 # READ RE-SOLVE TIME (s) — how long it takes him to correct a WRONG belief once
-# the puck is in flight and he can watch it. Physically a different quantity from
-# `read_lag_s` (the age of a wind-up read), which is why it is a separate knob:
-# tying them together means the deception window cannot lengthen without also
-# making the pre-read staler.
+# the puck is in flight and he can watch it. A separate knob from `read_lag_s`
+# (the age of a wind-up read) so the deception window can lengthen without
+# making the pre-read staler. It decides whether LATERAL deception pays: the
+# belief is wrong only this long, and the arms recover in what is left of the
+# flight.
 #
-# It is the term that decides whether LATERAL deception pays. The belief is only
-# wrong for this long, and the arms recover in whatever is left of the flight:
-# at 0.05 s against a 0.21 s flight from 7 m he is wrong for under a quarter of
-# it and a 5 m/s arm covers the rest easily.
-#
-# ANCHORED, not tuned: each tier re-solves in its own `reaction_delay_s`. Reading
-# a line you got WRONG is a fresh read, not a refinement — you are not adjusting
-# an estimate, you are discovering the estimate was of a different shot. So the
-# cost is a full cold read, and a slower goalie stays wrong longer. That lands
-# where the measurement saturates anyway: on the corner-deception sweep
-# (test_goalie_disguise_read) goals out of 14 go 7 -> 8 -> 9 -> 10 across
-# 0.05 / 0.08 / 0.10 / 0.13 s and are flat above, with the TELEGRAPHED control
-# pinned at 7 throughout.
+# Anchored, not tuned: each tier re-solves in its own `reaction_delay_s`.
+# Reading a line you got wrong is a fresh cold read, not a refinement, so a
+# slower goalie stays wrong longer.
 var read_converge_s: float
 # Butterfly push-off speed (m/s) — the slide to a post or across the crease. A
 # weaker goalie's push is softer, so he loses the race to the post on a wrap.
@@ -168,8 +146,8 @@ func _init(p_arm_reaction_delay_s: float, p_cross_crease_react_delay_s: float,
 	slide_push_speed_mps = p_slide_push_speed_mps
 
 
-# Hard == the GoalieController @export defaults verbatim, so applying Hard is a
-# true no-op (pinned by tests/unit/rules/test_goalie_profile_mirrors.gd).
+# Hard == the GoalieController defaults verbatim, so applying Hard is a no-op
+# (tests/unit/rules/test_goalie_profile_mirrors.gd).
 static func hard() -> GoalieSkillProfile:
 	return GoalieSkillProfile.new(0.18, 0.12, 0.25, 0.30, 0.12,
 			1.75, 1.30, 5.0, 5.0, 18.0, 14.0, 0.9,

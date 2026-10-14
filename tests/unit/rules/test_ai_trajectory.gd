@@ -5,6 +5,10 @@ extends GutTest
 # inner boundary, the lead-time convenience wrapper, and the
 # zero-velocity / zero-lead degenerate cases.
 
+const Snapshot := preload("res://tests/snapshot.gd")
+const SNAPSHOT_PATH := "res://tests/unit/rules/snapshots/puck_trajectory.txt"
+const TICK_S: float = 1.0 / 120.0
+
 
 func test_constant_velocity_steps_forward() -> void:
 	var pos := Vector3(0, 0, 0)
@@ -173,16 +177,36 @@ func test_step_puck_reflects_velocity_at_board() -> void:
 	assert_lte(stepped.origin.x, GameRules.INNER_HALF_WIDTH + 0.001, "stays inside the boards")
 
 
+func _glance_off_the_board() -> Array[Vector3]:
+	# Gentle into the +X board (x), mostly along it (+Z).
+	var vel := Vector3(6, 0, 30)
+	var stepped: Transform3D = AITrajectory.step_puck(
+			Vector3(GameRules.INNER_HALF_WIDTH - 0.02, 0, 0), vel, TICK_S)
+	return [vel, stepped.basis.x]
+
+
 func test_step_puck_board_friction_bleeds_tangential_speed() -> void:
-	# A puck glancing off the +X board (small into-board X, large along-board Z) loses some of
-	# its ALONG-board speed to board friction — the term that kills a hard rim-around. Ice
-	# friction over one tick is ~0.004 m/s (negligible at this speed), so the drop is the board.
-	var pos := Vector3(GameRules.INNER_HALF_WIDTH - 0.02, 0, 0)
-	var vel := Vector3(6, 0, 30)  # mostly tangential (+Z), gentle into the +X board
-	var stepped: Transform3D = AITrajectory.step_puck(pos, vel, 1.0 / 120.0)
-	assert_lt(stepped.basis.x.x, 0.0, "into-board component reflected")
-	assert_lt(stepped.basis.x.z, 29.5, "along-board (tangential) speed bled by board friction")
-	assert_gt(stepped.basis.x.z, 27.0, "but most of the tangential pace is kept on a glance")
+	# A glancing carom loses some ALONG-board speed to Coulomb board friction,
+	# bounded by friction × the normal impulse (restitution at most 1) and by the
+	# sticking cap. Ice friction over the tick is charged on top.
+	var vels: Array[Vector3] = _glance_off_the_board()
+	var vel: Vector3 = vels[0]
+	var after: Vector3 = vels[1]
+	var ice: float = GameRules.PUCK_ICE_DECEL_M_S2 * TICK_S
+	var loss: float = vel.z - after.z
+	assert_lt(after.x, 0.0, "into-board component reflected")
+	assert_gt(loss, ice, "the board bleeds along-board speed beyond the ice's share")
+	assert_lte(loss, GameRules.PUCK_BOARD_FRICTION * 2.0 * vel.x + ice,
+			"the drop is bounded by friction × the normal impulse")
+	assert_lte(loss, GameRules.PUCK_BOARD_TANGENTIAL_MAX_LOSS * vel.z + ice,
+			"…and by the sticking cap")
+
+
+func test_puck_trajectory_calibration_snapshot() -> void:
+	var snap := Snapshot.new(SNAPSHOT_PATH)
+	snap.record("30 m/s glance off the side board, along-board speed after one tick",
+			_glance_off_the_board()[1].z)
+	snap.verify(self)
 
 
 func test_a_square_carom_cannot_erase_the_along_board_channel() -> void:
@@ -387,10 +411,10 @@ func test_a_puck_that_never_closes_reports_no_gate() -> void:
 	# Running for the far end with the whole rink to cross: nothing inside the
 	# horizon brings it closer than it already is, so there is nothing to set up
 	# for and gate_closes says so.
-	AITrajectory.solve_reception_gate(
+	var in_reach: bool = AITrajectory.solve_reception_gate(
 			Vector3(0, 0, 5), Vector3(0, 0, 20), Vector3.ZERO,
 			_GATE_REACH, _GATE_HORIZON_S, _GATE_STEPS)
-	assert_false(AITrajectory.gate_in_reach)
+	assert_false(in_reach)
 	assert_false(AITrajectory.gate_closes, "a departing puck is not a reception")
 
 
@@ -420,7 +444,7 @@ func test_a_puck_ringing_off_the_near_wall_does_close() -> void:
 # solve.
 #
 # The tracked quantity is `gate_offset` — the meet in the BODY's frame, which is
-# what the blade aim consumes (SkaterAgentStateMachine._blade_gate_on_puck_line)
+# what the blade aim consumes (SkaterAgentReception.blade_gate)
 # and therefore what the stick is asked to do. `gate_point`, the same event in
 # world coordinates, feeds the stance instead and legitimately moves.
 func _walk_gate(puck_pos: Vector3, puck_vel: Vector3, body_pos: Vector3,
@@ -435,7 +459,7 @@ func _walk_gate(puck_pos: Vector3, puck_vel: Vector3, body_pos: Vector3,
 	while i < 60 and b.distance_to(p) > _GATE_REACH:
 		var hit: bool = AITrajectory.solve_reception_gate(
 				p, v, b, _GATE_REACH, _GATE_HORIZON_S, _GATE_STEPS,
-				body_vel if ride else Vector3.ZERO, AIRoleCarrier.PASS_LEAD_MAX_S)
+				body_vel if ride else Vector3.ZERO, AICarrierPassSearch.PASS_LEAD_MAX_S)
 		if hit and first_entry < 0:
 			first_entry = i
 		if AITrajectory.gate_offset.length() > _GATE_REACH + 0.001:
@@ -499,7 +523,7 @@ func test_the_ride_leaves_a_standing_receiver_untouched() -> void:
 	var frozen_offset: Vector3 = AITrajectory.gate_offset
 	AITrajectory.solve_reception_gate(puck_pos, puck_vel, from_pos,
 			_GATE_REACH, _GATE_HORIZON_S, _GATE_STEPS,
-			Vector3.ZERO, AIRoleCarrier.PASS_LEAD_MAX_S)
+			Vector3.ZERO, AICarrierPassSearch.PASS_LEAD_MAX_S)
 	assert_eq(AITrajectory.gate_point, frozen_point)
 	assert_eq(AITrajectory.gate_offset, frozen_offset)
 	# And the two halves describe one event: the offset applied to the body IS

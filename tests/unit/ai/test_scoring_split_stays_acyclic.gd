@@ -1,58 +1,72 @@
 extends GutTest
 
-# AICarrySpace was split out of AIActionScoring, and the split is only safe
-# while the dependency runs ONE WAY: carry-space reads the scorer, never the
-# reverse.
+# The bot evaluators are split by dependency, not by topic, and the split is
+# only safe while it stays acyclic: a const read across a GDScript `class_name`
+# cycle can fail at PARSE time, which takes the whole class down — every static
+# call on it, from every file, at once — with nothing pointing at the cause.
 #
-# This is not a style preference. AICarrySpace reads six reference speeds and
-# the puck-protect handle as CONSTANTS off AIActionScoring, and a const read
-# across a GDScript `class_name` cycle fails at PARSE time — which takes the
-# whole class down, not one call. When that happened during the split, every
-# static call on the scorer reported "Nonexistent function ... in base
-# 'GDScript'" from 82 files at once, and 522 tests failed with nothing pointing
-# at the actual cause.
-#
-# The split itself was chosen by dependency closure rather than by topic: the
-# seven functions the rest of the scorer still calls — the shared arrival clock
-# and the net-obstacle tests — stayed behind precisely so this direction holds.
+# The shape held here: the shared primitives (the arrival clock, the net and
+# slot segment tests, the puck lane, the body's execution constants, the
+# planning keeper) are LEAVES that read no evaluator, and the two big
+# evaluators that read them — AIActionScoring and AICarrySpace — never read
+# each other.
 
 const _SCORING: String = "res://Scripts/domain/ai/action_scoring.gd"
 const _CARRY: String = "res://Scripts/domain/ai/carry_space.gd"
+const _LEAVES: PackedStringArray = [
+	"res://Scripts/domain/ai/arrival.gd",
+	"res://Scripts/domain/ai/net_obstacle.gd",
+	"res://Scripts/domain/ai/puck_lane.gd",
+	"res://Scripts/domain/ai/bot_mechanics.gd",
+	"res://Scripts/domain/ai/goalie_model.gd",
+]
+const _EVALUATORS: PackedStringArray = ["AIActionScoring", "AICarrySpace"]
 
 
-func test_the_scorer_never_reaches_into_carry_space() -> void:
-	var src: String = FileAccess.get_file_as_string(_SCORING)
-	assert_false(src.is_empty(), "could not read action_scoring.gd")
+# Every non-comment line of `path` that names `symbol`.
+func _code_refs(path: String, symbol: String) -> PackedStringArray:
+	var src: String = FileAccess.get_file_as_string(path)
+	assert_false(src.is_empty(), "could not read %s" % path)
 	var out := PackedStringArray()
 	for line: String in src.split("\n"):
 		var code: String = line.split("#")[0]
-		if code.contains("AICarrySpace"):
+		if code.contains(symbol):
 			out.append(code.strip_edges())
-	assert_eq(out.size(), 0,
-			"action_scoring.gd references AICarrySpace: %s. That closes the loop — " % [out] +
-			"carry-space reads consts off the scorer, and a const read across a " +
-			"class_name cycle is a parse error that takes the whole class with it. " +
-			"Move what the scorer needs back into it instead.")
+	return out
 
 
-# The other half of the same rule, stated positively: carry-space is allowed to
-# read the scorer, and does. If this stops being true the borrow list in its
-# header is stale.
-func test_carry_space_reads_the_scorer() -> void:
-	var src: String = FileAccess.get_file_as_string(_CARRY)
-	assert_false(src.is_empty(), "could not read carry_space.gd")
-	assert_true(src.contains("AIActionScoring."),
-			"carry_space.gd no longer reads AIActionScoring — if the borrowed clock " +
-			"and constants are genuinely gone, update its header, which names them")
+func test_the_leaves_read_no_evaluator() -> void:
+	for leaf: String in _LEAVES:
+		for evaluator: String in _EVALUATORS:
+			var refs: PackedStringArray = _code_refs(leaf, evaluator)
+			assert_eq(refs.size(), 0,
+					"%s references %s: %s. The leaves are what both evaluators " % [
+							leaf, evaluator, refs] +
+					"share; a leaf that reads one of them closes a cycle.")
 
 
-# The scorer keeps the primitives the rest of it calls. Losing one to a future
-# split is the exact failure this file exists for, and it is silent until the
-# whole class stops parsing.
-func test_the_shared_primitives_stayed_with_the_scorer() -> void:
-	var src: String = FileAccess.get_file_as_string(_SCORING)
-	for shared: String in ["time_to_arrive", "carry_path_blocked_by_net",
-			"pass_lane_blocked_by_net"]:
-		assert_true(src.contains("static func %s(" % shared),
-				"`%s` is a primitive the rest of the scorer calls bare — it has to " % shared +
-				"live here, not in a class the scorer is forbidden to reference")
+func test_the_scorer_and_carry_space_never_read_each_other() -> void:
+	assert_eq(_code_refs(_SCORING, "AICarrySpace").size(), 0,
+			"action_scoring.gd references AICarrySpace — move what both need into a leaf")
+	assert_eq(_code_refs(_CARRY, "AIActionScoring").size(), 0,
+			"carry_space.gd references AIActionScoring — move what both need into a leaf")
+
+
+# The primitives everything shares live in the leaves. One drifting back into an
+# evaluator is the failure this file exists for, and it is silent until a class
+# stops parsing.
+func test_the_shared_primitives_live_in_the_leaves() -> void:
+	var placement: Dictionary = {
+		"res://Scripts/domain/ai/arrival.gd": ["time_to_arrive"],
+		"res://Scripts/domain/ai/net_obstacle.gd": ["carry_path_blocked_by_net",
+				"pass_lane_blocked_by_net", "pass_crosses_own_slot"],
+		"res://Scripts/domain/ai/puck_lane.gd": ["lane_clear", "lane_clear_saucer",
+				"pass_launch_speed", "release_contest_clean"],
+		"res://Scripts/domain/ai/goalie_model.gd": ["set_goalie_profile",
+				"predict_goalie_pos", "planned_goalie_depth", "goalie_lateral_reach"],
+	}
+	for path: String in placement:
+		var src: String = FileAccess.get_file_as_string(path)
+		for shared: String in placement[path]:
+			assert_true(src.contains("static func %s(" % shared),
+					"`%s` should live in %s" % [shared, path])

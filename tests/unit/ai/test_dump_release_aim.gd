@@ -104,7 +104,7 @@ func _fire_dump(offset_deg: float) -> InputState:
 	# Park the cursor on the carry aim ring, rotated off the dump line.
 	var to_spot: Vector3 = (DUMP_SPOT - SELF_POS).normalized()
 	var ring_dir: Vector3 = to_spot.rotated(Vector3.UP, deg_to_rad(offset_deg))
-	sm._mouse_pos = SELF_POS + ring_dir * Agent.CARRY_BLADE_AIM_FORWARD_M
+	sm._mouse_pos = SELF_POS + ring_dir * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
 	sm._mouse_pos.y = 0.0
 	sm._mouse_pos_initialized = true
 	# _step_mouse_internal shapes against these (cached each dispatch live).

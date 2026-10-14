@@ -6,7 +6,8 @@ class_name AIStrideRamp
 # goes as v³), then cruise.
 
 # Fraction of the stride's push the movement model nets after glide losses
-# over a 0→top ramp. Measured (tests/unit/ai/test_time_to_arrive_calibration.gd).
+# over a 0→top ramp, measured against the real movement core
+# (tests/unit/ai/test_time_to_arrive_calibration.gd).
 const EFFICIENCY: float = 1.0
 
 # head_start's crossing search: the scan only has to bracket where the speeds

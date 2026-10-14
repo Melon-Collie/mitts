@@ -328,7 +328,7 @@ positional gate. Two pieces:
    - **The keeper it reads:** the displacement term's, off his square by the
      deficit, at the depth the shot's predicted keeper is (`score_shoot_value`
      passes it), else at the depth a set keeper holds for that puck
-     (`AIActionScoring.set_goalie_depth`, the planner's own depth solve). So a
+     (`AIGoalieModel.set_goalie_depth`, the planner's own depth solve). So a
      set keeper shuts the doorstep, a keeper backed into his crease does not,
      and a keeper beaten off his square in tight concedes it.
    - **At range nothing changes:** the term is zero and the seam is the public

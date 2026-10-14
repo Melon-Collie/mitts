@@ -129,8 +129,9 @@ static func run_rush(path: Array, goal: Vector3, profile: BotSkillProfile,
 	var unsettled: float = clampf(absf(state.z) / Shot.PUSH_SPEED, 0.0, 1.0)
 	var goalie := Vector3(state.x, 0.0, state.y)   # (x, 0, z) for the scoring calls
 	var spread: float = profile.shot_aim_error_rad
+	# Blind to the hand, as the live carrier's selection is (#699).
 	var danger: float = AIActionScoring.score_shoot(shooter, goal, goalie, Shot.NET_HW, [],
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S, unsettled, [], -1.0, false, 0.0, false, spread)
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, unsettled, [], -1.0, false, 0.0, false, 0.0)
 	if danger < Shot.SHOOT_MIN:
 		counts[Shot.NO_SHOT] = samples
 		return counts
@@ -138,10 +139,10 @@ static func run_rush(path: Array, goal: Vector3, profile: BotSkillProfile,
 	# real bot's _shot_aim_point read, so it fires at the side he has to reverse to
 	# reach, not where he's already recovering. Loft/power still from the hole model.
 	var aim: Vector3 = AIShotAim.compute_open_net_aim(shooter, goalie, goal.z,
-			Shot.NET_HW, AIActionScoring.GOALIE_SHADOW_HALF_M,
+			Shot.NET_HW, AIGoalieModel.GOALIE_SHADOW_HALF_M,
 			AIShotAim.DEFAULT_CORNER_BIAS, state.z)
 	var loft: int = AIActionScoring.best_shot_loft(shooter, goal, goalie, Shot.NET_HW,
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S, unsettled, -1.0, false, 0.0, false, spread)
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, unsettled, -1.0, false, 0.0, false, spread)
 	var power_t: float = 1.0  # every hole fires full pace (contact-point solve)
 	# The goalie keeps sliding at release velocity: pass his (x, vx) via `state`.
 	for _i: int in samples:

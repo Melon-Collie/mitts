@@ -2,9 +2,9 @@ class_name AIShotValue
 
 # THE SEAM. Everything the bots rank — carry candidates, pass receivers, off-puck
 # seams, the shoot/don't gate — asks "how good is a shot from here" through
-# `for_release`, so the model behind it can be replaced in this file alone. That
-# narrowness is deliberate insurance: the model is knowingly an APPROXIMATION,
-# adopted while the live goalie is being retuned.
+# `for_release`, so the model behind it can be replaced in this file alone (the
+# currency rule: Scripts/domain/ai/CLAUDE.md → "One currency across the
+# carrier's compete").
 #
 # ── The model ────────────────────────────────────────────────────────────────
 # XGBaseline's public form — a logistic in log-distance and angle — plus two
@@ -14,40 +14,33 @@ class_name AIShotValue
 #   logit = XGBaseline.logit_for_shot(...) + DISPLACEMENT_LOGIT_PER_M · deficit
 #           + body_logit(...)
 #
-# It literally extends the baseline's logit rather than re-deriving it, so at
-# zero displacement, from anywhere his body fills no more of the mouth than it
-# does from the slot, the two are the same number by construction (asserted in
+# It extends the baseline's logit rather than re-deriving it, so at zero
+# displacement, from anywhere his body fills no more of the mouth than it does
+# from the slot, the two are the same number by construction (asserted in
 # tests/unit/ai/test_shot_value.gd).
 #
 # ── Why the public form is the right base ────────────────────────────────────
-# The target is an NHL-quality keeper. Against one, an NHL-calibrated model is
-# correct BY CONSTRUCTION — its apparent miscalibration against the current
-# goalie (predicting ~0.09 where the grid measures 0.438) is a statement about
-# him, not about the form. And it has the property the five-hole geometry never
-# had: it is smooth and monotone, so the DIFFERENCE between two nearby spots is
-# meaningful. That is the only quantity a carry beam consumes, and a surface
-# built from a max over five holes with structural cliffs cannot supply it.
+# The target is an NHL-quality keeper, against whom an NHL-calibrated model is
+# correct by construction; a gap against the live goalie is a statement about
+# him, not the form. And it is smooth and monotone, so the DIFFERENCE between
+# two nearby spots is meaningful — the only quantity a carry beam consumes, and
+# one a max over goalie holes with structural cliffs cannot supply.
 #
 # ── Why displacement is the one feature that must be added ───────────────────
-# The public form marginalises the goalie away. That is right for a season-long
-# stat and fatal for a decision: two spots two metres apart score identically,
-# so moving the keeper buys nothing and the argmax falls through to whatever
-# tie-breakers are left. Displacement is what makes "make him move" scoreable,
-# and it is measurable rather than assumed — see displacement_deficit_m.
+# The public form marginalises the goalie away: right for a season-long stat,
+# fatal for a decision, because two spots two metres apart score identically and
+# moving the keeper buys nothing. Displacement is what makes "make him move"
+# scoreable, and it is measured rather than assumed — see displacement_deficit_m.
 #
 # ── Why the body is the second ───────────────────────────────────────────────
 # The public form is fitted on shots whose doorstep share is mostly rebounds and
-# displaced keepers, so its point-blank value is mostly those: it reads ~0.6 from
-# 2 m whoever is in the net. Against a set, square keeper the open mouth from
-# there is nearly nil (the live keeper stops all of it), and the bot drove into
-# his pads for it. body_logit is that missing perception, in the same
-# ln(available width) currency as POST_SEAL_LOGIT.
+# displaced keepers, so it reads ~0.6 from 2 m whoever is in the net. Against a
+# set, square keeper the open mouth from there is nearly nil. body_logit is that
+# missing perception, in the same ln(available width) currency as
+# POST_SEAL_LOGIT.
 #
-# Deliberately NOT modelled: the DOWN (butterfly) state and screens. Both are
-# whole-goalie states rather than body parts, so they fit this model's grain and
-# drop in as further logit terms when something measures them.
-#
-# Pure/static and engine-free, like every other domain evaluator.
+# Not modelled: screens, and whether the keeper is actually down (the body term
+# takes whichever stance leaves the look least open).
 
 # Log-odds added per metre the keeper is displaced off his square.
 #
@@ -72,15 +65,11 @@ const MAX_USEFUL_DISPLACEMENT_M: float = GameRules.NET_HALF_WIDTH
 #
 # The coefficient is ln(2) and it is geometry rather than a tunable: to a first
 # approximation a shot's chance scales with the target width available to it,
-# so removing half the mouth halves the odds, and halved odds is exactly
-# -ln(2) of logit. No fitting, nothing to tune.
+# so removing half the mouth halves the odds, which is -ln(2) of logit.
 #
-# v1 does not distinguish VH from RVH. VH stands the near column ice-to-
-# shoulder while RVH stays compressed and concedes the short-side high — so
-# the true RVH penalty is smaller than a full halving. Treating both as half
-# the mouth is a known over-penalty on RVH, deferred rather than guessed,
-# because splitting them needs the band structure this model deliberately
-# does not carry.
+# VH and RVH are treated alike. RVH stays compressed and concedes the short-side
+# high, so this over-penalises it; splitting them needs the band structure this
+# model does not carry.
 const POST_SEAL_LOGIT: float = -0.6931472
 
 # Heights the keeper's silhouette is read at across the mouth.
@@ -135,9 +124,9 @@ static func for_release(release: Vector3, attacking_goal: Vector3,
 # `displacement_m`, `keeper_depth_m` out from the goal centre where the caller
 # knows it, else at the depth a set keeper holds for this puck. The shooter's
 # own steepest rung and pace set how high he can get the puck from here; the
-# reference is the league's. On a
-# post-sealed look it prices his body on the shot line and POST_SEAL_LOGIT the
-# near half he walls; in tight the body alone already shuts it.
+# reference is the league's. On a post-sealed look it prices his body on the
+# shot line and POST_SEAL_LOGIT the near half he walls; in tight the body alone
+# already shuts it.
 static func body_logit(release: Vector3, attacking_goal: Vector3,
 		displacement_m: float, keeper_depth_m: float = -1.0,
 		loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH,
@@ -154,13 +143,13 @@ static func body_logit(release: Vector3, attacking_goal: Vector3,
 
 
 # Share of the goal mouth a set keeper's body leaves open from `release`, the
-# keeper `offset_m` off the shot line and `keeper_depth_m` out (body_logit). His structural silhouette (GoalieAnatomy)
-# is projected from the puck onto the goal line at _BODY_SAMPLES heights: from
-# in tight he is close to the eye and the mouth is far, so his pads alone fill
-# it. He is in whichever stance, standing or down, each with its own hands,
-# leaves this look the least, a height the shooter's steepest loft rung cannot
-# reach at his pace is not open, and which way he is off his square is not
-# known, so both mirror images are averaged.
+# keeper `offset_m` off the shot line and `keeper_depth_m` out (body_logit). His
+# structural silhouette (GoalieAnatomy) is projected from the puck onto the goal
+# line at _BODY_SAMPLES heights: from in tight he is close to the eye and the
+# mouth is far, so his pads alone fill it. He is in whichever stance, standing
+# or down, each with its own hands, leaves this look the least; a height the
+# shooter's steepest loft rung cannot reach at his pace is not open; and which
+# way he is off his square is not known, so both mirror images are averaged.
 static func open_mouth_fraction(release: Vector3, attacking_goal: Vector3,
 		offset_m: float, keeper_depth_m: float = -1.0,
 		loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH,
@@ -170,7 +159,7 @@ static func open_mouth_fraction(release: Vector3, attacking_goal: Vector3,
 	if l_net < 0.001:
 		return 1.0
 	var depth: float = keeper_depth_m if keeper_depth_m >= 0.0 \
-			else AIActionScoring.set_goalie_depth(l_net)
+			else AIGoalieModel.set_goalie_depth(l_net)
 	if depth >= l_net:
 		return 1.0   # not between the puck and the net: pulled, or beaten past
 	var l_keeper: float = maxf(l_net - depth, 0.05)
@@ -222,24 +211,20 @@ static func _open_across(stance: int, scale: float, oblique: float, offset_m: fl
 #   deficit = |where he must be − where he is| − |how far he can push by then|
 #
 # Both halves are measured, not fitted. The demand is the arc-match square for
-# the release point (AIActionScoring.goalie_arc_match_x, the same solve the
+# the release point (AIGoalieModel.goalie_arc_match_x, the same solve the
 # live keeper skates); the supply is his real accel-limited T-push over the
 # time he has after his reaction delay, braking into the spot as the live mover
 # does (goalie_push_progress). Floored at zero:
 # a keeper who can comfortably get there is simply set, and there is no such
 # thing as negative displacement.
-#
-# This is also why the model survives the goalie being retuned. It reads his
-# KINEMATICS — push speed, accel ramp, reaction delay, all published in
-# GameRules — and never his anatomy, which is the part under repair.
 static func displacement_deficit_m(keeper_pos: Vector3,
 		attacking_goal: Vector3, release: Vector3,
 		time_to_release_s: float) -> float:
-	var need: float = absf(AIActionScoring.goalie_arc_match_x(
+	var need: float = absf(AIGoalieModel.goalie_arc_match_x(
 			keeper_pos, attacking_goal, release) - keeper_pos.x)
 	var move_time: float = maxf(
-			0.0, time_to_release_s - AIActionScoring.goalie_leg_delay_s)
-	return maxf(0.0, need - AIActionScoring.goalie_push_progress(need, move_time))
+			0.0, time_to_release_s - AIGoalieModel.goalie_leg_delay_s)
+	return maxf(0.0, need - AIGoalieModel.goalie_push_progress(need, move_time))
 
 
 # Each stance's structural cover at each height, plus its hands where they rest

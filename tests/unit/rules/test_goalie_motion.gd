@@ -1,6 +1,6 @@
 extends GutTest
 
-# AIActionScoring.goalie_unsettled + the motion penalty in score_shoot. Models
+# AIGoalieModel.goalie_unsettled + the motion penalty in score_shoot. Models
 # the real goalie's caught-moving weakness so the AI values plays that beat the
 # goalie ACROSS (cross-seam one-timers) over static shots at a set goalie.
 #
@@ -28,7 +28,7 @@ func _arc_match_x(puck_x: float) -> float:
 func test_set_squared_goalie_is_fully_settled() -> void:
 	# Goalie already at its arc-match target for this shooter → no forced motion.
 	var goalie := _goalie_at(_arc_match_x(SHOOTER.x))
-	var u := AIActionScoring.goalie_unsettled(goalie, GOAL, 0.26, SHOOTER)
+	var u := AIGoalieModel.goalie_unsettled(goalie, GOAL, 0.26, SHOOTER)
 	assert_almost_eq(u, 0.0, 0.001, "a set, square goalie reads as fully settled")
 
 
@@ -37,7 +37,7 @@ func test_cross_seam_one_timer_catches_goalie_moving() -> void:
 	# one-timed from the near side (x = +2 → target +0.18). With only the pass
 	# flight to react (~0.21 s), it can't cover the 0.36 m → caught mid-slide.
 	var goalie := _goalie_at(_arc_match_x(-2.0))
-	var u := AIActionScoring.goalie_unsettled(goalie, GOAL, 0.21, SHOOTER)
+	var u := AIGoalieModel.goalie_unsettled(goalie, GOAL, 0.21, SHOOTER)
 	assert_almost_eq(u, 1.0, 0.001,
 			"a cross-seam one-timer should leave the goalie fully unsettled")
 
@@ -46,7 +46,7 @@ func test_goalie_resets_when_given_time() -> void:
 	# Same cross-ice swing, but a slow developing play (long release) lets the
 	# goalie reach its target and re-set before the shot → settled.
 	var goalie := _goalie_at(_arc_match_x(-2.0))
-	var u := AIActionScoring.goalie_unsettled(goalie, GOAL, 0.7, SHOOTER)
+	var u := AIGoalieModel.goalie_unsettled(goalie, GOAL, 0.7, SHOOTER)
 	assert_almost_eq(u, 0.0, 0.001,
 			"with enough time the goalie re-squares and is no longer unsettled")
 
@@ -56,7 +56,7 @@ func test_unsettled_ramps_between_moving_and_set() -> void:
 	# 0.45 s: the push (react 0.13, then the lateral_accel ramp) covers the 0.36 m
 	# swing with a beat to spare, but less than the full settle window.
 	var goalie := _goalie_at(_arc_match_x(-2.0))
-	var u := AIActionScoring.goalie_unsettled(goalie, GOAL, 0.45, SHOOTER)
+	var u := AIGoalieModel.goalie_unsettled(goalie, GOAL, 0.45, SHOOTER)
 	assert_gt(u, 0.0)
 	assert_lt(u, 1.0)
 
@@ -67,7 +67,7 @@ func test_squared_pos_arc_matches_the_puck() -> void:
 	# The squared goalie sits at the arc-match x for the puck, at its own depth —
 	# no time term (a carry destination: the keeper has tracked it there and is set).
 	var goalie := _goalie_at(-1.3)                    # anywhere on its line
-	var squared := AIActionScoring.goalie_squared_pos(goalie, GOAL, SHOOTER)
+	var squared := AIGoalieModel.goalie_squared_pos(goalie, GOAL, SHOOTER)
 	assert_almost_eq(squared.x, _arc_match_x(SHOOTER.x), 0.001,
 			"squared goalie sits at the shooter's arc-match x")
 	assert_almost_eq(squared.z, GOALIE_Z, 0.001, "…at its own depth, unchanged")
@@ -76,8 +76,8 @@ func test_squared_pos_arc_matches_the_puck() -> void:
 func test_squared_pos_reads_fully_settled_by_construction() -> void:
 	# A goalie AT its squared position has zero forced motion — the carry model's
 	# companion to unsettled=0: a squared keeper is never caught moving.
-	var squared := AIActionScoring.goalie_squared_pos(_goalie_at(0.0), GOAL, SHOOTER)
-	var u := AIActionScoring.goalie_unsettled(squared, GOAL, 0.13, SHOOTER)
+	var squared := AIGoalieModel.goalie_squared_pos(_goalie_at(0.0), GOAL, SHOOTER)
+	var u := AIGoalieModel.goalie_unsettled(squared, GOAL, 0.13, SHOOTER)
 	assert_almost_eq(u, 0.0, 0.001, "a squared goalie is fully settled at any release")
 
 
@@ -87,8 +87,8 @@ func test_squared_pos_ignores_reaction_time_unlike_predict() -> void:
 	# squared model tracks it fully. From a standing centre, a quick release leaves
 	# predict short of the arc-match while squared is already there.
 	var centred := _goalie_at(0.0)
-	var predicted := AIActionScoring.predict_goalie_pos(centred, GOAL, 0.14, SHOOTER)
-	var squared := AIActionScoring.goalie_squared_pos(centred, GOAL, SHOOTER)
+	var predicted := AIGoalieModel.predict_goalie_pos(centred, GOAL, 0.14, SHOOTER)
+	var squared := AIGoalieModel.goalie_squared_pos(centred, GOAL, SHOOTER)
 	var target: float = _arc_match_x(SHOOTER.x)
 	assert_lt(predicted.x, target - 0.01, "react-then-slide falls short on a quick release")
 	assert_almost_eq(squared.x, target, 0.001, "the squared carry model tracks all the way")
@@ -107,10 +107,10 @@ func test_moving_goalie_scores_higher_than_set_goalie() -> void:
 	var opps: Array[Vector3] = []
 	var set_score := AIActionScoring.score_shoot(
 			band_shooter, GOAL, goalie, GameRules.NET_HALF_WIDTH, opps,
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S, 0.0)
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0)
 	var moving_score := AIActionScoring.score_shoot(
 			band_shooter, GOAL, goalie, GameRules.NET_HALF_WIDTH, opps,
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S, 1.0)
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 1.0)
 	assert_gt(moving_score, set_score,
 			"a shot at a caught-moving goalie should rate above the same shot at a set one")
 
@@ -124,7 +124,7 @@ func test_default_factor_is_back_compatible() -> void:
 			SHOOTER, GOAL, goalie, GameRules.NET_HALF_WIDTH, opps)
 	var explicit := AIActionScoring.score_shoot(
 			SHOOTER, GOAL, goalie, GameRules.NET_HALF_WIDTH, opps,
-			AIActionScoring.WRISTER_SHOT_SPEED_M_S, 0.0)
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0)
 	assert_almost_eq(implicit, explicit, 0.0001)
 
 

@@ -41,69 +41,6 @@ func _resolver(skaters: Array) -> Dictionary:
 	return team_map
 
 
-# ─── Slot lists ─────────────────────────────────────────────────────────────
-
-func test_slots_for_dzone() -> void:
-	# One PRESSURE on the carrier, the rest MARK a man each.
-	var slots: Array = AIRoleSlots.slots_for_state(AIPossessionState.State.DZONE)
-	assert_true(slots.has(AIRoleSlots.Slot.PRESSURE))
-	assert_true(slots.has(AIRoleSlots.Slot.MARK))
-
-
-func test_slots_for_ozone() -> void:
-	var slots: Array = AIRoleSlots.slots_for_state(AIPossessionState.State.OZONE)
-	assert_true(slots.has(AIRoleSlots.Slot.CARRIER))
-	assert_true(slots.has(AIRoleSlots.Slot.FINISHER))
-	assert_true(slots.has(AIRoleSlots.Slot.SUPPORT))
-
-
-func test_slots_for_trans_do() -> void:
-	var slots: Array = AIRoleSlots.slots_for_state(AIPossessionState.State.TRANS_OFFENSE)
-	assert_true(slots.has(AIRoleSlots.Slot.CARRIER))
-	assert_true(slots.has(AIRoleSlots.Slot.OUTLET))
-	assert_true(slots.has(AIRoleSlots.Slot.SUPPORT))
-
-
-func test_slots_for_breakout() -> void:
-	# BREAKOUT (we possess in our own DZ) uses {CARRIER, BREAKOUT_STRONG,
-	# BREAKOUT_WEAK}: the carrier plus a strong-side-wall outlet and a
-	# weak-side reverse valve.
-	var slots: Array = AIRoleSlots.slots_for_state(AIPossessionState.State.BREAKOUT)
-	assert_true(slots.has(AIRoleSlots.Slot.CARRIER))
-	assert_true(slots.has(AIRoleSlots.Slot.BREAKOUT_STRONG))
-	assert_true(slots.has(AIRoleSlots.Slot.BREAKOUT_WEAK))
-
-
-func test_slots_for_trans_od() -> void:
-	# TRANS_DEFENSE is the layered rush defense compressed to three bodies
-	# (docs/transition-defense-plan.md §5.2): RUSH_D1 in front of the carrier
-	# holding a gap, TRACK_PUCK behind him running him down, TRACK_MID owning
-	# the middle lane. Man-marking is gone from transition — the structure is
-	# lanes and layers, and DZONE's coverage owns the settled three-man problem.
-	var slots: Array = AIRoleSlots.slots_for_state(AIPossessionState.State.TRANS_DEFENSE)
-	assert_true(slots.has(AIRoleSlots.Slot.RUSH_D1))
-	assert_true(slots.has(AIRoleSlots.Slot.TRACK_PUCK))
-	assert_true(slots.has(AIRoleSlots.Slot.TRACK_MID))
-	assert_false(slots.has(AIRoleSlots.Slot.MARK),
-			"transition no longer man-marks")
-	assert_false(slots.has(AIRoleSlots.Slot.PRESSURE),
-			"PRESSURE is not a transition role")
-
-
-func test_slots_for_neutral() -> void:
-	# NEUTRAL has its own role behaviors (CHASE, FLANK_L, FLANK_R)
-	# since the no-carrier scenario calls for "race to puck + hold
-	# support" semantics rather than the inverse-scoring defensive
-	# roles. See test_role_chase.gd / test_role_flank.gd for the
-	# behavior tests.
-	var slots: Array = AIRoleSlots.slots_for_state(AIPossessionState.State.NEUTRAL)
-	assert_true(slots.has(AIRoleSlots.Slot.CHASE))
-	assert_true(slots.has(AIRoleSlots.Slot.FLANK_L))
-	assert_true(slots.has(AIRoleSlots.Slot.FLANK_R))
-
-
-# ─── assign() ───────────────────────────────────────────────────────────────
-
 func test_assign_dzone_distributes_slots() -> void:
 	# PRESSURE = closest to the puck; the other two MARK a man each. Which
 	# marker ends up net-front vs. weak-side is decided downstream by the threat
@@ -220,15 +157,6 @@ func test_assign_breakout_strong_follows_strong_x_sign() -> void:
 	assert_eq(assignments[110], AIRoleSlots.Slot.BREAKOUT_WEAK)
 
 
-func test_slots_for_forecheck() -> void:
-	# FORECHECK (opp possesses in their own DZ) uses {F1_PRESSURE,
-	# F2_MID, F3_HIGH}: the 1-1-1 forecheck. No CARRIER (opp has it).
-	var slots: Array = AIRoleSlots.slots_for_state(AIPossessionState.State.FORECHECK)
-	assert_true(slots.has(AIRoleSlots.Slot.F1_PRESSURE))
-	assert_true(slots.has(AIRoleSlots.Slot.F2_MID))
-	assert_true(slots.has(AIRoleSlots.Slot.F3_HIGH))
-
-
 func test_assign_forecheck_f1_pressures_puck_f3_is_high() -> void:
 	# Team 0 forechecking in the opp end (opp net at -Z). Opp 200 carries
 	# the puck deep (z = -22). F3 = closest to the opp blue line (highest
@@ -325,53 +253,48 @@ func test_assign_trans_od_contain_when_whole_team_caught_up_ice() -> void:
 				"peer %d takes a recovery job" % pid)
 
 
-func test_assign_hysteresis_keeps_prev_when_close() -> void:
-	# Semantic assignment: PRESSURE = soonest to puck, with
-	# HYSTERESIS_PENALTY_S added to a contender's effective arrival
-	# time. Setup: peer 110 is 0.5 m closer to puck than 100, but 100
-	# currently has PRESSURE — the time penalty on 110 keeps 100 in
-	# the slot.
-	var skaters: Array = [
-			[100, 0, Vector3(4.0, 0.0, 22.0)],   # 1.0 m from puck
-			[110, 0, Vector3(4.5, 0.0, 22.0)],   # 0.5 m from puck (raw closer)
-			[120, 0, Vector3(-2.0, 0.0, 25.0)],  # near our net
-			[200, 1, Vector3(5.0, 0.0, 22.0)],
-	]
-	var snap := _make_snapshot(skaters, 200)
+func test_assign_hysteresis_flips_exactly_past_the_penalty() -> void:
+	# PRESSURE = soonest to the puck, a contender paying HYSTERESIS_PENALTY_S on
+	# top of his arrival time. The incumbent (100) holds the slot while the
+	# contender (110) is sooner by less than the penalty and loses it once he is
+	# sooner by more, wherever the two stand.
+	var puck := Vector3(5.0, 0.0, 22.0)
+	var incumbent := Vector3(2.0, 0.0, 22.0)
+	var ref: float = AIArrival.SKATER_REF_SPEED_M_S
+	var t_incumbent: float = AIArrival.time_to_arrive(incumbent, puck, Vector3.ZERO, ref)
 	var prev: Dictionary = {
 			100: AIRoleSlots.Slot.PRESSURE,
 			110: AIRoleSlots.Slot.MARK,
 			120: AIRoleSlots.Slot.MARK,
 	}
-	var assignments: Dictionary[int, int] = AIRoleSlots.assign(
-			snap, TEAM_ID, OUR_NET_Z, AIPossessionState.State.DZONE,
-			_resolver(skaters), prev)
-	# Calibrated standing-start ETAs: 100 ≈ 0.48 s (no penalty, was
-	# PRESSURE); 110 ≈ 0.34 + 0.2 hysteresis ≈ 0.54 s. 100 wins.
-	assert_eq(assignments[100], AIRoleSlots.Slot.PRESSURE,
-			"peer 100 keeps PRESSURE despite peer 110 being 0.5 m closer to puck")
-
-
-func test_assign_hysteresis_swaps_when_contender_meaningfully_sooner() -> void:
-	# The contender's arrival advantage now exceeds the hysteresis
-	# margin — the slot flips to the genuinely better-placed peer.
-	var skaters: Array = [
-			[100, 0, Vector3(2.0, 0.0, 22.0)],   # 3.0 m from puck → ≈0.83 s
-			[110, 0, Vector3(4.0, 0.0, 22.0)],   # 1.0 m → ≈0.48 + 0.2 = 0.68 s
-			[120, 0, Vector3(-2.0, 0.0, 25.0)],
-			[200, 1, Vector3(5.0, 0.0, 22.0)],
-	]
-	var snap := _make_snapshot(skaters, 200)
-	var prev: Dictionary = {
-			100: AIRoleSlots.Slot.PRESSURE,
-			110: AIRoleSlots.Slot.MARK,
-			120: AIRoleSlots.Slot.MARK,
-	}
-	var assignments: Dictionary[int, int] = AIRoleSlots.assign(
-			snap, TEAM_ID, OUR_NET_Z, AIPossessionState.State.DZONE,
-			_resolver(skaters), prev)
-	assert_eq(assignments[110], AIRoleSlots.Slot.PRESSURE,
-			"a contender arriving clearly sooner takes the slot through hysteresis")
+	var held: int = 0
+	var flipped: int = 0
+	for k: int in range(1, 13):
+		var contender := Vector3(5.0, 0.0, 22.0 - 0.25 * k)
+		var advantage: float = t_incumbent \
+				- AIArrival.time_to_arrive(contender, puck, Vector3.ZERO, ref)
+		if absf(advantage - AIRoleSlots.HYSTERESIS_PENALTY_S) < 0.01:
+			continue
+		var skaters: Array = [
+				[100, 0, incumbent],
+				[110, 0, contender],
+				[120, 0, Vector3(-8.0, 0.0, 10.0)],  # far off, never the soonest
+				[200, 1, puck],
+		]
+		var assignments: Dictionary[int, int] = AIRoleSlots.assign(
+				_make_snapshot(skaters, 200), TEAM_ID, OUR_NET_Z,
+				AIPossessionState.State.DZONE, _resolver(skaters), prev)
+		var flips: bool = advantage > AIRoleSlots.HYSTERESIS_PENALTY_S
+		var winner: int = 110 if flips else 100
+		assert_eq(assignments[winner], AIRoleSlots.Slot.PRESSURE,
+				"contender %.2f s sooner (penalty %.2f s): peer %d holds PRESSURE"
+				% [advantage, AIRoleSlots.HYSTERESIS_PENALTY_S, winner])
+		if flips:
+			flipped += 1
+		else:
+			held += 1
+	assert_gt(held, 0, "the sweep includes contenders inside the penalty")
+	assert_gt(flipped, 0, "…and contenders past it")
 
 
 func test_assign_momentum_beats_raw_distance() -> void:
@@ -484,3 +407,14 @@ func test_mixed_team_human_carrier_bots_fill_other_slots() -> void:
 	assert_true(assignments.has(10000))
 	assert_true(assignments.has(10001))
 	assert_ne(assignments[10000], assignments[10001], "bots get different slots")
+
+
+# Every slot the brain can hand out has a row in the agent's per-slot facts, so a
+# new slot cannot silently read as unlabelled, non-reactive and never jabbing.
+func test_every_slot_has_its_facts() -> void:
+	for slot: int in AIRoleSlots.Slot.values():
+		if slot == AIRoleSlots.Slot.NONE:
+			assert_eq(AIRoleSlots.label(slot), "-")
+			continue
+		assert_ne(AIRoleSlots.label(slot), "-",
+				"slot %s has no row in AIRoleSlots._SLOT_INFO" % AIRoleSlots.Slot.keys()[slot])

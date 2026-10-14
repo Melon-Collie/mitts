@@ -14,7 +14,10 @@ extends GutTest
 # model at all, because every other consumer of puck paths (reception gate,
 # chase election, shadow comparator) walks the stepped one.
 
+const Snapshot := preload("res://tests/snapshot.gd")
 const STEP_DT: float = 0.005
+# Two integrator steps of disagreement in when the line is crossed.
+const CLOCK_SLACK_S: float = 2.0 * STEP_DT
 
 
 func _stepped_landing(origin: Vector3, vel: Vector3, seconds: float) -> Vector3:
@@ -207,12 +210,44 @@ func test_the_crossing_read_is_direction_aware() -> void:
 # decides a clear's legality is how long it takes to get there — not how far it
 # goes. These pin the clock the dump eval races against.
 
+# When the stepped integrator first carries the release across the far goal
+# line; INF if it never does.
+func _stepped_time_to_far_goal_line(origin: Vector3, vel: Vector3, seconds: float) -> float:
+	var walk: Array[Vector3] = AITrajectory.predict(
+			origin, vel, int(seconds / STEP_DT), STEP_DT,
+			GameRules.PUCK_ICE_DECEL_M_S2, GameRules.PUCK_BOARD_COR_SCALE,
+			Vector3.ZERO, 0.0, GameRules.PUCK_BOARD_FRICTION,
+			GameRules.PUCK_COLLISION_RADIUS)
+	var prev_z: float = origin.z
+	for i: int in walk.size():
+		if walk[i].z <= -GameRules.GOAL_LINE_Z:
+			return (i + inverse_lerp(prev_z, walk[i].z, -GameRules.GOAL_LINE_Z)) * STEP_DT
+		prev_z = walk[i].z
+	return INF
+
+
 func test_the_crossing_clock_is_reported_with_the_crossing() -> void:
-	var t: float = _time_to_far_goal_line(Vector3(12.0, 0.0, 22.0), Vector3(0.0, 0.0, -14.0))
+	var origin := Vector3(12.0, 0.0, 22.0)
+	var vel := Vector3(0.0, 0.0, -14.0)
+	var t: float = _time_to_far_goal_line(origin, vel)
 	assert_true(is_finite(t), "a crossing release reports when it crosses")
-	# 48.65 m at 14 m/s shedding 0.49 m/s^2 is a 3.72 s slide; the line grazes
-	# the far corner arc first, and the board-friction bleed there costs a beat.
-	assert_almost_eq(t, 3.8, 0.2, "crossing clock is the slide solve plus the corner graze")
+	# Nothing on the way (boards, the corner arc) can make it faster than an
+	# unobstructed slide over the same distance.
+	var d: float = origin.z + GameRules.GOAL_LINE_Z
+	var a: float = GameRules.PUCK_ICE_DECEL_M_S2
+	var v: float = absf(vel.z)
+	var straight: float = (v - sqrt(v * v - 2.0 * a * d)) / a
+	assert_gte(t, straight, "no faster than the straight slide")
+	assert_almost_eq(t, _stepped_time_to_far_goal_line(origin, vel, 6.0), CLOCK_SLACK_S,
+			"the clock is the stepped walk's crossing")
+
+
+# Rewrite with MITTS_UPDATE_SNAPSHOTS=1 (tests/snapshot.gd) and review the diff.
+func test_crossing_clock_calibration_snapshot() -> void:
+	var snap := Snapshot.new("res://tests/unit/ai/snapshots/puck_release_landing.txt")
+	snap.record("14 m/s clear up the wall from our corner: seconds to their goal line",
+			_time_to_far_goal_line(Vector3(12.0, 0.0, 22.0), Vector3(0.0, 0.0, -14.0)))
+	snap.verify(self)
 
 
 func test_a_release_that_never_crosses_reports_no_clock() -> void:

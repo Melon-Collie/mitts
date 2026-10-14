@@ -1,6 +1,6 @@
 extends GutTest
 
-# AIRoleHelpers.approach_speed_cap — the closed form behind the last man's
+# AILastManDiscipline.approach_speed_cap — the closed form behind the last man's
 # step-up discipline (PRESSURE's cut-off and RUSH_D1's gap stand both ride it).
 #
 # It answers one question: how fast may a defender be closing on a rush, given
@@ -19,7 +19,7 @@ const ACCEL: float = 10.5
 
 
 func _cap(spare: float, closing: float) -> float:
-	return AIRoleHelpers.approach_speed_cap(spare, closing, V_MAX, ACCEL)
+	return AILastManDiscipline.approach_speed_cap(spare, closing, V_MAX, ACCEL)
 
 
 func test_more_spare_depth_allows_more_approach_speed() -> void:

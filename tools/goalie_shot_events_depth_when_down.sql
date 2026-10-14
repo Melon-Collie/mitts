@@ -52,7 +52,7 @@
 --
 -- ══ CORRECTION — THE RADIUS IS A PROXY, NOT A CAUSE ════════════════════════
 -- "Dropping WHILE aggressive is the defect" was the causal reading of the table
--- above, and tests/unit/ai/test_human_wraparound.gd contradicts it. Held to a
+-- above, and tests/slow/ai/test_human_wraparound.gd contradicts it. Held to a
 -- FIXED release point, baiting the commit further out leaves LESS net open, not
 -- more: measured 2/7 aim points open from a commit at 0.92 m against 3/7 from
 -- one at 0.27 m.

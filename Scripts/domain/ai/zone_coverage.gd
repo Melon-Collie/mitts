@@ -1,20 +1,19 @@
 class_name AIZoneCoverage
 
-# D-zone coverage geometry — the shared evaluator behind the 5v5 DZONE roles
-# (AIRoleZoneDefense), the defenseman's retreat bounds (AIRoleDefenseman) and
-# the transition-exposure term's defensive anchors. Design:
-# docs/5v5-ai-plan.md §3/§5; the numbers are the researched NHL hybrid
-# ("man-on-man below the dots, zone above") mapped onto this rink.
+# D-zone coverage geometry: the 5v5 DZONE roles' areas and anchors
+# (AIRoleZoneDefense, and TeamBrain's zone eligibility), the defensive home
+# posts station retreats floor at, and the house gate (HOUSE_TOP_DEPTH_M) the
+# transition reads race to. Design: docs/5v5-ai-plan.md §3/§5; the numbers are
+# the researched NHL hybrid ("man-on-man below the dots, zone above") mapped
+# onto this rink.
 #
 # Model: five puck-relative RESPONSIBILITY AREAS (strong/weak D low, C in
 # the slot, strong/weak W high), each with a breathing rest anchor — the
 # structure collapses toward the house as the puck goes below the goal line
-# and extends toward the points as it goes high. Within its area a defender
-# soft-locks the most dangerous man (finish-danger read, the same
-# measurement the house pin uses) and RELEASES HIM AT THE AREA BOUNDARY —
-# the neighbor whose ice he enters inherits him. Exactly one role owns
-# pressure on the puck at any time (pressure_owner) — "closest defender
-# pressures, everyone else holds shape" falls out of the area split.
+# and extends toward the points as it goes high. A defender may only be handed
+# a man standing in his area, and releases him at the area boundary — the
+# neighbour whose ice he enters inherits him. Exactly one role owns pressure on
+# the puck at any time (pressure_owner).
 #
 # All coordinates are world-space; "depth" is metres from the defended goal
 # line INTO the zone (negative = behind the goal line). The strong side is
@@ -22,8 +21,6 @@ class_name AIZoneCoverage
 # the geometry mirrors automatically.
 
 # ── The house (researched scoring-chance polygon: posts → dots → circle tops)
-const HOUSE_DOT_X_M: float = 6.71          # end-zone dot lateral
-const HOUSE_DOT_DEPTH_M: float = 6.1       # dots' depth off the goal line
 const HOUSE_TOP_DEPTH_M: float = 10.7      # tops of the circles
 
 # ── Area boundaries (depths off the goal line, lateral half-widths) ─────────
@@ -66,7 +63,7 @@ const BREATHE_HIGH_DEPTH_M: float = HOUSE_TOP_DEPTH_M
 const SHOT_LANE_STEP_M: float = 3.0
 const POINT_THREAT_DEPTH_M: float = 10.7   # puck deeper than this = "at the point"
 
-# ── Defensive-responsibility anchors (plan §5 — one primitive, 3 consumers) ─
+# ── Defensive home posts (plan §5) ───────────────────────────────────────────
 const D_HOME_U_M: float = 5.0              # a D's home post: dot lane at his blue line
 const F_HOME_DEPTH_INTO_NZ_M: float = 4.0  # a forward's home post: high F3 ice
 
@@ -140,7 +137,6 @@ static func in_area(slot: int, strong_x: float, own_goal_z: float,
 # slides continuously instead of teleporting between stances.
 static func anchor_of(slot: int, strong_x: float, own_goal_z: float,
 		puck_pos: Vector3) -> Vector3:
-	var own_dir: float = signf(own_goal_z)
 	var d_p: float = depth_of(own_goal_z, puck_pos)
 	# 0 = fully collapsed (puck at/below the goal line), 1 = fully extended.
 	var t: float = clampf((d_p - BREATHE_LOW_DEPTH_M)
@@ -172,15 +168,12 @@ static func anchor_of(slot: int, strong_x: float, own_goal_z: float,
 					lerpf(W_WEAK_SAG_DEPTH_M, W_WEAK_POINT_DEPTH_M, t))
 		_:
 			return Vector3(0.0, 0.0, own_goal_z)
-	# (unreachable — every zone slot returns above)
 
 
-# Defensive-responsibility anchor — where a player's defensive post is
-# (plan §5: shared by the zone roles' geometry, the defenseman's retreat
-# bounds, and the transition-exposure back-cover read). A defenseman's post
-# is the dot lane at his own blue line; a forward's is the high (F3) ice
-# just up-ice of it. `side_sign` is the player's home side as a world-X sign
-# (PlayerRules.home_side_x; 0 = C/unknown → middle).
+# A player's defensive home post (plan §5), the floor station retreats fall
+# back to. A defenseman's post is the dot lane at his own blue line; a
+# forward's is the high (F3) ice just up-ice of it. `side_sign` is the player's
+# home side as a world-X sign (PlayerRules.home_side_x; 0 = C/unknown → middle).
 static func defensive_anchor(is_defense: bool, side_sign: float,
 		own_goal_z: float) -> Vector3:
 	var own_dir: float = signf(own_goal_z)

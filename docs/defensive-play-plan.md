@@ -665,7 +665,7 @@ The defenseman's 2-on-1 play: down on the ice across the pass lane, stick out.
   can't otherwise reach the lane in time, and the carrier is inside shooting range.
   This read is gated per tier too.
 - **Decided:** the diver's stick knocks the puck away and catches nothing, and he
-  is down `DiveRules.DOWN_S` 1.0 s, the get-up included.
+  is down `DiveRules.DOWN_S` 1.4 s, the get-up included.
 
 ### As built
 - **Rules.** `DiveRules`: the start (stance + block from plain puckless skating,

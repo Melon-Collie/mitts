@@ -9,7 +9,8 @@
 # Extra args pass straight through to gut_cmdln, e.g.:
 #   .claude/hooks/run-gut.sh -gtest=res://tests/unit/rules/test_shot_release_rules.gd
 #   .claude/hooks/run-gut.sh -gdir=res://tests/unit/state
-# With no args it runs everything in .gutconfig.json (all of res://tests/).
+# With no args it runs the default tier in .gutconfig.json (res://tests/unit/).
+# The slow tier is -gdir=res://tests/slow, the instruments -gdir=res://tests/instruments.
 set -euo pipefail
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
