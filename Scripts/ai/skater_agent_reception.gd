@@ -35,9 +35,9 @@ const RECEIVE_PATH_STEPS: int = 20
 # the glass, body rink-side); outside it the ordinary side-stand runs.
 const WALL_KILL_BAND_M: float = 1.0
 # "Give with the puck" ceiling on an incoming feed's RECEIVER-FRAME speed: above
-# it the receiver brakes to shed its own closing. Must sit between
-# AIPuckLane.PASS_TARGET_CLOSING_M_S (20 — every clean bot feed arrives at
-# it) and Puck.deflect_min_speed (22), so only genuinely hot arrivals trip it.
+# it the receiver brakes to shed its own closing. Between
+# AIPuckLane.PASS_TARGET_CLOSING_M_S (every clean bot feed arrives at it) and
+# Puck.deflect_min_speed (test_bot_mirrors.gd), so only hot arrivals trip it.
 const RECEIVE_GIVE_CEILING_M_S: float = 21.5
 
 # ── Shot-aware reception (read_shot) ─────────────────────────────────────────

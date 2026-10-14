@@ -55,9 +55,10 @@ const TRACK_HOLD_MARGIN_S: float = 0.35
 # regrouping, and the answer is to stand up at our line, not to retreat.
 const REGROUP_CLOSING_M_S: float = 1.0
 
-# Lead on attackers. Must equal AIRoleReads.DEFENSIVE_ANTICIPATION_S / _MAX_M
-# so the read and its roles lead men the same way; copied rather than imported
-# because AIRoleReads depends on this module through RoleContext.
+# Lead on attackers, equal to AIRoleReads.DEFENSIVE_ANTICIPATION_S / _MAX_M so
+# the read and its roles lead men the same way (test_bot_mirrors.gd); copied
+# rather than imported because AIRoleReads depends on this module through
+# RoleContext.
 const ANTICIPATION_S: float = 0.3
 const ANTICIPATION_MAX_M: float = 2.5
 

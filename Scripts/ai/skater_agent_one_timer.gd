@@ -23,14 +23,14 @@ const ONE_TIMER_SQUARE_UP_MAX_RAD: float = deg_to_rad(45.0)
 const ONE_TIMER_FEED_LOOKAHEAD_MAX_S: float = 1.2
 
 # The slapper one-timer pickup ZONE's offset in the skater's local frame (+X =
-# blade side, −Z = in front); must match SkaterController.slapper_zone_offset_x /
-# _z. The wound-up blade is raised, so the ZONE makes the catch: the one-timer
+# blade side, −Z = in front), SkaterController.slapper_zone_offset_x / _z's
+# (test_bot_mirrors.gd). The wound-up blade is raised, so the ZONE makes the catch: the one-timer
 # settle places THIS point on the feed's live line.
 const BOT_ONE_TIMER_ZONE_OFFSET_X_M: float = 1.0
 const BOT_ONE_TIMER_ZONE_OFFSET_Z_M: float = -0.4
 
 # Release radius (m) around the slapper zone centre for the wound-up one-timer.
-# Must stay INSIDE SkaterController.slapper_zone_radius (0.5) so a clean feed
+# Inside SkaterController.slapper_zone_radius (test_bot_mirrors.gd) so a clean feed
 # attaches first and fires the with-puck release; this only catches a puck that
 # slips through without attaching.
 const ONE_TIMER_RELEASE_RADIUS_M: float = 0.4

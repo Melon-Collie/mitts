@@ -9,7 +9,7 @@ class_name AILoosePuckChase
 
 # Incumbent keeps the chase unless a challenger's intercept time beats it by
 # more than this margin (s) — ≈ 1 m at the calibrated ETA's close-range
-# standing-start rate. Must equal AIRoleSlots.HYSTERESIS_PENALTY_S (see there).
+# standing-start rate. Equal to AIRoleSlots.HYSTERESIS_PENALTY_S (see there).
 const HYSTERESIS_S: float = 0.2
 # Default for teammate_first_to_puck's tag_up_peers — a shared empty map, so
 # callers that omit it allocate nothing.

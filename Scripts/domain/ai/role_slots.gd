@@ -153,9 +153,10 @@ static func pressures_puck(slot: int) -> bool:
 # ANTI_CROWD_RADIUS_M, the span inside which two bots occupy the same spot.
 # ~1.2 brain ticks, so it outlives the re-election cadence.
 #
-# Must equal AILoosePuckChase.HYSTERESIS_S: the chase and slot elections race
-# the same bodies over the same ETA model, and if their stickiness disagreed a
-# bot could hold the chase while losing the slot that assumes it.
+# Equal to AILoosePuckChase.HYSTERESIS_S (test_bot_mirrors.gd): the chase and
+# slot elections race the same bodies over the same ETA model, and if their
+# stickiness disagreed a bot could hold the chase while losing the slot that
+# assumes it.
 const HYSTERESIS_PENALTY_S: float = 0.2
 
 # Hysteresis for the NEUTRAL flank L/R split, which is an X-axis SIDE choice

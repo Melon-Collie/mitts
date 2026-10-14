@@ -1142,8 +1142,8 @@ static func _worst_screener_along(
 # max() against the direct read at the call site, never additive — the two are
 # different aims of the same rip.
 
-# Domain mirror of Puck.deflect_min_speed (the receiver-relative pace above
-# which a blade deflects instead of catching): a rip below it lands on the
+# Puck.deflect_min_speed (test_bot_mirrors.gd), the receiver-relative pace above
+# which a blade deflects instead of catching: a rip below it lands on the
 # tape as a pass — no tip outcome exists.
 const TIP_DEFLECT_MIN_SPEED_M_S: float = 22.0
 
