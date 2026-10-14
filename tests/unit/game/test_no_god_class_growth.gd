@@ -47,10 +47,7 @@ const _SIZE_LIMIT: int = 800
 const _SIZE_SLACK: int = 40
 
 const _SIZE_ALLOWANCE: Dictionary[String, int] = {
-	# +3: the wrister wind-up side reads the trailer's relative motion over the
-	# charge (#740), not just where he stands at the commit.
-	# +1: the chase steer passes when an airborne puck is back on the blade plane.
-	"res://Scripts/ai/skater_agent_state_machine.gd": 6616,
+	"res://Scripts/ai/skater_agent_state_machine.gd": 5169,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
 	"res://Scripts/game/game_manager.gd": 5787,
 	"res://Scripts/domain/ai/action_scoring.gd": 3577,

@@ -36,6 +36,21 @@ After dispatch, `SkaterAgent.tick` runs three per-tick passes that may overwrite
 the dispatched input: the stick lift, board play (`apply_board_play`) and the
 shot block (`SkaterAgentShotBlock`).
 
+### The dispatch throttle
+
+The DECISION is throttled; the blade is not. Outside the press states the full
+dispatch runs every `_dispatch_period_ticks` (60 Hz Hard, 20 Hz Normal, ~13 Hz
+Easy). Skipped ticks reuse the cached move vector and the brake / stance / hit /
+stick-lift flags, but re-derive the blade target from CURRENT perception — the
+chase reception aim, the off-puck ready stance, jab and tie aims, and the carry
+cursor — so a catchable feed never transits a blade that only re-aims on
+dispatch ticks. Anything that re-derives on skipped ticks may only READ
+dispatch-throttled state. The press states (SHOOT / PASS / ONE_TIMER) always
+run full-rate: charge timing and pre-aim convergence are tick-sensitive. Every
+counter sized in physics ticks (evade and jab windows, pre-aim wait, the
+role-argmax cooldown) advances by the dispatch span, never by 1, or its
+wall-clock duration stretches with the tier.
+
 **Off-puck behaviour does not live here.** Each `TeamBrain` slot maps to a role
 module returning a `RoleDecision` (target position and velocity, optional aim
 override, check commit, the man it covers); the state machine only consumes it.
@@ -64,6 +79,13 @@ worker batch costs bot quality (the batch's decisions are skipped), and two
 brain ticks stacking is a recurring spike for free. Possession events
 force-retick BOTH brains together, so the phase offset has to be re-applied at
 every forced-tick accumulator reset, not just at construction.
+
+Agents are phase-staggered for the same reason. Each bot's dispatch and
+role-argmax counters start at a per-peer phase (`_stagger_cadence_phases`), and
+every re-arm adds a small per-peer skew, because a possession flip zeroes many
+bots' counters on the same tick and identical periods would keep them in
+lockstep forever. Real bot peers only: tests pin tick-exact behaviour off phase
+0.
 
 **The agents do not read the live brain.** `TeamBrain.build_view()` freezes the
 blackboard into a `TeamBrainView` after each tick, on the worker, sequenced

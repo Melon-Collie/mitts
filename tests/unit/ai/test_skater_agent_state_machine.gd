@@ -506,7 +506,7 @@ func test_body_face_clamps_a_behind_target_to_the_reach_cone() -> void:
 
 # ── Slice 3: shot wind-up geometry ───────────────────────────────────────────
 # Pure trig on the aim direction — no snapshot, no goalie. Right-handed bot
-# (is_left_handed = false → _handedness_perp_sign = 1.0).
+# (is_left_handed = false → _handedness_perp_sign = -1.0).
 
 func test_compensated_aim_is_unit_rotation_by_theta() -> void:
 	var aim := Vector3(0, 0, 1)
