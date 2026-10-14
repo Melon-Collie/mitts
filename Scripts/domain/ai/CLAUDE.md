@@ -750,8 +750,10 @@ remains.
   (control / support behind / numbers), never a private per-station race.
   *Stations that hold forward ice while WE possess* — the 5v5 points, the
   forecheck line pair, F3, the high slot, the trailing valve — go through
-  `offensive_station_target`: hold the forward stand, or fall back to the
-  defensive home post, with no intermediate stand. *The two NEUTRAL shapes* —
+  `offensive_station_target`: hold the forward stand (leashed to the play), or
+  give it up — to `numbers_floor`, goal-side of the deepest attacker behind it,
+  while we still have the puck; to the retreat floor once we don't. *The two
+  NEUTRAL shapes* —
   3v3 FLANK and 5v5 DBACK — go through `neutral_station_target`: a slow loose
   puck is not a rush, so giving up the stand restores a **numbers layer**
   (`numbers_floor`, floored at the house gate) instead of a post. NEUTRAL also
