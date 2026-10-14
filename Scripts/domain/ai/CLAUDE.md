@@ -496,15 +496,18 @@ topic: functions the scorer calls bare stay with the scorer.
   - **A corner scores only what clears the clean-entry inset** off the pipe (post
     radius + puck radius) — a hard geometric requirement. The five-hole pays the
     puck's diameter against its gap the same way.
-  - **Make probability is soft at both ends.** The signed margin (negative by the
-    overlap depth when he has it covered) goes through a softplus with the
-    keeper's edge softness to an effective window, and a Gaussian placement
-    probability over the shooter's spread (`placement_spread`: his aim error in
-    quadrature with the dispersion every release carries) decides whether the
-    puck lands in it. Never fuse the two spreads into one sigma — a wider hand
-    would widen the window and a covered shot would score HIGHER the worse you
-    shoot. Never go back to clamping a raw window against release scatter alone
-    (`test_shot_currency_saturation.gd` measures both failures).
+  - **Make probability is soft at both ends** (`_make_probability`). The shot
+    beats him iff the puck lands inside the window, and the window's edge is
+    itself uncertain: P = P(|X| − ε < margin/2), with X the shooter's placement
+    error (`placement_spread`: his aim error in quadrature with the dispersion
+    every release carries) and ε the keeper's edge error
+    (`goalie_edge_spread`), the margin signed negative by the overlap depth when
+    he has it covered. The two compose as independent variances; softening the
+    window by the edge first and then shooting at it would treat edge
+    uncertainty as window the shooter can reliably exploit. Nothing the shooter
+    does may improve the geometry — a worse hand must never score a covered shot
+    higher. Never go back to clamping a raw window against release scatter
+    alone (`test_shot_currency_saturation.gd` measures why).
   - **The aim sits at the window centre** (`DEFAULT_CORNER_BIAS = 0`), so the
     wobble splits a taken shot into goals / saves / posts symmetrically.
   - **HIGH holes ride the angle ladder** (`docs/elevation-rework-plan.md`): every
