@@ -218,8 +218,8 @@ path) and the shaft's liftable point is still in reach. The lift is the
 `lifts_sticks` cognition gate, closed on Easy so a shielded puck genuinely
 protects it against a beginner tier.
 
-**A covering role's extra is the stick tie** (`AIStickTieRead`), and its price is
-its own stick. The man is tied only while the puck is coming to him — a loose
+**A defensive-zone coverer's extra is the stick tie** (`AIStickTieRead`), and its
+price is its own stick. The man is tied only while the puck is coming to him — a loose
 puck whose path reaches his blade, or his carrier with a pass lane no defender's
 stick reaches — and only when the coverer's free stick could not have stopped it,
 with the man's shaft in reach, and he holds it while that stays true. His blade
@@ -229,9 +229,10 @@ beaten by the same jukes a human would be. A tied attacker the feed is coming to
 pulls his stick straight away; one it isn't coming to holds on, keeping that
 defender's stick out of the play. Both halves are the `ties_sticks` cognition
 gate, closed on Easy. The tie reads the covered man from
-`RoleDecision.locked_man_pid`, which today only the 5v5 zone roles set
-(`zone_defense.gd`); MARK, TRACK_MID and RUSH_D2 cover through `cover_threat`,
-which does not, so they never tie (#769).
+`RoleDecision.locked_man_pid`, which MARK and the 5v5 zone roles set and
+`cover_threat` deliberately does not: TRACK_MID and RUSH_D2 cover a man in
+transition, where the stick belongs in the passing lane, so they publish no lock
+and never tie.
 
 **On the boards, the checker's extra is holding the pin** (`apply_board_play`,
 every tick after dispatch), and the hold follows what is coached: keep the commit

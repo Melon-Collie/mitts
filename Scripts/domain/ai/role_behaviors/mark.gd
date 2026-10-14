@@ -17,6 +17,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 
 	if AIDefensiveVerbs.cover_threat(ctx, d, ctx.assigned_threat_peer,
 			AIRoleReads.resolve_defensive_play_ref(ctx)):
+		d.locked_man_pid = ctx.assigned_threat_peer
 		return d
 
 	var opp_positions: Array[Vector3] = ctx.scratch_opp_positions

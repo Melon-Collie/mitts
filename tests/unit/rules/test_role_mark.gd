@@ -108,6 +108,22 @@ func test_assigned_man_drives_coverage_side_dzone() -> void:
 			"coverage is goal-side of the man; got z=%f" % left_target.z)
 
 
+# The covered man is what the agent's stick tie reads (skater_agent_stick_play.gd
+# tie_aim): a marker publishes him, a marker with nobody assigned publishes nobody.
+func test_the_marker_publishes_the_man_it_covers() -> void:
+	var skaters: Array = [
+		[1, TEAM_ID, Vector3(0, 0, 16), Vector3.ZERO],
+		[200, 1 - TEAM_ID, Vector3(0, 0, 20), Vector3.ZERO],
+		[210, 1 - TEAM_ID, Vector3(-7, 0, 19), Vector3.ZERO],
+	]
+	var ctx: RoleContext = _make_ctx(Vector3(0, 0, 16), skaters, 200)
+	ctx.assigned_threat_peer = 210
+	assert_eq(AIRoleMark.decide(ctx).locked_man_pid, 210)
+	ctx.assigned_threat_peer = -1
+	assert_eq(AIRoleMark.decide(ctx).locked_man_pid, -1,
+			"the unassigned fallback covers ice, not a man")
+
+
 func test_assigned_man_drives_coverage_side_trans_od() -> void:
 	# Rush: carrier in NZ, a receiver wide on +X. Assigned that man, MARK covers
 	# his side goal-side of him — the same behavior the old BACKCHECK had.

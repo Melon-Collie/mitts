@@ -399,6 +399,8 @@ func test_d2_takes_the_mid_lane_driver() -> void:
 	assert_lt(absf(d.target_position.x), 6.0,
 			"D2 covers the middle driver, not the wall man; got %s"
 			% d.target_position)
+	# A rush D's stick belongs in the lane: no stick-tie lock in transition.
+	assert_eq(d.locked_man_pid, -1, "D2 covers without a stick-tie lock")
 
 
 func test_d2_holds_mid_ice_with_nobody_driving() -> void:
