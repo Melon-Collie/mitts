@@ -86,10 +86,19 @@ static func race_vmax(caps: AISkaterCaps) -> float:
 	return caps.max_speed if caps != null else AIArrival.SKATER_REF_SPEED_M_S
 
 
-# The shared predicted path for one race, memoized on the exact puck state so
-# every consumer racing the same puck — both teams' elections, each chaser's
-# race-lost decline, every reach-band read — shares one walk. Callers must treat
-# the returned array as read-only.
+# The predicted path one race is run over, freshly walked.
+static func walk_race(puck_pos: Vector3, puck_vel: Vector3) -> Array[Vector3]:
+	return AITrajectory.predict_puck(puck_pos, puck_vel, RACE_STEPS,
+			RACE_LOOKAHEAD_S / float(RACE_STEPS))
+
+
+# The AI worker's memo of walk_race, keyed on the exact puck state so every bot
+# racing the same puck in a batch — each chaser's race-lost decline, every
+# reach-band read — shares one walk. Callers must treat the returned array as
+# read-only. WORKER THREAD ONLY: the host's per-frame election runs on the main
+# thread while a batch is in flight, and two threads replacing one static array
+# can free it under a reader, so elect walks its own
+# (test_loose_puck_chase.gd holds that).
 static var _traj_cache_pos: Vector3 = Vector3.INF
 static var _traj_cache_vel: Vector3 = Vector3.INF
 static var _traj_cache: Array[Vector3] = []
@@ -100,8 +109,7 @@ static func race_trajectory(puck_pos: Vector3, puck_vel: Vector3) -> Array[Vecto
 		return _traj_cache
 	_traj_cache_pos = puck_pos
 	_traj_cache_vel = puck_vel
-	_traj_cache = AITrajectory.predict_puck(puck_pos, puck_vel, RACE_STEPS,
-			RACE_LOOKAHEAD_S / float(RACE_STEPS))
+	_traj_cache = walk_race(puck_pos, puck_vel)
 	return _traj_cache
 
 
@@ -377,7 +385,7 @@ static func elect(
 		camped_ids: Array = []) -> int:
 	if not puck_playable:
 		return -1
-	var traj: Array[Vector3] = race_trajectory(puck_pos, puck_vel)
+	var traj: Array[Vector3] = walk_race(puck_pos, puck_vel)
 	var step_dt: float = RACE_LOOKAHEAD_S / float(RACE_STEPS)
 	var margin: float = setup_margin(puck_vel)
 	var t_play: float = race_playable_time(puck_pos, puck_vel)

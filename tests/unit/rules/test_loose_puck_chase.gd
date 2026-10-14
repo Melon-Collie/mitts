@@ -769,3 +769,20 @@ func test_reach_band_ignores_a_puck_flying_over_the_stick() -> void:
 			Vector3(-1, _REST_Y, 0), Vector3(10, 0, 0),
 			Vector3(3, 0, 0), Vector3.ZERO, REF, 0.5)
 	assert_true(flat, "the same puck along the ice is")
+
+
+# race_trajectory's memo is a static the AI worker owns. The election runs on the
+# main thread every frame, overlapping an in-flight batch, so it — and anything
+# else the host calls outside the worker — must walk its own path.
+func test_the_main_thread_election_never_touches_the_worker_memo() -> void:
+	var src: String = FileAccess.get_file_as_string(
+			"res://Scripts/domain/ai/loose_puck_chase.gd")
+	var start: int = src.find("static func elect(")
+	assert_gt(start, -1, "found the election")
+	var end: int = src.find("\nstatic func ", start + 1)
+	var body: String = src.substr(start, end - start if end != -1 else -1)
+	assert_false(body.contains("race_trajectory("), "elect walks its own path")
+	for path: String in ["res://Scripts/game/game_manager.gd",
+			"res://Scripts/game/ai_coordinator.gd"]:
+		assert_false(FileAccess.get_file_as_string(path).contains("race_trajectory("),
+				"%s runs on the main thread" % path)
