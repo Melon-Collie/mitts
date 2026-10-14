@@ -266,7 +266,7 @@ func _ahead_man_ctx(blocked: bool) -> RoleContext:
 
 
 func _ahead_man_drive_in(ctx: RoleContext) -> float:
-	return _decided(ctx)._receiver_drive_in_value(
+	return _decided(ctx)._field.receiver_drive_in_value(
 			ctx, _AHEAD_MAN, AIBotMechanics.WRISTER_SHOT_SPEED_M_S, null)
 
 
@@ -586,14 +586,14 @@ func test_an_in_zone_carrier_prices_a_turnover_in_xg() -> void:
 	var c_in := AIRoleCarrier.new()
 	var ctx_in: RoleContext = _make_ctx(inside)
 	c_in.decide(ctx_in)
-	assert_almost_eq(c_in._turnover_cost(ctx_in, loss, 1.0, our_goalie), expected_xg, 0.0005,
+	assert_almost_eq(c_in._field.turnover_cost(ctx_in, loss, 1.0, our_goalie), expected_xg, 0.0005,
 			"in the zone a turnover costs the opponent's xG promise there")
 
 	var outside := Vector3(-8.0, 0.0, -4.0)
 	var c_out := AIRoleCarrier.new()
 	var ctx_out: RoleContext = _make_ctx(outside)
 	c_out.decide(ctx_out)
-	assert_almost_eq(c_out._turnover_cost(ctx_out, loss, 1.0, our_goalie),
+	assert_almost_eq(c_out._field.turnover_cost(ctx_out, loss, 1.0, our_goalie),
 			AIActionScoring.threat_surface_shoot(loss, our_net, our_goalie,
 					GameRules.NET_HALF_WIDTH, defenders), 0.0005,
 			"outside the zone it stays on the potential scale, like the gains")
@@ -619,7 +619,7 @@ func test_a_defender_who_never_covers_the_drive_costs_it_nothing() -> void:
 		ctx.self_velocity = v
 		var c := AIRoleCarrier.new()
 		c.decide(ctx)
-		drive.append(c._receiver_drive_in_value(ctx, self_pos,
+		drive.append(c._field.receiver_drive_in_value(ctx, self_pos,
 				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, null, v))
 	assert_gt(drive[1], 0.0, "precondition: the drive is worth something")
 	assert_almost_eq(drive[0], drive[1], 0.005,
@@ -641,7 +641,7 @@ func test_the_shot_s_keep_never_discounts_what_the_spot_is_worth_by_position() -
 	var position_value: float = AIActionScoring.position_potential(pos, goal, none) \
 			* AIActionScoring.potential_realization_discount(pos, goal)
 	for keep: float in [1.0, 0.5, 0.0]:
-		assert_almost_eq(c._score_at(ctx, pos, self_pos, none, pulled,
+		assert_almost_eq(c._field.value_at(ctx, pos, self_pos, none, pulled,
 				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, 0.0, 10.0,
 				GameRules.DEFAULT_LOFT_TAN_HIGH, keep), position_value, 1e-6,
 				"keep %.1f" % keep)
@@ -653,11 +653,11 @@ func test_in_the_zone_the_keep_discounts_the_shot() -> void:
 	var c := AIRoleCarrier.new()
 	var none: Array[Vector3] = []
 	var keeper := ctx.attacking_goal_pos + Vector3(0.0, 0.0, 1.0)
-	var kept: float = c._score_at(ctx, self_pos, self_pos, none, keeper,
+	var kept: float = c._field.value_at(ctx, self_pos, self_pos, none, keeper,
 			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, 0.0, 0.0,
 			GameRules.DEFAULT_LOFT_TAN_HIGH, 1.0)
 	assert_gt(kept, 0.0)
-	assert_almost_eq(c._score_at(ctx, self_pos, self_pos, none, keeper,
+	assert_almost_eq(c._field.value_at(ctx, self_pos, self_pos, none, keeper,
 			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, 0.0, 0.0,
 			GameRules.DEFAULT_LOFT_TAN_HIGH, 0.5), kept * 0.5, 1e-6)
 
@@ -1249,7 +1249,7 @@ func _ctx_with_finisher(fin_pos: Vector3, ready: bool) -> RoleContext:
 func test_developing_feed_zero_without_brain() -> void:
 	var ctx := _make_ctx(Vector3(4, 0, -18))
 	var carrier := AIRoleCarrier.new()
-	carrier._scratch_teammate_ids = [2]
+	carrier._field.teammate_ids = [2]
 	assert_eq(carrier._best_developing_feed(ctx), 0.0,
 			"no team brain → nothing to wait for")
 
@@ -1258,14 +1258,14 @@ func test_developing_feed_zero_when_finisher_already_ready() -> void:
 	# Already-flagged finisher is fed by normal scoring — not something to hold for.
 	var ctx := _ctx_with_finisher(Vector3(-2.5, 0, -21.5), true)
 	var carrier := AIRoleCarrier.new()
-	carrier._scratch_teammate_ids = [2]
+	carrier._field.teammate_ids = [2]
 	assert_eq(carrier._best_developing_feed(ctx), 0.0)
 
 
 func test_developing_feed_positive_for_staging_cross_seam_finisher() -> void:
 	var ctx := _ctx_with_finisher(Vector3(-2.5, 0, -21.5), false)
 	var carrier := AIRoleCarrier.new()
-	carrier._scratch_teammate_ids = [2]
+	carrier._field.teammate_ids = [2]
 	assert_gt(carrier._best_developing_feed(ctx), 0.0,
 			"a staging cross-seam finisher gives a positive developing feed")
 
@@ -1277,7 +1277,7 @@ func test_developing_feed_invisible_without_the_cognition_gate() -> void:
 	var ctx := _ctx_with_finisher(Vector3(-2.5, 0, -21.5), false)
 	ctx.holds_for_developing_feeds = false
 	var carrier := AIRoleCarrier.new()
-	carrier._scratch_teammate_ids = [2]
+	carrier._field.teammate_ids = [2]
 	assert_eq(carrier._best_developing_feed(ctx), 0.0,
 			"the developing play is invisible to a tier without the hold read")
 
@@ -1294,10 +1294,10 @@ func test_goalie_motion_blind_reads_the_keeper_as_always_set() -> void:
 	gs.position_z = OPP_NET_Z + 1.2
 	ctx.snapshot.goalie_states[1 - TEAM_ID] = gs
 	var carrier := AIRoleCarrier.new()
-	assert_gt(carrier._goalie_unsettled_at(ctx, 0.2, self_pos), 0.0,
+	assert_gt(AICarrierField.goalie_unsettled_at(ctx, 0.2, self_pos), 0.0,
 			"an off-square keeper on a short release reads unsettled")
 	ctx.reads_goalie_motion = false
-	assert_eq(carrier._goalie_unsettled_at(ctx, 0.2, self_pos), 0.0,
+	assert_eq(AICarrierField.goalie_unsettled_at(ctx, 0.2, self_pos), 0.0,
 			"a motion-blind tier reads the same keeper as set")
 
 
@@ -1313,7 +1313,7 @@ func test_developing_feed_zero_for_ghosted_finisher() -> void:
 	brain.slot_assignments[2] = AIRoleSlots.Slot.FINISHER
 	ctx.team_brain = brain
 	var carrier := AIRoleCarrier.new()
-	carrier._scratch_teammate_ids = [2]
+	carrier._field.teammate_ids = [2]
 	assert_eq(carrier._best_developing_feed(ctx), 0.0,
 			"a ghosted finisher isn't a developing play — nothing to hold for")
 
@@ -1322,7 +1322,7 @@ func test_developing_feed_zero_when_finisher_out_of_offensive_zone() -> void:
 	# Finisher back in the neutral zone (z = -5 > -BLUE_LINE_Z) → not a cross-seam.
 	var ctx := _ctx_with_finisher(Vector3(-3, 0, -5), false)
 	var carrier := AIRoleCarrier.new()
-	carrier._scratch_teammate_ids = [2]
+	carrier._field.teammate_ids = [2]
 	assert_eq(carrier._best_developing_feed(ctx), 0.0,
 			"a finisher outside the OZ isn't a developing cross-seam")
 
@@ -1336,13 +1336,13 @@ func test_developing_feed_counts_a_finisher_still_crossing_the_line() -> void:
 	var fin_pos := Vector3(-5, 0, -(GameRules.BLUE_LINE_Z - 1.0))
 	var parked := _ctx_with_finisher(fin_pos, false)
 	var c1 := AIRoleCarrier.new()
-	c1._scratch_teammate_ids = [2]
+	c1._field.teammate_ids = [2]
 	assert_eq(c1._best_developing_feed(parked), 0.0,
 			"parked outside the line: nothing developing")
 	var driving := _ctx_with_finisher(fin_pos, false)
 	driving.snapshot.skater_states[2].velocity = Vector3(1.0, 0, -8.5)
 	var c2 := AIRoleCarrier.new()
-	c2._scratch_teammate_ids = [2]
+	c2._field.teammate_ids = [2]
 	assert_gt(c2._best_developing_feed(driving), 0.0,
 			"driving in: the entering finisher is a developing play")
 
@@ -1357,12 +1357,12 @@ func test_developing_feed_values_the_spot_the_finisher_is_driving_to() -> void:
 	var fin_pos := Vector3(-5, 0, -12.0)
 	var parked := _ctx_with_finisher(fin_pos, false)
 	var c1 := AIRoleCarrier.new()
-	c1._scratch_teammate_ids = [2]
+	c1._field.teammate_ids = [2]
 	var feed_parked: float = c1._best_developing_feed(parked)
 	var driving := _ctx_with_finisher(fin_pos, false)
 	driving.snapshot.skater_states[2].velocity = Vector3(2.5, 0, -6.5)
 	var c2 := AIRoleCarrier.new()
-	c2._scratch_teammate_ids = [2]
+	c2._field.teammate_ids = [2]
 	assert_gt(c2._best_developing_feed(driving), feed_parked,
 			"the feed is valued at the spot the finisher is getting to")
 
@@ -1414,7 +1414,7 @@ func test_developing_feed_positive_for_outlet_skating_its_route() -> void:
 	# Outlet on the strong wall, skating hard up-ice toward the blue line.
 	var ctx := _ctx_with_outlet(Vector3(9, 0, 16), Vector3(1.2, 0, -6))
 	var carrier := AIRoleCarrier.new()
-	carrier._scratch_teammate_ids = [2]
+	carrier._field.teammate_ids = [2]
 	assert_gt(carrier._best_developing_feed(ctx), 0.0,
 			"an outlet skating up its route is a developing feed worth holding for")
 
@@ -1424,7 +1424,7 @@ func test_developing_feed_zero_for_stationary_outlet() -> void:
 	# scoring already prices that; nothing is developing.
 	var ctx := _ctx_with_outlet(Vector3(9, 0, 16), Vector3.ZERO)
 	var carrier := AIRoleCarrier.new()
-	carrier._scratch_teammate_ids = [2]
+	carrier._field.teammate_ids = [2]
 	assert_eq(carrier._best_developing_feed(ctx), 0.0,
 			"a stationary outlet isn't developing anything")
 
@@ -1432,7 +1432,7 @@ func test_developing_feed_zero_for_stationary_outlet() -> void:
 func test_developing_feed_zero_for_ghosted_outlet() -> void:
 	var ctx := _ctx_with_outlet(Vector3(9, 0, 16), Vector3(1.2, 0, -6), true)
 	var carrier := AIRoleCarrier.new()
-	carrier._scratch_teammate_ids = [2]
+	carrier._field.teammate_ids = [2]
 	assert_eq(carrier._best_developing_feed(ctx), 0.0,
 			"a ghosted outlet can't receive — no developing feed")
 
@@ -1444,7 +1444,7 @@ func test_developing_outlet_beats_the_spot_it_left_behind() -> void:
 	# outlet against one parked at the same spot but projected nowhere.
 	var moving := _ctx_with_outlet(Vector3(9, 0, 16), Vector3(1.2, 0, -6))
 	var carrier := AIRoleCarrier.new()
-	carrier._scratch_teammate_ids = [2]
+	carrier._field.teammate_ids = [2]
 	var developing: float = carrier._best_developing_feed(moving)
 
 	# The same feed valued AT the outlet's current spot: reuse _pass_ev
@@ -1455,7 +1455,7 @@ func test_developing_outlet_beats_the_spot_it_left_behind() -> void:
 			dist, moving.self_wrister_shot_speed, moving.pass_speed_scale)
 	var flight_t: float = clampf(dist / pass_speed, 0.0, AIRoleCarrier.PASS_LEAD_MAX_S)
 	var carrier2 := AIRoleCarrier.new()
-	carrier2._scratch_teammate_ids = [2]
+	carrier2._field.teammate_ids = [2]
 	var stay_put: float = carrier2._pass_ev(
 			moving, spot, pass_speed, flight_t,
 			flight_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, flight_t,
@@ -1505,7 +1505,7 @@ func test_best_dump_geometry_in_own_zone_is_a_hard_rim_out() -> void:
 	# The clear is a searched release now, so the side it comes off is an
 	# outcome of the icing constraint and the ice in front of the carrier, not
 	# a formula — what has to hold is that the puck leaves our end and stays in
-	# play. dump[4] is the resting spot; dump[1] is only where the stick points.
+	# play. dump.settle is the resting spot; dump.aim is only where the stick points.
 	var self_pos := Vector3(6, 0, 24)
 	var skaters: Array = [
 			[1, TEAM_ID, self_pos],
@@ -1513,10 +1513,10 @@ func test_best_dump_geometry_in_own_zone_is_a_hard_rim_out() -> void:
 	]
 	var ctx: RoleContext = _make_ctx(self_pos, skaters)
 	var c := AIRoleCarrier.new()
-	c._build_action_opponents_lists(ctx)
-	var dump: Array = c._best_dump(ctx, AIRoleHelpers.resolve_our_goalie_pos(ctx))
-	assert_false(dump[2], "a DZ clear is a chip out, not a soft corner flip")
-	var settle: Vector3 = dump[4]
+	c._field.fill(ctx)
+	var dump: AICarrierDumpSearch = _dumped(c, ctx, AIRoleHelpers.resolve_our_goalie_pos(ctx))
+	assert_false(dump.is_soft, "a DZ clear is a chip out, not a soft corner flip")
+	var settle: Vector3 = dump.settle
 	gut.p("  DZ clear from %s settles at %s" % [self_pos, settle])
 	assert_false(
 			AIActionScoring.in_offensive_zone(settle, ctx.defending_goal_pos),
@@ -1549,11 +1549,17 @@ func _dump_in_ctx() -> RoleContext:
 	return _make_ctx(self_pos, [[1, TEAM_ID, self_pos], [3, 1, Vector3(2, 0, -5)]])
 
 
-# The carrier's searched dump at `ctx`: [value, aim, is_soft, is_rim, settle, pace].
-func _searched_dump(ctx: RoleContext) -> Array:
+# The carrier's searched dump at `ctx`.
+func _searched_dump(ctx: RoleContext) -> AICarrierDumpSearch:
 	var c := AIRoleCarrier.new()
-	c._build_action_opponents_lists(ctx)
-	return c._best_dump(ctx, AIRoleHelpers.resolve_our_goalie_pos(ctx))
+	c._field.fill(ctx)
+	return _dumped(c, ctx, AIRoleHelpers.resolve_our_goalie_pos(ctx))
+
+
+# Carrier `c`'s dump search at `ctx`, its field already filled.
+func _dumped(c: AIRoleCarrier, ctx: RoleContext, our_goalie: Vector3) -> AICarrierDumpSearch:
+	c._dump.search(ctx, c._field, our_goalie)
+	return c._dump
 
 
 func test_a_dump_in_is_a_soft_flip_at_a_pace_the_release_can_fire() -> void:
@@ -1562,9 +1568,9 @@ func test_a_dump_in_is_a_soft_flip_at_a_pace_the_release_can_fire() -> void:
 	# The pace is a real choice off the ladder, inside the producible release band.
 	# Where it comes to rest is the race's outcome: the snapshot's row.
 	var ctx: RoleContext = _dump_in_ctx()
-	var dump: Array = _searched_dump(ctx)
-	assert_true(dump[2], "a dump-in is a soft flip")
-	assert_between(dump[5], GameRules.DEFAULT_WRISTER_POWER_MIN_M_S,
+	var dump: AICarrierDumpSearch = _searched_dump(ctx)
+	assert_true(dump.is_soft, "a dump-in is a soft flip")
+	assert_between(dump.launch_speed, GameRules.DEFAULT_WRISTER_POWER_MIN_M_S,
 			ctx.self_wrister_shot_speed,
 			"the launch pace sits in the band the release can actually fire")
 
@@ -1577,10 +1583,10 @@ func test_dump_in_will_not_feed_the_keeper() -> void:
 	var self_pos := Vector3(0, 0, -4)
 	var ctx: RoleContext = _make_ctx(self_pos, [[1, TEAM_ID, self_pos]])
 	var c := AIRoleCarrier.new()
-	c._build_action_opponents_lists(ctx)
-	var dump: Array = c._best_dump(ctx, AIRoleHelpers.resolve_our_goalie_pos(ctx))
-	var settle: Vector3 = dump[4]
-	var keeper: Vector3 = c._goalie_now(ctx)
+	c._field.fill(ctx)
+	var dump: AICarrierDumpSearch = _dumped(c, ctx, AIRoleHelpers.resolve_our_goalie_pos(ctx))
+	var settle: Vector3 = dump.settle
+	var keeper: Vector3 = AICarrierField.goalie_now(ctx)
 	gut.p("  dump-in settles at %s, keeper at %s" % [settle, keeper])
 	assert_false(
 			AIActionScoring.keeper_collects_first(
@@ -1730,7 +1736,7 @@ func test_delayed_offside_closes_the_zone_to_the_carry() -> void:
 	var self_pos := Vector3(0, 0, -5)  # neutral ice, attacking -Z
 	var ctx := _make_ctx(self_pos)
 	var c := AIRoleCarrier.new()
-	c._build_action_opponents_lists(ctx)
+	c._field.fill(ctx)
 	var goalie: Vector3 = AIRoleHelpers.resolve_our_goalie_pos(ctx)
 	var in_zone := Vector3(0, 0, -9)
 	assert_gt(c._score_move_candidate_base(ctx, in_zone, goalie), -INF,
@@ -1747,9 +1753,9 @@ func test_delayed_offside_takes_the_dump_in_off_the_table() -> void:
 			[3, 1, Vector3(2, 0, -5)]])
 	ctx.zone_entry_blocked = true
 	var c := AIRoleCarrier.new()
-	c._build_action_opponents_lists(ctx)
-	var dump: Array = c._best_dump(ctx, AIRoleHelpers.resolve_our_goalie_pos(ctx))
-	assert_eq(dump[0], -INF, "a dumped puck nobody may touch is no dump-in")
+	c._field.fill(ctx)
+	var dump: AICarrierDumpSearch = _dumped(c, ctx, AIRoleHelpers.resolve_our_goalie_pos(ctx))
+	assert_eq(dump.value, -INF, "a dumped puck nobody may touch is no dump-in")
 
 
 func test_no_dump_once_in_the_offensive_zone() -> void:
@@ -1936,7 +1942,7 @@ func test_oz_valve_prunes_carry_candidates_in_the_blue_line_band() -> void:
 	var self_pos := Vector3(0.0, 0.0, -12.0)
 	var ctx := _make_ctx(self_pos)
 	var c := AIRoleCarrier.new()
-	c._build_action_opponents_lists(ctx)
+	c._field.fill(ctx)
 	var in_band := Vector3(0.0, 0.0,
 			-(GameRules.BLUE_LINE_Z + AIRoleCarrier.OZ_RETREAT_LINE_BUFFER_M * 0.5))
 	var past_band := Vector3(0.0, 0.0,
@@ -1954,7 +1960,7 @@ func test_nz_carrier_may_target_entry_candidates_near_the_line() -> void:
 	var self_pos := Vector3(0.0, 0.0, -5.0)   # neutral zone
 	var ctx := _make_ctx(self_pos)
 	var c := AIRoleCarrier.new()
-	c._build_action_opponents_lists(ctx)
+	c._field.fill(ctx)
 	var just_inside := Vector3(0.0, 0.0, -(GameRules.BLUE_LINE_Z + 0.7))
 	assert_gt(c._score_move_candidate(ctx, just_inside, ctx.defending_goal_pos), -INF,
 			"an entry candidate in the band is not pruned from outside the zone")
@@ -1963,7 +1969,7 @@ func test_nz_carrier_may_target_entry_candidates_near_the_line() -> void:
 # The carrier's best pass to mate 2 at `ctx`: [peer, value, saucer, …].
 func _best_pass_to_mate(ctx: RoleContext) -> Array:
 	var c := AIRoleCarrier.new()
-	c._build_action_opponents_lists(ctx)
+	c._field.fill(ctx)
 	return c._compute_best_pass(ctx, Vector2(0.0, -1.0), [2])
 
 
@@ -2264,13 +2270,13 @@ func test_pass_option_prefers_the_spot_that_reopens_the_lane() -> void:
 	# spot inherits (a discounted cut of) the receiver's value.
 	var ctx := _make_ctx(Vector3.ZERO)
 	var c := AIRoleCarrier.new()
-	c._scratch_option_receiver_pos.append(Vector3(-8.0, 0.0, 0.0))
-	c._scratch_option_receiver_val.append(0.12)
-	c._scratch_opponents.append(Vector3(-4.0, 0.0, 0.0))    # parked on the direct lane
-	c._scratch_opponent_vels.append(Vector3.ZERO)
-	c._scratch_opponent_caps.append(null)
-	var blocked: float = c._candidate_pass_option(ctx, Vector3.ZERO)
-	var open: float = c._candidate_pass_option(ctx, Vector3(0.0, 0.0, 8.0))
+	c._field.receiver_pos.append(Vector3(-8.0, 0.0, 0.0))
+	c._field.receiver_val.append(0.12)
+	c._field.opponents.append(Vector3(-4.0, 0.0, 0.0))    # parked on the direct lane
+	c._field.opponent_vels.append(Vector3.ZERO)
+	c._field.opponent_caps.append(null)
+	var blocked: float = c._field.pass_option_from(ctx, Vector3.ZERO)
+	var open: float = c._field.pass_option_from(ctx, Vector3(0.0, 0.0, 8.0))
 	assert_gt(open, blocked + 0.02,
 			"the spot with the reopened lane inherits real receiver value")
 	assert_lt(open, 0.12, "the option is a discounted cut, never par with a live pass")
@@ -2520,8 +2526,8 @@ func test_own_zone_clear_is_worth_more_with_a_winger_posted_to_win_it() -> void:
 	# the delivery value comes from the race, which every roster size runs.
 	var ctx := _rim_ctx(5, false)
 	var c := AIRoleCarrier.new()
-	c._build_action_opponents_lists(ctx)
-	var with_winger: Array = c._best_dump(ctx, ctx.defending_goal_pos)
+	c._field.fill(ctx)
+	var with_winger: AICarrierDumpSearch = _dumped(c, ctx, ctx.defending_goal_pos)
 	# Same scene with the wall post unmanned.
 	var bare := _make_ctx(Vector3(10.5, 0, 24.0), [
 			[1, TEAM_ID, Vector3(10.5, 0, 24.0)],
@@ -2533,11 +2539,11 @@ func test_own_zone_clear_is_worth_more_with_a_winger_posted_to_win_it() -> void:
 	# lost outright and the clear pays its whole concession.
 	bare.team_size = 5
 	var c_bare := AIRoleCarrier.new()
-	c_bare._build_action_opponents_lists(bare)
-	var without: Array = c_bare._best_dump(bare, bare.defending_goal_pos)
+	c_bare._field.fill(bare)
+	var without: AICarrierDumpSearch = _dumped(c_bare, bare, bare.defending_goal_pos)
 	gut.p("  clear value: winger posted %.4f vs unmanned %.4f"
-			% [with_winger[0], without[0]])
-	assert_gt(with_winger[0], without[0],
+			% [with_winger.value, without.value])
+	assert_gt(with_winger.value, without.value,
 			"a manned post makes the clear worth more than an unmanned one")
 
 
@@ -2560,10 +2566,10 @@ func _behind_net_clear_ctx() -> RoleContext:
 func _behind_net_clear() -> Array:
 	var ctx: RoleContext = _behind_net_clear_ctx()
 	var c := AIRoleCarrier.new()
-	c._build_action_opponents_lists(ctx)
-	var r: Array = c._best_dump(ctx, ctx.defending_goal_pos)
+	c._field.fill(ctx)
+	var r: AICarrierDumpSearch = _dumped(c, ctx, ctx.defending_goal_pos)
 	var our_slot: Vector3 = ctx.defending_goal_pos + Vector3(0, 0, -6.0)
-	return [r[0], r[4], c._turnover_cost(ctx, our_slot, 1.0, ctx.defending_goal_pos)]
+	return [r.value, r.settle, c._field.turnover_cost(ctx, our_slot, 1.0, ctx.defending_goal_pos)]
 
 
 func test_behind_net_clear_is_a_real_play_under_a_committed_forecheck() -> void:
@@ -2604,8 +2610,8 @@ func test_the_clear_rims_to_the_wall_our_man_can_win() -> void:
 		var ctx := _make_ctx(self_pos, skaters)
 		ctx.team_size = 5
 		var c := AIRoleCarrier.new()
-		c._build_action_opponents_lists(ctx)
-		settles.append(c._best_dump(ctx, ctx.defending_goal_pos)[4])
+		c._field.fill(ctx)
+		settles.append(_dumped(c, ctx, ctx.defending_goal_pos).settle)
 	gut.p("  clear settles: strong-side post %s vs far-side post %s"
 			% [settles[0], settles[1]])
 	assert_gt(settles[0].x, 0.0, "with the winger up the strong wall, rim it there")
@@ -2623,15 +2629,15 @@ func test_a_camped_wall_lane_makes_the_clear_worth_less() -> void:
 	# than the one he took away. Both are the assertion below.
 	var open_ctx := _rim_ctx(5, false)
 	var c_open := AIRoleCarrier.new()
-	c_open._build_action_opponents_lists(open_ctx)
-	var open_r: Array = c_open._best_dump(open_ctx, open_ctx.defending_goal_pos)
+	c_open._field.fill(open_ctx)
+	var open_r: AICarrierDumpSearch = _dumped(c_open, open_ctx, open_ctx.defending_goal_pos)
 	var ctx := _rim_ctx(5, true)
 	var c := AIRoleCarrier.new()
-	c._build_action_opponents_lists(ctx)
-	var r: Array = c._best_dump(ctx, ctx.defending_goal_pos)
-	gut.p("  clear settles open %s camped %s" % [open_r[4], r[4]])
-	gut.p("  clear value: open lane %.4f vs camped %.4f" % [open_r[0], r[0]])
-	assert_lt(r[0], open_r[0],
+	c._field.fill(ctx)
+	var r: AICarrierDumpSearch = _dumped(c, ctx, ctx.defending_goal_pos)
+	gut.p("  clear settles open %s camped %s" % [open_r.settle, r.settle])
+	gut.p("  clear value: open lane %.4f vs camped %.4f" % [open_r.value, r.value])
+	assert_lt(r.value, open_r.value,
 			"a body camped where the clear lands lowers our odds of winning it")
 
 
@@ -2653,7 +2659,7 @@ func test_developing_feed_watches_the_over_valve_in_5v5() -> void:
 	brain.slot_assignments[2] = AIRoleSlots.Slot.BREAKOUT_D2
 	ctx.team_brain = brain
 	var carrier := AIRoleCarrier.new()
-	carrier._scratch_teammate_ids = [2]
+	carrier._field.teammate_ids = [2]
 	assert_gt(carrier._best_developing_feed(ctx), 0.0,
 			"a partner skating to the net-back valve is a developing Over")
 
@@ -2990,7 +2996,7 @@ func _record_dump_and_breakout_picks(snap: Snapshot) -> void:
 	snap.record("past centre, a loose pair ahead: pick",
 			_pick(_decided(_contained_past_centre_ctx(false))))
 	snap.record("dump-in past centre, one D ahead: rests at",
-			_spot(_searched_dump(_dump_in_ctx())[4]))
+			_spot(_searched_dump(_dump_in_ctx()).settle))
 	snap.record("pinned in our zone by a head-on forecheck, outlet up the wall: pick",
 			_pick(_decided(_pinned_with_an_outlet_ctx())))
 	snap.record("wheeling up the weak wall, middle clogged: pick", _pick(_decided(_wall_exit_ctx())))

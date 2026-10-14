@@ -1429,7 +1429,7 @@ static func _is_past_goal_line(pos: Vector3, attacking_goal: Vector3) -> bool:
 
 
 # True when `pos` is on the attacking side of the attacking blue line — the
-# offensive zone, and the value-map regime boundary: the carrier's `_score_at`
+# offensive zone, and the value-map regime boundary: the carrier's `AICarrierField.value_at`
 # prices in-zone positions through the value seam and out-of-zone positions by
 # position_potential. Sign-folded for either attacking direction.
 # `buffer` demands the position sit that much DEEPER than the line — the
@@ -1442,7 +1442,7 @@ static func in_offensive_zone(pos: Vector3, attacking_goal: Vector3,
 
 # Position potential in [0, 1] — the value of being at this position with no
 # specific shot or pass in view, as closeness × the goal mouth's projected width
-# from this bearing × openness (each derived below). `_score_at` reads it only
+# from this bearing × openness (each derived below). `AICarrierField.value_at` reads it only
 # while the CARRIER is outside the offensive zone; in the zone the bot prices
 # real shot danger instead. Behind the attacking goal line it returns 0.
 static func position_potential(
@@ -1495,7 +1495,7 @@ static func potential_realization_discount(pos: Vector3,
 
 
 # ── Dump races ────────────────────────────────────────────────────────────────
-# The race primitives the dump searches (below, and AIRoleCarrier._best_dump)
+# The race primitives the dump searches (below, and AICarrierDumpSearch)
 # and the rim pricing read. The dump itself is a residual, never entered in the
 # value compete — see Scripts/domain/ai/CLAUDE.md → "Dumps are searched
 # RELEASES".
@@ -1936,7 +1936,7 @@ static func dump_loft_hang_s(loft_level: int) -> float:
 #     pace on contact and lengthens the route, so the puck dies before the line.
 #   DOESN'T CLEAR — a launch that comes to rest still inside our own zone.
 #
-# It does not CHOOSE among the survivors — `AIRoleCarrier._best_dump` does, in
+# It does not CHOOSE among the survivors — `AICarrierDumpSearch.search` does, in
 # CONCESSION. Never rank here by depth: that ranks in metres while the caller
 # prices in concession.
 #
@@ -1975,7 +1975,7 @@ static func dump_clear_candidates(origin: Vector3, up_ice_dir: float,
 #
 # Scored as recovery × realized position value — the same realization
 # discount every other future-value read pays, so the search optimizes what
-# _best_dump prices. No icing branch: this dump is only offered past the red
+# AICarrierDumpSearch prices. No icing branch: this dump is only offered past the red
 # line, and icing requires a release from our own half.
 static func solve_dump_in(origin: Vector3, attacking_goal: Vector3,
 		max_launch_speed: float, loft_level: int,

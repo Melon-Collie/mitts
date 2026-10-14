@@ -124,7 +124,7 @@ var defensive_anticipation_scale: float = 1.0
 var settle_penalty_frac: float = 0.0
 var settle_penalty_tau_s: float = 0.25
 # COGNITION gate: false = the goalie always reads SET to the pass / one-timer EV
-# (carrier._goalie_unsettled_at returns 0). The aim-side half of the gate lives
+# (AICarrierField.goalie_unsettled_at returns 0). The aim-side half of the gate lives
 # on the state machine.
 var reads_goalie_motion: bool = true
 # COGNITION gate: false = the carrier never values a play that doesn't exist

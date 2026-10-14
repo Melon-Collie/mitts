@@ -610,7 +610,7 @@ func test_shot_from_behind_goalie_is_not_a_phantom_open_net() -> void:
 # ── position_potential ───────────────────────────────────────────────────────
 # position_potential models "value of being at this position" — used
 # only when the evaluator is OUTSIDE shooting range (the regime rule
-# in SM._score_at). Closeness peaks at the slot and ramps to 0 at the
+# in AICarrierField.value_at). Closeness peaks at the slot and ramps to 0 at the
 # goal mouth (inside) and at the goal-to-goal rink length (outside).
 
 func test_potential_zero_behind_goal_line() -> void:

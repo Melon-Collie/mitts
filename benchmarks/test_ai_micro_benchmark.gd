@@ -154,10 +154,10 @@ func test_evaluator_costs() -> void:
 	_bench("CARRIER compete (open ice)", func() -> void:
 		open_carrier._pick_action_cooldown = 0
 		open_carrier.decide(open_ctx))
-	open_carrier._build_action_opponents_lists(open_ctx)
+	open_carrier._field.fill(open_ctx)
 	_bench("open ice: best pass (receivers)", func() -> void:
 		open_carrier._compute_best_pass(open_ctx, Vector2(0, -1),
-				open_carrier._scratch_teammate_ids))
+				open_carrier._field.teammate_ids))
 	_bench("open ice: best carry (candidates)", func() -> void:
 		open_carrier._best_carry(open_ctx, 0.1, open_ctx.self_pos))
 
@@ -169,13 +169,13 @@ func test_evaluator_costs() -> void:
 	_bench("CARRIER compete (pinned breakout, rims)", func() -> void:
 		rim_carrier._pick_action_cooldown = 0
 		rim_carrier.decide(rim_ctx))
-	rim_carrier._build_action_opponents_lists(rim_ctx)
+	rim_carrier._field.fill(rim_ctx)
 	_bench("pinned breakout: fire phase (shot, passes, rims)", func() -> void:
 		rim_carrier._pick_fire_phase(rim_ctx))
 	_bench("AIRimPass.build (behind our net, 5 def)", func() -> void:
 		AIRimPass.build(Vector3(3.0, 0.0, 28.0), GameRules.DEFAULT_WRISTER_POWER_MAX_M_S,
-				OUR_NET_Z, rim_carrier._scratch_opponents,
-				rim_carrier._scratch_opponent_vels, rim_carrier._scratch_opponent_caps)
+				OUR_NET_Z, rim_carrier._field.opponents,
+				rim_carrier._field.opponent_vels, rim_carrier._field.opponent_caps)
 		for k: int in AIRimPass.count:
 			AIRimPass.opp_time(k))
 
@@ -201,9 +201,9 @@ func test_evaluator_costs() -> void:
 	var self_facing := Vector2(0.0, -1.0)
 	for _i: int in REPS:
 		var t0: int = Time.get_ticks_usec()
-		cinst._build_action_opponents_lists(cx)
+		cinst._field.fill(cx)
 		var t1: int = Time.get_ticks_usec()
-		cinst._compute_best_pass(cx, self_facing, cinst._scratch_teammate_ids)
+		cinst._compute_best_pass(cx, self_facing, cinst._field.teammate_ids)
 		var t2: int = Time.get_ticks_usec()
 		cinst._best_carry(cx, 0.1, cx.self_pos)
 		var t3: int = Time.get_ticks_usec()
@@ -228,32 +228,32 @@ func test_evaluator_costs() -> void:
 			"us": float(AIRoleCarrier.CARRY_BEAM_WIDTH)})
 
 	var cand: Vector3 = cx.self_pos + Vector3(1.5, 0.0, -2.5)
-	var cur_puck: Vector3 = cinst._puck_pos_at(cx.self_pos, cx.attacking_goal_pos)
-	var cand_puck: Vector3 = cinst._puck_pos_at(cand, cx.attacking_goal_pos)
+	var cur_puck: Vector3 = AICarrierField.puck_pos_at(cx.self_pos, cx.attacking_goal_pos)
+	var cand_puck: Vector3 = AICarrierField.puck_pos_at(cand, cx.attacking_goal_pos)
 	var t_arr: float = AIArrival.time_to_arrive(
 			cx.self_pos, cand, cx.self_velocity, cx.self_max_speed,
 			cx.self_max_accel, cx.self_lateral_grip)
 	var keeper: Vector3 = Vector3(0.0, 0.0, -(GameRules.GOAL_LINE_Z - 1.3))
 	_bench("  cand: carry_safety", func() -> void:
 		AICarrySpace.carry_safety(cur_puck, cand_puck, t_arr,
-				cinst._scratch_opponents, cinst._scratch_opponent_vels,
-				cinst._scratch_opponent_caps, true))
+				cinst._field.opponents, cinst._field.opponent_vels,
+				cinst._field.opponent_caps, true))
 	_bench("  cand: carry_lane_clearance", func() -> void:
 		AICarrySpace.carry_lane_clearance(cur_puck, cand_puck, t_arr,
-				cinst._scratch_opponents, cinst._scratch_opponent_vels))
+				cinst._field.opponents, cinst._field.opponent_vels))
 	_bench("  cand: carry_strip_point", func() -> void:
 		AICarrySpace.carry_strip_point(cur_puck, cand_puck, t_arr,
-				cinst._scratch_opponents, cinst._scratch_opponent_vels,
-				cinst._scratch_opponent_caps, true))
+				cinst._field.opponents, cinst._field.opponent_vels,
+				cinst._field.opponent_caps, true))
 	_bench("  cand: predict_goalie_pos", func() -> void:
 		AIGoalieModel.predict_goalie_pos(keeper, cx.attacking_goal_pos,
 				t_arr, cand))
 	_bench("  cand: turnover_cost", func() -> void:
 		AIActionScoring.turnover_cost(cand_puck, 0.4, cx.defending_goal_pos,
 				Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z - 1.3),
-				GameRules.NET_HALF_WIDTH, cinst._scratch_our_defenders))
+				GameRules.NET_HALF_WIDTH, cinst._field.our_defenders))
 	_bench("  cand: _score_at (the seam)", func() -> void:
-		cinst._score_at(cx, cand, cx.self_pos, cinst._scratch_opponents,
+		cinst._field.value_at(cx, cand, cx.self_pos, cinst._field.opponents,
 				keeper, cx.self_wrister_shot_speed, 0.0, cx.self_aim_spread_rad))
 
 	# One carry candidate in isolation.
@@ -262,7 +262,7 @@ func test_evaluator_costs() -> void:
 	_bench("carrier: one carry candidate", func() -> void:
 		cinst._score_move_candidate(cx, one_cand, goalie_pos))
 	_bench("carrier: one pass-option read", func() -> void:
-		cinst._candidate_pass_option(cx, one_cand))
+		cinst._field.pass_option_from(cx, one_cand))
 
 	# The space fan on its own. Only the carrier reads it today; this line
 	# exists so the cost of giving it to another role is a number rather than
@@ -274,27 +274,27 @@ func test_evaluator_costs() -> void:
 	_bench("controlled_space (fan only)", func() -> void:
 		AICarrySpace.controlled_space(
 				cx.self_pos, cx.self_velocity, null, cx.attacking_goal_pos,
-				AIRoleCarrier.FORWARD_PRESSURE_HORIZON_M,
-				cinst._scratch_opponents, cinst._scratch_opponent_vels,
-				cinst._scratch_opponent_caps))
+				AICarrierField.FORWARD_PRESSURE_HORIZON_M,
+				cinst._field.opponents, cinst._field.opponent_vels,
+				cinst._field.opponent_caps))
 	# The fan's two cheaper granularities, for sizing an off-puck consumer:
 	# one whole carry-safety sample (what the fan does 14 times), and the bare
 	# reachable-set read at a point (one defender loop instead of three).
 	_bench("control_at (one sample)", func() -> void:
 		AICarrySpace.control_at(
 				one_cand, cx.self_pos, cx.self_velocity, null,
-				cinst._scratch_opponents, cinst._scratch_opponent_vels,
-				cinst._scratch_opponent_caps))
+				cinst._field.opponents, cinst._field.opponent_vels,
+				cinst._field.opponent_caps))
 	_bench("reach_clearance (one point)", func() -> void:
 		AICarrySpace.reach_clearance(
-				one_cand, 0.8, cinst._scratch_opponents,
-				cinst._scratch_opponent_vels, cinst._scratch_opponent_caps))
+				one_cand, 0.8, cinst._field.opponents,
+				cinst._field.opponent_vels, cinst._field.opponent_caps))
 	_bench("controlled_space (fan + bearing profile)", func() -> void:
 		AICarrySpace.controlled_space(
 				cx.self_pos, cx.self_velocity, null, cx.attacking_goal_pos,
-				AIRoleCarrier.FORWARD_PRESSURE_HORIZON_M,
-				cinst._scratch_opponents, cinst._scratch_opponent_vels,
-				cinst._scratch_opponent_caps, bearing_out))
+				AICarrierField.FORWARD_PRESSURE_HORIZON_M,
+				cinst._field.opponents, cinst._field.opponent_vels,
+				cinst._field.opponent_caps, bearing_out))
 
 	# The per-dispatch baseline every off-puck bot pays at 60 Hz regardless
 	# of the 30 Hz argmax: ctx build + predicates + steering on cached-

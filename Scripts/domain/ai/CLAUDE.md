@@ -40,7 +40,7 @@ shot xG through the seam, or his possession promise (`position_potential` ×
 realization × `XG_SLOT_REF`). Outside the zone the gains are on the potential
 scale and so is `threat_surface_shoot`. Mixing them (raw potential costs against
 xG gains) overprices every in-zone turnover about tenfold.
-`AIRoleCarrier._turnover_cost` picks the unit; a cost memo must only ever hold
+`AICarrierField.turnover_cost` picks the unit; a cost memo must only ever hold
 one.
 
 The giveaway bars (`SHOT_MIN_VALUE` 0.05, `PASS_MIN_VALUE` 0.02) are scale-bound
@@ -783,7 +783,7 @@ remains.
     and angle. Behind the goal line every shot is 0, so a candidate there is
     worth only the pass OPTION it opens.
   - Candidates also price the **pass option** they open
-    (`_candidate_pass_option`: cached per-teammate spot values × the lane from
+    (`carrier_field.gd:pass_option_from`: cached per-teammate spot values × the lane from
     the candidate, discounted as a future action), credited as the *improvement*
     over the same read at the current spot, so a lane already open belongs to the
     live pass and repositioning earns option value only where it reopens one.
@@ -807,7 +807,7 @@ remains.
     the carrier's.
   - **One-way valve:** a carrier in the zone prunes any carry candidate or pass
     receiver that would leave it. The pass half keys on the PUCK where it leaves
-    the blade (`_zone_taken`), because that is what the offside line reads. The
+    the blade (`AICarrierField.zone_taken`), because that is what the offside line reads. The
     valve is a hand-set *tactical* choice (zone control is a rule of the game, not
     a perception), **buffered on both sides**: carry candidates stay
     `OZ_RETREAT_LINE_BUFFER_M` off the line (the pass windup sweeps the puck a
