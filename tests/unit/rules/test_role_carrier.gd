@@ -1224,12 +1224,13 @@ func test_positive_shot_scores_above_zero_in_slot() -> void:
 # _best_developing_feed is the value the carrier weighs against firing now —
 # P(keep) × this × decay(held) competes directly in the action max.
 
-func _ctx_with_finisher(fin_pos: Vector3, ready: bool) -> RoleContext:
-	# Carrier strong-side in the OZ; a FINISHER-slotted teammate staging at fin_pos.
+func _ctx_with_finisher(fin_pos: Vector3, ready: bool,
+		slot: int = AIRoleSlots.Slot.FINISHER) -> RoleContext:
+	# Carrier strong-side in the OZ; a teammate in `slot` staging at fin_pos.
 	var self_pos := Vector3(4, 0, -18)
 	var ctx := _make_ctx(self_pos, [[1, TEAM_ID, self_pos], [2, TEAM_ID, fin_pos]])
 	var brain := TeamBrain.new(TEAM_ID, ctx.team_id_by_peer)
-	brain.slot_assignments[2] = AIRoleSlots.Slot.FINISHER
+	brain.slot_assignments[2] = slot
 	if ready:
 		brain.set_one_timer_ready(2, true)
 	ctx.team_brain = brain
@@ -1268,6 +1269,20 @@ func test_developing_feed_positive_for_staging_cross_seam_finisher() -> void:
 	carrier._field.teammate_ids = [2]
 	assert_gt(carrier._pass.developing_feed_value(ctx), 0.0,
 			"a staging cross-seam finisher gives a positive developing feed")
+
+
+func test_the_net_front_man_is_waited_for_like_the_finisher() -> void:
+	# 5v5's NET_FRONT runs the finisher's role, so a feed he is still skating
+	# into is the same developing play.
+	var fin := AIRoleCarrier.new()
+	fin._field.teammate_ids = [2]
+	var nf := AIRoleCarrier.new()
+	nf._field.teammate_ids = [2]
+	var spot := Vector3(-2.5, 0, -21.5)
+	assert_almost_eq(
+			nf._pass.developing_feed_value(
+					_ctx_with_finisher(spot, false, AIRoleSlots.Slot.NET_FRONT)),
+			fin._pass.developing_feed_value(_ctx_with_finisher(spot, false)), 1e-6)
 
 
 func test_developing_feed_invisible_without_the_cognition_gate() -> void:

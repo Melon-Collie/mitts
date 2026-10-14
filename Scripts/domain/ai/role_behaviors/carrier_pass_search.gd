@@ -583,7 +583,8 @@ func _facing_rotation_time(self_facing_xz: Vector2, self_pos: Vector3,
 # 0 for a tier with ctx.holds_for_developing_feeds false (a cognition gate: it
 # plays only what exists right now). Two kinds, both self-gating:
 #
-#   - FINISHER, not yet one-timer-ready: the feed to the spot he is DRIVING TO
+#   - FINISHER (or the 5v5 NET_FRONT, who runs the finisher's role), not yet
+#     one-timer-ready: the feed to the spot he is DRIVING TO
 #     (projected OUTLET_DEVELOP_WINDOW_S along his velocity, inside the zone by
 #     the reception band), priced on the seam (score_pass_value) with the keeper
 #     given the flight plus the finisher's wrister charge to re-square. So a
@@ -612,7 +613,7 @@ func developing_feed_value(ctx: RoleContext) -> float:
 		if tm == null or ctx.snapshot.is_out_of_play(pid):
 			continue
 		var feed: float = 0.0
-		if slot == AIRoleSlots.Slot.FINISHER:
+		if slot == AIRoleSlots.Slot.FINISHER or slot == AIRoleSlots.Slot.NET_FRONT:
 			# A one-timer-flagged finisher is already fed by the normal pass
 			# scoring. The OZ gate reads the PROJECTED spot — a finisher a stride
 			# outside the line, driving in, is the developing cross-seam — and
