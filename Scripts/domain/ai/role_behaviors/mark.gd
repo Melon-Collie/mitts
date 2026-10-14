@@ -1,44 +1,20 @@
 class_name AIRoleMark
 
-# MARK role behavior — the off-puck man-marker. DZONE only: the defenders NOT
-# engaging the puck carrier (PRESSURE has him) each MARK a distinct assigned
-# opponent — pick up a MAN, not a patch of ice. Transition defense deliberately
-# does NOT man-mark (docs/transition-defense-plan.md §5); it runs lanes and
-# layers, and MARK survives only as the extra-body fallback in the 5v5
-# election's remainder.
+# MARK — the off-puck man-marker: 3v3 DZONE's two defenders not on the puck, and
+# the 5v5 election's spare body outside our possession. Pick up a MAN, not a
+# patch of ice; which man (and so net-front vs. weak side) is the threat
+# partition's call (AIThreatAssignment), one marker per man.
 #
-# Net-front vs. weak-side vs. sprint-home positioning is EMERGENT — it falls out
-# of WHICH man the optimal matcher (AIThreatAssignment) hands this defender, plus
-# the shared cover geometry and the state machine's steering, never
-# separate role code. One marker per man is the matcher's guarantee, so two
-# defenders cannot stack on the same opponent.
-#
-# ── Primary (assigned a man) ─────────────────────────────────────────────────
-# Cover the assigned opponent, goal-side and in the carrier→man feed lane. A
-# defender already skating the right way wins the pairing upstream, so this is
-# pure positioning.
-#
-# ── Fallback (unassigned) ────────────────────────────────────────────────────
-# No man assigned — more markers than the carrier has receivers, a loose puck,
-# or no brain. Recover to the most dangerous ice: argmax over a slot-region
-# candidate set of
+# Fallback (no man assigned — more markers than receivers, a loose puck, no
+# brain): recover to the most dangerous ice, argmaxing
 #
 #     -max over opps of threat_surface_shoot(
 #         opp, our_net, our_goalie, our_team_with_us_at_c)
-#
-# so an extra marker with no man still races home and helps at the net. The
-# search center is the midpoint between the puck and our net, which interpolates
-# correctly across both states this role serves — puck NZ-side (TRANS_DEFENSE) pulls
-# the center out toward our blue line, puck deep (DZONE) pulls it to the slot —
-# so one fallback covers both zones without a per-state branch.
 
 
 static func decide(ctx: RoleContext) -> RoleDecision:
 	var d := RoleDecision.new()
 
-	# Cover the assigned man — deny the carrier's feed to him. Needs a live play
-	# reference (the feed source); INF means no puck at all, which drops us to the
-	# recovery fallback below.
 	if AIRoleHelpers.cover_threat(ctx, d, ctx.assigned_threat_peer,
 			AIRoleHelpers.resolve_defensive_play_ref(ctx)):
 		return d
@@ -47,7 +23,6 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	var opp_states: Array[SkaterNetworkState] = ctx.scratch_opp_states
 	AIRoleHelpers.collect_opponents(ctx, opp_positions, opp_states, true)
 	if opp_positions.is_empty():
-		# No opps to defend against.
 		d.target_position = ctx.self_pos
 		return d
 
@@ -56,11 +31,8 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	var our_team_excluding_self: Array[Vector3] = ctx.scratch_teammates
 	AIRoleHelpers.collect_teammates_excluding_self(ctx, our_team_excluding_self)
 
-	# The midpoint between puck and our net interpolates correctly across both
-	# states this fallback serves: puck NZ-side (TRANS_DEFENSE) puts it at our blue
-	# line, puck deep (DZONE) puts it at the slot — one fallback, no per-state
-	# branch. Falls back to the slot when puck_state is unavailable, so a missing
-	# snapshot cannot strand MARK at (0, 0, 0).
+	# The puck/net midpoint: toward our blue line with the puck out, the slot with
+	# it deep — no per-state branch. The slot when there is no puck state.
 	var search_center: Vector3
 	if ctx.snapshot != null and ctx.snapshot.puck_state != null:
 		search_center = (ctx.snapshot.puck_state.position + our_net) * 0.5
@@ -69,15 +41,11 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 				0.0,
 				0.0,
 				our_net.z - ctx.own_goal_dir * GameRules.SLOT_DIST_M)
-	# Per-opp threat upper bounds for the per-candidate early-out — same
-	# monotone-in-defenders argument as AIRoleHelpers.carrier_option_bases.
-	#
-	# TeamBrain's shared threat memo supplies them when it published this tick.
-	# That memo is APPROXIMATE (full-team defender set, raw opponent positions, up
-	# to a brain tick stale), which can perturb the fallback's candidate ordering
-	# by roughly one body in a 4-defender surface — the accepted price of not
-	# paying these surfaces per marker per re-eval. An empty memo keeps the exact
-	# local computation.
+	# Per-opp threat upper bounds for _max_shot_threat's early-out (see
+	# AIRoleHelpers.carrier_option_bases). TeamBrain's memo supplies them when it
+	# published: APPROXIMATE (full-team defender set, raw positions, up to a brain
+	# tick stale), the accepted price of not paying these per marker. An empty
+	# memo computes exactly.
 	var memo: Dictionary[int, float] = ctx.threat_shoot_base_by_opp
 	var opp_ids: Array[int] = ctx.scratch_opp_ids
 	var bases: Array[float] = ctx.scratch_option_bases
@@ -91,9 +59,8 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 					ctx.scratch_teammate_caps)
 		bases.append(base)
 
-	# Far from the recovery region, skate at the CALCULATED cover directly: the
-	# stick-in-the-lane point on the biggest base threat, the same cover geometry
-	# the assigned-man path uses (see STATION_ARGMAX_LOD_M).
+	# Far from the recovery region, skate at the cover anchor on the biggest base
+	# threat (STATION_ARGMAX_LOD_M).
 	if not AIRoleHelpers.station_needs_refinement(ctx.self_pos, search_center):
 		var worst: int = 0
 		for i: int in bases.size():
@@ -128,16 +95,11 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	return d
 
 
-# Returns the highest threat surface any opp could extract from their current
-# position with our hypothetical defender at `candidate` in the threat's
-# "opponents" list. Uses threat_surface_shoot, which falls back to
-# position_potential when score_shoot returns 0 — gives the fallback a non-zero
-# gradient across opp positions even when no opp is in immediate shooting range,
-# so an unassigned marker pulls into the dominant opp's pressure cone instead of
-# sitting flat at slot. `bases` (per-opp threats WITHOUT the candidate, in
-# opp_positions order) bound each term from above — adding a defender only
-# lowers a surface — so terms evaluate in descending-bound order and stop when
-# the running max meets the next bound: identical result, fewer surfaces.
+# The highest shot-threat surface any opp has with our defender at `candidate`.
+# The surface's position_potential floor keeps a gradient where no opp is in
+# shooting range. `bases` (per-opp threats without the candidate, in
+# opp_positions order) bound each term from above, so terms evaluate in
+# descending-bound order and stop early — an exact prune.
 static func _max_shot_threat(
 		candidate: Vector3,
 		opp_positions: Array[Vector3],
@@ -147,9 +109,8 @@ static func _max_shot_threat(
 		bases: Array[float],
 		our_team_caps: Array = [],
 		self_caps: AISkaterCaps = null) -> float:
-	# Defenders = our team + me at the candidate, push/popped into the caller's
-	# array in place (10 calls/decide). Caps ride alongside only when the caller
-	# supplied a matched array.
+	# Same in-place defender push/pop and caps contract as
+	# AIRoleHelpers.carrier_best_option.
 	var caps_matched: bool = our_team_caps.size() == our_team_excluding_self.size()
 	our_team_excluding_self.push_back(candidate)
 	if caps_matched:

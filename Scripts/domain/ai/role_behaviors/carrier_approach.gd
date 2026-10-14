@@ -1,33 +1,22 @@
 class_name AICarrierApproach
 extends RefCounted
 
-# What a defender who owns the puck carrier needs to know about him before it can
-# decide anything: where he is, how fast, which way he is going home, how much
-# route he has left, and how hard he is coming. One read shared by every role
-# that closes a carrier, so their degenerate-case guards cannot drift apart.
-#
-# Filled in place from a caller-owned instance (RoleContext.scratch_carrier_
-# approach) by AIRoleHelpers.read_carrier_approach, so the read costs no
-# allocation on the dispatch path.
+# What a defender who owns the carrier knows about him — one read shared by every
+# role that closes a carrier, so their degenerate-case guards cannot drift apart.
+# Filled in place by AIRoleHelpers.read_carrier_approach / fill_approach.
 
-# His position, and his velocity. This is his REAL body, never a velocity-led
-# point: the stand rides him (RoleDecision.target_velocity), so leading as well
+# His REAL body, never a velocity-led point: the stand rides him, so a lead
 # double-counts his motion.
 var carrier_pos: Vector3 = Vector3.ZERO
 var carrier_vel: Vector3 = Vector3.ZERO
 
-# Unit vector from him toward the net we defend — the line he retreats us down,
-# and the axis every gap is measured on. ZERO when he is on top of the net, which
-# is the one case with no well-defined line; roles handle that themselves rather
-# than being handed a fabricated direction.
+# Unit vector from him toward the net we defend — the axis every gap is measured
+# on. ZERO when he is on top of the net; roles handle that case themselves.
 var dir_net: Vector3 = Vector3.ZERO
 
-# Metres of route he has left to our net. This is the gap ladder's own input
-# ("ice remaining"), so the ladder and the stand cannot disagree about it.
+# Metres from him to our net.
 var net_dist: float = 0.0
 
-# His pace ALONG that line, never below zero. Lateral drift buys no burst toward
-# our net — the turn radius pays for that conversion first — so a carrier flying
-# across the slot is not closing on us and the ladder must not price him as if
-# he were.
+# His pace ALONG dir_net, m/s, floored at zero: lateral drift buys no burst
+# toward our net, so a carrier flying across the slot is not closing.
 var closing: float = 0.0

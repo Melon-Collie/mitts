@@ -1,57 +1,29 @@
 class_name AIRoleRushD
 
-# RUSH_D1 / RUSH_D2 — the two defensemen defending a rush (5v5 TRANS_DEFENSE).
-# Design: docs/transition-defense-plan.md §5–§6.
+# RUSH_D1 / RUSH_D2 — the rush defense's front layer (TRANS_DEFENSE; 3v3 runs
+# RUSH_D1 alone). Design: docs/transition-defense-plan.md §5–§6.
 #
-#   RUSH_D1 — the strong-side D. He OWNS THE CARRIER: hold a gap sized by the
-#     ice remaining, angle him off the middle, and attack the moment his speed
-#     advantage is gone. He keeps the carrier across the blue line (the state
-#     does not flip there — see the coverage gate), so there is no handoff and
-#     no target discontinuity mid-rush.
-#   RUSH_D2 — the weak-side D. He holds MID-ICE and takes the mid-lane drive
-#     ("the mid-lane drive is fed to D2"). On a DOWN_ONE read he is the man in
-#     the passing lane; with only one D back, RUSH_D1 inherits that job.
+#   RUSH_D1 — OWNS THE CARRIER: holds the ladder's gap, angles him off the
+#     middle, and attacks once his speed advantage is gone. He keeps the carrier
+#     across the blue line, so there is no handoff mid-rush.
+#   RUSH_D2 (5v5) — holds MID-ICE and takes the mid-lane drive.
 #
-# ── Gap control ──────────────────────────────────────────────────────────────
-# The gap is a LADDER ON ICE REMAINING, plus the RAMP CUSHION: the ground the
-# carrier gains while this body builds to his speed (ramp_cushion_m). The ladder
-# is the gap between two bodies already travelling together; the cushion is what
-# it costs to become one, and it is nil once you are. Sizing the gap off the
-# carrier's pace ALONE holds the offensive blue line's gap all the way back to
-# your own net, which is the sag — the cushion cannot, because a defender riding
-# the rush at its pace has nothing left to build.
-#
-# Modifiers must be able to run BOTH ways — something has to be able to say
-# CLOSE THE GAP, not just widen it — and they read the team's shared numbers
-# rather than each defender's private depth scan, which on a rush sees nobody
-# home and disables the blue-line stand for everyone.
-#
-# THE GAP IS MEASURED OFF HIS REAL POSITION, never a velocity-led one. The route
-# carries his velocity as a feed-forward, so a lead on top of it double-counts
-# his motion: at a 7.7 m/s rush that is 2.67 m of doctrine plus 2.31 m of lead,
-# 86% wider than the ladder asks for. Note test_role_rush_d measures against the
-# LED point on purpose to isolate the ladder — the carrier is beaten off his real
-# body, so that difference is an artifact of the test, not of the doctrine.
+# The gap ladder, its ramp cushion and its domain: Scripts/domain/ai/CLAUDE.md →
+# "The gap ladder is one ladder". Measure the gap off his REAL position, never a
+# velocity-led one: the stand rides him, so a lead double-counts his motion.
 
-# The gap ladder, in stick lengths (BLADE_REACH_M — the honest physical unit,
-# already attribute-scaled, so a long-stick D legitimately plays a hair wider).
+# The gap ladder, in stick lengths (stick_m: attribute-scaled blade reach).
 const GAP_MIN_STICKS: float = 1.0
 const GAP_MAX_STICKS: float = 3.0
 # One rung of the ladder: the step every modifier moves the gap by.
 const GAP_RUNG_STICKS: float = 1.0
 
-# Backpressure that lets the D tighten and stand up (the repo's own doctrine,
-# docs/5v5-ai-plan.md:548 — "a backchecker within ~1-2 s of the carrier lets the
-# D tighten the gap and stand up; without it, default conservative").
+# A backchecker within this many seconds of the carrier lets the D tighten and
+# stand up (docs/5v5-ai-plan.md, backpressure doctrine: "~1–2 s").
 const BACKPRESSURE_TIGHTEN_S: float = 1.5
 
-# ── Gap-up trigger ───────────────────────────────────────────────────────────
-# When the carrier's speed advantage is gone, ATTACK — close to stick range on
-# an angle, skating forward. This is the modern read ("defend by skating
-# forward, kill the rush early").
-#
-# He isn't coming at pace — and, under the stride ramp, he can't BUILD it past us
-# either (see should_gap_up):
+# ── Gap-up trigger (should_gap_up) ───────────────────────────────────────────
+# Below this closing speed he isn't coming at pace.
 const GAP_UP_CLOSING_M_S: float = 3.0
 # Steered inside this of the boards: no room left to take outside.
 const GAP_UP_WALL_M: float = 2.0
@@ -66,11 +38,8 @@ const LANE_PLAY_DANGER_BAR: float = 0.5
 # he is the layer behind RUSH_D1, not a second body on the puck.
 const D2_MID_DEPTH_M: float = 12.0
 # How far off centre an attacker may be and still count as the MID-LANE drive
-# D2 exists to take: the end-zone dot lane, which is what bounds the middle of
-# the ice. Without this the pick was argmin|x| over the whole rush, so a lone
-# second attacker hugging the boards read as "the mid-lane man" and pulled D2
-# off mid-ice — vacating the exact lane the layered defense keeps him in. A wide
-# man is the mid trackers' pickup as he cuts in, not D2's to chase.
+# D2 takes: the end-zone dot lane. A wide man is the mid trackers' pickup as he
+# cuts in, not D2's to chase off mid-ice.
 const D2_MID_LANE_HALF_WIDTH_M: float = GameRules.END_ZONE_FACEOFF_DOT_X
 # How far weak-side of centre D2 shades while holding mid-ice.
 const D2_WEAK_SHADE_M: float = 2.0
@@ -105,31 +74,22 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 	var gap: float = _gap_for(ctx, read, carrier_pos, cushion)
 	gap = minf(gap, dist)   # never project the stand past the net
 
-	# GAP UP: his speed advantage is gone, so stop retreating and take the ice.
-	# Closing to stick range on an angle IS the attack. It is exempt from the
-	# step-up bound below, because the bound prices exactly the risk the gap-up's
-	# triggers rule out — being beaten by pace you cannot match.
+	# The gap-up is exempt from the step-up bound: that bound prices being beaten
+	# by pace you cannot match, which the gap-up's triggers rule out. A riding
+	# stand is exempt too — see _settable_gap.
 	var gapping_up: bool = should_gap_up(ctx, read, ap, cushion)
-	# The stand rides him, so the trip ends with this body already travelling at
-	# the rush's pace at the ladder's gap. That is what gap control IS, and it is
-	# also what stands the approach bound down — see _settable_gap.
 	var ride: Vector3 = AIRoleHelpers.stand_ride_velocity(ctx)
 	if gapping_up:
 		gap = minf(stick_m(ctx) * GAP_MIN_STICKS, dist)
 	elif ride == Vector3.ZERO:
 		gap = minf(_settable_gap(ctx, carrier_pos, dir_net, gap, closing), dist)
-	# Stepping UP into the stand, or retreating with it? Measured off the carrier
-	# on the same axis the gap is, so the comparison is exact and carries no dead
-	# band of its own — the arrival brake it selects (below) has its own
-	# engage/release hysteresis and a speed floor, so the one regime where this
-	# can flicker is a near-stationary body, where the brake is inert anyway.
+	# Stepping UP into the stand, or retreating with it? No dead band needed: the
+	# arrival brake it selects has its own hysteresis and speed floor.
 	var stepping_up: bool = _depth_along(ctx, carrier_pos, dir_net) > gap
 
 	var stand: Vector3 = AIRoleHelpers.carrier_stand(ap, gap)
 
-	# Odd-man: play the pass. The lane fan finds the feed lane from the
-	# evaluators; the numbers read decides WHEN that doctrine applies, rather
-	# than the fan inferring it from receiver danger alone.
+	# Odd-man: play the pass. The numbers read decides WHEN; the fan finds where.
 	if read.numbers != AIRushRead.Numbers.EVEN_OR_UP and ctx.plays_rush_pass_lanes:
 		var fan: Vector3 = _lane_fan_target(ctx, read, carrier_pos, our_net,
 				dir_net, carrier_pos.distance_to(stand))
@@ -139,14 +99,10 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 	d.target_position = _clamp_to_house(ctx, stand)
 	d.target_velocity = ride
 	set_house_retreat_floor(ctx, ap, d)
-	# The arrival brake is an ICE-frame read, so it only reaches this role when
-	# there is no man to ride (a loose puck) — a moving stand stands it down
-	# outright. There a stand sweeping toward us at the play's pace is not a
-	# station, so braking at it parks us short and the play arrives while we are
-	# stopped: a RETREAT is paced, and a step-UP wants the brake because the
-	# approach bound placed that stand precisely as its trigger. The gap-up drives
-	# through either way — against a carrier with no speed to beat us with, taking
-	# the ice IS the attack.
+	# The arrival brake only matters with no man to ride (a moving stand stands it
+	# down). A retreat is paced rather than braked; a step-up wants the brake,
+	# since the approach bound placed that stand as its trigger; the gap-up drives
+	# through.
 	d.arrive_at_speed = gapping_up or not stepping_up
 	return d
 
@@ -159,17 +115,12 @@ static func _depth_along(ctx: RoleContext, threat_pos: Vector3,
 			+ (ctx.self_pos.z - threat_pos.z) * dir_net.z
 
 
-# The BASE ladder, in stick lengths: ice remaining to OUR blue line gives 3
-# sticks at their blue line, 2 at the red line, 1 at ours. Zero ice left (he is
-# in the zone) means you are on him.
+# The BASE ladder, in stick lengths, on ice remaining to OUR blue line: 3 at
+# their blue line, 2 at the red line, 1 at ours and inside.
 #
-# The divisor is BLUE_LINE_Z — one zone-to-centre span — because that is the ice
-# between consecutive rungs: their blue line is 2·BLUE_LINE_Z of remaining ice,
-# the red line is 1·, ours is 0·, so `1 + ice / BLUE_LINE_Z` lands the table
-# above exactly. Doubling it (the §6 prose reads "2 zones", which is the same
-# distance said differently) halves the ramp to 2 / 1.5 / 1 and leaves
-# GAP_MAX_STICKS unreachable from the base term, while still tightening with
-# depth — which is all a monotonicity test can see.
+# The divisor is BLUE_LINE_Z because that is the ice between consecutive rungs.
+# Do not double it to match §6's "2 zones" prose: that halves the ramp to
+# 2 / 1.5 / 1, and a monotonicity test would not notice.
 static func _ladder_sticks(threat_pos: Vector3, own_goal_dir: float) -> float:
 	var ice_to_line: float = maxf(
 			GameRules.BLUE_LINE_Z - own_goal_dir * threat_pos.z, 0.0)
@@ -177,22 +128,17 @@ static func _ladder_sticks(threat_pos: Vector3, own_goal_dir: float) -> float:
 			GAP_MIN_STICKS, GAP_MAX_STICKS)
 
 
-# The ladder gap in metres WITHOUT the shared read's numbers/backpressure rungs,
-# plus the ramp cushion (ramp_cushion_m). Public so the lost-race pre-contain can
-# stand where RUSH_D1 is going to want it: two different formulas leave the
-# declining chaser planted somewhere the gap defender has to correct off the
-# moment possession flips. The rungs are deliberately excluded — a NEUTRAL
-# chaser has no rush posture to read yet.
+# The ladder gap in metres plus the ramp cushion, WITHOUT the read's numbers /
+# backpressure rungs (a NEUTRAL chaser has no rush posture to read yet). Public
+# so the lost-race pre-contain stands where RUSH_D1 will want it.
 static func ladder_gap_m(threat_pos: Vector3, own_goal_dir: float,
 		stick: float, cushion_m: float) -> float:
 	return _with_cushion(_ladder_sticks(threat_pos, own_goal_dir) \
 			* maxf(stick, 0.5), cushion_m, threat_pos, own_goal_dir)
 
 
-# The cushion deepens the stand only as far as the house gate: it is the price
-# of a retreat race that finishes there (ramp_cushion_m), so it never pushes a
-# stand past it. The ladder alone still applies inside, where it is the in-zone
-# "on him" gap.
+# The cushion deepens the stand only as far as the house gate, where its race
+# finishes; the ladder alone still applies inside.
 static func _with_cushion(ladder_m: float, cushion_m: float,
 		threat_pos: Vector3, own_goal_dir: float) -> float:
 	var dz: float = own_goal_dir * GameRules.GOAL_LINE_Z - threat_pos.z
@@ -202,28 +148,14 @@ static func _with_cushion(ladder_m: float, cushion_m: float,
 
 
 # The ground the threat gains on this body while it builds to his speed, both
-# driving flat out down `ap.dir_net` from now (AIStrideRamp.head_start). Our
-# momentum the other way is braked out first, so a defender still drifting
-# up-ice from the attack owes that too.
+# driving flat out down `ap.dir_net` (AIStrideRamp.head_start; our opposing
+# momentum braked out first). The race finishes at the HOUSE GATE, so the
+# horizon is his trip there and the head start never exceeds the ice he has
+# left to it.
 #
-# The race finishes at the HOUSE GATE (the top of the circles — AIRushRead's
-# finish line for the same race). Past it there is no ice left to build speed
-# in, and standing up is the in-zone ladder's job: so the horizon is his trip to
-# the gate, and the head start is never more than the ice he has left to it.
-# Without that bound a defender already home read a flying carrier as metres of
-# cushion to concede and was walked into his own crease; _with_cushion holds the
-# stand itself to the same line.
-#
-# This is the gap's honest pace term. The ladder describes two bodies already
-# travelling together; a standing defender against a carrier at 9 m/s concedes
-# ~5.5 m before he is one, which is more than the whole 3-stick ladder. Once he
-# rides the rush at its pace the cushion is nil and the ladder alone sets the
-# gap, so it cannot hold an O-zone gap at our own net the way pace-sizing did.
-#
-# Along the line only: lateral momentum has its own redirect cost, which this
-# does not price. `threat_peer` -1 (a loose puck) prices a league skater. Caps
-# carry no puck-carry speed cap, so a carrier is priced at his free top speed —
-# a slight over-read of the cushion, in the safe direction.
+# Along the line only: lateral momentum is not priced. `threat_peer` -1 (a loose
+# puck) prices a league skater. A carrier is priced at his free top speed — a
+# slight over-read, in the safe direction.
 static func ramp_cushion_m(ctx: RoleContext, ap: AICarrierApproach,
 		threat_peer: int) -> float:
 	return head_start_on_me(ctx, ap.dir_net, ap.carrier_vel, ap.net_dist,
@@ -231,11 +163,8 @@ static func ramp_cushion_m(ctx: RoleContext, ap: AICarrierApproach,
 
 
 # Ends a ridden retreat at the HOUSE GATE for a defender still in front of the
-# carrier he owns — the same finish line the ladder's retreat race is priced to
-# (ramp_cushion_m). Inside it there is no ice left to build speed in, so riding
-# him on toward our net only decides where the shot comes from with us in our
-# own crease; standing him up is the in-zone ladder's job. Once he is level with
-# us the floor lifts, because a beaten defender has to chase.
+# carrier he owns — the finish line ramp_cushion_m is priced to. Once he is
+# level with us the floor lifts: a beaten defender has to chase.
 static func set_house_retreat_floor(ctx: RoleContext, ap: AICarrierApproach,
 		d: RoleDecision) -> void:
 	if d.target_velocity == Vector3.ZERO or ap.dir_net == Vector3.ZERO:
@@ -272,11 +201,9 @@ static func head_start_on_me(ctx: RoleContext, dir_net: Vector3,
 			AIActionScoring.REVERSAL_BRAKE_DECEL_M_S2, horizon), ice_to_gate)
 
 
-# How far from our net an attacker is, as this body has to race him: his
-# distance less the ground he gains on us while we build to his pace
-# (AIRoleRushD.head_start_on_me). "Behind me" is a race under the stride ramp —
-# a man level with a standing station at 8 m/s is already past it by the time
-# it is moving — so counting numbers off where he stands reads him late.
+# An attacker's distance from our net less the ground he gains on us while we
+# build to his pace — "behind me" as a race, since a man level with a standing
+# station at speed is past it by the time it moves.
 static func race_depth_to_net(ctx: RoleContext, pid: int) -> float:
 	var s: SkaterNetworkState = ctx.snapshot.skater_states.get(pid)
 	if s == null:
@@ -290,21 +217,21 @@ static func race_depth_to_net(ctx: RoleContext, pid: int) -> float:
 	return maxf(d - head_start_on_me(ctx, dir_net, s.velocity, d,
 			pid), 0.0)
 
-# The gap ladder plus its modifiers, in metres.
+
+# The gap ladder plus its modifiers, in metres. The modifiers run BOTH ways and
+# read the team's shared numbers, never a private depth scan.
 static func _gap_for(ctx: RoleContext, read: AIRushRead, carrier_pos: Vector3,
 		cushion_m: float) -> float:
 	var sticks: float = _ladder_sticks(carrier_pos, ctx.own_goal_dir)
 
-	# Numbers. EVEN_OR_UP is licence to challenge; DOWN_TWO_PLUS buys time for
-	# the backcheck. DOWN_ONE deliberately does NOT widen — an odd-man
-	# concession is LATERAL (into the pass lane, below), never deeper. Conceding
-	# depth on a 2-on-1 is how it turns into a breakaway.
+	# EVEN_OR_UP is licence to challenge; DOWN_TWO_PLUS buys time for the
+	# backcheck. DOWN_ONE deliberately does NOT widen: an odd-man concession is
+	# LATERAL (the lane fan), never deeper, or a 2-on-1 becomes a breakaway.
 	if read.numbers == AIRushRead.Numbers.EVEN_OR_UP:
 		sticks -= GAP_RUNG_STICKS
 	elif read.numbers == AIRushRead.Numbers.DOWN_TWO_PLUS:
 		sticks += GAP_RUNG_STICKS
 
-	# Live backpressure lets us stand up (see BACKPRESSURE_TIGHTEN_S).
 	if read.backpressure_s < BACKPRESSURE_TIGHTEN_S:
 		sticks -= GAP_RUNG_STICKS
 
@@ -313,44 +240,22 @@ static func _gap_for(ctx: RoleContext, read: AIRushRead, carrier_pos: Vector3,
 			ctx.own_goal_dir)
 
 
-# Is his speed advantage gone?
-#
-# He is not coming at pace, AND he cannot build it past us: whatever he does
-# from here, he gains less than a stick on us before we are travelling at his
-# speed (`cushion_m`, ramp_cushion_m), so from one stick off him he never gets
-# outside our reach. His pace alone cannot answer this under the stride ramp: a
-# standing defender stepped up on a fresh receiver is beaten by the burst, and
-# one already backing off at that pace is not. The race alone cannot either: a
-# defender riding a full-speed rush has nothing to build, but the ladder's
-# cushion is there for the cut, not the burst.
-#
-# And when the retreat cannot hold a gap — by the time I am up to his speed he
-# has eaten all but a stick of the ice I own — retreating only decides where he
-# reaches me, and I would meet him turning. If I stand in his lane, his path runs
-# through my reach and meeting him now, skating at him, is the contest I can
-# still win: step up. Off his lane I keep retreating; a step-up across to him is
-# a second lost race, spent skating sideways while he builds speed.
-# (tests/unit/ai/test_nz_turnover_recovery.gd measures both halves.)
-#
-# The race only means something while he is coming at us. A carrier not
-# advancing on our net has no rush to beat us with — the ladder has no domain
-# (see AIRolePressure: the forechecker's F1, a D retrieving behind his own
-# line) — and he is attacked outright, as is one steered to the wall.
-#
-# Public because AIRolePressure asks the identical question. The two roles that
-# own a carrier already share the gap LADDER; they have to share the read that
-# says when the ladder stops applying, or the answer changes at the handoff —
-# and for the forechecking F1 (which dispatches into PRESSURE) the ladder never
-# applied in the first place. See AIRolePressure.decide.
+# Is his speed advantage gone — close to stick range and attack? True when:
+#   · he is not advancing on our net (the ladder has no domain), or is steered
+#     to the wall;
+#   · he is not coming at pace AND cannot build it past us (cushion under a
+#     stick);
+#   · the retreat cannot hold a gap (the cushion eats all but a stick of my
+#     depth) and I stand in his lane — off it, I keep retreating.
+# Shared with AIRolePressure so both carrier-owners agree at the handoff. See
+# Scripts/domain/ai/CLAUDE.md → "Pace enters through the stride ramp".
 static func should_gap_up(ctx: RoleContext, read: AIRushRead,
 		ap: AICarrierApproach, cushion_m: float) -> bool:
-	# Never step up into a rush we're outnumbered against — that is the one case
-	# where being beaten is a goal rather than a scoring chance.
+	# Outnumbered, being beaten is a goal rather than a scoring chance.
 	if read.numbers == AIRushRead.Numbers.DOWN_TWO_PLUS:
 		return false
 	if ap.closing < AIRushRead.REGROUP_CLOSING_M_S:
 		return true
-	# Steered to the wall: no outside left to give him.
 	if GameRules.INNER_HALF_WIDTH - absf(ap.carrier_pos.x) < GAP_UP_WALL_M:
 		return true
 	var stick: float = stick_m(ctx)
@@ -364,27 +269,16 @@ static func should_gap_up(ctx: RoleContext, read: AIRushRead,
 
 
 # ── Step-up discipline ───────────────────────────────────────────────────────
-# The ladder says WHERE the stand is; it does not say whether this body can GET
-# there and still be a defender when the rush arrives. That bites in one regime:
-# a defender already DEEPER than the stand — a D at home with the rush still in
-# the neutral zone — where the ladder names a stand 10–18 m up-ice, a committed
-# skate rather than positioning, so he arrives carrying a full stride of up-ice momentum and
-# any cut leaves him reversing while the rush is gone (unbounded, 4.2 m/s of
-# up-ice speed at the meet, a mean 10.9 m off his own net).
+# A defender deeper than his stand must not charge it: the ladder can name a
+# stand 10–18 m up-ice, and he would arrive carrying up-ice momentum into the
+# rush. So an ICE-FRAME approach closes no faster than he can still be
+# travelling WITH the rush when it arrives (AIRoleHelpers.settable_stand_depth).
+# Skipped with a layer home behind us, where a beaten challenge is a scoring
+# chance rather than a breakaway.
 #
-# So an ICE-FRAME approach is bounded by the speed the rendezvous leaves room
-# for: close on the rush no faster than you can still be travelling WITH it by
-# the time it arrives. Skipped with a layer home behind us — a beaten challenge
-# is then a scoring chance rather than a breakaway, which is what licenses D1 to
-# step into the rush while D2 holds mid-ice behind him.
-#
-# Never apply it while the stand RIDES a man, which on a live rush is always.
-# The moving-frame route already regulates its own approach, so a bound on top is
-# two controllers on one axis: it charges `closing²/2a` for a PIVOT the route no
-# longer performs (≈3.8 m of the ≈6 m spare against a 7.5 m/s rush) and places
-# the stand within 0.3 m of wherever the defender already stands. A defender
-# whose stand is always where he is has no error to close, and the pair produces
-# a D backing up 7 m in front of a rush for the length of the ice.
+# Never apply it while the stand RIDES a man: the moving-frame route already
+# regulates its own approach, and the bound on top pins the stand to wherever
+# the defender stands.
 static func _settable_gap(ctx: RoleContext, carrier_pos: Vector3,
 		dir_net: Vector3, gap: float, closing: float) -> float:
 	if AIRoleHelpers.has_support_behind(ctx):
@@ -400,8 +294,6 @@ static func _decide_d2(ctx: RoleContext) -> RoleDecision:
 	var read: AIRushRead = ctx.rush_read
 	var our_net: Vector3 = ctx.defending_goal_pos
 
-	# The mid-lane drive man: the attacker closest to the middle of the ice who
-	# isn't the carrier. He is the one D2 exists to take.
 	if AIRoleHelpers.cover_threat(ctx, d, _mid_lane_man_peer(read),
 			AIRoleHelpers.resolve_defensive_play_ref(ctx)):
 		d.target_position = _clamp_to_house(ctx, d.target_position)
@@ -443,9 +335,8 @@ static func _mid_lane_man_index(read: AIRushRead) -> int:
 
 # ── Shared ───────────────────────────────────────────────────────────────────
 
-# This bot's stick length — the ladder's unit. Public for the same reason
-# should_gap_up is: PRESSURE sizes a gapped-up stand in the same unit, and two
-# roles holding "one stick" must not compute two different metres.
+# This bot's stick length — the ladder's unit. Public so PRESSURE's "one stick"
+# is the same metres.
 static func stick_m(ctx: RoleContext) -> float:
 	return maxf(ctx.self_blade_reach, 0.5)
 
@@ -456,16 +347,11 @@ static func _clamp_to_house(ctx: RoleContext, pos: Vector3) -> Vector3:
 	return AIRoleHelpers.hold_out_to_house_gate(ctx.defending_goal_pos, pos)
 
 
-# Argmax over the retreat-line point plus fan candidates toward each receiver's
-# feed lane, all at `gap` distance from the carrier. 2-on-1 doctrine is DERIVED
-# rather than scripted: the goalie is in both terms, so "the goalie takes the
-# shooter, I take the pass" falls out of the max. The numbers read decides when
-# the doctrine applies; the fan never infers an odd-man rush from receiver
-# danger alone.
-#
-# KNOWN GAP (carried over): a wide-but-DEEP receiver reads as near-certain
-# because the planning keeper has no sharp-angle post play outside the 2 m seal
-# zone, so RUSH_D1 respects wide-deep feed lanes more than the textbook says to.
+# Argmax over the retreat-line point plus fan candidates toward each dangerous
+# receiver's feed lane, all `gap` from the carrier. The 2-on-1 doctrine is
+# derived rather than scripted: the goalie is in both terms of
+# carrier_live_option, so "the goalie takes the shooter, I take the pass" falls
+# out of the max.
 static func _lane_fan_target(ctx: RoleContext, read: AIRushRead,
 		carrier_pos: Vector3, our_net: Vector3, dir_net: Vector3,
 		gap: float) -> Vector3:
@@ -492,10 +378,8 @@ static func _lane_fan_target(ctx: RoleContext, read: AIRushRead,
 	var no_defenders: Array[Vector3] = []
 	var a_net: float = atan2(dir_net.z, dir_net.x)
 	for i: int in receivers.size():
-		# Only leave the shooter for a receiver who is a genuine immediate
-		# threat: his finish-if-fed must clear the bar with the keeper predicted
-		# over the FEED'S flight. A trailing, low-danger receiver never pulls us
-		# off the carrier however open his lane.
+		# Only leave the shooter for a genuine immediate threat: his finish-if-fed,
+		# with the keeper predicted over the feed's flight, must clear the bar.
 		var feed_speed: float = AIActionScoring.expected_pass_speed(
 				carrier_pos, receivers[i])
 		var feed_flight: float = carrier_pos.distance_to(receivers[i]) \

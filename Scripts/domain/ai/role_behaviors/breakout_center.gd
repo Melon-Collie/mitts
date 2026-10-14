@@ -1,22 +1,18 @@
 class_name AIRoleBreakoutCenter
 
-# BREAKOUT_C role behavior — BREAKOUT, 5v5 only. The center's low swing: the
-# SECOND outlet underneath the breakout (the half-wall winger is the first).
-# The researched rules (plan appendix): swing low mirroring the puck side,
-# chest open to the middle, stay BELOW/level with the puck until the first
-# pass is made, be available as you cross the hash marks. Timing beats
-# position — the swing paces the carrier rather than parking.
+# BREAKOUT_C (5v5 BREAKOUT) — the center's low swing, the SECOND outlet under
+# the breakout. Researched rules (docs/5v5-ai-plan.md appendix): swing low on
+# the puck side, stay below the puck until the first pass, pace the carrier
+# rather than park.
 #
-# Model: the swing point sits in the mid lane (half the carrier's lateral —
-# mirroring his side while keeping the middle), a few metres goal-side of
-# him, clamped in front of our goal line. lane_clear from the carrier picks
-# between the mid-lane point and a slide toward the strong-side circle when
-# the middle is clogged.
+# The swing point sits SWING_BELOW_M goal-side of the carrier, in the mid lane
+# or the carrier's-side circle lane — whichever the carrier has the cleaner
+# lane_clear to.
 
 const SWING_BELOW_M: float = 3.0       # goal-side of the carrier
 const GOAL_LINE_PAD_M: float = 2.0
 const MID_LANE_FRACTION: float = 0.5   # mirror the puck side, keep the middle
-const CIRCLE_LANE_X_M: float = 6.0     # alternate: strong-side circle lane
+const CIRCLE_LANE_X_M: float = 6.0     # alternate: the carrier's-side circle lane
 
 
 static func decide(ctx: RoleContext) -> RoleDecision:
@@ -31,13 +27,10 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	var opp_states: Array[SkaterNetworkState] = ctx.scratch_opp_states
 	AIRoleHelpers.collect_opponents(ctx, opp_positions, opp_states)
 
-	# Below the puck until the first pass: depth = carrier + a few metres
-	# toward our net, never behind the goal line.
+	# Never behind our goal line.
 	var cap: float = GameRules.GOAL_LINE_Z - GOAL_LINE_PAD_M
 	var z: float = clampf(carrier_pos.z + own_dir * SWING_BELOW_M, -cap, cap)
 
-	# Two swing lanes: the mid-lane mirror and the strong-circle slide —
-	# take whichever gives the carrier the cleaner outlet feed.
 	var mid := Vector3(carrier_pos.x * MID_LANE_FRACTION, 0.0, z)
 	var circle := Vector3(signf(carrier_pos.x) * CIRCLE_LANE_X_M, 0.0, z)
 	var pass_speed_mid: float = AIActionScoring.expected_pass_speed(carrier_pos, mid)
@@ -52,6 +45,6 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	if not AIRoleHelpers.is_legal_position(target):
 		target = mid if target == circle else circle
 	d.target_position = target
-	# The swing paces the retrieval — arrive in stride, not parked.
+	# The swing paces the retrieval.
 	d.arrive_at_speed = true
 	return d

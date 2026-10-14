@@ -1,17 +1,12 @@
 class_name AIRoleHighSlot
 
-# HIGH_SLOT role behavior — OZONE, 5v5 only. The third forward ("F3"): floats
-# the soft ice between the dots at the top of the house, stays ABOVE the puck
-# (own-goal-side of it — "F3 keeps the puck and all four teammates in front
-# of him"), is the seam/one-timer option on the low-to-high or cross-ice
-# feed, and is the designated first man back on a turnover. Design: plan §2
-# (OZONE) + the appendix's F3 rules.
+# HIGH_SLOT (5v5 OZONE) — the third forward, F3: floats the high slot ABOVE the
+# puck as the seam / one-timer option and the first man back. Design:
+# docs/5v5-ai-plan.md §2 and the appendix's F3 rules.
 #
-# Positioning is a small argmax over the high-slot band: candidates score
-# their ONE-TIMER LOOK (feed lane from the carrier × shot lane to the net —
-# the seam read), with the above-the-puck rule as a hard filter and the
-# race home as the depth bound (the F3-conscience half: sag when a counter
-# threat looms, exactly the forecheck-F3 read applied inside the zone).
+# A small argmax over the band, scoring the one-timer look (feed lane × shot
+# lane), with above-the-puck as a hard filter and the shared station read
+# (offensive_station_target) bounding the result.
 
 # The float band: depths off the attacked goal line and lateral samples
 # (weak-side shaded — the seam is usually back across the grain).
@@ -22,7 +17,7 @@ const ABOVE_PUCK_MARGIN_M: float = 1.0
 
 
 static func decide(ctx: RoleContext) -> RoleDecision:
-	# "D pinches, F3 fills": the strong point down his wall puts F3 on the line.
+	# "D pinches, F3 fills".
 	var fill: RoleDecision = AIRoleDefenseman.rotate_up_to_point(
 			ctx, AIRoleSlots.Slot.POINT_STRONG)
 	if fill != null:
@@ -42,11 +37,8 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	var teammates: Array[Vector3] = ctx.scratch_teammates
 	AIRoleHelpers.collect_teammates_excluding_self(ctx, teammates)
 
-	# Far from the band, skate at the CALCULATED float spot directly — the seam
-	# argmax refines a look that gets re-read from closer before arrival (see
-	# STATION_ARGMAX_LOD_M). The pinch read still bounds that direct spot: F3 has
-	# to be the seam option AND the first man back, and a bound that only sags him
-	# home leaves him just the second of those.
+	# Far from the band, skate at the calculated float spot (STATION_ARGMAX_LOD_M),
+	# still through the station read.
 	var band_center := Vector3(
 			0.0, 0.0, opp_net.z + own_dir * BAND_DEPTHS_M[1])
 	if not AIRoleHelpers.station_needs_refinement(ctx.self_pos, band_center):
@@ -63,15 +55,13 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		var z: float = opp_net.z + own_dir * depth
 		for x: float in BAND_LATERAL_M:
 			var c := Vector3(x, 0.0, z)
-			# Above the puck, always: own-goal-side of the carrier.
 			if own_dir * c.z < own_dir * carrier_pos.z + ABOVE_PUCK_MARGIN_M:
 				continue
 			if not AIRoleHelpers.is_legal_position(c):
 				continue
 			if AIRoleHelpers.too_close_to_teammate(c, teammates):
 				continue
-			# The seam look: can the carrier feed me here, and can I shoot from
-			# here? Each lane defender priced at his own reach and close.
+			# The seam look: can the carrier feed me here, and can I shoot from here?
 			var feed: float = AIActionScoring.lane_clear(
 					carrier_pos, c, opp_positions, pass_speed_ref,
 					AIActionScoring.EMPTY_VEC3, ctx.scratch_opp_caps)
@@ -83,9 +73,8 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 				best_score = score
 				best_pos = c
 	if best_score == -INF:
-		# Whole band filtered (deep carrier + heavy counter threat): sag from
-		# the top of the zone down the retreat line as far as the counter
-		# paths demand.
+		# Whole band filtered (carrier above it, or crowded): 1 m inside the
+		# opp blue line.
 		best_pos = Vector3(0.0, 0.0,
 				opp_net.z + own_dir * (GameRules.GOAL_LINE_Z - GameRules.BLUE_LINE_Z - 1.0))
 	d.target_position = AIRoleHelpers.offensive_station_target(

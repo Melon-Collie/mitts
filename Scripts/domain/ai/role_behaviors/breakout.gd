@@ -1,92 +1,46 @@
 class_name AIRoleBreakout
 
-# BREAKOUT role behavior — BREAKOUT state only (we possess the puck in
-# our OWN defensive zone). Two outlet options for the carrier breaking
-# the puck out, asymmetric by job but scored with the same primitive:
+# The breakout outlets (BREAKOUT: we have the puck in our own zone).
 #
-#   strong (BREAKOUT_STRONG) — the strong-side-wall outlet. Presents UP
-#     THE WALL: candidates are sampled along the strong-side boards from
-#     just ahead of the carrier all the way to our blue line (plus a
-#     mid-seam column — see MID_SEAM_FRACTION), and the score picks the
-#     highest spot whose lane is still clean. So STRONG stretches to the
-#     blue line when the wall is open, drops to a lower open spot when
-#     the high wall is covered, and swings inside when the wall lane is
-#     the carrier's own wheel route — a real up-the-wall breakout
-#     outlet, not a 4 m dump-off.
-#   weak   (BREAKOUT_WEAK)   — the weak-side reverse valve. Stays
-#     goal-side of (no further up-ice than) the carrier so a D-to-D
-#     reverse is always available and the carrier is never the last
-#     man back. Mirrors SUPPORT's safety-valve role, on the weak side.
+#   strong (BREAKOUT_STRONG, both team sizes) — the up-the-wall outlet: samples
+#     the strong-side boards from just ahead of the carrier to our blue line
+#     and takes the highest spot whose lane is still clean.
+#   weak (3v3 BREAKOUT_WEAK, 5v5 BREAKOUT_D2) — the reverse valve: the weak
+#     side, held goal-side of the carrier so a reverse is always on and the
+#     carrier is never the last man back.
 #
-# Scoring (both): argmax over each role's candidate set of
-#
-#     lane_clear(carrier → c, pass_speed) × position_potential(c)
-#
-# - lane_clear is the reaction-window PASS model (same one the carrier
-#   uses to decide the pass), so the outlet positions itself where the
-#   carrier actually has a clean lane — the two agree on "threadable."
-#   It also gates STRONG's stretch: a covered high-wall candidate scores
-#   near the BLOCKED_LANE_FLOOR, so STRONG only advances as far as the
-#   lane stays open (the floor keeps dead-lane candidates ranked by
-#   potential instead of erased — see BLOCKED_LANE_FLOOR).
-# - position_potential is the open-ice / forward-progress value of the
-#   spot. Its `closeness` term ALREADY rewards up-ice progress (closer to
-#   the attacking net), so among equally-open wall candidates the more
-#   advanced one wins — no separate up-ice factor needed. It also doesn't
-#   collapse to 0 deep in our zone (its ramp spans the whole rink),
-#   unlike score_pass / score_shoot, so it gives a usable breakout
-#   gradient where those return 0.
-#
-# The asymmetry lives in candidate generation: STRONG samples up the
-# strong-side wall (free to advance); WEAK searches the weak side and is
-# hard-constrained goal-side of the carrier. Search side comes from
-# ctx.strong_x (the brain's hysteretic strong side) so it matches the
-# slot assignment.
+# Both argmax `max(lane_clear(carrier → c), BLOCKED_LANE_FLOOR) ×
+# position_potential(c)`. lane_clear is the carrier's own pass model, so the
+# outlet stands where his lane really is clean. position_potential already
+# rewards up-ice progress and, unlike score_pass, stays non-zero deep in our
+# zone.
 
-# Lateral inset from the boards for the strong-side wall: a shoulder of air off
-# the glass, and no more. The STRONG outlet is the designated rim receiver, so
-# the stance must keep the boards line INSIDE the blade's receive reach — a body
-# ~1.85 m off the inner wall against a ~1.4 m comfortable blade span makes the
-# rim physically untouchable and every rim-around sails past the post man.
+# Lateral inset from the boards for the strong-side wall: a shoulder of air, no
+# more. The STRONG outlet is the rim receiver, so the boards line must stay
+# inside his ~1.4 m comfortable blade span.
 const WALL_INSET_M: float = 1.2
 
-# STRONG wall sampling: how many points along the wall (carrier→blue line)
-# and how far ahead of the carrier the NEAREST one sits. The samples span
-# from STRONG_MIN_LEAD_M up-ice of the carrier to our blue line (the zone
-# exit); position_potential + lane_clear pick the best of them.
+# STRONG wall sampling: samples from STRONG_MIN_LEAD_M up-ice of the carrier to
+# our blue line.
 const STRONG_WALL_SAMPLES: int = 5
 const STRONG_MIN_LEAD_M: float = 3.0
 
-# STRONG's second column: a mid-seam lane at this fraction of the wall offset
-# (≈ the dot lane), same depth samples. A single column pinned to the wall leaves
-# the outlet with no move when the wall lane dies — the CARRIER wheeling up the
-# strong boards himself, or a forechecker camped on the half-wall. With both,
-# the same lane × potential argmax picks the wall when the middle is contested
-# and swings inside when the wall lane is occupied or covered.
-#
-# 5v5 (breakout plan §C.1): STRONG is a WALL POST — the winger holds the boards,
-# which is the one protected lane and the rim's receiving line, adjusting only
-# along it. So the mid-seam column is generated ONLY when the carrier's own route
-# occupies the wall lane, the one case the post must yield. 3v3 keeps both
-# columns; its rover outlet legitimately swings inside.
+# STRONG's second column: a mid-seam lane at this fraction of the wall offset,
+# so the outlet has a move when the wall lane dies. In 5v5 STRONG is a WALL POST
+# (docs/breakout-plan.md, Phase C) and gets the column only when the carrier's
+# own route occupies the wall lane; 3v3's rover always has it.
 const MID_SEAM_FRACTION: float = 0.5
 # "The carrier owns the wall lane": within the wall inset plus a body of
 # the boards on the outlet's side.
 const WALL_LANE_BAND_M: float = 3.0
 
-# Floor on the lane term so dead pass lanes rank candidates instead of erasing
-# them. lane_clear reads ~0 for EVERY candidate while a forechecker is draped on
-# the carrier (a defender within a stick of the release blocks all lanes at the
-# origin) or parked on the outlet's own route (closing reach over a long flight
-# blankets the whole 3 m-spaced column), so a hard `lane <= 0 → skip` empties the
-# set and the outlet freezes at self_pos. The floor keeps position_potential's
-# gradient alive so the route keeps developing, and the moment a real lane opens
-# it dominates the argmax again.
+# Floor on the lane term, so dead lanes still rank candidates: a forechecker
+# draped on the carrier zeroes every lane, and without the floor the outlet would
+# freeze.
 const BLOCKED_LANE_FLOOR: float = 0.15
 
-# Weak-side safety-valve tolerance: WEAK may sit up to this far up-ice
-# of the carrier (roughly even) but no further — keeps it the reverse
-# option, never ahead of the play. Mirrors AIRoleSupport.
+# How far up-ice of the carrier WEAK may sit (roughly even). Same value as
+# AIRoleSupport.GOAL_SIDE_TOLERANCE_M.
 const GOAL_SIDE_TOLERANCE_M: float = 1.5
 
 
@@ -95,8 +49,6 @@ const GOAL_SIDE_TOLERANCE_M: float = 1.5
 static func decide(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 	var d := RoleDecision.new()
 
-	# Orient off a live teammate carrier, falling back to the puck when it is
-	# loose (mid-pass in our own zone). Stand still only when there is no puck.
 	var carrier_pos: Vector3 = AIRoleHelpers.resolve_offensive_play_ref(ctx)
 	if not carrier_pos.is_finite():
 		d.target_position = ctx.self_pos
@@ -108,8 +60,6 @@ static func decide(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 	var teammate_positions: Array[Vector3] = ctx.scratch_teammates
 	AIRoleHelpers.collect_teammates_excluding_self(ctx, teammate_positions)
 
-	# Side this outlet works: strong outlet on the strong side, weak
-	# outlet on the opposite side.
 	var side_x: float = ctx.strong_x if is_strong else -ctx.strong_x
 
 	var candidates: Array[Vector3]
@@ -127,10 +77,7 @@ static func decide(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 			continue
 		if AIRoleHelpers.too_close_to_teammate(c, teammate_positions):
 			continue
-		# Offside is not a concern here: the breakout zone is our own end and the
-		# hard line is the OPP blue line a full rink away, which no candidate from
-		# these search centres reaches. WEAK, the safety valve, is the only one
-		# constrained — it stays goal-side so it remains the reverse option.
+		# No offside filter: no candidate here reaches the opp blue line.
 		if not is_strong and not _is_goal_side_of_carrier(
 				c, carrier_pos, ctx.own_goal_dir):
 			continue
@@ -159,12 +106,10 @@ static func _strong_wall_candidates(ctx: RoleContext, carrier_pos: Vector3,
 	var wall_x: float = side_x * (GameRules.RINK_HALF_WIDTH - WALL_INSET_M)
 	var mid_x: float = wall_x * MID_SEAM_FRACTION
 	var own_dir: float = ctx.own_goal_dir
-	# Depth = own_dir * z grows toward our net; up-ice is SMALLER depth.
+	# own_dir * z grows toward our net; up-ice is SMALLER.
 	var carrier_depth: float = own_dir * carrier_pos.z
 	var blue_depth: float = GameRules.BLUE_LINE_Z
-	# Nearest sample sits a bit ahead of the carrier; farthest at the blue
-	# line. maxf keeps the range non-inverted when the carrier is already
-	# close to the line (then all samples collapse onto the blue line).
+	# maxf: a carrier already near the line collapses the samples onto it.
 	var bottom_depth: float = maxf(carrier_depth - STRONG_MIN_LEAD_M, blue_depth)
 	var top_depth: float = blue_depth
 	# The 5v5 wall post yields its lane only to the carrier's own route.
@@ -183,16 +128,14 @@ static func _strong_wall_candidates(ctx: RoleContext, carrier_pos: Vector3,
 	return result
 
 
-# WEAK search center: weak-side wall, level with the carrier on the depth
-# axis — the reverse-valve release point.
+# WEAK search center: the weak-side wall, level with the carrier.
 static func _weak_search_center(carrier_pos: Vector3, side_x: float) -> Vector3:
 	var wall_x: float = side_x * (GameRules.RINK_HALF_WIDTH - WALL_INSET_M)
 	return Vector3(wall_x, 0.0, carrier_pos.z)
 
 
-# The safety valve: true when `c` is no further up-ice than the carrier, within
-# GOAL_SIDE_TOLERANCE_M. own_goal_dir * z grows toward our net, so a larger value
-# is deeper. Mirrors AIRoleSupport.
+# True when `c` is no further up-ice than the carrier, within
+# GOAL_SIDE_TOLERANCE_M.
 static func _is_goal_side_of_carrier(c: Vector3, carrier_pos: Vector3,
 		own_goal_dir: float) -> bool:
 	return own_goal_dir * c.z >= own_goal_dir * carrier_pos.z - GOAL_SIDE_TOLERANCE_M

@@ -1,12 +1,9 @@
 class_name AIRoleWideLane
 
-# WIDE_L / WIDE_R role behavior — TRANS_OFFENSE, 5v5 only. The rush's wide
-# drivers: fill the outside lanes at pace so the entry has width (defenders
-# must respect three lanes, which is what opens the middle for the carrier
-# and the trailer). Paced to the play like OUTLET — lead the carrier up-ice,
-# but never onside-break: hold up at the attacking blue line until the puck
-# crosses (the body-level offside brake is the hard backstop; this keeps the
-# route honest so the brake never has to slam).
+# WIDE_L / WIDE_R (5v5 TRANS_OFFENSE) — fill the outside lanes at pace so the
+# entry has width. Lead the play up-ice, but hold NZ-side of the attacking blue
+# line until the puck crosses, so the body-level offside brake never has to
+# slam.
 
 const LANE_INSET_M: float = 4.0     # off the boards
 const LEAD_AHEAD_M: float = 5.0     # up-ice of the play reference
@@ -22,10 +19,7 @@ static func decide(ctx: RoleContext, side: float) -> RoleDecision:
 		return d
 
 	var x: float = side * (GameRules.RINK_HALF_WIDTH - LANE_INSET_M)
-	# Lead the play up-ice (toward the attacking net).
 	var z: float = play_ref.z - own_dir * LEAD_AHEAD_M
-	# Offside honesty: until the PUCK is across the attacking blue line,
-	# hold the NZ side of it.
 	var attacking_blue_z: float = -own_dir * GameRules.BLUE_LINE_Z
 	var puck_in_zone: bool = own_dir * play_ref.z < own_dir * attacking_blue_z
 	if not puck_in_zone:
@@ -33,6 +27,6 @@ static func decide(ctx: RoleContext, side: float) -> RoleDecision:
 		if own_dir * z < own_dir * hold_z:
 			z = hold_z
 	d.target_position = Vector3(x, 0.0, z)
-	# The lane advances with the rush — hit it in stride.
+	# The lane advances with the rush.
 	d.arrive_at_speed = true
 	return d
