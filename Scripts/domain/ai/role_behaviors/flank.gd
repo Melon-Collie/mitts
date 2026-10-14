@@ -4,7 +4,7 @@ class_name AIRoleFlank
 # loose puck, slightly defensive, ready to support whoever gets it.
 #
 # A rigid offset off the puck alone is puckwatching, so the stand goes through
-# AIRoleHelpers.neutral_station_target, which also demands somebody home behind
+# AILastManDiscipline.neutral_station_target, which also demands somebody home behind
 # me: exactly one body draws the layer. See Scripts/domain/ai/CLAUDE.md →
 # "Last-man discipline".
 
@@ -30,7 +30,7 @@ static func decide(ctx: RoleContext, lateral_sign: float) -> RoleDecision:
 	# The LAYER's stand is the D post at our blue line — the stand 5v5's back pair
 	# holds here. Never a puck-relative floor: it would be skated through the
 	# moment anybody picks the puck up.
-	d.target_position = AIRoleHelpers.neutral_station_target(
+	d.target_position = AILastManDiscipline.neutral_station_target(
 			ctx, stand, ctx.prev_held_forward_stand,
 			AIZoneCoverage.defensive_anchor(
 					true, ctx.self_home_side, ctx.defending_goal_pos.z))

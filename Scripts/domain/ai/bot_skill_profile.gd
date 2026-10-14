@@ -91,7 +91,7 @@ var pass_speed_scale: float
 # PACE: how hard the on-puck pressurer hunts body checks. 1.0 = full hit-hunting;
 # below 1.0 raises the required separating-hit impulse inversely so only the
 # hardest hits commit; 0.0 = pure containment. Consumed in
-# AIRoleHelpers.evaluate_body_check.
+# AIDefensiveVerbs.evaluate_body_check.
 var check_aggression: float
 
 # PACE: multiplier on DEFENSIVE_ANTICIPATION_S, how far ahead a defender READS
@@ -100,7 +100,7 @@ var check_aggression: float
 # bot scores the threats where they ARE, not where they're going.
 #
 # It must never move a defender's STAND: a cover point and a gap stand already
-# ride their man (AIRoleHelpers.cover_threat), so leading the anchor as well
+# ride their man (AIDefensiveVerbs.cover_threat), so leading the anchor as well
 # double-counts his motion. The on-puck space concession is pursuit_standoff_m.
 var defensive_anticipation_scale: float
 

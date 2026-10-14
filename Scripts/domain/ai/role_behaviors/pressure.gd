@@ -4,7 +4,7 @@ class_name AIRolePressure
 # puck pressurer: get goal-side of the carrier and take away his best option.
 #
 # INVERSE SCORING: each candidate is scored by how much our body there deflates
-# the carrier's best option (AIRoleHelpers.carrier_best_option). The argmax
+# the carrier's best option (AIDefensiveVerbs.carrier_best_option). The argmax
 # takes carrier_stand as the ring's centre and the gap and inside shade as
 # floors, then picks the bearing.
 
@@ -18,28 +18,28 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 
 	# A loose puck is a live read; stand still only with no puck at all.
 	var ap: AICarrierApproach = ctx.scratch_carrier_approach
-	if not AIRoleHelpers.read_carrier_approach(ctx, ap):
+	if not AIDefensiveVerbs.read_carrier_approach(ctx, ap):
 		d.target_position = ctx.self_pos
 		return d
 	var carrier_pos: Vector3 = ap.carrier_pos
 
 	# PRESSURE has teammates behind it in both its states, so the commit risk of
 	# a real, separating hit is acceptable.
-	var check: AIBodyCheck.Result = AIRoleHelpers.evaluate_body_check(ctx)
+	var check: AIBodyCheck.Result = AIDefensiveVerbs.evaluate_body_check(ctx)
 	if check.commit:
 		d.commit_check = true
 		d.target_position = check.target
 		return d
 
 	var our_net: Vector3 = ctx.defending_goal_pos
-	var our_goalie_pos: Vector3 = AIRoleHelpers.resolve_our_goalie_pos(ctx)
+	var our_goalie_pos: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 
 	var our_team_excluding_self: Array[Vector3] = ctx.scratch_teammates
-	AIRoleHelpers.collect_teammates_excluding_self(ctx, our_team_excluding_self)
+	AIRoleReads.collect_teammates_excluding_self(ctx, our_team_excluding_self)
 
 	# Anticipated, so PRESSURE shades toward where a feed is going.
 	var opp_teammates: Array[Vector3] = ctx.scratch_opp_receivers
-	AIRoleHelpers.collect_opp_team_excluding_carrier(ctx, opp_teammates, true)
+	AIRoleReads.collect_opp_team_excluding_carrier(ctx, opp_teammates, true)
 
 	# The cut-off distance is the shared gap ladder, sized off the carrier's REAL
 	# position — never a led one (the stand rides him). Its domain is
@@ -57,14 +57,14 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	else:
 		gap += AIRoleRushD.ladder_gap_m(
 				carrier_pos, ctx.own_goal_dir, ctx.self_blade_reach, cushion)
-	# The stand is angled (AIRoleHelpers.carrier_stand), as RUSH_D1's is.
+	# The stand is angled (AIDefensiveVerbs.carrier_stand), as RUSH_D1's is.
 	var inside_dir := Vector3.ZERO
 	var inside_shade: float = 0.0
 	var search_center: Vector3 = carrier_pos
 	if ap.dir_net != Vector3.ZERO:
-		search_center = AIRoleHelpers.carrier_stand(ap, gap)
-		inside_dir = AIRoleHelpers.inside_dir(carrier_pos, ap.dir_net)
-		inside_shade = AIRoleHelpers.inside_shade_m(carrier_pos)
+		search_center = AIDefensiveVerbs.carrier_stand(ap, gap)
+		inside_dir = AIDefensiveVerbs.inside_dir(carrier_pos, ap.dir_net)
+		inside_shade = AIDefensiveVerbs.inside_shade_m(carrier_pos)
 	# The lead is used only by the pass-lane stand below — where a feed would be
 	# thrown from, not how close to stand.
 	var lead: Vector3 = carrier_pos \
@@ -76,13 +76,13 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	# net could never close. The gap-up is exempt, as RUSH_D1's is.
 	var min_depth: float = -INF
 	var depth_dir: Vector3 = Vector3.ZERO
-	if not gapping_up and AIRoleHelpers.stand_ride_velocity(ctx) == Vector3.ZERO \
-			and not AIRoleHelpers.has_support_behind(ctx):
+	if not gapping_up and AIRoleReads.stand_ride_velocity(ctx) == Vector3.ZERO \
+			and not AILastManDiscipline.has_support_behind(ctx):
 		if ap.dir_net != Vector3.ZERO:
 			var net_dir: Vector3 = ap.dir_net
 			var want: float = (search_center.x - carrier_pos.x) * net_dir.x \
 					+ (search_center.z - carrier_pos.z) * net_dir.z
-			var settable: float = AIRoleHelpers.settable_stand_depth(
+			var settable: float = AILastManDiscipline.settable_stand_depth(
 					ctx, carrier_pos, net_dir, want, closing_now)
 			if settable > want:
 				# Re-centre the ring on the settable line so the argmax still picks
@@ -95,7 +95,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	# Upper bounds for carrier_best_option's early-out, and the data the
 	# calculated closing stands are built from.
 	var bases: Array[float] = ctx.scratch_option_bases
-	AIRoleHelpers.carrier_option_bases(
+	AIDefensiveVerbs.carrier_option_bases(
 			carrier_pos, our_net, our_goalie_pos,
 			our_team_excluding_self, opp_teammates, bases,
 			ctx.scratch_teammate_caps)
@@ -108,7 +108,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 			< PRESSURE_INNER_RING_RANGE_M * PRESSURE_INNER_RING_RANGE_M
 	var candidates: Array[Vector3] = []
 	if near_cutoff:
-		candidates = AIRoleHelpers.generate_candidates_around(
+		candidates = AIStationSearch.generate_candidates_around(
 				ctx.self_pos, search_center, true)
 	else:
 		candidates.append(search_center)
@@ -127,7 +127,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 				candidates.append((search_center + pass_stand) * 0.5)
 	# Switch-hysteresis: "block the shot" and "block the best pass" are often
 	# near-equal, and trading them every dispatch covers neither.
-	AIRoleHelpers.append_incumbent(ctx, candidates)
+	AIStationSearch.append_incumbent(ctx, candidates)
 
 	var best_pos: Vector3 = ctx.self_pos
 	var best_score: float = -INF
@@ -157,22 +157,22 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 					+ (c.z - carrier_pos.z) * inside_dir.z
 			if off < inside_shade:
 				c += inside_dir * (inside_shade - off)
-		if not AIRoleHelpers.is_legal_position(c):
+		if not AIStationSearch.is_legal_position(c):
 			continue
 		if not _is_goal_side(c, carrier_pos, our_net):
 			continue
 		if min_depth > -INF and (c.x - carrier_pos.x) * depth_dir.x \
 				+ (c.z - carrier_pos.z) * depth_dir.z < min_depth - 0.01:
 			continue  # up-ice of the settable stand — a lunge (see above)
-		if AIRoleHelpers.too_close_to_teammate(c, our_team_excluding_self):
+		if AIStationSearch.too_close_to_teammate(c, our_team_excluding_self):
 			continue
 
 		# Higher = better for us, i.e. lower for the carrier.
-		var pressure_score: float = -AIRoleHelpers.carrier_best_option(
+		var pressure_score: float = -AIDefensiveVerbs.carrier_best_option(
 				c, carrier_pos, our_net, our_goalie_pos,
 				our_team_excluding_self, opp_teammates, bases,
 				ctx.scratch_teammate_caps, ctx.caps_by_peer.get(ctx.peer_id)) \
-				+ AIRoleHelpers.incumbent_bonus(ctx, c)
+				+ AIStationSearch.incumbent_bonus(ctx, c)
 		if pressure_score > best_score:
 			best_score = pressure_score
 			best_pos = c
@@ -186,7 +186,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	# Publish the ride only when a candidate survived: otherwise `best_pos` is our
 	# own feet, a HOLD, and a hold that rides a man matches his velocity forever.
 	if found:
-		d.target_velocity = AIRoleHelpers.stand_ride_velocity(ctx)
+		d.target_velocity = AIRoleReads.stand_ride_velocity(ctx)
 		AIRoleRushD.set_house_retreat_floor(ctx, ap, d)
 		# The gap we just sized is ours to hold (RoleDecision.engaged_peer_id).
 		if ctx.snapshot != null and ctx.snapshot.puck_state != null:

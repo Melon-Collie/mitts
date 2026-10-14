@@ -15,7 +15,7 @@ enum State {
 }
 
 # Margin from the goal line that anchors are clamped inside of. The X-inset is
-# AIRoleHelpers.RINK_INSET_M.
+# AIStationSearch.RINK_INSET_M.
 const RINK_Z_INSET: float = 1.0
 
 # A quick release waits for the motion-limited cursor to converge on its aim
@@ -3328,7 +3328,7 @@ func _carry_mouse_aim(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 	# Keep the target on the rink side of the attacking goal line, or the blade
 	# punches through the net.
 	var goal_line_z: float = _attacking_goal_pos.z
-	var max_forward_z: float = goal_line_z + AIRoleHelpers.GOAL_LINE_BUFFER_M * _own_goal_dir
+	var max_forward_z: float = goal_line_z + AIStationSearch.GOAL_LINE_BUFFER_M * _own_goal_dir
 	if (target.z - max_forward_z) * _own_goal_dir < 0.0:
 		target.z = max_forward_z
 	# ...and inside the boards (CARRY_BLADE_WALL_MARGIN_M), clamped after every
@@ -3928,8 +3928,8 @@ func _teammate_must_tag_up(snapshot: WorldSnapshot) -> bool:
 # doesn't pull the bot into the boards or behind the goal line.
 func _clamp_anchor(p: Vector3) -> Vector3:
 	var x: float = clampf(p.x,
-			-GameRules.RINK_HALF_WIDTH + AIRoleHelpers.RINK_INSET_M,
-			GameRules.RINK_HALF_WIDTH - AIRoleHelpers.RINK_INSET_M)
+			-GameRules.RINK_HALF_WIDTH + AIStationSearch.RINK_INSET_M,
+			GameRules.RINK_HALF_WIDTH - AIStationSearch.RINK_INSET_M)
 	var z: float = clampf(p.z,
 			-GameRules.GOAL_LINE_Z + RINK_Z_INSET,
 			GameRules.GOAL_LINE_Z - RINK_Z_INSET)
@@ -4044,7 +4044,7 @@ func _should_chase_loose_puck(snapshot: WorldSnapshot, self_pos: Vector3) -> boo
 	# role positioning, where the CHASE slot pre-contains the pickup.
 	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 	var self_vel: Vector3 = self_state.velocity if self_state != null else Vector3.ZERO
-	return not AIRoleHelpers.loose_puck_race_lost(
+	return not AILoosePuckChase.loose_puck_race_lost(
 			snapshot, self_pos, self_vel, _self_max_speed,
 			_team_id, _team_id_by_peer, _caps_by_peer, _peer_id, _own_goal_dir)
 

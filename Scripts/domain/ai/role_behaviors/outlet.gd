@@ -47,20 +47,20 @@ const PACE_TOLERANCE_M: float = 1.0
 static func decide(ctx: RoleContext) -> RoleDecision:
 	var d := RoleDecision.new()
 
-	var carrier_pos: Vector3 = AIRoleHelpers.resolve_offensive_play_ref(ctx)
+	var carrier_pos: Vector3 = AIRoleReads.resolve_offensive_play_ref(ctx)
 	if not carrier_pos.is_finite():
 		d.target_position = ctx.self_pos
 		return d
 
 	var opp_positions: Array[Vector3] = ctx.scratch_opp_positions
 	var opp_states: Array[SkaterNetworkState] = ctx.scratch_opp_states
-	AIRoleHelpers.collect_opponents(ctx, opp_positions, opp_states)
+	AIRoleReads.collect_opponents(ctx, opp_positions, opp_states)
 
 	var teammate_positions: Array[Vector3] = ctx.scratch_teammates
-	AIRoleHelpers.collect_teammates_excluding_self(ctx, teammate_positions)
+	AIRoleReads.collect_teammates_excluding_self(ctx, teammate_positions)
 
 	var rush: float = clampf(
-			(AIRoleHelpers.carrier_closing_speed(ctx) - RUSH_SPEED_LO_M_S)
+			(AIRoleReads.carrier_closing_speed(ctx) - RUSH_SPEED_LO_M_S)
 					/ (RUSH_SPEED_HI_M_S - RUSH_SPEED_LO_M_S),
 			0.0, 1.0)
 	var rushing: bool = rush > ARRIVE_AT_SPEED_RUSH
@@ -75,15 +75,15 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 			-GameRules.RINK_HALF_WIDTH + WEAK_SIDE_INSET_M,
 			GameRules.RINK_HALF_WIDTH - WEAK_SIDE_INSET_M)
 	var search_center := Vector3(weak_x, 0.0, paced_z)
-	var candidates: Array[Vector3] = AIRoleHelpers.generate_candidates_around(
+	var candidates: Array[Vector3] = AIStationSearch.generate_candidates_around(
 			ctx.self_pos, search_center)
 	# Switch-hysteresis (the cursor snaps to this target).
-	AIRoleHelpers.append_incumbent(ctx, candidates)
+	AIStationSearch.append_incumbent(ctx, candidates)
 
 	var best_pos: Vector3 = ctx.self_pos
 	var best_score: float = -INF
 	for c: Vector3 in candidates:
-		if not AIRoleHelpers.is_legal_position(c):
+		if not AIStationSearch.is_legal_position(c):
 			continue
 		if _is_offside(c, ctx):
 			continue
@@ -91,7 +91,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		if rushing and ctx.own_goal_dir * c.z \
 				< ctx.own_goal_dir * paced_z - PACE_TOLERANCE_M:
 			continue
-		if AIRoleHelpers.too_close_to_teammate(c, teammate_positions):
+		if AIStationSearch.too_close_to_teammate(c, teammate_positions):
 			continue
 		# The speed our carrier would actually fire at — on a long pass, the
 		# charged speed.
@@ -102,7 +102,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		var potential: float = AIActionScoring.position_potential(
 				c, ctx.attacking_goal_pos, opp_positions, ctx.scratch_opp_caps)
 		var score: float = maxf(lane, BLOCKED_LANE_FLOOR) * potential \
-				+ AIRoleHelpers.incumbent_bonus(ctx, c)
+				+ AIStationSearch.incumbent_bonus(ctx, c)
 		if score > best_score:
 			best_score = score
 			best_pos = c

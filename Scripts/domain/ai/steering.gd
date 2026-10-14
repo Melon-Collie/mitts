@@ -280,7 +280,7 @@ static func compute_move_vector(
 # end the approach, and no repel in the field out-muscles a full-unit anchor
 # term — so the caller falls back to the point seek, which at least stops.
 #
-# Deliberately the RINK surface and not AIRoleHelpers.is_legal_position — this
+# Deliberately the RINK surface and not AIStationSearch.is_legal_position — this
 # asks "can a body be here", not "should a stand be chosen here" (that one also
 # excludes the crease and the goal-line buffer, which are good ice to be routed
 # ACROSS).

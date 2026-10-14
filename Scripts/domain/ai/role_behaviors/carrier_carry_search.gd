@@ -144,15 +144,15 @@ var _beam_prune_bound: float = -INF
 # clamp — and plants on the end wall until stripped. The route to each candidate
 # is still checked against the net by _score_move_candidate_base.
 func _candidate_ice_legal(candidate: Vector3, allow_behind: bool) -> bool:
-	if absf(candidate.x) > GameRules.RINK_HALF_WIDTH - AIRoleHelpers.RINK_INSET_M:
+	if absf(candidate.x) > GameRules.RINK_HALF_WIDTH - AIStationSearch.RINK_INSET_M:
 		return false
-	if absf(candidate.z) <= GameRules.GOAL_LINE_Z - AIRoleHelpers.GOAL_LINE_BUFFER_M:
+	if absf(candidate.z) <= GameRules.GOAL_LINE_Z - AIStationSearch.GOAL_LINE_BUFFER_M:
 		return true
 	if not allow_behind:
 		return false
 	# On the surface (rounded corners honoured) with a body's clearance.
 	var xz := Vector2(candidate.x, candidate.z)
-	if not GameRules.clamp_to_rink_inner(xz, AIRoleHelpers.RINK_INSET_M) \
+	if not GameRules.clamp_to_rink_inner(xz, AIStationSearch.RINK_INSET_M) \
 			.is_equal_approx(xz):
 		return false
 	# Outside the cage (the same exclusion box the skater body is held clear of).
@@ -191,7 +191,7 @@ func search(ctx: RoleContext, shoot_now_score: float,
 	_field.holds.configure_from(ctx)
 	var attacking_goal: Vector3 = ctx.attacking_goal_pos
 	var own_goal_dir: float = ctx.own_goal_dir
-	var our_goalie: Vector3 = AIRoleHelpers.resolve_our_goalie_pos(ctx)
+	var our_goalie: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 	var slot_pos: Vector3 = AICarrierField.slot_anchor(own_goal_dir)
 	# Forward = toward the slot; the attacking-goal axis when the bot is on it.
 	var to_slot_x: float = slot_pos.x - self_pos.x

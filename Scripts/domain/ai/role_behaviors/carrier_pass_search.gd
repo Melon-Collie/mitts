@@ -95,7 +95,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 	var best_pass_peer: int = 0
 	var best_pass_score: float = 0.0
 	var best_pass_saucer: bool = false
-	var our_goalie: Vector3 = AIRoleHelpers.resolve_our_goalie_pos(ctx)
+	var our_goalie: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 	var attacking_goal: Vector3 = ctx.attacking_goal_pos
 	# One-way valve: once the zone is taken the carrier won't pass the puck back
 	# out of it (the carry-side valve is in AICarrierCarrySearch).
@@ -600,7 +600,7 @@ func developing_feed_value(ctx: RoleContext) -> float:
 	if ctx.team_brain == null:
 		return 0.0
 	var self_pos: Vector3 = ctx.self_pos
-	var our_goalie: Vector3 = AIRoleHelpers.resolve_our_goalie_pos(ctx)
+	var our_goalie: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 	var self_state: SkaterNetworkState = ctx.snapshot.skater_states.get(ctx.peer_id)
 	var self_facing: Vector2 = self_state.facing if self_state != null else Vector2.ZERO
 	var best: float = 0.0
@@ -625,7 +625,7 @@ func developing_feed_value(ctx: RoleContext) -> float:
 			if ctx.team_brain.is_one_timer_ready(pid) \
 					or not AIActionScoring.in_offensive_zone(
 							spot, ctx.attacking_goal_pos, AICarrierField.OZ_RECEIVE_LINE_BUFFER_M) \
-					or not AIRoleHelpers.is_legal_position(spot):
+					or not AIStationSearch.is_legal_position(spot):
 				continue
 			var dist: float = self_pos.distance_to(spot)
 			var pass_speed: float = AIPuckLane.pass_launch_speed(
@@ -673,7 +673,7 @@ func _developing_outlet_feed(ctx: RoleContext, tm: SkaterNetworkState,
 	var spot := Vector3(
 			tm.position.x + vel.x * OUTLET_DEVELOP_WINDOW_S, 0.0,
 			tm.position.z + vel.z * OUTLET_DEVELOP_WINDOW_S)
-	if not AIRoleHelpers.is_legal_position(spot):
+	if not AIStationSearch.is_legal_position(spot):
 		return 0.0
 	var dist: float = ctx.self_pos.distance_to(spot)
 	var pass_speed: float = AIPuckLane.pass_launch_speed(

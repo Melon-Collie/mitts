@@ -38,7 +38,7 @@ const FAST_PUCK_SPEED_M_S: float = 4.0
 # body is not a collector, whatever his hypothetical ETA says. Two consumers:
 #   - the election (below): a HUMAN teammate can't be assigned by election,
 #     so he only suppresses the bots while demonstrably playing the puck;
-#   - the chase decline (AIRoleHelpers.loose_puck_race_lost): an opponent
+#   - the chase decline (AILoosePuckChase.loose_puck_race_lost): an opponent
 #     who is NOT running the race must not talk our chaser out of it, or both
 #     teams decline on hypothetical winners and nobody goes.
 const RACE_COMMIT_MIN_CLOSING_M_S: float = 1.0
@@ -435,3 +435,92 @@ static func best_intercept_time(
 		if t < best_t:
 			best_t = t
 	return best_t
+
+
+# Should I decline a loose puck? True when a committed opponent reaches it a
+# clear contest band (CHASE_CONTEST_MARGIN_M) ahead of me AND nobody else contains
+# the counter. Inside the band it is a live 50/50 worth racing.
+#
+# `own_goal_dir` (+1 = our net at +Z) enables the containment read; 0.0 (unit
+# tests only) claims no containment.
+static func loose_puck_race_lost(
+		snapshot: WorldSnapshot, self_pos: Vector3, self_vel: Vector3,
+		self_max_speed: float, team_id: int, team_id_by_peer: Dictionary,
+		caps_by_peer: Dictionary, self_pid: int = -1,
+		own_goal_dir: float = 0.0) -> bool:
+	if snapshot == null or snapshot.puck_state == null:
+		return false
+	var puck_pos: Vector3 = snapshot.puck_state.position
+	# Race the puck's predicted path, never its current position, on the chase
+	# election's own walk so the decline cannot contradict it.
+	var puck_vel: Vector3 = snapshot.puck_state.velocity
+	var traj: Array[Vector3] = AILoosePuckChase.race_trajectory(puck_pos, puck_vel)
+	var step_dt: float = AILoosePuckChase.RACE_LOOKAHEAD_S \
+			/ float(AILoosePuckChase.RACE_STEPS)
+	var margin: float = AILoosePuckChase.setup_margin(puck_vel)
+	var t_play: float = AILoosePuckChase.race_playable_time(puck_pos, puck_vel)
+	var self_vmax: float = maxf(self_max_speed, 1.0)
+	var my_eta: float = AILoosePuckChase.path_intercept_time(
+			traj, step_dt, puck_pos, self_pos, self_vel, self_vmax, margin,
+			AIArrival.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
+	var best_opp_eta: float = INF
+	var best_opp_meet: Vector3 = puck_pos
+	for pid: int in snapshot.skater_states:
+		if team_id_by_peer.get(pid, -1) == team_id:
+			continue
+		var s: SkaterNetworkState = snapshot.skater_states[pid]
+		# Lost only to an opponent RUNNING it: the ETA prices a hypothetical run,
+		# so a flat-footed body off the line would otherwise veto the chase. A
+		# downstream interceptor whose band the puck's path enters counts.
+		var speed: float = AILoosePuckChase.race_vmax(caps_by_peer.get(pid))
+		var t: float = AILoosePuckChase.path_intercept_time(
+				traj, step_dt, puck_pos, s.position, s.velocity, speed, margin,
+				AIArrival.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
+		var meet: Vector3 = AILoosePuckChase.path_intercept_point(
+				traj, step_dt, puck_pos, t)
+		var committed: bool = AILoosePuckChase.path_enters_band(traj, puck_pos,
+				s.position, AIActionScoring.CHASE_CONTEST_MARGIN_M) \
+				or AILoosePuckChase.committed_to_point(s, meet)
+		if not committed:
+			continue
+		if t < best_opp_eta:
+			best_opp_eta = t
+			best_opp_meet = meet
+	if best_opp_eta == INF:
+		return false
+	var contest_window: float = AIActionScoring.CHASE_CONTEST_MARGIN_M \
+			/ maxf(self_max_speed, 1.0)
+	if my_eta <= best_opp_eta + contest_window:
+		return false
+	# Declining buys a pre-contain body, worth it only when nobody else contains.
+	return not _has_containment_behind(snapshot, team_id, team_id_by_peer,
+			self_pid, best_opp_meet, own_goal_dir)
+
+
+# Is someone else covering the counter, so that leaving to chase is free? A live
+# teammate qualifies if he is GOAL-SIDE of the pickup, or can reach the HOUSE GATE
+# inside AIRushRead.LATE_MAN_WINDOW_S — the second because nothing can be
+# goal-side of a puck behind our own goal line.
+#
+# Never re-phrase this as a race to the pickup: behind our goal line the pickup
+# IS our net, so the collector is already home and nobody beats him there.
+static func _has_containment_behind(snapshot: WorldSnapshot, team_id: int,
+		team_id_by_peer: Dictionary, self_pid: int, pickup: Vector3,
+		own_goal_dir: float) -> bool:
+	if own_goal_dir == 0.0:
+		return false
+	var gate := Vector3(0.0, 0.0, own_goal_dir
+			* (GameRules.GOAL_LINE_Z - AIZoneCoverage.HOUSE_TOP_DEPTH_M))
+	for pid: int in snapshot.skater_states:
+		if pid == self_pid or team_id_by_peer.get(pid, -1) != team_id:
+			continue
+		var mate: SkaterNetworkState = snapshot.skater_states[pid]
+		if mate.is_ghost:
+			continue
+		if own_goal_dir * (mate.position.z - pickup.z) \
+				> AIActionScoring.CHASE_CONTEST_MARGIN_M:
+			return true
+		if AIArrival.time_to_arrive(mate.position, gate, mate.velocity) \
+				<= AIRushRead.LATE_MAN_WINDOW_S:
+			return true
+	return false

@@ -58,7 +58,7 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 	var read: AIRushRead = ctx.rush_read
 
 	var ap: AICarrierApproach = ctx.scratch_carrier_approach
-	if not AIRoleHelpers.read_carrier_approach(ctx, ap):
+	if not AIDefensiveVerbs.read_carrier_approach(ctx, ap):
 		d.target_position = ctx.self_pos
 		return d
 	var carrier_pos: Vector3 = ap.carrier_pos
@@ -78,7 +78,7 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 	# by pace you cannot match, which the gap-up's triggers rule out. A riding
 	# stand is exempt too — see _settable_gap.
 	var gapping_up: bool = should_gap_up(ctx, read, ap, cushion)
-	var ride: Vector3 = AIRoleHelpers.stand_ride_velocity(ctx)
+	var ride: Vector3 = AIRoleReads.stand_ride_velocity(ctx)
 	if gapping_up:
 		gap = minf(stick_m(ctx) * GAP_MIN_STICKS, dist)
 	elif ride == Vector3.ZERO:
@@ -87,7 +87,7 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 	# arrival brake it selects has its own hysteresis and speed floor.
 	var stepping_up: bool = _depth_along(ctx, carrier_pos, dir_net) > gap
 
-	var stand: Vector3 = AIRoleHelpers.carrier_stand(ap, gap)
+	var stand: Vector3 = AIDefensiveVerbs.carrier_stand(ap, gap)
 
 	# Odd-man: play the pass. The numbers read decides WHEN; the fan finds where.
 	if read.numbers != AIRushRead.Numbers.EVEN_OR_UP and ctx.plays_rush_pass_lanes:
@@ -209,7 +209,7 @@ static func race_depth_to_net(ctx: RoleContext, pid: int) -> float:
 	if s == null:
 		return INF
 	var our_net: Vector3 = ctx.defending_goal_pos
-	var d: float = AIRoleHelpers.xz_distance(s.position, our_net)
+	var d: float = AIRoleReads.xz_distance(s.position, our_net)
 	if d < 0.001:
 		return 0.0
 	var dir_net := Vector3((our_net.x - s.position.x) / d, 0.0,
@@ -272,7 +272,7 @@ static func should_gap_up(ctx: RoleContext, read: AIRushRead,
 # A defender deeper than his stand must not charge it: the ladder can name a
 # stand 10–18 m up-ice, and he would arrive carrying up-ice momentum into the
 # rush. So an ICE-FRAME approach closes no faster than he can still be
-# travelling WITH the rush when it arrives (AIRoleHelpers.settable_stand_depth).
+# travelling WITH the rush when it arrives (AILastManDiscipline.settable_stand_depth).
 # Skipped with a layer home behind us, where a beaten challenge is a scoring
 # chance rather than a breakaway.
 #
@@ -281,9 +281,9 @@ static func should_gap_up(ctx: RoleContext, read: AIRushRead,
 # the defender stands.
 static func _settable_gap(ctx: RoleContext, carrier_pos: Vector3,
 		dir_net: Vector3, gap: float, closing: float) -> float:
-	if AIRoleHelpers.has_support_behind(ctx):
+	if AILastManDiscipline.has_support_behind(ctx):
 		return gap
-	return AIRoleHelpers.settable_stand_depth(
+	return AILastManDiscipline.settable_stand_depth(
 			ctx, carrier_pos, dir_net, gap, closing)
 
 
@@ -294,8 +294,8 @@ static func _decide_d2(ctx: RoleContext) -> RoleDecision:
 	var read: AIRushRead = ctx.rush_read
 	var our_net: Vector3 = ctx.defending_goal_pos
 
-	if AIRoleHelpers.cover_threat(ctx, d, _mid_lane_man_peer(read),
-			AIRoleHelpers.resolve_defensive_play_ref(ctx)):
+	if AIDefensiveVerbs.cover_threat(ctx, d, _mid_lane_man_peer(read),
+			AIRoleReads.resolve_defensive_play_ref(ctx)):
 		d.target_position = _clamp_to_house(ctx, d.target_position)
 		d.arrive_at_speed = true
 		return d
@@ -344,7 +344,7 @@ static func stick_m(ctx: RoleContext) -> float:
 # No rush role ever stands deeper than the house gate (top of the circles) — the
 # doorstep belongs to in-zone coverage, which is a different state.
 static func _clamp_to_house(ctx: RoleContext, pos: Vector3) -> Vector3:
-	return AIRoleHelpers.hold_out_to_house_gate(ctx.defending_goal_pos, pos)
+	return AILastManDiscipline.hold_out_to_house_gate(ctx.defending_goal_pos, pos)
 
 
 # Argmax over the retreat-line point plus fan candidates toward each dangerous
@@ -365,13 +365,13 @@ static func _lane_fan_target(ctx: RoleContext, read: AIRushRead,
 		return Vector3.INF
 
 	var teammates: Array[Vector3] = ctx.scratch_teammates
-	AIRoleHelpers.collect_teammates_excluding_self(ctx, teammates)
-	var our_goalie_pos: Vector3 = AIRoleHelpers.resolve_our_goalie_pos(ctx)
+	AIRoleReads.collect_teammates_excluding_self(ctx, teammates)
+	var our_goalie_pos: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 
 	var self_caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.peer_id)
 	var on_line: Vector3 = carrier_pos + dir_net * gap
 	var best_pos: Vector3 = on_line
-	var best_score: float = LINE_HOLD_MARGIN - AIRoleHelpers.carrier_live_option(
+	var best_score: float = LINE_HOLD_MARGIN - AIDefensiveVerbs.carrier_live_option(
 			on_line, carrier_pos, our_net, our_goalie_pos, teammates, receivers,
 			INF, ctx.scratch_teammate_caps, self_caps)
 
@@ -386,7 +386,7 @@ static func _lane_fan_target(ctx: RoleContext, read: AIRushRead,
 				/ maxf(feed_speed, 1.0)
 		AIGoalieModel.resolve_feed_keeper(
 				our_goalie_pos, our_net, feed_flight, receivers[i], carrier_pos,
-				AIRoleHelpers.our_goalie_hands(ctx), feed_speed, teammates)
+				AIRoleReads.our_goalie_hands(ctx), feed_speed, teammates)
 		var recv_seal: float = AIGoalieModel.derive_post_seal_x_sign(
 				receivers[i], our_net)
 		var recv_danger: float = AIActionScoring.score_shoot(
@@ -411,9 +411,9 @@ static func _lane_fan_target(ctx: RoleContext, read: AIRushRead,
 			var c := Vector3(
 					carrier_pos.x + cos(a) * gap, 0.0,
 					carrier_pos.z + sin(a) * gap)
-			if not AIRoleHelpers.is_legal_position(c):
+			if not AIStationSearch.is_legal_position(c):
 				continue
-			var score: float = -AIRoleHelpers.carrier_live_option(
+			var score: float = -AIDefensiveVerbs.carrier_live_option(
 					c, carrier_pos, our_net, our_goalie_pos, teammates, receivers,
 					-best_score, ctx.scratch_teammate_caps, self_caps)
 			if score > best_score:

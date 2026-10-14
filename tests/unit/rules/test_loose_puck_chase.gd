@@ -213,14 +213,14 @@ func test_rim_race_not_lost_for_downstream_defender() -> void:
 	snap.puck_state.velocity = Vector3(0, 0, 15)
 	snap.skater_states[1] = _skater(Vector3(10, 0, 14))
 	snap.skater_states[2] = _skater(Vector3(12, 0, -11.5), Vector3(0, 0, 8))
-	var lost: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost: bool = AILoosePuckChase.loose_puck_race_lost(
 			snap, Vector3(10, 0, 14), Vector3.ZERO, REF,
 			0, {1: 0, 2: 1}, {})
 	assert_false(lost, "the downstream defender's path intercept keeps the race alive")
 	# Control: the same puck SETTLED at the opponent's feet is honestly lost.
 	snap.puck_state.position = Vector3(12, 0, -11.0)
 	snap.puck_state.velocity = Vector3.ZERO
-	var lost_settled: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost_settled: bool = AILoosePuckChase.loose_puck_race_lost(
 			snap, Vector3(10, 0, 14), Vector3.ZERO, REF,
 			0, {1: 0, 2: 1}, {})
 	assert_true(lost_settled, "a settled puck at the opponent's feet is honestly lost")
@@ -346,13 +346,13 @@ func test_race_not_lost_to_an_opponent_ignoring_the_puck() -> void:
 	snap.puck_state.velocity = Vector3.ZERO
 	snap.skater_states[1] = _skater(Vector3(0, 0, 8))     # us
 	snap.skater_states[2] = _skater(Vector3(0, 0, -4))    # idle opponent
-	var lost: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost: bool = AILoosePuckChase.loose_puck_race_lost(
 			snap, Vector3(0, 0, 8), Vector3.ZERO, REF,
 			0, {1: 0, 2: 1}, {})
 	assert_false(lost, "an opponent not running the race can't talk us out of it")
 	# Control: the same opponent actually closing on the puck wins it back.
 	snap.skater_states[2] = _skater(Vector3(0, 0, -4), Vector3(0, 0, 5))
-	var lost_live: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost_live: bool = AILoosePuckChase.loose_puck_race_lost(
 			snap, Vector3(0, 0, 8), Vector3.ZERO, REF,
 			0, {1: 0, 2: 1}, {})
 	assert_true(lost_live, "a committed nearer opponent honestly wins the race")
@@ -371,14 +371,14 @@ func test_rim_race_not_lost_to_an_opponent_off_the_rim_line() -> void:
 	snap.puck_state.velocity = Vector3(8, 0, 0)
 	snap.skater_states[1] = _skater(Vector3(-12, 0, -11))    # us, trailing it
 	snap.skater_states[2] = _skater(Vector3(4, 0, -1))       # idle, mid-ice
-	var lost: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost: bool = AILoosePuckChase.loose_puck_race_lost(
 			snap, Vector3(-12, 0, -11), Vector3.ZERO, REF,
 			0, {1: 0, 2: 1}, {})
 	assert_false(lost, "a body off the rim's line and standing still is no veto")
 	# Control: an opponent parked ON the rim's line downstream IS committed —
 	# standing where the puck is coming to you is the whole play.
 	snap.skater_states[2] = _skater(Vector3(4, 0, -12.5))
-	var lost_on_line: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost_on_line: bool = AILoosePuckChase.loose_puck_race_lost(
 			snap, Vector3(-12, 0, -11), Vector3.ZERO, REF,
 			0, {1: 0, 2: 1}, {})
 	assert_true(lost_on_line, "an opponent standing in the rim's path honestly wins it")
@@ -458,7 +458,7 @@ func test_lost_race_is_still_run_when_a_teammate_is_home() -> void:
 	var teams := {1: 0, 2: 0, 11: 1}
 	# own_goal_dir +1 → our net at +Z, so the teammate at z=2 is goal-side of
 	# a pickup at z=-24.
-	var lost: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost: bool = AILoosePuckChase.loose_puck_race_lost(
 			snap, Vector3(-4, 0, -14), Vector3.ZERO, REF, 0, teams, {}, 1, 1.0)
 	assert_false(lost, "a lost race with support behind us is a forecheck, not a stop")
 
@@ -476,7 +476,7 @@ func test_last_man_still_declines_a_lost_race() -> void:
 	snap.skater_states[11] = _skater(Vector3(-6, 0, -22),
 			Vector3(0, 0, -4))                                      # opponent, winning
 	var teams := {1: 0, 2: 0, 11: 1}
-	var lost: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost: bool = AILoosePuckChase.loose_puck_race_lost(
 			snap, Vector3(-4, 0, -14), Vector3.ZERO, REF, 0, teams, {}, 1, 1.0)
 	assert_true(lost, "the last man with nobody home still pre-contains")
 
@@ -504,7 +504,7 @@ func test_a_puck_rimmed_into_our_own_corner_is_still_chased() -> void:
 	snap.skater_states[11] = _skater(Vector3(10, 0, 23),
 			Vector3(0, 0, 4))                                       # opponent, winning
 	var teams := {1: 0, 2: 0, 3: 0, 11: 1}
-	var lost: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost: bool = AILoosePuckChase.loose_puck_race_lost(
 			snap, Vector3(6, 0, 20), Vector3.ZERO, REF, 0, teams, {}, 1, 1.0)
 	assert_false(lost,
 			"a puck behind our whole team is pressured while the house is covered")
@@ -521,7 +521,7 @@ func test_a_puck_rimmed_into_our_own_corner_is_still_chased() -> void:
 	alone.skater_states[2] = _skater(Vector3(1, 0, -8))             # caught up-ice
 	alone.skater_states[3] = _skater(Vector3(-2, 0, -10))           # caught up-ice
 	alone.skater_states[11] = _skater(Vector3(10, 0, 23), Vector3(0, 0, 4))
-	var lost_alone: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost_alone: bool = AILoosePuckChase.loose_puck_race_lost(
 			alone, Vector3(6, 0, 20), Vector3.ZERO, REF, 0, teams, {}, 1, 1.0)
 	assert_true(lost_alone,
 			"with nobody able to hold the house the last man covers the net front")
@@ -539,7 +539,7 @@ func test_a_ghosted_teammate_is_not_containment() -> void:
 	snap.skater_states[2].is_ghost = true
 	snap.skater_states[11] = _skater(Vector3(-6, 0, -22), Vector3(0, 0, -4))
 	var teams := {1: 0, 2: 0, 11: 1}
-	var lost: bool = AIRoleHelpers.loose_puck_race_lost(
+	var lost: bool = AILoosePuckChase.loose_puck_race_lost(
 			snap, Vector3(-4, 0, -14), Vector3.ZERO, REF, 0, teams, {}, 1, 1.0)
 	assert_true(lost, "a ghosted teammate contains nothing")
 

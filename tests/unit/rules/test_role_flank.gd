@@ -9,7 +9,7 @@ const OUR_NET_Z: float = 26.65
 
 # `home_mate` parks a teammate on our own goal line. It is ON by default because
 # the flank only holds its puck-side shape while somebody is HOME BEHIND IT
-# (AIRoleHelpers.home_layer_behind_me) — a flank that is the last man back is the
+# (AILastManDiscipline.home_layer_behind_me) — a flank that is the last man back is the
 # layer and takes the layer's stand instead, which is the whole point of that
 # read. So a fixture about the SHAPE has to say somebody else is home; without
 # one the only bot on the ice is trivially the last man and every case below
@@ -44,7 +44,7 @@ func _make_ctx(self_pos: Vector3, puck_pos: Vector3,
 
 
 # The same fixture with the LIVE transition read the brain hands production
-# dispatch. The last-man bound (AIRoleHelpers.neutral_station_target) needs real
+# dispatch. The last-man bound (AILastManDiscipline.neutral_station_target) needs real
 # perception — who is an attacker and who is behind the stand — and an unwired
 # read deliberately reports "nobody told me anything" and holds the geometry,
 # so a fixture that wants to exercise the bound has to supply it.

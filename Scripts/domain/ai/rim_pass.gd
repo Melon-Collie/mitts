@@ -183,8 +183,8 @@ static func path_length(k: int, t: float) -> float:
 		var t_i: float = float(i + 1) * STEP_DT
 		if t_i >= t:
 			var f: float = clampf((t - float(i) * STEP_DT) / STEP_DT, 0.0, 1.0)
-			return length + AIRoleHelpers.xz_distance(prev, path[i]) * f
-		length += AIRoleHelpers.xz_distance(prev, path[i])
+			return length + AIRoleReads.xz_distance(prev, path[i]) * f
+		length += AIRoleReads.xz_distance(prev, path[i])
 		prev = path[i]
 	return length
 
@@ -288,16 +288,16 @@ static func _keeper_time(k: int, keeper_pos: Vector3, ours: Array[Vector3]) -> f
 		if spd[i] < KEEPER_RIM_MIN_SPEED_M_S or spd[i] > KEEPER_RIM_MAX_SPEED_M_S:
 			continue
 		var t_out: float = GoalieBehaviorRules.travel_time_from_rest(
-				maxf(AIRoleHelpers.xz_distance(keeper_pos, p)
+				maxf(AIRoleReads.xz_distance(keeper_pos, p)
 						- AIGoalieModel.GOALIE_PUCK_PLAY_REACH_M, 0.0),
 				AIGoalieModel.GOALIE_PUCK_PLAY_SPEED_M_S,
 				AIGoalieModel.GOALIE_PUCK_PLAY_ACCEL_M_S2)
 		var t_i: float = float(i + 1) * STEP_DT
 		if t_out + KEEPER_SET_BEAT_S > t_i:
 			continue
-		var nearest: float = AIRoleHelpers.xz_distance(origin, p)
+		var nearest: float = AIRoleReads.xz_distance(origin, p)
 		for q: Vector3 in ours:
-			nearest = minf(nearest, AIRoleHelpers.xz_distance(q, p))
+			nearest = minf(nearest, AIRoleReads.xz_distance(q, p))
 		if nearest / KEEPER_PRESSURE_SPEED_M_S \
 				> 2.0 * t_out + KEEPER_STOP_BEAT_S + margin:
 			return t_i

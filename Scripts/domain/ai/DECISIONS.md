@@ -75,7 +75,7 @@ Doctrine: [The defensive verbs](CLAUDE.md#the-defensive-verbs),
 [The three facts a station reads](CLAUDE.md#the-three-facts-a-station-reads-and-the-one-that-stays-unread),
 [A pinch is priced on both halves](CLAUDE.md#a-pinch-is-priced-on-both-halves-and-its-cover-is-another-roles-read).
 Facts per slot (`[label, reactive, pressurer]`) live in `role_slots.gd:_SLOT_INFO`.
-Shared station bounds: `role_helpers.gd:offensive_station_target` (OST) /
+Shared station bounds: `last_man_discipline.gd:offensive_station_target` (OST) /
 `neutral_station_target` (NST) = `may_hold_forward_stand` + `numbers_floor` /
 `station_retreat_floor` + `pull_into_play`.
 
@@ -91,7 +91,7 @@ Shared station bounds: `role_helpers.gd:offensive_station_target` (OST) /
 | BREAKOUT_C (5: BO) | `breakout_center.gd:decide` | carrier, opps | low swing: mid vs circle lane by `lane_clear`; `arrive_at_speed` | no play ref → hold | **none** |
 | F2_MID · F3_HIGH (3: FC) | `forecheck.gd:decide` (`_decide_mid`, `_decide_high`) | carrier/puck, opp receivers | F2: minimise best breakout feed (`_max_pass_threat`); F3: `wall_rim_keepin` else OST as back layer | no play ref → hold | `test_role_forecheck.gd` |
 | F2_STRONG · F2_WEAK (5: FC) | `forecheck.gd:decide_f2` | as F2 | lane argmax; weak fills a pinch via `defenseman.gd:rotate_up_to_point` | hold | `test_role_forecheck.gd` |
-| CHASE (both: NEUTRAL) | `chase.gd:decide` → `role_helpers.gd:chase_puck` | `loose_puck_race_lost` | race (puck) or pre-contain `carrier_stand` on the puck | no puck → hold | `test_role_chase.gd` |
+| CHASE (both: NEUTRAL) | `chase.gd:decide` → `defensive_verbs.gd:chase_puck` | `loose_puck_race_lost` | race (puck) or pre-contain `carrier_stand` on the puck | no puck → hold | `test_role_chase.gd` |
 | FLANK_L/R (both: NEUTRAL) | `flank.gd:decide` | puck, home side | NST off a puck-side stand, layer = `zone_coverage.gd:defensive_anchor` | no puck → hold | `test_role_flank.gd` |
 | RUSH_D1 (both: TD) | `rush_d.gd:_decide_d1` | `rush_read` (numbers, backpressure, threat axis), approach, `plays_rush_pass_lanes` | ladder gap + ramp cushion, `should_gap_up`, `_settable_gap`, `carrier_stand`, odd-man `_lane_fan_target`, house clamp, ride, retreat floor | no puck → hold; on our net → carrier pos | `test_role_rush_d.gd`; *slow* `test_rush_gap_discipline.gd`, `test_defensive_routing.gd`, `test_nz_turnover_recovery.gd` |
 | RUSH_D2 (5: TD) | `rush_d.gd:_decide_d2` | `rush_read.attacker_leads` | `cover_threat` on the mid-lane man | mid-ice post behind D1 | `test_role_rush_d.gd` |
@@ -164,7 +164,7 @@ Functions in `skater_agent_state_machine.gd` unless named.
 | tag-up override | `_state_off_puck` → `_tag_up_anchor` | `snapshot.is_out_of_play(self)` | blue line | `test_world_snapshot_out_of_play.gd` |
 | off-puck blade priority | `_state_off_puck` | yank > jab > tie > one-timer aim > aim override > ready stance (`_ready_stance_aim`, `_compute_desired_aim_dir`, `_deflect_safe_aim_dir`) | decision, puck | `test_skater_agent_state_machine.gd` |
 | one-timer readiness preserve | `_state_off_puck`, `_set_one_timer_ready` | ready role through a pass flight (`ONE_TIMER_PRESERVE_MAX_TICKS`) | **real** carrier | `test_one_timer_chain.gd` |
-| → CHASE_PUCK | `_should_chase_loose_puck`, `_incoming_pass_to_me`, `_post_puck_lost_state` | real carrier none, `_loose_elapsed_s ≥` reaction delay; GET_PUCK; reach band (`loose_puck_chase.gd:puck_comes_to_reach`, `_teammate_first_to_puck`); election; not `role_helpers.gd:loose_puck_race_lost` | election, path | `test_skater_agent_state_machine.gd`, `test_loose_puck_chase.gd`; *slow* `test_loose_puck_engagement.gd` |
+| → CHASE_PUCK | `_should_chase_loose_puck`, `_incoming_pass_to_me`, `_post_puck_lost_state` | real carrier none, `_loose_elapsed_s ≥` reaction delay; GET_PUCK; reach band (`loose_puck_chase.gd:puck_comes_to_reach`, `_teammate_first_to_puck`); election; not `loose_puck_chase.gd:loose_puck_race_lost` | election, path | `test_skater_agent_state_machine.gd`, `test_loose_puck_chase.gd`; *slow* `test_loose_puck_engagement.gd` |
 | chase steering | `_state_chase_puck`, `_lead_intercept`, `_shade_intercept_goal_side` | chasing | contested 50/50 overshoot, blade-first route, rink clamp | `test_ai_chase_angling.gd`, `test_skater_agent_state_machine.gd` |
 | reception | `_try_shot_reception` (A: one-time, B: net-ward catch), `_pass_receive_aim_and_steer`, `_chase_reception_aim_target`, `_blade_gate_on_puck_line`, `_wall_kill_aim`; give-brake `RECEIVE_GIVE_CEILING_M_S` | fast loose puck toward me | `trajectory.gd` path, `score_shoot` ≥ `SHOT_RECEPTION_SCORE_GATE`, redirect angle / forehand / square-up | `test_skater_agent_state_machine.gd`, `test_one_timer_chain.gd`; *slow* `test_pass_reception_catch.gd` |
 | strip pull-back | `_update_engagement_cooldown` | puck just knocked loose near me | `ENGAGEMENT_*` | `test_skater_agent_state_machine.gd` |
@@ -183,7 +183,7 @@ Functions in `skater_agent_state_machine.gd` unless named.
 | hold a pin / pinned slide | `skater_agent_board_play.gd:apply`, `_pin_worth_holding`, `_last_back`, `_team_arrival_s`, `_pinner_mirror`, `_pinned_slide` | pin role ≠ NONE | `check_aggression`, `PIN_LAG_BUDGET_S` | `test_bot_board_play.gd`; *slow* `test_board_play.gd` |
 | carrier vs square checker | `skater_agent_board_play.gd:_answer_pin_threat` → `pin_threat_read.gd:answer` | carrying at the wall, committed checker ≤ `PIN_THREAT_RANGE_M` | `protects_the_puck` | `test_pin_threat_read.gd`, `test_bot_board_play.gd` |
 | shot block / 2-on-1 dive | `skater_agent_shot_block.gd:apply`, `_shot_coming`, `_dive_point`; `shot_block_read.gd` | opponent windup in our end on my line / numbers ≠ EVEN | `blocks_shots`; never while CARRY | `test_bot_shot_block.gd`, `test_shot_block_read.gd` |
-| body check commit | `role_helpers.gd:evaluate_body_check` → `body_check.gd:evaluate`; SM holds `hit_held` | PRESSURE / TRACK_PUCK | `check_aggression`, own weight/transfer | `test_body_check.gd`, `test_role_pressure.gd` |
+| body check commit | `defensive_verbs.gd:evaluate_body_check` → `body_check.gd:evaluate`; SM holds `hit_held` | PRESSURE / TRACK_PUCK | `check_aggression`, own weight/transfer | `test_body_check.gd`, `test_role_pressure.gd` |
 | dispatch throttle | `dispatch` (skip counter, live re-aim on skipped ticks, far-play ×2), `_stagger_cadence_phases` | non-press states | `dispatch_period_ticks` | `test_skater_agent_state_machine.gd`; `benchmarks/` |
 | role-argmax throttle | `_state_off_puck` (`must_recompute`, `_is_reactive_slot`) | OFF_PUCK | `ROLE_DECISION_PERIOD_TICKS`, `FAR_PLAY_LOD_RADIUS_M`, `FINISHER_FLIGHT_NEAR_M` | `test_skater_agent_state_machine.gd` |
 
@@ -205,8 +205,8 @@ Plumbing: `skater_agent_state_machine.gd:apply_profile` → SM field → (roles)
 | `settle_penalty_frac` / `_tau_s` | precision | 0.85, 0.55 / 0.60, 0.30 / 0.0, 0.25 | `carrier.gd:_settle_penalty` → `_pick_commit_phase` bars |
 | `pursuit_standoff_m` | pace (space) | 3.0 / 0.75 / 0.0 | `pressure.gd:decide` |
 | `pass_speed_scale` | pace | 0.75 / 0.85 / 1.0 | `carrier_pass_search.gd:search`, `_pick_commit_phase`, `carrier_field.gd:pass_option_from`, `carrier_pass_search.gd:developing_feed_value`, `carrier_pass_search.gd:_developing_outlet_feed` |
-| `check_aggression` | pace (threat) | 0.0 / 0.65 / 1.0 | `role_helpers.gd:evaluate_body_check`; `skater_agent_board_play.gd:apply` |
-| `defensive_anticipation_scale` | pace (space) | 0.2 / 0.6 / 1.0 | `role_helpers.gd:collect_opp_team_excluding_carrier`, `collect_opponents` |
+| `check_aggression` | pace (threat) | 0.0 / 0.65 / 1.0 | `defensive_verbs.gd:evaluate_body_check`; `skater_agent_board_play.gd:apply` |
+| `defensive_anticipation_scale` | pace (space) | 0.2 / 0.6 / 1.0 | `role_reads.gd:collect_opp_team_excluding_carrier`, `collect_opponents` |
 | `reads_goalie_motion` | cognition | F / T / T | `_shot_aim_point`; `carrier_field.gd:goalie_unsettled_at`, `carrier_carry_search.gd:_score_move_candidate_base` |
 | `holds_for_developing_feeds` | cognition | F / T / T | `carrier_pass_search.gd:developing_feed_value` |
 | `reads_receiver_commitment` | cognition | F / T / T | `carrier_pass_search.gd:search` (ω = 0 when off) |
@@ -227,9 +227,9 @@ Hand-picked by design ([Evaluators model perception, never feel](CLAUDE.md#evalu
 
 - **Election targets** — `role_slots_5v5.gd`: `_POINT_INSET_M` … `_TRACK_MID_SPLIT_M`, plus inline literals in `_specs_for_state` / `_breakout_post_specs` (TRAILER `6.0`, ZONE_D_WEAK `1.0`, ZONE_C `1.5`, BREAKOUT_STRONG `half_w − 2.0`, BREAKOUT_D2 `1.0`).
 - **Zone anchors** — `zone_coverage.gd`: `*_REST_*`, `W_*`, `BREATHE_*`, `D_HOME_U_M`, `F_HOME_DEPTH_INTO_NZ_M`, `SHOT_LANE_STEP_M`.
-- **Role staging** — `finisher.gd` (`WEAK_SIDE_BIAS_M`, `RUSH_*`, `TIP_STATION_DIST_M`); `support.gd` (`SEARCH_RADIUS_M`, `HIGH_POST_INSET_M`, `GOAL_SIDE_TOLERANCE_M`); `outlet.gd` (`BLUE_LINE_BUFFER_M`, `WEAK_SIDE_INSET_M`, `RUSH_*`, `PACE_TOLERANCE_M`, `BLOCKED_LANE_FLOOR`); `breakout.gd` (`WALL_*`, `STRONG_*`, `MID_SEAM_FRACTION`, `BLOCKED_LANE_FLOOR`); `breakout_center.gd`; `wide_lane.gd`; `high_slot.gd` (`BAND_*`); `flank.gd`; `forecheck.gd` (`F3_WALL_INSET_M`, `F2_*`); `defenseman.gd` (`POINT_*`, `DP_*`, `DVALVE_*`, `DBACK_*`, `RIM_KEEPIN_WALL_INSET_M`, `PINCH_MAX_DEPTH_M`); `track.gd` (`MID_LANE_SPLIT_M`, `CIRCLE_TOP_INSET_M`, `HIP_GOAL_SIDE_M`); `rush_d.gd` (`GAP_*_STICKS`, `D2_*`, `RUSH_LANE_FAN_FRACTIONS`, `LANE_PLAY_DANGER_BAR`); `role_helpers.gd` (`ANGLE_INSIDE_M`, `BEHIND_HOLD_EXTRA_M`, `PLAY_CONNECTION_FLIGHT_S`, `DEFENSIVE_ANTICIPATION_*`).
-- **Stability margins** — `role_slots.gd:HYSTERESIS_PENALTY_S/_M`; `role_slots_5v5.gd:POSITION_BIAS_S`; `team_brain.gd:STRONG_SIDE_HYSTERESIS_M`; `possession_state.gd:COVERAGE_HOLD_TICKS`; `rush_read.gd:TRACK_*_MARGIN_S`; `threat_assignment.gd:HYSTERESIS_MARGIN_FRAC`; `zone_coverage.gd:AREA_RELEASE_MARGIN_M`; `loose_puck_chase.gd:HYSTERESIS_S`; `role_helpers.gd:TARGET_SWITCH_MARGIN`; `action_scoring.gd:ACTION_HYSTERESIS_MARGIN_FRAC`; SM `FACE_*_HYSTERESIS_M`, `CARRY_MAN_TO_BEAT_HYSTERESIS_M`.
-- **Cadence / search budget** — `team_brain.gd:TICK_PERIOD`; SM `DISPATCH_PERIOD_TICKS`, `ROLE_DECISION_PERIOD_TICKS`, `FAR_PLAY_LOD_RADIUS_M`, `FINISHER_FLIGHT_NEAR_M`; `carrier.gd:PICK_ACTION_PERIOD_TICKS`, `OPEN_ICE_LOD_*`, `CARRY_BEAM_WIDTH`, `EXPOSURE_PROB_FLOOR`; `role_helpers.gd:SEARCH_STEP_M`, `POLAR_ANGLES`, `STATION_ARGMAX_LOD_M`, `ANTI_CROWD_RADIUS_M`.
+- **Role staging** — `finisher.gd` (`WEAK_SIDE_BIAS_M`, `RUSH_*`, `TIP_STATION_DIST_M`); `support.gd` (`SEARCH_RADIUS_M`, `HIGH_POST_INSET_M`, `GOAL_SIDE_TOLERANCE_M`); `outlet.gd` (`BLUE_LINE_BUFFER_M`, `WEAK_SIDE_INSET_M`, `RUSH_*`, `PACE_TOLERANCE_M`, `BLOCKED_LANE_FLOOR`); `breakout.gd` (`WALL_*`, `STRONG_*`, `MID_SEAM_FRACTION`, `BLOCKED_LANE_FLOOR`); `breakout_center.gd`; `wide_lane.gd`; `high_slot.gd` (`BAND_*`); `flank.gd`; `forecheck.gd` (`F3_WALL_INSET_M`, `F2_*`); `defenseman.gd` (`POINT_*`, `DP_*`, `DVALVE_*`, `DBACK_*`, `RIM_KEEPIN_WALL_INSET_M`, `PINCH_MAX_DEPTH_M`); `track.gd` (`MID_LANE_SPLIT_M`, `CIRCLE_TOP_INSET_M`, `HIP_GOAL_SIDE_M`); `rush_d.gd` (`GAP_*_STICKS`, `D2_*`, `RUSH_LANE_FAN_FRACTIONS`, `LANE_PLAY_DANGER_BAR`); `defensive_verbs.gd` (`ANGLE_INSIDE_M`), `last_man_discipline.gd` (`BEHIND_HOLD_EXTRA_M`, `PLAY_CONNECTION_FLIGHT_S`), `role_reads.gd` (`DEFENSIVE_ANTICIPATION_*`).
+- **Stability margins** — `role_slots.gd:HYSTERESIS_PENALTY_S/_M`; `role_slots_5v5.gd:POSITION_BIAS_S`; `team_brain.gd:STRONG_SIDE_HYSTERESIS_M`; `possession_state.gd:COVERAGE_HOLD_TICKS`; `rush_read.gd:TRACK_*_MARGIN_S`; `threat_assignment.gd:HYSTERESIS_MARGIN_FRAC`; `zone_coverage.gd:AREA_RELEASE_MARGIN_M`; `loose_puck_chase.gd:HYSTERESIS_S`; `station_search.gd:TARGET_SWITCH_MARGIN`; `action_scoring.gd:ACTION_HYSTERESIS_MARGIN_FRAC`; SM `FACE_*_HYSTERESIS_M`, `CARRY_MAN_TO_BEAT_HYSTERESIS_M`.
+- **Cadence / search budget** — `team_brain.gd:TICK_PERIOD`; SM `DISPATCH_PERIOD_TICKS`, `ROLE_DECISION_PERIOD_TICKS`, `FAR_PLAY_LOD_RADIUS_M`, `FINISHER_FLIGHT_NEAR_M`; `carrier.gd:PICK_ACTION_PERIOD_TICKS`, `OPEN_ICE_LOD_*`, `CARRY_BEAM_WIDTH`, `EXPOSURE_PROB_FLOOR`; `station_search.gd:SEARCH_STEP_M`, `POLAR_ANGLES`, `STATION_ARGMAX_LOD_M`, `ANTI_CROWD_RADIUS_M`.
 - **Carrier tactics** — `carrier.gd`: `PING_*_EV_MULT`, `FORWARD_PRESSURE_*`, `PASS_OPTION_DISCOUNT`, `RIM_SOFT_SHARE`, `EXPOSURE_APPETITE_*`, `RECEIVER_DRIVE_*`, `OUTLET_DEVELOP_*`, `CARRY_FIELD_*`, `CARRY_PLAN_BEAT_S`, `CARRY_EXIT_*`, `WHEEL_*`, `WALKOUT_*`, `DEKE_ENGAGE_RANGE_M`, `DEKE_CONTAIN_MAX_CLOSING_M_S`, `PASS_LEAD_MAX_S`, `DUMP_AIM_STANDOFF_M`.
 - **Execution windows** — SM: `ONE_TIME_*`, `ONE_TIMER_*`, `BOT_WRISTER_*`, `INTENT_MAX_WAIT_TICKS`, `ENGAGEMENT_*`, `RECEIVE_*`, `STICKHANDLE_*`, `CARRY_PROTECT_*`, `CARRY_BEHIND_NET_*`, `PROTECT_TURN_*`, `OWN_NET_BLADE_DISCIPLINE_M`, `READY_STANCE_AIM_FORWARD_M`, `FACE_THREAT_*`; `skater_agent_poke_evade.gd` `POKE_EVADE_*`, `DEKE_*`; `skater_agent_stick_play.gd` `POKE_JAB_*`, `STICK_LIFT_HOLD_TICKS`; `skater_agent_board_play.gd` `PIN_*`; `skater_agent_steering.gd:SHOT_LANE_LEAD_TIME_S`; `bot_mechanics.gd`.
 - **Steering field** — `steering.gd`: `*_REPEL_*`, `NET_DETOUR_*`, `ANCHOR_DEADBAND`, `BRAKE_PIVOT_*`, `STANCE_*`, `ARRIVAL_BRAKE_*`, `OFFSIDE_BRAKE_*`.
@@ -239,7 +239,7 @@ Hand-picked by design ([Evaluators model perception, never feel](CLAUDE.md#evalu
 
 ## 8. Adding a bot feature — checklist
 
-Ratchet first: `skater_agent_state_machine.gd` (4255), `action_scoring.gd` (2026 / 36 public), `role_helpers.gd` (1097 / 48 public), `carry_space.gd` (1065) and `carrier.gd` (1031) sit at their `test_no_god_class_growth.gd` caps — any growth there is an extraction or a deliberate bump.
+Ratchet first: `skater_agent_state_machine.gd` (4255), `action_scoring.gd` (2026 / 36 public), `carry_space.gd` (1065) and `carrier.gd` (1031) sit at their `test_no_god_class_growth.gd` caps — any growth there is an extraction or a deliberate bump.
 
 **New carrier action**
 1. Model it in a leaf or one evaluator (`action_scoring.gd` / `carry_space.gd`), never both directions (`test_scoring_split_stays_acyclic.gd`); calibration test in `test_ai_action_scoring.gd`.
@@ -250,7 +250,7 @@ Ratchet first: `skater_agent_state_machine.gd` (4255), `action_scoring.gd` (2026
 6. Tests: `test_role_carrier.gd` (outcomes that are tuning go in its snapshot), `test_skater_agent_state_machine.gd`.
 
 **New role (behaviour for a slot)**
-1. `role_behaviors/<role>.gd` with `static func decide(ctx: RoleContext) -> RoleDecision`; compose `cover_threat` / `read_carrier_approach` + `carrier_stand` / `chase_puck`; stations through OST / NST; publish `target_velocity` only for a real stand.
+1. `role_behaviors/<role>.gd` with `static func decide(ctx: RoleContext) -> RoleDecision`, composed from the shared blocks: the verbs in `defensive_verbs.gd` (`cover_threat`, `read_carrier_approach` + `carrier_stand`, `chase_puck`, `carrier_best_option`), stations through `last_man_discipline.gd` (`offensive_station_target` / `neutral_station_target`), the candidate argmax through `station_search.gd` (`generate_candidates_around`, `incumbent_bonus`), context through `role_reads.gd`; publish `target_velocity` only for a real stand.
 2. New input → `RoleContext` var + stamp it in `_build_role_context` (every build, both brain/no-brain branches). New output → `RoleDecision` var + consumer in `_state_off_puck`.
 3. No `Scripts/ai/` class names in domain (`test_bot_domain_does_not_reach_up.gd`); no allocation per call beyond the existing `RoleDecision`.
 4. Test: `tests/unit/rules/test_role_<role>.gd`.

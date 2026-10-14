@@ -15,21 +15,21 @@ class_name AIRoleMark
 static func decide(ctx: RoleContext) -> RoleDecision:
 	var d := RoleDecision.new()
 
-	if AIRoleHelpers.cover_threat(ctx, d, ctx.assigned_threat_peer,
-			AIRoleHelpers.resolve_defensive_play_ref(ctx)):
+	if AIDefensiveVerbs.cover_threat(ctx, d, ctx.assigned_threat_peer,
+			AIRoleReads.resolve_defensive_play_ref(ctx)):
 		return d
 
 	var opp_positions: Array[Vector3] = ctx.scratch_opp_positions
 	var opp_states: Array[SkaterNetworkState] = ctx.scratch_opp_states
-	AIRoleHelpers.collect_opponents(ctx, opp_positions, opp_states, true)
+	AIRoleReads.collect_opponents(ctx, opp_positions, opp_states, true)
 	if opp_positions.is_empty():
 		d.target_position = ctx.self_pos
 		return d
 
 	var our_net: Vector3 = ctx.defending_goal_pos
-	var our_goalie_pos: Vector3 = AIRoleHelpers.resolve_our_goalie_pos(ctx)
+	var our_goalie_pos: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 	var our_team_excluding_self: Array[Vector3] = ctx.scratch_teammates
-	AIRoleHelpers.collect_teammates_excluding_self(ctx, our_team_excluding_self)
+	AIRoleReads.collect_teammates_excluding_self(ctx, our_team_excluding_self)
 
 	# The puck/net midpoint: toward our blue line with the puck out, the slot with
 	# it deep — no per-state branch. The slot when there is no puck state.
@@ -42,7 +42,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 				0.0,
 				our_net.z - ctx.own_goal_dir * GameRules.SLOT_DIST_M)
 	# Per-opp threat upper bounds for _max_shot_threat's early-out (see
-	# AIRoleHelpers.carrier_option_bases). TeamBrain's memo supplies them when it
+	# AIDefensiveVerbs.carrier_option_bases). TeamBrain's memo supplies them when it
 	# published: APPROXIMATE (full-team defender set, raw positions, up to a brain
 	# tick stale), the accepted price of not paying these per marker. An empty
 	# memo computes exactly.
@@ -61,7 +61,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 
 	# Far from the recovery region, skate at the cover anchor on the biggest base
 	# threat (STATION_ARGMAX_LOD_M).
-	if not AIRoleHelpers.station_needs_refinement(ctx.self_pos, search_center):
+	if not AIStationSearch.station_needs_refinement(ctx.self_pos, search_center):
 		var worst: int = 0
 		for i: int in bases.size():
 			if bases[i] > bases[worst]:
@@ -70,23 +70,23 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 				opp_positions[worst], our_net)
 		return d
 
-	var candidates: Array[Vector3] = AIRoleHelpers.generate_candidates_around(
+	var candidates: Array[Vector3] = AIStationSearch.generate_candidates_around(
 			ctx.self_pos, search_center)
-	AIRoleHelpers.append_incumbent(ctx, candidates)
+	AIStationSearch.append_incumbent(ctx, candidates)
 
 	var best_pos: Vector3 = ctx.self_pos
 	var best_score: float = -INF
 	for c: Vector3 in candidates:
-		if not AIRoleHelpers.is_legal_position(c):
+		if not AIStationSearch.is_legal_position(c):
 			continue
-		if AIRoleHelpers.too_close_to_teammate(c, our_team_excluding_self):
+		if AIStationSearch.too_close_to_teammate(c, our_team_excluding_self):
 			continue
 
 		var mark_score: float = -_max_shot_threat(
 				c, opp_positions, our_net, our_goalie_pos,
 				our_team_excluding_self, bases, ctx.scratch_teammate_caps,
 				ctx.caps_by_peer.get(ctx.peer_id)) \
-				+ AIRoleHelpers.incumbent_bonus(ctx, c)
+				+ AIStationSearch.incumbent_bonus(ctx, c)
 		if mark_score > best_score:
 			best_score = mark_score
 			best_pos = c
@@ -110,7 +110,7 @@ static func _max_shot_threat(
 		our_team_caps: Array = [],
 		self_caps: AISkaterCaps = null) -> float:
 	# Same in-place defender push/pop and caps contract as
-	# AIRoleHelpers.carrier_best_option.
+	# AIDefensiveVerbs.carrier_best_option.
 	var caps_matched: bool = our_team_caps.size() == our_team_excluding_self.size()
 	our_team_excluding_self.push_back(candidate)
 	if caps_matched:

@@ -73,7 +73,7 @@ func test_clean_possession_holds_the_line() -> void:
 	var ctx: RoleContext = _ctx(stand,
 			[[2, Vector3(8.0, 0.0, -22.0)]],
 			[[10, Vector3(-6.0, 0.0, -20.0)], [11, Vector3(0.0, 0.0, -14.0)]], 2)
-	var t: Vector3 = AIRoleHelpers.offensive_station_target(ctx, stand, false)
+	var t: Vector3 = AILastManDiscipline.offensive_station_target(ctx, stand, false)
 	assert_almost_eq(t.z, stand.z, 0.5,
 			"clean control holds the offensive blue line; got %s" % t)
 
@@ -92,7 +92,7 @@ func test_contested_control_alone_does_not_send_a_station_home() -> void:
 	assert_lt(ctx.rush_read.pressure_eta_s, 0.6,
 			"scenario check: the carrier is genuinely pressured; got %.2f s"
 			% ctx.rush_read.pressure_eta_s)
-	var t: Vector3 = AIRoleHelpers.offensive_station_target(ctx, stand, false)
+	var t: Vector3 = AILastManDiscipline.offensive_station_target(ctx, stand, false)
 	assert_almost_eq(t.z, stand.z, 0.5,
 			"pressure with nobody behind us does not vacate the stand; got %s" % t)
 
@@ -109,8 +109,8 @@ func test_support_behind_lets_the_pinch_stand() -> void:
 				[2, Vector3(8.0, 0.0, -22.0)],
 				[3, Vector3(0.0, 0.0, 6.0)],       # F3 high, behind the stand
 			], lurker, 2)
-	var t_alone: Vector3 = AIRoleHelpers.offensive_station_target(alone, stand, false)
-	var t_backed: Vector3 = AIRoleHelpers.offensive_station_target(backed, stand, false)
+	var t_alone: Vector3 = AILastManDiscipline.offensive_station_target(alone, stand, false)
+	var t_backed: Vector3 = AILastManDiscipline.offensive_station_target(backed, stand, false)
 	assert_gt(t_alone.z, stand.z, "unsupported, the lurker pulls the point back")
 	assert_almost_eq(t_backed.z, stand.z, 0.5,
 			"with support behind, the pinch holds; got %s" % t_backed)
@@ -130,7 +130,7 @@ func test_retreat_stops_at_the_numbers_layer_not_at_home() -> void:
 	var ctx: RoleContext = _ctx(stand,
 			[[2, Vector3(8.0, 0.0, -22.0)]],
 			[[10, lurker, lurker_vel]], 2)
-	var t: Vector3 = AIRoleHelpers.offensive_station_target(ctx, stand, false)
+	var t: Vector3 = AILastManDiscipline.offensive_station_target(ctx, stand, false)
 	var net := Vector3(0.0, 0.0, OUR_NET_Z)
 	# Compare against where he is as this station has to RACE him — his ice
 	# less the head start he gains while it builds to his pace — because that
@@ -140,7 +140,7 @@ func test_retreat_stops_at_the_numbers_layer_not_at_home() -> void:
 			"the station does retreat toward home")
 	assert_gt(t.distance_to(net), layer_d - 4.0,
 			"but stops at the numbers layer, not deeper; got %s" % t)
-	var home: Vector3 = AIRoleHelpers.station_retreat_floor(ctx, stand)
+	var home: Vector3 = AILastManDiscipline.station_retreat_floor(ctx, stand)
 	assert_gt(t.distance_to(net), home.distance_to(net) + 4.0,
 			"and nowhere near the old home-post floor; got %s vs home %s" % [t, home])
 
@@ -153,7 +153,7 @@ func test_a_body_level_with_the_point_is_not_behind_him() -> void:
 	var ctx: RoleContext = _ctx(stand,
 			[[2, Vector3(8.0, 0.0, -22.0)]],
 			[[10, Vector3(5.0, 0.0, -9.0)]], 2)   # covering the point, level
-	var t: Vector3 = AIRoleHelpers.offensive_station_target(ctx, stand, false)
+	var t: Vector3 = AILastManDiscipline.offensive_station_target(ctx, stand, false)
 	assert_almost_eq(t.z, stand.z, 0.5,
 			"puckless coverage level with the point does not move him; got %s" % t)
 
@@ -165,7 +165,7 @@ func test_an_offside_lurker_is_not_a_threat() -> void:
 	var ctx: RoleContext = _ctx(stand,
 			[[2, Vector3(8.0, 0.0, -22.0)]],
 			[[10, Vector3(0.0, 0.0, 14.0), Vector3(0.0, 0.0, 7.0)]], 2)
-	var t: Vector3 = AIRoleHelpers.offensive_station_target(ctx, stand, false)
+	var t: Vector3 = AILastManDiscipline.offensive_station_target(ctx, stand, false)
 	assert_almost_eq(t.z, stand.z, 0.5,
 			"an illegally-positioned lurker is not a counter threat; got %s" % t)
 
@@ -180,7 +180,7 @@ func test_a_station_out_of_feed_range_is_pulled_into_the_play() -> void:
 	var ctx: RoleContext = _ctx(far_stand,
 			[[2, Vector3(0.0, 0.0, -22.0)]],
 			[[10, Vector3(-6.0, 0.0, -20.0)]], 2)
-	var t: Vector3 = AIRoleHelpers.offensive_station_target(ctx, far_stand, true)
+	var t: Vector3 = AILastManDiscipline.offensive_station_target(ctx, far_stand, true)
 	var puck := Vector3(0.0, 0.0, -22.0)
 	assert_lt(t.distance_to(puck), far_stand.distance_to(puck),
 			"a station outside feed range is pulled toward the play; got %s" % t)
@@ -194,7 +194,7 @@ func test_the_leash_does_not_undo_a_legitimate_retreat() -> void:
 	var ctx: RoleContext = _ctx(stand,
 			[[2, Vector3(8.0, 0.0, -22.0)]],
 			[[10, lurker, Vector3(0.0, 0.0, 7.0)]], 2)
-	var t: Vector3 = AIRoleHelpers.offensive_station_target(ctx, stand, false)
+	var t: Vector3 = AILastManDiscipline.offensive_station_target(ctx, stand, false)
 	var net := Vector3(0.0, 0.0, OUR_NET_Z)
 	assert_lt(t.distance_to(net), lurker.distance_to(net) + 4.0,
 			"the retreat reaches the lurker's layer, unclamped; got %s" % t)
@@ -211,7 +211,7 @@ func test_a_bottled_opponent_does_not_trigger_a_retreat() -> void:
 			[[10, Vector3(4.0, 0.0, -24.0)]], 10)
 	assert_eq(ctx.rush_read.mode, AIRushRead.Mode.REGROUP,
 			"scenario check: a still carrier deep in his end is not a rush")
-	var t: Vector3 = AIRoleHelpers.offensive_station_target(ctx, stand, true)
+	var t: Vector3 = AILastManDiscipline.offensive_station_target(ctx, stand, true)
 	assert_almost_eq(t.z, stand.z, 0.5,
 			"a bottled carrier is exactly who you pinch on; got %s" % t)
 
@@ -224,7 +224,7 @@ func test_a_breakout_at_pace_releases_the_stand() -> void:
 			[[10, Vector3(2.0, 0.0, -14.0), Vector3(0.0, 0.0, 7.0)]], 10)
 	assert_eq(ctx.rush_read.mode, AIRushRead.Mode.RUSH,
 			"scenario check: the carrier is exiting at pace")
-	var t: Vector3 = AIRoleHelpers.offensive_station_target(ctx, stand, true)
+	var t: Vector3 = AILastManDiscipline.offensive_station_target(ctx, stand, true)
 	assert_gt(t.z, stand.z, "the stand is released; got %s" % t)
 
 
@@ -254,7 +254,7 @@ func test_unwired_read_holds_the_shape() -> void:
 	ctx.defending_goal_pos = Vector3(0.0, 0.0, OUR_NET_Z)
 	ctx.own_goal_dir = 1.0
 	assert_false(ctx.rush_read.is_live)
-	assert_eq(AIRoleHelpers.offensive_station_target(ctx, stand, false), stand)
+	assert_eq(AILastManDiscipline.offensive_station_target(ctx, stand, false), stand)
 
 
 # ── Who is the back layer ────────────────────────────────────────────────────
@@ -267,8 +267,8 @@ func test_a_lone_back_layer_retreats_to_the_defenseman_post() -> void:
 	var stand := Vector3(9.0, 0.0, OPP_BLUE_Z)
 	var ctx: RoleContext = _ctx(stand, [], [[10, Vector3(0.0, 0.0, -20.0),
 			Vector3(0.0, 0.0, 7.0)]], 10, false)
-	var as_forward: Vector3 = AIRoleHelpers.station_retreat_floor(ctx, stand)
-	var as_back: Vector3 = AIRoleHelpers.station_retreat_floor(ctx, stand, true)
+	var as_forward: Vector3 = AILastManDiscipline.station_retreat_floor(ctx, stand)
+	var as_back: Vector3 = AILastManDiscipline.station_retreat_floor(ctx, stand, true)
 	var net := Vector3(0.0, 0.0, OUR_NET_Z)
 	assert_lt(as_back.distance_to(net), as_forward.distance_to(net) - 2.0,
 			"the back layer floors deeper than a forward; back=%s fwd=%s"
@@ -288,9 +288,9 @@ func test_the_high_slot_holds_while_two_points_are_behind_it() -> void:
 				[3, Vector3(6.7, 0.0, -9.29)],       # strong point
 				[4, Vector3(-3.0, 0.0, -9.29)],      # weak point
 			], [[10, Vector3(0.0, 0.0, 2.0), Vector3(0.0, 0.0, 7.0)]], 2, false)
-	assert_true(AIRoleHelpers.has_support_behind(ctx),
+	assert_true(AILastManDiscipline.has_support_behind(ctx),
 			"scenario check: the points are genuinely behind the high slot")
-	var t: Vector3 = AIRoleHelpers.offensive_station_target(ctx, hs_stand, true)
+	var t: Vector3 = AILastManDiscipline.offensive_station_target(ctx, hs_stand, true)
 	assert_almost_eq(t.z, hs_stand.z, 0.5,
 			"with two points home the high slot keeps attacking; got %s" % t)
 
@@ -305,8 +305,8 @@ func test_the_high_slot_does_back_off_once_both_points_activate() -> void:
 				[3, Vector3(7.0, 0.0, -21.0)],       # point activated deep
 				[4, Vector3(-6.0, 0.0, -20.0)],      # point activated deep
 			], [[10, Vector3(0.0, 0.0, 2.0), Vector3(0.0, 0.0, 7.0)]], 2, false)
-	assert_false(AIRoleHelpers.has_support_behind(ctx),
+	assert_false(AILastManDiscipline.has_support_behind(ctx),
 			"scenario check: nobody is behind the high slot now")
-	var t: Vector3 = AIRoleHelpers.offensive_station_target(ctx, hs_stand, true)
+	var t: Vector3 = AILastManDiscipline.offensive_station_target(ctx, hs_stand, true)
 	assert_gt(t.z, hs_stand.z,
 			"as the rearmost body it does back off; got %s" % t)

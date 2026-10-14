@@ -36,7 +36,7 @@ var threat_shoot_base_by_opp: Dictionary[int, float] = {}
 # attackers).
 var rush_read: AIRushRead = TeamStrategyView.new().get_rush_read()
 # Last dispatch's RoleDecision.held_forward_stand — the incumbent side of
-# AIRoleHelpers.may_hold_forward_stand's hysteresis. False across a slot change.
+# AILastManDiscipline.may_hold_forward_stand's hysteresis. False across a slot change.
 var prev_held_forward_stand: bool = false
 # Peer -> team_id, live dict owned by PlayerRegistry; read with
 # `get(pid, -1)`. A Dictionary rather than a resolver Callable because roles
@@ -83,7 +83,7 @@ var self_loft_tans: Vector3 = Vector3(
 		GameRules.DEFAULT_LOFT_TAN_LOW,
 		GameRules.DEFAULT_LOFT_TAN_MID,
 		GameRules.DEFAULT_LOFT_TAN_HIGH)
-# Body-check delivery and current stagger, for AIRoleHelpers.evaluate_body_check.
+# Body-check delivery and current stagger, for AIDefensiveVerbs.evaluate_body_check.
 var self_weight: float = 1.0
 var self_body_check_transfer: float = 0.45
 var self_stagger_timer: float = 0.0
@@ -115,7 +115,7 @@ var pursuit_standoff_m: float = 0.0
 var pass_speed_scale: float = 1.0
 # How hard the on-puck pressurer hunts body checks: 1 = full, 0 = never commits.
 var check_aggression: float = 1.0
-# Multiplier on AIRoleHelpers.DEFENSIVE_ANTICIPATION_S (lead_threat). Never
+# Multiplier on AIRoleReads.DEFENSIVE_ANTICIPATION_S (lead_threat). Never
 # moves a stand.
 var defensive_anticipation_scale: float = 1.0
 # Settle doubt: the fraction a fresh carrier raises every active option's
@@ -157,7 +157,7 @@ var dispatch_period_ticks: int = 1
 
 # Last dispatch's target_position, or Vector3.INF on the first dispatch and
 # across a slot change (no role inherits another's target). The incumbent for
-# argmax switch-hysteresis (AIRoleHelpers.append_incumbent / incumbent_bonus).
+# argmax switch-hysteresis (AIStationSearch.append_incumbent / incumbent_bonus).
 var prev_role_target: Vector3 = Vector3.INF
 
 # NHL only: an untouched release from behind the red line that reaches their
@@ -190,7 +190,7 @@ var scratch_teammates: Array[Vector3] = []
 # Index-matched to scratch_teammates; entries may be null.
 var scratch_teammate_caps: Array[AISkaterCaps] = []
 var scratch_opp_receivers: Array[Vector3] = []
-# Option-value upper bounds (AIRoleHelpers.carrier_option_bases).
+# Option-value upper bounds (AIDefensiveVerbs.carrier_option_bases).
 var scratch_option_bases: Array[float] = []
-# AIRoleHelpers.read_carrier_approach's output.
+# AIDefensiveVerbs.read_carrier_approach's output.
 var scratch_carrier_approach := AICarrierApproach.new()

@@ -3,7 +3,7 @@ extends RefCounted
 
 # What a defender who owns the carrier knows about him — one read shared by every
 # role that closes a carrier, so their degenerate-case guards cannot drift apart.
-# Filled in place by AIRoleHelpers.read_carrier_approach / fill_approach.
+# Filled in place by AIDefensiveVerbs.read_carrier_approach / fill_approach.
 
 # His REAL body, never a velocity-led point: the stand rides him, so a lead
 # double-counts his motion.

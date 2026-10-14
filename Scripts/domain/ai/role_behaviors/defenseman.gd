@@ -13,8 +13,8 @@ class_name AIRoleDefenseman
 #   NEUTRAL back pair (DBACK_L / DBACK_R) — goal-side at our blue line inside
 #     the dots, shading with the puck.
 #
-# Every stand goes through the shared station read (AIRoleHelpers.
-# offensive_station_target / neutral_station_target).
+# Every stand goes through the shared station read
+# (AILastManDiscipline.offensive_station_target / neutral_station_target).
 #
 # THE ROTATION. While the strong-side D is deeper than any stand his slot takes,
 # the weak D slides to the middle of the line and a forward takes the vacated
@@ -111,9 +111,9 @@ static func _decide_point(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 
 	var opp_positions: Array[Vector3] = ctx.scratch_opp_positions
 	var opp_states: Array[SkaterNetworkState] = ctx.scratch_opp_states
-	AIRoleHelpers.collect_opponents(ctx, opp_positions, opp_states)
+	AIRoleReads.collect_opponents(ctx, opp_positions, opp_states)
 	var teammates: Array[Vector3] = ctx.scratch_teammates
-	AIRoleHelpers.collect_teammates_excluding_self(ctx, teammates)
+	AIRoleReads.collect_teammates_excluding_self(ctx, teammates)
 	# Puck depth off the ATTACKED goal line.
 	var puck_depth: float = INF
 	if ctx.snapshot != null and ctx.snapshot.puck_state != null:
@@ -133,21 +133,21 @@ static func _decide_point(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 		for row: int in (POINT_SINK_ROWS + 1 if allow_sink else 1):
 			var z: float = line_z - own_dir * (POINT_SINK_M * float(row))
 			var c := Vector3(side * u, 0.0, z)
-			if not AIRoleHelpers.is_legal_position(c):
+			if not AIStationSearch.is_legal_position(c):
 				continue
-			if AIRoleHelpers.too_close_to_teammate(c, teammates):
+			if AIStationSearch.too_close_to_teammate(c, teammates):
 				continue
 			# Walking the line: could I get my point shot through from here?
 			var lane: float = AIPuckLane.lane_clear(
 					c, opp_net, opp_positions, shot_speed,
 					AIActionScoring.EMPTY_VEC3, ctx.scratch_opp_caps)
-			var score: float = lane + AIRoleHelpers.incumbent_bonus(ctx, c)
+			var score: float = lane + AIStationSearch.incumbent_bonus(ctx, c)
 			if score > best_score:
 				best_score = score
 				best_pos = c
 	if best_score == -INF:
 		best_pos = base_stand
-	d.target_position = AIRoleHelpers.offensive_station_target(
+	d.target_position = AILastManDiscipline.offensive_station_target(
 			ctx, best_pos, ctx.prev_held_forward_stand)
 	d.held_forward_stand = d.target_position.distance_to(best_pos) < 0.5
 	return d
@@ -222,7 +222,7 @@ static func _decide_line_hold(ctx: RoleContext, lane_x: float,
 	elif _partner_vacated(ctx, AIRoleSlots.Slot.DP_STRONG):
 		# The rotation's weak-D half.
 		line_stand.x = 0.0
-	d.target_position = AIRoleHelpers.offensive_station_target(
+	d.target_position = AILastManDiscipline.offensive_station_target(
 			ctx, line_stand, ctx.prev_held_forward_stand)
 	d.held_forward_stand = d.target_position.distance_to(line_stand) < 0.5
 	return d
@@ -250,7 +250,7 @@ static func _wall_pinch(ctx: RoleContext, side: float,
 	var depth: float = _depth_inside_attacked_zone(ctx, cs.position)
 	if depth < 0.0 or depth > PINCH_MAX_DEPTH_M:
 		return null
-	if not AIRoleHelpers.may_hold_forward_stand(
+	if not AILastManDiscipline.may_hold_forward_stand(
 			ctx, ctx.prev_held_forward_stand, line_stand):
 		return null
 	var pinching: bool = ctx.prev_role_target.is_finite() \
@@ -278,9 +278,9 @@ static func _wall_pinch(ctx: RoleContext, side: float,
 static func _pinch_is_covered(ctx: RoleContext, line_stand: Vector3,
 		t_engage: float) -> bool:
 	var our_net: Vector3 = ctx.defending_goal_pos
-	var stand_d: float = AIRoleHelpers.xz_distance(line_stand, our_net)
+	var stand_d: float = AIRoleReads.xz_distance(line_stand, our_net)
 	for lead: Vector3 in ctx.rush_read.attacker_leads:
-		if AIRoleHelpers.xz_distance(lead, our_net) \
+		if AIRoleReads.xz_distance(lead, our_net) \
 				< stand_d - AIRushRead.cover_envelope_m():
 			return false
 	var partner: SkaterNetworkState = _slot_holder(ctx, AIRoleSlots.Slot.DP_WEAK)
@@ -301,11 +301,11 @@ static func _pinch_is_covered(ctx: RoleContext, line_stand: Vector3,
 static func rotate_up_to_point(ctx: RoleContext, strong_slot: int) -> RoleDecision:
 	var stand: Vector3 = strong_point_stand(ctx, strong_slot)
 	var covering: bool = ctx.prev_role_target.is_finite() \
-			and AIRoleHelpers.xz_distance(ctx.prev_role_target, stand) < ROTATION_HELD_M
+			and AIRoleReads.xz_distance(ctx.prev_role_target, stand) < ROTATION_HELD_M
 	if not strong_point_vacated(ctx, strong_slot, covering):
 		return null
 	var d := RoleDecision.new()
-	d.target_position = AIRoleHelpers.offensive_station_target(
+	d.target_position = AILastManDiscipline.offensive_station_target(
 			ctx, stand, ctx.prev_held_forward_stand, true)
 	d.held_forward_stand = d.target_position.distance_to(stand) < 0.5
 	return d
@@ -364,7 +364,7 @@ static func _depth_inside_attacked_zone(ctx: RoleContext, pos: Vector3) -> float
 static func _decide_valve(ctx: RoleContext) -> RoleDecision:
 	var d := RoleDecision.new()
 	var own_dir: float = ctx.own_goal_dir
-	var play_ref: Vector3 = AIRoleHelpers.resolve_offensive_play_ref(ctx)
+	var play_ref: Vector3 = AIRoleReads.resolve_offensive_play_ref(ctx)
 	if not play_ref.is_finite():
 		d.target_position = ctx.self_pos
 		return d
@@ -374,7 +374,7 @@ static func _decide_valve(ctx: RoleContext) -> RoleDecision:
 	var target := Vector3(0.0, 0.0, trail_z)
 	# The valve's whole job is never to be beaten home.
 	var valve_stand: Vector3 = target
-	target = AIRoleHelpers.offensive_station_target(
+	target = AILastManDiscipline.offensive_station_target(
 			ctx, valve_stand, ctx.prev_held_forward_stand)
 	d.held_forward_stand = target.distance_to(valve_stand) < 0.5
 	d.target_position = target
@@ -393,7 +393,7 @@ static func _decide_back(ctx: RoleContext, side: float) -> RoleDecision:
 		x += clampf(ctx.snapshot.puck_state.position.x * DBACK_PUCK_SHADE,
 				-DBACK_SHADE_MAX_M, DBACK_SHADE_MAX_M)
 	var stand := Vector3(x, 0.0, own_dir * GameRules.BLUE_LINE_Z)
-	d.target_position = AIRoleHelpers.neutral_station_target(
+	d.target_position = AILastManDiscipline.neutral_station_target(
 			ctx, stand, ctx.prev_held_forward_stand)
 	d.held_forward_stand = d.target_position.distance_to(stand) < 0.5
 	return d

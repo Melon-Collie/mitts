@@ -124,19 +124,19 @@ static func _last_shooter_is_elevated(ctx: RoleContext) -> bool:
 static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 	var d := RoleDecision.new()
 
-	var carrier_pos: Vector3 = AIRoleHelpers.resolve_teammate_carrier_pos(ctx)
+	var carrier_pos: Vector3 = AIRoleReads.resolve_teammate_carrier_pos(ctx)
 	if not carrier_pos.is_finite():
 		d.target_position = ctx.self_pos
 		return d
 
-	var goalie_pos: Vector3 = AIRoleHelpers.resolve_opp_goalie_pos(ctx)
+	var goalie_pos: Vector3 = AIRoleReads.resolve_opp_goalie_pos(ctx)
 
 	var opp_positions: Array[Vector3] = ctx.scratch_opp_positions
 	var opp_states: Array[SkaterNetworkState] = ctx.scratch_opp_states
-	AIRoleHelpers.collect_opponents(ctx, opp_positions, opp_states)
+	AIRoleReads.collect_opponents(ctx, opp_positions, opp_states)
 
 	var teammate_positions: Array[Vector3] = ctx.scratch_teammates
-	AIRoleHelpers.collect_teammates_excluding_self(ctx, teammate_positions)
+	AIRoleReads.collect_teammates_excluding_self(ctx, teammate_positions)
 
 	# 0 = set cycle (cross-seam staging), 1 = full rush (net-crash).
 	var rush: float = _rush_factor(ctx)
@@ -150,7 +150,7 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 			0.0,
 			ctx.attacking_goal_pos.z + ctx.own_goal_dir * stage_dist)
 	# Far from the station, skate at the calculated center (STATION_ARGMAX_LOD_M).
-	if not AIRoleHelpers.station_needs_refinement(ctx.self_pos, search_center):
+	if not AIStationSearch.station_needs_refinement(ctx.self_pos, search_center):
 		d.target_position = search_center
 		return d
 	# Named stations rather than a polar ring: one ring cannot span the backdoor
@@ -184,7 +184,7 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 		candidates.append(ctx.attacking_goal_pos
 				+ to_carrier * (TIP_STATION_DIST_M / to_carrier_len))
 	# Switch-hysteresis (the pre-aim cursor snaps to this target).
-	AIRoleHelpers.append_incumbent(ctx, candidates)
+	AIStationSearch.append_incumbent(ctx, candidates)
 
 	# The carrier's rip, for the tip term: his real wrister pace, released a
 	# handle-length toward the net.
@@ -209,9 +209,9 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 	# decision just made.
 	var depth_cap: float = stage_dist
 	for c: Vector3 in candidates:
-		if not AIRoleHelpers.is_legal_position(c):
+		if not AIStationSearch.is_legal_position(c):
 			continue
-		if AIRoleHelpers.too_close_to_teammate(c, teammate_positions):
+		if AIStationSearch.too_close_to_teammate(c, teammate_positions):
 			continue
 		if absf(c.z - goal_z) > depth_cap:
 			continue
@@ -227,7 +227,7 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 		# depth-capped against it (GoalieBehaviorRules.backdoor_depth_cap).
 		AIGoalieModel.resolve_feed_keeper(
 				goalie_pos, ctx.attacking_goal_pos, flight_t, c, carrier_pos,
-				AIRoleHelpers.opp_goalie_hands(ctx), pass_speed, opp_positions)
+				AIRoleReads.opp_goalie_hands(ctx), pass_speed, opp_positions)
 		var feed: float = AIActionScoring.score_pass(
 				carrier_pos, c, ctx.attacking_goal_pos,
 				AIGoalieModel.feed_keeper_pos, GameRules.NET_HALF_WIDTH,
@@ -240,7 +240,7 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 				carrier_shot_speed, ctx.scratch_opp_caps, self_caps)
 		# The better of the one-timer feed and the tip — max(), not sum: one puck,
 		# one outcome.
-		var score: float = maxf(feed, tip) + AIRoleHelpers.incumbent_bonus(ctx, c)
+		var score: float = maxf(feed, tip) + AIStationSearch.incumbent_bonus(ctx, c)
 		if score > best_score:
 			best_score = score
 			best_pos = c
@@ -248,7 +248,7 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 	d.target_position = best_pos
 	# No separate quality gate: a weak spot scores low for the carrier too. Half
 	# a search step — nearer the chosen station than any neighbour.
-	if ctx.self_pos.distance_to(best_pos) < AIRoleHelpers.SEARCH_STEP_M * 0.5:
+	if ctx.self_pos.distance_to(best_pos) < AIStationSearch.SEARCH_STEP_M * 0.5:
 		d.is_one_timer_ready = true
 	return d
 

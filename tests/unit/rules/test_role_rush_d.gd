@@ -174,7 +174,7 @@ func _cushion(up_ice_m_s: float) -> float:
 			[[10, 1, carrier, vel]], 10, AIRushRead.Numbers.DOWN_ONE)
 	ctx.self_velocity = Vector3(0.0, 0.0, -up_ice_m_s)
 	var ap := AICarrierApproach.new()
-	AIRoleHelpers.fill_approach(ctx, carrier, vel, ap)
+	AIDefensiveVerbs.fill_approach(ctx, carrier, vel, ap)
 	return AIRoleRushD.ramp_cushion_m(ctx, ap, 10)
 
 
@@ -196,7 +196,7 @@ func test_no_cushion_once_the_carrier_is_inside_the_house_gate() -> void:
 	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, OUR_NET_Z - 3.0),
 			[[10, 1, carrier, Vector3(0.0, 0.0, 9.0)]], 10)
 	var ap := AICarrierApproach.new()
-	AIRoleHelpers.fill_approach(ctx, carrier, Vector3(0.0, 0.0, 9.0), ap)
+	AIDefensiveVerbs.fill_approach(ctx, carrier, Vector3(0.0, 0.0, 9.0), ap)
 	assert_eq(AIRoleRushD.ramp_cushion_m(ctx, ap, 10), 0.0,
 			"no retreat race is left inside the house gate")
 
@@ -246,7 +246,7 @@ func test_backpressure_lets_the_d_stand_up() -> void:
 
 # ── The stand rides the carrier ──────────────────────────────────────────────
 # The ladder says where the stand IS. What used to answer "may I take the trip to
-# it?" was a stand-PLACEMENT bound (AIRoleHelpers.settable_stand_depth): hold the
+# it?" was a stand-PLACEMENT bound (AILastManDiscipline.settable_stand_depth): hold the
 # stand back to where a charge would end set, because an ice-frame seek could only
 # ever reach a spot by charging it and braking to zero.
 #

@@ -27,8 +27,8 @@ static func decide(ctx: RoleContext, role_slot: int) -> RoleDecision:
 
 	var man_pid: int = ctx.assigned_threat_peer
 	var d := RoleDecision.new()
-	if AIRoleHelpers.cover_threat(ctx, d, man_pid,
-			AIRoleHelpers.resolve_defensive_play_ref(ctx)):
+	if AIDefensiveVerbs.cover_threat(ctx, d, man_pid,
+			AIRoleReads.resolve_defensive_play_ref(ctx)):
 		d.locked_man_pid = man_pid
 		return d
 

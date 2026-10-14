@@ -255,7 +255,7 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 	if carrier_pid != -1 and _team_id_by_peer.get(carrier_pid, -1) == team_id:
 		return empty
 	# The feed source: the opponent carrier, else the puck — the same resolution
-	# as AIRoleHelpers.resolve_defensive_play_ref, so brain and marker read one
+	# as AIRoleReads.resolve_defensive_play_ref, so brain and marker read one
 	# play. Do not require a live carrier: that dissolves the whole coverage for
 	# the flight of every pass, shot, rebound and dump.
 	var play_ref: Vector3 = snapshot.puck_state.position
@@ -396,7 +396,7 @@ func _refresh_threat_base_memo(snapshot: WorldSnapshot) -> void:
 
 # Our goalie's current world position, or the goal mouth as a first-frame
 # fallback. The brain has no RoleContext, so it cannot call
-# AIRoleHelpers.resolve_our_goalie_pos.
+# AIRoleReads.resolve_our_goalie_pos.
 func _resolve_our_goalie_pos(snapshot: WorldSnapshot) -> Vector3:
 	var goalie: GoalieNetworkState = snapshot.goalie_states.get(team_id)
 	if goalie == null:

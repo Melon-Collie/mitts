@@ -13,7 +13,7 @@ const COVERED_STAND := Vector3(6.71, 0.0, -8.29)
 
 # `home_side` is the D's lobby home side (-1 = LD, +1 = RD), which sets his
 # defensive home post and therefore the line his station retreats down
-# (AIRoleHelpers.station_retreat_floor). Defaults to the right-side D, matching
+# (AILastManDiscipline.station_retreat_floor). Defaults to the right-side D, matching
 # the strong-side stations most of these cases exercise. Leaving it at
 # RoleContext's 0 default would put the post dead centre — a body no real 5v5
 # defenseman has — and make every retreat artificially central.
@@ -61,7 +61,7 @@ func _make_ctx(self_pos: Vector3, skaters: Array = [],
 	ctx.self_home_side = home_side
 	# A LIVE transition read, built from this fixture's own snapshot — exactly
 	# what the brain hands production dispatch. The offensive stations' pinch read
-	# (AIRoleHelpers.may_hold_forward_stand) needs real perception: possession
+	# (AILastManDiscipline.may_hold_forward_stand) needs real perception: possession
 	# security and who is behind the stand. An unwired read reports "no
 	# perception" and the stations then just hold their geometry, so a fixture
 	# that wants to exercise the read has to supply it.

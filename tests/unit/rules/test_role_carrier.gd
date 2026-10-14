@@ -1514,7 +1514,7 @@ func test_best_dump_geometry_in_own_zone_is_a_hard_rim_out() -> void:
 	var ctx: RoleContext = _make_ctx(self_pos, skaters)
 	var c := AIRoleCarrier.new()
 	c._field.fill(ctx)
-	var dump: AICarrierDumpSearch = _dumped(c, ctx, AIRoleHelpers.resolve_our_goalie_pos(ctx))
+	var dump: AICarrierDumpSearch = _dumped(c, ctx, AIRoleReads.resolve_our_goalie_pos(ctx))
 	assert_false(dump.is_soft, "a DZ clear is a chip out, not a soft corner flip")
 	var settle: Vector3 = dump.settle
 	gut.p("  DZ clear from %s settles at %s" % [self_pos, settle])
@@ -1553,7 +1553,7 @@ func _dump_in_ctx() -> RoleContext:
 func _searched_dump(ctx: RoleContext) -> AICarrierDumpSearch:
 	var c := AIRoleCarrier.new()
 	c._field.fill(ctx)
-	return _dumped(c, ctx, AIRoleHelpers.resolve_our_goalie_pos(ctx))
+	return _dumped(c, ctx, AIRoleReads.resolve_our_goalie_pos(ctx))
 
 
 # Carrier `c`'s dump search at `ctx`, its field already filled.
@@ -1584,7 +1584,7 @@ func test_dump_in_will_not_feed_the_keeper() -> void:
 	var ctx: RoleContext = _make_ctx(self_pos, [[1, TEAM_ID, self_pos]])
 	var c := AIRoleCarrier.new()
 	c._field.fill(ctx)
-	var dump: AICarrierDumpSearch = _dumped(c, ctx, AIRoleHelpers.resolve_our_goalie_pos(ctx))
+	var dump: AICarrierDumpSearch = _dumped(c, ctx, AIRoleReads.resolve_our_goalie_pos(ctx))
 	var settle: Vector3 = dump.settle
 	var keeper: Vector3 = AICarrierField.goalie_now(ctx)
 	gut.p("  dump-in settles at %s, keeper at %s" % [settle, keeper])
@@ -1737,7 +1737,7 @@ func test_delayed_offside_closes_the_zone_to_the_carry() -> void:
 	var ctx := _make_ctx(self_pos)
 	var c := AIRoleCarrier.new()
 	c._field.fill(ctx)
-	var goalie: Vector3 = AIRoleHelpers.resolve_our_goalie_pos(ctx)
+	var goalie: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 	var in_zone := Vector3(0, 0, -9)
 	assert_gt(c._carry._score_move_candidate_base(ctx, in_zone, goalie), -INF,
 			"an open entry is a candidate")
@@ -1754,7 +1754,7 @@ func test_delayed_offside_takes_the_dump_in_off_the_table() -> void:
 	ctx.zone_entry_blocked = true
 	var c := AIRoleCarrier.new()
 	c._field.fill(ctx)
-	var dump: AICarrierDumpSearch = _dumped(c, ctx, AIRoleHelpers.resolve_our_goalie_pos(ctx))
+	var dump: AICarrierDumpSearch = _dumped(c, ctx, AIRoleReads.resolve_our_goalie_pos(ctx))
 	assert_eq(dump.value, -INF, "a dumped puck nobody may touch is no dump-in")
 
 

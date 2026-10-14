@@ -168,7 +168,7 @@ Don't read `is_ghost` alone for it: under NHL nobody is ghosted for offside.
 The bot answer to being out of play is the tag-up override in
 `_state_off_puck`; a carrier with a teammate out of play holds the puck short
 of the blue line (`offside_brake` on the puck), since carrying it in is an
-immediate whistle. The coverage reads in `role_helpers.gd` still read
+immediate whistle. The coverage reads in `defensive_verbs.gd` and `role_reads.gd` still read
 `is_ghost` on purpose — an NHL offside skater is physically on the ice.
 
 A teammate owing a tag-up is a TEAM state, not a personal one: until the whole team

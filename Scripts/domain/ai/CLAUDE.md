@@ -183,9 +183,9 @@ Three verbs exist as shared code; the roles compose them.
 
 | verb | seam | callers |
 |---|---|---|
-| **cover a threat** — take the ice between him and our net, in the feed lane, riding him | `AIRoleHelpers.cover_threat` | MARK, the 5v5 zone soft-lock, TRACK_MID, RUSH_D2 |
+| **cover a threat** — take the ice between him and our net, in the feed lane, riding him | `AIDefensiveVerbs.cover_threat` | MARK, the 5v5 zone soft-lock, TRACK_MID, RUSH_D2 |
 | **close the carrier** — read his approach, hold the ladder's gap, angle him off the middle | `read_carrier_approach` + `carrier_stand` | PRESSURE, RUSH_D1, and the read alone for TRACK_PUCK |
-| **go get the puck** — race it, or hold the pre-contain stand when somebody else has won it | `AIRoleHelpers.chase_puck` | CHASE |
+| **go get the puck** — race it, or hold the pre-contain stand when somebody else has won it | `AIDefensiveVerbs.chase_puck` | CHASE |
 
 `AICarrierApproach` is the carrier half's subject: his position and velocity, the
 line he retreats us down, the route he has left, and his pace along it, filled
@@ -314,7 +314,7 @@ battle), and releases when he is back. The D slots race the lateral trip
 
 ## Covering a man is one behavior, and the role only chooses WHO
 
-`AIRoleHelpers.cover_threat` is the whole of it: take the ice between him and
+`AIDefensiveVerbs.cover_threat` is the whole of it: take the ice between him and
 our net, from inside the lane the puck would be fed to him through, riding him.
 Every off-puck defensive role calls it and differs *only* in which man it names —
 MARK and the five 5v5 zone roles from the threat partition, TRACK_MID from

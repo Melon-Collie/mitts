@@ -42,7 +42,7 @@ static func decide_f2(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 				ctx, AIRoleSlots.Slot.DP_STRONG)
 		if fill != null:
 			return fill
-	var carrier_pos: Vector3 = AIRoleHelpers.resolve_defensive_play_ref(ctx)
+	var carrier_pos: Vector3 = AIRoleReads.resolve_defensive_play_ref(ctx)
 	if not carrier_pos.is_finite():
 		var d := RoleDecision.new()
 		d.target_position = ctx.self_pos
@@ -74,7 +74,7 @@ static func _decide_high(ctx: RoleContext) -> RoleDecision:
 	var line_stand := Vector3(wall_x, 0.0, blue_z)
 	# F3_HIGH (3v3 only) IS the team's back layer, so he retreats to the
 	# DEFENSEMAN's home post (as_back_layer).
-	d.target_position = AIRoleHelpers.offensive_station_target(
+	d.target_position = AILastManDiscipline.offensive_station_target(
 			ctx, line_stand, ctx.prev_held_forward_stand, true)
 	d.held_forward_stand = d.target_position.distance_to(line_stand) < 0.5
 	return d
@@ -82,7 +82,7 @@ static func _decide_high(ctx: RoleContext) -> RoleDecision:
 
 # ── F2: mid-lane breakout-pass read ──────────────────────────────────────────
 static func _decide_mid(ctx: RoleContext) -> RoleDecision:
-	var carrier_pos: Vector3 = AIRoleHelpers.resolve_defensive_play_ref(ctx)
+	var carrier_pos: Vector3 = AIRoleReads.resolve_defensive_play_ref(ctx)
 	if not carrier_pos.is_finite():
 		var d := RoleDecision.new()
 		d.target_position = ctx.self_pos
@@ -97,24 +97,24 @@ static func _decide_mid_at(ctx: RoleContext, carrier_pos: Vector3,
 	var d := RoleDecision.new()
 
 	var opp_teammates: Array[Vector3] = ctx.scratch_opp_receivers
-	AIRoleHelpers.collect_opp_team_excluding_carrier(ctx, opp_teammates, true)
+	AIRoleReads.collect_opp_team_excluding_carrier(ctx, opp_teammates, true)
 	if opp_teammates.is_empty():
 		# No receivers to deny: sit at the read spot rather than freeze.
 		d.target_position = search_center
 		return d
 
 	var our_net: Vector3 = ctx.defending_goal_pos
-	var our_goalie_pos: Vector3 = AIRoleHelpers.resolve_our_goalie_pos(ctx)
+	var our_goalie_pos: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 	var our_team_excluding_self: Array[Vector3] = ctx.scratch_teammates
-	AIRoleHelpers.collect_teammates_excluding_self(ctx, our_team_excluding_self)
+	AIRoleReads.collect_teammates_excluding_self(ctx, our_team_excluding_self)
 
-	var candidates: Array[Vector3] = AIRoleHelpers.generate_candidates_around(
+	var candidates: Array[Vector3] = AIStationSearch.generate_candidates_around(
 			ctx.self_pos, search_center)
 	# Switch-hysteresis (the cursor snaps to this target).
-	AIRoleHelpers.append_incumbent(ctx, candidates)
+	AIStationSearch.append_incumbent(ctx, candidates)
 
 	# Per-receiver upper bounds for _max_pass_threat's early-out (see
-	# AIRoleHelpers.carrier_option_bases).
+	# AIDefensiveVerbs.carrier_option_bases).
 	var bases: Array[float] = ctx.scratch_option_bases
 	bases.clear()
 	for opp_pos: Vector3 in opp_teammates:
@@ -126,18 +126,18 @@ static func _decide_mid_at(ctx: RoleContext, carrier_pos: Vector3,
 	var best_pos: Vector3 = search_center
 	var best_score: float = -INF
 	for c: Vector3 in candidates:
-		if not AIRoleHelpers.is_legal_position(c):
+		if not AIStationSearch.is_legal_position(c):
 			continue
 		# Stay IN the attacking zone: sagging out concedes the forecheck.
 		if ctx.own_goal_dir * c.z > -GameRules.BLUE_LINE_Z:
 			continue
-		if AIRoleHelpers.too_close_to_teammate(c, our_team_excluding_self):
+		if AIStationSearch.too_close_to_teammate(c, our_team_excluding_self):
 			continue
 		var threat: float = _max_pass_threat(
 				c, carrier_pos, opp_teammates, our_net, our_goalie_pos,
 				our_team_excluding_self, bases, ctx.scratch_teammate_caps,
 				ctx.caps_by_peer.get(ctx.peer_id))
-		var score: float = -threat + AIRoleHelpers.incumbent_bonus(ctx, c)
+		var score: float = -threat + AIStationSearch.incumbent_bonus(ctx, c)
 		if score > best_score:
 			best_score = score
 			best_pos = c
@@ -170,7 +170,7 @@ static func _max_pass_threat(
 		our_team_caps: Array = [],
 		self_caps: AISkaterCaps = null) -> float:
 	# Same in-place defender push/pop and caps contract as
-	# AIRoleHelpers.carrier_best_option.
+	# AIDefensiveVerbs.carrier_best_option.
 	var caps_matched: bool = our_team_caps.size() == our_team_excluding_self.size()
 	our_team_excluding_self.push_back(candidate)
 	if caps_matched:

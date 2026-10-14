@@ -64,11 +64,11 @@ const ENTRY_Z: float = -GameRules.BLUE_LINE_Z
 # covers 3 m in that time, which is the whole gap.
 const IN_SHAPE_REL_M_S: float = 4.0
 # And close enough to contest. The gap ladder tops out at 3 sticks; add the
-# anticipation lead the stand is built off (AIRoleHelpers.DEFENSIVE_ANTICIPATION_
+# anticipation lead the stand is built off (AIRoleReads.DEFENSIVE_ANTICIPATION_
 # MAX_M) and one more stick of tolerance, since what is being bounded is "is he
 # defending this man at all", not the ladder itself.
 const IN_SHAPE_GAP_M: float = 3.0 * AIBotMechanics.BLADE_REACH_M \
-		+ AIRoleHelpers.DEFENSIVE_ANTICIPATION_MAX_M \
+		+ AIRoleReads.DEFENSIVE_ANTICIPATION_MAX_M \
 		+ AIBotMechanics.BLADE_REACH_M
 
 
@@ -360,7 +360,7 @@ func test_two_defencemen_are_not_blown_by_a_neutral_zone_rush() -> void:
 # man had ALREADY got behind them, which in a neutral-zone puck race is nobody —
 # both teams are converging on a loose puck. So every station read clear, all
 # three bodies ended up within a few metres of the puck, and whoever won it had
-# beaten the whole team. `AIRoleHelpers.home_layer_behind_me` is the missing
+# beaten the whole team. `AILastManDiscipline.home_layer_behind_me` is the missing
 # clause; `AIRoleFlank` supplies the layer's stand.
 #
 # WHAT IS MEASURED, and why it is the shape rather than the outcome. The obvious

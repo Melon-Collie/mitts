@@ -247,7 +247,7 @@ static func cover_anchor(man: Vector3, our_net: Vector3) -> Vector3:
 		return man
 	var depth: float = minf(COVER_DEPTH_M, dist)
 	var anchor: Vector3 = man + (to_net / dist) * depth
-	var line_z: float = GameRules.GOAL_LINE_Z - AIRoleHelpers.GOAL_LINE_BUFFER_M
+	var line_z: float = GameRules.GOAL_LINE_Z - AIStationSearch.GOAL_LINE_BUFFER_M
 	if absf(anchor.z) > line_z:
 		anchor.z = signf(anchor.z) * line_z
 	return anchor

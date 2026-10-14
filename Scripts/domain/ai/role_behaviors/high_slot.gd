@@ -26,23 +26,23 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	var own_dir: float = ctx.own_goal_dir
 	var opp_net: Vector3 = ctx.attacking_goal_pos
 
-	var carrier_pos: Vector3 = AIRoleHelpers.resolve_offensive_play_ref(ctx)
+	var carrier_pos: Vector3 = AIRoleReads.resolve_offensive_play_ref(ctx)
 	if not carrier_pos.is_finite():
 		d.target_position = ctx.self_pos
 		return d
 
 	var opp_positions: Array[Vector3] = ctx.scratch_opp_positions
 	var opp_states: Array[SkaterNetworkState] = ctx.scratch_opp_states
-	AIRoleHelpers.collect_opponents(ctx, opp_positions, opp_states)
+	AIRoleReads.collect_opponents(ctx, opp_positions, opp_states)
 	var teammates: Array[Vector3] = ctx.scratch_teammates
-	AIRoleHelpers.collect_teammates_excluding_self(ctx, teammates)
+	AIRoleReads.collect_teammates_excluding_self(ctx, teammates)
 
 	# Far from the band, skate at the calculated float spot (STATION_ARGMAX_LOD_M),
 	# still through the station read.
 	var band_center := Vector3(
 			0.0, 0.0, opp_net.z + own_dir * BAND_DEPTHS_M[1])
-	if not AIRoleHelpers.station_needs_refinement(ctx.self_pos, band_center):
-		d.target_position = AIRoleHelpers.offensive_station_target(
+	if not AIStationSearch.station_needs_refinement(ctx.self_pos, band_center):
+		d.target_position = AILastManDiscipline.offensive_station_target(
 				ctx, band_center, ctx.prev_held_forward_stand)
 		d.held_forward_stand = d.target_position.distance_to(band_center) < 0.5
 		return d
@@ -57,9 +57,9 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 			var c := Vector3(x, 0.0, z)
 			if own_dir * c.z < own_dir * carrier_pos.z + ABOVE_PUCK_MARGIN_M:
 				continue
-			if not AIRoleHelpers.is_legal_position(c):
+			if not AIStationSearch.is_legal_position(c):
 				continue
-			if AIRoleHelpers.too_close_to_teammate(c, teammates):
+			if AIStationSearch.too_close_to_teammate(c, teammates):
 				continue
 			# The seam look: can the carrier feed me here, and can I shoot from here?
 			var feed: float = AIPuckLane.lane_clear(
@@ -68,7 +68,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 			var shot: float = AIPuckLane.lane_clear(
 					c, opp_net, opp_positions, ctx.self_wrister_shot_speed,
 					AIActionScoring.EMPTY_VEC3, ctx.scratch_opp_caps)
-			var score: float = feed * shot + AIRoleHelpers.incumbent_bonus(ctx, c)
+			var score: float = feed * shot + AIStationSearch.incumbent_bonus(ctx, c)
 			if score > best_score:
 				best_score = score
 				best_pos = c
@@ -77,7 +77,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		# opp blue line.
 		best_pos = Vector3(0.0, 0.0,
 				opp_net.z + own_dir * (GameRules.GOAL_LINE_Z - GameRules.BLUE_LINE_Z - 1.0))
-	d.target_position = AIRoleHelpers.offensive_station_target(
+	d.target_position = AILastManDiscipline.offensive_station_target(
 			ctx, best_pos, ctx.prev_held_forward_stand)
 	d.held_forward_stand = d.target_position.distance_to(best_pos) < 0.5
 	return d

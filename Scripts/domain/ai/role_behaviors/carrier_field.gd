@@ -432,7 +432,7 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 	var dir_z: float = to_net_z * inv
 	var target := Vector3(
 			receiver_spot.x + dir_x * reach, 0.0, receiver_spot.z + dir_z * reach)
-	if not AIRoleHelpers.is_legal_position(target):
+	if not AIStationSearch.is_legal_position(target):
 		return 0.0
 	var recv_speed: float = receiver_caps.max_speed if receiver_caps != null \
 			else ctx.self_max_speed

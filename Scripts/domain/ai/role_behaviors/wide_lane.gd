@@ -13,7 +13,7 @@ const LINE_HOLD_BACK_M: float = 0.8 # NZ-side stand-off at the blue line
 static func decide(ctx: RoleContext, side: float) -> RoleDecision:
 	var d := RoleDecision.new()
 	var own_dir: float = ctx.own_goal_dir
-	var play_ref: Vector3 = AIRoleHelpers.resolve_offensive_play_ref(ctx)
+	var play_ref: Vector3 = AIRoleReads.resolve_offensive_play_ref(ctx)
 	if not play_ref.is_finite():
 		d.target_position = ctx.self_pos
 		return d

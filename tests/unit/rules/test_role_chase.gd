@@ -1,7 +1,7 @@
 extends GutTest
 
 # AIRoleChase — NEUTRAL only. The whole role is the shared "go get the puck"
-# verb (AIRoleHelpers.chase_puck): race it, or hold the pre-contain stand when
+# verb (AIDefensiveVerbs.chase_puck): race it, or hold the pre-contain stand when
 # an opponent has already won it. The state machine takes over actual retrieval
 # via CHASE_PUCK once the bot is closest.
 
@@ -108,7 +108,7 @@ func test_the_pre_contain_stand_is_angled_off_the_middle() -> void:
 	var offset: Vector3 = d.target_position - (puck_pos + dir_net
 			* puck_pos.distance_to(d.target_position))
 	# Signed onto the inside axis: positive means shaded toward centre ice.
-	var inside: Vector3 = AIRoleHelpers.inside_dir(puck_pos, dir_net)
+	var inside: Vector3 = AIDefensiveVerbs.inside_dir(puck_pos, dir_net)
 	assert_gt(offset.x * inside.x + offset.z * inside.z, 0.1,
 			"the pre-contain stand takes the inside of a wide puck; got %s for a puck at %s"
 			% [str(d.target_position), str(puck_pos)])
@@ -121,7 +121,7 @@ func test_chase_puck_reports_whether_we_are_running_the_race() -> void:
 	var puck_pos := Vector3(0.0, 0.0, -8.0)
 	var live: RoleContext = _make_ctx(Vector3(0.0, 0.0, -4.0), puck_pos)
 	var d_live := RoleDecision.new()
-	assert_true(AIRoleHelpers.chase_puck(live, d_live), "an uncontested puck is ours to go get")
+	assert_true(AIDefensiveVerbs.chase_puck(live, d_live), "an uncontested puck is ours to go get")
 	assert_eq(d_live.target_position, puck_pos, "…and the target is the puck")
 
 	var lost: RoleContext = _make_ctx(Vector3(0.0, 0.0, -2.0), Vector3(0.0, 0.0, -14.0))
@@ -130,6 +130,6 @@ func test_chase_puck_reports_whether_we_are_running_the_race() -> void:
 	lost.snapshot.skater_states[200] = opp
 	lost.team_id_by_peer[200] = 1
 	var d_lost := RoleDecision.new()
-	assert_false(AIRoleHelpers.chase_puck(lost, d_lost), "a race an opponent owns is declined")
+	assert_false(AIDefensiveVerbs.chase_puck(lost, d_lost), "a race an opponent owns is declined")
 	assert_ne(d_lost.target_position, Vector3(0.0, 0.0, -14.0),
 			"…and the target is the stand, not the puck")

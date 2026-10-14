@@ -18,14 +18,14 @@ const CIRCLE_LANE_X_M: float = 6.0     # alternate: the carrier's-side circle la
 static func decide(ctx: RoleContext) -> RoleDecision:
 	var d := RoleDecision.new()
 	var own_dir: float = ctx.own_goal_dir
-	var carrier_pos: Vector3 = AIRoleHelpers.resolve_offensive_play_ref(ctx)
+	var carrier_pos: Vector3 = AIRoleReads.resolve_offensive_play_ref(ctx)
 	if not carrier_pos.is_finite():
 		d.target_position = ctx.self_pos
 		return d
 
 	var opp_positions: Array[Vector3] = ctx.scratch_opp_positions
 	var opp_states: Array[SkaterNetworkState] = ctx.scratch_opp_states
-	AIRoleHelpers.collect_opponents(ctx, opp_positions, opp_states)
+	AIRoleReads.collect_opponents(ctx, opp_positions, opp_states)
 
 	# Never behind our goal line.
 	var cap: float = GameRules.GOAL_LINE_Z - GOAL_LINE_PAD_M
@@ -42,7 +42,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 			carrier_pos, circle, opp_positions, pass_speed_circle,
 			AIActionScoring.EMPTY_VEC3, ctx.scratch_opp_caps)
 	var target: Vector3 = mid if lane_mid >= lane_circle else circle
-	if not AIRoleHelpers.is_legal_position(target):
+	if not AIStationSearch.is_legal_position(target):
 		target = mid if target == circle else circle
 	d.target_position = target
 	# The swing paces the retrieval.

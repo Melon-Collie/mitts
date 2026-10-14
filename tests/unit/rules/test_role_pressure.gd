@@ -221,10 +221,10 @@ func test_standing_target_ignored_when_wrong_side() -> void:
 func test_candidate_set_includes_inner_ring() -> void:
 	# PRESSURE samples at half step too (18 candidates: center + self +
 	# 8 outer + 8 inner) so the cut-off can correct in small moves.
-	var candidates: Array[Vector3] = AIRoleHelpers.generate_candidates_around(
+	var candidates: Array[Vector3] = AIStationSearch.generate_candidates_around(
 			Vector3.ZERO, Vector3(5, 0, 5), true)
 	assert_eq(candidates.size(), 18)
-	var default_set: Array[Vector3] = AIRoleHelpers.generate_candidates_around(
+	var default_set: Array[Vector3] = AIStationSearch.generate_candidates_around(
 			Vector3.ZERO, Vector3(5, 0, 5))
 	assert_eq(default_set.size(), 10, "inner ring is opt-in")
 
@@ -247,7 +247,7 @@ func test_wrong_side_candidates_are_filtered() -> void:
 			"wrong-side candidates must be filtered; chosen target.z=%f vs carrier.z=%f" % [d.target_position.z, carrier_pos.z])
 
 
-# ── The last-man step-up clamp (AIRoleHelpers.settable_stand_depth) ──────────
+# ── The last-man step-up clamp (AILastManDiscipline.settable_stand_depth) ──────────
 # PRESSURE's cut-off sits one stick goal-side of where the carrier is GOING —
 # a challenge position, and the right one while a layer is home behind. As the
 # genuine LAST man it is also a step-up, and a rush at pace is exactly when that
@@ -311,7 +311,7 @@ func test_the_stand_is_the_gap_ladder() -> void:
 	var ctx: Dictionary = _rush_ctx(true, 7.0)
 	var d: RoleDecision = AIRolePressure.decide(ctx["ctx"])
 	var ap := AICarrierApproach.new()
-	AIRoleHelpers.fill_approach(ctx["ctx"], ctx["carrier"], Vector3(0.0, 0.0, 7.0), ap)
+	AIDefensiveVerbs.fill_approach(ctx["ctx"], ctx["carrier"], Vector3(0.0, 0.0, 7.0), ap)
 	var want: float = AIRoleRushD.ladder_gap_m(
 			ctx["carrier"], 1.0, ctx["ctx"].self_blade_reach,
 			AIRoleRushD.ramp_cushion_m(ctx["ctx"], ap, 200))

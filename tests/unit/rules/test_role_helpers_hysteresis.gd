@@ -1,6 +1,6 @@
 extends GutTest
 
-# AIRoleHelpers target switch-hysteresis — the shared off-puck argmax stickiness
+# AIStationSearch target switch-hysteresis — the shared off-puck argmax stickiness
 # (append_incumbent / incumbent_bonus / TARGET_SWITCH_MARGIN). Covers the pure
 # helpers directly, then the black-box guarantee at a converted role (SUPPORT):
 # a near-tied standing spot is held; a clearly-beaten one is dropped. Per-role
@@ -22,7 +22,7 @@ func test_append_incumbent_adds_finite_prev_target() -> void:
 	var ctx: RoleContext = _bare_ctx()
 	ctx.prev_role_target = Vector3(3, 0, -5)
 	var candidates: Array[Vector3] = [Vector3.ZERO, Vector3(1, 0, 1)]
-	AIRoleHelpers.append_incumbent(ctx, candidates)
+	AIStationSearch.append_incumbent(ctx, candidates)
 	assert_eq(candidates.size(), 3, "the incumbent is injected as an extra candidate")
 	assert_eq(candidates[2], Vector3(3, 0, -5), "…at exactly the standing target")
 
@@ -31,7 +31,7 @@ func test_append_incumbent_noop_without_incumbent() -> void:
 	# INF (first dispatch / slot change) injects nothing.
 	var ctx: RoleContext = _bare_ctx()
 	var candidates: Array[Vector3] = [Vector3.ZERO]
-	AIRoleHelpers.append_incumbent(ctx, candidates)
+	AIStationSearch.append_incumbent(ctx, candidates)
 	assert_eq(candidates.size(), 1, "no incumbent → no injection")
 
 
@@ -40,16 +40,16 @@ func test_append_incumbent_noop_without_incumbent() -> void:
 func test_incumbent_bonus_only_for_the_standing_target() -> void:
 	var ctx: RoleContext = _bare_ctx()
 	ctx.prev_role_target = Vector3(3, 0, -5)
-	assert_eq(AIRoleHelpers.incumbent_bonus(ctx, Vector3(3, 0, -5)),
-			AIRoleHelpers.TARGET_SWITCH_MARGIN, "the standing spot earns the margin bonus")
-	assert_eq(AIRoleHelpers.incumbent_bonus(ctx, Vector3(3.1, 0, -5)), 0.0,
+	assert_eq(AIStationSearch.incumbent_bonus(ctx, Vector3(3, 0, -5)),
+			AIStationSearch.TARGET_SWITCH_MARGIN, "the standing spot earns the margin bonus")
+	assert_eq(AIStationSearch.incumbent_bonus(ctx, Vector3(3.1, 0, -5)), 0.0,
 			"a different spot earns nothing")
 
 
 func test_incumbent_bonus_zero_without_incumbent() -> void:
 	var ctx: RoleContext = _bare_ctx()
 	# No candidate is ever == INF, so the bonus is always 0.
-	assert_eq(AIRoleHelpers.incumbent_bonus(ctx, Vector3(3, 0, -5)), 0.0,
+	assert_eq(AIStationSearch.incumbent_bonus(ctx, Vector3(3, 0, -5)), 0.0,
 			"no incumbent → no bonus")
 
 
@@ -114,7 +114,7 @@ func _argmax_with_bonus(ctx: RoleContext, candidates: Array[Vector3],
 	var best_pos: Vector3 = Vector3.INF
 	var best_score: float = -INF
 	for c: Vector3 in candidates:
-		var score: float = float(raw_scores[c]) + AIRoleHelpers.incumbent_bonus(ctx, c)
+		var score: float = float(raw_scores[c]) + AIStationSearch.incumbent_bonus(ctx, c)
 		if score > best_score:
 			best_score = score
 			best_pos = c
@@ -125,10 +125,10 @@ func test_incumbent_held_when_beaten_within_the_margin() -> void:
 	var ctx: RoleContext = _bare_ctx()
 	ctx.prev_role_target = Vector3(5, 0, 0)
 	var candidates: Array[Vector3] = [Vector3(1, 0, 0)]  # a fresh spot
-	AIRoleHelpers.append_incumbent(ctx, candidates)
+	AIStationSearch.append_incumbent(ctx, candidates)
 	# Fresh beats the incumbent by half the margin → incumbent holds.
 	var raw := {Vector3(1, 0, 0): 1.00,
-			Vector3(5, 0, 0): 1.00 - 0.5 * AIRoleHelpers.TARGET_SWITCH_MARGIN}
+			Vector3(5, 0, 0): 1.00 - 0.5 * AIStationSearch.TARGET_SWITCH_MARGIN}
 	assert_eq(_argmax_with_bonus(ctx, candidates, raw), Vector3(5, 0, 0),
 			"a standing spot beaten by less than the margin is kept")
 
@@ -137,9 +137,9 @@ func test_incumbent_dropped_when_beaten_beyond_the_margin() -> void:
 	var ctx: RoleContext = _bare_ctx()
 	ctx.prev_role_target = Vector3(5, 0, 0)
 	var candidates: Array[Vector3] = [Vector3(1, 0, 0)]
-	AIRoleHelpers.append_incumbent(ctx, candidates)
+	AIStationSearch.append_incumbent(ctx, candidates)
 	# Fresh beats the incumbent by twice the margin → switch to the fresh spot.
 	var raw := {Vector3(1, 0, 0): 1.00,
-			Vector3(5, 0, 0): 1.00 - 2.0 * AIRoleHelpers.TARGET_SWITCH_MARGIN}
+			Vector3(5, 0, 0): 1.00 - 2.0 * AIStationSearch.TARGET_SWITCH_MARGIN}
 	assert_eq(_argmax_with_bonus(ctx, candidates, raw), Vector3(1, 0, 0),
 			"a standing spot beaten past the margin is dropped for the fresh spot")

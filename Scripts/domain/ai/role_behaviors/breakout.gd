@@ -49,16 +49,16 @@ const GOAL_SIDE_TOLERANCE_M: float = 1.5
 static func decide(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 	var d := RoleDecision.new()
 
-	var carrier_pos: Vector3 = AIRoleHelpers.resolve_offensive_play_ref(ctx)
+	var carrier_pos: Vector3 = AIRoleReads.resolve_offensive_play_ref(ctx)
 	if not carrier_pos.is_finite():
 		d.target_position = ctx.self_pos
 		return d
 
 	var opp_positions: Array[Vector3] = ctx.scratch_opp_positions
 	var opp_states: Array[SkaterNetworkState] = ctx.scratch_opp_states
-	AIRoleHelpers.collect_opponents(ctx, opp_positions, opp_states)
+	AIRoleReads.collect_opponents(ctx, opp_positions, opp_states)
 	var teammate_positions: Array[Vector3] = ctx.scratch_teammates
-	AIRoleHelpers.collect_teammates_excluding_self(ctx, teammate_positions)
+	AIRoleReads.collect_teammates_excluding_self(ctx, teammate_positions)
 
 	var side_x: float = ctx.strong_x if is_strong else -ctx.strong_x
 
@@ -67,15 +67,15 @@ static func decide(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 		candidates = _strong_wall_candidates(ctx, carrier_pos, side_x)
 	else:
 		var search_center: Vector3 = _weak_search_center(carrier_pos, side_x)
-		candidates = AIRoleHelpers.generate_candidates_around(ctx.self_pos, search_center)
-	AIRoleHelpers.append_incumbent(ctx, candidates)
+		candidates = AIStationSearch.generate_candidates_around(ctx.self_pos, search_center)
+	AIStationSearch.append_incumbent(ctx, candidates)
 
 	var best_pos: Vector3 = ctx.self_pos
 	var best_score: float = -INF
 	for c: Vector3 in candidates:
-		if not AIRoleHelpers.is_legal_position(c):
+		if not AIStationSearch.is_legal_position(c):
 			continue
-		if AIRoleHelpers.too_close_to_teammate(c, teammate_positions):
+		if AIStationSearch.too_close_to_teammate(c, teammate_positions):
 			continue
 		# No offside filter: no candidate here reaches the opp blue line.
 		if not is_strong and not _is_goal_side_of_carrier(
@@ -88,7 +88,7 @@ static func decide(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 		var potential: float = AIActionScoring.position_potential(
 				c, ctx.attacking_goal_pos, opp_positions, ctx.scratch_opp_caps)
 		var score: float = maxf(lane, BLOCKED_LANE_FLOOR) * potential \
-				+ AIRoleHelpers.incumbent_bonus(ctx, c)
+				+ AIStationSearch.incumbent_bonus(ctx, c)
 		if score > best_score:
 			best_score = score
 			best_pos = c

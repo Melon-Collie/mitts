@@ -31,20 +31,20 @@ static var _scratch_threat_by_cover: Array[float] = []
 static func decide(ctx: RoleContext) -> RoleDecision:
 	var d := RoleDecision.new()
 
-	var carrier_pos: Vector3 = AIRoleHelpers.resolve_offensive_play_ref(ctx)
+	var carrier_pos: Vector3 = AIRoleReads.resolve_offensive_play_ref(ctx)
 	if not carrier_pos.is_finite():
 		d.target_position = ctx.self_pos
 		return d
 
 	var our_net: Vector3 = ctx.defending_goal_pos
-	var goalie_pos: Vector3 = AIRoleHelpers.resolve_opp_goalie_pos(ctx)
+	var goalie_pos: Vector3 = AIRoleReads.resolve_opp_goalie_pos(ctx)
 
 	var opp_positions: Array[Vector3] = ctx.scratch_opp_positions
 	var opp_states: Array[SkaterNetworkState] = ctx.scratch_opp_states
-	AIRoleHelpers.collect_opponents(ctx, opp_positions, opp_states)
+	AIRoleReads.collect_opponents(ctx, opp_positions, opp_states)
 
 	var teammate_positions: Array[Vector3] = ctx.scratch_teammates
-	AIRoleHelpers.collect_teammates_excluding_self(ctx, teammate_positions)
+	AIRoleReads.collect_teammates_excluding_self(ctx, teammate_positions)
 
 	# Candidate-invariant exposure inputs; an unpressured carrier gives prior 0
 	# and the cost short-circuits.
@@ -61,7 +61,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	_scratch_threat_by_cover.clear()
 	for _i: int in teammate_positions.size() + 2:
 		_scratch_threat_by_cover.append(-1.0)
-	var our_goalie: Vector3 = AIRoleHelpers.resolve_our_goalie_pos(ctx)
+	var our_goalie: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 
 	# Far from the station, skate at the calculated post (STATION_ARGMAX_LOD_M).
 	# In transit it is the goal-side trail a step behind the carrier.
@@ -73,19 +73,19 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 						- ctx.own_goal_dir * HIGH_POST_INSET_M)
 	else:
 		station = carrier_pos + Vector3(
-				0.0, 0.0, ctx.own_goal_dir * AIRoleHelpers.SEARCH_STEP_M)
-	if not AIRoleHelpers.station_needs_refinement(ctx.self_pos, station):
+				0.0, 0.0, ctx.own_goal_dir * AIStationSearch.SEARCH_STEP_M)
+	if not AIStationSearch.station_needs_refinement(ctx.self_pos, station):
 		return _hold_or_restore_numbers(ctx, d, station)
 
 	var candidates: Array[Vector3] = _generate_candidates(ctx, carrier_pos)
-	AIRoleHelpers.append_incumbent(ctx, candidates)
+	AIStationSearch.append_incumbent(ctx, candidates)
 
 	var best_pos: Vector3 = ctx.self_pos
 	var best_score: float = -INF
 	for c: Vector3 in candidates:
-		if not AIRoleHelpers.is_legal_position(c):
+		if not AIStationSearch.is_legal_position(c):
 			continue
-		if AIRoleHelpers.too_close_to_teammate(c, teammate_positions):
+		if AIStationSearch.too_close_to_teammate(c, teammate_positions):
 			continue
 		if not _is_goal_side_of_carrier(c, carrier_pos, ctx.own_goal_dir):
 			continue
@@ -94,7 +94,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		var cand_flight: float = carrier_pos.distance_to(c) / maxf(pass_speed, 1.0)
 		AIGoalieModel.resolve_feed_keeper(
 				goalie_pos, ctx.attacking_goal_pos, cand_flight, c, carrier_pos,
-				AIRoleHelpers.opp_goalie_hands(ctx), pass_speed, opp_positions)
+				AIRoleReads.opp_goalie_hands(ctx), pass_speed, opp_positions)
 		var pass_value: float = AIActionScoring.score_pass(
 				carrier_pos, c, ctx.attacking_goal_pos,
 				AIGoalieModel.feed_keeper_pos, GameRules.NET_HALF_WIDTH,
@@ -106,7 +106,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 				GameRules.NET_HALF_WIDTH, teammate_positions, c,
 				ctx.self_max_speed, opp_positions, _scratch_opp_vels,
 				ctx.scratch_opp_caps, _scratch_mate_etas, _scratch_threat_by_cover)
-		var score: float = pass_value - counter_cost + AIRoleHelpers.incumbent_bonus(ctx, c)
+		var score: float = pass_value - counter_cost + AIStationSearch.incumbent_bonus(ctx, c)
 		if score > best_score:
 			best_score = score
 			best_pos = c
@@ -121,9 +121,9 @@ static func _hold_or_restore_numbers(ctx: RoleContext, d: RoleDecision,
 		stand: Vector3) -> RoleDecision:
 	d.target_position = stand
 	if AIActionScoring.in_offensive_zone(stand, ctx.attacking_goal_pos) \
-			and not AIRoleHelpers.may_hold_forward_stand(
+			and not AILastManDiscipline.may_hold_forward_stand(
 					ctx, ctx.prev_held_forward_stand, stand):
-		d.target_position = AIRoleHelpers.numbers_floor(ctx, stand)
+		d.target_position = AILastManDiscipline.numbers_floor(ctx, stand)
 	d.held_forward_stand = d.target_position.distance_to(stand) < 0.5
 	return d
 
@@ -163,7 +163,7 @@ static func _generate_candidates(ctx: RoleContext, carrier_pos: Vector3) -> Arra
 						* (GameRules.GOAL_LINE_Z - GameRules.ICING_FACEOFF_DOT_Z + 3.0)))
 		return result
 	result.append(carrier_pos)
-	for angle: float in AIRoleHelpers.POLAR_ANGLES:
+	for angle: float in AIStationSearch.POLAR_ANGLES:
 		result.append(Vector3(
 				carrier_pos.x + SEARCH_RADIUS_M * cos(angle),
 				0.0,

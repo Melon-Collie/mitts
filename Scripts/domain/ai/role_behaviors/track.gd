@@ -52,7 +52,7 @@ static func _decide_puck(ctx: RoleContext) -> RoleDecision:
 	var read: AIRushRead = ctx.rush_read
 
 	var ap: AICarrierApproach = ctx.scratch_carrier_approach
-	if not AIRoleHelpers.read_carrier_approach(ctx, ap):
+	if not AIDefensiveVerbs.read_carrier_approach(ctx, ap):
 		d.target_position = ctx.self_pos
 		return d
 	var carrier_pos: Vector3 = ap.carrier_pos
@@ -63,14 +63,14 @@ static func _decide_puck(ctx: RoleContext) -> RoleDecision:
 		hip = carrier_pos + ap.dir_net * _hip_gap(ctx, ap, read.carrier_peer)
 
 	if _is_goal_side_of(ctx, carrier_pos, CHECK_GOAL_SIDE_MARGIN_M):
-		var check: AIBodyCheck.Result = AIRoleHelpers.evaluate_body_check(ctx)
+		var check: AIBodyCheck.Result = AIDefensiveVerbs.evaluate_body_check(ctx)
 		if check.commit:
 			d.commit_check = true
 			d.target_position = check.target
 			return d
 
 	d.target_position = hip
-	d.target_velocity = AIRoleHelpers.stand_ride_velocity(ctx)
+	d.target_velocity = AIRoleReads.stand_ride_velocity(ctx)
 	# No brake at the hip; riding a man already expresses that, so this covers
 	# the loose-puck fallback.
 	d.arrive_at_speed = true
@@ -116,8 +116,8 @@ static func _decide_mid(ctx: RoleContext, side: float) -> RoleDecision:
 
 	# HOME: cover the man in my ice; with nobody there, hold the post — never
 	# chase out of the structure.
-	if AIRoleHelpers.cover_threat(ctx, d, _man_in_my_lane_peer(ctx, read, side),
-			AIRoleHelpers.resolve_defensive_play_ref(ctx)):
+	if AIDefensiveVerbs.cover_threat(ctx, d, _man_in_my_lane_peer(ctx, read, side),
+			AIRoleReads.resolve_defensive_play_ref(ctx)):
 		return d
 	d.target_position = _post(ctx, read, side)
 	return d
@@ -133,7 +133,7 @@ static func _post(ctx: RoleContext, read: AIRushRead, side: float) -> Vector3:
 		axis = Vector3(0.0, 0.0, -ctx.own_goal_dir)
 	var p: Vector3 = our_net - axis * depth
 	p.x += side * MID_LANE_SPLIT_M
-	return p if AIRoleHelpers.is_legal_position(p) else our_net - axis * depth
+	return p if AIStationSearch.is_legal_position(p) else our_net - axis * depth
 
 
 # How far off our net a man may be and still be in "my ice": the post plus a

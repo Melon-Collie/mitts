@@ -348,7 +348,7 @@ func test_evaluator_costs() -> void:
 	var opp_mates: Array[Vector3] = [
 			Vector3(-4, 0, -19), Vector3(3, 0, -14), Vector3(-1, 0, -8)]
 	_bench("carrier_best_option (PRESSURE per candidate)", func() -> void:
-		AIRoleHelpers.carrier_best_option(
+		AIDefensiveVerbs.carrier_best_option(
 				from, Vector3(2, 0, -17), net, goalie, opps, opp_mates))
 	var opp_vels: Array[Vector3] = []
 	var opp_caps: Array = []

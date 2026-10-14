@@ -5,7 +5,7 @@ extends GutTest
 # The reported failure is that they do not — the forwards end up cycling alone
 # while both D sit well back, so the attack is outnumbered in the zone.
 #
-# The station target runs through AIRoleHelpers.offensive_station_target, which
+# The station target runs through AILastManDiscipline.offensive_station_target, which
 # is the pinch read (plan §13): hold the forward stand while we have real
 # control and either support behind us or nobody behind us; otherwise back off
 # to the numbers layer; and if the puck is not ours at all, retreat to structure.

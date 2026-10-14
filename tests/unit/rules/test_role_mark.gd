@@ -4,7 +4,7 @@ extends GutTest
 # old ANCHOR / COVER / BACKCHECK, which had converged to identical man-marking.
 #
 # Primary path (brain assigned a man): the shared cover stand,
-# AIRoleHelpers.cover_threat — goal-side of that opponent, in the carrier→man
+# AIDefensiveVerbs.cover_threat — goal-side of that opponent, in the carrier→man
 # feed lane, riding his cut. Tests:
 #   - Assigned man drives coverage to that man's side (DZONE + TRANS_DEFENSE).
 #   - Coverage stays ATTACHED to the man (near his cover anchor, not from the slot).
@@ -124,7 +124,7 @@ func test_assigned_man_drives_coverage_side_trans_od() -> void:
 	assert_gt(d.target_position.x, 0.0,
 			"assigned the +X man → cover his side; got x=%f" % d.target_position.x)
 	assert_gt(d.target_position.z,
-			man.z - AIRoleHelpers.COVER_GOAL_SIDE_TOLERANCE_M - 0.01,
+			man.z - AIDefensiveVerbs.COVER_GOAL_SIDE_TOLERANCE_M - 0.01,
 			"coverage is goal-side of the man; got z=%f" % d.target_position.z)
 
 
@@ -145,12 +145,12 @@ func test_assigned_man_is_covered_tight_not_from_the_slot() -> void:
 	ctx.assigned_threat_peer = 210
 	var d: RoleDecision = AIRoleMark.decide(ctx)
 	var max_attach: float = AIThreatAssignment.COVER_DEPTH_M \
-			+ AIRoleHelpers.SEARCH_STEP_M + 0.5
+			+ AIStationSearch.SEARCH_STEP_M + 0.5
 	assert_lt(d.target_position.distance_to(man), max_attach,
 			"man coverage stays attached to the man; got %s for man at %s" \
 			% [d.target_position, man])
 	assert_gt(d.target_position.z,
-			man.z - AIRoleHelpers.COVER_GOAL_SIDE_TOLERANCE_M - 0.01,
+			man.z - AIDefensiveVerbs.COVER_GOAL_SIDE_TOLERANCE_M - 0.01,
 			"…and on the defensive side of him; got z=%f" % d.target_position.z)
 
 
@@ -208,7 +208,7 @@ func test_wide_man_coverage_stays_in_the_sealing_lane() -> void:
 	var target: Vector3 = AIRoleMark.decide(ctx).target_position
 	var to_net: Vector3 = (ctx.defending_goal_pos - man).normalized()
 	var proj: float = (target.x - man.x) * to_net.x + (target.z - man.z) * to_net.z
-	assert_gt(proj, -AIRoleHelpers.COVER_GOAL_SIDE_TOLERANCE_M - 0.01,
+	assert_gt(proj, -AIDefensiveVerbs.COVER_GOAL_SIDE_TOLERANCE_M - 0.01,
 			"coverage seals the man→net lane, not the space beside him;"
 			+ " got %s (lane projection %f)" % [target, proj])
 
@@ -337,11 +337,11 @@ func test_fallback_far_cover_reads_the_brain_threat_memo() -> void:
 func test_lead_threat_clamps_long_lead() -> void:
 	var p := Vector3.ZERO
 	# Slow: leads along velocity (3 m/s × 0.3 s = 0.9 m), unclamped.
-	var slow: Vector3 = AIRoleHelpers.lead_threat(p, Vector3(3, 0, 0))
+	var slow: Vector3 = AIRoleReads.lead_threat(p, Vector3(3, 0, 0))
 	assert_almost_eq(slow.x, 0.9, 0.001, "slow lead is vel × horizon")
 	# Fast: 50 m/s × 0.3 = 15 m → clamped to the max.
-	var fast: Vector3 = AIRoleHelpers.lead_threat(p, Vector3(50, 0, 0))
-	assert_almost_eq(fast.x, AIRoleHelpers.DEFENSIVE_ANTICIPATION_MAX_M, 0.001,
+	var fast: Vector3 = AIRoleReads.lead_threat(p, Vector3(50, 0, 0))
+	assert_almost_eq(fast.x, AIRoleReads.DEFENSIVE_ANTICIPATION_MAX_M, 0.001,
 			"long lead clamps to DEFENSIVE_ANTICIPATION_MAX_M")
 
 

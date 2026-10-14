@@ -73,7 +73,6 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# sweeping the jump. +6: the pinch hop composed onto the contest exit.
 	"res://Scripts/controllers/puck_controller.gd": 1589,
 	"res://Scripts/actors/hockey_rink.gd": 1469,
-	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 1097,
 	"res://Scripts/game/player_prefs.gd": 1404,
 	"res://Scripts/actors/skater_mesh_builder.gd": 1446,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1372,
@@ -106,7 +105,6 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/game/game_manager.gd": 63,
 	"res://Scripts/domain/state/player_attributes.gd": 53,
 	"res://Scripts/networking/network_telemetry.gd": 53,
-	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 48,
 	# +1: knockdown_drop_m, which the gait's crumple and the sprawl's buckle share.
 	"res://Scripts/controllers/skater_controller.gd": 41,
 	"res://Scripts/actors/puck.gd": 43,

@@ -761,7 +761,7 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	var attacking_goal: Vector3 = ctx.attacking_goal_pos
 	if rebuild_lists:
 		_field.fill(ctx)
-	var our_goalie: Vector3 = AIRoleHelpers.resolve_our_goalie_pos(ctx)
+	var our_goalie: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 	var puck_now: Vector3 = self_pos
 	if snapshot.puck_state != null:
 		puck_now = Vector3(
