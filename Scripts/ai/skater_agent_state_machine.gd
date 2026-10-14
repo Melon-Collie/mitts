@@ -1017,8 +1017,7 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 			or _state == State.ONE_TIMER_PRESSED)
 	if not is_press_state and _dispatch_skip_counter > 0:
 		_dispatch_skip_counter -= 1
-		input.move_vector = _offside_guard(_cached_move_vector, snapshot, self_pos,
-				self_state.velocity, have_puck)
+		input.move_vector = _cached_move_vector
 		input.stick_lift_held = _cached_stick_lift_held
 		input.brake = _cached_brake
 		input.stance_held = _cached_stance_held
@@ -2613,8 +2612,7 @@ func _pass_aim_point(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 	return lead
 
 
-# Steers the body toward `anchor` (SkaterAgentSteering), then the offside
-# brake, applied last so the hard constraint wins. `arrive` opts into the
+# Steers the body toward `anchor` (SkaterAgentSteering). `arrive` opts into the
 # arrival brake: station-keeping callers (off-puck role destinations) brake to
 # STOP at the anchor; waypoint-style callers (carry steps, puck chase, check
 # commits, tag-up) re-pick the anchor continuously or want to arrive at speed.
@@ -2627,25 +2625,26 @@ func _apply_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 	_steering.steer(input, snapshot, self_pos, anchor, arrive, velocity_match_speed,
 			anchor_velocity, engaged_peer_id, retreat_floor_center, retreat_floor_radius,
 			_attacking_goal_pos, _upright_lateral_accel(), _blade_reach)
+
+
+# Body-level offside guard: keep an attacking non-carrier's momentum-driven body
+# short of the attacking blue line before the puck (instant ghost in ARCADE), and
+# a team owing an NHL tag-up out entirely (Scripts/ai/CLAUDE.md → Who may play
+# the puck). SkaterAgent.tick runs it every tick as the LAST write to the move.
+func apply_offside_guard(input: InputState, snapshot: WorldSnapshot) -> void:
+	if snapshot == null or snapshot.puck_state == null:
+		return
 	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
-	if self_state != null:
-		input.move_vector = _offside_guard(input.move_vector, snapshot, self_pos,
-				self_state.velocity, snapshot.puck_state.carrier_peer_id == _peer_id)
-
-
-# Body-level offside guard: keep an attacking non-carrier from skating its body
-# across the attacking blue line before the puck (instant ghost in ARCADE). The
-# role-level target filter can't hold a momentum-driven body to the line on its
-# own. A team owing an NHL tag-up holds the line (see Scripts/ai/CLAUDE.md →
-# Who may play the puck). Runs on every tick, decided or not.
-func _offside_guard(desired: Vector2, snapshot: WorldSnapshot, self_pos: Vector3,
-		v: Vector3, is_carrier: bool) -> Vector2:
+	if self_state == null:
+		return
 	var puck_pos: Vector3 = snapshot.puck_state.position
 	var team_offside: bool = _teammate_must_tag_up(snapshot)
+	var is_carrier: bool = snapshot.real_puck_carrier_peer_id == _peer_id
 	var hold_entry: bool = is_carrier and team_offside
-	return AISteering.offside_brake(
-			desired, puck_pos if hold_entry else self_pos, v, _own_goal_dir,
-			puck_pos.z, is_carrier and not hold_entry, team_offside)
+	input.move_vector = AISteering.offside_brake(
+			input.move_vector, puck_pos if hold_entry else self_state.position,
+			self_state.velocity, _own_goal_dir, puck_pos.z,
+			is_carrier and not hold_entry, team_offside)
 
 
 # Opponent peer ids, read straight from the per-frame roster cache published by

@@ -53,7 +53,10 @@ Adding a behaviour is four steps:
 
 After dispatch, `SkaterAgent.tick` runs three per-tick passes that may overwrite
 the dispatched input: the stick lift, board play (`apply_board_play`) and the
-shot block (`SkaterAgentShotBlock`).
+shot block (`SkaterAgentShotBlock`). The offside brake (`apply_offside_guard`)
+runs after all of them as the last write to the move, so no writer — the deke
+inside dispatch, the pinned slide after it — can carry a bot over the line
+(`test_agent_offside_guard.gd`).
 
 ### The dispatch throttle
 

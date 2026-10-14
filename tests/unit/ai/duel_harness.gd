@@ -300,6 +300,8 @@ func step() -> void:
 			tick_ai_us += us
 		else:
 			s.agent.dispatch(s.input, snapshot)
+		# Production's last write to the move (SkaterAgent.tick).
+		s.agent.apply_offside_guard(s.input, snapshot)
 		if s.agent._poke_evade.deking:
 			deke_fired = true
 			dekes_by_peer[s.peer_id] = true
