@@ -40,7 +40,7 @@ func _carrier_snap() -> WorldSnapshot:
 func _held_ticks() -> int:
 	var held: int = 0
 	var pressed: int = 0
-	for _i: int in Agent.STICK_LIFT_HOLD_TICKS + 5:
+	for _i: int in SkaterAgentStickPlay.STICK_LIFT_HOLD_TICKS + 5:
 		var input := InputState.new()
 		sm.apply_stick_lift_input(input)
 		held += 1 if input.stick_check_held else 0
@@ -57,7 +57,7 @@ func test_a_shielded_puck_draws_a_lift_from_behind() -> void:
 	var lift_point: Vector3 = AIStickLiftRead.shaft_lift_point(
 			s.skater_states[OPP_ID].top_hand_world, s.skater_states[OPP_ID].blade_contact_world)
 	assert_almost_eq(aim.distance_to(lift_point), 0.0, 1e-4, "it aims under the shaft")
-	assert_eq(_held_ticks(), Agent.STICK_LIFT_HOLD_TICKS, "and holds the button through the hook")
+	assert_eq(_held_ticks(), SkaterAgentStickPlay.STICK_LIFT_HOLD_TICKS, "and holds the button through the hook")
 
 
 func test_an_open_puck_draws_the_jab() -> void:
@@ -79,7 +79,7 @@ func test_the_beginner_tier_only_jabs() -> void:
 
 func test_the_lift_hook_ends_inside_the_fast_drop_window() -> void:
 	# Held past HOOK_MAX_S the lift would end in the slow recovery instead.
-	var hook_s: float = float(Agent.STICK_LIFT_HOLD_TICKS) / 120.0 - StickCheckRules.RISE_S
+	var hook_s: float = float(SkaterAgentStickPlay.STICK_LIFT_HOLD_TICKS) / 120.0 - StickCheckRules.RISE_S
 	assert_gt(hook_s, StickCheckRules.HOOK_MIN_S)
 	assert_lt(hook_s, StickCheckRules.HOOK_MAX_S)
 
@@ -191,13 +191,13 @@ func test_a_covering_bot_keeps_holding_the_tie_it_made() -> void:
 func test_a_bot_holding_a_tie_follows_the_mans_stick_late() -> void:
 	var s: WorldSnapshot = _feed_snap()
 	var man: SkaterNetworkState = s.skater_states[OPP_ID]
-	var first: Vector3 = sm._step_tie_follow(man)
+	var first: Vector3 = sm._stick_play.step_tie_follow(man)
 	man.top_hand_world += Vector3(1.0, 0.0, 0.0)
 	man.blade_contact_world += Vector3(1.0, 0.0, 0.0)
 	var ticks: int = roundi(StickCheckRules.TIE_LAG_BUDGET_S * 120.0)
 	var follow: Vector3 = first
 	for _i: int in ticks:
-		follow = sm._step_tie_follow(man)
+		follow = sm._stick_play.step_tie_follow(man)
 	var moved: float = follow.x - first.x
 	assert_gt(moved, 0.5, "it gets most of the way there inside the lag budget")
 	assert_lt(moved, 0.75, "but not at once: a bot reads a pull as late as a human holder")
