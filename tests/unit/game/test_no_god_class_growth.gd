@@ -69,7 +69,9 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +33: the dive takes the knockdown's fall its own way — a thrown tip rate,
 	# no rebound, legs long, the belt kept on his line — and stays down while
 	# block is held. +5: a bot's caps carry its wrist-shot load and facing configs.
-	"res://Scripts/controllers/skater_controller.gd": 3537,
+	# +10: the staged get-up's one clock (knockdown_getup_left) and the stagger
+	# he finds his legs through once it ends.
+	"res://Scripts/controllers/skater_controller.gd": 3547,
 	"res://Scripts/actors/skater.gd": 2796,
 	"res://Scripts/networking/network_manager.gd": 2855,
 	"res://Scripts/game/tutorial_manager.gd": 2067,
@@ -114,7 +116,8 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/networking/network_telemetry.gd": 53,
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 48,
 	# +1: knockdown_drop_m, which the gait's crumple and the sprawl's buckle share.
-	"res://Scripts/controllers/skater_controller.gd": 41,
+	# +1: knockdown_getup_left, the get-up clock the gait and the torso fold read.
+	"res://Scripts/controllers/skater_controller.gd": 42,
 	"res://Scripts/actors/puck.gd": 43,
 	"res://Scripts/domain/state/game_state_machine.gd": 39,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 37,

@@ -628,7 +628,9 @@ toward its own pose by its weight, so the stroke and every additive layer below
 it fade with no layer knowing about another. The block owns the legs, the drop
 and the ankles, and unplants its kneeling leg; the knockdown, last, owns the
 legs, the drop, the plants (the blade contact seat, `Scripts/actors/CLAUDE.md`),
-the mohawk yaw, the edges, the trunk and the wobble. **A layer never suppresses another with a
+the mohawk yaw, the edges, the trunk and the wobble — and through the get-up
+it owns the kneel too, solving each thigh so a foot pivot never goes under
+the ice. **A layer never suppresses another with a
 `(1 − other.weight)` factor** — if one must win, it is an override above the
 other. `test_gait_layers.gd` holds the order and the knockdown's mask.
 

@@ -168,14 +168,12 @@ func _apply_lean() -> void:
 	# as the body reaches the ice (KnockdownFallRules.fold_at), so the landed
 	# torso lies IN the ice plane instead of curling through it or propping up
 	# as a plank. It rides the SAME recoil direction (fall the way you were hit)
-	# and the same replicated timer, layered on top of the stagger recoil.
-	# kd_t holds full while more than knockdown_getup_seconds remains, then
-	# eases to 0 (the get-up).
-	var kd_t: float = clampf(
-			_controller.knockdown_timer / maxf(_controller.knockdown_getup_seconds, 0.001), 0.0, 1.0)
+	# and the same replicated timer, layered on top of the stagger recoil, and
+	# lets go as he comes up onto his knees.
+	var lie: float = KnockdownFallRules.lie_share(_controller.knockdown_getup_left())
 	var mag: float = deg_to_rad(_controller.stagger_recoil_deg) * recoil_t
-	if kd_t > 0.0:
-		mag += _controller.knockdown_fold_rad() * kd_t
+	if lie > 0.0:
+		mag += _controller.knockdown_fold_rad() * lie
 	if mag > 0.0:
 		var d: Vector2 = _controller.stagger_recoil_dir
 		recoil_pitch = mag * d.y

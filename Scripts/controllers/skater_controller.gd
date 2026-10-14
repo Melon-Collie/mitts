@@ -156,8 +156,8 @@ var stagger_recoil_deg: float = 13.0  # peak torso recoil lean at full stagger
 # disable knockdowns.
 var knockdown_impulse: float = 1.8         # m/s victim impulse above which a hit knocks down
 var knockdown_ref_impulse: float = 3.1     # m/s impulse of a maximal (longest) knockdown
-var knockdown_min_seconds: float = 0.7     # down time of a just-barely knockdown
-var knockdown_max_seconds: float = 1.5     # down time of a maximal hit
+var knockdown_min_seconds: float = 1.1     # down time of a just-barely knockdown, the get-up included
+var knockdown_max_seconds: float = 1.9     # down time of a maximal hit
 var knockdown_friction: float = 2.0  # m/s² a downed body sheds sliding on its gear: μ ≈ 0.2, padded nylon on ice
 # Knockdown pose (cosmetic): a downed player FALLS — the knees buckle into the
 # collapse crouch that matches the gait's drop, the whole cosmetic rig tips
@@ -170,11 +170,14 @@ var knockdown_friction: float = 2.0  # m/s² a downed body sheds sliding on its 
 # replicated knockdown_timer (elapsed down-time = _knockdown_total − timer), so
 # it renders identically on every machine and through reconcile, like the
 # stagger stumble.
-# knockdown_getup_seconds is the tail window over which the whole pose eases back
-# up (the get-up) — it holds full while more than this much time remains.
+# knockdown_getup_seconds is the tail of the window spent getting up, staged
+# knees → one knee → skates (KnockdownFallRules.lie_share and its siblings); the
+# lying pose holds full while more than this much time remains.
 var knockdown_pose_drop_m: float = 0.3     # buckle sink — the tilt does the lying-down
 var knockdown_fold_deg: float = 20.0       # airborne torso curl; resolves to lie-flat on landing
-var knockdown_getup_seconds: float = 0.4   # tail over which the down pose eases back up
+var knockdown_getup_seconds: float = 0.8
+# Back on his skates he finds his legs: a stagger this long, leaning forward.
+var knockdown_getup_stagger_seconds: float = 0.5
 # Fall model tunables (KnockdownFallRules.Config — units and physical
 # justifications live on the fields there).
 var knockdown_fall_buckle_seconds: float = 0.1
@@ -1776,8 +1779,7 @@ func _render_pose_update(delta: float) -> void:
 # machine renders the same fall while the gameplay body underneath keeps its
 # deterministic slide. Upright, it only settles the rig back level.
 func _apply_knockdown_fall() -> void:
-	var kd_t: float = clampf(
-			knockdown_timer / maxf(knockdown_getup_seconds, 0.001), 0.0, 1.0)
+	var kd_t: float = knockdown_getup_left()
 	if not _apply_fall_tilt(kd_t):
 		return
 	if kd_t <= 0.0 or not skater.on_camera():
@@ -1791,14 +1793,15 @@ func _apply_knockdown_fall() -> void:
 		_sprawl_scratch = KnockdownFallRules.SprawlPose.new()
 	var legs: Vector3 = _skating.leg_segment_lengths()
 	var share: float = knockdown_pose_weight()
-	# The buckle is solved from the drop the gait is applying at this instant,
-	# entry and get-up alike: the drop is 1 − cos of the angle, so scaling a
-	# solved pose instead leaves the boots under the ice part-way. The scatter
-	# alone eases out with the get-up envelope.
+	# The buckle is solved from the lying drop the gait is applying at this
+	# instant: the drop is 1 − cos of the angle, so scaling a solved pose instead
+	# leaves the boots under the ice part-way. It hands the legs to the get-up's
+	# kneel as he comes up onto his knees.
+	var lie: float = KnockdownFallRules.lie_share(kd_t)
 	KnockdownFallRules.sprawl_into(_sprawl_scratch, knockdown_elapsed(),
-			_fall_entry_speed(), stagger_recoil_dir, knockdown_drop_m() * share,
-			legs, _fall_config(), KnockdownFallRules.getup_scale(kd_t))
-	skater.apply_knockdown_leg_overlay(_sprawl_scratch, share)
+			_fall_entry_speed(), stagger_recoil_dir, knockdown_drop_m() * share * lie,
+			legs, _fall_config(), lie)
+	skater.apply_knockdown_leg_overlay(_sprawl_scratch, share * lie)
 
 
 # The whole-rig tilt alone; false once upright and level. A pure function of
@@ -1847,16 +1850,22 @@ func knockdown_elapsed() -> float:
 	return maxf(_knockdown_total - knockdown_timer, 0.0)
 
 
-# How much of the down pose holds (0..1): full while more than
-# knockdown_getup_seconds remain, easing out over that tail, and ramped in over
-# the buckle window. The gait's crumple sinks the body by this share of
-# knockdown_drop_m(), and the legs buckle to exactly that share.
+# The get-up tail left (0..1): 1 while fully down, 0 upright — the clock every
+# get-up envelope in KnockdownFallRules takes.
+func knockdown_getup_left() -> float:
+	return clampf(knockdown_timer / maxf(knockdown_getup_seconds, 0.001), 0.0, 1.0)
+
+
+# How much of the down pose holds over the live one (0..1): ramped in over the
+# buckle window, full through the lie and the kneel, easing out as he stands up
+# off the knee. The gait's crumple sinks the body by this share of the drop, and
+# the legs buckle to exactly that share.
 func knockdown_pose_weight() -> float:
-	var kd_t: float = clampf(
-			knockdown_timer / maxf(knockdown_getup_seconds, 0.001), 0.0, 1.0)
+	var kd_t: float = knockdown_getup_left()
 	if kd_t <= 0.0:
 		return 0.0
-	return kd_t * KnockdownFallRules.entry_ramp(knockdown_elapsed(), _fall_config())
+	return KnockdownFallRules.stand_hold(kd_t) \
+			* KnockdownFallRules.entry_ramp(knockdown_elapsed(), _fall_config())
 
 
 # How far the down pose sinks the body. None for a dive: it goes down long off
@@ -1865,25 +1874,24 @@ func knockdown_drop_m() -> float:
 	return 0.0 if _diving() else knockdown_pose_drop_m
 
 
-# Current whole-body fall tilt (radians): the tipping-body solve scaled by the
-# get-up envelope. Closed-form in replicated state (timer, window total, entry
-# shove), so it serves both the render-rate fall pass and the deterministic
-# tick (the pose coordinator's fold) without divergence.
+# Current whole-body fall tilt (radians): the tipping-body solve, gone by the
+# time he is on his knees. Closed-form in replicated state (timer, window total,
+# entry shove), so it serves both the render-rate fall pass and the
+# deterministic tick (the pose coordinator's fold) without divergence.
 func knockdown_fall_tilt() -> float:
-	var kd_t: float = clampf(
-			knockdown_timer / maxf(knockdown_getup_seconds, 0.001), 0.0, 1.0)
+	var kd_t: float = knockdown_getup_left()
 	if kd_t <= 0.0:
 		return 0.0
 	return KnockdownFallRules.tilt_at(
 			knockdown_elapsed(), _fall_entry_speed(), _fall_config()) \
-			* KnockdownFallRules.getup_scale(kd_t)
+			* KnockdownFallRules.lie_share(kd_t)
 
 
 # Waist-fold magnitude for the current fall instant: the reflexive airborne
 # curl resolving to the lie-flat complement as the body reaches the ice
 # (KnockdownFallRules.fold_at), developing through the same entry ramp as the
-# gait's crumple. SkaterPoseCoordinator scales it by kd_t and decomposes it
-# along the recoil direction.
+# gait's crumple. SkaterPoseCoordinator scales it by the lying share and
+# decomposes it along the recoil direction.
 func knockdown_fold_rad() -> float:
 	# A diver stretches out along the layout; only a hit curls.
 	var curl: float = 0.0 if _diving() else deg_to_rad(knockdown_fold_deg)
@@ -1903,8 +1911,7 @@ func knockdown_fold_rad() -> float:
 # draws a short stick; Scripts/controllers/CLAUDE.md). On the brace's own clock,
 # so going down and getting up are continuous.
 func _apply_dive_layout() -> void:
-	var kd_t: float = clampf(
-			knockdown_timer / maxf(knockdown_getup_seconds, 0.001), 0.0, 1.0)
+	var kd_t: float = knockdown_getup_left()
 	var brace_t: float = KnockdownFallRules.brace_at(
 			knockdown_elapsed(), kd_t, knockdown_brace_in_seconds)
 	if brace_t <= 0.001:
@@ -1955,8 +1962,7 @@ func _sync_dive_layout() -> void:
 
 
 func _apply_knockdown_brace() -> void:
-	var kd_t: float = clampf(
-			knockdown_timer / maxf(knockdown_getup_seconds, 0.001), 0.0, 1.0)
+	var kd_t: float = knockdown_getup_left()
 	var brace_t: float = KnockdownFallRules.brace_at(
 			knockdown_elapsed(), kd_t, knockdown_brace_in_seconds)
 	if brace_t <= 0.001:
@@ -3204,8 +3210,12 @@ func _apply_movement(input: InputState, delta: float) -> void:
 	var down_floor: float = 0.0
 	if skater.is_diving and input.block_held and knockdown_timer >= knockdown_getup_seconds:
 		down_floor = knockdown_getup_seconds
+	var was_down: bool = knockdown_timer > 0.0
 	knockdown_timer = maxf(knockdown_timer - delta, down_floor)
 	skater.is_knocked_down = knockdown_timer > 0.0
+	if was_down and not skater.is_knocked_down:
+		stagger_timer = maxf(stagger_timer, knockdown_getup_stagger_seconds)
+		stagger_recoil_dir = Vector2(0.0, -1.0)
 	if not skater.is_knocked_down:
 		skater.is_diving = false
 	if skater.is_knocked_down:
