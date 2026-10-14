@@ -6,7 +6,13 @@ extends GutTest
 # over the nearer-right-now bot), and incumbent hysteresis (the current
 # chaser keeps the role unless a challenger clearly beats them).
 
+const Snapshot := preload("res://tests/snapshot.gd")
+const SNAPSHOT_PATH := "res://tests/unit/rules/snapshots/loose_puck_chase.txt"
 const REF: float = AIArrival.SKATER_REF_SPEED_M_S
+# A skater parked 20 m down a 15 m/s puck's path along the +X wall.
+const RIM_FROM := Vector3(12, 0, 0)
+const RIM_VEL := Vector3(0, 0, 15)
+const PARKED_IN_PATH := Vector3(12, 0, 20)
 
 
 func _skater(pos: Vector3, vel: Vector3 = Vector3.ZERO) -> SkaterNetworkState:
@@ -172,16 +178,27 @@ func test_rim_elects_downstream_skater_over_tail_chaser() -> void:
 	assert_eq(pid, 200, "the rim's path elects the downstream skater, not the tail-chaser")
 
 
-func test_path_intercept_time_reads_arrival_of_the_puck() -> void:
-	# Skater parked in a fast puck's path: his intercept time is when the
-	# PUCK arrives (~20 m at rim pace → ~1.5 s), not his skate time to the
-	# puck's current spot (20 m from rest ≈ 2.9 s).
-	var traj: Array[Vector3] = AILoosePuckChase.race_trajectory(
-			Vector3(12, 0, 0), Vector3(0, 0, 15))
+func _parked_intercept_time() -> float:
+	var traj: Array[Vector3] = AILoosePuckChase.race_trajectory(RIM_FROM, RIM_VEL)
 	var dt: float = AILoosePuckChase.RACE_LOOKAHEAD_S / float(AILoosePuckChase.RACE_STEPS)
-	var t: float = AILoosePuckChase.path_intercept_time(
-			traj, dt, Vector3(12, 0, 0), Vector3(12, 0, 20), Vector3.ZERO, REF)
-	assert_between(t, 1.0, 2.0, "intercept ≈ the puck's own arrival at the parked skater")
+	return AILoosePuckChase.path_intercept_time(
+			traj, dt, RIM_FROM, PARKED_IN_PATH, Vector3.ZERO, REF)
+
+
+func test_path_intercept_time_reads_arrival_of_the_puck() -> void:
+	# His intercept is when the PUCK reaches him, which beats skating to where
+	# the puck is now.
+	var t: float = _parked_intercept_time()
+	assert_gt(t, 0.0, "the puck still has to travel to him")
+	assert_lt(t, AIArrival.time_to_arrive(PARKED_IN_PATH, RIM_FROM, Vector3.ZERO, REF),
+			"intercept beats skating to the puck's current spot")
+
+
+func test_loose_puck_chase_calibration_snapshot() -> void:
+	var snap := Snapshot.new(SNAPSHOT_PATH)
+	snap.record("skater parked 20 m down a 15 m/s rim, path intercept time",
+			_parked_intercept_time())
+	snap.verify(self)
 
 
 func test_rim_race_not_lost_for_downstream_defender() -> void:

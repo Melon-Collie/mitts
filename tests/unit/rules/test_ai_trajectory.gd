@@ -5,6 +5,10 @@ extends GutTest
 # inner boundary, the lead-time convenience wrapper, and the
 # zero-velocity / zero-lead degenerate cases.
 
+const Snapshot := preload("res://tests/snapshot.gd")
+const SNAPSHOT_PATH := "res://tests/unit/rules/snapshots/puck_trajectory.txt"
+const TICK_S: float = 1.0 / 120.0
+
 
 func test_constant_velocity_steps_forward() -> void:
 	var pos := Vector3(0, 0, 0)
@@ -173,16 +177,36 @@ func test_step_puck_reflects_velocity_at_board() -> void:
 	assert_lte(stepped.origin.x, GameRules.INNER_HALF_WIDTH + 0.001, "stays inside the boards")
 
 
+func _glance_off_the_board() -> Array[Vector3]:
+	# Gentle into the +X board (x), mostly along it (+Z).
+	var vel := Vector3(6, 0, 30)
+	var stepped: Transform3D = AITrajectory.step_puck(
+			Vector3(GameRules.INNER_HALF_WIDTH - 0.02, 0, 0), vel, TICK_S)
+	return [vel, stepped.basis.x]
+
+
 func test_step_puck_board_friction_bleeds_tangential_speed() -> void:
-	# A puck glancing off the +X board (small into-board X, large along-board Z) loses some of
-	# its ALONG-board speed to board friction — the term that kills a hard rim-around. Ice
-	# friction over one tick is ~0.004 m/s (negligible at this speed), so the drop is the board.
-	var pos := Vector3(GameRules.INNER_HALF_WIDTH - 0.02, 0, 0)
-	var vel := Vector3(6, 0, 30)  # mostly tangential (+Z), gentle into the +X board
-	var stepped: Transform3D = AITrajectory.step_puck(pos, vel, 1.0 / 120.0)
-	assert_lt(stepped.basis.x.x, 0.0, "into-board component reflected")
-	assert_lt(stepped.basis.x.z, 29.5, "along-board (tangential) speed bled by board friction")
-	assert_gt(stepped.basis.x.z, 27.0, "but most of the tangential pace is kept on a glance")
+	# A glancing carom loses some ALONG-board speed to Coulomb board friction,
+	# bounded by friction × the normal impulse (restitution at most 1) and by the
+	# sticking cap. Ice friction over the tick is charged on top.
+	var vels: Array[Vector3] = _glance_off_the_board()
+	var vel: Vector3 = vels[0]
+	var after: Vector3 = vels[1]
+	var ice: float = GameRules.PUCK_ICE_DECEL_M_S2 * TICK_S
+	var loss: float = vel.z - after.z
+	assert_lt(after.x, 0.0, "into-board component reflected")
+	assert_gt(loss, ice, "the board bleeds along-board speed beyond the ice's share")
+	assert_lte(loss, GameRules.PUCK_BOARD_FRICTION * 2.0 * vel.x + ice,
+			"the drop is bounded by friction × the normal impulse")
+	assert_lte(loss, GameRules.PUCK_BOARD_TANGENTIAL_MAX_LOSS * vel.z + ice,
+			"…and by the sticking cap")
+
+
+func test_puck_trajectory_calibration_snapshot() -> void:
+	var snap := Snapshot.new(SNAPSHOT_PATH)
+	snap.record("30 m/s glance off the side board, along-board speed after one tick",
+			_glance_off_the_board()[1].z)
+	snap.verify(self)
 
 
 func test_a_square_carom_cannot_erase_the_along_board_channel() -> void:

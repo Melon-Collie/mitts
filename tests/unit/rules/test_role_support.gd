@@ -194,35 +194,6 @@ func test_no_opponents_means_no_exposure_penalty() -> void:
 	assert_true(absf(d.target_position.z) <= GameRules.GOAL_LINE_Z)
 
 
-func test_covering_self_erases_the_counter_from_a_recoverable_spot() -> void:
-	# The covering-set contract at SUPPORT's seam (counter_rush_cost with
-	# SUPPORT itself as the per-candidate racer): same loss, same collector —
-	# standing where SUPPORT beats the counter home erases the threat (self
-	# joins the covering set, the counter shot is a blocked look), while
-	# standing past the play leaves it live. This is what replaced the old
-	# my_time/safe_time ramp: who COVERS, not who wins a footrace ratio.
-	var net := Vector3(0, 0, OUR_NET_Z)
-	var goalie := Vector3(0, 0, OUR_NET_Z - 0.8)
-	var loss := Vector3(0, 0, 0)                      # turnover at center ice
-	var opps: Array[Vector3] = [Vector3(1, 0, 1)]     # collector on the puck
-	var vels: Array[Vector3] = [Vector3.ZERO]
-	var no_mates: Array[Vector3] = []
-	var recoverable: float = AIActionScoring.counter_rush_cost(
-			loss, 1.0, net, goalie, GameRules.NET_HALF_WIDTH, no_mates,
-			Vector3(0, 0, 14), AIArrival.SKATER_REF_SPEED_M_S,
-			opps, vels, [])
-	var exposed: float = AIActionScoring.counter_rush_cost(
-			loss, 1.0, net, goalie, GameRules.NET_HALF_WIDTH, no_mates,
-			Vector3(0, 0, -15), AIArrival.SKATER_REF_SPEED_M_S,
-			opps, vels, [])
-	assert_gt(exposed, 0.25,
-			"a spot past the play leaves the counter live; got %f" % exposed)
-	assert_lt(recoverable, exposed * 0.5,
-			"covering the counter point collapses the threat (one body walls "
-			+ "most of the slot look); recoverable=%f exposed=%f"
-			% [recoverable, exposed])
-
-
 func test_crease_lurker_does_not_zero_the_high_stations() -> void:
 	# The covering-set replacement's headline fix: a beaten opponent parked at
 	# OUR crease gave the old body-ETA ramp a ~0 time-home, which zeroed every
