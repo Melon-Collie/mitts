@@ -65,7 +65,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +162: the rim pass. The path search lives in AIRimPass; what stays here is
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
-	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 4005,
+	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 4026,
 	# +33: the dive takes the knockdown's fall its own way — a thrown tip rate,
 	# no rebound, legs long, the belt kept on his line — and stays down while
 	# block is held. +5: a bot's caps carry its wrist-shot load and facing configs.

@@ -3245,8 +3245,15 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 	# pace its hold loads for a body arriving at this pace, worth only the odds
 	# the puck is still there at the press, and a pull the carry is too short for
 	# waits at the spot, in the wind-up the keeper races.
-	var cand_wait: float = _arrival_hold_wait(ctx, candidate, arrive_vel, local_time)
-	var cand_speed: float = ctx.self_wrister_shot_speed * _holds.arrival_share
+	var cand_wait: float = 0.0
+	var cand_share: float = 1.0
+	var cand_keep: float = 1.0
+	if _shot_reads(ctx, self_pos,
+			candidate + arrive_vel * SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S):
+		cand_wait = _arrival_hold_wait(ctx, candidate, arrive_vel, local_time)
+		cand_share = _holds.arrival_share
+		cand_keep = _holds.arrival_keep
+	var cand_speed: float = ctx.self_wrister_shot_speed * cand_share
 	var cand_windup: float = SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S + cand_wait
 	# The keeper backs in as the carry closes on him (AIActionScoring's planning
 	# depth model): over the carry his depth follows the chart / rush-backflow
@@ -3299,7 +3306,7 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 	var dest_score: float = _score_at(ctx, cand_release, self_pos,
 			_scratch_opponents_path, cand_goalie,
 			cand_speed, cand_unsettled, ctx.self_aim_spread_rad,
-			cand_displacement, ctx.self_loft_tans.z) * _holds.arrival_keep
+			cand_displacement, ctx.self_loft_tans.z, cand_keep)
 	# ENTRY CONTINUATION: from outside the zone an in-zone candidate is worth what
 	# a carrier there does next, which its own shot xG badly understates just
 	# inside the line. The drive-in from the candidate, priced in the in-zone
@@ -3474,6 +3481,17 @@ func _score_wheel_candidate(ctx: RoleContext, dest: Vector3,
 	return benefit - cost
 
 
+# Whether a shot released at `release` by a carrier now at `from_pos` is what
+# _score_at prices the spot by. Outside the zone, from outside it, at a keeper
+# home, the spot is worth its position and the shot (near nothing at that range)
+# is never the better read, so its hold is not worth solving.
+func _shot_reads(ctx: RoleContext, from_pos: Vector3, release: Vector3) -> bool:
+	return AIActionScoring.in_offensive_zone(from_pos, ctx.attacking_goal_pos) \
+			or AIActionScoring.in_offensive_zone(release, ctx.attacking_goal_pos) \
+			or _goalie_now(ctx).distance_to(ctx.attacking_goal_pos) \
+					>= AIActionScoring.THREAT_GOALIE_HOME_M
+
+
 # The hold a carry candidate's shot on arrival is taken from (AIShotHolds
 # .solve_arrival, its share and keep left in _holds), and the wait it owes before
 # the press: the pull there from where the puck sits now, less the `carry_s` the
@@ -3531,7 +3549,8 @@ func _score_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 		goalie_unsettled_factor: float = 0.0,
 		_aim_spread_rad: float = 0.0,
 		keeper_displacement_m: float = 0.0,
-		loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH) -> float:
+		loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH,
+		shot_keep: float = 1.0) -> float:
 	var attacking_goal: Vector3 = ctx.attacking_goal_pos
 	# All the carrier's opponent arrays (path / pass / stand projections) are built
 	# in the same snapshot order as _scratch_opponent_caps, so the defenders in the
@@ -3580,10 +3599,12 @@ func _score_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 	# path the per-tier scatter dial does not act as the SELECTIVITY lever
 	# BotSkillProfile describes — a wobblier hand does not decline marginal
 	# shots.
+	# `shot_keep`: the odds the shooter still has the puck at the press. It
+	# discounts the shot, never the position value the spot also offers.
 	var shoot_s: float = AIActionScoring.score_shoot_value(
 			pos, attacking_goal, predicted_goalie_pos, keeper_displacement_m,
 			GameRules.NET_HALF_WIDTH, opps, shot_speed_m_s,
-			_scratch_opponent_caps, ShotEvent.ShotType.SHOT, loft_tan_high)
+			_scratch_opponent_caps, ShotEvent.ShotType.SHOT, loft_tan_high) * shot_keep
 	if AIActionScoring.in_offensive_zone(from_pos, attacking_goal):
 		# PURE xG in the offensive zone — position_potential (the progression
 		# value map) is not consulted here; once a goalie is in play a real shot
@@ -3724,21 +3745,21 @@ func _receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 			_goalie_now(ctx), ctx.attacking_goal_pos, reached, start_s + t,
 			(receiver_spot.distance_to(ctx.attacking_goal_pos)
 					- reached.distance_to(ctx.attacking_goal_pos)) / maxf(t, 0.001))
+	var regime_from: Vector3 = from_pos if from_pos.is_finite() else ctx.self_pos
 	var shot_speed: float = receiver_shot_speed
 	var hold_keep: float = 1.0
 	var wait: float = 0.0
-	if own_hands:
+	if own_hands and _shot_reads(ctx, regime_from, reached):
 		var arrive_vel: Vector3 = (reached - receiver_spot) / t if t > 0.001 else Vector3.ZERO
 		wait = _arrival_hold_wait(ctx, reached, arrive_vel, start_s + t)
 		shot_speed *= _holds.arrival_share
 		hold_keep = _holds.arrival_keep
 	# score_at, so the reached spot is priced in the same regime as the carrier's own
 	# candidates.
-	var advanced: float = _score_at(ctx, reached,
-			from_pos if from_pos.is_finite() else ctx.self_pos,
+	var advanced: float = _score_at(ctx, reached, regime_from,
 			_scratch_opponents_pass, goalie, shot_speed, 0.0, 0.0, 0.0,
-			_loft_high(receiver_caps))
-	return advanced * keep * hold_keep * AIActionScoring.delay_discount(t + wait)
+			_loft_high(receiver_caps), hold_keep)
+	return advanced * keep * AIActionScoring.delay_discount(t + wait)
 
 
 # How much room the carrier has to OPERATE toward the attacking objective —

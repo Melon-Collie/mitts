@@ -259,9 +259,12 @@ who loads the puck, not just have the rule switched on.
 - **Carry candidates' shots** on arrival are held where the sweep would hold
   them: the best pocket for the line at the arrival pace, or the line's other
   side when a stick covers the pocket, at that hold's pace and keep, plus any
-  pull the carry is too short to make (`AIShotHolds.solve_arrival`). The
-  carrier's own drive-in credit reads the same way. Teammates' shots keep the
-  full-pace read: their hands are not modelled.
+  pull the carry is too short to make (`AIShotHolds.solve_arrival`). The keep
+  discounts the shot only, never the spot's position value, and the hold is
+  not solved where the shot is not what the spot is priced by (outside the
+  zone, from outside it, at a keeper home). The carrier's own drive-in credit
+  reads the same way. Teammates' shots keep the full-pace read: their hands
+  are not modelled.
 - **Measured** (Phase 4 carries it on). Point-blank
   conversion against the live keeper (`test_bot_vs_goalie_conversion.gd`, 63
   rushes per goalie tier) went from HARD 6% / NORMAL 19% / EASY 33% to 51% /

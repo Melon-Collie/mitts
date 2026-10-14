@@ -822,6 +822,41 @@ func test_a_defender_who_never_covers_the_drive_costs_it_nothing() -> void:
 			% [drive[0], drive[1]])
 
 
+func test_the_shot_s_keep_never_discounts_what_the_spot_is_worth_by_position() -> void:
+	# Out of the zone with the keeper pulled, _score_at weighs the long shot
+	# against the spot's position value. Losing the puck before the press costs
+	# the shot, never the position.
+	var self_pos := Vector3(0.0, 0.0, 0.0)
+	var ctx: RoleContext = _make_ctx(self_pos)
+	var c := AIRoleCarrier.new()
+	var goal: Vector3 = ctx.attacking_goal_pos
+	var pos := Vector3(2.0, 0.0, -5.0)
+	var none: Array[Vector3] = []
+	var pulled := Vector3(0.0, 0.0, 0.0)
+	var position_value: float = AIActionScoring.position_potential(pos, goal, none) \
+			* AIActionScoring.potential_realization_discount(pos, goal)
+	for keep: float in [1.0, 0.5, 0.0]:
+		assert_almost_eq(c._score_at(ctx, pos, self_pos, none, pulled,
+				AIActionScoring.WRISTER_SHOT_SPEED_M_S, 0.0, 0.0, 10.0,
+				GameRules.DEFAULT_LOFT_TAN_HIGH, keep), position_value, 1e-6,
+				"keep %.1f" % keep)
+
+
+func test_in_the_zone_the_keep_discounts_the_shot() -> void:
+	var self_pos := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z + 8.0)
+	var ctx: RoleContext = _make_ctx(self_pos)
+	var c := AIRoleCarrier.new()
+	var none: Array[Vector3] = []
+	var keeper := ctx.attacking_goal_pos + Vector3(0.0, 0.0, 1.0)
+	var kept: float = c._score_at(ctx, self_pos, self_pos, none, keeper,
+			AIActionScoring.WRISTER_SHOT_SPEED_M_S, 0.0, 0.0, 0.0,
+			GameRules.DEFAULT_LOFT_TAN_HIGH, 1.0)
+	assert_gt(kept, 0.0)
+	assert_almost_eq(c._score_at(ctx, self_pos, self_pos, none, keeper,
+			AIActionScoring.WRISTER_SHOT_SPEED_M_S, 0.0, 0.0, 0.0,
+			GameRules.DEFAULT_LOFT_TAN_HIGH, 0.5), kept * 0.5, 1e-6)
+
+
 # ─── O-zone shot selection: don't fire the long shot on entry ────────────────
 
 func test_carrier_entering_ozone_drives_the_slot_over_a_long_shot() -> void:
