@@ -41,7 +41,7 @@ class_name GoalieSaveSelection
 #           modelling gap, it is REAL and measured — the pads sweeping from
 #           vertical to flat neither block the standing lane nor seal the ice,
 #           which is the seam a human beats him through
-#           (tests/unit/ai/test_goalie_mid_drop_gap.gd). The model reproduces it
+#           (tests/instruments/ai/test_goalie_mid_drop_gap.gd). The model reproduces it
 #           instead of pretending the drop is instant.
 #     >= 1  a full reaction fits: stay up and READ.
 #

@@ -249,7 +249,7 @@ func test_backpressure_lets_the_d_stand_up() -> void:
 # and a D whose stand is always where he is never closes on anybody.
 #
 # The behavioural half of this — how much up-ice speed he actually carries into
-# the meet — is pinned in tests/unit/ai/test_rush_gap_discipline.gd, which
+# the meet — is pinned in tests/slow/ai/test_rush_gap_discipline.gd, which
 # measures the body over multi-second rushes. That is the only place it can
 # honestly live; a single dispatch cannot see a route. Here we pin the contract
 # the route is built on.

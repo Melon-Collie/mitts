@@ -93,7 +93,7 @@ var five_hole_base_m: float
 # he converges onto the true line once the puck is in flight, so a long shot is
 # read correctly and an in-tight one is not. No RNG.
 #
-# The height-deception sweep (tests/unit/ai/test_goalie_disguise_read.gd)
+# The height-deception sweep (tests/slow/ai/test_goalie_disguise_read.gd)
 # responds over roughly 0–0.10 s and is flat above: past that the goalie is
 # already fully committed to the wrong read, so more staleness buys the shooter
 # nothing.

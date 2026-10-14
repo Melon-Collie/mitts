@@ -183,7 +183,7 @@ func test_a_defender_with_a_trip_to_make_still_arrives_in_shape() -> void:
 	# discriminate far more sharply than it ever did.
 	#   · "arrives stopped and gets walked" -> test_a_defender_is_not_walked_into_
 	#     his_own_net below (0.1 m vs 6.8 m worst).
-	#   · "meets the rush charging" -> tests/unit/ai/test_rush_gap_discipline.gd,
+	#   · "meets the rush charging" -> tests/slow/ai/test_rush_gap_discipline.gd,
 	#     which is where that claim lived before this file existed and which still
 	#     separates the models by an order of magnitude (charging 4.2 m/s and 27 of
 	#     35 starts over the lunge bar, against 0.5 m/s and 0 of 35 now).

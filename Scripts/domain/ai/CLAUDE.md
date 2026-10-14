@@ -139,7 +139,7 @@ Two consequences:
   the end boards. `AISteering.is_rideable_anchor` is the structural backstop; the
   role is still expected not to publish one it did not earn.
 
-Both halves are pinned by `tests/unit/ai/test_defensive_routing.gd` (share of
+Both halves are pinned by `tests/slow/ai/test_defensive_routing.gd` (share of
 time in shape, and whether a defence pair gets blown by) and
 `test_rush_gap_discipline.gd` (up-ice speed and excursion at the meet). They
 measure the BODY over multi-second rushes, which is the only honest home for a
@@ -385,7 +385,7 @@ steps a standing defender up on a fresh receiver who then bursts past him. And
 when the retreat cannot hold a gap — the cushion eats all but a stick of the ice
 he owns — a defender IN the carrier's lane steps up to meet him rather than be
 reached while turning; off the lane he keeps retreating.
-`tests/unit/ai/test_nz_turnover_recovery.gd` scores this against the best a body
+`tests/slow/ai/test_nz_turnover_recovery.gd` scores this against the best a body
 could do: a straight-line retreat on the same ramp.
 
 ### The ladder has a domain: the carrier has to be coming at us

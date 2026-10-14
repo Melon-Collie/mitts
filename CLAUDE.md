@@ -76,10 +76,11 @@ instantiated all over it, and render if the rig's shape is what changed. Trivial
 and the skater rig offscreen; you cannot run the game.** Use
 `.claude/hooks/run-gut.sh` (wraps `godot --headless -s res://addons/gut/gut_cmdln.gd`,
 honoring `.gutconfig.json`). Pass `gut_cmdln` flags through, e.g.
-`-gdir=res://tests/unit/state`.
+`-gdir=res://tests/unit/state`. A bare run is the default tier (`tests/unit/`);
+the slow tier and the instruments are separate directories (`tests/CLAUDE.md`).
 - **Local:** `GODOT_BIN` (in `.claude/settings.local.json`) points at the Godot
-  executable. Full suite ≈ 15–18 s. **Redirect to a file, don't pipe** — the
-  Windows console exe throttles badly on an MSYS pipe (≈90 s vs ≈18 s):
+  executable. **Redirect to a file, don't pipe** — the Windows console exe
+  throttles badly on an MSYS pipe:
   `bash .claude/hooks/run-gut.sh > "$TMP/gut.log" 2>&1; tail -40 "$TMP/gut.log"`.
 - **Web:** the `SessionStart` hook async-installs Godot; run
   `.claude/hooks/wait-for-godot.sh` once before the first test run, then

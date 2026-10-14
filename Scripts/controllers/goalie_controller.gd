@@ -364,7 +364,7 @@ var rush_min_closing_speed: float = 1.5
 # the crease rather than continuing to the goal line.
 #
 # CALIBRATED, not derived — it sits between D and C because that is where the
-# anchor sweep in tests/unit/ai/test_goalie_post_lane_drive.gd stops moving the
+# anchor sweep in tests/instruments/ai/test_goalie_post_lane_drive.gd stops moving the
 # control. Below 0.40 the post-lane drive concedes 4x what a centre-lane drive
 # does; at 0.40 they concede alike; past 0.55 he stops being beatable on either.
 var rush_arrive_depth: float = 0.40
