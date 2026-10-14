@@ -253,53 +253,48 @@ func test_assign_trans_od_contain_when_whole_team_caught_up_ice() -> void:
 				"peer %d takes a recovery job" % pid)
 
 
-func test_assign_hysteresis_keeps_prev_when_close() -> void:
-	# Semantic assignment: PRESSURE = soonest to puck, with
-	# HYSTERESIS_PENALTY_S added to a contender's effective arrival
-	# time. Setup: peer 110 is 0.5 m closer to puck than 100, but 100
-	# currently has PRESSURE — the time penalty on 110 keeps 100 in
-	# the slot.
-	var skaters: Array = [
-			[100, 0, Vector3(4.0, 0.0, 22.0)],   # 1.0 m from puck
-			[110, 0, Vector3(4.5, 0.0, 22.0)],   # 0.5 m from puck (raw closer)
-			[120, 0, Vector3(-2.0, 0.0, 25.0)],  # near our net
-			[200, 1, Vector3(5.0, 0.0, 22.0)],
-	]
-	var snap := _make_snapshot(skaters, 200)
+func test_assign_hysteresis_flips_exactly_past_the_penalty() -> void:
+	# PRESSURE = soonest to the puck, a contender paying HYSTERESIS_PENALTY_S on
+	# top of his arrival time. The incumbent (100) holds the slot while the
+	# contender (110) is sooner by less than the penalty and loses it once he is
+	# sooner by more, wherever the two stand.
+	var puck := Vector3(5.0, 0.0, 22.0)
+	var incumbent := Vector3(2.0, 0.0, 22.0)
+	var ref: float = AIArrival.SKATER_REF_SPEED_M_S
+	var t_incumbent: float = AIArrival.time_to_arrive(incumbent, puck, Vector3.ZERO, ref)
 	var prev: Dictionary = {
 			100: AIRoleSlots.Slot.PRESSURE,
 			110: AIRoleSlots.Slot.MARK,
 			120: AIRoleSlots.Slot.MARK,
 	}
-	var assignments: Dictionary[int, int] = AIRoleSlots.assign(
-			snap, TEAM_ID, OUR_NET_Z, AIPossessionState.State.DZONE,
-			_resolver(skaters), prev)
-	# Calibrated standing-start ETAs: 100 ≈ 0.48 s (no penalty, was
-	# PRESSURE); 110 ≈ 0.34 + 0.2 hysteresis ≈ 0.54 s. 100 wins.
-	assert_eq(assignments[100], AIRoleSlots.Slot.PRESSURE,
-			"peer 100 keeps PRESSURE despite peer 110 being 0.5 m closer to puck")
-
-
-func test_assign_hysteresis_swaps_when_contender_meaningfully_sooner() -> void:
-	# The contender's arrival advantage now exceeds the hysteresis
-	# margin — the slot flips to the genuinely better-placed peer.
-	var skaters: Array = [
-			[100, 0, Vector3(2.0, 0.0, 22.0)],   # 3.0 m from puck → ≈0.83 s
-			[110, 0, Vector3(4.0, 0.0, 22.0)],   # 1.0 m → ≈0.48 + 0.2 = 0.68 s
-			[120, 0, Vector3(-2.0, 0.0, 25.0)],
-			[200, 1, Vector3(5.0, 0.0, 22.0)],
-	]
-	var snap := _make_snapshot(skaters, 200)
-	var prev: Dictionary = {
-			100: AIRoleSlots.Slot.PRESSURE,
-			110: AIRoleSlots.Slot.MARK,
-			120: AIRoleSlots.Slot.MARK,
-	}
-	var assignments: Dictionary[int, int] = AIRoleSlots.assign(
-			snap, TEAM_ID, OUR_NET_Z, AIPossessionState.State.DZONE,
-			_resolver(skaters), prev)
-	assert_eq(assignments[110], AIRoleSlots.Slot.PRESSURE,
-			"a contender arriving clearly sooner takes the slot through hysteresis")
+	var held: int = 0
+	var flipped: int = 0
+	for k: int in range(1, 13):
+		var contender := Vector3(5.0, 0.0, 22.0 - 0.25 * k)
+		var advantage: float = t_incumbent \
+				- AIArrival.time_to_arrive(contender, puck, Vector3.ZERO, ref)
+		if absf(advantage - AIRoleSlots.HYSTERESIS_PENALTY_S) < 0.01:
+			continue
+		var skaters: Array = [
+				[100, 0, incumbent],
+				[110, 0, contender],
+				[120, 0, Vector3(-8.0, 0.0, 10.0)],  # far off, never the soonest
+				[200, 1, puck],
+		]
+		var assignments: Dictionary[int, int] = AIRoleSlots.assign(
+				_make_snapshot(skaters, 200), TEAM_ID, OUR_NET_Z,
+				AIPossessionState.State.DZONE, _resolver(skaters), prev)
+		var flips: bool = advantage > AIRoleSlots.HYSTERESIS_PENALTY_S
+		var winner: int = 110 if flips else 100
+		assert_eq(assignments[winner], AIRoleSlots.Slot.PRESSURE,
+				"contender %.2f s sooner (penalty %.2f s): peer %d holds PRESSURE"
+				% [advantage, AIRoleSlots.HYSTERESIS_PENALTY_S, winner])
+		if flips:
+			flipped += 1
+		else:
+			held += 1
+	assert_gt(held, 0, "the sweep includes contenders inside the penalty")
+	assert_gt(flipped, 0, "…and contenders past it")
 
 
 func test_assign_momentum_beats_raw_distance() -> void:

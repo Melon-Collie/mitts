@@ -17,10 +17,20 @@ extends GutTest
 #   - DZONE positioning lands near our net.
 #   - Lane-blocking + cross-crease shading toward the dominant threat.
 #   - Fallback center is puck-adaptive (midpoint), not pinned to a fixed slot.
-# Underlying score_shoot primitive is tested in test_ai_action_scoring.
+# Underlying score_shoot primitive is tested in test_ai_action_scoring. Where
+# the fallback currently lands each fixture is the snapshot,
+# test_mark_fallback_snapshot.
 
+const Snapshot := preload("res://tests/snapshot.gd")
+const SNAPSHOT_PATH := "res://tests/unit/rules/snapshots/role_mark.txt"
 const TEAM_ID: int = 0
-const OUR_NET_Z: float = 26.65   # Team 0 defends +Z
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z   # Team 0 defends +Z
+# A lone opposing carrier straight out from our net in the D-zone, and the
+# fallback marker off to his side.
+const DZONE_CARRIER := Vector3(0, 0, 22)
+const DZONE_MARKER := Vector3(8, 0, 18)
+# A carrier who just took it back deep in their end (TRANS_DEFENSE).
+const DEEP_LOSS_CARRIER := Vector3(0, 0, -15)
 
 
 # `skaters` entries are [peer_id, team_id, position] (velocity optional as [3]).
@@ -230,32 +240,29 @@ func test_unassigned_falls_back_even_with_a_live_carrier() -> void:
 
 # ── Fallback: DZONE positioning near our net ───────────────────────────────
 
-func test_fallback_target_is_near_our_net_in_dzone() -> void:
-	# DZONE: opp carrier deep at (0, 0, 22). Fallback search center is
-	# midpoint(puck, our_net) = (0, 0, 24.3) — close to net. Polar samples
-	# around this center stay near the slot.
+func _lone_carrier_target(self_pos: Vector3, carrier: Vector3) -> Vector3:
 	var skaters: Array = [
-		[1, TEAM_ID, Vector3(0, 0, 18), Vector3.ZERO],
-		[200, 1 - TEAM_ID, Vector3(0, 0, 22), Vector3.ZERO],
+		[1, TEAM_ID, self_pos, Vector3.ZERO],
+		[200, 1 - TEAM_ID, carrier, Vector3.ZERO],
 	]
-	var ctx: RoleContext = _make_ctx(Vector3(0, 0, 18), skaters, 200)
-	var d: RoleDecision = AIRoleMark.decide(ctx)
-	assert_lt(absf(OUR_NET_Z - d.target_position.z), 9.0,
-			"target stays near our net in DZONE; got z=%f" % d.target_position.z)
+	return AIRoleMark.decide(_make_ctx(self_pos, skaters, 200)).target_position
+
+
+func test_fallback_target_is_near_our_net_in_dzone() -> void:
+	# DZONE: the fallback centres on midpoint(puck, our net), so it recovers
+	# goal-side of the carrier rather than out toward him.
+	var target: Vector3 = _lone_carrier_target(Vector3(0, 0, 18), DZONE_CARRIER)
+	assert_gt(target.z, DZONE_CARRIER.z,
+			"target stays goal-side of the carrier, near our net; got z=%f" % target.z)
 
 
 func test_fallback_blocks_shot_lane_for_single_opp() -> void:
-	# Single opp carrier shooting from (0, 0, 22) at our net. Fallback picks a
-	# candidate on the shot-lane axis (X near 0) — defender placement on the
-	# lane reduces the opp's threat surface.
-	var skaters: Array = [
-		[1, TEAM_ID, Vector3(8, 0, 18), Vector3.ZERO],   # us, off to the side
-		[200, 1 - TEAM_ID, Vector3(0, 0, 22), Vector3.ZERO],
-	]
-	var ctx: RoleContext = _make_ctx(Vector3(8, 0, 18), skaters, 200)
-	var d: RoleDecision = AIRoleMark.decide(ctx)
-	assert_lt(absf(d.target_position.x), 3.5,
-			"target stays close to shot-lane axis; got x=%f" % d.target_position.x)
+	# A lone carrier shooting from straight out: the fallback steps from the
+	# side into his shot lane (between the posts' lines) — placement on the lane
+	# reduces his threat.
+	var target: Vector3 = _lone_carrier_target(DZONE_MARKER, DZONE_CARRIER)
+	assert_lt(absf(target.x), GameRules.NET_HALF_WIDTH,
+			"target stands in the shot lane; got x=%f" % target.x)
 
 
 func test_fallback_shades_toward_dominant_threat() -> void:
@@ -287,24 +294,16 @@ func test_fallback_shades_toward_dominant_threat() -> void:
 # ── Fallback: puck-adaptive centering (both zones) ─────────────────────────
 
 func test_fallback_center_is_puck_adaptive_not_fixed_slot() -> void:
-	# TRANS_DEFENSE: puck up-ice at z=-15 (we just lost it deep). The unified
-	# fallback centers on midpoint(puck, our_net), so the recovery target sits
-	# BETWEEN the puck and the net — not pinned at the fixed slot the old
-	# BACKCHECK used. Grounds the marker in the developing play instead of a
-	# hard-coded home spot.
-	var skaters: Array = [
-		[1, TEAM_ID, Vector3(0, 0, -10), Vector3.ZERO],
-		[200, 1 - TEAM_ID, Vector3(0, 0, -15), Vector3.ZERO],
-	]
-	var ctx: RoleContext = _make_ctx(Vector3(0, 0, -10), skaters, 200)
-	var d: RoleDecision = AIRoleMark.decide(ctx)
+	# TRANS_DEFENSE: puck up-ice (we just lost it deep). The fallback centres on
+	# midpoint(puck, our net), so the recovery target sits nearer that midpoint
+	# than the fixed slot the old BACKCHECK used — grounded in the developing play
+	# instead of a hard-coded home spot.
+	var target: Vector3 = _lone_carrier_target(Vector3(0, 0, -10), DEEP_LOSS_CARRIER)
 	var slot_z: float = OUR_NET_Z - GameRules.SLOT_DIST_M
-	var midpoint_z: float = (-15.0 + OUR_NET_Z) * 0.5
-	# Adaptive: the target tracks toward the midpoint, well up-ice of the fixed
-	# slot (which would sit ~21.65). Assert it's clearly forward of the slot.
-	assert_lt(d.target_position.z, slot_z - 4.0,
-			"fallback centers on the puck→net midpoint, up-ice of the fixed slot;"
-			+ " got z=%f (slot=%f, midpoint≈%f)" % [d.target_position.z, slot_z, midpoint_z])
+	var midpoint_z: float = (DEEP_LOSS_CARRIER.z + OUR_NET_Z) * 0.5
+	assert_lt(absf(target.z - midpoint_z), absf(target.z - slot_z),
+			"fallback centres on the puck→net midpoint, not the fixed slot;"
+			+ " got z=%f (slot=%f, midpoint=%f)" % [target.z, slot_z, midpoint_z])
 
 
 func test_fallback_far_cover_reads_the_brain_threat_memo() -> void:
@@ -344,3 +343,18 @@ func test_lead_threat_clamps_long_lead() -> void:
 	var fast: Vector3 = AIRoleHelpers.lead_threat(p, Vector3(50, 0, 0))
 	assert_almost_eq(fast.x, AIRoleHelpers.DEFENSIVE_ANTICIPATION_MAX_M, 0.001,
 			"long lead clamps to DEFENSIVE_ANTICIPATION_MAX_M")
+
+
+func test_mark_fallback_snapshot() -> void:
+	var snap := Snapshot.new(SNAPSHOT_PATH)
+	var rows: Dictionary = {
+		"DZONE lone carrier, marker in the slot": _lone_carrier_target(Vector3(0, 0, 18), DZONE_CARRIER),
+		"DZONE lone carrier, marker off to the side": _lone_carrier_target(DZONE_MARKER, DZONE_CARRIER),
+		"TRANS_DEFENSE, carrier deep in their end":
+				_lone_carrier_target(Vector3(0, 0, -10), DEEP_LOSS_CARRIER),
+	}
+	for key: String in rows:
+		var target: Vector3 = rows[key]
+		snap.record("%s, target x" % key, target.x)
+		snap.record("%s, target z" % key, target.z)
+	snap.verify(self)

@@ -1,10 +1,14 @@
 extends GutTest
 
 # AIRoleDefenseman — the 5v5 off-puck D (plan §4). Team 0 defends +Z and
-# attacks -Z; peer 1 is the bot under test.
+# attacks -Z; peer 1 is the bot under test. Where the walk-the-line argmax
+# currently stands is the snapshot, test_point_walk_snapshot.
 
+const Snapshot := preload("res://tests/snapshot.gd")
+const SNAPSHOT_PATH := "res://tests/unit/rules/snapshots/role_defenseman.txt"
 const TEAM_ID: int = 0
-const OUR_NET_Z: float = 26.65
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z
+const COVERED_STAND := Vector3(6.71, 0.0, -8.29)
 
 
 # `home_side` is the D's lobby home side (-1 = LD, +1 = RD), which sets his
@@ -81,18 +85,25 @@ func test_point_holds_just_inside_the_offensive_blue_line() -> void:
 	assert_gt(d.target_position.x, 0.0, "strong point works the strong side")
 
 
-func test_point_walks_off_a_covered_shot_lane() -> void:
-	# A shot-blocker parked on the wall lane: the walk-the-line argmax must
-	# move the stand off that lane (the researched lateral walk).
-	var wall_stand := Vector3(6.71, 0.0, -8.29)
-	var blocker_pos: Vector3 = wall_stand + (Vector3(0, 0, -OUR_NET_Z) - wall_stand).normalized() * 3.0
-	var ctx: RoleContext = _make_ctx(wall_stand, [
+# A shot-blocker parked 3 m down the lane from the point's stand to the net.
+func _covered_wall_lane_ctx() -> RoleContext:
+	var blocker: Vector3 = COVERED_STAND + (Vector3(0, 0, -OUR_NET_Z) - COVERED_STAND).normalized() * 3.0
+	return _make_ctx(COVERED_STAND, [
 			[2, TEAM_ID, Vector3(8.0, 0.0, -22.0)],
-			[10, 1, blocker_pos],
+			[10, 1, blocker],
 	], 2)
-	var d: RoleDecision = AIRoleDefenseman.decide(ctx, AIRoleSlots.Slot.POINT_STRONG)
-	assert_gt(wall_stand.distance_to(d.target_position), 1.5,
-			"a blocked lane walks the point off the wall stand")
+
+
+func test_point_walks_off_a_covered_shot_lane() -> void:
+	# The walk-the-line argmax moves the stand to a lane the point shot gets
+	# through better than it does from the covered stand.
+	var ctx: RoleContext = _covered_wall_lane_ctx()
+	var blocker: Array[Vector3] = [ctx.snapshot.skater_states[10].position]
+	var net := Vector3(0, 0, -OUR_NET_Z)
+	var target: Vector3 = AIRoleDefenseman.decide(ctx, AIRoleSlots.Slot.POINT_STRONG).target_position
+	assert_gt(AIPuckLane.lane_clear(target, net, blocker, ctx.self_wrister_shot_speed),
+			AIPuckLane.lane_clear(COVERED_STAND, net, blocker, ctx.self_wrister_shot_speed),
+			"a blocked lane walks the point to a clearer one; got %s" % target)
 
 
 func test_point_holds_the_line_against_high_zone_coverage() -> void:
@@ -592,3 +603,12 @@ func test_point_reads_a_rim_still_coming_around_the_end_boards() -> void:
 			"the rim around the boards is read before it reaches the wall; got %s"
 			% d.target_position)
 	assert_true(d.arrive_at_speed, "...and met in stride")
+
+
+func test_point_walk_snapshot() -> void:
+	var snap := Snapshot.new(SNAPSHOT_PATH)
+	var target: Vector3 = AIRoleDefenseman.decide(
+			_covered_wall_lane_ctx(), AIRoleSlots.Slot.POINT_STRONG).target_position
+	snap.record("strong point, stand's lane covered, target x", target.x)
+	snap.record("strong point, stand's lane covered, target z", target.z)
+	snap.verify(self)

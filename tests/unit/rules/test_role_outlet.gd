@@ -10,10 +10,13 @@ extends GutTest
 #   - Covered stretch spot → stage somewhere open (live argmax).
 #
 # The geometric guts (lane_clear / position_potential) are covered in
-# test_ai_action_scoring.
+# test_ai_action_scoring. Where the rush pace cap currently stages the outlet is
+# the snapshot, test_outlet_rush_pacing_snapshot.
 
+const Snapshot := preload("res://tests/snapshot.gd")
+const SNAPSHOT_PATH := "res://tests/unit/rules/snapshots/role_outlet.txt"
 const TEAM_ID: int = 0
-const OUR_NET_Z: float = 26.65   # Team 0 defends +Z, attacks -Z
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z   # Team 0 defends +Z, attacks -Z
 const OPP_NET_Z: float = -OUR_NET_Z
 
 
@@ -259,18 +262,19 @@ func test_rush_sets_arrive_at_speed_but_set_play_does_not() -> void:
 			"a set play holds the line and brakes to a stop, as before")
 
 
+func _outlet_target(carrier_vel: Vector3) -> Vector3:
+	return AIRoleOutlet.decide(
+			_make_ctx(Vector3(-2, 0, -2), 100, _rush_skaters(carrier_vel))).target_position
+
+
 func test_rush_paces_outlet_behind_the_parked_stretch_spot() -> void:
 	# Same deep carrier; only its velocity differs. Parked (set play) stages
 	# up at the blue line; on a rush the pace cap keeps the OUTLET level with
 	# the carrier's advance — meaningfully further NZ-side (higher z for Team
 	# 0) so it arrives in stride instead of standing at the line.
-	var rush_z: float = AIRoleOutlet.decide(
-			_make_ctx(Vector3(-2, 0, -2), 100,
-					_rush_skaters(Vector3(0, 0, -8)))).target_position.z
-	var set_z: float = AIRoleOutlet.decide(
-			_make_ctx(Vector3(-2, 0, -2), 100,
-					_rush_skaters(Vector3.ZERO))).target_position.z
-	assert_gt(rush_z, set_z + 1.0,
+	var rush_z: float = _outlet_target(Vector3(0, 0, -8)).z
+	var set_z: float = _outlet_target(Vector3.ZERO).z
+	assert_gt(rush_z, set_z,
 			"rush paces the OUTLET back off the line vs the parked stretch spot; got rush=%f set=%f" \
 			% [rush_z, set_z])
 
@@ -294,3 +298,14 @@ func test_anti_crowding_avoids_candidates_near_teammates() -> void:
 	var dist_to_teammate: float = d.target_position.distance_to(search_center)
 	assert_gt(dist_to_teammate, AIRoleHelpers.ANTI_CROWD_RADIUS_M - 0.01,
 			"chosen target must clear the anti-crowd radius around the teammate")
+
+
+func test_outlet_rush_pacing_snapshot() -> void:
+	var snap := Snapshot.new(SNAPSHOT_PATH)
+	var parked: Vector3 = _outlet_target(Vector3.ZERO)
+	var rushing: Vector3 = _outlet_target(Vector3(0, 0, -8))
+	snap.record("parked carrier, outlet target x", parked.x)
+	snap.record("parked carrier, outlet target z", parked.z)
+	snap.record("8 m/s rush, outlet target x", rushing.x)
+	snap.record("8 m/s rush, outlet target z", rushing.z)
+	snap.verify(self)

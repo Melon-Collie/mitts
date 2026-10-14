@@ -7,7 +7,7 @@ extends GutTest
 # scoring lives in each role's own test; this pins the shared mechanism.
 
 const TEAM_ID: int = 0
-const OUR_NET_Z: float = 26.65   # Team 0 defends +Z
+const OUR_NET_Z: float = GameRules.GOAL_LINE_Z   # Team 0 defends +Z
 
 
 func _bare_ctx() -> RoleContext:
@@ -126,8 +126,9 @@ func test_incumbent_held_when_beaten_within_the_margin() -> void:
 	ctx.prev_role_target = Vector3(5, 0, 0)
 	var candidates: Array[Vector3] = [Vector3(1, 0, 0)]  # a fresh spot
 	AIRoleHelpers.append_incumbent(ctx, candidates)
-	# Fresh beats the incumbent by only 0.02 (< 0.04 margin) → incumbent holds.
-	var raw := {Vector3(1, 0, 0): 1.00, Vector3(5, 0, 0): 0.98}
+	# Fresh beats the incumbent by half the margin → incumbent holds.
+	var raw := {Vector3(1, 0, 0): 1.00,
+			Vector3(5, 0, 0): 1.00 - 0.5 * AIRoleHelpers.TARGET_SWITCH_MARGIN}
 	assert_eq(_argmax_with_bonus(ctx, candidates, raw), Vector3(5, 0, 0),
 			"a standing spot beaten by less than the margin is kept")
 
@@ -137,7 +138,8 @@ func test_incumbent_dropped_when_beaten_beyond_the_margin() -> void:
 	ctx.prev_role_target = Vector3(5, 0, 0)
 	var candidates: Array[Vector3] = [Vector3(1, 0, 0)]
 	AIRoleHelpers.append_incumbent(ctx, candidates)
-	# Fresh beats the incumbent by 0.10 (> 0.04 margin) → switch to the fresh spot.
-	var raw := {Vector3(1, 0, 0): 1.00, Vector3(5, 0, 0): 0.90}
+	# Fresh beats the incumbent by twice the margin → switch to the fresh spot.
+	var raw := {Vector3(1, 0, 0): 1.00,
+			Vector3(5, 0, 0): 1.00 - 2.0 * AIRoleHelpers.TARGET_SWITCH_MARGIN}
 	assert_eq(_argmax_with_bonus(ctx, candidates, raw), Vector3(1, 0, 0),
 			"a standing spot beaten past the margin is dropped for the fresh spot")
