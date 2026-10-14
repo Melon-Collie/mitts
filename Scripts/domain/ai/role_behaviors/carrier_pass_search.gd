@@ -440,8 +440,8 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 		rim_loss_point: Vector3 = Vector3.INF) -> float:
 	var self_pos: Vector3 = ctx.self_pos
 	# The pass flies from the PUCK, not the body: behind the net the two differ
-	# by up to a stick's reach. self_pos stays the body reference for the
-	# receiver scoring / loss-point terms below.
+	# by up to a stick's reach. The lane and its loss points are the puck's;
+	# self_pos stays the body reference for the release and recovery terms.
 	var origin: Vector3 = AICarrierField.pass_origin(ctx)
 	# Hard zeros: net-blocker (segment crosses a net body) and own-DZ
 	# slot crossing (intercepted = goal-against). A rim's path is not this
@@ -536,11 +536,11 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# A rim is lost where the soonest opponent meets its path.
 	var loss_point: Vector3 = rim_loss_point if is_rim and rim_loss_point.is_finite() \
 			else AIPuckLane.lane_loss_point(
-					self_pos, receiver_spot, _field.opponents_release, pass_speed,
+					origin, receiver_spot, _field.opponents_release, pass_speed,
 					_field.opponent_vels, _field.opponent_caps)
 	cost += _field.turnover_cost(ctx, loss_point,
 			release_clean * (1.0 - lane), our_goalie)
-	cost += _field.turnover_cost(ctx, AIPuckLane.pass_miss_loss_point(self_pos, receiver_spot),
+	cost += _field.turnover_cost(ctx, AIPuckLane.pass_miss_loss_point(origin, receiver_spot),
 			release_clean * lane * miss_prob, our_goalie)
 	# Reception strip: the puck dies AT the receiver, in whatever traffic he was
 	# about to catch it in.

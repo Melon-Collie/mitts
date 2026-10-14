@@ -304,11 +304,12 @@ static func lane_block_at(
 # b = his perpendicular distance, |X(u)−D| = √((u−a)²+b²); setting d/du = 0 gives
 # the interior optimum (u−a) = k·b/√(1−k²), k = close/speed. Evaluated there and
 # at the perpendicular foot (u = a, robust to the reaction-delay kink), best wins.
-# Pure float math, allocation-free.
+# Returns (block, u): the block and the lane arc-coord he plants on for it. Pure
+# float math, allocation-free.
 static func _lane_brake_block(
 		fx: float, fz: float, dirx: float, dirz: float, seg_len: float,
 		speed: float, px: float, pz: float,
-		stick_reach: float, close_speed: float) -> float:
+		stick_reach: float, close_speed: float) -> Vector2:
 	var rx: float = px - fx
 	var rz: float = pz - fz
 	var a: float = rx * dirx + rz * dirz             # along-lane coord of the defender
@@ -316,12 +317,43 @@ static func _lane_brake_block(
 	var perp_z: float = rz - a * dirz
 	var b: float = sqrt(perp_x * perp_x + perp_z * perp_z)   # perpendicular distance
 	var k: float = close_speed / speed
-	var u_opt: float = seg_len if k >= 1.0 else a + k * b / sqrt(1.0 - k * k)
-	var blk_opt: float = _brake_block_at(
-			clampf(u_opt, 0.0, seg_len), a, b, speed, stick_reach, close_speed)
-	var blk_foot: float = _brake_block_at(
-			clampf(a, 0.0, seg_len), a, b, speed, stick_reach, close_speed)
-	return maxf(blk_opt, blk_foot)
+	var u_opt: float = clampf(
+			seg_len if k >= 1.0 else a + k * b / sqrt(1.0 - k * k), 0.0, seg_len)
+	var u_foot: float = clampf(a, 0.0, seg_len)
+	var blk_opt: float = _brake_block_at(u_opt, a, b, speed, stick_reach, close_speed)
+	var blk_foot: float = _brake_block_at(u_foot, a, b, speed, stick_reach, close_speed)
+	if blk_opt >= blk_foot:
+		return Vector2(blk_opt, u_opt)
+	return Vector2(blk_foot, u_foot)
+
+
+# One defender's block on an `accurate` lane (see lane_clear) and where he makes
+# it: the ballistic read at his closest approach, or the guided interceptor's
+# planted point when that blocks harder. Returns (block, lane arc-coord of the
+# pick), so lane_clear's probability and lane_loss_point's place come from one
+# read of the same defender.
+static func _accurate_block(fx: float, fz: float, dirx: float, dirz: float,
+		line_len: float, eff_speed: float, px: float, pz: float,
+		vx: float, vz: float, stick_reach: float, close_speed: float) -> Vector2:
+	var pvx: float = dirx * eff_speed
+	var pvz: float = dirz * eff_speed
+	var block: float = 0.0
+	var u: float = 0.0
+	# Ballistic (coasting) block — 0 for a defender whose closest approach is
+	# only AFTER the puck reaches the receiver (trailing the play).
+	var t_raw: float = _lane_closest_approach_t(fx, fz, pvx, pvz, px, pz, vx, vz)
+	if t_raw <= line_len / eff_speed:
+		var t: float = maxf(t_raw, 0.0)
+		block = lane_block_at(fx, fz, pvx, pvz, t, px, pz, vx, vz,
+				stick_reach, close_speed)
+		u = eff_speed * t
+	# Guided-interceptor floor: he can brake and clog a reachable crossing
+	# instead of coasting through it (only ADDS block).
+	var brake: Vector2 = _lane_brake_block(fx, fz, dirx, dirz, line_len, eff_speed,
+			px, pz, stick_reach, close_speed)
+	if brake.x > block:
+		return brake
+	return Vector2(block, u)
 
 
 # Block strength if the defender aims to occupy lane arc-coord `u` — reach at the
@@ -403,6 +435,13 @@ static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 			if caps != null:
 				stick_reach = caps.stick_reach
 				close_speed = LANE_LATERAL_FRACTION * caps.max_speed
+		if accurate:
+			# Survival: the puck must beat this defender too.
+			survival *= 1.0 - _accurate_block(from.x, from.z, dirx, dirz, line_len,
+					eff_speed, p.x, p.z, vx, vz, stick_reach, close_speed).x
+			if survival <= 0.0:
+				break
+			continue
 		# Ballistic (coasting) block — 0 for a defender whose closest approach is
 		# only AFTER the puck reaches the receiver (trailing the play).
 		var block: float = 0.0
@@ -411,23 +450,10 @@ static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 		if t_raw <= seg_time:
 			block = lane_block_at(from.x, from.z, pvx, pvz, maxf(t_raw, 0.0),
 					p.x, p.z, vx, vz, stick_reach, close_speed)
-		if not accurate:
-			if block > max_block:
-				max_block = block
-				if max_block >= 1.0:
-					break
-			continue
-		# Guided-interceptor floor: he can brake and clog a reachable crossing
-		# instead of coasting through it (only ADDS block; see _lane_brake_block).
-		var brake_block: float = _lane_brake_block(
-				from.x, from.z, dirx, dirz, line_len, eff_speed,
-				p.x, p.z, stick_reach, close_speed)
-		if brake_block > block:
-			block = brake_block
-		# Survival: the puck must beat this defender too.
-		survival *= 1.0 - block
-		if survival <= 0.0:
-			break
+		if block > max_block:
+			max_block = block
+			if max_block >= 1.0:
+				break
 	if accurate:
 		return clampf(survival, 0.0, 1.0)
 	return clampf(1.0 - max_block, 0.0, 1.0)
@@ -497,14 +523,13 @@ static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vecto
 	return clampf(1.0 - max_block, 0.0, 1.0)
 
 
-# Interceptor point for a fired-puck lane: where on the puck's path the
-# strongest-blocking defender reaches it (their closest-approach point) —
-# the spot the puck is most likely to be picked off. Returns Vector3.INF
-# when no defender blocks the lane (i.e. lane_clear would return 1.0).
+# Interceptor point for a fired-puck lane under lane_clear's ACCURATE model:
+# where on the puck's path its strongest-blocking defender picks it — the
+# coasting man's closest approach, or the spot a guided interceptor plants on.
+# Vector3.INF exactly when no defender blocks (lane_clear(accurate) == 1.0), so
+# a lane with any interception risk always has a place to price it at.
 #
-# The loss location for the pass turnover cost (turnover_cost). Shares the
-# per-defender block helpers with lane_clear's default model, so the two
-# agree on which defender is worst.
+# The loss location for the pass turnover cost (turnover_cost).
 static func lane_loss_point(from: Vector3, to: Vector3,
 		opponents: Array[Vector3], puck_speed_m_s: float,
 		opponent_vels: Array[Vector3] = [],
@@ -516,14 +541,13 @@ static func lane_loss_point(from: Vector3, to: Vector3,
 		return Vector3.INF
 	var line_len: float = sqrt(line_len_sq)
 	var speed: float = maxf(puck_speed_m_s, 1.0)
-	var seg_time: float = line_len / speed
-	var inv_len: float = 1.0 / line_len
-	var pvx: float = dx * inv_len * speed
-	var pvz: float = dz * inv_len * speed
+	var eff_speed: float = line_len / _friction_traverse_time(line_len, speed)
+	var dirx: float = dx / line_len
+	var dirz: float = dz / line_len
 	var vel_count: int = opponent_vels.size()
 	var has_caps: bool = opponent_caps.size() == opponents.size()
 	var max_block: float = 0.0
-	var best_point: Vector3 = Vector3.INF
+	var best_u: float = 0.0
 	for i: int in opponents.size():
 		var p: Vector3 = opponents[i]
 		var vx: float = 0.0
@@ -531,13 +555,6 @@ static func lane_loss_point(from: Vector3, to: Vector3,
 		if i < vel_count:
 			vx = opponent_vels[i].x
 			vz = opponent_vels[i].z
-		var t_raw: float = _lane_closest_approach_t(
-				from.x, from.z, pvx, pvz, p.x, p.z, vx, vz)
-		if t_raw > seg_time:
-			continue  # trailing the play — never closest in flight
-		var t: float = maxf(t_raw, 0.0)
-		# Same per-defender build resolution as lane_clear, so the two keep
-		# agreeing on which defender is worst when the caller threads caps.
 		var stick_reach: float = LANE_DEFENDER_REACH_M
 		var close_speed: float = LANE_DEFENDER_CLOSE_SPEED_M_S
 		if has_caps:
@@ -545,14 +562,14 @@ static func lane_loss_point(from: Vector3, to: Vector3,
 			if caps != null:
 				stick_reach = caps.stick_reach
 				close_speed = LANE_LATERAL_FRACTION * caps.max_speed
-		var block: float = lane_block_at(
-				from.x, from.z, pvx, pvz, t, p.x, p.z, vx, vz,
-				stick_reach, close_speed)
-		if block > max_block:
-			max_block = block
-			# Puck position at the defender's closest approach = the pick spot.
-			best_point = Vector3(from.x + pvx * t, 0.0, from.z + pvz * t)
-	return best_point
+		var read: Vector2 = _accurate_block(from.x, from.z, dirx, dirz, line_len,
+				eff_speed, p.x, p.z, vx, vz, stick_reach, close_speed)
+		if read.x > max_block:
+			max_block = read.x
+			best_u = read.y
+	if max_block <= 0.0:
+		return Vector3.INF
+	return Vector3(from.x + dirx * best_u, 0.0, from.z + dirz * best_u)
 
 
 # ── Pass execution risk ──────────────────────────────────────────────────────

@@ -1522,6 +1522,47 @@ func test_lane_loss_point_finite_for_close_release_defender() -> void:
 	assert_almost_eq(p.z, 1.0, 0.1, "the pick happens right where the defender stands")
 
 
+func test_lane_loss_point_prices_a_lane_only_the_planted_interceptor_blocks() -> void:
+	# 4.5 m off a 16 m lane at z = 10: coasting, he never reaches the puck, but
+	# he can skate down the lane and plant on it ahead of the feed. The accurate
+	# lane prices that pick, so the loss point must be that planted spot — not
+	# INF, which turnover_cost reads as a free interception.
+	var from := Vector3(0.0, 0.0, 0.0)
+	var to := Vector3(0.0, 0.0, 16.0)
+	var planter: Array[Vector3] = [Vector3(4.5, 0.0, 10.0)]
+	var speed: float = AIPuckLane.PASS_SPEED_M_S
+	assert_eq(AIPuckLane.lane_clear(from, to, planter, speed), 1.0,
+			"precondition: the coasting read sees no block")
+	assert_lt(AIPuckLane.lane_clear(from, to, planter, speed, [], [], true), 1.0,
+			"the accurate lane does")
+	var p: Vector3 = AIPuckLane.lane_loss_point(from, to, planter, speed)
+	assert_true(p.is_finite(), "an interception the lane prices has a place")
+	assert_almost_eq(p.x, 0.0, 0.001, "on the lane")
+	assert_between(p.z, 10.0, 16.0, "planted downstream of his crossing, short of the tape")
+
+
+func test_the_lane_and_its_loss_point_agree_on_whether_anyone_blocks() -> void:
+	# One model for the chance and the place: a lane the accurate read says can
+	# be picked always has a loss point, and a clean one never does.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 772
+	for i: int in 400:
+		var from := Vector3(rng.randf_range(-10.0, 10.0), 0.0, rng.randf_range(-20.0, 20.0))
+		var to: Vector3 = from + Vector3(rng.randf_range(-14.0, 14.0), 0.0,
+				rng.randf_range(-14.0, 14.0))
+		var opps: Array[Vector3] = []
+		var vels: Array[Vector3] = []
+		for j: int in rng.randi_range(0, 3):
+			opps.append(from.lerp(to, rng.randf()) + Vector3(rng.randf_range(-6.0, 6.0), 0.0,
+					rng.randf_range(-6.0, 6.0)))
+			vels.append(Vector3(rng.randf_range(-5.0, 5.0), 0.0, rng.randf_range(-5.0, 5.0)))
+		var speed: float = rng.randf_range(8.0, 24.0)
+		var lane: float = AIPuckLane.lane_clear(from, to, opps, speed, vels, [], true)
+		var p: Vector3 = AIPuckLane.lane_loss_point(from, to, opps, speed, vels)
+		assert_eq(p.is_finite(), lane < 1.0,
+				"case %d: lane %.4f but loss point %s" % [i, lane, p])
+
+
 func test_lane_loss_point_picks_worst_blocker() -> void:
 	# Two blockers; the one with higher block strength defines the loss
 	# point. The dead-on mid-lane defender at z=7 outweighs one far off the
