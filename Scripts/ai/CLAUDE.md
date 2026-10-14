@@ -89,7 +89,8 @@ lockstep forever. Real bot peers only: tests pin tick-exact behaviour off phase
 
 **The agents do not read the live brain.** `TeamBrain.build_view()` freezes the
 blackboard into a `TeamBrainView` after each tick, on the worker, sequenced
-before any decide; dispatch reads that — `TeamStrategyView` is the interface both
+before any decide; dispatch reads that — `TeamStrategyView` (domain-side, so the
+roles that consume it do not reach up a layer) is the interface both
 implement. It is refilled, never reallocated, and the main thread never touches
 it, which is why no mutex is needed. Writes the host raises against a brain are
 queued and drained on the main thread only while the worker is idle

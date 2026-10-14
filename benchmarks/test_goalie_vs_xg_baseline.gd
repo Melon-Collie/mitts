@@ -498,7 +498,7 @@ const BOUNDARY_POWERS: Array[float] = [0.8, 1.0]
 # (WRISTER_AIM vs SLAPPER_CHARGE_WITH_PUCK gates the pre-lean, the pinned-windup
 # squaring override and the slapper aim shade), not one knob with two settings.
 #
-#   QUICK WRISTER — SkaterAgentStateMachine.BOT_WRISTER_CHARGE_TICKS, the charge
+#   QUICK WRISTER — AIBotMechanics.BOT_WRISTER_CHARGE_TICKS, the charge
 #   every bot in the game actually holds. 15 ticks / 125 ms, which is SHORTER
 #   than either length an earlier pass swept by hand, so the quick-release case
 #   was never actually measured.

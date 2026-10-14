@@ -99,7 +99,7 @@ var body_check_transfer: float = 0.45
 # the reach that sets how tight an evasion seam it can thread (best_evade_point).
 # Scaled by the blade lever (max_blade_speed over its base). Puck HANDLING, not
 # pass reception. Default is the league carry-handle reach
-# (AIActionScoring.EVADE_CARRY_HANDLE_M).
+# (AIBotMechanics.EVADE_CARRY_HANDLE_M).
 var handle_reach: float = 0.9
 
 # Half-angle of the blade's reach cone: how far off its FACING the body can

@@ -892,7 +892,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 				ctx.snapshot.puck_state.position.x, 0.0,
 				ctx.snapshot.puck_state.position.z)
 	var wrister_base_release: Vector3 = puck_now \
-			+ horizontal_velocity * SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S
+			+ horizontal_velocity * AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
 	# No shot when the PUCK ITSELF is on/behind the goal line. Gate on the real
 	# puck, not the projection: score_shoot clamps a behind-the-goalie release to
 	# a jam point in FRONT of him, so a projected blade landing a hair in front
@@ -960,7 +960,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 				snapshot.skater_states[ctx.peer_id].facing)
 		_holds.price_keep(self_pos, Vector2(horizontal_velocity.x, horizontal_velocity.z),
 				snapshot.skater_states[ctx.peer_id].facing,
-				SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S, _scratch_opponents,
+				AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, _scratch_opponents,
 				_scratch_opponent_vels, _scratch_opponent_caps)
 	_phase_shoot_score = -1.0
 	for k: int in _holds.count:
@@ -972,7 +972,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var sample_speed: float = ctx.self_wrister_shot_speed * share
 		var release: Vector3 = AIActionScoring.release_ahead_of_goalie(
 				self_pos + hold + horizontal_velocity
-						* (SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S + pull_s),
+						* (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + pull_s),
 				attacking_goal, goalie_now)
 		var flight_s: float = release.distance_to(attacking_goal) \
 				/ maxf(sample_speed, 1.0)
@@ -988,7 +988,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var sample_goalie: Vector3 = goalie_now if _shot_env_seal_x != 0.0 \
 				else AIActionScoring.predict_goalie_pos(
 						goalie_now, attacking_goal,
-						SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S + pull_s
+						AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + pull_s
 								+ flight_s + ctx.shot_timing_error_s * 0.5,
 						release, shot_closing)
 		# Priced through the seam, like the carry and pass legs (see
@@ -997,7 +997,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		# power once SHOOT has won.
 		var shot_disp: float = AIShotValue.displacement_deficit_m(
 				goalie_now, attacking_goal, release,
-				SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S + pull_s
+				AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + pull_s
 						+ flight_s + ctx.shot_timing_error_s * 0.5)
 		var s: float = AIActionScoring.score_shoot_value(
 				release, attacking_goal, sample_goalie, shot_disp,
@@ -1025,7 +1025,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var tip_pull_s: float = _holds.pull_s[tip_k]
 		var tip_release: Vector3 = AIActionScoring.release_ahead_of_goalie(
 				self_pos + tip_hold + horizontal_velocity
-						* (SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S + tip_pull_s),
+						* (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + tip_pull_s),
 				attacking_goal, goalie_now)
 		var tip_speed: float = ctx.self_wrister_shot_speed * tip_share
 		for tip_man: Vector3 in _scratch_option_receiver_pos:
@@ -1318,7 +1318,7 @@ func _build_action_opponents_lists(ctx: RoleContext) -> void:
 			_scratch_opponent_vels.append(s.velocity)
 			_scratch_opponent_caps.append(ctx.caps_by_peer.get(peer_id))
 			_scratch_opponents_release.append(AITrajectory.predict_at(
-					s.position, s.velocity, SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S))
+					s.position, s.velocity, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S))
 		else:
 			_scratch_our_defenders.append(s.position)
 			_scratch_our_defender_caps.append(ctx.caps_by_peer.get(peer_id))
@@ -1533,7 +1533,7 @@ func _compute_best_pass(ctx: RoleContext, self_facing_xz: Vector2,
 				ctx.self_reach_cone_half_angle, ctx.self_facing_turn_rate)
 		var s_rim: float = _pass_ev(ctx, AIRimPass.meet_point(rim_k, rim_t),
 				AIRimPass.paces[rim_k], rim_t,
-				rim_t + SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S,
+				rim_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S,
 				rim_t + rotation_time, our_goalie, rim_caps, rim_lane, rim_miss,
 				rim_state.velocity, rim_space, floor_ev,
 				AIRimPass.dirs[rim_k], AIRimPass.opp_meet[rim_k])
@@ -1569,7 +1569,7 @@ func _rim_launch_for(ctx: RoleContext, receiver_state: SkaterNetworkState,
 	var speed: float = receiver_caps.max_speed if receiver_caps != null \
 			else AIArrival.SKATER_REF_SPEED_M_S
 	var catch_radius: float = receiver_caps.handle_reach if receiver_caps != null \
-			else AIActionScoring.EVADE_CARRY_HANDLE_M
+			else AIBotMechanics.EVADE_CARRY_HANDLE_M
 	var receiver_speed: float = Vector2(
 			receiver_state.velocity.x, receiver_state.velocity.z).length()
 	if _rim_sure_by_k.size() != AIRimPass.MAX_LAUNCHES:
@@ -1679,7 +1679,7 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 	# Execution miss (AIActionScoring.pass_miss_prob): this bot's release error
 	# projected over the pass distance vs the receiver's catch envelope.
 	var catch_radius: float = receiver_caps.handle_reach if receiver_caps != null \
-			else AIActionScoring.EVADE_CARRY_HANDLE_M
+			else AIBotMechanics.EVADE_CARRY_HANDLE_M
 	# Receiver-commitment term: a receiver mid-cut curves off the straight-line
 	# lead. Zero for a settled receiver (or a commitment-blind tier, which
 	# passes receiver_omega 0).
@@ -1716,7 +1716,7 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 		_last_flat_variant_lane = lane
 	var receiver_release_t: float = flight_t
 	if not receiver_is_one_timer:
-		receiver_release_t += SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S
+		receiver_release_t += AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
 	var rotation_time: float = _facing_rotation_time(
 			self_facing_xz, ctx.self_pos, receiver,
 			ctx.self_reach_cone_half_angle, ctx.self_facing_turn_rate)
@@ -2467,12 +2467,12 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 	var cand_share: float = 1.0
 	var cand_keep: float = 1.0
 	if _shot_reads(ctx, self_pos,
-			candidate + arrive_vel * SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S):
+			candidate + arrive_vel * AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S):
 		cand_wait = _arrival_hold_wait(ctx, candidate, arrive_vel, local_time)
 		cand_share = _holds.arrival_share
 		cand_keep = _holds.arrival_keep
 	var cand_speed: float = ctx.self_wrister_shot_speed * cand_share
-	var cand_windup: float = SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S + cand_wait
+	var cand_windup: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + cand_wait
 	# The keeper backs in as the carry closes on him (the planning depth model).
 	# Closing is the rate this carry shortens the puck's distance to the goal.
 	var carry_closing: float = (self_pos.distance_to(ctx.attacking_goal_pos)
@@ -2684,7 +2684,7 @@ func _arrival_hold_wait(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector
 	if aim.length_squared() < 0.0001:
 		aim = Vector2(0.0, -signf(ctx.attacking_goal_pos.z))
 	var facing: Vector2 = ctx.snapshot.skater_states[ctx.peer_id].facing
-	var windup: float = SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S
+	var windup: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
 	_holds.solve_arrival(aim.normalized(), Vector2(arrive_vel.x, arrive_vel.z), facing,
 			candidate + arrive_vel * windup, carry_s + windup,
 			_scratch_opponents, _scratch_opponent_vels, _scratch_opponent_caps)
@@ -2976,7 +2976,7 @@ func _best_developing_feed(ctx: RoleContext) -> float:
 					self_pos, spot, ctx.attacking_goal_pos,
 					AIShotValue.displacement_deficit_m(
 							_goalie_now(ctx), ctx.attacking_goal_pos, spot,
-							flight_t + SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S),
+							flight_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S),
 					_scratch_opponents_pass, pass_speed, _scratch_opponent_caps)
 		elif slot == AIRoleSlots.Slot.BREAKOUT_STRONG \
 				or slot == AIRoleSlots.Slot.OUTLET \
@@ -3019,7 +3019,7 @@ func _developing_outlet_feed(ctx: RoleContext, tm: SkaterNetworkState,
 	var flight_t: float = clampf(dist / pass_speed, 0.0, PASS_LEAD_MAX_S)
 	# Breakout receivers carry on reception (no one-timer): flight + wrister
 	# charge, as the live pass scoring bills a non-ready receiver.
-	var release_t: float = flight_t + SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S
+	var release_t: float = flight_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
 	var rotation_time: float = _facing_rotation_time(self_facing_xz, ctx.self_pos, spot,
 			ctx.self_reach_cone_half_angle, ctx.self_facing_turn_rate)
 	return _pass_ev(ctx, spot, pass_speed, flight_t, release_t,
@@ -3038,7 +3038,7 @@ func _puck_pos_at(body_pos: Vector3, attacking_goal: Vector3) -> Vector3:
 	if len_sq < 0.0001:
 		return body_pos
 	var inv: float = 1.0 / sqrt(len_sq)
-	return body_pos + to_goal * (inv * SkaterAgentStateMachine.CARRY_BLADE_AIM_FORWARD_M)
+	return body_pos + to_goal * (inv * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M)
 
 
 # The pass valve's read: the offside line reads the PUCK, which leads the body,
@@ -3051,7 +3051,7 @@ func _zone_taken(ctx: RoleContext) -> bool:
 		return false
 	var puck: Vector3 = ctx.snapshot.puck_state.position
 	return AIActionScoring.in_offensive_zone(puck, goal) or AIActionScoring.in_offensive_zone(
-			puck + ctx.self_velocity * SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S, goal)
+			puck + ctx.self_velocity * AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, goal)
 
 
 # OZ slot anchor — the long-range carry candidate and the forward axis of the

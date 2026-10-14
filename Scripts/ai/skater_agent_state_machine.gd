@@ -154,17 +154,6 @@ const _RECV_NONE: int = 0           # not a shot reception — run the normal ca
 const _RECV_CATCH_STRIDE: int = 1   # Mode B handled aim+steer; caller runs transitions
 const _RECV_ONE_TIME: int = 2       # Mode A transitioned to ONE_TIMER_PRESSED; caller returns
 
-# CARRY blade aim distance (m forward in goal direction) — the cursor ring the
-# carry dangle, the pre-aim targets, and the arc-step all live on. 1.3 m is ~80%
-# of the league blade orbit (stick + blade = 1.6 m), INSIDE reach, so the blade
-# holds AT the cursor with slack in every direction, and the model's assumed
-# carried-puck position (self + this × forward — _puck_pos_at, the stickhandle
-# threat point, the poke-evade trigger) is where the blade can really hold it.
-#
-# Anything denominated in metres ON THIS RING is really an angle: the stickhandle
-# offset and AIM_CONVERGED_DIST_M must be rescaled with it (aim errors are stored
-# in radians on BotSkillProfile so they don't move).
-const CARRY_BLADE_AIM_FORWARD_M: float = 1.3
 
 # Behind-the-net cradle. A full CARRY_BLADE_AIM_FORWARD_M reach from behind the
 # attacking cage chords the blade into the mesh, and stick-on-net contact strips
@@ -307,32 +296,9 @@ const OFFSIDE_HOLD_BUFFER_M: float = 1.0
 # lane in the wrong zone entirely.
 const SHOT_LANE_LEAD_TIME_S: float = 0.25
 
-# Blade-reach radius. Inside it the stick can reach the puck where it is, so the
-# blade aims at its CURRENT position rather than the lead intercept (which rides
-# the blade past a puck at our feet); steering still uses the lead. Stick + blade
-# + a feel buffer so the snap kicks in just before the blade arrives.
-#
-# BLADE_REACH_M is the league default, for consumers that don't know whose reach
-# to use (the PRESSURE role's gap geometry). The bot's own reach is `_blade_reach`,
-# scaled to its build in apply_capabilities.
-const BLADE_REACH_BUFFER_M: float = 0.2
-const BLADE_REACH_M: float = (
-		GameRules.DEFAULT_STICK_LENGTH_M
-		+ GameRules.DEFAULT_BLADE_LENGTH_M
-		+ BLADE_REACH_BUFFER_M)
-var _blade_reach: float = BLADE_REACH_M
+var _blade_reach: float = AIBotMechanics.BLADE_REACH_M
 
 # ── Wrister charge ───────────────────────────────────────────────────────────
-# SHOOT_PRESSED and the charged PASS_PRESSED variant hold shoot_held for this many
-# ticks while the blade sweeps from wind_up_start to aim_target, then release.
-# Power rides input.bot_wrister_power_t, so the sweep is cosmetic, but the
-# DURATION is the real commit→release delay: BOT_WRISTER_LOOKAHEAD_S is derived
-# from it so the scorer's goalie prediction stays honest.
-#
-# ~125 ms: the keeper's reaction (~0.13 s leg / 0.18 s arm) has barely fired, so a
-# set, squared goalie still covers a straight-on range shot while lateral lag and
-# point-blank arm-deploy gaps stay open.
-const BOT_WRISTER_CHARGE_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 8   # ~125 ms
 
 # Straight-line span (m) of the cosmetic wind-up sweep. A full-power shot uses the
 # whole span; a soft pass scales it down so the gesture reads as gentle. Compact,
@@ -346,13 +312,6 @@ const BOT_WRISTER_BAIL_RADIUS_M: float = 2.0
 # has no release spot to skate to, and steering lets the repulsion fields wander
 # the body. Above it, a rush wrister arrives at the locked anchor in stride.
 const BOT_WRISTER_PLANT_SPEED_M_S: float = 1.5
-# Lookahead for scoring a wrister at COMMIT time — from the carrier picking SHOOT
-# to the puck leaving the blade: the pre-aim's residual convergence (short, since
-# _carry_aim_track_fire keeps facing pre-tracked during CARRY) plus the charge.
-# Projects both the shooter's release position and the goalie / opponents.
-const BOT_PRE_AIM_BUFFER_S: float = 0.01
-const BOT_WRISTER_LOOKAHEAD_S: float = (
-		float(BOT_WRISTER_CHARGE_TICKS) / _PhysicsConstants.PHYSICS_TICK + BOT_PRE_AIM_BUFFER_S)
 
 # Perpendicular offset of the wind-up lerp line off aim_dir, so the cosmetic
 # sweep reads as a forehand pose rather than a jab through the body's centreline
@@ -1031,7 +990,7 @@ func apply_capabilities(caps: AISkaterCaps) -> void:
 		return
 	_self_max_speed = caps.max_speed
 	_chase_max_accel = caps.max_accel
-	_blade_reach = caps.blade_span + BLADE_REACH_BUFFER_M
+	_blade_reach = caps.blade_span + AIBotMechanics.BLADE_REACH_BUFFER_M
 	_receive_body_offset = caps.blade_span - RECEIVE_BODY_INSET_M
 	_poke_jab_reach = caps.blade_span + GameRules.POKE_RADIUS_M
 	_stick_lift_reach = caps.blade_span + GameRules.STICK_LIFT_RADIUS_M
@@ -1137,7 +1096,7 @@ func apply_profile(profile: BotSkillProfile) -> void:
 # slew / the virtual cursor ring. Defaults to the ring radius; every live caller
 # passes the real span.
 func _apply_aim_slew(slew: float,
-		orbit_radius_m: float = CARRY_BLADE_AIM_FORWARD_M) -> void:
+		orbit_radius_m: float = AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M) -> void:
 	_mouse_max_speed_m_s = slew
 	# Arc rate: lesser of the IK-gate ceiling and the linear slew cap projected
 	# onto the blade's orbit radius — above either, the arc-step chord-cuts the
@@ -1929,8 +1888,8 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 			var approach: Vector3 = Vector3(
 					target.x - self_pos.x, 0.0, target.z - self_pos.z)
 			var approach_len: float = approach.length()
-			if approach_len > CARRY_BLADE_AIM_FORWARD_M:
-				target -= approach * (CARRY_BLADE_AIM_FORWARD_M / approach_len)
+			if approach_len > AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M:
+				target -= approach * (AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M / approach_len)
 		# Every target above is built off the PUCK, whose path can ride ice a
 		# skater's centre never reaches (the contested overshoot can even land
 		# inside the glass), and steering at it grinds the body into the boards.
@@ -2086,7 +2045,7 @@ func _blade_gate_on_puck_line(self_pos: Vector3, self_vel: Vector3,
 # Comfortable blade extension for a parked reception: the blade span (_blade_reach
 # less its outward buffer) minus the side-stand inset, off the IK ROM clamp.
 func _receive_gate_reach() -> float:
-	return maxf(_blade_reach - BLADE_REACH_BUFFER_M - RECEIVE_BODY_INSET_M, 0.4)
+	return maxf(_blade_reach - AIBotMechanics.BLADE_REACH_BUFFER_M - RECEIVE_BODY_INSET_M, 0.4)
 
 
 # The boards at `xz`: the unit INWARD normal packed in x/z, and the gap to the
@@ -2358,7 +2317,7 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		if self_state != null:
 			hv = Vector3(self_state.velocity.x, 0.0, self_state.velocity.z)
 		_apply_steering(input, snapshot, self_pos,
-				self_pos + hv * BOT_WRISTER_LOOKAHEAD_S)
+				self_pos + hv * AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S)
 	else:
 		_apply_brake_steering(input, snapshot, self_pos)
 
@@ -2544,8 +2503,8 @@ func _aim_ring_toward(self_pos: Vector3, aim_world: Vector3) -> Vector3:
 	if to_aim.length_squared() < 0.0001:
 		# Fall back to the attacking direction (team-aware). Vector3.FORWARD
 		# is (0, 0, -1), which is correct for team 0 but inverts for team 1.
-		return self_pos + Vector3(0.0, 0.0, -_own_goal_dir) * CARRY_BLADE_AIM_FORWARD_M
-	return self_pos + to_aim.normalized() * CARRY_BLADE_AIM_FORWARD_M
+		return self_pos + Vector3(0.0, 0.0, -_own_goal_dir) * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
+	return self_pos + to_aim.normalized() * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
 
 
 # ── Protect-side turn ────────────────────────────────────────────────────────
@@ -2627,7 +2586,7 @@ func _target_is_behind(desired_dir: Vector3, self_state: SkaterNetworkState) -> 
 # describes the same arc.
 func _arc_step_mouse_target(self_pos: Vector3, final_target: Vector3,
 		self_state: SkaterNetworkState, arc_rate: float,
-		ring_radius: float = CARRY_BLADE_AIM_FORWARD_M) -> Vector3:
+		ring_radius: float = AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M) -> Vector3:
 	var to_final: Vector3 = final_target - self_pos
 	to_final.y = 0.0
 	if to_final.length_squared() < 0.0001:
@@ -2695,7 +2654,7 @@ func _clamp_aim_to_reach_cone(self_pos: Vector3, target: Vector3,
 	var gate: float = maxf(_self_reach_cone_half_angle - FACE_GATE_MARGIN_RAD, 0.0)
 	var out_dir: Vector2 = target_dir if absf(ang) <= gate \
 			else facing.rotated(signf(ang) * gate)
-	return self_pos + Vector3(out_dir.x, 0.0, out_dir.y) * CARRY_BLADE_AIM_FORWARD_M
+	return self_pos + Vector3(out_dir.x, 0.0, out_dir.y) * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
 
 
 func _state_shoot_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3, have_puck: bool) -> void:
@@ -2729,7 +2688,7 @@ func _state_shoot_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: 
 		var hv0: Vector3 = Vector3.ZERO
 		if self_state != null:
 			hv0 = Vector3(self_state.velocity.x, 0.0, self_state.velocity.z)
-		_shoot_release_anchor = self_pos + hv0 * BOT_WRISTER_LOOKAHEAD_S
+		_shoot_release_anchor = self_pos + hv0 * AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
 		_shoot_wind_up_moving = hv0.length() > BOT_WRISTER_PLANT_SPEED_M_S
 	# Rush wrister: steer to the anchor. Near-still: plant (BOT_WRISTER_PLANT_SPEED_M_S).
 	if _shoot_wind_up_moving:
@@ -2787,7 +2746,7 @@ func _state_shoot_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: 
 	# Clamped at 1: during the sampled late-release hold the blade sits at the
 	# aim target.
 	var t: float = minf(
-			float(_shoot_charge_tick) / float(BOT_WRISTER_CHARGE_TICKS), 1.0)
+			float(_shoot_charge_tick) / float(AIBotMechanics.BOT_WRISTER_CHARGE_TICKS), 1.0)
 	input.mouse_world_pos = _step_mouse_toward(self_pos + _shoot_wind_up_start.lerp(_shoot_aim_target, t))
 
 	# The charge tracker reads its DIRECTION from the screen-pos delta, which a bot
@@ -2799,7 +2758,7 @@ func _state_shoot_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: 
 	input.bot_wrister_power_t = _shot_power_committed
 	input.bot_wrister_aim_dir = _shoot_aim_dir_locked
 
-	if _shoot_charge_tick < BOT_WRISTER_CHARGE_TICKS + _shoot_release_hold_ticks:
+	if _shoot_charge_tick < AIBotMechanics.BOT_WRISTER_CHARGE_TICKS + _shoot_release_hold_ticks:
 		# Still charging, or on the sampled late-release hold.
 		input.shoot_held = true
 		_shoot_charge_tick += 1
@@ -2985,7 +2944,7 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 		input.shoot_pressed = true
 
 	# Endpoints are offsets from the current self_pos (see _shoot_wind_up_start).
-	var t: float = float(_pass_charge_tick) / float(BOT_WRISTER_CHARGE_TICKS)
+	var t: float = float(_pass_charge_tick) / float(AIBotMechanics.BOT_WRISTER_CHARGE_TICKS)
 	input.mouse_world_pos = _step_mouse_toward(self_pos + _pass_wind_up_start.lerp(_pass_aim_target, t))
 
 	# Synthesized screen-pos sweep and committed power / direction, as in
@@ -2995,7 +2954,7 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 	input.bot_wrister_power_t = _pass_power_committed
 	input.bot_wrister_aim_dir = _pass_aim_dir_locked
 
-	if _pass_charge_tick < BOT_WRISTER_CHARGE_TICKS:
+	if _pass_charge_tick < AIBotMechanics.BOT_WRISTER_CHARGE_TICKS:
 		input.shoot_held = true
 		_pass_charge_tick += 1
 	else:
@@ -3613,7 +3572,7 @@ func _carry_reach_behind_net(self_pos: Vector3) -> float:
 	# Wide of the cage laterally: full reach (the wall margin and
 	# net_safe_blade_target own that side).
 	if absf(self_pos.x) > GameRules.NET_BACK_HALF_WIDTH + CARRY_BEHIND_NET_LATERAL_M:
-		return CARRY_BLADE_AIM_FORWARD_M
+		return AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
 	# Signed distance PAST a goal line toward its end boards (>0 = behind that
 	# net). BOTH nets cradle: behind our own, a puck popped loose by the cage is
 	# loose in our crease.
@@ -3623,7 +3582,7 @@ func _carry_reach_behind_net(self_pos: Vector3) -> float:
 	# Ramp: full reach until a band's width in front of the line, tight cradle at
 	# or behind it.
 	var t: float = clampf((past + CARRY_BEHIND_NET_BAND_M) / CARRY_BEHIND_NET_BAND_M, 0.0, 1.0)
-	return lerpf(CARRY_BLADE_AIM_FORWARD_M, CARRY_BEHIND_NET_CRADLE_M, t)
+	return lerpf(AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M, CARRY_BEHIND_NET_CRADLE_M, t)
 
 
 func _carry_mouse_aim(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
@@ -3754,7 +3713,7 @@ func _has_man_to_beat() -> bool:
 func _stickhandle_offset(snapshot: WorldSnapshot, self_pos: Vector3, forward_dir: Vector3) -> Vector3:
 	var right_axis: Vector3 = Vector3(forward_dir.z, 0.0, -forward_dir.x)
 	# Threat distance is measured from the carried puck, not the body.
-	var carry_pos: Vector3 = self_pos + forward_dir * CARRY_BLADE_AIM_FORWARD_M
+	var carry_pos: Vector3 = self_pos + forward_dir * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
 	# Positive = pull toward +right_axis (away from a threat on the left).
 	var lateral_force: float = 0.0
 	for peer_id: int in _opponent_ids(snapshot):
@@ -3820,7 +3779,7 @@ func _poke_evade_modulate_steering(input: InputState, snapshot: WorldSnapshot, s
 	var forward: Vector2 = vel_xz / speed
 	# Same carried-puck point the stickhandle uses.
 	var forward_3d := Vector3(forward.x, 0.0, forward.y)
-	var carry_pos: Vector3 = self_pos + forward_3d * CARRY_BLADE_AIM_FORWARD_M
+	var carry_pos: Vector3 = self_pos + forward_3d * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
 	var trigger_threat: SkaterNetworkState = null
 	for peer_id: int in snapshot.skater_states:
 		if peer_id == _peer_id:
@@ -3951,8 +3910,8 @@ func _deke_mouse_target(self_pos: Vector3) -> Vector3:
 	if dir == Vector2.ZERO:
 		return Vector3.INF
 	var target := Vector3(
-			self_pos.x + dir.x * CARRY_BLADE_AIM_FORWARD_M, 0.0,
-			self_pos.z + dir.y * CARRY_BLADE_AIM_FORWARD_M)
+			self_pos.x + dir.x * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M, 0.0,
+			self_pos.z + dir.y * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M)
 	var on_ice: Vector2 = GameRules.clamp_to_rink_inner(
 			Vector2(target.x, target.z), CARRY_BLADE_WALL_MARGIN_M)
 	target.x = on_ice.x
@@ -4393,7 +4352,7 @@ func _carrier_puck_pos(snapshot: WorldSnapshot) -> Vector3:
 # lateral velocity biases the aim back across the grain — unless this tier is
 # goalie-motion blind (_reads_goalie_motion).
 func _shot_aim_point(snapshot: WorldSnapshot, self_pos: Vector3,
-		release_lookahead_s: float = BOT_WRISTER_LOOKAHEAD_S) -> Vector3:
+		release_lookahead_s: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S) -> Vector3:
 	var goalie: Vector3 = _predict_goalie_at(
 			snapshot, release_lookahead_s, self_pos)
 	var goalie_vx: float = 0.0
@@ -4862,7 +4821,7 @@ static func _shade_intercept_goal_side(target: Vector3, our_net: Vector3) -> Vec
 	var dist: float = Vector2(to_net.x, to_net.z).length()
 	if dist < 0.001:
 		return target
-	var shade: float = minf(BLADE_REACH_M, dist)
+	var shade: float = minf(AIBotMechanics.BLADE_REACH_M, dist)
 	var inv: float = shade / dist
 	return Vector3(target.x + to_net.x * inv, target.y, target.z + to_net.z * inv)
 

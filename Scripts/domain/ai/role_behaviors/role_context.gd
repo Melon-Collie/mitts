@@ -90,7 +90,7 @@ var self_stagger_timer: float = 0.0
 # Hands-scaled carry-handle reach, m — how tight a seam best_evade_point threads.
 var self_handle_reach: float = 0.9
 # Stick + blade reach, m — the "one stick length" unit of the gap ladder.
-var self_blade_reach: float = SkaterAgentStateMachine.BLADE_REACH_M
+var self_blade_reach: float = AIBotMechanics.BLADE_REACH_M
 # Blade reach cone half-angle (ROM + torso twist) and facing turn rate, rad/s —
 # what the carrier's _facing_rotation_time charges an aim outside the cone.
 var self_reach_cone_half_angle: float = deg_to_rad(157.0)

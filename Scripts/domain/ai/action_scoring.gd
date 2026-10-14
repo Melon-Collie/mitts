@@ -2189,13 +2189,13 @@ static func _is_past_goal_line(pos: Vector3, attacking_goal: Vector3) -> bool:
 #              product; no count normalizer, no saturation constant
 #
 # T_window is the bot's real decision→puck-away time
-# (SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S). Directionality is
+# (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S). Directionality is
 # emergent: the release point sits a carry-handle toward the target, so a man
 # behind the shooter is farther from the puck. A blade planted on the release
 # point still leaves read_delay / T_window clean per opponent.
 static func release_contest_clean(release_pt: Vector3,
 		opponents: Array[Vector3], opponent_caps: Array = []) -> float:
-	var t_window: float = SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S
+	var t_window: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
 	var contest_frac: float = maxf(0.0, t_window - LANE_REACTION_DELAY_S) \
 			/ t_window
 	var has_caps: bool = opponent_caps.size() == opponents.size()
@@ -2232,7 +2232,7 @@ static func release_point_toward(shooter: Vector3, target: Vector3) -> Vector3:
 	var len_sq: float = dx * dx + dz * dz
 	if len_sq < 0.0001:
 		return shooter
-	var inv: float = EVADE_CARRY_HANDLE_M / sqrt(len_sq)
+	var inv: float = AIBotMechanics.EVADE_CARRY_HANDLE_M / sqrt(len_sq)
 	return Vector3(shooter.x + dx * inv, 0.0, shooter.z + dz * inv)
 
 
@@ -3004,7 +3004,7 @@ const PASS_MISS_OVERSHOOT_M: float = 3.0
 # compounded with the fraction of the ±(aim_error × distance) lateral spread that
 # lands outside the catch envelope.
 static func pass_miss_prob(distance: float, aim_error_rad: float,
-		catch_radius: float = EVADE_CARRY_HANDLE_M,
+		catch_radius: float = AIBotMechanics.EVADE_CARRY_HANDLE_M,
 		receiver_uncertainty_m: float = 0.0) -> float:
 	# Two lateral catch-point offsets (m) against the receiver's catch
 	# envelope, added (the worst case is they align): the passer's aim spread
@@ -3047,11 +3047,6 @@ static func pass_miss_loss_point(from: Vector3, receiver: Vector3) -> Vector3:
 	var inv: float = PASS_MISS_OVERSHOOT_M / sqrt(len_sq)
 	return Vector3(receiver.x + dx * inv, 0.0, receiver.z + dz * inv)
 
-
-# Base puck-protect reach: how far a carrier holds the puck off his body while
-# handling. Hands scales it (a better handler protects it further out / threads a
-# tighter seam) — callers pass the scaled value; this is the league default.
-const EVADE_CARRY_HANDLE_M: float = 0.9
 
 # ── Dump delivery search ─────────────────────────────────────────────────────
 # A dump is a RELEASE, not a spot: both dumps search launches and read where

@@ -40,7 +40,7 @@ const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
 
 const DT: float = 1.0 / 120.0
 # Mirrors of live tuning the plant integrates with (SkaterController export
-# defaults; PuckController.PICKUP_RADIUS; Agent.BLADE_REACH_M).
+# defaults; PuckController.PICKUP_RADIUS; AIBotMechanics.BLADE_REACH_M).
 const FACING_DRAG: float = 5.0
 const MAX_BLADE_SPEED: float = 10.0
 const BLADE_REACH: float = 1.8

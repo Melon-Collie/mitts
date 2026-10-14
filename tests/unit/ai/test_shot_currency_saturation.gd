@@ -152,7 +152,7 @@ func _planner_read(start: Vector3, candidate: Vector3,
 			- candidate.distance_to(_goal)) / maxf(local_time, 0.001)
 	var tracked: Vector3 = AIActionScoring.predict_goalie_pos(
 			keeper_now, _goal, local_time, candidate, carry_closing)
-	var look: float = SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S
+	var look: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
 	var release: Vector3 = AIActionScoring.release_ahead_of_goalie(
 			candidate + arrive_vel * look, _goal, tracked)
 	var release_t: float = look + release.distance_to(_goal) / WRIST

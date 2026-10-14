@@ -1881,7 +1881,7 @@ func test_developing_outlet_beats_the_spot_it_left_behind() -> void:
 	carrier2._scratch_teammate_ids = [2]
 	var stay_put: float = carrier2._pass_ev(
 			moving, spot, pass_speed, flight_t,
-			flight_t + SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S, flight_t,
+			flight_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, flight_t,
 			moving.defending_goal_pos)
 
 	assert_gt(developing, stay_put,

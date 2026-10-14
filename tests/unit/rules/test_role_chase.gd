@@ -65,7 +65,7 @@ func test_lost_race_retreats_to_the_pre_contain_point() -> void:
 	ctx.team_id_by_peer[200] = 1
 	var d: RoleDecision = AIRoleChase.decide(ctx)
 	assert_gt(d.target_position.z,
-			puck_pos.z + AIRoleRushD.GAP_MIN_STICKS * SkaterAgentStateMachine.BLADE_REACH_M - 0.01,
+			puck_pos.z + AIRoleRushD.GAP_MIN_STICKS * AIBotMechanics.BLADE_REACH_M - 0.01,
 			"lost race → the target is goal-side of the pickup, not the puck;"
 			+ " got %s" % str(d.target_position))
 

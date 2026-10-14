@@ -1269,7 +1269,7 @@ func build_ai_caps() -> AISkaterCaps:
 	# longer lever protects the puck further out. _base is captured on the
 	# first apply_attributes (always run before this).
 	if _base_max_blade_speed > 0.001:
-		caps.handle_reach = AIActionScoring.EVADE_CARRY_HANDLE_M \
+		caps.handle_reach = AIBotMechanics.EVADE_CARRY_HANDLE_M \
 				* (max_blade_speed / _base_max_blade_speed)
 	# Blade reach cone: the exact IK gate SkaterPoseCoordinator.apply_facing
 	# enforces (ROM backhand + torso twist), so the bot models the same off-facing

@@ -1589,7 +1589,7 @@ func test_lane_clear_release_windup_projection_blocks_more() -> void:
 	var vel := Vector3(-3.0, 0.0, 0.0)               # closing on the lane from the +X side
 	var at_decision: Array[Vector3] = [Vector3(3.0, 0.0, 6.0)]
 	var at_release: Array[Vector3] = [AITrajectory.predict_at(
-			at_decision[0], vel, SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S)]
+			at_decision[0], vel, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S)]
 	var decision_lane: float = AIActionScoring.lane_clear(
 			from, to, at_decision, charged_pass_speed, [vel])
 	var release_lane: float = AIActionScoring.lane_clear(

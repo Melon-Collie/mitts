@@ -322,7 +322,7 @@ func _fill_backpressure(snapshot: WorldSnapshot,
 # Envelope inside which a defender OWNS a man: the goal-side cover stand plus a
 # stick.
 static func cover_envelope_m() -> float:
-	return AIThreatAssignment.COVER_DEPTH_M + SkaterAgentStateMachine.BLADE_REACH_M
+	return AIThreatAssignment.COVER_DEPTH_M + AIBotMechanics.BLADE_REACH_M
 
 
 # ── Coverage readiness (the DZONE handoff gate — plan §9) ────────────────────

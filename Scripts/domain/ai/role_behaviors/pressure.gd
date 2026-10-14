@@ -68,7 +68,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	# The lead is used only by the pass-lane stand below — where a feed would be
 	# thrown from, not how close to stand.
 	var lead: Vector3 = carrier_pos \
-			+ carrier_velocity * SkaterAgentStateMachine.BOT_WRISTER_LOOKAHEAD_S
+			+ carrier_velocity * AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
 
 	# Last man: take the cut-off set, never lunge into it — an ICE-FRAME bound,
 	# so a loose puck only. Never apply it to a live carrier: it would name a
@@ -121,7 +121,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 			var lane_len: float = sqrt(lane.x * lane.x + lane.z * lane.z)
 			if lane_len > 0.001:
 				var pass_stand: Vector3 = lead + lane * (
-						(SkaterAgentStateMachine.BLADE_REACH_M
+						(AIBotMechanics.BLADE_REACH_M
 								+ ctx.pursuit_standoff_m) / lane_len)
 				candidates.append(pass_stand)
 				candidates.append((search_center + pass_stand) * 0.5)

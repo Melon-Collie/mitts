@@ -20,7 +20,7 @@ func test_caps_defaults_equal_league_baseline() -> void:
 	# league baseline too, so a missing caps_by_peer entry reproduces old behaviour.
 	assert_almost_eq(caps.weight, 1.0, 0.001)
 	assert_almost_eq(caps.body_check_transfer, 0.45, 0.001)
-	assert_almost_eq(caps.handle_reach, AIActionScoring.EVADE_CARRY_HANDLE_M, 0.001,
+	assert_almost_eq(caps.handle_reach, AIBotMechanics.EVADE_CARRY_HANDLE_M, 0.001,
 			"handle reach defaults to the league carry-handle reach")
 	assert_almost_eq(caps.blade_speed, 10.0, 0.001,
 			"blade speed defaults to the controller's league max_blade_speed")
@@ -98,7 +98,7 @@ func test_apply_capabilities_derives_reach_gates_and_speeds() -> void:
 	sm.apply_capabilities(caps)
 	# Reach gates derive from blade_span + the SM's own buffers.
 	assert_almost_eq(sm._blade_reach,
-			2.0 + SkaterAgentStateMachine.BLADE_REACH_BUFFER_M, 0.001)
+			2.0 + AIBotMechanics.BLADE_REACH_BUFFER_M, 0.001)
 	assert_almost_eq(sm._poke_jab_reach, 2.0 + GameRules.POKE_RADIUS_M, 0.001)
 	assert_almost_eq(sm._receive_body_offset,
 			2.0 - SkaterAgentStateMachine.RECEIVE_BODY_INSET_M, 0.001)
@@ -154,4 +154,4 @@ func test_unwired_state_machine_uses_baseline_reach() -> void:
 	# A freshly constructed SM (no capabilities applied) reaches exactly as
 	# the old const did, so non-attribute paths are unchanged.
 	var sm := SkaterAgentStateMachine.new()
-	assert_almost_eq(sm._blade_reach, SkaterAgentStateMachine.BLADE_REACH_M, 0.001)
+	assert_almost_eq(sm._blade_reach, AIBotMechanics.BLADE_REACH_M, 0.001)

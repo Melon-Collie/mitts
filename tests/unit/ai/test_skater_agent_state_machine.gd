@@ -237,7 +237,7 @@ func test_shade_intercept_pulls_toward_our_net() -> void:
 	var shaded: Vector3 = Agent._shade_intercept_goal_side(target, our_net)
 	assert_almost_eq(
 			Vector2(shaded.x - target.x, shaded.z - target.z).length(),
-			Agent.BLADE_REACH_M, 0.0001)
+			AIBotMechanics.BLADE_REACH_M, 0.0001)
 	assert_gt(shaded.z, target.z, "shade moves the point toward the +Z net")
 
 
@@ -398,7 +398,7 @@ func test_arc_step_degenerate_target_returns_target() -> void:
 func test_arc_step_result_lies_on_aim_ring() -> void:
 	sm._mouse_pos_initialized = false
 	var r: Vector3 = sm._arc_step_mouse_target(Vector3.ZERO, Vector3(10, 0, 0), _self_state(Vector2(0, 1)), Agent.MOUSE_ARC_RATE_RAD_S)
-	assert_almost_eq(r.distance_to(Vector3.ZERO), Agent.CARRY_BLADE_AIM_FORWARD_M, 0.0001)
+	assert_almost_eq(r.distance_to(Vector3.ZERO), AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M, 0.0001)
 
 
 func test_arc_step_caps_angular_rate() -> void:
@@ -461,7 +461,7 @@ func test_step_aim_projects_target_onto_ring() -> void:
 	sm._mouse_pos_initialized = false
 	sm._step_mouse_aim(Vector3(10, 0, 0))  # far east; arced onto the 2 m ring
 	assert_almost_eq(Vector2(sm._mouse_pos.x, sm._mouse_pos.z).length(),
-			Agent.CARRY_BLADE_AIM_FORWARD_M, 1e-4)
+			AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M, 1e-4)
 	assert_eq(sm._cached_aim_mode, Agent._STEP_ARC, "_step_mouse_aim is the arc path")
 
 
@@ -482,7 +482,7 @@ func test_body_face_snaps_cursor_straight_at_an_in_cone_target() -> void:
 	sm._mouse_pos_initialized = true
 	var r: Vector3 = sm._step_mouse_face(target)
 	assert_eq(sm._cached_aim_mode, Agent._STEP_FACE)
-	assert_almost_eq(Vector2(r.x, r.z).length(), Agent.CARRY_BLADE_AIM_FORWARD_M, 1e-4,
+	assert_almost_eq(Vector2(r.x, r.z).length(), AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M, 1e-4,
 			"cursor sits on the body ring in one tick, ignoring the low blade slew")
 	assert_almost_eq(Vector2(r.x, r.z).angle(), Vector2(4, 3).angle(), 1e-4,
 			"…pointing straight at the in-cone target, no slew")
@@ -675,7 +675,7 @@ func test_shoot_pressed_charges_then_releases_into_carry() -> void:
 	assert_true(i1.shoot_held, "still holding the charge")
 	# Drive to release: shoot_held drops on the final tick and we return to CARRY.
 	var released := false
-	for _n in range(Agent.BOT_WRISTER_CHARGE_TICKS + 2):
+	for _n in range(AIBotMechanics.BOT_WRISTER_CHARGE_TICKS + 2):
 		var i := InputState.new()
 		sm.dispatch(i, s)
 		if sm.get_state() == Agent.State.CARRY:
@@ -1162,7 +1162,7 @@ func test_pass_pressed_charged_releases_after_windup() -> void:
 	var s := _self_snap(Vector3.ZERO, true)
 	_add_skater(s, TEAMMATE_ID, Vector3(8, 0, 0))
 	var released := false
-	for _n in range(Agent.BOT_WRISTER_CHARGE_TICKS + 2):
+	for _n in range(AIBotMechanics.BOT_WRISTER_CHARGE_TICKS + 2):
 		var i := InputState.new()
 		sm.dispatch(i, s)
 		if sm.get_state() == Agent.State.CARRY:
@@ -1214,7 +1214,7 @@ func test_pass_pressed_dump_in_charges_flat_at_the_searched_pace() -> void:
 	# …and the wind-up spends the dump target when it finally releases (the
 	# quick-release branch, which normally clears it, never runs for a dump-in).
 	var released: bool = false
-	for _t: int in range(Agent.BOT_WRISTER_CHARGE_TICKS + 4):
+	for _t: int in range(AIBotMechanics.BOT_WRISTER_CHARGE_TICKS + 4):
 		var t := InputState.new()
 		sm.dispatch(t, _self_snap(Vector3.ZERO, true))
 		if sm.get_state() == Agent.State.CARRY:
@@ -1681,7 +1681,7 @@ func test_incoming_pass_to_me_defers_to_a_closer_teammate() -> void:
 func _gate_reach() -> float:
 	# Mirror of the helper's comfortable extension: pickup buffer stripped back
 	# off _blade_reach, then the side-stand inset.
-	return maxf(sm._blade_reach - Agent.BLADE_REACH_BUFFER_M
+	return maxf(sm._blade_reach - AIBotMechanics.BLADE_REACH_BUFFER_M
 			- Agent.RECEIVE_BODY_INSET_M, 0.4)
 
 
@@ -2324,7 +2324,7 @@ func test_carry_reach_symmetric_behind_both_nets() -> void:
 
 func test_carry_reach_full_in_neutral_zone() -> void:
 	var reach: float = sm._carry_reach_behind_net(Vector3(0, 0, 0))
-	assert_almost_eq(reach, SkaterAgentStateMachine.CARRY_BLADE_AIM_FORWARD_M, 0.01,
+	assert_almost_eq(reach, AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M, 0.01,
 			"full reach away from both cages")
 
 
@@ -2333,7 +2333,7 @@ func test_carry_reach_full_wide_behind_own_net() -> void:
 	# not net-working — keeps full reach.
 	var reach: float = sm._carry_reach_behind_net(
 			Vector3(2.5, 0, GameRules.GOAL_LINE_Z + 0.5))
-	assert_almost_eq(reach, SkaterAgentStateMachine.CARRY_BLADE_AIM_FORWARD_M, 0.01,
+	assert_almost_eq(reach, AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M, 0.01,
 			"wide in the corner behind our net keeps full reach")
 
 

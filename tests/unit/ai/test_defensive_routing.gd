@@ -67,9 +67,9 @@ const IN_SHAPE_REL_M_S: float = 4.0
 # anticipation lead the stand is built off (AIRoleHelpers.DEFENSIVE_ANTICIPATION_
 # MAX_M) and one more stick of tolerance, since what is being bounded is "is he
 # defending this man at all", not the ladder itself.
-const IN_SHAPE_GAP_M: float = 3.0 * SkaterAgentStateMachine.BLADE_REACH_M \
+const IN_SHAPE_GAP_M: float = 3.0 * AIBotMechanics.BLADE_REACH_M \
 		+ AIRoleHelpers.DEFENSIVE_ANTICIPATION_MAX_M \
-		+ SkaterAgentStateMachine.BLADE_REACH_M
+		+ AIBotMechanics.BLADE_REACH_M
 
 
 # The signed offset of `body` off the carrier→our-net line, positive toward the
