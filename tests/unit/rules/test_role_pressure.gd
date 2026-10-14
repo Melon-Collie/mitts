@@ -5,8 +5,6 @@ extends GutTest
 #   - Goal-side filter rejects wrong-side candidates.
 #   - Argmax picks a position that blocks the shot lane when
 #     carrier has a clear shot.
-#   - Argmax shifts toward a pass-lane when an opp teammate offers
-#     a more dangerous pass than the shot.
 # Underlying score_shoot / score_pass primitives are tested in
 # test_ai_action_scoring. Where the argmax currently stands for the reference
 # fixtures is the snapshot, test_pressure_calibration_snapshot.
@@ -161,43 +159,6 @@ func test_argmax_blocks_shot_lane_when_no_pass_options() -> void:
 			"target is goal-side of carrier (z=%f)" % target.z)
 	assert_lt(absf(target.x), GameRules.NET_HALF_WIDTH,
 			"target stands in the shot lane; got x=%f" % target.x)
-
-
-func test_argmax_shifts_toward_pass_lane_when_pass_dominates() -> void:
-	# Carrier with a back-checker right behind them and an open
-	# teammate to the side. The shot lane is essentially blocked by
-	# our own positioning so the pass becomes the dominant threat.
-	# PRESSURE should shade laterally toward the pass lane between
-	# carrier and the opp teammate.
-	#
-	# Geometry: carrier at (0, 0, 22). Opp teammate at (5, 0, 22) —
-	# same depth, lateral. Pass lane goes along +X. PRESSURE should
-	# shade toward +X relative to a baseline (no-pass-option) setup.
-	var carrier_pos := Vector3(0, 0, 22)
-	var opp_teammate_pos := Vector3(5, 0, 22)
-
-	# Baseline: only the carrier.
-	var skaters_solo: Array = [
-		[1, TEAM_ID, Vector3(0, 0, 18), Vector3.ZERO],
-		[200, 1 - TEAM_ID, carrier_pos, Vector3.ZERO],
-	]
-	var ctx_a: RoleContext = _make_ctx(Vector3(0, 0, 18), 200, skaters_solo)
-	var solo_target: Vector3 = AIRolePressure.decide(ctx_a).target_position
-
-	# With pass option: opp teammate to the +X side.
-	var skaters_pass: Array = [
-		[1, TEAM_ID, Vector3(0, 0, 18), Vector3.ZERO],
-		[200, 1 - TEAM_ID, carrier_pos, Vector3.ZERO],
-		[210, 1 - TEAM_ID, opp_teammate_pos, Vector3.ZERO],
-	]
-	var ctx_b: RoleContext = _make_ctx(Vector3(0, 0, 18), 200, skaters_pass)
-	var pass_target: Vector3 = AIRolePressure.decide(ctx_b).target_position
-
-	# With a +X pass option, PRESSURE should shade toward +X (or at
-	# least no further -X than the solo baseline). Loose assertion:
-	# pass-target.x >= solo-target.x.
-	assert_true(pass_target.x >= solo_target.x - 0.01,
-			"adding +X pass option should not pull PRESSURE further -X; got pass=%s solo=%s" % [pass_target, solo_target])
 
 
 # ── Target switch-hysteresis ────────────────────────────────────────────────

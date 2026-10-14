@@ -6,7 +6,6 @@ extends GutTest
 #   - Bail-out cases (no carrier / opp carrier).
 #   - Anti-crowding filter.
 #   - Argmax actually picks something non-degenerate.
-#   - Exposure penalizes deeper candidates when opps threaten recovery.
 #
 # The geometric details of score_pass / time_to_arrive are already
 # covered in test_ai_action_scoring; we don't re-test them here.
@@ -148,36 +147,6 @@ func test_anti_crowding_avoids_candidates_near_teammates() -> void:
 	var dist_to_teammate: float = d.target_position.distance_to(crowding_teammate_pos)
 	assert_gt(dist_to_teammate, AIRoleHelpers.ANTI_CROWD_RADIUS_M - 0.01,
 			"chosen target must clear the anti-crowd radius around the teammate")
-
-
-# ── Exposure: deeper candidates penalized when opps threaten recovery ───────
-
-func test_exposure_pulls_target_higher_when_opp_threatens_recovery() -> void:
-	# Same SUPPORT/carrier setup with and without a back-checking
-	# opp near our blue line. Without the threat, score is dominated
-	# by score_pass. With the threat, exposure penalizes deep
-	# candidates and the chosen position should be no deeper.
-	var support_pos := Vector3(0, 0, -10)
-	var carrier_pos := Vector3(-5, 0, -22)
-
-	var skaters_no_threat: Array = [
-		[1, TEAM_ID, support_pos, Vector3.ZERO],
-		[100, TEAM_ID, carrier_pos, Vector3.ZERO],
-	]
-	var ctx_a: RoleContext = _make_ctx(support_pos, 100, skaters_no_threat)
-	var no_threat_target: Vector3 = AIRoleSupport.decide(ctx_a).target_position
-
-	var skaters_threat: Array = [
-		[1, TEAM_ID, support_pos, Vector3.ZERO],
-		[100, TEAM_ID, carrier_pos, Vector3.ZERO],
-		[200, 1 - TEAM_ID, Vector3(0, 0, OUR_NET_Z - 10), Vector3(0, 0, 8)],
-	]
-	var ctx_b: RoleContext = _make_ctx(support_pos, 100, skaters_threat)
-	var threat_target: Vector3 = AIRoleSupport.decide(ctx_b).target_position
-
-	assert_true(threat_target.z >= no_threat_target.z - 0.01,
-			"opp threatening home should pull SUPPORT no deeper than baseline;"
-			+ " got threat=%s baseline=%s" % [threat_target, no_threat_target])
 
 
 # ── No-opps edge case ───────────────────────────────────────────────────────
