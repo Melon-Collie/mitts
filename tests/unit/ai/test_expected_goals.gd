@@ -7,6 +7,7 @@ extends GutTest
 # test_expected_goals_calibration.gd.
 
 
+const Snapshot := preload("res://tests/snapshot.gd")
 const GOAL := Vector3(0.0, 0.0, -30.0)   # a goal line; exact z is irrelevant to shape
 const SPEED: float = 28.0
 
@@ -53,14 +54,15 @@ func test_deeper_goalie_leaves_more_net_in_tight() -> void:
 			"in tight, a deep goalie exposes more net than one challenging out")
 
 
-func test_wide_open_look_approaches_the_cap() -> void:
-	# Point-blank with the goalie stranded post-to-post — a near-certain look
-	# should sit near XG_MAX (and never exceed it).
+func test_a_keeper_stranded_outside_the_cone_concedes_the_empty_net() -> void:
+	# Point-blank with the goalie stranded past the far post: the look is the
+	# empty net, still capped at XG_MAX.
 	var shooter := Vector3(0.0, 0.0, GOAL.z + 3.0)
-	var beaten := Vector3(_nhw() + 0.6, 0.0, GOAL.z + 0.2)
-	var xg := _xg(shooter, beaten)
-	assert_gt(xg, 0.6, "a wide-open point-blank look is a high-danger chance")
-	assert_lte(xg, AIActionScoring.XG_MAX, "never exceeds the cap")
+	var stranded := Vector3(_nhw() + 0.6, 0.0, GOAL.z + 0.2)
+	var absent := Vector3(30.0, 0.0, 0.0)
+	assert_almost_eq(_xg(shooter, stranded), _xg(shooter, absent), 0.01,
+			"a stranded keeper takes nothing off the look")
+	assert_lte(_xg(shooter, stranded), AIActionScoring.XG_MAX, "never exceeds the cap")
 
 
 func test_decoupled_from_bot_aim_spread() -> void:
@@ -77,3 +79,16 @@ func test_decoupled_from_bot_aim_spread() -> void:
 	# expected_goals is stable — calling it is deterministic and spread-free.
 	assert_eq(_xg(shooter, goalie), _xg(shooter, goalie),
 			"expected_goals has no aim-spread input to move it")
+
+
+# The calibrated values at the reference looks; rewrite with
+# MITTS_UPDATE_SNAPSHOTS=1 (tests/snapshot.gd) and review the diff.
+func test_expected_goals_calibration_snapshot() -> void:
+	var snap := Snapshot.new("res://tests/unit/ai/snapshots/expected_goals.txt")
+	var shooter := Vector3(0.0, 0.0, GOAL.z + 3.0)
+	snap.record("3 m, keeper stranded past the far post", _xg(shooter,
+			Vector3(_nhw() + 0.6, 0.0, GOAL.z + 0.2)))
+	snap.record("3 m, keeper deep", _xg(shooter, Vector3(0.0, 0.0, GOAL.z + 0.3)))
+	snap.record("3 m, keeper challenging 1.75 m out", _xg(shooter,
+			Vector3(0.0, 0.0, GOAL.z + 1.75)))
+	snap.verify(self)
