@@ -1890,10 +1890,10 @@ func test_sharp_angle_shot_into_a_vh_seal_is_never_worth_firing() -> void:
 	# The observed over-fire: from a sharp angle the arc-square model read a
 	# near-goal-line keeper as roughly centred (his deep arc-x sits near 0),
 	# conceding a phantom short side — while the real goalie is parked at the
-	# post in VH with the whole near column walled off. With the seal read
-	# from the replicated state, the shot from the seal side collapses below
-	# the fire floor: whatever the carrier does here, it is never "fire into
-	# the VH wall."
+	# post in VH with the whole near column walled off. The shot value now
+	# prices this look at ~0.057, the same with or without the seal and just
+	# over SHOT_MIN_VALUE (0.05); the carrier declines it only because carrying
+	# out-values it (#780).
 	var self_pos := Vector3(4.5, 0, -26.0)   # sharp angle, seal side, in tight
 	var ctx_vh := _make_ctx(self_pos)
 	var g_vh := GoalieNetworkState.new()
