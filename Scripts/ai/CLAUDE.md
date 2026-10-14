@@ -14,6 +14,22 @@ and follows the same dispatch + `match` + per-state-handler shape as
 `Scripts/controllers/skater_state_machine.gd`, so a reader of one can read the
 other.
 
+Self-contained jobs live in collaborators the state machine holds, each
+`SkaterAgentShotBlock`-shaped: identity at `setup`, the bot's knobs and state
+passed per call, and only its own fields written.
+
+| collaborator | owns |
+|---|---|
+| `SkaterAgentSteering` | body steering to an anchor: the field, brake-pivot, arrival brake, stance carve |
+| `SkaterAgentPokeEvade` | the carrier's cut, brake check and fake-then-cut deke |
+| `SkaterAgentStickPlay` | the jab / lift reach-in, the tie and its pull, the stick-check button |
+| `SkaterAgentBoardPlay` | holding a pin, the pinned slide, a carrier's answer to a square checker |
+| `SkaterAgentShotBlock` | the shot block and the 2-on-1 dive |
+
+The state machine never writes a collaborator's fields, and no collaborator
+names the state machine (`test_agent_collaborator_seams.gd`). A new
+self-contained job is a new collaborator, not more state-machine fields.
+
 Adding a behaviour is four steps:
 
 1. Append a `State` enum value.
