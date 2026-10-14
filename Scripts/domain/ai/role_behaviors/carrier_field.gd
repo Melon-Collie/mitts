@@ -133,7 +133,7 @@ func fill_receivers(ctx: RoleContext, cur_puck_pos: Vector3) -> void:
 			teammate_ids.append(peer_id)
 
 	# Pass-OPTION cache: each legal receiver's spot value at his CURRENT position
-	# (goalie arc-squared to it). Legality approximates _compute_best_pass's: no
+	# (goalie arc-squared to it). Legality approximates AICarrierPassSearch.search's: no
 	# out-of-play receivers, and an OZ carrier counts only receivers standing
 	# OZ_RECEIVE_LINE_BUFFER_M inside the line (the live pass applies that
 	# buffer to the solved lead instead).
@@ -482,7 +482,7 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 
 
 # The same forward-space read for a pass receiver at `pos` with velocity `vel`
-# and build `caps` (see _pass_ev), so both sides of a carry-vs-pass compete pay
+# and build `caps` (see AICarrierPassSearch._pass_ev), so both sides of a carry-vs-pass compete pay
 # the same toll for the same clogged ice.
 func forward_clearance_at(ctx: RoleContext, pos: Vector3, vel: Vector3,
 		caps: AISkaterCaps) -> float:

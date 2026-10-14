@@ -459,7 +459,7 @@ func _walk_gate(puck_pos: Vector3, puck_vel: Vector3, body_pos: Vector3,
 	while i < 60 and b.distance_to(p) > _GATE_REACH:
 		var hit: bool = AITrajectory.solve_reception_gate(
 				p, v, b, _GATE_REACH, _GATE_HORIZON_S, _GATE_STEPS,
-				body_vel if ride else Vector3.ZERO, AIRoleCarrier.PASS_LEAD_MAX_S)
+				body_vel if ride else Vector3.ZERO, AICarrierPassSearch.PASS_LEAD_MAX_S)
 		if hit and first_entry < 0:
 			first_entry = i
 		if AITrajectory.gate_offset.length() > _GATE_REACH + 0.001:
@@ -523,7 +523,7 @@ func test_the_ride_leaves_a_standing_receiver_untouched() -> void:
 	var frozen_offset: Vector3 = AITrajectory.gate_offset
 	AITrajectory.solve_reception_gate(puck_pos, puck_vel, from_pos,
 			_GATE_REACH, _GATE_HORIZON_S, _GATE_STEPS,
-			Vector3.ZERO, AIRoleCarrier.PASS_LEAD_MAX_S)
+			Vector3.ZERO, AICarrierPassSearch.PASS_LEAD_MAX_S)
 	assert_eq(AITrajectory.gate_point, frozen_point)
 	assert_eq(AITrajectory.gate_offset, frozen_offset)
 	# And the two halves describe one event: the offset applied to the body IS

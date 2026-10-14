@@ -112,7 +112,7 @@ var reads_goalie_motion: bool
 
 # COGNITION: value a play that doesn't exist yet — a finisher still skating to
 # the back door, an outlet still opening — and protect the puck until it does
-# (carrier._best_developing_feed). False = plays only what's in front of it.
+# (AICarrierPassSearch.developing_feed_value). False = plays only what's in front of it.
 var holds_for_developing_feeds: bool
 
 # COGNITION: price a receiver's smoothed heading turn rate as catch-point

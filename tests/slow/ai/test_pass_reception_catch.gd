@@ -41,7 +41,7 @@ func _catches(recv_pos: Vector3, recv_vel: Vector3,
 	target.position = recv_pos
 	target.velocity = recv_vel
 	var aim: Vector3 = AIPassLead.lead_point(from_pos, target, Vector3.ZERO, speed,
-			AIRoleCarrier.PASS_LEAD_MAX_S)
+			AICarrierPassSearch.PASS_LEAD_MAX_S)
 	var dir: Vector3 = aim - from_pos
 	dir.y = 0.0
 	h.puck_vel = dir.normalized() * speed

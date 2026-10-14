@@ -128,7 +128,7 @@ var settle_penalty_tau_s: float = 0.25
 # on the state machine.
 var reads_goalie_motion: bool = true
 # COGNITION gate: false = the carrier never values a play that doesn't exist
-# yet (carrier._best_developing_feed returns 0).
+# yet (AICarrierPassSearch.developing_feed_value returns 0).
 var holds_for_developing_feeds: bool = true
 # COGNITION gate: false = heading_omega reads as 0 in the pass EV, so a feed to
 # a hard-cutting receiver prices like one to a straight-line skater.
@@ -148,7 +148,7 @@ var ping_move_target: Vector3 = Vector3.INF
 # The carrier multiplies its shoot EV by AIRoleCarrier.PING_SHOOT_EV_MULT.
 var ping_shoot_active: bool = false
 # The pinger of a live PASS_TO_ME / IM_OPEN ping (-1 none); the carrier
-# multiplies that receiver's pass EV by AIRoleCarrier.PING_PASS_EV_MULT.
+# multiplies that receiver's pass EV by AICarrierPassSearch.PING_PASS_EV_MULT.
 var ping_pass_target_peer: int = -1
 
 # Physics ticks per decide() call. A role counting ticks must scale by this, or

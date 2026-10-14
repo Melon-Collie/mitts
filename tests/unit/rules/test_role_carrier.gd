@@ -1250,7 +1250,7 @@ func test_developing_feed_zero_without_brain() -> void:
 	var ctx := _make_ctx(Vector3(4, 0, -18))
 	var carrier := AIRoleCarrier.new()
 	carrier._field.teammate_ids = [2]
-	assert_eq(carrier._best_developing_feed(ctx), 0.0,
+	assert_eq(carrier._pass.developing_feed_value(ctx), 0.0,
 			"no team brain → nothing to wait for")
 
 
@@ -1259,14 +1259,14 @@ func test_developing_feed_zero_when_finisher_already_ready() -> void:
 	var ctx := _ctx_with_finisher(Vector3(-2.5, 0, -21.5), true)
 	var carrier := AIRoleCarrier.new()
 	carrier._field.teammate_ids = [2]
-	assert_eq(carrier._best_developing_feed(ctx), 0.0)
+	assert_eq(carrier._pass.developing_feed_value(ctx), 0.0)
 
 
 func test_developing_feed_positive_for_staging_cross_seam_finisher() -> void:
 	var ctx := _ctx_with_finisher(Vector3(-2.5, 0, -21.5), false)
 	var carrier := AIRoleCarrier.new()
 	carrier._field.teammate_ids = [2]
-	assert_gt(carrier._best_developing_feed(ctx), 0.0,
+	assert_gt(carrier._pass.developing_feed_value(ctx), 0.0,
 			"a staging cross-seam finisher gives a positive developing feed")
 
 
@@ -1278,7 +1278,7 @@ func test_developing_feed_invisible_without_the_cognition_gate() -> void:
 	ctx.holds_for_developing_feeds = false
 	var carrier := AIRoleCarrier.new()
 	carrier._field.teammate_ids = [2]
-	assert_eq(carrier._best_developing_feed(ctx), 0.0,
+	assert_eq(carrier._pass.developing_feed_value(ctx), 0.0,
 			"the developing play is invisible to a tier without the hold read")
 
 
@@ -1314,7 +1314,7 @@ func test_developing_feed_zero_for_ghosted_finisher() -> void:
 	ctx.team_brain = brain
 	var carrier := AIRoleCarrier.new()
 	carrier._field.teammate_ids = [2]
-	assert_eq(carrier._best_developing_feed(ctx), 0.0,
+	assert_eq(carrier._pass.developing_feed_value(ctx), 0.0,
 			"a ghosted finisher isn't a developing play — nothing to hold for")
 
 
@@ -1323,7 +1323,7 @@ func test_developing_feed_zero_when_finisher_out_of_offensive_zone() -> void:
 	var ctx := _ctx_with_finisher(Vector3(-3, 0, -5), false)
 	var carrier := AIRoleCarrier.new()
 	carrier._field.teammate_ids = [2]
-	assert_eq(carrier._best_developing_feed(ctx), 0.0,
+	assert_eq(carrier._pass.developing_feed_value(ctx), 0.0,
 			"a finisher outside the OZ isn't a developing cross-seam")
 
 
@@ -1337,13 +1337,13 @@ func test_developing_feed_counts_a_finisher_still_crossing_the_line() -> void:
 	var parked := _ctx_with_finisher(fin_pos, false)
 	var c1 := AIRoleCarrier.new()
 	c1._field.teammate_ids = [2]
-	assert_eq(c1._best_developing_feed(parked), 0.0,
+	assert_eq(c1._pass.developing_feed_value(parked), 0.0,
 			"parked outside the line: nothing developing")
 	var driving := _ctx_with_finisher(fin_pos, false)
 	driving.snapshot.skater_states[2].velocity = Vector3(1.0, 0, -8.5)
 	var c2 := AIRoleCarrier.new()
 	c2._field.teammate_ids = [2]
-	assert_gt(c2._best_developing_feed(driving), 0.0,
+	assert_gt(c2._pass.developing_feed_value(driving), 0.0,
 			"driving in: the entering finisher is a developing play")
 
 
@@ -1358,12 +1358,12 @@ func test_developing_feed_values_the_spot_the_finisher_is_driving_to() -> void:
 	var parked := _ctx_with_finisher(fin_pos, false)
 	var c1 := AIRoleCarrier.new()
 	c1._field.teammate_ids = [2]
-	var feed_parked: float = c1._best_developing_feed(parked)
+	var feed_parked: float = c1._pass.developing_feed_value(parked)
 	var driving := _ctx_with_finisher(fin_pos, false)
 	driving.snapshot.skater_states[2].velocity = Vector3(2.5, 0, -6.5)
 	var c2 := AIRoleCarrier.new()
 	c2._field.teammate_ids = [2]
-	assert_gt(c2._best_developing_feed(driving), feed_parked,
+	assert_gt(c2._pass.developing_feed_value(driving), feed_parked,
 			"the feed is valued at the spot the finisher is getting to")
 
 
@@ -1415,7 +1415,7 @@ func test_developing_feed_positive_for_outlet_skating_its_route() -> void:
 	var ctx := _ctx_with_outlet(Vector3(9, 0, 16), Vector3(1.2, 0, -6))
 	var carrier := AIRoleCarrier.new()
 	carrier._field.teammate_ids = [2]
-	assert_gt(carrier._best_developing_feed(ctx), 0.0,
+	assert_gt(carrier._pass.developing_feed_value(ctx), 0.0,
 			"an outlet skating up its route is a developing feed worth holding for")
 
 
@@ -1425,7 +1425,7 @@ func test_developing_feed_zero_for_stationary_outlet() -> void:
 	var ctx := _ctx_with_outlet(Vector3(9, 0, 16), Vector3.ZERO)
 	var carrier := AIRoleCarrier.new()
 	carrier._field.teammate_ids = [2]
-	assert_eq(carrier._best_developing_feed(ctx), 0.0,
+	assert_eq(carrier._pass.developing_feed_value(ctx), 0.0,
 			"a stationary outlet isn't developing anything")
 
 
@@ -1433,7 +1433,7 @@ func test_developing_feed_zero_for_ghosted_outlet() -> void:
 	var ctx := _ctx_with_outlet(Vector3(9, 0, 16), Vector3(1.2, 0, -6), true)
 	var carrier := AIRoleCarrier.new()
 	carrier._field.teammate_ids = [2]
-	assert_eq(carrier._best_developing_feed(ctx), 0.0,
+	assert_eq(carrier._pass.developing_feed_value(ctx), 0.0,
 			"a ghosted outlet can't receive — no developing feed")
 
 
@@ -1445,7 +1445,7 @@ func test_developing_outlet_beats_the_spot_it_left_behind() -> void:
 	var moving := _ctx_with_outlet(Vector3(9, 0, 16), Vector3(1.2, 0, -6))
 	var carrier := AIRoleCarrier.new()
 	carrier._field.teammate_ids = [2]
-	var developing: float = carrier._best_developing_feed(moving)
+	var developing: float = carrier._pass.developing_feed_value(moving)
 
 	# The same feed valued AT the outlet's current spot: reuse _pass_ev
 	# directly so both sides run identical pricing.
@@ -1453,10 +1453,10 @@ func test_developing_outlet_beats_the_spot_it_left_behind() -> void:
 	var dist: float = moving.self_pos.distance_to(spot)
 	var pass_speed: float = AIPuckLane.pass_launch_speed(
 			dist, moving.self_wrister_shot_speed, moving.pass_speed_scale)
-	var flight_t: float = clampf(dist / pass_speed, 0.0, AIRoleCarrier.PASS_LEAD_MAX_S)
+	var flight_t: float = clampf(dist / pass_speed, 0.0, AICarrierPassSearch.PASS_LEAD_MAX_S)
 	var carrier2 := AIRoleCarrier.new()
 	carrier2._field.teammate_ids = [2]
-	var stay_put: float = carrier2._pass_ev(
+	var stay_put: float = carrier2._pass._pass_ev(
 			moving, spot, pass_speed, flight_t,
 			flight_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, flight_t,
 			moving.defending_goal_pos)
@@ -1774,7 +1774,7 @@ func test_no_dump_once_in_the_offensive_zone() -> void:
 			"no dumping once the zone is established")
 
 
-# ─── _facing_rotation_time: the blade reach cone (Aim-B / B1) ────────────────
+# ─── AICarrierPassSearch._facing_rotation_time: the blade reach cone (Aim-B / B1) ────────────────
 # The carrier prices a shot/pass by the body ROTATION it costs. The blade
 # reaches anywhere inside the ±reach-cone (ROM + torso twist, ~157°) from the
 # current facing, so an in-cone aim fires with NO turn; only the narrow back
@@ -1792,7 +1792,7 @@ func _rot_time(facing_deg: float, target_deg: float, cone: float,
 	var t := deg_to_rad(target_deg)
 	var facing_xz := Vector2(sin(f), cos(f))
 	var target := Vector3(sin(t) * 10.0, 0.0, cos(t) * 10.0)
-	return c._facing_rotation_time(facing_xz, Vector3.ZERO, target, cone, rate)
+	return c._pass._facing_rotation_time(facing_xz, Vector3.ZERO, target, cone, rate)
 
 
 func test_in_cone_aim_costs_no_rotation() -> void:
@@ -1966,11 +1966,12 @@ func test_nz_carrier_may_target_entry_candidates_near_the_line() -> void:
 			"an entry candidate in the band is not pruned from outside the zone")
 
 
-# The carrier's best pass to mate 2 at `ctx`: [peer, value, saucer, …].
-func _best_pass_to_mate(ctx: RoleContext) -> Array:
+# The carrier's pass search for mate 2 at `ctx`.
+func _best_pass_to_mate(ctx: RoleContext) -> AICarrierPassSearch:
 	var c := AIRoleCarrier.new()
 	c._field.fill(ctx)
-	return c._compute_best_pass(ctx, Vector2(0.0, -1.0), [2])
+	c._pass.search(ctx, Vector2(0.0, -1.0), [2])
+	return c._pass
 
 
 func test_oz_pass_skips_receiver_hugging_the_blue_line() -> void:
@@ -1980,9 +1981,9 @@ func test_oz_pass_skips_receiver_hugging_the_blue_line() -> void:
 	# man past the keep-out band (the far-post backdoor the squared goalie
 	# can't re-square onto) is a legal (positive) feed.
 	var at_line := Vector3(-2.5, 0.0, -(GameRules.BLUE_LINE_Z + 0.5))
-	assert_eq(_best_pass_to_mate(_backdoor_ctx(at_line))[1], 0.0,
+	assert_eq(_best_pass_to_mate(_backdoor_ctx(at_line)).best_score, 0.0,
 			"a receiver hugging the blue line is not a pass target from inside the zone")
-	assert_gt(_best_pass_to_mate(_backdoor_ctx(_BACKDOOR_MATE))[1], 0.0,
+	assert_gt(_best_pass_to_mate(_backdoor_ctx(_BACKDOOR_MATE)).best_score, 0.0,
 			"the same open man past the keep-out band is a legal feed")
 
 
@@ -2002,7 +2003,7 @@ func test_short_feed_below_saucer_floor_stays_grounded() -> void:
 	# At 5.5 m even the softest legal flip (min wrister pace) can't land with
 	# runway, so no saucer variant exists and the pass stays flat whatever the
 	# lane looks like. (Which variant the 8 m feed takes is the snapshot's row.)
-	assert_false(_best_pass_to_mate(_mid_lane_feed_ctx(4.5, 7.5))[2],
+	assert_false(_best_pass_to_mate(_mid_lane_feed_ctx(4.5, 7.5)).best_is_saucer,
 			"below the physical saucer floor the feed stays grounded")
 
 
@@ -2660,7 +2661,7 @@ func test_developing_feed_watches_the_over_valve_in_5v5() -> void:
 	ctx.team_brain = brain
 	var carrier := AIRoleCarrier.new()
 	carrier._field.teammate_ids = [2]
-	assert_gt(carrier._best_developing_feed(ctx), 0.0,
+	assert_gt(carrier._pass.developing_feed_value(ctx), 0.0,
 			"a partner skating to the net-back valve is a developing Over")
 
 
@@ -2788,11 +2789,11 @@ func test_a_rim_is_fired_as_soft_as_the_race_allows() -> void:
 	c._pick_fire_phase(ctx)
 	var best: float = 0.0
 	for k: int in AIRimPass.count:
-		best = maxf(best, c._rim_sure_by_k[k])
+		best = maxf(best, c._pass._rim_sure_by_k[k])
 	var softest: float = INF
 	var hardest: float = 0.0
 	for k: int in AIRimPass.count:
-		if c._rim_sure_by_k[k] >= best * AIRoleCarrier.RIM_SOFT_SHARE:
+		if c._pass._rim_sure_by_k[k] >= best * AICarrierPassSearch.RIM_SOFT_SHARE:
 			softest = minf(softest, AIRimPass.paces[k])
 			hardest = maxf(hardest, AIRimPass.paces[k])
 	gut.p("  rim fired at %.1f m/s (near-best band %.1f..%.1f)"
@@ -2922,7 +2923,7 @@ func _record_feed_and_pressure_picks(snap: Snapshot) -> void:
 	snap.record("neutral ice, straight lane clogged, close outlet up-ice: pick",
 			_pick(_decided(_close_outlet_ctx())))
 	snap.record("8 m feed past a mid-lane stick: variant",
-			_variant(_best_pass_to_mate(_mid_lane_feed_ctx(2.0, 6.5))[2]))
+			_variant(_best_pass_to_mate(_mid_lane_feed_ctx(2.0, 6.5)).best_is_saucer))
 	snap.record("pinged ahead man 9 m out behind a mid-lane stick: variant",
 			_variant(_decided(_pinged_saucer_ctx()).pass_should_saucer))
 	snap.record("board pincer closing, open outlet across: pick", _pick(_decided(_pincer_ctx())))
@@ -2954,7 +2955,7 @@ func _record_entry_and_finish_picks(snap: Snapshot) -> void:
 	snap.record("fresh entry, finisher driving the house: intent",
 			_intent_name(fresh.intended_action))
 	snap.record("fresh entry, finisher driving the house: developing feed",
-			fresh._best_developing_feed(fresh_ctx))
+			fresh._pass.developing_feed_value(fresh_ctx))
 	snap.record("fresh entry, finisher driving the house: shoot-now value", fresh.debug_shoot_score)
 	for dist: float in [10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0]:
 		snap.record("head-on drive at 6 m/s, keeper 1 m out, from %.0f m: pick" % dist,

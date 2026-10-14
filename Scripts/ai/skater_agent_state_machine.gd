@@ -1717,7 +1717,7 @@ func _pass_receive_aim_and_steer(input: InputState, snapshot: WorldSnapshot, sel
 	# velocity — so the meet is a fixed point both bodies travel toward.
 	AITrajectory.solve_reception_gate(puck_pos, puck_vel, self_pos,
 			_receive_gate_reach(), RECEIVE_PATH_HORIZON_S, RECEIVE_PATH_STEPS,
-			self_vel, AIRoleCarrier.PASS_LEAD_MAX_S)
+			self_vel, AICarrierPassSearch.PASS_LEAD_MAX_S)
 	# Path-based, not a dot product against the current velocity: a rim running
 	# away down the far wall can still be coming to us around a corner.
 	if not AITrajectory.gate_closes:
@@ -1799,7 +1799,7 @@ func _blade_gate_on_puck_line(self_pos: Vector3, self_vel: Vector3,
 	# On the puck's real path, against our own MOVING reach.
 	if not AITrajectory.solve_reception_gate(puck_pos, puck_vel, self_pos,
 			_receive_gate_reach(), RECEIVE_PATH_HORIZON_S, RECEIVE_PATH_STEPS,
-			self_vel, AIRoleCarrier.PASS_LEAD_MAX_S):
+			self_vel, AICarrierPassSearch.PASS_LEAD_MAX_S):
 		# No touchable point on the path. A puck moving AWAY is chased from
 		# behind; otherwise hold the blade toward the path's closest approach
 		# until the entry point appears.
@@ -3062,7 +3062,7 @@ func _pass_aim_point(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 		origin = Vector3(
 				snapshot.puck_state.position.x, 0.0, snapshot.puck_state.position.z)
 	var lead: Vector3 = AIPassLead.lead_point(
-			origin, receiver, accel, pass_speed, AIRoleCarrier.PASS_LEAD_MAX_S, receiver_caps)
+			origin, receiver, accel, pass_speed, AICarrierPassSearch.PASS_LEAD_MAX_S, receiver_caps)
 	# Net guard on the FIRED lane: the scored lane was net-checked at commit, but
 	# the lead re-solves every tick and a receiver drifting near the net plane can
 	# walk it into the cage (the classic behind-the-net feed that rings off the

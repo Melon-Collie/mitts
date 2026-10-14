@@ -11,11 +11,11 @@ class_name AIRimPass
 # The boards and the corner arcs bleed pace on every contact, so each bearing is
 # walked on a pace ladder up to the passer's own wrister max, and only arrivals
 # the receiver can catch count (catchable). The carrier fires the softest launch
-# that still reaches him (AIRoleCarrier._rim_launch_for).
+# that still reaches him (AICarrierPassSearch._rim_launch_for).
 #
 # This file is the path half: which launches are rims, where each one goes, and
 # who reaches it first. What a rim is WORTH stays in the carrier's pass compete
-# (_rim_launch_for ranks it, _pass_ev prices the best), in one currency with the
+# (AICarrierPassSearch ranks it in _rim_launch_for and prices the best in _pass_ev), in one currency with the
 # flat feed and the saucer.
 #
 # A launch is a rim when its first board contact is near the passer and

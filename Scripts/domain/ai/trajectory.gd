@@ -222,7 +222,7 @@ static func step_puck(pos: Vector3, vel: Vector3, dt: float) -> Transform3D:
 # The body is projected at CONSTANT velocity, and only for `ride_s` — after that
 # it is treated as parked, since a steering receiver's present velocity is a
 # claim with a shelf life. Callers pass the passer's own lead bound
-# (AIRoleCarrier.PASS_LEAD_MAX_S), so the two halves of a pass agree on how much
+# (AICarrierPassSearch.PASS_LEAD_MAX_S), so the two halves of a pass agree on how much
 # of the receiver's motion is real.
 #
 # Results land in statics (single-threaded AI tick, same convention as

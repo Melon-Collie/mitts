@@ -1,7 +1,7 @@
 class_name AIPassLead
 
 # Pass-leading for AI passers, shared by the carrier's pass scoring
-# (`AIRoleCarrier._compute_best_pass`) and the state machine's firing aim
+# (`AICarrierPassSearch.search`) and the state machine's firing aim
 # (`SkaterAgentStateMachine._pass_aim_point`), so a pass is never evaluated at
 # one aim point and released at another.
 #

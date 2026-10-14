@@ -156,7 +156,7 @@ func test_evaluator_costs() -> void:
 		open_carrier.decide(open_ctx))
 	open_carrier._field.fill(open_ctx)
 	_bench("open ice: best pass (receivers)", func() -> void:
-		open_carrier._compute_best_pass(open_ctx, Vector2(0, -1),
+		open_carrier._pass.search(open_ctx, Vector2(0, -1),
 				open_carrier._field.teammate_ids))
 	_bench("open ice: best carry (candidates)", func() -> void:
 		open_carrier._best_carry(open_ctx, 0.1, open_ctx.self_pos))
@@ -203,11 +203,11 @@ func test_evaluator_costs() -> void:
 		var t0: int = Time.get_ticks_usec()
 		cinst._field.fill(cx)
 		var t1: int = Time.get_ticks_usec()
-		cinst._compute_best_pass(cx, self_facing, cinst._field.teammate_ids)
+		cinst._pass.search(cx, self_facing, cinst._field.teammate_ids)
 		var t2: int = Time.get_ticks_usec()
 		cinst._best_carry(cx, 0.1, cx.self_pos)
 		var t3: int = Time.get_ticks_usec()
-		cinst._best_developing_feed(cx)
+		cinst._pass.developing_feed_value(cx)
 		var t4: int = Time.get_ticks_usec()
 		t_build += t1 - t0
 		t_pass += t2 - t1

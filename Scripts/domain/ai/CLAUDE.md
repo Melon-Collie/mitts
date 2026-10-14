@@ -618,7 +618,7 @@ remains.
   collapses to their body radius (sticks fly under it), with full stick reach on
   either side of it. The flip must land with runway before the tape
   (`saucer_max_launch_speed`), so the carrier scores each receiver flat and
-  saucered and lets EV decide (`_pass_variant_ev`, the saucer paying
+  saucered and lets EV decide (`carrier_pass_search.gd:_pass_variant_ev`, the saucer paying
   `SAUCER_EXTRA_MISS_PROB`); below ~6.5 m no legal saucer exists. **Receiver
   commitment** enters the completion model as an execution-miss term: a receiver
   mid-cut curves off the straight-line lead by his heading arc's tangent
@@ -733,13 +733,13 @@ remains.
     stepped integrator) and the dump fixtures in `test_role_carrier.gd`.
 
 - **Rims are passes whose lane is the boards** (`AIRimPass`; each receiver's
-  best launch is ranked by `AIRoleCarrier._rim_launch_for`, and only the single
-  best is priced through `_pass_ev`) — a third pass variant beside the flat feed
+  best launch is ranked by `AICarrierPassSearch._rim_launch_for`, and only the single
+  best is priced through `carrier_pass_search.gd:_pass_ev`) — a third pass variant beside the flat feed
   and the saucer, in the same currency. It is searched as a RELEASE,
   not aimed at a receiver: bearings banked glancing off the boards near the
   passer, each walked at a pace ladder up to the passer's own wrister max. Of the
   launches that reach a receiver nearly as surely as the best
-  (`AIRoleCarrier.RIM_SOFT_SHARE`), the SOFTEST is fired: easier to stop, and
+  (`AICarrierPassSearch.RIM_SOFT_SHARE`), the SOFTEST is fired: easier to stop, and
   one that gets by him dies sooner. The walk is the chase election's own, so the
   receiver a rim is priced to reach is the one the election will send to it. The
   LANE is a race along that path in `chase_recovery`'s contest band — the
