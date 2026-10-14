@@ -579,21 +579,10 @@ var full_dispatch_count: int = 0
 # one-timer camp. These keep the ~30 Hz argmax cadence; shape-holding posts
 # re-eval at half that (~15 Hz).
 func _is_reactive_slot(slot: int, snapshot: WorldSnapshot) -> bool:
-	if AIRoleSlots.is_reactive(slot):
+	# The zone defender who owns pressure this tick does PRESSURE's job.
+	if AIRoleSlots.is_reactive(slot) or _owns_zone_pressure(slot, snapshot):
 		return true
 	match slot:
-		AIRoleSlots.Slot.ZONE_D_STRONG, AIRoleSlots.Slot.ZONE_D_WEAK, \
-		AIRoleSlots.Slot.ZONE_C, AIRoleSlots.Slot.ZONE_W_STRONG, \
-		AIRoleSlots.Slot.ZONE_W_WEAK:
-			# The zone defender who OWNS pressure this tick does PRESSURE's job;
-			# ownership moves with the puck, so it is resolved here, not fixed.
-			if snapshot != null and snapshot.puck_state != null:
-				var strong_x: float = _current_strategy.strong_x() \
-						if _current_strategy != null else 1.0
-				if AIZoneCoverage.pressure_owner(strong_x,
-						_own_goal_dir * GameRules.GOAL_LINE_Z,
-						snapshot.puck_state.position) == slot:
-					return true
 		AIRoleSlots.Slot.FINISHER, AIRoleSlots.Slot.NET_FRONT:
 			# The one-timer camp's fast cadence buys a live seam read, which only
 			# exists while the puck is IN the attacking zone; elsewhere the
@@ -3000,19 +2989,20 @@ func _is_puck_pressurer_slot(snapshot: WorldSnapshot) -> bool:
 	if _cached_role_decision != null and _cached_role_decision.pressures_puck:
 		return true   # a station role on the carrier this beat (the pinching D)
 	var slot: int = _current_strategy.get_slot(_peer_id)
-	if AIRoleSlots.pressures_puck(slot):
-		return true
-	match slot:
-		AIRoleSlots.Slot.ZONE_D_STRONG, AIRoleSlots.Slot.ZONE_D_WEAK, \
-		AIRoleSlots.Slot.ZONE_C, AIRoleSlots.Slot.ZONE_W_STRONG, \
-		AIRoleSlots.Slot.ZONE_W_WEAK:
-			if snapshot == null or snapshot.puck_state == null:
-				return false
-			return AIZoneCoverage.pressure_owner(
-					_current_strategy.strong_x(),
-					_own_goal_dir * GameRules.GOAL_LINE_Z,
-					snapshot.puck_state.position) == slot
-	return false
+	return AIRoleSlots.pressures_puck(slot) or _owns_zone_pressure(slot, snapshot)
+
+
+# Whether `slot` is the 5v5 zone area that owns the puck this tick
+# (AIZoneCoverage.pressure_owner). Ownership moves with the puck, so it is
+# resolved per call, never fixed to a slot.
+func _owns_zone_pressure(slot: int, snapshot: WorldSnapshot) -> bool:
+	if not AIRoleSlots5.is_zone_slot(slot) or snapshot == null \
+			or snapshot.puck_state == null:
+		return false
+	var strong_x: float = _current_strategy.strong_x() if _current_strategy != null \
+			else 1.0
+	return AIZoneCoverage.pressure_owner(strong_x, _own_goal_dir * GameRules.GOAL_LINE_Z,
+			snapshot.puck_state.position) == slot
 
 
 # The carried puck's position (the jab aim point), or INF with no carrier.
@@ -3788,6 +3778,6 @@ func _set_state(s: State) -> void:
 
 
 func _reset_to_off_puck() -> void:
-	_state = State.OFF_PUCK
+	_set_state(State.OFF_PUCK)
 	_pass_target_peer_id = -1
 	_carrier.reset()
