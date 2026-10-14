@@ -167,3 +167,20 @@ func test_the_stick_is_held_out_front_through_the_kneel() -> void:
 	var forward: Vector3 = -_skater.global_transform.basis.z
 	assert_gt(left.dot(forward), 0.8, "the blade is out in front of him")
 	assert_lt(left.y + _skater.global_position.y, 0.1, "on the ice")
+
+
+func test_a_divers_stick_goes_dead_as_he_starts_to_get_up() -> void:
+	var dive := InputState.new()
+	dive.stance_held = true
+	dive.block_held = true
+	dive.mouse_world_pos = _skater.global_position + Vector3(3.0, 0.0, 0.0)
+	dive.delta = DT
+	_controller._process_input(dive, DT)
+	_run_down_to(_controller.knockdown_getup_seconds + 0.05, dive)
+	assert_true(_skater.dive_laid_out, "the control: laid out, his stick plays")
+	for _i: int in 240:
+		_controller._process_input(dive, DT)
+	assert_true(_skater.dive_laid_out, "block held, he lies there and it still plays")
+	_run_down_to(_controller.knockdown_getup_seconds - 0.01)
+	assert_true(_skater.is_knocked_down, "the control: still down")
+	assert_false(_skater.dive_laid_out, "getting up, it is as dead as anyone's")

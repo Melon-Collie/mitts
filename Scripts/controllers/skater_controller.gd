@@ -1956,6 +1956,15 @@ func _start_dive(input: InputState) -> void:
 	_set_knockdown_from_impulse(DiveRules.DOWN_S, skater.velocity)
 
 
+# The down flags off the timer. A diver's stick and low block play only while he
+# lies laid out; getting up he is down like anyone (DiveRules: the timer holds at
+# the get-up's start while block is held).
+func _set_down_flags(diving: bool) -> void:
+	skater.is_knocked_down = knockdown_timer > 0.0
+	skater.is_diving = diving
+	skater.dive_laid_out = diving and knockdown_timer >= knockdown_getup_seconds
+
+
 # A diver's layout in world space, from the replicated fall direction (body
 # frame) and the facing, which holds still while down.
 func _sync_dive_layout() -> void:
@@ -2190,8 +2199,7 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	skater.set_balance_tilt(state.balance_tilt, state.balance_tilt_vel)
 	var prev_kd: float = knockdown_timer
 	knockdown_timer = state.knockdown_timer
-	skater.is_knocked_down = knockdown_timer > 0.0
-	skater.is_diving = state.diving
+	_set_down_flags(state.diving)
 	# Fall metadata off the recorded velocity (stamped above), so a replayed
 	# knockdown falls the way the live one did.
 	_sync_knockdown_meta(prev_kd)
@@ -2440,8 +2448,7 @@ func teleport_to(pos: Vector3, facing: Vector2 = Vector2.ZERO) -> void:
 	skater.set_balance_tilt(Vector2.ZERO)
 	var was_down: bool = knockdown_timer > 0.0
 	knockdown_timer = 0.0
-	skater.is_knocked_down = false
-	skater.is_diving = false
+	_set_down_flags(false)
 	_knockdown_total = 0.0
 	_knockdown_entry_speed = 0.0
 	# The render pass only clears the tilt while it runs, and it's
@@ -3248,12 +3255,10 @@ func _apply_movement(input: InputState, delta: float) -> void:
 		down_floor = knockdown_getup_seconds
 	var was_down: bool = knockdown_timer > 0.0
 	knockdown_timer = maxf(knockdown_timer - delta, down_floor)
-	skater.is_knocked_down = knockdown_timer > 0.0
+	_set_down_flags(skater.is_diving and knockdown_timer > 0.0)
 	if was_down and not skater.is_knocked_down:
 		stagger_timer = maxf(stagger_timer, knockdown_getup_stagger_seconds)
 		stagger_recoil_dir = Vector2(0.0, -1.0)
-	if not skater.is_knocked_down:
-		skater.is_diving = false
 	if skater.is_knocked_down:
 		stance_active = false
 		hit_active = false
