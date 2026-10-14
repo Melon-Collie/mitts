@@ -524,7 +524,15 @@ remains.
     uncertainty as window the shooter can reliably exploit. Nothing the shooter
     does may improve the geometry — a worse hand must never score a covered shot
     higher. Never go back to clamping a raw window against release scatter
-    alone (`test_shot_currency_saturation.gd` measures why).
+    alone (`test_shot_currency_saturation.gd` measures why). The event is
+    X − ε < m/2 and −X − ε < m/2, two correlated normals under one bound
+    each, so P is exactly the bivariate normal CDF on its diagonal,
+    Φ₂(h, h; ρ) with h = m / (2√(σp² + σe²)) and ρ = (σe² − σp²)/(σp² + σe²),
+    computed as Φ(h)² + (1/2π)∫₀^asin ρ exp(−h²/(1 + sin θ)) dθ. Exact, it is
+    monotone in the hand by construction; a moment-matched normal is not — at
+    range (a crisp edge) it reads a covered hole as a ~5% make for a Normal
+    hand. `test_shot_danger_properties.gd` holds monotonicity, both limits and
+    the error against a dense reference.
   - **The aim sits at the window centre** (`DEFAULT_CORNER_BIAS = 0`), so the
     wobble splits a taken shot into goals / saves / posts symmetrically.
   - **HIGH holes ride the angle ladder** (`docs/elevation-rework-plan.md`): every

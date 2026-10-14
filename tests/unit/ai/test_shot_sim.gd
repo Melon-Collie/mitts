@@ -11,8 +11,6 @@ const Sim := preload("res://tests/unit/ai/shot_sim_harness.gd")
 const Snapshot := preload("res://tests/snapshot.gd")
 const SAMPLES: int = 300
 const SEED: int = 0x5EED
-# Where the misses stop landing on the goalie (BotSkillProfile.shot_aim_error_rad).
-const USABLE_CEILING_RAD: float = 0.050
 # Goalie states a real shot meets — set, half-caught, and caught mid-slide. Saves
 # live in the caught-moving band (a fully set goalie is either not shot at or
 # beaten clean); aggregating over the mix approximates a game's shot situations.
@@ -87,10 +85,8 @@ func test_shot_outcome_distribution_by_tier() -> void:
 
 func test_scatter_is_the_conversion_dial() -> void:
 	# What shot_aim_error_rad buys (BotSkillProfile): goals per shot fall
-	# strictly with scatter, and across the band where the misses stay on the
-	# goalie the shoot rate does not move — scatter is conversion, not volume.
-	# Above that band the selection relation inverts, which is why the flatness
-	# is only asserted below it. The rates themselves are the snapshot.
+	# strictly with scatter, and the shoot rate does not move — scatter is
+	# conversion, not volume. The rates themselves are the snapshot.
 	var snap := Snapshot.new("res://tests/unit/ai/snapshots/shot_sim_scatter.txt")
 	var goal_pcts: Array[float] = []
 	var shoot_pcts: Array[float] = []
@@ -101,8 +97,7 @@ func test_scatter_is_the_conversion_dial() -> void:
 		var shots: int = t["shots"]
 		var shoot_pct: float = _pct(shots, shots + t[Sim.NO_SHOT])
 		goal_pcts.append(_pct(t[Sim.GOAL], shots))
-		if spread <= USABLE_CEILING_RAD:
-			shoot_pcts.append(shoot_pct)
+		shoot_pcts.append(shoot_pct)
 		snap.record("spread %.3f: goal %% of shots" % spread, goal_pcts[-1])
 		snap.record("spread %.3f: post or wide %% of shots" % spread,
 				_pct(t[Sim.POST] + t[Sim.WIDE], shots))
@@ -112,5 +107,5 @@ func test_scatter_is_the_conversion_dial() -> void:
 				"more scatter must convert strictly worse (step %d)" % i)
 	for i: int in range(1, shoot_pcts.size()):
 		assert_almost_eq(shoot_pcts[i], shoot_pcts[0], 0.01,
-				"below the ceiling, scatter does not move the shoot rate (step %d)" % i)
+				"scatter does not move the shoot rate (step %d)" % i)
 	snap.verify(self)

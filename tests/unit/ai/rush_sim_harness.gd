@@ -129,8 +129,9 @@ static func run_rush(path: Array, goal: Vector3, profile: BotSkillProfile,
 	var unsettled: float = clampf(absf(state.z) / Shot.PUSH_SPEED, 0.0, 1.0)
 	var goalie := Vector3(state.x, 0.0, state.y)   # (x, 0, z) for the scoring calls
 	var spread: float = profile.shot_aim_error_rad
+	# Blind to the hand, as the live carrier's selection is (#699).
 	var danger: float = AIActionScoring.score_shoot(shooter, goal, goalie, Shot.NET_HW, [],
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, unsettled, [], -1.0, false, 0.0, false, spread)
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, unsettled, [], -1.0, false, 0.0, false, 0.0)
 	if danger < Shot.SHOOT_MIN:
 		counts[Shot.NO_SHOT] = samples
 		return counts

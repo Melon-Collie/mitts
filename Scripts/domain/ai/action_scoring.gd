@@ -463,37 +463,35 @@ static func danger_from_margin(shooter: Vector3, goalie_pos: Vector3,
 			goalie_edge_spread(shooter, goalie_pos))
 
 
-# Half-normal moments of |placement error| in units of its own σ:
-# E = √(2/π), Var = 1 − 2/π. Properties of the distribution, not tunables.
-const _HALFNORM_MEAN: float = 0.7978845608
-const _HALFNORM_VAR: float = 0.3633802276
+# 8-point Gauss–Legendre nodes and weights on [−1, 1] (within 5e-4 of a dense
+# reference: test_shot_danger_properties.gd).
+const _GL8_X: Array[float] = [-0.9602898564975363, -0.7966664774136267,
+		-0.5255324099163290, -0.1834346424956498, 0.1834346424956498,
+		0.5255324099163290, 0.7966664774136267, 0.9602898564975363]
+const _GL8_W: Array[float] = [0.1012285362903763, 0.2223810344533745,
+		0.3137066458778873, 0.3626837833783620, 0.3626837833783620,
+		0.3137066458778873, 0.2223810344533745, 0.1012285362903763]
 
 
 # P(goal) for a signed `margin`, a shooter whose placement scatters by
-# `sigma_p`, and a cover edge uncertain by `sigma_e` — all radians at the eye.
-#
-# The shot beats him iff the puck lands inside the window, and the window's
-# half-width is itself uncertain: |X| < margin/2 + ε, with X the placement
-# error and ε the edge error. Rearranged, that is a single CDF —
-#
-#     P = P(|X| − ε < margin/2)
-#
-# — of a half-normal minus a normal, evaluated here at its first two moments
-# (max error 0.075 against a dense numerical reference over the operating grid,
-# at the cost of one erf).
-#
-# The two compose as independent VARIANCES. Softening the window by σ_e and
-# then hitting it with precision σ_p instead treats edge uncertainty as extra
-# window the shooter can reliably exploit, so the same number of edge sigmas
-# inside the cover would score differently with the keeper's range.
+# `sigma_p`, and a cover edge uncertain by `sigma_e` — all radians at the eye:
+# P(|X| − ε < margin/2) exactly, as Φ₂(h, h; ρ) by its integral over arcsin ρ
+# (Scripts/domain/ai/CLAUDE.md → Shot geometry). Never replace it with a
+# moment-matched normal: that lets a covered shot score higher the worse the hand.
 static func _make_probability(margin: float, sigma_p: float,
 		sigma_e: float) -> float:
-	var spread: float = sqrt(
-			_HALFNORM_VAR * sigma_p * sigma_p + sigma_e * sigma_e)
-	if spread <= 0.000001:
+	var var_sum: float = sigma_p * sigma_p + sigma_e * sigma_e
+	if var_sum <= 1e-12:
 		return 1.0 if margin > 0.0 else 0.0
-	var z: float = (margin * 0.5 - _HALFNORM_MEAN * sigma_p) / spread
-	return clampf(0.5 * (1.0 + _erf(z / sqrt(2.0))), 0.0, 1.0)
+	var h: float = margin * 0.5 / sqrt(var_sum)
+	var hh: float = h * h
+	var half_angle: float = 0.5 * asin(clampf(
+			(sigma_e * sigma_e - sigma_p * sigma_p) / var_sum, -1.0, 1.0))
+	var integral: float = 0.0
+	for i: int in 8:
+		integral += _GL8_W[i] * exp(-hh / (1.0 + sin(half_angle * (1.0 + _GL8_X[i]))))
+	var phi_h: float = 0.5 * (1.0 + _erf(h / sqrt(2.0)))
+	return clampf(phi_h * phi_h + integral * half_angle / TAU, 0.0, 1.0)
 
 
 # 1σ of the keeper's cover EDGE for this look, in radians at the shooter's eye.

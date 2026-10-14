@@ -228,6 +228,63 @@ func test_the_standing_five_hole_rule_is_the_pose_gap() -> void:
 # One row per doctrine reference look. Rewrite with MITTS_UPDATE_SNAPSHOTS=1
 # (tests/snapshot.gd) and review the diff.
 
+# ── The make probability (_make_probability) ─────────────────────────────────
+# P(goal) for a hole `margin` (rad, negative when covered), the shooter's
+# placement spread σp and the keeper's edge spread σe. The grids span the
+# operating range: σe from a long look (0.03 m at 20 m) to point blank, σp from
+# the Hard floor past the Easy hand.
+const MARGINS: Array[float] = [-0.06, -0.04, -0.02, -0.01, 0.0, 0.01, 0.02, 0.04,
+		0.06, 0.1]
+const EDGE_SPREADS: Array[float] = [0.0015, 0.003, 0.01, 0.03, 0.06]
+
+
+func test_a_wider_hand_never_raises_the_make_probability() -> void:
+	# Nothing the shooter does may improve the geometry: for any edge, a wider
+	# hand only makes every window harder to land in — covered or open.
+	for se: float in EDGE_SPREADS:
+		for m: float in MARGINS:
+			var by_hand: Array[float] = []
+			for k: int in 30:
+				by_hand.append(AIActionScoring._make_probability(m, 0.008 + 0.004 * k, se))
+			_assert_nonincreasing(by_hand, "P(margin %.2f, σe %.4f) over a widening hand"
+					% [m, se])
+
+
+# P = E over the shooter's |X| of P(edge clears it) — integrated densely.
+func _reference_make_probability(m: float, sp: float, se: float) -> float:
+	var steps: int = 2000
+	var dz: float = 8.0 / steps
+	var total: float = 0.0
+	for i: int in steps:
+		var z: float = (i + 0.5) * dz
+		var density: float = 2.0 * exp(-0.5 * z * z) / sqrt(TAU)
+		total += density * dz * 0.5 * (1.0 + AIActionScoring._erf(
+				(0.5 * m - sp * z) / (se * sqrt(2.0))))
+	return total
+
+
+func test_the_make_probability_is_exact_across_the_operating_grid() -> void:
+	var worst: float = 0.0
+	for se: float in EDGE_SPREADS:
+		for m: float in MARGINS:
+			for sp: float in [0.01, 0.02, 0.04, 0.055, 0.1]:
+				worst = maxf(worst, absf(AIActionScoring._make_probability(m, sp, se)
+						- _reference_make_probability(m, sp, se)))
+	assert_lt(worst, 0.002, "worst error against the dense reference: %.5f" % worst)
+
+
+func test_the_make_probability_meets_both_limits() -> void:
+	# A perfect edge leaves only the hand: P(|X| < m/2). A perfect hand leaves
+	# only the edge: P(ε > −m/2).
+	for m: float in MARGINS:
+		var hand_only: float = maxf(0.0, AIActionScoring._erf(m * 0.5 / (0.04 * sqrt(2.0))))
+		assert_almost_eq(AIActionScoring._make_probability(m, 0.04, 1e-6), hand_only, 0.002,
+				"no edge spread, margin %.2f" % m)
+		var edge_only: float = 0.5 * (1.0 + AIActionScoring._erf(m * 0.5 / (0.01 * sqrt(2.0))))
+		assert_almost_eq(AIActionScoring._make_probability(m, 1e-6, 0.01), edge_only, 0.002,
+				"no hand spread, margin %.2f" % m)
+
+
 const LOFT_NAMES: Array[String] = ["FLAT", "LOW", "MID", "HIGH"]
 
 

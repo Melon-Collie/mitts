@@ -265,10 +265,12 @@ static func run_spot(shooter: Vector3, goal: Vector3, profile: BotSkillProfile,
 	goalie.x = clampf(goalie.x + clampf(unsettled, 0.0, 1.0) * CAUGHT_OFFSET_M,
 			-NET_HW, NET_HW)
 	var spread: float = profile.shot_aim_error_rad
-	# Would the bot even fire? Real selection, spread- AND unsettled-aware (a
-	# caught-moving goalie opens the window, so more marginal shots clear the bar).
+	# Would the bot even fire? Unsettled-aware (a caught-moving goalie opens the
+	# window, so more marginal shots clear the bar) but blind to the hand, as the
+	# live carrier's selection is (#699): the chance decides whether to shoot,
+	# the hand only how it lands.
 	var danger: float = AIActionScoring.score_shoot(shooter, goal, goalie, NET_HW, [],
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, unsettled, [], -1.0, false, 0.0, false, spread)
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, unsettled, [], -1.0, false, 0.0, false, 0.0)
 	if danger < SHOOT_MIN:
 		counts[NO_SHOT] = samples
 		return counts
