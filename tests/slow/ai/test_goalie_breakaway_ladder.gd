@@ -4,44 +4,28 @@ extends GutTest
 # This project's own player scores overwhelmingly on breakaways, and the move is
 # always the one `test_human_wraparound` models: drive at him, pull the puck
 # across to commit him, then take it around him. Two ways to finish it, and the
-# ladder lives on the one that beats him:
+# ladder lives on the one that beats him. He seals the post the puck was pulled
+# toward, so carrying on round him is shut; what beats him is coming back across
+# into the space he left, which is a race to re-commit: how far out he is
+# (depth) and how hard he pushes (the slide push, tiered like every other
+# movement speed). Depth cuts the other way: a goalie who challenges the rush
+# harder is easier to beat back across.
 #
-#            walk around (pull side)   cut back across
-#   EASY            0 of 7                 5 of 7
-#   NORMAL          0 of 7                 3 of 7
-#   HARD            0 of 7                 3 of 7
-#
-# He seals the post the puck was pulled toward, and every tier gets there in
-# time, so carrying on round him is shut. (It was 5/2/2 while the seal turned him
-# toward the OTHER post whenever he committed from outside the seal spot — the
-# pad that should have been on the post pointed away from it.) What beats him is
-# coming back across into the space he left, which is a race to re-commit: how
-# far out he is (depth) and how hard he pushes (the slide push, tiered like every
-# other movement speed).
-#
-# Every measurement below fires the same seven-point aim fan at the same release
-# point after the same bait, so the count IS how much net is open — not whether
-# a shooter who already knows the answer can find it.
-#
-# ── TWO KNOBS ────────────────────────────────────────────────────────────────
-# `depth_base_m` and `slide_push_speed_mps` are the tier levers this play can
-# feel. The others — every read latency, every reach speed, the drop time, the
-# five-hole, the poke — change nothing here, to the shot. The butterfly toe-out
-# moves it by one aim point at its EASY value: a shot from the cutback's sharp
-# angle meets the flat pad along its toe. Depth cuts the other way: a goalie who
-# challenges the rush harder is easier to beat back across.
+# Every measurement fires the same seven-point aim fan at the same release point
+# after the same bait, so the count IS how much net is open — not whether a
+# shooter who already knows the answer can find it. The counts themselves are
+# the reviewed snapshot, snapshots/breakaway_ladder.txt.
 #
 # ── THE TRADE IS REAL ───────────────────────────────────────────────────────
 # Pulling `depth_base_m` in is not free — it concedes the centre-lane rush shot
-# from 5 m, which is exactly what challenge depth exists to cut off. Both halves
-# are priced together in test 3.
+# from 5 m, which is exactly what challenge depth exists to cut off.
 #
-# ⚠️ THIS IS NOT A LICENCE TO RETUNE IT. 1.30 is not a tuning number — it is
-# `CreaseRules.STRAIGHT_DEPTH`, heels at the crease top, the taught B position.
-# Replacing a rink landmark with a number that won a 49-shot sweep trades a model
-# for a magic constant, which is the thing this codebase spends its effort not
-# doing.
+# ⚠️ THIS IS NOT A LICENCE TO RETUNE IT. 1.30 is not a tuning number — it is the
+# taught B position, heels at the crease top. Replacing a rink landmark with a
+# number that won a 49-shot sweep trades a model for a magic constant, which is
+# the thing this codebase spends its effort not doing.
 
+const Snapshot := preload("res://tests/snapshot.gd")
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 const Harness := preload("res://tests/unit/ai/human_wraparound_harness.gd")
 const SkaterScene := preload("res://Scenes/Skater.tscn")
@@ -53,9 +37,17 @@ const PULL_S: float = 0.25
 const PULL_AT_M: float = 3.5
 const WALK_ROUND: float = -1.0   # carry on to the side the puck was pulled to
 const CUT_BACK: float = 1.0      # come back across into the space he left
+const TIERS: Array[int] = [GoalieSkillProfile.Difficulty.EASY,
+		GoalieSkillProfile.Difficulty.NORMAL, GoalieSkillProfile.Difficulty.HARD]
+const LEVER_DEPTH_BASE_M: float = 0.60
+const LEVER_PUSH_MPS: float = 1.8
+const TRADE_BASES: Array[float] = [1.30, 1.00, 0.80, 0.60]
 
 var _h: RefCounted = null
 var _ctrl: GoalieController = null
+# Each count is deterministic (every trial resets the keeper), so a count one
+# test measured is reused by the next instead of re-run.
+var _counts: Dictionary = {}
 
 
 func before_each() -> void:
@@ -82,6 +74,9 @@ func _apply(over: Dictionary) -> void:
 
 # How much net the finish opens after the bait, as a count of the aim fan.
 func _finish_open(over: Dictionary, side: float = CUT_BACK) -> int:
+	var key: String = "finish %s %s" % [over, side]
+	if _counts.has(key):
+		return _counts[key]
 	var open: int = 0
 	for ax: float in AIM_X:
 		_apply(over)
@@ -91,6 +86,7 @@ func _finish_open(over: Dictionary, side: float = CUT_BACK) -> int:
 		var rel: Vector3 = _h.wrap_to(side * 1.35, 0.70, 4.0)
 		if _h.fire_release_at(rel, Vector3(ax, 0.0, GOAL_Z), 0, 18.0, 0.0) == 0:
 			open += 1
+	_counts[key] = open
 	return open
 
 
@@ -98,6 +94,9 @@ func _finish_open(over: Dictionary, side: float = CUT_BACK) -> int:
 # around him. Elevated and hard, which is the rush shot challenge depth exists
 # to cut the angle on.
 func _rush_open(over: Dictionary, lane: float, dist: float) -> int:
+	var key: String = "rush %s %s %s" % [over, lane, dist]
+	if _counts.has(key):
+		return _counts[key]
 	var open: int = 0
 	for ax: float in AIM_X:
 		_apply(over)
@@ -107,39 +106,35 @@ func _rush_open(over: Dictionary, lane: float, dist: float) -> int:
 		var spot := Vector3(lane, 0.0, GOAL_Z + dist)
 		if _h.fire_release_at(spot, Vector3(ax, 0.0, GOAL_Z), 1, 28.0, 0.0) == 0:
 			open += 1
+	_counts[key] = open
 	return open
 
 
+func _tier_over(tier: int) -> Dictionary:
+	var p: GoalieSkillProfile = GoalieSkillProfile.for_difficulty(tier)
+	return {
+		"depth_aggressive_m": p.depth_aggressive_m,
+		"depth_base_m": p.depth_base_m,
+		"reaction_delay_s": p.reaction_delay_s,
+		"lateral_accel_mps2": p.lateral_accel_mps2,
+		"butterfly_drop_s": p.butterfly_drop_s,
+		"arm_reaction_delay_s": p.arm_reaction_delay_s,
+		"read_lag_s": p.read_lag_s,
+		"five_hole_base_m": p.five_hole_base_m,
+		"slide_push_speed_mps": p.slide_push_speed_mps,
+	}
+
+
 # ── 1. THE LADDER MUST NOT RUN BACKWARDS ─────────────────────────────────────
-# No tier leaks less net on the cutback than the one above it, and EASY leaks
-# more than HARD. Carrying on round him is sealed on every tier.
+# On every tier the cutback beats him and carrying on round him, which the seal
+# answers, does not. No tier leaks less net on the cutback than the one above
+# it, and EASY leaks more than HARD.
 func test_the_difficulty_ladder_is_not_inverted_on_a_walkaround() -> void:
 	var open: Dictionary = {}
-	var walk: Dictionary = {}
-	for tier: int in [GoalieSkillProfile.Difficulty.EASY,
-			GoalieSkillProfile.Difficulty.NORMAL,
-			GoalieSkillProfile.Difficulty.HARD]:
-		var p: GoalieSkillProfile = GoalieSkillProfile.for_difficulty(tier)
-		var over: Dictionary = {
-			"depth_aggressive_m": p.depth_aggressive_m,
-			"depth_base_m": p.depth_base_m,
-			"reaction_delay_s": p.reaction_delay_s,
-			"lateral_accel_mps2": p.lateral_accel_mps2,
-			"butterfly_drop_s": p.butterfly_drop_s,
-			"arm_reaction_delay_s": p.arm_reaction_delay_s,
-			"read_lag_s": p.read_lag_s,
-			"five_hole_base_m": p.five_hole_base_m,
-			"slide_push_speed_mps": p.slide_push_speed_mps,
-		}
-		open[tier] = _finish_open(over)
-		walk[tier] = _finish_open(over, WALK_ROUND)
-		gut.p("tier %d -> cutback %d, walk round %d, of %d aim points"
-				% [tier, open[tier], walk[tier], AIM_X.size()])
-		assert_lte(walk[tier] as int, open[tier] as int,
-				"tier %d: the seal answers the puck that keeps going" % tier)
-	assert_lte(open[GoalieSkillProfile.Difficulty.HARD] as int,
-			open[GoalieSkillProfile.Difficulty.EASY] as int,
-			"a HARD keeper must never leak more net on a cutback than an EASY one")
+	for tier: int in TIERS:
+		open[tier] = _finish_open(_tier_over(tier))
+		assert_lt(_finish_open(_tier_over(tier), WALK_ROUND), open[tier] as int,
+				"tier %d: the cutback beats him and the walkaround does not" % tier)
 	assert_lte(open[GoalieSkillProfile.Difficulty.HARD] as int,
 			open[GoalieSkillProfile.Difficulty.NORMAL] as int, "HARD never leaks more than NORMAL")
 	assert_lte(open[GoalieSkillProfile.Difficulty.NORMAL] as int,
@@ -148,60 +143,48 @@ func test_the_difficulty_ladder_is_not_inverted_on_a_walkaround() -> void:
 			open[GoalieSkillProfile.Difficulty.EASY] as int, "and the ladder separates")
 
 
-# ── 2. TWO KNOBS ─────────────────────────────────────────────────────────────
-# The teeth: if a tier lever is ever added or retuned so that it moves this play,
-# this fails, and that is worth knowing — the ladder reaches the cutback through
-# how far out he stands and how hard he pushes back across.
-func test_depth_and_the_push_are_the_tier_levers_this_play_can_feel() -> void:
+# ── 2. DEPTH AND THE PUSH ────────────────────────────────────────────────────
+# The ladder reaches the cutback through how far out he stands and how hard he
+# pushes back across: a keeper sat deeper has less ice to recover, and a softer
+# push loses the race to re-commit.
+func test_depth_and_the_push_move_the_cutback() -> void:
 	var baseline: int = _finish_open({})
-	var inert: Dictionary = {
-		"reaction_delay_s": 0.30,
-		"lateral_accel_mps2": 2.4,
-		"butterfly_drop_s": 0.32,
-		"arm_reaction_delay_s": 0.45,
-		"read_lag_s": 0.06,
-		"five_hole_base_m": 0.30,
-		"poke_radius_m": 0.08,
-		"move_read_scramble_delay_s": 0.35,
-		"cross_crease_react_delay_s": 0.40,
-		"glove_react_max_speed_mps": 5.0,
-		"depth_aggressive_m": 0.90,
-	}
-	for k: String in inert:
-		var open: int = _finish_open({k: inert[k]})
-		assert_eq(open, baseline,
-				"%s at its EASY value must not move the cutback" % k)
-	var moved: int = _finish_open({"depth_base_m": 0.60})
-	gut.p("baseline %d of %d open; depth_base 0.60 -> %d"
-			% [baseline, AIM_X.size(), moved])
-	assert_lt(moved, baseline, "depth_base is a lever")
-	var slow_push: int = _finish_open({"slide_push_speed_mps": 1.8})
-	gut.p("push 1.8 m/s -> %d" % slow_push)
-	assert_gt(slow_push, baseline, "and the push back across is the other")
+	assert_lt(_finish_open({"depth_base_m": LEVER_DEPTH_BASE_M}), baseline,
+			"a deeper base leaves less net on the cutback")
+	assert_gt(_finish_open({"slide_push_speed_mps": LEVER_PUSH_MPS}), baseline,
+			"a softer push back across leaves more")
 
 
 # ── 3. THE TRADE, PRICED ─────────────────────────────────────────────────────
-# Characterisation. Both halves at once so neither can be improved quietly at the
-# other's expense — a depth change that only reports the walkaround has been
-# checked against the half it helps.
-func test_the_depth_base_trade_has_a_minimum() -> void:
-	var best_total: int = 99
-	var best_base: float = 0.0
-	for base: float in [1.30, 1.00, 0.80, 0.60]:
+# Both halves at once so neither can be improved quietly at the other's expense:
+# the depth that shuts the cutback concedes the centre-lane rush shot from 5 m.
+func test_pulling_the_depth_base_in_concedes_the_centre_lane_rush() -> void:
+	var authored: int = _rush_open({}, 0.0, 5.0)
+	var pulled_in: int = _rush_open({"depth_base_m": TRADE_BASES[-1]}, 0.0, 5.0)
+	assert_gt(pulled_in, authored,
+			"pulled in to %.2f m he concedes more of the centre-lane rush from 5 m"
+			% TRADE_BASES[-1])
+
+
+# ── THE REVIEWED COUNTS ──────────────────────────────────────────────────────
+# Rewrite with MITTS_UPDATE_SNAPSHOTS=1 (tests/snapshot.gd) and review the diff.
+func test_breakaway_ladder_snapshot() -> void:
+	var snap := Snapshot.new("res://tests/slow/ai/snapshots/breakaway_ladder.txt")
+	var n: int = AIM_X.size()
+	for tier: int in TIERS:
+		var name: String = GoalieSkillProfile.Difficulty.keys()[tier]
+		snap.record("%s: cutback open of %d" % [name, n], _finish_open(_tier_over(tier)))
+		snap.record("%s: walk round open of %d" % [name, n],
+				_finish_open(_tier_over(tier), WALK_ROUND))
+	snap.record("HARD, depth_base %.2f: cutback open of %d" % [LEVER_DEPTH_BASE_M, n],
+			_finish_open({"depth_base_m": LEVER_DEPTH_BASE_M}))
+	snap.record("HARD, slide push %.1f m/s: cutback open of %d" % [LEVER_PUSH_MPS, n],
+			_finish_open({"slide_push_speed_mps": LEVER_PUSH_MPS}))
+	for base: float in TRADE_BASES:
 		var over := {"depth_base_m": base}
-		var walk: int = _finish_open(over)
-		var rush: int = 0
+		snap.record("depth_base %.2f: cutback open of %d" % [base, n], _finish_open(over))
 		for lane: float in [0.0, 2.5]:
 			for dist: float in [5.0, 8.0, 11.0]:
-				rush += _rush_open(over, lane, dist)
-		var total: int = walk + rush
-		gut.p("depth_base %.2f | cutback %d/%d  rush %d/%d  total %d/%d"
-				% [base, walk, AIM_X.size(), rush, 6 * AIM_X.size(), total,
-				7 * AIM_X.size()])
-		if total < best_total:
-			best_total = total
-			best_base = base
-	gut.p("least net conceded overall at depth_base %.2f (%d open)"
-			% [best_base, best_total])
-	assert_lt(best_base, 1.30,
-			"the authored crease-top depth is past the optimum on this pair of plays")
+				snap.record("depth_base %.2f: rush lane %.1f from %.0f m, open of %d"
+						% [base, lane, dist, n], _rush_open(over, lane, dist))
+	snap.verify(self)

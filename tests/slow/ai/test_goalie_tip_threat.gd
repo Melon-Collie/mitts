@@ -6,28 +6,12 @@ extends GutTest
 # shooter. A tip beats the read, so the save is where he already stands
 # (GoalieTipDepth): no further out than keeps his body on the tip's line.
 #
-# ── WHAT IT MEASURED (2026-09) ───────────────────────────────────────────────
-# 30 m/s shot, tip keeps 85% of it. `direct` is the same spot shooting at the
-# net past the stick, 7 aims x 4 lofts.
-#
-#                               FULL CHALLENGE            TIP CAP
-#   shooter       stick         r     tips   direct       r     tips   direct
-#   18 m centre   (1.5, 4.0)    1.72  0/8    0            1.72  0/8    0
-#   18 m centre   (2.5, 3.0)    1.72  4/8    0            1.28  2/8    0
-#   18 m centre   (1.0, 5.5)    1.72  1/7    0            1.72  1/7    0
-#   18 m centre   (-1.5, 4.0)   1.72  0/8    0            1.72  0/8    0
-#   16 m, 5 wide  (1.5, 4.0)    1.72  4/8    3            1.34  3/8    3
-#   16 m, 5 wide  (2.5, 3.0)    1.72  6/6    3            0.97  4/8    3
-#   16 m, 5 wide  (1.0, 5.5)    1.72  3/8    3            1.72  3/8    3
-#   16 m, 5 wide  (-1.5, 4.0)   1.70  0/10   2            1.70  0/10   2
-#
-# Tips 18 -> 13, direct shots no worse (11 -> 11 as first measured, 11 -> 10
-# once the hands moved out in front): from the point the direct shot is a
-# reaction save at any depth, so the angle A buys is worth nothing there while
-# the redirect it sells is. A stick on the shooter's line is covered by
-# challenging, and one at 5.5 m is a tip he can still react to — neither moves
-# him.
+# From the point the direct shot is a reaction save at any depth, so the angle A
+# buys is worth nothing there while the redirect it sells is. A stick on the
+# shooter's line is covered by challenging, and one at 5.5 m is a tip he can
+# still react to — neither moves him.
 
+const Snapshot := preload("res://tests/snapshot.gd")
 const Harness := preload("res://tests/unit/ai/real_goalie_shot_harness.gd")
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 const DT: float = 1.0 / 120.0
@@ -136,13 +120,24 @@ func _direct_goals(shooter: Vector3) -> int:
 	return goals
 
 
+const NO_STICK := Vector3(-20.0, 0.0, 0.0)
+const TIP_IN_TIGHT := Vector3(2.5, 0.0, GOAL_Z + 3.0)
+const TIP_REACTABLE := Vector3(1.0, 0.0, GOAL_Z + 5.5)
+
+
+# His settled depth against the wide point shot with the tipper at `tipper`.
+func _depth_with_tipper_at(tipper: Vector3) -> float:
+	_tipper.global_position = tipper
+	_h.settle_ready(WIDE_POINT)
+	return _ctrl._current_depth
+
+
 func test_a_stick_off_the_shooters_line_holds_him_nearer_his_crease() -> void:
-	_tipper.global_position = Vector3(2.5, 0.0, GOAL_Z + 3.0)
-	_h.settle_ready(WIDE_POINT)
-	assert_lt(_ctrl._current_depth, 1.1, "short of A, on the tip's line")
-	_tipper.global_position = Vector3(1.0, 0.0, GOAL_Z + 5.5)
-	_h.settle_ready(WIDE_POINT)
-	assert_gt(_ctrl._current_depth, 1.6, "a tip from 5.5 m is one he can react to")
+	var free: float = _depth_with_tipper_at(NO_STICK)
+	assert_lt(_depth_with_tipper_at(TIP_IN_TIGHT), free,
+			"a stick at 3 m off the shooter's line holds him in, on the tip's line")
+	assert_almost_eq(_depth_with_tipper_at(TIP_REACTABLE), free, 0.01,
+			"a tip from 5.5 m is one he can react to, so it does not move him")
 
 
 func test_tips_score_less_and_the_direct_shot_is_untouched() -> void:
@@ -158,3 +153,12 @@ func test_tips_score_less_and_the_direct_shot_is_untouched() -> void:
 	assert_lt(tips[true], tips[false], "the redirect is covered better")
 	assert_gt(tips[true], 0, "and it still scores — not a wall")
 	assert_lte(direct[true], direct[false], "at no cost to the shot he can react to")
+
+
+# Rewrite with MITTS_UPDATE_SNAPSHOTS=1 (tests/snapshot.gd) and review the diff.
+func test_tip_depth_snapshot() -> void:
+	var snap := Snapshot.new("res://tests/slow/ai/snapshots/goalie_tip_threat.txt")
+	snap.record("16 m 5 wide, no stick: depth", _depth_with_tipper_at(NO_STICK))
+	snap.record("16 m 5 wide, stick at (2.5, 3.0): depth", _depth_with_tipper_at(TIP_IN_TIGHT))
+	snap.record("16 m 5 wide, stick at (1.0, 5.5): depth", _depth_with_tipper_at(TIP_REACTABLE))
+	snap.verify(self)
