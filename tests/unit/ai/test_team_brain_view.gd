@@ -92,8 +92,8 @@ func test_view_mirrors_ping_chase_peer() -> void:
 const _SM_PATH := "res://Scripts/ai/skater_agent_state_machine.gd"
 const _ALLOWED_LIVE_BRAIN_LINES: Array[String] = [
 	"var v: TeamBrainView = _team_brain.get_view()",
-	'return "%s: %s" % [_team_state_label(_team_brain.state), _slot_label(_team_brain.get_slot(_peer_id))]',
-	"return _slot_label(_team_brain.get_slot(debug_pass_peer_id))",
+	'return "%s: %s" % [_team_state_label(_team_brain.state), AIRoleSlots.label(_team_brain.get_slot(_peer_id))]',
+	"return AIRoleSlots.label(_team_brain.get_slot(debug_pass_peer_id))",
 	"_team_brain.set_one_timer_ready(_peer_id, _is_one_timer_ready)",
 ]
 
