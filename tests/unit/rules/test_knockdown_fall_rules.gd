@@ -231,16 +231,41 @@ func test_sprawl_is_deterministic() -> void:
 	assert_eq(a.r_knee, b.r_knee, "same inputs, same pose — replay-safe")
 
 
-# ── getup_scale ───────────────────────────────────────────────────────────────
+# ── the staged get-up ─────────────────────────────────────────────────────────
+# kd_t is the tail left: 1 while fully down, 0 upright.
 
-func test_getup_scale_endpoints_and_monotonic() -> void:
-	assert_almost_eq(KnockdownFallRules.getup_scale(0.0), 0.0, 0.0001, "fully up at 0")
-	assert_almost_eq(KnockdownFallRules.getup_scale(1.0), 1.0, 0.0001, "fully down at 1")
-	var prev: float = 0.0
-	for i in range(1, 11):
-		var s: float = KnockdownFallRules.getup_scale(i * 0.1)
-		assert_true(s >= prev, "the get-up envelope never reverses")
-		prev = s
+func test_the_lie_holds_until_the_tail_and_is_gone_on_the_knees() -> void:
+	assert_almost_eq(KnockdownFallRules.lie_share(1.0), 1.0, 0.0001, "fully down")
+	assert_almost_eq(KnockdownFallRules.lie_share(1.0 - KnockdownFallRules.GETUP_KNEES_END),
+			0.0, 0.0001, "on his knees, nothing of the lie is left")
+	assert_almost_eq(KnockdownFallRules.lie_share(0.0), 0.0, 0.0001, "upright")
+
+
+func test_the_step_comes_after_the_knees_and_before_the_stand() -> void:
+	var knees: float = 1.0 - KnockdownFallRules.GETUP_KNEES_END
+	var stepped: float = 1.0 - KnockdownFallRules.GETUP_STEP_END
+	assert_almost_eq(KnockdownFallRules.step_share(knees), 0.0, 0.0001,
+			"both knees down before the free leg steps up")
+	assert_almost_eq(KnockdownFallRules.step_share(stepped), 1.0, 0.0001,
+			"the skate is planted before he stands")
+	assert_almost_eq(KnockdownFallRules.stand_hold(stepped), 1.0, 0.0001,
+			"the down pose holds full until he stands off the knee")
+	assert_almost_eq(KnockdownFallRules.stand_hold(0.0), 0.0, 0.0001,
+			"and hands the body back to the live pose once upright")
+
+
+func test_every_getup_envelope_moves_one_way() -> void:
+	var lie: float = 1.0
+	var step: float = 0.0
+	var hold: float = 1.0
+	for i: int in range(100, -1, -1):
+		var kd_t: float = i * 0.01
+		assert_lte(KnockdownFallRules.lie_share(kd_t), lie + 1e-6, "the lie never comes back")
+		assert_gte(KnockdownFallRules.step_share(kd_t), step - 1e-6, "the step never reverses")
+		assert_lte(KnockdownFallRules.stand_hold(kd_t), hold + 1e-6, "the stand never sits back down")
+		lie = KnockdownFallRules.lie_share(kd_t)
+		step = KnockdownFallRules.step_share(kd_t)
+		hold = KnockdownFallRules.stand_hold(kd_t)
 
 
 # ── brace_at ──────────────────────────────────────────────────────────────────
@@ -256,7 +281,7 @@ func test_brace_ramps_in_over_brace_in_seconds() -> void:
 func test_brace_releases_through_the_getup() -> void:
 	assert_almost_eq(KnockdownFallRules.brace_at(1.0, 0.0, 0.15), 0.0, 0.0001,
 			"brace is gone when the get-up completes")
-	assert_true(KnockdownFallRules.brace_at(1.0, 0.5, 0.15) < 1.0,
+	assert_true(KnockdownFallRules.brace_at(1.0, 0.8, 0.15) < 1.0,
 			"brace eases out with the same envelope as the tilt")
 
 

@@ -265,9 +265,9 @@ func _physics_process(delta: float) -> void:
 	_pickup_claim_floor = maxf(_pickup_claim_floor - delta, 0.0)
 	_poke_cooldown = maxf(_poke_cooldown - delta, 0.0)
 	_poke_claim_floor = maxf(_poke_claim_floor - delta, 0.0)
-	# Down, only a diver's stick plays (and only to poke: see the pickup gate).
+	# Down, only a laid-out diver's stick plays (and only to poke: see the pickup gate).
 	if not _is_host and NetworkManager.is_clock_ready() and not skater.is_ghost and not puck.pickup_locked and _sm.get_state() != State.SHOT_BLOCKING \
-			and (not skater.is_knocked_down or skater.is_diving):
+			and (not skater.is_knocked_down or skater.dive_laid_out):
 		var blade_pos_for_claim: Vector3 = skater.get_blade_contact_global()
 		# Branch on the CLIENT-side carrier view (PuckController, driven by the
 		# carrier events). Never gate this on puck.carrier: it is host-only and
@@ -588,8 +588,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# its impulse-seeded metadata (timer extension only grows the window total).
 	var prev_kd: float = knockdown_timer
 	knockdown_timer = server_state.knockdown_timer
-	skater.is_knocked_down = knockdown_timer > 0.0
-	skater.is_diving = server_state.diving
+	_set_down_flags(server_state.diving)
 	_sync_knockdown_meta(prev_kd)
 	# Snap facing for replay accuracy — facing drives the direction of travel,
 	# so the replay must start from the server's facing to reproduce the trajectory.

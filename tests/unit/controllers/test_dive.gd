@@ -178,7 +178,7 @@ func test_the_top_hand_stays_off_the_ice() -> void:
 func test_the_slide_carries_its_momentum_through_the_window() -> void:
 	_skate(90)
 	var before: float = _c.skater.velocity.length()
-	_dive_ticks(ceili(DiveRules.DOWN_S / DT) - 2)
+	_dive_ticks(ceili(1.0 / DT))
 	assert_true(_c.skater.is_knocked_down, "the control: still down")
 	assert_gt(_c.skater.velocity.length(), before - 2.5,
 			"gear on ice takes a couple of m/s over the second down, not the whole slide")
