@@ -5,7 +5,7 @@ class_name AIRoleHelpers
 # reads. A role's own differentiator is its scoring function.
 
 # Polar candidate ring radius. A sampling parameter, not a behavioral knob; the
-# same scale as AIRoleCarrier.CARRY_SEARCH_STEP_M.
+# same scale as AICarrierCarrySearch.CARRY_SEARCH_STEP_M.
 const SEARCH_STEP_M: float = 3.0
 
 # Candidates this close to a teammate are filtered out: the physical-overlap

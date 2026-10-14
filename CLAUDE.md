@@ -291,6 +291,7 @@ that file can't tell you:
 | New controller behavior | Method on `SkaterController`; `GameManager` calls it, never pokes internals directly |
 | New reconcile logic | `domain/rules/reconciliation_rules.gd` + GUT test |
 | New bot AI evaluator | `domain/ai/action_scoring.gd` (shot, pass, dump, and the shared clocks) or `domain/ai/carry_space.gd` (the carrier's room to operate: evasion, controlled space, deke, brake) + GUT calibration test — build it as a grounded model (see `Scripts/domain/ai/CLAUDE.md`) |
+| New carrier action | A search collaborator in `domain/ai/role_behaviors/` beside `AICarrierPassSearch` / `AICarrierCarrySearch` / `AICarrierDumpSearch`, reading the carrier's `AICarrierField` (shared perception and valuation go there); its candidate in `AIRoleCarrier`'s compete. `test_carrier_collaborator_seams.gd` holds the seam; the full checklist is `Scripts/domain/ai/DECISIONS.md` §8 |
 | Port a hot kernel to C++ | `native/src/` + seeded parity fuzz test + micro-bench row; GDScript original stays as the reference (see `native/README.md`) |
 | New "body dial X scales Y" rule | `PlayerAttributes` (see `Scripts/domain/state/CLAUDE.md`) |
 | New skater cosmetic rig behavior | The rig that owns it under `Scripts/actors/` (`SkaterLegRig` / `SkaterArmRig` / `SkaterStickRig`); it reads `Skater`'s tuning and markers and writes only its own state, and `Skater` delegates rather than reaching in. `test_skater_collaborator_seams.gd` holds the seam (see `Scripts/actors/CLAUDE.md`) |

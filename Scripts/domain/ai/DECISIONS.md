@@ -117,9 +117,9 @@ Doctrine: [One currency across the carrier's compete](CLAUDE.md#one-currency-acr
 [Hesitation is a raised bar](CLAUDE.md#hesitation-is-a-raised-bar-never-a-timer),
 [The models in detail](CLAUDE.md#the-models-in-detail) (shot value, carry safety, pass lanes, dumps, rims, positional value, controlled space),
 [Where an evaluator goes](CLAUDE.md#where-an-evaluator-goes).
-All functions below are in `carrier.gd` unless named.
+The carrier is `carrier.gd` (the compete: intents, phases, argmax, commitment) over `carrier_field.gd` (`AICarrierField`: what it sees, what a spot is worth, what a turnover costs) and three searches that read the field — `carrier_pass_search.gd`, `carrier_carry_search.gd`, `carrier_dump_search.gd`. Bare function names below are in `carrier.gd`; `test_carrier_collaborator_seams.gd` holds the seam.
 
-**Currency** — "xG": `action_scoring.gd:score_shoot_value` (the `shot_value.gd` seam) in the zone; outside it `position_potential` × `potential_realization_discount`, meeting xG only at `_entry_value`. Every option pays `carrier_field.gd:turnover_cost` (`action_scoring.gd:turnover_cost`, unit chosen by carrier zone) and, 5v5 only, `carrier_field.gd:counter_exposure_cost` (`counter_rush_cost` × `carrier_field.gd:EXPOSURE_APPETITE_*`). Future value × `action_scoring.gd:delay_discount`.
+**Currency** — "xG": `action_scoring.gd:score_shoot_value` (the `shot_value.gd` seam) in the zone; outside it `position_potential` × `potential_realization_discount`, meeting xG only at `carrier_field.gd:entry_value`. Every option pays `carrier_field.gd:turnover_cost` (`action_scoring.gd:turnover_cost`, unit chosen by carrier zone) and, 5v5 only, `carrier_field.gd:counter_exposure_cost` (`counter_rush_cost` × `carrier_field.gd:EXPOSURE_APPETITE_*`). Future value × `action_scoring.gd:delay_discount`.
 
 | action | evaluator | sees | vetoes / gates | test |
 |---|---|---|---|---|
@@ -130,9 +130,9 @@ All functions below are in `carrier.gd` unless named.
 | PASS saucer | `carrier_pass_search.gd:_pass_variant_ev` (saucer), `puck_lane.gd:lane_clear_saucer`, `saucer_max_launch_speed` | sticks under the flight | flat lane ≥ `SAUCER_SKIP_WHEN_LANE_CLEAR`; no landing runway; not better than flat; +`SAUCER_EXTRA_MISS_PROB` | `test_ai_action_scoring.gd`, `test_role_carrier.gd` |
 | PASS rim | `rim_pass.gd:build`, `carrier_pass_search.gd:_rim_launch_for` (rank), then `carrier_pass_search.gd:_pass_ev` for the single best | boards path walk, receiver meet/catchability, opponent + keeper race, softest launch within `RIM_SOFT_SHARE` | flat lane clear; zone rules as flat; released as INTENT_DUMP `dump_is_rim` | `test_rim_pass.gd`, `test_role_carrier.gd` |
 | one-timer feed | a PASS whose receiver `is_one_timer_ready` (keeper gets flight only) | readiness flag (§2) | as PASS | `test_one_timer_chain.gd` |
-| CARRY | `_best_carry` → `_beam_score_base`/`_score_move_candidate_base` (one-ply) → `_upgrade_candidate_two_ply` (`carrier_field.gd:pass_option_from`) | candidates: field bearings from `carry_space.gd:controlled_space` (`CARRY_FIELD_*`), rear ring (`_REAR_ANGLES` × `beat_reach_along`), slot anchor, DZ wall exits, post walkouts, directed seam, 5v5 wheel `_score_wheel_candidate`; each = dest `carrier_field.gd:value_at` (arrival shot vs tracked keeper) × `carry_lane_clearance` × decay × `carry_safety` − strip cost at `carry_strip_point` | one-way OZ valve (`OZ_RETREAT_LINE_BUFFER_M`); `zone_entry_blocked`; `carry_path_blocked_by_net`; `_candidate_ice_legal`; exact ceiling prunes; `CARRY_BEAM_WIDTH` | `test_role_carrier.gd`, `test_controlled_space.gd`, `test_reach_safety.gd` |
-| stand still | inside `_best_carry` | shoot-now score (or potential outside zone) × safety − cost | wins only strictly | `test_role_carrier.gd` |
-| drive-in floor | `carrier_field.gd:receiver_drive_in_value` (self) floors carry; carry × `FORWARD_PRESSURE_*` via `_carrier_forward_clearance` | forward space | — | `test_role_carrier.gd` |
+| CARRY | `carrier_carry_search.gd:search` → `carrier_carry_search.gd:_beam_score_base`/`_score_move_candidate_base` (one-ply) → `carrier_carry_search.gd:_upgrade_candidate_two_ply` (`carrier_field.gd:pass_option_from`) | candidates: field bearings from `carry_space.gd:controlled_space` (`CARRY_FIELD_*`), rear ring (`_REAR_ANGLES` × `beat_reach_along`), slot anchor, DZ wall exits, post walkouts, directed seam, 5v5 wheel `carrier_carry_search.gd:_score_wheel_candidate`; each = dest `carrier_field.gd:value_at` (arrival shot vs tracked keeper) × `carry_lane_clearance` × decay × `carry_safety` − strip cost at `carry_strip_point` | one-way OZ valve (`OZ_RETREAT_LINE_BUFFER_M`); `zone_entry_blocked`; `carry_path_blocked_by_net`; `carrier_carry_search.gd:_candidate_ice_legal`; exact ceiling prunes; `CARRY_BEAM_WIDTH` | `test_role_carrier.gd`, `test_controlled_space.gd`, `test_reach_safety.gd` |
+| stand still | inside `carrier_carry_search.gd:search` | shoot-now score (or potential outside zone) × safety − cost | wins only strictly | `test_role_carrier.gd` |
+| drive-in floor | `carrier_field.gd:receiver_drive_in_value` (self) floors carry; carry × `FORWARD_PRESSURE_*` via `carrier_carry_search.gd:forward_space` | forward space | — | `test_role_carrier.gd` |
 | HOLD for a developing feed | `carrier_pass_search.gd:developing_feed_value`, `carrier_pass_search.gd:_developing_outlet_feed` × current safety × `delay_discount(_hold_elapsed_s)` | FINISHER spot projected `OUTLET_DEVELOP_WINDOW_S` (`score_pass_value`); OUTLET / BREAKOUT_STRONG / BREAKOUT_D2 skating ≥ `OUTLET_DEVELOP_MIN_SPEED_M_S` | `holds_for_developing_feeds`; one-timer-ready finisher skipped | `test_role_carrier.gd` |
 | DUMP — DZ clear | `carrier_dump_search.gd:search`: `action_scoring.gd:dump_clear_candidates`, `chase_recovery`, `carrier_dump_search.gd:_concession` | landings (`trajectory.gd:puck_release_landing`), race to rest spot | residual only (`retention_hopeless` and no qualified fire); icing / dies-in-zone launches illegal; staggered | `test_role_carrier.gd`, `test_puck_release_landing.gd` |
 | DUMP — NZ dump-in | `carrier_dump_search.gd:search`: `action_scoring.gd:solve_dump_in` (bearing × pace, `keeper_collects_first`) | race to rest spot, realized potential gain | residual; only past red line, not in OZ; `zone_entry_blocked`; icing from behind red line | `test_dump_release_aim.gd`, `test_role_carrier.gd` |
@@ -201,13 +201,13 @@ Plumbing: `skater_agent_state_machine.gd:apply_profile` → SM field → (roles)
 | `dispatch_period_ticks` | precision | 9 / 6 / 2 | `dispatch`, `_stagger_cadence_phases`, `_state_off_puck`, `_state_carry`; `carrier.gd:decide`; `skater_agent_stick_play.gd:jab_aim`; `skater_agent_poke_evade.gd:modulate` |
 | `shot_aim_error_rad` | precision | 0.055 / 0.04 / 0.01 | `_set_state` (sample); `_try_shot_reception` gate; `self_aim_spread_rad` → `best_shot_loft`/`best_shot_aim` in `_pick_commit_phase` |
 | `pass_aim_error_rad` | precision | 0.0225 / 0.015 / 0.01 | `_set_state`; `carrier_pass_search.gd:_pass_variant_ev`, `carrier_pass_search.gd:_rim_launch_for`, `carrier_field.gd:pass_option_from` (`pass_miss_prob`) |
-| `shot_timing_error_s` | precision | 0.24 / 0.16 / 0.10 | `_sample_release_hold_ticks`; `carrier.gd:_pick_fire_phase`, `_score_move_candidate_base` (½ into keeper budget) |
+| `shot_timing_error_s` | precision | 0.24 / 0.16 / 0.10 | `_sample_release_hold_ticks`; `carrier.gd:_pick_fire_phase`, `carrier_carry_search.gd:_score_move_candidate_base` (½ into keeper budget) |
 | `settle_penalty_frac` / `_tau_s` | precision | 0.85, 0.55 / 0.60, 0.30 / 0.0, 0.25 | `carrier.gd:_settle_penalty` → `_pick_commit_phase` bars |
 | `pursuit_standoff_m` | pace (space) | 3.0 / 0.75 / 0.0 | `pressure.gd:decide` |
 | `pass_speed_scale` | pace | 0.75 / 0.85 / 1.0 | `carrier_pass_search.gd:search`, `_pick_commit_phase`, `carrier_field.gd:pass_option_from`, `carrier_pass_search.gd:developing_feed_value`, `carrier_pass_search.gd:_developing_outlet_feed` |
 | `check_aggression` | pace (threat) | 0.0 / 0.65 / 1.0 | `role_helpers.gd:evaluate_body_check`; `skater_agent_board_play.gd:apply` |
 | `defensive_anticipation_scale` | pace (space) | 0.2 / 0.6 / 1.0 | `role_helpers.gd:collect_opp_team_excluding_carrier`, `collect_opponents` |
-| `reads_goalie_motion` | cognition | F / T / T | `_shot_aim_point`; `carrier_field.gd:goalie_unsettled_at`, `_score_move_candidate_base` |
+| `reads_goalie_motion` | cognition | F / T / T | `_shot_aim_point`; `carrier_field.gd:goalie_unsettled_at`, `carrier_carry_search.gd:_score_move_candidate_base` |
 | `holds_for_developing_feeds` | cognition | F / T / T | `carrier_pass_search.gd:developing_feed_value` |
 | `reads_receiver_commitment` | cognition | F / T / T | `carrier_pass_search.gd:search` (ω = 0 when off) |
 | `angles_the_chase` | cognition | F / T / T | `_state_chase_puck` |
@@ -239,14 +239,15 @@ Hand-picked by design ([Evaluators model perception, never feel](CLAUDE.md#evalu
 
 ## 8. Adding a bot feature — checklist
 
-Ratchet first: `skater_agent_state_machine.gd` (4255), `carrier.gd` (3104), `action_scoring.gd` (2026 / 36 public), `role_helpers.gd` (1097 / 48 public) and `carry_space.gd` (1065) sit at their `test_no_god_class_growth.gd` caps — any growth there is an extraction or a deliberate bump.
+Ratchet first: `skater_agent_state_machine.gd` (4255), `action_scoring.gd` (2026 / 36 public), `role_helpers.gd` (1097 / 48 public), `carry_space.gd` (1065) and `carrier.gd` (1031) sit at their `test_no_god_class_growth.gd` caps — any growth there is an extraction or a deliberate bump.
 
 **New carrier action**
 1. Model it in a leaf or one evaluator (`action_scoring.gd` / `carry_space.gd`), never both directions (`test_scoring_split_stays_acyclic.gd`); calibration test in `test_ai_action_scoring.gd`.
 2. Price in the xG seam with `AICarrierField.turnover_cost` (+ `counter_exposure_cost` in 5v5) — [one currency](CLAUDE.md#one-currency-across-the-carriers-compete).
-3. `carrier.gd`: `INTENT_*` const; score in `_pick_fire_phase` into a `_phase_*` field (survives slicing); qualify against its own bar and add hysteresis in `_pick_commit_phase`; public result fields zeroed in `reset()` and `clear_intent()`.
-4. SM: `_state_from_carrier_intent` (+ `test_state_from_carrier_intent_maps_every_intent`); mirror/freeze in `_state_carry`; `_aim_target_for_intent`, `_release_is_charged`; a new press state also needs the `is_press_state` list in `dispatch` and sampling in `_set_state`.
-5. Tests: `test_role_carrier.gd`, `test_skater_agent_state_machine.gd`.
+3. A search over candidates is its own collaborator beside the others (pattern `carrier_dump_search.gd`): `class_name AICarrier<X>Search`, the field at construction, results in named fields, its own scratch; reads the field, never writes its lists, never names `AIRoleCarrier` (`test_carrier_collaborator_seams.gd`). Shared perception or valuation it needs goes on `AICarrierField`, filled in `fill` / `fill_receivers`.
+4. `carrier.gd`: `INTENT_*` const; hold the search as `var _x := AICarrier<X>Search.new(_field)`; score in `_pick_fire_phase` into a `_phase_*` field (survives slicing); qualify against its own bar and add hysteresis in `_pick_commit_phase`; public result fields zeroed in `reset()` and `clear_intent()`.
+5. SM: `_state_from_carrier_intent` (+ `test_state_from_carrier_intent_maps_every_intent`); mirror/freeze in `_state_carry`; `_aim_target_for_intent`, `_release_is_charged`; a new press state also needs the `is_press_state` list in `dispatch` and sampling in `_set_state`.
+6. Tests: `test_role_carrier.gd` (outcomes that are tuning go in its snapshot), `test_skater_agent_state_machine.gd`.
 
 **New role (behaviour for a slot)**
 1. `role_behaviors/<role>.gd` with `static func decide(ctx: RoleContext) -> RoleDecision`; compose `cover_threat` / `read_carrier_approach` + `carrier_stand` / `chase_puck`; stations through OST / NST; publish `target_velocity` only for a real stand.

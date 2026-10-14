@@ -98,7 +98,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 	var our_goalie: Vector3 = AIRoleHelpers.resolve_our_goalie_pos(ctx)
 	var attacking_goal: Vector3 = ctx.attacking_goal_pos
 	# One-way valve: once the zone is taken the carrier won't pass the puck back
-	# out of it (the carry-side valve is in _score_move_candidate_base).
+	# out of it (the carry-side valve is in AICarrierCarrySearch).
 	var carrier_in_oz: bool = AICarrierField.zone_taken(ctx)
 	var pass_origin: Vector3 = AICarrierField.pass_origin(ctx)
 	var best_pass_rim_dir := Vector3.ZERO

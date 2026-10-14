@@ -795,7 +795,7 @@ remains.
     **post-walkout** candidates appear behind a goal line, and the carry cursor
     swings around the nearer post (stick-on-net contact dislodges the puck).
     Behind-the-goal-line ice is playable for a carrier already back there
-    (`AIRoleCarrier._candidate_ice_legal`), or the walkouts are the only moves and
+    (`AICarrierCarrySearch._candidate_ice_legal`), or the walkouts are the only moves and
     a pressured carrier plants on the end wall.
   - *Carrier outside the zone:* candidates are priced by `position_potential`
     (the goal mouth's projected width `cos θ` × a closeness gradient ×
@@ -829,7 +829,7 @@ remains.
 
 - **Field-derived carry candidates** — the forward half of the carry search is
   generated from the space fan's per-bearing profile (`controlled_space` fills
-  `out_bearing_control`; `AIRoleCarrier._best_carry` takes the best
+  `out_bearing_control`; `AICarrierCarrySearch.search` takes the best
   `CARRY_FIELD_BEARINGS` by control × forward projection, each at two fractions
   of the planning beat). The radius is one `CARRY_PLAN_BEAT_S` of travel at real
   speed — the 3 m local step at a standstill, the blue line at a full stride.

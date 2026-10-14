@@ -159,7 +159,7 @@ func test_evaluator_costs() -> void:
 		open_carrier._pass.search(open_ctx, Vector2(0, -1),
 				open_carrier._field.teammate_ids))
 	_bench("open ice: best carry (candidates)", func() -> void:
-		open_carrier._best_carry(open_ctx, 0.1, open_ctx.self_pos))
+		open_carrier._carry.search(open_ctx, 0.1, open_ctx.self_pos))
 
 	# The rim pass: our carrier behind our own net with the forecheck in the
 	# lanes, the one scene where every receiver's flat feed is contested and the
@@ -205,7 +205,7 @@ func test_evaluator_costs() -> void:
 		var t1: int = Time.get_ticks_usec()
 		cinst._pass.search(cx, self_facing, cinst._field.teammate_ids)
 		var t2: int = Time.get_ticks_usec()
-		cinst._best_carry(cx, 0.1, cx.self_pos)
+		cinst._carry.search(cx, 0.1, cx.self_pos)
 		var t3: int = Time.get_ticks_usec()
 		cinst._pass.developing_feed_value(cx)
 		var t4: int = Time.get_ticks_usec()
@@ -218,14 +218,14 @@ func test_evaluator_costs() -> void:
 	_results.append({"label": "carrier: best carry (candidates)", "us": float(t_carry) / REPS})
 	_results.append({"label": "carrier: developing-feed hold read", "us": float(t_feed) / REPS})
 	# ── Carrier anatomy ──────────────────────────────────────────────────────
-	# _best_carry dominates the compete, so break IT down: how many candidates
+	# The carry search dominates the compete, so break IT down: how many candidates
 	# the beam actually scores, and what one candidate's primitives cost. The
-	# beam is left populated by the _best_carry call above.
-	cinst._best_carry(cx, 0.1, cx.self_pos)
+	# beam is left populated by the carry search above.
+	cinst._carry.search(cx, 0.1, cx.self_pos)
 	_results.append({"label": "  [beam rows scored]",
-			"us": float(cinst._beam_total.size())})
+			"us": float(cinst._carry._beam_total.size())})
 	_results.append({"label": "  [beam width (pass-2 upgrades)]",
-			"us": float(AIRoleCarrier.CARRY_BEAM_WIDTH)})
+			"us": float(AICarrierCarrySearch.CARRY_BEAM_WIDTH)})
 
 	var cand: Vector3 = cx.self_pos + Vector3(1.5, 0.0, -2.5)
 	var cur_puck: Vector3 = AICarrierField.puck_pos_at(cx.self_pos, cx.attacking_goal_pos)
@@ -260,7 +260,7 @@ func test_evaluator_costs() -> void:
 	var one_cand: Vector3 = cx.self_pos + Vector3(2.0, 0.0, 2.0)
 	var goalie_pos := Vector3(0.0, 0.0, -(GameRules.GOAL_LINE_Z - 0.8))
 	_bench("carrier: one carry candidate", func() -> void:
-		cinst._score_move_candidate(cx, one_cand, goalie_pos))
+		cinst._carry._score_move_candidate(cx, one_cand, goalie_pos))
 	_bench("carrier: one pass-option read", func() -> void:
 		cinst._field.pass_option_from(cx, one_cand))
 

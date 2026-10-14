@@ -3,9 +3,9 @@ extends RefCounted
 
 # The carrier's last-resort DUMP: which delivery to fire when nothing else is
 # worth keeping the puck for — the DZ clear (a pure concession) or the NZ
-# dump-in (priced on the race to where it settles). AIRoleCarrier owns one,
-# calls search() from its commit phase and reads the result fields; it never
-# writes them.
+# dump-in (priced on the race to where it settles). AIRoleCarrier owns one over
+# its AICarrierField, calls search() from its commit phase and reads the result
+# fields; it never writes them.
 
 # How far down the chosen launch line the dump's aim point is placed. Distance
 # is not direction, but it has to clear the blade: the quick release aims
@@ -13,6 +13,8 @@ extends RefCounted
 # cursor inside the stick's reach carries no direction at all. Comfortably
 # outside any reach.
 const DUMP_AIM_STANDOFF_M: float = 20.0
+
+var _field: AICarrierField
 
 # ── Result (valid after search) ──────────────────────────────────────────────
 var value: float = -INF
@@ -40,6 +42,10 @@ var _clear_recovery: Array[float] = []
 var _landing: Array[Vector3] = [Vector3.ZERO]
 
 
+func _init(field: AICarrierField) -> void:
+	_field = field
+
+
 # Two clears priced within this of each other are the same clear, so depth
 # breaks the tie (see search). Sized well under the shot-threat scale the
 # prices are denominated in.
@@ -51,16 +57,16 @@ const CLEAR_PRICE_TIE_BAND: float = 0.001
 # a Vector2 — a value type, so pricing a whole candidate set allocates nothing.
 # The clear's search ranks its candidates with this and search reports the
 # winner with it, so the chosen delivery is the one the compete is told about.
-func _concession(ctx: RoleContext, field: AICarrierField, spot: Vector3, our_goalie: Vector3,
+func _concession(ctx: RoleContext, spot: Vector3, our_goalie: Vector3,
 		known_recovery: float = -1.0) -> Vector2:
 	var recovery: float = known_recovery
 	if recovery < 0.0:
 		recovery = AIActionScoring.chase_recovery(
-				spot, _chasers, field.opponents,
-				_chaser_vels, field.opponent_vels)
+				spot, _chasers, _field.opponents,
+				_chaser_vels, _field.opponent_vels)
 	var loss: float = 1.0 - recovery
-	var concede: float = field.turnover_cost(ctx, spot, loss, our_goalie)
-	concede += field.counter_exposure_cost(ctx, spot, loss, ctx.self_pos, our_goalie)
+	var concede: float = _field.turnover_cost(ctx, spot, loss, our_goalie)
+	concede += _field.counter_exposure_cost(ctx, spot, loss, ctx.self_pos, our_goalie)
 	return Vector2(concede, recovery)
 
 
@@ -76,7 +82,7 @@ func _concession(ctx: RoleContext, field: AICarrierField, spot: Vector3, our_goa
 #   DZ CLEAR — the legal launch we concede LEAST by; a pure concession.
 #   NZ DUMP-IN — offensive, priced on the race to the resting spot; never icing,
 #     since it is offered only past the red line.
-func search(ctx: RoleContext, field: AICarrierField, our_goalie: Vector3) -> void:
+func search(ctx: RoleContext, our_goalie: Vector3) -> void:
 	value = -INF
 	var self_pos: Vector3 = ctx.self_pos
 	var attacking_goal: Vector3 = ctx.attacking_goal_pos
@@ -99,9 +105,9 @@ func search(ctx: RoleContext, field: AICarrierField, our_goalie: Vector3) -> voi
 	# Our chasers = teammates + ourselves (we dump and chase).
 	_chasers.clear()
 	_chaser_vels.clear()
-	for i: int in field.our_defenders.size():
-		_chasers.append(field.our_defenders[i])
-		_chaser_vels.append(field.our_defender_vels[i])
+	for i: int in _field.our_defenders.size():
+		_chasers.append(_field.our_defenders[i])
+		_chaser_vels.append(_field.our_defender_vels[i])
 	_chasers.append(self_pos)
 	_chaser_vels.append(ctx.self_velocity)
 
@@ -131,8 +137,8 @@ func search(ctx: RoleContext, field: AICarrierField, our_goalie: Vector3) -> voi
 		var free_exists: bool = false
 		for i: int in n:
 			var rec: float = AIActionScoring.chase_recovery(
-					_clear_spots[i], _chasers, field.opponents,
-					_chaser_vels, field.opponent_vels)
+					_clear_spots[i], _chasers, _field.opponents,
+					_chaser_vels, _field.opponent_vels)
 			_clear_recovery[i] = rec
 			free_exists = free_exists or rec >= 1.0
 		var target_z: float = -ctx.own_goal_dir * GameRules.BLUE_LINE_Z
@@ -145,7 +151,7 @@ func search(ctx: RoleContext, field: AICarrierField, our_goalie: Vector3) -> voi
 			var spot: Vector3 = _clear_spots[i]
 			var spot_priced := Vector2(0.0, rec)
 			if rec < 1.0:
-				spot_priced = _concession(ctx, field, spot, our_goalie, rec)
+				spot_priced = _concession(ctx, spot, our_goalie, rec)
 			var price: float = -spot_priced.x
 			var miss: float = absf(spot.z - target_z)
 			if price <= best_price - CLEAR_PRICE_TIE_BAND:
@@ -166,13 +172,13 @@ func search(ctx: RoleContext, field: AICarrierField, our_goalie: Vector3) -> voi
 		launch = AIActionScoring.solve_dump_in(
 				origin, attacking_goal, ctx.self_wrister_shot_speed,
 				ShotMechanics.ELEVATION_FLAT,
-				_chasers, field.opponents, AICarrierField.goalie_now(ctx),
+				_chasers, _field.opponents, AICarrierField.goalie_now(ctx),
 				_landing, _chaser_vels,
-				field.opponent_vels)
+				_field.opponent_vels)
 		if launch == Vector3.ZERO:
 			return
 		rest = _landing[0]
-		priced = _concession(ctx, field, rest, our_goalie)
+		priced = _concession(ctx, rest, our_goalie)
 
 	# Everything below prices the RESTING spot.
 	var recovery: float = priced.y
@@ -188,17 +194,17 @@ func search(ctx: RoleContext, field: AICarrierField, our_goalie: Vector3) -> voi
 		var chase_t: float = AIArrival.time_to_arrive(
 				self_pos, rest, ctx.self_velocity, ctx.self_max_speed,
 				ctx.self_max_accel, ctx.self_lateral_grip)
-		for i: int in field.our_defenders.size():
-			var mate_caps: AISkaterCaps = field.our_defender_caps[i]
+		for i: int in _field.our_defenders.size():
+			var mate_caps: AISkaterCaps = _field.our_defender_caps[i]
 			chase_t = minf(chase_t, AIArrival.time_to_arrive(
-					field.our_defenders[i], rest, field.our_defender_vels[i],
+					_field.our_defenders[i], rest, _field.our_defender_vels[i],
 					mate_caps.max_speed if mate_caps != null else ctx.self_max_speed,
 					mate_caps.max_accel if mate_caps != null else ctx.self_max_accel))
 		var chase_decay: float = AIActionScoring.delay_discount(chase_t)
 		# The resting spot's potential is FUTURE value, so it pays the realization
 		# discount like every other future-value read.
 		gain = recovery * AIActionScoring.position_potential(
-				rest, attacking_goal, field.opponents) * chase_decay \
+				rest, attacking_goal, _field.opponents) * chase_decay \
 				* AIActionScoring.potential_realization_discount(
 						rest, attacking_goal)
 

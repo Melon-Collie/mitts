@@ -157,7 +157,7 @@ func fill_receivers(ctx: RoleContext, cur_puck_pos: Vector3) -> void:
 				ctx, tm.position, ctx.self_pos, opponents, tm_goalie,
 				tm_shot_speed, 0.0, 0.0, 0.0, loft_high(tm_caps)))
 	# The same option read at the CURRENT puck spot — the baseline a candidate's
-	# option credit is measured against (see _upgrade_candidate_two_ply): an
+	# option credit is measured against (see AICarrierCarrySearch._upgrade_candidate_two_ply): an
 	# option already available from here belongs to the live pass in the fire
 	# compete, so only the IMPROVEMENT motivates a carry. Subtracting it also
 	# cancels the coarse option model's bias against the fully-priced pass

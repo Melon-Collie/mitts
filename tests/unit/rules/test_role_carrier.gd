@@ -1558,7 +1558,7 @@ func _searched_dump(ctx: RoleContext) -> AICarrierDumpSearch:
 
 # Carrier `c`'s dump search at `ctx`, its field already filled.
 func _dumped(c: AIRoleCarrier, ctx: RoleContext, our_goalie: Vector3) -> AICarrierDumpSearch:
-	c._dump.search(ctx, c._field, our_goalie)
+	c._dump.search(ctx, our_goalie)
 	return c._dump
 
 
@@ -1739,10 +1739,10 @@ func test_delayed_offside_closes_the_zone_to_the_carry() -> void:
 	c._field.fill(ctx)
 	var goalie: Vector3 = AIRoleHelpers.resolve_our_goalie_pos(ctx)
 	var in_zone := Vector3(0, 0, -9)
-	assert_gt(c._score_move_candidate_base(ctx, in_zone, goalie), -INF,
+	assert_gt(c._carry._score_move_candidate_base(ctx, in_zone, goalie), -INF,
 			"an open entry is a candidate")
 	ctx.zone_entry_blocked = true
-	assert_eq(c._score_move_candidate_base(ctx, in_zone, goalie), -INF,
+	assert_eq(c._carry._score_move_candidate_base(ctx, in_zone, goalie), -INF,
 			"with a teammate owing a tag-up, carrying in would be whistled")
 
 
@@ -1944,12 +1944,12 @@ func test_oz_valve_prunes_carry_candidates_in_the_blue_line_band() -> void:
 	var c := AIRoleCarrier.new()
 	c._field.fill(ctx)
 	var in_band := Vector3(0.0, 0.0,
-			-(GameRules.BLUE_LINE_Z + AIRoleCarrier.OZ_RETREAT_LINE_BUFFER_M * 0.5))
+			-(GameRules.BLUE_LINE_Z + AICarrierCarrySearch.OZ_RETREAT_LINE_BUFFER_M * 0.5))
 	var past_band := Vector3(0.0, 0.0,
-			-(GameRules.BLUE_LINE_Z + AIRoleCarrier.OZ_RETREAT_LINE_BUFFER_M + 1.0))
-	assert_eq(c._score_move_candidate(ctx, in_band, ctx.defending_goal_pos), -INF,
+			-(GameRules.BLUE_LINE_Z + AICarrierCarrySearch.OZ_RETREAT_LINE_BUFFER_M + 1.0))
+	assert_eq(c._carry._score_move_candidate(ctx, in_band, ctx.defending_goal_pos), -INF,
 			"a retreat to within windup reach of the blue line is pruned")
-	assert_gt(c._score_move_candidate(ctx, past_band, ctx.defending_goal_pos), -INF,
+	assert_gt(c._carry._score_move_candidate(ctx, past_band, ctx.defending_goal_pos), -INF,
 			"a retreat that keeps the windup envelope inside the zone stays legal")
 
 
@@ -1962,7 +1962,7 @@ func test_nz_carrier_may_target_entry_candidates_near_the_line() -> void:
 	var c := AIRoleCarrier.new()
 	c._field.fill(ctx)
 	var just_inside := Vector3(0.0, 0.0, -(GameRules.BLUE_LINE_Z + 0.7))
-	assert_gt(c._score_move_candidate(ctx, just_inside, ctx.defending_goal_pos), -INF,
+	assert_gt(c._carry._score_move_candidate(ctx, just_inside, ctx.defending_goal_pos), -INF,
 			"an entry candidate in the band is not pruned from outside the zone")
 
 
@@ -2388,7 +2388,7 @@ func _spun_off_cut_in() -> Vector3:
 
 
 func _move_score(c: AIRoleCarrier, ctx: RoleContext, spot: Vector3) -> float:
-	return c._score_move_candidate(ctx, spot, Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z))
+	return c._carry._score_move_candidate(ctx, spot, Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z))
 
 
 func test_spun_off_carrier_prices_the_cut_in_over_escape_and_standing() -> void:
@@ -2430,8 +2430,8 @@ func test_continuation_credit_respects_live_containment() -> void:
 	var our_goalie := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z)
 	var cut_in: Vector3 = self_pos + (net - self_pos).normalized() * 3.0
 	var lateral := Vector3(8.2, 0.0, -17.0)
-	assert_gt(c._score_move_candidate(ctx, lateral, our_goalie),
-			c._score_move_candidate(ctx, cut_in, our_goalie),
+	assert_gt(c._carry._score_move_candidate(ctx, lateral, our_goalie),
+			c._carry._score_move_candidate(ctx, cut_in, our_goalie),
 			"a live defender in the cut lane still owns it — cycle, don't force")
 
 
@@ -2717,27 +2717,27 @@ func test_behind_net_candidates_exist_for_a_carrier_behind_the_goal_line() -> vo
 	# negative than OPP_NET_Z.
 	var behind := Vector3(3.0, 0.0, OPP_NET_Z - 1.6)
 	var c := AIRoleCarrier.new()
-	assert_true(c._candidate_ice_legal(
+	assert_true(c._carry._candidate_ice_legal(
 			Vector3(-3.0, 0.0, behind.z), true),
 			"the walk across the back of the cage is a representable move")
-	assert_true(c._candidate_ice_legal(
+	assert_true(c._carry._candidate_ice_legal(
 			Vector3(6.0, 0.0, behind.z + 1.0), true),
 			"so is working out toward the corner")
 
 
 func test_the_cage_itself_is_still_not_a_place_to_stand() -> void:
 	var c := AIRoleCarrier.new()
-	assert_false(c._candidate_ice_legal(
+	assert_false(c._carry._candidate_ice_legal(
 			Vector3(0.0, 0.0, OPP_NET_Z - GameRules.NET_DEPTH * 0.5), true),
 			"inside the goal frame is not ice")
 
 
 func test_behind_net_candidates_stay_on_the_playing_surface() -> void:
 	var c := AIRoleCarrier.new()
-	assert_false(c._candidate_ice_legal(
+	assert_false(c._carry._candidate_ice_legal(
 			Vector3(3.0, 0.0, -(GameRules.INNER_HALF_LENGTH + 0.5)), true),
 			"through the end boards is not ice")
-	assert_false(c._candidate_ice_legal(
+	assert_false(c._carry._candidate_ice_legal(
 			Vector3(GameRules.CORNER_CENTER_X + GameRules.INNER_CORNER_RADIUS,
 					0.0, GameRules.CORNER_CENTER_Z + 3.0), true),
 			"and the rounded corner is honoured, not a bounding box")
@@ -2746,10 +2746,10 @@ func test_behind_net_candidates_stay_on_the_playing_surface() -> void:
 func test_a_carrier_out_front_keeps_the_old_goal_line_clamp() -> void:
 	# Scoped change: nothing about front-of-net carrying moves.
 	var c := AIRoleCarrier.new()
-	assert_false(c._candidate_ice_legal(
+	assert_false(c._carry._candidate_ice_legal(
 			Vector3(3.0, 0.0, OPP_NET_Z - 1.6), false),
 			"a carrier in front never plans a step past the goal line")
-	assert_true(c._candidate_ice_legal(Vector3(3.0, 0.0, -18.0), false))
+	assert_true(c._carry._candidate_ice_legal(Vector3(3.0, 0.0, -18.0), false))
 
 
 # ── The rim pass (AIRimPass) ─────────────────────────────────────────────────
