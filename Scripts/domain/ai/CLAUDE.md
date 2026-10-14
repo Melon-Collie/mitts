@@ -222,7 +222,10 @@ protects it against a beginner tier.
 price is its own stick. The man is tied only while the puck is coming to him — a loose
 puck whose path reaches his blade, or his carrier with a pass lane no defender's
 stick reaches — and only when the coverer's free stick could not have stopped it,
-with the man's shaft in reach, and he holds it while that stays true. His blade
+with the man's shaft in reach, and he holds it while that stays true. A puck
+already at the man's blade starts no tie — loose for a tick under his own
+stickhandle or a contested pickup, it is his puck, not a feed — but a tie already
+made holds through the arrival, which is the reception it exists to deny. His blade
 follows the man's stick through a lag of `StickCheckRules.TIE_LAG_BUDGET_S` —
 what a human holder sees it late by over the network — so a bot holding a tie is
 beaten by the same jukes a human would be. A tied attacker the feed is coming to

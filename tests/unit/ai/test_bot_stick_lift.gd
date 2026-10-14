@@ -139,6 +139,34 @@ func test_a_bot_ties_nobody_with_the_puck_nowhere_near_the_man() -> void:
 	assert_false(sm._stick_tie_aim(s, me, s.skater_states[SELF_ID], _covering_the_man()).is_finite())
 
 
+func test_a_puck_already_on_his_blade_starts_no_tie() -> void:
+	# Loose for a tick under his own stickhandle or a contested pickup, the puck
+	# sitting on his blade still reads as a path reaching him. It is his puck,
+	# not a feed: tying him then is a stick check on the handler.
+	var s: WorldSnapshot = _feed_snap()
+	s.puck_state.position = s.skater_states[OPP_ID].blade_contact_world
+	s.puck_state.velocity = Vector3(0.0, 0.0, -6.0)
+	var x: float = 0.9 + (sm._blade_reach + sm._stick_lift_reach) * 0.5
+	var me := Vector3(x, 0.0, -0.6)
+	s.skater_states[SELF_ID].position = me
+	assert_false(sm._stick_tie_aim(s, me, s.skater_states[SELF_ID], _covering_the_man()).is_finite(),
+			"a puck already at his blade is not a feed to deny")
+
+
+func test_a_tie_already_made_holds_through_the_arrival() -> void:
+	# The other half: once tied, the feed reaching his blade is the reception
+	# the tie exists to deny, so the hold must not let go as it lands.
+	var s: WorldSnapshot = _feed_snap()
+	s.puck_state.position = Vector3(0.9, 0.0, 0.0)
+	var x: float = 0.9 + (sm._blade_reach + sm._stick_lift_reach) * 0.5
+	var me := Vector3(x, 0.0, -0.6)
+	s.skater_states[SELF_ID].position = me
+	s.skater_states[SELF_ID].stick_tied = true
+	s.skater_states[OPP_ID].stick_tied = true
+	assert_true(sm._stick_tie_aim(s, me, s.skater_states[SELF_ID], _covering_the_man()).is_finite(),
+			"the tie holds while the feed arrives")
+
+
 func test_a_tied_bot_the_feed_is_coming_to_pulls_its_stick_away() -> void:
 	var s: WorldSnapshot = _feed_snap()
 	var me: SkaterNetworkState = s.skater_states[SELF_ID]

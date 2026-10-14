@@ -142,7 +142,7 @@ func tie_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 	var self_tied: bool = self_state != null and self_state.stick_tied
 	if man == null or (man.stick_tied and not self_tied) \
 			or not _man_is_a_live_target(snapshot, self_pos, decision.locked_man_pid, man,
-					blade_reach) \
+					blade_reach, self_tied) \
 			or not AIStickTieRead.shaft_in_reach(self_pos, man.top_hand_world,
 					man.blade_contact_world, stick_lift_reach):
 		_stick_tie_holding = false
@@ -168,16 +168,23 @@ func step_tie_follow(man: SkaterNetworkState) -> Vector3:
 
 # The puck is coming to him — a loose puck whose path reaches his blade, or his
 # carrier with an open lane — and we could not have got a stick on it ourselves.
+# A tie is only STARTED on a puck still on its way: one already at his blade is
+# his, loose for a tick under his own stickhandle or a contested pickup. A tie
+# already made (`self_tied`) holds through the arrival, which is the reception it
+# exists to deny.
 func _man_is_a_live_target(snapshot: WorldSnapshot, self_pos: Vector3, man_pid: int,
-		man: SkaterNetworkState, blade_reach: float) -> bool:
+		man: SkaterNetworkState, blade_reach: float, self_tied: bool) -> bool:
 	var puck: PuckNetworkState = snapshot.puck_state
 	var carrier_pid: int = puck.carrier_peer_id
 	if carrier_pid == man_pid:
 		return false
 	if carrier_pid == -1:
+		var receive_reach: float = PuckController.PICKUP_RADIUS + AIStickTieRead.RECEIVER_STEP_M
+		if not self_tied and AIStickTieRead.puck_within(puck.position,
+				man.blade_contact_world, receive_reach):
+			return false
 		return AIStickTieRead.path_passes_within(puck.position, puck.velocity,
-				man.blade_contact_world,
-				PuckController.PICKUP_RADIUS + AIStickTieRead.RECEIVER_STEP_M) \
+				man.blade_contact_world, receive_reach) \
 				and not AIStickTieRead.path_passes_within(puck.position, puck.velocity,
 						self_pos, blade_reach)
 	if _team_id_by_peer.get(carrier_pid, -1) == _team_id:
