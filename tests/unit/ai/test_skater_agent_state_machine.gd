@@ -695,14 +695,14 @@ func _self_snap(self_pos: Vector3, have_puck: bool) -> WorldSnapshot:
 func test_press_state_ignores_dispatch_throttle() -> void:
 	# A non-press state with a pending skip counter would reuse its cached
 	# decision; a press state must always dispatch full (charge timing is
-	# tick-sensitive). Exercised via the dump's one-tick quick release.
+	# tick-sensitive). Exercised via a dump's charge starting on this tick.
 	sm._state = Agent.State.PASS_PRESSED
 	sm._dump_target = Vector3(12, 0, 0)
 	sm._dispatch_skip_counter = 5
 	var i := InputState.new()
 	sm.dispatch(i, _self_snap(Vector3.ZERO, true))
-	assert_true(i.quick_pass_pressed, "press states are never throttled")
-	assert_eq(sm.get_state(), Agent.State.CARRY)
+	assert_true(i.shoot_pressed, "press states are never throttled")
+	assert_eq(sm.get_state(), Agent.State.PASS_PRESSED, "the charge holds the state")
 
 
 # ── SHOOT_PRESSED (multi-tick wrister charge) ────────────────────────────────
@@ -1212,34 +1212,16 @@ func test_pass_pressed_charged_releases_after_windup() -> void:
 	assert_eq(sm._pass_target_peer_id, -1, "release clears the pass target")
 
 
-func test_pass_pressed_dump_clear_chips_high_and_clears() -> void:
-	# A DZ clear-out: dump_target set, not soft. PASS_PRESSED fires a one-tick
-	# quick release aimed at the location, lifted HIGH to chip over sticks into
-	# the neutral zone — never a charged wind-up.
-	sm._state = Agent.State.PASS_PRESSED
-	sm._pass_should_charge = true         # a charge flag must NOT survive a dump
-	sm._dump_target = Vector3(12, 0, 0)   # a location, no receiver
-	sm._dump_is_soft = false
-	var i := InputState.new()
-	sm.dispatch(i, _self_snap(Vector3.ZERO, true))
-	assert_true(i.quick_pass_pressed, "a dump fires the one-tick quick release")
-	assert_eq(i.elevation_level, ShotMechanics.ELEVATION_HIGH, "a clear-out chips HIGH")
-	assert_eq(sm.get_state(), Agent.State.CARRY, "the dump is a one-tick press")
-	assert_false(sm._dump_target.is_finite(), "firing clears the dump target")
-
-
 func test_pass_pressed_dump_in_charges_flat_at_the_searched_pace() -> void:
-	# A dump-in past centre is the ONE dump that charges. Its depth IS its pace
-	# (AIActionScoring.solve_dump_in searches it), and the one-tick quick release
-	# only fires at the fixed quick-pass pace — which out-slides the rink twice
-	# over, so a chip at it comes back off the end boards. So the dump-in takes
-	# the charged wrister at _dump_launch_speed, FLAT: a charged release
-	# normalizes (dir.x, tan, dir.z) at its power, so any loft spends pace going
-	# up and the puck's ground speed stops being the number the pace ladder
-	# solved the runout from.
+	# A dump-in's depth IS its pace (AIActionScoring.solve_dump_in searches it),
+	# and the one-tick quick release only fires at the fixed quick-pass pace —
+	# which out-slides the rink twice over. So the dump-in takes the charged
+	# wrister at _dump_launch_speed, FLAT: a charged release normalizes
+	# (dir.x, tan, dir.z) at its power, so any loft spends pace going up and the
+	# puck's ground speed stops being the number the pace ladder solved the
+	# runout from.
 	sm._state = Agent.State.PASS_PRESSED
 	sm._dump_target = Vector3(-11, 0, -20)
-	sm._dump_is_soft = true
 	sm._dump_launch_speed = 12.0
 	var i := InputState.new()
 	sm.dispatch(i, _self_snap(Vector3.ZERO, true))
@@ -1278,22 +1260,6 @@ func test_pass_pressed_rim_charges_flat_at_its_searched_pace() -> void:
 	assert_eq(sm._pass_target_speed, 26.4, "…at the pace its search walked")
 
 
-func test_pass_pressed_dump_clear_stays_a_one_tick_release() -> void:
-	# The other half of the split: only the dump-IN charges. A DZ clear is a last
-	# resort under pressure — getting the puck gone NOW beats a wind-up that gets
-	# stripped mid-swing — so it keeps the one-tick quick release even though the
-	# carrier hands it a launch speed.
-	sm._state = Agent.State.PASS_PRESSED
-	sm._dump_target = Vector3(12, 0, 0)
-	sm._dump_is_soft = false
-	sm._dump_launch_speed = 11.0
-	var i := InputState.new()
-	sm.dispatch(i, _self_snap(Vector3.ZERO, true))
-	assert_true(i.quick_pass_pressed, "a clear still fires the one-tick release")
-	assert_false(sm._pass_should_charge, "…and never charges")
-	assert_eq(sm.get_state(), Agent.State.CARRY, "the clear is a one-tick press")
-
-
 func test_pass_pressed_dump_lost_puck_clears_target() -> void:
 	# Puck knocked loose before the dump fires — bail clears the dump target so a
 	# later PASS/DUMP starts fresh.
@@ -1325,7 +1291,6 @@ class _CarrierStub extends AIRoleCarrier:
 	var next_anchor: Vector3 = Vector3.ZERO
 	var next_pass_target: int = -1
 	var next_dump_target: Vector3 = Vector3.INF
-	var next_dump_is_soft: bool = false
 
 	func decide(_ctx: RoleContext) -> RoleDecision:
 		decide_calls += 1
@@ -1333,7 +1298,6 @@ class _CarrierStub extends AIRoleCarrier:
 		last_carry_anchor = next_anchor
 		pass_target_peer_id = next_pass_target
 		dump_target = next_dump_target
-		dump_is_soft = next_dump_is_soft
 		return RoleDecision.new()
 
 	func clear_intent() -> void:
@@ -1427,7 +1391,6 @@ func test_carry_dump_intent_commits_and_freezes_target() -> void:
 	var stub := _stub_carry(AIRoleCarrier.INTENT_CARRY)
 	stub.next_intent = AIRoleCarrier.INTENT_DUMP
 	stub.next_dump_target = Vector3(12, 0, 5)
-	stub.next_dump_is_soft = false
 	sm._intent_max_wait_ticks = 0
 	var s := _self_snap(Vector3.ZERO, true)
 	var landed: int = -1

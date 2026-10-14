@@ -1495,8 +1495,8 @@ static func potential_realization_discount(pos: Vector3,
 # ── Dump races ────────────────────────────────────────────────────────────────
 # The race primitives the dump searches (below, and AICarrierDumpSearch)
 # and the rim pricing read. The dump itself is a residual, never entered in the
-# value compete — see Scripts/domain/ai/CLAUDE.md → "Dumps are searched
-# RELEASES".
+# value compete — see Scripts/domain/ai/CLAUDE.md → "The dump-in is a
+# searched RELEASE".
 
 # The head-start that turns a 50/50 loose-puck race into a near-sure recovery:
 # a stride, expressed as the TIME a stride buys at reference pace, because the
@@ -1858,17 +1858,16 @@ static func counter_rush_cost(
 	return loss_prob * threat * delay_discount(t_counter)
 
 
-# ── Dump delivery search ─────────────────────────────────────────────────────
-# A dump is a RELEASE, not a spot: both dumps search launches and read where
-# each one actually comes to rest (AITrajectory.puck_release_landing). The DZ
-# clear filters for legal launches (dump_clear_candidates); the NZ dump-in is
-# scored on winning the race to the resting spot (solve_dump_in). See
-# Scripts/domain/ai/CLAUDE.md → "Dumps are searched RELEASES".
+# ── Dump-in search ──────────────────────────────────────────────────────────
+# A dump-in is a RELEASE, not a spot: it searches launches and reads where each
+# one actually comes to rest (AITrajectory.puck_release_landing), scored on
+# winning the race there (solve_dump_in). See Scripts/domain/ai/CLAUDE.md →
+# "The dump-in is a searched RELEASE".
 
-# Launch bearings tried per dump, as offsets from the aim axis. Spread wide
-# enough to include the steep bank into the near boards — the delivery that
-# makes a DZ clear legal — and dense enough that the corner it wraps into is
-# resolved. Each bearing is one closed-form landing solve.
+# Launch bearings tried per dump-in, as offsets from the aim axis. Spread wide
+# enough to include the steep bank into the near boards, and dense enough that
+# the corner it wraps into is resolved. Each bearing is one closed-form landing
+# solve.
 const DUMP_SEARCH_BEARINGS_RAD: Array = [
 	-1.20, -0.90, -0.60, -0.30, 0.0, 0.30, 0.60, 0.90, 1.20,
 ]
@@ -1913,57 +1912,6 @@ static func keeper_collects_first(spot: Vector3, keeper_pos: Vector3,
 			<= ours / maxf(chaser_speed, 0.001)
 
 
-# Hang time (s) of a release at `loft_level` — the airborne window, 2·vy/g;
-# 0 for any level without a fixed vertical launch (FLAT, MID).
-static func dump_loft_hang_s(loft_level: int) -> float:
-	var vy: float = 0.0
-	if loft_level == ShotMechanics.ELEVATION_LOW:
-		vy = GameRules.DEFAULT_LOFT_VY_LOW_M_S
-	elif loft_level == ShotMechanics.ELEVATION_HIGH:
-		vy = GameRules.DEFAULT_LOFT_VY_HIGH_M_S
-	return 2.0 * vy / GameRules.GRAVITY_M_S2
-
-
-# The DZ clear: enumerate the launches it is LEGAL to make, and leave the
-# choosing to the caller.
-#
-# Two refusals, both DOCTRINE rather than valuation — filters, never penalties
-# a good enough price could outvote:
-#   ICES — a launch that reaches their goal line starts a hybrid icing race.
-#     Legality is bought by the PATH: a steep bank into the near boards sheds
-#     pace on contact and lengthens the route, so the puck dies before the line.
-#   DOESN'T CLEAR — a launch that comes to rest still inside our own zone.
-#
-# It does not CHOOSE among the survivors — `AICarrierDumpSearch.search` does, in
-# CONCESSION. Never rank here by depth: that ranks in metres while the caller
-# prices in concession.
-#
-# `out_vels` / `out_spots` are caller-owned and index-matched (the caller-owned
-# out-param pattern — the search allocates nothing on the compete path). Returns
-# the candidate count; 0 means no legal clear exists from here, which leaves the
-# caller to decide what to do with a puck that cannot be cleared at all.
-static func dump_clear_candidates(origin: Vector3, up_ice_dir: float,
-		launch_speed: float, loft_level: int, our_net: Vector3,
-		out_vels: Array[Vector3], out_spots: Array[Vector3]) -> int:
-	var hang_s: float = dump_loft_hang_s(loft_level)
-	# Their goal line is the one icing is judged at: up-ice of us.
-	var their_line_z: float = up_ice_dir * GameRules.GOAL_LINE_Z
-	var axis := Vector3(0.0, 0.0, up_ice_dir)
-	out_vels.clear()
-	out_spots.clear()
-	for offset: float in DUMP_SEARCH_BEARINGS_RAD:
-		var vel: Vector3 = axis.rotated(Vector3.UP, offset) * launch_speed
-		var landing: Transform3D = AITrajectory.puck_release_landing(
-				origin, vel, hang_s, their_line_z, up_ice_dir)
-		if landing.basis.x.x > 0.5:
-			continue
-		if in_offensive_zone(landing.origin, our_net):
-			continue  # dies in our own zone — that is not a clear
-		out_vels.append(vel)
-		out_spots.append(landing.origin)
-	return out_spots.size()
-
-
 # The NZ dump-in: search launches — BEARING x PACE — and take the one whose
 # RESTING spot we are most likely to win. `out_landing` receives the chosen spot
 # and `max_launch_speed` bounds the pace ladder (the top of the dumper's own
@@ -1976,12 +1924,11 @@ static func dump_clear_candidates(origin: Vector3, up_ice_dir: float,
 # AICarrierDumpSearch prices. No icing branch: this dump is only offered past the red
 # line, and icing requires a release from our own half.
 static func solve_dump_in(origin: Vector3, attacking_goal: Vector3,
-		max_launch_speed: float, loft_level: int,
+		max_launch_speed: float,
 		our_chasers: Array[Vector3], opp_chasers: Array[Vector3],
 		keeper_pos: Vector3, out_landing: Array[Vector3],
 		our_vels: Array[Vector3] = EMPTY_VEC3,
 		opp_vels: Array[Vector3] = EMPTY_VEC3) -> Vector3:
-	var hang_s: float = dump_loft_hang_s(loft_level)
 	var goal_dir: float = signf(attacking_goal.z)
 	var axis := Vector3(0.0, 0.0, goal_dir)
 	var best_vel: Vector3 = Vector3.ZERO
@@ -1993,9 +1940,7 @@ static func solve_dump_in(origin: Vector3, attacking_goal: Vector3,
 		var dir: Vector3 = axis.rotated(Vector3.UP, offset)
 		for frac: float in DUMP_SEARCH_PACE_FRACS:
 			var vel: Vector3 = dir * (floor_speed + band * frac)
-			var landing: Transform3D = AITrajectory.puck_release_landing(
-					origin, vel, hang_s)
-			var spot: Vector3 = landing.origin
+			var spot: Vector3 = AITrajectory.puck_release_landing(origin, vel)
 			# A dump-in that does not get the puck deeper than we already are is
 			# not a dump-in; it is a giveaway in the neutral zone.
 			if goal_dir * (spot.z - origin.z) <= 0.0:

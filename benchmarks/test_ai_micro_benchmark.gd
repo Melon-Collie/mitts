@@ -383,7 +383,7 @@ func test_evaluator_costs() -> void:
 	var chasers: Array[Vector3] = [from, Vector3(6, 0, -2)]
 	var landing_out: Array[Vector3] = [Vector3.ZERO]
 	_bench("solve_dump_in (9 bearings x 4 paces, 5 def)", func() -> void:
-		AIActionScoring.solve_dump_in(from, net, 28.0, ShotMechanics.ELEVATION_FLAT,
+		AIActionScoring.solve_dump_in(from, net, 28.0,
 				chasers, opps, net, landing_out))
 
 	# Puck-path integration, at the horizons a settle-point read needs. These are

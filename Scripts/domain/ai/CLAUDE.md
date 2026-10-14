@@ -701,48 +701,41 @@ remains.
   ("did *anybody* go?") over perturbation families, since every individual
   decision in that failure is defensible. The attacking-zone mirror is #604.
 
-- **Dumps are searched RELEASES, priced where the puck stops**
-  (`AIActionScoring.dump_clear_candidates` / `solve_dump_in` over
-  `AITrajectory.puck_release_landing`). Any pace the bot produces out-slides the
-  rink several times over, so an aim point is only a place the puck passes
-  through; the concession is priced at the landing. The landing solve is CLOSED
-  FORM (straight legs under constant deceleration between board contacts,
-  mirroring `clamp_to_rink_inner` including the corner arcs), because the stepped
-  walk costs as much as the whole `controlled_space` fan.
-  - **The DZ clear** takes, among the launches it is LEGAL to make, the one we
-    concede least by. Two doctrine filters, which no price can outvote: a launch
-    that reaches their goal line starts an icing race we have no reason to run,
-    and one that comes to rest inside our zone cleared nothing. Among the
-    survivors the RACE decides; depth is only the tie-break. It stays a pure
-    concession (value ≤ 0): crediting the race it wins makes a clear beat
-    carrying where a clean regroup exists. It fires at the fixed quick-pass pace
-    (#653).
-  - **The NZ dump-in** is offensive and scored on the race to the resting spot,
-    with no icing branch (it is only offered past the red line). Its search runs
-    bearing × PACE and fires FLAT on the charged wrister, because a charged
-    release normalizes `(dir.x, tan, dir.z)` at its power and any loft would spend
-    the pace the runout was solved from. The **keeper is a body in the race**
+- **The dump-in is a searched RELEASE, priced where the puck stops**
+  (`AIActionScoring.solve_dump_in` over `AITrajectory.puck_release_landing`).
+  Any pace the bot produces out-slides the rink several times over, so an aim
+  point is only a place the puck passes through; the race is priced at the
+  landing. The landing solve is CLOSED FORM (straight legs under constant
+  deceleration between board contacts, mirroring `clamp_to_rink_inner` including
+  the corner arcs), because the stepped walk costs as much as the whole
+  `controlled_space` fan.
+  - It is offensive and scored on the race to the resting spot, with no icing
+    branch (it is only offered past the red line). Its search runs bearing ×
+    PACE and fires FLAT on the charged wrister, because a charged release
+    normalizes `(dir.x, tan, dir.z)` at its power and any loft would spend the
+    pace the runout was solved from. The **keeper is a body in the race**
     (`keeper_collects_first`), or the doorstep reads as a free recovery. The gain
     is realization-discounted like every other future-value read.
-  - **Both races are arrival races** through `time_to_arrive` — the chase clock
+  - **The race is an arrival race** through `time_to_arrive` — the chase clock
     and the recovery probability (`chase_recovery`) alike — with the contest band
     expressed as the TIME a stride buys (`CHASE_CONTEST_MARGIN_S`); a metre band
-    saturates to 0 or 1 over the 30–40 m a clear travels. Both searches use EXACT
+    saturates to 0 or 1 over the 30–40 m a dump travels. The search uses EXACT
     prunes, never budgets.
   - **The dump is a residual, never a compete entry.** There is deliberately no
     third giveaway bar: the dump fires only when the strip-point-priced carry has
     non-positive EV, there is no drive-in, and no qualified fire exists. Scored
     and entered in the value compete, it out-scores an open carrier on an empty
     rink, wins whenever the carry is contested, and the softest release keeps
-    winning because its landing puts the puck in the slot. In our own zone the
-    drive-in gets no vote (it is benefit-only and would veto every clear); past
-    centre it does, because a free entry must never be flung away.
-  - **Icing is a race, not a distance** (`IcingRace`, starting when the puck
-    reaches the goal line), so legality is bought by the PATH: a steep bank sheds
-    roughly half its pace where a glancing rim sheds ~7%. Loft buys passage over
-    sticks, not clock.
+    winning because its landing puts the puck in the slot. Past centre the
+    drive-in gets a vote, because a free entry must never be flung away.
+  - **There is no defensive-zone clear.** A carrier in his own half with
+    nothing worth keeping the puck for still keeps it — protects, takes the hit,
+    or moves it with a qualified pass, the rim up the wall included. Do not
+    bring back a chip-it-out residual: it fired whenever the carry went
+    non-positive and floated the puck to spots that handed it over.
   - Bounded by `test_puck_release_landing.gd` (cross-validated against the
-    stepped integrator) and the dump fixtures in `test_role_carrier.gd`.
+    stepped integrator) and the dump fixtures in `test_role_carrier.gd`
+    (`test_no_dump_from_our_own_zone` holds the last point).
 
 - **Rims are passes whose lane is the boards** (`AIRimPass`; each receiver's
   best launch is ranked by `AICarrierPassSearch._rim_launch_for`, and only the single

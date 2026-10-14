@@ -1515,30 +1515,14 @@ func _own_slot_swarm_ctx(tight: bool) -> RoleContext:
 			[5, 1, Vector3(8.8, 0, 24.6)]])
 
 
-func test_best_dump_geometry_in_own_zone_is_a_hard_rim_out() -> void:
-	# Direct pin on what the DZ clear ACHIEVES, not on the bearing it picks.
-	# The clear is a searched release now, so the side it comes off is an
-	# outcome of the icing constraint and the ice in front of the carrier, not
-	# a formula — what has to hold is that the puck leaves our end and stays in
-	# play. dump.settle is the resting spot; dump.aim is only where the stick points.
-	var self_pos := Vector3(6, 0, 24)
-	var skaters: Array = [
-			[1, TEAM_ID, self_pos],
-			[3, 1, Vector3(6, 0, 22)],
-	]
-	var ctx: RoleContext = _make_ctx(self_pos, skaters)
-	var c := AIRoleCarrier.new()
-	c._field.fill(ctx)
-	var dump: AICarrierDumpSearch = _dumped(c, ctx, AIRoleReads.resolve_our_goalie_pos(ctx))
-	assert_false(dump.is_soft, "a DZ clear is a chip out, not a soft corner flip")
-	var settle: Vector3 = dump.settle
-	gut.p("  DZ clear from %s settles at %s" % [self_pos, settle])
-	assert_false(
-			AIActionScoring.in_offensive_zone(settle, ctx.defending_goal_pos),
-			"the clear takes the puck out of our defensive zone")
-	# And it does not ice: the release never reaches their goal line.
-	assert_lt(absf(settle.z), GameRules.GOAL_LINE_Z,
-			"the clear stays in play — no goal-line crossing")
+func test_no_dump_from_our_own_zone() -> void:
+	# Swarmed on the blade in our slot, retention is hopeless, and still nothing
+	# is flung away: the dump-in exists only past the red line, and there is no
+	# clear.
+	var ctx: RoleContext = _own_slot_swarm_ctx(true)
+	assert_eq(_searched_dump(ctx).value, -INF, "no dump applies in our own zone")
+	assert_ne(_decided(ctx).intended_action, AIRoleCarrier.INTENT_DUMP,
+			"the swarmed carrier keeps the puck or releases it, never dumps it")
 
 
 # Past centre, short of their blue line, nothing to pass to: a set stand-up line
@@ -1577,14 +1561,13 @@ func _dumped(c: AIRoleCarrier, ctx: RoleContext, our_goalie: Vector3) -> AICarri
 	return c._dump
 
 
-func test_a_dump_in_is_a_soft_flip_at_a_pace_the_release_can_fire() -> void:
+func test_a_dump_in_fires_at_a_pace_the_release_can_fire() -> void:
 	# The dump-in searches BEARING x PACE: every pace the bot can produce
 	# out-slides the rink several times over, so bearing alone cannot place it.
 	# The pace is a real choice off the ladder, inside the producible release band.
 	# Where it comes to rest is the race's outcome: the snapshot's row.
 	var ctx: RoleContext = _dump_in_ctx()
 	var dump: AICarrierDumpSearch = _searched_dump(ctx)
-	assert_true(dump.is_soft, "a dump-in is a soft flip")
 	assert_between(dump.launch_speed, GameRules.DEFAULT_WRISTER_POWER_MIN_M_S,
 			ctx.self_wrister_shot_speed,
 			"the launch pace sits in the band the release can actually fire")
@@ -2500,163 +2483,6 @@ func test_wheel_is_5v5_exclusive() -> void:
 			"no far-wall wheel exit exists in 3v3")
 
 
-func _rim_ctx(team_size: int, wall_lane_blocked: bool) -> RoleContext:
-	# Carrier pinned on our own wall by two forecheckers; the wall winger is
-	# posted up the boards on the rim's path; the rest of the ice is deep.
-	# The forecheck pins from the INSIDE shoulder (angling the carrier to
-	# the wall — the real geometry), which is exactly what leaves the wall
-	# lane itself as the one protected out.
-	#
-	# The bodies are placed against where the clear actually COMES TO REST. With
-	# the winger posted up the strong wall the search rims to him and the puck
-	# dies just past centre on that side (~(11.7, -2.8)), so the camped body is
-	# their retreating D standing on that spot. Both are derived from the
-	# delivery, not assumed: the release search is blind to skaters, so every
-	# scene here shares one candidate set and only the RACE for it moves — the
-	# camped test prints the settle it read, so a physics change that moves the
-	# landing shows the stale placement instead of hiding it.
-	var self_pos := Vector3(10.5, 0, 24.0)
-	var skaters: Array = [
-		[1, TEAM_ID, self_pos],
-		[2, TEAM_ID, Vector3(11.5, 0, 6.0)],
-		[3, 1, Vector3(8.8, 0, 23.0)],
-		[4, 1, Vector3(9.0, 0, 25.8)],
-		[5, 1, Vector3(0.0, 0, 15.0)],
-	]
-	if wall_lane_blocked:
-		skaters.append([6, 1, Vector3(11.7, 0, -2.8)])
-	var ctx := _make_ctx(self_pos, skaters)
-	ctx.team_size = team_size
-	return ctx
-
-
-func test_own_zone_clear_is_worth_more_with_a_winger_posted_to_win_it() -> void:
-	# The clear is not a pure concession: what it is worth is what we are likely
-	# to win back. A teammate posted where the puck comes to rest turns it into
-	# a completed breakout, and the value has to see that.
-	#
-	# This replaces a pin on the retired FLAT-rim delivery flag. The rim/chip
-	# choice no longer exists as a branch — a launch angled into the near boards
-	# IS the rim, and the landing solver walks its real carom — so what is
-	# assertable is the consequence, not the label. It is also no longer 5v5-only:
-	# the delivery value comes from the race, which every roster size runs.
-	var ctx := _rim_ctx(5, false)
-	var c := AIRoleCarrier.new()
-	c._field.fill(ctx)
-	var with_winger: AICarrierDumpSearch = _dumped(c, ctx, ctx.defending_goal_pos)
-	# Same scene with the wall post unmanned.
-	var bare := _make_ctx(Vector3(10.5, 0, 24.0), [
-			[1, TEAM_ID, Vector3(10.5, 0, 24.0)],
-			[3, 1, Vector3(8.8, 0, 23.0)],
-			[4, 1, Vector3(9.0, 0, 25.8)],
-			[5, 1, Vector3(0.0, 0, 15.0)]])
-	# Unmanned, our only chaser is the carrier himself — 44 m behind the resting
-	# puck and a full rink-length worse than their nearest body, so the race is
-	# lost outright and the clear pays its whole concession.
-	bare.team_size = 5
-	var c_bare := AIRoleCarrier.new()
-	c_bare._field.fill(bare)
-	var without: AICarrierDumpSearch = _dumped(c_bare, bare, bare.defending_goal_pos)
-	gut.p("  clear value: winger posted %.4f vs unmanned %.4f"
-			% [with_winger.value, without.value])
-	assert_gt(with_winger.value, without.value,
-			"a manned post makes the clear worth more than an unmanned one")
-
-
-# Retriever BEHIND our net with the forecheck committed, the wall winger posted
-# — the breakout harness's compete moment.
-func _behind_net_clear_ctx() -> RoleContext:
-	var self_pos := Vector3(2.0, 0, 28.2)
-	var ctx := _make_ctx(self_pos, [
-			[1, TEAM_ID, self_pos],
-			[2, TEAM_ID, Vector3(10.5, 0, 14.0)],      # wall winger posted
-			[3, 1, Vector3(3.5, 0, 25.8)],             # F1 chasing net-front
-			[4, 1, Vector3(6.5, 0, 22.0)],             # F2 inside shoulder
-			[5, 1, Vector3(0.0, 0, 15.0)]])            # high man in the middle
-	ctx.team_size = 5
-	return ctx
-
-
-# [the clear's value, where it comes to rest, the cost of instead losing the puck
-# in our slot]: the searched clear and a turnover, priced by one carrier.
-func _behind_net_clear() -> Array:
-	var ctx: RoleContext = _behind_net_clear_ctx()
-	var c := AIRoleCarrier.new()
-	c._field.fill(ctx)
-	var r: AICarrierDumpSearch = _dumped(c, ctx, ctx.defending_goal_pos)
-	var our_slot: Vector3 = ctx.defending_goal_pos + Vector3(0, 0, -6.0)
-	return [r.value, r.settle, c._field.turnover_cost(ctx, our_slot, 1.0, ctx.defending_goal_pos)]
-
-
-func test_behind_net_clear_is_a_real_play_under_a_committed_forecheck() -> void:
-	# Doctrine says clearing is the right play here, and it has to price that way:
-	# the searched release is the flown path, it is a pure concession (never a
-	# credit), it leaves our zone, and it concedes less than surrendering the puck
-	# in front of our own net would.
-	var clear: Array = _behind_net_clear()
-	gut.p("  behind-net clear settles at %s, value %.4f" % [clear[1], clear[0]])
-	assert_lte(clear[0], 0.0, "a clear is priced as a concession, never a credit")
-	assert_gt(clear[0], -clear[2],
-			"the clear concedes less than a turnover in our slot (%.4f)" % clear[2])
-	assert_false(
-			AIActionScoring.in_offensive_zone(clear[1], Vector3(0, 0, OUR_NET_Z)),
-			"and it actually leaves our zone")
-
-
-func test_the_clear_rims_to_the_wall_our_man_can_win() -> void:
-	# The search's whole job: among launches that are legal to make, take the one
-	# we concede least by. Which wall that is depends on who is standing there, so
-	# moving the posted winger across the ice moves the clear across with him —
-	# nothing else in the scene changes, and the release search itself is blind to
-	# skaters, so the candidate set is byte-identical in both runs.
-	#
-	# This is what the depth objective could not do. Ranked on metres-to-the-blue-
-	# line the two runs are the SAME ranking, so the clear fired at the same wall
-	# whether or not anyone was there to win it (#650).
-	var self_pos := Vector3(10.5, 0, 24.0)
-	var forecheck: Array = [
-		[3, 1, Vector3(8.8, 0, 23.0)],
-		[4, 1, Vector3(9.0, 0, 25.8)],
-		[5, 1, Vector3(0.0, 0, 15.0)],
-	]
-	var settles: Array[Vector3] = []
-	for post: Vector3 in [Vector3(11.5, 0, 6.0), Vector3(-11.5, 0, 6.0)]:
-		var skaters: Array = [[1, TEAM_ID, self_pos], [2, TEAM_ID, post]]
-		skaters.append_array(forecheck)
-		var ctx := _make_ctx(self_pos, skaters)
-		ctx.team_size = 5
-		var c := AIRoleCarrier.new()
-		c._field.fill(ctx)
-		settles.append(_dumped(c, ctx, ctx.defending_goal_pos).settle)
-	gut.p("  clear settles: strong-side post %s vs far-side post %s"
-			% [settles[0], settles[1]])
-	assert_gt(settles[0].x, 0.0, "with the winger up the strong wall, rim it there")
-	assert_lt(settles[1].x, 0.0, "post him on the far wall and the rim follows him")
-
-
-func test_a_camped_wall_lane_makes_the_clear_worth_less() -> void:
-	# A body sitting where the clear comes to rest is priced by the race, not by
-	# a lane test on a modelled route: he is simply nearer the resting puck, so
-	# our recovery odds drop and the clear is worth less. Same scene, one
-	# opponent added on the resting spot (see _rim_ctx). The candidate set is
-	# identical in both runs — the release search reads only geometry — so what
-	# this measures is purely the race: either the same clear costs more with him
-	# standing on it, or the search backs off to a different wall that costs more
-	# than the one he took away. Both are the assertion below.
-	var open_ctx := _rim_ctx(5, false)
-	var c_open := AIRoleCarrier.new()
-	c_open._field.fill(open_ctx)
-	var open_r: AICarrierDumpSearch = _dumped(c_open, open_ctx, open_ctx.defending_goal_pos)
-	var ctx := _rim_ctx(5, true)
-	var c := AIRoleCarrier.new()
-	c._field.fill(ctx)
-	var r: AICarrierDumpSearch = _dumped(c, ctx, ctx.defending_goal_pos)
-	gut.p("  clear settles open %s camped %s" % [open_r.settle, r.settle])
-	gut.p("  clear value: open lane %.4f vs camped %.4f" % [open_r.value, r.value])
-	assert_lt(r.value, open_r.value,
-			"a body camped where the clear lands lowers our odds of winning it")
-
-
 func test_developing_feed_watches_the_over_valve_in_5v5() -> void:
 	# The OVER: the partner D swinging across the TOP of our zone (the legal
 	# D-to-D lane over the slot box's upper edge) is a developing feed worth
@@ -2825,7 +2651,6 @@ func test_a_rim_commits_as_a_flat_charged_release_along_its_bearing() -> void:
 	assert_eq(c.intended_action, AIRoleCarrier.INTENT_DUMP,
 			"pinned on his own goal line with the lane cut, he rims it")
 	assert_true(c.dump_is_rim, "the dump release fires FLAT as a rim")
-	assert_false(c.dump_is_soft)
 	assert_eq(c.pass_target_peer_id, c._phase_best_pass_peer, "…to the receiver it was priced to")
 	assert_eq(c.dump_launch_speed, c._phase_best_pass_rim_pace, "…at its searched pace")
 	var puck: Vector3 = ctx.snapshot.puck_state.position
@@ -2900,11 +2725,6 @@ func test_carrier_calibration_snapshot() -> void:
 	snap.record("stick 1.6 m ahead on the presented puck: offset behind the body",
 			frontal.protect_offset.z)
 	snap.record("defender abreast 2.2 m off the hip: protect gain", _abreast_shield().protect_gain)
-	var clear: Array = _behind_net_clear()
-	var rest: Vector3 = clear[1]
-	snap.record("behind-net clear under a committed forecheck: value", clear[0])
-	snap.record("behind-net clear under a committed forecheck: rests at x", rest.x)
-	snap.record("behind-net clear under a committed forecheck: rests at z", rest.z)
 	var pinch: AIRoleCarrier = _pinch(_TIGHT_WALL_HALF_GAP)
 	snap.record("tight-wall pinch, open man wide: intent", _intent_name(pinch.intended_action))
 	snap.record("tight-wall pinch, open man wide: pass target", pinch.pass_target_peer_id)

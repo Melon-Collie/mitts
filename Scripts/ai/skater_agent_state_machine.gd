@@ -379,14 +379,10 @@ var _holds := AIShotHolds.new()
 # (_state_from_carrier_intent); this sentinel tells that state to aim at a
 # LOCATION and skip the receiver-close bail.
 #
-# The CLEAR (neither flag) is a last resort under pressure: a one-tick HIGH chip
-# at the fixed quick-pass pace, since a wind-up gets stripped mid-swing. The
-# offensive dump-in (`_dump_is_soft`) and the rim (`_dump_is_rim`) fire FLAT on
-# the charged wrister at `_dump_launch_speed`, because where each lands IS its
-# pace (AIActionScoring.solve_dump_in searches it) and the fixed quick pace
-# out-slides the rink.
+# Both dumps — the dump-in and the rim (`_dump_is_rim`) — fire FLAT on the
+# charged wrister at `_dump_launch_speed`, because where each lands IS its pace
+# (AIActionScoring.solve_dump_in searches it).
 var _dump_target: Vector3 = Vector3.INF
-var _dump_is_soft: bool = false
 var _dump_is_rim: bool = false
 var _dump_launch_speed: float = AIPuckLane.PASS_SPEED_M_S
 
@@ -1693,7 +1689,6 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		# _dump_target first, so the always-fresh pass mirror can't hijack a dump.)
 		if _carrier.intended_action == AIRoleCarrier.INTENT_DUMP:
 			_dump_target = _carrier.dump_target
-			_dump_is_soft = _carrier.dump_is_soft
 			_dump_is_rim = _carrier.dump_is_rim
 			_dump_launch_speed = _carrier.dump_launch_speed
 		else:
@@ -1797,15 +1792,13 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 
 
 # True when `intent` fires as a charged wrister (a shot, a charged pass, or a
-# dump-in / rim) rather than the one-tick quick release.
+# dump) rather than the one-tick quick release.
 func _release_is_charged(intent: State) -> bool:
 	if intent == State.SHOOT_PRESSED:
 		return true
 	if intent != State.PASS_PRESSED:
 		return false
-	if _dump_target.is_finite():
-		return _dump_is_soft or _dump_is_rim
-	return _pass_should_charge
+	return _dump_target.is_finite() or _pass_should_charge
 
 
 # The carried puck's offset off the body, world XZ.
@@ -2265,18 +2258,12 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 	if is_dump:
 		_pass_should_saucer = false
 		_pass_target_peer_id = -1
-		# The clear's HIGH chip lifts over every stick to the blue line; it fires
-		# on the quick-pass path, whose loft leaves ground speed alone.
-		if _dump_is_soft or _dump_is_rim:
-			input.elevation_level = ShotMechanics.ELEVATION_FLAT
-		else:
-			input.elevation_level = ShotMechanics.ELEVATION_HIGH
 		# FLAT is load-bearing on the charged path: release_wrister normalizes
 		# (dir.x, tan, dir.z) at `power`, so any loft spends pace going up and the
 		# ground speed stops being the pace the landing search solved.
-		_pass_should_charge = _dump_is_soft or _dump_is_rim
-		if _pass_should_charge:
-			_pass_target_speed = _dump_launch_speed
+		input.elevation_level = ShotMechanics.ELEVATION_FLAT
+		_pass_should_charge = true
+		_pass_target_speed = _dump_launch_speed
 
 	_apply_brake_steering(input, snapshot, self_pos)
 	# Saucer: LOW loft over a contested mid-lane stick. Set every tick (the level
@@ -2293,7 +2280,7 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 			self_pos, _pass_aim_point(snapshot, self_pos))
 
 	if not _pass_should_charge:
-		# ── Quick release: one tick (only the clear dump takes this path) ──
+		# ── Quick release: one tick ──
 		# SNAP the cursor ONTO the aim before firing — the release happens on the
 		# tick it is decided, so a motion-limited step would fire from wherever
 		# the carry left the cursor:
@@ -2309,14 +2296,11 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 		_mouse_pos_initialized = true
 		input.mouse_world_pos = _step_mouse_toward(clean_pass_aim)
 		if DEBUG_DECISIONS:
-			debug_last_decision = ("DUMP%s" % ("↝corner" if _dump_is_soft
-					else ("↝rim" if _dump_is_rim else "↝out"))) \
-					if is_dump else "PASS→%s" % target_slot_label
+			debug_last_decision = "PASS→%s" % target_slot_label
 		# The quick-pass button fires this tick from carry at the fixed pass
-		# power. Clear the target so a future PASS/DUMP picks a fresh one.
+		# power. Clear the target so a future PASS picks a fresh one.
 		input.quick_pass_pressed = true
 		_pass_target_peer_id = -1
-		_dump_target = Vector3.INF
 		_set_state(State.CARRY)
 		return
 
@@ -2335,7 +2319,10 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 				return
 
 	if DEBUG_DECISIONS:
-		debug_last_decision = "PASS+→%s" % target_slot_label
+		if is_dump:
+			debug_last_decision = "DUMP↝rim" if _dump_is_rim else "DUMP↝corner"
+		else:
+			debug_last_decision = "PASS+→%s" % target_slot_label
 
 	if _pass_charge_tick == 0:
 		# aim_dir comes from clean_pass_aim rather than the stepped mouse, so a

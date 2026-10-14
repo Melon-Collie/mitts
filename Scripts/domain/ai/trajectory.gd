@@ -397,9 +397,8 @@ static func time_until_on_blade_plane(pos: Vector3, vel: Vector3,
 
 
 # ── Released-puck landing, closed form ───────────────────────────────────────
-# Where a released puck comes to REST, and whether it crossed a goal line on the
-# way. The dump eval prices its concession where the puck stops, not at a spot
-# it aims through at speed.
+# Where a released puck comes to REST. The dump-in prices its race where the
+# puck stops, not at a spot it aims through at speed.
 #
 # Closed form rather than a stepped walk because the answer is wanted per
 # delivery inside the carrier's compete, and a full stepped runout is hundreds of
@@ -434,15 +433,6 @@ static func puck_runout_m(speed: float) -> float:
 	if speed <= 0.0:
 		return 0.0
 	return speed * speed / (2.0 * GameRules.PUCK_ICE_DECEL_M_S2)
-
-
-# Inverse of the above: the fastest launch whose runout dies within
-# `distance_m`. Fed the distance to the far goal line, this is the icing bound
-# on a straight clear — no search, one sqrt.
-static func puck_launch_speed_for_runout(distance_m: float) -> float:
-	if distance_m <= 0.0:
-		return 0.0
-	return sqrt(2.0 * GameRules.PUCK_ICE_DECEL_M_S2 * distance_m)
 
 
 # Distance along `dir` (unit, XZ) from `p` to the first inner-board contact, and
@@ -523,43 +513,11 @@ static func _bounce_velocity(v: Vector2, inward_normal: Vector2) -> Vector2:
 	return out
 
 
-# Where a release comes to rest, and WHEN it reaches a given line.
-#
-# `hang_s` is airborne time (a chip / saucer): during it the puck carries its
-# launch speed with NO ice friction — height is why a flip covers ground a slide
-# cannot — and only then begins to run out.
-#
-# Returns a Transform3D (a value type, so nothing allocates on the compete path
-# — the same packing rationale as _step's return):
-#   origin   — the settle point
-#   basis.x  — (crossed, time_to_cross_s, total_time_s)
-#
-# `ice_line_z` / `ice_line_dir` (+1 = the line sits at greater z) name a line to
-# time the crossing of; pass dir = 0.0 to skip it. TIME is the point of this,
-# not the bare fact of crossing: hybrid icing is a RACE that starts when the
-# puck crosses the goal line (IcingRace), so a delivery earns its legality by
-# taking a longer PATH, and the dump eval needs the clock.
-static func puck_release_landing(origin: Vector3, vel: Vector3, hang_s: float,
-		ice_line_z: float = 0.0, ice_line_dir: float = 0.0) -> Transform3D:
+# Where a flat release comes to rest: straight slides under the ice decel
+# between board contacts, each contact the same carom as _step.
+static func puck_release_landing(origin: Vector3, vel: Vector3) -> Vector3:
 	var p := Vector2(origin.x, origin.z)
 	var v := Vector2(vel.x, vel.z)
-	var cross_t: float = INF
-	var elapsed: float = 0.0
-	# Airborne leg: straight and frictionless, boards ignored (the puck is above
-	# the kickplate and the glass is not modelled as a carom surface here).
-	if hang_s > 0.0 and v.length() > _RELEASE_MIN_SPEED_M_S:
-		var air_end: Vector2 = p + v * hang_s
-		if ice_line_dir != 0.0:
-			var f: float = _segment_line_fraction(p, air_end, ice_line_z, ice_line_dir)
-			if f >= 0.0:
-				cross_t = elapsed + hang_s * f
-		# Land a hair INSIDE the boundary the leg loop searches. clamp_to_rink_inner
-		# returns a float32 Vector2 that can round to either side of the boundary,
-		# and a start a rounding-width outside it makes _first_board_hit report no
-		# board at all — the puck would slide its whole runout through the wall.
-		p = GameRules.clamp_to_rink_inner(air_end,
-				GameRules.PUCK_COLLISION_RADIUS + _RELEASE_BOARD_EPS_M)
-		elapsed += hang_s
 	for _leg: int in _RELEASE_MAX_LEGS:
 		var speed: float = v.length()
 		if speed <= _RELEASE_MIN_SPEED_M_S:
@@ -569,16 +527,7 @@ static func puck_release_landing(origin: Vector3, vel: Vector3, hang_s: float,
 		var hit: Vector3 = _first_board_hit(p, dir, runout,
 				GameRules.PUCK_COLLISION_RADIUS)
 		var leg_len: float = runout if is_inf(hit.x) else hit.x
-		var leg_end: Vector2 = p + dir * leg_len
-		# Time to slide leg_len under constant decel: the root of
-		# leg_len = v*t - a*t^2/2 . A full runout leg simply takes v/a.
-		var leg_t: float = _slide_time(speed, leg_len)
-		if ice_line_dir != 0.0 and is_inf(cross_t):
-			var f: float = _segment_line_fraction(p, leg_end, ice_line_z, ice_line_dir)
-			if f >= 0.0:
-				cross_t = elapsed + _slide_time(speed, leg_len * f)
-		p = leg_end
-		elapsed += leg_t
+		p += dir * leg_len
 		if is_inf(hit.x):
 			v = Vector2.ZERO
 			break
@@ -592,45 +541,8 @@ static func puck_release_landing(origin: Vector3, vel: Vector3, hang_s: float,
 	# straight slide clamped to the surface, never settle it at the last contact.
 	var tail_speed: float = v.length()
 	if tail_speed > _RELEASE_MIN_SPEED_M_S:
-		var tail: Vector2 = p + v / tail_speed * puck_runout_m(tail_speed)
-		if ice_line_dir != 0.0 and is_inf(cross_t):
-			var f: float = _segment_line_fraction(p, tail, ice_line_z, ice_line_dir)
-			if f >= 0.0:
-				cross_t = elapsed + _slide_time(tail_speed, p.distance_to(tail) * f)
-		elapsed += tail_speed / GameRules.PUCK_ICE_DECEL_M_S2
-		p = GameRules.clamp_to_rink_inner(tail, GameRules.PUCK_COLLISION_RADIUS)
-	return Transform3D(
-			Basis(Vector3(0.0 if is_inf(cross_t) else 1.0,
-					0.0 if is_inf(cross_t) else cross_t, elapsed),
-					Vector3.ZERO, Vector3.ZERO),
-			Vector3(p.x, 0.0, p.y))
-
-
-# Time to slide `dist` starting at `speed` under the ice decel — the root of
-# dist = speed*t - a*t^2/2. Clamped at the stopping time, so asking for the
-# whole runout (or beyond) returns speed/a rather than a NaN off a negative
-# discriminant.
-static func _slide_time(speed: float, dist: float) -> float:
-	var a: float = GameRules.PUCK_ICE_DECEL_M_S2
-	var stop_t: float = speed / a
-	if dist <= 0.0:
-		return 0.0
-	var disc: float = speed * speed - 2.0 * a * dist
-	if disc <= 0.0:
-		return stop_t
-	return minf((speed - sqrt(disc)) / a, stop_t)
-
-
-# Fraction along segment a->b at which it first reaches `line_z` on the `dir`
-# side, or -1.0 if it never does. 0.0 when `a` is already past the line.
-static func _segment_line_fraction(a: Vector2, b: Vector2,
-		line_z: float, dir: float) -> float:
-	var a_past: float = a.y * dir - line_z * dir
-	var b_past: float = b.y * dir - line_z * dir
-	if a_past >= 0.0:
-		return 0.0
-	if b_past < 0.0:
-		return -1.0
-	return a_past / (a_past - b_past)
+		p = GameRules.clamp_to_rink_inner(p + v / tail_speed * puck_runout_m(tail_speed),
+				GameRules.PUCK_COLLISION_RADIUS)
+	return Vector3(p.x, 0.0, p.y)
 
 

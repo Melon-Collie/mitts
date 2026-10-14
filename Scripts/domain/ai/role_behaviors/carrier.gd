@@ -187,17 +187,14 @@ var shot_hold_share: float = 1.0
 # state machine to drive steering during CARRY.
 var last_carry_anchor: Vector3 = Vector3.ZERO
 
-# Set when intent commits to DUMP: the world spot to fire the puck at, and the
-# delivery kind — a soft flip (the dump-in), a FLAT rim (the rim PASS, see
-# AIRimPass), or the HIGH chip clear (neither flag). A rim is chosen as a pass
-# and released as a dump, because its aim is a bearing into the boards rather
-# than the receiver. Read by the state machine's dump release.
+# Set when intent commits to DUMP: the world spot to fire the puck at, and
+# whether it is the rim PASS (AIRimPass) rather than the dump-in. A rim is chosen
+# as a pass and released as a dump, because its aim is a bearing into the boards
+# rather than the receiver. Read by the state machine's dump release.
 var dump_target: Vector3 = Vector3.INF
-var dump_is_soft: bool = false
 var dump_is_rim: bool = false
-# Launch pace (m/s) a charged dump fires at: the dump-in's winning pace from
-# solve_dump_in's ladder, or the rim's searched pace. The clear is a fixed-pace
-# one-tick release and ignores it.
+# Launch pace (m/s) the dump fires at: the dump-in's winning pace from
+# solve_dump_in's ladder, or the rim's searched pace.
 var dump_launch_speed: float = AIPuckLane.PASS_SPEED_M_S
 
 # ── Puck-protect mirror (read by the state machine's carry blade aim) ────────
@@ -387,7 +384,6 @@ func reset() -> void:
 	shoot_now_hold = Vector3.ZERO
 	last_carry_anchor = Vector3.ZERO
 	dump_target = Vector3.INF
-	dump_is_soft = false
 	dump_is_rim = false
 	dump_launch_speed = AIPuckLane.PASS_SPEED_M_S
 	protect_offset = Vector3.ZERO
@@ -419,7 +415,6 @@ func clear_intent() -> void:
 	pass_target_speed = AIPuckLane.PASS_SPEED_M_S
 	pass_should_saucer = false
 	dump_target = Vector3.INF
-	dump_is_soft = false
 	dump_is_rim = false
 	dump_launch_speed = AIPuckLane.PASS_SPEED_M_S
 	_pick_action_cooldown = 0
@@ -866,13 +861,13 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	# -INF on the label means "nothing was conceded", not "a dump scored -INF".
 	debug_dump_score = -INF
 	# The dump is a RESIDUAL, never an option in the value compete — see
-	# Scripts/domain/ai/CLAUDE.md → "Dumps are searched RELEASES". Retention is
+	# Scripts/domain/ai/CLAUDE.md → "The dump-in is a searched RELEASE". Retention is
 	# hopeless only when BOTH reads of keeping the puck fail, because each is blind
 	# where the other sees: the raw carry is one beat ahead and cannot see the
 	# entry a carrier skates into by beating his man; the drive-in sees that but is
 	# benefit-only, so it cannot say a carry is doomed. In our own zone the
-	# drive-in gets no vote: it is positive for any carrier with a sliver of a lane
-	# and would veto every clear.
+	# drive-in gets no vote: it is positive for any carrier with a sliver of a lane,
+	# and would keep a doomed carrier from moving the puck in front of his own net.
 	var in_own_zone: bool = AIActionScoring.in_offensive_zone(
 			self_pos, ctx.defending_goal_pos)
 	var retention_hopeless: bool = raw_carry_score <= 0.0 \
@@ -892,7 +887,6 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 			new_intent = INTENT_DUMP
 			pass_target_peer_id = best_pass_peer
 			dump_target = puck_now + best_pass_rim_dir * AICarrierDumpSearch.DUMP_AIM_STANDOFF_M
-			dump_is_soft = false
 			dump_is_rim = true
 			dump_launch_speed = _phase_best_pass_rim_pace
 		elif new_intent == INTENT_PASS:
@@ -964,17 +958,16 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 			shot_hold_offset = shoot_now_hold
 			shot_hold_share = _shot_sample_share
 	elif retention_hopeless and not staggered:
-		# Last resort, and the ONLY place the delivery search runs. Its job is to
-		# pick WHICH delivery; its score is read only as availability (-INF where
-		# no dump applies), and with none available the bot keeps skating and
-		# the next re-eval looks again.
+		# Last resort, and the ONLY place the dump-in search runs. Its score is read
+		# only as availability (-INF where no dump-in applies — in our own half
+		# there is never one), and with none the bot keeps the puck and the next
+		# re-eval looks again.
 		_dump.search(ctx, our_goalie)
 		debug_dump_score = _dump.value
 		if _dump.value > -INF:
 			_hold_elapsed_s = 0.0
 			new_intent = INTENT_DUMP
 			dump_target = _dump.aim
-			dump_is_soft = _dump.is_soft
 			dump_is_rim = false
 			dump_launch_speed = _dump.launch_speed
 		else:

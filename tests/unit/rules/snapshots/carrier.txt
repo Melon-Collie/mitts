@@ -9,9 +9,6 @@ ahead man, defender in his path: intent	CARRY
 stick 1.6 m ahead on the presented puck: protect gain	0.6198
 stick 1.6 m ahead on the presented puck: offset behind the body	0.6235
 defender abreast 2.2 m off the hip: protect gain	0.2879
-behind-net clear under a committed forecheck: value	0.0000
-behind-net clear under a committed forecheck: rests at x	8.0217
-behind-net clear under a committed forecheck: rests at z	-6.8010
 tight-wall pinch, open man wide: intent	PASS
 tight-wall pinch, open man wide: pass target	2
 dead slot over the 8.5 m band, set keeper: shoot-now ratio	1.6567
@@ -60,7 +57,7 @@ standing 3 m out, keeper displaced to the backhand side: hold load share	1.0000
 dead-sharp beside the net, keeper on the near post: winning hold	(0.0, 0.0)
 69 deg off the normal, keeper squared 1.2 m out: intent	CARRY
 69 deg off the normal, keeper squared 1.2 m out: shoot-now value	0.0294
-swarmed on the blade in our slot: intent	DUMP
+swarmed on the blade in our slot: intent	CARRY
 swarmed in our slot a stride looser: intent	CARRY
 past centre, stand-up line at gap, open backfield: pick	CARRY to (-1.3, 0.1)
 past centre, a loose pair ahead: pick	CARRY to (0.0, -21.6)
