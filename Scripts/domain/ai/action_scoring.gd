@@ -779,23 +779,6 @@ static func expected_pass_speed(shooter: Vector3, receiver: Vector3) -> float:
 	return pass_launch_speed(shooter.distance_to(receiver), GameRules.DEFAULT_WRISTER_POWER_MAX_M_S)
 
 
-# Reference (league-average) top skating speed, shared with
-# SkaterController.max_speed via GameRules. A FALLBACK: a read with a peer in
-# view resolves his real top speed through AISkaterCaps (caps_by_peer). The
-# sites that price at this reference by design — the realization discount and
-# the counter-cover teammate races — say so at the site.
-const SKATER_REF_SPEED_M_S: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
-
-# Floor (m/s) for momentum-adverse `time_to_arrive` returns, so reverse
-# candidates get finite (large) ETAs rather than infinite ones.
-const MIN_TRAVEL_SPEED_M_S: float = 1.0
-
-# League-default all-direction thrust — the redirect authority a caps-less
-# time_to_arrive caller assumes for the cross-momentum shed. Per-bot callers
-# pass the skater's real AISkaterCaps.max_accel instead. Mirrors
-# SkaterController.thrust.
-const SHED_ACCEL_DEFAULT_M_S2: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
-
 # ── The delay discount ───────────────────────────────────────────────────────
 # A future action (a carry that arrives in `t` s, a pass in flight, a spot whose
 # shot must still be skated to) is worth less than the same value NOW, because
@@ -1746,7 +1729,7 @@ static func score_pass_value(
 		shot_type: int = ShotEvent.ShotType.SHOT) -> float:
 	if _is_past_goal_line(receiver, attacking_goal):
 		return 0.0
-	if pass_lane_blocked_by_net(shooter, receiver):
+	if AINetObstacle.pass_lane_blocked_by_net(shooter, receiver):
 		return 0.0
 	var lane: float = lane_clear(shooter, receiver, opponents, pass_speed_m_s,
 			EMPTY_VEC3, opponent_caps)
@@ -2147,7 +2130,7 @@ static func score_pass(
 		opponent_caps: Array = EMPTY_CAPS) -> float:
 	if _is_past_goal_line(receiver, attacking_goal):
 		return 0.0
-	if pass_lane_blocked_by_net(shooter, receiver):
+	if AINetObstacle.pass_lane_blocked_by_net(shooter, receiver):
 		return 0.0
 	# Lane-clear's reaction window scales with puck flight time, so pass the
 	# actual fire speed (expected_pass_speed). `precomputed_lane` (>= 0) lets a
@@ -2628,7 +2611,7 @@ static func position_potential(
 static func potential_realization_discount(pos: Vector3,
 		attacking_goal: Vector3) -> float:
 	var travel_dist: float = maxf(0.0, pos.distance_to(attacking_goal) - SLOT_RADIUS_M)
-	return delay_discount(travel_dist / SKATER_REF_SPEED_M_S)
+	return delay_discount(travel_dist / AIArrival.SKATER_REF_SPEED_M_S)
 
 
 # ── Dump races ────────────────────────────────────────────────────────────────
@@ -2642,7 +2625,7 @@ static func potential_realization_discount(pos: Vector3,
 # race below is run in time. A metre band saturates to 0 or 1 over the 30-40 m
 # a clear travels.
 const CHASE_CONTEST_MARGIN_M: float = 2.0
-const CHASE_CONTEST_MARGIN_S: float = CHASE_CONTEST_MARGIN_M / SKATER_REF_SPEED_M_S
+const CHASE_CONTEST_MARGIN_S: float = CHASE_CONTEST_MARGIN_M / AIArrival.SKATER_REF_SPEED_M_S
 
 
 # True when `pos` is on the attacking side of centre ice (z = 0) — past the red
@@ -2687,12 +2670,12 @@ static func chase_recovery(
 static func _first_arrival(target: Vector3, chasers: Array[Vector3],
 		vels: Array[Vector3]) -> float:
 	var has_vels: bool = vels.size() == chasers.size()
-	var vmax: float = maxf(SKATER_REF_SPEED_M_S, MIN_TRAVEL_SPEED_M_S)
+	var vmax: float = maxf(AIArrival.SKATER_REF_SPEED_M_S, AIArrival.MIN_TRAVEL_SPEED_M_S)
 	var best: float = INF
 	for i: int in chasers.size():
 		if chasers[i].distance_to(target) >= best * vmax:
 			continue
-		best = minf(best, time_to_arrive(chasers[i], target,
+		best = minf(best, AIArrival.time_to_arrive(chasers[i], target,
 				vels[i] if has_vels else Vector3.ZERO))
 	return best
 
@@ -2769,7 +2752,7 @@ static func threat_surface_pass(
 		net_half_width: float,
 		defenders: Array[Vector3],
 		defender_caps: Array = EMPTY_CAPS) -> float:
-	if pass_lane_blocked_by_net(carrier_pos, receiver_pos):
+	if AINetObstacle.pass_lane_blocked_by_net(carrier_pos, receiver_pos):
 		return 0.0
 	# Assume the opponent fires this hypothetical pass at the speed our bots
 	# would, or the quick-pass default overstates defender reaction time on
@@ -2876,7 +2859,7 @@ static func fill_counter_cover_etas(our_net: Vector3,
 	var cp: Vector3 = counter_point_for(our_net)
 	out_etas.clear()
 	for tm: Vector3 in teammates:
-		out_etas.append(tm.distance_to(cp) / SKATER_REF_SPEED_M_S)
+		out_etas.append(tm.distance_to(cp) / AIArrival.SKATER_REF_SPEED_M_S)
 
 
 static func counter_rush_cost(
@@ -2906,13 +2889,13 @@ static func counter_rush_cost(
 	var has_vels: bool = opponent_vels.size() == opponents.size()
 	var has_caps: bool = opponent_caps.size() == opponents.size()
 	for i: int in opponents.size():
-		var speed: float = SKATER_REF_SPEED_M_S
+		var speed: float = AIArrival.SKATER_REF_SPEED_M_S
 		if has_caps:
 			var caps: AISkaterCaps = opponent_caps[i]
 			if caps != null:
 				speed = caps.max_speed
 		var vel: Vector3 = opponent_vels[i] if has_vels else Vector3.ZERO
-		var t_collect: float = time_to_arrive(opponents[i], loss_point, vel, speed)
+		var t_collect: float = AIArrival.time_to_arrive(opponents[i], loss_point, vel, speed)
 		if t_collect < t_collect_best:
 			t_collect_best = t_collect
 		var t: float = t_collect + carry_dist / maxf(speed, 0.001)
@@ -2924,7 +2907,7 @@ static func counter_rush_cost(
 	# fastest collect, price the hardest feed to each other opponent and HIS
 	# carry home from rest, and let the min compete with the lone-carrier time.
 	for j: int in opponents.size():
-		var j_speed: float = SKATER_REF_SPEED_M_S
+		var j_speed: float = AIArrival.SKATER_REF_SPEED_M_S
 		if has_caps:
 			var j_caps: AISkaterCaps = opponent_caps[j]
 			if j_caps != null:
@@ -2937,7 +2920,7 @@ static func counter_rush_cost(
 		var t_pf: float = t_collect_best \
 				+ loss_point.distance_to(opponents[j]) \
 						/ GameRules.DEFAULT_WRISTER_POWER_MAX_M_S \
-				+ time_to_arrive(opponents[j], counter_point, Vector3.ZERO, j_speed)
+				+ AIArrival.time_to_arrive(opponents[j], counter_point, Vector3.ZERO, j_speed)
 		if t_pf < t_counter:
 			t_counter = t_pf
 
@@ -2958,7 +2941,7 @@ static func counter_rush_cost(
 				_scratch_counter_cover.append(cover_anchor)
 	else:
 		for tm: Vector3 in teammates:
-			if tm.distance_to(counter_point) / SKATER_REF_SPEED_M_S \
+			if tm.distance_to(counter_point) / AIArrival.SKATER_REF_SPEED_M_S \
 					+ setup_margin <= t_counter:
 				_scratch_counter_cover.append(cover_anchor)
 	if self_recover_pos.is_finite() \
@@ -3069,338 +3052,6 @@ static func pass_miss_loss_point(from: Vector3, receiver: Vector3) -> Vector3:
 # handling. Hands scales it (a better handler protects it further out / threads a
 # tighter seam) — callers pass the scaled value; this is the league default.
 const EVADE_CARRY_HANDLE_M: float = 0.9
-
-# ── Calibrated phase model ─────────────────────────────────────────────────────
-# The measured controller (SkaterMovementRules at 120 Hz driven by the real
-# steering — the velocity-matched seek plus the pivot brake, see
-# tests/unit/ai/test_time_to_arrive_calibration.gd, which pins every constant
-# here against simulated arrivals) decomposes into:
-#
-#   REDIRECT — cross-momentum beyond what the seek sheds for free. The
-#     velocity-matched anchor pull cancels cross-drift out of the thrust's
-#     spare headroom, so moderate drift costs nothing; only the EXCESS above
-#     VM_FREE_SHED_M_S pays, at the measured net shed rate.
-#   REVERSAL — velocity pointed away brakes out at the brake key's real
-#     stop decel and gives back the ground lost while braking.
-#   PURSUIT — the stride's own ramp at the NET push the movement model
-#     delivers after glide losses: constant accel up to the power knee,
-#     constant power above it (AIStrideRamp), up to top speed,
-#     then cruise. A standing start genuinely pays ~0.5 s over a plain
-#     dist/speed read; a full-speed head-on drive pays nothing.
-#
-# Never collapse this to `effective = ref + v_along` with the shed as a pure
-# delay: that credits a full-speed closer with up to DOUBLE top speed and hands
-# standing starts top speed for free. Errors vs the measured table are within
-# ~±20% on the clean families; short diagonal cuts at high speed (the
-# controller can overfly the catch window and circle once) run up to ~2× the
-# estimate.
-
-# Cross speed the velocity-matched seek redirects for free (costs no time).
-# Measured.
-const VM_FREE_SHED_M_S: float = 2.0
-# Net shed rate for cross speed beyond the free band. Measured.
-const VM_SHED_DECEL_M_S2: float = 11.0
-# Brake-key deceleration for reversals — the hockey stop itself.
-const REVERSAL_BRAKE_DECEL_M_S2: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
-
-
-# `ref_speed_m_s` is the actor's flat skating speed; `accel_m_s2` its all-direction
-# thrust (Acceleration-scaled) — both default to league references so cross-player
-# callers (opponent / teammate ETA, the loose-puck election that must stay
-# consistent across all bots) keep the shared baseline. A bot estimating ITS OWN
-# arrival passes its attribute-scaled top speed AND max_accel (a higher-Acceleration
-# build redirects and ramps faster, so it reaches an off-axis cut sooner).
-#
-# NET-AWARE: a route whose straight line crosses a cage prices the real
-# around-the-cage detour (_time_to_arrive_routed). The common open-ice case
-# pays only the cheap z-gate below (a segment that never reaches the goal line
-# cannot cross a cage).
-static func time_to_arrive(from_pos: Vector3, dest: Vector3,
-		from_velocity: Vector3, ref_speed_m_s: float = SKATER_REF_SPEED_M_S,
-		accel_m_s2: float = SHED_ACCEL_DEFAULT_M_S2,
-		lateral_grip: float = 1.0) -> float:
-	# Route only when the segment passes THROUGH a cage — an endpoint inside
-	# the inflated frame box is a conceptual "at the net" destination (race-
-	# home reads target the net center as their home proxy; a pinned body
-	# starts against the mesh) and keeps the direct model.
-	if maxf(absf(from_pos.z), absf(dest.z)) \
-			>= GameRules.GOAL_LINE_Z - CARRY_NET_CLEAR_MARGIN_M \
-			and carry_path_blocked_by_net(from_pos, dest) \
-			and not _point_in_cage_box(from_pos) \
-			and not _point_in_cage_box(dest):
-		return _time_to_arrive_routed(
-				from_pos, dest, from_velocity, ref_speed_m_s, accel_m_s2,
-				lateral_grip)
-	return _time_to_arrive_direct(
-			from_pos, dest, from_velocity, ref_speed_m_s, accel_m_s2,
-			lateral_grip)
-
-
-# True when `p` sits inside either inflated cage frame box (the same
-# inflation carry_path_blocked_by_net tests against).
-static func _point_in_cage_box(p: Vector3) -> bool:
-	if absf(p.x) > GameRules.NET_BACK_HALF_WIDTH + CARRY_NET_CLEAR_MARGIN_M:
-		return false
-	var az: float = absf(p.z)
-	return az >= GameRules.GOAL_LINE_Z - CARRY_NET_CLEAR_MARGIN_M \
-			and az <= GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH \
-					+ CARRY_NET_CLEAR_MARGIN_M
-
-
-# The around-the-cage route: the best of four waypoints — beside either post at
-# mid-cage depth, the behind-net alley, and the front lip — which together give
-# every crossing geometry its small detour. Each leg runs the calibrated direct
-# model, carrying pace through the waypoint. Legs are not re-checked for
-# blockage: the waypoints sit a body's clearance outside the inflated frame.
-static func _time_to_arrive_routed(from_pos: Vector3, dest: Vector3,
-		from_velocity: Vector3, ref_speed_m_s: float,
-		accel_m_s2: float, lateral_grip: float = 1.0) -> float:
-	# The cage being crossed is on the side the route actually reaches.
-	var s: float = signf(from_pos.z) \
-			if absf(from_pos.z) >= absf(dest.z) else signf(dest.z)
-	var side_x: float = GameRules.NET_BACK_HALF_WIDTH \
-			+ CARRY_NET_CLEAR_MARGIN_M + NET_ROUTE_CLEAR_M
-	var mid_z: float = s * (GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH * 0.5)
-	var back_z: float = s * (GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH \
-			+ CARRY_NET_CLEAR_MARGIN_M + NET_ROUTE_CLEAR_M)
-	var front_z: float = s * (GameRules.GOAL_LINE_Z \
-			- CARRY_NET_CLEAR_MARGIN_M - NET_ROUTE_CLEAR_M)
-	var vmax: float = maxf(ref_speed_m_s, MIN_TRAVEL_SPEED_M_S)
-	var best: float = INF
-	for wp: Vector3 in [
-			Vector3(-side_x, 0.0, mid_z), Vector3(side_x, 0.0, mid_z),
-			Vector3(0.0, 0.0, back_z), Vector3(0.0, 0.0, front_z)]:
-		var t1: float = _time_to_arrive_direct(
-				from_pos, wp, from_velocity, ref_speed_m_s, accel_m_s2,
-				lateral_grip)
-		var to_dest: Vector3 = dest - wp
-		to_dest.y = 0.0
-		var v_wp := Vector3.ZERO
-		if to_dest.length_squared() > 0.0001:
-			v_wp = to_dest.normalized() * minf(
-					from_pos.distance_to(wp) / maxf(t1, 0.001), vmax)
-		var t: float = t1 + _time_to_arrive_direct(
-				wp, dest, v_wp, ref_speed_m_s, accel_m_s2, lateral_grip)
-		if t < best:
-			best = t
-	return best
-
-
-# The calibrated direct-route travel model (no net awareness — the public
-# time_to_arrive gates and routes; the routed legs call this).
-static func _time_to_arrive_direct(from_pos: Vector3, dest: Vector3,
-		from_velocity: Vector3, ref_speed_m_s: float = SKATER_REF_SPEED_M_S,
-		accel_m_s2: float = SHED_ACCEL_DEFAULT_M_S2,
-		lateral_grip: float = 1.0) -> float:
-	var dx: float = dest.x - from_pos.x
-	var dz: float = dest.z - from_pos.z
-	var dist: float = sqrt(dx * dx + dz * dz)
-	if dist < 0.001:
-		return 0.0
-	var vmax: float = maxf(ref_speed_m_s, MIN_TRAVEL_SPEED_M_S)
-	var inv: float = 1.0 / dist
-	var v_along: float = from_velocity.x * dx * inv + from_velocity.z * dz * inv
-	var v_len_sq: float = from_velocity.x * from_velocity.x \
-			+ from_velocity.z * from_velocity.z
-	var v_perp: float = sqrt(maxf(0.0, v_len_sq - v_along * v_along))
-	# REDIRECT: only the cross momentum the seek can't shed for free pays,
-	# scaled by this build's edge grip — the turn authority SkaterMovementRules
-	# scales in the real body (turning redirects momentum on the edges; the
-	# stride plays no part, and grip never limits the ramp below).
-	var grip: float = maxf(lateral_grip, 0.001)
-	var t: float = maxf(0.0, v_perp - VM_FREE_SHED_M_S * grip) \
-			/ (VM_SHED_DECEL_M_S2 * grip)
-	var r: float = dist
-	var v0: float = v_along
-	if v0 < 0.0:
-		# Reversal: brake the retreat out, giving back the ground lost while
-		# braking; the pursuit then ramps from rest. (Brake friction is
-		# attribute-flat — the brake key, not thrust.)
-		t += -v0 / REVERSAL_BRAKE_DECEL_M_S2
-		r += v0 * v0 / (2.0 * REVERSAL_BRAKE_DECEL_M_S2)
-		v0 = 0.0
-	return t + AIStrideRamp.time_to_cover(v0, r, vmax, accel_m_s2)
-
-
-# True iff the segment from `from` to `to` (in world XZ) intersects either
-# net's PHYSICAL footprint: the back-frame half-width (NET_BACK_HALF_WIDTH,
-# wider than the post span — GameRules.is_over_net_footprint's reading)
-# inflated by the puck's radius, since the puck's EDGE clanks the frame. Do not
-# narrow it to the post line: a feed from below the goal line would read clear
-# and ring off the outside of the cage.
-static func pass_lane_blocked_by_net(from: Vector3, to: Vector3) -> bool:
-	var goal_line_z: float = GameRules.GOAL_LINE_Z - GameRules.PUCK_COLLISION_RADIUS
-	var net_half_w: float = GameRules.NET_BACK_HALF_WIDTH + GameRules.PUCK_COLLISION_RADIUS
-	var net_back_z: float = GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH \
-			+ GameRules.PUCK_COLLISION_RADIUS
-	# Team 0's net (positive z).
-	if _segment_crosses_aabb_xz(
-			from.x, from.z, to.x, to.z,
-			-net_half_w, net_half_w,
-			goal_line_z, net_back_z):
-		return true
-	# Team 1's net (negative z), mirrored.
-	if _segment_crosses_aabb_xz(
-			from.x, from.z, to.x, to.z,
-			-net_half_w, net_half_w,
-			-net_back_z, -goal_line_z):
-		return true
-	return false
-
-
-# ── The net as a CARRY / BLADE obstacle ──────────────────────────────────────
-# The carry model sees the cage the way the body steering does
-# (AISteering._net_detour rounds the post). Two consumers:
-#   - carry_path_blocked_by_net — a carried traverse (body + puck) cannot pass
-#     through the cage, so a carry candidate whose straight route crosses it
-#     is unreachable as priced.
-#   - net_safe_blade_target — the carry cursor must never ask the blade IK to
-#     reach THROUGH the frame (stick-on-net contact dislodges the carried
-#     puck), so a crossing chord is swung around the nearer post.
-# Margins are physical half-widths of the thing traversing: a carried body +
-# puck for the path, a blade length of standoff for the cursor (same standard
-# as the boards clamp).
-const CARRY_NET_CLEAR_MARGIN_M: float = 0.5
-# Extra lateral/depth clearance the net-aware ETA's corner waypoints keep
-# beyond the inflated frame — a body's half-width, the corner is skated
-# around, not clipped (see _time_to_arrive_routed).
-const NET_ROUTE_CLEAR_M: float = 0.4
-const BLADE_NET_CLEAR_MARGIN_M: float = GameRules.DEFAULT_BLADE_LENGTH_M
-
-
-# True iff a carried traverse from → to would pass through either cage
-# (frame AABB inflated by the carry margin). From-inside counts as blocked —
-# the slab test's t_min = 0 is inside the box — which is correct: a body
-# standing against the mesh can't carry through it.
-static func carry_path_blocked_by_net(from: Vector3, to: Vector3) -> bool:
-	var hw: float = GameRules.NET_BACK_HALF_WIDTH + CARRY_NET_CLEAR_MARGIN_M
-	var z_front: float = GameRules.GOAL_LINE_Z - CARRY_NET_CLEAR_MARGIN_M
-	var z_back: float = GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH + CARRY_NET_CLEAR_MARGIN_M
-	if _segment_crosses_aabb_xz(from.x, from.z, to.x, to.z, -hw, hw, z_front, z_back):
-		return true
-	return _segment_crosses_aabb_xz(from.x, from.z, to.x, to.z, -hw, hw, -z_back, -z_front)
-
-
-# Redirect a blade-aim target whose chord from `from` crosses a net frame:
-# rotate the aim to the frame's tangent bearing around the nearer post (the
-# occluded bearing interval is bounded by the inflated frame's corner
-# bearings; the chord crosses, so the original bearing lies inside it — clamp
-# to the nearer edge plus a small step of daylight). Distance from `from` is
-# preserved, y is flattened (blade targets live on the ice plane). A
-# non-crossing target returns unchanged. Degenerate case — `from` itself
-# inside the inflated frame region (pinned against the mesh): no tangent
-# exists, so slide the aim laterally toward the nearer post-side exit.
-static func net_safe_blade_target(from: Vector3, target: Vector3) -> Vector3:
-	var hw: float = GameRules.NET_BACK_HALF_WIDTH + BLADE_NET_CLEAR_MARGIN_M
-	var z_front: float = GameRules.GOAL_LINE_Z - BLADE_NET_CLEAR_MARGIN_M
-	var z_back: float = GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH + BLADE_NET_CLEAR_MARGIN_M
-	var box_z0: float
-	var box_z1: float
-	if _segment_crosses_aabb_xz(from.x, from.z, target.x, target.z, -hw, hw, z_front, z_back):
-		box_z0 = z_front
-		box_z1 = z_back
-	elif _segment_crosses_aabb_xz(from.x, from.z, target.x, target.z, -hw, hw, -z_back, -z_front):
-		box_z0 = -z_back
-		box_z1 = -z_front
-	else:
-		return target
-	var to_target := Vector2(target.x - from.x, target.z - from.z)
-	var dist: float = to_target.length()
-	if dist < 0.001:
-		return target
-	if from.x > -hw and from.x < hw and from.z > box_z0 and from.z < box_z1:
-		var side: float = signf(from.x) if from.x != 0.0 else 1.0
-		return Vector3(from.x + side * dist, 0.0, from.z)
-	var target_ang: float = atan2(to_target.x, to_target.y)
-	var min_rel: float = INF
-	var max_rel: float = -INF
-	for corner_x: float in [-hw, hw]:
-		for corner_z: float in [box_z0, box_z1]:
-			var rel: float = wrapf(
-					atan2(corner_x - from.x, corner_z - from.z) - target_ang, -PI, PI)
-			min_rel = minf(min_rel, rel)
-			max_rel = maxf(max_rel, rel)
-	# The chord crosses, so 0 ∈ [min_rel, max_rel]. Swing to the nearer edge,
-	# plus a small step of daylight past the corner.
-	var swing: float = min_rel if -min_rel <= max_rel else max_rel
-	var out_ang: float = target_ang + swing + signf(swing) * 0.05
-	return Vector3(from.x + sin(out_ang) * dist, 0.0, from.z + cos(out_ang) * dist)
-
-
-# Own-DZ slot danger zone. True iff the pass segment crosses the
-# rectangle in front of OUR net — the high-danger area where a
-# deflected/intercepted pass becomes a goal against. Asymmetric to
-# `pass_lane_blocked_by_net` because passes through OPP slot are
-# legitimate (backdoor / cross-crease feeds); only OWN slot is risky.
-#
-# Slot rect: x ∈ ±OWN_DZ_SLOT_HALF_WIDTH_M, z ∈ [own_goal_line - depth,
-# own_goal_line] for own_goal_z > 0; mirrored for own_goal_z < 0. Sized to the
-# "home plate" high-danger area, not just the net mouth: a feed that clips the
-# flanks is the same giveaway as a dead-centre one. Half-width covers the posts
-# plus a stick either side; depth reaches toward the hash marks.
-const OWN_DZ_SLOT_HALF_WIDTH_M: float = 2.75
-const OWN_DZ_SLOT_DEPTH_M: float = 6.0
-static func pass_crosses_own_slot(from: Vector3, to: Vector3, own_goal_z: float) -> bool:
-	var depth: float = OWN_DZ_SLOT_DEPTH_M
-	var half_w: float = OWN_DZ_SLOT_HALF_WIDTH_M
-	if own_goal_z > 0.0:
-		# Team 0: own net at +z. Slot is in front of goal line,
-		# z ∈ [own_goal_z - depth, own_goal_z].
-		return _segment_crosses_aabb_xz(
-				from.x, from.z, to.x, to.z,
-				-half_w, half_w,
-				own_goal_z - depth, own_goal_z)
-	else:
-		# Team 1: own net at -z. Slot z ∈ [own_goal_z, own_goal_z + depth].
-		return _segment_crosses_aabb_xz(
-				from.x, from.z, to.x, to.z,
-				-half_w, half_w,
-				own_goal_z, own_goal_z + depth)
-
-
-# Liang-Barsky parametric clipping: returns true iff the segment from
-# (fx, fz) to (tx, tz) intersects the axis-aligned rectangle bounded
-# by [x_min, x_max] × [z_min, z_max]. Endpoint inside the rect counts
-# as intersection.
-static func _segment_crosses_aabb_xz(
-		fx: float, fz: float, tx: float, tz: float,
-		x_min: float, x_max: float, z_min: float, z_max: float) -> bool:
-	var dx: float = tx - fx
-	var dz: float = tz - fz
-	var t_min: float = 0.0
-	var t_max: float = 1.0
-	# X slab.
-	if absf(dx) < 0.0001:
-		if fx < x_min or fx > x_max:
-			return false
-	else:
-		var t1: float = (x_min - fx) / dx
-		var t2: float = (x_max - fx) / dx
-		if t1 > t2:
-			var tmp: float = t1
-			t1 = t2
-			t2 = tmp
-		t_min = maxf(t_min, t1)
-		t_max = minf(t_max, t2)
-		if t_min > t_max:
-			return false
-	# Z slab.
-	if absf(dz) < 0.0001:
-		if fz < z_min or fz > z_max:
-			return false
-	else:
-		var t1: float = (z_min - fz) / dz
-		var t2: float = (z_max - fz) / dz
-		if t1 > t2:
-			var tmp: float = t1
-			t1 = t2
-			t2 = tmp
-		t_min = maxf(t_min, t1)
-		t_max = minf(t_max, t2)
-		if t_min > t_max:
-			return false
-	return true
-
 
 # ── Dump delivery search ─────────────────────────────────────────────────────
 # A dump is a RELEASE, not a spot: both dumps search launches and read where
@@ -3555,7 +3206,7 @@ static func solve_dump_in(origin: Vector3, attacking_goal: Vector3,
 				continue
 			# A puck the keeper collects is not a dump-in at any pace.
 			if keeper_collects_first(spot, keeper_pos, our_chasers,
-					SKATER_REF_SPEED_M_S):
+					AIArrival.SKATER_REF_SPEED_M_S):
 				continue
 			# What the spot is worth if we win it OUTRIGHT — the candidate's
 			# ceiling, since recovery is a probability. A spot whose ceiling

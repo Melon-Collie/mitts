@@ -2,10 +2,9 @@ class_name AICarrySpace
 
 # How much room a carrier has to operate, and what he can do with it:
 # reachable-set evasion, the safety maps, the crossing sample, controlled space,
-# the brake check and the fake-then-cut deke. It borrows the arrival clock, the net test,
-# six reference speeds and the puck-protect handle from AIActionScoring, and the
-# dependency runs one way only — a const read across a `class_name` cycle is a
-# parse error (test_scoring_split_stays_acyclic.gd).
+# the brake check and the fake-then-cut deke. It reads the arrival clock and its
+# reference speeds from AIArrival and the net test from AINetObstacle, and never
+# AIActionScoring (test_scoring_split_stays_acyclic.gd).
 
 # ── Reachable-set evasion (pursuit-evasion possession safety) ────────────────
 # Whether a defender threatens the puck is "can he get a stick to it given his
@@ -92,7 +91,7 @@ static func reach_clearance(
 	for i: int in n:
 		var accel: float = MANEUVER_ACCEL_M_S2
 		var stick: float = EVADE_STICK_REACH_M
-		var vmax: float = AIActionScoring.SKATER_REF_SPEED_M_S
+		var vmax: float = AIArrival.SKATER_REF_SPEED_M_S
 		var grip: float = 1.0
 		if has_caps:
 			# Per-opponent build — Acceleration (max_accel) sets the ramp, reach
@@ -165,14 +164,14 @@ static func _reach_clearance_one(point_x: float, point_z: float, time: float,
 		# the edge grip the movement core turns with), then brake out any
 		# retreat (losing ground), then the stride's pursuit ramp.
 		var grip: float = maxf(lateral_grip, 0.001)
-		var tau_p: float = tau - maxf(0.0, v_perp - AIActionScoring.VM_FREE_SHED_M_S * grip) \
-				/ (AIActionScoring.VM_SHED_DECEL_M_S2 * grip)
+		var tau_p: float = tau - maxf(0.0, v_perp - AIArrival.VM_FREE_SHED_M_S * grip) \
+				/ (AIArrival.VM_SHED_DECEL_M_S2 * grip)
 		if tau_p > 0.0:
 			var v0: float = v_along
 			if v0 < 0.0:
-				var t_b: float = minf(-v0 / AIActionScoring.REVERSAL_BRAKE_DECEL_M_S2, tau_p)
-				d = v0 * t_b + 0.5 * AIActionScoring.REVERSAL_BRAKE_DECEL_M_S2 * t_b * t_b
-				v0 += AIActionScoring.REVERSAL_BRAKE_DECEL_M_S2 * t_b
+				var t_b: float = minf(-v0 / AIArrival.REVERSAL_BRAKE_DECEL_M_S2, tau_p)
+				d = v0 * t_b + 0.5 * AIArrival.REVERSAL_BRAKE_DECEL_M_S2 * t_b * t_b
+				v0 += AIArrival.REVERSAL_BRAKE_DECEL_M_S2 * t_b
 				tau_p -= t_b
 			d += AIStrideRamp.distance_in(v0, tau_p, vmax, accel)
 	return dist - d - stick
@@ -592,14 +591,14 @@ const SPACE_RING_STAGGER_RAD: float = 0.2036
 static func control_at(sample: Vector3, from: Vector3, from_vel: Vector3,
 		from_caps: AISkaterCaps, opponents: Array[Vector3],
 		opponent_vels: Array[Vector3], opponent_caps: Array = []) -> float:
-	var speed: float = AIActionScoring.SKATER_REF_SPEED_M_S
+	var speed: float = AIArrival.SKATER_REF_SPEED_M_S
 	var accel: float = MANEUVER_ACCEL_M_S2
 	var grip: float = 1.0
 	if from_caps != null:
 		speed = from_caps.max_speed
 		accel = from_caps.max_accel
 		grip = from_caps.lateral_grip
-	var t: float = AIActionScoring.time_to_arrive(from, sample, from_vel, speed, accel, grip)
+	var t: float = AIArrival.time_to_arrive(from, sample, from_vel, speed, accel, grip)
 	return carry_safety(from, sample, t, opponents, opponent_vels,
 			opponent_caps, true)
 
@@ -665,7 +664,7 @@ static func controlled_space(from: Vector3, from_vel: Vector3,
 			# carrier can take, so it leaves both sums like an off-surface one —
 			# which also keeps the fan off time_to_arrive's around-the-net
 			# routing, an 8x per-sample cost.
-			if AIActionScoring.carry_path_blocked_by_net(from, sample):
+			if AINetObstacle.carry_path_blocked_by_net(from, sample):
 				continue
 			var c: float = 1.0
 			if not outer_full:

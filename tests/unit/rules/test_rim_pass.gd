@@ -72,7 +72,7 @@ func test_no_rim_leg_runs_through_a_net() -> void:
 		var path: Array[Vector3] = AIRimPass.paths[k]
 		var prev: Vector3 = AIRimPass.origin
 		for p: Vector3 in path:
-			assert_false(AIActionScoring.pass_lane_blocked_by_net(prev, p),
+			assert_false(AINetObstacle.pass_lane_blocked_by_net(prev, p),
 					"launch %d crosses the cage" % k)
 			prev = p
 
@@ -99,7 +99,7 @@ func test_a_receiver_up_the_wall_meets_the_rim() -> void:
 	var best_t: float = INF
 	for k: int in n:
 		best_t = minf(best_t, AIRimPass.meet_time(k, Vector3(11.5, 0.0, 14.0),
-				Vector3.ZERO, AIActionScoring.SKATER_REF_SPEED_M_S))
+				Vector3.ZERO, AIArrival.SKATER_REF_SPEED_M_S))
 	assert_lt(best_t, INF, "the half-wall winger can meet a rim")
 
 

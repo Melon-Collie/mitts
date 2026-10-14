@@ -18,7 +18,7 @@ class_name AIThreatAssignment
 # value men attract the closest reachable defender, and an outnumbered backline
 # concedes the least dangerous reachable man.
 #
-# time_to_cover is the momentum-aware ETA (AIActionScoring.time_to_arrive) to a
+# time_to_cover is the momentum-aware ETA (AIArrival.time_to_arrive) to a
 # COVER ANCHOR goal-side of the man — the spot that denies his one-timer — not
 # to the man's body.
 #
@@ -112,7 +112,7 @@ static func assign(
 		# reaches a further man in time, so it's assigned the harder cover.
 		var d_caps: AISkaterCaps = defender_caps.get(d)
 		var d_speed: float = d_caps.max_speed if d_caps != null \
-				else AIActionScoring.SKATER_REF_SPEED_M_S
+				else AIArrival.SKATER_REF_SPEED_M_S
 		# ZONE ELIGIBILITY. Omitting the pair from the row is the whole
 		# mechanism: _best_matching skips men the row does not carry, and
 		# _matching_reward / _restrict_prev reject a mapping naming one.
@@ -123,7 +123,7 @@ static func assign(
 			if restricted and not allowed.has(m):
 				continue
 			var anchor: Vector3 = cover_anchor(man_pos.get(m, Vector3.ZERO), our_net)
-			var t: float = AIActionScoring.time_to_arrive(d_pos, anchor, d_vel, d_speed)
+			var t: float = AIArrival.time_to_arrive(d_pos, anchor, d_vel, d_speed)
 			var reach: float = 1.0 / (1.0 + maxf(t, 0.0))
 			row[m] = maxf(man_value.get(m, 0.0), 0.0) * reach
 		reward[d] = row
@@ -198,8 +198,8 @@ static func _pick_house_defender(
 			continue
 		var d_caps: AISkaterCaps = defender_caps.get(d)
 		var d_speed: float = d_caps.max_speed if d_caps != null \
-				else AIActionScoring.SKATER_REF_SPEED_M_S
-		var t: float = AIActionScoring.time_to_arrive(
+				else AIArrival.SKATER_REF_SPEED_M_S
+		var t: float = AIArrival.time_to_arrive(
 				defender_pos.get(d, Vector3.ZERO), anchor,
 				defender_vel.get(d, Vector3.ZERO), d_speed)
 		if t < best_t or (t == best_t and (best_def == -1 or d < best_def)):

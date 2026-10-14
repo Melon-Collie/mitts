@@ -47,9 +47,9 @@ func test_role_context_self_speeds_default_to_baseline() -> void:
 func test_time_to_arrive_default_matches_explicit_baseline() -> void:
 	var from := Vector3(0, 0, 0)
 	var dest := Vector3(0, 0, 10)
-	var implicit := AIActionScoring.time_to_arrive(from, dest, Vector3.ZERO)
-	var explicit := AIActionScoring.time_to_arrive(
-			from, dest, Vector3.ZERO, AIActionScoring.SKATER_REF_SPEED_M_S)
+	var implicit := AIArrival.time_to_arrive(from, dest, Vector3.ZERO)
+	var explicit := AIArrival.time_to_arrive(
+			from, dest, Vector3.ZERO, AIArrival.SKATER_REF_SPEED_M_S)
 	assert_almost_eq(implicit, explicit, 0.0001,
 			"omitting ref_speed must equal passing the baseline (back-compat)")
 
@@ -57,8 +57,8 @@ func test_time_to_arrive_default_matches_explicit_baseline() -> void:
 func test_time_to_arrive_faster_skater_arrives_sooner() -> void:
 	var from := Vector3(0, 0, 0)
 	var dest := Vector3(0, 0, 10)
-	var slow := AIActionScoring.time_to_arrive(from, dest, Vector3.ZERO, 8.0)
-	var fast := AIActionScoring.time_to_arrive(from, dest, Vector3.ZERO, 11.0)
+	var slow := AIArrival.time_to_arrive(from, dest, Vector3.ZERO, 8.0)
+	var fast := AIArrival.time_to_arrive(from, dest, Vector3.ZERO, 11.0)
 	assert_lt(fast, slow, "a higher ref speed must yield a shorter arrival time")
 
 

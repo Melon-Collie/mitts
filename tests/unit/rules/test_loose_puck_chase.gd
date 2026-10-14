@@ -6,7 +6,7 @@ extends GutTest
 # over the nearer-right-now bot), and incumbent hysteresis (the current
 # chaser keeps the role unless a challenger clearly beats them).
 
-const REF: float = AIActionScoring.SKATER_REF_SPEED_M_S
+const REF: float = AIArrival.SKATER_REF_SPEED_M_S
 
 
 func _skater(pos: Vector3, vel: Vector3 = Vector3.ZERO) -> SkaterNetworkState:
@@ -673,7 +673,7 @@ func test_settled_puck_intercept_equals_the_skaters_eta() -> void:
 			Vector3.ZERO, Vector3.ZERO)
 	var dt: float = AILoosePuckChase.RACE_LOOKAHEAD_S / float(AILoosePuckChase.RACE_STEPS)
 	var from := Vector3(0, 0, 7)
-	var eta: float = AIActionScoring.time_to_arrive(from, Vector3.ZERO, Vector3.ZERO, REF)
+	var eta: float = AIArrival.time_to_arrive(from, Vector3.ZERO, Vector3.ZERO, REF)
 	var t: float = AILoosePuckChase.path_intercept_time(
 			traj, dt, Vector3.ZERO, from, Vector3.ZERO, REF, 0.0)
 	# A settled puck makes the slack exactly linear in t, so the crossing IS
@@ -731,11 +731,11 @@ func test_popped_puck_intercept_waits_for_the_landing() -> void:
 	var reach: float = 1.0
 	var blind: float = AILoosePuckChase.path_intercept_time(traj, _STEP_DT, pos,
 			skater, Vector3.ZERO, REF, 0.0,
-			AIActionScoring.SHED_ACCEL_DEFAULT_M_S2, reach)
+			AIArrival.SHED_ACCEL_DEFAULT_M_S2, reach)
 	assert_lt(blind, t_play, "without the flight the read plays it under the pop")
 	var t: float = AILoosePuckChase.path_intercept_time(traj, _STEP_DT, pos,
 			skater, Vector3.ZERO, REF, 0.0,
-			AIActionScoring.SHED_ACCEL_DEFAULT_M_S2, reach, t_play)
+			AIArrival.SHED_ACCEL_DEFAULT_M_S2, reach, t_play)
 	assert_almost_eq(t, t_play, 0.0001, "met the instant it is back on the blade plane")
 	var meet: Vector3 = AILoosePuckChase.path_intercept_point(traj, _STEP_DT, pos, t)
 	assert_gt(meet.x, 0.8, "steered to where it lands, a metre downstream")

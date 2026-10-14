@@ -2104,7 +2104,7 @@ func test_dump_in_will_not_feed_the_keeper() -> void:
 	assert_false(
 			AIActionScoring.keeper_collects_first(
 					settle, keeper, [self_pos] as Array[Vector3],
-					AIActionScoring.SKATER_REF_SPEED_M_S),
+					AIArrival.SKATER_REF_SPEED_M_S),
 			"the chosen dump is not one the keeper simply collects")
 
 	# The primitive itself, both ways: a puck resting in the blue paint with our
@@ -2112,10 +2112,10 @@ func test_dump_in_will_not_feed_the_keeper() -> void:
 	# because 4.2 m/s cannot beat a winger's 9 to it.
 	var ours: Array[Vector3] = [Vector3(0, 0, -6)]
 	assert_true(AIActionScoring.keeper_collects_first(
-			Vector3(0, 0, -24.0), keeper, ours, AIActionScoring.SKATER_REF_SPEED_M_S),
+			Vector3(0, 0, -24.0), keeper, ours, AIArrival.SKATER_REF_SPEED_M_S),
 			"a puck dying on the doorstep belongs to the keeper")
 	assert_false(AIActionScoring.keeper_collects_first(
-			Vector3(11.5, 0, -23.0), keeper, ours, AIActionScoring.SKATER_REF_SPEED_M_S),
+			Vector3(11.5, 0, -23.0), keeper, ours, AIArrival.SKATER_REF_SPEED_M_S),
 			"…and a puck in the corner does not — he cannot get there first")
 
 

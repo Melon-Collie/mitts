@@ -185,9 +185,9 @@ static func head_start_on_me(ctx: RoleContext, dir_net: Vector3,
 	var caps: AISkaterCaps = ctx.caps_by_peer.get(threat_peer) \
 			if threat_peer != -1 else null
 	var lead_vmax: float = caps.max_speed if caps != null \
-			else AIActionScoring.SKATER_REF_SPEED_M_S
+			else AIArrival.SKATER_REF_SPEED_M_S
 	var lead_accel: float = caps.max_accel if caps != null \
-			else AIActionScoring.SHED_ACCEL_DEFAULT_M_S2
+			else AIArrival.SHED_ACCEL_DEFAULT_M_S2
 	var lead_v: float = threat_vel.x * dir_net.x + threat_vel.z * dir_net.z
 	var self_v: float = ctx.self_velocity.x * dir_net.x \
 			+ ctx.self_velocity.z * dir_net.z
@@ -198,7 +198,7 @@ static func head_start_on_me(ctx: RoleContext, dir_net: Vector3,
 			maxf(lead_v, 0.0), ice_to_gate, lead_vmax, lead_accel)
 	return minf(AIStrideRamp.head_start(lead_v, lead_vmax, lead_accel,
 			self_v, ctx.self_max_speed, ctx.self_max_accel,
-			AIActionScoring.REVERSAL_BRAKE_DECEL_M_S2, horizon), ice_to_gate)
+			AIArrival.REVERSAL_BRAKE_DECEL_M_S2, horizon), ice_to_gate)
 
 
 # An attacker's distance from our net less the ground he gains on us while we

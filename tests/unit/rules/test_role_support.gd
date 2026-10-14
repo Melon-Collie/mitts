@@ -209,11 +209,11 @@ func test_covering_self_erases_the_counter_from_a_recoverable_spot() -> void:
 	var no_mates: Array[Vector3] = []
 	var recoverable: float = AIActionScoring.counter_rush_cost(
 			loss, 1.0, net, goalie, GameRules.NET_HALF_WIDTH, no_mates,
-			Vector3(0, 0, 14), AIActionScoring.SKATER_REF_SPEED_M_S,
+			Vector3(0, 0, 14), AIArrival.SKATER_REF_SPEED_M_S,
 			opps, vels, [])
 	var exposed: float = AIActionScoring.counter_rush_cost(
 			loss, 1.0, net, goalie, GameRules.NET_HALF_WIDTH, no_mates,
-			Vector3(0, 0, -15), AIActionScoring.SKATER_REF_SPEED_M_S,
+			Vector3(0, 0, -15), AIArrival.SKATER_REF_SPEED_M_S,
 			opps, vels, [])
 	assert_gt(exposed, 0.25,
 			"a spot past the play leaves the counter live; got %f" % exposed)

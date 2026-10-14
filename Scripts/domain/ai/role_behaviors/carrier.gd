@@ -1567,7 +1567,7 @@ func _rim_launch_for(ctx: RoleContext, receiver_state: SkaterNetworkState,
 		receiver_omega: float, receiver_caps: AISkaterCaps,
 		carrier_in_oz: bool) -> float:
 	var speed: float = receiver_caps.max_speed if receiver_caps != null \
-			else AIActionScoring.SKATER_REF_SPEED_M_S
+			else AIArrival.SKATER_REF_SPEED_M_S
 	var catch_radius: float = receiver_caps.handle_reach if receiver_caps != null \
 			else AIActionScoring.EVADE_CARRY_HANDLE_M
 	var receiver_speed: float = Vector2(
@@ -1764,9 +1764,9 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# slot crossing (intercepted = goal-against). A rim's path is not this
 	# segment — AIRimPass checked each of its legs instead.
 	var is_rim: bool = rim_dir != Vector3.ZERO
-	if not is_rim and AIActionScoring.pass_lane_blocked_by_net(origin, receiver_spot):
+	if not is_rim and AINetObstacle.pass_lane_blocked_by_net(origin, receiver_spot):
 		return 0.0
-	if not is_rim and AIActionScoring.pass_crosses_own_slot(
+	if not is_rim and AINetObstacle.pass_crosses_own_slot(
 			origin, receiver_spot, ctx.own_goal_dir * GameRules.GOAL_LINE_Z):
 		return 0.0
 	if lane < 0.0:
@@ -2160,7 +2160,7 @@ func _best_carry(ctx: RoleContext, shoot_now_score: float,
 				* (GameRules.GOAL_LINE_Z - WHEEL_EXIT_UP_ICE_M)
 		for side: float in [-1.0, 1.0]:
 			var wheel := Vector3(side * wheel_x, 0.0, wheel_z)
-			if not AIActionScoring.carry_path_blocked_by_net(self_pos, wheel):
+			if not AINetObstacle.carry_path_blocked_by_net(self_pos, wheel):
 				continue
 			var wheel_total: float = _score_wheel_candidate(
 					ctx, wheel, our_goalie, maxf(best_score, stand_total))
@@ -2329,12 +2329,12 @@ func _best_dump(ctx: RoleContext, our_goalie: Vector3) -> Array:
 		# instant full-speed sprint from a standstill. Nearest by ETA, not by
 		# metres: the man already moving that way is the chaser even when someone
 		# flat-footed stands closer.
-		var chase_t: float = AIActionScoring.time_to_arrive(
+		var chase_t: float = AIArrival.time_to_arrive(
 				self_pos, settle, ctx.self_velocity, ctx.self_max_speed,
 				ctx.self_max_accel, ctx.self_lateral_grip)
 		for i: int in _scratch_our_defenders.size():
 			var mate_caps: AISkaterCaps = _scratch_our_defender_caps[i]
-			chase_t = minf(chase_t, AIActionScoring.time_to_arrive(
+			chase_t = minf(chase_t, AIArrival.time_to_arrive(
 					_scratch_our_defenders[i], settle, _scratch_our_defender_vels[i],
 					mate_caps.max_speed if mate_caps != null else ctx.self_max_speed,
 					mate_caps.max_accel if mate_caps != null else ctx.self_max_accel))
@@ -2401,9 +2401,9 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 	# traverse. POST-WALKOUT candidates are exempt — they are reached around the
 	# post (the steering's net detour), which the straight-segment test can't see.
 	if not is_post_walkout \
-			and AIActionScoring.carry_path_blocked_by_net(self_pos, candidate):
+			and AINetObstacle.carry_path_blocked_by_net(self_pos, candidate):
 		return -INF
-	var local_time: float = AIActionScoring.time_to_arrive(
+	var local_time: float = AIArrival.time_to_arrive(
 			self_pos, candidate, ctx.self_velocity, ctx.self_max_speed,
 			ctx.self_max_accel, ctx.self_lateral_grip)
 	# CEILING PRUNES (exact): with dest_score ≤ 1 and cost ≥ 0, each partial
@@ -2594,7 +2594,7 @@ func _score_wheel_candidate(ctx: RoleContext, dest: Vector3,
 	var self_pos: Vector3 = ctx.self_pos
 	var apex := Vector3(0.0, 0.0, ctx.own_goal_dir
 			* (GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH + WHEEL_APEX_CLEARANCE_M))
-	var t1: float = AIActionScoring.time_to_arrive(
+	var t1: float = AIArrival.time_to_arrive(
 			self_pos, apex, ctx.self_velocity, ctx.self_max_speed,
 			ctx.self_max_accel, ctx.self_lateral_grip)
 	# Carry pace through the apex, consistent with the arrival model.
@@ -2604,7 +2604,7 @@ func _score_wheel_candidate(ctx: RoleContext, dest: Vector3,
 			self_pos.distance_to(apex) / maxf(t1, 0.001), ctx.self_max_speed)
 	var v_apex: Vector3 = to_dest.normalized() * apex_speed \
 			if to_dest.length_squared() > 0.0001 else Vector3.ZERO
-	var t2: float = AIActionScoring.time_to_arrive(
+	var t2: float = AIArrival.time_to_arrive(
 			apex, dest, v_apex, ctx.self_max_speed, ctx.self_max_accel, ctx.self_lateral_grip)
 	# The same exact ceiling ladder as _score_move_candidate_base, per leg.
 	var decay: float = AIActionScoring.delay_discount(t1 + t2)
@@ -2785,9 +2785,9 @@ func _candidate_pass_option(ctx: RoleContext, candidate: Vector3,
 				<= maxf(best, useless_below):
 			continue
 		var rpos: Vector3 = _scratch_option_receiver_pos[i]
-		if AIActionScoring.pass_lane_blocked_by_net(candidate, rpos):
+		if AINetObstacle.pass_lane_blocked_by_net(candidate, rpos):
 			continue
-		if AIActionScoring.pass_crosses_own_slot(
+		if AINetObstacle.pass_crosses_own_slot(
 				candidate, rpos, ctx.own_goal_dir * GameRules.GOAL_LINE_Z):
 			continue
 		var dist: float = candidate.distance_to(rpos)
@@ -2848,7 +2848,7 @@ func _receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 			else ctx.self_max_accel
 	# Momentum-honest: a man in stride carries his pace into the drive, one curling
 	# back brakes it out first. Never `reach / max_speed`.
-	var reach_time: float = AIActionScoring.time_to_arrive(
+	var reach_time: float = AIArrival.time_to_arrive(
 			receiver_spot, target, receiver_vel, recv_speed, recv_accel)
 	# A defender in the way drops keep and stops the drive where he covers it;
 	# apply_escape as for the carrier's own candidates.
@@ -2865,7 +2865,7 @@ func _receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 			receiver_spot, target, reach_time,
 			opps, _scratch_opponent_vels, _scratch_opponent_caps, true, true)
 	var t: float = reach_time if reached == target \
-			else AIActionScoring.time_to_arrive(
+			else AIArrival.time_to_arrive(
 					receiver_spot, reached, receiver_vel, recv_speed, recv_accel)
 	_project_opponents_to(ctx, start_s + t, _scratch_opponents_pass)
 	# The keeper backs in over the receiver's drive exactly as over the carrier's

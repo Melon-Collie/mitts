@@ -83,7 +83,7 @@ static func setup_margin(puck_vel: Vector3) -> float:
 # unset). Every race read prices with it, so they cannot disagree about who has
 # the extra gear.
 static func race_vmax(caps: AISkaterCaps) -> float:
-	return caps.max_speed if caps != null else AIActionScoring.SKATER_REF_SPEED_M_S
+	return caps.max_speed if caps != null else AIArrival.SKATER_REF_SPEED_M_S
 
 
 # The shared predicted path for one race, memoized on the exact puck state so
@@ -130,7 +130,7 @@ static func race_trajectory(puck_pos: Vector3, puck_vel: Vector3) -> Array[Vecto
 static func path_intercept_time(traj: Array[Vector3], step_dt: float,
 		puck_pos: Vector3, skater_pos: Vector3, skater_vel: Vector3,
 		max_speed: float, margin: float = KILL_SETUP_MARGIN_S,
-		accel: float = AIActionScoring.SHED_ACCEL_DEFAULT_M_S2,
+		accel: float = AIArrival.SHED_ACCEL_DEFAULT_M_S2,
 		reach: float = 0.0, playable_from: float = 0.0) -> float:
 	if traj.is_empty():
 		return INF
@@ -190,14 +190,14 @@ static func race_playable_time(puck_pos: Vector3, puck_vel: Vector3) -> float:
 static func _reach_eta(from_pos: Vector3, point: Vector3, vel: Vector3,
 		max_speed: float, accel: float, reach: float) -> float:
 	if reach <= 0.0:
-		return AIActionScoring.time_to_arrive(from_pos, point, vel, max_speed, accel)
+		return AIArrival.time_to_arrive(from_pos, point, vel, max_speed, accel)
 	var dx: float = point.x - from_pos.x
 	var dz: float = point.z - from_pos.z
 	var d: float = sqrt(dx * dx + dz * dz)
 	if d <= reach:
 		return 0.0
 	var f: float = (d - reach) / d
-	return AIActionScoring.time_to_arrive(from_pos,
+	return AIArrival.time_to_arrive(from_pos,
 			Vector3(from_pos.x + dx * f, point.y, from_pos.z + dz * f),
 			vel, max_speed, accel)
 
@@ -272,7 +272,7 @@ static func puck_comes_to_reach(
 		var dz: float = meet.z - self_pos.z
 		if dx * dx + dz * dz > band2:
 			continue
-		if AIActionScoring.time_to_arrive(self_pos, meet, self_vel, max_speed) \
+		if AIArrival.time_to_arrive(self_pos, meet, self_vel, max_speed) \
 				<= seg_t0 + (t0 + step_dt - seg_t0) * f:
 			return true
 	return false
@@ -395,7 +395,7 @@ static func elect(
 		var max_speed: float = race_vmax(caps_by_peer.get(pid))
 		var t: float = path_intercept_time(traj, step_dt, puck_pos,
 				s.position, s.velocity, max_speed, margin,
-				AIActionScoring.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
+				AIArrival.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
 		if pid != prev_elected:
 			t += HYSTERESIS_S
 		# Tie-break on the lower peer_id, never iteration order.
@@ -431,7 +431,7 @@ static func best_intercept_time(
 		var max_speed: float = race_vmax(caps_by_peer.get(pid))
 		var t: float = path_intercept_time(traj, step_dt, puck_pos,
 				s.position, s.velocity, max_speed, margin,
-				AIActionScoring.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
+				AIArrival.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
 		if t < best_t:
 			best_t = t
 	return best_t

@@ -303,7 +303,7 @@ func test_net_blocker_oz_corner_to_corner_through_back_of_net() -> void:
 	# teammate mirrored on the left. Pass goes through the net rect.
 	var from := Vector3(5.0, 0.0, 27.0)   # inside net z-range
 	var to := Vector3(-5.0, 0.0, 27.0)
-	assert_true(AIActionScoring.pass_lane_blocked_by_net(from, to),
+	assert_true(AINetObstacle.pass_lane_blocked_by_net(from, to),
 			"corner-to-corner pass through the back of the net should be blocked")
 
 
@@ -312,7 +312,7 @@ func test_net_blocker_dz_pass_across_goal_mouth() -> void:
 	# the front face of the net rect.
 	var from := Vector3(3.0, 0.0, 28.0)   # behind own net
 	var to := Vector3(-3.0, 0.0, 25.0)    # front of own net
-	assert_true(AIActionScoring.pass_lane_blocked_by_net(from, to),
+	assert_true(AINetObstacle.pass_lane_blocked_by_net(from, to),
 			"pass crossing the goal mouth at goal-line z should be blocked by the net")
 
 
@@ -321,7 +321,7 @@ func test_net_blocker_clean_slot_pass_not_blocked() -> void:
 	# endpoints in front of GOAL_LINE_Z, segment never enters either rect.
 	var from := Vector3(5.0, 0.0, 18.0)
 	var to := Vector3(-5.0, 0.0, 18.0)
-	assert_false(AIActionScoring.pass_lane_blocked_by_net(from, to),
+	assert_false(AINetObstacle.pass_lane_blocked_by_net(from, to),
 			"slot-line pass nowhere near the net should not be blocked")
 
 
@@ -331,7 +331,7 @@ func test_net_blocker_low_to_high_pass_not_blocked() -> void:
 	# but z exits the rect cleanly toward NZ.
 	var from := Vector3(5.0, 0.0, 25.5)   # in front of goal line, off to side
 	var to := Vector3(0.0, 0.0, 12.0)
-	assert_false(AIActionScoring.pass_lane_blocked_by_net(from, to),
+	assert_false(AINetObstacle.pass_lane_blocked_by_net(from, to),
 			"low-to-high OZ pass should not be blocked by the attacking net")
 
 
@@ -344,11 +344,11 @@ func test_net_blocker_covers_the_outer_frame_not_just_the_posts() -> void:
 	var graze_x: float = GameRules.NET_HALF_WIDTH + 0.05   # 0.965 — outside posts
 	var from := Vector3(graze_x, 0.0, 28.2)                # behind the net
 	var to := Vector3(graze_x, 0.0, 20.0)                  # up the slot, same x
-	assert_true(AIActionScoring.pass_lane_blocked_by_net(from, to),
+	assert_true(AINetObstacle.pass_lane_blocked_by_net(from, to),
 			"a lane through the outer frame band is blocked, not just the post span")
 	# Clearly wide of frame + puck radius stays clear.
 	var wide_x: float = GameRules.NET_BACK_HALF_WIDTH + GameRules.PUCK_COLLISION_RADIUS + 0.05
-	assert_false(AIActionScoring.pass_lane_blocked_by_net(
+	assert_false(AINetObstacle.pass_lane_blocked_by_net(
 			Vector3(wide_x, 0.0, 28.2), Vector3(wide_x, 0.0, 20.0)),
 			"a lane genuinely wide of the physical frame is clear")
 
@@ -373,21 +373,21 @@ func test_own_slot_pass_blocked_team0() -> void:
 	# at z=22 (slot depth) crossing x=0 → blocked.
 	var from := Vector3(3.0, 0.0, 22.0)
 	var to := Vector3(-3.0, 0.0, 22.0)
-	assert_true(AIActionScoring.pass_crosses_own_slot(from, to, GOAL.z))
+	assert_true(AINetObstacle.pass_crosses_own_slot(from, to, GOAL.z))
 
 
 func test_own_slot_pass_blocked_team1() -> void:
 	# Mirror — team 1 (own goal at -z).
 	var from := Vector3(3.0, 0.0, -22.0)
 	var to := Vector3(-3.0, 0.0, -22.0)
-	assert_true(AIActionScoring.pass_crosses_own_slot(from, to, -GOAL.z))
+	assert_true(AINetObstacle.pass_crosses_own_slot(from, to, -GOAL.z))
 
 
 func test_pass_outside_own_slot_not_blocked() -> void:
 	# Pass in NZ — well in front of slot rect. Not blocked.
 	var from := Vector3(3.0, 0.0, 5.0)
 	var to := Vector3(-3.0, 0.0, 5.0)
-	assert_false(AIActionScoring.pass_crosses_own_slot(from, to, GOAL.z))
+	assert_false(AINetObstacle.pass_crosses_own_slot(from, to, GOAL.z))
 
 
 func test_breakout_pass_not_blocked() -> void:
@@ -395,7 +395,7 @@ func test_breakout_pass_not_blocked() -> void:
 	# slot rect because z exits the slot range before x enters.
 	var from := Vector3(8.0, 0.0, 24.0)   # corner near boards
 	var to := Vector3(0.0, 0.0, 5.0)      # mid-NZ
-	assert_false(AIActionScoring.pass_crosses_own_slot(from, to, GOAL.z))
+	assert_false(AINetObstacle.pass_crosses_own_slot(from, to, GOAL.z))
 
 
 func test_own_slot_side_of_crease_feed_blocked() -> void:
@@ -405,7 +405,7 @@ func test_own_slot_side_of_crease_feed_blocked() -> void:
 	# goal-against; the widened ±2.75 rect vetoes it as the giveaway it is.
 	var from := Vector3(2.6, 0.0, 26.0)
 	var to := Vector3(2.2, 0.0, 21.0)
-	assert_true(AIActionScoring.pass_crosses_own_slot(from, to, GOAL.z))
+	assert_true(AINetObstacle.pass_crosses_own_slot(from, to, GOAL.z))
 
 
 # ── Shot danger: seven-hole open-net calibration ─────────────────────────────
@@ -923,7 +923,7 @@ func test_realization_discount_matches_delay_discount_currency() -> void:
 	# action in the carrier's EV model.
 	var pos := Vector3(0.0, 0.0, 8.65)  # 18 m from goal → 12 m past slot edge
 	var expected: float = AIActionScoring.delay_discount(
-			12.0 / AIActionScoring.SKATER_REF_SPEED_M_S)
+			12.0 / AIArrival.SKATER_REF_SPEED_M_S)
 	assert_almost_eq(
 			AIActionScoring.potential_realization_discount(pos, GOAL),
 			expected, 0.0001)
@@ -994,7 +994,7 @@ func test_chase_recovery_without_velocities_races_from_rest() -> void:
 			"equal standing starts are a coin flip")
 	assert_almost_eq(
 			AIActionScoring.CHASE_CONTEST_MARGIN_S
-					* AIActionScoring.SKATER_REF_SPEED_M_S,
+					* AIArrival.SKATER_REF_SPEED_M_S,
 			AIActionScoring.CHASE_CONTEST_MARGIN_M, 1e-6,
 			"the time band is the stride band at reference pace")
 
@@ -1004,7 +1004,7 @@ func test_chase_recovery_without_velocities_races_from_rest() -> void:
 func test_time_to_arrive_zero_at_destination() -> void:
 	var p := Vector3(5.0, 0.0, 5.0)
 	assert_almost_eq(
-			AIActionScoring.time_to_arrive(p, p, Vector3.ZERO),
+			AIArrival.time_to_arrive(p, p, Vector3.ZERO),
 			0.0, 0.0001)
 
 
@@ -1015,9 +1015,9 @@ func test_time_to_arrive_charges_the_standing_start_ramp() -> void:
 	# accel to the power knee, constant power to v_max, then cruise.
 	var from := Vector3(0.0, 0.0, 0.0)
 	var dest := Vector3(10.0, 0.0, 0.0)
-	var t: float = AIActionScoring.time_to_arrive(from, dest, Vector3.ZERO)
-	var vmax: float = AIActionScoring.SKATER_REF_SPEED_M_S
-	var a: float = AIActionScoring.SHED_ACCEL_DEFAULT_M_S2 \
+	var t: float = AIArrival.time_to_arrive(from, dest, Vector3.ZERO)
+	var vmax: float = AIArrival.SKATER_REF_SPEED_M_S
+	var a: float = AIArrival.SHED_ACCEL_DEFAULT_M_S2 \
 			* AIStrideRamp.EFFICIENCY
 	var knee: float = GameRules.DEFAULT_SKATER_POWER_KNEE_M_S
 	var p: float = a * knee
@@ -1036,9 +1036,9 @@ func test_time_to_arrive_charges_the_standing_start_ramp() -> void:
 func test_time_to_arrive_faster_with_momentum_toward_dest() -> void:
 	var from := Vector3(0.0, 0.0, 0.0)
 	var dest := Vector3(10.0, 0.0, 0.0)
-	var stationary: float = AIActionScoring.time_to_arrive(from, dest, Vector3.ZERO)
-	var with_momentum: float = AIActionScoring.time_to_arrive(
-			from, dest, Vector3(AIActionScoring.SKATER_REF_SPEED_M_S, 0.0, 0.0))
+	var stationary: float = AIArrival.time_to_arrive(from, dest, Vector3.ZERO)
+	var with_momentum: float = AIArrival.time_to_arrive(
+			from, dest, Vector3(AIArrival.SKATER_REF_SPEED_M_S, 0.0, 0.0))
 	assert_lt(with_momentum, stationary,
 			"velocity component toward dest reduces arrival time")
 
@@ -1046,8 +1046,8 @@ func test_time_to_arrive_faster_with_momentum_toward_dest() -> void:
 func test_time_to_arrive_slower_with_momentum_away() -> void:
 	var from := Vector3(0.0, 0.0, 0.0)
 	var dest := Vector3(10.0, 0.0, 0.0)
-	var stationary: float = AIActionScoring.time_to_arrive(from, dest, Vector3.ZERO)
-	var with_momentum: float = AIActionScoring.time_to_arrive(
+	var stationary: float = AIArrival.time_to_arrive(from, dest, Vector3.ZERO)
+	var with_momentum: float = AIArrival.time_to_arrive(
 			from, dest, Vector3(-5.0, 0.0, 0.0))
 	assert_gt(with_momentum, stationary,
 			"velocity component away from dest increases arrival time")
@@ -1060,11 +1060,11 @@ func test_time_to_arrive_prices_the_full_reversal() -> void:
 	# monotone in how hard the retreat was.
 	var from := Vector3(0.0, 0.0, 0.0)
 	var dest := Vector3(10.0, 0.0, 0.0)
-	var mild: float = AIActionScoring.time_to_arrive(
+	var mild: float = AIArrival.time_to_arrive(
 			from, dest, Vector3(-5.0, 0.0, 0.0))
-	var extreme: float = AIActionScoring.time_to_arrive(
+	var extreme: float = AIArrival.time_to_arrive(
 			from, dest, Vector3(-50.0, 0.0, 0.0))
-	var rest: float = AIActionScoring.time_to_arrive(from, dest, Vector3.ZERO)
+	var rest: float = AIArrival.time_to_arrive(from, dest, Vector3.ZERO)
 	assert_gt(mild, rest, "a retreat costs more than a standing start")
 	assert_gt(extreme, mild, "a harder retreat costs more")
 	assert_lt(extreme, 60.0, "and stays finite")

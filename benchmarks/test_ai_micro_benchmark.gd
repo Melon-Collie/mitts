@@ -230,7 +230,7 @@ func test_evaluator_costs() -> void:
 	var cand: Vector3 = cx.self_pos + Vector3(1.5, 0.0, -2.5)
 	var cur_puck: Vector3 = cinst._puck_pos_at(cx.self_pos, cx.attacking_goal_pos)
 	var cand_puck: Vector3 = cinst._puck_pos_at(cand, cx.attacking_goal_pos)
-	var t_arr: float = AIActionScoring.time_to_arrive(
+	var t_arr: float = AIArrival.time_to_arrive(
 			cx.self_pos, cand, cx.self_velocity, cx.self_max_speed,
 			cx.self_max_accel, cx.self_lateral_grip)
 	var keeper: Vector3 = Vector3(0.0, 0.0, -(GameRules.GOAL_LINE_Z - 1.3))
@@ -374,7 +374,7 @@ func test_evaluator_costs() -> void:
 	_bench("release_contest_clean (5 def)", func() -> void:
 		AIActionScoring.release_contest_clean(from, opps, opp_caps))
 	_bench("time_to_arrive", func() -> void:
-		AIActionScoring.time_to_arrive(from, net, Vector3(2, 0, -4)))
+		AIArrival.time_to_arrive(from, net, Vector3(2, 0, -4)))
 
 	# The dump-in delivery search: DUMP_SEARCH_BEARINGS_RAD x DUMP_SEARCH_PACE_FRACS
 	# closed-form landing solves, plus a recovery race per surviving candidate.

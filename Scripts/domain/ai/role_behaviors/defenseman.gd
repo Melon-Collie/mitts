@@ -189,7 +189,7 @@ static func wall_rim_keepin(ctx: RoleContext, side: float) -> Vector3:
 				return Vector3.INF
 			stand.x = side * minf(absf(cross_x),
 					GameRules.INNER_HALF_WIDTH - RIM_KEEPIN_WALL_INSET_M)
-			var t_me: float = AIActionScoring.time_to_arrive(
+			var t_me: float = AIArrival.time_to_arrive(
 					ctx.self_pos, stand, ctx.self_velocity,
 					ctx.self_max_speed, ctx.self_max_accel, ctx.self_lateral_grip)
 			return stand if t_me <= (float(i) + f) * step_dt else Vector3.INF
@@ -257,7 +257,7 @@ static func _wall_pinch(ctx: RoleContext, side: float,
 			and _depth_inside_attacked_zone(ctx, ctx.prev_role_target) \
 					> DP_LINE_INSET_M + POINT_VACATED_SLACK_M
 	if not pinching:
-		var t_me: float = AIActionScoring.time_to_arrive(
+		var t_me: float = AIArrival.time_to_arrive(
 				ctx.self_pos, cs.position, ctx.self_velocity,
 				ctx.self_max_speed, ctx.self_max_accel, ctx.self_lateral_grip)
 		var out_speed: float = cs.velocity.z * ctx.own_goal_dir
@@ -290,7 +290,7 @@ static func _pinch_is_covered(ctx: RoleContext, line_stand: Vector3,
 	var filler: SkaterNetworkState = _slot_holder(ctx, AIRoleSlots.Slot.F2_WEAK)
 	if filler == null:
 		return false
-	return AIActionScoring.time_to_arrive(filler.position, line_stand,
+	return AIArrival.time_to_arrive(filler.position, line_stand,
 			filler.velocity) <= t_engage + AIRushRead.LATE_MAN_WINDOW_S
 
 

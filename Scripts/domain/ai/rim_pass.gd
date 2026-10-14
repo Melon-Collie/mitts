@@ -230,8 +230,8 @@ static func _walk(k: int, vel: Vector3, own_goal_z: float) -> bool:
 	for i: int in STEPS:
 		var stepped: Transform3D = AITrajectory.step_puck(p, v, STEP_DT)
 		if _leg_near_middle(p, stepped.origin) \
-				and (AIActionScoring.pass_lane_blocked_by_net(p, stepped.origin)
-				or AIActionScoring.pass_crosses_own_slot(p, stepped.origin, own_goal_z)):
+				and (AINetObstacle.pass_lane_blocked_by_net(p, stepped.origin)
+				or AINetObstacle.pass_crosses_own_slot(p, stepped.origin, own_goal_z)):
 			return false
 		p = stepped.origin
 		v = stepped.basis.x
@@ -244,7 +244,7 @@ static func _walk(k: int, vel: Vector3, own_goal_z: float) -> bool:
 # prune for the two segment tests: a leg with both ends on the same side,
 # outside the wider of the two, cannot reach either.
 static func _leg_near_middle(a: Vector3, b: Vector3) -> bool:
-	var half_w: float = maxf(AIActionScoring.OWN_DZ_SLOT_HALF_WIDTH_M,
+	var half_w: float = maxf(AINetObstacle.OWN_DZ_SLOT_HALF_WIDTH_M,
 			GameRules.NET_BACK_HALF_WIDTH + GameRules.PUCK_COLLISION_RADIUS)
 	return not ((a.x > half_w and b.x > half_w) or (a.x < -half_w and b.x < -half_w))
 
@@ -258,7 +258,7 @@ static func _race_opponents(k: int, opp_positions: Array[Vector3],
 	for i: int in opp_positions.size():
 		var caps: AISkaterCaps = opp_caps[i] if i < opp_caps.size() else null
 		var speed: float = caps.max_speed if caps != null \
-				else AIActionScoring.SKATER_REF_SPEED_M_S
+				else AIArrival.SKATER_REF_SPEED_M_S
 		var vel: Vector3 = opp_vels[i] if i < opp_vels.size() else Vector3.ZERO
 		var t: float = AILoosePuckChase.path_intercept_time(path, STEP_DT, origin,
 				opp_positions[i], vel, speed, margin)

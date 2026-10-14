@@ -157,8 +157,8 @@ static func assign(
 		var cs: SkaterNetworkState = snapshot.skater_states[carrier_pid]
 		var c_caps: AISkaterCaps = caps_by_peer.get(carrier_pid)
 		var c_speed: float = c_caps.max_speed if c_caps != null \
-				else AIActionScoring.SKATER_REF_SPEED_M_S
-		var t_carrier: float = AIActionScoring.time_to_arrive(
+				else AIArrival.SKATER_REF_SPEED_M_S
+		var t_carrier: float = AIArrival.time_to_arrive(
 				cs.position, Vector3(0.0, 0.0, own_goal_z), cs.velocity, c_speed)
 		var set_margin_s: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S \
 				/ AISteering.ARRIVAL_BRAKE_DECEL_M_S2
@@ -435,14 +435,14 @@ static func _pick_soonest(
 		var s: SkaterNetworkState = snapshot.skater_states[pid]
 		var caps: AISkaterCaps = caps_by_peer.get(pid)
 		var speed: float = caps.max_speed if caps != null \
-				else AIActionScoring.SKATER_REF_SPEED_M_S
+				else AIArrival.SKATER_REF_SPEED_M_S
 		var t: float
 		if spec.lateral_race:
-			t = AIActionScoring.time_to_arrive(
+			t = AIArrival.time_to_arrive(
 					Vector3(s.position.x, 0.0, 0.0), Vector3(spec.target.x, 0.0, 0.0),
 					Vector3(s.velocity.x, 0.0, 0.0), speed)
 		else:
-			t = AIActionScoring.time_to_arrive(
+			t = AIArrival.time_to_arrive(
 					s.position, spec.target, s.velocity, speed)
 		# Feasibility deadline (pass 1 only): a candidate who can't make the
 		# race target in time is no candidate — defer to cross-fill rather

@@ -1033,7 +1033,7 @@ static func loose_puck_race_lost(
 	var self_vmax: float = maxf(self_max_speed, 1.0)
 	var my_eta: float = AILoosePuckChase.path_intercept_time(
 			traj, step_dt, puck_pos, self_pos, self_vel, self_vmax, margin,
-			AIActionScoring.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
+			AIArrival.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
 	var best_opp_eta: float = INF
 	var best_opp_meet: Vector3 = puck_pos
 	for pid: int in snapshot.skater_states:
@@ -1046,7 +1046,7 @@ static func loose_puck_race_lost(
 		var speed: float = AILoosePuckChase.race_vmax(caps_by_peer.get(pid))
 		var t: float = AILoosePuckChase.path_intercept_time(
 				traj, step_dt, puck_pos, s.position, s.velocity, speed, margin,
-				AIActionScoring.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
+				AIArrival.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
 		var meet: Vector3 = AILoosePuckChase.path_intercept_point(
 				traj, step_dt, puck_pos, t)
 		var committed: bool = AILoosePuckChase.path_enters_band(traj, puck_pos,
@@ -1091,7 +1091,7 @@ static func _has_containment_behind(snapshot: WorldSnapshot, team_id: int,
 		if own_goal_dir * (mate.position.z - pickup.z) \
 				> AIActionScoring.CHASE_CONTEST_MARGIN_M:
 			return true
-		if AIActionScoring.time_to_arrive(mate.position, gate, mate.velocity) \
+		if AIArrival.time_to_arrive(mate.position, gate, mate.velocity) \
 				<= AIRushRead.LATE_MAN_WINDOW_S:
 			return true
 	return false

@@ -454,24 +454,24 @@ goalie while the net in front of them is an Easy one.
 
 ## Where an evaluator goes
 
-Two files, and the line between them is a dependency direction rather than a
-taste call.
+The files are split by dependency, not by topic, and the shape is load-bearing:
+a const read across a GDScript `class_name` cycle can fail at PARSE time, which
+takes the whole class down and every static call on it from every file at once.
 
-`action_scoring.gd` holds the shot geometry and xG, passing, dumping, the
-difficulty-synced goalie mirror, and the primitives everything shares — the
-momentum-honest arrival clock `time_to_arrive`, and the net-obstacle tests.
+- **Leaves** read no evaluator: `arrival.gd` (`AIArrival` — the momentum-honest
+  arrival clock `time_to_arrive` and the reference speeds it assumes) and
+  `net_obstacle.gd` (`AINetObstacle` — segment tests against the cages and our
+  own slot).
+- `action_scoring.gd` (`AIActionScoring`) holds the shot geometry and xG,
+  passing, dumping and the difficulty-synced goalie mirror.
+- `carry_space.gd` (`AICarrySpace`) holds the carrier's room to operate:
+  reachable-set evasion, the safety maps, the crossing sample, controlled space,
+  the brake check and the fake-then-cut deke.
 
-`carry_space.gd` (`AICarrySpace`) holds the carrier's room to operate:
-reachable-set evasion, the safety maps, the crossing sample, controlled space,
-the brake check and the fake-then-cut deke.
-
-**`AICarrySpace` reads `AIActionScoring`; never the reverse.** It borrows the
-arrival clock, the net test, six reference speeds and the puck-protect handle,
-and that direction is load-bearing: a const read across a GDScript `class_name`
-cycle can fail at PARSE time, which takes the whole class down and every static
-call on it from every file at once. `test_scoring_split_stays_acyclic.gd` holds
-it. That is also why the split was drawn by dependency closure rather than by
-topic: functions the scorer calls bare stay with the scorer.
+Both evaluators read the leaves and never each other.
+`test_scoring_split_stays_acyclic.gd` holds that. A primitive both need goes in
+a leaf; an extraction is cut where nothing in the cut reaches back into what
+remains.
 
 ## The models in detail
 

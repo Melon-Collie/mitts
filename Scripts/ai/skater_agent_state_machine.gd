@@ -1918,7 +1918,7 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 				target = puck_pos + through.normalized() * ENGAGEMENT_PROXIMITY_M
 				# A drive-through that crosses a net engages at the puck instead,
 				# rather than driving the body through the frame.
-				if AIActionScoring.carry_path_blocked_by_net(puck_pos, target):
+				if AINetObstacle.carry_path_blocked_by_net(puck_pos, target):
 					target = puck_pos
 		elif carrier_pid == -1:
 			# BLADE-FIRST pickup route: steer the BODY one carry cradle SHORT of the
@@ -2027,7 +2027,7 @@ func _pass_receive_aim_and_steer(input: InputState, snapshot: WorldSnapshot, sel
 			Vector2(body_anchor.x, body_anchor.z), BODY_WALL_MARGIN_M)
 	body_anchor = Vector3(anchor_xz.x, 0.0, anchor_xz.y)
 	# Timing gate (RECEIVE_TIMING_MARGIN).
-	var bot_eta: float = AIActionScoring.time_to_arrive(
+	var bot_eta: float = AIArrival.time_to_arrive(
 			self_pos, body_anchor, self_vel, _self_max_speed)
 	if bot_eta > puck_eta * RECEIVE_TIMING_MARGIN:
 		return false
@@ -3337,8 +3337,8 @@ func _pass_aim_point(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 	# walk it into the cage (the classic behind-the-net feed that rings off the
 	# outside of the frame). If the led lane crosses a net but the receiver's body
 	# line doesn't, fire at the body — a catch on the tape beats a clank.
-	if AIActionScoring.pass_lane_blocked_by_net(origin, lead) \
-			and not AIActionScoring.pass_lane_blocked_by_net(origin, receiver.position):
+	if AINetObstacle.pass_lane_blocked_by_net(origin, lead) \
+			and not AINetObstacle.pass_lane_blocked_by_net(origin, receiver.position):
 		return Vector3(receiver.position.x, 0.0, receiver.position.z)
 	return lead
 
@@ -3724,7 +3724,7 @@ func _carry_mouse_aim(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 	target.x = on_ice.x
 	target.z = on_ice.y
 	# ...and never THROUGH a net frame: the chord swings around the nearer post.
-	return AIActionScoring.net_safe_blade_target(self_pos, target)
+	return AINetObstacle.net_safe_blade_target(self_pos, target)
 
 
 # True while the presented-forward puck is inside somebody's reach — there is
@@ -3957,7 +3957,7 @@ func _deke_mouse_target(self_pos: Vector3) -> Vector3:
 			Vector2(target.x, target.z), CARRY_BLADE_WALL_MARGIN_M)
 	target.x = on_ice.x
 	target.z = on_ice.y
-	return AIActionScoring.net_safe_blade_target(self_pos, target)
+	return AINetObstacle.net_safe_blade_target(self_pos, target)
 
 
 # Defensive poke jab (or stick lift): the reach-in aim while one is active, else

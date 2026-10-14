@@ -146,13 +146,13 @@ func test_a_standing_defender_gives_a_flying_carrier_the_ramp() -> void:
 			[[10, 1, carrier, vel]], 10, AIRushRead.Numbers.DOWN_ONE)
 	var ice_to_gate: float = OUR_NET_Z - AIZoneCoverage.HOUSE_TOP_DEPTH_M
 	var ramp: float = minf(AIStrideRamp.head_start(9.0,
-			AIActionScoring.SKATER_REF_SPEED_M_S,
-			AIActionScoring.SHED_ACCEL_DEFAULT_M_S2, 0.0,
+			AIArrival.SKATER_REF_SPEED_M_S,
+			AIArrival.SHED_ACCEL_DEFAULT_M_S2, 0.0,
 			standing.self_max_speed, standing.self_max_accel,
-			AIActionScoring.REVERSAL_BRAKE_DECEL_M_S2,
+			AIArrival.REVERSAL_BRAKE_DECEL_M_S2,
 			AIStrideRamp.time_to_cover(9.0, ice_to_gate,
-					AIActionScoring.SKATER_REF_SPEED_M_S,
-					AIActionScoring.SHED_ACCEL_DEFAULT_M_S2)), ice_to_gate)
+					AIArrival.SKATER_REF_SPEED_M_S,
+					AIArrival.SHED_ACCEL_DEFAULT_M_S2)), ice_to_gate)
 	assert_gt(ramp, STICK, "a flat start against 9 m/s concedes real ice")
 	var deeper: float = \
 			_gap(AIRoleRushD.decide(standing, AIRoleSlots.Slot.RUSH_D1), carrier, vel) \

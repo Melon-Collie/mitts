@@ -218,8 +218,8 @@ func _fill_attackers(snapshot: WorldSnapshot, team_id: int,
 			continue
 		var caps: AISkaterCaps = caps_by_peer.get(pid)
 		var accel: float = caps.max_accel if caps != null \
-				else AIActionScoring.SHED_ACCEL_DEFAULT_M_S2
-		var t: float = AIActionScoring.time_to_arrive(
+				else AIArrival.SHED_ACCEL_DEFAULT_M_S2
+		var t: float = AIArrival.time_to_arrive(
 				s.position, our_net, s.velocity,
 				_race_speed(caps), accel)
 		if t <= bar:
@@ -266,8 +266,8 @@ func _fill_recovery(snapshot: WorldSnapshot, team_id: int,
 			continue
 		var caps: AISkaterCaps = caps_by_peer.get(pid)
 		var accel: float = caps.max_accel if caps != null \
-				else AIActionScoring.SHED_ACCEL_DEFAULT_M_S2
-		var t: float = AIActionScoring.time_to_arrive(
+				else AIArrival.SHED_ACCEL_DEFAULT_M_S2
+		var t: float = AIArrival.time_to_arrive(
 				s.position, gate, s.velocity,
 				_race_speed(caps), accel)
 		# Enter/hold hysteresis on the race (see TRACK_ENTER_MARGIN_S).
@@ -310,8 +310,8 @@ func _fill_backpressure(snapshot: WorldSnapshot,
 		var caps: AISkaterCaps = caps_by_peer.get(pid)
 		var speed: float = _race_speed(caps)
 		var accel: float = caps.max_accel if caps != null \
-				else AIActionScoring.SHED_ACCEL_DEFAULT_M_S2
-		var t: float = AIActionScoring.time_to_arrive(
+				else AIArrival.SHED_ACCEL_DEFAULT_M_S2
+		var t: float = AIArrival.time_to_arrive(
 				s.position, hip, s.velocity, speed, accel)
 		if t < backpressure_s:
 			backpressure_s = t
@@ -358,14 +358,14 @@ func _origin_eta(snapshot: WorldSnapshot, team_id: int,
 		our_net: Vector3, opp_carries: bool, pid_carrier: int) -> float:
 	if opp_carries:
 		var cs: SkaterNetworkState = snapshot.skater_states[pid_carrier]
-		return AIActionScoring.time_to_arrive(cs.position, our_net, cs.velocity,
+		return AIArrival.time_to_arrive(cs.position, our_net, cs.velocity,
 				_race_speed(caps_by_peer.get(pid_carrier)))
 	var best_collect: float = INF
 	for pid: int in snapshot.skater_states:
 		if team_id_by_peer.get(pid, -1) == team_id:
 			continue
 		var s: SkaterNetworkState = snapshot.skater_states[pid]
-		var t: float = AIActionScoring.time_to_arrive(
+		var t: float = AIArrival.time_to_arrive(
 				s.position, rush_origin, s.velocity,
 				_race_speed(caps_by_peer.get(pid)))
 		if t < best_collect:
@@ -373,8 +373,8 @@ func _origin_eta(snapshot: WorldSnapshot, team_id: int,
 	if best_collect == INF:
 		return INF
 	# Carry from the pickup, restarting from rest — the gather costs the momentum.
-	return best_collect + AIActionScoring.time_to_arrive(
-			rush_origin, our_net, Vector3.ZERO, AIActionScoring.SKATER_REF_SPEED_M_S)
+	return best_collect + AIArrival.time_to_arrive(
+			rush_origin, our_net, Vector3.ZERO, AIArrival.SKATER_REF_SPEED_M_S)
 
 
 # Time until the rush reaches our blue line; 0 once it's already inside.
@@ -392,7 +392,7 @@ func _entry_eta(own_dir: float, origin_along: float, closing: float) -> float:
 
 # The rush and the backcheck both race at the skater's own top speed.
 func _race_speed(caps: AISkaterCaps) -> float:
-	return caps.max_speed if caps != null else AIActionScoring.SKATER_REF_SPEED_M_S
+	return caps.max_speed if caps != null else AIArrival.SKATER_REF_SPEED_M_S
 
 
 # Velocity lead, clamped — cover where he's cutting, not the freeze-frame. Shrinks
@@ -447,9 +447,9 @@ func _pressure_eta(snapshot: WorldSnapshot, team_id: int,
 			continue
 		var s: SkaterNetworkState = snapshot.skater_states[pid]
 		var caps: AISkaterCaps = caps_by_peer.get(pid)
-		var t: float = AIActionScoring.time_to_arrive(
+		var t: float = AIArrival.time_to_arrive(
 				s.position, carrier_pos, s.velocity,
-				caps.max_speed if caps != null else AIActionScoring.SKATER_REF_SPEED_M_S)
+				caps.max_speed if caps != null else AIArrival.SKATER_REF_SPEED_M_S)
 		if t < best:
 			best = t
 	return best
