@@ -78,6 +78,74 @@ enum Slot {
 	TRACK_MID,        # The single mid tracker (3v3) — centre lane, no side split.
 }
 
+# The fixed facts the agent reads per slot, as [debug label, REACTIVE, PRESSURER]:
+# REACTIVE slots track something moving at play speed (the carrier, a man, a
+# race) and keep the fast argmax cadence; PRESSURER slots own the puck
+# defensively and may reach in. The situational cases — the 5v5 zone role that
+# owns the puck this tick, the finisher's camp in the zone, a live soft-lock —
+# are the agent's to add on top.
+const _SLOT_INFO: Dictionary = {
+	Slot.CARRIER: ["Carrier", false, false],
+	Slot.PRESSURE: ["Pressure", true, true],
+	Slot.MARK: ["Mark", true, false],
+	Slot.FINISHER: ["Finisher", false, false],
+	Slot.OUTLET: ["Outlet", false, false],
+	Slot.SUPPORT: ["Support", false, false],
+	Slot.BREAKOUT_STRONG: ["BreakStrong", false, false],
+	Slot.BREAKOUT_WEAK: ["BreakWeak", false, false],
+	Slot.F1_PRESSURE: ["F1", true, true],
+	Slot.F2_MID: ["F2", false, false],
+	Slot.F3_HIGH: ["F3", false, false],
+	Slot.CHASE: ["Chase", true, false],
+	Slot.FLANK_L: ["FlankL", false, false],
+	Slot.FLANK_R: ["FlankR", false, false],
+	Slot.NET_FRONT: ["NetFront", false, false],
+	Slot.HIGH_SLOT: ["HighSlot", false, false],
+	Slot.POINT_STRONG: ["PointS", false, false],
+	Slot.POINT_WEAK: ["PointW", false, false],
+	Slot.F2_STRONG: ["F2S", false, false],
+	Slot.F2_WEAK: ["F2W", false, false],
+	Slot.DP_STRONG: ["DPointS", false, false],
+	Slot.DP_WEAK: ["DPointW", false, false],
+	Slot.ZONE_D_STRONG: ["ZDS", false, false],
+	Slot.ZONE_D_WEAK: ["ZDW", false, false],
+	Slot.ZONE_C: ["ZC", false, false],
+	Slot.ZONE_W_STRONG: ["ZWS", false, false],
+	Slot.ZONE_W_WEAK: ["ZWW", false, false],
+	Slot.BREAKOUT_D2: ["BreakD2", false, false],
+	Slot.BREAKOUT_C: ["BreakC", false, false],
+	Slot.BREAKOUT_STRETCH: ["Stretch", false, false],
+	Slot.WIDE_L: ["WideL", false, false],
+	Slot.WIDE_R: ["WideR", false, false],
+	Slot.TRAILER: ["Trailer", false, false],
+	Slot.DVALVE: ["DValve", false, false],
+	Slot.DBACK_L: ["DBackL", false, false],
+	Slot.DBACK_R: ["DBackR", false, false],
+	Slot.RUSH_D1: ["RushD1", true, true],
+	Slot.RUSH_D2: ["RushD2", true, false],
+	Slot.TRACK_PUCK: ["TrackPuck", true, true],
+	Slot.TRACK_MID_STRONG: ["TrackMid", true, false],
+	Slot.TRACK_MID_WEAK: ["TrackMid", true, false],
+	Slot.TRACK_MID: ["TrackMid", true, false],
+}
+
+
+# The slot's short debug label; "-" for NONE.
+static func label(slot: int) -> String:
+	var info: Array = _SLOT_INFO.get(slot, ["-", false, false])
+	return info[0]
+
+
+static func is_reactive(slot: int) -> bool:
+	var info: Array = _SLOT_INFO.get(slot, ["-", false, false])
+	return info[1]
+
+
+static func pressures_puck(slot: int) -> bool:
+	var info: Array = _SLOT_INFO.get(slot, ["-", false, false])
+	return info[2]
+
+
 # Hysteresis for the soonest-to-arrive elections: a peer that didn't hold the
 # slot last tick pays this many seconds of effective arrival time to take it.
 # A hand-set STABILITY MARGIN (it damps an argmin, it measures nothing), scaled

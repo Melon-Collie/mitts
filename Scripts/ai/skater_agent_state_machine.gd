@@ -714,14 +714,9 @@ var full_dispatch_count: int = 0
 # one-timer camp. These keep the ~30 Hz argmax cadence; shape-holding posts
 # re-eval at half that (~15 Hz).
 func _is_reactive_slot(slot: int, snapshot: WorldSnapshot) -> bool:
+	if AIRoleSlots.is_reactive(slot):
+		return true
 	match slot:
-		AIRoleSlots.Slot.PRESSURE, AIRoleSlots.Slot.F1_PRESSURE, \
-		AIRoleSlots.Slot.MARK, \
-		AIRoleSlots.Slot.CHASE, \
-		AIRoleSlots.Slot.RUSH_D1, AIRoleSlots.Slot.RUSH_D2, \
-		AIRoleSlots.Slot.TRACK_PUCK, AIRoleSlots.Slot.TRACK_MID_STRONG, \
-		AIRoleSlots.Slot.TRACK_MID_WEAK, AIRoleSlots.Slot.TRACK_MID:
-			return true
 		AIRoleSlots.Slot.ZONE_D_STRONG, AIRoleSlots.Slot.ZONE_D_WEAK, \
 		AIRoleSlots.Slot.ZONE_C, AIRoleSlots.Slot.ZONE_W_STRONG, \
 		AIRoleSlots.Slot.ZONE_W_WEAK:
@@ -1021,7 +1016,7 @@ func get_state() -> State:
 func debug_role() -> String:
 	if _team_brain == null:
 		return "?"
-	return "%s: %s" % [_team_state_label(_team_brain.state), _slot_label(_team_brain.get_slot(_peer_id))]
+	return "%s: %s" % [_team_state_label(_team_brain.state), AIRoleSlots.label(_team_brain.get_slot(_peer_id))]
 
 
 # Debug label: the option that scored highest on the carrier's latest re-eval,
@@ -1050,7 +1045,7 @@ func debug_intent() -> String:
 func debug_pass_slot() -> String:
 	if debug_pass_peer_id == 0 or _team_brain == null:
 		return "—"
-	return _slot_label(_team_brain.get_slot(debug_pass_peer_id))
+	return AIRoleSlots.label(_team_brain.get_slot(debug_pass_peer_id))
 
 
 # Debug label: compass direction of the best carry destination, forward = toward
@@ -1095,93 +1090,6 @@ func _team_state_label(state: int) -> String:
 			return "Forecheck"
 		_:
 			return "?"
-
-
-func _slot_label(slot: int) -> String:
-	match slot:
-		AIRoleSlots.Slot.CARRIER:
-			return "Carrier"
-		AIRoleSlots.Slot.PRESSURE:
-			return "Pressure"
-		AIRoleSlots.Slot.MARK:
-			return "Mark"
-		AIRoleSlots.Slot.RUSH_D1:
-			return "RushD1"
-		AIRoleSlots.Slot.RUSH_D2:
-			return "RushD2"
-		AIRoleSlots.Slot.TRACK_PUCK:
-			return "TrackPuck"
-		AIRoleSlots.Slot.TRACK_MID, AIRoleSlots.Slot.TRACK_MID_STRONG, \
-		AIRoleSlots.Slot.TRACK_MID_WEAK:
-			return "TrackMid"
-		AIRoleSlots.Slot.FINISHER:
-			return "Finisher"
-		AIRoleSlots.Slot.OUTLET:
-			return "Outlet"
-		AIRoleSlots.Slot.SUPPORT:
-			return "Support"
-		AIRoleSlots.Slot.BREAKOUT_STRONG:
-			return "BreakStrong"
-		AIRoleSlots.Slot.BREAKOUT_WEAK:
-			return "BreakWeak"
-		AIRoleSlots.Slot.F1_PRESSURE:
-			return "F1"
-		AIRoleSlots.Slot.F2_MID:
-			return "F2"
-		AIRoleSlots.Slot.F3_HIGH:
-			return "F3"
-		AIRoleSlots.Slot.CHASE:
-			return "Chase"
-		AIRoleSlots.Slot.FLANK_L:
-			return "FlankL"
-		AIRoleSlots.Slot.FLANK_R:
-			return "FlankR"
-		AIRoleSlots.Slot.NET_FRONT:
-			return "NetFront"
-		AIRoleSlots.Slot.HIGH_SLOT:
-			return "HighSlot"
-		AIRoleSlots.Slot.POINT_STRONG:
-			return "PointS"
-		AIRoleSlots.Slot.POINT_WEAK:
-			return "PointW"
-		AIRoleSlots.Slot.F2_STRONG:
-			return "F2S"
-		AIRoleSlots.Slot.F2_WEAK:
-			return "F2W"
-		AIRoleSlots.Slot.DP_STRONG:
-			return "DPointS"
-		AIRoleSlots.Slot.DP_WEAK:
-			return "DPointW"
-		AIRoleSlots.Slot.ZONE_D_STRONG:
-			return "ZDS"
-		AIRoleSlots.Slot.ZONE_D_WEAK:
-			return "ZDW"
-		AIRoleSlots.Slot.ZONE_C:
-			return "ZC"
-		AIRoleSlots.Slot.ZONE_W_STRONG:
-			return "ZWS"
-		AIRoleSlots.Slot.ZONE_W_WEAK:
-			return "ZWW"
-		AIRoleSlots.Slot.BREAKOUT_D2:
-			return "BreakD2"
-		AIRoleSlots.Slot.BREAKOUT_C:
-			return "BreakC"
-		AIRoleSlots.Slot.BREAKOUT_STRETCH:
-			return "Stretch"
-		AIRoleSlots.Slot.WIDE_L:
-			return "WideL"
-		AIRoleSlots.Slot.WIDE_R:
-			return "WideR"
-		AIRoleSlots.Slot.TRAILER:
-			return "Trailer"
-		AIRoleSlots.Slot.DVALVE:
-			return "DValve"
-		AIRoleSlots.Slot.DBACK_L:
-			return "DBackL"
-		AIRoleSlots.Slot.DBACK_R:
-			return "DBackR"
-		_:
-			return "-"
 
 
 # ── Dispatch ─────────────────────────────────────────────────────────────────
@@ -2763,7 +2671,7 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 	# Debug label, resolved before `_pass_target_peer_id` is cleared below.
 	var target_slot_label: String = "?"
 	if DEBUG_DECISIONS and _current_strategy != null and _pass_target_peer_id != -1:
-		target_slot_label = _slot_label(_current_strategy.get_slot(_pass_target_peer_id))
+		target_slot_label = AIRoleSlots.label(_current_strategy.get_slot(_pass_target_peer_id))
 	# The receiver's lead (or the dump target), rotated by this release's
 	# committed execution error.
 	var clean_pass_aim: Vector3 = _apply_committed_aim_error(
@@ -3697,19 +3605,16 @@ func apply_stick_lift_input(input: InputState) -> void:
 
 
 # True if our current role is on the puck defensively — the only roles that jab:
-# PRESSURE, F1_PRESSURE, RUSH_D1, TRACK_PUCK (a backchecker who can't poke is
-# just escorting), a station role pressuring this beat, and in the 5v5 zone the
-# one area role that owns the puck (AIZoneCoverage.pressure_owner).
+# the PRESSURER slots (AIRoleSlots.pressures_puck), a station role pressuring
+# this beat, and in the 5v5 zone the one area role that owns the puck
+# (AIZoneCoverage.pressure_owner).
 func _is_puck_pressurer_slot(snapshot: WorldSnapshot) -> bool:
 	if _current_strategy == null:
 		return false
 	if _cached_role_decision != null and _cached_role_decision.pressures_puck:
 		return true   # a station role on the carrier this beat (the pinching D)
 	var slot: int = _current_strategy.get_slot(_peer_id)
-	if slot == AIRoleSlots.Slot.PRESSURE \
-			or slot == AIRoleSlots.Slot.F1_PRESSURE \
-			or slot == AIRoleSlots.Slot.RUSH_D1 \
-			or slot == AIRoleSlots.Slot.TRACK_PUCK:
+	if AIRoleSlots.pressures_puck(slot):
 		return true
 	match slot:
 		AIRoleSlots.Slot.ZONE_D_STRONG, AIRoleSlots.Slot.ZONE_D_WEAK, \

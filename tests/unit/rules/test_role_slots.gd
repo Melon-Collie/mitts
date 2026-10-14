@@ -412,3 +412,14 @@ func test_mixed_team_human_carrier_bots_fill_other_slots() -> void:
 	assert_true(assignments.has(10000))
 	assert_true(assignments.has(10001))
 	assert_ne(assignments[10000], assignments[10001], "bots get different slots")
+
+
+# Every slot the brain can hand out has a row in the agent's per-slot facts, so a
+# new slot cannot silently read as unlabelled, non-reactive and never jabbing.
+func test_every_slot_has_its_facts() -> void:
+	for slot: int in AIRoleSlots.Slot.values():
+		if slot == AIRoleSlots.Slot.NONE:
+			assert_eq(AIRoleSlots.label(slot), "-")
+			continue
+		assert_ne(AIRoleSlots.label(slot), "-",
+				"slot %s has no row in AIRoleSlots._SLOT_INFO" % AIRoleSlots.Slot.keys()[slot])
