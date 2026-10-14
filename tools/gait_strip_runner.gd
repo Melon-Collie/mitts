@@ -18,6 +18,8 @@ const OUT_DIR: String = "user://gait_strip"
 const TURN_AT: int = 180
 # Ticks the dive holds block, past which it gets up.
 const DIVE_HOLD: int = 110
+# Ticks from the hit to the get-up: a maximal knockdown less its get-up tail.
+const HIT_GETUP_AT: int = 128
 # One build for every strip, as the pose capture does.
 const BUILD_HEIGHT_IN: int = 73
 const BUILD_WEIGHT_LB: int = 201
@@ -54,6 +56,12 @@ const SCENARIOS: Array[Dictionary] = [
 	# Skating up-ice, then the dive (stance + block) laid out to the right,
 	# across the travel, held DIVE_HOLD ticks: down, the slide, and the get-up.
 	{"name": "dive", "warm": TURN_AT + 2, "step": 22},
+	# The same dive's get-up alone, from the tick block is let go: onto the
+	# knees, the free leg stepped up, and standing off that knee.
+	{"name": "diveup", "warm": TURN_AT + DIVE_HOLD + 1, "step": 13},
+	# Checked hard from the left while skating up-ice, from the start of the
+	# get-up (HIT_GETUP_AT ticks after the hit).
+	{"name": "hitup", "warm": TURN_AT + HIT_GETUP_AT, "step": 13},
 ]
 
 
@@ -234,7 +242,10 @@ func _steer(input: InputState) -> void:
 			move = Vector2(1.0, 0.0) if _tick < 20 else Vector2.ZERO
 			aim = up_ice
 			input.brake = _tick >= 20
-		"dive":
+		"hitup":
+			if _tick == TURN_AT:
+				_controller._on_body_check_received(Vector3(3.0, 0.0, 0.0))
+		"dive", "diveup":
 			input.stance_held = turning and _tick <= TURN_AT + DIVE_HOLD
 			input.block_held = input.stance_held
 			if turning:

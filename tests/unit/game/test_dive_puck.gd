@@ -24,6 +24,7 @@ func before_each() -> void:
 	_diver.set_physics_process(false)
 	_diver.set_process(false)
 	_diver.is_diving = true
+	_diver.dive_laid_out = true
 	_diver.is_knocked_down = true
 	_diver.dive_layout = Vector2(1.0, 0.0)
 	_pc = PuckController.new()
@@ -59,13 +60,22 @@ func test_a_puck_over_the_lying_body_goes_through() -> void:
 
 func test_a_standing_skater_there_does_not_block_it() -> void:
 	_diver.is_diving = false
+	_diver.dive_laid_out = false
 	_diver.is_knocked_down = false
 	var v: Vector3 = _shot_across_the_body(0.0)
 	_pc._check_interactions()
 	assert_eq(_puck.linear_velocity, v, "the control: a metre out, nothing is there")
 
 
-func test_the_divers_stick_knocks_a_puck_away_and_catches_nothing() -> void:
+func test_getting_up_the_lying_block_is_gone() -> void:
+	_diver.dive_laid_out = false
+	var v: Vector3 = _shot_across_the_body(0.0)
+	_pc._check_interactions()
+	assert_eq(_puck.linear_velocity, v, "on his knees, nothing lies a metre out")
+
+
+# A puck coming onto the diver's blade; returns its velocity before the check.
+func _puck_onto_the_blade() -> Vector3:
 	var drop: float = _diver.get_blade_contact_global().y - _puck.ice_height
 	_diver.global_position.y -= drop
 	var blade: Vector3 = _diver.get_blade_contact_global()
@@ -73,7 +83,19 @@ func test_the_divers_stick_knocks_a_puck_away_and_catches_nothing() -> void:
 	_puck.global_position = blade
 	_puck.linear_velocity = -face * 6.0
 	_pc._prev_puck_pos = blade + face * 0.2
-	var v: Vector3 = _puck.linear_velocity
+	return _puck.linear_velocity
+
+
+func test_the_divers_stick_knocks_a_puck_away_and_catches_nothing() -> void:
+	var v: Vector3 = _puck_onto_the_blade()
 	_pc._check_interactions()
 	assert_null(_puck.carrier, "a diver catches nothing")
 	assert_ne(_puck.linear_velocity, v, "his stick knocked it away")
+
+
+func test_getting_up_his_stick_plays_nothing() -> void:
+	_diver.dive_laid_out = false
+	var v: Vector3 = _puck_onto_the_blade()
+	_pc._check_interactions()
+	assert_null(_puck.carrier, "down, he catches nothing")
+	assert_eq(_puck.linear_velocity, v, "and getting up, his stick knocks nothing away")

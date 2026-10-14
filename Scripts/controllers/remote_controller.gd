@@ -771,8 +771,7 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	# the fall's tip rate from the replicated slide velocity stamped above.
 	var prev_kd: float = knockdown_timer
 	knockdown_timer = state.knockdown_timer
-	skater.is_knocked_down = knockdown_timer > 0.0
-	skater.is_diving = state.diving
+	_set_down_flags(state.diving)
 	_sync_knockdown_meta(prev_kd)
 	_sync_dive_layout()
 	# The torso's tilt is the frame the wire's blade is local to, so it too

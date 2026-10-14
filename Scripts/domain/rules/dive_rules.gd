@@ -10,9 +10,9 @@ extends RefCounted
 # the stick reaches.
 
 # Down at least this long, the get-up included (SkaterController
-# .knockdown_getup_seconds eases out over its tail); block held keeps him lying
-# there until it is let go.
-const DOWN_S: float = 1.0
+# .knockdown_getup_seconds is its tail); block held keeps him lying there until
+# it is let go.
+const DOWN_S: float = 1.4
 # The fall is thrown, not taken: the diver leaves his skates at the hardest hit's
 # tip rate (the knockdown's knockdown_fall_max_entry_omega) whatever his speed,
 # after a push this long, and lands without a rebound — on purpose, onto his
