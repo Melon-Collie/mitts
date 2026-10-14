@@ -146,7 +146,7 @@ The carrier is `carrier.gd` (the compete: intents, phases, argmax, commitment) o
 3. fire if `fire ≥ carry` and `fire ≥ hold` (ties fire), or retention hopeless — never while staggered;
 4. else `carrier_dump_search.gd:search` if retention hopeless; else CARRY (advance `_hold_elapsed_s` only while hold > carry).
 
-Agent side (`skater_agent_state_machine.gd`): `_state_carry` latches the intent (`_state_from_carrier_intent`), freezes shot/dump params, pre-aims (`_aim_target_for_intent`, `_lock_pass_hold`), presses when `_load_ready` (charged) or aim converged / `_aim_needs_no_rotation`, or on `_intent_max_wait_ticks`; then `carrier.clear_intent()`.
+Agent side (`skater_agent_state_machine.gd`): `_state_carry` latches the intent (`_state_from_carrier_intent`), freezes shot/dump params, pre-aims (`_aim_target_for_intent`, `_lock_pass_hold`), presses when `_load_ready` or on `_intent_max_wait_ticks` (every release is a charged wrister); then `carrier.clear_intent()`.
 
 ---
 
@@ -245,7 +245,7 @@ Ratchet first: `skater_agent_state_machine.gd` (4255), `action_scoring.gd` (2026
 2. Price in the xG seam with `AICarrierField.turnover_cost` (+ `counter_exposure_cost` in 5v5) — [one currency](CLAUDE.md#one-currency-across-the-carriers-compete).
 3. A search over candidates is its own collaborator beside the others (pattern `carrier_dump_search.gd`): `class_name AICarrier<X>Search`, the field at construction, results in named fields, its own scratch; reads the field, never writes its lists, never names `AIRoleCarrier` (`test_carrier_collaborator_seams.gd`). Shared perception or valuation it needs goes on `AICarrierField`, filled in `fill` / `fill_receivers`.
 4. `carrier.gd`: `INTENT_*` const; hold the search as `var _x := AICarrier<X>Search.new(_field)`; score in `_pick_fire_phase` into a `_phase_*` field (survives slicing); qualify against its own bar and add hysteresis in `_pick_commit_phase`; public result fields zeroed in `reset()` and `clear_intent()`.
-5. SM: `_state_from_carrier_intent` (+ `test_state_from_carrier_intent_maps_every_intent`); mirror/freeze in `_state_carry`; `_aim_target_for_intent`, `_release_is_charged`; a new press state also needs the `is_press_state` list in `dispatch` and sampling in `_set_state`.
+5. SM: `_state_from_carrier_intent` (+ `test_state_from_carrier_intent_maps_every_intent`); mirror/freeze in `_state_carry`; `_aim_target_for_intent`; a new press state also needs the `is_press_state` list in `dispatch` and sampling in `_set_state`.
 6. Tests: `test_role_carrier.gd` (outcomes that are tuning go in its snapshot), `test_skater_agent_state_machine.gd`.
 
 **New role (behaviour for a slot)**

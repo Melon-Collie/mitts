@@ -1166,22 +1166,8 @@ func test_far_chase_faces_its_route() -> void:
 
 # ── PASS_PRESSED ─────────────────────────────────────────────────────────────
 
-func test_pass_pressed_quick_fires_and_clears_target() -> void:
-	sm._state = Agent.State.PASS_PRESSED
-	sm._pass_should_charge = false
-	sm._pass_target_peer_id = TEAMMATE_ID
-	var s := _self_snap(Vector3.ZERO, true)
-	_add_skater(s, TEAMMATE_ID, Vector3(3, 0, 0))
-	var i := InputState.new()
-	sm.dispatch(i, s)
-	assert_true(i.quick_pass_pressed, "quick pass fires the dedicated quick-shot edge")
-	assert_eq(sm.get_state(), Agent.State.CARRY, "quick pass is a one-tick press")
-	assert_eq(sm._pass_target_peer_id, -1, "quick pass clears its target for the next pick")
-
-
 func test_pass_pressed_lost_puck_bails_and_clears() -> void:
 	sm._state = Agent.State.PASS_PRESSED
-	sm._pass_should_charge = true
 	sm._pass_should_saucer = true
 	sm._pass_target_peer_id = TEAMMATE_ID
 	var s := _self_snap(Vector3.ZERO, false)  # no puck
@@ -1189,13 +1175,11 @@ func test_pass_pressed_lost_puck_bails_and_clears() -> void:
 	assert_ne(sm.get_state(), Agent.State.PASS_PRESSED, "lost puck bails")
 	assert_eq(sm.get_state(), sm._post_puck_lost_state(s))
 	assert_eq(sm._pass_target_peer_id, -1, "bail clears the stale pass target")
-	assert_false(sm._pass_should_charge, "bail clears the charge flag")
 	assert_false(sm._pass_should_saucer, "bail clears the saucer flag")
 
 
 func test_pass_pressed_charged_releases_after_windup() -> void:
 	sm._state = Agent.State.PASS_PRESSED
-	sm._pass_should_charge = true
 	sm._pass_target_peer_id = TEAMMATE_ID
 	var s := _self_snap(Vector3.ZERO, true)
 	_add_skater(s, TEAMMATE_ID, Vector3(8, 0, 0))
@@ -1225,9 +1209,7 @@ func test_pass_pressed_dump_in_charges_flat_at_the_searched_pace() -> void:
 	sm._dump_launch_speed = 12.0
 	var i := InputState.new()
 	sm.dispatch(i, _self_snap(Vector3.ZERO, true))
-	assert_false(i.quick_pass_pressed, "a dump-in does NOT take the one-tick path")
 	assert_eq(i.elevation_level, ShotMechanics.ELEVATION_FLAT, "a dump-in fires FLAT")
-	assert_true(sm._pass_should_charge, "the dump-in charges")
 	assert_eq(sm._pass_target_speed, 12.0, "…at the pace the search placed it with")
 	assert_eq(sm.get_state(), Agent.State.PASS_PRESSED, "the charge holds the state")
 
@@ -1254,9 +1236,7 @@ func test_pass_pressed_rim_charges_flat_at_its_searched_pace() -> void:
 	sm._dump_launch_speed = 26.4
 	var i := InputState.new()
 	sm.dispatch(i, _self_snap(Vector3.ZERO, true))
-	assert_false(i.quick_pass_pressed, "a rim does NOT take the one-tick path")
 	assert_eq(i.elevation_level, ShotMechanics.ELEVATION_FLAT, "a rim rides the ice")
-	assert_true(sm._pass_should_charge, "the rim charges")
 	assert_eq(sm._pass_target_speed, 26.4, "…at the pace its search walked")
 
 
@@ -1474,67 +1454,6 @@ func test_windup_side_flip_moves_to_backhand() -> void:
 	var mid: Vector3 = _windup_midpoint(sm, aim, -1.0)
 	assert_lt(mid.dot(_forehand_dir(aim, false)), 0.0,
 			"side-flip moves the RH wind-up to the backhand side")
-
-
-# ── _aim_needs_no_rotation: commit-then-aim reach cone (Aim-B2) ──────────────
-# The carrier commits to the charge WITHOUT a body turn when the aim already
-# sits inside the blade reach cone (minus the commit safety margin) of the
-# current facing. Default cone 157° − 25° margin = 132° immediate-commit half-
-# angle. Pure geometry, unit-tested here (the full pre-aim transition is driven
-# from a live snapshot elsewhere).
-
-func _aim_dir(deg: float) -> Vector2:
-	# Direction `deg` off +Z (the facing axis used below), XZ as (x, z).
-	var r: float = deg_to_rad(deg)
-	return Vector2(sin(r), cos(r))
-
-
-func test_forward_aim_needs_no_rotation() -> void:
-	assert_true(sm._aim_needs_no_rotation(Vector2(0, 1), _aim_dir(0.0)),
-			"an aim dead ahead never needs a body turn")
-
-
-func test_lateral_in_cone_aim_needs_no_rotation() -> void:
-	# A 100° off-wing / lateral pass is inside the 132° commit cone — the blade
-	# reaches it with the body frozen, so no pre-aim rotation.
-	assert_true(sm._aim_needs_no_rotation(Vector2(0, 1), _aim_dir(100.0)),
-			"a 100° lateral aim is reachable without turning the body")
-	assert_true(sm._aim_needs_no_rotation(Vector2(0, 1), _aim_dir(-100.0)),
-			"symmetric on the other side")
-
-
-func test_back_wedge_aim_needs_rotation() -> void:
-	# 150° is past the 132° commit cone (in the back wedge) — the body must
-	# rotate until the aim swings into the cone.
-	assert_false(sm._aim_needs_no_rotation(Vector2(0, 1), _aim_dir(150.0)),
-			"a 150° back-wedge aim still needs a body turn")
-
-
-func test_commit_cone_boundary() -> void:
-	# The boundary is the bot's reach cone less the commit margin.
-	var edge_deg: float = rad_to_deg(
-			sm._self_reach_cone_half_angle - Agent.AIM_COMMIT_CONE_MARGIN_RAD)
-	assert_true(sm._aim_needs_no_rotation(Vector2(0, 1), _aim_dir(edge_deg - 0.5)))
-	assert_false(sm._aim_needs_no_rotation(Vector2(0, 1), _aim_dir(edge_deg + 0.5)))
-
-
-func test_commit_cone_tracks_the_bots_real_reach() -> void:
-	# A lower-reach build (smaller cone) shrinks the immediate-commit window, so
-	# an aim that a full-reach bot commits to may need a turn for the smaller one.
-	var caps := AISkaterCaps.new()
-	caps.reach_cone_half_angle = deg_to_rad(120.0)   # commit cone → 95°
-	sm.apply_capabilities(caps)
-	assert_true(sm._aim_needs_no_rotation(Vector2(0, 1), _aim_dir(90.0)),
-			"90° still inside the reduced 95° commit cone")
-	assert_false(sm._aim_needs_no_rotation(Vector2(0, 1), _aim_dir(110.0)),
-			"110° now past the reduced cone — needs a turn")
-
-
-func test_degenerate_facing_or_aim_needs_rotation() -> void:
-	assert_false(sm._aim_needs_no_rotation(Vector2.ZERO, _aim_dir(0.0)),
-			"no facing → fall back to the safe (rotate) path")
-	assert_false(sm._aim_needs_no_rotation(Vector2(0, 1), Vector2.ZERO),
-			"no aim direction → fall back to the safe path")
 
 
 # ── Poke-evade deke trigger: relative closing (angled/stationary defender) ──────

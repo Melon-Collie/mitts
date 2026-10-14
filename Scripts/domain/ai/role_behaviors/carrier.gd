@@ -146,11 +146,6 @@ var _settle_elapsed_s: float = 0.0
 # the state machine entering PASS_PRESSED. -1 = no current pass target.
 var pass_target_peer_id: int = -1
 
-# Set true with every PASS commit — every bot pass is a charged wrister. The
-# state machine reads it entering PASS_PRESSED to charge rather than fire on the
-# first tick.
-var pass_should_charge: bool = false
-
 # LAUNCH speed for the chosen PASS (AIPuckLane.pass_launch_speed): set so
 # the puck arrives on the teammate's tape at the magnet pace, friction-compensated
 # by distance. The state machine maps this to the wrister charge fraction it winds
@@ -373,7 +368,6 @@ func _arm_pick_cooldown(ctx: RoleContext, base_ticks: int) -> void:
 func reset() -> void:
 	intended_action = INTENT_CARRY
 	pass_target_peer_id = -1
-	pass_should_charge = false
 	pass_target_speed = AIPuckLane.PASS_SPEED_M_S
 	pass_should_saucer = false
 	shot_loft_level = ShotMechanics.ELEVATION_FLAT
@@ -411,7 +405,6 @@ func reset() -> void:
 func clear_intent() -> void:
 	intended_action = INTENT_CARRY
 	pass_target_peer_id = -1
-	pass_should_charge = false
 	pass_target_speed = AIPuckLane.PASS_SPEED_M_S
 	pass_should_saucer = false
 	dump_target = Vector3.INF
@@ -910,7 +903,6 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 						ctx.pass_speed_scale, receiver.velocity, pass_dir)
 			else:
 				pass_target_speed = AIPuckLane.PASS_SPEED_M_S * ctx.pass_speed_scale
-			pass_should_charge = true
 			# A saucer's launch is capped at the receivability bound for the
 			# distance — a flip still airborne at the tape flies over the
 			# receiver's grounded blade — even after the receiver-relative solve.

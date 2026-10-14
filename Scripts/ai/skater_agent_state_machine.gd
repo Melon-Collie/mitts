@@ -10,7 +10,7 @@ enum State {
 	CHASE_PUCK,       # loose-puck chase — pursue, blade on the puck
 	CARRY,            # with puck, no committed action — aim at goal
 	SHOOT_PRESSED,    # multi-tick wrister charge aimed at goalie shadow
-	PASS_PRESSED,     # one-tick press window aimed at a teammate's lead position
+	PASS_PRESSED,     # multi-tick wrister charge aimed at a lead or a dump line
 	ONE_TIMER_PRESSED,   # off-puck FINISHER fire-on-contact when ready + puck in zone
 }
 
@@ -18,19 +18,10 @@ enum State {
 # AIStationSearch.RINK_INSET_M.
 const RINK_Z_INSET: float = 1.0
 
-# A quick release waits for the motion-limited cursor to converge on its aim
-# before pressing, or it leaves at whatever angle the cursor was mid-traversal
-# at. "Converged" is a distance on the CARRY_BLADE_AIM_FORWARD_M ring, so really
-# an ANGLE: 0.10 at the 1.3 m ring is ~±4.4°, slop for moving aim targets
-# (receiver leads, goalie shadow drift).
-const AIM_CONVERGED_DIST_M: float = 0.10
-
-# Commit-then-aim margin for the quick release. The blade reaches anywhere inside
-# the reach cone (_self_reach_cone_half_angle, ≈ 157°) from the current facing, so
-# an aim inside the cone commits at once; only the back wedge pre-rotates the
-# body. This pulls the immediate-commit boundary inside the hard cone edge. Feel
-# knob: widen toward 0 if bots leave reachable aims on the table, tighten if a
-# wide aim's blade visibly lags the release.
+# How far inside the hard reach-cone edge (_self_reach_cone_half_angle, ≈ 157°)
+# an aim must sit to count as reachable with the heading frozen — the one-timer's
+# press gate. Feel knob: widen toward 0 if bots pass up reachable aims, tighten if
+# a wide aim's blade visibly lags the release.
 const AIM_COMMIT_CONE_MARGIN_RAD: float = deg_to_rad(25.0)
 
 # Default / floor for the pre-aim convergence timeout — the safety net for
@@ -415,9 +406,6 @@ var _shoot_wind_up_moving: bool = false
 # lateral offset onto the forehand side.
 var _handedness_perp_sign: float = 1.0
 
-# Charged pass: PASS_PRESSED holds shoot_held through BOT_WRISTER_CHARGE_TICKS
-# with the sweep aimed at the receiver lead, instead of releasing on tick 0.
-var _pass_should_charge: bool = false
 # Mirrored from _carrier.pass_target_speed: the distance-adaptive LAUNCH speed
 # the chosen pass should fire at. Drives both the pass lead (so the fired aim
 # matches the scored one) and the wrister charge fraction the wind-up targets.
@@ -1653,7 +1641,6 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		_intended_action = State.CARRY
 		_intent_wait_ticks = 0
 		_pass_target_peer_id = -1
-		_pass_should_charge = false
 		_pass_should_saucer = false
 		_shot_loft_level = ShotMechanics.ELEVATION_FLAT
 		_shot_aim_locked = Vector3.INF
@@ -1673,7 +1660,6 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 	# Mirrored every tick: press states and pre-aim read these fresh.
 	_last_carry_anchor = _carrier.last_carry_anchor
 	_pass_target_peer_id = _carrier.pass_target_peer_id
-	_pass_should_charge = _carrier.pass_should_charge
 	_pass_target_speed = _carrier.pass_target_speed
 	_pass_should_saucer = _carrier.pass_should_saucer
 	# Shot params must NOT keep tracking the carrier once a fire intent is latched,
@@ -1742,15 +1728,12 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 	# Mouse target depends on intent: carry uses normal goal-aim (or the
 	# deke's committed sell-and-snap while that maneuver is live), fire
 	# states pre-aim toward action direction.
-	var mouse_target: Vector3
 	if _intended_action == State.CARRY:
 		# _step_carry_cursor is also re-run on throttle-skipped ticks.
 		_step_carry_cursor(input, snapshot, self_pos, self_state)
 	else:
-		mouse_target = _aim_target_for_intent(snapshot, self_pos)
-		# ARC pre-aim swing: the convergence/commit logic below reads the arc; the
-		# cached FINAL mouse_target drives the convergence check so the bot fires
-		# only when the body has reached the real aim. A charged release's hold is
+		var mouse_target: Vector3 = _aim_target_for_intent(snapshot, self_pos)
+		# ARC pre-aim swing toward the FINAL target. A charged release's hold is
 		# a carry reach, not an aim: FRONT in front of the body, round to the hold
 		# itself behind it.
 		if not _pre_aim_holds_puck():
@@ -1760,26 +1743,12 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		else:
 			input.mouse_world_pos = _step_mouse_front(mouse_target)
 
-	# Pre-aim waits for cursor convergence (or timeout) before the press. Body
-	# facing is not gated: the ARC step keeps the cursor inside the blade ROM.
+	# Every release is a charged wrister, which fires along its committed aim
+	# from wherever the puck sits: the press waits (or times out) only until the
+	# puck carries the share of pace it was priced at.
 	if _intended_action != State.CARRY:
-		# XZ only: the cursor sits at y=0 while _aim_target_for_intent inherits
-		# self_pos.y, so a 3D distance would never converge.
-		var dx: float = _mouse_pos.x - mouse_target.x
-		var dz: float = _mouse_pos.z - mouse_target.z
-		var aim_dist: float = sqrt(dx * dx + dz * dz)
-		var aim_converged: bool = aim_dist < AIM_CONVERGED_DIST_M
-		# Commit-then-aim: a quick release whose aim already sits inside the reach
-		# cone of the CURRENT facing commits now rather than pivoting the body to it.
-		var aim_reachable_no_turn: bool = self_state != null and _aim_needs_no_rotation(
-				self_state.facing,
-				Vector2(mouse_target.x - self_pos.x, mouse_target.z - self_pos.z))
-		# A charged release fires along its committed aim from wherever the puck
-		# sits, so it waits on neither: it presses once the puck carries the
-		# share of pace it was priced at.
-		var ready: bool = _load_ready(snapshot, self_pos, self_state) \
-				if _release_is_charged(_intended_action) else (aim_converged or aim_reachable_no_turn)
-		if ready or _intent_wait_ticks >= _intent_max_wait_ticks:
+		if _load_ready(snapshot, self_pos, self_state) \
+				or _intent_wait_ticks >= _intent_max_wait_ticks:
 			_set_state(_intended_action)
 			_intended_action = State.CARRY
 			_intent_wait_ticks = 0
@@ -1789,16 +1758,6 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		else:
 			# Advance by the dispatch span: _intent_max_wait_ticks is in physics ticks.
 			_intent_wait_ticks += _dispatch_period_ticks
-
-
-# True when `intent` fires as a charged wrister (a shot, a charged pass, or a
-# dump) rather than the one-tick quick release.
-func _release_is_charged(intent: State) -> bool:
-	if intent == State.SHOOT_PRESSED:
-		return true
-	if intent != State.PASS_PRESSED:
-		return false
-	return _dump_target.is_finite() or _pass_should_charge
 
 
 # The carried puck's offset off the body, world XZ.
@@ -1823,7 +1782,7 @@ func _share_as_is(snapshot: WorldSnapshot, self_pos: Vector3,
 func _lock_pass_hold(snapshot: WorldSnapshot, self_pos: Vector3,
 		self_state: SkaterNetworkState) -> void:
 	_pass_hold_share = 0.0
-	if self_state == null or not _release_is_charged(State.PASS_PRESSED):
+	if self_state == null:
 		return
 	var pace: float = _dump_launch_speed if _dump_target.is_finite() else _pass_target_speed
 	var puck: Vector2 = _puck_offset(snapshot, self_pos)
@@ -1845,16 +1804,6 @@ func _load_ready(snapshot: WorldSnapshot, self_pos: Vector3,
 			else _pass_hold_share
 	return _share_as_is(snapshot, self_pos, self_state, _locked_pre_aim_point) \
 			>= priced - LOAD_READY_SHARE_SLACK
-
-
-# True when `aim_dir` (world XZ, bot → aim point) falls inside this bot's reach
-# cone around `facing` less AIM_COMMIT_CONE_MARGIN_RAD — the blade reaches the aim
-# with the heading frozen, so no pre-aim body rotation is needed.
-func _aim_needs_no_rotation(facing: Vector2, aim_dir: Vector2) -> bool:
-	if facing.length_squared() < 0.0001 or aim_dir.length_squared() < 0.0001:
-		return false
-	var angle: float = abs(facing.angle_to(aim_dir))
-	return angle <= maxf(_self_reach_cone_half_angle - AIM_COMMIT_CONE_MARGIN_RAD, 0.0)
 
 
 # Maps the carrier's INTENT_* enum (decoupled from State for unit testing) to a
@@ -1879,7 +1828,7 @@ func _state_from_carrier_intent(intent: int) -> State:
 func _aim_target_for_intent(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 	match _intended_action:
 		State.PASS_PRESSED:
-			if _release_is_charged(_intended_action) and _pass_hold_share > 0.0:
+			if _pass_hold_share > 0.0:
 				return self_pos + _pass_hold_offset
 			var target: Vector3 = (_locked_pre_aim_point
 					if _locked_pre_aim_point.is_finite()
@@ -1903,16 +1852,13 @@ func _pre_aim_holds_puck() -> bool:
 		State.SHOOT_PRESSED:
 			return _shot_hold_offset_locked != Vector3.ZERO
 		State.PASS_PRESSED:
-			return _release_is_charged(_intended_action) and _pass_hold_share > 0.0
+			return _pass_hold_share > 0.0
 	return false
 
 
 # The point on the carry aim ring (CARRY_BLADE_AIM_FORWARD_M) toward `aim_world`:
-# the right DIRECTION close to the bot, so pre-aim converges fast. A PRE-AIM
-# target only, never a release cursor: release_wrister's quick-pass branch aims
-# blade→cursor, and a cursor this close to the body carries no direction (see
-# the snap in _state_pass_pressed's one-tick branch). It is the FINAL point the
-# convergence check compares against, not an arc step.
+# the right DIRECTION close to the bot, so pre-aim swings there fast. It is the
+# FINAL point of the pre-aim swing, not an arc step.
 func _aim_ring_toward(self_pos: Vector3, aim_world: Vector3) -> Vector3:
 	var to_aim: Vector3 = aim_world - self_pos
 	to_aim.y = 0.0
@@ -2245,7 +2191,6 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 	# Lost the puck mid-charge: release-without-puck is a no-op.
 	if not have_puck:
 		_pass_target_peer_id = -1
-		_pass_should_charge = false
 		_pass_should_saucer = false
 		_dump_target = Vector3.INF
 		_set_state(_post_puck_lost_state(snapshot))
@@ -2262,7 +2207,6 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 		# (dir.x, tan, dir.z) at `power`, so any loft spends pace going up and the
 		# ground speed stops being the pace the landing search solved.
 		input.elevation_level = ShotMechanics.ELEVATION_FLAT
-		_pass_should_charge = true
 		_pass_target_speed = _dump_launch_speed
 
 	_apply_brake_steering(input, snapshot, self_pos)
@@ -2279,31 +2223,6 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 	var clean_pass_aim: Vector3 = _apply_committed_aim_error(
 			self_pos, _pass_aim_point(snapshot, self_pos))
 
-	if not _pass_should_charge:
-		# ── Quick release: one tick ──
-		# SNAP the cursor ONTO the aim before firing — the release happens on the
-		# tick it is decided, so a motion-limited step would fire from wherever
-		# the carry left the cursor:
-		#   DIRECTION — the carry cursor sits at the protect seam, so the release
-		#     would leave on the shielding side; the commit-then-aim reach-cone
-		#     shortcut means pre-aim can't cover this.
-		#   CONDITIONING — release_wrister's quick-pass branch aims blade→cursor,
-		#     and the blade is the ROM-projection of that same cursor, so a cursor
-		#     inside the stick's reach (the aim ring included) carries no
-		#     direction. The aim must land on the TARGET.
-		# The step call stays so the skipped-tick cache sees this target.
-		_mouse_pos = Vector3(clean_pass_aim.x, 0.0, clean_pass_aim.z)
-		_mouse_pos_initialized = true
-		input.mouse_world_pos = _step_mouse_toward(clean_pass_aim)
-		if DEBUG_DECISIONS:
-			debug_last_decision = "PASS→%s" % target_slot_label
-		# The quick-pass button fires this tick from carry at the fixed pass
-		# power. Clear the target so a future PASS picks a fresh one.
-		input.quick_pass_pressed = true
-		_pass_target_peer_id = -1
-		_set_state(State.CARRY)
-		return
-
 	# ── Charged wrister pass ──
 	# Mid-charge bail, as in SHOOT_PRESSED. Skipped on tick 0.
 	if _pass_charge_tick > 0:
@@ -2313,7 +2232,6 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 			if _opponent_within_forward(snapshot, self_pos, forward, BOT_WRISTER_BAIL_RADIUS_M):
 				input.slap_pressed = true
 				_pass_target_peer_id = -1
-				_pass_should_charge = false
 				_pass_should_saucer = false
 				_set_state(State.CARRY)
 				return
@@ -2370,7 +2288,6 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 		# Release: shoot_held drops and release_wrister fires.
 		input.shoot_held = false
 		_pass_target_peer_id = -1
-		_pass_should_charge = false
 		_pass_should_saucer = false
 		# A charged dump (dump-in / rim) releases here, so its aim is spent here.
 		_dump_target = Vector3.INF

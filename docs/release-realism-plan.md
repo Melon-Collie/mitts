@@ -226,9 +226,10 @@ who loads the puck, not just have the rule switched on.
   backstop). The pull goes around the front of the body when the straight line
   to the hold would run through the skater (`BladeRoute`), and is priced on
   that route. A hold behind the body is swung round to at the bot's arc rate,
-  on the hold's own reach, and priced at that swing's time. The Aim-B2 reach-cone commit stays for the one-tick quick release
-  only: a charged release fires along its committed aim from wherever the puck
-  sits, so it waits on neither the aim nor the body.
+  on the hold's own reach, and priced at that swing's time. A charged release
+  fires along its committed aim from wherever the puck sits, so it waits on
+  neither the aim nor the body. (Every bot release is charged now; the Aim-B2
+  reach-cone commit went with the one-tick quick release.)
 - **A pass holds the puck where it is** when that already carries the feed's
   pace, else goes to the pocket for it (`_lock_pass_hold`). A backhand pass's
   power is committed over the backhand coefficient so it leaves at the solved
