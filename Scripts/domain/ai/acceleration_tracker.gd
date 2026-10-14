@@ -1,16 +1,11 @@
 class_name AIAccelerationTracker
 extends RefCounted
 
-# Global per-skater acceleration read for the bot AI. Each skater's
-# frame-over-frame velocity delta, low-passed into a smoothed XZ acceleration,
-# is a GLOBAL quantity — identical for every bot that looks at it — so it is
-# computed ONCE per host physics frame here and shared by reference through
-# WorldSnapshot.accel_by_peer, rather than every bot recomputing the same diff
-# over every skater each tick. See CLAUDE.md -> hot-path discipline,
-# "memoize at the seam".
-#
-# Stateful (holds the previous-velocity and smoothed-accel dicts across frames),
-# so it is a RefCounted the host owns and ticks — mirroring TeamBrain.
+# Per-skater smoothed XZ acceleration and heading turn rate for the bot AI.
+# Both are global quantities, identical for every bot that reads them, so the
+# host computes them once per physics frame and shares them by reference through
+# WorldSnapshot.accel_by_peer / heading_omega_by_peer (CLAUDE.md → hot-path
+# discipline, "memoize at the seam").
 
 # Low-pass on the raw per-frame velocity diff. The raw diff is noisy at
 # 120 Hz (a one-tick velocity blip reads as a huge accel); the lerp
@@ -20,37 +15,22 @@ const SMOOTH_ALPHA: float = 0.2
 # register as a multi-hundred-m/s² spike that poisons receiver lead.
 const CLAMP_M_S2: float = 14.0
 
-# ── Heading turn rate (receiver-commitment perception) ────────────────────────
-# Alongside the linear accel, low-pass the per-skater HEADING angular velocity
-# (rad/s — how fast the travel direction is rotating). This is the passer's
-# "how committed is this receiver to a direction" read: a skater mid-cut spins
-# its heading fast (low confidence — hard to lead), one holding a line settles
-# toward zero (high confidence — lead it freely). It is a running estimate, so
-# it GAINS confidence over time — a receiver coming out of a turn reads
-# uncertain for a beat, then settles as the filter decays. Consumed by the pass
-# EV (AIActionScoring.receiver_heading_uncertainty_m) to stop bots chucking
-# feeds at turning players; a settled receiver is penalised ~0, so a clean quick
-# feed is unaffected.
-#
-# Low-pass is slightly slower than the linear accel (a heading estimate should
-# build/decay over a beat, not snap tick-to-tick). Below OMEGA_MIN_SPEED there's
-# no reliable heading to differentiate (velocity direction is noise near rest),
-# so the raw rate is treated as zero — a near-stationary receiver is EASY to
-# feed (no lead), which is exactly "settled / confident". The clamp caps a
-# one-frame velocity flip (collision / reconcile snap) from reading as an
-# impossible spin.
+# Heading turn rate (rad/s): the passer's read of how committed a receiver is
+# to a direction (AIActionScoring.receiver_heading_uncertainty_m). Filtered a
+# little slower than the accel so it builds and decays over a beat. Below
+# OMEGA_MIN_SPEED_M_S the travel direction is noise, so the raw rate reads 0 —
+# a near-stationary receiver needs no lead, which is "settled". The clamp stops
+# a one-frame velocity flip (collision / reconcile snap) reading as a spin.
 const OMEGA_SMOOTH_ALPHA: float = 0.15
 const OMEGA_CLAMP_RAD_S: float = 8.0
 const OMEGA_MIN_SPEED_M_S: float = 1.0
 
-# peer_id -> smoothed accel (XZ; y always 0). Shared by reference onto
-# current_snapshot.accel_by_peer each frame — always the live value.
+# peer_id -> smoothed accel (XZ; y always 0).
 var accel_by_peer: Dictionary[int, Vector3] = {}
 
-# peer_id -> smoothed heading turn rate (rad/s, signed; magnitude is what the
-# pass EV reads). Shared by reference onto current_snapshot.heading_omega_by_peer
-# each frame. Smoothing SIGNED (not magnitude) so straight-line direction noise
-# cancels around zero while a sustained turn's consistent sign accumulates.
+# peer_id -> smoothed heading turn rate (rad/s; the pass EV reads its
+# magnitude). Smoothed SIGNED so straight-line direction noise cancels around
+# zero while a sustained turn's consistent sign accumulates.
 var heading_omega_by_peer: Dictionary[int, float] = {}
 
 var _prev_velocity_by_peer: Dictionary[int, Vector3] = {}
@@ -60,10 +40,9 @@ var _seen: Dictionary[int, bool] = {}
 var _stale: Array[int] = []
 
 
-# Advance the estimate one physics frame from the freshest skater states.
-# Called once per host frame from GameManager (never per bot). First-sight
-# peers seed prev_velocity from the current value and contribute zero accel,
-# so a spawn / rejoin doesn't register as a thrust spike.
+# Advance one physics frame; called once per host frame, never per bot.
+# First-sight peers seed prev_velocity from the current value and contribute
+# zero accel, so a spawn / rejoin doesn't register as a thrust spike.
 func update(skater_states: Dictionary, delta: float) -> void:
 	if delta <= 0.0:
 		return
@@ -85,9 +64,8 @@ func update(skater_states: Dictionary, delta: float) -> void:
 			smoothed.x *= scale
 			smoothed.z *= scale
 		accel_by_peer[peer_id] = smoothed
-		# Heading turn rate: the signed XZ angle swept from prev→curr velocity
-		# per second. atan2(cross, dot) handles the full range and sign; both
-		# ends need real travel speed or the direction is noise (→ raw 0).
+		# Signed XZ angle swept prev→curr per second; atan2(cross, dot) covers the
+		# full range and sign.
 		var raw_omega: float = 0.0
 		var prev_speed: float = sqrt(prev_v.x * prev_v.x + prev_v.z * prev_v.z)
 		var curr_speed: float = sqrt(curr_v.x * curr_v.x + curr_v.z * curr_v.z)

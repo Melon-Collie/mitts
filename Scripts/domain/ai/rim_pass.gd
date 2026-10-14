@@ -3,21 +3,20 @@ class_name AIRimPass
 # The rim pass: a puck fired into the near boards so the boards carry it to a
 # teammate — up the wall to the half-wall winger, around the end boards to the
 # weak side, behind the net to the partner D. A straight pass prices a line; a
-# rim's lane IS the boards, so it is searched as a RELEASE (bearing at the
-# quick-pass pace) and walked on the puck's predicted path — friction and board
-# caroms, the same walk the chase election races on, at the same resolution, so
-# the receiver the rim is priced to reach is the one the election will send.
+# rim's lane IS the boards, so it is searched as a RELEASE (bearing × pace) and
+# walked on the puck's predicted path — friction and board caroms, the same walk
+# the chase election races on, at the same resolution, so the receiver the rim
+# is priced to reach is the one the election will send.
 #
-# The boards and the corner arcs bleed pace on every contact, so the search runs
-# a pace ladder from a soft rim up to the passer's own wrister max and keeps only
-# arrivals the receiver can catch: the puck's speed in his frame under the
-# deflect threshold. The carrier fires the softest launch that still reaches him
-# (AIRoleCarrier._rim_launch_for).
+# The boards and the corner arcs bleed pace on every contact, so each bearing is
+# walked on a pace ladder up to the passer's own wrister max, and only arrivals
+# the receiver can catch count (catchable). The carrier fires the softest launch
+# that still reaches him (AIRoleCarrier._rim_launch_for).
 #
 # This file is the path half: which launches are rims, where each one goes, and
-# who reaches it first. What a rim is WORTH stays in the carrier's pass EV
-# (AIRoleCarrier._rim_variant_ev), so it competes with the flat feed and the
-# saucer in one currency.
+# who reaches it first. What a rim is WORTH stays in the carrier's pass compete
+# (_rim_launch_for ranks it, _pass_ev prices the best), in one currency with the
+# flat feed and the saucer.
 #
 # A launch is a rim when its first board contact is near the passer and
 # glancing, so the boards carry it rather than turning it back into the middle.
@@ -98,11 +97,11 @@ static func _ensure_scratch() -> void:
 		speeds.append(v)
 
 
-# Searches the rim launches from `from` up to `max_pace` and races every
-# opponent on each one. Returns the number of launches (0 when the passer is nowhere near
-# the boards). A launch survives only if no leg of its path runs through a net
-# or across our own slot (`own_goal_z`), which the puck walk itself does not
-# model. `opp_*` are index-matched; caps may be null (league default).
+# Searches the rim launches from `from` up to `max_pace` and holds the
+# opponents for the lazy race (opp_time). Returns the number of launches (0 when
+# the passer is nowhere near the boards). A launch survives only if no leg of its
+# path runs through a net or across our own slot (`own_goal_z`), which the puck
+# walk itself does not model. `opp_*` are index-matched; caps may be null (league default).
 # `keeper_pos` is their goalie (INF = none), and `ours` our other skaters, whom
 # he races home against before he leaves his net.
 static func build(from: Vector3, max_pace: float, own_goal_z: float,

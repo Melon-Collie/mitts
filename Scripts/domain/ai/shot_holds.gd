@@ -12,11 +12,9 @@ extends RefCounted
 # (WristerPocket), and a reach out to either side of the shot line, which moves
 # the whole tangent-cone geometry around a goalie in tight (the pull-across, the
 # backhand tuck) at whatever pace the load leaves there. A pull costs its real
-# time: the blade's travel along the route it walks (its swing round the body to
-# a hold behind it), or the body's turn onto the cursor when the turn is what
-# loads the puck (a forehand pulled beside the stick hip is loaded before the
-# body moves). A pulled hold sits at the handling reach; the load reads its
-# bearing, not its distance. All vectors are world XZ, offsets off the body.
+# time (pull_time, _fill_pulled). A pulled hold sits at the handling reach; the
+# load reads its bearing, not its distance. All vectors are world XZ, offsets
+# off the body.
 
 # A puck this near the body's centre has no bearing to load from.
 const MIN_OFFSET_M: float = 0.05

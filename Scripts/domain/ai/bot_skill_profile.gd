@@ -1,25 +1,17 @@
 class_name BotSkillProfile
 extends RefCounted
 
-# Per-difficulty bundle of deterministic bot-skill knobs. Pure domain (no engine
-# APIs, no RNG in this file) so it stays unit-testable and replay-safe. Every
-# knob rides one of the three difficulty axes — PRECISION / PACE / COGNITION;
-# the rules that keep them separate are in Scripts/domain/ai/CLAUDE.md.
-#
-# Aim slew is deliberately NOT a tier knob: a bot slews its aim cursor at its
-# real Hands blade speed (AISkaterCaps.blade_speed), so execution difficulty
-# rides the bot's attribute build instead. The goalie's tier knobs are their own
-# bundle (GoalieSkillProfile).
-#
-# Tick rate: seconds-denominated knobs are tick-independent. dispatch_period_ticks
-# is NOT — it is calibrated against the 120 Hz sim and must be rescaled linearly
-# if the tick rate ever changes.
+# Per-difficulty bundle of deterministic bot-skill knobs. Every knob rides one of
+# the three difficulty axes — PRECISION / PACE / COGNITION; the rules that keep
+# them separate (and why aim slew is not a tier knob) are in
+# Scripts/domain/ai/CLAUDE.md → "Difficulty rides three independent axes". The
+# goalie's tier knobs are their own bundle (GoalieSkillProfile).
 #
 # To add a tier: add a Difficulty value, a factory, and a for_difficulty arm.
 # To add a knob: add a field + _init param, set it in ALL THREE factories, and
 # consume it where it is read — SkaterAgentStateMachine (dispatch, execution
 # error, and the knobs it copies onto RoleContext), GameManager (carrier reaction
-# delay), pressure.gd / carrier.gd (via RoleContext).
+# delay), the roles (via RoleContext).
 
 enum Difficulty {
 	EASY = 0,     # the floor — well-late reads, swimmy blade, commits hard to stale reads
@@ -34,29 +26,27 @@ enum Difficulty {
 var carrier_reaction_delay_s: float
 
 # Physics ticks between full decision re-evaluations during non-press states
-# (press states always run full-rate). Higher = laggier reads.
+# (press states always run full-rate). Higher = laggier reads. The one knob not
+# denominated in seconds: calibrated at the 120 Hz sim, so it rescales linearly
+# if the tick rate ever moves.
 var dispatch_period_ticks: int
 
 # Execution error on SHOT releases (radians of release-direction error; one
 # uniform ± sample per release, held through the windup so the blade sweeps
-# smoothly to a slightly wrong spot). THE conversion dial per tier — the
-# shot-outcome sim (tests/unit/ai/test_shot_sim.gd) measures goals-per-shot
-# falling smoothly and monotonically with it: 0.010 → 87%, 0.030 → 62%,
-# 0.040 → 53%, 0.050 → 47%, 0.075 → 34%.
+# smoothly to a slightly wrong spot). THE conversion dial per tier: goals per
+# shot fall smoothly and monotonically with it on the shot-outcome sim
+# (tests/unit/ai/test_shot_sim.gd).
 #
 # The bot is SELF-HONEST — the same value feeds the score's required-window inset
 # (RoleContext.self_aim_spread_rad), so it aims a window it actually fits and its
-# misses land on the GOALIE. Posts+wides stay ~1% of shots up to ~0.05 and only
-# then climb (0.075 → 6%, 0.090 → 12%); past that edge the tier stops looking
-# beaten and starts looking incompetent. Feeding the score a SMALLER spread than
-# the hand executes is not the lever it sounds like: goals-per-shot barely moves
-# (62% → 64%) because the extra wobble only walks the aim onto the pipe (14%
-# posts at believed 0.010 / executed 0.030).
+# misses land on the GOALIE. Posts and wides stay rare up to ~0.05 rad and climb
+# past it, where a tier stops looking beaten and starts looking incompetent. Do
+# not feed the score a smaller spread than the hand executes: conversion barely
+# moves, the extra wobble only walks the aim onto the pipe.
 #
-# Its selectivity feedback is REAL BUT WEAK — measured on the sim's grid the
-# shoot rate does not move at all from 0.010 to 0.050, because those spots clear
-# the fire bar either way, so it bites only on shots already near the bar.
-# Selectivity is what settle_penalty_frac is for; this knob is conversion.
+# Its selectivity feedback is weak — it bites only on shots already near the
+# fire bar. Selectivity is what settle_penalty_frac is for; this knob is
+# conversion.
 var shot_aim_error_rad: float
 
 # Execution error on PASS releases and the dump, sampled the same way.
@@ -87,27 +77,23 @@ var settle_penalty_frac: float
 var settle_penalty_tau_s: float
 
 # PACE: extra metres the on-puck PRESSURE defender drops its cut-off line back
-# toward its own net, beyond the one-stick-length baseline. Consumed in
-# pressure.gd. Must stay under a stick length — see normal().
+# toward its own net, beyond the ladder's gap. Must stay under a stick length —
+# see normal().
 var pursuit_standoff_m: float
 
 # PACE: multiplier on the pace this bot's passes ARRIVE at (passes only, not
 # shots) — AIActionScoring.pass_launch_speed then solves the launch that delivers
 # it, so a softened feed still reaches the tape and still catches a streaking
-# receiver. 0.85 puts the puck on the stick at 17 m/s instead of 20.
+# receiver.
 #
-# The most direct "how much time does the human get" dial there is: a 12 m feed
-# at 0.85 spends 0.71 s in flight instead of 0.60 s, which is most of a stride
-# for a defender reading it. And the bot is SELF-HONEST about it — every pass
-# scoring site solves its lane clearance and miss probability at this same
-# reduced pace, so a lower tier also stops ATTEMPTING the feeds its slower puck
-# can no longer thread, rather than throwing them and getting picked.
+# The bot is SELF-HONEST about it — every pass scoring site solves its lane
+# clearance and miss probability at this same reduced pace, so a lower tier also
+# stops ATTEMPTING the feeds its slower puck can no longer thread.
 var pass_speed_scale: float
 
 # PACE: how hard the on-puck pressurer hunts body checks. 1.0 = full hit-hunting;
 # below 1.0 raises the required separating-hit impulse inversely so only the
-# hardest hits commit; 0.0 = pure containment. The biggest "scary vs relaxed"
-# lever — getting lined up is the most intense moment in the game. Consumed in
+# hardest hits commit; 0.0 = pure containment. Consumed in
 # AIRoleHelpers.evaluate_body_check.
 var check_aggression: float
 
@@ -208,11 +194,11 @@ func _init(p_carrier_reaction_delay_s: float,
 
 
 # Hard reads as a very strong human rather than a frame-perfect robot: ~50 ms
-# reaction, dispatch at the engine baseline cadence, a flat ±0.6° of execution
-# error on both releases, and 0.10 s of release slop — so the doorstep lateral
-# beat is still hunted but a window in the ~0.05–0.10 s band is a coin flip the
-# goalie sometimes robs. No settle doubt, pace knobs at their no-op baseline,
-# every cognition gate open.
+# reaction, dispatch every 2 ticks, a flat ±0.6° of execution error on both
+# releases, and 0.10 s of release slop — so the doorstep lateral beat is still
+# hunted but a window in the ~0.05–0.10 s band is a coin flip the goalie
+# sometimes robs. No settle doubt, pace knobs at their no-op baseline, every
+# cognition gate open.
 #
 # Tune carrier_reaction_delay_s UP if it matches passes too readily.
 static func hard() -> BotSkillProfile:
@@ -226,20 +212,18 @@ static func hard() -> BotSkillProfile:
 # one-timers) at a third of Hard's re-decide rate. Shot error ±2.3° ≈ ±0.48 m at
 # the net from 12 m, so a well-picked corner becomes goals AND saves and the
 # score's spread budget stops the from-range snipes entirely; pass error stays
-# near-Hard so the passing game keeps connecting. On the shot-outcome sim it
-# buries 53% of what it takes against 87% for Hard, with the misses landing on
-# the keeper (posts ~1%, wides ~0%).
+# near-Hard so the passing game keeps connecting.
 #
 # The 0.60 settle doubt is the tier's INDECISION dial: for the first beat of a
 # possession an option must be worth ~2.5× its giveaway bar to be worth the puck
 # (τ = 0.30 s, so ~1.25× by 0.3 s and gone by ~0.9 s). It is most of what stops
-# Normal reading as "Hard with extra lag" — it no longer finds EVERY pass on the
-# first touch, so pressuring a fresh carrier off a marginal outlet is a real play.
+# Normal reading as "Hard with extra lag": pressuring a fresh carrier off a
+# marginal outlet is a real play.
 #
 # pursuit_standoff_m must stay well under a stick length: at 1.5 m the pressurer
-# sits permanently outside blade reach and can never poke, which playtests read
-# as "bots never challenge". At 0.75 the carrier's own motion brings the puck
-# transiently into contest range while the human still gets his beat.
+# sits permanently outside blade reach and can never poke. At 0.75 the carrier's
+# own motion brings the puck transiently into contest range while the human
+# still gets his beat.
 static func normal() -> BotSkillProfile:
 	return BotSkillProfile.new(0.22, 6, 0.04, 0.015, 0.16, 0.60, 0.30,
 			0.75, 0.85, 0.65, 0.6,
