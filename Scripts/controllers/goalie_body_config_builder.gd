@@ -252,6 +252,8 @@ class Inputs:
 	var puck_play_stride_phase: float = 0.0
 	var puck_play_stride_intensity: float = 0.0
 	var footwork: GoalieFootwork = null
+	# Where the screen peek has craned his eyes off his midline (goalie-local x).
+	var eye_offset_local_x: float = 0.0
 
 # Scratch — `Goalie.apply_body_config` reads but never stores the reference, so
 # one shared instance is safe, and it keeps ~150 lines of Vector3 literals off
@@ -329,6 +331,12 @@ func build(inputs: Inputs) -> GoalieBodyConfig:
 	c.head_rot = Vector3(c.head_rot.x, inputs.head_yaw_deg, c.head_rot.z)
 	c.blocker_over_glove = blocker_over_glove_for_state(inputs.state)
 	GoalieFootwork.apply(c, inputs.footwork, inputs.state)
+	if GoalieStateMachine.is_on_his_feet(inputs.state):
+		# He leans his eyes around a screen, and his head goes with every lean.
+		c.body_rot.z += GoalieAnatomy.roll_for_head_shift(
+				c.head_pos.y, c.body_pos.y, inputs.eye_offset_local_x)
+		c.head_pos.x += GoalieAnatomy.head_shift_for_roll(c.head_pos.y, c.body_pos.y, c.body_rot.z)
+		c.body_pos.x += GoalieAnatomy.trunk_shift_for_roll(c.body_rot.z)
 	if not catches_left:
 		_mirror_hands(c)
 	# Last, so every modifier that moved the hand is already in.

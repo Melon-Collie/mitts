@@ -84,15 +84,9 @@ static func apply(c: GoalieBodyConfig, fw: GoalieFootwork, state: int) -> void:
 	c.left_pad_step_rot = Vector3.ZERO
 	c.right_pad_step_pos = Vector3.ZERO
 	c.right_pad_step_rot = Vector3.ZERO
-	if fw == null or not _has_footwork(state):
+	if fw == null or not GoalieStateMachine.is_on_his_feet(state):
 		return
 	fw._write(c)
-
-
-static func _has_footwork(state: int) -> bool:
-	return state == GoalieStateMachine.State.STANDING \
-			or state == GoalieStateMachine.State.READY \
-			or state == GoalieStateMachine.State.RECOVERING
 
 
 func _write(c: GoalieBodyConfig) -> void:

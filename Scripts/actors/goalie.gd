@@ -376,6 +376,13 @@ func apply_network_pose(state: GoalieNetworkState) -> void:
 	_body.position = GoalieBodyConfigBuilder.resting_body_position_for_state(state.state_enum)
 	_body.rotation = Vector3(state.body_pitch, _body.rotation.y, state.body_roll)
 	_head.position = GoalieBodyConfigBuilder.resting_head_position_for_state(state.state_enum)
+	if GoalieStateMachine.is_on_his_feet(state.state_enum):
+		# On his feet the trunk leans from the hips, the head riding it — derived
+		# from the roll, which is all the wire carries of it.
+		var roll_deg: float = rad_to_deg(state.body_roll)
+		_head.position.x += GoalieAnatomy.head_shift_for_roll(
+				_head.position.y, _body.position.y, roll_deg)
+		_body.position.x += GoalieAnatomy.trunk_shift_for_roll(roll_deg)
 	_head.rotation = Vector3(_head.rotation.x, state.head_yaw, _head.rotation.z)
 	_left_pad.position = state.left_pad_offset
 	_left_pad.rotation = Vector3(state.left_pad_pitch, state.left_pad_yaw, state.left_pad_roll)

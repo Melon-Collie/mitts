@@ -1036,8 +1036,8 @@ var _slide_coverage_confirm_timer: float = 0.0
 # solve wants them. A craned head reaches `head_peek_max_offset`; the rate is a
 # neck/shoulder lean, fast next to everything else he does but not instant, so a
 # screen drifting across the solve's refusal threshold doesn't snap the sightline.
-# Host-only — the AI is host-only and the offset is small enough that not putting
-# it on the wire costs clients nothing visible.
+# Host-only. Clients see it as the lean that carries his head there: the pose
+# rolls the trunk by that much, and body roll is on the wire.
 var _eye_offset_x: float = 0.0
 var _eye_peek_target_x: float = 0.0
 # Side of the last peek he took (±1, 0 before any) — the side he keeps on a
@@ -4000,6 +4000,7 @@ func _update_body_parts(delta: float) -> void:
 	_footwork.advance(delta, _velocity_x * cos(yaw) - _velocity_z * sin(yaw),
 			_arc_t_push, _arc_braking, shuffle_speed)
 	_pose_inputs.footwork = _footwork
+	_pose_inputs.eye_offset_local_x = _eye_offset_x * cos(yaw)
 	_set_pad_toe_out_inputs()
 	_set_prelean_inputs()
 	var config: GoalieBodyConfig = _pose.build(_pose_inputs)

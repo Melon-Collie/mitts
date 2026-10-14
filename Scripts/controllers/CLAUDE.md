@@ -380,6 +380,14 @@ anywhere (that release is the blocking drop's). The peek holds the side it chose
 on a dead-on screen (`_peek_side`); left to the sign of a perpendicular near
 zero it flipped every tick. `test_goalie_screen_room.gd` holds both.
 
+**The peek is seen, and it is the eyes the reads use.** On his feet the pose
+leans the trunk from the hips by exactly the roll that carries his head to
+`_eye_offset_x` (`GoalieAnatomy.roll_for_head_shift`); the head rides every lean,
+footwork's included. Only the roll goes on the wire, so the network pose
+rebuilds the head and the trunk's hip pivot from it. Never put the head
+somewhere the sightline is not: a peek you cannot see is one a shooter cannot
+read. `test_goalie_screen_peek_pose.gd` holds it.
+
 **A tip is covered by where he stands, never by a reaction or a pre-commit.**
 Its flight from a net-front blade is shorter than his read, and he is frozen
 on the shot until it is touched, so there is no race to run. `GoalieTipDepth`

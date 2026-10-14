@@ -102,6 +102,26 @@ static func pad_center_y_on_ice(rot_deg: Vector3) -> float:
 	return absf(b.x.y) * half.x + absf(b.y.y) * half.y + absf(b.z.y) * half.z
 
 
+# The head rides the trunk's sideways lean, pivoting at the hips (the trunk
+# box's bottom): a roll of `roll_deg` (positive tips the chest toward local −x)
+# carries a head at `head_y` this far along local x.
+static func head_shift_for_roll(head_y: float, body_y: float, roll_deg: float) -> float:
+	return -(head_y - body_y + TORSO_BOX_HEIGHT_M * 0.5) * sin(deg_to_rad(roll_deg))
+
+
+# Where the trunk's centre goes for that lean to pivot at the hips: the box
+# turns about its own centre, so it slides back by what that swings its bottom.
+static func trunk_shift_for_roll(roll_deg: float) -> float:
+	return -TORSO_BOX_HEIGHT_M * 0.5 * sin(deg_to_rad(roll_deg))
+
+
+# The inverse of head_shift_for_roll: the lean that carries the head `shift`
+# along local x.
+static func roll_for_head_shift(head_y: float, body_y: float, shift: float) -> float:
+	var lever: float = maxf(head_y - body_y + TORSO_BOX_HEIGHT_M * 0.5, 0.01)
+	return -rad_to_deg(asin(clampf(shift / lever, -1.0, 1.0)))
+
+
 # Vertical extent (bottom, top) of a part, as a Vector2 so callers can test a
 # height against it without allocating.
 static func _span(center_y: float, height: float) -> Vector2:
