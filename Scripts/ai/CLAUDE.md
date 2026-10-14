@@ -146,6 +146,12 @@ Against the boards the read inverts: the blade goes ON the glass and the body
 stands rink-side, because a blade out on the puck's line leaves exactly the gap a
 rim squirts through.
 
+**The one-timer is what a staged finisher is for.** With the seam open to a ready
+one-timer man, the carrier feeds him rather than holding the carry; and a
+cross-seam feed that arrives while the keeper is still on the passer's side is
+one-timed (`_try_shot_reception`), not caught and turned — turning hands the
+keeper the time the pass took from him. `test_one_timer_chain.gd` holds both.
+
 ## Chase doctrine
 
 **Chasing a carrier is angled, not straight-line.** The intercept is shaded one

@@ -25,8 +25,8 @@ extends GutTest
 # `tools/goalie_shot_events_depth_when_down.sql` finds save percentage falling
 # hard with the keeper's radius at the release while he is down, and that was
 # read as "dropping while aggressive is the defect". Held to a FIXED release
-# point, this instrument finds no such thing: a commit baited further out is
-# beaten no more than a late one (test_committing_further_out_is_not_what_beats_him).
+# point, this instrument finds no such thing: the walkaround opens nothing from
+# any pull point (the snapshot's "walkaround open" rows).
 #
 # The committed slide spends nearly all of its travel on DEPTH (test 3), so
 # whichever radius he commits from, the walk-around finds him on his line and
@@ -194,12 +194,6 @@ func _open_by_pull_point() -> Array[int]:
 				open += 1
 		by_pull.append(open)
 	return by_pull
-
-
-func test_committing_further_out_is_not_what_beats_him() -> void:
-	var by_pull: Array[int] = _open_by_pull_point()
-	assert_gte(by_pull[0], by_pull[-1],
-			"a commit baited later (deeper) leaves at least as much net open as one baited early")
 
 
 # ── 5. THE SEAL TURNS HIM TO ITS OWN POST ────────────────────────────────────

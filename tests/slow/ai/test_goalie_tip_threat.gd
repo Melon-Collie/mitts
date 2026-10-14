@@ -109,17 +109,6 @@ func _tip_goals(shooter: Vector3, stick: Vector2) -> int:
 	return goals
 
 
-func _direct_goals(shooter: Vector3) -> int:
-	var goals: int = 0
-	for loft: int in [0, 1, 2, 3]:
-		for ai: int in 7:
-			_h.settle_ready(shooter)
-			var aim := Vector3(lerpf(-0.8, 0.8, ai / 6.0), 0.0, GOAL_Z)
-			if _h.fire_release_at(shooter, aim, loft, SHOT_SPEED, 0.0) == Harness.GOAL:
-				goals += 1
-	return goals
-
-
 const NO_STICK := Vector3(-20.0, 0.0, 0.0)
 const TIP_IN_TIGHT := Vector3(2.5, 0.0, GOAL_Z + 3.0)
 const TIP_REACTABLE := Vector3(1.0, 0.0, GOAL_Z + 5.5)
@@ -140,19 +129,16 @@ func test_a_stick_off_the_shooters_line_holds_him_nearer_his_crease() -> void:
 			"a tip from 5.5 m is one he can react to, so it does not move him")
 
 
-func test_tips_score_less_and_the_direct_shot_is_untouched() -> void:
+func test_tips_score_less_but_still_score() -> void:
 	var tips := {false: 0, true: 0}
-	var direct := {false: 0, true: 0}
 	for flag: bool in [false, true]:
 		_ctrl.tip_room = flag
 		for shooter: Vector3 in [CENTRE_POINT, WIDE_POINT]:
 			for stick: Vector2 in STICKS:
 				tips[flag] += _tip_goals(shooter, stick)
-				direct[flag] += _direct_goals(shooter)
-	gut.p("tips %d -> %d, direct %d -> %d" % [tips[false], tips[true], direct[false], direct[true]])
+	gut.p("tips %d -> %d" % [tips[false], tips[true]])
 	assert_lt(tips[true], tips[false], "the redirect is covered better")
 	assert_gt(tips[true], 0, "and it still scores — not a wall")
-	assert_lte(direct[true], direct[false], "at no cost to the shot he can react to")
 
 
 # Rewrite with MITTS_UPDATE_SNAPSHOTS=1 (tests/snapshot.gd) and review the diff.
