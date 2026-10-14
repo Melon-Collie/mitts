@@ -50,21 +50,28 @@ extractable; scene-dependent behavior is verified by the user in a local session
 
 ## Calibration and characterisation tests
 
-Some tests are not pass/fail assertions about a single function but **pinned
-measurements** of emergent behaviour — the goalie breakaway ladder, the shot
-value calibration against the live keeper, the blade lever calibration, the
-shot-danger calibration block in `test_ai_action_scoring.gd`. They exist to
-catch silent drift when an upstream number moves.
+A model that is tuned has two kinds of test, and they must not be mixed.
 
-When one fails, the question is *"did the behavior change on purpose?"* — not
-*"which assertion do I loosen?"* Re-pin the table only once you have confirmed
-the new numbers are the intended ones, and say so in the commit.
+**Properties** say what any honest version of the model does, whatever its
+calibration: a monotonicity (a wider angle never scores higher), a bound, an
+ordering that is a physical necessity, an identity (a keeper outside the
+shooting cone concedes the empty net), a comparison against a live constant
+rather than its current value. They are ordinary assertions and a tuning change
+never breaks them unless it breaks the physics. `test_shot_danger_properties.gd`
+is the model.
 
-A pin that has to be re-pinned for every feature is protecting nothing. Prefer
-the property it stands for — a monotonicity, a bound, an ordering that is a
-physical necessity, a comparison against a live constant rather than its
-current value — and keep the measured numbers, if they are worth keeping, in an
-instrument.
+**Calibration values** — what the model currently says at the doctrine's
+reference looks — are a **snapshot**: rows recorded through `tests/snapshot.gd`
+into a checked-in table beside the test (`tests/unit/rules/snapshots/`). Any
+moved row fails with its pinned and current value. When the move is intended,
+rerun the test with `MITTS_UPDATE_SNAPSHOTS=1`, review the table's diff, and
+say in the commit that the new numbers are the intended ones. Never write a
+tuned threshold (`assert_gt(score, 0.8)`) as an assertion: it is a snapshot row
+that has to be re-pinned by hand.
+
+Measurements against the live goalie that cost seconds — the breakaway ladder,
+the shot value calibration — are the same kind of thing; they live in the slow
+tier until they are turned into properties plus a snapshot.
 
 ## Ratchets
 
