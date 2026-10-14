@@ -46,8 +46,8 @@ Doctrine: [DZONE is a shape, not a location](CLAUDE.md#dzone-is-a-shape-not-a-lo
 | possession state (7 states) | `possession_state.gd:compute` | puck zone, puck speed (`NEUTRAL_PUCK_SPEED_M_S`), **debounced** carrier, sticky last carrier team | `TeamBrain.state` | `test_possession_state.gd` |
 | coverage readiness gate | `rush_read.gd:_coverage_ready` + `possession_state.gd:coverage_read`, in `team_brain.gd:_compute_tick` | bot bodies inside our blue line vs `attackers` (capped), `COVERAGE_HOLD_TICKS` leave-hysteresis; only while an opponent carries | DZONE → TRANS_DEFENSE downgrade; `coverage_downgraded` | `test_coverage_readiness.gd` |
 | strong side | `team_brain.gd:_compute_tick` | puck x, `STRONG_SIDE_HYSTERESIS_M` | `_strong_x` → `strong_x()` | none for the hysteresis |
-| rush mode / axis | `rush_read.gd:fill` | carrier (or loose puck) pos/vel, closing along axis, `REGROUP_CLOSING_M_S` | `mode`, `threat_axis`, `rush_origin`, `carrier_peer` | `test_rush_read.gd` |
-| rush ETAs | `rush_read.gd:_origin_eta`, `_entry_eta` | carry ETA, or best opponent collect + carry | `rush_eta_s`, `entry_eta_s` | indirect only (`test_rush_read.gd` via attackers) |
+| rush mode / axis | `rush_read.gd:fill` | carrier (or loose puck) pos/vel, closing along axis, `REGROUP_CLOSING_M_S` | `mode`, `threat_axis`, `carrier_peer` | `test_rush_read.gd` |
+| rush ETA | `rush_read.gd:_origin_eta` | carry ETA, or best opponent collect + carry | `rush_eta_s` | indirect only (`test_rush_read.gd` via attackers) |
 | who is attacking | `rush_read.gd:_fill_attackers` | `time_to_arrive` to our net ≤ rush ETA + `LATE_MAN_WINDOW_S`; offside-positioned bodies dropped | `attackers`, `attacker_leads` | `test_rush_read.gd` |
 | who is back | `rush_read.gd:_fill_recovery` | radial goal-side test; race to the house gate + `BACKCHECK_WINDOW_S`; `TRACK_ENTER/HOLD_MARGIN_S` | `inside` / `tracking` / `beaten`, `recovery_by_peer` | `test_rush_read.gd` |
 | numbers | `rush_read.gd:_fill_numbers` | attackers − (inside + tracking) | `numbers` (EVEN_OR_UP / DOWN_ONE / DOWN_TWO_PLUS) | `test_rush_read.gd` |

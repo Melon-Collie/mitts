@@ -556,7 +556,7 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 			AICarrierField.goalie_now(ctx), ctx.attacking_goal_pos, cand_release, release_t)
 	var dest_score: float = _field.value_at(ctx, cand_release, self_pos,
 			_scratch_opponents_path, cand_goalie,
-			cand_speed, cand_unsettled, ctx.self_aim_spread_rad,
+			cand_speed, cand_unsettled,
 			cand_displacement, ctx.self_loft_tans.z, cand_keep)
 	# ENTRY CONTINUATION: from outside the zone an in-zone candidate is worth what
 	# a carrier there does next — the drive-in from it, priced in the in-zone
@@ -685,7 +685,7 @@ func _score_wheel_candidate(ctx: RoleContext, dest: Vector3,
 	_field.project_opponents(t1 + t2, _scratch_opponents_cont)
 	var dest_score: float = _field.value_at(ctx, dest, self_pos,
 			_scratch_opponents_cont, AICarrierField.goalie_now(ctx),
-			ctx.self_wrister_shot_speed, 0.0, ctx.self_aim_spread_rad, 0.0,
+			ctx.self_wrister_shot_speed, 0.0, 0.0,
 			ctx.self_loft_tans.z)
 	var benefit: float = dest_score * ceiling
 	if keep >= 1.0:

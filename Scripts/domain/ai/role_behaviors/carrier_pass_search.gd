@@ -487,7 +487,7 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 			receiver_release_t)
 	var receiver_value: float = _field.value_at(ctx, receiver_spot, self_pos,
 			_proj_buf, receiver_goalie,
-			receiver_shot_speed, receiver_unsettled, 0.0,
+			receiver_shot_speed, receiver_unsettled,
 			receiver_displacement, AICarrierField.loft_high(receiver_caps))
 	# An OPEN receiver can carry into a better look, so he is credited the best
 	# value he can REACH with a short drive toward the net. It bites in the OZ,

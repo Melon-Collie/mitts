@@ -155,7 +155,7 @@ func fill_receivers(ctx: RoleContext, cur_puck_pos: Vector3) -> void:
 		receiver_pos.append(tm.position)
 		receiver_val.append(value_at(
 				ctx, tm.position, ctx.self_pos, opponents, tm_goalie,
-				tm_shot_speed, 0.0, 0.0, 0.0, loft_high(tm_caps)))
+				tm_shot_speed, 0.0, 0.0, loft_high(tm_caps)))
 	# The same option read at the CURRENT puck spot — the baseline a candidate's
 	# option credit is measured against (see AICarrierCarrySearch._upgrade_candidate_two_ply): an
 	# option already available from here belongs to the live pass in the fire
@@ -344,7 +344,7 @@ static func loft_high(caps: AISkaterCaps) -> float:
 # `opps` must already be projected to the time the actor will be at `pos`, in
 # the same snapshot order as opponent_caps. `shot_speed_m_s` and
 # `loft_tan_high` are the SHOOTER's (this bot's for carry/stand candidates, the
-# receiver's build for a pass). `_aim_spread_rad` is unused: the seam prices the
+# receiver's build for a pass). It takes no aim spread: the seam prices the
 # chance, not the shooter. `shot_keep` is the odds the shooter still has the
 # puck at the press; it discounts the shot, never the position value.
 func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
@@ -352,7 +352,6 @@ func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 		predicted_goalie_pos: Vector3,
 		shot_speed_m_s: float = AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
 		goalie_unsettled_factor: float = 0.0,
-		_aim_spread_rad: float = 0.0,
 		keeper_displacement_m: float = 0.0,
 		loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH,
 		shot_keep: float = 1.0) -> float:
@@ -476,7 +475,7 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 		shot_speed *= holds.arrival_share
 		hold_keep = holds.arrival_keep
 	var advanced: float = value_at(ctx, reached, regime_from,
-			_drive_buf, goalie, shot_speed, 0.0, 0.0, 0.0,
+			_drive_buf, goalie, shot_speed, 0.0, 0.0,
 			loft_high(receiver_caps), hold_keep)
 	return advanced * keep * AIActionScoring.delay_discount(t + wait)
 

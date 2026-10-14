@@ -642,7 +642,7 @@ func test_the_shot_s_keep_never_discounts_what_the_spot_is_worth_by_position() -
 			* AIActionScoring.potential_realization_discount(pos, goal)
 	for keep: float in [1.0, 0.5, 0.0]:
 		assert_almost_eq(c._field.value_at(ctx, pos, self_pos, none, pulled,
-				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, 0.0, 10.0,
+				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, 10.0,
 				GameRules.DEFAULT_LOFT_TAN_HIGH, keep), position_value, 1e-6,
 				"keep %.1f" % keep)
 
@@ -654,11 +654,11 @@ func test_in_the_zone_the_keep_discounts_the_shot() -> void:
 	var none: Array[Vector3] = []
 	var keeper := ctx.attacking_goal_pos + Vector3(0.0, 0.0, 1.0)
 	var kept: float = c._field.value_at(ctx, self_pos, self_pos, none, keeper,
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, 0.0, 0.0,
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, 0.0,
 			GameRules.DEFAULT_LOFT_TAN_HIGH, 1.0)
 	assert_gt(kept, 0.0)
 	assert_almost_eq(c._field.value_at(ctx, self_pos, self_pos, none, keeper,
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, 0.0, 0.0,
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, 0.0,
 			GameRules.DEFAULT_LOFT_TAN_HIGH, 0.5), kept * 0.5, 1e-6)
 
 

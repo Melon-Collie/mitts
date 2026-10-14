@@ -52,10 +52,10 @@ var _faceoff_input: InputState = InputState.new()
 # zero-momentum coin-flip a blade merely held on the puck produces. Timed
 # to crest just before the drop (bots are movement-locked until then and can't
 # react on the drop like a human), so a well-timed human still out-draws a bot.
-@export var bot_draw_swing_time: float = 0.18   # s before the drop the rip fires
-@export var bot_draw_windup_distance: float = 0.3  # m the blade loads on the far side of the puck
-@export var bot_draw_pull_distance: float = 0.6  # m past the dot the rip follows through
-@export var bot_draw_lateral_bias: float = 0.7   # angle off straight-back toward the backhand winger
+var bot_draw_swing_time: float = 0.18   # s before the drop the rip fires
+var bot_draw_windup_distance: float = 0.3  # m the blade loads on the far side of the puck
+var bot_draw_pull_distance: float = 0.6  # m past the dot the rip follows through
+var bot_draw_lateral_bias: float = 0.7   # angle off straight-back toward the backhand winger
 
 # ── Scripted mode ─────────────────────────────────────────────────────────────
 # When set_scripted_mode(true) is called the agent is bypassed entirely and
