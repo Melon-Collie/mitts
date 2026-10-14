@@ -50,7 +50,7 @@ func test_measure_low_cover_edge() -> void:
 			- GameRules.NET_POST_RADIUS - GameRules.PUCK_COLLISION_RADIUS
 	gut.p("Flat shots, zero scatter. Edge = smallest |aim_x| that SCORES.")
 	gut.p("model standing core = %.3f m, butterfly core = %.3f m"
-			% [AIActionScoring.LOW_CORE_STANDING_M,
+			% [AIGoalieModel.LOW_CORE_STANDING_M,
 			AIActionScoring.HOLE_BAND_CORE[AIActionScoring.HOLE_BAND_LOW]])
 	gut.p("dist  depth | side  edge@goal  edge@keeper   parts")
 	for dist: float in [3.0, 5.0, 7.0, 9.0, 12.0]:

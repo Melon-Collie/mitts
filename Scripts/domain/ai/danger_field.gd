@@ -141,7 +141,7 @@ static func _vertex(net_idx: int, ix: int, iu: int, our_net: Vector3,
 # reference values. Returns the DANGER (what callers want).
 static func _core_quality(pos: Vector3, our_net: Vector3, goalie: Vector3,
 		net_half_width: float) -> float:
-	var seal_x: float = AIActionScoring.derive_post_seal_x_sign(pos, our_net)
+	var seal_x: float = AIGoalieModel.derive_post_seal_x_sign(pos, our_net)
 	return AIActionScoring.open_net_danger(
 			pos, our_net, goalie, net_half_width,
 			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, -1.0, false,
@@ -153,7 +153,7 @@ static func _core_quality(pos: Vector3, our_net: Vector3, goalie: Vector3,
 # _core_margin(p)) (test_danger_field.gd holds it).
 static func _core_margin(pos: Vector3, our_net: Vector3, goalie: Vector3,
 		net_half_width: float) -> float:
-	var seal_x: float = AIActionScoring.derive_post_seal_x_sign(pos, our_net)
+	var seal_x: float = AIGoalieModel.derive_post_seal_x_sign(pos, our_net)
 	return AIActionScoring.best_signed_margin(
 			pos, our_net, goalie, net_half_width,
 			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, -1.0, false,

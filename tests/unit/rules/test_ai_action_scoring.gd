@@ -170,7 +170,7 @@ func test_shoot_score_zero_from_behind_net_off_center() -> void:
 		var shooter := Vector3(x, 0.0, 27.5)
 		assert_eq(AIActionScoring.score_shoot(shooter, GOAL, goalie, NET_HW, []), 0.0,
 				"behind-the-net shot at x=%.1f must score 0" % x)
-		assert_eq(AIActionScoring.release_ahead_of_goalie(shooter, GOAL, goalie), shooter,
+		assert_eq(AIGoalieModel.release_ahead_of_goalie(shooter, GOAL, goalie), shooter,
 				"a behind-the-line release is not clamped into a phantom in-front spot")
 
 
@@ -660,7 +660,7 @@ func test_shot_danger_sharp_angle_is_low() -> void:
 	# keeper standing on the near post), and every production consumer
 	# threads the derived seal — so the doctrine call does too.
 	var shooter := Vector3(7.0, 0.0, 24.0)
-	var seal: float = AIActionScoring.derive_post_seal_x_sign(shooter, GOAL)
+	var seal: float = AIGoalieModel.derive_post_seal_x_sign(shooter, GOAL)
 	assert_ne(seal, 0.0, "premise: the ~70° look is inside the predicted post seal")
 	var s: float = AIActionScoring.score_shoot(
 			shooter, GOAL, Vector3(0.9, 0.0, 25.05), NET_HW, [],
@@ -771,8 +771,8 @@ func test_in_offensive_zone_folds_for_negative_z_attack() -> void:
 func test_release_clamped_when_behind_goalie() -> void:
 	var goalie := Vector3(0.0, 0.0, 24.65)          # 2 m out from GOAL (z 26.65)
 	var behind := Vector3(0.5, 0.0, 25.5)           # in the crease, past the goalie
-	var clamped: Vector3 = AIActionScoring.release_ahead_of_goalie(behind, GOAL, goalie)
-	assert_almost_eq(clamped.z, 24.65 - AIActionScoring.GOALIE_JAM_DISTANCE_M, 1e-4,
+	var clamped: Vector3 = AIGoalieModel.release_ahead_of_goalie(behind, GOAL, goalie)
+	assert_almost_eq(clamped.z, 24.65 - AIGoalieModel.GOALIE_JAM_DISTANCE_M, 1e-4,
 			"pushed out to the jam distance in front of the goalie")
 	assert_almost_eq(clamped.x, 0.5, 1e-6, "lateral offset is untouched")
 
@@ -780,7 +780,7 @@ func test_release_clamped_when_behind_goalie() -> void:
 func test_release_untouched_when_in_front_of_goalie() -> void:
 	var goalie := Vector3(0.0, 0.0, 24.65)
 	var in_front := Vector3(1.0, 0.0, 20.0)         # out in the slot, well in front
-	var out: Vector3 = AIActionScoring.release_ahead_of_goalie(in_front, GOAL, goalie)
+	var out: Vector3 = AIGoalieModel.release_ahead_of_goalie(in_front, GOAL, goalie)
 	assert_eq(out, in_front, "a normal in-front shot is not clamped")
 
 
@@ -1933,12 +1933,12 @@ func test_doorstep_drive_beats_the_push_but_not_the_set_wall() -> void:
 	var release := shooter + vel * lookahead
 	var none: Array[Vector3] = []
 	var goalie_now := Vector3(0, 0, -24.9)   # challenging, square to the carrier now
-	var set_goalie: Vector3 = AIActionScoring.goalie_squared_pos(
+	var set_goalie: Vector3 = AIGoalieModel.goalie_squared_pos(
 			goalie_now, goal, release)
 	var walled: float = AIActionScoring.score_shoot(
 			release, goal, set_goalie, GameRules.NET_HALF_WIDTH, none, 33.0)
 	var flight: float = release.distance_to(goal) / 33.0
-	var pushed: Vector3 = AIActionScoring.predict_goalie_pos(
+	var pushed: Vector3 = AIGoalieModel.predict_goalie_pos(
 			goalie_now, goal, lookahead + flight, release)
 	var off_the_move: float = AIActionScoring.score_shoot(
 			release, goal, pushed, GameRules.NET_HALF_WIDTH, none, 33.0)
@@ -2092,16 +2092,16 @@ func test_derive_post_seal_only_fires_in_the_sharp_near_line_zone() -> void:
 	# normal slot / mid look does not; a sharp-but-in-tight shot still short of the
 	# extreme angle does not.
 	var goal := Vector3(0, 0, -26.65)
-	assert_ne(AIActionScoring.derive_post_seal_x_sign(Vector3(8, 0, -25.5), goal), 0.0,
+	assert_ne(AIGoalieModel.derive_post_seal_x_sign(Vector3(8, 0, -25.5), goal), 0.0,
 			"dead-angle corner (1.15 m out, ~82°) is sealed")
-	assert_eq(AIActionScoring.derive_post_seal_x_sign(Vector3(0, 0, -20.65), goal), 0.0,
+	assert_eq(AIGoalieModel.derive_post_seal_x_sign(Vector3(0, 0, -20.65), goal), 0.0,
 			"the slot is never sealed")
-	assert_eq(AIActionScoring.derive_post_seal_x_sign(Vector3(7, 0, -18.0), goal), 0.0,
+	assert_eq(AIGoalieModel.derive_post_seal_x_sign(Vector3(7, 0, -18.0), goal), 0.0,
 			"an off-angle mid look (8.6 m out) is not sealed")
-	assert_eq(AIActionScoring.derive_post_seal_x_sign(Vector3(4, 0, -24.0), goal), 0.0,
+	assert_eq(AIGoalieModel.derive_post_seal_x_sign(Vector3(4, 0, -24.0), goal), 0.0,
 			"a sharp but in-tight look (2.65 m out, ~56°) is a real shot, not a seal")
 	# The seal side is the shooter's side of the goal center.
-	assert_eq(AIActionScoring.derive_post_seal_x_sign(Vector3(-8, 0, -25.5), goal), -1.0,
+	assert_eq(AIGoalieModel.derive_post_seal_x_sign(Vector3(-8, 0, -25.5), goal), -1.0,
 			"seals the side the shooter is on")
 
 
@@ -2112,9 +2112,9 @@ func test_predicted_seal_kills_the_phantom_dead_angle_shot() -> void:
 	# threaded, the same model reads the wall the live keeper actually adopts.
 	var goal := Vector3(0, 0, -26.65)
 	var corner := Vector3(8, 0, -25.5)
-	var goalie: Vector3 = AIActionScoring.goalie_squared_pos(
+	var goalie: Vector3 = AIGoalieModel.goalie_squared_pos(
 			Vector3(0, 0, goal.z + 1.3), goal, corner)
-	var seal: float = AIActionScoring.derive_post_seal_x_sign(corner, goal)
+	var seal: float = AIGoalieModel.derive_post_seal_x_sign(corner, goal)
 	var unsealed: float = AIActionScoring.score_shoot(
 			corner, goal, goalie, GameRules.NET_HALF_WIDTH, [] as Array[Vector3])
 	var sealed: float = AIActionScoring.score_shoot(
@@ -2132,9 +2132,9 @@ func test_score_pass_walls_a_dead_angle_receiver() -> void:
 	var shooter := Vector3(6, 0, 20.0)
 	var corner := Vector3(8, 0, 25.5)      # dead angle, in the seal zone
 	var slot := Vector3(0, 0, 20.65)       # a real look
-	var g_corner: Vector3 = AIActionScoring.goalie_squared_pos(
+	var g_corner: Vector3 = AIGoalieModel.goalie_squared_pos(
 			Vector3(0, 0, GOAL.z - 1.3), GOAL, corner)
-	var g_slot: Vector3 = AIActionScoring.goalie_squared_pos(
+	var g_slot: Vector3 = AIGoalieModel.goalie_squared_pos(
 			Vector3(0, 0, GOAL.z - 1.3), GOAL, slot)
 	var no_opps: Array[Vector3] = []
 	assert_almost_eq(AIActionScoring.score_pass(
@@ -2152,7 +2152,7 @@ func test_threat_surface_shoot_seals_a_dead_angle_opponent() -> void:
 	# without the seal our defenders would over-respect a shot the keeper has
 	# already sealed. Sealed, only the positional fallback remains.
 	var opp := Vector3(5, 0, 25.8)         # in the seal zone, phantom-dominant
-	var g: Vector3 = AIActionScoring.goalie_squared_pos(
+	var g: Vector3 = AIGoalieModel.goalie_squared_pos(
 			Vector3(0, 0, GOAL.z - 1.3), GOAL, opp)
 	var no_opps: Array[Vector3] = []
 	var unsealed_shot: float = AIActionScoring.score_shoot(
@@ -2269,11 +2269,11 @@ func test_arc_match_x_bounded_by_goalie_radius() -> void:
 	# can never exceed his radial distance from the goal.
 	var goal := Vector3(0, 0, -26.65)
 	var goalie := Vector3(0, 0, -24.9)   # 1.75 out
-	var x: float = AIActionScoring.goalie_arc_match_x(
+	var x: float = AIGoalieModel.goalie_arc_match_x(
 			goalie, goal, Vector3(4.0, 0, -26.4))   # wide, 0.25 m off the line
 	assert_lte(absf(x), 1.7501, "arc-x is bounded by the goalie's own radius")
 	# Moderate angles unchanged: well inside the radius, wider than the post.
-	var mid: float = AIActionScoring.goalie_arc_match_x(
+	var mid: float = AIGoalieModel.goalie_arc_match_x(
 			goalie, goal, Vector3(1.75, 0, -24.05))
 	assert_almost_eq(mid, 1.75 * 1.75 / 2.6, 0.001,
 			"a moderate-angle arc-x is the raw arc match (unclamped)")
@@ -2603,13 +2603,13 @@ func test_predicted_hands_sink_when_unsettled() -> void:
 	# The pre-arm rebuild seam: a keeper predicted to be moving at release
 	# is scored against hands at the sliding pose height, not the presented
 	# stance — the unsettled body's partial silhouette, measured.
-	var set_hands: Vector4 = AIActionScoring.predicted_goalie_hands(HANDS_READY, 0.0)
+	var set_hands: Vector4 = AIGoalieModel.predicted_goalie_hands(HANDS_READY, 0.0)
 	assert_almost_eq(set_hands.y, HANDS_READY.y, 0.001, "a set keeper keeps his stance")
-	var moving: Vector4 = AIActionScoring.predicted_goalie_hands(HANDS_READY, 1.0)
-	assert_almost_eq(moving.y, AIActionScoring.SLIDING_HANDS_Y_M, 0.001,
+	var moving: Vector4 = AIGoalieModel.predicted_goalie_hands(HANDS_READY, 1.0)
+	assert_almost_eq(moving.y, AIGoalieModel.SLIDING_HANDS_Y_M, 0.001,
 			"a fully caught-moving keeper's glove rides at the slide height")
 	assert_almost_eq(moving.x, HANDS_READY.x, 0.001, "laterals travel with the body")
-	assert_false(AIActionScoring.predicted_goalie_hands(Vector4.INF, 1.0).is_finite(),
+	assert_false(AIGoalieModel.predicted_goalie_hands(Vector4.INF, 1.0).is_finite(),
 			"absent pose passes through")
 
 

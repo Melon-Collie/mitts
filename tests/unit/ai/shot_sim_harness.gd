@@ -108,9 +108,9 @@ enum { GOAL, SAVE, POST, WIDE, NO_SHOT }
 # moving carrier or a live receiver, neither of which this instrument stages.
 static func _depth_constraints(threat_dist: float) -> GoalieDepthSolver.Constraints:
 	var c := GoalieDepthSolver.Constraints.new()
-	c.ceiling_radius = 1.75 if threat_dist <= AIActionScoring.GOALIE_ZONE_DEPTH_M \
-			else AIActionScoring.GOALIE_RESTING_DEPTH_M
-	c.standoff_cap = threat_dist - AIActionScoring.GOALIE_CHALLENGE_STANDOFF_M
+	c.ceiling_radius = 1.75 if threat_dist <= AIGoalieModel.GOALIE_ZONE_DEPTH_M \
+			else AIGoalieModel.GOALIE_RESTING_DEPTH_M
+	c.standoff_cap = threat_dist - AIGoalieModel.GOALIE_CHALLENGE_STANDOFF_M
 	c.floor_radius = 0.10
 	return c
 

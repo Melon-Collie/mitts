@@ -105,7 +105,7 @@ static func solve_caps(c: Constraints) -> float:
 # THE settled depth for a set of constraints — the tightest cap, floored, with the
 # rush backflow applied. This is the SHARED model: the live controller integrates
 # toward it via `solve`, and the bot planner reads it directly
-# (AIActionScoring.planned_goalie_depth) so the two cannot drift.
+# (AIGoalieModel.planned_goalie_depth) so the two cannot drift.
 #
 # Keeping this a separate entry point matters. The planner has no per-tick state
 # to integrate and wants the STEADY-STATE answer; the controller needs the

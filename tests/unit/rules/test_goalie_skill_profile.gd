@@ -98,22 +98,22 @@ func test_set_goalie_profile_syncs_bot_shot_model() -> void:
 	# Restore Hard afterwards: the model is a static on AIActionScoring and
 	# other tests assume the baseline.
 	var easy: GoalieSkillProfile = GoalieSkillProfile.easy()
-	AIActionScoring.set_goalie_profile(easy)
-	assert_eq(AIActionScoring.goalie_leg_delay_s, easy.reaction_delay_s)
-	assert_eq(AIActionScoring.goalie_arm_delay_s, easy.arm_reaction_delay_s)
-	assert_eq(AIActionScoring.goalie_butterfly_drop_s, easy.butterfly_drop_s)
-	assert_eq(AIActionScoring.goalie_lateral_accel_m_s2, easy.lateral_accel_mps2)
-	assert_almost_eq(AIActionScoring.goalie_arm_deploy_s,
+	AIGoalieModel.set_goalie_profile(easy)
+	assert_eq(AIGoalieModel.goalie_leg_delay_s, easy.reaction_delay_s)
+	assert_eq(AIGoalieModel.goalie_arm_delay_s, easy.arm_reaction_delay_s)
+	assert_eq(AIGoalieModel.goalie_butterfly_drop_s, easy.butterfly_drop_s)
+	assert_eq(AIGoalieModel.goalie_lateral_accel_m_s2, easy.lateral_accel_mps2)
+	assert_almost_eq(AIGoalieModel.goalie_arm_deploy_s,
 			AIActionScoring.HOLE_BAND_EXT[AIActionScoring.HOLE_BAND_HIGH]
 				/ easy.glove_react_max_speed_mps, 0.0001)
-	AIActionScoring.set_goalie_profile(GoalieSkillProfile.hard())
+	AIGoalieModel.set_goalie_profile(GoalieSkillProfile.hard())
 	# Hard restores the authored baselines exactly (the defaults the rest of
 	# the suite scores against).
-	assert_eq(AIActionScoring.goalie_leg_delay_s, GameRules.DEFAULT_GOALIE_REACTION_DELAY_S)
-	assert_eq(AIActionScoring.goalie_arm_delay_s, GameRules.DEFAULT_GOALIE_ARM_REACTION_DELAY_S)
-	assert_eq(AIActionScoring.goalie_butterfly_drop_s, AIActionScoring.GOALIE_BUTTERFLY_DROP_S)
-	assert_eq(AIActionScoring.goalie_lateral_accel_m_s2, GameRules.DEFAULT_GOALIE_LATERAL_ACCEL_M_S2)
-	assert_almost_eq(AIActionScoring.goalie_arm_deploy_s, AIActionScoring.GOALIE_ARM_DEPLOY_S, 0.0001)
+	assert_eq(AIGoalieModel.goalie_leg_delay_s, GameRules.DEFAULT_GOALIE_REACTION_DELAY_S)
+	assert_eq(AIGoalieModel.goalie_arm_delay_s, GameRules.DEFAULT_GOALIE_ARM_REACTION_DELAY_S)
+	assert_eq(AIGoalieModel.goalie_butterfly_drop_s, AIGoalieModel.GOALIE_BUTTERFLY_DROP_S)
+	assert_eq(AIGoalieModel.goalie_lateral_accel_m_s2, GameRules.DEFAULT_GOALIE_LATERAL_ACCEL_M_S2)
+	assert_almost_eq(AIGoalieModel.goalie_arm_deploy_s, AIGoalieModel.GOALIE_ARM_DEPLOY_S, 0.0001)
 
 
 func test_all_values_stay_physical() -> void:

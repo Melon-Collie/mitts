@@ -384,18 +384,18 @@ static func _lane_fan_target(ctx: RoleContext, read: AIRushRead,
 				carrier_pos, receivers[i])
 		var feed_flight: float = carrier_pos.distance_to(receivers[i]) \
 				/ maxf(feed_speed, 1.0)
-		AIActionScoring.resolve_feed_keeper(
+		AIGoalieModel.resolve_feed_keeper(
 				our_goalie_pos, our_net, feed_flight, receivers[i], carrier_pos,
 				AIRoleHelpers.our_goalie_hands(ctx), feed_speed, teammates)
-		var recv_seal: float = AIActionScoring.derive_post_seal_x_sign(
+		var recv_seal: float = AIGoalieModel.derive_post_seal_x_sign(
 				receivers[i], our_net)
 		var recv_danger: float = AIActionScoring.score_shoot(
-				receivers[i], our_net, AIActionScoring.feed_keeper_pos,
+				receivers[i], our_net, AIGoalieModel.feed_keeper_pos,
 				GameRules.NET_HALF_WIDTH,
 				no_defenders, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-				AIActionScoring.feed_keeper_unsettled, [], -1.0, false,
+				AIGoalieModel.feed_keeper_unsettled, [], -1.0, false,
 				recv_seal, recv_seal != 0.0, 0.0, [],
-				AIActionScoring.feed_keeper_hands)
+				AIGoalieModel.feed_keeper_hands)
 		if recv_danger < LANE_PLAY_DANGER_BAR:
 			continue
 		var lane_x: float = receivers[i].x - carrier_pos.x

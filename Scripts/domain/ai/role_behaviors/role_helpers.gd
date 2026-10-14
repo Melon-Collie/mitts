@@ -478,9 +478,9 @@ static func carrier_live_option(
 			break
 		var pass_speed: float = AIPuckLane.expected_pass_speed(carrier_pos, receiver)
 		var flight_s: float = carrier_pos.distance_to(receiver) / maxf(pass_speed, 1.0)
-		var pred_goalie: Vector3 = AIActionScoring.predict_goalie_pos(
+		var pred_goalie: Vector3 = AIGoalieModel.predict_goalie_pos(
 				our_goalie_pos, our_net, flight_s, receiver)
-		var unsettled: float = AIActionScoring.goalie_unsettled(
+		var unsettled: float = AIGoalieModel.goalie_unsettled(
 				our_goalie_pos, our_net, flight_s, receiver)
 		var pass_value: float = AIActionScoring.score_pass(
 				carrier_pos, receiver, our_net, pred_goalie,
@@ -575,7 +575,7 @@ static func resolve_our_goalie_pos(ctx: RoleContext) -> Vector3:
 
 
 # The opposing goalie's replicated hand read (hole-model v3), for the
-# pre-armed feed keeper (AIActionScoring.resolve_feed_keeper). INF when no
+# pre-armed feed keeper (AIGoalieModel.resolve_feed_keeper). INF when no
 # state is buffered — the resolver synthesizes the league stance.
 static func opp_goalie_hands(ctx: RoleContext) -> Vector4:
 	var goalie: GoalieNetworkState = ctx.snapshot.goalie_states.get(1 - ctx.team_id)

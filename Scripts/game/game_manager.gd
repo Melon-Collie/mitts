@@ -1082,7 +1082,7 @@ func on_host_started() -> void:
 	goalie_skill_profile = GoalieSkillProfile.for_difficulty(goalie_diff)
 	# Sync the bots' shot model to the tier — otherwise they score their shots
 	# against a Hard goalie's reads and pass up looks that beat a weaker one.
-	AIActionScoring.set_goalie_profile(goalie_skill_profile)
+	AIGoalieModel.set_goalie_profile(goalie_skill_profile)
 	# Arm the host AI timings for this match. Reset as well as enable: the probe
 	# is static and survives between matches, so a previous match's session
 	# maximum would otherwise be reported as this one's.
@@ -5005,7 +5005,7 @@ func refresh_freeplay_goalie_difficulty() -> void:
 	if not NetworkManager.is_free_play_mode:
 		return
 	goalie_skill_profile = GoalieSkillProfile.for_difficulty(PlayerPrefs.freeplay_goalie_difficulty)
-	AIActionScoring.set_goalie_profile(goalie_skill_profile)
+	AIGoalieModel.set_goalie_profile(goalie_skill_profile)
 	for gc: GoalieController in goalie_controllers:
 		gc.apply_skill_profile(goalie_skill_profile)
 

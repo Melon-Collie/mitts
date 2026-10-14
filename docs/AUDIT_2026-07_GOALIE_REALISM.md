@@ -405,7 +405,7 @@ shuffle-vs-T-push doctrine. The from-rest accel ramp (and the fact that the race
 ### 5.2 Butterfly drop speed — F2, ❌
 
 `butterfly_drop_speed = 0.05 s` pads-to-floor (`goalie_controller.gd:276`), mirrored by
-`AIActionScoring.GOALIE_BUTTERFLY_DROP_S = 0.05`. The only truly *measured* number in the
+`AIGoalieModel.GOALIE_BUTTERFLY_DROP_S = 0.05`. The only truly *measured* number in the
 research set says this is ~5× too fast: drop velocity 2.07 ± 0.09 m/s for a pro goalie (Brock
 Univ. motion capture), over a ~0.5–0.7 m hip fall → **~0.25–0.4 s from initiation to ice seal**.
 Even granting that pads (the first thing down) seal before the hips finish, ~0.15 s is the

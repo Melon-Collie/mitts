@@ -7,7 +7,7 @@ extends GutTest
 #
 # Two contracts hold them together, and both were prose:
 #
-#   1. The AUTHORED defaults must agree. AIActionScoring's static vars start at
+#   1. The AUTHORED defaults must agree. AIGoalieModel's static vars start at
 #      the same values GoalieController's @exports do, so a fresh scene with no
 #      profile applied has the bots modelling the goalie they face.
 #   2. set_goalie_profile must carry EVERY tiered knob the model reads. A knob
@@ -52,27 +52,27 @@ func _export_default(name: String) -> float:
 func test_authored_defaults_agree_before_any_profile_is_applied() -> void:
 	# GoalieSkillProfile.hard() is the controller's authored default by
 	# construction, so applying it must not move the model.
-	AIActionScoring.set_goalie_profile(GoalieSkillProfile.hard())
-	assert_almost_eq(AIActionScoring.goalie_leg_delay_s, _export_default("reaction_delay"), 1e-6,
+	AIGoalieModel.set_goalie_profile(GoalieSkillProfile.hard())
+	assert_almost_eq(AIGoalieModel.goalie_leg_delay_s, _export_default("reaction_delay"), 1e-6,
 			"the bots' leg-reaction delay must be the goalie's own")
-	assert_almost_eq(AIActionScoring.goalie_arm_delay_s, _export_default("arm_reaction_delay"), 1e-6,
+	assert_almost_eq(AIGoalieModel.goalie_arm_delay_s, _export_default("arm_reaction_delay"), 1e-6,
 			"the bots' arm-reaction delay must be the goalie's own")
-	assert_almost_eq(AIActionScoring.goalie_butterfly_drop_s,
+	assert_almost_eq(AIGoalieModel.goalie_butterfly_drop_s,
 			_export_default("butterfly_drop_speed"), 1e-6,
 			"the bots' drop time must be the goalie's own — it decides whether a low " +
 			"shot is still open when the puck arrives")
-	assert_almost_eq(AIActionScoring.goalie_lateral_accel_m_s2,
+	assert_almost_eq(AIGoalieModel.goalie_lateral_accel_m_s2,
 			_export_default("lateral_accel"), 1e-6,
 			"the bots' lateral accel must be the goalie's own — it decides whether a " +
 			"cross-crease look is reachable")
-	assert_almost_eq(AIActionScoring._planning_ceiling, _export_default("depth_aggressive"), 1e-6,
+	assert_almost_eq(AIGoalieModel._planning_ceiling, _export_default("depth_aggressive"), 1e-6,
 			"the bots' challenge-depth ceiling must be the goalie's own")
 
 
 func test_the_arm_deploy_ramp_derives_from_the_goalies_own_reach_and_speed() -> void:
-	AIActionScoring.set_goalie_profile(GoalieSkillProfile.hard())
+	AIGoalieModel.set_goalie_profile(GoalieSkillProfile.hard())
 	var reach: float = AIActionScoring.HOLE_BAND_EXT[AIActionScoring.HOLE_BAND_HIGH]
-	assert_almost_eq(AIActionScoring.goalie_arm_deploy_s,
+	assert_almost_eq(AIGoalieModel.goalie_arm_deploy_s,
 			reach / _export_default("glove_react_max_speed"), 1e-6,
 			"the deploy ramp is the high-band reach divided by the glove's real speed, " +
 			"not an authored number — a faster glove must shrink it")
@@ -80,23 +80,23 @@ func test_the_arm_deploy_ramp_derives_from_the_goalies_own_reach_and_speed() -> 
 
 # A lower tier has to actually move the model, or the ladder is decoration.
 func test_an_easier_tier_moves_every_axis_the_bots_read() -> void:
-	AIActionScoring.set_goalie_profile(GoalieSkillProfile.hard())
+	AIGoalieModel.set_goalie_profile(GoalieSkillProfile.hard())
 	var hard := {
-		"leg": AIActionScoring.goalie_leg_delay_s,
-		"arm": AIActionScoring.goalie_arm_delay_s,
-		"drop": AIActionScoring.goalie_butterfly_drop_s,
-		"accel": AIActionScoring.goalie_lateral_accel_m_s2,
-		"deploy": AIActionScoring.goalie_arm_deploy_s,
-		"depth": AIActionScoring._planning_ceiling,
+		"leg": AIGoalieModel.goalie_leg_delay_s,
+		"arm": AIGoalieModel.goalie_arm_delay_s,
+		"drop": AIGoalieModel.goalie_butterfly_drop_s,
+		"accel": AIGoalieModel.goalie_lateral_accel_m_s2,
+		"deploy": AIGoalieModel.goalie_arm_deploy_s,
+		"depth": AIGoalieModel._planning_ceiling,
 	}
-	AIActionScoring.set_goalie_profile(GoalieSkillProfile.easy())
-	assert_gt(AIActionScoring.goalie_leg_delay_s, hard.leg, "Easy reads later with the legs")
-	assert_gt(AIActionScoring.goalie_arm_delay_s, hard.arm, "and later with the arms")
-	assert_gt(AIActionScoring.goalie_butterfly_drop_s, hard.drop, "and drops slower")
-	assert_lt(AIActionScoring.goalie_lateral_accel_m_s2, hard.accel, "and pushes across slower")
-	assert_gt(AIActionScoring.goalie_arm_deploy_s, hard.deploy, "and deploys the glove slower")
-	assert_lt(AIActionScoring._planning_ceiling, hard.depth, "and sits deeper in his net")
-	AIActionScoring.set_goalie_profile(GoalieSkillProfile.hard())
+	AIGoalieModel.set_goalie_profile(GoalieSkillProfile.easy())
+	assert_gt(AIGoalieModel.goalie_leg_delay_s, hard.leg, "Easy reads later with the legs")
+	assert_gt(AIGoalieModel.goalie_arm_delay_s, hard.arm, "and later with the arms")
+	assert_gt(AIGoalieModel.goalie_butterfly_drop_s, hard.drop, "and drops slower")
+	assert_lt(AIGoalieModel.goalie_lateral_accel_m_s2, hard.accel, "and pushes across slower")
+	assert_gt(AIGoalieModel.goalie_arm_deploy_s, hard.deploy, "and deploys the glove slower")
+	assert_lt(AIGoalieModel._planning_ceiling, hard.depth, "and sits deeper in his net")
+	AIGoalieModel.set_goalie_profile(GoalieSkillProfile.hard())
 
 
 # The one that catches the real mistake: a knob added to the profile and wired
@@ -104,7 +104,7 @@ func test_an_easier_tier_moves_every_axis_the_bots_read() -> void:
 # quantity the shot model reads must appear in set_goalie_profile's body.
 func test_every_mirrored_profile_field_is_carried_by_the_sync() -> void:
 	var src: String = FileAccess.get_file_as_string(
-			"res://Scripts/domain/ai/action_scoring.gd")
+			"res://Scripts/domain/ai/goalie_model.gd")
 	var head: int = src.find("static func set_goalie_profile(")
 	assert_gt(head, 0, "set_goalie_profile must exist — it is the whole seam")
 	var body: String = src.substr(head, src.find("\n\n\n", head) - head)

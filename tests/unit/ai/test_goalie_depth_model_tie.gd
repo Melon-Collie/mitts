@@ -4,7 +4,7 @@ extends GutTest
 #
 # There are three consumers of "where will the keeper be standing?":
 #   1. GoalieController          — the live goalie (integrates toward the target)
-#   2. AIActionScoring           — the bot planner's keeper (shot/pass/carry EV)
+#   2. AIGoalieModel             — the bot planner's keeper (shot/pass/carry EV)
 #   3. shot_sim_harness          — the lateral-reach BAND instrument score_shoot
 #                                  is calibrated against
 #
@@ -74,7 +74,7 @@ func test_the_planner_matches_the_live_goalie_on_a_static_read() -> void:
 		var live: float = _live_settled(d)
 		var keeper := Vector3(0.0, 0.0, GOAL_Z + live)
 		var release := Vector3(0.0, 0.0, GOAL_Z + d)
-		var planned: float = AIActionScoring.planned_goalie_depth(
+		var planned: float = AIGoalieModel.planned_goalie_depth(
 				keeper, goal, release, 0.25, 0.0)
 		gut.p("threat %.1f m: live %.2f  planned %.2f" % [d, live, planned])
 		assert_almost_eq(planned, live, 0.03,
@@ -88,7 +88,7 @@ func test_the_planner_still_retreats_him_on_an_approach() -> void:
 	var goal := Vector3(0.0, 0.0, GOAL_Z)
 	var keeper := Vector3(0.0, 0.0, GOAL_Z + 1.75)
 	var close_release := Vector3(0.0, 0.0, GOAL_Z + 2.5)
-	var closing: float = AIActionScoring.planned_goalie_depth(
+	var closing: float = AIGoalieModel.planned_goalie_depth(
 			keeper, goal, close_release, 0.4, 6.0)
 	assert_lt(closing, 1.75,
 			"a closing rush must still back the planned keeper in")
@@ -101,9 +101,9 @@ func test_the_standoff_reaches_the_planner() -> void:
 	var goal := Vector3(0.0, 0.0, GOAL_Z)
 	var keeper := Vector3(0.0, 0.0, GOAL_Z + 1.75)
 	var release := Vector3(0.0, 0.0, GOAL_Z + 2.0)
-	var planned: float = AIActionScoring.planned_goalie_depth(
+	var planned: float = AIGoalieModel.planned_goalie_depth(
 			keeper, goal, release, 0.3, 0.0)
-	assert_true(planned <= 2.0 - AIActionScoring.GOALIE_CHALLENGE_STANDOFF_M + 0.01,
+	assert_true(planned <= 2.0 - AIGoalieModel.GOALIE_CHALLENGE_STANDOFF_M + 0.01,
 			"the planner must respect the standoff the live keeper keeps (got %.2f)" % planned)
 
 
@@ -141,7 +141,7 @@ func test_the_planner_tracks_a_live_rush() -> void:
 		var keeper := Vector3(0.0, 0.0, GOAL_Z + _ctrl._current_depth)
 		# puck_pos_at_release is where the puck will be AT release, not now.
 		var release := Vector3(0.0, 0.0, GOAL_Z + start - 6.0 * PLAN_S)
-		var planned: float = AIActionScoring.planned_goalie_depth(
+		var planned: float = AIGoalieModel.planned_goalie_depth(
 				keeper, goal, release, PLAN_S, 6.0)
 		_step(Vector3(0.0, 0.0, GOAL_Z + start), Vector3(0.0, 0.0, -6.0), PLAN_TICKS)
 		var live: float = _ctrl._current_depth
@@ -181,7 +181,7 @@ func test_the_planner_never_over_states_the_keeper() -> void:
 			var settled: float = _ctrl._current_depth
 			var keeper := Vector3(0.0, 0.0, GOAL_Z + settled)
 			var release := Vector3(0.0, 0.0, GOAL_Z + to_d)
-			var planned: float = AIActionScoring.planned_goalie_depth(
+			var planned: float = AIGoalieModel.planned_goalie_depth(
 					keeper, goal, release, PLAN_S, 0.0)
 			_step(Vector3(0.0, 0.0, GOAL_Z + to_d), Vector3.ZERO, PLAN_TICKS)
 			var live: float = _ctrl._current_depth

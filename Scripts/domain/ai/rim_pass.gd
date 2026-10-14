@@ -42,7 +42,7 @@ const MAX_LAUNCHES: int = 18
 # defaults (test_rim_pass.gd holds the two together): the rim pace window he
 # will stop, how early he must be set, the beat he takes stopping it, and the
 # sprint he assumes of the nearest of us. His GO margin is tiered and lives on
-# AIActionScoring.goalie_puck_play_go_margin_s.
+# AIGoalieModel.goalie_puck_play_go_margin_s.
 const KEEPER_RIM_MIN_SPEED_M_S: float = 4.0
 const KEEPER_RIM_MAX_SPEED_M_S: float = 22.0
 const KEEPER_SET_BEAT_S: float = 0.15
@@ -276,7 +276,7 @@ static func _race_opponents(k: int, opp_positions: Array[Vector3],
 # spot. INF when he stays home, which is every rim for a tier that never plays
 # the puck.
 static func _keeper_time(k: int, keeper_pos: Vector3, ours: Array[Vector3]) -> float:
-	var margin: float = AIActionScoring.goalie_puck_play_go_margin_s
+	var margin: float = AIGoalieModel.goalie_puck_play_go_margin_s
 	if not keeper_pos.is_finite() or is_inf(margin):
 		return INF
 	var path: Array[Vector3] = paths[k]
@@ -289,9 +289,9 @@ static func _keeper_time(k: int, keeper_pos: Vector3, ours: Array[Vector3]) -> f
 			continue
 		var t_out: float = GoalieBehaviorRules.travel_time_from_rest(
 				maxf(AIRoleHelpers.xz_distance(keeper_pos, p)
-						- AIActionScoring.GOALIE_PUCK_PLAY_REACH_M, 0.0),
-				AIActionScoring.GOALIE_PUCK_PLAY_SPEED_M_S,
-				AIActionScoring.GOALIE_PUCK_PLAY_ACCEL_M_S2)
+						- AIGoalieModel.GOALIE_PUCK_PLAY_REACH_M, 0.0),
+				AIGoalieModel.GOALIE_PUCK_PLAY_SPEED_M_S,
+				AIGoalieModel.GOALIE_PUCK_PLAY_ACCEL_M_S2)
 		var t_i: float = float(i + 1) * STEP_DT
 		if t_out + KEEPER_SET_BEAT_S > t_i:
 			continue

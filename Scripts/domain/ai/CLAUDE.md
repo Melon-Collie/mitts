@@ -445,7 +445,7 @@ concedes standing still).
 
 **The skater AI's goalie model is a MIRROR, not a second tier.** The read model
 the bots score against — leg and arm delays, drop time, lateral accel ramp, arm
-deploy — lives as static vars on `AIActionScoring` and is synced from the match's
+deploy — lives as static vars on `AIGoalieModel` and is synced from the match's
 profile by `set_goalie_profile`. A new tiered goalie knob the shot model also
 reads must be added there too, or the bots go on scoring against the Hard
 goalie while the net in front of them is an Easy one.
@@ -467,10 +467,12 @@ takes the whole class down and every static call on it from every file at once.
     the saucer, the release contest, the pass's launch speed and its own miss;
   - `bot_mechanics.gd` (`AIBotMechanics`) — the league-default execution
     constants the evaluators price and the agent executes (blade reach, the
-    carry-cursor ring, the wrister charge and its lookahead).
+    carry-cursor ring, the wrister charge and its lookahead);
+  - `goalie_model.gd` (`AIGoalieModel`) — the keeper the bots plan against: his
+    body's cover numbers, the difficulty-synced reads, planned depth, lateral
+    push, post seal and predicted position.
 - `action_scoring.gd` (`AIActionScoring`) holds the shot geometry and xG,
-  position value, dumping, turnover pricing and the difficulty-synced goalie
-  mirror.
+  position value, dumping and turnover pricing.
 - `carry_space.gd` (`AICarrySpace`) holds the carrier's room to operate:
   reachable-set evasion, the safety maps, the crossing sample, controlled space,
   the brake check and the fake-then-cut deke.

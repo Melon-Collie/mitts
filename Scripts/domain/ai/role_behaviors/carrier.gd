@@ -855,7 +855,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var tm_caps: AISkaterCaps = ctx.caps_by_peer.get(pid)
 		var tm_shot_speed: float = tm_caps.wrister_shot_speed if tm_caps != null \
 				else AIBotMechanics.WRISTER_SHOT_SPEED_M_S
-		var tm_goalie: Vector3 = AIActionScoring.goalie_squared_pos(
+		var tm_goalie: Vector3 = AIGoalieModel.goalie_squared_pos(
 				_goalie_now(ctx), attacking_goal, tm.position)
 		_scratch_option_receiver_pos.append(tm.position)
 		_scratch_option_receiver_val.append(_score_at(
@@ -970,7 +970,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var share: float = _holds.share[k]
 		var pull_s: float = _holds.pull_s[k]
 		var sample_speed: float = ctx.self_wrister_shot_speed * share
-		var release: Vector3 = AIActionScoring.release_ahead_of_goalie(
+		var release: Vector3 = AIGoalieModel.release_ahead_of_goalie(
 				self_pos + hold + horizontal_velocity
 						* (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + pull_s),
 				attacking_goal, goalie_now)
@@ -983,10 +983,10 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		# decides a razor lateral window.
 		# The shooter's own netward pace backs the keeper in over the wind-up +
 		# flight (the planning depth model).
-		var shot_closing: float = AIActionScoring.closing_toward(
+		var shot_closing: float = AIGoalieModel.closing_toward(
 				ctx.self_pos, ctx.self_velocity, attacking_goal)
 		var sample_goalie: Vector3 = goalie_now if _shot_env_seal_x != 0.0 \
-				else AIActionScoring.predict_goalie_pos(
+				else AIGoalieModel.predict_goalie_pos(
 						goalie_now, attacking_goal,
 						AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + pull_s
 								+ flight_s + ctx.shot_timing_error_s * 0.5,
@@ -1023,7 +1023,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var tip_hold := Vector3(_holds.offset[tip_k].x, 0.0, _holds.offset[tip_k].y)
 		var tip_share: float = _holds.share[tip_k]
 		var tip_pull_s: float = _holds.pull_s[tip_k]
-		var tip_release: Vector3 = AIActionScoring.release_ahead_of_goalie(
+		var tip_release: Vector3 = AIGoalieModel.release_ahead_of_goalie(
 				self_pos + tip_hold + horizontal_velocity
 						* (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + tip_pull_s),
 				attacking_goal, goalie_now)
@@ -1787,7 +1787,7 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	_project_opponents_to(ctx, flight_t, _scratch_opponents_pass)
 	# A receiver streaking netward backs the keeper in over the feed's flight,
 	# same planning depth model the carrier's own reads use.
-	var receiver_closing: float = AIActionScoring.closing_toward(
+	var receiver_closing: float = AIGoalieModel.closing_toward(
 			receiver_spot, receiver_vel, ctx.attacking_goal_pos)
 	var receiver_goalie: Vector3 = _predict_goalie_at(
 			ctx, receiver_release_t, receiver_spot, receiver_closing)
@@ -2477,10 +2477,10 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 	# Closing is the rate this carry shortens the puck's distance to the goal.
 	var carry_closing: float = (self_pos.distance_to(ctx.attacking_goal_pos)
 			- candidate.distance_to(ctx.attacking_goal_pos)) / maxf(local_time, 0.001)
-	var tracked_goalie: Vector3 = AIActionScoring.predict_goalie_pos(
+	var tracked_goalie: Vector3 = AIGoalieModel.predict_goalie_pos(
 			_goalie_now(ctx), ctx.attacking_goal_pos, local_time, candidate,
 			carry_closing)
-	var cand_release: Vector3 = AIActionScoring.release_ahead_of_goalie(
+	var cand_release: Vector3 = AIGoalieModel.release_ahead_of_goalie(
 			candidate + arrive_vel * cand_windup,
 			ctx.attacking_goal_pos, tracked_goalie)
 	var cand_flight: float = cand_release.distance_to(ctx.attacking_goal_pos) \
@@ -2488,15 +2488,15 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 	# Same expected-lateness budget as the shoot-now sweep (timing error × 0.5),
 	# and the keeper still backing in over the wind-up + flight at the arrival
 	# pace.
-	var release_closing: float = AIActionScoring.closing_toward(
+	var release_closing: float = AIGoalieModel.closing_toward(
 			candidate, arrive_vel, ctx.attacking_goal_pos)
-	var cand_goalie: Vector3 = AIActionScoring.predict_goalie_pos(
+	var cand_goalie: Vector3 = AIGoalieModel.predict_goalie_pos(
 			tracked_goalie, ctx.attacking_goal_pos,
 			cand_windup + cand_flight + ctx.shot_timing_error_s * 0.5,
 			cand_release, release_closing)
 	var cand_unsettled: float = 0.0
 	if ctx.reads_goalie_motion:
-		cand_unsettled = AIActionScoring.goalie_unsettled(
+		cand_unsettled = AIGoalieModel.goalie_unsettled(
 				tracked_goalie, ctx.attacking_goal_pos,
 				cand_windup + cand_flight + ctx.shot_timing_error_s * 0.5,
 				cand_release, release_closing)
@@ -2870,7 +2870,7 @@ func _receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 	_project_opponents_to(ctx, start_s + t, _scratch_opponents_pass)
 	# The keeper backs in over the receiver's drive exactly as over the carrier's
 	# own: both sides of the carry-vs-pass compete must read the same keeper.
-	var goalie: Vector3 = AIActionScoring.goalie_squared_pos(
+	var goalie: Vector3 = AIGoalieModel.goalie_squared_pos(
 			_goalie_now(ctx), ctx.attacking_goal_pos, reached, start_s + t,
 			(receiver_spot.distance_to(ctx.attacking_goal_pos)
 					- reached.distance_to(ctx.attacking_goal_pos)) / maxf(t, 0.001))
@@ -3082,11 +3082,11 @@ func _goalie_now(ctx: RoleContext) -> Vector3:
 	return Vector3(opp_goalie.position_x, 0.0, opp_goalie.position_z)
 
 
-# AIActionScoring.predict_goalie_pos from the goalie's current position.
+# AIGoalieModel.predict_goalie_pos from the goalie's current position.
 # `release_time_s` is the time from now until the shot leaves the blade.
 func _predict_goalie_at(ctx: RoleContext, release_time_s: float,
 		puck_pos_at_release: Vector3, closing_speed_m_s: float = 0.0) -> Vector3:
-	return AIActionScoring.predict_goalie_pos(
+	return AIGoalieModel.predict_goalie_pos(
 			_goalie_now(ctx), ctx.attacking_goal_pos,
 			release_time_s, puck_pos_at_release, closing_speed_m_s)
 
@@ -3099,6 +3099,6 @@ func _goalie_unsettled_at(ctx: RoleContext, release_time_s: float,
 		puck_pos_at_release: Vector3, closing_speed_m_s: float = 0.0) -> float:
 	if not ctx.reads_goalie_motion:
 		return 0.0
-	return AIActionScoring.goalie_unsettled(
+	return AIGoalieModel.goalie_unsettled(
 			_goalie_now(ctx), ctx.attacking_goal_pos,
 			release_time_s, puck_pos_at_release, closing_speed_m_s)

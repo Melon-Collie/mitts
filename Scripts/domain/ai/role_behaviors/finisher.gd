@@ -225,14 +225,14 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 				carrier_pos.distance_to(c) / pass_speed, 0.0, FEED_FLIGHT_MAX_S)
 		# Pre-armed feed keeper: a goalie who can see this spot is already
 		# depth-capped against it (GoalieBehaviorRules.backdoor_depth_cap).
-		AIActionScoring.resolve_feed_keeper(
+		AIGoalieModel.resolve_feed_keeper(
 				goalie_pos, ctx.attacking_goal_pos, flight_t, c, carrier_pos,
 				AIRoleHelpers.opp_goalie_hands(ctx), pass_speed, opp_positions)
 		var feed: float = AIActionScoring.score_pass(
 				carrier_pos, c, ctx.attacking_goal_pos,
-				AIActionScoring.feed_keeper_pos, GameRules.NET_HALF_WIDTH,
-				opp_positions, pass_speed, AIActionScoring.feed_keeper_unsettled,
-				-1.0, AIActionScoring.feed_keeper_hands, Vector4.INF,
+				AIGoalieModel.feed_keeper_pos, GameRules.NET_HALF_WIDTH,
+				opp_positions, pass_speed, AIGoalieModel.feed_keeper_unsettled,
+				-1.0, AIGoalieModel.feed_keeper_hands, Vector4.INF,
 				ctx.scratch_opp_caps)
 		var tip: float = AIActionScoring.tip_ev(
 				carrier_release, c, ctx.attacking_goal_pos, goalie_pos,

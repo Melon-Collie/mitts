@@ -402,7 +402,7 @@ func test_report_how_much_of_the_hole_is_the_rush_backflow() -> void:
 # the two apart. The full 5-point sweep is in the header; three points are kept
 # live here because these maps are the most expensive thing in the suite.
 #
-# `AIActionScoring._build_planning_rush_cfg` copies all three anchors by hand, so
+# `AIGoalieModel._build_planning_rush_cfg` copies all three anchors by hand, so
 # it must move with `rush_arrive_depth` or the bots score against a keeper who
 # retreats further than the one they meet. The tie is pinned by
 # test_goalie_depth_model_tie.gd — keep the two in step.

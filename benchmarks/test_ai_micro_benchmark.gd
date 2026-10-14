@@ -246,7 +246,7 @@ func test_evaluator_costs() -> void:
 				cinst._scratch_opponents, cinst._scratch_opponent_vels,
 				cinst._scratch_opponent_caps, true))
 	_bench("  cand: predict_goalie_pos", func() -> void:
-		AIActionScoring.predict_goalie_pos(keeper, cx.attacking_goal_pos,
+		AIGoalieModel.predict_goalie_pos(keeper, cx.attacking_goal_pos,
 				t_arr, cand))
 	_bench("  cand: turnover_cost", func() -> void:
 		AIActionScoring.turnover_cost(cand_puck, 0.4, cx.defending_goal_pos,

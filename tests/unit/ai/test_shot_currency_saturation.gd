@@ -150,17 +150,17 @@ func _planner_read(start: Vector3, candidate: Vector3,
 	var arrive_vel: Vector3 = (candidate - start).normalized() * carry_speed
 	var carry_closing: float = (start.distance_to(_goal)
 			- candidate.distance_to(_goal)) / maxf(local_time, 0.001)
-	var tracked: Vector3 = AIActionScoring.predict_goalie_pos(
+	var tracked: Vector3 = AIGoalieModel.predict_goalie_pos(
 			keeper_now, _goal, local_time, candidate, carry_closing)
 	var look: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
-	var release: Vector3 = AIActionScoring.release_ahead_of_goalie(
+	var release: Vector3 = AIGoalieModel.release_ahead_of_goalie(
 			candidate + arrive_vel * look, _goal, tracked)
 	var release_t: float = look + release.distance_to(_goal) / WRIST
-	var release_closing: float = AIActionScoring.closing_toward(
+	var release_closing: float = AIGoalieModel.closing_toward(
 			candidate, arrive_vel, _goal)
-	var unsettled: float = AIActionScoring.goalie_unsettled(
+	var unsettled: float = AIGoalieModel.goalie_unsettled(
 			tracked, _goal, release_t, release, release_closing)
-	var at_release: Vector3 = AIActionScoring.predict_goalie_pos(
+	var at_release: Vector3 = AIGoalieModel.predict_goalie_pos(
 			tracked, _goal, release_t, release, release_closing)
 	return {
 		"time": local_time,

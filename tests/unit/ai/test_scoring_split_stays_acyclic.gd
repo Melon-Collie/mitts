@@ -6,9 +6,10 @@ extends GutTest
 # call on it, from every file, at once — with nothing pointing at the cause.
 #
 # The shape held here: the shared primitives (the arrival clock, the net and
-# slot segment tests, the puck lane, the body's execution constants) are LEAVES
-# that read no evaluator, and the two big evaluators that read them —
-# AIActionScoring and AICarrySpace — never read each other.
+# slot segment tests, the puck lane, the body's execution constants, the
+# planning keeper) are LEAVES that read no evaluator, and the two big
+# evaluators that read them — AIActionScoring and AICarrySpace — never read
+# each other.
 
 const _SCORING: String = "res://Scripts/domain/ai/action_scoring.gd"
 const _CARRY: String = "res://Scripts/domain/ai/carry_space.gd"
@@ -17,6 +18,7 @@ const _LEAVES: PackedStringArray = [
 	"res://Scripts/domain/ai/net_obstacle.gd",
 	"res://Scripts/domain/ai/puck_lane.gd",
 	"res://Scripts/domain/ai/bot_mechanics.gd",
+	"res://Scripts/domain/ai/goalie_model.gd",
 ]
 const _EVALUATORS: PackedStringArray = ["AIActionScoring", "AICarrySpace"]
 
@@ -60,6 +62,8 @@ func test_the_shared_primitives_live_in_the_leaves() -> void:
 				"pass_lane_blocked_by_net", "pass_crosses_own_slot"],
 		"res://Scripts/domain/ai/puck_lane.gd": ["lane_clear", "lane_clear_saucer",
 				"pass_launch_speed", "release_contest_clean"],
+		"res://Scripts/domain/ai/goalie_model.gd": ["set_goalie_profile",
+				"predict_goalie_pos", "planned_goalie_depth", "goalie_lateral_reach"],
 	}
 	for path: String in placement:
 		var src: String = FileAccess.get_file_as_string(path)

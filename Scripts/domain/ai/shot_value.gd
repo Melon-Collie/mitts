@@ -159,7 +159,7 @@ static func open_mouth_fraction(release: Vector3, attacking_goal: Vector3,
 	if l_net < 0.001:
 		return 1.0
 	var depth: float = keeper_depth_m if keeper_depth_m >= 0.0 \
-			else AIActionScoring.set_goalie_depth(l_net)
+			else AIGoalieModel.set_goalie_depth(l_net)
 	if depth >= l_net:
 		return 1.0   # not between the puck and the net: pulled, or beaten past
 	var l_keeper: float = maxf(l_net - depth, 0.05)
@@ -211,7 +211,7 @@ static func _open_across(stance: int, scale: float, oblique: float, offset_m: fl
 #   deficit = |where he must be − where he is| − |how far he can push by then|
 #
 # Both halves are measured, not fitted. The demand is the arc-match square for
-# the release point (AIActionScoring.goalie_arc_match_x, the same solve the
+# the release point (AIGoalieModel.goalie_arc_match_x, the same solve the
 # live keeper skates); the supply is his real accel-limited T-push over the
 # time he has after his reaction delay (goalie_lateral_reach). Floored at zero:
 # a keeper who can comfortably get there is simply set, and there is no such
@@ -219,11 +219,11 @@ static func _open_across(stance: int, scale: float, oblique: float, offset_m: fl
 static func displacement_deficit_m(keeper_pos: Vector3,
 		attacking_goal: Vector3, release: Vector3,
 		time_to_release_s: float) -> float:
-	var need: float = absf(AIActionScoring.goalie_arc_match_x(
+	var need: float = absf(AIGoalieModel.goalie_arc_match_x(
 			keeper_pos, attacking_goal, release) - keeper_pos.x)
 	var move_time: float = maxf(
-			0.0, time_to_release_s - AIActionScoring.goalie_leg_delay_s)
-	return maxf(0.0, need - AIActionScoring.goalie_lateral_reach(move_time))
+			0.0, time_to_release_s - AIGoalieModel.goalie_leg_delay_s)
+	return maxf(0.0, need - AIGoalieModel.goalie_lateral_reach(move_time))
 
 
 # Each stance's structural cover at each height, plus its hands where they rest

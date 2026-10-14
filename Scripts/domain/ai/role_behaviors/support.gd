@@ -92,14 +92,14 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		var pass_speed: float = AIPuckLane.expected_pass_speed(carrier_pos, c)
 		# Pre-armed feed keeper (GoalieBehaviorRules.backdoor_depth_cap).
 		var cand_flight: float = carrier_pos.distance_to(c) / maxf(pass_speed, 1.0)
-		AIActionScoring.resolve_feed_keeper(
+		AIGoalieModel.resolve_feed_keeper(
 				goalie_pos, ctx.attacking_goal_pos, cand_flight, c, carrier_pos,
 				AIRoleHelpers.opp_goalie_hands(ctx), pass_speed, opp_positions)
 		var pass_value: float = AIActionScoring.score_pass(
 				carrier_pos, c, ctx.attacking_goal_pos,
-				AIActionScoring.feed_keeper_pos, GameRules.NET_HALF_WIDTH,
-				opp_positions, pass_speed, AIActionScoring.feed_keeper_unsettled,
-				-1.0, AIActionScoring.feed_keeper_hands, Vector4.INF,
+				AIGoalieModel.feed_keeper_pos, GameRules.NET_HALF_WIDTH,
+				opp_positions, pass_speed, AIGoalieModel.feed_keeper_unsettled,
+				-1.0, AIGoalieModel.feed_keeper_hands, Vector4.INF,
 				ctx.scratch_opp_caps)
 		var counter_cost: float = AIActionScoring.counter_rush_cost(
 				carrier_pos, turnover_prior, our_net, our_goalie,

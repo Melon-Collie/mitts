@@ -36,7 +36,7 @@ func before_each() -> void:
 # The exact reference: score_shoot under the threat-family inputs, mirroring
 # threat_surface_shoot's call (derived seal, league pace, no pose reads).
 func _exact(pos: Vector3, goalie: Vector3, defenders: Array[Vector3]) -> float:
-	var seal_x: float = AIActionScoring.derive_post_seal_x_sign(pos, _net)
+	var seal_x: float = AIGoalieModel.derive_post_seal_x_sign(pos, _net)
 	return AIActionScoring.score_shoot(
 			pos, _net, goalie, GameRules.NET_HALF_WIDTH, defenders,
 			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, [], -1.0, false,
@@ -116,7 +116,7 @@ func test_screened_shooter_is_understated_only() -> void:
 	# it reduced to the lane term equalling itself. With a currency that has
 	# range, the lane block can dominate, and the assert started failing while
 	# the property it names stayed true.
-	var seal_x: float = AIActionScoring.derive_post_seal_x_sign(pos, _net)
+	var seal_x: float = AIGoalieModel.derive_post_seal_x_sign(pos, _net)
 	var none: Array[Vector3] = []
 	var screen_d: float = AIActionScoring.screen_along_m(
 			pos, _goalie, defenders, none)

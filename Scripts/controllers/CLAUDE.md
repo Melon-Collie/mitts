@@ -437,7 +437,7 @@ value at the controller's authored default, so HARD is the authored goalie by
 construction.
 
 Whenever the bots' shot model reads the same quantity as a goalie knob, the two
-must be synced (`AIActionScoring.set_goalie_profile`) or the bots score against a
+must be synced (`AIGoalieModel.set_goalie_profile`) or the bots score against a
 goalie they do not face. See the AI MIRROR note in `goalie_skill_profile.gd`.
 
 **On a breakaway the ladder lives on the cutback, and comes from the push.**

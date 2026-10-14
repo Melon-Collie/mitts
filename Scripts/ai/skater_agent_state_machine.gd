@@ -3470,7 +3470,7 @@ func _opponent_ids(snapshot: WorldSnapshot) -> Array:
 
 
 # Returns the opposing goalie's CURRENT world position. Used as input
-# to AIActionScoring.predict_goalie_pos, which models the goalie's
+# to AIGoalieModel.predict_goalie_pos, which models the goalie's
 # react-then-slide forward along the puck's lateral target. Falls back
 # to _attacking_goal_pos when goalie state isn't buffered yet (first-
 # frame edge case); downstream geometry handles that gracefully.
@@ -3490,13 +3490,13 @@ func _own_goalie_now(snapshot: WorldSnapshot) -> Vector3:
 	return Vector3(own_goalie.position_x, 0.0, own_goalie.position_z)
 
 
-# Wraps AIActionScoring.predict_goalie_pos for the common case where
+# Wraps AIGoalieModel.predict_goalie_pos for the common case where
 # the puck-at-release is the position we're scoring a shot from.
 # `release_time_s` is the time from now until the bot fires (e.g.,
 # wrister charge time + any path/flight time before the fire).
 func _predict_goalie_at(snapshot: WorldSnapshot, release_time_s: float,
 		puck_pos_at_release: Vector3) -> Vector3:
-	return AIActionScoring.predict_goalie_pos(
+	return AIGoalieModel.predict_goalie_pos(
 			_goalie_now(snapshot), _attacking_goal_pos,
 			release_time_s, puck_pos_at_release)
 
@@ -4364,7 +4364,7 @@ func _shot_aim_point(snapshot: WorldSnapshot, self_pos: Vector3,
 			self_pos, goalie,
 			_attacking_goal_pos.z,
 			GameRules.NET_HALF_WIDTH,
-			AIActionScoring.GOALIE_SHADOW_HALF_M,
+			AIGoalieModel.GOALIE_SHADOW_HALF_M,
 			AIShotAim.DEFAULT_CORNER_BIAS,
 			goalie_vx)
 

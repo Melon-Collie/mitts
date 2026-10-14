@@ -10,7 +10,7 @@ extends RefCounted
 #
 # AI MIRROR: the bots' shot/pass scoring predicts the live goalie with the same
 # read model (leg/arm delays, drop time, lateral accel ramp, arm deploy), held as
-# static vars on AIActionScoring and synced from the match's profile by
+# static vars on AIGoalieModel and synced from the match's profile by
 # set_goalie_profile. Their defaults are the Hard baselines, so unwired contexts
 # (unit tests) score against the Hard goalie.
 #
@@ -24,7 +24,7 @@ extends RefCounted
 # To add a knob: add a field + _init param, set it in all three factories, and
 # consume it in GoalieController._apply_skill_profile. If the bots' shot model
 # reads the same quantity (see AI MIRROR), also sync it in
-# AIActionScoring.set_goalie_profile — otherwise the bots keep scoring against
+# AIGoalieModel.set_goalie_profile — otherwise the bots keep scoring against
 # the Hard goalie's version of it.
 
 enum Difficulty {
@@ -70,7 +70,7 @@ var lateral_accel_mps2: float
 var puck_play_go_margin_s: float
 # Reflexive leg-drop read latency (s) — gates the butterfly drop that seals the
 # five-hole and low ice, so it is the single strongest "reacts, but slower"
-# lever. AI-mirrored (AIActionScoring.goalie_leg_delay_s).
+# lever. AI-mirrored (AIGoalieModel.goalie_leg_delay_s).
 var reaction_delay_s: float
 # Primed (quiet-eye) read latency (s) after watching a visible windup — the
 # floor BOTH reads shortcut to when the goalie is pre-armed. Tiering it matters
@@ -79,7 +79,7 @@ var reaction_delay_s: float
 # newcomers take.
 var prearmed_reaction_delay_s: float
 # Pads-to-floor time (s) once the butterfly commits. AI-mirrored
-# (AIActionScoring.goalie_butterfly_drop_s).
+# (AIGoalieModel.goalie_butterfly_drop_s).
 var butterfly_drop_s: float
 # Standing five-hole pad gap (m of separation each side of center). Higher = a
 # visibly leaky five-hole whenever the paddle is off-centre (tracking, active

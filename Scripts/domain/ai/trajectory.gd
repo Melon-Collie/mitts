@@ -226,7 +226,7 @@ static func step_puck(pos: Vector3, vel: Vector3, dt: float) -> Transform3D:
 # of the receiver's motion is real.
 #
 # Results land in statics (single-threaded AI tick, same convention as
-# AIActionScoring.resolve_feed_keeper): one solve serves the stance, the timing
+# AIGoalieModel.resolve_feed_keeper): one solve serves the stance, the timing
 # gate and the blade aim, with no per-call allocation on a per-tick path.
 static var gate_point: Vector3 = Vector3.INF   # where the puck meets the reach
 static var gate_velocity: Vector3 = Vector3.ZERO   # its travel there (post-carom)
