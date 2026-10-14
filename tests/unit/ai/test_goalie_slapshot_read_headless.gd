@@ -16,8 +16,12 @@ extends GutTest
 # and can skate the shot origin out from under a shade.
 
 const State = SkaterStateMachine.State
+const Snapshot := preload("res://tests/snapshot.gd")
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z   # goalie defends the -Z net
 const DT: float = 1.0 / 120.0
+# A full wind-up read, past prearm_read_time, and a snap release far short of it.
+const FULL_READ_TICKS: int = 150
+const QUICK_READ_TICKS: int = 8
 
 var _goalie: Goalie = null
 var _puck: Puck = null
@@ -26,6 +30,11 @@ var _ctrl: GoalieController = null
 
 
 func before_each() -> void:
+	_rig()
+
+
+# A fresh goalie, puck and carrier; setup() runs once per rig.
+func _rig() -> void:
 	_goalie = load("res://Scenes/Goalie.tscn").instantiate() as Goalie
 	_puck = load("res://Scenes/Puck.tscn").instantiate() as Puck
 	_carrier = load("res://Scenes/Skater.tscn").instantiate() as Skater
@@ -94,58 +103,70 @@ func test_goalie_reads_the_slapper_windup_in_the_slot() -> void:
 
 
 # The honest "does he cover it" metric: the shot passes the goalie's DEPTH plane
-# at some x; a set goalie saves it if that x is within his lateral reach (butterfly
-# pad half-spread + a little). Goalie holds his set position on a direct shot (he
-# doesn't chase), so coverage is decided by where the wind-up read left him.
-const _SAVE_REACH_M: float = 0.55   # butterfly pad half-coverage, low shot
-
+# at some x, and a low shot there is his to save if it falls inside the
+# butterfly pad edge. He holds his set position on a direct shot (he doesn't
+# chase), so coverage is decided by where the wind-up read left him.
 func _shot_x_at_goalie_depth(pin: Vector3, vel: Vector3) -> float:
 	var g_z: float = _goalie.global_position.z
 	var t: float = (g_z - pin.z) / vel.z
 	return pin.x + vel.x * t
 
-func test_shade_lets_the_goalie_cover_the_against_grain_corner() -> void:
-	# The cheese: slot slapper, puck pinned to the blade side, ripped to the FAR
-	# (against-the-grain) corner. Squaring to the pinned puck alone left the goalie
-	# a metre short. With the aim shade he reads the locked wind-up and cheats his
-	# angle over, so the shot line falls inside his reach at his depth plane.
+
+# The cheese: a slot slapper, puck pinned 1 m to the blade side, ripped low to
+# the FAR (against-the-grain) corner after `read_ticks` of wind-up, on a fresh
+# rig. Returns [goalie x, gap from the shot line at his depth plane, the half
+# width his pads cover in the stance he is in].
+func _far_corner_read(read_ticks: int, shaded: bool = true) -> Array[float]:
+	_rig()
 	var shooter := Vector3(0.0, 0.0, GOAL_Z + 7.0)
 	var pin := shooter + Vector3(1.0, 0.0, 0.0)
 	var far_corner := Vector3(-0.80, _puck.ice_height, GOAL_Z)
 	_arm_windup(shooter, 1.0, far_corner)
-	_tick(150)   # full wind-up read → shade ramps in
-
-	var shot_speed: float = 32.0
-	var vel: Vector3 = (far_corner - pin).normalized() * shot_speed
+	if not shaded:
+		_ctrl.slapper_aim_shade = 0.0
+	_tick(read_ticks)
+	var vel: Vector3 = (far_corner - pin).normalized() * 32.0
 	vel.y = 0.0
-	var shot_x: float = _shot_x_at_goalie_depth(pin, vel)
 	var goalie_x: float = _goalie.global_position.x
-	var gap: float = absf(goalie_x - shot_x)
-	gut.p("shaded goalie_x=%.2f  shot_x@depth=%.2f  gap=%.2f  reach=%.2f  read_timer=%.2f" % [
-			goalie_x, shot_x, gap, _SAVE_REACH_M, _ctrl._shot_read_timer])
+	var down: bool = not _ctrl._sm.is_upright()
+	return [goalie_x, absf(goalie_x - _shot_x_at_goalie_depth(pin, vel)),
+			GoalieAnatomy.structural_cover_half_width_at(GoalieAnatomy.pad_span(down).x, down)]
 
-	assert_lt(goalie_x, 0.10,
-			"goalie must shade toward the aimed (far) corner, not hold the puck-squared angle")
-	assert_lt(gap, _SAVE_REACH_M,
-			"the shot line must fall inside the goalie's reach at his depth — a save, not a cheese")
+
+func test_shade_lets_the_goalie_cover_the_against_grain_corner() -> void:
+	# Squaring to the pinned puck alone leaves the far corner open; with the aim
+	# shade he reads the locked wind-up and cheats his angle over, so the shot
+	# line falls inside his cover at his depth plane.
+	var squared: Array[float] = _far_corner_read(FULL_READ_TICKS, false)
+	var shaded: Array[float] = _far_corner_read(FULL_READ_TICKS)
+	assert_lt(shaded[0], squared[0], "he shades toward the aimed (far) corner")
+	assert_lt(shaded[1], squared[1], "which closes the gap to the shot line")
+	assert_lt(shaded[1], shaded[2],
+			"the shot line falls inside his cover — a save, not a cheese")
 
 
 func test_quick_release_still_beats_the_shade() -> void:
 	# The skill window survives: a snap release with almost no wind-up read gets
 	# little shade, so a well-placed corner shot still beats the goalie.
-	var shooter := Vector3(0.0, 0.0, GOAL_Z + 7.0)
-	var pin := shooter + Vector3(1.0, 0.0, 0.0)
-	var far_corner := Vector3(-0.80, _puck.ice_height, GOAL_Z)
-	_arm_windup(shooter, 1.0, far_corner)
-	_tick(8)   # ~0.07 s of read — far below prearm_read_time (0.40 s)
+	var quick: Array[float] = _far_corner_read(QUICK_READ_TICKS)
+	var full: Array[float] = _far_corner_read(FULL_READ_TICKS)
+	assert_gt(quick[1], full[1], "the shade ramps in with read time")
+	assert_gt(quick[1], quick[2] + GameRules.PUCK_COLLISION_RADIUS,
+			"a quick release gets little shade — a placed corner shot clears him")
 
-	var shot_speed: float = 32.0
-	var vel: Vector3 = (far_corner - pin).normalized() * shot_speed
-	vel.y = 0.0
-	var gap: float = absf(_goalie.global_position.x - _shot_x_at_goalie_depth(pin, vel))
-	gut.p("quick-release gap=%.2f (read_timer=%.2f)" % [gap, _ctrl._shot_read_timer])
-	assert_gt(gap, _SAVE_REACH_M,
-			"a quick release gets little shade — a placed corner shot still beats the goalie")
+
+# Rewrite with MITTS_UPDATE_SNAPSHOTS=1 (tests/snapshot.gd) and review the diff.
+func test_slapper_shade_calibration_snapshot() -> void:
+	var snap := Snapshot.new("res://tests/unit/ai/snapshots/goalie_slapper_shade.txt")
+	var squared: Array[float] = _far_corner_read(FULL_READ_TICKS, false)
+	var shaded: Array[float] = _far_corner_read(FULL_READ_TICKS)
+	var quick: Array[float] = _far_corner_read(QUICK_READ_TICKS)
+	snap.record("full read, shade off: goalie x", squared[0])
+	snap.record("full read, shade off: gap to the shot line", squared[1])
+	snap.record("full read, shaded: goalie x", shaded[0])
+	snap.record("full read, shaded: gap to the shot line", shaded[1])
+	snap.record("quick release: gap to the shot line", quick[1])
+	snap.verify(self)
 
 
 # ── Wrister wind-up: same PIN, different MOBILITY ────────────────────────────

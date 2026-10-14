@@ -4,28 +4,20 @@ extends GutTest
 # Anything read under `elevated_threshold` (the top of the butterfly trunk,
 # 1.0 m) drops him, and flat the pads are 0.28 m tall — so a corner shot at
 # 0.3-0.6 m goes over the pad and wide of the trunk, and only a hand can stop
-# it. Measured before the hands answered such a shot, a set Hard goalie with
-# the whole wrister space fired at him (aim every 7 cm, FLAT/LOW/HIGH, 60/70/80
-# mph, perfect execution) conceded, all of them LOW-row corner shots:
-#
-#     9 m centre    14/216      12 m centre      5/216
-#    15 m centre    11/216      12 m, 5 m wide   8/216
-#
-# and every one of them crossed with his hands still at rest. The bots' shot
-# model already assumed the hands take that band (AIActionScoring
-# ._delay_at_height); the live keeper was the half that didn't.
+# it. The bots' shot model assumes the hands take that band
+# (AIActionScoring._delay_at_height); these hold the live keeper to it.
 #
 # The second half is WHERE the hand goes. The read belief is a goal-line
 # crossing, and from an angle he stands well out from that line squared to the
-# shooter, so the goal-line x overstates how far wide of him the puck passes.
-# Aimed there the blocker reaches past the puck and takes the stick with it —
-# from 12 m and 5 m wide that cost 17/216 once the hands did answer, against
-# 0/216 aimed at his own plane. The wind-up pre-lean drifts the same hand toward
-# the declared aim, so it takes the same plane.
+# shooter, so the goal-line x overstates how far wide of him the puck passes:
+# aimed there the blocker reaches past the puck and takes the stick with it. The
+# hand aims at his own plane, and the wind-up pre-lean drifts it the same way.
 
+const Snapshot := preload("res://tests/snapshot.gd")
 const Harness := preload("res://tests/unit/ai/real_goalie_shot_harness.gd")
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 const MPH_TO_MS: float = 0.44704
+const IN_TIGHT_AIMS: int = 9
 const CORNER: float = GameRules.NET_HALF_WIDTH \
 		- GameRules.NET_POST_RADIUS - GameRules.PUCK_COLLISION_RADIUS
 
@@ -33,18 +25,26 @@ var _goalie: Node = null
 var _puck: Node = null
 var _shooter: Skater = null
 var _ctrl: GoalieController = null
+var _h: RefCounted = null
 
 
+func before_each() -> void:
+	_h = null
+
+
+# One live rig per test, shared by every measurement in it.
 func _live(harness: GDScript) -> RefCounted:
+	if _h != null:
+		return _h
 	_goalie = load("res://Scenes/Goalie.tscn").instantiate()
 	_puck = load("res://Scenes/Puck.tscn").instantiate()
 	_shooter = load("res://Scenes/Skater.tscn").instantiate() as Skater
 	_ctrl = GoalieController.new()
 	for n: Node in [_goalie, _puck, _shooter, _ctrl]:
 		add_child_autofree(n)
-	var h: RefCounted = harness.new()
-	h.setup(_goalie, _puck, _ctrl, _shooter)
-	return h
+	_h = harness.new()
+	_h.setup(_goalie, _puck, _ctrl, _shooter)
+	return _h
 
 
 func _hand_inputs(yaw: float, goalie_xz: Vector2, puck_xz: Vector2,
@@ -108,37 +108,61 @@ func test_the_windup_prelean_drifts_toward_the_same_plane() -> void:
 				"pre-lean toward %+.2f lands the hand on his own plane's crossing" % impact)
 
 
-func test_unscreened_wristers_from_above_the_circles_meet_a_hand() -> void:
+const ABOVE_THE_CIRCLES: Array[Vector3] = [Vector3(0.0, 0.0, GOAL_Z + 12.0),
+		Vector3(5.0, 0.0, GOAL_Z + 12.0), Vector3(-7.0, 0.0, GOAL_Z + 12.0)]
+
+
+# [goals, hand saves] over unscreened LOW wristers at 70 mph from 12 m, four aims
+# from each spot.
+func _over_the_pad_from_range() -> Array[int]:
 	var h: RefCounted = _live(Harness)
 	var goals: int = 0
 	var hand_saves: int = 0
-	for spot: Vector3 in [Vector3(0.0, 0.0, GOAL_Z + 12.0),
-			Vector3(5.0, 0.0, GOAL_Z + 12.0), Vector3(-7.0, 0.0, GOAL_Z + 12.0)]:
+	for spot: Vector3 in ABOVE_THE_CIRCLES:
 		for aim_x: float in [-CORNER, -0.6, 0.6, CORNER]:
 			h.settle_ready(spot)
 			var o: int = h.fire_at(spot, Vector3(aim_x, 0.0, GOAL_Z),
 					ShotMechanics.ELEVATION_LOW, 70.0 * MPH_TO_MS, 0.0)
 			if o == Harness.GOAL:
 				goals += 1
-				gut.p("GOAL from (%.1f, %.1f) at %+.2f, crossing y %.2f" % [
-						spot.x, spot.z - GOAL_Z, aim_x, h.last_cross.y])
 			elif o == Harness.SAVE and (h.last_part == GoalieSaveRules.SavePart.GLOVE
 					or h.last_part == GoalieSaveRules.SavePart.BLOCKER):
 				hand_saves += 1
-	assert_eq(goals, 0, "a set Hard keeper takes a clean 12 m corner shot over his pads")
-	assert_gt(hand_saves, 0, "and it is the hands that take some of them")
+	return [goals, hand_saves]
+
+
+func test_unscreened_wristers_from_above_the_circles_meet_a_hand() -> void:
+	assert_gt(_over_the_pad_from_range()[1], 0,
+			"a set keeper's hands take some of the 12 m corner shots over his pads")
 
 
 # The other side of the trade, so the fix cannot quietly become a wall: in
-# tight the arm read still loses to the flight, and the over-the-pad corner
-# keeps scoring.
-func test_in_tight_the_arm_read_still_loses() -> void:
+# tight the arm read still loses to the flight, and somewhere across the mouth
+# a LOW shot from the dot line beats him.
+func _over_the_pad_in_tight(mph: float) -> int:
 	var h: RefCounted = _live(Harness)
 	var spot := Vector3(0.0, 0.0, GOAL_Z + GameRules.GOAL_LINE_Z - GameRules.ICING_FACEOFF_DOT_Z)
 	var goals: int = 0
-	for shot: Vector2 in [Vector2(-CORNER, 80.0), Vector2(-0.05, 70.0), Vector2(0.02, 80.0)]:
+	for i: int in IN_TIGHT_AIMS:
 		h.settle_ready(spot)
-		if h.fire_at(spot, Vector3(shot.x, 0.0, GOAL_Z), ShotMechanics.ELEVATION_LOW,
-				shot.y * MPH_TO_MS, 0.0) == Harness.GOAL:
+		var aim := Vector3(lerpf(-CORNER, CORNER, i / float(IN_TIGHT_AIMS - 1)), 0.0, GOAL_Z)
+		if h.fire_at(spot, aim, ShotMechanics.ELEVATION_LOW, mph * MPH_TO_MS, 0.0) == Harness.GOAL:
 			goals += 1
-	assert_gt(goals, 0, "an over-the-pad shot from the dot line still beats the arm read")
+	return goals
+
+
+func test_in_tight_the_arm_read_still_loses() -> void:
+	assert_gt(_over_the_pad_in_tight(70.0) + _over_the_pad_in_tight(80.0), 0,
+			"an over-the-pad shot from the dot line still beats the arm read")
+
+
+# Rewrite with MITTS_UPDATE_SNAPSHOTS=1 (tests/snapshot.gd) and review the diff.
+func test_hands_over_the_pad_calibration_snapshot() -> void:
+	var snap := Snapshot.new("res://tests/unit/ai/snapshots/goalie_hands_over_the_pad.txt")
+	var from_range: Array[int] = _over_the_pad_from_range()
+	snap.record("12 m LOW wristers, 12 shots: goals", from_range[0])
+	snap.record("12 m LOW wristers, 12 shots: hand saves", from_range[1])
+	for mph: float in [70.0, 80.0]:
+		snap.record("dot line LOW at %.0f mph, %d aims: goals" % [mph, IN_TIGHT_AIMS],
+				_over_the_pad_in_tight(mph))
+	snap.verify(self)
