@@ -251,6 +251,7 @@ class Inputs:
 	# can express.
 	var puck_play_stride_phase: float = 0.0
 	var puck_play_stride_intensity: float = 0.0
+	var footwork: GoalieFootwork = null
 
 # Scratch — `Goalie.apply_body_config` reads but never stores the reference, so
 # one shared instance is safe, and it keeps ~150 lines of Vector3 literals off
@@ -327,6 +328,7 @@ func build(inputs: Inputs) -> GoalieBodyConfig:
 	# position/pitch stays authored.
 	c.head_rot = Vector3(c.head_rot.x, inputs.head_yaw_deg, c.head_rot.z)
 	c.blocker_over_glove = blocker_over_glove_for_state(inputs.state)
+	GoalieFootwork.apply(c, inputs.footwork, inputs.state)
 	if not catches_left:
 		_mirror_hands(c)
 	# Last, so every modifier that moved the hand is already in.

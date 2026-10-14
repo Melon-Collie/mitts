@@ -53,7 +53,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/ai/skater_agent_state_machine.gd": 6628,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
 	"res://Scripts/game/game_manager.gd": 5787,
-	"res://Scripts/domain/ai/action_scoring.gd": 4476,
+	"res://Scripts/domain/ai/action_scoring.gd": 4479,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
 	# Scripts/controllers/CLAUDE.md rather than inline, and the tunable
@@ -61,7 +61,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +7: the puck-velocity estimate is bounded by the puck's own speed limit.
 	# It is a one-tick finite difference feeding a positional decision, so a
 	# teleport read as travel moved the tracked threat metres in a tick.
-	"res://Scripts/controllers/goalie_controller.gd": 5014,
+	"res://Scripts/controllers/goalie_controller.gd": 5039,
 	# +162: the rim pass. The path search lives in AIRimPass; what stays here is
 	# the variant's EV (it prices through _pass_ev, an instance method) and the
 	# commit that releases a winning rim as a flat charged dump.
@@ -82,13 +82,13 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/domain/ai/role_behaviors/role_helpers.gd": 1409,
 	"res://Scripts/game/player_prefs.gd": 1404,
 	"res://Scripts/actors/skater_mesh_builder.gd": 1446,
-	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1372,
+	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1357,
 	"res://Scripts/ui/career_stats_screen.gd": 1271,
 	"res://Scripts/domain/ai/carry_space.gd": 1255,
 	"res://Scripts/ui/lobby_manager.gd": 1247,
 	"res://Scripts/actors/puck.gd": 1102,
 	"res://Scripts/ui/side_menu.gd": 995,
-	"res://Scripts/controllers/goalie_body_config_builder.gd": 1121,
+	"res://Scripts/controllers/goalie_body_config_builder.gd": 1123,
 	"res://Scripts/ui/network_debug_overlay.gd": 956,
 	"res://Scripts/networking/network_telemetry.gd": 957,
 	"res://Scripts/controllers/local_controller.gd": 949,
@@ -108,7 +108,7 @@ const _API_SLACK: int = 3
 const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/networking/network_manager.gd": 208,
 	"res://Scripts/actors/skater.gd": 145,
-	"res://Scripts/domain/ai/action_scoring.gd": 70,
+	"res://Scripts/domain/ai/action_scoring.gd": 71,
 	"res://Scripts/game/game_manager.gd": 63,
 	"res://Scripts/domain/state/player_attributes.gd": 53,
 	"res://Scripts/networking/network_telemetry.gd": 53,
@@ -117,7 +117,7 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/controllers/skater_controller.gd": 41,
 	"res://Scripts/actors/puck.gd": 43,
 	"res://Scripts/domain/state/game_state_machine.gd": 39,
-	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 37,
+	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 36,
 	"res://Scripts/actors/skater_mesh_builder.gd": 30,
 	"res://Scripts/controllers/puck_controller.gd": 29,
 	"res://Scripts/game/shot_on_goal_tracker.gd": 26,

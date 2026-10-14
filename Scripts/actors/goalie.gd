@@ -58,6 +58,12 @@ const _GLOVE_CUFF_IN_GLOVE := Vector3(0.0, -0.03, 0.07)
 const _ELBOW_CLEARS_TRUNK_M: float = GoalieAnatomy.TORSO_BOX_WIDTH_M * 0.5 \
 		- GoalieAnatomy.SHOULDER_OFFSET.x + _UPPER_ARM_RADIUS
 
+# The pads' eased stance, which apply_body_config lerps toward the config and
+# lays the footwork step over; the nodes carry the sum.
+var _left_pad_eased_pos: Vector3 = Vector3.ZERO
+var _left_pad_eased_rot: Vector3 = Vector3.ZERO
+var _right_pad_eased_pos: Vector3 = Vector3.ZERO
+var _right_pad_eased_rot: Vector3 = Vector3.ZERO
 # The blocker arm's elbow from the last _seat_blocker, goalie-local; the drawn
 # arm reads it so it is the arm the board rides.
 var _blocker_elbow: Vector3 = Vector3.ZERO
@@ -117,6 +123,7 @@ func _ready() -> void:
 	_init_connectors()
 	_init_arm_bones()
 	_seat_blocker()
+	_rebase_pads()
 	_setup_uniform_coordinator()
 	var vfx := GoalieVFX.new()
 	vfx.name = "VFX"
@@ -142,8 +149,14 @@ func apply_uniform(colors: Dictionary) -> void:
 # tracks position closely enough not to need its own cap. The blocker step
 # applies to the entire BlockArm (pad + stick rigid assembly).
 func apply_body_config(config: GoalieBodyConfig, t: float, glove_max_step: float = -1.0, blocker_max_step: float = -1.0) -> void:
-	_lerp_part(_left_pad,  config.left_pad_pos,  config.left_pad_rot,  t)
-	_lerp_part(_right_pad, config.right_pad_pos, config.right_pad_rot, t)
+	_left_pad_eased_pos = _left_pad_eased_pos.lerp(config.left_pad_pos, t)
+	_left_pad_eased_rot = _lerp_euler_deg(_left_pad_eased_rot, config.left_pad_rot, t)
+	_left_pad.position = _left_pad_eased_pos + config.left_pad_step_pos
+	_left_pad.rotation_degrees = _left_pad_eased_rot + config.left_pad_step_rot
+	_right_pad_eased_pos = _right_pad_eased_pos.lerp(config.right_pad_pos, t)
+	_right_pad_eased_rot = _lerp_euler_deg(_right_pad_eased_rot, config.right_pad_rot, t)
+	_right_pad.position = _right_pad_eased_pos + config.right_pad_step_pos
+	_right_pad.rotation_degrees = _right_pad_eased_rot + config.right_pad_step_rot
 	_lerp_part(_body,      config.body_pos,      config.body_rot,      t)
 	_lerp_part(_head,      config.head_pos,      config.head_rot,      t)
 	if glove_max_step < 0.0:
@@ -368,12 +381,22 @@ func apply_network_pose(state: GoalieNetworkState) -> void:
 	_left_pad.rotation = Vector3(state.left_pad_pitch, state.left_pad_yaw, state.left_pad_roll)
 	_right_pad.position = state.right_pad_offset
 	_right_pad.rotation = Vector3(state.right_pad_pitch, state.right_pad_yaw, state.right_pad_roll)
+	_rebase_pads()
 	_glove.position = state.glove_offset
 	_glove.rotation = Vector3(state.glove_pitch, state.glove_yaw, _glove.rotation.z)
 	_block_arm.position = state.blocker_offset
 	_block_arm.rotation = Vector3(state.blocker_pitch, state.blocker_yaw, _block_arm.rotation.z)
 	_blocker_over_glove = GoalieBodyConfigBuilder.blocker_over_glove_for_state(state.state_enum)
 	_seat_blocker()
+
+# Take the pads' eased stance from where they stand — after any pose written
+# straight onto them, so the next eased pose carries on from it.
+func _rebase_pads() -> void:
+	_left_pad_eased_pos = _left_pad.position
+	_left_pad_eased_rot = _left_pad.rotation_degrees
+	_right_pad_eased_pos = _right_pad.position
+	_right_pad_eased_rot = _right_pad.rotation_degrees
+
 
 # Seat the blade at its lie and curve (GoalieStickRules.blade_rotation), which
 # the authored square L does not carry. Applied once at build time: a lie is a

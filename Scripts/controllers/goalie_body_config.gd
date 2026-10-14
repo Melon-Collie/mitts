@@ -15,3 +15,9 @@ var blocker_rot: Vector3 = Vector3.ZERO
 # The blocker lies over the back of the glove (the smother) rather than
 # standing square to the shooter (Goalie._seat_blocker).
 var blocker_over_glove: bool = false
+# Footwork laid over each pad's eased stance unsmoothed (GoalieFootwork):
+# goalie-local metres and degrees.
+var left_pad_step_pos: Vector3 = Vector3.ZERO
+var left_pad_step_rot: Vector3 = Vector3.ZERO
+var right_pad_step_pos: Vector3 = Vector3.ZERO
+var right_pad_step_rot: Vector3 = Vector3.ZERO

@@ -20,7 +20,7 @@ extends RefCounted
 #     GoalieDepthSolver.solve_target (the real depth model) + target_arc_position
 #     — the goalie squared on the challenge arc for that shooter, INDEPENDENT of
 #     the shot score's own cover model (the point of the "real goalie" choice).
-#   - Goalie REACH: GoalieBehaviorRules.reachable_lateral_distance with the real
+#   - Goalie REACH: GoaliePushRules.cruise_reach with the real
 #     push speed / lateral accel and the real leg/arm reaction delays + butterfly
 #     drop, plus the goalie's real pose anatomy (pad span, glove reach, pad-top
 #     seam) — assembled here from the goalie's own constants.
@@ -144,12 +144,12 @@ static func _reach_half(puck_y: float, t: float, unsettled: float) -> float:
 	var late: float = clampf(unsettled, 0.0, 1.0) * UNSETTLE_REACT_PENALTY_S
 	if puck_y <= PAD_TOP:
 		var t_low: float = maxf(0.0, t - LEG_DELAY - late)
-		var push: float = GoalieBehaviorRules.reachable_lateral_distance(PUSH_SPEED, LAT_ACCEL, t_low)
+		var push: float = GoaliePushRules.cruise_reach(PUSH_SPEED, LAT_ACCEL, t_low)
 		var drop_frac: float = clampf(t_low / BUTTERFLY_DROP, 0.0, 1.0)
 		return lerpf(STANDING_LOW_HALF, BUTTERFLY_LOW_HALF, drop_frac) + push
 	var t_high: float = maxf(0.0, t - ARM_DELAY - late)
 	var deploy: float = clampf(t_high / ARM_DEPLOY, 0.0, 1.0)
-	var push_h: float = GoalieBehaviorRules.reachable_lateral_distance(PUSH_SPEED, LAT_ACCEL, t_high)
+	var push_h: float = GoaliePushRules.cruise_reach(PUSH_SPEED, LAT_ACCEL, t_high)
 	return HIGH_SET_HALF + (ARM_REACH - HIGH_SET_HALF) * deploy + push_h
 
 

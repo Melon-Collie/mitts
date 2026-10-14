@@ -148,15 +148,15 @@ func test_the_difficulty_ladder_is_not_inverted_on_a_walkaround() -> void:
 			open[GoalieSkillProfile.Difficulty.EASY] as int, "and the ladder separates")
 
 
-# ── 2. TWO KNOBS ─────────────────────────────────────────────────────────────
+# ── 2. THREE KNOBS ───────────────────────────────────────────────────────────
 # The teeth: if a tier lever is ever added or retuned so that it moves this play,
 # this fails, and that is worth knowing — the ladder reaches the cutback through
-# how far out he stands and how hard he pushes back across.
-func test_depth_and_the_push_are_the_tier_levers_this_play_can_feel() -> void:
+# how far out he stands, how hard he pushes back across, and how well his edges
+# stop him set on his spot.
+func test_depth_the_push_and_the_edges_are_the_tier_levers_this_play_can_feel() -> void:
 	var baseline: int = _finish_open({})
 	var inert: Dictionary = {
 		"reaction_delay_s": 0.30,
-		"lateral_accel_mps2": 2.4,
 		"butterfly_drop_s": 0.32,
 		"arm_reaction_delay_s": 0.45,
 		"read_lag_s": 0.06,
@@ -177,7 +177,10 @@ func test_depth_and_the_push_are_the_tier_levers_this_play_can_feel() -> void:
 	assert_lt(moved, baseline, "depth_base is a lever")
 	var slow_push: int = _finish_open({"slide_push_speed_mps": 1.8})
 	gut.p("push 1.8 m/s -> %d" % slow_push)
-	assert_gt(slow_push, baseline, "and the push back across is the other")
+	assert_gt(slow_push, baseline, "the push back across is another")
+	var soft_edges: int = _finish_open({"lateral_accel_mps2": 2.4})
+	gut.p("edges 2.4 m/s² -> %d" % soft_edges)
+	assert_gt(soft_edges, baseline, "and edges that stop him late are the third")
 
 
 # ── 3. THE TRADE, PRICED ─────────────────────────────────────────────────────

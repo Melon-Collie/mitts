@@ -622,6 +622,12 @@ const DEFAULT_GOALIE_T_PUSH_SPEED_M_S: float = 3.8
 # AI predicts against the top-tier keeper like every other goalie constant
 # here). The ramp is the window a hard lateral cut in tight genuinely beats.
 const DEFAULT_GOALIE_LATERAL_ACCEL_M_S2: float = 14.0
+# How much harder he stops than he pushes. A planned stop sets the lead skate's
+# edge across the travel with his weight on it — the hardest edge a goalie
+# makes, where the push that built the speed is one leg extending. Killing a
+# full T-push inside about a pad's width (~0.3 m) is ~24 m/s², 1.75x the push.
+# A ratio, so a tier's weaker edges stop worse exactly as they push worse.
+const GOALIE_EDGE_STOP_DECEL_RATIO: float = 1.75
 # The pad-top seam: the height where the goalie's coverage changes hands from
 # the leg pads to the torso + arms. Mirrors the stance anatomy in
 # GoalieBodyConfigBuilder (torso bottom glued to the seam — body centre 1.22
