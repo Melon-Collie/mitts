@@ -1516,8 +1516,8 @@
     },
     {
       "name": "Peach",
-      "primary": "#EE7F62",
-      "secondary": "#1E2A5A",
+      "primary": "#1E2A5A",
+      "secondary": "#EE7F62",
       "light": "#F5EBDA",
       "home": {
         "helmet": "#1E2A5A",
@@ -1526,23 +1526,23 @@
           "text": "#1E2A5A"
         },
         "jersey": {
-          "base": "#EE7F62",
-          "yoke": "#1E2A5A",
+          "base": "#1E2A5A",
+          "collar": "#EE7F62",
           "stripes": [
             {
-              "pos": 0.07,
-              "width": 0.022,
-              "color": "#F5EBDA"
+              "pos": 0.77,
+              "width": 0.05,
+              "color": "#F6B23F"
             },
             {
               "pos": 0.82,
-              "width": 0.16,
-              "color": "#F5EBDA"
+              "width": 0.05,
+              "color": "#EE7F62"
             },
             {
-              "pos": 0.82,
-              "width": 0.1,
-              "color": "#1E2A5A"
+              "pos": 0.87,
+              "width": 0.05,
+              "color": "#D44A3C"
             }
           ]
         },
@@ -1552,17 +1552,22 @@
             "stripes": []
           },
           "lower": {
-            "base": "#EE7F62",
+            "base": "#1E2A5A",
             "stripes": [
               {
-                "pos": 0.3,
-                "width": 0.34,
-                "color": "#F5EBDA"
+                "pos": 0.2,
+                "width": 0.1,
+                "color": "#F6B23F"
               },
               {
                 "pos": 0.3,
-                "width": 0.22,
-                "color": "#1E2A5A"
+                "width": 0.1,
+                "color": "#EE7F62"
+              },
+              {
+                "pos": 0.4,
+                "width": 0.1,
+                "color": "#D44A3C"
               }
             ]
           }
@@ -1573,24 +1578,29 @@
           "stripes": []
         },
         "socks": {
-          "base": "#EE7F62",
+          "base": "#1E2A5A",
           "stripes": [
             {
-              "pos": 0.5,
-              "width": 0.36,
-              "color": "#F5EBDA"
+              "pos": 0.39,
+              "width": 0.11,
+              "color": "#F6B23F"
             },
             {
               "pos": 0.5,
-              "width": 0.24,
-              "color": "#1E2A5A"
+              "width": 0.11,
+              "color": "#EE7F62"
+            },
+            {
+              "pos": 0.61,
+              "width": 0.11,
+              "color": "#D44A3C"
             }
           ]
         },
-        "goalie_pads": "#EE7F62",
+        "goalie_pads": "#1E2A5A",
         "text": {
-          "color": "#1E2A5A",
-          "outline": "#1E2A5A"
+          "color": "#F5EBDA",
+          "outline": "#F5EBDA"
         }
       },
       "away": {
@@ -1609,14 +1619,19 @@
               "color": "#EE7F62"
             },
             {
-              "pos": 0.82,
-              "width": 0.16,
-              "color": "#EE7F62"
+              "pos": 0.77,
+              "width": 0.05,
+              "color": "#F6B23F"
             },
             {
               "pos": 0.82,
-              "width": 0.1,
-              "color": "#1E2A5A"
+              "width": 0.05,
+              "color": "#EE7F62"
+            },
+            {
+              "pos": 0.87,
+              "width": 0.05,
+              "color": "#D44A3C"
             }
           ]
         },
@@ -1629,14 +1644,19 @@
             "base": "#F5EBDA",
             "stripes": [
               {
-                "pos": 0.3,
-                "width": 0.34,
-                "color": "#EE7F62"
+                "pos": 0.2,
+                "width": 0.1,
+                "color": "#F6B23F"
               },
               {
                 "pos": 0.3,
-                "width": 0.22,
-                "color": "#1E2A5A"
+                "width": 0.1,
+                "color": "#EE7F62"
+              },
+              {
+                "pos": 0.4,
+                "width": 0.1,
+                "color": "#D44A3C"
               }
             ]
           }
@@ -1650,14 +1670,19 @@
           "base": "#F5EBDA",
           "stripes": [
             {
-              "pos": 0.5,
-              "width": 0.36,
-              "color": "#EE7F62"
+              "pos": 0.39,
+              "width": 0.11,
+              "color": "#F6B23F"
             },
             {
               "pos": 0.5,
-              "width": 0.24,
-              "color": "#1E2A5A"
+              "width": 0.11,
+              "color": "#EE7F62"
+            },
+            {
+              "pos": 0.61,
+              "width": 0.11,
+              "color": "#D44A3C"
             }
           ]
         },
