@@ -39,9 +39,11 @@ extends GutTest
 #   · player_attributes.gd (53) — one accessor per body dial, by design.
 #
 # Scope is Scripts/ only. A long test is not the same cost as a long subsystem,
-# and addons/ is vendored.
+# and addons/ is vendored. Generated data under _GENERATED_DIR is a measurement
+# written as constants, never read or edited by hand, so it is not counted.
 
 const _SIZE_LIMIT: int = 800
+const _GENERATED_DIR: String = "res://Scripts/domain/ai/generated/"
 # Slack before an un-banked win is reported, so ordinary edits inside a listed
 # file don't demand a table update on every commit.
 const _SIZE_SLACK: int = 40
@@ -160,6 +162,8 @@ func _assert_ratchet(allowance: Dictionary[String, int], limit: int, slack: int,
 		unit: String, measure: Callable, remedy: String) -> void:
 	var seen: Dictionary[String, bool] = {}
 	for path: String in _all_files("res://Scripts", ".gd"):
+		if path.begins_with(_GENERATED_DIR):
+			continue
 		var measured: int = measure.call(path)
 		seen[path] = true
 		if not allowance.has(path):
