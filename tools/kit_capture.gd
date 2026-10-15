@@ -439,7 +439,7 @@ func _draw_collar(c: Node2D, top_center: Vector2, color: Color, neck_depth_m: fl
 		var t: float = PI * float(k) / 16.0
 		neck.append(top_center + Vector2(cos(t) * _NECK_HALF_WIDTH_M,
 				sin(t) * neck_depth_m) * _PX_PER_M)
-	c.draw_colored_polygon(neck, _PANEL_BG.darkened(0.35))
+	c.draw_colored_polygon(neck, _PANEL_BG)
 	c.draw_polyline(neck, color, _COLLAR_WIDTH_M * _PX_PER_M, true)
 
 

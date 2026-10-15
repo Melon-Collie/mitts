@@ -15,6 +15,7 @@
         },
         "jersey": {
           "base": "#F46B2A",
+          "collar": "#2A9472",
           "stripes": [
             {
               "pos": 0.85,
@@ -82,6 +83,7 @@
         },
         "jersey": {
           "base": "#FFFFFF",
+          "collar": "#2A9472",
           "stripes": [
             {
               "pos": 0.85,
@@ -155,6 +157,7 @@
         },
         "jersey": {
           "base": "#7FB320",
+          "collar": "#4A6B15",
           "stripes": [
             {
               "pos": 0.92,
@@ -228,6 +231,7 @@
         },
         "jersey": {
           "base": "#FFFFFF",
+          "collar": "#4A6B15",
           "stripes": [
             {
               "pos": 0.92,
@@ -307,6 +311,7 @@
         },
         "jersey": {
           "base": "#971829",
+          "collar": "#E8445A",
           "stripes": [
             {
               "pos": 0.92,
@@ -396,6 +401,7 @@
         },
         "jersey": {
           "base": "#F5E6D3",
+          "collar": "#E8445A",
           "stripes": [
             {
               "pos": 0.92,
@@ -491,6 +497,7 @@
         },
         "jersey": {
           "base": "#F5D028",
+          "collar": "#5AB4E0",
           "stripes": [
             {
               "pos": 0.9,
@@ -554,6 +561,7 @@
         },
         "jersey": {
           "base": "#FFFFFF",
+          "collar": "#5AB4E0",
           "stripes": [
             {
               "pos": 0.9,
@@ -623,6 +631,7 @@
         },
         "jersey": {
           "base": "#E31B6D",
+          "collar": "#1A1A1A",
           "stripes": [
             {
               "pos": 0.93,
@@ -691,6 +700,7 @@
         },
         "jersey": {
           "base": "#FFFFFF",
+          "collar": "#1A1A1A",
           "stripes": [
             {
               "pos": 0.93,
@@ -765,6 +775,7 @@
         },
         "jersey": {
           "base": "#4A7AD6",
+          "collar": "#6B1E4A",
           "stripes": [
             {
               "pos": 0.88,
@@ -839,6 +850,7 @@
         },
         "jersey": {
           "base": "#FFFFFF",
+          "collar": "#6B1E4A",
           "stripes": [
             {
               "pos": 0.88,
@@ -920,6 +932,7 @@
         "jersey": {
           "base": "#382B6E",
           "yoke": "#F7EFDD",
+          "collar": "#DE7324",
           "stripes": [
             {
               "pos": 0.95,
@@ -985,6 +998,7 @@
         "jersey": {
           "base": "#F7EFDD",
           "yoke": "#382B6E",
+          "collar": "#DE7324",
           "stripes": [
             {
               "pos": 0.95,
@@ -1055,6 +1069,7 @@
         },
         "jersey": {
           "base": "#E8455A",
+          "collar": "#1A1A1A",
           "stripes": [
             {
               "pos": 0.95,
@@ -1130,6 +1145,7 @@
         },
         "jersey": {
           "base": "#FFFFFF",
+          "collar": "#1A1A1A",
           "stripes": [
             {
               "pos": 0.95,

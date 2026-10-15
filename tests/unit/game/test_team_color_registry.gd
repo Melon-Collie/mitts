@@ -89,7 +89,11 @@ func test_every_preset_has_a_contrasting_glove_accent() -> void:
 # The collar and the yoke are optional; a kit that omits them parses them null,
 # which the painters read as "fall back" (UniformPaint.collar_color / yoke_color).
 func test_collar_and_yoke_are_optional_and_parse_null() -> void:
-	var kit: Dictionary = TeamColorRegistry.get_colors(_PAPAYA, 0).uniform
-	assert_true(kit.jersey.has("collar"), "every kit carries the collar key")
-	assert_null(kit.jersey.collar, "Papaya names no collar")
-	assert_null(kit.jersey.yoke, "nor a yoke")
+	var bare: Dictionary = TeamColorRegistry._parse_kit({"jersey": {"base": "#FF0000"}})
+	assert_true(bare.jersey.has("collar"), "every kit carries the collar key")
+	assert_null(bare.jersey.collar, "an unnamed collar parses null")
+	assert_null(bare.jersey.yoke, "and so does an unnamed yoke")
+	var named: Dictionary = TeamColorRegistry._parse_kit(
+			{"jersey": {"base": "#FF0000", "yoke": "#00FF00", "collar": "#0000FF"}})
+	assert_eq(named.jersey.yoke, Color("#00FF00"))
+	assert_eq(named.jersey.collar, Color("#0000FF"))
