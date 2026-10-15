@@ -213,6 +213,13 @@ duels plus sixteen checkers charging across the carrier's lane: the hand-coded
 check fired once (the pincer), and every other duel is unchanged — kept 19 of
 19, strips equal; the pincer now cuts instead and gains 6.5 m to 3.3.
 
+**Poke-evade cut: deleted**, and with it the directed seam it latched
+(`best_evade_point_toward`, the carrier's `evade_seam_world`) and the poke
+trigger scan, which then only served the deke — the deke carries its own gates.
+What is left of `SkaterAgentPokeEvade` is the deke. Same duels: kept 19 of 19
+both ways, strips 189 → 143, ground gained 274 → 291 m; where the cut fired,
+the rolled carry or the deke now plays.
+
 ### Then
 
 Shot-currency step 4 (the drive-in priced along the rolled route), and pricing

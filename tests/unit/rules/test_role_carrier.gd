@@ -2049,8 +2049,6 @@ func test_open_ice_carrier_feels_no_protect_gain() -> void:
 	var c := AIRoleCarrier.new()
 	c.decide(ctx)
 	assert_eq(c.protect_gain, 0.0, "open ice: the forward carry is already safe")
-	assert_true(c.evade_seam_world.is_finite(),
-			"the evasion seam is published for the deke cut")
 
 
 const _PROTECT_SPOT := Vector3(0, 0, 5)
@@ -2293,7 +2291,7 @@ func test_patient_container_arms_the_deke_read() -> void:
 
 func test_no_deke_read_against_a_committed_charger() -> void:
 	# Same spot, but the defender is charging in hard — committed pressure is
-	# the rolled stop / seam cut's moment, not a fake's (he's already biting).
+	# the rolled cut or stop's moment, not a fake's (he's already biting).
 	var self_pos := Vector3(0.0, 0.0, -14.0)
 	var skaters: Array = [
 			[1, TEAM_ID, self_pos],

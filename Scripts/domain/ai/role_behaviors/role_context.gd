@@ -124,7 +124,7 @@ var reads_receiver_commitment: bool = true
 # it splits toward an uncovered receiver's feed lane (AIRoleRushD's lane fan).
 var plays_rush_pass_lanes: bool = true
 # COGNITION gate: true = the carrier shields the puck (protect_offset /
-# protect_gain) and the poke-evade deke cuts toward the seam; false = the puck
+# protect_gain) and dekes a patient container; false = the puck
 # stays presented ahead of the body.
 var protects_the_puck: bool = true
 

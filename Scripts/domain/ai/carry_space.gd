@@ -629,24 +629,6 @@ static func best_evade_point(
 			env, opponents, opponent_vels, opponent_caps)
 
 
-# The OBJECTIVE-DIRECTED seam: where to put the puck to get PAST the pressure
-# toward the spot the carrier wants (`objective` — the live carry anchor). The
-# max-clearance seam is survival, not playmaking: steered by it alone a carrier
-# is herded wherever the ice is emptiest and never beats his man. Lexicographic:
-# among envelope samples clearing EVADE_SAFE_CLEAR_MIN_M, the most PROGRESS
-# toward the objective; only when none is safe, pure max clearance.
-static func best_evade_point_toward(
-		carrier_pos: Vector3, carrier_vel: Vector3, objective: Vector3,
-		opponents: Array[Vector3], opponent_vels: Array[Vector3],
-		handle_reach: float, opponent_caps: Array = []) -> Vector3:
-	var env: float = 0.5 * MANEUVER_ACCEL_M_S2 * EVADE_HORIZON_S * EVADE_HORIZON_S \
-			+ handle_reach
-	return _best_clear_point(
-			carrier_pos.x + carrier_vel.x * EVADE_HORIZON_S,
-			carrier_pos.z + carrier_vel.z * EVADE_HORIZON_S,
-			env, opponents, opponent_vels, opponent_caps, objective)
-
-
 # WHERE ON THE BLADE to hold the puck under pressure: a point in the carrier's
 # handling envelope ALONE (no body-maneuver term — the body keeps doing whatever
 # steering wants; this is pure stick work), safe from every defender's
@@ -663,10 +645,9 @@ static func best_evade_point_toward(
 #     the best available shield buys, which is what the consumer's blend weight
 #     needs.
 #   WHERE to put the puck reads the DIRECTED seam (objective = the presented
-#     forward spot), exactly like best_evade_point_toward: among samples with a
-#     blade of real air (EVADE_SAFE_CLEAR_MIN_M) take the one CLOSEST to that
-#     spot, falling back to max clearance only when nothing in the envelope is
-#     safe.
+#     forward spot): among samples with a blade of real air
+#     (EVADE_SAFE_CLEAR_MIN_M) take the one CLOSEST to that spot, falling back to
+#     max clearance only when nothing in the envelope is safe.
 #
 # Never AIM with the max-clearance point: it is diametrically opposite the
 # checker, and a checker only makes shielding necessary by being in FRONT, so
@@ -696,9 +677,8 @@ static func best_handle_protect_point(
 # the projected center stays as the fallback even off-surface (the containment
 # backstop owns that degenerate case, not the seam search).
 #
-# With a finite `objective`, the sweep is objective-directed (see
-# best_evade_point_toward): among samples clearing EVADE_SAFE_CLEAR_MIN_M the
-# one closest to the objective wins; the max-clearance point remains the
+# With a finite `objective`, the sweep is objective-directed: among samples
+# clearing EVADE_SAFE_CLEAR_MIN_M the one closest to the objective wins; the max-clearance point remains the
 # fallback when no sample is safe.
 static func _best_clear_point(proj_x: float, proj_z: float, env: float,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
@@ -749,7 +729,7 @@ static func _best_clear_point(proj_x: float, proj_z: float, env: float,
 
 
 # ── Fake-then-cut deke (manufacturing the opening) ───────────────────────────
-# The seam cut and a rolled stop only EXPLOIT commitment a defender makes on
+# A rolled cut or stop only EXPLOITS commitment a defender makes on
 # his own — a patient jockey who never commits leaves no clearance to cut into
 # and the duel stalemates. A real deke MANUFACTURES the commitment: sell one
 # side, the defender must match it (gap control), and matching loads him with

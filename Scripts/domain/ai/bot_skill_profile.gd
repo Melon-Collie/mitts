@@ -135,7 +135,7 @@ var plays_rush_pass_lanes: bool
 
 # COGNITION: shield the puck with the body — a pressured carrier pulls the puck
 # off the presented forward spot to the protected side of the reachable-set seam,
-# and the poke-evade moment commits a real maneuver. False = the puck stays
+# and a patient container gets deked. False = the puck stays
 # presented ~2 m ahead at all times and no deke exists at all, so a newcomer's
 # straight-line poke-check genuinely works.
 var protects_the_puck: bool

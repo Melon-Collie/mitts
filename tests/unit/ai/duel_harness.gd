@@ -165,12 +165,9 @@ var deke_fired: bool = false
 # peer_id -> true for every skater that fired a fake-then-cut deke (attributes
 # deke_fired when a strip swaps who's carrying mid-duel). NOTE: the deke's live
 # regime is narrow by design — slow jockeying against ONE patient container.
-# At approach speed the poke-evade routes to the committed cut instead
-# (|closing| > the contain cap), and the cut + speed genuinely beats a lone
-# defender — so expect most duels to resolve via evades_by_peer, not dekes.
 var dekes_by_peer: Dictionary = {}
-# peer_id -> true once ANY committed evade window fired (cut / deke). Easy's
-# closed protect gate means it never commits one — the live tier-gate control.
+# peer_id -> true once a committed deke window fired. Easy's closed protect gate
+# means it never commits one — the live tier-gate control.
 var evades_by_peer: Dictionary = {}
 var strips: int = 0
 # One entry per fired release: { "tick": int, "peer": int } — pass/shot

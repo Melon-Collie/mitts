@@ -372,7 +372,7 @@ static func _moving_frame_pursuit(to_anchor: Vector3, anchor_dist: float,
 # opposing the anchor direction — pressure bends the carry line, it never
 # reverses it. Retreat is the carry DELIBERATION's call (the anchor itself
 # moves), never a reflex here, so a defender parked dead on the line repels
-# ~nothing and driving at him is the poke-evade's read. `to_anchor` /
+# ~nothing and getting round him is the rolled carry's read. `to_anchor` /
 # `anchor_dist` are the anchor pull inputs, passed through.
 static func _carrier_threat_repel(self_pos: Vector3, self_velocity: Vector3,
 		to_anchor: Vector3, anchor_dist: float, opponent_positions: Array[Vector3],
@@ -595,7 +595,7 @@ static func stance_carves_to(self_pos: Vector3, anchor: Vector3, desired: Vector
 			was_holding)
 
 
-# The same read for a committed cut with no anchor (a deke or a poke-evade): the
+# The same read for a committed cut with no anchor (the deke's): the
 # whole turn onto `dir` has to happen inside the maneuver's `window_s`.
 static func stance_cuts_onto(dir: Vector2, velocity_xz: Vector2,
 		upright_lateral_accel: float, window_s: float) -> bool:

@@ -546,13 +546,10 @@ remains.
   **momentum-projected** position. So a hard charger's reach rides downrange to
   where you *were* (beat him by letting him overshoot), while a jockeying
   defender's disk stays on you and a stick on the puck stays a strip threat.
-  - Two seam reads share one sampler: the **max-clearance seam**
-    (`best_evade_point`, "can I keep the puck at all") and the
-    **objective-directed seam** (`best_evade_point_toward`): the safe envelope
-    sample (clearance ≥ `EVADE_SAFE_CLEAR_MIN_M`) with the most progress toward
-    the live carry anchor, falling back to max clearance only when nothing safe
-    exists. The directed seam is what the deke latches, so the bot beats its
-    man *on the way to its spot*.
+  - The **max-clearance seam** (`best_evade_point`, "can I keep the puck at
+    all") prices the carrier's current safety. Where the body goes to beat a
+    man is not a seam read: it is the carry's rolled moves, each priced at its
+    own end (`docs/hybrid-carry-plan.md`).
   - **The boards bound the seam search** (`board_gap_m` rejects off-surface
     samples; a wall alone strips nothing). Pinned against the boards, half the
     envelope is illegal and the best seam runs along the wall, so a wall-pinned
@@ -572,18 +569,16 @@ remains.
     the puck on the back hip against any checker in front — on neither a shot nor
     a pass. A beaten / behind man is filtered out (`PROTECT_SCREEN_BEHIND_M`), so
     the carrier squares up the instant it clears its man.
-  - **The poke-evade moment** picks between two committed maneuvers, after the
-    rolled carry: when the carry search already chose its **BRAKE** move (the
-    stop that lets a committed checker's sweep fly past, priced by the same
-    rollout as every other input), the evade stands down and the stop plays.
-    Otherwise a **fake-then-cut deke** (`deke_cut_side`) against PATIENT
-    containment, which runs the reachable-set model against the defender's
-    post-bite state and fires only when the cut side is covered now but clear
-    after the bite (so an agile defender bites harder, and *can* be deked); else
-    the **cut** latched toward the directed seam. The deke executes as a committed window (fake ~0.3 s, cut
-    ~0.2 s — the durations the eval priced), triggered both off imminent pokes
-    and by a **containment trigger**, since a patient container never closes fast
-    enough to register as a poke.
+  - **The cut and the stop are rolled moves.** Against pressure the carry
+    search prices its hard cuts and its BRAKE (the stop that lets a committed
+    checker's sweep fly past) by the same rollout as every other input; no
+    separate maneuver overrides them.
+  - **The fake-then-cut deke** (`deke_cut_side`) is the one committed maneuver
+    left: against PATIENT containment it runs the reachable-set model against
+    the defender's post-bite state and fires only when the cut side is covered
+    now but clear after the bite (so an agile defender bites harder, and *can*
+    be deked). It executes as a committed window (fake ~0.3 s, cut ~0.2 s — the
+    durations the eval priced), and stands down when the carry chose to stop.
   - The carry mouse is clamped a blade-length inside the boards
     (`CARRY_BLADE_WALL_MARGIN_M`): a target at the kickplate slams the stick into
     the wall and knocks the puck loose.

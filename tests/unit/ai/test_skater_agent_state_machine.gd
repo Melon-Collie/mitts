@@ -3,7 +3,7 @@ extends GutTest
 # SkaterAgentStateMachine against fabricated WorldSnapshots: the chase and
 # reception predicates, the cursor and aim geometry, the press states and their
 # wind-ups, the carry handler's transitions (with a stubbed carrier), the
-# dispatch throttle, poke-evade and deke, and the cognition gates. No live
+# dispatch throttle, the deke, and the cognition gates. No live
 # actors — everything runs headless off the bot's identity set by setup.
 
 const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
@@ -1456,97 +1456,6 @@ func test_windup_side_flip_moves_to_backhand() -> void:
 			"side-flip moves the RH wind-up to the backhand side")
 
 
-# ── Poke-evade deke trigger: relative closing (angled/stationary defender) ──────
-
-func test_poke_evade_fires_driving_at_a_stationary_defender() -> void:
-	# The deke's closing gate is RELATIVE: a carrier skating into a waiting / angled
-	# defender closes the gap, so the deke fires. The old defender-only closing left
-	# the bot skating straight into a static poke without cutting around it.
-	# A usable seam is required now (no blind fallback), so give the carrier one.
-	var snap := _poke_snap(Vector3(0, 0, -6), Vector3(0, 0, -3.5), Vector3.ZERO)
-	sm._carrier.evade_seam_world = Vector3(1.5, 0, -1.5)   # a real cut direction
-	var input := InputState.new()
-	sm._poke_evade_modulate_steering(input, snap, Vector3.ZERO)
-	assert_gt(sm._poke_evade.active_ticks, 0,
-			"driving at a stationary defender within poke reach triggers the deke")
-	assert_ne(sm._poke_evade.cut_seam_dir, Vector2.ZERO, "the cut latches the seam direction")
-
-
-func test_poke_evade_never_triggers_without_a_usable_maneuver() -> void:
-	# No seam read (Easy's closed protect gate / seam not computed) → the
-	# poke-evade must not trigger at all: there is no blind fallback
-	# cut, and the window + cooldown are only spent on a committed move.
-	var snap := _poke_snap(Vector3(0, 0, -6), Vector3(0, 0, -3.5), Vector3.ZERO)
-	# sm._carrier.evade_seam_world stays INF.
-	var input := InputState.new()
-	sm._poke_evade_modulate_steering(input, snap, Vector3.ZERO)
-	assert_eq(sm._poke_evade.active_ticks, 0, "no seam → no evade")
-	assert_eq(sm._poke_evade.cooldown_ticks, 0, "no cooldown burned on a non-maneuver")
-
-
-func test_poke_evade_stands_down_for_the_rolled_stop() -> void:
-	# The carry already priced the stop against this pressure: a cut toward the
-	# seam would override the move the carrier chose, so no window opens and the
-	# rolled brake reaches the input untouched.
-	var snap := _poke_snap(Vector3(0, 0, -6), Vector3(0, 0, -3.5), Vector3.ZERO)
-	sm._carrier.evade_seam_world = Vector3(2.0, 0.0, -1.0)
-	sm._carrier.carry_move = AICarryRollout.Move.BRAKE
-	var input := InputState.new()
-	input.brake = true
-	sm._poke_evade_modulate_steering(input, snap, Vector3.ZERO)
-	assert_eq(sm._poke_evade.active_ticks, 0, "no evade window over a rolled stop")
-	assert_true(input.brake, "the rolled brake is what the carrier skates")
-	sm._carrier.carry_move = AICarryRollout.Move.STRAIGHT
-	sm._poke_evade_modulate_steering(input, snap, Vector3.ZERO)
-	assert_gt(sm._poke_evade.active_ticks, 0, "the same pressure on a forward move cuts")
-
-
-# Builds the standard poke-trigger scene: self carrying at `self_vel`, one
-# opponent at `opp_pos` with `opp_vel`, counters cleared for a fresh trigger.
-func _poke_snap(self_vel: Vector3, opp_pos: Vector3, opp_vel: Vector3) -> WorldSnapshot:
-	var snap := WorldSnapshot.new()
-	var me := SkaterNetworkState.new()
-	me.position = Vector3(0, 0, 0)
-	me.velocity = self_vel
-	snap.skater_states[SELF_ID] = me
-	var opp := SkaterNetworkState.new()
-	opp.position = opp_pos
-	opp.velocity = opp_vel
-	opp.blade_contact_world = opp_pos
-	snap.skater_states[OPP_ID] = opp
-	snap.puck_state = PuckNetworkState.new()
-	snap.puck_state.carrier_peer_id = SELF_ID
-	snap.puck_state.position = me.position
-	sm._poke_evade.active_ticks = 0
-	sm._poke_evade.cooldown_ticks = 0
-	return snap
-
-
-func test_poke_evade_skips_a_defender_neither_side_is_closing_on() -> void:
-	# Guard: if the carrier is NOT moving toward the defender (drifting away) and the
-	# defender is static, nothing is closing, so no deke — the relative gate still
-	# filters the genuinely-idle case.
-	var snap := WorldSnapshot.new()
-	var me := SkaterNetworkState.new()
-	me.position = Vector3(0, 0, 0)
-	me.velocity = Vector3(0, 0, 6)           # skating AWAY from the defender ahead
-	snap.skater_states[SELF_ID] = me
-	var opp := SkaterNetworkState.new()
-	opp.position = Vector3(0, 0, -3.0)
-	opp.velocity = Vector3.ZERO
-	opp.blade_contact_world = Vector3(0, 0, -3.0)
-	snap.skater_states[OPP_ID] = opp
-	snap.puck_state = PuckNetworkState.new()
-	snap.puck_state.carrier_peer_id = SELF_ID
-	snap.puck_state.position = me.position
-	sm._poke_evade.active_ticks = 0
-	sm._poke_evade.cooldown_ticks = 0
-	var input := InputState.new()
-	sm._poke_evade_modulate_steering(input, snap, me.position)
-	assert_eq(sm._poke_evade.active_ticks, 0,
-			"a defender behind the direction of travel, neither closing, gets no deke")
-
-
 # ── Receive in stride vs settle ──────────────────────────────────────────────
 # The side-stand reception only settles (arrival brake) when arriving AND
 # stopping both fit before the puck; a tight window takes the feed in stride.
@@ -2084,7 +1993,7 @@ func test_containment_deke_fakes_then_cuts() -> void:
 	sm._carrier.deke_fake_dir = Vector2(1, 0)
 	sm._carrier.deke_cut_dir = Vector2(-0.7, -0.7)
 	var i := InputState.new()
-	sm._poke_evade_modulate_steering(i, s, Vector3.ZERO)
+	sm._apply_deke(i, s)
 	assert_true(sm._poke_evade.deking, "the containment stalemate commits the deke")
 	assert_almost_eq(i.move_vector.x, 1.0, 0.01, "fake phase thrusts the sell side")
 	var fake_mouse: Vector3 = sm._deke_mouse_target(Vector3.ZERO)
@@ -2092,16 +2001,35 @@ func test_containment_deke_fakes_then_cuts() -> void:
 	# Wind the window down to the cut phase.
 	sm._poke_evade.active_ticks = SkaterAgentPokeEvade.DEKE_CUT_TICKS
 	var i2 := InputState.new()
-	sm._poke_evade_modulate_steering(i2, s, Vector3.ZERO)
+	sm._apply_deke(i2, s)
 	assert_lt(i2.move_vector.x, 0.0, "cut phase explodes across")
 	var cut_mouse: Vector3 = sm._deke_mouse_target(Vector3.ZERO)
 	assert_lt(cut_mouse.x, 0.0, "the cursor snaps across for the cut")
 	# Expire → the deliberate deke cooldown arms.
 	sm._poke_evade.active_ticks = 1
-	sm._poke_evade_modulate_steering(InputState.new(), s, Vector3.ZERO)
+	sm._apply_deke(InputState.new(), s)
 	assert_false(sm._poke_evade.deking, "the maneuver ends with the window")
 	assert_eq(sm._poke_evade.cooldown_ticks, SkaterAgentPokeEvade.DEKE_COOLDOWN_TICKS,
 			"dekes pace at the longer cooldown")
+
+
+func test_the_deke_stands_down_for_the_rolled_stop() -> void:
+	# The carry priced the stop against this pressure: a fake would override
+	# the move the carrier chose, so no window opens and the rolled brake
+	# reaches the input untouched.
+	var s := _self_snap(Vector3.ZERO, true)
+	sm._carrier.deke_go = true
+	sm._carrier.deke_fake_dir = Vector2(1, 0)
+	sm._carrier.deke_cut_dir = Vector2(-0.7, -0.7)
+	sm._carrier.carry_move = AICarryRollout.Move.BRAKE
+	var i := InputState.new()
+	i.brake = true
+	sm._apply_deke(i, s)
+	assert_false(sm._poke_evade.deking, "no deke over a rolled stop")
+	assert_true(i.brake, "the rolled brake is what the carrier skates")
+	sm._carrier.carry_move = AICarryRollout.Move.STRAIGHT
+	sm._apply_deke(InputState.new(), s)
+	assert_true(sm._poke_evade.deking, "the same read on a forward move dekes")
 
 
 func test_no_deke_without_the_carrier_read() -> void:
@@ -2110,7 +2038,7 @@ func test_no_deke_without_the_carrier_read() -> void:
 	var s := _self_snap(Vector3.ZERO, true)
 	sm._carrier.deke_go = false
 	var i := InputState.new()
-	sm._poke_evade_modulate_steering(i, s, Vector3.ZERO)
+	sm._apply_deke(i, s)
 	assert_false(sm._poke_evade.deking)
 	assert_eq(sm._poke_evade.active_ticks, 0)
 

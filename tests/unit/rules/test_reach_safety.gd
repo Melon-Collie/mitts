@@ -250,63 +250,6 @@ func test_wall_pinned_carrier_reads_less_safe_than_open_ice() -> void:
 	assert_lt(at_1_5[0], at_1_5[1], "pinned at 1.5 m reads less safe than open ice")
 
 
-# ─── best_evade_point_toward: beat the man TOWARD the objective ──────────────
-
-func test_directed_seam_advances_past_an_overplaying_defender() -> void:
-	# Carrier driving +Z at the objective, defender overplaying the left side of
-	# the lane. The pure max-clearance seam retreats to wherever is emptiest
-	# (behind/lateral); the DIRECTED seam takes the safe sample on the OPEN side
-	# on the way forward — beating the man, not avoiding him.
-	var objective := Vector3(0, 0, 10)
-	var opps: Array[Vector3] = [Vector3(-1.2, 0, 3.0)]
-	var vels: Array[Vector3] = [Vector3.ZERO]
-	var directed: Vector3 = AICarrySpace.best_evade_point_toward(
-			Vector3.ZERO, Vector3(0, 0, 4), objective, opps, vels, HANDLE)
-	var undirected: Vector3 = AICarrySpace.best_evade_point(
-			Vector3.ZERO, Vector3(0, 0, 4), opps, vels, HANDLE)
-	assert_gt(directed.x, 0.5, "cuts to the open (right) side of the overplayed lane")
-	assert_gt(directed.z, 1.6, "advances past the projected center, toward the objective")
-	assert_gt(directed.z, undirected.z + 0.5,
-			"the directed seam advances where the max-clearance seam gives ground")
-
-
-func test_directed_seam_is_genuinely_safe() -> void:
-	# The progress winner must clear every defender's reach by the blade-of-air
-	# floor — progress never buys back into a strip.
-	var objective := Vector3(0, 0, 10)
-	var opps: Array[Vector3] = [Vector3(-1.2, 0, 3.0)]
-	var vels: Array[Vector3] = [Vector3.ZERO]
-	var directed: Vector3 = AICarrySpace.best_evade_point_toward(
-			Vector3.ZERO, Vector3(0, 0, 4), objective, opps, vels, HANDLE)
-	var clear: float = AICarrySpace.reach_clearance(
-			directed, AICarrySpace.EVADE_HORIZON_S, opps, vels)
-	assert_gte(clear, AICarrySpace.EVADE_SAFE_CLEAR_MIN_M,
-			"the directed seam keeps at least a blade of air off every reach")
-
-
-func test_directed_seam_falls_back_to_max_clearance_when_surrounded() -> void:
-	# Swarmed — no envelope sample clears the safe floor. Nothing to attack:
-	# the directed seam degrades to exactly the survival (max-clearance) read.
-	var objective := Vector3(0, 0, 10)
-	var opps: Array[Vector3] = [
-			Vector3(1.2, 0, 0), Vector3(-0.85, 0, 0.85), Vector3(-0.85, 0, -0.85)]
-	var vels: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO, Vector3.ZERO]
-	var directed: Vector3 = AICarrySpace.best_evade_point_toward(
-			Vector3.ZERO, Vector3.ZERO, objective, opps, vels, HANDLE)
-	var undirected: Vector3 = AICarrySpace.best_evade_point(
-			Vector3.ZERO, Vector3.ZERO, opps, vels, HANDLE)
-	assert_eq(directed, undirected, "no safe sample → survive first, pure max clearance")
-
-
-func test_directed_seam_leans_toward_objective_in_open_ice() -> void:
-	# Nobody around: every sample is safe, so the directed seam is simply the
-	# most-progress point of the envelope — it leans toward the objective.
-	var objective := Vector3(0, 0, 10)
-	var directed: Vector3 = AICarrySpace.best_evade_point_toward(
-			Vector3.ZERO, Vector3.ZERO, objective, [], [], HANDLE)
-	assert_gt(directed.z, 0.5, "open ice: the seam leans toward the objective")
-
-
 # ─── best_handle_protect_point: shield the puck with the body ─────────────────
 
 func test_protect_point_pulls_the_puck_away_from_a_frontal_stick() -> void:

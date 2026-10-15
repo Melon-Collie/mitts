@@ -98,7 +98,7 @@ const CARRY_BEHIND_NET_LATERAL_M: float = 1.0   # lateral reach past the frame s
 # QUIET HANDS: body facing chases the carry cursor, so a sustained offset becomes
 # body rotation — 0.33 m on the 1.3 m ring is ~±14° of wag; wider turns a threat
 # crossing the line into a twitchy ~44° swing. The big threats belong to the
-# deliberate answers (protect blend, the rolled carry, seam cut, deke). Ring metres —
+# deliberate answers (protect blend, the rolled carry, the deke). Ring metres —
 # rescale with CARRY_BLADE_AIM_FORWARD_M.
 const STICKHANDLE_THREAT_RADIUS_M: float = 3.0
 const STICKHANDLE_FULL_OFFSET_RADIUS_M: float = 1.5
@@ -619,8 +619,8 @@ var _reads_receiver_commitment: bool = true
 var _angles_the_chase: bool = true
 # _plays_rush_pass_lanes rides RoleContext into RUSH_D1's odd-man lane fan.
 var _plays_rush_pass_lanes: bool = true
-# _protects_the_puck gates the carry blade's protect blend and the seam-directed
-# poke-evade. False = naive forward carry, the puck presented ahead of the body.
+# _protects_the_puck gates the carry blade's protect blend and the deke. False =
+# naive forward carry, the puck presented ahead of the body.
 var _protects_the_puck: bool = true
 # _lifts_sticks gates the jab-or-lift read (AIStickLiftRead). False = jab only.
 var _lifts_sticks: bool = true
@@ -769,7 +769,6 @@ func setup(peer_id: int, team_id: int, brain: TeamBrain, team_id_by_peer: Dictio
 	_caps_by_peer = caps_by_peer
 	_shot_block.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_board_play.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
-	_poke_evade.setup(peer_id, team_id, team_id_by_peer)
 	_stick_play.setup(peer_id, team_id, team_id_by_peer)
 	_steering.setup(peer_id, team_id, team_id_by_peer)
 	_reception.setup(peer_id, team_id, team_id_by_peer, caps_by_peer, is_left_handed)
@@ -1711,9 +1710,9 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 			# Skated through at pace — no arrival brake.
 			_apply_steering(input, snapshot, self_pos, _last_carry_anchor,
 					false, _self_max_speed)
-		# The discrete poke-evade (cut / deke), only while carrying
-		# with no intent: a pre-aim has its own steering target.
-		_poke_evade_modulate_steering(input, snapshot, self_pos)
+		# The committed deke, only while carrying with no intent: a pre-aim has
+		# its own steering target.
+		_apply_deke(input, snapshot)
 	elif _intended_action == State.SHOOT_PRESSED:
 		var hv: Vector3 = Vector3.ZERO
 		if self_state != null:
@@ -1876,8 +1875,9 @@ func _aim_ring_toward(self_pos: Vector3, aim_world: Vector3) -> Vector3:
 # The sign is latched until the swing passes halfway or completes, or a per-tick
 # re-read would flip direction mid-sweep.
 const PROTECT_TURN_MIN_SWING_RAD: float = deg_to_rad(100.0)
-# A stick's poke reach off the swept puck.
-const PROTECT_TURN_THREAT_RADIUS_M: float = SkaterAgentPokeEvade.POKE_EVADE_TRIGGER_REACH_M
+# A stick's poke reach off the swept puck: a blade-length lunge plus the stick
+# itself, held out from the defender's body.
+const PROTECT_TURN_THREAT_RADIUS_M: float = 2.5
 # The long way must beat the short way's clearance by this much — a marginal
 # gain isn't worth the extra rotation time.
 const PROTECT_TURN_MARGIN_M: float = 0.5
@@ -2821,10 +2821,12 @@ func _stickhandle_offset(snapshot: WorldSnapshot, self_pos: Vector3, forward_dir
 	return right_axis * magnitude
 
 
-# The poke-evade (SkaterAgentPokeEvade), only while carrying with no intent.
-func _poke_evade_modulate_steering(input: InputState, snapshot: WorldSnapshot,
-		self_pos: Vector3) -> void:
-	_poke_evade.modulate(input, snapshot, self_pos, _carrier, _protects_the_puck,
+# The deke (SkaterAgentPokeEvade), only while carrying with no intent.
+func _apply_deke(input: InputState, snapshot: WorldSnapshot) -> void:
+	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
+	if self_state == null:
+		return
+	_poke_evade.modulate(input, self_state.velocity, _carrier,
 			_upright_lateral_accel(), _dispatch_period_ticks)
 
 
