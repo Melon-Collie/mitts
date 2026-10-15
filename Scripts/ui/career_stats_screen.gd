@@ -180,7 +180,6 @@ func _build_tab_switcher() -> Control:
 	for i: int in labels.size():
 		var btn := Button.new()
 		btn.text = labels[i]
-		btn.flat = true
 		btn.custom_minimum_size = Vector2(140, 40)
 		btn.add_theme_font_size_override("font_size", 18)
 		bar.add_child(btn)

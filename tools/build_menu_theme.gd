@@ -44,6 +44,7 @@ func _build_theme() -> Theme:
 # brighter teal-glow on hover. Primary CTAs opt in to &"ButtonPrimary" instead.
 func _apply_button_type(theme: Theme, type: String) -> void:
 	theme.set_color("font_color",          type, MenuStyle.TEXT_BODY)
+	theme.set_color("font_focus_color",    type, MenuStyle.TEXT_BODY)
 	theme.set_color("font_hover_color",    type, MenuStyle.TEAL_HOVER)
 	theme.set_color("font_pressed_color",  type, MenuStyle.TEAL_HOVER)
 	theme.set_color("font_disabled_color", type, MenuStyle.TEXT_MUTED)
@@ -58,11 +59,14 @@ func _apply_button_type(theme: Theme, type: String) -> void:
 
 
 # Primary CTA — solid teal fill, dark text. One per screen. Opt-in via
-# btn.theme_type_variation = &"ButtonPrimary".
+# btn.theme_type_variation = &"ButtonPrimary". Every type sets font_focus_color:
+# left unset, a focused button falls back to Godot's near-white, and screens
+# focus their first button for mouse players too (the ring is what hides).
 func _apply_primary_button_variation(theme: Theme) -> void:
 	const TYPE: StringName = &"ButtonPrimary"
 	theme.set_type_variation(TYPE, &"Button")
 	theme.set_color("font_color",          TYPE, MenuStyle.ON_TEAL)
+	theme.set_color("font_focus_color",    TYPE, MenuStyle.ON_TEAL)
 	theme.set_color("font_hover_color",    TYPE, MenuStyle.ON_TEAL)
 	theme.set_color("font_pressed_color",  TYPE, MenuStyle.ON_TEAL)
 	theme.set_color("font_disabled_color", TYPE, MenuStyle.TEXT_MUTED)
@@ -79,6 +83,7 @@ func _apply_tertiary_button_variation(theme: Theme) -> void:
 	const TYPE: StringName = &"ButtonTertiary"
 	theme.set_type_variation(TYPE, &"Button")
 	theme.set_color("font_color",          TYPE, MenuStyle.TEXT_MUTED)
+	theme.set_color("font_focus_color",    TYPE, MenuStyle.TEXT_MUTED)
 	theme.set_color("font_hover_color",    TYPE, MenuStyle.DANGER)
 	theme.set_color("font_pressed_color",  TYPE, MenuStyle.DANGER)
 	theme.set_color("font_disabled_color", TYPE, MenuStyle.TEXT_MUTED)
@@ -266,13 +271,15 @@ func _empty_icon() -> ImageTexture:
 # ── Type variations ──────────────────────────────────────────────────────────
 
 # Underline tabs — transparent everywhere except a 2px bottom border on the
-# active tab. Replaces the old boxy tab variant. Active tab gets brighter text
-# + teal underline; inactive is muted, brightens on hover.
+# active tab. Active tab gets brighter text + teal underline; inactive is dim,
+# brightens on hover. A tab button must not be `flat`: a flat Button skips its
+# background stylebox, which is where the underline lives.
 func _apply_tab_inactive_variation(theme: Theme) -> void:
 	const TYPE: StringName = &"TabButton"
 	theme.set_type_variation(TYPE, &"Button")
-	theme.set_color("font_color",       TYPE, MenuStyle.TEXT_MUTED)
-	theme.set_color("font_hover_color", TYPE, MenuStyle.TEXT_DIM)
+	theme.set_color("font_color",       TYPE, MenuStyle.TEXT_DIM)
+	theme.set_color("font_focus_color", TYPE, MenuStyle.TEXT_DIM)
+	theme.set_color("font_hover_color", TYPE, MenuStyle.TEXT_BODY)
 	var s := _tab_box(false)
 	for state: StringName in [&"normal", &"hover", &"pressed", &"focus"]:
 		theme.set_stylebox(state, TYPE, s)
@@ -282,6 +289,7 @@ func _apply_tab_active_variation(theme: Theme) -> void:
 	const TYPE: StringName = &"TabButtonActive"
 	theme.set_type_variation(TYPE, &"Button")
 	theme.set_color("font_color",       TYPE, MenuStyle.TEAL_HOVER)
+	theme.set_color("font_focus_color", TYPE, MenuStyle.TEAL_HOVER)
 	theme.set_color("font_hover_color", TYPE, MenuStyle.TEAL_HOVER)
 	var s := _tab_box(true)
 	for state: StringName in [&"normal", &"hover", &"pressed", &"focus"]:

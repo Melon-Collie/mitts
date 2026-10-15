@@ -134,10 +134,10 @@ func _enter_stage(stage: String) -> void:
 	tree.change_scene_to_file(path)
 	while tree.current_scene == null or tree.current_scene.scene_file_path != path:
 		await tree.process_frame
-	# Clear of the HUD corners and of the skater at centre ice, where the free
-	# play aim cursor otherwise sits.
+	# Bottom centre is below every menu column and dialog, so no shot catches a
+	# button in its hover state.
 	var view: Vector2 = get_viewport().get_visible_rect().size
-	Input.warp_mouse(view * Vector2(0.5, 0.72))
+	Input.warp_mouse(view * Vector2(0.5, 0.97))
 	await _settle(_STAGE_SETTLE_FRAMES, _STAGE_SETTLE_SEC)
 
 

@@ -74,19 +74,12 @@ func _build_content() -> void:
 	_export_status_label = _make_status_label()
 	add_child(_export_status_label)
 
-	var bots_hint := Label.new()
-	bots_hint.add_theme_font_size_override("font_size", 12)
-	bots_hint.add_theme_color_override("font_color", _MUTED)
-	bots_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	bots_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	bots_hint.text = "Edit AI bot names, numbers, and attributes. As host, your roster is used for the whole lobby. Builds over the point-buy budget reset to medium."
-	add_child(bots_hint)
-
 	var bots_export_btn := _make_button("Export Bots File...")
 	bots_export_btn.custom_minimum_size = Vector2(260, 40)
 	bots_export_btn.add_theme_font_size_override("font_size", 16)
 	bots_export_btn.pressed.connect(_on_export_bots_pressed)
 	add_child(_field_row("Custom bots", bots_export_btn))
+	add_child(_row_note("Edit AI bot names, numbers, and attributes. As host, your roster is used for the whole lobby. Builds over the point-buy budget reset to medium."))
 
 	_bot_export_status_label = _make_status_label()
 	add_child(_bot_export_status_label)
@@ -100,15 +93,9 @@ func _build_content() -> void:
 	_share_stats_check.toggled.connect(func(_p: bool) -> void: _notify_changed())
 	add_child(_field_row("Share Gameplay Stats", _share_stats_check))
 
-	var stats_notice := Label.new()
-	stats_notice.text = "Uploads match results so you can track your career. " \
-		+ "With this off, the Career menu and replay playback are unavailable — " \
-		+ "both are built from your uploaded games."
-	stats_notice.add_theme_font_size_override("font_size", 12)
-	stats_notice.add_theme_color_override("font_color", _MUTED)
-	stats_notice.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	stats_notice.custom_minimum_size = Vector2(380, 0)
-	add_child(stats_notice)
+	add_child(_row_note("Uploads match results so you can track your career. "
+		+ "With this off, the Career menu and replay playback are unavailable — "
+		+ "both are built from your uploaded games."))
 
 # The two export status labels share the same style.
 func _make_status_label() -> Label:
