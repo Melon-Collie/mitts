@@ -344,7 +344,12 @@ func step() -> void:
 				rec["dump_score"] = c.agent._carrier.debug_dump_score
 			releases.append(rec)
 			_release_grace[c.peer_id] = ticks + RELEASE_GRACE_TICKS
-			var aim: Vector3 = c.input.mouse_world_pos - c.pos
+			# Along the release's committed direction, as the controller fires a
+			# bot's charge (ShotMechanics.wrister_aim_dir): at the wind-up's end the
+			# cursor can sit a hand off the body, aimed anywhere.
+			var committed: Vector3 = c.input.bot_slapper_aim_dir \
+					if c.was_holding_slap and not c.input.slap_held else c.input.bot_wrister_aim_dir
+			var aim: Vector3 = ShotMechanics.wrister_aim_dir(committed, c.input.mouse_world_pos, c.pos)
 			aim.y = 0.0
 			if aim.length_squared() < 0.0001:
 				aim = Vector3(c.facing.x, 0.0, c.facing.y)
