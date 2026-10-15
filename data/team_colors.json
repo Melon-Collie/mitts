@@ -1209,7 +1209,7 @@
       "secondary": "#3FB8AF",
       "light": "#F3EAD3",
       "home": {
-        "helmet": "#3B2414",
+        "helmet": "#3FB8AF",
         "shoulders": {
           "color": "#5C3A21",
           "text": "#F3EAD3"
@@ -1251,9 +1251,9 @@
             ]
           }
         },
-        "gloves": "#5C3A21",
+        "gloves": "#3FB8AF",
         "pants": {
-          "base": "#3B2414",
+          "base": "#5C3A21",
           "stripes": [
             {
               "pos": 0.5,
@@ -1280,7 +1280,7 @@
         "goalie_pads": "#F3EAD3",
         "text": {
           "color": "#F3EAD3",
-          "outline": "#3B2414"
+          "outline": "#5C3A21"
         }
       },
       "away": {
@@ -1329,7 +1329,7 @@
         },
         "gloves": "#5C3A21",
         "pants": {
-          "base": "#3B2414",
+          "base": "#5C3A21",
           "stripes": [
             {
               "pos": 0.5,
@@ -1356,7 +1356,7 @@
         "goalie_pads": "#F3EAD3",
         "text": {
           "color": "#5C3A21",
-          "outline": "#3B2414"
+          "outline": "#5C3A21"
         }
       }
     }
