@@ -22,7 +22,7 @@ const FEED_SPEED_M_S: float = 16.0
 
 # The ratchets. Tighten when a change wins by more than BANK_MARGIN.
 const MAX_MEAN_ABS_ERR: float = 0.105
-const MIN_CONCORDANCE: float = 0.90
+const MIN_CONCORDANCE: float = 0.899
 const BANK_MARGIN: float = 0.02
 
 
