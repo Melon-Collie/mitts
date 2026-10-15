@@ -6,20 +6,20 @@ extends GutTest
 #   Home (team_id 0): primary body, secondary stripe, light lettering.
 #   Away (team_id 1): light body, primary stripe, primary lettering.
 
-const _PAPAYA: int = 0  # primary #F46B2A, secondary #2A9472, light #FBF3EC
+const _HOME_SLOT: int = TeamColorRegistry.DEFAULT_HOME_SLOT
 
 
 func test_home_uses_primary_body_secondary_stripe() -> void:
-	var ui: Dictionary = TeamColorRegistry.get_ui_colors(_PAPAYA, 0)
-	var preset: Dictionary = TeamColorRegistry.get_preset(_PAPAYA)
+	var ui: Dictionary = TeamColorRegistry.get_ui_colors(_HOME_SLOT, 0)
+	var preset: Dictionary = TeamColorRegistry.get_preset(_HOME_SLOT)
 	assert_eq(ui.base, preset.primary, "home body is primary")
 	assert_eq(ui.stripe, preset.secondary, "home stripe is secondary")
 	assert_eq(ui.text, preset.light, "home lettering is light")
 
 
 func test_away_uses_light_body_primary_stripe() -> void:
-	var ui: Dictionary = TeamColorRegistry.get_ui_colors(_PAPAYA, 1)
-	var preset: Dictionary = TeamColorRegistry.get_preset(_PAPAYA)
+	var ui: Dictionary = TeamColorRegistry.get_ui_colors(_HOME_SLOT, 1)
+	var preset: Dictionary = TeamColorRegistry.get_preset(_HOME_SLOT)
 	assert_eq(ui.base, preset.light, "away body is light")
 	assert_eq(ui.stripe, preset.primary, "away stripe is primary")
 	assert_eq(ui.text, preset.primary, "away lettering is primary")
@@ -27,8 +27,8 @@ func test_away_uses_light_body_primary_stripe() -> void:
 
 func test_get_colors_exposes_ui_keys_matching_get_ui_colors() -> void:
 	for team_id: int in [0, 1]:
-		var colors: Dictionary = TeamColorRegistry.get_colors(_PAPAYA, team_id)
-		var ui: Dictionary = TeamColorRegistry.get_ui_colors(_PAPAYA, team_id)
+		var colors: Dictionary = TeamColorRegistry.get_colors(_HOME_SLOT, team_id)
+		var ui: Dictionary = TeamColorRegistry.get_ui_colors(_HOME_SLOT, team_id)
 		assert_eq(colors.ui_base, ui.base)
 		assert_eq(colors.ui_stripe, ui.stripe)
 		assert_eq(colors.ui_text, ui.text)
@@ -54,12 +54,12 @@ func test_unknown_slot_still_returns_valid_ui_colors() -> void:
 # Each team always wears its own primary, independent of its opponent's colors.
 
 func test_score_stripe_pair_home_is_primary() -> void:
-	var pair: Dictionary = TeamColorRegistry.get_score_stripe_pair(_PAPAYA, 1)
-	assert_eq(pair.home, TeamColorRegistry.get_preset(_PAPAYA).primary,
+	var pair: Dictionary = TeamColorRegistry.get_score_stripe_pair(_HOME_SLOT, 1)
+	assert_eq(pair.home, TeamColorRegistry.get_preset(_HOME_SLOT).primary,
 			"home stripe is its primary")
 
 func test_score_stripe_pair_away_is_primary() -> void:
-	var pair: Dictionary = TeamColorRegistry.get_score_stripe_pair(_PAPAYA, 1)
+	var pair: Dictionary = TeamColorRegistry.get_score_stripe_pair(_HOME_SLOT, 1)
 	assert_eq(pair.away, TeamColorRegistry.get_preset(1).primary,
 			"away stripe is its primary")
 
@@ -97,3 +97,32 @@ func test_collar_and_yoke_are_optional_and_parse_null() -> void:
 			{"jersey": {"base": "#FF0000", "yoke": "#00FF00", "collar": "#0000FF"}})
 	assert_eq(named.jersey.yoke, Color("#00FF00"))
 	assert_eq(named.jersey.collar, Color("#0000FF"))
+
+
+# With no JSON at all the registry falls back to two hardcoded presets, and they
+# stand for the bundled file's first two slots: same team, same solid colors
+# (the fallback carries no stripes, yoke or collar).
+func test_hardcoded_fallback_mirrors_the_bundled_first_slots() -> void:
+	var raw: Dictionary = JSON.parse_string(
+			FileAccess.get_file_as_string("res://data/team_colors.json"))
+	var fallbacks: Array[Dictionary] = [
+		TeamColorRegistry._hardcoded_pomegranate(), TeamColorRegistry._hardcoded_blueberry()]
+	for slot: int in fallbacks.size():
+		var entry: Dictionary = raw.teams[slot]
+		var preset: Dictionary = fallbacks[slot]
+		assert_eq(preset.name, entry.name, "slot %d fallback is the bundled team" % slot)
+		for key: String in ["primary", "secondary", "light"]:
+			assert_eq(preset[key], Color(entry[key]), "%s %s" % [entry.name, key])
+		for side: String in ["home", "away"]:
+			var bundled: Dictionary = TeamColorRegistry._parse_kit(entry[side])
+			var kit: Dictionary = preset[side]
+			var label: String = "%s %s" % [entry.name, side]
+			assert_eq(kit.helmet, bundled.helmet, label + " helmet")
+			assert_eq(kit.gloves, bundled.gloves, label + " gloves")
+			assert_eq(kit.goalie_pads, bundled.goalie_pads, label + " goalie pads")
+			assert_eq(kit.shoulders, bundled.shoulders, label + " shoulders")
+			assert_eq(kit.text.color, bundled.text.color, label + " lettering")
+			for region: String in ["jersey", "pants", "socks"]:
+				assert_eq(kit[region].base, bundled[region].base, "%s %s" % [label, region])
+			for part: String in ["upper", "lower"]:
+				assert_eq(kit.arms[part].base, bundled.arms[part].base, "%s arms.%s" % [label, part])

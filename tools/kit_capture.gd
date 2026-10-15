@@ -6,7 +6,7 @@ extends SceneTree
 # for editing data/team_colors.json: change a kit, re-run, look.
 #
 #   .claude/hooks/render-kits.sh                # every team, into ./.preview/kits
-#   .claude/hooks/render-kits.sh papaya,7       # named teams or slot numbers
+#   .claude/hooks/render-kits.sh pineapple,7       # named teams or slot numbers
 #
 # Nothing here re-paints a kit. Each garment is a rink mesh laid flat (a tube
 # flattened is half its perimeter wide, so every width is measured off the shared

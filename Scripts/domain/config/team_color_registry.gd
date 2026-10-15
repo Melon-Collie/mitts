@@ -63,7 +63,7 @@ static func get_preset(slot: int) -> Dictionary:
 	push_warning("TeamColorRegistry: unknown slot '%d', using default" % slot)
 	if _presets.size() > DEFAULT_HOME_SLOT:
 		return _presets[DEFAULT_HOME_SLOT]
-	return _hardcoded_papaya()
+	return _hardcoded_pomegranate()
 
 
 # Returns the merged color set for a given team slot + side.
@@ -269,73 +269,71 @@ static func _parse_optional_color(hex: Variant) -> Variant:
 
 static func _load_hardcoded_fallback() -> void:
 	_presets.clear()
-	_presets.append(_hardcoded_papaya())
-	_presets.append(_hardcoded_lime())
+	_presets.append(_hardcoded_pomegranate())
+	_presets.append(_hardcoded_blueberry())
 
 
-static func _hardcoded_papaya() -> Dictionary:
-	# Mirrors the Papaya team from data/team_colors.json so a missing file
-	# still produces a usable kit.
+static func _hardcoded_pomegranate() -> Dictionary:
 	return {
-		"name":      "Papaya",
-		"primary":   _parse_color("#F46B2A"),
-		"secondary": _parse_color("#2A9472"),
-		"light":     _parse_color("#FFFFFF"),  # mirrors away jersey base
+		"name":      "Pomegranate",
+		"primary":   _parse_color("#971829"),
+		"secondary": _parse_color("#E8445A"),
+		"light":     _parse_color("#F5E6D3"),  # mirrors away jersey base
 		"home":      _parse_kit({
-			"helmet":      "#2A9472",
-			"shoulders":   {"color": "#2A9472", "text": "#FFFFFF"},
-			"jersey":      {"base": "#F46B2A", "stripes": []},
-			"arms":        {"upper": {"base": "#F46B2A", "stripes": []},
-							"lower": {"base": "#C8321A", "stripes": []}},
-			"gloves":      "#2A9472",
-			"pants":       {"base": "#2A9472", "stripes": []},
-			"socks":       {"base": "#F46B2A", "stripes": []},
-			"goalie_pads": "#F46B2A",
-			"text":        {"color": "#FFFFFF", "outline": "#C8321A"},
+			"helmet":      "#971829",
+			"shoulders":   {"color": "#971829", "text": "#F5E6D3"},
+			"jersey":      {"base": "#971829", "stripes": []},
+			"arms":        {"upper": {"base": "#971829", "stripes": []},
+							"lower": {"base": "#971829", "stripes": []}},
+			"gloves":      "#971829",
+			"pants":       {"base": "#971829", "stripes": []},
+			"socks":       {"base": "#971829", "stripes": []},
+			"goalie_pads": "#971829",
+			"text":        {"color": "#F5E6D3", "outline": "#E8445A"},
 		}),
 		"away":      _parse_kit({
-			"helmet":      "#FFFFFF",
-			"shoulders":   {"color": "#2A9472", "text": "#F46B2A"},
-			"jersey":      {"base": "#FFFFFF", "stripes": []},
-			"arms":        {"upper": {"base": "#F46B2A", "stripes": []},
-							"lower": {"base": "#C8321A", "stripes": []}},
-			"gloves":      "#2A9472",
-			"pants":       {"base": "#2A9472", "stripes": []},
-			"socks":       {"base": "#FFFFFF", "stripes": []},
-			"goalie_pads": "#FFFFFF",
-			"text":        {"color": "#F46B2A", "outline": "#C8321A"},
+			"helmet":      "#F5E6D3",
+			"shoulders":   {"color": "#971829", "text": "#F5E6D3"},
+			"jersey":      {"base": "#F5E6D3", "stripes": []},
+			"arms":        {"upper": {"base": "#971829", "stripes": []},
+							"lower": {"base": "#971829", "stripes": []}},
+			"gloves":      "#971829",
+			"pants":       {"base": "#971829", "stripes": []},
+			"socks":       {"base": "#F5E6D3", "stripes": []},
+			"goalie_pads": "#F5E6D3",
+			"text":        {"color": "#971829", "outline": "#E8445A"},
 		}),
 	}
 
 
-static func _hardcoded_lime() -> Dictionary:
+static func _hardcoded_blueberry() -> Dictionary:
 	return {
-		"name":      "Lime",
-		"primary":   _parse_color("#7FB320"),
-		"secondary": _parse_color("#4A6B15"),
+		"name":      "Blueberry",
+		"primary":   _parse_color("#4A7AD6"),
+		"secondary": _parse_color("#6B1E4A"),
 		"light":     _parse_color("#FFFFFF"),  # mirrors away jersey base
 		"home":      _parse_kit({
-			"helmet":      "#4A6B15",
-			"shoulders":   {"color": "#7FB320", "text": "#FFFFFF"},
-			"jersey":      {"base": "#7FB320", "stripes": []},
-			"arms":        {"upper": {"base": "#7FB320", "stripes": []},
-							"lower": {"base": "#7FB320", "stripes": []}},
-			"gloves":      "#4A6B15",
-			"pants":       {"base": "#4A6B15", "stripes": []},
-			"socks":       {"base": "#7FB320", "stripes": []},
-			"goalie_pads": "#7FB320",
-			"text":        {"color": "#F5E6D3", "outline": "#4A6B15"},
+			"helmet":      "#6B1E4A",
+			"shoulders":   {"color": "#4A7AD6", "text": "#FFFFFF"},
+			"jersey":      {"base": "#4A7AD6", "stripes": []},
+			"arms":        {"upper": {"base": "#4A7AD6", "stripes": []},
+							"lower": {"base": "#4A7AD6", "stripes": []}},
+			"gloves":      "#6B1E4A",
+			"pants":       {"base": "#6B1E4A", "stripes": []},
+			"socks":       {"base": "#4A7AD6", "stripes": []},
+			"goalie_pads": "#4A7AD6",
+			"text":        {"color": "#FFFFFF", "outline": "#6B1E4A"},
 		}),
 		"away":      _parse_kit({
 			"helmet":      "#FFFFFF",
-			"shoulders":   {"color": "#7FB320", "text": "#FFFFFF"},
+			"shoulders":   {"color": "#C8D8F0", "text": "#6B1E4A"},
 			"jersey":      {"base": "#FFFFFF", "stripes": []},
-			"arms":        {"upper": {"base": "#FFFFFF", "stripes": []},
-							"lower": {"base": "#FFFFFF", "stripes": []}},
-			"gloves":      "#4A6B15",
-			"pants":       {"base": "#4A6B15", "stripes": []},
+			"arms":        {"upper": {"base": "#C8D8F0", "stripes": []},
+							"lower": {"base": "#C8D8F0", "stripes": []}},
+			"gloves":      "#4A7AD6",
+			"pants":       {"base": "#4A7AD6", "stripes": []},
 			"socks":       {"base": "#FFFFFF", "stripes": []},
 			"goalie_pads": "#FFFFFF",
-			"text":        {"color": "#7FB320", "outline": "#4A6B15"},
+			"text":        {"color": "#4A7AD6", "outline": "#6B1E4A"},
 		}),
 	}
