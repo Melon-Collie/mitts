@@ -1520,17 +1520,17 @@
     },
     {
       "name": "Peach",
-      "primary": "#F8A985",
+      "primary": "#EE7F62",
       "secondary": "#1E2A5A",
       "light": "#F5EBDA",
       "home": {
         "helmet": "#1E2A5A",
         "shoulders": {
-          "color": "#F8A985",
+          "color": "#EE7F62",
           "text": "#1E2A5A"
         },
         "jersey": {
-          "base": "#F8A985",
+          "base": "#EE7F62",
           "yoke": "#1E2A5A",
           "stripes": [
             {
@@ -1552,11 +1552,11 @@
         },
         "arms": {
           "upper": {
-            "base": "#F8A985",
+            "base": "#EE7F62",
             "stripes": []
           },
           "lower": {
-            "base": "#F8A985",
+            "base": "#EE7F62",
             "stripes": [
               {
                 "pos": 0.3,
@@ -1577,7 +1577,7 @@
           "stripes": []
         },
         "socks": {
-          "base": "#F8A985",
+          "base": "#EE7F62",
           "stripes": [
             {
               "pos": 0.5,
@@ -1591,7 +1591,7 @@
             }
           ]
         },
-        "goalie_pads": "#F8A985",
+        "goalie_pads": "#EE7F62",
         "text": {
           "color": "#1E2A5A",
           "outline": "#1E2A5A"
@@ -1610,12 +1610,12 @@
             {
               "pos": 0.07,
               "width": 0.022,
-              "color": "#F8A985"
+              "color": "#EE7F62"
             },
             {
               "pos": 0.82,
               "width": 0.16,
-              "color": "#F8A985"
+              "color": "#EE7F62"
             },
             {
               "pos": 0.82,
@@ -1635,7 +1635,7 @@
               {
                 "pos": 0.3,
                 "width": 0.34,
-                "color": "#F8A985"
+                "color": "#EE7F62"
               },
               {
                 "pos": 0.3,
@@ -1656,7 +1656,7 @@
             {
               "pos": 0.5,
               "width": 0.36,
-              "color": "#F8A985"
+              "color": "#EE7F62"
             },
             {
               "pos": 0.5,
