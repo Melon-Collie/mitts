@@ -47,8 +47,8 @@ const _ELBOW_SPHERE_RADIUS: float = 0.09
 # shoulder, set outboard and up of the joint so they stand past the trunk and
 # above the collar, which is the goalie's shoulder line from the top-down
 # camera. Semi-axes in the body's frame; tilt with the trunk.
-const _FLOATER_SEMI_AXES := Vector3(0.13, 0.10, 0.125)
-const _FLOATER_OUTSET := Vector3(0.02, 0.03, 0.0)
+const FLOATER_SEMI_AXES := Vector3(0.13, 0.10, 0.125)
+const FLOATER_OUTSET := Vector3(0.02, 0.03, 0.0)
 # The glove forearm ends here, in the Glove's frame, rather than at its origin:
 # behind the trapper's heel, where the cuff opening takes a real forearm, so
 # the arm meets the back of the hand instead of running through its thumb.
@@ -661,11 +661,11 @@ func _update_connectors() -> void:
 	var glove_shoulder: Vector3 = _body.position + _body.basis * Vector3(
 			-GoalieAnatomy.SHOULDER_OFFSET.x, GoalieAnatomy.SHOULDER_OFFSET.y, 0.0)
 	var blocker_shoulder: Vector3 = _body.position + _body.basis * GoalieAnatomy.SHOULDER_OFFSET
-	var floater_basis: Basis = _body.basis.scaled_local(_FLOATER_SEMI_AXES)
+	var floater_basis: Basis = _body.basis.scaled_local(FLOATER_SEMI_AXES)
 	glove_shoulder_sphere.transform = Transform3D(floater_basis, glove_shoulder
-			+ _body.basis * Vector3(-_FLOATER_OUTSET.x, _FLOATER_OUTSET.y, _FLOATER_OUTSET.z))
+			+ _body.basis * Vector3(-FLOATER_OUTSET.x, FLOATER_OUTSET.y, FLOATER_OUTSET.z))
 	blocker_shoulder_sphere.transform = Transform3D(floater_basis,
-			blocker_shoulder + _body.basis * _FLOATER_OUTSET)
+			blocker_shoulder + _body.basis * FLOATER_OUTSET)
 	# Glove arm: shoulder on body's left side (goalie's catch hand).
 	_update_arm_ik(glove_upper_arm, glove_forearm,
 		glove_shoulder, _glove.position + _glove.basis * _GLOVE_CUFF_IN_GLOVE, Vector3.LEFT,

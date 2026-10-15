@@ -9,10 +9,10 @@ extends RefCounted
 #                                  using cached text colors from apply_uniform
 #
 # Painting paths:
-#   - Torso  → SubViewport + JerseyDecal (base + optional yoke + stripe array
+#   - Torso  → SubViewport + JerseyDecal (base + collar + yoke + stripe array
 #     + name/number text). One viewport per skater.
-#   - Shoulders → shared SubViewport + ShoulderDecal (shoulder base color +
-#     shoulder text color/outline; independent of jersey text).
+#   - Shoulders → shared SubViewport + ShoulderDecal (the yoke over the top,
+#     the shoulder color below, its own text color/outline).
 #   - Forearm / upper arm / socks → ImageTexture with horizontal bands stacked
 #     in array order; widths shrink to form concentric "centered cross-section"
 #     bands (watermelon rind, lime pith).
@@ -36,15 +36,14 @@ var _blade_tape: MeshInstance3D                    # team-colored tape band, chi
 # changes; the cache lets each entry point trigger a refresh without re-
 # supplying the other side's data.
 var _jersey_base_color: Color = Color.WHITE
-var _jersey_yoke_color: Variant = null            # Color or null
+var _jersey_yoke_color: Color = Color.WHITE
+var _jersey_collar_color: Color = Color.WHITE
 var _jersey_stripes: Array[Dictionary] = []
 var _shoulder_color: Color = Color.WHITE
 var _shoulder_text_color: Color = Color.BLACK
-var _shoulder_outline_color: Color = Color.BLACK
 var _player_name: String = ""
 var _jersey_number: int = 0
 var _text_color: Color = Color.BLACK
-var _text_outline_color: Color = Color.BLACK
 # The kit colors a gear model or tape pick resolves against, cached from the
 # last apply_uniform so a live cosmetic change repaints without one.
 # _team_accent is colors.primary (TEAM for tape and skates), _kit_gloves is
@@ -109,10 +108,10 @@ func _create_jersey_viewport() -> void:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_texture = _jersey_viewport.get_texture()
 	mat.roughness = UniformPaint.ROUGH_CLOTH
-	# uv1_offset.x = 0.25 rotates the wrap 90° around the cylinder so the
-	# texture's back-center (texel x=128) lands at the skater's +Z (back).
-	# Godot's CylinderMesh starts U=0 at +Z and increases CCW.
-	mat.uv1_offset = Vector3(0.25, 0.0, 0.0)
+	# Rotates the wrap so the texture's back-center (JerseyDecal.BACK_CENTER_X)
+	# lands at the skater's +Z (back). The lathe starts U=0 at +Z, turned by
+	# its half-facet phase, and increases CCW.
+	mat.uv1_offset = Vector3(JerseyDecal.UV_OFFSET_X, 0.0, 0.0)
 	BodyRim.apply(mat)
 	_skater.set_upper_surface_material(SkaterMeshBuilder.UpperSurface.TORSO, mat)
 
@@ -121,18 +120,17 @@ func _create_jersey_viewport() -> void:
 # at +Z, so per-shoulder uv1_offset.x rotates the wrap a quarter turn each
 # way to face the number outward (-X on left, +X on right).
 func _create_shoulder_viewport() -> void:
+	_shoulder_decal = ShoulderDecal.new()
+	_shoulder_decal.name = "ShoulderDecal"
 	_shoulder_viewport = SubViewport.new()
 	_shoulder_viewport.name = "ShoulderViewport"
-	_shoulder_viewport.size = Vector2i(ShoulderDecal.IMG_W, ShoulderDecal.IMG_H)
+	_shoulder_viewport.size = _shoulder_decal.size
 	_shoulder_viewport.transparent_bg = false
 	_shoulder_viewport.disable_3d = true
 	_shoulder_viewport.handle_input_locally = false
 	_shoulder_viewport.gui_disable_input = true
 	_shoulder_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 	_skater.add_child(_shoulder_viewport)
-
-	_shoulder_decal = ShoulderDecal.new()
-	_shoulder_decal.name = "ShoulderDecal"
 	_shoulder_viewport.add_child(_shoulder_decal)
 
 	var tex: ViewportTexture = _shoulder_viewport.get_texture()
@@ -167,18 +165,17 @@ func apply_uniform(colors: Dictionary) -> void:
 
 	var uniform: Dictionary = colors.uniform
 	_text_color = colors.text
-	_text_outline_color = colors.text_outline
 
 	# Jersey torso (decal repaint).
 	_jersey_base_color = uniform.jersey.base
-	_jersey_yoke_color = uniform.jersey.yoke
+	_jersey_yoke_color = UniformPaint.yoke_color(uniform.jersey)
+	_jersey_collar_color = UniformPaint.collar_color(uniform.jersey)
 	_jersey_stripes = uniform.jersey.stripes
 	_rebuild_jersey_texture()
 
 	# Shoulder caps (decal repaint with shoulder-specific color + text).
 	_shoulder_color = uniform.shoulders.color
 	_shoulder_text_color = uniform.shoulders.text
-	_shoulder_outline_color = uniform.shoulders.outline
 	_rebuild_shoulder_texture()
 
 	# Helmet — glossy hard plastic.
@@ -224,15 +221,13 @@ func apply_uniform(colors: Dictionary) -> void:
 	_paint_cylinder_h(SkaterMeshBuilder.UpperBone.TOP_FOREARM, arms_lower)
 	_paint_cylinder_h(SkaterMeshBuilder.UpperBone.BOTTOM_FOREARM, arms_lower)
 
-	# Elbow spheres — paint as arms.lower.base so they read as the upper
-	# edge of the lower-arm cuff. (Hand spheres above already covered.)
-	var elbow_mat: StandardMaterial3D = UniformPaint.solid(arms_lower.base)
+	var elbow_mat: StandardMaterial3D = UniformPaint.solid(elbow_color(uniform.arms))
 	_skater.set_upper_surface_material(SkaterMeshBuilder.UpperBone.TOP_ELBOW, elbow_mat)
 	_skater.set_upper_surface_material(
 			SkaterMeshBuilder.UpperBone.BOTTOM_ELBOW, elbow_mat.duplicate())
 
 	# Pants — vertical side stripes (pants stripe pos is U, width is column
-	# thickness; see _make_v_stripes_texture). The thigh carries the hip joint's
+	# thickness; see make_pants_stripes_texture). The thigh carries the hip joint's
 	# dome now, so its stripe runs up over the hip the way a real pant's does;
 	# the knee ball stays solid, since a stripe would ring it.
 	var pants_block: Dictionary = uniform.pants
@@ -280,8 +275,8 @@ func _rebuild_jersey_texture() -> void:
 	if _jersey_decal == null:
 		return
 	_jersey_decal.update_jersey(
-			_jersey_base_color, _jersey_yoke_color, _jersey_stripes,
-			_player_name, _jersey_number, _text_color, _text_outline_color)
+			_jersey_base_color, _jersey_yoke_color, _jersey_collar_color, _jersey_stripes,
+			_player_name, _jersey_number, _text_color)
 	_jersey_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 
@@ -289,7 +284,7 @@ func _rebuild_shoulder_texture() -> void:
 	if _shoulder_decal == null:
 		return
 	_shoulder_decal.update_shoulder(
-			_shoulder_color, _jersey_number, _shoulder_text_color, _shoulder_outline_color)
+			_shoulder_color, _jersey_yoke_color, _jersey_number, _shoulder_text_color)
 	_shoulder_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 
@@ -319,6 +314,17 @@ func _paint_cylinder_h(part: int, segment: Dictionary) -> void:
 		return
 	var tex: ImageTexture = make_arm_stripes_texture(segment.base, segment.stripes)
 	_skater.set_upper_surface_material(part, UniformPaint.textured(tex))
+
+
+# The elbow pad's color: the kit's arms.elbow when it names one, else whatever
+# the forearm's stripes put at its elbow end, so the pad disappears into the
+# sleeve. Public static because the lobby backdrop's dummies wear the same pad.
+static func elbow_color(arms: Dictionary) -> Color:
+	var elbow: Variant = arms.get("elbow")
+	if elbow is Color:
+		return elbow
+	return make_arm_stripes_texture(arms.lower.base, arms.lower.stripes) \
+			.get_image().get_pixel(0, 0)
 
 
 # Arm variant of UniformPaint.h_stripes: pre-shrinks the pattern about its
@@ -356,7 +362,7 @@ func _paint_pants_thigh(surface: int, pants_block: Dictionary, u_offset: float) 
 				UniformPaint.solid(pants_block.base, UniformPaint.ROUGH_NYLON))
 		return
 	var mat: StandardMaterial3D = UniformPaint.textured(
-			_make_v_stripes_texture(pants_block.base, pants_block.stripes), UniformPaint.ROUGH_NYLON)
+			make_pants_stripes_texture(pants_block.base, pants_block.stripes), UniformPaint.ROUGH_NYLON)
 	mat.uv1_offset = Vector3(u_offset, 0.0, 0.0)
 	_skater.set_leg_surface_material(surface, mat)
 
@@ -371,10 +377,11 @@ func _socks_material(socks_block: Dictionary) -> StandardMaterial3D:
 # Builds a (width_px × 4) image of vertical stripe columns. Used by pants:
 # each stripe.pos is the U position of the column center, stripe.width is the
 # column width. The caller's per-thigh uv1_offset.x lands the centered column
-# on the outer face of each leg.
+# on the outer face of each leg. Public static because tools/kit_capture.gd
+# lays the breezers out flat in this same paint.
 const _PANTS_TEX_WIDTH_PX: int = 128
 
-func _make_v_stripes_texture(base: Color, stripes: Array[Dictionary]) -> ImageTexture:
+static func make_pants_stripes_texture(base: Color, stripes: Array[Dictionary]) -> ImageTexture:
 	var img := Image.create(_PANTS_TEX_WIDTH_PX, UniformPaint.STRIPE_TEX_WIDTH_PX, false, Image.FORMAT_RGBA8)
 	img.fill(base)
 	for s: Dictionary in stripes:

@@ -21,6 +21,8 @@ const ROUGH_GLOVE: float = 0.6     # glove leather and nylon
 const CYLINDER_SIDE_V_FRACTION: float = 0.5
 const STRIPE_TEX_HEIGHT_PX: int = 128
 const STRIPE_TEX_WIDTH_PX: int = 4
+# Sphere-convention parts (the shoulder caps) map V over the whole image.
+const CAP_TEX_HEIGHT_PX: int = 128
 
 
 static func solid(color: Color, roughness: float = ROUGH_CLOTH) -> StandardMaterial3D:
@@ -37,6 +39,39 @@ static func textured(tex: Texture2D, roughness: float = ROUGH_CLOTH) -> Standard
 	mat.roughness = roughness
 	BodyRim.apply(mat)
 	return mat
+
+
+# The top of a sweater is three colors, each falling back to the one below it:
+# the collar ring (the torso's top cap) to the yoke, and the yoke (the top of
+# the shoulders) to the jersey body.
+static func yoke_color(jersey: Dictionary) -> Color:
+	var yoke: Variant = jersey.get("yoke")
+	return yoke if yoke is Color else jersey.base
+
+
+static func collar_color(jersey: Dictionary) -> Color:
+	var collar: Variant = jersey.get("collar")
+	return collar if collar is Color else yoke_color(jersey)
+
+
+# The jersey's stripes with the yoke band first, over the torso side down to the
+# shoulder line — for h_stripes painters; JerseyDecal paints the same band.
+static func jersey_stripes(jersey: Dictionary) -> Array:
+	var frac: float = SkaterMeshBuilder.TORSO_YOKE_SIDE_FRACTION
+	var out: Array = [{"pos": frac * 0.5, "width": frac, "color": yoke_color(jersey)}]
+	out.append_array(jersey.stripes)
+	return out
+
+
+# A shoulder cap without its number: the yoke over its top, the cap's own color
+# below. ShoulderDecal paints the same split under the number.
+static func shoulder_cap(jersey: Dictionary, cap_color: Color) -> ImageTexture:
+	var img := Image.create(STRIPE_TEX_WIDTH_PX, CAP_TEX_HEIGHT_PX, false, Image.FORMAT_RGBA8)
+	img.fill(cap_color)
+	img.fill_rect(Rect2i(0, 0, STRIPE_TEX_WIDTH_PX,
+			int(round(SkaterMeshBuilder.SHOULDER_CAP_YOKE_V * float(CAP_TEX_HEIGHT_PX)))),
+			yoke_color(jersey))
+	return ImageTexture.create_from_image(img)
 
 
 # Horizontal bands across a cylinder's curved side. Each stripe is `pos` (centre,
