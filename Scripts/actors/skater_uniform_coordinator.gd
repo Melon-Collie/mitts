@@ -110,10 +110,10 @@ func _create_jersey_viewport() -> void:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_texture = _jersey_viewport.get_texture()
 	mat.roughness = UniformPaint.ROUGH_CLOTH
-	# uv1_offset.x = 0.25 rotates the wrap 90° around the cylinder so the
-	# texture's back-center (texel x=128) lands at the skater's +Z (back).
-	# Godot's CylinderMesh starts U=0 at +Z and increases CCW.
-	mat.uv1_offset = Vector3(0.25, 0.0, 0.0)
+	# Rotates the wrap so the texture's back-center (JerseyDecal.BACK_CENTER_X)
+	# lands at the skater's +Z (back). The lathe starts U=0 at +Z, turned by
+	# its half-facet phase, and increases CCW.
+	mat.uv1_offset = Vector3(JerseyDecal.UV_OFFSET_X, 0.0, 0.0)
 	BodyRim.apply(mat)
 	_skater.set_upper_surface_material(SkaterMeshBuilder.UpperSurface.TORSO, mat)
 
@@ -122,18 +122,18 @@ func _create_jersey_viewport() -> void:
 # at +Z, so per-shoulder uv1_offset.x rotates the wrap a quarter turn each
 # way to face the number outward (-X on left, +X on right).
 func _create_shoulder_viewport() -> void:
+	_shoulder_decal = ShoulderDecal.new()
+	_shoulder_decal.name = "ShoulderDecal"
+	_shoulder_decal.use_skater_cap()
 	_shoulder_viewport = SubViewport.new()
 	_shoulder_viewport.name = "ShoulderViewport"
-	_shoulder_viewport.size = Vector2i(ShoulderDecal.IMG_W, ShoulderDecal.IMG_H)
+	_shoulder_viewport.size = _shoulder_decal.size
 	_shoulder_viewport.transparent_bg = false
 	_shoulder_viewport.disable_3d = true
 	_shoulder_viewport.handle_input_locally = false
 	_shoulder_viewport.gui_disable_input = true
 	_shoulder_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 	_skater.add_child(_shoulder_viewport)
-
-	_shoulder_decal = ShoulderDecal.new()
-	_shoulder_decal.name = "ShoulderDecal"
 	_shoulder_viewport.add_child(_shoulder_decal)
 
 	var tex: ViewportTexture = _shoulder_viewport.get_texture()

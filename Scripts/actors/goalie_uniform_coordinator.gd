@@ -184,8 +184,6 @@ func _create_shoulder_viewport() -> void:
 func _rebuild_shoulder_texture() -> void:
 	if _shoulder_decal == null:
 		return
-	# The skater's yoke-over-the-cap split is not the goalie's: his shoulder is
-	# one color, so it is passed as its own yoke.
 	_shoulder_decal.update_shoulder(_shoulder_color, _shoulder_color, _jersey_number,
 			_shoulder_text_color, _shoulder_outline_color)
 	_shoulder_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE

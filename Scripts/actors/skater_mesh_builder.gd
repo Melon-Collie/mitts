@@ -110,7 +110,10 @@ const _SKATE_PROFILE: Array[Vector2] = [
 const _TORSO_X_SCALE: float = 1.05
 const _TORSO_Z_SCALE: float = 0.88
 
-const _TORSO_SIDES: int = 10   # back number spans ~3 facets — creased, still legible
+const _TORSO_SIDES: int = 10
+# Half a facet: the torso's rings turn so a flat face, not an edge, is under the
+# name and number. U still starts at vertex 0; the material's offset adds it.
+const TORSO_U_PHASE: float = 0.5 / _TORSO_SIDES
 const _LEG_SIDES: int = 8
 
 # Head + helmet. One mesh on the HELMET bone: the shell on surface 0 (painted
@@ -824,7 +827,7 @@ static func _build_pelvis() -> ArrayMesh:
 
 static func _build_torso() -> ArrayMesh:
 	return _build_lathe(_TORSO_PROFILE, _TORSO_SIDES, _TORSO_X_SCALE, _TORSO_Z_SCALE,
-			_TORSO_REAR_SWAY)
+			_TORSO_REAR_SWAY, TAU * TORSO_U_PHASE)
 
 
 # Head ball at HEAD_RADIUS, sitting _HEAD_FORWARD_M ahead of the helmet center,
@@ -1157,7 +1160,7 @@ static func _build_skate() -> ArrayMesh:
 # top cap is where the jersey yoke paints.
 static func _build_lathe(profile: Array[Vector2], sides: int,
 		x_scale: float, z_scale: float,
-		z_offsets: Array[float] = []) -> ArrayMesh:
+		z_offsets: Array[float] = [], phase: float = 0.0) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_smooth_group(-1)  # flat shading — see class doc block
@@ -1168,7 +1171,7 @@ static func _build_lathe(profile: Array[Vector2], sides: int,
 	var vs := PackedFloat32Array()
 	for i in profile.size():
 		var s: Vector2 = profile[i]
-		var ring: PackedVector3Array = _ring(s.x, s.y, x_scale, z_scale, sides)
+		var ring: PackedVector3Array = _ring(s.x, s.y, x_scale, z_scale, sides, phase)
 		# Optional per-ring Z shift (index-aligned with the profile; short or
 		# empty array = centered). Rings stay circular — the shift moves the
 		# whole ring, giving the lathe an asymmetric sway (the torso's seat)
@@ -1198,14 +1201,15 @@ static func _build_lathe(profile: Array[Vector2], sides: int,
 
 
 # One horizontal ring of sides+1 points (the last duplicates the first so the
-# UV seam gets u = 1.0 instead of wrapping back to 0). θ starts at +Z and
-# advances toward +X — the engine primitive winding the painters expect.
+# UV seam gets u = 1.0 instead of wrapping back to 0). θ starts at +Z (turned
+# by `phase`) and advances toward +X — the engine primitive winding the
+# painters expect.
 static func _ring(y: float, radius: float, x_scale: float, z_scale: float,
-		sides: int) -> PackedVector3Array:
+		sides: int, phase: float = 0.0) -> PackedVector3Array:
 	var pts := PackedVector3Array()
 	pts.resize(sides + 1)
 	for k in sides + 1:
-		var theta: float = TAU * float(k) / float(sides)
+		var theta: float = TAU * float(k) / float(sides) + phase
 		pts[k] = Vector3(sin(theta) * radius * x_scale, y, cos(theta) * radius * z_scale)
 	return pts
 

@@ -38,10 +38,6 @@ const _COLLAR_WIDTH_M: float = 0.025
 const _NECK_HALF_WIDTH_M: float = 0.08
 const _NECK_DEPTH_FRONT_M: float = 0.06
 const _NECK_DEPTH_BACK_M: float = 0.02
-# Shoulder decal window: the outward hemisphere (the per-shoulder uv1_offset puts
-# the number at U 0.5), and V symmetric about the equator's number band.
-const _CAP_U: Vector2 = Vector2(0.25, 0.75)
-const _CAP_V: Vector2 = Vector2(0.12, 0.88)
 const _CAP_SEGMENTS: int = 28
 # A thigh is a tube under the hip dome; the dome (buried in the pelvis in game)
 # would flatten into a spike, so the leg starts at the first ring this wide.
@@ -270,8 +266,9 @@ func _build_sheet() -> void:
 		jersey_vp.add_child(jersey)
 		_jersey_decals.append(jersey)
 		_jersey_textures.append(jersey_vp.get_texture())
-		var shoulder_vp := _decal_viewport(Vector2i(ShoulderDecal.IMG_W, ShoulderDecal.IMG_H))
 		var shoulder := ShoulderDecal.new()
+		shoulder.use_skater_cap()
+		var shoulder_vp := _decal_viewport(shoulder.size)
 		shoulder_vp.add_child(shoulder)
 		_shoulder_decals.append(shoulder)
 		_shoulder_textures.append(shoulder_vp.get_texture())
@@ -399,6 +396,9 @@ func _draw_collar(c: Node2D, top_center: Vector2, color: Color, neck_depth_m: fl
 	c.draw_polyline(neck, color, _COLLAR_WIDTH_M * _PX_PER_M, true)
 
 
+# The decal window is the patch of the cap facing outward (the per-shoulder
+# uv1_offset puts the number at U 0.5), as wide and tall in metres as the patch
+# is drawn, centred on the number — so the number keeps its shape.
 func _draw_shoulder_cap(c: Node2D, center: Vector2, tex: Texture2D) -> void:
 	var pts := PackedVector2Array()
 	var uvs := PackedVector2Array()
@@ -407,8 +407,8 @@ func _draw_shoulder_cap(c: Node2D, center: Vector2, tex: Texture2D) -> void:
 		var t: float = TAU * float(k) / float(_CAP_SEGMENTS)
 		var unit := Vector2(cos(t), sin(t))
 		pts.append(center + unit * half_px)
-		uvs.append(Vector2(lerpf(_CAP_U.x, _CAP_U.y, unit.x * 0.5 + 0.5),
-				lerpf(_CAP_V.x, _CAP_V.y, unit.y * 0.5 + 0.5)))
+		uvs.append(Vector2(0.5 + unit.x * _cap_half.x / ShoulderDecal.CAP_GIRTH_M,
+				ShoulderDecal.SKATER_NUMBER_CENTER_V + unit.y * _cap_half.y / ShoulderDecal.CAP_M_PER_V))
 	c.draw_polygon(pts, PackedColorArray([Color.WHITE]), uvs, tex)
 	pts.append(pts[0])
 	c.draw_polyline(pts, _EDGE, 1.5, true)

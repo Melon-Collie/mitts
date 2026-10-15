@@ -41,7 +41,11 @@ const SHOTS: Array = [
 	{"name": "back", "cam": Vector3(0.0, 0.5, 2.6), "aim": Vector3(0.0, 0.25, 0.0)},
 	{"name": "high_back", "cam": Vector3(0.8, 1.9, 2.0), "aim": Vector3(0.0, 0.2, 0.0)},
 	{"name": "game", "game_cam": true},
+	# Close-ups for lettering (only when named in UNIFORM_STUDY_SHOTS).
+	{"name": "back_close", "cam": Vector3(0.0, 0.42, 1.25), "aim": Vector3(0.0, 0.32, 0.0)},
+	{"name": "shoulder_close", "cam": Vector3(1.2, 0.5, 0.25), "aim": Vector3(0.18, 0.38, 0.0)},
 ]
+const _CLOSE_SHOTS: Array[String] = ["back_close", "shoulder_close"]
 const _GAME_ZOOM: float = 3.0
 
 
@@ -122,7 +126,7 @@ func _run() -> void:
 		print("[uniform_study] %s %s, %s" % [TeamColorRegistry.get_preset_name(int(kit[0])),
 				"home" if int(kit[1]) == 0 else "away", row[1]])
 
-		for shot: Dictionary in SHOTS:
+		for shot: Dictionary in _shots():
 			if bool(shot.get("game_cam", false)):
 				_frame_as_the_game_does(skater)
 			else:
@@ -140,6 +144,17 @@ func _run() -> void:
 		await get_tree().process_frame
 	_save_sheet(tiles, rows.size())
 	get_tree().quit()
+
+
+# SHOTS, or the ones UNIFORM_STUDY_SHOTS names; the close-ups only when named.
+func _shots() -> Array:
+	var requested: PackedStringArray = OS.get_environment("UNIFORM_STUDY_SHOTS").split(",", false)
+	var out: Array = []
+	for shot: Dictionary in SHOTS:
+		var name: String = shot.name
+		if requested.is_empty() and not _CLOSE_SHOTS.has(name) or requested.has(name):
+			out.append(shot)
+	return out
 
 
 func _kits() -> Array:
@@ -219,7 +234,7 @@ func _save_sheet(tiles: Array[Image], rows: int) -> void:
 	if out_dir.is_empty():
 		out_dir = "user://uniform_study"
 	DirAccess.make_dir_recursive_absolute(out_dir)
-	var cols: int = SHOTS.size()
+	var cols: int = _shots().size()
 	var sheet := Image.create_empty(cols * TILE, rows * TILE, false, Image.FORMAT_RGBA8)
 	sheet.fill(BACKGROUND)
 	for i: int in tiles.size():
