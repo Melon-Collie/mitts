@@ -2,7 +2,7 @@ extends RefCounted
 
 # ── Bot-vs-bot DUEL HARNESS ──────────────────────────────────────────────────
 # Steps full multi-second duels between real bot brains, headlessly, so
-# emergent SEQUENCES (deke past a container, escape a pincer, pick a puck up
+# emergent SEQUENCES (beat a container, escape a pincer, pick a puck up
 # blade-first) become pinnable GUT scenarios instead of playtest-only
 # observations. Loaded via preload from scenario test files — deliberately no
 # class_name (test infrastructure stays out of the global namespace).
@@ -67,9 +67,8 @@ const BRAIN_PERIOD_TICKS: int = 20
 # containment policy: hold the puck→own-net line at a set gap, never retreat
 # past a depth floor, mirror with real skater accel off a reaction-delayed
 # puck read, blade presented on the puck line. Real defender bots CHASE a
-# carrier one-on-one (and the carrier rightly beats them with speed + the
-# cut), so patient containment — the fake-then-cut deke's home regime — has
-# to be staged deliberately.
+# carrier one-on-one (and the carrier rightly beats them with speed and a cut),
+# so patient containment has to be staged deliberately.
 const PUPPET_REACTION_TICKS: int = 18       # ≈ EVADE_REACTION_S at 120 Hz
 const PUPPET_ACCEL_M_S2: float = 10.5       # DEFAULT_SKATER_THRUST_M_S2
 const PUPPET_MAX_SPEED_M_S: float = 9.0
@@ -161,14 +160,6 @@ var _prev_chase_by_team: Dictionary = {}
 const BOARD_RESTITUTION: float = 0.5
 
 # ── Outcome telemetry (scenario assertions read these) ──────────────────────
-var deke_fired: bool = false
-# peer_id -> true for every skater that fired a fake-then-cut deke (attributes
-# deke_fired when a strip swaps who's carrying mid-duel). NOTE: the deke's live
-# regime is narrow by design — slow jockeying against ONE patient container.
-var dekes_by_peer: Dictionary = {}
-# peer_id -> true once a committed deke window fired. Easy's closed protect gate
-# means it never commits one — the live tier-gate control.
-var evades_by_peer: Dictionary = {}
 var strips: int = 0
 # One entry per fired release: { "tick": int, "peer": int } — pass/shot
 # events; the puck goes loose along the shooter's aim at RELEASE_SPEED_M_S.
@@ -298,11 +289,6 @@ func step() -> void:
 			s.agent.dispatch(s.input, snapshot)
 		# Production's last write to the move (SkaterAgent.tick).
 		s.agent.apply_offside_guard(s.input, snapshot)
-		if s.agent._poke_evade.deking:
-			deke_fired = true
-			dekes_by_peer[s.peer_id] = true
-		if s.agent._poke_evade.active_ticks > 0:
-			evades_by_peer[s.peer_id] = true
 	# Collect one-timer readiness into the brains after dispatch — the write moved
 	# off _set_one_timer_ready for threading (AICoordinator does the same on the
 	# host), so the frozen view reflects it next frame.

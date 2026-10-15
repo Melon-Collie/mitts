@@ -595,17 +595,6 @@ static func stance_carves_to(self_pos: Vector3, anchor: Vector3, desired: Vector
 			was_holding)
 
 
-# The same read for a committed cut with no anchor (the deke's): the
-# whole turn onto `dir` has to happen inside the maneuver's `window_s`.
-static func stance_cuts_onto(dir: Vector2, velocity_xz: Vector2,
-		upright_lateral_accel: float, window_s: float) -> bool:
-	var speed: float = velocity_xz.length()
-	if speed < 0.01 or dir.length_squared() < 0.0001 or window_s <= 0.0:
-		return false
-	var turn: float = absf(velocity_xz.angle_to(dir))
-	return _stance_out_turns(turn / window_s, speed, upright_lateral_accel, false)
-
-
 static func _stance_out_turns(required_rate: float, speed: float,
 		upright_lateral_accel: float, was_holding: bool) -> bool:
 	if upright_lateral_accel >= speed * GameRules.DEFAULT_SKATER_MAX_TURN_RATE_RAD_S:

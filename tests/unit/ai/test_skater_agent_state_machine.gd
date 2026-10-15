@@ -1981,68 +1981,6 @@ func test_off_puck_arrival_redirects_cross_momentum() -> void:
 			"off-puck arrival redirects onto the line to the spot")
 
 
-# ── Fake-then-cut deke lifecycle (containment trigger + phase split) ─────────
-
-func test_containment_deke_fakes_then_cuts() -> void:
-	# Standstill duel (below the lateral cut's speed floor): the carrier's
-	# deke read arms and the maneuver commits — thrust sells the fake side,
-	# then explodes across to the cut side, and the carry-cursor override
-	# sells it with the puck. Cooldown afterwards is the longer deke pace.
-	var s := _self_snap(Vector3.ZERO, true)
-	sm._carrier.deke_go = true
-	sm._carrier.deke_fake_dir = Vector2(1, 0)
-	sm._carrier.deke_cut_dir = Vector2(-0.7, -0.7)
-	var i := InputState.new()
-	sm._apply_deke(i, s)
-	assert_true(sm._poke_evade.deking, "the containment stalemate commits the deke")
-	assert_almost_eq(i.move_vector.x, 1.0, 0.01, "fake phase thrusts the sell side")
-	var fake_mouse: Vector3 = sm._deke_mouse_target(Vector3.ZERO)
-	assert_gt(fake_mouse.x, 0.5, "the cursor sells the fake WITH the puck")
-	# Wind the window down to the cut phase.
-	sm._poke_evade.active_ticks = SkaterAgentPokeEvade.DEKE_CUT_TICKS
-	var i2 := InputState.new()
-	sm._apply_deke(i2, s)
-	assert_lt(i2.move_vector.x, 0.0, "cut phase explodes across")
-	var cut_mouse: Vector3 = sm._deke_mouse_target(Vector3.ZERO)
-	assert_lt(cut_mouse.x, 0.0, "the cursor snaps across for the cut")
-	# Expire → the deliberate deke cooldown arms.
-	sm._poke_evade.active_ticks = 1
-	sm._apply_deke(InputState.new(), s)
-	assert_false(sm._poke_evade.deking, "the maneuver ends with the window")
-	assert_eq(sm._poke_evade.cooldown_ticks, SkaterAgentPokeEvade.DEKE_COOLDOWN_TICKS,
-			"dekes pace at the longer cooldown")
-
-
-func test_the_deke_stands_down_for_the_rolled_stop() -> void:
-	# The carry priced the stop against this pressure: a fake would override
-	# the move the carrier chose, so no window opens and the rolled brake
-	# reaches the input untouched.
-	var s := _self_snap(Vector3.ZERO, true)
-	sm._carrier.deke_go = true
-	sm._carrier.deke_fake_dir = Vector2(1, 0)
-	sm._carrier.deke_cut_dir = Vector2(-0.7, -0.7)
-	sm._carrier.carry_move = AICarryRollout.Move.BRAKE
-	var i := InputState.new()
-	i.brake = true
-	sm._apply_deke(i, s)
-	assert_false(sm._poke_evade.deking, "no deke over a rolled stop")
-	assert_true(i.brake, "the rolled brake is what the carrier skates")
-	sm._carrier.carry_move = AICarryRollout.Move.STRAIGHT
-	sm._apply_deke(InputState.new(), s)
-	assert_true(sm._poke_evade.deking, "the same read on a forward move dekes")
-
-
-func test_no_deke_without_the_carrier_read() -> void:
-	# Standstill with no manufactured opening: nothing fires — the window and
-	# cooldown are only ever spent on a committed move.
-	var s := _self_snap(Vector3.ZERO, true)
-	sm._carrier.deke_go = false
-	var i := InputState.new()
-	sm._apply_deke(i, s)
-	assert_false(sm._poke_evade.deking)
-	assert_eq(sm._poke_evade.active_ticks, 0)
-
-
 # ── Own-net blade discipline (_deflect_safe_aim_dir) ─────────────────────────
 
 func test_house_blade_clears_the_puck_to_mouth_corridor() -> void:

@@ -1,6 +1,6 @@
 # Hybrid carry — a far destination, the next half-second rolled out
 
-Status: **agreed design; steps 1–3 done.** The CLAUDE.md workflow applies: this
+Status: **agreed design; steps 1–4 done.** The CLAUDE.md workflow applies: this
 doc is the plan, deviations get discussed first.
 
 ## Decisions
@@ -219,6 +219,21 @@ trigger scan, which then only served the deke — the deke carries its own gates
 What is left of `SkaterAgentPokeEvade` is the deke. Same duels: kept 19 of 19
 both ways, strips 189 → 143, ground gained 274 → 291 m; where the cut fired,
 the rolled carry or the deke now plays.
+
+**Deke: deleted, not folded.** Built as designed — two rolled moves, a fake
+square across the line then a 45° cut, priced against the container bitten
+(he reads the fake, then accelerates toward it until the cut, and reads the
+cut only from then) — it failed the gate: strips 143 → 293, ground 291 →
+246 m. Measuring why: in the duels the defender does not bite. At the cut he
+has drifted *away* from the fake side (mean −0.21 m, −0.87 m/s along it, where
+the model said +0.12 m, +1.57 m/s); the old deke read was safe because it
+checked the cut only half a second out with almost no redirect for him. What
+the old deke did deliver was its stance cut — with the stance off it lost
+(232 strips) — and the rolled carry with no deke at all keeps the puck as well
+as the old deke did (139 strips, 294 m). So `SkaterAgentPokeEvade`, the
+carrier's deke read and `deke_cut_side` are gone, and the rolled moves are
+the carrier's only answer to pressure. They never hold the stance (#794).
+Easy's `protects_the_puck` now gates only the blade's protect blend.
 
 ### Then
 

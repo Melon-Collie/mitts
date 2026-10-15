@@ -21,7 +21,6 @@ passed per call, and only its own fields written.
 | collaborator | owns |
 |---|---|
 | `SkaterAgentSteering` | body steering to an anchor: the field, brake-pivot, arrival brake, stance carve |
-| `SkaterAgentPokeEvade` | the carrier's cut and fake-then-cut deke; stands down when the rolled carry chose to stop |
 | `SkaterAgentStickPlay` | the jab / lift reach-in, the tie and its pull, the stick-check button |
 | `SkaterAgentBoardPlay` | holding a pin, the pinned slide, a carrier's answer to a square checker |
 | `SkaterAgentShotBlock` | the shot block and the 2-on-1 dive |
@@ -54,8 +53,8 @@ Adding a behaviour is four steps:
 After dispatch, `SkaterAgent.tick` runs three per-tick passes that may overwrite
 the dispatched input: the stick lift, board play (`apply_board_play`) and the
 shot block (`SkaterAgentShotBlock`). The offside brake (`apply_offside_guard`)
-runs after all of them as the last write to the move, so no writer — the deke
-inside dispatch, the pinned slide after it — can carry a bot over the line
+runs after all of them as the last write to the move, so no writer — the rolled
+carry inside dispatch, the pinned slide after it — can carry a bot over the line
 (`test_agent_offside_guard.gd`).
 
 ### The dispatch throttle
@@ -69,7 +68,7 @@ cursor — so a catchable feed never transits a blade that only re-aims on
 dispatch ticks. Anything that re-derives on skipped ticks may only READ
 dispatch-throttled state. The press states (SHOOT / PASS / ONE_TIMER) always
 run full-rate: charge timing and pre-aim convergence are tick-sensitive. Every
-counter sized in physics ticks (evade and jab windows, pre-aim wait, the
+counter sized in physics ticks (jab windows, pre-aim wait, the
 role-argmax cooldown) advances by the dispatch span, never by 1, or its
 wall-clock duration stretches with the tier.
 

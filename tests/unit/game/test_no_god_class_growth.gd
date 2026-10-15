@@ -49,7 +49,7 @@ const _GENERATED_DIR: String = "res://Scripts/domain/ai/generated/"
 const _SIZE_SLACK: int = 40
 
 const _SIZE_ALLOWANCE: Dictionary[String, int] = {
-	"res://Scripts/ai/skater_agent_state_machine.gd": 3687,
+	"res://Scripts/ai/skater_agent_state_machine.gd": 3664,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
 	"res://Scripts/game/game_manager.gd": 5787,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
@@ -60,7 +60,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# It is a one-tick finite difference feeding a positional decision, so a
 	# teleport read as travel moved the tracked threat metres in a tick.
 	"res://Scripts/controllers/goalie_controller.gd": 5040,
-	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 942,
+	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 869,
 	# +33: the dive takes the knockdown's fall its own way — a thrown tip rate,
 	# no rebound, legs long, the belt kept on his line — and stays down while
 	# block is held. +5: a bot's caps carry its wrist-shot load and facing configs.
@@ -82,7 +82,6 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/actors/skater_mesh_builder.gd": 1446,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1304,
 	"res://Scripts/ui/career_stats_screen.gd": 1271,
-	"res://Scripts/domain/ai/carry_space.gd": 911,
 	"res://Scripts/ui/lobby_manager.gd": 1247,
 	"res://Scripts/actors/puck.gd": 1102,
 	"res://Scripts/ui/side_menu.gd": 995,

@@ -499,8 +499,8 @@ takes the whole class down and every static call on it from every file at once.
 - `action_scoring.gd` (`AIActionScoring`) holds the shot and pass reads on the
   value seam, the xG stat, position value, dumping and turnover pricing.
 - `carry_space.gd` (`AICarrySpace`) holds the carrier's room to operate:
-  reachable-set evasion, the safety maps, the crossing sample, controlled space
-  and the fake-then-cut deke.
+  reachable-set evasion, the safety maps, the crossing sample and controlled
+  space.
 
 Both evaluators read the leaves and never each other.
 `test_scoring_split_stays_acyclic.gd` holds that. A primitive both need goes in
@@ -569,20 +569,16 @@ remains.
     the puck on the back hip against any checker in front — on neither a shot nor
     a pass. A beaten / behind man is filtered out (`PROTECT_SCREEN_BEHIND_M`), so
     the carrier squares up the instant it clears its man.
-  - **The cut and the stop are rolled moves.** Against pressure the carry
-    search prices its hard cuts and its BRAKE (the stop that lets a committed
-    checker's sweep fly past) by the same rollout as every other input; no
-    separate maneuver overrides them.
-  - **The fake-then-cut deke** (`deke_cut_side`) is the one committed maneuver
-    left: against PATIENT containment it runs the reachable-set model against
-    the defender's post-bite state and fires only when the cut side is covered
-    now but clear after the bite (so an agile defender bites harder, and *can*
-    be deked). It executes as a committed window (fake ~0.3 s, cut ~0.2 s — the
-    durations the eval priced), and stands down when the carry chose to stop.
+  - **Every answer to pressure is a rolled move.** The carry search prices its
+    hard cuts and its BRAKE (the stop that lets a committed checker's sweep fly
+    past) by the same rollout as every other input; no separate maneuver
+    overrides them. There is no deke: in the bot duels a defender does not
+    bite on a fake (measured, he drifts away from it), and the rolled carry
+    keeps the puck as well without one.
   - The carry mouse is clamped a blade-length inside the boards
     (`CARRY_BLADE_WALL_MARGIN_M`): a target at the kickplate slams the stick into
     the wall and knocks the puck loose.
-  - Seam / protect / deke reads are the `protects_the_puck` cognition gate
+  - The protect read is the `protects_the_puck` cognition gate
     (Easy carries naively presented so a newcomer's poke-check works).
 
 - **Pass lanes** (`lane_clear`) — reach-vs-flight-time reachability: a defender

@@ -98,7 +98,7 @@ const CARRY_BEHIND_NET_LATERAL_M: float = 1.0   # lateral reach past the frame s
 # QUIET HANDS: body facing chases the carry cursor, so a sustained offset becomes
 # body rotation — 0.33 m on the 1.3 m ring is ~±14° of wag; wider turns a threat
 # crossing the line into a twitchy ~44° swing. The big threats belong to the
-# deliberate answers (protect blend, the rolled carry, the deke). Ring metres —
+# deliberate answers (protect blend, the rolled carry). Ring metres —
 # rescale with CARRY_BLADE_AIM_FORWARD_M.
 const STICKHANDLE_THREAT_RADIUS_M: float = 3.0
 const STICKHANDLE_FULL_OFFSET_RADIUS_M: float = 1.5
@@ -619,8 +619,8 @@ var _reads_receiver_commitment: bool = true
 var _angles_the_chase: bool = true
 # _plays_rush_pass_lanes rides RoleContext into RUSH_D1's odd-man lane fan.
 var _plays_rush_pass_lanes: bool = true
-# _protects_the_puck gates the carry blade's protect blend and the deke. False =
-# naive forward carry, the puck presented ahead of the body.
+# _protects_the_puck gates the carry blade's protect blend. False = naive forward
+# carry, the puck presented ahead of the body.
 var _protects_the_puck: bool = true
 # _lifts_sticks gates the jab-or-lift read (AIStickLiftRead). False = jab only.
 var _lifts_sticks: bool = true
@@ -631,7 +631,6 @@ var _ties_sticks: bool = true
 var _blocks_shots: bool = true
 var _shot_block := SkaterAgentShotBlock.new()
 var _board_play := SkaterAgentBoardPlay.new()
-var _poke_evade := SkaterAgentPokeEvade.new()
 var _stick_play := SkaterAgentStickPlay.new()
 var _steering := SkaterAgentSteering.new()
 var _reception := SkaterAgentReception.new()
@@ -1710,9 +1709,6 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 			# Skated through at pace — no arrival brake.
 			_apply_steering(input, snapshot, self_pos, _last_carry_anchor,
 					false, _self_max_speed)
-		# The committed deke, only while carrying with no intent: a pre-aim has
-		# its own steering target.
-		_apply_deke(input, snapshot)
 	elif _intended_action == State.SHOOT_PRESSED:
 		var hv: Vector3 = Vector3.ZERO
 		if self_state != null:
@@ -1722,9 +1718,8 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 	else:
 		_apply_brake_steering(input, snapshot, self_pos)
 
-	# Mouse target depends on intent: carry uses normal goal-aim (or the
-	# deke's committed sell-and-snap while that maneuver is live), fire
-	# states pre-aim toward action direction.
+	# Mouse target depends on intent: carry uses normal goal-aim, fire states
+	# pre-aim toward action direction.
 	if _intended_action == State.CARRY:
 		# _step_carry_cursor is also re-run on throttle-skipped ticks.
 		_step_carry_cursor(input, snapshot, self_pos, self_state)
@@ -2627,24 +2622,21 @@ func _carry_aim_track_fire(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector
 	return _aim_ring_toward(self_pos, _shot_aim_point(snapshot, self_pos))
 
 
-# Computes and steps the CARRY-intent mouse cursor: the deke sell-and-snap while
-# a deke is live, else the carry-or-fire track aim. A front-hemisphere reach steps
-# FRONT; a turn-around (target BEHIND the body) steps ARC. Its callees only READ
+# Computes and steps the CARRY-intent mouse cursor: the carry-or-fire track aim.
+# A front-hemisphere reach steps FRONT; a turn-around (target BEHIND the body)
+# steps ARC. Its callees only READ
 # dispatch-throttled state, so the skipped-tick path may call it every physics
 # tick.
 func _step_carry_cursor(input: InputState, snapshot: WorldSnapshot,
 		self_pos: Vector3, self_state: SkaterNetworkState) -> void:
-	var deke_mouse: Vector3 = _deke_mouse_target(self_pos)
-	var mouse_target: Vector3 = deke_mouse if deke_mouse.is_finite() \
-			else _carry_aim_track_fire(snapshot, self_pos)
+	var mouse_target: Vector3 = _carry_aim_track_fire(snapshot, self_pos)
 	var to_target := Vector3(mouse_target.x - self_pos.x, 0.0, mouse_target.z - self_pos.z)
 	if not _target_is_behind(to_target, self_state):
 		# No arc walk on a front reach — clear any long-way orbit latched by a
 		# prior turn-around so the next ARC swing re-evaluates from scratch.
 		_arc_protect_sign = 0.0
 		input.mouse_world_pos = _step_mouse_front(mouse_target)
-	elif not deke_mouse.is_finite() and _carry_tracking_fire \
-			and _carrier.shoot_now_hold != Vector3.ZERO:
+	elif _carry_tracking_fire and _carrier.shoot_now_hold != Vector3.ZERO:
 		input.mouse_world_pos = _step_mouse_hold_arc(mouse_target)
 	else:
 		input.mouse_world_pos = _step_mouse_aim(mouse_target)
@@ -2819,20 +2811,6 @@ func _stickhandle_offset(snapshot: WorldSnapshot, self_pos: Vector3, forward_dir
 		lateral_force -= lateral_unit * ramp
 	var magnitude: float = clampf(lateral_force, -1.0, 1.0) * STICKHANDLE_OFFSET_MAX_M
 	return right_axis * magnitude
-
-
-# The deke (SkaterAgentPokeEvade), only while carrying with no intent.
-func _apply_deke(input: InputState, snapshot: WorldSnapshot) -> void:
-	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
-	if self_state == null:
-		return
-	_poke_evade.modulate(input, self_state.velocity, _carrier,
-			_upright_lateral_accel(), _dispatch_period_ticks)
-
-
-# The deke's carry-cursor override, or INF when no deke is running.
-func _deke_mouse_target(self_pos: Vector3) -> Vector3:
-	return _poke_evade.mouse_target(self_pos)
 
 
 # What the upright edges can turn: the movement core's turn_accel × our grip.
@@ -3669,7 +3647,6 @@ func _set_state(s: State) -> void:
 			_carry_protect_gain_smooth = 0.0
 			_carry_protect_offset_smooth = Vector3.ZERO
 			_carry_has_man = false
-			_poke_evade.reset()
 			_stick_play.reset_reach_in()
 			_carrier.clear_intent()
 		_state = s

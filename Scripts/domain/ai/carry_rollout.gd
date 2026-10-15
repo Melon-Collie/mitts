@@ -22,8 +22,7 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 enum Move { STRAIGHT, SOFT_LEFT, SOFT_RIGHT, HARD_LEFT, HARD_RIGHT, BRAKE, CUT_BACK }
 const MOVE_COUNT: int = 7
 
-# How long a move is held. Half a second is the deke's length, but it is too
-# short to price an escape: from a standstill with a checker three metres off,
+# How long a move is held. Half a second is too short to price an escape: from a standstill with a checker three metres off,
 # every move is within his reach for that long, and what a cut buys only shows
 # in the half-second after.
 const HORIZON_S: float = 1.0

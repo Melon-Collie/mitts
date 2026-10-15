@@ -331,17 +331,15 @@ stance when the turn the steering target demands at the current speed exceeds
 normal-grip capacity (`v² / r_needed > turn_accel · grip`), and for
 low-speed mirroring. Design it against `Scripts/domain/ai/CLAUDE.md`.
 
-Implemented as two reads on `AISteering`. `stance_carves_to` takes the arc
-tangent to travel through the steering anchor (radius d / 2 sin θ) and holds the
-stance while its turn rate beats the upright edges' `turn_accel × grip / v`;
-every steered route reads it, short of a pivot. `stance_cuts_onto` asks the same
-of a committed cut with no anchor (the deke's cut phase, the poke-evade cut):
-can the upright edges turn onto it inside the maneuver's window. Both stand
-down below `turn_accel × grip / max_turn_rate`, where the turn is rate-bound and
-doubling the grip turns no faster. A carrier's stop (the carry's rolled BRAKE)
-stays a pure stop. Low-speed
-mirroring is not modelled: the stance's sideways shuffle only exists below
-`GRIP_MIN_SPEED` (0.5 m/s), too narrow a band to hold a read on.
+Implemented as a read on `AISteering`. `stance_carves_to` takes the arc tangent
+to travel through the steering anchor (radius d / 2 sin θ) and holds the stance
+while its turn rate beats the upright edges' `turn_accel × grip / v`; every
+steered route reads it, short of a pivot. It stands down below
+`turn_accel × grip / max_turn_rate`, where the turn is rate-bound and doubling
+the grip turns no faster. A carrier's stop (the carry's rolled BRAKE) stays a
+pure stop, and the carry's rolled cuts do not hold the stance yet (#794).
+Low-speed mirroring is not modelled: the stance's sideways shuffle only exists
+below `GRIP_MIN_SPEED` (0.5 m/s), too narrow a band to hold a read on.
 
 ### 4.6 UI, input and tutorial
 

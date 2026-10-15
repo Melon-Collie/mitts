@@ -13,10 +13,8 @@ extends GutTest
 # "was at (x, z) on tick N". Frame-exact pins would test the harness
 # approximations and shatter on every feel-tuning pass.
 #
-# Duels pin "the duel RESOLVED", plus "a committed deke fired" where a patient
-# container makes it the answer (evades_by_peer); the deke's math, arming, and
-# lifecycle are pinned by unit tests (test_reach_safety / test_role_carrier /
-# the state-machine suite).
+# Duels pin "the duel RESOLVED"; how the carrier gets there is the rolled
+# carry's choice, pinned by its own unit tests.
 #
 # Staging convention: team 0 attacks -Z (net at z = -GOAL_LINE_Z), team 1
 # attacks +Z. Duels are staged mid-ice — the harness has no boards.
@@ -40,7 +38,7 @@ func test_container_duel_resolves_with_possession() -> void:
 	#
 	# Staged as a LIVE RUSH, not a standing start: the carrier drives at the
 	# net and the container steps up with committed forward momentum — the two
-	# closing on each other. This is the regime a deke/cut actually lives in:
+	# closing on each other. This is the regime a cut actually lives in:
 	# a container carrying real along-ice momentum can't instantly redirect it,
 	# so the carrier's cut beats it. A stationary standing start is the
 	# degenerate case — a container with no momentum trivially mirrors every
@@ -68,12 +66,11 @@ func test_container_duel_resolves_with_possession() -> void:
 			"the puck got past the container's starting line in team-0 hands — the duel resolved")
 
 
-func test_cornered_carrier_commits_a_maneuver_and_escapes() -> void:
+func test_cornered_carrier_escapes() -> void:
 	# A patient scripted container holds the line to the net while a real
-	# defender pressures from behind — retreat denied, forward contained.
-	# The carrier must burn the committed deke on the patient container and
-	# convert it: the puck crosses the container's depth floor still in
-	# team-0 hands, or gets released on net once the lane opens.
+	# defender pressures from behind — retreat denied, forward contained. The
+	# carrier must get past: the puck crosses the container's depth floor still
+	# in team-0 hands, or gets released on net once the lane opens.
 	var duel: RefCounted = DuelHarness.new()
 	duel.add_skater(CARRIER, 0, Vector3(0, 0, -9.0))
 	duel.add_puppet_container(PUPPET, 1, Vector3(0, 0, -11.3), 2.3, -13.0)
@@ -84,27 +81,8 @@ func test_cornered_carrier_commits_a_maneuver_and_escapes() -> void:
 		duel.step()
 		if duel.carrier() == CARRIER and duel.puck_pos.z < -13.0:
 			crossed_carrying = true
-	assert_true(duel.evades_by_peer.get(CARRIER, false),
-			"the cornered carrier commits a deke instead of freezing")
-	# Un-pended by the #27 compete restructure (nominal reach + measured
-	# safety bands): the post-maneuver carry compete now converts on merit.
 	assert_true(crossed_carrying or duel.releases.size() > 0,
-			"the maneuver converts — puck carried past the container or released on net")
-
-
-func test_easy_carrier_never_commits_a_maneuver() -> void:
-	# Control case: the identical corner with an Easy carrier. Easy's closed
-	# protect gate (protects_the_puck = false) shuts the committed deke, ever.
-	# The naive carry is the tier's defining weakness by design.
-	var duel: RefCounted = DuelHarness.new()
-	duel.add_skater(CARRIER, 0, Vector3(0, 0, -9.0), BotSkillProfile.easy())
-	duel.add_puppet_container(PUPPET, 1, Vector3(0, 0, -11.3), 2.3, -13.0)
-	duel.add_skater(DEFENDER, 1, Vector3(0, 0, -6.5), BotSkillProfile.easy())
-	duel.start(CARRIER)
-	duel.run(6.0)
-	assert_false(duel.evades_by_peer.get(CARRIER, false),
-			"Easy commits no deke window — the tier gate holds in a live duel")
-	assert_false(duel.deke_fired, "Easy has no deke")
+			"puck carried past the container or released on net")
 
 
 func test_pincer_duel_carrier_keeps_the_puck() -> void:

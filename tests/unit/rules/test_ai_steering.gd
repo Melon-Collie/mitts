@@ -538,14 +538,6 @@ func test_the_stance_turn_holds_until_well_inside_the_upright_rate() -> void:
 			"above the release fraction a held stance stays held")
 
 
-func test_a_committed_cut_digs_in_when_the_window_is_short() -> void:
-	var v := Vector2(8.0, 0.0)
-	assert_true(AISteering.stance_cuts_onto(_dir_at(90.0), v, UPRIGHT_A, 0.2),
-			"a square cut inside 0.2 s needs the stance")
-	assert_false(AISteering.stance_cuts_onto(_dir_at(5.0), v, UPRIGHT_A, 0.2),
-			"a 5° drift is an upright carve")
-
-
 # The rule's upright rate is the movement core's: a full-lock upright turn at
 # speed rotates travel by turn_accel × grip / v per second.
 func test_the_upright_rate_the_rule_assumes_is_the_physics() -> void:

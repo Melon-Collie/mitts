@@ -8,7 +8,7 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 # PICK_ACTION_PERIOD_TICKS ticks, with DUMP (AICarrierDumpSearch) as the
 # residual when none of them is worth anything. The searches all read this
 # carrier's AICarrierField; this file owns the compete — the shot sweep, the
-# protect / evade / deke reads, the bars, the argmax and its commitment.
+# protect / evade reads, the bars, the argmax and its commitment.
 # Hysteresis on the current fire intent stops flicker during pre-aim; CARRY gets
 # none, because stand-still's shot branch IS the shoot-now score and fire must
 # win that tie.
@@ -101,13 +101,6 @@ const PICK_ACTION_PERIOD_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 30   # ~3
 const OPEN_ICE_LOD_RADIUS_M: float = 8.0
 const OPEN_ICE_LOD_PERIOD_MULT: int = 3
 
-# Deke engagement gates, the cheap pre-filters before AICarrySpace.deke_cut_side.
-# ENGAGE_RANGE: close enough that the duel is live but the fake still has room to
-# develop — a step beyond the poke trigger's reach. MAX_CLOSING: the deke answers
-# PATIENT containment; above this relative closing speed the pressure is
-# committed and the rolled cut or stop owns the moment.
-const DEKE_ENGAGE_RANGE_M: float = 3.5
-const DEKE_CONTAIN_MAX_CLOSING_M_S: float = 2.0
 
 
 # ── Puck-protect directionality (see _fill_protect_opponents) ────────────────
@@ -214,13 +207,6 @@ var protect_gain: float = 0.0
 # tier holds. EVADE_SAFE_MARGIN_M (what reach_clearance reports against nobody)
 # until first computed, so a fresh carrier squares up.
 var forward_puck_clearance: float = AICarrySpace.EVADE_SAFE_MARGIN_M
-# Fake-then-cut deke read (AICarrySpace.deke_cut_side): true when faking one way
-# manufactures a safe cut past the containing defender that doesn't exist right
-# now. The dirs are world-XZ units for the two committed phases, latched by the
-# state machine's trigger. Protect-tier only; refreshed every re-eval.
-var deke_go: bool = false
-var deke_fake_dir: Vector2 = Vector2.ZERO
-var deke_cut_dir: Vector2 = Vector2.ZERO
 
 # ── Throttle ─────────────────────────────────────────────────────────────────
 var _pick_action_cooldown: int = 0
@@ -370,9 +356,6 @@ func reset() -> void:
 	protect_offset = Vector3.ZERO
 	protect_gain = 0.0
 	forward_puck_clearance = AICarrySpace.EVADE_SAFE_MARGIN_M
-	deke_go = false
-	deke_fake_dir = Vector2.ZERO
-	deke_cut_dir = Vector2.ZERO
 	_hold_elapsed_s = 0.0
 	_pick_action_cooldown = 0
 	_ticks_since_pick = 0
@@ -413,8 +396,7 @@ func _pick_action(ctx: RoleContext) -> void:
 	_pick_commit_phase(ctx, false)
 
 
-# FIRE phase of the compete: opponent lists, the evasion / deke /
-# protect reads, the pass-option cache, and the SHOOT + PASS scoring. Leaves
+# FIRE phase of the compete: opponent lists, the evasion / protect reads, the pass-option cache, and the SHOOT + PASS scoring. Leaves
 # its products in the _phase_* / _shot_sample_* fields (plus the
 # _scratch_* buffers) for _pick_commit_phase.
 func _pick_fire_phase(ctx: RoleContext) -> void:
@@ -435,61 +417,6 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 	_phase_current_safety = AICarrySpace.clearance_to_safety(
 			AICarrySpace.reach_clearance(evade_seam, AICarrySpace.EVADE_HORIZON_S,
 					_field.opponents, _field.opponent_vels, _field.opponent_caps))
-
-	# Fake-then-cut deke read: find the PATIENT container — the nearest opponent
-	# inside the duel range, ahead on the objective line, with small relative
-	# closing — and ask whether faking one way buys a safe cut past him. The
-	# axis frame (puck → his projected spot, plus its perpendicular) is built
-	# HERE and the returned side is converted with the same frame, so the eval
-	# and the executed gesture agree by construction.
-	deke_go = false
-	deke_fake_dir = Vector2.ZERO
-	deke_cut_dir = Vector2.ZERO
-	if ctx.protects_the_puck:
-		# The live carry anchor, ≤ one re-eval stale (the attacking goal until
-		# the first re-eval picks one).
-		var objective: Vector3 = last_carry_anchor
-		if objective == Vector3.ZERO:
-			objective = attacking_goal
-		var obj_dir: Vector3 = objective - cur_puck_pos
-		obj_dir.y = 0.0
-		if obj_dir.length_squared() > 0.0001:
-			obj_dir = obj_dir.normalized()
-			var deked_idx: int = -1
-			var deked_dist: float = DEKE_ENGAGE_RANGE_M
-			for i: int in _field.opponents.size():
-				var to_opp: Vector3 = _field.opponents[i] - cur_puck_pos
-				to_opp.y = 0.0
-				var d: float = to_opp.length()
-				if d >= deked_dist or d < 0.001:
-					continue
-				if to_opp.dot(obj_dir) <= 0.0:
-					continue   # behind the play — not the man to beat
-				var closing: float = (ctx.self_velocity - _field.opponent_vels[i]) \
-						.dot(to_opp / d)
-				if absf(closing) > DEKE_CONTAIN_MAX_CLOSING_M_S:
-					continue   # committed pressure — other maneuvers own it
-				deked_dist = d
-				deked_idx = i
-			if deked_idx != -1:
-				var d_proj: Vector3 = _field.opponents[deked_idx] \
-						+ _field.opponent_vels[deked_idx] \
-								* (AICarrySpace.DEKE_FAKE_S + AICarrySpace.DEKE_CUT_S)
-				var axis: Vector3 = d_proj - cur_puck_pos
-				axis.y = 0.0
-				if axis.length_squared() > 0.0001:
-					axis = axis.normalized()
-					var perp := Vector3(axis.z, 0.0, -axis.x)
-					var side: int = AICarrySpace.deke_cut_side(
-							cur_puck_pos, ctx.self_velocity, ctx.self_handle_reach,
-							axis, perp, deked_idx,
-							_field.opponents, _field.opponent_vels,
-							_field.opponent_caps)
-					if side != 0:
-						var cut3: Vector3 = (axis + perp * float(side)).normalized()
-						deke_go = true
-						deke_cut_dir = Vector2(cut3.x, cut3.z)
-						deke_fake_dir = Vector2(-perp.x * float(side), -perp.z * float(side))
 
 	# Puck-protect read (see protect_offset / protect_gain) against the
 	# directional opponent set (see PROTECT_SCREEN_BEHIND_M). Pure stick work:
