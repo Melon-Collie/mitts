@@ -13,6 +13,7 @@ const _STAGE_BOOT: String = "boot"
 const _STAGE_FREE_PLAY: String = "free_play"
 const _STAGE_TUTORIAL: String = "tutorial"
 const _STAGE_LOBBY: String = "lobby"
+const _STAGE_MATCH: String = "match"
 
 const _SHOTS: Array[Dictionary] = [
 	{"name": "boot", "stage": _STAGE_BOOT, "open": "_open_nothing"},
@@ -36,6 +37,7 @@ const _SHOTS: Array[Dictionary] = [
 	{"name": "hud_free_play", "stage": _STAGE_FREE_PLAY, "open": "_close_side_menu"},
 	{"name": "hud_tutorial", "stage": _STAGE_TUTORIAL, "open": "_open_nothing"},
 	{"name": "lobby", "stage": _STAGE_LOBBY, "open": "_open_nothing"},
+	{"name": "hud_match", "stage": _STAGE_MATCH, "open": "_open_nothing"},
 ]
 
 # Long enough for a match scene's first-frame setup (camera ease-in, HUD
@@ -47,6 +49,13 @@ const _STAGE_SETTLE_SEC: float = 3.0
 # Covers the menu open tweens, which run on real time.
 const _SHOT_SETTLE_FRAMES: int = 4
 const _SHOT_SETTLE_SEC: float = 0.8
+# Game time a match runs past the opening faceoff before its shots, so the
+# skaters have spread out of the faceoff formation.
+const _MATCH_PLAY_SEC: float = 6.0
+# Physics ticks allowed per rendered frame while that time elapses. At the
+# software rasterizer's ~1 fps the default 8 would take minutes of wall clock.
+const _MATCH_STEPS_PER_FRAME: int = 60
+const _MATCH_START_TIMEOUT_FRAMES: int = 600
 # Deepest overlay stack a shot opens (locker over player settings over the side
 # menu), plus slack.
 const _MAX_DISMISS_PRESSES: int = 6
@@ -127,18 +136,45 @@ func _enter_stage(stage: String) -> void:
 			NetworkManager.start_free_play()
 		_STAGE_TUTORIAL:
 			NetworkManager.start_tutorial(TutorialRegistry.MOVEMENT_ID)
-		_STAGE_LOBBY:
+		_STAGE_LOBBY, _STAGE_MATCH:
 			NetworkManager.start_offline()
 			path = Constants.SCENE_LOBBY
 	_stage = stage
 	tree.change_scene_to_file(path)
 	while tree.current_scene == null or tree.current_scene.scene_file_path != path:
 		await tree.process_frame
+	if stage == _STAGE_MATCH:
+		await _start_match()
 	# Bottom centre is below every menu column and dialog, so no shot catches a
 	# button in its hover state.
 	var view: Vector2 = get_viewport().get_visible_rect().size
 	Input.warp_mouse(view * Vector2(0.5, 0.97))
 	await _settle(_STAGE_SETTLE_FRAMES, _STAGE_SETTLE_SEC)
+
+
+# From the offline lobby: the host's Fill with Bots and Start Game, then play
+# until the opening faceoff is well behind.
+func _start_match() -> void:
+	var tree: SceneTree = get_tree()
+	var lobby: LobbyManager = _find(tree.current_scene, LobbyManager) as LobbyManager
+	_invoke(lobby, "_fill_open_slots_with_bots")
+	_invoke(lobby, "_on_start_pressed")
+	var waited: int = 0
+	while tree.current_scene == null \
+			or tree.current_scene.scene_file_path != Constants.SCENE_HOCKEY \
+			or GameManager.is_movement_locked():
+		await tree.process_frame
+		waited += 1
+		if waited > _MATCH_START_TIMEOUT_FRAMES:
+			_fail("the match never left the opening faceoff")
+			return
+	var default_steps: int = Engine.max_physics_steps_per_frame
+	Engine.max_physics_steps_per_frame = _MATCH_STEPS_PER_FRAME
+	var target: int = Engine.get_physics_frames() \
+			+ int(_MATCH_PLAY_SEC * Engine.physics_ticks_per_second)
+	while Engine.get_physics_frames() < target:
+		await tree.process_frame
+	Engine.max_physics_steps_per_frame = default_steps
 
 
 func _settle(frames: int, seconds: float) -> void:
