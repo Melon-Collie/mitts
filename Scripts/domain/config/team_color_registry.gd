@@ -200,14 +200,15 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 		"shoulders": {
 			"color":   _parse_color(shoulders_raw.get("color",   "#FFFFFF")),
 			"text":    _parse_color(shoulders_raw.get("text",    "#FFFFFF")),
-			"outline": _parse_color(shoulders_raw.get("outline", "#000000")),
 		},
 		"jersey": {
 			"base":    _parse_color(jersey_raw.get("base",    "#FFFFFF")),
 			"yoke":    _parse_optional_color(jersey_raw.get("yoke", null)),
+			"collar":  _parse_optional_color(jersey_raw.get("collar", null)),
 			"stripes": _parse_stripes(jersey_raw.get("stripes", [])),
 		},
 		"arms": {
+			"elbow": _parse_optional_color(arms_raw.get("elbow", null)),
 			"upper": {
 				"base":    _parse_color(arms_upper.get("base",    "#FFFFFF")),
 				"stripes": _parse_stripes(arms_upper.get("stripes", [])),
@@ -258,7 +259,8 @@ static func _parse_color(hex: Variant) -> Color:
 	return Color.WHITE
 
 
-# yoke is optional — null means "no yoke band".
+# yoke, collar and arms.elbow are optional — null falls back: the collar to the
+# yoke, the yoke to the jersey body, the elbow to the sleeve under it.
 static func _parse_optional_color(hex: Variant) -> Variant:
 	if hex == null:
 		return null
@@ -281,7 +283,7 @@ static func _hardcoded_papaya() -> Dictionary:
 		"light":     _parse_color("#FFFFFF"),  # mirrors away jersey base
 		"home":      _parse_kit({
 			"helmet":      "#2A9472",
-			"shoulders":   {"color": "#2A9472", "text": "#FFFFFF", "outline": "#C8321A"},
+			"shoulders":   {"color": "#2A9472", "text": "#FFFFFF"},
 			"jersey":      {"base": "#F46B2A", "stripes": []},
 			"arms":        {"upper": {"base": "#F46B2A", "stripes": []},
 							"lower": {"base": "#C8321A", "stripes": []}},
@@ -293,7 +295,7 @@ static func _hardcoded_papaya() -> Dictionary:
 		}),
 		"away":      _parse_kit({
 			"helmet":      "#FFFFFF",
-			"shoulders":   {"color": "#2A9472", "text": "#F46B2A", "outline": "#C8321A"},
+			"shoulders":   {"color": "#2A9472", "text": "#F46B2A"},
 			"jersey":      {"base": "#FFFFFF", "stripes": []},
 			"arms":        {"upper": {"base": "#F46B2A", "stripes": []},
 							"lower": {"base": "#C8321A", "stripes": []}},
@@ -314,7 +316,7 @@ static func _hardcoded_lime() -> Dictionary:
 		"light":     _parse_color("#FFFFFF"),  # mirrors away jersey base
 		"home":      _parse_kit({
 			"helmet":      "#4A6B15",
-			"shoulders":   {"color": "#7FB320", "text": "#FFFFFF", "outline": "#4A6B15"},
+			"shoulders":   {"color": "#7FB320", "text": "#FFFFFF"},
 			"jersey":      {"base": "#7FB320", "stripes": []},
 			"arms":        {"upper": {"base": "#7FB320", "stripes": []},
 							"lower": {"base": "#7FB320", "stripes": []}},
@@ -326,7 +328,7 @@ static func _hardcoded_lime() -> Dictionary:
 		}),
 		"away":      _parse_kit({
 			"helmet":      "#FFFFFF",
-			"shoulders":   {"color": "#7FB320", "text": "#FFFFFF", "outline": "#4A6B15"},
+			"shoulders":   {"color": "#7FB320", "text": "#FFFFFF"},
 			"jersey":      {"base": "#FFFFFF", "stripes": []},
 			"arms":        {"upper": {"base": "#FFFFFF", "stripes": []},
 							"lower": {"base": "#FFFFFF", "stripes": []}},

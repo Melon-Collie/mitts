@@ -3,7 +3,7 @@ extends SceneTree
 # Dev visualizer: renders the goalie offscreen from three standing angles, a
 # butterfly, a near-overhead butterfly, a close-up of the stick on the ice, the
 # half-butterfly, the blocking vs reaction butterfly, the butterfly stick
-# side-on, and the post, cover and catch stances, so goalie mesh/pose changes can be SEEN without launching the game. A bare-instantiated goalie is a collapsed lump — every part is placed
+# side-on, and the post, cover and catch stances, then the kit from behind and above behind, so goalie mesh/pose/paint changes can be SEEN without launching the game. A bare-instantiated goalie is a collapsed lump — every part is placed
 # per-tick by its controller — so this drives the real pose builder directly:
 # a GoalieBodyConfigBuilder.Inputs bundle (state + defaults) rebuilt and
 # snapped with apply_body_config(config, 1.0) each frame. The goalie faces −Z.
@@ -16,6 +16,7 @@ extends SceneTree
 #
 # Locally any GPU works: drop the env var and xvfb-run. Output paths print
 # on save (user:// — never the repo tree, so captures can't be committed).
+# GOALIE_CAPTURE_KIT ("slot:side", default "1:0") picks the kit he wears.
 
 var _frames: int = 0
 var _camera: Camera3D = null
@@ -66,7 +67,10 @@ func _on_frame() -> void:
 		var scene: PackedScene = load("res://Scenes/Goalie.tscn")
 		_goalie = scene.instantiate()
 		root.add_child(_goalie)
-		_goalie.call("apply_uniform", TeamColorRegistry.get_colors(1, 0))
+		var kit: PackedStringArray = OS.get_environment("GOALIE_CAPTURE_KIT").split(":")
+		var slot: int = int(kit[0]) if kit[0].is_valid_int() else 1
+		var side: int = int(kit[1]) if kit.size() > 1 else 0
+		_goalie.call("apply_uniform", TeamColorRegistry.get_colors(slot, side))
 		_goalie.call("apply_jersey_info", "MELON", 31)
 		_builder = GoalieBodyConfigBuilder.new()
 		_inputs = GoalieBodyConfigBuilder.Inputs.new()
@@ -151,7 +155,9 @@ func _on_frame() -> void:
 
 
 # The stances that hold the arms somewhere other than ready, each from the
-# shooter's 3/4 so both elbows read.
+# shooter's 3/4 so both elbows read; then the kit from behind and from above
+# behind, where the yoke, the shoulders and the back's lettering show.
+# [name, state, camera position?, look-at?]
 const _STANCE_SHOTS: Array = [
 	["rvh_left", GoalieStateMachine.State.RVH_LEFT],
 	["vh_left", GoalieStateMachine.State.VH_LEFT],
@@ -159,6 +165,8 @@ const _STANCE_SHOTS: Array = [
 	["covering", GoalieStateMachine.State.COVERING],
 	["catching", GoalieStateMachine.State.CATCHING],
 	["catching_down", GoalieStateMachine.State.CATCHING_DOWN],
+	["back", GoalieStateMachine.State.READY, Vector3(0.0, 1.1, 2.6), Vector3(0.0, 0.85, 0.0)],
+	["high_back", GoalieStateMachine.State.READY, Vector3(0.6, 2.4, 1.9), Vector3(0.0, 0.8, 0.0)],
 ]
 var _stance_index: int = 0
 
@@ -167,10 +175,11 @@ func _capture_next_stance() -> void:
 	if _stance_index >= _STANCE_SHOTS.size():
 		quit()
 		return
-	_inputs.state = _STANCE_SHOTS[_stance_index][1]
+	var shot: Array = _STANCE_SHOTS[_stance_index]
+	_inputs.state = shot[1]
 	_inputs.puck_position = Vector3(0.0, 0.0, -0.5)
-	_camera.position = Vector3(-2.0, 1.1, -2.2)
-	_camera.look_at(Vector3(0.0, 0.6, 0.0))
+	_camera.position = shot[2] if shot.size() > 2 else Vector3(-2.0, 1.1, -2.2)
+	_camera.look_at(shot[3] if shot.size() > 3 else Vector3(0.0, 0.6, 0.0))
 	_stance_index += 1
 
 

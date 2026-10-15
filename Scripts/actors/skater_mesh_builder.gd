@@ -28,18 +28,23 @@ extends RefCounted
 # from Scenes/Skater.tscn) so nothing pokes through ice, boards, or gear that
 # was tuned around the primitive silhouettes.
 const _TORSO_PROFILE: Array[Vector2] = [
-	Vector2(0.275, 0.192),   # trap line — the shoulder pads' shelf, wide enough to meet the caps
-	Vector2(0.245, 0.218),
-	Vector2(0.130, 0.214),   # chest
-	Vector2(0.000, 0.194),   # waist tuck
-	Vector2(-0.150, 0.204),
-	Vector2(-0.230, 0.214),
-	Vector2(-0.275, 0.222),  # jersey hem flare
+	Vector2(0.275, 0.125),   # collar, around the neck's trapezius flare
+	Vector2(0.255, 0.185),   # trapezius slope over the shoulder pads
+	Vector2(0.215, 0.222),   # shoulder line — the pads' widest, the caps seat into it
+	Vector2(0.130, 0.222),   # chest — from here the sweater hangs nearly straight,
+	Vector2(0.000, 0.212),   # barely tucked at the waist
+	Vector2(-0.150, 0.216),
+	Vector2(-0.230, 0.220),
+	Vector2(-0.275, 0.223),  # hem, at the primitive envelope's width
 ]
+# The yoke paints the torso side from the collar down to the shoulder line
+# (station 2), as a fraction of the side's height; the collar ring is the top cap.
+const TORSO_YOKE_SIDE_FRACTION: float = (_TORSO_PROFILE[0].x - _TORSO_PROFILE[2].x) \
+		/ (_TORSO_PROFILE[0].x - _TORSO_PROFILE[7].x)
 # Rear (+Z is the back) shift per _TORSO_PROFILE ring — the hockey-butt sway:
 # the seat builds through the lower back and peaks at the hem that drapes
 # over it, while the chest rings stay centered so the belly keeps its line.
-const _TORSO_REAR_SWAY: Array[float] = [0.0, 0.0, 0.0, 0.006, 0.018, 0.028, 0.032]
+const _TORSO_REAR_SWAY: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.006, 0.018, 0.028, 0.032]
 # The pelvis, in the waist's space (y 0 is the trunk's fold pivot, the hip
 # pivots sit at −0.13). It is the seat the torso does NOT carry: the trunk texture
 # rotates the torso bone about that pivot, so at any fold worth seeing the
@@ -105,7 +110,10 @@ const _SKATE_PROFILE: Array[Vector2] = [
 const _TORSO_X_SCALE: float = 1.05
 const _TORSO_Z_SCALE: float = 0.88
 
-const _TORSO_SIDES: int = 10   # back number spans ~3 facets — creased, still legible
+const _TORSO_SIDES: int = 10
+# Half a facet: the torso's rings turn so a flat face, not an edge, is under the
+# name and number. U still starts at vertex 0; the material's offset adds it.
+const TORSO_U_PHASE: float = 0.5 / _TORSO_SIDES
 const _LEG_SIDES: int = 8
 
 # Head + helmet. One mesh on the HELMET bone: the shell on surface 0 (painted
@@ -145,22 +153,29 @@ const HEAD_RADIUS: float = 0.135
 # _HELMET_RADIUS or the face pokes through the shell at the front equator.
 const _HEAD_FORWARD_M: float = 0.015
 
-# Shoulder cap: an asymmetric deltoid pad. The +Y end — which
-# Skater._orient_shoulder_cap points INTO the trap/chest (away from the arm)
-# — is a blunt, flat-capped base, so the cap merges into the torso
-# silhouette instead of pinching to a pole right where it meets the chest;
-# the −Y end keeps the prolate taper that runs down the arm. Stations are
-# (y, radius, equirect v): the v column preserves the sphere-convention
-# mapping the shoulder-number decal is painted against, with the number band
-# on the full-width equator.
+# A loose sleeve's radius at its full-width end; Skater, the cap and the lobby
+# figures read it. The elbow pad only fills the bend, just proud of it.
+const SLEEVE_RADIUS_M: float = 0.080
+const ELBOW_PAD_RADIUS_M: float = SLEEVE_RADIUS_M * 1.04
+
+# Shoulder cap: the pad under the sleeve. Its +Y end (SkaterArmRig points it
+# into the trap) is a blunt base tucked under the torso's trapezius slope; the
+# −Y end stays at the sleeve's radius so the cap flows into the upper arm. The
+# origin is the arm root, so the profile sits below it to continue the
+# neck-to-arm slope. Stations are (y, radius, equirect v), v keeping the sphere
+# mapping the shoulder number paints against, its band on the equator.
 const _SHOULDER_PROFILE: Array[Vector3] = [
-	Vector3(0.075, 0.068, 0.12),   # blunt torso-side base (flat-capped)
-	Vector3(0.045, 0.096, 0.30),
-	Vector3(0.000, 0.105, 0.50),   # equator — the number band
-	Vector3(-0.055, 0.096, 0.68),
-	Vector3(-0.105, 0.070, 0.85),
-	Vector3(-0.137, 0.030, 1.0),   # arm-side taper
+	Vector3(0.050, 0.056, 0.12),   # blunt torso-side base (flat-capped)
+	Vector3(0.025, 0.080, 0.30),
+	Vector3(-0.015, 0.090, 0.50),  # equator — the number band
+	Vector3(-0.060, 0.088, 0.68),
+	Vector3(-0.105, 0.084, 0.85),
+	Vector3(-0.140, SLEEVE_RADIUS_M, 1.0),   # arm-side end, at the sleeve's own radius
 ]
+
+# The yoke crosses the cap at its second ring, so the top of the shoulder
+# matches the jersey and the cap's own color starts below it.
+const SHOULDER_CAP_YOKE_V: float = _SHOULDER_PROFILE[1].z
 
 const _KNEE_RADIUS: float = 0.095
 
@@ -742,11 +757,11 @@ static func shared_joint_ball() -> ArrayMesh:
 		return _build_ball(1.0, 8, 4, 1.0))
 
 
-# Elbow pad, unit radius: a ball drawn out to a cap at +Y, which the arm rig
-# points out of the bend (SkaterArmRig._pose_elbow) — the point a sleeve shows
-# over a hockey elbow pad.
+# Elbow pad, unit radius: a ball drawn out to a soft point at +Y, which the arm
+# rig points out of the bend (SkaterArmRig._pose_elbow) — the pad's shape just
+# showing through a thick sleeve.
 const _ELBOW_PAD_PROFILE: Array[Vector2] = [
-	Vector2(1.22, 0.32), Vector2(1.02, 0.78), Vector2(0.62, 1.0), Vector2(0.1, 1.02),
+	Vector2(1.08, 0.30), Vector2(0.92, 0.74), Vector2(0.56, 0.98), Vector2(0.1, 1.02),
 	Vector2(-0.45, 0.9), Vector2(-0.82, 0.55), Vector2(-0.98, 0.18),
 ]
 static func shared_elbow_pad() -> ArrayMesh:
@@ -812,7 +827,7 @@ static func _build_pelvis() -> ArrayMesh:
 
 static func _build_torso() -> ArrayMesh:
 	return _build_lathe(_TORSO_PROFILE, _TORSO_SIDES, _TORSO_X_SCALE, _TORSO_Z_SCALE,
-			_TORSO_REAR_SWAY)
+			_TORSO_REAR_SWAY, TAU * TORSO_U_PHASE)
 
 
 # Head ball at HEAD_RADIUS, sitting _HEAD_FORWARD_M ahead of the helmet center,
@@ -1145,7 +1160,7 @@ static func _build_skate() -> ArrayMesh:
 # top cap is where the jersey yoke paints.
 static func _build_lathe(profile: Array[Vector2], sides: int,
 		x_scale: float, z_scale: float,
-		z_offsets: Array[float] = []) -> ArrayMesh:
+		z_offsets: Array[float] = [], phase: float = 0.0) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_smooth_group(-1)  # flat shading — see class doc block
@@ -1156,7 +1171,7 @@ static func _build_lathe(profile: Array[Vector2], sides: int,
 	var vs := PackedFloat32Array()
 	for i in profile.size():
 		var s: Vector2 = profile[i]
-		var ring: PackedVector3Array = _ring(s.x, s.y, x_scale, z_scale, sides)
+		var ring: PackedVector3Array = _ring(s.x, s.y, x_scale, z_scale, sides, phase)
 		# Optional per-ring Z shift (index-aligned with the profile; short or
 		# empty array = centered). Rings stay circular — the shift moves the
 		# whole ring, giving the lathe an asymmetric sway (the torso's seat)
@@ -1186,14 +1201,15 @@ static func _build_lathe(profile: Array[Vector2], sides: int,
 
 
 # One horizontal ring of sides+1 points (the last duplicates the first so the
-# UV seam gets u = 1.0 instead of wrapping back to 0). θ starts at +Z and
-# advances toward +X — the engine primitive winding the painters expect.
+# UV seam gets u = 1.0 instead of wrapping back to 0). θ starts at +Z (turned
+# by `phase`) and advances toward +X — the engine primitive winding the
+# painters expect.
 static func _ring(y: float, radius: float, x_scale: float, z_scale: float,
-		sides: int) -> PackedVector3Array:
+		sides: int, phase: float = 0.0) -> PackedVector3Array:
 	var pts := PackedVector3Array()
 	pts.resize(sides + 1)
 	for k in sides + 1:
-		var theta: float = TAU * float(k) / float(sides)
+		var theta: float = TAU * float(k) / float(sides) + phase
 		pts[k] = Vector3(sin(theta) * radius * x_scale, y, cos(theta) * radius * z_scale)
 	return pts
 

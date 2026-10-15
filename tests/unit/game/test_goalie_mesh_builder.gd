@@ -78,8 +78,21 @@ func test_body_keeps_the_jersey_shader_contract() -> void:
 	assert_gt(back_area, 0.15, "body needs a flat +Z back region for the nameplate")
 	assert_gt(top_area, 0.02, "body needs a flat top face for the yoke")
 	var aabb: AABB = mesh.get_aabb()
-	assert_almost_eq(aabb.size.y, 0.72, 0.001,
-			"stripes map over object Y — the body must keep the box's full height span")
+	assert_almost_eq(aabb.size.y, 2.0 * GoalieMeshBuilder.BODY_TOP_Y, 0.001,
+			"stripes and the back decal map over object Y — the body spans ±BODY_TOP_Y")
+
+
+# The shader states the body's half-extents as constants; GoalieTextDecal sizes
+# its lettering from GoalieMeshBuilder's. Both are the frame the back decal is
+# projected in, so they must be the same numbers.
+func test_the_jersey_shader_states_the_body_extents() -> void:
+	var code: String = (load("res://Assets/Shaders/goalie_jersey.gdshader") as Shader).code
+	var rx := RegEx.create_from_string("const float (HALF_[HW]) = ([0-9.]+);")
+	var found: Dictionary = {}
+	for m: RegExMatch in rx.search_all(code):
+		found[m.get_string(1)] = float(m.get_string(2))
+	assert_almost_eq(float(found.get("HALF_H", 0.0)), GoalieMeshBuilder.BODY_TOP_Y, 1e-6)
+	assert_almost_eq(float(found.get("HALF_W", 0.0)), GoalieMeshBuilder.BODY_HALF_W, 1e-6)
 
 
 func test_blocker_board_fills_its_collider() -> void:

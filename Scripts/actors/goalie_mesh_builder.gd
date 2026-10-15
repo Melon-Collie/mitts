@@ -154,6 +154,16 @@ const _NECK_RADIUS_BOT: float = 0.062  # flares toward the shoulders
 const _NECK_BACK_OFFSET: float = 0.020  # body-local +Z (rearward)
 const _NECK_COLOR := Color(0.10, 0.10, 0.11)
 
+# The kit's paint over the body's top (goalie_jersey.gdshader): the collar is a
+# ring round the neck guard on the top face, and the yoke covers the rest of the
+# top and runs down every side as deep as the skater's trapezius slope, so a
+# goalie's shoulders carry the yoke as far down as a skater's.
+const BODY_TOP_Y: float = _BODY_STATIONS[0].x    # the body spans ±this
+const BODY_HALF_W: float = _BODY_HALF_W
+const COLLAR_RADIUS_M: float = _NECK_RADIUS_BOT + 0.035
+const COLLAR_CENTER_Z: float = _NECK_BACK_OFFSET
+const YOKE_DEPTH_M: float = _TORSO_PROFILE[0].x - _TORSO_PROFILE[2].x
+
 # Catch glove: a trapper's hand, built as its silhouette rather than as the
 # hoop and disc of the primitives it replaces. The drawn forearm is the wrist
 # and cuff, so this starts at its end: seen by the shooter, a mitt rising from

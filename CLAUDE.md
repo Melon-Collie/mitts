@@ -116,6 +116,15 @@ beside and ahead, printing the locomotion mix per frame — which state the legs
 skated, and when it came on (`tools/gait_strip_runner.gd`). A held pose cannot
 show a stroke or a state firing at the wrong time.
 
+**To see a KIT, lay it flat.** `.claude/hooks/render-kits.sh [teams]` writes
+one PNG per team to `.preview/kits/`: home and away, jersey front and back with
+sleeves and shoulder caps, pants, socks, and a legend of every color and stripe
+keyed by its path in `data/team_colors.json` (`tools/kit_capture.gd`). The
+garments are the rink's meshes flattened and painted by the game's own decals and
+stripe textures, so it is the check for a kit edit. It loads through
+`TeamColorRegistry`, so a `user://team_colors.json` shadows the bundled file
+here as it does in the game, and the run says which one won.
+
 A render answers *how it reads*; it does not answer *whether two placements
 agree*. When the question is the second one — does the pad still sit on the arm,
 does the mirrored side land where the near side does — measure it in a test

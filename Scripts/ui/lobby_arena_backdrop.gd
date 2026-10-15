@@ -170,15 +170,15 @@ func _build_dummy(meshes: Dictionary, mats: Dictionary) -> Node3D:
 
 # Static two-segment arm from the skater's shared meshes: tapered bone prisms
 # shoulder→elbow→hand, an elbow-pad ball, and a gloved fist gripping toward
-# the stick. Radii mirror the live rig (arm 0.065, elbow 0.082, glove 0.064).
-# Upper and lower segments wear their own kit materials, elbow ball reads as
-# the lower-arm cuff — same split as SkaterUniformCoordinator.apply_uniform.
+# the stick. The sleeve and elbow radii are the live rig's own (SkaterMeshBuilder);
+# the glove is its 0.064. Upper and lower segments wear their own kit
+# materials and the elbow its own (SkaterUniformCoordinator.elbow_color).
 func _add_dummy_arm(d: Node3D, mats: Dictionary,
 		shoulder: Vector3, elbow: Vector3, hand: Vector3) -> void:
 	_add_bone(d, mats.arm_upper, shoulder, elbow)
 	_add_bone(d, mats.arm_lower, elbow, hand)
 	_add_part(d, SkaterMeshBuilder.shared_joint_ball(), mats.elbow, elbow,
-			Basis.from_scale(Vector3.ONE * 0.082))
+			Basis.from_scale(Vector3.ONE * SkaterMeshBuilder.ELBOW_PAD_RADIUS_M))
 	# Glove fist: local +Y points back toward the elbow, same convention the
 	# live rig orients it with.
 	var grip: Basis = _basis_along((elbow - hand).normalized()).scaled(Vector3.ONE * 0.064)
@@ -193,7 +193,8 @@ func _add_bone(d: Node3D, mat: StandardMaterial3D, proximal: Vector3, distal: Ve
 	if length < 0.001:
 		return
 	var b: Basis = _basis_along(dir / length)
-	b = Basis(b.x * 0.065, b.y * length, b.z * 0.065)
+	b = Basis(b.x * SkaterMeshBuilder.SLEEVE_RADIUS_M, b.y * length,
+			b.z * SkaterMeshBuilder.SLEEVE_RADIUS_M)
 	var mi := MeshInstance3D.new()
 	mi.mesh = SkaterMeshBuilder.shared_arm_bone()
 	mi.material_override = mat
@@ -241,8 +242,8 @@ func _dummy_meshes() -> Dictionary:
 
 
 # Dress the dummy in the real kit (colors.uniform), not flat team colors:
-# striped jersey with the yoke on the torso's top cap, the shoulder pads'
-# own color, striped arms (upper/lower segments each), striped socks, solid
+# striped jersey with the collar on the torso's top cap and the yoke over the
+# shoulders, the shoulder pads' own color under it, striped arms (upper/lower segments each), striped socks, solid
 # pants base. Stripe textures come from SkaterUniformCoordinator's
 # UniformPaint.h_stripes / make_arm_stripes_texture so the bands land exactly
 # where the in-game skater's do. Pants keep the base color only — the
@@ -257,8 +258,8 @@ func _dummy_materials(colors: Dictionary) -> Dictionary:
 	var arms_lower: Dictionary = uniform.arms.lower
 
 	var jersey_mat := StandardMaterial3D.new()
-	jersey_mat.albedo_texture = UniformPaint.h_stripes(
-			jersey_block.base, jersey_block.stripes, jersey_block.yoke)
+	jersey_mat.albedo_texture = UniformPaint.h_stripes(jersey_block.base,
+			UniformPaint.jersey_stripes(jersey_block), UniformPaint.collar_color(jersey_block))
 	jersey_mat.roughness = 0.9
 
 	var socks_mat: StandardMaterial3D
@@ -272,7 +273,7 @@ func _dummy_materials(colors: Dictionary) -> Dictionary:
 
 	return {
 		"jersey":    jersey_mat,
-		"shoulder":  _matte(uniform.shoulders.color),
+		"shoulder":  _textured(UniformPaint.shoulder_cap(jersey_block, uniform.shoulders.color)),
 		"helmet":    _matte(uniform.helmet, 0.28),
 		"pants":     _matte(uniform.pants.base),
 		"socks":     socks_mat,
@@ -280,7 +281,7 @@ func _dummy_materials(colors: Dictionary) -> Dictionary:
 		"steel":     _matte(SkaterMeshBuilder.BLADE_STEEL_COLOR, 0.25),
 		"arm_upper": _arm_material(arms_upper),
 		"arm_lower": _arm_material(arms_lower),
-		"elbow":     _matte(arms_lower.base),
+		"elbow":     _matte(SkaterUniformCoordinator.elbow_color(uniform.arms)),
 		"gloves":    _matte(uniform.gloves),
 		"skin":      _matte(SkinToneRegistry.color_for(SkinToneRegistry.DEFAULT_INDEX)),
 		"stick":     _matte(Color(0.06, 0.06, 0.07), 0.4),
@@ -305,4 +306,11 @@ func _matte(c: Color, roughness: float = 0.9) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = c
 	m.roughness = roughness
+	return m
+
+
+func _textured(tex: Texture2D) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = tex
+	m.roughness = 0.9
 	return m
