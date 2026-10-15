@@ -1726,6 +1726,165 @@
           "outline": "#1E2A5A"
         }
       }
+    },
+    {
+      "name": "Blackberry",
+      "primary": "#161618",
+      "secondary": "#5E2457",
+      "light": "#FFFFFF",
+      "home": {
+        "helmet": "#161618",
+        "shoulders": {
+          "color": "#5E2457",
+          "text": "#FFFFFF"
+        },
+        "jersey": {
+          "base": "#161618",
+          "collar": "#5E2457",
+          "stripes": [
+            {
+              "pos": 0.81,
+              "width": 0.06,
+              "color": "#B0243A"
+            },
+            {
+              "pos": 0.87,
+              "width": 0.06,
+              "color": "#5E2457"
+            }
+          ]
+        },
+        "arms": {
+          "upper": {
+            "base": "#161618",
+            "stripes": []
+          },
+          "lower": {
+            "base": "#161618",
+            "stripes": [
+              {
+                "pos": 0.245,
+                "width": 0.11,
+                "color": "#B0243A"
+              },
+              {
+                "pos": 0.355,
+                "width": 0.11,
+                "color": "#5E2457"
+              }
+            ]
+          }
+        },
+        "gloves": "#161618",
+        "pants": {
+          "base": "#161618",
+          "stripes": []
+        },
+        "socks": {
+          "base": "#161618",
+          "stripes": [
+            {
+              "pos": 0.415,
+              "width": 0.13,
+              "color": "#B0243A"
+            },
+            {
+              "pos": 0.545,
+              "width": 0.13,
+              "color": "#5E2457"
+            }
+          ]
+        },
+        "goalie_pads": "#161618",
+        "text": {
+          "color": "#FFFFFF",
+          "outline": "#FFFFFF"
+        }
+      },
+      "away": {
+        "helmet": "#FFFFFF",
+        "shoulders": {
+          "color": "#161618",
+          "text": "#FFFFFF"
+        },
+        "jersey": {
+          "base": "#FFFFFF",
+          "collar": "#5E2457",
+          "stripes": [
+            {
+              "pos": 0.78,
+              "width": 0.06,
+              "color": "#B0243A"
+            },
+            {
+              "pos": 0.84,
+              "width": 0.06,
+              "color": "#5E2457"
+            },
+            {
+              "pos": 0.9,
+              "width": 0.06,
+              "color": "#161618"
+            }
+          ]
+        },
+        "arms": {
+          "upper": {
+            "base": "#FFFFFF",
+            "stripes": []
+          },
+          "lower": {
+            "base": "#FFFFFF",
+            "stripes": [
+              {
+                "pos": 0.19,
+                "width": 0.11,
+                "color": "#B0243A"
+              },
+              {
+                "pos": 0.3,
+                "width": 0.11,
+                "color": "#5E2457"
+              },
+              {
+                "pos": 0.41,
+                "width": 0.11,
+                "color": "#161618"
+              }
+            ]
+          }
+        },
+        "gloves": "#161618",
+        "pants": {
+          "base": "#161618",
+          "stripes": []
+        },
+        "socks": {
+          "base": "#FFFFFF",
+          "stripes": [
+            {
+              "pos": 0.35,
+              "width": 0.13,
+              "color": "#B0243A"
+            },
+            {
+              "pos": 0.48,
+              "width": 0.13,
+              "color": "#5E2457"
+            },
+            {
+              "pos": 0.61,
+              "width": 0.13,
+              "color": "#161618"
+            }
+          ]
+        },
+        "goalie_pads": "#FFFFFF",
+        "text": {
+          "color": "#161618",
+          "outline": "#161618"
+        }
+      }
     }
   ]
 }
