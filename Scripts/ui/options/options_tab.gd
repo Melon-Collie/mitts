@@ -27,7 +27,9 @@ const _SEP    := MenuStyle.TEXT_SEP
 const _LABEL_COL_WIDTH := 180
 const _LABEL_FONT_SIZE := 17
 const _VALUE_FONT_SIZE := 14
-const _SECTION_FONT_SIZE := 11
+const _SECTION_FONT_SIZE := 12
+const _NOTE_FONT_SIZE := 13
+const _ROW_SEPARATION := 14
 const _VALUE_COL_WIDTH := 56
 
 # Builds the tab's content. Sets the shared box layout, then defers to the
@@ -71,7 +73,7 @@ func _section_header(text: String) -> Label:
 	var l := Label.new()
 	l.text = text.to_upper()
 	l.add_theme_font_size_override("font_size", _SECTION_FONT_SIZE)
-	l.add_theme_color_override("font_color", _MUTED)
+	l.add_theme_color_override("font_color", _DIM)
 	return l
 
 # Vertical breathing room above a non-first section header.
@@ -85,7 +87,7 @@ func _section_spacer() -> Control:
 func _field_row(label_text: String, control: Control) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_theme_constant_override("separation", 14)
+	row.add_theme_constant_override("separation", _ROW_SEPARATION)
 
 	var lbl := Label.new()
 	lbl.text = label_text
@@ -96,6 +98,18 @@ func _field_row(label_text: String, control: Control) -> HBoxContainer:
 	row.add_child(lbl)
 	row.add_child(control)
 	return row
+
+# Explanatory text for the row above it, indented to that row's control column.
+func _row_note(text: String) -> MarginContainer:
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", _LABEL_COL_WIDTH + _ROW_SEPARATION)
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_size_override("font_size", _NOTE_FONT_SIZE)
+	l.add_theme_color_override("font_color", _DIM)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	margin.add_child(l)
+	return margin
 
 # Label + slider that fills + fixed-width value label on the right. Slider is set
 # to expand horizontally so its width tracks the row width.

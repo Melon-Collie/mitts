@@ -10,6 +10,7 @@ extends Control
 
 const _HOCKEY_SCENE_PATH := "res://Scenes/Hockey.tscn"
 
+var _title_column: Control = null  # logo + menu; hidden under the settings overlay
 var _button_column: Control = null
 var _loading_label: Label = null
 var _settings_container: Control = null
@@ -57,6 +58,7 @@ func _build_ui() -> void:
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(center)
+	_title_column = center
 
 	var vbox := VBoxContainer.new()
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -186,9 +188,7 @@ func _build_settings_overlay() -> void:
 	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 
 	var options := OptionsPanel.new()
-	options.close_requested.connect(func() -> void:
-		_settings_container.visible = false
-		_focus_title_menu())
+	options.close_requested.connect(func() -> void: _settings_container.visible = false)
 	panel.add_child(options)
 	_settings_panel = options
 
@@ -197,17 +197,29 @@ func _build_settings_overlay() -> void:
 	_settings_container.visible = false
 	_settings_container.add_child(overlay)
 	_settings_container.add_child(panel)
+	_settings_container.visibility_changed.connect(_on_settings_visibility_changed)
 	add_child(_settings_container)
 
 
 func _on_settings_pressed() -> void:
 	if _settings_container != null:
 		_settings_container.visible = true
-		# Controller: the settings overlay covers the title buttons, so wall focus
-		# off from them; the pad lands on the active tab's first control.
-		ControllerNav.set_subtree_focusable(_button_column, false)
-		if _settings_panel != null:
-			_settings_panel.focus_active_tab()
+
+
+# Driven off visibility so every close path (X, Cancel, Escape, a scrim click)
+# restores the title menu. The logo's glow halo is wider than the options panel
+# and shows through the scrim at its edges, so the title column hides outright.
+func _on_settings_visibility_changed() -> void:
+	var open: bool = _settings_container.visible
+	_title_column.visible = not open
+	if not open:
+		_focus_title_menu()
+		return
+	# Controller: wall focus off the title buttons; the pad lands on the active
+	# tab's first control.
+	ControllerNav.set_subtree_focusable(_button_column, false)
+	if _settings_panel != null:
+		_settings_panel.focus_active_tab()
 
 
 # Focus the title menu's first button (Play), deferred so it lands after layout.
@@ -244,7 +256,6 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _settings_container != null and _settings_container.visible:
 		if event.is_action_pressed(&"ui_cancel"):
 			_settings_container.visible = false
-			_focus_title_menu()
 			get_viewport().set_input_as_handled()
 
 

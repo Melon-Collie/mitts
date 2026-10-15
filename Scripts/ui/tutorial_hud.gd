@@ -138,8 +138,8 @@ func _build() -> void:
 
 	# Row 5: hint (hidden until hint delay expires)
 	_hint_label = Label.new()
-	_hint_label.add_theme_font_size_override("font_size", 11)
-	_hint_label.add_theme_color_override("font_color", MenuStyle.TEAL_DIM)
+	_hint_label.add_theme_font_size_override("font_size", 12)
+	_hint_label.add_theme_color_override("font_color", MenuStyle.TEXT_DIM)
 	_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_hint_label.visible = false
 	vbox.add_child(_hint_label)
