@@ -19,6 +19,9 @@ const OUTCOME_CHARS: String = "GsPw"
 # The deke's forward pace and duration; the caller picks how far across.
 const DEKE_S: float = 0.4
 const DEKE_FORWARD_M_S: float = 3.0
+# Every staged carrier skated in: from this far straight out, at this pace.
+const APPROACH_M: float = 4.0
+const APPROACH_M_S: float = 4.0
 
 var goal := Vector3(0.0, 0.0, GOAL_Z)
 # The keeper as he stood square on the passer, just before the last feed left.
@@ -39,14 +42,14 @@ func _init(goalie: Node, puck: Node, ctrl: GoalieController, shooter: Skater) ->
 
 # Settled and square on a carrier at `spot`. Returns the release point.
 func stage_set(spot: Vector3) -> Vector3:
-	_h.settle_ready(spot)
+	_settle_on(spot)
 	return spot
 
 
 # Settled square on a carrier at `passer`, then a feed travels loose to the
 # receiver waiting at `spot` at `speed`. Returns the release point.
 func stage_feed(spot: Vector3, passer: Vector3, speed: float) -> Vector3:
-	_h.settle_ready(passer)
+	_settle_on(passer)
 	_ctrl.fill_state(pre_feed_read)
 	_shooter.global_position = spot
 	_shooter.velocity = Vector3.ZERO
@@ -66,8 +69,13 @@ func stage_feed(spot: Vector3, passer: Vector3, speed: float) -> Vector3:
 # further out), who then dekes across onto it. Returns where the puck ends up,
 # which is the release point.
 func stage_deke(spot: Vector3, across: float) -> Vector3:
-	_h.settle_ready(Vector3(spot.x - across, 0.0, spot.z + DEKE_FORWARD_M_S * DEKE_S))
+	_settle_on(Vector3(spot.x - across, 0.0, spot.z + DEKE_FORWARD_M_S * DEKE_S))
 	return _h.deke_across(spot.x, DEKE_S, DEKE_FORWARD_M_S)
+
+
+# The keeper set on a carrier who skated in to `at` straight from up the ice.
+func _settle_on(at: Vector3) -> void:
+	_h.approach_and_settle(at, at - Vector3(0.0, 0.0, signf(GOAL_Z) * APPROACH_M), APPROACH_M_S)
 
 
 # The bot's release from the staged state: a one-timer leaves cold; everything

@@ -28,10 +28,9 @@ line is evaluation vs. feel, not "numbers are bad".
 
 SHOOT, PASS and CARRY are compared numerically, so all three price the shot
 through the value seam (`AIShotValue` / `score_shoot_value`). Leaving one leg on
-the hole geometry — which saturates at 1.0 while the seam tops out near 0.45 from
-any real spot — makes that leg win outright, and a hold priced in the wrong model
-is a permanent veto on the other two. The hole geometry is the truth for
-*executing* a committed shot (aim, loft, power); it is not the ranking currency.
+a different model makes that leg win or lose on scale alone, and a hold priced in
+the wrong model is a permanent veto on the other two. The committed shot is the
+seam's own pick (aim and loft), so what is priced is what is fired.
 
 The turnover COST is in the same currency as the gains it is subtracted from.
 `AIActionScoring.turnover_cost` (and `counter_rush_cost`) take `in_xg` for a
@@ -44,8 +43,8 @@ xG gains) overprices every in-zone turnover about tenfold.
 one.
 
 The giveaway bars (`SHOT_MIN_VALUE` 0.05, `PASS_MIN_VALUE` 0.02) are scale-bound
-to that seam — an honest NHL-calibrated goal probability where a clean mid-slot
-look is ~0.12. They are not transferable to the hole-geometry score.
+to that seam — odds of scoring on today's goalie with a first shot. They are not
+transferable to the hole-geometry score.
 
 ## Difficulty rides three independent axes
 
@@ -494,16 +493,34 @@ remains.
 
 - **Shot value — the ranking currency** (`AIShotValue`, `shot_value.gd`). Every
   "how good is a shot from here" the bots rank asks it, so the model behind it
-  can be replaced in that file alone. It is `XGBaseline`'s public logistic (log
-  distance and angle) plus two perceptions the public form marginalises away:
-  how far the keeper is displaced off the square he needs, and how much of the
-  mouth his body fills from in tight. Smooth and monotone, so the DIFFERENCE
-  between two nearby spots — the only thing a carry beam consumes — means
-  something. Its ordering is usable and its levels are not; fitting the levels
-  against logged shots is #578.
+  can be replaced in that file alone. It answers the odds of scoring on today's
+  goalie, read from `AIShotOdds`: the live `GoalieController`'s open set,
+  measured cell by cell (release spot × how he was beaten or set) and generated
+  into `generated/shot_field_data.gd` (`docs/shot-currency-plan.md`). A goalie
+  change is a regeneration (`.claude/hooks/generate-shot-field.sh`;
+  `test_shot_field_is_current.gd` fails until it is run), never an edit here.
+  - **Every measured carrier skated in** (`shot_odds_stager.gd`), so "set" is a
+    keeper who tracked the carry, rushed back off it, and settled. A carrier who
+    appears in tight with the keeper on his crease draws a committed slide,
+    which no carry the bots price ever produces.
+  - **The keeper is read as a Stance** — upright, down, or sealed on the post —
+    plus his offset off the square and his lateral speed; the field is kernel-
+    weighted over those within the four spots around the release. A pass is
+    priced from the passer, the keeper square on him, at the feed's travel and
+    flight. Outside `AIGoalieModel.GOALIE_HOME_M` the net is empty.
+  - **Odds are at one placement scatter** (`REFERENCE_SPREAD_RAD`): a property
+    of the chance, not the shooter (a wobblier tier misses more of the same
+    shots). First contact is the outcome: rebounds and screens are not in it
+    (#785), so a clean shot from range against a set keeper is worth ~0.
+  - Held against measured cells it was not generated at by
+    `test_shot_odds_vs_truth.gd`, whose error, concordance and pick-share
+    bounds are ratchets.
+  - The committed shot fires the field's own pick (`AIShotOdds.pick_shot_now`:
+    the aim and loft with the best odds), so the price and the shot are one.
 
-- **Shot geometry** (`open_net_danger`, the hole model) — the execution truth:
-  the aim, loft and pace of a committed shot, and the threat surfaces. The open
+- **Shot geometry** (`open_net_danger`, the hole model) — the defensive reads
+  (threat surfaces, the danger field) and the aim of a shot with no keeper
+  replicated. The open
   net is scored across the goalie holes (top/bottom corners + five-hole), each as
   the net it clears past his reaction-gated, height-appropriate cover.
   - **The goalie occludes as a body.** Each band's cover is a disc (he squares to

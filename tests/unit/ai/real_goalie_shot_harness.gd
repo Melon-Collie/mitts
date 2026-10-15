@@ -346,6 +346,52 @@ func settle_ready(shooter: Vector3, max_ticks: int = 400, tol: float = 0.0015) -
 	return max_ticks
 
 
+# Settled on a carrier who skated in to `spot`: `settle_ready` at `from`, then
+# carried in a straight line to `spot` at `speed_m_s`, then held there until the
+# goalie stops moving. A carrier who appears in tight with the goalie still on
+# his crease is not a set keeper: he answers the arrival by committing a slide.
+# Returns the ticks the hold took; `last_settle_went_down` reports a keeper who
+# dropped on the way or in the hold.
+func approach_and_settle(spot: Vector3, from: Vector3, speed_m_s: float,
+		max_ticks: int = 400, tol: float = 0.0015) -> int:
+	settle_ready(from)
+	var went_down: bool = last_settle_went_down
+	var dist: float = from.distance_to(spot)
+	var vel: Vector3 = (spot - from).normalized() * speed_m_s if dist > 0.001 else Vector3.ZERO
+	var ticks: int = int(dist / maxf(speed_m_s, 0.1) / DT)
+	for i: int in ticks:
+		var pos: Vector3 = from.lerp(spot, float(i + 1) / float(maxi(ticks, 1)))
+		_shooter.global_position = pos
+		_shooter.velocity = vel
+		_puck.global_position = pos
+		_puck.linear_velocity = Vector3.ZERO
+		_ctrl._physics_process(DT)
+		went_down = went_down or not _ctrl._sm.is_upright()
+	_shooter.global_position = spot
+	_shooter.velocity = Vector3.ZERO
+	var prev_depth: float = -1.0
+	var prev_x: float = INF
+	var stable: int = 0
+	for i: int in max_ticks:
+		_puck.global_position = spot
+		_puck.linear_velocity = Vector3.ZERO
+		_ctrl._physics_process(DT)
+		went_down = went_down or not _ctrl._sm.is_upright()
+		var d: float = _ctrl._current_depth
+		var x: float = _ctrl._current_x
+		if absf(d - prev_depth) < tol and absf(x - prev_x) < tol:
+			stable += 1
+			if stable >= 10:
+				last_settle_went_down = went_down
+				return i + 1
+		else:
+			stable = 0
+		prev_depth = d
+		prev_x = x
+	last_settle_went_down = went_down
+	return max_ticks
+
+
 # Publish a wind-up for `ticks` WITHOUT resetting or settling — the caller owns
 # the starting pose (use `settle_ready`). This is the composable half of
 # `hold_windup`, which bundles a reset and is documented as a trap.

@@ -1,7 +1,7 @@
 # Shot currency — the odds against today's goalie
 
-Status: **agreed design, not started.** The CLAUDE.md workflow applies: this doc
-is the plan, deviations get discussed first.
+Status: **agreed design; steps 1–2 done, step 3 in progress.** The CLAUDE.md
+workflow applies: this doc is the plan, deviations get discussed first.
 
 ## Decisions
 
@@ -22,8 +22,14 @@ is the plan, deviations get discussed first.
   so a pinhole found at one exact instant is not odds to bank on. It is applied
   at lookup, so changing it needs no re-measurement.
 - **First shot only.** Rebounds, screens and tips get no credit here; that is
-  #785, after the carrier work. Until then a set keeper reads as close to a
-  wall, and the bots work to move him before they shoot.
+  #785, after the carrier work. Until then a set keeper reads as a wall from
+  range (a clean first shot from 9.5 m out is ~0 against the Hard keeper), and
+  the bots work to move him or get in tight before they shoot.
+- **A set keeper is one who tracked the carrier in.** Every measured carrier
+  skates in to his spot (`shot_odds_stager.gd`). Teleported in tight with the
+  keeper reset to his crease, the shooter draws a committed slide and is
+  measured against a keeper mid-coil — up to 0.9 odds from 3 m where the
+  tracked keeper concedes about 0.4.
 - The goalie does not change. Everything below is the bots' model of him.
 
 ## 1. Why
@@ -160,8 +166,8 @@ The defensive reads move with it in step 3, so their absolute bars —
 
 ### Step 3 — switch the currency
 
-`AIShotValue.for_release` stays the one entry point; its body becomes the
-field (`AIShotOdds`). The defensive reads (`score_shoot`, `AIDangerField`) move
+`AIShotValue` stays the one seam (`now`, `set_keeper`, `feed`); its body becomes
+the field (`AIShotOdds`). The defensive reads (`score_shoot`, `AIDangerField`) move
 to it too, so offence and defence price a shot the same way. Consequences:
 
 - `SHOT_MIN_VALUE` / `PASS_MIN_VALUE` become bars on real odds and are re-set.
