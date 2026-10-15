@@ -26,5 +26,5 @@ native/src/*.obj
 # the editor hot-reloads from a tilde-prefixed shadow copy beside the original.
 ~*.dll
 
-# Offscreen arena renders (.claude/hooks/render-arena.sh) — output, not source.
+# Offscreen renders (.claude/hooks/render-arena.sh, render-ui.sh) — output, not source.
 .preview/

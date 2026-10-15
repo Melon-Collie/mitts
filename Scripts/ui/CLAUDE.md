@@ -124,6 +124,14 @@ screen — it uppercases the button's current text, so call it **after** setting
 `btn.text`, and any later dynamic text must supply an uppercase string itself
 (`Button` has no uppercase property).
 
+## Seeing a screen
+
+`.claude/hooks/render-ui.sh` renders the menus and HUD offscreen (root
+`CLAUDE.md` has the constraints). A new overlay gets a row in
+`tools/ui_preview_runner.gd`'s shot list that opens it through the handler its
+button calls. The runner dismisses every shot with Escape, so a popup that
+ignores `ui_cancel` fails the run.
+
 ## Scene files
 
 `.tscn` files and complex `.tres` resources are authored by the user in the Godot
