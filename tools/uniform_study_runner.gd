@@ -13,8 +13,24 @@ const BUILD_HEIGHT_IN: int = 73
 const BUILD_WEIGHT_LB: int = 201
 
 # [team slot, side (0 home, 1 away)] per row: a yoke kit, a contrast-sleeve kit,
-# a white sweater with white caps, a striped-hem kit.
+# a white sweater with white caps, a striped-hem kit. UNIFORM_STUDY_KITS
+# overrides it ("0:0,6:1" — slot:side).
 const KITS: Array = [[6, 0], [7, 0], [4, 1], [0, 0], [2, 1]]
+
+# Held arm poses, as [ticks, {aim (relative to the skater), shoot, slap}]
+# segments — the arm-swinging subset of pose_capture_runner.gd's set. Every kit
+# is shot in every pose named by UNIFORM_STUDY_POSES (default: rest).
+const POSES: Dictionary = {
+	"rest": [[60, {"aim": Vector3(0.4, 0.0, -2.5)}]],
+	"cross_body": [[20, {"aim": Vector3(0.4, 0.0, -2.0)}], [50, {"aim": Vector3(-2.6, 0.0, -0.4)}]],
+	"forehand_wide": [[20, {"aim": Vector3(0.4, 0.0, -2.0)}], [50, {"aim": Vector3(2.6, 0.0, -0.2)}]],
+	"wrister_follow": [[10, {"aim": Vector3(0.4, 0.0, -2.0)}],
+			[45, {"aim": Vector3(1.4, 0.0, -3.0), "shoot": true}], [14, {"aim": Vector3(1.4, 0.0, -3.0)}]],
+	"slap_coil": [[10, {"aim": Vector3(0.4, 0.0, -2.0)}],
+			[58, {"aim": Vector3(0.8, 0.0, -3.2), "slap": true}]],
+	"slap_follow": [[10, {"aim": Vector3(0.4, 0.0, -2.0)}],
+			[58, {"aim": Vector3(0.8, 0.0, -3.2), "slap": true}], [16, {"aim": Vector3(0.8, 0.0, -3.2)}]],
+}
 
 # Camera offset and aim, relative to the skater's origin (hip height). The
 # skater faces −Z.
@@ -26,7 +42,6 @@ const SHOTS: Array = [
 	{"name": "high_back", "cam": Vector3(0.8, 1.9, 2.0), "aim": Vector3(0.0, 0.2, 0.0)},
 	{"name": "game", "game_cam": true},
 ]
-const POSE_TICKS: int = 60
 const _GAME_ZOOM: float = 3.0
 
 
@@ -60,7 +75,12 @@ func _run() -> void:
 	var skater_scene: PackedScene = load("res://Scenes/Skater.tscn")
 	var puck_scene: PackedScene = load("res://Scenes/Puck.tscn")
 	var tiles: Array[Image] = []
-	for kit: Array in KITS:
+	var rows: Array[Array] = []
+	for kit: Array in _kits():
+		for pose: String in _pose_names():
+			rows.append([kit, pose])
+	for row: Array in rows:
+		var kit: Array = row[0]
 		var puck: Puck = puck_scene.instantiate() as Puck
 		add_child(puck)
 		puck.visible = false
@@ -84,14 +104,23 @@ func _run() -> void:
 
 		controller._pose.facing = Vector2(0.0, -1.0)
 		skater.set_facing(controller._pose.facing)
+		puck.set_carrier(skater)
+		controller.on_puck_picked_up_network()
 		var input := InputState.new()
-		input.mouse_world_pos = skater.global_position + Vector3(0.4, 0.0, -2.5)
-		for _t: int in POSE_TICKS:
-			controller._process_input(input, DT)
-			skater._physics_process(DT)
-			skater._process(DT)
-		print("[uniform_study] %s %s" % [TeamColorRegistry.get_preset_name(int(kit[0])),
-				"home" if int(kit[1]) == 0 else "away"])
+		for step: Array in POSES[row[1]]:
+			var spec: Dictionary = step[1]
+			for t: int in int(step[0]):
+				input.delta = DT
+				input.mouse_world_pos = skater.global_position + (spec.aim as Vector3)
+				input.shoot_held = spec.get("shoot", false)
+				input.shoot_pressed = input.shoot_held and t == 0
+				input.slap_held = spec.get("slap", false)
+				input.slap_pressed = input.slap_held and t == 0
+				controller._process_input(input, DT)
+				skater._physics_process(DT)
+				skater._process(DT)
+		print("[uniform_study] %s %s, %s" % [TeamColorRegistry.get_preset_name(int(kit[0])),
+				"home" if int(kit[1]) == 0 else "away", row[1]])
 
 		for shot: Dictionary in SHOTS:
 			if bool(shot.get("game_cam", false)):
@@ -109,8 +138,31 @@ func _run() -> void:
 		skater.queue_free()
 		puck.queue_free()
 		await get_tree().process_frame
-	_save_sheet(tiles)
+	_save_sheet(tiles, rows.size())
 	get_tree().quit()
+
+
+func _kits() -> Array:
+	var requested: String = OS.get_environment("UNIFORM_STUDY_KITS")
+	if requested.is_empty():
+		return KITS
+	var out: Array = []
+	for token: String in requested.split(",", false):
+		var parts: PackedStringArray = token.split(":")
+		out.append([int(parts[0]), int(parts[1]) if parts.size() > 1 else 0])
+	return out
+
+
+func _pose_names() -> Array[String]:
+	var out: Array[String] = []
+	for name: String in OS.get_environment("UNIFORM_STUDY_POSES").split(",", false):
+		if POSES.has(name.strip_edges()):
+			out.append(name.strip_edges())
+		else:
+			push_warning("[uniform_study] unknown pose '%s'" % name)
+	if out.is_empty():
+		out.append("rest")
+	return out
 
 
 func _build_stage() -> void:
@@ -162,13 +214,12 @@ func _frame_as_the_game_does(skater: Skater) -> void:
 	_camera.rotation_degrees = Vector3(-tilt, 0.0, 0.0)
 
 
-func _save_sheet(tiles: Array[Image]) -> void:
+func _save_sheet(tiles: Array[Image], rows: int) -> void:
 	var out_dir: String = OS.get_environment("UNIFORM_STUDY_OUT")
 	if out_dir.is_empty():
 		out_dir = "user://uniform_study"
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	var cols: int = SHOTS.size()
-	var rows: int = KITS.size()
 	var sheet := Image.create_empty(cols * TILE, rows * TILE, false, Image.FORMAT_RGBA8)
 	sheet.fill(BACKGROUND)
 	for i: int in tiles.size():

@@ -10,7 +10,8 @@ extends SceneTree
 #       --rendering-driver opengl3 --rendering-method gl_compatibility \
 #       --audio-driver Dummy -s res://tools/uniform_study.gd
 #
-# UNIFORM_STUDY_OUT sets the output directory (default user://uniform_study).
+# UNIFORM_STUDY_OUT sets the output directory (default user://uniform_study);
+# UNIFORM_STUDY_KITS and UNIFORM_STUDY_POSES pick the rows (see the runner).
 # A two-line bootstrap for the same reason as pose_capture.gd: the work names
 # Skater and SkaterController, which only compile once the autoloads are up.
 const RUNNER: String = "res://tools/uniform_study_runner.gd"

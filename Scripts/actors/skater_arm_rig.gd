@@ -18,10 +18,11 @@ extends RefCounted
 # this file only reads them.
 
 # Fraction of the way the cap's pole leans from its rest hang toward the live
-# upper-arm direction. Partial follow: the deltoid engages with the arm but
-# stays seated on the torso at extreme reaches (a full follow points the whole
-# pad down a cross-body arm and opens a gap at the trap line).
-const _SHOULDER_CAP_FOLLOW: float = 0.6
+# upper-arm direction. Full: the cap is the top of the sleeve and turns with it,
+# so the shoulder patch never slides round the arm as it swings. The cap's base
+# tucks under the torso's trapezius slope, which is what keeps a cross-body arm
+# from opening a gap at the trap line.
+const _SHOULDER_CAP_FOLLOW: float = 1.0
 # Rest pole in upper-body space for the RIGHT cap (x mirrors for the left):
 # down, a touch outboard and forward — the deltoid's hang on a relaxed arm.
 const _SHOULDER_CAP_REST_POLE := Vector3(0.32, -0.93, -0.17)
