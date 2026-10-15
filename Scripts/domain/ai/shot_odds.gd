@@ -76,8 +76,7 @@ static var _flight := PackedFloat32Array()
 static var _aim_odds := PackedFloat32Array()
 static var _aims_per_cell: int = 0
 # Scratch for one query: each matching cell's share of the answer. Static, so
-# queries run on one thread at a time — the AI worker, as AIDangerField's memo
-# assumes.
+# queries must run on one thread at a time — the AI worker.
 static var _q_cells := PackedInt32Array()
 static var _q_weights := PackedFloat32Array()
 static var _q_blend := PackedFloat32Array()

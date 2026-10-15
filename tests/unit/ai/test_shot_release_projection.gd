@@ -20,7 +20,7 @@ extends GutTest
 # metre sideways is the difference between a corner and a miss.
 #
 # Nothing tested it, and nothing could: the shot-outcome instruments
-# (shot_sim_harness, real_goalie_shot_harness) both fire from a GIVEN release
+# (real_goalie_shot_harness, the shot-field stager) both fire from a GIVEN release
 # point, so a projection error is invisible to them by construction. This drives
 # the real state machine and the real movement physics through a full press
 # instead, and measures the gap.

@@ -57,7 +57,7 @@ calibration: a monotonicity (a wider angle never scores higher), a bound, an
 ordering that is a physical necessity, an identity (a keeper outside the
 shooting cone concedes the empty net), a comparison against a live constant
 rather than its current value. They are ordinary assertions and a tuning change
-never breaks them unless it breaks the physics. `test_shot_danger_properties.gd`
+never breaks them unless it breaks the physics. `tests/unit/ai/test_shot_odds.gd`
 is the model.
 
 **Calibration values** — what the model currently says at the doctrine's

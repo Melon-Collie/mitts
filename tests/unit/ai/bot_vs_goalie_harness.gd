@@ -23,8 +23,8 @@ extends RefCounted
 # This joins them. The bot picks the shot; the real keeper tries to stop it.
 #
 # ── WHAT IS REAL ────────────────────────────────────────────────────────────
-#   * the bot's decision to shoot, and WHICH shot — `best_shot_aim` /
-#     `best_shot_loft` / the scorer's own release speed, read off the live
+#   * the bot's decision to shoot, and WHICH shot — the carrier's
+#     `shot_aim_point` / `shot_loft_level` / release speed, read off the live
 #     carrier role at the moment it fires
 #   * its steering and pace into the release (duel_harness movement)
 #   * the goalie: real GoalieController on the real Goalie.tscn, ticked once per

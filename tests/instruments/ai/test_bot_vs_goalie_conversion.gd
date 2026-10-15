@@ -10,7 +10,7 @@ extends GutTest
 # goalie; the goalie plays as `GoalieController`; and until this file nothing
 # compared their OUTCOMES. Every other sweep either scripts the shooter (the
 # real-goalie harness, the xG benchmark, the beatability sweep) or models the
-# save (rush_sim_harness), so the balance was set by the gap between two models
+# save, so the balance was set by the gap between two models
 # that no test could see. That is why the sweeps read "wall" while the logged
 # games read 0.614.
 #

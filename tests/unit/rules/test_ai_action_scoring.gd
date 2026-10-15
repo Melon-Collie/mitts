@@ -324,13 +324,7 @@ func test_own_slot_side_of_crease_feed_blocked() -> void:
 	assert_true(AINetObstacle.pass_crosses_own_slot(from, to, GOAL.z))
 
 
-# ── Shot danger: the seven-hole model ────────────────────────────────────────
-# score_shoot rates a shot by the best of the seven goalie holes (open_net_danger)
-# — top/bottom corners, five-hole, armpits — each scored as the net it clears past
-# the goalie's height-appropriate, reaction-gated cover; best_shot_loft returns the
-# winning hole's elevation. Its shape over angle, range, keeper placement and
-# traffic, and the calibrated values, are test_shot_danger_properties.gd.
-# (GOAL at +Z; a lower goalie z = further OUT.)
+# ── Zone predicates ──────────────────────────────────────────────────────────
 
 func test_in_offensive_zone_past_blue_line() -> void:
 	var deep := Vector3(0.0, 0.0, 20.0)          # well inside the zone
