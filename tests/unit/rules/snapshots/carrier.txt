@@ -59,7 +59,7 @@ dead-sharp beside the net, keeper on the near post: winning hold	(-0.3, 0.8)
 69 deg off the normal, keeper squared 1.2 m out: shoot-now value	0.1253
 swarmed on the blade in our slot: intent	CARRY
 swarmed in our slot a stride looser: intent	CARRY
-past centre, stand-up line at gap, open backfield: pick	CARRY to (-1.3, 0.1)
+past centre, stand-up line at gap, open backfield: pick	CARRY to (2.0, 5.3)
 past centre, a loose pair ahead: pick	CARRY to (0.0, -21.6)
 dump-in past centre, one D ahead: rests at	(-2.0, -18.0)
 pinned in our zone by a head-on forecheck, outlet up the wall: pick	PASS to 2

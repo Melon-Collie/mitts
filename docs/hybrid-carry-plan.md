@@ -1,6 +1,6 @@
 # Hybrid carry — a far destination, the next half-second rolled out
 
-Status: **agreed design; step 1 done, step 2 next.** The CLAUDE.md workflow applies: this
+Status: **agreed design; steps 1–2 done, step 3 next.** The CLAUDE.md workflow applies: this
 doc is the plan, deviations get discussed first.
 
 ## Decisions
@@ -152,6 +152,18 @@ the ice. A native kernel can make the full-rate step affordable later.
 The long-range candidates move into a destination menu with hysteresis; the
 near move is still today's anchor steering, aimed at the destination. Mostly a
 refactor: the duels and rush sims should not move much.
+
+**Done**, with one change of order. `AICarrierDestinations` holds the menu and
+the hysteresis; every destination is priced in full by today's candidate
+scoring, and only the chosen one competes as an anchor. Regroup wins where it
+should (a set stand-up line past centre, nothing to pass to — the snapshot's one
+moved row). The near candidates still orient on the slot: oriented on the
+destination, they lost the entry. A destination is priced as one straight carry
+all the way, so a defender anywhere on that line zeroes the forward ones and
+regroup wins, and a fan pointed back at regroup has no entry candidate — the
+carrier stood still short of the blue line with room to enter. Orienting the
+near move on the destination moves to step 3, where the rollout's seven inputs
+still cover every direction.
 
 ### Step 3 — the near move
 

@@ -6,7 +6,7 @@ extends RefCounted
 # AICarrierCarrySearch prices the menu each search and hands the totals back to
 # choose(), which keeps the incumbent unless a challenger beats it by the
 # action hysteresis margin, so the plan does not flicker between two near-equal
-# places. The search orients its near candidates on the chosen one.
+# places.
 #
 # Left and right are the carrier's, facing the goal he attacks.
 
@@ -46,7 +46,8 @@ const WALKOUT_FRONT_M: float = 0.7
 # (AIZoneCoverage.LOW_ZONE_DEPTH_M's value).
 const WHEEL_EXIT_UP_ICE_M: float = 8.0
 # A destination this close is where the carrier already is: standing still is
-# that plan, and it is always in the compete.
+# that plan, and it is always in the compete. The slot is exempt: the drive at
+# the net is still the plan from on it.
 const ARRIVED_M: float = 2.0
 
 # The menu, index-matched, refilled by fill().
@@ -72,7 +73,8 @@ func fill(ctx: RoleContext) -> void:
 	var own: float = ctx.own_goal_dir
 	# +X is the carrier's left when he attacks +Z.
 	var left: float = -own
-	_add(ctx, Kind.SLOT, AICarrierField.slot_anchor(own))
+	kinds.append(Kind.SLOT)
+	spots.append(AICarrierField.slot_anchor(own))
 	var in_own_zone: bool = own * self_pos.z > GameRules.BLUE_LINE_Z
 	var wide_x: float = GameRules.RINK_HALF_WIDTH - WIDE_LANE_WALL_INSET_M
 	if AIActionScoring.in_offensive_zone(self_pos, ctx.attacking_goal_pos):

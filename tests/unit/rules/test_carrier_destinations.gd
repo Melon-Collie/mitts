@@ -58,9 +58,11 @@ func test_behind_our_net_in_5v5_the_wheel_appears_only_round_the_cage() -> void:
 
 
 func test_a_destination_he_is_already_at_is_not_on_the_menu() -> void:
-	var d := _menu(Vector3(0.0, 0.0, 0.0))
-	var at := _menu(_spot(d, K.WIDE_LEFT) + Vector3(0.0, 0.0, 1.0))
-	assert_false(at.kinds.has(K.WIDE_LEFT))
+	var d := _menu(Vector3(1.0, 0.0, 0.0))
+	var at := _menu(_spot(d, K.REGROUP) + Vector3(0.0, 0.0, -1.0))
+	assert_false(at.kinds.has(K.REGROUP))
+	var on_slot := _menu(AICarrierField.slot_anchor(1.0))
+	assert_true(on_slot.kinds.has(K.SLOT), "except the slot: the drive at the net is still on")
 
 
 func test_the_incumbent_keeps_the_plan_inside_the_margin() -> void:

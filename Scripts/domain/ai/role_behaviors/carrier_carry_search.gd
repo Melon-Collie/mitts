@@ -4,8 +4,9 @@ extends RefCounted
 # The carrier's CARRY: where to take the puck next. The destination it carries
 # FOR (AICarrierDestinations: the slot, the wide lanes, the zone exits, post
 # walkouts, the 5v5 wheel, regroup) is chosen from the menu with hysteresis; the
-# near candidates — the field-derived forward fan, the rear ring, the directed
-# evasion seam — are oriented on it and compete with it and with standing still.
+# near candidates — the field-derived forward fan and the rear ring, oriented on
+# the slot, and the directed evasion seam — compete with it and with standing
+# still.
 # Each is scored on arrival value, the lane and safety of getting there and the
 # pass option it opens, the near ones under a two-ply beam. AIRoleCarrier owns
 # one over its AICarrierField, calls forward_space() then search() in the commit
@@ -159,8 +160,7 @@ func _init(field: AICarrierField) -> void:
 #   - The chosen destination (see AICarrierDestinations), each on the menu
 #     priced in full and the incumbent kept by hysteresis
 #   - Up to 6 field-derived FORWARD candidates: the space fan's best bearings
-#     toward the destination at two fractions of the planning beat (see
-#     CARRY_FIELD_*)
+#     at two fractions of the planning beat (see CARRY_FIELD_*)
 #   - Up to 10 REAR/LATERAL candidates: the five bearings the fan does not
 #     span, each at two fractions of that bearing's OWN beat reach (see
 #     _REAR_ANGLES)
@@ -209,13 +209,24 @@ func search(ctx: RoleContext, shoot_now_score: float,
 	_beam_cost.clear()
 
 	# ── The destination ─────────────────────────────────────────────────────
-	# Every destination on the menu is priced honestly (no prune bound): the
-	# hysteresis compares totals, and a pruned one has none.
+	# The incumbent is priced first and honestly; a challenger only matters if it
+	# beats the incumbent's hysteresis key and every challenger before it, so it
+	# is priced under that bound (exact: a pruned one cannot be chosen).
 	_dest.fill(ctx)
-	_dest_totals.clear()
+	_dest_totals.resize(_dest.kinds.size())
+	_dest_totals.fill(-INF)
+	var key_bound: float = -INF
+	var incumbent: int = _dest.kinds.find(_dest.chosen_kind)
+	if incumbent >= 0:
+		var t: float = _score_destination(ctx, incumbent, our_goalie, behind_net, -INF)
+		_dest_totals[incumbent] = t
+		key_bound = t * (1.0 + AIActionScoring.ACTION_HYSTERESIS_MARGIN_FRAC) if t > 0.0 else t
 	for i: int in _dest.kinds.size():
-		_dest_totals.append(_score_destination(ctx, _dest.kinds[i], _dest.spots[i],
-				our_goalie, behind_net))
+		if i == incumbent:
+			continue
+		var t: float = _score_destination(ctx, i, our_goalie, behind_net, key_bound)
+		_dest_totals[i] = t
+		key_bound = maxf(key_bound, t)
 	_dest.choose(_dest_totals)
 	destination_kind = _dest.chosen_kind
 	destination = _dest.chosen_spot
@@ -231,10 +242,8 @@ func search(ctx: RoleContext, shoot_now_score: float,
 		best_score = _dest.chosen_total
 	_beam_prune_bound = maxf(stand_total, best_score)
 
-	# Forward = toward the destination; toward the slot when there is none, or
-	# the attacking-goal axis when the bot is on it.
-	var aim: Vector3 = destination if destination_kind >= 0 \
-			else AICarrierField.slot_anchor(ctx.own_goal_dir)
+	# Forward = toward the slot; the attacking-goal axis when the bot is on it.
+	var aim: Vector3 = AICarrierField.slot_anchor(ctx.own_goal_dir)
 	var to_aim_x: float = aim.x - self_pos.x
 	var to_aim_z: float = aim.z - self_pos.z
 	var to_aim_len_sq: float = to_aim_x * to_aim_x + to_aim_z * to_aim_z
@@ -365,17 +374,20 @@ func reset() -> void:
 	destination = Vector3.INF
 
 
-# The full value of carrying to destination `kind` at `spot`, -INF when it
-# cannot be carried to. Scored outside the beam: its row is dropped again.
-func _score_destination(ctx: RoleContext, kind: int, spot: Vector3,
-		our_goalie: Vector3, behind_net: bool) -> float:
+# The full value of carrying to menu destination `i`, -INF when it cannot be
+# carried to or cannot beat `best_so_far`. Scored outside the beam: its row is
+# dropped again.
+func _score_destination(ctx: RoleContext, i: int, our_goalie: Vector3, behind_net: bool,
+		best_so_far: float) -> float:
+	var kind: int = _dest.kinds[i]
+	var spot: Vector3 = _dest.spots[i]
 	if AICarrierDestinations.is_wheel(kind):
-		return _score_wheel_candidate(ctx, spot, our_goalie, -INF)
+		return _score_wheel_candidate(ctx, spot, our_goalie, best_so_far)
 	if not _candidate_ice_legal(spot, behind_net):
 		return -INF
 	var rows_before: int = _beam_total.size()
 	var total: float = _score_move_candidate(ctx, spot, our_goalie,
-			AICarrierDestinations.is_walkout(kind))
+			AICarrierDestinations.is_walkout(kind), best_so_far)
 	_beam_pos.resize(rows_before)
 	_beam_total.resize(rows_before)
 	_beam_dest.resize(rows_before)

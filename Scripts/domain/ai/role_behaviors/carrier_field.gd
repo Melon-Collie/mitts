@@ -229,7 +229,7 @@ static func zone_taken(ctx: RoleContext) -> bool:
 			puck + ctx.self_velocity * AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, goal)
 
 
-# OZ slot anchor — the long-range carry candidate and the forward axis of the
+# OZ slot anchor — the slot destination and the forward axis of the
 # carry search, a fixed depth off the attacking goal line.
 static func slot_anchor(own_goal_dir: float) -> Vector3:
 	var slot_z: float = -own_goal_dir * (GameRules.GOAL_LINE_Z - GameRules.SLOT_DIST_M)
