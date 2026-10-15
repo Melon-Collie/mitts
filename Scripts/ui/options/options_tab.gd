@@ -135,12 +135,3 @@ func _value_label(text: String, min_width: int = _VALUE_COL_WIDTH) -> Label:
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	return l
-
-# Wide action button (used by the Customization export rows).
-func _make_button(label: String) -> Button:
-	var btn := Button.new()
-	btn.text = label
-	btn.custom_minimum_size = Vector2(308, 48)
-	btn.add_theme_font_size_override("font_size", 20)
-	SoundManager.wire_button(btn)
-	return btn

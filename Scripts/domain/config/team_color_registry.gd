@@ -32,8 +32,8 @@ class_name TeamColorRegistry
 const DEFAULT_HOME_SLOT: int = 0
 const DEFAULT_AWAY_SLOT: int = 1
 
-const _USER_JSON_PATH: String = "user://team_colors.json"
-const _RES_JSON_PATH:  String = "res://data/team_colors.json"
+const USER_JSON_PATH: String = "user://team_colors.json"
+const RES_JSON_PATH:  String = "res://data/team_colors.json"
 const _SCHEMA_ID: String = "mitts.jersey.v2"
 
 # Fallback "light" (away body) for presets that predate the field or come
@@ -43,13 +43,15 @@ const _UI_WHITE: Color = Color(0.949, 0.957, 0.969)  # #F2F4F7
 
 static var _presets: Array[Dictionary] = []
 static var _loaded: bool = false
+# The file the presets came from; empty when the hardcoded fallback is in use.
+static var _loaded_path: String = ""
 
 
 static func ensure_loaded() -> void:
 	if _loaded:
 		return
 	_loaded = true
-	for path: String in [_USER_JSON_PATH, _RES_JSON_PATH]:
+	for path: String in [USER_JSON_PATH, RES_JSON_PATH]:
 		if _try_load_from(path):
 			return
 	push_error("TeamColorRegistry: no valid JSON found in user:// or res://")
@@ -160,16 +162,10 @@ static func _try_load_from(path: String) -> bool:
 	var text: String = file.get_as_text()
 	file.close()
 	var data: Variant = JSON.parse_string(text)
-	if not data is Dictionary:
-		push_error("TeamColorRegistry: malformed JSON in %s" % path)
+	if not accepts(data):
+		push_error("TeamColorRegistry: %s is not a %s file with teams" % [path, _SCHEMA_ID])
 		return false
 	var data_dict: Dictionary = data
-	if data_dict.get("schema", "") != _SCHEMA_ID:
-		push_error("TeamColorRegistry: %s schema mismatch (need %s)" % [path, _SCHEMA_ID])
-		return false
-	if not data_dict.has("teams"):
-		push_error("TeamColorRegistry: %s missing 'teams' array" % path)
-		return false
 	_presets.clear()
 	for entry: Dictionary in data_dict.teams:
 		_presets.append({
@@ -180,10 +176,23 @@ static func _try_load_from(path: String) -> bool:
 			"home":      _parse_kit(entry.get("home", {})),
 			"away":      _parse_kit(entry.get("away", {})),
 		})
-	if _presets.is_empty():
-		push_warning("TeamColorRegistry: %s contained no valid teams" % path)
-		return false
+	_loaded_path = path
 	return true
+
+
+# Whether parsed JSON is a colors file the loader takes: the schema, and at
+# least one team. The Options menu asks this of a player's edited copy.
+static func accepts(data: Variant) -> bool:
+	if not data is Dictionary:
+		return false
+	var d: Dictionary = data
+	return d.get("schema", "") == _SCHEMA_ID and d.get("teams") is Array \
+			and not (d.teams as Array).is_empty()
+
+
+static func loaded_path() -> String:
+	ensure_loaded()
+	return _loaded_path
 
 
 static func _parse_kit(raw: Dictionary) -> Dictionary:
@@ -268,6 +277,7 @@ static func _parse_optional_color(hex: Variant) -> Variant:
 
 
 static func _load_hardcoded_fallback() -> void:
+	_loaded_path = ""
 	_presets.clear()
 	_presets.append(_hardcoded_pomegranate())
 	_presets.append(_hardcoded_blueberry())

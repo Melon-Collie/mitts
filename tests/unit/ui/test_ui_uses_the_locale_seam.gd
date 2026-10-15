@@ -68,7 +68,7 @@ const _GRANDFATHERED: Dictionary[String, int] = {
 	"res://Scripts/ui/options/audio_tab.gd": 7,
 	"res://Scripts/ui/options/camera_tab.gd": 5,
 	"res://Scripts/ui/options/controls_tab.gd": 54,
-	"res://Scripts/ui/options/gameplay_tab.gd": 23,
+	"res://Scripts/ui/options/gameplay_tab.gd": 13,
 	"res://Scripts/ui/options/video_tab.gd": 26,
 	"res://Scripts/ui/options_panel.gd": 10,
 	"res://Scripts/ui/passing_drill_hud.gd": 9,

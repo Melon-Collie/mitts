@@ -1,16 +1,17 @@
 class_name OptionsGameplayTab
 extends OptionsTab
 
-# Gameplay tab — general/gameplay toggles, plus the file-export "Customization"
-# section and the data-sharing "Privacy" section.
+# Gameplay tab — general/gameplay toggles, plus the "Customization" section
+# (editable copies of the team colors and bot roster) and the data-sharing
+# "Privacy" section.
 
 var _locale_btn: OptionButton = null
 var _attack_up_check: CheckButton = null
 var _self_beacon_mode_btn: OptionButton = null
 var _freeplay_goalie_btn: OptionButton = null
 var _share_stats_check: CheckButton = null
-var _export_status_label: Label = null
-var _bot_export_status_label: Label = null
+var _colors_file: CustomDataFile = null
+var _bots_file: CustomDataFile = null
 
 func _build_content() -> void:
 	add_child(_section_header("General"))
@@ -63,26 +64,21 @@ func _build_content() -> void:
 	add_child(_field_row("Free Play Goalie", _freeplay_goalie_btn))
 
 	add_child(_section_spacer())
-	add_child(_section_header("Customization"))
+	add_child(_section_header(tr("OPTIONS_SECTION_CUSTOMIZATION")))
 
-	var export_btn := _make_button("Export Colors File...")
-	export_btn.custom_minimum_size = Vector2(260, 40)
-	export_btn.add_theme_font_size_override("font_size", 16)
-	export_btn.pressed.connect(_on_export_colors_pressed)
-	add_child(_field_row("Custom palette", export_btn))
+	_colors_file = CustomDataFile.new(TeamColorRegistry.RES_JSON_PATH,
+			TeamColorRegistry.USER_JSON_PATH, TeamColorRegistry.accepts,
+			TeamColorRegistry.loaded_path, "teams", "TEAM_COLORS_FILE_OUTDATED")
+	add_child(_field_row(tr("OPTIONS_TEAM_COLORS_FILE"), _colors_file.build_buttons(self)))
+	add_child(_row_note(tr("OPTIONS_TEAM_COLORS_FILE_NOTE")))
+	add_child(_colors_file.build_status())
 
-	_export_status_label = _make_status_label()
-	add_child(_export_status_label)
-
-	var bots_export_btn := _make_button("Export Bots File...")
-	bots_export_btn.custom_minimum_size = Vector2(260, 40)
-	bots_export_btn.add_theme_font_size_override("font_size", 16)
-	bots_export_btn.pressed.connect(_on_export_bots_pressed)
-	add_child(_field_row("Custom bots", bots_export_btn))
-	add_child(_row_note("Edit AI bot names, numbers, and attributes. As host, your roster is used for the whole lobby. Builds over the point-buy budget reset to medium."))
-
-	_bot_export_status_label = _make_status_label()
-	add_child(_bot_export_status_label)
+	_bots_file = CustomDataFile.new(BotIdentityRegistry.RES_JSON_PATH,
+			BotIdentityRegistry.USER_JSON_PATH, BotIdentityRegistry.accepts,
+			BotIdentityRegistry.loaded_path)
+	add_child(_field_row(tr("OPTIONS_BOTS_FILE"), _bots_file.build_buttons(self)))
+	add_child(_row_note(tr("OPTIONS_BOTS_FILE_NOTE")))
+	add_child(_bots_file.build_status())
 
 	add_child(_section_spacer())
 	add_child(_section_header("Privacy"))
@@ -96,49 +92,6 @@ func _build_content() -> void:
 	add_child(_row_note("Uploads match results so you can track your career. "
 		+ "With this off, the Career menu and replay playback are unavailable — "
 		+ "both are built from your uploaded games."))
-
-# The two export status labels share the same style.
-func _make_status_label() -> Label:
-	var l := Label.new()
-	l.add_theme_font_size_override("font_size", 12)
-	l.add_theme_color_override("font_color", _MUTED)
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.custom_minimum_size = Vector2(0, 0)
-	return l
-
-func _on_export_colors_pressed() -> void:
-	_export_user_file("res://data/team_colors.json", "user://team_colors.json", _export_status_label)
-
-func _on_export_bots_pressed() -> void:
-	_export_user_file("res://data/bot_identities.json", "user://bot_identities.json", _bot_export_status_label)
-
-# Copies a bundled res:// data file to its editable user:// counterpart and
-# reports the absolute path (via the given status label) so the player can find
-# and edit it. Shared by the Team Colors and Bot Roster export buttons.
-func _export_user_file(src_path: String, dst_path: String, status_label: Label) -> void:
-	var src_file := FileAccess.open(src_path, FileAccess.READ)
-	if src_file == null:
-		status_label.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3, 1.0))
-		status_label.text = "Error: bundled file not found."
-		return
-	var content: String = src_file.get_as_text()
-	src_file.close()
-	var existed: bool = FileAccess.file_exists(dst_path)
-	var dst_file := FileAccess.open(dst_path, FileAccess.WRITE)
-	if dst_file == null:
-		status_label.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3, 1.0))
-		status_label.text = "Error: could not write to user data folder."
-		return
-	dst_file.store_string(content)
-	dst_file.close()
-	var global_path: String = ProjectSettings.globalize_path(dst_path)
-	status_label.add_theme_color_override("font_color", _DIM)
-	# Both rosters are read once and cached for the process lifetime (the
-	# registries' static `_loaded` guard), so an edit only takes effect on the
-	# next launch — tell the player so they don't think their changes were lost.
-	status_label.text = "%s:\n%s\nEdit it, then restart the game to apply your changes." % [
-			"Overwrote" if existed else "Saved", global_path]
 
 # Stored-code form of the language dropdown: "" for "System default" (index 0),
 # else the shipped locale's code.
