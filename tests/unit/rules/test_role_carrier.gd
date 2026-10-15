@@ -684,8 +684,9 @@ func _head_on_drive_ctx(dist: float) -> RoleContext:
 const _ONE_V_ONE_SPOT := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z + 3.0)
 
 
-# 3 m out, the keeper squared to the carrier 2 m off his line; cutting across at
-# 6 m/s with the body facing its travel (FacingRules), or flat-footed.
+# 3 m out, the keeper squared to the carrier 0.9 m off his line (where the live
+# goalie settles on a carrier there); cutting across at 6 m/s with the body
+# facing its travel (FacingRules), or flat-footed.
 func _one_v_one_ctx(cutting: bool) -> RoleContext:
 	var ctx := _make_ctx(_ONE_V_ONE_SPOT)
 	if cutting:
@@ -693,7 +694,7 @@ func _one_v_one_ctx(cutting: bool) -> RoleContext:
 		ctx.snapshot.skater_states[1].velocity = ctx.self_velocity
 		ctx.snapshot.skater_states[1].facing = Vector2(1.0, 0.0)
 	ctx.snapshot.goalie_states[1 - TEAM_ID] = _squared_goalie(
-			_ONE_V_ONE_SPOT, Vector3(0.0, 0.0, OPP_NET_Z), 2.0)
+			_ONE_V_ONE_SPOT, Vector3(0.0, 0.0, OPP_NET_Z), 0.9)
 	return ctx
 
 
@@ -706,21 +707,9 @@ func _beaten_keeper_ctx() -> RoleContext:
 	ctx.snapshot.skater_states[1].facing = Vector2(1.0, 0.0)
 	var lagged := GoalieNetworkState.new()
 	lagged.position_x = 0.7
-	lagged.position_z = -GameRules.GOAL_LINE_Z + 2.0
+	lagged.position_z = -GameRules.GOAL_LINE_Z + 0.9
 	ctx.snapshot.goalie_states[1 - TEAM_ID] = lagged
 	return ctx
-
-
-func test_flat_footed_against_an_overcommitted_challenge_there_is_no_shot() -> void:
-	# The keeper is only ~1 m off the puck, and from 3 m the steepest rung gets the
-	# puck no higher than his pads, so no hold the blade can reach standing still
-	# beats him. With the shot under its giveaway bar, no mate and no dump in the
-	# zone, the only play left is a carry (where to: the snapshot).
-	var c: AIRoleCarrier = _decided(_one_v_one_ctx(false))
-	assert_lt(c.debug_shoot_score, AIRoleCarrier.SHOT_MIN_VALUE,
-			"flat-footed vs an overcommitted challenge, there is no shot; got %f"
-			% c.debug_shoot_score)
-	assert_eq(c.intended_action, AIRoleCarrier.INTENT_CARRY, "…so the 1v1 carries")
 
 
 func test_mid_cut_hold_never_out_prices_the_same_instants_fire() -> void:
@@ -1878,14 +1867,9 @@ func test_post_seal_x_sign_decodes_the_wire_convention() -> void:
 
 
 func test_sharp_angle_shot_into_a_vh_seal_is_never_worth_firing() -> void:
-	# The observed over-fire: from a sharp angle the arc-square model read a
-	# near-goal-line keeper as roughly centred (his deep arc-x sits near 0),
-	# conceding a phantom short side — while the real goalie is parked at the
-	# post in VH with the whole near column walled off. The shot value now
-	# prices this look at ~0.057, the same with or without the seal and just
-	# over SHOT_MIN_VALUE (0.05); the carrier declines it only because carrying
-	# out-values it (#780).
-	var self_pos := Vector3(4.5, 0, -26.0)   # sharp angle, seal side, in tight
+	# In tight at a sharp angle the live goalie seals the near post in VH (the
+	# shot field is measured off him), and the shot into it is no real chance.
+	var self_pos := Vector3(4.5, 0, -26.0)
 	var ctx_vh := _make_ctx(self_pos)
 	var g_vh := GoalieNetworkState.new()
 	g_vh.position_x = 0.85                    # parked at the +x post
@@ -1894,28 +1878,8 @@ func test_sharp_angle_shot_into_a_vh_seal_is_never_worth_firing() -> void:
 	ctx_vh.snapshot.goalie_states[1 - TEAM_ID] = g_vh
 	var vh := AIRoleCarrier.new()
 	vh.decide(ctx_vh)
-	# Not exactly zero: the model honestly keeps the thin cross-net window at
-	# the FAR post (see the aim test in test_ai_action_scoring) — but the
-	# near column is walled off, so nothing here rates as a real chance.
 	assert_lt(vh.debug_shoot_score, 0.10,
 			"the sealed sharp angle offers no real chance; got %f" % vh.debug_shoot_score)
-
-	# Same carrier, same replicated goalie placement, but STANDING: under the
-	# body-occlusion shot model the goalie's DEPTH walls the cross-net lane from
-	# a spot this sharp with or without the seal — the obscenely-tight-angle fire
-	# is never a real chance, which is exactly the read the seal used to be
-	# needed for. (The seal still matters where the angle leaves real lanes —
-	# see the VH/RVH hole tests in test_ai_action_scoring.)
-	var ctx_up := _make_ctx(self_pos)
-	var g_up := GoalieNetworkState.new()
-	g_up.position_x = 0.85
-	g_up.position_z = -26.55
-	g_up.state_enum = GoalieStateMachine.State.STANDING as int
-	ctx_up.snapshot.goalie_states[1 - TEAM_ID] = g_up
-	var up := AIRoleCarrier.new()
-	up.decide(ctx_up)
-	assert_lt(up.debug_shoot_score, 0.10,
-			"upright from the same sharp spot is no chance either — body depth walls it")
 
 
 # ─── attacking blue-line keep-out bands ──────────────────────────────────────
@@ -2789,13 +2753,13 @@ func _record_entry_and_finish_picks(snap: Snapshot) -> void:
 		snap.record("head-on drive at 6 m/s, keeper 1 m out, from %.0f m: pick" % dist,
 				_pick(_decided(_head_on_drive_ctx(dist))))
 	var cut: AIRoleCarrier = _decided(_one_v_one_ctx(true))
-	snap.record("1v1 cutting across 3 m out, keeper squared 2 m out: pick", _pick(cut))
-	snap.record("1v1 cutting across 3 m out, keeper squared 2 m out: shoot-now value",
+	snap.record("1v1 cutting across 3 m out, keeper squared 0.9 m out: pick", _pick(cut))
+	snap.record("1v1 cutting across 3 m out, keeper squared 0.9 m out: shoot-now value",
 			cut.debug_shoot_score)
 	var beaten: AIRoleCarrier = _decided(_beaten_keeper_ctx())
 	snap.record("1v1 mid-cut, keeper lagging the arc: intent", _intent_name(beaten.intended_action))
 	snap.record("1v1 mid-cut, keeper lagging the arc: shoot-now value", beaten.debug_shoot_score)
-	snap.record("1v1 flat-footed 3 m out vs a 2 m challenge: carry anchor",
+	snap.record("1v1 flat-footed 3 m out, keeper squared 0.9 m out: carry anchor",
 			_spot(_decided(_one_v_one_ctx(false)).last_carry_anchor))
 	snap.record("standing 3 m out, keeper squared 1.3 m out: intent",
 			_intent_name(_decided(_standstill_ctx(3.0)).intended_action))

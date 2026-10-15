@@ -89,6 +89,9 @@ var pass_option_ceiling: float = 0.0
 # candidate's shot on arrival, a pass's launch cap. Its results are read back
 # right after each solve, so it is a tool, not a list.
 var holds := AIShotHolds.new()
+# Where the last receiver_drive_in_value drive was stopped or arrived: the spot
+# its value was priced at, read back right after the call.
+var drive_in_reached: Vector3 = Vector3.INF
 # Projection scratch for receiver_drive_in_value: opponents at the start of the
 # drive, and at its end.
 var _entry_buf: Array[Vector3] = []
@@ -413,6 +416,7 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 		receiver_caps: AISkaterCaps,
 		receiver_vel: Vector3 = Vector3.ZERO, from_pos: Vector3 = Vector3.INF,
 		start_s: float = 0.0, own_hands: bool = false) -> float:
+	drive_in_reached = Vector3.INF
 	# A delayed offside is up: driving in from outside the zone is not on.
 	if ctx.zone_entry_blocked \
 			and not AIActionScoring.in_offensive_zone(receiver_spot, ctx.attacking_goal_pos):
@@ -429,7 +433,8 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 	var dir_z: float = to_net_z * inv
 	var target := Vector3(
 			receiver_spot.x + dir_x * reach, 0.0, receiver_spot.z + dir_z * reach)
-	if not AIStationSearch.is_legal_position(target):
+	if not AIStationSearch.is_legal_position(target) \
+			or AINetObstacle.carry_path_blocked_by_net(receiver_spot, target):
 		return 0.0
 	var recv_speed: float = receiver_caps.max_speed if receiver_caps != null \
 			else ctx.self_max_speed
@@ -468,6 +473,7 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 		hold_keep = holds.arrival_keep
 	var advanced: float = value_at(ctx, reached, regime_from, _drive_buf, Vector3.INF,
 			0.0, hold_keep)
+	drive_in_reached = reached
 	return advanced * keep * AIActionScoring.delay_discount(t + wait)
 
 

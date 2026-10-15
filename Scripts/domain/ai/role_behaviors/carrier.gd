@@ -797,11 +797,13 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	# at our own velocity as his is at his. Without it two equally-covered
 	# wingers at the blue line each rate the OTHER man's drive above their own
 	# discounted carry, and the puck ping-pongs along the line instead of
-	# entering the zone.
+	# entering the zone. When the floor wins, the carry is that drive.
 	var drive_in_value: float = _field.receiver_drive_in_value(
 			ctx, self_pos, ctx.caps_by_peer.get(ctx.peer_id), ctx.self_velocity,
 			Vector3.INF, 0.0, true)
-	carry_score = maxf(carry_score, drive_in_value)
+	if drive_in_value > carry_score:
+		carry_score = drive_in_value
+		last_carry_anchor = _field.drive_in_reached
 
 	# Hysteresis on FIRE intents only, proportional (positive scores only) so
 	# stickiness scales with the score instead of swamping the small-score

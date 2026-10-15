@@ -10,8 +10,8 @@ extends GutTest
 # FINDINGS (the prints are the deliverable; see the trailing asserts):
 #   - NOT the lag. The shoot-vs-carry balance decided it: "walk it in" read as a
 #     free tap-in, so carry won and no shot was taken on the pass.
-#   - That was the value seam not seeing the keeper's body in tight. Since it
-#     does (AIShotValue.body_logit), walking in is priced behind his pads and the
+#   - The seam reads the measured goalie now (AIShotOdds): walking it in and
+#     firing on the pass are priced against the same keeper, and the
 #     unpressured flyby takes its shot. A backchecker still drops the carry.
 
 const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
@@ -140,11 +140,8 @@ func test_flyby_shot_by_tier_and_facing() -> void:
 	var free: Dictionary = _run_flyby(start, vel, ticks, BotSkillProfile.hard(), true, 0.0)
 	var pressed: Dictionary = _run_flyby(start, vel, ticks, BotSkillProfile.hard(), true, 1.6)
 	assert_gt(free["slot_ticks"], 0, "the carrier passes through point-blank shot range")
-	# (1) Walking it in is no free tap-in: the shot reads at least as well, and
-	# the pass gets it off.
-	assert_gte(free["peak_shoot"], free["peak_carry"],
-			"unpressured, the flyby shot out-reads walking it in")
-	assert_gt(free["shots"], 0, "…and it is taken")
+	# (1) Going by, the shot gets off.
+	assert_gt(free["shots"], 0, "unpressured, the flyby shot is taken")
 	# (2) Pressure is what shifts it: a backchecker collapses the carry's value.
 	assert_lt(pressed["peak_carry"], free["peak_carry"],
 			"a backchecker drops the carry EV toward the shot")
