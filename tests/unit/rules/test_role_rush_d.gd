@@ -532,3 +532,40 @@ func test_a_carrier_crossing_at_speed_is_not_regrouping() -> void:
 	assert_true(_crossing_read(Vector3.ZERO)[1], "a standing carrier is a regroup: step up")
 	assert_false(_crossing_read(Vector3(6.0, 0.0, 0.0))[1],
 			"one crossing at speed is not: his speed is a turn from our net")
+
+
+# ── Depth before width ───────────────────────────────────────────────────────
+
+# How far across the carrier→net line the D1 target sits from the defender, for
+# a defender at `self_pos` moving at `self_vel` off a wide carrier.
+func _width_asked(self_pos: Vector3, self_vel: Vector3) -> Array:
+	var carrier := Vector3(8.0, 0.0, 0.0)
+	var carrier_vel := Vector3(0.0, 0.0, 6.0)
+	var ctx: RoleContext = _ctx(self_pos, [[10, 1, carrier, carrier_vel]], 10,
+			AIRushRead.Numbers.DOWN_ONE)
+	ctx.self_velocity = self_vel
+	var d: RoleDecision = AIRoleRushD.decide(ctx, AIRoleSlots.Slot.RUSH_D1)
+	var dir_net: Vector3 = (Vector3(0.0, 0.0, OUR_NET_Z) - carrier).normalized()
+	var to_target: Vector3 = d.target_position - self_pos
+	var across: Vector3 = to_target - dir_net * to_target.dot(dir_net)
+	var ride_across: Vector3 = d.target_velocity \
+			- dir_net * d.target_velocity.dot(dir_net)
+	return [across.length(), ride_across.length(), to_target.dot(dir_net)]
+
+
+func test_a_standing_defender_short_of_his_stand_goes_down_the_line_first() -> void:
+	# Level with a wide carrier, out on the far side of his lane: the stand is
+	# deeper AND across. From a stand every push goes to depth.
+	var standing: Array = _width_asked(Vector3(-2.0, 0.0, 2.0), Vector3.ZERO)
+	assert_gt(standing[2], 0.0, "the fixture leaves him short of his stand")
+	assert_almost_eq(standing[0], 0.0, 0.05,
+			"no width until he has the pace; got %.2f m across" % standing[0])
+	assert_almost_eq(standing[1], 0.0, 0.05, "and the ride goes straight down the line")
+
+
+func test_a_defender_already_at_pace_spends_the_spare_stride_across() -> void:
+	var standing: Array = _width_asked(Vector3(-2.0, 0.0, 2.0), Vector3.ZERO)
+	var retreating: Array = _width_asked(Vector3(-2.0, 0.0, 2.0), Vector3(0.0, 0.0, 6.0))
+	gut.p("  across: standing %.2f m, retreating %.2f m" % [standing[0], retreating[0]])
+	assert_gt(retreating[0], standing[0] + 0.5,
+			"carrying the pace leaves stride to take ice across")

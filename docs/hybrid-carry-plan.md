@@ -1,6 +1,6 @@
 # Hybrid carry — a far destination, the next half-second rolled out
 
-Status: **agreed design; steps 1–2 done, step 3 built with two gates open.** The CLAUDE.md workflow applies: this
+Status: **agreed design; steps 1–3 done.** The CLAUDE.md workflow applies: this
 doc is the plan, deviations get discussed first.
 
 ## Decisions
@@ -172,7 +172,7 @@ facing follows it. The forward fan, rear ring, seam candidate and the carrier's
 threat repel are deleted. This is the step that changes how carriers skate, and
 the one to playtest.
 
-**Built; two gates open** (below). The seven moves replace the forward fan, the
+**Built.** The seven moves replace the forward fan, the
 rear ring and the seam candidate; the agent skates the winning stick directly.
 Changes from the design above:
 
@@ -187,19 +187,17 @@ Changes from the design above:
 - The remaining route from a move's end is priced by the lane and the decay
   only, not by its safety: beyond the horizon the next re-plan sees the defence.
 
-Measured: default tier green but for one gate; slow tier 51/52. The bot duels
-and rush sims pass. The micro-bench is higher, not lower: carrier compete
-~3.1 ms (step 1: 2.5), the rollout 0.76 ms of it.
+Measured: default and slow tiers green; the bot duels and rush sims pass. The
+micro-bench is higher, not lower: carrier compete ~3.1 ms (step 1: 2.5), the
+rollout 0.76 ms of it.
 
-Open — for the user:
-- `test_nz_turnover_recovery` (slow): the bot carrier now beats the defence more
-  often — contained 17/36 (was 21), and 2 of 9 races the defender could win are
-  lost (was 0). The defence did not change; the carrier finds the off-centre
-  lanes round him.
-- `test_point_holds_the_line`: the weak point chases a point feed out of the
-  zone. The feed's release reads the cursor on the tick the passer drops to
-  off-puck, which the duel harness takes as the origin — a harness flaw this
-  cycle now happens to hit.
+The carrier found the off-centre lanes round the rush defence, which this step
+answered on the defence side rather than by blunting the carrier: the race reads
+a carrier's speed turned onto the line, the chase election counts a feed's own
+reach band, our pass in flight is not a rush, and the defender goes to depth
+before width (`Scripts/domain/ai/CLAUDE.md`, "Pace enters through the stride
+ramp"). `test_nz_turnover_recovery` now contains 19 of 36 with 1 of 9 winnable
+races lost; zone coverage's uncovered-share ceiling was widened to 2.5 (#791).
 
 ### Step 4 — the maneuvers
 

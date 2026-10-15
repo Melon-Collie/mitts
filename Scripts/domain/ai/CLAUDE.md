@@ -400,6 +400,15 @@ steps a standing defender up on a fresh receiver who then bursts past him. And
 when the retreat cannot hold a gap — the cushion eats all but a stick of the ice
 he owns — a defender IN the carrier's lane steps up to meet him rather than be
 reached while turning; off the lane he keeps retreating.
+
+Depth comes before width (`_depth_first`). A defender short of his stand's depth
+has one speed budget: the pace down the line that keeps up with the carrier and
+wins back the missing depth in the time his depth buys, and only the stride left
+over may go across — scaled by the share of that pace he already has, so from a
+stand every push goes down the line. Chasing a wide carrier's lateral first
+spends the retreat, and a cut back then finds the defender level with him. A
+hard "no width until at pace" gate measured worse: a defender who never shades
+across is beaten wide by the off-lane starts.
 `tests/slow/ai/test_nz_turnover_recovery.gd` scores this against the best a body
 could do: a straight-line retreat on the same ramp.
 

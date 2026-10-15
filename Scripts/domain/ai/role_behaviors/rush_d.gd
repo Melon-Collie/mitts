@@ -102,8 +102,10 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 		if fan.is_finite():
 			stand = fan
 
-	d.target_position = _clamp_to_house(ctx, stand)
 	d.target_velocity = ride
+	if not gapping_up:
+		stand = _depth_first(ctx, ap, stand, d)
+	d.target_position = _clamp_to_house(ctx, stand)
 	set_retreat_floor(ctx, ap, d)
 	# The arrival brake only matters with no man to ride (a moving stand stands it
 	# down). A retreat is paced rather than braked; a step-up wants the brake,
@@ -111,6 +113,38 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 	# through.
 	d.arrive_at_speed = gapping_up or not stepping_up
 	return d
+
+
+# Depth before width. A defender short of his stand's depth must keep pace with
+# the carrier down the line and win the rest back before the carrier reaches
+# him; only the stride left over can take him across (one speed budget, |v| at
+# most his top speed), and none of it until he has that pace — from a stand,
+# every push goes down the line first. So the stand's offset across the line,
+# and the ride's sideways part, are capped at the spare speed, scaled by the
+# share of the pace he has, over the time his depth buys at the carrier's speed.
+# Mirroring a carrier who skates wide spends the retreat, and a turn then finds
+# the defender level with him.
+static func _depth_first(ctx: RoleContext, ap: AICarrierApproach, stand: Vector3,
+		d: RoleDecision) -> Vector3:
+	var dir_net: Vector3 = ap.dir_net
+	var to_stand: Vector3 = stand - ctx.self_pos
+	var short: float = to_stand.x * dir_net.x + to_stand.z * dir_net.z
+	if short <= 0.0:
+		return stand
+	var carrier_speed: float = Vector2(ap.carrier_vel.x, ap.carrier_vel.z).length()
+	var time_s: float = maxf(_depth_along(ctx, ap.carrier_pos, dir_net), stick_m(ctx)) \
+			/ maxf(carrier_speed, 1.0)
+	var pace: float = maxf(ap.closing, 0.0) + short / time_s
+	var have: float = ctx.self_velocity.x * dir_net.x + ctx.self_velocity.z * dir_net.z
+	var spare: float = sqrt(maxf(ctx.self_max_speed * ctx.self_max_speed - pace * pace, 0.0)) \
+			* clampf(have / maxf(pace, 0.1), 0.0, 1.0)
+	var ride: Vector3 = d.target_velocity
+	var ride_along: float = ride.x * dir_net.x + ride.z * dir_net.z
+	var ride_across := Vector3(ride.x - dir_net.x * ride_along, 0.0,
+			ride.z - dir_net.z * ride_along)
+	d.target_velocity = dir_net * ride_along + ride_across.limit_length(spare)
+	var across := Vector3(to_stand.x - dir_net.x * short, 0.0, to_stand.z - dir_net.z * short)
+	return ctx.self_pos + dir_net * short + across.limit_length(spare * time_s)
 
 
 # How far goal-side of `threat_pos` this bot currently stands, along `dir_net` —
