@@ -1,8 +1,8 @@
 extends SceneTree
 
 # Dev visualizer: lays each team's home and away kit out FLAT — jersey front and
-# back with both sleeves and shoulder caps, the breezers, the socks — beside a
-# legend of every color and stripe in the kit, and saves one PNG per team. It is
+# back with both sleeves and shoulder caps, the breezers, the helmet, the socks —
+# beside a legend of every color and stripe in the kit, and saves one PNG per team. It is
 # for editing data/team_colors.json: change a kit, re-run, look.
 #
 #   .claude/hooks/render-kits.sh                # every team, into ./.preview/kits
@@ -62,6 +62,10 @@ const _JERSEY_GAP: float = 40.0
 const _LEGEND_W: float = 600.0
 const _BODY_TOP: float = 120.0
 const _ROW2_TOP: float = 420.0
+# The helmet is the rink's own mesh, rendered three-quarter from the front left
+# and a little above (the mesh faces −Z), between the pants and the socks.
+const _HELMET_PX: int = 170
+const _HELMET_VIEW_DIR: Vector3 = Vector3(-0.6, 0.3, -0.75)
 const _LEGEND_TOP: float = 92.0
 const _LINE_H: float = 22.0
 const _CHIP_PX: float = 14.0
@@ -103,6 +107,8 @@ var _upper_arm_textures: Array[Texture2D] = [null, null]
 var _forearm_textures: Array[Texture2D] = [null, null]
 var _pants_textures: Array[Texture2D] = [null, null]
 var _sock_textures: Array[Texture2D] = [null, null]
+var _helmet_textures: Array[Texture2D] = []
+var _helmet_meshes: Array[MeshInstance3D] = []
 var _preset: Dictionary = {}
 var _player_name: String = _DEFAULT_NAME
 var _number: int = _DEFAULT_NUMBER
@@ -147,6 +153,8 @@ func _render() -> void:
 			_pants_textures[side] = SkaterUniformCoordinator.make_pants_stripes_texture(
 					kit.pants.base, kit.pants.stripes)
 			_sock_textures[side] = UniformPaint.h_stripes(kit.socks.base, kit.socks.stripes)
+			_helmet_meshes[side].set_surface_override_material(SkaterMeshBuilder.HELMET_SURF_SHELL,
+					UniformPaint.solid(kit.helmet, UniformPaint.ROUGH_HELMET))
 		_canvas.queue_redraw()
 		# Decal viewports draw first, the sheet samples them a frame later.
 		for _i: int in 4:
@@ -271,6 +279,7 @@ func _build_sheet() -> void:
 		shoulder_vp.add_child(shoulder)
 		_shoulder_decals.append(shoulder)
 		_shoulder_textures.append(shoulder_vp.get_texture())
+		_helmet_textures.append(_helmet_viewport().get_texture())
 
 	_sheet = SubViewport.new()
 	_sheet.size = Vector2i(_sheet_size())
@@ -291,6 +300,47 @@ func _decal_viewport(size: Vector2i) -> SubViewport:
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	root.add_child(vp)
 	return vp
+
+
+func _helmet_viewport() -> SubViewport:
+	var vp := SubViewport.new()
+	vp.size = Vector2i(_HELMET_PX, _HELMET_PX)
+	vp.transparent_bg = true
+	vp.own_world_3d = true
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	root.add_child(vp)
+	var env := Environment.new()
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.55, 0.57, 0.62)
+	var world_env := WorldEnvironment.new()
+	world_env.environment = env
+	vp.add_child(world_env)
+	# Key from the camera's side, the way the arena's lights catch a face.
+	var key := DirectionalLight3D.new()
+	key.rotation_degrees = Vector3(-40.0, 210.0, 0.0)
+	vp.add_child(key)
+	var helmet := MeshInstance3D.new()
+	helmet.mesh = SkaterMeshBuilder.shared_helmet_assembly()
+	vp.add_child(helmet)
+	_helmet_meshes.append(helmet)
+	# Framed on the shell; the head and neck under it are cropped.
+	var bounds := AABB()
+	var shell: PackedVector3Array = helmet.mesh.surface_get_arrays(
+			SkaterMeshBuilder.HELMET_SURF_SHELL)[Mesh.ARRAY_VERTEX]
+	bounds.position = shell[0]
+	for v: Vector3 in shell:
+		bounds = bounds.expand(v)
+	var cam := Camera3D.new()
+	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	cam.size = bounds.get_longest_axis_size() * 1.3
+	vp.add_child(cam)
+	cam.position = bounds.get_center() + _HELMET_VIEW_DIR.normalized() * 2.0
+	cam.look_at(bounds.get_center())
+	return vp
+
+
+func _helmet_x() -> float:
+	return (_front_x() + _back_x()) * 0.5
 
 
 func _sheet_size() -> Vector2:
@@ -338,6 +388,8 @@ func _draw_panel(c: Node2D, top: float, side: int) -> void:
 	_caption(c, Vector2(_front_x(), row2 - 8.0), "PANTS")
 	_draw_pants(c, Vector2(_front_x(), row2 + _WAISTBAND_M * _PX_PER_M), kit.pants.base,
 			_pants_textures[side])
+	_caption(c, Vector2(_helmet_x(), row2 - 8.0), "HELMET")
+	c.draw_texture(_helmet_textures[side], Vector2(_helmet_x() - _HELMET_PX * 0.5, row2 + 2.0))
 	_caption(c, Vector2(_back_x(), row2 - 8.0), "SOCKS")
 	_draw_socks(c, Vector2(_back_x(), row2 + 10.0), _sock_textures[side])
 
