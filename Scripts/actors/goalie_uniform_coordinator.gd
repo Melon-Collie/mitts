@@ -35,10 +35,8 @@ var _shoulder_decal: ShoulderDecal
 
 # Cached for apply_jersey_info refresh.
 var _text_color: Color = Color.WHITE
-var _text_outline_color: Color = Color.BLACK
 var _shoulder_color: Color = Color.WHITE
 var _shoulder_text_color: Color = Color.BLACK
-var _shoulder_outline_color: Color = Color.BLACK
 var _player_name: String = ""
 var _jersey_number: int = 0
 
@@ -52,7 +50,6 @@ func setup(goalie: Goalie) -> void:
 func apply_uniform(colors: Dictionary) -> void:
 	var uniform: Dictionary = colors.uniform
 	_text_color = colors.text
-	_text_outline_color = colors.text_outline
 
 	var jersey: Dictionary = uniform.jersey
 	_jersey_mat.set_shader_parameter("base_color", jersey.base)
@@ -86,7 +83,6 @@ func apply_uniform(colors: Dictionary) -> void:
 
 	_shoulder_color = uniform.shoulders.color
 	_shoulder_text_color = uniform.shoulders.text
-	_shoulder_outline_color = uniform.shoulders.outline
 	_rebuild_shoulder_texture()
 
 	var elbow_mat: StandardMaterial3D = UniformPaint.solid(arms.lower.base)
@@ -185,7 +181,7 @@ func _rebuild_shoulder_texture() -> void:
 	if _shoulder_decal == null:
 		return
 	_shoulder_decal.update_shoulder(_shoulder_color, _shoulder_color, _jersey_number,
-			_shoulder_text_color, _shoulder_outline_color)
+			_shoulder_text_color)
 	_shoulder_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 
@@ -213,7 +209,7 @@ func _set_stripe_params(stripes: Array[Dictionary]) -> void:
 
 
 func _rebuild_text_decal() -> void:
-	_text_decal.update_text(_player_name, _jersey_number, _text_color, _text_outline_color)
+	_text_decal.update_text(_player_name, _jersey_number, _text_color)
 	_text_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 

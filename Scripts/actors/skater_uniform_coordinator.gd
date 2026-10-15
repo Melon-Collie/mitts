@@ -41,11 +41,9 @@ var _jersey_collar_color: Color = Color.WHITE
 var _jersey_stripes: Array[Dictionary] = []
 var _shoulder_color: Color = Color.WHITE
 var _shoulder_text_color: Color = Color.BLACK
-var _shoulder_outline_color: Color = Color.BLACK
 var _player_name: String = ""
 var _jersey_number: int = 0
 var _text_color: Color = Color.BLACK
-var _text_outline_color: Color = Color.BLACK
 # The kit colors a gear model or tape pick resolves against, cached from the
 # last apply_uniform so a live cosmetic change repaints without one.
 # _team_accent is colors.primary (TEAM for tape and skates), _kit_gloves is
@@ -168,7 +166,6 @@ func apply_uniform(colors: Dictionary) -> void:
 
 	var uniform: Dictionary = colors.uniform
 	_text_color = colors.text
-	_text_outline_color = colors.text_outline
 
 	# Jersey torso (decal repaint).
 	_jersey_base_color = uniform.jersey.base
@@ -180,7 +177,6 @@ func apply_uniform(colors: Dictionary) -> void:
 	# Shoulder caps (decal repaint with shoulder-specific color + text).
 	_shoulder_color = uniform.shoulders.color
 	_shoulder_text_color = uniform.shoulders.text
-	_shoulder_outline_color = uniform.shoulders.outline
 	_rebuild_shoulder_texture()
 
 	# Helmet — glossy hard plastic.
@@ -281,7 +277,7 @@ func _rebuild_jersey_texture() -> void:
 		return
 	_jersey_decal.update_jersey(
 			_jersey_base_color, _jersey_yoke_color, _jersey_collar_color, _jersey_stripes,
-			_player_name, _jersey_number, _text_color, _text_outline_color)
+			_player_name, _jersey_number, _text_color)
 	_jersey_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 
@@ -289,8 +285,7 @@ func _rebuild_shoulder_texture() -> void:
 	if _shoulder_decal == null:
 		return
 	_shoulder_decal.update_shoulder(
-			_shoulder_color, _jersey_yoke_color, _jersey_number, _shoulder_text_color,
-			_shoulder_outline_color)
+			_shoulder_color, _jersey_yoke_color, _jersey_number, _shoulder_text_color)
 	_shoulder_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 

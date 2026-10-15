@@ -13,10 +13,6 @@ extends Node2D
 # UV region). Stripes paint in array order; later overpaints earlier, so
 # stacked stripes sharing pos with shrinking widths produce concentric
 # centered bands.
-#
-# 'No outline' on text: if text_outline_color == text_color, skip the
-# outline pass entirely (rather than drawing an outline of equal color,
-# which looks identical but costs draw calls).
 
 const FONT: Font = preload("res://Assets/Fonts/BarlowSemiCondensed-ExtraBold.ttf")
 const NAME_FONT: Font = preload("res://Assets/Fonts/Manrope-SemiBold.ttf")
@@ -52,8 +48,6 @@ const NAME_GAP_M: float = 0.02
 const NAME_EM_M: float = 0.075
 const NUMBER_GAP_M: float = 0.012
 const NUMBER_EM_M: float = 0.25
-const NAME_OUTLINE_M: float = 0.006
-const NUMBER_OUTLINE_M: float = 0.011
 const YOKE_BOTTOM_PX: int = roundi(SkaterMeshBuilder.TORSO_YOKE_SIDE_FRACTION * SIDE_V_MAX_PX)
 
 var jersey_color: Color = Color.WHITE
@@ -63,7 +57,6 @@ var stripes: Array[Dictionary] = []       # [{pos, width, color}]
 var player_name: String = ""
 var jersey_number: int = 0
 var text_color: Color = Color.BLACK
-var text_outline_color: Color = Color.BLACK
 
 
 func _draw() -> void:
@@ -80,11 +73,10 @@ func _draw() -> void:
 	var name_top_m: float = float(YOKE_BOTTOM_PX) / PX_PER_M.y + NAME_GAP_M
 	var name_upper: String = player_name.to_upper()
 	if name_upper.length() > 0:
-		_draw_centered(NAME_FONT, name_upper, NAME_EM_M, name_top_m, NAME_OUTLINE_M)
+		_draw_centered(NAME_FONT, name_upper, NAME_EM_M, name_top_m)
 	var num_str: String = str(jersey_number)
 	if num_str.length() > 0:
-		_draw_centered(FONT, num_str, NUMBER_EM_M, name_top_m + NAME_EM_M + NUMBER_GAP_M,
-				NUMBER_OUTLINE_M)
+		_draw_centered(FONT, num_str, NUMBER_EM_M, name_top_m + NAME_EM_M + NUMBER_GAP_M)
 
 
 # Converts a v2 stripe {pos, width} over a region of height region_px into
@@ -101,25 +93,21 @@ static func _stripe_band(stripe: Dictionary, region_px: int) -> Vector2i:
 # Centred on the back, `em_m` tall with its em box's top `top_m` below the
 # collar. The text is set at the vertical texel density and squeezed or widened
 # to the horizontal one, so it is the shape the font draws once on the body.
-# Outline first so the fill sits on top; skipped when it matches the fill (the
-# "no outline" sentinel).
-func _draw_centered(font: Font, s: String, em_m: float, top_m: float, outline_m: float) -> void:
+# One color, no outline — the kit's text.outline is for UI chrome.
+func _draw_centered(font: Font, s: String, em_m: float, top_m: float) -> void:
 	var size: int = roundi(em_m * PX_PER_M.y)
 	var stretch: float = PX_PER_M.x / PX_PER_M.y
 	var width: float = font.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
 	var pos := Vector2(float(BACK_CENTER_X) / stretch - width * 0.5,
 			top_m * PX_PER_M.y + font.get_ascent(size))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(stretch, 1.0))
-	if not text_outline_color.is_equal_approx(text_color):
-		draw_string_outline(font, pos, s, HORIZONTAL_ALIGNMENT_LEFT, -1, size,
-				roundi(outline_m * PX_PER_M.y), text_outline_color)
 	draw_string(font, pos, s, HORIZONTAL_ALIGNMENT_LEFT, -1, size, text_color)
 	draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
 func update_jersey(
 		j_color: Color, j_yoke: Color, j_collar: Color, j_stripes: Array[Dictionary],
-		p_name: String, p_number: int, t_color: Color, t_outline: Color) -> void:
+		p_name: String, p_number: int, t_color: Color) -> void:
 	jersey_color = j_color
 	yoke_color = j_yoke
 	collar_color = j_collar
@@ -127,5 +115,4 @@ func update_jersey(
 	player_name = p_name
 	jersey_number = p_number
 	text_color = t_color
-	text_outline_color = t_outline
 	queue_redraw()
