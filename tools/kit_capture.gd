@@ -32,11 +32,9 @@ const _SLEEVE_DROP_DEG: float = 40.0
 # within _SHOULDER_LINE_SPAN_M of the collar), so the shoulder cap covers the join.
 const _SLEEVE_INSET_M: float = 0.03
 const _SHOULDER_LINE_SPAN_M: float = 0.10
-# The torso's top cap disk (where a yoke paints) shown as the shoulder band above
-# the trap line, with the collar cut into it — a flat-lay convention, not a
-# measured part.
-const _YOKE_HEIGHT_M: float = 0.07
-const _YOKE_SLOPE_M: float = 0.05
+# The neck opening cut into the collar station, trimmed in the collar color
+# (the torso's top cap) — a flat-lay convention, not a measured part.
+const _COLLAR_WIDTH_M: float = 0.025
 const _NECK_HALF_WIDTH_M: float = 0.08
 const _NECK_DEPTH_FRONT_M: float = 0.06
 const _NECK_DEPTH_BACK_M: float = 0.02
@@ -140,9 +138,11 @@ func _render() -> void:
 		_preset = TeamColorRegistry.get_preset(slot)
 		for side: int in 2:
 			var kit: Dictionary = _kit(side)
-			_jersey_decals[side].update_jersey(kit.jersey.base, kit.jersey.yoke,
+			_jersey_decals[side].update_jersey(kit.jersey.base,
+					UniformPaint.yoke_color(kit.jersey), UniformPaint.collar_color(kit.jersey),
 					kit.jersey.stripes, _player_name, _number, kit.text.color, kit.text.outline)
-			_shoulder_decals[side].update_shoulder(kit.shoulders.color, _number,
+			_shoulder_decals[side].update_shoulder(kit.shoulders.color,
+					UniformPaint.yoke_color(kit.jersey), _number,
 					kit.shoulders.text, kit.shoulders.outline)
 			_upper_arm_textures[side] = SkaterUniformCoordinator.make_arm_stripes_texture(
 					kit.arms.upper.base, kit.arms.upper.stripes)
@@ -366,8 +366,7 @@ func _draw_jersey(c: Node2D, top_center: Vector2, kit: Dictionary, side: int,
 	for i: int in 2:
 		_draw_sleeve(c, roots[i], -1.0 if i == 0 else 1.0, kit.arms.lower.base, side)
 	_draw_tube(c, top_center, _torso, _jersey_textures[side], u)
-	var yoke: Color = kit.jersey.yoke if kit.jersey.yoke is Color else kit.jersey.base
-	_draw_yoke(c, top_center, yoke, neck_depth_m)
+	_draw_collar(c, top_center, UniformPaint.collar_color(kit.jersey), neck_depth_m)
 	for root_px: Vector2 in roots:
 		_draw_shoulder_cap(c, root_px, _shoulder_textures[side])
 
@@ -388,28 +387,14 @@ func _draw_sleeve(c: Node2D, root_px: Vector2, outward: float, elbow_color: Colo
 	c.draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
-func _draw_yoke(c: Node2D, top_center: Vector2, color: Color, neck_depth_m: float) -> void:
-	var half_w: float = _torso[0].y * 0.5 * _PX_PER_M
-	var h: float = _YOKE_HEIGHT_M * _PX_PER_M
-	var slope: float = _YOKE_SLOPE_M * _PX_PER_M
-	var band := PackedVector2Array([
-		top_center + Vector2(-half_w, 0.0),
-		top_center + Vector2(-half_w + slope, -h),
-		top_center + Vector2(half_w - slope, -h),
-		top_center + Vector2(half_w, 0.0),
-	])
-	c.draw_colored_polygon(band, color)
+func _draw_collar(c: Node2D, top_center: Vector2, color: Color, neck_depth_m: float) -> void:
 	var neck := PackedVector2Array()
-	var neck_top: Vector2 = top_center + Vector2(0.0, -h)
 	for k: int in 17:
 		var t: float = PI * float(k) / 16.0
-		neck.append(neck_top + Vector2(cos(t) * _NECK_HALF_WIDTH_M,
+		neck.append(top_center + Vector2(cos(t) * _NECK_HALF_WIDTH_M,
 				sin(t) * neck_depth_m) * _PX_PER_M)
-	c.draw_colored_polygon(neck, color.darkened(0.45))
-	var outline := PackedVector2Array([band[0], band[1], neck[16]])
-	outline.append_array(neck)
-	outline.append_array(PackedVector2Array([band[2], band[3]]))
-	c.draw_polyline(outline, _EDGE, 1.5, true)
+	c.draw_colored_polygon(neck, _PANEL_BG.darkened(0.35))
+	c.draw_polyline(neck, color, _COLLAR_WIDTH_M * _PX_PER_M, true)
 
 
 func _draw_shoulder_cap(c: Node2D, center: Vector2, tex: Texture2D) -> void:
@@ -489,11 +474,10 @@ func _draw_legend(c: Node2D, at: Vector2, kit: Dictionary) -> void:
 	pen = _legend_row(c, pen, "helmet", [kit.helmet], [""])
 	pen = _legend_row(c, pen, "shoulders", [kit.shoulders.color, kit.shoulders.text,
 			kit.shoulders.outline], ["", "text", "outline"])
-	var yoke: Variant = kit.jersey.yoke
-	if yoke is Color:
-		pen = _legend_row(c, pen, "jersey", [kit.jersey.base, yoke], ["", "yoke"])
-	else:
-		pen = _legend_row(c, pen, "jersey", [kit.jersey.base], ["(no yoke)"])
+	pen = _legend_row(c, pen, "jersey", [kit.jersey.base, UniformPaint.yoke_color(kit.jersey),
+			UniformPaint.collar_color(kit.jersey)],
+			["", "yoke" if kit.jersey.yoke is Color else "yoke (base)",
+			"collar" if kit.jersey.collar is Color else "collar (yoke)"])
 	pen = _stripe_rows(c, pen, kit.jersey.stripes)
 	pen = _legend_row(c, pen, "arms.upper", [kit.arms.upper.base], [""])
 	pen = _stripe_rows(c, pen, kit.arms.upper.stripes)

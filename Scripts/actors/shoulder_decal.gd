@@ -1,7 +1,9 @@
 class_name ShoulderDecal
 extends Node2D
 
-# Draws the shoulder-cap base color + player number into a small viewport
+# Draws the shoulder cap — the yoke over its top (SkaterMeshBuilder
+# .SHOULDER_CAP_YOKE_V), its own color below — and the player number into a
+# small viewport
 # that the shoulder spheres sample as their material albedo. Same
 # render-to-texture pattern as JerseyDecal — one viewport shared by both
 # shoulders, per skater. The number sits at the texture equator (V≈0.5)
@@ -17,8 +19,11 @@ const IMG_W: int = 256
 const IMG_H: int = 256
 const NUMBER_FONT_SIZE: int = 56
 const NUMBER_OUTLINE_PX: int = 5
+# Just below the equator, on the part of the cap that hangs down the arm.
+const NUMBER_CENTER_V: float = 0.56
 
 var shoulder_color: Color = Color.WHITE
+var yoke_color: Color = Color.WHITE
 var jersey_number: int = 0
 var text_color: Color = Color.BLACK
 var text_outline_color: Color = Color.BLACK
@@ -26,6 +31,8 @@ var text_outline_color: Color = Color.BLACK
 
 func _draw() -> void:
 	draw_rect(Rect2(0, 0, IMG_W, IMG_H), shoulder_color, true)
+	draw_rect(Rect2(0, 0, IMG_W, roundf(SkaterMeshBuilder.SHOULDER_CAP_YOKE_V * IMG_H)),
+			yoke_color, true)
 	var num_str: String = str(jersey_number)
 	if num_str.length() == 0:
 		return
@@ -33,7 +40,7 @@ func _draw() -> void:
 			num_str, HORIZONTAL_ALIGNMENT_LEFT, -1, NUMBER_FONT_SIZE)
 	var ascent: float = FONT.get_ascent(NUMBER_FONT_SIZE)
 	var x: float = (float(IMG_W) - size.x) * 0.5
-	var y_baseline: float = (float(IMG_H) - size.y) * 0.5 + ascent
+	var y_baseline: float = NUMBER_CENTER_V * float(IMG_H) - size.y * 0.5 + ascent
 	var pos := Vector2(x, y_baseline)
 	if not text_outline_color.is_equal_approx(text_color):
 		draw_string_outline(FONT, pos, num_str,
@@ -42,8 +49,10 @@ func _draw() -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, -1, NUMBER_FONT_SIZE, text_color)
 
 
-func update_shoulder(s_color: Color, p_number: int, t_color: Color, t_outline: Color) -> void:
+func update_shoulder(s_color: Color, s_yoke: Color, p_number: int, t_color: Color,
+		t_outline: Color) -> void:
 	shoulder_color = s_color
+	yoke_color = s_yoke
 	jersey_number = p_number
 	text_color = t_color
 	text_outline_color = t_outline

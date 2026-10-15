@@ -241,8 +241,8 @@ func _dummy_meshes() -> Dictionary:
 
 
 # Dress the dummy in the real kit (colors.uniform), not flat team colors:
-# striped jersey with the yoke on the torso's top cap, the shoulder pads'
-# own color, striped arms (upper/lower segments each), striped socks, solid
+# striped jersey with the collar on the torso's top cap and the yoke over the
+# shoulders, the shoulder pads' own color under it, striped arms (upper/lower segments each), striped socks, solid
 # pants base. Stripe textures come from SkaterUniformCoordinator's
 # UniformPaint.h_stripes / make_arm_stripes_texture so the bands land exactly
 # where the in-game skater's do. Pants keep the base color only — the
@@ -257,8 +257,8 @@ func _dummy_materials(colors: Dictionary) -> Dictionary:
 	var arms_lower: Dictionary = uniform.arms.lower
 
 	var jersey_mat := StandardMaterial3D.new()
-	jersey_mat.albedo_texture = UniformPaint.h_stripes(
-			jersey_block.base, jersey_block.stripes, jersey_block.yoke)
+	jersey_mat.albedo_texture = UniformPaint.h_stripes(jersey_block.base,
+			UniformPaint.jersey_stripes(jersey_block), UniformPaint.collar_color(jersey_block))
 	jersey_mat.roughness = 0.9
 
 	var socks_mat: StandardMaterial3D
@@ -272,7 +272,7 @@ func _dummy_materials(colors: Dictionary) -> Dictionary:
 
 	return {
 		"jersey":    jersey_mat,
-		"shoulder":  _matte(uniform.shoulders.color),
+		"shoulder":  _textured(UniformPaint.shoulder_cap(jersey_block, uniform.shoulders.color)),
 		"helmet":    _matte(uniform.helmet, 0.28),
 		"pants":     _matte(uniform.pants.base),
 		"socks":     socks_mat,
@@ -305,4 +305,11 @@ func _matte(c: Color, roughness: float = 0.9) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = c
 	m.roughness = roughness
+	return m
+
+
+func _textured(tex: Texture2D) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = tex
+	m.roughness = 0.9
 	return m

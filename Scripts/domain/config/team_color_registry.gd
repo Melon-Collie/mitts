@@ -205,6 +205,7 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 		"jersey": {
 			"base":    _parse_color(jersey_raw.get("base",    "#FFFFFF")),
 			"yoke":    _parse_optional_color(jersey_raw.get("yoke", null)),
+			"collar":  _parse_optional_color(jersey_raw.get("collar", null)),
 			"stripes": _parse_stripes(jersey_raw.get("stripes", [])),
 		},
 		"arms": {
@@ -258,7 +259,8 @@ static func _parse_color(hex: Variant) -> Color:
 	return Color.WHITE
 
 
-# yoke is optional — null means "no yoke band".
+# yoke and collar are optional — null falls back: the collar to the yoke, the
+# yoke to the jersey body.
 static func _parse_optional_color(hex: Variant) -> Variant:
 	if hex == null:
 		return null

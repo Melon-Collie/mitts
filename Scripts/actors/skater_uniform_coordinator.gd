@@ -9,10 +9,10 @@ extends RefCounted
 #                                  using cached text colors from apply_uniform
 #
 # Painting paths:
-#   - Torso  → SubViewport + JerseyDecal (base + optional yoke + stripe array
+#   - Torso  → SubViewport + JerseyDecal (base + collar + yoke + stripe array
 #     + name/number text). One viewport per skater.
-#   - Shoulders → shared SubViewport + ShoulderDecal (shoulder base color +
-#     shoulder text color/outline; independent of jersey text).
+#   - Shoulders → shared SubViewport + ShoulderDecal (the yoke over the top,
+#     the shoulder color below, its own text color/outline).
 #   - Forearm / upper arm / socks → ImageTexture with horizontal bands stacked
 #     in array order; widths shrink to form concentric "centered cross-section"
 #     bands (watermelon rind, lime pith).
@@ -36,7 +36,8 @@ var _blade_tape: MeshInstance3D                    # team-colored tape band, chi
 # changes; the cache lets each entry point trigger a refresh without re-
 # supplying the other side's data.
 var _jersey_base_color: Color = Color.WHITE
-var _jersey_yoke_color: Variant = null            # Color or null
+var _jersey_yoke_color: Color = Color.WHITE
+var _jersey_collar_color: Color = Color.WHITE
 var _jersey_stripes: Array[Dictionary] = []
 var _shoulder_color: Color = Color.WHITE
 var _shoulder_text_color: Color = Color.BLACK
@@ -171,7 +172,8 @@ func apply_uniform(colors: Dictionary) -> void:
 
 	# Jersey torso (decal repaint).
 	_jersey_base_color = uniform.jersey.base
-	_jersey_yoke_color = uniform.jersey.yoke
+	_jersey_yoke_color = UniformPaint.yoke_color(uniform.jersey)
+	_jersey_collar_color = UniformPaint.collar_color(uniform.jersey)
 	_jersey_stripes = uniform.jersey.stripes
 	_rebuild_jersey_texture()
 
@@ -280,7 +282,7 @@ func _rebuild_jersey_texture() -> void:
 	if _jersey_decal == null:
 		return
 	_jersey_decal.update_jersey(
-			_jersey_base_color, _jersey_yoke_color, _jersey_stripes,
+			_jersey_base_color, _jersey_yoke_color, _jersey_collar_color, _jersey_stripes,
 			_player_name, _jersey_number, _text_color, _text_outline_color)
 	_jersey_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
@@ -289,7 +291,8 @@ func _rebuild_shoulder_texture() -> void:
 	if _shoulder_decal == null:
 		return
 	_shoulder_decal.update_shoulder(
-			_shoulder_color, _jersey_number, _shoulder_text_color, _shoulder_outline_color)
+			_shoulder_color, _jersey_yoke_color, _jersey_number, _shoulder_text_color,
+			_shoulder_outline_color)
 	_shoulder_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 

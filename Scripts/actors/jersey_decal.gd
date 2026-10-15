@@ -1,7 +1,8 @@
 class_name JerseyDecal
 extends Node2D
 
-# Draws the jersey base color, optional yoke (top band), procedural stripe
+# Draws the jersey base color, the collar (the torso's top cap) and the yoke (the
+# side from the collar down to the shoulder line), the procedural stripe
 # array, and player name/number into a SubViewport that the torso material
 # samples as its albedo texture. The torso's CylinderMesh wraps this 2D
 # texture around its surface; text at x=BACK_CENTER_X lands on the +Z back
@@ -35,13 +36,17 @@ const SIDE_V_MAX_PX: int = IMG_H / 2   # 128 — bottom of the side surface
 const TOP_CAP_RECT: Rect2 = Rect2(128, 128, 256, 128)
 const NAME_FONT_SIZE: int = 28
 const NUMBER_FONT_SIZE: int = 56
-const NAME_Y_TOP: int = 8
-const NUMBER_Y_TOP: int = 40
+# The yoke's bottom edge on the side region; the name hangs just below it, as
+# it does under a real sweater's shoulder panel.
+const YOKE_BOTTOM_PX: int = roundi(SkaterMeshBuilder.TORSO_YOKE_SIDE_FRACTION * SIDE_V_MAX_PX)
+const NAME_Y_TOP: int = YOKE_BOTTOM_PX + 4
+const NUMBER_Y_TOP: int = NAME_Y_TOP + 32
 const NAME_OUTLINE_PX: int = 3
 const NUMBER_OUTLINE_PX: int = 5
 
 var jersey_color: Color = Color.WHITE
-var yoke_color: Variant = null            # Color or null
+var yoke_color: Color = Color.WHITE
+var collar_color: Color = Color.WHITE
 var stripes: Array[Dictionary] = []       # [{pos, width, color}]
 var player_name: String = ""
 var jersey_number: int = 0
@@ -52,10 +57,8 @@ var text_outline_color: Color = Color.BLACK
 func _draw() -> void:
 	# Base fill across the whole texture so cap disks aren't transparent.
 	draw_rect(Rect2(0, 0, IMG_W, IMG_H), jersey_color, true)
-	# Optional yoke — paints the flat top disk of the torso cylinder by
-	# overpainting the top-cap region of the texture.
-	if yoke_color is Color:
-		draw_rect(TOP_CAP_RECT, yoke_color, true)
+	draw_rect(TOP_CAP_RECT, collar_color, true)
+	draw_rect(Rect2(0, 0, IMG_W, YOKE_BOTTOM_PX), yoke_color, true)
 	# Stripes paint in array order over the side region [0, SIDE_V_MAX_PX].
 	for stripe: Dictionary in stripes:
 		var band: Vector2i = _stripe_band(stripe, SIDE_V_MAX_PX)
@@ -98,10 +101,11 @@ func _draw_centered(font: Font, s: String, font_size: int, y_top: int, outline_p
 
 
 func update_jersey(
-		j_color: Color, j_yoke: Variant, j_stripes: Array[Dictionary],
+		j_color: Color, j_yoke: Color, j_collar: Color, j_stripes: Array[Dictionary],
 		p_name: String, p_number: int, t_color: Color, t_outline: Color) -> void:
 	jersey_color = j_color
 	yoke_color = j_yoke
+	collar_color = j_collar
 	stripes = j_stripes
 	player_name = p_name
 	jersey_number = p_number

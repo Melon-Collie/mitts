@@ -84,3 +84,12 @@ func test_every_preset_has_a_contrasting_glove_accent() -> void:
 					or accent.is_equal_approx(colors.secondary),
 					"%s side %d: the glove accent is a team color"
 					% [TeamColorRegistry.get_preset_name(slot), team_id])
+
+
+# The collar and the yoke are optional; a kit that omits them parses them null,
+# which the painters read as "fall back" (UniformPaint.collar_color / yoke_color).
+func test_collar_and_yoke_are_optional_and_parse_null() -> void:
+	var kit: Dictionary = TeamColorRegistry.get_colors(_PAPAYA, 0).uniform
+	assert_true(kit.jersey.has("collar"), "every kit carries the collar key")
+	assert_null(kit.jersey.collar, "Papaya names no collar")
+	assert_null(kit.jersey.yoke, "nor a yoke")

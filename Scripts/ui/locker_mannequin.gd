@@ -590,8 +590,9 @@ static func _basis_along(y_axis: Vector3) -> Basis:
 
 # ── Paint ────────────────────────────────────────────────────────────────────
 
-# The kit, not flat team colors: striped jersey with the yoke on the torso's
-# top cap, the shoulder pads' own color, striped socks, solid pants. Stripe
+# The kit, not flat team colors: striped jersey with the collar on the torso's
+# top cap and the yoke over the shoulders, the shoulder pads' own color under
+# it, striped socks, solid pants. Stripe
 # textures come from the coordinator the rink paints with, so the bands land
 # where the in-game skater's do.
 func _paint_body(colors: Dictionary, skin_tone: int) -> void:
@@ -599,8 +600,8 @@ func _paint_body(colors: Dictionary, skin_tone: int) -> void:
 	var jersey: Dictionary = uniform.jersey
 	var socks: Dictionary = uniform.socks
 
-	_paint_texture(_torso, 0, UniformPaint.h_stripes(
-			jersey.base, jersey.stripes, jersey.yoke), _CLOTH_ROUGH)
+	_paint_texture(_torso, 0, UniformPaint.h_stripes(jersey.base,
+			UniformPaint.jersey_stripes(jersey), UniformPaint.collar_color(jersey)), _CLOTH_ROUGH)
 	_paint(_pelvis, 0, uniform.pants.base, UniformPaint.ROUGH_NYLON)
 	_paint(_helmet, SkaterMeshBuilder.HELMET_SURF_SHELL, uniform.helmet, _HELMET_ROUGH)
 	_paint(_helmet, SkaterMeshBuilder.HELMET_SURF_SKIN,
@@ -611,8 +612,9 @@ func _paint_body(colors: Dictionary, skin_tone: int) -> void:
 		sock_tex = UniformPaint.h_stripes(
 				socks.base, socks.stripes)
 	var sleeve: Color = uniform.arms.upper.base
+	var cap_tex: ImageTexture = UniformPaint.shoulder_cap(jersey, uniform.shoulders.color)
 	for i: int in 2:
-		_paint(_shoulders[i], 0, uniform.shoulders.color, _CLOTH_ROUGH)
+		_paint_texture(_shoulders[i], 0, cap_tex, _CLOTH_ROUGH)
 		# The knee takes the pants BASE solid — the rink paints it apart from
 		# the thigh, whose side stripe would ring a ball.
 		_paint(_thighs[i], 0, uniform.pants.base, UniformPaint.ROUGH_NYLON)

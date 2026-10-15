@@ -37,6 +37,10 @@ const _TORSO_PROFILE: Array[Vector2] = [
 	Vector2(-0.230, 0.214),
 	Vector2(-0.275, 0.222),  # jersey hem flare
 ]
+# The yoke paints the torso side from the collar down to the shoulder line
+# (station 2), as a fraction of the side's height; the collar ring is the top cap.
+const TORSO_YOKE_SIDE_FRACTION: float = (_TORSO_PROFILE[0].x - _TORSO_PROFILE[2].x) \
+		/ (_TORSO_PROFILE[0].x - _TORSO_PROFILE[7].x)
 # Rear (+Z is the back) shift per _TORSO_PROFILE ring — the hockey-butt sway:
 # the seat builds through the lower back and peaks at the hem that drapes
 # over it, while the chest rings stay centered so the belly keeps its line.
@@ -160,6 +164,10 @@ const _SHOULDER_PROFILE: Array[Vector3] = [
 	Vector3(-0.105, 0.070, 0.85),
 	Vector3(-0.140, 0.066, 1.0),   # arm-side end, at the sleeve's own radius
 ]
+
+# The yoke crosses the cap at its second ring, so the top of the shoulder
+# matches the jersey and the cap's own color starts below it.
+const SHOULDER_CAP_YOKE_V: float = _SHOULDER_PROFILE[1].z
 
 const _KNEE_RADIUS: float = 0.095
 
