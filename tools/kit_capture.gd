@@ -267,7 +267,6 @@ func _build_sheet() -> void:
 		_jersey_decals.append(jersey)
 		_jersey_textures.append(jersey_vp.get_texture())
 		var shoulder := ShoulderDecal.new()
-		shoulder.use_skater_cap()
 		var shoulder_vp := _decal_viewport(shoulder.size)
 		shoulder_vp.add_child(shoulder)
 		_shoulder_decals.append(shoulder)
@@ -408,7 +407,7 @@ func _draw_shoulder_cap(c: Node2D, center: Vector2, tex: Texture2D) -> void:
 		var unit := Vector2(cos(t), sin(t))
 		pts.append(center + unit * half_px)
 		uvs.append(Vector2(0.5 + unit.x * _cap_half.x / ShoulderDecal.CAP_GIRTH_M,
-				ShoulderDecal.SKATER_NUMBER_CENTER_V + unit.y * _cap_half.y / ShoulderDecal.CAP_M_PER_V))
+				ShoulderDecal.CAP_NUMBER_CENTER_V + unit.y * _cap_half.y / ShoulderDecal.CAP_M_PER_V))
 	c.draw_polygon(pts, PackedColorArray([Color.WHITE]), uvs, tex)
 	pts.append(pts[0])
 	c.draw_polyline(pts, _EDGE, 1.5, true)

@@ -70,13 +70,21 @@ func _draw() -> void:
 		if band.y > band.x:
 			draw_rect(Rect2(0, band.x, IMG_W, band.y - band.x), stripe.color, true)
 
-	var name_top_m: float = float(YOKE_BOTTOM_PX) / PX_PER_M.y + NAME_GAP_M
-	var name_upper: String = player_name.to_upper()
-	if name_upper.length() > 0:
-		_draw_centered(NAME_FONT, name_upper, NAME_EM_M, name_top_m)
-	var num_str: String = str(jersey_number)
-	if num_str.length() > 0:
-		_draw_centered(FONT, num_str, NUMBER_EM_M, name_top_m + NAME_EM_M + NUMBER_GAP_M)
+	draw_back_lettering(self, player_name, jersey_number, text_color, float(BACK_CENTER_X),
+			PX_PER_M, float(YOKE_BOTTOM_PX) / PX_PER_M.y)
+
+
+# A back's name and number, laid out in metres down from the top of the back
+# (`yoke_bottom_m` is where the yoke ends) and centred on `center_x` px. The
+# goalie's back letters through this too, so every player's back reads alike.
+static func draw_back_lettering(canvas: CanvasItem, p_name: String, number: int, color: Color,
+		center_x: float, px_per_m: Vector2, yoke_bottom_m: float) -> void:
+	var name_top_m: float = yoke_bottom_m + NAME_GAP_M
+	if not p_name.is_empty():
+		_draw_centered(canvas, NAME_FONT, p_name.to_upper(), NAME_EM_M, name_top_m,
+				center_x, px_per_m, color)
+	_draw_centered(canvas, FONT, str(number), NUMBER_EM_M,
+			name_top_m + NAME_EM_M + NUMBER_GAP_M, center_x, px_per_m, color)
 
 
 # Converts a v2 stripe {pos, width} over a region of height region_px into
@@ -90,19 +98,20 @@ static func _stripe_band(stripe: Dictionary, region_px: int) -> Vector2i:
 	return Vector2i(y0, y1)
 
 
-# Centred on the back, `em_m` tall with its em box's top `top_m` below the
-# collar. The text is set at the vertical texel density and squeezed or widened
-# to the horizontal one, so it is the shape the font draws once on the body.
-# One color, no outline — the kit's text.outline is for UI chrome.
-func _draw_centered(font: Font, s: String, em_m: float, top_m: float) -> void:
-	var size: int = roundi(em_m * PX_PER_M.y)
-	var stretch: float = PX_PER_M.x / PX_PER_M.y
+# `em_m` tall with its em box's top `top_m` below the top of the back. The text
+# is set at the vertical texel density and squeezed or widened to the
+# horizontal one, so it is the shape the font draws once on the body. One
+# color, no outline — the kit's text.outline is for UI chrome.
+static func _draw_centered(canvas: CanvasItem, font: Font, s: String, em_m: float,
+		top_m: float, center_x: float, px_per_m: Vector2, color: Color) -> void:
+	var size: int = roundi(em_m * px_per_m.y)
+	var stretch: float = px_per_m.x / px_per_m.y
 	var width: float = font.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
-	var pos := Vector2(float(BACK_CENTER_X) / stretch - width * 0.5,
-			top_m * PX_PER_M.y + font.get_ascent(size))
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2(stretch, 1.0))
-	draw_string(font, pos, s, HORIZONTAL_ALIGNMENT_LEFT, -1, size, text_color)
-	draw_set_transform_matrix(Transform2D.IDENTITY)
+	var pos := Vector2(center_x / stretch - width * 0.5,
+			top_m * px_per_m.y + font.get_ascent(size))
+	canvas.draw_set_transform(Vector2.ZERO, 0.0, Vector2(stretch, 1.0))
+	canvas.draw_string(font, pos, s, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
+	canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
 func update_jersey(

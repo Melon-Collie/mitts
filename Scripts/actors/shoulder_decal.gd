@@ -1,69 +1,62 @@
 class_name ShoulderDecal
 extends Node2D
 
-# Draws a shoulder's color and the player number into a small viewport that the
-# shoulder parts sample as their albedo — the same render-to-texture pattern as
-# JerseyDecal, one viewport shared by both shoulders. The number sits on V's
-# middle band and U = 0.5; each shoulder's uv1_offset turns that outward.
+# Draws a shoulder part's paint — the yoke over its top, its own color below —
+# and the player number into a small viewport that both shoulders sample as
+# their albedo, the same render-to-texture pattern as JerseyDecal. U wraps the
+# part with the number at 0.5 (each shoulder's uv1_offset turns that outward)
+# and V runs pole to pole.
 #
-# The skater's cap (use_skater_cap) also wears the yoke over its top
-# (SkaterMeshBuilder.SHOULDER_CAP_YOKE_V) and letters in metres, like the back,
-# at the cap's own texel density. The goalie's shoulders keep the plain layout:
-# one color, the number at a fixed pixel size.
-#
-# The number is one color, no outline, like the back's lettering.
+# The number is lettered in metres at the part's own texel density, so it is
+# the same size and shape on every player's shoulder. One color, no outline,
+# like the back's lettering. Defaults are the skater's cap; the goalie's
+# floater states its own (use_part).
 
 const FONT: Font = preload("res://Assets/Fonts/BarlowSemiCondensed-ExtraBold.ttf")
-const IMG_W: int = 256
-const IMG_H: int = 256
-const NUMBER_FONT_SIZE: int = 56
+# A sleeve number a little over half the back name's em.
+const NUMBER_EM_M: float = 0.10
 
 # The skater's cap mesh, measured by test_lettering_scale.gd: the equator's
 # girth (U wraps it across the texture's width) and metres of meridian per unit
-# of V through the number band.
-const SKATER_SIZE: Vector2i = Vector2i(512, 256)
+# of V through the number band. Its number hangs below the equator, on the part
+# of the cap that runs down the arm.
+const CAP_SIZE: Vector2i = Vector2i(512, 256)
 const CAP_GIRTH_M: float = 0.556
 const CAP_M_PER_V: float = 0.23
-const SKATER_PX_PER_M: Vector2 = Vector2(SKATER_SIZE.x / CAP_GIRTH_M, SKATER_SIZE.y / CAP_M_PER_V)
-# A sleeve number a little over half the back name's em, on the part of the cap
-# that hangs down the arm, below the yoke.
-const SKATER_NUMBER_EM_M: float = 0.10
-const SKATER_NUMBER_CENTER_V: float = 0.58
+const CAP_NUMBER_CENTER_V: float = 0.58
 
-var size: Vector2i = Vector2i(IMG_W, IMG_H)
+var size: Vector2i = CAP_SIZE
 var shoulder_color: Color = Color.WHITE
 var yoke_color: Color = Color.WHITE
 var jersey_number: int = 0
 var text_color: Color = Color.BLACK
-var _skater_cap: bool = false
+var _px_per_m: Vector2 = Vector2(CAP_SIZE.x / CAP_GIRTH_M, CAP_SIZE.y / CAP_M_PER_V)
+var _yoke_v: float = SkaterMeshBuilder.SHOULDER_CAP_YOKE_V
+var _number_center_v: float = CAP_NUMBER_CENTER_V
 
 
-# Before the viewport is sized from `size`.
-func use_skater_cap() -> void:
-	_skater_cap = true
-	size = SKATER_SIZE
+# A part other than the skater's cap: its texture size, its girth round U and
+# metres per unit V through the number, the V where the yoke ends, and the
+# number's centre in V. Before the viewport is sized from `size`.
+func use_part(p_size: Vector2i, girth_m: float, m_per_v: float, yoke_v: float,
+		number_center_v: float) -> void:
+	size = p_size
+	_px_per_m = Vector2(p_size.x / girth_m, p_size.y / m_per_v)
+	_yoke_v = yoke_v
+	_number_center_v = number_center_v
 
 
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), shoulder_color, true)
-	if _skater_cap:
-		draw_rect(Rect2(0, 0, size.x, roundf(SkaterMeshBuilder.SHOULDER_CAP_YOKE_V * size.y)),
-				yoke_color, true)
+	draw_rect(Rect2(0, 0, size.x, roundf(_yoke_v * size.y)), yoke_color, true)
 	var num_str: String = str(jersey_number)
-	if num_str.is_empty():
-		return
-	var font_size: int = NUMBER_FONT_SIZE
-	var stretch: float = 1.0
-	var center_v: float = 0.5
-	if _skater_cap:
-		font_size = roundi(SKATER_NUMBER_EM_M * SKATER_PX_PER_M.y)
-		stretch = SKATER_PX_PER_M.x / SKATER_PX_PER_M.y
-		center_v = SKATER_NUMBER_CENTER_V
 	# Set at the vertical texel density and stretched to the horizontal one, so
-	# the number keeps the font's shape once it is on the cap.
+	# the number keeps the font's shape once it is on the part.
+	var font_size: int = roundi(NUMBER_EM_M * _px_per_m.y)
+	var stretch: float = _px_per_m.x / _px_per_m.y
 	var text: Vector2 = FONT.get_string_size(num_str, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
 	var pos := Vector2(float(size.x) * 0.5 / stretch - text.x * 0.5,
-			center_v * float(size.y) - text.y * 0.5 + FONT.get_ascent(font_size))
+			_number_center_v * float(size.y) - text.y * 0.5 + FONT.get_ascent(font_size))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(stretch, 1.0))
 	draw_string(FONT, pos, num_str, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, text_color)
 	draw_set_transform_matrix(Transform2D.IDENTITY)

@@ -122,7 +122,6 @@ func _create_jersey_viewport() -> void:
 func _create_shoulder_viewport() -> void:
 	_shoulder_decal = ShoulderDecal.new()
 	_shoulder_decal.name = "ShoulderDecal"
-	_shoulder_decal.use_skater_cap()
 	_shoulder_viewport = SubViewport.new()
 	_shoulder_viewport.name = "ShoulderViewport"
 	_shoulder_viewport.size = _shoulder_decal.size
