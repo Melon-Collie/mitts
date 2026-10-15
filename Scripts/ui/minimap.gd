@@ -53,7 +53,6 @@ const _PUCK_OUTLINE: Color = Color(1.0, 1.0, 1.0, 0.9)
 # drawn over it in black.
 const _MARKER_OUTLINE: Color = MenuStyle.BROADCAST_BG
 const _LOCAL_OUTLINE: Color = Color(1.0, 1.0, 1.0, 0.95)
-const _CARRIER_RING: Color = Color(1.0, 1.0, 1.0, 0.9)
 const _ATTACK_CHEVRON: Color = MenuStyle.TEAL
 # Faceoff spots — static reference marks only (no circles, no hashmarks), muted
 # and low-alpha so a live player/puck dot always wins the eye over them.
@@ -71,7 +70,9 @@ const _FACEOFF_DOT_RADIUS: float = 1.3
 const _LOCAL_TIP: float = 7.0
 const _LOCAL_BACK: float = 4.0
 const _LOCAL_HALF_WIDTH: float = 5.0
-const _CARRIER_RING_GAP: float = 2.5
+# The puck already sits on its carrier's stick; the carrier's marker grows by
+# this factor so a scrum still shows whose stick it is on.
+const _CARRIER_SCALE: float = 5.5 / _PLAYER_DOT_RADIUS
 
 var _ice_width_px: float = 0.0   # short (X) axis, derived from rink aspect
 var _bg_style: StyleBoxFlat = null
@@ -301,15 +302,13 @@ func _paint_dynamic(ci: Control) -> void:
 			local_record = record
 			continue
 		var pos: Vector2 = _map_point(record.skater.global_position.x, record.skater.global_position.z, flip)
-		_draw_dot(ci, pos, _PLAYER_DOT_RADIUS, record.jersey_color)
-		if record.skater == carrier:
-			_draw_carrier_ring(ci, pos, _PLAYER_DOT_RADIUS)
+		var radius: float = _PLAYER_DOT_RADIUS * (_CARRIER_SCALE if record.skater == carrier else 1.0)
+		_draw_dot(ci, pos, radius, record.jersey_color)
 	if local_record != null:
 		var skater: Skater = local_record.skater
 		var lpos: Vector2 = _map_point(skater.global_position.x, skater.global_position.z, flip)
-		_draw_local_arrow(ci, lpos, skater.get_facing(), flip, local_record.jersey_color)
-		if skater == carrier:
-			_draw_carrier_ring(ci, lpos, _LOCAL_TIP)
+		_draw_local_arrow(ci, lpos, skater.get_facing(), flip, local_record.jersey_color,
+				_CARRIER_SCALE if skater == carrier else 1.0)
 
 	if puck != null and is_instance_valid(puck):
 		var ppos: Vector2 = _map_point(puck.global_position.x, puck.global_position.z, flip)
@@ -377,22 +376,20 @@ func _draw_dot(ci: Control, pos: Vector2, radius: float, fill: Color) -> void:
 # You: an arrowhead along your facing, in your jersey, outlined white. Facing is
 # world (x, z); the map's base orientation is x right, z down, so it maps as-is
 # and the attack-up flip negates it like a position.
-func _draw_local_arrow(ci: Control, pos: Vector2, facing: Vector2, flip: bool, fill: Color) -> void:
+func _draw_local_arrow(ci: Control, pos: Vector2, facing: Vector2, flip: bool, fill: Color,
+		size_factor: float) -> void:
 	var dir: Vector2 = facing.normalized() if facing.length_squared() > 0.0001 else Vector2.DOWN
 	if flip:
 		dir = -dir
 	var side: Vector2 = dir.orthogonal()
-	_arrow_pts[0] = pos + dir * _LOCAL_TIP
-	_arrow_pts[1] = pos - dir * _LOCAL_BACK + side * _LOCAL_HALF_WIDTH
-	_arrow_pts[2] = pos - dir * _LOCAL_BACK - side * _LOCAL_HALF_WIDTH
+	_arrow_pts[0] = pos + dir * (_LOCAL_TIP * size_factor)
+	_arrow_pts[1] = pos + (side * _LOCAL_HALF_WIDTH - dir * _LOCAL_BACK) * size_factor
+	_arrow_pts[2] = pos - (side * _LOCAL_HALF_WIDTH + dir * _LOCAL_BACK) * size_factor
 	ci.draw_colored_polygon(_arrow_pts, fill)
 	for i: int in 3:
 		_arrow_outline[i] = _arrow_pts[i]
 	_arrow_outline[3] = _arrow_pts[0]
 	ci.draw_polyline(_arrow_outline, _LOCAL_OUTLINE, 1.5, true)
-
-func _draw_carrier_ring(ci: Control, pos: Vector2, marker_radius: float) -> void:
-	ci.draw_arc(pos, marker_radius + _CARRIER_RING_GAP, 0.0, TAU, 24, _CARRIER_RING, 1.5, true)
 
 # A chevron in the end margin past the boards the local team attacks, pointing
 # off the map: which way is "up the ice" for you, whatever the camera flip.
