@@ -1288,9 +1288,15 @@ func build_ai_caps() -> AISkaterCaps:
 	# multiplier — a nimbler bot turns (and prices a back-wedge aim) faster.
 	if _base_facing_drag_speed > 0.001:
 		caps.facing_turn_rate *= facing_drag_speed / _base_facing_drag_speed
+	caps.movement = _build_movement_config()
+	caps.facing_drag_speed = facing_drag_speed
+	caps.facing_drag_speed_braking = facing_drag_speed_braking
+	caps.board_shield_probe = board_shield_probe
+	caps.board_shield_max_rad = deg_to_rad(board_shield_max_deg)
 	if skater != null:
 		caps.weight = skater.weight
 		caps.body_check_transfer = skater.body_check_transfer
+		caps.body_radius = skater.collision_radius()
 	return caps
 
 

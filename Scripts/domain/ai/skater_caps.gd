@@ -101,6 +101,21 @@ var handle_reach: float = 0.9
 # Default = 90° + 67°.
 var reach_cone_half_angle: float = deg_to_rad(157.0)
 
+# The skating physics this body runs (SkaterController's movement config, a copy:
+# the controller writes the body-check stagger into its own every tick, on the
+# main thread, while bots read on the AI worker).
+var movement: SkaterMovementRules.MovementConfig = SkaterMovementRules.league_config()
+# The pose coordinator's facing lerp rates, per second (Agility-scaled).
+var facing_drag_speed: float = 5.0
+var facing_drag_speed_braking: float = 10.0
+# The body's contact disc (Size-scaled): how close to the boards and the cage its
+# centre can get.
+var body_radius: float = 0.35
+# A carrier on the boards squares up along them (BoardPlayRules
+# .board_shield_facing): the probe distance it starts at and the most it turns.
+var board_shield_probe: float = 1.1
+var board_shield_max_rad: float = deg_to_rad(55.0)
+
 # Effective body-facing turn rate (rad/s) used to price the rotation an out-of-cone
 # aim costs: a constant-rate approximation of the real exponential lerp at
 # facing_drag_speed, 6.0 rad/s at baseline and scaled by the skater's Agility.

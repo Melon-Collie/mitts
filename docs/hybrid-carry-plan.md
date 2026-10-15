@@ -1,6 +1,6 @@
 # Hybrid carry — a far destination, the next half-second rolled out
 
-Status: **draft, for review.** The CLAUDE.md workflow applies once agreed: this
+Status: **agreed design; step 1 done, step 2 next.** The CLAUDE.md workflow applies: this
 doc is the plan, deviations get discussed first.
 
 ## Decisions
@@ -13,6 +13,11 @@ doc is the plan, deviations get discussed first.
 - **Evasion becomes one question** — which input keeps the puck and makes
   progress — so a carrier with open ice ahead skates straight and faces
   forward because nothing beats it, not because a rule says so.
+- **Regroup is on trial**: in the menu until the duels and playtests show
+  whether it pays.
+- **Every tier runs the same code.** Hard is the basis; easier tiers are tuned
+  down from it as needed, not given a smaller input set.
+- **7 inputs over 0.5 s** to start; the exact set is settled in step 1.
 - Shot-currency step 4 (`docs/shot-currency-plan.md`) waits for this: the drive
   that prices a spot outside the zone should follow a route a carrier takes.
 
@@ -128,6 +133,20 @@ A micro-bench row; a 120 Hz rollout of 7 inputs is ~420 `apply_movement` calls,
 so this step also measures whether a coarser sub-step (60 Hz) holds the
 calibration, and uses the native kernel when it is built.
 
+**Done.** `AICarryRollout` (`Scripts/domain/ai/carry_rollout.gd`), held to the
+live controller by `test_carry_rollout.gd` to float noise, with and without the
+puck: from rest, in stride, crossing the destination line, into the boards, at
+the cage. It runs the controller's own order, which matters: the facing step
+reads the velocity before the body's containment strips it. The carrier's board
+shield (facing turned along the wall) is modelled; other bodies, the goalie's
+footprint and the shot and knockdown states are not.
+
+Cost, per carrier, all seven moves: 1.4 ms at the live 120 Hz step, 0.37 ms at
+30 Hz (`STEP_TICKS` 4), which drifts ~6 cm and 0.3 m/s from the live path —
+bounded by a test. The containment and the board shield are skipped exactly when
+nothing in reach of the horizon touches the boards or a cage, which is most of
+the ice. A native kernel can make the full-rate step affordable later.
+
 ### Step 2 — destinations
 
 The long-range candidates move into a destination menu with hysteresis; the
@@ -163,9 +182,5 @@ one layer followed by another.
 
 ## 5. Open questions
 
-- The destination menu: is it the right set? In particular whether **regroup**
-  belongs, and whether the formations should supply a destination (the lane the
-  formation wants the carrier in).
-- The input set and horizon (7 inputs, 0.5 s) — a starting point, set in step 1.
-- Difficulty: should a lower tier roll fewer inputs (cognition), or the same set
-  with its execution noise?
+- Whether the formations should hand the carrier a destination (the lane the
+  formation wants him in). Not in this plan; revisit once the menu has played.

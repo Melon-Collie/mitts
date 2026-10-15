@@ -65,6 +65,35 @@ const GRIP_MIN_SPEED: float = 0.5
 const SKID_TURN_TAPER: float = PI * 0.25
 
 
+# A league-average body's config, before any attributes apply: SkaterController's
+# authored defaults (test_movement_league_config.gd holds the two together).
+static func league_config() -> MovementConfig:
+	var cfg := MovementConfig.new()
+	cfg.thrust = GameRules.DEFAULT_SKATER_THRUST_M_S2
+	cfg.power_knee_speed = GameRules.DEFAULT_SKATER_POWER_KNEE_M_S
+	cfg.friction = 0.35
+	cfg.friction_drag = 0.09
+	cfg.max_speed = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
+	cfg.move_deadzone = 0.1
+	cfg.stop_decel = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
+	cfg.reverse_skid_fraction = GameRules.DEFAULT_SKATER_REVERSE_SKID_FRACTION
+	cfg.turn_accel = GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2
+	cfg.max_turn_rate = GameRules.DEFAULT_SKATER_MAX_TURN_RATE_RAD_S
+	cfg.puck_carry_speed_multiplier = 0.92
+	cfg.backward_thrust_multiplier = 0.80
+	cfg.crossover_thrust_multiplier = 0.90
+	cfg.backward_max_speed_multiplier = 0.75
+	cfg.lateral_grip = 1.0
+	cfg.stance_grip_mult = 2.0
+	cfg.stance_scrape = 3.0 / GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2
+	cfg.stance_stride_mult = 0.6
+	cfg.stance_max_speed_mult = 0.85
+	cfg.stance_shuffle_mult = 1.2
+	cfg.commit_grip_mult = 0.6
+	cfg.commit_stride_mult = 0.5
+	return cfg
+
+
 # `grip_scale` multiplies the edge grip from outside the config (the body-check
 # stagger); 1.0 is untouched.
 static func apply_movement(

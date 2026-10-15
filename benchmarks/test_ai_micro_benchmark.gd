@@ -160,6 +160,11 @@ func test_evaluator_costs() -> void:
 				open_carrier._field.teammate_ids))
 	_bench("open ice: best carry (candidates)", func() -> void:
 		open_carrier._carry.search(open_ctx, 0.1, open_ctx.self_pos))
+	var rollout := AICarryRollout.new()
+	var roll_caps := AISkaterCaps.new()
+	_bench("carry rollout (7 moves × 0.5 s)", func() -> void:
+		rollout.roll_all(open_ctx.self_pos, Vector3(0.0, 0.0, -6.0), Vector2(0, -1),
+				Vector2(0.2, -1.0), roll_caps))
 
 	# The rim pass: our carrier behind our own net with the forecheck in the
 	# lanes, the one scene where every receiver's flat feed is contested and the

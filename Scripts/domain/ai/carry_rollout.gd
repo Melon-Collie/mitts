@@ -1,0 +1,188 @@
+class_name AICarryRollout
+extends RefCounted
+
+# The carrier's near moves, skated: each of a fixed set of stick inputs held for
+# HORIZON_S from the carrier's real velocity and facing, through the movement
+# physics every skater runs (SkaterMovementRules.apply_movement), the facing the
+# pose coordinator turns him through (FacingRules at his own drag), and the
+# body's rink and net clamps. What a move is priced on is where that leaves him.
+#
+# Moves are relative to `toward`, the direction of the carry's destination. A
+# forward move faces where it skates; the brake faces the destination (the brake
+# check); the cut back skates away from it facing it — backward.
+#
+# Not modelled: other bodies (contact and checks), the goalie's footprint, and
+# the knockdown and shot states that suspend locomotion.
+#
+# One instance per carrier, results overwritten by every roll; read them before
+# the next call.
+
+const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
+
+enum Move { STRAIGHT, SOFT_LEFT, SOFT_RIGHT, HARD_LEFT, HARD_RIGHT, BRAKE, CUT_BACK }
+const MOVE_COUNT: int = 7
+
+# How long a move is held: the deke's length (fake + cut), a little past the
+# evasion look-ahead, so a cut has time to change which defender can reach.
+const HORIZON_S: float = 0.5
+const TICKS: int = int(HORIZON_S * _PhysicsConstants.PHYSICS_TICK)
+const DT: float = 1.0 / _PhysicsConstants.PHYSICS_TICK
+# Path samples per move, at equal times through the horizon (the last is the end).
+const SAMPLES: int = 3
+const _TICKS_PER_SAMPLE: int = TICKS / SAMPLES
+
+# Physics ticks per rollout step. 1 is the live integration exactly; 4 (30 Hz)
+# drifts from it by ~6 cm and 0.3 m/s over the horizon, far inside a stick's
+# reach, for a quarter of the cost (test_carry_rollout.gd bounds the drift). Must
+# divide _TICKS_PER_SAMPLE.
+const STEP_TICKS: int = 4
+var step_ticks: int = STEP_TICKS
+
+# Stick angles off `toward`. In world XZ a positive Vector2.rotated turns toward
+# +X from −Z, which is the skater's right.
+const SOFT_TURN_RAD: float = deg_to_rad(30.0)
+const HARD_TURN_RAD: float = deg_to_rad(75.0)
+
+# Index-matched by Move.
+var stick: Array[Vector2] = []
+var cursor: Array[Vector2] = []
+var brake: Array[bool] = []
+var end_pos: Array[Vector3] = []
+var end_vel: Array[Vector3] = []
+var end_facing: Array[Vector2] = []
+# The path met the boards or the cage and was held off them, as the body is.
+var touched_boundary: Array[bool] = []
+# MOVE_COUNT × SAMPLES positions, row-major by move.
+var samples: Array[Vector3] = []
+
+var _facing_out := FacingRules.Result.new()
+
+
+func _init() -> void:
+	stick.resize(MOVE_COUNT)
+	cursor.resize(MOVE_COUNT)
+	brake.resize(MOVE_COUNT)
+	end_pos.resize(MOVE_COUNT)
+	end_vel.resize(MOVE_COUNT)
+	end_facing.resize(MOVE_COUNT)
+	touched_boundary.resize(MOVE_COUNT)
+	samples.resize(MOVE_COUNT * SAMPLES)
+
+
+# Rolls every move. `toward` is world XZ; it need not be normalised but must not
+# be zero. `facing` is the body's facing (world XZ, unit).
+func roll_all(pos: Vector3, vel: Vector3, facing: Vector2, toward: Vector2,
+		caps: AISkaterCaps, has_puck: bool = true) -> void:
+	var t: Vector2 = toward.normalized()
+	var walls: bool = _walls_in_reach(pos, vel, caps)
+	for m: int in MOVE_COUNT:
+		_set_move(m, t)
+		_roll(m, pos, vel, facing, caps, has_puck, walls)
+
+
+func sample(move: int, k: int) -> Vector3:
+	return samples[move * SAMPLES + k]
+
+
+func _set_move(m: int, t: Vector2) -> void:
+	brake[m] = false
+	match m:
+		Move.STRAIGHT:
+			stick[m] = t
+		Move.SOFT_LEFT:
+			stick[m] = t.rotated(-SOFT_TURN_RAD)
+		Move.SOFT_RIGHT:
+			stick[m] = t.rotated(SOFT_TURN_RAD)
+		Move.HARD_LEFT:
+			stick[m] = t.rotated(-HARD_TURN_RAD)
+		Move.HARD_RIGHT:
+			stick[m] = t.rotated(HARD_TURN_RAD)
+		Move.BRAKE:
+			stick[m] = t
+			brake[m] = true
+		Move.CUT_BACK:
+			stick[m] = -t
+	cursor[m] = t if m == Move.BRAKE or m == Move.CUT_BACK else stick[m]
+
+
+# One tick in the live order: the controller's input step (the movement physics
+# on the facing the body has, then the facing step on the new velocity), then
+# the body's integration and containment, which the controller runs ahead of.
+#
+# `walls` false skips the containment and the board shield, which are exactly
+# no-ops for this roll then (_walls_in_reach).
+func _roll(m: int, pos: Vector3, vel: Vector3, facing: Vector2, caps: AISkaterCaps,
+		has_puck: bool, walls: bool) -> void:
+	var cfg: SkaterMovementRules.MovementConfig = caps.movement
+	var move: Vector2 = stick[m]
+	var braking: bool = brake[m]
+	var cur: Vector2 = cursor[m]
+	var drag: float = caps.facing_drag_speed_braking if braking else caps.facing_drag_speed
+	var radius: float = caps.body_radius
+	var dt: float = DT * step_ticks
+	var p: Vector3 = pos
+	var v: Vector3 = vel
+	var f: Vector2 = facing
+	var touched: bool = false
+	for i: int in range(step_ticks - 1, TICKS, step_ticks):
+		v = SkaterMovementRules.apply_movement(v, move, atan2(-f.x, -f.y), has_puck,
+				braking, dt, cfg)
+		v.y = 0.0
+		f = _face(f, cur, v, p, braking, drag * dt, caps, has_puck and walls)
+		p += v * dt
+		if not walls:
+			if (i + 1) % _TICKS_PER_SAMPLE == 0:
+				samples[m * SAMPLES + (i + 1) / _TICKS_PER_SAMPLE - 1] = p
+			continue
+		var xz := Vector2(p.x, p.z)
+		var held: Vector2 = GameRules.push_out_of_net(
+				GameRules.clamp_to_rink_inner(xz, radius), radius)
+		if xz.distance_squared_to(held) > 1e-6:
+			var out_dir: Vector2 = (held - xz).normalized()
+			var vxz := Vector2(v.x, v.z)
+			var into: float = vxz.dot(out_dir)
+			if into < 0.0:
+				vxz -= into * out_dir
+				v.x = vxz.x
+				v.z = vxz.y
+			p.x = held.x
+			p.z = held.y
+			touched = true
+		if (i + 1) % _TICKS_PER_SAMPLE == 0:
+			samples[m * SAMPLES + (i + 1) / _TICKS_PER_SAMPLE - 1] = p
+	end_pos[m] = p
+	end_vel[m] = v
+	end_facing[m] = f
+	touched_boundary[m] = touched
+
+
+# SkaterPoseCoordinator.apply_facing for a cursor held along `cur`: the facing
+# rule's target (turned along the boards for a carrier on them), frozen while
+# the cursor sits in the unreachable wedge behind him, a chord lerp toward it
+# otherwise (an angle slerp through the turn round).
+func _face(f: Vector2, cur: Vector2, v: Vector3, p: Vector3, braking: bool, step: float,
+		caps: AISkaterCaps, shield: bool) -> Vector2:
+	FacingRules.solve(_facing_out, f, cur, Vector2(v.x, v.z), braking, false, caps.facing_rules)
+	var behind: bool = absf(f.angle_to(cur)) >= caps.reach_cone_half_angle
+	if behind and not _facing_out.turning_to_cursor_behind:
+		return f
+	var target: Vector2 = _facing_out.target
+	if shield:
+		target = BoardPlayRules.board_shield_facing(target, BoardPlayRules.board_proximity(
+				Vector2(p.x, p.z), caps.board_shield_probe), caps.board_shield_max_rad)
+	if behind:
+		return f.slerp(target, minf(step, 1.0))
+	return f.lerp(target, step).normalized()
+
+
+# Whether anything the body could reach in the horizon (from rest at full
+# thrust on top of its speed) comes within a body radius of the boards, the
+# shield's probe of them, or a body radius of either cage.
+static func _walls_in_reach(pos: Vector3, vel: Vector3, caps: AISkaterCaps) -> bool:
+	var reach: float = Vector2(vel.x, vel.z).length() * HORIZON_S \
+			+ 0.5 * caps.movement.thrust * HORIZON_S * HORIZON_S
+	var xz := Vector2(pos.x, pos.z)
+	var board_margin: float = reach + caps.body_radius + caps.board_shield_probe
+	if not GameRules.clamp_to_rink_inner(xz, board_margin).is_equal_approx(xz):
+		return true
+	return not GameRules.push_out_of_net(xz, reach + caps.body_radius).is_equal_approx(xz)
