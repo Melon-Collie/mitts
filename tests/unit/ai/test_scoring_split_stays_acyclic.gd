@@ -7,7 +7,7 @@ extends GutTest
 #
 # The shape held here: the shared primitives (the arrival clock, the net and
 # slot segment tests, the puck lane, the body's execution constants, the
-# planning keeper) are LEAVES that read no evaluator, and the two big
+# planning keeper, the measured shot odds) are LEAVES that read no evaluator, and the two big
 # evaluators that read them — AIActionScoring and AICarrySpace — never read
 # each other.
 
@@ -19,6 +19,7 @@ const _LEAVES: PackedStringArray = [
 	"res://Scripts/domain/ai/puck_lane.gd",
 	"res://Scripts/domain/ai/bot_mechanics.gd",
 	"res://Scripts/domain/ai/goalie_model.gd",
+	"res://Scripts/domain/ai/shot_odds.gd",
 ]
 const _EVALUATORS: PackedStringArray = ["AIActionScoring", "AICarrySpace"]
 
