@@ -47,6 +47,9 @@ const D2_MID_LANE_HALF_WIDTH_M: float = GameRules.END_ZONE_FACEOFF_DOT_X
 # How far weak-side of centre D2 shades while holding mid-ice.
 const D2_WEAK_SHADE_M: float = 2.0
 
+# A threat with no caps of his own is a league skater.
+static var _league_caps := AISkaterCaps.new()
+
 
 static func decide(ctx: RoleContext, slot: int) -> RoleDecision:
 	if slot == AIRoleSlots.Slot.RUSH_D2:
@@ -151,14 +154,9 @@ static func _with_cushion(ladder_m: float, cushion_m: float,
 
 
 # The ground the threat gains on this body while it builds to his speed, both
-# driving flat out down `ap.dir_net` (AIStrideRamp.head_start; our opposing
-# momentum braked out first). The race finishes where a ridden retreat ends
-# (RETREAT_FINISH_M), so the horizon is his trip there and the head start never
-# exceeds the ice he has left to it.
-#
-# Along the line only: lateral momentum is not priced. `threat_peer` -1 (a loose
-# puck) prices a league skater. A carrier is priced at his free top speed — a
-# slight over-read, in the safe direction.
+# driving flat out down `ap.dir_net` (head_start_on_me). The race finishes where
+# a ridden retreat ends (RETREAT_FINISH_M), so the horizon is his trip there and
+# the head start never exceeds the ice he has left to it.
 static func ramp_cushion_m(ctx: RoleContext, ap: AICarrierApproach,
 		threat_peer: int) -> float:
 	return head_start_on_me(ctx, ap.dir_net, ap.carrier_vel, ap.net_dist,
@@ -190,26 +188,49 @@ static func set_retreat_floor(ctx: RoleContext, ap: AICarrierApproach,
 # ramp_cushion_m's race for any threat: `dir_net` his line to our net,
 # `net_dist` his ice to it, finishing `finish_m` off the net. Also what "behind
 # me" means to an offensive station (race_depth_to_net), finishing at the gate.
+#
+# Both drive flat out down the line (AIStrideRamp.head_start; our opposing
+# momentum braked out first), the threat from the better of two starts: his pace
+# along the line now, or his whole speed turned onto it. A turn keeps a skater's
+# speed and swings it at his edge-limited rate (SkaterMovementRules), so a man
+# crossing the ice at speed has that speed toward our net a moment later; the
+# turn costs him the ground the arc gives up against the straight run.
+# `threat_peer` -1 (a loose puck) prices a league skater. A carrier is priced at
+# his free top speed — a slight over-read, in the safe direction.
 static func head_start_on_me(ctx: RoleContext, dir_net: Vector3,
 		threat_vel: Vector3, net_dist: float, threat_peer: int,
 		finish_m: float = AIZoneCoverage.HOUSE_TOP_DEPTH_M) -> float:
-	var caps: AISkaterCaps = ctx.caps_by_peer.get(threat_peer) \
-			if threat_peer != -1 else null
-	var lead_vmax: float = caps.max_speed if caps != null \
-			else AIArrival.SKATER_REF_SPEED_M_S
-	var lead_accel: float = caps.max_accel if caps != null \
-			else AIArrival.SHED_ACCEL_DEFAULT_M_S2
-	var lead_v: float = threat_vel.x * dir_net.x + threat_vel.z * dir_net.z
-	var self_v: float = ctx.self_velocity.x * dir_net.x \
-			+ ctx.self_velocity.z * dir_net.z
 	var ice_to_finish: float = net_dist - finish_m
 	if ice_to_finish <= 0.0:
 		return 0.0
+	var caps: AISkaterCaps = ctx.caps_by_peer.get(threat_peer) \
+			if threat_peer != -1 else null
+	if caps == null:
+		caps = _league_caps
+	var self_v: float = ctx.self_velocity.x * dir_net.x \
+			+ ctx.self_velocity.z * dir_net.z
+	var along: float = threat_vel.x * dir_net.x + threat_vel.z * dir_net.z
+	var gained: float = _head_start_from(ctx, along, caps, self_v, ice_to_finish)
+	var speed: float = Vector2(threat_vel.x, threat_vel.z).length()
+	if speed > along + 0.1:
+		var off_line: float = acos(clampf(along / speed, -1.0, 1.0))
+		var turn_rate: float = minf(caps.movement.turn_accel * caps.lateral_grip / speed,
+				caps.movement.max_turn_rate)
+		var arc_cost: float = speed * (off_line - sin(off_line)) / turn_rate
+		gained = maxf(gained,
+				_head_start_from(ctx, speed, caps, self_v, ice_to_finish) - arc_cost)
+	return minf(gained, ice_to_finish)
+
+
+# AIStrideRamp.head_start for a threat starting down the line at `lead_v`, over
+# his trip to the finish.
+static func _head_start_from(ctx: RoleContext, lead_v: float, caps: AISkaterCaps,
+		self_v: float, ice_to_finish: float) -> float:
 	var horizon: float = AIStrideRamp.time_to_cover(
-			maxf(lead_v, 0.0), ice_to_finish, lead_vmax, lead_accel)
-	return minf(AIStrideRamp.head_start(lead_v, lead_vmax, lead_accel,
+			maxf(lead_v, 0.0), ice_to_finish, caps.max_speed, caps.max_accel)
+	return AIStrideRamp.head_start(lead_v, caps.max_speed, caps.max_accel,
 			self_v, ctx.self_max_speed, ctx.self_max_accel,
-			AIArrival.REVERSAL_BRAKE_DECEL_M_S2, horizon), ice_to_finish)
+			AIArrival.REVERSAL_BRAKE_DECEL_M_S2, horizon)
 
 
 # An attacker's distance from our net less the ground he gains on us while we
@@ -252,8 +273,10 @@ static func _gap_for(ctx: RoleContext, read: AIRushRead, carrier_pos: Vector3,
 
 
 # Is his speed advantage gone — close to stick range and attack? True when:
-#   · he is not advancing on our net (the ladder has no domain), or is steered
-#     to the wall;
+#   · he is not advancing on our net and cannot build a head start on us (the
+#     ladder has no domain) — a man crossing the ice at speed is not regrouping:
+#     a turn puts that speed at our net (head_start_on_me) — or is steered to
+#     the wall;
 #   · he is not coming at pace AND cannot build it past us (cushion under a
 #     stick);
 #   · the retreat cannot hold a gap (the cushion eats all but a stick of my
@@ -265,11 +288,11 @@ static func should_gap_up(ctx: RoleContext, read: AIRushRead,
 	# Outnumbered, being beaten is a goal rather than a scoring chance.
 	if read.numbers == AIRushRead.Numbers.DOWN_TWO_PLUS:
 		return false
-	if ap.closing < AIRushRead.REGROUP_CLOSING_M_S:
+	var stick: float = stick_m(ctx)
+	if ap.closing < AIRushRead.REGROUP_CLOSING_M_S and cushion_m < stick:
 		return true
 	if GameRules.INNER_HALF_WIDTH - absf(ap.carrier_pos.x) < GAP_UP_WALL_M:
 		return true
-	var stick: float = stick_m(ctx)
 	if ap.closing < GAP_UP_CLOSING_M_S and cushion_m < stick:
 		return true
 	var dx: float = ctx.self_pos.x - ap.carrier_pos.x

@@ -505,3 +505,30 @@ func test_rush_d_cushion_snapshot() -> void:
 	snap.record("ramp cushion, D standing 16 m off a 6 m/s carrier", _cushion(0.0))
 	snap.record("ramp cushion, same D drifting up-ice at 3 m/s", _cushion(3.0))
 	snap.verify(self)
+
+
+# ── A turn keeps a skater's speed ────────────────────────────────────────────
+
+func _crossing_read(carrier_vel: Vector3) -> Array:
+	var carrier := Vector3(0.0, 0.0, 0.0)
+	var ctx: RoleContext = _ctx(Vector3(3.0, 0.0, 12.0), [[10, 1, carrier, carrier_vel]], 10)
+	var ap := AICarrierApproach.new()
+	AIDefensiveVerbs.fill_approach(ctx, carrier, carrier_vel, ap)
+	var cushion: float = AIRoleRushD.ramp_cushion_m(ctx, ap, 10)
+	return [cushion, AIRoleRushD.should_gap_up(ctx, ctx.rush_read, ap, cushion)]
+
+
+func test_a_carrier_crossing_at_speed_has_a_head_start_a_standing_one_does_not() -> void:
+	# Crossing the ice he is not closing on our net at all, but a turn swings
+	# that speed at it: the race is priced on it, never on his pace along the line.
+	var standing: Array = _crossing_read(Vector3.ZERO)
+	var crossing: Array = _crossing_read(Vector3(6.0, 0.0, 0.0))
+	var leaving: Array = _crossing_read(Vector3(0.0, 0.0, -6.0))
+	assert_gt(crossing[0], standing[0], "crossing at speed earns more cushion than standing")
+	assert_lt(leaving[0], crossing[0], "skating away needs a longer turn than crossing")
+
+
+func test_a_carrier_crossing_at_speed_is_not_regrouping() -> void:
+	assert_true(_crossing_read(Vector3.ZERO)[1], "a standing carrier is a regroup: step up")
+	assert_false(_crossing_read(Vector3(6.0, 0.0, 0.0))[1],
+			"one crossing at speed is not: his speed is a turn from our net")

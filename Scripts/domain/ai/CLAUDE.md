@@ -380,6 +380,12 @@ a standing body against a 9 m/s carrier gives up ~5.5 m, more than the whole
 velocities, his up-ice momentum braked out first), and every ladder reader adds
 it. It is nil for a defender riding the rush at its pace.
 
+The threat starts from the better of his pace along the line and his whole speed
+turned onto it, less the ground the arc costs at his edge-limited turn rate
+(`head_start_on_me`). A turn keeps a skater's speed; read along the line only, a
+carrier crossing the ice at speed looked like a standing one, and the defender
+stepped up into the turn that took him wide.
+
 The race finishes where a ridden retreat ends (`RETREAT_FINISH_M`, the paint
 plus the crease buffer): the horizon is his trip there, the head start is capped
 at the ice he has left to it, and the cushion never pushes a stand past it
@@ -388,7 +394,8 @@ at the ice he has left to it, and the cushion never pushes a stand past it
 is what keeps a stand that deep from becoming a walk into the crease.
 
 The gap-up reads the same race. "His speed advantage is gone" means he is not
-coming at pace AND cannot build it past us (cushion under a stick); pace alone
+coming at pace AND cannot build it past us (cushion under a stick) — the regroup
+clause too, so a man crossing at speed is not regrouping; pace alone
 steps a standing defender up on a fresh receiver who then bursts past him. And
 when the retreat cannot hold a gap — the cushion eats all but a stick of the ice
 he owns — a defender IN the carrier's lane steps up to meet him rather than be
@@ -406,8 +413,9 @@ floor by the gap clamp, so the forechecker cannot close even in principle (his
 poke reaches ~1.9 m).
 
 The domain read is the shared `AIRoleRushD.should_gap_up`, not a zone test. Its
-"not advancing on our net" clause (`AIRushRead.REGROUP_CLOSING_M_S`) is satisfied
-by construction by a D retrieving behind his own goal line, so the two
+"not advancing on our net" clause (`AIRushRead.REGROUP_CLOSING_M_S`, with no head
+start to build) is satisfied by construction by a D retrieving behind his own
+goal line, so the two
 carrier-owning roles agree at the TRANS_DEFENSE → DZONE handoff exactly as they
 do on the ladder itself.
 
