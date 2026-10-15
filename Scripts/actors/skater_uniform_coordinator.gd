@@ -226,9 +226,7 @@ func apply_uniform(colors: Dictionary) -> void:
 	_paint_cylinder_h(SkaterMeshBuilder.UpperBone.TOP_FOREARM, arms_lower)
 	_paint_cylinder_h(SkaterMeshBuilder.UpperBone.BOTTOM_FOREARM, arms_lower)
 
-	# Elbow spheres — paint as arms.lower.base so they read as the upper
-	# edge of the lower-arm cuff. (Hand spheres above already covered.)
-	var elbow_mat: StandardMaterial3D = UniformPaint.solid(arms_lower.base)
+	var elbow_mat: StandardMaterial3D = UniformPaint.solid(elbow_color(uniform.arms))
 	_skater.set_upper_surface_material(SkaterMeshBuilder.UpperBone.TOP_ELBOW, elbow_mat)
 	_skater.set_upper_surface_material(
 			SkaterMeshBuilder.UpperBone.BOTTOM_ELBOW, elbow_mat.duplicate())
@@ -322,6 +320,17 @@ func _paint_cylinder_h(part: int, segment: Dictionary) -> void:
 		return
 	var tex: ImageTexture = make_arm_stripes_texture(segment.base, segment.stripes)
 	_skater.set_upper_surface_material(part, UniformPaint.textured(tex))
+
+
+# The elbow pad's color: the kit's arms.elbow when it names one, else whatever
+# the forearm's stripes put at its elbow end, so the pad disappears into the
+# sleeve. Public static because the lobby backdrop's dummies wear the same pad.
+static func elbow_color(arms: Dictionary) -> Color:
+	var elbow: Variant = arms.get("elbow")
+	if elbow is Color:
+		return elbow
+	return make_arm_stripes_texture(arms.lower.base, arms.lower.stripes) \
+			.get_image().get_pixel(0, 0)
 
 
 # Arm variant of UniformPaint.h_stripes: pre-shrinks the pattern about its

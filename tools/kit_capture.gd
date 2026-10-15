@@ -364,7 +364,8 @@ func _draw_jersey(c: Node2D, top_center: Vector2, kit: Dictionary, side: int,
 		roots.append(top_center + Vector2(dir * (line.y * 0.5 - _SLEEVE_INSET_M),
 				line.x) * _PX_PER_M)
 	for i: int in 2:
-		_draw_sleeve(c, roots[i], -1.0 if i == 0 else 1.0, kit.arms.lower.base, side)
+		_draw_sleeve(c, roots[i], -1.0 if i == 0 else 1.0,
+				SkaterUniformCoordinator.elbow_color(kit.arms), side)
 	_draw_tube(c, top_center, _torso, _jersey_textures[side], u)
 	_draw_collar(c, top_center, UniformPaint.collar_color(kit.jersey), neck_depth_m)
 	for root_px: Vector2 in roots:
@@ -372,7 +373,7 @@ func _draw_jersey(c: Node2D, top_center: Vector2, kit: Dictionary, side: int,
 
 
 # A sleeve hangs down and out from `root` at _SLEEVE_DROP_DEG: upper arm from
-# the shoulder, the elbow pad in the forearm's base (as the rink paints it), the
+# the shoulder, the elbow pad in its own color (as the rink paints it), the
 # forearm on. Stripe V 0 is the proximal end of each bone, as on the arm mesh.
 func _draw_sleeve(c: Node2D, root_px: Vector2, outward: float, elbow_color: Color,
 		side: int) -> void:
@@ -382,8 +383,9 @@ func _draw_sleeve(c: Node2D, root_px: Vector2, outward: float, elbow_color: Colo
 	var elbow := Vector2(0.0, _upper_arm[_upper_arm.size() - 1].x * _PX_PER_M)
 	_draw_tube(c, Vector2.ZERO, _upper_arm, _upper_arm_textures[side], _FULL_U)
 	_draw_tube(c, elbow, _forearm, _forearm_textures[side], _FULL_U)
-	c.draw_circle(elbow, _arm_radius_m * _PX_PER_M, elbow_color)
-	c.draw_arc(elbow, _arm_radius_m * _PX_PER_M, 0.0, TAU, 32, _EDGE, 1.5, true)
+	var pad_px: float = SkaterMeshBuilder.ELBOW_PAD_RADIUS_M * _PX_PER_M
+	c.draw_circle(elbow, pad_px, elbow_color)
+	c.draw_arc(elbow, pad_px, 0.0, TAU, 32, _EDGE, 1.5, true)
 	c.draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
@@ -483,6 +485,8 @@ func _draw_legend(c: Node2D, at: Vector2, kit: Dictionary) -> void:
 	pen = _stripe_rows(c, pen, kit.arms.upper.stripes)
 	pen = _legend_row(c, pen, "arms.lower", [kit.arms.lower.base], [""])
 	pen = _stripe_rows(c, pen, kit.arms.lower.stripes)
+	pen = _legend_row(c, pen, "arms.elbow", [SkaterUniformCoordinator.elbow_color(kit.arms)],
+			["" if kit.arms.elbow is Color else "(forearm at the elbow)"])
 	pen = _legend_row(c, pen, "gloves", [kit.gloves], [""])
 	pen = _legend_row(c, pen, "pants", [kit.pants.base], ["(stripe pos is across, U)"])
 	pen = _stripe_rows(c, pen, kit.pants.stripes)

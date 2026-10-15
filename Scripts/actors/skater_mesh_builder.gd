@@ -31,11 +31,11 @@ const _TORSO_PROFILE: Array[Vector2] = [
 	Vector2(0.275, 0.125),   # collar, around the neck's trapezius flare
 	Vector2(0.255, 0.185),   # trapezius slope over the shoulder pads
 	Vector2(0.215, 0.222),   # shoulder line — the pads' widest, the caps seat into it
-	Vector2(0.130, 0.214),   # chest
-	Vector2(0.000, 0.194),   # waist tuck
-	Vector2(-0.150, 0.204),
-	Vector2(-0.230, 0.214),
-	Vector2(-0.275, 0.222),  # jersey hem flare
+	Vector2(0.130, 0.222),   # chest — from here the sweater hangs nearly straight,
+	Vector2(0.000, 0.212),   # barely tucked at the waist
+	Vector2(-0.150, 0.216),
+	Vector2(-0.230, 0.220),
+	Vector2(-0.275, 0.223),  # hem, at the primitive envelope's width
 ]
 # The yoke paints the torso side from the collar down to the shoulder line
 # (station 2), as a fraction of the side's height; the collar ring is the top cap.
@@ -150,6 +150,11 @@ const HEAD_RADIUS: float = 0.135
 # _HELMET_RADIUS or the face pokes through the shell at the front equator.
 const _HEAD_FORWARD_M: float = 0.015
 
+# A loose sleeve's radius at its full-width end; Skater, the cap and the lobby
+# figures read it. The elbow pad only fills the bend, just proud of it.
+const SLEEVE_RADIUS_M: float = 0.080
+const ELBOW_PAD_RADIUS_M: float = SLEEVE_RADIUS_M * 1.04
+
 # Shoulder cap: the pad under the sleeve. Its +Y end (SkaterArmRig points it
 # into the trap) is a blunt base tucked under the torso's trapezius slope; the
 # −Y end stays at the sleeve's radius so the cap flows into the upper arm. The
@@ -157,12 +162,12 @@ const _HEAD_FORWARD_M: float = 0.015
 # neck-to-arm slope. Stations are (y, radius, equirect v), v keeping the sphere
 # mapping the shoulder number paints against, its band on the equator.
 const _SHOULDER_PROFILE: Array[Vector3] = [
-	Vector3(0.050, 0.050, 0.12),   # blunt torso-side base (flat-capped)
-	Vector3(0.025, 0.074, 0.30),
-	Vector3(-0.015, 0.082, 0.50),  # equator — the number band
-	Vector3(-0.060, 0.078, 0.68),
-	Vector3(-0.105, 0.070, 0.85),
-	Vector3(-0.140, 0.066, 1.0),   # arm-side end, at the sleeve's own radius
+	Vector3(0.050, 0.056, 0.12),   # blunt torso-side base (flat-capped)
+	Vector3(0.025, 0.080, 0.30),
+	Vector3(-0.015, 0.090, 0.50),  # equator — the number band
+	Vector3(-0.060, 0.088, 0.68),
+	Vector3(-0.105, 0.084, 0.85),
+	Vector3(-0.140, SLEEVE_RADIUS_M, 1.0),   # arm-side end, at the sleeve's own radius
 ]
 
 # The yoke crosses the cap at its second ring, so the top of the shoulder
@@ -749,11 +754,11 @@ static func shared_joint_ball() -> ArrayMesh:
 		return _build_ball(1.0, 8, 4, 1.0))
 
 
-# Elbow pad, unit radius: a ball drawn out to a cap at +Y, which the arm rig
-# points out of the bend (SkaterArmRig._pose_elbow) — the point a sleeve shows
-# over a hockey elbow pad.
+# Elbow pad, unit radius: a ball drawn out to a soft point at +Y, which the arm
+# rig points out of the bend (SkaterArmRig._pose_elbow) — the pad's shape just
+# showing through a thick sleeve.
 const _ELBOW_PAD_PROFILE: Array[Vector2] = [
-	Vector2(1.22, 0.32), Vector2(1.02, 0.78), Vector2(0.62, 1.0), Vector2(0.1, 1.02),
+	Vector2(1.08, 0.30), Vector2(0.92, 0.74), Vector2(0.56, 0.98), Vector2(0.1, 1.02),
 	Vector2(-0.45, 0.9), Vector2(-0.82, 0.55), Vector2(-0.98, 0.18),
 ]
 static func shared_elbow_pad() -> ArrayMesh:
