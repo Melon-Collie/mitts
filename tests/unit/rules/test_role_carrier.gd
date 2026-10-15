@@ -267,7 +267,7 @@ func _ahead_man_ctx(blocked: bool) -> RoleContext:
 
 func _ahead_man_drive_in(ctx: RoleContext) -> float:
 	return _decided(ctx)._field.receiver_drive_in_value(
-			ctx, _AHEAD_MAN, AIBotMechanics.WRISTER_SHOT_SPEED_M_S, null)
+			ctx, _AHEAD_MAN, null)
 
 
 func test_a_defender_in_the_drive_path_strips_the_receivers_drive_in() -> void:
@@ -617,8 +617,7 @@ func test_a_defender_who_never_covers_the_drive_costs_it_nothing() -> void:
 		ctx.self_velocity = v
 		var c := AIRoleCarrier.new()
 		c.decide(ctx)
-		drive.append(c._field.receiver_drive_in_value(ctx, self_pos,
-				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, null, v))
+		drive.append(c._field.receiver_drive_in_value(ctx, self_pos, null, v))
 	assert_gt(drive[1], 0.0, "precondition: the drive is worth something")
 	assert_almost_eq(drive[0], drive[1], 0.005,
 			"a defender 5 m ahead who never covers the drive costs it nothing (%.3f vs %.3f)"
@@ -626,7 +625,7 @@ func test_a_defender_who_never_covers_the_drive_costs_it_nothing() -> void:
 
 
 func test_the_shot_s_keep_never_discounts_what_the_spot_is_worth_by_position() -> void:
-	# Out of the zone with the keeper pulled, _score_at weighs the long shot
+	# Out of the zone with the keeper pulled, value_at weighs the long shot
 	# against the spot's position value. Losing the puck before the press costs
 	# the shot, never the position.
 	var self_pos := Vector3(0.0, 0.0, 0.0)
@@ -638,11 +637,14 @@ func test_the_shot_s_keep_never_discounts_what_the_spot_is_worth_by_position() -
 	var pulled := Vector3(0.0, 0.0, 0.0)
 	var position_value: float = AIActionScoring.position_potential(pos, goal, none) \
 			* AIActionScoring.potential_realization_discount(pos, goal)
+	var prev: float = INF
 	for keep: float in [1.0, 0.5, 0.0]:
-		assert_almost_eq(c._field.value_at(ctx, pos, self_pos, none, pulled,
-				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, 10.0,
-				GameRules.DEFAULT_LOFT_TAN_HIGH, keep), position_value, 1e-6,
-				"keep %.1f" % keep)
+		var v: float = c._field.value_at(ctx, pos, self_pos, none, pulled, 0.0, keep)
+		assert_gte(v, position_value - 1e-6, "keep %.1f never takes the position value" % keep)
+		assert_lte(v, prev + 1e-6, "keep %.1f only ever discounts the shot" % keep)
+		prev = v
+	assert_almost_eq(c._field.value_at(ctx, pos, self_pos, none, pulled, 0.0, 0.0),
+			position_value, 1e-6, "with no keep the spot is worth its position")
 
 
 func test_in_the_zone_the_keep_discounts_the_shot() -> void:
@@ -651,13 +653,10 @@ func test_in_the_zone_the_keep_discounts_the_shot() -> void:
 	var c := AIRoleCarrier.new()
 	var none: Array[Vector3] = []
 	var keeper := ctx.attacking_goal_pos + Vector3(0.0, 0.0, 1.0)
-	var kept: float = c._field.value_at(ctx, self_pos, self_pos, none, keeper,
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, 0.0,
-			GameRules.DEFAULT_LOFT_TAN_HIGH, 1.0)
+	var kept: float = c._field.value_at(ctx, self_pos, self_pos, none, keeper, 0.0, 1.0)
 	assert_gt(kept, 0.0)
-	assert_almost_eq(c._field.value_at(ctx, self_pos, self_pos, none, keeper,
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, 0.0,
-			GameRules.DEFAULT_LOFT_TAN_HIGH, 0.5), kept * 0.5, 1e-6)
+	assert_almost_eq(c._field.value_at(ctx, self_pos, self_pos, none, keeper, 0.0, 0.5),
+			kept * 0.5, 1e-6)
 
 
 # ─── O-zone shot selection (what he picks at these: the snapshot) ────────────

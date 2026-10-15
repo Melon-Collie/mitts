@@ -193,16 +193,6 @@ static func planned_goalie_depth(
 	return maxf(now_depth - rate * time_s, target)
 
 
-# Radius a SET keeper holds for a puck `dist` from the goal: the same constraint
-# solve planned_goalie_depth predicts him with, no anticipatory cap binding.
-static func set_goalie_depth(dist: float) -> float:
-	var c := _depth_cfg_planning
-	c.ceiling_radius = _planning_ceiling if dist <= GOALIE_ZONE_DEPTH_M \
-			else GOALIE_RESTING_DEPTH_M
-	c.standoff_cap = dist - GOALIE_CHALLENGE_STANDOFF_M
-	return GoalieDepthSolver.solve_target(c)
-
-
 # `goalie_now` relocated to `depth` metres out from the attacked goal line,
 # keeping his lateral position. The rink side is the side the goal faces.
 static func at_depth(goalie_now: Vector3, attacking_goal: Vector3,
@@ -239,6 +229,11 @@ static func goalie_push_progress(need: float, move_time: float) -> float:
 static func _goalie_set_time(dist: float) -> float:
 	return GoaliePushRules.time_to_set(
 			dist, GOALIE_MAX_LATERAL_SPEED_MPS, goalie_lateral_accel_m_s2)
+
+# How far (m) from the net mouth a keeper still counts as HOME — the crease
+# depth plus a stride. Beyond it (pulled, or out playing the puck) the net is
+# empty to a shot.
+const GOALIE_HOME_M: float = 3.0
 
 # Shadow half-width used by AIShotAim.compute_open_net_aim for the lane-check
 # aim point — picks a point past the goalie for the lane segment check.

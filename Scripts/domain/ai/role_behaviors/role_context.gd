@@ -123,9 +123,10 @@ var defensive_anticipation_scale: float = 1.0
 # Scripts/domain/ai/CLAUDE.md → "Hesitation is a raised bar, never a timer".
 var settle_penalty_frac: float = 0.0
 var settle_penalty_tau_s: float = 0.25
-# COGNITION gate: false = the goalie always reads SET to the pass / one-timer EV
-# (AICarrierField.goalie_unsettled_at returns 0). The aim-side half of the gate lives
-# on the state machine.
+# COGNITION gate: false = the keeper always reads SET to the carrier: still to the
+# shot reads (AICarrierField.goalie_unsettled_at returns 0) and already square on a
+# pass's receiver (AICarrierField.feed_value_at). The aim-side half of the gate
+# lives on the state machine.
 var reads_goalie_motion: bool = true
 # COGNITION gate: false = the carrier never values a play that doesn't exist
 # yet (AICarrierPassSearch.developing_feed_value returns 0).

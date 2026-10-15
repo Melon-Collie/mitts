@@ -1,187 +1,58 @@
 extends GutTest
 
-# AIShotValue — the decision layer's single value seam. These pin the
-# PROPERTIES the model must have for a utility argmax to be able to steer on
-# it, not the numbers it currently produces: the numbers are knowingly an
-# approximation until the goalie is retuned, but a surface that is
-# non-monotone, unbounded, or indifferent to displacement is broken whatever
-# the goalie does.
+# The value seam (AIShotValue): every shot the carrier ranks is priced through it,
+# so these hold its contract whatever the measured field says. The levels are
+# the field's, held against the live goalie by test_shot_odds_vs_truth.gd.
 
-const Snapshot := preload("res://tests/snapshot.gd")
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
-var GOAL := Vector3(0.0, 0.0, GOAL_Z)
 
 
-func _spot(x: float, fwd: float) -> Vector3:
-	return Vector3(x, 0.0, GOAL_Z + fwd)
+func _goal() -> Vector3:
+	return Vector3(0.0, 0.0, GOAL_Z)
 
 
-func _v(x: float, fwd: float, disp: float = 0.0) -> float:
-	return AIShotValue.for_release(_spot(x, fwd), GOAL, disp)
+func test_a_set_keeper_is_a_still_upright_keeper_on_his_square() -> void:
+	var goal: Vector3 = _goal()
+	for release: Vector3 in [Vector3(0.0, 0.0, GOAL_Z + 6.0),
+			Vector3(-4.0, 0.0, GOAL_Z + 3.0), Vector3(5.0, 0.0, GOAL_Z + 10.0)]:
+		var square := Vector3(0.0, 0.0, GOAL_Z + 1.2)
+		for i: int in 4:
+			square.x = AIGoalieModel.goalie_arc_match_x(square, goal, release)
+		assert_almost_eq(AIShotValue.set_keeper(release, goal),
+				AIShotOdds.shot_now(release, goal, square, 0.0, AIShotOdds.Stance.UPRIGHT),
+				1e-3, "square, still and upright is the set keeper at %s" % release)
 
 
-# ── The structural claim: this IS the public model plus its features ─────────
-func test_zero_displacement_is_exactly_the_public_baseline() -> void:
-	# Wherever the keeper's body fills no more of the mouth than from the slot.
-	for x: float in [0.0, 3.0, 6.0]:
-		for fwd: float in [10.0, 18.0]:
-			var spot: Vector3 = _spot(x, fwd)
-			assert_eq(AIShotValue.body_logit(spot, GOAL, 0.0), 0.0,
-					"from range his body is no bigger than from the slot (%.0f, %.0f)"
-							% [x, fwd])
-			assert_almost_eq(
-					AIShotValue.for_release(spot, GOAL, 0.0),
-					XGBaseline.for_shot(spot.x, spot.z, 0, ShotEvent.ShotType.SHOT),
-					0.000001,
-					"at zero displacement the model must BE XGBaseline (%.0f, %.0f)"
-							% [x, fwd])
+func test_a_keeper_out_of_his_home_range_leaves_an_empty_net() -> void:
+	var goal: Vector3 = _goal()
+	var release := Vector3(2.0, 0.0, GOAL_Z + 12.0)
+	var pulled := Vector3(0.0, 0.0, 0.0)
+	assert_almost_eq(AIShotValue.now(release, goal, pulled, 0.0,
+			AIShotOdds.Stance.UPRIGHT),
+			AIShotOdds.empty_net(release, goal), 1e-6)
+	assert_gt(AIShotOdds.empty_net(release, goal), AIShotValue.set_keeper(release, goal),
+			"an empty net is worth more than one with a set keeper in it")
 
 
-func test_shot_type_bumps_pass_through() -> void:
-	var spot: Vector3 = _spot(0.0, 6.0)
-	assert_gt(AIShotValue.for_release(spot, GOAL, 0.0,
-					ShotEvent.ShotType.ONE_TIMER),
-			AIShotValue.for_release(spot, GOAL, 0.0, ShotEvent.ShotType.SHOT),
-			"a one-timer carries the baseline's bump through the seam")
-
-
-# ── The keeper's body in tight ───────────────────────────────────────────────
-func test_a_set_keepers_body_fills_the_mouth_as_the_shooter_closes() -> void:
+func test_an_empty_net_is_easier_the_closer_you_are() -> void:
+	var goal: Vector3 = _goal()
 	var prev: float = 1.0
-	for fwd: float in [16.0, 9.0, 6.0, 4.0, 3.0, 2.0]:
-		var open: float = AIShotValue.open_mouth_fraction(_spot(0.0, fwd), GOAL, 0.0)
-		assert_lte(open, prev, "less of the mouth is open from %.0f m" % fwd)
-		prev = open
-	assert_almost_eq(prev, 0.0, 0.001, "from 2 m his pads fill it")
+	for d: float in [2.0, 6.0, 15.0, 30.0, 50.0]:
+		var p: float = AIShotOdds.empty_net(Vector3(0.0, 0.0, GOAL_Z + d), goal)
+		assert_lte(p, prev, "%.0f m is no easier than closer in" % d)
+		prev = p
 
 
-func test_the_body_term_only_ever_takes_away() -> void:
-	for x: float in [0.0, 2.0, 5.0]:
-		for fwd: float in [1.0, 2.0, 4.0, 8.0, 16.0]:
-			assert_lte(AIShotValue.body_logit(_spot(x, fwd), GOAL, 0.0), 0.0)
-
-
-func test_a_set_keeper_shuts_the_doorstep_and_a_beaten_one_does_not() -> void:
-	var slot: float = _v(0.0, 6.0)
-	assert_lt(_v(0.0, 2.0), slot,
-			"driving into a set keeper is worth less than the slot look")
-	assert_gt(_v(0.0, 2.0, 0.6), slot,
-			"a keeper beaten off his square in tight still concedes the doorstep")
-
-
-# ── Monotonicity: the properties an argmax needs ─────────────────────────────
-func test_closer_is_better_at_every_angle() -> void:
-	# From the slot out; inside it a set keeper's body takes over (above).
-	for x: float in [0.0, 2.0, 5.0]:
-		var prev: float = INF
-		for fwd: float in [6.0, 9.0, 13.0, 18.0]:
-			var v: float = _v(x, fwd)
-			assert_lt(v, prev, "value must fall with range (x=%.0f, %.0f m)"
-					% [x, fwd])
-			prev = v
-
-
-func test_straighter_is_better_at_every_range() -> void:
-	for fwd: float in [6.0, 12.0]:
-		var prev: float = INF
-		for x: float in [0.0, 2.0, 4.0, 7.0]:
-			var v: float = _v(x, fwd)
-			assert_lt(v, prev, "value must fall with angle (%.0f m, x=%.0f)"
-					% [fwd, x])
-			prev = v
-
-
-func test_displacing_the_keeper_always_helps() -> void:
-	for x: float in [0.0, 3.0]:
-		for fwd: float in [4.0, 8.0, 14.0]:
-			var prev: float = -INF
-			for disp: float in [0.0, 0.2, 0.5, 0.9]:
-				var v: float = _v(x, fwd, disp)
-				assert_gt(v, prev,
-						"displacement must raise value (x=%.0f, %.0f m, d=%.1f)"
-								% [x, fwd, disp])
-				prev = v
-
-
-# The specific thing the old currency could not express, and the reason this
-# feature exists at all: there must be REAL headroom above a set keeper, or
-# moving him buys nothing and the argmax falls through to tie-breakers.
-func test_a_moved_keeper_beats_a_set_one_by_a_wide_margin() -> void:
-	var set_v: float = _v(0.0, 6.0, 0.0)
-	var moved: float = _v(0.0, 6.0, 0.85)
-	assert_gt(moved, set_v * 2.0,
-			"beating him to one side must be worth multiples of a set look (%.3f vs %.3f)"
-					% [moved, set_v])
-
-
-func test_displacement_saturates_rather_than_running_away() -> void:
-	var at_post: float = _v(0.0, 6.0, AIShotValue.MAX_USEFUL_DISPLACEMENT_M)
-	var absurd: float = _v(0.0, 6.0, 25.0)
-	assert_almost_eq(absurd, at_post, 0.000001,
-			"displacement past the post buys nothing more — the mouth is finite")
-
-
-# ── Bounds and guards ────────────────────────────────────────────────────────
-func test_bounded_everywhere() -> void:
-	for x: float in [0.0, 4.0, 9.0, 20.0]:
-		for fwd: float in [0.3, 1.0, 5.0, 15.0, 40.0]:
-			for disp: float in [0.0, 0.9]:
-				var v: float = _v(x, fwd, disp)
-				assert_between(v, 0.0, 1.0,
-						"bounded at (%.0f, %.1f, d=%.1f)" % [x, fwd, disp])
-
-
-func test_no_shot_from_on_or_behind_the_goal_line() -> void:
-	assert_eq(AIShotValue.for_release(_spot(0.0, 0.0), GOAL, 0.9), 0.0,
-			"on the goal line there is no shot")
-	assert_eq(AIShotValue.for_release(_spot(1.0, -2.0), GOAL, 0.9), 0.0,
-			"behind the net there is no shot, however displaced he is")
-
-
-func test_works_for_the_other_net() -> void:
-	var far_goal := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z)
-	var a: float = AIShotValue.for_release(
-			Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z - 6.0), far_goal, 0.4)
-	var b: float = _v(0.0, 6.0, 0.4)
-	assert_almost_eq(a, b, 0.000001, "the model is net-symmetric")
-
-
-# ── The displacement measurement itself ──────────────────────────────────────
-func test_a_set_keeper_on_the_shot_line_has_no_deficit() -> void:
-	var release: Vector3 = _spot(0.0, 7.0)
-	var keeper := Vector3(0.0, 0.0, GOAL_Z + 1.5)
-	assert_almost_eq(AIShotValue.displacement_deficit_m(
-			keeper, GOAL, release, 0.4), 0.0, 0.001,
-			"already square on a straight-on shot — nothing to make up")
-
-
-func test_more_time_lets_him_close_the_deficit() -> void:
-	var release: Vector3 = _spot(-4.0, 5.0)
-	var keeper := Vector3(0.7, 0.0, GOAL_Z + 1.5)
-	var snap: float = AIShotValue.displacement_deficit_m(
-			keeper, GOAL, release, 0.15)
-	var slow: float = AIShotValue.displacement_deficit_m(
-			keeper, GOAL, release, 1.2)
-	assert_gt(snap, slow,
-			"a quick release leaves more deficit than a slow one (%.3f vs %.3f)"
-					% [snap, slow])
-	assert_almost_eq(slow, 0.0, 0.001,
-			"given a second-plus he re-squares completely")
-
-
-func test_deficit_never_negative() -> void:
-	var release: Vector3 = _spot(0.0, 9.0)
-	var keeper := Vector3(0.0, 0.0, GOAL_Z + 1.5)
-	assert_eq(AIShotValue.displacement_deficit_m(keeper, GOAL, release, 3.0),
-			0.0, "a keeper with all the time in the world is set, not negative")
-
-
-# ── The reviewed calibration ─────────────────────────────────────────────────
-# Rewrite with MITTS_UPDATE_SNAPSHOTS=1 (tests/snapshot.gd) and review the diff.
-func test_shot_value_calibration_snapshot() -> void:
-	var snap := Snapshot.new("res://tests/unit/ai/snapshots/shot_value.txt")
-	snap.record("slot 6 m, set keeper", _v(0.0, 6.0))
-	snap.record("doorstep 2 m, set keeper", _v(0.0, 2.0))
-	snap.record("doorstep 2 m, keeper 0.6 m off his square", _v(0.0, 2.0, 0.6))
-	snap.record("slot 6 m, keeper 0.85 m off his square", _v(0.0, 6.0, 0.85))
-	snap.verify(self)
+func test_bounded_and_nothing_from_behind_the_goal_line() -> void:
+	var goal: Vector3 = _goal()
+	var keeper := Vector3(0.3, 0.0, GOAL_Z + 1.3)
+	for x: float in [-8.0, -2.0, 0.0, 3.0, 9.0]:
+		for fwd: float in [-2.0, 0.0, 1.0, 4.0, 9.0, 16.0, 30.0]:
+			var r := Vector3(x, 0.0, GOAL_Z + fwd)
+			for v: float in [AIShotValue.now(r, goal, keeper, 1.5,
+					AIShotOdds.Stance.UPRIGHT),
+					AIShotValue.set_keeper(r, goal), AIShotOdds.empty_net(r, goal),
+					AIShotValue.feed(r + Vector3(3.0, 0.0, 0.0), r, 15.0, goal, keeper, true)]:
+				assert_between(v, 0.0, 1.0)
+				if fwd <= 0.0:
+					assert_eq(v, 0.0, "no shot from on or behind the goal line")

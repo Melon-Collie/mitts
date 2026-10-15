@@ -28,10 +28,10 @@ const EMPTY_CAPS: Array = []
 static func _static_init() -> void:
 	EMPTY_VEC3.make_read_only()
 	var goal := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
-	XG_SLOT_REF = AIShotValue.for_release(slot_reference_release(goal), goal, 0.0)
+	XG_SLOT_REF = AIShotValue.set_keeper(slot_reference_release(goal), goal)
 
-# xG of a clean look from the slot ring, head-on, against a set keeper: the
-# situation position_potential reads as 1.0, measured on the live shot model.
+# The odds of a clean look from the slot ring, head-on, against a set keeper: the
+# situation position_potential reads as 1.0, read through the value seam.
 # It converts an in-zone xG value into position_potential's unit.
 static var XG_SLOT_REF: float = 0.0
 
@@ -1268,38 +1268,39 @@ static func score_shoot(
 
 
 # ── The SEAM's composed counterpart ──────────────────────────────────────────
-# score_shoot's structure with AIShotValue supplying the shot quality — a
-# smooth, goalie-displacement-aware probability — instead of the hole geometry.
-# Same guards, release clamp and defender terms: the lane and the release
-# contest are facts about DEFENDERS, not the goalie model.
+# score_shoot's structure with AIShotValue supplying the shot's odds against
+# today's goalie instead of the hole geometry. Same guards and defender terms:
+# the lane and the release contest are facts about DEFENDERS, not the goalie.
+#
+# The keeper is at `keeper_pos` moving across at `keeper_vel_x` in `stance`, an
+# AIShotOdds.Stance (AIShotValue.now); `keeper_pos` INF means square and set on
+# the release (AIShotValue.set_keeper).
 static func score_shoot_value(
 		shooter: Vector3,
 		attacking_goal: Vector3,
-		predicted_goalie_pos: Vector3,
-		keeper_displacement_m: float,
-		net_half_width: float,
+		keeper_pos: Vector3,
 		opponents: Array[Vector3],
+		keeper_vel_x: float = 0.0,
+		stance: int = AIShotOdds.Stance.UPRIGHT,
 		shot_speed_m_s: float = AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-		opponent_caps: Array = [],
-		shot_type: int = ShotEvent.ShotType.SHOT,
-		loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH) -> float:
+		opponent_caps: Array = []) -> float:
 	if (shooter.z - attacking_goal.z) * -signf(attacking_goal.z) < 0.001:
 		return 0.0
-	shooter = AIGoalieModel.release_ahead_of_goalie(shooter, attacking_goal, predicted_goalie_pos)
-	# The seal is derived from the same geometric trigger the live keeper uses
-	# (derive_post_seal_x_sign — inside the post zone AND past the bearing), so
-	# predictive and shoot-now paths agree about it without threading state.
-	var seal_x: float = AIGoalieModel.derive_post_seal_x_sign(shooter, attacking_goal)
-	var quality: float = AIShotValue.for_release(
-			shooter, attacking_goal, keeper_displacement_m, shot_type,
-			seal_x != 0.0, Vector2(predicted_goalie_pos.x - attacking_goal.x,
-					predicted_goalie_pos.z - attacking_goal.z).length(),
-			loft_tan_high, shot_speed_m_s)
+	var quality: float
+	var keeper: Vector3 = keeper_pos
+	if keeper.is_finite():
+		shooter = AIGoalieModel.release_ahead_of_goalie(shooter, attacking_goal, keeper)
+		quality = AIShotValue.now(shooter, attacking_goal, keeper, keeper_vel_x, stance)
+	else:
+		quality = AIShotValue.set_keeper(shooter, attacking_goal)
+		keeper = AIGoalieModel.goalie_squared_pos(
+				attacking_goal - Vector3(0.0, 0.0, signf(attacking_goal.z)
+						* AIGoalieModel.GOALIE_RESTING_DEPTH_M), attacking_goal, shooter)
 	if quality <= 0.0:
 		return 0.0
 	var aim: Vector3 = AIShotAim.compute_open_net_aim(
-			shooter, predicted_goalie_pos, attacking_goal.z,
-			net_half_width, AIGoalieModel.GOALIE_SHADOW_HALF_M)
+			shooter, keeper, attacking_goal.z,
+			GameRules.NET_HALF_WIDTH, AIGoalieModel.GOALIE_SHADOW_HALF_M)
 	var lane: float = AIPuckLane.lane_clear(shooter, aim, opponents, shot_speed_m_s,
 			EMPTY_VEC3, opponent_caps)
 	var pressure: float = AIPuckLane.release_contest_clean(
@@ -1307,9 +1308,8 @@ static func score_shoot_value(
 	return quality * lane * pressure
 
 
-# score_pass's twin on the seam — lane × the receiver's shot value from where
-# he catches it, with the keeper's displacement at the receiver's release the
-# one goalie term (score_pass reads the whole pose instead).
+# score_pass's twin on the seam — lane × the receiver's odds off the feed, the
+# keeper at `keeper_pos` square on the passer as it leaves.
 #
 # The DEVELOPING-feed hold must be priced here, not by score_pass: it competes
 # with the fire as `fire_score >= hold_value`, and a hole-geometry hold is a
@@ -1318,11 +1318,11 @@ static func score_pass_value(
 		shooter: Vector3,
 		receiver: Vector3,
 		attacking_goal: Vector3,
-		keeper_displacement_m: float,
+		keeper_pos: Vector3,
 		opponents: Array[Vector3],
 		pass_speed_m_s: float = AIPuckLane.PASS_SPEED_M_S,
 		opponent_caps: Array = EMPTY_CAPS,
-		shot_type: int = ShotEvent.ShotType.SHOT) -> float:
+		one_timer: bool = false) -> float:
 	if _is_past_goal_line(receiver, attacking_goal):
 		return 0.0
 	if AINetObstacle.pass_lane_blocked_by_net(shooter, receiver):
@@ -1331,9 +1331,8 @@ static func score_pass_value(
 			EMPTY_VEC3, opponent_caps)
 	if lane <= 0.0:
 		return 0.0
-	return lane * AIShotValue.for_release(
-			receiver, attacking_goal, keeper_displacement_m, shot_type,
-			AIGoalieModel.derive_post_seal_x_sign(receiver, attacking_goal) != 0.0)
+	return lane * AIShotValue.feed(shooter, receiver, pass_speed_m_s, attacking_goal,
+			keeper_pos, one_timer)
 
 
 # FIELDED twin of score_shoot for the threat-surface consumer family
@@ -1559,10 +1558,9 @@ static func _first_arrival(target: Vector3, chasers: Array[Vector3],
 
 
 # How far (m) from the net mouth the goalie still counts as HOME for the
-# threat-surface shot skips below — the crease depth plus a stride. Beyond it
-# (pulled, or out playing the puck) the direct-shot branch must be computed
-# from anywhere on the rink.
-const THREAT_GOALIE_HOME_M: float = 3.0
+# threat-surface shot skips below; beyond it the direct-shot branch must be
+# computed from anywhere on the rink.
+const THREAT_GOALIE_HOME_M: float = AIGoalieModel.GOALIE_HOME_M
 
 # "Threat surface" — the value an opponent can extract from his current
 # position, from a defender's perspective: max(fielded shot, position_potential).
@@ -1683,14 +1681,14 @@ static func turnover_cost(
 				defender_caps)
 	var value: float = position_potential(loss_point, our_net, our_defenders, defender_caps) \
 			* potential_realization_discount(loss_point, our_net) * XG_SLOT_REF
-	# Outside our zone with the keeper home his shot xG beats that promise by at
-	# most a long shot's logistic tail, ~0.003 at the far end
-	# (test_in_xg_turnover_shot_skip_is_safe), so the shot read is skipped there.
+	# Outside our zone with the keeper home his shot's odds do not beat that
+	# promise (test_in_xg_turnover_shot_skip_is_safe), so the shot read is
+	# skipped there. Our keeper is taken square and set on the loss point.
 	if in_offensive_zone(loss_point, our_net) \
 			or our_goalie_pos.distance_to(our_net) >= THREAT_GOALIE_HOME_M:
 		value = maxf(value, score_shoot_value(
-				loss_point, our_net, our_goalie_pos, 0.0, net_half_width,
-				our_defenders, AIBotMechanics.WRISTER_SHOT_SPEED_M_S, defender_caps))
+				loss_point, our_net, Vector3.INF, our_defenders, 0.0, false,
+				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, defender_caps))
 	return loss_prob * value
 
 
@@ -1847,8 +1845,7 @@ static func counter_rush_cost(
 	if threat < 0.0:
 		if in_xg:
 			threat = score_shoot_value(
-					counter_point, our_net, our_goalie_pos, 0.0, net_half_width,
-					_scratch_counter_cover)
+					counter_point, our_net, Vector3.INF, _scratch_counter_cover)
 		else:
 			threat = score_shoot(
 					counter_point, our_net, our_goalie_pos, net_half_width,

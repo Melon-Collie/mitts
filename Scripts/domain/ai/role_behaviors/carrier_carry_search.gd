@@ -509,14 +509,11 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 	# (arrival_hold_wait): at that hold's pace and keep odds, with any pull the
 	# carry is too short for waited out in the wind-up the keeper races.
 	var cand_wait: float = 0.0
-	var cand_share: float = 1.0
 	var cand_keep: float = 1.0
 	if AICarrierField.shot_reads(ctx, self_pos,
 			candidate + arrive_vel * AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S):
 		cand_wait = _field.arrival_hold_wait(ctx, candidate, arrive_vel, local_time)
-		cand_share = _field.holds.arrival_share
 		cand_keep = _field.holds.arrival_keep
-	var cand_speed: float = ctx.self_wrister_shot_speed * cand_share
 	var cand_windup: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + cand_wait
 	# The keeper backs in as the carry closes on him (the planning depth model).
 	# Closing is the rate this carry shortens the puck's distance to the goal.
@@ -528,36 +525,16 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 	var cand_release: Vector3 = AIGoalieModel.release_ahead_of_goalie(
 			candidate + arrive_vel * cand_windup,
 			ctx.attacking_goal_pos, tracked_goalie)
-	var cand_flight: float = cand_release.distance_to(ctx.attacking_goal_pos) \
-			/ maxf(cand_speed, 1.0)
-	# Same expected-lateness budget as the shoot-now sweep (timing error × 0.5),
-	# and the keeper still backing in over the wind-up + flight at the arrival
-	# pace.
-	var release_closing: float = AIGoalieModel.closing_toward(
-			candidate, arrive_vel, ctx.attacking_goal_pos)
-	var cand_goalie: Vector3 = AIGoalieModel.predict_goalie_pos(
-			tracked_goalie, ctx.attacking_goal_pos,
-			cand_windup + cand_flight + ctx.shot_timing_error_s * 0.5,
-			cand_release, release_closing)
-	var cand_unsettled: float = 0.0
-	if ctx.reads_goalie_motion:
-		cand_unsettled = AIGoalieModel.goalie_unsettled(
-				tracked_goalie, ctx.attacking_goal_pos,
-				cand_windup + cand_flight + ctx.shot_timing_error_s * 0.5,
-				cand_release, release_closing)
-	# Displacement at the release: from where he is NOW over everything the play
-	# gives him — carry, wind-up and flight. Measured at the DESTINATION, never as
-	# a max over route samples: the ~30 Hz re-decide already re-prices the shot
-	# at every point on the route, and a max over samples is optimistically
-	# biased against the shoot and pass legs, which get one estimate each.
-	var release_t: float = local_time + cand_windup + cand_flight \
-			+ ctx.shot_timing_error_s * 0.5
-	var cand_displacement: float = AIShotValue.displacement_deficit_m(
-			AICarrierField.goalie_now(ctx), ctx.attacking_goal_pos, cand_release, release_t)
+	# The shot is decided on ARRIVAL, against the keeper as he is then: a carry
+	# that outran him leaves him still pushing toward his square, at the share of
+	# the push he has left (goalie_unsettled). The field prices what he does over
+	# the wind-up and flight itself. A goalie-motion-blind tier reads him still.
+	var lag: float = AIGoalieModel.goalie_arc_match_x(
+			tracked_goalie, ctx.attacking_goal_pos, cand_release) - tracked_goalie.x
+	var keeper_vel_x: float = signf(lag) * AIGoalieModel.GOALIE_MAX_LATERAL_SPEED_MPS \
+			* AICarrierField.goalie_unsettled_at(ctx, local_time, candidate, carry_closing)
 	var dest_score: float = _field.value_at(ctx, cand_release, self_pos,
-			_scratch_opponents_path, cand_goalie,
-			cand_speed, cand_unsettled,
-			cand_displacement, ctx.self_loft_tans.z, cand_keep)
+			_scratch_opponents_path, tracked_goalie, keeper_vel_x, cand_keep)
 	# ENTRY CONTINUATION: from outside the zone an in-zone candidate is worth what
 	# a carrier there does next — the drive-in from it, priced in the in-zone
 	# regime and starting when we arrive — which its own shot xG badly
@@ -565,8 +542,8 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 	if AIActionScoring.in_offensive_zone(candidate, ctx.attacking_goal_pos) \
 			and not AIActionScoring.in_offensive_zone(self_pos, ctx.attacking_goal_pos):
 		dest_score = maxf(dest_score, AICarrierField.entry_value(_field.receiver_drive_in_value(
-				ctx, candidate, ctx.self_wrister_shot_speed,
-				ctx.caps_by_peer.get(ctx.peer_id), arrive_vel, candidate, local_time, true)))
+				ctx, candidate, ctx.caps_by_peer.get(ctx.peer_id), arrive_vel, candidate,
+				local_time, true)))
 	var keep_prob: float = safety
 	var cost: float = 0.0
 	# A fully safe route (the common open-ice case) skips localizing a strip
@@ -683,10 +660,7 @@ func _score_wheel_candidate(ctx: RoleContext, dest: Vector3,
 	if ceiling <= best_so_far:
 		return -INF
 	_field.project_opponents(t1 + t2, _scratch_opponents_cont)
-	var dest_score: float = _field.value_at(ctx, dest, self_pos,
-			_scratch_opponents_cont, AICarrierField.goalie_now(ctx),
-			ctx.self_wrister_shot_speed, 0.0, 0.0,
-			ctx.self_loft_tans.z)
+	var dest_score: float = _field.value_at(ctx, dest, self_pos, _scratch_opponents_cont)
 	var benefit: float = dest_score * ceiling
 	if keep >= 1.0:
 		return benefit

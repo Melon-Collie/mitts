@@ -468,33 +468,17 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 					self_pos + rim_dir if is_rim else receiver_spot),
 			_field.opponents, _field.opponent_caps)
 	_field.project_opponents(flight_t, _proj_buf)
-	# A receiver streaking netward backs the keeper in over the feed's flight,
-	# same planning depth model the carrier's own reads use.
-	var receiver_closing: float = AIGoalieModel.closing_toward(
-			receiver_spot, receiver_vel, ctx.attacking_goal_pos)
-	var receiver_goalie: Vector3 = AICarrierField.predict_goalie_at(
-			ctx, receiver_release_t, receiver_spot, receiver_closing)
-	var receiver_unsettled: float = AICarrierField.goalie_unsettled_at(
-			ctx, receiver_release_t, receiver_spot, receiver_closing)
-	var receiver_shot_speed: float = receiver_caps.wrister_shot_speed if receiver_caps != null \
-			else AIBotMechanics.WRISTER_SHOT_SPEED_M_S
-	# The feed's edge: the puck relocates the shot origin far faster than the
-	# keeper re-squares, and what he cannot cover over the flight plus the
-	# receiver's release is the displacement — the same quantity the carry leg
-	# reads.
-	var receiver_displacement: float = AIShotValue.displacement_deficit_m(
-			AICarrierField.goalie_now(ctx), ctx.attacking_goal_pos, receiver_spot,
-			receiver_release_t)
-	var receiver_value: float = _field.value_at(ctx, receiver_spot, self_pos,
-			_proj_buf, receiver_goalie,
-			receiver_shot_speed, receiver_unsettled,
-			receiver_displacement, AICarrierField.loft_high(receiver_caps))
+	# The receiver's shot off this feed, the keeper square on the passer as it
+	# leaves (the goalie's own answer to the flight, AIShotValue.feed). A
+	# one-timer-ready receiver's release is the flight alone (_pass_variant_ev).
+	var receiver_value: float = _field.feed_value_at(ctx, origin, receiver_spot,
+			pass_speed, receiver_release_t <= flight_t, self_pos, _proj_buf)
 	# An OPEN receiver can carry into a better look, so he is credited the best
 	# value he can REACH with a short drive toward the net. It bites in the OZ,
 	# where value_at is shot-only. (Re-projects _proj_buf, which
 	# the instant value above has already consumed.)
 	receiver_value = maxf(receiver_value, _field.receiver_drive_in_value(
-			ctx, receiver_spot, receiver_shot_speed, receiver_caps, receiver_vel))
+			ctx, receiver_spot, receiver_caps, receiver_vel))
 	var time_decay: float = AIActionScoring.delay_discount(delay_s)
 	# Reception pressure: the reachable-set clearance at the reception spot when
 	# the puck arrives — defenders momentum-projected from their RELEASE-TIME
@@ -636,10 +620,7 @@ func developing_feed_value(ctx: RoleContext) -> float:
 			# On the seam, because this value is compared directly against
 			# fire_score (see score_pass_value).
 			feed = AIActionScoring.score_pass_value(
-					self_pos, spot, ctx.attacking_goal_pos,
-					AIShotValue.displacement_deficit_m(
-							AICarrierField.goalie_now(ctx), ctx.attacking_goal_pos, spot,
-							flight_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S),
+					self_pos, spot, ctx.attacking_goal_pos, AICarrierField.goalie_now(ctx),
 					_proj_buf, pass_speed, _field.opponent_caps)
 		elif slot == AIRoleSlots.Slot.BREAKOUT_STRONG \
 				or slot == AIRoleSlots.Slot.OUTLET \

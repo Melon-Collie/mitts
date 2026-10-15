@@ -2225,8 +2225,8 @@ func test_xg_slot_ref_is_the_xg_of_potentials_full_value() -> void:
 	assert_almost_eq(AIActionScoring.potential_realization_discount(ring, goal), 1.0, 0.0001,
 			"…with nothing left to skate")
 	assert_almost_eq(AIActionScoring.XG_SLOT_REF,
-			AIShotValue.for_release(ring, goal, 0.0), 0.000001,
-			"XG_SLOT_REF is the xG of that same look")
+			AIShotValue.set_keeper(ring, goal), 0.000001,
+			"XG_SLOT_REF is the odds of that same look")
 	assert_gt(AIActionScoring.XG_SLOT_REF, 0.0, "and it is a real number, not the unset default")
 
 
@@ -2244,8 +2244,7 @@ func test_in_xg_turnover_shot_skip_is_safe() -> void:
 			var promise: float = AIActionScoring.position_potential(spot, our_net, none) \
 					* AIActionScoring.potential_realization_discount(spot, our_net) \
 					* AIActionScoring.XG_SLOT_REF
-			var shot: float = AIActionScoring.score_shoot_value(
-					spot, our_net, keeper, 0.0, GameRules.NET_HALF_WIDTH, none)
+			var shot: float = AIActionScoring.score_shoot_value(spot, our_net, keeper, none)
 			worst = minf(worst, promise - shot)
 	assert_gte(worst, -0.005,
 			"outside our zone the shot never beats the possession promise by more than a tail (worst %.4f)"

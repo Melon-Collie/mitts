@@ -147,15 +147,8 @@ func fill_receivers(ctx: RoleContext, cur_puck_pos: Vector3) -> void:
 		if in_oz_now and not AIActionScoring.in_offensive_zone(
 				tm.position, ctx.attacking_goal_pos, OZ_RECEIVE_LINE_BUFFER_M):
 			continue
-		var tm_caps: AISkaterCaps = ctx.caps_by_peer.get(pid)
-		var tm_shot_speed: float = tm_caps.wrister_shot_speed if tm_caps != null \
-				else AIBotMechanics.WRISTER_SHOT_SPEED_M_S
-		var tm_goalie: Vector3 = AIGoalieModel.goalie_squared_pos(
-				goalie_now(ctx), ctx.attacking_goal_pos, tm.position)
 		receiver_pos.append(tm.position)
-		receiver_val.append(value_at(
-				ctx, tm.position, ctx.self_pos, opponents, tm_goalie,
-				tm_shot_speed, 0.0, 0.0, loft_high(tm_caps)))
+		receiver_val.append(value_at(ctx, tm.position, ctx.self_pos, opponents))
 	# The same option read at the CURRENT puck spot — the baseline a candidate's
 	# option credit is measured against (see AICarrierCarrySearch._upgrade_candidate_two_ply): an
 	# option already available from here belongs to the live pass in the fire
@@ -261,18 +254,8 @@ static func goalie_now(ctx: RoleContext) -> Vector3:
 	return Vector3(opp_goalie.position_x, 0.0, opp_goalie.position_z)
 
 
-# AIGoalieModel.predict_goalie_pos from the goalie's current position.
-# `release_time_s` is the time from now until the shot leaves the blade.
-static func predict_goalie_at(ctx: RoleContext, release_time_s: float,
-		puck_pos_at_release: Vector3, closing_speed_m_s: float = 0.0) -> Vector3:
-	return AIGoalieModel.predict_goalie_pos(
-			goalie_now(ctx), ctx.attacking_goal_pos,
-			release_time_s, puck_pos_at_release, closing_speed_m_s)
-
-
-# How unsettled [0,1] the goalie is at that same release. The shot read uses it
-# only to void its keeper-home skip; the seam itself prices a caught-moving
-# keeper by displacement. Cognition gate: a goalie-motion-blind tier
+# How unsettled [0,1] the goalie is at a release `release_time_s` from now — the
+# share of his push he has left. Cognition gate: a goalie-motion-blind tier
 # (ctx.reads_goalie_motion false) reads 0.
 static func goalie_unsettled_at(ctx: RoleContext, release_time_s: float,
 		puck_pos_at_release: Vector3, closing_speed_m_s: float = 0.0) -> float:
@@ -325,11 +308,6 @@ func arrival_hold_wait(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3
 	return maxf(0.0, holds.pull_time(from, holds.arrival_offset, facing) - carry_s)
 
 
-# The steepest loft rung a player's blade has, the league's when unknown.
-static func loft_high(caps: AISkaterCaps) -> float:
-	return caps.loft_tans.z if caps != null else GameRules.DEFAULT_LOFT_TAN_HIGH
-
-
 # Position-value scorer at `pos`, evaluated from the carrier at `from_pos`.
 #
 #   carrier in the zone:            shot xG at `pos`
@@ -342,54 +320,74 @@ static func loft_high(caps: AISkaterCaps) -> float:
 # stand-still strictly beats a step toward the net in open ice.
 #
 # `opps` must already be projected to the time the actor will be at `pos`, in
-# the same snapshot order as opponent_caps. `shot_speed_m_s` and
-# `loft_tan_high` are the SHOOTER's (this bot's for carry/stand candidates, the
-# receiver's build for a pass). It takes no aim spread: the seam prices the
-# chance, not the shooter. `shot_keep` is the odds the shooter still has the
-# puck at the press; it discounts the shot, never the position value.
+# the same snapshot order as opponent_caps. The keeper is at `keeper_pos` moving
+# across at `keeper_vel_x` (AIShotValue.now), or square and set on `pos` when
+# `keeper_pos` is INF (AIShotValue.set_keeper). It takes no aim spread: the seam
+# prices the chance, not the shooter. `shot_keep` is the odds the shooter still
+# has the puck at the press; it discounts the shot, never the position value.
 func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
-		opps: Array[Vector3],
-		predicted_goalie_pos: Vector3,
-		shot_speed_m_s: float = AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-		goalie_unsettled_factor: float = 0.0,
-		keeper_displacement_m: float = 0.0,
-		loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH,
-		shot_keep: float = 1.0) -> float:
-	var attacking_goal: Vector3 = ctx.attacking_goal_pos
-	# Hot-path skip (the same proof threat_surface_shoot runs): with the keeper
-	# HOME and settled, a direct shot from OUTSIDE the attacking zone is dead by
-	# score_shoot's own coverage math, so the potential branch always wins. A
-	# displaced, pulled or unsettled keeper voids the proof and computes fully.
-	var out_of_zone: bool = not AIActionScoring.in_offensive_zone(pos, attacking_goal)
-	if out_of_zone and goalie_unsettled_factor <= 0.0 \
-			and not AIActionScoring.in_offensive_zone(from_pos, attacking_goal) \
-			and predicted_goalie_pos.distance_to(attacking_goal) \
-					< AIActionScoring.THREAT_GOALIE_HOME_M:
-		var potential_nz: float = AIActionScoring.position_potential(
-				pos, attacking_goal, opps)
-		return potential_nz * AIActionScoring.potential_realization_discount(
-				pos, attacking_goal)
-	# THE SEAM (AIShotValue): xG plus a keeper-displacement term. A max over five
-	# holes with structural cliffs cannot supply the small differences a carry
-	# beam consumes. Displacement arrives in metres rather than the 0..1
-	# unsettled scalar, which saturates the moment he is caught moving at all
-	# and cannot say HOW beaten he is. The post seal is derived inside.
+		opps: Array[Vector3], keeper_pos: Vector3 = Vector3.INF,
+		keeper_vel_x: float = 0.0, shot_keep: float = 1.0) -> float:
+	if _shot_is_dead_from_here(ctx, pos, from_pos, keeper_vel_x, keeper_pos):
+		return _potential_at(ctx, pos, opps)
 	var shoot_s: float = AIActionScoring.score_shoot_value(
-			pos, attacking_goal, predicted_goalie_pos, keeper_displacement_m,
-			GameRules.NET_HALF_WIDTH, opps, shot_speed_m_s,
-			opponent_caps, ShotEvent.ShotType.SHOT, loft_tan_high) * shot_keep
-	if AIActionScoring.in_offensive_zone(from_pos, attacking_goal):
-		# PURE xG in the offensive zone, with no possession floor: a smooth xG
-		# surface does not go flat where no shot is available right now, so the
-		# gradient is real.
+			pos, ctx.attacking_goal_pos, keeper_pos, opps, keeper_vel_x, false,
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, opponent_caps) * shot_keep
+	return _regime_value(ctx, pos, from_pos, opps, shoot_s)
+
+
+# value_at for a receiver at `pos` fed from `passer` at `pass_speed`, the keeper
+# square on the passer as it leaves (AIShotValue.feed). `one_timer`: he one-times
+# it; otherwise he catches and charges. A goalie-motion-blind tier
+# (ctx.reads_goalie_motion) reads the keeper already set on the receiver.
+func feed_value_at(ctx: RoleContext, passer: Vector3, pos: Vector3, pass_speed: float,
+		one_timer: bool, from_pos: Vector3, opps: Array[Vector3]) -> float:
+	if _shot_is_dead_from_here(ctx, pos, from_pos, 0.0):
+		return _potential_at(ctx, pos, opps)
+	var shoot_s: float = AIShotValue.feed(passer, pos, pass_speed, ctx.attacking_goal_pos,
+			goalie_now(ctx), one_timer) if ctx.reads_goalie_motion \
+			else AIShotValue.set_keeper(pos, ctx.attacking_goal_pos)
+	if shoot_s > 0.0:
+		var aim: Vector3 = AIShotAim.compute_open_net_aim(pos, goalie_now(ctx),
+				ctx.attacking_goal_pos.z, GameRules.NET_HALF_WIDTH,
+				AIGoalieModel.GOALIE_SHADOW_HALF_M)
+		shoot_s *= AIPuckLane.lane_clear(pos, aim, opps,
+				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, AIActionScoring.EMPTY_VEC3, opponent_caps) \
+				* AIPuckLane.release_contest_clean(
+						AIPuckLane.release_point_toward(pos, ctx.attacking_goal_pos),
+						opps, opponent_caps)
+	return _regime_value(ctx, pos, from_pos, opps, shoot_s)
+
+
+# Hot-path skip (the same proof threat_surface_shoot runs): with the keeper HOME
+# and still, a direct shot from OUTSIDE the attacking zone is dead, so the
+# potential branch always wins. A moving or pulled keeper voids the proof.
+# `keeper_pos` INF reads the keeper where he stands now.
+func _shot_is_dead_from_here(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
+		keeper_vel_x: float, keeper_pos: Vector3 = Vector3.INF) -> bool:
+	var keeper: Vector3 = keeper_pos if keeper_pos.is_finite() else goalie_now(ctx)
+	return keeper_vel_x == 0.0 \
+			and not AIActionScoring.in_offensive_zone(pos, ctx.attacking_goal_pos) \
+			and not AIActionScoring.in_offensive_zone(from_pos, ctx.attacking_goal_pos) \
+			and keeper.distance_to(ctx.attacking_goal_pos) < AIActionScoring.THREAT_GOALIE_HOME_M
+
+
+func _potential_at(ctx: RoleContext, pos: Vector3, opps: Array[Vector3]) -> float:
+	return AIActionScoring.position_potential(pos, ctx.attacking_goal_pos, opps) \
+			* AIActionScoring.potential_realization_discount(pos, ctx.attacking_goal_pos)
+
+
+# The two value scales, keyed on the carrier (see value_at): `shoot_s` is the
+# shot's odds at `pos`.
+func _regime_value(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
+		opps: Array[Vector3], shoot_s: float) -> float:
+	if AIActionScoring.in_offensive_zone(from_pos, ctx.attacking_goal_pos):
+		# Pure odds in the offensive zone, with no possession floor: the field's
+		# surface does not go flat where no shot is available right now.
 		return shoot_s
-	var potential_s: float = AIActionScoring.position_potential(
-			pos, attacking_goal, opps)
-	var realization: float = AIActionScoring.potential_realization_discount(
-			pos, attacking_goal)
-	if AIActionScoring.in_offensive_zone(pos, attacking_goal):
+	if AIActionScoring.in_offensive_zone(pos, ctx.attacking_goal_pos):
 		return entry_value(shoot_s)
-	return maxf(shoot_s, potential_s * realization)
+	return maxf(shoot_s, _potential_at(ctx, pos, opps))
 
 
 # An in-zone xG value as an out-of-zone carrier reads it, in position_potential's
@@ -412,7 +410,7 @@ static func entry_value(in_zone_xg: float) -> float:
 # the drive is this carrier's, so the shot at its end is held as a carry
 # candidate's is (arrival_hold_wait); a receiver's hands are not modelled.
 func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
-		receiver_shot_speed: float, receiver_caps: AISkaterCaps,
+		receiver_caps: AISkaterCaps,
 		receiver_vel: Vector3 = Vector3.ZERO, from_pos: Vector3 = Vector3.INF,
 		start_s: float = 0.0, own_hands: bool = false) -> float:
 	# A delayed offside is up: driving in from outside the zone is not on.
@@ -459,24 +457,17 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 			else AIArrival.time_to_arrive(
 					receiver_spot, reached, receiver_vel, recv_speed, recv_accel)
 	project_opponents(start_s + t, _drive_buf)
-	# The keeper backs in over the receiver's drive exactly as over the carrier's
-	# own: both sides of the carry-vs-pass compete must read the same keeper.
-	var goalie: Vector3 = AIGoalieModel.goalie_squared_pos(
-			goalie_now(ctx), ctx.attacking_goal_pos, reached, start_s + t,
-			(receiver_spot.distance_to(ctx.attacking_goal_pos)
-					- reached.distance_to(ctx.attacking_goal_pos)) / maxf(t, 0.001))
+	# The keeper tracks the drive the whole way, so it arrives at him square and
+	# set — for the carrier's own drive and a receiver's alike.
 	var regime_from: Vector3 = from_pos if from_pos.is_finite() else ctx.self_pos
-	var shot_speed: float = receiver_shot_speed
 	var hold_keep: float = 1.0
 	var wait: float = 0.0
 	if own_hands and shot_reads(ctx, regime_from, reached):
 		var arrive_vel: Vector3 = (reached - receiver_spot) / t if t > 0.001 else Vector3.ZERO
 		wait = arrival_hold_wait(ctx, reached, arrive_vel, start_s + t)
-		shot_speed *= holds.arrival_share
 		hold_keep = holds.arrival_keep
-	var advanced: float = value_at(ctx, reached, regime_from,
-			_drive_buf, goalie, shot_speed, 0.0, 0.0,
-			loft_high(receiver_caps), hold_keep)
+	var advanced: float = value_at(ctx, reached, regime_from, _drive_buf, Vector3.INF,
+			0.0, hold_keep)
 	return advanced * keep * AIActionScoring.delay_discount(t + wait)
 
 

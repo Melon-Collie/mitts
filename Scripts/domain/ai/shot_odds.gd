@@ -7,16 +7,24 @@ extends RefCounted
 # here models the goalie: a goalie change is a regeneration, never an edit here.
 #
 # A cell is one measured situation: a release spot, the keeper's read, and his
-# open set (FLAT / LOW / HIGH × aims post to post). Its odds are the best aim's
-# goal fraction under REFERENCE_SPREAD_RAD of placement scatter. A query is
-# bilinear over the release-spot grid; within a spot it is a kernel over the
-# cells' keeper state, so the answer leans on the situations most like this one.
+# open set (FLAT / LOW / HIGH × aims post to post). Each aim's odds are its goal
+# fraction under REFERENCE_SPREAD_RAD of placement scatter; the cell's odds are
+# its best aim's. A query is bilinear over the release-spot grid; within a spot
+# it is a kernel over the cells' keeper state, so the answer leans on the
+# situations most like this one.
 #
-# Two kinds of query:
-#   shot_now — the keeper as he stands: shooting off the carry, or what a carry
+# Two kinds of situation:
+#   shot now — the keeper as he stands: shooting off the carry, or what a carry
 #     arrives at. Samples: settled, after a deke, and as feeds left him on arrival.
+#     His stance is matched exactly (Stance): a keeper sealed on his post and one
+#     sprawled after a feed are both "down", and nothing alike.
 #   feed     — a pass, read at the passer's decision with the keeper square on the
 #     passer; what he manages over the flight is the goalie's own answer.
+#
+# The value queries average the cells' best odds; the pick blends the cells'
+# per-aim odds and takes the best aim, so it costs more and runs once a shot is
+# committed. Where neighbouring cells disagree on the aim, the average of their
+# bests reads a little above the best of the blend.
 
 # Placement scatter (radians) the odds are priced at — about the Normal hand. A
 # decision is made before the release and the keeper's timing at release varies,
@@ -29,11 +37,26 @@ const OFFSET_BANDWIDTH_M: float = 0.3
 const VELOCITY_BANDWIDTH_M_S: float = 1.0
 const TRAVEL_BANDWIDTH_M: float = 0.3
 const FLIGHT_BANDWIDTH_S: float = 0.1
-# Below this total kernel weight a query falls back to its nearest sample.
+# Below this total kernel weight a spot falls back to its nearest sample.
 const _MIN_WEIGHT: float = 1e-4
+# How the keeper stands, matched exactly within a spot.
+enum Stance { UPRIGHT, DOWN, POST_SEAL }
+
+# The field's lofts, in the order its outcome strings are stored.
+const LOFTS: Array[int] = [ShotMechanics.ELEVATION_FLAT, ShotMechanics.ELEVATION_LOW,
+		ShotMechanics.ELEVATION_HIGH]
 
 # The net the field was measured at; every query is mapped into its frame.
 const _FIELD_GOAL := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
+
+
+# A shot the field recommends: the odds, where to aim on the goal line (world),
+# and the loft level.
+class Pick:
+	var odds: float = 0.0
+	var aim := Vector3.INF
+	var loft: int = ShotMechanics.ELEVATION_FLAT
+
 
 static var _built: bool = false
 # Per spot (index fi * nx + xi): the first cell and how many.
@@ -44,45 +67,158 @@ static var _odds := PackedFloat32Array()
 static var _is_shot_sample := PackedByteArray()
 static var _is_feed := PackedByteArray()
 static var _one_timer := PackedByteArray()
-static var _down := PackedByteArray()
+static var _stance := PackedByteArray()
 static var _offset := PackedFloat32Array()
 static var _velocity := PackedFloat32Array()
 static var _travel := PackedFloat32Array()
 static var _flight := PackedFloat32Array()
+# Per cell × loft × aim, at REFERENCE_SPREAD_RAD.
+static var _aim_odds := PackedFloat32Array()
+static var _aims_per_cell: int = 0
+# Scratch for one query: each matching cell's share of the answer. Static, so
+# queries run on one thread at a time — the AI worker, as AIDangerField's memo
+# assumes.
+static var _q_cells := PackedInt32Array()
+static var _q_weights := PackedFloat32Array()
+static var _q_blend := PackedFloat32Array()
 
 
-# The odds of a shot from `release` at the net at `goal`, against the keeper as
-# `keeper` reads now.
-static func shot_now(release: Vector3, goal: Vector3, keeper: GoalieNetworkState) -> float:
-	_build()
-	var mirror: float = -signf(goal.z)
-	var local := Vector2((release.x - goal.x) * mirror, (release.z - goal.z) * mirror)
+# The odds of a shot from `release` at the net at `goal`, against the keeper at
+# `keeper_pos` moving laterally at `keeper_vel_x` (world) in `stance` (Stance;
+# stance_of reads it off a replicated goalie).
+static func shot_now(release: Vector3, goal: Vector3, keeper_pos: Vector3,
+		keeper_vel_x: float, stance: int) -> float:
+	if not _weigh_shot_now(release, goal, keeper_pos, keeper_vel_x, stance):
+		return 0.0
+	return _weighted_odds()
+
+
+# The odds of a shot from `release` against a keeper square, still and upright on
+# it: what a carry he tracks the whole way arrives at.
+static func shot_set(release: Vector3, goal: Vector3) -> float:
+	var local: Vector2 = _local(release, goal)
 	if local.y <= 0.0:
 		return 0.0
-	var k := Vector3(keeper.position_x, 0.0, keeper.position_z)
-	var offset: float = (k.x - AIGoalieModel.goalie_arc_match_x(k, goal, release)) * mirror
-	return _bilinear(local, false, false, keeper.is_down(), offset,
-			keeper.velocity_x * mirror)
+	_build()
+	_weigh(local, false, false, Stance.UPRIGHT, 0.0, 0.0)
+	return _weighted_odds() if not _q_cells.is_empty() else 0.0
+
+
+# The replicated goalie's Stance.
+static func stance_of(keeper: GoalieNetworkState, goal: Vector3) -> int:
+	if keeper.post_seal_x_sign(goal.z) != 0.0:
+		return Stance.POST_SEAL
+	return Stance.DOWN if keeper.is_down() else Stance.UPRIGHT
 
 
 # The odds of the receiver's shot off a pass from `passer` to `receiver` at
-# `speed`, the keeper square on the passer as `keeper` reads. `one_timer`: the
+# `speed`, the keeper at `keeper_pos` square on the passer. `one_timer`: the
 # receiver one-times it; otherwise he catches and charges.
 static func feed(passer: Vector3, receiver: Vector3, speed: float, goal: Vector3,
-		keeper: GoalieNetworkState, one_timer: bool) -> float:
+		keeper_pos: Vector3, one_timer: bool) -> float:
+	if not _weigh_feed(passer, receiver, speed, goal, keeper_pos, one_timer):
+		return 0.0
+	return _weighted_odds()
+
+
+# The shot to fire from `release` against the keeper as shot_now reads him, into
+# `out`. `out.aim` is INF when there is no shot from here.
+static func pick_shot_now(release: Vector3, goal: Vector3, keeper_pos: Vector3,
+		keeper_vel_x: float, stance: int, out: Pick) -> void:
+	out.odds = 0.0
+	out.aim = Vector3.INF
+	out.loft = ShotMechanics.ELEVATION_FLAT
+	if not _weigh_shot_now(release, goal, keeper_pos, keeper_vel_x, stance):
+		return
+	_blend_aims()
+	var best: int = 0
+	for i: int in _q_blend.size():
+		if _q_blend[i] > _q_blend[best]:
+			best = i
+	var n: int = AIShotFieldData.AIM_POINTS
+	var mirror: float = -signf(goal.z)
+	out.odds = _q_blend[best]
+	out.loft = LOFTS[best / n]
+	out.aim = Vector3(goal.x + aim_x(best % n) * mirror, 0.0, goal.z)
+
+
+# The odds a shot from `release` at an EMPTY net at `goal` goes in: aimed at the
+# middle, the crossing scattering by REFERENCE_SPREAD_RAD over the range. No
+# goalie, so nothing measured: it is where the puck lands.
+static func empty_net(release: Vector3, goal: Vector3) -> float:
+	var mirror: float = -signf(goal.z)
+	var range_m: float = Vector2(release.x - goal.x, release.z - goal.z).length()
+	if (release.z - goal.z) * mirror <= 0.0:
+		return 0.0
+	var reach: float = GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS \
+			- GameRules.PUCK_COLLISION_RADIUS
+	var sigma_m: float = REFERENCE_SPREAD_RAD * maxf(range_m, 0.5)
+	return _erf(reach / (sigma_m * sqrt(2.0)))
+
+
+# Lateral aim (m, in the net's own frame) of aim sample `i` post to post.
+static func aim_x(i: int) -> float:
+	var reach: float = GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS \
+			- GameRules.PUCK_COLLISION_RADIUS
+	return lerpf(-reach, reach, float(i) / float(AIShotFieldData.AIM_POINTS - 1))
+
+
+static func _weigh_shot_now(release: Vector3, goal: Vector3, keeper_pos: Vector3,
+		keeper_vel_x: float, stance: int) -> bool:
+	var local: Vector2 = _local(release, goal)
+	if local.y <= 0.0:
+		return false
+	_build()
+	var mirror: float = -signf(goal.z)
+	var k := Vector3(keeper_pos.x, 0.0, keeper_pos.z)
+	var offset: float = (k.x - AIGoalieModel.goalie_arc_match_x(k, goal, release)) * mirror
+	_weigh(local, false, false, stance, offset, keeper_vel_x * mirror)
+	return not _q_cells.is_empty()
+
+
+# `world` in the field's frame: (lateral, metres out from the goal line).
+static func _local(world: Vector3, goal: Vector3) -> Vector2:
+	var mirror: float = -signf(goal.z)
+	return Vector2((world.x - goal.x) * mirror, (world.z - goal.z) * mirror)
+
+
+static func _weigh_feed(passer: Vector3, receiver: Vector3, speed: float, goal: Vector3,
+		keeper_pos: Vector3, one_timer: bool) -> bool:
 	_build()
 	var mirror: float = -signf(goal.z)
 	var local := Vector2((receiver.x - goal.x) * mirror, (receiver.z - goal.z) * mirror)
 	if local.y <= 0.0:
-		return 0.0
-	var k := Vector3(keeper.position_x, 0.0, keeper.position_z)
+		return false
+	var k := Vector3(keeper_pos.x, 0.0, keeper_pos.z)
 	var travel: float = (AIGoalieModel.goalie_arc_match_x(k, goal, receiver) - k.x) * mirror
 	var flight: float = passer.distance_to(receiver) / maxf(speed, 0.1)
-	return _bilinear(local, true, one_timer, false, travel, flight)
+	_weigh(local, true, one_timer, Stance.UPRIGHT, travel, flight)
+	return not _q_cells.is_empty()
 
 
-static func _bilinear(local: Vector2, is_feed: bool, one_timer: bool, down: bool,
-		a: float, b: float) -> float:
+static func _weighted_odds() -> float:
+	var v: float = 0.0
+	for j: int in _q_cells.size():
+		v += _q_weights[j] * _odds[_q_cells[j]]
+	return v
+
+
+static func _blend_aims() -> void:
+	_q_blend.resize(_aims_per_cell)
+	_q_blend.fill(0.0)
+	for j: int in _q_cells.size():
+		var base: int = _q_cells[j] * _aims_per_cell
+		var w: float = _q_weights[j]
+		for i: int in _aims_per_cell:
+			_q_blend[i] += w * _aim_odds[base + i]
+
+
+# Fills the query scratch with the matching cells and their normalized weights:
+# bilinear over the four spots around `local`, a kernel over (a, b) within each.
+static func _weigh(local: Vector2, is_feed: bool, one_timer: bool, stance: int,
+		a: float, b: float) -> void:
+	_q_cells.clear()
+	_q_weights.clear()
 	var xs: Array[float] = AIShotFieldData.SPOT_X
 	var fs: Array[float] = AIShotFieldData.SPOT_FWD
 	var xi: int = _bracket(xs, local.x)
@@ -90,37 +226,29 @@ static func _bilinear(local: Vector2, is_feed: bool, one_timer: bool, down: bool
 	var tx: float = clampf((local.x - xs[xi]) / (xs[xi + 1] - xs[xi]), 0.0, 1.0)
 	var tf: float = clampf((local.y - fs[fi]) / (fs[fi + 1] - fs[fi]), 0.0, 1.0)
 	var total: float = 0.0
-	var weight: float = 0.0
 	for corner: int in 4:
-		var cx: int = xi + (corner & 1)
-		var cf: int = fi + (corner >> 1)
 		var w: float = (tx if corner & 1 else 1.0 - tx) * (tf if corner >> 1 else 1.0 - tf)
 		if w <= 0.0:
 			continue
-		var v: float = _at_spot(cf * xs.size() + cx, is_feed, one_timer, down, a, b)
-		if v < 0.0:
-			continue
-		total += w * v
-		weight += w
-	return total / weight if weight > 0.0 else 0.0
+		var spot: int = (fi + (corner >> 1)) * xs.size() + xi + (corner & 1)
+		total += _weigh_spot(spot, w, is_feed, one_timer, stance, a, b)
+	if total <= 0.0:
+		_q_cells.clear()
+		_q_weights.clear()
+		return
+	for j: int in _q_weights.size():
+		_q_weights[j] /= total
 
 
-# Index of the grid interval holding `v`, clamped to the grid.
-static func _bracket(grid: Array[float], v: float) -> int:
-	for i: int in range(grid.size() - 2, -1, -1):
-		if v >= grid[i]:
-			return i
-	return 0
-
-
-# Kernel average of one spot's matching cells, or -1 when it has none.
-static func _at_spot(spot: int, is_feed: bool, one_timer: bool, down: bool,
-		a: float, b: float) -> float:
+# Appends one spot's matching cells with weights summing to `spot_weight`, and
+# returns `spot_weight`, or 0 when the spot has no matching cell.
+static func _weigh_spot(spot: int, spot_weight: float, is_feed: bool, one_timer: bool,
+		stance: int, a: float, b: float) -> float:
 	var ha: float = TRAVEL_BANDWIDTH_M if is_feed else OFFSET_BANDWIDTH_M
 	var hb: float = FLIGHT_BANDWIDTH_S if is_feed else VELOCITY_BANDWIDTH_M_S
-	var sum: float = 0.0
+	var first: int = _q_cells.size()
 	var wsum: float = 0.0
-	var nearest: float = -1.0
+	var nearest: int = -1
 	var nearest_d2: float = INF
 	for c: int in range(_spot_first[spot], _spot_first[spot] + _spot_count[spot]):
 		var ca: float
@@ -131,7 +259,7 @@ static func _at_spot(spot: int, is_feed: bool, one_timer: bool, down: bool,
 			ca = _travel[c]
 			cb = _flight[c]
 		else:
-			if _is_shot_sample[c] == 0 or (_down[c] == 1) != down:
+			if _is_shot_sample[c] == 0 or _stance[c] != stance:
 				continue
 			ca = _offset[c]
 			cb = _velocity[c]
@@ -139,14 +267,31 @@ static func _at_spot(spot: int, is_feed: bool, one_timer: bool, down: bool,
 		var db: float = (b - cb) / hb
 		var d2: float = da * da + db * db
 		var w: float = exp(-0.5 * d2)
-		sum += w * _odds[c]
+		_q_cells.append(c)
+		_q_weights.append(w)
 		wsum += w
 		if d2 < nearest_d2:
 			nearest_d2 = d2
-			nearest = _odds[c]
+			nearest = c
+	if nearest < 0:
+		return 0.0
 	if wsum < _MIN_WEIGHT:
-		return nearest
-	return sum / wsum
+		_q_cells.resize(first)
+		_q_weights.resize(first)
+		_q_cells.append(nearest)
+		_q_weights.append(spot_weight)
+		return spot_weight
+	for j: int in range(first, _q_weights.size()):
+		_q_weights[j] *= spot_weight / wsum
+	return spot_weight
+
+
+# Index of the grid interval holding `v`, clamped to the grid.
+static func _bracket(grid: Array[float], v: float) -> int:
+	for i: int in range(grid.size() - 2, -1, -1):
+		if v >= grid[i]:
+			return i
+	return 0
 
 
 static func _build() -> void:
@@ -159,6 +304,7 @@ static func _build() -> void:
 	_spot_first.fill(0)
 	_spot_count.fill(0)
 	var n: int = AIShotFieldData.ROWS.size()
+	_aims_per_cell = LOFTS.size() * AIShotFieldData.AIM_POINTS
 	_odds.resize(n)
 	_offset.resize(n)
 	_velocity.resize(n)
@@ -167,7 +313,8 @@ static func _build() -> void:
 	_is_shot_sample.resize(n)
 	_is_feed.resize(n)
 	_one_timer.resize(n)
-	_down.resize(n)
+	_stance.resize(n)
+	_aim_odds.resize(n * _aims_per_cell)
 	for c: int in n:
 		var t: PackedStringArray = AIShotFieldData.ROWS[c].split("\t")
 		var spot: int = AIShotFieldData.SPOT_FWD.find(float(t[2])) * AIShotFieldData.SPOT_X.size() \
@@ -180,23 +327,29 @@ static func _build() -> void:
 		var release := Vector3(float(t[7]), 0.0, _FIELD_GOAL.z + float(t[8]))
 		var pre := Vector3(float(t[9]), 0.0, float(t[10]))
 		var now := Vector3(float(t[30]), 0.0, float(t[31]))
-		var now_state: int = int(float(t[33]))
 		_is_feed[c] = 1 if kind == "FEED" else 0
 		_one_timer[c] = 1 if mode == "O" else 0
 		# A feed caught and charged is also the keeper as the receiver finds him.
 		_is_shot_sample[c] = 1 if kind != "FEED" or mode == "K" else 0
 		var probe := GoalieNetworkState.new()
-		probe.state_enum = now_state
-		_down[c] = 1 if probe.is_down() else 0
+		probe.state_enum = int(float(t[33]))
+		_stance[c] = stance_of(probe, _FIELD_GOAL)
 		_offset[c] = now.x - AIGoalieModel.goalie_arc_match_x(now, _FIELD_GOAL, release)
 		_velocity[c] = float(t[35])
 		var receiver := Vector3(float(t[1]), 0.0, _FIELD_GOAL.z + float(t[2]))
 		var passer := Vector3(float(t[5]), 0.0, receiver.z)
 		_travel[c] = AIGoalieModel.goalie_arc_match_x(pre, _FIELD_GOAL, receiver) - pre.x
 		_flight[c] = passer.distance_to(receiver) / maxf(float(t[6]), 0.1)
-		var dist: float = maxf(Vector2(release.x, release.z - _FIELD_GOAL.z).length(), 0.5)
-		_odds[c] = best_odds(PackedStringArray([t[51], t[52], t[53]]),
-				REFERENCE_SPREAD_RAD * dist)
+		var sigma_m: float = REFERENCE_SPREAD_RAD \
+				* maxf(Vector2(release.x, release.z - _FIELD_GOAL.z).length(), 0.5)
+		var best: float = 0.0
+		for li: int in LOFTS.size():
+			var pattern: String = t[51 + li]
+			for i: int in pattern.length():
+				var p: float = aim_odds(pattern, i, sigma_m)
+				_aim_odds[c * _aims_per_cell + li * AIShotFieldData.AIM_POINTS + i] = p
+				best = maxf(best, p)
+		_odds[c] = best
 
 
 # The best aim's goal fraction over `patterns` (FLAT / LOW / HIGH outcome strings

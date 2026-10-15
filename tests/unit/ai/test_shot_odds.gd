@@ -5,13 +5,8 @@ extends GutTest
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 
 
-func _keeper_at(goal: Vector3, x: float, depth: float, vel_x: float = 0.0) -> GoalieNetworkState:
-	var g := GoalieNetworkState.new()
-	g.position_x = x
-	g.position_z = goal.z - signf(goal.z) * depth
-	g.velocity_x = vel_x
-	g.state_enum = GoalieStateMachine.State.READY
-	return g
+func _keeper_at(goal: Vector3, x: float, depth: float) -> Vector3:
+	return Vector3(x, 0.0, goal.z - signf(goal.z) * depth)
 
 
 func test_odds_are_probabilities_across_the_zone() -> void:
@@ -20,8 +15,8 @@ func test_odds_are_probabilities_across_the_zone() -> void:
 		for x: float in [-9.0, -4.0, 0.0, 4.0, 9.0]:
 			var release := Vector3(x, 0.0, GOAL_Z + fwd)
 			for kx: float in [-0.8, 0.0, 0.8]:
-				var k: GoalieNetworkState = _keeper_at(goal, kx, 1.5, kx * 2.0)
-				var now: float = AIShotOdds.shot_now(release, goal, k)
+				var k: Vector3 = _keeper_at(goal, kx, 1.5)
+				var now: float = AIShotOdds.shot_now(release, goal, k, kx * 2.0, AIShotOdds.Stance.UPRIGHT)
 				assert_between(now, 0.0, 1.0, "shot_now at (%.1f, %.1f)" % [x, fwd])
 				var fed: float = AIShotOdds.feed(release + Vector3(4.0, 0.0, 0.0), release,
 						15.0, goal, k, true)
@@ -30,11 +25,11 @@ func test_odds_are_probabilities_across_the_zone() -> void:
 
 func test_no_shot_from_on_or_behind_the_goal_line() -> void:
 	var goal := Vector3(0.0, 0.0, GOAL_Z)
-	var k: GoalieNetworkState = _keeper_at(goal, 0.0, 1.0)
+	var k: Vector3 = _keeper_at(goal, 0.0, 1.0)
 	for x: float in [-2.0, 0.0, 2.0]:
 		for behind: float in [0.0, 1.0, 3.0]:
 			var release := Vector3(x, 0.0, GOAL_Z - behind)
-			assert_eq(AIShotOdds.shot_now(release, goal, k), 0.0)
+			assert_eq(AIShotOdds.shot_now(release, goal, k, 0.0, AIShotOdds.Stance.UPRIGHT), 0.0)
 			assert_eq(AIShotOdds.feed(Vector3(0.0, 0.0, GOAL_Z + 6.0), release, 15.0, goal, k,
 					false), 0.0)
 
@@ -49,10 +44,10 @@ func test_the_far_net_reads_as_the_measured_net_seen_from_the_other_end() -> voi
 		for fwd: float in [3.0, 6.5, 10.0]:
 			var r_near := Vector3(release_x, 0.0, GOAL_Z + fwd)
 			var r_far := Vector3(-release_x, 0.0, -GOAL_Z - fwd)
-			var k_near: GoalieNetworkState = _keeper_at(near, 0.4, 1.4, 1.5)
-			var k_far: GoalieNetworkState = _keeper_at(far, -0.4, 1.4, -1.5)
-			assert_almost_eq(AIShotOdds.shot_now(r_far, far, k_far),
-					AIShotOdds.shot_now(r_near, near, k_near), 1e-5,
+			var k_near: Vector3 = _keeper_at(near, 0.4, 1.4)
+			var k_far: Vector3 = _keeper_at(far, -0.4, 1.4)
+			assert_almost_eq(AIShotOdds.shot_now(r_far, far, k_far, -1.5, AIShotOdds.Stance.UPRIGHT),
+					AIShotOdds.shot_now(r_near, near, k_near, 1.5, AIShotOdds.Stance.UPRIGHT), 1e-5,
 					"shot_now mirrors at (%.1f, %.1f)" % [release_x, fwd])
 			var p_near := Vector3(release_x + 3.0, 0.0, GOAL_Z + fwd + 2.0)
 			var p_far := Vector3(-release_x - 3.0, 0.0, -GOAL_Z - fwd - 2.0)
