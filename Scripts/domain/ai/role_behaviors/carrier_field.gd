@@ -179,7 +179,7 @@ func turnover_cost(ctx: RoleContext, loss_point: Vector3, loss_prob: float,
 		our_goalie: Vector3) -> float:
 	return AIActionScoring.turnover_cost(
 			loss_point, loss_prob, ctx.defending_goal_pos, our_goalie,
-			GameRules.NET_HALF_WIDTH, our_defenders, our_defender_caps,
+			our_defenders, our_defender_caps,
 			AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos))
 
 
@@ -195,7 +195,7 @@ func counter_exposure_cost(ctx: RoleContext, loss_point: Vector3,
 			else EXPOSURE_APPETITE_FORWARD
 	return appetite * AIActionScoring.counter_rush_cost(
 			loss_point, loss_prob, ctx.defending_goal_pos, our_goalie,
-			GameRules.NET_HALF_WIDTH, our_defenders,
+			our_defenders,
 			recover_from, ctx.self_max_speed,
 			opponents, opponent_vels, opponent_caps,
 			exposure_mate_etas, exposure_threat_memo,

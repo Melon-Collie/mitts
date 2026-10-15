@@ -437,9 +437,8 @@ standing leg's drop and the arm's reach.
 **`elevated_threshold` forks the LEGS, not the hands.** Under it he drops, and
 flat the pads are 0.28 m tall, so a corner shot at 0.3-0.6 m clears them wide
 of the trunk. The hands take every shot read over the flat pad top, after the
-arm read — the band the bots' shot model already charges to the arms
-(`AIActionScoring._delay_at_height`). Left to the legs alone, that band was the
-one way a set keeper lost clean shots from range. The hand aims where the
+arm read. Left to the legs alone, that band was the one way a set keeper lost
+clean shots from range. The hand aims where the
 believed line crosses HIS plane, not the goal line: from an angle he stands out
 on the shooter's line, and the goal-line x sends the blocker, and the stick on
 it, past the puck. `test_goalie_hands_over_the_pad.gd` holds both, and that the

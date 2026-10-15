@@ -67,20 +67,22 @@ func test_time_to_arrive_faster_skater_arrives_sooner() -> void:
 	assert_lt(fast, slow, "a higher ref speed must yield a shorter arrival time")
 
 
-# ── score_shoot shot-speed sensitivity ──────────────────────────────────────
+# ── shot-speed sensitivity ───────────────────────────────────────────────────
 
-func test_score_shoot_non_decreasing_in_shot_speed() -> void:
+func test_score_shoot_value_non_decreasing_in_shot_speed() -> void:
 	# A faster shot gives a lane defender less reaction time, so shot quality
 	# is non-decreasing in shot speed for the same geometry. Defender placed
 	# in the lane so the term actually bites.
-	var shooter := Vector3(0, 0, 5)
 	var goal := Vector3(0, 0, -GameRules.GOAL_LINE_Z)
+	var shooter := Vector3(1.0, 0, goal.z + 6.0)
 	var goalie := Vector3(0, 0, goal.z + 1.0)
-	var defenders: Array[Vector3] = [Vector3(0.3, 0, 2.0)]
-	var slow := AIActionScoring.score_shoot(
-			shooter, goal, goalie, GameRules.NET_HALF_WIDTH, defenders, 16.0)
-	var fast := AIActionScoring.score_shoot(
-			shooter, goal, goalie, GameRules.NET_HALF_WIDTH, defenders, 28.0)
+	var defenders: Array[Vector3] = [Vector3(0.7, 0, goal.z + 4.0)]
+	var slow := AIActionScoring.score_shoot_value(
+			shooter, goal, goalie, defenders, 0.0, AIShotOdds.Stance.UPRIGHT, 16.0)
+	var fast := AIActionScoring.score_shoot_value(
+			shooter, goal, goalie, defenders, 0.0, AIShotOdds.Stance.UPRIGHT, 28.0)
+	assert_gt(AIActionScoring.score_shoot_value(shooter, goal, goalie, [] as Array[Vector3]),
+			fast, "the defender is in the lane, so the term bites")
 	assert_gte(fast, slow,
 			"faster shot should score >= slower shot through the same lane")
 

@@ -11,13 +11,13 @@ const GOAL := Vector3(0.0, 0.0, 26.65)
 func test_shoot_score_falls_off_with_pressure() -> void:
 	var shooter := Vector3(0.0, 0.0, 21.0)
 	var goalie := Vector3(0.5, 0.0, 26.0)
-	var clear: float = AIActionScoring.score_shoot(shooter, GOAL, goalie, NET_HW,[])
+	var clear: float = AIActionScoring.score_shoot_value(shooter, GOAL, goalie, [])
 	# Defender one stick from the RELEASE POINT (the puck a carry-handle
 	# toward the net): his blade genuinely contests the windup
 	# (release_contest_clean). Off the shot lane laterally so lane_clear
 	# stays ~1.0 — this tests release duress in isolation.
 	var nearby_opp: Array[Vector3] = [Vector3(1.2, 0.0, 22.4)]
-	var pressured: float = AIActionScoring.score_shoot(shooter, GOAL, goalie, NET_HW,nearby_opp)
+	var pressured: float = AIActionScoring.score_shoot_value(shooter, GOAL, goalie, nearby_opp)
 	assert_lt(pressured, clear, "a blade within reach of the release contests the shot")
 
 
@@ -28,9 +28,9 @@ func test_shoot_score_ignores_defender_beyond_blade_reach() -> void:
 	# contests it. He's also kept off the shot lane so lane_clear is 1.0.
 	var shooter := Vector3(0.0, 0.0, 21.0)
 	var goalie := Vector3(0.5, 0.0, 26.0)
-	var clear: float = AIActionScoring.score_shoot(shooter, GOAL, goalie, NET_HW,[])
+	var clear: float = AIActionScoring.score_shoot_value(shooter, GOAL, goalie, [])
 	var watcher: Array[Vector3] = [Vector3(2.8, 0.0, 22.5)]
-	var watched: float = AIActionScoring.score_shoot(shooter, GOAL, goalie, NET_HW,watcher)
+	var watched: float = AIActionScoring.score_shoot_value(shooter, GOAL, goalie, watcher)
 	assert_almost_eq(watched, clear, 0.001,
 			"a body near-but-out-of-reach does not contest the release")
 
@@ -44,12 +44,12 @@ func test_shoot_score_reduced_by_mid_lane_defender() -> void:
 	# threshold.
 	var shooter := Vector3(0.0, 0.0, 15.0)
 	var goalie := Vector3(0.5, 0.0, 26.0)
-	var clear: float = AIActionScoring.score_shoot(shooter, GOAL, goalie, NET_HW,[])
+	var clear: float = AIActionScoring.score_shoot_value(shooter, GOAL, goalie, [])
 	# Defender at z=20, 5 m from shooter along an ~11 m segment —
 	# t ≈ 0.43, time_to_defender ≈ 0.16 s > LANE_REACTION_DELAY_S
 	# (0.08), so they have time to position their stick.
 	var blocker: Array[Vector3] = [Vector3(-0.1, 0.0, 20.0)]
-	var blocked: float = AIActionScoring.score_shoot(shooter, GOAL, goalie, NET_HW,blocker)
+	var blocked: float = AIActionScoring.score_shoot_value(shooter, GOAL, goalie, blocker)
 	assert_gt(clear, 0.0)
 	assert_lt(blocked, clear, "defender in shot lane with reaction time should reduce shoot score")
 
@@ -62,17 +62,15 @@ func test_shot_lane_defender_reach_scales_with_build() -> void:
 	var shooter := Vector3(0, 0, 15)
 	var goalie := Vector3(1.0, 0, 26)
 	var off_lane: Array[Vector3] = [Vector3(0.9, 0, 20)]
-	var league: float = AIActionScoring.score_shoot(shooter, GOAL, goalie, NET_HW, off_lane)
+	var league: float = AIActionScoring.score_shoot_value(shooter, GOAL, goalie, off_lane)
 	var big := AISkaterCaps.new()
 	big.stick_reach = 1.7
 	big.max_speed = 12.0
-	var vs_big: float = AIActionScoring.score_shoot(shooter, GOAL, goalie, NET_HW, off_lane,
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, [big])
+	var vs_big: float = AIActionScoring.score_shoot_value(shooter, GOAL, goalie, off_lane, 0.0, AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S, [big])
 	var small := AISkaterCaps.new()
 	small.stick_reach = 1.0
 	small.max_speed = 6.0
-	var vs_small: float = AIActionScoring.score_shoot(shooter, GOAL, goalie, NET_HW, off_lane,
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, [small])
+	var vs_small: float = AIActionScoring.score_shoot_value(shooter, GOAL, goalie, off_lane, 0.0, AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S, [small])
 	assert_lt(vs_big, league, "a longer-reach, faster defender blocks more of the shot")
 	assert_gt(vs_small, league, "a shorter, slower defender blocks less")
 
@@ -97,10 +95,10 @@ func test_shoot_blocked_by_close_on_line_defender() -> void:
 func test_shoot_score_unaffected_by_defender_off_lane() -> void:
 	var shooter := Vector3(0.0, 0.0, 21.0)
 	var goalie := Vector3(0.5, 0.0, 26.0)
-	var clear: float = AIActionScoring.score_shoot(shooter, GOAL, goalie, NET_HW,[])
+	var clear: float = AIActionScoring.score_shoot_value(shooter, GOAL, goalie, [])
 	# Defender to the far side, outside both pressure radius and shot lane.
 	var off_lane: Array[Vector3] = [Vector3(8.0, 0.0, 24.0)]
-	var s: float = AIActionScoring.score_shoot(shooter, GOAL, goalie, NET_HW,off_lane)
+	var s: float = AIActionScoring.score_shoot_value(shooter, GOAL, goalie, off_lane)
 	assert_almost_eq(s, clear, 0.001)
 
 
@@ -109,7 +107,7 @@ func test_pass_score_zero_when_lane_blocked() -> void:
 	var receiver := Vector3(0.0, 0.0, 22.0)  # close to goal, would normally score
 	var goalie := Vector3(0.5, 0.0, 26.0)
 	var blocker: Array[Vector3] = [Vector3(0.0, 0.0, 16.0)]  # right on the line
-	var s: float = AIActionScoring.score_pass(shooter, receiver, GOAL, goalie, NET_HW,blocker)
+	var s: float = AIActionScoring.score_pass_value(shooter, receiver, GOAL, goalie, blocker)
 	assert_eq(s, 0.0, "opponent on the pass line should zero the score")
 
 
@@ -119,7 +117,7 @@ func test_pass_lane_only_counts_opponents_between_endpoints() -> void:
 	var goalie := Vector3(0.5, 0.0, 26.0)
 	# Opponent BEHIND the shooter (z=5, before z=10) — shouldn't block
 	var behind: Array[Vector3] = [Vector3(0.0, 0.0, 5.0)]
-	var s: float = AIActionScoring.score_pass(shooter, receiver, GOAL, goalie, NET_HW,behind)
+	var s: float = AIActionScoring.score_pass_value(shooter, receiver, GOAL, goalie, behind)
 	assert_gt(s, 0.0, "opponent behind the shooter shouldn't block the lane")
 
 
@@ -127,7 +125,7 @@ func test_shoot_score_zero_from_behind_goal_line() -> void:
 	# GOAL.z = +26.65; shooter past it (z=27) is behind the net.
 	var shooter := Vector3(0.0, 0.0, 27.0)
 	var goalie := Vector3(0.0, 0.0, 26.0)
-	var s: float = AIActionScoring.score_shoot(shooter, GOAL, goalie, NET_HW,[])
+	var s: float = AIActionScoring.score_shoot_value(shooter, GOAL, goalie, [])
 	assert_eq(s, 0.0, "shot from behind goal line should score 0")
 
 
@@ -140,31 +138,17 @@ func test_shoot_score_zero_from_behind_net_off_center() -> void:
 	var goalie := Vector3(0.0, 0.0, 25.9)
 	for x: float in [1.5, 3.0]:
 		var shooter := Vector3(x, 0.0, 27.5)
-		assert_eq(AIActionScoring.score_shoot(shooter, GOAL, goalie, NET_HW, []), 0.0,
+		assert_eq(AIActionScoring.score_shoot_value(shooter, GOAL, goalie, []), 0.0,
 				"behind-the-net shot at x=%.1f must score 0" % x)
 		assert_eq(AIGoalieModel.release_ahead_of_goalie(shooter, GOAL, goalie), shooter,
 				"a behind-the-line release is not clamped into a phantom in-front spot")
-
-
-func test_shoot_score_dead_from_beside_the_net() -> void:
-	# From beside the net near the goal line the sightline to the far post runs
-	# along the crease THROUGH the goalie's body — his depth occludes it (the
-	# body-disc model). The old zero-depth cover left the far post "open" from
-	# here, which is where the hopeless bad-angle fires came from. RVH/VH make
-	# it worse, but even an upright keeper walls it with his body alone.
-	var goalie := Vector3(0.8, 0.0, 26.3)
-	for x: float in [3.0, 5.0, 7.0]:
-		for fwd: float in [0.5, 1.0]:
-			var shooter := Vector3(x, 0.0, GOAL.z - fwd)
-			var s: float = AIActionScoring.score_shoot(shooter, GOAL, goalie, NET_HW, [])
-			assert_lt(s, 0.02, "side-of-net x=%.1f fwd=%.1f is never a real chance" % [x, fwd])
 
 
 func test_pass_score_zero_to_receiver_behind_goal_line() -> void:
 	var shooter := Vector3(0.0, 0.0, 20.0)
 	var receiver := Vector3(0.0, 0.0, 28.0)  # past attacking goal line
 	var goalie := Vector3(0.0, 0.0, 26.0)
-	var s: float = AIActionScoring.score_pass(shooter, receiver, GOAL, goalie, NET_HW,[])
+	var s: float = AIActionScoring.score_pass_value(shooter, receiver, GOAL, goalie, [])
 	assert_eq(s, 0.0, "pass to receiver behind goal line should score 0")
 
 
@@ -172,12 +156,12 @@ func test_pass_score_falls_off_with_receiver_pressure() -> void:
 	var shooter := Vector3(0.0, 0.0, 10.0)
 	var receiver := Vector3(0.0, 0.0, 22.0)
 	var goalie := Vector3(0.5, 0.0, 26.0)
-	var clear: float = AIActionScoring.score_pass(shooter, receiver, GOAL, goalie, NET_HW,[])
+	var clear: float = AIActionScoring.score_pass_value(shooter, receiver, GOAL, goalie, [])
 	# Defender 2 m past the receiver (toward the attacking goal) and
 	# 0.5 m off-axis — inside the receiver's forward pressure cone but
 	# past the shooter→receiver segment so lane_clear isn't triggered.
 	var checker: Array[Vector3] = [Vector3(0.5, 0.0, 24.0)]
-	var pressured: float = AIActionScoring.score_pass(shooter, receiver, GOAL, goalie, NET_HW,checker)
+	var pressured: float = AIActionScoring.score_pass_value(shooter, receiver, GOAL, goalie, checker)
 	assert_lt(pressured, clear)
 
 
@@ -188,10 +172,10 @@ func test_pass_score_falls_off_with_receiver_pressure() -> void:
 func test_shoot_pressure_ignores_defender_behind_shooter() -> void:
 	var shooter := Vector3(0.0, 0.0, 21.0)
 	var goalie := Vector3(0.5, 0.0, 25.4)
-	var clean: float = AIActionScoring.score_shoot(shooter, GOAL, goalie, NET_HW,[])
+	var clean: float = AIActionScoring.score_shoot_value(shooter, GOAL, goalie, [])
 	# Defender 2 m behind shooter (between shooter and own net).
 	var behind: Array[Vector3] = [Vector3(0.5, 0.0, 19.0)]
-	var pressured: float = AIActionScoring.score_shoot(shooter, GOAL, goalie, NET_HW,behind)
+	var pressured: float = AIActionScoring.score_shoot_value(shooter, GOAL, goalie, behind)
 	assert_almost_eq(pressured, clean, 0.001,
 			"defender behind the shooter should not pressure the shot")
 
@@ -199,11 +183,11 @@ func test_shoot_pressure_ignores_defender_behind_shooter() -> void:
 func test_shoot_pressure_ignores_perpendicular_defender() -> void:
 	var shooter := Vector3(0.0, 0.0, 21.0)
 	var goalie := Vector3(0.5, 0.0, 25.4)
-	var clean: float = AIActionScoring.score_shoot(shooter, GOAL, goalie, NET_HW,[])
+	var clean: float = AIActionScoring.score_shoot_value(shooter, GOAL, goalie, [])
 	# Defender 2 m sideways at the same depth — directly perpendicular
 	# to the shooter→goal axis. Cube weight = 0 (dot = 0).
 	var perp: Array[Vector3] = [Vector3(2.0, 0.0, 21.0)]
-	var pressured: float = AIActionScoring.score_shoot(shooter, GOAL, goalie, NET_HW,perp)
+	var pressured: float = AIActionScoring.score_shoot_value(shooter, GOAL, goalie, perp)
 	assert_almost_eq(pressured, clean, 0.001,
 			"perpendicular defender should not pressure the shot")
 
@@ -224,8 +208,8 @@ func test_pass_trailing_defender_pressures_reception_but_not_the_lane() -> void:
 	var lane: float = AIPuckLane.lane_clear(
 			shooter, receiver, trailing, AIPuckLane.PASS_SPEED_M_S)
 	assert_almost_eq(lane, 1.0, 0.0001, "a defender past the receiver isn't a lane interceptor")
-	var clean: float = AIActionScoring.score_pass(shooter, receiver, GOAL, goalie, NET_HW,[])
-	var pressured: float = AIActionScoring.score_pass(shooter, receiver, GOAL, goalie, NET_HW,trailing)
+	var clean: float = AIActionScoring.score_pass_value(shooter, receiver, GOAL, goalie, [])
+	var pressured: float = AIActionScoring.score_pass_value(shooter, receiver, GOAL, goalie, trailing)
 	assert_lt(pressured, clean, "a defender on the receiver still pressures the reception")
 
 
@@ -293,9 +277,7 @@ func test_score_pass_zero_when_segment_crosses_net() -> void:
 	var goalie := Vector3(0.0, 0.0, -25.0)
 	# Far-side goal so receiver isn't past attacking goal line.
 	var attacking_goal := Vector3(0.0, 0.0, -26.65)
-	var s: float = AIActionScoring.score_pass(
-			shooter, receiver, attacking_goal, goalie,
-			NET_HW, [])
+	var s: float = AIActionScoring.score_pass_value(shooter, receiver, attacking_goal, goalie, [])
 	assert_almost_eq(s, 0.0, 0.001,
 			"score_pass returns zero when the segment crosses a net rect")
 
@@ -350,204 +332,6 @@ func test_own_slot_side_of_crease_feed_blocked() -> void:
 # traffic, and the calibrated values, are test_shot_danger_properties.gd.
 # (GOAL at +Z; a lower goalie z = further OUT.)
 
-func test_shot_danger_backdoor_tap_in_is_shot_flat() -> void:
-	# A gaping open net low: no reason to elevate — bury it along the ice.
-	var loft: int = AIActionScoring.best_shot_loft(
-			Vector3(-0.8, 0.0, 25.5), GOAL, Vector3(0.85, 0.0, 25.45),
-			NET_HW, AIBotMechanics.WRISTER_SHOT_SPEED_M_S)
-	assert_eq(loft, ShotMechanics.ELEVATION_FLAT, "an open net gets buried flat")
-
-
-func test_shot_danger_open_look_dwarfs_firing_into_a_set_goalie() -> void:
-	# In tight nothing walls a placed shot (standing → quick-released, down →
-	# roofed), so the honest comparison is against RANGE, where the wall is
-	# real: the same open look dwarfs the direct shot once the keeper's
-	# read + reach covers the flight.
-	var open_s: float = AIActionScoring.score_shoot(
-			Vector3(3.0, 0.0, 22.0), GOAL, Vector3(0.0, 0.0, 25.15), NET_HW, [])
-	var ranged_s: float = AIActionScoring.score_shoot(
-			Vector3(0.0, 0.0, 13.65), GOAL, Vector3(0.0, 0.0, 25.15), NET_HW, [])
-	assert_gt(open_s, ranged_s, "an open net beats the covered ranged look")
-
-
-func test_aim_spread_softens_the_window_to_a_partial_make() -> void:
-	# Execution spread is part of shot SELECTION: the same window scores LOWER for
-	# a noisier hand (its wobble eats the opening — monotonically with spread). But
-	# a wobble comparable to or wider than the window no longer CLOSES it: the shot
-	# is priced as a PARTIAL make (_soft_make_angle), so the bot still takes it and
-	# gets saved on the shots that miss — instead of the old certain-make-only cut
-	# that declined every shot the goalie could reach (and left the keeper without
-	# a save to make). Window: the cross-seam look past a frozen centred goalie.
-	# A sub-saturation window (the 8 m set-goalie knife cell) so the mapping's
-	# gradient is visible — a wide-open look saturates to 1.0 for every hand,
-	# which is correct and asserted elsewhere.
-	var shooter := Vector3(0.0, 0.0, GOAL.z - 8.0)
-	var goalie := Vector3(0.0, 0.0, GOAL.z - 1.15)
-	var clean: float = AIActionScoring.score_shoot(
-			shooter, GOAL, goalie, NET_HW, [], AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-			0.0, [], -1.0, false, 0.0, false, 0.0)
-	var noisy: float = AIActionScoring.score_shoot(
-			shooter, GOAL, goalie, NET_HW, [], AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-			0.0, [], -1.0, false, 0.0, false, 0.03)
-	var wild: float = AIActionScoring.score_shoot(
-			shooter, GOAL, goalie, NET_HW, [], AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-			0.0, [], -1.0, false, 0.0, false, 0.4)
-	assert_gt(clean, noisy, "a noisier hand rates the same window lower")
-	assert_gt(noisy, wild, "…and a wild hand lower still (monotonic in spread)")
-	assert_gt(wild, 0.0,
-			"a wobble wider than the window is a partial make, not a hard cut")
-	assert_lt(wild, clean * 0.6,
-			"…rated well below the clean look — a low-percentage shot, not a gimme")
-
-
-func test_shot_danger_top_band_glove_race_in_tight_deploy_shuts_it_at_range() -> void:
-	# In tight the glove can't extend, but no blade's steepest rung gets the
-	# puck over a STANDING keeper's 0.86 m pad seam from 2.4 m: nobody roofs the
-	# doorstep (docs/elevation-rework-plan.md §1), on any gear. A DOWN keeper's
-	# pads are 0.28 m tall and his glove starts there, so over the pad is live.
-	# At RANGE the puck's trip to his body covers the whole deploy and the set
-	# glove shuts the band.
-	var shooter := Vector3(0.0, 0.0, 24.25)    # 2.4 m
-	var goalie := Vector3(0.0, 0.0, 25.9)
-	var m28 := Vector3(tan(deg_to_rad(6.4)), tan(deg_to_rad(10.0)), tan(deg_to_rad(13.6)))
-	var set_high: float = AIActionScoring._hole_open_angle(
-			0, shooter, GOAL, goalie, NET_HW, 33.0, 0.0, -1.0, false, 0.0, false,
-			0.0, 0.0, Vector4.INF, Vector4.INF, m28)
-	var down_high: float = AIActionScoring._hole_open_angle(
-			0, shooter, GOAL, goalie, NET_HW, 33.0, 0.0, -1.0, true)
-	assert_almost_eq(set_high, 0.0, 0.0001,
-			"even the toe hook can't roof a standing keeper from the doorstep")
-	assert_gt(down_high, 0.0, "over a down keeper's pad is live in tight")
-	var far_shooter := Vector3(0.0, 0.0, 15.65)    # 11 m
-	var far_goalie := Vector3(0.0, 0.0, 25.15)     # 1.5 m challenge
-	var far_high: float = AIActionScoring._hole_open_angle(
-			0, far_shooter, GOAL, far_goalie, NET_HW, 33.0, 0.0)
-	assert_almost_eq(far_high, 0.0, 0.0001,
-			"at range the deploy beats the puck to his body — top band shut")
-
-
-func test_point_blank_roof_is_live_over_a_down_goalie() -> void:
-	# The contact-point identity shot: from 2 m over a butterflied goalie the
-	# open toe's solved arc arrives top-shelf at full pace — the doorstep roof
-	# the old fixed-vy model physically could not produce (its arc needed
-	# ~0.25 s to rise above the pad-top seam). The keeper is DEEP (beaten to
-	# his crease): dead on the shooter's nose his body-disc still occludes
-	# the whole mouth from 2 m, which is the honest no-shot.
-	var shooter := Vector3(0.0, 0.0, 24.65)    # 2 m
-	var goalie := Vector3(0.0, 0.0, 25.9)
-	var loft: int = AIActionScoring.best_shot_loft(
-			shooter, GOAL, goalie, NET_HW, 33.0,
-			0.0, 0.0, true)   # slide gap sealed — the roof is the way in
-	assert_gte(loft, ShotMechanics.ELEVATION_MID,
-			"the open toe roofs the butterfly from the doorstep")
-	# With his slide gap leaking (caught mid-slide), the five-hole is the
-	# wider, simpler hole and the finish stays flat — the tie-break at work.
-	var leaky: int = AIActionScoring.best_shot_loft(
-			shooter, GOAL, goalie, NET_HW, 33.0,
-			0.0, GoalieBehaviorRules.five_hole_gap_m(true, 0.18), true)
-	assert_eq(leaky, ShotMechanics.ELEVATION_FLAT,
-			"a leaking five-hole out-simples the roof")
-
-
-func test_high_band_is_a_rung_choice_per_ladder() -> void:
-	# The roofing gradient IS the ladder (docs/elevation-rework-plan.md §1):
-	# each gear's HIGH rung lands top-shelf at its own home range, nobody roofs
-	# the 2 m doorstep, and from the point the league ladder's in-band rung is
-	# MID, because HIGH would miss high and the band never lets the bot sail on
-	# purpose.
-	var gears: Array = [
-		["M88", Vector3(5.0, 6.9, 8.9), 8.5],
-		["M92", Vector3(5.5, 8.2, 11.0), 6.0],
-		["M28", Vector3(6.4, 10.0, 13.6), 4.5],
-	]
-	for gear: Array in gears:
-		var deg: Vector3 = gear[1]
-		var tans := Vector3(tan(deg_to_rad(deg.x)), tan(deg_to_rad(deg.y)),
-				tan(deg_to_rad(deg.z)))
-		assert_eq(AIActionScoring._best_high_rung(2.0, 33.0, tans),
-				ShotMechanics.ELEVATION_FLAT, "%s cannot roof the doorstep" % gear[0])
-		assert_eq(AIActionScoring._best_high_rung(gear[2], 33.0, tans),
-				ShotMechanics.ELEVATION_HIGH,
-				"%s's toe rung is top-shelf at its home range" % gear[0])
-	assert_eq(AIActionScoring._best_high_rung(15.0, 33.0),
-			ShotMechanics.ELEVATION_MID,
-			"from the point the league's top-shelf rung is the toe-side snipe")
-
-
-func test_standing_keeper_on_top_bars_the_point_blank_roof() -> void:
-	# Against a STANDING goalie right on the puck, even the toe rung crosses
-	# his plane under the stick assembly (PADDLE_HEIGHT_M) — the paddle eats
-	# it, so the band is closed and the finish stays flat. (Only the DOWN
-	# goalie, paddle on the ice, concedes the doorstep roof.)
-	var m28 := Vector3(0.14945, 0.34433, 0.53171)
-	assert_eq(AIActionScoring._best_high_rung(2.0, 33.0, m28, 1.0),
-			ShotMechanics.ELEVATION_FLAT, "standing keeper at 1 m: the paddle bars the roof")
-	assert_ne(AIActionScoring._best_high_rung(2.0, 33.0, m28, 1.0, true),
-			ShotMechanics.ELEVATION_FLAT, "the same look over a DOWN goalie is live")
-
-
-func test_the_seal_only_takes_net_away_from_a_sharp_angle() -> void:
-	# A ~70° wall look sits inside the predicted post seal (the live keeper's
-	# RVH/VH zone), and threading the seal can only remove holes.
-	var shooter := Vector3(7.0, 0.0, 24.0)
-	var seal: float = AIGoalieModel.derive_post_seal_x_sign(shooter, GOAL)
-	assert_ne(seal, 0.0, "premise: the ~70° look is inside the predicted post seal")
-	var keeper := Vector3(0.9, 0.0, 25.05)
-	var sealed: float = AIActionScoring.score_shoot(
-			shooter, GOAL, keeper, NET_HW, [],
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, [], -1.0, false,
-			seal, true)
-	assert_lte(sealed, AIActionScoring.score_shoot(shooter, GOAL, keeper, NET_HW, []))
-
-
-func test_shot_danger_unsettled_goalie_scores_higher() -> void:
-	# Same geometry; an unsettled (mid-slide) goalie can't deploy his glove in
-	# time, so the shot beats him more.
-	# At the 8.5 m band the set look sits below saturation (the calibrated
-	# knife cell), so the late-read credit is visible; in tight both reads
-	# saturate to the certain look they really are.
-	var shooter := Vector3(0.0, 0.0, 18.15)   # ~8.5 m
-	var goalie := Vector3(0.0, 0.0, 25.5)
-	var set_s: float = AIActionScoring.score_shoot(
-			shooter, GOAL, goalie, NET_HW, [],
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0)
-	var unsettled: float = AIActionScoring.score_shoot(
-			shooter, GOAL, goalie, NET_HW, [],
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 1.0)
-	assert_gt(unsettled, set_s, "a mid-slide goalie reads the shot late → higher danger")
-
-
-func test_shot_aim_targets_the_open_side() -> void:
-	# Off the strong side (+x) vs a centred goalie: the open net is the near side,
-	# so the aim resolves to a point on that side of the net.
-	var aim: Vector3 = AIActionScoring.best_shot_aim(
-			Vector3(3.0, 0.0, 22.0), GOAL, Vector3(0.0, 0.0, 25.15),
-			NET_HW, AIBotMechanics.WRISTER_SHOT_SPEED_M_S)
-	assert_gt(aim.x, 0.0, "aim resolves to the open near side")
-	assert_lt(absf(aim.x), NET_HW + 0.001, "aim stays inside the posts")
-	assert_almost_eq(aim.z, GOAL.z, 0.001, "aim sits on the net plane")
-
-
-func test_shot_aim_roofs_toward_a_post() -> void:
-	# Down-goalie slot (five-hole sealed): the loft goes over the pad and the aim
-	# is a CORNER (near a post), not dead centre — aim and loft describe the same
-	# hole.
-	var shooter := Vector3(0.0, 0.0, 23.15)   # 3.5 m
-	var goalie := Vector3(0.0, 0.0, 25.05)
-	var loft: int = AIActionScoring.best_shot_loft(
-			shooter, GOAL, goalie, NET_HW, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-			0.0, 0.0, true)
-	var aim: Vector3 = AIActionScoring.best_shot_aim(
-			shooter, GOAL, goalie, NET_HW, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-			0.0, 0.0, true)
-	assert_ne(loft, ShotMechanics.ELEVATION_FLAT, "the down goalie's opening is over the pad")
-	assert_gt(absf(aim.x), 0.4, "...so the aim is a top corner, not the goalie's chest")
-
-
-# ── in_offensive_zone ─────────────────────────────────────────────────────────
-# The value-map regime boundary: the attacking blue line. Attacking GOAL at +Z, so
-# the O-zone is z > BLUE_LINE_Z.
-
 func test_in_offensive_zone_past_blue_line() -> void:
 	var deep := Vector3(0.0, 0.0, 20.0)          # well inside the zone
 	var just_in := Vector3(0.0, 0.0, GameRules.BLUE_LINE_Z + 0.5)
@@ -590,28 +374,6 @@ func test_release_untouched_when_in_front_of_goalie() -> void:
 	var out: Vector3 = AIGoalieModel.release_ahead_of_goalie(in_front, GOAL, goalie)
 	assert_eq(out, in_front, "a normal in-front shot is not clamped")
 
-
-func test_shot_from_behind_goalie_is_not_a_phantom_open_net() -> void:
-	# A shooter jammed dead-center just past the goalie used to read as an open net
-	# (keeper modelled behind the shooter → danger 1.0). Clamped in front of him,
-	# it's a point-blank jam into a set keeper — near zero, and far below a real
-	# slot shot from the same centered line.
-	var goalie := Vector3(0.0, 0.0, 24.65)
-	var behind := Vector3(0.0, 0.0, 25.8)           # crease, dead center, past goalie
-	var behind_danger: float = AIActionScoring.score_shoot(behind, GOAL, goalie, NET_HW, [])
-	var slot := Vector3(0.0, 0.0, 20.65)            # real slot look, same line
-	var slot_danger: float = AIActionScoring.score_shoot(slot, GOAL, goalie, NET_HW, [])
-	assert_lte(behind_danger, slot_danger,
-			"a jam from behind the goalie is not more dangerous than a slot shot")
-	assert_lt(behind_danger, 0.2,
-			"…it's a near-nothing point-blank jam, not a phantom open net")
-
-
-# ── position_potential ───────────────────────────────────────────────────────
-# position_potential models "value of being at this position" — used
-# only when the evaluator is OUTSIDE shooting range (the regime rule
-# in AICarrierField.value_at). Closeness peaks at the slot and ramps to 0 at the
-# goal mouth (inside) and at the goal-to-goal rink length (outside).
 
 func test_potential_zero_behind_goal_line() -> void:
 	# Past the attacking goal line — no shooting potential. position_potential is
@@ -1040,12 +802,8 @@ func test_score_pass_higher_at_charged_speed_with_in_lane_defender() -> void:
 	# body-occlusion model and both pass speeds would tie at 0.
 	var goalie := Vector3(0.5, 0.0, GOAL.z - 1.0)
 	var in_lane: Array[Vector3] = [Vector3(0.5, 0.0, 2.5)]
-	var slow: float = AIActionScoring.score_pass(
-			shooter, receiver, GOAL, goalie, NET_HW, in_lane,
-			AIPuckLane.PASS_SPEED_M_S)
-	var fast: float = AIActionScoring.score_pass(
-			shooter, receiver, GOAL, goalie, NET_HW, in_lane,
-			AIPuckLane.PASS_CHARGE_SPEED_M_S)
+	var slow: float = AIActionScoring.score_pass_value(shooter, receiver, GOAL, goalie, in_lane, AIPuckLane.PASS_SPEED_M_S)
+	var fast: float = AIActionScoring.score_pass_value(shooter, receiver, GOAL, goalie, in_lane, AIPuckLane.PASS_CHARGE_SPEED_M_S)
 	assert_gt(fast, slow,
 			"charged pass scores higher than quick-shot when a defender sits in the lane (less reaction time)")
 
@@ -1110,22 +868,15 @@ func test_pass_score_prices_lane_defender_by_build() -> void:
 	var receiver := Vector3(0.0, 0.0, 22.0)
 	var goalie := Vector3(0.5, 0.0, 26.0)
 	var off_lane: Array[Vector3] = [Vector3(2.5, 0.0, 15.0)]
-	var league: float = AIActionScoring.score_pass(
-			shooter, receiver, GOAL, goalie, NET_HW, off_lane)
+	var league: float = AIActionScoring.score_pass_value(shooter, receiver, GOAL, goalie, off_lane)
 	var long_stick := AISkaterCaps.new()
 	long_stick.stick_reach = 1.6
 	long_stick.max_speed = 12.0
-	var vs_long: float = AIActionScoring.score_pass(
-			shooter, receiver, GOAL, goalie, NET_HW, off_lane,
-			AIPuckLane.PASS_SPEED_M_S, 0.0, -1.0, Vector4.INF, Vector4.INF,
-			[long_stick])
+	var vs_long: float = AIActionScoring.score_pass_value(shooter, receiver, GOAL, goalie, off_lane, AIPuckLane.PASS_SPEED_M_S, [long_stick])
 	var short_stick := AISkaterCaps.new()
 	short_stick.stick_reach = 1.1
 	short_stick.max_speed = 6.0
-	var vs_short: float = AIActionScoring.score_pass(
-			shooter, receiver, GOAL, goalie, NET_HW, off_lane,
-			AIPuckLane.PASS_SPEED_M_S, 0.0, -1.0, Vector4.INF, Vector4.INF,
-			[short_stick])
+	var vs_short: float = AIActionScoring.score_pass_value(shooter, receiver, GOAL, goalie, off_lane, AIPuckLane.PASS_SPEED_M_S, [short_stick])
 	assert_lt(vs_long, league,
 			"the long-stick defender's real reach covers the same feed")
 	assert_gt(vs_short, league,
@@ -1174,18 +925,18 @@ func test_threat_surface_pass_prices_defenders_by_build() -> void:
 	var our_goalie := Vector3(0.5, 0.0, 26.0)
 	var our_defender: Array[Vector3] = [Vector3(2.0, 0.0, 15.0)]
 	var league: float = AIActionScoring.threat_surface_pass(
-			opp_carrier, opp_receiver, GOAL, our_goalie, NET_HW, our_defender)
+			opp_carrier, opp_receiver, GOAL, our_goalie, our_defender)
 	var long_stick := AISkaterCaps.new()
 	long_stick.stick_reach = 1.6
 	long_stick.max_speed = 12.0
 	var vs_long: float = AIActionScoring.threat_surface_pass(
-			opp_carrier, opp_receiver, GOAL, our_goalie, NET_HW, our_defender,
+			opp_carrier, opp_receiver, GOAL, our_goalie, our_defender,
 			[long_stick])
 	var short_stick := AISkaterCaps.new()
 	short_stick.stick_reach = 1.1
 	short_stick.max_speed = 6.0
 	var vs_short: float = AIActionScoring.threat_surface_pass(
-			opp_carrier, opp_receiver, GOAL, our_goalie, NET_HW, our_defender,
+			opp_carrier, opp_receiver, GOAL, our_goalie, our_defender,
 			[short_stick])
 	assert_lt(vs_long, league,
 			"a long-stick defender covers more of the opponent's feed")
@@ -1204,17 +955,17 @@ func test_turnover_cost_prices_defenders_by_build() -> void:
 	# same narrow ring the position_potential case pins.
 	var our_defender: Array[Vector3] = [Vector3(1.4, 0.0, 20.9)]
 	var league: float = AIActionScoring.turnover_cost(
-			loss_point, 1.0, GOAL, our_goalie, NET_HW, our_defender)
+			loss_point, 1.0, GOAL, our_goalie, our_defender)
 	var long_fast := AISkaterCaps.new()
 	long_fast.stick_reach = 1.6
 	long_fast.max_speed = 12.0
 	var vs_long: float = AIActionScoring.turnover_cost(
-			loss_point, 1.0, GOAL, our_goalie, NET_HW, our_defender, [long_fast])
+			loss_point, 1.0, GOAL, our_goalie, our_defender, [long_fast])
 	var short_slow := AISkaterCaps.new()
 	short_slow.stick_reach = 1.05
 	short_slow.max_speed = 5.0
 	var vs_short: float = AIActionScoring.turnover_cost(
-			loss_point, 1.0, GOAL, our_goalie, NET_HW, our_defender, [short_slow])
+			loss_point, 1.0, GOAL, our_goalie, our_defender, [short_slow])
 	assert_lt(vs_long, league,
 			"losing it next to a long-stick defender is cheaper than league")
 	assert_gt(vs_short, league,
@@ -1588,23 +1339,23 @@ const OUR_GOALIE := Vector3(0.0, 0.0, 26.0)
 
 func test_turnover_cost_zero_when_no_loss_point() -> void:
 	var c: float = AIActionScoring.turnover_cost(
-			Vector3.INF, 0.5, OUR_NET, OUR_GOALIE, NET_HW, [])
+			Vector3.INF, 0.5, OUR_NET, OUR_GOALIE, [])
 	assert_eq(c, 0.0, "no interception point → no turnover cost")
 
 
 func test_turnover_cost_zero_when_no_loss_prob() -> void:
 	var loss := Vector3(0.0, 0.0, 21.0)  # dangerous spot, but...
 	var c: float = AIActionScoring.turnover_cost(
-			loss, 0.0, OUR_NET, OUR_GOALIE, NET_HW, [])
+			loss, 0.0, OUR_NET, OUR_GOALIE, [])
 	assert_eq(c, 0.0, "zero loss probability → no turnover cost")
 
 
 func test_turnover_cost_scales_with_loss_probability() -> void:
 	var loss := Vector3(0.0, 0.0, 21.0)  # in our slot, in front of our net
 	var low: float = AIActionScoring.turnover_cost(
-			loss, 0.2, OUR_NET, OUR_GOALIE, NET_HW, [])
+			loss, 0.2, OUR_NET, OUR_GOALIE, [])
 	var high: float = AIActionScoring.turnover_cost(
-			loss, 0.8, OUR_NET, OUR_GOALIE, NET_HW, [])
+			loss, 0.8, OUR_NET, OUR_GOALIE, [])
 	assert_gt(high, low, "higher interception probability → higher turnover cost")
 
 
@@ -1615,9 +1366,9 @@ func test_turnover_cost_self_localizes_by_geometry() -> void:
 	var in_slot := Vector3(0.0, 0.0, 21.0)       # ~5.6 m from our net
 	var far_out := Vector3(0.0, 0.0, 2.0)        # near center ice
 	var slot_cost: float = AIActionScoring.turnover_cost(
-			in_slot, 0.5, OUR_NET, OUR_GOALIE, NET_HW, [])
+			in_slot, 0.5, OUR_NET, OUR_GOALIE, [])
 	var far_cost: float = AIActionScoring.turnover_cost(
-			far_out, 0.5, OUR_NET, OUR_GOALIE, NET_HW, [])
+			far_out, 0.5, OUR_NET, OUR_GOALIE, [])
 	assert_gt(slot_cost, far_cost,
 			"own-zone turnover costs more than a neutral-ice one at equal probability")
 
@@ -1733,99 +1484,14 @@ func test_pass_miss_cost_self_localizes_by_rink_end() -> void:
 	var opp_end_loss: Vector3 = AIPuckLane.pass_miss_loss_point(
 			Vector3(2.0, 0.0, -20.0), Vector3(-2.0, 0.0, -23.0))
 	var own_end_cost: float = AIActionScoring.turnover_cost(
-			own_end_loss, AIPuckLane.PASS_MISS_BASE_PROB, OUR_NET, OUR_GOALIE, NET_HW, [])
+			own_end_loss, AIPuckLane.PASS_MISS_BASE_PROB, OUR_NET, OUR_GOALIE, [])
 	var opp_end_cost: float = AIActionScoring.turnover_cost(
-			opp_end_loss, AIPuckLane.PASS_MISS_BASE_PROB, OUR_NET, OUR_GOALIE, NET_HW, [])
+			opp_end_loss, AIPuckLane.PASS_MISS_BASE_PROB, OUR_NET, OUR_GOALIE, [])
 	assert_gt(own_end_cost, opp_end_cost * 4.0,
 			"a missed pass in our own end costs multiples of the same miss in theirs")
 
 
 # ─── Stance-aware five-hole (measured slot from the replicated pose) ──────
-
-func test_five_hole_scores_only_the_clearance_past_the_puck() -> void:
-	# The five-hole pays the puck's own diameter, same honesty the corners pay
-	# via the clean-entry inset: a down-goalie slide leak WIDER than the puck is
-	# the live five-hole; a gap the puck can't fit through scores exactly 0.
-	var goal := Vector3(0, 0, -26.65)
-	var shooter := Vector3(0, 0, -22.65)
-	var goalie := Vector3(0, 0, -24.9)
-	var wide_leak: float = AIActionScoring.open_net_danger(
-			shooter, goal, goalie, GameRules.NET_HALF_WIDTH, 33.0, 0.0,
-			GoalieBehaviorRules.five_hole_gap_m(true, 0.18), true)   # 0.36 m
-	var thin_leak: float = AIActionScoring.open_net_danger(
-			shooter, goal, goalie, GameRules.NET_HALF_WIDTH, 33.0, 0.0,
-			GoalieBehaviorRules.five_hole_gap_m(true, 0.10), true)   # 0.20 m
-	var no_fit: float = AIActionScoring.open_net_danger(
-			shooter, goal, goalie, GameRules.NET_HALF_WIDTH, 33.0, 0.0,
-			2.0 * GameRules.PUCK_COLLISION_RADIUS - 0.01, true)      # narrower than the puck
-	var five_disabled: float = AIActionScoring.open_net_danger(
-			shooter, goal, goalie, GameRules.NET_HALF_WIDTH, 33.0, 0.0, 0.0, true)
-	assert_gt(wide_leak, thin_leak, "a wider slide leak is a bigger five-hole")
-	assert_almost_eq(no_fit, five_disabled, 0.001,
-			"a gap the puck cannot fit through contributes nothing (only corners remain)")
-
-
-func test_five_hole_pays_the_execution_spread() -> void:
-	# The five-hole pays the shooter's execution spread exactly as the corners
-	# do (via _soft_make_angle): a razor slot a noisy hand can barely thread
-	# scores LOWER (so it can't out-score a wider corner via the flat-loft
-	# tie-break — the "five-hole happy" bug), and a wobble wider than the slot
-	# softens it to a low-percentage partial make rather than a hard zero.
-	var goal := Vector3(0, 0, -26.65)
-	var shooter := Vector3(0, 0, -23.65)
-	var goalie := Vector3(0, 0, -24.9)
-	var gap: float = GoalieBehaviorRules.five_hole_gap_m(false, 0.02)
-	var clean: float = AIActionScoring.open_net_danger(
-			shooter, goal, goalie, GameRules.NET_HALF_WIDTH, 33.0, 0.0,
-			gap, false, 0.0, false, 0.0)
-	var noisy: float = AIActionScoring.open_net_danger(
-			shooter, goal, goalie, GameRules.NET_HALF_WIDTH, 33.0, 0.0,
-			gap, false, 0.0, false, 0.02)
-	assert_gt(clean, noisy, "a noisier hand rates the same slot lower")
-	var wild: float = AIActionScoring.open_net_danger(
-			shooter, goal, goalie, GameRules.NET_HALF_WIDTH, 33.0, 0.0,
-			gap, false, 0.0, false, 0.2)
-	assert_gt(noisy, wild, "a wilder hand rates the razor slot lower still")
-	assert_lt(wild, clean * 0.5,
-			"a wobble wider than the slot leaves only a low-percentage partial make")
-
-
-func test_standing_five_hole_sealed_from_range() -> void:
-	# Same slot from 12 m: flight ~0.36 s ≫ legs delay + pads-to-floor — the
-	# goalie reads the release and drops; the slot is gone when the puck arrives.
-	var goal := Vector3(0, 0, -26.65)
-	var shooter := Vector3(0, 0, -14.65)
-	var goalie := Vector3(0, 0, -24.9)
-	var gap: float = GoalieBehaviorRules.five_hole_gap_m(false, 0.02)
-	var angle: float = AIActionScoring.open_net_danger(
-			shooter, goal, goalie, GameRules.NET_HALF_WIDTH, 33.0, 0.0, gap, false)
-	# From range the corners re-open (long flight buys arm reach... inverse) —
-	# assert specifically that the FIVE hole contributes nothing: compare with
-	# gap 0 (five disabled) — identical means the slot was sealed.
-	var no_five: float = AIActionScoring.open_net_danger(
-			shooter, goal, goalie, GameRules.NET_HALF_WIDTH, 33.0, 0.0, 0.0, false)
-	assert_almost_eq(angle, no_five, 0.001,
-			"from range the drop seals the slot before the puck arrives")
-
-
-func test_down_goalie_five_hole_is_the_slide_leak() -> void:
-	# A goalie mid-slide (down, openness 0.18) leaks the measured 0.36 m gap —
-	# and being down there is no further drop to seal it with. In tight (4 m,
-	# goalie challenging) the leak out-scores the walled-off corners, so the
-	# best-hole read rises above the no-leak baseline.
-	var goal := Vector3(0, 0, -26.65)
-	var shooter := Vector3(0, 0, -22.65)
-	var goalie := Vector3(0, 0, -24.9)
-	var gap: float = GoalieBehaviorRules.five_hole_gap_m(true, 0.18)
-	var with_leak: float = AIActionScoring.open_net_danger(
-			shooter, goal, goalie, GameRules.NET_HALF_WIDTH, 33.0, 0.0, gap, true)
-	var sealed: float = AIActionScoring.open_net_danger(
-			shooter, goal, goalie, GameRules.NET_HALF_WIDTH, 33.0, 0.0, 0.0, true)
-	assert_gt(with_leak, sealed,
-			"a mid-slide leak is a real five-hole in tight")
-
-
-# ─── Predicted post-seal (the "one model, consistent inputs" fix) ──────────────
 
 func test_derive_post_seal_only_fires_in_the_sharp_near_line_zone() -> void:
 	# The predictor matches the live goalie's RVH/VH trigger: within ~2 m of the
@@ -1846,149 +1512,6 @@ func test_derive_post_seal_only_fires_in_the_sharp_near_line_zone() -> void:
 			"seals the side the shooter is on")
 
 
-func test_predicted_seal_kills_the_phantom_dead_angle_shot() -> void:
-	# The bug: a carry candidate / receiver at the dead-angle corner scored a
-	# phantom far-side open net (the predictive path fed score_shoot an unsealed
-	# keeper), so a bot would carry there and never shoot. With the predicted seal
-	# threaded, the same model reads the wall the live keeper actually adopts.
-	var goal := Vector3(0, 0, -26.65)
-	var corner := Vector3(8, 0, -25.5)
-	var goalie: Vector3 = AIGoalieModel.goalie_squared_pos(
-			Vector3(0, 0, goal.z + 1.3), goal, corner)
-	var seal: float = AIGoalieModel.derive_post_seal_x_sign(corner, goal)
-	var unsealed: float = AIActionScoring.score_shoot(
-			corner, goal, goalie, GameRules.NET_HALF_WIDTH, [] as Array[Vector3])
-	var sealed: float = AIActionScoring.score_shoot(
-			corner, goal, goalie, GameRules.NET_HALF_WIDTH, [] as Array[Vector3],
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, [], -1.0, false, seal, seal != 0.0)
-	assert_gt(unsealed, 0.05, "sanity: the unsealed read is the phantom the bug scored")
-	assert_almost_eq(sealed, 0.0, 0.001, "the predicted seal walls the dead-angle look")
-
-
-func test_score_pass_walls_a_dead_angle_receiver() -> void:
-	# The seal predictor now lives inside score_pass too, so every predictive pass
-	# read (defensive threat surfaces, off-puck staging, developing feeds) walls a
-	# feed to the dead-angle wraparound instead of crediting the phantom open net.
-	# A slot receiver on an equally clear lane stays a real feed.
-	var shooter := Vector3(6, 0, 20.0)
-	var corner := Vector3(8, 0, 25.5)      # dead angle, in the seal zone
-	var slot := Vector3(0, 0, 20.65)       # a real look
-	var g_corner: Vector3 = AIGoalieModel.goalie_squared_pos(
-			Vector3(0, 0, GOAL.z - 1.3), GOAL, corner)
-	var g_slot: Vector3 = AIGoalieModel.goalie_squared_pos(
-			Vector3(0, 0, GOAL.z - 1.3), GOAL, slot)
-	var no_opps: Array[Vector3] = []
-	assert_almost_eq(AIActionScoring.score_pass(
-			shooter, corner, GOAL, g_corner, GameRules.NET_HALF_WIDTH, no_opps),
-			0.0, 0.001, "the dead-angle feed is walled by the seal")
-	assert_gt(AIActionScoring.score_pass(
-			shooter, slot, GOAL, g_slot, GameRules.NET_HALF_WIDTH, no_opps),
-			0.05, "the slot feed on an equally clear lane is a real threat")
-
-
-func test_threat_surface_shoot_seals_a_dead_angle_opponent() -> void:
-	# Defensive symmetry: an opponent at the dead-angle wraparound of OUR net is
-	# walled by our keeper, so the threat surface reads the seal too. At this spot
-	# the unsealed phantom shot (~0.29) dominates the positional read (~0.14) — so
-	# without the seal our defenders would over-respect a shot the keeper has
-	# already sealed. Sealed, only the positional fallback remains.
-	var opp := Vector3(5, 0, 25.8)         # in the seal zone, phantom-dominant
-	var g: Vector3 = AIGoalieModel.goalie_squared_pos(
-			Vector3(0, 0, GOAL.z - 1.3), GOAL, opp)
-	var no_opps: Array[Vector3] = []
-	var unsealed_shot: float = AIActionScoring.score_shoot(
-			opp, GOAL, g, GameRules.NET_HALF_WIDTH, no_opps)
-	var positional: float = AIActionScoring.position_potential(opp, GOAL, no_opps)
-	var surface: float = AIActionScoring.threat_surface_shoot(
-			opp, GOAL, g, GameRules.NET_HALF_WIDTH, no_opps)
-	assert_gt(unsealed_shot, positional,
-			"sanity: unsealed, the phantom shot dominates the positional read here")
-	assert_almost_eq(surface, positional, 0.001,
-			"sealed → the phantom shot is gone, only the positional fallback remains")
-
-
-# ─── Post-seal stances (VH / RVH) — the pose IS the coverage ───────────────
-
-func test_vh_seal_closes_short_side_high() -> void:
-	# Short-side HIGH vs a goalie AT his post: his body-reach cover alone
-	# leaves a slice over the shoulder — the RVH weakness — and closing it is
-	# VH's whole reason to exist. Sealed-tall reads 0; RVH (not tall) keeps
-	# the same measured opening the bare read gives. The look rides an EASED
-	# MID (19 m/s): at ~4.35 m the M92 ladder's full-pace arcs all miss the
-	# band (the documented mid-range gap), and the seal's structure is
-	# pace-independent — what the deployed wall covers, not a race.
-	var goal := Vector3(0, 0, -26.65)
-	var shooter := Vector3(3.0, 0, -23.5)
-	var goalie := Vector3(0.5, 0, -26.2)
-	var high_near: int = 1   # HIGH band, +x side — the seal side for this shooter
-	var bare: float = AIActionScoring._hole_open_angle(
-			high_near, shooter, goal, goalie, GameRules.NET_HALF_WIDTH,
-			19.0, 0.0, -1.0, true)
-	assert_gt(bare, 0.0, "sanity: body reach alone leaves short-side high open")
-	var vh: float = AIActionScoring._hole_open_angle(
-			high_near, shooter, goal, goalie, GameRules.NET_HALF_WIDTH,
-			19.0, 0.0, -1.0, true, 1.0, true)
-	assert_eq(vh, 0.0, "VH walls the whole near column — no short-side high")
-	var rvh: float = AIActionScoring._hole_open_angle(
-			high_near, shooter, goal, goalie, GameRules.NET_HALF_WIDTH,
-			19.0, 0.0, -1.0, true, 1.0, false)
-	assert_eq(rvh, bare, "RVH stays compressed — short-side high stays measured")
-
-
-func test_post_seal_closes_five_hole_and_near_low() -> void:
-	# Between-the-legs is closed in BOTH post-seal families (back pad + the
-	# post-sealed pad close the ice slot), and the near-post LOW column is
-	# gone in both too.
-	var goal := Vector3(0, 0, -26.65)
-	var shooter := Vector3(1.0, 0, -23.9)
-	var goalie := Vector3(0.6, 0, -26.3)
-	var gap: float = GoalieBehaviorRules.five_hole_gap_m(true, 0.18)  # slide leak
-	var five_bare: float = AIActionScoring._hole_open_angle(
-			4, shooter, goal, goalie, GameRules.NET_HALF_WIDTH,
-			33.0, 0.0, gap, true)
-	assert_gt(five_bare, 0.0, "sanity: a mid-slide leak is a real five-hole read")
-	var five_rvh: float = AIActionScoring._hole_open_angle(
-			4, shooter, goal, goalie, GameRules.NET_HALF_WIDTH,
-			33.0, 0.0, gap, true, 1.0, false)
-	assert_eq(five_rvh, 0.0, "the post-seal back pad closes the slot")
-	var low_vh: float = AIActionScoring._hole_open_angle(
-			3, shooter, goal, goalie, GameRules.NET_HALF_WIDTH,
-			33.0, 0.0, -1.0, true, 1.0, true)
-	assert_eq(low_vh, 0.0, "near-post low is sealed")
-
-
-func test_vh_seal_aims_the_far_corner_not_the_wall() -> void:
-	# From the seal side the only surviving look is the thin cross-net window
-	# at the far post — the chosen aim must sit in the far half, never on the
-	# walled-off short side. ("Never fire into the VH wall.") The shooter sits a
-	# couple of strides off the goal line: right ON the line the goalie's body
-	# depth occludes even the far post and nothing is open at all.
-	var goal := Vector3(0, 0, -26.65)
-	var shooter := Vector3(4.5, 0, -24.0)
-	var goalie := Vector3(0.85, 0, -26.55)   # parked at the +x post, VH
-	var aim: Vector3 = AIActionScoring.best_shot_aim(
-			shooter, goal, goalie, GameRules.NET_HALF_WIDTH, 33.0,
-			0.0, -1.0, true, 0.0, 1.0, true)
-	assert_lt(aim.x, 0.0, "the only look vs VH is across — aim sits in the far half")
-
-
-# ─── Post-clearance aim clamp ─────────────────────────────────────────────
-
-func test_hole_aim_never_targets_the_post_band() -> void:
-	# Goalie shades hard to one side leaving a sliver at the far post — the aim
-	# must stay inside the puck-entry line (post radius + puck radius inside the
-	# post centerline), never on the pipe itself.
-	var goal := Vector3(0, 0, -26.65)
-	var shooter := Vector3(0, 0, -20.65)
-	var goalie := Vector3(0.8, 0, -25.3)  # shaded far to +X
-	var aim: Vector3 = AIActionScoring.best_shot_aim(
-			shooter, goal, goalie, GameRules.NET_HALF_WIDTH, 33.0)
-	assert_lte(absf(aim.x), GameRules.NET_ENTRY_HALF_WIDTH + 0.0001,
-			"aim stays inside the clean-entry line; got x=%f" % aim.x)
-
-
-# ─── Arc-radius clamp (no goalie off the cage) ────────────────────────────
-
 func test_arc_match_x_bounded_by_goalie_radius() -> void:
 	# A puck reference near the goal line at wide x used to explode the arc-x
 	# toward the corner boards. The goalie squares along his ARC: |x offset|
@@ -2007,61 +1530,13 @@ func test_arc_match_x_bounded_by_goalie_radius() -> void:
 
 # ─── Spread-aware entry inset ─────────────────────────────────────────────
 
-func test_aim_spread_pulls_a_degenerate_corner_aim_off_the_post() -> void:
-	# A noisy hand budgets its own wobble inside the entry line. Exercised on
-	# the hole-aim primitive directly: a goalie hugging the left post collapses
-	# the left corner's open segment onto the post itself; the physical entry
-	# clamp pulls the aim to the clean-entry line, and a nonzero spread pulls
-	# it a further spread × range inside so the wobble can't reach the iron.
-	# (Chosen corner aims normally sit well off the post via the corner bias —
-	# the clamp is the backstop for degenerate slivers.)
-	var goal := Vector3(0, 0, -26.65)
-	var shooter := Vector3(0, 0, -22.65)   # 4 m out, dead center
-	var goalie := Vector3(-0.8, 0, -25.6)  # hugging the left post
-	var exact: float = AIActionScoring._hole_aim_x(
-			2, shooter, goal, goalie, GameRules.NET_HALF_WIDTH, 33.0, 0.0)
-	assert_almost_eq(exact, -GameRules.NET_ENTRY_HALF_WIDTH, 0.001,
-			"degenerate left-corner aim rides the physical entry clamp")
-	var spread: float = 0.01   # rad — ~0.02 m cursor noise on the 2 m aim arm
-	var noisy: float = AIActionScoring._hole_aim_x(
-			2, shooter, goal, goalie, GameRules.NET_HALF_WIDTH, 33.0, 0.0, spread)
-	assert_almost_eq(noisy, exact + spread * shooter.distance_to(goal), 0.01,
-			"spread inset pulls the clamped aim inside by spread × range")
-
-
-# ─── Screen perception (sightline occlusion) ──────────────────────────────
-
-# Shared fixture: a point-range shooter against a set, centred, challenged
-# goalie. The screen tests move ONE body around the sightline; they pass it
-# through `screeners` (the shooter's own traffic) so lane/pressure stay
-# constant and the sightline effect is isolated.
-func _screened_point_shot(screeners: Array[Vector3]) -> float:
-	var shooter := Vector3(0.0, 0.0, 10.0)   # 16.65 m out — the point
-	var goalie := Vector3(0.0, 0.0, 25.5)    # set, challenged ~1.15 m
-	return AIActionScoring.score_shoot(
-			shooter, GOAL, goalie, NET_HW, [],
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, [], -1.0, false,
-			0.0, false, 0.0, screeners)
-
-
-func test_body_off_the_sightline_does_not_screen() -> void:
-	# Same depth as the deadly screen, 1.5 m off the shooter→goalie line: the
-	# goalie sees the release the whole way — identical score to the clean look.
-	var clean: float = _screened_point_shot([])
-	var off_line: float = _screened_point_shot([Vector3(1.5, 0.0, 24.0)])
-	assert_almost_eq(off_line, clean, 0.0000001,
-			"an off-line body changes nothing")
-
-
-# ─── Shoot-for-tip EV (the deflection play) ────────────────────────────────
-
 func _tip_fixture(tip_man: Vector3, pace: float,
 		defenders: Array[Vector3]) -> float:
 	# Point release, set challenged goalie — the same look the screen tests
 	# use, now with a body to deflect off.
 	return AIActionScoring.tip_ev(
 			Vector3(0.0, 0.0, 10.0), tip_man, GOAL,
-			Vector3(0.0, 0.0, 25.5), NET_HW, defenders, pace)
+			Vector3(0.0, 0.0, 25.5), defenders, pace)
 
 
 func test_tip_needs_a_blade_the_shot_line_actually_crosses() -> void:
@@ -2087,130 +1562,6 @@ func test_tip_needs_deflect_pace() -> void:
 
 const HANDS_READY := Vector4(-0.42, 0.90, 0.44, 0.86)
 const HANDS_BUTTERFLY := Vector4(-0.42, 0.44, 0.44, 0.44)
-
-
-func test_ready_hands_reproduce_the_legacy_high_cover() -> void:
-	# The resting stance parks the hands at ~the torso edge inside the band —
-	# the pose path must degenerate to the legacy deploy there (no static
-	# armpit hole the stance actually covers).
-	var spread: float = BotSkillProfile.hard().shot_aim_error_rad
-	for dist: float in [5.0, 9.0, 14.0]:
-		var shooter := Vector3(0.0, 0.0, GOAL.z - dist)
-		var goalie := Vector3(0.0, 0.0, GOAL.z - 1.2)
-		var legacy: float = AIActionScoring.open_net_danger(
-				shooter, GOAL, goalie, NET_HW,
-				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0,
-				-1.0, false, 0.0, false, spread)
-		var posed: float = AIActionScoring.open_net_danger(
-				shooter, GOAL, goalie, NET_HW,
-				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0,
-				-1.0, false, 0.0, false, spread, 0.0, HANDS_READY)
-		assert_almost_eq(posed, legacy, 0.12,
-				"READY pose ≈ legacy cover at %.0f m (posed %.3f legacy %.3f)"
-				% [dist, posed, legacy])
-
-
-func test_committed_glove_side_covers_and_vacates_correctly() -> void:
-	# Glove dragged WIDE toward net-left (a committed reach): its side's high
-	# corner is covered sooner, and the vacated right side (blocker parked
-	# low) opens — per-side asymmetry the band aggregate could never see.
-	var shooter := Vector3(0.0, 0.0, GOAL.z - 6.0)   # the league toe rung's home range
-	var goalie := Vector3(0.0, 0.0, GOAL.z - 1.2)
-	var committed_left := Vector4(-0.80, 0.95, 0.44, 0.40)  # glove wide-left, blocker low
-	var left_open: float = AIActionScoring._hole_open_angle(
-			0, shooter, GOAL, goalie, NET_HW,
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0,
-			-1.0, false, 0.0, false, 0.0, 0.0, committed_left)
-	var right_open: float = AIActionScoring._hole_open_angle(
-			1, shooter, GOAL, goalie, NET_HW,
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0,
-			-1.0, false, 0.0, false, 0.0, 0.0, committed_left)
-	assert_lt(left_open, right_open,
-			"the committed glove walls its side; the low blocker's side opens"
-			+ " (L %.4f vs R %.4f)" % [left_open, right_open])
-
-
-# ── Hole-model v3: the LOW band reads the replicated pads ────────────────────
-# Standing pads local ±0.22 at ~12° roll; butterfly ±0.42 rolled 90° flat
-# (GoalieBodyConfigBuilder). GOAL is +z here → net_dx = local_x.
-
-const PADS_STANDING := Vector4(-0.22, -0.209, 0.22, 0.209)
-const PADS_BUTTERFLY := Vector4(-0.42, -PI * 0.5, 0.42, PI * 0.5)
-
-
-func test_ready_pads_reproduce_the_legacy_low_cover() -> void:
-	var spread: float = BotSkillProfile.hard().shot_aim_error_rad
-	for dist: float in [5.0, 9.0, 14.0]:
-		var shooter := Vector3(0.0, 0.0, GOAL.z - dist)
-		var goalie := Vector3(0.0, 0.0, GOAL.z - 1.2)
-		var legacy: float = AIActionScoring.open_net_danger(
-				shooter, GOAL, goalie, NET_HW,
-				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0,
-				-1.0, false, 0.0, false, spread)
-		var posed: float = AIActionScoring.open_net_danger(
-				shooter, GOAL, goalie, NET_HW,
-				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0,
-				-1.0, false, 0.0, false, spread, 0.0,
-				HANDS_READY, PADS_STANDING)
-		assert_almost_eq(posed, legacy, 0.15,
-				"standing pads ≈ legacy LOW at %.0f m (posed %.3f legacy %.3f)"
-				% [dist, posed, legacy])
-
-
-func test_butterfly_pads_measure_the_full_splay() -> void:
-	# A DOWN goalie's measured splayed pads equal the declared butterfly
-	# edge exactly (0.42 offset + 0.42 rolled-flat half-length = 0.84). The
-	# hands stay at their default on both sides, so only the pads differ.
-	var spread: float = BotSkillProfile.hard().shot_aim_error_rad
-	var shooter := Vector3(0.0, 0.0, GOAL.z - 8.0)
-	var goalie := Vector3(0.0, 0.0, GOAL.z - 1.2)
-	var legacy: float = AIActionScoring.open_net_danger(
-			shooter, GOAL, goalie, NET_HW,
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0,
-			-1.0, true, 0.0, false, spread)
-	var posed: float = AIActionScoring.open_net_danger(
-			shooter, GOAL, goalie, NET_HW,
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0,
-			-1.0, true, 0.0, false, spread, 0.0,
-			Vector4.INF, PADS_BUTTERFLY)
-	assert_almost_eq(posed, legacy, 0.1,
-			"butterfly measurement = the declared splay (posed %.3f legacy %.3f)"
-			% [posed, legacy])
-
-
-func test_slid_pads_open_the_vacated_low_corner() -> void:
-	# The goalie mid-slide toward net-left: both pads carried left of
-	# center. His left low corner is walled beyond the stance; the vacated
-	# right low corner opens — asymmetry the declared symmetric core could
-	# never see (the cross-crease slide leak, measured).
-	var shooter := Vector3(0.0, 0.0, GOAL.z - 6.0)
-	var goalie := Vector3(-0.3, 0.0, GOAL.z - 1.2)
-	var slid_left := Vector4(-0.75, -PI * 0.5, -0.05, -PI * 0.5)
-	var left_low: float = AIActionScoring._hole_open_angle(
-			2, shooter, GOAL, goalie, NET_HW,
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.6,
-			-1.0, true, 0.0, false, 0.0, 0.0, Vector4.INF, slid_left)
-	var right_low: float = AIActionScoring._hole_open_angle(
-			3, shooter, GOAL, goalie, NET_HW,
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.6,
-			-1.0, true, 0.0, false, 0.0, 0.0, Vector4.INF, slid_left)
-	assert_lt(left_low, right_low,
-			"the slide walls its side low and vacates the other (L %.4f R %.4f)"
-			% [left_low, right_low])
-
-
-func test_predicted_hands_sink_when_unsettled() -> void:
-	# The pre-arm rebuild seam: a keeper predicted to be moving at release
-	# is scored against hands at the sliding pose height, not the presented
-	# stance — the unsettled body's partial silhouette, measured.
-	var set_hands: Vector4 = AIGoalieModel.predicted_goalie_hands(HANDS_READY, 0.0)
-	assert_almost_eq(set_hands.y, HANDS_READY.y, 0.001, "a set keeper keeps his stance")
-	var moving: Vector4 = AIGoalieModel.predicted_goalie_hands(HANDS_READY, 1.0)
-	assert_almost_eq(moving.y, AIGoalieModel.SLIDING_HANDS_Y_M, 0.001,
-			"a fully caught-moving keeper's glove rides at the slide height")
-	assert_almost_eq(moving.x, HANDS_READY.x, 0.001, "laterals travel with the body")
-	assert_false(AIGoalieModel.predicted_goalie_hands(Vector4.INF, 1.0).is_finite(),
-			"absent pose passes through")
 
 
 # XG_SLOT_REF converts in-zone xG into position_potential's unit, so it must be
@@ -2249,3 +1600,21 @@ func test_in_xg_turnover_shot_skip_is_safe() -> void:
 	assert_gte(worst, -0.005,
 			"outside our zone the shot never beats the possession promise by more than a tail (worst %.4f)"
 			% worst)
+
+
+func test_lane_clear_accurate_never_reads_a_crossing_defender_clearer() -> void:
+	# The guided floor: a defender on the lane at any crossing speed reads no
+	# clearer than standing still, where the ballistic coast lets a fast one
+	# sail through.
+	var from := Vector3(0.0, 0.0, 0.0)
+	var to := Vector3(0.0, 0.0, 12.0)
+	var d: Array[Vector3] = [Vector3(2.0, 0.0, 6.0)]
+	var still: float = AIPuckLane.lane_clear(from, to, d, 18.0, [Vector3.ZERO], [], true)
+	for vx: float in [-4.0, -10.0, -16.0, -22.0]:
+		var v: Array[Vector3] = [Vector3(vx, 0.0, 0.0)]
+		var accurate: float = AIPuckLane.lane_clear(from, to, d, 18.0, v, [], true)
+		assert_lte(accurate, still + 1e-4, "crossing at %.0f reads clearer than standing" % vx)
+	var fast: Array[Vector3] = [Vector3(-16.0, 0.0, 0.0)]
+	assert_lt(AIPuckLane.lane_clear(from, to, d, 18.0, fast, [], true),
+			AIPuckLane.lane_clear(from, to, d, 18.0, fast),
+			"the floor is what stops a fast crosser coasting through")

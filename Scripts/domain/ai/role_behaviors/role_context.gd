@@ -64,25 +64,11 @@ var self_max_speed: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 var self_max_accel: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
 # AISkaterCaps.lateral_grip — perpendicular authority in its own ETA reads.
 var self_lateral_grip: float = 1.0
-# Worst-case per-release shot aim error, radians. The shot aim reserves it from
-# the entry width, and the shot score demands it as extra window (the fit inset
-# in AIActionScoring._hole_open_angle). 0 = error-free agent.
-var self_aim_spread_rad: float = 0.0
 # Pass release-direction error, radians (BotSkillProfile.pass_aim_error_rad);
 # drives AIPuckLane.pass_miss_prob. 0 = error-free agent (miss = base floor).
 var self_pass_aim_error_rad: float = 0.0
-# Max seconds a release fires LATE (BotSkillProfile.shot_timing_error_s;
-# execution samples uniform [0, max]). The carrier's shot evals hand the goalie
-# the mean lateness (× 0.5). 0 = tick-perfect agent.
-var shot_timing_error_s: float = 0.0
 # Charged wrister release speed, m/s — also the cap on its pass launch speed.
 var self_wrister_shot_speed: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
-# Blade angle ladder (AISkaterCaps.loft_tans: tan per level, x/y/z =
-# LOW/MID/HIGH) — what the HIGH-hole rung-picker prices.
-var self_loft_tans: Vector3 = Vector3(
-		GameRules.DEFAULT_LOFT_TAN_LOW,
-		GameRules.DEFAULT_LOFT_TAN_MID,
-		GameRules.DEFAULT_LOFT_TAN_HIGH)
 # Body-check delivery and current stagger, for AIDefensiveVerbs.evaluate_body_check.
 var self_weight: float = 1.0
 var self_body_check_transfer: float = 0.65

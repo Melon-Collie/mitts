@@ -72,12 +72,7 @@ const SHOT_MIN_FORWARD_OF_LINE_M: float = 0.3
 
 
 # ── Where the shot is held (shoot-now eval) ──────────────────────────────────
-# Winning hold from the last shoot-now sweep: the release/goalie/pace the
-# SHOOT commit's loft/aim must be computed against (so the executed shot is the
-# one that won the compete), and the share of pace the load gives it.
-var _shot_sample_release: Vector3 = Vector3.ZERO
-var _shot_sample_goalie: Vector3 = Vector3.ZERO
-var _shot_sample_speed: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
+# The share of pace the winning hold's load gives the committed shot.
 var _shot_sample_share: float = 1.0
 # True when the winning shoot read is the TIP rip (AIActionScoring.tip_ev):
 # fired flat at full pace THROUGH the net-front teammate's blade at the net
@@ -159,11 +154,11 @@ var pass_target_speed: float = AIPuckLane.PASS_SPEED_M_S
 var pass_should_saucer: bool = false
 
 # Set when intent commits to SHOOT: the loft rung (ShotMechanics.ELEVATION_*) of
-# the goalie hole the shot is aimed at (see AIActionScoring.best_shot_loft).
+# the shot the field picked (AIShotOdds.pick_shot_now).
 # Read by the state machine's press-state handlers to drive the release loft.
 var shot_loft_level: int = ShotMechanics.ELEVATION_FLAT
 
-# Set alongside shot_loft_level: the world aim POINT of that same hole (on the
+# Set alongside shot_loft_level: the world aim POINT of that same shot (on the
 # net plane). INF until a SHOOT commit picks one.
 var shot_aim_point: Vector3 = Vector3.INF
 
@@ -264,15 +259,6 @@ var _phase_best_pass_saucer: bool = false
 var _phase_best_pass_rim_dir: Vector3 = Vector3.ZERO
 # The winning pass's rim pace, carried to the release with its bearing.
 var _phase_best_pass_rim_pace: float = 0.0
-# Opposing-goalie env captured alongside the winning shot sample, so the
-# commit's loft/aim/power solve reads the same goalie the score saw:
-var _shot_env_unsettled: float = 0.0
-var _shot_env_five_hole: float = -1.0
-var _shot_env_goalie_down: bool = false
-var _shot_env_seal_x: float = 0.0
-var _shot_env_seal_tall: bool = false
-var _shot_env_hands: Vector4 = Vector4.INF
-var _shot_env_pads: Vector4 = Vector4.INF
 # The field's shot from this eval's base release (_pick_fire_phase): the holds
 # are solved toward its aim, and a committed SHOOT fires it.
 var _shot_pick := AIShotOdds.Pick.new()
@@ -432,7 +418,7 @@ func _pick_action(ctx: RoleContext) -> void:
 
 # FIRE phase of the compete: opponent lists, the evasion / brake-check / deke /
 # protect reads, the pass-option cache, and the SHOOT + PASS scoring. Leaves
-# its products in the _phase_* / _shot_env_* / _shot_sample_* fields (plus the
+# its products in the _phase_* / _shot_sample_* fields (plus the
 # _scratch_* buffers) for _pick_commit_phase.
 func _pick_fire_phase(ctx: RoleContext) -> void:
 	var snapshot: WorldSnapshot = ctx.snapshot
@@ -603,40 +589,12 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 					and goalie_now.distance_to(attacking_goal)
 							< AIActionScoring.THREAT_GOALIE_HOME_M)
 
-	# The goalie env from the replicated pose, kept in _shot_env_* so the commit
-	# phase's loft/aim/power solve reads the same goalie. The five-hole is the
-	# real ~0.20 m slot standing, the residual leak down.
-	_shot_env_unsettled = 0.0
-	_shot_env_five_hole = -1.0
-	_shot_env_goalie_down = false
-	_shot_env_seal_x = 0.0
-	_shot_env_seal_tall = false
-	_shot_env_hands = Vector4.INF
-	_shot_env_pads = Vector4.INF
-	var opp_goalie_state: GoalieNetworkState = ctx.snapshot.goalie_states.get(1 - ctx.team_id)
-	if opp_goalie_state != null and not shot_unavailable:
-		_shot_env_goalie_down = opp_goalie_state.is_down()
-		# The HIGH cover races from where the glove/blocker actually are, the
-		# LOW cover from the measured pad edges.
-		_shot_env_hands = opp_goalie_state.hands_read(ctx.attacking_goal_pos.z)
-		_shot_env_pads = opp_goalie_state.pads_read(ctx.attacking_goal_pos.z)
-		_shot_env_five_hole = GoalieBehaviorRules.five_hole_gap_m(
-				_shot_env_goalie_down, opp_goalie_state.five_hole_openness)
-		# Post-seal stance (VH/RVH): the pose IS the coverage, and he holds the
-		# post rather than re-squaring, so the shot is scored against where he's
-		# parked (see sample_goalie below), not an arc-squared keeper.
-		_shot_env_seal_x = opp_goalie_state.post_seal_x_sign(attacking_goal.z)
-		_shot_env_seal_tall = opp_goalie_state.is_post_seal_tall()
-
 	# Top-level SHOOT: the hold sweep over AIShotHolds (the puck where it is, the
 	# loaded pocket, a reach to either side of the shot line). Each hold prices
 	# its release at the pace its load allows, its pull's time in the goalie's
 	# budget, at the odds the puck survives the pull and the charge
 	# (price_keep). The as-is hold is scored first and the compare is strictly
-	# greater, so a tie keeps the release that needs no pull. The goalie at puck
-	# ARRIVAL is react-then-slide from where he actually is toward the release's
-	# arc-square, over the pull, the charge and the flight; the caught-moving
-	# effect is priced as his displacement shortfall (shot_disp).
+	# greater, so a tie keeps the release that needs no pull.
 	# The shot is the field's pick (AIShotOdds) from the base release, so the
 	# hold, its load share, the aim and the loft all describe one shot: a hold
 	# solved toward the net centre for an aim elsewhere prices a load the press
@@ -680,20 +638,6 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 				self_pos + hold + horizontal_velocity
 						* (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + pull_s),
 				attacking_goal, goalie_now)
-		var flight_s: float = release.distance_to(attacking_goal) \
-				/ maxf(sample_speed, 1.0)
-		# The keeper predicted at the puck's arrival, read only by the goalie-hole
-		# fallback that aims the shot when no keeper is replicated: his tracking
-		# budget includes this bot's EXPECTED release lateness (timing error ×
-		# 0.5), and the shooter's netward pace backs him in.
-		var shot_closing: float = AIGoalieModel.closing_toward(
-				ctx.self_pos, ctx.self_velocity, attacking_goal)
-		var sample_goalie: Vector3 = goalie_now if _shot_env_seal_x != 0.0 \
-				else AIGoalieModel.predict_goalie_pos(
-						goalie_now, attacking_goal,
-						AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + pull_s
-								+ flight_s + ctx.shot_timing_error_s * 0.5,
-						release, shot_closing)
 		# Priced through the seam like the carry and pass legs, against the
 		# keeper as he reads now: the field prices what he does over the wind-up
 		# and flight. With no keeper replicated he is taken
@@ -704,9 +648,6 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 				_field.opponent_caps) * _field.holds.keep[k]
 		if s > _phase_shoot_score:
 			_phase_shoot_score = s
-			_shot_sample_release = release
-			_shot_sample_goalie = sample_goalie
-			_shot_sample_speed = sample_speed
 			_shot_sample_share = share
 			shoot_now_hold = hold
 
@@ -729,13 +670,10 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		for tip_man: Vector3 in _field.receiver_pos:
 			var tip_s: float = AIActionScoring.tip_ev(
 					tip_release, tip_man, attacking_goal, goalie_now,
-					GameRules.NET_HALF_WIDTH, _field.opponents_release,
+					_field.opponents_release,
 					tip_speed, _field.opponent_caps) * _field.holds.keep[tip_k]
 			if tip_s > _phase_shoot_score:
 				_phase_shoot_score = tip_s
-				_shot_sample_release = tip_release
-				_shot_sample_goalie = goalie_now
-				_shot_sample_speed = tip_speed
 				_shot_sample_share = tip_share
 				shoot_now_hold = tip_hold
 				_shot_sample_is_tip = true
@@ -751,7 +689,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 
 # COMMIT phase of the compete: the CARRY candidate argmax, the DUMP read, and
 # the fire-vs-carry-vs-hold compete that commits the intent. Consumes the fire
-# phase's _phase_* / _shot_env_* / _shot_sample_* products. `rebuild_lists` is
+# phase's _phase_* / _shot_sample_* products. `rebuild_lists` is
 # true on the second dispatch of a SLICED eval, where the opponent lists are one
 # dispatch old: the carry/dump scoring rebuilds them, while the fire SCORES stay
 # the older reads.
@@ -940,29 +878,13 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 			shot_hold_share = _shot_sample_share
 		elif new_intent == INTENT_SHOOT:
 			# Aim and loft are the shot field's pick the holds were solved toward
-			# (_pick_fire_phase). The goalie-hole geometry stands in only when no
-			# keeper is replicated.
-			if _shot_pick.aim.is_finite():
-				shot_aim_point = _shot_pick.aim
-				shot_loft_level = _shot_pick.loft
-			else:
-				var shot_screen_dist: float = AIActionScoring.screen_along_m(
-						_shot_sample_release, _shot_sample_goalie,
-						_field.opponents_release, _field.receiver_pos)
-				shot_loft_level = AIActionScoring.best_shot_loft(
-						_shot_sample_release, attacking_goal, _shot_sample_goalie,
-						GameRules.NET_HALF_WIDTH, _shot_sample_speed,
-						_shot_env_unsettled, _shot_env_five_hole, _shot_env_goalie_down,
-						_shot_env_seal_x, _shot_env_seal_tall, ctx.self_aim_spread_rad,
-						shot_screen_dist, _shot_env_hands, _shot_env_pads, ctx.self_loft_tans)
-				shot_aim_point = AIActionScoring.best_shot_aim(
-						_shot_sample_release, attacking_goal, _shot_sample_goalie,
-						GameRules.NET_HALF_WIDTH, _shot_sample_speed,
-						_shot_env_unsettled, _shot_env_five_hole, _shot_env_goalie_down,
-						ctx.self_aim_spread_rad,
-						_shot_env_seal_x, _shot_env_seal_tall, shot_screen_dist,
-						_shot_env_hands, _shot_env_pads, ctx.self_loft_tans)
-			# Full power for every hole (see shot_power_t).
+			# (_pick_fire_phase); at a net with no keeper replicated, flat at the
+			# middle.
+			shot_aim_point = _shot_pick.aim if _shot_pick.aim.is_finite() \
+					else Vector3(attacking_goal.x, 0.0, attacking_goal.z)
+			shot_loft_level = _shot_pick.loft if _shot_pick.aim.is_finite() \
+					else ShotMechanics.ELEVATION_FLAT
+			# Full power (see shot_power_t).
 			shot_power_t = 1.0
 			shot_hold_offset = shoot_now_hold
 			shot_hold_share = _shot_sample_share

@@ -43,8 +43,7 @@ xG gains) overprices every in-zone turnover about tenfold.
 one.
 
 The giveaway bars (`SHOT_MIN_VALUE` 0.05, `PASS_MIN_VALUE` 0.02) are scale-bound
-to that seam — odds of scoring on today's goalie with a first shot. They are not
-transferable to the hole-geometry score.
+to that seam — odds of scoring on today's goalie with a first shot.
 
 ## Difficulty rides three independent axes
 
@@ -452,12 +451,12 @@ two groups and a tier needs both, or the ladder is only reaction latency: read
 latencies (when he starts moving) and positioning / save levers (how much net he
 concedes standing still).
 
-**The skater AI's goalie model is a MIRROR, not a second tier.** The read model
-the bots score against — leg and arm delays, drop time, lateral accel ramp, arm
-deploy — lives as static vars on `AIGoalieModel` and is synced from the match's
-profile by `set_goalie_profile`. A new tiered goalie knob the shot model also
-reads must be added there too, or the bots go on scoring against the Hard
-goalie while the net in front of them is an Easy one.
+**The skater AI's goalie model is a MIRROR, not a second tier.** What the bots
+predict of him outside the shot field — his leg read, lateral accel ramp, depth
+and puck-play margin — lives as static vars on `AIGoalieModel`, synced from the
+match's profile by `set_goalie_profile`. The shot field itself is measured
+against the Hard goalie only, so against a lower tier the bots price shots as
+if the net were Hard's; per-tier fields are the planned fix.
 
 ---
 
@@ -480,8 +479,8 @@ takes the whole class down and every static call on it from every file at once.
   - `goalie_model.gd` (`AIGoalieModel`) — the keeper the bots plan against: his
     body's cover numbers, the difficulty-synced reads, planned depth, lateral
     push, post seal and predicted position.
-- `action_scoring.gd` (`AIActionScoring`) holds the shot geometry and xG,
-  position value, dumping and turnover pricing.
+- `action_scoring.gd` (`AIActionScoring`) holds the shot and pass reads on the
+  value seam, the xG stat, position value, dumping and turnover pricing.
 - `carry_space.gd` (`AICarrySpace`) holds the carrier's room to operate:
   reachable-set evasion, the safety maps, the crossing sample, controlled space,
   the brake check and the fake-then-cut deke.
@@ -493,9 +492,13 @@ remains.
 
 ## The models in detail
 
-- **Shot value — the ranking currency** (`AIShotValue`, `shot_value.gd`). Every
-  "how good is a shot from here" the bots rank asks it, so the model behind it
-  can be replaced in that file alone. It answers the odds of scoring on today's
+- **Shot value — the one shot model** (`AIShotValue`, `shot_value.gd`). Every
+  "how good is a shot from here" asks it — the carrier's compete, the threat
+  surfaces and coverage reads, a pass's worth to either side
+  (`score_pass_value`), tips (`deflection`, the line not picked) and the
+  post-game xG stat (`now_at_spread`, at the shot's context spread) — so offence
+  and defence price a chance alike, and the model behind it can be replaced in
+  that file alone. It answers the odds of scoring on today's
   goalie, read from `AIShotOdds`: the live `GoalieController`'s open set,
   measured cell by cell (release spot × how he was beaten or set) and generated
   into `generated/shot_field_data.gd` (`docs/shot-currency-plan.md`). A goalie
@@ -519,79 +522,6 @@ remains.
     bounds are ratchets.
   - The committed shot fires the field's own pick (`AIShotOdds.pick_shot_now`:
     the aim and loft with the best odds), so the price and the shot are one.
-
-- **Shot geometry** (`open_net_danger`, the hole model) — the defensive reads
-  (threat surfaces, the danger field) and the aim of a shot with no keeper
-  replicated. The open
-  net is scored across the goalie holes (top/bottom corners + five-hole), each as
-  the net it clears past his reaction-gated, height-appropriate cover.
-  - **The goalie occludes as a body.** Each band's cover is a disc (he squares to
-    the puck, so he presents his cover half-width perpendicular to the sightline
-    from any bearing), and the covered interval is the disc's tangent cone from
-    the shooter's eye — from a sharp angle his depth walls the cross-crease lane.
-  - **A corner scores only what clears the clean-entry inset** off the pipe (post
-    radius + puck radius) — a hard geometric requirement. The five-hole pays the
-    puck's diameter against its gap the same way.
-  - **Make probability is soft at both ends** (`_make_probability`). The shot
-    beats him iff the puck lands inside the window, and the window's edge is
-    itself uncertain: P = P(|X| − ε < margin/2), with X the shooter's placement
-    error (`placement_spread`: his aim error in quadrature with the dispersion
-    every release carries) and ε the keeper's edge error
-    (`goalie_edge_spread`), the margin signed negative by the overlap depth when
-    he has it covered. The two compose as independent variances; softening the
-    window by the edge first and then shooting at it would treat edge
-    uncertainty as window the shooter can reliably exploit. Nothing the shooter
-    does may improve the geometry — a worse hand must never score a covered shot
-    higher. Never go back to clamping a raw window against release scatter
-    alone (`test_shot_currency_saturation.gd` measures why). The event is
-    X − ε < m/2 and −X − ε < m/2, two correlated normals under one bound
-    each, so P is exactly the bivariate normal CDF on its diagonal,
-    Φ₂(h, h; ρ) with h = m / (2√(σp² + σe²)) and ρ = (σe² − σp²)/(σp² + σe²),
-    computed as Φ(h)² + (1/2π)∫₀^asin ρ exp(−h²/(1 + sin θ)) dθ. Exact, it is
-    monotone in the hand by construction; a moment-matched normal is not — at
-    range (a crisp edge) it reads a covered hole as a ~5% make for a Normal
-    hand. `test_shot_danger_properties.gd` holds monotonicity, both limits and
-    the error against a dense reference.
-  - **The aim sits at the window centre** (`DEFAULT_CORNER_BIAS = 0`), so the
-    wobble splits a taken shot into goals / saves / posts symmetrically.
-  - **HIGH holes ride the angle ladder** (`docs/elevation-rework-plan.md`): every
-    shot fires at full pace and the bot picks the RUNG
-    (`_best_high_rung` over `AISkaterCaps.loft_tans`). The band's floor is HIS
-    PAD TOP (0.86 m standing, 0.28 m down), its ceiling `HIGH_BAND_CEILING_M`
-    (bots never deliberately miss high), and a standing keeper's paddle
-    (`GoalieStickRules.PADDLE_HEIGHT_M`) bars it.
-  - **Shape picks the rung, the race scores it.** `_best_high_rung` selects on
-    `GoalieAnatomy.structural_cover_half_width_at` — no reaction term, because
-    cover needs a read time that needs a pace that needs a rung. `_cover_at_height`
-    then races the hands, the butterfly drop and the lateral push at the chosen
-    height, charging the ARM read (`_delay_at_height`) for a puck over his pads.
-    One `_hole_rung` read per hole feeds `_rung_pace` / `_rung_arrival`, so the
-    score, the loft and the aim cannot describe different shots, and the same
-    hole drives `best_shot_loft` / `best_shot_aim`.
-  - **Holdovers, pinned by `test_goalie_low_cover.gd`:** above the standing seam
-    the structural cover is floored by `HOLE_BAND_CORE[HIGH]` (0.40; shoulders
-    and arm roots are not colliders), and the stick's vertical extent still
-    floors cover everywhere below the seam.
-  - A **down** goalie concedes the arm extension (his glove starts at the pads).
-    A release on or behind the goal line scores 0 — the wraparound is a carry,
-    not a shot. The five-hole opens only when the goalie is caught moving
-    (`goalie_unsettled_factor`), fading over the shot's flight time. There is no
-    armpit hole: arm commitment is not observable, so it would be a phantom
-    target.
-  - **The keeper is predicted, not frozen.** Shoot-now and carry-candidate evals
-    read him through react-then-push (`predict_goalie_pos`: from his actual
-    position toward the release's arc-square over carry + charge + flight, with
-    his real read delay and the `lateral_accel` push ramp) and, on depth, the
-    rush backflow (`planned_goalie_depth`, the live keeper's own chart). Depth is
-    **retreat-only**: his live depth is replicated truth set by things the
-    planner can't see, so a static read returns it unchanged and only an approach
-    moves him. Holding depth frozen is a trap — a keeper pinned at challenge depth
-    then APPEARS TO GROW as the shooter closes (tangent cone), and the in-zone
-    gradient points away from the net. A hard lateral cut in tight is an arc race
-    his ramp genuinely loses: the doorstep drive-side window.
-  - Distance, angle and coverage all emerge from the geometry — there are no
-    distance/angle curves. The ordering is pinned by the calibration table in
-    `test_ai_action_scoring.gd`.
 
 - **Carry safety** (`reach_clearance` / `best_evade_point`) — a reachable-set
   pursuit-evasion model. Each skater is a bounded-accel body: over a short

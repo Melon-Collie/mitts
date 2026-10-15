@@ -1447,10 +1447,6 @@ func _spawn_world() -> void:
 	_spawn_goalies()
 	_wire_subsystems()
 	if NetworkManager.is_host:
-		# Fresh session, fresh memo — the danger field's vertices self-heal
-		# against goalie motion anyway (per-vertex epsilon validation), this
-		# just guarantees no value survives a world respawn.
-		AIDangerField.reset()
 		team_brains = [
 				TeamBrain.new(0, _registry.team_id_by_peer, _registry.caps_by_peer,
 						_state_machine.team_size, _registry.position_by_peer,
@@ -3804,18 +3800,14 @@ func _note_shot_trajectory() -> void:
 	# Sampled here because this is the release tick and everything below is already
 	# computed for the goalie's own read.
 	_note_shot_context(vel, shooter_team)
-	# xG (A2): evaluate this shot's expected goals from the REAL goalie geometry at
+	# xG (A2): evaluate this shot's expected goals against the real goalie at
 	# release, and hold it on the pending shot to commit when it resolves. Only
 	# directed shots can become counted attempts, so only they need an xG — an
 	# undirected release keeps xG 0, which is honest: we never evaluated it.
 	if directed:
 		var xg: float = AIActionScoring.expected_goals(
 				pos, Vector3(0.0, 0.0, directed_line_z),
-				_defending_goalie_pos(directed_line_z),
-				GameRules.NET_HALF_WIDTH, vel.length(),
-				0.0, -1.0, false, 0.0, false, 0.0,
-				Vector4.INF, Vector4.INF, AIActionScoring.DEFAULT_LOFT_TANS,
-				_shot_release_spread())
+				_defending_goalie_pos(directed_line_z), _shot_release_spread())
 		_shot_tracker.note_xg(xg)
 
 

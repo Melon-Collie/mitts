@@ -63,7 +63,7 @@ static func cover_man_target(ctx: RoleContext, man_pos: Vector3,
 		ctx.scratch_teammate_caps.push_back(ctx.caps_by_peer.get(ctx.peer_id))
 		var threat: float = AIActionScoring.threat_surface_pass(
 				carrier_pos, man_pos, our_net, our_goalie_pos,
-				GameRules.NET_HALF_WIDTH, teammates, ctx.scratch_teammate_caps)
+				teammates, ctx.scratch_teammate_caps)
 		teammates.pop_back()
 		ctx.scratch_teammate_caps.pop_back()
 		var score: float = -threat + AIStationSearch.incumbent_bonus(ctx, c)
@@ -218,11 +218,11 @@ static func carrier_option_bases(
 	out_bases.clear()
 	out_bases.append(AIActionScoring.threat_surface_shoot(
 			carrier_pos, our_net, our_goalie_pos,
-			GameRules.NET_HALF_WIDTH, our_team_excluding_self, our_team_caps))
+			our_team_excluding_self, our_team_caps))
 	for opp_pos: Vector3 in opp_teammates:
 		out_bases.append(AIActionScoring.threat_surface_pass(
 				carrier_pos, opp_pos, our_net, our_goalie_pos,
-				GameRules.NET_HALF_WIDTH, our_team_excluding_self, our_team_caps))
+				our_team_excluding_self, our_team_caps))
 
 
 # The opposing carrier's best option — shoot at our net, or pass to any of
@@ -271,12 +271,12 @@ static func carrier_best_option(
 			if bi == 0:
 				v = AIActionScoring.threat_surface_shoot(
 						carrier_pos, our_net, our_goalie_pos,
-						GameRules.NET_HALF_WIDTH, our_team_excluding_self,
+						our_team_excluding_self,
 						our_team_caps)
 			else:
 				v = AIActionScoring.threat_surface_pass(
 						carrier_pos, opp_teammates[bi - 1], our_net, our_goalie_pos,
-						GameRules.NET_HALF_WIDTH, our_team_excluding_self,
+						our_team_excluding_self,
 						our_team_caps)
 			if v > best:
 				best = v
@@ -288,13 +288,13 @@ static func carrier_best_option(
 	# Unpruned path (no bases supplied).
 	var shoot_value: float = AIActionScoring.threat_surface_shoot(
 			carrier_pos, our_net, our_goalie_pos,
-			GameRules.NET_HALF_WIDTH, our_team_excluding_self, our_team_caps)
+			our_team_excluding_self, our_team_caps)
 
 	var pass_value: float = 0.0
 	for opp_pos: Vector3 in opp_teammates:
 		var pass_score: float = AIActionScoring.threat_surface_pass(
 				carrier_pos, opp_pos, our_net, our_goalie_pos,
-				GameRules.NET_HALF_WIDTH, our_team_excluding_self, our_team_caps)
+				our_team_excluding_self, our_team_caps)
 		if pass_score > pass_value:
 			pass_value = pass_score
 
@@ -330,23 +330,15 @@ static func carrier_live_option(
 	our_team_excluding_self.push_back(candidate)
 	if caps_matched:
 		our_team_caps.push_back(self_caps)
-	var best: float = AIActionScoring.score_shoot(
-			carrier_pos, our_net, our_goalie_pos,
-			GameRules.NET_HALF_WIDTH, our_team_excluding_self,
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, our_team_caps)
+	var best: float = AIActionScoring.score_shoot_value(
+			carrier_pos, our_net, our_goalie_pos, our_team_excluding_self, 0.0,
+			AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S, our_team_caps)
 	for receiver: Vector3 in opp_teammates:
 		if best >= abort_above:
 			break
-		var pass_speed: float = AIPuckLane.expected_pass_speed(carrier_pos, receiver)
-		var flight_s: float = carrier_pos.distance_to(receiver) / maxf(pass_speed, 1.0)
-		var pred_goalie: Vector3 = AIGoalieModel.predict_goalie_pos(
-				our_goalie_pos, our_net, flight_s, receiver)
-		var unsettled: float = AIGoalieModel.goalie_unsettled(
-				our_goalie_pos, our_net, flight_s, receiver)
-		var pass_value: float = AIActionScoring.score_pass(
-				carrier_pos, receiver, our_net, pred_goalie,
-				GameRules.NET_HALF_WIDTH, our_team_excluding_self, pass_speed,
-				unsettled, -1.0, Vector4.INF, Vector4.INF, our_team_caps)
+		var pass_value: float = AIActionScoring.score_pass_value(
+				carrier_pos, receiver, our_net, our_goalie_pos, our_team_excluding_self,
+				AIPuckLane.expected_pass_speed(carrier_pos, receiver), our_team_caps, true)
 		if pass_value > best:
 			best = pass_value
 	our_team_excluding_self.pop_back()

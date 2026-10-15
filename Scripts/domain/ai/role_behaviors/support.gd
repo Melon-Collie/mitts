@@ -5,7 +5,7 @@ class_name AIRoleSupport
 # Be a pass option AND recoverable: in the OZ the third man high (point outlet,
 # first man back); in transition, the goal-side trail.
 #
-# Argmax over `score_pass(carrier, c) − counter_rush_cost(c)`: the threat a
+# Argmax over `score_pass_value(carrier, c) − counter_rush_cost(c)`: the threat a
 # turnover at the carrier generates, surviving only the bodies — this one,
 # racing back from `c`, included — that beat the counter home, weighted by the
 # carrier's live turnover probability.
@@ -90,20 +90,12 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		if not _is_goal_side_of_carrier(c, carrier_pos, ctx.own_goal_dir):
 			continue
 		var pass_speed: float = AIPuckLane.expected_pass_speed(carrier_pos, c)
-		# Pre-armed feed keeper (GoalieBehaviorRules.backdoor_depth_cap).
-		var cand_flight: float = carrier_pos.distance_to(c) / maxf(pass_speed, 1.0)
-		AIGoalieModel.resolve_feed_keeper(
-				goalie_pos, ctx.attacking_goal_pos, cand_flight, c, carrier_pos,
-				AIRoleReads.opp_goalie_hands(ctx), pass_speed, opp_positions)
-		var pass_value: float = AIActionScoring.score_pass(
-				carrier_pos, c, ctx.attacking_goal_pos,
-				AIGoalieModel.feed_keeper_pos, GameRules.NET_HALF_WIDTH,
-				opp_positions, pass_speed, AIGoalieModel.feed_keeper_unsettled,
-				-1.0, AIGoalieModel.feed_keeper_hands, Vector4.INF,
-				ctx.scratch_opp_caps)
+		var pass_value: float = AIActionScoring.score_pass_value(
+				carrier_pos, c, ctx.attacking_goal_pos, goalie_pos, opp_positions,
+				pass_speed, ctx.scratch_opp_caps)
 		var counter_cost: float = AIActionScoring.counter_rush_cost(
 				carrier_pos, turnover_prior, our_net, our_goalie,
-				GameRules.NET_HALF_WIDTH, teammate_positions, c,
+				teammate_positions, c,
 				ctx.self_max_speed, opp_positions, _scratch_opp_vels,
 				ctx.scratch_opp_caps, _scratch_mate_etas, _scratch_threat_by_cover)
 		var score: float = pass_value - counter_cost + AIStationSearch.incumbent_bonus(ctx, c)

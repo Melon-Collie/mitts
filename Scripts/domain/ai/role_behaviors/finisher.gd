@@ -218,25 +218,13 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 		# The speed our carrier would actually fire at, not a flat constant —
 		# the defenders' reaction time scales with it.
 		var pass_speed: float = AIPuckLane.expected_pass_speed(carrier_pos, c)
-		# Predict the goalie over the feed's flight (the FINISHER fires on
-		# contact) and credit his motion, so the cross-seam look scores above a
-		# static strong-side one.
-		var flight_t: float = clampf(
-				carrier_pos.distance_to(c) / pass_speed, 0.0, FEED_FLIGHT_MAX_S)
-		# Pre-armed feed keeper: a goalie who can see this spot is already
-		# depth-capped against it (GoalieBehaviorRules.backdoor_depth_cap).
-		AIGoalieModel.resolve_feed_keeper(
-				goalie_pos, ctx.attacking_goal_pos, flight_t, c, carrier_pos,
-				AIRoleReads.opp_goalie_hands(ctx), pass_speed, opp_positions)
-		var feed: float = AIActionScoring.score_pass(
-				carrier_pos, c, ctx.attacking_goal_pos,
-				AIGoalieModel.feed_keeper_pos, GameRules.NET_HALF_WIDTH,
-				opp_positions, pass_speed, AIGoalieModel.feed_keeper_unsettled,
-				-1.0, AIGoalieModel.feed_keeper_hands, Vector4.INF,
-				ctx.scratch_opp_caps)
+		# The FINISHER fires on contact: his one-timer off the feed.
+		var feed: float = AIActionScoring.score_pass_value(
+				carrier_pos, c, ctx.attacking_goal_pos, goalie_pos, opp_positions,
+				pass_speed, ctx.scratch_opp_caps, true)
 		var tip: float = AIActionScoring.tip_ev(
 				carrier_release, c, ctx.attacking_goal_pos, goalie_pos,
-				GameRules.NET_HALF_WIDTH, opp_positions,
+				opp_positions,
 				carrier_shot_speed, ctx.scratch_opp_caps, self_caps)
 		# The better of the one-timer feed and the tip — max(), not sum: one puck,
 		# one outcome.

@@ -268,7 +268,7 @@ func _run_trial(scenario: String, mirror: float, jitter: int,
 			cough_danger = AIActionScoring.threat_local_shoot(
 					duel.puck_pos, Vector3(0, 0, GameRules.GOAL_LINE_Z),
 					Vector3(0, 0, GameRules.GOAL_LINE_Z - 0.8),
-					GameRules.NET_HALF_WIDTH, our_bodies)
+					our_bodies)
 			break
 
 	# First team-0 release after the trigger — the retriever's first move.

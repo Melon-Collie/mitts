@@ -1,6 +1,6 @@
 # Shot currency — the odds against today's goalie
 
-Status: **agreed design; steps 1–2 done, step 3 in progress.** The CLAUDE.md
+Status: **agreed design; steps 1–3 done, step 4 next.** The CLAUDE.md
 workflow applies: this doc is the plan, deviations get discussed first.
 
 ## Decisions
@@ -164,19 +164,23 @@ The defensive reads move with it in step 3, so their absolute bars —
 `NET_FRONT_DANGER_BAR` 0.5, `LANE_PLAY_DANGER_BAR` 0.5,
 `SHOT_RECEPTION_SCORE_GATE` 0.30 — are re-derived there.
 
-### Step 3 — switch the currency
+### Step 3 — switch the currency (done)
 
-`AIShotValue` stays the one seam (`now`, `set_keeper`, `feed`); its body becomes
-the field (`AIShotOdds`). The defensive reads (`score_shoot`, `AIDangerField`) move
-to it too, so offence and defence price a shot the same way. Consequences:
+`AIShotValue` is the one shot model (`now`, `set_keeper`, `feed`, `deflection`,
+`now_at_spread`); its body is the field (`AIShotOdds`). Every read moved to it:
+the carrier's compete, the threat surfaces and coverage reads, a pass's worth to
+either side (`score_pass_value`), tips (a deflection is a one-timer feed whose
+line is not picked) and the post-game xG stat (the field at the shot's context
+spread). The hole-geometry model, its planner and the `AIDangerField` memo are
+deleted; with no keeper replicated the bot shoots flat at the middle.
 
-- `SHOT_MIN_VALUE` / `PASS_MIN_VALUE` become bars on real odds and are re-set.
-- `tip_ev` is already on the per-hole scale, so the unit mismatch in the shoot
-  compete goes away.
-- `XGBaseline` leaves the bots entirely; it stays for whatever the post-game
-  stat decides (open question below).
-- Cost: a field lookup should be cheaper than either model it replaces
-  (`score_shoot` ~55 µs); measure with `benchmarks/` before and after.
+- The absolute bars are probabilities and kept their values on the field's
+  calibrated odds: `SHOT_MIN_VALUE` 0.05 / `PASS_MIN_VALUE` 0.02 (giveaway),
+  the 0.5 "more likely than not" net-front and lane-play bars (a feed in the
+  house reads ~0.95-1.0, a perimeter one ~0-0.1), and the 0.30 reception gate.
+- Known gaps, from the field's measured support: keeper depth is not a feature
+  (today's goalie only stands where he settles), and a keeper stranded past the
+  post reads as his most-beaten measured cell rather than an empty net.
 
 ### Step 4 — one currency over the whole ice
 
@@ -194,6 +198,5 @@ Fewer total shots until #785 gives rebounds their value.
 
 ## 6. Open questions
 
-- Does the post-game xG stat (`AIActionScoring.expected_goals`) move to the same
-  model? It is deliberately shooter-blind and separate today; decide when step 3
-  lands.
+- ~~Does the post-game xG stat move to the same model?~~ Yes (step 3): the
+  field's odds at the shot's context spread, plus the first-contact leak.

@@ -4,8 +4,7 @@ extends GutTest
 # Anything read under `elevated_threshold` (the top of the butterfly trunk,
 # 1.0 m) drops him, and flat the pads are 0.28 m tall — so a corner shot at
 # 0.3-0.6 m goes over the pad and wide of the trunk, and only a hand can stop
-# it. The bots' shot model assumes the hands take that band
-# (AIActionScoring._delay_at_height); these hold the live keeper to it.
+# it; these hold the live keeper to taking it.
 #
 # The second half is WHERE the hand goes. The read belief is a goal-line
 # crossing, and from an angle he stands well out from that line squared to the

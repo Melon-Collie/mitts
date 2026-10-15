@@ -251,10 +251,9 @@ func test_evaluator_costs() -> void:
 	_bench("  cand: turnover_cost", func() -> void:
 		AIActionScoring.turnover_cost(cand_puck, 0.4, cx.defending_goal_pos,
 				Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z - 1.3),
-				GameRules.NET_HALF_WIDTH, cinst._field.our_defenders))
+				cinst._field.our_defenders))
 	_bench("  cand: _score_at (the seam)", func() -> void:
-		cinst._field.value_at(cx, cand, cx.self_pos, cinst._field.opponents,
-				keeper, cx.self_wrister_shot_speed, 0.0, cx.self_aim_spread_rad))
+		cinst._field.value_at(cx, cand, cx.self_pos, cinst._field.opponents, keeper))
 
 	# One carry candidate in isolation.
 	var one_cand: Vector3 = cx.self_pos + Vector3(2.0, 0.0, 2.0)
@@ -328,20 +327,20 @@ func test_evaluator_costs() -> void:
 	var net := Vector3(0.0, 0.0, -OUR_NET_Z)
 	var goalie := Vector3(0.0, 0.0, -OUR_NET_Z + 0.8)
 	var from := Vector3(6.0, 0.0, -18.0)
-	_bench("score_shoot (5 defenders)", func() -> void:
-		AIActionScoring.score_shoot(from, net, goalie, GameRules.NET_HALF_WIDTH, opps))
+	_bench("score_shoot_value (5 defenders)", func() -> void:
+		AIActionScoring.score_shoot_value(from, net, goalie, opps))
+	_bench("AIShotOdds.shot_now (the field read)", func() -> void:
+		AIShotOdds.shot_now(from, net, goalie, 0.0, AIShotOdds.Stance.UPRIGHT))
+	_bench("AIShotValue.feed (one-timer)", func() -> void:
+		AIShotValue.feed(Vector3(-4, 0, -19), from, 16.0, net, goalie, true))
 	_bench("lane_clear (5 defenders)", func() -> void:
 		AIPuckLane.lane_clear(from, net, opps, 20.0))
 	_bench("threat_surface_pass (5 def)", func() -> void:
 		AIActionScoring.threat_surface_pass(from, Vector3(-4, 0, -19), net, goalie,
-				GameRules.NET_HALF_WIDTH, opps))
+				opps))
 	_bench("threat_surface_shoot (5 def)", func() -> void:
 		AIActionScoring.threat_surface_shoot(from, net, goalie,
-				GameRules.NET_HALF_WIDTH, opps))
-	# What AIDangerField buys: the fielded core vs the exact five-hole one.
-	_bench("score_shoot_threat_fielded (5 def)", func() -> void:
-		AIActionScoring.score_shoot_threat_fielded(from, net, goalie,
-				GameRules.NET_HALF_WIDTH, opps))
+				opps))
 	# PRESSURE's per-candidate unit: the carrier's whole best-option argmax,
 	# re-run with us standing at the candidate. This is the inner loop of the
 	# outer 18-candidate argmax.
@@ -359,8 +358,7 @@ func test_evaluator_costs() -> void:
 			Vector3(0, 0, 2), Vector3(-2, 0, 10)]
 	_bench("counter_rush_cost (4 tm, 5 opp)", func() -> void:
 		AIActionScoring.counter_rush_cost(from, 0.5, Vector3(0, 0, OUR_NET_Z),
-				Vector3(0, 0, OUR_NET_Z - 0.8), GameRules.NET_HALF_WIDTH,
-				mates, from, 8.0, opps, opp_vels, opp_caps))
+				Vector3(0, 0, OUR_NET_Z - 0.8), mates, from, 8.0, opps, opp_vels, opp_caps))
 	_bench("reach_clearance (5 def)", func() -> void:
 		AICarrySpace.reach_clearance(from, 0.4, opps, opp_vels, opp_caps))
 	_bench("carry_safety (5 def)", func() -> void:

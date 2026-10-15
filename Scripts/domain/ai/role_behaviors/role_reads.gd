@@ -78,24 +78,6 @@ static func resolve_our_goalie_pos(ctx: RoleContext) -> Vector3:
 	return Vector3(goalie.position_x, 0.0, goalie.position_z)
 
 
-# The opposing goalie's replicated hand read (hole-model v3), for the
-# pre-armed feed keeper (AIGoalieModel.resolve_feed_keeper). INF when no
-# state is buffered — the resolver synthesizes the league stance.
-static func opp_goalie_hands(ctx: RoleContext) -> Vector4:
-	var goalie: GoalieNetworkState = ctx.snapshot.goalie_states.get(1 - ctx.team_id)
-	if goalie == null:
-		return Vector4.INF
-	return goalie.hands_read(ctx.attacking_goal_pos.z)
-
-
-# OUR goalie's replicated hand read — the defensive mirror.
-static func our_goalie_hands(ctx: RoleContext) -> Vector4:
-	var goalie: GoalieNetworkState = ctx.snapshot.goalie_states.get(ctx.team_id)
-	if goalie == null:
-		return Vector4.INF
-	return goalie.hands_read(ctx.defending_goal_pos.z)
-
-
 # Whoever carries the puck, either team, or Vector3.INF when it is loose / null.
 static func resolve_any_carrier_pos(ctx: RoleContext) -> Vector3:
 	if ctx.snapshot == null or ctx.snapshot.puck_state == null:

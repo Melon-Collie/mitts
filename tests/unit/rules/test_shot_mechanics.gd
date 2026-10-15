@@ -649,7 +649,7 @@ const _FULL_PACE: float = 33.0
 const _BUTTERFLY_PAD_TOP: float = 0.28   # GoalieAnatomy pad box width, rolled flat
 const _BUTTERFLY_HANDS: float = 0.49     # GoalieStickRules butterfly hand height
 const _STANDING_SEAM: float = 0.86       # GameRules.DEFAULT_GOALIE_PAD_TOP_SEAM_M
-const _CAVITY_TOP: float = 1.17          # AIActionScoring.HIGH_BAND_CEILING_M
+const _CAVITY_TOP: float = 1.17
 
 # Where each blade's menu is authored to land.
 const _HOME_M88: float = 8.5

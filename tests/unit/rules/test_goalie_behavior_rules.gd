@@ -18,18 +18,6 @@ func _zone_cfg() -> GoalieBehaviorRules.DefensiveZoneConfig:
 	cfg.rvh_early_angle = 60.0
 	return cfg
 
-func _depth_cfg() -> GoalieBehaviorRules.DepthConfig:
-	var cfg := GoalieBehaviorRules.DepthConfig.new()
-	cfg.zone_post_z = 2.0
-	cfg.zone_aggressive_z = 8.0
-	cfg.zone_base_z = 12.0
-	cfg.zone_conservative_z = 20.0
-	cfg.depth_aggressive = 1.75
-	cfg.depth_base = 1.30
-	cfg.depth_conservative = 0.70
-	cfg.depth_defensive = 0.10
-	return cfg
-
 # ── detect_shot ──────────────────────────────────────────────────────────────
 
 func test_slow_puck_not_a_shot() -> void:
@@ -177,33 +165,6 @@ func test_puck_behind_negative_z_goal() -> void:
 	# Puck "behind" means z < -26.6.
 	assert_true(GoalieBehaviorRules.is_puck_in_defensive_zone(
 		Vector3(0, 0, -28), -26.6, 0.0, 1, _zone_cfg()))
-
-# ── target_depth_for_puck_distance ───────────────────────────────────────────
-
-func test_depth_at_zone_post_reaches_aggressive() -> void:
-	var d: float = GoalieBehaviorRules.target_depth_for_puck_distance(
-		_depth_cfg().zone_post_z, _depth_cfg())
-	assert_almost_eq(d, _depth_cfg().depth_aggressive, 0.001)
-
-func test_depth_inside_aggressive_zone_stays_aggressive() -> void:
-	var d: float = GoalieBehaviorRules.target_depth_for_puck_distance(
-		5.0,  # between zone_post_z and zone_aggressive_z
-		_depth_cfg())
-	assert_almost_eq(d, _depth_cfg().depth_aggressive, 0.001)
-
-func test_depth_far_away_floors_at_conservative() -> void:
-	# A puck far away IN FRONT leaves the goalie resting at conservative depth
-	# (watching the play from the paint) — goal-line depth is for behind-net /
-	# post play only (audit F8; USA Hockey D-zone = behind-net tracking).
-	var d: float = GoalieBehaviorRules.target_depth_for_puck_distance(
-		100.0, _depth_cfg())
-	assert_almost_eq(d, _depth_cfg().depth_conservative, 0.001)
-
-func test_depth_at_origin_is_defensive() -> void:
-	# puck_z_dist = 0 → t = 0 → lerp(defensive, aggressive, 0) = defensive
-	var d: float = GoalieBehaviorRules.target_depth_for_puck_distance(
-		0.0, _depth_cfg())
-	assert_almost_eq(d, _depth_cfg().depth_defensive, 0.001)
 
 # ── target_lateral_x ─────────────────────────────────────────────────────────
 # Goalie defends +Z goal: direction_sign = sign(-26.6) = -1

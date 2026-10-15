@@ -1,41 +1,23 @@
 class_name AIGoalieModel
 
-# The keeper the bots plan against: his body's cover numbers, his
-# difficulty-tiered reads (synced from the match's GoalieSkillProfile by
-# set_goalie_profile), the depth he gives ground to, his lateral push, the post
-# he seals and where he will be at a release. A MIRROR of the live
-# GoalieController, not a second tier — see Scripts/domain/ai/CLAUDE.md → "The
-# goalie is tiered". A leaf (GameRules and the goalie rule classes only).
+# The keeper the bots plan against where the shot field does not answer: where
+# he will be when a carry arrives or a puck is played — his difficulty-tiered
+# reads (synced from the match's GoalieSkillProfile by set_goalie_profile), the
+# depth he gives ground to, his lateral push and the post he seals. A MIRROR of
+# the live GoalieController, not a second tier — see Scripts/domain/ai/CLAUDE.md
+# → "The goalie is tiered". A leaf (GameRules and the goalie rule classes only).
 
 # The pad column a standing goalie covers with NO reaction — stance pad centre +
-# half a pad box (GoalieBehaviorRules). Everything between this and
-# AIActionScoring.HOLE_BAND_CORE[LOW] exists only once the butterfly drop lands.
+# half a pad box (GoalieBehaviorRules).
 const LOW_CORE_STANDING_M: float = (
 		GoalieBehaviorRules.STANDING_PAD_CENTER_X_M
 		+ GoalieBehaviorRules.PAD_BOX_WIDTH_M * 0.5)
-
-# How far the glove extends past its held-up stance position to the live
-# glove's reach (glove_max_x_outward 0.85 − the HIGH band's 0.40 core).
-const GLOVE_EXTENSION_M: float = 0.45
-
-# Reaction ramp width (s) — time to extend to the placement. Hard baseline:
-# GLOVE_EXTENSION_M (0.45) / glove_react_max_speed (5.0); the live value tracks the
-# tier via set_goalie_profile.
-const GOALIE_ARM_DEPLOY_S: float = 0.09
 
 # Top speed of the react-then-push lateral model (goalie_lateral_reach): he
 # ACCELERATES onto it at goalie_lateral_accel_m_s2, never snapping to it, which
 # is what a hard lateral cut in tight beats. A const because no tier varies
 # GoalieController.t_push_speed.
 const GOALIE_MAX_LATERAL_SPEED_MPS: float = GameRules.DEFAULT_GOALIE_T_PUSH_SPEED_M_S
-
-# Pads-to-floor time (s) once the goalie commits the butterfly — the Hard
-# baseline, mirroring GoalieController.butterfly_drop_speed (grounded on the
-# measured pro drop velocity of 2.07 m/s; the live value tracks the tier via
-# set_goalie_profile). After the leg read delay it gates both the five-hole
-# seal and the LOW band's widening to the butterfly core (_cover_at_height),
-# raced against the puck reaching HIS body.
-const GOALIE_BUTTERFLY_DROP_S: float = 0.20
 
 # ── Difficulty-synced goalie read model ───────────────────────────────────────
 # See Scripts/domain/ai/CLAUDE.md → "The goalie is tiered". Synced by
@@ -44,10 +26,7 @@ const GOALIE_BUTTERFLY_DROP_S: float = 0.20
 # because the model threads ~every scoring entry point; set at match config,
 # never per tick.
 static var goalie_leg_delay_s: float = GameRules.DEFAULT_GOALIE_REACTION_DELAY_S
-static var goalie_arm_delay_s: float = GameRules.DEFAULT_GOALIE_ARM_REACTION_DELAY_S
-static var goalie_butterfly_drop_s: float = GOALIE_BUTTERFLY_DROP_S
 static var goalie_lateral_accel_m_s2: float = GameRules.DEFAULT_GOALIE_LATERAL_ACCEL_M_S2
-static var goalie_arm_deploy_s: float = GOALIE_ARM_DEPLOY_S
 # The tier's puck-play GO margin (INF = he never leaves the net for a rim).
 static var goalie_puck_play_go_margin_s: float = 0.9
 
@@ -115,29 +94,13 @@ static func _build_planning_rush_cfg() -> GoalieBehaviorRules.RushRetreatConfig:
 # GoalieSkillProfile.hard() to restore the baseline (tests must restore).
 static func set_goalie_profile(profile: GoalieSkillProfile) -> void:
 	goalie_leg_delay_s = profile.reaction_delay_s
-	goalie_arm_delay_s = profile.arm_reaction_delay_s
-	goalie_butterfly_drop_s = profile.butterfly_drop_s
 	goalie_lateral_accel_m_s2 = profile.lateral_accel_mps2
 	goalie_puck_play_go_margin_s = profile.puck_play_go_margin_s
-	# Deploy ramp = reaction-gated reach / arm speed (see GOALIE_ARM_DEPLOY_S).
-	goalie_arm_deploy_s = GLOVE_EXTENSION_M / profile.glove_react_max_speed_mps
 	# Depth chart + backflow anchors — the tier's challenge depth (the live
 	# controller feeds these same two profile fields into its own configs).
 	_planning_ceiling = profile.depth_aggressive_m
 	_rush_cfg_planning.depth_engage = profile.depth_aggressive_m
 	_rush_cfg_planning.depth_mid = profile.depth_base_m
-
-
-# Closing speed (m/s) of a body at `pos` moving at `vel` toward `goal`.
-# Negative when it is backing off. The input the depth model needs to know
-# whether the rush backflow engages.
-static func closing_toward(pos: Vector3, vel: Vector3, goal: Vector3) -> float:
-	var dx: float = goal.x - pos.x
-	var dz: float = goal.z - pos.z
-	var d: float = sqrt(dx * dx + dz * dz)
-	if d < 0.001:
-		return 0.0
-	return (vel.x * dx + vel.z * dz) / d
 
 
 # The keeper's radial depth (metres out from his goal line) when the puck is at
@@ -385,132 +348,6 @@ static func goalie_squared_pos(
 			based.y, based.z)
 
 
-# ── The backdoor pre-arm (planning keeper) ──────────────────────────────────
-# A live goalie who can see a one-timer man on the weak side has his challenge
-# radius capped by GoalieBehaviorRules.backdoor_depth_cap. The planning keeper
-# for a FEED therefore reads:
-#   position    — arc-matched ON the receiver's shot line at the capped depth;
-#                 caught out beyond the cap he arrives short of the line.
-#   unsettled   — the race's TIGHTNESS, radius/cap: riding the cap edge he
-#                 arrives at the buzzer, parked deep he arrives set.
-#   hands       — predicted_goalie_hands sunk by that tightness. Load-bearing:
-#                 without it score_shoot prices the on-line keeper as a SET
-#                 wall and erases reachable feeds.
-# Filled by resolve_feed_keeper (static outputs — the scratch pattern on the
-# single-threaded AI tick), consumed by the feed evaluators.
-static var feed_keeper_pos: Vector3 = Vector3.INF
-static var feed_keeper_unsettled: float = 0.0
-static var feed_keeper_hands: Vector4 = Vector4.INF
-
-# Planning-side mirror of the live goalie's backdoor tuning (GoalieController
-# fields at league defaults; values cited from the controller).
-static var _backdoor_cfg_planning: GoalieBehaviorRules.BackdoorThreatConfig = \
-		_build_planning_backdoor_cfg()
-
-
-static func _build_planning_backdoor_cfg() -> GoalieBehaviorRules.BackdoorThreatConfig:
-	var cfg := GoalieBehaviorRules.BackdoorThreatConfig.new()
-	cfg.pass_speed = GameRules.DEFAULT_QUICK_PASS_POWER_M_S
-	cfg.release_time = 0.15         # backdoor_release_time field default
-	cfg.react_delay = 0.12          # cross_crease_react_delay field default
-	cfg.goalie_lateral_speed = GameRules.DEFAULT_GOALIE_T_PUSH_SPEED_M_S
-	cfg.goalie_lateral_accel = GameRules.DEFAULT_GOALIE_LATERAL_ACCEL_M_S2
-	cfg.max_shooter_distance = 9.0  # backdoor_max_shooter_distance field default
-	return cfg
-
-
-# Minimum radius the pre-arm can pull the planning keeper to — the live
-# caller floors an unwinnable race at its defensive crease depth.
-const _BACKDOOR_PLANNING_FLOOR_M: float = 0.8
-
-
-# Resolves the pre-armed feed keeper into the feed_keeper_* statics.
-# Returns true when the backdoor cap BOUND (the pre-armed triple is live);
-# false leaves the caller on the ordinary predict_goalie_pos path (no live
-# one-timer geometry — receiver behind the line, out of range, or on the
-# carrier's own shot line).
-static func resolve_feed_keeper(
-		goalie_now: Vector3,
-		attacking_goal: Vector3,
-		release_time_s: float,
-		receiver_pos: Vector3,
-		carrier_pos: Vector3,
-		pose_hands: Vector4 = Vector4.INF,
-		pass_speed_m_s: float = -1.0,
-		defender_positions: Array[Vector3] = []) -> bool:
-	var dir_sign: int = int(-signf(attacking_goal.z))
-	# Price the cap at the feed actually being scored (callers fire
-	# expected_pass_speed); a quick-pass-priced cap hands the planning keeper
-	# more window than the real puck gives him.
-	_backdoor_cfg_planning.pass_speed = pass_speed_m_s \
-			if pass_speed_m_s > 0.0 else GameRules.DEFAULT_QUICK_PASS_POWER_M_S
-	# The live keeper discounts a weak-side man his own defence is standing on
-	# (backdoor_depth_cap), so the planning keeper sees the same coverage.
-	# `defender_positions` is whoever wears the modelled goalie's colours; empty
-	# restores the uncovered read exactly.
-	var d_nearest_sq: float = INF
-	for d in defender_positions:
-		var ddx: float = d.x - receiver_pos.x
-		var ddz: float = d.z - receiver_pos.z
-		var d_sq: float = ddx * ddx + ddz * ddz
-		if d_sq < d_nearest_sq:
-			d_nearest_sq = d_sq
-	var d_arrival: float = INF
-	if not is_inf(d_nearest_sq):
-		d_arrival = GoalieBehaviorRules.defender_arrival_time(
-				sqrt(d_nearest_sq), GameRules.DEFAULT_STICK_LENGTH_M,
-				GameRules.DEFAULT_SKATER_MAX_SPEED_M_S,
-				GameRules.DEFAULT_SKATER_THRUST_M_S2)
-	var cap: float = GoalieBehaviorRules.backdoor_depth_cap(
-			carrier_pos, carrier_pos, receiver_pos,
-			attacking_goal.z, attacking_goal.x, dir_sign, d_arrival,
-			_backdoor_cfg_planning)
-	if cap >= INF:
-		feed_keeper_pos = predict_goalie_pos(
-				goalie_now, attacking_goal, release_time_s, receiver_pos)
-		feed_keeper_unsettled = goalie_unsettled(
-				goalie_now, attacking_goal, release_time_s, receiver_pos)
-		feed_keeper_hands = pose_hands
-		return false
-	var cap_floored: float = maxf(cap, _BACKDOOR_PLANNING_FLOOR_M)
-	var gx: float = goalie_now.x - attacking_goal.x
-	var gz: float = goalie_now.z - attacking_goal.z
-	var radius: float = sqrt(gx * gx + gz * gz)
-	var start: Vector3 = goalie_now
-	if radius > cap_floored and radius > 0.001:
-		var s: float = cap_floored / radius
-		start = Vector3(attacking_goal.x + gx * s, goalie_now.y,
-				attacking_goal.z + gz * s)
-	var tightness: float = clampf(
-			minf(radius, cap_floored) / maxf(cap, 0.001), 0.0, 1.0)
-	# The cap's line-arrival guarantee holds only for a keeper who RESPECTED
-	# it: the chord he must cover is r·sinθ and the feed window buys cap·sinθ,
-	# so caught out at r > cap he covers only cap/r of the lateral gap
-	# (continuous at r = cap).
-	var progress: float = 1.0
-	if radius > cap_floored:
-		progress = cap_floored / radius
-	var matched_x: float = goalie_arc_match_x(start, attacking_goal, receiver_pos)
-	feed_keeper_pos = Vector3(
-			lerpf(start.x, matched_x, progress), start.y, start.z)
-	feed_keeper_unsettled = tightness
-	# No replicated pose in scope → the league READY stance
-	# (GoalieBodyConfigBuilder's hands) stands in, so the sunk-hands read
-	# exists for every caller.
-	var hands: Vector4 = pose_hands if pose_hands.is_finite() \
-			else Vector4(-0.42, 0.90, 0.44, 0.86)
-	feed_keeper_hands = predicted_goalie_hands(hands, tightness)
-	return true
-
-
-# Predicts the goalie's position at shot release, `release_time_s` from now,
-# for a puck at `puck_pos_at_release` (the shooter for a direct shot, the
-# receiver lead for a pass, the candidate for carry-then-shoot). Depth from
-# planned_goalie_depth; laterally, react-then-push — his leg read delay, then
-# the accelerating push, braking onto his spot (goalie_push_progress), toward
-# the ARC-MATCHING x
-# (goalie_arc_match_x). Never slide him toward puck.x directly: that is wrong
-# for off-axis shooters and reads diagonal carries as open-net plays.
 static func predict_goalie_pos(
 		goalie_now: Vector3,
 		attacking_goal: Vector3,
@@ -529,24 +366,6 @@ static func predict_goalie_pos(
 		return based
 	return Vector3(based.x + signf(dx) * goalie_push_progress(absf(dx), move_time),
 			based.y, based.z)
-
-
-# Hand height (m) of the SLIDING pose — GoalieBodyConfigBuilder's slide, arms
-# tucked for the push.
-const SLIDING_HANDS_Y_M: float = 0.55
-
-
-# PREDICTED hands for a keeper in motion — the pose accompaniment to
-# predict_goalie_pos. Laterals are kept (the hands travel with the body);
-# heights sink toward SLIDING_HANDS_Y_M by the unsettled fraction, so a keeper
-# predicted mid-push is scored against hands that trail low. INF passes
-# through.
-static func predicted_goalie_hands(current: Vector4, unsettled: float) -> Vector4:
-	if not current.is_finite():
-		return current
-	var u: float = clampf(unsettled, 0.0, 1.0)
-	return Vector4(current.x, lerpf(current.y, SLIDING_HANDS_Y_M, u),
-			current.z, lerpf(current.w, SLIDING_HANDS_Y_M, u))
 
 
 # Companion to predict_goalie_pos: how UNSETTLED [0, 1] the goalie is AT release.

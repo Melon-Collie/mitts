@@ -325,32 +325,15 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 				(eligible_men[def_pid] as Dictionary)[pid] = true
 		man_value[pid] = AIActionScoring.threat_surface_pass(
 				play_ref, mp, our_net, our_goalie_pos,
-				GameRules.NET_HALF_WIDTH, no_defenders)
-		# Finish danger if fed: shot value from his spot with the goalie
-		# predicted over the feed's flight, no field defenders. Unlike man_value
-		# it carries no lane factor: a contested feed still becomes a tap-in if
-		# it arrives.
-		var feed_speed: float = AIPuckLane.expected_pass_speed(play_ref, mp)
-		var feed_flight: float = play_ref.distance_to(mp) / maxf(feed_speed, 1.0)
-		# A sharp-angle man fires into the post seal a competent keeper adopts,
-		# so he is not a finish threat the assignment must chase.
-		var man_seal: float = AIGoalieModel.derive_post_seal_x_sign(mp, our_net)
-		# Deliberately WITHOUT the defender positions the other callers pass:
-		# coverage is this scan's output, and feeding the markers back in would
-		# free a covered man's marker, raise his danger, and pull the marker back.
-		var g_state: GoalieNetworkState = snapshot.goalie_states.get(team_id)
-		AIGoalieModel.resolve_feed_keeper(
-				our_goalie_pos, our_net, feed_flight, mp, play_ref,
-				g_state.hands_read(our_net.z) if g_state != null else Vector4.INF,
-				feed_speed)
-		man_danger[pid] = AIActionScoring.score_shoot(
-				mp, our_net,
-				AIGoalieModel.feed_keeper_pos,
-				GameRules.NET_HALF_WIDTH, no_defenders,
-				AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-				AIGoalieModel.feed_keeper_unsettled,
-				[], -1.0, false, man_seal, man_seal != 0.0, 0.0, [],
-				AIGoalieModel.feed_keeper_hands)
+				no_defenders)
+		# Finish danger if fed: his one-timer off the feed, our keeper square on
+		# the play as he stands (AIShotValue.feed). Unlike man_value it carries no
+		# lane factor: a contested feed still becomes a tap-in if it arrives. And
+		# no defenders: coverage is this scan's output, and feeding the markers
+		# back in would free a covered man's marker, raise his danger, and pull
+		# the marker back.
+		man_danger[pid] = AIShotValue.feed(play_ref, mp,
+				AIPuckLane.expected_pass_speed(play_ref, mp), our_net, our_goalie_pos, true)
 	if men.is_empty():
 		return empty
 
@@ -391,7 +374,7 @@ func _refresh_threat_base_memo(snapshot: WorldSnapshot) -> void:
 			continue
 		threat_shoot_base_by_opp[pid] = AIActionScoring.threat_surface_shoot(
 				snapshot.skater_states[pid].position, our_net, our_goalie_pos,
-				GameRules.NET_HALF_WIDTH, _memo_defenders, _memo_defender_caps)
+				_memo_defenders, _memo_defender_caps)
 
 
 # Our goalie's current world position, or the goal mouth as a first-frame

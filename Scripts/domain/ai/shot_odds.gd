@@ -121,6 +121,20 @@ static func feed(passer: Vector3, receiver: Vector3, speed: float, goal: Vector3
 	return _weighted_odds()
 
 
+# The odds of the receiver's one-timer off that feed when he does not pick the
+# line — a deflection, which leaves anywhere across the mouth: the mean over
+# every aim and loft.
+static func feed_unaimed(passer: Vector3, receiver: Vector3, speed: float, goal: Vector3,
+		keeper_pos: Vector3) -> float:
+	if not _weigh_feed(passer, receiver, speed, goal, keeper_pos, true):
+		return 0.0
+	_blend_aims()
+	var sum: float = 0.0
+	for v: float in _q_blend:
+		sum += v
+	return sum / float(_q_blend.size())
+
+
 # The shot to fire from `release` against the keeper as shot_now reads him, into
 # `out`. `out.aim` is INF when there is no shot from here.
 static func pick_shot_now(release: Vector3, goal: Vector3, keeper_pos: Vector3,
@@ -142,17 +156,44 @@ static func pick_shot_now(release: Vector3, goal: Vector3, keeper_pos: Vector3,
 	out.aim = Vector3(goal.x + aim_x(best % n) * mirror, 0.0, goal.z)
 
 
+# shot_now's odds from the best aim when the crossing scatters by `spread_rad`
+# instead of REFERENCE_SPREAD_RAD: the measured open sets re-read at that spread.
+# Re-parses the cells it weighs, so it is for a once-per-shot read (the xG stat),
+# never a per-tick one.
+static func shot_now_at_spread(release: Vector3, goal: Vector3, keeper_pos: Vector3,
+		keeper_vel_x: float, stance: int, spread_rad: float) -> float:
+	if not _weigh_shot_now(release, goal, keeper_pos, keeper_vel_x, stance):
+		return 0.0
+	var sigma_m: float = spread_rad \
+			* maxf(Vector2(release.x - goal.x, release.z - goal.z).length(), 0.5)
+	var blend := PackedFloat32Array()
+	blend.resize(_aims_per_cell)
+	blend.fill(0.0)
+	for j: int in _q_cells.size():
+		var t: PackedStringArray = AIShotFieldData.ROWS[_q_cells[j]].split("\t")
+		for li: int in LOFTS.size():
+			var pattern: String = t[51 + li]
+			for i: int in pattern.length():
+				blend[li * AIShotFieldData.AIM_POINTS + i] += \
+						_q_weights[j] * aim_odds(pattern, i, sigma_m)
+	var best: float = 0.0
+	for v: float in blend:
+		best = maxf(best, v)
+	return best
+
+
 # The odds a shot from `release` at an EMPTY net at `goal` goes in: aimed at the
-# middle, the crossing scattering by REFERENCE_SPREAD_RAD over the range. No
-# goalie, so nothing measured: it is where the puck lands.
-static func empty_net(release: Vector3, goal: Vector3) -> float:
+# middle, the crossing scattering by `spread_rad` over the range. No goalie, so
+# nothing measured: it is where the puck lands.
+static func empty_net(release: Vector3, goal: Vector3,
+		spread_rad: float = REFERENCE_SPREAD_RAD) -> float:
 	var mirror: float = -signf(goal.z)
 	var range_m: float = Vector2(release.x - goal.x, release.z - goal.z).length()
 	if (release.z - goal.z) * mirror <= 0.0:
 		return 0.0
 	var reach: float = GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS \
 			- GameRules.PUCK_COLLISION_RADIUS
-	var sigma_m: float = REFERENCE_SPREAD_RAD * maxf(range_m, 0.5)
+	var sigma_m: float = spread_rad * maxf(range_m, 0.5)
 	return _erf(reach / (sigma_m * sqrt(2.0)))
 
 

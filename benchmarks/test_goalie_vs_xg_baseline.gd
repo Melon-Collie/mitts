@@ -460,8 +460,7 @@ func test_report_goalie_angular_coverage() -> void:
 			var right: Vector2 = Vector2(hw, GOAL_Z) - eye
 			var net_subt: float = absf(left.angle_to(right))
 			# He squares to the puck, so he presents his blocking half-width
-			# perpendicular to the sightline from any bearing — the same disc
-			# assumption AIActionScoring.open_net_danger occludes with.
+			# perpendicular to the sightline from any bearing.
 			var body_hw: float = _ctrl.pad_local_offset + _ctrl.butterfly_pad_half_width
 			var g_dist: float = maxf((Vector2(gx, gz) - eye).length(), 0.01)
 			var g_subt: float = 2.0 * atan2(body_hw, g_dist)

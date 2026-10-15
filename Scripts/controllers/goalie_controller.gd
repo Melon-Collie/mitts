@@ -419,9 +419,7 @@ var recovery_duration: float = 0.35         # s spent standing back up
 # ~0.4 m the pads/hips fall, the ice seal lands ~0.2 s after commitment. The gap
 # closes CONTINUOUSLY through the drop (openness converges during drop_progress),
 # so the effective five-hole seal — gap narrower than the puck — lands well before
-# full completion. Difficulty-varied (GoalieSkillProfile.butterfly_drop_s) and
-# AI-mirrored per tier via AIGoalieModel.goalie_butterfly_drop_s; this default
-# mirrors the scorer's GOALIE_BUTTERFLY_DROP_S baseline — change both together.
+# full completion. Difficulty-varied (GoalieSkillProfile.butterfly_drop_s).
 var butterfly_drop_speed: float = 0.20      # s for pads to close to floor
 var butterfly_radius: float = 0.40          # arc radius from goal center while down
 # Knee shuffle — the smallest of the three down-movement tiers (micro-scoot,
@@ -854,9 +852,6 @@ var shoulder_pitch_y_range: float = 0.55  # y-distance from neutral that maps to
 # over the stroke rather than the peak. Close top-corner snipes still beat the ARM
 # DELAY (arm_reaction_delay 0.18 s > a slot shot's flight), so this only bounds
 # the range shots a real goalie gloves.
-# AIGoalieModel mirrors this as the arm deploy ramp (goalie_arm_deploy_s =
-# HIGH-band EXT / speed; baseline const GOALIE_ARM_DEPLOY_S, re-derived per tier
-# in set_goalie_profile) — change the baselines together.
 var glove_react_max_speed: float = 5.0
 # Blocker (entire BlockArm assembly) reach speed cap, mirroring the glove.
 # Same magnitude — both arms have similar reach speed; if blocker should be

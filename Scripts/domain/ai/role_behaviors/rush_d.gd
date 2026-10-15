@@ -386,27 +386,14 @@ static func _lane_fan_target(ctx: RoleContext, read: AIRushRead,
 			on_line, carrier_pos, our_net, our_goalie_pos, teammates, receivers,
 			INF, ctx.scratch_teammate_caps, self_caps)
 
-	var no_defenders: Array[Vector3] = []
 	var a_net: float = atan2(dir_net.z, dir_net.x)
 	for i: int in receivers.size():
-		# Only leave the shooter for a genuine immediate threat: his finish-if-fed,
-		# with the keeper predicted over the feed's flight, must clear the bar.
-		var feed_speed: float = AIPuckLane.expected_pass_speed(
-				carrier_pos, receivers[i])
-		var feed_flight: float = carrier_pos.distance_to(receivers[i]) \
-				/ maxf(feed_speed, 1.0)
-		AIGoalieModel.resolve_feed_keeper(
-				our_goalie_pos, our_net, feed_flight, receivers[i], carrier_pos,
-				AIRoleReads.our_goalie_hands(ctx), feed_speed, teammates)
-		var recv_seal: float = AIGoalieModel.derive_post_seal_x_sign(
-				receivers[i], our_net)
-		var recv_danger: float = AIActionScoring.score_shoot(
-				receivers[i], our_net, AIGoalieModel.feed_keeper_pos,
-				GameRules.NET_HALF_WIDTH,
-				no_defenders, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-				AIGoalieModel.feed_keeper_unsettled, [], -1.0, false,
-				recv_seal, recv_seal != 0.0, 0.0, [],
-				AIGoalieModel.feed_keeper_hands)
+		# Only leave the shooter for a genuine immediate threat: his one-timer off
+		# the feed, our keeper square on the carrier as he stands, must clear the
+		# bar.
+		var recv_danger: float = AIShotValue.feed(carrier_pos, receivers[i],
+				AIPuckLane.expected_pass_speed(carrier_pos, receivers[i]), our_net,
+				our_goalie_pos, true)
 		if recv_danger < LANE_PLAY_DANGER_BAR:
 			continue
 		var lane_x: float = receivers[i].x - carrier_pos.x

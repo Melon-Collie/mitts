@@ -55,15 +55,6 @@ var wrister_shot_speed: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 # rate. Default mirrors the controller's 10.0.
 var blade_speed: float = 10.0
 
-# The blade curve's angle ladder as tan per elevated loft level
-# (x = LOW, y = MID, z = HIGH — SkaterController.loft_tan_low/mid/high). The
-# HIGH-hole rung-picker reads it so a bot prices (and fires) the rungs its own
-# blade has. Default = the league-neutral ladder.
-var loft_tans: Vector3 = Vector3(
-		GameRules.DEFAULT_LOFT_TAN_LOW,
-		GameRules.DEFAULT_LOFT_TAN_MID,
-		GameRules.DEFAULT_LOFT_TAN_HIGH)
-
 # Lateral grip multiplier (= SkaterController.lateral_grip — agility × the
 # skate-profile lean). Scales edge turn authority, so planning reads it wherever
 # it models a direction change (the cross-momentum shed in time_to_arrive /

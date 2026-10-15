@@ -56,7 +56,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		if base < 0.0:
 			base = AIActionScoring.threat_surface_shoot(
 					opp_positions[i], our_net, our_goalie_pos,
-					GameRules.NET_HALF_WIDTH, our_team_excluding_self,
+					our_team_excluding_self,
 					ctx.scratch_teammate_caps)
 		bases.append(base)
 
@@ -131,7 +131,7 @@ static func _max_shot_threat(
 		used |= 1 << bi
 		var threat: float = AIActionScoring.threat_surface_shoot(
 				opp_positions[bi], our_net, our_goalie_pos,
-				GameRules.NET_HALF_WIDTH, our_team_excluding_self, our_team_caps)
+				our_team_excluding_self, our_team_caps)
 		if threat > max_threat:
 			max_threat = threat
 	our_team_excluding_self.pop_back()

@@ -205,9 +205,8 @@ var _mouse_max_speed_m_s: float = MOUSE_MAX_SPEED_M_S
 # Aim error budgets (radians on the release direction, uniform ±): shots on the
 # shot budget, passes / dumps on the pass budget. ONE sample per release, drawn at
 # press-state entry (_set_state → _sample_aim_error_rad) and held through the
-# windup — a missed spot, not a shaking hand. The shot spread is also what the
-# score demands as extra window (RoleContext.self_aim_spread_rad). From
-# BotSkillProfile via apply_profile; both default 0, so raw test agents stay
+# windup — a missed spot, not a shaking hand. From BotSkillProfile via
+# apply_profile; both default 0, so raw test agents stay
 # bit-deterministic.
 var _shot_aim_error_rad: float = 0.0
 var _pass_aim_error_rad: float = 0.0
@@ -431,7 +430,6 @@ var _pass_aim_dir_locked: Vector3 = Vector3.ZERO
 # unwired bot and the unit tests.
 var _self_max_speed: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 var _self_wrister_shot_speed: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
-var _self_loft_tans: Vector3 = AIActionScoring.DEFAULT_LOFT_TANS
 var _self_lateral_grip: float = 1.0
 # Body-check delivery (mass-emergent), so a defensive role can predict THIS bot's
 # hit strength before committing to a check.
@@ -728,7 +726,6 @@ func apply_capabilities(caps: AISkaterCaps) -> void:
 	_poke_jab_reach = caps.blade_span + GameRules.POKE_RADIUS_M
 	_stick_lift_reach = caps.blade_span + GameRules.STICK_LIFT_RADIUS_M
 	_self_wrister_shot_speed = caps.wrister_shot_speed
-	_self_loft_tans = caps.loft_tans
 	_self_lateral_grip = caps.lateral_grip
 	_self_weight = caps.weight
 	_self_body_check_transfer = caps.body_check_transfer
@@ -1269,11 +1266,8 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	ctx.self_max_speed = _self_max_speed
 	ctx.self_max_accel = _chase_max_accel
 	ctx.self_wrister_shot_speed = _self_wrister_shot_speed
-	ctx.self_loft_tans = _self_loft_tans
 	ctx.self_lateral_grip = _self_lateral_grip
-	ctx.self_aim_spread_rad = _shot_aim_error_rad
 	ctx.self_pass_aim_error_rad = _pass_aim_error_rad
-	ctx.shot_timing_error_s = _shot_timing_error_s
 	ctx.self_weight = _self_weight
 	ctx.self_body_check_transfer = _self_body_check_transfer
 	ctx.self_handle_reach = _self_handle_reach
@@ -1599,8 +1593,7 @@ func _pass_receive_aim_and_steer(input: InputState, snapshot: WorldSnapshot, sel
 #   _RECV_ONE_TIME     — Mode A: transitioned to ONE_TIMER_PRESSED; caller must
 #                        return.
 func _try_shot_reception(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3) -> int:
-	if not _reception.read_shot(snapshot, self_pos, _blade_reach, _attacking_goal_pos,
-			_shot_aim_error_rad):
+	if not _reception.read_shot(snapshot, self_pos, _blade_reach, _attacking_goal_pos):
 		return _RECV_NONE
 	if _reception.shot_one_time_geometry and _squared_to_shoot(snapshot, self_pos):
 		# One transitional tick of net-aimed steering before ONE_TIMER_PRESSED

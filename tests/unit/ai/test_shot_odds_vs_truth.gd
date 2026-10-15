@@ -14,12 +14,10 @@ extends GutTest
 # Three ratchets: mean |model − truth| may not grow, concordance (does it order
 # two cells the way the goalie does) may not fall, and neither may the share of
 # the best odds the field's own pick keeps (AIShotOdds.pick_shot_now, the shot a
-# bot fires). All bank when the field improves. The retired per-hole model and
-# its planner (best_shot_aim / best_shot_loft) are reported beside them.
+# bot fires). All bank when the field improves.
 
 const TRUTH_PATH: String = "res://tests/unit/ai/data/shot_odds_truth.txt"
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
-const SHOT_SPEED: float = AIBotMechanics.WRISTER_SHOT_SPEED_M_S
 const FEED_SPEED_M_S: float = 16.0
 
 # The ratchets. Tighten when a change wins by more than BANK_MARGIN.
@@ -34,8 +32,6 @@ class Cell:
 	var spot: Vector3
 	var scenario: String
 	var patterns := PackedStringArray()
-	var planner_aim_x: float
-	var planner_loft: int
 	var keeper: GoalieNetworkState = GoalieNetworkState.new()
 	var pre_keeper: GoalieNetworkState = GoalieNetworkState.new()
 
@@ -56,8 +52,6 @@ func _cells() -> Array[Cell]:
 		c.scenario = t[2]
 		c.spot = Vector3(float(t[3]), 0.0, GOAL_Z + float(t[4]))
 		c.patterns = PackedStringArray([t[5], t[6], t[7]])
-		c.planner_aim_x = float(t[8])
-		c.planner_loft = int(t[9])
 		_fill_read(c.keeper, t, 11)
 		_fill_read(c.pre_keeper, t, 32)
 		out.append(c)
@@ -131,17 +125,6 @@ func _pos(g: GoalieNetworkState) -> Vector3:
 	return Vector3(g.position_x, 0.0, g.position_z)
 
 
-# The retired per-hole model on the same read, for the report only.
-func _per_hole(c: Cell) -> float:
-	var g: GoalieNetworkState = c.keeper
-	var down: bool = g.is_down()
-	return AIActionScoring.open_net_danger(c.release, Vector3(0.0, 0.0, GOAL_Z),
-			Vector3(g.position_x, 0.0, g.position_z), GameRules.NET_HALF_WIDTH,
-			SHOT_SPEED, 0.0, GoalieBehaviorRules.five_hole_gap_m(down, g.five_hole_openness),
-			down, g.post_seal_x_sign(GOAL_Z), g.is_post_seal_tall(),
-			AIShotOdds.REFERENCE_SPREAD_RAD, 0.0, g.hands_read(GOAL_Z), g.pads_read(GOAL_Z))
-
-
 func _concordance(model: Array[float], truth: Array[float]) -> float:
 	var ok: int = 0
 	var total: int = 0
@@ -159,34 +142,26 @@ func test_the_shot_field_against_the_measured_odds() -> void:
 	var cells: Array[Cell] = _cells()
 	assert_gt(cells.size(), 0, "the table has cells")
 	var model: Array[float] = []
-	var hole: Array[float] = []
 	var truth: Array[float] = []
 	var by_scenario: Dictionary = {}
 	for c: Cell in cells:
 		var m: float = _model(c)
-		var h: float = _per_hole(c)
 		var t: float = _truth(c)
 		model.append(m)
-		hole.append(h)
 		truth.append(t)
-		var s: Array = by_scenario.get(c.scenario, [0.0, 0.0, 0.0, 0.0, 0])
+		var s: Array = by_scenario.get(c.scenario, [0.0, 0.0, 0.0, 0])
 		s[0] += m
 		s[1] += t
 		s[2] += absf(m - t)
-		s[3] += absf(h - t)
-		s[4] += 1
+		s[3] += 1
 		by_scenario[c.scenario] = s
 	var err: float = 0.0
-	var hole_err: float = 0.0
 	for i: int in cells.size():
 		err += absf(model[i] - truth[i])
-		hole_err += absf(hole[i] - truth[i])
 	err /= float(cells.size())
-	hole_err /= float(cells.size())
 	var concordance: float = _concordance(model, truth)
 	var best_sum: float = 0.0
 	var pick_sum: float = 0.0
-	var planner_sum: float = 0.0
 	var pick := AIShotOdds.Pick.new()
 	for c: Cell in cells:
 		if not _fires_from_the_carry(c):
@@ -197,18 +172,15 @@ func test_the_shot_field_against_the_measured_odds() -> void:
 		best_sum += _truth(c)
 		if pick.aim.is_finite():
 			pick_sum += _truth_at(c, pick.aim.x, pick.loft)
-		planner_sum += _truth_at(c, c.planner_aim_x, c.planner_loft)
 	var pick_share: float = pick_sum / maxf(best_sum, 0.0001)
-	gut.p("scenario     field   truth   |err|   per-hole |err|   (%d cells)" % cells.size())
+	gut.p("scenario     field   truth   |err|   (%d cells)" % cells.size())
 	for name: String in by_scenario:
 		var s: Array = by_scenario[name]
-		var n: float = float(s[4])
-		gut.p("%-10s  %6.3f  %6.3f  %6.3f   %6.3f" % [name, s[0] / n, s[1] / n, s[2] / n,
-				s[3] / n])
-	gut.p("field: mean |err| %.3f, concordance %.1f%%   per-hole: mean |err| %.3f, concordance %.1f%%"
-			% [err, concordance * 100.0, hole_err, _concordance(hole, truth) * 100.0])
-	gut.p("firing from the carry, the pick keeps %.0f%% of the best odds (the old planner %.0f%%)"
-			% [100.0 * pick_share, 100.0 * planner_sum / maxf(best_sum, 0.0001)])
+		var n: float = float(s[3])
+		gut.p("%-10s  %6.3f  %6.3f  %6.3f" % [name, s[0] / n, s[1] / n, s[2] / n])
+	gut.p("field: mean |err| %.3f, concordance %.1f%%" % [err, concordance * 100.0])
+	gut.p("firing from the carry, the pick keeps %.0f%% of the best odds"
+			% [100.0 * pick_share])
 	assert_gte(pick_share, MIN_PICK_SHARE, "the field's pick keeps less of the best odds")
 	assert_false(pick_share > MIN_PICK_SHARE + BANK_MARGIN,
 			"the pick keeps %.3f of the best odds, up from %.3f: bank it in MIN_PICK_SHARE"

@@ -1265,7 +1265,6 @@ func build_ai_caps() -> AISkaterCaps:
 	caps.max_lean_shift = skater.max_lean_shift()
 	caps.wrister_shot_speed = max_wrister_power
 	caps.blade_speed = max_blade_speed
-	caps.loft_tans = Vector3(loft_tan_low, loft_tan_mid, loft_tan_high)
 	caps.lateral_grip = lateral_grip
 	caps.backhand_power_coefficient = backhand_power_coefficient
 	caps.wrister_load = _wrister_load_config()

@@ -245,9 +245,8 @@ func _run(attackers: Array, defenders: Array, carrier: int) -> Result:
 				continue
 			r.uncovered_sum += 1
 			r.uncovered_by_man[opp] = int(r.uncovered_by_man.get(opp, 0)) + 1
-			worst = maxf(worst, AIActionScoring.score_shoot_threat_fielded(
-					snap.skater_states[opp].position, our_net, our_net,
-					GameRules.NET_HALF_WIDTH, no_defenders))
+			worst = maxf(worst, AIActionScoring.score_shoot_value(
+					snap.skater_states[opp].position, our_net, our_net, no_defenders))
 		r.open_danger_sum += worst
 		r.open_danger_worst = maxf(r.open_danger_worst, worst)
 	return r

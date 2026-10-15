@@ -593,7 +593,7 @@ func test_an_in_zone_carrier_prices_a_turnover_in_xg() -> void:
 	c_out.decide(ctx_out)
 	assert_almost_eq(c_out._field.turnover_cost(ctx_out, loss, 1.0, our_goalie),
 			AIActionScoring.threat_surface_shoot(loss, our_net, our_goalie,
-					GameRules.NET_HALF_WIDTH, defenders), 0.0005,
+					defenders), 0.0005,
 			"outside the zone it stays on the potential scale, like the gains")
 
 
@@ -809,16 +809,6 @@ func _tuck_ctx() -> RoleContext:
 	g.position_z = -26.1
 	ctx.snapshot.goalie_states[1 - TEAM_ID] = g
 	return ctx
-
-
-func test_the_winning_hold_is_priced_at_the_pace_its_load_carries() -> void:
-	# Whichever hold wins the sweep (at the tuck fixture: the snapshot), the shot
-	# from it is priced at the pace its load carries there.
-	var ctx: RoleContext = _tuck_ctx()
-	var c: AIRoleCarrier = _decided(ctx)
-	assert_almost_eq(c._shot_sample_speed,
-			ctx.self_wrister_shot_speed * c._shot_sample_share, 0.001,
-			"the winning hold is priced at the pace its load carries there")
 
 
 func test_shot_commit_carries_the_winning_hold() -> void:

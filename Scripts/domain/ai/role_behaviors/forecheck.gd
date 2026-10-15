@@ -120,7 +120,7 @@ static func _decide_mid_at(ctx: RoleContext, carrier_pos: Vector3,
 	for opp_pos: Vector3 in opp_teammates:
 		bases.append(AIActionScoring.threat_surface_pass(
 				carrier_pos, opp_pos, our_net, our_goalie_pos,
-				GameRules.NET_HALF_WIDTH, our_team_excluding_self,
+				our_team_excluding_self,
 				ctx.scratch_teammate_caps))
 
 	var best_pos: Vector3 = search_center
@@ -190,7 +190,7 @@ static func _max_pass_threat(
 		used |= 1 << bi
 		var threat: float = AIActionScoring.threat_surface_pass(
 				carrier_pos, opp_teammates[bi], our_net, our_goalie_pos,
-				GameRules.NET_HALF_WIDTH, our_team_excluding_self, our_team_caps)
+				our_team_excluding_self, our_team_caps)
 		if threat > max_threat:
 			max_threat = threat
 	our_team_excluding_self.pop_back()

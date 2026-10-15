@@ -6,9 +6,8 @@ extends RefCounted
 # save loop — GoalieContactDetector.nearest + GoalieSaveRules.resolve_contact,
 # the exact pair Puck._physics_process runs on the host — with the goalie's real
 # reaction delay, butterfly drop, lateral push and pose anatomy (glove/pad
-# boxes) in the loop. Unlike shot_sim_harness (a lateral-reach BAND model that
-# score_shoot is calibrated against), nothing here is a re-derived cover proxy:
-# the puck is marched tick-by-tick and tested against the goalie's actual posed
+# boxes) in the loop. Nothing here is a re-derived cover proxy: the puck is
+# marched tick-by-tick and tested against the goalie's actual posed
 # collision boxes, and the goalie reacts to the real puck motion each tick.
 #
 # This is the reference the band instrument and score_shoot's HIGH/LOW cover are
@@ -27,8 +26,6 @@ const DT: float = 1.0 / 120.0
 const RADIUS: float = GameRules.PUCK_COLLISION_RADIUS
 const MAX_STEPS: int = 300          # ~2.5 s flight ceiling — a shot resolves long before
 
-# Outcome enum mirrors shot_sim_harness so callers can compare the two
-# instruments cell-for-cell.
 enum { GOAL, SAVE, POST, WIDE, NO_SHOT }
 
 var _goalie: Node = null
@@ -413,7 +410,7 @@ func publish_windup(shooter: Vector3, declared_aim: Vector3, loft_level: int,
 # Launch velocity for a shot from `shooter` toward the net-plane `aim`:
 # horizontal heading toward the aim (+ scatter), pace split by the level's SET
 # ANGLE (ShotMechanics.shot_loft_y, league-neutral M92 ladder — same model as
-# the live release and shot_sim_harness, so the instruments are comparable).
+# the live release).
 # Vector3.ZERO if the aim is degenerate.
 func shot_velocity(shooter: Vector3, aim: Vector3, loft_level: int, power_t: float,
 		err_rad: float) -> Vector3:
@@ -500,8 +497,7 @@ func _march(shooter: Vector3, vel_in: Vector3) -> int:
 		# instrument counts FIRST goalie contact as the outcome: a deaden/catch is
 		# plainly a save, and a live kick (pad/blocker/stick) is the goalie
 		# stopping the initial shot — the second-chance rebound is a separate event
-		# out of this instrument's scope (mirrors shot_sim_harness's terminal-save
-		# scope). So any contact classifies SAVE.
+		# out of this instrument's scope. So any contact classifies SAVE.
 		if GoalieContactDetector.nearest([_goalie], prev, pos, RADIUS, _scratch, _contact):
 			last_shot_speed = vel.length()
 			var g3: Node3D = _contact.goalie as Node3D
@@ -561,7 +557,7 @@ func _classify_part(part_body: Node3D) -> int:
 	return GoalieSaveRules.SavePart.PAD
 
 
-# On/off-net verdict at the goal-line crossing (mirror of shot_sim_harness).
+# On/off-net verdict at the goal-line crossing.
 func _net_verdict(cross_x: float, cross_y: float) -> int:
 	var hw: float = GameRules.NET_HALF_WIDTH
 	var bar: float = GameRules.NET_HEIGHT

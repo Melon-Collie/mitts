@@ -12,8 +12,8 @@ extends GutTest
 #              deterministic, so this IS the goalie's open set; the odds for a
 #              shooter of any scatter are this spread by his placement
 #              distribution (test_shot_odds_vs_truth.gd does that).
-#   picked   — the shot the planner itself chooses (best_shot_aim /
-#              best_shot_loft) from the same read, and what it did.
+#   picked   — the shot the field itself picks (AIShotOdds.pick_shot_now) from
+#              the same read, and what it did.
 #   read     — the replicated GoalieNetworkState at DECISION time: what a bot
 #              sees when it decides whether to shoot from here; and for a feed,
 #              the read square on the passer before it left.
@@ -30,9 +30,6 @@ const Stager := preload("res://tests/unit/ai/shot_odds_stager.gd")
 
 const OUT_PATH: String = "res://tests/unit/ai/data/shot_odds_truth.txt"
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
-const SHOT_SPEED: float = AIBotMechanics.WRISTER_SHOT_SPEED_M_S
-# The planner's own pick is solved at the Hard hand's spread.
-const REF_SPREAD_RAD: float = 0.01
 const FEED_SPEED_M_S: float = 16.0
 const DEKE_ACROSS_M: float = 2.0
 
@@ -99,18 +96,11 @@ func _row(spot: Vector3, scenario: int) -> String:
 	var release: Vector3 = stage.call()
 	var gs: GoalieNetworkState = _s.read()
 	var keeper := Vector3(gs.position_x, 0.0, gs.position_z)
-	var down: bool = gs.is_down()
-	var five: float = GoalieBehaviorRules.five_hole_gap_m(down, gs.five_hole_openness)
-	var hands: Vector4 = gs.hands_read(GOAL_Z)
-	var pads: Vector4 = gs.pads_read(GOAL_Z)
-	var seal_x: float = gs.post_seal_x_sign(GOAL_Z)
-	var seal_tall: bool = gs.is_post_seal_tall()
-	var picked_aim: Vector3 = AIActionScoring.best_shot_aim(release, _goal, keeper,
-			GameRules.NET_HALF_WIDTH, SHOT_SPEED, 0.0, five, down, REF_SPREAD_RAD,
-			seal_x, seal_tall, 0.0, hands, pads)
-	var picked_loft: int = AIActionScoring.best_shot_loft(release, _goal, keeper,
-			GameRules.NET_HALF_WIDTH, SHOT_SPEED, 0.0, five, down, seal_x, seal_tall,
-			REF_SPREAD_RAD, 0.0, hands, pads)
+	var pick := AIShotOdds.Pick.new()
+	AIShotOdds.pick_shot_now(release, _goal, keeper, gs.velocity_x,
+			AIShotOdds.stance_of(gs, _goal), pick)
+	var picked_aim: Vector3 = pick.aim if pick.aim.is_finite() else _goal
+	var picked_loft: int = pick.loft
 	var picked: String = _s.outcome(stage, one_timer, caught, picked_aim, picked_loft)
 	var pre: GoalieNetworkState = gs
 	if _feed_distance(scenario) > 0.0:
