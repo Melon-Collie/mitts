@@ -531,34 +531,6 @@ static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 	return mid if c_mid <= c_end else to
 
 
-# How far along `bearing` this body can actually get within `horizon_s`.
-#
-# From the double-integrator reachable set: with bounded acceleration, the
-# positions reachable at time T form a disc centred on the MOMENTUM-PROJECTED
-# point (pos + v*T) with radius 0.5*a*T^2 — the deviation the thrust can buy
-# off the ballistic path. Intersecting the bearing ray with that disc gives the
-# farthest point in that direction which is a real destination rather than a
-# wish.
-#
-# Returns a NEGATIVE value when the ray misses the disc entirely: at that speed
-# the direction is not available. At a standstill the disc is centred on the
-# body and every bearing reaches 0.5*a*T^2; at pace the centre slides downrange
-# until the rearward and then the lateral bearings fall outside it.
-static func beat_reach_along(velocity: Vector3, bearing_x: float,
-		bearing_z: float, accel_m_s2: float, horizon_s: float) -> float:
-	var cx: float = velocity.x * horizon_s
-	var cz: float = velocity.z * horizon_s
-	var r: float = 0.5 * accel_m_s2 * horizon_s * horizon_s
-	# Split the momentum offset into along-bearing and perpendicular parts; the
-	# perpendicular part is what can push the ray clear of the disc.
-	var along: float = bearing_x * cx + bearing_z * cz
-	var perp_sq: float = maxf(0.0, cx * cx + cz * cz - along * along)
-	var disc: float = r * r - perp_sq
-	if disc <= 0.0:
-		return -1.0
-	return along + sqrt(disc)
-
-
 # ── Controlled space: how much room a carrier has to OPERATE ─────────────────
 # The fraction of the ice ahead this carrier can reach WITH THE PUCK: a fan of
 # carry paths across the forward cone, each priced by the same carry_safety the
@@ -607,18 +579,10 @@ static func control_at(sample: Vector3, from: Vector3, from_vel: Vector3,
 # is the objective the cone points at (the attacking net for the carrier's
 # forward-pressure read); `horizon_m` how far ahead space is felt. Returns 1.0
 # when the objective is degenerate or every sample is off-ice.
-# `out_bearing_control`, when sized to SPACE_SAMPLE_ANGLES, is filled with the
-# mean control along each BEARING of the fan (averaged over the rings, off-ice
-# samples skipped, 1.0 where a bearing has no legal sample) — which way out of
-# here is open. AIRoleCarrier generates its forward carry candidates from it.
 static func controlled_space(from: Vector3, from_vel: Vector3,
 		from_caps: AISkaterCaps, toward: Vector3, horizon_m: float,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
-		opponent_caps: Array = [],
-		out_bearing_control: Array[float] = []) -> float:
-	var want_bearings: bool = out_bearing_control.size() == SPACE_SAMPLE_ANGLES.size()
-	if want_bearings:
-		out_bearing_control.fill(1.0)
+		opponent_caps: Array = []) -> float:
 	var fx: float = toward.x - from.x
 	var fz: float = toward.z - from.z
 	var flen: float = sqrt(fx * fx + fz * fz)
@@ -632,8 +596,6 @@ static func controlled_space(from: Vector3, from_vel: Vector3,
 	var weighted: float = 0.0
 	var total: float = 0.0
 	for bi: int in SPACE_SAMPLE_ANGLES.size():
-		var bearing_sum: float = 0.0
-		var bearing_n: int = 0
 		# PREFIX IMPLICATION. Rings are walked OUTERMOST FIRST, and when the
 		# outer path along a bearing comes back fully controlled, the inner
 		# samples on that same bearing are credited 1.0 without being priced.
@@ -676,10 +638,6 @@ static func controlled_space(from: Vector3, from_vel: Vector3,
 			var w: float = r * ca
 			total += w
 			weighted += w * c
-			bearing_sum += c
-			bearing_n += 1
-		if want_bearings and bearing_n > 0:
-			out_bearing_control[bi] = bearing_sum / float(bearing_n)
 	if total <= 0.0:
 		return 1.0
 	return weighted / total

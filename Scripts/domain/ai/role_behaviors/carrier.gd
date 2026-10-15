@@ -176,6 +176,12 @@ var shot_hold_share: float = 1.0
 # Cached carry destination from the most recent re-eval. Read by the
 # state machine to drive steering during CARRY.
 var last_carry_anchor: Vector3 = Vector3.ZERO
+# The rolled near move that carry is (AICarryRollout.Move; -1 when the carry is
+# steered to last_carry_anchor instead): the stick and the brake to hold until
+# the next re-eval.
+var carry_move: int = -1
+var carry_stick: Vector2 = Vector2.ZERO
+var carry_brake: bool = false
 
 # Set when intent commits to DUMP: the world spot to fire the puck at, and
 # whether it is the rim PASS (AIRimPass) rather than the dump-in. A rim is chosen
@@ -366,6 +372,7 @@ func reset() -> void:
 	shot_hold_share = 1.0
 	shoot_now_hold = Vector3.ZERO
 	last_carry_anchor = Vector3.ZERO
+	carry_move = -1
 	dump_target = Vector3.INF
 	dump_is_rim = false
 	dump_launch_speed = AIPuckLane.PASS_SPEED_M_S
@@ -706,7 +713,6 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 		puck_now = Vector3(
 				snapshot.puck_state.position.x, 0.0,
 				snapshot.puck_state.position.z)
-	var directed_seam: Vector3 = evade_seam_world
 	var current_safety: float = _phase_current_safety
 	var shoot_score: float = _phase_shoot_score
 	var best_pass_peer: int = _phase_best_pass_peer
@@ -725,9 +731,13 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	# search's forward candidates come from.
 	var forward_space: float = _carry.forward_space(ctx)
 
-	_carry.search(ctx, raw_shoot_score, directed_seam)
+	_carry.search(ctx, raw_shoot_score)
 	var carry_score: float = _carry.value
 	last_carry_anchor = _carry.anchor
+	carry_move = _carry.move
+	if carry_move >= 0:
+		carry_stick = _carry.rollout.stick[carry_move]
+		carry_brake = _carry.rollout.brake[carry_move]
 	var raw_carry_score: float = _carry.raw_value
 	# Pass-first under pressure (see FORWARD_PRESSURE_*); the dump still judges
 	# against the raw carry.
@@ -743,6 +753,7 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	if drive_in_value > carry_score:
 		carry_score = drive_in_value
 		last_carry_anchor = _field.drive_in_reached
+		carry_move = -1
 
 	# Hysteresis on FIRE intents only, proportional (positive scores only) so
 	# stickiness scales with the score instead of swamping the small-score

@@ -534,8 +534,8 @@ remains.
     **objective-directed seam** (`best_evade_point_toward`): the safe envelope
     sample (clearance ≥ `EVADE_SAFE_CLEAR_MIN_M`) with the most progress toward
     the live carry anchor, falling back to max clearance only when nothing safe
-    exists. The directed seam is what the deke latches and what enters the
-    carry-candidate compete, so the bot beats its man *on the way to its spot*.
+    exists. The directed seam is what the deke latches, so the bot beats its
+    man *on the way to its spot*.
   - **The boards bound the seam search** (`board_gap_m` rejects off-surface
     samples; a wall alone strips nothing). Pinned against the boards, half the
     envelope is illegal and the best seam runs along the wall, so a wall-pinned
@@ -741,12 +741,14 @@ remains.
     the candidate, discounted as a future action), credited as the *improvement*
     over the same read at the current spot, so a lane already open belongs to the
     live pass and repositioning earns option value only where it reopens one.
-  - The **retreat ring** (`_REAR_ANGLES` at two fractions of each bearing's
-    reach) is the committed peel-out; backing out to reopen a lane can out-value grinding on a
-    defender.
+  - The **cut back** (`AICarryRollout.Move.CUT_BACK`, skating backward facing
+    the destination) and **regroup** (a destination) are the peel-outs; backing
+    out to reopen a lane can out-value grinding on a defender.
   - **The net is a carry / blade obstacle** (`carry_path_blocked_by_net` /
-    `net_safe_blade_target`): a candidate whose route crosses a cage prunes, two
-    **post-walkout** candidates appear behind a goal line, and the carry cursor
+    `net_safe_blade_target`): a destination whose route crosses a cage prunes
+    (the wheel is priced round it), two **post-walkout** destinations appear
+    behind a goal line, a rolled move is held off the cage as the body is, and
+    the carry cursor
     swings around the nearer post (stick-on-net contact dislodges the puck).
     Behind-the-goal-line ice is playable for a carrier already back there
     (`AICarrierCarrySearch._candidate_ice_legal`), or the walkouts are the only moves and
@@ -781,13 +783,15 @@ remains.
   reads ~0.2 optimistic** — a `min` over defenders cannot count bodies; true pitch
   control fixes it and was rejected on cost.
 
-- **Field-derived carry candidates** — the forward half of the carry search is
-  generated from the space fan's per-bearing profile (`controlled_space` fills
-  `out_bearing_control`; `AICarrierCarrySearch.search` takes the best
-  `CARRY_FIELD_BEARINGS` by control × forward projection, each at two fractions
-  of the planning beat). The radius is one `CARRY_PLAN_BEAT_S` of travel at real
-  speed — the 3 m local step at a standstill, the blue line at a full stride.
-  Rearward and lateral bearings are a separate ring (`_REAR_ANGLES`), each at
-  `CARRY_FIELD_RADII` fractions of its own `beat_reach_along` — never the
-  forward radius, which would grow the rear steps with speed — because the fan
-  only looks where the carrier is trying to go.
+- **The carry is a destination and a skated move** (`docs/hybrid-carry-plan.md`).
+  The destination (`AICarrierDestinations`) is where the carry is FOR, chosen
+  with hysteresis and priced as one straight carry there. The move is one of
+  `AICarryRollout`'s seven held inputs, skated a second toward it through the
+  movement physics, the facing rule and the body's containment, and priced on
+  where that leaves him — the arrival value there or the destination's carried
+  on, × the keep odds along the rolled path (`_rolled_safety`), − the strip
+  cost. The chosen input is the carrier's stick until the next re-eval: what is
+  priced is what is skated. Never price a near move by a straight line and a
+  closed-form clock — that is what let a carrier plan spots it could not reach.
+  A destination across a cage is skated at the arrival clock's waypoint round it
+  (`AIArrival.cage_waypoint`).

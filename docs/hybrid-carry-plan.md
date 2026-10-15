@@ -1,6 +1,6 @@
 # Hybrid carry — a far destination, the next half-second rolled out
 
-Status: **agreed design; steps 1–2 done, step 3 next.** The CLAUDE.md workflow applies: this
+Status: **agreed design; steps 1–2 done, step 3 built with two gates open.** The CLAUDE.md workflow applies: this
 doc is the plan, deviations get discussed first.
 
 ## Decisions
@@ -171,6 +171,35 @@ Rollouts toward the destination, scored; the chosen input drives the carrier;
 facing follows it. The forward fan, rear ring, seam candidate and the carrier's
 threat repel are deleted. This is the step that changes how carriers skate, and
 the one to playtest.
+
+**Built; two gates open** (below). The seven moves replace the forward fan, the
+rear ring and the seam candidate; the agent skates the winning stick directly.
+Changes from the design above:
+
+- **The horizon is one second, not half.** From a standstill with a checker
+  three metres off, every move is inside his reach for half a second, so the
+  search could only choose where to lose the puck — forward, into him. What a cut
+  buys shows in the half-second after. A second also needed the 30 Hz step's
+  drift bound widened to ~20 cm.
+- **A destination across a cage is skated at the arrival clock's waypoint round
+  it** (`AIArrival.cage_waypoint`); aimed straight, the wheel slid along the
+  cage.
+- The remaining route from a move's end is priced by the lane and the decay
+  only, not by its safety: beyond the horizon the next re-plan sees the defence.
+
+Measured: default tier green but for one gate; slow tier 51/52. The bot duels
+and rush sims pass. The micro-bench is higher, not lower: carrier compete
+~3.1 ms (step 1: 2.5), the rollout 0.76 ms of it.
+
+Open — for the user:
+- `test_nz_turnover_recovery` (slow): the bot carrier now beats the defence more
+  often — contained 17/36 (was 21), and 2 of 9 races the defender could win are
+  lost (was 0). The defence did not change; the carrier finds the off-centre
+  lanes round him.
+- `test_point_holds_the_line`: the weak point chases a point feed out of the
+  zone. The feed's release reads the cursor on the tick the passer drops to
+  off-puck, which the duel harness takes as the origin — a harness flaw this
+  cycle now happens to hit.
 
 ### Step 4 — the maneuvers
 

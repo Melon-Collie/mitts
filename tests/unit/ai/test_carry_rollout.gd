@@ -160,7 +160,7 @@ func test_straight_goes_furthest_toward_the_destination() -> void:
 func test_the_brake_stops_shorter_than_a_coast_would() -> void:
 	_roll.roll_all(Vector3(0, 0, 5), Vector3(0, 0, -8), Vector2(0, -1), Vector2(0, -1), _caps())
 	var stopped: Vector3 = _roll.end_vel[AICarryRollout.Move.BRAKE]
-	assert_lt(stopped.length(), 8.0 - 3.0, "a half-second hockey stop sheds several m/s")
+	assert_lt(stopped.length(), 8.0 - 3.0, "a hockey stop held over the horizon sheds several m/s")
 
 
 func test_the_cut_back_skates_away_still_facing_the_destination() -> void:
@@ -181,7 +181,7 @@ func test_no_move_leaves_the_rink() -> void:
 	assert_true(_roll.touched_boundary[AICarryRollout.Move.STRAIGHT], "and says it met the boards")
 
 
-func test_the_coarse_step_stays_within_a_few_centimetres_of_the_tick() -> void:
+func test_the_coarse_step_stays_within_a_hand_of_the_tick() -> void:
 	var caps := AISkaterCaps.new()
 	var coarse := AICarryRollout.new()
 	assert_eq(coarse.step_ticks, AICarryRollout.STEP_TICKS)
@@ -197,7 +197,7 @@ func test_the_coarse_step_stays_within_a_few_centimetres_of_the_tick() -> void:
 		coarse.roll_all(s[0], s[1], s[2], s[3], caps)
 		for m: int in AICarryRollout.MOVE_COUNT:
 			for k: int in AICarryRollout.SAMPLES:
-				assert_lt(_roll.sample(m, k).distance_to(coarse.sample(m, k)), 0.1,
+				assert_lt(_roll.sample(m, k).distance_to(coarse.sample(m, k)), 0.25,
 						"%s from %s, sample %d" % [AICarryRollout.Move.keys()[m], s[0], k])
 			assert_lt(_roll.end_vel[m].distance_to(coarse.end_vel[m]), 0.5,
 					"%s from %s, velocity" % [AICarryRollout.Move.keys()[m], s[0]])

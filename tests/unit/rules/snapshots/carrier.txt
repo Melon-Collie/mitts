@@ -13,7 +13,7 @@ tight-wall pinch, open man wide: intent	PASS
 tight-wall pinch, open man wide: pass target	2
 dead slot over the 8.5 m band, set keeper: shoot-now ratio	5.8129
 spun-off carrier, cut-in over standing still: move-score ratio	10.6482
-tight-wall pinch, open man wide: carry anchor	(0.0, -12.7)
+tight-wall pinch, open man wide: carry anchor	(0.0, -22.1)
 spun-off carrier, beaten man behind: pick	CARRY to (1.4, -24.0)
 pressured deep in our zone, open outlet up the strong wall: pick	PASS to 2
 outlet straight up the wall, forechecker standing off the lane: pick	PASS to 2
@@ -26,28 +26,28 @@ pinged ahead man 9 m out behind a mid-lane stick: variant	SAUCER
 board pincer closing, open outlet across: pick	PASS to 2
 light pressure, only a covered mate behind: intent	CARRY
 deep in our zone, forechecker charging, only a deeper mate: intent	CARRY
-deep in our zone, alone, forechecker charging, flanks open: pick	CARRY to (-4.8, 15.1)
+deep in our zone, alone, forechecker charging, flanks open: pick	CARRY to (4.4, 17.8)
 pressured deep, outlet en route, deeper valve as bait: pick	PASS to 2
-alone at rest 0.8 m short of the blue line: pick	CARRY to (0.0, -9.5)
+alone at rest 0.8 m short of the blue line: pick	CARRY to (0.0, -10.6)
 rush up the wall 4.3 m short of the line, room to enter: intent	CARRY
-rush up the wall 5.8 m short of the line, room to enter: pick	CARRY to (-2.8, -9.2)
+rush up the wall 5.8 m short of the line, room to enter: pick	CARRY to (-3.7, -11.0)
 rush up the wall, smothered at the line, trailer open: pick	PASS to 2
 level with a mate at the blue line, symmetric set D: intent	CARRY
-2 m inside the blue line, open, keeper 2 m out: pick	CARRY to (0.0, -21.6)
+2 m inside the blue line, open, keeper 2 m out: pick	CARRY to (0.0, -13.1)
 fresh entry, finisher driving the house: intent	CARRY
 fresh entry, finisher driving the house: developing feed	0.9039
 fresh entry, finisher driving the house: shoot-now value	0.0186
-head-on drive at 6 m/s, keeper 1 m out, from 10 m: pick	CARRY to (0.0, -22.6)
-head-on drive at 6 m/s, keeper 1 m out, from 9 m: pick	CARRY to (0.0, -23.1)
-head-on drive at 6 m/s, keeper 1 m out, from 8 m: pick	CARRY to (-2.4, -24.2)
-head-on drive at 6 m/s, keeper 1 m out, from 7 m: pick	CARRY to (-2.4, -25.2)
+head-on drive at 6 m/s, keeper 1 m out, from 10 m: pick	CARRY to (0.0, -23.6)
+head-on drive at 6 m/s, keeper 1 m out, from 9 m: pick	CARRY to (-3.2, -24.3)
+head-on drive at 6 m/s, keeper 1 m out, from 8 m: pick	CARRY to (-3.2, -25.3)
+head-on drive at 6 m/s, keeper 1 m out, from 7 m: pick	CARRY to (0.0, -23.6)
 head-on drive at 6 m/s, keeper 1 m out, from 6 m: pick	CARRY to (0.0, -23.6)
-head-on drive at 6 m/s, keeper 1 m out, from 5 m: pick	CARRY to (-1.2, -24.4)
+head-on drive at 6 m/s, keeper 1 m out, from 5 m: pick	SHOOT
 head-on drive at 6 m/s, keeper 1 m out, from 4 m: pick	SHOOT
 head-on drive at 6 m/s, keeper 1 m out, from 3 m: pick	SHOOT
 1v1 cutting across 3 m out, keeper squared 0.9 m out: pick	SHOOT
 1v1 cutting across 3 m out, keeper squared 0.9 m out: shoot-now value	0.8070
-1v1 mid-cut, keeper lagging the arc: intent	CARRY
+1v1 mid-cut, keeper lagging the arc: intent	SHOOT
 1v1 mid-cut, keeper lagging the arc: shoot-now value	0.7112
 1v1 flat-footed 3 m out, keeper squared 0.9 m out: carry anchor	(0.0, -23.6)
 standing 3 m out, keeper squared 1.3 m out: intent	SHOOT
@@ -59,16 +59,16 @@ dead-sharp beside the net, keeper on the near post: winning hold	(-0.3, 0.8)
 69 deg off the normal, keeper squared 1.2 m out: shoot-now value	0.1253
 swarmed on the blade in our slot: intent	CARRY
 swarmed in our slot a stride looser: intent	CARRY
-past centre, stand-up line at gap, open backfield: pick	CARRY to (2.0, 5.3)
-past centre, a loose pair ahead: pick	CARRY to (0.0, -21.6)
+past centre, stand-up line at gap, open backfield: pick	DUMP
+past centre, a loose pair ahead: pick	DUMP
 dump-in past centre, one D ahead: rests at	(-2.0, -18.0)
 pinned in our zone by a head-on forecheck, outlet up the wall: pick	PASS to 2
-wheeling up the weak wall, middle clogged: pick	CARRY to (-11.0, 4.3)
-behind our cage, empty rink: pick	CARRY to (1.8, 26.0)
+wheeling up the weak wall, middle clogged: pick	CARRY to (-12.5, 15.1)
+behind our cage, empty rink: pick	CARRY to (1.6, 27.3)
 beat his man down the wing at 8.5 m/s: pick	CARRY to (2.0, -23.8)
-wing entry in stride, defender on the inside lane: carry anchor	(10.9, -24.5)
-sharp-angle corner, keeper sealing, defender boxing out: pick	CARRY to (0.0, -21.6)
-behind their cage, empty rink: carry anchor	(1.8, -26.0)
-splittable gap up the middle, open man wide: carry anchor	(0.0, -22.5)
+wing entry in stride, defender on the inside lane: carry anchor	(5.5, -23.2)
+sharp-angle corner, keeper sealing, defender boxing out: pick	CARRY to (11.8, -24.6)
+behind their cage, empty rink: carry anchor	(1.4, -27.7)
+splittable gap up the middle, open man wide: carry anchor	(0.0, -14.5)
 checker dead on the carry line: seam degrees off the carry	150.0000
 checker 2 m off the carry line: seam degrees off the carry	30.0000

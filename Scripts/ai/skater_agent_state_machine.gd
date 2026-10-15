@@ -1703,9 +1703,14 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 	# fires before the goalie can reset. A PASS brakes: pass leads aim from a held
 	# spot.
 	if _intended_action == State.CARRY:
-		# Skated through at pace — no arrival brake.
-		_apply_steering(input, snapshot, self_pos, _last_carry_anchor,
-				false, _self_max_speed)
+		if _carrier.carry_move >= 0:
+			# The rolled move the carrier priced is the input it skates.
+			input.move_vector = _carrier.carry_stick
+			input.brake = _carrier.carry_brake
+		else:
+			# Skated through at pace — no arrival brake.
+			_apply_steering(input, snapshot, self_pos, _last_carry_anchor,
+					false, _self_max_speed)
 		# The discrete poke-evade (cut / brake check / deke), only while carrying
 		# with no intent: a pre-aim has its own steering target.
 		_poke_evade_modulate_steering(input, snapshot, self_pos)

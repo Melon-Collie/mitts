@@ -22,9 +22,11 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 enum Move { STRAIGHT, SOFT_LEFT, SOFT_RIGHT, HARD_LEFT, HARD_RIGHT, BRAKE, CUT_BACK }
 const MOVE_COUNT: int = 7
 
-# How long a move is held: the deke's length (fake + cut), a little past the
-# evasion look-ahead, so a cut has time to change which defender can reach.
-const HORIZON_S: float = 0.5
+# How long a move is held. Half a second is the deke's length, but it is too
+# short to price an escape: from a standstill with a checker three metres off,
+# every move is within his reach for that long, and what a cut buys only shows
+# in the half-second after.
+const HORIZON_S: float = 1.0
 const TICKS: int = int(HORIZON_S * _PhysicsConstants.PHYSICS_TICK)
 const DT: float = 1.0 / _PhysicsConstants.PHYSICS_TICK
 # Path samples per move, at equal times through the horizon (the last is the end).
@@ -32,7 +34,7 @@ const SAMPLES: int = 3
 const _TICKS_PER_SAMPLE: int = TICKS / SAMPLES
 
 # Physics ticks per rollout step. 1 is the live integration exactly; 4 (30 Hz)
-# drifts from it by ~6 cm and 0.3 m/s over the horizon, far inside a stick's
+# drifts from it by up to ~20 cm and 0.3 m/s over the horizon, inside a stick's
 # reach, for a quarter of the cost (test_carry_rollout.gd bounds the drift). Must
 # divide _TICKS_PER_SAMPLE.
 const STEP_TICKS: int = 4
@@ -74,10 +76,9 @@ func _init() -> void:
 func roll_all(pos: Vector3, vel: Vector3, facing: Vector2, toward: Vector2,
 		caps: AISkaterCaps, has_puck: bool = true) -> void:
 	var t: Vector2 = toward.normalized()
-	var walls: bool = _walls_in_reach(pos, vel, caps)
 	for m: int in MOVE_COUNT:
 		_set_move(m, t)
-		_roll(m, pos, vel, facing, caps, has_puck, walls)
+		_roll(m, pos, vel, facing, caps, has_puck)
 
 
 func sample(move: int, k: int) -> Vector3:
@@ -109,10 +110,11 @@ func _set_move(m: int, t: Vector2) -> void:
 # on the facing the body has, then the facing step on the new velocity), then
 # the body's integration and containment, which the controller runs ahead of.
 #
-# `walls` false skips the containment and the board shield, which are exactly
-# no-ops for this roll then (_walls_in_reach).
+# Between the corner arcs only the side boards bound the ice, and the cages sit
+# past the goal lines, so a body there further from the side boards than its
+# radius (the shield's probe, for the shield) skips each exactly.
 func _roll(m: int, pos: Vector3, vel: Vector3, facing: Vector2, caps: AISkaterCaps,
-		has_puck: bool, walls: bool) -> void:
+		has_puck: bool) -> void:
 	var cfg: SkaterMovementRules.MovementConfig = caps.movement
 	var move: Vector2 = stick[m]
 	var braking: bool = brake[m]
@@ -120,6 +122,8 @@ func _roll(m: int, pos: Vector3, vel: Vector3, facing: Vector2, caps: AISkaterCa
 	var drag: float = caps.facing_drag_speed_braking if braking else caps.facing_drag_speed
 	var radius: float = caps.body_radius
 	var dt: float = DT * step_ticks
+	var contain_x: float = GameRules.INNER_HALF_WIDTH - radius
+	var shield_x: float = GameRules.INNER_HALF_WIDTH - caps.board_shield_probe
 	var p: Vector3 = pos
 	var v: Vector3 = vel
 	var f: Vector2 = facing
@@ -128,9 +132,11 @@ func _roll(m: int, pos: Vector3, vel: Vector3, facing: Vector2, caps: AISkaterCa
 		v = SkaterMovementRules.apply_movement(v, move, atan2(-f.x, -f.y), has_puck,
 				braking, dt, cfg)
 		v.y = 0.0
-		f = _face(f, cur, v, p, braking, drag * dt, caps, has_puck and walls)
+		var between_arcs: bool = absf(p.z) <= GameRules.CORNER_CENTER_Z
+		f = _face(f, cur, v, p, braking, drag * dt, caps,
+				has_puck and not (between_arcs and absf(p.x) <= shield_x))
 		p += v * dt
-		if not walls:
+		if absf(p.z) <= GameRules.CORNER_CENTER_Z and absf(p.x) <= contain_x:
 			if (i + 1) % _TICKS_PER_SAMPLE == 0:
 				samples[m * SAMPLES + (i + 1) / _TICKS_PER_SAMPLE - 1] = p
 			continue
@@ -174,15 +180,3 @@ func _face(f: Vector2, cur: Vector2, v: Vector3, p: Vector3, braking: bool, step
 		return f.slerp(target, minf(step, 1.0))
 	return f.lerp(target, step).normalized()
 
-
-# Whether anything the body could reach in the horizon (from rest at full
-# thrust on top of its speed) comes within a body radius of the boards, the
-# shield's probe of them, or a body radius of either cage.
-static func _walls_in_reach(pos: Vector3, vel: Vector3, caps: AISkaterCaps) -> bool:
-	var reach: float = Vector2(vel.x, vel.z).length() * HORIZON_S \
-			+ 0.5 * caps.movement.thrust * HORIZON_S * HORIZON_S
-	var xz := Vector2(pos.x, pos.z)
-	var board_margin: float = reach + caps.body_radius + caps.board_shield_probe
-	if not GameRules.clamp_to_rink_inner(xz, board_margin).is_equal_approx(xz):
-		return true
-	return not GameRules.push_out_of_net(xz, reach + caps.body_radius).is_equal_approx(xz)

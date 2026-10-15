@@ -159,10 +159,10 @@ func test_evaluator_costs() -> void:
 		open_carrier._pass.search(open_ctx, Vector2(0, -1),
 				open_carrier._field.teammate_ids))
 	_bench("open ice: best carry (candidates)", func() -> void:
-		open_carrier._carry.search(open_ctx, 0.1, open_ctx.self_pos))
+		open_carrier._carry.search(open_ctx, 0.1))
 	var rollout := AICarryRollout.new()
 	var roll_caps := AISkaterCaps.new()
-	_bench("carry rollout (7 moves × 0.5 s)", func() -> void:
+	_bench("carry rollout (7 moves × 1 s)", func() -> void:
 		rollout.roll_all(open_ctx.self_pos, Vector3(0.0, 0.0, -6.0), Vector2(0, -1),
 				Vector2(0.2, -1.0), roll_caps))
 
@@ -210,7 +210,7 @@ func test_evaluator_costs() -> void:
 		var t1: int = Time.get_ticks_usec()
 		cinst._pass.search(cx, self_facing, cinst._field.teammate_ids)
 		var t2: int = Time.get_ticks_usec()
-		cinst._carry.search(cx, 0.1, cx.self_pos)
+		cinst._carry.search(cx, 0.1)
 		var t3: int = Time.get_ticks_usec()
 		cinst._pass.developing_feed_value(cx)
 		var t4: int = Time.get_ticks_usec()
@@ -226,7 +226,7 @@ func test_evaluator_costs() -> void:
 	# The carry search dominates the compete, so break IT down: how many candidates
 	# the beam actually scores, and what one candidate's primitives cost. The
 	# beam is left populated by the carry search above.
-	cinst._carry.search(cx, 0.1, cx.self_pos)
+	cinst._carry.search(cx, 0.1)
 	_results.append({"label": "  [beam rows scored]",
 			"us": float(cinst._carry._beam_total.size())})
 	_results.append({"label": "  [beam width (pass-2 upgrades)]",

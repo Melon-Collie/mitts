@@ -2246,16 +2246,16 @@ func _pinch(half_gap: float) -> AIRoleCarrier:
 	return _decided(ctx)
 
 
-func test_a_wider_gap_never_pulls_the_carry_plan_away_from_the_net() -> void:
+func test_a_wider_gap_never_makes_the_carry_worth_less() -> void:
 	# Between the pinch and the split, opening the gap only ever gives the carrier
-	# more room to attack: his planned anchor never moves away from the net.
-	var prev_z: float = INF
+	# more room: the carry is never worth less.
+	var prev: float = -INF
 	for half_gap: float in [_TIGHT_WALL_HALF_GAP, 0.7, 0.9, 1.1, 1.3, 1.5, _SPLITTABLE_HALF_GAP]:
-		var z: float = _pinch(half_gap).last_carry_anchor.z
-		assert_lte(z, prev_z + 1e-4,
-				"gap %.1f m: the anchor backs off the net (z %.2f after %.2f)"
-				% [2.0 * half_gap, z, prev_z])
-		prev_z = z
+		var v: float = _pinch(half_gap)._carry.raw_value
+		assert_gte(v, prev - 1e-4,
+				"gap %.1f m: the carry is worth less (%.3f after %.3f)"
+				% [2.0 * half_gap, v, prev])
+		prev = v
 
 
 # Entering down the wing in stride, a defender on the inside lane, the keeper
@@ -2406,10 +2406,12 @@ func test_behind_net_carrier_wheels_to_the_far_wall_in_5v5() -> void:
 	c.decide(ctx)
 	assert_eq(c.intended_action, AIRoleCarrier.INTENT_CARRY,
 			"the wheel is a carry, not a panic release")
-	assert_lt(c.last_carry_anchor.x, -5.0,
-			"the carry exits on the FAR side of the cage")
-	assert_lt(c.last_carry_anchor.z, 22.0,
-			"...up the far wall, not a near-post step")
+	assert_true(AICarrierDestinations.is_wheel(c._carry.destination_kind),
+			"it carries for the wheel")
+	assert_lt(c._carry.destination.x, -5.0, "out the FAR side of the cage")
+	assert_lt(c._carry.destination.z, 22.0, "...up the far wall, not a near-post step")
+	assert_lt(c.last_carry_anchor.x, self_pos.x, "and skates across behind the cage to it")
+	assert_gt(c.last_carry_anchor.z, GameRules.GOAL_LINE_Z, "...round the back, not into it")
 
 
 func test_wheel_is_5v5_exclusive() -> void:
