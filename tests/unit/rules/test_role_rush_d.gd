@@ -189,16 +189,16 @@ func test_momentum_up_ice_costs_more_cushion_than_standing() -> void:
 	assert_gt(_cushion(3.0), _cushion(0.0), "drifting up-ice owes more than standing")
 
 
-func test_no_cushion_once_the_carrier_is_inside_the_house_gate() -> void:
-	# The race finishes at the top of the circles; inside it the in-zone ladder
+func test_no_cushion_once_the_carrier_is_past_where_a_retreat_ends() -> void:
+	# The race finishes where a ridden retreat ends; past it the ladder alone
 	# stands him up, however flat the defender is.
-	var carrier := Vector3(0.0, 0.0, OUR_NET_Z - AIZoneCoverage.HOUSE_TOP_DEPTH_M + 1.0)
+	var carrier := Vector3(0.0, 0.0, OUR_NET_Z - AIRoleRushD.RETREAT_FINISH_M + 0.3)
 	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, OUR_NET_Z - 3.0),
 			[[10, 1, carrier, Vector3(0.0, 0.0, 9.0)]], 10)
 	var ap := AICarrierApproach.new()
 	AIDefensiveVerbs.fill_approach(ctx, carrier, Vector3(0.0, 0.0, 9.0), ap)
 	assert_eq(AIRoleRushD.ramp_cushion_m(ctx, ap, 10), 0.0,
-			"no retreat race is left inside the house gate")
+			"no retreat race is left past where a retreat ends")
 
 
 # ── Numbers ──────────────────────────────────────────────────────────────────

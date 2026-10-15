@@ -17,6 +17,9 @@ const GAP_MIN_STICKS: float = 1.0
 const GAP_MAX_STICKS: float = 3.0
 # One rung of the ladder: the step every modifier moves the gap by.
 const GAP_RUNG_STICKS: float = 1.0
+# How far off our net a ridden retreat may end: the paint plus the steering's
+# crease buffer, ice no body stands on.
+const RETREAT_FINISH_M: float = CreaseRules.ARC_RADIUS + AISteering.CREASE_REPEL_EXTENSION
 
 # A backchecker within this many seconds of the carrier lets the D tighten and
 # stand up (docs/5v5-ai-plan.md, backpressure doctrine: "~1–2 s").
@@ -98,7 +101,7 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 
 	d.target_position = _clamp_to_house(ctx, stand)
 	d.target_velocity = ride
-	set_house_retreat_floor(ctx, ap, d)
+	set_retreat_floor(ctx, ap, d)
 	# The arrival brake only matters with no man to ride (a moving stand stands it
 	# down). A retreat is paced rather than braked; a step-up wants the brake,
 	# since the approach bound placed that stand as its trigger; the gap-up drives
@@ -137,21 +140,21 @@ static func ladder_gap_m(threat_pos: Vector3, own_goal_dir: float,
 			* maxf(stick, 0.5), cushion_m, threat_pos, own_goal_dir)
 
 
-# The cushion deepens the stand only as far as the house gate, where its race
+# The cushion deepens the stand only as far as RETREAT_FINISH_M, where its race
 # finishes; the ladder alone still applies inside.
 static func _with_cushion(ladder_m: float, cushion_m: float,
 		threat_pos: Vector3, own_goal_dir: float) -> float:
 	var dz: float = own_goal_dir * GameRules.GOAL_LINE_Z - threat_pos.z
-	var ice_to_gate: float = sqrt(threat_pos.x * threat_pos.x + dz * dz) \
-			- AIZoneCoverage.HOUSE_TOP_DEPTH_M
-	return maxf(ladder_m, minf(ladder_m + cushion_m, ice_to_gate))
+	var ice_to_finish: float = sqrt(threat_pos.x * threat_pos.x + dz * dz) \
+			- RETREAT_FINISH_M
+	return maxf(ladder_m, minf(ladder_m + cushion_m, ice_to_finish))
 
 
 # The ground the threat gains on this body while it builds to his speed, both
 # driving flat out down `ap.dir_net` (AIStrideRamp.head_start; our opposing
-# momentum braked out first). The race finishes at the HOUSE GATE, so the
-# horizon is his trip there and the head start never exceeds the ice he has
-# left to it.
+# momentum braked out first). The race finishes where a ridden retreat ends
+# (RETREAT_FINISH_M), so the horizon is his trip there and the head start never
+# exceeds the ice he has left to it.
 #
 # Along the line only: lateral momentum is not priced. `threat_peer` -1 (a loose
 # puck) prices a league skater. A carrier is priced at his free top speed — a
@@ -159,13 +162,16 @@ static func _with_cushion(ladder_m: float, cushion_m: float,
 static func ramp_cushion_m(ctx: RoleContext, ap: AICarrierApproach,
 		threat_peer: int) -> float:
 	return head_start_on_me(ctx, ap.dir_net, ap.carrier_vel, ap.net_dist,
-			threat_peer)
+			threat_peer, RETREAT_FINISH_M)
 
 
-# Ends a ridden retreat at the HOUSE GATE for a defender still in front of the
-# carrier he owns — the finish line ramp_cushion_m is priced to. Once he is
-# level with us the floor lifts: a beaten defender has to chase.
-static func set_house_retreat_floor(ctx: RoleContext, ap: AICarrierApproach,
+# Ends a ridden retreat for a defender still in front of the carrier he owns.
+# With a gap he may back off as far as the house gate and no further — inside it,
+# backing off only walks him into his own net. Draped on the carrier — within a
+# stick, or close enough that building to the carrier's pace from here
+# (ramp_cushion_m) ends with him there — he rides him in down to
+# RETREAT_FINISH_M. Once level the floor lifts: a beaten defender has to chase.
+static func set_retreat_floor(ctx: RoleContext, ap: AICarrierApproach,
 		d: RoleDecision) -> void:
 	if d.target_velocity == Vector3.ZERO or ap.dir_net == Vector3.ZERO:
 		return
@@ -173,15 +179,20 @@ static func set_house_retreat_floor(ctx: RoleContext, ap: AICarrierApproach,
 			+ (ctx.self_pos.z - ap.carrier_pos.z) * ap.dir_net.z
 	if depth <= 0.0:
 		return
+	var threat: int = ctx.rush_read.carrier_peer if ctx.rush_read != null else -1
+	var draped: bool = depth - stick_m(ctx) <= ramp_cushion_m(ctx, ap, threat)
 	d.retreat_floor_center = ctx.defending_goal_pos
-	d.retreat_floor_radius_m = AIZoneCoverage.HOUSE_TOP_DEPTH_M
+	d.retreat_floor_radius_m = RETREAT_FINISH_M if draped \
+			else minf(AIZoneCoverage.HOUSE_TOP_DEPTH_M,
+					AIRoleReads.xz_distance(ctx.self_pos, ctx.defending_goal_pos))
 
 
 # ramp_cushion_m's race for any threat: `dir_net` his line to our net,
-# `net_dist` his ice to it. Also what "behind me" means to an offensive station
-# (race_depth_to_net).
+# `net_dist` his ice to it, finishing `finish_m` off the net. Also what "behind
+# me" means to an offensive station (race_depth_to_net), finishing at the gate.
 static func head_start_on_me(ctx: RoleContext, dir_net: Vector3,
-		threat_vel: Vector3, net_dist: float, threat_peer: int) -> float:
+		threat_vel: Vector3, net_dist: float, threat_peer: int,
+		finish_m: float = AIZoneCoverage.HOUSE_TOP_DEPTH_M) -> float:
 	var caps: AISkaterCaps = ctx.caps_by_peer.get(threat_peer) \
 			if threat_peer != -1 else null
 	var lead_vmax: float = caps.max_speed if caps != null \
@@ -191,14 +202,14 @@ static func head_start_on_me(ctx: RoleContext, dir_net: Vector3,
 	var lead_v: float = threat_vel.x * dir_net.x + threat_vel.z * dir_net.z
 	var self_v: float = ctx.self_velocity.x * dir_net.x \
 			+ ctx.self_velocity.z * dir_net.z
-	var ice_to_gate: float = net_dist - AIZoneCoverage.HOUSE_TOP_DEPTH_M
-	if ice_to_gate <= 0.0:
+	var ice_to_finish: float = net_dist - finish_m
+	if ice_to_finish <= 0.0:
 		return 0.0
 	var horizon: float = AIStrideRamp.time_to_cover(
-			maxf(lead_v, 0.0), ice_to_gate, lead_vmax, lead_accel)
+			maxf(lead_v, 0.0), ice_to_finish, lead_vmax, lead_accel)
 	return minf(AIStrideRamp.head_start(lead_v, lead_vmax, lead_accel,
 			self_v, ctx.self_max_speed, ctx.self_max_accel,
-			AIArrival.REVERSAL_BRAKE_DECEL_M_S2, horizon), ice_to_gate)
+			AIArrival.REVERSAL_BRAKE_DECEL_M_S2, horizon), ice_to_finish)
 
 
 # An attacker's distance from our net less the ground he gains on us while we

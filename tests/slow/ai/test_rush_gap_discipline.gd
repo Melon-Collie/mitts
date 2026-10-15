@@ -44,12 +44,12 @@ extends GutTest
 # collapsing to under a metre is the visible shape of that: a defender who
 # understands the stand is coming to him does not go and fetch it.
 #
-# The route column has since moved with the gap ladder and the house-gate
-# retreat floor (AIRoleRushD.set_house_retreat_floor), which stops the ride
-# carrying a defender inside the gate while he is still in front of the carrier.
-# It now reads 1.3 m/s at the meet, 4/35 over the lunge bar, 1.8 m mean / 5.2 m
-# worst excursion and 2.44 m of separation: he MEETS the carrier near the gate
-# instead of retreating in front of him, which is a contest, not a lunge.
+# The retreat floor (AIRoleRushD.set_retreat_floor) stops the ride carrying a
+# defender inside the gate with a gap while he is still in front of the carrier,
+# and lets him ride the carrier in once he is draped on him. It reads 0.6 m/s at
+# the meet, 1/35 over the lunge bar, 0.7 m mean / 3.7 m worst excursion and
+# 2.76 m of separation: he MEETS the carrier rather than retreating in front of
+# him, which is a contest, not a lunge.
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 

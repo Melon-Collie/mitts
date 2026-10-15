@@ -210,13 +210,16 @@ func test_a_defender_with_a_trip_to_make_still_arrives_in_shape() -> void:
 # stack against a carrier who simply drives the middle, the pressurer rode a
 # constant ~6 m cushion from the tops of the circles to his own GOAL LINE and
 # never contested anything: you could walk him into his own net by skating at
-# him. The fix is the route's RETREAT FLOOR at the house gate
-# (AIRoleRushD.set_house_retreat_floor): while he is still in front of the
-# carrier, the ride may not carry him inside it.
+# him. The route's RETREAT FLOOR (AIRoleRushD.set_retreat_floor) is what stops
+# that: while he is still in front of the carrier with a gap, the ride may not
+# carry him inside the house gate; draped on the carrier, he rides him in.
 #
 #   Over the 9-start sweep below:              ladder only  →  retreat floor
-#     defender's closest approach to his own net, mean   7.3 m        9.5 m
-#     worst single start                                 4.1 m        7.5 m
+#     defender's closest approach to his own net, mean   7.3 m        8.0 m
+#     worst single start                                 4.1 m        4.8 m
+#
+# The floor's readings sit under the gate because a draped defender rides the
+# carrier in, which is the read rather than a walk-in.
 #
 # The ladder alone settles a defender who starts up-ice at the gate, but one
 # already inside it (the z=-14 and z=-20 rows) rode the carrier further in from

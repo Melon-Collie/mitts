@@ -187,7 +187,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	# own feet, a HOLD, and a hold that rides a man matches his velocity forever.
 	if found:
 		d.target_velocity = AIRoleReads.stand_ride_velocity(ctx)
-		AIRoleRushD.set_house_retreat_floor(ctx, ap, d)
+		AIRoleRushD.set_retreat_floor(ctx, ap, d)
 		# The gap we just sized is ours to hold (RoleDecision.engaged_peer_id).
 		if ctx.snapshot != null and ctx.snapshot.puck_state != null:
 			var pid: int = ctx.snapshot.puck_state.carrier_peer_id

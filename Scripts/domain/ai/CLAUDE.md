@@ -361,15 +361,15 @@ Three things have to be true together, and each is load-bearing:
   it.
 
 A house-gate floor on the STAND is wrong: it only widens the gap past what the
-ladder asks for. The floor belongs on the ROUTE
-(`AIRoleRushD.set_house_retreat_floor`): a defender already inside the gate,
-goal-side of his own stand with the stand coming at him, would otherwise be fed
-the carrier's net-ward velocity and backed into his own crease. The floor caps
-the route's commanded speed toward our net at what the arrival brake could still
-shed before the gate (lateral ride untouched), and only while he is in front of
-the carrier: level or beaten, it lifts and he chases. It is the same finish line
-the retreat race is priced to (below), so the ladder and the route agree on where
-retreating stops and standing him up begins.
+ladder asks for. The floor belongs on the ROUTE (`AIRoleRushD.set_retreat_floor`),
+and it says when a defender may give ice while he is still in front of the
+carrier: with a gap, down to the house gate and no further, because backing off
+inside it only walks him into his own net; draped on the carrier, all the way to
+the crease (`RETREAT_FINISH_M`), riding him. "Draped" is within a stick, or close
+enough that building to the carrier's pace from where he stands ends with him
+there (the ramp cushion, below), so he is at speed when they meet rather than
+reached flat-footed. It caps only the route's speed toward our net (lateral ride
+untouched), and level or beaten it lifts and he chases.
 
 ### Pace enters through the stride ramp, and only there
 
@@ -381,10 +381,12 @@ a standing body against a 9 m/s carrier gives up ~5.5 m, more than the whole
 velocities, his up-ice momentum braked out first), and every ladder reader adds
 it. It is nil for a defender riding the rush at its pace.
 
-The race finishes at the HOUSE GATE, `AIRushRead`'s finish line for the same
-race: the horizon is his trip there, the head start is capped at the ice he has
-left to it, and the cushion never pushes a stand past it (`_with_cushion`) — an
-uncapped cushion walks a defender already home into his own crease.
+The race finishes where a ridden retreat ends (`RETREAT_FINISH_M`, the paint
+plus the crease buffer): the horizon is his trip there, the head start is capped
+at the ice he has left to it, and the cushion never pushes a stand past it
+(`_with_cushion`). RUSH_D1's stand is still held out to the gate
+(`_clamp_to_house`); inside the zone, the pressurer's is not, and the floor above
+is what keeps a stand that deep from becoming a walk into the crease.
 
 The gap-up reads the same race. "His speed advantage is gone" means he is not
 coming at pace AND cannot build it past us (cushion under a stick); pace alone
