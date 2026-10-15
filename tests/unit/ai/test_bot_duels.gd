@@ -75,7 +75,7 @@ func test_container_duel_resolves_with_possession() -> void:
 func test_cornered_carrier_commits_a_maneuver_and_escapes() -> void:
 	# A patient scripted container holds the line to the net while a real
 	# defender pressures from behind — retreat denied, forward contained.
-	# The carrier must burn a COMMITTED maneuver (cut / brake check / deke)
+	# The carrier must burn a COMMITTED maneuver (cut / deke)
 	# and convert it: the puck crosses the container's depth floor still in
 	# team-0 hands, or gets released on net once the lane opens.
 	var duel: RefCounted = DuelHarness.new()
@@ -99,7 +99,7 @@ func test_cornered_carrier_commits_a_maneuver_and_escapes() -> void:
 func test_easy_carrier_never_commits_a_maneuver() -> void:
 	# Control case: the identical corner with an Easy carrier. Easy's closed
 	# protect gate (protects_the_puck = false) shuts the whole committed-
-	# maneuver tier — no cut, no brake check, and especially no deke, ever.
+	# maneuver tier — no cut, and especially no deke, ever.
 	# The naive carry is the tier's defining weakness by design.
 	var duel: RefCounted = DuelHarness.new()
 	duel.add_skater(CARRIER, 0, Vector3(0, 0, -9.0), BotSkillProfile.easy())

@@ -105,7 +105,7 @@ const OPEN_ICE_LOD_PERIOD_MULT: int = 3
 # ENGAGE_RANGE: close enough that the duel is live but the fake still has room to
 # develop — a step beyond the poke trigger's reach. MAX_CLOSING: the deke answers
 # PATIENT containment; above this relative closing speed the pressure is
-# committed and the brake check / seam cut own the moment.
+# committed and the rolled stop / seam cut own the moment.
 const DEKE_ENGAGE_RANGE_M: float = 3.5
 const DEKE_CONTAIN_MAX_CLOSING_M_S: float = 2.0
 
@@ -219,10 +219,6 @@ var forward_puck_clearance: float = AICarrySpace.EVADE_SAFE_MARGIN_M
 # toward the live carry anchor, falling back to max clearance when nothing is
 # safe. Vector3.INF until first computed.
 var evade_seam_world: Vector3 = Vector3.INF
-# Whether a brake check currently beats the seam cut against the live pressure
-# (AICarrySpace.prefers_brake_check). Latched by the state machine's poke-evade
-# trigger to pick the maneuver; protect-tier only.
-var brake_check_favored: bool = false
 # Fake-then-cut deke read (AICarrySpace.deke_cut_side): true when faking one way
 # manufactures a safe cut past the containing defender that doesn't exist right
 # now. The dirs are world-XZ units for the two committed phases, latched by the
@@ -380,7 +376,6 @@ func reset() -> void:
 	protect_gain = 0.0
 	forward_puck_clearance = AICarrySpace.EVADE_SAFE_MARGIN_M
 	evade_seam_world = Vector3.INF
-	brake_check_favored = false
 	deke_go = false
 	deke_fake_dir = Vector2.ZERO
 	deke_cut_dir = Vector2.ZERO
@@ -424,7 +419,7 @@ func _pick_action(ctx: RoleContext) -> void:
 	_pick_commit_phase(ctx, false)
 
 
-# FIRE phase of the compete: opponent lists, the evasion / brake-check / deke /
+# FIRE phase of the compete: opponent lists, the evasion / deke /
 # protect reads, the pass-option cache, and the SHOOT + PASS scoring. Leaves
 # its products in the _phase_* / _shot_sample_* fields (plus the
 # _scratch_* buffers) for _pick_commit_phase.
@@ -448,9 +443,8 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 					_field.opponents, _field.opponent_vels, _field.opponent_caps))
 	# The DIRECTED seam — where to put the puck to get PAST the pressure toward
 	# the live carry anchor (the attacking goal until the first re-eval picks
-	# one). The state machine latches it as the deke direction and the carry search
-	# scores it as a candidate. The anchor is ≤ one re-eval stale, which is fine
-	# for a body-scale step.
+	# one). The state machine's poke-evade latches it as the cut direction. The
+	# anchor is ≤ one re-eval stale, which is fine for a body-scale step.
 	var seam_objective: Vector3 = last_carry_anchor
 	if seam_objective == Vector3.ZERO:
 		seam_objective = attacking_goal
@@ -459,12 +453,6 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 			_field.opponents, _field.opponent_vels,
 			ctx.self_handle_reach, _field.opponent_caps)
 	evade_seam_world = directed_seam
-	# Gated with the other protect-tier reads: the brake check is taught puck
-	# skill.
-	brake_check_favored = ctx.protects_the_puck \
-			and AICarrySpace.prefers_brake_check(
-					cur_puck_pos, ctx.self_velocity, directed_seam,
-					_field.opponents, _field.opponent_vels, _field.opponent_caps)
 
 	# Fake-then-cut deke read: find the PATIENT container — the nearest opponent
 	# inside the duel range, ahead on the objective line, with small relative

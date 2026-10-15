@@ -2293,7 +2293,7 @@ func test_patient_container_arms_the_deke_read() -> void:
 
 func test_no_deke_read_against_a_committed_charger() -> void:
 	# Same spot, but the defender is charging in hard — committed pressure is
-	# the brake check / seam's moment, not a fake's (he's already biting).
+	# the rolled stop / seam cut's moment, not a fake's (he's already biting).
 	var self_pos := Vector3(0.0, 0.0, -14.0)
 	var skaters: Array = [
 			[1, TEAM_ID, self_pos],

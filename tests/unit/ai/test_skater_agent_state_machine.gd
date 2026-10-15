@@ -1473,28 +1473,32 @@ func test_poke_evade_fires_driving_at_a_stationary_defender() -> void:
 
 
 func test_poke_evade_never_triggers_without_a_usable_maneuver() -> void:
-	# No seam read (Easy's closed protect gate / seam not computed) and no brake
-	# read → the poke-evade must not trigger at all: there is no blind fallback
+	# No seam read (Easy's closed protect gate / seam not computed) → the
+	# poke-evade must not trigger at all: there is no blind fallback
 	# cut, and the window + cooldown are only spent on a committed move.
 	var snap := _poke_snap(Vector3(0, 0, -6), Vector3(0, 0, -3.5), Vector3.ZERO)
-	# sm._carrier.evade_seam_world stays INF and brake_check_favored false.
+	# sm._carrier.evade_seam_world stays INF.
 	var input := InputState.new()
 	sm._poke_evade_modulate_steering(input, snap, Vector3.ZERO)
-	assert_eq(sm._poke_evade.active_ticks, 0, "no seam + no brake read → no evade")
+	assert_eq(sm._poke_evade.active_ticks, 0, "no seam → no evade")
 	assert_eq(sm._poke_evade.cooldown_ticks, 0, "no cooldown burned on a non-maneuver")
 
 
-func test_poke_evade_brake_check_triggers_without_a_seam() -> void:
-	# A brake read alone is a usable maneuver: the brake check needs no cut
-	# direction (it steers by the carry anchor on exit), so it triggers even
-	# when the seam is underfoot/unusable — and it presses the real brake key.
+func test_poke_evade_stands_down_for_the_rolled_stop() -> void:
+	# The carry already priced the stop against this pressure: a cut toward the
+	# seam would override the move the carrier chose, so no window opens and the
+	# rolled brake reaches the input untouched.
 	var snap := _poke_snap(Vector3(0, 0, -6), Vector3(0, 0, -3.5), Vector3.ZERO)
-	sm._carrier.brake_check_favored = true
-	sm._last_carry_anchor = Vector3(0, 0, -8)
+	sm._carrier.evade_seam_world = Vector3(2.0, 0.0, -1.0)
+	sm._carrier.carry_move = AICarryRollout.Move.BRAKE
 	var input := InputState.new()
+	input.brake = true
 	sm._poke_evade_modulate_steering(input, snap, Vector3.ZERO)
-	assert_gt(sm._poke_evade.active_ticks, 0, "brake read alone triggers the maneuver")
-	assert_true(input.brake, "the brake check presses the real brake key")
+	assert_eq(sm._poke_evade.active_ticks, 0, "no evade window over a rolled stop")
+	assert_true(input.brake, "the rolled brake is what the carrier skates")
+	sm._carrier.carry_move = AICarryRollout.Move.STRAIGHT
+	sm._poke_evade_modulate_steering(input, snap, Vector3.ZERO)
+	assert_gt(sm._poke_evade.active_ticks, 0, "the same pressure on a forward move cuts")
 
 
 # Builds the standard poke-trigger scene: self carrying at `self_vel`, one

@@ -169,9 +169,8 @@ var deke_fired: bool = false
 # (|closing| > the contain cap), and the cut + speed genuinely beats a lone
 # defender — so expect most duels to resolve via evades_by_peer, not dekes.
 var dekes_by_peer: Dictionary = {}
-# peer_id -> true once ANY committed evade window fired (cut / brake check /
-# deke). Easy's closed protect gate means it never commits one — the live
-# tier-gate control.
+# peer_id -> true once ANY committed evade window fired (cut / deke). Easy's
+# closed protect gate means it never commits one — the live tier-gate control.
 var evades_by_peer: Dictionary = {}
 var strips: int = 0
 # One entry per fired release: { "tick": int, "peer": int } — pass/shot

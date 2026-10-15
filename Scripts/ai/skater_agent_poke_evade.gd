@@ -4,8 +4,7 @@ extends RefCounted
 const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 
 # Poke-evade: when an opponent's blade reaches poke range from the front, commit
-# for a brief window to a full-thrust CUT toward the directed seam, or — when the
-# carrier's re-eval read the braked hold as better — a BRAKE CHECK, so the poke
+# for a brief window to a full-thrust CUT toward the directed seam, so the poke
 # timed for our current trajectory swings through empty ice. Front-hemisphere
 # only: a defender chasing from behind closes faster on a sideways cut.
 const POKE_EVADE_TRIGGER_REACH_M: float = 2.5
@@ -23,11 +22,6 @@ const POKE_EVADE_COOLDOWN_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 2   # ~5
 # blind-perpendicular fallback: without a seam read (always, on Easy's closed
 # protect gate) there is no deke.
 const POKE_EVADE_SEAM_MIN_DIST_M: float = 0.75
-# BRAKE-CHECK window: the brake is held for the evasion horizon the maneuver was
-# priced over (AICarrySpace.EVADE_HORIZON_S). The exit needs no window: a beaten
-# man drops out of the threat-gated repel, so anchor attraction bursts past him.
-const POKE_EVADE_BRAKE_TICKS: int = int(
-		AICarrySpace.EVADE_HORIZON_S * _PhysicsConstants.PHYSICS_TICK)   # ~400 ms
 
 # FAKE-THEN-CUT deke windows, in ticks, derived from AICarrySpace.DEKE_FAKE_S /
 # DEKE_CUT_S so the gesture performed is the one the eval priced. The cooldown is
@@ -38,8 +32,7 @@ const DEKE_CUT_TICKS: int = int(
 		AICarrySpace.DEKE_CUT_S * _PhysicsConstants.PHYSICS_TICK)
 const DEKE_COOLDOWN_TICKS: int = _PhysicsConstants.PHYSICS_TICK   # ~1 s
 
-# One carrier's discrete poke-evade: the committed cut, brake check or
-# fake-then-cut deke, and the carry cursor that sells the deke. Owns the window
+# One carrier's discrete poke-evade: the committed cut or fake-then-cut deke, and the carry cursor that sells the deke. Owns the window
 # and what it latched; the carrier's read and the bot's knobs come in per call.
 # Public so tests can stage a window; the agent itself only calls methods.
 
@@ -51,12 +44,8 @@ var active_ticks: int = 0
 var cooldown_ticks: int = 0
 # Cut direction LATCHED at trigger toward the carrier's directed evasion seam —
 # re-reading it per tick would spiral as our own velocity rotates mid-cut.
-# Non-zero whenever a CUT window is active; ZERO otherwise, including a BRAKE
-# window (which steers by the carry anchor).
+# Non-zero whenever a CUT window is active; ZERO otherwise.
 var cut_seam_dir: Vector2 = Vector2.ZERO
-# Maneuver LATCHED at trigger: TRUE = BRAKE CHECK, FALSE = the cut. From the
-# carrier's brake_check_favored read.
-var braking: bool = false
 # Maneuver LATCHED at trigger: the FAKE-THEN-CUT deke. Phase splits on the
 # remaining active ticks (fake while > DEKE_CUT_TICKS, then the cut); both
 # directions latched from the carrier's manufactured-opening read at trigger
@@ -77,7 +66,6 @@ func reset() -> void:
 	active_ticks = 0
 	cooldown_ticks = 0
 	cut_seam_dir = Vector2.ZERO
-	braking = false
 	deking = false
 	deke_fake_dir = Vector2.ZERO
 	deke_cut_dir = Vector2.ZERO
@@ -85,8 +73,9 @@ func reset() -> void:
 
 # Poke-evade (see the POKE_EVADE_* constants): overrides steering for a brief
 # committed window — a CUT toward the carrier's directed evasion seam (latched
-# at trigger, _seam_cut_direction; no seam, no cut), a BRAKE CHECK when the
-# carrier's re-eval favours it, or the FAKE-THEN-CUT deke.
+# at trigger, _seam_cut_direction; no seam, no cut) or the FAKE-THEN-CUT deke.
+# A stop is not one of them: the carrier's rolled carry prices BRAKE against the
+# same pressure, and when it picked it the evade stands down so the stop plays.
 #
 # Lifecycle: while active, drive the maneuver and count down, then start the
 # cooldown; during the cooldown, normal steering; otherwise scan for a trigger.
@@ -96,26 +85,24 @@ func reset() -> void:
 # POKE_EVADE_TRIGGER_REACH_M of our puck, in our FRONT hemisphere by velocity;
 # RELATIVE closing ≥ POKE_EVADE_MIN_CLOSING_VEL_M_S — the carrier driving at a
 # waiting defender counts.
-# `carrier` is the bot's AIRoleCarrier, read for its published evasion read;
-# `carry_anchor` the live carry anchor (a brake check's exit);
-# `upright_lateral_accel` what the bot's edges can turn; the window counts down by
+# `carrier` is the bot's AIRoleCarrier, read for its published evasion read and
+# rolled move; `upright_lateral_accel` what the bot's edges can turn; the window counts down by
 # `dispatch_period_ticks`, the span one call covers.
 func modulate(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
-		carrier: AIRoleCarrier, protects_the_puck: bool, carry_anchor: Vector3,
+		carrier: AIRoleCarrier, protects_the_puck: bool,
 		upright_lateral_accel: float, dispatch_period_ticks: int) -> void:
 	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 	if self_state == null:
 		return
 	var vel_xz := Vector2(self_state.velocity.x, self_state.velocity.z)
 	if active_ticks > 0:
-		_drive(input, self_pos, vel_xz, carry_anchor, upright_lateral_accel)
+		_drive(input, vel_xz, upright_lateral_accel)
 		# Decrement by the dispatch span: the window is sized in physics ticks.
 		active_ticks -= dispatch_period_ticks
 		if active_ticks <= 0:
 			active_ticks = 0
 			cooldown_ticks = DEKE_COOLDOWN_TICKS \
 					if deking else POKE_EVADE_COOLDOWN_TICKS
-			braking = false
 			deking = false
 		return
 	if cooldown_ticks > 0:
@@ -126,7 +113,7 @@ func modulate(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		# Too slow for the cut (it reads as a wiggle), but the standstill duel
 		# against a patient container is the deke's home.
 		if carrier.deke_go:
-			_start_deke(input, self_pos, vel_xz, carrier, carry_anchor, upright_lateral_accel)
+			_start_deke(input, vel_xz, carrier, upright_lateral_accel)
 		return
 	var forward: Vector2 = vel_xz / speed
 	# Same carried-puck point the stickhandle uses.
@@ -168,24 +155,23 @@ func modulate(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		# register as a poke, so the deke commits here when the carrier's
 		# re-eval says a fake would manufacture an opening.
 		if carrier.deke_go:
-			_start_deke(input, self_pos, vel_xz, carrier, carry_anchor, upright_lateral_accel)
+			_start_deke(input, vel_xz, carrier, upright_lateral_accel)
 		return
-	# Maneuver pick, latched for the window: a BRAKE CHECK against committed
-	# pressure; else the deke against patient pressure; else the cut toward
-	# the seam. No usable maneuver means no trigger: the window and cooldown
-	# are only spent on a committed move.
-	var brake_check: bool = carrier.brake_check_favored
-	if not brake_check and carrier.deke_go:
-		_start_deke(input, self_pos, vel_xz, carrier, carry_anchor, upright_lateral_accel)
+	# Maneuver pick, latched for the window: the rolled stop the carry already
+	# chose; else the deke against patient pressure; else the cut toward the
+	# seam. No usable maneuver means no trigger: the window and cooldown are
+	# only spent on a committed move.
+	if carrier.carry_move == AICarryRollout.Move.BRAKE:
+		return
+	if carrier.deke_go:
+		_start_deke(input, vel_xz, carrier, upright_lateral_accel)
 		return
 	var cut_dir: Vector2 = _seam_cut_direction(self_pos, carrier, protects_the_puck)
-	if cut_dir == Vector2.ZERO and not brake_check:
+	if cut_dir == Vector2.ZERO:
 		return
-	braking = brake_check
 	cut_seam_dir = cut_dir
-	active_ticks = POKE_EVADE_BRAKE_TICKS if brake_check \
-			else POKE_EVADE_ACTIVE_TICKS
-	_drive(input, self_pos, vel_xz, carry_anchor, upright_lateral_accel)
+	active_ticks = POKE_EVADE_ACTIVE_TICKS
+	_drive(input, vel_xz, upright_lateral_accel)
 
 
 # The cut direction: toward the carrier's DIRECTED evasion seam (from the last
@@ -210,37 +196,26 @@ func _seam_cut_direction(self_pos: Vector3, carrier: AIRoleCarrier,
 # phases; the drive below splits them on the remaining ticks. Directions come
 # from the carrier's manufactured-opening read (same axis frame as the eval,
 # so the gesture performed is the gesture priced).
-func _start_deke(input: InputState, self_pos: Vector3, vel_xz: Vector2,
-		carrier: AIRoleCarrier, carry_anchor: Vector3, upright_lateral_accel: float) -> void:
+func _start_deke(input: InputState, vel_xz: Vector2, carrier: AIRoleCarrier,
+		upright_lateral_accel: float) -> void:
 	deking = true
 	deke_fake_dir = carrier.deke_fake_dir
 	deke_cut_dir = carrier.deke_cut_dir
 	cut_seam_dir = Vector2.ZERO
 	active_ticks = DEKE_FAKE_TICKS + DEKE_CUT_TICKS
-	_drive(input, self_pos, vel_xz, carry_anchor, upright_lateral_accel)
+	_drive(input, vel_xz, upright_lateral_accel)
 
 
 # One active-window tick of the committed maneuver. DEKE: thrust the fake side,
-# then across to the cut side (the cursor follows — mouse_target). BRAKE
-# CHECK: the real brake key with move_vector on the exit direction (the live
-# carry anchor), the brake-pivot's input shape. CUT: the latched seam direction.
-# Both cuts dig in the stance when the upright edges can't turn onto them inside
+# then across to the cut side (the cursor follows — mouse_target). CUT: the
+# latched seam direction. Both cuts dig in the stance when the upright edges can't turn onto them inside
 # their window (AISteering.stance_cuts_onto).
-func _drive(input: InputState, self_pos: Vector3, vel_xz: Vector2, carry_anchor: Vector3,
-		upright_lateral_accel: float) -> void:
+func _drive(input: InputState, vel_xz: Vector2, upright_lateral_accel: float) -> void:
 	if deking:
 		var cutting: bool = active_ticks <= DEKE_CUT_TICKS
 		input.move_vector = deke_cut_dir if cutting else deke_fake_dir
 		input.stance_held = cutting and AISteering.stance_cuts_onto(
 				deke_cut_dir, vel_xz, upright_lateral_accel, AICarrySpace.DEKE_CUT_S)
-		return
-	if braking:
-		input.brake = true
-		input.stance_held = false
-		var exit := Vector2(carry_anchor.x - self_pos.x,
-				carry_anchor.z - self_pos.z)
-		if exit.length_squared() > 0.01:
-			input.move_vector = exit.normalized()
 		return
 	input.move_vector = cut_seam_dir
 	input.stance_held = AISteering.stance_cuts_onto(cut_seam_dir, vel_xz,

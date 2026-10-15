@@ -338,7 +338,8 @@ every steered route reads it, short of a pivot. `stance_cuts_onto` asks the same
 of a committed cut with no anchor (the deke's cut phase, the poke-evade cut):
 can the upright edges turn onto it inside the maneuver's window. Both stand
 down below `turn_accel × grip / max_turn_rate`, where the turn is rate-bound and
-doubling the grip turns no faster. The brake check stays a pure stop. Low-speed
+doubling the grip turns no faster. A carrier's stop (the carry's rolled BRAKE)
+stays a pure stop. Low-speed
 mirroring is not modelled: the stance's sideways shuffle only exists below
 `GRIP_MIN_SPEED` (0.5 m/s), too narrow a band to hold a read on.
 

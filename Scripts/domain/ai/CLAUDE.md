@@ -499,8 +499,8 @@ takes the whole class down and every static call on it from every file at once.
 - `action_scoring.gd` (`AIActionScoring`) holds the shot and pass reads on the
   value seam, the xG stat, position value, dumping and turnover pricing.
 - `carry_space.gd` (`AICarrySpace`) holds the carrier's room to operate:
-  reachable-set evasion, the safety maps, the crossing sample, controlled space,
-  the brake check and the fake-then-cut deke.
+  reachable-set evasion, the safety maps, the crossing sample, controlled space
+  and the fake-then-cut deke.
 
 Both evaluators read the leaves and never each other.
 `test_scoring_split_stays_acyclic.gd` holds that. A primitive both need goes in
@@ -572,21 +572,22 @@ remains.
     the puck on the back hip against any checker in front — on neither a shot nor
     a pass. A beaten / behind man is filtered out (`PROTECT_SCREEN_BEHIND_M`), so
     the carrier squares up the instant it clears its man.
-  - **The poke-evade moment** picks between three committed maneuvers: a **brake
-    check** (`prefers_brake_check`, `brake_stop_point`) against COMMITTED
-    pressure, when the checker's sweep flies past the stopped puck; a
-    **fake-then-cut deke** (`deke_cut_side`) against PATIENT containment, which
-    runs the reachable-set model against the defender's post-bite state and fires
-    only when the cut side is covered now but clear after the bite (so an agile
-    defender bites harder, and *can* be deked); and the **cut** latched toward the
-    directed seam. The deke executes as a committed window (fake ~0.3 s, cut
+  - **The poke-evade moment** picks between two committed maneuvers, after the
+    rolled carry: when the carry search already chose its **BRAKE** move (the
+    stop that lets a committed checker's sweep fly past, priced by the same
+    rollout as every other input), the evade stands down and the stop plays.
+    Otherwise a **fake-then-cut deke** (`deke_cut_side`) against PATIENT
+    containment, which runs the reachable-set model against the defender's
+    post-bite state and fires only when the cut side is covered now but clear
+    after the bite (so an agile defender bites harder, and *can* be deked); else
+    the **cut** latched toward the directed seam. The deke executes as a committed window (fake ~0.3 s, cut
     ~0.2 s — the durations the eval priced), triggered both off imminent pokes
     and by a **containment trigger**, since a patient container never closes fast
     enough to register as a poke.
   - The carry mouse is clamped a blade-length inside the boards
     (`CARRY_BLADE_WALL_MARGIN_M`): a target at the kickplate slams the stick into
     the wall and knocks the puck loose.
-  - Seam / protect / brake reads are the `protects_the_puck` cognition gate
+  - Seam / protect / deke reads are the `protects_the_puck` cognition gate
     (Easy carries naively presented so a newcomer's poke-check works).
 
 - **Pass lanes** (`lane_clear`) — reach-vs-flight-time reachability: a defender

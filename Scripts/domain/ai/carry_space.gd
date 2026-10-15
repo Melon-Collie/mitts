@@ -1,8 +1,8 @@
 class_name AICarrySpace
 
 # How much room a carrier has to operate, and what he can do with it:
-# reachable-set evasion, the safety maps, the crossing sample, controlled space,
-# the brake check and the fake-then-cut deke. It reads the arrival clock and its
+# reachable-set evasion, the safety maps, the crossing sample, controlled space
+# and the fake-then-cut deke. It reads the arrival clock and its
 # reference speeds from AIArrival and the net test from AINetObstacle, and never
 # AIActionScoring (test_scoring_split_stays_acyclic.gd).
 
@@ -226,39 +226,6 @@ static func transit_clearance_to_safety(clearance: float) -> float:
 const CARRY_LUNGE_WINDOW_S: float = EVADE_HORIZON_S
 
 
-# Worst reachable clearance along a carry from→to reached at `arrival_time`.
-# Samples the mid-point and the destination (each at its own time, defenders
-# momentum-projected) and returns the tightest — so a carry that ends in a seam
-# but threads a defender mid-route is still penalised. from == to gives the
-# static hold read (is this spot clear over the window).
-# `apply_escape` turns on reach_clearance's escape-speed gate (see that doc): a
-# defender the carrier is out-skating along this carry can't sustain a strip. The
-# carry direction and pace come from (from, to, arrival_time) — the carrier drives
-# from→to at exactly that pace.
-static func carry_clearance(from: Vector3, to: Vector3, arrival_time: float,
-		opponents: Array[Vector3], opponent_vels: Array[Vector3],
-		opponent_caps: Array = [], apply_escape: bool = false) -> float:
-	var carry_dir := Vector2.ZERO
-	var carry_speed: float = 0.0
-	if apply_escape and arrival_time > 0.0:
-		var dx: float = to.x - from.x
-		var dz: float = to.z - from.z
-		var dist: float = sqrt(dx * dx + dz * dz)
-		if dist > 0.001:
-			carry_dir = Vector2(dx / dist, dz / dist)
-			carry_speed = dist / arrival_time
-	# MID sample: full-window pursuit (the en-route gauntlet — see
-	# CARRY_LUNGE_WINDOW_S). END sample: pursuit bounded to the arrival
-	# lunge — the carrier is established and protecting there.
-	var c_mid: float = reach_clearance(
-			from.lerp(to, 0.5), arrival_time * 0.5, opponents, opponent_vels,
-			opponent_caps, -1.0, carry_dir, carry_speed)
-	var c_end: float = reach_clearance(to, arrival_time, opponents, opponent_vels,
-			opponent_caps, minf(arrival_time, CARRY_LUNGE_WINDOW_S),
-			carry_dir, carry_speed)
-	return minf(c_mid, c_end)
-
-
 # ── Crossing sample: the meeting-strip band ──────────────────────────────────
 # The mid/end samples can straddle a defender the carry path MEETS between
 # them — a pinch wall just past `from`, a forechecker met in the first
@@ -370,8 +337,8 @@ static func carry_crossing_keep(from: Vector3, to: Vector3, arrival_time: float,
 # (transit band), the END sample a dwelling one (the carrier arrives there),
 # a stand (from == to) dwells at both, and each defender the path MEETS
 # between the fixed samples contributes the measured crossing band
-# (carry_crossing_keep). Never clearance_to_safety(carry_clearance(...)): that
-# forces one map onto both regimes.
+# (carry_crossing_keep). Never one map over the worst of both samples: that
+# forces the dwell band onto a puck in transit.
 static func carry_safety(from: Vector3, to: Vector3, arrival_time: float,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		opponent_caps: Array = [], apply_escape: bool = false) -> float:
@@ -781,66 +748,8 @@ static func _best_clear_point(proj_x: float, proj_z: float, env: float,
 	return best
 
 
-# ── Brake check (the committed stop that lets the checker fly by) ────────────
-# A brake check is the third answer to pressure, next to the cut and the
-# shield: kill all speed so the defender's momentum carries his reach PAST the
-# puck, then re-accelerate into the lane he vacated. It is exactly the
-# reachable-set model run against a DIFFERENT own-body plan: braked, the puck
-# ends at the physical stop point instead of riding downrange to where his poke
-# is timed. Worth it only when that braked hold reads meaningfully clearer than
-# the cut (killing momentum is a real cost the cut doesn't pay), which is the
-# compare `prefers_brake_check` runs.
-
-# How hard the real brake key decelerates the body (m/s²). A local const rather
-# than a read of AISteering's, so the dependency stays one-way: steering reads
-# the evasion consts here, never the reverse.
-const BRAKE_DECEL_M_S2: float = 10.0
-
-# The braked-hold read must itself be genuinely safe — the same blade-of-air
-# standard the directed seam applies — AND beat the cut by a real margin.
-# The margin is tactical, not evaluated: braking surrenders all momentum
-# (re-acceleration to top speed takes ~a second), so a marginally clearer stop
-# isn't worth planting your feet for. Roughly one more blade of air.
-const BRAKE_CHECK_MARGIN_M: float = GameRules.DEFAULT_BLADE_LENGTH_M
-
-
-# Where the puck comes to rest if the carrier slams the brake NOW: the current
-# spot plus the physical stopping distance v²/(2·decel) along the velocity.
-static func brake_stop_point(puck_pos: Vector3, carrier_vel: Vector3) -> Vector3:
-	var v_xz := Vector2(carrier_vel.x, carrier_vel.z)
-	var speed: float = v_xz.length()
-	if speed < 0.001:
-		return puck_pos
-	var stop_dist: float = speed * speed / (2.0 * BRAKE_DECEL_M_S2)
-	var inv: float = stop_dist / speed
-	return Vector3(puck_pos.x + v_xz.x * inv, 0.0, puck_pos.z + v_xz.y * inv)
-
-
-# Should the carrier answer this pressure with a brake check instead of the cut
-# toward `cut_seam`? Both maneuvers are priced by the same reachable
-# carry_clearance over the evasion horizon — the brake as the short braking
-# path to the physical stop point (a defender sweeping through it mid-stop is
-# caught by the mid-route sample), the cut as the carry to the seam. TRUE iff
-# the braked hold is genuinely safe (≥ the blade-of-air floor) and clears the
-# cut by BRAKE_CHECK_MARGIN_M. A jockeying defender pacing the carrier stays on
-# him through a brake (his projected reach never leaves), so this self-selects
-# for genuinely committed pressure — the only kind a brake check beats.
-static func prefers_brake_check(
-		puck_pos: Vector3, carrier_vel: Vector3, cut_seam: Vector3,
-		opponents: Array[Vector3], opponent_vels: Array[Vector3],
-		opponent_caps: Array = []) -> bool:
-	var stop: Vector3 = brake_stop_point(puck_pos, carrier_vel)
-	var brake_clear: float = carry_clearance(
-			puck_pos, stop, EVADE_HORIZON_S, opponents, opponent_vels, opponent_caps)
-	if brake_clear < EVADE_SAFE_CLEAR_MIN_M:
-		return false
-	var cut_clear: float = carry_clearance(
-			puck_pos, cut_seam, EVADE_HORIZON_S, opponents, opponent_vels, opponent_caps)
-	return brake_clear > cut_clear + BRAKE_CHECK_MARGIN_M
-
-
 # ── Fake-then-cut deke (manufacturing the opening) ───────────────────────────
-# The seam cut and the brake check only EXPLOIT commitment a defender makes on
+# The seam cut and a rolled stop only EXPLOIT commitment a defender makes on
 # his own — a patient jockey who never commits leaves no clearance to cut into
 # and the duel stalemates. A real deke MANUFACTURES the commitment: sell one
 # side, the defender must match it (gap control), and matching loads him with

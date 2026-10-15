@@ -206,6 +206,13 @@ two-segment input; the poke-evade cut becomes the hard-cut input it already is.
 Each is deleted only once the duels show the rolled version keeps the puck as
 well — `test_bot_duels.gd` is the gate, measured, not assumed.
 
+**Brake check: deleted.** `prefers_brake_check` and the poke-evade's brake
+window are gone; when a stick comes in and the carry's rolled move is BRAKE,
+the evade stands down so the rolled stop plays. Measured over three carrier
+duels plus sixteen checkers charging across the carrier's lane: the hand-coded
+check fired once (the pincer), and every other duel is unchanged — kept 19 of
+19, strips equal; the pincer now cuts instead and gains 6.5 m to 3.3.
+
 ### Then
 
 Shot-currency step 4 (the drive-in priced along the rolled route), and pricing

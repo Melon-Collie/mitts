@@ -21,7 +21,7 @@ passed per call, and only its own fields written.
 | collaborator | owns |
 |---|---|
 | `SkaterAgentSteering` | body steering to an anchor: the field, brake-pivot, arrival brake, stance carve |
-| `SkaterAgentPokeEvade` | the carrier's cut, brake check and fake-then-cut deke |
+| `SkaterAgentPokeEvade` | the carrier's cut and fake-then-cut deke; stands down when the rolled carry chose to stop |
 | `SkaterAgentStickPlay` | the jab / lift reach-in, the tie and its pull, the stick-check button |
 | `SkaterAgentBoardPlay` | holding a pin, the pinned slide, a carrier's answer to a square checker |
 | `SkaterAgentShotBlock` | the shot block and the 2-on-1 dive |

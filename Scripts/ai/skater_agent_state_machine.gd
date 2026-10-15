@@ -98,7 +98,7 @@ const CARRY_BEHIND_NET_LATERAL_M: float = 1.0   # lateral reach past the frame s
 # QUIET HANDS: body facing chases the carry cursor, so a sustained offset becomes
 # body rotation — 0.33 m on the 1.3 m ring is ~±14° of wag; wider turns a threat
 # crossing the line into a twitchy ~44° swing. The big threats belong to the
-# deliberate answers (protect blend, seam deke, brake check). Ring metres —
+# deliberate answers (protect blend, the rolled carry, seam cut, deke). Ring metres —
 # rescale with CARRY_BLADE_AIM_FORWARD_M.
 const STICKHANDLE_THREAT_RADIUS_M: float = 3.0
 const STICKHANDLE_FULL_OFFSET_RADIUS_M: float = 1.5
@@ -1711,7 +1711,7 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 			# Skated through at pace — no arrival brake.
 			_apply_steering(input, snapshot, self_pos, _last_carry_anchor,
 					false, _self_max_speed)
-		# The discrete poke-evade (cut / brake check / deke), only while carrying
+		# The discrete poke-evade (cut / deke), only while carrying
 		# with no intent: a pre-aim has its own steering target.
 		_poke_evade_modulate_steering(input, snapshot, self_pos)
 	elif _intended_action == State.SHOOT_PRESSED:
@@ -2825,7 +2825,7 @@ func _stickhandle_offset(snapshot: WorldSnapshot, self_pos: Vector3, forward_dir
 func _poke_evade_modulate_steering(input: InputState, snapshot: WorldSnapshot,
 		self_pos: Vector3) -> void:
 	_poke_evade.modulate(input, snapshot, self_pos, _carrier, _protects_the_puck,
-			_last_carry_anchor, _upright_lateral_accel(), _dispatch_period_ticks)
+			_upright_lateral_accel(), _dispatch_period_ticks)
 
 
 # The deke's carry-cursor override, or INF when no deke is running.
