@@ -43,7 +43,7 @@ func test_a_keeper_stranded_outside_the_cone_concedes_the_empty_net() -> void:
 	# Point-blank with the goalie stranded past the far post the look is the empty
 	# net. The field reads a keeper that far off his square from its most-beaten
 	# measured cell.
-	pending("the shot field has no measured cell with the keeper stranded past the post")
+	pending("the shot field has no measured cell with the keeper stranded past the post (#787)")
 
 
 # The calibrated values at the reference looks; rewrite with

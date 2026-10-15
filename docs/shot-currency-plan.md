@@ -1,6 +1,7 @@
 # Shot currency — the odds against today's goalie
 
-Status: **agreed design; steps 1–3 done, step 4 next.** The CLAUDE.md
+Status: **agreed design; steps 1–3 done; step 4 waits for hybrid carry**
+(`docs/hybrid-carry-plan.md`), so the drive it prices follows a real route. The CLAUDE.md
 workflow applies: this doc is the plan, deviations get discussed first.
 
 ## Decisions
@@ -178,9 +179,10 @@ deleted; with no keeper replicated the bot shoots flat at the middle.
   calibrated odds: `SHOT_MIN_VALUE` 0.05 / `PASS_MIN_VALUE` 0.02 (giveaway),
   the 0.5 "more likely than not" net-front and lane-play bars (a feed in the
   house reads ~0.95-1.0, a perimeter one ~0-0.1), and the 0.30 reception gate.
-- Known gaps, from the field's measured support: keeper depth is not a feature
-  (today's goalie only stands where he settles), and a keeper stranded past the
-  post reads as his most-beaten measured cell rather than an empty net.
+- Known gaps: keeper depth is not a feature and a keeper stranded past the post
+  reads as his most-beaten measured cell rather than an empty net (#787); one
+  field for every goalie tier (#786); odds priced at the league blade loft
+  (#788).
 
 ### Step 4 — one currency over the whole ice
 
