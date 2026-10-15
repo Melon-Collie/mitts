@@ -610,6 +610,11 @@ remains.
   pushed ONTO the wall surface, because a blade parked on the path line leaves
   the gap the puck squirts through.
 
+- **A pass in flight is still ours.** `AIPossessionState` keeps a fast loose
+  puck with its last carrier's team outside our zone, and the rush read takes
+  the same answer (`AIRushRead.fill`'s `possession_team`): read as a loose puck,
+  our feed to the point is a puck advancing on our net, and the points bailed.
+
 - **Loose-puck retrieval is two reads, not one** (`AILoosePuckChase`).
   - The **election** names exactly one chaser per team: momentum-aware
     intercept, incumbent hysteresis, per-build top-speed caps, and the friction +
@@ -618,7 +623,11 @@ remains.
     rather than the peer-id tie-break. A puck in the AIR is raced from where it
     lands: no point on the path before `AITrajectory.time_until_on_blade_plane`
     is makeable, in the election, the race-lost decline, the chaser's steer and
-    the reach band alike.
+    the reach band alike. A puck coming to a teammate's stick is his in the
+    election too, raced at the puck's own time to his band (`reach_meet_time`,
+    never the passer's own blade as a feed leaves it): a 15 m/s feed steps clean
+    over a receiver between two samples of the body race, and the far point was
+    elected to chase our own pass while it reached its man.
   - The **incidental reach band** (`puck_comes_to_reach`) answers "is this puck
     coming to *me*", which is not the election's business. Losing a race by
     0.3 s is no reason to hold your station while the puck slides past your

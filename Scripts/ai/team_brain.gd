@@ -167,7 +167,7 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 		_prev_recovery[pid] = rush_read.recovery_by_peer[pid]
 	rush_read.fill(snapshot, team_id, _own_goal_z, _team_id_by_peer,
 			_caps_by_peer, _prev_recovery, rule_set != GameRules.RuleSet.OFF,
-			_bot_peers)
+			_bot_peers, _last_carrier_team)
 
 	# Coverage readiness: hold the rush/recovery shape until the backcheck is
 	# home (Scripts/domain/ai/CLAUDE.md → "DZONE is a shape, not a location").

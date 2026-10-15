@@ -786,3 +786,33 @@ func test_the_main_thread_election_never_touches_the_worker_memo() -> void:
 			"res://Scripts/game/ai_coordinator.gd"]:
 		assert_false(FileAccess.get_file_as_string(path).contains("race_trajectory("),
 				"%s runs on the main thread" % path)
+
+
+# ── A feed reaching its man is his ───────────────────────────────────────────
+# A cross-ice feed to the point (team 0 attacking −Z, the feed travelling +Z):
+# the receiver stands on its path stepping into it, the passer has just let it
+# go, the weak-side point is twelve metres off the line.
+const FEED_FROM := Vector3(7.25, 0, -19.87)
+const FEED_VEL := Vector3(-2.34, 0, 14.8)
+
+
+func _feed_states() -> Dictionary:
+	return {
+		100: _skater(Vector3(5.94, 0, -9.51), Vector3(-0.19, 0, -2.06)),   # receiver
+		200: _skater(Vector3(-6.0, 0, -9.29)),                             # far point
+		300: _skater(Vector3(7.53, 0, -20.95)),                            # passer
+	}
+
+
+func test_a_feed_reaching_its_man_elects_him() -> void:
+	# His body cannot be set at a sampled point of a 15 m/s path in time, but the
+	# puck comes to his stick: the race counts that, so nobody else is sent after
+	# a pass that is reaching its man — even an incumbent.
+	assert_eq(AILoosePuckChase.elect(_feed_states(), [100, 200, 300], FEED_FROM,
+			FEED_VEL, 200), 100)
+
+
+func test_the_passer_does_not_own_his_own_feed() -> void:
+	# The feed starts on his blade, leaving: that is not a puck coming to his stick.
+	assert_ne(AILoosePuckChase.elect(_feed_states(), [200, 300], FEED_FROM,
+			FEED_VEL, -1), 300)

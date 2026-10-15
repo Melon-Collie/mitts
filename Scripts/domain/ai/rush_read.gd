@@ -116,7 +116,7 @@ var pressure_eta_s: float = 0.0
 func fill(snapshot: WorldSnapshot, team_id: int, own_goal_z: float,
 		team_id_by_peer: Dictionary, caps_by_peer: Dictionary,
 		prev_recovery: Dictionary, offsides_enforced: bool = true,
-		bot_peers: Dictionary = {}) -> void:
+		bot_peers: Dictionary = {}, possession_team: int = -1) -> void:
 	_reset()
 	if snapshot == null or snapshot.puck_state == null:
 		return
@@ -136,11 +136,20 @@ func fill(snapshot: WorldSnapshot, team_id: int, own_goal_z: float,
 	# does not apply and is left at its inert default.
 	var we_carry: bool = pid_carrier != -1 \
 			and team_id_by_peer.get(pid_carrier, -1) == team_id
+	# A pass in flight is still ours: AIPossessionState's sticky rule
+	# (`possession_team`, its carrier team), a fast loose puck outside our zone
+	# keeping the last carrier's team. Read as a loose puck, our own feed to the
+	# point is a puck advancing on our net — a rush the points retreat from.
+	if pid_carrier == -1 and possession_team == team_id \
+			and own_dir * puck_pos.z <= GameRules.BLUE_LINE_Z:
+		var pv: Vector3 = snapshot.puck_state.velocity
+		we_carry = pv.x * pv.x + pv.z * pv.z >= AIPossessionState.NEUTRAL_PUCK_SPEED_M_S \
+				* AIPossessionState.NEUTRAL_PUCK_SPEED_M_S
 	is_live = true
 	# Possession security (see pressure_eta_s). Only OUR carrier can be "secure";
 	# anything else is already contested by definition.
 	pressure_eta_s = 0.0
-	if we_carry:
+	if we_carry and pid_carrier != -1:
 		pressure_eta_s = _pressure_eta(
 				snapshot, team_id, team_id_by_peer, caps_by_peer,
 				snapshot.skater_states[pid_carrier].position)
