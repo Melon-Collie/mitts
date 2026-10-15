@@ -47,7 +47,8 @@ const _BOARD_COLOR: Color = Color(0.753, 0.847, 0.878, 0.45)
 const _CENTER_LINE_COLOR: Color = Color(0.86, 0.22, 0.22, 0.85)
 const _BLUE_LINE_COLOR: Color = Color(0.30, 0.52, 0.95, 0.85)
 const _GOAL_LINE_COLOR: Color = Color(0.86, 0.22, 0.22, 0.4)
-const _PUCK_FILL: Color = MenuStyle.TEXT_TITLE
+const _PUCK_FILL: Color = Color(0.02, 0.02, 0.02, 1.0)
+const _PUCK_OUTLINE: Color = Color(1.0, 1.0, 1.0, 0.9)
 # Every marker is cut out of the panel by a ring of panel colour rather than
 # drawn over it in black.
 const _MARKER_OUTLINE: Color = MenuStyle.BROADCAST_BG
@@ -64,7 +65,7 @@ const _CREASE_ARC_STEPS: int = 10
 
 const _PLAYER_DOT_RADIUS: float = 4.5
 const _GOALIE_HALF_SIZE: float = 3.25  # goalies draw as squares; shape marks the role
-const _PUCK_DOT_RADIUS: float = 2.25
+const _PUCK_DOT_RADIUS: float = 2.5
 const _FACEOFF_DOT_RADIUS: float = 1.3
 # The local skater's arrowhead, in map pixels from the skater's position.
 const _LOCAL_TIP: float = 7.0
@@ -312,7 +313,7 @@ func _paint_dynamic(ci: Control) -> void:
 
 	if puck != null and is_instance_valid(puck):
 		var ppos: Vector2 = _map_point(puck.global_position.x, puck.global_position.z, flip)
-		ci.draw_circle(ppos, _PUCK_DOT_RADIUS + 1.0, _MARKER_OUTLINE, true, -1.0, true)
+		ci.draw_circle(ppos, _PUCK_DOT_RADIUS + 1.0, _PUCK_OUTLINE, true, -1.0, true)
 		ci.draw_circle(ppos, _PUCK_DOT_RADIUS, _PUCK_FILL, true, -1.0, true)
 
 # Maps a world XZ position into map-local pixels. Base orientation matches the
