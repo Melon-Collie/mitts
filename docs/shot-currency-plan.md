@@ -12,6 +12,15 @@ is the plan, deviations get discussed first.
 - **Rebuild on today's goalie.** `claude/goalie-planner-calibration` (July) is
   the map, not code to port: the keeper has changed since (#782's get-up, #784's
   screen peek). Its findings are summarised in §2.
+- **The model is generated from the goalie, never hand-copied.** The bots read
+  the odds from a table measured off the live `GoalieController`; a goalie change
+  means re-running the generator, and no model code changes — new save
+  mechanics included. A staleness check fails the suite when the goalie's code
+  or tuning has moved since the table was generated.
+- **Placement scatter 0.04 rad** for the currency (about the Normal hand): a
+  decision is made before the release and the keeper's timing at release varies,
+  so a pinhole found at one exact instant is not odds to bank on. It is applied
+  at lookup, so changing it needs no re-measurement.
 - **First shot only.** Rebounds, screens and tips get no credit here; that is
   #785, after the carrier work. Until then a set keeper reads as close to a
   wall, and the bots work to move him before they shoot.
@@ -111,34 +120,57 @@ read, against the measured odds at the same placement scatter. Two ratchets —
 mean |model − truth| and concordance — bank as step 2 improves them. It also
 reports how much of the best odds the planner's own pick keeps.
 
-### Step 2 — make the per-hole model true
+### Step 2 — generate the shot field from the goalie
 
-Fix the model against the table, missing perception first:
+The hand-built reaction model (`open_net_danger`'s cover race, and the mirrored
+constants it needs — `GLOVE_EXTENSION_M`, `GOALIE_BUTTERFLY_DROP_S`,
+`FIVE_GAP_M`, `PAD_SPLAY_HALF_M`, …) is what makes every goalie change a model
+edit, so it is replaced, not repaired. One generator measures two tables off the
+live goalie, in step 1's form (the open set per cell: FLAT / LOW / HIGH × 24
+aims through the bot's own release):
 
-1. the stick's real surface (paddle and shaft, not just the blade);
-2. the hand cover at the pose he actually holds;
-3. phase: the drop's low-seal hump, lateral commitment, the held-windup lean;
-4. the planner's pick, until `picked` ≈ `best`.
+- **SHOT** — release spot × the keeper state the bot sees NOW: set; caught off
+  his square (offset from the arc-square, lateral velocity, stance), sampled by
+  the states feeds and dekes leave him in. Queried with the live read: shooting
+  from the carry, or what a carry candidate arrives at.
+- **FEED** — receiver spot × the pass: how far the keeper must travel between
+  the passer's square and the receiver's (geometry, `goalie_arc_match_x`), the
+  flight time, and one-timer vs catch-and-charge. Queried at the passer's
+  decision, the keeper assumed square on the passer. What he manages over the
+  flight is the goalie's own answer, so `predict_goalie_pos` leaves the feed path.
 
-This changes the defensive reads too (they use the same model), so their
-absolute bars — `NET_FRONT_DANGER_BAR` 0.5, `LANE_PLAY_DANGER_BAR` 0.5,
-`SHOT_RECEPTION_SCORE_GATE` 0.30 — are re-derived here, not left at values
-measured against the old surface.
+It is emitted as a generated GDScript file of constants
+(`Scripts/domain/ai/generated/`), because the domain layer cannot load files.
+`AIShotOdds` queries it: bilinear over spots, a kernel over the continuous state,
+stance matched exactly. The odds are the best aim's goal fraction under the
+reference scatter; the planner aims at that same aim, so execution and value
+cannot disagree.
+
+Checks: the generator stamps a fingerprint of the goalie's sources and tuning,
+and a unit test fails when it no longer matches (regenerate). Step 1's table is
+the held-out set — its feed distances and speeds are not the field's — and
+`test_shot_odds_vs_truth.gd` moves from the per-hole model to the field.
+
+Built small first (a coarse grid, checked against the held-out table), then the
+full grid: ~1–2 hours on four processes, run when the goalie changes.
+
+The defensive reads move with it in step 3, so their absolute bars —
+`NET_FRONT_DANGER_BAR` 0.5, `LANE_PLAY_DANGER_BAR` 0.5,
+`SHOT_RECEPTION_SCORE_GATE` 0.30 — are re-derived there.
 
 ### Step 3 — switch the currency
 
 `AIShotValue.for_release` stays the one entry point; its body becomes the
-per-hole model at the predicted keeper state. Consequences:
+field (`AIShotOdds`). The defensive reads (`score_shoot`, `AIDangerField`) move
+to it too, so offence and defence price a shot the same way. Consequences:
 
 - `SHOT_MIN_VALUE` / `PASS_MIN_VALUE` become bars on real odds and are re-set.
 - `tip_ev` is already on the per-hole scale, so the unit mismatch in the shoot
   compete goes away.
 - `XGBaseline` leaves the bots entirely; it stays for whatever the post-game
   stat decides (open question below).
-- Cost: the per-hole model is dearer than the seam (`score_shoot` ~55 µs vs a
-  whole carry candidate ~180 µs). Measure with `benchmarks/` before and after;
-  the predicted keeper varies per candidate, so the memo cannot simply be
-  reused.
+- Cost: a field lookup should be cheaper than either model it replaces
+  (`score_shoot` ~55 µs); measure with `benchmarks/` before and after.
 
 ### Step 4 — one currency over the whole ice
 
@@ -159,8 +191,3 @@ Fewer total shots until #785 gives rebounds their value.
 - Does the post-game xG stat (`AIActionScoring.expected_goals`) move to the same
   model? It is deliberately shooter-blind and separate today; decide when step 3
   lands.
-- The table's truth is spread by the Hard hand's placement scatter, which is
-  what the currency assumes today. Whether the currency should carry more
-  uncertainty than that — the keeper's reaction varies, a decision is made
-  before the release — is open; the table supports any spread without
-  re-measuring.
