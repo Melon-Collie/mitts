@@ -28,8 +28,9 @@ extends RefCounted
 # from Scenes/Skater.tscn) so nothing pokes through ice, boards, or gear that
 # was tuned around the primitive silhouettes.
 const _TORSO_PROFILE: Array[Vector2] = [
-	Vector2(0.275, 0.192),   # trap line — the shoulder pads' shelf, wide enough to meet the caps
-	Vector2(0.245, 0.218),
+	Vector2(0.275, 0.125),   # collar, around the neck's trapezius flare
+	Vector2(0.255, 0.185),   # trapezius slope over the shoulder pads
+	Vector2(0.215, 0.222),   # shoulder line — the pads' widest, the caps seat into it
 	Vector2(0.130, 0.214),   # chest
 	Vector2(0.000, 0.194),   # waist tuck
 	Vector2(-0.150, 0.204),
@@ -39,7 +40,7 @@ const _TORSO_PROFILE: Array[Vector2] = [
 # Rear (+Z is the back) shift per _TORSO_PROFILE ring — the hockey-butt sway:
 # the seat builds through the lower back and peaks at the hem that drapes
 # over it, while the chest rings stay centered so the belly keeps its line.
-const _TORSO_REAR_SWAY: Array[float] = [0.0, 0.0, 0.0, 0.006, 0.018, 0.028, 0.032]
+const _TORSO_REAR_SWAY: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.006, 0.018, 0.028, 0.032]
 # The pelvis, in the waist's space (y 0 is the trunk's fold pivot, the hip
 # pivots sit at −0.13). It is the seat the torso does NOT carry: the trunk texture
 # rotates the torso bone about that pivot, so at any fold worth seeing the
@@ -145,21 +146,19 @@ const HEAD_RADIUS: float = 0.135
 # _HELMET_RADIUS or the face pokes through the shell at the front equator.
 const _HEAD_FORWARD_M: float = 0.015
 
-# Shoulder cap: an asymmetric deltoid pad. The +Y end — which
-# Skater._orient_shoulder_cap points INTO the trap/chest (away from the arm)
-# — is a blunt, flat-capped base, so the cap merges into the torso
-# silhouette instead of pinching to a pole right where it meets the chest;
-# the −Y end keeps the prolate taper that runs down the arm. Stations are
-# (y, radius, equirect v): the v column preserves the sphere-convention
-# mapping the shoulder-number decal is painted against, with the number band
-# on the full-width equator.
+# Shoulder cap: the pad under the sleeve. Its +Y end (SkaterArmRig points it
+# into the trap) is a blunt base tucked under the torso's trapezius slope; the
+# −Y end stays at the sleeve's radius so the cap flows into the upper arm. The
+# origin is the arm root, so the profile sits below it to continue the
+# neck-to-arm slope. Stations are (y, radius, equirect v), v keeping the sphere
+# mapping the shoulder number paints against, its band on the equator.
 const _SHOULDER_PROFILE: Array[Vector3] = [
-	Vector3(0.075, 0.068, 0.12),   # blunt torso-side base (flat-capped)
-	Vector3(0.045, 0.096, 0.30),
-	Vector3(0.000, 0.105, 0.50),   # equator — the number band
-	Vector3(-0.055, 0.096, 0.68),
+	Vector3(0.050, 0.050, 0.12),   # blunt torso-side base (flat-capped)
+	Vector3(0.025, 0.074, 0.30),
+	Vector3(-0.015, 0.082, 0.50),  # equator — the number band
+	Vector3(-0.060, 0.078, 0.68),
 	Vector3(-0.105, 0.070, 0.85),
-	Vector3(-0.137, 0.030, 1.0),   # arm-side taper
+	Vector3(-0.140, 0.066, 1.0),   # arm-side end, at the sleeve's own radius
 ]
 
 const _KNEE_RADIUS: float = 0.095

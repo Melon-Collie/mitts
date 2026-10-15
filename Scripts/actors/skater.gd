@@ -58,9 +58,9 @@ const _BLADE_CRADLE_CUP_DEG: float = 8.0             # axial twist (handedness-s
 # sits on the OPPOSITE side of the body from the blade: a left-handed shooter
 # (blade on −X) has the top hand on the right shoulder (+X), and vice versa.
 # Matches the ShoulderL/R cap origins in Scenes/Skater.tscn (keep in sync)
-# so the drawn arm roots at the deltoid cap. Sits so the cap's blunt base
-# seats into the trap slope (torso upper-chest x extent ~0.21) with its
-# equator just proud of the jersey.
+# so the drawn arm roots at the deltoid cap. Sits just inside the torso's
+# shoulder line (x extent ~0.23), so the cap's inner half is under the jersey
+# and its outer half reads as the pad.
 var shoulder_offset: float = 0.22
 # Shoulder Y in upper-body-local space. Matches the ShoulderL/R ball centers
 # in the scene (keep in sync) so the drawn arm hangs from the visible

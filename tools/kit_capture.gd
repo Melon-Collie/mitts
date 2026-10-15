@@ -28,10 +28,10 @@ const _PX_PER_M: float = 420.0
 # would bend the texture across that trapezoid.
 const _TUBE_COLUMNS: int = 12
 const _SLEEVE_DROP_DEG: float = 40.0
-# Sleeve root, from the torso's top corner: in from the edge and down from the
-# trap line, so the shoulder cap covers the join.
+# Sleeve root: in from the edge of the torso's shoulder line (its widest ring
+# within _SHOULDER_LINE_SPAN_M of the collar), so the shoulder cap covers the join.
 const _SLEEVE_INSET_M: float = 0.03
-const _SLEEVE_ROOT_DROP_M: float = 0.06
+const _SHOULDER_LINE_SPAN_M: float = 0.10
 # The torso's top cap disk (where a yoke paints) shown as the shoulder band above
 # the trap line, with the collar cut into it — a flat-lay convention, not a
 # measured part.
@@ -237,6 +237,14 @@ static func _lathe_stations(mesh: ArrayMesh, radius_scale: float = 1.0,
 	return out
 
 
+func _shoulder_line() -> Vector3:
+	var best: Vector3 = _torso[0]
+	for s: Vector3 in _torso:
+		if s.x <= _SHOULDER_LINE_SPAN_M and s.y > best.y:
+			best = s
+	return best
+
+
 static func _below_dome(stations: Array[Vector3]) -> Array[Vector3]:
 	var widest: float = 0.0
 	for s: Vector3 in stations:
@@ -350,11 +358,11 @@ func _caption(c: Node2D, at: Vector2, text: String) -> void:
 
 func _draw_jersey(c: Node2D, top_center: Vector2, kit: Dictionary, side: int,
 		u: Vector2, neck_depth_m: float) -> void:
-	var half_top: float = _torso[0].y * 0.5
+	var line: Vector3 = _shoulder_line()
 	var roots: Array[Vector2] = []
 	for dir: float in [-1.0, 1.0]:
-		roots.append(top_center + Vector2(dir * (half_top - _SLEEVE_INSET_M),
-				_SLEEVE_ROOT_DROP_M) * _PX_PER_M)
+		roots.append(top_center + Vector2(dir * (line.y * 0.5 - _SLEEVE_INSET_M),
+				line.x) * _PX_PER_M)
 	for i: int in 2:
 		_draw_sleeve(c, roots[i], -1.0 if i == 0 else 1.0, kit.arms.lower.base, side)
 	_draw_tube(c, top_center, _torso, _jersey_textures[side], u)
