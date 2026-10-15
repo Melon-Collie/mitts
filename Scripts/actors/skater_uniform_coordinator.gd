@@ -232,7 +232,7 @@ func apply_uniform(colors: Dictionary) -> void:
 			SkaterMeshBuilder.UpperBone.BOTTOM_ELBOW, elbow_mat.duplicate())
 
 	# Pants — vertical side stripes (pants stripe pos is U, width is column
-	# thickness; see _make_v_stripes_texture). The thigh carries the hip joint's
+	# thickness; see make_pants_stripes_texture). The thigh carries the hip joint's
 	# dome now, so its stripe runs up over the hip the way a real pant's does;
 	# the knee ball stays solid, since a stripe would ring it.
 	var pants_block: Dictionary = uniform.pants
@@ -356,7 +356,7 @@ func _paint_pants_thigh(surface: int, pants_block: Dictionary, u_offset: float) 
 				UniformPaint.solid(pants_block.base, UniformPaint.ROUGH_NYLON))
 		return
 	var mat: StandardMaterial3D = UniformPaint.textured(
-			_make_v_stripes_texture(pants_block.base, pants_block.stripes), UniformPaint.ROUGH_NYLON)
+			make_pants_stripes_texture(pants_block.base, pants_block.stripes), UniformPaint.ROUGH_NYLON)
 	mat.uv1_offset = Vector3(u_offset, 0.0, 0.0)
 	_skater.set_leg_surface_material(surface, mat)
 
@@ -371,10 +371,11 @@ func _socks_material(socks_block: Dictionary) -> StandardMaterial3D:
 # Builds a (width_px × 4) image of vertical stripe columns. Used by pants:
 # each stripe.pos is the U position of the column center, stripe.width is the
 # column width. The caller's per-thigh uv1_offset.x lands the centered column
-# on the outer face of each leg.
+# on the outer face of each leg. Public static because tools/kit_capture.gd
+# lays the breezers out flat in this same paint.
 const _PANTS_TEX_WIDTH_PX: int = 128
 
-func _make_v_stripes_texture(base: Color, stripes: Array[Dictionary]) -> ImageTexture:
+static func make_pants_stripes_texture(base: Color, stripes: Array[Dictionary]) -> ImageTexture:
 	var img := Image.create(_PANTS_TEX_WIDTH_PX, UniformPaint.STRIPE_TEX_WIDTH_PX, false, Image.FORMAT_RGBA8)
 	img.fill(base)
 	for s: Dictionary in stripes:
