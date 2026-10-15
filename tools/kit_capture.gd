@@ -1,8 +1,8 @@
 extends SceneTree
 
 # Dev visualizer: lays each team's home and away kit out FLAT — jersey front and
-# back with both sleeves and shoulder caps, the breezers, the helmet, the socks —
-# beside a legend of every color and stripe in the kit, and saves one PNG per team. It is
+# back with both sleeves and shoulder caps, the breezers, the helmet, the socks,
+# the gloves — beside a legend of every color and stripe in the kit, and saves one PNG per team. It is
 # for editing data/team_colors.json: change a kit, re-run, look.
 #
 #   .claude/hooks/render-kits.sh                # every team, into ./.preview/kits
@@ -92,6 +92,14 @@ var _arm_radius_m: float = 0.0
 var _cap_half: Vector2 = Vector2.ZERO
 # The helmet as a disc as wide as its shell, between the pants and the socks.
 var _helmet_radius_m: float = 0.0
+# The glove, fingers up, right of the socks: the fist's width and the heights of
+# its back and its fingers (its two surfaces), and the cuff under them.
+var _glove_width_m: float = 0.0
+var _glove_back_m: float = 0.0
+var _glove_fingers_m: float = 0.0
+var _cuff_width_m: float = 0.0
+# Per side, the default glove model's three zone colors (body, fingers, cuff).
+var _glove_colors: Array[PackedColorArray] = [PackedColorArray(), PackedColorArray()]
 
 var _sheet: SubViewport
 var _canvas: Node2D
@@ -149,6 +157,12 @@ func _render() -> void:
 			_pants_textures[side] = SkaterUniformCoordinator.make_pants_stripes_texture(
 					kit.pants.base, kit.pants.stripes)
 			_sock_textures[side] = UniformPaint.h_stripes(kit.socks.base, kit.socks.stripes)
+			var colors: Dictionary = TeamColorRegistry.get_colors(slot, side)
+			_glove_colors[side].clear()
+			for zone: int in GearModelRegistry.GLOVE_ZONE_COUNT:
+				_glove_colors[side].append(GearModelRegistry.glove_color(
+						GearStyleConfig.new().glove_model, zone,
+						colors.gloves, colors.glove_accent, colors.light))
 		_canvas.queue_redraw()
 		# Decal viewports draw first, the sheet samples them a frame later.
 		for _i: int in 4:
@@ -189,7 +203,13 @@ func _measure_parts() -> void:
 	_arm_radius_m = skater.arm_mesh_thickness * 0.5
 	var upper_len: float = skater.upper_arm_length
 	var fore_len: float = skater.forearm_length
+	var hand_r: float = skater.hand_sphere_radius
+	_cuff_width_m = 2.0 * skater.arm_mesh_thickness * 0.6
 	skater.free()
+	var fist: ArrayMesh = SkaterMeshBuilder.shared_glove_fist()
+	_glove_width_m = _surface_bounds(fist, SkaterMeshBuilder.FIST_PART_BACK).size.x * hand_r
+	_glove_back_m = _surface_bounds(fist, SkaterMeshBuilder.FIST_PART_BACK).size.y * hand_r
+	_glove_fingers_m = _surface_bounds(fist, SkaterMeshBuilder.FIST_PART_FINGERS).size.y * hand_r
 
 	_torso = _lathe_stations(SkaterMeshBuilder.shared_torso())
 	_upper_arm = _lathe_stations(SkaterMeshBuilder.shared_arm_bone(), _arm_radius_m, upper_len)
@@ -247,6 +267,14 @@ func _shoulder_line() -> Vector3:
 	return best
 
 
+static func _surface_bounds(mesh: ArrayMesh, surface: int) -> AABB:
+	var verts: PackedVector3Array = mesh.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX]
+	var bounds := AABB(verts[0], Vector3.ZERO)
+	for v: Vector3 in verts:
+		bounds = bounds.expand(v)
+	return bounds
+
+
 static func _below_dome(stations: Array[Vector3]) -> Array[Vector3]:
 	var widest: float = 0.0
 	for s: Vector3 in stations:
@@ -297,6 +325,10 @@ func _decal_viewport(size: Vector2i) -> SubViewport:
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	root.add_child(vp)
 	return vp
+
+
+func _glove_x() -> float:
+	return _back_x() + _JERSEY_HALF_SPAN * 0.72
 
 
 func _helmet_x() -> float:
@@ -352,6 +384,8 @@ func _draw_panel(c: Node2D, top: float, side: int) -> void:
 	var helmet_at := Vector2(_helmet_x(), row2 + 12.0 + _helmet_radius_m * _PX_PER_M)
 	c.draw_circle(helmet_at, _helmet_radius_m * _PX_PER_M, kit.helmet)
 	c.draw_arc(helmet_at, _helmet_radius_m * _PX_PER_M, 0.0, TAU, 48, _EDGE, 1.5, true)
+	_caption(c, Vector2(_glove_x(), row2 - 8.0), "GLOVE")
+	_draw_glove(c, Vector2(_glove_x(), row2 + 14.0), _glove_colors[side])
 	_caption(c, Vector2(_back_x(), row2 - 8.0), "SOCKS")
 	_draw_socks(c, Vector2(_back_x(), row2 + 10.0), _sock_textures[side])
 
@@ -440,6 +474,29 @@ func _draw_pants(c: Node2D, top_center: Vector2, base: Color, tex: Texture2D) ->
 			half * 4.0, _WAISTBAND_M * _PX_PER_M)
 	c.draw_rect(band, base)
 	c.draw_rect(band, _EDGE, false, 1.5)
+
+
+# Fingers at the top, the back of the hand under them with the thumb off its
+# side, the cuff at the bottom, each in its zone's color; creases split the
+# fingers.
+func _draw_glove(c: Node2D, top_center: Vector2, colors: PackedColorArray) -> void:
+	var w: float = _glove_width_m * _PX_PER_M
+	var fingers := Rect2(top_center.x - w * 0.5, top_center.y, w, _glove_fingers_m * _PX_PER_M)
+	var back := Rect2(fingers.position.x, fingers.end.y, w, _glove_back_m * _PX_PER_M)
+	var cuff_w: float = _cuff_width_m * _PX_PER_M
+	var cuff := Rect2(top_center.x - cuff_w * 0.5, back.end.y,
+			cuff_w, SkaterMeshBuilder.CUFF_HEIGHT_M * _PX_PER_M)
+	var thumb := Rect2(back.position.x - w * 0.3, back.position.y + back.size.y * 0.15,
+			w * 0.3, back.size.y * 0.6)
+	for part: Array in [[thumb, colors[GearModelRegistry.GLOVE_BODY]],
+			[fingers, colors[GearModelRegistry.GLOVE_FINGERS]],
+			[back, colors[GearModelRegistry.GLOVE_BODY]],
+			[cuff, colors[GearModelRegistry.GLOVE_CUFF]]]:
+		c.draw_rect(part[0], part[1])
+		c.draw_rect(part[0], _EDGE, false, 1.5)
+	for k: int in range(1, 4):
+		var x: float = fingers.position.x + w * float(k) / 4.0
+		c.draw_line(Vector2(x, fingers.position.y), Vector2(x, fingers.end.y), _EDGE, 1.5)
 
 
 func _draw_socks(c: Node2D, top_center: Vector2, tex: Texture2D) -> void:
