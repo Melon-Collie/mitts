@@ -334,8 +334,9 @@ func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 	if _shot_is_dead_from_here(ctx, pos, from_pos, keeper_vel_x, keeper_pos):
 		return _potential_at(ctx, pos, opps)
 	var shoot_s: float = AIActionScoring.score_shoot_value(
-			pos, ctx.attacking_goal_pos, keeper_pos, opps, keeper_vel_x, false,
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, opponent_caps) * shot_keep
+			pos, ctx.attacking_goal_pos, keeper_pos, opps, keeper_vel_x,
+			AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
+			opponent_caps) * shot_keep
 	return _regime_value(ctx, pos, from_pos, opps, shoot_s)
 
 
