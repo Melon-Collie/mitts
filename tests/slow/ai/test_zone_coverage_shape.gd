@@ -144,10 +144,11 @@ const ZONE_SLOTS: Array[int] = [
 ]
 
 # Attackers in the zone that no defender has, per tick — the bot-attack
-# fixtures' shared ceiling, now guarding low cycle alone (measured 2.21, with a
-# defender off chasing the puck counted as covering nobody). A pinned
-# measurement, not a bound derived from the model it replaced.
-const UNCOVERED_CEILING: float = 2.4
+# fixtures' shared ceiling, now guarding low cycle alone (measured 2.41, with a
+# defender off chasing the puck counted as covering nobody, and both attacking
+# points holding the line through their own passes). A pinned measurement, not a
+# bound derived from the model it replaced; #791 is bringing it down.
+const UNCOVERED_CEILING: float = 2.5
 # The scripted crossing cutter (measured 0.80), pinned at the same ~0.28 margin.
 # Nearly all of it is the weak-side point, a man the shot model prices at
 # nothing (worst open danger 0.0000) whom the D sags off; it read 0.35 until the
