@@ -385,6 +385,7 @@ func reset() -> void:
 	_full_eval_pending = true
 	_settle_arm_pending = true
 	_settle_elapsed_s = 0.0
+	_carry.reset()
 
 
 # Clear just the persistent intent (not last_carry_anchor / debug). Called by

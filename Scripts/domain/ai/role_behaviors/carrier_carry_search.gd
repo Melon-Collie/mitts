@@ -1,13 +1,15 @@
 class_name AICarrierCarrySearch
 extends RefCounted
 
-# The carrier's CARRY: where to take the puck next — the candidate set (the
-# field-derived forward fan, the rear ring, the slot anchor, zone-exit walls,
-# post walkouts, the 5v5 wheel, the directed evasion seam, standing still),
-# each scored on arrival value, the lane and safety of getting there and the
-# pass option it opens, under a two-ply beam. AIRoleCarrier owns one over its
-# AICarrierField, calls forward_space() then search() in the commit phase and
-# reads the result fields; it never writes them.
+# The carrier's CARRY: where to take the puck next. The destination it carries
+# FOR (AICarrierDestinations: the slot, the wide lanes, the zone exits, post
+# walkouts, the 5v5 wheel, regroup) is chosen from the menu with hysteresis; the
+# near candidates — the field-derived forward fan, the rear ring, the directed
+# evasion seam — are oriented on it and compete with it and with standing still.
+# Each is scored on arrival value, the lane and safety of getting there and the
+# pass option it opens, the near ones under a two-ply beam. AIRoleCarrier owns
+# one over its AICarrierField, calls forward_space() then search() in the commit
+# phase and reads the result fields; it never writes them.
 
 var _field: AICarrierField
 
@@ -17,6 +19,13 @@ var _field: AICarrierField
 var value: float = 0.0
 var anchor: Vector3 = Vector3.ZERO
 var raw_value: float = 0.0
+# The destination carried to (AICarrierDestinations.Kind, -1 for none) and where.
+var destination_kind: int = -1
+var destination: Vector3 = Vector3.INF
+
+var _dest := AICarrierDestinations.new()
+# The menu's totals, index-matched to _dest.kinds.
+var _dest_totals: Array[float] = []
 
 
 # ── Attacking blue-line keep-out bands ──────────────────────────────────────
@@ -35,31 +44,10 @@ const OZ_RETREAT_LINE_BUFFER_M: float = GameRules.DEFAULT_STICK_LENGTH_M + 1.0
 # beat-scaled forward radii, and the horizon the space fan is sampled over.
 const CARRY_SEARCH_STEP_M: float = 3.0
 
-# Post-walkout candidates — one just outside each post, a step onto the rink
-# side of the goal line, generated only while the carrier is behind a goal line,
-# where every other route out front crosses the cage and prunes. The lateral
-# clearance is physical: post half-span + a carried body's half-width + blade
-# slop.
-const WALKOUT_POST_CLEARANCE_M: float = 0.9
-const WALKOUT_FRONT_M: float = 0.7
-
-# The WHEEL (5v5 only — breakout plan §B): from behind our own goal line, the
-# carry around the BACK of the cage and out the far half-wall — the escape when
-# the retriever has a step on the chaser. Priced as a two-leg carry through the
-# behind-net apex (_score_wheel_candidate). Exit depth = the top of the low
-# battle ice (the value of AIZoneCoverage.LOW_ZONE_DEPTH_M); apex = the middle
-# of the behind-net alley (cage back + half the gap to the boards).
-const WHEEL_EXIT_UP_ICE_M: float = 8.0
+# The wheel destination is priced as a two-leg carry through the behind-net
+# apex (_score_wheel_candidate): the middle of the behind-net alley, cage back +
+# half the gap to the boards.
 const WHEEL_APEX_CLEARANCE_M: float = 0.75
-
-# Zone-exit wall routes — a long-range carry candidate up each boards lane to
-# just past our own blue line, generated only in our defensive zone. The slot
-# anchor, the only other long-range candidate, runs through center ice where a
-# forecheck sets up, so without these a deep carrier with a clogged middle has
-# only short steps and the backpass. The NZ lead puts the destination across
-# the blue line — a completed exit.
-const CARRY_EXIT_WALL_INSET_M: float = 2.0
-const CARRY_EXIT_NZ_LEAD_M: float = 3.0
 
 # REAR/LATERAL ring angles, relative to the carry direction — the half of the
 # bearing circle the space fan does not span (it looks only ±70°, where the
@@ -168,20 +156,19 @@ func _init(field: AICarrierField) -> void:
 # for the dump's residual test (a pinned carry that will be stripped must read
 # negative). Candidates:
 #   - Stand-still (current position)
+#   - The chosen destination (see AICarrierDestinations), each on the menu
+#     priced in full and the incumbent kept by hysteresis
 #   - Up to 6 field-derived FORWARD candidates: the space fan's best bearings
-#     at two fractions of the planning beat (see CARRY_FIELD_*)
+#     toward the destination at two fractions of the planning beat (see
+#     CARRY_FIELD_*)
 #   - Up to 10 REAR/LATERAL candidates: the five bearings the fan does not
 #     span, each at two fractions of that bearing's OWN beat reach (see
 #     _REAR_ANGLES)
-#   - The OZ slot anchor (long-range "drive at slot")
-#   - Two zone-exit wall routes in our defensive zone (see CARRY_EXIT_*)
-#   - Two post walkouts when behind either goal line (see WALKOUT_*)
 #   - The objective-directed evasion seam
-#   - Two WHEEL exits, 5v5, behind our own goal line (see WHEEL_*)
 #
-# Movement candidates are scored in TWO PASSES (see CARRY_BEAM_WIDTH); a
+# The near candidates are scored in TWO PASSES (see CARRY_BEAM_WIDTH); a
 # candidate whose straight route crosses a net frame prunes (the walkouts are
-# the exempt, around-the-post routes).
+# the exempt, around-the-post routes, and the wheel is priced around the cage).
 #
 # `shoot_now_score` is the top-level SHOOT eval (pre-ping, pre-hysteresis):
 # stand-still's shot branch shares it verbatim — see the stand-still block.
@@ -190,33 +177,12 @@ func search(ctx: RoleContext, shoot_now_score: float,
 	var self_pos: Vector3 = ctx.self_pos
 	_field.holds.configure_from(ctx)
 	var attacking_goal: Vector3 = ctx.attacking_goal_pos
-	var own_goal_dir: float = ctx.own_goal_dir
 	var our_goalie: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
-	var slot_pos: Vector3 = AICarrierField.slot_anchor(own_goal_dir)
-	# Forward = toward the slot; the attacking-goal axis when the bot is on it.
-	var to_slot_x: float = slot_pos.x - self_pos.x
-	var to_slot_z: float = slot_pos.z - self_pos.z
-	var to_slot_len_sq: float = to_slot_x * to_slot_x + to_slot_z * to_slot_z
-	var fwd_x: float
-	var fwd_z: float
-	if to_slot_len_sq < 0.001:
-		fwd_x = 0.0
-		fwd_z = -own_goal_dir
-	else:
-		var inv: float = 1.0 / sqrt(to_slot_len_sq)
-		fwd_x = to_slot_x * inv
-		fwd_z = to_slot_z * inv
-
-	# Stand-still is compared last and wins only if STRICTLY greater than every
-	# movement candidate: resolving carry ties toward movement keeps the bot
-	# from dawdling when slot-drive is the play.
-	var best_pos: Vector3 = self_pos
-	var best_score: float = -INF
+	var behind_net: bool = absf(self_pos.z) > GameRules.GOAL_LINE_Z
 
 	# Stand-still is COMPUTED up front because it doubles as an exact pruning
 	# floor: it always participates in this argmax, so a movement candidate whose
-	# ceiling can't strictly beat stand_total can't affect the outcome. It seeds
-	# the beam's pass-1 prune bound and the wheel's bound.
+	# ceiling can't strictly beat stand_total can't affect the outcome.
 	var stand_score: float = shoot_now_score
 	if not AIActionScoring.in_offensive_zone(self_pos, attacking_goal):
 		var stand_potential: float = AIActionScoring.position_potential(
@@ -234,10 +200,6 @@ func search(ctx: RoleContext, shoot_now_score: float,
 			1.0 - stand_safety, self_pos, our_goalie)
 	var stand_total: float = stand_score * stand_safety - stand_cost
 
-	# ── Pass 1 (beam base): one-ply rows for every legal candidate ───────────
-	# Candidates stay ordered forward-first: the prune bound tightens to the
-	# best one-ply total as rows land (see _beam_prune_bound), so a strong early
-	# spot prunes the tail cheaply.
 	_beam_pos.clear()
 	_beam_total.clear()
 	_beam_dest.clear()
@@ -245,15 +207,54 @@ func search(ctx: RoleContext, shoot_now_score: float,
 	_beam_decay.clear()
 	_beam_safety.clear()
 	_beam_cost.clear()
-	_beam_prune_bound = stand_total
 
-	var behind_net: bool = absf(self_pos.z) > GameRules.GOAL_LINE_Z
+	# ── The destination ─────────────────────────────────────────────────────
+	# Every destination on the menu is priced honestly (no prune bound): the
+	# hysteresis compares totals, and a pruned one has none.
+	_dest.fill(ctx)
+	_dest_totals.clear()
+	for i: int in _dest.kinds.size():
+		_dest_totals.append(_score_destination(ctx, _dest.kinds[i], _dest.spots[i],
+				our_goalie, behind_net))
+	_dest.choose(_dest_totals)
+	destination_kind = _dest.chosen_kind
+	destination = _dest.chosen_spot
+
+	# Stand-still and the destination are always in the argmax, so the best of
+	# them is an exact prune bound for every near candidate. Ties resolve toward
+	# movement (stand-still wins only STRICTLY), which keeps the bot from
+	# dawdling when the destination is the play.
+	var best_pos: Vector3 = self_pos
+	var best_score: float = -INF
+	if destination_kind >= 0:
+		best_pos = destination
+		best_score = _dest.chosen_total
+	_beam_prune_bound = maxf(stand_total, best_score)
+
+	# Forward = toward the destination; toward the slot when there is none, or
+	# the attacking-goal axis when the bot is on it.
+	var aim: Vector3 = destination if destination_kind >= 0 \
+			else AICarrierField.slot_anchor(ctx.own_goal_dir)
+	var to_aim_x: float = aim.x - self_pos.x
+	var to_aim_z: float = aim.z - self_pos.z
+	var to_aim_len_sq: float = to_aim_x * to_aim_x + to_aim_z * to_aim_z
+	var fwd_x: float = 0.0
+	var fwd_z: float = -ctx.own_goal_dir
+	if to_aim_len_sq >= 0.001:
+		var inv: float = 1.0 / sqrt(to_aim_len_sq)
+		fwd_x = to_aim_x * inv
+		fwd_z = to_aim_z * inv
+
+	# ── Pass 1 (beam base): one-ply rows for every near candidate ────────────
+	# Ordered forward-first: the prune bound tightens to the best one-ply total
+	# as rows land (see _beam_prune_bound), so a strong early spot prunes the
+	# tail cheaply.
 
 	# FORWARD candidates — the top CARRY_FIELD_BEARINGS bearings of the space
 	# field's per-bearing profile (_scratch_bearing_control), each at
 	# CARRY_FIELD_RADII fractions of one planning beat of travel at the
 	# carrier's real speed. Ranked by control × forward projection: control
-	# alone would rate a wide-open sideways bearing above a merely-good netward
+	# alone would rate a wide-open sideways bearing above a merely-good forward
 	# one, and the cos is the foreshortening the space aggregate itself uses.
 	# See Scripts/domain/ai/CLAUDE.md → "Field-derived carry candidates".
 	var beat_r: float = clampf(
@@ -316,27 +317,6 @@ func search(ctx: RoleContext, shoot_now_score: float,
 				continue
 			_beam_score_base(ctx, candidate, our_goalie, false)
 
-	# Slot anchor — the long-range candidate, valid from anywhere on the rink.
-	_beam_score_base(ctx, slot_pos, our_goalie, false)
-
-	# Zone-exit wall routes (see CARRY_EXIT_*), only in our own DEFENSIVE ZONE:
-	# never gate on own HALF, because past our blue line the exit target sits
-	# BEHIND the carrier.
-	if own_goal_dir * self_pos.z > GameRules.BLUE_LINE_Z:
-		var exit_x: float = GameRules.RINK_HALF_WIDTH - CARRY_EXIT_WALL_INSET_M
-		var exit_z: float = own_goal_dir * (GameRules.BLUE_LINE_Z - CARRY_EXIT_NZ_LEAD_M)
-		_beam_score_base(ctx, Vector3(exit_x, 0.0, exit_z), our_goalie, false)
-		_beam_score_base(ctx, Vector3(-exit_x, 0.0, exit_z), our_goalie, false)
-
-	# Post walkouts (see WALKOUT_*): one outside each post; EV picks the side.
-	if absf(self_pos.z) > GameRules.GOAL_LINE_Z:
-		var behind_sign: float = signf(self_pos.z)
-		var walk_z: float = behind_sign * (GameRules.GOAL_LINE_Z - WALKOUT_FRONT_M)
-		var walk_x: float = GameRules.NET_HALF_WIDTH + WALKOUT_POST_CLEARANCE_M
-		for side: float in [-1.0, 1.0]:
-			_beam_score_base(
-					ctx, Vector3(side * walk_x, 0.0, walk_z), our_goalie, true)
-
 	# The objective-directed evasion seam (see evade_seam_world): the bot cuts
 	# past a committed defender into the lane he vacates, and it wins only when
 	# that space is worth carrying to.
@@ -360,24 +340,6 @@ func search(ctx: RoleContext, shoot_now_score: float,
 			best_pos = _beam_pos[bi]
 		_beam_total[bi] = -INF   # consumed — next rank takes the next-best row
 
-	# WHEEL exits (see WHEEL_*), only for destinations whose straight route the
-	# cage blocks — a side the straight line reaches is already covered above.
-	# Already a complete two-leg read, so it competes after the beam.
-	if absf(self_pos.z) > GameRules.GOAL_LINE_Z \
-			and ctx.team_size >= 5 and own_goal_dir * self_pos.z > 0.0:
-		var wheel_x: float = GameRules.RINK_HALF_WIDTH - CARRY_EXIT_WALL_INSET_M
-		var wheel_z: float = own_goal_dir \
-				* (GameRules.GOAL_LINE_Z - WHEEL_EXIT_UP_ICE_M)
-		for side: float in [-1.0, 1.0]:
-			var wheel := Vector3(side * wheel_x, 0.0, wheel_z)
-			if not AINetObstacle.carry_path_blocked_by_net(self_pos, wheel):
-				continue
-			var wheel_total: float = _score_wheel_candidate(
-					ctx, wheel, our_goalie, maxf(best_score, stand_total))
-			if wheel_total > best_score:
-				best_score = wheel_total
-				best_pos = wheel
-
 	# Stand-still last, winning only on STRICTLY greater. Its shot branch is the
 	# shoot-now score verbatim because "hold and fire from here" and SHOOT are the
 	# same physical act; priced separately at the CURRENT spot, a mid-cut hold
@@ -394,6 +356,34 @@ func search(ctx: RoleContext, shoot_now_score: float,
 	value = maxf(best_score, 0.0)
 	anchor = best_pos
 	raw_value = best_score
+
+
+# A new possession: the destination is chosen afresh.
+func reset() -> void:
+	_dest.reset()
+	destination_kind = -1
+	destination = Vector3.INF
+
+
+# The full value of carrying to destination `kind` at `spot`, -INF when it
+# cannot be carried to. Scored outside the beam: its row is dropped again.
+func _score_destination(ctx: RoleContext, kind: int, spot: Vector3,
+		our_goalie: Vector3, behind_net: bool) -> float:
+	if AICarrierDestinations.is_wheel(kind):
+		return _score_wheel_candidate(ctx, spot, our_goalie, -INF)
+	if not _candidate_ice_legal(spot, behind_net):
+		return -INF
+	var rows_before: int = _beam_total.size()
+	var total: float = _score_move_candidate(ctx, spot, our_goalie,
+			AICarrierDestinations.is_walkout(kind))
+	_beam_pos.resize(rows_before)
+	_beam_total.resize(rows_before)
+	_beam_dest.resize(rows_before)
+	_beam_lane.resize(rows_before)
+	_beam_decay.resize(rows_before)
+	_beam_safety.resize(rows_before)
+	_beam_cost.resize(rows_before)
+	return total
 
 
 # Pass-1 candidate entry (see CARRY_BEAM_WIDTH): base-score `candidate` into
