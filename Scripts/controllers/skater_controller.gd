@@ -1743,8 +1743,8 @@ func _process_input(input: InputState, delta: float) -> void:
 			if cel_state == SkaterStateMachine.State.SKATING_WITH_PUCK \
 					or cel_state == SkaterStateMachine.State.SKATING_WITHOUT_PUCK:
 				_shot_pose.apply_celebration_pose(1.0 - _celebration_timer / _celebration_total)
-	# Replay too: the next tick's twist follows the stick this leaves
-	# (Scripts/networking/CLAUDE.md).
+	# Replay too: down with block held, nothing re-solves the stick, so the next
+	# tick's twist follows the one this leaves (Scripts/networking/CLAUDE.md).
 	_apply_down_pose()
 
 
