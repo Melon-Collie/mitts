@@ -1674,6 +1674,9 @@ func _process_input(input: InputState, delta: float) -> void:
 
 	var tick_start_velocity: Vector3 = skater.velocity
 	_apply_movement(input, delta)
+	# The frame this tick's IK and twist solve in tilts with the fall: every tick
+	# lays its own, replay included (Scripts/networking/CLAUDE.md).
+	_apply_fall_tilt(knockdown_getup_left())
 	_advance_balance(tick_start_velocity, delta)
 	_pose.apply_velocity_lean(delta)
 	_pose.apply_facing(input, delta)
@@ -1740,20 +1743,9 @@ func _process_input(input: InputState, delta: float) -> void:
 			if cel_state == SkaterStateMachine.State.SKATING_WITH_PUCK \
 					or cel_state == SkaterStateMachine.State.SKATING_WITHOUT_PUCK:
 				_shot_pose.apply_celebration_pose(1.0 - _celebration_timer / _celebration_total)
-		# Knockdown brace: a downed player's arms pull in instead of holding the
-		# dangle the states just placed. Blends the tick's IK result toward the
-		# brace, so the handoff back to live IK through the get-up is continuous
-		# (at blend 0 the pose is exactly what the tick computed). Real ticks
-		# only, like the celebration override above — the wire then carries the
-		# braced pose to spectating machines for free, and blade interactions
-		# are already gated by is_knocked_down so the moved blade feeds nothing.
-		# A diver's stick is the exception: it lies out and still knocks pucks away.
-		if knockdown_timer > 0.0:
-			if skater.is_diving:
-				_apply_dive_layout()
-			else:
-				_apply_knockdown_brace()
-			_apply_getup_hold()
+	# Replay too: the next tick's twist follows the stick this leaves
+	# (Scripts/networking/CLAUDE.md).
+	_apply_down_pose()
 
 
 # Render-rate cosmetic pose pass, registered on the skater and invoked once per
@@ -1810,7 +1802,7 @@ func _apply_knockdown_fall() -> void:
 
 
 # The whole-rig tilt alone; false once upright and level. A pure function of
-# tick state, so the tick may lay it too (a diver's live blade hangs from it).
+# tick state, so the tick lays it too: the gameplay frame hangs from MeshRoot.
 func _apply_fall_tilt(kd_t: float) -> bool:
 	var tilt: float = knockdown_fall_tilt()
 	if tilt == 0.0 and kd_t <= 0.0:
@@ -1904,6 +1896,19 @@ func knockdown_fold_rad() -> float:
 			* KnockdownFallRules.entry_ramp(knockdown_elapsed(), _fall_config())
 
 
+# A downed player's hands over whatever the states placed — the brace, or a
+# diver's stick laid out — handing back to the live IK through the get-up.
+# Anything that re-solves the blade off the cursor while he is down owes this.
+func _apply_down_pose() -> void:
+	if knockdown_timer <= 0.0:
+		return
+	if skater.is_diving:
+		_apply_dive_layout()
+	else:
+		_apply_knockdown_brace()
+	_apply_getup_hold()
+
+
 # The braced-arm targets for a downed player, in upper-body-local space (so they
 # lie down with the tilted rig). The reflex depends on which way the body is
 # going down: face-down (forward fall, local −Z) the arms shoot OUT to catch the
@@ -1921,9 +1926,6 @@ func _apply_dive_layout() -> void:
 			knockdown_elapsed(), kd_t, knockdown_brace_in_seconds)
 	if brace_t <= 0.001:
 		return
-	# The live blade hangs from the tilted rig, so the tilt is laid on the tick
-	# before anything is placed in it, not left to the render pass.
-	_apply_fall_tilt(kd_t)
 	var layout := Vector3(skater.dive_layout.x, 0.0, skater.dive_layout.y)
 	var shoulder: Vector3 = skater.upper_body_to_global(skater.shoulder.position)
 	# The arm reaches down for the ice first and out along it as the body lies,
@@ -2009,7 +2011,6 @@ func _apply_getup_hold() -> void:
 			* KnockdownFallRules.stand_hold(kd_t)
 	if hold <= 0.001:
 		return
-	_apply_fall_tilt(kd_t)
 	var side: float = -1.0 if skater.is_left_handed else 1.0
 	# In the facing's frame, which holds still while down; the shoulders keep
 	# turning after the cursor.
