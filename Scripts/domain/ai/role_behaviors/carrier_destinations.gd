@@ -20,10 +20,10 @@ enum Kind {
 }
 
 # The wide lanes, a body's width plus a stride off the boards. Outside the
-# attacking zone they are the entry, a stride past the blue line; inside it, the
-# half-wall at the faceoff dots.
-const WIDE_LANE_WALL_INSET_M: float = 2.0
-const WIDE_ENTRY_LEAD_M: float = 3.0
+# attacking zone they are the possession read's wall entries (AIPossessionValue),
+# a stride past the blue line; inside it, the half-wall at the faceoff dots.
+const WIDE_LANE_WALL_INSET_M: float = AIPossessionValue.ENTRY_WALL_INSET_M
+const WIDE_ENTRY_LEAD_M: float = AIPossessionValue.ENTRY_LEAD_M
 # Regroup: back to just outside our own blue line on the neutral-zone side —
 # never into our zone — at least a lane in from the boards.
 const REGROUP_LINE_GAP_M: float = 2.0

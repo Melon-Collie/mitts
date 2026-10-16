@@ -2,7 +2,7 @@ class_name AIActionScoring
 
 # Pure-function scoring for on-puck actions: the shot and pass reads on the value
 # seam (AIShotValue — the odds against today's goalie), the xG stat, position
-# value, the turnover and counter-rush costs, and the dump release search. See
+# value, the turnover and counter-rush costs, and the dump races. See
 # Scripts/domain/ai/CLAUDE.md → "Where an evaluator goes".
 
 # Shared read-only empty arrays, so the leaf scorers don't allocate an empty
@@ -18,22 +18,10 @@ const EMPTY_CAPS: Array = []
 
 static func _static_init() -> void:
 	EMPTY_VEC3.make_read_only()
-	var goal := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
-	XG_SLOT_REF = AIShotValue.set_keeper(slot_reference_release(goal), goal)
 
-# The odds of a clean look from the slot ring, head-on, against a set keeper: the
-# situation position_potential reads as 1.0, read through the value seam.
-# It converts an in-zone xG value into position_potential's unit.
-static var XG_SLOT_REF: float = 0.0
-
-# The slot ring (m from the goal): position_potential's closeness peaks here,
-# the realization discount travels to it, and XG_SLOT_REF's reference release
-# sits on it.
+# The slot ring (m from the goal): position_potential's closeness peaks here, and
+# the realization discount travels to it.
 const SLOT_RADIUS_M: float = 6.0
-
-# The clean slot look XG_SLOT_REF is measured from, for the net at `goal`.
-static func slot_reference_release(goal: Vector3) -> Vector3:
-	return Vector3(goal.x, 0.0, goal.z - signf(goal.z) * SLOT_RADIUS_M)
 
 
 # ── The delay discount ───────────────────────────────────────────────────────
@@ -388,10 +376,16 @@ static func chase_recovery(
 		clock_error: bool = false) -> float:
 	if our_chasers.is_empty():
 		return 0.0
-	var our_t: float = _first_arrival(target, our_chasers, our_vels)
+	return arrival_race(target, first_arrival(target, our_chasers, our_vels),
+			opp_chasers, opp_vels, clock_error)
+
+
+# chase_recovery's race for a man of ours who gets to `target` at `our_t`.
+static func arrival_race(target: Vector3, our_t: float, opp_chasers: Array[Vector3],
+		opp_vels: Array[Vector3] = EMPTY_VEC3, clock_error: bool = false) -> float:
 	if opp_chasers.is_empty():
 		return 1.0
-	var opp_t: float = _first_arrival(target, opp_chasers, opp_vels)
+	var opp_t: float = first_arrival(target, opp_chasers, opp_vels)
 	var band: float = CHASE_CONTEST_MARGIN_S
 	if clock_error:
 		band += AIArrival.ERROR_FRAC * minf(maxf(our_t, opp_t), 1e6)
@@ -405,7 +399,7 @@ static func chase_recovery(
 # Exact prune: time_to_arrive only ever ADDS time to `straight_line_distance /
 # cap`, so a chaser whose bound is already beaten cannot win. It matters
 # because the dump searches call this per candidate spot.
-static func _first_arrival(target: Vector3, chasers: Array[Vector3],
+static func first_arrival(target: Vector3, chasers: Array[Vector3],
 		vels: Array[Vector3]) -> float:
 	var has_vels: bool = vels.size() == chasers.size()
 	var vmax: float = maxf(AIArrival.SKATER_REF_SPEED_M_S, AIArrival.MIN_TRAVEL_SPEED_M_S)
@@ -498,14 +492,11 @@ static func threat_surface_pass(
 	return maxf(pass_score, lane * positional)
 
 
-# Expected turnover cost — the defensive half of the carrier's expected-value
-# model: the possession value the OPPONENT gains if we lose the puck at
+# Expected turnover cost on the threat surfaces' scale — the defensive half of
+# an off-puck read: the possession value the OPPONENT gains if we lose the puck at
 # `loss_point`, times the probability of losing it. "Don't turn it over where it
-# hurts" falls out of geometry: small far from our net, large in front of it.
-#
-# `in_xg`: a carrier in the offensive zone, whose gains are odds — the cost is
-# then the opponent's shot through the seam or his possession promise in that
-# unit (Scripts/domain/ai/CLAUDE.md → "One currency").
+# hurts" falls out of geometry: small far from our net, large in front of it. The
+# carrier prices its own turnovers in odds instead (AICarrierField.turnover_cost).
 #
 # `our_defenders` are our skaters (excluding the carrier, who just got beat); they
 # block the opponent's lane and contest his release. Returns 0 when there is no
@@ -516,27 +507,13 @@ static func turnover_cost(
 		our_net: Vector3,
 		our_goalie_pos: Vector3,
 		our_defenders: Array[Vector3],
-		defender_caps: Array = EMPTY_CAPS,
-		in_xg: bool = false) -> float:
+		defender_caps: Array = EMPTY_CAPS) -> float:
 	if not loss_point.is_finite():
 		return 0.0
 	if loss_prob <= 0.0:
 		return 0.0
-	if not in_xg:
-		return loss_prob * threat_surface_shoot(
-				loss_point, our_net, our_goalie_pos, our_defenders, defender_caps)
-	var value: float = position_potential(loss_point, our_net, our_defenders, defender_caps) \
-			* potential_realization_discount(loss_point, our_net) * XG_SLOT_REF
-	# Outside our zone with the keeper home his shot's odds do not beat that
-	# promise (test_in_xg_turnover_shot_skip_is_safe), so the shot read is
-	# skipped there. Our keeper is taken square and set on the loss point.
-	if in_offensive_zone(loss_point, our_net) \
-			or our_goalie_pos.distance_to(our_net) >= THREAT_GOALIE_HOME_M:
-		value = maxf(value, score_shoot_value(
-				loss_point, our_net, Vector3.INF, our_defenders, 0.0,
-				AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-				defender_caps))
-	return loss_prob * value
+	return loss_prob * threat_surface_shoot(
+			loss_point, our_net, our_goalie_pos, our_defenders, defender_caps)
 
 
 # ── Transition-exposure: the counter-rush cost (5v5-gated at the caller) ─────
@@ -670,8 +647,8 @@ static func counter_rush_cost(
 	# pass a -1-seeded scratch (`threat_by_cover`, indexed by cover count,
 	# reset each compete).
 	#
-	# `in_xg` prices the shot through the value seam (see turnover_cost). A memo
-	# must only ever hold one unit.
+	# `in_xg` is the carrier's unit: the shot against a keeper set and square,
+	# as AIPossessionValue prices every shot. A memo must only ever hold one.
 	var cover_count: int = _scratch_counter_cover.size()
 	var threat: float = -1.0
 	if cover_count < threat_by_cover.size():
@@ -688,38 +665,11 @@ static func counter_rush_cost(
 	return loss_prob * threat * delay_discount(t_counter)
 
 
-# ── Dump-in search ──────────────────────────────────────────────────────────
-# A dump-in is a RELEASE, not a spot: it searches launches and reads where each
-# one actually comes to rest (AITrajectory.puck_release_landing), scored on
-# winning the race there (solve_dump_in). See Scripts/domain/ai/CLAUDE.md →
-# "The dump-in is a searched RELEASE".
-
-# Launch bearings tried per dump-in, as offsets from the aim axis. Spread wide
-# enough to include the steep bank into the near boards, and dense enough that
-# the corner it wraps into is resolved. Each bearing is one closed-form landing
-# solve.
-const DUMP_SEARCH_BEARINGS_RAD: Array = [
-	-1.20, -0.90, -0.60, -0.30, 0.0, 0.30, 0.60, 0.90, 1.20,
-]
-
-# Launch PACES tried per bearing on the dump-IN, as fractions of the release
-# band between the soft-touch floor (DEFAULT_WRISTER_POWER_MIN_M_S) and the pace
-# the dumper can produce. Bearing alone cannot place a dump: every pace the bot
-# can make out-slides the rink several times over, so where it stops is set by
-# what the boards take out of it.
-#
-# Spaced toward the SOFT end, because runout goes as v² and the metre-scale
-# placement lives in the first few m/s above the floor. Full pace stays as the
-# last rung: a hard rim around the boards can genuinely beat a defender to the
-# corner.
-const DUMP_SEARCH_PACE_FRACS: Array = [0.0, 0.18, 0.45, 1.0]
-
-
+# ── Dump-in races ───────────────────────────────────────────────────────────
 # Does the KEEPER get to a puck resting at `spot` before our nearest chaser?
 #
 # `chase_recovery` sees skaters only, so without this a dump dying on the
-# doorstep — the spot `position_potential` rates highest — reads as a free
-# recovery.
+# doorstep — the richest spot to win — reads as a free recovery.
 #
 # A straight race at both sides' real builds, no margin term: he leaves the
 # paint at a keeper's pace (GOALIE_PUCK_PLAY_*, ramped from rest) and collects
@@ -742,58 +692,3 @@ static func keeper_collects_first(spot: Vector3, keeper_pos: Vector3,
 			<= ours / maxf(chaser_speed, 0.001)
 
 
-# The NZ dump-in: search launches — BEARING x PACE — and take the one whose
-# RESTING spot we are most likely to win. `out_landing` receives the chosen spot
-# and `max_launch_speed` bounds the pace ladder (the top of the dumper's own
-# release band); the returned velocity's LENGTH is the pace that won, which the
-# release then has to actually fire at. Caller-owned out-param, so the search
-# allocates nothing on the compete path.
-#
-# Scored as recovery × realized position value — the same realization
-# discount every other future-value read pays, so the search optimizes what
-# AICarrierDumpSearch prices. No icing branch: this dump is only offered past the red
-# line, and icing requires a release from our own half.
-static func solve_dump_in(origin: Vector3, attacking_goal: Vector3,
-		max_launch_speed: float,
-		our_chasers: Array[Vector3], opp_chasers: Array[Vector3],
-		keeper_pos: Vector3, out_landing: Array[Vector3],
-		our_vels: Array[Vector3] = EMPTY_VEC3,
-		opp_vels: Array[Vector3] = EMPTY_VEC3) -> Vector3:
-	var goal_dir: float = signf(attacking_goal.z)
-	var axis := Vector3(0.0, 0.0, goal_dir)
-	var best_vel: Vector3 = Vector3.ZERO
-	var best_score: float = -INF
-	var best_spot: Vector3 = origin
-	var floor_speed: float = GameRules.DEFAULT_WRISTER_POWER_MIN_M_S
-	var band: float = maxf(max_launch_speed - floor_speed, 0.0)
-	for offset: float in DUMP_SEARCH_BEARINGS_RAD:
-		var dir: Vector3 = axis.rotated(Vector3.UP, offset)
-		for frac: float in DUMP_SEARCH_PACE_FRACS:
-			var vel: Vector3 = dir * (floor_speed + band * frac)
-			var spot: Vector3 = AITrajectory.puck_release_landing(origin, vel)
-			# A dump-in that does not get the puck deeper than we already are is
-			# not a dump-in; it is a giveaway in the neutral zone.
-			if goal_dir * (spot.z - origin.z) <= 0.0:
-				continue
-			# A puck the keeper collects is not a dump-in at any pace.
-			if keeper_collects_first(spot, keeper_pos, our_chasers,
-					AIArrival.SKATER_REF_SPEED_M_S):
-				continue
-			# What the spot is worth if we win it OUTRIGHT — the candidate's
-			# ceiling, since recovery is a probability. A spot whose ceiling
-			# already loses cannot win: an exact prune that keeps the pace
-			# ladder affordable.
-			var ceiling: float = position_potential(spot, attacking_goal, opp_chasers) \
-					* potential_realization_discount(spot, attacking_goal)
-			if ceiling <= best_score:
-				continue
-			# The race is run to where the puck STOPS.
-			var recovery: float = chase_recovery(
-					spot, our_chasers, opp_chasers, our_vels, opp_vels)
-			var score: float = recovery * ceiling
-			if score > best_score:
-				best_score = score
-				best_spot = spot
-				best_vel = vel
-	out_landing[0] = best_spot
-	return best_vel

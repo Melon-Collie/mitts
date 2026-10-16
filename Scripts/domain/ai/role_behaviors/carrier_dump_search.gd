@@ -11,6 +11,26 @@ extends RefCounted
 # point keeps the puck parallel to the searched launch line.
 const DUMP_AIM_STANDOFF_M: float = 20.0
 
+# Launch bearings tried per dump-in, as offsets from the aim axis. Spread wide
+# enough to include the steep bank into the near boards, and dense enough that
+# the corner it wraps into is resolved. Each bearing is one closed-form landing
+# solve.
+const DUMP_SEARCH_BEARINGS_RAD: Array = [
+	-1.20, -0.90, -0.60, -0.30, 0.0, 0.30, 0.60, 0.90, 1.20,
+]
+
+# Launch PACES tried per bearing on the dump-IN, as fractions of the release
+# band between the soft-touch floor (DEFAULT_WRISTER_POWER_MIN_M_S) and the pace
+# the dumper can produce. Bearing alone cannot place a dump: every pace the bot
+# can make out-slides the rink several times over, so where it stops is set by
+# what the boards take out of it.
+#
+# Spaced toward the SOFT end, because runout goes as v² and the metre-scale
+# placement lives in the first few m/s above the floor. Full pace stays as the
+# last rung: a hard rim around the boards can genuinely beat a defender to the
+# corner.
+const DUMP_SEARCH_PACE_FRACS: Array = [0.0, 0.18, 0.45, 1.0]
+
 var _field: AICarrierField
 
 # ── Result (valid after search) ──────────────────────────────────────────────
@@ -26,9 +46,14 @@ var launch_speed: float = 0.0
 # velocities index-matched — the race is run on ETAs, so momentum is part of it.
 var _chasers: Array[Vector3] = []
 var _chaser_vels: Array[Vector3] = []
-# Out-param for the dump-in landing solve, so it returns its resting spot
-# without allocating.
+# Where the dump-in landing solve leaves its resting spot.
 var _landing: Array[Vector3] = [Vector3.ZERO]
+# The landing solve's candidates, index-matched: launch, resting spot, our first
+# arrival there, the race to it.
+var _cand_vel: Array[Vector3] = []
+var _cand_spot: Array[Vector3] = []
+var _cand_t: Array[float] = []
+var _cand_race: Array[float] = []
 
 
 func _init(field: AICarrierField) -> void:
@@ -43,7 +68,7 @@ func _concession(ctx: RoleContext, spot: Vector3, our_goalie: Vector3) -> Vector
 			spot, _chasers, _field.opponents,
 			_chaser_vels, _field.opponent_vels)
 	var loss: float = 1.0 - recovery
-	var concede: float = _field.turnover_cost(ctx, spot, loss, our_goalie)
+	var concede: float = _field.turnover_cost(spot, loss)
 	concede += _field.counter_exposure_cost(ctx, spot, loss, ctx.self_pos, our_goalie)
 	return Vector2(concede, recovery)
 
@@ -84,10 +109,8 @@ func search(ctx: RoleContext, our_goalie: Vector3) -> void:
 	# The pace ladder runs over the dumper's OWN release band, and the winning
 	# pace must be carried out to the release (dump_launch_speed), or the
 	# placement is lost.
-	var launch: Vector3 = AIActionScoring.solve_dump_in(
-			origin, attacking_goal, ctx.self_wrister_shot_speed,
-			_chasers, _field.opponents, AICarrierField.goalie_now(ctx),
-			_landing, _chaser_vels, _field.opponent_vels)
+	var launch: Vector3 = _solve_dump_in(origin, attacking_goal, ctx.self_wrister_shot_speed,
+			AICarrierField.goalie_now(ctx))
 	if launch == Vector3.ZERO:
 		return
 	var rest: Vector3 = _landing[0]
@@ -106,17 +129,71 @@ func search(ctx: RoleContext, our_goalie: Vector3) -> void:
 				_field.our_defenders[i], rest, _field.our_defender_vels[i],
 				mate_caps.max_speed if mate_caps != null else ctx.self_max_speed,
 				mate_caps.max_accel if mate_caps != null else ctx.self_max_accel))
-	# The resting spot's potential is FUTURE value, so it pays the realization
-	# discount like every other future-value read; XG_SLOT_REF puts it in the odds
-	# the carry and the pass are priced in.
-	var gain: float = priced.y * AIActionScoring.position_potential(
-			rest, attacking_goal, _field.opponents) \
-			* AIActionScoring.delay_discount(chase_t) \
-			* AIActionScoring.potential_realization_discount(rest, attacking_goal) \
-			* AIActionScoring.XG_SLOT_REF
+	var gain: float = priced.y * _field.our_possession_at(rest, chase_t)
 
 	value = gain - priced.x
 	# Down the launch line, not at the resting spot (see DUMP_AIM_STANDOFF_M).
 	aim = origin + launch.normalized() * DUMP_AIM_STANDOFF_M
 	settle = rest
 	launch_speed = launch.length()
+
+
+# The NZ dump-in: search launches — BEARING x PACE — and take the one whose
+# RESTING spot is worth most to win: the race there × our possession of it, our
+# first man there when he arrives. Leaves the spot in _landing[0]; the returned
+# velocity's LENGTH is the pace that won, which the release then has to actually
+# fire at. `max_launch_speed` bounds the pace ladder (the top of the dumper's own
+# release band). No icing branch: this dump is only offered past the red line,
+# and icing requires a release from our own half.
+#
+# Every landing is raced first and priced best race first: possession is at most
+# 1, so once a spot is worth more than the next race, nothing after it can win
+# (exact).
+func _solve_dump_in(origin: Vector3, attacking_goal: Vector3, max_launch_speed: float,
+		keeper_pos: Vector3) -> Vector3:
+	var goal_dir: float = signf(attacking_goal.z)
+	var axis := Vector3(0.0, 0.0, goal_dir)
+	var floor_speed: float = GameRules.DEFAULT_WRISTER_POWER_MIN_M_S
+	var band: float = maxf(max_launch_speed - floor_speed, 0.0)
+	_cand_vel.clear()
+	_cand_spot.clear()
+	_cand_t.clear()
+	_cand_race.clear()
+	for offset: float in DUMP_SEARCH_BEARINGS_RAD:
+		var dir: Vector3 = axis.rotated(Vector3.UP, offset)
+		for frac: float in DUMP_SEARCH_PACE_FRACS:
+			var vel: Vector3 = dir * (floor_speed + band * frac)
+			var spot: Vector3 = AITrajectory.puck_release_landing(origin, vel)
+			# A dump-in that does not get the puck deeper than we already are is
+			# not a dump-in; it is a giveaway in the neutral zone.
+			if goal_dir * (spot.z - origin.z) <= 0.0:
+				continue
+			if AIActionScoring.keeper_collects_first(spot, keeper_pos, _chasers,
+					AIArrival.SKATER_REF_SPEED_M_S):
+				continue
+			var our_t: float = AIActionScoring.first_arrival(spot, _chasers, _chaser_vels)
+			_cand_vel.append(vel)
+			_cand_spot.append(spot)
+			_cand_t.append(our_t)
+			_cand_race.append(AIActionScoring.arrival_race(
+					spot, our_t, _field.opponents, _field.opponent_vels))
+	var best_vel: Vector3 = Vector3.ZERO
+	var best_score: float = -INF
+	var best_spot: Vector3 = origin
+	while true:
+		var k: int = -1
+		var race: float = -INF
+		for i: int in _cand_race.size():
+			if _cand_race[i] > race:
+				race = _cand_race[i]
+				k = i
+		if k == -1 or race <= best_score:
+			break
+		_cand_race[k] = -INF
+		var score: float = race * _field.our_possession_at(_cand_spot[k], _cand_t[k])
+		if score > best_score:
+			best_score = score
+			best_spot = _cand_spot[k]
+			best_vel = _cand_vel[k]
+	_landing[0] = best_spot
+	return best_vel

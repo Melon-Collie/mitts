@@ -1558,44 +1558,6 @@ const HANDS_READY := Vector4(-0.42, 0.90, 0.44, 0.86)
 const HANDS_BUTTERFLY := Vector4(-0.42, 0.44, 0.44, 0.44)
 
 
-# XG_SLOT_REF converts in-zone xG into position_potential's unit, so it must be
-# the xG of exactly the situation potential reads as 1.0: the slot ring, head-on,
-# nothing in the way, a set keeper.
-func test_xg_slot_ref_is_the_xg_of_potentials_full_value() -> void:
-	var goal := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
-	var ring := Vector3(0.0, 0.0, goal.z + AIActionScoring.SLOT_RADIUS_M)
-	var none: Array[Vector3] = []
-	assert_almost_eq(AIActionScoring.position_potential(ring, goal, none), 1.0, 0.0001,
-			"potential's full value sits on the slot ring, head-on")
-	assert_almost_eq(AIActionScoring.potential_realization_discount(ring, goal), 1.0, 0.0001,
-			"…with nothing left to skate")
-	assert_almost_eq(AIActionScoring.XG_SLOT_REF,
-			AIShotValue.set_keeper(ring, goal), 0.000001,
-			"XG_SLOT_REF is the odds of that same look")
-	assert_gt(AIActionScoring.XG_SLOT_REF, 0.0, "and it is a real number, not the unset default")
-
-
-# turnover_cost(in_xg) skips the opponent's shot read outside our zone with the
-# keeper home, on the claim that his shot xG beats his possession promise there by
-# no more than a long shot's logistic tail. Swept across both outer zones.
-func test_in_xg_turnover_shot_skip_is_safe() -> void:
-	var our_net := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z)
-	var keeper := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z - 0.8)
-	var none: Array[Vector3] = []
-	var worst: float = INF
-	for x: float in [-11.0, -6.0, 0.0, 6.0, 11.0]:
-		for z: float in [-24.0, -15.0, -6.0, 0.0, 4.0, 7.0]:
-			var spot := Vector3(x, 0.0, z)
-			var promise: float = AIActionScoring.position_potential(spot, our_net, none) \
-					* AIActionScoring.potential_realization_discount(spot, our_net) \
-					* AIActionScoring.XG_SLOT_REF
-			var shot: float = AIActionScoring.score_shoot_value(spot, our_net, keeper, none)
-			worst = minf(worst, promise - shot)
-	assert_gte(worst, -0.005,
-			"outside our zone the shot never beats the possession promise by more than a tail (worst %.4f)"
-			% worst)
-
-
 func test_lane_clear_accurate_never_reads_a_crossing_defender_clearer() -> void:
 	# The guided floor: a defender on the lane at any crossing speed reads no
 	# clearer than standing still, where the ballistic coast lets a fast one

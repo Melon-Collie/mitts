@@ -1197,7 +1197,7 @@ func test_pass_pressed_charged_releases_after_windup() -> void:
 
 
 func test_pass_pressed_dump_in_charges_flat_at_the_searched_pace() -> void:
-	# A dump-in's depth IS its pace (AIActionScoring.solve_dump_in searches it),
+	# A dump-in's depth IS its pace (AICarrierDumpSearch._solve_dump_in searches it),
 	# and the one-tick quick release only fires at the fixed quick-pass pace —
 	# which out-slides the rink twice over. So the dump-in takes the charged
 	# wrister at _dump_launch_speed, FLAT: a charged release normalizes

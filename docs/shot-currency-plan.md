@@ -221,9 +221,18 @@ the breakout's turnovers were that harness. On it, with the lane reading the
 forechecker's stick: entries 25 carried of 30, 3 turnovers, 43 passes (18
 backward); breakouts 19 exits of 20, 1 turnover.
 
-Still on the potential scale: the off-ball readers — threat reads, the
-turnover cost's opponent value, the outlet and breakout spot choice — and the
-dump's resting-spot gain (converted by `XG_SLOT_REF`).
+**What a spot is worth, for either side.** The leaf the search stops at, the
+opponent's value of a puck we lose, and the dump's resting spot are one read,
+`AIPossessionValue`: in the zone the better of the shot and one straight drive
+in (kept as far as the carry-safety read allows), outside it the best entry
+(its shot or drive) × the skate there × the race to it. `XG_SLOT_REF` is gone.
+On the entry drill: carried entries 25 → 27, turnovers 3 → 2, passes before
+entry 43 → 24 (backward 18 → 8); the breakout drill is level (18 exits of 20,
+1 turnover). Its cost is the dump search, a residual that prices each landing's
+possession (~0.3 ms each, a few ms when it runs).
+
+Still on the potential scale: the off-ball readers — the defence's threat
+surfaces and the outlet and breakout spot choice.
 
 ## 5. What players should see
 

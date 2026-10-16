@@ -569,32 +569,22 @@ func _decided_twice(ctx: RoleContext) -> AIRoleCarrier:
 
 # ─── turnover costs are priced in the unit of the gains ─────────────────────
 
-func test_a_turnover_is_priced_in_the_odds_wherever_the_carrier_is() -> void:
-	# A strip at the top of the zone hands the opponent a puck 40 m from our net.
-	# The carrier's gains are odds of scoring on both sides of the line, so that
-	# loss is the opponent's possession promise in odds for a carrier inside the
-	# zone and outside it alike. Same loss point, two carriers.
+func test_a_turnover_costs_the_opponents_possession_wherever_the_carrier_is() -> void:
+	# The carrier's gains are odds of scoring on both sides of the line, so a loss
+	# costs the opponent's possession of the spot in odds (AIPossessionValue), for
+	# a carrier inside the zone and outside it alike. Same loss point, two carriers.
 	var loss := Vector3(-4.0, 0.0, -15.0)
-	var our_net := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z)
-	var defenders: Array[Vector3] = []
-	var expected_xg: float = AIActionScoring.position_potential(loss, our_net, defenders) \
-			* AIActionScoring.potential_realization_discount(loss, our_net) \
-			* AIActionScoring.XG_SLOT_REF
-	var our_goalie := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z - 0.8)
-
-	var inside := Vector3(-8.0, 0.0, -16.0)
 	var c_in := AIRoleCarrier.new()
-	var ctx_in: RoleContext = _make_ctx(inside)
-	c_in.decide(ctx_in)
-	assert_almost_eq(c_in._field.turnover_cost(ctx_in, loss, 1.0, our_goalie), expected_xg, 0.0005,
-			"in the zone a turnover costs the opponent's xG promise there")
-
-	var outside := Vector3(-8.0, 0.0, -4.0)
+	c_in.decide(_make_ctx(Vector3(-8.0, 0.0, -16.0)))
 	var c_out := AIRoleCarrier.new()
-	var ctx_out: RoleContext = _make_ctx(outside)
-	c_out.decide(ctx_out)
-	assert_almost_eq(c_out._field.turnover_cost(ctx_out, loss, 1.0, our_goalie), expected_xg,
-			0.0005, "outside the zone the same loss costs the same odds")
+	c_out.decide(_make_ctx(Vector3(-8.0, 0.0, -4.0)))
+	var cost_in: float = c_in._field.turnover_cost(loss, 1.0)
+	assert_almost_eq(cost_in, c_in._field._theirs.at(loss), 1e-6,
+			"a certain loss costs the opponent's possession there")
+	assert_almost_eq(c_out._field.turnover_cost(loss, 1.0), cost_in, 1e-6,
+			"the same loss costs the same odds from outside the zone")
+	assert_gt(c_in._field.turnover_cost(Vector3(-4.0, 0.0, 20.0), 1.0), cost_in,
+			"and more in front of our net")
 
 
 # ─── drive-in: a clear drive is credited all the way ────────────────────────
@@ -905,7 +895,7 @@ func test_staggered_carrier_holds_instead_of_firing() -> void:
 
 # The same pressured breakout, with the outlet in two different situations. Both
 # are legal passes that fire on tick one with no doubt; the strong one is worth
-# ~11x PASS_MIN_VALUE, the weak one ~1.9x — inside the 1x-2.5x window Normal's
+# ~11x PASS_MIN_VALUE, the weak one ~1.5x — inside the 1x-2.5x window Normal's
 # doubt holds. The weak outlet is still sliding into the far corner, so his drive
 # up the wall has to brake that out first. Both values are future value and so
 # scale with READ_VALIDITY_TAU_S against a fixed bar: re-size the weak one's depth
@@ -922,7 +912,7 @@ func _settle_skaters(self_pos: Vector3, outlet: Vector3) -> Array:
 
 
 const _STRONG_OUTLET := Vector3(11, 0, 11)    # open, up the strong wall
-const _MARGINAL_OUTLET := Vector3(9.5, 0, 22.5)  # deep below the dot
+const _MARGINAL_OUTLET := Vector3(9.0, 0, 22.0)  # deep below the dot
 const _MARGINAL_OUTLET_VEL := Vector3(0, 0, 6.0)   # …and still sliding into the corner
 
 
@@ -1431,6 +1421,7 @@ func test_developing_outlet_beats_the_spot_it_left_behind() -> void:
 	# outlet against one parked at the same spot but projected nowhere.
 	var moving := _ctx_with_outlet(Vector3(9, 0, 16), Vector3(1.2, 0, -6))
 	var carrier := AIRoleCarrier.new()
+	carrier._field.fill(moving)
 	carrier._field.teammate_ids = [2]
 	var developing: float = carrier._pass.developing_feed_value(moving)
 
@@ -1442,6 +1433,7 @@ func test_developing_outlet_beats_the_spot_it_left_behind() -> void:
 			dist, moving.self_wrister_shot_speed, moving.pass_speed_scale)
 	var flight_t: float = clampf(dist / pass_speed, 0.0, AICarrierPassSearch.PASS_LEAD_MAX_S)
 	var carrier2 := AIRoleCarrier.new()
+	carrier2._field.fill(moving)
 	carrier2._field.teammate_ids = [2]
 	var stay_put: float = carrier2._pass._pass_ev(
 			moving, spot, pass_speed, flight_t,
@@ -2644,9 +2636,9 @@ func test_carrier_calibration_snapshot() -> void:
 			_shoot_now(_DEAD_SLOT, _DEAD_SLOT) / _shoot_now(_MID_BAND, _MID_BAND))
 	var spun_ctx: RoleContext = _spun_off_ctx()
 	var spun: AIRoleCarrier = _decided(spun_ctx)
-	snap.record("spun-off carrier, cut-in over standing still: move-score ratio",
+	snap.record("spun-off carrier, cut-in over standing still: move-score margin",
 			_move_score(spun, spun_ctx, _spun_off_cut_in())
-			/ _move_score(spun, spun_ctx, _SPUN_OFF_SPOT))
+			- _move_score(spun, spun_ctx, _SPUN_OFF_SPOT))
 	snap.record("tight-wall pinch, open man wide: carry anchor", _spot(pinch.last_carry_anchor))
 	snap.record("spun-off carrier, beaten man behind: pick", _pick(spun))
 	_record_feed_and_pressure_picks(snap)

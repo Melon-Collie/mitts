@@ -19,19 +19,11 @@ const EXPOSURE_APPETITE_FORWARD: float = 0.7
 # floor, not a tuning knob: at 4% × a bounded threat the term is noise).
 const EXPOSURE_PROB_FLOOR: float = 0.04
 
-# Receiver drive-in credit (see receiver_drive_in_value): the MAX distance an open
-# man is credited with carrying toward the net (the actual reach is the clear
-# extent of that path), and the closest to the net that drive may end (no credit
-# for a drive into the crease). The max is a horizon cap, finite because opponent
-# projections go stale over a long carry. Feel tunables, not an evaluation curve.
-const RECEIVER_DRIVE_MAX_M: float = 12.0
-const RECEIVER_DRIVE_MIN_NET_DIST_M: float = 3.0
-
-# The zone entries a spot outside the attacking zone is valued through
-# (horizon_value): a stride past the attacking blue line, in each wall lane (the
-# carry menu's wide lanes) and in the middle.
-const ENTRY_LEAD_M: float = AICarrierDestinations.WIDE_ENTRY_LEAD_M
-const ENTRY_WALL_INSET_M: float = AICarrierDestinations.WIDE_LANE_WALL_INSET_M
+# Receiver drive-in credit (see receiver_drive_in_value): the one drive in every
+# possession read credits (AIPossessionValue), here carried on the carrier's
+# own reach and clearance machinery.
+const RECEIVER_DRIVE_MAX_M: float = AIPossessionValue.DRIVE_MAX_M
+const RECEIVER_DRIVE_MIN_NET_DIST_M: float = AIPossessionValue.DRIVE_MIN_NET_DIST_M
 
 # RECEIVE: how far inside the line a pass target must sit when the carrier is
 # in the OZ. The catch plays the puck up to a stick's reach around the body and
@@ -93,11 +85,10 @@ var drive_in_reached: Vector3 = Vector3.INF
 # drive, and at its end.
 var _entry_buf: Array[Vector3] = []
 var _drive_buf: Array[Vector3] = []
-# The zone entries and what reaching each is worth (horizon_value), filled by
-# fill() for a carrier outside the attacking zone.
-var _entry_spots: Array[Vector3] = []
-var _entry_worth: Array[float] = []
-var _race_from: Array[Vector3] = []
+# What possession of a spot is worth to us (against the opponents) and to them
+# (against our defenders), priced by fill().
+var _ours := AIPossessionValue.new()
+var _theirs := AIPossessionValue.new()
 
 
 func fill(ctx: RoleContext) -> void:
@@ -131,29 +122,10 @@ func fill(ctx: RoleContext) -> void:
 				ctx.defending_goal_pos, our_defenders, exposure_mate_etas)
 		exposure_threat_memo.resize(our_defenders.size() + 2)
 		exposure_threat_memo.fill(-1.0)
-	_fill_entries(ctx)
-
-
-# Each zone entry's worth to a carrier arriving there in stride: the better of
-# the shot from it and the drive in from it, against the defence as it stands.
-# Filled here, never from horizon_value: the drive-in reuses the projection
-# scratch a value_at caller may be holding.
-func _fill_entries(ctx: RoleContext) -> void:
-	_entry_spots.clear()
-	_entry_worth.clear()
-	if AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos):
-		return
-	var z: float = -ctx.own_goal_dir * (GameRules.BLUE_LINE_Z + ENTRY_LEAD_M)
-	var wide_x: float = GameRules.RINK_HALF_WIDTH - ENTRY_WALL_INSET_M
-	var stride := Vector3(0.0, 0.0, -ctx.own_goal_dir * AIArrival.SKATER_REF_SPEED_M_S)
-	for x: float in [-wide_x, 0.0, wide_x]:
-		var spot := Vector3(x, 0.0, z)
-		var shot: float = AIActionScoring.score_shoot_value(spot, ctx.attacking_goal_pos,
-				Vector3.INF, opponents, 0.0, AIShotOdds.Stance.UPRIGHT,
-				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, opponent_caps)
-		_entry_spots.append(spot)
-		_entry_worth.append(maxf(shot, receiver_drive_in_value(ctx, spot,
-				ctx.caps_by_peer.get(ctx.peer_id), stride, spot)))
+	# In the zone the carrier reads our possession only of spots in it.
+	_ours.fill(ctx.attacking_goal_pos, opponents, opponent_vels, opponent_caps,
+			AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos))
+	_theirs.fill(ctx.defending_goal_pos, our_defenders, our_defender_vels, our_defender_caps)
 
 
 func fill_receivers(ctx: RoleContext, cur_puck_pos: Vector3) -> void:
@@ -204,13 +176,13 @@ func project_opponents(time_s: float, out_buf: Array[Vector3]) -> void:
 		out_buf.append(AITrajectory.predict_at(opponents[i], opponent_vels[i], time_s))
 
 
-# The cost of losing the puck at `loss_point` with probability `loss_prob`, in
-# the odds the carrier's gains are priced in, wherever he stands.
-func turnover_cost(ctx: RoleContext, loss_point: Vector3, loss_prob: float,
-		our_goalie: Vector3) -> float:
-	return AIActionScoring.turnover_cost(
-			loss_point, loss_prob, ctx.defending_goal_pos, our_goalie,
-			our_defenders, our_defender_caps, true)
+# The cost of losing the puck at `loss_point` with probability `loss_prob`: the
+# opponent's possession there (AIPossessionValue), in the odds the carrier's
+# gains are priced in.
+func turnover_cost(loss_point: Vector3, loss_prob: float) -> float:
+	if not loss_point.is_finite() or loss_prob <= 0.0:
+		return 0.0
+	return loss_prob * _theirs.at(loss_point)
 
 
 # Transition-exposure cost of losing the puck at `loss_point` with
@@ -401,23 +373,14 @@ func _shot_is_dead_from_here(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 
 
 # What the puck at `pos`, outside the attacking zone, is worth past the end of
-# what the carrier searches: the best zone entry, at its worth × the time the
-# skate there takes at league pace. No defence: the searched steps price the
-# defenders they meet, and beyond them where the defence will be is a guess,
-# so the leaf ranks by the one thing that is not — how far the zone is.
+# what the carrier searches: our possession there (AIPossessionValue).
 func horizon_value(pos: Vector3) -> float:
-	var best: float = 0.0
-	_race_from.resize(1)
-	_race_from[0] = pos
-	for i: int in _entry_spots.size():
-		var t: float = Vector2(pos.x - _entry_spots[i].x, pos.z - _entry_spots[i].z).length() \
-				/ AIArrival.SKATER_REF_SPEED_M_S
-		var timed: float = _entry_worth[i] * AIActionScoring.delay_discount(t)
-		if timed <= best:
-			continue
-		best = maxf(best, timed * AIActionScoring.chase_recovery(_entry_spots[i], _race_from,
-				opponents, AIActionScoring.EMPTY_VEC3, opponent_vels, true))
-	return best
+	return _ours.at(pos)
+
+
+# Our possession of `pos` with our man there `start_s` from now.
+func our_possession_at(pos: Vector3, start_s: float) -> float:
+	return _ours.at(pos, start_s)
 
 
 # The two cases of value_at: `shoot_s` is the shot's odds at `pos`.

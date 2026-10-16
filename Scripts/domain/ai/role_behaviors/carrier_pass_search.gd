@@ -490,22 +490,22 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# already priced by the carry/hold alternatives' own strip cost.
 	var benefit: float = receiver_value * completion * time_decay
 	# Poked at the release: the puck squirts loose at the blade.
-	var cost: float = _field.turnover_cost(ctx, origin,
-			1.0 - release_clean, our_goalie)
+	var cost: float = _field.turnover_cost(origin,
+			1.0 - release_clean)
 	# A rim is lost where the soonest opponent meets its path.
 	var loss_point: Vector3 = rim_loss_point if is_rim and rim_loss_point.is_finite() \
 			else AIPuckLane.lane_loss_point(
 					origin, receiver_spot, _field.opponents_release, pass_speed,
 					_field.opponent_vels, _field.opponent_caps,
 					_field.opponent_blades_release)
-	cost += _field.turnover_cost(ctx, loss_point,
-			release_clean * (1.0 - lane), our_goalie)
-	cost += _field.turnover_cost(ctx, AIPuckLane.pass_miss_loss_point(origin, receiver_spot),
-			release_clean * lane * miss_prob, our_goalie)
+	cost += _field.turnover_cost(loss_point,
+			release_clean * (1.0 - lane))
+	cost += _field.turnover_cost(AIPuckLane.pass_miss_loss_point(origin, receiver_spot),
+			release_clean * lane * miss_prob)
 	# Reception strip: the puck dies AT the receiver, in whatever traffic he was
 	# about to catch it in.
-	cost += _field.turnover_cost(ctx, receiver_spot,
-			release_clean * clean_lane * (1.0 - reception_safety), our_goalie)
+	cost += _field.turnover_cost(receiver_spot,
+			release_clean * clean_lane * (1.0 - reception_safety))
 	# Transition exposure (5v5): each loss mode also prices the COUNTER-RUSH
 	# it hands over — the carrier stays at self_pos through a pass, so his
 	# own recovery race starts from here (plan §6).

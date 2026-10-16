@@ -160,8 +160,8 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 	var stand_safety: float = AICarrySpace.carry_safety(
 			stand_puck_pos, stand_puck_pos, AICarrySpace.EVADE_HORIZON_S,
 			_field.opponents, _field.opponent_vels, _field.opponent_caps)
-	var stand_cost: float = _field.turnover_cost(ctx, stand_puck_pos,
-			1.0 - stand_safety, our_goalie)
+	var stand_cost: float = _field.turnover_cost(stand_puck_pos,
+			1.0 - stand_safety)
 	stand_cost += _field.counter_exposure_cost(ctx, stand_puck_pos,
 			1.0 - stand_safety, self_pos, our_goalie)
 	var stand_total: float = stand_score * stand_safety - stand_cost
@@ -335,7 +335,7 @@ func _score_move(ctx: RoleContext, m: int, our_goalie: Vector3, behind_net: bool
 	var worth: float = _end_worth(ctx, rollout, m, t0, caps, dest_arrival)
 	var cost: float = 0.0
 	if safety < 1.0 and _strip_point.is_finite():
-		cost = _field.turnover_cost(ctx, _strip_point, 1.0 - safety, our_goalie)
+		cost = _field.turnover_cost(_strip_point, 1.0 - safety)
 		cost += _field.counter_exposure_cost(ctx, _strip_point, 1.0 - safety, end,
 				our_goalie)
 	var total: float = worth * decay * safety - cost
@@ -438,7 +438,7 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 		if value <= best:
 			continue
 		if safety < 1.0 and _strip_point.is_finite():
-			value -= _field.turnover_cost(ctx, _strip_point, 1.0 - safety, our_goalie)
+			value -= _field.turnover_cost(_strip_point, 1.0 - safety)
 			value -= _field.counter_exposure_cost(ctx, _strip_point, 1.0 - safety,
 					_rollout2.end_pos[m], our_goalie)
 		best = maxf(best, value)
@@ -581,8 +581,8 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 		var strip_point: Vector3 = AICarrySpace.carry_strip_point(
 				cur_puck_pos, cand_puck_pos, local_time,
 				_field.opponents, _field.opponent_vels, _field.opponent_caps, true)
-		cost = _field.turnover_cost(ctx, strip_point,
-			1.0 - keep_prob, our_goalie)
+		cost = _field.turnover_cost(strip_point,
+			1.0 - keep_prob)
 		# Transition exposure (5v5): the carrier's recovery race starts from the
 		# CANDIDATE, the spot this carry commits him to.
 		cost += _field.counter_exposure_cost(ctx, strip_point, 1.0 - keep_prob,
@@ -790,8 +790,8 @@ func _score_wheel_candidate(ctx: RoleContext, dest: Vector3,
 		strip_point = AICarrySpace.carry_strip_point(
 				apex_puck, dest_puck, t2, _scratch_opponents_cont,
 				_field.opponent_vels, _field.opponent_caps, true)
-	var cost: float = _field.turnover_cost(ctx, strip_point,
-			1.0 - keep, our_goalie)
+	var cost: float = _field.turnover_cost(strip_point,
+			1.0 - keep)
 	cost += _field.counter_exposure_cost(ctx, strip_point, 1.0 - keep, dest, our_goalie)
 	return benefit - cost
 

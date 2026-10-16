@@ -34,13 +34,13 @@ seam's own pick (aim and loft), so what is priced is what is fired.
 
 The turnover COST is in the same currency as the gains it is subtracted from.
 The carrier's gains are odds of scoring wherever he stands, so
-`AICarrierField.turnover_cost` always passes `in_xg` to
-`AIActionScoring.turnover_cost` (and `counter_rush_cost`): the opponent's value at
-the loss point is his shot's odds through the seam, or his possession promise
-(`position_potential` × realization × `XG_SLOT_REF`). The off-ball readers still
-on the potential scale (`threat_surface_shoot`) take the other unit. Mixing them
-(raw potential costs against odds gains) overprices a turnover about 3.4-fold; a
-cost memo must only ever hold one.
+`AICarrierField.turnover_cost` prices a loss as the opponent's possession of the
+spot (`AIPossessionValue`), and passes `in_xg` to `counter_rush_cost`. What a spot
+with no shot right now is worth — a turnover there, a dump's resting spot, the
+carrier's search horizon — is that one read, for either side. The defence's
+threat surfaces (`threat_surface_shoot`, `AIActionScoring.turnover_cost`) are
+still on `position_potential`'s scale; never mix the two in one comparison or
+one memo.
 
 The giveaway bars (`SHOT_MIN_VALUE` 0.05, `PASS_MIN_VALUE` 0.02) are scale-bound
 to that seam — odds of scoring on today's goalie with a first shot.
@@ -497,15 +497,15 @@ takes the whole class down and every static call on it from every file at once.
     body's cover numbers, the difficulty-synced reads, planned depth, lateral
     push, post seal and predicted position.
 - `action_scoring.gd` (`AIActionScoring`) holds the shot and pass reads on the
-  value seam, the xG stat, position value, dumping and turnover pricing.
+  value seam, the xG stat, position value, the races and turnover pricing.
 - `carry_space.gd` (`AICarrySpace`) holds the carrier's room to operate:
-  reachable-set evasion, the safety maps, the crossing sample and controlled
-  space.
+  reachable-set evasion, the safety maps and the crossing sample.
 
-Both evaluators read the leaves and never each other.
-`test_scoring_split_stays_acyclic.gd` holds that. A primitive both need goes in
-a leaf; an extraction is cut where nothing in the cut reaches back into what
-remains.
+Both evaluators read the leaves and never each other. `possession_value.gd`
+(`AIPossessionValue`, what possession of a spot is worth) reads both from above,
+so neither may read it. `test_scoring_split_stays_acyclic.gd` holds that. A
+primitive both need goes in a leaf; an extraction is cut where nothing in the cut
+reaches back into what remains.
 
 ## The models in detail
 
@@ -674,7 +674,7 @@ remains.
   decision in that failure is defensible. The attacking-zone mirror is #604.
 
 - **The dump-in is a searched RELEASE, priced where the puck stops**
-  (`AIActionScoring.solve_dump_in` over `AITrajectory.puck_release_landing`).
+  (`AICarrierDumpSearch._solve_dump_in` over `AITrajectory.puck_release_landing`).
   Any pace the bot produces out-slides the rink several times over, so an aim
   point is only a place the puck passes through; the race is priced at the
   landing. The landing solve is CLOSED FORM (straight legs under constant
@@ -686,7 +686,7 @@ remains.
     normalizes `(dir.x, tan, dir.z)` at its power and any loft would spend the
     pace the runout was solved from. The **keeper is a body in the race**
     (`keeper_collects_first`), or the doorstep reads as a free recovery. The gain
-    is realization-discounted like every other future-value read.
+    is our possession of the spot (`AIPossessionValue`) once our man gets there.
   - **The race is an arrival race** through `time_to_arrive` — the chase clock
     and the recovery probability (`chase_recovery`) alike — with the contest band
     expressed as the TIME a stride buys (`CHASE_CONTEST_MARGIN_S`); a metre band
@@ -761,17 +761,20 @@ remains.
   - *Outside it* the carry searches two steps (a rolled move, then each move
     again from where it ends, for the `CARRY_PLY2_WIDTH` best: shoot, pass or
     carry on), pricing the defence it meets on each. Where a line stops outside
-    the zone it is worth `AICarrierField.horizon_value`: the best zone entry
-    (the better of the shot and the drive in from it) × the skate there × the
-    race to it (`chase_recovery`, its band widened by the arrival clock's own
-    error over the trip). No shape terms and no guess at where the defence will
-    be: the leaf ranks by how far the zone is and whether a defender gets to the
-    entry first. The race is what keeps the leaf honest against the searched
-    lines — without it a line that stays outside reads better than one that
-    crosses into the defence, and the carrier stalls at the line. Standing still
-    outside pays the step's decay like every move. A straight carry on to a
-    destination across the attacking line is not credited from outside: the
-    race prices getting in.
+    the zone it is worth our possession of the spot
+    (`AICarrierField.horizon_value` → `AIPossessionValue`): the best zone entry
+    (the better of the shot and one straight drive in from it, kept as far as
+    the carry-safety read allows) × the skate there × the race to it
+    (`arrival_race`, its band widened by the arrival clock's own error over the
+    trip). In the zone the same read is the better of the shot and the drive.
+    No shape terms and no guess at where the defence will be: the leaf ranks by
+    how far the zone is and whether a defender gets to the entry first. The
+    race is what keeps the leaf honest against the searched lines — without it
+    a line that stays outside reads better than one that crosses into the
+    defence, and the carrier stalls at the line. Standing still outside pays the
+    step's decay like every move. A straight carry on to a destination across
+    the attacking line is not credited from outside: the race prices getting
+    in.
   - Candidates also price the **pass option** they open
     (`carrier_field.gd:pass_option_from`: cached per-teammate spot values × the lane from
     the candidate, discounted as a future action), credited as the *improvement*

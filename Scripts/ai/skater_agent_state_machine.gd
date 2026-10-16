@@ -371,7 +371,7 @@ var _holds := AIShotHolds.new()
 #
 # Both dumps — the dump-in and the rim (`_dump_is_rim`) — fire FLAT on the
 # charged wrister at `_dump_launch_speed`, because where each lands IS its pace
-# (AIActionScoring.solve_dump_in searches it).
+# (AICarrierDumpSearch._solve_dump_in searches it).
 var _dump_target: Vector3 = Vector3.INF
 var _dump_is_rim: bool = false
 var _dump_launch_speed: float = AIPuckLane.PASS_SPEED_M_S

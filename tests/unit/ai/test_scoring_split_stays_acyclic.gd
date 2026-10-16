@@ -7,9 +7,9 @@ extends GutTest
 #
 # The shape held here: the shared primitives (the arrival clock, the net and
 # slot segment tests, the puck lane, the body's execution constants, the
-# planning keeper, the measured shot odds) are LEAVES that read no evaluator, and the two big
+# planning keeper, the measured shot odds) are LEAVES that read no evaluator, the two big
 # evaluators that read them — AIActionScoring and AICarrySpace — never read
-# each other.
+# each other, and the possession read (AIPossessionValue) reads both from above.
 
 const _SCORING: String = "res://Scripts/domain/ai/action_scoring.gd"
 const _CARRY: String = "res://Scripts/domain/ai/carry_space.gd"
@@ -44,6 +44,14 @@ func test_the_leaves_read_no_evaluator() -> void:
 					"%s references %s: %s. The leaves are what both evaluators " % [
 							leaf, evaluator, refs] +
 					"share; a leaf that reads one of them closes a cycle.")
+
+
+# The possession read sits above both evaluators: it reads them, so nothing it
+# reads may read it back.
+func test_nothing_the_possession_read_reads_reads_it() -> void:
+	for path: String in [_SCORING, _CARRY] + Array(_LEAVES):
+		assert_eq(_code_refs(path, "AIPossessionValue").size(), 0,
+				"%s references AIPossessionValue, which reads it" % path)
 
 
 func test_the_scorer_and_carry_space_never_read_each_other() -> void:

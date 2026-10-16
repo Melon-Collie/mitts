@@ -361,14 +361,22 @@ func test_evaluator_costs() -> void:
 		AIArrival.time_to_arrive(from, net, Vector3(2, 0, -4)))
 
 	# The dump-in delivery search: DUMP_SEARCH_BEARINGS_RAD x DUMP_SEARCH_PACE_FRACS
-	# closed-form landing solves, plus a recovery race per surviving candidate.
-	# The reason it is affordable at that width is directly below — the stepped
-	# walk this would otherwise need is ~263 µs for ONE full runout.
-	var chasers: Array[Vector3] = [from, Vector3(6, 0, -2)]
-	var landing_out: Array[Vector3] = [Vector3.ZERO]
-	_bench("solve_dump_in (9 bearings x 4 paces, 5 def)", func() -> void:
-		AIActionScoring.solve_dump_in(from, net, 28.0,
-				chasers, opps, net, landing_out))
+	# closed-form landing solves, plus our possession and a race per surviving
+	# candidate. The reason it is affordable at that width is directly below — the
+	# stepped walk this would otherwise need is ~263 µs for ONE full runout.
+	var dctx: RoleContext = _make_ctx(Vector3(2.0, 0.0, -3.0), 1)
+	var dumper := AIRoleCarrier.new()
+	dumper._pick_action_cooldown = 0
+	dumper.decide(dctx)
+	_bench("carrier: dump-in search (9 bearings x 4 paces)", func() -> void:
+		dumper._dump.search(dctx, net))
+	_bench("carrier: possession reads (both sides)", func() -> void:
+		dumper._field._ours.fill(dctx.attacking_goal_pos, dumper._field.opponents,
+				dumper._field.opponent_vels, dumper._field.opponent_caps)
+		dumper._field._theirs.fill(dctx.defending_goal_pos, dumper._field.our_defenders,
+				dumper._field.our_defender_vels, dumper._field.our_defender_caps))
+	_bench("carrier: our possession of one spot", func() -> void:
+		dumper._field.horizon_value(Vector3(4.0, 0.0, 6.0)))
 
 	# Puck-path integration, at the horizons a settle-point read needs. These are
 	# the STEPPED walk's cost, which is why the dump's settle-point solve is not
