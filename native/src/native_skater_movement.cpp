@@ -13,7 +13,7 @@ static constexpr double SKID_TURN_TAPER = Math_PI * 0.25;
 static constexpr int64_t POSTURE_STANCE = 1;
 static constexpr int64_t POSTURE_COMMIT = 2;
 
-String NativeSkaterMovement::configure(Object *movement_config) {
+String load_movement_tunables(Object *movement_config, MovementTunables &cfg) {
 	ERR_FAIL_NULL_V(movement_config, String("null config"));
 	String missing;
 	// Every tunable is a float on MovementConfig, so NIL can only mean the
@@ -32,6 +32,10 @@ String NativeSkaterMovement::configure(Object *movement_config) {
 	return missing;
 }
 
+String NativeSkaterMovement::configure(Object *movement_config) {
+	return load_movement_tunables(movement_config, cfg);
+}
+
 void NativeSkaterMovement::set_stagger_params(double max_stagger_seconds, double max_thrust_penalty,
 		double max_grip_penalty) {
 	stagger_max_seconds = max_stagger_seconds;
@@ -47,12 +51,12 @@ static double stagger_frac(double stagger_timer, double max_seconds) {
 	return CLAMP(stagger_timer / max_seconds, 0.0, 1.0);
 }
 
-Vector3 NativeSkaterMovement::apply_movement_internal(
+Vector3 movement_step(const MovementTunables &cfg,
 		const Vector3 &current_velocity,
 		const Vector2 &move_input,
 		double facing_rotation_y,
 		bool has_puck, bool brake, double delta, int64_t posture,
-		double thrust, double grip_scale) const {
+		double thrust, double grip_scale) {
 	Vector3 velocity = current_velocity;
 	double stride_mult = 1.0;
 	double cap_mult = 1.0;
@@ -151,7 +155,7 @@ Vector3 NativeSkaterMovement::apply_movement(
 		const Vector2 &move_input,
 		double facing_rotation_y,
 		bool has_puck, bool brake, double delta, int64_t posture) const {
-	return apply_movement_internal(current_velocity, move_input, facing_rotation_y,
+	return movement_step(cfg, current_velocity, move_input, facing_rotation_y,
 			has_puck, brake, delta, posture, cfg.thrust, 1.0);
 }
 
@@ -161,7 +165,7 @@ Vector3 NativeSkaterMovement::apply_movement_staggered(
 		double facing_rotation_y,
 		bool has_puck, bool brake, double delta, int64_t posture,
 		double thrust, double grip_scale) const {
-	return apply_movement_internal(current_velocity, move_input, facing_rotation_y,
+	return movement_step(cfg, current_velocity, move_input, facing_rotation_y,
 			has_puck, brake, delta, posture, thrust, grip_scale);
 }
 
@@ -190,7 +194,7 @@ void NativeSkaterMovement::integrate_forward(
 			thrust = cfg.thrust * (1.0 - frac * stagger_max_thrust_penalty);
 			grip_scale = 1.0 - frac * stagger_max_grip_penalty;
 		}
-		vel = apply_movement_internal(vel, decayed_input, facing_rotation_y,
+		vel = movement_step(cfg, vel, decayed_input, facing_rotation_y,
 				has_puck, brake, dt, posture, thrust, grip_scale);
 		pos += vel * (real_t)dt;
 	}

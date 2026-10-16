@@ -2,6 +2,7 @@
 
 #include "native_arm_rig.h"
 #include "native_blade_dangle.h"
+#include "native_carry_rollout.h"
 #include "native_bottom_hand_ik.h"
 #include "native_gif_encoder.h"
 #include "native_leg_chain.h"
@@ -29,6 +30,7 @@ void initialize_mitts_native_module(ModuleInitializationLevel p_level) {
 	ClassDB::register_class<mitts::NativeArmRig>();
 	ClassDB::register_class<mitts::NativeSkaterGait>();
 	ClassDB::register_class<mitts::NativeLegChain>();
+	ClassDB::register_class<mitts::NativeCarryRollout>();
 	ClassDB::register_class<mitts::NativeGifEncoder>();
 }
 

@@ -247,6 +247,14 @@ projected a second on (`_carry_on_value`); a line is worth its best of shooting,
 passing or carrying on. Where a line stops outside the zone it reads
 `AICarrierField.horizon_value` (`docs/shot-currency-plan.md`, step 4).
 
+Its cost is the second step: three more rolls and up to 21 more priced leaves a
+search. The prunes are exact (the drills replay identically), and the rolls run
+in `NativeCarryRollout` where the extension is built (~85 µs for the seven moves
+against ~780 in GDScript). The full compete measures ~3.7 ms against ~2.9 with no
+second step. Budget cuts were measured and rejected: searching two first moves
+deep instead of three cost the entry drill six entries, and a 15 Hz second-step
+roll three, with the trend running the same way down to 60 Hz.
+
 ## 4. What players should see
 
 Carriers skate where they mean to go and face it. Fewer stalls at an angle;

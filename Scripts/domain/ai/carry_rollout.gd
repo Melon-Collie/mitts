@@ -16,6 +16,10 @@ extends RefCounted
 #
 # One instance per carrier, results overwritten by every roll; read them before
 # the next call.
+#
+# Where the application layer installs `native_factory` (the extension is built),
+# each instance rolls through its own NativeCarryRollout instead — the same tick,
+# held to this file by test_native_carry_rollout_parity.gd.
 
 const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 
@@ -44,19 +48,25 @@ var step_ticks: int = STEP_TICKS
 const SOFT_TURN_RAD: float = deg_to_rad(30.0)
 const HARD_TURN_RAD: float = deg_to_rad(75.0)
 
+# Returns a configured kernel, or null. Unset, every roll is GDScript.
+static var native_factory: Callable = Callable()
+
 # Index-matched by Move.
 var stick: Array[Vector2] = []
 var cursor: Array[Vector2] = []
 var brake: Array[bool] = []
-var end_pos: Array[Vector3] = []
-var end_vel: Array[Vector3] = []
-var end_facing: Array[Vector2] = []
+var end_pos := PackedVector3Array()
+var end_vel := PackedVector3Array()
+var end_facing := PackedVector2Array()
 # The path met the boards or the cage and was held off them, as the body is.
 var touched_boundary: Array[bool] = []
 # MOVE_COUNT × SAMPLES positions, row-major by move.
-var samples: Array[Vector3] = []
+var samples := PackedVector3Array()
 
 var _facing_out := FacingRules.Result.new()
+var _native: RefCounted = null
+# The caps the kernel last loaded; caps are rebuilt, never edited, when a body changes.
+var _native_caps: AISkaterCaps = null
 
 
 func _init() -> void:
@@ -68,6 +78,8 @@ func _init() -> void:
 	end_facing.resize(MOVE_COUNT)
 	touched_boundary.resize(MOVE_COUNT)
 	samples.resize(MOVE_COUNT * SAMPLES)
+	if native_factory.is_valid():
+		_native = native_factory.call()
 
 
 # Rolls every move. `toward` is world XZ; it need not be normalised but must not
@@ -77,7 +89,31 @@ func roll_all(pos: Vector3, vel: Vector3, facing: Vector2, toward: Vector2,
 	var t: Vector2 = toward.normalized()
 	for m: int in MOVE_COUNT:
 		_set_move(m, t)
+	if _native != null and _native_loaded(caps):
+		_native.roll_all(pos, vel, facing, t, has_puck, step_ticks)
+		end_pos = _native.get_end_pos()
+		end_vel = _native.get_end_vel()
+		end_facing = _native.get_end_facing()
+		samples = _native.get_samples()
+		var touched: int = _native.get_touched_mask()
+		for m: int in MOVE_COUNT:
+			touched_boundary[m] = (touched >> m) & 1 == 1
+		return
+	for m: int in MOVE_COUNT:
 		_roll(m, pos, vel, facing, caps, has_puck)
+
+
+# Whether the kernel holds `caps`, loading them if not. A caps it cannot load
+# (a field renamed under it) drops the kernel for good: the GDScript is the
+# reference, and a stale binary must not roll on half its tunables.
+func _native_loaded(caps: AISkaterCaps) -> bool:
+	if caps == _native_caps:
+		return true
+	if _native.configure(caps) != "":
+		_native = null
+		return false
+	_native_caps = caps
+	return true
 
 
 func sample(move: int, k: int) -> Vector3:
