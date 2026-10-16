@@ -268,37 +268,14 @@ func test_evaluator_costs() -> void:
 	_bench("carrier: one pass-option read", func() -> void:
 		cinst._field.pass_option_from(cx, one_cand))
 
-	# The space fan on its own. Only the carrier reads it today; this line
-	# exists so the cost of giving it to another role is a number rather than
-	# a guess. Both forms: without the bearing profile (what an off-puck role
-	# would want — just "how much room is there") and with it (the carrier's
-	# form, which also generates its forward candidates).
-	var bearing_out: Array[float] = []
-	bearing_out.resize(AICarrySpace.SPACE_SAMPLE_ANGLES.size())
-	_bench("controlled_space (fan only)", func() -> void:
-		AICarrySpace.controlled_space(
-				cx.self_pos, cx.self_velocity, null, cx.attacking_goal_pos,
-				AICarrierField.FORWARD_PRESSURE_HORIZON_M,
-				cinst._field.opponents, cinst._field.opponent_vels,
-				cinst._field.opponent_caps))
-	# The fan's two cheaper granularities, for sizing an off-puck consumer:
-	# one whole carry-safety sample (what the fan does 14 times), and the bare
-	# reachable-set read at a point (one defender loop instead of three).
-	_bench("control_at (one sample)", func() -> void:
-		AICarrySpace.control_at(
-				one_cand, cx.self_pos, cx.self_velocity, null,
-				cinst._field.opponents, cinst._field.opponent_vels,
-				cinst._field.opponent_caps))
+	# The second carry step from one first move: every move rolled again from
+	# where it ends and priced as a first move is.
+	_bench("carrier: one second carry step", func() -> void:
+		cinst._carry._carry_on_value(cx, 0, goalie_pos, cinst._carry._league_caps))
 	_bench("reach_clearance (one point)", func() -> void:
 		AICarrySpace.reach_clearance(
 				one_cand, 0.8, cinst._field.opponents,
 				cinst._field.opponent_vels, cinst._field.opponent_caps))
-	_bench("controlled_space (fan + bearing profile)", func() -> void:
-		AICarrySpace.controlled_space(
-				cx.self_pos, cx.self_velocity, null, cx.attacking_goal_pos,
-				AICarrierField.FORWARD_PRESSURE_HORIZON_M,
-				cinst._field.opponents, cinst._field.opponent_vels,
-				cinst._field.opponent_caps, bearing_out))
 
 	# The per-dispatch baseline every off-puck bot pays at 60 Hz regardless
 	# of the 30 Hz argmax: ctx build + predicates + steering on cached-
@@ -371,9 +348,6 @@ func test_evaluator_costs() -> void:
 				opps, opp_vels, opp_caps, true))
 	_bench("best_evade_point (5 def)", func() -> void:
 		AICarrySpace.best_evade_point(from, Vector3(2, 0, -4), opps, opp_vels, 0.9))
-	_bench("best_evade_point_toward (5 def)", func() -> void:
-		AICarrySpace.best_evade_point_toward(from, Vector3(2, 0, -4), net,
-				opps, opp_vels, 0.9))
 	_bench("release_contest_clean (5 def)", func() -> void:
 		AIPuckLane.release_contest_clean(from, opps, opp_caps))
 	_bench("time_to_arrive", func() -> void:
