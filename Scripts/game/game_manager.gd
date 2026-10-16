@@ -477,6 +477,7 @@ func _ready() -> void:
 	var net_hook := PostPhysicsNetHook.new()
 	net_hook.callback = _capture_and_broadcast_post_physics
 	add_child(net_hook)
+	add_child(HostHitchSampler.new())
 	_replay_evt_kinds.resize(_REPLAY_EVENT_QUEUE_CAP)
 	_replay_evt_pos.resize(_REPLAY_EVENT_QUEUE_CAP)
 	_replay_evt_speed.resize(_REPLAY_EVENT_QUEUE_CAP)
