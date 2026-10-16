@@ -314,12 +314,15 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 		# Area eligibility, built as the men are collected. The incumbent gets a
 		# release margin so a man skating a seam is held a metre past the edge
 		# rather than flickering between two defenders; the matcher's own switch
-		# margin covers the rest.
+		# margin covers the rest. The puck owner's area is everyone's while he is
+		# on the puck, or a man in it is in nobody's.
+		var in_pressure_area: bool = AIZoneCoverage.in_area(pressure_slot, _strong_x,
+				_own_goal_z, mp)
 		for def_pid: int in zone_slot_by_def:
 			var margin: float = AIZoneCoverage.AREA_RELEASE_MARGIN_M \
 					if prev.get(def_pid, -1) == pid else 0.0
-			if AIZoneCoverage.in_area(zone_slot_by_def[def_pid], _strong_x,
-					_own_goal_z, mp, margin):
+			if in_pressure_area or AIZoneCoverage.in_area(zone_slot_by_def[def_pid],
+					_strong_x, _own_goal_z, mp, margin):
 				if not eligible_men.has(def_pid):
 					eligible_men[def_pid] = {}
 				(eligible_men[def_pid] as Dictionary)[pid] = true

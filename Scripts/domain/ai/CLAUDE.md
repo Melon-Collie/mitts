@@ -336,8 +336,10 @@ its geometry isn't built on.
 enters as ELIGIBILITY — which men it may be handed — rather than as a private
 search. Do not give the zone roles private argmaxes over their areas: the areas
 overlap on purpose, and independent argmaxes double-cover (most D-zone ticks)
-while leaving the best man open. The remaining hole is a man standing in NOBODY's
-area — eligibility cannot reach him however free a defender is.
+while leaving the best man open. The areas tile the zone, so a man can stand in
+nobody's coverable area only when his area's owner is on the puck: the pressure
+owner's area is therefore every zone defender's while he is (a strong D in the
+corner leaves his net-front man to whoever the matching sends).
 
 ## The gap ladder is one ladder, and both puck-owners read it
 
