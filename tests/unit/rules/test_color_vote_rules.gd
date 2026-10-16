@@ -4,8 +4,8 @@ extends GutTest
 # Color identity is an integer slot index into TeamColorRegistry.
 
 const _ALL_SLOTS: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7]
-const _DEFAULT_HOME: int = 0  # "blueberry"
-const _DEFAULT_AWAY: int = 1  # "pomegranate"
+const _DEFAULT_HOME: int = 0
+const _DEFAULT_AWAY: int = 1
 
 func _rng(seed_val: int = 1) -> RandomNumberGenerator:
 	var r := RandomNumberGenerator.new()
@@ -20,7 +20,7 @@ func test_tally_empty_votes_returns_empty_dict() -> void:
 	assert_true(t.is_empty())
 
 func test_tally_counts_each_color() -> void:
-	var votes: Array[int] = [2, 2, 7]  # lemon, lemon, lime
+	var votes: Array[int] = [2, 2, 7]
 	var t: Dictionary = ColorVoteRules.tally_votes(votes)
 	assert_eq(int(t[2]), 2)
 	assert_eq(int(t[7]), 1)
@@ -52,8 +52,8 @@ func test_resolve_empty_votes_falls_back_to_defaults() -> void:
 	assert_eq(result[1], _DEFAULT_AWAY)
 
 func test_resolve_majority_wins_per_team() -> void:
-	var home: Array[int] = [2, 2, 7]  # lemon, lemon, lime
-	var away: Array[int] = [6, 4, 6]  # fig, papaya, fig
+	var home: Array[int] = [2, 2, 7]
+	var away: Array[int] = [6, 4, 6]
 	var result: Array[int] = ColorVoteRules.resolve_team_colors(
 			home, away, _ALL_SLOTS, _DEFAULT_HOME, _DEFAULT_AWAY, _rng())
 	assert_eq(result[0], 2)
@@ -68,8 +68,8 @@ func test_resolve_three_way_tie_picks_random_voted_color() -> void:
 			"home should resolve to one of the three tied slots, got %d" % result[0])
 
 func test_resolve_clash_away_rerolls_from_remaining_votes() -> void:
-	# Home wins lemon (2v1). Away also wins lemon (2v1) but has fig as a
-	# fallback in its tally, so away should land on fig.
+	# Home wins slot 2 (2v1). Away also wins slot 2 (2v1) but has slot 6 as a
+	# fallback in its tally, so away should land on slot 6.
 	var home: Array[int] = [2, 2, 7]
 	var away: Array[int] = [2, 2, 6]
 	var result: Array[int] = ColorVoteRules.resolve_team_colors(
@@ -78,8 +78,8 @@ func test_resolve_clash_away_rerolls_from_remaining_votes() -> void:
 	assert_eq(result[1], 6, "away clash should re-roll to remaining vote")
 
 func test_resolve_clash_with_no_alt_votes_picks_from_palette() -> void:
-	# Both teams unanimously vote lemon. Away has no other voted slot, so it
-	# must pick uniformly from the palette excluding lemon.
+	# Both teams unanimously vote slot 2. Away has no other voted slot, so it
+	# must pick uniformly from the palette excluding slot 2.
 	var home: Array[int] = [2, 2, 2]
 	var away: Array[int] = [2, 2, 2]
 	var result: Array[int] = ColorVoteRules.resolve_team_colors(

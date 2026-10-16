@@ -235,3 +235,22 @@ OPTIONS_ANIMATION_DETAIL,Animation Detail,Detalle de animación
 OPTIONS_DETAIL_LOW,Low,Bajo
 OPTIONS_DETAIL_BALANCED,Balanced,Equilibrado
 OPTIONS_DETAIL_FULL,Full,Completo
+OPTIONS_SECTION_CUSTOMIZATION,Customization,Personalización
+OPTIONS_TEAM_COLORS_FILE,Team colors,Colores de equipo
+OPTIONS_TEAM_COLORS_FILE_NOTE,Makes a copy of the team colors you can edit in any text editor. Changes apply after a restart and only on your computer — other players see their own colors.,Crea una copia de los colores de equipo que puedes editar con cualquier editor de texto. Los cambios se aplican al reiniciar y solo en tu equipo — los demás jugadores ven sus propios colores.
+OPTIONS_BOTS_FILE,Bot roster,Plantilla de bots
+OPTIONS_BOTS_FILE_NOTE,"Edit AI bot names, numbers and attributes. As host, your roster is used for the whole lobby. Builds over the point-buy budget reset to medium. Changes apply after a restart.","Edita los nombres, números y atributos de los bots. Como anfitrión, tu plantilla se usa en toda la sala. Las configuraciones que superan el presupuesto de puntos vuelven a nivel medio. Los cambios se aplican al reiniciar."
+CUSTOM_FILE_CREATE,Create Editable Copy,Crear copia editable
+CUSTOM_FILE_RECREATE,Start Copy Over,Empezar la copia de nuevo
+CUSTOM_FILE_OPEN_FOLDER,Open Folder,Abrir carpeta
+CUSTOM_FILE_USE_BUILT_IN,Use Built-in,Usar el original
+CUSTOM_FILE_STATUS_BUILT_IN,Using the built-in file.,Usando el archivo original.
+CUSTOM_FILE_STATUS_IN_USE,Using your edited copy:,Usando tu copia editada:
+CUSTOM_FILE_STATUS_UNREADABLE,Your edited copy can't be read — the built-in file is used instead. Fix it or switch back to the built-in file.,No se puede leer tu copia editada — se usa el archivo original. Corrígela o vuelve al archivo original.
+TEAM_COLORS_FILE_OUTDATED,Your edited copy has %d teams but the game now has %d. Start the copy over to get the new teams — or switch back to the built-in file.,Tu copia editada tiene %d equipos pero el juego ahora tiene %d. Empieza la copia de nuevo para obtener los equipos nuevos — o vuelve al archivo original.
+CUSTOM_FILE_RESTART,Restart the game to apply.,Reinicia el juego para aplicar los cambios.
+CUSTOM_FILE_CONFIRM_RECREATE,Replace your edits with a fresh copy?,¿Reemplazar tus cambios con una copia nueva?
+CUSTOM_FILE_CONFIRM_USE_BUILT_IN,Delete your edited copy?,¿Borrar tu copia editada?
+CUSTOM_FILE_ERROR_NO_BUILT_IN,Error: the built-in file is missing.,Error: falta el archivo original.
+CUSTOM_FILE_ERROR_WRITE,Error: couldn't write to your user data folder.,Error: no se pudo escribir en tu carpeta de datos.
+CUSTOM_FILE_ERROR_DELETE,Error: couldn't delete your edited copy.,Error: no se pudo borrar tu copia editada.

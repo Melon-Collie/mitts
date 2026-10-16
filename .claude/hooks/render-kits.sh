@@ -4,7 +4,7 @@
 # tools/kit_capture.gd; see that file for what is drawn and from where.
 #
 #   .claude/hooks/render-kits.sh                # every team, into ./.preview/kits
-#   .claude/hooks/render-kits.sh papaya,lime    # named teams (or slot numbers)
+#   .claude/hooks/render-kits.sh pineapple,lime    # named teams (or slot numbers)
 #   KIT_PREVIEW_NAME=Smith KIT_PREVIEW_NUMBER=7 .claude/hooks/render-kits.sh
 #
 # Godot's own --headless is a DUMMY renderer: it draws nothing and captures

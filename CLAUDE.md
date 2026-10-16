@@ -127,7 +127,7 @@ set takes several minutes. Name only the shots you need.
 
 **To see a KIT, lay it flat.** `.claude/hooks/render-kits.sh [teams]` writes
 one PNG per team to `.preview/kits/`: home and away, jersey front and back with
-sleeves and shoulder caps, pants, socks, and a legend of every color and stripe
+sleeves and shoulder caps, pants, the helmet, socks, the default glove, and a legend of every color and stripe
 keyed by its path in `data/team_colors.json` (`tools/kit_capture.gd`). The
 garments are the rink's meshes flattened and painted by the game's own decals and
 stripe textures, so it is the check for a kit edit. It loads through
