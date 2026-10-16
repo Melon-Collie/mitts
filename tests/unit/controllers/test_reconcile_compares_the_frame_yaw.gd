@@ -115,6 +115,25 @@ func test_the_whip_is_on_the_wire() -> void:
 			"the whip alone exceeds the threshold (%.3f rad)" % widest)
 
 
+# The broadcast rate is the tangent every receiver's hermite and extrapolation
+# lays on the broadcast yaw, so it must be that yaw's own rate, whip included.
+func test_the_broadcast_rate_is_the_broadcast_yaws_rate() -> void:
+	var prev := SkaterNetworkState.new()
+	var cur := SkaterNetworkState.new()
+	var worst: float = 0.0
+	for tick: int in TICKS:
+		_tick(_host, _input_at(tick), false)
+		_host.fill_network_state(cur)
+		if tick > 0:
+			var yaw_rate: float = angle_difference(
+					prev.upper_body_rotation_y, cur.upper_body_rotation_y) / DT
+			worst = maxf(worst, absf(cur.upper_body_angular_velocity - yaw_rate))
+		var swap: SkaterNetworkState = prev
+		prev = cur
+		cur = swap
+	assert_lt(worst, 1e-3, "broadcast rate off the yaw's own by up to %.3f rad/s" % worst)
+
+
 func test_a_client_in_lockstep_with_its_host_never_reconciles() -> void:
 	var fired: Array[int] = _run(0.0)
 	assert_eq(fired.size(), 0, "reconciles at ticks %s" % [fired])

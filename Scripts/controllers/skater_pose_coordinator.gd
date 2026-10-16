@@ -63,7 +63,7 @@ func setup(skater: Skater, sm: SkaterStateMachine, aiming: SkaterAimingBehavior,
 	_controller = controller
 	_skating = skating
 	_prev_facing_angle = atan2(facing.x, facing.y)
-	_prev_upper_body_angle = upper_body_angle
+	_prev_upper_body_angle = skater.get_upper_body_rotation()
 
 # ── Per-Tick Application ──────────────────────────────────────────────────────
 func apply_velocity_lean(delta: float) -> void:
@@ -526,15 +526,17 @@ func apply_head_tracking_aim(aim_world: Vector3, delta: float) -> void:
 
 # ── Angular Velocity Bookkeeping ──────────────────────────────────────────────
 # Called at the end of _process_input on real (non-replay) frames so the
-# network state carries C1-continuous facing / upper-body rotation.
+# network state carries C1-continuous facing / upper-body rotation. The
+# upper-body rate is the FRAME yaw's (whip included), the angle it rides with.
 func update_angular_velocities(delta: float) -> void:
 	if delta <= 0.0:
 		return
 	var cur_fa: float = atan2(facing.x, facing.y)
+	var frame_yaw: float = _skater.get_upper_body_rotation()
 	facing_angular_velocity = angle_difference(_prev_facing_angle, cur_fa) / delta
-	upper_body_angular_velocity = angle_difference(_prev_upper_body_angle, upper_body_angle) / delta
+	upper_body_angular_velocity = angle_difference(_prev_upper_body_angle, frame_yaw) / delta
 	_prev_facing_angle = cur_fa
-	_prev_upper_body_angle = upper_body_angle
+	_prev_upper_body_angle = frame_yaw
 
 # ── Pose Resets ───────────────────────────────────────────────────────────────
 # Used by SkaterController._transition_to_skating and _enter_slapper_charge.
