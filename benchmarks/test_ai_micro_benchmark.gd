@@ -261,9 +261,7 @@ func test_evaluator_costs() -> void:
 		AIGoalieModel.predict_goalie_pos(keeper, cx.attacking_goal_pos,
 				t_arr, cand))
 	_bench("  cand: turnover_cost", func() -> void:
-		AIActionScoring.turnover_cost(cand_puck, 0.4, cx.defending_goal_pos,
-				Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z - 1.3),
-				cinst._field.our_defenders))
+		cinst._field.turnover_cost(cand_puck, 0.4))
 	_bench("  cand: _score_at (the seam)", func() -> void:
 		cinst._field.value_at(cx, cand, cx.self_pos, cinst._field.opponents, keeper))
 
@@ -324,25 +322,29 @@ func test_evaluator_costs() -> void:
 		AIShotValue.feed(Vector3(-4, 0, -19), from, 16.0, net, goalie, true))
 	_bench("lane_clear (5 defenders)", func() -> void:
 		AIPuckLane.lane_clear(from, net, opps, 20.0))
-	_bench("threat_surface_pass (5 def)", func() -> void:
-		AIActionScoring.threat_surface_pass(from, Vector3(-4, 0, -19), net, goalie,
-				opps))
-	_bench("threat_surface_shoot (5 def)", func() -> void:
-		AIActionScoring.threat_surface_shoot(from, net, goalie,
-				opps))
-	# PRESSURE's per-candidate unit: the carrier's whole best-option argmax,
-	# re-run with us standing at the candidate. This is the inner loop of the
-	# outer 18-candidate argmax.
-	var opp_mates: Array[Vector3] = [
-			Vector3(-4, 0, -19), Vector3(3, 0, -14), Vector3(-1, 0, -8)]
-	_bench("carrier_best_option (PRESSURE per candidate)", func() -> void:
-		AIDefensiveVerbs.carrier_best_option(
-				from, Vector3(2, 0, -17), net, goalie, opps, opp_mates))
 	var opp_vels: Array[Vector3] = []
 	var opp_caps: Array = []
 	for _i: int in opps.size():
 		opp_vels.append(Vector3.ZERO)
 		opp_caps.append(null)
+	# The defence's read of a man, `opps` standing in as the defence.
+	var poss := AIPossessionValue.new()
+	poss.fill(net, opps, opp_vels, opp_caps)
+	_bench("threat_of_feed (5 def)", func() -> void:
+		poss.threat_of_feed(from, Vector3(-4, 0, -19), Vector3.ZERO, goalie))
+	_bench("threat_of_carrier (5 def)", func() -> void:
+		poss.threat_of_carrier(from, Vector3(0, 0, -6), goalie))
+	# PRESSURE's per-candidate unit: the carrier's whole best-option argmax,
+	# re-run with us standing at the candidate. This is the inner loop of the
+	# outer 18-candidate argmax.
+	var opp_mates: Array[Vector3] = [
+			Vector3(-4, 0, -19), Vector3(3, 0, -14), Vector3(-1, 0, -8)]
+	var bases: Array[float] = []
+	AIDefensiveVerbs.carrier_option_bases(poss, from, Vector3(0, 0, -6), goalie,
+			opp_mates, bases)
+	_bench("carrier_best_option (PRESSURE per candidate)", func() -> void:
+		AIDefensiveVerbs.carrier_best_option(poss, Vector3(2, 0, -17), null, from,
+				Vector3(0, 0, -6), goalie, opp_mates, bases))
 	var mates: Array[Vector3] = [Vector3(-5, 0, -8), Vector3(3, 0, -12),
 			Vector3(0, 0, 2), Vector3(-2, 0, 10)]
 	_bench("counter_rush_cost (4 tm, 5 opp)", func() -> void:

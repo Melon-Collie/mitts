@@ -43,6 +43,18 @@ func test_closer_to_the_zone_is_worth_more() -> void:
 		prev = here
 
 
+func test_crossing_the_line_never_costs_the_puck_value() -> void:
+	# A man just inside the line can still skate to any entry a man just outside
+	# it would take, so stepping over the line on any lane never reads lower.
+	var v: AIPossessionValue = _read(_none)
+	for x: float in [0.0, -4.0, -9.0, -12.0]:
+		var prev: float = 0.0
+		for z: float in [-5.0, -7.0, -7.5, -8.0, -9.0, -10.0]:
+			var here: float = v.at(Vector3(x, 0.0, z))
+			assert_gte(here, prev - 1e-6, "x %.0f, z %.0f" % [x, z])
+			prev = here
+
+
 func test_a_defender_who_gets_to_the_entries_first_shuts_them() -> void:
 	var spot := Vector3(0.0, 0.0, 5.0)
 	var open: float = _read(_none).at(spot)
@@ -64,3 +76,76 @@ func test_both_ends_read_alike() -> void:
 	for spot: Vector3 in [Vector3(-8, 0, -20), Vector3(2, 0, 4), Vector3(9, 0, 15)]:
 		assert_almost_eq(theirs.at(Vector3(-spot.x, 0.0, -spot.z)), ours.at(spot), 1e-4,
 				"%s" % spot)
+
+
+func test_a_man_skating_at_the_zone_is_worth_more_than_one_skating_away() -> void:
+	var v: AIPossessionValue = _read(_none)
+	var spot := Vector3(0.0, 0.0, 6.0)
+	var standing: float = v.at(spot)
+	assert_gt(v.at(spot, 0.0, Vector3(0.0, 0.0, -7.0)), standing, "skating at it")
+	assert_lt(v.at(spot, 0.0, Vector3(0.0, 0.0, 7.0)), standing, "skating away")
+
+
+func test_his_speed_carries_the_drive_in() -> void:
+	var v: AIPossessionValue = _read(_none)
+	var corner := Vector3(-10.0, 0.0, -22.0)
+	assert_gt(v.at(corner, 0.0, Vector3(4.0, 0.0, -1.0)), v.at(corner),
+			"already moving toward the net, he gets there sooner")
+
+
+# ── The defence's read of a man ──────────────────────────────────────────────
+
+const OUR_NET := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z)    # the defence defends +Z
+const OUR_KEEPER := Vector3(0.5, 0.0, GameRules.GOAL_LINE_Z - 0.6)
+
+
+func _defence(defenders: Array[Vector3], caps: Array) -> AIPossessionValue:
+	var v := AIPossessionValue.new()
+	var vels: Array[Vector3] = []
+	for _d: Vector3 in defenders:
+		vels.append(Vector3.ZERO)
+	v.fill(OUR_NET, defenders, vels, caps)
+	return v
+
+
+func test_a_feed_is_covered_by_the_defenders_real_build() -> void:
+	# 2.0 m off the lane: inside the league blade's closing reach at this feed's
+	# pace, but not saturated, so a long and a short stick both move it.
+	var carrier := Vector3(0.0, 0.0, 8.0)
+	var receiver := Vector3(0.0, 0.0, 22.0)
+	var d: Array[Vector3] = [Vector3(2.0, 0.0, 15.0)]
+	var league: float = _defence(d, []).threat_of_feed(carrier, receiver, Vector3.ZERO,
+			OUR_KEEPER)
+	var long_stick := AISkaterCaps.new()
+	long_stick.stick_reach = 1.6
+	long_stick.max_speed = 12.0
+	var short_stick := AISkaterCaps.new()
+	short_stick.stick_reach = 1.1
+	short_stick.max_speed = 6.0
+	assert_lt(_defence(d, [long_stick]).threat_of_feed(carrier, receiver, Vector3.ZERO,
+			OUR_KEEPER), league, "a long-stick defender covers more of the feed")
+	assert_gt(_defence(d, [short_stick]).threat_of_feed(carrier, receiver, Vector3.ZERO,
+			OUR_KEEPER), league, "a short-stick defender concedes more of it")
+
+
+func test_a_carrier_threatens_at_least_his_shot_and_his_possession() -> void:
+	var none: Array[Vector3] = []
+	var v: AIPossessionValue = _defence(none, [])
+	var slot := Vector3(0.0, 0.0, 18.0)
+	assert_gte(v.threat_of_carrier(slot, Vector3.ZERO, OUR_KEEPER), v.at(slot) - 1e-6)
+	assert_gte(v.threat_of_carrier(slot, Vector3.ZERO, OUR_KEEPER),
+			AIActionScoring.score_shoot_value(slot, OUR_NET, OUR_KEEPER, none) - 1e-6)
+
+
+func test_a_body_on_the_lane_takes_the_feed() -> void:
+	var none: Array[Vector3] = []
+	var v: AIPossessionValue = _defence(none, [])
+	var carrier := Vector3(-8.0, 0.0, 20.0)
+	var receiver := Vector3(3.0, 0.0, 21.0)
+	var open: float = v.threat_of_feed(carrier, receiver, Vector3.ZERO, OUR_KEEPER)
+	v.push_defender(Vector3(-2.5, 0.0, 20.5), Vector3.ZERO, null)
+	var covered: float = v.threat_of_feed(carrier, receiver, Vector3.ZERO, OUR_KEEPER)
+	v.pop_defender()
+	assert_lt(covered, open * 0.5, "a stick in the lane")
+	assert_almost_eq(v.threat_of_feed(carrier, receiver, Vector3.ZERO, OUR_KEEPER), open,
+			1e-6, "and off again, the read is as it was")

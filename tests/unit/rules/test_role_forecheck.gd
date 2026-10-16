@@ -3,8 +3,8 @@ extends GutTest
 # AIRoleForecheck — FORECHECK off-puck roles. F1 reuses AIRolePressure
 # (covered in test_role_pressure), so here we cover F3 (high safety at
 # the opp blue line) and F2 (mid-lane breakout read). The underlying
-# threat_surface_pass primitive is covered in test_ai_action_scoring;
-# these cover the structural contracts:
+# threat_of_feed read is covered in test_possession_value; these cover the
+# structural contracts:
 #   - F3 holds at the opp blue line on the strong side.
 #   - F2 reads off a loose puck (doesn't freeze) and stays OZ-side of
 #     the opp blue line (doesn't drop deep into F1's area).

@@ -592,7 +592,7 @@ static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vecto
 # Vector3.INF exactly when no defender blocks (lane_clear(accurate) == 1.0), so
 # a lane with any interception risk always has a place to price it at.
 #
-# The loss location for the pass turnover cost (turnover_cost).
+# The loss location for the pass turnover cost (AICarrierField.turnover_cost).
 static func lane_loss_point(from: Vector3, to: Vector3,
 		opponents: Array[Vector3], puck_speed_m_s: float,
 		opponent_vels: Array[Vector3] = [],
@@ -652,8 +652,9 @@ static func lane_loss_point(from: Vector3, to: Vector3,
 # clear-lane backpass deep in our own zone scores as risk-free. pass_miss_prob
 # is the residual chance a lane-clear pass still fails, and the puck then ends
 # up loose PASS_MISS_OVERSHOOT_M past the receiver along the pass line. Fed to
-# turnover_cost, that risk self-localizes like interception risk: ~0 in the
-# OZ, the opponent's chance in front of our net for a DZ backpass.
+# AICarrierField.turnover_cost, that risk self-localizes like interception
+# risk: least in the OZ, the opponent's chance in front of our net for a DZ
+# backpass.
 #
 # The bot solves its launch to ARRIVE catchable (pass_launch_speed), so
 # reception difficulty is designed out of its own passes; the residual is an

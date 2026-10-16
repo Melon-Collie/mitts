@@ -322,18 +322,6 @@ static func position_potential(
 	return closeness * angle_factor * openness
 
 
-# Realization discount for position_potential: potential is FUTURE value,
-# cashed only by skating from `pos` to the slot, so it pays the same
-# delay_discount every other future action pays.
-#
-# Travel time is to the slot ring (SLOT_RADIUS_M) at the league reference
-# speed (cross-player: receivers use it too).
-static func potential_realization_discount(pos: Vector3,
-		attacking_goal: Vector3) -> float:
-	var travel_dist: float = maxf(0.0, pos.distance_to(attacking_goal) - SLOT_RADIUS_M)
-	return delay_discount(travel_dist / AIArrival.SKATER_REF_SPEED_M_S)
-
-
 # ── Dump races ────────────────────────────────────────────────────────────────
 # The race primitives the dump searches (below, and AICarrierDumpSearch)
 # and the rim pricing read. The dump itself is a residual, never entered in the
@@ -412,112 +400,14 @@ static func first_arrival(target: Vector3, chasers: Array[Vector3],
 	return best
 
 
-# How far (m) from the net mouth the goalie still counts as HOME for the
-# threat-surface shot skips below; beyond it the direct-shot branch must be
-# computed from anywhere on the rink.
+# How far (m) from the net mouth the goalie still counts as HOME for the shot
+# skips its readers make outside the zone; beyond it a direct shot must be
+# priced from anywhere on the rink.
 const THREAT_GOALIE_HOME_M: float = AIGoalieModel.GOALIE_HOME_M
 
-# "Threat surface" — the value an opponent can extract from his current
-# position, from a defender's perspective: max(fielded shot, position_potential).
-# The shot fades to ~0 far from our net; the positional fallback keeps a
-# non-zero gradient over any legal position, so a defender still has a reason
-# to close a far-but-dangerous man (reducing his openness).
-static func threat_surface_shoot(
-		opp_pos: Vector3,
-		our_net: Vector3,
-		our_goalie_pos: Vector3,
-		defenders: Array[Vector3],
-		defender_caps: Array = EMPTY_CAPS) -> float:
-	var positional: float = position_potential(opp_pos, our_net, defenders,
-			defender_caps)
-	# Hot-path skip, not a shaping choice: with the goalie HOME, a direct shot
-	# from outside the zone is dead by the hole geometry's own coverage math,
-	# so the max() below is always the positional branch there. A displaced or
-	# pulled goalie voids the proof, so it computes fully.
-	if not in_offensive_zone(opp_pos, our_net) \
-			and our_goalie_pos.distance_to(our_net) < THREAT_GOALIE_HOME_M:
-		return positional
-	var shoot: float = score_shoot_value(opp_pos, our_net, our_goalie_pos, defenders,
-			0.0, AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-			defender_caps)
-	return maxf(shoot, positional)
-
-
-# LOCAL threat — the shot branch of threat_surface_shoot WITHOUT the
-# positional fallback. The fallback is right for positioning and WRONG for
-# absolute turnover pricing: it floors possession-against-us at ~0.25-0.55
-# everywhere on the rink. Turnover pricing reads the immediate danger here and
-# the FUTURE carry-in danger via counter_rush_cost, which sees the covering set.
-static func threat_local_shoot(
-		opp_pos: Vector3,
-		our_net: Vector3,
-		our_goalie_pos: Vector3,
-		defenders: Array[Vector3],
-		defender_caps: Array = EMPTY_CAPS) -> float:
-	if not in_offensive_zone(opp_pos, our_net) \
-			and our_goalie_pos.distance_to(our_net) < THREAT_GOALIE_HOME_M:
-		return 0.0
-	return score_shoot_value(opp_pos, our_net, our_goalie_pos, defenders, 0.0,
-			AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S, defender_caps)
-
-
-# Pass-threat surface — the receiver's one-timer off the feed (score_pass_value)
-# with a positional fallback for the same
-# reason as threat_surface_shoot: when the receiver's shot collapses to 0 the
-# lane still has value to defend, so the fallback rewards defenders for being
-# in the lane AND for closing on the receiver. `defender_caps` (index-matched
-# to `defenders`) prices each defending blade's real reach and closing pace;
-# empty = league.
-static func threat_surface_pass(
-		carrier_pos: Vector3,
-		receiver_pos: Vector3,
-		our_net: Vector3,
-		our_goalie_pos: Vector3,
-		defenders: Array[Vector3],
-		defender_caps: Array = EMPTY_CAPS) -> float:
-	if AINetObstacle.pass_lane_blocked_by_net(carrier_pos, receiver_pos):
-		return 0.0
-	# Assume the opponent fires this hypothetical pass at the speed our bots
-	# would, or the quick-pass default overstates defender reaction time on
-	# long passes.
-	var pass_speed: float = AIPuckLane.expected_pass_speed(carrier_pos, receiver_pos)
-	# Compute the lane once: it feeds both the pass read and the positional floor
-	# below, on a per-candidate defensive read.
-	var lane: float = AIPuckLane.lane_clear(carrier_pos, receiver_pos, defenders, pass_speed,
-			EMPTY_VEC3, defender_caps)
-	var pass_score: float = score_pass_value(carrier_pos, receiver_pos, our_net,
-			our_goalie_pos, defenders, pass_speed, defender_caps, true, lane)
-	var positional: float = position_potential(receiver_pos, our_net, defenders,
-			defender_caps)
-	return maxf(pass_score, lane * positional)
-
-
-# Expected turnover cost on the threat surfaces' scale — the defensive half of
-# an off-puck read: the possession value the OPPONENT gains if we lose the puck at
-# `loss_point`, times the probability of losing it. "Don't turn it over where it
-# hurts" falls out of geometry: small far from our net, large in front of it. The
-# carrier prices its own turnovers in odds instead (AICarrierField.turnover_cost).
-#
-# `our_defenders` are our skaters (excluding the carrier, who just got beat); they
-# block the opponent's lane and contest his release. Returns 0 when there is no
-# loss location (INF) or no loss probability.
-static func turnover_cost(
-		loss_point: Vector3,
-		loss_prob: float,
-		our_net: Vector3,
-		our_goalie_pos: Vector3,
-		our_defenders: Array[Vector3],
-		defender_caps: Array = EMPTY_CAPS) -> float:
-	if not loss_point.is_finite():
-		return 0.0
-	if loss_prob <= 0.0:
-		return 0.0
-	return loss_prob * threat_surface_shoot(
-			loss_point, our_net, our_goalie_pos, our_defenders, defender_caps)
-
-
 # ── Transition-exposure: the counter-rush cost (5v5-gated at the caller) ─────
-# turnover_cost prices the threat AT the loss point, so a loss deep in the O-zone
+# The turnover cost prices possession AT the loss point
+# (AICarrierField.turnover_cost), so a loss deep in the O-zone
 # reads ~0 there while the true cost is the counter-rush into the ice the carrier
 # vacated. This is the additive second half:
 #   loss_prob × shot(counter_point | covering set) × delay_discount(t_counter)
@@ -636,11 +526,9 @@ static func counter_rush_cost(
 					/ maxf(self_max_speed, 0.001) + setup_margin <= t_counter:
 		_scratch_counter_cover.append(cover_anchor)
 
-	# score_shoot directly, not threat_surface_shoot: the counter point IS a
-	# shot location (the slot), squarely in score_shoot's domain — the
-	# positional fallback would hold its value regardless of the covering
-	# set (closeness × angle ignore defenders' block) and dilute the whole
-	# covered-vs-open signal this term exists to read.
+	# score_shoot directly, not a possession read: the counter point IS a shot
+	# location (the slot), and the covered-vs-open signal this term exists to
+	# read is the covering set's block on that shot.
 	#
 	# Memo by cover count: within one compete the only thing a candidate
 	# changes here is HOW MANY bodies stand at the anchor, so the caller may

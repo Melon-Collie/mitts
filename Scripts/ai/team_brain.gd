@@ -43,17 +43,24 @@ var slot_assignments: Dictionary[int, int] = {}      # peer_id -> AIRoleSlots.Sl
 # zone roles), so each covers a DISTINCT opponent instead of all collapsing on
 # the most dangerous one. Empty outside DZONE / TRANS_DEFENSE.
 var threat_assignments: Dictionary[int, int] = {}    # defender peer -> opp peer
-# opp peer_id → threat_surface_shoot of his current spot against our net, goalie
-# and full team, computed once per brain tick so MARK's unassigned fallback does
-# not pay it per marker per re-eval. APPROXIMATE: full-team defender set (the
+# opp peer_id → his threat with the puck (AIPossessionValue.threat_of_carrier)
+# against our net, goalie and full team, computed once per brain tick so MARK's
+# unassigned fallback does not pay it per marker per re-eval. APPROXIMATE: full-team defender set (the
 # exact read excludes the marker himself), raw unled positions, up to a brain
 # tick stale — usable only as ordering / pruning bounds, never for an
 # assigned-man cover. Empty whenever no MARK slot is live, so consumers fall back
 # to the exact local computation.
 var threat_shoot_base_by_opp: Dictionary[int, float] = {}
-# Scratch defender list + index-matched caps for the memo fill.
+# Scratch defender list + index-matched velocities and caps for the memo fill,
+# and the possession read over them.
 var _memo_defenders: Array[Vector3] = []
+var _memo_defender_vels: Array[Vector3] = []
 var _memo_defender_caps: Array[AISkaterCaps] = []
+var _memo_possession := AIPossessionValue.new()
+# The opposing attack's possession read with no defenders, for the partition's
+# man values (see _compute_threat_assignments).
+var _open_possession := AIPossessionValue.new()
+var _no_skaters: Array[Vector3] = []
 
 # The team's shared transition-defense read (docs/transition-defense-plan.md
 # §4), computed once per brain tick so no defender runs a private last-man race.
@@ -298,7 +305,7 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 	# Men = every opponent the puck-owner does not already own (see the header).
 	var our_net := Vector3(0.0, 0.0, _own_goal_z)
 	var our_goalie_pos: Vector3 = _resolve_our_goalie_pos(snapshot)
-	var no_defenders: Array[Vector3] = []
+	_open_possession.fill(our_net, _no_skaters, _no_skaters, [])
 	var men: Array[int] = []
 	var man_pos: Dictionary = {}
 	var man_value: Dictionary = {}
@@ -326,9 +333,8 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 				if not eligible_men.has(def_pid):
 					eligible_men[def_pid] = {}
 				(eligible_men[def_pid] as Dictionary)[pid] = true
-		man_value[pid] = AIActionScoring.threat_surface_pass(
-				play_ref, mp, our_net, our_goalie_pos,
-				no_defenders)
+		man_value[pid] = _open_possession.threat_of_feed(play_ref, mp,
+				snapshot.skater_states[pid].velocity, our_goalie_pos)
 		# Finish danger if fed: his one-timer off the feed, our keeper square on
 		# the play as he stands (AIShotValue.feed). Unlike man_value it carries no
 		# lane factor: a contested feed still becomes a tap-in if it arrives. And
@@ -367,17 +373,21 @@ func _refresh_threat_base_memo(snapshot: WorldSnapshot) -> void:
 	var our_net := Vector3(0.0, 0.0, _own_goal_z)
 	var our_goalie_pos: Vector3 = _resolve_our_goalie_pos(snapshot)
 	_memo_defenders.clear()
+	_memo_defender_vels.clear()
 	_memo_defender_caps.clear()
 	for pid: int in snapshot.skater_states:
 		if _team_id_by_peer.get(pid, -1) == team_id:
 			_memo_defenders.append(snapshot.skater_states[pid].position)
+			_memo_defender_vels.append(snapshot.skater_states[pid].velocity)
 			_memo_defender_caps.append(_caps_by_peer.get(pid))
+	_memo_possession.fill(our_net, _memo_defenders, _memo_defender_vels,
+			_memo_defender_caps)
 	for pid: int in snapshot.skater_states:
 		if _team_id_by_peer.get(pid, -1) == team_id:
 			continue
-		threat_shoot_base_by_opp[pid] = AIActionScoring.threat_surface_shoot(
-				snapshot.skater_states[pid].position, our_net, our_goalie_pos,
-				_memo_defenders, _memo_defender_caps)
+		var s: SkaterNetworkState = snapshot.skater_states[pid]
+		threat_shoot_base_by_opp[pid] = _memo_possession.threat_of_carrier(s.position,
+				s.velocity, our_goalie_pos)
 
 
 # Our goalie's current world position, or the goal mouth as a first-frame

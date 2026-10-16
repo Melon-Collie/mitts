@@ -37,10 +37,12 @@ The carrier's gains are odds of scoring wherever he stands, so
 `AICarrierField.turnover_cost` prices a loss as the opponent's possession of the
 spot (`AIPossessionValue`), and passes `in_xg` to `counter_rush_cost`. What a spot
 with no shot right now is worth — a turnover there, a dump's resting spot, the
-carrier's search horizon — is that one read, for either side. The defence's
-threat surfaces (`threat_surface_shoot`, `AIActionScoring.turnover_cost`) are
-still on `position_potential`'s scale; never mix the two in one comparison or
-one memo.
+carrier's search horizon — is that one read, for either side. The defence reads
+a man on it too: `threat_of_carrier` (his shot, or his possession of the spot)
+and `threat_of_feed` (his one-timer, or the lane × his possession), a candidate's
+body pushed onto the read's defence for the one call. The outlet and breakout
+spot reads are still on `position_potential`'s scale; never mix the two in one
+comparison or one memo.
 
 The giveaway bars (`SHOT_MIN_VALUE` 0.05, `PASS_MIN_VALUE` 0.02) are scale-bound
 to that seam — odds of scoring on today's goalie with a first shot.

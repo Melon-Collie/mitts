@@ -175,6 +175,11 @@ var scratch_opp_ids: Array[int] = []
 var scratch_teammates: Array[Vector3] = []
 # Index-matched to scratch_teammates; entries may be null.
 var scratch_teammate_caps: Array[AISkaterCaps] = []
+# Index-matched to scratch_teammates.
+var scratch_teammate_vels: Array[Vector3] = []
+# The opposing attack's possession read against our skaters
+# (AIRoleReads.defence_possession), over the three teammate buffers above.
+var scratch_defence_possession := AIPossessionValue.new()
 var scratch_opp_receivers: Array[Vector3] = []
 # Option-value upper bounds (AIDefensiveVerbs.carrier_option_bases).
 var scratch_option_bases: Array[float] = []

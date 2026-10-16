@@ -29,10 +29,13 @@ func _cost(teammates: Array[Vector3], self_pos: Vector3,
 			LOSS_POINT, 1.0, OUR_NET, OUR_GOALIE, teammates, self_pos, self_speed, opponents, opp_vels, opp_caps)
 
 
+# Their possession of the loss point with nobody of ours to contest it — what
+# the carrier's turnover cost prices a loss at (AICarrierField.turnover_cost).
 func _local_cost(loss_point: Vector3) -> float:
-	var no_defenders: Array[Vector3] = []
-	return AIActionScoring.turnover_cost(
-			loss_point, 1.0, OUR_NET, OUR_GOALIE, no_defenders)
+	var theirs := AIPossessionValue.new()
+	var nobody: Array[Vector3] = []
+	theirs.fill(OUR_NET, nobody, nobody, [])
+	return theirs.at(loss_point)
 
 
 func test_local_turnover_cost_falls_with_distance_from_our_net() -> void:

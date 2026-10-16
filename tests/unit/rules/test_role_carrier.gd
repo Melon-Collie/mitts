@@ -1986,7 +1986,7 @@ func test_committed_saucer_pass_caps_launch_at_the_receivability_bound() -> void
 
 func test_no_shot_is_even_scored_from_outside_the_zone() -> void:
 	# The shot eval is skipped entirely outside the attacking zone while the
-	# keeper is HOME — the same proof threat_surface_shoot and _score_at already
+	# keeper is HOME — the same proof threat_of_carrier and _score_at already
 	# run, applied to the eval that costs the most (goalie hole geometry + the
 	# three-sample release sweep + the tip read, on every NZ/DZ dispatch, to
 	# compute ~0).

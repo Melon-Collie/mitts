@@ -489,7 +489,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 	# ...and no shot at all from OUTSIDE the attacking zone while the keeper is
 	# HOME: at that range he is square long before the puck arrives, so the shot
 	# is dead by score_shoot's own coverage math (the same proof
-	# threat_surface_shoot and value_at run). Gating it, rather than leaving it
+	# AIPossessionValue.threat_of_carrier and value_at run). Gating it, rather than leaving it
 	# to SHOT_MIN_VALUE, guarantees the fire hysteresis and the ping SHOOT bias
 	# have no score to lift. A DISPLACED or PULLED keeper voids the proof — an
 	# empty net genuinely scores from centre ice — so this is not a blanket zone

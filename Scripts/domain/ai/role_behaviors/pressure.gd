@@ -97,11 +97,11 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 
 	# Upper bounds for carrier_best_option's early-out, and the data the
 	# calculated closing stands are built from.
+	var poss: AIPossessionValue = AIRoleReads.defence_possession(ctx,
+			our_team_excluding_self)
 	var bases: Array[float] = ctx.scratch_option_bases
-	AIDefensiveVerbs.carrier_option_bases(
-			carrier_pos, our_net, our_goalie_pos,
-			our_team_excluding_self, opp_teammates, bases,
-			ctx.scratch_teammate_caps)
+	AIDefensiveVerbs.carrier_option_bases(poss, carrier_pos, carrier_velocity,
+			our_goalie_pos, opp_teammates, bases)
 
 	# ENGAGED: the full ring with half-step samples, for small live corrections.
 	# CLOSING (the common case): the ring's ±SEARCH_STEP_M refinements are
@@ -172,9 +172,8 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 
 		# Higher = better for us, i.e. lower for the carrier.
 		var pressure_score: float = -AIDefensiveVerbs.carrier_best_option(
-				c, carrier_pos, our_net, our_goalie_pos,
-				our_team_excluding_self, opp_teammates, bases,
-				ctx.scratch_teammate_caps, ctx.caps_by_peer.get(ctx.peer_id)) \
+				poss, c, ctx.caps_by_peer.get(ctx.peer_id), carrier_pos,
+				carrier_velocity, our_goalie_pos, opp_teammates, bases) \
 				+ AIStationSearch.incumbent_bonus(ctx, c)
 		if pressure_score > best_score:
 			best_score = pressure_score

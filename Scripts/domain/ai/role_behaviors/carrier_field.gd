@@ -359,7 +359,7 @@ func feed_value_at(ctx: RoleContext, passer: Vector3, pos: Vector3, pass_speed: 
 	return _regime_value(ctx, pos, from_pos, shoot_s)
 
 
-# Hot-path skip (the same proof threat_surface_shoot runs): with the keeper HOME
+# Hot-path skip (the same proof AIPossessionValue.threat_of_carrier runs): with the keeper HOME
 # and still, a direct shot from OUTSIDE the attacking zone is dead, so the
 # horizon branch always wins. A moving or pulled keeper voids the proof.
 # `keeper_pos` INF reads the keeper where he stands now.

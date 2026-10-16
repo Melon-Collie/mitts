@@ -165,17 +165,31 @@ static func collect_opp_team_excluding_carrier(ctx: RoleContext,
 
 
 # Fills `out` with teammates' positions excluding self, and
-# ctx.scratch_teammate_caps index-matched.
+# ctx.scratch_teammate_caps / scratch_teammate_vels index-matched.
 static func collect_teammates_excluding_self(ctx: RoleContext,
 		out: Array[Vector3]) -> void:
 	out.clear()
 	ctx.scratch_teammate_caps.clear()
+	ctx.scratch_teammate_vels.clear()
 	for pid: int in ctx.snapshot.skater_states:
 		if pid == ctx.peer_id:
 			continue
 		if ctx.team_id_by_peer.get(pid, -1) == ctx.team_id:
 			out.append(ctx.snapshot.skater_states[pid].position)
 			ctx.scratch_teammate_caps.append(ctx.caps_by_peer.get(pid))
+			ctx.scratch_teammate_vels.append(ctx.snapshot.skater_states[pid].velocity)
+
+
+# The opposing attack's possession read (AIPossessionValue) against our skaters
+# other than this bot — the defence's scale for what a man threatens. Reads the
+# buffers collect_teammates_excluding_self filled into `teammates`, so call it
+# after that; a candidate body is priced by push_defender / pop_defender.
+static func defence_possession(ctx: RoleContext,
+		teammates: Array[Vector3]) -> AIPossessionValue:
+	var poss: AIPossessionValue = ctx.scratch_defence_possession
+	poss.fill(ctx.defending_goal_pos, teammates, ctx.scratch_teammate_vels,
+			ctx.scratch_teammate_caps)
+	return poss
 
 
 # Fills parallel arrays of opponent positions (led by lead_threat when
