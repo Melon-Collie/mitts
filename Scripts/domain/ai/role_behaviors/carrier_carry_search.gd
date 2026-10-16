@@ -245,7 +245,7 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 		if bi == -1:
 			break
 		var up_total: float = _upgrade_candidate_two_ply(ctx, bi,
-				rank < CARRY_PLY2_WIDTH, our_goalie, caps)
+				rank < CARRY_PLY2_WIDTH, our_goalie, caps, best_score)
 		if up_total > best_score:
 			best_score = up_total
 			best_pos = _beam_pos[bi]
@@ -403,9 +403,10 @@ func _end_worth(ctx: RoleContext, roll: AICarryRollout, m: int, t_end: float,
 # each rolled move again, from the end's position, pace and facing, against the
 # defence projected a first move's horizon on, priced as a first move is —
 # its end's worth × the decay of the step × its keep odds − its strip cost.
-# -INF when no second move is legal.
+# Returns `floor_value` when no second move beats it (exact: a move whose worth ×
+# decay cannot clear it is not read for safety, nor costed when × keep odds cannot).
 func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
-		caps: AISkaterCaps) -> float:
+		caps: AISkaterCaps, floor_value: float = -INF) -> float:
 	var t1: float = AICarryRollout.HORIZON_S
 	var start: Vector3 = rollout.end_pos[m1]
 	var aim: Vector3 = destination if destination_kind >= 0 \
@@ -424,20 +425,21 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 		dest_arrival = _dest_arrival[dest_i]
 	var behind_net: bool = absf(start.z) > GameRules.GOAL_LINE_Z
 	var decay: float = AIActionScoring.delay_discount(t1)
-	var best: float = -INF
+	_field.project_opponents(2.0 * t1, _scratch_opponents_path)
+	var best: float = floor_value
 	for m: int in AICarryRollout.MOVE_COUNT:
 		if not _move_legal(ctx, _rollout2, m, start, behind_net):
 			continue
-		var safety: float = _rolled_safety(ctx, _rollout2, m, start, _scratch_opponents_ply2)
-		if decay * safety <= best:
+		var worth: float = _end_worth(ctx, _rollout2, m, 2.0 * t1, caps, dest_arrival) * decay
+		if worth <= best:
 			continue
-		var strip: Vector3 = _strip_point
-		_field.project_opponents(2.0 * t1, _scratch_opponents_path)
-		var value: float = _end_worth(ctx, _rollout2, m, 2.0 * t1, caps, dest_arrival) \
-				* decay * safety
-		if safety < 1.0 and strip.is_finite():
-			value -= _field.turnover_cost(ctx, strip, 1.0 - safety, our_goalie)
-			value -= _field.counter_exposure_cost(ctx, strip, 1.0 - safety,
+		var safety: float = _rolled_safety(ctx, _rollout2, m, start, _scratch_opponents_ply2)
+		var value: float = worth * safety
+		if value <= best:
+			continue
+		if safety < 1.0 and _strip_point.is_finite():
+			value -= _field.turnover_cost(ctx, _strip_point, 1.0 - safety, our_goalie)
+			value -= _field.counter_exposure_cost(ctx, _strip_point, 1.0 - safety,
 					_rollout2.end_pos[m], our_goalie)
 		best = maxf(best, value)
 	return best
@@ -673,15 +675,28 @@ func _arrival_value(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3,
 # reason to keep carrying. CEILING PRUNE (exact): the credit can't exceed
 # _field.pass_option_ceiling − _field.pass_option_at_self, so when that can't raise
 # dest_score the per-receiver lane loop is skipped.
+#
+# With `carry_on`, the row's move is also searched a second step deep, for a
+# step that lifts the row past `best_so_far` (exact: a step's worth is odds, at
+# most 1, so it is worth at most its own decay; one that cannot win the argmax
+# is not priced).
 func _upgrade_candidate_two_ply(ctx: RoleContext, i: int, carry_on: bool = false,
-		our_goalie: Vector3 = Vector3.ZERO, caps: AISkaterCaps = null) -> float:
+		our_goalie: Vector3 = Vector3.ZERO, caps: AISkaterCaps = null,
+		best_so_far: float = -INF) -> float:
 	var candidate: Vector3 = _beam_pos[i]
 	var dest_score: float = _beam_dest[i]
-	if carry_on and _beam_move[i] >= 0:
-		dest_score = maxf(dest_score, _carry_on_value(ctx, _beam_move[i], our_goalie, caps))
 	var lane: float = _beam_lane[i]
 	var decay: float = _beam_decay[i]
 	var safety: float = _beam_safety[i]
+	var row_scale: float = lane * decay * safety
+	var step_needs: float = dest_score
+	if row_scale > 0.0:
+		step_needs = maxf(step_needs, (best_so_far + _beam_cost[i]) / row_scale)
+	if carry_on and _beam_move[i] >= 0 \
+			and AIActionScoring.delay_discount(AICarryRollout.HORIZON_S) > step_needs:
+		var step: float = _carry_on_value(ctx, _beam_move[i], our_goalie, caps, step_needs)
+		if step > step_needs:
+			dest_score = step
 	if _field.pass_option_ceiling - _field.pass_option_at_self > dest_score:
 		dest_score = maxf(dest_score, maxf(
 				0.0, _field.pass_option_from(ctx, candidate,
