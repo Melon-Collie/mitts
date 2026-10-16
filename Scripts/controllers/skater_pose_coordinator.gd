@@ -63,7 +63,7 @@ func setup(skater: Skater, sm: SkaterStateMachine, aiming: SkaterAimingBehavior,
 	_controller = controller
 	_skating = skating
 	_prev_facing_angle = atan2(facing.x, facing.y)
-	_prev_upper_body_angle = upper_body_angle
+	_prev_upper_body_angle = skater.get_upper_body_rotation()
 
 # ── Per-Tick Application ──────────────────────────────────────────────────────
 func apply_velocity_lean(delta: float) -> void:
@@ -128,6 +128,31 @@ func adopt_wire_lean(state: SkaterNetworkState) -> void:
 	upper_body_lean = state.torso_lean.x
 	upper_body_lean_roll = state.torso_lean.y
 	velocity_lean_x = state.posture_lean
+
+
+# The frame's yaw is the tracked angle plus the follow spring's whip, and the
+# yaw is what goes on the wire — so the reconcile history records both halves.
+func record_twist(snap: PredictedState) -> void:
+	snap.upper_body_rotation_y = _skater.get_upper_body_rotation()
+	snap.twist_whip = angle_difference(upper_body_angle, snap.upper_body_rotation_y)
+	snap.twist_follow = _twist_follow
+	snap.twist_follow_vel = _twist_follow_vel
+
+
+# The reconcile's half: put the frame on the host's yaw and rebuild the tracked
+# angle and spring under it from this machine's record of the same instant.
+# Taking the yaw as the tracked angle instead plants the whip in it. With no
+# record, the spring settles on the host's yaw.
+func adopt_wire_twist(frame_yaw: float, at_ack: PredictedState) -> void:
+	if at_ack != null:
+		upper_body_angle = frame_yaw - at_ack.twist_whip
+		_twist_follow = at_ack.twist_follow
+		_twist_follow_vel = at_ack.twist_follow_vel
+	else:
+		upper_body_angle = frame_yaw
+		_twist_follow = frame_yaw
+		_twist_follow_vel = 0.0
+	_skater.set_upper_body_rotation(frame_yaw)
 
 
 static func _is_slapper_charge(state: int) -> bool:
@@ -501,15 +526,17 @@ func apply_head_tracking_aim(aim_world: Vector3, delta: float) -> void:
 
 # ── Angular Velocity Bookkeeping ──────────────────────────────────────────────
 # Called at the end of _process_input on real (non-replay) frames so the
-# network state carries C1-continuous facing / upper-body rotation.
+# network state carries C1-continuous facing / upper-body rotation. The
+# upper-body rate is the FRAME yaw's (whip included), the angle it rides with.
 func update_angular_velocities(delta: float) -> void:
 	if delta <= 0.0:
 		return
 	var cur_fa: float = atan2(facing.x, facing.y)
+	var frame_yaw: float = _skater.get_upper_body_rotation()
 	facing_angular_velocity = angle_difference(_prev_facing_angle, cur_fa) / delta
-	upper_body_angular_velocity = angle_difference(_prev_upper_body_angle, upper_body_angle) / delta
+	upper_body_angular_velocity = angle_difference(_prev_upper_body_angle, frame_yaw) / delta
 	_prev_facing_angle = cur_fa
-	_prev_upper_body_angle = upper_body_angle
+	_prev_upper_body_angle = frame_yaw
 
 # ── Pose Resets ───────────────────────────────────────────────────────────────
 # Used by SkaterController._transition_to_skating and _enter_slapper_charge.

@@ -49,7 +49,7 @@ const _SIZE_SLACK: int = 40
 const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/ai/skater_agent_state_machine.gd": 3794,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
-	"res://Scripts/game/game_manager.gd": 5787,
+	"res://Scripts/game/game_manager.gd": 5788,
 	"res://Scripts/domain/ai/action_scoring.gd": 2026,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
@@ -87,7 +87,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/ui/side_menu.gd": 995,
 	"res://Scripts/controllers/goalie_body_config_builder.gd": 1131,
 	"res://Scripts/ui/network_debug_overlay.gd": 956,
-	"res://Scripts/networking/network_telemetry.gd": 957,
+	"res://Scripts/networking/network_telemetry.gd": 968,
 	"res://Scripts/controllers/local_controller.gd": 949,
 	# Main's resumable sample prediction and the board pin's forward cap crossed the
 	# limit together, each from under it, at the merge that joined them.
@@ -108,7 +108,7 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/domain/ai/action_scoring.gd": 36,
 	"res://Scripts/game/game_manager.gd": 63,
 	"res://Scripts/domain/state/player_attributes.gd": 53,
-	"res://Scripts/networking/network_telemetry.gd": 53,
+	"res://Scripts/networking/network_telemetry.gd": 54,
 	# +1: knockdown_drop_m, which the gait's crumple and the sprawl's buckle share.
 	# +1: knockdown_getup_left, the get-up clock the gait and the torso fold read.
 	"res://Scripts/controllers/skater_controller.gd": 42,

@@ -29,6 +29,9 @@ class_name NetworkSessionSummary extends RefCounted
 #     Both marker kinds can carry a `history` pre-trace (the ring of 1 s
 #     samples leading up to the moment), budgeted across the session so the
 #     row stays under the table's jsonb size cap.
+#   • Hitches: record_hitch() keeps every host frame past the stall band with
+#     its time split by where it went — no cooldown, since the question is how
+#     often and where, not when one first happened.
 
 # Metrics where a LOWER value is the bad direction, so the session minimum is
 # the diagnostic extreme worth keeping (everything else keeps the maximum).
@@ -70,9 +73,13 @@ const AUTO_MARKER_COOLDOWN_SEC: float = 30.0
 # rows blew the table's 64 KiB jsonb cap through exactly this cap).
 const MAX_MARKERS_WITH_HISTORY: int = 8
 
+# Stored hitches per session; hitch_count keeps counting past it.
+const MAX_HITCHES: int = 40
+
 var seconds: int = 0
 var felt_lag_count: int = 0
 var auto_marker_count: int = 0
+var hitch_count: int = 0
 
 var _min: Dictionary = {}
 var _max: Dictionary = {}
@@ -81,6 +88,7 @@ var _markers: Array[Dictionary] = []
 var _auto_markers: Array[Dictionary] = []
 var _auto_last_at: Dictionary = {}
 var _history_attached: int = 0
+var _hitches: Array[Dictionary] = []
 
 
 # Fold one 1 s sample into the session aggregates. `sample` maps metric name →
@@ -129,6 +137,15 @@ func record_auto_marker(at_sec: float, trigger: String, snapshot: Dictionary,
 	_auto_markers.append(marker)
 
 
+func record_hitch(at_sec: float, entry: Dictionary) -> void:
+	hitch_count += 1
+	if _hitches.size() >= MAX_HITCHES:
+		return
+	var stored: Dictionary = entry.duplicate()
+	stored["at_sec"] = at_sec
+	_hitches.append(stored)
+
+
 func _build_marker(at_sec: float, snapshot: Dictionary, history: Array[Dictionary]) -> Dictionary:
 	var marker: Dictionary = snapshot.duplicate()
 	marker["at_sec"] = at_sec
@@ -152,6 +169,8 @@ func to_dict() -> Dictionary:
 		"felt_lag_markers": _markers,
 		"auto_marker_count": auto_marker_count,
 		"auto_markers": _auto_markers,
+		"hitch_count": hitch_count,
+		"hitches": _hitches,
 	}
 	for key: String in _sum:
 		if key in TOTAL_KEYS:
@@ -183,8 +202,9 @@ const METRICS_MAX_TEXT_BYTES: int = 48 * 1024
 #   1. history traces off AUTO markers, last-attached first (earliest onsets
 #      keep their run-up),
 #   2. history traces off FELT markers, same order,
-#   3. whole auto markers from the tail,
-#   4. whole felt markers from the tail (the tester's explicit signal goes
+#   3. whole hitches from the tail (hitch_count survives),
+#   4. whole auto markers from the tail,
+#   5. whole felt markers from the tail (the tester's explicit signal goes
 #      last).
 # If the aggregates alone exceed max_bytes (not reachable at real metric
 # counts) the oversize dict is returned as-is — the POST fails like today, but
@@ -201,8 +221,10 @@ func to_dict_bounded(max_bytes: int = METRICS_MAX_TEXT_BYTES) -> Dictionary:
 	var auto: Array[Dictionary] = []
 	for m: Dictionary in _auto_markers:
 		auto.append(m.duplicate())
+	var hitches: Array[Dictionary] = _hitches.duplicate()
 	out["felt_lag_markers"] = felt
 	out["auto_markers"] = auto
+	out["hitches"] = hitches
 	for i: int in range(auto.size() - 1, -1, -1):
 		if _encoded_size(out) <= max_bytes:
 			return out
@@ -211,6 +233,8 @@ func to_dict_bounded(max_bytes: int = METRICS_MAX_TEXT_BYTES) -> Dictionary:
 		if _encoded_size(out) <= max_bytes:
 			return out
 		felt[i].erase("history")
+	while _encoded_size(out) > max_bytes and not hitches.is_empty():
+		hitches.pop_back()
 	while _encoded_size(out) > max_bytes and not auto.is_empty():
 		auto.pop_back()
 	while _encoded_size(out) > max_bytes and not felt.is_empty():
