@@ -600,3 +600,34 @@ func test_a_step_up_on_a_carrier_crossing_at_speed_holds_its_ice() -> void:
 func test_a_step_up_on_a_stalled_carrier_may_attack() -> void:
 	var d: RoleDecision = _step_up(Vector3(0.0, 0.0, 0.3))
 	assert_gt(d.advance_cap_m_s, 2.0, "a carrier with no speed is attacked")
+
+
+# ── Turn and skate ───────────────────────────────────────────────────────────
+
+# A rush D `depth` m goal-side of a carrier coming straight at our net at
+# `pace`, facing the play and backpedalling at `self_speed`.
+func _retreat(depth: float, pace: float, self_speed: float) -> RoleDecision:
+	var carrier := Vector3(0.0, 0.0, 0.0)
+	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, depth),
+			[[10, 1, carrier, Vector3(0.0, 0.0, pace)]], 10)
+	ctx.snapshot.skater_states[1].facing = Vector2(0.0, -1.0)
+	ctx.self_velocity = Vector3(0.0, 0.0, self_speed)
+	return AIRoleRushD.decide(ctx, AIRoleSlots.Slot.RUSH_D1)
+
+
+func test_backpedalling_into_a_race_he_loses_he_turns_and_skates() -> void:
+	assert_true(_retreat(6.0, 9.0, 7.5).face_travel,
+			"at his backward top speed against 9 m/s with 6 m to give: turn and skate")
+
+
+func test_with_depth_to_spare_he_faces_the_play() -> void:
+	assert_false(_retreat(14.0, 9.0, 7.5).face_travel)
+
+
+func test_from_a_stand_he_backpedals_first() -> void:
+	assert_false(_retreat(6.0, 9.0, 0.0).face_travel,
+			"a standing turn costs more ground than backpedalling")
+
+
+func test_draped_on_the_carrier_he_faces_him() -> void:
+	assert_false(_retreat(1.5, 9.0, 7.5).face_travel, "within a stick he plays the man")

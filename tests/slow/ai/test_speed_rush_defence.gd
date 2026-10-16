@@ -9,10 +9,12 @@ extends GutTest
 # house gate from a stand, after a real bot's reaction, on the movement model's
 # own backward caps (AIStrideRamp). A start is WINNABLE when that retreat reaches
 # the gate a body's width goal-side. A rush is LOST when, at any tick with the
-# carrier inside our blue line, he is nearer our net than the defender. Reference
+# carrier inside our blue line, the defender is not goal-side of him — not
+# between him and our net along his line to it (a defender inside a carrier on
+# the wall is goal-side however far the two are from the net). Reference
 # readings over these 32 starts, winnable rushes lost:
 #
-#   the last man commits a hit at the blue line                  8
+#   the last man commits a hit at the blue line                  7
 #   no hit without support behind; RUSH_D1's route past the line 2
 #
 # WHAT THE HARNESS DOES NOT MODEL: body collisions. The carrier skates through
@@ -37,8 +39,8 @@ func _gate_z() -> float:
 
 # One rush: the carrier at `speed` from `carrier_x`, the defender standing
 # `depth` goal-side at `d_x`, facing the play. Returns the worst margin (+ =
-# the defender nearer our net) while the carrier is inside our blue line, or INF
-# if he never got in.
+# the defender goal-side of the carrier, along the carrier's line to our net)
+# while the carrier is inside our blue line, or INF if he never got in.
 func _rush(carrier_x: float, d_x: float, depth: float, speed: float) -> float:
 	var duel := Duel.new()
 	duel.add_skater(1, 0, Vector3(carrier_x, 0.0, START_Z), BotSkillProfile.hard(),
@@ -55,7 +57,8 @@ func _rush(carrier_x: float, d_x: float, depth: float, speed: float) -> float:
 			break
 		var car: Object = duel._skater(1)
 		if car.pos.z < -GameRules.BLUE_LINE_Z:
-			worst = minf(worst, car.pos.distance_to(net) - duel._skater(2).pos.distance_to(net))
+			var to_net: Vector3 = (net - car.pos).normalized()
+			worst = minf(worst, (duel._skater(2).pos - car.pos).dot(to_net))
 		if car.pos.z <= _gate_z():
 			break
 	return worst

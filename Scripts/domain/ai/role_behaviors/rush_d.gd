@@ -103,6 +103,7 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 			stand = fan
 
 	d.target_velocity = ride
+	set_retreat_facing(ctx, ap, d, gapping_up)
 	if not gapping_up:
 		stand = depth_first(ctx, ap, stand, d)
 	d.target_position = _clamp_to_house(ctx, stand)
@@ -119,7 +120,7 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 # Depth before width. A defender short of his stand's depth must keep pace with
 # the carrier down the line and win the rest back before the carrier reaches
 # him; only the stride left over can take him across (one speed budget, |v| at
-# most his top speed), and none of it until he has that pace — from a stand,
+# most his top speed on the retreat he skates), and none of it until he has that pace — from a stand,
 # every push goes down the line first. So the stand's offset across the line,
 # and the ride's sideways part, are capped at the spare speed, scaled by the
 # share of the pace he has, over the time his depth buys: the carrier's soonest
@@ -139,7 +140,8 @@ static func depth_first(ctx: RoleContext, ap: AICarrierApproach, stand: Vector3,
 			maxf(_depth_along(ctx, ap.carrier_pos, dir_net), stick_m(ctx))), 0.05)
 	var pace: float = maxf(ap.closing, 0.0) + short / time_s
 	var have: float = ctx.self_velocity.x * dir_net.x + ctx.self_velocity.z * dir_net.z
-	var spare: float = sqrt(maxf(ctx.self_max_speed * ctx.self_max_speed - pace * pace, 0.0)) \
+	var v_retreat: float = retreat_max_speed(ctx, d.face_travel)
+	var spare: float = sqrt(maxf(v_retreat * v_retreat - pace * pace, 0.0)) \
 			* clampf(have / maxf(pace, 0.1), 0.0, 1.0)
 	var ride: Vector3 = d.target_velocity
 	var ride_along: float = ride.x * dir_net.x + ride.z * dir_net.z
@@ -246,8 +248,80 @@ static func set_advance_cap(ctx: RoleContext, ap: AICarrierApproach,
 		return
 	var depth: float = _depth_along(ctx, ap.carrier_pos, ap.dir_net)
 	var pace: float = maxf(ap.closing, Vector2(ap.carrier_vel.x, ap.carrier_vel.z).length())
+	# A pace past the retreat's top speed is one he never matches on it, so there
+	# is no step to take toward him.
+	if pace >= retreat_max_speed(ctx, d.face_travel):
+		d.advance_cap_m_s = 0.0
+		return
 	d.advance_cap_m_s = AILastManDiscipline.approach_speed_cap(depth - gap, pace,
-			ctx.self_max_speed, ctx.self_max_accel)
+			ctx.self_max_speed, retreat_max_accel(ctx, d.face_travel))
+
+
+# Which way a defender in front of the carrier he owns skates his retreat
+# (RoleDecision.face_travel). He faces the play — where he can play the man —
+# unless backpedalling loses the race: the carrier gains more on that retreat
+# than the depth he holds past a stick. Then he turns to skate down the ice with
+# him, if that concedes less (retreat_gains). Draped within a stick of him, or
+# stepping up to him, he faces him to play him.
+static func set_retreat_facing(ctx: RoleContext, ap: AICarrierApproach,
+		d: RoleDecision, gapping_up: bool) -> void:
+	var depth: float = _depth_along(ctx, ap.carrier_pos, ap.dir_net)
+	if gapping_up or depth <= stick_m(ctx):
+		return
+	var threat: int = ctx.rush_read.carrier_peer if ctx.rush_read != null else -1
+	var gains: Vector2 = retreat_gains(ctx, ap.dir_net, ap.carrier_vel, ap.net_dist,
+			threat, RETREAT_FINISH_M)
+	d.face_travel = gains.x > depth - stick_m(ctx) and gains.y < gains.x
+
+
+# This bot's top speed and stride on a retreat: skating forward down the ice, or
+# backward facing the play (SkaterMovementRules' backward multipliers on his
+# own build).
+static func retreat_max_speed(ctx: RoleContext, forward: bool) -> float:
+	if forward:
+		return ctx.self_max_speed
+	return ctx.self_max_speed * _self_movement(ctx).backward_max_speed_multiplier
+
+
+static func retreat_max_accel(ctx: RoleContext, forward: bool) -> float:
+	if forward:
+		return ctx.self_max_accel
+	return ctx.self_max_accel * _self_movement(ctx).backward_thrust_multiplier
+
+
+static func _self_movement(ctx: RoleContext) -> SkaterMovementRules.MovementConfig:
+	var caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.peer_id)
+	return caps.movement if caps != null else _league_caps.movement
+
+
+# The ground the threat gains on each of a defender's two retreats (head_start_on_me):
+# x backpedalling facing the play, y turned and skating down the ice. Each first
+# turns his body from where it points now, at his facing turn rate.
+static func retreat_gains(ctx: RoleContext, dir_net: Vector3, threat_vel: Vector3,
+		net_dist: float, threat_peer: int, finish_m: float) -> Vector2:
+	var facing: Vector2 = _self_facing(ctx, -dir_net)
+	return Vector2(
+			_threat_gain(ctx, dir_net, threat_vel, net_dist, threat_peer, finish_m,
+					retreat_max_speed(ctx, false), retreat_max_accel(ctx, false),
+					_turn_s(ctx, facing, -dir_net)),
+			_threat_gain(ctx, dir_net, threat_vel, net_dist, threat_peer, finish_m,
+					retreat_max_speed(ctx, true), retreat_max_accel(ctx, true),
+					_turn_s(ctx, facing, dir_net)))
+
+
+# Where this bot's body points; `fallback` when it cannot be read.
+static func _self_facing(ctx: RoleContext, fallback: Vector3) -> Vector2:
+	var me: SkaterNetworkState = ctx.snapshot.skater_states.get(ctx.peer_id) \
+			if ctx.snapshot != null else null
+	if me == null or me.facing.length_squared() < 0.0001:
+		return Vector2(fallback.x, fallback.z)
+	return me.facing
+
+
+# How long turning the body from `facing` to `dir` takes at his facing turn rate.
+static func _turn_s(ctx: RoleContext, facing: Vector2, dir: Vector3) -> float:
+	return absf(facing.angle_to(Vector2(dir.x, dir.z))) \
+			/ maxf(ctx.self_facing_turn_rate, 0.1)
 
 
 # ramp_cushion_m's race for any threat: `dir_net` his line to our net,
@@ -261,10 +335,21 @@ static func set_advance_cap(ctx: RoleContext, ap: AICarrierApproach,
 # crossing the ice at speed has that speed toward our net a moment later; the
 # turn costs him the ground the arc gives up against the straight run.
 # `threat_peer` -1 (a loose puck) prices a league skater. A carrier is priced at
-# his free top speed — a slight over-read, in the safe direction.
+# his free top speed — a slight over-read, in the safe direction. We are priced
+# skating straight there at our forward stride, with no turn: the cushion a
+# step-up reads, which a straight race cannot price on the backward caps (a
+# carrier bursting from a stick away goes through the defender, not past him in
+# a race), so retreat_gains prices the two real retreats separately.
 static func head_start_on_me(ctx: RoleContext, dir_net: Vector3,
 		threat_vel: Vector3, net_dist: float, threat_peer: int,
 		finish_m: float = AIZoneCoverage.HOUSE_TOP_DEPTH_M) -> float:
+	return _threat_gain(ctx, dir_net, threat_vel, net_dist, threat_peer, finish_m,
+			ctx.self_max_speed, ctx.self_max_accel, 0.0)
+
+
+static func _threat_gain(ctx: RoleContext, dir_net: Vector3, threat_vel: Vector3,
+		net_dist: float, threat_peer: int, finish_m: float, self_vmax: float,
+		self_accel: float, self_turn_s: float) -> float:
 	var ice_to_finish: float = net_dist - finish_m
 	if ice_to_finish <= 0.0:
 		return 0.0
@@ -275,12 +360,13 @@ static func head_start_on_me(ctx: RoleContext, dir_net: Vector3,
 	var self_v: float = ctx.self_velocity.x * dir_net.x \
 			+ ctx.self_velocity.z * dir_net.z
 	var along: float = threat_vel.x * dir_net.x + threat_vel.z * dir_net.z
-	var gained: float = _head_start_from(ctx, along, caps, self_v, ice_to_finish)
+	var gained: float = _head_start_from(along, caps, self_v, self_vmax, self_accel,
+			self_turn_s, ice_to_finish)
 	var speed: float = Vector2(threat_vel.x, threat_vel.z).length()
 	var turn_s: float = _turn_onto_line_s(caps, along, speed)
 	if turn_s < INF:
-		gained = maxf(gained,
-				_head_start_from(ctx, speed, caps, self_v, ice_to_finish) - speed * turn_s)
+		gained = maxf(gained, _head_start_from(speed, caps, self_v, self_vmax, self_accel,
+				self_turn_s, ice_to_finish) - speed * turn_s)
 	return minf(gained, ice_to_finish)
 
 
@@ -315,13 +401,14 @@ static func _carrier_time_to(ctx: RoleContext, ap: AICarrierApproach, dist: floa
 
 # AIStrideRamp.head_start for a threat starting down the line at `lead_v`, over
 # his trip to the finish.
-static func _head_start_from(ctx: RoleContext, lead_v: float, caps: AISkaterCaps,
-		self_v: float, ice_to_finish: float) -> float:
+static func _head_start_from(lead_v: float, caps: AISkaterCaps, self_v: float,
+		self_vmax: float, self_accel: float, self_turn_s: float,
+		ice_to_finish: float) -> float:
 	var horizon: float = AIStrideRamp.time_to_cover(
 			maxf(lead_v, 0.0), ice_to_finish, caps.max_speed, caps.max_accel)
 	return AIStrideRamp.head_start(lead_v, caps.max_speed, caps.max_accel,
-			self_v, ctx.self_max_speed, ctx.self_max_accel,
-			AIArrival.REVERSAL_BRAKE_DECEL_M_S2, horizon)
+			self_v, self_vmax, self_accel,
+			AIArrival.REVERSAL_BRAKE_DECEL_M_S2, horizon, self_turn_s)
 
 
 # An attacker's distance from our net less the ground he gains on us while we

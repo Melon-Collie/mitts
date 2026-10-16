@@ -390,6 +390,27 @@ moving-frame closing term walking him up-ice at a carrier who is crossing rather
 than coming, which the turn down then beats. A carrier with no speed has no
 turn to beat him with, so the cap is wide open and he is attacked.
 
+### Facing the play, or turned to skate with him
+
+A skater backward has 80% of his stride and 80% of his top speed
+(`SkaterMovementRules`), so a carrier at speed outruns any backpedal. The
+defender in front of him skates one of two retreats (`AIRoleRushD.retreat_gains`):
+backpedalling facing the play, or turned to skate down the ice — each priced as
+a race after the time his body takes to turn there from where it points now
+(`AIStrideRamp.head_start`'s chase delay, at his facing turn rate). He faces the
+play unless backpedalling loses the race — the carrier gains more on it than
+the depth he holds past a stick — and then turns if that concedes less
+(`set_retreat_facing` → `RoleDecision.face_travel`, which the agent skates by
+putting the cursor down the route). Draped or stepping up, he faces the man.
+
+The turn's cost is what keeps it honest: from a stand a turn costs more ground
+than backpedalling, so a standing defender backpedals first and turns once he
+is moving with a carrier he cannot match — the coached "turn and skate" — and
+turning back costs as much again, so it does not flicker. The ramp cushion is
+NOT priced on these retreats: a straight race cannot see that a carrier bursting
+from a stick away has to go through the defender, and priced that way the
+cushion never lets him step up on a stalled carrier.
+
 ### Pace enters through the stride ramp, and only there
 
 The ladder is the gap between two bodies already travelling together. Under the

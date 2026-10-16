@@ -1213,6 +1213,10 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 			input.mouse_world_pos = _step_mouse_face(_shot_aim_point(snapshot, self_pos, 0.0))
 		elif decision.has_aim_override:
 			input.mouse_world_pos = _step_mouse_face(decision.aim_world_pos)
+		elif decision.face_travel and input.move_vector.length_squared() > 0.01:
+			# The cursor down the route: FacingRules turns the body onto its travel.
+			var travel := Vector3(input.move_vector.x, 0.0, input.move_vector.y).normalized()
+			input.mouse_world_pos = _step_mouse_face(self_pos + travel * READY_STANCE_AIM_FORWARD_M)
 		else:
 			_arm_off_puck_live_aim(decision.target_position, FACE_THREAT_NEAR_ANCHOR_M)
 			input.mouse_world_pos = _step_mouse_face(_ready_stance_aim(self_pos, decision.target_position, snapshot))

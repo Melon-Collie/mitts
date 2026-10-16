@@ -26,6 +26,10 @@ var retreat_floor_radius_m: float = 0.0
 # command AWAY from `retreat_floor_center` (INF = no cap). Read only with a floor.
 var advance_cap_m_s: float = INF
 
+# Skate the route facing where it goes rather than facing the play: a defender
+# turned to skate a retreat down the ice (AIRoleRushD.set_retreat_facing).
+var face_travel: bool = false
+
 # Optional aim override: `aim_world_pos` replaces the state machine's default
 # mouse target (the ready-stance look-at toward `target_position`). Used by
 # FINISHER's tip path to point the blade at the goal during a deflection.

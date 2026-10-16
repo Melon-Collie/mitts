@@ -196,6 +196,7 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 		var retreating: bool = ap.dir_net != Vector3.ZERO \
 				and not AIActionScoring.in_offensive_zone(carrier_pos, ctx.attacking_goal_pos)
 		if retreating and d.target_velocity != Vector3.ZERO:
+			AIRoleRushD.set_retreat_facing(ctx, ap, d, gapping_up)
 			d.target_position = AIRoleRushD.depth_first(ctx, ap, best_pos, d)
 		AIRoleRushD.set_retreat_floor(ctx, ap, d)
 		if retreating:
