@@ -241,6 +241,12 @@ Shot-currency step 4 (the drive-in priced along the rolled route), and pricing
 the carrier two deep: the rolled endpoints are the nodes, so the second ply is a
 handful of cheap leaves rather than a beam.
 
+**Two deep: built, and it is step 4.** For the `CARRY_PLY2_WIDTH` best first
+moves the search rolls every move again from where it ends, against the defence
+projected a second on (`_carry_on_value`); a line is worth its best of shooting,
+passing or carrying on. Where a line stops outside the zone it reads
+`AICarrierField.horizon_value` (`docs/shot-currency-plan.md`, step 4).
+
 ## 4. What players should see
 
 Carriers skate where they mean to go and face it. Fewer stalls at an angle;

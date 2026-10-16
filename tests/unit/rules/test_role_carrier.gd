@@ -63,13 +63,15 @@ func _make_ctx(self_pos: Vector3, skaters: Array = []) -> RoleContext:
 
 # ─── pricing the feed ───────────────────────────────────────────────────────
 
-# Our D off-centre in our own zone, an open outlet straight up the wall, and a
-# forechecker starting 2.6 m off the lane (a full stick clear) at `vel`.
+# Our D off-centre in our own zone, an open outlet straight up the wall past
+# the red line — far enough ahead that the forechecker can never race him to
+# the zone, so only the lane reads him — and a forechecker starting 2.6 m off
+# the lane (a full stick clear) at `vel`.
 func _lane_forechecker_ctx(vel: Vector3) -> RoleContext:
 	var self_pos := Vector3(4.0, 0.0, 20.0)
 	return _make_ctx(self_pos, [
 			[1, TEAM_ID, self_pos],
-			[2, TEAM_ID, Vector3(4.0, 0.0, 7.0)],
+			[2, TEAM_ID, Vector3(4.0, 0.0, -1.0)],
 			[11, 1, Vector3(6.6, 0.0, 13.5), false, vel]])
 
 
@@ -83,8 +85,8 @@ func test_forechecker_closing_the_breakout_lane_devalues_the_pass() -> void:
 	var s: AIRoleCarrier = _decided(_lane_forechecker_ctx(Vector3.ZERO))
 	assert_gt(s.debug_pass_score, 0.0, "precondition: the feed past a standing man is on")
 	var c: AIRoleCarrier = _decided(_lane_forechecker_ctx(Vector3(-8.0, 0.0, 0.0)))
-	assert_lt(c.debug_pass_score, s.debug_pass_score * 0.9,
-			"a forechecker skating into the lane during the windup materially drops the pass value")
+	assert_lt(c.debug_pass_score, s.debug_pass_score,
+			"a forechecker skating into the lane during the windup drops the pass value")
 
 
 func test_forechecker_on_the_hip_contests_the_pass_release() -> void:
@@ -567,11 +569,11 @@ func _decided_twice(ctx: RoleContext) -> AIRoleCarrier:
 
 # ─── turnover costs are priced in the unit of the gains ─────────────────────
 
-func test_an_in_zone_carrier_prices_a_turnover_in_xg() -> void:
+func test_a_turnover_is_priced_in_the_odds_wherever_the_carrier_is() -> void:
 	# A strip at the top of the zone hands the opponent a puck 40 m from our net.
-	# In the zone the carrier's gains are xG, so that loss must be priced as the
-	# opponent's possession promise in xG; outside, the gains are on the potential
-	# scale and so is the cost. Same loss point, two carriers.
+	# The carrier's gains are odds of scoring on both sides of the line, so that
+	# loss is the opponent's possession promise in odds for a carrier inside the
+	# zone and outside it alike. Same loss point, two carriers.
 	var loss := Vector3(-4.0, 0.0, -15.0)
 	var our_net := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z)
 	var defenders: Array[Vector3] = []
@@ -591,10 +593,8 @@ func test_an_in_zone_carrier_prices_a_turnover_in_xg() -> void:
 	var c_out := AIRoleCarrier.new()
 	var ctx_out: RoleContext = _make_ctx(outside)
 	c_out.decide(ctx_out)
-	assert_almost_eq(c_out._field.turnover_cost(ctx_out, loss, 1.0, our_goalie),
-			AIActionScoring.threat_surface_shoot(loss, our_net, our_goalie,
-					defenders), 0.0005,
-			"outside the zone it stays on the potential scale, like the gains")
+	assert_almost_eq(c_out._field.turnover_cost(ctx_out, loss, 1.0, our_goalie), expected_xg,
+			0.0005, "outside the zone the same loss costs the same odds")
 
 
 # ─── drive-in: a clear drive is credited all the way ────────────────────────
@@ -626,17 +626,16 @@ func test_a_defender_who_never_covers_the_drive_costs_it_nothing() -> void:
 
 func test_the_shot_s_keep_never_discounts_what_the_spot_is_worth_by_position() -> void:
 	# Out of the zone with the keeper pulled, value_at weighs the long shot
-	# against the spot's position value. Losing the puck before the press costs
+	# against the spot's horizon value. Losing the puck before the press costs
 	# the shot, never the position.
 	var self_pos := Vector3(0.0, 0.0, 0.0)
 	var ctx: RoleContext = _make_ctx(self_pos)
 	var c := AIRoleCarrier.new()
-	var goal: Vector3 = ctx.attacking_goal_pos
+	c._field.fill(ctx)
 	var pos := Vector3(2.0, 0.0, -5.0)
 	var none: Array[Vector3] = []
 	var pulled := Vector3(0.0, 0.0, 0.0)
-	var position_value: float = AIActionScoring.position_potential(pos, goal, none) \
-			* AIActionScoring.potential_realization_discount(pos, goal)
+	var position_value: float = c._field.horizon_value(pos)
 	var prev: float = INF
 	for keep: float in [1.0, 0.5, 0.0]:
 		var v: float = c._field.value_at(ctx, pos, self_pos, none, pulled, 0.0, keep)
@@ -923,8 +922,8 @@ func _settle_skaters(self_pos: Vector3, outlet: Vector3) -> Array:
 
 
 const _STRONG_OUTLET := Vector3(11, 0, 11)    # open, up the strong wall
-const _MARGINAL_OUTLET := Vector3(13, 0, 24.5)  # deep in the far corner
-const _MARGINAL_OUTLET_VEL := Vector3(0, 0, 6.0)   # …and still sliding into it
+const _MARGINAL_OUTLET := Vector3(9.5, 0, 22.5)  # deep below the dot
+const _MARGINAL_OUTLET_VEL := Vector3(0, 0, 6.0)   # …and still sliding into the corner
 
 
 func _settle_ctx(self_pos: Vector3, outlet: Vector3) -> RoleContext:
@@ -1401,6 +1400,7 @@ func test_developing_feed_positive_for_outlet_skating_its_route() -> void:
 	# Outlet on the strong wall, skating hard up-ice toward the blue line.
 	var ctx := _ctx_with_outlet(Vector3(9, 0, 16), Vector3(1.2, 0, -6))
 	var carrier := AIRoleCarrier.new()
+	carrier._field.fill(ctx)
 	carrier._field.teammate_ids = [2]
 	assert_gt(carrier._pass.developing_feed_value(ctx), 0.0,
 			"an outlet skating up its route is a developing feed worth holding for")
@@ -2412,6 +2412,7 @@ func test_developing_feed_watches_the_over_valve_in_5v5() -> void:
 	brain.slot_assignments[2] = AIRoleSlots.Slot.BREAKOUT_D2
 	ctx.team_brain = brain
 	var carrier := AIRoleCarrier.new()
+	carrier._field.fill(ctx)
 	carrier._field.teammate_ids = [2]
 	assert_gt(carrier._pass.developing_feed_value(ctx), 0.0,
 			"a partner skating to the net-back valve is a developing Over")

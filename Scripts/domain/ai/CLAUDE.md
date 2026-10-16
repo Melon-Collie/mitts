@@ -33,14 +33,14 @@ the wrong model is a permanent veto on the other two. The committed shot is the
 seam's own pick (aim and loft), so what is priced is what is fired.
 
 The turnover COST is in the same currency as the gains it is subtracted from.
-`AIActionScoring.turnover_cost` (and `counter_rush_cost`) take `in_xg` for a
-carrier in the offensive zone: the opponent's value at the loss point is then his
-shot xG through the seam, or his possession promise (`position_potential` ×
-realization × `XG_SLOT_REF`). Outside the zone the gains are on the potential
-scale and so is `threat_surface_shoot`. Mixing them (raw potential costs against
-xG gains) overprices every in-zone turnover about tenfold.
-`AICarrierField.turnover_cost` picks the unit; a cost memo must only ever hold
-one.
+The carrier's gains are odds of scoring wherever he stands, so
+`AICarrierField.turnover_cost` always passes `in_xg` to
+`AIActionScoring.turnover_cost` (and `counter_rush_cost`): the opponent's value at
+the loss point is his shot's odds through the seam, or his possession promise
+(`position_potential` × realization × `XG_SLOT_REF`). The off-ball readers still
+on the potential scale (`threat_surface_shoot`) take the other unit. Mixing them
+(raw potential costs against odds gains) overprices a turnover about 3.4-fold; a
+cost memo must only ever hold one.
 
 The giveaway bars (`SHOT_MIN_VALUE` 0.05, `PASS_MIN_VALUE` 0.02) are scale-bound
 to that seam — odds of scoring on today's goalie with a first shot.
@@ -674,8 +674,7 @@ remains.
   point is only a place the puck passes through; the race is priced at the
   landing. The landing solve is CLOSED FORM (straight legs under constant
   deceleration between board contacts, mirroring `clamp_to_rink_inner` including
-  the corner arcs), because the stepped walk costs as much as the whole
-  `controlled_space` fan.
+  the corner arcs), because the stepped walk costs as much as a carry search.
   - It is offensive and scored on the race to the resting spot, with no icing
     branch (it is only offered past the red line). Its search runs bearing ×
     PACE and fires FLAT on the charged wrister, because a charged release
@@ -746,14 +745,28 @@ remains.
   carrier get his action off from this spot: the release-contest race, run to the
   puck a carry-handle ahead of the body toward the net.
 
-- **Positional value** — two regimes split at the attacking **blue line**
-  (`in_offensive_zone`), gated on the **carrier's** position, not the
-  candidate's.
-  - *Carrier in the zone:* every candidate is priced through the value seam;
-    `position_potential` is never consulted. There is no possession floor: the
-    seam is smooth, so a spot with no shot right now still scores by its distance
-    and angle. Behind the goal line every shot is 0, so a candidate there is
-    worth only the pass OPTION it opens.
+- **Positional value** — the carrier searches forward until play reaches
+  something concrete, and only values a spot where the search stops. One unit
+  on both sides of the line: the odds of scoring.
+  - *In the zone* (the spot or the carrier) every candidate is priced through
+    the value seam. There is no possession floor: the seam is smooth, so a spot
+    with no shot right now still scores by its distance and angle. Behind the
+    goal line every shot is 0, so a candidate there is worth only the pass
+    OPTION it opens.
+  - *Outside it* the carry searches two steps (a rolled move, then each move
+    again from where it ends, for the `CARRY_PLY2_WIDTH` best: shoot, pass or
+    carry on), pricing the defence it meets on each. Where a line stops outside
+    the zone it is worth `AICarrierField.horizon_value`: the best zone entry
+    (the better of the shot and the drive in from it) × the skate there × the
+    race to it (`chase_recovery`, its band widened by the arrival clock's own
+    error over the trip). No shape terms and no guess at where the defence will
+    be: the leaf ranks by how far the zone is and whether a defender gets to the
+    entry first. The race is what keeps the leaf honest against the searched
+    lines — without it a line that stays outside reads better than one that
+    crosses into the defence, and the carrier stalls at the line. Standing still
+    outside pays the step's decay like every move. A straight carry on to a
+    destination across the attacking line is not credited from outside: the
+    race prices getting in.
   - Candidates also price the **pass option** they open
     (`carrier_field.gd:pass_option_from`: cached per-teammate spot values × the lane from
     the candidate, discounted as a future action), credited as the *improvement*
@@ -771,14 +784,9 @@ remains.
     Behind-the-goal-line ice is playable for a carrier already back there
     (`AICarrierCarrySearch._candidate_ice_legal`), or the walkouts are the only moves and
     a pressured carrier plants on the end wall.
-  - *Carrier outside the zone:* candidates are priced by `position_potential`
-    (the goal mouth's projected width `cos θ` × a closeness gradient ×
-    openness). The two scales meet only at the **entry**: an outside player
-    prices an in-zone spot only when an option crosses the line, through
-    `XG_SLOT_REF` capped at 1.0 (`AIRoleCarrier._entry_value`), plus the **entry
-    continuation** — the drive-in from the candidate, priced in the in-zone
-    regime — so a drop pass wins only when the trailer's entry genuinely beats
-    the carrier's.
+  - An in-zone candidate reached from outside also gets its **entry
+    continuation** — the drive-in from it — so a drop pass wins only when the
+    trailer's entry genuinely beats the carrier's.
   - **One-way valve:** a carrier in the zone prunes any carry candidate or pass
     receiver that would leave it. The pass half keys on the PUCK where it leaves
     the blade (`AICarrierField.zone_taken`), because that is what the offside line reads. The
@@ -787,19 +795,6 @@ remains.
     `OZ_RETREAT_LINE_BUFFER_M` off the line (the pass windup sweeps the puck a
     stick's reach behind the body), and a pass target's lead sits
     `OZ_RECEIVE_LINE_BUFFER_M` inside it.
-
-- **Controlled space** (`controlled_space` / `control_at`) — "how much room do I
-  have", measured: a staggered 2×7 fan of carry *paths* across the forward cone,
-  each priced by the same `carry_safety` a real carry candidate gets and reached
-  at the same `time_to_arrive`, area-weighted and forward-projected (`cos θ`).
-  Off-surface samples leave both sums — a wall removes options, it doesn't strip.
-  Both sides of the carry-vs-pass compete read it at their own velocity and build,
-  so momentum falls out of the arrival time. Angular resolution buys accuracy,
-  radial does not, and staggering alternate rings doubles the effective bearings.
-  Don't price forward pressure with a single ray or corridor test: it has no clock
-  and cliffs at the reach boundary. Known residual: a **two-man wall met at speed
-  reads ~0.2 optimistic** — a `min` over defenders cannot count bodies; true pitch
-  control fixes it and was rejected on cost.
 
 - **The carry is a destination and a skated move** (`docs/hybrid-carry-plan.md`).
   The destination (`AICarrierDestinations`) is where the carry is FOR, chosen

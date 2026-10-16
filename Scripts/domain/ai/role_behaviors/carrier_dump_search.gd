@@ -107,11 +107,13 @@ func search(ctx: RoleContext, our_goalie: Vector3) -> void:
 				mate_caps.max_speed if mate_caps != null else ctx.self_max_speed,
 				mate_caps.max_accel if mate_caps != null else ctx.self_max_accel))
 	# The resting spot's potential is FUTURE value, so it pays the realization
-	# discount like every other future-value read.
+	# discount like every other future-value read; XG_SLOT_REF puts it in the odds
+	# the carry and the pass are priced in.
 	var gain: float = priced.y * AIActionScoring.position_potential(
 			rest, attacking_goal, _field.opponents) \
 			* AIActionScoring.delay_discount(chase_t) \
-			* AIActionScoring.potential_realization_discount(rest, attacking_goal)
+			* AIActionScoring.potential_realization_discount(rest, attacking_goal) \
+			* AIActionScoring.XG_SLOT_REF
 
 	value = gain - priced.x
 	# Down the launch line, not at the resting spot (see DUMP_AIM_STANDOFF_M).

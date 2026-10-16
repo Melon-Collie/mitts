@@ -629,10 +629,6 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	if ctx.ping_shoot_active and shoot_score > 0.0:
 		shoot_score *= PING_SHOOT_EV_MULT
 
-	# Runs BEFORE the carry search: its per-bearing by-product is where the
-	# search's forward candidates come from.
-	var forward_space: float = _carry.forward_space(ctx)
-
 	_carry.search(ctx, raw_shoot_score)
 	var carry_score: float = _carry.value
 	last_carry_anchor = _carry.anchor
@@ -641,14 +637,10 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 		carry_stick = _carry.rollout.stick[carry_move]
 		carry_brake = _carry.rollout.brake[carry_move]
 	var raw_carry_score: float = _carry.raw_value
-	# Pass-first under pressure (see FORWARD_PRESSURE_*); the dump still judges
-	# against the raw carry.
-	carry_score *= lerpf(AICarrierField.FORWARD_PRESSURE_MIN_SCALE, 1.0, forward_space)
-	# …but SELF is floored by the same drive-in credit the pass search gives a receiver,
-	# at our own velocity as his is at his. Without it two equally-covered
-	# wingers at the blue line each rate the OTHER man's drive above their own
-	# discounted carry, and the puck ping-pongs along the line instead of
-	# entering the zone. When the floor wins, the carry is that drive.
+	# The carry is floored by the same drive-in credit the pass search gives a
+	# receiver, at our own velocity as his is at his, so neither of two
+	# equally-covered wingers rates the other's drive above his own. When the
+	# floor wins, the carry is that drive.
 	var drive_in_value: float = _field.receiver_drive_in_value(
 			ctx, self_pos, ctx.caps_by_peer.get(ctx.peer_id), ctx.self_velocity,
 			Vector3.INF, 0.0, true)

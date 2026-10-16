@@ -185,13 +185,38 @@ deleted; with no keeper replicated the bot shoots flat at the middle.
   (#788); positions priced against an upright keeper while shoot-now reads his
   live stance (#792).
 
-### Step 4 — one currency over the whole ice
+### Step 4 — one currency over the whole ice (done for the carrier)
 
 Outside the zone a spot is worth the odds of the shot you reach by driving in
 from it — `receiver_drive_in_value`'s machinery, already used for pass
 receivers — discounted by time and by the odds of keeping the puck that far.
 `position_potential`, `potential_realization_discount`, `entry_value` and
 `XG_SLOT_REF` go, and with them the stitch at the blue line.
+
+**As built: search, then a plain leaf.** Pricing a neutral-zone spot as a drive
+to the net does not work: straight routes to fixed entries swing between ~0.1
+and ~0.4 on whether the line passes the forechecker, and over a 25 m trip the
+defence is a guess. So the carrier searches forward instead — a second carry
+step from its best first moves (`docs/hybrid-carry-plan.md`, "Then") — and only
+values a spot where its search stops: `AICarrierField.horizon_value`, the best
+zone entry's worth (shot or drive-in) × the skate's decay × the race to it. The
+race is what makes the leaf honest against the searched lines; without it the
+carrier stalls at the line, because staying outside reads better than crossing
+into the defence. The forward-pressure toll went with it: a patch for the carry
+not seeing past its first second. Every carrier-side value and cost is now in
+odds; `entry_value` is gone.
+
+Measured on the entry drill (`tests/instruments/ai/test_nz_entry_drill.gd`:
+three attackers from their own half against a defence standing up at its
+line, 30 starts): carried entries 21 → 26, turnovers
+5 → 4, passes before entry 67 → 27, backward 32 → 9; time stalled at the line
+about level. The breakout drill under a two-man forecheck
+(`tests/instruments/ai/test_breakout_drill.gd`) is level (11 exits of 20,
+9 turnovers).
+
+Still on the potential scale: the off-ball readers — threat reads, the
+turnover cost's opponent value, the outlet and breakout spot choice — and the
+dump's resting-spot gain (converted by `XG_SLOT_REF`).
 
 ## 5. What players should see
 

@@ -27,16 +27,11 @@ const EXPOSURE_PROB_FLOOR: float = 0.04
 const RECEIVER_DRIVE_MAX_M: float = 12.0
 const RECEIVER_DRIVE_MIN_NET_DIST_M: float = 3.0
 
-# Forward-pressure discount (see forward_clearance_at). The strip model prices a
-# defender ON the puck but not one sitting in the path the carrier must beat to
-# advance, so without this a lightly-pressured carrier grinds forward instead of
-# moving the puck to an unimpeded teammate. HORIZON is how far ahead the contest
-# is felt; MIN_SCALE is the most a fully-blocked path discounts (never to zero —
-# a carrier with no outlet still carries). Feel tunables; the clearance itself is
-# the grounded read. Applied only to the fire-vs-carry compete and the receiver
-# of a pass, never to the raw carry the dump is judged against.
-const FORWARD_PRESSURE_HORIZON_M: float = 9.0
-const FORWARD_PRESSURE_MIN_SCALE: float = 0.55
+# The zone entries a spot outside the attacking zone is valued through
+# (horizon_value): a stride past the attacking blue line, in each wall lane (the
+# carry menu's wide lanes) and in the middle.
+const ENTRY_LEAD_M: float = AICarrierDestinations.WIDE_ENTRY_LEAD_M
+const ENTRY_WALL_INSET_M: float = AICarrierDestinations.WIDE_LANE_WALL_INSET_M
 
 # RECEIVE: how far inside the line a pass target must sit when the carrier is
 # in the OZ. The catch plays the puck up to a stick's reach around the body and
@@ -96,6 +91,11 @@ var drive_in_reached: Vector3 = Vector3.INF
 # drive, and at its end.
 var _entry_buf: Array[Vector3] = []
 var _drive_buf: Array[Vector3] = []
+# The zone entries and what reaching each is worth (horizon_value), filled by
+# fill() for a carrier outside the attacking zone.
+var _entry_spots: Array[Vector3] = []
+var _entry_worth: Array[float] = []
+var _race_from: Array[Vector3] = []
 
 
 func fill(ctx: RoleContext) -> void:
@@ -125,6 +125,29 @@ func fill(ctx: RoleContext) -> void:
 				ctx.defending_goal_pos, our_defenders, exposure_mate_etas)
 		exposure_threat_memo.resize(our_defenders.size() + 2)
 		exposure_threat_memo.fill(-1.0)
+	_fill_entries(ctx)
+
+
+# Each zone entry's worth to a carrier arriving there in stride: the better of
+# the shot from it and the drive in from it, against the defence as it stands.
+# Filled here, never from horizon_value: the drive-in reuses the projection
+# scratch a value_at caller may be holding.
+func _fill_entries(ctx: RoleContext) -> void:
+	_entry_spots.clear()
+	_entry_worth.clear()
+	if AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos):
+		return
+	var z: float = -ctx.own_goal_dir * (GameRules.BLUE_LINE_Z + ENTRY_LEAD_M)
+	var wide_x: float = GameRules.RINK_HALF_WIDTH - ENTRY_WALL_INSET_M
+	var stride := Vector3(0.0, 0.0, -ctx.own_goal_dir * AIArrival.SKATER_REF_SPEED_M_S)
+	for x: float in [-wide_x, 0.0, wide_x]:
+		var spot := Vector3(x, 0.0, z)
+		var shot: float = AIActionScoring.score_shoot_value(spot, ctx.attacking_goal_pos,
+				Vector3.INF, opponents, 0.0, AIShotOdds.Stance.UPRIGHT,
+				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, opponent_caps)
+		_entry_spots.append(spot)
+		_entry_worth.append(maxf(shot, receiver_drive_in_value(ctx, spot,
+				ctx.caps_by_peer.get(ctx.peer_id), stride, spot)))
 
 
 func fill_receivers(ctx: RoleContext, cur_puck_pos: Vector3) -> void:
@@ -175,12 +198,13 @@ func project_opponents(time_s: float, out_buf: Array[Vector3]) -> void:
 		out_buf.append(AITrajectory.predict_at(opponents[i], opponent_vels[i], time_s))
 
 
+# The cost of losing the puck at `loss_point` with probability `loss_prob`, in
+# the odds the carrier's gains are priced in, wherever he stands.
 func turnover_cost(ctx: RoleContext, loss_point: Vector3, loss_prob: float,
 		our_goalie: Vector3) -> float:
 	return AIActionScoring.turnover_cost(
 			loss_point, loss_prob, ctx.defending_goal_pos, our_goalie,
-			our_defenders, our_defender_caps,
-			AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos))
+			our_defenders, our_defender_caps, true)
 
 
 # Transition-exposure cost of losing the puck at `loss_point` with
@@ -198,8 +222,7 @@ func counter_exposure_cost(ctx: RoleContext, loss_point: Vector3,
 			our_defenders,
 			recover_from, ctx.self_max_speed,
 			opponents, opponent_vels, opponent_caps,
-			exposure_mate_etas, exposure_threat_memo,
-			AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos))
+			exposure_mate_etas, exposure_threat_memo, true)
 
 
 # ── Stateless reads every search shares ──────────────────────────────────────
@@ -311,16 +334,11 @@ func arrival_hold_wait(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3
 	return maxf(0.0, holds.pull_time(from, holds.arrival_offset, facing) - carry_s)
 
 
-# Position-value scorer at `pos`, evaluated from the carrier at `from_pos`.
+# Position-value scorer at `pos`, evaluated from the carrier at `from_pos`, in
+# the odds of scoring:
 #
-#   carrier in the zone:            shot xG at `pos`
-#   carrier outside, `pos` outside: max(shot xG, position_potential × realization)
-#   carrier outside, `pos` inside:  shot xG at `pos`, converted (entry_value)
-#
-# Two value scales, keyed on the CARRIER — see Scripts/domain/ai/CLAUDE.md →
-# "Positional value". The potential branch pays the realization discount: it is
-# future value that still has to be skated to the slot, and undecayed,
-# stand-still strictly beats a step toward the net in open ice.
+#   `pos` in the zone, or the carrier is:  the shot's odds at `pos`
+#   both outside:                          max(the shot, horizon_value)
 #
 # `opps` must already be projected to the time the actor will be at `pos`, in
 # the same snapshot order as opponent_caps. The keeper is at `keeper_pos` moving
@@ -332,12 +350,12 @@ func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 		opps: Array[Vector3], keeper_pos: Vector3 = Vector3.INF,
 		keeper_vel_x: float = 0.0, shot_keep: float = 1.0) -> float:
 	if _shot_is_dead_from_here(ctx, pos, from_pos, keeper_vel_x, keeper_pos):
-		return _potential_at(ctx, pos, opps)
+		return horizon_value(pos)
 	var shoot_s: float = AIActionScoring.score_shoot_value(
 			pos, ctx.attacking_goal_pos, keeper_pos, opps, keeper_vel_x,
 			AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
 			opponent_caps) * shot_keep
-	return _regime_value(ctx, pos, from_pos, opps, shoot_s)
+	return _regime_value(ctx, pos, from_pos, shoot_s)
 
 
 # value_at for a receiver at `pos` fed from `passer` at `pass_speed`, the keeper
@@ -347,7 +365,7 @@ func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 func feed_value_at(ctx: RoleContext, passer: Vector3, pos: Vector3, pass_speed: float,
 		one_timer: bool, from_pos: Vector3, opps: Array[Vector3]) -> float:
 	if _shot_is_dead_from_here(ctx, pos, from_pos, 0.0):
-		return _potential_at(ctx, pos, opps)
+		return horizon_value(pos)
 	var shoot_s: float = AIShotValue.feed(passer, pos, pass_speed, ctx.attacking_goal_pos,
 			goalie_now(ctx), one_timer) if ctx.reads_goalie_motion \
 			else AIShotValue.set_keeper(pos, ctx.attacking_goal_pos)
@@ -360,12 +378,12 @@ func feed_value_at(ctx: RoleContext, passer: Vector3, pos: Vector3, pass_speed: 
 				* AIPuckLane.release_contest_clean(
 						AIPuckLane.release_point_toward(pos, ctx.attacking_goal_pos),
 						opps, opponent_caps)
-	return _regime_value(ctx, pos, from_pos, opps, shoot_s)
+	return _regime_value(ctx, pos, from_pos, shoot_s)
 
 
 # Hot-path skip (the same proof threat_surface_shoot runs): with the keeper HOME
 # and still, a direct shot from OUTSIDE the attacking zone is dead, so the
-# potential branch always wins. A moving or pulled keeper voids the proof.
+# horizon branch always wins. A moving or pulled keeper voids the proof.
 # `keeper_pos` INF reads the keeper where he stands now.
 func _shot_is_dead_from_here(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 		keeper_vel_x: float, keeper_pos: Vector3 = Vector3.INF) -> bool:
@@ -376,29 +394,35 @@ func _shot_is_dead_from_here(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 			and keeper.distance_to(ctx.attacking_goal_pos) < AIActionScoring.THREAT_GOALIE_HOME_M
 
 
-func _potential_at(ctx: RoleContext, pos: Vector3, opps: Array[Vector3]) -> float:
-	return AIActionScoring.position_potential(pos, ctx.attacking_goal_pos, opps) \
-			* AIActionScoring.potential_realization_discount(pos, ctx.attacking_goal_pos)
+# What the puck at `pos`, outside the attacking zone, is worth past the end of
+# what the carrier searches: the best zone entry, at its worth × the time the
+# skate there takes at league pace. No defence: the searched steps price the
+# defenders they meet, and beyond them where the defence will be is a guess,
+# so the leaf ranks by the one thing that is not — how far the zone is.
+func horizon_value(pos: Vector3) -> float:
+	var best: float = 0.0
+	_race_from.resize(1)
+	_race_from[0] = pos
+	for i: int in _entry_spots.size():
+		var t: float = Vector2(pos.x - _entry_spots[i].x, pos.z - _entry_spots[i].z).length() \
+				/ AIArrival.SKATER_REF_SPEED_M_S
+		var timed: float = _entry_worth[i] * AIActionScoring.delay_discount(t)
+		if timed <= best:
+			continue
+		best = maxf(best, timed * AIActionScoring.chase_recovery(_entry_spots[i], _race_from,
+				opponents, AIActionScoring.EMPTY_VEC3, opponent_vels, true))
+	return best
 
 
-# The two value scales, keyed on the carrier (see value_at): `shoot_s` is the
-# shot's odds at `pos`.
+# The two cases of value_at: `shoot_s` is the shot's odds at `pos`.
 func _regime_value(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
-		opps: Array[Vector3], shoot_s: float) -> float:
-	if AIActionScoring.in_offensive_zone(from_pos, ctx.attacking_goal_pos):
-		# Pure odds in the offensive zone, with no possession floor: the field's
-		# surface does not go flat where no shot is available right now.
+		shoot_s: float) -> float:
+	if AIActionScoring.in_offensive_zone(from_pos, ctx.attacking_goal_pos) \
+			or AIActionScoring.in_offensive_zone(pos, ctx.attacking_goal_pos):
+		# Pure odds, with no possession floor: the field's surface does not go flat
+		# where no shot is available right now.
 		return shoot_s
-	if AIActionScoring.in_offensive_zone(pos, ctx.attacking_goal_pos):
-		return entry_value(shoot_s)
-	return maxf(shoot_s, _potential_at(ctx, pos, opps))
-
-
-# An in-zone xG value as an out-of-zone carrier reads it, in position_potential's
-# unit. Capped at a clean slot look, potential's own ceiling, which also keeps the
-# [0, 1] bound the carry candidates' ceiling prunes rely on.
-static func entry_value(in_zone_xg: float) -> float:
-	return minf(in_zone_xg / AIActionScoring.XG_SLOT_REF, 1.0)
+	return maxf(shoot_s, horizon_value(pos))
 
 
 # The value of a man DRIVING IN from `receiver_spot`: the value he reaches by
@@ -476,16 +500,6 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 			0.0, hold_keep)
 	drive_in_reached = reached
 	return advanced * keep * AIActionScoring.delay_discount(t + wait)
-
-
-# The same forward-space read for a pass receiver at `pos` with velocity `vel`
-# and build `caps` (see AICarrierPassSearch._pass_ev), so both sides of a carry-vs-pass compete pay
-# the same toll for the same clogged ice.
-func forward_clearance_at(ctx: RoleContext, pos: Vector3, vel: Vector3,
-		caps: AISkaterCaps) -> float:
-	return AICarrySpace.controlled_space(
-			pos, vel, caps, ctx.attacking_goal_pos, FORWARD_PRESSURE_HORIZON_M,
-			opponents, opponent_vels, opponent_caps)
 
 
 # The pass-option cache's spot value for the receiver standing at `pos` (0.0 when

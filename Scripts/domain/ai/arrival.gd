@@ -47,6 +47,11 @@ const SHED_ACCEL_DEFAULT_M_S2: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
 # controller can overfly the catch window and circle once) run up to ~2× the
 # estimate.
 
+# The clock's error against the live controller on the clean families: a share
+# of the trip, with a floor (test_time_to_arrive_calibration.gd holds it).
+const ERROR_FRAC: float = 0.25
+const ERROR_FLOOR_S: float = 0.18
+
 # Cross speed the velocity-matched seek redirects for free (costs no time).
 # Measured.
 const VM_FREE_SHED_M_S: float = 2.0

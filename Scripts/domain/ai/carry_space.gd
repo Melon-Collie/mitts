@@ -1,8 +1,8 @@
 class_name AICarrySpace
 
 # How much room a carrier has to operate: reachable-set evasion, the safety
-# maps, the crossing sample and controlled space. It reads the arrival clock and
-# its reference speeds from AIArrival and the net test from AINetObstacle, and
+# maps and the crossing sample. It reads the arrival clock and its reference
+# speeds from AIArrival and the net test from AINetObstacle, and
 # never AIActionScoring (test_scoring_split_stays_acyclic.gd).
 
 # ── Reachable-set evasion (pursuit-evasion possession safety) ────────────────
@@ -495,118 +495,6 @@ static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 		return to    # covered at the destination, or nothing covered at all
 	# Neither covered (a low strip probability anyway): the tighter of the two.
 	return mid if c_mid <= c_end else to
-
-
-# ── Controlled space: how much room a carrier has to OPERATE ─────────────────
-# The fraction of the ice ahead this carrier can reach WITH THE PUCK: a fan of
-# carry paths across the forward cone, each priced by the same carry_safety the
-# real carry candidates use and reached at the same momentum-honest
-# time_to_arrive, area-weighted (polar element ∝ r) and forward-projected
-# (max(0, cos θ), position_potential's foreshortening). Paths, not points, so a
-# defender between two rays is met en route by both (the crossing band) and the
-# fan can stay coarse. Momentum is never a term; it falls out of the honest
-# arrival time. Design and known residual: Scripts/domain/ai/CLAUDE.md →
-# "Controlled space".
-#
-# Samples off the playing surface leave BOTH sums rather than reading as
-# pressure: a wall does not strip the puck, it removes options, and pricing the
-# boards here would discount a clean wall carry as if it were covered.
-#
-# Fan density: angular resolution buys accuracy, radial does not, so the budget
-# goes to angles.
-const SPACE_SAMPLE_RINGS: Array[float] = [0.5, 1.0]
-# ±70° in 23° steps. Coarse by design — paths, not points (see the block doc).
-const SPACE_SAMPLE_ANGLES: Array[float] = [
-		-1.2217, -0.8145, -0.4072, 0.0, 0.4072, 0.8145, 1.2217]
-# Rings are STAGGERED by half an angular step, so the two rings sample 14
-# distinct bearings instead of the same 7 twice: free anti-aliasing against a
-# defender between two rays reading as taking more space than one dead centre.
-const SPACE_RING_STAGGER_RAD: float = 0.2036
-
-
-# One sample: the keep probability of carrying from `from` to `sample`, reached
-# at this build's honest momentum-aware arrival time.
-static func control_at(sample: Vector3, from: Vector3, from_vel: Vector3,
-		from_caps: AISkaterCaps, opponents: Array[Vector3],
-		opponent_vels: Array[Vector3], opponent_caps: Array = []) -> float:
-	var speed: float = AIArrival.SKATER_REF_SPEED_M_S
-	var accel: float = MANEUVER_ACCEL_M_S2
-	var grip: float = 1.0
-	if from_caps != null:
-		speed = from_caps.max_speed
-		accel = from_caps.max_accel
-		grip = from_caps.lateral_grip
-	var t: float = AIArrival.time_to_arrive(from, sample, from_vel, speed, accel, grip)
-	return carry_safety(from, sample, t, opponents, opponent_vels,
-			opponent_caps, true)
-
-
-# The area-weighted controlled fraction of the forward cone, in [0, 1]. `toward`
-# is the objective the cone points at (the attacking net for the carrier's
-# forward-pressure read); `horizon_m` how far ahead space is felt. Returns 1.0
-# when the objective is degenerate or every sample is off-ice.
-static func controlled_space(from: Vector3, from_vel: Vector3,
-		from_caps: AISkaterCaps, toward: Vector3, horizon_m: float,
-		opponents: Array[Vector3], opponent_vels: Array[Vector3],
-		opponent_caps: Array = []) -> float:
-	var fx: float = toward.x - from.x
-	var fz: float = toward.z - from.z
-	var flen: float = sqrt(fx * fx + fz * fz)
-	if flen < 0.001 or horizon_m <= 0.0 or opponents.is_empty():
-		return 1.0
-	fx /= flen
-	fz /= flen
-	# The cone never reaches past the objective itself — closing on the net, the
-	# space that matters is the ice up to it, not behind it.
-	var reach: float = minf(horizon_m, flen)
-	var weighted: float = 0.0
-	var total: float = 0.0
-	for bi: int in SPACE_SAMPLE_ANGLES.size():
-		# PREFIX IMPLICATION. Rings are walked OUTERMOST FIRST, and when the
-		# outer path along a bearing comes back fully controlled, the inner
-		# samples on that same bearing are credited 1.0 without being priced.
-		# They are a strict PREFIX of a path already proven clean: the inner
-		# destination lies on the outer route, reached sooner, and the outer
-		# read's mid sample and crossing band already swept the ice between.
-		# Open ice is where the fan's cost lives (nothing trips carry_safety's
-		# early-outs), so this is the skip that pays.
-		var outer_full: bool = false
-		for k: int in SPACE_SAMPLE_RINGS.size():
-			var ri: int = SPACE_SAMPLE_RINGS.size() - 1 - k
-			var r: float = reach * SPACE_SAMPLE_RINGS[ri]
-			# Alternate rings ride half an angular step over (SPACE_RING_STAGGER_RAD).
-			var stagger: float = SPACE_RING_STAGGER_RAD if ri % 2 == 1 else 0.0
-			var angle: float = SPACE_SAMPLE_ANGLES[bi] + stagger
-			var ca: float = cos(angle)
-			# Forward projection: straight ahead counts fully, ±70° about a third.
-			if ca <= 0.0:
-				continue
-			var sa: float = sin(angle)
-			var dir_x: float = fx * ca - fz * sa
-			var dir_z: float = fx * sa + fz * ca
-			var sample := Vector3(
-					from.x + dir_x * r, 0.0, from.z + dir_z * r)
-			if board_gap_m(sample) < 0.0:
-				continue   # off the playing surface — see the block doc
-			# A sample whose straight path runs through a cage is not ice this
-			# carrier can take, so it leaves both sums like an off-surface one —
-			# which also keeps the fan off time_to_arrive's around-the-net
-			# routing, an 8x per-sample cost.
-			if AINetObstacle.carry_path_blocked_by_net(from, sample):
-				continue
-			var c: float = 1.0
-			if not outer_full:
-				c = control_at(sample, from, from_vel, from_caps,
-						opponents, opponent_vels, opponent_caps)
-				if k == 0 and c >= 1.0:
-					outer_full = true   # prefix implication — see the block above
-			# Polar area element ∝ r, so the outer ring stands for more ice.
-			var w: float = r * ca
-			total += w
-			weighted += w * c
-	if total <= 0.0:
-		return 1.0
-	return weighted / total
 
 
 # The carrier's best evasion target — the point in his handling envelope (where he

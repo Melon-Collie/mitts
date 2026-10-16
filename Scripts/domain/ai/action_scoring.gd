@@ -288,9 +288,7 @@ static func _is_past_goal_line(pos: Vector3, attacking_goal: Vector3) -> bool:
 
 
 # True when `pos` is on the attacking side of the attacking blue line — the
-# offensive zone, and the value-map regime boundary: the carrier's `AICarrierField.value_at`
-# prices in-zone positions through the value seam and out-of-zone positions by
-# position_potential. Sign-folded for either attacking direction.
+# offensive zone. Sign-folded for either attacking direction.
 # `buffer` demands the position sit that much DEEPER than the line — the
 # carrier's blue-line keep-out bands (retreat / reception) use it so "in the
 # zone" can mean "in the zone with margin for the stick's reach".
@@ -301,9 +299,8 @@ static func in_offensive_zone(pos: Vector3, attacking_goal: Vector3,
 
 # Position potential in [0, 1] — the value of being at this position with no
 # specific shot or pass in view, as closeness × the goal mouth's projected width
-# from this bearing × openness (each derived below). `AICarrierField.value_at` reads it only
-# while the CARRIER is outside the offensive zone; in the zone the bot prices
-# real shot danger instead. Behind the attacking goal line it returns 0.
+# from this bearing × openness (each derived below): the off-ball readers'
+# scale. Behind the attacking goal line it returns 0.
 static func position_potential(
 		pos: Vector3,
 		attacking_goal: Vector3,
@@ -337,13 +334,9 @@ static func position_potential(
 	return closeness * angle_factor * openness
 
 
-# Realization discount for position_potential when it prices a CARRY /
-# receiver destination in the carrier's compete: potential is FUTURE value,
+# Realization discount for position_potential: potential is FUTURE value,
 # cashed only by skating from `pos` to the slot, so it pays the same
-# delay_discount every other future action pays. Without it the stand-still
-# candidate holds its potential undecayed while every movement candidate pays
-# travel decay, and an open carrier plants at the blue line; with it an
-# on-route step trades travel decay for realization decay one-for-one.
+# delay_discount every other future action pays.
 #
 # Travel time is to the slot ring (SLOT_RADIUS_M) at the league reference
 # speed (cross-player: receivers use it too).
@@ -384,19 +377,25 @@ static func past_center_toward_attack(pos: Vector3, attacking_goal: Vector3) -> 
 # `our_vels` / `opp_vels` are index-matched to their position arrays; omit them
 # and every chaser races from rest. Everyone runs at the league reference build
 # — the same simplification counter_rush_cost makes for teammates.
+# `clock_error`: widen the contest band by the arrival clock's own error over
+# the longer trip (AIArrival.ERROR_FRAC), for a race decided seconds from now.
 static func chase_recovery(
 		target: Vector3,
 		our_chasers: Array[Vector3],
 		opp_chasers: Array[Vector3],
 		our_vels: Array[Vector3] = EMPTY_VEC3,
-		opp_vels: Array[Vector3] = EMPTY_VEC3) -> float:
+		opp_vels: Array[Vector3] = EMPTY_VEC3,
+		clock_error: bool = false) -> float:
 	if our_chasers.is_empty():
 		return 0.0
 	var our_t: float = _first_arrival(target, our_chasers, our_vels)
 	if opp_chasers.is_empty():
 		return 1.0
 	var opp_t: float = _first_arrival(target, opp_chasers, opp_vels)
-	return clampf(0.5 + (opp_t - our_t) / (2.0 * CHASE_CONTEST_MARGIN_S), 0.0, 1.0)
+	var band: float = CHASE_CONTEST_MARGIN_S
+	if clock_error:
+		band += AIArrival.ERROR_FRAC * minf(maxf(our_t, opp_t), 1e6)
+	return clampf(0.5 + (opp_t - our_t) / (2.0 * band), 0.0, 1.0)
 
 
 # Soonest any of `chasers` reaches `target`. `vels` is used only when it is
