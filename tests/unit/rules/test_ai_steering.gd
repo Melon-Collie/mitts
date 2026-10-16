@@ -342,11 +342,11 @@ const RUSH := Vector3(0, 0, 8.3)
 
 
 func _ride_move(self_pos: Vector3, anchor: Vector3, anchor_vel: Vector3,
-		floor_radius: float) -> Vector2:
+		floor_radius: float, advance_cap: float = INF) -> Vector2:
 	return AISteering.compute_move_vector(
 			self_pos, anchor, NO_OPS, NO_OPS, NO_LANE, NO_LANE, RINK_X, RINK_Z,
 			AISteering.OPPONENT_REPEL_WEIGHT, NO_OPS, NO_OPS, Vector3.ZERO,
-			MATCH_SPEED, anchor_vel, FLOOR_NET, floor_radius)
+			MATCH_SPEED, anchor_vel, FLOOR_NET, floor_radius, advance_cap)
 
 
 func test_a_ride_backs_a_defender_inside_the_gate_toward_his_net() -> void:
@@ -378,6 +378,39 @@ func test_the_retreat_floor_is_inert_far_from_it() -> void:
 	var floored := _ride_move(self_pos, anchor, RUSH, FLOOR_RADIUS)
 	assert_almost_eq(floored.x, free.x, 0.0001)
 	assert_almost_eq(floored.y, free.y, 0.0001)
+
+
+# ── Advance cap on a ridden stand ────────────────────────────────────────────
+# The same route's other sign: a stand up-ice of the defender, riding a carrier
+# coming slowly, pulls him up-ice at it unless capped.
+
+const STEP_UP_SELF := Vector3(0, 0, 14.0)
+const STEP_UP_STAND := Vector3(0, 0, 10.0)
+const SLOW_RUSH := Vector3(0, 0, 1.0)
+
+
+func test_a_ridden_step_up_charges_up_ice_uncapped() -> void:
+	# The premise the cap exists for.
+	var free := _ride_move(STEP_UP_SELF, STEP_UP_STAND, SLOW_RUSH, FLOOR_RADIUS)
+	assert_lt(free.y, -0.1, "the closing term drives him up-ice at the stand")
+
+
+func test_the_advance_cap_holds_his_ice() -> void:
+	var held := _ride_move(STEP_UP_SELF, STEP_UP_STAND, SLOW_RUSH, FLOOR_RADIUS, 0.0)
+	assert_gt(held.y, -0.001, "no up-ice thrust with a zero cap")
+
+
+func test_the_advance_cap_keeps_the_lateral_ride() -> void:
+	var held := _ride_move(STEP_UP_SELF, STEP_UP_STAND, SLOW_RUSH + Vector3(4.0, 0, 0),
+			FLOOR_RADIUS, 0.0)
+	assert_gt(held.x, 0.1, "he still tracks the carrier across the ice")
+
+
+func test_the_advance_cap_is_read_only_with_a_floor() -> void:
+	var free := _ride_move(STEP_UP_SELF, STEP_UP_STAND, SLOW_RUSH, 0.0)
+	var capped := _ride_move(STEP_UP_SELF, STEP_UP_STAND, SLOW_RUSH, 0.0, 0.0)
+	assert_almost_eq(capped.x, free.x, 0.0001)
+	assert_almost_eq(capped.y, free.y, 0.0001)
 
 
 # net detour tests — route a bot pinned behind a goal line out around

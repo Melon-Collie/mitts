@@ -130,7 +130,8 @@ static func compute_move_vector(
 		velocity_match_speed: float = 0.0,
 		anchor_velocity: Vector3 = Vector3.ZERO,
 		retreat_floor_center: Vector3 = Vector3.ZERO,
-		retreat_floor_radius: float = 0.0) -> Vector2:
+		retreat_floor_radius: float = 0.0,
+		advance_cap: float = INF) -> Vector2:
 	var force_x: float = 0.0
 	var force_z: float = 0.0
 
@@ -152,7 +153,7 @@ static func compute_move_vector(
 		var pursue: Vector2 = _moving_frame_pursuit(
 				to_anchor, anchor_dist, anchor_velocity, self_velocity,
 				velocity_match_speed, retreat_floor_center - self_pos,
-				retreat_floor_radius)
+				retreat_floor_radius, advance_cap)
 		force_x += pursue.x
 		force_z += pursue.y
 	elif anchor_dist > ANCHOR_DEADBAND:
@@ -307,7 +308,7 @@ static func is_rideable_anchor(anchor: Vector3) -> bool:
 static func _moving_frame_pursuit(to_anchor: Vector3, anchor_dist: float,
 		anchor_velocity: Vector3, self_velocity: Vector3,
 		v_max: float, to_floor: Vector3 = Vector3.ZERO,
-		floor_radius: float = 0.0) -> Vector2:
+		floor_radius: float = 0.0, advance_cap: float = INF) -> Vector2:
 	var des_x: float = anchor_velocity.x
 	var des_z: float = anchor_velocity.z
 	if anchor_dist > 0.001:
@@ -342,6 +343,10 @@ static func _moving_frame_pursuit(to_anchor: Vector3, anchor_dist: float,
 			if toward > allowed:
 				des_x -= ux * (toward - allowed)
 				des_z -= uz * (toward - allowed)
+			# RoleDecision.advance_cap_m_s: the same component's other sign.
+			elif -toward > advance_cap:
+				des_x -= ux * (toward + advance_cap)
+				des_z -= uz * (toward + advance_cap)
 	# We cannot skate faster than we can skate. Clamping the SUM (rather than the
 	# closing term) keeps the best available heading: flat out along the line that
 	# serves both errands, which as the gap closes rotates off pursuit and onto the

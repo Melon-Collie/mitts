@@ -569,3 +569,34 @@ func test_a_defender_already_at_pace_spends_the_spare_stride_across() -> void:
 	gut.p("  across: standing %.2f m, retreating %.2f m" % [standing[0], retreating[0]])
 	assert_gt(retreating[0], standing[0] + 0.5,
 			"carrying the pace leaves stride to take ice across")
+
+
+func test_a_defender_carrying_width_keeps_it() -> void:
+	# Short of his stand, he gets no NEW width — but speed he already carries
+	# across, the way he is sent, is not braked off: gliding costs no stride.
+	var standing: Array = _width_asked(Vector3(-2.0, 0.0, 2.0), Vector3.ZERO)
+	var sliding: Array = _width_asked(Vector3(-2.0, 0.0, 2.0), Vector3(4.0, 0.0, 0.0))
+	assert_almost_eq(standing[1], 0.0, 0.05, "the fixture's standing ride has no width")
+	assert_gt(sliding[1], 0.5, "the ride keeps the width he carries")
+	assert_gt(sliding[0], standing[0] + 0.5, "and so does the stand")
+
+
+# ── A step-up never outruns the turn ─────────────────────────────────────────
+
+func _step_up(carrier_vel: Vector3) -> RoleDecision:
+	var carrier := Vector3(0.0, 0.0, 0.0)
+	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, 4.0), [[10, 1, carrier, carrier_vel]], 10,
+			AIRushRead.Numbers.DOWN_ONE)
+	return AIRoleRushD.decide(ctx, AIRoleSlots.Slot.RUSH_D1)
+
+
+func test_a_step_up_on_a_carrier_crossing_at_speed_holds_its_ice() -> void:
+	# In his lane with the retreat unable to hold a gap, he steps up — but the
+	# carrier can turn 6 m/s at our net, so the route may not carry him up-ice.
+	var d: RoleDecision = _step_up(Vector3(6.0, 0.0, 0.5))
+	assert_lt(d.advance_cap_m_s, 0.5, "got %.2f m/s up-ice" % d.advance_cap_m_s)
+
+
+func test_a_step_up_on_a_stalled_carrier_may_attack() -> void:
+	var d: RoleDecision = _step_up(Vector3(0.0, 0.0, 0.3))
+	assert_gt(d.advance_cap_m_s, 2.0, "a carrier with no speed is attacked")

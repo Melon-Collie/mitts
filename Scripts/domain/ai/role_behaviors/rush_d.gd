@@ -80,9 +80,9 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 	var gap: float = _gap_for(ctx, read, carrier_pos, cushion)
 	gap = minf(gap, dist)   # never project the stand past the net
 
-	# The gap-up is exempt from the step-up bound: that bound prices being beaten
-	# by pace you cannot match, which the gap-up's triggers rule out. A riding
-	# stand is exempt too — see _settable_gap.
+	# The gap-up's STAND is exempt from the step-up bound, and so is any riding
+	# stand (see _settable_gap); a riding route is bounded instead by
+	# set_advance_cap.
 	var gapping_up: bool = should_gap_up(ctx, read, ap, cushion)
 	var ride: Vector3 = AIRoleReads.stand_ride_velocity(ctx)
 	if gapping_up:
@@ -107,6 +107,7 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 		stand = _depth_first(ctx, ap, stand, d)
 	d.target_position = _clamp_to_house(ctx, stand)
 	set_retreat_floor(ctx, ap, d)
+	set_advance_cap(ctx, ap, d, gap)
 	# The arrival brake only matters with no man to ride (a moving stand stands it
 	# down). A retreat is paced rather than braked; a step-up wants the brake,
 	# since the approach bound placed that stand as its trigger; the gap-up drives
@@ -229,6 +230,24 @@ static func set_retreat_floor(ctx: RoleContext, ap: AICarrierApproach,
 	d.retreat_floor_radius_m = RETREAT_FINISH_M if draped \
 			else minf(AIZoneCoverage.HOUSE_TOP_DEPTH_M,
 					AIRoleReads.xz_distance(ctx.self_pos, ctx.defending_goal_pos))
+
+
+# Bounds a ridden stand's step toward the carrier, set with the retreat floor:
+# the route may command no more speed up-ice than the defender can still turn
+# into the carrier's pace before the carrier has eaten the depth he holds past
+# `gap` (AILastManDiscipline.approach_speed_cap, the step-up bound with its
+# pivot), the carrier's pace being his whole speed turned at our net. The stand
+# keeps its place and the ride its lateral; only the charge is bounded. Without
+# it the moving-frame closing term walks a stepping-up defender up-ice at a
+# carrier who is crossing rather than coming, and the turn down beats him.
+static func set_advance_cap(ctx: RoleContext, ap: AICarrierApproach,
+		d: RoleDecision, gap: float) -> void:
+	if d.retreat_floor_radius_m <= 0.0:
+		return
+	var depth: float = _depth_along(ctx, ap.carrier_pos, ap.dir_net)
+	var pace: float = maxf(ap.closing, Vector2(ap.carrier_vel.x, ap.carrier_vel.z).length())
+	d.advance_cap_m_s = AILastManDiscipline.approach_speed_cap(depth - gap, pace,
+			ctx.self_max_speed, ctx.self_max_accel)
 
 
 # ramp_cushion_m's race for any threat: `dir_net` his line to our net,

@@ -22,6 +22,10 @@ var target_velocity: Vector3 = Vector3.ZERO
 var retreat_floor_center: Vector3 = Vector3.ZERO
 var retreat_floor_radius_m: float = 0.0
 
+# The other side of the same route: most speed, m/s, a stand riding a man may
+# command AWAY from `retreat_floor_center` (INF = no cap). Read only with a floor.
+var advance_cap_m_s: float = INF
+
 # Optional aim override: `aim_world_pos` replaces the state machine's default
 # mouse target (the ready-stance look-at toward `target_position`). Used by
 # FINISHER's tip path to point the blade at the goal during a deflection.

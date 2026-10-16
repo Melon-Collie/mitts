@@ -132,7 +132,10 @@ Two consequences:
 - **Do not bound a route by placing the stand defensively** (a step-up plan, an
   approach-speed limit). The route already regulates its own approach, so a
   placement bound on top is two controllers on one axis: the stand lands where
-  the defender already stands and he never closes on anybody.
+  the defender already stands and he never closes on anybody. A bound on what
+  the route may COMMAND is a different thing — the stand stays where it is and
+  the frame still closes on him — and that is where the retreat floor and the
+  advance cap live (below).
 - **A ride velocity is a commitment with no terminating condition.** A stand only
   gets one when the role really produced a stand. A degenerate "hold where you
   are" fallback that also rides a man matches his velocity forever — out through
@@ -369,6 +372,15 @@ enough that building to the carrier's pace from where he stands ends with him
 there (the ramp cushion, below), so he is at speed when they meet rather than
 reached flat-footed. It caps only the route's speed toward our net (lateral ride
 untouched), and level or beaten it lifts and he chases.
+
+The same route is capped the other way (`AIRoleRushD.set_advance_cap`): no more
+speed up-ice than he can still turn into the carrier's pace before the carrier
+eats the depth he holds past his gap — `approach_speed_cap`, the step-up bound
+with its pivot, the carrier's pace being his whole speed turned at our net. A
+gap-up keeps its stand a stick off the carrier; what the cap stops is the
+moving-frame closing term walking him up-ice at a carrier who is crossing rather
+than coming, which the turn down then beats. A carrier with no speed has no
+turn to beat him with, so the cap is wide open and he is attacked.
 
 ### Pace enters through the stride ramp, and only there
 

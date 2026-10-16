@@ -1153,7 +1153,7 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 				not decision.commit_check and not decision.arrive_at_speed,
 				_self_max_speed, decision.target_velocity,
 				decision.engaged_peer_id, decision.retreat_floor_center,
-				decision.retreat_floor_radius_m)
+				decision.retreat_floor_radius_m, decision.advance_cap_m_s)
 		if decision.commit_check:
 			# Hit held delivers the FULL transfer AIBodyCheck's predicted_impulse
 			# assumed (an uncommitted drive lands only the passive fraction).
@@ -2507,10 +2507,10 @@ func _apply_steering(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 		anchor_velocity: Vector3 = Vector3.ZERO,
 		engaged_peer_id: int = -1,
 		retreat_floor_center: Vector3 = Vector3.ZERO,
-		retreat_floor_radius: float = 0.0) -> void:
+		retreat_floor_radius: float = 0.0, advance_cap: float = INF) -> void:
 	_steering.steer(input, snapshot, self_pos, anchor, arrive, velocity_match_speed,
 			anchor_velocity, engaged_peer_id, retreat_floor_center, retreat_floor_radius,
-			_attacking_goal_pos, _upright_lateral_accel(), _blade_reach)
+			_attacking_goal_pos, _upright_lateral_accel(), _blade_reach, advance_cap)
 
 
 # Body-level offside guard: keep an attacking non-carrier's momentum-driven body
