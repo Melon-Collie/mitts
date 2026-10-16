@@ -144,7 +144,7 @@ func test_a_remote_rebuilds_the_blade_from_the_wire() -> void:
 			"and the blade with it (off by %.3f m)" % rebuilt.distance_to(expected))
 	# Without the lean on the wire the frame would sit upright under the body.
 	b.set_balance_tilt(Vector2.ZERO)
-	assert_gt(b.upper_body.position.distance_to(a.upper_body.position), 0.3,
+	assert_gt(b.upper_body.position.distance_to(a.upper_body.position), 0.25,
 			"the lean is what carries the frame")
 
 

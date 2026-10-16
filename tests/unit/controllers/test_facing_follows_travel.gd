@@ -85,6 +85,33 @@ func test_a_cursor_behind_the_travel_turns_the_skater_round() -> void:
 			"looking straight back while skating forward turns to skate backward, not freeze")
 
 
+func test_a_cursor_flicked_ahead_turns_a_backward_skater_forward() -> void:
+	_controller._pose.facing = Vector2(BEHIND.x, BEHIND.z)
+	_skater.set_facing(Vector2(BEHIND.x, BEHIND.z))
+	_skate(AHEAD, 6.0, BEHIND, 30)
+	_skate(AHEAD, 6.0, AHEAD, 120)
+	assert_lt(_facing_off(AHEAD), 20.0,
+			"a cursor flicked to where a backward skater is going turns them round, not freeze")
+
+
+func test_a_backward_skater_turns_forward_on_the_cursors_side() -> void:
+	# Leaning a touch right of straight back, with the cursor flicked ahead-left:
+	# the body comes round through the left, the way the player is looking.
+	var lean := Vector2(BEHIND.x, BEHIND.z).rotated(deg_to_rad(-5.0))
+	_controller._pose.facing = lean
+	_skater.set_facing(lean)
+	var ahead_left := AHEAD.rotated(Vector3.UP, deg_to_rad(10.0))
+	var widest_right: float = -INF
+	var widest_left: float = INF
+	for _i: int in 120:
+		_skate(AHEAD, 6.0, ahead_left, 1)
+		widest_right = maxf(widest_right, _skater.get_facing().x)
+		widest_left = minf(widest_left, _skater.get_facing().x)
+	assert_lt(_facing_off(AHEAD), 20.0)
+	assert_lt(widest_left, -0.9, "the body swept through the left")
+	assert_lt(widest_right, 0.2, "and never round the right")
+
+
 func test_a_cursor_behind_a_standing_skater_still_freezes_facing() -> void:
 	_skate(AHEAD, 0.0, AHEAD, 30)
 	_skate(AHEAD, 0.0, BEHIND, 120)

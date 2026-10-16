@@ -72,3 +72,36 @@ func test_the_stance_squares_only_when_slow() -> void:
 	assert_almost_eq(_off(LEFT), 0.0, 0.01, "slow in the stance squares to the cursor")
 	_solve(AHEAD, LEFT, AHEAD * 6.0, false, true)
 	assert_almost_eq(_off(AHEAD), 0.0, 0.01, "at speed the stance just crouches")
+
+
+func test_a_backward_skater_takes_up_the_travel_ahead() -> void:
+	_solve(BEHIND, AHEAD, AHEAD * 6.0)
+	assert_almost_eq(_off(AHEAD), 0.0, 0.01)
+	assert_true(_out.taking_up_travel, "the target is the travel, so the wedge freeze lets go")
+	_solve(BEHIND, AHEAD.rotated(deg_to_rad(30.0)), AHEAD * 1.0)
+	assert_false(_out.taking_up_travel, "below the engage band the target is the cursor")
+	_solve(BEHIND, AHEAD, Vector2.ZERO)
+	assert_false(_out.taking_up_travel)
+
+
+func test_a_cursor_behind_the_travel_is_not_taking_it_up() -> void:
+	_solve(AHEAD, BEHIND, AHEAD * 6.0)
+	assert_false(_out.taking_up_travel)
+
+
+func test_turning_round_goes_the_cursors_way() -> void:
+	# Backward, leaning a touch right of straight back, so the short way to the
+	# travel is round the right; the cursor is ahead-left, so it goes round the left.
+	var facing := BEHIND.rotated(deg_to_rad(5.0))
+	var cursor := AHEAD.rotated(deg_to_rad(10.0))
+	var short_way: float = facing.angle_to(AHEAD)
+	var turn: float = FacingRules.turn_round_angle(facing, AHEAD, cursor)
+	assert_eq(signf(turn), signf(facing.angle_to(cursor)), "round on the cursor's side")
+	assert_ne(signf(turn), signf(short_way), "which here is the long way")
+	assert_almost_eq(absf(turn), TAU - absf(short_way), 0.0001)
+
+
+func test_turning_round_to_a_cursor_dead_behind_keeps_the_lean() -> void:
+	var facing := BEHIND.rotated(deg_to_rad(5.0))
+	var turn: float = FacingRules.turn_round_angle(facing, AHEAD, AHEAD)
+	assert_almost_eq(turn, facing.angle_to(AHEAD), 0.0001)
