@@ -82,7 +82,7 @@ static func league_config() -> MovementConfig:
 	cfg.puck_carry_speed_multiplier = 0.92
 	cfg.backward_thrust_multiplier = 0.80
 	cfg.crossover_thrust_multiplier = 0.90
-	cfg.backward_max_speed_multiplier = 0.75
+	cfg.backward_max_speed_multiplier = 0.80
 	cfg.lateral_grip = 1.0
 	cfg.stance_grip_mult = 2.0
 	cfg.stance_scrape = 3.0 / GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2

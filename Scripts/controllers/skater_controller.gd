@@ -28,7 +28,7 @@ var lateral_grip: float = 1.0
 var puck_carry_speed_multiplier: float = 0.92  # pre-apply default; per-build value is set by apply_attributes (PlayerAttributes.carry_speed_mult, Speed-eased)
 var backward_thrust_multiplier: float = 0.80
 var crossover_thrust_multiplier: float = 0.90
-var backward_max_speed_multiplier: float = 0.75
+var backward_max_speed_multiplier: float = 0.80
 # Ceiling on the velocity fed to the gait during the faceoff / intro skate-in
 # (see begin_approach / apply_approach). The glide always completes in a fixed
 # duration, so a far start implies a high velocity — clamp it here so the stride

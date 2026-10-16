@@ -13,7 +13,9 @@ class_name AIRolePressure
 const PRESSURE_INNER_RING_RANGE_M: float = 4.5
 
 
-static func decide(ctx: RoleContext) -> RoleDecision:
+# `cover_priced`: the caller has already priced who picks the play up if the
+# challenge is beaten (the pinch's rotation), so the hit needs no man behind.
+static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision:
 	var d := RoleDecision.new()
 
 	# A loose puck is a live read; stand still only with no puck at all.
@@ -23,13 +25,14 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		return d
 	var carrier_pos: Vector3 = ap.carrier_pos
 
-	# PRESSURE has teammates behind it in both its states, so the commit risk of
-	# a real, separating hit is acceptable.
-	var check: AIBodyCheck.Result = AIDefensiveVerbs.evaluate_body_check(ctx)
-	if check.commit:
-		d.commit_check = true
-		d.target_position = check.target
-		return d
+	# A committed hit loads him on a shoulder at half a stride, so a carrier who
+	# cuts is gone: the last man back never throws one (has_support_behind).
+	if cover_priced or AILastManDiscipline.has_support_behind(ctx):
+		var check: AIBodyCheck.Result = AIDefensiveVerbs.evaluate_body_check(ctx)
+		if check.commit:
+			d.commit_check = true
+			d.target_position = check.target
+			return d
 
 	var our_net: Vector3 = ctx.defending_goal_pos
 	var our_goalie_pos: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
@@ -185,9 +188,18 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	#
 	# Publish the ride only when a candidate survived: otherwise `best_pos` is our
 	# own feet, a HOLD, and a hold that rides a man matches his velocity forever.
+	# The argmax picks the bearing; the route is RUSH_D1's, so the D who owned the
+	# rush skates it the same way after the line. A forecheck (the carrier in
+	# his own zone) has no retreat to manage, so its route stays free.
 	if found:
 		d.target_velocity = AIRoleReads.stand_ride_velocity(ctx)
+		var retreating: bool = ap.dir_net != Vector3.ZERO \
+				and not AIActionScoring.in_offensive_zone(carrier_pos, ctx.attacking_goal_pos)
+		if retreating and d.target_velocity != Vector3.ZERO:
+			d.target_position = AIRoleRushD.depth_first(ctx, ap, best_pos, d)
 		AIRoleRushD.set_retreat_floor(ctx, ap, d)
+		if retreating:
+			AIRoleRushD.set_advance_cap(ctx, ap, d, gap)
 		# The gap we just sized is ours to hold (RoleDecision.engaged_peer_id).
 		if ctx.snapshot != null and ctx.snapshot.puck_state != null:
 			var pid: int = ctx.snapshot.puck_state.carrier_peer_id

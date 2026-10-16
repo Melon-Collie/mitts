@@ -63,13 +63,16 @@ func _make_ctx(self_pos: Vector3, carrier_pid: int = -1,
 
 # ── Body check commit ────────────────────────────────────────────────────────
 
-# A pressurer 2 m from a stationary carrier, head-on, at `transfer`.
-func _head_on_check(transfer: float) -> RoleDecision:
+# A pressurer 2 m from a stationary carrier, head-on, at `transfer`, with a
+# teammate home behind him unless `last_man`.
+func _head_on_check(transfer: float, last_man: bool = false) -> RoleDecision:
 	var self_pos := Vector3(0, 0, 18)
 	var skaters: Array = [
 			[1, TEAM_ID, self_pos],
 			[200, 1 - TEAM_ID, Vector3(0, 0, 20)],
 	]
+	if not last_man:
+		skaters.append([2, TEAM_ID, Vector3(0, 0, OUR_NET_Z - 2.0)])
 	var ctx: RoleContext = _make_ctx(self_pos, 200, skaters)
 	ctx.self_max_speed = 9.0
 	ctx.self_body_check_transfer = transfer
@@ -95,6 +98,12 @@ func test_commits_exactly_when_the_hit_would_separate() -> void:
 			committed += 1
 			assert_almost_eq(d.target_position.z, 20.0, 0.5, "steers at the carrier's body intercept")
 	assert_between(committed, 1, 19, "the sweep spans both sides of the bar")
+
+
+func test_the_last_man_back_never_commits() -> void:
+	# A hit that separates with a layer home is a breakaway without one.
+	assert_true(_head_on_check(1.0).commit_check, "the fixture's hit separates")
+	assert_false(_head_on_check(1.0, true).commit_check)
 
 
 func test_no_body_check_on_loose_puck() -> void:

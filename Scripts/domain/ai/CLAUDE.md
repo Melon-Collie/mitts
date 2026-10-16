@@ -198,7 +198,10 @@ no inside to take; he shares the read and places his own target. And **PRESSURE
 cannot simply call a verb that fills the decision**, because its argmax sits
 between the stand and the answer: it consumes `carrier_stand` as the ring's
 centre and `inside_dir` / `inside_shade_m` as a floor on the candidates, then
-sets the target itself.
+sets the target itself. Outside a forecheck its ROUTE is RUSH_D1's
+(`depth_first`, the retreat floor, `set_advance_cap`), so the argmax picks the
+bearing and nothing about how the body skates there changes at the line; a
+forechecker (the carrier in his own zone) has no retreat to manage.
 
 A loose puck is not a fourth subject — it is a carrier nobody is holding. Both
 of the first two verbs reach it through `resolve_defensive_play_ref`, which
@@ -344,7 +347,12 @@ lengths at their blue line, 2 at the red line, 1 stick at ours, and inside our o
 zone "1 stick / contact: you are on him" (`docs/transition-defense-plan.md` §6).
 So the TRANS_DEFENSE → DZONE re-election is not a geometry discontinuity: *the D
 who gapped a carrier through the neutral zone keeps him into the zone; there is
-no handoff at the line.*
+no handoff at the line.* The same holds for the route (above) and for the hit:
+the pressurer commits a body check only with support behind
+(`AILastManDiscipline.has_support_behind`) or a cover its caller has already
+priced (the pinch's rotation), because a committed hit loads him on
+a shoulder at half a stride, and the last man back who throws one at a carrier
+with speed is skated around (`test_speed_rush_defence.gd`).
 
 Three things have to be true together, and each is load-bearing:
 
@@ -413,7 +421,7 @@ when the retreat cannot hold a gap — the cushion eats all but a stick of the i
 he owns — a defender IN the carrier's lane steps up to meet him rather than be
 reached while turning; off the lane he keeps retreating.
 
-Depth comes before width (`_depth_first`). A defender short of his stand's depth
+Depth comes before width (`depth_first`). A defender short of his stand's depth
 has one speed budget: the pace down the line that keeps up with the carrier and
 wins back the missing depth in the time his depth buys, and only the stride left
 over may go across — scaled by the share of that pace he already has, so from a

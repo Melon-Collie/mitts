@@ -104,7 +104,7 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 
 	d.target_velocity = ride
 	if not gapping_up:
-		stand = _depth_first(ctx, ap, stand, d)
+		stand = depth_first(ctx, ap, stand, d)
 	d.target_position = _clamp_to_house(ctx, stand)
 	set_retreat_floor(ctx, ap, d)
 	set_advance_cap(ctx, ap, d, gap)
@@ -128,7 +128,7 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 # retreat, and a turn then finds the defender level with him. Speed he already
 # carries across, the way the cap would send him, he keeps: gliding costs no
 # stride, and braking it spends the push the depth needs.
-static func _depth_first(ctx: RoleContext, ap: AICarrierApproach, stand: Vector3,
+static func depth_first(ctx: RoleContext, ap: AICarrierApproach, stand: Vector3,
 		d: RoleDecision) -> Vector3:
 	var dir_net: Vector3 = ap.dir_net
 	var to_stand: Vector3 = stand - ctx.self_pos

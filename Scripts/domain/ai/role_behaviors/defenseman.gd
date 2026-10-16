@@ -265,7 +265,7 @@ static func _wall_pinch(ctx: RoleContext, side: float,
 			return null
 		if not _pinch_is_covered(ctx, line_stand, t_me):
 			return null
-	var d: RoleDecision = AIRolePressure.decide(ctx)
+	var d: RoleDecision = AIRolePressure.decide(ctx, true)
 	d.pressures_puck = true
 	# Still the forward posture, so the numbers read keeps its holding hysteresis.
 	d.held_forward_stand = true
