@@ -24,6 +24,7 @@ extends GutTest
 #                                   contained   winnable races lost
 #   gap-up on current pace              16              3 / 9
 #   ramp cushion + gap-up race          19              1 / 9
+#   depth-first on the carrier's race   20              1 / 9
 #
 # Most of what is still lost sits off the carrier's lane, where the straight-line
 # bound ignores the lateral ice the defender must also cover.

@@ -409,6 +409,14 @@ stand every push goes down the line. Chasing a wide carrier's lateral first
 spends the retreat, and a cut back then finds the defender level with him. A
 hard "no width until at pace" gate measured worse: a defender who never shades
 across is beaten wide by the off-lane starts.
+
+The time his depth buys is the carrier's soonest trip down to it — from his pace
+along the line, or his whole speed turned onto it at the arc's cost — never his
+speed alone: a carrier skating across the ice at speed is not coming down it, and
+pricing him as if he were leaves no stride for width at exactly the moment he
+goes wide. And the cap is on width the defender would ADD: speed he already
+carries across, the way he is sent, he keeps, because braking it spends the push
+the depth needs.
 `tests/slow/ai/test_nz_turnover_recovery.gd` scores this against the best a body
 could do: a straight-line retreat on the same ramp.
 

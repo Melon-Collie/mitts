@@ -121,9 +121,12 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 # most his top speed), and none of it until he has that pace — from a stand,
 # every push goes down the line first. So the stand's offset across the line,
 # and the ride's sideways part, are capped at the spare speed, scaled by the
-# share of the pace he has, over the time his depth buys at the carrier's speed.
-# Mirroring a carrier who skates wide spends the retreat, and a turn then finds
-# the defender level with him.
+# share of the pace he has, over the time his depth buys: the carrier's soonest
+# trip down to it (_carrier_time_to), so speed he carries across the line buys
+# him only what turning it costs. Mirroring a carrier who skates wide spends the
+# retreat, and a turn then finds the defender level with him. Speed he already
+# carries across, the way the cap would send him, he keeps: gliding costs no
+# stride, and braking it spends the push the depth needs.
 static func _depth_first(ctx: RoleContext, ap: AICarrierApproach, stand: Vector3,
 		d: RoleDecision) -> Vector3:
 	var dir_net: Vector3 = ap.dir_net
@@ -131,9 +134,8 @@ static func _depth_first(ctx: RoleContext, ap: AICarrierApproach, stand: Vector3
 	var short: float = to_stand.x * dir_net.x + to_stand.z * dir_net.z
 	if short <= 0.0:
 		return stand
-	var carrier_speed: float = Vector2(ap.carrier_vel.x, ap.carrier_vel.z).length()
-	var time_s: float = maxf(_depth_along(ctx, ap.carrier_pos, dir_net), stick_m(ctx)) \
-			/ maxf(carrier_speed, 1.0)
+	var time_s: float = maxf(_carrier_time_to(ctx, ap,
+			maxf(_depth_along(ctx, ap.carrier_pos, dir_net), stick_m(ctx))), 0.05)
 	var pace: float = maxf(ap.closing, 0.0) + short / time_s
 	var have: float = ctx.self_velocity.x * dir_net.x + ctx.self_velocity.z * dir_net.z
 	var spare: float = sqrt(maxf(ctx.self_max_speed * ctx.self_max_speed - pace * pace, 0.0)) \
@@ -142,9 +144,19 @@ static func _depth_first(ctx: RoleContext, ap: AICarrierApproach, stand: Vector3
 	var ride_along: float = ride.x * dir_net.x + ride.z * dir_net.z
 	var ride_across := Vector3(ride.x - dir_net.x * ride_along, 0.0,
 			ride.z - dir_net.z * ride_along)
-	d.target_velocity = dir_net * ride_along + ride_across.limit_length(spare)
+	d.target_velocity = dir_net * ride_along \
+			+ ride_across.limit_length(maxf(spare, _carried_toward(ctx, ride_across)))
 	var across := Vector3(to_stand.x - dir_net.x * short, 0.0, to_stand.z - dir_net.z * short)
-	return ctx.self_pos + dir_net * short + across.limit_length(spare * time_s)
+	return ctx.self_pos + dir_net * short \
+			+ across.limit_length(maxf(spare, _carried_toward(ctx, across)) * time_s)
+
+
+# This bot's speed along `dir`'s direction, floored at zero.
+static func _carried_toward(ctx: RoleContext, dir: Vector3) -> float:
+	var len: float = dir.length()
+	if len < 0.001:
+		return 0.0
+	return maxf((ctx.self_velocity.x * dir.x + ctx.self_velocity.z * dir.z) / len, 0.0)
 
 
 # How far goal-side of `threat_pos` this bot currently stands, along `dir_net` —
@@ -246,14 +258,40 @@ static func head_start_on_me(ctx: RoleContext, dir_net: Vector3,
 	var along: float = threat_vel.x * dir_net.x + threat_vel.z * dir_net.z
 	var gained: float = _head_start_from(ctx, along, caps, self_v, ice_to_finish)
 	var speed: float = Vector2(threat_vel.x, threat_vel.z).length()
-	if speed > along + 0.1:
-		var off_line: float = acos(clampf(along / speed, -1.0, 1.0))
-		var turn_rate: float = minf(caps.movement.turn_accel * caps.lateral_grip / speed,
-				caps.movement.max_turn_rate)
-		var arc_cost: float = speed * (off_line - sin(off_line)) / turn_rate
+	var turn_s: float = _turn_onto_line_s(caps, along, speed)
+	if turn_s < INF:
 		gained = maxf(gained,
-				_head_start_from(ctx, speed, caps, self_v, ice_to_finish) - arc_cost)
+				_head_start_from(ctx, speed, caps, self_v, ice_to_finish) - speed * turn_s)
 	return minf(gained, ice_to_finish)
+
+
+# What turning his whole `speed` onto the line costs a man moving `along` it, in
+# seconds of straight running: the arc gives up speed·(θ − sin θ)/ω of ground at
+# his edge-limited turn rate ω (SkaterMovementRules). INF when there is no turn
+# worth making.
+static func _turn_onto_line_s(caps: AISkaterCaps, along: float, speed: float) -> float:
+	if speed <= along + 0.1:
+		return INF
+	var off_line: float = acos(clampf(along / speed, -1.0, 1.0))
+	var turn_rate: float = minf(caps.movement.turn_accel * caps.lateral_grip / speed,
+			caps.movement.max_turn_rate)
+	return (off_line - sin(off_line)) / turn_rate
+
+
+# The soonest the carrier covers `dist` toward our net: from his pace down the
+# line, or with his whole speed turned onto it (head_start_on_me's two starts).
+static func _carrier_time_to(ctx: RoleContext, ap: AICarrierApproach, dist: float) -> float:
+	var peer: int = ctx.rush_read.carrier_peer if ctx.rush_read != null else -1
+	var caps: AISkaterCaps = ctx.caps_by_peer.get(peer) if peer != -1 else null
+	if caps == null:
+		caps = _league_caps
+	var t: float = AIStrideRamp.time_to_cover(ap.closing, dist, caps.max_speed, caps.max_accel)
+	var speed: float = Vector2(ap.carrier_vel.x, ap.carrier_vel.z).length()
+	var turn_s: float = _turn_onto_line_s(caps, ap.closing, speed)
+	if turn_s < INF:
+		t = minf(t, turn_s + AIStrideRamp.time_to_cover(speed, dist, caps.max_speed,
+				caps.max_accel))
+	return t
 
 
 # AIStrideRamp.head_start for a threat starting down the line at `lead_v`, over
