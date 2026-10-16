@@ -773,11 +773,9 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# persistently non-zero value means the replay itself leaves the body
 	# off-server, so the offset rebuilds every cycle instead of settling.
 	NetworkTelemetry.record_post_replay_residual(skater.global_position.distance_to(server_state.position))
-	# Blade must be re-applied after position is set — upper_body_to_local()
-	# uses skater.global_position, so it must reflect the final replayed position.
-	# Dispatch by state: slapper/follow-through have their own pose handlers; using
-	# _ik.apply_blade_from_mouse here would IK the blade to the mouse position every
-	# reconcile, popping it down from the slapper wind-up pose at the broadcast rate.
+	# Re-apply the blade in the final replayed frame, by state and then the down pose
+	# over it, as the tick does: the mouse IK alone pops it to the cursor on every
+	# reconcile (off a slapper wind-up, or a diver's laid-out stick).
 	match _sm.get_state():
 		State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK, \
 		State.ONE_TIMER_RETENTION:
@@ -795,6 +793,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			# on every reconcile. Skip — the next real tick re-applies it.
 			if not is_celebrating():
 				_ik.apply_blade_from_mouse(_current_input, 0.0)
+	_apply_down_pose()
 	var blade_reconcile_delta: float = skater.get_blade_contact_global().distance_to(pre_reconcile_blade)
 	NetworkTelemetry.record_blade_reconcile(blade_reconcile_delta)
 	if blade_reconcile_delta > _BLADE_JUMP_THRESHOLD:
