@@ -30,6 +30,8 @@ func _run(duel: Object) -> Array:
 
 
 # The carrier deep with wingers on both walls; F1 on him, F2 high in the slot.
+# The forecheckers arrive with their sticks out toward the puck, as a forecheck
+# does — the harness otherwise starts every blade at its body.
 func _setup(carrier: Vector3, f1: Vector3, f2: Vector3) -> Object:
 	var duel: Object = Duel.new()
 	duel.team_size = 3
@@ -39,6 +41,10 @@ func _setup(carrier: Vector3, f1: Vector3, f2: Vector3) -> Object:
 	duel.add_skater(201, 1, f1, null, (carrier - f1).normalized() * 4.0)
 	duel.add_skater(202, 1, f2, null, Vector3(0, 0, 2.0))
 	duel.start(101)
+	for peer: int in [201, 202]:
+		var s: Object = duel._skater(peer)
+		s.blade = s.pos + (carrier - s.pos).limit_length(Duel.BLADE_REACH)
+		s.prev_blade = s.blade
 	return duel
 
 

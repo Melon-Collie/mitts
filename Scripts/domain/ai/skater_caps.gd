@@ -35,11 +35,14 @@ var blade_span: float = GameRules.DEFAULT_STICK_LENGTH_M + GameRules.DEFAULT_BLA
 var stick_reach: float = GameRules.DEFAULT_STICK_LENGTH_M
 
 # Maximum distance from the body origin to a legal blade-contact point (arm ROM
-# displacement + stick + blade). NOT a bot-planning input: the host's anti-cheat
-# ceiling on client-authoritative blade claims (pickup / poke / stick-lift),
-# pinning the claimed blade to within this reach of the server-authoritative
-# body. Default = league stick + blade + baseline backhand ROM reach.
-var max_blade_reach: float = GameRules.DEFAULT_STICK_LENGTH_M + GameRules.DEFAULT_BLADE_LENGTH_M + 0.46
+# displacement + stick + blade). The host's anti-cheat ceiling on client-
+# authoritative blade claims (pickup / poke / stick-lift), pinning the claimed
+# blade to within this reach of the server-authoritative body; and where a lane
+# read lets a defender hold the stick he is reaching with (AIPuckLane
+# ._blade_block). Default = league stick + blade + baseline backhand ROM reach.
+const LEAGUE_MAX_BLADE_REACH_M: float = GameRules.DEFAULT_STICK_LENGTH_M \
+		+ GameRules.DEFAULT_BLADE_LENGTH_M + 0.46
+var max_blade_reach: float = LEAGUE_MAX_BLADE_REACH_M
 # The furthest the balance lean can carry the shoulders off the body, metres
 # (Skater.max_lean_shift). The claim reach bound adds it; the bots' own reach
 # model does not, since a lean is not something a bot plans a reach around.
@@ -52,8 +55,9 @@ var wrister_shot_speed: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 
 # How fast the blade traverses its ROM to chase the aim cursor (Hands, =
 # SkaterController.max_blade_speed). A bot slews its aim cursor at exactly this
-# rate. Default mirrors the controller's 10.0.
-var blade_speed: float = 10.0
+# rate.
+const LEAGUE_BLADE_SPEED_M_S: float = 10.0
+var blade_speed: float = LEAGUE_BLADE_SPEED_M_S
 
 # Lateral grip multiplier (= SkaterController.lateral_grip — agility × the
 # skate-profile lean). Scales edge turn authority, so planning reads it wherever

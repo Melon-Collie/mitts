@@ -583,7 +583,12 @@ remains.
 
 - **Pass lanes** (`lane_clear`) — reach-vs-flight-time reachability: a defender
   blocks iff they can get a stick onto the puck's path before it passes; faster
-  pucks thread better for free. The **saucer** (`lane_clear_saucer`) is the same
+  pucks thread better for free. The carrier's own read also takes each
+  defender's **stick where he holds it** (`opponent_blades_release`): a
+  forechecker reaching for the puck has his blade a metre nearer the lane than
+  his body, and his hands start on the windup, so the first metres of a pass out
+  past him are his. Only a pick his body can hold the stick at counts
+  (`AISkaterCaps.max_blade_reach`). The **saucer** (`lane_clear_saucer`) is the same
   model under the LOW loft's flight: during the over window a defender's reach
   collapses to their body radius (sticks fly under it), with full stick reach on
   either side of it. The flip must land with runway before the tape

@@ -45,19 +45,22 @@ const FACING_DRAG: float = 5.0
 const MAX_BLADE_SPEED: float = 10.0
 const BLADE_REACH: float = 1.8
 const PICKUP_RADIUS: float = 0.5
-# Relative-frame catchability ceiling for a loose-puck attach — the
-# production deflect threshold (Puck.deflect_min_speed, receiver-relative):
-# below it every blade contact catches; the harness doesn't model the
-# above-threshold deflect spectrum. Must exceed skater top speed (9) or a
-# full-stride bot can never pick up the puck it's chasing.
-const PICKUP_MAX_REL_SPEED: float = 22.0
+# A loose-puck attach is the production catch (PuckReceptionRules.should_receive)
+# at Puck's defaults: always under PICKUP_MAX_REL_SPEED, at any angle under
+# DEFLECT_MIN_REL_SPEED, and up to RECEIVE_ALIGNMENT_BONUS more for a blade square
+# to the puck — the shaft read from the body to the blade, the harness having no
+# hands. test_bot_mirrors.gd holds the three to Puck.
+const PICKUP_MAX_REL_SPEED: float = 8.0
+const DEFLECT_MIN_REL_SPEED: float = 22.0
+const RECEIVE_ALIGNMENT_BONUS: float = 8.0
 # A releaser can't re-catch its own release while the puck departs its blade
 # (production has a post-shot pickup cooldown on the controller).
 const RELEASE_GRACE_TICKS: int = 36
 # A stripped puck squirts along the poking blade's sweep at a capped pace.
 const STRIP_SQUIRT_M_S: float = 3.5
-# Release pace for a fired pass/shot event (quick-shot scale). The harness
-# records release EVENTS for assertions; flight fidelity is not the point.
+# Release pace for a shot (quick-shot scale): the harness records shot EVENTS for
+# assertions, and their flight fidelity is not the point. Passes fly at their
+# own pace (_release_speed).
 const RELEASE_SPEED_M_S: float = 15.0
 # TeamBrain re-slot cadence (~6 Hz, the production rhythm).
 const BRAIN_PERIOD_TICKS: int = 20
@@ -97,6 +100,9 @@ class SimSkater:
 	var profile: BotSkillProfile = null
 	var was_holding_shot: bool = false
 	var was_holding_slap: bool = false
+	# The charge held last tick was a pass (or dump): it leaves at the pace the bot
+	# committed to (_release_speed).
+	var was_passing: bool = false
 	# Body-relative blade latched as a wrister charge starts (see step()).
 	var wrister_hold: Vector3 = Vector3.ZERO
 	var wrister_active: bool = false
@@ -145,6 +151,9 @@ var carrier_id: int = -1
 # staging a lofted dump; 0 (the default) is the ordinary ice puck.
 var airborne_ticks: int = 0
 const LANDING_SPEED_KEEP: float = 0.6
+# The share of pace the airborne puck lands with: LANDING_SPEED_KEEP for a staged
+# chip, all of it for a saucer (the bots' own saucer model).
+var _airborne_keep: float = LANDING_SPEED_KEEP
 var ticks: int = 0
 var move_cfg: SkaterMovementRules.MovementConfig
 var _facing_cfg: FacingRules.Config
@@ -275,6 +284,7 @@ func step() -> void:
 			continue
 		s.was_holding_shot = s.input.shoot_held
 		s.was_holding_slap = s.input.slap_held
+		s.was_passing = s.agent._state == SkaterAgentStateMachine.State.PASS_PRESSED
 		# Production's per-tick reset (SkaterAgent.tick) — held flags that a
 		# cancelled press state leaves set must not latch into later ticks.
 		SkaterAgent.zero_input(s.input, DT, s.input.host_timestamp)
@@ -335,8 +345,14 @@ func step() -> void:
 			aim.y = 0.0
 			if aim.length_squared() < 0.0001:
 				aim = Vector3(c.facing.x, 0.0, c.facing.y)
-			puck_vel = aim.normalized() * RELEASE_SPEED_M_S
+			puck_vel = aim.normalized() * _release_speed(c)
 			carrier_id = -1
+			# A saucer flies over the sticks: untouchable from launch to touch-down
+			# (its time above the blade plane), keeping its pace.
+			if c.input.elevation_level == ShotMechanics.ELEVATION_LOW and c.was_passing \
+					and c.was_holding_shot and not c.input.shoot_held:
+				airborne_ticks = roundi(AIPuckLane.saucer_hang_time_s() / DT)
+				_airborne_keep = 1.0
 	# Integrate bodies + blades.
 	for s: SimSkater in skaters:
 		if s.agent == null:
@@ -418,7 +434,8 @@ func step() -> void:
 					puck_vel, outward_air, BOARD_RESTITUTION)
 			puck_pos = Vector3(clamped_air.x, puck_pos.y, clamped_air.y)
 		if airborne_ticks == 0:
-			puck_vel *= LANDING_SPEED_KEEP
+			puck_vel *= _airborne_keep
+			_airborne_keep = LANDING_SPEED_KEEP
 	else:
 		var speed: float = Vector2(puck_vel.x, puck_vel.z).length()
 		if speed > 0.0:
@@ -444,7 +461,12 @@ func step() -> void:
 			if ticks < int(_release_grace.get(s.peer_id, 0)):
 				continue   # own release still departing the blade
 			var rel: Vector3 = puck_vel - s.vel
-			if Vector2(rel.x, rel.z).length() > PICKUP_MAX_REL_SPEED:
+			rel.y = 0.0
+			var face: Vector3 = PuckReceptionRules.blade_face_normal(s.blade, s.pos, rel,
+					Vector3(s.facing.x, 0.0, s.facing.y))
+			if not PuckReceptionRules.should_receive(Vector3(puck_vel.x, 0.0, puck_vel.z),
+					Vector3(s.vel.x, 0.0, s.vel.z), face, PICKUP_MAX_REL_SPEED,
+					DEFLECT_MIN_REL_SPEED, RECEIVE_ALIGNMENT_BONUS):
 				continue
 			if PuckInteractionRules.check_pickup(
 					prev_puck, puck_pos, s.prev_blade, s.blade, PICKUP_RADIUS):
@@ -521,6 +543,18 @@ func _script_skate(s: SimSkater, err: Vector3) -> void:
 	s.pos += s.vel * DT
 	s.prev_blade = s.blade
 	s.blade = s.pos + Vector3(s.facing.x, 0.0, s.facing.y) * SCRIPT_CARRY_REACH_M
+
+
+# The pace a release leaves at: a charged pass or dump at the pace its bot
+# committed to (the controller's wrister load, which turns the committed power
+# into that pace, is not modelled), a quick pass at its fixed pace, a shot at
+# RELEASE_SPEED_M_S.
+func _release_speed(c: SimSkater) -> float:
+	if c.input.quick_pass_pressed:
+		return GameRules.DEFAULT_QUICK_PASS_POWER_M_S
+	if c.was_passing and c.was_holding_shot and not c.input.shoot_held:
+		return c.agent._pass_target_speed
+	return RELEASE_SPEED_M_S
 
 
 func carrier() -> int:

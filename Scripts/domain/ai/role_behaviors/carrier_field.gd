@@ -55,6 +55,8 @@ var opponents: Array[Vector3] = []
 var opponent_vels: Array[Vector3] = []
 var opponent_caps: Array[AISkaterCaps] = []
 var opponents_release: Array[Vector3] = []
+# Their blades (on the ice plane), carried at their skating to the same instant.
+var opponent_blades_release: Array[Vector3] = []
 # Our skaters excluding the carrier (the man who just lost it covers nothing) —
 # the defenders that reduce the opponent's threat in the turnover-cost term —
 # with their caps and velocities, index-matched.
@@ -103,6 +105,7 @@ func fill(ctx: RoleContext) -> void:
 	opponent_vels.clear()
 	opponent_caps.clear()
 	opponents_release.clear()
+	opponent_blades_release.clear()
 	our_defenders.clear()
 	our_defender_caps.clear()
 	our_defender_vels.clear()
@@ -116,6 +119,9 @@ func fill(ctx: RoleContext) -> void:
 			opponent_caps.append(ctx.caps_by_peer.get(peer_id))
 			opponents_release.append(AITrajectory.predict_at(
 					s.position, s.velocity, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S))
+			var blade := Vector3(s.blade_contact_world.x, 0.0, s.blade_contact_world.z)
+			opponent_blades_release.append(AITrajectory.predict_at(
+					blade, s.velocity, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S))
 		else:
 			our_defenders.append(s.position)
 			our_defender_caps.append(ctx.caps_by_peer.get(peer_id))

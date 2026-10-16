@@ -211,8 +211,15 @@ three attackers from their own half against a defence standing up at its
 line, 30 starts): carried entries 21 → 26, turnovers
 5 → 4, passes before entry 67 → 27, backward 32 → 9; time stalled at the line
 about level. The breakout drill under a two-man forecheck
-(`tests/instruments/ai/test_breakout_drill.gd`) is level (11 exits of 20,
+(`tests/instruments/ai/test_breakout_drill.gd`) was level (11 exits of 20,
 9 turnovers).
+
+Those runs flew every pass at a flat 15 m/s, without a saucer's loft, and
+caught under a flat 22 m/s. The duel harness now flies a pass at the pace its
+bot committed to, lofts the saucer, and catches by the puck's own rule; most of
+the breakout's turnovers were that harness. On it, with the lane reading the
+forechecker's stick: entries 25 carried of 30, 3 turnovers, 43 passes (18
+backward); breakouts 19 exits of 20, 1 turnover.
 
 Still on the potential scale: the off-ball readers — threat reads, the
 turnover cost's opponent value, the outlet and breakout spot choice — and the

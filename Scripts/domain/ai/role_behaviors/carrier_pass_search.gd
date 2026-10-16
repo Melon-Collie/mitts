@@ -369,7 +369,8 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 			return 0.0
 		var lane_flat: float = AIPuckLane.lane_clear(
 				pass_origin, receiver, _field.opponents_release, pass_speed,
-				_field.opponent_vels, _field.opponent_caps, true)
+				_field.opponent_vels, _field.opponent_caps, true,
+				_field.opponent_blades_release)
 		if lane_flat >= AIPuckLane.SAUCER_SKIP_WHEN_LANE_CLEAR:
 			return 0.0
 		lane = AIPuckLane.lane_clear_saucer(
@@ -381,7 +382,8 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 	else:
 		lane = AIPuckLane.lane_clear(
 				pass_origin, receiver, _field.opponents_release, pass_speed,
-				_field.opponent_vels, _field.opponent_caps, true)
+				_field.opponent_vels, _field.opponent_caps, true,
+				_field.opponent_blades_release)
 		_last_flat_variant_lane = lane
 	var receiver_release_t: float = flight_t
 	if not receiver_is_one_timer:
@@ -439,7 +441,8 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	if lane < 0.0:
 		lane = AIPuckLane.lane_clear(
 				origin, receiver_spot, _field.opponents_release, pass_speed,
-				_field.opponent_vels, _field.opponent_caps, true)
+				_field.opponent_vels, _field.opponent_caps, true,
+				_field.opponent_blades_release)
 	if lane <= 0.0:
 		return 0.0
 	# RELEASE CONTEST — the cough-up loss mode: a forechecker whose stick reaches
@@ -493,7 +496,8 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	var loss_point: Vector3 = rim_loss_point if is_rim and rim_loss_point.is_finite() \
 			else AIPuckLane.lane_loss_point(
 					origin, receiver_spot, _field.opponents_release, pass_speed,
-					_field.opponent_vels, _field.opponent_caps)
+					_field.opponent_vels, _field.opponent_caps,
+					_field.opponent_blades_release)
 	cost += _field.turnover_cost(ctx, loss_point,
 			release_clean * (1.0 - lane), our_goalie)
 	cost += _field.turnover_cost(ctx, AIPuckLane.pass_miss_loss_point(origin, receiver_spot),
