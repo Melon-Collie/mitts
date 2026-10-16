@@ -436,7 +436,7 @@ static func record_shot_launch_divergence(pos_div_m: float, vel_div: float) -> v
 	if vel_div > instance._shot_launch_vel_div_max:
 		instance._shot_launch_vel_div_max = vel_div
 
-# input_lead: estimated_host_time() - input.host_timestamp at the moment an
+# input_lead: sim_time() - input.host_timestamp at the moment an
 # input is popped from the host queue, in SECONDS (published as ms).
 static func record_input_lead(lead_sec: float) -> void:
 	if instance == null:
