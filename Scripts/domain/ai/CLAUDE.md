@@ -36,8 +36,8 @@ The turnover COST is in the same currency as the gains it is subtracted from.
 The carrier's gains are odds of scoring wherever he stands, so
 `AICarrierField.turnover_cost` prices a loss as the opponent's possession of the
 spot (`AIPossessionValue`), and passes `in_xg` to `counter_rush_cost`. What a spot
-with no shot right now is worth — a turnover there, a dump's resting spot, the
-carrier's search horizon — is that one read, for either side. The defence reads
+with no shot right now is worth — a turnover there, the carrier's search
+horizon — is that one read, for either side. The defence reads
 a man on it too: `threat_of_carrier` (his shot, or his possession of the spot)
 and `threat_of_feed` (his one-timer, or the lane × his possession), a candidate's
 body pushed onto the read's defence for the one call. The outlet and breakout
@@ -738,40 +738,14 @@ reaches back into what remains.
   ("did *anybody* go?") over perturbation families, since every individual
   decision in that failure is defensible. The attacking-zone mirror is #604.
 
-- **The dump-in is a searched RELEASE, priced where the puck stops**
-  (`AICarrierDumpSearch._solve_dump_in` over `AITrajectory.puck_release_landing`).
-  Any pace the bot produces out-slides the rink several times over, so an aim
-  point is only a place the puck passes through; the race is priced at the
-  landing. The landing solve is CLOSED FORM (straight legs under constant
-  deceleration between board contacts, mirroring `clamp_to_rink_inner` including
-  the corner arcs), because the stepped walk costs as much as a carry search.
-  - It is offensive and scored on the race to the resting spot, with no icing
-    branch (it is only offered past the red line). Its search runs bearing ×
-    PACE and fires FLAT on the charged wrister, because a charged release
-    normalizes `(dir.x, tan, dir.z)` at its power and any loft would spend the
-    pace the runout was solved from. The **keeper is a body in the race**
-    (`keeper_collects_first`), or the doorstep reads as a free recovery. The gain
-    is our possession of the spot (`AIPossessionValue`) once our man gets there.
-  - **The race is an arrival race** through `time_to_arrive` — the chase clock
-    and the recovery probability (`chase_recovery`) alike — with the contest band
-    expressed as the TIME a stride buys (`CHASE_CONTEST_MARGIN_S`); a metre band
-    saturates to 0 or 1 over the 30–40 m a dump travels. The search uses EXACT
-    prunes, never budgets.
-  - **The dump is a residual, never a compete entry.** There is deliberately no
-    third giveaway bar: the dump fires only when the strip-point-priced carry has
-    non-positive EV, there is no drive-in, and no qualified fire exists. Scored
-    and entered in the value compete, it out-scores an open carrier on an empty
-    rink, wins whenever the carry is contested, and the softest release keeps
-    winning because its landing puts the puck in the slot. Past centre the
-    drive-in gets a vote, because a free entry must never be flung away.
-  - **There is no defensive-zone clear.** A carrier in his own half with
-    nothing worth keeping the puck for still keeps it — protects, takes the hit,
-    or moves it with a qualified pass, the rim up the wall included. Do not
-    bring back a chip-it-out residual: it fired whenever the carry went
-    non-positive and floated the puck to spots that handed it over.
-  - Bounded by `test_puck_release_landing.gd` (cross-validated against the
-    stepped integrator) and the dump fixtures in `test_role_carrier.gd`
-    (`test_no_dump_from_our_own_zone` holds the last point).
+- **There is no dump-in and no defensive-zone clear.** A carrier with nothing
+  worth keeping the puck for still keeps it — protects, takes the hit, or moves
+  it with a qualified pass, the rim included — and the next re-eval looks again
+  (`AIRoleCarrier._pick_commit_phase`'s `retention_hopeless` branch). A delivery
+  to open ice that comes back must not be a scored entry in the value compete
+  priced against the carry's next second: it out-scores an open carrier on an
+  empty rink. A released puck's race is priced where it STOPS, not at an aim
+  point it passes through at speed.
 
 - **Rims are passes whose lane is the boards** (`AIRimPass`; each receiver's
   best launch is ranked by `AICarrierPassSearch._rim_launch_for`, and only the single
@@ -783,7 +757,7 @@ reaches back into what remains.
   (`AICarrierPassSearch.RIM_SOFT_SHARE`), the SOFTEST is fired: easier to stop, and
   one that gets by him dies sooner. The walk is the chase election's own, so the
   receiver a rim is priced to reach is the one the election will send to it. The
-  LANE is a race along that path in `chase_recovery`'s contest band — the
+  LANE is a race along that path in `arrival_race`'s contest band — the
   receiver against the soonest opponent, and against their keeper behind his own
   net by the live goalie's trip gates. Arrivals over the receiver's catch
   threshold are dropped. Zone rules mirror the straight feed's. A winner is

@@ -4,8 +4,9 @@ Status: **scoping / agreed-design draft** (task #32). Implementation follows the
 CLAUDE.md workflow: this doc is the plan; deviations get discussed first.
 
 The own-zone clear this doc iterates on has since been removed with no
-replacement: a carrier in his own half never dumps (see
-`Scripts/domain/ai/CLAUDE.md` → "The dump-in is a searched RELEASE").
+replacement, and so has the neutral-zone dump-in: a carrier never dumps (see
+`Scripts/domain/ai/CLAUDE.md` → "There is no dump-in and no defensive-zone
+clear").
 
 ## 1. The problem (playtest report + diagnosis)
 

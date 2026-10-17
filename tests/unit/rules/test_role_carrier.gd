@@ -1,7 +1,7 @@
 extends GutTest
 
 # AIRoleCarrier's compete on fixture snapshots: what it picks (shoot, pass and
-# its variants, carry, dump, hold) and where, plus its lifecycle (reset,
+# its variants and the rim, carry, hold) and where, plus its lifecycle (reset,
 # clear_intent, cooldown, settle doubt). The evaluators it prices with are
 # covered in test_ai_action_scoring and test_reach_safety. A pick asserted here
 # is doctrine (Scripts/domain/ai/CLAUDE.md, Scripts/ai/CLAUDE.md, the design
@@ -1460,7 +1460,7 @@ func _developing_outlet_and_valve_ctx() -> RoleContext:
 	return ctx
 
 
-# ─── dumping: last-resort relief in two specific spots ───────────────────────
+# ─── under pressure: the snapshot's relief fixtures ──────────────────────────
 
 # Deep in our slot with three forecheckers converging, flanks opposed so the
 # protect budget splits: on the blade (`tight`), or a stride looser.
@@ -1479,16 +1479,6 @@ func _own_slot_swarm_ctx(tight: bool) -> RoleContext:
 			[5, 1, Vector3(8.8, 0, 24.6)]])
 
 
-func test_no_dump_from_our_own_zone() -> void:
-	# Swarmed on the blade in our slot, retention is hopeless, and still nothing
-	# is flung away: the dump-in exists only past the red line, and there is no
-	# clear.
-	var ctx: RoleContext = _own_slot_swarm_ctx(true)
-	assert_eq(_searched_dump(ctx).value, -INF, "no dump applies in our own zone")
-	assert_ne(_decided(ctx).intended_action, AIRoleCarrier.INTENT_DUMP,
-			"the swarmed carrier keeps the puck or releases it, never dumps it")
-
-
 # Past centre, short of their blue line, nothing to pass to: a set stand-up line
 # (head D at gap, flankers bracketing both swing lanes), or a loose pair — one D
 # backing off, one wide of the lane.
@@ -1504,133 +1494,6 @@ func _contained_past_centre_ctx(walled: bool) -> RoleContext:
 			[1, TEAM_ID, self_pos],
 			[3, 1, Vector3(2, 0, -5), false, Vector3(0, 0, -4)],
 			[4, 1, Vector3(-1, 0, -5.5)]])
-
-
-# Past centre with one defender a metre ahead.
-func _dump_in_ctx() -> RoleContext:
-	var self_pos := Vector3(2, 0, -4)
-	return _make_ctx(self_pos, [[1, TEAM_ID, self_pos], [3, 1, Vector3(2, 0, -5)]])
-
-
-# The carrier's searched dump at `ctx`.
-func _searched_dump(ctx: RoleContext) -> AICarrierDumpSearch:
-	var c := AIRoleCarrier.new()
-	c._field.fill(ctx)
-	return _dumped(c, ctx, AIRoleReads.resolve_our_goalie_pos(ctx))
-
-
-# Carrier `c`'s dump search at `ctx`, its field already filled.
-func _dumped(c: AIRoleCarrier, ctx: RoleContext, our_goalie: Vector3) -> AICarrierDumpSearch:
-	c._dump.search(ctx, our_goalie)
-	return c._dump
-
-
-func test_a_dump_in_fires_at_a_pace_the_release_can_fire() -> void:
-	# The dump-in searches BEARING x PACE: every pace the bot can produce
-	# out-slides the rink several times over, so bearing alone cannot place it.
-	# The pace is a real choice off the ladder, inside the producible release band.
-	# Where it comes to rest is the race's outcome: the snapshot's row.
-	var ctx: RoleContext = _dump_in_ctx()
-	var dump: AICarrierDumpSearch = _searched_dump(ctx)
-	assert_between(dump.launch_speed, GameRules.DEFAULT_WRISTER_POWER_MIN_M_S,
-			ctx.self_wrister_shot_speed,
-			"the launch pace sits in the band the release can actually fire")
-
-
-func test_dump_in_will_not_feed_the_keeper() -> void:
-	# The missing body in the dump's race. chase_recovery sees skaters only, so
-	# a puck dying on the doorstep would read as a FREE recovery, the delivery
-	# search aiming there. It is the keeper's puck; he is standing on it.
-	var self_pos := Vector3(0, 0, -4)
-	var ctx: RoleContext = _make_ctx(self_pos, [[1, TEAM_ID, self_pos]])
-	var c := AIRoleCarrier.new()
-	c._field.fill(ctx)
-	var dump: AICarrierDumpSearch = _dumped(c, ctx, AIRoleReads.resolve_our_goalie_pos(ctx))
-	var settle: Vector3 = dump.settle
-	var keeper: Vector3 = AICarrierField.goalie_now(ctx)
-	gut.p("  dump-in settles at %s, keeper at %s" % [settle, keeper])
-	assert_false(
-			AIActionScoring.keeper_collects_first(
-					settle, keeper, [self_pos] as Array[Vector3],
-					AIArrival.SKATER_REF_SPEED_M_S),
-			"the chosen dump is not one the keeper simply collects")
-
-	# The primitive itself, both ways: a puck resting in the blue paint with our
-	# nearest man twenty metres out is his; the same puck in the corner is not,
-	# because 4.2 m/s cannot beat a winger's 9 to it.
-	var ours: Array[Vector3] = [Vector3(0, 0, -6)]
-	assert_true(AIActionScoring.keeper_collects_first(
-			Vector3(0, 0, -24.0), keeper, ours, AIArrival.SKATER_REF_SPEED_M_S),
-			"a puck dying on the doorstep belongs to the keeper")
-	assert_false(AIActionScoring.keeper_collects_first(
-			Vector3(11.5, 0, -23.0), keeper, ours, AIArrival.SKATER_REF_SPEED_M_S),
-			"…and a puck in the corner does not — he cannot get there first")
-
-
-func test_an_easy_entry_is_carried_not_dumped() -> void:
-	# The headline behavior. A carrier past centre with the ice in front of him
-	# genuinely open — one defender well wide of the lane — must take the entry,
-	# not fling it in. Three asymmetries used to hand this to the dump, all of
-	# them comparing a dumped puck's WHOLE play against a carry's next second:
-	# the settle spot's potential skipped the realization discount every carry
-	# candidate pays, the chase clock ran at an instant full-speed sprint no
-	# skater can produce, and the compete never saw the drive-in the carrier
-	# could simply take.
-	var self_pos := Vector3(0, 0, -2)
-	for label: String in ["wide D", "wide D, in stride"]:
-		var vel: Vector3 = Vector3(0, 0, -8) if label.ends_with("stride") \
-				else Vector3.ZERO
-		var ctx: RoleContext = _make_ctx(self_pos, [
-				[1, TEAM_ID, self_pos],
-				[3, 1, Vector3(-12, 0, -9)]])
-		ctx.self_velocity = vel
-		var c := AIRoleCarrier.new()
-		c.decide(ctx)
-		gut.p("  %s: intent=%d dump=%.4f carry=%.4f"
-				% [label, c.intended_action, c.debug_dump_score, c.debug_carry_score])
-		assert_ne(c.intended_action, AIRoleCarrier.INTENT_DUMP,
-				"%s: an open entry is skated in, not dumped" % label)
-
-	# The contrast that keeps this honest: the dump must still be REACHABLE.
-	# Wall it off with a real stand-up line and the compete stops preferring the
-	# carry — this is the flip, not a blanket ban on dumping.
-	var walled: RoleContext = _make_ctx(self_pos, [
-			[1, TEAM_ID, self_pos],
-			[3, 1, Vector3(-4, 0, -5)],
-			[4, 1, Vector3(0, 0, -4.5)],
-			[5, 1, Vector3(4, 0, -5)]])
-	var cw := AIRoleCarrier.new()
-	cw.decide(walled)
-	gut.p("  walled: intent=%d dump=%.4f carry=%.4f"
-			% [cw.intended_action, cw.debug_dump_score, cw.debug_carry_score])
-	assert_lt(cw.debug_carry_score, 0.30,
-			"a stand-up wall genuinely collapses the carry's value")
-
-
-func test_an_unopposed_carrier_never_dumps() -> void:
-	# The headline of the residual model. The dump used to be SCORED and entered
-	# in the compete, and it beat an open carrier on an EMPTY RINK: its credit
-	# reached the slot while the carry's is horizon-capped at RECEIVER_DRIVE_MAX_M,
-	# so a soft chip whose landing solve put the puck 17 m up ice out-valued
-	# skating the same ground. Nothing on the ice to lose the puck to, and the bot
-	# threw it away.
-	#
-	# A dump is now what is LEFT when retention is worth nothing, so with the rink
-	# empty there is nothing for it to be left over from — the search does not
-	# even run.
-	for z: float in [-1.0, -3.0, -5.0, -7.0]:
-		for label: String in ["standing", "in stride"]:
-			var self_pos := Vector3(0, 0, z)
-			var vel: Vector3 = Vector3(0, 0, -8) if label == "in stride" \
-					else Vector3.ZERO
-			var ctx: RoleContext = _make_ctx(self_pos, [[1, TEAM_ID, self_pos]])
-			ctx.self_velocity = vel
-			var c := AIRoleCarrier.new()
-			c.decide(ctx)
-			assert_ne(c.intended_action, AIRoleCarrier.INTENT_DUMP,
-					"z=%.0f %s: an unopposed carrier skates it in" % [z, label])
-			assert_eq(c.debug_dump_score, -INF,
-					"z=%.0f %s: the delivery search never ran" % [z, label])
 
 
 # Past centre, IN STRIDE at a three-man stand-up line that walls the entry off,
@@ -1651,19 +1514,6 @@ func _walled_ctx(with_outlet: bool) -> RoleContext:
 	return ctx
 
 
-func test_a_qualified_release_outranks_the_dump_rather_than_out_scoring_it() -> void:
-	# The ordering, not a comparison: a release that cleared its own giveaway bar
-	# is a live play and a dump is what is left when there is none, so with the
-	# outlet on the delivery search never runs. The outlet does not have to
-	# out-VALUE the concession. (What the lone carrier does at this wall is
-	# calibration: the snapshot's walled-off rows.)
-	var s: AIRoleCarrier = _decided(_walled_ctx(true))
-	assert_gt(s.debug_pass_score, AIRoleCarrier.PASS_MIN_VALUE,
-			"precondition: the outlet clears the pass bar")
-	assert_eq(s.debug_dump_score, -INF,
-			"the delivery search never ran — the release outranked it")
-
-
 # Pinned in the DZ by a head-on forecheck, a teammate wide open up the strong wall.
 func _pinned_with_an_outlet_ctx() -> RoleContext:
 	var self_pos := Vector3(8, 0, 20)
@@ -1672,23 +1522,6 @@ func _pinned_with_an_outlet_ctx() -> RoleContext:
 			[2, TEAM_ID, Vector3(11, 0, 11)],
 			[3, 1, Vector3(8, 0, 17), false, Vector3(0, 0, 4)],
 			[4, 1, Vector3(5.5, 0, 19)]])
-
-
-func test_no_dump_in_own_side_neutral_zone() -> void:
-	# Between our own blue line and centre — not our DZ, not past the red line. No
-	# dump applies here even under pressure (it would be icing to fire it in, and
-	# there's no need to clear from mid-ice).
-	var self_pos := Vector3(0, 0, 4)                       # own-side NZ (own net +Z)
-	var skaters: Array = [
-			[1, TEAM_ID, self_pos],
-			[3, 1, Vector3(0, 0, 1), false, Vector3(0, 0, 4)],
-			[4, 1, Vector3(3, 0, 2)],
-			[5, 1, Vector3(-3, 0, 2)],
-	]
-	var c := AIRoleCarrier.new()
-	c.decide(_make_ctx(self_pos, skaters))
-	assert_ne(c.intended_action, AIRoleCarrier.INTENT_DUMP,
-			"no dump from the own-side neutral zone")
 
 
 # ─── NHL icing and delayed offside ────────────────────────────────────────────
@@ -1705,34 +1538,6 @@ func test_delayed_offside_closes_the_zone_to_the_carry() -> void:
 	ctx.zone_entry_blocked = true
 	assert_eq(c._carry._score_move_candidate_base(ctx, in_zone, goalie), -INF,
 			"with a teammate owing a tag-up, carrying in would be whistled")
-
-
-func test_delayed_offside_takes_the_dump_in_off_the_table() -> void:
-	var self_pos := Vector3(2, 0, -4)
-	var ctx: RoleContext = _make_ctx(self_pos, [
-			[1, TEAM_ID, self_pos],
-			[3, 1, Vector3(2, 0, -5)]])
-	ctx.zone_entry_blocked = true
-	var c := AIRoleCarrier.new()
-	c._field.fill(ctx)
-	var dump: AICarrierDumpSearch = _dumped(c, ctx, AIRoleReads.resolve_our_goalie_pos(ctx))
-	assert_eq(dump.value, -INF, "a dumped puck nobody may touch is no dump-in")
-
-
-func test_no_dump_once_in_the_offensive_zone() -> void:
-	# Already established in the OZ — the valve keeps the puck in, and there's no
-	# dump. Even swarmed, it cycles/holds rather than dumping it away.
-	var self_pos := Vector3(0, 0, -12)                     # in the OZ (attack -Z)
-	var skaters: Array = [
-			[1, TEAM_ID, self_pos],
-			[3, 1, Vector3(0, 0, -14), false, Vector3(0, 0, -4)],
-			[4, 1, Vector3(3, 0, -13)],
-			[5, 1, Vector3(-3, 0, -13)],
-	]
-	var c := AIRoleCarrier.new()
-	c.decide(_make_ctx(self_pos, skaters))
-	assert_ne(c.intended_action, AIRoleCarrier.INTENT_DUMP,
-			"no dumping once the zone is established")
 
 
 # ─── AICarrierPassSearch._facing_rotation_time: the blade reach cone (Aim-B / B1) ────────────────
@@ -2553,7 +2358,6 @@ func test_a_rim_commits_as_a_flat_charged_release_along_its_bearing() -> void:
 	c.decide(ctx)
 	assert_eq(c.intended_action, AIRoleCarrier.INTENT_DUMP,
 			"pinned on his own goal line with the lane cut, he rims it")
-	assert_true(c.dump_is_rim, "the dump release fires FLAT as a rim")
 	assert_eq(c.pass_target_peer_id, c._phase_best_pass_peer, "…to the receiver it was priced to")
 	assert_eq(c.dump_launch_speed, c._phase_best_pass_rim_pace, "…at its searched pace")
 	var puck: Vector3 = ctx.snapshot.puck_state.position
@@ -2642,7 +2446,7 @@ func test_carrier_calibration_snapshot() -> void:
 	snap.record("spun-off carrier, beaten man behind: pick", _pick(spun))
 	_record_feed_and_pressure_picks(snap)
 	_record_entry_and_finish_picks(snap)
-	_record_dump_and_breakout_picks(snap)
+	_record_relief_and_breakout_picks(snap)
 	_record_zone_play_picks(snap)
 	snap.verify(self)
 
@@ -2725,7 +2529,7 @@ func _record_entry_and_finish_picks(snap: Snapshot) -> void:
 			wide.debug_shoot_score)
 
 
-func _record_dump_and_breakout_picks(snap: Snapshot) -> void:
+func _record_relief_and_breakout_picks(snap: Snapshot) -> void:
 	snap.record("swarmed on the blade in our slot: intent",
 			_intent_name(_decided(_own_slot_swarm_ctx(true)).intended_action))
 	snap.record("swarmed in our slot a stride looser: intent",
@@ -2734,8 +2538,6 @@ func _record_dump_and_breakout_picks(snap: Snapshot) -> void:
 			_pick(_decided(_contained_past_centre_ctx(true))))
 	snap.record("past centre, a loose pair ahead: pick",
 			_pick(_decided(_contained_past_centre_ctx(false))))
-	snap.record("dump-in past centre, one D ahead: rests at",
-			_spot(_searched_dump(_dump_in_ctx()).settle))
 	snap.record("pinned in our zone by a head-on forecheck, outlet up the wall: pick",
 			_pick(_decided(_pinned_with_an_outlet_ctx())))
 	snap.record("wheeling up the weak wall, middle clogged: pick", _pick(_decided(_wall_exit_ctx())))

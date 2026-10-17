@@ -406,42 +406,36 @@ func test_delay_discount_bounds_patience() -> void:
 			0.0001, "constant-hazard: memoryless, so it compounds geometrically")
 
 
-# ── Dumping: zone gates, chase race ───────────────────────────────────────────
-# GOAL is at +Z, so the attacking side of centre is z > 0.
+# ── The loose-puck race ──────────────────────────────────────────────────────
 
-func test_past_center_toward_attack() -> void:
-	assert_true(AIActionScoring.past_center_toward_attack(Vector3(0, 0, 5.0), GOAL))
-	assert_false(AIActionScoring.past_center_toward_attack(Vector3(0, 0, -5.0), GOAL))
-	assert_false(AIActionScoring.past_center_toward_attack(Vector3(0, 0, 0.0), GOAL),
-			"exactly on centre is not past it")
-	# Folds for the other attack direction.
-	var neg_goal := Vector3(0, 0, -26.65)
-	assert_true(AIActionScoring.past_center_toward_attack(Vector3(0, 0, -5.0), neg_goal))
-	assert_false(AIActionScoring.past_center_toward_attack(Vector3(0, 0, 5.0), neg_goal))
+# Our first man to `target` against theirs.
+func _race(target: Vector3, ours: Array[Vector3], theirs: Array[Vector3],
+		our_vels: Array[Vector3] = [], their_vels: Array[Vector3] = []) -> float:
+	return AIActionScoring.arrival_race(target,
+			AIActionScoring.first_arrival(target, ours, our_vels), theirs, their_vels)
 
 
-func test_chase_recovery_race() -> void:
+func test_the_loose_puck_race() -> void:
 	var target := Vector3(10, 0, 20)
 	# No chaser of ours → we never get it; no opponent → uncontested.
-	assert_eq(AIActionScoring.chase_recovery(target, [], [Vector3(9, 0, 20)]), 0.0)
-	assert_eq(AIActionScoring.chase_recovery(target, [Vector3(9, 0, 20)], []), 1.0)
+	assert_eq(_race(target, [] as Array[Vector3], [Vector3(9, 0, 20)] as Array[Vector3]), 0.0)
+	assert_eq(_race(target, [Vector3(9, 0, 20)] as Array[Vector3], [] as Array[Vector3]), 1.0)
 	# Dead tie → coin flip.
-	var tie: float = AIActionScoring.chase_recovery(
-			target, [Vector3(7, 0, 20)], [Vector3(13, 0, 20)])   # both 3 m out
+	var tie: float = _race(target, [Vector3(7, 0, 20)] as Array[Vector3],
+			[Vector3(13, 0, 20)] as Array[Vector3])   # both 3 m out
 	assert_almost_eq(tie, 0.5, 1e-6)
 	# We're a full contest-margin closer → near-certain.
 	var ours: Array[Vector3] = [Vector3(10, 0, 20)]              # 0 m
 	var theirs: Array[Vector3] = [Vector3(10, 0, 24)]           # 4 m = 2× margin
-	assert_gt(AIActionScoring.chase_recovery(target, ours, theirs), 0.99)
+	assert_gt(_race(target, ours, theirs), 0.99)
 	# They're closer → near-zero.
-	assert_lt(AIActionScoring.chase_recovery(target, theirs, ours), 0.01)
+	assert_lt(_race(target, theirs, ours), 0.01)
 
 
-func test_chase_recovery_races_arrivals_not_metres() -> void:
+func test_the_loose_puck_race_runs_on_arrivals_not_metres() -> void:
 	# The race is won by whoever GETS there, which is not whoever is nearest: a
 	# body 2 m closer but skating the other way has to shed its speed, turn, and
-	# come back. Distance alone cannot see that, and over the 30-40 m a clear
-	# travels it is the difference between a puck we recover and one we hand over.
+	# come back. Distance alone cannot see that.
 	var target := Vector3(0, 0, 0)
 	# Ours is FARTHER but already flying at the spot; theirs is nearer and leaving.
 	var ours: Array[Vector3] = [Vector3(0, 0, 12)]
@@ -450,24 +444,21 @@ func test_chase_recovery_races_arrivals_not_metres() -> void:
 	var their_vels: Array[Vector3] = [Vector3(0, 0, -9)]
 	# On metres alone this is a race we lose outright (10 m vs 12 m — a
 	# cruise-pace gap of exactly the contest band, so 0 to rounding).
-	assert_almost_eq(AIActionScoring.chase_recovery(target, ours, theirs), 0.0, 1e-9,
+	assert_almost_eq(_race(target, ours, theirs), 0.0, 1e-9,
 			"the distance read hands it to the nearer body")
-	assert_gt(AIActionScoring.chase_recovery(
-			target, ours, theirs, our_vels, their_vels), 0.99,
+	assert_gt(_race(target, ours, theirs, our_vels, their_vels), 0.99,
 			"...but we arrive first, so the arrival race gives it to us")
 	# Symmetric: the same two bodies with the momentum swapped flips it back.
-	assert_lt(AIActionScoring.chase_recovery(
-			target, theirs, ours, their_vels, our_vels), 0.01)
+	assert_lt(_race(target, theirs, ours, their_vels, our_vels), 0.01)
 
 
-func test_chase_recovery_without_velocities_races_from_rest() -> void:
+func test_the_loose_puck_race_without_velocities_runs_from_rest() -> void:
 	# Callers holding no velocities still get a real ramp rather than an instant
-	# full-speed sprint, and the contest band is the same stride it always was —
-	# CHASE_CONTEST_MARGIN_S is that stride's duration at reference pace, so a
-	# standing race calibrates exactly where the metre form did.
+	# full-speed sprint, and the contest band is a stride:
+	# CHASE_CONTEST_MARGIN_S is that stride's duration at reference pace.
 	var target := Vector3(0, 0, 0)
-	assert_almost_eq(AIActionScoring.chase_recovery(
-			target, [Vector3(0, 0, 4)], [Vector3(0, 0, 4)]), 0.5, 1e-6,
+	assert_almost_eq(_race(target, [Vector3(0, 0, 4)] as Array[Vector3],
+			[Vector3(0, 0, 4)] as Array[Vector3]), 0.5, 1e-6,
 			"equal standing starts are a coin flip")
 	assert_almost_eq(
 			AIActionScoring.CHASE_CONTEST_MARGIN_S

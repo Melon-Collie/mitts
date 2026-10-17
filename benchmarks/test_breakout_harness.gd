@@ -294,10 +294,9 @@ func _intent_label(rec: Dictionary) -> String:
 	# — the intent enum can already be cleared by fire time.
 	var decision: String = String(rec.get("decision", ""))
 	if decision != "":
-		return "%s(p%.2f c%.2f d%.2f)" % [decision,
+		return "%s(p%.2f c%.2f)" % [decision,
 				float(rec.get("pass_score", 0.0)),
-				float(rec.get("carry_score", 0.0)),
-				float(rec.get("dump_score", 0.0))]
+				float(rec.get("carry_score", 0.0))]
 	return "rel(%d)" % int(rec.get("intent", -1))
 
 

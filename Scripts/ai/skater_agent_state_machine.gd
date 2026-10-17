@@ -369,11 +369,9 @@ var _holds := AIShotHolds.new()
 # (_state_from_carrier_intent); this sentinel tells that state to aim at a
 # LOCATION and skip the receiver-close bail.
 #
-# Both dumps — the dump-in and the rim (`_dump_is_rim`) — fire FLAT on the
-# charged wrister at `_dump_launch_speed`, because where each lands IS its pace
-# (AICarrierDumpSearch._solve_dump_in searches it).
+# The dump is the rim pass (AIRimPass): it fires FLAT on the charged wrister at
+# `_dump_launch_speed`, because how far round the boards it carries IS its pace.
 var _dump_target: Vector3 = Vector3.INF
-var _dump_is_rim: bool = false
 var _dump_launch_speed: float = AIPuckLane.PASS_SPEED_M_S
 
 # Multi-tick wrister charge: shoot_held for BOT_WRISTER_CHARGE_TICKS while the
@@ -511,10 +509,6 @@ var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 const DISPATCH_PERIOD_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 60   # ~60 Hz
 var _dispatch_period_ticks: int = DISPATCH_PERIOD_TICKS
 
-# The match's latched rule set (GameRules.RuleSet), stamped by AIController each
-# tick; sets RoleContext.icing_enforced. Defaults to the
-# game's default so unwired contexts (tests) model the standard game.
-var rule_set: int = GameRules.DEFAULT_RULE_SET
 var _dispatch_skip_counter: int = 0
 
 # ── Loose-puck reactivity clock ──────────────────────────────────────────────
@@ -1298,7 +1292,6 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	ctx.dispatch_period_ticks = _dispatch_period_ticks
 	# Every ctx field below is re-stamped every build: the instance is reused, and
 	# a stale field would carry another match's, brain's or tick's value.
-	ctx.icing_enforced = rule_set == GameRules.RuleSet.NHL
 	ctx.zone_entry_blocked = _teammate_must_tag_up(snapshot)
 	if _current_strategy != null:
 		ctx.strong_x = _current_strategy.strong_x()
@@ -1670,7 +1663,6 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		# _dump_target first, so the always-fresh pass mirror can't hijack a dump.)
 		if _carrier.intended_action == AIRoleCarrier.INTENT_DUMP:
 			_dump_target = _carrier.dump_target
-			_dump_is_rim = _carrier.dump_is_rim
 			_dump_launch_speed = _carrier.dump_launch_speed
 		else:
 			_dump_target = Vector3.INF
@@ -2240,7 +2232,7 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 
 	if DEBUG_DECISIONS:
 		if is_dump:
-			debug_last_decision = "DUMP↝rim" if _dump_is_rim else "DUMP↝corner"
+			debug_last_decision = "DUMP↝rim"
 		else:
 			debug_last_decision = "PASS+→%s" % target_slot_label
 
@@ -2291,7 +2283,7 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 		input.shoot_held = false
 		_pass_target_peer_id = -1
 		_pass_should_saucer = false
-		# A charged dump (dump-in / rim) releases here, so its aim is spent here.
+		# A charged dump (the rim) releases here, so its aim is spent here.
 		_dump_target = Vector3.INF
 		_set_state(State.CARRY)
 

@@ -603,21 +603,6 @@ func test_the_bots_predict_the_same_boundary_the_puck_uses() -> void:
 				"predicted puck respects the same inset boundary")
 
 
-func test_the_closed_form_caroms_on_the_same_edge_as_the_walk() -> void:
-	# The stepped walk above and AITrajectory.puck_release_landing's closed form
-	# are two solvers for one puck: the dump-in ranks releases with the closed
-	# form, everything else walks the sim. Both must inset the boards by the puck
-	# radius, or the closed form rests a radius deeper per contact on a rim.
-	for deg: int in range(0, 360, 20):
-		var rad: float = deg_to_rad(float(deg))
-		var vel := Vector3(cos(rad), 0.0, sin(rad)) * 14.0
-		var landing: Vector3 = AITrajectory.puck_release_landing(
-				Vector3(3.0, 0.0, 6.0), vel)
-		var xz := Vector2(landing.x, landing.z)
-		assert_almost_eq(GameRules.clamp_to_rink_inner(xz, _PR).distance_to(xz), 0.0, 1e-2,
-				"closed-form landing keeps the puck's edge out of the boards (%d°)" % deg)
-
-
 func test_skater_approximations_are_unchanged() -> void:
 	# _step's default margin is 0, so the no-bounce skater path still clamps the
 	# body centre exactly as before.

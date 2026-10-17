@@ -392,11 +392,6 @@ func horizon_value(pos: Vector3) -> float:
 	return _ours.at(pos)
 
 
-# Our possession of `pos` with our man there `start_s` from now.
-func our_possession_at(pos: Vector3, start_s: float) -> float:
-	return _ours.at(pos, start_s)
-
-
 # The two cases of value_at: `shoot_s` is the shot's odds at `pos`.
 func _regime_value(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 		shoot_s: float) -> float:

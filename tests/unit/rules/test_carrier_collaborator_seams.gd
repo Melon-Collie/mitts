@@ -1,8 +1,8 @@
 extends GutTest
 
 # AIRoleCarrier's collaborators: AICarrierField (what it sees and what a spot is
-# worth) and the searches over it (AICarrierPassSearch, AICarrierCarrySearch,
-# AICarrierDumpSearch). The carrier reads their results and never writes their
+# worth) and the searches over it (AICarrierPassSearch, AICarrierCarrySearch).
+# The carrier reads their results and never writes their
 # fields; no search names the carrier; and the field's lists are written only
 # by its own fill passes, so every search in a phase reads the same field.
 
@@ -12,7 +12,6 @@ const _FIELD: String = _DIR + "carrier_field.gd"
 const _SEARCHES: Array[String] = [
 	_DIR + "carrier_pass_search.gd",
 	_DIR + "carrier_carry_search.gd",
-	_DIR + "carrier_dump_search.gd",
 	_DIR + "carrier_destinations.gd",
 ]
 # The field's members a search may drive: the hold solver is a tool whose
@@ -34,7 +33,7 @@ func _src(path: String) -> String:
 
 func test_the_carrier_never_writes_a_collaborator_field() -> void:
 	var src: String = _src(_CARRIER)
-	for holder: String in ["_field", "_pass", "_carry", "_dump"]:
+	for holder: String in ["_field", "_pass", "_carry"]:
 		assert_true(src.contains("var %s := " % holder), "the carrier holds %s" % holder)
 		var re := RegEx.create_from_string("%s\\.([a-z_][a-z_0-9]*)%s" % [holder, _LIST_WRITE])
 		var writes := PackedStringArray()

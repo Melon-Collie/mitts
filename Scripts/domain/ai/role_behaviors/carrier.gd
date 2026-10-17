@@ -5,9 +5,8 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 
 # CARRIER role behavior: the puck-carrying utility AI. Scores SHOOT (wrister),
 # PASS (AICarrierPassSearch) and CARRY (AICarrierCarrySearch) on one scale every
-# PICK_ACTION_PERIOD_TICKS ticks, with DUMP (AICarrierDumpSearch) as the
-# residual when none of them is worth anything. The searches all read this
-# carrier's AICarrierField; this file owns the compete — the shot sweep, the
+# PICK_ACTION_PERIOD_TICKS ticks. The searches all read this carrier's
+# AICarrierField; this file owns the compete — the shot sweep, the
 # protect / evade reads, the bars, the argmax and its commitment.
 # Hysteresis on the current fire intent stops flicker during pre-aim; CARRY gets
 # none, because stand-still's shot branch IS the shoot-now score and fire must
@@ -24,14 +23,17 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 const INTENT_CARRY: int = 0
 const INTENT_SHOOT: int = 1
 const INTENT_PASS: int = 3
-# Last-resort DUMP — fire the puck to a location (no receiver). The state machine
-# maps it onto a PASS_PRESSED release aimed at `dump_target`.
+# The rim PASS's release — fire the puck to a location (no receiver). The state
+# machine maps it onto a PASS_PRESSED release aimed at `dump_target`.
 const INTENT_DUMP: int = 5
+# How far down the rim's bearing its aim point is placed. The charged release
+# converges its blade's side offset onto this point, so a far point keeps the
+# puck parallel to the searched bearing.
+const RIM_AIM_STANDOFF_M: float = 20.0
 
 # ── Giveaway floors: least value worth releasing the puck for ────────────────
 # In the seam's xG currency; see Scripts/domain/ai/CLAUDE.md → "One currency
-# across the carrier's compete". There is no third bar for the DUMP: it is a
-# residual (see _pick_commit_phase), not a release chosen on merits.
+# across the carrier's compete".
 #
 # A SHOT hands the puck over unless it goes in, so it must out-value the
 # possession. A clear-lane shot straight on reaches 0.05 at about 14 m: nothing
@@ -176,14 +178,12 @@ var carry_move: int = -1
 var carry_stick: Vector2 = Vector2.ZERO
 var carry_brake: bool = false
 
-# Set when intent commits to DUMP: the world spot to fire the puck at, and
-# whether it is the rim PASS (AIRimPass) rather than the dump-in. A rim is chosen
-# as a pass and released as a dump, because its aim is a bearing into the boards
-# rather than the receiver. Read by the state machine's dump release.
+# Set when intent commits to DUMP: the world spot to fire the rim PASS
+# (AIRimPass) at. A rim is chosen as a pass and released as a dump, because its
+# aim is a bearing into the boards rather than the receiver. Read by the state
+# machine's dump release.
 var dump_target: Vector3 = Vector3.INF
-var dump_is_rim: bool = false
-# Launch pace (m/s) the dump fires at: the dump-in's winning pace from
-# solve_dump_in's ladder, or the rim's searched pace.
+# Launch pace (m/s) the rim fires at: its searched pace.
 var dump_launch_speed: float = AIPuckLane.PASS_SPEED_M_S
 
 # ── Puck-protect mirror (read by the state machine's carry blade aim) ────────
@@ -249,7 +249,6 @@ var _shot_pick := AIShotOdds.Pick.new()
 # What the carrier sees this phase (AICarrierField), refilled at each phase's
 # head, and the searches that read it.
 var _field := AICarrierField.new()
-var _dump := AICarrierDumpSearch.new(_field)
 var _pass := AICarrierPassSearch.new(_field)
 var _carry := AICarrierCarrySearch.new(_field)
 
@@ -273,7 +272,6 @@ var debug_pass_score: float = 0.0
 var debug_pass_peer_id: int = 0
 var debug_carry_score: float = 0.0
 var debug_carry_pos: Vector3 = Vector3.ZERO
-var debug_dump_score: float = 0.0
 
 
 # ── Public API ───────────────────────────────────────────────────────────────
@@ -351,7 +349,6 @@ func reset() -> void:
 	last_carry_anchor = Vector3.ZERO
 	carry_move = -1
 	dump_target = Vector3.INF
-	dump_is_rim = false
 	dump_launch_speed = AIPuckLane.PASS_SPEED_M_S
 	protect_offset = Vector3.ZERO
 	protect_gain = 0.0
@@ -377,7 +374,6 @@ func clear_intent() -> void:
 	pass_target_speed = AIPuckLane.PASS_SPEED_M_S
 	pass_should_saucer = false
 	dump_target = Vector3.INF
-	dump_is_rim = false
 	dump_launch_speed = AIPuckLane.PASS_SPEED_M_S
 	_pick_action_cooldown = 0
 	_ticks_since_pick = 0
@@ -597,11 +593,11 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 	_phase_best_pass_rim_pace = _pass.best_rim_pace
 
 
-# COMMIT phase of the compete: the CARRY candidate argmax, the DUMP read, and
-# the fire-vs-carry-vs-hold compete that commits the intent. Consumes the fire
+# COMMIT phase of the compete: the CARRY candidate argmax, and the
+# fire-vs-carry-vs-hold compete that commits the intent. Consumes the fire
 # phase's _phase_* / _shot_sample_* products. `rebuild_lists` is
 # true on the second dispatch of a SLICED eval, where the opponent lists are one
-# dispatch old: the carry/dump scoring rebuilds them, while the fire SCORES stay
+# dispatch old: the carry scoring rebuilds them, while the fire SCORES stay
 # the older reads.
 func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	var snapshot: WorldSnapshot = ctx.snapshot
@@ -609,7 +605,6 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	var attacking_goal: Vector3 = ctx.attacking_goal_pos
 	if rebuild_lists:
 		_field.fill(ctx)
-	var our_goalie: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 	var puck_now: Vector3 = self_pos
 	if snapshot.puck_state != null:
 		puck_now = Vector3(
@@ -656,8 +651,8 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	# re-eval and the bot would never fire.
 	if intended_action == INTENT_SHOOT and shoot_score > 0.0:
 		shoot_score *= 1.0 + AIActionScoring.ACTION_HYSTERESIS_MARGIN_FRAC
-	elif (intended_action == INTENT_PASS or (intended_action == INTENT_DUMP
-			and dump_is_rim)) and best_pass_score > 0.0:
+	elif (intended_action == INTENT_PASS or intended_action == INTENT_DUMP) \
+			and best_pass_score > 0.0:
 		best_pass_score *= 1.0 + AIActionScoring.ACTION_HYSTERESIS_MARGIN_FRAC
 
 	debug_shoot_score = shoot_score
@@ -708,12 +703,7 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 			* keep_prob * AIActionScoring.delay_discount(_hold_elapsed_s))
 
 	var new_intent: int
-	# Only filled when the delivery search actually runs (the dump branch below);
-	# -INF on the label means "nothing was conceded", not "a dump scored -INF".
-	debug_dump_score = -INF
-	# The dump is a RESIDUAL, never an option in the value compete — see
-	# Scripts/domain/ai/CLAUDE.md → "The dump-in is a searched RELEASE". Retention is
-	# hopeless only when BOTH reads of keeping the puck fail, because each is blind
+	# Retention is hopeless only when BOTH reads of keeping the puck fail, because each is blind
 	# where the other sees: the raw carry is one beat ahead and cannot see the
 	# entry a carrier skates into by beating his man; the drive-in sees that but is
 	# benefit-only, so it cannot say a carry is doomed. In our own zone the
@@ -724,8 +714,8 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	var retention_hopeless: bool = raw_carry_score <= 0.0 \
 			and (in_own_zone or drive_in_value <= 0.0)
 	# Fire if it beats retention (carrying, or holding for the developing play) —
-	# or, when retention is hopeless, at all: the ordering is fire-then-dump with
-	# nothing to compare, and an unqualified fire arrives as -INF and loses both.
+	# or, when retention is hopeless, at all: there is nothing to compare it with,
+	# and an unqualified fire arrives as -INF and loses both.
 	if ((fire_score >= carry_score and fire_score >= hold_value)
 			or (retention_hopeless and fire_score > -INF)) \
 			and not staggered:
@@ -737,8 +727,7 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 			# receiver).
 			new_intent = INTENT_DUMP
 			pass_target_peer_id = best_pass_peer
-			dump_target = puck_now + best_pass_rim_dir * AICarrierDumpSearch.DUMP_AIM_STANDOFF_M
-			dump_is_rim = true
+			dump_target = puck_now + best_pass_rim_dir * RIM_AIM_STANDOFF_M
 			dump_launch_speed = _phase_best_pass_rim_pace
 		elif new_intent == INTENT_PASS:
 			pass_target_peer_id = best_pass_peer
@@ -795,21 +784,10 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 			shot_hold_offset = shoot_now_hold
 			shot_hold_share = _shot_sample_share
 	elif retention_hopeless and not staggered:
-		# Last resort, and the ONLY place the dump-in search runs. Its score is read
-		# only as availability (-INF where no dump-in applies — in our own half
-		# there is never one), and with none the bot keeps the puck and the next
+		# Nothing to fire and nothing worth holding for: keep the puck, and the next
 		# re-eval looks again.
-		_dump.search(ctx, our_goalie)
-		debug_dump_score = _dump.value
-		if _dump.value > -INF:
-			_hold_elapsed_s = 0.0
-			new_intent = INTENT_DUMP
-			dump_target = _dump.aim
-			dump_is_rim = false
-			dump_launch_speed = _dump.launch_speed
-		else:
-			_hold_elapsed_s = 0.0
-			new_intent = INTENT_CARRY
+		_hold_elapsed_s = 0.0
+		new_intent = INTENT_CARRY
 	else:
 		# Not firing. Advance the hold clock only while the developing play is the
 		# reason (it out-scores plain carrying); a normal carry resets it so the

@@ -229,8 +229,9 @@ in (kept as far as the carry-safety read allows), outside it the best entry
 (its shot or drive) × the skate there × the race to it. `XG_SLOT_REF` is gone.
 On the entry drill: carried entries 25 → 27, turnovers 3 → 2, passes before
 entry 43 → 24 (backward 18 → 8); the breakout drill is level (18 exits of 20,
-1 turnover). Its cost is the dump search, a residual that prices each landing's
-possession (~0.3 ms each, a few ms when it runs).
+1 turnover). Its cost was the dump search, a residual that priced each landing's
+possession (~0.3 ms each, a few ms when it ran); the dump-in has since been cut —
+rare, poor in results, and a worker spike when it searched.
 
 The off-ball readers read it too: the defence prices a man by his threat on it
 (`threat_of_carrier` / `threat_of_feed`), and the outlet and breakout roles stand

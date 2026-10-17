@@ -1196,25 +1196,24 @@ func test_pass_pressed_charged_releases_after_windup() -> void:
 	assert_eq(sm._pass_target_peer_id, -1, "release clears the pass target")
 
 
-func test_pass_pressed_dump_in_charges_flat_at_the_searched_pace() -> void:
-	# A dump-in's depth IS its pace (AICarrierDumpSearch._solve_dump_in searches it),
-	# and the one-tick quick release only fires at the fixed quick-pass pace —
-	# which out-slides the rink twice over. So the dump-in takes the charged
-	# wrister at _dump_launch_speed, FLAT: a charged release normalizes
-	# (dir.x, tan, dir.z) at its power, so any loft spends pace going up and the
-	# puck's ground speed stops being the number the pace ladder solved the
-	# runout from.
+func test_pass_pressed_rim_charges_flat_at_its_searched_pace() -> void:
+	# The rim pass (AIRimPass) walks its path at a searched pace, and the one-tick
+	# quick release only fires at the fixed quick-pass pace, which would die in
+	# the first corner. So the rim takes the charged wrister at _dump_launch_speed,
+	# FLAT: a charged release normalizes (dir.x, tan, dir.z) at its power, so any
+	# loft spends pace going up and the puck's ground speed stops being the pace
+	# the search walked.
 	sm._state = Agent.State.PASS_PRESSED
-	sm._dump_target = Vector3(-11, 0, -20)
-	sm._dump_launch_speed = 12.0
+	sm._dump_target = Vector3(20, 0, 0)
+	sm._dump_launch_speed = 26.4
 	var i := InputState.new()
 	sm.dispatch(i, _self_snap(Vector3.ZERO, true))
-	assert_eq(i.elevation_level, ShotMechanics.ELEVATION_FLAT, "a dump-in fires FLAT")
-	assert_eq(sm._pass_target_speed, 12.0, "…at the pace the search placed it with")
+	assert_eq(i.elevation_level, ShotMechanics.ELEVATION_FLAT, "a rim rides the ice")
+	assert_eq(sm._pass_target_speed, 26.4, "…at the pace its search walked")
 	assert_eq(sm.get_state(), Agent.State.PASS_PRESSED, "the charge holds the state")
 
 	# …and the wind-up spends the dump target when it finally releases (the
-	# quick-release branch, which normally clears it, never runs for a dump-in).
+	# quick-release branch, which normally clears it, never runs for a rim).
 	var released: bool = false
 	for _t: int in range(AIBotMechanics.BOT_WRISTER_CHARGE_TICKS + 4):
 		var t := InputState.new()
@@ -1222,22 +1221,8 @@ func test_pass_pressed_dump_in_charges_flat_at_the_searched_pace() -> void:
 		if sm.get_state() == Agent.State.CARRY:
 			released = true
 			break
-	assert_true(released, "the charged dump-in releases within the charge budget")
+	assert_true(released, "the charged rim releases within the charge budget")
 	assert_false(sm._dump_target.is_finite(), "releasing clears the dump target")
-
-
-func test_pass_pressed_rim_charges_flat_at_its_searched_pace() -> void:
-	# The rim pass (AIRimPass) walks its path at a searched pace, so like the
-	# dump-in it must leave FLAT at that pace on the charged path — the quick
-	# release's fixed pace would die in the first corner.
-	sm._state = Agent.State.PASS_PRESSED
-	sm._dump_target = Vector3(20, 0, 0)
-	sm._dump_is_rim = true
-	sm._dump_launch_speed = 26.4
-	var i := InputState.new()
-	sm.dispatch(i, _self_snap(Vector3.ZERO, true))
-	assert_eq(i.elevation_level, ShotMechanics.ELEVATION_FLAT, "a rim rides the ice")
-	assert_eq(sm._pass_target_speed, 26.4, "…at the pace its search walked")
 
 
 func test_pass_pressed_dump_lost_puck_clears_target() -> void:

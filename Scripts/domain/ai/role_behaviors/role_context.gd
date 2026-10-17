@@ -146,11 +146,8 @@ var dispatch_period_ticks: int = 1
 # argmax switch-hysteresis (AIStationSearch.append_incumbent / incumbent_bonus).
 var prev_role_target: Vector3 = Vector3.INF
 
-# NHL only: an untouched release from behind the red line that reaches their
-# goal line is icing (the dump-in reads it).
-var icing_enforced: bool = false
 # NHL delayed offside: a teammate owes a tag-up, so the carrier keeps its
-# carries, feeds and dumps out of the attacking zone.
+# carries, feeds and rims out of the attacking zone.
 var zone_entry_blocked: bool = false
 
 # ── 5v5 position identity ────────────────────────────────────────────────────

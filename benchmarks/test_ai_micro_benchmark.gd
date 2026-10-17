@@ -362,33 +362,22 @@ func test_evaluator_costs() -> void:
 	_bench("time_to_arrive", func() -> void:
 		AIArrival.time_to_arrive(from, net, Vector3(2, 0, -4)))
 
-	# The dump-in delivery search: DUMP_SEARCH_BEARINGS_RAD x DUMP_SEARCH_PACE_FRACS
-	# closed-form landing solves, plus our possession and a race per surviving
-	# candidate. The reason it is affordable at that width is directly below — the
-	# stepped walk this would otherwise need is ~263 µs for ONE full runout.
-	var dctx: RoleContext = _make_ctx(Vector3(2.0, 0.0, -3.0), 1)
-	var dumper := AIRoleCarrier.new()
-	dumper._pick_action_cooldown = 0
-	dumper.decide(dctx)
-	_bench("carrier: dump-in search (9 bearings x 4 paces)", func() -> void:
-		dumper._dump.search(dctx, net))
+	var pctx: RoleContext = _make_ctx(Vector3(2.0, 0.0, -3.0), 1)
+	var poss_carrier := AIRoleCarrier.new()
+	poss_carrier._pick_action_cooldown = 0
+	poss_carrier.decide(pctx)
 	_bench("carrier: possession reads (both sides)", func() -> void:
-		dumper._field._ours.fill(dctx.attacking_goal_pos, dumper._field.opponents,
-				dumper._field.opponent_vels, dumper._field.opponent_caps)
-		dumper._field._theirs.fill(dctx.defending_goal_pos, dumper._field.our_defenders,
-				dumper._field.our_defender_vels, dumper._field.our_defender_caps))
+		poss_carrier._field._ours.fill(pctx.attacking_goal_pos, poss_carrier._field.opponents,
+				poss_carrier._field.opponent_vels, poss_carrier._field.opponent_caps)
+		poss_carrier._field._theirs.fill(pctx.defending_goal_pos,
+				poss_carrier._field.our_defenders, poss_carrier._field.our_defender_vels,
+				poss_carrier._field.our_defender_caps))
 	_bench("carrier: our possession of one spot", func() -> void:
-		dumper._field.horizon_value(Vector3(4.0, 0.0, 6.0)))
+		poss_carrier._field.horizon_value(Vector3(4.0, 0.0, 6.0)))
 
-	# Puck-path integration, at the horizons a settle-point read needs. These are
-	# the STEPPED walk's cost, which is why the dump's settle-point solve is not
-	# built on it: the dump prices where the puck actually stops, and a full
-	# runout is ~270 of these steps per candidate release — so it uses the closed
-	# form (AITrajectory.puck_release_landing) instead, cross-validated against
-	# this walk in test_puck_release_landing.gd. Step counts are the whole runout
-	# at the two paces that matter: a quick-pass rim
-	# (14 m/s, ~200 m of runout under PUCK_ICE_DECEL_M_S2 — it never stops on this
-	# rink, so it is bounded by board contacts) and an icing-legal pace whose
+	# Puck-path integration, the stepped walk every puck read runs: a quick-pass
+	# rim (14 m/s, ~200 m of runout under PUCK_ICE_DECEL_M_S2 — it never stops on
+	# this rink, so it is bounded by board contacts) and an icing-legal pace whose
 	# runout dies inside the rink. dt matches solve_reception_gate's walk.
 	var rim_vel := Vector3(0.0, 0.0, -14.0)
 	var legal_vel := Vector3(0.0, 0.0, -6.6)

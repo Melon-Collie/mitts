@@ -333,7 +333,6 @@ func step() -> void:
 				rec["pass_peer"] = c.agent._carrier.debug_pass_peer_id
 				rec["pass_score"] = c.agent._carrier.debug_pass_score
 				rec["carry_score"] = c.agent._carrier.debug_carry_score
-				rec["dump_score"] = c.agent._carrier.debug_dump_score
 			releases.append(rec)
 			_release_grace[c.peer_id] = ticks + RELEASE_GRACE_TICKS
 			# Along the release's committed direction, as the controller fires a

@@ -2,7 +2,7 @@ class_name AIActionScoring
 
 # Pure-function scoring for on-puck actions: the shot and pass reads on the value
 # seam (AIShotValue — the odds against today's goalie), the xG stat, position
-# value, the turnover and counter-rush costs, and the dump races. See
+# value, the turnover and counter-rush costs, and the loose-puck race. See
 # Scripts/domain/ai/CLAUDE.md → "Where an evaluator goes".
 
 # Shared read-only empty arrays, so the leaf scorers don't allocate an empty
@@ -299,53 +299,26 @@ static func in_offensive_zone(pos: Vector3, attacking_goal: Vector3,
 	return pos.z * signf(attacking_goal.z) > GameRules.BLUE_LINE_Z + buffer
 
 
-# ── Dump races ────────────────────────────────────────────────────────────────
-# The race primitives the dump searches (below, and AICarrierDumpSearch)
-# and the rim pricing read. The dump itself is a residual, never entered in the
-# value compete — see Scripts/domain/ai/CLAUDE.md → "The dump-in is a
-# searched RELEASE".
-
+# ── Loose-puck races ─────────────────────────────────────────────────────────
 # The head-start that turns a 50/50 loose-puck race into a near-sure recovery:
 # a stride, expressed as the TIME a stride buys at reference pace, because the
-# race below is run in time. A metre band saturates to 0 or 1 over the 30-40 m
-# a clear travels.
+# race below is run in time. A metre band saturates to 0 or 1 over a long chase.
 const CHASE_CONTEST_MARGIN_M: float = 2.0
 const CHASE_CONTEST_MARGIN_S: float = CHASE_CONTEST_MARGIN_M / AIArrival.SKATER_REF_SPEED_M_S
 
 
-# True when `pos` is on the attacking side of centre ice (z = 0) — past the red
-# line, where a dump-in to the offensive zone can't be icing.
-static func past_center_toward_attack(pos: Vector3, attacking_goal: Vector3) -> bool:
-	return pos.z * signf(attacking_goal.z) > 0.0
-
-
-# Probability our team wins the race to a loose puck at `target`: an ARRIVAL
-# race between our first body there and theirs, with a contest band around a
-# tie (CHASE_CONTEST_MARGIN_S). 1.0 uncontested, 0.0 if we have no chaser.
+# Probability our team wins the race to a loose puck at `target` when our first
+# man gets there at `our_t`: an ARRIVAL race against their first body there,
+# with a contest band around a tie (CHASE_CONTEST_MARGIN_S). 1.0 uncontested.
 #
 # Momentum-honest, through time_to_arrive: nearest by ETA, never by metres — a
-# body two metres nearer but skating the other way loses this race. Keep the
-# clock and the probability on the same arrival model.
+# body two metres nearer but skating the other way loses this race. Keep
+# `our_t` on the same arrival model.
 #
-# `our_vels` / `opp_vels` are index-matched to their position arrays; omit them
-# and every chaser races from rest. Everyone runs at the league reference build
-# — the same simplification counter_rush_cost makes for teammates.
+# `opp_vels` is index-matched to `opp_chasers`; omit it and every chaser races
+# from rest, at the league reference build.
 # `clock_error`: widen the contest band by the arrival clock's own error over
 # the longer trip (AIArrival.ERROR_FRAC), for a race decided seconds from now.
-static func chase_recovery(
-		target: Vector3,
-		our_chasers: Array[Vector3],
-		opp_chasers: Array[Vector3],
-		our_vels: Array[Vector3] = EMPTY_VEC3,
-		opp_vels: Array[Vector3] = EMPTY_VEC3,
-		clock_error: bool = false) -> float:
-	if our_chasers.is_empty():
-		return 0.0
-	return arrival_race(target, first_arrival(target, our_chasers, our_vels),
-			opp_chasers, opp_vels, clock_error)
-
-
-# chase_recovery's race for a man of ours who gets to `target` at `our_t`.
 static func arrival_race(target: Vector3, our_t: float, opp_chasers: Array[Vector3],
 		opp_vels: Array[Vector3] = EMPTY_VEC3, clock_error: bool = false) -> float:
 	if opp_chasers.is_empty():
@@ -363,7 +336,7 @@ static func arrival_race(target: Vector3, our_t: float, opp_chasers: Array[Vecto
 #
 # Exact prune: time_to_arrive only ever ADDS time to `straight_line_distance /
 # cap`, so a chaser whose bound is already beaten cannot win. It matters
-# because the dump searches call this per candidate spot.
+# because the possession read races every entry it prices.
 static func first_arrival(target: Vector3, chasers: Array[Vector3],
 		vels: Array[Vector3]) -> float:
 	var has_vels: bool = vels.size() == chasers.size()
@@ -528,32 +501,5 @@ static func counter_rush_cost(
 		if cover_count < threat_by_cover.size():
 			threat_by_cover[cover_count] = threat
 	return loss_prob * threat * delay_discount(t_counter)
-
-
-# ── Dump-in races ───────────────────────────────────────────────────────────
-# Does the KEEPER get to a puck resting at `spot` before our nearest chaser?
-#
-# `chase_recovery` sees skaters only, so without this a dump dying on the
-# doorstep — the richest spot to win — reads as a free recovery.
-#
-# A straight race at both sides' real builds, no margin term: he leaves the
-# paint at a keeper's pace (GOALIE_PUCK_PLAY_*, ramped from rest) and collects
-# from a paddle's length; we run at skater pace. That bounds how far out the
-# ice is his without a picked radius. Deliberately blind to the trip
-# conditions the live keeper also weighs (net-front exclusion, cooldown, the
-# tiered GO margin): each only makes him STAY, so ignoring them errs toward not
-# feeding him.
-static func keeper_collects_first(spot: Vector3, keeper_pos: Vector3,
-		our_chasers: Array[Vector3], chaser_speed: float) -> bool:
-	if our_chasers.is_empty():
-		return true
-	var ours: float = INF
-	for c: Vector3 in our_chasers:
-		ours = minf(ours, c.distance_to(spot))
-	var keeper_dist: float = maxf(
-			keeper_pos.distance_to(spot) - AIGoalieModel.GOALIE_PUCK_PLAY_REACH_M, 0.0)
-	return GoalieBehaviorRules.travel_time_from_rest(
-			keeper_dist, AIGoalieModel.GOALIE_PUCK_PLAY_SPEED_M_S, AIGoalieModel.GOALIE_PUCK_PLAY_ACCEL_M_S2) \
-			<= ours / maxf(chaser_speed, 0.001)
 
 

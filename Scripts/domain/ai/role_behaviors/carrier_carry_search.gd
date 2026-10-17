@@ -15,7 +15,7 @@ var _field: AICarrierField
 
 # ── Result of search() ───────────────────────────────────────────────────────
 # The best plan's value floored at 0 (what the compete reads), where it goes,
-# and the unfloored value (what the dump is judged against).
+# and the unfloored value (what retention_hopeless reads).
 var value: float = 0.0
 var anchor: Vector3 = Vector3.ZERO
 var raw_value: float = 0.0
@@ -132,8 +132,8 @@ func _init(field: AICarrierField) -> void:
 
 # Searches the best carry into the result fields. `value` is floored at 0, the
 # "keep the puck" value for the fire compete; `raw_value` keeps the honest sign
-# for the dump's residual test (a pinned carry that will be stripped must read
-# negative). It first chooses the destination (each on the menu priced as a
+# for the carrier's retention_hopeless read (a pinned carry that will be
+# stripped must read negative). It first chooses the destination (each on the menu priced as a
 # carry there, the incumbent kept by hysteresis), then the near move toward it:
 # standing still, or one of the rolled moves, in TWO PASSES (see
 # CARRY_BEAM_WIDTH).
