@@ -217,7 +217,7 @@ class ArcConfig:
 	var seal_inset: float = 0.38
 	var seal_depth: float = 0.10
 	# Angle (deg off the perpendicular) at which post integration takes over.
-	var post_integration_angle_deg: float = 80.0
+	var post_integration_angle_deg: float = 77.0
 	# Filled by target_arc_position: 0 = on the pure challenge arc, 1 = fully at
 	# the seal spot. Callers use it to fade constraints that only make sense while
 	# he is genuinely out challenging (see GoalieController._front_of_line_z).

@@ -103,6 +103,15 @@ func test_the_bots_know_how_long_the_goalie_takes_to_stand_up() -> void:
 			1e-6, "the window the carrier prices a down goalie's stance over is his rise")
 
 
+# A predicted seal the live keeper does not adopt prices a sharp-angle look against
+# a post he is not on, or the other way round.
+func test_the_bots_seal_the_post_where_the_goalie_does() -> void:
+	assert_almost_eq(AIGoalieModel.GOALIE_SEAL_ZONE_POST_Z_M, _export_default("zone_post_z"),
+			1e-6, "the seal zone's depth must be the goalie's own")
+	assert_almost_eq(rad_to_deg(AIGoalieModel.GOALIE_SEAL_ANGLE_RAD),
+			_export_default("rvh_early_angle"), 1e-4, "the seal angle must be the goalie's own")
+
+
 func test_the_export_parser_still_reads_the_controller() -> void:
 	assert_gt(_export_default("reaction_delay"), 0.0, "parsed a real reaction delay")
 	assert_gt(_export_default("glove_react_max_speed"), 0.0, "parsed a real glove speed")

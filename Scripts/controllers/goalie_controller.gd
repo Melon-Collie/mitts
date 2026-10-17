@@ -248,7 +248,7 @@ var rvh_depth: float = 0.1
 # squared stance hands off to post integration at the same place rather than
 # teleporting. (= outer pad reach 0.88 - 0.50 body inset toward post.)
 var post_seal_inset: float = 0.38
-var rvh_early_angle: float = 80.0
+var rvh_early_angle: float = 77.0
 var rvh_post_pad_angle: float = 15.0
 
 var five_hole_base: float = 0.02

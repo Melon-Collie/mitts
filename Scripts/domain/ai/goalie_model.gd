@@ -221,11 +221,12 @@ const GOALIE_RECOVERY_S: float = 0.35
 # predicted from the trigger the live goalie uses
 # (GoalieBehaviorRules.is_puck_in_defensive_zone).
 #
-# Mirrors GoalieController.zone_post_z / rvh_early_angle: within this depth of
+# GoalieController.zone_post_z / rvh_early_angle (test_ai_goalie_model_mirrors.gd
+# holds them): within this depth of
 # the goal line AND past this bearing off the goal normal, the keeper is
 # post-sealed — only the wraparound/extreme-corner region.
 const GOALIE_SEAL_ZONE_POST_Z_M: float = 2.0
-const GOALIE_SEAL_ANGLE_RAD: float = deg_to_rad(80.0)
+const GOALIE_SEAL_ANGLE_RAD: float = deg_to_rad(77.0)
 
 
 # Predicted post-seal x-sign for a shot from `shooter`: the side (relative to goal
@@ -235,7 +236,7 @@ const GOALIE_SEAL_ANGLE_RAD: float = deg_to_rad(80.0)
 # needs no seal. Pure float, allocation-free — safe on the per-candidate path.
 #
 # Two triggers, both grounded in the live keeper:
-#  · The RVH/VH zone (2 m, 80°) — the live controller's own stance trigger.
+#  · The RVH/VH zone (2 m, 77°) — the live controller's own stance trigger.
 #  · DEAD-ANGLE ERASURE: outside that zone, a keeper hugging the near post
 #    still kills a sharp-angle look. The shot dies when the net's whole
 #    angular window from the shooter is no wider than his stance span plus a

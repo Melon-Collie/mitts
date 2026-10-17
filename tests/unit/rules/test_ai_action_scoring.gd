@@ -1269,7 +1269,7 @@ func test_pass_miss_cost_self_localizes_by_rink_end() -> void:
 
 func test_derive_post_seal_only_fires_in_the_sharp_near_line_zone() -> void:
 	# The predictor matches the live goalie's RVH/VH trigger: within ~2 m of the
-	# goal line AND past ~80° off the goal normal. A dead-angle corner seals; a
+	# goal line AND past ~77° off the goal normal. A dead-angle corner seals; a
 	# normal slot / mid look does not; a sharp-but-in-tight shot still short of the
 	# extreme angle does not.
 	var goal := Vector3(0, 0, -26.65)
