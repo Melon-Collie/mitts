@@ -43,9 +43,7 @@ func test_local_turnover_cost_falls_with_distance_from_our_net() -> void:
 	# where it happens, so it fades as the loss moves straight up-ice from our
 	# slot and reads little for a loss deep in their end — which is exactly why
 	# the counter must exist.
-	# From 14 m out: inside the slot ring the positional fallback falls toward the
-	# net (position_potential's approach gradient), under the field's in-tight
-	# odds.
+	# From 14 m out: closer in, the shot's in-tight odds fall toward the net.
 	var prev: float = INF
 	for z: float in [14.0, 8.0, 0.0, -8.0, -14.0, LOSS_POINT.z]:
 		var cost: float = _local_cost(Vector3(0.0, 0.0, z))

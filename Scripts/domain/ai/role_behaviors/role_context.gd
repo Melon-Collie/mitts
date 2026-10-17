@@ -172,6 +172,11 @@ var scratch_opp_states: Array[SkaterNetworkState] = []
 var scratch_opp_caps: Array[AISkaterCaps] = []
 # Index-matched to scratch_opp_positions.
 var scratch_opp_ids: Array[int] = []
+# Index-matched to scratch_opp_positions: each opponent's velocity, never led.
+var scratch_opp_vels: Array[Vector3] = []
+# Our possession read against the opponents (AIRoleReads.attack_possession), over
+# the opponent buffers above.
+var scratch_attack_possession := AIPossessionValue.new()
 var scratch_teammates: Array[Vector3] = []
 # Index-matched to scratch_teammates; entries may be null.
 var scratch_teammate_caps: Array[AISkaterCaps] = []

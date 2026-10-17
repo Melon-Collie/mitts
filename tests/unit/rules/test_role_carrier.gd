@@ -1539,9 +1539,8 @@ func test_a_dump_in_fires_at_a_pace_the_release_can_fire() -> void:
 
 func test_dump_in_will_not_feed_the_keeper() -> void:
 	# The missing body in the dump's race. chase_recovery sees skaters only, so
-	# a puck dying on the doorstep — the spot position_potential rates highest
-	# on the whole rink — used to read as a FREE recovery, and the delivery
-	# search aimed there. It is the keeper's puck; he is standing on it.
+	# a puck dying on the doorstep would read as a FREE recovery, the delivery
+	# search aiming there. It is the keeper's puck; he is standing on it.
 	var self_pos := Vector3(0, 0, -4)
 	var ctx: RoleContext = _make_ctx(self_pos, [[1, TEAM_ID, self_pos]])
 	var c := AIRoleCarrier.new()

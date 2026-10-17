@@ -19,11 +19,6 @@ const EMPTY_CAPS: Array = []
 static func _static_init() -> void:
 	EMPTY_VEC3.make_read_only()
 
-# The slot ring (m from the goal): position_potential's closeness peaks here, and
-# the realization discount travels to it.
-const SLOT_RADIUS_M: float = 6.0
-
-
 # ── The delay discount ───────────────────────────────────────────────────────
 # A future action (a carry that arrives in `t` s, a pass in flight, a spot whose
 # shot must still be skated to) is worth less than the same value NOW, because
@@ -302,43 +297,6 @@ static func _is_past_goal_line(pos: Vector3, attacking_goal: Vector3) -> bool:
 static func in_offensive_zone(pos: Vector3, attacking_goal: Vector3,
 		buffer: float = 0.0) -> bool:
 	return pos.z * signf(attacking_goal.z) > GameRules.BLUE_LINE_Z + buffer
-
-
-# Position potential in [0, 1] — the value of being at this position with no
-# specific shot or pass in view, as closeness × the goal mouth's projected width
-# from this bearing × openness (each derived below): the off-ball readers'
-# scale. Behind the attacking goal line it returns 0.
-static func position_potential(
-		pos: Vector3,
-		attacking_goal: Vector3,
-		opponents: Array[Vector3],
-		opponent_caps: Array = EMPTY_CAPS) -> float:
-	var net_normal_z: float = -signf(attacking_goal.z)
-	var forward: float = (pos.z - attacking_goal.z) * net_normal_z
-	if forward < 0.001:
-		return 0.0
-	var dist: float = pos.distance_to(attacking_goal)
-	# Closeness: 0 at the goal, 1 on the slot ring, 0 at goal-to-goal
-	# distance — the gradient covers the whole rink so deep-zone positions
-	# still have a forward-progress signal.
-	var rink_length: float = absf(GameRules.GOAL_LINE_Z) * 2.0
-	var closeness: float
-	if dist <= SLOT_RADIUS_M:
-		closeness = clampf(dist / SLOT_RADIUS_M, 0.0, 1.0)
-	else:
-		closeness = clampf(
-				1.0 - (dist - SLOT_RADIUS_M) / (rink_length - SLOT_RADIUS_M),
-				0.0, 1.0)
-	# Angle quality = the goal mouth's PROJECTED width from this bearing,
-	# cos(θ) = forward / horizontal_distance: 1 head-on, → 0 along the goal line.
-	var lateral: float = pos.x - attacking_goal.x
-	var horiz_dist: float = sqrt(forward * forward + lateral * lateral)
-	var angle_factor: float = forward / horiz_dist
-	# Openness: could a carrier get his action off from this spot — the same
-	# release contest the shot scorers use.
-	var openness: float = AIPuckLane.release_contest_clean(
-			AIPuckLane.release_point_toward(pos, attacking_goal), opponents, opponent_caps)
-	return closeness * angle_factor * openness
 
 
 # ── Dump races ────────────────────────────────────────────────────────────────

@@ -231,8 +231,10 @@ entry 43 → 24 (backward 18 → 8); the breakout drill is level (18 exits of 20
 1 turnover). Its cost is the dump search, a residual that prices each landing's
 possession (~0.3 ms each, a few ms when it runs).
 
-Still on the potential scale: the off-ball readers — the defence's threat
-surfaces and the outlet and breakout spot choice.
+The off-ball readers read it too: the defence prices a man by his threat on it
+(`threat_of_carrier` / `threat_of_feed`), and the outlet and breakout roles stand
+where the lane × our possession of the spot is best. `position_potential` is
+gone.
 
 ## 5. What players should see
 

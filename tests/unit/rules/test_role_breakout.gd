@@ -1,9 +1,9 @@
 extends GutTest
 
-# AIRoleBreakout's decide() integrates existing primitives (lane_clear +
-# position_potential) over a side-gated candidate set. These tests cover
-# the structural contracts rather than re-testing the scoring math
-# (covered in test_ai_action_scoring):
+# AIRoleBreakout's decide() integrates existing primitives (lane_clear + our
+# possession read) over a side-gated candidate set. These tests cover the
+# structural contracts rather than re-testing the scoring math (covered in
+# test_ai_action_scoring and test_possession_value):
 #   - Bail-out when there's no puck.
 #   - STRONG sets up on the strong side; WEAK on the weak side.
 #   - WEAK stays goal-side of the carrier (reverse valve); STRONG may
@@ -181,9 +181,8 @@ func test_strong_swings_mid_seam_when_wall_route_is_covered() -> void:
 func test_strong_keeps_skating_route_when_every_lane_is_dead() -> void:
 	# A forechecker draped right on the carrier blocks EVERY pass lane at
 	# the release point (reachability model: a defender within a stick of
-	# the origin blocks all lanes). Before the BLOCKED_LANE_FLOOR every
-	# candidate was skipped and the outlet froze at self_pos; now dead
-	# lanes still rank by position_potential so the route keeps developing.
+	# the origin blocks all lanes). Dead lanes still rank by the possession
+	# read (BLOCKED_LANE_FLOOR), so the outlet never freezes at self_pos.
 	var self_pos := Vector3(9, 0, 20)
 	var carrier_pos := Vector3(0, 0, 24)
 	var skaters: Array = [

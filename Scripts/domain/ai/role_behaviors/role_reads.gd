@@ -202,6 +202,7 @@ static func collect_opponents(ctx: RoleContext,
 	out_states.clear()
 	ctx.scratch_opp_caps.clear()
 	ctx.scratch_opp_ids.clear()
+	ctx.scratch_opp_vels.clear()
 	for pid: int in ctx.snapshot.skater_states:
 		if ctx.team_id_by_peer.get(pid, -1) != ctx.team_id:
 			var s: SkaterNetworkState = ctx.snapshot.skater_states[pid]
@@ -210,6 +211,18 @@ static func collect_opponents(ctx: RoleContext,
 			out_states.append(s)
 			ctx.scratch_opp_caps.append(ctx.caps_by_peer.get(pid))
 			ctx.scratch_opp_ids.append(pid)
+			ctx.scratch_opp_vels.append(s.velocity)
+
+
+# Our possession read (AIPossessionValue) against the opponents collect_opponents
+# filled into `opponents` — the attack's scale for what a spot is worth to us.
+# Call it after collect_opponents.
+static func attack_possession(ctx: RoleContext,
+		opponents: Array[Vector3]) -> AIPossessionValue:
+	var poss: AIPossessionValue = ctx.scratch_attack_possession
+	poss.fill(ctx.attacking_goal_pos, opponents, ctx.scratch_opp_vels,
+			ctx.scratch_opp_caps)
+	return poss
 
 
 static func xz_distance(a: Vector3, b: Vector3) -> float:

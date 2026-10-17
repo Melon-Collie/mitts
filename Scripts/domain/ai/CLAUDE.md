@@ -41,8 +41,8 @@ carrier's search horizon — is that one read, for either side. The defence read
 a man on it too: `threat_of_carrier` (his shot, or his possession of the spot)
 and `threat_of_feed` (his one-timer, or the lane × his possession), a candidate's
 body pushed onto the read's defence for the one call. The outlet and breakout
-spot reads are still on `position_potential`'s scale; never mix the two in one
-comparison or one memo.
+roles stand where the lane to them × our possession of the spot is best, so
+there is no second scale left to mix in.
 
 The giveaway bars (`SHOT_MIN_VALUE` 0.05, `PASS_MIN_VALUE` 0.02) are scale-bound
 to that seam — odds of scoring on today's goalie with a first shot.
@@ -805,8 +805,8 @@ reaches back into what remains.
   challenge may lunge). Do not resurrect a per-station graded counter race
   without a reason the shared read cannot serve, and a measurement.
 
-- **Openness** (`release_contest_clean`, inside `position_potential`) — could a
-  carrier get his action off from this spot: the release-contest race, run to the
+- **Openness** (`release_contest_clean`, inside every shot's defender share) —
+  could a carrier get his action off from this spot: the release-contest race, run to the
   puck a carry-handle ahead of the body toward the net.
 
 - **Positional value** — the carrier searches forward until play reaches

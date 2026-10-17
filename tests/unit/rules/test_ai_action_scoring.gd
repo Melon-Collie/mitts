@@ -369,77 +369,6 @@ func test_release_untouched_when_in_front_of_goalie() -> void:
 	assert_eq(out, in_front, "a normal in-front shot is not clamped")
 
 
-func test_potential_zero_behind_goal_line() -> void:
-	# Past the attacking goal line — no shooting potential. position_potential is
-	# the raw geometric progression, with no possession floor.
-	var pos := Vector3(0.0, 0.0, 27.5)
-	assert_eq(AIActionScoring.position_potential(pos, GOAL, []), 0.0)
-
-
-func test_potential_zero_at_90_degrees_off_axis() -> void:
-	# Pure perpendicular — angle factor zeros.
-	var pos := Vector3(8.0, 0.0, 26.65)  # same z as goal
-	assert_almost_eq(AIActionScoring.position_potential(pos, GOAL, []), 0.0, 0.01)
-
-
-func test_potential_peaks_at_slot() -> void:
-	# Slot position should score above any nearby non-slot position.
-	var slot := Vector3(0.0, 0.0, 20.65)  # 6 m from goal — slot radius
-	var deeper := Vector3(0.0, 0.0, 24.65)  # 2 m from goal — past slot
-	var farther := Vector3(0.0, 0.0, 14.65)  # 12 m from goal — past slot outward
-	var slot_v: float = AIActionScoring.position_potential(slot, GOAL, [])
-	var deeper_v: float = AIActionScoring.position_potential(deeper, GOAL, [])
-	var farther_v: float = AIActionScoring.position_potential(farther, GOAL, [])
-	assert_gt(slot_v, deeper_v, "slot scores higher than past-slot toward goal")
-	assert_gt(slot_v, farther_v, "slot scores higher than past-slot away from goal")
-
-
-func test_potential_drops_inside_slot_toward_goal() -> void:
-	# Closeness ramps DOWN inside slot — getting closer to the goal
-	# than the slot doesn't keep increasing the position value.
-	var slot := Vector3(0.0, 0.0, 20.65)   # 6 m from goal
-	var crease := Vector3(0.0, 0.0, 25.65)  # 1 m from goal — in the crease
-	assert_gt(
-			AIActionScoring.position_potential(slot, GOAL, []),
-			AIActionScoring.position_potential(crease, GOAL, []),
-			"slot has higher potential than the crease (no carry-into-net pull)")
-
-
-func test_potential_drops_with_far_distance() -> void:
-	# Linear ramp on the outside — further from goal = lower potential.
-	# Near OZ blue line vs deep DZ — both have full angle, no defenders.
-	var oz_high := Vector3(0.0, 0.0, 5.0)    # ~22 m from goal
-	var deep_dz := Vector3(0.0, 0.0, -20.0)  # ~46 m from goal
-	assert_gt(
-			AIActionScoring.position_potential(oz_high, GOAL, []),
-			AIActionScoring.position_potential(deep_dz, GOAL, []),
-			"closer to goal scores higher")
-
-
-func test_potential_angle_is_goalmouth_projection() -> void:
-	# The angle term is the goal mouth's projected width (cos of the bearing off
-	# the goal normal), not a linear taper. Two positions the SAME distance (5 m)
-	# from the goal — one head-on, one ~53° off (forward 3, lateral 4 → cos = 0.6)
-	# — so closeness and openness match; only the projection differs. The off-axis
-	# value must be the head-on value scaled by cos ≈ 0.6.
-	var head_on := Vector3(0.0, 0.0, GOAL.z - 5.0)          # dist 5, cos 1
-	var off_axis := Vector3(4.0, 0.0, GOAL.z - 3.0)         # dist 5, cos 0.6
-	var head_v: float = AIActionScoring.position_potential(head_on, GOAL, [])
-	var off_v: float = AIActionScoring.position_potential(off_axis, GOAL, [])
-	assert_almost_eq(off_v, head_v * 0.6, 0.02,
-			"off-axis value is the head-on value foreshortened by cos(θ)")
-
-
-func test_potential_drops_with_pressure() -> void:
-	# Forward-cone pressure cuts openness, dropping potential.
-	var pos := Vector3(0.0, 0.0, 5.0)  # ~22 m from goal — outside shoot range
-	var clean: float = AIActionScoring.position_potential(pos, GOAL, [])
-	# Defender 2 m forward toward goal, on-axis.
-	var pressured_opps: Array[Vector3] = [Vector3(0.0, 0.0, 7.0)]
-	var pressured: float = AIActionScoring.position_potential(pos, GOAL, pressured_opps)
-	assert_lt(pressured, clean, "forward-cone defender drops position potential")
-
-
 func test_shot_quality_is_the_seams_goalie_half() -> void:
 	# A caller that memoizes shot_quality and hands it back reads exactly what
 	# the seam computes itself, for every keeper the seam takes.
@@ -889,34 +818,6 @@ func test_lane_loss_point_follows_the_caps_aware_worst_defender() -> void:
 			[short_slow, long_fast])
 	assert_lt(absf(caps_p.z - 10.0), absf(caps_p.z - 5.0),
 			"on real builds the long-stick man deeper in the lane is the pick spot")
-
-
-func test_position_potential_prices_contester_by_build() -> void:
-	# Openness is the same release contest score_shoot runs, so a contesting
-	# body's real blade decides how covered the spot reads: a long-stick fast
-	# contester closes more of the windup than the league read, a short slow
-	# one less.
-	# The release point sits a carry-handle toward the goal (z = 15.9); the
-	# windup window is short (~135 ms), so the build split lives in a narrow
-	# ring: inside the league blade's contest reach (~1.55 m) but outside the
-	# short stick's (~1.19 m).
-	var pos := Vector3(0.0, 0.0, 15.0)
-	var contester: Array[Vector3] = [Vector3(1.4, 0.0, 15.9)]
-	var league: float = AIActionScoring.position_potential(pos, GOAL, contester)
-	var long_fast := AISkaterCaps.new()
-	long_fast.stick_reach = 1.6
-	long_fast.max_speed = 12.0
-	var vs_long: float = AIActionScoring.position_potential(
-			pos, GOAL, contester, [long_fast])
-	var short_slow := AISkaterCaps.new()
-	short_slow.stick_reach = 1.05
-	short_slow.max_speed = 5.0
-	var vs_short: float = AIActionScoring.position_potential(
-			pos, GOAL, contester, [short_slow])
-	assert_lt(vs_long, league,
-			"a long-stick fast contester covers more of the spot's release")
-	assert_gt(vs_short, league,
-			"a short slow contester covers less of it")
 
 
 func test_lane_clear_blocks_close_on_line_defender() -> void:

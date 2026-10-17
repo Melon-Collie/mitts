@@ -189,7 +189,7 @@ static func expected_pass_speed(shooter: Vector3, receiver: Vector3) -> float:
 
 # ── Release contest: the pressure read, as a physical race ────────────────────
 # P(the release completes clean) in [0, 1] against every nearby opponent — the
-# factor the shot scorers and position_potential multiply by. A physical
+# factor the shot scorers multiply by. A physical
 # contest, never a density curve: an opponent's BLADE must reach the RELEASE
 # POINT (release_point_toward) while the puck is still on the blade.
 #
