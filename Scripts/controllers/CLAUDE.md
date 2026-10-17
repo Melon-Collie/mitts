@@ -217,6 +217,16 @@ The shape of that failure is worth recognising: a stance loop at a fixed period
 whose slide has NO lateral leg means two owners are fighting over
 `_current_depth`. `test_goalie_held_puck_slide_loop.gd` holds all of it.
 
+**A shot released from the post seal keeps him in it until it resolves.**
+RVH and VH are entered only while no shot is in flight, and they are left the
+same way: a puck on net released while he is sealed holds the stance, exits and
+post swaps alike, until it is picked up, touches him or a post, the boards or
+the net, or is no longer on net (`_holding_seal_for_shot`). Standing up
+mid-flight swings the post pad into the puck's path, and a moving pad strikes the
+puck with its own speed. While sealed he starts no shot reaction at all, which is
+why the hold is its own flag and not the reaction's.
+`tests/slow/ai/test_goalie_holds_the_seal_through_a_shot.gd` holds it.
+
 **Down, the pad covers the post only if it points there.** The arrival test
 measures the post spot against the sealing pad as a segment turned however far
 his body is from the seal's own facing (`BeatenWideConfig.pad_turn_rad`). A
