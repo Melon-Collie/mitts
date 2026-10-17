@@ -412,6 +412,12 @@ play unless backpedalling loses the race — the carrier gains more on it than
 the depth he holds past a stick — and then turns if that concedes less
 (`set_retreat_facing` → `RoleDecision.face_travel`, which the agent skates by
 putting the cursor down the route). Draped or stepping up, he faces the man.
+The race is priced down the carrier's line to the net, so it only governs a
+route that is mostly that retreat: a route to a stand more across the ice than
+goal-side stays square to the man, so a cut back reverses his crossover instead
+of a turn he has to undo (`test_role_rush_d.gd`). What a cut back still beats is
+a defender who has matched a wide carrier's drift (`test_nz_turnover_recovery`'s
+header; #799).
 
 The turn's cost is what keeps it honest: from a stand a turn costs more ground
 than backpedalling, so a standing defender backpedals first and turns once he

@@ -103,7 +103,7 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 			stand = fan
 
 	d.target_velocity = ride
-	set_retreat_facing(ctx, ap, d, gapping_up)
+	set_retreat_facing(ctx, ap, d, gapping_up, stand)
 	if not gapping_up:
 		stand = depth_first(ctx, ap, stand, d)
 	d.target_position = _clamp_to_house(ctx, stand)
@@ -262,11 +262,18 @@ static func set_advance_cap(ctx: RoleContext, ap: AICarrierApproach,
 # unless backpedalling loses the race: the carrier gains more on that retreat
 # than the depth he holds past a stick. Then he turns to skate down the ice with
 # him, if that concedes less (retreat_gains). Draped within a stick of him, or
-# stepping up to him, he faces him to play him.
+# stepping up to him, he faces him to play him. The race is priced down the
+# carrier's line to the net, so it says nothing of a route to `stand` that is
+# mostly across it: covering sideways, he stays square to the man and crossovers,
+# and a cut back reverses his crossover rather than a turn he has to undo.
 static func set_retreat_facing(ctx: RoleContext, ap: AICarrierApproach,
-		d: RoleDecision, gapping_up: bool) -> void:
+		d: RoleDecision, gapping_up: bool, stand: Vector3) -> void:
 	var depth: float = _depth_along(ctx, ap.carrier_pos, ap.dir_net)
 	if gapping_up or depth <= stick_m(ctx):
+		return
+	var to_stand := Vector3(stand.x - ctx.self_pos.x, 0.0, stand.z - ctx.self_pos.z)
+	var down: float = to_stand.dot(ap.dir_net)
+	if down * down < to_stand.length_squared() - down * down:
 		return
 	var threat: int = ctx.rush_read.carrier_peer if ctx.rush_read != null else -1
 	var gains: Vector2 = retreat_gains(ctx, ap.dir_net, ap.carrier_vel, ap.net_dist,

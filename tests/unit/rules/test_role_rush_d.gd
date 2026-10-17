@@ -620,6 +620,23 @@ func test_backpedalling_into_a_race_he_loses_he_turns_and_skates() -> void:
 			"at his backward top speed against 9 m/s with 6 m to give: turn and skate")
 
 
+func test_a_route_mostly_across_the_ice_stays_square_to_the_man() -> void:
+	# A turnover the carrier drifts wide from (test_nz_turnover_recovery's 8 m
+	# start, 2 m off his lane, the tick he was turning): the backward race is lost,
+	# but the route to the stand runs mostly across, which that race (priced down
+	# the line to the net) says nothing about — and turned, a cut back costs him a
+	# turn to undo.
+	var ctx: RoleContext = _ctx(Vector3(1.0, 0.0, 5.4),
+			[[10, 1, Vector3(-1.5, 0.0, -0.3), Vector3(-4.7, 0.0, 5.2)]], 10,
+			AIRushRead.Numbers.EVEN_OR_UP, INF, false)
+	ctx.snapshot.skater_states[1].facing = Vector2(-1.0, -0.1)
+	ctx.self_velocity = Vector3(-3.8, 0.0, 1.5)
+	var d: RoleDecision = AIRoleRushD.decide(ctx, AIRoleSlots.Slot.RUSH_D1)
+	assert_gt(absf(d.target_position.x - 1.0), absf(d.target_position.z - 5.4),
+			"precondition: the stand is more across than goal-side")
+	assert_false(d.face_travel, "covering sideways he faces the play")
+
+
 func test_with_depth_to_spare_he_faces_the_play() -> void:
 	assert_false(_retreat(14.0, 9.0, 7.5).face_travel)
 
