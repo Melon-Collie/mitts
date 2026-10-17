@@ -655,7 +655,8 @@ func _arrival_value(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3,
 	var keeper_vel_x: float = signf(lag) * AIGoalieModel.GOALIE_MAX_LATERAL_SPEED_MPS \
 			* AICarrierField.goalie_unsettled_at(ctx, local_time, candidate, carry_closing)
 	var dest_score: float = _field.value_at(ctx, cand_release, self_pos,
-			_scratch_opponents_path, tracked_goalie, keeper_vel_x, cand_keep)
+			_scratch_opponents_path, tracked_goalie, keeper_vel_x, cand_keep,
+			_field.keeper_stance_at(local_time + cand_windup))
 	# ENTRY CONTINUATION: from outside the zone an in-zone candidate is worth what
 	# a carrier there does next — the drive-in from it, priced in the in-zone
 	# regime and starting when we arrive — which its own shot xG badly

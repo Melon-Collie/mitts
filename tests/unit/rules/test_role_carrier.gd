@@ -2754,3 +2754,21 @@ func _record_zone_play_picks(snap: Snapshot) -> void:
 			_spot(_pinch(_SPLITTABLE_HALF_GAP).last_carry_anchor))
 	snap.record("checker dead on the carry line: seam degrees off the carry", _shield_seam_deg(0.0))
 	snap.record("checker 2 m off the carry line: seam degrees off the carry", _shield_seam_deg(2.0))
+
+
+func test_a_down_keeper_is_priced_down_only_for_a_shot_before_he_can_rise() -> void:
+	# The carry candidates price their shot at arrival in the keeper's stance at
+	# the release (AICarrierField.keeper_stance_at), as shoot-now reads it live.
+	var self_pos := Vector3(-1.0, 0.0, -GameRules.GOAL_LINE_Z + 9.0)
+	var ctx := _make_ctx(self_pos)
+	var g := GoalieNetworkState.new()
+	g.position_z = -GameRules.GOAL_LINE_Z + 0.6
+	g.state_enum = GoalieStateMachine.State.BUTTERFLY as int
+	ctx.snapshot.goalie_states[1 - TEAM_ID] = g
+	var c := AIRoleCarrier.new()
+	c._field.fill(ctx)
+	assert_eq(c._field.keeper_stance_at(0.0), AIShotOdds.Stance.DOWN, "down now")
+	assert_eq(c._field.keeper_stance_at(AIGoalieModel.GOALIE_RECOVERY_S * 0.9),
+			AIShotOdds.Stance.DOWN, "still down for a shot before he could stand up")
+	assert_eq(c._field.keeper_stance_at(AIGoalieModel.GOALIE_RECOVERY_S),
+			AIShotOdds.Stance.UPRIGHT, "after it, his rise is his call: priced upright")

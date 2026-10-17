@@ -44,6 +44,8 @@ const PASS_OPTION_DISCOUNT: float = 0.8
 # the shot and the charged pass both leave the blade ~135 ms after the intent
 # commits, so their lanes are priced at release-time defender spots.
 var opponents: Array[Vector3] = []
+# The opposing keeper's live stance (AIShotOdds.Stance), read once per fill.
+var keeper_stance: int = AIShotOdds.Stance.UPRIGHT
 var opponent_vels: Array[Vector3] = []
 var opponent_caps: Array[AISkaterCaps] = []
 var opponents_release: Array[Vector3] = []
@@ -122,6 +124,9 @@ func fill(ctx: RoleContext) -> void:
 				ctx.defending_goal_pos, our_defenders, exposure_mate_etas)
 		exposure_threat_memo.resize(our_defenders.size() + 2)
 		exposure_threat_memo.fill(-1.0)
+	var opp_keeper: GoalieNetworkState = ctx.snapshot.goalie_states.get(1 - ctx.team_id)
+	keeper_stance = AIShotOdds.stance_of(opp_keeper, ctx.attacking_goal_pos) \
+			if opp_keeper != null else AIShotOdds.Stance.UPRIGHT
 	# In the zone the carrier reads our possession only of spots in it.
 	_ours.fill(ctx.attacking_goal_pos, opponents, opponent_vels, opponent_caps,
 			AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos))
@@ -249,6 +254,13 @@ static func pass_origin(ctx: RoleContext) -> Vector3:
 	return ctx.self_pos
 
 
+# The keeper's stance at a shot `t` s from now: the one he is in for a shot
+# before he could stand up (AIGoalieModel.GOALIE_RECOVERY_S); upright after it,
+# since when he chooses to rise is his read, not one the carrier can make.
+func keeper_stance_at(t: float) -> int:
+	return keeper_stance if t < AIGoalieModel.GOALIE_RECOVERY_S else AIShotOdds.Stance.UPRIGHT
+
+
 # The opposing goalie's CURRENT world position; the attacking goal when his
 # state isn't buffered yet.
 static func goalie_now(ctx: RoleContext) -> Vector3:
@@ -321,17 +333,19 @@ func arrival_hold_wait(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3
 # `opps` must already be projected to the time the actor will be at `pos`, in
 # the same snapshot order as opponent_caps. The keeper is at `keeper_pos` moving
 # across at `keeper_vel_x` (AIShotValue.now), or square and set on `pos` when
-# `keeper_pos` is INF (AIShotValue.set_keeper). It takes no aim spread: the seam
-# prices the chance, not the shooter. `shot_keep` is the odds the shooter still
-# has the puck at the press; it discounts the shot, never the position value.
+# `keeper_pos` is INF (AIShotValue.set_keeper), in `keeper_stance` (an
+# AIShotOdds.Stance; keeper_stance_at). It takes no aim spread: the seam prices
+# the chance, not the shooter. `shot_keep` is the odds the shooter still has the
+# puck at the press; it discounts the shot, never the position value.
 func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 		opps: Array[Vector3], keeper_pos: Vector3 = Vector3.INF,
-		keeper_vel_x: float = 0.0, shot_keep: float = 1.0) -> float:
+		keeper_vel_x: float = 0.0, shot_keep: float = 1.0,
+		keeper_stance: int = AIShotOdds.Stance.UPRIGHT) -> float:
 	if _shot_is_dead_from_here(ctx, pos, from_pos, keeper_vel_x, keeper_pos):
 		return horizon_value(pos)
 	var shoot_s: float = AIActionScoring.score_shoot_value(
 			pos, ctx.attacking_goal_pos, keeper_pos, opps, keeper_vel_x,
-			AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
+			keeper_stance, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
 			opponent_caps) * shot_keep
 	return _regime_value(ctx, pos, from_pos, shoot_s)
 

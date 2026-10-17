@@ -207,6 +207,11 @@ const GOALIE_SHADOW_HALF_M: float = 0.3
 # fraction delays his read (UNSETTLE_READ_PENALTY_S).
 const GOALIE_SETTLE_REF_S: float = 0.20
 
+# How long (s) a goalie down in his stance takes to stand back up
+# (GoalieController.recovery_duration): a shot sooner than this from now still
+# finds him in the stance he is in.
+const GOALIE_RECOVERY_S: float = 0.35
+
 
 # ── Predicted post-seal (RVH/VH) ────────────────────────────────────────────
 # The shoot-now eval reads the LIVE goalie's seal state

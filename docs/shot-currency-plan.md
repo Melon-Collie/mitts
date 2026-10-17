@@ -182,8 +182,9 @@ deleted; with no keeper replicated the bot shoots flat at the middle.
 - Known gaps: keeper depth is not a feature and a keeper stranded past the post
   reads as his most-beaten measured cell rather than an empty net (#787); one
   field for every goalie tier (#786); odds priced at the league blade loft
-  (#788); positions priced against an upright keeper while shoot-now reads his
-  live stance (#792).
+  (#788); a position the carrier reaches is priced in the keeper's live stance
+  only for a shot before he could stand up (`AIGoalieModel.GOALIE_RECOVERY_S`),
+  upright after it — when he chooses to rise is not modelled (#792).
 
 ### Step 4 — one currency over the whole ice (done for the carrier)
 
