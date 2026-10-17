@@ -253,45 +253,6 @@ static func carrier_best_option(poss: AIPossessionValue, candidate: Vector3,
 	return best
 
 
-# Rush variant of carrier_best_option, for RUSH_D1's lane fan: the finishes only,
-# no possession term — each pass priced as a ONE-TIMER feed the goalie must
-# traverse for, the direct shot against the goalie where he is ("the goalie takes
-# the shooter, I take the pass").
-#
-# `abort_above` is exact pruning for a caller that MINIMIZES: once the running
-# best exceeds it, the remaining receivers cannot matter. INF evaluates all.
-static func carrier_live_option(
-		candidate: Vector3,
-		carrier_pos: Vector3,
-		our_net: Vector3,
-		our_goalie_pos: Vector3,
-		our_team_excluding_self: Array[Vector3],
-		opp_teammates: Array[Vector3],
-		abort_above: float = INF,
-		our_team_caps: Array = [],
-		self_caps: AISkaterCaps = null) -> float:
-	# Same in-place defender push/pop and caps contract as carrier_best_option.
-	var caps_matched: bool = our_team_caps.size() == our_team_excluding_self.size()
-	our_team_excluding_self.push_back(candidate)
-	if caps_matched:
-		our_team_caps.push_back(self_caps)
-	var best: float = AIActionScoring.score_shoot_value(
-			carrier_pos, our_net, our_goalie_pos, our_team_excluding_self, 0.0,
-			AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S, our_team_caps)
-	for receiver: Vector3 in opp_teammates:
-		if best >= abort_above:
-			break
-		var pass_value: float = AIActionScoring.score_pass_value(
-				carrier_pos, receiver, our_net, our_goalie_pos, our_team_excluding_self,
-				AIPuckLane.expected_pass_speed(carrier_pos, receiver), our_team_caps, true)
-		if pass_value > best:
-			best = pass_value
-	our_team_excluding_self.pop_back()
-	if caps_matched:
-		our_team_caps.pop_back()
-	return best
-
-
 # Whether to commit to a body check on the live OPPONENT carrier this tick
 # (AIBodyCheck). No-commit when the puck is loose, ours, or absent. Called by
 # PRESSURE (and F1) and by TRACK_PUCK once goal-side; RUSH_D1 never calls it.

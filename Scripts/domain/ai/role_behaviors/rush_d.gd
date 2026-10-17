@@ -97,8 +97,8 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 
 	# Odd-man: play the pass. The numbers read decides WHEN; the fan finds where.
 	if read.numbers != AIRushRead.Numbers.EVEN_OR_UP and ctx.plays_rush_pass_lanes:
-		var fan: Vector3 = _lane_fan_target(ctx, read, carrier_pos, our_net,
-				dir_net, carrier_pos.distance_to(stand))
+		var fan: Vector3 = _lane_fan_target(ctx, read, ap, our_net,
+				carrier_pos.distance_to(stand))
 		if fan.is_finite():
 			stand = fan
 
@@ -560,13 +560,15 @@ static func _clamp_to_house(ctx: RoleContext, pos: Vector3) -> Vector3:
 
 
 # Argmax over the retreat-line point plus fan candidates toward each dangerous
-# receiver's feed lane, all `gap` from the carrier. The 2-on-1 doctrine is
-# derived rather than scripted: the goalie is in both terms of
-# carrier_live_option, so "the goalie takes the shooter, I take the pass" falls
+# receiver's feed lane, all `gap` from the carrier, each priced by what it takes
+# from the carrier's best option (AIDefensiveVerbs.carrier_best_option) at the
+# stand's ride. The 2-on-1 doctrine is derived rather than scripted: the goalie
+# is in every option, so "the goalie takes the shooter, I take the pass" falls
 # out of the max.
 static func _lane_fan_target(ctx: RoleContext, read: AIRushRead,
-		carrier_pos: Vector3, our_net: Vector3, dir_net: Vector3,
-		gap: float) -> Vector3:
+		ap: AICarrierApproach, our_net: Vector3, gap: float) -> Vector3:
+	var carrier_pos: Vector3 = ap.carrier_pos
+	var dir_net: Vector3 = ap.dir_net
 	var receivers: Array[Vector3] = ctx.scratch_opp_receivers
 	receivers.clear()
 	for i: int in read.attackers.size():
@@ -579,13 +581,18 @@ static func _lane_fan_target(ctx: RoleContext, read: AIRushRead,
 	var teammates: Array[Vector3] = ctx.scratch_teammates
 	AIRoleReads.collect_teammates_excluding_self(ctx, teammates)
 	var our_goalie_pos: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
+	var poss: AIPossessionValue = AIRoleReads.defence_possession(ctx, teammates)
+	var bases: Array[float] = ctx.scratch_option_bases
+	AIDefensiveVerbs.carrier_option_bases(poss, carrier_pos, ap.carrier_vel,
+			our_goalie_pos, receivers, bases)
 
 	var self_caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.peer_id)
+	var ride: Vector3 = AIRoleReads.stand_ride_velocity(ctx)
 	var on_line: Vector3 = carrier_pos + dir_net * gap
 	var best_pos: Vector3 = on_line
-	var best_score: float = LINE_HOLD_MARGIN - AIDefensiveVerbs.carrier_live_option(
-			on_line, carrier_pos, our_net, our_goalie_pos, teammates, receivers,
-			INF, ctx.scratch_teammate_caps, self_caps)
+	var best_score: float = LINE_HOLD_MARGIN - AIDefensiveVerbs.carrier_best_option(
+			poss, on_line, ride, self_caps, carrier_pos, ap.carrier_vel, our_goalie_pos,
+			receivers, bases)
 
 	var a_net: float = atan2(dir_net.z, dir_net.x)
 	for i: int in receivers.size():
@@ -612,9 +619,9 @@ static func _lane_fan_target(ctx: RoleContext, read: AIRushRead,
 					carrier_pos.z + sin(a) * gap)
 			if not AIStationSearch.is_legal_position(c):
 				continue
-			var score: float = -AIDefensiveVerbs.carrier_live_option(
-					c, carrier_pos, our_net, our_goalie_pos, teammates, receivers,
-					-best_score, ctx.scratch_teammate_caps, self_caps)
+			var score: float = -AIDefensiveVerbs.carrier_best_option(
+					poss, c, ride, self_caps, carrier_pos, ap.carrier_vel, our_goalie_pos,
+					receivers, bases)
 			if score > best_score:
 				best_score = score
 				best_pos = c
