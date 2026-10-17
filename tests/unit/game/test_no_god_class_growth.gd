@@ -49,7 +49,7 @@ const _GENERATED_DIR: String = "res://Scripts/domain/ai/generated/"
 const _SIZE_SLACK: int = 40
 
 const _SIZE_ALLOWANCE: Dictionary[String, int] = {
-	"res://Scripts/ai/skater_agent_state_machine.gd": 3668,
+	"res://Scripts/ai/skater_agent_state_machine.gd": 3673,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
 	"res://Scripts/game/game_manager.gd": 5787,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which

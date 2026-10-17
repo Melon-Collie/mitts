@@ -540,6 +540,27 @@ func test_the_stance_carves_a_turn_the_upright_edges_cannot_make() -> void:
 			Vector2(1.0, 0.0), v, UPRIGHT_A, 1.8, false), "straight ahead needs no turn")
 
 
+# A held stick with no anchor: the turn off travel onto it, inside the window.
+# A 75° cut at 8 m/s in a third of a second asks 3.9 rad/s of edges that give
+# 9/8 ≈ 1.1; a 5° nudge asks 0.26.
+func test_a_held_stick_cuts_in_the_stance_while_the_turn_outruns_the_edges() -> void:
+	var v := Vector2(8.0, 0.0)
+	var window: float = AICarryRollout.STANCE_TURN_WINDOW_S
+	assert_true(AISteering.stance_cuts_onto(_dir_at(75.0), v, UPRIGHT_A, window, false),
+			"a hard cut at speed digs in")
+	assert_false(AISteering.stance_cuts_onto(_dir_at(5.0), v, UPRIGHT_A, window, false),
+			"a nudge is an upright carve")
+	assert_false(AISteering.stance_cuts_onto(_dir_at(170.0), v, UPRIGHT_A, window, false),
+			"past STANCE_CUT_MAX_ANGLE_DEG a reversal is a stop and a push back")
+	var slow := Vector2(UPRIGHT_A / GameRules.DEFAULT_SKATER_MAX_TURN_RATE_RAD_S * 0.9, 0.0)
+	assert_false(AISteering.stance_cuts_onto(_dir_at(75.0), slow, UPRIGHT_A, window, false),
+			"rate-bound: no stance")
+	# The turn at 0.9 of the upright rate: not engaged, but a held stance stays.
+	var held_deg: float = rad_to_deg(0.9 * UPRIGHT_A / 8.0 * window)
+	assert_false(AISteering.stance_cuts_onto(_dir_at(held_deg), v, UPRIGHT_A, window, false))
+	assert_true(AISteering.stance_cuts_onto(_dir_at(held_deg), v, UPRIGHT_A, window, true))
+
+
 func test_an_anchor_inside_the_arrival_floor_does_not_demand_a_turn() -> void:
 	var dir: Vector2 = _dir_at(30.0)
 	var underfoot := Vector3(dir.x * 0.1, 0.0, dir.y * 0.1)

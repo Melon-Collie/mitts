@@ -232,7 +232,9 @@ the old deke did deliver was its stance cut — with the stance off it lost
 (232 strips) — and the rolled carry with no deke at all keeps the puck as well
 as the old deke did (139 strips, 294 m). So `SkaterAgentPokeEvade`, the
 carrier's deke read and `deke_cut_side` are gone, and the rolled moves are
-the carrier's only answer to pressure. They never hold the stance (#794).
+the carrier's only answer to pressure. Their cuts hold the stance while the
+turn outruns the upright edges (`AISteering.stance_cuts_onto`; see
+`docs/skating-stance-plan.md` → Phase 3).
 Easy's `protects_the_puck` now gates only the blade's protect blend.
 
 ### Then

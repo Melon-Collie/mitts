@@ -10,7 +10,8 @@ namespace mitts {
 
 // C++ port of Scripts/domain/ai/carry_rollout.gd (AICarryRollout.roll_all: every
 // move skated in one crossing) with the rules a rolled tick runs inlined —
-// SkaterMovementRules.apply_movement (shared with NativeSkaterMovement),
+// AISteering.stance_cuts_onto, SkaterMovementRules.apply_movement (shared with
+// NativeSkaterMovement),
 // FacingRules.solve, BoardPlayRules.board_proximity / board_shield_facing, and
 // GameRules.clamp_to_rink_inner / push_out_of_net. The GDScript files are the
 // reference; tests/unit/ai/test_native_carry_rollout_parity.gd fuzzes the two.
@@ -24,7 +25,7 @@ namespace mitts {
 
 #define MITTS_FACING_TUNABLES(X) \
 	X(engage_min_speed) X(engage_full_speed) X(hold_min_speed) X(hold_full_speed) \
-	X(cone_rad) X(cone_hysteresis_rad)
+	X(cone_rad) X(cone_hysteresis_rad) X(stance_square_max_speed)
 
 #define MITTS_ROLLOUT_BODY_TUNABLES(X) \
 	X(facing_drag_speed) X(facing_drag_speed_braking) X(body_radius) \
@@ -65,6 +66,15 @@ class NativeCarryRollout : public godot::RefCounted {
 	int64_t ticks = 0;
 	int64_t samples_per_move = 1;
 
+	// The stance read (AICarryRollout.STANCE_TURN_WINDOW_S, AISteering's
+	// STANCE_CUT_MAX_ANGLE_DEG, STANCE_RELEASE_FRACTION and turn-rate ceiling,
+	// FacingRules' STANCE_SQUARE_BLEND_M_S).
+	double stance_window_s = 0.0;
+	double stance_cut_max_rad = 0.0;
+	double stance_release_fraction = 1.0;
+	double max_turn_rate = 0.0;
+	double stance_square_blend = 0.0;
+
 	godot::PackedVector3Array end_pos;
 	godot::PackedVector3Array end_vel;
 	godot::PackedVector2Array end_facing;
@@ -74,8 +84,10 @@ class NativeCarryRollout : public godot::RefCounted {
 	godot::Vector2 clamp_to_rink_inner(const godot::Vector2 &world_xz, double margin) const;
 	godot::Vector2 push_out_of_net(const godot::Vector2 &world_xz, double radius) const;
 	godot::Vector2 face(const godot::Vector2 &f, const godot::Vector2 &cur,
-			const godot::Vector3 &v, const godot::Vector3 &p, bool braking, double step,
-			bool shield) const;
+			const godot::Vector3 &v, const godot::Vector3 &p, bool braking, bool stance,
+			double step, bool shield) const;
+	bool stance_cuts_onto(const godot::Vector2 &dir, const godot::Vector3 &v,
+			double upright_lateral_accel, bool was_holding) const;
 	void roll(int m, const godot::Vector2 &stick, const godot::Vector2 &cursor, bool braking,
 			const godot::Vector3 &pos, const godot::Vector3 &vel, const godot::Vector2 &facing,
 			bool has_puck, int64_t step_ticks);
@@ -89,6 +101,8 @@ public:
 			double p_goal_line_z, double p_net_depth, double p_net_back_half_width);
 	void set_moves(double p_soft_turn_rad, double p_hard_turn_rad, double p_tick_dt,
 			int64_t p_ticks, int64_t p_samples_per_move);
+	void set_stance(double p_window_s, double p_cut_max_rad, double p_release_fraction,
+			double p_max_turn_rate, double p_square_blend);
 	// Returns a space-separated list of missing property names — empty means
 	// every tunable loaded.
 	godot::String configure(godot::Object *caps);

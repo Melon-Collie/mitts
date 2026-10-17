@@ -600,6 +600,20 @@ static func stance_carves_to(self_pos: Vector3, anchor: Vector3, desired: Vector
 			was_holding)
 
 
+# The same read for a held stick with no anchor (a rolled carry move's): the turn
+# off travel onto `dir` has to happen inside `window_s`. Past
+# STANCE_CUT_MAX_ANGLE_DEG it is a stop and a push back, as the pivot's is.
+static func stance_cuts_onto(dir: Vector2, velocity_xz: Vector2,
+		upright_lateral_accel: float, window_s: float, was_holding: bool) -> bool:
+	var speed: float = velocity_xz.length()
+	if speed < 0.01 or dir.length_squared() < 0.0001 or window_s <= 0.0:
+		return false
+	var turn: float = absf(velocity_xz.angle_to(dir))
+	if turn > deg_to_rad(STANCE_CUT_MAX_ANGLE_DEG):
+		return false
+	return _stance_out_turns(turn / window_s, speed, upright_lateral_accel, was_holding)
+
+
 static func _stance_out_turns(required_rate: float, speed: float,
 		upright_lateral_accel: float, was_holding: bool) -> bool:
 	if upright_lateral_accel >= speed * GameRules.DEFAULT_SKATER_MAX_TURN_RATE_RAD_S:

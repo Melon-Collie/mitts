@@ -11,6 +11,9 @@ extends RefCounted
 # forward move faces where it skates; the brake faces the destination (the brake
 # check); the cut back skates away from it facing it — backward.
 #
+# A move holds the skating stance while the turn onto its stick needs more than
+# the upright edges give (STANCE_TURN_WINDOW_S); the brake never does, a pure stop.
+#
 # Not modelled: other bodies (contact and checks), the goalie's footprint, and
 # the knockdown and shot states that suspend locomotion.
 #
@@ -47,6 +50,11 @@ var step_ticks: int = STEP_TICKS
 # +X from −Z, which is the skater's right.
 const SOFT_TURN_RAD: float = deg_to_rad(30.0)
 const HARD_TURN_RAD: float = deg_to_rad(75.0)
+
+# A move is priced from its first path sample on, so its cut must be on its line
+# by then: the stance holds while that turn outruns the upright edges
+# (AISteering.stance_cuts_onto). The agent skates the same read.
+const STANCE_TURN_WINDOW_S: float = HORIZON_S / SAMPLES
 
 # Returns a configured kernel, or null. Unset, every roll is GDScript.
 static var native_factory: Callable = Callable()
@@ -159,16 +167,21 @@ func _roll(m: int, pos: Vector3, vel: Vector3, facing: Vector2, caps: AISkaterCa
 	var dt: float = DT * step_ticks
 	var contain_x: float = GameRules.INNER_HALF_WIDTH - radius
 	var shield_x: float = GameRules.INNER_HALF_WIDTH - caps.board_shield_probe
+	var upright: float = cfg.turn_accel * cfg.lateral_grip
 	var p: Vector3 = pos
 	var v: Vector3 = vel
 	var f: Vector2 = facing
 	var touched: bool = false
+	var stance: bool = false
 	for i: int in range(step_ticks - 1, TICKS, step_ticks):
+		stance = not braking and AISteering.stance_cuts_onto(move, Vector2(v.x, v.z), upright,
+				STANCE_TURN_WINDOW_S, stance)
 		v = SkaterMovementRules.apply_movement(v, move, atan2(-f.x, -f.y), has_puck,
-				braking, dt, cfg)
+				braking, dt, cfg, SkaterMovementRules.Posture.STANCE if stance
+						else SkaterMovementRules.Posture.UPRIGHT)
 		v.y = 0.0
 		var between_arcs: bool = absf(p.z) <= GameRules.CORNER_CENTER_Z
-		f = _face(f, cur, v, p, braking, drag * dt, caps,
+		f = _face(f, cur, v, p, braking, stance, drag * dt, caps,
 				has_puck and not (between_arcs and absf(p.x) <= shield_x))
 		p += v * dt
 		if absf(p.z) <= GameRules.CORNER_CENTER_Z and absf(p.x) <= contain_x:
@@ -201,9 +214,10 @@ func _roll(m: int, pos: Vector3, vel: Vector3, facing: Vector2, caps: AISkaterCa
 # rule's target (turned along the boards for a carrier on them), frozen while
 # the cursor sits in the unreachable wedge behind him, a chord lerp toward it
 # otherwise (an angle slerp through the turn round).
-func _face(f: Vector2, cur: Vector2, v: Vector3, p: Vector3, braking: bool, step: float,
-		caps: AISkaterCaps, shield: bool) -> Vector2:
-	FacingRules.solve(_facing_out, f, cur, Vector2(v.x, v.z), braking, false, caps.facing_rules)
+func _face(f: Vector2, cur: Vector2, v: Vector3, p: Vector3, braking: bool, stance: bool,
+		step: float, caps: AISkaterCaps, shield: bool) -> Vector2:
+	FacingRules.solve(_facing_out, f, cur, Vector2(v.x, v.z), braking, stance,
+			caps.facing_rules)
 	var behind: bool = absf(f.angle_to(cur)) >= caps.reach_cone_half_angle
 	if behind and not _facing_out.turning_to_cursor_behind:
 		return f

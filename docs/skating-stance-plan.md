@@ -337,7 +337,13 @@ while its turn rate beats the upright edges' `turn_accel × grip / v`; every
 steered route reads it, short of a pivot. It stands down below
 `turn_accel × grip / max_turn_rate`, where the turn is rate-bound and doubling
 the grip turns no faster. A carrier's stop (the carry's rolled BRAKE) stays a
-pure stop, and the carry's rolled cuts do not hold the stance yet (#794).
+pure stop. The carry's rolled cuts hold it by the anchorless form of the same
+read, `stance_cuts_onto`: the turn onto the move's stick, done by the move's
+first path sample (`AICarryRollout.STANCE_TURN_WINDOW_S`), and never past
+`STANCE_CUT_MAX_ANGLE_DEG`. The rollout skates the stance (GDScript and the
+native kernel), so the cut is priced on the grip it is skated on, and the agent
+holds it by the same read. Over the 19 carrier duels it took strips from 160 to
+97, at 263 → 248 m of ground.
 Low-speed mirroring is not modelled: the stance's sideways shuffle only exists
 below `GRIP_MIN_SPEED` (0.5 m/s), too narrow a band to hold a read on.
 

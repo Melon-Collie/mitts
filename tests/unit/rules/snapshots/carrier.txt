@@ -30,7 +30,7 @@ deep in our zone, alone, forechecker charging, flanks open: pick	CARRY to (1.4, 
 pressured deep, outlet en route, deeper valve as bait: pick	PASS to 2
 alone at rest 0.8 m short of the blue line: pick	CARRY to (0.0, -10.6)
 rush up the wall 4.3 m short of the line, room to enter: intent	CARRY
-rush up the wall 5.8 m short of the line, room to enter: pick	CARRY to (-10.4, -7.4)
+rush up the wall 5.8 m short of the line, room to enter: pick	CARRY to (-2.9, -9.5)
 rush up the wall, smothered at the line, trailer open: pick	PASS to 2
 level with a mate at the blue line, symmetric set D: intent	CARRY
 2 m inside the blue line, open, keeper 2 m out: pick	CARRY to (0.0, -13.1)
@@ -38,8 +38,8 @@ fresh entry, finisher driving the house: intent	CARRY
 fresh entry, finisher driving the house: developing feed	0.9039
 fresh entry, finisher driving the house: shoot-now value	0.0186
 head-on drive at 6 m/s, keeper 1 m out, from 10 m: pick	CARRY to (0.0, -23.6)
-head-on drive at 6 m/s, keeper 1 m out, from 9 m: pick	CARRY to (-3.2, -24.3)
-head-on drive at 6 m/s, keeper 1 m out, from 8 m: pick	CARRY to (-3.2, -25.3)
+head-on drive at 6 m/s, keeper 1 m out, from 9 m: pick	CARRY to (0.0, -23.6)
+head-on drive at 6 m/s, keeper 1 m out, from 8 m: pick	CARRY to (0.0, -23.6)
 head-on drive at 6 m/s, keeper 1 m out, from 7 m: pick	CARRY to (0.0, -23.6)
 head-on drive at 6 m/s, keeper 1 m out, from 6 m: pick	CARRY to (0.0, -23.6)
 head-on drive at 6 m/s, keeper 1 m out, from 5 m: pick	SHOOT
@@ -63,10 +63,10 @@ past centre, stand-up line at gap, open backfield: pick	DUMP
 past centre, a loose pair ahead: pick	DUMP
 dump-in past centre, one D ahead: rests at	(-8.8, -14.3)
 pinned in our zone by a head-on forecheck, outlet up the wall: pick	PASS to 2
-wheeling up the weak wall, middle clogged: pick	CARRY to (-12.5, 15.1)
+wheeling up the weak wall, middle clogged: pick	CARRY to (-12.5, 15.3)
 behind our cage, empty rink: pick	CARRY to (3.2, 26.4)
 beat his man down the wing at 8.5 m/s: pick	CARRY to (2.0, -23.8)
-wing entry in stride, defender on the inside lane: carry anchor	(5.5, -23.2)
+wing entry in stride, defender on the inside lane: carry anchor	(12.2, -19.5)
 sharp-angle corner, keeper sealing, defender boxing out: pick	CARRY to (11.9, -24.6)
 behind their cage, empty rink: carry anchor	(1.4, -27.7)
 splittable gap up the middle, open man wide: carry anchor	(0.0, -14.5)

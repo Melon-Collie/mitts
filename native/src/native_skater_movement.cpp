@@ -7,11 +7,9 @@ using namespace godot;
 
 namespace mitts {
 
-// SkaterMovementRules.GRIP_MIN_SPEED / SKID_TURN_TAPER / Posture.
+// SkaterMovementRules.GRIP_MIN_SPEED / SKID_TURN_TAPER.
 static constexpr double GRIP_MIN_SPEED = 0.5;
 static constexpr double SKID_TURN_TAPER = Math_PI * 0.25;
-static constexpr int64_t POSTURE_STANCE = 1;
-static constexpr int64_t POSTURE_COMMIT = 2;
 
 String load_movement_tunables(Object *movement_config, MovementTunables &cfg) {
 	ERR_FAIL_NULL_V(movement_config, String("null config"));

@@ -21,6 +21,11 @@ namespace mitts {
 // BodyCheckRules.Config fields, set via set_stagger_params. `posture` is
 // SkaterMovementRules.Posture as an int (UPRIGHT 0, STANCE 1, COMMIT 2).
 
+// SkaterMovementRules.Posture.
+inline constexpr int64_t POSTURE_UPRIGHT = 0;
+inline constexpr int64_t POSTURE_STANCE = 1;
+inline constexpr int64_t POSTURE_COMMIT = 2;
+
 #define MITTS_MOVEMENT_TUNABLES(X) \
 	X(thrust) X(power_knee_speed) X(friction) X(friction_drag) X(max_speed) \
 	X(move_deadzone) X(stop_decel) X(reverse_skid_fraction) X(turn_accel) \

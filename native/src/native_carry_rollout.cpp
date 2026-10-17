@@ -51,6 +51,15 @@ void NativeCarryRollout::set_moves(double p_soft_turn_rad, double p_hard_turn_ra
 	samples.resize(MOVE_COUNT * samples_per_move);
 }
 
+void NativeCarryRollout::set_stance(double p_window_s, double p_cut_max_rad,
+		double p_release_fraction, double p_max_turn_rate, double p_square_blend) {
+	stance_window_s = p_window_s;
+	stance_cut_max_rad = p_cut_max_rad;
+	stance_release_fraction = p_release_fraction;
+	max_turn_rate = p_max_turn_rate;
+	stance_square_blend = p_square_blend;
+}
+
 String NativeCarryRollout::configure(Object *caps) {
 	ERR_FAIL_NULL_V(caps, String("null caps"));
 	String missing;
@@ -156,10 +165,30 @@ Vector2 NativeCarryRollout::push_out_of_net(const Vector2 &world_xz, double radi
 	return Vector2((real_t)(net_back_half_width + radius), world_xz.y);
 }
 
-// AICarryRollout._face over FacingRules.solve (never in stance) and
+// AISteering.stance_cuts_onto over _stance_out_turns.
+bool NativeCarryRollout::stance_cuts_onto(const Vector2 &dir, const Vector3 &v,
+		double upright_lateral_accel, bool was_holding) const {
+	const Vector2 velocity(v.x, v.z);
+	const double speed = velocity.length();
+	if (speed < 0.01 || dir.length_squared() < 0.0001 || stance_window_s <= 0.0) {
+		return false;
+	}
+	if (upright_lateral_accel >= speed * max_turn_rate) {
+		return false;
+	}
+	const double turn = Math::abs((double)velocity.angle_to(dir));
+	if (turn > stance_cut_max_rad) {
+		return false;
+	}
+	const double required = turn / stance_window_s;
+	const double upright_rate = upright_lateral_accel / speed;
+	return required > upright_rate * (was_holding ? stance_release_fraction : 1.0);
+}
+
+// AICarryRollout._face over FacingRules.solve and
 // BoardPlayRules.board_proximity / board_shield_facing.
 Vector2 NativeCarryRollout::face(const Vector2 &f, const Vector2 &cur, const Vector3 &v,
-		const Vector3 &p, bool braking, double step, bool shield) const {
+		const Vector3 &p, bool braking, bool stance, double step, bool shield) const {
 	Vector2 target = cur;
 	bool turning_to_cursor_behind = false;
 	const Vector2 velocity(v.x, v.z);
@@ -169,9 +198,13 @@ Vector2 NativeCarryRollout::face(const Vector2 &f, const Vector2 &cur, const Vec
 			const Vector2 travel = velocity / (real_t)speed;
 			const bool following = Math::abs((double)f.angle_to(travel))
 					<= Math::abs((double)f.angle_to(cur));
-			const double share = following
+			double share = following
 					? smoothstep(facing_cfg.hold_min_speed, facing_cfg.hold_full_speed, speed)
 					: smoothstep(facing_cfg.engage_min_speed, facing_cfg.engage_full_speed, speed);
+			if (stance) {
+				share = MIN(share, smoothstep(facing_cfg.stance_square_max_speed
+						- stance_square_blend, facing_cfg.stance_square_max_speed, speed));
+			}
 			if (share > 0.0) {
 				const double cone = facing_cfg.cone_rad
 						+ (following ? facing_cfg.cone_hysteresis_rad : -facing_cfg.cone_hysteresis_rad);
@@ -229,16 +262,19 @@ void NativeCarryRollout::roll(int m, const Vector2 &stick, const Vector2 &cursor
 	const double contain_x = inner_half_width - radius;
 	const double shield_x = inner_half_width - body.board_shield_probe;
 	const int64_t ticks_per_sample = ticks / samples_per_move;
+	const double upright = move_cfg.turn_accel * move_cfg.lateral_grip;
 	Vector3 p = pos;
 	Vector3 v = vel;
 	Vector2 f = facing;
 	bool touched = false;
+	bool stance = false;
 	for (int64_t i = step_ticks - 1; i < ticks; i += step_ticks) {
+		stance = !braking && stance_cuts_onto(stick, v, upright, stance);
 		v = movement_step(move_cfg, v, stick, Math::atan2((double)-f.x, (double)-f.y), has_puck,
-				braking, dt, 0, move_cfg.thrust, 1.0);
+				braking, dt, stance ? POSTURE_STANCE : POSTURE_UPRIGHT, move_cfg.thrust, 1.0);
 		v.y = 0.0;
 		const bool between_arcs = Math::abs((double)p.z) <= corner_center_z;
-		f = face(f, cursor, v, p, braking, drag * dt,
+		f = face(f, cursor, v, p, braking, stance, drag * dt,
 				has_puck && !(between_arcs && Math::abs((double)p.x) <= shield_x));
 		p += v * (real_t)dt;
 		const bool on_sample = (i + 1) % ticks_per_sample == 0;
@@ -318,6 +354,9 @@ void NativeCarryRollout::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_moves", "soft_turn_rad", "hard_turn_rad", "tick_dt",
 			"ticks", "samples_per_move"),
 			&NativeCarryRollout::set_moves);
+	ClassDB::bind_method(D_METHOD("set_stance", "window_s", "cut_max_rad", "release_fraction",
+			"max_turn_rate", "square_blend"),
+			&NativeCarryRollout::set_stance);
 	ClassDB::bind_method(D_METHOD("configure", "caps"), &NativeCarryRollout::configure);
 	ClassDB::bind_method(D_METHOD("roll_all", "pos", "vel", "facing", "toward", "has_puck",
 			"step_ticks"),

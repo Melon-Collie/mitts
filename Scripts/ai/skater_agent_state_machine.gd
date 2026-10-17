@@ -1706,9 +1706,14 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 	# spot.
 	if _intended_action == State.CARRY:
 		if _carrier.carry_move >= 0:
-			# The rolled move the carrier priced is the input it skates.
+			# The rolled move the carrier priced is the input it skates, the stance
+			# by the read the roll held it on (AICarryRollout.STANCE_TURN_WINDOW_S).
 			input.move_vector = _carrier.carry_stick
 			input.brake = _carrier.carry_brake
+			var v: Vector3 = self_state.velocity if self_state != null else Vector3.ZERO
+			input.stance_held = not input.brake and AISteering.stance_cuts_onto(
+					input.move_vector, Vector2(v.x, v.z), _upright_lateral_accel(),
+					AICarryRollout.STANCE_TURN_WINDOW_S, _cached_stance_held)
 		else:
 			# Skated through at pace — no arrival brake.
 			_apply_steering(input, snapshot, self_pos, _last_carry_anchor,

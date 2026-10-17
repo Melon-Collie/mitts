@@ -24,4 +24,7 @@ static func make_configured() -> RefCounted:
 			GameRules.GOAL_LINE_Z, GameRules.NET_DEPTH, GameRules.NET_BACK_HALF_WIDTH)
 	native.set_moves(AICarryRollout.SOFT_TURN_RAD, AICarryRollout.HARD_TURN_RAD,
 			AICarryRollout.DT, AICarryRollout.TICKS, AICarryRollout.SAMPLES)
+	native.set_stance(AICarryRollout.STANCE_TURN_WINDOW_S,
+			deg_to_rad(AISteering.STANCE_CUT_MAX_ANGLE_DEG), AISteering.STANCE_RELEASE_FRACTION,
+			GameRules.DEFAULT_SKATER_MAX_TURN_RATE_RAD_S, FacingRules.STANCE_SQUARE_BLEND_M_S)
 	return native

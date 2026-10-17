@@ -56,12 +56,18 @@ func _place(pos: Vector3, vel: Vector3, facing: Vector2) -> void:
 
 
 # The live tick for a held move: the controller's input step, then the body's
-# integration and containment.
-func _skate_live(move: int) -> void:
+# integration and containment. The stance is pressed by the read the agent skates
+# a rolled move on, from the live velocity.
+func _skate_live(move: int, upright_lateral_accel: float) -> void:
+	var stance: bool = false
 	for _i: int in AICarryRollout.TICKS:
 		var input := InputState.new()
 		input.move_vector = _roll.stick[move]
 		input.brake = _roll.brake[move]
+		stance = not input.brake and AISteering.stance_cuts_onto(input.move_vector,
+				Vector2(_skater.velocity.x, _skater.velocity.z), upright_lateral_accel,
+				AICarryRollout.STANCE_TURN_WINDOW_S, stance)
+		input.stance_held = stance
 		var c: Vector2 = _roll.cursor[move]
 		input.mouse_world_pos = _skater.global_position + Vector3(c.x, 0.0, c.y) * 6.0
 		input.mouse_world_pos.y = 0.0
@@ -87,7 +93,7 @@ func _assert_matches_live_carrying(label: String, pos: Vector3, vel: Vector3,
 	_roll.roll_all(pos, vel, facing, toward, caps, carrying)
 	for m: int in AICarryRollout.MOVE_COUNT:
 		_place(pos, vel, facing)
-		_skate_live(m)
+		_skate_live(m, caps.movement.turn_accel * caps.movement.lateral_grip)
 		var live_pos: Vector3 = _skater.global_position
 		var tag: String = "%s, %s" % [label, AICarryRollout.Move.keys()[m]]
 		assert_lt(Vector2(live_pos.x - _roll.end_pos[m].x, live_pos.z - _roll.end_pos[m].z)
