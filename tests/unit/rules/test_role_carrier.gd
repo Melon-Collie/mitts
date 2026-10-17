@@ -913,7 +913,7 @@ func _settle_skaters(self_pos: Vector3, outlet: Vector3) -> Array:
 
 const _STRONG_OUTLET := Vector3(11, 0, 11)    # open, up the strong wall
 const _MARGINAL_OUTLET := Vector3(9.0, 0, 22.0)  # deep below the dot
-const _MARGINAL_OUTLET_VEL := Vector3(0, 0, 6.0)   # …and still sliding into the corner
+const _MARGINAL_OUTLET_VEL := Vector3(0, 0, 1.5)   # …and still drifting into the corner
 
 
 func _settle_ctx(self_pos: Vector3, outlet: Vector3) -> RoleContext:

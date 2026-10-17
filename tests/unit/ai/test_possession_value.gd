@@ -55,6 +55,18 @@ func test_crossing_the_line_never_costs_the_puck_value() -> void:
 			prev = here
 
 
+func test_a_body_on_his_stick_costs_him_the_puck_where_the_race_is_his() -> void:
+	# Both defenders trail him to every entry, so neither takes the race; only
+	# the one in reach of his skate takes the puck off it.
+	var spot := Vector3(0.0, 0.0, 4.0)
+	var on_him: Array[Vector3] = [Vector3(1.0, 0.0, 5.0)]
+	var far_back: Array[Vector3] = [Vector3(1.0, 0.0, 16.0)]
+	var open: float = _read(_none).at(spot)
+	assert_almost_eq(_read(far_back).at(spot), open, 1e-6,
+			"a man he out-skates to every entry costs him nothing")
+	assert_lt(_read(on_him).at(spot), open * 0.8, "a body on his stick does")
+
+
 func test_a_defender_who_gets_to_the_entries_first_shuts_them() -> void:
 	var spot := Vector3(0.0, 0.0, 5.0)
 	var open: float = _read(_none).at(spot)

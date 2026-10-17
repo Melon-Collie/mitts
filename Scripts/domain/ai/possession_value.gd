@@ -6,13 +6,14 @@ extends RefCounted
 # the defence as it stands:
 #
 #   in the zone   the best of the shot from here, one straight drive in, and
-#                 the best zone entry × the skate there × the race to it
+#                 the best zone entry, as outside it
 #   outside it    the best zone entry × the skate there × the race to it
 #
 # A drive is worth the shot where it ends × the odds of keeping the puck that
 # far × the delay discount of the skate. An entry is worth the better of its
-# shot and the drive in from it, × the skate there × the race to it: the side's
-# man from the spot against the defence's first arrival (AIActionScoring
+# shot and the drive in from it, × the skate there — its delay discount, and the
+# odds he keeps the puck on it (_skate_keep) — × the race to it: the side's man
+# from the spot against the defence's first arrival (AIActionScoring
 # .arrival_race, its band widened by the arrival clock's error). Entry worths
 # depend only on fill()'s defence, so each is priced once per fill, and only
 # when a read could use it: its worth on empty ice, which a defence only lowers,
@@ -25,7 +26,9 @@ extends RefCounted
 # Where a side enters: a stride past the line, in the middle and in each wall lane.
 const ENTRY_LEAD_M: float = 3.0
 const ENTRY_WALL_INSET_M: float = 2.0
-# A drive in: straight at the net, at most this far, stopping this far out.
+# A drive in: straight at the net, at most this far, stopping this far out. Also
+# how far a skate to an entry is priced as a carry: the read does not follow the
+# defence's pursuit further.
 const DRIVE_MAX_M: float = 12.0
 const DRIVE_MIN_NET_DIST_M: float = 3.0
 # Goalie halves memoized per fill (_goalie_half): a defence read prices the same
@@ -39,6 +42,7 @@ var _defender_caps: Array = []
 var _entry_spots: Array[Vector3] = []
 var _entry_worth: Array[float] = []   # < 0 until priced (_worth)
 var _projected: Array[Vector3] = []
+var _skate_defence: Array[Vector3] = []
 # The entries' worth on empty ice at _open_goal: _worth's bound.
 var _open_goal: Vector3 = Vector3.INF
 var _open_worth: Array[float] = []
@@ -104,9 +108,33 @@ func at(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO) -> floa
 		var timed: float = _worth(i) * discount
 		if timed <= best:
 			continue
-		best = maxf(best, timed * AIActionScoring.arrival_race(_entry_spots[i], t,
-				_defenders, _defender_vels, true))
+		timed *= AIActionScoring.arrival_race(_entry_spots[i], t, _defenders,
+				_defender_vels, true)
+		if timed <= best:
+			continue
+		var defence: Array[Vector3] = _defenders
+		if start_s > 0.0:
+			_skate_defence.clear()
+			for k: int in _defenders.size():
+				_skate_defence.append(AITrajectory.predict_at(_defenders[k],
+						_defender_vels[k], start_s))
+			defence = _skate_defence
+		best = maxf(best, timed * _skate_keep(pos, _entry_spots[i], vel, defence))
 	return best
+
+
+# The odds the man at `from`, moving at `vel`, keeps the puck on his skate toward
+# `entry` against `defence`: priced over the drive's own horizon (DRIVE_MAX_M),
+# the rest of the way left to the race for the entry.
+func _skate_keep(from: Vector3, entry: Vector3, vel: Vector3,
+		defence: Array[Vector3]) -> float:
+	var leg: Vector3 = entry - from
+	var d: float = leg.length()
+	if d > DRIVE_MAX_M:
+		leg *= DRIVE_MAX_M / d
+	var t: float = AIArrival.time_to_arrive(from, from + leg, vel)
+	return AICarrySpace.carry_safety(from, from + leg, t, defence, _defender_vels,
+			_defender_caps, true)
 
 
 # Entry `i`'s worth against fill()'s defence, priced on first use with any body
