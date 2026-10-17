@@ -129,8 +129,14 @@ a closing term that is spent by the time you arrive, so an approach ends
 point, a defender could only defend from ice he was already standing on: one
 starting 20 m off his stand meets the carrier at ~10 m/s of relative speed.
 
-Two consequences:
+Three consequences:
 
+- **Price a stand at the ride it is skated at.** A candidate pushed onto a
+  possession read standing still is a man a carrier at speed out-skates
+  (`AICarrySpace`'s escape credit), so only the end of his drive — the crease —
+  would read as covering it, and the argmax walks the pressurer in.
+  `carrier_best_option` takes the candidate's velocity; PRESSURE passes its
+  `stand_ride_velocity` (`test_role_pressure.gd`).
 - **Do not bound a route by placing the stand defensively** (a step-up plan, an
   approach-speed limit). The route already regulates its own approach, so a
   placement bound on top is two controllers on one axis: the stand lands where

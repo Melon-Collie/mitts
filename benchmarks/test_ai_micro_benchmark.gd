@@ -343,7 +343,7 @@ func test_evaluator_costs() -> void:
 	AIDefensiveVerbs.carrier_option_bases(poss, from, Vector3(0, 0, -6), goalie,
 			opp_mates, bases)
 	_bench("carrier_best_option (PRESSURE per candidate)", func() -> void:
-		AIDefensiveVerbs.carrier_best_option(poss, Vector3(2, 0, -17), null, from,
+		AIDefensiveVerbs.carrier_best_option(poss, Vector3(2, 0, -17), Vector3.ZERO, null, from,
 				Vector3(0, 0, -6), goalie, opp_mates, bases))
 	var mates: Array[Vector3] = [Vector3(-5, 0, -8), Vector3(3, 0, -12),
 			Vector3(0, 0, 2), Vector3(-2, 0, 10)]

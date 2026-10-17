@@ -67,7 +67,8 @@ var _memo_next: int = 0
 # Reads the ice for the side attacking `goal` against `defenders` (velocities and
 # caps index-matched) and prices its entries, unless `in_zone_only`: then only
 # spots in the zone may be read. The arrays are read, not copied: refill them in
-# place and call fill() again when the ice changes.
+# place and call fill() again when the ice changes. push_defender appends to
+# them, so a read that is pushed onto needs its three arrays distinct.
 func fill(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3],
 		defender_caps: Array, in_zone_only: bool = false) -> void:
 	_goal = goal

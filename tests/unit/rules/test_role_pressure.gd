@@ -357,13 +357,44 @@ func test_the_last_man_bound_is_retired_for_a_live_carrier() -> void:
 	# naming a stand at wherever the body already is. That is what walked the
 	# pressurer to his own goal line: a defender whose stand is always where he
 	# stands can never close, so the carrier simply pushes him back. Same
-	# retirement, same reason, as AIRoleRushD._settable_gap.
+	# retirement, same reason, as AIRoleRushD._settable_gap. The bound only ever
+	# deepens a stand; the man behind may still move the bearing the argmax
+	# picks, since he is part of the defence it prices the carrier against.
 	var alone: Dictionary = _rush_ctx(false, 7.0)
 	var layered: Dictionary = _rush_ctx(true, 7.0)
-	assert_almost_eq(
+	assert_lte(
 			_stand_depth(AIRolePressure.decide(alone["ctx"]), alone["carrier"]),
-			_stand_depth(AIRolePressure.decide(layered["ctx"]), layered["carrier"]),
-			0.05, "the last man reads the ladder, not a depth bound")
+			_stand_depth(AIRolePressure.decide(layered["ctx"]), layered["carrier"]) + 0.05,
+			"the last man reads the ladder, not a depth bound")
+
+
+func test_a_stand_held_at_his_pace_takes_the_drive_a_standing_one_concedes() -> void:
+	# A carrier at speed out-skates a man standing in his lane, so priced
+	# standing, a body 1.8 m in front of him takes nothing and only the net-front
+	# denies the drive — the argmax walks the pressurer into his crease. The
+	# stand is a moving frame, priced at the ride it is skated at.
+	var our_net := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
+	var keeper := our_net + Vector3(0.0, 0.0, 0.8)
+	# The routing sweep's z -20 / x -6 rush, the tick it went wrong: the stand the
+	# gap ladder named, a little inside his line to the net.
+	var carrier := Vector3(-3.66, 0.0, -15.02)
+	var carrier_vel := Vector3(1.7, 0.0, -8.3)
+	var in_lane := Vector3(-2.34, 0.0, -16.49)
+	var nobody: Array[Vector3] = []
+	var still: Array[Vector3] = []
+	var poss := AIPossessionValue.new()
+	poss.fill(our_net, nobody, still, [])
+	var receivers: Array[Vector3] = []
+	var bases: Array[float] = []
+	AIDefensiveVerbs.carrier_option_bases(poss, carrier, carrier_vel, keeper, receivers,
+			bases)
+	var standing: float = AIDefensiveVerbs.carrier_best_option(poss, in_lane,
+			Vector3.ZERO, null, carrier, carrier_vel, keeper, receivers, bases)
+	var riding: float = AIDefensiveVerbs.carrier_best_option(poss, in_lane,
+			carrier_vel, null, carrier, carrier_vel, keeper, receivers, bases)
+	gut.p("  open %.3f | standing in his lane %.3f | riding it %.3f"
+			% [bases[0], standing, riding])
+	assert_lt(riding, standing * 0.5, "a body at his pace in his lane takes the drive")
 
 
 func test_a_loose_puck_keeps_the_last_man_bound() -> void:

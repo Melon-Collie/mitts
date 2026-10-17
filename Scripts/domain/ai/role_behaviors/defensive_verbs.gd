@@ -218,7 +218,9 @@ static func carrier_option_bases(poss: AIPossessionValue, carrier_pos: Vector3,
 
 # The opposing carrier's best option — keep it himself, or feed any of
 # `opp_teammates` (already led by anticipation, so read standing) — with our
-# hypothetical defender at `candidate` added to `poss`'s defenders. PRESSURE
+# hypothetical defender at `candidate`, skating at `candidate_vel` (the stand's
+# ride: a body holding station on him is not one he out-skates), added to
+# `poss`'s defenders. PRESSURE
 # argmaxes its negation. On the possession scale, so the gradient survives where
 # the shot collapses to 0 far from the net: what a body there takes from his
 # possession is what pulls a defender tight to a carrier with no shot. Coverage
@@ -227,10 +229,10 @@ static func carrier_option_bases(poss: AIPossessionValue, carrier_pos: Vector3,
 # `bases` (carrier_option_bases) prunes exactly: options are evaluated in
 # descending-bound order and stop when no remaining bound beats the running max.
 static func carrier_best_option(poss: AIPossessionValue, candidate: Vector3,
-		self_caps: AISkaterCaps, carrier_pos: Vector3, carrier_vel: Vector3,
-		our_goalie_pos: Vector3, opp_teammates: Array[Vector3],
+		candidate_vel: Vector3, self_caps: AISkaterCaps, carrier_pos: Vector3,
+		carrier_vel: Vector3, our_goalie_pos: Vector3, opp_teammates: Array[Vector3],
 		bases: Array[float]) -> float:
-	poss.push_defender(candidate, Vector3.ZERO, self_caps)
+	poss.push_defender(candidate, candidate_vel, self_caps)
 	var best: float = 0.0
 	var used: int = 0
 	while true:

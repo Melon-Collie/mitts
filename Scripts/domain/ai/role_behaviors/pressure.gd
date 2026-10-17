@@ -132,6 +132,7 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 	# near-equal, and trading them every dispatch covers neither.
 	AIStationSearch.append_incumbent(ctx, candidates)
 
+	var ride: Vector3 = AIRoleReads.stand_ride_velocity(ctx)
 	var best_pos: Vector3 = ctx.self_pos
 	var best_score: float = -INF
 	var found: bool = false
@@ -172,7 +173,7 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 
 		# Higher = better for us, i.e. lower for the carrier.
 		var pressure_score: float = -AIDefensiveVerbs.carrier_best_option(
-				poss, c, ctx.caps_by_peer.get(ctx.peer_id), carrier_pos,
+				poss, c, ride, ctx.caps_by_peer.get(ctx.peer_id), carrier_pos,
 				carrier_velocity, our_goalie_pos, opp_teammates, bases) \
 				+ AIStationSearch.incumbent_bonus(ctx, c)
 		if pressure_score > best_score:
@@ -191,7 +192,7 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 	# rush skates it the same way after the line. A forecheck (the carrier in
 	# his own zone) has no retreat to manage, so its route stays free.
 	if found:
-		d.target_velocity = AIRoleReads.stand_ride_velocity(ctx)
+		d.target_velocity = ride
 		var retreating: bool = ap.dir_net != Vector3.ZERO \
 				and not AIActionScoring.in_offensive_zone(carrier_pos, ctx.attacking_goal_pos)
 		if retreating and d.target_velocity != Vector3.ZERO:
