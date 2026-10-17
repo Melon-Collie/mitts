@@ -20,7 +20,7 @@ tight-wall pinch, open man wide: carry anchor	(0.0, -12.7)
 spun-off carrier, beaten man behind: pick	CARRY to (0.0, -21.6)
 pressured deep in our zone, open outlet up the strong wall: pick	PASS to 2
 outlet straight up the wall, forechecker standing off the lane: pick	PASS to 2
-wide in the zone, open man at the far-post backdoor: pick	PASS to 2
+wide in the zone, open man at the far-post backdoor: pick	CARRY to (-1.0, -25.6)
 our end, middle clogged, winger ahead with a clear path: pick	PASS to 2
 central in the zone, open mate wide at a poor angle: intent	CARRY
 neutral ice, straight lane clogged, close outlet up-ice: pick	PASS to 2

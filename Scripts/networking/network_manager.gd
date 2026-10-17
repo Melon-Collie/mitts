@@ -60,7 +60,9 @@ signal world_state_received(data: PackedByteArray)
 signal slot_assigned(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color)
 signal remote_skater_spawn_requested(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String, jersey_number: int, attributes: PlayerAttributes)
 signal existing_players_synced(player_data: Array)
-signal local_puck_pickup_confirmed
+# `settle_until_units` is the input stamp (0.1 ms units) the catch's settle
+# ends on, 0 for none (ReceptionSettle).
+signal local_puck_pickup_confirmed(settle_until_units: int)
 signal local_puck_stolen(forced_lift_s: float)
 signal carrier_puck_dropped
 signal remote_carrier_changed(new_carrier_peer_id: int)
@@ -1975,23 +1977,23 @@ func sync_existing_players(player_data: Array) -> void:
 		return
 	existing_players_synced.emit(player_data)
 
-func send_puck_picked_up(peer_id: int) -> void:
+func send_puck_picked_up(peer_id: int, settle_until_units: int) -> void:
 	# AI bots have no ENet connection — rpc_id would fail. Bots are driven
 	# directly by the host's AIController, so no client-side notification
 	# is needed.
 	if not is_real_peer(peer_id):
 		return
 	var seq: int = _event_log.record(
-			SnapshotEventLog.EventType.PICKED_UP, peer_id, 0, local_time())
-	notify_puck_picked_up.rpc_id(peer_id, seq)
+			SnapshotEventLog.EventType.PICKED_UP, peer_id, settle_until_units, local_time())
+	notify_puck_picked_up.rpc_id(peer_id, seq, settle_until_units)
 
 @rpc("authority", "reliable")
-func notify_puck_picked_up(event_seq: int) -> void:
+func notify_puck_picked_up(event_seq: int, settle_until_units: int) -> void:
 	NetworkSimManager.send(
-		func(seq: int) -> void:
+		func(seq: int, until_units: int) -> void:
 			if _event_log.try_apply_reliable(seq):
-				local_puck_pickup_confirmed.emit(),
-		[event_seq], true)
+				local_puck_pickup_confirmed.emit(until_units),
+		[event_seq, settle_until_units], true)
 
 func send_ghost_state_to_all(peer_id: int, is_ghost: bool) -> void:
 	for remote_id: int in connected_peer_ids():
@@ -2077,7 +2079,7 @@ func _dispatch_snapshot_event(type: int, arg: int) -> void:
 		SnapshotEventLog.EventType.CARRIER_CHANGED:
 			remote_carrier_changed.emit(arg)
 		SnapshotEventLog.EventType.PICKED_UP:
-			local_puck_pickup_confirmed.emit()
+			local_puck_pickup_confirmed.emit(arg)
 		SnapshotEventLog.EventType.STOLEN:
 			local_puck_stolen.emit(arg / 1000.0)
 		SnapshotEventLog.EventType.DROPPED:

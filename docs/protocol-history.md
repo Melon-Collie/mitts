@@ -345,3 +345,8 @@ here whenever you bump, in the same format.
 #      of any downed snapshot (knockdown or dive) is now a friction-only slide
 #      (SkaterMovementRules.slide_forward) on the render and the rewind alike,
 #      in place of integrate_forward on its last intent. Replay FORMAT_VERSION 16.
+# v76: the reception settle. notify_puck_picked_up gains settle_until_units, and
+#      the PICKED_UP snapshot event carries the same value in its arg (previously
+#      always 0): the input stamp, in 0.1 ms units, before which the carrier's
+#      shots and passes are held (ReceptionSettle). No byte layout changed; the
+#      replay format is unchanged (events never enter replay frames).

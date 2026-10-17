@@ -47,7 +47,7 @@ Adding a behaviour is four steps:
 | OFF_PUCK | ONE_TIMER_PRESSED | a ready one-timer man's feed is released on his line or reaches his zone (`_is_one_timer_ready`, `SkaterAgentOneTimer.line_anchor`, `_puck_in_one_timer_zone`) |
 | CHASE_PUCK | ONE_TIMER_PRESSED | a ready one-timer man's feed reaches his zone, or a feed he is chasing is worth redirecting (`_try_shot_reception`) |
 | CHASE_PUCK | OFF_PUCK | the chase ends, or the bot is out of play |
-| CARRY | SHOOT_PRESSED, PASS_PRESSED | the carrier's committed intent is ready to release (a dump releases through PASS_PRESSED) |
+| CARRY | SHOOT_PRESSED, PASS_PRESSED | the carrier's committed intent is ready to release and its catch has settled (a dump releases through PASS_PRESSED) |
 | any press state | CARRY | the release fires, or the press bails |
 | CARRY, any press state | `_post_puck_lost_state` | the puck is gone: CHASE_PUCK for the nearest teammate to a loose puck, else OFF_PUCK |
 

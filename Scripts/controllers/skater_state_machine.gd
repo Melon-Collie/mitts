@@ -107,12 +107,16 @@ var locked_slapper_dir: Vector2 = Vector2.ZERO
 
 var _cb: Callbacks
 var _aiming: SkaterAimingBehavior
+var _settle: ReceptionSettle = ReceptionSettle.new()
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 
-func setup(callbacks: Callbacks, aiming: SkaterAimingBehavior) -> void:
+func setup(callbacks: Callbacks, aiming: SkaterAimingBehavior,
+		settle: ReceptionSettle = null) -> void:
 	_cb = callbacks
 	_aiming = aiming
+	if settle != null:
+		_settle = settle
 
 # ── State accessors ───────────────────────────────────────────────────────────
 
@@ -160,15 +164,24 @@ func _state_skating_without_puck(_skater: Skater, input: InputState, delta: floa
 
 func _state_skating_with_puck(skater: Skater, input: InputState, delta: float, _has_puck: bool, _is_movement_locked: bool) -> void:
 	_cb.apply_blade_from_mouse.call(input, delta)
+	# A hard catch is still settling: nothing leaves the blade, and the press
+	# waits for the first input past the settle.
+	if _settle.is_locked():
+		_settle.hold(input)
+		return
+	var quick_pass: bool = input.quick_pass_pressed or _settle.held_quick_pass
+	var shoot: bool = input.shoot_pressed or _settle.held_shoot
+	var slap: bool = input.slap_pressed or _settle.held_slap
+	_settle.clear()
 	# Quick pass: dedicated button, fires instantly (no aim state). Checked
 	# before the wrister so the blade target computed above is this tick's, and
 	# returns so a same-tick shoot/slap press can't stack on top.
-	if input.quick_pass_pressed:
+	if quick_pass:
 		_cb.fire_quick_pass.call(input)
 		return
-	if input.shoot_pressed:
+	if shoot:
 		_enter_wrister_aim(skater, input)
-	if input.slap_pressed:
+	if slap:
 		_cb.enter_slapper_charge.call(input)
 
 

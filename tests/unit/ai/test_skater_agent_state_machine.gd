@@ -1420,6 +1420,29 @@ func test_carry_intent_maps_to_matching_press_state() -> void:
 		assert_eq(stub.clear_intent_calls, 1, "commit forces a carrier re-eval")
 
 
+func test_a_settling_catch_holds_the_press() -> void:
+	# Nothing can leave the blade while a hard catch settles, so the bot holds its
+	# committed intent in CARRY instead of pressing into the settle — and presses
+	# the moment it ends.
+	var stub := _stub_carry(AIRoleCarrier.INTENT_PASS, Vector3.ZERO, TEAMMATE_ID)
+	var s := _self_snap(Vector3.ZERO, true)
+	_add_skater(s, TEAMMATE_ID, Vector3(4, 0, 0))
+	sm._intent_max_wait_ticks = 0
+	s.real_carrier_settle_s = 0.1
+	for _n in range(5):
+		sm.dispatch(InputState.new(), s)
+	assert_eq(sm.get_state(), Agent.State.CARRY, "no press while the catch settles")
+	assert_eq(stub.clear_intent_calls, 0)
+	s.real_carrier_settle_s = 0.0
+	var landed: int = -1
+	for _n in range(3):
+		sm.dispatch(InputState.new(), s)
+		if sm.get_state() != Agent.State.CARRY:
+			landed = sm.get_state()
+			break
+	assert_eq(landed, Agent.State.PASS_PRESSED, "presses once settled")
+
+
 func test_carry_dump_intent_commits_and_freezes_target() -> void:
 	# INTENT_DUMP maps to PASS_PRESSED (the reused release path) and the dump
 	# target is captured at commit. Force the timeout branch so the commit lands

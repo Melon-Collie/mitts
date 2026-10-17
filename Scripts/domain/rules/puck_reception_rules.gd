@@ -34,6 +34,20 @@ class_name PuckReceptionRules
 # backswing gesture felt fiddly and unintuitive). The skater's own velocity is
 # a frame correction, not a gesture: it changes what "incoming speed" means,
 # it doesn't reward stick wind-up.
+# League-default reception thresholds (m/s, receiver frame) for readers with no
+# Puck to ask — the bots' pass pricing. The live values are Puck's
+# pickup_max_speed / deflect_min_speed / alignment_receive_bonus.
+const LEAGUE_PICKUP_MAX_M_S: float = 8.0
+const LEAGUE_DEFLECT_MIN_M_S: float = 22.0
+const LEAGUE_ALIGNMENT_BONUS_M_S: float = 8.0
+
+# Settle at the catch ceiling: a pro taking a touch on a feed he only just held.
+const RECEPTION_SETTLE_MAX_S: float = 0.25
+# Blade speed cap while settling — the hands are still soaking the catch, so the
+# blade moves at about a quarter of the league dangle speed (max_blade_speed 10).
+const SETTLE_BLADE_SPEED_M_S: float = 2.5
+
+
 static func should_receive(
 		puck_velocity: Vector3,
 		receiver_velocity: Vector3,
@@ -45,13 +59,39 @@ static func should_receive(
 	var relative_speed: float = relative_velocity.length()
 	if relative_speed <= pickup_max_speed:
 		return true
-	# How head-on the approach is, in the receiver's frame: -relative_dir points
-	# from puck toward the blade; dot with the face normal = squareness. Negative
-	# (puck moving away from the face) clamps to 0, no bonus. relative_speed >
-	# pickup_max_speed here, so the normalize is safe.
-	var alignment: float = maxf(0.0, -relative_velocity.normalized().dot(blade_normal))
-	var threshold: float = deflect_min_speed + alignment_bonus * alignment
+	var threshold: float = deflect_min_speed + alignment_bonus * alignment(relative_velocity, blade_normal)
 	return relative_speed < threshold
+
+
+# How head-on the approach is, in the receiver's frame: -relative_dir points
+# from puck toward the blade; dot with the face normal = squareness. Negative
+# (puck moving away from the face) clamps to 0, no bonus.
+static func alignment(relative_velocity: Vector3, blade_normal: Vector3) -> float:
+	if relative_velocity.length_squared() < 0.000001:
+		return 0.0
+	return maxf(0.0, -relative_velocity.normalized().dot(blade_normal))
+
+
+# Seconds a caught puck ties up the receiver's hands before it can leave the
+# blade again. The catch above is a force limit (blade not blown open, force ∝
+# v²), so the settle is the share of that limit the catch used: nothing below
+# the always-catch speed, the full RECEPTION_SETTLE_MAX_S at the ceiling for
+# this blade angle. Squaring up raises the ceiling, so it shortens the settle
+# exactly as it widens the catch. Pass the same (possibly ceiling-scaled)
+# thresholds should_receive was judged with.
+static func settle_seconds(
+		relative_speed: float,
+		blade_alignment: float,
+		pickup_max_speed: float,
+		deflect_min_speed: float,
+		alignment_bonus: float) -> float:
+	var ceiling: float = deflect_min_speed + alignment_bonus * clampf(blade_alignment, 0.0, 1.0)
+	var floor_sq: float = pickup_max_speed * pickup_max_speed
+	var span: float = ceiling * ceiling - floor_sq
+	if span <= 0.0:
+		return 0.0
+	var used: float = clampf((relative_speed * relative_speed - floor_sq) / span, 0.0, 1.0)
+	return RECEPTION_SETTLE_MAX_S * used
 
 
 # Pure: horizontal unit vector perpendicular to the stick shaft (top_hand →

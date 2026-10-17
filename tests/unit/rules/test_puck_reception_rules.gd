@@ -220,3 +220,54 @@ func test_blade_face_normal_falls_back_when_shaft_degenerate() -> void:
 	var n: Vector3 = PuckReceptionRules.blade_face_normal(
 		Vector3.ZERO, Vector3.ZERO, Vector3(0, 0, 1), Vector3(1, 0, 0))
 	assert_almost_eq(n, Vector3(0, 0, -1), Vector3(0.001, 0.001, 0.001))
+
+
+# ── Settle ───────────────────────────────────────────────────────────────────
+# How long a caught puck ties up the hands: the share of the catch's force limit
+# it used. Properties only; RECEPTION_SETTLE_MAX_S is a feel tunable.
+
+func _settle(speed: float, alignment: float) -> float:
+	return PuckReceptionRules.settle_seconds(speed, alignment, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS)
+
+
+func test_a_pickup_never_settles() -> void:
+	assert_eq(_settle(PICKUP_MAX, 0.0), 0.0)
+	assert_eq(_settle(2.0, 0.0), 0.0)
+
+
+func test_a_catch_at_its_ceiling_settles_longest() -> void:
+	assert_almost_eq(_settle(DEFLECT_MIN, 0.0), PuckReceptionRules.RECEPTION_SETTLE_MAX_S, 1e-6)
+	assert_almost_eq(_settle(DEFLECT_MIN + ALIGN_BONUS, 1.0),
+			PuckReceptionRules.RECEPTION_SETTLE_MAX_S, 1e-6)
+	assert_almost_eq(_settle(60.0, 0.0), PuckReceptionRules.RECEPTION_SETTLE_MAX_S, 1e-6,
+			"capped: past the ceiling there is no catch to settle")
+
+
+func test_a_harder_catch_settles_longer() -> void:
+	var prev: float = -1.0
+	for speed: float in [9.0, 12.0, 15.0, 18.0, 21.0]:
+		var t: float = _settle(speed, 0.0)
+		assert_gt(t, prev, "settle grows with closing speed (%.0f m/s)" % speed)
+		prev = t
+
+
+func test_squaring_up_shortens_the_settle() -> void:
+	# The same alignment that raises the catch ceiling: a squared blade uses less
+	# of its limit on the same feed.
+	assert_lt(_settle(18.0, 1.0), _settle(18.0, 0.5))
+	assert_lt(_settle(18.0, 0.5), _settle(18.0, 0.0))
+
+
+func test_a_stiffer_blade_settles_sooner() -> void:
+	var stiff: float = PuckReceptionRules.settle_seconds(
+			18.0, 0.0, PICKUP_MAX, DEFLECT_MIN * 1.07, ALIGN_BONUS * 1.07)
+	assert_lt(stiff, _settle(18.0, 0.0))
+
+
+func test_alignment_reads_the_approach_against_the_face() -> void:
+	var face := Vector3(-1, 0, 0)
+	assert_almost_eq(PuckReceptionRules.alignment(Vector3(10, 0, 0), face), 1.0, 1e-6)
+	assert_almost_eq(PuckReceptionRules.alignment(Vector3(0, 0, 10), face), 0.0, 1e-6)
+	assert_eq(PuckReceptionRules.alignment(Vector3(-10, 0, 0), face), 0.0,
+			"a puck leaving the face earns no squareness")
+	assert_eq(PuckReceptionRules.alignment(Vector3.ZERO, face), 0.0)

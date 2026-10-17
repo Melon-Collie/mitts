@@ -1767,7 +1767,9 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 
 	# Pre-aim waits for cursor convergence (or timeout) before the press. Body
 	# facing is not gated: the ARC step keeps the cursor inside the blade ROM.
-	if _intended_action != State.CARRY:
+	# A catch still settling holds the press outright: the controller would only
+	# hold it to the settle's end, and a charge counted from here would fire short.
+	if _intended_action != State.CARRY and snapshot.real_carrier_settle_s <= 0.0:
 		# XZ only: the cursor sits at y=0 while _aim_target_for_intent inherits
 		# self_pos.y, so a 3D distance would never converge.
 		var dx: float = _mouse_pos.x - mouse_target.x

@@ -1944,7 +1944,7 @@ func _on_phase_changed_period_buzzer(p: GamePhase.Phase) -> void:
 		SoundManager.play_crowd(SoundManager.Sound.PERIOD_BUZZER)
 
 
-func _on_local_pickup_sound() -> void:
+func _on_local_pickup_sound(_settle_until_units: int) -> void:
 	var record := _registry.get_local() if _registry != null else null
 	if record != null and record.skater != null:
 		SoundManager.play_world(SoundManager.Sound.PUCK_PICKUP, record.skater.global_position, 0.0, 0.05)
@@ -3066,7 +3066,7 @@ func _resolve_skater_peer_id(skater: Skater) -> int:
 	return _registry.resolve_peer_id(skater) if _registry != null else -1
 
 
-func _on_server_puck_picked_up_by(peer_id: int) -> void:
+func _on_server_puck_picked_up_by(peer_id: int, settle_s: float) -> void:
 	# clear_for_grant, not clear(): if a different peer's claim was pending,
 	# NACK it so their optimistic pin rolls back now (covers every
 	# authoritative grant path, including the one-timer catch).
@@ -3092,8 +3092,9 @@ func _on_server_puck_picked_up_by(peer_id: int) -> void:
 	if _possession_tracker != null:
 		_possession_tracker.on_pickup(peer_id)
 	record.controller.on_puck_picked_up_network()
+	var settle_until_units: int = record.controller.arm_reception_settle(settle_s)
 	if not record.is_local:
-		NetworkManager.send_puck_picked_up(peer_id)
+		NetworkManager.send_puck_picked_up(peer_id, settle_until_units)
 	NetworkManager.send_carrier_changed_to_all(peer_id)
 	# NHL delayed-offside: pickup by an offending-team attacker whistles the
 	# play dead. Consume immediately so the faceoff fires before the next
@@ -3911,10 +3912,11 @@ func on_carrier_puck_dropped() -> void:
 		puck_controller.notify_local_puck_dropped()
 
 
-func on_local_player_picked_up_puck() -> void:
+func on_local_player_picked_up_puck(settle_until_units: int) -> void:
 	var record := _registry.get_local() if _registry != null else null
 	if record != null:
 		record.controller.on_puck_picked_up_network()
+		record.controller.adopt_reception_settle(settle_until_units)
 		puck_controller.notify_local_pickup(record.skater)
 
 
@@ -5283,6 +5285,10 @@ func _apply_bot_carrier_reaction_delay(snap: WorldSnapshot, delta: float) -> voi
 		return
 	var real_carrier: int = snap.puck_state.carrier_peer_id
 	snap.real_puck_carrier_peer_id = real_carrier
+	var carrier_record: PlayerRecord = _registry.get_record(real_carrier) \
+			if real_carrier != -1 else null
+	snap.real_carrier_settle_s = carrier_record.controller.reception_settle_remaining_s() \
+			if carrier_record != null else 0.0
 	# StateBufferManager._interpolate_puck returns the live ring-buffer object
 	# directly when the query is at/after the newest sample (the common case for
 	# get_state_delayed(0.0)). Writing the debounced carrier into it would

@@ -31,6 +31,9 @@ var _input_history: Array[InputState] = []
 # Per-tick prediction snapshots keyed by input.host_timestamp.
 var _prediction_history: Array[PredictedState] = []
 const _PREDICTION_HISTORY_CAP: int = _PhysicsConstants.PHYSICS_TICK * 2  # ~2 s, matches the reconcile input cap
+# The reception settle as it stood before a reconcile replay, restored after it:
+# the replay re-runs held presses against the stamps, the live tick owns them.
+var _settle_saved: ReceptionSettle = ReceptionSettle.new()
 # Highest ack (last_processed_host_timestamp) a reconcile has already consumed;
 # gates the stale-ack early-out in reconcile(). Reset wherever
 # _prediction_history is cleared (teleport / dead-puck lock).
@@ -533,6 +536,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# inside the replay loop, so without save/restore each reconcile drains the
 	# unconfirmed window again and the one-timer fires ahead of its own hold.
 	var pre_one_timer_retention_timer: float = _aiming.one_timer_retention_timer
+	_settle_saved.copy_from(_settle)
 	# slapper_charge_timer ticks inside _update_slapper_charge during replay; without
 	# save/restore each reconcile re-ticks the unconfirmed inputs and the timer
 	# inflates O(N) per broadcast, popping the blade above slapper_wind_up_height.
@@ -675,6 +679,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	_sm.shot_dir = pre_shot_dir
 	_aiming.one_timer_window_timer = pre_one_timer_window_timer
 	_aiming.one_timer_retention_timer = pre_one_timer_retention_timer
+	_settle.copy_from(_settle_saved)
 	_aiming.slapper_charge_timer = pre_slapper_charge_timer
 	_aiming.cursor_speed_ema = pre_charge_cursor_speed
 	_aiming.stroke_travel = pre_charge_stroke_travel

@@ -162,16 +162,20 @@ static func meet_point(k: int, t: float) -> Vector3:
 # speed in his frame under the deflect threshold (Puck.deflect_min_speed's
 # domain mirror)? The heading is the walked segment the meet falls in.
 static func catchable(k: int, t: float, recv_vel: Vector3) -> bool:
+	return closing_speed(k, t, recv_vel) < AIActionScoring.TIP_DEFLECT_MIN_SPEED_M_S
+
+
+# The puck's speed in the receiver's frame at the meet.
+static func closing_speed(k: int, t: float, recv_vel: Vector3) -> float:
 	var path: Array[Vector3] = paths[k]
 	var spd: Array[float] = speeds[k]
 	var i: int = clampi(int(ceil(t / STEP_DT)) - 1, 0, STEPS - 1)
 	var from: Vector3 = path[i - 1] if i > 0 else origin
 	var seg := Vector3(path[i].x - from.x, 0.0, path[i].z - from.z)
 	if seg.length_squared() < 0.000001:
-		return true
+		return 0.0
 	var v: Vector3 = seg.normalized() * spd[i]
-	var rel := Vector2(v.x - recv_vel.x, v.z - recv_vel.z)
-	return rel.length() < AIActionScoring.TIP_DEFLECT_MIN_SPEED_M_S
+	return Vector2(v.x - recv_vel.x, v.z - recv_vel.z).length()
 
 
 # Path length up to time `t` — the distance the passer's aim error is spread over.

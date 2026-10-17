@@ -214,7 +214,9 @@ var _skater_getter: Callable = Callable()
 var _team_id_by_skater: Dictionary = {}
 
 # ── Signals (server-side puck events, GameManager listens) ───────────────────
-signal puck_picked_up_by(peer_id: int)
+# `settle_s` is how long the catch ties up the carrier's hands
+# (PuckReceptionRules.settle_seconds).
+signal puck_picked_up_by(peer_id: int, settle_s: float)
 signal puck_released_by_carrier(peer_id: int)
 # `peer_id` is the dispossessed carrier; `stripper_peer_id` is the defender who
 # took the puck (poke / stick-lift / body-check), or -1 when a goalie stripped
@@ -377,9 +379,22 @@ func _track_loose_velocity(delta: float) -> void:
 func apply_lag_comp_pickup(skater: Skater) -> void:
 	if not is_instance_valid(skater) or puck.carrier != null:
 		return
-	skater.trigger_reception_cushion(puck.get_puck_velocity() - skater.velocity)
+	_grant_catch(skater, puck.get_puck_velocity())
+
+
+# Every host grant: the cushion and the settle read the arrival in the receiver's
+# frame, against the same thresholds the catch was judged by.
+func _grant_catch(skater: Skater, puck_vel: Vector3) -> void:
+	var relative_vel: Vector3 = puck_vel - skater.velocity
+	skater.trigger_reception_cushion(relative_vel)
+	var settle_s: float = PuckReceptionRules.settle_seconds(
+			relative_vel.length(),
+			PuckReceptionRules.alignment(relative_vel, skater.get_blade_face_normal(relative_vel)),
+			puck.pickup_max_speed,
+			puck.deflect_min_speed * skater.reception_ceiling_mult,
+			puck.alignment_receive_bonus * skater.reception_ceiling_mult)
 	puck.set_carrier(skater)
-	_on_puck_picked_up(skater)
+	_on_puck_picked_up(skater, settle_s)
 
 
 # Host-only scripted teleports (tutorial staging). Each restarts next tick's
@@ -736,9 +751,7 @@ func _check_interactions() -> void:
 						# stamp — the resolver applied the outcome; no carrier here.
 						pass
 					else:
-						skater.trigger_reception_cushion(puck_vel - skater.velocity)
-						puck.set_carrier(skater)
-						_on_puck_picked_up(skater)
+						_grant_catch(skater, puck_vel)
 				else:
 					puck.apply_blade_deflect(skater)
 				break
@@ -1051,12 +1064,12 @@ func _pin_puck_to_carrier(carrier: Skater, delta: float) -> void:
 # three variants below differ only in how peer_id is sourced (resolve from
 # the skater argument vs. read the cached carrier) and which signal fires.
 # GameManager listens and does the player-registry / RPC work.
-func _on_puck_picked_up(carrier: Skater) -> void:
+func _on_puck_picked_up(carrier: Skater, settle_s: float) -> void:
 	var peer_id: int = _resolve_peer_id(carrier)
 	if peer_id == -1:
 		return
 	_carrier_peer_id = peer_id
-	puck_picked_up_by.emit(peer_id)
+	puck_picked_up_by.emit(peer_id, settle_s)
 
 func _on_puck_released() -> void:
 	var peer_id: int = _carrier_peer_id

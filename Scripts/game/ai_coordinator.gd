@@ -360,6 +360,7 @@ func _stabilize_snapshot(src: WorldSnapshot) -> void:
 	_copy_teammate_ids(src.teammate_ids_by_team, ws.teammate_ids_by_team)
 	_copy_closest(src.closest_to_puck_by_team, ws.closest_to_puck_by_team)
 	ws.real_puck_carrier_peer_id = src.real_puck_carrier_peer_id
+	ws.real_carrier_settle_s = src.real_carrier_settle_s
 	ws.host_timestamp = src.host_timestamp
 	if src.puck_state != null:
 		_worker_puck.copy_from(src.puck_state)

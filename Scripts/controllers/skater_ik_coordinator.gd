@@ -76,8 +76,8 @@ var _native_bottom: RefCounted = null
 # _blade_dangle_vel, the init flag) — only _smoothed_blade_world is mirrored
 # back, because the hand solve below the block reads it.
 var _native_dangle: RefCounted = null
-# The tie state the dangle config was last synced for (the blade cap follows it).
-var _dangle_synced_tied: bool = false
+# The blade cap the dangle config was last synced for.
+var _dangle_synced_cap: float = -1.0
 
 func setup(skater: Skater, controller: SkaterController,
 		skating: SkaterSkatingCoordinator) -> void:
@@ -113,7 +113,7 @@ func invalidate_configs() -> void:
 # configs), so they sync here — covered by the same invalidate_configs moment
 # that rebuilds the config objects on apply_attributes.
 func _sync_dangle_config() -> void:
-	_dangle_synced_tied = _skater != null and _skater.stick_tied
+	_dangle_synced_cap = _blade_speed_cap()
 	if _native_dangle != null:
 		_native_dangle.set_config(
 				_blade_speed_cap(),
@@ -122,10 +122,14 @@ func _sync_dangle_config() -> void:
 
 
 # Two tied sticks push against each other: both blades chase at the tie's speed.
+# Hands still soaking a hard catch move slower too.
 func _blade_speed_cap() -> float:
+	var cap: float = _controller.max_blade_speed
 	if _skater != null and _skater.stick_tied:
-		return minf(_controller.max_blade_speed, StickCheckRules.TIE_BLADE_SPEED_M_S)
-	return _controller.max_blade_speed
+		cap = minf(cap, StickCheckRules.TIE_BLADE_SPEED_M_S)
+	if _controller.reception_settle_remaining_s() > 0.0:
+		cap = minf(cap, PuckReceptionRules.SETTLE_BLADE_SPEED_M_S)
+	return cap
 
 # Drop the smoothed-blade baseline so the next solve re-seeds it deterministically
 # from the first replayed input (the init branch in apply_blade_from_mouse snaps
@@ -237,7 +241,7 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 	#    would drag while skating and, once skating speed exceeds the cap, never
 	#    catch up. So carry the smoothed blade along with the skater's translation
 	#    first, then cap only the residual dangle relative to the player.
-	if _skater.stick_tied != _dangle_synced_tied:
+	if _blade_speed_cap() != _dangle_synced_cap:
 		_sync_dangle_config()
 	if _native_dangle != null:
 		# Native port of the block below (native/src/native_blade_dangle.cpp).

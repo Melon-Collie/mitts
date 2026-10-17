@@ -114,6 +114,34 @@ static func pass_launch_speed(distance: float, max_launch: float,
 			+ 2.0 * GameRules.PUCK_ICE_DECEL_M_S2 * maxf(distance, 0.0))
 	return clampf(launch, GameRules.DEFAULT_WRISTER_POWER_MIN_M_S, max_launch)
 
+
+# Speed (m/s) a feed launched at `launch_speed` from `from` meets a receiver
+# moving at `receiver_vel` at `to`, in his frame: the launch less ice friction
+# over the distance, against his velocity (XZ).
+static func feed_closing_speed(from: Vector3, to: Vector3, launch_speed: float,
+		receiver_vel: Vector3) -> float:
+	var d := Vector2(to.x - from.x, to.z - from.z)
+	var dist: float = d.length()
+	if dist < 0.001:
+		return 0.0
+	var arrival: float = sqrt(maxf(0.0,
+			launch_speed * launch_speed - 2.0 * GameRules.PUCK_ICE_DECEL_M_S2 * dist))
+	var v: Vector2 = d / dist * arrival
+	return Vector2(v.x - receiver_vel.x, v.y - receiver_vel.z).length()
+
+
+# Seconds a receiver's hands are tied settling a feed that meets him at
+# `closing_speed` before he can release it again (PuckReceptionRules
+# .settle_seconds at the league thresholds, scaled by his blade's ceiling lean).
+# `squared`: a bot receiver sets up square on a straight feed; a rim along the
+# boards is met at whatever angle the wall gives, so it reads the any-angle bar.
+static func receiver_settle_s(closing_speed: float, squared: bool,
+		ceiling_mult: float) -> float:
+	return PuckReceptionRules.settle_seconds(closing_speed, 1.0 if squared else 0.0,
+			PuckReceptionRules.LEAGUE_PICKUP_MAX_M_S,
+			PuckReceptionRules.LEAGUE_DEFLECT_MIN_M_S * ceiling_mult,
+			PuckReceptionRules.LEAGUE_ALIGNMENT_BONUS_M_S * ceiling_mult)
+
 # ── Saucer pass ──────────────────────────────────────────────────────────────
 # Pure kinematics of the LOW loft's fixed vertical launch
 # (GameRules.DEFAULT_LOFT_VY_LOW_M_S) under gravity:

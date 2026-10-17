@@ -39,6 +39,9 @@ var tag_up_peers: Dictionary[int, bool] = {}
 # its OWN possession instantly (proprioception — you know the moment the puck
 # is on your stick). -1 = loose.
 var real_puck_carrier_peer_id: int = -1
+# Seconds the real carrier's catch still settles before a shot or pass can
+# leave his blade (ReceptionSettle) — proprioception like the field above.
+var real_carrier_settle_s: float = 0.0
 
 func get_skater_state(peer_id: int) -> SkaterNetworkState:
 	return skater_states.get(peer_id)

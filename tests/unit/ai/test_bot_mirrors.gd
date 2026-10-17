@@ -39,4 +39,14 @@ func test_the_puck_thresholds_the_bots_price() -> void:
 	# arrival, still short of a deflection, makes the receiver give with it.
 	assert_gt(SkaterAgentReception.RECEIVE_GIVE_CEILING_M_S, AIPuckLane.PASS_TARGET_CLOSING_M_S)
 	assert_lt(SkaterAgentReception.RECEIVE_GIVE_CEILING_M_S, puck.deflect_min_speed)
+	# The settle a feed costs its receiver is priced at the league thresholds.
+	assert_eq(PuckReceptionRules.LEAGUE_PICKUP_MAX_M_S, puck.pickup_max_speed)
+	assert_eq(PuckReceptionRules.LEAGUE_DEFLECT_MIN_M_S, puck.deflect_min_speed)
+	assert_eq(PuckReceptionRules.LEAGUE_ALIGNMENT_BONUS_M_S, puck.alignment_receive_bonus)
 	puck.free()
+
+
+func test_settling_hands_are_slower_than_free_ones() -> void:
+	var ctrl: SkaterController = SkaterControllerScript.new()
+	assert_lt(PuckReceptionRules.SETTLE_BLADE_SPEED_M_S, ctrl.max_blade_speed)
+	ctrl.free()

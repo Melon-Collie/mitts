@@ -5,6 +5,7 @@ extends Node
 # Type alias so the subclasses and their callers can write `State.X`.
 const State = SkaterStateMachine.State
 var _sm: SkaterStateMachine = SkaterStateMachine.new()
+var _settle: ReceptionSettle = ReceptionSettle.new()
 
 # ── Movement Tuning ───────────────────────────────────────────────────────────
 # Field meanings and units: SkaterMovementRules.MovementConfig.
@@ -1178,7 +1179,7 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	_cb.update_slapper_charge = _update_slapper_charge
 	_cb.apply_slapper_velocity_drag = _apply_slapper_velocity_drag
 	_cb.apply_block_movement = _apply_block_movement
-	_sm.setup(_cb, _aiming)
+	_sm.setup(_cb, _aiming, _settle)
 	_pose.setup(skater, _sm, _aiming, self, _skating)
 	_skating.setup(skater, _sm, self)
 	# Cosmetic pose (leg gait / head / off-hand IK) now runs at render rate in
@@ -1636,6 +1637,10 @@ func _process_input(input: InputState, delta: float) -> void:
 	# cancel) that would otherwise read as a perpetual dig-in chop, and the
 	# wire octant would inflate them to unit length on remote clients.
 	_self_posing = false  # main live path delegates cosmetics to the render hook
+	# Bots and the host's own player stamp nothing outside a draw; on the host
+	# their inputs are consumed at sim_time, which is the stamp clock.
+	_settle.observe(input.host_timestamp if input.host_timestamp > 0.0
+			else NetworkManager.sim_time())
 	skater.move_intent = input.move_vector \
 			if input.move_vector.length() > move_deadzone else Vector2.ZERO
 	skater.brake_intent = input.brake
@@ -2416,10 +2421,33 @@ func on_puck_picked_up_network() -> void:
 	else:
 		_sm.set_state(State.SKATING_WITH_PUCK)
 
+# Host, right after on_puck_picked_up_network on the grant tick: a hard catch
+# settles before anything can leave the blade. A puck caught into a slapper
+# charge is a one-timer's and never settles. Returns the end stamp the carrier's
+# own client adopts (adopt_reception_settle), 0 for none.
+func arm_reception_settle(seconds: float) -> int:
+	if _sm.get_state() != State.SKATING_WITH_PUCK:
+		_settle.clear()
+		return 0
+	return _settle.arm(seconds)
+
+
+# Carrier's client: the host's end stamp from the pickup event.
+func adopt_reception_settle(until_units: int) -> void:
+	if _sm.get_state() != State.SKATING_WITH_PUCK:
+		return
+	_settle.adopt(until_units)
+
+
+func reception_settle_remaining_s() -> float:
+	return _settle.remaining_s()
+
+
 func on_puck_released_network() -> void:
 	if not has_puck:
 		return
 	has_puck = false
+	_settle.clear()
 	if _sm.get_state() == State.ONE_TIMER_RETENTION:
 		# Poked/lifted off the blade mid-hold. The swing is already committed, so
 		# don't snap out of it — let the hold run down and whiff through the full
@@ -2443,6 +2471,7 @@ func teleport_to(pos: Vector3, facing: Vector2 = Vector2.ZERO) -> void:
 	skater.hit_committed = false
 	_stick_check.reset()
 	skater.stick_check_phase = _stick_check.phase
+	_settle.clear()
 	stagger_timer = 0.0
 	balance_tilt_vel = Vector2.ZERO
 	skater.set_balance_tilt(Vector2.ZERO)

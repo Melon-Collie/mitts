@@ -220,9 +220,12 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		var rotation_time: float = _facing_rotation_time(self_facing_xz,
 				ctx.self_pos, ctx.self_pos + AIRimPass.dirs[rim_k],
 				ctx.self_reach_cone_half_angle, ctx.self_facing_turn_rate)
+		var rim_settle_s: float = AIPuckLane.receiver_settle_s(
+				AIRimPass.closing_speed(rim_k, rim_t, rim_state.velocity),
+				false, _ceiling_mult(rim_caps))
 		var s_rim: float = _pass_ev(ctx, AIRimPass.meet_point(rim_k, rim_t),
 				AIRimPass.paces[rim_k], rim_t,
-				rim_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S,
+				rim_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + rim_settle_s,
 				rim_t + rotation_time, our_goalie, rim_caps, rim_lane, rim_miss,
 				rim_state.velocity, rim_space, floor_ev,
 				AIRimPass.dirs[rim_k], AIRimPass.opp_meet[rim_k])
@@ -399,7 +402,11 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 		_last_flat_variant_lane = lane
 	var receiver_release_t: float = flight_t
 	if not receiver_is_one_timer:
-		receiver_release_t += AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+		receiver_release_t += AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S \
+				+ AIPuckLane.receiver_settle_s(
+						AIPuckLane.feed_closing_speed(
+								pass_origin, receiver, pass_speed, receiver_state.velocity),
+						true, _ceiling_mult(receiver_caps))
 	var rotation_time: float = _facing_rotation_time(
 			self_facing_xz, ctx.self_pos, receiver,
 			ctx.self_reach_cone_half_angle, ctx.self_facing_turn_rate)
@@ -680,10 +687,17 @@ func _developing_outlet_feed(ctx: RoleContext, tm: SkaterNetworkState,
 	var pass_speed: float = AIPuckLane.pass_launch_speed(
 			dist, ctx.self_wrister_shot_speed, ctx.pass_speed_scale)
 	var flight_t: float = clampf(dist / pass_speed, 0.0, PASS_LEAD_MAX_S)
-	# Breakout receivers carry on reception (no one-timer): flight + wrister
-	# charge, as the live pass scoring bills a non-ready receiver.
-	var release_t: float = flight_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+	# Breakout receivers carry on reception (no one-timer): flight, settle and
+	# wrister charge, as the live pass scoring bills a non-ready receiver.
+	var release_t: float = flight_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S \
+			+ AIPuckLane.receiver_settle_s(
+					AIPuckLane.feed_closing_speed(ctx.self_pos, spot, pass_speed, vel),
+					true, _ceiling_mult(receiver_caps))
 	var rotation_time: float = _facing_rotation_time(self_facing_xz, ctx.self_pos, spot,
 			ctx.self_reach_cone_half_angle, ctx.self_facing_turn_rate)
 	return _pass_ev(ctx, spot, pass_speed, flight_t, release_t,
 			flight_t + rotation_time, our_goalie, receiver_caps)
+
+
+static func _ceiling_mult(caps: AISkaterCaps) -> float:
+	return caps.reception_ceiling_mult if caps != null else 1.0
