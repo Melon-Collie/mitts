@@ -8,11 +8,12 @@ class_name FacingRules
 # travel needs real skating speed (engage_*), so a side-step tap stays squared;
 # keeping it holds down to a crawl (hold_*), so a coast keeps its line. It squares
 # to the cursor when the cursor falls behind the travel cone (skating backward
-# while watching the play) and when braking. Either way round the target can sit
-# behind the body, and the body turns round to it (turn_round_angle). The stance
-# squares to the cursor too, but only below stance_square_max_speed — opening up
-# to a man or a pass is a low-speed move, and at speed squaring would swing the
-# hips off the line and turn the stride into a shuffle.
+# while watching the play) and when braking. A moving skater turns round to a
+# target behind the body (turn_round_angle); only a standing one is held off it
+# by the unreachable-wedge freeze. The stance squares to the cursor too, but only
+# below stance_square_max_speed — opening up to a man or a pass is a low-speed
+# move, and at speed squaring would swing the hips off the line and turn the
+# stride into a shuffle.
 #
 # Stateless: the band and the cone's hysteresis are read off whichever of the two
 # the body faces now, so reconcile replay agrees. All vectors are world XZ.
@@ -35,25 +36,21 @@ class Config:
 class Result:
 	var target: Vector2 = Vector2.ZERO
 	# The cursor has fallen behind the travel cone of a moving skater: facing turns
-	# round to it, even past the unreachable-wedge freeze — that turn is how a
-	# skater goes to skating backward.
+	# round to it — that turn is how a skater goes to skating backward.
 	var turning_to_cursor_behind: bool = false
-	# Facing has taken up some of the travel: the target is where the skating goes,
-	# not the cursor, so the unreachable-wedge freeze (which keeps the body off a
-	# cursor it cannot reach) does not hold it. A backward skater whose cursor comes
-	# round ahead turns to skate forward this way.
-	var taking_up_travel: bool = false
+	# Still moving (past hold_min_speed, braking included): a skater can pivot or
+	# step round to anything, so the unreachable-wedge freeze holds only one
+	# standing still.
+	var free_to_turn_round: bool = false
 
 
 static func solve(out: Result, facing: Vector2, cursor_dir: Vector2, velocity: Vector2,
 		brake: bool, stance: bool, cfg: Config) -> void:
 	out.target = cursor_dir
 	out.turning_to_cursor_behind = false
-	out.taking_up_travel = false
-	if brake:
-		return
 	var speed: float = velocity.length()
-	if speed < 0.001:
+	out.free_to_turn_round = speed > cfg.hold_min_speed
+	if brake or speed < 0.001:
 		return
 	var travel: Vector2 = velocity / speed
 	var following: bool = absf(facing.angle_to(travel)) <= absf(facing.angle_to(cursor_dir))
@@ -72,7 +69,6 @@ static func solve(out: Result, facing: Vector2, cursor_dir: Vector2, velocity: V
 	if absf(travel.angle_to(cursor_dir)) > cone:
 		out.turning_to_cursor_behind = true
 		return
-	out.taking_up_travel = true
 	out.target = cursor_dir.slerp(travel, share)
 
 

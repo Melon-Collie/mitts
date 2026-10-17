@@ -239,8 +239,8 @@ func apply_facing(input: InputState, delta: float) -> void:
 			# cone, regardless of side: an unlock tied to the side it left from
 			# strands facing when the mouse wraps round. Snap-prevention on wraps
 			# lives in the blade speed cap (SkaterIKCoordinator), not in this lock.
-			# A moving skater turns round instead — to a cursor behind the travel
-			# (into skating backward) or to the travel itself (back out of it).
+			# Only a standing skater is held: a moving one turns round instead
+			# (FacingRules.Result.free_to_turn_round).
 			var cursor_dir: Vector2 = to_mouse.normalized()
 			FacingRules.solve(_facing_rule, facing, cursor_dir,
 					Vector2(_skater.velocity.x, _skater.velocity.z), input.brake,
@@ -249,8 +249,7 @@ func apply_facing(input: InputState, delta: float) -> void:
 			var mouse_body_angle: float = facing.angle_to(cursor_dir)
 			var ik_gate: float = deg_to_rad(_controller.rom_backhand_angle_max_deg + _controller.upper_body_max_twist_deg)
 			var behind_gate: bool = abs(mouse_body_angle) >= ik_gate
-			var turns_round: bool = _facing_rule.turning_to_cursor_behind \
-					or _facing_rule.taking_up_travel
+			var turns_round: bool = _facing_rule.free_to_turn_round
 			if behind_gate and not turns_round:
 				ik_locked_side = int(sign(mouse_body_angle))
 			else:

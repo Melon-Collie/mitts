@@ -112,6 +112,27 @@ func test_a_backward_skater_turns_forward_on_the_cursors_side() -> void:
 	assert_lt(widest_right, 0.2, "and never round the right")
 
 
+func test_a_slow_backward_skater_turns_forward_on_a_flick() -> void:
+	_controller._pose.facing = Vector2(BEHIND.x, BEHIND.z)
+	_skater.set_facing(Vector2(BEHIND.x, BEHIND.z))
+	_skate(AHEAD, 1.0, BEHIND, 30)
+	_skate(AHEAD, 1.0, AHEAD, 120)
+	assert_lt(_facing_off(AHEAD), 20.0, "below the engage band the body still comes round")
+
+
+func test_a_stop_turns_round_to_a_cursor_behind() -> void:
+	_skate(AHEAD, 6.0, AHEAD, 30, Vector2(0.0, -1.0))
+	for _i: int in 60:
+		_skater.velocity = AHEAD * 4.0
+		var input := InputState.new()
+		input.brake = true
+		input.mouse_world_pos = _skater.global_position + BEHIND * 6.0
+		input.mouse_world_pos.y = 0.0
+		input.delta = DT
+		_controller._process_input(input, DT)
+	assert_lt(_facing_off(BEHIND), 20.0, "stopping and looking back turns the body to go back")
+
+
 func test_a_cursor_behind_a_standing_skater_still_freezes_facing() -> void:
 	_skate(AHEAD, 0.0, AHEAD, 30)
 	_skate(AHEAD, 0.0, BEHIND, 120)

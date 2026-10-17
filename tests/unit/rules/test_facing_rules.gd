@@ -77,16 +77,20 @@ func test_the_stance_squares_only_when_slow() -> void:
 func test_a_backward_skater_takes_up_the_travel_ahead() -> void:
 	_solve(BEHIND, AHEAD, AHEAD * 6.0)
 	assert_almost_eq(_off(AHEAD), 0.0, 0.01)
-	assert_true(_out.taking_up_travel, "the target is the travel, so the wedge freeze lets go")
+	assert_true(_out.free_to_turn_round)
+
+
+func test_only_a_standing_skater_is_held_off_a_target_behind() -> void:
 	_solve(BEHIND, AHEAD.rotated(deg_to_rad(30.0)), AHEAD * 1.0)
-	assert_false(_out.taking_up_travel, "below the engage band the target is the cursor")
-	_solve(BEHIND, AHEAD, Vector2.ZERO)
-	assert_false(_out.taking_up_travel)
-
-
-func test_a_cursor_behind_the_travel_is_not_taking_it_up() -> void:
-	_solve(AHEAD, BEHIND, AHEAD * 6.0)
-	assert_false(_out.taking_up_travel)
+	assert_true(_out.free_to_turn_round, "a slow skate below the engage band still turns")
+	_solve(AHEAD, BEHIND, AHEAD * 6.0, true)
+	assert_true(_out.free_to_turn_round, "so does a stop")
+	_solve(AHEAD, BEHIND, AHEAD * 2.0, false, true)
+	assert_true(_out.free_to_turn_round, "and the stance when slow")
+	_solve(AHEAD, BEHIND, AHEAD * 0.3)
+	assert_false(_out.free_to_turn_round, "nearly stopped is standing")
+	_solve(AHEAD, BEHIND, Vector2.ZERO)
+	assert_false(_out.free_to_turn_round)
 
 
 func test_turning_round_goes_the_cursors_way() -> void:
