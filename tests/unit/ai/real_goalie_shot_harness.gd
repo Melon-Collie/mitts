@@ -56,6 +56,11 @@ var last_trapped: bool = false
 # Reused per-march scratch (allocation-free like the production loop).
 var _scratch: SweptDiscOBB.Result = SweptDiscOBB.Result.new()
 var _contact: GoalieContactDetector.Contact = GoalieContactDetector.Contact.new()
+# Each collision part's world velocity over the last _tick_goalie, index-matched
+# to Goalie.get_collision_parts. The goalie's own estimate needs consecutive
+# physics frames, which no instrument advances, so it would read zero.
+var _part_origins := PackedVector3Array()
+var _part_vels := PackedVector3Array()
 var _frame: PuckGeometryCollision.Result = PuckGeometryCollision.Result.new()
 var _tick: PuckAuthorityRules.TickResult = PuckAuthorityRules.TickResult.new()
 
@@ -670,7 +675,7 @@ func fire_tracking_rebound(shooter: Vector3, aim: Vector3, loft_level: int,
 		var prev: Vector3 = pos
 		_puck.global_position = pos
 		_puck.linear_velocity = vel
-		_ctrl._physics_process(DT)
+		_tick_goalie()
 		# READ THE GOALIE BACK before integrating. He plays the puck through the
 		# same API the host drive honours — apply_goalie_sweep writes
 		# linear_velocity, cover and the glove hold set motion_pinned — so an
@@ -703,7 +708,7 @@ func fire_tracking_rebound(shooter: Vector3, aim: Vector3, loft_level: int,
 			# gated on the face he is presenting.
 			var fwd: Vector3 = -g3.global_transform.basis.z if g3 != null else Vector3.ZERO
 			GoalieSaveRules.resolve_contact(
-					vel, part, _contact.normal, _save_res, fwd)
+					vel, part, _contact.normal, _save_res, fwd, _struck_part_velocity())
 			if contact_parts.size() == 1:
 				last_trapped = _save_res.trapped
 			vel = _save_res.velocity
@@ -946,3 +951,34 @@ func _goalie_can_still_play(puck_pos: Vector3, puck_vel: Vector3) -> bool:
 	if puck_vel.length() > _ctrl.clear_max_puck_speed:
 		return false
 	return _goalie.global_position.distance_to(puck_pos) <= _ctrl.clear_reach
+
+
+# One controller tick, measuring how far each collision part moved through it:
+# a pad moving into the puck hits it as Puck._physics_process sees it.
+func _tick_goalie() -> void:
+	var parts: Array[CollisionShape3D] = (_goalie as Goalie).get_collision_parts()
+	_part_origins.resize(parts.size())
+	for i: int in parts.size():
+		_part_origins[i] = parts[i].global_transform.origin
+	_ctrl._physics_process(DT)
+	_part_vels.resize(parts.size())
+	for i: int in parts.size():
+		_part_vels[i] = (parts[i].global_transform.origin - _part_origins[i]) / DT
+
+
+# The velocity of the part _contact struck: its body's collision shape nearest
+# the contact point.
+func _struck_part_velocity() -> Vector3:
+	var g: Goalie = _goalie as Goalie
+	var parts: Array[CollisionShape3D] = g.get_collision_parts()
+	var bodies: Array[Node] = g.get_collision_part_bodies()
+	var best: int = -1
+	var best_d2: float = INF
+	for i: int in mini(parts.size(), _part_vels.size()):
+		if bodies[i] != _contact.part:
+			continue
+		var d2: float = parts[i].global_transform.origin.distance_squared_to(_contact.point)
+		if d2 < best_d2:
+			best_d2 = d2
+			best = i
+	return _part_vels[best] if best >= 0 else Vector3.ZERO
