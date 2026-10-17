@@ -46,10 +46,13 @@ extends GutTest
 #
 # The retreat floor (AIRoleRushD.set_retreat_floor) stops the ride carrying a
 # defender inside the gate with a gap while he is still in front of the carrier,
-# and lets him ride the carrier in once he is draped on him. It reads 0.6 m/s at
-# the meet, 1/35 over the lunge bar, 0.7 m mean / 3.7 m worst excursion and
-# 2.76 m of separation: he MEETS the carrier rather than retreating in front of
-# him, which is a contest, not a lunge.
+# and lets him ride the carrier in once he is draped on him.
+#
+# Each rush is measured until the puck leaves the carrier. Today 32 of 35
+# carriers shoot from inside the zone, 6-14 m out, before the defender reaches
+# them (2 are stripped, 1 still carries at the horizon), so the meet is the
+# release: 0.0 m/s up-ice, 0/35 over the lunge bar, 0.3 m mean / 1.2 m worst
+# excursion and 3.89 m of separation.
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 
@@ -86,8 +89,14 @@ func _rush(d_start: Vector3, carrier_start: Vector3) -> Dictionary:
 	var max_net_dist: float = d_start.distance_to(net)
 	var min_sep: float = INF
 	var up_ice_at_meet: float = 0.0
+	var ended: String = "carry"
 	for _t: int in int(SECS / DT):
 		duel.step()
+		# The rush is over once the puck leaves him: what follows is a rebound or
+		# a loose-puck race, not a gap.
+		if duel.carrier_id != 1:
+			ended = "strip" if duel.strips > 0 else "release"
+			break
 		var dman: Object = duel._skater(2)
 		var car: Object = duel._skater(1)
 		max_net_dist = maxf(max_net_dist, dman.pos.distance_to(net))
@@ -98,7 +107,7 @@ func _rush(d_start: Vector3, carrier_start: Vector3) -> Dictionary:
 			# momentum he has to reverse before he can defend anything.
 			up_ice_at_meet = maxf(dman.vel.dot((dman.pos - net).normalized()), 0.0)
 	return {"up_ice": up_ice_at_meet, "sep": min_sep,
-			"excursion": max_net_dist - d_start.distance_to(net)}
+			"excursion": max_net_dist - d_start.distance_to(net), "ended": ended}
 
 
 func test_gap_defender_does_not_charge_a_neutral_zone_rush() -> void:
@@ -108,6 +117,7 @@ func test_gap_defender_does_not_charge_a_neutral_zone_rush() -> void:
 	var exc_sum: float = 0.0
 	var sep_sum: float = 0.0
 	var worst_exc: float = 0.0
+	var ended: Dictionary = {"carry": 0, "strip": 0, "release": 0}
 	var n: int = 0
 	for dz: float in [-22.0, -20.0, -18.0, -16.0, -14.0, -12.0, -10.0]:
 		var row: String = "  D z=%6.1f :" % dz
@@ -121,6 +131,7 @@ func test_gap_defender_does_not_charge_a_neutral_zone_rush() -> void:
 			exc_sum += r["excursion"]
 			sep_sum += r["sep"]
 			worst_exc = maxf(worst_exc, r["excursion"])
+			ended[r["ended"]] += 1
 			var tag: String = "z%.0f/x%.0f" % [dz, cx]
 			if r["up_ice"] > LUNGE_M_S:
 				lunges.append(tag)
@@ -131,6 +142,8 @@ func test_gap_defender_does_not_charge_a_neutral_zone_rush() -> void:
 	gut.p("  → mean up-ice at meet %.1f m/s | over the lunge bar %d/%d | mean excursion %.1f m | worst %.1f m | mean separation %.2f m" % [
 			up_sum / float(n), lunges.size(), n, exc_sum / float(n), worst_exc,
 			sep_sum / float(n)])
+	gut.p("  → rushes ended: still carrying %d | stripped %d | puck released %d" % [
+			ended["carry"], ended["strip"], ended["release"]])
 
 	# The aggregate is the assertion: a defender meeting the rush with some speed
 	# on is ordinary gap control (he closed the last metres as the budget opened
