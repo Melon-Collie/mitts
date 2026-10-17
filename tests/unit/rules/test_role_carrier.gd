@@ -230,7 +230,7 @@ func _decided(ctx: RoleContext) -> AIRoleCarrier:
 func _set_keeper(ctx: RoleContext) -> RoleContext:
 	var g := GoalieNetworkState.new()
 	g.position_z = -GameRules.GOAL_LINE_Z + 1.3
-	ctx.snapshot.goalie_states[1 - TEAM_ID] = g
+	_place_keeper(ctx, g)
 	return ctx
 
 
@@ -463,7 +463,7 @@ func test_carrier_in_ozone_never_passes_out_to_a_neutral_zone_teammate() -> void
 			[3, 1, Vector3(0, 0, -15)],
 	]
 	var ctx_in: RoleContext = _make_ctx(self_pos, skaters_in)
-	ctx_in.snapshot.goalie_states[1 - TEAM_ID] = g
+	_place_keeper(ctx_in, g)
 	var c2 := AIRoleCarrier.new()
 	c2.decide(ctx_in)
 	assert_gt(c2.debug_pass_score, AIRoleCarrier.PASS_MIN_VALUE,
@@ -535,7 +535,7 @@ func _entry_ctx(body_z: float, skaters_extra: Array) -> RoleContext:
 	ctx.snapshot.puck_state.position = self_pos + Vector3(0, 0, -1.1)
 	var g := GoalieNetworkState.new()
 	g.position_z = -GameRules.GOAL_LINE_Z + 1.0
-	ctx.snapshot.goalie_states[1 - TEAM_ID] = g
+	_place_keeper(ctx, g)
 	return ctx
 
 
@@ -655,7 +655,7 @@ func _fresh_entry_keeper_ctx() -> RoleContext:
 	var ctx := _make_ctx(Vector3(0, 0, -9))
 	var g := GoalieNetworkState.new()
 	g.position_z = -24.65
-	ctx.snapshot.goalie_states[1 - TEAM_ID] = g
+	_place_keeper(ctx, g)
 	return ctx
 
 
@@ -666,7 +666,7 @@ func _head_on_drive_ctx(dist: float) -> RoleContext:
 	ctx.self_velocity = Vector3(0.0, 0.0, -6.0)
 	var g := GoalieNetworkState.new()
 	g.position_z = -GameRules.GOAL_LINE_Z + 1.0
-	ctx.snapshot.goalie_states[1 - TEAM_ID] = g
+	_place_keeper(ctx, g)
 	return ctx
 
 
@@ -697,7 +697,7 @@ func _beaten_keeper_ctx() -> RoleContext:
 	var lagged := GoalieNetworkState.new()
 	lagged.position_x = 0.7
 	lagged.position_z = -GameRules.GOAL_LINE_Z + 0.9
-	ctx.snapshot.goalie_states[1 - TEAM_ID] = lagged
+	_place_keeper(ctx, lagged)
 	return ctx
 
 
@@ -717,7 +717,7 @@ func test_mid_cut_hold_never_out_prices_the_same_instants_fire() -> void:
 		var g := GoalieNetworkState.new()
 		g.position_x = gx
 		g.position_z = -GameRules.GOAL_LINE_Z + 2.0
-		ctx.snapshot.goalie_states[1 - TEAM_ID] = g
+		_place_keeper(ctx, g)
 		var c := AIRoleCarrier.new()
 		c.decide(ctx)
 		assert_gt(c.debug_shoot_score, 0.3,
@@ -774,7 +774,20 @@ func _squared_goalie(self_pos: Vector3, net: Vector3, depth: float) -> GoalieNet
 	var gs := GoalieNetworkState.new()
 	gs.position_x = g.x
 	gs.position_z = g.z
+	_face(gs, self_pos)
 	return gs
+
+
+# Turns `g` to face `at`, as the live keeper turns to his threat.
+func _face(g: GoalieNetworkState, at: Vector3) -> void:
+	g.rotation_y = atan2(-(at.x - g.position_x), -(at.z - g.position_z))
+
+
+# The opposing keeper at `ctx`, facing the puck.
+func _place_keeper(ctx: RoleContext, g: GoalieNetworkState) -> void:
+	_face(g, ctx.snapshot.puck_state.position if ctx.snapshot.puck_state != null
+			else ctx.self_pos)
+	ctx.snapshot.goalie_states[1 - TEAM_ID] = g
 
 
 # ─── where the shot is held (see AIRoleCarrier "Where the shot is held") ─────
@@ -786,7 +799,7 @@ func _backhand_side_keeper_ctx() -> RoleContext:
 	var g := GoalieNetworkState.new()
 	g.position_x = -0.8
 	g.position_z = -25.0
-	ctx.snapshot.goalie_states[1 - TEAM_ID] = g
+	_place_keeper(ctx, g)
 	return ctx
 
 
@@ -796,7 +809,7 @@ func _tuck_ctx() -> RoleContext:
 	var g := GoalieNetworkState.new()
 	g.position_x = 0.85
 	g.position_z = -26.1
-	ctx.snapshot.goalie_states[1 - TEAM_ID] = g
+	_place_keeper(ctx, g)
 	return ctx
 
 
@@ -976,7 +989,7 @@ func test_an_obvious_shot_beats_the_settle_doubt_outright() -> void:
 	var g := GoalieNetworkState.new()
 	g.position_x = 1.2
 	g.position_z = -GameRules.GOAL_LINE_Z + 0.5
-	ctx.snapshot.goalie_states[1 - TEAM_ID] = g
+	_place_keeper(ctx, g)
 	ctx.settle_penalty_frac = 0.6
 	ctx.settle_penalty_tau_s = 0.3
 	var c := AIRoleCarrier.new()
@@ -1204,7 +1217,7 @@ func _ctx_with_finisher(fin_pos: Vector3, ready: bool,
 	var dir: Vector3 = (self_pos - net).normalized()
 	g.position_x = net.x + dir.x * 1.3
 	g.position_z = net.z + dir.z * 1.3
-	ctx.snapshot.goalie_states[1 - TEAM_ID] = g
+	_place_keeper(ctx, g)
 	return ctx
 
 
@@ -1268,7 +1281,7 @@ func test_goalie_motion_blind_reads_the_keeper_as_always_set() -> void:
 	var gs := GoalieNetworkState.new()
 	gs.position_x = -2.5                          # ~2.5 m off the square line
 	gs.position_z = OPP_NET_Z + 1.2
-	ctx.snapshot.goalie_states[1 - TEAM_ID] = gs
+	_place_keeper(ctx, gs)
 	var carrier := AIRoleCarrier.new()
 	assert_gt(AICarrierField.goalie_unsettled_at(ctx, 0.2, self_pos), 0.0,
 			"an off-square keeper on a short release reads unsettled")
@@ -1359,7 +1372,7 @@ func _fresh_entry_finisher_ctx() -> RoleContext:
 	var g := GoalieNetworkState.new()
 	g.position_x = 0.45
 	g.position_z = -26.65 + 1.3
-	ctx.snapshot.goalie_states[1 - TEAM_ID] = g
+	_place_keeper(ctx, g)
 	var brain := TeamBrain.new(TEAM_ID, ctx.team_id_by_peer)
 	brain.slot_assignments[2] = AIRoleSlots.Slot.FINISHER
 	brain.slot_assignments[3] = AIRoleSlots.Slot.SUPPORT
@@ -1661,7 +1674,7 @@ func test_sharp_angle_shot_into_a_vh_seal_is_never_worth_firing() -> void:
 	g_vh.position_x = 0.85                    # parked at the +x post
 	g_vh.position_z = -26.55                  # post-seal depth ~0.10
 	g_vh.state_enum = GoalieStateMachine.State.VH_LEFT as int   # seals +x here
-	ctx_vh.snapshot.goalie_states[1 - TEAM_ID] = g_vh
+	_place_keeper(ctx_vh, g_vh)
 	var vh := AIRoleCarrier.new()
 	vh.decide(ctx_vh)
 	assert_lt(vh.debug_shoot_score, 0.10,
@@ -1805,7 +1818,7 @@ func test_no_shot_is_even_scored_from_outside_the_zone() -> void:
 	var home := GoalieNetworkState.new()
 	home.position_x = 0.0
 	home.position_z = OPP_NET_Z + 1.0                # keeper home in his crease
-	ctx.snapshot.goalie_states[1 - TEAM_ID] = home
+	_place_keeper(ctx, home)
 	var c := AIRoleCarrier.new()
 	c.decide(ctx)
 	assert_lt(c.debug_shoot_score, 0.0,
@@ -1816,7 +1829,7 @@ func test_no_shot_is_even_scored_from_outside_the_zone() -> void:
 	# Even ordered to shoot by a teammate's smart ping, which biases the shot
 	# score: the bias multiplies a score that was never computed.
 	var pinged := _make_ctx(self_pos, [[1, TEAM_ID, self_pos]])
-	pinged.snapshot.goalie_states[1 - TEAM_ID] = home
+	_place_keeper(pinged, home)
 	pinged.ping_shoot_active = true
 	var cp := AIRoleCarrier.new()
 	cp.decide(pinged)
@@ -1830,7 +1843,7 @@ func test_no_shot_is_even_scored_from_outside_the_zone() -> void:
 	var pulled := GoalieNetworkState.new()
 	pulled.position_x = 0.0
 	pulled.position_z = 0.0                          # off for an extra attacker
-	empty.snapshot.goalie_states[1 - TEAM_ID] = pulled
+	_place_keeper(empty, pulled)
 	var ce := AIRoleCarrier.new()
 	ce.decide(empty)
 	assert_gt(ce.debug_shoot_score, 0.0,
@@ -2246,7 +2259,7 @@ func test_in_front_shot_still_scores_through_the_gate() -> void:
 	var g := GoalieNetworkState.new()
 	g.position_x = 0.75                                              # beaten to the +x side
 	g.position_z = net.z + 1.3
-	ctx.snapshot.goalie_states[1 - TEAM_ID] = g
+	_place_keeper(ctx, g)
 	var c := AIRoleCarrier.new()
 	c.decide(ctx)
 	assert_gt(c.debug_shoot_score, 0.0,
@@ -2566,7 +2579,7 @@ func test_a_down_keeper_is_priced_down_only_for_a_shot_before_he_can_rise() -> v
 	var g := GoalieNetworkState.new()
 	g.position_z = -GameRules.GOAL_LINE_Z + 0.6
 	g.state_enum = GoalieStateMachine.State.BUTTERFLY as int
-	ctx.snapshot.goalie_states[1 - TEAM_ID] = g
+	_place_keeper(ctx, g)
 	var c := AIRoleCarrier.new()
 	c._field.fill(ctx)
 	assert_eq(c._field.keeper_stance_at(0.0), AIShotOdds.Stance.DOWN, "down now")

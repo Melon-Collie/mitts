@@ -627,5 +627,7 @@ func _build_snapshot() -> WorldSnapshot:
 			if real is Vector3:
 				g.position_x = real.x
 				g.position_z = real.z
+		# Facing the puck, as a live keeper turns to it.
+		g.rotation_y = atan2(-(puck_pos.x - g.position_x), -(puck_pos.z - g.position_z))
 		snap.goalie_states[tid] = g
 	return snap

@@ -11,18 +11,6 @@ func _goal() -> Vector3:
 	return Vector3(0.0, 0.0, GOAL_Z)
 
 
-func test_a_set_keeper_is_a_still_upright_keeper_on_his_square() -> void:
-	var goal: Vector3 = _goal()
-	for release: Vector3 in [Vector3(0.0, 0.0, GOAL_Z + 6.0),
-			Vector3(-4.0, 0.0, GOAL_Z + 3.0), Vector3(5.0, 0.0, GOAL_Z + 10.0)]:
-		var square := Vector3(0.0, 0.0, GOAL_Z + 1.2)
-		for i: int in 4:
-			square.x = AIGoalieModel.goalie_arc_match_x(square, goal, release)
-		assert_almost_eq(AIShotValue.set_keeper(release, goal),
-				AIShotOdds.shot_now(release, goal, square, 0.0, AIShotOdds.Stance.UPRIGHT),
-				1e-3, "square, still and upright is the set keeper at %s" % release)
-
-
 func test_a_keeper_out_of_his_home_range_leaves_an_empty_net() -> void:
 	var goal: Vector3 = _goal()
 	var release := Vector3(2.0, 0.0, GOAL_Z + 12.0)

@@ -45,6 +45,7 @@ func _snapshot(pos: Vector3, vel: Vector3, facing: Vector2,
 		var g := GoalieNetworkState.new()
 		g.position_x = 0.0
 		g.position_z = (1.0 if tid == 0 else -1.0) * (GameRules.GOAL_LINE_Z - 0.8)
+		g.rotation_y = atan2(-(pos.x - g.position_x), -(pos.z - g.position_z))
 		snap.goalie_states[tid] = g
 	return snap
 

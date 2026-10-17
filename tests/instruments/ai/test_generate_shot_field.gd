@@ -26,9 +26,10 @@ const OUT_PATH: String = "res://Scripts/domain/ai/generated/shot_field_data.gd"
 const SHARD_PATH: String = "user://shot_field_shard_%d.txt"
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 # Lateral and metres-out release grid, in the frame of the net at GOAL_Z.
-# Densest near the net, where the goalie's open set changes fastest.
+# Densest near the net, where the goalie's open set changes fastest. The first
+# row is on the goal line's doorstep, where he seals the post at a sharp angle.
 const SPOT_X: Array[float] = [-8.0, -6.0, -4.0, -2.0, 0.0, 2.0, 4.0, 6.0, 8.0]
-const SPOT_FWD: Array[float] = [1.5, 2.5, 3.5, 4.5, 6.0, 7.5, 9.5, 12.0, 15.0]
+const SPOT_FWD: Array[float] = [0.6, 1.5, 2.5, 3.5, 4.5, 6.0, 7.5, 9.5, 12.0, 15.0]
 const DEKE_ACROSS_M: float = 2.0
 # Signed lateral offsets of the passer from the receiver, and feed paces.
 const FEED_OFFSETS_M: Array[float] = [-6.0, -3.5, -1.5, 1.5, 3.5, 6.0]

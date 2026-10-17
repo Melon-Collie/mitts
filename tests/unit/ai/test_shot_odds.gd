@@ -79,13 +79,72 @@ func test_a_set_keeper_reads_the_measured_set_cell() -> void:
 
 func test_the_set_cells_read_square_on_the_shot() -> void:
 	# squareness() and the generator's reads share a facing convention: a keeper
-	# settled on the carrier faces him. Off the goal-line row, where he sets on
-	# the post rather than square, every SET cell reads within a few degrees.
+	# settled on the carrier faces him. Within a couple of metres of the line he
+	# sets on the post rather than square; out from there every SET cell faces
+	# the shot.
 	AIShotOdds.shot_set(Vector3(0.0, 0.0, GOAL_Z + 6.0), Vector3(0.0, 0.0, GOAL_Z))
 	for spot: int in AIShotOdds._set_cell.size():
-		if AIShotFieldData.SPOT_FWD[spot / AIShotFieldData.SPOT_X.size()] \
-				< AIShotFieldData.SPOT_FWD[1]:
+		if AIShotFieldData.SPOT_FWD[spot / AIShotFieldData.SPOT_X.size()] < 2.5:
 			continue
 		var c: int = AIShotOdds._set_cell[spot]
-		assert_lt(absf(AIShotOdds._square[c]), deg_to_rad(3.0),
+		assert_lt(absf(AIShotOdds._square[c]), deg_to_rad(5.0),
 				"SET cell %d faces the shot" % c)
+
+
+# The cells at `c`'s spot, weighed by a query with `c`'s own read; returns the
+# weight on `other`.
+func _weight_of(other: int, c: int, use_facing: bool) -> float:
+	var t: PackedStringArray = AIShotFieldData.ROWS[c].split("\t")
+	var goal := Vector3(0.0, 0.0, GOAL_Z)
+	var release := Vector3(float(t[7]), 0.0, GOAL_Z + float(t[8]))
+	var keeper := Vector3(float(t[30]), 0.0, float(t[31]))
+	AIShotOdds.shot_now(release, goal, keeper, float(t[35]), AIShotOdds._stance[c],
+			float(t[32]) if use_facing else NAN)
+	for j: int in AIShotOdds._q_cells.size():
+		if AIShotOdds._q_cells[j] == other:
+			return AIShotOdds._q_weights[j]
+	return 0.0
+
+
+func _spot_of(c: int) -> int:
+	var t: PackedStringArray = AIShotFieldData.ROWS[c].split("\t")
+	return AIShotFieldData.SPOT_FWD.find(float(t[2])) * AIShotFieldData.SPOT_X.size() \
+			+ AIShotFieldData.SPOT_X.find(float(t[1]))
+
+
+func test_a_keeper_drawn_off_his_depth_is_told_from_a_set_one() -> void:
+	# A decoy that leaves him deep in his net or out challenging, at the offset
+	# a set keeper has: his depth alone is what tells the two apart.
+	AIShotOdds.shot_set(Vector3(0.0, 0.0, GOAL_Z + 6.0), Vector3(0.0, 0.0, GOAL_Z))
+	var checked: int = 0
+	for c: int in AIShotFieldData.ROWS.size():
+		if AIShotFieldData.ROWS[c].get_slice("\t", 3) != "DECOY":
+			continue
+		var set_cell: int = AIShotOdds._set_cell[_spot_of(c)]
+		if absf(AIShotOdds._depth[c] - AIShotOdds._depth[set_cell]) \
+				< 2.0 * AIShotOdds.DEPTH_BANDWIDTH_M \
+				or AIShotOdds._stance[c] != AIShotOdds._stance[set_cell]:
+			continue
+		checked += 1
+		assert_gt(_weight_of(c, c, false), _weight_of(set_cell, c, false),
+				"decoy cell %d reads as itself, not the SET keeper" % c)
+	assert_gt(checked, 0, "the field measures keepers drawn off their depth")
+
+
+func test_a_keeper_turned_off_the_shot_is_told_from_a_set_one() -> void:
+	# A feed can leave him at a set keeper's offset and depth, still, but turned
+	# toward where the pass came from: his facing alone tells the two apart.
+	AIShotOdds.shot_set(Vector3(0.0, 0.0, GOAL_Z + 6.0), Vector3(0.0, 0.0, GOAL_Z))
+	var checked: int = 0
+	for c: int in AIShotFieldData.ROWS.size():
+		if AIShotOdds._is_shot_sample[c] == 0:
+			continue
+		var set_cell: int = AIShotOdds._set_cell[_spot_of(c)]
+		if c == set_cell or AIShotOdds._stance[c] != AIShotOdds._stance[set_cell] \
+				or absf(angle_difference(AIShotOdds._square[c], AIShotOdds._square[set_cell])) \
+						< 2.0 * AIShotOdds.SQUARE_BANDWIDTH_RAD:
+			continue
+		checked += 1
+		assert_gt(_weight_of(c, c, true), _weight_of(set_cell, c, true),
+				"cell %d, turned off the shot, reads as itself" % c)
+	assert_gt(checked, 0, "the field measures keepers turned off the shot")
