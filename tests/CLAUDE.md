@@ -253,3 +253,9 @@ set by the worst tick) and the per-call evaluator ranking.
 Domain code must be replay-safe: the same inputs produce the same outputs, or
 reconcile replay diverges from the host. Tests that touch AI or physics must not
 depend on wall-clock time or unseeded randomness.
+
+Instruments that stage the real goalie must also be order-free: each staging
+starts from a full reset (`GoalieController.reset_to_crease`, the puck
+restaged), so a measurement does not depend on what ran before it.
+`tests/slow/ai/test_shot_field_cells_are_order_free.gd` holds it for the shot
+field, whose cells are sharded across processes.

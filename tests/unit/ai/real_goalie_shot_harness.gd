@@ -313,6 +313,10 @@ var last_settle_went_down: bool = false
 func settle_ready(shooter: Vector3, max_ticks: int = 400, tol: float = 0.0015) -> int:
 	last_settle_went_down = false
 	_begin_play()
+	# No instrument runs the puck's own tick, which is what consumes a release's
+	# queued launch: restage it, or the last shot's vector is still what
+	# get_release_velocity reports.
+	_puck.stage_at(shooter)
 	_ctrl.reset_to_crease()
 	_shooter.global_position = shooter
 	_shooter.velocity = Vector3.ZERO

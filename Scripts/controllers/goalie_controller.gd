@@ -1247,6 +1247,9 @@ func snap_to_standing_pose(open_five_hole: bool = false) -> void:
 	_pose_inputs.reading_pinned_windup = false
 	_pose_inputs.reacting_to_shot = false
 	_pose_inputs.hands_answer_shot = false
+	_pose_inputs.blocking_seal = false
+	_set_pad_toe_out_inputs()
+	_set_prelean_inputs()
 	_pose_inputs.current_x = _current_x
 	_pose_inputs.goalie_z = goalie.global_position.z
 	_pose_inputs.direction_sign = _direction_sign
@@ -1517,6 +1520,12 @@ func reset_to_crease() -> void:
 	goalie.set_stick_collision_enabled(true)
 	goalie.set_goalie_position(_current_x, _goal_line_z + _direction_sign * _current_depth)
 	goalie.set_goalie_rotation_y(PI if _direction_sign == 1 else 0.0)
+	# The pose jumps with him. The body solve can sleep from the first tick (a
+	# faceoff dot past _BODY_SOLVE_SLEEP_M), and what it holds must be this reset,
+	# not the last play's stance.
+	_body_solve_asleep = false
+	_footwork.reset()
+	snap_to_standing_pose()
 	# Snapping back to the crease is a jump, not a slide — drop the interpolation
 	# history so it is not drawn as one (see SkaterController.teleport_to).
 	goalie.reset_physics_interpolation()

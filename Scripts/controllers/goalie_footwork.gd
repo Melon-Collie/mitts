@@ -57,6 +57,7 @@ var stopping: float = 0.0
 
 func reset() -> void:
 	phase = 0.0
+	side = 1.0
 	moving = 0.0
 	pushing = 0.0
 	stopping = 0.0
