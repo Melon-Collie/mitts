@@ -49,8 +49,43 @@ func test_the_far_net_reads_as_the_measured_net_seen_from_the_other_end() -> voi
 			assert_almost_eq(AIShotOdds.shot_now(r_far, far, k_far, -1.5, AIShotOdds.Stance.UPRIGHT),
 					AIShotOdds.shot_now(r_near, near, k_near, 1.5, AIShotOdds.Stance.UPRIGHT), 1e-5,
 					"shot_now mirrors at (%.1f, %.1f)" % [release_x, fwd])
+			var yaw: float = PI - 0.5
+			assert_almost_eq(
+					AIShotOdds.shot_now(r_far, far, k_far, -1.5, AIShotOdds.Stance.UPRIGHT,
+							yaw + PI),
+					AIShotOdds.shot_now(r_near, near, k_near, 1.5, AIShotOdds.Stance.UPRIGHT,
+							yaw), 1e-5,
+					"shot_now with a facing mirrors at (%.1f, %.1f)" % [release_x, fwd])
 			var p_near := Vector3(release_x + 3.0, 0.0, GOAL_Z + fwd + 2.0)
 			var p_far := Vector3(-release_x - 3.0, 0.0, -GOAL_Z - fwd - 2.0)
 			assert_almost_eq(AIShotOdds.feed(p_far, r_far, 16.0, far, k_far, true),
 					AIShotOdds.feed(p_near, r_near, 16.0, near, k_near, true), 1e-5,
 					"feed mirrors at (%.1f, %.1f)" % [release_x, fwd])
+
+
+func test_a_set_keeper_reads_the_measured_set_cell() -> void:
+	# "Square and set on it" is a measured situation, so at every measured spot
+	# the set read IS that spot's SET cell.
+	var goal := Vector3(0.0, 0.0, GOAL_Z)
+	AIShotOdds.shot_set(Vector3(0.0, 0.0, GOAL_Z + 6.0), goal)
+	for fwd: float in AIShotFieldData.SPOT_FWD:
+		for x: float in AIShotFieldData.SPOT_X:
+			var spot: int = AIShotFieldData.SPOT_FWD.find(fwd) * AIShotFieldData.SPOT_X.size() \
+					+ AIShotFieldData.SPOT_X.find(x)
+			assert_almost_eq(AIShotOdds.shot_set(Vector3(x, 0.0, GOAL_Z + fwd), goal),
+					AIShotOdds._odds[AIShotOdds._set_cell[spot]], 1e-6,
+					"the set read at (%.1f, %.1f) is the SET cell" % [x, fwd])
+
+
+func test_the_set_cells_read_square_on_the_shot() -> void:
+	# squareness() and the generator's reads share a facing convention: a keeper
+	# settled on the carrier faces him. Off the goal-line row, where he sets on
+	# the post rather than square, every SET cell reads within a few degrees.
+	AIShotOdds.shot_set(Vector3(0.0, 0.0, GOAL_Z + 6.0), Vector3(0.0, 0.0, GOAL_Z))
+	for spot: int in AIShotOdds._set_cell.size():
+		if AIShotFieldData.SPOT_FWD[spot / AIShotFieldData.SPOT_X.size()] \
+				< AIShotFieldData.SPOT_FWD[1]:
+			continue
+		var c: int = AIShotOdds._set_cell[spot]
+		assert_lt(absf(AIShotOdds._square[c]), deg_to_rad(3.0),
+				"SET cell %d faces the shot" % c)

@@ -137,8 +137,9 @@ live goalie, in step 1's form (the open set per cell: FLAT / LOW / HIGH × 24
 aims through the bot's own release):
 
 - **SHOT** — release spot × the keeper state the bot sees NOW: set; caught off
-  his square (offset from the arc-square, lateral velocity, stance), sampled by
-  the states feeds and dekes leave him in. Queried with the live read: shooting
+  his square (offset from the arc-square, lateral velocity, stance, depth, and
+  how square he faces the release), sampled by the states feeds and dekes leave
+  him in and by decoy carriers that draw him across, in or out (#787). Queried with the live read: shooting
   from the carry, or what a carry candidate arrives at.
 - **FEED** — receiver spot × the pass: how far the keeper must travel between
   the passer's square and the receiver's (geometry, `goalie_arc_match_x`), the

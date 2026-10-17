@@ -65,6 +65,20 @@ func stage_feed(spot: Vector3, passer: Vector3, speed: float) -> Vector3:
 	return spot
 
 
+# Settled square on a carrier at `decoy`, then the puck is at `spot` with no
+# flight between: the limit of a feed, the keeper as a play left him out of
+# position. The jump is staging, not puck motion, so his velocity read starts
+# from the spot. Returns the release point.
+func stage_decoy(spot: Vector3, decoy: Vector3) -> Vector3:
+	_settle_on(decoy)
+	_shooter.global_position = spot
+	_shooter.velocity = Vector3.ZERO
+	_puck.global_position = spot
+	_puck.linear_velocity = Vector3.ZERO
+	_ctrl._prev_puck_position = spot
+	return spot
+
+
 # Settled on the carrier `across` metres to the side of `spot` (and a stride
 # further out), who then dekes across onto it. Returns where the puck ends up,
 # which is the release point.

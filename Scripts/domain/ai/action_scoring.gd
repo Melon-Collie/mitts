@@ -180,9 +180,10 @@ static func tip_ev(
 # the lane and the release contest are facts about DEFENDERS, not the goalie.
 #
 # The keeper is at `keeper_pos` moving across at `keeper_vel_x` in `stance`, an
-# AIShotOdds.Stance (AIShotValue.now); `keeper_pos` INF means square and set on
-# the release (AIShotValue.set_keeper). `precomputed_quality` (>= 0) hands in the
-# shot_quality a caller already has for these arguments.
+# AIShotOdds.Stance, facing `keeper_yaw` (AIShotValue.now); `keeper_pos` INF
+# means square and set on the release (AIShotValue.set_keeper).
+# `precomputed_quality` (>= 0) hands in the shot_quality a caller already has
+# for these arguments.
 static func score_shoot_value(
 		shooter: Vector3,
 		attacking_goal: Vector3,
@@ -192,7 +193,8 @@ static func score_shoot_value(
 		stance: int = AIShotOdds.Stance.UPRIGHT,
 		shot_speed_m_s: float = AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
 		opponent_caps: Array = [],
-		precomputed_quality: float = -1.0) -> float:
+		precomputed_quality: float = -1.0,
+		keeper_yaw: float = NAN) -> float:
 	if (shooter.z - attacking_goal.z) * -signf(attacking_goal.z) < 0.001:
 		return 0.0
 	var quality: float = precomputed_quality
@@ -200,7 +202,8 @@ static func score_shoot_value(
 	if keeper.is_finite():
 		shooter = AIGoalieModel.release_ahead_of_goalie(shooter, attacking_goal, keeper)
 		if quality < 0.0:
-			quality = AIShotValue.now(shooter, attacking_goal, keeper, keeper_vel_x, stance)
+			quality = AIShotValue.now(shooter, attacking_goal, keeper, keeper_vel_x, stance,
+					keeper_yaw)
 	else:
 		if quality < 0.0:
 			quality = AIShotValue.set_keeper(shooter, attacking_goal)

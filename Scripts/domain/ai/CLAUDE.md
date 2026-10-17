@@ -591,10 +591,18 @@ reaches back into what remains.
     appears in tight with the keeper on his crease draws a committed slide,
     which no carry the bots price ever produces.
   - **The keeper is read as a Stance** — upright, down, or sealed on the post —
-    plus his offset off the square and his lateral speed; the field is kernel-
-    weighted over those within the four spots around the release. A pass is
-    priced from the passer, the keeper square on him, at the feed's travel and
-    flight. Outside `AIGoalieModel.GOALIE_HOME_M` the net is empty.
+    plus his offset off the square, his lateral speed, his depth, and how
+    square he faces the release (`AIShotOdds.squareness`, left out when his
+    facing is not read); the field is kernel-weighted over those within the
+    four spots around the release. Squareness is what tells a keeper set on
+    the shot from one a feed dragged off it at the same offset. Out-of-position
+    keepers are measured, not extrapolated: DECOY cells set him on a carrier
+    elsewhere, then shoot from the spot. A keeper "square and set" on the
+    release (`AIShotValue.set_keeper`) is read from the SET cells alone,
+    because a feed cell can show the same visible keeper and a different
+    outcome. A pass is priced from the passer, the keeper square on him, at the
+    feed's travel and flight. Outside `AIGoalieModel.GOALIE_HOME_M` the net is
+    empty.
   - **Odds are at one placement scatter** (`REFERENCE_SPREAD_RAD`): a property
     of the chance, not the shooter (a wobblier tier misses more of the same
     shots). First contact is the outcome: rebounds and screens are not in it

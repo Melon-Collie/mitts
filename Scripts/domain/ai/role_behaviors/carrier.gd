@@ -510,13 +510,15 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 	var keeper_now: Vector3 = Vector3.INF
 	var keeper_vel_x: float = 0.0
 	var keeper_stance: int = AIShotOdds.Stance.UPRIGHT
+	var keeper_yaw: float = NAN
 	if opp_keeper != null:
 		keeper_now = Vector3(opp_keeper.position_x, 0.0, opp_keeper.position_z)
 		keeper_vel_x = opp_keeper.velocity_x if ctx.reads_goalie_motion else 0.0
 		keeper_stance = AIShotOdds.stance_of(opp_keeper, attacking_goal)
+		keeper_yaw = opp_keeper.rotation_y
 		if not shot_unavailable:
 			AIShotOdds.pick_shot_now(wrister_base_release, attacking_goal, keeper_now,
-					keeper_vel_x, keeper_stance, _shot_pick)
+					keeper_vel_x, keeper_stance, _shot_pick, keeper_yaw)
 	var shot_target: Vector3 = _shot_pick.aim if _shot_pick.aim.is_finite() else attacking_goal
 	var shot_dir: Vector3 = shot_target - wrister_base_release
 	shot_dir.y = 0.0
@@ -551,7 +553,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var s: float = AIActionScoring.score_shoot_value(
 				release, attacking_goal, keeper_now, _field.opponents_release,
 				keeper_vel_x, keeper_stance, sample_speed,
-				_field.opponent_caps) * _field.holds.keep[k]
+				_field.opponent_caps, -1.0, keeper_yaw) * _field.holds.keep[k]
 		if s > _phase_shoot_score:
 			_phase_shoot_score = s
 			_shot_sample_share = share

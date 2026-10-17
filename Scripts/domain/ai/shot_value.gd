@@ -21,24 +21,25 @@ class_name AIShotValue
 #                picked.
 
 
-# `stance` is an AIShotOdds.Stance.
+# `stance` is an AIShotOdds.Stance; `keeper_yaw` his rotation_y, NAN when not read.
 static func now(release: Vector3, goal: Vector3, keeper_pos: Vector3,
-		keeper_vel_x: float, stance: int) -> float:
+		keeper_vel_x: float, stance: int, keeper_yaw: float = NAN) -> float:
 	if Vector2(keeper_pos.x - goal.x, keeper_pos.z - goal.z).length() \
 			> AIGoalieModel.GOALIE_HOME_M:
 		return AIShotOdds.empty_net(release, goal)
-	return AIShotOdds.shot_now(release, goal, keeper_pos, keeper_vel_x, stance)
+	return AIShotOdds.shot_now(release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw)
 
 
 # `now` with the crossing scattering by `spread_rad`: what the xG stat reads, at
 # the shot's context spread rather than the reference. Once per shot.
 static func now_at_spread(release: Vector3, goal: Vector3, keeper_pos: Vector3,
-		keeper_vel_x: float, stance: int, spread_rad: float) -> float:
+		keeper_vel_x: float, stance: int, spread_rad: float,
+		keeper_yaw: float = NAN) -> float:
 	if Vector2(keeper_pos.x - goal.x, keeper_pos.z - goal.z).length() \
 			> AIGoalieModel.GOALIE_HOME_M:
 		return AIShotOdds.empty_net(release, goal, spread_rad)
 	return AIShotOdds.shot_now_at_spread(release, goal, keeper_pos, keeper_vel_x, stance,
-			spread_rad)
+			spread_rad, keeper_yaw)
 
 
 static func set_keeper(release: Vector3, goal: Vector3) -> float:
