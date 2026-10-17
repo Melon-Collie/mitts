@@ -1618,7 +1618,9 @@ func test_shot_is_measured_from_the_puck_not_the_body() -> void:
 	# toward the net → the release ref moves with it → wider real angles → higher
 	# shoot score. (The fixture default puts the puck AT the body, so every other
 	# scenario in this file is unchanged.)
-	var self_pos := Vector3(0, 0, -17.65)   # 9 m out
+	# 6 m out, where the puck's own spot is the winning hold (further out a side
+	# pocket wins either way, and the read cannot see which point it came from).
+	var self_pos := Vector3(0, 0, -20.65)
 	var ctx_body: RoleContext = _make_ctx(self_pos)
 	var c1 := AIRoleCarrier.new()
 	c1.decide(ctx_body)
@@ -1667,18 +1669,23 @@ func test_post_seal_x_sign_decodes_the_wire_convention() -> void:
 
 func test_sharp_angle_shot_into_a_vh_seal_is_never_worth_firing() -> void:
 	# In tight at a sharp angle the live goalie seals the near post in VH (the
-	# shot field is measured off him), and the shot into it is no real chance.
+	# shot field's goal-line row measures him there), and the shot into the seal
+	# from where the carrier stands is no chance. (Pulling the puck off the line
+	# first is a different shot, priced from the field's decoy cells.)
 	var self_pos := Vector3(4.5, 0, -26.0)
-	var ctx_vh := _make_ctx(self_pos)
 	var g_vh := GoalieNetworkState.new()
 	g_vh.position_x = 0.85                    # parked at the +x post
 	g_vh.position_z = -26.55                  # post-seal depth ~0.10
 	g_vh.state_enum = GoalieStateMachine.State.VH_LEFT as int   # seals +x here
-	_place_keeper(ctx_vh, g_vh)
-	var vh := AIRoleCarrier.new()
-	vh.decide(ctx_vh)
-	assert_lt(vh.debug_shoot_score, 0.10,
-			"the sealed sharp angle offers no real chance; got %f" % vh.debug_shoot_score)
+	_face(g_vh, self_pos)
+	var keeper := Vector3(g_vh.position_x, 0.0, g_vh.position_z)
+	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+	var into_the_seal: float = AIActionScoring.score_shoot_value(
+			AIGoalieModel.release_ahead_of_goalie(self_pos, goal, keeper), goal, keeper,
+			[] as Array[Vector3], 0.0, AIShotOdds.stance_of(g_vh, goal),
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, [], -1.0, g_vh.rotation_y)
+	assert_lt(into_the_seal, AIRoleCarrier.SHOT_MIN_VALUE,
+			"the shot into the seal offers no real chance; got %f" % into_the_seal)
 
 
 # ─── attacking blue-line keep-out bands ──────────────────────────────────────

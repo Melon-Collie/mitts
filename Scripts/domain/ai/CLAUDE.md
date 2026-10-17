@@ -594,10 +594,13 @@ reaches back into what remains.
     plus his offset off the square, his lateral speed, his depth, and how
     square he faces the release (`AIShotOdds.squareness`, left out when his
     facing is not read); the field is kernel-weighted over those within the
-    four spots around the release. Squareness is what tells a keeper set on
-    the shot from one a feed dragged off it at the same offset. Out-of-position
+    four spots around the release, each spot counting by how much matching
+    evidence it holds, so a spot whose only cell is unlike the query yields to
+    a neighbour with a close one. Squareness is what tells a keeper set on the
+    shot from one a feed dragged off it at the same offset. Out-of-position
     keepers are measured, not extrapolated: DECOY cells set him on a carrier
-    elsewhere, then shoot from the spot. A keeper "square and set" on the
+    elsewhere, then shoot from the spot, and the grid's first row, 0.6 m out,
+    is where he seals the post. A keeper "square and set" on the
     release (`AIShotValue.set_keeper`) is read from the SET cells alone,
     because a feed cell can show the same visible keeper and a different
     outcome. A pass is priced from the passer, the keeper square on him, at the

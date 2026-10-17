@@ -268,7 +268,8 @@ static func _weighted_odds() -> float:
 	var v: float = 0.0
 	for j: int in _q_cells.size():
 		v += _q_weights[j] * _odds[_q_cells[j]]
-	return v
+	# The weights are float32, so a sum of certain cells can land a hair past 1.
+	return minf(v, 1.0)
 
 
 static func _blend_aims() -> void:
@@ -318,8 +319,11 @@ static func _weigh(local: Vector2, is_feed: bool, one_timer: bool, stance: int,
 		_q_weights[j] /= total
 
 
-# Appends one spot's matching cells with weights summing to `spot_weight`, and
-# returns `spot_weight`, or 0 when the spot has no matching cell.
+# Appends one spot's matching cells and returns the weight they carry: the
+# spot's bilinear `spot_weight` times its evidence, the kernel mass of its cells
+# capped at one sample's. A spot whose only cell is far from the query then
+# yields to a neighbour with a close one, instead of answering for its whole
+# share. 0 when the spot has no matching cell.
 static func _weigh_spot(spot: int, spot_weight: float, is_feed: bool, one_timer: bool,
 		stance: int, a: float, b: float, depth: float = NAN,
 		square: float = NAN) -> float:
@@ -365,11 +369,12 @@ static func _weigh_spot(spot: int, spot_weight: float, is_feed: bool, one_timer:
 		_q_cells.resize(first)
 		_q_weights.resize(first)
 		_q_cells.append(nearest)
-		_q_weights.append(spot_weight)
-		return spot_weight
+		_q_weights.append(spot_weight * _MIN_WEIGHT)
+		return spot_weight * _MIN_WEIGHT
+	var share: float = spot_weight * minf(wsum, 1.0)
 	for j: int in range(first, _q_weights.size()):
-		_q_weights[j] *= spot_weight / wsum
-	return spot_weight
+		_q_weights[j] *= share / wsum
+	return share
 
 
 # Index of the grid interval holding `v`, clamped to the grid.
