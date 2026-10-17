@@ -501,9 +501,9 @@ func test_carrier_whose_puck_has_entered_never_drops_it_back_out() -> void:
 		assert_eq(c.debug_pass_score, 0.0,
 				"puck at z %.1f: the neutral-zone trailer is not a legal receiver" % puck_z)
 
-	# Control: a step further back the puck cannot reach the line before
-	# release, so the zone is not yet taken and the same trailer is a live drop.
-	var back_pos := Vector3(-8.0, 0, -4.0)
+	# Control: further back the puck cannot reach the line before release, so the
+	# zone is not yet taken and the same trailer is a live drop.
+	var back_pos := Vector3(-8.0, 0, -3.0)
 	var back_skaters: Array = [
 			[1, TEAM_ID, back_pos, false, v],
 			[2, TEAM_ID, Vector3(2.0, 0, back_pos.z + 5.0), false, v],
@@ -594,8 +594,10 @@ func test_a_defender_who_never_covers_the_drive_costs_it_nothing() -> void:
 	# At 5 m and at 8 m he never gets a stick on the drive, so the drive-in (the
 	# shot the carrier skates into) must be the same: the full drive to the net,
 	# not a drive stopped halfway because halfway was the closer sample.
+	# Starting just short of the line: from further back the drive ends where a
+	# set keeper concedes nothing, and the comparison reads 0 against 0.
 	var v := Vector3(0, 0, -7.0)
-	var self_pos := Vector3(-8.0, 0, -4.5)
+	var self_pos := Vector3(-8.0, 0, -6.5)
 	var drive: Array[float] = []
 	for gap: float in [5.0, 8.0]:
 		var skaters: Array = [
