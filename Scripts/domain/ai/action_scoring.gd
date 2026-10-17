@@ -186,7 +186,8 @@ static func tip_ev(
 #
 # The keeper is at `keeper_pos` moving across at `keeper_vel_x` in `stance`, an
 # AIShotOdds.Stance (AIShotValue.now); `keeper_pos` INF means square and set on
-# the release (AIShotValue.set_keeper).
+# the release (AIShotValue.set_keeper). `precomputed_quality` (>= 0) hands in the
+# shot_quality a caller already has for these arguments.
 static func score_shoot_value(
 		shooter: Vector3,
 		attacking_goal: Vector3,
@@ -195,16 +196,19 @@ static func score_shoot_value(
 		keeper_vel_x: float = 0.0,
 		stance: int = AIShotOdds.Stance.UPRIGHT,
 		shot_speed_m_s: float = AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-		opponent_caps: Array = []) -> float:
+		opponent_caps: Array = [],
+		precomputed_quality: float = -1.0) -> float:
 	if (shooter.z - attacking_goal.z) * -signf(attacking_goal.z) < 0.001:
 		return 0.0
-	var quality: float
+	var quality: float = precomputed_quality
 	var keeper: Vector3 = keeper_pos
 	if keeper.is_finite():
 		shooter = AIGoalieModel.release_ahead_of_goalie(shooter, attacking_goal, keeper)
-		quality = AIShotValue.now(shooter, attacking_goal, keeper, keeper_vel_x, stance)
+		if quality < 0.0:
+			quality = AIShotValue.now(shooter, attacking_goal, keeper, keeper_vel_x, stance)
 	else:
-		quality = AIShotValue.set_keeper(shooter, attacking_goal)
+		if quality < 0.0:
+			quality = AIShotValue.set_keeper(shooter, attacking_goal)
 		keeper = AIGoalieModel.goalie_squared_pos(
 				attacking_goal - Vector3(0.0, 0.0, signf(attacking_goal.z)
 						* AIGoalieModel.GOALIE_RESTING_DEPTH_M), attacking_goal, shooter)
@@ -212,6 +216,18 @@ static func score_shoot_value(
 		return 0.0
 	return quality * _shot_defender_terms(shooter, attacking_goal, keeper, opponents,
 			shot_speed_m_s, opponent_caps)
+
+
+# score_shoot_value's goalie half: the odds the shot beats the keeper, before
+# any defender. Reads no defender, so one spot's is good against any defence
+# (test_shot_quality_is_the_seams_goalie_half).
+static func shot_quality(shooter: Vector3, attacking_goal: Vector3, keeper_pos: Vector3,
+		keeper_vel_x: float = 0.0, stance: int = AIShotOdds.Stance.UPRIGHT) -> float:
+	if keeper_pos.is_finite():
+		return AIShotValue.now(
+				AIGoalieModel.release_ahead_of_goalie(shooter, attacking_goal, keeper_pos),
+				attacking_goal, keeper_pos, keeper_vel_x, stance)
+	return AIShotValue.set_keeper(shooter, attacking_goal)
 
 
 # The defenders' share of a shot from `shooter`: its lane past them to the open
@@ -235,7 +251,8 @@ static func _shot_defender_terms(shooter: Vector3, attacking_goal: Vector3,
 # shot's own lane and release contest. Every read of a pass prices it here —
 # the carrier's, a defender's, a support or finisher spot — so offence and
 # defence agree on what a feed is worth. `precomputed_lane` (>= 0) hands in the
-# identical pass lane_clear a caller already ran.
+# identical pass lane_clear a caller already ran; `precomputed_odds` (>= 0) the
+# AIShotValue.feed it already has for these arguments.
 static func score_pass_value(
 		shooter: Vector3,
 		receiver: Vector3,
@@ -245,7 +262,8 @@ static func score_pass_value(
 		pass_speed_m_s: float = AIPuckLane.PASS_SPEED_M_S,
 		opponent_caps: Array = EMPTY_CAPS,
 		one_timer: bool = false,
-		precomputed_lane: float = -1.0) -> float:
+		precomputed_lane: float = -1.0,
+		precomputed_odds: float = -1.0) -> float:
 	if _is_past_goal_line(receiver, attacking_goal):
 		return 0.0
 	if AINetObstacle.pass_lane_blocked_by_net(shooter, receiver):
@@ -255,8 +273,9 @@ static func score_pass_value(
 					EMPTY_VEC3, opponent_caps)
 	if lane <= 0.0:
 		return 0.0
-	var odds: float = AIShotValue.feed(shooter, receiver, pass_speed_m_s, attacking_goal,
-			keeper_pos, one_timer)
+	var odds: float = precomputed_odds if precomputed_odds >= 0.0 \
+			else AIShotValue.feed(shooter, receiver, pass_speed_m_s, attacking_goal,
+					keeper_pos, one_timer)
 	if odds <= 0.0:
 		return 0.0
 	var keeper: Vector3 = keeper_pos if keeper_pos.is_finite() else attacking_goal

@@ -440,6 +440,24 @@ func test_potential_drops_with_pressure() -> void:
 	assert_lt(pressured, clean, "forward-cone defender drops position potential")
 
 
+func test_shot_quality_is_the_seams_goalie_half() -> void:
+	# A caller that memoizes shot_quality and hands it back reads exactly what
+	# the seam computes itself, for every keeper the seam takes.
+	var defenders: Array[Vector3] = [Vector3(1.0, 0.0, 20.0), Vector3(-3.0, 0.0, 18.0)]
+	var keepers: Array[Vector3] = [Vector3.INF, Vector3(0.4, 0.0, 25.9),
+			Vector3(-1.5, 0.0, 24.5)]
+	for spot: Vector3 in [Vector3(0, 0, 18), Vector3(-7, 0, 21), Vector3(9, 0, 12),
+			Vector3(2, 0, 24.5)]:
+		for keeper: Vector3 in keepers:
+			for stance: int in [AIShotOdds.Stance.UPRIGHT, AIShotOdds.Stance.DOWN]:
+				var whole: float = AIActionScoring.score_shoot_value(spot, GOAL, keeper,
+						defenders, 0.6, stance)
+				var halves: float = AIActionScoring.score_shoot_value(spot, GOAL, keeper,
+						defenders, 0.6, stance, AIBotMechanics.WRISTER_SHOT_SPEED_M_S, [],
+						AIActionScoring.shot_quality(spot, GOAL, keeper, 0.6, stance))
+				assert_almost_eq(halves, whole, 1e-9, "%s vs keeper %s" % [spot, keeper])
+
+
 func test_delay_discount_bounds_patience() -> void:
 	# The delay discount is constant-hazard survival, exp(-t / READ_VALIDITY_TAU_S):
 	# 1 at t=0, strictly decreasing. The UPPER-BOUND guard the value sweep was

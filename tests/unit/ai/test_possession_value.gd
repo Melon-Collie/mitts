@@ -93,6 +93,39 @@ func test_his_speed_carries_the_drive_in() -> void:
 			"already moving toward the net, he gets there sooner")
 
 
+# Entries are priced only when a read could use them, bounded until then by
+# their empty-ice worth. Both halves of that are held here: no defence raises an
+# entry above the bound, and a lazy read — a body pushed on it included — reads
+# what pricing every entry first reads.
+func test_entries_priced_on_demand_read_as_priced_up_front() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var spots: Array[Vector3] = [Vector3(0, 0, 5), Vector3(-9, 0, -3), Vector3(6, 0, -9),
+			Vector3(-12, 0, -12), Vector3(3, 0, -18), Vector3(10, 0, 12)]
+	for trial: int in 40:
+		var defenders: Array[Vector3] = []
+		for _k: int in rng.randi_range(0, 5):
+			defenders.append(Vector3(rng.randf_range(-12.0, 12.0), 0.0,
+					rng.randf_range(-24.0, 20.0)))
+		var body := Vector3(rng.randf_range(-10.0, 10.0), 0.0, rng.randf_range(-20.0, 10.0))
+		var eager: AIPossessionValue = _read(defenders.duplicate())
+		for i: int in eager._entry_spots.size():
+			assert_lte(eager._worth(i), eager._open_worth[i] + 1e-6,
+					"trial %d: a defence never raises entry %d" % [trial, i])
+		var lazy: AIPossessionValue = _read(defenders.duplicate())
+		for spot: Vector3 in spots:
+			assert_almost_eq(lazy.at(spot), eager.at(spot), 1e-6,
+					"trial %d at %s" % [trial, spot])
+		lazy = _read(defenders.duplicate())
+		lazy.push_defender(body, Vector3.ZERO, null)
+		eager.push_defender(body, Vector3.ZERO, null)
+		for spot: Vector3 in spots:
+			assert_almost_eq(lazy.at(spot), eager.at(spot), 1e-6,
+					"trial %d at %s, a body pushed" % [trial, spot])
+		lazy.pop_defender()
+		eager.pop_defender()
+
+
 # ── The defence's read of a man ──────────────────────────────────────────────
 
 const OUR_NET := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z)    # the defence defends +Z

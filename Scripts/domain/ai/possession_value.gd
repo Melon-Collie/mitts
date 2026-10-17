@@ -14,7 +14,9 @@ extends RefCounted
 # shot and the drive in from it, × the skate there × the race to it: the side's
 # man from the spot against the defence's first arrival (AIActionScoring
 # .arrival_race, its band widened by the arrival clock's error). Entry worths
-# depend only on the defence, so fill() prices them once per read of the ice.
+# depend only on fill()'s defence, so each is priced once per fill, and only
+# when a read could use it: its worth on empty ice, which a defence only lowers,
+# bounds it until then.
 #
 # Every shot is against a keeper who tracked the play: set and square
 # (AIShotValue.set_keeper). Not modelled: passes — one man carries — and where
@@ -26,14 +28,36 @@ const ENTRY_WALL_INSET_M: float = 2.0
 # A drive in: straight at the net, at most this far, stopping this far out.
 const DRIVE_MAX_M: float = 12.0
 const DRIVE_MIN_NET_DIST_M: float = 3.0
+# Goalie halves memoized per fill (_goalie_half): a defence read prices the same
+# few spots against every candidate body. Round-robin past this many.
+const GOALIE_MEMO_CAP: int = 32
 
 var _goal: Vector3 = Vector3.ZERO
 var _defenders: Array[Vector3] = []
 var _defender_vels: Array[Vector3] = []
 var _defender_caps: Array = []
 var _entry_spots: Array[Vector3] = []
-var _entry_worth: Array[float] = []
+var _entry_worth: Array[float] = []   # < 0 until priced (_worth)
 var _projected: Array[Vector3] = []
+# The entries' worth on empty ice at _open_goal: _worth's bound.
+var _open_goal: Vector3 = Vector3.INF
+var _open_worth: Array[float] = []
+var _no_one: Array[Vector3] = []
+var _no_caps: Array = []
+# Bodies push_defender added since fill(), and _worth's scratch for setting them
+# aside.
+var _pushed: int = 0
+var _stash_pos: Array[Vector3] = []
+var _stash_vel: Array[Vector3] = []
+var _stash_caps: Array = []
+# _goalie_half's memo: a shot's quality from `_memo_from` (`_memo_to` INF), or a
+# feed's odds from `_memo_from` to `_memo_to`, against the keeper at
+# `_memo_keeper`.
+var _memo_from: Array[Vector3] = []
+var _memo_to: Array[Vector3] = []
+var _memo_keeper: Array[Vector3] = []
+var _memo_value: Array[float] = []
+var _memo_next: int = 0
 
 
 # Reads the ice for the side attacking `goal` against `defenders` (velocities and
@@ -46,6 +70,12 @@ func fill(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3
 	_defenders = defenders
 	_defender_vels = defender_vels
 	_defender_caps = defender_caps
+	_pushed = 0
+	_memo_from.clear()
+	_memo_to.clear()
+	_memo_keeper.clear()
+	_memo_value.clear()
+	_memo_next = 0
 	_entry_spots.clear()
 	_entry_worth.clear()
 	if in_zone_only:
@@ -53,9 +83,10 @@ func fill(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3
 	var z: float = signf(goal.z) * (GameRules.BLUE_LINE_Z + ENTRY_LEAD_M)
 	var wide_x: float = GameRules.RINK_HALF_WIDTH - ENTRY_WALL_INSET_M
 	for x: float in [-wide_x, 0.0, wide_x]:
-		var spot := Vector3(x, 0.0, z)
-		_entry_spots.append(spot)
-		_entry_worth.append(maxf(_shot(spot), _drive(spot, 0.0)))
+		_entry_spots.append(Vector3(x, 0.0, z))
+		_entry_worth.append(-1.0)
+	if goal != _open_goal:
+		_price_open()
 
 
 # The puck at `pos` for the side fill() priced, its man there `start_s` from now
@@ -67,7 +98,10 @@ func at(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO) -> floa
 				_drive(pos, start_s, vel))
 	for i: int in _entry_spots.size():
 		var t: float = start_s + AIArrival.time_to_arrive(pos, _entry_spots[i], vel)
-		var timed: float = _entry_worth[i] * AIActionScoring.delay_discount(t)
+		var discount: float = AIActionScoring.delay_discount(t)
+		if _open_worth[i] * discount <= best:
+			continue
+		var timed: float = _worth(i) * discount
 		if timed <= best:
 			continue
 		best = maxf(best, timed * AIActionScoring.arrival_race(_entry_spots[i], t,
@@ -75,9 +109,71 @@ func at(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO) -> floa
 	return best
 
 
+# Entry `i`'s worth against fill()'s defence, priced on first use with any body
+# pushed since set aside.
+func _worth(i: int) -> float:
+	if _entry_worth[i] >= 0.0:
+		return _entry_worth[i]
+	var n: int = _pushed
+	for _k: int in n:
+		_stash_pos.push_back(_defenders.back())
+		_stash_vel.push_back(_defender_vels.back())
+		_stash_caps.push_back(_defender_caps.back() \
+				if _defender_caps.size() == _defenders.size() else null)
+		pop_defender()
+	_entry_worth[i] = _price_entry(_entry_spots[i])
+	for _k: int in n:
+		push_defender(_stash_pos.pop_back(), _stash_vel.pop_back(), _stash_caps.pop_back())
+	return _entry_worth[i]
+
+
+func _price_open() -> void:
+	_open_goal = _goal
+	var defenders: Array[Vector3] = _defenders
+	var vels: Array[Vector3] = _defender_vels
+	var caps: Array = _defender_caps
+	_defenders = _no_one
+	_defender_vels = _no_one
+	_defender_caps = _no_caps
+	_open_worth.clear()
+	for spot: Vector3 in _entry_spots:
+		_open_worth.append(_price_entry(spot))
+	_defenders = defenders
+	_defender_vels = vels
+	_defender_caps = caps
+
+
+func _price_entry(spot: Vector3) -> float:
+	return maxf(_shot(spot), _drive(spot, 0.0))
+
+
 func _shot(pos: Vector3) -> float:
 	return AIActionScoring.score_shoot_value(pos, _goal, Vector3.INF, _defenders, 0.0,
-			AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S, _defender_caps)
+			AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S, _defender_caps,
+			_goalie_half(pos, Vector3.INF, Vector3.INF, 0.0))
+
+
+# The defence-free half of a shot from `from` (`to` INF: AIActionScoring
+# .shot_quality) or of a one-timer off a feed from `from` to `to` at `speed`
+# (AIShotValue.feed), against the keeper at `keeper`.
+func _goalie_half(from: Vector3, to: Vector3, keeper: Vector3, speed: float) -> float:
+	for i: int in _memo_value.size():
+		if _memo_from[i] == from and _memo_to[i] == to and _memo_keeper[i] == keeper:
+			return _memo_value[i]
+	var v: float = AIActionScoring.shot_quality(from, _goal, keeper) if not to.is_finite() \
+			else AIShotValue.feed(from, to, speed, _goal, keeper, true)
+	if _memo_value.size() < GOALIE_MEMO_CAP:
+		_memo_from.append(from)
+		_memo_to.append(to)
+		_memo_keeper.append(keeper)
+		_memo_value.append(v)
+	else:
+		_memo_from[_memo_next] = from
+		_memo_to[_memo_next] = to
+		_memo_keeper[_memo_next] = keeper
+		_memo_value[_memo_next] = v
+		_memo_next = (_memo_next + 1) % GOALIE_MEMO_CAP
+	return v
 
 
 # One straight drive at the net from `from`, the man there `start_s` from now at
@@ -126,7 +222,7 @@ func threat_of_carrier(pos: Vector3, vel: Vector3, keeper: Vector3) -> float:
 			or keeper.distance_to(_goal) >= AIActionScoring.THREAT_GOALIE_HOME_M:
 		shot = AIActionScoring.score_shoot_value(pos, _goal, keeper, _defenders, 0.0,
 				AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-				_defender_caps)
+				_defender_caps, _goalie_half(pos, Vector3.INF, keeper, 0.0))
 	return maxf(shot, at(pos, 0.0, vel))
 
 
@@ -139,23 +235,26 @@ func threat_of_feed(from: Vector3, to: Vector3, to_vel: Vector3,
 	var speed: float = AIPuckLane.expected_pass_speed(from, to)
 	var lane: float = AIPuckLane.lane_clear(from, to, _defenders, speed,
 			AIActionScoring.EMPTY_VEC3, _defender_caps)
+	var odds: float = _goalie_half(from, to, keeper, speed) if lane > 0.0 else 0.0
 	var one_timer: float = AIActionScoring.score_pass_value(from, to, _goal, keeper,
-			_defenders, speed, _defender_caps, true, lane)
+			_defenders, speed, _defender_caps, true, lane, odds)
 	return maxf(one_timer, lane * at(to, from.distance_to(to) / maxf(speed, 0.1), to_vel))
 
 
 # A hypothetical defender added to the read's (the caller's) arrays for a read,
 # and taken off again: a candidate spot priced with our body on it. The entries
-# keep the worth fill() priced them at; the races and the zone read see him.
+# keep their worth against fill()'s defence; the races and the zone read see him.
 # Caps ride along only when the read's caps were index-matched.
 func push_defender(pos: Vector3, vel: Vector3, caps: AISkaterCaps) -> void:
 	if _defender_caps.size() == _defenders.size():
 		_defender_caps.push_back(caps)
 	_defenders.push_back(pos)
 	_defender_vels.push_back(vel)
+	_pushed += 1
 
 
 func pop_defender() -> void:
+	_pushed -= 1
 	_defenders.pop_back()
 	_defender_vels.pop_back()
 	if _defender_caps.size() > _defenders.size():
