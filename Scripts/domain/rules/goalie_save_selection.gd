@@ -40,9 +40,8 @@ class_name GoalieSaveSelection
 #      0..1 he begins the drop and the puck arrives mid-rotation. This is not a
 #           modelling gap, it is REAL and measured — the pads sweeping from
 #           vertical to flat neither block the standing lane nor seal the ice,
-#           which is the seam a human beats him through
-#           (tests/instruments/ai/test_goalie_mid_drop_gap.gd). The model reproduces it
-#           instead of pretending the drop is instant.
+#           which is the seam a human beats him through. The model reproduces
+#           it instead of pretending the drop is instant.
 #     >= 1  a full reaction fits: stay up and READ.
 #
 # The one case that is not about time is coverage: if the lateral race is

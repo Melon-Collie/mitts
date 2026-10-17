@@ -1783,8 +1783,8 @@ func _drop_waits_on_a_stick(ttg: float) -> bool:
 # A low shot he has READ ONTO A PAD FACE is a stand-up save. Standing, the pads
 # are a column from the ice to the pad-top seam; rolled flat they are 0.28 m tall
 # and the band above is open outside the trunk. So for a puck already on a pad,
-# going down buys no width he needs, gives up height he has, and spends 0.2 s
-# mid-rotation (test_goalie_mid_drop_gap). The five-hole and the ice outside the
+# going down buys no width he needs, gives up height he has, and spends
+# `butterfly_drop_speed` mid-rotation. The five-hole and the ice outside the
 # pads are the butterfly's to close, so those still drop him.
 #
 # Only on a CONVERGED read: until the belief has caught up with the puck he does
