@@ -36,8 +36,8 @@ extends GutTest
 #
 #                                      parked-point route   moving frame + ladder
 #   in-zone time with nobody goal-side       5% (worst 48%)     0% (worst 0%)
-#   closest approach to own net, worst       0.1 m              7.5 m
-#   inside offset at the zone entry         +1.65 m            +1.04 m
+#   closest approach to own net, worst       0.1 m              4.6 m
+#   inside offset at the zone entry         +1.65 m            +0.92 m
 #
 # The inside offset does NOT improve and is not claimed to: the parked-point route
 # reads a LARGER shade because it is measured off a body standing still a long way
