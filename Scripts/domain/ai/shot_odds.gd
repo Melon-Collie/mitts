@@ -34,6 +34,11 @@ extends RefCounted
 # the weighing runs in NativeShotOdds, held to this file by
 # test_native_shot_odds_parity.gd; the matched cells come back only to a query
 # that reads them (_sync_cells).
+#
+# A query's scratch is a Query. Every read takes one, the AI worker's when none
+# is passed; a caller on another thread passes its own (the xG stat, on the main
+# thread at a release), or the two overwrite each other mid-read. The field
+# itself is read-only once built (prepare).
 
 # Placement scatter (radians) the odds are priced at — about the Normal hand. A
 # decision is made before the release and the keeper's timing at release varies,
@@ -72,9 +77,26 @@ class Pick:
 	var loft: int = ShotMechanics.ELEVATION_FLAT
 
 
+# One query's scratch: each matching cell's share of the answer, the odds they
+# give, and the kernel that ran it (whose own copy of the cells `cells` lags until
+# _sync_cells). `use_native` false holds the query to the GDScript reference.
+class Query:
+	var cells := PackedInt32Array()
+	var weights := PackedFloat32Array()
+	var blend := PackedFloat32Array()
+	var count: int = 0
+	var odds: float = 0.0
+	var synced: bool = true
+	var use_native: bool = true
+	var native: RefCounted = null
+	var native_epoch: int = -1
+
+
 # Returns an unconfigured NativeShotOdds, or null. Unset, every query is GDScript.
 static var native_factory: Callable = Callable()
-static var _native: RefCounted = null
+# Bumped by attach_native: each query takes a fresh kernel from the factory then.
+static var _native_epoch: int = 0
+static var _worker := Query.new()
 
 static var _built: bool = false
 # Per spot (index fi * nx + xi): the first cell and how many.
@@ -98,16 +120,6 @@ static var _flight := PackedFloat32Array()
 # Per cell × loft × aim, at REFERENCE_SPREAD_RAD.
 static var _aim_odds := PackedFloat32Array()
 static var _aims_per_cell: int = 0
-# Scratch for one query: each matching cell's share of the answer. Static, so
-# queries must run on one thread at a time — the AI worker.
-static var _q_cells := PackedInt32Array()
-static var _q_weights := PackedFloat32Array()
-static var _q_blend := PackedFloat32Array()
-# The query's match count and odds; the cells above lag a native query until
-# _sync_cells.
-static var _q_count: int = 0
-static var _q_odds: float = 0.0
-static var _q_synced: bool = true
 
 
 # The odds of a shot from `release` at the net at `goal`, against the keeper at
@@ -115,23 +127,26 @@ static var _q_synced: bool = true
 # stance_of reads it off a replicated goalie), facing `keeper_yaw` (his
 # rotation_y; NAN when not read, and then his facing does not count).
 static func shot_now(release: Vector3, goal: Vector3, keeper_pos: Vector3,
-		keeper_vel_x: float, stance: int, keeper_yaw: float = NAN) -> float:
-	if not _weigh_shot_now(release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw):
+		keeper_vel_x: float, stance: int, keeper_yaw: float = NAN,
+		query: Query = null) -> float:
+	var q: Query = _query(query)
+	if not _weigh_shot_now(q, release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw):
 		return 0.0
-	return _weighted_odds()
+	return q.odds
 
 
 # The odds of a shot from `release` against a keeper square, still and upright on
 # it: what a carry he tracks the whole way arrives at. That situation is measured
 # (the SET cells), so it is read from them alone: a feed cell can show the same
 # visible keeper and a different outcome, from history no read carries.
-static func shot_set(release: Vector3, goal: Vector3) -> float:
+static func shot_set(release: Vector3, goal: Vector3, query: Query = null) -> float:
 	var local: Vector2 = _local(release, goal)
 	if local.y <= 0.0:
 		return 0.0
 	_build()
-	_weigh(local, false, false, Stance.UPRIGHT, 0.0, 0.0, NAN, NAN, true)
-	return _weighted_odds() if _q_count > 0 else 0.0
+	var q: Query = _query(query)
+	_weigh(q, local, false, false, Stance.UPRIGHT, 0.0, 0.0, NAN, NAN, true)
+	return q.odds if q.count > 0 else 0.0
 
 
 # The replicated goalie's Stance.
@@ -145,43 +160,47 @@ static func stance_of(keeper: GoalieNetworkState, goal: Vector3) -> int:
 # `speed`, the keeper at `keeper_pos` square on the passer. `one_timer`: the
 # receiver one-times it; otherwise he catches and charges.
 static func feed(passer: Vector3, receiver: Vector3, speed: float, goal: Vector3,
-		keeper_pos: Vector3, one_timer: bool) -> float:
-	if not _weigh_feed(passer, receiver, speed, goal, keeper_pos, one_timer):
+		keeper_pos: Vector3, one_timer: bool, query: Query = null) -> float:
+	var q: Query = _query(query)
+	if not _weigh_feed(q, passer, receiver, speed, goal, keeper_pos, one_timer):
 		return 0.0
-	return _weighted_odds()
+	return q.odds
 
 
 # The odds of the receiver's one-timer off that feed when he does not pick the
 # line — a deflection, which leaves anywhere across the mouth: the mean over
 # every aim and loft.
 static func feed_unaimed(passer: Vector3, receiver: Vector3, speed: float, goal: Vector3,
-		keeper_pos: Vector3) -> float:
-	if not _weigh_feed(passer, receiver, speed, goal, keeper_pos, true):
+		keeper_pos: Vector3, query: Query = null) -> float:
+	var q: Query = _query(query)
+	if not _weigh_feed(q, passer, receiver, speed, goal, keeper_pos, true):
 		return 0.0
-	_blend_aims()
+	_blend_aims(q)
 	var sum: float = 0.0
-	for v: float in _q_blend:
+	for v: float in q.blend:
 		sum += v
-	return sum / float(_q_blend.size())
+	return sum / float(q.blend.size())
 
 
 # The shot to fire from `release` against the keeper as shot_now reads him, into
 # `out`. `out.aim` is INF when there is no shot from here.
 static func pick_shot_now(release: Vector3, goal: Vector3, keeper_pos: Vector3,
-		keeper_vel_x: float, stance: int, out: Pick, keeper_yaw: float = NAN) -> void:
+		keeper_vel_x: float, stance: int, out: Pick, keeper_yaw: float = NAN,
+		query: Query = null) -> void:
 	out.odds = 0.0
 	out.aim = Vector3.INF
 	out.loft = ShotMechanics.ELEVATION_FLAT
-	if not _weigh_shot_now(release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw):
+	var q: Query = _query(query)
+	if not _weigh_shot_now(q, release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw):
 		return
-	_blend_aims()
+	_blend_aims(q)
 	var best: int = 0
-	for i: int in _q_blend.size():
-		if _q_blend[i] > _q_blend[best]:
+	for i: int in q.blend.size():
+		if q.blend[i] > q.blend[best]:
 			best = i
 	var n: int = AIShotFieldData.AIM_POINTS
 	var mirror: float = -signf(goal.z)
-	out.odds = _q_blend[best]
+	out.odds = q.blend[best]
 	out.loft = LOFTS[best / n]
 	out.aim = Vector3(goal.x + aim_x(best % n) * mirror, 0.0, goal.z)
 
@@ -192,22 +211,23 @@ static func pick_shot_now(release: Vector3, goal: Vector3, keeper_pos: Vector3,
 # never a per-tick one.
 static func shot_now_at_spread(release: Vector3, goal: Vector3, keeper_pos: Vector3,
 		keeper_vel_x: float, stance: int, spread_rad: float,
-		keeper_yaw: float = NAN) -> float:
-	if not _weigh_shot_now(release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw):
+		keeper_yaw: float = NAN, query: Query = null) -> float:
+	var q: Query = _query(query)
+	if not _weigh_shot_now(q, release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw):
 		return 0.0
 	var sigma_m: float = spread_rad \
 			* maxf(Vector2(release.x - goal.x, release.z - goal.z).length(), 0.5)
-	_sync_cells()
+	_sync_cells(q)
 	var blend := PackedFloat32Array()
 	blend.resize(_aims_per_cell)
 	blend.fill(0.0)
-	for j: int in _q_cells.size():
-		var t: PackedStringArray = AIShotFieldData.ROWS[_q_cells[j]].split("\t")
+	for j: int in q.cells.size():
+		var t: PackedStringArray = AIShotFieldData.ROWS[q.cells[j]].split("\t")
 		for li: int in LOFTS.size():
 			var pattern: String = t[51 + li]
 			for i: int in pattern.length():
 				blend[li * AIShotFieldData.AIM_POINTS + i] += \
-						_q_weights[j] * aim_odds(pattern, i, sigma_m)
+						q.weights[j] * aim_odds(pattern, i, sigma_m)
 	var best: float = 0.0
 	for v: float in blend:
 		best = maxf(best, v)
@@ -236,7 +256,7 @@ static func aim_x(i: int) -> float:
 	return lerpf(-reach, reach, float(i) / float(AIShotFieldData.AIM_POINTS - 1))
 
 
-static func _weigh_shot_now(release: Vector3, goal: Vector3, keeper_pos: Vector3,
+static func _weigh_shot_now(q: Query, release: Vector3, goal: Vector3, keeper_pos: Vector3,
 		keeper_vel_x: float, stance: int, keeper_yaw: float) -> bool:
 	var local: Vector2 = _local(release, goal)
 	if local.y <= 0.0:
@@ -246,10 +266,10 @@ static func _weigh_shot_now(release: Vector3, goal: Vector3, keeper_pos: Vector3
 	var k := Vector3(keeper_pos.x, 0.0, keeper_pos.z)
 	var offset: float = (k.x - AIGoalieModel.goalie_arc_match_x(k, goal, release)) * mirror
 	var square: float = NAN if is_nan(keeper_yaw) else squareness(k, keeper_yaw, release)
-	_weigh(local, false, false, stance, offset, keeper_vel_x * mirror,
+	_weigh(q, local, false, false, stance, offset, keeper_vel_x * mirror,
 			_depth_of(k, goal), square, false,
 			1 if AIGoalieModel.in_post_seal_zone(release, goal) else 0)
-	return _q_count > 0
+	return q.count > 0
 
 
 # The signed angle (rad) from a keeper at `keeper` facing `yaw` (rotation_y) to
@@ -270,8 +290,8 @@ static func _local(world: Vector3, goal: Vector3) -> Vector2:
 	return Vector2((world.x - goal.x) * mirror, (world.z - goal.z) * mirror)
 
 
-static func _weigh_feed(passer: Vector3, receiver: Vector3, speed: float, goal: Vector3,
-		keeper_pos: Vector3, one_timer: bool) -> bool:
+static func _weigh_feed(q: Query, passer: Vector3, receiver: Vector3, speed: float,
+		goal: Vector3, keeper_pos: Vector3, one_timer: bool) -> bool:
 	_build()
 	var mirror: float = -signf(goal.z)
 	var local := Vector2((receiver.x - goal.x) * mirror, (receiver.z - goal.z) * mirror)
@@ -280,33 +300,32 @@ static func _weigh_feed(passer: Vector3, receiver: Vector3, speed: float, goal: 
 	var k := Vector3(keeper_pos.x, 0.0, keeper_pos.z)
 	var travel: float = (AIGoalieModel.goalie_arc_match_x(k, goal, receiver) - k.x) * mirror
 	var flight: float = passer.distance_to(receiver) / maxf(speed, 0.1)
-	_weigh(local, true, one_timer, Stance.UPRIGHT, travel, flight)
-	return _q_count > 0
+	_weigh(q, local, true, one_timer, Stance.UPRIGHT, travel, flight)
+	return q.count > 0
 
 
-static func _weighted_odds() -> float:
-	return _q_odds
+static func _query(query: Query) -> Query:
+	return query if query != null else _worker
 
 
-# The query's matched cells and weights, fetched from the native kernel when it
-# ran the query.
-static func _sync_cells() -> void:
-	if _q_synced:
+# `q`'s matched cells and weights, fetched from its kernel when the kernel ran it.
+static func _sync_cells(q: Query) -> void:
+	if q.synced:
 		return
-	_q_cells = _native.get_cells()
-	_q_weights = _native.get_weights()
-	_q_synced = true
+	q.cells = q.native.get_cells()
+	q.weights = q.native.get_weights()
+	q.synced = true
 
 
-static func _blend_aims() -> void:
-	_sync_cells()
-	_q_blend.resize(_aims_per_cell)
-	_q_blend.fill(0.0)
-	for j: int in _q_cells.size():
-		var base: int = _q_cells[j] * _aims_per_cell
-		var w: float = _q_weights[j]
+static func _blend_aims(q: Query) -> void:
+	_sync_cells(q)
+	q.blend.resize(_aims_per_cell)
+	q.blend.fill(0.0)
+	for j: int in q.cells.size():
+		var base: int = q.cells[j] * _aims_per_cell
+		var w: float = q.weights[j]
 		for i: int in _aims_per_cell:
-			_q_blend[i] += w * _aim_odds[base + i]
+			q.blend[i] += w * _aim_odds[base + i]
 
 
 # Fills the query scratch with the matching cells and their normalized weights:
@@ -315,19 +334,22 @@ static func _blend_aims() -> void:
 # (offset, velocity) plus `depth` and `square`, each left out of the kernel when
 # NAN, and a sealed keeper's `in_seal_zone` (0 / 1). `set_query`: each spot's SET
 # cell alone.
-static func _weigh(local: Vector2, is_feed: bool, one_timer: bool, stance: int,
+static func _weigh(q: Query, local: Vector2, is_feed: bool, one_timer: bool, stance: int,
 		a: float, b: float, depth: float = NAN, square: float = NAN,
 		set_query: bool = false, in_seal_zone: int = 0) -> void:
-	if _native != null:
-		_q_odds = _native.weigh(local.x, local.y, is_feed, one_timer, stance, a, b, depth,
+	if q.native_epoch != _native_epoch:
+		q.native_epoch = _native_epoch
+		q.native = _new_native() if q.use_native else null
+	if q.native != null:
+		q.odds = q.native.weigh(local.x, local.y, is_feed, one_timer, stance, a, b, depth,
 				square, set_query, in_seal_zone)
-		_q_count = _native.get_count()
-		_q_synced = false
+		q.count = q.native.get_count()
+		q.synced = false
 		return
-	_q_synced = true
-	_q_odds = 0.0
-	_q_cells.clear()
-	_q_weights.clear()
+	q.synced = true
+	q.odds = 0.0
+	q.cells.clear()
+	q.weights.clear()
 	var xs: Array[float] = AIShotFieldData.SPOT_X
 	var fs: Array[float] = AIShotFieldData.SPOT_FWD
 	var xi: int = _bracket(xs, local.x)
@@ -342,24 +364,24 @@ static func _weigh(local: Vector2, is_feed: bool, one_timer: bool, stance: int,
 		var spot: int = (fi + (corner >> 1)) * xs.size() + xi + (corner & 1)
 		if set_query:
 			if _set_cell[spot] >= 0:
-				_q_cells.append(_set_cell[spot])
-				_q_weights.append(w)
+				q.cells.append(_set_cell[spot])
+				q.weights.append(w)
 				total += w
 		else:
-			total += _weigh_spot(spot, w, is_feed, one_timer, stance, a, b, depth, square,
+			total += _weigh_spot(q, spot, w, is_feed, one_timer, stance, a, b, depth, square,
 					in_seal_zone)
 	if total <= 0.0:
-		_q_cells.clear()
-		_q_weights.clear()
-		_q_count = 0
+		q.cells.clear()
+		q.weights.clear()
+		q.count = 0
 		return
 	var v: float = 0.0
-	for j: int in _q_weights.size():
-		_q_weights[j] /= total
-		v += _q_weights[j] * _odds[_q_cells[j]]
-	_q_count = _q_cells.size()
+	for j: int in q.weights.size():
+		q.weights[j] /= total
+		v += q.weights[j] * _odds[q.cells[j]]
+	q.count = q.cells.size()
 	# The weights are float32, so a sum of certain cells can land a hair past 1.
-	_q_odds = minf(v, 1.0)
+	q.odds = minf(v, 1.0)
 
 
 # Appends one spot's matching cells and returns the weight they carry: the
@@ -367,12 +389,12 @@ static func _weigh(local: Vector2, is_feed: bool, one_timer: bool, stance: int,
 # capped at one sample's. A spot whose only cell is far from the query then
 # yields to a neighbour with a close one, instead of answering for its whole
 # share. 0 when the spot has no matching cell.
-static func _weigh_spot(spot: int, spot_weight: float, is_feed: bool, one_timer: bool,
-		stance: int, a: float, b: float, depth: float = NAN,
+static func _weigh_spot(q: Query, spot: int, spot_weight: float, is_feed: bool,
+		one_timer: bool, stance: int, a: float, b: float, depth: float = NAN,
 		square: float = NAN, in_seal_zone: int = 0) -> float:
 	var ha: float = TRAVEL_BANDWIDTH_M if is_feed else OFFSET_BANDWIDTH_M
 	var hb: float = FLIGHT_BANDWIDTH_S if is_feed else VELOCITY_BANDWIDTH_M_S
-	var first: int = _q_cells.size()
+	var first: int = q.cells.size()
 	var wsum: float = 0.0
 	var nearest: int = -1
 	var nearest_d2: float = INF
@@ -402,8 +424,8 @@ static func _weigh_spot(spot: int, spot_weight: float, is_feed: bool, one_timer:
 				var ds: float = angle_difference(_square[c], square) / SQUARE_BANDWIDTH_RAD
 				d2 += ds * ds
 		var w: float = exp(-0.5 * d2)
-		_q_cells.append(c)
-		_q_weights.append(w)
+		q.cells.append(c)
+		q.weights.append(w)
 		wsum += w
 		if d2 < nearest_d2:
 			nearest_d2 = d2
@@ -411,14 +433,14 @@ static func _weigh_spot(spot: int, spot_weight: float, is_feed: bool, one_timer:
 	if nearest < 0:
 		return 0.0
 	if wsum < _MIN_WEIGHT:
-		_q_cells.resize(first)
-		_q_weights.resize(first)
-		_q_cells.append(nearest)
-		_q_weights.append(spot_weight * _MIN_WEIGHT)
+		q.cells.resize(first)
+		q.weights.resize(first)
+		q.cells.append(nearest)
+		q.weights.append(spot_weight * _MIN_WEIGHT)
 		return spot_weight * _MIN_WEIGHT
 	var share: float = spot_weight * minf(wsum, 1.0)
-	for j: int in range(first, _q_weights.size()):
-		_q_weights[j] *= share / wsum
+	for j: int in range(first, q.weights.size()):
+		q.weights[j] *= share / wsum
 	return share
 
 
@@ -496,19 +518,28 @@ static func _build() -> void:
 				_aim_odds[c * _aims_per_cell + li * AIShotFieldData.AIM_POINTS + i] = p
 				best = maxf(best, p)
 		_odds[c] = best
-	attach_native()
 
 
-# Hands the built field to a kernel from `native_factory`, or drops the kernel
-# when there is none. The field is built on first use, so this also runs then.
+# Builds the field, so nothing reads it half-built: run once on the main thread
+# before the AI worker starts.
+static func prepare() -> void:
+	_build()
+
+
+# Takes `native_factory` as it now stands: every query swaps in a fresh kernel
+# from it on its next read, or drops its kernel when there is none.
 static func attach_native() -> void:
-	_native = null
-	_q_synced = true
-	if not _built or not native_factory.is_valid():
-		return
+	_native_epoch += 1
+
+
+# A kernel from `native_factory` loaded with the built field, or null.
+static func _new_native() -> RefCounted:
+	if not native_factory.is_valid():
+		return null
+	_build()
 	var native: RefCounted = native_factory.call()
 	if native == null:
-		return
+		return null
 	native.set_grid(PackedFloat64Array(AIShotFieldData.SPOT_X),
 			PackedFloat64Array(AIShotFieldData.SPOT_FWD), _spot_first, _spot_count, _set_cell)
 	native.set_cells(_odds, _is_shot_sample, _is_feed, _one_timer, _stance, _in_seal_zone,
@@ -516,7 +547,7 @@ static func attach_native() -> void:
 	native.set_bandwidths(OFFSET_BANDWIDTH_M, VELOCITY_BANDWIDTH_M_S, DEPTH_BANDWIDTH_M,
 			SQUARE_BANDWIDTH_RAD, TRAVEL_BANDWIDTH_M, FLIGHT_BANDWIDTH_S, _MIN_WEIGHT,
 			Stance.POST_SEAL)
-	_native = native
+	return native
 
 
 # The best aim's goal fraction over `patterns` (FLAT / LOW / HIGH outcome strings

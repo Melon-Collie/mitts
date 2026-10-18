@@ -89,9 +89,10 @@ static func xg_release_spread(is_backhand: bool, skater_speed_m_s: float) -> flo
 # `keeper_stance` is an AIShotOdds.Stance.
 static func expected_goals(shooter: Vector3, attacking_goal: Vector3,
 		goalie_pos: Vector3, release_spread_rad: float = XG_BASE_SPREAD_RAD,
-		keeper_stance: int = AIShotOdds.Stance.UPRIGHT) -> float:
+		keeper_stance: int = AIShotOdds.Stance.UPRIGHT,
+		query: AIShotOdds.Query = null) -> float:
 	var beaten: float = AIShotValue.now_at_spread(shooter, attacking_goal, goalie_pos,
-			0.0, keeper_stance, release_spread_rad)
+			0.0, keeper_stance, release_spread_rad, NAN, query)
 	return minf(XG_MAX, beaten + (1.0 - beaten) * XG_COVERED_LEAK)
 
 

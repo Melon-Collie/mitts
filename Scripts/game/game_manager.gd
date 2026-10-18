@@ -269,6 +269,9 @@ var _tutorial_offsides_active: bool = false
 var _registry: PlayerRegistry = null
 var _codec: WorldStateCodec = null
 var _shot_tracker: ShotOnGoalTracker = null
+# The xG stat's own scratch on the shot field: it reads at a release, on the main
+# thread, while the AI worker reads through the default one.
+var _xg_query := AIShotOdds.Query.new()
 var _hit_tracker: HitTracker = null
 var _stick_ties: StickTieTracker = null
 var _board_pins: BoardPinTracker = null
@@ -463,6 +466,7 @@ func _ready() -> void:
 	print("[native] hot-path kernels: %s" % NativeKernels.summary())
 	NativeCarryRolloutFactory.install()
 	NativeShotOddsFactory.install()
+	AIShotOdds.prepare()
 	# Make Manrope the engine-wide fallback font so every Control that
 	# doesn't set its own font picks it up automatically — saves us from
 	# touching every popup, dialog, and HUD label by hand. Explicit font
@@ -3810,7 +3814,8 @@ func _note_shot_trajectory() -> void:
 	if directed:
 		var xg: float = AIActionScoring.expected_goals(
 				pos, Vector3(0.0, 0.0, directed_line_z),
-				_defending_goalie_pos(directed_line_z), _shot_release_spread())
+				_defending_goalie_pos(directed_line_z), _shot_release_spread(),
+				AIShotOdds.Stance.UPRIGHT, _xg_query)
 		_shot_tracker.note_xg(xg)
 
 

@@ -54,6 +54,12 @@ main thread* in the idle window before the next kick. And the two brain fields
 main reads every frame (the ping-elected chaser, and the possession / coverage
 flag) are published into plain mirrors at kick time.
 
+The domain's static memos and scratch belong to the worker. A main-thread
+caller brings its own: the xG stat reads the shot field through its own
+`AIShotOdds.Query`, and the chase election walks its own path rather than
+`race_trajectory`'s memo. Source tests in `test_shot_odds.gd` and
+`test_loose_puck_chase.gd` hold both.
+
 The one blocking call is `await_idle`, on the despawn path only: an
 `AIController` the worker holds must outlive the batch. The threaded path is not
 exercised by the headless suite, which bypasses the coordinator — so a change

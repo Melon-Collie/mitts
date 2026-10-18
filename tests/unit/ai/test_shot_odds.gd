@@ -100,10 +100,10 @@ func _weight_of(other: int, c: int, use_facing: bool) -> float:
 	var keeper := Vector3(float(t[30]), 0.0, float(t[31]))
 	AIShotOdds.shot_now(release, goal, keeper, float(t[35]), AIShotOdds._stance[c],
 			float(t[32]) if use_facing else NAN)
-	AIShotOdds._sync_cells()
-	for j: int in AIShotOdds._q_cells.size():
-		if AIShotOdds._q_cells[j] == other:
-			return AIShotOdds._q_weights[j]
+	AIShotOdds._sync_cells(AIShotOdds._worker)
+	for j: int in AIShotOdds._worker.cells.size():
+		if AIShotOdds._worker.cells[j] == other:
+			return AIShotOdds._worker.weights[j]
 	return 0.0
 
 
@@ -164,10 +164,60 @@ func test_a_keeper_on_the_post_is_read_by_whether_the_puck_is_in_his_seal_zone()
 			var k := Vector3(keeper.x * signf(x), 0.0, keeper.z)
 			var inside: int = 1 if AIGoalieModel.in_post_seal_zone(release, goal) else 0
 			AIShotOdds.shot_now(release, goal, k, 0.0, AIShotOdds.Stance.POST_SEAL)
-			AIShotOdds._sync_cells()
-			for c: int in AIShotOdds._q_cells:
+			AIShotOdds._sync_cells(AIShotOdds._worker)
+			for c: int in AIShotOdds._worker.cells:
 				assert_eq(int(AIShotOdds._in_seal_zone[c]), inside,
 						"a seal read at (%.1f, %.2f) reads cell %d" % [x, fwd, c])
-			if not AIShotOdds._q_cells.is_empty():
+			if not AIShotOdds._worker.cells.is_empty():
 				read[inside] = true
 	assert_true(read[0] and read[1], "the field measures the seal both held and being left")
+
+
+# A caller off the AI worker reads through its own Query. It gets the worker's
+# answer, and the worker's scratch is left as the worker's last read had it.
+func test_a_query_of_its_own_leaves_the_workers_untouched() -> void:
+	var goal := Vector3(0.0, 0.0, GOAL_Z)
+	var keeper: Vector3 = _keeper_at(goal, 0.3, 1.2)
+	var mine := AIShotOdds.Query.new()
+	for x: float in [-6.0, -2.0, 0.0, 3.0, 7.0]:
+		var release := Vector3(x, 0.0, GOAL_Z + 7.0)
+		var worker_odds: float = AIShotOdds.shot_now(release, goal, keeper, 0.5,
+				AIShotOdds.Stance.UPRIGHT)
+		AIShotOdds._sync_cells(AIShotOdds._worker)
+		var worker_cells: PackedInt32Array = AIShotOdds._worker.cells.duplicate()
+		var other := Vector3(-x, 0.0, GOAL_Z + 3.0)
+		AIShotOdds.shot_now_at_spread(other, goal, keeper, 0.0, AIShotOdds.Stance.UPRIGHT, 0.06,
+				NAN, mine)
+		AIShotOdds._sync_cells(AIShotOdds._worker)
+		assert_eq(AIShotOdds._worker.cells, worker_cells, "x %.0f: the worker's cells kept" % x)
+		assert_eq(AIShotOdds.shot_now(release, goal, keeper, 0.5, AIShotOdds.Stance.UPRIGHT,
+				NAN, mine), worker_odds, "x %.0f: the same answer through either" % x)
+
+
+# The xG stat reads the field on the main thread at a release while the AI worker
+# reads it too: the main-thread game code reaches it only through its own query.
+func test_the_main_thread_reads_the_field_through_its_own_query() -> void:
+	var allowed: Array[String] = ["AIShotOdds.Query", "AIShotOdds.Stance",
+			"AIShotOdds.prepare", "AIShotOdds.native_factory", "AIShotOdds.attach_native"]
+	var checked: int = 0
+	for f: String in DirAccess.get_files_at("res://Scripts/game"):
+		if not f.ends_with(".gd"):
+			continue
+		var src: String = FileAccess.get_file_as_string("res://Scripts/game".path_join(f))
+		for token: String in ["AIShotOdds.", "AIShotValue.", "AIPossessionValue."]:
+			var at: int = src.find(token)
+			while at >= 0:
+				var use: String = src.substr(at, 40)
+				var ok: bool = false
+				for a: String in allowed:
+					if use.begins_with(a):
+						ok = true
+				assert_true(ok, "%s calls %s on the main thread" % [f, use.get_slice("(", 0)])
+				at = src.find(token, at + 1)
+		var call: int = src.find("expected_goals(")
+		while call >= 0:
+			checked += 1
+			var args: String = src.substr(call, src.find("\n\n", call) - call)
+			assert_true(args.contains("_xg_query"), "%s reads xG through its own query" % f)
+			call = src.find("expected_goals(", call + 1)
+	assert_gt(checked, 0, "the xG call was found")
