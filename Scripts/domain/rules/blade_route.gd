@@ -14,6 +14,24 @@ const BODY_RADIUS_M: float = 0.35
 const CLEAR_M: float = BODY_RADIUS_M + GameRules.PUCK_COLLISION_RADIUS
 
 
+# The swing round the body from `from` to a hold `to` behind the skater, signed
+# as from.angle_to(to). A moving skater's hips stay on the skating line until the
+# cursor passes the blade's reach edge (FacingRules), so a hold inside it is swung
+# round the front: the blade cannot pass behind him, and a cursor crossing
+# straight behind would start a pivot. Past the edge, or standing (the body turns
+# with the cursor), the short way.
+static func swing_angle(from: Vector2, to: Vector2, facing: Vector2, velocity: Vector2,
+		rules: FacingRules.Config, is_left_handed: bool) -> float:
+	var a: float = from.angle_to(to)
+	if velocity.length() <= rules.hold_min_speed or facing.length_squared() < 0.0001 \
+			or absf(facing.angle_to(to)) >= FacingRules.reach_edge(rules, facing, to, is_left_handed):
+		return a
+	var back: float = from.angle_to(-facing)
+	if signf(back) == signf(a) and absf(back) < absf(a):
+		a -= signf(a) * TAU
+	return a
+
+
 static func crosses_body(from: Vector2, to: Vector2) -> bool:
 	if to.length() <= CLEAR_M:
 		return false

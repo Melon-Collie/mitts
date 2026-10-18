@@ -114,7 +114,7 @@ func solve_shot(aim: Vector2, puck_offset: Vector2, velocity: Vector2,
 	share[0] = share_at(puck_offset, aim, facing)
 	pull_s[0] = 0.0
 	pocket(aim, velocity, facing)
-	_fill_pulled(1, pocket_result.dir, aim, pocket_result.facing, facing)
+	_fill_pulled(1, pocket_result.dir, aim, pocket_result.facing, facing, velocity)
 	count = 2
 	for side: int in 2:
 		var dir: Vector2 = aim.normalized().rotated(PI * 0.5 if side == 0 else -PI * 0.5)
@@ -122,7 +122,7 @@ func solve_shot(aim: Vector2, puck_offset: Vector2, velocity: Vector2,
 			continue
 		FacingRules.solve(_facing, facing, dir, velocity, false, false, is_left_handed,
 				facing_cfg)
-		_fill_pulled(count, dir, aim, _facing.target, facing)
+		_fill_pulled(count, dir, aim, _facing.target, facing, velocity)
 		count += 1
 
 
@@ -178,7 +178,7 @@ func price_keep(self_pos: Vector3, velocity: Vector2, facing: Vector2, charge_s:
 				offset[k], t_end, opponents, opponent_vels, opponent_caps)
 		if pull_s[k] > 0.0 and k_keep > 0.0:
 			var t_mid: float = pull_s[k] * 0.5
-			_fill_route(k, facing)
+			_fill_route(k, facing, velocity)
 			k_keep = minf(k_keep, AICarrySpace.transit_clearance_to_safety(
 					AICarrySpace.reach_clearance(
 							_world(self_pos, _route[ROUTE_SEGMENTS / 2], velocity, t_mid),
@@ -198,10 +198,10 @@ func price_keep(self_pos: Vector3, velocity: Vector2, facing: Vector2, charge_s:
 		keep[k] = k_keep
 
 
-func _fill_route(k: int, facing: Vector2) -> void:
+func _fill_route(k: int, facing: Vector2, velocity: Vector2) -> void:
 	_route.resize(ROUTE_SEGMENTS + 1)
 	for j: int in ROUTE_SEGMENTS + 1:
-		_route[j] = _route_point(k, facing, float(j) / ROUTE_SEGMENTS)
+		_route[j] = _route_point(k, facing, velocity, float(j) / ROUTE_SEGMENTS)
 
 
 func _route_gap(p: Vector2) -> float:
@@ -216,22 +216,28 @@ static func _behind(from: Vector2, to: Vector2, facing: Vector2) -> bool:
 
 
 # The blade's time pulling the puck from `from` to `to` (offsets off the body
-# facing `facing`): BladeRoute's length at the blade speed to a spot in front;
-# to one behind, the swing round at arc_rate, or the blade's travel if longer.
-func pull_time(from: Vector2, to: Vector2, facing: Vector2) -> float:
+# facing `facing`, skating at `velocity`): BladeRoute's length at the blade speed
+# to a spot in front; to one behind, the swing round (BladeRoute.swing_angle) at
+# arc_rate, or the blade's travel if longer.
+func pull_time(from: Vector2, to: Vector2, facing: Vector2, velocity: Vector2) -> float:
 	var speed: float = maxf(blade_speed, 0.1)
 	if not _behind(from, to, facing):
 		return BladeRoute.length(from, to, facing) / speed
-	return maxf(absf(from.angle_to(to)) / maxf(arc_rate, 0.1), from.distance_to(to) / speed)
+	return maxf(absf(_swing(from, to, facing, velocity)) / maxf(arc_rate, 0.1),
+			from.distance_to(to) / speed)
+
+
+func _swing(from: Vector2, to: Vector2, facing: Vector2, velocity: Vector2) -> float:
+	return BladeRoute.swing_angle(from, to, facing, velocity, facing_cfg, is_left_handed)
 
 
 # The point a fraction `frac` along the pull to hold `k`: BladeRoute to a hold in
-# front, the short way round the body to one behind.
-func _route_point(k: int, facing: Vector2, frac: float) -> Vector2:
+# front, the swing round the body to one behind.
+func _route_point(k: int, facing: Vector2, velocity: Vector2, frac: float) -> Vector2:
 	var from: Vector2 = offset[0]
 	var to: Vector2 = offset[k]
 	if _behind(from, to, facing):
-		return from.normalized().rotated(from.angle_to(to) * frac) \
+		return from.normalized().rotated(_swing(from, to, facing, velocity) * frac) \
 				* lerpf(from.length(), to.length(), frac)
 	return BladeRoute.point_along(from, to, facing,
 			BladeRoute.length(from, to, facing) * frac)
@@ -253,9 +259,9 @@ static func _world(self_pos: Vector3, off: Vector2, velocity: Vector2, t: float)
 # A pulled hold along `dir`. The cursor on it turns the body toward `body`, but
 # the press waits for that turn only when the turn is what loads the puck.
 func _fill_pulled(k: int, dir: Vector2, aim: Vector2, body: Vector2,
-		facing: Vector2) -> void:
+		facing: Vector2, velocity: Vector2) -> void:
 	offset[k] = dir * handle_reach
-	var blade_s: float = pull_time(offset[0], offset[k], facing)
+	var blade_s: float = pull_time(offset[0], offset[k], facing, velocity)
 	var share_now: float = share_at(offset[k], aim, facing)
 	var share_turned: float = share_at(offset[k], aim, body)
 	if share_now >= share_turned - 0.001 or facing.length_squared() < 0.0001:
