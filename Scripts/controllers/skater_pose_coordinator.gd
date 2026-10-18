@@ -28,7 +28,6 @@ var upper_body_lean_roll: float = 0.0
 var velocity_lean_x: float = 0.0
 var lower_body_lag: float = 0.0
 var head_angle: float = 0.0
-var ik_locked_side: int = 0  # +1 = exited right, -1 = exited left, 0 = unlocked
 # Upper-body twist follow-through (secondary motion): a damped spring trails the
 # tracked twist so the shoulders whip through a fast cut and settle, instead of
 # tracking rigidly. Converges to the tracked angle at steady state (adds nothing
@@ -251,10 +250,7 @@ func apply_facing(input: InputState, delta: float) -> void:
 			var behind_gate: bool = absf(mouse_body_angle) \
 					>= FacingRules.reach_edge(rules, facing, cursor_dir, lefty)
 			var turns_round: bool = _facing_rule.free_to_turn_round
-			if behind_gate and not turns_round:
-				ik_locked_side = int(sign(mouse_body_angle))
-			else:
-				ik_locked_side = 0
+			if turns_round or not behind_gate:
 				var drag: float = _controller.facing_drag_speed_braking if input.brake else _controller.facing_drag_speed
 				# Re-square hard through the follow-through: the coil left facing stale
 				# at the wind-up cursor, and a lazy drag can't catch up in ~0.22 s, so
