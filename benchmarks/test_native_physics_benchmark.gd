@@ -205,6 +205,7 @@ func test_goalie_contact_gather_vs_legacy() -> void:
 	var packed := PackedFloat32Array()
 	var parts: Array = []
 	var part_goalies: Array = []
+	var part_velocities := PackedVector3Array()
 	var prev := Vector3(0.1, 0.1, 24.9)
 	var curr := Vector3(0.15, 0.12, 25.05)
 	var ticks: int = 2000
@@ -219,10 +220,11 @@ func test_goalie_contact_gather_vs_legacy() -> void:
 	t0 = Time.get_ticks_usec()
 	for _t: int in ticks:
 		var count: int = GoalieContactDetector.gather_boxes(
-				goalies, packed, parts, part_goalies)
+				goalies, packed, parts, part_goalies, part_velocities)
 		for _s: int in 16:
 			var _hit: bool = GoalieContactDetector.nearest_packed(
-					packed, count, parts, part_goalies, prev, curr, 0.065, contact)
+					packed, count, parts, part_goalies, part_velocities, prev, curr, 0.065,
+					contact)
 	_report("goalie contact tick (16 substeps)", gd_us, Time.get_ticks_usec() - t0, ticks)
 
 	for r: Node3D in _bench_roots:
