@@ -27,6 +27,11 @@ extends GutTest
 #   depth-first on the carrier's race   20              1 / 9
 #   the carrier's cuts in the stance    18              3 / 9
 #   turn-and-skate on retreats only     17              3 / 9
+#   hips on the skating line            16              3 / 9
+#
+# The hips riding the line cost a backpedal its angle to an off-lane carrier,
+# and with it the share of the backward top-speed penalty an angled body skips
+# (SkaterMovementRules): he skates at the flat 80% his retreat is priced at.
 #
 # Most of what is still lost sits off the carrier's lane, where the straight-line
 # bound ignores the lateral ice the defender must also cover. The three lost
@@ -51,7 +56,7 @@ const BOUND_REACTION_S: float = 0.05 + TeamBrain.TICK_PERIOD
 # as winnable — a body's width, so a coin-flip finish is not held against the bot.
 const WINNABLE_MARGIN_M: float = 0.5
 
-const MIN_CONTAINED: int = 17
+const MIN_CONTAINED: int = 16
 const MAX_WINNABLE_LOST: int = 3
 
 
