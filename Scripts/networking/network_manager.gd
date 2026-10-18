@@ -435,14 +435,25 @@ func _ready() -> void:
 	# PlayerPrefs and these fields on Apply, but on a fresh launch nothing
 	# else copies the saved values across, so without this the menu shows
 	# the user's name/number while spawn falls back to "Player"/10/true.
+	# PlayerPrefs' Steam Cloud reconcile runs deferred, after this — on a new
+	# machine the values read here are still the defaults, so re-seed on adopt.
 	local_player_name = PlayerPrefs.player_name
 	local_jersey_number = PlayerPrefs.jersey_number
 	local_is_left_handed = PlayerPrefs.is_left_handed
+	PlayerPrefs.cloud_prefs_adopted.connect(_on_cloud_prefs_adopted)
 	_peer_attributes[1] = PlayerPrefs.get_player_attributes()
 	_peer_tape_codes[1] = PlayerPrefs.stick_tape_code
 	_peer_skin_tones[1] = SkinToneRegistry.clamp_index(PlayerPrefs.skin_tone)
 	_peer_gear_styles[1] = GearStyleConfig.from_code(PlayerPrefs.gear_style_code).to_code()
 	_peer_positions[1] = PlayerPrefs.preferred_position
+
+
+# Routed through apply_local_identity so a mid-session adopt (Deck resume)
+# also reaches the live skater.
+func _on_cloud_prefs_adopted() -> void:
+	apply_local_identity(PlayerPrefs.player_name, PlayerPrefs.jersey_number,
+			PlayerPrefs.is_left_handed)
+
 
 # ── Connection ────────────────────────────────────────────────────────────────
 func start_offline() -> void:

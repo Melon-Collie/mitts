@@ -69,6 +69,11 @@ newer-write-wins. The cloud file name mirrors the local basename, so
 `--config-suffix` dev instances stay separate in Cloud too. Dynamic Cloud Sync
 (`cloud_files_changed`) re-runs the reconcile on a Deck suspend → resume.
 
+The reconcile runs deferred, after every autoload's `_ready`, so on a machine
+with no local file anything that copied a pref out at init holds the defaults
+until it lands. An adopt emits `PlayerPrefs.cloud_prefs_adopted`; a copy that
+outlives init (NetworkManager's `local_*` identity) re-reads on it.
+
 ## Lag-compensated claim resolvers
 
 `PickupClaimResolver`, `PokeClaimResolver`, `StickLiftClaimResolver`,

@@ -69,7 +69,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/controllers/skater_controller.gd": 3588,
 	# +1: dive_laid_out, the diver's stick and low block until the get-up.
 	"res://Scripts/actors/skater.gd": 2797,
-	"res://Scripts/networking/network_manager.gd": 2855,
+	"res://Scripts/networking/network_manager.gd": 2866,
 	"res://Scripts/game/tutorial_manager.gd": 2067,
 	"res://Scripts/controllers/skater_ik_coordinator.gd": 950,
 	# +21: apply_scripted_grant / stage_scripted — the tutorial's teleports
@@ -77,7 +77,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# sweeping the jump. +6: the pinch hop composed onto the contest exit.
 	"res://Scripts/controllers/puck_controller.gd": 1589,
 	"res://Scripts/actors/hockey_rink.gd": 1469,
-	"res://Scripts/game/player_prefs.gd": 1404,
+	"res://Scripts/game/player_prefs.gd": 1409,
 	"res://Scripts/actors/skater_mesh_builder.gd": 1462,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1357,
 	"res://Scripts/ui/career_stats_screen.gd": 1271,
