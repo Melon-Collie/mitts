@@ -393,6 +393,19 @@ static func fill_counter_cover_etas(our_net: Vector3,
 		out_etas.append(tm.distance_to(cp) / AIArrival.SKATER_REF_SPEED_M_S)
 
 
+# Each opponent's carry home to the counter point from rest, at his Speed cap:
+# what the pass-forward leg races, and the same for every loss point, so a
+# compete fills it once (counter_time's `opp_home`).
+static func fill_counter_opp_home(our_net: Vector3, opponents: Array[Vector3],
+		opponent_caps: Array, out_home: Array[float]) -> void:
+	var cp: Vector3 = counter_point_for(our_net)
+	var has_caps: bool = opponent_caps.size() == opponents.size()
+	out_home.clear()
+	for j: int in opponents.size():
+		out_home.append(AIArrival.time_to_arrive(opponents[j], cp, Vector3.ZERO,
+				_opponent_speed(opponent_caps, j, has_caps)))
+
+
 static func counter_rush_cost(
 		loss_point: Vector3,
 		loss_prob: float,
@@ -406,9 +419,23 @@ static func counter_rush_cost(
 		opponent_caps: Array,
 		mate_etas: Array[float] = [],
 		threat_by_cover: Array[float] = [],
-		in_xg: bool = false) -> float:
+		in_xg: bool = false,
+		opp_home: Array[float] = []) -> float:
 	if not loss_point.is_finite() or loss_prob <= 0.0 or opponents.is_empty():
 		return 0.0
+	return counter_rush_cost_at(
+			counter_time(loss_point, our_net, opponents, opponent_vels, opponent_caps,
+					opp_home),
+			loss_prob, our_net, our_goalie_pos, teammates, self_recover_pos,
+			self_max_speed, mate_etas, threat_by_cover, in_xg)
+
+
+# When the fastest counter off a loss at `loss_point` reaches the counter point:
+# collect and carry, or collect and feed an outlet already ahead. INF when no
+# opponent can. `opp_home` is fill_counter_opp_home's, or empty to race it here.
+static func counter_time(loss_point: Vector3, our_net: Vector3,
+		opponents: Array[Vector3], opponent_vels: Array[Vector3],
+		opponent_caps: Array, opp_home: Array[float] = []) -> float:
 	var counter_point: Vector3 = counter_point_for(our_net)
 
 	# Fastest opponent: collect the loss, then carry to the counter point at
@@ -419,11 +446,7 @@ static func counter_rush_cost(
 	var has_vels: bool = opponent_vels.size() == opponents.size()
 	var has_caps: bool = opponent_caps.size() == opponents.size()
 	for i: int in opponents.size():
-		var speed: float = AIArrival.SKATER_REF_SPEED_M_S
-		if has_caps:
-			var caps: AISkaterCaps = opponent_caps[i]
-			if caps != null:
-				speed = caps.max_speed
+		var speed: float = _opponent_speed(opponent_caps, i, has_caps)
 		var vel: Vector3 = opponent_vels[i] if has_vels else Vector3.ZERO
 		var t_collect: float = AIArrival.time_to_arrive(opponents[i], loss_point, vel, speed)
 		if t_collect < t_collect_best:
@@ -432,27 +455,52 @@ static func counter_rush_cost(
 		if t < t_counter:
 			t_counter = t
 	if t_counter == INF:
-		return 0.0
+		return INF
 	# PASS-FORWARD leg: the counter can hit an outlet already AHEAD. From the
 	# fastest collect, price the hardest feed to each other opponent and HIS
 	# carry home from rest, and let the min compete with the lone-carrier time.
+	var has_home: bool = opp_home.size() == opponents.size()
 	for j: int in opponents.size():
-		var j_speed: float = AIArrival.SKATER_REF_SPEED_M_S
-		if has_caps:
-			var j_caps: AISkaterCaps = opponent_caps[j]
-			if j_caps != null:
-				j_speed = j_caps.max_speed
-		var j_carry: float = opponents[j].distance_to(counter_point)
 		# The feed only helps when the outlet is genuinely AHEAD of the
 		# lug — skip receivers whose own carry isn't shorter.
-		if j_carry >= carry_dist:
+		if opponents[j].distance_to(counter_point) >= carry_dist:
 			continue
+		var home: float = opp_home[j] if has_home else AIArrival.time_to_arrive(
+				opponents[j], counter_point, Vector3.ZERO,
+				_opponent_speed(opponent_caps, j, has_caps))
 		var t_pf: float = t_collect_best \
 				+ loss_point.distance_to(opponents[j]) \
 						/ GameRules.DEFAULT_WRISTER_POWER_MAX_M_S \
-				+ AIArrival.time_to_arrive(opponents[j], counter_point, Vector3.ZERO, j_speed)
+				+ home
 		if t_pf < t_counter:
 			t_counter = t_pf
+	return t_counter
+
+
+static func _opponent_speed(opponent_caps: Array, i: int, has_caps: bool) -> float:
+	if has_caps:
+		var caps: AISkaterCaps = opponent_caps[i]
+		if caps != null:
+			return caps.max_speed
+	return AIArrival.SKATER_REF_SPEED_M_S
+
+
+# counter_rush_cost once the counter's time `t_counter` is known: who beats it
+# home, and what the shot from the counter point is worth past them.
+static func counter_rush_cost_at(
+		t_counter: float,
+		loss_prob: float,
+		our_net: Vector3,
+		our_goalie_pos: Vector3,
+		teammates: Array[Vector3],
+		self_recover_pos: Vector3,
+		self_max_speed: float,
+		mate_etas: Array[float] = [],
+		threat_by_cover: Array[float] = [],
+		in_xg: bool = false) -> float:
+	if t_counter == INF or loss_prob <= 0.0:
+		return 0.0
+	var counter_point: Vector3 = counter_point_for(our_net)
 
 	# Covering set: bodies that beat the counter home WITH TIME TO SET — the
 	# same brake-to-arrive margin AIRoleSlots5.assign charges the RUSH_D1

@@ -350,6 +350,22 @@ func test_evaluator_costs() -> void:
 	_bench("counter_rush_cost (4 tm, 5 opp)", func() -> void:
 		AIActionScoring.counter_rush_cost(from, 0.5, Vector3(0, 0, OUR_NET_Z),
 				Vector3(0, 0, OUR_NET_Z - 0.8), mates, from, 8.0, opps, opp_vels, opp_caps))
+	# The callers' per-candidate paths: the shot memoized per compete, and either
+	# the opponents' carries home filled once (the carrier) or the whole race run
+	# once (support, whose loss point is the carrier for every candidate).
+	var our_net := Vector3(0, 0, OUR_NET_Z)
+	var memo: Array[float] = []
+	memo.resize(mates.size() + 2)
+	memo.fill(-1.0)
+	var homes: Array[float] = []
+	AIActionScoring.fill_counter_opp_home(our_net, opps, opp_caps, homes)
+	_bench("counter_rush_cost, memoized (carrier per candidate)", func() -> void:
+		AIActionScoring.counter_rush_cost(from, 0.5, our_net, Vector3(0, 0, OUR_NET_Z - 0.8),
+				mates, from, 8.0, opps, opp_vels, opp_caps, [], memo, false, homes))
+	var t_counter: float = AIActionScoring.counter_time(from, our_net, opps, opp_vels, opp_caps)
+	_bench("counter_rush_cost_at, memoized (support per candidate)", func() -> void:
+		AIActionScoring.counter_rush_cost_at(t_counter, 0.5, our_net,
+				Vector3(0, 0, OUR_NET_Z - 0.8), mates, from, 8.0, [], memo))
 	_bench("reach_clearance (5 def)", func() -> void:
 		AICarrySpace.reach_clearance(from, 0.4, opps, opp_vels, opp_caps))
 	_bench("carry_safety (5 def)", func() -> void:

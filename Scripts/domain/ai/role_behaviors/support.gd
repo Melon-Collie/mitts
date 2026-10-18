@@ -62,6 +62,11 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	for _i: int in teammate_positions.size() + 2:
 		_scratch_threat_by_cover.append(-1.0)
 	var our_goalie: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
+	# Every candidate prices a loss at the carrier, so the counter is one race.
+	var t_counter: float = INF
+	if turnover_prior > 0.0:
+		t_counter = AIActionScoring.counter_time(carrier_pos, our_net, opp_positions,
+				_scratch_opp_vels, ctx.scratch_opp_caps)
 
 	# Far from the station, skate at the calculated post (STATION_ARGMAX_LOD_M).
 	# In transit it is the goal-side trail a step behind the carrier.
@@ -93,11 +98,10 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		var pass_value: float = AIActionScoring.score_pass_value(
 				carrier_pos, c, ctx.attacking_goal_pos, goalie_pos, opp_positions,
 				pass_speed, ctx.scratch_opp_caps)
-		var counter_cost: float = AIActionScoring.counter_rush_cost(
-				carrier_pos, turnover_prior, our_net, our_goalie,
-				teammate_positions, c,
-				ctx.self_max_speed, opp_positions, _scratch_opp_vels,
-				ctx.scratch_opp_caps, _scratch_mate_etas, _scratch_threat_by_cover)
+		var counter_cost: float = AIActionScoring.counter_rush_cost_at(
+				t_counter, turnover_prior, our_net, our_goalie,
+				teammate_positions, c, ctx.self_max_speed,
+				_scratch_mate_etas, _scratch_threat_by_cover)
 		var score: float = pass_value - counter_cost + AIStationSearch.incumbent_bonus(ctx, c)
 		if score > best_score:
 			best_score = score

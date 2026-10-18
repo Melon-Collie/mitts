@@ -61,6 +61,7 @@ var our_defender_vels: Array[Vector3] = []
 # and the counter-threat memo by covering-body count, -1-seeded with them.
 var exposure_mate_etas: Array[float] = []
 var exposure_threat_memo: Array[float] = []
+var exposure_opp_home: Array[float] = []
 
 # ── Receivers (fill_receivers: the FIRE phase only) ──────────────────────────
 # Read in the fire phase and carried into a sliced commit phase unchanged, since
@@ -124,6 +125,8 @@ func fill(ctx: RoleContext) -> void:
 				ctx.defending_goal_pos, our_defenders, exposure_mate_etas)
 		exposure_threat_memo.resize(our_defenders.size() + 2)
 		exposure_threat_memo.fill(-1.0)
+		AIActionScoring.fill_counter_opp_home(
+				ctx.defending_goal_pos, opponents, opponent_caps, exposure_opp_home)
 	var opp_keeper: GoalieNetworkState = ctx.snapshot.goalie_states.get(1 - ctx.team_id)
 	keeper_stance = AIShotOdds.stance_of(opp_keeper, ctx.attacking_goal_pos) \
 			if opp_keeper != null else AIShotOdds.Stance.UPRIGHT
@@ -205,7 +208,7 @@ func counter_exposure_cost(ctx: RoleContext, loss_point: Vector3,
 			our_defenders,
 			recover_from, ctx.self_max_speed,
 			opponents, opponent_vels, opponent_caps,
-			exposure_mate_etas, exposure_threat_memo, true)
+			exposure_mate_etas, exposure_threat_memo, true, exposure_opp_home)
 
 
 # ── Stateless reads every search shares ──────────────────────────────────────
