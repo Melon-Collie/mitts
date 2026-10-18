@@ -34,6 +34,39 @@ const DRIVE_MIN_NET_DIST_M: float = 3.0
 # Goalie halves memoized per fill (_goalie_half): a defence read prices the same
 # few spots against every candidate body. Round-robin past this many.
 const GOALIE_MEMO_CAP: int = 32
+# Entry worths shared across reads (_SharedEntries): every bot on a side prices
+# the same entries against the same defence in one AI batch. Round-robin past
+# this many defences.
+const SHARED_ENTRY_SLOTS: int = 4
+
+
+# One defence's entry worths, keyed on the exact ice they were priced against.
+# `generation` moves when the slot is handed to another defence, so a read that
+# holds it can tell. Reads run on the AI worker alone (as AIShotOdds' do).
+class _SharedEntries:
+	var goal: Vector3 = Vector3.INF
+	var defenders: Array[Vector3] = []
+	var vels: Array[Vector3] = []
+	var caps: Array = []
+	var worth: Array[float] = []
+	var generation: int = 0
+
+	func matches(g: Vector3, d: Array[Vector3], v: Array[Vector3], c: Array) -> bool:
+		return goal == g and defenders == d and vels == v and caps == c
+
+	func claim(g: Vector3, d: Array[Vector3], v: Array[Vector3], c: Array,
+			entries: int) -> void:
+		goal = g
+		defenders.assign(d)
+		vels.assign(v)
+		caps.assign(c)
+		worth.resize(entries)
+		worth.fill(-1.0)
+		generation += 1
+
+
+static var _shared: Array[_SharedEntries] = []
+static var _shared_next: int = 0
 
 var _goal: Vector3 = Vector3.ZERO
 var _defenders: Array[Vector3] = []
@@ -62,6 +95,9 @@ var _memo_to: Array[Vector3] = []
 var _memo_keeper: Array[Vector3] = []
 var _memo_value: Array[float] = []
 var _memo_next: int = 0
+# The shared slot this fill's entries live in, and its generation when taken.
+var _slot: _SharedEntries = null
+var _slot_generation: int = -1
 
 
 # Reads the ice for the side attacking `goal` against `defenders` (velocities and
@@ -83,6 +119,7 @@ func fill(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3
 	_memo_next = 0
 	_entry_spots.clear()
 	_entry_worth.clear()
+	_slot = null
 	if in_zone_only:
 		return
 	var z: float = signf(goal.z) * (GameRules.BLUE_LINE_Z + ENTRY_LEAD_M)
@@ -150,10 +187,36 @@ func _worth(i: int) -> float:
 		_stash_caps.push_back(_defender_caps.back() \
 				if _defender_caps.size() == _defenders.size() else null)
 		pop_defender()
-	_entry_worth[i] = _price_entry(_entry_spots[i])
+	_entry_worth[i] = _shared_worth(i)
 	for _k: int in n:
 		push_defender(_stash_pos.pop_back(), _stash_vel.pop_back(), _stash_caps.pop_back())
 	return _entry_worth[i]
+
+
+# Entry `i` against fill()'s defence (no pushed bodies), from the shared slot
+# when another read already priced it.
+func _shared_worth(i: int) -> float:
+	if _slot == null or _slot.generation != _slot_generation:
+		_slot = _find_slot()
+		_slot_generation = _slot.generation
+	if _slot.worth[i] < 0.0:
+		_slot.worth[i] = _price_entry(_entry_spots[i])
+	return _slot.worth[i]
+
+
+func _find_slot() -> _SharedEntries:
+	for slot: _SharedEntries in _shared:
+		if slot.matches(_goal, _defenders, _defender_vels, _defender_caps):
+			return slot
+	var slot: _SharedEntries
+	if _shared.size() < SHARED_ENTRY_SLOTS:
+		slot = _SharedEntries.new()
+		_shared.append(slot)
+	else:
+		slot = _shared[_shared_next]
+		_shared_next = (_shared_next + 1) % SHARED_ENTRY_SLOTS
+	slot.claim(_goal, _defenders, _defender_vels, _defender_caps, _entry_spots.size())
+	return slot
 
 
 func _price_open() -> void:

@@ -124,10 +124,13 @@ func test_entries_priced_on_demand_read_as_priced_up_front() -> void:
 		for i: int in eager._entry_spots.size():
 			assert_lte(eager._worth(i), eager._open_worth[i] + 1e-6,
 					"trial %d: a defence never raises entry %d" % [trial, i])
+		# Cleared, or the lazy read takes the eager one's shared entries.
+		AIPossessionValue._shared.clear()
 		var lazy: AIPossessionValue = _read(defenders.duplicate())
 		for spot: Vector3 in spots:
 			assert_almost_eq(lazy.at(spot), eager.at(spot), 1e-6,
 					"trial %d at %s" % [trial, spot])
+		AIPossessionValue._shared.clear()
 		lazy = _read(defenders.duplicate())
 		lazy.push_defender(body, Vector3.ZERO, null)
 		eager.push_defender(body, Vector3.ZERO, null)
@@ -136,6 +139,52 @@ func test_entries_priced_on_demand_read_as_priced_up_front() -> void:
 					"trial %d at %s, a body pushed" % [trial, spot])
 		lazy.pop_defender()
 		eager.pop_defender()
+
+
+# Reads of the same defence share their entries' worths. Sharing must never
+# change an answer: a read that takes them reads what one priced alone does, a
+# different defence never takes them, and a read whose slot went to another
+# defence prices its own again.
+func test_reads_of_one_defence_share_entries_and_no_other_does() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	var spots: Array[Vector3] = [Vector3(0, 0, 5), Vector3(-9, 0, -3), Vector3(10, 0, 12)]
+	for trial: int in 20:
+		var defenders: Array[Vector3] = []
+		for _k: int in rng.randi_range(1, 5):
+			defenders.append(Vector3(rng.randf_range(-12.0, 12.0), 0.0,
+					rng.randf_range(-24.0, 20.0)))
+		AIPossessionValue._shared.clear()
+		var alone: Array[float] = []
+		var fresh: AIPossessionValue = _read(defenders.duplicate())
+		for spot: Vector3 in spots:
+			alone.append(fresh.at(spot))
+		AIPossessionValue._shared.clear()
+		var first: AIPossessionValue = _read(defenders.duplicate())
+		for i: int in first._entry_spots.size():
+			first._worth(i)
+		var second: AIPossessionValue = _read(defenders.duplicate())
+		for j: int in spots.size():
+			assert_almost_eq(second.at(spots[j]), alone[j], 1e-6,
+					"trial %d: a shared read at %s" % [trial, spots[j]])
+		assert_true(second._slot == first._slot, "trial %d: the same defence shares" % trial)
+		var moved: Array[Vector3] = defenders.duplicate()
+		moved[0] += Vector3(0.5, 0.0, 0.0)
+		var other: AIPossessionValue = _read(moved)
+		other._worth(0)
+		assert_false(other._slot == first._slot, "trial %d: another defence does not" % trial)
+		# Hand every slot to another defence; the first read prices its own again.
+		for k: int in AIPossessionValue.SHARED_ENTRY_SLOTS:
+			var evict: Array[Vector3] = [Vector3(float(k), 0.0, 30.0)]
+			_read(evict)._worth(0)
+		var again: AIPossessionValue = _read(defenders.duplicate())
+		for j: int in spots.size():
+			assert_almost_eq(again.at(spots[j]), alone[j], 1e-6,
+					"trial %d: after eviction at %s" % [trial, spots[j]])
+		first._entry_worth.fill(-1.0)
+		for j: int in spots.size():
+			assert_almost_eq(first.at(spots[j]), alone[j], 1e-6,
+					"trial %d: a read whose slot was taken, at %s" % [trial, spots[j]])
 
 
 # ── The defence's read of a man ──────────────────────────────────────────────
