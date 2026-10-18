@@ -23,6 +23,13 @@ var _results: Array[Dictionary] = []
 
 # One frozen 5v5 scene: opp carrier cycling our strong corner, full lineups.
 # Peer 1 = the bot under test (team 0); 100-series = opponents.
+# Back to the GDScript reference for the rows that follow.
+func _uninstall_native_ai() -> void:
+	AIShotOdds.native_factory = Callable()
+	AIShotOdds.attach_native()
+	AICarryRollout.native_factory = Callable()
+
+
 func _make_ctx(self_pos: Vector3, carrier_pid: int = 100) -> RoleContext:
 	var snap := WorldSnapshot.new()
 	var placements: Array = [
@@ -160,6 +167,23 @@ func test_evaluator_costs() -> void:
 				open_carrier._field.teammate_ids))
 	_bench("open ice: best carry (candidates)", func() -> void:
 		open_carrier._carry.search(open_ctx, 0.1))
+	# The shipped game's path: the field read and the rollout both native.
+	NativeShotOddsFactory.install()
+	NativeCarryRolloutFactory.install()
+	var native_open := AIRoleCarrier.new()
+	native_open._field.fill(open_ctx)
+	_bench("open ice: best carry (candidates, native kernels)", func() -> void:
+		native_open._carry.search(open_ctx, 0.1))
+	var native_c := AIRoleCarrier.new()
+	native_c._pick_action_cooldown = 0
+	native_c.decide(c_ctx)
+	native_c._field.fill(c_ctx)
+	_bench("carrier: best carry (candidates, native kernels)", func() -> void:
+		native_c._carry.search(c_ctx, 0.1))
+	_bench("CARRIER compete (full, native kernels)", func() -> void:
+		native_c._pick_action_cooldown = 0
+		native_c.decide(c_ctx))
+	_uninstall_native_ai()
 	var rollout := AICarryRollout.new()
 	rollout._native = null
 	var roll_caps := AISkaterCaps.new()
@@ -318,6 +342,10 @@ func test_evaluator_costs() -> void:
 		AIActionScoring.score_shoot_value(from, net, goalie, opps))
 	_bench("AIShotOdds.shot_now (the field read)", func() -> void:
 		AIShotOdds.shot_now(from, net, goalie, 0.0, AIShotOdds.Stance.UPRIGHT))
+	NativeShotOddsFactory.install()
+	_bench("AIShotOdds.shot_now (the field read, native)", func() -> void:
+		AIShotOdds.shot_now(from, net, goalie, 0.0, AIShotOdds.Stance.UPRIGHT))
+	_uninstall_native_ai()
 	_bench("AIShotValue.feed (one-timer)", func() -> void:
 		AIShotValue.feed(Vector3(-4, 0, -19), from, 16.0, net, goalie, true))
 	_bench("lane_clear (5 defenders)", func() -> void:

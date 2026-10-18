@@ -100,6 +100,7 @@ func _weight_of(other: int, c: int, use_facing: bool) -> float:
 	var keeper := Vector3(float(t[30]), 0.0, float(t[31]))
 	AIShotOdds.shot_now(release, goal, keeper, float(t[35]), AIShotOdds._stance[c],
 			float(t[32]) if use_facing else NAN)
+	AIShotOdds._sync_cells()
 	for j: int in AIShotOdds._q_cells.size():
 		if AIShotOdds._q_cells[j] == other:
 			return AIShotOdds._q_weights[j]
@@ -163,6 +164,7 @@ func test_a_keeper_on_the_post_is_read_by_whether_the_puck_is_in_his_seal_zone()
 			var k := Vector3(keeper.x * signf(x), 0.0, keeper.z)
 			var inside: int = 1 if AIGoalieModel.in_post_seal_zone(release, goal) else 0
 			AIShotOdds.shot_now(release, goal, k, 0.0, AIShotOdds.Stance.POST_SEAL)
+			AIShotOdds._sync_cells()
 			for c: int in AIShotOdds._q_cells:
 				assert_eq(int(AIShotOdds._in_seal_zone[c]), inside,
 						"a seal read at (%.1f, %.2f) reads cell %d" % [x, fwd, c])

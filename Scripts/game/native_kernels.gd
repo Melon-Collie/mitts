@@ -10,6 +10,7 @@ const KERNEL_CLASSES: Array[StringName] = [
 	&"NativeTopHandIK", &"NativeBottomHandIK",
 	&"NativeSkaterMovement", &"NativePuckStep", &"NativeBladeDangle",
 	&"NativeArmRig", &"NativeSkaterGait", &"NativeLegChain", &"NativeCarryRollout",
+	&"NativeShotOdds",
 ]
 
 

@@ -462,6 +462,7 @@ func _ready() -> void:
 	randomize()
 	print("[native] hot-path kernels: %s" % NativeKernels.summary())
 	NativeCarryRolloutFactory.install()
+	NativeShotOddsFactory.install()
 	# Make Manrope the engine-wide fallback font so every Control that
 	# doesn't set its own font picks it up automatically — saves us from
 	# touching every popup, dialog, and HUD label by hand. Explicit font
