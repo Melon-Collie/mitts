@@ -229,6 +229,17 @@ const GOALIE_SEAL_ZONE_POST_Z_M: float = 2.0
 const GOALIE_SEAL_ANGLE_RAD: float = deg_to_rad(77.0)
 
 
+# Whether a puck at `shooter`, in front of the net at `attacking_goal`, is inside
+# the live keeper's RVH/VH trigger zone: where he takes the post, and outside which
+# a keeper still on it is leaving it.
+static func in_post_seal_zone(shooter: Vector3, attacking_goal: Vector3) -> bool:
+	var forward: float = (shooter.z - attacking_goal.z) * -signf(attacking_goal.z)
+	if forward < 0.001 or forward > GOALIE_SEAL_ZONE_POST_Z_M:
+		return false
+	return atan2(absf(shooter.x - attacking_goal.x), maxf(forward, 0.01)) \
+			>= GOALIE_SEAL_ANGLE_RAD
+
+
 # Predicted post-seal x-sign for a shot from `shooter`: the side (relative to goal
 # center) a keeper would seal, or 0.0 for the common in-front look where no seal
 # applies. Only the IN-FRONT sharp angle is sealed here (VH — tall); a release
@@ -250,13 +261,12 @@ static func derive_post_seal_x_sign(shooter: Vector3, attacking_goal: Vector3) -
 	var lateral: float = absf(shooter.x - attacking_goal.x)
 	# Frontal early-out (hot path — this is on every arc-match): neither
 	# trigger can fire at or inside 45° off the normal. The RVH/VH zone needs
-	# 80°, and the erasure's window at 45° (≥ 1.83·cos 45° / d) is always
+	# 77°, and the erasure's window at 45° (≥ 1.83·cos 45° / d) is always
 	# wider than the post-body cover (≤ 0.80 / d) at any range.
 	if lateral <= forward:
 		return 0.0
 	var side: float = signf(shooter.x - attacking_goal.x)
-	if forward <= GOALIE_SEAL_ZONE_POST_Z_M \
-			and atan2(lateral, maxf(forward, 0.01)) >= GOALIE_SEAL_ANGLE_RAD:
+	if in_post_seal_zone(shooter, attacking_goal):
 		return side
 	if side == 0.0:
 		return 0.0

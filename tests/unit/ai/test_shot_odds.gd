@@ -148,3 +148,24 @@ func test_a_keeper_turned_off_the_shot_is_told_from_a_set_one() -> void:
 		assert_gt(_weight_of(c, c, true), _weight_of(set_cell, c, true),
 				"cell %d, turned off the shot, reads as itself" % c)
 	assert_gt(checked, 0, "the field measures keepers turned off the shot")
+
+
+func test_a_keeper_on_the_post_is_read_by_whether_the_puck_is_in_his_seal_zone() -> void:
+	# Sealed with the puck inside his zone he is set on the post; with it outside,
+	# it has been pulled off the line and he is leaving. Each query reads only the
+	# cells on its own side of that trigger.
+	var goal := Vector3(0.0, 0.0, GOAL_Z)
+	var keeper: Vector3 = _keeper_at(goal, 0.85, 0.1)
+	var read: Array[bool] = [false, false]
+	for fwd: float in [0.6, 0.65, 0.8, 1.0, 1.5, 2.5]:
+		for x: float in [-8.0, -5.0, -4.0, 4.0, 4.5, 6.0, 8.0]:
+			var release := Vector3(x, 0.0, GOAL_Z + fwd)
+			var k := Vector3(keeper.x * signf(x), 0.0, keeper.z)
+			var inside: int = 1 if AIGoalieModel.in_post_seal_zone(release, goal) else 0
+			AIShotOdds.shot_now(release, goal, k, 0.0, AIShotOdds.Stance.POST_SEAL)
+			for c: int in AIShotOdds._q_cells:
+				assert_eq(int(AIShotOdds._in_seal_zone[c]), inside,
+						"a seal read at (%.1f, %.2f) reads cell %d" % [x, fwd, c])
+			if not AIShotOdds._q_cells.is_empty():
+				read[inside] = true
+	assert_true(read[0] and read[1], "the field measures the seal both held and being left")

@@ -18,7 +18,10 @@ extends RefCounted
 #     arrives at. Samples: settled, after a deke, as feeds left him on arrival,
 #     and drawn out of position by a decoy carrier. His stance is matched exactly
 #     (Stance): a keeper sealed on his post and one sprawled after a feed are
-#     both "down", and nothing alike.
+#     both "down", and nothing alike. A sealed one is matched on whether the
+#     release is inside his seal zone too (AIGoalieModel.in_post_seal_zone):
+#     outside it the puck has been pulled off the line and he is leaving the
+#     post, which is a different keeper from one set on it.
 #   feed     — a pass, read at the passer's decision with the keeper square on the
 #     passer; what he manages over the flight is the goalie's own answer.
 #
@@ -76,6 +79,7 @@ static var _is_shot_sample := PackedByteArray()
 static var _is_feed := PackedByteArray()
 static var _one_timer := PackedByteArray()
 static var _stance := PackedByteArray()
+static var _in_seal_zone := PackedByteArray()
 static var _offset := PackedFloat32Array()
 static var _velocity := PackedFloat32Array()
 static var _depth := PackedFloat32Array()
@@ -228,7 +232,8 @@ static func _weigh_shot_now(release: Vector3, goal: Vector3, keeper_pos: Vector3
 	var offset: float = (k.x - AIGoalieModel.goalie_arc_match_x(k, goal, release)) * mirror
 	var square: float = NAN if is_nan(keeper_yaw) else squareness(k, keeper_yaw, release)
 	_weigh(local, false, false, stance, offset, keeper_vel_x * mirror,
-			_depth_of(k, goal), square)
+			_depth_of(k, goal), square, false,
+			1 if AIGoalieModel.in_post_seal_zone(release, goal) else 0)
 	return not _q_cells.is_empty()
 
 
@@ -286,10 +291,11 @@ static func _blend_aims() -> void:
 # bilinear over the four spots around `local`, a kernel over the keeper state
 # within each. A feed's state is (a, b) = (travel, flight); a shot's is (a, b) =
 # (offset, velocity) plus `depth` and `square`, each left out of the kernel when
-# NAN. `set_query`: each spot's SET cell alone.
+# NAN, and a sealed keeper's `in_seal_zone` (0 / 1). `set_query`: each spot's SET
+# cell alone.
 static func _weigh(local: Vector2, is_feed: bool, one_timer: bool, stance: int,
 		a: float, b: float, depth: float = NAN, square: float = NAN,
-		set_query: bool = false) -> void:
+		set_query: bool = false, in_seal_zone: int = 0) -> void:
 	_q_cells.clear()
 	_q_weights.clear()
 	var xs: Array[float] = AIShotFieldData.SPOT_X
@@ -310,7 +316,8 @@ static func _weigh(local: Vector2, is_feed: bool, one_timer: bool, stance: int,
 				_q_weights.append(w)
 				total += w
 		else:
-			total += _weigh_spot(spot, w, is_feed, one_timer, stance, a, b, depth, square)
+			total += _weigh_spot(spot, w, is_feed, one_timer, stance, a, b, depth, square,
+					in_seal_zone)
 	if total <= 0.0:
 		_q_cells.clear()
 		_q_weights.clear()
@@ -326,7 +333,7 @@ static func _weigh(local: Vector2, is_feed: bool, one_timer: bool, stance: int,
 # share. 0 when the spot has no matching cell.
 static func _weigh_spot(spot: int, spot_weight: float, is_feed: bool, one_timer: bool,
 		stance: int, a: float, b: float, depth: float = NAN,
-		square: float = NAN) -> float:
+		square: float = NAN, in_seal_zone: int = 0) -> float:
 	var ha: float = TRAVEL_BANDWIDTH_M if is_feed else OFFSET_BANDWIDTH_M
 	var hb: float = FLIGHT_BANDWIDTH_S if is_feed else VELOCITY_BANDWIDTH_M_S
 	var first: int = _q_cells.size()
@@ -343,6 +350,8 @@ static func _weigh_spot(spot: int, spot_weight: float, is_feed: bool, one_timer:
 			cb = _flight[c]
 		else:
 			if _is_shot_sample[c] == 0 or _stance[c] != stance:
+				continue
+			if stance == Stance.POST_SEAL and _in_seal_zone[c] != in_seal_zone:
 				continue
 			ca = _offset[c]
 			cb = _velocity[c]
@@ -409,6 +418,7 @@ static func _build() -> void:
 	_is_feed.resize(n)
 	_one_timer.resize(n)
 	_stance.resize(n)
+	_in_seal_zone.resize(n)
 	_aim_odds.resize(n * _aims_per_cell)
 	for c: int in n:
 		var t: PackedStringArray = AIShotFieldData.ROWS[c].split("\t")
@@ -429,6 +439,7 @@ static func _build() -> void:
 		var probe := GoalieNetworkState.new()
 		probe.state_enum = int(float(t[33]))
 		_stance[c] = stance_of(probe, _FIELD_GOAL)
+		_in_seal_zone[c] = 1 if AIGoalieModel.in_post_seal_zone(release, _FIELD_GOAL) else 0
 		_offset[c] = now.x - AIGoalieModel.goalie_arc_match_x(now, _FIELD_GOAL, release)
 		_velocity[c] = float(t[35])
 		_depth[c] = _depth_of(now, _FIELD_GOAL)
