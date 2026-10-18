@@ -9,8 +9,8 @@ class_name GoalieStickRules
 # READY it spans roughly -0.17..+0.21 m of the goalie's local x (+x blocker
 # side). The pads are the outer low surface; the stick is the five-hole's.
 #
-# tests/slow/ai/test_goalie_low_cover.gd sweeps flat shots for the point where
-# saves stop. Against a standing keeper the blocker side is shut at every range
+# Swept with flat shots against the live keeper for the point where saves
+# stop: against a standing keeper the blocker side is shut at every range
 # from 3 m to 12 m and the glove side leaks at 7 m. From 3 m nearly every first
 # contact is the stick, but that is ANGLE COMPRESSION, not reach: he stands
 # 1.68 m out of a 3 m shot, so every aim from post to post crosses his plane

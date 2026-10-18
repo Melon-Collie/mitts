@@ -15,8 +15,9 @@ class_name AIDefensiveVerbs
 const COVER_GOAL_SIDE_TOLERANCE_M: float = 0.5
 
 
-# The spot that most deflates the carrier→`man_pos` pass-threat surface (lane
-# interception × the man's resulting shot), searched around the threat
+# The spot that most deflates the threat of the carrier's feed to the man at
+# `man_pos`, moving at `man_vel` (AIPossessionValue.threat_of_feed: the lane ×
+# his one-timer or his possession of the spot), searched around the threat
 # partition's cover anchor (AIThreatAssignment.cover_anchor).
 #
 # The search center must track the man 1:1: one that moves slower than he does (a
@@ -24,12 +25,14 @@ const COVER_GOAL_SIDE_TOLERANCE_M: float = 0.5
 # the anchor the partition scored reachability against, so pairing and coverage
 # agree. Scoring the ASSIGNED man rather than the max over all opponents is what
 # stops two defenders collapsing onto the same one.
-static func cover_man_target(ctx: RoleContext, man_pos: Vector3,
+static func cover_man_target(ctx: RoleContext, man_pos: Vector3, man_vel: Vector3,
 		carrier_pos: Vector3) -> Vector3:
 	var our_net: Vector3 = ctx.defending_goal_pos
 	var our_goalie_pos: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 	var teammates: Array[Vector3] = ctx.scratch_teammates
 	AIRoleReads.collect_teammates_excluding_self(ctx, teammates)
+	var poss: AIPossessionValue = AIRoleReads.defence_possession(ctx, teammates)
+	var self_caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.peer_id)
 
 	var search_center: Vector3 = AIThreatAssignment.cover_anchor(man_pos, our_net)
 	var candidates: Array[Vector3] = AIStationSearch.generate_candidates_around(ctx.self_pos, search_center)
@@ -57,15 +60,10 @@ static func cover_man_target(ctx: RoleContext, man_pos: Vector3,
 			continue
 		if AIStationSearch.too_close_to_teammate(c, teammates):
 			continue
-		# Defenders = our team + us at c, push/popped into the shared scratch in
-		# place; the hypothetical body carries our own caps.
-		teammates.push_back(c)
-		ctx.scratch_teammate_caps.push_back(ctx.caps_by_peer.get(ctx.peer_id))
-		var threat: float = AIActionScoring.threat_surface_pass(
-				carrier_pos, man_pos, our_net, our_goalie_pos,
-				GameRules.NET_HALF_WIDTH, teammates, ctx.scratch_teammate_caps)
-		teammates.pop_back()
-		ctx.scratch_teammate_caps.pop_back()
+		poss.push_defender(c, Vector3.ZERO, self_caps)
+		var threat: float = poss.threat_of_feed(carrier_pos, man_pos, man_vel,
+				our_goalie_pos)
+		poss.pop_defender()
 		var score: float = -threat + AIStationSearch.incumbent_bonus(ctx, c)
 		# A man on the net (no lane) disables the goal-side filter.
 		var proj: float = (c.x - man_pos.x) * to_net_x + (c.z - man_pos.z) * to_net_z \
@@ -96,7 +94,7 @@ static func cover_threat(ctx: RoleContext, d: RoleDecision, man_pid: int,
 	if not play_ref.is_finite():
 		return false
 	var man: SkaterNetworkState = ctx.snapshot.skater_states[man_pid]
-	d.target_position = cover_man_target(ctx, man.position, play_ref)
+	d.target_position = cover_man_target(ctx, man.position, man.velocity, play_ref)
 	d.target_velocity = man.velocity
 	return true
 
@@ -204,154 +202,54 @@ static func chase_puck(ctx: RoleContext, d: RoleDecision) -> bool:
 
 
 # Per-decide upper bounds for carrier_best_option's early-out
-# (out_bases[0] = shoot, [1..] = opp_teammates in order). Every threat surface is
-# monotone NON-INCREASING in the defender set, so the values with the current
-# defenders bound every candidate-adjusted value from above.
-static func carrier_option_bases(
-		carrier_pos: Vector3,
-		our_net: Vector3,
-		our_goalie_pos: Vector3,
-		our_team_excluding_self: Array[Vector3],
-		opp_teammates: Array[Vector3],
-		out_bases: Array[float],
-		our_team_caps: Array = []) -> void:
+# (out_bases[0] = his own threat, [1..] = the feed to each of `opp_teammates`).
+# Every threat is monotone NON-INCREASING in the defender set, so the values with
+# the current defenders (`poss`, AIRoleReads.defence_possession) bound every
+# candidate-adjusted value from above.
+static func carrier_option_bases(poss: AIPossessionValue, carrier_pos: Vector3,
+		carrier_vel: Vector3, our_goalie_pos: Vector3, opp_teammates: Array[Vector3],
+		out_bases: Array[float]) -> void:
 	out_bases.clear()
-	out_bases.append(AIActionScoring.threat_surface_shoot(
-			carrier_pos, our_net, our_goalie_pos,
-			GameRules.NET_HALF_WIDTH, our_team_excluding_self, our_team_caps))
+	out_bases.append(poss.threat_of_carrier(carrier_pos, carrier_vel, our_goalie_pos))
 	for opp_pos: Vector3 in opp_teammates:
-		out_bases.append(AIActionScoring.threat_surface_pass(
-				carrier_pos, opp_pos, our_net, our_goalie_pos,
-				GameRules.NET_HALF_WIDTH, our_team_excluding_self, our_team_caps))
+		out_bases.append(poss.threat_of_feed(carrier_pos, opp_pos, Vector3.ZERO,
+				our_goalie_pos))
 
 
-# The opposing carrier's best option — shoot at our net, or pass to any of
-# `opp_teammates` — with our hypothetical defender at `candidate` added to his
-# view of the defenders. PRESSURE argmaxes its negation.
+# The opposing carrier's best option — keep it himself, or feed any of
+# `opp_teammates` (already led by anticipation, so read standing) — with our
+# hypothetical defender at `candidate`, skating at `candidate_vel` (the stand's
+# ride: a body holding station on him is not one he out-skates), added to
+# `poss`'s defenders. PRESSURE
+# argmaxes its negation. On the possession scale, so the gradient survives where
+# the shot collapses to 0 far from the net: what a body there takes from his
+# possession is what pulls a defender tight to a carrier with no shot. Coverage
+# is continuous: a teammate already on a receiver suppresses that feed.
 #
-# Scored on the threat SURFACES so the gradient survives where score_shoot /
-# score_pass collapse to 0 far from the net; their position_potential floor is
-# what pulls a defender tight to a carrier with no immediate scoring threat.
-# Coverage is continuous: a teammate already on a receiver suppresses that pass
-# threat, with no separate "who is open" boolean.
-static func carrier_best_option(
-		candidate: Vector3,
-		carrier_pos: Vector3,
-		our_net: Vector3,
-		our_goalie_pos: Vector3,
-		our_team_excluding_self: Array[Vector3],
-		opp_teammates: Array[Vector3],
-		bases: Array[float] = [],
-		our_team_caps: Array = [],
-		self_caps: AISkaterCaps = null) -> float:
-	# Defenders = our team + me at the candidate, push/popped into the caller's
-	# array in place. Caps ride alongside only when the caller supplied a matched
-	# array; otherwise the surfaces fall back to league.
-	var caps_matched: bool = our_team_caps.size() == our_team_excluding_self.size()
-	our_team_excluding_self.push_back(candidate)
-	if caps_matched:
-		our_team_caps.push_back(self_caps)
+# `bases` (carrier_option_bases) prunes exactly: options are evaluated in
+# descending-bound order and stop when no remaining bound beats the running max.
+static func carrier_best_option(poss: AIPossessionValue, candidate: Vector3,
+		candidate_vel: Vector3, self_caps: AISkaterCaps, carrier_pos: Vector3,
+		carrier_vel: Vector3, our_goalie_pos: Vector3, opp_teammates: Array[Vector3],
+		bases: Array[float]) -> float:
+	poss.push_defender(candidate, candidate_vel, self_caps)
 	var best: float = 0.0
-
-	if bases.size() == opp_teammates.size() + 1:
-		# Pruned path: evaluate in descending-bound order, stop when no remaining
-		# bound can beat the running max. Exact — a skipped value ≤ its bound ≤ best.
-		var used: int = 0
-		while true:
-			var bi: int = -1
-			var bound: float = -1.0
-			for i: int in bases.size():
-				if used & (1 << i) == 0 and bases[i] > bound:
-					bound = bases[i]
-					bi = i
-			if bi == -1 or bound <= best:
-				break
-			used |= 1 << bi
-			var v: float
-			if bi == 0:
-				v = AIActionScoring.threat_surface_shoot(
-						carrier_pos, our_net, our_goalie_pos,
-						GameRules.NET_HALF_WIDTH, our_team_excluding_self,
-						our_team_caps)
-			else:
-				v = AIActionScoring.threat_surface_pass(
-						carrier_pos, opp_teammates[bi - 1], our_net, our_goalie_pos,
-						GameRules.NET_HALF_WIDTH, our_team_excluding_self,
-						our_team_caps)
-			if v > best:
-				best = v
-		our_team_excluding_self.pop_back()
-		if caps_matched:
-			our_team_caps.pop_back()
-		return best
-
-	# Unpruned path (no bases supplied).
-	var shoot_value: float = AIActionScoring.threat_surface_shoot(
-			carrier_pos, our_net, our_goalie_pos,
-			GameRules.NET_HALF_WIDTH, our_team_excluding_self, our_team_caps)
-
-	var pass_value: float = 0.0
-	for opp_pos: Vector3 in opp_teammates:
-		var pass_score: float = AIActionScoring.threat_surface_pass(
-				carrier_pos, opp_pos, our_net, our_goalie_pos,
-				GameRules.NET_HALF_WIDTH, our_team_excluding_self, our_team_caps)
-		if pass_score > pass_value:
-			pass_value = pass_score
-
-	our_team_excluding_self.pop_back()
-	if caps_matched:
-		our_team_caps.pop_back()
-	return maxf(shoot_value, pass_value)
-
-
-# Rush variant of carrier_best_option, for RUSH_D1's lane fan: RAW xG (no
-# position_potential floor), each pass priced as a ONE-TIMER feed the goalie must
-# traverse for, the direct shot against the goalie where he is — "the goalie takes
-# the shooter, I take the pass".
-#
-# Not the surfaced variant: its floor is flat across the fan's gap distances, and
-# a set-goalie pass read scores the one-timer feed near zero — hiding the threat
-# the fan exists to take away.
-#
-# `abort_above` is exact pruning for a caller that MINIMIZES: once the running
-# best exceeds it, the remaining receivers cannot matter. INF evaluates all.
-static func carrier_live_option(
-		candidate: Vector3,
-		carrier_pos: Vector3,
-		our_net: Vector3,
-		our_goalie_pos: Vector3,
-		our_team_excluding_self: Array[Vector3],
-		opp_teammates: Array[Vector3],
-		abort_above: float = INF,
-		our_team_caps: Array = [],
-		self_caps: AISkaterCaps = null) -> float:
-	# Same in-place defender push/pop and caps contract as carrier_best_option.
-	var caps_matched: bool = our_team_caps.size() == our_team_excluding_self.size()
-	our_team_excluding_self.push_back(candidate)
-	if caps_matched:
-		our_team_caps.push_back(self_caps)
-	var best: float = AIActionScoring.score_shoot(
-			carrier_pos, our_net, our_goalie_pos,
-			GameRules.NET_HALF_WIDTH, our_team_excluding_self,
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, 0.0, our_team_caps)
-	for receiver: Vector3 in opp_teammates:
-		if best >= abort_above:
+	var used: int = 0
+	while true:
+		var bi: int = -1
+		var bound: float = -1.0
+		for i: int in bases.size():
+			if used & (1 << i) == 0 and bases[i] > bound:
+				bound = bases[i]
+				bi = i
+		if bi == -1 or bound <= best:
 			break
-		var pass_speed: float = AIPuckLane.expected_pass_speed(carrier_pos, receiver)
-		var flight_s: float = carrier_pos.distance_to(receiver) / maxf(pass_speed, 1.0)
-		var pred_goalie: Vector3 = AIGoalieModel.predict_goalie_pos(
-				our_goalie_pos, our_net, flight_s, receiver)
-		var unsettled: float = AIGoalieModel.goalie_unsettled(
-				our_goalie_pos, our_net, flight_s, receiver)
-		var pass_value: float = AIActionScoring.score_pass(
-				carrier_pos, receiver, our_net, pred_goalie,
-				GameRules.NET_HALF_WIDTH, our_team_excluding_self, pass_speed,
-				unsettled, -1.0, Vector4.INF, Vector4.INF, our_team_caps)
-		if pass_value > best:
-			best = pass_value
-	our_team_excluding_self.pop_back()
-	if caps_matched:
-		our_team_caps.pop_back()
+		used |= 1 << bi
+		var v: float = poss.threat_of_carrier(carrier_pos, carrier_vel, our_goalie_pos) \
+				if bi == 0 else poss.threat_of_feed(carrier_pos, opp_teammates[bi - 1],
+						Vector3.ZERO, our_goalie_pos)
+		best = maxf(best, v)
+	poss.pop_defender()
 	return best
 
 

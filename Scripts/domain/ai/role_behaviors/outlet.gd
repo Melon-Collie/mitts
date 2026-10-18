@@ -4,10 +4,11 @@ class_name AIRoleOutlet
 # stretch-pass option waiting NZ-side of the opp blue line. It accepts being
 # past the play; defensive responsibility falls to SUPPORT.
 #
-# Argmax over `max(lane_clear(carrier → c), BLOCKED_LANE_FLOOR) ×
-# position_potential(c)`, as the BREAKOUT outlets do: this far from the opp goal
-# score_shoot foreshortens to ~0, so a score_pass argmax would read ~0 for every
-# candidate and go blind to a defender on the spot or in the lane.
+# Argmax over `max(lane_clear(carrier → c), BLOCKED_LANE_FLOOR) × our possession
+# of c` (AIPossessionValue, him there when the pass arrives, moving as he is), as
+# the BREAKOUT outlets do: this far from the opp goal a shot from the spot is ~0,
+# so a score_pass argmax would read ~0 for every candidate and go blind to a
+# defender on the spot or in the lane.
 
 # How far NZ-side of the opp blue line the set-play search center sits, so most
 # samples are onside; _is_offside is the actual guard.
@@ -39,7 +40,7 @@ const RUSH_ENTRY_LEAD_M: float = 4.0
 const ARRIVE_AT_SPEED_RUSH: float = 0.25
 
 # Pace cap slack (m): on a rush, candidates further net-ward of the paced depth
-# than this are rejected, or position_potential would drag the OUTLET up to park
+# than this are rejected, or the possession read would drag the OUTLET up to park
 # at the line.
 const PACE_TOLERANCE_M: float = 1.0
 
@@ -80,6 +81,8 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	# Switch-hysteresis (the cursor snaps to this target).
 	AIStationSearch.append_incumbent(ctx, candidates)
 
+	var possession: AIPossessionValue = AIRoleReads.attack_possession(ctx,
+			opp_positions)
 	var best_pos: Vector3 = ctx.self_pos
 	var best_score: float = -INF
 	for c: Vector3 in candidates:
@@ -99,9 +102,9 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		var lane: float = AIPuckLane.lane_clear(
 				carrier_pos, c, opp_positions, pass_speed,
 				AIActionScoring.EMPTY_VEC3, ctx.scratch_opp_caps)
-		var potential: float = AIActionScoring.position_potential(
-				c, ctx.attacking_goal_pos, opp_positions, ctx.scratch_opp_caps)
-		var score: float = maxf(lane, BLOCKED_LANE_FLOOR) * potential \
+		var held: float = possession.at(c, carrier_pos.distance_to(c) / pass_speed,
+				ctx.self_velocity)
+		var score: float = maxf(lane, BLOCKED_LANE_FLOOR) * held \
 				+ AIStationSearch.incumbent_bonus(ctx, c)
 		if score > best_score:
 			best_score = score

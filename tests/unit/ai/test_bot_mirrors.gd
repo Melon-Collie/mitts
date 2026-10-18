@@ -1,12 +1,14 @@
 extends GutTest
 
 # Constants the bot code copies from somewhere else it cannot read: the
-# controller's slapper zone and the puck's deflect threshold (scene nodes the
-# domain must not reach), and the pairs two bot modules keep equal so their
-# reads agree. Each was a "must match" comment; this is the check.
+# controller's slapper zone, blade speed and pickup radius and the puck's deflect
+# threshold (scene nodes the domain must not reach), the duel harness's copy of
+# the puck's catch, and the pairs two bot modules keep equal so their reads
+# agree. Each was a "must match" comment; this is the check.
 
 const SkaterControllerScript := preload("res://Scripts/controllers/skater_controller.gd")
 const PuckScript := preload("res://Scripts/actors/puck.gd")
+const DuelHarness := preload("res://tests/unit/ai/duel_harness.gd")
 
 
 func test_the_two_defensive_leads_agree() -> void:
@@ -40,3 +42,20 @@ func test_the_puck_thresholds_the_bots_price() -> void:
 	assert_gt(SkaterAgentReception.RECEIVE_GIVE_CEILING_M_S, AIPuckLane.PASS_TARGET_CLOSING_M_S)
 	assert_lt(SkaterAgentReception.RECEIVE_GIVE_CEILING_M_S, puck.deflect_min_speed)
 	puck.free()
+
+
+func test_the_harness_catches_as_the_puck_does() -> void:
+	var puck: Puck = PuckScript.new()
+	assert_eq(DuelHarness.PICKUP_MAX_REL_SPEED, puck.pickup_max_speed)
+	assert_eq(DuelHarness.DEFLECT_MIN_REL_SPEED, puck.deflect_min_speed)
+	assert_eq(DuelHarness.RECEIVE_ALIGNMENT_BONUS, puck.alignment_receive_bonus)
+	puck.free()
+
+
+func test_a_lane_reads_the_stick_the_body_holds() -> void:
+	assert_eq(AIPuckLane.LANE_BLADE_CATCH_M, PuckController.PICKUP_RADIUS,
+			"a pass passing a blade inside the pickup radius is his")
+	var ctrl: SkaterController = SkaterControllerScript.new()
+	assert_eq(AISkaterCaps.LEAGUE_BLADE_SPEED_M_S, ctrl.max_blade_speed,
+			"a defender's hands traverse at the league blade speed")
+	ctrl.free()

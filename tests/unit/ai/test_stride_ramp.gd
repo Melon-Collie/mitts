@@ -71,3 +71,42 @@ func test_head_start_matches_a_fine_sweep() -> void:
 		assert_almost_eq(AIStrideRamp.head_start(lv, lmax, la, cv, cmax, ca, 9.0, hz),
 				brute, 0.01, "lead %.2f/%.1f chase %.2f/%.1f horizon %.2f"
 						% [lv, lmax, cv, cmax, hz])
+
+
+# ── A turn before the stride (chase_delay_s) ─────────────────────────────────
+
+func test_a_turned_chase_matches_its_brute_force_head_start() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261016
+	for _i: int in 100:
+		var lv: float = rng.randf_range(0.0, 10.0)
+		var cv: float = rng.randf_range(-4.0, 8.0)
+		var hz: float = rng.randf_range(0.3, 4.0)
+		var delay: float = rng.randf_range(0.0, 0.6)
+		var brute: float = 0.0
+		var t: float = 0.0
+		while t <= hz:
+			brute = maxf(brute, AIStrideRamp.signed_distance_in(lv, t, 10.0, 10.5, 9.0)
+					- AIStrideRamp.delayed_distance_in(cv, t, 10.0, 10.5, 9.0, delay))
+			t += 0.001
+		assert_almost_eq(AIStrideRamp.head_start(lv, 10.0, 10.5, cv, 10.0, 10.5, 9.0, hz,
+				delay), brute, 0.01, "lead %.2f chase %.2f delay %.2f horizon %.2f"
+						% [lv, cv, delay, hz])
+
+
+func test_a_turn_never_helps_the_chaser() -> void:
+	for cv: float in [-3.0, 0.0, 4.0]:
+		var straight: float = AIStrideRamp.head_start(7.0, 10.0, 10.5, cv, 10.0, 10.5, 9.0, 3.0)
+		var turned: float = AIStrideRamp.head_start(7.0, 10.0, 10.5, cv, 10.0, 10.5, 9.0, 3.0,
+				0.5)
+		assert_gte(turned, straight - 1e-6, "chase from %.1f m/s" % cv)
+
+
+func test_through_the_turn_he_only_brakes_or_coasts() -> void:
+	assert_almost_eq(AIStrideRamp.delayed_distance_in(4.0, 0.3, 10.0, 10.5, 9.0, 0.5),
+			1.2, 1e-6, "coasting at 4 m/s")
+	assert_almost_eq(AIStrideRamp.delayed_speed_at(-3.0, 0.5, 10.0, 10.5, 9.0, 0.5), 0.0,
+			1e-6, "a wrong-way start is braked out, not reversed")
+	assert_almost_eq(AIStrideRamp.delayed_distance_in(4.0, 1.0, 10.0, 10.5, 9.0, 0.0),
+			AIStrideRamp.signed_distance_in(4.0, 1.0, 10.0, 10.5, 9.0), 1e-6,
+			"no turn is the plain stride")

@@ -1,21 +1,18 @@
 extends GutTest
 
 # ── The xG contract ──────────────────────────────────────────────────────────
-# expected_goals prices BOTH halves of beating a goalie:
-#   xG = P(placement lands in the open window) + P(miss it) × P(goalie leaks)
+# expected_goals is the shot field's odds against the keeper at release, at the
+# shot's CONTEXT spread, plus the leak the field's first-contact outcome leaves
+# out:
+#   xG = P(first contact beats him) + P(it does not) × XG_COVERED_LEAK
 # so this pins the structural properties that follow from that, plus a sanity
-# band against the independent location-only model (XGBaseline).
-#
-# Never calibrate its scale against shot_sim_harness: that measures a BOT firing
-# with its own uniform ±spread, which is not "how likely is this chance to be
-# finished by an arbitrary shooter". The magnitude fit is against logged game
-# outcomes (analytics plan §3.3): Σ xG ≈ Σ goals, with the on-net fraction
-# calibrating the release spread. Until enough games accumulate, these
+# band against the independent location-only model (XGBaseline). The magnitude
+# fit is against logged game outcomes (analytics plan §3.3): Σ xG ≈ Σ goals,
+# with the on-net fraction calibrating the release spread. Until enough games accumulate, these
 # properties, the baseline band and the reviewed snapshot hold the model honest.
 
 
 const Snapshot := preload("res://tests/snapshot.gd")
-const SPEED: float = 33.0
 
 # A const initializer can't reference another script's constant, so this is a var.
 var GOAL := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
@@ -26,9 +23,7 @@ func _nhw() -> float:
 
 
 func _xg(shooter: Vector3, goalie: Vector3, spread: float) -> float:
-	return AIActionScoring.expected_goals(shooter, GOAL, goalie, _nhw(), SPEED,
-			0.0, -1.0, false, 0.0, false, 0.0, Vector4.INF, Vector4.INF,
-			AIActionScoring.DEFAULT_LOFT_TANS, spread)
+	return AIActionScoring.expected_goals(shooter, GOAL, goalie, spread)
 
 
 func _settled() -> float:

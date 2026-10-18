@@ -150,8 +150,8 @@ func setup_agent(peer_id: int, team_id: int, brain: TeamBrain, team_id_by_peer: 
 # MAIN-THREAD tick preamble: the guards and the special (non-agent) modes, each
 # of which does its own node writes right here. Returns true ONLY for normal
 # gameplay — where the caller runs decide() then apply_decision(). For a normal
-# tick it also stamps the agent's latched rule set and captures the host time the
-# decision will use, so decide() itself reads no autoloads (worker-safe).
+# tick it also captures the host time the decision will use, so decide() itself
+# reads no autoloads (worker-safe).
 func begin_tick(delta: float) -> bool:
 	if skater == null or puck == null or _agent == null:
 		return false
@@ -221,12 +221,9 @@ func begin_tick(delta: float) -> bool:
 
 
 # Main-thread stamp done right before the worker is kicked (worker idle), so the
-# agent's latched rule set and the decision's host time are set without racing an
-# in-flight decide(). See AICoordinator.
+# decision's host time is set without racing an in-flight decide(). See
+# AICoordinator.
 func prep_for_decide() -> void:
-	# Latched match rules for the AI's offside-aware reads (the agent must never
-	# carry a previous match's).
-	_agent.set_rule_set(GameManager.get_rule_set())
 	_pending_host_time = NetworkManager.estimated_host_time()
 
 

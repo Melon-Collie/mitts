@@ -78,8 +78,7 @@ var reaction_delay_s: float
 # coils), so an untiered prearm makes Easy sharpest against exactly the shots
 # newcomers take.
 var prearmed_reaction_delay_s: float
-# Pads-to-floor time (s) once the butterfly commits. AI-mirrored
-# (AIGoalieModel.goalie_butterfly_drop_s).
+# Pads-to-floor time (s) once the butterfly commits.
 var butterfly_drop_s: float
 # Standing five-hole pad gap (m of separation each side of center). Higher = a
 # visibly leaky five-hole whenever the paddle is off-centre (tracking, active

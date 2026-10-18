@@ -44,9 +44,10 @@ const HYSTERESIS_MARGIN_FRAC: float = 0.15
 # trigger is the man's FINISH danger if fed (`man_danger`), which carries no
 # lane factor: a contested feed still becomes a tap-in if it arrives.
 #
-# The caller's read is P(goal | clean feed) with the goalie predicted over the
-# feed's flight: the net-front man measures ~1.0, a perimeter winger ~0.0 (the
-# keeper re-squares inside the flight), so the bar is "more likely than not".
+# The caller's read is P(goal | clean feed), his one-timer off the shot field
+# (AIShotValue.feed): a man in the house measures ~0.95-1.0, a perimeter winger
+# ~0-0.1 (the keeper re-squares inside the flight), so the bar is "more likely
+# than not".
 const NET_FRONT_DANGER_BAR: float = 0.5
 
 

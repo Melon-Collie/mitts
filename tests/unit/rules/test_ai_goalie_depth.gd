@@ -26,12 +26,6 @@ func _rush_depth(dist: float, window_s: float) -> float:
 			_keeper_at(CHALLENGE_DEPTH), GOAL, _puck_out(dist), window_s, RUSH_CLOSING_M_S)
 
 
-func _shoot_at_depth(release: Vector3, depth: float) -> float:
-	var opps: Array[Vector3] = []
-	return AIActionScoring.score_shoot(release, GOAL, _keeper_at(depth),
-			GameRules.NET_HALF_WIDTH, opps, AIBotMechanics.WRISTER_SHOT_SPEED_M_S)
-
-
 func before_each() -> void:
 	AIGoalieModel.set_goalie_profile(GoalieSkillProfile.hard())
 
@@ -104,26 +98,8 @@ func test_the_retreat_is_rate_bounded() -> void:
 				"over %.2f s he gives at most a skating rate's depth" % window)
 
 
-# ── What it buys the shooter ────────────────────────────────────────────────
-
-func test_the_doorstep_drive_stops_reading_as_a_covered_net() -> void:
-	# A keeper held frozen at challenge depth stands a quarter-metre off a 2 m
-	# release and his tangent cone swallows the net; the retreat he actually
-	# makes on the drive opens it.
-	var release: Vector3 = _puck_out(2.0)
-	var frozen: float = _shoot_at_depth(release, CHALLENGE_DEPTH)
-	var retreated: float = _shoot_at_depth(release, _rush_depth(2.0, 0.9))
-	assert_gt(retreated, frozen,
-			"the retreating keeper concedes more than the frozen one; frozen %.3f retreated %.3f"
-			% [frozen, retreated])
-
-
 func test_goalie_depth_calibration_snapshot() -> void:
 	var snap := Snapshot.new(SNAPSHOT_PATH)
 	snap.record("rush to 3 m over 1 s, planned depth", _rush_depth(3.0, 1.0))
 	snap.record("rush to 2 m over 20 ms, planned depth", _rush_depth(2.0, 0.02))
-	snap.record("doorstep 2 m, keeper frozen at challenge depth",
-			_shoot_at_depth(_puck_out(2.0), CHALLENGE_DEPTH))
-	snap.record("doorstep 2 m, keeper retreated over 0.9 s",
-			_shoot_at_depth(_puck_out(2.0), _rush_depth(2.0, 0.9)))
 	snap.verify(self)

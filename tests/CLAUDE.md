@@ -57,7 +57,7 @@ calibration: a monotonicity (a wider angle never scores higher), a bound, an
 ordering that is a physical necessity, an identity (a keeper outside the
 shooting cone concedes the empty net), a comparison against a live constant
 rather than its current value. They are ordinary assertions and a tuning change
-never breaks them unless it breaks the physics. `test_shot_danger_properties.gd`
+never breaks them unless it breaks the physics. `tests/unit/ai/test_shot_odds.gd`
 is the model.
 
 **Calibration values** — what the model currently says at the doctrine's
@@ -72,6 +72,13 @@ that has to be re-pinned by hand.
 Measurements against the live goalie that cost seconds — the breakaway ladder,
 the shot value calibration — are the same kind of thing; they live in the slow
 tier until they are turned into properties plus a snapshot.
+
+A model that predicts the live goalie is held against **measured data** rather
+than against itself: `tests/unit/ai/data/shot_odds_truth.txt` is the goalie's
+open set per cell, written by an instrument that drives the real
+`GoalieController` (minutes), and `test_shot_odds_vs_truth.gd` scores the shot
+model against it in milliseconds. The data file is regenerated when the goalie
+changes, never hand-edited; the test's error and concordance bounds are ratchets.
 
 ## Ratchets
 
@@ -246,3 +253,9 @@ set by the worst tick) and the per-call evaluator ranking.
 Domain code must be replay-safe: the same inputs produce the same outputs, or
 reconcile replay diverges from the host. Tests that touch AI or physics must not
 depend on wall-clock time or unseeded randomness.
+
+Instruments that stage the real goalie must also be order-free: each staging
+starts from a full reset (`GoalieController.reset_to_crease`, the puck
+restaged), so a measurement does not depend on what ran before it.
+`tests/slow/ai/test_shot_field_cells_are_order_free.gd` holds it for the shot
+field, whose cells are sharded across processes.

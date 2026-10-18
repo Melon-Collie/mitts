@@ -183,7 +183,7 @@ func test_dispatch_period_is_at_least_one_tick() -> void:
 
 func test_puck_protection_is_tiered() -> void:
 	# Shielding the puck with the body is a taught fundamental: Hard and Normal
-	# protect (blade to the seam under pressure, seam-directed deke); Easy
+	# protect (blade to the seam under pressure); Easy
 	# carries naively presented in front so a newcomer's poke-check works.
 	assert_true(BotSkillProfile.hard().protects_the_puck,
 			"Hard shields the puck with its body")

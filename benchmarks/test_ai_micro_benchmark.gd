@@ -23,6 +23,13 @@ var _results: Array[Dictionary] = []
 
 # One frozen 5v5 scene: opp carrier cycling our strong corner, full lineups.
 # Peer 1 = the bot under test (team 0); 100-series = opponents.
+# Back to the GDScript reference for the rows that follow.
+func _uninstall_native_ai() -> void:
+	AIShotOdds.native_factory = Callable()
+	AIShotOdds.attach_native()
+	AICarryRollout.native_factory = Callable()
+
+
 func _make_ctx(self_pos: Vector3, carrier_pid: int = 100) -> RoleContext:
 	var snap := WorldSnapshot.new()
 	var placements: Array = [
@@ -159,7 +166,36 @@ func test_evaluator_costs() -> void:
 		open_carrier._pass.search(open_ctx, Vector2(0, -1),
 				open_carrier._field.teammate_ids))
 	_bench("open ice: best carry (candidates)", func() -> void:
-		open_carrier._carry.search(open_ctx, 0.1, open_ctx.self_pos))
+		open_carrier._carry.search(open_ctx, 0.1))
+	# The shipped game's path: the field read and the rollout both native.
+	NativeShotOddsFactory.install()
+	NativeCarryRolloutFactory.install()
+	var native_open := AIRoleCarrier.new()
+	native_open._field.fill(open_ctx)
+	_bench("open ice: best carry (candidates, native kernels)", func() -> void:
+		native_open._carry.search(open_ctx, 0.1))
+	var native_c := AIRoleCarrier.new()
+	native_c._pick_action_cooldown = 0
+	native_c.decide(c_ctx)
+	native_c._field.fill(c_ctx)
+	_bench("carrier: best carry (candidates, native kernels)", func() -> void:
+		native_c._carry.search(c_ctx, 0.1))
+	_bench("CARRIER compete (full, native kernels)", func() -> void:
+		native_c._pick_action_cooldown = 0
+		native_c.decide(c_ctx))
+	_uninstall_native_ai()
+	var rollout := AICarryRollout.new()
+	rollout._native = null
+	var roll_caps := AISkaterCaps.new()
+	_bench("carry rollout (7 moves × 1 s, GDScript)", func() -> void:
+		rollout.roll_all(open_ctx.self_pos, Vector3(0.0, 0.0, -6.0), Vector2(0, -1),
+				Vector2(0.2, -1.0), roll_caps))
+	var native_rollout := AICarryRollout.new()
+	native_rollout._native = NativeCarryRolloutFactory.make_configured()
+	if native_rollout._native != null:
+		_bench("carry rollout (7 moves × 1 s, native)", func() -> void:
+			native_rollout.roll_all(open_ctx.self_pos, Vector3(0.0, 0.0, -6.0), Vector2(0, -1),
+					Vector2(0.2, -1.0), roll_caps))
 
 	# The rim pass: our carrier behind our own net with the forecheck in the
 	# lanes, the one scene where every receiver's flat feed is contested and the
@@ -205,7 +241,7 @@ func test_evaluator_costs() -> void:
 		var t1: int = Time.get_ticks_usec()
 		cinst._pass.search(cx, self_facing, cinst._field.teammate_ids)
 		var t2: int = Time.get_ticks_usec()
-		cinst._carry.search(cx, 0.1, cx.self_pos)
+		cinst._carry.search(cx, 0.1)
 		var t3: int = Time.get_ticks_usec()
 		cinst._pass.developing_feed_value(cx)
 		var t4: int = Time.get_ticks_usec()
@@ -221,7 +257,7 @@ func test_evaluator_costs() -> void:
 	# The carry search dominates the compete, so break IT down: how many candidates
 	# the beam actually scores, and what one candidate's primitives cost. The
 	# beam is left populated by the carry search above.
-	cinst._carry.search(cx, 0.1, cx.self_pos)
+	cinst._carry.search(cx, 0.1)
 	_results.append({"label": "  [beam rows scored]",
 			"us": float(cinst._carry._beam_total.size())})
 	_results.append({"label": "  [beam width (pass-2 upgrades)]",
@@ -249,12 +285,9 @@ func test_evaluator_costs() -> void:
 		AIGoalieModel.predict_goalie_pos(keeper, cx.attacking_goal_pos,
 				t_arr, cand))
 	_bench("  cand: turnover_cost", func() -> void:
-		AIActionScoring.turnover_cost(cand_puck, 0.4, cx.defending_goal_pos,
-				Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z - 1.3),
-				GameRules.NET_HALF_WIDTH, cinst._field.our_defenders))
+		cinst._field.turnover_cost(cand_puck, 0.4))
 	_bench("  cand: _score_at (the seam)", func() -> void:
-		cinst._field.value_at(cx, cand, cx.self_pos, cinst._field.opponents,
-				keeper, cx.self_wrister_shot_speed, 0.0, cx.self_aim_spread_rad))
+		cinst._field.value_at(cx, cand, cx.self_pos, cinst._field.opponents, keeper))
 
 	# One carry candidate in isolation.
 	var one_cand: Vector3 = cx.self_pos + Vector3(2.0, 0.0, 2.0)
@@ -264,37 +297,14 @@ func test_evaluator_costs() -> void:
 	_bench("carrier: one pass-option read", func() -> void:
 		cinst._field.pass_option_from(cx, one_cand))
 
-	# The space fan on its own. Only the carrier reads it today; this line
-	# exists so the cost of giving it to another role is a number rather than
-	# a guess. Both forms: without the bearing profile (what an off-puck role
-	# would want — just "how much room is there") and with it (the carrier's
-	# form, which also generates its forward candidates).
-	var bearing_out: Array[float] = []
-	bearing_out.resize(AICarrySpace.SPACE_SAMPLE_ANGLES.size())
-	_bench("controlled_space (fan only)", func() -> void:
-		AICarrySpace.controlled_space(
-				cx.self_pos, cx.self_velocity, null, cx.attacking_goal_pos,
-				AICarrierField.FORWARD_PRESSURE_HORIZON_M,
-				cinst._field.opponents, cinst._field.opponent_vels,
-				cinst._field.opponent_caps))
-	# The fan's two cheaper granularities, for sizing an off-puck consumer:
-	# one whole carry-safety sample (what the fan does 14 times), and the bare
-	# reachable-set read at a point (one defender loop instead of three).
-	_bench("control_at (one sample)", func() -> void:
-		AICarrySpace.control_at(
-				one_cand, cx.self_pos, cx.self_velocity, null,
-				cinst._field.opponents, cinst._field.opponent_vels,
-				cinst._field.opponent_caps))
+	# The second carry step from one first move: every move rolled again from
+	# where it ends and priced as a first move is.
+	_bench("carrier: one second carry step", func() -> void:
+		cinst._carry._carry_on_value(cx, 0, goalie_pos, cinst._carry._league_caps))
 	_bench("reach_clearance (one point)", func() -> void:
 		AICarrySpace.reach_clearance(
 				one_cand, 0.8, cinst._field.opponents,
 				cinst._field.opponent_vels, cinst._field.opponent_caps))
-	_bench("controlled_space (fan + bearing profile)", func() -> void:
-		AICarrySpace.controlled_space(
-				cx.self_pos, cx.self_velocity, null, cx.attacking_goal_pos,
-				AICarrierField.FORWARD_PRESSURE_HORIZON_M,
-				cinst._field.opponents, cinst._field.opponent_vels,
-				cinst._field.opponent_caps, bearing_out))
 
 	# The per-dispatch baseline every off-puck bot pays at 60 Hz regardless
 	# of the 30 Hz argmax: ctx build + predicates + steering on cached-
@@ -328,39 +338,62 @@ func test_evaluator_costs() -> void:
 	var net := Vector3(0.0, 0.0, -OUR_NET_Z)
 	var goalie := Vector3(0.0, 0.0, -OUR_NET_Z + 0.8)
 	var from := Vector3(6.0, 0.0, -18.0)
-	_bench("score_shoot (5 defenders)", func() -> void:
-		AIActionScoring.score_shoot(from, net, goalie, GameRules.NET_HALF_WIDTH, opps))
+	_bench("score_shoot_value (5 defenders)", func() -> void:
+		AIActionScoring.score_shoot_value(from, net, goalie, opps))
+	_bench("AIShotOdds.shot_now (the field read)", func() -> void:
+		AIShotOdds.shot_now(from, net, goalie, 0.0, AIShotOdds.Stance.UPRIGHT))
+	NativeShotOddsFactory.install()
+	_bench("AIShotOdds.shot_now (the field read, native)", func() -> void:
+		AIShotOdds.shot_now(from, net, goalie, 0.0, AIShotOdds.Stance.UPRIGHT))
+	_uninstall_native_ai()
+	_bench("AIShotValue.feed (one-timer)", func() -> void:
+		AIShotValue.feed(Vector3(-4, 0, -19), from, 16.0, net, goalie, true))
 	_bench("lane_clear (5 defenders)", func() -> void:
 		AIPuckLane.lane_clear(from, net, opps, 20.0))
-	_bench("threat_surface_pass (5 def)", func() -> void:
-		AIActionScoring.threat_surface_pass(from, Vector3(-4, 0, -19), net, goalie,
-				GameRules.NET_HALF_WIDTH, opps))
-	_bench("threat_surface_shoot (5 def)", func() -> void:
-		AIActionScoring.threat_surface_shoot(from, net, goalie,
-				GameRules.NET_HALF_WIDTH, opps))
-	# What AIDangerField buys: the fielded core vs the exact five-hole one.
-	_bench("score_shoot_threat_fielded (5 def)", func() -> void:
-		AIActionScoring.score_shoot_threat_fielded(from, net, goalie,
-				GameRules.NET_HALF_WIDTH, opps))
-	# PRESSURE's per-candidate unit: the carrier's whole best-option argmax,
-	# re-run with us standing at the candidate. This is the inner loop of the
-	# outer 18-candidate argmax.
-	var opp_mates: Array[Vector3] = [
-			Vector3(-4, 0, -19), Vector3(3, 0, -14), Vector3(-1, 0, -8)]
-	_bench("carrier_best_option (PRESSURE per candidate)", func() -> void:
-		AIDefensiveVerbs.carrier_best_option(
-				from, Vector3(2, 0, -17), net, goalie, opps, opp_mates))
 	var opp_vels: Array[Vector3] = []
 	var opp_caps: Array = []
 	for _i: int in opps.size():
 		opp_vels.append(Vector3.ZERO)
 		opp_caps.append(null)
+	# The defence's read of a man, `opps` standing in as the defence.
+	var poss := AIPossessionValue.new()
+	poss.fill(net, opps, opp_vels, opp_caps)
+	_bench("threat_of_feed (5 def)", func() -> void:
+		poss.threat_of_feed(from, Vector3(-4, 0, -19), Vector3.ZERO, goalie))
+	_bench("threat_of_carrier (5 def)", func() -> void:
+		poss.threat_of_carrier(from, Vector3(0, 0, -6), goalie))
+	# PRESSURE's per-candidate unit: the carrier's whole best-option argmax,
+	# re-run with us standing at the candidate. This is the inner loop of the
+	# outer 18-candidate argmax.
+	var opp_mates: Array[Vector3] = [
+			Vector3(-4, 0, -19), Vector3(3, 0, -14), Vector3(-1, 0, -8)]
+	var bases: Array[float] = []
+	AIDefensiveVerbs.carrier_option_bases(poss, from, Vector3(0, 0, -6), goalie,
+			opp_mates, bases)
+	_bench("carrier_best_option (PRESSURE per candidate)", func() -> void:
+		AIDefensiveVerbs.carrier_best_option(poss, Vector3(2, 0, -17), Vector3.ZERO, null, from,
+				Vector3(0, 0, -6), goalie, opp_mates, bases))
 	var mates: Array[Vector3] = [Vector3(-5, 0, -8), Vector3(3, 0, -12),
 			Vector3(0, 0, 2), Vector3(-2, 0, 10)]
 	_bench("counter_rush_cost (4 tm, 5 opp)", func() -> void:
 		AIActionScoring.counter_rush_cost(from, 0.5, Vector3(0, 0, OUR_NET_Z),
-				Vector3(0, 0, OUR_NET_Z - 0.8), GameRules.NET_HALF_WIDTH,
-				mates, from, 8.0, opps, opp_vels, opp_caps))
+				Vector3(0, 0, OUR_NET_Z - 0.8), mates, from, 8.0, opps, opp_vels, opp_caps))
+	# The callers' per-candidate paths: the shot memoized per compete, and either
+	# the opponents' carries home filled once (the carrier) or the whole race run
+	# once (support, whose loss point is the carrier for every candidate).
+	var our_net := Vector3(0, 0, OUR_NET_Z)
+	var memo: Array[float] = []
+	memo.resize(mates.size() + 2)
+	memo.fill(-1.0)
+	var homes: Array[float] = []
+	AIActionScoring.fill_counter_opp_home(our_net, opps, opp_caps, homes)
+	_bench("counter_rush_cost, memoized (carrier per candidate)", func() -> void:
+		AIActionScoring.counter_rush_cost(from, 0.5, our_net, Vector3(0, 0, OUR_NET_Z - 0.8),
+				mates, from, 8.0, opps, opp_vels, opp_caps, [], memo, false, homes))
+	var t_counter: float = AIActionScoring.counter_time(from, our_net, opps, opp_vels, opp_caps)
+	_bench("counter_rush_cost_at, memoized (support per candidate)", func() -> void:
+		AIActionScoring.counter_rush_cost_at(t_counter, 0.5, our_net,
+				Vector3(0, 0, OUR_NET_Z - 0.8), mates, from, 8.0, [], memo))
 	_bench("reach_clearance (5 def)", func() -> void:
 		AICarrySpace.reach_clearance(from, 0.4, opps, opp_vels, opp_caps))
 	_bench("carry_safety (5 def)", func() -> void:
@@ -368,33 +401,27 @@ func test_evaluator_costs() -> void:
 				opps, opp_vels, opp_caps, true))
 	_bench("best_evade_point (5 def)", func() -> void:
 		AICarrySpace.best_evade_point(from, Vector3(2, 0, -4), opps, opp_vels, 0.9))
-	_bench("best_evade_point_toward (5 def)", func() -> void:
-		AICarrySpace.best_evade_point_toward(from, Vector3(2, 0, -4), net,
-				opps, opp_vels, 0.9))
 	_bench("release_contest_clean (5 def)", func() -> void:
 		AIPuckLane.release_contest_clean(from, opps, opp_caps))
 	_bench("time_to_arrive", func() -> void:
 		AIArrival.time_to_arrive(from, net, Vector3(2, 0, -4)))
 
-	# The dump-in delivery search: DUMP_SEARCH_BEARINGS_RAD x DUMP_SEARCH_PACE_FRACS
-	# closed-form landing solves, plus a recovery race per surviving candidate.
-	# The reason it is affordable at that width is directly below — the stepped
-	# walk this would otherwise need is ~263 µs for ONE full runout.
-	var chasers: Array[Vector3] = [from, Vector3(6, 0, -2)]
-	var landing_out: Array[Vector3] = [Vector3.ZERO]
-	_bench("solve_dump_in (9 bearings x 4 paces, 5 def)", func() -> void:
-		AIActionScoring.solve_dump_in(from, net, 28.0, ShotMechanics.ELEVATION_FLAT,
-				chasers, opps, net, landing_out))
+	var pctx: RoleContext = _make_ctx(Vector3(2.0, 0.0, -3.0), 1)
+	var poss_carrier := AIRoleCarrier.new()
+	poss_carrier._pick_action_cooldown = 0
+	poss_carrier.decide(pctx)
+	_bench("carrier: possession reads (both sides)", func() -> void:
+		poss_carrier._field._ours.fill(pctx.attacking_goal_pos, poss_carrier._field.opponents,
+				poss_carrier._field.opponent_vels, poss_carrier._field.opponent_caps)
+		poss_carrier._field._theirs.fill(pctx.defending_goal_pos,
+				poss_carrier._field.our_defenders, poss_carrier._field.our_defender_vels,
+				poss_carrier._field.our_defender_caps))
+	_bench("carrier: our possession of one spot", func() -> void:
+		poss_carrier._field.horizon_value(Vector3(4.0, 0.0, 6.0)))
 
-	# Puck-path integration, at the horizons a settle-point read needs. These are
-	# the STEPPED walk's cost, which is why the dump's settle-point solve is not
-	# built on it: the dump prices where the puck actually stops, and a full
-	# runout is ~270 of these steps per candidate release — so it uses the closed
-	# form (AITrajectory.puck_release_landing) instead, cross-validated against
-	# this walk in test_puck_release_landing.gd. Step counts are the whole runout
-	# at the two paces that matter: a quick-pass rim
-	# (14 m/s, ~200 m of runout under PUCK_ICE_DECEL_M_S2 — it never stops on this
-	# rink, so it is bounded by board contacts) and an icing-legal pace whose
+	# Puck-path integration, the stepped walk every puck read runs: a quick-pass
+	# rim (14 m/s, ~200 m of runout under PUCK_ICE_DECEL_M_S2 — it never stops on
+	# this rink, so it is bounded by board contacts) and an icing-legal pace whose
 	# runout dies inside the rink. dt matches solve_reception_gate's walk.
 	var rim_vel := Vector3(0.0, 0.0, -14.0)
 	var legal_vel := Vector3(0.0, 0.0, -6.6)

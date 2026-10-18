@@ -38,6 +38,7 @@ func _add_goalie(s: WorldSnapshot, team_id: int, pos: Vector3) -> void:
 	var g := GoalieNetworkState.new()
 	g.position_x = pos.x
 	g.position_z = pos.z
+	g.rotation_y = atan2(pos.x, pos.z)   # out of his net, toward centre ice
 	s.goalie_states[team_id] = g
 
 

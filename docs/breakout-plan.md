@@ -3,6 +3,11 @@
 Status: **scoping / agreed-design draft** (task #32). Implementation follows the
 CLAUDE.md workflow: this doc is the plan; deviations get discussed first.
 
+The own-zone clear this doc iterates on has since been removed with no
+replacement, and so has the neutral-zone dump-in: a carrier never dumps (see
+`Scripts/domain/ai/CLAUDE.md` → "There is no dump-in and no defensive-zone
+clear").
+
 ## 1. The problem (playtest report + diagnosis)
 
 Playtest observations (3v3 and 5v5):

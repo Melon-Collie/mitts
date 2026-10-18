@@ -6,8 +6,7 @@ class_name AIStationSearch
 # scoring function; this is the sampling it scores.
 
 
-# Polar candidate ring radius. A sampling parameter, not a behavioral knob; the
-# same scale as AICarrierCarrySearch.CARRY_SEARCH_STEP_M.
+# Polar candidate ring radius. A sampling parameter, not a behavioral knob.
 const SEARCH_STEP_M: float = 3.0
 
 

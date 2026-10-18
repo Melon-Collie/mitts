@@ -217,6 +217,16 @@ The shape of that failure is worth recognising: a stance loop at a fixed period
 whose slide has NO lateral leg means two owners are fighting over
 `_current_depth`. `test_goalie_held_puck_slide_loop.gd` holds all of it.
 
+**A shot released from the post seal keeps him in it until it resolves.**
+RVH and VH are entered only while no shot is in flight, and they are left the
+same way: a puck on net released while he is sealed holds the stance, exits and
+post swaps alike, until it is picked up, touches him or a post, the boards or
+the net, or is no longer on net (`_holding_seal_for_shot`). Standing up
+mid-flight swings the post pad into the puck's path, and a moving pad strikes the
+puck with its own speed. While sealed he starts no shot reaction at all, which is
+why the hold is its own flag and not the reaction's.
+`tests/slow/ai/test_goalie_holds_the_seal_through_a_shot.gd` holds it.
+
 **Down, the pad covers the post only if it points there.** The arrival test
 measures the post spot against the sealing pad as a segment turned however far
 his body is from the seal's own facing (`BeatenWideConfig.pad_turn_rad`). A
@@ -437,9 +447,8 @@ standing leg's drop and the arm's reach.
 **`elevated_threshold` forks the LEGS, not the hands.** Under it he drops, and
 flat the pads are 0.28 m tall, so a corner shot at 0.3-0.6 m clears them wide
 of the trunk. The hands take every shot read over the flat pad top, after the
-arm read — the band the bots' shot model already charges to the arms
-(`AIActionScoring._delay_at_height`). Left to the legs alone, that band was the
-one way a set keeper lost clean shots from range. The hand aims where the
+arm read. Left to the legs alone, that band was the one way a set keeper lost
+clean shots from range. The hand aims where the
 believed line crosses HIS plane, not the goal line: from an angle he stands out
 on the shooter's line, and the goal-line x sends the blocker, and the stick on
 it, past the puck. `test_goalie_hands_over_the_pad.gd` holds both, and that the

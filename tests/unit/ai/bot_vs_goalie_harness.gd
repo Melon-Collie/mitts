@@ -23,8 +23,8 @@ extends RefCounted
 # This joins them. The bot picks the shot; the real keeper tries to stop it.
 #
 # ── WHAT IS REAL ────────────────────────────────────────────────────────────
-#   * the bot's decision to shoot, and WHICH shot — `best_shot_aim` /
-#     `best_shot_loft` / the scorer's own release speed, read off the live
+#   * the bot's decision to shoot, and WHICH shot — the carrier's
+#     `shot_aim_point` / `shot_loft_level` / release speed, read off the live
 #     carrier role at the moment it fires
 #   * its steering and pace into the release (duel_harness movement)
 #   * the goalie: real GoalieController on the real Goalie.tscn, ticked once per
@@ -169,7 +169,7 @@ func run_rush(start: Vector3, vel: Vector3, profile: BotSkillProfile,
 	# the body is still square in front of him. Firing from the body erases the
 	# entire mechanism.
 	#
-	# `_shot_sample_release` is that winning point, and the winning hold less
+	# The body plus `shoot_now_hold` is that winning point, and the winning hold less
 	# the puck's own spot (`_field.holds.offset[0]`) is the pull it represents; the pull
 	# being non-zero is what marks a FLANK release as opposed to a straight one.
 	var l_blade: Vector3 = start
@@ -185,7 +185,7 @@ func run_rush(start: Vector3, vel: Vector3, profile: BotSkillProfile,
 				l_intent = c0.intended_action
 				l_aim = c0.shot_aim_point
 				l_loft = c0.shot_loft_level
-				l_speed = c0._shot_sample_speed
+				l_speed = _committed_pace(s0.agent, c0)
 				l_pos = s0.pos
 				l_stance = _ctrl.stance()
 				l_unset = _ctrl.unset_fraction()
@@ -193,8 +193,7 @@ func run_rush(start: Vector3, vel: Vector3, profile: BotSkillProfile,
 				l_gx = _goalie.global_position.x
 				l_lat = s0.vel.x   # SIGNED — the mode split needs the direction
 				l_ev = s0.agent.debug_shoot_score
-				l_blade = c0._shot_sample_release \
-						if c0._shot_sample_release != Vector3.INF else s0.blade
+				l_blade = s0.pos + c0.shoot_now_hold
 				l_gpos = _goalie.global_position
 				l_offset = c0.shoot_now_hold \
 						- Vector3(c0._field.holds.offset[0].x, 0.0, c0._field.holds.offset[0].y)
@@ -261,4 +260,10 @@ func _publish_windup(duel: RefCounted) -> void:
 			if sk.input.slap_held else SkaterStateMachine.State.WRISTER_AIM
 	_shooter.predicted_shot_velocity = _h.shot_velocity_at(
 			sk.blade, car.shot_aim_point, car.shot_loft_level,
-			car._shot_sample_speed, 0.0)
+			_committed_pace(sk.agent, car), 0.0)
+
+
+# The pace the winning shot leaves at: the shooter's wrister top end times the
+# share of it the winning hold's load gives.
+func _committed_pace(agent: Object, car: Object) -> float:
+	return agent._self_wrister_shot_speed * car._shot_sample_share

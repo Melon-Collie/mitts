@@ -43,17 +43,24 @@ var slot_assignments: Dictionary[int, int] = {}      # peer_id -> AIRoleSlots.Sl
 # zone roles), so each covers a DISTINCT opponent instead of all collapsing on
 # the most dangerous one. Empty outside DZONE / TRANS_DEFENSE.
 var threat_assignments: Dictionary[int, int] = {}    # defender peer -> opp peer
-# opp peer_id → threat_surface_shoot of his current spot against our net, goalie
-# and full team, computed once per brain tick so MARK's unassigned fallback does
-# not pay it per marker per re-eval. APPROXIMATE: full-team defender set (the
+# opp peer_id → his threat with the puck (AIPossessionValue.threat_of_carrier)
+# against our net, goalie and full team, computed once per brain tick so MARK's
+# unassigned fallback does not pay it per marker per re-eval. APPROXIMATE: full-team defender set (the
 # exact read excludes the marker himself), raw unled positions, up to a brain
 # tick stale — usable only as ordering / pruning bounds, never for an
 # assigned-man cover. Empty whenever no MARK slot is live, so consumers fall back
 # to the exact local computation.
 var threat_shoot_base_by_opp: Dictionary[int, float] = {}
-# Scratch defender list + index-matched caps for the memo fill.
+# Scratch defender list + index-matched velocities and caps for the memo fill,
+# and the possession read over them.
 var _memo_defenders: Array[Vector3] = []
+var _memo_defender_vels: Array[Vector3] = []
 var _memo_defender_caps: Array[AISkaterCaps] = []
+var _memo_possession := AIPossessionValue.new()
+# The opposing attack's possession read with no defenders, for the partition's
+# man values (see _compute_threat_assignments).
+var _open_possession := AIPossessionValue.new()
+var _no_skaters: Array[Vector3] = []
 
 # The team's shared transition-defense read (docs/transition-defense-plan.md
 # §4), computed once per brain tick so no defender runs a private last-man race.
@@ -167,7 +174,7 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 		_prev_recovery[pid] = rush_read.recovery_by_peer[pid]
 	rush_read.fill(snapshot, team_id, _own_goal_z, _team_id_by_peer,
 			_caps_by_peer, _prev_recovery, rule_set != GameRules.RuleSet.OFF,
-			_bot_peers)
+			_bot_peers, _last_carrier_team)
 
 	# Coverage readiness: hold the rush/recovery shape until the backcheck is
 	# home (Scripts/domain/ai/CLAUDE.md → "DZONE is a shape, not a location").
@@ -298,7 +305,7 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 	# Men = every opponent the puck-owner does not already own (see the header).
 	var our_net := Vector3(0.0, 0.0, _own_goal_z)
 	var our_goalie_pos: Vector3 = _resolve_our_goalie_pos(snapshot)
-	var no_defenders: Array[Vector3] = []
+	_open_possession.fill(our_net, _no_skaters, _no_skaters, [])
 	var men: Array[int] = []
 	var man_pos: Dictionary = {}
 	var man_value: Dictionary = {}
@@ -314,43 +321,28 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 		# Area eligibility, built as the men are collected. The incumbent gets a
 		# release margin so a man skating a seam is held a metre past the edge
 		# rather than flickering between two defenders; the matcher's own switch
-		# margin covers the rest.
+		# margin covers the rest. The puck owner's area is everyone's while he is
+		# on the puck, or a man in it is in nobody's.
+		var in_pressure_area: bool = AIZoneCoverage.in_area(pressure_slot, _strong_x,
+				_own_goal_z, mp)
 		for def_pid: int in zone_slot_by_def:
 			var margin: float = AIZoneCoverage.AREA_RELEASE_MARGIN_M \
 					if prev.get(def_pid, -1) == pid else 0.0
-			if AIZoneCoverage.in_area(zone_slot_by_def[def_pid], _strong_x,
-					_own_goal_z, mp, margin):
+			if in_pressure_area or AIZoneCoverage.in_area(zone_slot_by_def[def_pid],
+					_strong_x, _own_goal_z, mp, margin):
 				if not eligible_men.has(def_pid):
 					eligible_men[def_pid] = {}
 				(eligible_men[def_pid] as Dictionary)[pid] = true
-		man_value[pid] = AIActionScoring.threat_surface_pass(
-				play_ref, mp, our_net, our_goalie_pos,
-				GameRules.NET_HALF_WIDTH, no_defenders)
-		# Finish danger if fed: shot value from his spot with the goalie
-		# predicted over the feed's flight, no field defenders. Unlike man_value
-		# it carries no lane factor: a contested feed still becomes a tap-in if
-		# it arrives.
-		var feed_speed: float = AIPuckLane.expected_pass_speed(play_ref, mp)
-		var feed_flight: float = play_ref.distance_to(mp) / maxf(feed_speed, 1.0)
-		# A sharp-angle man fires into the post seal a competent keeper adopts,
-		# so he is not a finish threat the assignment must chase.
-		var man_seal: float = AIGoalieModel.derive_post_seal_x_sign(mp, our_net)
-		# Deliberately WITHOUT the defender positions the other callers pass:
-		# coverage is this scan's output, and feeding the markers back in would
-		# free a covered man's marker, raise his danger, and pull the marker back.
-		var g_state: GoalieNetworkState = snapshot.goalie_states.get(team_id)
-		AIGoalieModel.resolve_feed_keeper(
-				our_goalie_pos, our_net, feed_flight, mp, play_ref,
-				g_state.hands_read(our_net.z) if g_state != null else Vector4.INF,
-				feed_speed)
-		man_danger[pid] = AIActionScoring.score_shoot(
-				mp, our_net,
-				AIGoalieModel.feed_keeper_pos,
-				GameRules.NET_HALF_WIDTH, no_defenders,
-				AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-				AIGoalieModel.feed_keeper_unsettled,
-				[], -1.0, false, man_seal, man_seal != 0.0, 0.0, [],
-				AIGoalieModel.feed_keeper_hands)
+		man_value[pid] = _open_possession.threat_of_feed(play_ref, mp,
+				snapshot.skater_states[pid].velocity, our_goalie_pos)
+		# Finish danger if fed: his one-timer off the feed, our keeper square on
+		# the play as he stands (AIShotValue.feed). Unlike man_value it carries no
+		# lane factor: a contested feed still becomes a tap-in if it arrives. And
+		# no defenders: coverage is this scan's output, and feeding the markers
+		# back in would free a covered man's marker, raise his danger, and pull
+		# the marker back.
+		man_danger[pid] = AIShotValue.feed(play_ref, mp,
+				AIPuckLane.expected_pass_speed(play_ref, mp), our_net, our_goalie_pos, true)
 	if men.is_empty():
 		return empty
 
@@ -381,17 +373,21 @@ func _refresh_threat_base_memo(snapshot: WorldSnapshot) -> void:
 	var our_net := Vector3(0.0, 0.0, _own_goal_z)
 	var our_goalie_pos: Vector3 = _resolve_our_goalie_pos(snapshot)
 	_memo_defenders.clear()
+	_memo_defender_vels.clear()
 	_memo_defender_caps.clear()
 	for pid: int in snapshot.skater_states:
 		if _team_id_by_peer.get(pid, -1) == team_id:
 			_memo_defenders.append(snapshot.skater_states[pid].position)
+			_memo_defender_vels.append(snapshot.skater_states[pid].velocity)
 			_memo_defender_caps.append(_caps_by_peer.get(pid))
+	_memo_possession.fill(our_net, _memo_defenders, _memo_defender_vels,
+			_memo_defender_caps)
 	for pid: int in snapshot.skater_states:
 		if _team_id_by_peer.get(pid, -1) == team_id:
 			continue
-		threat_shoot_base_by_opp[pid] = AIActionScoring.threat_surface_shoot(
-				snapshot.skater_states[pid].position, our_net, our_goalie_pos,
-				GameRules.NET_HALF_WIDTH, _memo_defenders, _memo_defender_caps)
+		var s: SkaterNetworkState = snapshot.skater_states[pid]
+		threat_shoot_base_by_opp[pid] = _memo_possession.threat_of_carrier(s.position,
+				s.velocity, our_goalie_pos)
 
 
 # Our goalie's current world position, or the goal mouth as a first-frame

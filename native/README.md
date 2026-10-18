@@ -3,9 +3,9 @@
 C++ ports of per-tick math kernels, registered as `Native*` classes
 (`NativeTopHandIK`, `NativeBottomHandIK`, `NativeSkaterMovement`,
 `NativePuckStep`, `NativeBladeDangle`, `NativeArmRig`, `NativeSkaterGait`,
-`NativeLegChain`). The
-GDScript originals (in `Scripts/domain/rules/`, `Scripts/controllers/` and
-`Scripts/actors/`) remain the behavioral
+`NativeLegChain`, `NativeCarryRollout`, `NativeShotOdds`). The
+GDScript originals (in `Scripts/domain/rules/`, `Scripts/domain/ai/`,
+`Scripts/controllers/` and `Scripts/actors/`) remain the behavioral
 reference; each ported kernel is pinned to its reference by a seeded fuzz test
 (`tests/unit/rules/test_native_ik_parity.gd` and its siblings). **Change a
 solver in both places or not at all** — the parity tests are the gate.
@@ -164,6 +164,26 @@ without a built binary, loses performance, never correctness — CI builds it):
   makes itself (trunk texture, sizing) and reads the native's back on demand
   (`_sync_cap`); a degenerate span returns false and takes the GDScript path.
   `tests/unit/rules/test_native_arm_rig_parity.gd`.
+
+- **Carry rollout** — `AICarryRollout.roll_all` (the bot carrier's near moves,
+  four rolls a carry search on the AI worker): every move skated in one call,
+  through the movement step `NativeSkaterMovement` shares (`movement_step`), the
+  facing rule, the board shield and the body's containment. The domain cannot
+  name a ClassDB class, so the application layer installs the kernel
+  (`NativeCarryRolloutFactory.install`, from `GameManager._ready`) and each
+  rollout builds its own; the caps load by name once per caps object. 780 → 85 µs
+  for the seven moves. `tests/unit/ai/test_native_carry_rollout_parity.gd`.
+
+- **Shot-field read** — `AIShotOdds._weigh` (every shot the bots price, on the
+  AI worker): the bilinear spot blend, each spot's kernel over its cells and the
+  weighted odds in one call. The GDScript builds the field and hands its packed
+  per-cell arrays over once (`attach_native`, re-run when
+  `NativeShotOddsFactory.install` sets the factory from `GameManager._ready`);
+  each query's inputs stay GDScript. The matched cells come back only to the
+  queries that read them (the pick, the xG spread, a deflection). Weights round
+  through float as the GDScript's packed arrays do, so the two agree to the bit.
+  38 → 5 µs a read; the carrier's carry search 26–28% faster in the zone.
+  `tests/unit/ai/test_native_shot_odds_parity.gd`.
 
 The parity suites force the GDScript path on their reference objects (e.g.
 nulling `_skating._native`) — a parity test must never compare the native

@@ -55,12 +55,6 @@ func test_authored_defaults_agree_before_any_profile_is_applied() -> void:
 	AIGoalieModel.set_goalie_profile(GoalieSkillProfile.hard())
 	assert_almost_eq(AIGoalieModel.goalie_leg_delay_s, _export_default("reaction_delay"), 1e-6,
 			"the bots' leg-reaction delay must be the goalie's own")
-	assert_almost_eq(AIGoalieModel.goalie_arm_delay_s, _export_default("arm_reaction_delay"), 1e-6,
-			"the bots' arm-reaction delay must be the goalie's own")
-	assert_almost_eq(AIGoalieModel.goalie_butterfly_drop_s,
-			_export_default("butterfly_drop_speed"), 1e-6,
-			"the bots' drop time must be the goalie's own — it decides whether a low " +
-			"shot is still open when the puck arrives")
 	assert_almost_eq(AIGoalieModel.goalie_lateral_accel_m_s2,
 			_export_default("lateral_accel"), 1e-6,
 			"the bots' lateral accel must be the goalie's own — it decides whether a " +
@@ -69,56 +63,55 @@ func test_authored_defaults_agree_before_any_profile_is_applied() -> void:
 			"the bots' challenge-depth ceiling must be the goalie's own")
 
 
-func test_the_arm_deploy_ramp_derives_from_the_goalies_own_reach_and_speed() -> void:
-	AIGoalieModel.set_goalie_profile(GoalieSkillProfile.hard())
-	var reach: float = AIActionScoring.HOLE_BAND_EXT[AIActionScoring.HOLE_BAND_HIGH]
-	assert_almost_eq(AIGoalieModel.goalie_arm_deploy_s,
-			reach / _export_default("glove_react_max_speed"), 1e-6,
-			"the deploy ramp is the high-band reach divided by the glove's real speed, " +
-			"not an authored number — a faster glove must shrink it")
-
-
 # A lower tier has to actually move the model, or the ladder is decoration.
 func test_an_easier_tier_moves_every_axis_the_bots_read() -> void:
 	AIGoalieModel.set_goalie_profile(GoalieSkillProfile.hard())
 	var hard := {
 		"leg": AIGoalieModel.goalie_leg_delay_s,
-		"arm": AIGoalieModel.goalie_arm_delay_s,
-		"drop": AIGoalieModel.goalie_butterfly_drop_s,
 		"accel": AIGoalieModel.goalie_lateral_accel_m_s2,
-		"deploy": AIGoalieModel.goalie_arm_deploy_s,
 		"depth": AIGoalieModel._planning_ceiling,
 	}
 	AIGoalieModel.set_goalie_profile(GoalieSkillProfile.easy())
 	assert_gt(AIGoalieModel.goalie_leg_delay_s, hard.leg, "Easy reads later with the legs")
-	assert_gt(AIGoalieModel.goalie_arm_delay_s, hard.arm, "and later with the arms")
-	assert_gt(AIGoalieModel.goalie_butterfly_drop_s, hard.drop, "and drops slower")
 	assert_lt(AIGoalieModel.goalie_lateral_accel_m_s2, hard.accel, "and pushes across slower")
-	assert_gt(AIGoalieModel.goalie_arm_deploy_s, hard.deploy, "and deploys the glove slower")
 	assert_lt(AIGoalieModel._planning_ceiling, hard.depth, "and sits deeper in his net")
 	AIGoalieModel.set_goalie_profile(GoalieSkillProfile.hard())
 
 
 # The one that catches the real mistake: a knob added to the profile and wired
 # into the controller, but never into the sync. Every profile field that names a
-# quantity the shot model reads must appear in set_goalie_profile's body.
+# quantity the bots' goalie prediction reads must appear in set_goalie_profile's
+# body.
 func test_every_mirrored_profile_field_is_carried_by_the_sync() -> void:
 	var src: String = FileAccess.get_file_as_string(
 			"res://Scripts/domain/ai/goalie_model.gd")
 	var head: int = src.find("static func set_goalie_profile(")
 	assert_gt(head, 0, "set_goalie_profile must exist — it is the whole seam")
 	var body: String = src.substr(head, src.find("\n\n\n", head) - head)
-	for field: String in ["reaction_delay_s", "arm_reaction_delay_s", "butterfly_drop_s",
-			"lateral_accel_mps2", "glove_react_max_speed_mps", "depth_aggressive_m",
-			"depth_base_m"]:
+	for field: String in ["reaction_delay_s", "lateral_accel_mps2", "depth_aggressive_m",
+			"depth_base_m", "puck_play_go_margin_s"]:
 		assert_true(body.contains("profile.%s" % field),
-				"set_goalie_profile does not read `profile.%s`, which the shot model " % field +
+				"set_goalie_profile does not read `profile.%s`, which the goalie prediction " % field +
 				"depends on — the bots would go on scoring against the Hard goalie " +
 				"while facing a lower tier")
 
 
 # Guards the guard: the export parser is the only moving part above, and if it
 # stopped matching every assertion would compare NAN against NAN.
+func test_the_bots_know_how_long_the_goalie_takes_to_stand_up() -> void:
+	assert_almost_eq(AIGoalieModel.GOALIE_RECOVERY_S, _export_default("recovery_duration"),
+			1e-6, "the window the carrier prices a down goalie's stance over is his rise")
+
+
+# A predicted seal the live keeper does not adopt prices a sharp-angle look against
+# a post he is not on, or the other way round.
+func test_the_bots_seal_the_post_where_the_goalie_does() -> void:
+	assert_almost_eq(AIGoalieModel.GOALIE_SEAL_ZONE_POST_Z_M, _export_default("zone_post_z"),
+			1e-6, "the seal zone's depth must be the goalie's own")
+	assert_almost_eq(rad_to_deg(AIGoalieModel.GOALIE_SEAL_ANGLE_RAD),
+			_export_default("rvh_early_angle"), 1e-4, "the seal angle must be the goalie's own")
+
+
 func test_the_export_parser_still_reads_the_controller() -> void:
 	assert_gt(_export_default("reaction_delay"), 0.0, "parsed a real reaction delay")
 	assert_gt(_export_default("glove_react_max_speed"), 0.0, "parsed a real glove speed")

@@ -8,8 +8,9 @@ class_name AIRoleMark
 # Fallback (no man assigned — more markers than receivers, a loose puck, no
 # brain): recover to the most dangerous ice, argmaxing
 #
-#     -max over opps of threat_surface_shoot(
-#         opp, our_net, our_goalie, our_team_with_us_at_c)
+#     -max over opps of AIPossessionValue.threat_of_carrier(opp)
+#
+# against our team with us at the candidate.
 
 
 static func decide(ctx: RoleContext) -> RoleDecision:
@@ -31,6 +32,8 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	var our_goalie_pos: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 	var our_team_excluding_self: Array[Vector3] = ctx.scratch_teammates
 	AIRoleReads.collect_teammates_excluding_self(ctx, our_team_excluding_self)
+	var poss: AIPossessionValue = AIRoleReads.defence_possession(ctx,
+			our_team_excluding_self)
 
 	# The puck/net midpoint: toward our blue line with the puck out, the slot with
 	# it deep — no per-state branch. The slot when there is no puck state.
@@ -54,10 +57,8 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	for i: int in opp_positions.size():
 		var base: float = memo.get(opp_ids[i], -1.0) if not memo.is_empty() else -1.0
 		if base < 0.0:
-			base = AIActionScoring.threat_surface_shoot(
-					opp_positions[i], our_net, our_goalie_pos,
-					GameRules.NET_HALF_WIDTH, our_team_excluding_self,
-					ctx.scratch_teammate_caps)
+			base = poss.threat_of_carrier(opp_positions[i], opp_states[i].velocity,
+					our_goalie_pos)
 		bases.append(base)
 
 	# Far from the recovery region, skate at the cover anchor on the biggest base
@@ -83,10 +84,8 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		if AIStationSearch.too_close_to_teammate(c, our_team_excluding_self):
 			continue
 
-		var mark_score: float = -_max_shot_threat(
-				c, opp_positions, our_net, our_goalie_pos,
-				our_team_excluding_self, bases, ctx.scratch_teammate_caps,
-				ctx.caps_by_peer.get(ctx.peer_id)) \
+		var mark_score: float = -_max_threat(poss, c, ctx.caps_by_peer.get(ctx.peer_id),
+				opp_positions, opp_states, our_goalie_pos, bases) \
 				+ AIStationSearch.incumbent_bonus(ctx, c)
 		if mark_score > best_score:
 			best_score = mark_score
@@ -96,27 +95,16 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	return d
 
 
-# The highest shot-threat surface any opp has with our defender at `candidate`.
-# The surface's position_potential floor keeps a gradient where no opp is in
-# shooting range. `bases` (per-opp threats without the candidate, in
-# opp_positions order) bound each term from above, so terms evaluate in
-# descending-bound order and stop early — an exact prune.
-static func _max_shot_threat(
-		candidate: Vector3,
-		opp_positions: Array[Vector3],
-		our_net: Vector3,
-		our_goalie_pos: Vector3,
-		our_team_excluding_self: Array[Vector3],
-		bases: Array[float],
-		our_team_caps: Array = [],
-		self_caps: AISkaterCaps = null) -> float:
-	# Same in-place defender push/pop and caps contract as
-	# AIDefensiveVerbs.carrier_best_option.
-	var caps_matched: bool = our_team_caps.size() == our_team_excluding_self.size()
-	our_team_excluding_self.push_back(candidate)
-	if caps_matched:
-		our_team_caps.push_back(self_caps)
-
+# The highest threat any opp carries (AIPossessionValue.threat_of_carrier) with
+# our defender at `candidate`. On the possession scale, so a gradient survives
+# where no opp is in shooting range. `bases` (per-opp threats without the
+# candidate, in opp_positions order) bound each term from above, so terms
+# evaluate in descending-bound order and stop early — an exact prune.
+static func _max_threat(poss: AIPossessionValue, candidate: Vector3,
+		self_caps: AISkaterCaps, opp_positions: Array[Vector3],
+		opp_states: Array[SkaterNetworkState], our_goalie_pos: Vector3,
+		bases: Array[float]) -> float:
+	poss.push_defender(candidate, Vector3.ZERO, self_caps)
 	var max_threat: float = 0.0
 	var used: int = 0
 	while true:
@@ -129,12 +117,7 @@ static func _max_shot_threat(
 		if bi == -1 or bound <= max_threat:
 			break
 		used |= 1 << bi
-		var threat: float = AIActionScoring.threat_surface_shoot(
-				opp_positions[bi], our_net, our_goalie_pos,
-				GameRules.NET_HALF_WIDTH, our_team_excluding_self, our_team_caps)
-		if threat > max_threat:
-			max_threat = threat
-	our_team_excluding_self.pop_back()
-	if caps_matched:
-		our_team_caps.pop_back()
+		max_threat = maxf(max_threat, poss.threat_of_carrier(opp_positions[bi],
+				opp_states[bi].velocity, our_goalie_pos))
+	poss.pop_defender()
 	return max_threat

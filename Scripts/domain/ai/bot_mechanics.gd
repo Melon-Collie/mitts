@@ -14,7 +14,7 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 # hold it.
 #
 # Anything denominated in metres ON THIS RING is really an angle: the state
-# machine's stickhandle offset and AIM_CONVERGED_DIST_M must be rescaled with it
+# machine's stickhandle offset must be rescaled with it
 # (aim errors are stored in radians on BotSkillProfile so they don't move).
 const CARRY_BLADE_AIM_FORWARD_M: float = 1.3
 

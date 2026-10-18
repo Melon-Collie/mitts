@@ -39,18 +39,19 @@ extends GutTest
 #   · player_attributes.gd (53) — one accessor per body dial, by design.
 #
 # Scope is Scripts/ only. A long test is not the same cost as a long subsystem,
-# and addons/ is vendored.
+# and addons/ is vendored. Generated data under _GENERATED_DIR is a measurement
+# written as constants, never read or edited by hand, so it is not counted.
 
 const _SIZE_LIMIT: int = 800
+const _GENERATED_DIR: String = "res://Scripts/domain/ai/generated/"
 # Slack before an un-banked win is reported, so ordinary edits inside a listed
 # file don't demand a table update on every commit.
 const _SIZE_SLACK: int = 40
 
 const _SIZE_ALLOWANCE: Dictionary[String, int] = {
-	"res://Scripts/ai/skater_agent_state_machine.gd": 3794,
+	"res://Scripts/ai/skater_agent_state_machine.gd": 3665,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
 	"res://Scripts/game/game_manager.gd": 5788,
-	"res://Scripts/domain/ai/action_scoring.gd": 2026,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
 	# Scripts/controllers/CLAUDE.md rather than inline, and the tunable
@@ -58,15 +59,15 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +7: the puck-velocity estimate is bounded by the puck's own speed limit.
 	# It is a one-tick finite difference feeding a positional decision, so a
 	# teleport read as travel moved the tracked threat metres in a tick.
-	"res://Scripts/controllers/goalie_controller.gd": 5040,
-	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 1031,
+	"res://Scripts/controllers/goalie_controller.gd": 5075,
+	"res://Scripts/domain/ai/role_behaviors/carrier.gd": 841,
 	# +33: the dive takes the knockdown's fall its own way — a thrown tip rate,
 	# no rebound, legs long, the belt kept on his line — and stays down while
 	# block is held. +5: a bot's caps carry its wrist-shot load and facing configs.
 	# +10: the staged get-up's one clock (knockdown_getup_left) and the stagger
 	# he finds his legs through once it ends. +36: the get-up's stick hold. +5:
 	# the down flags in one place, a diver's stick dead from the get-up.
-	"res://Scripts/controllers/skater_controller.gd": 3588,
+	"res://Scripts/controllers/skater_controller.gd": 3593,
 	# +1: dive_laid_out, the diver's stick and low block until the get-up.
 	"res://Scripts/actors/skater.gd": 2797,
 	"res://Scripts/networking/network_manager.gd": 2866,
@@ -79,9 +80,8 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/actors/hockey_rink.gd": 1469,
 	"res://Scripts/game/player_prefs.gd": 1409,
 	"res://Scripts/actors/skater_mesh_builder.gd": 1462,
-	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1357,
+	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1304,
 	"res://Scripts/ui/career_stats_screen.gd": 1271,
-	"res://Scripts/domain/ai/carry_space.gd": 1065,
 	"res://Scripts/ui/lobby_manager.gd": 1247,
 	"res://Scripts/actors/puck.gd": 1102,
 	"res://Scripts/ui/side_menu.gd": 995,
@@ -105,7 +105,6 @@ const _API_SLACK: int = 3
 const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/networking/network_manager.gd": 208,
 	"res://Scripts/actors/skater.gd": 145,
-	"res://Scripts/domain/ai/action_scoring.gd": 36,
 	"res://Scripts/game/game_manager.gd": 63,
 	"res://Scripts/domain/state/player_attributes.gd": 53,
 	"res://Scripts/networking/network_telemetry.gd": 54,
@@ -160,6 +159,8 @@ func _assert_ratchet(allowance: Dictionary[String, int], limit: int, slack: int,
 		unit: String, measure: Callable, remedy: String) -> void:
 	var seen: Dictionary[String, bool] = {}
 	for path: String in _all_files("res://Scripts", ".gd"):
+		if path.begins_with(_GENERATED_DIR):
+			continue
 		var measured: int = measure.call(path)
 		seen[path] = true
 		if not allowance.has(path):

@@ -4,8 +4,7 @@ extends GutTest
 # Anything read under `elevated_threshold` (the top of the butterfly trunk,
 # 1.0 m) drops him, and flat the pads are 0.28 m tall — so a corner shot at
 # 0.3-0.6 m goes over the pad and wide of the trunk, and only a hand can stop
-# it. The bots' shot model assumes the hands take that band
-# (AIActionScoring._delay_at_height); these hold the live keeper to it.
+# it; these hold the live keeper to taking it.
 #
 # The second half is WHERE the hand goes. The read belief is a goal-line
 # crossing, and from an angle he stands well out from that line squared to the
@@ -138,7 +137,8 @@ func test_unscreened_wristers_from_above_the_circles_meet_a_hand() -> void:
 
 # The other side of the trade, so the fix cannot quietly become a wall: in
 # tight the arm read still loses to the flight, and somewhere across the mouth
-# a LOW shot from the dot line beats him.
+# a MID shot from the dot line beats him over the pads. LOW from there crosses
+# him at the flat pad top, which the drop seals.
 func _over_the_pad_in_tight(mph: float) -> int:
 	var h: RefCounted = _live(Harness)
 	var spot := Vector3(0.0, 0.0, GOAL_Z + GameRules.GOAL_LINE_Z - GameRules.ICING_FACEOFF_DOT_Z)
@@ -146,7 +146,7 @@ func _over_the_pad_in_tight(mph: float) -> int:
 	for i: int in IN_TIGHT_AIMS:
 		h.settle_ready(spot)
 		var aim := Vector3(lerpf(-CORNER, CORNER, i / float(IN_TIGHT_AIMS - 1)), 0.0, GOAL_Z)
-		if h.fire_at(spot, aim, ShotMechanics.ELEVATION_LOW, mph * MPH_TO_MS, 0.0) == Harness.GOAL:
+		if h.fire_at(spot, aim, ShotMechanics.ELEVATION_MID, mph * MPH_TO_MS, 0.0) == Harness.GOAL:
 			goals += 1
 	return goals
 
@@ -163,6 +163,6 @@ func test_hands_over_the_pad_calibration_snapshot() -> void:
 	snap.record("12 m LOW wristers, 12 shots: goals", from_range[0])
 	snap.record("12 m LOW wristers, 12 shots: hand saves", from_range[1])
 	for mph: float in [70.0, 80.0]:
-		snap.record("dot line LOW at %.0f mph, %d aims: goals" % [mph, IN_TIGHT_AIMS],
+		snap.record("dot line MID at %.0f mph, %d aims: goals" % [mph, IN_TIGHT_AIMS],
 				_over_the_pad_in_tight(mph))
 	snap.verify(self)

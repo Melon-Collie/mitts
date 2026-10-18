@@ -3,7 +3,7 @@ extends GutTest
 # SkaterAgentStateMachine against fabricated WorldSnapshots: the chase and
 # reception predicates, the cursor and aim geometry, the press states and their
 # wind-ups, the carry handler's transitions (with a stubbed carrier), the
-# dispatch throttle, poke-evade and deke, and the cognition gates. No live
+# dispatch throttle, the deke, and the cognition gates. No live
 # actors — everything runs headless off the bot's identity set by setup.
 
 const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
@@ -695,14 +695,14 @@ func _self_snap(self_pos: Vector3, have_puck: bool) -> WorldSnapshot:
 func test_press_state_ignores_dispatch_throttle() -> void:
 	# A non-press state with a pending skip counter would reuse its cached
 	# decision; a press state must always dispatch full (charge timing is
-	# tick-sensitive). Exercised via the dump's one-tick quick release.
+	# tick-sensitive). Exercised via a dump's charge starting on this tick.
 	sm._state = Agent.State.PASS_PRESSED
 	sm._dump_target = Vector3(12, 0, 0)
 	sm._dispatch_skip_counter = 5
 	var i := InputState.new()
 	sm.dispatch(i, _self_snap(Vector3.ZERO, true))
-	assert_true(i.quick_pass_pressed, "press states are never throttled")
-	assert_eq(sm.get_state(), Agent.State.CARRY)
+	assert_true(i.shoot_pressed, "press states are never throttled")
+	assert_eq(sm.get_state(), Agent.State.PASS_PRESSED, "the charge holds the state")
 
 
 # ── SHOOT_PRESSED (multi-tick wrister charge) ────────────────────────────────
@@ -1166,22 +1166,8 @@ func test_far_chase_faces_its_route() -> void:
 
 # ── PASS_PRESSED ─────────────────────────────────────────────────────────────
 
-func test_pass_pressed_quick_fires_and_clears_target() -> void:
-	sm._state = Agent.State.PASS_PRESSED
-	sm._pass_should_charge = false
-	sm._pass_target_peer_id = TEAMMATE_ID
-	var s := _self_snap(Vector3.ZERO, true)
-	_add_skater(s, TEAMMATE_ID, Vector3(3, 0, 0))
-	var i := InputState.new()
-	sm.dispatch(i, s)
-	assert_true(i.quick_pass_pressed, "quick pass fires the dedicated quick-shot edge")
-	assert_eq(sm.get_state(), Agent.State.CARRY, "quick pass is a one-tick press")
-	assert_eq(sm._pass_target_peer_id, -1, "quick pass clears its target for the next pick")
-
-
 func test_pass_pressed_lost_puck_bails_and_clears() -> void:
 	sm._state = Agent.State.PASS_PRESSED
-	sm._pass_should_charge = true
 	sm._pass_should_saucer = true
 	sm._pass_target_peer_id = TEAMMATE_ID
 	var s := _self_snap(Vector3.ZERO, false)  # no puck
@@ -1189,13 +1175,11 @@ func test_pass_pressed_lost_puck_bails_and_clears() -> void:
 	assert_ne(sm.get_state(), Agent.State.PASS_PRESSED, "lost puck bails")
 	assert_eq(sm.get_state(), sm._post_puck_lost_state(s))
 	assert_eq(sm._pass_target_peer_id, -1, "bail clears the stale pass target")
-	assert_false(sm._pass_should_charge, "bail clears the charge flag")
 	assert_false(sm._pass_should_saucer, "bail clears the saucer flag")
 
 
 func test_pass_pressed_charged_releases_after_windup() -> void:
 	sm._state = Agent.State.PASS_PRESSED
-	sm._pass_should_charge = true
 	sm._pass_target_peer_id = TEAMMATE_ID
 	var s := _self_snap(Vector3.ZERO, true)
 	_add_skater(s, TEAMMATE_ID, Vector3(8, 0, 0))
@@ -1212,45 +1196,24 @@ func test_pass_pressed_charged_releases_after_windup() -> void:
 	assert_eq(sm._pass_target_peer_id, -1, "release clears the pass target")
 
 
-func test_pass_pressed_dump_clear_chips_high_and_clears() -> void:
-	# A DZ clear-out: dump_target set, not soft. PASS_PRESSED fires a one-tick
-	# quick release aimed at the location, lifted HIGH to chip over sticks into
-	# the neutral zone — never a charged wind-up.
+func test_pass_pressed_rim_charges_flat_at_its_searched_pace() -> void:
+	# The rim pass (AIRimPass) walks its path at a searched pace, and the one-tick
+	# quick release only fires at the fixed quick-pass pace, which would die in
+	# the first corner. So the rim takes the charged wrister at _dump_launch_speed,
+	# FLAT: a charged release normalizes (dir.x, tan, dir.z) at its power, so any
+	# loft spends pace going up and the puck's ground speed stops being the pace
+	# the search walked.
 	sm._state = Agent.State.PASS_PRESSED
-	sm._pass_should_charge = true         # a charge flag must NOT survive a dump
-	sm._dump_target = Vector3(12, 0, 0)   # a location, no receiver
-	sm._dump_is_soft = false
+	sm._dump_target = Vector3(20, 0, 0)
+	sm._dump_launch_speed = 26.4
 	var i := InputState.new()
 	sm.dispatch(i, _self_snap(Vector3.ZERO, true))
-	assert_true(i.quick_pass_pressed, "a dump fires the one-tick quick release")
-	assert_eq(i.elevation_level, ShotMechanics.ELEVATION_HIGH, "a clear-out chips HIGH")
-	assert_eq(sm.get_state(), Agent.State.CARRY, "the dump is a one-tick press")
-	assert_false(sm._dump_target.is_finite(), "firing clears the dump target")
-
-
-func test_pass_pressed_dump_in_charges_flat_at_the_searched_pace() -> void:
-	# A dump-in past centre is the ONE dump that charges. Its depth IS its pace
-	# (AIActionScoring.solve_dump_in searches it), and the one-tick quick release
-	# only fires at the fixed quick-pass pace — which out-slides the rink twice
-	# over, so a chip at it comes back off the end boards. So the dump-in takes
-	# the charged wrister at _dump_launch_speed, FLAT: a charged release
-	# normalizes (dir.x, tan, dir.z) at its power, so any loft spends pace going
-	# up and the puck's ground speed stops being the number the pace ladder
-	# solved the runout from.
-	sm._state = Agent.State.PASS_PRESSED
-	sm._dump_target = Vector3(-11, 0, -20)
-	sm._dump_is_soft = true
-	sm._dump_launch_speed = 12.0
-	var i := InputState.new()
-	sm.dispatch(i, _self_snap(Vector3.ZERO, true))
-	assert_false(i.quick_pass_pressed, "a dump-in does NOT take the one-tick path")
-	assert_eq(i.elevation_level, ShotMechanics.ELEVATION_FLAT, "a dump-in fires FLAT")
-	assert_true(sm._pass_should_charge, "the dump-in charges")
-	assert_eq(sm._pass_target_speed, 12.0, "…at the pace the search placed it with")
+	assert_eq(i.elevation_level, ShotMechanics.ELEVATION_FLAT, "a rim rides the ice")
+	assert_eq(sm._pass_target_speed, 26.4, "…at the pace its search walked")
 	assert_eq(sm.get_state(), Agent.State.PASS_PRESSED, "the charge holds the state")
 
 	# …and the wind-up spends the dump target when it finally releases (the
-	# quick-release branch, which normally clears it, never runs for a dump-in).
+	# quick-release branch, which normally clears it, never runs for a rim).
 	var released: bool = false
 	for _t: int in range(AIBotMechanics.BOT_WRISTER_CHARGE_TICKS + 4):
 		var t := InputState.new()
@@ -1258,40 +1221,8 @@ func test_pass_pressed_dump_in_charges_flat_at_the_searched_pace() -> void:
 		if sm.get_state() == Agent.State.CARRY:
 			released = true
 			break
-	assert_true(released, "the charged dump-in releases within the charge budget")
+	assert_true(released, "the charged rim releases within the charge budget")
 	assert_false(sm._dump_target.is_finite(), "releasing clears the dump target")
-
-
-func test_pass_pressed_rim_charges_flat_at_its_searched_pace() -> void:
-	# The rim pass (AIRimPass) walks its path at a searched pace, so like the
-	# dump-in it must leave FLAT at that pace on the charged path — the quick
-	# release's fixed pace would die in the first corner.
-	sm._state = Agent.State.PASS_PRESSED
-	sm._dump_target = Vector3(20, 0, 0)
-	sm._dump_is_rim = true
-	sm._dump_launch_speed = 26.4
-	var i := InputState.new()
-	sm.dispatch(i, _self_snap(Vector3.ZERO, true))
-	assert_false(i.quick_pass_pressed, "a rim does NOT take the one-tick path")
-	assert_eq(i.elevation_level, ShotMechanics.ELEVATION_FLAT, "a rim rides the ice")
-	assert_true(sm._pass_should_charge, "the rim charges")
-	assert_eq(sm._pass_target_speed, 26.4, "…at the pace its search walked")
-
-
-func test_pass_pressed_dump_clear_stays_a_one_tick_release() -> void:
-	# The other half of the split: only the dump-IN charges. A DZ clear is a last
-	# resort under pressure — getting the puck gone NOW beats a wind-up that gets
-	# stripped mid-swing — so it keeps the one-tick quick release even though the
-	# carrier hands it a launch speed.
-	sm._state = Agent.State.PASS_PRESSED
-	sm._dump_target = Vector3(12, 0, 0)
-	sm._dump_is_soft = false
-	sm._dump_launch_speed = 11.0
-	var i := InputState.new()
-	sm.dispatch(i, _self_snap(Vector3.ZERO, true))
-	assert_true(i.quick_pass_pressed, "a clear still fires the one-tick release")
-	assert_false(sm._pass_should_charge, "…and never charges")
-	assert_eq(sm.get_state(), Agent.State.CARRY, "the clear is a one-tick press")
 
 
 func test_pass_pressed_dump_lost_puck_clears_target() -> void:
@@ -1325,7 +1256,6 @@ class _CarrierStub extends AIRoleCarrier:
 	var next_anchor: Vector3 = Vector3.ZERO
 	var next_pass_target: int = -1
 	var next_dump_target: Vector3 = Vector3.INF
-	var next_dump_is_soft: bool = false
 
 	func decide(_ctx: RoleContext) -> RoleDecision:
 		decide_calls += 1
@@ -1333,7 +1263,6 @@ class _CarrierStub extends AIRoleCarrier:
 		last_carry_anchor = next_anchor
 		pass_target_peer_id = next_pass_target
 		dump_target = next_dump_target
-		dump_is_soft = next_dump_is_soft
 		return RoleDecision.new()
 
 	func clear_intent() -> void:
@@ -1427,7 +1356,6 @@ func test_carry_dump_intent_commits_and_freezes_target() -> void:
 	var stub := _stub_carry(AIRoleCarrier.INTENT_CARRY)
 	stub.next_intent = AIRoleCarrier.INTENT_DUMP
 	stub.next_dump_target = Vector3(12, 0, 5)
-	stub.next_dump_is_soft = false
 	sm._intent_max_wait_ticks = 0
 	var s := _self_snap(Vector3.ZERO, true)
 	var landed: int = -1
@@ -1511,154 +1439,6 @@ func test_windup_side_flip_moves_to_backhand() -> void:
 	var mid: Vector3 = _windup_midpoint(sm, aim, -1.0)
 	assert_lt(mid.dot(_forehand_dir(aim, false)), 0.0,
 			"side-flip moves the RH wind-up to the backhand side")
-
-
-# ── _aim_needs_no_rotation: commit-then-aim reach cone (Aim-B2) ──────────────
-# The carrier commits to the charge WITHOUT a body turn when the aim already
-# sits inside the blade reach cone (minus the commit safety margin) of the
-# current facing. Default cone 157° − 25° margin = 132° immediate-commit half-
-# angle. Pure geometry, unit-tested here (the full pre-aim transition is driven
-# from a live snapshot elsewhere).
-
-func _aim_dir(deg: float) -> Vector2:
-	# Direction `deg` off +Z (the facing axis used below), XZ as (x, z).
-	var r: float = deg_to_rad(deg)
-	return Vector2(sin(r), cos(r))
-
-
-func test_forward_aim_needs_no_rotation() -> void:
-	assert_true(sm._aim_needs_no_rotation(Vector2(0, 1), _aim_dir(0.0)),
-			"an aim dead ahead never needs a body turn")
-
-
-func test_lateral_in_cone_aim_needs_no_rotation() -> void:
-	# A 100° off-wing / lateral pass is inside the 132° commit cone — the blade
-	# reaches it with the body frozen, so no pre-aim rotation.
-	assert_true(sm._aim_needs_no_rotation(Vector2(0, 1), _aim_dir(100.0)),
-			"a 100° lateral aim is reachable without turning the body")
-	assert_true(sm._aim_needs_no_rotation(Vector2(0, 1), _aim_dir(-100.0)),
-			"symmetric on the other side")
-
-
-func test_back_wedge_aim_needs_rotation() -> void:
-	# 150° is past the 132° commit cone (in the back wedge) — the body must
-	# rotate until the aim swings into the cone.
-	assert_false(sm._aim_needs_no_rotation(Vector2(0, 1), _aim_dir(150.0)),
-			"a 150° back-wedge aim still needs a body turn")
-
-
-func test_commit_cone_boundary() -> void:
-	# The boundary is the bot's reach cone less the commit margin.
-	var edge_deg: float = rad_to_deg(
-			sm._self_reach_cone_half_angle - Agent.AIM_COMMIT_CONE_MARGIN_RAD)
-	assert_true(sm._aim_needs_no_rotation(Vector2(0, 1), _aim_dir(edge_deg - 0.5)))
-	assert_false(sm._aim_needs_no_rotation(Vector2(0, 1), _aim_dir(edge_deg + 0.5)))
-
-
-func test_commit_cone_tracks_the_bots_real_reach() -> void:
-	# A lower-reach build (smaller cone) shrinks the immediate-commit window, so
-	# an aim that a full-reach bot commits to may need a turn for the smaller one.
-	var caps := AISkaterCaps.new()
-	caps.reach_cone_half_angle = deg_to_rad(120.0)   # commit cone → 95°
-	sm.apply_capabilities(caps)
-	assert_true(sm._aim_needs_no_rotation(Vector2(0, 1), _aim_dir(90.0)),
-			"90° still inside the reduced 95° commit cone")
-	assert_false(sm._aim_needs_no_rotation(Vector2(0, 1), _aim_dir(110.0)),
-			"110° now past the reduced cone — needs a turn")
-
-
-func test_degenerate_facing_or_aim_needs_rotation() -> void:
-	assert_false(sm._aim_needs_no_rotation(Vector2.ZERO, _aim_dir(0.0)),
-			"no facing → fall back to the safe (rotate) path")
-	assert_false(sm._aim_needs_no_rotation(Vector2(0, 1), Vector2.ZERO),
-			"no aim direction → fall back to the safe path")
-
-
-# ── Poke-evade deke trigger: relative closing (angled/stationary defender) ──────
-
-func test_poke_evade_fires_driving_at_a_stationary_defender() -> void:
-	# The deke's closing gate is RELATIVE: a carrier skating into a waiting / angled
-	# defender closes the gap, so the deke fires. The old defender-only closing left
-	# the bot skating straight into a static poke without cutting around it.
-	# A usable seam is required now (no blind fallback), so give the carrier one.
-	var snap := _poke_snap(Vector3(0, 0, -6), Vector3(0, 0, -3.5), Vector3.ZERO)
-	sm._carrier.evade_seam_world = Vector3(1.5, 0, -1.5)   # a real cut direction
-	var input := InputState.new()
-	sm._poke_evade_modulate_steering(input, snap, Vector3.ZERO)
-	assert_gt(sm._poke_evade.active_ticks, 0,
-			"driving at a stationary defender within poke reach triggers the deke")
-	assert_ne(sm._poke_evade.cut_seam_dir, Vector2.ZERO, "the cut latches the seam direction")
-
-
-func test_poke_evade_never_triggers_without_a_usable_maneuver() -> void:
-	# No seam read (Easy's closed protect gate / seam not computed) and no brake
-	# read → the poke-evade must not trigger at all: there is no blind fallback
-	# cut, and the window + cooldown are only spent on a committed move.
-	var snap := _poke_snap(Vector3(0, 0, -6), Vector3(0, 0, -3.5), Vector3.ZERO)
-	# sm._carrier.evade_seam_world stays INF and brake_check_favored false.
-	var input := InputState.new()
-	sm._poke_evade_modulate_steering(input, snap, Vector3.ZERO)
-	assert_eq(sm._poke_evade.active_ticks, 0, "no seam + no brake read → no evade")
-	assert_eq(sm._poke_evade.cooldown_ticks, 0, "no cooldown burned on a non-maneuver")
-
-
-func test_poke_evade_brake_check_triggers_without_a_seam() -> void:
-	# A brake read alone is a usable maneuver: the brake check needs no cut
-	# direction (it steers by the carry anchor on exit), so it triggers even
-	# when the seam is underfoot/unusable — and it presses the real brake key.
-	var snap := _poke_snap(Vector3(0, 0, -6), Vector3(0, 0, -3.5), Vector3.ZERO)
-	sm._carrier.brake_check_favored = true
-	sm._last_carry_anchor = Vector3(0, 0, -8)
-	var input := InputState.new()
-	sm._poke_evade_modulate_steering(input, snap, Vector3.ZERO)
-	assert_gt(sm._poke_evade.active_ticks, 0, "brake read alone triggers the maneuver")
-	assert_true(input.brake, "the brake check presses the real brake key")
-
-
-# Builds the standard poke-trigger scene: self carrying at `self_vel`, one
-# opponent at `opp_pos` with `opp_vel`, counters cleared for a fresh trigger.
-func _poke_snap(self_vel: Vector3, opp_pos: Vector3, opp_vel: Vector3) -> WorldSnapshot:
-	var snap := WorldSnapshot.new()
-	var me := SkaterNetworkState.new()
-	me.position = Vector3(0, 0, 0)
-	me.velocity = self_vel
-	snap.skater_states[SELF_ID] = me
-	var opp := SkaterNetworkState.new()
-	opp.position = opp_pos
-	opp.velocity = opp_vel
-	opp.blade_contact_world = opp_pos
-	snap.skater_states[OPP_ID] = opp
-	snap.puck_state = PuckNetworkState.new()
-	snap.puck_state.carrier_peer_id = SELF_ID
-	snap.puck_state.position = me.position
-	sm._poke_evade.active_ticks = 0
-	sm._poke_evade.cooldown_ticks = 0
-	return snap
-
-
-func test_poke_evade_skips_a_defender_neither_side_is_closing_on() -> void:
-	# Guard: if the carrier is NOT moving toward the defender (drifting away) and the
-	# defender is static, nothing is closing, so no deke — the relative gate still
-	# filters the genuinely-idle case.
-	var snap := WorldSnapshot.new()
-	var me := SkaterNetworkState.new()
-	me.position = Vector3(0, 0, 0)
-	me.velocity = Vector3(0, 0, 6)           # skating AWAY from the defender ahead
-	snap.skater_states[SELF_ID] = me
-	var opp := SkaterNetworkState.new()
-	opp.position = Vector3(0, 0, -3.0)
-	opp.velocity = Vector3.ZERO
-	opp.blade_contact_world = Vector3(0, 0, -3.0)
-	snap.skater_states[OPP_ID] = opp
-	snap.puck_state = PuckNetworkState.new()
-	snap.puck_state.carrier_peer_id = SELF_ID
-	snap.puck_state.position = me.position
-	sm._poke_evade.active_ticks = 0
-	sm._poke_evade.cooldown_ticks = 0
-	var input := InputState.new()
-	sm._poke_evade_modulate_steering(input, snap, me.position)
-	assert_eq(sm._poke_evade.active_ticks, 0,
-			"a defender behind the direction of travel, neither closing, gets no deke")
 
 
 # ── Receive in stride vs settle ──────────────────────────────────────────────
@@ -2184,49 +1964,6 @@ func test_off_puck_arrival_redirects_cross_momentum() -> void:
 	assert_almost_eq(seek_in.move_vector.x, 0.0, 0.02, "plain seek ignores the cross-drift")
 	assert_lt(match_in.move_vector.x, -0.1,
 			"off-puck arrival redirects onto the line to the spot")
-
-
-# ── Fake-then-cut deke lifecycle (containment trigger + phase split) ─────────
-
-func test_containment_deke_fakes_then_cuts() -> void:
-	# Standstill duel (below the lateral cut's speed floor): the carrier's
-	# deke read arms and the maneuver commits — thrust sells the fake side,
-	# then explodes across to the cut side, and the carry-cursor override
-	# sells it with the puck. Cooldown afterwards is the longer deke pace.
-	var s := _self_snap(Vector3.ZERO, true)
-	sm._carrier.deke_go = true
-	sm._carrier.deke_fake_dir = Vector2(1, 0)
-	sm._carrier.deke_cut_dir = Vector2(-0.7, -0.7)
-	var i := InputState.new()
-	sm._poke_evade_modulate_steering(i, s, Vector3.ZERO)
-	assert_true(sm._poke_evade.deking, "the containment stalemate commits the deke")
-	assert_almost_eq(i.move_vector.x, 1.0, 0.01, "fake phase thrusts the sell side")
-	var fake_mouse: Vector3 = sm._deke_mouse_target(Vector3.ZERO)
-	assert_gt(fake_mouse.x, 0.5, "the cursor sells the fake WITH the puck")
-	# Wind the window down to the cut phase.
-	sm._poke_evade.active_ticks = SkaterAgentPokeEvade.DEKE_CUT_TICKS
-	var i2 := InputState.new()
-	sm._poke_evade_modulate_steering(i2, s, Vector3.ZERO)
-	assert_lt(i2.move_vector.x, 0.0, "cut phase explodes across")
-	var cut_mouse: Vector3 = sm._deke_mouse_target(Vector3.ZERO)
-	assert_lt(cut_mouse.x, 0.0, "the cursor snaps across for the cut")
-	# Expire → the deliberate deke cooldown arms.
-	sm._poke_evade.active_ticks = 1
-	sm._poke_evade_modulate_steering(InputState.new(), s, Vector3.ZERO)
-	assert_false(sm._poke_evade.deking, "the maneuver ends with the window")
-	assert_eq(sm._poke_evade.cooldown_ticks, SkaterAgentPokeEvade.DEKE_COOLDOWN_TICKS,
-			"dekes pace at the longer cooldown")
-
-
-func test_no_deke_without_the_carrier_read() -> void:
-	# Standstill with no manufactured opening: nothing fires — the window and
-	# cooldown are only ever spent on a committed move.
-	var s := _self_snap(Vector3.ZERO, true)
-	sm._carrier.deke_go = false
-	var i := InputState.new()
-	sm._poke_evade_modulate_steering(i, s, Vector3.ZERO)
-	assert_false(sm._poke_evade.deking)
-	assert_eq(sm._poke_evade.active_ticks, 0)
 
 
 # ── Own-net blade discipline (_deflect_safe_aim_dir) ─────────────────────────

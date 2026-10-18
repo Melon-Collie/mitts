@@ -9,8 +9,8 @@ extends GutTest
 #   - Offside filter rejects OZ candidates (past opp blue line).
 #   - Covered stretch spot → stage somewhere open (live argmax).
 #
-# The geometric guts (lane_clear / position_potential) are covered in
-# test_ai_action_scoring. Where the rush pace cap currently stages the outlet is
+# The guts (lane_clear, the possession read) are covered in
+# test_ai_action_scoring and test_possession_value. Where the rush pace cap currently stages the outlet is
 # the snapshot, test_outlet_rush_pacing_snapshot.
 
 const Snapshot := preload("res://tests/snapshot.gd")

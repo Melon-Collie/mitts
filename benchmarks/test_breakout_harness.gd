@@ -255,20 +255,22 @@ func _run_trial(scenario: String, mirror: float, jitter: int,
 			outcome = "cough-up"
 			if duel.team_map.get(first_touch_peer, -1) == 0:
 				intercept_pos = duel.puck_pos
-			# Danger of the possession we conceded: the LOCAL shot threat at
-			# the cough spot against our actual bodies. A doorstep scramble
+			# Danger of the possession we conceded: their threat with the puck
+			# at the cough spot against our actual bodies. A doorstep scramble
 			# giveaway and a re-entry against five set defenders both label
 			# "cough-up" — this column is what the clear-vs-pass doctrine
 			# actually trades on (a clear converts the first into the
 			# second even when possession comes back).
 			var our_bodies: Array[Vector3] = []
+			var our_vels: Array[Vector3] = []
 			for s3: RefCounted in duel.skaters:
 				if s3.team_id == 0 and s3.peer_id != cid:
 					our_bodies.append(s3.pos)
-			cough_danger = AIActionScoring.threat_local_shoot(
-					duel.puck_pos, Vector3(0, 0, GameRules.GOAL_LINE_Z),
-					Vector3(0, 0, GameRules.GOAL_LINE_Z - 0.8),
-					GameRules.NET_HALF_WIDTH, our_bodies)
+					our_vels.append(s3.vel)
+			var theirs := AIPossessionValue.new()
+			theirs.fill(Vector3(0, 0, GameRules.GOAL_LINE_Z), our_bodies, our_vels, [])
+			cough_danger = theirs.threat_of_carrier(duel.puck_pos, Vector3.ZERO,
+					Vector3(0, 0, GameRules.GOAL_LINE_Z - 0.8))
 			break
 
 	# First team-0 release after the trigger — the retriever's first move.
@@ -292,10 +294,9 @@ func _intent_label(rec: Dictionary) -> String:
 	# — the intent enum can already be cleared by fire time.
 	var decision: String = String(rec.get("decision", ""))
 	if decision != "":
-		return "%s(p%.2f c%.2f d%.2f)" % [decision,
+		return "%s(p%.2f c%.2f)" % [decision,
 				float(rec.get("pass_score", 0.0)),
-				float(rec.get("carry_score", 0.0)),
-				float(rec.get("dump_score", 0.0))]
+				float(rec.get("carry_score", 0.0))]
 	return "rel(%d)" % int(rec.get("intent", -1))
 
 

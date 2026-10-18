@@ -34,6 +34,20 @@ const LANE_REACTION_DELAY_S: float = 0.08
 const LANE_LATERAL_FRACTION: float = 0.5
 const LANE_DEFENDER_CLOSE_SPEED_M_S: float = LANE_LATERAL_FRACTION * GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 
+# A defender's STICK, where he holds it: the puck is his if it passes within a
+# blade's catch of where his blade can be — carried at his skating velocity, and
+# moving at his hands' traverse speed (AISkaterCaps.blade_speed) from his read of
+# the windup on — and only where his body can hold the stick there (the arm,
+# stick and blade it holds out, AISkaterCaps.max_blade_reach). The catch is the
+# pickup radius (PuckController.PICKUP_RADIUS). A forechecker reaching for the puck has his blade a metre
+# nearer the passing lane than his body: read from the body alone, the first
+# metres of every pass out of his reach look clean.
+const LANE_BLADE_CATCH_M: float = 0.5
+# His hands start on the windup, not the release: the charged pass shows itself
+# for its whole wind-up (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S) before it flies.
+const LANE_BLADE_READ_DELAY_S: float = LANE_REACTION_DELAY_S \
+		- AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+
 # A defender's reach in the airborne stretch of a saucer: his BODY radius, no
 # stick, no closing — a flip clears a grounded stick but not a torso. The
 # canonical body half-width (GameRules.OFFSIDE_LINE_SLACK tracks the skater's
@@ -175,7 +189,7 @@ static func expected_pass_speed(shooter: Vector3, receiver: Vector3) -> float:
 
 # ── Release contest: the pressure read, as a physical race ────────────────────
 # P(the release completes clean) in [0, 1] against every nearby opponent — the
-# factor the shot scorers and position_potential multiply by. A physical
+# factor the shot scorers multiply by. A physical
 # contest, never a density curve: an opponent's BLADE must reach the RELEASE
 # POINT (release_point_toward) while the puck is still on the blade.
 #
@@ -280,15 +294,19 @@ static func _lane_miss_at(
 # reach = stick + closing they can do after the reaction delay; block is
 # how far the lane penetrates that reach, normalised by a stick length
 # (one full stick inside reach ⇒ certain block). Pure float math.
+#
+# `read_delay` is when his closing starts, from the release: the default read
+# delay, or less for a blade that has been moving through the windup.
 static func lane_block_at(
 		fx: float, fz: float, pvx: float, pvz: float, t: float,
 		px: float, pz: float, vx: float, vz: float,
 		stick_reach: float = LANE_DEFENDER_REACH_M,
-		close_speed: float = LANE_DEFENDER_CLOSE_SPEED_M_S) -> float:
+		close_speed: float = LANE_DEFENDER_CLOSE_SPEED_M_S,
+		read_delay: float = LANE_REACTION_DELAY_S) -> float:
 	var miss: float = _lane_miss_at(fx, fz, pvx, pvz, t, px, pz, vx, vz)
 	# Normalised by his own stick, so "one full stick inside reach" scales with
 	# the defender.
-	var reach: float = stick_reach + close_speed * maxf(0.0, t - LANE_REACTION_DELAY_S)
+	var reach: float = stick_reach + close_speed * maxf(0.0, t - read_delay)
 	return clampf((reach - miss) / stick_reach, 0.0, 1.0)
 
 
@@ -309,7 +327,8 @@ static func lane_block_at(
 static func _lane_brake_block(
 		fx: float, fz: float, dirx: float, dirz: float, seg_len: float,
 		speed: float, px: float, pz: float,
-		stick_reach: float, close_speed: float) -> Vector2:
+		stick_reach: float, close_speed: float,
+		read_delay: float = LANE_REACTION_DELAY_S) -> Vector2:
 	var rx: float = px - fx
 	var rz: float = pz - fz
 	var a: float = rx * dirx + rz * dirz             # along-lane coord of the defender
@@ -320,8 +339,10 @@ static func _lane_brake_block(
 	var u_opt: float = clampf(
 			seg_len if k >= 1.0 else a + k * b / sqrt(1.0 - k * k), 0.0, seg_len)
 	var u_foot: float = clampf(a, 0.0, seg_len)
-	var blk_opt: float = _brake_block_at(u_opt, a, b, speed, stick_reach, close_speed)
-	var blk_foot: float = _brake_block_at(u_foot, a, b, speed, stick_reach, close_speed)
+	var blk_opt: float = _brake_block_at(u_opt, a, b, speed, stick_reach, close_speed,
+			read_delay)
+	var blk_foot: float = _brake_block_at(u_foot, a, b, speed, stick_reach, close_speed,
+			read_delay)
 	if blk_opt >= blk_foot:
 		return Vector2(blk_opt, u_opt)
 	return Vector2(blk_foot, u_foot)
@@ -360,9 +381,10 @@ static func _accurate_block(fx: float, fz: float, dirx: float, dirz: float,
 # puck's arrival time there, minus the distance he must cover to it. Shared by the
 # two candidate points _lane_brake_block evaluates.
 static func _brake_block_at(u: float, a: float, b: float, speed: float,
-		stick_reach: float, close_speed: float) -> float:
+		stick_reach: float, close_speed: float,
+		read_delay: float = LANE_REACTION_DELAY_S) -> float:
 	var t_x: float = u / speed
-	var reach: float = stick_reach + close_speed * maxf(0.0, t_x - LANE_REACTION_DELAY_S)
+	var reach: float = stick_reach + close_speed * maxf(0.0, t_x - read_delay)
 	var du: float = u - a
 	var gap: float = sqrt(du * du + b * b)
 	return clampf((reach - gap) / stick_reach, 0.0, 1.0)
@@ -381,6 +403,33 @@ static func _friction_traverse_time(dist: float, v0: float) -> float:
 	return (v0 - sqrt(disc)) / a
 
 
+# One defender's blade on an `accurate` lane, as _accurate_block reads his body:
+# (block, lane arc-coord of the pick) for the blade (bx, bz), where his body could
+# hold the stick there — within `hold_reach` (AISkaterCaps.max_blade_reach) of it
+# as it closes (see LANE_BLADE_CATCH_M).
+static func _blade_block(fx: float, fz: float, dirx: float, dirz: float,
+		line_len: float, eff_speed: float, bx: float, bz: float, px: float, pz: float,
+		vx: float, vz: float, hold_reach: float, close_speed: float,
+		blade_speed: float) -> Vector2:
+	var pvx: float = dirx * eff_speed
+	var pvz: float = dirz * eff_speed
+	var best := Vector2.ZERO
+	var t_raw: float = _lane_closest_approach_t(fx, fz, pvx, pvz, bx, bz, vx, vz)
+	if t_raw <= line_len / eff_speed:
+		var t: float = maxf(t_raw, 0.0)
+		var block: float = lane_block_at(fx, fz, pvx, pvz, t, bx, bz, vx, vz,
+				LANE_BLADE_CATCH_M, blade_speed, LANE_BLADE_READ_DELAY_S)
+		if block > 0.0 and lane_block_at(fx, fz, pvx, pvz, t, px, pz, vx, vz,
+				hold_reach, close_speed) > 0.0:
+			best = Vector2(block, eff_speed * t)
+	var guided: Vector2 = _lane_brake_block(fx, fz, dirx, dirz, line_len, eff_speed,
+			bx, bz, LANE_BLADE_CATCH_M, blade_speed, LANE_BLADE_READ_DELAY_S)
+	if guided.x > best.x and lane_block_at(fx, fz, pvx, pvz, guided.y / eff_speed,
+			px, pz, vx, vz, hold_reach, close_speed) > 0.0:
+		best = guided
+	return best
+
+
 # Lane-clear factor in [0, 1] for a FIRED puck (shot or pass) — the
 # closest-approach reachability model (see the doc-block above the lane
 # constants), not the carry-path AICarrySpace.carry_lane_clearance.
@@ -396,9 +445,12 @@ static func _friction_traverse_time(dist: float, v0: float) -> float:
 #      one spot are mildly over-counted, which errs conservative.
 #   3. Friction timing — the far end of a long lane gives defenders the extra
 #      time they really get.
+#   4. With `opponent_blades` (index-matched), each defender's stick where he
+#      holds it (_blade_block, max'd per defender).
 static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 		puck_speed_m_s: float, opponent_vels: Array[Vector3] = [],
-		opponent_caps: Array = [], accurate: bool = false) -> float:
+		opponent_caps: Array = [], accurate: bool = false,
+		opponent_blades: Array[Vector3] = []) -> float:
 	var dx: float = to.x - from.x
 	var dz: float = to.z - from.z
 	var line_len_sq: float = dx * dx + dz * dz
@@ -418,6 +470,7 @@ static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 	var dirz: float = dz * inv_len
 	var vel_count: int = opponent_vels.size()
 	var has_caps: bool = opponent_caps.size() == opponents.size()
+	var has_blades: bool = opponent_blades.size() == opponents.size()
 	var max_block: float = 0.0
 	var survival: float = 1.0   # accurate: independent-defender survival product
 	for i: int in opponents.size():
@@ -427,18 +480,28 @@ static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 		if i < vel_count:
 			vx = opponent_vels[i].x
 			vz = opponent_vels[i].z
-		# This defender's real stick reach and lateral close speed.
+		# This defender's real stick reach, lateral close speed and hands.
 		var stick_reach: float = LANE_DEFENDER_REACH_M
 		var close_speed: float = LANE_DEFENDER_CLOSE_SPEED_M_S
+		var blade_speed: float = AISkaterCaps.LEAGUE_BLADE_SPEED_M_S
+		var hold_reach: float = AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M
 		if has_caps:
 			var caps: AISkaterCaps = opponent_caps[i]
 			if caps != null:
 				stick_reach = caps.stick_reach
 				close_speed = LANE_LATERAL_FRACTION * caps.max_speed
+				blade_speed = caps.blade_speed
+				hold_reach = caps.max_blade_reach
 		if accurate:
 			# Survival: the puck must beat this defender too.
-			survival *= 1.0 - _accurate_block(from.x, from.z, dirx, dirz, line_len,
+			var block: float = _accurate_block(from.x, from.z, dirx, dirz, line_len,
 					eff_speed, p.x, p.z, vx, vz, stick_reach, close_speed).x
+			if has_blades:
+				var b: Vector3 = opponent_blades[i]
+				block = maxf(block, _blade_block(from.x, from.z, dirx, dirz, line_len,
+						eff_speed, b.x, b.z, p.x, p.z, vx, vz, hold_reach, close_speed,
+						blade_speed).x)
+			survival *= 1.0 - block
 			if survival <= 0.0:
 				break
 			continue
@@ -529,11 +592,11 @@ static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vecto
 # Vector3.INF exactly when no defender blocks (lane_clear(accurate) == 1.0), so
 # a lane with any interception risk always has a place to price it at.
 #
-# The loss location for the pass turnover cost (turnover_cost).
+# The loss location for the pass turnover cost (AICarrierField.turnover_cost).
 static func lane_loss_point(from: Vector3, to: Vector3,
 		opponents: Array[Vector3], puck_speed_m_s: float,
 		opponent_vels: Array[Vector3] = [],
-		opponent_caps: Array = []) -> Vector3:
+		opponent_caps: Array = [], opponent_blades: Array[Vector3] = []) -> Vector3:
 	var dx: float = to.x - from.x
 	var dz: float = to.z - from.z
 	var line_len_sq: float = dx * dx + dz * dz
@@ -546,6 +609,7 @@ static func lane_loss_point(from: Vector3, to: Vector3,
 	var dirz: float = dz / line_len
 	var vel_count: int = opponent_vels.size()
 	var has_caps: bool = opponent_caps.size() == opponents.size()
+	var has_blades: bool = opponent_blades.size() == opponents.size()
 	var max_block: float = 0.0
 	var best_u: float = 0.0
 	for i: int in opponents.size():
@@ -557,13 +621,24 @@ static func lane_loss_point(from: Vector3, to: Vector3,
 			vz = opponent_vels[i].z
 		var stick_reach: float = LANE_DEFENDER_REACH_M
 		var close_speed: float = LANE_DEFENDER_CLOSE_SPEED_M_S
+		var blade_speed: float = AISkaterCaps.LEAGUE_BLADE_SPEED_M_S
+		var hold_reach: float = AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M
 		if has_caps:
 			var caps: AISkaterCaps = opponent_caps[i]
 			if caps != null:
 				stick_reach = caps.stick_reach
 				close_speed = LANE_LATERAL_FRACTION * caps.max_speed
+				blade_speed = caps.blade_speed
+				hold_reach = caps.max_blade_reach
 		var read: Vector2 = _accurate_block(from.x, from.z, dirx, dirz, line_len,
 				eff_speed, p.x, p.z, vx, vz, stick_reach, close_speed)
+		if has_blades:
+			var b: Vector3 = opponent_blades[i]
+			var blade_read: Vector2 = _blade_block(from.x, from.z, dirx, dirz, line_len,
+					eff_speed, b.x, b.z, p.x, p.z, vx, vz, hold_reach, close_speed,
+					blade_speed)
+			if blade_read.x > read.x:
+				read = blade_read
 		if read.x > max_block:
 			max_block = read.x
 			best_u = read.y
@@ -577,8 +652,9 @@ static func lane_loss_point(from: Vector3, to: Vector3,
 # clear-lane backpass deep in our own zone scores as risk-free. pass_miss_prob
 # is the residual chance a lane-clear pass still fails, and the puck then ends
 # up loose PASS_MISS_OVERSHOOT_M past the receiver along the pass line. Fed to
-# turnover_cost, that risk self-localizes like interception risk: ~0 in the
-# OZ, the opponent's chance in front of our net for a DZ backpass.
+# AICarrierField.turnover_cost, that risk self-localizes like interception
+# risk: least in the OZ, the opponent's chance in front of our net for a DZ
+# backpass.
 #
 # The bot solves its launch to ARRIVE catchable (pass_launch_speed), so
 # reception difficulty is designed out of its own passes; the residual is an

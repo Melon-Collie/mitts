@@ -26,8 +26,8 @@ const DT: float = 1.0 / 120.0
 # Pass-through tolerance: within one blade's contact of the target counts as
 # arrived (ETAs feed contests and races, not parking precision).
 const ARRIVE_RADIUS_M: float = 0.5
-const TOL_FRAC: float = 0.25
-const TOL_FLOOR_S: float = 0.18
+const TOL_FRAC: float = AIArrival.ERROR_FRAC
+const TOL_FLOOR_S: float = AIArrival.ERROR_FLOOR_S
 
 var _cfg: SkaterMovementRules.MovementConfig
 

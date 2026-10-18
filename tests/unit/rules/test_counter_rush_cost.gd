@@ -26,14 +26,16 @@ func _cost(teammates: Array[Vector3], self_pos: Vector3,
 		opp_vels.append(Vector3.ZERO)
 		opp_caps.append(null)
 	return AIActionScoring.counter_rush_cost(
-			LOSS_POINT, 1.0, OUR_NET, OUR_GOALIE, GameRules.NET_HALF_WIDTH,
-			teammates, self_pos, self_speed, opponents, opp_vels, opp_caps)
+			LOSS_POINT, 1.0, OUR_NET, OUR_GOALIE, teammates, self_pos, self_speed, opponents, opp_vels, opp_caps)
 
 
+# Their possession of the loss point with nobody of ours to contest it — what
+# the carrier's turnover cost prices a loss at (AICarrierField.turnover_cost).
 func _local_cost(loss_point: Vector3) -> float:
-	var no_defenders: Array[Vector3] = []
-	return AIActionScoring.turnover_cost(
-			loss_point, 1.0, OUR_NET, OUR_GOALIE, GameRules.NET_HALF_WIDTH, no_defenders)
+	var theirs := AIPossessionValue.new()
+	var nobody: Array[Vector3] = []
+	theirs.fill(OUR_NET, nobody, nobody, [])
+	return theirs.at(loss_point)
 
 
 func test_local_turnover_cost_falls_with_distance_from_our_net() -> void:
@@ -41,13 +43,14 @@ func test_local_turnover_cost_falls_with_distance_from_our_net() -> void:
 	# where it happens, so it fades as the loss moves straight up-ice from our
 	# slot and reads little for a loss deep in their end — which is exactly why
 	# the counter must exist.
-	var our_slot := Vector3(0.0, 0.0, NET_Z - GameRules.SLOT_DIST_M)
+	# From 14 m out: closer in, the shot's in-tight odds fall toward the net.
 	var prev: float = INF
-	for z: float in [our_slot.z, 14.0, 8.0, 0.0, -8.0, -14.0, LOSS_POINT.z]:
+	for z: float in [14.0, 8.0, 0.0, -8.0, -14.0, LOSS_POINT.z]:
 		var cost: float = _local_cost(Vector3(0.0, 0.0, z))
 		assert_lte(cost, prev + 1e-4, "a loss further up-ice never costs more (z %.0f)" % z)
 		prev = cost
-	assert_lt(_local_cost(LOSS_POINT), _local_cost(our_slot),
+	assert_lt(_local_cost(LOSS_POINT),
+			_local_cost(Vector3(0.0, 0.0, NET_Z - GameRules.SLOT_DIST_M)),
 			"a deep O-zone loss carries less local threat than one in our slot")
 
 
@@ -77,7 +80,7 @@ func _self_cover_cost(recover_from: Vector3) -> float:
 	var vels: Array[Vector3] = [Vector3.ZERO]
 	var no_mates: Array[Vector3] = []
 	return AIActionScoring.counter_rush_cost(
-			Vector3.ZERO, 1.0, net, goalie, GameRules.NET_HALF_WIDTH, no_mates,
+			Vector3.ZERO, 1.0, net, goalie, no_mates,
 			recover_from, AIArrival.SKATER_REF_SPEED_M_S, opps, vels, [])
 
 
@@ -115,8 +118,7 @@ func test_zero_loss_prob_is_free() -> void:
 	var opp_vels: Array[Vector3] = [Vector3.ZERO]
 	var opp_caps: Array = [null]
 	assert_eq(AIActionScoring.counter_rush_cost(
-			LOSS_POINT, 0.0, OUR_NET, OUR_GOALIE, GameRules.NET_HALF_WIDTH,
-			nobody, LOSS_POINT, 8.0, opponents, opp_vels, opp_caps), 0.0)
+			LOSS_POINT, 0.0, OUR_NET, OUR_GOALIE, nobody, LOSS_POINT, 8.0, opponents, opp_vels, opp_caps), 0.0)
 
 
 func test_sooner_counter_costs_more() -> void:
