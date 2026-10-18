@@ -267,9 +267,7 @@ extends GutTest
 # ── Two smaller things the data says ────────────────────────────────────────
 # The game's own stored `xg` tracks well in tight (0.479 vs 0.512 actual at
 # 0-3 m; 0.283 vs 0.286 at 3-5 m) and UNDER-predicts badly from mid-range
-# (0.084 vs 0.308 at 7-10 m, 0.085 vs 0.250 at 10-15 m, n=13 and n=4). Same
-# direction as the band-instrument divergence flagged on
-# test_shot_value_calibration.
+# (0.084 vs 0.308 at 7-10 m, 0.085 vs 0.250 at 10-15 m, n=13 and n=4).
 #
 # Overall save percentage is 0.667. Arcade by design, but it is the number any
 # future "is the goalie too strong" question should be measured against, not the
@@ -460,8 +458,7 @@ func test_report_goalie_angular_coverage() -> void:
 			var right: Vector2 = Vector2(hw, GOAL_Z) - eye
 			var net_subt: float = absf(left.angle_to(right))
 			# He squares to the puck, so he presents his blocking half-width
-			# perpendicular to the sightline from any bearing — the same disc
-			# assumption AIActionScoring.open_net_danger occludes with.
+			# perpendicular to the sightline from any bearing.
 			var body_hw: float = _ctrl.pad_local_offset + _ctrl.butterfly_pad_half_width
 			var g_dist: float = maxf((Vector2(gx, gz) - eye).length(), 0.01)
 			var g_subt: float = 2.0 * atan2(body_hw, g_dist)

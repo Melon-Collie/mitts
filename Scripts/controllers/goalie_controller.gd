@@ -248,7 +248,7 @@ var rvh_depth: float = 0.1
 # squared stance hands off to post integration at the same place rather than
 # teleporting. (= outer pad reach 0.88 - 0.50 body inset toward post.)
 var post_seal_inset: float = 0.38
-var rvh_early_angle: float = 80.0
+var rvh_early_angle: float = 77.0
 var rvh_post_pad_angle: float = 15.0
 
 var five_hole_base: float = 0.02
@@ -419,9 +419,7 @@ var recovery_duration: float = 0.35         # s spent standing back up
 # ~0.4 m the pads/hips fall, the ice seal lands ~0.2 s after commitment. The gap
 # closes CONTINUOUSLY through the drop (openness converges during drop_progress),
 # so the effective five-hole seal — gap narrower than the puck — lands well before
-# full completion. Difficulty-varied (GoalieSkillProfile.butterfly_drop_s) and
-# AI-mirrored per tier via AIGoalieModel.goalie_butterfly_drop_s; this default
-# mirrors the scorer's GOALIE_BUTTERFLY_DROP_S baseline — change both together.
+# full completion. Difficulty-varied (GoalieSkillProfile.butterfly_drop_s).
 var butterfly_drop_speed: float = 0.20      # s for pads to close to floor
 var butterfly_radius: float = 0.40          # arc radius from goal center while down
 # Knee shuffle — the smallest of the three down-movement tiers (micro-scoot,
@@ -854,9 +852,6 @@ var shoulder_pitch_y_range: float = 0.55  # y-distance from neutral that maps to
 # over the stroke rather than the peak. Close top-corner snipes still beat the ARM
 # DELAY (arm_reaction_delay 0.18 s > a slot shot's flight), so this only bounds
 # the range shots a real goalie gloves.
-# AIGoalieModel mirrors this as the arm deploy ramp (goalie_arm_deploy_s =
-# HIGH-band EXT / speed; baseline const GOALIE_ARM_DEPLOY_S, re-derived per tier
-# in set_goalie_profile) — change the baselines together.
 var glove_react_max_speed: float = 5.0
 # Blocker (entire BlockArm assembly) reach speed cap, mirroring the glove.
 # Same magnitude — both arms have similar reach speed; if blocker should be
@@ -1113,6 +1108,9 @@ var _scratch_prelean_shot := GoalieBehaviorRules.ShotResult.new()
 var _save_situation := GoalieSaveSelection.Situation.new()
 # Scratch for the read-belief solve at release (see _seed_read_belief).
 var _scratch_belief := GoalieBehaviorRules.ShotResult.new()
+# A shot on net released while he is sealed: see _holding_seal_for_shot.
+var _seal_shot_live: bool = false
+var _scratch_seal_shot := GoalieBehaviorRules.ShotResult.new()
 # Mid-flight velocity change (m/s) that counts as a REDIRECT rather than the
 # analytic step's own drag/bounce jitter — a blade tip changes the line by far
 # more than a tick of friction does.
@@ -1252,6 +1250,9 @@ func snap_to_standing_pose(open_five_hole: bool = false) -> void:
 	_pose_inputs.reading_pinned_windup = false
 	_pose_inputs.reacting_to_shot = false
 	_pose_inputs.hands_answer_shot = false
+	_pose_inputs.blocking_seal = false
+	_set_pad_toe_out_inputs()
+	_set_prelean_inputs()
 	_pose_inputs.current_x = _current_x
 	_pose_inputs.goalie_z = goalie.global_position.z
 	_pose_inputs.direction_sign = _direction_sign
@@ -1501,6 +1502,7 @@ func reset_to_crease() -> void:
 	_read_last_vel = Vector3.ZERO
 	_screen_block_drop_timer = -1.0
 	_chest_t = 0.0
+	_seal_shot_live = false
 	# Cover state clears with the goalie; the puck's pickup_locked is owned by
 	# the phase machinery through stoppages (FACEOFF_PREP locks, PLAYING entry
 	# unlocks), so a reset mid-cover never needs to touch the lock here. But
@@ -1522,6 +1524,12 @@ func reset_to_crease() -> void:
 	goalie.set_stick_collision_enabled(true)
 	goalie.set_goalie_position(_current_x, _goal_line_z + _direction_sign * _current_depth)
 	goalie.set_goalie_rotation_y(PI if _direction_sign == 1 else 0.0)
+	# The pose jumps with him. The body solve can sleep from the first tick (a
+	# faceoff dot past _BODY_SOLVE_SLEEP_M), and what it holds must be this reset,
+	# not the last play's stance.
+	_body_solve_asleep = false
+	_footwork.reset()
+	snap_to_standing_pose()
 	# Snapping back to the crease is a jump, not a slide — drop the interpolation
 	# history so it is not drawn as one (see SkaterController.teleport_to).
 	goalie.reset_physics_interpolation()
@@ -1775,8 +1783,8 @@ func _drop_waits_on_a_stick(ttg: float) -> bool:
 # A low shot he has READ ONTO A PAD FACE is a stand-up save. Standing, the pads
 # are a column from the ice to the pad-top seam; rolled flat they are 0.28 m tall
 # and the band above is open outside the trunk. So for a puck already on a pad,
-# going down buys no width he needs, gives up height he has, and spends 0.2 s
-# mid-rotation (test_goalie_mid_drop_gap). The five-hole and the ice outside the
+# going down buys no width he needs, gives up height he has, and spends
+# `butterfly_drop_speed` mid-rotation. The five-hole and the ice outside the
 # pads are the butterfly's to close, so those still drop him.
 #
 # Only on a CONVERGED read: until the belief has caught up with the puck he does
@@ -1891,6 +1899,8 @@ func _puck_past_save_plane() -> bool:
 #   RECOVERING → READY/STAND ─ recovery_duration elapsed; back into READY if
 #                              the threat persists, else fully STANDING.
 #   RVH_* → READY/STANDING   ─ puck leaves defensive zone; same READY check.
+#                              Never while a shot released from the seal is in
+#                              flight (_holding_seal_for_shot).
 func _update_state(delta: float) -> void:
 	# Only clear leftover reaction timers while down with NO active reaction. Do NOT
 	# clear them for a reaction that legitimately started while down (an elevated
@@ -2010,7 +2020,9 @@ func _update_state(delta: float) -> void:
 				_sm.transition_to(State.READY if _is_ready_situation() else State.STANDING)
 				_sm.recovery_timer = 0.0
 		State.RVH_LEFT:
-			if _should_play_rim():
+			if _holding_seal_for_shot():
+				pass
+			elif _should_play_rim():
 				_enter_puck_play()
 			elif not _is_puck_in_defensive_zone() or _pass_read_live():
 				_sm.transition_to(State.READY if _is_ready_situation() else State.STANDING)
@@ -2020,7 +2032,9 @@ func _update_state(delta: float) -> void:
 			elif puck_local_x >= rvh_swap_deadband_m:
 				_sm.transition_to(State.RVH_RIGHT)
 		State.RVH_RIGHT:
-			if _should_play_rim():
+			if _holding_seal_for_shot():
+				pass
+			elif _should_play_rim():
 				_enter_puck_play()
 			elif not _is_puck_in_defensive_zone() or _pass_read_live():
 				_sm.transition_to(State.READY if _is_ready_situation() else State.STANDING)
@@ -2029,7 +2043,9 @@ func _update_state(delta: float) -> void:
 			elif puck_local_x < -rvh_swap_deadband_m:
 				_sm.transition_to(State.RVH_LEFT)
 		State.VH_LEFT:
-			if not _is_puck_in_defensive_zone() or _pass_read_live():
+			if _holding_seal_for_shot():
+				pass
+			elif not _is_puck_in_defensive_zone() or _pass_read_live():
 				_sm.transition_to(State.READY if _is_ready_situation() else State.STANDING)
 			elif _puck_front_of_goal_m() < -post_stance_swap_deadband_m:
 				# Puck carried behind the goal line — back to the RVH ice seal.
@@ -2037,7 +2053,9 @@ func _update_state(delta: float) -> void:
 			elif puck_local_x >= rvh_swap_deadband_m:
 				_sm.transition_to(State.VH_RIGHT)
 		State.VH_RIGHT:
-			if not _is_puck_in_defensive_zone() or _pass_read_live():
+			if _holding_seal_for_shot():
+				pass
+			elif not _is_puck_in_defensive_zone() or _pass_read_live():
 				_sm.transition_to(State.READY if _is_ready_situation() else State.STANDING)
 			elif _puck_front_of_goal_m() < -post_stance_swap_deadband_m:
 				_sm.transition_to(State.RVH_RIGHT)
@@ -2049,6 +2067,17 @@ func _update_state(delta: float) -> void:
 			_tick_puck_play(delta)
 		State.CATCHING, State.CATCHING_DOWN:
 			_tick_catch(delta)
+
+# Whether a shot released from the seal is still coming, loose and on net; the
+# post stance holds while it is (Scripts/controllers/CLAUDE.md).
+func _holding_seal_for_shot() -> bool:
+	if not _seal_shot_live:
+		return false
+	if puck.get_carrier() != null or not GoalieBehaviorRules.detect_shot_into(
+			puck.global_position, _loose_puck_velocity(), _goal_line_z, _goal_center_x,
+			_universal_shot_cfg, _scratch_seal_shot).is_shot:
+		_seal_shot_live = false
+	return _seal_shot_live
 
 # True when the puck is in the goalie's defensive half AND not controlled by
 # the goalie's own team (loose or carried by an opponent). Drives the
@@ -4745,6 +4774,10 @@ func _on_puck_released() -> void:
 	# puck event would inherit stale latency from a previous unrelated release.
 	var back_date: float = _pending_reaction_back_date
 	_pending_reaction_back_date = 0.0
+	if _sm.is_post_integrated():
+		_seal_shot_live = GoalieBehaviorRules.detect_shot_into(
+				puck.global_position, puck.get_release_velocity(), _goal_line_z,
+				_goal_center_x, _universal_shot_cfg, _scratch_seal_shot).is_shot
 	# RVH / VH are post-hug coverage with committed poses — no glove reach is wired
 	# (they save by geometry: the blocking-stance trade) and the goalie is already
 	# committed to the puck-side post. Every other state (STANDING, READY,
@@ -4822,6 +4855,7 @@ func _on_puck_contact(contacted: Goalie) -> void:
 		return
 	_slide.arm_event_lockout()
 	_last_save_time = float(Time.get_ticks_msec()) * 0.001
+	_seal_shot_live = false
 	# A save resolves the read immediately — clear the freeze fast so the goalie
 	# can track / slide to the rebound rather than sit frozen while it's in the
 	# slot. (The slide event-lockout above still gives a beat before a committed
@@ -4835,6 +4869,7 @@ func _on_puck_contact(contacted: Goalie) -> void:
 # reading. Starts the clear delay if currently reacting.
 func _on_reaction_resolved() -> void:
 	_reaction.arm_clear()
+	_seal_shot_live = false
 
 # Reaction collaborator signal handler — translates the reaction start into the
 # host-side slide lockout. (Host-only in practice: clients render from the

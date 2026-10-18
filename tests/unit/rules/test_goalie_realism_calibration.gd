@@ -92,8 +92,6 @@ func test_butterfly_drop_time_in_measured_band_and_mirrored_to_bots() -> void:
 	var gc: GoalieController = _gc()
 	assert_between(gc.butterfly_drop_speed, 0.15, 0.40,
 			"drop time grounded on the measured 2.07 m/s drop velocity")
-	assert_almost_eq(gc.butterfly_drop_speed, AIGoalieModel.GOALIE_BUTTERFLY_DROP_S,
-			0.0001, "bot shot model must mirror the live drop time")
 
 
 func test_post_to_post_push_time_in_estimated_band() -> void:

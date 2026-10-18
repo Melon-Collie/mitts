@@ -154,20 +154,3 @@ func test_the_wire_reads_the_half_side_by_side() -> void:
 		var body_y: float = GoalieBodyConfigBuilder.resting_body_position_for_state(st).y
 		assert_lt(body_y, GoalieBodyConfigBuilder.resting_body_position_for_state(State.READY).y)
 		assert_gt(body_y, GoalieBodyConfigBuilder.resting_body_position_for_state(State.BUTTERFLY).y)
-
-
-func test_the_shot_model_covers_the_down_side_and_not_the_up_side() -> void:
-	# Net frame: the right pad down flat, the left one standing.
-	var pads := Vector4(-GoalieBodyConfigBuilder.READY_PAD_X_M,
-			deg_to_rad(-GoalieBodyConfigBuilder.READY_PAD_ROLL_DEG), 0.42, deg_to_rad(90.0))
-	var t_read: float = 0.05
-	var down_side: float = AIActionScoring._cover_at_height(
-			0.05, t_read, false, 1, Vector4.INF, pads)
-	var up_side: float = AIActionScoring._cover_at_height(
-			0.05, t_read, false, -1, Vector4.INF, pads)
-	var full: float = AIActionScoring._cover_at_height(
-			0.05, t_read, true, -1, Vector4.INF, pads)
-	assert_gte(down_side, GoalieAnatomy.butterfly_pad_edge_half_width(),
-			"the flat pad covers its side along the ice")
-	assert_lt(up_side, down_side, "the up leg's side is the half's open side")
-	assert_gte(up_side, full, "and read as standing it can still drop, which down concedes")

@@ -62,34 +62,35 @@ static func distance_to_speed(speed: float, accel_m_s2: float) -> float:
 # comes up to the lead's, so this finds that crossing (a coarse scan of the speed
 # difference, then bisection) and prices the distance there and at the horizon
 # — two distance pairs rather than a fine distance sweep, since it runs per
-# attacker on every station dispatch.
+# attacker on every station dispatch. `chase_delay_s` is a turn the chaser makes
+# before his stride (delayed_distance_in).
 static func head_start(lead_v0: float, lead_vmax: float, lead_accel: float,
 		chase_v0: float, chase_vmax: float, chase_accel: float,
-		brake_m_s2: float, horizon_s: float) -> float:
+		brake_m_s2: float, horizon_s: float, chase_delay_s: float = 0.0) -> float:
 	if horizon_s <= 0.0:
 		return 0.0
 	var best: float = _gain_at(horizon_s, lead_v0, lead_vmax, lead_accel,
-			chase_v0, chase_vmax, chase_accel, brake_m_s2)
+			chase_v0, chase_vmax, chase_accel, brake_m_s2, chase_delay_s)
 	var step: float = horizon_s / float(HEAD_START_SCAN)
 	var t0: float = 0.0
 	var d0: float = _speed_gap(0.0, lead_v0, lead_vmax, lead_accel,
-			chase_v0, chase_vmax, chase_accel, brake_m_s2)
+			chase_v0, chase_vmax, chase_accel, brake_m_s2, chase_delay_s)
 	for i: int in range(1, HEAD_START_SCAN + 1):
 		var t1: float = step * float(i)
 		var d1: float = _speed_gap(t1, lead_v0, lead_vmax, lead_accel,
-				chase_v0, chase_vmax, chase_accel, brake_m_s2)
+				chase_v0, chase_vmax, chase_accel, brake_m_s2, chase_delay_s)
 		if d0 > 0.0 and d1 <= 0.0:
 			var lo: float = t0
 			var hi: float = t1
 			for _j: int in HEAD_START_BISECT:
 				var mid: float = 0.5 * (lo + hi)
 				if _speed_gap(mid, lead_v0, lead_vmax, lead_accel, chase_v0,
-						chase_vmax, chase_accel, brake_m_s2) > 0.0:
+						chase_vmax, chase_accel, brake_m_s2, chase_delay_s) > 0.0:
 					lo = mid
 				else:
 					hi = mid
 			best = maxf(best, _gain_at(lo, lead_v0, lead_vmax, lead_accel,
-					chase_v0, chase_vmax, chase_accel, brake_m_s2))
+					chase_v0, chase_vmax, chase_accel, brake_m_s2, chase_delay_s))
 		t0 = t1
 		d0 = d1
 	return maxf(best, 0.0)
@@ -97,16 +98,51 @@ static func head_start(lead_v0: float, lead_vmax: float, lead_accel: float,
 
 static func _gain_at(t: float, lead_v0: float, lead_vmax: float,
 		lead_accel: float, chase_v0: float, chase_vmax: float,
-		chase_accel: float, brake_m_s2: float) -> float:
+		chase_accel: float, brake_m_s2: float, chase_delay_s: float) -> float:
 	return signed_distance_in(lead_v0, t, lead_vmax, lead_accel, brake_m_s2) \
-			- signed_distance_in(chase_v0, t, chase_vmax, chase_accel, brake_m_s2)
+			- delayed_distance_in(chase_v0, t, chase_vmax, chase_accel, brake_m_s2,
+					chase_delay_s)
 
 
 static func _speed_gap(t: float, lead_v0: float, lead_vmax: float,
 		lead_accel: float, chase_v0: float, chase_vmax: float,
-		chase_accel: float, brake_m_s2: float) -> float:
+		chase_accel: float, brake_m_s2: float, chase_delay_s: float) -> float:
 	return signed_speed_at(lead_v0, t, lead_vmax, lead_accel, brake_m_s2) \
-			- signed_speed_at(chase_v0, t, chase_vmax, chase_accel, brake_m_s2)
+			- delayed_speed_at(chase_v0, t, chase_vmax, chase_accel, brake_m_s2,
+					chase_delay_s)
+
+
+# signed_distance_in for a skater who turns for `delay_s` before he strides:
+# through the turn he only brakes out a wrong-way start and otherwise coasts.
+static func delayed_distance_in(v0: float, time: float, vmax: float,
+		accel_m_s2: float, brake_m_s2: float, delay_s: float) -> float:
+	if delay_s <= 0.0:
+		return signed_distance_in(v0, time, vmax, accel_m_s2, brake_m_s2)
+	var turn: float = minf(time, delay_s)
+	var coasted: float = v0 * turn
+	if v0 < 0.0:
+		var t_brake: float = minf(turn, -v0 / maxf(brake_m_s2, 0.001))
+		coasted = v0 * t_brake + 0.5 * brake_m_s2 * t_brake * t_brake
+	if time <= delay_s:
+		return coasted
+	return coasted + signed_distance_in(_coast_speed(v0, delay_s, brake_m_s2),
+			time - delay_s, vmax, accel_m_s2, brake_m_s2)
+
+
+static func delayed_speed_at(v0: float, time: float, vmax: float,
+		accel_m_s2: float, brake_m_s2: float, delay_s: float) -> float:
+	if delay_s <= 0.0:
+		return signed_speed_at(v0, time, vmax, accel_m_s2, brake_m_s2)
+	if time <= delay_s:
+		return _coast_speed(v0, time, brake_m_s2)
+	return signed_speed_at(_coast_speed(v0, delay_s, brake_m_s2), time - delay_s,
+			vmax, accel_m_s2, brake_m_s2)
+
+
+static func _coast_speed(v0: float, time: float, brake_m_s2: float) -> float:
+	if v0 >= 0.0:
+		return v0
+	return minf(v0 + brake_m_s2 * time, 0.0)
 
 
 # The speed signed_distance_in integrates: the stride's speed `time` into the

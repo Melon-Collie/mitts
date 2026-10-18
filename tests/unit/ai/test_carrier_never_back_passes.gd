@@ -83,6 +83,7 @@ func _compete(carrier: Vector3, behind_m: float) -> Dictionary:
 	var gs := GoalieNetworkState.new()
 	gs.position_x = g.x
 	gs.position_z = g.z
+	gs.rotation_y = atan2(-(carrier.x - g.x), -(carrier.z - g.z))
 	snap.goalie_states[1] = gs
 	var own := GoalieNetworkState.new()
 	own.position_x = 0.0

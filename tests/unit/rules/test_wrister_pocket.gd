@@ -107,7 +107,7 @@ func test_the_bearing_path_matches_the_local_frame_solve() -> void:
 		var best_dir := Vector2.ZERO
 		for offset: float in WristerPocket._CANDIDATES:
 			var pocket: Vector2 = aim.rotated(offset)
-			FacingRules.solve(fr, facing, pocket, vel, false, false, _facing_cfg)
+			FacingRules.solve(fr, facing, pocket, vel, false, false, left, _facing_cfg)
 			var s: float = _ref_share(pocket, aim, fr.target, left, lr)
 			if s > best:
 				second = best

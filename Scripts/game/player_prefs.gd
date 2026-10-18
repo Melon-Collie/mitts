@@ -1,5 +1,9 @@
 extends Node
 
+# A Steam Cloud copy replaced the loaded prefs (boot reconcile or Dynamic Cloud
+# Sync). Anything that copied a pref out at its own init must re-read it here.
+signal cloud_prefs_adopted
+
 const SAVE_PATH: String = "user://preferences.cfg"
 
 # Window mode. Godot's WINDOW_MODE_FULLSCREEN is a borderless "fullscreen
@@ -673,6 +677,7 @@ func _sync_from_cloud() -> void:
 	f.store_buffer(cloud_bytes)
 	f = null
 	_load()
+	cloud_prefs_adopted.emit()
 
 func apply_locale() -> void:
 	LocaleManager.apply(locale)

@@ -189,16 +189,16 @@ func test_momentum_up_ice_costs_more_cushion_than_standing() -> void:
 	assert_gt(_cushion(3.0), _cushion(0.0), "drifting up-ice owes more than standing")
 
 
-func test_no_cushion_once_the_carrier_is_inside_the_house_gate() -> void:
-	# The race finishes at the top of the circles; inside it the in-zone ladder
+func test_no_cushion_once_the_carrier_is_past_where_a_retreat_ends() -> void:
+	# The race finishes where a ridden retreat ends; past it the ladder alone
 	# stands him up, however flat the defender is.
-	var carrier := Vector3(0.0, 0.0, OUR_NET_Z - AIZoneCoverage.HOUSE_TOP_DEPTH_M + 1.0)
+	var carrier := Vector3(0.0, 0.0, OUR_NET_Z - AIRoleRushD.RETREAT_FINISH_M + 0.3)
 	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, OUR_NET_Z - 3.0),
 			[[10, 1, carrier, Vector3(0.0, 0.0, 9.0)]], 10)
 	var ap := AICarrierApproach.new()
 	AIDefensiveVerbs.fill_approach(ctx, carrier, Vector3(0.0, 0.0, 9.0), ap)
 	assert_eq(AIRoleRushD.ramp_cushion_m(ctx, ap, 10), 0.0,
-			"no retreat race is left inside the house gate")
+			"no retreat race is left past where a retreat ends")
 
 
 # ── Numbers ──────────────────────────────────────────────────────────────────
@@ -505,3 +505,146 @@ func test_rush_d_cushion_snapshot() -> void:
 	snap.record("ramp cushion, D standing 16 m off a 6 m/s carrier", _cushion(0.0))
 	snap.record("ramp cushion, same D drifting up-ice at 3 m/s", _cushion(3.0))
 	snap.verify(self)
+
+
+# ── A turn keeps a skater's speed ────────────────────────────────────────────
+
+func _crossing_read(carrier_vel: Vector3) -> Array:
+	var carrier := Vector3(0.0, 0.0, 0.0)
+	var ctx: RoleContext = _ctx(Vector3(3.0, 0.0, 12.0), [[10, 1, carrier, carrier_vel]], 10)
+	var ap := AICarrierApproach.new()
+	AIDefensiveVerbs.fill_approach(ctx, carrier, carrier_vel, ap)
+	var cushion: float = AIRoleRushD.ramp_cushion_m(ctx, ap, 10)
+	return [cushion, AIRoleRushD.should_gap_up(ctx, ctx.rush_read, ap, cushion)]
+
+
+func test_a_carrier_crossing_at_speed_has_a_head_start_a_standing_one_does_not() -> void:
+	# Crossing the ice he is not closing on our net at all, but a turn swings
+	# that speed at it: the race is priced on it, never on his pace along the line.
+	var standing: Array = _crossing_read(Vector3.ZERO)
+	var crossing: Array = _crossing_read(Vector3(6.0, 0.0, 0.0))
+	var leaving: Array = _crossing_read(Vector3(0.0, 0.0, -6.0))
+	assert_gt(crossing[0], standing[0], "crossing at speed earns more cushion than standing")
+	assert_lt(leaving[0], crossing[0], "skating away needs a longer turn than crossing")
+
+
+func test_a_carrier_crossing_at_speed_is_not_regrouping() -> void:
+	assert_true(_crossing_read(Vector3.ZERO)[1], "a standing carrier is a regroup: step up")
+	assert_false(_crossing_read(Vector3(6.0, 0.0, 0.0))[1],
+			"one crossing at speed is not: his speed is a turn from our net")
+
+
+# ── Depth before width ───────────────────────────────────────────────────────
+
+# How far across the carrier→net line the D1 target sits from the defender, for
+# a defender at `self_pos` moving at `self_vel` off a wide carrier.
+func _width_asked(self_pos: Vector3, self_vel: Vector3) -> Array:
+	var carrier := Vector3(8.0, 0.0, 0.0)
+	var carrier_vel := Vector3(0.0, 0.0, 6.0)
+	var ctx: RoleContext = _ctx(self_pos, [[10, 1, carrier, carrier_vel]], 10,
+			AIRushRead.Numbers.DOWN_ONE)
+	ctx.self_velocity = self_vel
+	var d: RoleDecision = AIRoleRushD.decide(ctx, AIRoleSlots.Slot.RUSH_D1)
+	var dir_net: Vector3 = (Vector3(0.0, 0.0, OUR_NET_Z) - carrier).normalized()
+	var to_target: Vector3 = d.target_position - self_pos
+	var across: Vector3 = to_target - dir_net * to_target.dot(dir_net)
+	var ride_across: Vector3 = d.target_velocity \
+			- dir_net * d.target_velocity.dot(dir_net)
+	return [across.length(), ride_across.length(), to_target.dot(dir_net)]
+
+
+func test_a_standing_defender_short_of_his_stand_goes_down_the_line_first() -> void:
+	# Level with a wide carrier, out on the far side of his lane: the stand is
+	# deeper AND across. From a stand every push goes to depth.
+	var standing: Array = _width_asked(Vector3(-2.0, 0.0, 2.0), Vector3.ZERO)
+	assert_gt(standing[2], 0.0, "the fixture leaves him short of his stand")
+	assert_almost_eq(standing[0], 0.0, 0.05,
+			"no width until he has the pace; got %.2f m across" % standing[0])
+	assert_almost_eq(standing[1], 0.0, 0.05, "and the ride goes straight down the line")
+
+
+func test_a_defender_already_at_pace_spends_the_spare_stride_across() -> void:
+	var standing: Array = _width_asked(Vector3(-2.0, 0.0, 2.0), Vector3.ZERO)
+	var retreating: Array = _width_asked(Vector3(-2.0, 0.0, 2.0), Vector3(0.0, 0.0, 6.0))
+	gut.p("  across: standing %.2f m, retreating %.2f m" % [standing[0], retreating[0]])
+	assert_gt(retreating[0], standing[0] + 0.5,
+			"carrying the pace leaves stride to take ice across")
+
+
+func test_a_defender_carrying_width_keeps_it() -> void:
+	# Short of his stand, he gets no NEW width — but speed he already carries
+	# across, the way he is sent, is not braked off: gliding costs no stride.
+	var standing: Array = _width_asked(Vector3(-2.0, 0.0, 2.0), Vector3.ZERO)
+	var sliding: Array = _width_asked(Vector3(-2.0, 0.0, 2.0), Vector3(4.0, 0.0, 0.0))
+	assert_almost_eq(standing[1], 0.0, 0.05, "the fixture's standing ride has no width")
+	assert_gt(sliding[1], 0.5, "the ride keeps the width he carries")
+	assert_gt(sliding[0], standing[0] + 0.5, "and so does the stand")
+
+
+# ── A step-up never outruns the turn ─────────────────────────────────────────
+
+func _step_up(carrier_vel: Vector3) -> RoleDecision:
+	var carrier := Vector3(0.0, 0.0, 0.0)
+	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, 4.0), [[10, 1, carrier, carrier_vel]], 10,
+			AIRushRead.Numbers.DOWN_ONE)
+	return AIRoleRushD.decide(ctx, AIRoleSlots.Slot.RUSH_D1)
+
+
+func test_a_step_up_on_a_carrier_crossing_at_speed_holds_its_ice() -> void:
+	# In his lane with the retreat unable to hold a gap, he steps up — but the
+	# carrier can turn 6 m/s at our net, so the route may not carry him up-ice.
+	var d: RoleDecision = _step_up(Vector3(6.0, 0.0, 0.5))
+	assert_lt(d.advance_cap_m_s, 0.5, "got %.2f m/s up-ice" % d.advance_cap_m_s)
+
+
+func test_a_step_up_on_a_stalled_carrier_may_attack() -> void:
+	var d: RoleDecision = _step_up(Vector3(0.0, 0.0, 0.3))
+	assert_gt(d.advance_cap_m_s, 2.0, "a carrier with no speed is attacked")
+
+
+# ── Turn and skate ───────────────────────────────────────────────────────────
+
+# A rush D `depth` m goal-side of a carrier coming straight at our net at
+# `pace`, facing the play and backpedalling at `self_speed`.
+func _retreat(depth: float, pace: float, self_speed: float) -> RoleDecision:
+	var carrier := Vector3(0.0, 0.0, 0.0)
+	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, depth),
+			[[10, 1, carrier, Vector3(0.0, 0.0, pace)]], 10)
+	ctx.snapshot.skater_states[1].facing = Vector2(0.0, -1.0)
+	ctx.self_velocity = Vector3(0.0, 0.0, self_speed)
+	return AIRoleRushD.decide(ctx, AIRoleSlots.Slot.RUSH_D1)
+
+
+func test_backpedalling_into_a_race_he_loses_he_turns_and_skates() -> void:
+	assert_true(_retreat(6.0, 9.0, 7.5).face_travel,
+			"at his backward top speed against 9 m/s with 6 m to give: turn and skate")
+
+
+func test_a_route_mostly_across_the_ice_stays_square_to_the_man() -> void:
+	# A turnover the carrier drifts wide from (test_nz_turnover_recovery's 8 m
+	# start, 2 m off his lane, the tick he was turning): the backward race is lost,
+	# but the route to the stand runs mostly across, which that race (priced down
+	# the line to the net) says nothing about — and turned, a cut back costs him a
+	# turn to undo.
+	var ctx: RoleContext = _ctx(Vector3(1.0, 0.0, 5.4),
+			[[10, 1, Vector3(-1.5, 0.0, -0.3), Vector3(-4.7, 0.0, 5.2)]], 10,
+			AIRushRead.Numbers.EVEN_OR_UP, INF, false)
+	ctx.snapshot.skater_states[1].facing = Vector2(-1.0, -0.1)
+	ctx.self_velocity = Vector3(-3.8, 0.0, 1.5)
+	var d: RoleDecision = AIRoleRushD.decide(ctx, AIRoleSlots.Slot.RUSH_D1)
+	assert_gt(absf(d.target_position.x - 1.0), absf(d.target_position.z - 5.4),
+			"precondition: the stand is more across than goal-side")
+	assert_false(d.face_travel, "covering sideways he faces the play")
+
+
+func test_with_depth_to_spare_he_faces_the_play() -> void:
+	assert_false(_retreat(14.0, 9.0, 7.5).face_travel)
+
+
+func test_from_a_stand_he_backpedals_first() -> void:
+	assert_false(_retreat(6.0, 9.0, 0.0).face_travel,
+			"a standing turn costs more ground than backpedalling")
+
+
+func test_draped_on_the_carrier_he_faces_him() -> void:
+	assert_false(_retreat(1.5, 9.0, 7.5).face_travel, "within a stick he plays the man")

@@ -9,11 +9,11 @@ class_name AIRoleBreakout
 #     side, held goal-side of the carrier so a reverse is always on and the
 #     carrier is never the last man back.
 #
-# Both argmax `max(lane_clear(carrier → c), BLOCKED_LANE_FLOOR) ×
-# position_potential(c)`. lane_clear is the carrier's own pass model, so the
-# outlet stands where his lane really is clean. position_potential already
-# rewards up-ice progress and, unlike score_pass, stays non-zero deep in our
-# zone.
+# Both argmax `max(lane_clear(carrier → c), BLOCKED_LANE_FLOOR) × our possession
+# of c` (AIPossessionValue, him there when the pass arrives, moving as he is).
+# lane_clear is the carrier's own pass model, so the outlet stands where his lane
+# really is clean; the possession read rewards up-ice progress and, unlike
+# score_pass, stays non-zero deep in our zone.
 
 # Lateral inset from the boards for the strong-side wall: a shoulder of air, no
 # more. The STRONG outlet is the rim receiver, so the boards line must stay
@@ -70,6 +70,8 @@ static func decide(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 		candidates = AIStationSearch.generate_candidates_around(ctx.self_pos, search_center)
 	AIStationSearch.append_incumbent(ctx, candidates)
 
+	var possession: AIPossessionValue = AIRoleReads.attack_possession(ctx,
+			opp_positions)
 	var best_pos: Vector3 = ctx.self_pos
 	var best_score: float = -INF
 	for c: Vector3 in candidates:
@@ -85,9 +87,9 @@ static func decide(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 		var lane: float = AIPuckLane.lane_clear(
 				carrier_pos, c, opp_positions, pass_speed,
 				AIActionScoring.EMPTY_VEC3, ctx.scratch_opp_caps)
-		var potential: float = AIActionScoring.position_potential(
-				c, ctx.attacking_goal_pos, opp_positions, ctx.scratch_opp_caps)
-		var score: float = maxf(lane, BLOCKED_LANE_FLOOR) * potential \
+		var held: float = possession.at(c, carrier_pos.distance_to(c) / pass_speed,
+				ctx.self_velocity)
+		var score: float = maxf(lane, BLOCKED_LANE_FLOOR) * held \
 				+ AIStationSearch.incumbent_bonus(ctx, c)
 		if score > best_score:
 			best_score = score

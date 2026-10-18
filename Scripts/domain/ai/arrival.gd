@@ -47,6 +47,11 @@ const SHED_ACCEL_DEFAULT_M_S2: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
 # controller can overfly the catch window and circle once) run up to ~2× the
 # estimate.
 
+# The clock's error against the live controller on the clean families: a share
+# of the trip, with a floor (test_time_to_arrive_calibration.gd holds it).
+const ERROR_FRAC: float = 0.25
+const ERROR_FLOOR_S: float = 0.18
+
 # Cross speed the velocity-matched seek redirects for free (costs no time).
 # Measured.
 const VM_FREE_SHED_M_S: float = 2.0
@@ -102,6 +107,15 @@ const NET_ROUTE_CLEAR_M: float = 0.4
 static func _time_to_arrive_routed(from_pos: Vector3, dest: Vector3,
 		from_velocity: Vector3, ref_speed_m_s: float,
 		accel_m_s2: float, lateral_grip: float = 1.0) -> float:
+	return _time_via(from_pos, cage_waypoint(from_pos, dest, from_velocity, ref_speed_m_s,
+			accel_m_s2, lateral_grip), dest, from_velocity, ref_speed_m_s, accel_m_s2,
+			lateral_grip)
+
+
+# The waypoint of the quickest route round the cage from `from_pos` to `dest`
+# (see _time_to_arrive_routed).
+static func cage_waypoint(from_pos: Vector3, dest: Vector3, from_velocity: Vector3,
+		ref_speed_m_s: float, accel_m_s2: float, lateral_grip: float = 1.0) -> Vector3:
 	# The cage being crossed is on the side the route actually reaches.
 	var s: float = signf(from_pos.z) \
 			if absf(from_pos.z) >= absf(dest.z) else signf(dest.z)
@@ -112,25 +126,34 @@ static func _time_to_arrive_routed(from_pos: Vector3, dest: Vector3,
 			+ AINetObstacle.CARRY_NET_CLEAR_MARGIN_M + NET_ROUTE_CLEAR_M)
 	var front_z: float = s * (GameRules.GOAL_LINE_Z \
 			- AINetObstacle.CARRY_NET_CLEAR_MARGIN_M - NET_ROUTE_CLEAR_M)
-	var vmax: float = maxf(ref_speed_m_s, MIN_TRAVEL_SPEED_M_S)
 	var best: float = INF
+	var best_wp: Vector3 = dest
 	for wp: Vector3 in [
 			Vector3(-side_x, 0.0, mid_z), Vector3(side_x, 0.0, mid_z),
 			Vector3(0.0, 0.0, back_z), Vector3(0.0, 0.0, front_z)]:
-		var t1: float = _time_to_arrive_direct(
-				from_pos, wp, from_velocity, ref_speed_m_s, accel_m_s2,
-				lateral_grip)
-		var to_dest: Vector3 = dest - wp
-		to_dest.y = 0.0
-		var v_wp := Vector3.ZERO
-		if to_dest.length_squared() > 0.0001:
-			v_wp = to_dest.normalized() * minf(
-					from_pos.distance_to(wp) / maxf(t1, 0.001), vmax)
-		var t: float = t1 + _time_to_arrive_direct(
-				wp, dest, v_wp, ref_speed_m_s, accel_m_s2, lateral_grip)
+		var t: float = _time_via(from_pos, wp, dest, from_velocity, ref_speed_m_s,
+				accel_m_s2, lateral_grip)
 		if t < best:
 			best = t
-	return best
+			best_wp = wp
+	return best_wp
+
+
+# The two direct legs from_pos → wp → dest, pace carried through the waypoint.
+static func _time_via(from_pos: Vector3, wp: Vector3, dest: Vector3,
+		from_velocity: Vector3, ref_speed_m_s: float, accel_m_s2: float,
+		lateral_grip: float) -> float:
+	var vmax: float = maxf(ref_speed_m_s, MIN_TRAVEL_SPEED_M_S)
+	var t1: float = _time_to_arrive_direct(
+			from_pos, wp, from_velocity, ref_speed_m_s, accel_m_s2, lateral_grip)
+	var to_dest: Vector3 = dest - wp
+	to_dest.y = 0.0
+	var v_wp := Vector3.ZERO
+	if to_dest.length_squared() > 0.0001:
+		v_wp = to_dest.normalized() * minf(
+				from_pos.distance_to(wp) / maxf(t1, 0.001), vmax)
+	return t1 + _time_to_arrive_direct(
+			wp, dest, v_wp, ref_speed_m_s, accel_m_s2, lateral_grip)
 
 
 # The calibrated direct-route travel model (no net awareness — the public

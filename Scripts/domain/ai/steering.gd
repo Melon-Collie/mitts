@@ -130,7 +130,8 @@ static func compute_move_vector(
 		velocity_match_speed: float = 0.0,
 		anchor_velocity: Vector3 = Vector3.ZERO,
 		retreat_floor_center: Vector3 = Vector3.ZERO,
-		retreat_floor_radius: float = 0.0) -> Vector2:
+		retreat_floor_radius: float = 0.0,
+		advance_cap: float = INF) -> Vector2:
 	var force_x: float = 0.0
 	var force_z: float = 0.0
 
@@ -152,7 +153,7 @@ static func compute_move_vector(
 		var pursue: Vector2 = _moving_frame_pursuit(
 				to_anchor, anchor_dist, anchor_velocity, self_velocity,
 				velocity_match_speed, retreat_floor_center - self_pos,
-				retreat_floor_radius)
+				retreat_floor_radius, advance_cap)
 		force_x += pursue.x
 		force_z += pursue.y
 	elif anchor_dist > ANCHOR_DEADBAND:
@@ -307,7 +308,7 @@ static func is_rideable_anchor(anchor: Vector3) -> bool:
 static func _moving_frame_pursuit(to_anchor: Vector3, anchor_dist: float,
 		anchor_velocity: Vector3, self_velocity: Vector3,
 		v_max: float, to_floor: Vector3 = Vector3.ZERO,
-		floor_radius: float = 0.0) -> Vector2:
+		floor_radius: float = 0.0, advance_cap: float = INF) -> Vector2:
 	var des_x: float = anchor_velocity.x
 	var des_z: float = anchor_velocity.z
 	if anchor_dist > 0.001:
@@ -342,6 +343,10 @@ static func _moving_frame_pursuit(to_anchor: Vector3, anchor_dist: float,
 			if toward > allowed:
 				des_x -= ux * (toward - allowed)
 				des_z -= uz * (toward - allowed)
+			# RoleDecision.advance_cap_m_s: the same component's other sign.
+			elif -toward > advance_cap:
+				des_x -= ux * (toward + advance_cap)
+				des_z -= uz * (toward + advance_cap)
 	# We cannot skate faster than we can skate. Clamping the SUM (rather than the
 	# closing term) keeps the best available heading: flat out along the line that
 	# serves both errands, which as the gap closes rotates off pursuit and onto the
@@ -372,7 +377,7 @@ static func _moving_frame_pursuit(to_anchor: Vector3, anchor_dist: float,
 # opposing the anchor direction — pressure bends the carry line, it never
 # reverses it. Retreat is the carry DELIBERATION's call (the anchor itself
 # moves), never a reflex here, so a defender parked dead on the line repels
-# ~nothing and driving at him is the poke-evade's read. `to_anchor` /
+# ~nothing and getting round him is the rolled carry's read. `to_anchor` /
 # `anchor_dist` are the anchor pull inputs, passed through.
 static func _carrier_threat_repel(self_pos: Vector3, self_velocity: Vector3,
 		to_anchor: Vector3, anchor_dist: float, opponent_positions: Array[Vector3],
@@ -595,15 +600,18 @@ static func stance_carves_to(self_pos: Vector3, anchor: Vector3, desired: Vector
 			was_holding)
 
 
-# The same read for a committed cut with no anchor (a deke or a poke-evade): the
-# whole turn onto `dir` has to happen inside the maneuver's `window_s`.
+# The same read for a held stick with no anchor (a rolled carry move's): the turn
+# off travel onto `dir` has to happen inside `window_s`. Past
+# STANCE_CUT_MAX_ANGLE_DEG it is a stop and a push back, as the pivot's is.
 static func stance_cuts_onto(dir: Vector2, velocity_xz: Vector2,
-		upright_lateral_accel: float, window_s: float) -> bool:
+		upright_lateral_accel: float, window_s: float, was_holding: bool) -> bool:
 	var speed: float = velocity_xz.length()
 	if speed < 0.01 or dir.length_squared() < 0.0001 or window_s <= 0.0:
 		return false
 	var turn: float = absf(velocity_xz.angle_to(dir))
-	return _stance_out_turns(turn / window_s, speed, upright_lateral_accel, false)
+	if turn > deg_to_rad(STANCE_CUT_MAX_ANGLE_DEG):
+		return false
+	return _stance_out_turns(turn / window_s, speed, upright_lateral_accel, was_holding)
 
 
 static func _stance_out_turns(required_rate: float, speed: float,

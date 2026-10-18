@@ -21,6 +21,11 @@ namespace mitts {
 // BodyCheckRules.Config fields, set via set_stagger_params. `posture` is
 // SkaterMovementRules.Posture as an int (UPRIGHT 0, STANCE 1, COMMIT 2).
 
+// SkaterMovementRules.Posture.
+inline constexpr int64_t POSTURE_UPRIGHT = 0;
+inline constexpr int64_t POSTURE_STANCE = 1;
+inline constexpr int64_t POSTURE_COMMIT = 2;
+
 #define MITTS_MOVEMENT_TUNABLES(X) \
 	X(thrust) X(power_knee_speed) X(friction) X(friction_drag) X(max_speed) \
 	X(move_deadzone) X(stop_decel) X(reverse_skid_fraction) X(turn_accel) \
@@ -31,15 +36,28 @@ namespace mitts {
 	X(stance_max_speed_mult) X(stance_shuffle_mult) \
 	X(commit_grip_mult) X(commit_stride_mult)
 
+struct MovementTunables {
+#define X(name) double name = 0.0;
+	MITTS_MOVEMENT_TUNABLES(X)
+#undef X
+};
+
+// Loads every tunable by property name from a GDScript MovementConfig. Returns a
+// space-separated list of the missing ones — empty means all loaded.
+godot::String load_movement_tunables(godot::Object *movement_config, MovementTunables &out);
+
+// SkaterMovementRules.apply_movement at an explicit thrust and grip scale.
+godot::Vector3 movement_step(const MovementTunables &cfg,
+		const godot::Vector3 &current_velocity,
+		const godot::Vector2 &move_input,
+		double facing_rotation_y,
+		bool has_puck, bool brake, double delta, int64_t posture,
+		double thrust, double grip_scale);
+
 class NativeSkaterMovement : public godot::RefCounted {
 	GDCLASS(NativeSkaterMovement, godot::RefCounted)
 
-	struct Config {
-#define X(name) double name = 0.0;
-		MITTS_MOVEMENT_TUNABLES(X)
-#undef X
-	};
-	Config cfg;
+	MovementTunables cfg;
 
 	double stagger_max_seconds = 0.0;
 	double stagger_max_thrust_penalty = 0.0;
@@ -47,13 +65,6 @@ class NativeSkaterMovement : public godot::RefCounted {
 
 	godot::Vector3 fwd_position;
 	godot::Vector3 fwd_velocity;
-
-	godot::Vector3 apply_movement_internal(
-			const godot::Vector3 &current_velocity,
-			const godot::Vector2 &move_input,
-			double facing_rotation_y,
-			bool has_puck, bool brake, double delta, int64_t posture,
-			double thrust, double grip_scale) const;
 
 protected:
 	static void _bind_methods();

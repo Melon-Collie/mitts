@@ -35,11 +35,14 @@ var blade_span: float = GameRules.DEFAULT_STICK_LENGTH_M + GameRules.DEFAULT_BLA
 var stick_reach: float = GameRules.DEFAULT_STICK_LENGTH_M
 
 # Maximum distance from the body origin to a legal blade-contact point (arm ROM
-# displacement + stick + blade). NOT a bot-planning input: the host's anti-cheat
-# ceiling on client-authoritative blade claims (pickup / poke / stick-lift),
-# pinning the claimed blade to within this reach of the server-authoritative
-# body. Default = league stick + blade + baseline backhand ROM reach.
-var max_blade_reach: float = GameRules.DEFAULT_STICK_LENGTH_M + GameRules.DEFAULT_BLADE_LENGTH_M + 0.46
+# displacement + stick + blade). The host's anti-cheat ceiling on client-
+# authoritative blade claims (pickup / poke / stick-lift), pinning the claimed
+# blade to within this reach of the server-authoritative body; and where a lane
+# read lets a defender hold the stick he is reaching with (AIPuckLane
+# ._blade_block). Default = league stick + blade + baseline backhand ROM reach.
+const LEAGUE_MAX_BLADE_REACH_M: float = GameRules.DEFAULT_STICK_LENGTH_M \
+		+ GameRules.DEFAULT_BLADE_LENGTH_M + 0.46
+var max_blade_reach: float = LEAGUE_MAX_BLADE_REACH_M
 # The furthest the balance lean can carry the shoulders off the body, metres
 # (Skater.max_lean_shift). The claim reach bound adds it; the bots' own reach
 # model does not, since a lean is not something a bot plans a reach around.
@@ -52,23 +55,14 @@ var wrister_shot_speed: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 
 # How fast the blade traverses its ROM to chase the aim cursor (Hands, =
 # SkaterController.max_blade_speed). A bot slews its aim cursor at exactly this
-# rate. Default mirrors the controller's 10.0.
-var blade_speed: float = 10.0
-
-# The blade curve's angle ladder as tan per elevated loft level
-# (x = LOW, y = MID, z = HIGH — SkaterController.loft_tan_low/mid/high). The
-# HIGH-hole rung-picker reads it so a bot prices (and fires) the rungs its own
-# blade has. Default = the league-neutral ladder.
-var loft_tans: Vector3 = Vector3(
-		GameRules.DEFAULT_LOFT_TAN_LOW,
-		GameRules.DEFAULT_LOFT_TAN_MID,
-		GameRules.DEFAULT_LOFT_TAN_HIGH)
+# rate.
+const LEAGUE_BLADE_SPEED_M_S: float = 10.0
+var blade_speed: float = LEAGUE_BLADE_SPEED_M_S
 
 # Lateral grip multiplier (= SkaterController.lateral_grip — agility × the
 # skate-profile lean). Scales edge turn authority, so planning reads it wherever
 # it models a direction change (the cross-momentum shed in time_to_arrive /
-# reach_clearance, the deke's bite/unwind budgets). Grip never limits parallel
-# drive, in planning or in physics.
+# reach_clearance). Grip never limits parallel drive, in planning or in physics.
 var lateral_grip: float = 1.0
 
 # Reception ceiling lean (= Skater.reception_ceiling_mult, from the blade
@@ -88,6 +82,8 @@ var backhand_power_coefficient: float = 0.75
 var wrister_load: WristerLoad.Config = WristerLoad.Config.new()
 var facing_rules: FacingRules.Config = FacingRules.Config.new()
 var wrister_unloaded_share: float = 0.6
+# Which side the forehand is on, for the facing rule's per-side reach edges.
+var is_left_handed: bool = true
 
 # Body-check delivery inputs to SkaterCollisionRules.victim_kick
 # (closing × transfer × m_a / (m_a + m_b)): a heavier player predicts harder
@@ -105,10 +101,26 @@ var handle_reach: float = 0.9
 # Half-angle of the blade's reach cone: how far off its FACING the body can
 # place the blade WITHOUT turning — arm ROM plus torso twist
 # (SkaterController.rom_backhand_angle_max_deg + upper_body_max_twist_deg, the
-# exact gate SkaterPoseCoordinator.apply_facing enforces on the IK). Only aims
-# beyond it (the narrow back wedge) cost a body rotation. Not attribute-scaled.
+# backhand side of the per-side gate SkaterPoseCoordinator.apply_facing enforces,
+# FacingRules.reach_edge; one cone for both sides here). Only aims beyond it (the
+# narrow back wedge) cost a body rotation. Not attribute-scaled.
 # Default = 90° + 67°.
 var reach_cone_half_angle: float = deg_to_rad(157.0)
+
+# The skating physics this body runs (SkaterController's movement config, a copy:
+# the controller writes the body-check stagger into its own every tick, on the
+# main thread, while bots read on the AI worker).
+var movement: SkaterMovementRules.MovementConfig = SkaterMovementRules.league_config()
+# The pose coordinator's facing lerp rates, per second (Agility-scaled).
+var facing_drag_speed: float = 5.0
+var facing_drag_speed_braking: float = 10.0
+# The body's contact disc (Size-scaled): how close to the boards and the cage its
+# centre can get.
+var body_radius: float = 0.35
+# A carrier on the boards squares up along them (BoardPlayRules
+# .board_shield_facing): the probe distance it starts at and the most it turns.
+var board_shield_probe: float = 1.1
+var board_shield_max_rad: float = deg_to_rad(55.0)
 
 # Effective body-facing turn rate (rad/s) used to price the rotation an out-of-cone
 # aim costs: a constant-rate approximation of the real exponential lerp at

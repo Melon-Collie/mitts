@@ -2,23 +2,13 @@ extends GutTest
 
 # Pins the TIE between the live goalie's depth and every model that predicts it.
 #
-# There are three consumers of "where will the keeper be standing?":
-#   1. GoalieController          — the live goalie (integrates toward the target)
-#   2. AIGoalieModel             — the bot planner's keeper (shot/pass/carry EV)
-#   3. shot_sim_harness          — the lateral-reach BAND instrument score_shoot
-#                                  is calibrated against
-#
-# All three now go through GoalieDepthSolver. They did not always: the planner and
-# the band instrument each carried their own copy of the retired Buckley distance
-# chart, so when depth became a solve they were predicting a keeper who no longer
-# existed — the planner would have under-valued in-tight shots (it thought he was
-# 0.35 m further out than he is at 2 m). Nothing failed, because a duplicated
-# constant does not fail, it just quietly lies.
-#
-# These tests are the thing that WILL fail next time.
+# Two consumers of "where will the keeper be standing?": GoalieController (the
+# live goalie, integrating toward the target) and AIGoalieModel (where the bots
+# expect him when a carry arrives). Both go through GoalieDepthSolver, and these
+# tests fail if a copied constant lets the planner predict a keeper who no
+# longer exists.
 
 const Harness := preload("res://tests/unit/ai/real_goalie_shot_harness.gd")
-const ShotSim := preload("res://tests/unit/ai/shot_sim_harness.gd")
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 const SETTLE_TICKS: int = 240
 
@@ -43,25 +33,11 @@ func before_each() -> void:
 
 
 # The live goalie's settled depth against a stationary, unpressured threat — the
-# case all three models agree they are describing.
+# case both models agree they are describing.
 func _live_settled(threat_dist: float) -> float:
 	_ctrl.reset_to_crease()
 	_h.settle(Vector3(0.0, 0.0, GOAL_Z + threat_dist), SETTLE_TICKS)
 	return _ctrl._current_depth
-
-
-func test_the_band_instrument_matches_the_live_goalie() -> void:
-	# shot_sim_harness.goalie_set_pos drives score_shoot's calibration. If it and
-	# the live keeper disagree, the bots are tuned against a fiction.
-	var goal := Vector3(0.0, 0.0, GOAL_Z)
-	for d: float in [1.5, 2.0, 3.0, 5.0, 8.0]:
-		var shooter := Vector3(0.0, 0.0, GOAL_Z + d)
-		var band: Vector3 = ShotSim.goalie_set_pos(shooter, goal)
-		var band_depth: float = absf(band.z - GOAL_Z)
-		var live: float = _live_settled(d)
-		gut.p("threat %.1f m: live %.2f  band %.2f" % [d, live, band_depth])
-		assert_almost_eq(band_depth, live, 0.03,
-				"the band instrument must model the depth the live goalie actually holds (%.1f m)" % d)
 
 
 func test_the_planner_matches_the_live_goalie_on_a_static_read() -> void:

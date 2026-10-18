@@ -46,9 +46,10 @@ const RECEIVE_GIVE_CEILING_M_S: float = 21.5
 # the default chase that turns the body to the puck and then back to shoot.
 # Both aim at a net-forward catch point and stand so the puck arrives there.
 #
-# Engages when the puck is a real pass to us and a redirect from the reception
-# point scores >= SHOT_RECEPTION_SCORE_GATE (score_shoot at the soft redirect
-# pace, so this also means "in range with a real look").
+# Engages when the puck is a real pass to us and the shot off it from the
+# reception point scores >= SHOT_RECEPTION_SCORE_GATE (score_pass_value, the
+# better of one-timing and catching), so this also means "in range with a real
+# look".
 #
 # Mode A needs a LATERAL forehand-side cross-pass, far enough out that skating in
 # buys nothing, with the bot not already driving net-ward, and squared up (the
@@ -310,7 +311,7 @@ func incoming_pass(snapshot: WorldSnapshot, self_pos: Vector3) -> bool:
 # normal catch); true with the net-forward stand and whether its geometry allows
 # a one-time.
 func read_shot(snapshot: WorldSnapshot, self_pos: Vector3, blade_reach: float,
-		attacking_goal: Vector3, shot_aim_error_rad: float) -> bool:
+		attacking_goal: Vector3) -> bool:
 	var puck_state: PuckNetworkState = snapshot.puck_state
 	# Only loose pucks are receivable; held pucks aren't a pass to catch.
 	if puck_state.carrier_peer_id != -1:
@@ -334,14 +335,16 @@ func read_shot(snapshot: WorldSnapshot, self_pos: Vector3, blade_reach: float,
 	perp_off.y = 0.0
 	if perp_off.length() > RECEIVE_TRIGGER_LATERAL_M:
 		return false
-	# A fire-on-contact redirect gives the goalie no slide time, so score it at his
-	# CURRENT position and the soft redirect pace, with this bot's own shot spread.
+	# The feed as it stands: the puck where it is now, the keeper square on it as
+	# he is now, one-timed or caught, whichever is the better shot. Its lane is
+	# handed in clear — whether the puck gets here is the reception's own read.
 	_gather_opponents(snapshot)
-	var shot_score: float = AIActionScoring.score_shoot(
-			perp_foot, attacking_goal, _goalie_now(snapshot, attacking_goal),
-			GameRules.NET_HALF_WIDTH, _shot_opponents,
-			AIPuckLane.PASS_SPEED_M_S, 0.0, _shot_opponent_caps,
-			-1.0, false, 0.0, false, shot_aim_error_rad)
+	var keeper: Vector3 = _goalie_now(snapshot, attacking_goal)
+	var shot_score: float = maxf(
+			AIActionScoring.score_pass_value(puck_pos, perp_foot, attacking_goal, keeper,
+					_shot_opponents, puck_speed, _shot_opponent_caps, true, 1.0),
+			AIActionScoring.score_pass_value(puck_pos, perp_foot, attacking_goal, keeper,
+					_shot_opponents, puck_speed, _shot_opponent_caps, false, 1.0))
 	if shot_score < SHOT_RECEPTION_SCORE_GATE:
 		return false
 	# Net-forward geometry. Anchor = the catch point pulled back one blade-reach

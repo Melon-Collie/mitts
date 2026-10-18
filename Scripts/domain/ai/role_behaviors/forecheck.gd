@@ -107,6 +107,8 @@ static func _decide_mid_at(ctx: RoleContext, carrier_pos: Vector3,
 	var our_goalie_pos: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 	var our_team_excluding_self: Array[Vector3] = ctx.scratch_teammates
 	AIRoleReads.collect_teammates_excluding_self(ctx, our_team_excluding_self)
+	var poss: AIPossessionValue = AIRoleReads.defence_possession(ctx,
+			our_team_excluding_self)
 
 	var candidates: Array[Vector3] = AIStationSearch.generate_candidates_around(
 			ctx.self_pos, search_center)
@@ -118,10 +120,8 @@ static func _decide_mid_at(ctx: RoleContext, carrier_pos: Vector3,
 	var bases: Array[float] = ctx.scratch_option_bases
 	bases.clear()
 	for opp_pos: Vector3 in opp_teammates:
-		bases.append(AIActionScoring.threat_surface_pass(
-				carrier_pos, opp_pos, our_net, our_goalie_pos,
-				GameRules.NET_HALF_WIDTH, our_team_excluding_self,
-				ctx.scratch_teammate_caps))
+		bases.append(poss.threat_of_feed(carrier_pos, opp_pos, Vector3.ZERO,
+				our_goalie_pos))
 
 	var best_pos: Vector3 = search_center
 	var best_score: float = -INF
@@ -133,10 +133,8 @@ static func _decide_mid_at(ctx: RoleContext, carrier_pos: Vector3,
 			continue
 		if AIStationSearch.too_close_to_teammate(c, our_team_excluding_self):
 			continue
-		var threat: float = _max_pass_threat(
-				c, carrier_pos, opp_teammates, our_net, our_goalie_pos,
-				our_team_excluding_self, bases, ctx.scratch_teammate_caps,
-				ctx.caps_by_peer.get(ctx.peer_id))
+		var threat: float = _max_pass_threat(poss, c, ctx.caps_by_peer.get(ctx.peer_id),
+				carrier_pos, opp_teammates, our_goalie_pos, bases)
 		var score: float = -threat + AIStationSearch.incumbent_bonus(ctx, c)
 		if score > best_score:
 			best_score = score
@@ -155,27 +153,15 @@ static func _mid_search_center(ctx: RoleContext, carrier_pos: Vector3) -> Vector
 	return Vector3(x, 0.0, z)
 
 
-# The highest pass-threat surface the carrier has to any teammate, with our
-# defender at `candidate`. `bases` (per-receiver threats without the candidate,
-# in opp_teammates order) bound each term from above, so terms evaluate in
-# descending-bound order and stop early — an exact prune.
-static func _max_pass_threat(
-		candidate: Vector3,
-		carrier_pos: Vector3,
-		opp_teammates: Array[Vector3],
-		our_net: Vector3,
-		our_goalie_pos: Vector3,
-		our_team_excluding_self: Array[Vector3],
-		bases: Array[float],
-		our_team_caps: Array = [],
-		self_caps: AISkaterCaps = null) -> float:
-	# Same in-place defender push/pop and caps contract as
-	# AIDefensiveVerbs.carrier_best_option.
-	var caps_matched: bool = our_team_caps.size() == our_team_excluding_self.size()
-	our_team_excluding_self.push_back(candidate)
-	if caps_matched:
-		our_team_caps.push_back(self_caps)
-
+# The biggest threat the carrier's feed to any teammate carries
+# (AIPossessionValue.threat_of_feed; receivers led by anticipation, so read
+# standing), with our defender at `candidate`. `bases` (per-receiver threats
+# without the candidate, in opp_teammates order) bound each term from above, so
+# terms evaluate in descending-bound order and stop early — an exact prune.
+static func _max_pass_threat(poss: AIPossessionValue, candidate: Vector3,
+		self_caps: AISkaterCaps, carrier_pos: Vector3, opp_teammates: Array[Vector3],
+		our_goalie_pos: Vector3, bases: Array[float]) -> float:
+	poss.push_defender(candidate, Vector3.ZERO, self_caps)
 	var max_threat: float = 0.0
 	var used: int = 0
 	while true:
@@ -188,12 +174,7 @@ static func _max_pass_threat(
 		if bi == -1 or bound <= max_threat:
 			break
 		used |= 1 << bi
-		var threat: float = AIActionScoring.threat_surface_pass(
-				carrier_pos, opp_teammates[bi], our_net, our_goalie_pos,
-				GameRules.NET_HALF_WIDTH, our_team_excluding_self, our_team_caps)
-		if threat > max_threat:
-			max_threat = threat
-	our_team_excluding_self.pop_back()
-	if caps_matched:
-		our_team_caps.pop_back()
+		max_threat = maxf(max_threat, poss.threat_of_feed(carrier_pos,
+				opp_teammates[bi], Vector3.ZERO, our_goalie_pos))
+	poss.pop_defender()
 	return max_threat

@@ -86,6 +86,13 @@ static func race_vmax(caps: AISkaterCaps) -> float:
 	return caps.max_speed if caps != null else AIArrival.SKATER_REF_SPEED_M_S
 
 
+# Blade reach for one candidate's reach band: his blade span from caps plus the
+# agent's buffer (SkaterAgentStateMachine._blade_reach), league when unset.
+static func race_reach(caps: AISkaterCaps) -> float:
+	return caps.blade_span + AIBotMechanics.BLADE_REACH_BUFFER_M if caps != null \
+			else AIBotMechanics.BLADE_REACH_M
+
+
 # The predicted path one race is run over, freshly walked.
 static func walk_race(puck_pos: Vector3, puck_vel: Vector3) -> Array[Vector3]:
 	return AITrajectory.predict_puck(puck_pos, puck_vel, RACE_STEPS,
@@ -129,8 +136,9 @@ static func race_trajectory(puck_pos: Vector3, puck_vel: Vector3) -> Array[Vecto
 # `reach` lets the SELF read steer to where the blade, not the body, meets the
 # puck. The comparative reads (the election, best_intercept_time, the race-lost
 # decline) must leave it at 0: every body within a stick would solve to t = 0
-# and the election would fall through to its peer-id tie-break. A puck inside
-# the stick is puck_comes_to_reach's read, which overrides the election.
+# and the election would fall through to its peer-id tie-break. A puck coming to
+# the stick is puck_comes_to_reach's read; the election counts it as the puck's
+# own time to the band (reach_meet_time), never the body's.
 #
 # `playable_from` (race_playable_time) is when the puck is back down where a
 # grounded blade can play it: nothing earlier on the path is makeable, so a
@@ -256,9 +264,19 @@ static func puck_comes_to_reach(
 		puck_pos: Vector3, puck_vel: Vector3,
 		self_pos: Vector3, self_vel: Vector3,
 		max_speed: float, reach: float) -> bool:
+	return reach_meet_time(race_trajectory(puck_pos, puck_vel), puck_pos, puck_vel,
+			self_pos, self_vel, max_speed, reach, false) < INF
+
+
+# When the puck on `traj` first meets this skater's reach band, by
+# puck_comes_to_reach's rule; INF if it never does. `approaching_only` drops a
+# meeting at the very start of a path the puck is leaving him along — the
+# passer's own blade as the feed goes.
+static func reach_meet_time(traj: Array[Vector3], puck_pos: Vector3, puck_vel: Vector3,
+		self_pos: Vector3, self_vel: Vector3, max_speed: float, reach: float,
+		approaching_only: bool) -> float:
 	var band: float = reach + INCIDENTAL_STRIDE_M
 	var band2: float = band * band
-	var traj: Array[Vector3] = race_trajectory(puck_pos, puck_vel)
 	var step_dt: float = RACE_LOOKAHEAD_S / float(RACE_STEPS)
 	# A puck flying through the band is over the stick, not in it: only the
 	# path from its landing on counts.
@@ -274,16 +292,18 @@ static func puck_comes_to_reach(
 			start = path_intercept_point(traj, step_dt, puck_pos, t_play)
 		var seg_t0: float = maxf(t0, t_play)
 		var f: float = _segment_meet_fraction(start, traj[i], self_pos)
+		if approaching_only and i == 0 and f <= 0.0:
+			continue
 		var meet := Vector3(start.x + (traj[i].x - start.x) * f, 0.0,
 				start.z + (traj[i].z - start.z) * f)
 		var dx: float = meet.x - self_pos.x
 		var dz: float = meet.z - self_pos.z
 		if dx * dx + dz * dz > band2:
 			continue
-		if AIArrival.time_to_arrive(self_pos, meet, self_vel, max_speed) \
-				<= seg_t0 + (t0 + step_dt - seg_t0) * f:
-			return true
-	return false
+		var t_meet: float = seg_t0 + (t0 + step_dt - seg_t0) * f
+		if AIArrival.time_to_arrive(self_pos, meet, self_vel, max_speed) <= t_meet:
+			return t_meet
+	return INF
 
 
 # ── Teammate yield (Scripts/domain/ai/CLAUDE.md → "Teammates don't stab") ───
@@ -400,10 +420,16 @@ static func elect(
 		if not human_ids.is_empty() and human_ids.has(pid) \
 				and not committed_to_race(s, puck_pos):
 			continue
-		var max_speed: float = race_vmax(caps_by_peer.get(pid))
+		var caps: AISkaterCaps = caps_by_peer.get(pid)
+		var max_speed: float = race_vmax(caps)
 		var t: float = path_intercept_time(traj, step_dt, puck_pos,
 				s.position, s.velocity, max_speed, margin,
 				AIArrival.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
+		# A puck coming to his stick is his (puck_comes_to_reach, which the agent
+		# honours over the election): the race counts it, or a pass reaching its
+		# man elects someone else to chase it too.
+		t = minf(t, reach_meet_time(traj, puck_pos, puck_vel, s.position, s.velocity,
+				max_speed, race_reach(caps), true))
 		if pid != prev_elected:
 			t += HYSTERESIS_S
 		# Tie-break on the lower peer_id, never iteration order.

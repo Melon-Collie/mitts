@@ -204,8 +204,8 @@ static func stays_in_zone(k: int, t: float, attacking_goal: Vector3,
 
 
 # Race completion: the receiver against the soonest opponent on the same path,
-# in the contest band the dump's chase_recovery prices with — one currency for
-# "who gets to a loose puck first".
+# in the contest band AIActionScoring.arrival_race prices with — one currency
+# for "who gets to a loose puck first".
 static func race_completion(k: int, receiver_t: float) -> float:
 	var t_opp: float = opp_time(k)
 	if t_opp == INF:

@@ -28,7 +28,7 @@ var lateral_grip: float = 1.0
 var puck_carry_speed_multiplier: float = 0.92  # pre-apply default; per-build value is set by apply_attributes (PlayerAttributes.carry_speed_mult, Speed-eased)
 var backward_thrust_multiplier: float = 0.80
 var crossover_thrust_multiplier: float = 0.90
-var backward_max_speed_multiplier: float = 0.75
+var backward_max_speed_multiplier: float = 0.80
 # Ceiling on the velocity fed to the gait during the faceoff / intro skate-in
 # (see begin_approach / apply_approach). The glide always completes in a fixed
 # duration, so a far start implies a high velocity — clamp it here so the stride
@@ -1267,11 +1267,12 @@ func build_ai_caps() -> AISkaterCaps:
 	caps.max_lean_shift = skater.max_lean_shift()
 	caps.wrister_shot_speed = max_wrister_power
 	caps.blade_speed = max_blade_speed
-	caps.loft_tans = Vector3(loft_tan_low, loft_tan_mid, loft_tan_high)
 	caps.lateral_grip = lateral_grip
 	caps.backhand_power_coefficient = backhand_power_coefficient
 	caps.wrister_load = _wrister_load_config()
 	caps.facing_rules = facing_rules
+	if skater != null:
+		caps.is_left_handed = skater.is_left_handed
 	caps.wrister_unloaded_share = wrister_unloaded_share
 	caps.reception_ceiling_mult = skater.reception_ceiling_mult
 	# Handle reach scales with the blade lever: max_blade_speed / its base is
@@ -1291,9 +1292,15 @@ func build_ai_caps() -> AISkaterCaps:
 	# multiplier — a nimbler bot turns (and prices a back-wedge aim) faster.
 	if _base_facing_drag_speed > 0.001:
 		caps.facing_turn_rate *= facing_drag_speed / _base_facing_drag_speed
+	caps.movement = _build_movement_config()
+	caps.facing_drag_speed = facing_drag_speed
+	caps.facing_drag_speed_braking = facing_drag_speed_braking
+	caps.board_shield_probe = board_shield_probe
+	caps.board_shield_max_rad = deg_to_rad(board_shield_max_deg)
 	if skater != null:
 		caps.weight = skater.weight
 		caps.body_check_transfer = skater.body_check_transfer
+		caps.body_radius = skater.collision_radius()
 	return caps
 
 

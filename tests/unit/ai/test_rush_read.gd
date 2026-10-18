@@ -477,3 +477,23 @@ func test_empty_snapshot_is_inert() -> void:
 	assert_eq(r.mode, AIRushRead.Mode.NONE)
 	assert_true(r.attackers.is_empty())
 	assert_true(r.coverage_ready == false)
+
+
+# ── A pass in flight is still ours ───────────────────────────────────────────
+
+func _feed_read(possession_team: int) -> AIRushRead:
+	var ours := {1: [Vector3(6.0, 0, -9.5), Vector3.ZERO], 2: [Vector3(7.5, 0, -21.0), Vector3.ZERO]}
+	var theirs := {11: [Vector3(6.5, 0, -22.5), Vector3.ZERO], 12: [Vector3(0.0, 0, -19.0), Vector3.ZERO]}
+	var snap: WorldSnapshot = _snapshot(ours, theirs, -1, Vector3(7.0, 0, -15.0))
+	snap.puck_state.velocity = Vector3(-2.3, 0, 14.8)
+	var r := AIRushRead.new()
+	r.fill(snap, 0, OUR_NET_Z, _team_map(ours, theirs), {}, {}, true, {}, possession_team)
+	return r
+
+
+func test_our_feed_in_flight_is_not_their_rush() -> void:
+	# AIPossessionState's sticky rule: a fast loose puck keeps its last carrier's
+	# team. Our feed to the point travels toward our own net, and read as a loose
+	# puck it is a rush the points retreat from.
+	assert_ne(_feed_read(0).mode, AIRushRead.Mode.RUSH, "our own feed is not a rush")
+	assert_eq(_feed_read(1).mode, AIRushRead.Mode.RUSH, "their pass the same way is")

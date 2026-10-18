@@ -21,7 +21,6 @@ passed per call, and only its own fields written.
 | collaborator | owns |
 |---|---|
 | `SkaterAgentSteering` | body steering to an anchor: the field, brake-pivot, arrival brake, stance carve |
-| `SkaterAgentPokeEvade` | the carrier's cut, brake check and fake-then-cut deke |
 | `SkaterAgentStickPlay` | the jab / lift reach-in, the tie and its pull, the stick-check button |
 | `SkaterAgentBoardPlay` | holding a pin, the pinned slide, a carrier's answer to a square checker |
 | `SkaterAgentShotBlock` | the shot block and the 2-on-1 dive |
@@ -47,15 +46,15 @@ Adding a behaviour is four steps:
 | OFF_PUCK | ONE_TIMER_PRESSED | a ready one-timer man's feed is released on his line or reaches his zone (`_is_one_timer_ready`, `SkaterAgentOneTimer.line_anchor`, `_puck_in_one_timer_zone`) |
 | CHASE_PUCK | ONE_TIMER_PRESSED | a ready one-timer man's feed reaches his zone, or a feed he is chasing is worth redirecting (`_try_shot_reception`) |
 | CHASE_PUCK | OFF_PUCK | the chase ends, or the bot is out of play |
-| CARRY | SHOOT_PRESSED, PASS_PRESSED | the carrier's committed intent is ready to release (a dump releases through PASS_PRESSED) |
+| CARRY | SHOOT_PRESSED, PASS_PRESSED | the carrier's committed intent is ready to release (a rim releases through PASS_PRESSED) |
 | any press state | CARRY | the release fires, or the press bails |
 | CARRY, any press state | `_post_puck_lost_state` | the puck is gone: CHASE_PUCK for the nearest teammate to a loose puck, else OFF_PUCK |
 
 After dispatch, `SkaterAgent.tick` runs three per-tick passes that may overwrite
 the dispatched input: the stick lift, board play (`apply_board_play`) and the
 shot block (`SkaterAgentShotBlock`). The offside brake (`apply_offside_guard`)
-runs after all of them as the last write to the move, so no writer — the deke
-inside dispatch, the pinned slide after it — can carry a bot over the line
+runs after all of them as the last write to the move, so no writer — the rolled
+carry inside dispatch, the pinned slide after it — can carry a bot over the line
 (`test_agent_offside_guard.gd`).
 
 ### The dispatch throttle
@@ -69,7 +68,7 @@ cursor — so a catchable feed never transits a blade that only re-aims on
 dispatch ticks. Anything that re-derives on skipped ticks may only READ
 dispatch-throttled state. The press states (SHOOT / PASS / ONE_TIMER) always
 run full-rate: charge timing and pre-aim convergence are tick-sensitive. Every
-counter sized in physics ticks (evade and jab windows, pre-aim wait, the
+counter sized in physics ticks (jab windows, pre-aim wait, the
 role-argmax cooldown) advances by the dispatch span, never by 1, or its
 wall-clock duration stretches with the tier.
 
@@ -179,7 +178,7 @@ immediate whistle. The coverage reads in `defensive_verbs.gd` and `role_reads.gd
 A teammate owing a tag-up is a TEAM state, not a personal one: until the whole team
 is out, nobody may enter (`offside_brake`'s `hold_line` keeps the line shut
 even once the puck is in), and the carrier keeps its carries, feeds and
-dump-ins out of the zone (`RoleContext.zone_entry_blocked`). The brake runs on
+rims out of the zone (`RoleContext.zone_entry_blocked`). The brake runs on
 every tick, decided or not — a throttled bot still moves on its cached vector.
 An out-of-play bot is also never the elected loose-puck chaser: it would refuse
 the chase while nobody else was sent.

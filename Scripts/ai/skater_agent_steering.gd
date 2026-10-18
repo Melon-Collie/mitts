@@ -70,7 +70,7 @@ func steer(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		anchor_velocity: Vector3, engaged_peer_id: int,
 		retreat_floor_center: Vector3, retreat_floor_radius: float,
 		attacking_goal_pos: Vector3, upright_lateral_accel: float,
-		blade_reach: float) -> void:
+		blade_reach: float, advance_cap: float = INF) -> void:
 	# Standard potential-field steering with brake-pivot.
 	# Use the per-team roster published by GameManager._enrich_snapshot_for_ai
 	# instead of re-partitioning snapshot.skater_states every physics tick.
@@ -159,7 +159,7 @@ func steer(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 			GameRules.RINK_HALF_WIDTH, GameRules.RINK_HALF_LENGTH,
 			opp_repel, steer_vels, _scratch_teammate_steer_vels,
 			match_self_vel, velocity_match_speed, anchor_velocity,
-			retreat_floor_center, retreat_floor_radius)
+			retreat_floor_center, retreat_floor_radius, advance_cap)
 
 	# Brake-pivot: if our current velocity is far off the desired direction,
 	# carving a wide arc loses. The bot keeps move_vector on the exit direction —

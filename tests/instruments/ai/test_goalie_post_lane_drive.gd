@@ -97,7 +97,7 @@ extends GutTest
 # not decide that: from the post lane at 2.5 m the short-side gap is already the
 # ANGULARLY smaller of the two (5.2° against 7.4°), so an even-handed model is
 # shading away from it correctly. Post integration cannot rescue it either —
-# `rvh_early_angle` is 80°, not reached on this lane until 0.16 m off the line.
+# `rvh_early_angle` is 77°, not reached on this lane until 0.21 m off the line.
 #
 # So the depth is the lever, and the retreat is where the defect lives.
 #

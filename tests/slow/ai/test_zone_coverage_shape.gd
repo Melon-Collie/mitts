@@ -143,18 +143,16 @@ const ZONE_SLOTS: Array[int] = [
 	AIRoleSlots.Slot.ZONE_W_WEAK,
 ]
 
-# Attackers in the zone that no defender has, per tick — the bot-attack
-# fixtures' shared ceiling, now guarding low cycle alone (measured 2.21, with a
-# defender off chasing the puck counted as covering nobody). A pinned
-# measurement, not a bound derived from the model it replaced.
-const UNCOVERED_CEILING: float = 2.4
-# The scripted crossing cutter (measured 0.80), pinned at the same ~0.28 margin.
-# Nearly all of it is the weak-side point, a man the shot model prices at
-# nothing (worst open danger 0.0000) whom the D sags off; it read 0.35 until the
-# keeper's pushes had to stop on their spot, which moved the planner's backdoor
-# depth and with it which men the partition rates worth a body. The cutter
+# Attackers in the zone that no defender has, per tick, in the low cycle
+# (measured 1.12, pinned at the ~0.28 margin the scripted fixtures use). Most of
+# it is the weak point, whom the D sag off; the man in the puck owner's area
+# stays coverable while he is on the puck (TeamBrain's eligibility).
+const UNCOVERED_CEILING: float = 1.4
+# The scripted crossing cutter (measured 1.00), pinned at the same ~0.28 margin.
+# It is the weak-side point, a man the shot model prices at nothing: with the
+# cutter low in the strong D's area, the weak winger sags onto him. The cutter
 # himself — the man this fixture is about — is pinned on his own below.
-const UNCOVERED_CEILING_CROSSING_CUTTER: float = 1.08
+const UNCOVERED_CEILING_CROSSING_CUTTER: float = 1.28
 # Share of the D-zone ticks the cutter may go unattended (measured 0 of 480).
 const CUTTER_DROPPED_CEILING: float = 0.05
 # The scripted point shot (measured 0.63), pinned at the same ~0.28 margin.
@@ -245,9 +243,8 @@ func _run(attackers: Array, defenders: Array, carrier: int) -> Result:
 				continue
 			r.uncovered_sum += 1
 			r.uncovered_by_man[opp] = int(r.uncovered_by_man.get(opp, 0)) + 1
-			worst = maxf(worst, AIActionScoring.score_shoot_threat_fielded(
-					snap.skater_states[opp].position, our_net, our_net,
-					GameRules.NET_HALF_WIDTH, no_defenders))
+			worst = maxf(worst, AIActionScoring.score_shoot_value(
+					snap.skater_states[opp].position, our_net, our_net, no_defenders))
 		r.open_danger_sum += worst
 		r.open_danger_worst = maxf(r.open_danger_worst, worst)
 	return r

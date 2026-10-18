@@ -54,6 +54,12 @@ main thread* in the idle window before the next kick. And the two brain fields
 main reads every frame (the ping-elected chaser, and the possession / coverage
 flag) are published into plain mirrors at kick time.
 
+The domain's static memos and scratch belong to the worker. A main-thread
+caller brings its own: the xG stat reads the shot field through its own
+`AIShotOdds.Query`, and the chase election walks its own path rather than
+`race_trajectory`'s memo. Source tests in `test_shot_odds.gd` and
+`test_loose_puck_chase.gd` hold both.
+
 The one blocking call is `await_idle`, on the despawn path only: an
 `AIController` the worker holds must outlive the batch. The threaded path is not
 exercised by the headless suite, which bypasses the coordinator — so a change
@@ -68,6 +74,11 @@ the game only bridges that namespace to its `user://` file; a genuine conflict i
 newer-write-wins. The cloud file name mirrors the local basename, so
 `--config-suffix` dev instances stay separate in Cloud too. Dynamic Cloud Sync
 (`cloud_files_changed`) re-runs the reconcile on a Deck suspend → resume.
+
+The reconcile runs deferred, after every autoload's `_ready`, so on a machine
+with no local file anything that copied a pref out at init holds the defaults
+until it lands. An adopt emits `PlayerPrefs.cloud_prefs_adopted`; a copy that
+outlives init (NetworkManager's `local_*` identity) re-reads on it.
 
 ## Lag-compensated claim resolvers
 

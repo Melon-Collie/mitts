@@ -64,25 +64,11 @@ var self_max_speed: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 var self_max_accel: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
 # AISkaterCaps.lateral_grip — perpendicular authority in its own ETA reads.
 var self_lateral_grip: float = 1.0
-# Worst-case per-release shot aim error, radians. The shot aim reserves it from
-# the entry width, and the shot score demands it as extra window (the fit inset
-# in AIActionScoring._hole_open_angle). 0 = error-free agent.
-var self_aim_spread_rad: float = 0.0
 # Pass release-direction error, radians (BotSkillProfile.pass_aim_error_rad);
 # drives AIPuckLane.pass_miss_prob. 0 = error-free agent (miss = base floor).
 var self_pass_aim_error_rad: float = 0.0
-# Max seconds a release fires LATE (BotSkillProfile.shot_timing_error_s;
-# execution samples uniform [0, max]). The carrier's shot evals hand the goalie
-# the mean lateness (× 0.5). 0 = tick-perfect agent.
-var shot_timing_error_s: float = 0.0
 # Charged wrister release speed, m/s — also the cap on its pass launch speed.
 var self_wrister_shot_speed: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
-# Blade angle ladder (AISkaterCaps.loft_tans: tan per level, x/y/z =
-# LOW/MID/HIGH) — what the HIGH-hole rung-picker prices.
-var self_loft_tans: Vector3 = Vector3(
-		GameRules.DEFAULT_LOFT_TAN_LOW,
-		GameRules.DEFAULT_LOFT_TAN_MID,
-		GameRules.DEFAULT_LOFT_TAN_HIGH)
 # Body-check delivery and current stagger, for AIDefensiveVerbs.evaluate_body_check.
 var self_weight: float = 1.0
 var self_body_check_transfer: float = 0.65
@@ -123,9 +109,10 @@ var defensive_anticipation_scale: float = 1.0
 # Scripts/domain/ai/CLAUDE.md → "Hesitation is a raised bar, never a timer".
 var settle_penalty_frac: float = 0.0
 var settle_penalty_tau_s: float = 0.25
-# COGNITION gate: false = the goalie always reads SET to the pass / one-timer EV
-# (AICarrierField.goalie_unsettled_at returns 0). The aim-side half of the gate lives
-# on the state machine.
+# COGNITION gate: false = the keeper always reads SET to the carrier: still to the
+# shot reads (AICarrierField.goalie_unsettled_at returns 0) and already square on a
+# pass's receiver (AICarrierField.feed_value_at). The aim-side half of the gate
+# lives on the state machine.
 var reads_goalie_motion: bool = true
 # COGNITION gate: false = the carrier never values a play that doesn't exist
 # yet (AICarrierPassSearch.developing_feed_value returns 0).
@@ -137,8 +124,7 @@ var reads_receiver_commitment: bool = true
 # it splits toward an uncovered receiver's feed lane (AIRoleRushD's lane fan).
 var plays_rush_pass_lanes: bool = true
 # COGNITION gate: true = the carrier shields the puck (protect_offset /
-# protect_gain) and the poke-evade deke cuts toward the seam; false = the puck
-# stays presented ahead of the body.
+# protect_gain); false = the puck stays presented ahead of the body.
 var protects_the_puck: bool = true
 
 # ── Smart-ping directive (a human teammate's tactical order) ──────────────────
@@ -160,11 +146,8 @@ var dispatch_period_ticks: int = 1
 # argmax switch-hysteresis (AIStationSearch.append_incumbent / incumbent_bonus).
 var prev_role_target: Vector3 = Vector3.INF
 
-# NHL only: an untouched release from behind the red line that reaches their
-# goal line is icing (the dump-in reads it).
-var icing_enforced: bool = false
 # NHL delayed offside: a teammate owes a tag-up, so the carrier keeps its
-# carries, feeds and dumps out of the attacking zone.
+# carries, feeds and rims out of the attacking zone.
 var zone_entry_blocked: bool = false
 
 # ── 5v5 position identity ────────────────────────────────────────────────────
@@ -186,9 +169,19 @@ var scratch_opp_states: Array[SkaterNetworkState] = []
 var scratch_opp_caps: Array[AISkaterCaps] = []
 # Index-matched to scratch_opp_positions.
 var scratch_opp_ids: Array[int] = []
+# Index-matched to scratch_opp_positions: each opponent's velocity, never led.
+var scratch_opp_vels: Array[Vector3] = []
+# Our possession read against the opponents (AIRoleReads.attack_possession), over
+# the opponent buffers above.
+var scratch_attack_possession := AIPossessionValue.new()
 var scratch_teammates: Array[Vector3] = []
 # Index-matched to scratch_teammates; entries may be null.
 var scratch_teammate_caps: Array[AISkaterCaps] = []
+# Index-matched to scratch_teammates.
+var scratch_teammate_vels: Array[Vector3] = []
+# The opposing attack's possession read against our skaters
+# (AIRoleReads.defence_possession), over the three teammate buffers above.
+var scratch_defence_possession := AIPossessionValue.new()
 var scratch_opp_receivers: Array[Vector3] = []
 # Option-value upper bounds (AIDefensiveVerbs.carrier_option_bases).
 var scratch_option_bases: Array[float] = []

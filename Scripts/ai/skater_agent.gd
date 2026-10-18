@@ -30,11 +30,6 @@ func apply_capabilities(caps: AISkaterCaps) -> void:
 	_sm.apply_capabilities(caps)
 
 
-# The match's latched GameRules.RuleSet, for the offside-aware reads.
-func set_rule_set(rs: int) -> void:
-	_sm.rule_set = rs
-
-
 # Main thread only, after dispatch: the worker never writes team state.
 func push_one_timer_ready() -> void:
 	_sm.push_one_timer_ready()

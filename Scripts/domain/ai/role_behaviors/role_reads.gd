@@ -78,24 +78,6 @@ static func resolve_our_goalie_pos(ctx: RoleContext) -> Vector3:
 	return Vector3(goalie.position_x, 0.0, goalie.position_z)
 
 
-# The opposing goalie's replicated hand read (hole-model v3), for the
-# pre-armed feed keeper (AIGoalieModel.resolve_feed_keeper). INF when no
-# state is buffered — the resolver synthesizes the league stance.
-static func opp_goalie_hands(ctx: RoleContext) -> Vector4:
-	var goalie: GoalieNetworkState = ctx.snapshot.goalie_states.get(1 - ctx.team_id)
-	if goalie == null:
-		return Vector4.INF
-	return goalie.hands_read(ctx.attacking_goal_pos.z)
-
-
-# OUR goalie's replicated hand read — the defensive mirror.
-static func our_goalie_hands(ctx: RoleContext) -> Vector4:
-	var goalie: GoalieNetworkState = ctx.snapshot.goalie_states.get(ctx.team_id)
-	if goalie == null:
-		return Vector4.INF
-	return goalie.hands_read(ctx.defending_goal_pos.z)
-
-
 # Whoever carries the puck, either team, or Vector3.INF when it is loose / null.
 static func resolve_any_carrier_pos(ctx: RoleContext) -> Vector3:
 	if ctx.snapshot == null or ctx.snapshot.puck_state == null:
@@ -183,17 +165,31 @@ static func collect_opp_team_excluding_carrier(ctx: RoleContext,
 
 
 # Fills `out` with teammates' positions excluding self, and
-# ctx.scratch_teammate_caps index-matched.
+# ctx.scratch_teammate_caps / scratch_teammate_vels index-matched.
 static func collect_teammates_excluding_self(ctx: RoleContext,
 		out: Array[Vector3]) -> void:
 	out.clear()
 	ctx.scratch_teammate_caps.clear()
+	ctx.scratch_teammate_vels.clear()
 	for pid: int in ctx.snapshot.skater_states:
 		if pid == ctx.peer_id:
 			continue
 		if ctx.team_id_by_peer.get(pid, -1) == ctx.team_id:
 			out.append(ctx.snapshot.skater_states[pid].position)
 			ctx.scratch_teammate_caps.append(ctx.caps_by_peer.get(pid))
+			ctx.scratch_teammate_vels.append(ctx.snapshot.skater_states[pid].velocity)
+
+
+# The opposing attack's possession read (AIPossessionValue) against our skaters
+# other than this bot — the defence's scale for what a man threatens. Reads the
+# buffers collect_teammates_excluding_self filled into `teammates`, so call it
+# after that; a candidate body is priced by push_defender / pop_defender.
+static func defence_possession(ctx: RoleContext,
+		teammates: Array[Vector3]) -> AIPossessionValue:
+	var poss: AIPossessionValue = ctx.scratch_defence_possession
+	poss.fill(ctx.defending_goal_pos, teammates, ctx.scratch_teammate_vels,
+			ctx.scratch_teammate_caps)
+	return poss
 
 
 # Fills parallel arrays of opponent positions (led by lead_threat when
@@ -206,6 +202,7 @@ static func collect_opponents(ctx: RoleContext,
 	out_states.clear()
 	ctx.scratch_opp_caps.clear()
 	ctx.scratch_opp_ids.clear()
+	ctx.scratch_opp_vels.clear()
 	for pid: int in ctx.snapshot.skater_states:
 		if ctx.team_id_by_peer.get(pid, -1) != ctx.team_id:
 			var s: SkaterNetworkState = ctx.snapshot.skater_states[pid]
@@ -214,6 +211,18 @@ static func collect_opponents(ctx: RoleContext,
 			out_states.append(s)
 			ctx.scratch_opp_caps.append(ctx.caps_by_peer.get(pid))
 			ctx.scratch_opp_ids.append(pid)
+			ctx.scratch_opp_vels.append(s.velocity)
+
+
+# Our possession read (AIPossessionValue) against the opponents collect_opponents
+# filled into `opponents` — the attack's scale for what a spot is worth to us.
+# Call it after collect_opponents.
+static func attack_possession(ctx: RoleContext,
+		opponents: Array[Vector3]) -> AIPossessionValue:
+	var poss: AIPossessionValue = ctx.scratch_attack_possession
+	poss.fill(ctx.attacking_goal_pos, opponents, ctx.scratch_opp_vels,
+			ctx.scratch_opp_caps)
+	return poss
 
 
 static func xz_distance(a: Vector3, b: Vector3) -> float:

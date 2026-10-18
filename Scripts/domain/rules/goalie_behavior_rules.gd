@@ -38,16 +38,6 @@ class DefensiveZoneConfig:
 	var zone_post_z: float = 0.0
 	var rvh_early_angle: float = 0.0  # degrees
 
-class DepthConfig:
-	var zone_post_z: float = 0.0
-	var zone_aggressive_z: float = 0.0
-	var zone_base_z: float = 0.0
-	var zone_conservative_z: float = 0.0
-	var depth_aggressive: float = 0.0
-	var depth_base: float = 0.0
-	var depth_conservative: float = 0.0
-	var depth_defensive: float = 0.0
-
 class ThreatConfig:
 	var shooter_weight: float = 0.0   # 0 = pure puck, 1 = pure carrier body
 
@@ -129,49 +119,6 @@ static func is_puck_in_defensive_zone(
 	var puck_angle: float = atan2(abs(puck_position.x - goal_center_x), maxf(puck_z_dist, 0.01))
 	return puck_angle >= deg_to_rad(cfg.rvh_early_angle)
 
-# Buckley-chart target depth given horizontal distance from the goal line.
-# Piecewise-linear interpolation across four zones.
-#
-# ⚠️ NO LONGER THE LIVE GOALIE'S DEPTH MODEL. GoalieController solves depth from
-# the races instead (GoalieDepthSolver): a ceiling, a physical standoff, the
-# lateral tracking cap, the backdoor re-square race and the rush backflow. The
-# Buckley letters are emergent there rather than authored, because the real zones
-# are situational — A is a play ENTERING the zone, B a settled shot, C a live
-# lateral play, D the post — and reproducing them from distance alone put A in the
-# slot and B at the points, inverted (plan doc §5.7).
-#
-# Retained because `tests/unit/ai/shot_sim_harness.gd` still models the goalie
-# this way for its lateral-reach BAND instrument, which the bots' score_shoot is
-# calibrated against. That means the band instrument and the live goalie have
-# DIVERGED for the unconstrained (1v0) case; reconcile before using the band for
-# tuning again.
-static func target_depth_for_puck_distance(puck_z_dist: float, cfg: DepthConfig) -> float:
-	var t: float
-	if puck_z_dist <= cfg.zone_post_z:
-		t = puck_z_dist / cfg.zone_post_z
-		return lerpf(cfg.depth_defensive, cfg.depth_aggressive, t)
-	if puck_z_dist <= cfg.zone_aggressive_z:
-		return cfg.depth_aggressive
-	if puck_z_dist <= cfg.zone_base_z:
-		t = (puck_z_dist - cfg.zone_aggressive_z) / (cfg.zone_base_z - cfg.zone_aggressive_z)
-		return lerpf(cfg.depth_aggressive, cfg.depth_base, t)
-	if puck_z_dist <= cfg.zone_conservative_z:
-		t = (puck_z_dist - cfg.zone_base_z) / (cfg.zone_conservative_z - cfg.zone_base_z)
-		return lerpf(cfg.depth_base, cfg.depth_conservative, t)
-	# Beyond the conservative zone the chart FLOORS at conservative depth
-	# (realism audit F8): a puck far away in FRONT of the net leaves a real
-	# goalie resting at/near the paint watching the play — D (goal-line) depth
-	# is for behind-net / post-integrated play, which the defensive-zone / RVH
-	# paths own. The old taper walked the goalie back to his goal line during
-	# neutral-zone play, which no goalie does.
-	return cfg.depth_conservative
-
-# Lateral X target using angle bisector: find the line from the puck that
-# bisects the shooting angle between the two posts, then intersect it with
-# the goalie's depth plane. This maximises net coverage from the goalie's
-# position rather than simply projecting the puck's X onto the depth plane.
-# direction_sign: sign(-goal_line_z) — determines which side of the goal
-# the goalie stands on (same convention as GoalieController._direction_sign).
 static func target_lateral_x(
 		puck_position: Vector3,
 		goal_line_z: float,
@@ -270,7 +217,7 @@ class ArcConfig:
 	var seal_inset: float = 0.38
 	var seal_depth: float = 0.10
 	# Angle (deg off the perpendicular) at which post integration takes over.
-	var post_integration_angle_deg: float = 80.0
+	var post_integration_angle_deg: float = 77.0
 	# Filled by target_arc_position: 0 = on the pure challenge arc, 1 = fully at
 	# the seal spot. Callers use it to fade constraints that only make sense while
 	# he is genuinely out challenging (see GoalieController._front_of_line_z).

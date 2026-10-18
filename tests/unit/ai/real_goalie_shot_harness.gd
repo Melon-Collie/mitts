@@ -6,9 +6,8 @@ extends RefCounted
 # save loop — GoalieContactDetector.nearest + GoalieSaveRules.resolve_contact,
 # the exact pair Puck._physics_process runs on the host — with the goalie's real
 # reaction delay, butterfly drop, lateral push and pose anatomy (glove/pad
-# boxes) in the loop. Unlike shot_sim_harness (a lateral-reach BAND model that
-# score_shoot is calibrated against), nothing here is a re-derived cover proxy:
-# the puck is marched tick-by-tick and tested against the goalie's actual posed
+# boxes) in the loop. Nothing here is a re-derived cover proxy: the puck is
+# marched tick-by-tick and tested against the goalie's actual posed
 # collision boxes, and the goalie reacts to the real puck motion each tick.
 #
 # This is the reference the band instrument and score_shoot's HIGH/LOW cover are
@@ -27,8 +26,6 @@ const DT: float = 1.0 / 120.0
 const RADIUS: float = GameRules.PUCK_COLLISION_RADIUS
 const MAX_STEPS: int = 300          # ~2.5 s flight ceiling — a shot resolves long before
 
-# Outcome enum mirrors shot_sim_harness so callers can compare the two
-# instruments cell-for-cell.
 enum { GOAL, SAVE, POST, WIDE, NO_SHOT }
 
 var _goalie: Node = null
@@ -37,7 +34,7 @@ var _ctrl: GoalieController = null
 var _shooter: Skater = null
 var _goal_z: float = -GameRules.GOAL_LINE_Z
 
-# Diagnostics from the last fire() (for probing the instrument).
+# Diagnostics from the last shot (for probing the instrument).
 var last_part: int = -1              # SavePart of the contact that ended it, or -1
 var last_contact_pos: Vector3 = Vector3.INF   # where the save contact happened
 var last_cross: Vector3 = Vector3.INF         # net-plane crossing (x, y) if it got there
@@ -59,6 +56,11 @@ var last_trapped: bool = false
 # Reused per-march scratch (allocation-free like the production loop).
 var _scratch: SweptDiscOBB.Result = SweptDiscOBB.Result.new()
 var _contact: GoalieContactDetector.Contact = GoalieContactDetector.Contact.new()
+# Each collision part's world velocity over the last _tick_goalie, index-matched
+# to Goalie.get_collision_parts. The goalie's own estimate needs consecutive
+# physics frames, which no instrument advances, so it would read zero.
+var _part_origins := PackedVector3Array()
+var _part_vels := PackedVector3Array()
 var _frame: PuckGeometryCollision.Result = PuckGeometryCollision.Result.new()
 var _tick: PuckAuthorityRules.TickResult = PuckAuthorityRules.TickResult.new()
 
@@ -316,6 +318,10 @@ var last_settle_went_down: bool = false
 func settle_ready(shooter: Vector3, max_ticks: int = 400, tol: float = 0.0015) -> int:
 	last_settle_went_down = false
 	_begin_play()
+	# No instrument runs the puck's own tick, which is what consumes a release's
+	# queued launch: restage it, or the last shot's vector is still what
+	# get_release_velocity reports.
+	_puck.stage_at(shooter)
 	_ctrl.reset_to_crease()
 	_shooter.global_position = shooter
 	_shooter.velocity = Vector3.ZERO
@@ -346,6 +352,52 @@ func settle_ready(shooter: Vector3, max_ticks: int = 400, tol: float = 0.0015) -
 	return max_ticks
 
 
+# Settled on a carrier who skated in to `spot`: `settle_ready` at `from`, then
+# carried in a straight line to `spot` at `speed_m_s`, then held there until the
+# goalie stops moving. A carrier who appears in tight with the goalie still on
+# his crease is not a set keeper: he answers the arrival by committing a slide.
+# Returns the ticks the hold took; `last_settle_went_down` reports a keeper who
+# dropped on the way or in the hold.
+func approach_and_settle(spot: Vector3, from: Vector3, speed_m_s: float,
+		max_ticks: int = 400, tol: float = 0.0015) -> int:
+	settle_ready(from)
+	var went_down: bool = last_settle_went_down
+	var dist: float = from.distance_to(spot)
+	var vel: Vector3 = (spot - from).normalized() * speed_m_s if dist > 0.001 else Vector3.ZERO
+	var ticks: int = int(dist / maxf(speed_m_s, 0.1) / DT)
+	for i: int in ticks:
+		var pos: Vector3 = from.lerp(spot, float(i + 1) / float(maxi(ticks, 1)))
+		_shooter.global_position = pos
+		_shooter.velocity = vel
+		_puck.global_position = pos
+		_puck.linear_velocity = Vector3.ZERO
+		_ctrl._physics_process(DT)
+		went_down = went_down or not _ctrl._sm.is_upright()
+	_shooter.global_position = spot
+	_shooter.velocity = Vector3.ZERO
+	var prev_depth: float = -1.0
+	var prev_x: float = INF
+	var stable: int = 0
+	for i: int in max_ticks:
+		_puck.global_position = spot
+		_puck.linear_velocity = Vector3.ZERO
+		_ctrl._physics_process(DT)
+		went_down = went_down or not _ctrl._sm.is_upright()
+		var d: float = _ctrl._current_depth
+		var x: float = _ctrl._current_x
+		if absf(d - prev_depth) < tol and absf(x - prev_x) < tol:
+			stable += 1
+			if stable >= 10:
+				last_settle_went_down = went_down
+				return i + 1
+		else:
+			stable = 0
+		prev_depth = d
+		prev_x = x
+	last_settle_went_down = went_down
+	return max_ticks
+
+
 # Publish a wind-up for `ticks` WITHOUT resetting or settling — the caller owns
 # the starting pose (use `settle_ready`). This is the composable half of
 # `hold_windup`, which bundles a reset and is documented as a trap.
@@ -367,7 +419,7 @@ func publish_windup(shooter: Vector3, declared_aim: Vector3, loft_level: int,
 # Launch velocity for a shot from `shooter` toward the net-plane `aim`:
 # horizontal heading toward the aim (+ scatter), pace split by the level's SET
 # ANGLE (ShotMechanics.shot_loft_y, league-neutral M92 ladder — same model as
-# the live release and shot_sim_harness, so the instruments are comparable).
+# the live release).
 # Vector3.ZERO if the aim is degenerate.
 func shot_velocity(shooter: Vector3, aim: Vector3, loft_level: int, power_t: float,
 		err_rad: float) -> Vector3:
@@ -395,7 +447,8 @@ func shot_velocity_at(shooter: Vector3, aim: Vector3, loft_level: int,
 	return Vector3(hdir.x * v_h, speed_m_s * y_ratio * inv_norm, hdir.y * v_h)
 
 
-# fire() at an explicit speed. Mirrors fire()'s bookkeeping exactly.
+# A shot at `speed_m_s` with no wind-up: a one-timer. Released through the
+# puck's signal like Puck.release, so the goalie reads it as he does in a game.
 func fire_at(shooter: Vector3, aim: Vector3, loft_level: int, speed_m_s: float,
 		err_rad: float) -> int:
 	var vel: Vector3 = shot_velocity_at(shooter, aim, loft_level, speed_m_s, err_rad)
@@ -409,28 +462,16 @@ func fire_at(shooter: Vector3, aim: Vector3, loft_level: int, speed_m_s: float,
 	last_contact_pos = Vector3.INF
 	last_cross = Vector3.INF
 	last_goalie_pos = Vector3.INF
-	return _march(shooter, vel)
-
-
-func fire(shooter: Vector3, aim: Vector3, loft_level: int, power_t: float,
-		err_rad: float) -> int:
-	var vel: Vector3 = shot_velocity(shooter, aim, loft_level, power_t, err_rad)
-	if vel == Vector3.ZERO:
-		return WIDE
-	_shooter.global_position = shooter
-	# Release: the puck leaves the blade and flies as a shot.
-	_puck.clear_carrier()
-	last_part = -1
-	last_caught = false
-	last_trapped = false
-	last_contact_pos = Vector3.INF
-	last_cross = Vector3.INF
-	last_goalie_pos = Vector3.INF
+	var pos: Vector3 = shooter
+	pos.y = _puck.ice_height
+	_puck.global_position = pos
+	_puck.apply_release_velocity(vel)
+	_puck.puck_released.emit()
 	return _march(shooter, vel)
 
 
 # March a released puck against the live goalie until it resolves. Shared by the
-# plain `fire` path and the windup/release path below.
+# one-timer `fire_at` and the windup/release path below.
 func _march(shooter: Vector3, vel_in: Vector3) -> int:
 	var goal := Vector3(0.0, 0.0, _goal_z)
 	var vel: Vector3 = vel_in
@@ -454,8 +495,7 @@ func _march(shooter: Vector3, vel_in: Vector3) -> int:
 		# instrument counts FIRST goalie contact as the outcome: a deaden/catch is
 		# plainly a save, and a live kick (pad/blocker/stick) is the goalie
 		# stopping the initial shot — the second-chance rebound is a separate event
-		# out of this instrument's scope (mirrors shot_sim_harness's terminal-save
-		# scope). So any contact classifies SAVE.
+		# out of this instrument's scope. So any contact classifies SAVE.
 		if GoalieContactDetector.nearest([_goalie], prev, pos, RADIUS, _scratch, _contact):
 			last_shot_speed = vel.length()
 			var g3: Node3D = _contact.goalie as Node3D
@@ -481,22 +521,6 @@ func _march(shooter: Vector3, vel_in: Vector3) -> int:
 	return WIDE
 
 
-# Run `samples` scatter draws of one aim/loft/power triple from a settled goalie,
-# re-settling between shots so each sample fires at the set pose. Returns a counts
-# dict keyed by the outcome enum plus "shots".
-func run_spot(shooter: Vector3, aim: Vector3, loft_level: int, power_t: float,
-		spread: float, samples: int, resettle_ticks: int,
-		rng: RandomNumberGenerator) -> Dictionary:
-	var counts := {GOAL: 0, SAVE: 0, POST: 0, WIDE: 0, "shots": 0}
-	for _i: int in samples:
-		settle(shooter, resettle_ticks)
-		var err: float = rng.randf_range(-spread, spread)
-		var outcome: int = fire(shooter, aim, loft_level, power_t, err)
-		counts[outcome] += 1
-		counts["shots"] += 1
-	return counts
-
-
 # Classify a save surface by node name, mirroring Puck._classify_save_part.
 func _classify_part(part_body: Node3D) -> int:
 	if part_body == null:
@@ -515,7 +539,7 @@ func _classify_part(part_body: Node3D) -> int:
 	return GoalieSaveRules.SavePart.PAD
 
 
-# On/off-net verdict at the goal-line crossing (mirror of shot_sim_harness).
+# On/off-net verdict at the goal-line crossing.
 func _net_verdict(cross_x: float, cross_y: float) -> int:
 	var hw: float = GameRules.NET_HALF_WIDTH
 	var bar: float = GameRules.NET_HEIGHT
@@ -624,7 +648,7 @@ func fire_tracking_rebound(shooter: Vector3, aim: Vector3, loft_level: int,
 		var prev: Vector3 = pos
 		_puck.global_position = pos
 		_puck.linear_velocity = vel
-		_ctrl._physics_process(DT)
+		_tick_goalie()
 		# READ THE GOALIE BACK before integrating. He plays the puck through the
 		# same API the host drive honours — apply_goalie_sweep writes
 		# linear_velocity, cover and the glove hold set motion_pinned — so an
@@ -657,7 +681,7 @@ func fire_tracking_rebound(shooter: Vector3, aim: Vector3, loft_level: int,
 			# gated on the face he is presenting.
 			var fwd: Vector3 = -g3.global_transform.basis.z if g3 != null else Vector3.ZERO
 			GoalieSaveRules.resolve_contact(
-					vel, part, _contact.normal, _save_res, fwd)
+					vel, part, _contact.normal, _save_res, fwd, _struck_part_velocity())
 			if contact_parts.size() == 1:
 				last_trapped = _save_res.trapped
 			vel = _save_res.velocity
@@ -900,3 +924,34 @@ func _goalie_can_still_play(puck_pos: Vector3, puck_vel: Vector3) -> bool:
 	if puck_vel.length() > _ctrl.clear_max_puck_speed:
 		return false
 	return _goalie.global_position.distance_to(puck_pos) <= _ctrl.clear_reach
+
+
+# One controller tick, measuring how far each collision part moved through it:
+# a pad moving into the puck hits it as Puck._physics_process sees it.
+func _tick_goalie() -> void:
+	var parts: Array[CollisionShape3D] = (_goalie as Goalie).get_collision_parts()
+	_part_origins.resize(parts.size())
+	for i: int in parts.size():
+		_part_origins[i] = parts[i].global_transform.origin
+	_ctrl._physics_process(DT)
+	_part_vels.resize(parts.size())
+	for i: int in parts.size():
+		_part_vels[i] = (parts[i].global_transform.origin - _part_origins[i]) / DT
+
+
+# The velocity of the part _contact struck: its body's collision shape nearest
+# the contact point.
+func _struck_part_velocity() -> Vector3:
+	var g: Goalie = _goalie as Goalie
+	var parts: Array[CollisionShape3D] = g.get_collision_parts()
+	var bodies: Array[Node] = g.get_collision_part_bodies()
+	var best: int = -1
+	var best_d2: float = INF
+	for i: int in mini(parts.size(), _part_vels.size()):
+		if bodies[i] != _contact.part:
+			continue
+		var d2: float = parts[i].global_transform.origin.distance_squared_to(_contact.point)
+		if d2 < best_d2:
+			best_d2 = d2
+			best = i
+	return _part_vels[best] if best >= 0 else Vector3.ZERO
