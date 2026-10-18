@@ -8,7 +8,7 @@ extends RefCounted
 # face costs no surface of its own.
 #
 # The face gear rides 0.157 m (cage) to 0.158 m (shields) from the helmet centre,
-# which is _HEAD_FORWARD_M behind this origin, so nothing here may stand more than
+# which is HEAD_FORWARD_M behind this origin, so nothing here may stand more than
 # about a centimetre proud of the facets — test_skater_face_mesh.gd holds it.
 
 const EYE_TINT := Color(0.12, 0.10, 0.10)

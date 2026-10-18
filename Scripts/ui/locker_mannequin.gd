@@ -4,8 +4,8 @@ extends Node3D
 # The locker's display figure: a full kit-dressed skater assembled from the
 # rink's own shared part meshes, standing on the case floor with the picked
 # stick in both hands. Every piece the locker edits is worn HERE — skates on
-# the feet, gloves gripping the shaft, face gear in the helmet — so a pick is
-# judged in the place it will actually be seen.
+# the feet, gloves gripping the shaft, face gear and hair on the head — so a
+# pick is judged in the place it will actually be seen.
 #
 # Built from the individual part meshes rather than the skinned rig. That costs
 # nothing in fidelity: `shared_torso()` and the skinned mesh's torso surface are
@@ -34,13 +34,14 @@ extends Node3D
 # rows: it is nearly as long as the player is tall, so a framing that contains
 # all of it is barely a zoom at all. LENGTH and FLEX want the whole stick, CURVE
 # and the blade tape want the blade, the knob and the wrap want the butt end.
-enum Focus { FULL, STICK, BLADE, GRIP, SKATES, GLOVES, HELMET }
+enum Focus { FULL, STICK, BLADE, GRIP, SKATES, GLOVES, HELMET, HAIR }
 
 # ── Rig rest pose (Scenes/Skater.tscn, MeshRoot-local) ───────────────────────
 # Leg offsets are relative to the LEG pivot so the chain reads as the scene's
 # parenting does (Leg → Shin → Sock/Skate/Foot) without the intermediate nodes.
 const _TORSO_Y: float = 0.195
 const _HELMET_Y: float = 0.65
+const _HAIR_DROP_M: float = -0.06
 const _SHOULDER_X: float = 0.22
 const _SHOULDER_Y: float = 0.40
 const _LEG_X: float = 0.13
@@ -116,9 +117,10 @@ const _KNOB_HEIGHT_M: float = 0.05
 # The yaw the figure turns to present the piece (mirrored by shooting side, so
 # the gear you are looking at faces the glass) and the camera's elevation:
 # above for the head, well below for boots on the floor, and down onto the
-# blade, which lies on the ice.
-const _FOCUS_YAW_DEG: Array[float] = [22.0, 40.0, 52.0, 30.0, 26.0, 34.0, 18.0]
-const _FOCUS_PITCH_DEG: Array[float] = [-3.0, 4.0, 26.0, -2.0, 24.0, 5.0, -8.0]
+# blade, which lies on the ice. The hair is turned well past the side, because
+# the helmet leaves only the nape, the sideburns and the flow to see.
+const _FOCUS_YAW_DEG: Array[float] = [22.0, 40.0, 52.0, 30.0, 26.0, 34.0, 18.0, 130.0]
+const _FOCUS_PITCH_DEG: Array[float] = [-3.0, 4.0, 26.0, -2.0, 24.0, 5.0, -8.0, -4.0]
 # Half-extent of each subject (width, height) in metres — the caller turns
 # these into a distance with its own lens, so "how big is the thing" lives here
 # and "how wide does the case see" lives there. The four fixed-size subjects
@@ -135,6 +137,7 @@ const _FOCUS_EXTENT: Array[Vector2] = [
 	Vector2(0.24, 0.16),
 	Vector2(0.16, 0.22),   # GLOVES — measured
 	Vector2(0.19, 0.19),   # HELMET
+	Vector2(0.20, 0.26),   # HAIR
 ]
 
 # Surface finishes, matching the rink's (SkaterUniformCoordinator).
@@ -147,6 +150,8 @@ var _rig: Node3D = null
 var _torso: MeshInstance3D = null
 var _helmet: MeshInstance3D = null
 var _face: MeshInstance3D = null
+var _scalp: MeshInstance3D = null
+var _facial_hair: MeshInstance3D = null
 var _shoulders: Array[MeshInstance3D] = []
 var _pelvis: MeshInstance3D = null
 var _thighs: Array[MeshInstance3D] = []
@@ -172,7 +177,7 @@ var _knob: MeshInstance3D = null
 # Focus anchors, in THIS node's space — recomputed by every apply() because the
 # pieces move with the build's height and the picked stick length.
 var _anchors: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO, Vector3.ZERO,
-	Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO]
+	Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO]
 # Seeded from _FOCUS_EXTENT; the measured framings overwrite their own entry.
 var _extents: Array[Vector2] = _FOCUS_EXTENT.duplicate()
 # The posed shaft line, in rig space. Written by the stick pass and read by the
@@ -203,10 +208,15 @@ func _build() -> void:
 	# Helmet assembly carries the shell and the head/neck skin as two surfaces,
 	# so the head rides the helmet's scale exactly as it rides its bone.
 	_helmet = _part(SkaterMeshBuilder.shared_helmet_assembly())
-	# The face piece rides the HELMET, so it is a child at identity rather than
-	# a sibling sharing its transform — that is what riding the bone means.
+	# The face piece and the hair ride the HELMET, so they are children at
+	# identity rather than siblings sharing its transform — that is what riding
+	# the bone means.
 	_face = MeshInstance3D.new()
 	_helmet.add_child(_face)
+	_scalp = MeshInstance3D.new()
+	_helmet.add_child(_scalp)
+	_facial_hair = MeshInstance3D.new()
+	_helmet.add_child(_facial_hair)
 
 	for i: int in 2:
 		_shoulders.append(_part(SkaterMeshBuilder.shared_shoulder_cap()))
@@ -379,6 +389,8 @@ func _pose(attrs: PlayerAttributes, tape: StickTapeConfig,
 	# same way); the two body framings join them here.
 	_anchors[Focus.SKATES] = Vector3(0.0, boot_y, _BOOT_DZ)
 	_anchors[Focus.HELMET] = _helmet.position
+	# Centred under the helmet's, between the rim and the collar the flow reaches.
+	_anchors[Focus.HAIR] = _helmet.position + Vector3(0.0, _HAIR_DROP_M * m_head, 0.0)
 	# The wide shot holds the whole standing figure, so it grows with the build.
 	# Crown comes off the posed helmet's own bounds rather than a copy of the
 	# builder's radius, which would drift the first time the shell changed. The
@@ -390,6 +402,7 @@ func _pose(attrs: PlayerAttributes, tape: StickTapeConfig,
 			maxf(_FOCUS_EXTENT[Focus.FULL].x, _extents[Focus.STICK].x),
 			(crown - _ICE_Y) * 0.5 + 0.06)
 	_extents[Focus.HELMET] = _FOCUS_EXTENT[Focus.HELMET] * m_head
+	_extents[Focus.HAIR] = _FOCUS_EXTENT[Focus.HAIR] * m_head
 
 	# Seat the whole rig so the runner's contact lands on this node's origin.
 	# The boot is the one unscaled part, so its contact does not follow the
@@ -678,6 +691,11 @@ func _paint_gear(gear: GearStyleConfig, colors: Dictionary) -> void:
 	# material, and a null mesh for bare.
 	_face.mesh = SkaterMeshBuilder.shared_face_gear(gear.helmet_face)
 	_face.material_override = SkaterMeshBuilder.make_face_gear_material(gear.helmet_face)
+	_scalp.mesh = SkaterHairMesh.shared_hair(gear.hair_style)
+	_scalp.material_override = SkaterHairMesh.make_material(gear.hair_color, false)
+	_facial_hair.mesh = SkaterHairMesh.shared_facial_hair(gear.facial_hair)
+	_facial_hair.material_override = SkaterHairMesh.make_material(gear.hair_color,
+			SkaterHairMesh.is_translucent(gear.facial_hair))
 
 
 func _paint_stick(gear: GearStyleConfig, tape: StickTapeConfig,

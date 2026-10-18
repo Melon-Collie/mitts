@@ -3,8 +3,8 @@ extends Control
 
 # The player screen — who you are, one column: name, number, handedness,
 # preferred position, skin tone, height, weight, the LockerPopup launcher (every
-# equipment pick — stick, skates, gloves, helmet — around a mannequin wearing
-# all of them), and the team pick last.
+# equipment pick — stick, skates, gloves, helmet — and the hair, around a
+# mannequin wearing all of them), and the team pick last.
 #
 # One build per player, no presets — edits land directly on PlayerPrefs' flat
 # fields. Opened from the main menu only (the lobby has no build editor).
@@ -16,7 +16,7 @@ extends Control
 #
 # During an active online match the BUILD half (height, weight, profile, stick
 # gear) is locked — attributes replicate at join time — while cosmetics (skin,
-# tape, skate/glove color) stay live.
+# tape, gear models, hair) stay live.
 
 signal name_changed(new_name: String)
 signal jersey_number_changed(new_number: int)
@@ -73,11 +73,8 @@ var _pending_curve: int = PlayerAttributes.GEAR_BALANCED
 var _pending_flex: int = PlayerAttributes.GEAR_BALANCED
 var _pending_length: int = PlayerAttributes.GEAR_BALANCED
 var _pending_tape: int = StickTapeConfig.DEFAULT_CODE
-var _pending_skate_model: int = 0
-var _pending_glove_model: int = 0
-var _pending_lace_color: int = GearStyleConfig.LACE_DEFAULT_INDEX
-var _pending_stick_model: int = 0
-var _pending_helmet_face: int = GearModelRegistry.FACE_NONE
+# Packed GearStyleConfig code — the locker edits every field of it.
+var _pending_gear: int = GearStyleConfig.DEFAULT_CODE
 var _name_valid: bool = true
 var _number_valid: bool = true
 # Online matches lock the build (attributes replicate at join); cosmetics stay
@@ -248,7 +245,7 @@ func _open_locker() -> void:
 	# pick, so the locker previews the design on the team you are about to play
 	# for.
 	_locker_popup.set_focus_scope(self, _locker_edit_btn)
-	_locker_popup.open(_pending_attributes(), _pending_tape, _pending_gear_code(),
+	_locker_popup.open(_pending_attributes(), _pending_tape, _pending_gear,
 			_build_locked, _pending_team_colors(), _pending_skin, _pending_is_left)
 
 
@@ -260,12 +257,7 @@ func _on_locker_edited(profile: int, curve: int, flex: int, length: int,
 		_pending_flex = flex
 		_pending_length = length
 	_pending_tape = tape_code
-	var gear := GearStyleConfig.from_code(gear_code)
-	_pending_skate_model = gear.skate_model
-	_pending_glove_model = gear.glove_model
-	_pending_lace_color = gear.lace_color
-	_pending_stick_model = gear.stick_model
-	_pending_helmet_face = gear.helmet_face
+	_pending_gear = GearStyleConfig.from_code(gear_code).to_code()
 	_update_apply_state()
 
 
@@ -654,22 +646,17 @@ func _pending_team_colors() -> Dictionary:
 	return TeamColorRegistry.get_colors(maxi(_pending_color_slot, 0), 0)
 
 
-func _pending_gear_code() -> int:
-	return GearStyleConfig.new(_pending_skate_model, _pending_glove_model,
-			_pending_lace_color, _pending_stick_model, _pending_helmet_face).to_code()
-
-
 # Whether the equipment the player would get on Apply differs from what the
 # rink is showing — pending locker edits are otherwise invisible behind the
 # button. Everything the locker owns counts: the stick gear and blade profile,
-# the tape, and all five fields of the gear code.
+# the tape, and every field of the gear code.
 func _is_locker_dirty() -> bool:
 	return _pending_profile != int(_snapshot.get("profile", 0)) \
 			or _pending_curve != int(_snapshot.get("curve", 0)) \
 			or _pending_flex != int(_snapshot.get("flex", 0)) \
 			or _pending_length != int(_snapshot.get("length", 0)) \
 			or _pending_tape != int(_snapshot.get("tape", StickTapeConfig.DEFAULT_CODE)) \
-			or _pending_gear_code() != int(_snapshot.get("gear", GearStyleConfig.DEFAULT_CODE))
+			or _pending_gear != int(_snapshot.get("gear", GearStyleConfig.DEFAULT_CODE))
 
 
 func _is_build_dirty() -> bool:
@@ -692,7 +679,7 @@ func _update_apply_state() -> void:
 		or _pending_color_slot != _snapshot.get("color_slot", -1)
 		or _pending_skin != int(_snapshot.get("skin", SkinToneRegistry.DEFAULT_INDEX))
 		or _pending_tape != int(_snapshot.get("tape", StickTapeConfig.DEFAULT_CODE))
-		or _pending_gear_code() != int(_snapshot.get("gear", GearStyleConfig.DEFAULT_CODE))
+		or _pending_gear != int(_snapshot.get("gear", GearStyleConfig.DEFAULT_CODE))
 		or _is_build_dirty())
 	_apply_btn.disabled = not changed or not _name_valid or not _number_valid
 	# The note fades via modulate, not `visible` — it reserves its line so the
@@ -750,11 +737,10 @@ func _apply() -> void:
 	if _pending_tape != int(_snapshot.get("tape", StickTapeConfig.DEFAULT_CODE)):
 		PlayerPrefs.stick_tape_code = _pending_tape
 		NetworkManager.apply_local_tape(_pending_tape)
-	var gear_code: int = _pending_gear_code()
-	if gear_code != int(_snapshot.get("gear", GearStyleConfig.DEFAULT_CODE)):
-		PlayerPrefs.gear_style_code = gear_code
+	if _pending_gear != int(_snapshot.get("gear", GearStyleConfig.DEFAULT_CODE)):
+		PlayerPrefs.gear_style_code = _pending_gear
 		# Same live-cosmetic path as tape and skin.
-		NetworkManager.apply_local_gear_style(gear_code)
+		NetworkManager.apply_local_gear_style(_pending_gear)
 	PlayerPrefs.save()
 	visible = false
 
@@ -780,13 +766,7 @@ func _restore_from_snapshot() -> void:
 	_pending_flex = int(_snapshot.get("flex", PlayerAttributes.GEAR_BALANCED))
 	_pending_length = int(_snapshot.get("length", PlayerAttributes.GEAR_BALANCED))
 	_pending_tape = int(_snapshot.get("tape", StickTapeConfig.DEFAULT_CODE))
-	var gear := GearStyleConfig.from_code(
-			int(_snapshot.get("gear", GearStyleConfig.DEFAULT_CODE)))
-	_pending_skate_model = gear.skate_model
-	_pending_glove_model = gear.glove_model
-	_pending_lace_color = gear.lace_color
-	_pending_stick_model = gear.stick_model
-	_pending_helmet_face = gear.helmet_face
+	_pending_gear = int(_snapshot.get("gear", GearStyleConfig.DEFAULT_CODE))
 	_name_field.text = _pending_name
 	_number_field.text = str(_pending_number)
 	_left_btn.button_pressed = _pending_is_left

@@ -47,10 +47,14 @@ func test_roster_entry_carries_the_players_cosmetics() -> void:
 
 
 # Everything in the entry has to survive JSON — the header is stringified whole
-# and the join event is written as a JSON payload.
+# and the join event is written as a JSON payload. The hair fields put the gear
+# code past 32 bits, and JSON numbers come back as floats.
 func test_entry_survives_json_round_trip() -> void:
 	var gear: int = GearStyleConfig.new(GearModelRegistry.SKATE_BLACKOUT,
-			GearModelRegistry.GLOVE_PRO, 3, 0, GearModelRegistry.FACE_VISOR).to_code()
+			GearModelRegistry.GLOVE_PRO, 3, 0, GearModelRegistry.FACE_VISOR,
+			HairStyleRegistry.HAIR_BALD, HairStyleRegistry.FACIAL_BEARD,
+			HairStyleRegistry.color_count() - 1).to_code()
+	assert_gt(gear, 0xFFFFFFFF, "the code under test is wider than 32 bits")
 	var entry: Dictionary = GAME_MANAGER.replay_roster_entry(
 			_record_with_look(StickTapeConfig.DEFAULT_CODE, gear, 5))
 	var decoded: Variant = JSON.parse_string(JSON.stringify(entry))

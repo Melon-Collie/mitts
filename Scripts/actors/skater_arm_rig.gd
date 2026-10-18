@@ -47,8 +47,8 @@ var _pos: PackedVector3Array = PackedVector3Array()
 var _base_scale: PackedVector3Array = PackedVector3Array()
 var _base_pos: PackedVector3Array = PackedVector3Array()
 var _helmet_base_euler: Vector3 = Vector3.ZERO
-var _face_gear_attach: BoneAttachment3D = null
-var _face_gear_mesh: MeshInstance3D = null
+var _head_attach: BoneAttachment3D = null
+var _head_pieces: Array[MeshInstance3D] = []
 
 # The gait's trunk texture (stride sway, weight shift, stance and check leans,
 # the stagger wobble), applied to the shell bones on top of the spine. The
@@ -163,7 +163,7 @@ func build(skeleton: Skeleton3D) -> void:
 
 	# The gear style may have landed before the rig (spawn order is
 	# registry-driven); now that the helmet bone exists, dress it.
-	apply_face_gear()
+	apply_head_pieces()
 
 
 # ── Arm pose ─────────────────────────────────────────────────────────────────
@@ -538,36 +538,38 @@ func repose_bone(bone: int) -> void:
 	_skeleton.set_bone_pose(bone, pose)
 
 
-# ── Face gear ────────────────────────────────────────────────────────────────
+# ── Head pieces ──────────────────────────────────────────────────────────────
+# The face gear and the hair: per-player meshes riding the HELMET bone, so they
+# take its head turn and its head-bulk scale. Kept off the skinned mesh because
+# the helmet assembly is shared by every skater; a null mesh is a bare head.
 
-func apply_face_gear() -> void:
+enum HeadPiece { FACE_GEAR, SCALP, FACIAL_HAIR }
+
+
+func apply_head_pieces() -> void:
 	if _skeleton == null:
 		return
-	var mesh: ArrayMesh = SkaterMeshBuilder.shared_face_gear(
-			_skater.gear_style.helmet_face)
-	if mesh == null:
-		if _face_gear_attach != null:
-			_skeleton.remove_child(_face_gear_attach)
-			_face_gear_attach.queue_free()
-			_face_gear_attach = null
-			_face_gear_mesh = null
-		return
-	if _face_gear_attach == null:
-		_face_gear_attach = BoneAttachment3D.new()
-		_face_gear_attach.name = "FaceGear"
-		_skeleton.add_child(_face_gear_attach)
+	if _head_attach == null:
+		_head_attach = BoneAttachment3D.new()
+		_head_attach.name = "HeadPieces"
+		_skeleton.add_child(_head_attach)
 		# bone_idx after add_child — the setter binds against the parent skeleton.
-		_face_gear_attach.bone_idx = SkaterMeshBuilder.UpperBone.HELMET
-		_face_gear_mesh = MeshInstance3D.new()
-		_face_gear_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		_face_gear_attach.add_child(_face_gear_mesh)
-	_face_gear_mesh.mesh = mesh
+		_head_attach.bone_idx = SkaterMeshBuilder.UpperBone.HELMET
+		for i: int in HeadPiece.size():
+			var piece := MeshInstance3D.new()
+			piece.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			_head_attach.add_child(piece)
+			_head_pieces.append(piece)
+	var gear: GearStyleConfig = _skater.gear_style
+	_head_pieces[HeadPiece.FACE_GEAR].mesh = SkaterMeshBuilder.shared_face_gear(gear.helmet_face)
+	_head_pieces[HeadPiece.SCALP].mesh = SkaterHairMesh.shared_hair(gear.hair_style)
+	_head_pieces[HeadPiece.FACIAL_HAIR].mesh = SkaterHairMesh.shared_facial_hair(gear.facial_hair)
 
 
-# The face piece's render node, for the uniform coordinator's paint and ghost
-# fade. Null while the pick is bare.
-func face_gear_mesh() -> MeshInstance3D:
-	return _face_gear_mesh
+# One head piece's render node, for the uniform coordinator's paint and ghost
+# fade. Null before the rig is built; its mesh is null while the piece is bare.
+func head_piece(piece: HeadPiece) -> MeshInstance3D:
+	return _head_pieces[piece] if piece < _head_pieces.size() else null
 
 
 # ── Sizing seams ─────────────────────────────────────────────────────────────

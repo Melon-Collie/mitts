@@ -4,8 +4,8 @@ extends GutTest
 # it proves the pickers are wired to the catalogues and that a pick reaches the
 # figure. What is pinned here: every dropdown lists its whole catalogue with the
 # player's current picks selected, a pick repaints the piece that wears it, Done
-# hands back a gear code carrying all five fields, and the camera follows the
-# group a row belongs to.
+# hands back a gear code carrying every field, and the camera follows the group
+# a row belongs to.
 
 # A synthetic kit shaped like TeamColorRegistry.get_colors' output, with every
 # slot distinguishable so a zone landing on the wrong one is visible.
@@ -181,6 +181,38 @@ func test_face_gear_dresses_the_helmet() -> void:
 	assert_eq(piece.mesh, SkaterMeshBuilder.shared_face_gear(GearModelRegistry.FACE_CAGE))
 	_btn("_face_btn").item_selected.emit(GearModelRegistry.FACE_NONE)
 	assert_null(piece.mesh, "bare leaves the helmet open")
+
+
+func test_the_hair_rows_list_their_catalogues() -> void:
+	_open(GearStyleConfig.new(0, 0, GearStyleConfig.LACE_DEFAULT_INDEX, 0,
+			GearModelRegistry.FACE_NONE, HairStyleRegistry.HAIR_FLOW,
+			HairStyleRegistry.FACIAL_GOATEE, 4))
+	assert_eq(_btn("_hair_btn").item_count, HairStyleRegistry.hair_count())
+	assert_eq(_btn("_facial_btn").item_count, HairStyleRegistry.facial_count())
+	assert_eq(_btn("_hair_btn").selected, HairStyleRegistry.HAIR_FLOW)
+	assert_eq(_btn("_facial_btn").selected, HairStyleRegistry.FACIAL_GOATEE)
+	var dd: SwatchDropdown = _popup.get("_hair_color_dd") as SwatchDropdown
+	assert_eq(dd.get("_selected_index"), 4, "the colour swatch shows the pick")
+	assert_eq((dd.get("_colors") as Array).size(), HairStyleRegistry.color_count())
+
+
+func test_hair_dresses_the_head() -> void:
+	_open()
+	var scalp: MeshInstance3D = _mannequin().get("_scalp") as MeshInstance3D
+	var facial: MeshInstance3D = _mannequin().get("_facial_hair") as MeshInstance3D
+	assert_eq(scalp.mesh, SkaterHairMesh.shared_hair(HairStyleRegistry.HAIR_SHORT),
+			"the stock look wears the short cut")
+	assert_null(facial.mesh, "and no beard")
+	_btn("_hair_btn").item_selected.emit(HairStyleRegistry.HAIR_BALD)
+	assert_null(scalp.mesh, "bald grows nothing")
+	_btn("_facial_btn").item_selected.emit(HairStyleRegistry.FACIAL_BEARD)
+	assert_eq(facial.mesh, SkaterHairMesh.shared_facial_hair(HairStyleRegistry.FACIAL_BEARD))
+	(_popup.get("_hair_color_dd") as SwatchDropdown).selected.emit(6)
+	assert_eq((facial.material_override as StandardMaterial3D).albedo_color,
+			HairStyleRegistry.color_for(6), "the beard takes the picked colour")
+	_btn("_facial_btn").item_selected.emit(HairStyleRegistry.FACIAL_STUBBLE)
+	assert_lt((facial.material_override as StandardMaterial3D).albedo_color.a, 1.0,
+			"stubble previews translucent")
 
 
 # The stick is the piece the old gear workbench never showed. Pin that a curve
@@ -369,6 +401,10 @@ func test_a_row_aims_the_case_at_its_own_group() -> void:
 	assert_eq(_popup.get("_focus"), LockerMannequin.Focus.GLOVES)
 	_btn("_face_btn").focus_entered.emit()
 	assert_eq(_popup.get("_focus"), LockerMannequin.Focus.HELMET)
+	_btn("_hair_btn").focus_entered.emit()
+	assert_eq(_popup.get("_focus"), LockerMannequin.Focus.HAIR, "the hair turns the head away")
+	_btn("_facial_btn").focus_entered.emit()
+	assert_eq(_popup.get("_focus"), LockerMannequin.Focus.HELMET, "a beard is on the face")
 	_btn("_length_btn").focus_entered.emit()
 	assert_eq(_popup.get("_focus"), LockerMannequin.Focus.STICK)
 
@@ -490,6 +526,7 @@ func test_the_swatch_rows_reframe_the_case_too() -> void:
 		"_blade_color_dd": LockerMannequin.Focus.BLADE,
 		"_knob_color_dd": LockerMannequin.Focus.GRIP,
 		"_lace_dd": LockerMannequin.Focus.SKATES,
+		"_hair_color_dd": LockerMannequin.Focus.HAIR,
 	}
 	for name: String in rows:
 		var dd: SwatchDropdown = _popup.get(name) as SwatchDropdown
@@ -509,10 +546,10 @@ func test_every_row_control_is_pad_reachable() -> void:
 	_open()
 	for name: String in ["_length_btn", "_curve_btn", "_flex_btn",
 			"_stick_model_btn", "_span_btn", "_style_btn", "_profile_btn",
-			"_skate_btn", "_glove_btn", "_face_btn"]:
+			"_skate_btn", "_glove_btn", "_face_btn", "_hair_btn", "_facial_btn"]:
 		assert_ne(_btn(name).focus_mode, Control.FOCUS_NONE,
 				"%s can be focused" % name)
-	for name: String in ["_blade_color_dd", "_knob_color_dd", "_lace_dd"]:
+	for name: String in ["_blade_color_dd", "_knob_color_dd", "_lace_dd", "_hair_color_dd"]:
 		var dd: SwatchDropdown = _popup.get(name) as SwatchDropdown
 		assert_ne(dd.focus_target().focus_mode, Control.FOCUS_NONE,
 				"%s can be focused" % name)
@@ -569,7 +606,7 @@ func test_each_framing_looks_somewhere_different() -> void:
 	for focus: int in [LockerMannequin.Focus.FULL, LockerMannequin.Focus.STICK,
 			LockerMannequin.Focus.BLADE, LockerMannequin.Focus.GRIP,
 			LockerMannequin.Focus.SKATES, LockerMannequin.Focus.GLOVES,
-			LockerMannequin.Focus.HELMET]:
+			LockerMannequin.Focus.HELMET, LockerMannequin.Focus.HAIR]:
 		var anchor: Vector3 = _mannequin().focus_anchor(focus)
 		for other: Vector3 in seen:
 			assert_gt(anchor.distance_to(other), 0.05,
@@ -585,6 +622,9 @@ func test_done_hands_back_every_pick() -> void:
 	_btn("_stick_model_btn").item_selected.emit(StickModelRegistry.count() - 1)
 	_btn("_curve_btn").item_selected.emit(2)
 	_btn("_profile_btn").item_selected.emit(2)   # Power grind
+	_btn("_hair_btn").item_selected.emit(HairStyleRegistry.HAIR_MEDIUM)
+	_btn("_facial_btn").item_selected.emit(HairStyleRegistry.FACIAL_MUSTACHE)
+	(_popup.get("_hair_color_dd") as SwatchDropdown).selected.emit(5)
 	watch_signals(_popup)
 	_popup.call("_done")
 	assert_signal_emitted(_popup, "locker_edited")
@@ -596,6 +636,9 @@ func test_done_hands_back_every_pick() -> void:
 	assert_eq(gear.glove_model, GearModelRegistry.GLOVE_VINTAGE)
 	assert_eq(gear.helmet_face, GearModelRegistry.FACE_CAGE)
 	assert_eq(gear.stick_model, StickModelRegistry.count() - 1)
+	assert_eq(gear.hair_style, HairStyleRegistry.HAIR_MEDIUM)
+	assert_eq(gear.facial_hair, HairStyleRegistry.FACIAL_MUSTACHE)
+	assert_eq(gear.hair_color, 5)
 
 
 # The lock is the online-match attribute freeze: gameplay rows go dead, every
@@ -610,7 +653,7 @@ func test_the_lock_freezes_gameplay_rows_only() -> void:
 	for name: String in ["_length_btn", "_curve_btn", "_flex_btn", "_profile_btn"]:
 		assert_true(_btn(name).disabled, "%s locks" % name)
 	for name: String in ["_skate_btn", "_glove_btn", "_face_btn", "_stick_model_btn",
-			"_span_btn", "_style_btn"]:
+			"_span_btn", "_style_btn", "_hair_btn", "_facial_btn"]:
 		assert_false(_btn(name).disabled, "%s stays live" % name)
 	# A locked row that still moved its pick would commit a frozen attribute.
 	_btn("_curve_btn").item_selected.emit(2)

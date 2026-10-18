@@ -2,26 +2,32 @@ class_name GearStyleConfig
 extends RefCounted
 
 # A player's gear cosmetics: a skate MODEL, a glove MODEL, a lace color, a
-# stick MODEL, and a helmet FACE option. The skate/glove picks are indices
-# into GearModelRegistry — whole designs that paint every zone of the piece
-# (boot / collar / accent band; glove body / cuff) out of black, white and
-# the team's own colors, rather than a single accent color the player tints.
+# stick MODEL, a helmet FACE option, and what shows under the helmet — a hair
+# style, a facial-hair style and their shared colour (HairStyleRegistry). The
+# skate/glove picks are indices into GearModelRegistry — whole designs that
+# paint every zone of the piece (boot / collar / accent band; glove body /
+# cuff) out of black, white and the team's own colors, rather than a single
+# accent color the player tints.
 # The stick pick is an index into StickModelRegistry — a fixed shaft/blade
 # colorway, because real sticks ship in their maker's colors whoever you play
 # for. The lace pick stays an index into the shared TapeColorRegistry palette,
 # because laces are chosen apart from the skate. The face pick is a
 # GearModelRegistry FACE_* option (bare / visor / cage / fishbowl) — a fixed
-# look, like the stick. Cosmetic only — nothing gameplay reads it.
-# Skates/gloves/laces/face and the stick model are all picked in the locker;
-# all painted by SkaterUniformCoordinator.
+# look, like the stick. The hair rides the same code rather than one of its own
+# because it goes everywhere the face gear goes — join, spawn, replay header,
+# the bot card — and is picked in the same place. Cosmetic only — nothing
+# gameplay reads it. Every field is picked in the locker; all painted by
+# SkaterUniformCoordinator.
 #
 # Travels the wire as one packed int (to_code/from_code) appended to the join
 # and spawn payloads, like the tape code. from_code clamps every field, so a
 # forged code lands on a legal look instead of being rejected.
 #
 # Defaults — skate model 0 (all-black boot), glove model 0 (kit-colored body
-# and cuff), laces WHITE, stick model 0 (the house MITTS stick), face 0 (bare)
-# — are the stock look an untouched player wears.
+# and cuff), laces WHITE, stick model 0 (the house MITTS stick), face 0 (bare),
+# short dark-brown hair and no facial hair — are the stock look an untouched
+# player wears. Zero in every hair field is that stock look, so a code saved
+# before the hair fields existed decodes to it.
 
 # 5 bits per field, matching StickTapeConfig's palette headroom.
 const _FIELD_BITS: int = 5
@@ -29,6 +35,9 @@ const _FIELD_MASK: int = (1 << _FIELD_BITS) - 1
 const _LACE_SHIFT: int = _FIELD_BITS * 2
 const _STICK_SHIFT: int = _FIELD_BITS * 3
 const _FACE_SHIFT: int = _FIELD_BITS * 4
+const _HAIR_SHIFT: int = _FIELD_BITS * 5
+const _FACIAL_SHIFT: int = _FIELD_BITS * 6
+const _HAIR_COLOR_SHIFT: int = _FIELD_BITS * 7
 
 # Palette index of the classic lace (TapeColorRegistry WHITE).
 const LACE_DEFAULT_INDEX: int = 1
@@ -48,11 +57,17 @@ var glove_model: int = 0
 var lace_color: int = LACE_DEFAULT_INDEX
 var stick_model: int = 0
 var helmet_face: int = GearModelRegistry.FACE_NONE
+var hair_style: int = HairStyleRegistry.HAIR_SHORT
+var facial_hair: int = HairStyleRegistry.FACIAL_NONE
+var hair_color: int = 0
 
 
 func _init(p_skate_model: int = 0, p_glove_model: int = 0,
 		p_lace_color: int = LACE_DEFAULT_INDEX, p_stick_model: int = 0,
-		p_helmet_face: int = GearModelRegistry.FACE_NONE) -> void:
+		p_helmet_face: int = GearModelRegistry.FACE_NONE,
+		p_hair_style: int = HairStyleRegistry.HAIR_SHORT,
+		p_facial_hair: int = HairStyleRegistry.FACIAL_NONE,
+		p_hair_color: int = 0) -> void:
 	skate_model = p_skate_model if GearModelRegistry.is_valid_skate(p_skate_model) else 0
 	glove_model = p_glove_model if GearModelRegistry.is_valid_glove(p_glove_model) else 0
 	lace_color = p_lace_color if TapeColorRegistry.is_valid(p_lace_color) \
@@ -60,11 +75,18 @@ func _init(p_skate_model: int = 0, p_glove_model: int = 0,
 	stick_model = p_stick_model if StickModelRegistry.is_valid(p_stick_model) else 0
 	helmet_face = p_helmet_face if GearModelRegistry.is_valid_face(p_helmet_face) \
 			else GearModelRegistry.FACE_NONE
+	hair_style = p_hair_style if HairStyleRegistry.is_valid_hair(p_hair_style) \
+			else HairStyleRegistry.HAIR_SHORT
+	facial_hair = p_facial_hair if HairStyleRegistry.is_valid_facial(p_facial_hair) \
+			else HairStyleRegistry.FACIAL_NONE
+	hair_color = p_hair_color if HairStyleRegistry.is_valid_color(p_hair_color) else 0
 
 
 func to_code() -> int:
 	return skate_model | (glove_model << _FIELD_BITS) | (lace_color << _LACE_SHIFT) \
-			| (stick_model << _STICK_SHIFT) | (helmet_face << _FACE_SHIFT)
+			| (stick_model << _STICK_SHIFT) | (helmet_face << _FACE_SHIFT) \
+			| (hair_style << _HAIR_SHIFT) | (facial_hair << _FACIAL_SHIFT) \
+			| (hair_color << _HAIR_COLOR_SHIFT)
 
 
 static func from_code(code: int) -> GearStyleConfig:
@@ -73,7 +95,10 @@ static func from_code(code: int) -> GearStyleConfig:
 			(code >> _FIELD_BITS) & _FIELD_MASK,
 			(code >> _LACE_SHIFT) & _FIELD_MASK,
 			(code >> _STICK_SHIFT) & _FIELD_MASK,
-			(code >> _FACE_SHIFT) & _FIELD_MASK)
+			(code >> _FACE_SHIFT) & _FIELD_MASK,
+			(code >> _HAIR_SHIFT) & _FIELD_MASK,
+			(code >> _FACIAL_SHIFT) & _FIELD_MASK,
+			(code >> _HAIR_COLOR_SHIFT) & _FIELD_MASK)
 
 
 # Maps a pre-models gear code (skate accent color, glove accent color, laces —
