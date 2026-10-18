@@ -120,7 +120,8 @@ func solve_shot(aim: Vector2, puck_offset: Vector2, velocity: Vector2,
 		var dir: Vector2 = aim.normalized().rotated(PI * 0.5 if side == 0 else -PI * 0.5)
 		if dir.dot(pocket_result.dir) > 0.999:
 			continue
-		FacingRules.solve(_facing, facing, dir, velocity, false, false, facing_cfg)
+		FacingRules.solve(_facing, facing, dir, velocity, false, false, is_left_handed,
+				facing_cfg)
 		_fill_pulled(count, dir, aim, _facing.target, facing)
 		count += 1
 
@@ -141,7 +142,8 @@ func solve_arrival(aim: Vector2, velocity: Vector2, facing: Vector2, at: Vector3
 		return
 	var side: float = -1.0 if aim.cross(pocket_result.dir) > 0.0 else 1.0
 	var dir: Vector2 = aim.normalized().rotated(side * PI * 0.5)
-	FacingRules.solve(_facing, facing, dir, velocity, false, false, facing_cfg)
+	FacingRules.solve(_facing, facing, dir, velocity, false, false, is_left_handed,
+				facing_cfg)
 	var other: Vector2 = dir * handle_reach
 	var other_share: float = share_at(other, aim, _facing.target)
 	var other_keep: float = _dwell_keep(at, other, t, opponents, opponent_vels, opponent_caps)

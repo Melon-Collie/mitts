@@ -233,22 +233,23 @@ func apply_facing(input: InputState, delta: float) -> void:
 		)
 		if to_mouse.length() > _controller.move_deadzone:
 			# Gate: while the mouse is in the unreachable wedge behind the skater
-			# (beyond rom_backhand_angle_max_deg + upper_body_max_twist_deg from
-			# forward), freeze facing so the body doesn't chase a target it can't
-			# reach. Resume tracking as soon as the mouse returns to the reachable
+			# (past the blade's reach edge on its side, FacingRules.reach_edge),
+			# freeze facing so the body doesn't chase a target it can't reach. Resume tracking as soon as the mouse returns to the reachable
 			# cone, regardless of side: an unlock tied to the side it left from
 			# strands facing when the mouse wraps round. Snap-prevention on wraps
 			# lives in the blade speed cap (SkaterIKCoordinator), not in this lock.
 			# Only a standing skater is held: a moving one turns round instead
 			# (FacingRules.Result.free_to_turn_round).
 			var cursor_dir: Vector2 = to_mouse.normalized()
+			var lefty: bool = _skater.is_left_handed
+			var rules: FacingRules.Config = _controller.facing_rules
 			FacingRules.solve(_facing_rule, facing, cursor_dir,
 					Vector2(_skater.velocity.x, _skater.velocity.z), input.brake,
-					_controller.stance_active, _controller.facing_rules)
+					_controller.stance_active, lefty, rules)
 			var facing_target: Vector2 = _facing_rule.target
 			var mouse_body_angle: float = facing.angle_to(cursor_dir)
-			var ik_gate: float = deg_to_rad(_controller.rom_backhand_angle_max_deg + _controller.upper_body_max_twist_deg)
-			var behind_gate: bool = abs(mouse_body_angle) >= ik_gate
+			var behind_gate: bool = absf(mouse_body_angle) \
+					>= FacingRules.reach_edge(rules, facing, cursor_dir, lefty)
 			var turns_round: bool = _facing_rule.free_to_turn_round
 			if behind_gate and not turns_round:
 				ik_locked_side = int(sign(mouse_body_angle))
@@ -273,8 +274,8 @@ func apply_facing(input: InputState, delta: float) -> void:
 									Vector2(_skater.global_position.x, _skater.global_position.z),
 									_controller.board_shield_probe),
 							deg_to_rad(_controller.board_shield_max_deg))
-				if turns_round and (behind_gate
-						or absf(facing.angle_to(facing_target)) >= ik_gate):
+				if turns_round and (behind_gate or absf(facing.angle_to(facing_target))
+						>= FacingRules.reach_edge(rules, facing, facing_target, lefty)):
 					# Turning round to a cursor or a target in the wedge: a chord lerp
 					# toward a near-opposed vector barely moves, so turn by angle.
 					facing = facing.rotated(FacingRules.turn_round_angle(

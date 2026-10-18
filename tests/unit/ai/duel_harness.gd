@@ -362,11 +362,11 @@ func step() -> void:
 				s.input.mouse_world_pos.z - s.pos.z)
 		if to_mouse.length() > move_cfg.move_deadzone:
 			# The game's own facing rule (FacingRules), so a bot here faces where
-			# it would in a match: its travel once skating, its cursor otherwise.
+			# it would in a match: its skating line once skating, its cursor otherwise.
 			FacingRules.solve(_facing_rule, s.facing, to_mouse.normalized(),
 					Vector2(s.vel.x, s.vel.z), s.input.brake, s.input.stance_held,
-					_facing_cfg)
-			if _facing_rule.turning_to_cursor_behind:
+					s.agent._is_left_handed, _facing_cfg)
+			if _facing_rule.pivoting:
 				s.facing = s.facing.slerp(_facing_rule.target, minf(FACING_DRAG * DT, 1.0))
 			else:
 				s.facing = s.facing.lerp(_facing_rule.target, FACING_DRAG * DT).normalized()
