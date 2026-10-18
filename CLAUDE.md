@@ -73,8 +73,8 @@ instantiated all over it, and render if the rig's shape is what changed. Trivial
 (`PhysicsMaterial`, simple `StandardMaterial3D`) are safe to author directly —
 3–5 lines, no cross-references; the UID line is optional.
 
-**You can run the GUT test suite headless, and you can render both the arena bowl
-and the skater rig offscreen; you cannot run the game.** Use
+**You can run the GUT test suite headless, and you can render the arena bowl, the
+skater rig, the kits and the menus and HUD offscreen; you cannot play the game.** Use
 `.claude/hooks/run-gut.sh` (wraps `godot --headless -s res://addons/gut/gut_cmdln.gd`,
 honoring `.gutconfig.json`). Pass `gut_cmdln` flags through, e.g.
 `-gdir=res://tests/unit/state`. A bare run is the default tier (`tests/unit/`);
@@ -115,6 +115,24 @@ through the real controller and captures a frame every few ticks from behind,
 beside and ahead, printing the locomotion mix per frame — which state the legs
 skated, and when it came on (`tools/gait_strip_runner.gd`). A held pose cannot
 show a stroke or a state firing at the wrong time.
+
+**To see a SCREEN, render it.** `.claude/hooks/render-ui.sh [shots]` drives the
+real menus and HUD (title card, each Options tab, the free-play HUD and every
+side-menu overlay, the tutorial HUD, the lobby, a 3v3 against bots a few seconds
+in) and writes PNGs to `.preview/ui/`. Shot list in `tools/ui_preview_runner.gd`;
+`--list` prints it. Each run gets a throwaway user data directory, so it shows
+first-run defaults and never touches your prefs. The UI comes out faithful but the 3D behind it does not (software
+Compatibility renderer), and a match runs at about a frame a second, so the full
+set takes several minutes. Name only the shots you need.
+
+**To see a KIT, lay it flat.** `.claude/hooks/render-kits.sh [teams]` writes
+one PNG per team to `.preview/kits/`: home and away, jersey front and back with
+sleeves and shoulder caps, pants, the helmet, socks, the default glove, and a legend of every color and stripe
+keyed by its path in `data/team_colors.json` (`tools/kit_capture.gd`). The
+garments are the rink's meshes flattened and painted by the game's own decals and
+stripe textures, so it is the check for a kit edit. It loads through
+`TeamColorRegistry`, so a `user://team_colors.json` shadows the bundled file
+here as it does in the game, and the run says which one won.
 
 A render answers *how it reads*; it does not answer *whether two placements
 agree*. When the question is the second one — does the pad still sit on the arm,

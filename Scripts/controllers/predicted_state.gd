@@ -23,11 +23,16 @@ var shot_state: int
 # replayed-entry share of reconciles points at replay fidelity, while a high
 # live-entry share points at genuine live prediction divergence.
 var was_replay_rerecorded: bool = false
-# Upper-body twist in radians. Reconcile compares this against server's
-# broadcast `upper_body_rotation_y` so a divergence channel (drift between
-# host and client's lerped upper-body angle across reconciles) is visible
-# to the threshold check instead of silently accumulating.
+# The upper-body frame's yaw (radians), follow-through whip included: the same
+# quantity the host broadcasts as `upper_body_rotation_y`, so the threshold
+# compares like with like.
 var upper_body_rotation_y: float
+# What rebuilds the twist state under an adopted frame yaw (see
+# SkaterPoseCoordinator.adopt_wire_twist): the whip the follow spring adds over
+# the tracked angle, and the spring itself.
+var twist_whip: float
+var twist_follow: float
+var twist_follow_vel: float
 
 
 # Binary search for the snapshot at exactly target_ts. Returns null when the

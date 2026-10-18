@@ -94,3 +94,51 @@ func test_roughness_defaults_to_cloth_and_is_overridable() -> void:
 	assert_almost_eq(UniformPaint.solid(Color.RED).roughness, UniformPaint.ROUGH_CLOTH, 1e-6)
 	assert_almost_eq(UniformPaint.solid(Color.RED, UniformPaint.ROUGH_HELMET).roughness,
 			UniformPaint.ROUGH_HELMET, 1e-6)
+
+
+# The top of a sweater: the collar falls back to the yoke, the yoke to the body,
+# so a kit that names neither is one color to the neck.
+func test_collar_and_yoke_fall_back_down_the_sweater() -> void:
+	var plain := {"base": Color.RED, "yoke": null, "collar": null}
+	assert_eq(UniformPaint.yoke_color(plain), Color.RED)
+	assert_eq(UniformPaint.collar_color(plain), Color.RED)
+	var yoked := {"base": Color.RED, "yoke": Color.BLUE, "collar": null}
+	assert_eq(UniformPaint.collar_color(yoked), Color.BLUE, "the collar follows the yoke")
+	var collared := {"base": Color.RED, "yoke": Color.BLUE, "collar": Color.GREEN}
+	assert_eq(UniformPaint.collar_color(collared), Color.GREEN)
+
+
+# The lobby figures paint the yoke as a band through h_stripes, the rink skater
+# through JerseyDecal; both must stop at the torso's shoulder line.
+func test_the_yoke_band_ends_at_the_shoulder_line_on_both_painters() -> void:
+	var jersey := {"base": Color.RED, "yoke": Color.BLUE, "collar": null, "stripes": []}
+	var tex: ImageTexture = UniformPaint.h_stripes(Color.RED, UniformPaint.jersey_stripes(jersey))
+	var side_px: int = int(round(UniformPaint.CYLINDER_SIDE_V_FRACTION
+			* float(UniformPaint.STRIPE_TEX_HEIGHT_PX)))
+	var yoke_px: float = SkaterMeshBuilder.TORSO_YOKE_SIDE_FRACTION * float(side_px)
+	assert_eq(_row(tex, 0), Color.BLUE, "the yoke starts at the collar")
+	assert_eq(_row(tex, int(yoke_px) - 1), Color.BLUE, "and runs to the shoulder line")
+	assert_eq(_row(tex, int(ceil(yoke_px)) + 1), Color.RED, "where the body takes over")
+	assert_almost_eq(float(JerseyDecal.YOKE_BOTTOM_PX) / float(JerseyDecal.SIDE_V_MAX_PX),
+			SkaterMeshBuilder.TORSO_YOKE_SIDE_FRACTION, 1.0 / float(JerseyDecal.SIDE_V_MAX_PX),
+			"the decal's yoke ends at the same shoulder line, to a pixel")
+
+
+func test_the_jersey_stripes_paint_over_the_yoke() -> void:
+	var hem := {"pos": 0.9, "width": 0.1, "color": Color.GREEN}
+	var jersey := {"base": Color.RED, "yoke": Color.BLUE, "collar": null, "stripes": [hem]}
+	var stripes: Array = UniformPaint.jersey_stripes(jersey)
+	assert_eq(stripes.size(), 2)
+	assert_eq(stripes[0].color, Color.BLUE, "the yoke goes down first")
+	assert_eq(stripes[1], hem, "so an authored stripe is never painted under it")
+
+
+# The yoke crosses the shoulder cap at one V; the cap's own color is below it.
+func test_the_shoulder_cap_wears_the_yoke_over_its_top() -> void:
+	var jersey := {"base": Color.RED, "yoke": null, "collar": null}
+	var img: Image = UniformPaint.shoulder_cap(jersey, Color.GREEN).get_image()
+	var split: float = SkaterMeshBuilder.SHOULDER_CAP_YOKE_V * float(UniformPaint.CAP_TEX_HEIGHT_PX)
+	assert_eq(img.get_pixel(0, 0), Color.RED, "a kit with no yoke tops the cap in the jersey color")
+	assert_eq(img.get_pixel(0, int(split) - 1), Color.RED)
+	assert_eq(img.get_pixel(0, int(ceil(split)) + 1), Color.GREEN, "the cap's color below")
+	assert_eq(img.get_pixel(0, UniformPaint.CAP_TEX_HEIGHT_PX - 1), Color.GREEN)

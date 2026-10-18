@@ -58,9 +58,9 @@ const _BLADE_CRADLE_CUP_DEG: float = 8.0             # axial twist (handedness-s
 # sits on the OPPOSITE side of the body from the blade: a left-handed shooter
 # (blade on −X) has the top hand on the right shoulder (+X), and vice versa.
 # Matches the ShoulderL/R cap origins in Scenes/Skater.tscn (keep in sync)
-# so the drawn arm roots at the deltoid cap. Sits so the cap's blunt base
-# seats into the trap slope (torso upper-chest x extent ~0.21) with its
-# equator just proud of the jersey.
+# so the drawn arm roots at the deltoid cap. Sits just inside the torso's
+# shoulder line (x extent ~0.23), so the cap's inner half is under the jersey
+# and its outer half reads as the pad.
 var shoulder_offset: float = 0.22
 # Shoulder Y in upper-body-local space. Matches the ShoulderL/R ball centers
 # in the scene (keep in sync) so the drawn arm hangs from the visible
@@ -254,15 +254,12 @@ var arm_working_extension: float = 0.97
 # update_arm_mesh) and a touch backward — a hockey top-hand elbow rides out
 # and slightly behind the chest line, not pinned against the ribs.
 var arm_pole_local: Vector3 = Vector3(0.55, -1.0, 0.1)
-# Base size of the arm bone meshes. scale.z is set per tick to the bone's
-# actual length; X/Y control arm thickness. Sized as a padded JERSEY SLEEVE
-# (elbow pad + liner under cloth), not a bare arm: a bare-arm 0.055 radius reads
-# skinny next to the 0.09 socks.
-var arm_mesh_thickness: float = 0.13
-# Radius of the elbow joint spheres positioned per-tick at the IK elbow.
-# Well proud of arm_mesh_thickness * 0.5 so the joint reads as the elbow
-# PAD bulging under the sleeve, the arm's answer to the deltoid caps.
-var elbow_sphere_radius: float = 0.082
+# Base size of the arm bone meshes (diameter). scale.z is set per tick to the
+# bone's actual length; X/Y control arm thickness. A loose jersey sleeve, not a
+# bare arm — see SkaterMeshBuilder.SLEEVE_RADIUS_M.
+var arm_mesh_thickness: float = SkaterMeshBuilder.SLEEVE_RADIUS_M * 2.0
+# Radius of the elbow pads positioned per-tick at the IK elbow.
+var elbow_sphere_radius: float = SkaterMeshBuilder.ELBOW_PAD_RADIUS_M
 # Radius of the gloved fist positioned per-tick at the IK hand — slightly
 # thicker than the sleeve it hangs from. 0.064 puts the fist mesh (±1.05
 # unit-width) at ~13.4 cm across the knuckles, a real glove proportion.
@@ -400,10 +397,10 @@ var bottom_hand: Marker3D = null
 
 # Visual forearm-bulk multiplier (the Hands attribute's arm tell), stamped by
 # SkaterAppearanceCoordinator.apply. The glove cuff radius must scale with this,
-# not stay fixed: at Hands 4 the scaled forearm (0.055 × 1.20) is EXACTLY the
-# fixed cuff's 0.11 × 0.6 — coaxial cylinders of equal radius, z-fighting the
-# whole wrist — and Hands 5 pokes clean through. Read by both the appearance and
-# the uniform pass, which size the cuff independently and in either order.
+# not stay fixed: a thick-forearm build otherwise meets a fixed cuff's radius —
+# coaxial cylinders of equal radius, z-fighting the whole wrist — and then pokes
+# through it. Read by both the appearance and the uniform pass, which size the
+# cuff independently and in either order.
 var forearm_visual_mult: float = 1.0
 
 # Butt-end knob cylinder at the top of the shaft (just past the top hand).

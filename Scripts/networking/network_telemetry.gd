@@ -436,7 +436,7 @@ static func record_shot_launch_divergence(pos_div_m: float, vel_div: float) -> v
 	if vel_div > instance._shot_launch_vel_div_max:
 		instance._shot_launch_vel_div_max = vel_div
 
-# input_lead: estimated_host_time() - input.host_timestamp at the moment an
+# input_lead: sim_time() - input.host_timestamp at the moment an
 # input is popped from the host queue, in SECONDS (published as ms).
 static func record_input_lead(lead_sec: float) -> void:
 	if instance == null:
@@ -938,15 +938,26 @@ func _auto_marker(trigger: String) -> void:
 	# the context the numeric samples can't — the puck's replication mode, the
 	# live game phase + actor count, and the last game-event transition with its
 	# age, so a host_stall can be pinned to a phase handler vs steady play.
-	var snapshot: Dictionary = {
-		"puck_mode": puck_mode,
-		"phase": current_phase,
-		"actor_count": current_actor_count,
-	}
-	if not _last_host_event.is_empty():
-		snapshot["last_event"] = _last_host_event
-		snapshot["last_event_age_s"] = maxf(0.0, float(session.seconds) - _last_host_event_sec)
+	var snapshot: Dictionary = {"puck_mode": puck_mode}
+	_add_host_context(snapshot)
 	session.record_auto_marker(float(session.seconds), trigger, snapshot, recent_samples())
+
+
+# A host frame past the stall band, split by where its time went
+# (HostHitchSampler). Kept without a cooldown, up to the session's cap.
+static func record_hitch(entry: Dictionary) -> void:
+	if instance == null:
+		return
+	instance._add_host_context(entry)
+	instance.session.record_hitch(float(instance.session.seconds), entry)
+
+
+func _add_host_context(d: Dictionary) -> void:
+	d["phase"] = current_phase
+	d["actor_count"] = current_actor_count
+	if not _last_host_event.is_empty():
+		d["last_event"] = _last_host_event
+		d["last_event_age_s"] = maxf(0.0, float(session.seconds) - _last_host_event_sec)
 
 
 # Fresh accumulator for a rematch: each game posts its own row keyed to its own

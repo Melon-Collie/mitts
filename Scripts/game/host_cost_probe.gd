@@ -64,6 +64,13 @@ enum Section {
 }
 
 const SECTION_COUNT: int = 12
+# The top-level main-thread sections — each time spent once. Nested ones
+# (AI_APPLY, SKATER_STEP, AI_KICK sit inside DISPATCH) and the worker's
+# (BRAINS, WORKER) are left out, so a sum over these never counts twice.
+const MAIN_THREAD_SECTIONS: Array[int] = [
+	Section.SNAPSHOT, Section.DISPATCH, Section.SKATER_PHYS, Section.PUCK_PHYS,
+	Section.GOALIE_PHYS, Section.GM_TAIL, Section.NET_CAPTURE,
+]
 const SECTION_NAMES: Array[String] = [
 	"snapshot", "brains (in worker)", "dispatch (total)", "  dispatch: apply",
 	"    of which skater step", "  dispatch: kick", "worker (off-thread)",
@@ -89,6 +96,10 @@ static var _max_us: PackedFloat64Array = _new_bins()
 # its own mean. Both statistics now describe the same thing: one tick.
 static var _tick_us: PackedFloat64Array = _new_bins()
 static var _ticks: int = 0
+# The same per-section totals summed over every tick of the current RENDERED
+# frame, drained by HostHitchSampler once per frame. Fed straight from record()
+# rather than end_tick, which runs before the bodies' sections of its own tick.
+static var _frame_us: PackedFloat64Array = _new_bins()
 # Ticks that found the worker still chewing the previous batch, so no new one
 # could be kicked. Sustained high values mean the bots are deciding at less than
 # the tick rate — an AI-responsiveness fact rather than a frame-cost one, but it
@@ -122,6 +133,7 @@ static func record(section: int, us: int) -> void:
 	if not enabled:
 		return
 	_tick_us[section] += float(us)
+	_frame_us[section] += float(us)
 
 
 # Closes the host tick. The worker-busy share is collected by the coordinator
@@ -161,6 +173,14 @@ static func end_tick() -> void:
 static func note_worker_busy(busy: bool) -> void:
 	if enabled and busy:
 		_worker_busy_ticks += 1
+
+
+# Copies this frame's per-section totals into `out` (SECTION_COUNT long) and
+# starts the next frame's from zero.
+static func take_frame_sections(out: PackedFloat64Array) -> void:
+	for s: int in SECTION_COUNT:
+		out[s] = _frame_us[s]
+		_frame_us[s] = 0.0
 
 
 static func has_data() -> bool:
@@ -228,6 +248,7 @@ static func reset() -> void:
 		_sum_us[s] = 0.0
 		_max_us[s] = 0.0
 		_tick_us[s] = 0.0
+		_frame_us[s] = 0.0
 		_pub_mean_us[s] = 0.0
 		_pub_max_us[s] = 0.0
 		_session_max_us[s] = 0.0

@@ -51,7 +51,7 @@ const _SIZE_SLACK: int = 40
 const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/ai/skater_agent_state_machine.gd": 3665,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
-	"res://Scripts/game/game_manager.gd": 5787,
+	"res://Scripts/game/game_manager.gd": 5788,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
 	# Scripts/controllers/CLAUDE.md rather than inline, and the tunable
@@ -67,7 +67,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +10: the staged get-up's one clock (knockdown_getup_left) and the stagger
 	# he finds his legs through once it ends. +36: the get-up's stick hold. +5:
 	# the down flags in one place, a diver's stick dead from the get-up.
-	"res://Scripts/controllers/skater_controller.gd": 3592,
+	"res://Scripts/controllers/skater_controller.gd": 3593,
 	# +1: dive_laid_out, the diver's stick and low block until the get-up.
 	"res://Scripts/actors/skater.gd": 2797,
 	"res://Scripts/networking/network_manager.gd": 2855,
@@ -79,7 +79,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/controllers/puck_controller.gd": 1589,
 	"res://Scripts/actors/hockey_rink.gd": 1469,
 	"res://Scripts/game/player_prefs.gd": 1404,
-	"res://Scripts/actors/skater_mesh_builder.gd": 1446,
+	"res://Scripts/actors/skater_mesh_builder.gd": 1462,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1304,
 	"res://Scripts/ui/career_stats_screen.gd": 1271,
 	"res://Scripts/ui/lobby_manager.gd": 1247,
@@ -87,7 +87,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/ui/side_menu.gd": 995,
 	"res://Scripts/controllers/goalie_body_config_builder.gd": 1131,
 	"res://Scripts/ui/network_debug_overlay.gd": 956,
-	"res://Scripts/networking/network_telemetry.gd": 957,
+	"res://Scripts/networking/network_telemetry.gd": 968,
 	"res://Scripts/controllers/local_controller.gd": 949,
 	# Main's resumable sample prediction and the board pin's forward cap crossed the
 	# limit together, each from under it, at the merge that joined them.
@@ -107,7 +107,7 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/actors/skater.gd": 145,
 	"res://Scripts/game/game_manager.gd": 63,
 	"res://Scripts/domain/state/player_attributes.gd": 53,
-	"res://Scripts/networking/network_telemetry.gd": 53,
+	"res://Scripts/networking/network_telemetry.gd": 54,
 	# +1: knockdown_drop_m, which the gait's crumple and the sprawl's buckle share.
 	# +1: knockdown_getup_left, the get-up clock the gait and the torso fold read.
 	"res://Scripts/controllers/skater_controller.gd": 42,

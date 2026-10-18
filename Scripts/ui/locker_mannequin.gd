@@ -59,11 +59,12 @@ const _BLADE_ICE_M: float = SkaterMeshBuilder.BLADE_ICE_Z
 # The ice plane in rig-local coordinates. Everything scales about it.
 const _ICE_Y: float = _LEG_Y + _BOOT_DY - _BLADE_ICE_M
 
-# Part radii for the unit-scale meshes, mirroring the live rig's exports.
-const _ARM_RADIUS: float = 0.065
-const _ELBOW_RADIUS: float = 0.082
+# Part radii for the unit-scale meshes: the sleeve and the elbow are the live
+# rig's own; the cuff stays proud of the sleeve's wrist end as the rig's does.
+const _ARM_RADIUS: float = SkaterMeshBuilder.SLEEVE_RADIUS_M
+const _ELBOW_RADIUS: float = SkaterMeshBuilder.ELBOW_PAD_RADIUS_M
 const _HAND_RADIUS: float = 0.064
-const _CUFF_RADIUS: float = 0.065
+const _CUFF_RADIUS: float = SkaterMeshBuilder.SLEEVE_RADIUS_M * 1.2
 # How far up the forearm the cuff ring sits from the fist's center.
 const _CUFF_OFFSET_M: float = 0.085
 # Arm segments at the rig's own lengths (Skater.upper_arm_length /
@@ -590,8 +591,9 @@ static func _basis_along(y_axis: Vector3) -> Basis:
 
 # ── Paint ────────────────────────────────────────────────────────────────────
 
-# The kit, not flat team colors: striped jersey with the yoke on the torso's
-# top cap, the shoulder pads' own color, striped socks, solid pants. Stripe
+# The kit, not flat team colors: striped jersey with the collar on the torso's
+# top cap and the yoke over the shoulders, the shoulder pads' own color under
+# it, striped socks, solid pants. Stripe
 # textures come from the coordinator the rink paints with, so the bands land
 # where the in-game skater's do.
 func _paint_body(colors: Dictionary, skin_tone: int) -> void:
@@ -599,8 +601,8 @@ func _paint_body(colors: Dictionary, skin_tone: int) -> void:
 	var jersey: Dictionary = uniform.jersey
 	var socks: Dictionary = uniform.socks
 
-	_paint_texture(_torso, 0, UniformPaint.h_stripes(
-			jersey.base, jersey.stripes, jersey.yoke), _CLOTH_ROUGH)
+	_paint_texture(_torso, 0, UniformPaint.h_stripes(jersey.base,
+			UniformPaint.jersey_stripes(jersey), UniformPaint.collar_color(jersey)), _CLOTH_ROUGH)
 	_paint(_pelvis, 0, uniform.pants.base, UniformPaint.ROUGH_NYLON)
 	_paint(_helmet, SkaterMeshBuilder.HELMET_SURF_SHELL, uniform.helmet, _HELMET_ROUGH)
 	_paint(_helmet, SkaterMeshBuilder.HELMET_SURF_SKIN,
@@ -611,8 +613,11 @@ func _paint_body(colors: Dictionary, skin_tone: int) -> void:
 		sock_tex = UniformPaint.h_stripes(
 				socks.base, socks.stripes)
 	var sleeve: Color = uniform.arms.upper.base
+	# One-color sleeves here, so an unnamed elbow is the sleeve too.
+	var elbow: Color = uniform.arms.elbow if uniform.arms.get("elbow") is Color else sleeve
+	var cap_tex: ImageTexture = UniformPaint.shoulder_cap(jersey, uniform.shoulders.color)
 	for i: int in 2:
-		_paint(_shoulders[i], 0, uniform.shoulders.color, _CLOTH_ROUGH)
+		_paint_texture(_shoulders[i], 0, cap_tex, _CLOTH_ROUGH)
 		# The knee takes the pants BASE solid — the rink paints it apart from
 		# the thigh, whose side stripe would ring a ball.
 		_paint(_thighs[i], 0, uniform.pants.base, UniformPaint.ROUGH_NYLON)
@@ -623,7 +628,7 @@ func _paint_body(colors: Dictionary, skin_tone: int) -> void:
 			_paint(_socks[i], 0, socks.base, _CLOTH_ROUGH)
 		_paint(_upper_arms[i], 0, sleeve, _CLOTH_ROUGH)
 		_paint(_forearms[i], 0, sleeve, _CLOTH_ROUGH)
-		_paint(_elbows[i], 0, sleeve, _CLOTH_ROUGH)
+		_paint(_elbows[i], 0, elbow, _CLOTH_ROUGH)
 
 
 # The four gear picks, painted onto the pieces that wear them. A model paints

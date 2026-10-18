@@ -18,11 +18,8 @@ signal hit_received(impulse: Vector3)
 # non-determinism (body-check mis-replay, contested collision resolution).
 @export var reconcile_position_threshold: float = 0.05
 @export var reconcile_velocity_threshold: float = 0.3
-# Upper-body rotation divergence past this triggers reconcile. Pose evolution
-# is currently deterministic from inputs, but `_pose.upper_body_angle` persists
-# across reconciles without a server snap, so any future non-determinism (or
-# accumulated float drift) would silently desync the torso twist. Setting this
-# above zero makes the threshold check structurally aware of the channel.
+# Upper-body frame yaw divergence past this triggers reconcile — the blade
+# markers hang under that frame, so a twist desync moves the blade.
 # 0.1 rad ≈ 5.7°: well above lerp-convergence noise, well below visible desync.
 @export var reconcile_upper_body_rotation_threshold: float = 0.1
 
@@ -394,7 +391,7 @@ func _append_prediction_snapshot() -> void:
 	snap.velocity = skater.velocity
 	snap.facing = _pose.facing
 	snap.shot_state = _sm.get_state() as int
-	snap.upper_body_rotation_y = _pose.upper_body_angle
+	_pose.record_twist(snap)
 	_prediction_history.append(snap)
 	if _prediction_history.size() > _PREDICTION_HISTORY_CAP:
 		_prediction_history.pop_front()
@@ -473,7 +470,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 		NetworkTelemetry.record_reconcile_miss(reason, gap_ms)
 	var divergence_position: Vector3 = predicted.position if predicted != null else skater.global_position
 	var divergence_velocity: Vector3 = predicted.velocity if predicted != null else skater.velocity
-	var divergence_upper_body: float = predicted.upper_body_rotation_y if predicted != null else _pose.upper_body_angle
+	var divergence_upper_body: float = predicted.upper_body_rotation_y if predicted != null else skater.get_upper_body_rotation()
 	# Trim confirmed predictions — future reconciles only ever look at strictly
 	# later timestamps.
 	while not _prediction_history.is_empty() and _prediction_history[0].host_timestamp <= trim_ts:
@@ -600,11 +597,9 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	_pose.ik_locked_side = 0
 	_pose.lower_body_lag = 0.0
 	_pose.apply_lower_body_yaw(0.0)
-	# Snap upper-body rotation to server value. Pose evolution is deterministic
-	# from inputs, but _pose.upper_body_angle is the one persistent pose field
-	# that carries across reconciles without a per-cycle resync — anchoring it
-	# to the server bounds drift to zero per cycle instead of accumulating.
-	_pose.upper_body_angle = server_state.upper_body_rotation_y
+	# The host's frame yaw at the ack, with the tracked angle and twist spring
+	# rebuilt under it — the replay's first tick reads the blade in this frame.
+	_pose.adopt_wire_twist(server_state.upper_body_rotation_y, predicted)
 	# Drop the IK blade smoother's baseline so it re-seeds deterministically from
 	# the first replayed input's ROM-clamped target — the live smoothed value
 	# would otherwise bias the replay's first tick.
@@ -667,7 +662,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			replay_snap.velocity = skater.velocity
 			replay_snap.facing = _pose.facing
 			replay_snap.shot_state = _sm.get_state() as int
-			replay_snap.upper_body_rotation_y = _pose.upper_body_angle
+			_pose.record_twist(replay_snap)
 			replay_snap.was_replay_rerecorded = true
 			replay_hist_i += 1
 	is_replaying = false
@@ -745,7 +740,8 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# inflating it; the local prediction stays authoritative and charge does not
 	# round-trip through server state.
 	skater.set_facing(_pose.facing)
-	skater.set_upper_body_rotation(_pose.upper_body_angle)
+	# The frame keeps the yaw the replay left it at (the host's, if nothing
+	# replayed): re-writing the tracked angle would drop the whip off the blade.
 	# Through the summing site, not the lag alone: the gait's yaw channels ride
 	# on it (SkaterPoseCoordinator.apply_lower_body_yaw).
 	_pose.apply_lower_body_yaw(0.0)
@@ -773,11 +769,9 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# persistently non-zero value means the replay itself leaves the body
 	# off-server, so the offset rebuilds every cycle instead of settling.
 	NetworkTelemetry.record_post_replay_residual(skater.global_position.distance_to(server_state.position))
-	# Blade must be re-applied after position is set — upper_body_to_local()
-	# uses skater.global_position, so it must reflect the final replayed position.
-	# Dispatch by state: slapper/follow-through have their own pose handlers; using
-	# _ik.apply_blade_from_mouse here would IK the blade to the mouse position every
-	# reconcile, popping it down from the slapper wind-up pose at the broadcast rate.
+	# Re-apply the blade in the final replayed frame, by state and then the down pose
+	# over it, as the tick does: the mouse IK alone pops it to the cursor on every
+	# reconcile (off a slapper wind-up, or a diver's laid-out stick).
 	match _sm.get_state():
 		State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK, \
 		State.ONE_TIMER_RETENTION:
@@ -795,6 +789,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			# on every reconcile. Skip — the next real tick re-applies it.
 			if not is_celebrating():
 				_ik.apply_blade_from_mouse(_current_input, 0.0)
+	_apply_down_pose()
 	var blade_reconcile_delta: float = skater.get_blade_contact_global().distance_to(pre_reconcile_blade)
 	NetworkTelemetry.record_blade_reconcile(blade_reconcile_delta)
 	if blade_reconcile_delta > _BLADE_JUMP_THRESHOLD:

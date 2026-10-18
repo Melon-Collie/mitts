@@ -233,6 +233,33 @@ even an auto trigger) lands *after* the bad moment, so trust the history run-up
 over the instantaneous snapshot. Later markers omit history to keep the row
 under the 64 KiB jsonb cap.
 
+## Hitches: `hitches` and `hitch_count` (host rows only)
+
+`host_stall` says THAT the host's frame stalled; `hitches` says where the time
+went. `HostHitchSampler` measures every host frame and records each one of at
+least `STALL_BAD_MS` (66 ms) — no cooldown, capped at 40 stored, with
+`hitch_count` counting past the cap. A frame runs from one process-start to the
+next, and each entry splits it:
+
+| Key | What it is |
+|---|---|
+| `frame_ms` | the whole frame, wall clock |
+| `physics_ms` / `ticks` / `worst_tick_ms` | this frame's physics ticks: their total, how many ran (8 = the engine's catch-up cap, so sim time was dropped), and the longest single one |
+| `process_ms` | the previous frame's `_process` callbacks |
+| `other_ms` | everything outside any callback: render, the multiplayer poll, engine work, the OS |
+| `top_sections` | the three biggest `HostCostProbe` main-thread sections inside `physics_ms` |
+| `unprobed_physics_ms` | physics time no probe section accounts for: the remote clients' input steps, engine transform propagation, unprobed nodes |
+| `pipeline_compiles` | shader pipelines compiled across the frame — non-zero means compile stutter |
+| `objects_delta` / `memory_delta_kb` | objects created and static memory gained across the frame |
+| `draw_calls` | draw calls in the last rendered frame |
+
+Plus the same attribution context as the auto markers (`phase`, `actor_count`,
+`last_event`, `last_event_age_s`) and `at_sec`. Reading one: a big
+`worst_tick_ms` with a dominant `top_sections` entry is our tick code; a big
+`unprobed_physics_ms` is tick work outside the probes; `other_ms` with
+`pipeline_compiles` > 0 is shader compilation; `other_ms` alone is render or
+something outside the game; `process_ms` is a `_process` callback.
+
 ## Getting the data without Supabase
 
 Every posted row is also mirrored locally to `user://net_sessions/` (last 10,

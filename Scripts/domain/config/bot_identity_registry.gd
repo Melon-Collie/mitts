@@ -55,8 +55,8 @@ class_name BotIdentityRegistry
 # A well-formed file with zero entries is valid — the caller treats an empty
 # pool as "use the built-in deterministic defaults".
 
-const _USER_JSON_PATH: String = "user://bot_identities.json"
-const _RES_JSON_PATH:  String = "res://data/bot_identities.json"
+const USER_JSON_PATH: String = "user://bot_identities.json"
+const RES_JSON_PATH:  String = "res://data/bot_identities.json"
 
 const _TAPE_KEYS: Array[String] = ["tape_blade", "tape_span", "tape_knob", "knob_style"]
 const _GEAR_KEYS: Array[String] = ["skate_model", "glove_model", "lace_color",
@@ -110,13 +110,15 @@ const _FB_FACE: Array[int] = [GearModelRegistry.FACE_VISOR, GearModelRegistry.FA
 
 static var _identities: Array[Dictionary] = []
 static var _loaded: bool = false
+# The file the roster came from; empty when neither loaded.
+static var _loaded_path: String = ""
 
 
 static func ensure_loaded() -> void:
 	if _loaded:
 		return
 	_loaded = true
-	for path: String in [_USER_JSON_PATH, _RES_JSON_PATH]:
+	for path: String in [USER_JSON_PATH, RES_JSON_PATH]:
 		if _try_load_from(path):
 			return
 
@@ -173,15 +175,27 @@ static func _try_load_from(path: String) -> bool:
 		return false
 	var text: String = file.get_as_text()
 	file.close()
-	var data = JSON.parse_string(text)
-	if not data is Dictionary or not data.has("identities"):
+	var data: Variant = JSON.parse_string(text)
+	if not accepts(data):
 		push_error("BotIdentityRegistry: malformed JSON in %s" % path)
 		return false
-	for entry: Dictionary in data["identities"]:
+	for entry: Dictionary in (data as Dictionary)["identities"]:
 		if String(entry.get("name", "")).is_empty():
 			continue
 		_identities.append(normalize_entry(entry))
+	_loaded_path = path
 	return true
+
+
+# Whether parsed JSON is a roster the loader takes — an empty one included.
+# The Options menu asks this of a player's edited copy.
+static func accepts(data: Variant) -> bool:
+	return data is Dictionary and (data as Dictionary).get("identities") is Array
+
+
+static func loaded_path() -> String:
+	ensure_loaded()
+	return _loaded_path
 
 
 # Turns one raw JSON entry into a canonical identity dict: routes the

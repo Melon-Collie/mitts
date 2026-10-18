@@ -296,3 +296,42 @@ func test_bounded_sheds_histories_from_the_tail_first() -> void:
 	# history went first.
 	assert_true((auto_markers[0] as Dictionary).has("history"),
 			"earliest onset keeps its run-up trace")
+
+
+# ── Hitches ──────────────────────────────────────────────────────────────────
+
+func test_hitch_recorded_with_timestamp_and_copied() -> void:
+	var s := _make()
+	var entry: Dictionary = {"frame_ms": 120.0}
+	s.record_hitch(42.0, entry)
+	entry["frame_ms"] = 1.0
+	var hitches: Array = s.to_dict()["hitches"]
+	assert_eq(hitches.size(), 1)
+	assert_eq((hitches[0] as Dictionary)["at_sec"], 42.0)
+	assert_eq((hitches[0] as Dictionary)["frame_ms"], 120.0, "the stored hitch is a copy")
+
+
+func test_hitches_have_no_cooldown_but_a_cap() -> void:
+	var s := _make()
+	for i: int in NetworkSessionSummary.MAX_HITCHES + 5:
+		s.record_hitch(10.0, {"frame_ms": 70.0})
+	var d: Dictionary = s.to_dict()
+	assert_eq((d["hitches"] as Array).size(), NetworkSessionSummary.MAX_HITCHES,
+			"same-second hitches all stored, up to the cap")
+	assert_eq(d["hitch_count"], NetworkSessionSummary.MAX_HITCHES + 5, "the count keeps climbing")
+
+
+func test_bounded_sheds_hitches_before_auto_markers_and_keeps_the_count() -> void:
+	var s := _fat_summary()
+	for i: int in 20:
+		s.record_hitch(float(i), _fat_sample(10))
+	var d: Dictionary = s.to_dict_bounded(1)
+	assert_eq((d["hitches"] as Array).size(), 0, "hitches shed to zero")
+	assert_eq(d["hitch_count"], 20, "hitch_count survives every shed stage")
+	assert_eq((s.to_dict()["hitches"] as Array).size(), 20, "live hitches untouched")
+	var no_hist: Dictionary = _fat_summary().to_dict_bounded(1)
+	var floor_size: int = JSON.stringify(no_hist).to_utf8_buffer().size()
+	var keeps_auto: Dictionary = s.to_dict_bounded(floor_size
+			+ JSON.stringify((_fat_summary().to_dict()["auto_markers"] as Array)[0]).length())
+	assert_gt((keeps_auto["auto_markers"] as Array).size(), 0,
+			"an auto marker outlives every hitch")
