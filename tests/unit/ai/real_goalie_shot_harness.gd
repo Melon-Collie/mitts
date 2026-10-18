@@ -34,7 +34,7 @@ var _ctrl: GoalieController = null
 var _shooter: Skater = null
 var _goal_z: float = -GameRules.GOAL_LINE_Z
 
-# Diagnostics from the last fire() (for probing the instrument).
+# Diagnostics from the last shot (for probing the instrument).
 var last_part: int = -1              # SavePart of the contact that ended it, or -1
 var last_contact_pos: Vector3 = Vector3.INF   # where the save contact happened
 var last_cross: Vector3 = Vector3.INF         # net-plane crossing (x, y) if it got there
@@ -447,7 +447,8 @@ func shot_velocity_at(shooter: Vector3, aim: Vector3, loft_level: int,
 	return Vector3(hdir.x * v_h, speed_m_s * y_ratio * inv_norm, hdir.y * v_h)
 
 
-# fire() at an explicit speed. Mirrors fire()'s bookkeeping exactly.
+# A shot at `speed_m_s` with no wind-up: a one-timer. Released through the
+# puck's signal like Puck.release, so the goalie reads it as he does in a game.
 func fire_at(shooter: Vector3, aim: Vector3, loft_level: int, speed_m_s: float,
 		err_rad: float) -> int:
 	var vel: Vector3 = shot_velocity_at(shooter, aim, loft_level, speed_m_s, err_rad)
@@ -461,28 +462,16 @@ func fire_at(shooter: Vector3, aim: Vector3, loft_level: int, speed_m_s: float,
 	last_contact_pos = Vector3.INF
 	last_cross = Vector3.INF
 	last_goalie_pos = Vector3.INF
-	return _march(shooter, vel)
-
-
-func fire(shooter: Vector3, aim: Vector3, loft_level: int, power_t: float,
-		err_rad: float) -> int:
-	var vel: Vector3 = shot_velocity(shooter, aim, loft_level, power_t, err_rad)
-	if vel == Vector3.ZERO:
-		return WIDE
-	_shooter.global_position = shooter
-	# Release: the puck leaves the blade and flies as a shot.
-	_puck.clear_carrier()
-	last_part = -1
-	last_caught = false
-	last_trapped = false
-	last_contact_pos = Vector3.INF
-	last_cross = Vector3.INF
-	last_goalie_pos = Vector3.INF
+	var pos: Vector3 = shooter
+	pos.y = _puck.ice_height
+	_puck.global_position = pos
+	_puck.apply_release_velocity(vel)
+	_puck.puck_released.emit()
 	return _march(shooter, vel)
 
 
 # March a released puck against the live goalie until it resolves. Shared by the
-# plain `fire` path and the windup/release path below.
+# one-timer `fire_at` and the windup/release path below.
 func _march(shooter: Vector3, vel_in: Vector3) -> int:
 	var goal := Vector3(0.0, 0.0, _goal_z)
 	var vel: Vector3 = vel_in
@@ -530,22 +519,6 @@ func _march(shooter: Vector3, vel_in: Vector3) -> int:
 			last_goalie_pos = _goalie.global_position
 			return _net_verdict(cx, cy)
 	return WIDE
-
-
-# Run `samples` scatter draws of one aim/loft/power triple from a settled goalie,
-# re-settling between shots so each sample fires at the set pose. Returns a counts
-# dict keyed by the outcome enum plus "shots".
-func run_spot(shooter: Vector3, aim: Vector3, loft_level: int, power_t: float,
-		spread: float, samples: int, resettle_ticks: int,
-		rng: RandomNumberGenerator) -> Dictionary:
-	var counts := {GOAL: 0, SAVE: 0, POST: 0, WIDE: 0, "shots": 0}
-	for _i: int in samples:
-		settle(shooter, resettle_ticks)
-		var err: float = rng.randf_range(-spread, spread)
-		var outcome: int = fire(shooter, aim, loft_level, power_t, err)
-		counts[outcome] += 1
-		counts["shots"] += 1
-	return counts
 
 
 # Classify a save surface by node name, mirroring Puck._classify_save_part.
