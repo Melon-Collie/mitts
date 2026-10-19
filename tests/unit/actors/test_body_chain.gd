@@ -146,6 +146,7 @@ func _skate_up_the_ice(c: SkaterController, input: InputState) -> void:
 func test_sweeping_the_cursor_at_speed_keeps_the_head_over_the_pelvis() -> void:
 	var c: SkaterController = _live_controller()
 	c.upper_body_lean_max_deg = 0.0
+	c.upper_body_lean_forward_max_deg = 0.0
 	var skater: Skater = c.skater
 	var input := InputState.new()
 	input.delta = DT
@@ -212,6 +213,7 @@ func test_a_held_turn_leans_and_steering_taps_do_not() -> void:
 func test_the_head_leans_less_than_the_trunk() -> void:
 	var c: SkaterController = _live_controller()
 	c.upper_body_lean_max_deg = 0.0
+	c.upper_body_lean_forward_max_deg = 0.0
 	var input := InputState.new()
 	input.delta = DT
 	_skate_up_the_ice(c, input)

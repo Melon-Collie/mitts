@@ -89,12 +89,71 @@ func test_the_hand_reaches_its_rim_in_every_direction() -> void:
 				"cursor %.0f° off facing: the hand sits on its rim" % deg)
 
 
-func test_reaching_ahead_commits_the_lean() -> void:
+func test_reaching_ahead_commits_the_forward_lean() -> void:
 	var c: SkaterController = _make_controller()
 	_reach(c, 0.0)
 	assert_almost_eq(-c.skater.upper_body.rotation.x,
-			deg_to_rad(c.upper_body_lean_max_deg), deg_to_rad(1.0),
+			deg_to_rad(c.upper_body_lean_forward_max_deg), deg_to_rad(1.0),
 			"full reach ahead folds the torso the whole way")
+
+
+func test_reaching_to_the_side_leans_by_the_side_cap() -> void:
+	var c: SkaterController = _make_controller()
+	for deg: float in [90.0, -90.0]:
+		_reach(c, deg)
+		var rot: Vector3 = c.skater.upper_body.rotation
+		var lean: float = rad_to_deg(Vector2(rot.x, rot.z).length())
+		assert_almost_eq(lean, c.upper_body_lean_max_deg, 2.0,
+				"cursor %.0f°: a side reach leans over the hip, not the forward fold" % deg)
+
+
+# Skating folds the trunk forward and a backhand reach twists it, and the
+# skeleton folds before it twists, so its shoulder sits off the frame's marker
+# (SkaterSpineRig.shoulder_in_frame). The hand is solved from where the arm is
+# drawn; solved from the marker, the drawn arm here stretched to 1.03 of itself.
+func test_a_skating_backhand_reach_never_outreaches_the_drawn_arm() -> void:
+	var c: SkaterController = _make_controller()
+	var sk: Skater = c.skater
+	sk.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
+	c.puck.set_carrier(sk)
+	c.on_puck_picked_up_network()
+	var arm: float = sk.upper_arm_length + sk.forearm_length
+	var worst: float = 0.0
+	var input := InputState.new()
+	for i: int in 160:
+		input.delta = DT
+		input.move_vector = Vector2.ZERO if i < 40 else Vector2(0.0, 1.0)
+		var aim: Vector3 = Vector3(0.0, 0.0, 3.0) if i < 40 else Vector3(-3.5, 0.0, 0.8)
+		input.mouse_world_pos = sk.global_position + aim
+		input.mouse_world_pos.y = 0.0
+		c._process_input(input, DT)
+		sk._physics_process(DT)
+		sk._process(DT)
+		var hand: Vector3 = sk.top_hand.position
+		var root: Vector3 = sk._arms.arm_root(sk.shoulder.position, hand)
+		worst = maxf(worst, root.distance_to(sk.upper_body.transform * hand) / arm)
+	assert_gt(-sk.trunk_fold(), deg_to_rad(5.0), "skating folds the trunk, or this means nothing")
+	assert_lt(worst, 1.0, "the drawn arm spans %.3f of its length" % worst)
+
+
+# The copy of the rig's build order the hand solve uses, held against the rig.
+func test_the_arm_shoulder_is_where_the_rig_puts_it() -> void:
+	var c: SkaterController = _make_controller()
+	var sk: Skater = c.skater
+	var marker: Vector3 = sk.shoulder.position
+	for case: Vector3 in [Vector3(-0.3, -1.0, 0.1), Vector3(-0.2, 0.9, -0.05),
+			Vector3(-0.35, -0.4, 0.0)]:
+		var fold: float = case.x * 0.6
+		sk.set_upper_body_rotation(case.y)
+		sk.set_upper_body_lean(case.x, case.z, fold)
+		sk.lower_body.rotation.y = 0.0
+		sk._spine.update()
+		var spine: Basis = sk._arms._skeleton.get_bone_global_pose(SkaterBodySkeleton.SPINE_BONE).basis
+		var drawn: Vector3 = sk.upper_body.basis.inverse() * (spine * marker)
+		var solved: Vector3 = SkaterSpineRig.shoulder_in_frame(
+				marker, sk.upper_body.rotation, 0.0, fold)
+		assert_almost_eq(solved.distance_to(drawn), 0.0, 0.002,
+				"fold %.2f twist %.2f: the solve's shoulder is the rig's" % [fold, case.y])
 
 
 func test_straight_ahead_is_the_arms_longest_reach() -> void:

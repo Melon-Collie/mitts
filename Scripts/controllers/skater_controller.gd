@@ -393,14 +393,14 @@ var upper_body_return_speed: float = 6.0
 var upper_body_follow_gain: float = 0.4        # how far the shoulders overshoot the whip
 var upper_body_follow_stiffness: float = 110.0  # spring constant (higher = quicker catch-up)
 var upper_body_follow_damping: float = 18.0     # damping (near-critical — a clean settle)
-# Reach lean — the torso tips TOWARD the blade's reach direction (pitch +
-# roll, see SkaterPoseCoordinator.compute_upper_body_lean_target). Because
-# the blade IK solves in the leaned frame, this lean genuinely extends world
-# reach at the ROM rim. It buys little (measured: 18° adds ~3 cm over 8°; the
-# arm buys the rest), and the cursor sits past the rim most of the time, so
-# this is mostly how far the skater visibly lunges at it. engage_power > 1
-# keeps the torso quiet mid-ROM and commits the lean near full extension.
-var upper_body_lean_max_deg: float = 8.0
+# Reach lean — the torso tips TOWARD the blade (SkaterPoseCoordinator
+# .compute_upper_body_lean_target), to the side cap out either side and the
+# forward cap straight ahead (_reach_lean_max_deg). It extends reach at the rim
+# by only a few cm (the blade IK solves in the leaned frame); mostly it is how
+# far the skater visibly lunges. engage_power > 1 keeps the torso quiet mid-ROM
+# and commits the lean near full extension.
+var upper_body_lean_max_deg: float = 15.0
+var upper_body_lean_forward_max_deg: float = 25.0
 var upper_body_lean_engage_power: float = 1.6
 var upper_body_lean_return_speed: float = 8.0
 

@@ -185,7 +185,7 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 		target_blade_world.y = 0.0
 		last_target_blade_world = target_blade_world
 	else:
-		var shoulder: Vector3 = address_shoulder(_skater.shoulder.position)
+		var shoulder: Vector3 = arm_shoulder()
 		var shoulder_world: Vector3 = _skater.upper_body_to_global(shoulder)
 		shoulder_world.y = 0.0
 		if (mouse_world - shoulder_world).length() < 0.01:
@@ -350,8 +350,7 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 	# boards, which is exactly what the clamp below then has to undo.
 	var ik: TopHandIK.Result = _solve_top_hand(
 			capped_blade_xz, blade_side_sign,
-			_board_reach_limit(capped_blade_xz, _skater.upper_body_to_global(
-					_skater.shoulder.position)))
+			_board_reach_limit(capped_blade_xz, _skater.upper_body_to_global(arm_shoulder())))
 	var hand_local: Vector3 = ik.hand
 	var blade_local: Vector3 = ik.blade
 	if commit_t > 0.0:
@@ -431,7 +430,7 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 	# solve there, so it would only redo work.
 	if wall_clamped != intended_blade:
 		hand_local = TopHandIK.hand_for_clamped_blade(
-				_skater.shoulder.position,
+				arm_shoulder(),
 				Vector2(wall_clamped.x, wall_clamped.z),
 				wall_clamped.y,
 				blade_side_sign,
@@ -472,10 +471,9 @@ func _board_reach_limit(target_blade_xz: Vector2, shoulder_world: Vector3) -> fl
 			NetGeometry.distance_to_near_net(origin, _controller.net_blade_half_thickness))
 	if clear > _controller.stick_length + _controller.rom_forward_reach_max + _OPEN_ICE_MARGIN_M:
 		return INF
+	var shoulder: Vector3 = arm_shoulder()
 	var aim_local := Vector3(
-			target_blade_xz.x - _skater.shoulder.position.x,
-			0.0,
-			target_blade_xz.y - _skater.shoulder.position.z)
+			target_blade_xz.x - shoulder.x, 0.0, target_blade_xz.y - shoulder.z)
 	if aim_local.length_squared() < 0.000001:
 		return INF
 	var aim_world: Vector3 = _skater.upper_body.global_transform.basis * aim_local
@@ -525,7 +523,7 @@ func _apply_carry_offset(desired_blade_xz: Vector2) -> Vector2:
 func _solve_top_hand(desired_blade_xz: Vector2, blade_side_sign: float,
 		max_blade_reach: float = INF) -> TopHandIK.Result:
 	var blade_y: float = blade_y_local()
-	var shoulder: Vector3 = address_shoulder(_skater.shoulder.position)
+	var shoulder: Vector3 = arm_shoulder()
 	var ik: TopHandIK.Result = _ik_result
 	if _native_top != null:
 		if _cached_top_cfg == null:
@@ -592,6 +590,19 @@ func update_bottom_hand() -> void:
 	if span.length() > reach:
 		bh = shoulder + span.normalized() * reach
 	_skater.set_bottom_hand_position(bh)
+
+# ── The shoulder the top hand works from ───────────────────────────────────────
+# Where the top arm is drawn from, which is where its reach is measured from: the
+# trunk's shoulder (SkaterSpineRig.shoulder_in_frame — a folded, twisted trunk
+# carries it off the frame's marker, and a hand solved off the marker then
+# out-reaches the arm drawn to it), then the faceoff address's fold. Tick state
+# only, because the blade it places is gameplay: the hips are taken square to
+# the facing, since their yaw carries the render-rate gait. The twist they would
+# add is clamped at the spine's limit in the poses where this matters.
+func arm_shoulder() -> Vector3:
+	return address_shoulder(SkaterSpineRig.shoulder_in_frame(_skater.shoulder.position,
+			_skater.upper_body.rotation, 0.0, _skater.trunk_fold()))
+
 
 # ── The centre's faceoff address ──────────────────────────────────────────────
 # What the hand solves owe a centre set over the dot. Why each exists, and what
@@ -709,7 +720,7 @@ func _commit_hand_pose(hand_local: Vector3, blade_local: Vector3,
 func rigid_stick(hand_local: Vector3, blade_local: Vector3,
 		blade_side_sign: float) -> TopHandIK.Result:
 	TopHandIK.enforce_rigid_stick(
-			_skater.shoulder.position, hand_local, blade_local, blade_side_sign,
+			arm_shoulder(), hand_local, blade_local, blade_side_sign,
 			_ik_config(blade_local.y), _rigid_result)
 	return _rigid_result
 

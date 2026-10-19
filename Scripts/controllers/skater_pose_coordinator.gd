@@ -112,6 +112,19 @@ static func compute_upper_body_lean_target(
 	return Vector2(mag * dir.y, -mag * dir.x)
 
 
+# The reach lean's cap toward the hand: the side cap out to either side, rising
+# to the forward cap straight ahead. Ahead is the skater's facing, not the
+# shoulders' — a backhand reach twists them toward the stick, and in their frame
+# a hand out to the side reads as straight ahead. A one-handed reach ahead folds
+# deep at the waist; one to the side leans over the hip.
+func _reach_lean_max_deg(hand_vec: Vector2) -> float:
+	var dir: Vector3 = Basis(Vector3.UP, _skater.upper_body.rotation.y) \
+			* Vector3(hand_vec.x, 0.0, hand_vec.y)
+	var ahead: float = maxf(-dir.z, 0.0) / maxf(dir.length(), 0.0001)
+	return lerpf(_controller.upper_body_lean_max_deg,
+			_controller.upper_body_lean_forward_max_deg, ahead * ahead)
+
+
 # The torso's lean off the wire (remote, replay and goal-replay paths): the
 # simulating machine's smoothed state, applied through the one torso writer.
 # Must run BEFORE set_blade_position — the wire blade is local to the tilted
@@ -450,9 +463,14 @@ func apply_upper_body(delta: float) -> void:
 
 	var target_angle: float = 0.0
 	var target_lean: Vector2 = Vector2.ZERO
+	# Off the shoulder the arm is drawn from, which is where its reach is measured
+	# (SkaterIKCoordinator.arm_shoulder, less the faceoff fold the address share
+	# zeroes this lean through anyway).
+	var shoulder: Vector3 = SkaterSpineRig.shoulder_in_frame(_skater.shoulder.position,
+			_skater.upper_body.rotation, 0.0, _skater.trunk_fold())
 	var hand_vec := Vector2(
-		_skater.top_hand.position.x - _skater.shoulder.position.x,
-		_skater.top_hand.position.z - _skater.shoulder.position.z)
+		_skater.top_hand.position.x - shoulder.x,
+		_skater.top_hand.position.z - shoulder.z)
 	var hand_reach: float = hand_vec.length()
 
 	if hand_reach > 0.01:
@@ -484,11 +502,11 @@ func apply_upper_body(delta: float) -> void:
 		var rim_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
 		target_lean = compute_upper_body_lean_target(
 				Vector2(_skater.top_hand.position.x, _skater.top_hand.position.z),
-				Vector2(_skater.shoulder.position.x, _skater.shoulder.position.z),
+				Vector2(shoulder.x, shoulder.z),
 				TopHandIK.rim_reach(atan2(hand_vec.x, -hand_vec.y) * rim_side_sign,
 						_controller.rom_forward_reach_max, _controller.rom_forehand_reach_max,
 						_controller.rom_backhand_reach_max),
-				_controller.upper_body_lean_max_deg,
+				_reach_lean_max_deg(hand_vec),
 				_controller.upper_body_lean_engage_power) * (1.0 - _address_share())
 
 	upper_body_angle = lerp_angle(upper_body_angle, target_angle, _controller.upper_body_return_speed * delta)

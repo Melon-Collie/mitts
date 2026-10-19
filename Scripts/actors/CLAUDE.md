@@ -93,6 +93,16 @@ under `UpperBody`, a leg skeleton under `LowerBody`) could not:
   shoulders always point where gameplay put them, so the arms reach their
   hands; past the limit the hips come round instead.
 
+The order has a price: a trunk both folded and twisted — a skating fold and a
+backhand reach — carries its shoulders off `UpperBody`'s markers, 5 cm at full
+twist. The arms are drawn from the trunk's, so the top hand is solved from
+there too (`SkaterIKCoordinator.arm_shoulder`, through
+`SkaterSpineRig.shoulder_in_frame`, which `test_top_hand_reaches_its_rim.gd`
+holds against the rig). Solved from the marker, the hand reached past the arm
+drawn to it. That copy reads tick state only — the hips are taken square to the
+facing, because their yaw carries the render-rate gait and the blade is
+gameplay.
+
 **The body leans toward its acceleration** (`BalanceRules`): atan(|a|/g),
 eased softly into a 20° cap, through a critically damped spring solved
 exactly. One model is the turn's bank, the start's forward drive and the
