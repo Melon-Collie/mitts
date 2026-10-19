@@ -72,7 +72,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/actors/skater.gd": 2797,
 	"res://Scripts/networking/network_manager.gd": 2866,
 	"res://Scripts/game/tutorial_manager.gd": 2067,
-	"res://Scripts/controllers/skater_ik_coordinator.gd": 957,
+	"res://Scripts/controllers/skater_ik_coordinator.gd": 995,
 	# +21: apply_scripted_grant / stage_scripted — the tutorial's teleports
 	# restart the swept interaction tests where the puck lands instead of
 	# sweeping the jump. +6: the pinch hop composed onto the contest exit.

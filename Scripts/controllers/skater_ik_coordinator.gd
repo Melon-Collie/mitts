@@ -58,6 +58,7 @@ var last_target_blade_world: Vector3 = Vector3.ZERO
 # skater per physics tick across the 3-pass loop).
 var _cached_top_cfg: TopHandIK.Config = null
 var _cached_bottom_cfg: BottomHandIK.Config = null
+var _two_hand_scratch := TopHandIK.Result.new()
 var _ik_result := TopHandIK.Result.new()
 var _net_result := NetBladeCollision.Result.new()
 # See resolve_blade_against_net.
@@ -518,12 +519,18 @@ func _apply_carry_offset(desired_blade_xz: Vector2) -> Vector2:
 # the shared _ik_result — callers must consume it before the next solve.
 func _solve_top_hand(desired_blade_xz: Vector2, blade_side_sign: float,
 		max_blade_reach: float = INF) -> TopHandIK.Result:
+	if _controller.has_puck:
+		desired_blade_xz = _carry_backhand_stop(desired_blade_xz, blade_side_sign)
 	var tilt: Basis = _level_tilt()
 	var shoulder: Vector3 = tilt * arm_shoulder()
 	var hang_y: float = (tilt * _trunk_shoulder()).y
 	var target: Vector3 = tilt * Vector3(desired_blade_xz.x,
 			blade_y_lean_corrected(desired_blade_xz.x, desired_blade_xz.y), desired_blade_xz.y)
 	var cfg: TopHandIK.Config = _level_config(hang_y, blade_y_local(), max_blade_reach)
+	if _controller.has_puck:
+		max_blade_reach = minf(max_blade_reach, _two_hand_reach(
+				tilt, shoulder, Vector2(target.x, target.z), blade_side_sign, cfg))
+		cfg.max_blade_reach = max_blade_reach
 	var ik: TopHandIK.Result = _ik_result
 	if _native_top != null:
 		_native_top.hand_rest_y = cfg.hand_rest_y
@@ -537,6 +544,37 @@ func _solve_top_hand(desired_blade_xz: Vector2, blade_side_sign: float,
 	ik.hand = untilt * ik.hand
 	ik.blade = untilt * ik.blade
 	return ik
+
+
+# ── Carrying with both hands (Scripts/controllers/CLAUDE.md) ─────────────────
+# How far along the aim a carrier's blade can go with the bottom hand still on
+# the shaft (TopHandIK.two_hand_reach), in the solve's level frame.
+func _two_hand_reach(tilt: Basis, shoulder: Vector3, target_xz: Vector2,
+		blade_side_sign: float, cfg: TopHandIK.Config) -> float:
+	var bottom: Vector3 = tilt * SkaterSpineRig.shoulder_in_frame(
+			_skater.bottom_shoulder.position, _skater.upper_body.rotation, 0.0,
+			_skater.trunk_fold())
+	var reach: float = (_skater.upper_arm_length + _skater.forearm_length) \
+			* _skater.arm_working_extension + _skater.shoulder_reach_m
+	return TopHandIK.two_hand_reach(shoulder, target_xz, blade_side_sign, cfg,
+			bottom, _grip_fraction(), reach, _two_hand_scratch)
+
+
+# The backhand angle past which the bottom hand lets go (bh_release_angle_deg,
+# off the body as _bh_backhand_angle measures it): a carrier's blade stops on it.
+func _carry_backhand_stop(target_xz: Vector2, blade_side_sign: float) -> Vector2:
+	var on_ice: Vector3 = _skater.upper_body_to_global(Vector3(target_xz.x,
+			blade_y_lean_corrected(target_xz.x, target_xz.y), target_xz.y))
+	var body: Basis = _skater.global_transform.basis
+	var rel: Vector3 = body.inverse() * (on_ice - _skater.global_position)
+	var r: float = Vector2(rel.x, rel.z).length()
+	var limit: float = deg_to_rad(_controller.bh_release_angle_deg)
+	if r < 0.01 or atan2(rel.x, -rel.z) * -blade_side_sign <= limit:
+		return target_xz
+	var a: float = limit * -blade_side_sign
+	var stopped: Vector3 = _skater.upper_body_to_local(_skater.global_position
+			+ body * Vector3(sin(a) * r, rel.y, -cos(a) * r))
+	return Vector2(stopped.x, stopped.z)
 
 
 # UpperBody's pitch and roll: level-frame = _level_tilt() * UpperBody-local.

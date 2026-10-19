@@ -632,3 +632,40 @@ func test_a_limit_past_the_whole_reach_is_no_limit() -> void:
 			bound_short += 1
 	assert_lt(worst, 0.00001, "a limit past the whole reach changes nothing (worst %f m)" % worst)
 	assert_gt(bound_short, 100, "while one inside it binds")
+
+
+# ── Two hands on the stick ───────────────────────────────────────────────
+
+func _held(shoulder: Vector3, target: Vector2, cfg: TopHandIK.Config, bottom: Vector3,
+		reach: float) -> bool:
+	var r: TopHandIK.Result = TopHandIK.solve(shoulder, target, -1.0, cfg)
+	return BottomHandIK.reachable_grip(bottom, r.hand, r.blade, 0.25, reach).y <= 0.0
+
+
+func test_two_hand_reach_is_the_last_cap_the_other_hand_holds() -> void:
+	var shoulder: Vector3 = _lefty_shoulder()
+	var bottom := Vector3(-SHOULDER_OFFSET, 0.0, 0.0)
+	var reach: float = 0.65
+	var cfg: TopHandIK.Config = _cfg()
+	var scratch := TopHandIK.Result.new()
+	for deg: float in [0.0, 20.0, 40.0]:
+		var a: float = deg_to_rad(deg)
+		var target := Vector2(shoulder.x + sin(a) * 5.0, shoulder.z - cos(a) * 5.0)
+		var limit: float = TopHandIK.two_hand_reach(shoulder, target, -1.0, cfg, bottom,
+				0.25, reach, scratch)
+		assert_true(is_finite(limit), "%.0f°: a target 5 m out is past the two-handed rim" % deg)
+		assert_eq(cfg.max_blade_reach, INF, "the search leaves the cap as it found it")
+		cfg.max_blade_reach = limit
+		assert_true(_held(shoulder, target, cfg, bottom, reach), "%.0f°: held at the limit" % deg)
+		cfg.max_blade_reach = limit + 0.02
+		assert_false(_held(shoulder, target, cfg, bottom, reach),
+				"%.0f°: let go just past it" % deg)
+		cfg.max_blade_reach = INF
+
+
+func test_a_held_target_sets_no_two_hand_limit() -> void:
+	var shoulder: Vector3 = _lefty_shoulder()
+	var target := Vector2(shoulder.x, shoulder.z - 1.0)
+	var limit: float = TopHandIK.two_hand_reach(shoulder, target, -1.0, _cfg(),
+			Vector3(-SHOULDER_OFFSET, 0.0, 0.0), 0.25, 0.65, TopHandIK.Result.new())
+	assert_eq(limit, INF, "a blade the other hand already reaches is not limited")

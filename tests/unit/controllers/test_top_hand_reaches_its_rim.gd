@@ -232,3 +232,59 @@ func test_the_league_default_reach_is_the_neutral_builds() -> void:
 	var c: SkaterController = _make_controller()
 	assert_almost_eq(c.build_ai_caps().max_blade_reach, AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M, 0.01,
 			"bots price an unknown defender's reach as the neutral build's")
+
+
+# Carrying, the puck stays in both hands: the blade stops where the bottom hand
+# could no longer hold the shaft, and on the backhand at the angle it lets go.
+func _carry(c: SkaterController, deg: float, skate: bool) -> void:
+	var sk: Skater = c.skater
+	c.puck.set_carrier(sk)
+	c.on_puck_picked_up_network()
+	var a: float = deg_to_rad(deg)
+	var input := InputState.new()
+	for i: int in 200:
+		if skate:
+			if i == 120:
+				sk.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
+		else:
+			c._pose.facing = Vector2(0.0, 1.0)
+			sk.set_facing(c._pose.facing)
+		input.delta = DT
+		input.move_vector = Vector2(0.0, 1.0) if skate else Vector2.ZERO
+		var aim: Vector3 = Vector3(0.0, 0.0, 3.0) if skate and i < 120 \
+				else Vector3(sin(a), 0.0, cos(a)) * 4.5
+		input.mouse_world_pos = sk.global_position + aim
+		input.mouse_world_pos.y = 0.0
+		c._process_input(input, DT)
+		sk._physics_process(DT)
+		sk._process(DT)
+
+
+func test_a_carrier_keeps_both_hands_on_the_stick() -> void:
+	for skate: bool in [false, true]:
+		for deg: float in [0.0, 45.0, -45.0, -90.0, -135.0]:
+			var c: SkaterController = _make_controller()
+			_carry(c, deg, skate)
+			var sk: Skater = c.skater
+			var hand: Vector3 = sk.top_hand.position
+			var shaft: Vector3 = sk.get_blade_position() - hand
+			var bh: Vector3 = sk.bottom_hand.position
+			var t: float = clampf((bh - hand).dot(shaft) / shaft.length_squared(), 0.0, 1.0)
+			var what: String = "%s, cursor %.0f°" % ["skating" if skate else "standing", deg]
+			assert_lt(bh.distance_to(hand + shaft * t), 0.02,
+					"%s: the bottom hand holds the shaft" % what)
+			assert_lt(rad_to_deg(c._ik._bh_backhand_angle()), c.bh_release_angle_deg + 0.5,
+					"%s: the blade stops at the backhand angle the hand lets go at" % what)
+
+
+func test_an_empty_stick_still_reaches_one_handed() -> void:
+	var with_puck: SkaterController = _make_controller()
+	_carry(with_puck, 0.0, false)
+	var empty: SkaterController = _make_controller()
+	_reach(empty, 0.0)
+	var carried: float = with_puck.skater.get_blade_contact_global().distance_to(
+			with_puck.skater.global_position)
+	var reached: float = empty.skater.get_blade_contact_global().distance_to(
+			empty.skater.global_position)
+	assert_gt(reached - carried, 0.1,
+			"one hand reaches %.2f m past the two-handed carry" % (reached - carried))

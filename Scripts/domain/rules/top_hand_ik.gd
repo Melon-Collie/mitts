@@ -64,6 +64,9 @@ class Result:
 	var hand: Vector3 = Vector3.ZERO
 	var blade: Vector3 = Vector3.ZERO
 
+# two_hand_reach's bisection: 2.5 m of reach to under a centimetre.
+const _TWO_HAND_BISECTIONS: int = 9
+
 # Projects a desired blade target onto the reachable blade region (the ROM
 # envelope), in upper-body-local space. This is the closed-form clamp — no
 # iteration, no hand work — that decides WHERE the blade ends up. solve() builds
@@ -293,6 +296,37 @@ static func _arm_angle_to_forehand(
 	if bearing.length_squared() < 0.000001:
 		return 0.0
 	return atan2(bearing.x, -bearing.y) * blade_side_sign
+
+
+# The farthest along the aim to `desired_blade_xz` the blade may sit, as a
+# max_blade_reach (horizontal distance from `shoulder`), with the other hand
+# still able to hold the shaft: some point of it within `bottom_reach` of
+# `bottom_shoulder` (BottomHandIK.reachable_grip). INF when the target itself is
+# held. Along one aim the solve only carries the shaft farther from the body as
+# the cap grows, so the answer is bisected; the target pose is tried first, and
+# carrying inside the two-handed rim costs that one solve. Leaves
+# cfg.max_blade_reach as it found it; `scratch` is overwritten.
+static func two_hand_reach(shoulder: Vector3, desired_blade_xz: Vector2,
+		blade_side_sign: float, cfg: Config, bottom_shoulder: Vector3, grip: float,
+		bottom_reach: float, scratch: Result) -> float:
+	solve(shoulder, desired_blade_xz, blade_side_sign, cfg, scratch)
+	if BottomHandIK.reachable_grip(bottom_shoulder, scratch.hand, scratch.blade,
+			grip, bottom_reach).y <= 0.0:
+		return INF
+	var cap: float = cfg.max_blade_reach
+	var lo: float = 0.0
+	var hi: float = Vector2(scratch.blade.x - shoulder.x, scratch.blade.z - shoulder.z).length()
+	for _i: int in _TWO_HAND_BISECTIONS:
+		var mid: float = (lo + hi) * 0.5
+		cfg.max_blade_reach = mid
+		solve(shoulder, desired_blade_xz, blade_side_sign, cfg, scratch)
+		if BottomHandIK.reachable_grip(bottom_shoulder, scratch.hand, scratch.blade,
+				grip, bottom_reach).y <= 0.0:
+			lo = mid
+		else:
+			hi = mid
+	cfg.max_blade_reach = cap
+	return lo
 
 
 # The farthest a blade's contact point can be from the body origin, the way the

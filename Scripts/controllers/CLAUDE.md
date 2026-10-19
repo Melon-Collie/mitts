@@ -763,6 +763,15 @@ hand the drawn arm could not reach or barely extended toward:
 
 The reach lean measures the hand the same way, and the host's claim clamp
 bounds the result (`TopHandIK.full_reach`, the trunk at its deepest fold).
+
+**A carrier keeps both hands on the stick.** An empty stick reaches one-handed
+to the rim; with the puck the blade stops where the bottom hand could no longer
+hold the shaft (`TopHandIK.two_hand_reach`, from the bottom shoulder read the
+way `arm_shoulder` reads the top one) and, on the backhand, at the angle past
+which it lets go (`bh_release_angle_deg`, `_carry_backhand_stop`) — the puck
+magnetises to the blade, so a one-handed carry was reach no defender could
+answer. Both are tick state; the drawn bottom hand reads the render-rate trunk
+and is what the limit is measured to keep on the shaft.
 `test_top_hand_reaches_its_rim.gd` holds all of it.
 
 **A pose the trunk texture cannot express does not belong in the gait.** The
