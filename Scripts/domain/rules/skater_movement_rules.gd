@@ -80,9 +80,9 @@ static func league_config() -> MovementConfig:
 	cfg.turn_accel = GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2
 	cfg.max_turn_rate = GameRules.DEFAULT_SKATER_MAX_TURN_RATE_RAD_S
 	cfg.puck_carry_speed_multiplier = 0.92
-	cfg.backward_thrust_multiplier = 0.80
-	cfg.crossover_thrust_multiplier = 0.90
-	cfg.backward_max_speed_multiplier = 0.80
+	cfg.backward_thrust_multiplier = 0.90
+	cfg.crossover_thrust_multiplier = 0.84
+	cfg.backward_max_speed_multiplier = 0.90
 	cfg.lateral_grip = 1.0
 	cfg.stance_grip_mult = 2.0
 	cfg.stance_scrape = 3.0 / GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2

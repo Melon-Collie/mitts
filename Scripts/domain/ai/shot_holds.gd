@@ -62,7 +62,7 @@ var _route := PackedVector2Array()
 func configure_from(ctx: RoleContext) -> void:
 	is_left_handed = ctx.self_forehand_perp_sign > 0.0
 	load_cfg = ctx.self_wrister_load
-	facing_cfg = ctx.self_facing_rules
+	facing_cfg = ctx.self_carry_facing_rules
 	unloaded_share = ctx.self_wrister_unloaded_share
 	backhand_coefficient = ctx.self_backhand_power_coefficient
 	handle_reach = ctx.self_handle_reach

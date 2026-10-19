@@ -28,6 +28,7 @@ class NativeTopHandIK : public godot::RefCounted {
 	double hand_y_max = 0.0;
 	double rom_forehand_angle_max = 0.0;
 	double rom_backhand_angle_max = 0.0;
+	double rom_forward_reach_max = 0.0;
 	double rom_forehand_reach_max = 0.0;
 	double rom_backhand_reach_max = 0.0;
 	double max_blade_reach = INFINITY;
@@ -36,6 +37,7 @@ class NativeTopHandIK : public godot::RefCounted {
 	godot::Vector3 blade;
 
 	godot::Vector2 clamp_aim_to_rom(const godot::Vector2 &aim_dir, double blade_side_sign) const;
+	double rim_reach(double angle_to_forehand) const;
 	static double stick_horiz_for(double stick_length, double hand_y, double blade_y);
 
 protected:
@@ -81,6 +83,8 @@ public:
 	double get_rom_forehand_angle_max() const { return rom_forehand_angle_max; }
 	void set_rom_backhand_angle_max(double v) { rom_backhand_angle_max = v; }
 	double get_rom_backhand_angle_max() const { return rom_backhand_angle_max; }
+	void set_rom_forward_reach_max(double v) { rom_forward_reach_max = v; }
+	double get_rom_forward_reach_max() const { return rom_forward_reach_max; }
 	void set_rom_forehand_reach_max(double v) { rom_forehand_reach_max = v; }
 	double get_rom_forehand_reach_max() const { return rom_forehand_reach_max; }
 	void set_rom_backhand_reach_max(double v) { rom_backhand_reach_max = v; }

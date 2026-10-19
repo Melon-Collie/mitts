@@ -12,7 +12,9 @@ extends RefCounted
 # lag-comp claim, StickTieClaimResolver → try_engage). It holds while either of
 # the two holds the stick-check button and the sticks stay within
 # TIE_SEPARATION_M, and breaks otherwise, on a knockdown or a ghost, when either
-# gains the puck, or at a stoppage. A break puts both on the shared cooldown.
+# gains the puck or is in a board pin, when either throws a cross-check (both
+# hands go to the shaft), or at a stoppage. A break puts both on the shared
+# cooldown. Nobody in a pin ties or is tied: the pin is ticked first.
 
 var _registry: PlayerRegistry = null
 var _carrier_getter: Callable = Callable()   # () -> Skater (null when loose)
@@ -63,7 +65,7 @@ func clear() -> void:
 func _can_initiate(skater: Skater) -> bool:
 	return skater.stick_check_phase == StickCheckRules.Phase.TIE and not skater.stick_tied \
 			and not skater.is_stick_check_cooling() and not skater.is_knocked_down \
-			and not skater.is_ghost
+			and not skater.is_ghost and skater.pin_role == BoardPinRules.Role.NONE
 
 
 func _hold_or_break() -> void:
@@ -79,6 +81,9 @@ func _hold_or_break() -> void:
 		var holds: bool = (a.stick_check_held or b.stick_check_held) \
 				and not a.is_knocked_down and not b.is_knocked_down \
 				and not a.is_ghost and not b.is_ghost \
+				and a.pin_role == BoardPinRules.Role.NONE and b.pin_role == BoardPinRules.Role.NONE \
+				and not CrossCheckRules.is_stick_busy(a.cross_check_phase) \
+				and not CrossCheckRules.is_stick_busy(b.cross_check_phase) \
 				and a != carrier and b != carrier \
 				and _stick_gap(a, b) <= StickCheckRules.TIE_SEPARATION_M
 		if not holds:
@@ -99,9 +104,10 @@ func _nearest_tieable(initiator: Skater) -> Skater:
 
 
 # Geometry is the caller's: an opponent who is not carrying (a carrier's stick is
-# lifted, not tied), not already tied, and not down or ghosted.
+# lifted, not tied), not already tied, not in a pin, and not down or ghosted.
 func _tieable(initiator: Skater, victim: Skater) -> bool:
-	if victim == initiator or victim.stick_tied or victim.is_knocked_down or victim.is_ghost:
+	if victim == initiator or victim.stick_tied or victim.is_knocked_down or victim.is_ghost \
+			or victim.pin_role != BoardPinRules.Role.NONE:
 		return false
 	var i_team: int = _registry.team_id_by_skater.get(initiator, -1)
 	var v_team: int = _registry.team_id_by_skater.get(victim, -1)

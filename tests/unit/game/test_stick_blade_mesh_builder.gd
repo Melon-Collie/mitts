@@ -362,6 +362,8 @@ func test_tape_config_drives_the_tape_node() -> void:
 
 func test_shaft_follow_pitch_tips_blade_with_raised_shaft() -> void:
 	var skater: Skater = _make_skater()
+	# Standing on the ice, as every skater does: the blade's toe is kept out of it.
+	skater.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
 	var blade_mesh: MeshInstance3D = skater.blade.get_node("MeshInstance3D") as MeshInstance3D
 	# Rest-lie shaft (~42°, hand above the blade): the blade lies near-flat.
 	skater.set_top_hand_position(Vector3(0.24, -0.10, 0.0))

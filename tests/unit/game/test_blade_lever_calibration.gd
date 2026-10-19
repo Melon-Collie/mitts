@@ -170,6 +170,26 @@ func test_ladder_is_the_loft_lever_per_curve() -> void:
 				"under the guard at rung %d" % i)
 
 
+func test_skate_profile_reaches_the_controller() -> void:
+	# The profile's leans land on the movement fields the physics and the bots'
+	# planning read, and re-applying Stability restores the base.
+	var c := _make_controller()
+	c.apply_attributes(PlayerAttributes.new(73, 201, PlayerAttributes.PROFILE_POWER))
+	assert_almost_eq(c.crossover_thrust_multiplier, 1.00, 0.01, "power crossover")
+	assert_almost_eq(c.backward_thrust_multiplier, 0.74, 0.01, "power backward")
+	c.apply_attributes(PlayerAttributes.new(73, 201, PlayerAttributes.PROFILE_SHIFTY))
+	assert_almost_eq(c.stance_grip_mult, 2.4, 0.01, "shifty stance grip")
+	assert_almost_eq(c.stance_shuffle_mult, 1.4, 0.01, "shifty side-step")
+	c.apply_attributes(PlayerAttributes.neutral())
+	assert_almost_eq(c.crossover_thrust_multiplier, 0.84, 1e-6)
+	assert_almost_eq(c.backward_thrust_multiplier, 0.90, 1e-6)
+	assert_almost_eq(c.backward_max_speed_multiplier, 0.90, 1e-6)
+	assert_almost_eq(c.stance_grip_mult, 2.0, 1e-6)
+	assert_almost_eq(c.stance_shuffle_mult, 1.2, 1e-6)
+	var move: SkaterMovementRules.MovementConfig = c.build_ai_caps().movement
+	assert_almost_eq(move.backward_thrust_multiplier, 0.90, 1e-6, "the bots read the build")
+
+
 func test_flex_reaches_the_controller() -> void:
 	# Stiff = bigger slapper AND a longer slapper charge; whippy = more of an
 	# unloaded wrister and a visibly bendier shaft. The wrister ceiling holds.

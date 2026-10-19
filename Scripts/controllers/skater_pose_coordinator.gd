@@ -66,8 +66,10 @@ func setup(skater: Skater, sm: SkaterStateMachine, aiming: SkaterAimingBehavior,
 
 # ── Per-Tick Application ──────────────────────────────────────────────────────
 func apply_velocity_lean(delta: float) -> void:
+	var leg_scale: float = _skating.leg_scale if _skating != null else 1.0
 	var target: float = compute_velocity_lean_target(
-			_skater.velocity, _skater.global_transform.basis, _controller.max_speed,
+			_skater.velocity, _skater.global_transform.basis,
+			_controller.gait_full_speed * leg_scale,
 			_controller.velocity_lean_forward_max_deg,
 			_controller.velocity_lean_back_max_deg)
 	velocity_lean_x = lerpf(velocity_lean_x, target, _controller.velocity_lean_speed * delta)
@@ -80,13 +82,13 @@ func apply_velocity_lean(delta: float) -> void:
 # through a carve, so a roll toward body-frame lateral velocity would lean OUT
 # of the turn. The turn's bank is the balance lean's (SkaterSpineRig).
 static func compute_velocity_lean_target(
-		world_velocity: Vector3, body_basis: Basis, max_speed: float,
+		world_velocity: Vector3, body_basis: Basis, full_speed: float,
 		fwd_lean_max_deg: float, back_lean_max_deg: float) -> float:
-	if max_speed <= 0.0:
+	if full_speed <= 0.0:
 		return 0.0
 	var local_vel: Vector3 = body_basis.inverse() * world_velocity
 	# −Z is the body's forward axis, so negate for a "how forward" fraction.
-	var fwd_t: float = clampf(-local_vel.z / max_speed, -1.0, 1.0)
+	var fwd_t: float = clampf(-local_vel.z / full_speed, -1.0, 1.0)
 	var pitch_max_deg: float = fwd_lean_max_deg if fwd_t >= 0.0 else back_lean_max_deg
 	return -fwd_t * deg_to_rad(pitch_max_deg)
 
@@ -110,6 +112,19 @@ static func compute_upper_body_lean_target(
 	var mag: float = deg_to_rad(lean_max_deg) * pow(reach_factor, maxf(engage_power, 0.01))
 	var dir: Vector2 = hand_vec / hand_reach
 	return Vector2(mag * dir.y, -mag * dir.x)
+
+
+# The reach lean's cap toward the hand: the side cap out to either side, rising
+# to the forward cap straight ahead. Ahead is the skater's facing, not the
+# shoulders' — a backhand reach twists them toward the stick, and in their frame
+# a hand out to the side reads as straight ahead. A one-handed reach ahead folds
+# deep at the waist; one to the side leans over the hip.
+func _reach_lean_max_deg(hand_vec: Vector2) -> float:
+	var dir: Vector3 = Basis(Vector3.UP, _skater.upper_body.rotation.y) \
+			* Vector3(hand_vec.x, 0.0, hand_vec.y)
+	var ahead: float = maxf(-dir.z, 0.0) / maxf(dir.length(), 0.0001)
+	return lerpf(_controller.upper_body_lean_max_deg,
+			_controller.upper_body_lean_forward_max_deg, ahead * ahead)
 
 
 # The torso's lean off the wire (remote, replay and goal-replay paths): the
@@ -231,53 +246,44 @@ func apply_facing(input: InputState, delta: float) -> void:
 			mouse_world.z - _skater.global_position.z
 		)
 		if to_mouse.length() > _controller.move_deadzone:
-			# Gate: while the mouse is in the unreachable wedge behind the skater
-			# (past the blade's reach edge on its side, FacingRules.reach_edge),
-			# freeze facing so the body doesn't chase a target it can't reach. Resume tracking as soon as the mouse returns to the reachable
-			# cone, regardless of side: an unlock tied to the side it left from
-			# strands facing when the mouse wraps round. Snap-prevention on wraps
-			# lives in the blade speed cap (SkaterIKCoordinator), not in this lock.
-			# Only a standing skater is held: a moving one turns round instead
-			# (FacingRules.Result.free_to_turn_round).
 			var cursor_dir: Vector2 = to_mouse.normalized()
 			var lefty: bool = _skater.is_left_handed
 			var rules: FacingRules.Config = _controller.facing_rules
+			# A carrier's hips pivot where its blade stops on the backhand.
 			FacingRules.solve(_facing_rule, facing, cursor_dir,
 					Vector2(_skater.velocity.x, _skater.velocity.z), input.brake,
-					_controller.stance_active, lefty, rules)
+					_controller.stance_active, lefty,
+					_controller.carry_facing_rules if _controller.has_puck else rules)
 			var facing_target: Vector2 = _facing_rule.target
-			var mouse_body_angle: float = facing.angle_to(cursor_dir)
-			var behind_gate: bool = absf(mouse_body_angle) \
+			var behind: bool = absf(facing.angle_to(cursor_dir)) \
 					>= FacingRules.reach_edge(rules, facing, cursor_dir, lefty)
-			var turns_round: bool = _facing_rule.free_to_turn_round
-			if turns_round or not behind_gate:
-				var drag: float = _controller.facing_drag_speed_braking if input.brake else _controller.facing_drag_speed
-				# Re-square hard through the follow-through: the coil left facing stale
-				# at the wind-up cursor, and a lazy drag can't catch up in ~0.22 s, so
-				# the blade handoff snaps to the wrong side (ROM-clamped to the stale
-				# facing) before reaching the cursor. See follow_through_facing_recover_speed.
-				if s == State.FOLLOW_THROUGH:
-					drag = maxf(drag, _controller.follow_through_facing_recover_speed)
-				# Board shield: a carrier working the wall squares up ALONG it and
-				# protects the puck rather than facing into it. Gated to carrying —
-				# digging a loose puck out of the corner keeps full facing freedom,
-				# because there's nothing to shield. Pure in the skater's position and
-				# the cursor, so it re-derives identically through reconcile replay.
-				if _controller.has_puck:
-					facing_target = BoardPlayRules.board_shield_facing(
-							facing_target,
-							BoardPlayRules.board_proximity(
-									Vector2(_skater.global_position.x, _skater.global_position.z),
-									_controller.board_shield_probe),
-							deg_to_rad(_controller.board_shield_max_deg))
-				if turns_round and (behind_gate or absf(facing.angle_to(facing_target))
-						>= FacingRules.reach_edge(rules, facing, facing_target, lefty)):
-					# Turning round to a cursor or a target in the wedge: a chord lerp
-					# toward a near-opposed vector barely moves, so turn by angle.
-					facing = facing.rotated(FacingRules.turn_round_angle(
-							facing, facing_target, cursor_dir) * minf(drag * delta, 1.0))
-				else:
-					facing = facing.lerp(facing_target, drag * delta).normalized()
+			var drag: float = _controller.facing_drag_speed_braking if input.brake else _controller.facing_drag_speed
+			# Re-square hard through the follow-through: the coil left facing stale
+			# at the wind-up cursor, and a lazy drag can't catch up in ~0.22 s, so
+			# the blade handoff snaps to the wrong side (ROM-clamped to the stale
+			# facing) before reaching the cursor. See follow_through_facing_recover_speed.
+			if s == State.FOLLOW_THROUGH:
+				drag = maxf(drag, _controller.follow_through_facing_recover_speed)
+			# Board shield: a carrier working the wall squares up ALONG it and
+			# protects the puck rather than facing into it. Gated to carrying —
+			# digging a loose puck out of the corner keeps full facing freedom,
+			# because there's nothing to shield. Pure in the skater's position and
+			# the cursor, so it re-derives identically through reconcile replay.
+			if _controller.has_puck:
+				facing_target = BoardPlayRules.board_shield_facing(
+						facing_target,
+						BoardPlayRules.board_proximity(
+								Vector2(_skater.global_position.x, _skater.global_position.z),
+								_controller.board_shield_probe),
+						deg_to_rad(_controller.board_shield_max_deg))
+			if behind or absf(facing.angle_to(facing_target)) \
+					>= FacingRules.reach_edge(rules, facing, facing_target, lefty):
+				# Turning round to a cursor or a target behind, standing or moving: a
+				# chord lerp toward a near-opposed vector barely moves, so turn by angle.
+				facing = facing.rotated(FacingRules.turn_round_angle(
+						facing, facing_target, cursor_dir) * minf(drag * delta, 1.0))
+			else:
+				facing = facing.lerp(facing_target, drag * delta).normalized()
 		_skater.set_facing(facing)
 		var turn_delta: float = angle_difference(prev_angle, _skater.rotation.y)
 		lower_body_lag = clampf(
@@ -450,40 +456,65 @@ func apply_upper_body(delta: float) -> void:
 
 	var target_angle: float = 0.0
 	var target_lean: Vector2 = Vector2.ZERO
-	var hand_vec := Vector2(
-		_skater.top_hand.position.x - _skater.shoulder.position.x,
-		_skater.top_hand.position.z - _skater.shoulder.position.z)
+	# Measured as the solve measures it (SkaterIKCoordinator._solve_top_hand): off
+	# the shoulder the arm is drawn from, in the arm's level frame — less the
+	# faceoff fold, which the address share zeroes this lean through anyway.
+	var rot: Vector3 = _skater.upper_body.rotation
+	var tilt: Basis = Basis.from_euler(Vector3(rot.x, 0.0, rot.z))
+	var shoulder: Vector3 = tilt * SkaterSpineRig.shoulder_in_frame(
+			_skater.shoulder.position, rot, 0.0, _skater.trunk_fold())
+	var hand: Vector3 = tilt * _skater.top_hand.position
+	var hand_vec := Vector2(hand.x - shoulder.x, hand.z - shoulder.z)
 	var hand_reach: float = hand_vec.length()
 
+	# Drive twist from the blade's world direction in the skater body frame.
+	# Using skater-local (not upper-body-local) gives a stable target that
+	# doesn't shrink as the body rotates: driving it from the HAND angle closes
+	# a dampening feedback loop that caps steady-state rotation at ~43% of the
+	# world angle. This way the body tracks 1:1 up to upper_body_max_twist_deg.
+	# It never reads the hand: in close the hand sits over the shoulder, and a
+	# twist gated on its reach squared the chest to a blade beside the hips.
+	# FREEZE: the coil normally faces the blade (which tracks the cursor), but a
+	# FROZEN blade can't lead the wind-up — so face the CURSOR directly, keeping
+	# the shoulders rotating toward the aim while the puck sits still.
+	var twist_source: Vector3 = _skater.upper_body_to_global(_skater.get_blade_position())
+	if _sm.get_state() == State.WRISTER_AIM:
+		twist_source = _controller._current_aim_world
+	var to_blade: Vector3 = twist_source - _skater.global_position
+	to_blade.y = 0.0
+	if to_blade.length() > 0.01:
+		var local_dir: Vector3 = _skater.global_transform.basis.inverse() * to_blade.normalized()
+		var blade_angle: float = atan2(local_dir.x, -local_dir.z)
+		var max_twist: float = deg_to_rad(_controller.upper_body_max_twist_deg)
+		target_angle = clampf(-blade_angle * _controller.upper_body_twist_ratio, -max_twist, max_twist)
+	# A cross-check squares the chest to its aim: the shaft is across it, and
+	# twisting after its blade would swing the shaft round to point ahead.
+	var shove_w: float = CrossCheckRules.pose_weight(_skater.cross_check_phase,
+			_skater.cross_check_elapsed)
+	if shove_w > 0.0:
+		var aim: Vector2 = _skater.cross_check_aim
+		var aim_local: Vector3 = _skater.global_transform.basis.inverse() \
+				* Vector3(aim.x, 0.0, aim.y)
+		var aim_twist: float = -atan2(aim_local.x, -aim_local.z) \
+				if aim.length_squared() > 0.0 else 0.0
+		target_angle = lerp_angle(target_angle, aim_twist, shove_w)
+	# A wrist shot winds the torso up by the power it would release
+	# with, from squared on the aim (nothing behind it) to the full wind-up.
+	if _sm.get_state() == State.WRISTER_AIM and _controller.has_puck:
+		target_angle = lerp_angle(target_angle, _controller.wrister_load.wound_yaw,
+				_controller.wrister_coil)
+
 	if hand_reach > 0.01:
-		# Drive twist from the blade's world direction in the skater body frame.
-		# Using skater-local (not upper-body-local) gives a stable target that
-		# doesn't shrink as the body rotates: driving it from the HAND angle closes
-		# a dampening feedback loop that caps steady-state rotation at ~43% of the
-		# world angle. This way the body tracks 1:1 up to upper_body_max_twist_deg.
-		# FREEZE: the coil normally faces the blade (which tracks the cursor), but a
-		# FROZEN blade can't lead the wind-up — so face the CURSOR directly, keeping
-		# the shoulders rotating toward the aim while the puck sits still.
-		var twist_source: Vector3 = _skater.upper_body_to_global(_skater.get_blade_position())
-		if _sm.get_state() == State.WRISTER_AIM:
-			twist_source = _controller._current_aim_world
-		var to_blade: Vector3 = twist_source - _skater.global_position
-		to_blade.y = 0.0
-		if to_blade.length() > 0.01:
-			var local_dir: Vector3 = _skater.global_transform.basis.inverse() * to_blade.normalized()
-			var blade_angle: float = atan2(local_dir.x, -local_dir.z)
-			var max_twist: float = deg_to_rad(_controller.upper_body_max_twist_deg)
-			target_angle = clampf(-blade_angle * _controller.upper_body_twist_ratio, -max_twist, max_twist)
-		# A wrist shot winds the torso up by the power it would release
-		# with, from squared on the aim (nothing behind it) to the full wind-up.
-		if _sm.get_state() == State.WRISTER_AIM and _controller.has_puck:
-			target_angle = lerp_angle(target_angle, _controller.wrister_load.wound_yaw,
-					_controller.wrister_coil)
+		# Measured against the rim in the hand's own direction, so the lean commits
+		# at full reach whichever way the arm is extending.
+		var rim_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
 		target_lean = compute_upper_body_lean_target(
-				Vector2(_skater.top_hand.position.x, _skater.top_hand.position.z),
-				Vector2(_skater.shoulder.position.x, _skater.shoulder.position.z),
-				_controller.rom_backhand_reach_max,
-				_controller.upper_body_lean_max_deg,
+				Vector2(hand.x, hand.z),
+				Vector2(shoulder.x, shoulder.z),
+				TopHandIK.rim_reach(atan2(hand_vec.x, -hand_vec.y) * rim_side_sign,
+						_controller.rom_forward_reach_max, _controller.rom_forehand_reach_max,
+						_controller.rom_backhand_reach_max),
+				_reach_lean_max_deg(hand_vec),
 				_controller.upper_body_lean_engage_power) * (1.0 - _address_share())
 
 	upper_body_angle = lerp_angle(upper_body_angle, target_angle, _controller.upper_body_return_speed * delta)

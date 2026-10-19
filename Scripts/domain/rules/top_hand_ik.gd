@@ -8,8 +8,9 @@ class_name TopHandIK
 #      plane, |blade.xz − hand.xz| == stick_horiz = sqrt(stick_length² −
 #      (hand.y − blade.y)²). Variable hand.y adjusts stick_horiz on the fly.
 #   2. The hand lies within an asymmetric range-of-motion envelope centered
-#      on the shoulder — small reach on the forehand (cross-body) side,
-#      large reach on the backhand (same side as the top hand) side.
+#      on the shoulder — a half-ellipse, longest straight ahead, short on the
+#      forehand (cross-body) side, long on the backhand (same side as the top
+#      hand) side.
 #   3. When the target is reachable, the blade lands exactly on the target.
 #      Unreachable targets fall short (past-ROM) or overshoot (past-hand-Y-
 #      ceiling at close range) **along the aim line**, preserving aim
@@ -46,8 +47,9 @@ class Config:
 	var hand_y_max: float = 0.0              # ceiling the hand may rise to (CLOSE)
 	var rom_forehand_angle_max: float = 0.0  # radians; ROM on forehand side
 	var rom_backhand_angle_max: float = 0.0  # radians; ROM on backhand side
-	var rom_forehand_reach_max: float = 0.0  # meters; max hand displacement forehand
-	var rom_backhand_reach_max: float = 0.0  # meters; max hand displacement backhand
+	var rom_forward_reach_max: float = 0.0   # meters; max hand displacement straight ahead
+	var rom_forehand_reach_max: float = 0.0  # meters; max hand displacement across the body
+	var rom_backhand_reach_max: float = 0.0  # meters; max hand displacement out to the side
 	# Hard cap on the blade's horizontal distance from the shoulder (meters).
 	# An obstacle the blade cannot reach past — in practice the boards — makes the
 	# reachable region the ROM envelope INTERSECTED with the open ice, and this is
@@ -61,6 +63,9 @@ class Config:
 class Result:
 	var hand: Vector3 = Vector3.ZERO
 	var blade: Vector3 = Vector3.ZERO
+
+# two_hand_reach's bisection: 2.5 m of reach to under a centimetre.
+const _TWO_HAND_BISECTIONS: int = 9
 
 # Projects a desired blade target onto the reachable blade region (the ROM
 # envelope), in upper-body-local space. This is the closed-form clamp — no
@@ -293,17 +298,78 @@ static func _arm_angle_to_forehand(
 	return atan2(bearing.x, -bearing.y) * blade_side_sign
 
 
+# The farthest along the aim to `desired_blade_xz` the blade may sit, as a
+# max_blade_reach (horizontal distance from `shoulder`), with the other hand
+# still able to hold the shaft: some point of it within `bottom_reach` of
+# `bottom_shoulder` (BottomHandIK.reachable_grip). INF when the target itself is
+# held. Along one aim the solve only carries the shaft farther from the body as
+# the cap grows, so the answer is bisected; the target pose is tried first, and
+# carrying inside the two-handed rim costs that one solve. Leaves
+# cfg.max_blade_reach as it found it; `scratch` is overwritten.
+static func two_hand_reach(shoulder: Vector3, desired_blade_xz: Vector2,
+		blade_side_sign: float, cfg: Config, bottom_shoulder: Vector3, grip: float,
+		bottom_reach: float, scratch: Result) -> float:
+	solve(shoulder, desired_blade_xz, blade_side_sign, cfg, scratch)
+	if BottomHandIK.reachable_grip(bottom_shoulder, scratch.hand, scratch.blade,
+			grip, bottom_reach).y <= 0.0:
+		return INF
+	var cap: float = cfg.max_blade_reach
+	var lo: float = 0.0
+	var hi: float = Vector2(scratch.blade.x - shoulder.x, scratch.blade.z - shoulder.z).length()
+	for _i: int in _TWO_HAND_BISECTIONS:
+		var mid: float = (lo + hi) * 0.5
+		cfg.max_blade_reach = mid
+		solve(shoulder, desired_blade_xz, blade_side_sign, cfg, scratch)
+		if BottomHandIK.reachable_grip(bottom_shoulder, scratch.hand, scratch.blade,
+				grip, bottom_reach).y <= 0.0:
+			lo = mid
+		else:
+			hi = mid
+	cfg.max_blade_reach = cap
+	return lo
+
+
+# The farthest a blade's contact point can be from the body origin, the way the
+# solve places it (SkaterIKCoordinator._solve_top_hand): the trunk pitched its
+# furthest forward (`pitch`), carrying the shoulder forward and down; the hand at
+# the forward reach, `hand_drop` straight below that shoulder; the stick down to
+# the blade on the ice; the contact `contact_offset` along the blade. Pitching
+# further only lowers the hand and flattens the stick, so the deepest pitch is
+# the farthest reach. The shoulder's lateral offset is added whole rather than
+# across the reach, which is the margin. Heights are above the ice; `shoulder`
+# is the marker in the trunk's frame, about its origin at `frame_height`.
+static func full_reach(shoulder: Vector3, pitch: float, frame_height: float,
+		hand_drop: float, forward_reach: float, stick_length: float,
+		blade_height: float, contact_offset: float, body_height: float) -> float:
+	var hand_height: float = frame_height + shoulder.y * cos(pitch) - hand_drop
+	var rise: float = hand_height - blade_height
+	var stick_horiz: float = sqrt(maxf(stick_length * stick_length - rise * rise, 0.0))
+	var horiz: float = absf(shoulder.x) + shoulder.y * sin(pitch) + forward_reach \
+			+ stick_horiz + contact_offset
+	return Vector2(horiz, body_height - blade_height).length()
+
+
 # Max hand displacement from the shoulder at a forehand-signed arm angle.
-# Cross-body forehand reach is limited by anatomy, same-side backhand reach
-# allows full extension; a small linear blend across zero avoids a seam.
 static func max_reach_for_angle(angle_to_forehand: float, cfg: Config) -> float:
-	var blend_band: float = deg_to_rad(5.0)
-	if angle_to_forehand >= blend_band:
-		return cfg.rom_forehand_reach_max
-	if angle_to_forehand <= -blend_band:
-		return cfg.rom_backhand_reach_max
-	var t: float = (angle_to_forehand + blend_band) / (2.0 * blend_band)
-	return lerpf(cfg.rom_backhand_reach_max, cfg.rom_forehand_reach_max, t)
+	return rim_reach(angle_to_forehand, cfg.rom_forward_reach_max,
+			cfg.rom_forehand_reach_max, cfg.rom_backhand_reach_max)
+
+
+# The ROM rim as two quarter-ellipses sharing the forward semi-axis, each with
+# its own side's lateral semi-axis: straight ahead the arm reaches with the
+# shoulder blade's protraction behind it, across the body the chest stops it,
+# and out to the side it extends without the protraction. Both quarters meet
+# at `forward` with zero slope, so the rim has no seam at 0. Past 90° (a hand
+# carried behind the shoulder) the side's lateral reach holds.
+static func rim_reach(angle_to_forehand: float, forward: float, forehand: float,
+		backhand: float) -> float:
+	var side: float = forehand if angle_to_forehand > 0.0 else backhand
+	var c: float = cos(angle_to_forehand)
+	if c <= 0.0:
+		return side
+	var s: float = sin(angle_to_forehand)
+	var denom: float = sqrt(side * side * c * c + forward * forward * s * s)
+	return forward * side / denom if denom > 0.000001 else 0.0
 
 # Clamp an aim direction (unit, from the shoulder) to the asymmetric angular
 # ROM — the same limits the FAR regime applies to the hand displacement.

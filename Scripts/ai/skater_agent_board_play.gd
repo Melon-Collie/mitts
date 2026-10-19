@@ -4,13 +4,22 @@ extends RefCounted
 const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 
 # Board play: how hard a pinner keeps driving into the wall against how hard he
-# slides (unit-free weights of one move vector), the offset at which his slide is
-# full, how close a committed checker has to be before a carrier answers him, and
-# the least time between a pinned bot's reversals (one must land before the next).
+# slides (unit-free weights of one move vector), how fast he closes an along-wall
+# offset on top of matching the man's slide, the along-wall speed error at which
+# his slide input is full, how close a checker holding his stick out has to be
+# before a carrier answers him, and the least time between a pinned bot's
+# reversals (one must land before the next).
 const PIN_MIRROR_DRIVE: float = 0.7
-const PIN_MIRROR_GAIN_M: float = 0.3
+const PIN_MIRROR_CLOSE_S: float = 0.25
+const PIN_MIRROR_SPEED_GAIN_M_S: float = 0.3
 const PIN_THREAT_RANGE_M: float = 2.5
 const PIN_REVERSAL_MIN_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 3 / 20   # ~150 ms
+# A pin is reached for this long before contact: the stick held out past the hook
+# (StickCheckRules.RISE_S + HOOK_MAX_S) when the bodies meet, plus a tick of slack.
+const PIN_REACH_S: float = StickCheckRules.RISE_S + StickCheckRules.HOOK_MAX_S \
+		+ 1.0 / _PhysicsConstants.PHYSICS_TICK
+
+static var _check_cfg := BodyCheckRules.Config.new()
 
 # One bot's board play, every physics tick after dispatch. Owns only its pin
 # state; the tier's knobs and the bot's state come in per call.
@@ -19,10 +28,11 @@ var _peer_id: int = -1
 var _team_id: int = -1
 var _team_id_by_peer: Dictionary = {}
 var _caps_by_peer: Dictionary = {}
-# As the pinner, where the man is read to be
+# As the pinner, where the man is read to be and how fast he is going
 # (lagged like a human's read, INF when not pinning). As the pinned, which way we
 # slide along the wall (0 when not pinned) and the ticks until we may reverse.
 var _pin_follow: Vector3 = Vector3.INF
+var _pin_follow_vel: Vector3 = Vector3.ZERO
 var _pin_slide_sign: float = 0.0
 var _pin_flip_ticks: int = 0
 
@@ -36,12 +46,14 @@ func setup(peer_id: int, team_id: int, team_id_by_peer: Dictionary,
 
 
 # The boards, every physics tick after dispatch (BoardPinRules).
-# - Locked as the pinner: hold the commit only while the pin is worth it
+# - Locked as the pinner: hold the stick button only while the pin is worth it
 #   (_pin_worth_holding), driving into the wall and mirroring the victim's slide
 #   through the same network lag a human pinner reads it with.
 # - Locked as the pinned: slide along the wall, and reverse when the pinner commits
 #   to following — the juke that gets a body past his.
-# - Carrying at the wall with a committed checker coming square: get out of his
+# - Driving a check into a man at the wall that will not knock him down, where a
+#   pin is worth it: reach for the pin instead (_reach_for_pin).
+# - Carrying at the wall with a checker coming square, stick out: get out of his
 #   line along the wall if that beats him there, else brace (hold the commit),
 #   which cannot be pinned (AIPinThreatRead).
 # `check_aggression` is the tier's PACE physicality knob (0 never holds a pin);
@@ -62,17 +74,62 @@ func apply(input: InputState, snapshot: WorldSnapshot, own_goal_dir: float,
 			var man_pid: int = _my_pinned_man(snapshot, me)
 			if man_pid == -1 or check_aggression <= 0.0 \
 					or not _pin_worth_holding(snapshot, me, man_pid, own_goal_dir):
-				# Let go: the dispatch may still be holding the commit for a hit.
-				input.hit_held = false
+				# Let go: the dispatch may still be holding the button for a tie.
+				input.stick_check_held = false
+				input.stick_check_pressed = false
 				_pin_follow = Vector3.INF
 				return
-			input.hit_held = true
+			input.stick_check_held = true
+			input.stick_check_pressed = false
 			input.move_vector = _pinner_mirror(snapshot.skater_states[man_pid], me)
 			return
 	_pin_follow = Vector3.INF
 	_pin_slide_sign = 0.0
+	if check_aggression > 0.0 and input.hit_held:
+		_reach_for_pin(input, snapshot, me, own_goal_dir)
 	if answers_pin_threats:
 		_answer_pin_threat(input, snapshot, me, max_accel)
+
+
+# The dispatch is driving a check: when its man is against the boards in front of
+# us, about to be touched, unbraced, and the hit will not knock him down (the
+# collision's own victim_kick against the knockdown line — the boards add to the
+# stagger, not the knockdown), reach for the
+# pin instead where one is worth holding. The stick goes out on the button, so the
+# commit lets go: the check and the pin are two buttons.
+func _reach_for_pin(input: InputState, snapshot: WorldSnapshot, me: SkaterNetworkState,
+		own_goal_dir: float) -> void:
+	var caps: AISkaterCaps = _caps_by_peer.get(_peer_id)
+	var transfer: float = caps.body_check_transfer if caps != null else 0.65
+	for pid: int in snapshot.skater_states:
+		if _team_id_by_peer.get(pid, -1) == _team_id:
+			continue
+		var man: SkaterNetworkState = snapshot.skater_states[pid]
+		if man.hit_committed or man.pin_role != BoardPinRules.Role.NONE:
+			continue
+		var out: Vector2 = BoardPinRules.wall_normal(man.position, GameRules.OFFSIDE_LINE_SLACK,
+				BoardPinRules.PIN_WALL_MARGIN_M)
+		if out == Vector2.ZERO:
+			continue
+		var to_man := Vector2(man.position.x - me.position.x, man.position.z - me.position.z)
+		var dist: float = to_man.length()
+		if dist < 1e-4 or (to_man / dist).dot(out) < BoardPinRules.BACKSTOP_MIN_INTO_WALL:
+			continue
+		if AIPinThreatRead.time_to_contact(man.position, man.velocity, me.position,
+				me.velocity) > PIN_REACH_S:
+			continue
+		var closing: float = maxf(Vector2(me.velocity.x - man.velocity.x,
+				me.velocity.z - man.velocity.z).dot(to_man / dist), 0.0)
+		var man_caps: AISkaterCaps = _caps_by_peer.get(pid)
+		if SkaterCollisionRules.victim_kick(closing, caps.weight if caps != null else 1.0,
+				man_caps.weight if man_caps != null else 1.0, transfer) \
+				>= _check_cfg.knockdown_impulse \
+				or not _pin_worth_holding(snapshot, me, pid, own_goal_dir):
+			return
+		input.hit_held = false
+		input.stick_check_held = true
+		input.stick_check_pressed = me.stick_check_phase == StickCheckRules.Phase.IDLE
+		return
 
 
 # The pinned man: the PINNED opponent nearest us, or -1.
@@ -131,24 +188,30 @@ func _team_arrival_s(snapshot: WorldSnapshot, at: Vector3, team: int, man_pid: i
 	return best
 
 
-# Drive into the wall, and slide toward where the man is read to be: his body
-# followed through a lag of BoardPinRules.PIN_LAG_BUDGET_S, so a bot pinner is
-# beaten by the same reversals a human pinner would be.
+# Drive into the wall, and slide with the man as he is read: his body and his
+# slide followed through a lag of BoardPinRules.PIN_LAG_BUDGET_S, so a bot pinner
+# is beaten by the same reversals a human pinner would be. Matching his slide is
+# what keeps up with a steady one; the offset is closed on top of it.
 func _pinner_mirror(man: SkaterNetworkState, me: SkaterNetworkState) -> Vector2:
 	if not _pin_follow.is_finite():
 		_pin_follow = man.position
+		_pin_follow_vel = man.velocity
 	else:
 		var k: float = 1.0 - exp(-1.0 / (float(_PhysicsConstants.PHYSICS_TICK)
 				* BoardPinRules.PIN_LAG_BUDGET_S))
 		_pin_follow += (man.position - _pin_follow) * k
+		_pin_follow_vel += (man.velocity - _pin_follow_vel) * k
 	var out: Vector2 = BoardPinRules.wall_normal(man.position, GameRules.OFFSIDE_LINE_SLACK,
 			BoardPinRules.PIN_WALL_RELEASE_M)
 	if out == Vector2.ZERO:
 		return Vector2.ZERO
 	var along := Vector2(-out.y, out.x)
 	var offset: float = BoardPinRules.along_wall_offset(_pin_follow, me.position, out)
-	return (out * PIN_MIRROR_DRIVE + along * clampf(offset / PIN_MIRROR_GAIN_M, -1.0, 1.0)) \
-			.normalized()
+	var want: float = Vector2(_pin_follow_vel.x, _pin_follow_vel.z).dot(along) \
+			+ offset / PIN_MIRROR_CLOSE_S
+	var have: float = Vector2(me.velocity.x, me.velocity.z).dot(along)
+	return (out * PIN_MIRROR_DRIVE + along * clampf((want - have) / PIN_MIRROR_SPEED_GAIN_M_S,
+			-1.0, 1.0)).normalized()
 
 
 # Slide along the wall, reversing whenever the pinner has committed to following
@@ -190,9 +253,9 @@ func _nearest_opponent_state(snapshot: WorldSnapshot, me: SkaterNetworkState) ->
 	return best
 
 
-# The most urgent committed opponent coming square into the boards we are
-# against, answered: skate out of his line along the wall if that is done before
-# he arrives, else brace. Nothing when there is none.
+# The most urgent opponent coming square into the boards we are against with his
+# stick held out (the pin's button), answered: skate out of his line along the
+# wall if that is done before he arrives, else brace. Nothing when there is none.
 func _answer_pin_threat(input: InputState, snapshot: WorldSnapshot,
 		me: SkaterNetworkState, max_accel: float) -> void:
 	var out: Vector2 = BoardPinRules.wall_normal(me.position, GameRules.OFFSIDE_LINE_SLACK,
@@ -205,7 +268,7 @@ func _answer_pin_threat(input: InputState, snapshot: WorldSnapshot,
 		if _team_id_by_peer.get(pid, -1) == _team_id:
 			continue
 		var opp: SkaterNetworkState = snapshot.skater_states[pid]
-		if not opp.hit_committed:
+		if not StickCheckRules.is_stick_busy(opp.stick_check_phase):
 			continue
 		var to_me := Vector2(me.position.x - opp.position.x, me.position.z - opp.position.z)
 		var dist: float = to_me.length()

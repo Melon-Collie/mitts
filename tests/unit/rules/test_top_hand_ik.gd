@@ -26,6 +26,7 @@ const STICK_HORIZ_AT_MAX: float = 0.82916
 # ROM
 const FORE_ANGLE: float = PI / 4.0        # 45°
 const BACK_ANGLE: float = 2.0 * PI / 3.0  # 120°
+const FWD_REACH: float = 0.85
 const FORE_REACH: float = 0.20
 const BACK_REACH: float = 0.70
 
@@ -37,6 +38,7 @@ func _cfg() -> TopHandIK.Config:
 	cfg.hand_y_max = HAND_Y_MAX
 	cfg.rom_forehand_angle_max = FORE_ANGLE
 	cfg.rom_backhand_angle_max = BACK_ANGLE
+	cfg.rom_forward_reach_max = FWD_REACH
 	cfg.rom_forehand_reach_max = FORE_REACH
 	cfg.rom_backhand_reach_max = BACK_REACH
 	return cfg
@@ -111,9 +113,11 @@ func test_far_forehand_target_past_rom_clamps_hand_short() -> void:
 
 	var hand_disp := Vector2(
 			result.hand.x - shoulder.x, result.hand.z - shoulder.z).length()
+	# The aim is past the forehand angle limit, so the hand stops on the rim
+	# where that limit crosses it.
 	assert_almost_eq(
-			hand_disp, FORE_REACH, 0.001,
-			"hand clamped to rom_forehand_reach_max on forehand side")
+			hand_disp, TopHandIK.max_reach_for_angle(FORE_ANGLE, _cfg()), 0.001,
+			"hand clamped to the rim at the forehand angle limit")
 
 	var blade_xz := Vector2(result.blade.x, result.blade.z)
 	assert_gt(
@@ -149,6 +153,52 @@ func test_far_backhand_target_reaches_farther_than_forehand() -> void:
 	assert_gt(
 			back_reach_achieved, fore_reach_achieved + 0.1,
 			"backhand blade reaches meaningfully farther than forehand at same target distance")
+
+
+# ── The rim is a half-ellipse ────────────────────────────────────────────
+
+func test_rim_is_the_forward_reach_straight_ahead() -> void:
+	assert_almost_eq(TopHandIK.max_reach_for_angle(0.0, _cfg()), FWD_REACH, 0.0001)
+
+
+func test_rim_is_each_sides_lateral_reach_at_ninety_degrees() -> void:
+	assert_almost_eq(TopHandIK.max_reach_for_angle(PI / 2.0, _cfg()), FORE_REACH, 0.0001,
+			"across the body")
+	assert_almost_eq(TopHandIK.max_reach_for_angle(-PI / 2.0, _cfg()), BACK_REACH, 0.0001,
+			"out to the backhand side")
+
+
+func test_rim_holds_the_side_reach_behind_the_shoulder() -> void:
+	# An ellipse continued past 90° would grow back toward the forward reach
+	# behind the body, where the arm reaches least.
+	for deg: float in [100.0, 135.0, 179.0]:
+		assert_almost_eq(TopHandIK.max_reach_for_angle(-deg_to_rad(deg), _cfg()), BACK_REACH,
+				0.0001, "backhand %.0f°" % deg)
+		assert_almost_eq(TopHandIK.max_reach_for_angle(deg_to_rad(deg), _cfg()), FORE_REACH,
+				0.0001, "forehand %.0f°" % deg)
+
+
+func test_rim_falls_from_ahead_to_the_side_without_a_seam() -> void:
+	# Monotone from straight ahead out to each side, and continuous through 0 —
+	# a step there would jump the hand as the cursor crosses the shoulder line.
+	var cfg: TopHandIK.Config = _cfg()
+	for side: float in [1.0, -1.0]:
+		var prev: float = TopHandIK.max_reach_for_angle(0.0, cfg)
+		for i: int in range(1, 91):
+			var r: float = TopHandIK.max_reach_for_angle(side * deg_to_rad(i), cfg)
+			assert_true(r <= prev + 0.000001, "rim grows at %d° side %.0f" % [i, side])
+			prev = r
+	var eps: float = deg_to_rad(0.01)
+	assert_almost_eq(TopHandIK.max_reach_for_angle(eps, cfg),
+			TopHandIK.max_reach_for_angle(-eps, cfg), 0.0001, "no seam at 0")
+
+
+func test_reaching_straight_ahead_extends_past_either_side() -> void:
+	var shoulder: Vector3 = _lefty_shoulder()
+	var ahead: TopHandIK.Result = TopHandIK.solve(
+			shoulder, Vector2(shoulder.x, shoulder.z - 5.0), -1.0, _cfg())
+	assert_almost_eq(Vector2(ahead.hand.x - shoulder.x, ahead.hand.z - shoulder.z).length(),
+			FWD_REACH, 0.001, "hand at the forward reach")
 
 # ── CLOSE regime: target inside stick reach ──────────────────────────────
 
@@ -430,7 +480,7 @@ func test_hand_never_leaves_arm_reach_for_any_clamped_blade() -> void:
 			var hand: Vector3 = TopHandIK.hand_for_clamped_blade(
 					shoulder, blade_xz, BLADE_Y, -1.0, cfg)
 			var reach: float = Vector2(hand.x - shoulder.x, hand.z - shoulder.z).length()
-			assert_lte(reach, BACK_REACH + 0.0005,
+			assert_lte(reach, FWD_REACH + 0.0005,
 					"hand within arm reach at %d° / %.2f m (got %.3f)" % [deg, dist, reach])
 
 func test_clamped_blade_pulled_behind_keeps_hand_in_front_of_shoulder() -> void:
@@ -523,7 +573,7 @@ func test_the_hand_never_slides_past_the_arm() -> void:
 	var blade := Vector3(shoulder.x, BLADE_Y, shoulder.z - (STICK_LENGTH + 1.5))
 	var res: TopHandIK.Result = _rigid(shoulder, hand, blade)
 	var reach: float = Vector2(res.hand.x - shoulder.x, res.hand.z - shoulder.z).length()
-	assert_lte(reach, BACK_REACH + 0.0005, "hand stopped at the arm's own limit")
+	assert_lte(reach, FWD_REACH + 0.0005, "hand stopped at the arm's own limit")
 	assert_gt(blade.distance_to(res.blade), 0.5, "so the finish fell short instead")
 	assert_almost_eq(res.hand.distance_to(res.blade), STICK_LENGTH, 0.0005,
 			"and the stick is still exactly a stick")
@@ -547,7 +597,7 @@ func test_a_raised_hand_keeps_its_height() -> void:
 	# at rest height — dropping the arm mid-follow-through.
 	var shoulder: Vector3 = _lefty_shoulder()
 	var hand := Vector3(shoulder.x, HAND_Y_MAX, shoulder.z - 0.20)
-	var blade := Vector3(shoulder.x, BLADE_Y + 0.5, shoulder.z - 2.2)
+	var blade := Vector3(shoulder.x, BLADE_Y + 0.5, shoulder.z - 2.0)
 	var res: TopHandIK.Result = _rigid(shoulder, hand, blade)
 	assert_gt(res.hand.y, HAND_REST_Y + 0.1, "the finish's raised hand survives")
 	assert_lte(res.hand.y, HAND_Y_MAX + 0.0005, "and stays under the ceiling")
@@ -582,3 +632,40 @@ func test_a_limit_past_the_whole_reach_is_no_limit() -> void:
 			bound_short += 1
 	assert_lt(worst, 0.00001, "a limit past the whole reach changes nothing (worst %f m)" % worst)
 	assert_gt(bound_short, 100, "while one inside it binds")
+
+
+# ── Two hands on the stick ───────────────────────────────────────────────
+
+func _held(shoulder: Vector3, target: Vector2, cfg: TopHandIK.Config, bottom: Vector3,
+		reach: float) -> bool:
+	var r: TopHandIK.Result = TopHandIK.solve(shoulder, target, -1.0, cfg)
+	return BottomHandIK.reachable_grip(bottom, r.hand, r.blade, 0.25, reach).y <= 0.0
+
+
+func test_two_hand_reach_is_the_last_cap_the_other_hand_holds() -> void:
+	var shoulder: Vector3 = _lefty_shoulder()
+	var bottom := Vector3(-SHOULDER_OFFSET, 0.0, 0.0)
+	var reach: float = 0.65
+	var cfg: TopHandIK.Config = _cfg()
+	var scratch := TopHandIK.Result.new()
+	for deg: float in [0.0, 20.0, 40.0]:
+		var a: float = deg_to_rad(deg)
+		var target := Vector2(shoulder.x + sin(a) * 5.0, shoulder.z - cos(a) * 5.0)
+		var limit: float = TopHandIK.two_hand_reach(shoulder, target, -1.0, cfg, bottom,
+				0.25, reach, scratch)
+		assert_true(is_finite(limit), "%.0f°: a target 5 m out is past the two-handed rim" % deg)
+		assert_eq(cfg.max_blade_reach, INF, "the search leaves the cap as it found it")
+		cfg.max_blade_reach = limit
+		assert_true(_held(shoulder, target, cfg, bottom, reach), "%.0f°: held at the limit" % deg)
+		cfg.max_blade_reach = limit + 0.02
+		assert_false(_held(shoulder, target, cfg, bottom, reach),
+				"%.0f°: let go just past it" % deg)
+		cfg.max_blade_reach = INF
+
+
+func test_a_held_target_sets_no_two_hand_limit() -> void:
+	var shoulder: Vector3 = _lefty_shoulder()
+	var target := Vector2(shoulder.x, shoulder.z - 1.0)
+	var limit: float = TopHandIK.two_hand_reach(shoulder, target, -1.0, _cfg(),
+			Vector3(-SHOULDER_OFFSET, 0.0, 0.0), 0.25, 0.65, TopHandIK.Result.new())
+	assert_eq(limit, INF, "a blade the other hand already reaches is not limited")

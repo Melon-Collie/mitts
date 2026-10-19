@@ -116,17 +116,24 @@ func test_the_stance_squares_only_when_slow() -> void:
 	assert_almost_eq(_off(AHEAD), 0.0, 0.01, "at speed the stance just crouches")
 
 
-func test_only_a_standing_skater_is_held_off_a_target_behind() -> void:
-	_solve(BEHIND, AHEAD.rotated(deg_to_rad(30.0)), AHEAD * 1.0)
-	assert_true(_out.free_to_turn_round, "a slow skate below the engage band still turns")
-	_solve(AHEAD, BEHIND, AHEAD * 6.0, true)
-	assert_true(_out.free_to_turn_round, "so does a stop")
-	_solve(AHEAD, BEHIND, AHEAD * 2.0, false, true)
-	assert_true(_out.free_to_turn_round, "and the stance when slow")
-	_solve(AHEAD, BEHIND, AHEAD * 0.3)
-	assert_false(_out.free_to_turn_round, "nearly stopped is standing")
-	_solve(AHEAD, BEHIND, Vector2.ZERO)
-	assert_false(_out.free_to_turn_round)
+# A cursor held on the edge flips the pivot on float noise, and each flip swung
+# the hips toward the other line and back: they sat between the two.
+func test_a_pivot_under_way_carries_through() -> void:
+	_cfg.backhand_edge_rad = deg_to_rad(67.0)
+	var cursor: Vector2 = _right_of_ahead(65.0)
+	_solve(AHEAD, cursor, AHEAD * 6.0)
+	assert_false(_out.pivoting, "on the line, 2° inside the edge holds it")
+	_solve(_right_of_ahead(15.0), cursor, AHEAD * 6.0)
+	assert_true(_out.pivoting, "hips already turning toward the cursor carry on round")
+	_solve(_left_of_ahead(15.0), cursor, AHEAD * 6.0)
+	assert_false(_out.pivoting, "hips turned the other way are no pivot under way")
+
+
+func test_taking_the_line_up_is_not_a_pivot_under_way() -> void:
+	_cfg.backhand_edge_rad = deg_to_rad(67.0)
+	var cursor: Vector2 = _right_of_ahead(62.0)
+	_solve(cursor, cursor, AHEAD * 1.8)
+	assert_false(_out.pivoting, "squared to the cursor in the engage band, the line still wins")
 
 
 func test_turning_round_goes_the_cursors_way() -> void:

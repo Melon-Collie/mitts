@@ -13,13 +13,14 @@ class_name FacingRules
 # out on the other hand. Braking squares to the cursor. The stance squares to it
 # too, but only below stance_square_max_speed — opening up to a man or a pass is
 # a low-speed move, and at speed squaring would swing the hips off the line and
-# turn the stride into a shuffle. A moving skater turns round to a target behind
-# the body (turn_round_angle); only a standing one is held off it by the
-# unreachable-wedge freeze.
+# turn the stride into a shuffle. Standing or moving, a skater turns round to a
+# target behind the body (turn_round_angle).
 #
 # Stateless: the line and the band are read off whichever way the body faces now,
-# so reconcile replay agrees, and a pivot leaves the cursor far inside the new
-# line's edge, so it cannot flip back. All vectors are world XZ.
+# so reconcile replay agrees. A pivot under way commits (pivot_commit), so a
+# cursor held on the edge cannot flick the hips back and forth, and it leaves the
+# cursor far inside the new line's edge, so it cannot flip back. All vectors are
+# world XZ.
 
 # The speed band over which the stance hands facing from the cursor back to travel.
 const STANCE_SQUARE_BLEND_M_S: float = 0.5
@@ -36,6 +37,10 @@ class Config:
 	var forehand_edge_rad: float = deg_to_rad(157.0)
 	var backhand_edge_rad: float = deg_to_rad(157.0)
 	var stance_square_max_speed: float = 3.0
+	# How far the hips' turn toward the cursor, past where the line holds them,
+	# eases the reach edge: a pivot under way carries through. Capped small, or a
+	# body still turning onto the line from a cursor near the edge reads as one.
+	var pivot_commit_rad: float = deg_to_rad(4.0)
 
 
 # Caller-owned result, filled each call.
@@ -44,10 +49,6 @@ class Result:
 	# The cursor has passed the reach edge off the line the hips are on: the target
 	# is the other line, forward to backward or back.
 	var pivoting: bool = false
-	# Still moving (past hold_min_speed, braking included): a skater can pivot or
-	# step round to anything, so the unreachable-wedge freeze holds only one
-	# standing still.
-	var free_to_turn_round: bool = false
 
 
 static func solve(out: Result, facing: Vector2, cursor_dir: Vector2, velocity: Vector2,
@@ -55,28 +56,40 @@ static func solve(out: Result, facing: Vector2, cursor_dir: Vector2, velocity: V
 	out.target = cursor_dir
 	out.pivoting = false
 	var speed: float = velocity.length()
-	out.free_to_turn_round = speed > cfg.hold_min_speed
 	if brake or speed < 0.001:
 		return
 	var travel: Vector2 = velocity / speed
 	var line: Vector2 = travel if facing.dot(travel) >= 0.0 else -travel
-	var pivoting: bool = absf(line.angle_to(cursor_dir)) \
+	var share: float = _line_share(cfg, facing, line, cursor_dir, speed, stance)
+	var off_line: float = line.angle_to(cursor_dir)
+	# Measured past where the line would hold the hips, so a body still squared
+	# to the cursor as it takes the line up is not a pivot under way.
+	var turned: float = maxf(line.angle_to(facing) * signf(off_line)
+			- (1.0 - share) * absf(off_line), 0.0)
+	var pivoting: bool = absf(off_line) + minf(turned, cfg.pivot_commit_rad) \
 			> reach_edge(cfg, line, cursor_dir, is_left_handed)
 	if pivoting:
 		line = -line
-	var on_line: bool = absf(facing.angle_to(line)) <= absf(facing.angle_to(cursor_dir))
+		share = _line_share(cfg, facing, line, cursor_dir, speed, stance)
+	if share <= 0.0:
+		return
+	out.pivoting = pivoting
+	out.target = cursor_dir.slerp(line, share)
+
+
+# How much of the target is `line` rather than the cursor: the hold band once
+# the body faces nearer the line, the engage band to take it up.
+static func _line_share(cfg: Config, facing: Vector2, line: Vector2, cursor_dir: Vector2,
+		speed: float, stance: bool) -> float:
 	var share: float
-	if on_line:
+	if absf(facing.angle_to(line)) <= absf(facing.angle_to(cursor_dir)):
 		share = smoothstep(cfg.hold_min_speed, cfg.hold_full_speed, speed)
 	else:
 		share = smoothstep(cfg.engage_min_speed, cfg.engage_full_speed, speed)
 	if stance:
 		share = minf(share, smoothstep(cfg.stance_square_max_speed - STANCE_SQUARE_BLEND_M_S,
 				cfg.stance_square_max_speed, speed))
-	if share <= 0.0:
-		return
-	out.pivoting = pivoting
-	out.target = cursor_dir.slerp(line, share)
+	return share
 
 
 # The sign of facing.angle_to(dir) for a dir on the forehand side: a left-handed

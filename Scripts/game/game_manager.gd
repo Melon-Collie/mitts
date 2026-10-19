@@ -274,6 +274,7 @@ var _xg_query := AIShotOdds.Query.new()
 var _hit_tracker: HitTracker = null
 var _stick_ties: StickTieTracker = null
 var _board_pins: BoardPinTracker = null
+var _cross_checks: CrossCheckTracker = null
 var _stick_tie_draw := StickTieDraw.new()
 var _frozen_puck := FrozenPuckRules.State.new()
 var _turnover_tracker: TurnoverTracker = null
@@ -287,6 +288,7 @@ var _pickup_claim: PickupClaimResolver = null
 var _poke_claim: PokeClaimResolver = null
 var _stick_lift_claim: StickLiftClaimResolver = null
 var _stick_tie_claim: StickTieClaimResolver = null
+var _cross_check_claim: CrossCheckClaimResolver = null
 var _hit_claim: HitClaimResolver = null
 var _phase_coord: PhaseCoordinator = null
 var _swap_coord: SlotSwapCoordinator = null
@@ -537,6 +539,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.poke_claim_received.connect(_on_poke_claim_received)
 	NetworkManager.stick_lift_claim_received.connect(_on_stick_lift_claim_received)
 	NetworkManager.stick_tie_claim_received.connect(_on_stick_tie_claim_received)
+	NetworkManager.cross_check_claim_received.connect(_on_cross_check_claim_received)
 	NetworkManager.ghost_state_received.connect(_on_ghost_state_received)
 	NetworkManager.offside_state_received.connect(_on_offside_state_received)
 	NetworkManager.hit_claim_received.connect(_on_hit_claim_received)
@@ -601,6 +604,8 @@ func _physics_process(delta: float) -> void:
 	_refresh_goalie_data_cache()
 	if _stick_tie_claim != null:
 		_stick_tie_claim.maybe_send_claim()
+	if _cross_check_claim != null:
+		_cross_check_claim.maybe_send_claim()
 	if not NetworkManager.is_host or puck == null or _state_machine == null:
 		return
 	# Goal replay temporarily owns actor positions on the host. Skip the live
@@ -681,8 +686,9 @@ func _physics_process(delta: float) -> void:
 	_apply_ghost_state(delta)
 	_shot_tracker.tick(delta)
 	_hit_tracker.tick(delta)
-	_stick_ties.tick(not _state_machine.is_movement_locked())
 	_board_pins.tick(not _state_machine.is_movement_locked())
+	_cross_checks.tick(not _state_machine.is_movement_locked())
+	_stick_ties.tick(not _state_machine.is_movement_locked())
 	_possession_tracker.tick(delta)
 	# Release before _pickup_claim.tick so a claim coming due this frame can still
 	# arm the contest window on the frame it lands.
@@ -1651,6 +1657,13 @@ func _wire_subsystems() -> void:
 		_board_pins.clear()
 	_board_pins = BoardPinTracker.new()
 	_board_pins.setup(_registry, NetworkManager.local_time, _strip_pinned_carrier)
+	if _cross_checks != null:
+		_cross_checks.clear()
+	_cross_checks = CrossCheckTracker.new()
+	_cross_checks.setup(_registry, func(s: Skater) -> SkaterController:
+		var rec: PlayerRecord = _registry.get_record(_registry.resolve_peer_id(s))
+		return rec.controller as SkaterController if rec != null else null)
+	_cross_checks.landed.connect(_on_cross_check_thrown)
 	_hit_tracker.impact_landed.connect(_on_impact_landed)
 	_hit_tracker.hit_credited.connect(_on_hit_credited)
 
@@ -1710,6 +1723,10 @@ func _wire_subsystems() -> void:
 	_stick_tie_claim = StickTieClaimResolver.new()
 	_stick_tie_claim.setup(_registry, _state_buffer_manager,
 			func() -> StickTieTracker: return _stick_ties, _get_puck_controller)
+
+	_cross_check_claim = CrossCheckClaimResolver.new()
+	_cross_check_claim.setup(_registry, _state_buffer_manager,
+			func() -> CrossCheckTracker: return _cross_checks)
 
 	_hit_claim = HitClaimResolver.new()
 	_hit_claim.setup(_registry, _state_buffer_manager, _hit_tracker, _get_puck_controller)
@@ -1923,6 +1940,7 @@ func _wire_sound_signals() -> void:
 	NetworkManager.puck_strip_received.connect(
 		func(pos: Vector3) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_STRIP, pos, _puck_speed_volume(puck.linear_velocity.length() if puck != null else 0.0), 0.06))
 	NetworkManager.body_check_landed.connect(_on_body_check_landed)
+	NetworkManager.cross_check_landed.connect(_on_cross_check_landed)
 	NetworkManager.smart_ping_received.connect(_on_smart_ping_received)
 	NetworkManager.stick_lift_received.connect(
 		func(pos: Vector3) -> void:
@@ -1948,12 +1966,10 @@ func _on_phase_changed_period_buzzer(p: GamePhase.Phase) -> void:
 		SoundManager.play_crowd(SoundManager.Sound.PERIOD_BUZZER)
 
 
-func _on_local_pickup_sound() -> void:
+func _on_local_pickup_sound(_settle_until_ms: int) -> void:
 	var record := _registry.get_local() if _registry != null else null
 	if record != null and record.skater != null:
-		SoundManager.play_world(SoundManager.Sound.PUCK_PICKUP, record.skater.global_position, 0.0, 0.05)
-		if NetworkManager.is_host:
-			_record_replay_audio_event("puck_pickup", record.skater.global_position, 0.0)
+		_play_pickup_sound(record.skater)
 
 
 func _on_remote_carrier_sound(new_carrier_peer_id: int) -> void:
@@ -1961,9 +1977,16 @@ func _on_remote_carrier_sound(new_carrier_peer_id: int) -> void:
 		return
 	var record: PlayerRecord = _registry.get_record(new_carrier_peer_id)
 	if record != null and record.skater != null:
-		SoundManager.play_world(SoundManager.Sound.PUCK_PICKUP, record.skater.global_position, 0.0, 0.05)
-		if NetworkManager.is_host:
-			_record_replay_audio_event("puck_pickup", record.skater.global_position, 0.0)
+		_play_pickup_sound(record.skater)
+
+
+# Louder the harder the catch: the puck's arrival speed in the carrier's frame.
+func _play_pickup_sound(carrier: Skater) -> void:
+	var speed: float = puck_controller.arrival_speed_for(carrier) if puck_controller != null else 0.0
+	SoundManager.play_world(SoundManager.Sound.PUCK_PICKUP, carrier.global_position,
+			SoundManager.reception_volume_db(speed), 0.05)
+	if NetworkManager.is_host:
+		_record_replay_audio_event("puck_pickup", carrier.global_position, speed)
 
 
 # Host-only: shadow a transient audio/VFX event into the in-memory recorder
@@ -3072,7 +3095,7 @@ func _resolve_skater_peer_id(skater: Skater) -> int:
 	return _registry.resolve_peer_id(skater) if _registry != null else -1
 
 
-func _on_server_puck_picked_up_by(peer_id: int) -> void:
+func _on_server_puck_picked_up_by(peer_id: int, settle_s: float) -> void:
 	# clear_for_grant, not clear(): if a different peer's claim was pending,
 	# NACK it so their optimistic pin rolls back now (covers every
 	# authoritative grant path, including the one-timer catch).
@@ -3097,9 +3120,10 @@ func _on_server_puck_picked_up_by(peer_id: int) -> void:
 		_turnover_tracker.on_carrier_gained(peer_id, was_faceoff)
 	if _possession_tracker != null:
 		_possession_tracker.on_pickup(peer_id)
-	record.controller.on_puck_picked_up_network()
+	var settle_until_ms: int = record.controller.settle_deadline_ms(settle_s)
+	record.controller.on_puck_picked_up_network(settle_until_ms)
 	if not record.is_local:
-		NetworkManager.send_puck_picked_up(peer_id)
+		NetworkManager.send_puck_picked_up(peer_id, settle_until_ms)
 	NetworkManager.send_carrier_changed_to_all(peer_id)
 	# NHL delayed-offside: pickup by an offending-team attacker whistles the
 	# play dead. Consume immediately so the faceoff fires before the next
@@ -3192,6 +3216,45 @@ func _on_stick_tie_claim_received(peer_id: int, host_timestamp: float, interp_de
 			_state_buffer_manager.newest_host_timestamp(),
 			_stick_tie_claim.receive_claim,
 			[peer_id, host_timestamp, interp_delay_ms, input_lead_ms, target_peer_id, blade_curr])
+
+
+func _on_cross_check_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float,
+		input_lead_ms: float, target_peer_id: int) -> void:
+	if not NetworkManager.is_host:
+		return
+	_deferred_claims.submit(
+			LagCompRewind.self_view_time(host_timestamp, input_lead_ms),
+			_state_buffer_manager.newest_host_timestamp(),
+			_cross_check_claim.receive_claim,
+			[peer_id, host_timestamp, interp_delay_ms, input_lead_ms, target_peer_id])
+
+
+# Host-only: a landed cross-check's feedback to every peer, and self-fired.
+func _on_cross_check_thrown(_shover: Skater, victim: Skater, dv: float, push_dir: Vector3) -> void:
+	var victim_peer_id: int = _registry.resolve_peer_id(victim)
+	NetworkManager.send_cross_check_to_all(victim_peer_id, dv, push_dir)
+	_on_cross_check_landed(victim_peer_id, dv, push_dir)
+	_record_replay_audio_event("cross_check", victim.global_position, dv, {
+		"victim_peer_id": victim_peer_id,
+		"push_dir": [push_dir.x, push_dir.y, push_dir.z],
+	})
+
+
+# The shove's burst, thud and knockback lead, at the hardness of the stagger it
+# lands (a shove the victim held lands none).
+func _on_cross_check_landed(victim_peer_id: int, dv: float, push_dir: Vector3) -> void:
+	var rec: PlayerRecord = _registry.get_record(victim_peer_id) if _registry != null else null
+	var t: float = SkaterVFX.shove_intensity(dv)
+	if rec == null or rec.skater == null or t <= 0.0:
+		return
+	var vfx: SkaterVFX = rec.skater.get_node_or_null("VFX") as SkaterVFX
+	if vfx != null:
+		vfx.fire_impact_burst(rec.skater, t, push_dir)
+	SoundManager.play_world(SoundManager.Sound.BODY_CHECK, rec.skater.global_position,
+			SkaterVFX.shove_volume_db(t), 0.08, SkaterVFX.shove_pitch_scale())
+	var rc: RemoteController = rec.controller as RemoteController
+	if rc != null:
+		rc.start_knockback_lead(push_dir, t)
 
 
 func _on_server_puck_released_by_carrier(peer_id: int) -> void:
@@ -3914,11 +3977,11 @@ func on_carrier_puck_dropped() -> void:
 		puck_controller.notify_local_puck_dropped()
 
 
-func on_local_player_picked_up_puck() -> void:
+func on_local_player_picked_up_puck(settle_until_ms: int = 0) -> void:
 	var record := _registry.get_local() if _registry != null else null
 	if record != null:
-		record.controller.on_puck_picked_up_network()
-		puck_controller.notify_local_pickup(record.skater)
+		record.controller.on_puck_picked_up_network(settle_until_ms)
+		puck_controller.notify_local_pickup(record.skater, settle_until_ms)
 
 
 func on_local_player_puck_stolen(forced_lift_s: float = 0.0) -> void:
@@ -4226,7 +4289,7 @@ func _on_body_check_landed(hitter_peer_id: int, victim_peer_id: int,
 	# controller isn't a RemoteController — and on the host (guarded inside).
 	var rc: RemoteController = victim_rec.controller as RemoteController
 	if rc != null:
-		rc.start_knockback_lead(hit_dir, force)
+		rc.start_knockback_lead(hit_dir, SkaterVFX.check_intensity(force))
 
 
 func _on_hit_claim_received(hitter_peer_id: int, victim_peer_id: int, host_timestamp: float,
@@ -4665,6 +4728,7 @@ func on_scene_exit() -> void:
 	_poke_claim = null
 	_stick_lift_claim = null
 	_stick_tie_claim = null
+	_cross_check_claim = null
 	_hit_claim = null
 	if _stick_ties != null:
 		_stick_ties.clear()
@@ -4672,6 +4736,9 @@ func on_scene_exit() -> void:
 	if _board_pins != null:
 		_board_pins.clear()
 	_board_pins = null
+	if _cross_checks != null:
+		_cross_checks.clear()
+	_cross_checks = null
 	_phase_coord = null
 	_swap_coord = null
 	if _debug_overlay:

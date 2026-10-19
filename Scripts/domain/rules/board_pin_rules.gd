@@ -3,13 +3,14 @@ extends RefCounted
 
 # The boards as a party to body contact: a check that drives a skater into the
 # wall lands harder (the wall takes the recoil his skates would have), and a
-# committed checker who drives an unbraced opponent into it pins him there.
+# checker holding his stick out on the stick button who drives an unbraced
+# opponent into it pins him there.
 #
-# A pin locks the two players together: neither stick plays the puck, and both
-# slide along the wall at capped speeds — the pinner's above the victim's, so a
-# pinner who reads the slide keeps up. The victim is free once his body is no
-# longer lined up with the pinner's along the wall (PIN_ESCAPE_OFFSET_M, either
-# side). Onset, escape and every end are the host's (BoardPinTracker); the caps
+# A pin locks the two players together: neither stick plays the puck, they touch
+# flat (locked_contact_axis), and both slide along the wall at capped speeds — the
+# pinner's above the victim's, so a pinner who reads the slide keeps up. The
+# victim is free once his body is no longer lined up with the pinner's along the
+# wall (PIN_ESCAPE_OFFSET_M, either side). Onset, escape and every end are the host's (BoardPinTracker); the caps
 # read only the replicated role and strength, so each client predicts its own.
 
 enum Role { NONE, PINNER, PINNED }
@@ -72,14 +73,46 @@ static func locked_wall_normal(pos: Vector3, body_radius: float, role: int) -> V
 	return wall_normal(pos, body_radius, margin)
 
 
-# The hit strength the stagger and knockdown read: the victim's open-ice Δv, or,
-# driven square into the boards, the whole closing speed the transfer carried —
-# the wall stops him, so none of it goes into his recoil.
+# The contact axis of a locked pair, from a to b: the boards' outward normal (into
+# the wall when b is the pinned one). The two are pressed flat into the glass, so
+# driving in presses the victim into the wall and never squeezes him along it, as
+# two discs touching off-centre would. ZERO for any other pair, whose contact
+# keeps the disc axis.
+static func locked_contact_axis(pos_a: Vector3, role_a: int, radius_a: float,
+		pos_b: Vector3, role_b: int, radius_b: float) -> Vector3:
+	if role_a == Role.NONE or role_b == Role.NONE or role_a == role_b:
+		return Vector3.ZERO
+	var b_pinned: bool = role_b == Role.PINNED
+	var out: Vector2 = locked_wall_normal(pos_b if b_pinned else pos_a,
+			radius_b if b_pinned else radius_a, Role.PINNED)
+	if out == Vector2.ZERO:
+		return Vector3.ZERO
+	var n := Vector3(out.x, 0.0, out.y)
+	return n if b_pinned else -n
+
+
+# How far apart a locked pair's bodies are along the boards' normal (pinner to
+# victim, edge to edge): the gap their flat contact keeps, whatever the
+# along-wall offset.
+static func locked_gap(victim_pos: Vector3, victim_radius: float, pinner_pos: Vector3,
+		pinner_radius: float, wall_out: Vector2) -> float:
+	return Vector2(victim_pos.x - pinner_pos.x, victim_pos.z - pinner_pos.z).dot(wall_out) \
+			- victim_radius - pinner_radius
+
+
+# How hard a hit landed, for the stagger and the puck strip: the victim's
+# open-ice Δv, or, driven square into the boards, the attacker's whole delivered
+# impulse (closing × transfer × his mass) on the victim's mass alone — the wall
+# stops him, so none of it goes into his recoil and none is shared with it. The
+# knockdown does not read this: being knocked off his feet is being moved, and
+# the wall is what stops the moving.
 static func backstop_hit_strength(open_ice_dv: float, closing_speed: float,
-		transfer: float, hit_dir: Vector2, wall_out: Vector2) -> float:
+		transfer: float, hit_dir: Vector2, wall_out: Vector2, attacker_mass: float,
+		victim_mass: float) -> float:
 	if wall_out == Vector2.ZERO or hit_dir.dot(wall_out) < BACKSTOP_MIN_INTO_WALL:
 		return open_ice_dv
-	return maxf(open_ice_dv, closing_speed * transfer)
+	return maxf(open_ice_dv,
+			closing_speed * transfer * attacker_mass / maxf(victim_mass, 0.001))
 
 
 static func pin_strength(defender_mass: float, victim_mass: float) -> float:
@@ -87,12 +120,12 @@ static func pin_strength(defender_mass: float, victim_mass: float) -> float:
 	return 0.5 if total <= 0.0 else defender_mass / total
 
 
-# A committed checker in contact, driving an unbraced victim (whose boards are
-# `wall_out`) into the wall along `hit_dir`. A victim holding the commit button is
-# braced: he can be hit, but not pinned.
-static func pin_holds(committed: bool, victim_braced: bool, hit_dir: Vector2,
+# A checker in contact, reaching for the pin with his stick held out, driving an
+# unbraced victim (whose boards are `wall_out`) into the wall along `hit_dir`. A
+# victim holding the commit button is braced: he can be hit, but not pinned.
+static func pin_holds(reaching: bool, victim_braced: bool, hit_dir: Vector2,
 		defender_vel: Vector3, defender_intent: Vector2, wall_out: Vector2) -> bool:
-	if not committed or victim_braced or wall_out == Vector2.ZERO \
+	if not reaching or victim_braced or wall_out == Vector2.ZERO \
 			or hit_dir.dot(wall_out) < BACKSTOP_MIN_INTO_WALL:
 		return false
 	return Vector2(defender_vel.x, defender_vel.z).dot(wall_out) >= PIN_DRIVE_MIN_M_S \
