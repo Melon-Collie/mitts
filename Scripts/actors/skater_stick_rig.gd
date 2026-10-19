@@ -19,14 +19,10 @@ extends RefCounted
 
 # ── Shaft geometry ───────────────────────────────────────────────────────────
 # The rendered shaft runs from the top hand to the HOSEL TIP, not the heel.
-# The hosel is fixed blade-local geometry ascending in the blade's own
-# vertical plane at the lie — but the hand is rarely in that plane (the blade
-# yaws with the cursor while the hand stays by the body), so a heel-aimed
-# shaft crossed the hosel at an angle over their whole overlap and the
-# junction read as a broken elbow. Ending the shaft at the tip makes the
-# connection point-exact in every pose; the residual angular mismatch shows
-# only as a slight bend at a joint where the two cross-sections nearly match.
-# A small overrun keeps the hosel's tip cap buried inside the shaft.
+# Skater._apply_blade_tilt lays the hosel along the heel→hand line, so the tip
+# lies on the shaft line and the shaft continues the hosel exactly — the stick
+# is one rigid piece (test_stick_is_rigid.gd). A small overrun keeps the
+# hosel's tip cap buried inside the shaft.
 const _SHAFT_TIP_OVERRUN_M: float = 0.03
 # The butt end extends past the TOP HAND so the knob rides visibly above the
 # fist — a real grip holds the shaft just below the knob, not on top of it.

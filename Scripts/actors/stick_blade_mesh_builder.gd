@@ -11,9 +11,9 @@ extends RefCounted
 # Frame: HEEL-ORIGIN blade-local space. The heel (where the shaft meets the
 # blade — the Blade Marker3D position) is at the origin; the toe tip is at
 # z = −length (−Z is the marker's look_at forward). +Y is up, X is lateral.
-# Building heel-origin (instead of a centered box) lets the cosmetic tilt in
-# Skater._apply_blade_tilt pivot about the heel, so the shaft→blade junction
-# stays pinned when the blade pitches with the shaft.
+# Building heel-origin (instead of a centered box) lets Skater._apply_blade_tilt
+# pivot the blade about the heel, so the shaft→blade junction stays pinned
+# when the blade pitches with the shaft.
 #
 # The same builder produces the team-tape band: pass `inflate` (cross-section
 # growth) and a `u_start`/`u_end` sub-span (fractions heel→toe) and the band
@@ -71,12 +71,10 @@ class Params:
 	var segments: int = 16
 	# Hosel: the tapered throat that carries the heel cross-section up the
 	# shaft line. 0 (the tape-band default) keeps a flat heel cap instead.
-	# The angle is the stick's lie (Skater.blade_lie_deg): the shaft-follow
-	# tilt keeps the blade rigidly at that angle to the shaft, so in
-	# blade-local space the shaft ALWAYS ascends from the heel at the lie —
-	# fixed hosel geometry stays glued to the rendered shaft in every pose
-	# (only the clamped extremes of the follow pitch open a small seam, and
-	# the tip is buried inside the shaft box).
+	# The angle is the stick's lie (Skater.blade_lie_deg): Skater
+	# ._apply_blade_tilt lays this axis along the shaft, so in blade-local
+	# space the shaft ALWAYS ascends from the heel at the lie and the hosel is
+	# its continuation in every pose (the tip is buried inside the shaft box).
 	var hosel_length: float = 0.0      # along the shaft line from the heel
 	var hosel_angle_deg: float = 42.0  # lie: shaft↔ice angle at flat blade
 
