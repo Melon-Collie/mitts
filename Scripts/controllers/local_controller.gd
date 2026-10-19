@@ -592,9 +592,6 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	_pose.facing = server_state.facing
 	skater.set_facing(_pose.facing)
 	_sync_dive_layout()
-	# IK lock side is relative to the old facing; reset so the gate re-evaluates
-	# cleanly from the snapped facing on the first post-reconcile frame.
-	_pose.ik_locked_side = 0
 	_pose.lower_body_lag = 0.0
 	_pose.apply_lower_body_yaw(0.0)
 	# The host's frame yaw at the ack, with the tracked angle and twist spring

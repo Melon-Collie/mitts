@@ -1208,7 +1208,8 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 		elif decision.has_aim_override:
 			input.mouse_world_pos = _step_mouse_face(decision.aim_world_pos)
 		elif decision.face_travel and input.move_vector.length_squared() > 0.01:
-			# The cursor down the route: FacingRules turns the body onto its travel.
+			# The cursor down the route: past the backward line's reach edge, so
+			# FacingRules pivots the hips onto the forward one.
 			var travel := Vector3(input.move_vector.x, 0.0, input.move_vector.y).normalized()
 			input.mouse_world_pos = _step_mouse_face(self_pos + travel * READY_STANCE_AIM_FORWARD_M)
 		else:
@@ -1871,6 +1872,9 @@ func _aim_ring_toward(self_pos: Vector3, aim_world: Vector3) -> Vector3:
 # The sign is latched until the swing passes halfway or completes, or a per-tick
 # re-read would flip direction mid-sweep.
 const PROTECT_TURN_MIN_SWING_RAD: float = deg_to_rad(100.0)
+# How far short of straight behind the body a turning-round cursor waits: inside
+# the gap between the reach edge and straight back, so it stays past the edge.
+const TURN_ROUND_BACK_MARGIN_RAD: float = deg_to_rad(10.0)
 # A stick's poke reach off the swept puck: a blade-length lunge plus the stick
 # itself, held out from the defender's body.
 const PROTECT_TURN_THREAT_RADIUS_M: float = 2.5
@@ -1965,10 +1969,26 @@ func _arc_step_mouse_target(self_pos: Vector3, final_target: Vector3,
 	var desired_angle: float = atan2(desired_dir.x, desired_dir.z)
 	var diff: float = wrapf(desired_angle - current_angle, -PI, PI)
 	var max_step: float = arc_rate * MOUSE_TICK_DELTA
+	# Moving, a target inside the blade's reach edge is swung round the front
+	# (BladeRoute.swing_angle, as AIShotHolds prices it); one past it turns the
+	# body round (FacingRules).
+	var vel := Vector2.ZERO
+	var facing := Vector2.ZERO
+	if self_state != null:
+		vel = Vector2(self_state.velocity.x, self_state.velocity.z)
+		facing = Vector2(self_state.facing.x, self_state.facing.y)
+	var rules: FacingRules.Config = _role_ctx.self_facing_rules
+	var to_dir := Vector2(desired_dir.x, desired_dir.z)
+	var moving: bool = vel.length() > rules.hold_min_speed and facing.length_squared() > 0.0001
+	var turning_round: bool = moving and absf(facing.angle_to(to_dir)) \
+			>= FacingRules.reach_edge(rules, facing, to_dir, _is_left_handed)
+	if moving and not turning_round:
+		diff = -BladeRoute.swing_angle(Vector2(seed_dir.x, seed_dir.z), to_dir, facing, vel,
+				rules, _is_left_handed)
 	# Protect-side turn (carriers only — see PROTECT_TURN_*): pick which way a
 	# big swing sweeps the puck, latch it, and hold it until the shortest way
 	# agrees (swung past halfway) or the swing completes.
-	if _state != State.CARRY:
+	if _state != State.CARRY or (moving and not turning_round):
 		_arc_protect_sign = 0.0
 	elif _arc_protect_sign != 0.0:
 		if signf(diff) == _arc_protect_sign or absf(diff) <= max_step:
@@ -1981,21 +2001,26 @@ func _arc_step_mouse_target(self_pos: Vector3, final_target: Vector3,
 				self_pos, current_angle, diff, _current_snapshot)
 		if protect_sign != signf(diff):
 			_arc_protect_sign = protect_sign
-	var stepped_angle: float
-	if _arc_protect_sign != 0.0:
-		stepped_angle = current_angle + _arc_protect_sign * max_step
-	else:
-		stepped_angle = current_angle + clampf(diff, -max_step, max_step)
+	var step: float = _arc_protect_sign * max_step if _arc_protect_sign != 0.0 \
+			else clampf(diff, -max_step, max_step)
+	if turning_round:
+		# Turning round, the cursor waits short of straight behind the body until it
+		# comes round: across it the pivot would reverse (FacingRules.turn_round_angle).
+		var back: float = wrapf(atan2(-facing.x, -facing.y) - current_angle, -PI, PI)
+		if signf(back) == signf(step):
+			step = signf(step) * minf(absf(step), maxf(absf(back) - TURN_ROUND_BACK_MARGIN_RAD, 0.0))
+	var stepped_angle: float = current_angle + step
 	return self_pos + Vector3(sin(stepped_angle), 0.0, cos(stepped_angle)) * ring_radius
 
 
 # FACE-mode cursor placement: a point on the body ring in the direction the bot
-# wants to point, but CLAMPED into the reachable cone (_self_reach_cone_half_angle
-# − FACE_GATE_MARGIN_RAD) of its current facing. Inside the cone the cursor points
-# straight at the target (the body turns to it at facing_drag_speed); in the back
-# wedge it's clamped to the cone edge on the target's side, so facing rotates to
-# that edge without the pose IK gate freezing, the target's relative angle shrinks
-# as the body turns, and the clamp releases — the bot walks all the way around.
+# wants to point. Moving, it points straight at the target: past the reach edge
+# that is what pivots the hips round to it (FacingRules), turning toward the
+# cursor's side. Standing still the back wedge freezes facing, so there it is
+# CLAMPED into the reachable cone (_self_reach_cone_half_angle −
+# FACE_GATE_MARGIN_RAD) of the current facing, on the target's side: facing
+# rotates to that edge, the target's relative angle shrinks as the body turns,
+# and the clamp releases — the bot walks all the way around.
 func _clamp_aim_to_reach_cone(self_pos: Vector3, target: Vector3,
 		self_state: SkaterNetworkState) -> Vector3:
 	var to_target := Vector2(target.x - self_pos.x, target.z - self_pos.z)
@@ -2003,11 +2028,15 @@ func _clamp_aim_to_reach_cone(self_pos: Vector3, target: Vector3,
 		return target
 	var target_dir: Vector2 = to_target.normalized()
 	var facing := Vector2(0.0, 1.0)
-	if self_state != null and self_state.facing.length_squared() > 0.0001:
-		facing = self_state.facing.normalized()
+	var free_to_turn_round: bool = false
+	if self_state != null:
+		if self_state.facing.length_squared() > 0.0001:
+			facing = self_state.facing.normalized()
+		free_to_turn_round = Vector2(self_state.velocity.x, self_state.velocity.z).length() \
+				> _role_ctx.self_facing_rules.hold_min_speed
 	var ang: float = facing.angle_to(target_dir)
 	var gate: float = maxf(_self_reach_cone_half_angle - FACE_GATE_MARGIN_RAD, 0.0)
-	var out_dir: Vector2 = target_dir if absf(ang) <= gate \
+	var out_dir: Vector2 = target_dir if free_to_turn_round or absf(ang) <= gate \
 			else facing.rotated(signf(ang) * gate)
 	return self_pos + Vector3(out_dir.x, 0.0, out_dir.y) * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
 
@@ -2308,8 +2337,8 @@ func _state_one_timer_pressed(input: InputState, snapshot: WorldSnapshot, self_p
 	else:
 		_apply_brake_steering(input, snapshot, self_pos)
 	# Open up to the net through the wait, as a shooter loading a one-timer does:
-	# skating, the body faces its travel (FacingRules), and only the stance
-	# squares it to the cursor — so without it the square-up gate below waits
+	# skating, the hips ride the skating line (FacingRules), and only the stance
+	# squares them to the cursor — so without it the square-up gate below waits
 	# out its backstop and the press-tick snap whips the body round.
 	input.stance_held = true
 	# AIM FROM THE RELEASE POINT, NOT THE CURRENT BODY: the slapper direction locks
@@ -2975,10 +3004,10 @@ const _STEP_FACE: int = 2
 const _STEP_FRONT: int = 3
 const _STEP_HOLD_ARC: int = 4
 
-# Headroom below the pose IK gate (_self_reach_cone_half_angle) that a FACE-mode
-# cursor is clamped to, so it never sits exactly on the freeze boundary. Only
-# affects a target in the back wedge; the body still walks all the way around to
-# it as facing rotates and the clamp releases.
+# Headroom below the pose IK gate (_self_reach_cone_half_angle) that a standing
+# bot's FACE-mode cursor is clamped to, so it never sits exactly on the freeze
+# boundary. Only affects a target in the back wedge; the body still walks all the
+# way around to it as facing rotates and the clamp releases.
 const FACE_GATE_MARGIN_RAD: float = deg_to_rad(6.0)
 
 

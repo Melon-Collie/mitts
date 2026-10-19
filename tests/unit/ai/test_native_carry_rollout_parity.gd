@@ -36,7 +36,10 @@ func _random_caps() -> AISkaterCaps:
 	caps.body_radius = _rng.randf_range(0.3, 0.42)
 	caps.board_shield_probe = _rng.randf_range(0.8, 1.4)
 	caps.board_shield_max_rad = deg_to_rad(_rng.randf_range(30.0, 70.0))
-	caps.reach_cone_half_angle = deg_to_rad(_rng.randf_range(130.0, 170.0))
+	caps.facing_rules = FacingRules.Config.new()
+	caps.facing_rules.forehand_edge_rad = deg_to_rad(_rng.randf_range(130.0, 170.0))
+	caps.facing_rules.backhand_edge_rad = deg_to_rad(_rng.randf_range(130.0, 170.0))
+	caps.is_left_handed = _rng.randf() < 0.5
 	return caps
 
 

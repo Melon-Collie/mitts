@@ -82,6 +82,8 @@ var backhand_power_coefficient: float = 0.75
 var wrister_load: WristerLoad.Config = WristerLoad.Config.new()
 var facing_rules: FacingRules.Config = FacingRules.Config.new()
 var wrister_unloaded_share: float = 0.6
+# Which side the forehand is on, for the facing rule's per-side reach edges.
+var is_left_handed: bool = true
 
 # Body-check delivery inputs to SkaterCollisionRules.victim_kick
 # (closing × transfer × m_a / (m_a + m_b)): a heavier player predicts harder
@@ -99,8 +101,9 @@ var handle_reach: float = 0.9
 # Half-angle of the blade's reach cone: how far off its FACING the body can
 # place the blade WITHOUT turning — arm ROM plus torso twist
 # (SkaterController.rom_backhand_angle_max_deg + upper_body_max_twist_deg, the
-# exact gate SkaterPoseCoordinator.apply_facing enforces on the IK). Only aims
-# beyond it (the narrow back wedge) cost a body rotation. Not attribute-scaled.
+# backhand side of the per-side gate SkaterPoseCoordinator.apply_facing enforces,
+# FacingRules.reach_edge; one cone for both sides here). Only aims beyond it (the
+# narrow back wedge) cost a body rotation. Not attribute-scaled.
 # Default = 90° + 67°.
 var reach_cone_half_angle: float = deg_to_rad(157.0)
 

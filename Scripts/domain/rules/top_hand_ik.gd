@@ -44,8 +44,8 @@ class Config:
 	var blade_y: float = 0.0                 # fixed local Y for the blade
 	var hand_rest_y: float = 0.0             # hand's resting local Y (FAR regime)
 	var hand_y_max: float = 0.0              # ceiling the hand may rise to (CLOSE)
-	var rom_forehand_angle_max: float = 0.0  # radians; ROM on forehand side (small)
-	var rom_backhand_angle_max: float = 0.0  # radians; ROM on backhand side (large)
+	var rom_forehand_angle_max: float = 0.0  # radians; ROM on forehand side
+	var rom_backhand_angle_max: float = 0.0  # radians; ROM on backhand side
 	var rom_forehand_reach_max: float = 0.0  # meters; max hand displacement forehand
 	var rom_backhand_reach_max: float = 0.0  # meters; max hand displacement backhand
 	# Hard cap on the blade's horizontal distance from the shoulder (meters).

@@ -49,7 +49,7 @@ const _GENERATED_DIR: String = "res://Scripts/domain/ai/generated/"
 const _SIZE_SLACK: int = 40
 
 const _SIZE_ALLOWANCE: Dictionary[String, int] = {
-	"res://Scripts/ai/skater_agent_state_machine.gd": 3665,
+	"res://Scripts/ai/skater_agent_state_machine.gd": 3694,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
 	"res://Scripts/game/game_manager.gd": 5788,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
@@ -67,7 +67,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +10: the staged get-up's one clock (knockdown_getup_left) and the stagger
 	# he finds his legs through once it ends. +36: the get-up's stick hold. +5:
 	# the down flags in one place, a diver's stick dead from the get-up.
-	"res://Scripts/controllers/skater_controller.gd": 3593,
+	"res://Scripts/controllers/skater_controller.gd": 3597,
 	# +1: dive_laid_out, the diver's stick and low block until the get-up.
 	"res://Scripts/actors/skater.gd": 2797,
 	"res://Scripts/networking/network_manager.gd": 2866,

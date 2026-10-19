@@ -28,7 +28,6 @@ var upper_body_lean_roll: float = 0.0
 var velocity_lean_x: float = 0.0
 var lower_body_lag: float = 0.0
 var head_angle: float = 0.0
-var ik_locked_side: int = 0  # +1 = exited right, -1 = exited left, 0 = unlocked
 # Upper-body twist follow-through (secondary motion): a damped spring trails the
 # tracked twist so the shoulders whip through a fast cut and settle, instead of
 # tracking rigidly. Converges to the tracked angle at steady state (adds nothing
@@ -233,26 +232,25 @@ func apply_facing(input: InputState, delta: float) -> void:
 		)
 		if to_mouse.length() > _controller.move_deadzone:
 			# Gate: while the mouse is in the unreachable wedge behind the skater
-			# (beyond rom_backhand_angle_max_deg + upper_body_max_twist_deg from
-			# forward), freeze facing so the body doesn't chase a target it can't
-			# reach. Resume tracking as soon as the mouse returns to the reachable
-			# cone, regardless of side. Snap-prevention on wraps lives in the
-			# blade speed cap (SkaterIKCoordinator), not in this lock — earlier
-			# versions tied unlock to "same side it left from", which could
-			# permanently strand facing when the mouse wrapped around.
-			# The one exception is a skater facing their travel whose cursor has gone
-			# behind it: turning to it is how they skate backward, so it turns.
-			FacingRules.solve(_facing_rule, facing, to_mouse.normalized(),
+			# (past the blade's reach edge on its side, FacingRules.reach_edge),
+			# freeze facing so the body doesn't chase a target it can't reach. Resume tracking as soon as the mouse returns to the reachable
+			# cone, regardless of side: an unlock tied to the side it left from
+			# strands facing when the mouse wraps round. Snap-prevention on wraps
+			# lives in the blade speed cap (SkaterIKCoordinator), not in this lock.
+			# Only a standing skater is held: a moving one turns round instead
+			# (FacingRules.Result.free_to_turn_round).
+			var cursor_dir: Vector2 = to_mouse.normalized()
+			var lefty: bool = _skater.is_left_handed
+			var rules: FacingRules.Config = _controller.facing_rules
+			FacingRules.solve(_facing_rule, facing, cursor_dir,
 					Vector2(_skater.velocity.x, _skater.velocity.z), input.brake,
-					_controller.stance_active, _controller.facing_rules)
+					_controller.stance_active, lefty, rules)
 			var facing_target: Vector2 = _facing_rule.target
-			var mouse_body_angle: float = facing.angle_to(to_mouse.normalized())
-			var ik_gate: float = deg_to_rad(_controller.rom_backhand_angle_max_deg + _controller.upper_body_max_twist_deg)
-			var behind_gate: bool = abs(mouse_body_angle) >= ik_gate
-			if behind_gate and not _facing_rule.turning_to_cursor_behind:
-				ik_locked_side = int(sign(mouse_body_angle))
-			else:
-				ik_locked_side = 0
+			var mouse_body_angle: float = facing.angle_to(cursor_dir)
+			var behind_gate: bool = absf(mouse_body_angle) \
+					>= FacingRules.reach_edge(rules, facing, cursor_dir, lefty)
+			var turns_round: bool = _facing_rule.free_to_turn_round
+			if turns_round or not behind_gate:
 				var drag: float = _controller.facing_drag_speed_braking if input.brake else _controller.facing_drag_speed
 				# Re-square hard through the follow-through: the coil left facing stale
 				# at the wind-up cursor, and a lazy drag can't catch up in ~0.22 s, so
@@ -272,10 +270,12 @@ func apply_facing(input: InputState, delta: float) -> void:
 									Vector2(_skater.global_position.x, _skater.global_position.z),
 									_controller.board_shield_probe),
 							deg_to_rad(_controller.board_shield_max_deg))
-				if behind_gate:
-					# Turning round to a cursor near-opposite: a chord lerp between
-					# opposed vectors barely moves, so turn by angle instead.
-					facing = facing.slerp(facing_target, minf(drag * delta, 1.0))
+				if turns_round and (behind_gate or absf(facing.angle_to(facing_target))
+						>= FacingRules.reach_edge(rules, facing, facing_target, lefty)):
+					# Turning round to a cursor or a target in the wedge: a chord lerp
+					# toward a near-opposed vector barely moves, so turn by angle.
+					facing = facing.rotated(FacingRules.turn_round_angle(
+							facing, facing_target, cursor_dir) * minf(drag * delta, 1.0))
 				else:
 					facing = facing.lerp(facing_target, drag * delta).normalized()
 		_skater.set_facing(facing)

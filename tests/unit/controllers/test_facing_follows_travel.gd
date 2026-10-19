@@ -85,6 +85,93 @@ func test_a_cursor_behind_the_travel_turns_the_skater_round() -> void:
 			"looking straight back while skating forward turns to skate backward, not freeze")
 
 
+func test_a_cursor_flicked_ahead_turns_a_backward_skater_forward() -> void:
+	_controller._pose.facing = Vector2(BEHIND.x, BEHIND.z)
+	_skater.set_facing(Vector2(BEHIND.x, BEHIND.z))
+	_skate(AHEAD, 6.0, BEHIND, 30)
+	_skate(AHEAD, 6.0, AHEAD, 120)
+	assert_lt(_facing_off(AHEAD), 20.0,
+			"a cursor flicked to where a backward skater is going turns them round, not freeze")
+
+
+func test_a_backward_skater_turns_forward_on_the_cursors_side() -> void:
+	# Leaning a touch right of straight back, with the cursor flicked ahead-left:
+	# the body comes round through the left, the way the player is looking.
+	var lean := Vector2(BEHIND.x, BEHIND.z).rotated(deg_to_rad(-5.0))
+	_controller._pose.facing = lean
+	_skater.set_facing(lean)
+	var ahead_left := AHEAD.rotated(Vector3.UP, deg_to_rad(10.0))
+	var widest_right: float = -INF
+	var widest_left: float = INF
+	for _i: int in 120:
+		_skate(AHEAD, 6.0, ahead_left, 1)
+		widest_right = maxf(widest_right, _skater.get_facing().x)
+		widest_left = minf(widest_left, _skater.get_facing().x)
+	assert_lt(_facing_off(AHEAD), 20.0)
+	assert_lt(widest_left, -0.9, "the body swept through the left")
+	assert_lt(widest_right, 0.2, "and never round the right")
+
+
+func test_a_slow_backward_skater_turns_forward_on_a_flick() -> void:
+	_controller._pose.facing = Vector2(BEHIND.x, BEHIND.z)
+	_skater.set_facing(Vector2(BEHIND.x, BEHIND.z))
+	_skate(AHEAD, 1.0, BEHIND, 30)
+	_skate(AHEAD, 1.0, AHEAD, 120)
+	assert_lt(_facing_off(AHEAD), 20.0, "below the engage band the body still comes round")
+
+
+func test_a_stop_turns_round_to_a_cursor_behind() -> void:
+	_skate(AHEAD, 6.0, AHEAD, 30, Vector2(0.0, -1.0))
+	for _i: int in 60:
+		_skater.velocity = AHEAD * 4.0
+		var input := InputState.new()
+		input.brake = true
+		input.mouse_world_pos = _skater.global_position + BEHIND * 6.0
+		input.mouse_world_pos.y = 0.0
+		input.delta = DT
+		_controller._process_input(input, DT)
+	assert_lt(_facing_off(BEHIND), 20.0, "stopping and looking back turns the body to go back")
+
+
+func test_a_lefty_reaches_round_the_forehand_then_pivots_onto_the_backhand() -> void:
+	var edge: float = rad_to_deg(_controller.facing_rules.forehand_edge_rad)
+	var inside := AHEAD.rotated(Vector3.UP, deg_to_rad(edge - 7.0))
+	_skate(AHEAD, 6.0, AHEAD, 30, Vector2(0.0, -1.0))
+	_skate(AHEAD, 6.0, inside, 120)
+	assert_lt(_facing_off(AHEAD), 3.0, "the torso and arms reach; the hips stay on the line")
+	var past := AHEAD.rotated(Vector3.UP, deg_to_rad(edge + 7.0))
+	var widest_left: float = INF
+	for _i: int in 120:
+		_skate(AHEAD, 6.0, past, 1)
+		widest_left = minf(widest_left, _skater.get_facing().x)
+	assert_lt(_facing_off(BEHIND), 5.0, "past the edge the hips pivot onto the backward line")
+	assert_lt(widest_left, -0.9, "turning toward the cursor, round the forehand side")
+	var cursor_side: float = signf(_skater.get_facing().angle_to(Vector2(past.x, past.z)))
+	assert_eq(cursor_side, -FacingRules.forehand_sign(true), "and the cursor comes out on the backhand")
+
+
+func test_skating_backward_keeps_the_hips_on_the_line() -> void:
+	_controller._pose.facing = Vector2(BEHIND.x, BEHIND.z)
+	_skater.set_facing(Vector2(BEHIND.x, BEHIND.z))
+	_skate(AHEAD, 6.0, BEHIND.rotated(Vector3.UP, deg_to_rad(60.0)), 120)
+	assert_lt(_facing_off(BEHIND), 3.0, "the torso watches the play; the hips stay on the line")
+
+
+func test_the_reach_edges_are_the_rigs() -> void:
+	var c := _controller
+	assert_almost_eq(c.facing_rules.forehand_edge_rad,
+			deg_to_rad(c.rom_forehand_angle_max_deg + c.upper_body_max_twist_deg), 0.000001)
+	assert_almost_eq(c.facing_rules.backhand_edge_rad,
+			deg_to_rad(c.rom_backhand_angle_max_deg + c.upper_body_max_twist_deg), 0.000001)
+	# The top hand's shoulder is on the backhand side, so the forehand is the other.
+	for lefty: bool in [true, false]:
+		_skater.is_left_handed = lefty
+		var sh: Vector3 = _skater.shoulder.global_position - _skater.global_position
+		var side: float = signf(_skater.get_facing().angle_to(Vector2(sh.x, sh.z)))
+		assert_eq(side, -FacingRules.forehand_sign(lefty),
+				"a %s shot's shoulder" % ("left" if lefty else "right"))
+
+
 func test_a_cursor_behind_a_standing_skater_still_freezes_facing() -> void:
 	_skate(AHEAD, 0.0, AHEAD, 30)
 	_skate(AHEAD, 0.0, BEHIND, 120)

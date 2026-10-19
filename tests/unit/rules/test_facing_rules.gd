@@ -1,7 +1,8 @@
 extends GutTest
 
 # FacingRules — where a skater's body heads, from its facing, the cursor and its
-# velocity. World XZ; the skater faces −Z ("ahead") unless a test says otherwise.
+# velocity. World XZ; the skater faces −Z ("ahead") unless a test says otherwise,
+# and shoots left unless it says otherwise, so the forehand is the LEFT side.
 
 const AHEAD := Vector2(0.0, -1.0)
 const LEFT := Vector2(-1.0, 0.0)
@@ -11,9 +12,13 @@ var _cfg := FacingRules.Config.new()
 var _out := FacingRules.Result.new()
 
 
+func before_each() -> void:
+	_cfg = FacingRules.Config.new()
+
+
 func _solve(facing: Vector2, cursor: Vector2, velocity: Vector2,
-		brake: bool = false, stance: bool = false) -> FacingRules.Result:
-	FacingRules.solve(_out, facing, cursor, velocity, brake, stance, _cfg)
+		brake: bool = false, stance: bool = false, lefty: bool = true) -> FacingRules.Result:
+	FacingRules.solve(_out, facing, cursor, velocity, brake, stance, lefty, _cfg)
 	return _out
 
 
@@ -21,27 +26,36 @@ func _off(dir: Vector2) -> float:
 	return rad_to_deg(absf(_out.target.angle_to(dir)))
 
 
+# `deg` round from straight ahead, toward the left.
+func _left_of_ahead(deg: float) -> Vector2:
+	return AHEAD.rotated(-deg_to_rad(deg))
+
+
+func _right_of_ahead(deg: float) -> Vector2:
+	return AHEAD.rotated(deg_to_rad(deg))
+
+
 func test_standing_faces_the_cursor() -> void:
 	_solve(AHEAD, LEFT, Vector2.ZERO)
 	assert_almost_eq(_off(LEFT), 0.0, 0.01)
 
 
-func test_skating_faces_the_travel_with_the_cursor_out_wide() -> void:
+func test_skating_faces_the_line_with_the_cursor_out_wide() -> void:
 	_solve(AHEAD, LEFT, AHEAD * 6.0)
 	assert_almost_eq(_off(AHEAD), 0.0, 0.01)
-	assert_false(_out.turning_to_cursor_behind)
+	assert_false(_out.pivoting)
 
 
-func test_taking_up_the_travel_needs_skating_speed() -> void:
+func test_taking_up_the_line_needs_skating_speed() -> void:
 	# Facing the cursor, moving at side-step pace: stays on the cursor.
 	_solve(LEFT, LEFT, AHEAD * 1.5)
 	assert_almost_eq(_off(LEFT), 0.0, 0.01, "a side-step tap stays squared")
 	_solve(LEFT, LEFT, AHEAD * 2.4)
-	assert_almost_eq(_off(AHEAD), 0.0, 0.01, "past the engage band it takes the travel")
+	assert_almost_eq(_off(AHEAD), 0.0, 0.01, "past the engage band it takes the line")
 
 
-func test_keeping_the_travel_holds_down_to_a_crawl() -> void:
-	# Already facing the travel: a coast keeps it well below the engage band.
+func test_keeping_the_line_holds_down_to_a_crawl() -> void:
+	# Already on the line: a coast keeps it well below the engage band.
 	_solve(AHEAD, LEFT, AHEAD * 1.5)
 	assert_almost_eq(_off(AHEAD), 0.0, 0.01)
 	_solve(AHEAD, LEFT, AHEAD * 0.4)
@@ -53,18 +67,46 @@ func test_braking_faces_the_cursor() -> void:
 	assert_almost_eq(_off(LEFT), 0.0, 0.01)
 
 
-func test_a_cursor_behind_the_travel_turns_round() -> void:
-	_solve(AHEAD, BEHIND, AHEAD * 6.0)
+func test_the_hips_hold_the_line_to_the_reach_edge() -> void:
+	var edge: float = rad_to_deg(_cfg.forehand_edge_rad)
+	_solve(AHEAD, _left_of_ahead(edge - 5.0), AHEAD * 6.0)
+	assert_almost_eq(_off(AHEAD), 0.0, 0.01, "inside the edge the torso and arms reach for it")
+	assert_false(_out.pivoting)
+	_solve(AHEAD, _left_of_ahead(edge + 5.0), AHEAD * 6.0)
+	assert_true(_out.pivoting, "past it the hips pivot")
+	assert_almost_eq(_off(BEHIND), 0.0, 0.01, "onto the backward line")
+
+
+func test_skating_backward_keeps_the_hips_on_the_line() -> void:
+	_solve(BEHIND, BEHIND.rotated(deg_to_rad(60.0)), AHEAD * 6.0)
+	assert_almost_eq(_off(BEHIND), 0.0, 0.01, "squared along the line, not to the cursor")
+	assert_false(_out.pivoting)
+
+
+func test_skating_backward_pivots_forward_at_the_edge() -> void:
+	_solve(BEHIND, _left_of_ahead(10.0), AHEAD * 6.0)
+	assert_true(_out.pivoting)
+	assert_almost_eq(_off(AHEAD), 0.0, 0.01)
+
+
+func test_a_pivot_cannot_flip_straight_back() -> void:
+	# Pivoted onto the backward line, the cursor that sent it there sits far inside
+	# the new line's edge.
+	var cursor := _left_of_ahead(rad_to_deg(_cfg.forehand_edge_rad) + 5.0)
+	_solve(BEHIND, cursor, AHEAD * 6.0)
+	assert_false(_out.pivoting)
 	assert_almost_eq(_off(BEHIND), 0.0, 0.01)
-	assert_true(_out.turning_to_cursor_behind)
 
 
-func test_the_cone_has_hysteresis() -> void:
-	var at_128 := AHEAD.rotated(deg_to_rad(128.0))
-	_solve(AHEAD, at_128, AHEAD * 6.0)
-	assert_false(_out.turning_to_cursor_behind, "following, 128° is inside 120 + 15")
-	_solve(at_128, at_128, AHEAD * 6.0)
-	assert_true(_out.turning_to_cursor_behind, "facing the cursor, 128° is past 120 − 15")
+func test_each_side_pivots_at_its_own_edge() -> void:
+	_cfg.forehand_edge_rad = deg_to_rad(120.0)
+	_cfg.backhand_edge_rad = deg_to_rad(170.0)
+	_solve(AHEAD, _left_of_ahead(140.0), AHEAD * 6.0)
+	assert_true(_out.pivoting, "a lefty's forehand is the left, and 140° is past it")
+	_solve(AHEAD, _right_of_ahead(140.0), AHEAD * 6.0)
+	assert_false(_out.pivoting, "a lefty's backhand is the right, and reaches 140°")
+	_solve(AHEAD, _right_of_ahead(140.0), AHEAD * 6.0, false, false, false)
+	assert_true(_out.pivoting, "a righty's forehand is the right")
 
 
 func test_the_stance_squares_only_when_slow() -> void:
@@ -72,3 +114,34 @@ func test_the_stance_squares_only_when_slow() -> void:
 	assert_almost_eq(_off(LEFT), 0.0, 0.01, "slow in the stance squares to the cursor")
 	_solve(AHEAD, LEFT, AHEAD * 6.0, false, true)
 	assert_almost_eq(_off(AHEAD), 0.0, 0.01, "at speed the stance just crouches")
+
+
+func test_only_a_standing_skater_is_held_off_a_target_behind() -> void:
+	_solve(BEHIND, AHEAD.rotated(deg_to_rad(30.0)), AHEAD * 1.0)
+	assert_true(_out.free_to_turn_round, "a slow skate below the engage band still turns")
+	_solve(AHEAD, BEHIND, AHEAD * 6.0, true)
+	assert_true(_out.free_to_turn_round, "so does a stop")
+	_solve(AHEAD, BEHIND, AHEAD * 2.0, false, true)
+	assert_true(_out.free_to_turn_round, "and the stance when slow")
+	_solve(AHEAD, BEHIND, AHEAD * 0.3)
+	assert_false(_out.free_to_turn_round, "nearly stopped is standing")
+	_solve(AHEAD, BEHIND, Vector2.ZERO)
+	assert_false(_out.free_to_turn_round)
+
+
+func test_turning_round_goes_the_cursors_way() -> void:
+	# Backward, leaning a touch right of straight back, so the short way to the
+	# travel is round the right; the cursor is ahead-left, so it goes round the left.
+	var facing := BEHIND.rotated(deg_to_rad(5.0))
+	var cursor := AHEAD.rotated(deg_to_rad(10.0))
+	var short_way: float = facing.angle_to(AHEAD)
+	var turn: float = FacingRules.turn_round_angle(facing, AHEAD, cursor)
+	assert_eq(signf(turn), signf(facing.angle_to(cursor)), "round on the cursor's side")
+	assert_ne(signf(turn), signf(short_way), "which here is the long way")
+	assert_almost_eq(absf(turn), TAU - absf(short_way), 0.0001)
+
+
+func test_turning_round_to_a_cursor_dead_behind_keeps_the_lean() -> void:
+	var facing := BEHIND.rotated(deg_to_rad(5.0))
+	var turn: float = FacingRules.turn_round_angle(facing, AHEAD, AHEAD)
+	assert_almost_eq(turn, facing.angle_to(AHEAD), 0.0001)

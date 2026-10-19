@@ -324,7 +324,8 @@ func arrival_hold_wait(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3
 	var puck: Vector3 = ctx.self_pos if ctx.snapshot.puck_state == null \
 			else ctx.snapshot.puck_state.position
 	var from := Vector2(puck.x - ctx.self_pos.x, puck.z - ctx.self_pos.z)
-	return maxf(0.0, holds.pull_time(from, holds.arrival_offset, facing) - carry_s)
+	return maxf(0.0, holds.pull_time(from, holds.arrival_offset, facing,
+			Vector2(ctx.self_velocity.x, ctx.self_velocity.z)) - carry_s)
 
 
 # Position-value scorer at `pos`, evaluated from the carrier at `from_pos`, in

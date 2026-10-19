@@ -25,11 +25,11 @@ namespace mitts {
 
 #define MITTS_FACING_TUNABLES(X) \
 	X(engage_min_speed) X(engage_full_speed) X(hold_min_speed) X(hold_full_speed) \
-	X(cone_rad) X(cone_hysteresis_rad) X(stance_square_max_speed)
+	X(forehand_edge_rad) X(backhand_edge_rad) X(stance_square_max_speed)
 
 #define MITTS_ROLLOUT_BODY_TUNABLES(X) \
 	X(facing_drag_speed) X(facing_drag_speed_braking) X(body_radius) \
-	X(board_shield_probe) X(board_shield_max_rad) X(reach_cone_half_angle)
+	X(board_shield_probe) X(board_shield_max_rad)
 
 class NativeCarryRollout : public godot::RefCounted {
 	GDCLASS(NativeCarryRollout, godot::RefCounted)
@@ -48,6 +48,7 @@ class NativeCarryRollout : public godot::RefCounted {
 		MITTS_ROLLOUT_BODY_TUNABLES(X)
 #undef X
 	} body;
+	bool is_left_handed = true;
 
 	// GameRules geometry.
 	double inner_half_width = 0.0;
@@ -83,6 +84,7 @@ class NativeCarryRollout : public godot::RefCounted {
 
 	godot::Vector2 clamp_to_rink_inner(const godot::Vector2 &world_xz, double margin) const;
 	godot::Vector2 push_out_of_net(const godot::Vector2 &world_xz, double radius) const;
+	double reach_edge(const godot::Vector2 &facing, const godot::Vector2 &dir) const;
 	godot::Vector2 face(const godot::Vector2 &f, const godot::Vector2 &cur,
 			const godot::Vector3 &v, const godot::Vector3 &p, bool braking, bool stance,
 			double step, bool shield) const;

@@ -97,6 +97,12 @@ String NativeCarryRollout::configure(Object *caps) {
 	}
 	MITTS_ROLLOUT_BODY_TUNABLES(X)
 #undef X
+	const Variant lefty = caps->get(StringName("is_left_handed"));
+	if (lefty.get_type() != Variant::BOOL) {
+		missing += "is_left_handed ";
+	} else {
+		is_left_handed = (bool)lefty;
+	}
 	return missing;
 }
 
@@ -185,39 +191,44 @@ bool NativeCarryRollout::stance_cuts_onto(const Vector2 &dir, const Vector3 &v,
 	return required > upright_rate * (was_holding ? stance_release_fraction : 1.0);
 }
 
-// AICarryRollout._face over FacingRules.solve and
+// FacingRules.reach_edge.
+double NativeCarryRollout::reach_edge(const Vector2 &facing, const Vector2 &dir) const {
+	const double forehand_sign = is_left_handed ? -1.0 : 1.0;
+	if (signd(facing.angle_to(dir)) == forehand_sign) {
+		return facing_cfg.forehand_edge_rad;
+	}
+	return facing_cfg.backhand_edge_rad;
+}
+
+// AICarryRollout._face over FacingRules.solve / reach_edge / turn_round_angle and
 // BoardPlayRules.board_proximity / board_shield_facing.
 Vector2 NativeCarryRollout::face(const Vector2 &f, const Vector2 &cur, const Vector3 &v,
 		const Vector3 &p, bool braking, bool stance, double step, bool shield) const {
 	Vector2 target = cur;
-	bool turning_to_cursor_behind = false;
 	const Vector2 velocity(v.x, v.z);
-	if (!braking) {
-		const double speed = velocity.length();
-		if (speed >= 0.001) {
-			const Vector2 travel = velocity / (real_t)speed;
-			const bool following = Math::abs((double)f.angle_to(travel))
-					<= Math::abs((double)f.angle_to(cur));
-			double share = following
-					? smoothstep(facing_cfg.hold_min_speed, facing_cfg.hold_full_speed, speed)
-					: smoothstep(facing_cfg.engage_min_speed, facing_cfg.engage_full_speed, speed);
-			if (stance) {
-				share = MIN(share, smoothstep(facing_cfg.stance_square_max_speed
-						- stance_square_blend, facing_cfg.stance_square_max_speed, speed));
-			}
-			if (share > 0.0) {
-				const double cone = facing_cfg.cone_rad
-						+ (following ? facing_cfg.cone_hysteresis_rad : -facing_cfg.cone_hysteresis_rad);
-				if (Math::abs((double)travel.angle_to(cur)) > cone) {
-					turning_to_cursor_behind = true;
-				} else {
-					target = cur.slerp(travel, (real_t)share);
-				}
-			}
+	const double speed = velocity.length();
+	const bool turns_round = speed > facing_cfg.hold_min_speed;
+	if (!braking && speed >= 0.001) {
+		const Vector2 travel = velocity / (real_t)speed;
+		Vector2 line = f.dot(travel) >= 0.0 ? travel : -travel;
+		if (Math::abs((double)line.angle_to(cur)) > reach_edge(line, cur)) {
+			line = -line;
+		}
+		const bool on_line = Math::abs((double)f.angle_to(line))
+				<= Math::abs((double)f.angle_to(cur));
+		double share = on_line
+				? smoothstep(facing_cfg.hold_min_speed, facing_cfg.hold_full_speed, speed)
+				: smoothstep(facing_cfg.engage_min_speed, facing_cfg.engage_full_speed, speed);
+		if (stance) {
+			share = MIN(share, smoothstep(facing_cfg.stance_square_max_speed
+					- stance_square_blend, facing_cfg.stance_square_max_speed, speed));
+		}
+		if (share > 0.0) {
+			target = cur.slerp(line, (real_t)share);
 		}
 	}
-	const bool behind = Math::abs((double)f.angle_to(cur)) >= body.reach_cone_half_angle;
-	if (behind && !turning_to_cursor_behind) {
+	const bool behind = Math::abs((double)f.angle_to(cur)) >= reach_edge(f, cur);
+	if (behind && !turns_round) {
 		return f;
 	}
 	if (shield) {
@@ -246,8 +257,13 @@ Vector2 NativeCarryRollout::face(const Vector2 &f, const Vector2 &cur, const Vec
 			}
 		}
 	}
-	if (behind) {
-		return f.slerp(target, (real_t)MIN(step, 1.0));
+	if (turns_round && (behind || Math::abs((double)f.angle_to(target)) >= reach_edge(f, target))) {
+		// FacingRules.turn_round_angle.
+		double turn = f.angle_to(target);
+		if (turn * (double)f.angle_to(cur) < 0.0) {
+			turn -= signd(turn) * Math_TAU;
+		}
+		return f.rotated((real_t)(turn * MIN(step, 1.0)));
 	}
 	return f.lerp(target, (real_t)step).normalized();
 }

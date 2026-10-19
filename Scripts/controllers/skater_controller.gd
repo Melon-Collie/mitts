@@ -212,7 +212,7 @@ var knockdown_sprawl_splay_deg: float = 18.0
 var facing_drag_speed: float = 5.0
 var facing_drag_speed_braking: float = 10.0
 # Where a skating skater's body heads (FacingRules); its tunables are the
-# config's defaults.
+# config's defaults, but for the reach edges setup() derives from the ROM below.
 var facing_rules: FacingRules.Config = FacingRules.Config.new()
 # Facing RECOVERY rate during the shot follow-through. The coil freezes facing at
 # the wind-up cursor position (it must — the coil is the torso twisting relative
@@ -1152,6 +1152,8 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	_game_state_has_faceoff_prep = game_state.has_method("is_faceoff_prep")
 	_game_state_has_period_break = game_state.has_method("is_period_break")
 	process_physics_priority = -1  # Run before Skater's integration step
+	facing_rules.forehand_edge_rad = deg_to_rad(rom_forehand_angle_max_deg + upper_body_max_twist_deg)
+	facing_rules.backhand_edge_rad = deg_to_rad(rom_backhand_angle_max_deg + upper_body_max_twist_deg)
 	skater.body_checked_player.connect(_on_body_checked_player)
 	skater.body_check_received.connect(_on_body_check_received)
 	if game_state.has_method("is_movement_locked"):
@@ -1269,6 +1271,8 @@ func build_ai_caps() -> AISkaterCaps:
 	caps.backhand_power_coefficient = backhand_power_coefficient
 	caps.wrister_load = _wrister_load_config()
 	caps.facing_rules = facing_rules
+	if skater != null:
+		caps.is_left_handed = skater.is_left_handed
 	caps.wrister_unloaded_share = wrister_unloaded_share
 	caps.reception_ceiling_mult = skater.reception_ceiling_mult
 	# Handle reach scales with the blade lever: max_blade_speed / its base is
