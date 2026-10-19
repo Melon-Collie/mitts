@@ -1,6 +1,6 @@
 # Physicality — the pin on the stick button, and the cross-check
 
-Status: **Phase A built**, playtest pending; B and C are design. Amends
+Status: **Phases A and B built**, playtest pending; C is design. Amends
 `docs/defensive-play-plan.md` (the pin revision, v74) and adds a new verb. Three
 phases, each its own PR and playtest.
 
@@ -273,6 +273,31 @@ Read `Scripts/networking/CLAUDE.md` first; this follows the stick lift's shape.
 - `test_no_god_class_growth.gd`: `skater_controller.gd` is grandfathered, so the
   phase machine and its glue live in a collaborator, not the controller.
 
+### As built (v77)
+
+- **The press is its own input bit.** The input record's flags were full, so it
+  grew a byte (`InputState.hit_pressed`, latched between ticks by the gatherer
+  like the other presses and carried across a dropped frame by the host's
+  drain). A press while ineligible is just the commit.
+- **Facings are vectors.** `in_reach` and `victim_dv` take `Skater.get_facing()`
+  (and the snapshot's `facing`), not a yaw.
+- **The feedback broadcast carries the victim, the Δv and the direction**, not
+  the shover. Its hardness is the stagger ladder's 0..1 (`BodyCheckRules
+  .intensity` of the Δv): the check's burst (`SkaterVFX.fire_impact_burst`), the
+  check's thud at the quiet end of its range (`SkaterVFX.shove_volume_db`), and
+  the knockback lead (`RemoteController.start_knockback_lead` now takes that
+  0..1 rather than a check force). A shove the victim held lands none of it.
+- **The pose squares the chest.** The upper body twists after the blade, which
+  for a shaft across the chest swung it round to point ahead; while the pose is
+  on, the twist target eases to square (`CrossCheckRules.pose_weight`, shared by
+  the hand pose and the twist). The grip widens to 0.40 of the stick so the
+  hands straddle the chest. Rendered as `cross_check_mid` / `cross_check_full`
+  in `tools/pose_capture_runner.gd`.
+- **Not built yet: the leg drive.** The legs skate whatever the gait was doing;
+  a `GaitLayer` for the push is a follow-up once the pose has been seen in play.
+- **Not built: the replay event.** A goal replay shows the push (the phase is in
+  the frames) but not its burst and thud.
+
 ## Phase C — bots cross-check
 
 Grounded per `Scripts/domain/ai/CLAUDE.md`; the checklist is
@@ -299,7 +324,7 @@ Grounded per `Scripts/domain/ai/CLAUDE.md`; the checklist is
 | Phase | Field | Protocol |
 |---|---|---|
 | A | none: onset and hold read inputs on the host; `pin_role` unchanged | none: no wire, RPC or range change (`build_info.gd`'s rules); mixed builds are refused by the Steam BuildID check |
-| B | `cross_check_phase` (u8: phase + elapsed ticks); cross-check claim RPC | bump |
+| B | `cross_check_phase` (u8: phase + elapsed ticks); the input's `hit_pressed` (a 25th byte); the claim RPC and the landed broadcast | v77; replay format 17 |
 | C | none | — |
 
 ## Where the code goes

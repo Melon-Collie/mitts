@@ -1,14 +1,15 @@
 class_name InputState
 
-const BYTES_SIZE: int = 24
+const BYTES_SIZE: int = 25
 # Layout: u32 timestamp@0.1ms(0) f32 delta(4) s16 move.x(8) s16 move.y(10)
 #         s16 mwp.x(12) s8 mwp.y(14) s16 mwp.z(15) s16 msp.x(17) s16 msp.y(19)
-#         u16 flags(21) u8 wrister_power_t(23)
+#         u16 flags(21) u8 wrister_power_t(23) u8 flags2(24)
 #         flags: shoot_pressed[0] shoot_held[1] slap_pressed[2] slap_held[3]
 #         stance_held[4] brake[5] elevation_level[6..7] block_held[8]
 #         stick_lift_held[9] stick_lift_pressed[10] quick_pass_pressed[11]
 #         hit_held[12] commit_wrister_power[13] stick_check_held[14]
-#         stick_check_pressed[15] — every bit spent; the next flag grows the record
+#         stick_check_pressed[15]
+#         flags2: hit_pressed[0]; bits 1-7 spare
 
 # Highest legal loft level (ShotMechanics.ELEVATION_HIGH = 3). The 2-bit wire
 # field spans exactly 0..3, so decode's clamp to this is belt-and-braces.
@@ -46,6 +47,9 @@ var quick_pass_pressed: bool = false
 # intent over a window. Replicated, so reconcile replay re-derives the check's
 # full-vs-passive transfer and its skating cost with no extra wire state.
 var hit_held: bool = false
+# The Ctrl press edge, latched between ticks like the other presses: it throws
+# the cross-check (CrossCheckRules); holding on is the commit.
+var hit_pressed: bool = false
 # The stick check (F / pad X): a press starts a lift attempt and the hold keeps
 # its hook open (SkaterStickCheck). The press has its own bit for the same reason
 # stick_lift_pressed does — RemoteController carries edges across a drain.
@@ -126,6 +130,7 @@ func to_array() -> Array:
 		bot_wrister_power_t,
 		stick_check_held,
 		stick_check_pressed,
+		hit_pressed,
 	]
 
 func to_bytes() -> PackedByteArray:
@@ -172,6 +177,7 @@ func write_bytes(b: PackedByteArray, offset: int) -> void:
 	# ignores the byte. u8 caps the decode at 1.0 by construction, so a forged
 	# payload can't buy a shot above the ceiling.
 	b.encode_u8(offset + 23, roundi(clampf(bot_wrister_power_t, 0.0, 1.0) * 255.0))
+	b.encode_u8(offset + 24, 0x01 if hit_pressed else 0)
 
 
 static func from_bytes(b: PackedByteArray, offset: int = 0) -> InputState:
@@ -207,6 +213,7 @@ static func from_bytes(b: PackedByteArray, offset: int = 0) -> InputState:
 	s.stick_check_held     = (flags & 0x4000) != 0
 	s.stick_check_pressed  = (flags & 0x8000) != 0
 	s.bot_wrister_power_t = float(b.decode_u8(offset + 23)) / 255.0
+	s.hit_pressed = (b.decode_u8(offset + 24) & 0x01) != 0
 	return s
 
 
@@ -240,4 +247,6 @@ static func from_array(data: Array) -> InputState:
 	if data.size() > 24:
 		state.stick_check_held = data[23]
 		state.stick_check_pressed = data[24]
+	if data.size() > 25:
+		state.hit_pressed = data[25]
 	return state

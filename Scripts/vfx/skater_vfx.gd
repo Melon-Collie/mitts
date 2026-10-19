@@ -47,6 +47,11 @@ const _CHECK_VOL_MIN_DB: float = -9.0    # a just-audible full-strength check
 const _CHECK_VOL_MAX_DB: float = 3.0     # the hardest hits
 const _CHECK_PITCH_LIGHT: float = 1.10   # full check — higher, snappier
 const _CHECK_PITCH_HEAVY: float = 0.90   # hardest hits — lower, heavier thud
+# A landed cross-check: the check's thud at the quiet end of its range, since a
+# shove's Δv tops out under a knockdown. A full-stagger shove is as loud as a
+# just-audible check.
+const _SHOVE_VOL_MIN_DB: float = -15.0
+const _SHOVE_VOL_MAX_DB: float = _CHECK_VOL_MIN_DB
 
 # Blade trail — same zero-gap GPU approach as puck trail, one system per skate.
 # Two dots per trail (left/right blade) pinned to IceVFX.ICE_Y so marks scrape the ice surface.
@@ -241,6 +246,15 @@ static func check_sound_pitch_scale(force: float) -> float:
 	return lerpf(_CHECK_PITCH_LIGHT, _CHECK_PITCH_HEAVY, check_sound_intensity(force))
 
 
+# `intensity` is the shove's 0..1 hardness (BodyCheckRules.intensity of the Δv).
+static func shove_volume_db(intensity: float) -> float:
+	return lerpf(_SHOVE_VOL_MIN_DB, _SHOVE_VOL_MAX_DB, clampf(intensity, 0.0, 1.0))
+
+
+static func shove_pitch_scale() -> float:
+	return _CHECK_PITCH_LIGHT
+
+
 # Driven by the host-authoritative broadcast (GameManager._on_body_check_landed),
 # never by the local body_checked_player signal, so the impact reads identically
 # on every client instead of off each machine's non-authoritative collision.
@@ -249,9 +263,14 @@ static func check_sound_pitch_scale(force: float) -> float:
 # hit-landed / replay-record closures — wrong during playback, recursive for the
 # recorder. Burst size + velocity scale with the impact_force.
 func fire_body_check_burst(victim: Skater, force: float, hit_dir: Vector3) -> void:
+	fire_impact_burst(victim, check_intensity(force), hit_dir)
+
+
+# The burst at 0..1 hardness `t`: a check's from its impact force, a shove's from
+# the stagger it lands.
+func fire_impact_burst(victim: Skater, t: float, hit_dir: Vector3) -> void:
 	if victim == null:
 		return
-	var t: float = check_intensity(force)
 	_body_check_burst.amount = int(lerpf(float(_CHECK_BURST_AMOUNT_MIN), float(_CHECK_BURST_AMOUNT_MAX), t))
 	var vel_max: float = lerpf(_CHECK_BURST_VEL_MIN, _CHECK_BURST_VEL_MAX, t)
 	_body_check_burst.initial_velocity_min = vel_max * 0.4

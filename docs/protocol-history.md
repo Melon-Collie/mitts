@@ -352,3 +352,9 @@ here whenever you bump, in the same format.
 #      stock haircut, so mixed builds must be refused. The replay format is
 #      unchanged: the header already carries the whole code, and an older file
 #      decodes to the stock look.
+# v77: the cross-check (docs/physicality-plan.md, Phase B). The input record
+#      grows a byte (24 -> 25 B): flags2 with hit_pressed in bit 0, the Ctrl
+#      press edge that throws it. The skater block grows a byte (58 -> 59 B):
+#      cross_check u8, phase in bits 0-1 and ticks elapsed in bits 2-7. Two new
+#      RPCs (receive_cross_check_claim, notify_cross_check) shift the rpc
+#      ordering. Replay FORMAT_VERSION 17.

@@ -474,6 +474,10 @@ func apply_upper_body(delta: float) -> void:
 			var blade_angle: float = atan2(local_dir.x, -local_dir.z)
 			var max_twist: float = deg_to_rad(_controller.upper_body_max_twist_deg)
 			target_angle = clampf(-blade_angle * _controller.upper_body_twist_ratio, -max_twist, max_twist)
+		# A cross-check squares the chest to the push: the shaft is across it, and
+		# twisting after its blade would swing the shaft round to point ahead.
+		target_angle = lerp_angle(target_angle, 0.0, CrossCheckRules.pose_weight(
+				_skater.cross_check_phase, _skater.cross_check_elapsed))
 		# A wrist shot winds the torso up by the power it would release
 		# with, from squared on the aim (nothing behind it) to the full wind-up.
 		if _sm.get_state() == State.WRISTER_AIM and _controller.has_puck:

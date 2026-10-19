@@ -61,6 +61,7 @@ var _pending_slap_pressed: bool = false
 var _pending_stick_lift_pressed: bool = false
 var _pending_quick_pass_pressed: bool = false
 var _pending_stick_check_pressed: bool = false
+var _pending_hit_pressed: bool = false
 # Loft mode (0 flat / 1 low saucer / 2 high), stepped by scroll-wheel events (or
 # the pad d-pad) in _process and stamped ABSOLUTE into every gathered frame.
 # Living here — not as sticky controller state — makes it plain input: reconcile
@@ -120,6 +121,7 @@ var _pad_slap_held: bool = false
 var _prev_pad_stick_lift: bool = false
 var _prev_pad_quick_pass: bool = false
 var _prev_pad_stick_check: bool = false
+var _prev_pad_hit: bool = false
 var _prev_pad_elev_up: bool = false
 var _prev_pad_elev_down: bool = false
 
@@ -190,6 +192,8 @@ func _process(delta: float) -> void:
 		_pending_quick_pass_pressed = true
 	if Input.is_action_just_pressed("stick_check"):
 		_pending_stick_check_pressed = true
+	if Input.is_action_just_pressed("hit"):
+		_pending_hit_pressed = true
 
 # Rising-edge detection for the pad's press-type inputs, mirroring the mouse
 # action just_pressed latch above. Triggers (wrister/slapshot) edge on the
@@ -236,6 +240,10 @@ func _accumulate_gamepad_edges(delta: float) -> void:
 	if stick_check_now and not _prev_pad_stick_check:
 		_pending_stick_check_pressed = true
 	_prev_pad_stick_check = stick_check_now
+	var hit_now: bool = _pad_held("hit")
+	if hit_now and not _prev_pad_hit:
+		_pending_hit_pressed = true
+	_prev_pad_hit = hit_now
 	var up_now: bool = _pad_held("elevation_up")
 	if up_now and not _prev_pad_elev_up:
 		_elevation_level = mini(_elevation_level + 1, InputState.MAX_ELEVATION_LEVEL)
@@ -318,6 +326,7 @@ func gather() -> InputState:
 	state.stick_lift_pressed = _pending_stick_lift_pressed
 	state.quick_pass_pressed = _pending_quick_pass_pressed
 	state.stick_check_pressed = _pending_stick_check_pressed
+	state.hit_pressed = _pending_hit_pressed
 	state.host_timestamp = NetworkManager.estimated_host_time()
 	_last_mouse_world_pos = state.mouse_world_pos
 	_last_mouse_screen_pos = state.mouse_screen_pos
@@ -327,6 +336,7 @@ func gather() -> InputState:
 	_pending_stick_lift_pressed = false
 	_pending_quick_pass_pressed = false
 	_pending_stick_check_pressed = false
+	_pending_hit_pressed = false
 	return state
 
 # Movement vector. Mouse+keyboard reads the WASD action vector; the pad adds the

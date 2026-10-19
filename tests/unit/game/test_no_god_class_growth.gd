@@ -51,7 +51,9 @@ const _SIZE_SLACK: int = 40
 const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/ai/skater_agent_state_machine.gd": 3694,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
-	"res://Scripts/game/game_manager.gd": 5788,
+	# +57: the cross-check — its tracker and resolver wired, the claim deferred,
+	# and the landed shove's burst, thud and knockback lead on every machine.
+	"res://Scripts/game/game_manager.gd": 5845,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
 	# Scripts/controllers/CLAUDE.md rather than inline, and the tunable
@@ -67,16 +69,22 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +10: the staged get-up's one clock (knockdown_getup_left) and the stagger
 	# he finds his legs through once it ends. +36: the get-up's stick hold. +5:
 	# the down flags in one place, a diver's stick dead from the get-up.
-	"res://Scripts/controllers/skater_controller.gd": 3597,
+	# +50: the cross-check — its phase stepped from the Ctrl press and adopted on
+	# reconcile, and the victim's answer to it (take_cross_check).
+	"res://Scripts/controllers/skater_controller.gd": 3647,
 	# +1: dive_laid_out, the diver's stick and low block until the get-up.
-	"res://Scripts/actors/skater.gd": 2797,
-	"res://Scripts/networking/network_manager.gd": 2866,
+	# +5: cross_check_phase / cross_check_elapsed, read by puck play and the pose.
+	"res://Scripts/actors/skater.gd": 2802,
+	# +33: the cross-check claim and its landed broadcast (two RPC pairs).
+	"res://Scripts/networking/network_manager.gd": 2899,
 	"res://Scripts/game/tutorial_manager.gd": 2067,
-	"res://Scripts/controllers/skater_ik_coordinator.gd": 950,
+	# +30: the cross-check pose — the shaft across the chest, the wide grip.
+	"res://Scripts/controllers/skater_ik_coordinator.gd": 980,
 	# +21: apply_scripted_grant / stage_scripted — the tutorial's teleports
 	# restart the swept interaction tests where the puck lands instead of
 	# sweeping the jump. +6: the pinch hop composed onto the contest exit.
-	"res://Scripts/controllers/puck_controller.gd": 1589,
+	# +4: a cross-checking stick plays no puck.
+	"res://Scripts/controllers/puck_controller.gd": 1593,
 	"res://Scripts/actors/hockey_rink.gd": 1469,
 	"res://Scripts/game/player_prefs.gd": 1409,
 	# +20: helmet_rim_y, the rim's height as built, which the hair reads to hide
@@ -90,10 +98,12 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/controllers/goalie_body_config_builder.gd": 1131,
 	"res://Scripts/ui/network_debug_overlay.gd": 956,
 	"res://Scripts/networking/network_telemetry.gd": 968,
-	"res://Scripts/controllers/local_controller.gd": 949,
+	# +1: a cross-checking stick sends no pickup or poke claim.
+	"res://Scripts/controllers/local_controller.gd": 950,
 	# Main's resumable sample prediction and the board pin's forward cap crossed the
 	# limit together, each from under it, at the merge that joined them.
-	"res://Scripts/controllers/remote_controller.gd": 822,
+	# +2: the cross-check phase applied off the wire.
+	"res://Scripts/controllers/remote_controller.gd": 824,
 	# +65: the hair rows (style, beard, colour) beside the skin, and the
 	# option/swatch row builders the skin and hair share.
 	"res://Scripts/ui/player_settings_popup.gd": 908,
@@ -107,14 +117,16 @@ const _API_LIMIT: int = 25
 const _API_SLACK: int = 3
 
 const _API_ALLOWANCE: Dictionary[String, int] = {
-	"res://Scripts/networking/network_manager.gd": 208,
+	# +4: send/receive_cross_check_claim, send_cross_check_to_all, notify_cross_check.
+	"res://Scripts/networking/network_manager.gd": 212,
 	"res://Scripts/actors/skater.gd": 145,
 	"res://Scripts/game/game_manager.gd": 63,
 	"res://Scripts/domain/state/player_attributes.gd": 53,
 	"res://Scripts/networking/network_telemetry.gd": 54,
 	# +1: knockdown_drop_m, which the gait's crumple and the sprawl's buckle share.
 	# +1: knockdown_getup_left, the get-up clock the gait and the torso fold read.
-	"res://Scripts/controllers/skater_controller.gd": 42,
+	# +1: take_cross_check, the victim's answer the host's CrossCheckTracker calls.
+	"res://Scripts/controllers/skater_controller.gd": 43,
 	"res://Scripts/actors/puck.gd": 43,
 	"res://Scripts/domain/state/game_state_machine.gd": 39,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 36,

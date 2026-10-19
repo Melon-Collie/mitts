@@ -33,6 +33,7 @@ func test_round_trip_preserves_all_fields() -> void:
 	s.hit_held           = true
 	s.stick_check_held   = true
 	s.stick_check_pressed = true
+	s.hit_pressed = true
 
 	var r := InputState.from_array(s.to_array())
 
@@ -58,13 +59,14 @@ func test_round_trip_preserves_all_fields() -> void:
 	assert_eq(r.hit_held,           s.hit_held)
 	assert_eq(r.stick_check_held,   s.stick_check_held)
 	assert_eq(r.stick_check_pressed, s.stick_check_pressed)
+	assert_eq(r.hit_pressed, s.hit_pressed)
 
 
 func test_array_length_sentinel() -> void:
 	# Field count sentinel — if someone adds a field without updating
 	# to_array/from_array, this catches the mismatch.
 	var s := InputState.new()
-	assert_eq(s.to_array().size(), 25)
+	assert_eq(s.to_array().size(), 26)
 
 
 func test_stick_lift_back_compat_defaults_false() -> void:
@@ -111,6 +113,7 @@ func test_bytes_round_trip_preserves_all_fields() -> void:
 	s.hit_held           = true
 	s.stick_check_held   = true
 	s.stick_check_pressed = true
+	s.hit_pressed = true
 
 	var r := InputState.from_bytes(s.to_bytes())
 
@@ -136,6 +139,7 @@ func test_bytes_round_trip_preserves_all_fields() -> void:
 	assert_eq(r.hit_held,           s.hit_held)
 	assert_eq(r.stick_check_held,   s.stick_check_held)
 	assert_eq(r.stick_check_pressed, s.stick_check_pressed)
+	assert_eq(r.hit_pressed, s.hit_pressed)
 
 
 func test_bytes_negative_mouse_screen_pos_round_trips() -> void:
@@ -152,7 +156,7 @@ func test_bytes_negative_mouse_screen_pos_round_trips() -> void:
 
 
 func test_bytes_size_sentinel() -> void:
-	assert_eq(InputState.BYTES_SIZE, 24)
+	assert_eq(InputState.BYTES_SIZE, 25)
 
 
 # ── Committed wrister power (gamepad) ────────────────────────────────────────
@@ -257,6 +261,7 @@ func _fully_populated_input() -> InputState:
 	s.hit_held           = true
 	s.stick_check_held   = true
 	s.stick_check_pressed = true
+	s.hit_pressed = true
 	s.commit_wrister_power = true
 	s.bot_wrister_power_t  = 0.75
 	return s
