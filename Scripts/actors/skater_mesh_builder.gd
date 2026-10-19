@@ -184,27 +184,47 @@ const SHOULDER_CAP_YOKE_V: float = _SHOULDER_PROFILE[1].z
 
 const _KNEE_RADIUS: float = 0.095
 
-# Gloved fist: a beveled cube, slightly wider than deep and chamfered all
-# around, swept along local Y — Skater._update_hand_glove aligns that axis
-# with the forearm so the block's faces track the arm instead of sitting
-# world-aligned. UNIT-scale like the other arm-rig meshes: node scale =
-# hand_sphere_radius sizes it (stations are y, half_w, half_d multiples).
-# The mid station adds no shape — it sits on the straight run between two
-# identical loops — but it is where the sweep splits into the BACK of the hand
-# and the FINGERS, the two pieces a glove design paints apart.
-const _GLOVE_FINGER_STATION: int = 2
+# Gloved fist, swept along local Y from the wrist (+Y, toward the elbow) to the
+# curled fingertips; SkaterArmRig._pose_glove aligns that axis with the forearm.
+# UNIT-scale (stations are y, half_w, half_d multiples of hand_sphere_radius).
+# Its roll about the forearm comes from world up, not the stick, so the section
+# stays near-square: no face of it can be the back of the hand or carry a thumb.
+const _GLOVE_FINGER_STATION: int = 3
+# The fist's and cuff's chamfered box section (_octagon_loop's face/side fracs).
+const _GLOVE_FACE_FRAC: float = 0.6
+const _GLOVE_SIDE_FRAC: float = 0.55
 const _GLOVE_FIST_STATIONS: Array[Vector3] = [
-	Vector3(0.95, 0.80, 0.74),    # wrist-side bevel (tucks under the cuff)
-	Vector3(0.55, 1.05, 0.95),
-	Vector3(0.0, 1.05, 0.95),     # knuckle line — the back / fingers split
-	Vector3(-0.55, 1.05, 0.95),
-	Vector3(-0.95, 0.80, 0.74),   # finger-side bevel
+	Vector3(0.95, 0.94, 0.86),    # wrist end, inside the cuff
+	Vector3(0.55, 1.08, 0.98),    # back of the hand
+	Vector3(0.12, 1.10, 1.00),    # knuckle roll
+	Vector3(-0.05, 1.00, 0.92),   # seam — the back / fingers split
+	Vector3(-0.38, 1.06, 0.98),   # finger roll
+	Vector3(-0.78, 0.96, 0.90),
+	Vector3(-1.0, 0.70, 0.66),    # fingertips, turned under
 ]
 
+# The glove on the arm, for every placer of it (the live rig through Skater's
+# defaults, the locker mannequin, the lobby dummies): the cuff's center sits
+# GLOVE_CUFF_BACK_M up the forearm from the fist's, spanning 0.05–0.13 m.
+const GLOVE_FIST_RADIUS_M: float = 0.064
+const GLOVE_CUFF_RADIUS_M: float = SLEEVE_RADIUS_M * 1.2
+const GLOVE_CUFF_BACK_M: float = 0.09
+
 # Arm-rig fixed dimensions. The cuff/knob heights are placement inputs on the
-# skater side (_update_cuff_transform / _update_stick_knob offset along the
-# bone by half the height), so they live here with the geometry they measure.
+# skater side (SkaterArmRig._pose_cuff / SkaterStickRig offset along the bone by
+# half the height), so they live here with the geometry they measure.
 const _ARM_TAPER: float = 0.88   # distal end radius fraction (top of mesh = proximal)
+# The forearm is the arm bone with a wrist: from 0.3 L off the hand it necks
+# down to a radius the fist hides by 0.2 L, so the sleeve stops in the glove. The
+# cuff is metric, so the neck must start under it (0.3 L <= 0.13 m) and be thin
+# before it ends (0.2 L >= 0.05 m): forearms of 0.25–0.43 m
+# (test_glove_hides_the_sleeve.gd).
+const _FOREARM_PROFILE: Array[Vector2] = [
+	Vector2(0.5, 1.0),
+	Vector2(-0.2, 1.0 - (1.0 - _ARM_TAPER) * 0.7),   # on the plain taper
+	Vector2(-0.3, 0.6),
+	Vector2(-0.5, 0.6),
+]
 const CUFF_HEIGHT_M: float = 0.08
 const KNOB_HEIGHT_M: float = 0.05
 const _KNOB_TOP_RADIUS: float = 0.035
@@ -342,9 +362,17 @@ static func shared_arm_bone() -> ArrayMesh:
 		return _radial_side_normals(_build_lathe(profile, _LEG_SIDES, 1.0, 1.0)))
 
 
-# Rewrites a lathe's SIDE normals to be purely radial — no component along the
-# lathe axis — leaving the caps alone. Only the arm bones need this, and they
-# need it because they are the one part whose scale is strongly non-uniform.
+# The forearm's prism (_FOREARM_PROFILE): its rings sit on the plain bone's
+# taper and V, so a sleeve's stripes land where they did.
+static func shared_forearm_bone() -> ArrayMesh:
+	return _shared("forearm_bone", func() -> ArrayMesh:
+		return _radial_side_normals(_build_lathe(_FOREARM_PROFILE, _LEG_SIDES, 1.0, 1.0)))
+
+
+# Rewrites a Y-axis solid's SIDE normals to be purely radial — no component
+# along the axis — leaving the caps alone. Only the arm bones and the glove cuff
+# need this, and they need it because they are the parts whose scale is
+# strongly non-uniform.
 #
 # Godot's skinning transforms a normal by the bone matrix itself, not by its
 # inverse transpose (an ordinary MeshInstance3D gets the proper normal matrix).
@@ -595,11 +623,19 @@ static func _append_surface(target: ArrayMesh, src: ArrayMesh,
 # child under it.
 static func shared_arm_bone_z() -> ArrayMesh:
 	return _shared("arm_bone_z", func() -> ArrayMesh:
-		var st := SurfaceTool.new()
-		st.begin(Mesh.PRIMITIVE_TRIANGLES)
-		st.append_from(shared_arm_bone(), 0,
-				Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3.ZERO))
-		return st.commit())
+		return _along_z(shared_arm_bone()))
+
+
+static func _forearm_bone_z() -> ArrayMesh:
+	return _shared("forearm_bone_z", func() -> ArrayMesh:
+		return _along_z(shared_forearm_bone()))
+
+
+static func _along_z(src: ArrayMesh) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.append_from(src, 0, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3.ZERO))
+	return st.commit()
 
 
 # ── The upper-body rig: one skinned mesh ─────────────────────────────────────
@@ -683,6 +719,7 @@ static func shared_upper_skin_mesh() -> ArrayMesh:
 	return _shared("upper_skin", func() -> ArrayMesh:
 		var m := ArrayMesh.new()
 		var bone: ArrayMesh = shared_arm_bone_z()
+		var forearm: ArrayMesh = _forearm_bone_z()
 		var ball: ArrayMesh = shared_elbow_pad()
 		var fist: ArrayMesh = shared_glove_fist()
 		var cuff: ArrayMesh = shared_cuff()
@@ -691,9 +728,9 @@ static func shared_upper_skin_mesh() -> ArrayMesh:
 		# Appended in UpperSurface order. For the ten arm parts the surface index
 		# and the bone index coincide, which is why they can share a number.
 		_append_skinned_surface(m, bone, UpperBone.TOP_UPPER_ARM)
-		_append_skinned_surface(m, bone, UpperBone.TOP_FOREARM)
+		_append_skinned_surface(m, forearm, UpperBone.TOP_FOREARM)
 		_append_skinned_surface(m, bone, UpperBone.BOTTOM_UPPER_ARM)
-		_append_skinned_surface(m, bone, UpperBone.BOTTOM_FOREARM)
+		_append_skinned_surface(m, forearm, UpperBone.BOTTOM_FOREARM)
 		_append_skinned_surface(m, ball, UpperBone.TOP_ELBOW)
 		_append_skinned_surface(m, ball, UpperBone.BOTTOM_ELBOW)
 		_append_skinned_surface(m, fist, UpperBone.TOP_HAND, FIST_PART_BACK)
@@ -780,7 +817,7 @@ static func shared_glove_fist() -> ArrayMesh:
 	return _shared("glove_fist", func() -> ArrayMesh:
 		var loops: Array[PackedVector3Array] = []
 		for s: Vector3 in _GLOVE_FIST_STATIONS:
-			loops.append(_octagon_loop(s.x, s.y, s.z, 0.6, 0.55))
+			loops.append(_octagon_loop(s.x, s.y, s.z, _GLOVE_FACE_FRAC, _GLOVE_SIDE_FRAC))
 		var m := ArrayMesh.new()
 		_commit_sweep_segment(m, loops, 0, _GLOVE_FINGER_STATION, _fist_loop_center)
 		_commit_sweep_segment(m, loops, _GLOVE_FINGER_STATION, loops.size() - 1,
@@ -796,19 +833,23 @@ static func _fist_loop_center(loop: PackedVector3Array) -> Vector3:
 
 # Glove cuff: the fist's chamfered box section, posed in the fist's frame. x/z
 # are multiples of the cuff radius; its height is real (CUFF_HEIGHT_M), since the
-# along-bone placement offsets by it.
+# along-bone placement offsets by it. Tapered: the open end clears the sleeve
+# going into it, the wrist end closes onto the back of the fist with a lip.
+# Its pose scale is (radius, 1, radius), ~10:1, so its sides need the arm
+# bone's radial normals (_radial_side_normals) or the taper shades them black.
 const _CUFF_STATIONS: Array[Vector3] = [
-	Vector3(0.5, 0.94, 0.86),    # open end, toward the elbow
-	Vector3(-0.5, 0.88, 0.80),   # wrist end, against the back of the fist
+	Vector3(0.5, 0.94, 0.875),   # open end, toward the elbow
+	Vector3(-0.5, 0.75, 0.69),   # wrist end, around the back of the fist
 ]
 static func shared_cuff() -> ArrayMesh:
 	return _shared("cuff", func() -> ArrayMesh:
 		var loops: Array[PackedVector3Array] = []
 		for c: Vector3 in _CUFF_STATIONS:
-			loops.append(_octagon_loop(c.x * CUFF_HEIGHT_M, c.y, c.z, 0.6, 0.55))
+			loops.append(_octagon_loop(c.x * CUFF_HEIGHT_M, c.y, c.z,
+					_GLOVE_FACE_FRAC, _GLOVE_SIDE_FRAC))
 		var m := ArrayMesh.new()
 		_commit_sweep_segment(m, loops, 0, loops.size() - 1, _fist_loop_center)
-		return m)
+		return _radial_side_normals(m))
 
 
 # Butt-end knob at its real dimensions (never rescaled).

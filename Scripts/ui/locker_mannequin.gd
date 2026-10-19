@@ -59,14 +59,13 @@ const _BLADE_ICE_M: float = SkaterMeshBuilder.BLADE_ICE_Z
 # The ice plane in rig-local coordinates. Everything scales about it.
 const _ICE_Y: float = _LEG_Y + _BOOT_DY - _BLADE_ICE_M
 
-# Part radii for the unit-scale meshes: the sleeve and the elbow are the live
-# rig's own; the cuff stays proud of the sleeve's wrist end as the rig's does.
+# Part radii for the unit-scale meshes, all the live rig's own, and all scaled by
+# girth together as the rig's are: the forearm's wrist neck is sized to hide
+# inside a fist and cuff of these proportions.
 const _ARM_RADIUS: float = SkaterMeshBuilder.SLEEVE_RADIUS_M
 const _ELBOW_RADIUS: float = SkaterMeshBuilder.ELBOW_PAD_RADIUS_M
-const _HAND_RADIUS: float = 0.064
-const _CUFF_RADIUS: float = SkaterMeshBuilder.SLEEVE_RADIUS_M * 1.2
-# How far up the forearm the cuff ring sits from the fist's center.
-const _CUFF_OFFSET_M: float = 0.085
+const _HAND_RADIUS: float = SkaterMeshBuilder.GLOVE_FIST_RADIUS_M
+const _CUFF_RADIUS: float = SkaterMeshBuilder.GLOVE_CUFF_RADIUS_M
 # Arm segments at the rig's own lengths (Skater.upper_arm_length /
 # forearm_length), NOT derived from how far the grip happens to be: the two
 # hands sit at very different distances from their shoulders, so a
@@ -232,7 +231,7 @@ func _build() -> void:
 		_collars.append(_part(SkaterMeshBuilder.shared_skate_assembly()))
 		_boots.append(_part(SkaterMeshBuilder.shared_boot_assembly()))
 		_upper_arms.append(_part(SkaterMeshBuilder.shared_arm_bone()))
-		_forearms.append(_part(SkaterMeshBuilder.shared_arm_bone()))
+		_forearms.append(_part(SkaterMeshBuilder.shared_forearm_bone()))
 		_elbows.append(_part(SkaterMeshBuilder.shared_elbow_pad()))
 		_hands.append(_part(SkaterMeshBuilder.shared_glove_fist()))
 		_cuffs.append(_part(SkaterMeshBuilder.shared_cuff()))
@@ -516,13 +515,15 @@ func _pose_arms(is_left_handed: bool, shoulder_x: float, shoulder_y: float,
 		# cuff scale their basis COLUMNS: Basis.scaled() would scale in the
 		# parent frame, which shears a rotated basis into a stretched sheet.
 		var grip: Basis = _basis_along((elbow - hand).normalized())
+		var hand_r: float = _HAND_RADIUS * m_girth
 		_hands[i].transform = Transform3D(
-				Basis(grip.x * _HAND_RADIUS, grip.y * _HAND_RADIUS,
-					grip.z * _HAND_RADIUS), hand)
-		var wrist: Vector3 = hand + (elbow - hand).normalized() * _CUFF_OFFSET_M
+				Basis(grip.x * hand_r, grip.y * hand_r, grip.z * hand_r), hand)
+		var wrist: Vector3 = hand \
+				+ (elbow - hand).normalized() * SkaterMeshBuilder.GLOVE_CUFF_BACK_M
 		# The cuff mesh carries its real height baked, so only the radius scales.
+		var cuff_r: float = _CUFF_RADIUS * m_girth
 		_cuffs[i].transform = Transform3D(
-				Basis(grip.x * _CUFF_RADIUS, grip.y, grip.z * _CUFF_RADIUS), wrist)
+				Basis(grip.x * cuff_r, grip.y, grip.z * cuff_r), wrist)
 
 	_anchors[Focus.GLOVES] = (grips[0] + grips[1]) * 0.5
 	# Both fists plus the shaft between them — how far apart they sit is solved,

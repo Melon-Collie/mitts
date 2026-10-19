@@ -250,15 +250,12 @@ var arm_pole_local: Vector3 = Vector3(0.55, -1.0, 0.1)
 var arm_mesh_thickness: float = SkaterMeshBuilder.SLEEVE_RADIUS_M * 2.0
 # Radius of the elbow pads positioned per-tick at the IK elbow.
 var elbow_sphere_radius: float = SkaterMeshBuilder.ELBOW_PAD_RADIUS_M
-# Radius of the gloved fist positioned per-tick at the IK hand — slightly
-# thicker than the sleeve it hangs from. 0.064 puts the fist mesh (±1.05
-# unit-width) at ~13.4 cm across the knuckles, a real glove proportion.
-var hand_sphere_radius: float = 0.064
-# Gap (along the bone direction, toward the elbow) between the hand-sphere
-# center and the forward face of the glove cuff cylinder. Without this the
-# cuff sits flush against the hand sphere and visually swallows it; a small
-# pullback exposes the hand sphere as a distinct ball at the wrist.
-var cuff_wrist_offset: float = 0.05
+# Scale of the gloved fist posed at the IK hand: ~14 cm across the knuckle
+# roll, a real glove proportion.
+var hand_sphere_radius: float = SkaterMeshBuilder.GLOVE_FIST_RADIUS_M
+# Gap along the forearm between the fist's center and the cuff's wrist end.
+var cuff_wrist_offset: float = SkaterMeshBuilder.GLOVE_CUFF_BACK_M \
+		- SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5
 
 # ── Balance posture (SkaterController steps it; BalanceRules) ────────────────
 # Natural frequency of the lean's spring: a held lean arrives in ~1 s, and
