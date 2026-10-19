@@ -278,8 +278,8 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 		var max_step: float = _blade_speed_cap() * delta
 		if max_step > 0.0:
 			# During a wrister aim, uncap blade motion ALONG the shot axis — the
-			# wind-back-and-snap that makes the shot feel responsive regardless of
-			# Hands — while keeping the PERPENDICULAR component capped at the normal
+			# wind-back-and-snap that makes the shot feel responsive on every build —
+			# while keeping the PERPENDICULAR component capped at the normal
 			# dangle budget (max_step). Lateral blade sweep IS dangling; capping only
 			# that axis fixes slow-blade shot feel without letting "shoot mode" become
 			# a way to dangle at full blade speed. The axis is skater→smoothed-blade
@@ -287,8 +287,8 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 			# target) self-stabilizes the split: a fast lateral whip can't drag the
 			# axis along with it (off-axis is capped, so the axis can only rotate as
 			# fast as that cap allows), while a slow re-aim turns the axis naturally.
-			# The on-axis budget is flat (Hands-independent) so shooting feels the
-			# same for everyone — Hands still gates the off-axis dangle.
+			# The on-axis budget is flat so shooting feels the same for everyone;
+			# the off-axis dangle stays capped at the build's max_blade_speed.
 			var axis_vec: Vector3 = _smoothed_blade_world - skater_pos
 			axis_vec.y = 0.0
 			if _controller.get_shot_state() == State.WRISTER_AIM and axis_vec.length_squared() > 0.0001:

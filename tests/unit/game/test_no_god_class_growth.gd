@@ -36,7 +36,7 @@ extends GutTest
 # is worth knowing which before trying:
 #   · network_manager.gd (204) — 115 are receive_*/send_*/notify_*. Godot
 #     dispatches @rpc by name on the node, so that IS the wire protocol.
-#   · player_attributes.gd (53) — one accessor per body dial, by design.
+#   · player_attributes.gd (37) — one accessor per body dial, by design.
 #
 # Scope is Scripts/ only. A long test is not the same cost as a long subsystem,
 # and addons/ is vendored. Generated data under _GENERATED_DIR is a measurement
@@ -67,9 +67,9 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +10: the staged get-up's one clock (knockdown_getup_left) and the stagger
 	# he finds his legs through once it ends. +36: the get-up's stick hold. +5:
 	# the down flags in one place, a diver's stick dead from the get-up.
-	"res://Scripts/controllers/skater_controller.gd": 3625,
+	"res://Scripts/controllers/skater_controller.gd": 3499,
 	# +1: dive_laid_out, the diver's stick and low block until the get-up.
-	"res://Scripts/actors/skater.gd": 2797,
+	"res://Scripts/actors/skater.gd": 2800,
 	"res://Scripts/networking/network_manager.gd": 2866,
 	"res://Scripts/game/tutorial_manager.gd": 2067,
 	"res://Scripts/controllers/skater_ik_coordinator.gd": 958,
@@ -78,7 +78,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# sweeping the jump. +6: the pinch hop composed onto the contest exit.
 	"res://Scripts/controllers/puck_controller.gd": 1664,
 	"res://Scripts/actors/hockey_rink.gd": 1469,
-	"res://Scripts/game/player_prefs.gd": 1409,
+	"res://Scripts/game/player_prefs.gd": 1342,
 	# +20: helmet_rim_y, the rim's height as built, which the hair reads to hide
 	# its top edge under the shell — the one source of the rim profile.
 	"res://Scripts/actors/skater_mesh_builder.gd": 1482,
@@ -108,9 +108,9 @@ const _API_SLACK: int = 3
 
 const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/networking/network_manager.gd": 208,
-	"res://Scripts/actors/skater.gd": 145,
+	"res://Scripts/actors/skater.gd": 146,
 	"res://Scripts/game/game_manager.gd": 63,
-	"res://Scripts/domain/state/player_attributes.gd": 53,
+	"res://Scripts/domain/state/player_attributes.gd": 37,
 	"res://Scripts/networking/network_telemetry.gd": 54,
 	# +1: knockdown_drop_m, which the gait's crumple and the sprawl's buckle share.
 	# +1: knockdown_getup_left, the get-up clock the gait and the torso fold read.

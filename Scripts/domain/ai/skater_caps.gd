@@ -53,8 +53,8 @@ var max_lean_shift: float = 0.0
 # time), and it caps the hardest pass (AIPuckLane.pass_launch_speed).
 var wrister_shot_speed: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 
-# How fast the blade traverses its ROM to chase the aim cursor (Hands, =
-# SkaterController.max_blade_speed). A bot slews its aim cursor at exactly this
+# How fast the blade traverses its ROM to chase the aim cursor (=
+# SkaterController.max_blade_speed, lever-scaled per build). A bot slews its aim cursor at exactly this
 # rate.
 const LEAGUE_BLADE_SPEED_M_S: float = 10.0
 var blade_speed: float = LEAGUE_BLADE_SPEED_M_S
@@ -114,7 +114,7 @@ var movement: SkaterMovementRules.MovementConfig = SkaterMovementRules.league_co
 # The pose coordinator's facing lerp rates, per second (Agility-scaled).
 var facing_drag_speed: float = 5.0
 var facing_drag_speed_braking: float = 10.0
-# The body's contact disc (Size-scaled): how close to the boards and the cage its
+# The body's contact disc (girth-scaled): how close to the boards and the cage its
 # centre can get.
 var body_radius: float = 0.35
 # A carrier on the boards squares up along them (BoardPlayRules

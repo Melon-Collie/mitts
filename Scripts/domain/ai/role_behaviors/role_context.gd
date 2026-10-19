@@ -75,7 +75,7 @@ var self_body_check_transfer: float = 0.65
 var self_stagger_timer: float = 0.0
 # Seconds left settling a hard catch: no release can start until it ends.
 var self_settle_s: float = 0.0
-# Hands-scaled carry-handle reach, m — how tight a seam best_evade_point threads.
+# Lever-scaled carry-handle reach, m — how tight a seam best_evade_point threads.
 var self_handle_reach: float = 0.9
 # Stick + blade reach, m — the "one stick length" unit of the gap ladder.
 var self_blade_reach: float = AIBotMechanics.BLADE_REACH_M

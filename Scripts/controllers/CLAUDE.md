@@ -515,14 +515,15 @@ and `SkaterSettleGate` (the settle lock a hard catch leaves; its deadline
 contract is in `Scripts/networking/CLAUDE.md`). `GameManager` calls
 methods on the controller and never pokes collaborator internals.
 
-**Attributes v4, one line each.** Skating splits into three height-routed
-sub-levers, so a small player can be explosive and shifty without owning the top
-gear and a big weak skater feels bad in the TURN rather than glued to the ice.
-Hands has no lever by constitution — "your hands are you" — so the blade caps
-derive from lever geometry rather than a fidelity table: the long lever sweeps
-but cannot cut back, the short lever is the scalpel. Shot means "what a charge
-buys you, and how fast you can charge it", never the uncharged snap. Full detail
-lives in `Scripts/domain/state/CLAUDE.md`.
+**Attributes, one line each.** Skating splits three ways: top speed rides height
+and the skate profile, first-step burst rides weight, and agility rides both, so
+a small player can be explosive and shifty without owning the top gear, and a
+heavy build feels it in the TURN rather than being glued to the ice. No build
+tracks the cursor more precisely ("your hands are you"). The blade caps derive
+from lever geometry instead: the long lever sweeps but cannot cut back, the
+short lever is the scalpel. Shot power means "what a charge buys you, and how
+fast you can charge it", never the uncharged snap. Full detail lives in
+`Scripts/domain/state/CLAUDE.md`.
 
 `apply_attributes` is **idempotent**: it captures baseline values on first call
 and recomputes from those baselines every time, so repeated applies (the

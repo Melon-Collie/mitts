@@ -2,19 +2,112 @@
 
 Scope: `Scripts/domain/state/player_attributes.gd` and its application path
 (`SkaterController.apply_attributes`, `SkaterAppearanceCoordinator.apply`).
-Design of record is `docs/attributes-v4-plan.md`.
+The original design record is `docs/attributes-v4-plan.md`. Where it and this
+file disagree, this file is current.
 
 ## The model
 
-A build is **BODY + GEAR** (attributes v4 — design of record in `docs/attributes-v4-plan.md`; the tier system is gone): two permanent continuous **body dials** — **Height** (inches, every inch 5'7"–6'8", tables authored at 5 anchors and interpolated; the range was extended 2026-07 by MOVING the end anchors out rather than adding rows, each end row rebalanced so the outer segment's per-inch slope just continues one more inch — so every previously-playable height kept its values and the two new ones genuinely extend each curve) and **Weight** (lbs, bounded per height by a **BMI band 23.0–29.0** floored at an absolute **162 lb** playable mass (two independent floors: the ratio governs 5'11"+, the absolute governs 5'7"–5'10" where a ratio stops meaning anything — 162 is the lightest player in the NHL), so implausible bodies are unrepresentable by construction; neutral 26.5, and the band is asymmetric about it so `frame_t` is piecewise — min/neutral/max pin to 0/0.5/1 at every height. Recalibrated 2026-07 against listed NHL cards: BMI is the right normalizer — the sample's weight-vs-height allometric exponent is 2.01 — but the old flat 24.0 lean floor was set by short players, whose lower tail is truncated by an *absolute* mass bound rather than a ratio, and it wrongly forbade real tall-lean bodies like 6'4"/195. Both edges are set at the distribution's shape, not its most extreme member — each excludes ~2 tail bodies, and neither is stretched to catch its outlier) — plus four lateral **gear slots** (skate profile, blade curve, stick flex, stick length; 0/1/2, 1 = balanced). **There is no power economy**: every axis is lateral, so there is no legal shape, no `is_legal_build` — validation is pure coercion (`coerce_height` / `coerce_weight` / gear clamps; a forged build lands on the nearest legal body). Neutral reference is **6'1" / 201 lbs / all-balanced** (the real NHL-average frame), where every gameplay multiplier is 1.0 (= the shipped `@export` defaults). **Gear slots — three of four live**: **STICK LENGTH** (short/standard/long — a ±4% lean on the height's cut, feeding reach, poke/claim range, the blade-cap lever, the wrister full-stroke rescale, and the stick mesh); **BLADE CURVE** (M88/M92/M28, modeled on the P88/P92/P28 patterns — the blade's **ANGLE LADDER** is the elevation lever (the manual contact-point model, design of record `docs/elevation-rework-plan.md` v3): each loft level 1–3 is a SET launch angle from the pattern's ladder (`_CURVE_LOFT_*_DEG` — a live playtest tuning surface; the plan doc's §1 ladder table is the reference, not this file), no solve, no position term, arrival emergent from angle × charge × range with missing high a real outcome. **The LEVEL names the shot, the GEAR names the range** (v3.2, 2026-08 — see the plan doc §1/§1.1): each level clears a goalie-POSTURE landmark, in absolute heights off the ice rather than fractions of the net — LOW 0.41 m clears the butterfly pad (0.28) and stays under his hands (0.49), MID 0.70 m is the armpit over those committed hands, HIGH 0.99 m is upstairs over the standing seam (0.86) — and each gear places those same three shots at its own HOME RANGE (M88 8.5 m the range blade, M92 6.0 m the all-rounder, M28 4.5 m the close blade), so which zone hands you the full menu IS the gear choice. Away from home the menu slides rather than breaking (one zone out keeps two shots, two zones out one); nobody gets a menu at the point, because the whole cavity is a ~3.4° window at 19 m and a point shot only has to reach the net. Anchoring the fans close in also bought two properties for free: build variance lives in the gravity drop (`~d²/v²`) so the ±17% power spread moves arrival only ±3–12 cm at these ranges (no normalization needed — builds change your shot without ruining it; the lone casualty is a weak build's M88 LOW landing under the pad), and the SLAPPER needs no separate ladder (its pace costs ~5 cm of drop at home, so rungs ride one notch higher). No rung sails on a wrister and no LOW rung sails even off a max slapper (apexes 0.62/0.75/1.01 by gear) — the flat bottom of every ladder is the universally safe shot. NOTE: the AI's hole model is still 2-band with a 0.86 m floor, so bots can only see the HIGH rung and play FLAT where a human goes over the pad or at the armpit — the height-resolved cover model is follow-up work; the levels double as deflect modes (`PuckCollisionRules.deflect_loft_speed`); quick passes stay on the fixed-speed table, curve-invariant; curve also leans the backhand coefficient toward-but-never-past parity (1.08/1.00/0.90), the SLAPPER-only power (±3% — pattern-squareness through the heel-contact sweep; wristers stay flex-only), the RECEPTION deflect ceiling + squared bonus (±7% via `Skater.reception_ceiling_mult`, read at the PuckController contact scan and the lag-comp pickup resolver — never `pickup_max_speed`, so soft passes settle on every blade and client provisional pickup stays build-independent), and the wrister runway (M28 0.90, dormant until the travel gate unfreezes). The rendered blade matches the pick — `Skater.apply_blade_pattern` swaps depth / bend position / face twist / toe radius per gear); **STICK FLEX** (whippy/medium/stiff — leans the shot ceiling WITH the slapper wind-up and wrister runway, a true lateral seesaw, deliberately unlike the height coupling where a harder shot also threatens sooner; the locker shows the pick's REAL stiffness number — `flex_number()` snaps weight onto the retail ladder 65/75/85/100/110 at ~0.42 lb of flex per lb of body (the half-bodyweight rule of thumb overshoots what players actually shoot; 0.42 puts the 201 lb neutral on an 85 and leaves one rung of headroom at each end for the pick to shift into), so the numbers OVERLAP across bodies exactly as stick fitting does. It is DISPLAY ONLY and no multiplier reads it: a number-driven lean would be a Goldilocks curve with one right answer per body, and would route weight into the shot-power axis, which is height's by design). The stacked quick-release loadout (whippy+open) bottoms at 81% of the neutral runway — the runway floor that keeps a max-power release readable to the goalie (NOTE: the "runway" IS the wrister travel gate, currently DORMANT — see the Wrister bullet; `apply_attributes` still rescales it, but nothing reads it while the blade is frozen); **SKATE PROFILE** (agility/balanced/power — the blade grind: power = +top speed/glide, −agility incl. `lateral_grip`; agility = +first step/cornering, −top speed; this is what re-widens the top-speed band the body plane compressed, ~20.5–24 mph across profiles; stacked body×gear agility corners pinned by test at ~0.84–1.15). **All four slots are live.** Bots price their own gear: `AISkaterCaps.loft_tans` feeds the HIGH-hole rung-picker (a bot prices and fires the rungs its own blade actually has), `AISkaterCaps.lateral_grip` feeds the planning models everywhere a direction change is priced (the ETA cross-momentum shed, each defender's `reach_clearance` shed, the deke's lateral bite/unwind budgets — calibration-tested against a gripped real-physics sim), and blade caps/reach/backhand ride the caps as before; the one residual drift (defensive reads of opponents assume an open face — conservative) is noted in the plan doc. The picker is the player screen (`player_settings_popup.gd`, built in code, single-column, main-menu only — the lobby has no build editor): ONE build per player (no presets — "it's just who you are"), with the skin and the hair beside it (style, facial hair and one colour for hair, beard and brows, from `HairStyleRegistry` — shells built by `SkaterHairMesh` on the HELMET bone; cosmetic, riding the packed `GearStyleConfig` code, which the locker hands back with the hair untouched), height/weight sliders inline (moving height preserves the frame fraction, so a lean build stays lean as it grows) and ONE sub-editor, the LOCKER (`locker_popup.gd`): the stick gear rows plus the stick MODEL (a fixed shaft/blade colorway from `StickModelRegistry` — real sticks ship in their maker's colors, so unlike gear models nothing resolves against the kit; cosmetic, rides the packed `GearStyleConfig` code) and the tape job, the blade profile + the skate/glove MODELS, lace color and helmet FACE gear (bare/visor/cage/fishbowl — fixed looks riding the HELMET bone, cosmetic only) — every pick in one modal around a live MANNEQUIN (`locker_mannequin.gd`) wearing the whole pending build (kit, body dials, skin and hair, stick in both hands) and assembled from the rink's own shared part meshes, with the camera dollying to whichever group the focused row dresses (skates → the boots, gloves → the fists on the shaft, helmet → the head) so a pick is judged where it will be seen (a model is a whole design from `GearModelRegistry` — skate quarter / toe cap / collar / accent band / blade holder, glove body / fingers / cuff — painted from four slots: true BLACK — SKATES ONLY, for boot leather, since no preset has black among its colors and a black glove would belong to nobody — plus the wearing team's own LIGHT (its white, which is cream for some presets), TEAM (primary, or the kit's glove color on gloves) and ACCENT (the secondary on skates; on gloves `glove_accent`, whichever team color the glove body is NOT, because five of the eight presets already dress their gloves in the secondary and pairing it with itself would paint them monochrome), so a design belongs to whichever sweater it is worn with rather than being a tint the player picks). The screen also holds the preferred POSITION (C/LW/RW/LD/RD — `PlayerRules.POSITION_NAMES` index, carried by `request_join`), which only steers lobby seating via `PlayerRules.preferred_slot` (3v3 merges LW/LD onto the left slot and RW/RD onto the right); it never touches gameplay. Bots have curated cards in `data/bot_identities.json` (`{height, weight, gear…}` plus a pinned cosmetic look — tape job, skate/glove/stick models, laces, helmet face gear (visor-heavy across the bundled roster), and optionally hair; a card that doesn't pin a cosmetic group draws a stable weighted look from its name hash at spawn, the same seam as the unpinned skin tone — hockey-card readable). Online matches lock the build at join time (replicated as **6 ints** — height, weight, profile, curve, flex, length — through `request_join` / `spawn_remote_skater`, `PROTOCOL_VERSION` v37); free-play picks re-apply immediately without a respawn.
+A build is **body + gear**, six ints:
 
-The routing (the constitution: a lever may scale **outputs** or **geometry**, never **fidelity** — see the plan doc §1):
-- **Height** → speed↔agility baseline fork (`max_speed` hump peaks at 6'1"; agility small-favored), **shot-power baseline** (big-favored, ~89.5 mph neutral slapper → ~98.7 mph at 6'8" body-only; gear re-widens the top end later), reach / mesh scale / arm-ROM / stick length (mesh-native 5'10" is the reach-1.0 anchor). *(+ visual height on Y; the head/helmet unit scales only by its own mild table and never stretches with height — near-constant adult heads are what sell a tall build as big rather than zoomed)*
-- **Weight** → **mass** (`mass_mult = lbs/201`, LINEAR and wide 0.79–1.28 — with no Checking stat, mass IS the physical system: delivery and brace are body-emergent through the collision resolver's reduced-mass math, `check_delivery_mult`/`brace_mult` are flat 1.0), **accel↔momentum fork** (lean = first-step burst; momentum is mass-emergent), an **agility bite** (F = mv²/r, delivered mechanically by `lateral_grip` — agility scales the edge turn authority in `SkaterMovementRules`, so the turn *radius* itself widens/tightens per build; heavy turns wide and stops long, **glide is exempt** so the tank still coasts, and top speed stays weight-free), **lateral girth** (`girth_mult` — the ONE grounded width: body density is ~constant so girth = sqrt(mass/height), normalized at 6'1"/201; every visual body part — torso, shoulders, limbs — AND the hitbox radius wear it, so silhouette = hitbox by construction, tall-lean reads elongated, short-heavy reads hydrant, and there are no authored width curves left to drift). *(silhouette = body: height scales the skeleton, weight-for-height scales the girth)*
-- **Hands** → **nothing, by constitution** ("your hands are you"): `hands_blade_mult()`/`hands_backhand_mult()` are 1.0 for every build. Hands differentiation is delivered as lever *geometry*, never a multiplier: the blade caps derive from the build's actual sweep lever (stick + arm ROM, normalized to the 6'1"/standard neutral) — **tip speed ∝ lever** (same angular gesture, faster blade in m/s; traverse time across your own reach stays ~flat, pinned ≤8% by `test_blade_lever_calibration`) and the **inertia cap ∝ 1/lever^k** (`blade_inertia_exponent`, default 1.2) — the long lever sweeps, the short lever cuts back. The second-order blade servo ships **ON** (`max_blade_accel = 250`, `blade_inertia_exponent = 1.6` — playtest-calibrated across the min/neutral/max builds; 0 disables it, reverting to the pre-v4 first-order servo bit-exact).
+- **Height**: inches, every inch from 5'7" to 6'8". Tables are authored at five
+  anchor heights (`ANCHOR_INCHES`) and interpolated.
+- **Weight**: pounds, bounded per height by a BMI band (23.0–29.0) and an
+  absolute 162 lb floor. The ratio governs 5'11" and up, and the floor governs
+  5'7"–5'10", where a ratio stops meaning anything. Implausible bodies can't be
+  represented. `frame_t()` (0 lean, 0.5 neutral, 1 heavy) is the
+  height-independent "how heavy for my frame" quantity the frame tables index
+  by. It is piecewise about the neutral, because the band is asymmetric.
+- **Four gear slots**: skate profile, blade curve, stick flex, stick length.
+  Each is 0/1/2, with 1 = balanced.
 
-**Top speed & carry:** top speed is speed-normalized over the full v3 span (`top_speed_mult`, 1.0 for the neutral build, whose top speed is `GameRules.DEFAULT_SKATER_MAX_SPEED_M_S`), so body-only builds sit in a tight ~22 mph middle band until the skate-profile gear slot re-widens it; the carry penalty is **Speed-eased only** (the v3 Hands term is folded into `CARRY_BASE` so neutral is unchanged at ~0.958) and is the whole cost of carrying at speed.
+**Every axis is lateral.** There is no power budget and no legality check.
+Validation only coerces (`coerce_height`, `coerce_weight`, the gear clamp), so a
+forged build lands on the nearest legal body. The neutral build is
+**6'1" / 201 lb / all-balanced** (`PlayerAttributes.neutral()`), the NHL-average
+frame. There every multiplier is 1.0 and a skater plays the controller's
+defaults.
 
-All tuning lives as private tables on `PlayerAttributes`, read via named accessors (`attrs.speed_mult()`, `accel_mult()`, `mass_mult()`, `top_speed_mult()`, …) — **never index a `_*` table outside that file**. Height tables are 5-vecs at the anchor heights; frame tables are 5-vecs lean→heavy indexed by `frame_t()` (position in the integer pounds band, so band edges and the 73"/201 neutral are exact). Derived/coupled levers are computed from their partner so they can't drift (edge glide = `2 − agility`, slapper wind-up = `2 − shot power`). To add a new "X scales Y" rule, see the doc-block at the top of `player_attributes.gd`.
+## The constitution
 
-Application path: `SkaterController.apply_attributes(attrs)` reads the accessors and writes scaled values to controller `@export`s, `Skater.weight`, etc.; `SkaterAppearanceCoordinator.apply(attrs)` does the visual mesh scaling. Both are idempotent — they capture baseline values on first call and recompute from baselines every subsequent call, so repeated applies (free-play picker changes) never compound. **Prefs migration** (`player_prefs.gd`, gated by `attr_scale_version`, now v5): a v4 tier save maps deterministically via `PlayerAttributes.migrate_tiers` (Checking→frame weight, strong Skating→profile lean, strong Skill→open curve or short stick by height, strong Checking→long stick); older six-attribute saves chain through `migrate_legacy` → `migrate_tiers`. Bot rosters and stored presets migrate through the same `from_dict` seam.
+A lever may scale **outputs** or **geometry**, never **fidelity**. "Your hands
+are you": no build tracks the cursor more precisely than another. Stickhandling
+differences come from lever geometry. The blade caps derive from the build's
+sweep lever (stick + arm ROM, normalized to the neutral build's lever):
+
+- **Tip speed ∝ lever.** The same angular gesture sweeps a longer blade faster
+  in m/s. `test_blade_lever_calibration` pins traverse time across a build's own
+  reach as roughly flat (≤8%).
+- **The inertia cap ∝ 1/lever^k** (`blade_inertia_exponent`). The long lever
+  sweeps but can't cut back; the short lever is the scalpel.
+
+Physical play works the same way. Mass is the whole system: check delivery and
+brace emerge from the collision resolver's reduced-mass math, and no attribute
+term scales them.
+
+## What each dial routes to
+
+| dial | scales | accessor(s) |
+|---|---|---|
+| Height | top-speed baseline (a hump that peaks at 6'1") | `speed_mult` → `top_speed_mult` |
+| | agility baseline (favors small builds) | `agility_mult` |
+| | charged-shot ceiling (favors big builds), slapper wind-up as 2 − power | `shot_power_mult` (wrister), `slapper_power_mult`, `shot_charge_mult` |
+| | skeleton, arm length and ROM, hand heights (mesh-native 5'10" = 1.0) | `height_mult` |
+| | stick cut to the body (~0.65× the height deviation) | `stick_len_mult` |
+| | helmet (a mild table of its own; heads are near-constant) | `head_bulk_mult` |
+| Weight | mass, linear in pounds (0.79–1.28) | `mass_mult` |
+| | first-step burst (favors lean builds) | `accel_mult` |
+| | agility bite (F = mv²/r: heavy turns wide and stops long) | `agility_mult` |
+| Both | girth = sqrt(mass/height): every lateral body part and the hitbox radius | `girth_mult` |
+
+Two deliberate exemptions. **Edge glide** reads only the height part of agility
+(`agility_glide_mult`), so a heavy build still coasts like its mass says it
+should. **Top speed** stays weight-free.
+
+`top_speed_mult` counts the speed lean twice: once raw, and once through its
+position in the 20–25 mph burst band. Body-only builds sit in a tight ~22 mph
+middle band, and the skate profile reaches either end of it.
+`carry_speed_mult` rises with the same band position and is the whole cost of
+carrying at speed.
+
+## The gear slots
+
+| slot | options | what it leans |
+|---|---|---|
+| Skate profile | agility / balanced / power | power: +top speed and glide, −agility (lateral grip included); agility: the reverse plus first step. Stacked with the body, agility runs ~0.84–1.15. |
+| Blade curve | M88 / M92 / M28 | the loft **angle ladder** (each level a set launch angle, steeper on the M28; design of record `docs/elevation-rework-plan.md`), backhand (1.08 / 1.00 / 0.90, never past parity), slapper power (±3%), reception ceiling (±7%, never `pickup_max_speed`). `Skater.apply_blade_pattern` renders the pick. |
+| Stick flex | whippy / medium / stiff | stiff is the **slapshot stick**: slapper ceiling (±6%) **and** slapper wind-up, both in the same direction (a lateral slot trades, it never stacks). Whippy is the **wrist-shot stick**: `wrister_unloaded_share` 0.70 / 0.60 / 0.50, the share of a wrister the shaft carries with no torso load. The wrister ceiling is flex-free, so they break even on a fully loaded wrister. The shaft's visible bow scales with the pick (`stick_bend_mult`, cosmetic). `flex_number()` shows the stick's real retail stiffness, fitted to weight; it is display-only. |
+| Stick length | short / standard / long | ±4% on the height's cut. Feeds reach, poke and claim range, the blade-cap lever and the stick mesh. |
+
+## Bots read the same body
+
+Bots never see the tables. `SkaterController.build_ai_caps` snapshots the
+scaled fields the physics drives with (top speed, thrust, reach, blade speed,
+lateral grip, backhand coefficient, wrister ceiling, reception lean, mass,
+radius) into `AISkaterCaps`, so the AI never disagrees with the body.
+
+## Where builds come from
+
+- **Players** pick one build on the player screen (`player_settings_popup.gd`:
+  height and weight sliders; height moves preserve `frame_t`) and its locker
+  (`locker_popup.gd`: the gear rows). There are no presets.
+- **Prefs** (`player_prefs.gd`) store the six ints under `attr_scale_version`
+  5. An older save loads the neutral build.
+- **Bots** carry curated cards in `data/bot_identities.json`, read through
+  `PlayerAttributes.from_dict`, which takes only the native keys.
+- **Online**, the build locks at join: six ints through `request_join` /
+  `spawn_remote_skater`, coerced by the host. In free play a pick re-applies
+  immediately.
+
+## Rules for changing it
+
+- All tuning is private consts in `player_attributes.gd`, read through named
+  accessors. **Never index a `_*` table outside that file.** The file header
+  says how to add an "X scales Y" rule.
+- Coupled levers derive from their partner so they can't drift: edge glide
+  from height agility, slapper wind-up from shot power.
+- `apply_attributes` and `SkaterAppearanceCoordinator.apply` are idempotent.
+  They capture bases on the first call and recompute live = base × multiplier
+  every call, so repeated applies never compound. A new scaled field needs its
+  base captured in `_capture_attribute_bases`.
+- The neutral build must stay at 1.0 everywhere (`test_neutral_is_all_ones`).
+  That is what lets the controller's defaults *be* the neutral build.

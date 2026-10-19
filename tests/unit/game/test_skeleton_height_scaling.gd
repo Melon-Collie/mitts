@@ -53,7 +53,7 @@ func _make_rig() -> Dictionary:
 
 static func _size_attrs(height_level: int) -> PlayerAttributes:
 	# Weight 0 coerces to the height's neutral frame — the pure-height build.
-	return PlayerAttributes.from_levels(height_level, 0)
+	return PlayerAttributes.new(height_level, 0)
 
 
 func test_skeleton_scales_about_ice_plane() -> void:
@@ -121,7 +121,7 @@ func test_reapply_is_idempotent_and_reversible() -> void:
 
 	# Free-play picker path: big → medium must land exactly where a fresh
 	# medium application lands.
-	var medium := PlayerAttributes.all_average()
+	var medium := PlayerAttributes.neutral()
 	controller.apply_attributes(medium)
 	var fresh: Dictionary = _make_rig()
 	(fresh["controller"] as SkaterController).apply_attributes(medium)

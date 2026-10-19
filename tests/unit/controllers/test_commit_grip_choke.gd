@@ -53,9 +53,9 @@ func _committed(lefty: bool, hit: bool) -> SkaterController:
 	add_child_autofree(controller)
 	controller.setup(skater, puck, gs)
 	# Every spawn path applies attributes (ActorSpawner falls back to
-	# all_average), and that is where the choke lands in metres — a controller
+	# neutral), and that is where the choke lands in metres — a controller
 	# without it is not a skater the game can produce.
-	controller.apply_attributes(PlayerAttributes.all_average())
+	controller.apply_attributes(PlayerAttributes.neutral())
 
 	var input := InputState.new()
 	for _i: int in TICKS:

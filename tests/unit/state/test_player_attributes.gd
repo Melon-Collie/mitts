@@ -1,15 +1,9 @@
 extends GutTest
 
-# PlayerAttributes — v4 BODY + GEAR model (docs/attributes-v4-plan.md). A build
-# is two continuous body dials — HEIGHT (inches, 5'7"..6'8") and WEIGHT (lbs,
-# bounded per height by a BMI band 22.5..29.0 floored at an absolute 160 lb) —
-# plus four lateral gear slots (stored, zero gameplay effect in step 1).
-# Neutral is 6'1" / 201 lbs / all-balanced, where every canonical multiplier
-# is 1.0.
-#
-# This test is the executable spec for the tables authored in
-# player_attributes.gd, including the constitution guarantee: no build scales
-# blade fidelity (hands) and no attribute term feeds checking (mass-emergent).
+# The executable spec for the tables in player_attributes.gd: two body dials
+# (HEIGHT in inches, WEIGHT in lbs inside the height's band) plus four lateral
+# gear slots, neutral at 6'1" / 201 lbs / all-balanced where every multiplier
+# is 1.0. Scripts/domain/state/CLAUDE.md has the model.
 
 const H_MIN: int = PlayerAttributes.HEIGHT_MIN     # 5'7" (67")
 const H_MED: int = PlayerAttributes.HEIGHT_MEDIUM  # 6'1" (73")
@@ -20,35 +14,30 @@ const MS_TO_MPH: float = 2.23694
 
 
 func _body(h: int, w: int) -> PlayerAttributes:
-	return PlayerAttributes.from_levels(h, w)
+	return PlayerAttributes.new(h, w)
 
 
 # ── Neutral identity ──────────────────────────────────────────────────────────
 func test_neutral_is_all_ones() -> void:
-	var a := PlayerAttributes.all_average()
+	var a := PlayerAttributes.neutral()
 	assert_eq(a.height, H_MED)
 	assert_eq(a.weight, 201)
 	assert_eq(a.profile, PlayerAttributes.GEAR_BALANCED)
-	# 6'1"/201/balanced must equal the shipped @export baseline everywhere.
+	# 6'1"/201/balanced must equal the controller's defaults everywhere.
 	assert_almost_eq(a.speed_mult(), 1.0, 0.0001, "speed")
 	assert_almost_eq(a.top_speed_mult(), 1.0, 0.0001, "top speed")
 	assert_almost_eq(a.accel_mult(), 1.0, 0.0001, "accel")
 	assert_almost_eq(a.agility_mult(), 1.0, 0.0001, "agility")
-	assert_almost_eq(a.hands_blade_mult(), 1.0, 0.0001, "hands")
 	assert_almost_eq(a.shot_power_mult(), 1.0, 0.0001, "shot")
-	assert_almost_eq(a.check_delivery_mult(), 1.0, 0.0001, "delivery")
-	assert_almost_eq(a.brace_mult(), 1.0, 0.0001, "brace")
 	assert_almost_eq(a.mass_mult(), 1.0, 0.0001, "mass")
-	assert_almost_eq(a.torso_bulk_mult(), 1.0, 0.0001, "torso")
+	assert_almost_eq(a.girth_mult(), 1.0, 0.0001, "girth")
 
 
-func test_neutral_matches_v3_average_derived_levers() -> void:
-	# The v4 body plane is authored around the v3 average-tier rows, so the
-	# derived levers must land where a v3 all-average 6'1" landed.
-	var a := PlayerAttributes.all_average()
+func test_neutral_derived_levers() -> void:
+	var a := PlayerAttributes.neutral()
 	assert_almost_eq(a.agility_glide_mult(), 1.0, 0.0001, "glide")
 	assert_almost_eq(a.shot_charge_mult(), 1.0, 0.0001, "charge")
-	assert_almost_eq(a.carry_speed_mult(), 0.9576, 0.001, "carry (v3 H3-average value)")
+	assert_almost_eq(a.carry_speed_mult(), 0.9576, 0.001, "carry at neutral")
 
 
 # ── Weight band (BMI interval + absolute playable-mass floor) ─────────────────
@@ -66,9 +55,8 @@ func test_weight_band_pounds_table() -> void:
 
 
 func test_weight_band_covers_real_tall_lean_bodies() -> void:
-	# The 2026-07 recalibration's reason for existing: the old flat BMI 24.0
-	# floor put the 6'4" minimum at 197 lb, which forbids real 6'4" NHL
-	# defensemen. These are listed cards, not invented bodies.
+	# A single flat lean ratio set by short players would forbid real tall-lean
+	# NHL bodies. These are listed cards, not invented bodies.
 	assert_true(PlayerAttributes.weight_min(76) <= 194,
 			"6'4 floor (%d lb) must reach Rinzel/Dobson" % PlayerAttributes.weight_min(76))
 	for card: Array in [[76, 195], [76, 194], [78, 207], [69, 162], [70, 165], [72, 175],
@@ -146,8 +134,8 @@ func test_implausible_bodies_unrepresentable() -> void:
 
 
 func test_zero_weight_coerces_to_neutral_frame() -> void:
-	# A pre-v5 save / defaulted wire arg (weight 0) lands on the height's
-	# neutral frame, keeping legacy identities' silhouettes.
+	# A defaulted wire arg or roster card (weight 0) lands on the height's
+	# neutral frame.
 	assert_eq(_body(H_MIN, 0).weight, 169)   # 5'7"
 	assert_eq(_body(H_MED, 0).weight, 201)
 	assert_eq(_body(H_MAX, 0).weight, 241)   # 6'8"
@@ -219,12 +207,6 @@ func test_extended_range_preserves_the_old_heights() -> void:
 	assert_eq(_body(80, 261).weight, 261)
 
 
-func test_legacy_1to5_height_maps_to_anchor_inches() -> void:
-	assert_eq(PlayerAttributes.new(1).height, 68)
-	assert_eq(PlayerAttributes.new(3).height, 73)
-	assert_eq(PlayerAttributes.new(5).height, 79)
-
-
 # ── Weight: accel fork, linear mass ───────────────────────
 func test_accel_lean_favored() -> void:
 	var lean := _body(H_MED, 174)
@@ -238,10 +220,7 @@ func test_mass_linear_in_displayed_weight() -> void:
 	assert_almost_eq(_body(H_MED, 201).mass_mult(), 1.0, 0.0001)
 	# Same pounds = same mass regardless of height — mass IS the displayed weight.
 	assert_almost_eq(_body(73, 210).mass_mult(), _body(76, 210).mass_mult(), 0.0001)
-	# Full spread ≈ 1.61× (257/160) — deliberately wider than v3's minor height
-	# edge: with no Checking stat, mass carries the physical game. The 2026-07
-	# band recalibration left this envelope intact (it dropped the lean BMI edge
-	# but the absolute playable-mass floor took over below 5'11").
+	# Full spread ≈ 1.61× — mass carries the physical game.
 	var ratio: float = _body(H_MAX, PlayerAttributes.weight_max(H_MAX)).mass_mult() \
 			/ _body(H_MIN, PlayerAttributes.weight_min(H_MIN)).mass_mult()
 	assert_between(ratio, 1.55, 1.70)
@@ -256,21 +235,9 @@ func test_frame_interpolates_between_anchors() -> void:
 
 
 # ── The constitution: no fidelity scaling, checking is mass-emergent ──────────
-func test_hands_never_scaled_by_any_build() -> void:
-	# "Your hands are you": the blade tracks every build's cursor identically.
-	for h: int in [H_MIN, 71, H_MED, 77, H_MAX]:
-		for w: int in [0, PlayerAttributes.weight_min(h), PlayerAttributes.weight_max(h)]:
-			var a := _body(h, w)
-			assert_almost_eq(a.hands_blade_mult(), 1.0, 0.0, "hands flat at %d\"/%d" % [h, w])
-			assert_almost_eq(a.hands_backhand_mult(), 1.0, 0.0, "backhand flat")
-
-
-func test_checking_accessors_neutral_mass_carries_it() -> void:
-	# Delivery/brace have no attribute term — the collision resolver reads mass.
+func test_mass_carries_the_physical_edge() -> void:
 	var tank := _body(H_MAX, 257)
 	var waterbug := _body(H_MIN, PlayerAttributes.weight_min(H_MIN))
-	assert_almost_eq(tank.check_delivery_mult(), 1.0, 0.0)
-	assert_almost_eq(tank.brace_mult(), 1.0, 0.0)
 	assert_true(tank.mass_mult() > waterbug.mass_mult(),
 			"the physical edge lives entirely in mass")
 
@@ -301,10 +268,10 @@ func test_glide_ignores_weight_tank_still_coasts() -> void:
 	assert_almost_eq(heavy.agility_glide_mult(), 1.0, 0.0001, "6'1\" glide is neutral")
 
 
-func test_radius_widens_with_frame() -> void:
-	# Hitbox tracks the silhouette: same height, heavier = wider.
-	assert_true(_body(H_MED, 220).radius_mult() > _body(H_MED, 174).radius_mult())
-	assert_almost_eq(_body(H_MED, 201).radius_mult(), 1.0, 0.0001, "neutral radius")
+func test_girth_widens_with_frame() -> void:
+	# Hitbox and silhouette both wear girth: same height, heavier = wider.
+	assert_true(_body(H_MED, 220).girth_mult() > _body(H_MED, 174).girth_mult())
+	assert_almost_eq(_body(H_MED, 201).girth_mult(), 1.0, 0.0001, "neutral girth")
 
 
 # ── Derived (coupled) levers ──────────────────────────────────────────────────
@@ -318,26 +285,26 @@ func test_glide_and_charge_are_inverse_of_partner() -> void:
 
 # ── Top speed (compressed pre-gear band) ─────────────────────────────────────
 func test_top_speed_bounded_pre_gear() -> void:
-	# Body-only speed occupies the middle of the v3 span, so every build's top
-	# speed lands in a tight ~22 mph band until the skate-profile gear slot
+	# Body-only speed occupies the middle of the normalization span, so every
+	# build's top speed lands in a tight ~22 mph band until the skate-profile gear slot
 	# re-widens it. The medium-height hump still gets the best gear.
 	var med := _body(H_MED, 0)
 	var small := _body(H_MIN, 0)
 	assert_true(med.top_speed_mult() > small.top_speed_mult())
 	for h: int in [H_MIN, H_MED, H_MAX]:
 		var a := _body(h, 0)
-		var top_mph: float = BASE_MAX_SPEED * a.speed_mult() * a.top_speed_mult() * MS_TO_MPH
+		var top_mph: float = BASE_MAX_SPEED * a.top_speed_mult() * MS_TO_MPH
 		assert_between(top_mph, 21.0, 23.0, "body-only top-speed band at %d\"" % h)
 
 
-# ── Gear slots (step 1: stored + coerced, no gameplay effect) ────────────────
+# ── Gear slots: stored and coerced ────────────────────────────────────────────
 func test_gear_defaults_balanced_and_clamps() -> void:
 	var a := PlayerAttributes.new(H_MED, 201, -3, 99, 2, 0)
 	assert_eq(a.profile, 0, "out-of-range gear clamps low")
 	assert_eq(a.curve, 2, "out-of-range gear clamps high")
 	assert_eq(a.flex, PlayerAttributes.FLEX_HIGH)
 	assert_eq(a.length, PlayerAttributes.LENGTH_SHORT)
-	assert_eq(PlayerAttributes.all_average().curve, PlayerAttributes.GEAR_BALANCED)
+	assert_eq(PlayerAttributes.neutral().curve, PlayerAttributes.GEAR_BALANCED)
 
 
 func test_equals_includes_gear() -> void:
@@ -347,7 +314,7 @@ func test_equals_includes_gear() -> void:
 	assert_true(a.equals(PlayerAttributes.new(H_MED, 201)))
 
 
-# ── Serialization & migration ─────────────────────────────────────────────────
+# ── Serialization ─────────────────────────────────────────────────────────────
 func test_dict_round_trip() -> void:
 	var a := PlayerAttributes.new(76, 228, 2, 0, 1, 2)
 	var b := PlayerAttributes.from_dict(a.to_dict())
@@ -356,90 +323,38 @@ func test_dict_round_trip() -> void:
 	assert_eq(b.profile, 2)
 
 
-func test_from_dict_tier_era_migrates() -> void:
-	# A v4 tier dict (Pohl's old card: 6'7", weak Skating, strong Checking) →
-	# heavy frame + long stick, height carried.
-	var a := PlayerAttributes.from_dict(
-			{"height": 5, "skating": 1, "skill": 2, "checking": 3})
-	assert_eq(a.height, 79)
-	assert_eq(a.weight, PlayerAttributes.weight_for_frame_t(79, 0.75),
-			"strong Checking → SOLID frame")
-	assert_eq(a.length, PlayerAttributes.LENGTH_LONG)
-
-
 func test_from_dict_name_only_is_neutral() -> void:
-	# No attribute keys at all → the height's neutral frame, never the legacy
-	# migration's default shape.
+	# No attribute keys at all → the height's neutral frame.
 	var a := PlayerAttributes.from_dict({"name": "Bot 1"})
-	assert_true(a.equals(PlayerAttributes.all_average()))
+	assert_true(a.equals(PlayerAttributes.neutral()))
 	var tall := PlayerAttributes.from_dict({"height": 79})
 	assert_eq(tall.weight, 235)
 	assert_eq(tall.profile, PlayerAttributes.GEAR_BALANCED)
 
 
-func test_migrate_tiers_mapping() -> void:
-	# Strong Skating below 6'1" → agility profile; at/above → power profile.
-	assert_eq(PlayerAttributes.migrate_tiers(68, 3, 2, 1).profile, PlayerAttributes.PROFILE_AGILITY)
-	assert_eq(PlayerAttributes.migrate_tiers(76, 3, 2, 1).profile, PlayerAttributes.PROFILE_POWER)
-	# Weak Checking → LIGHT frame.
-	assert_eq(PlayerAttributes.migrate_tiers(73, 3, 2, 1).weight,
-			PlayerAttributes.weight_for_frame_t(73, 0.25))
-	# Strong Skill small → short stick (dangler); big → open curve (bomber).
-	assert_eq(PlayerAttributes.migrate_tiers(68, 2, 3, 1).length, PlayerAttributes.LENGTH_SHORT)
-	assert_eq(PlayerAttributes.migrate_tiers(79, 1, 3, 2).curve, PlayerAttributes.CURVE_OPEN)
-	# All-average tiers → the height's neutral build.
-	assert_true(PlayerAttributes.migrate_tiers(73, 2, 2, 2)
-			.equals(PlayerAttributes.all_average()))
-
-
-func test_legacy_six_attr_migration_enforcer() -> void:
-	# A legacy size-5 / physical-5 enforcer → tall, heavy frame, long stick.
-	var a := PlayerAttributes.migrate_legacy(2, 1, 2, 5, 5, 4)
-	# The legacy 1..5 step table is FROZEN at the v3 heights, so size 5 stays
-	# 6'7" — a migrated save must not gain an inch because the range grew.
-	assert_eq(a.height, 79)
-	assert_true(a.weight > PlayerAttributes.weight_neutral(H_MAX), "checking-strong → heavier")
-	assert_eq(a.length, PlayerAttributes.LENGTH_LONG)
-
-
-func test_legacy_six_attr_migration_dangler() -> void:
-	# A small agility-5 / hands-5 dangler → short, light frame.
-	var a := PlayerAttributes.migrate_legacy(2, 5, 5, 2, 2, 2)
-	assert_eq(a.height, 70)  # size 2 -> 5'10"
-	assert_true(a.weight < PlayerAttributes.weight_neutral(70), "checking-weak → leaner")
-
-
 # ── Visual tells ──────────────────────────────────────────────────────────────
-func test_visual_tells_map_to_body() -> void:
-	# Silhouette = body: frame drives uniform bulk, height drives torso/scale.
-	var heavy := _body(H_MED, 220)
-	var lean := _body(H_MED, 174)
-	assert_true(heavy.shoulder_bulk_mult() > lean.shoulder_bulk_mult(), "shoulders read frame")
-	assert_true(heavy.thigh_mult() > lean.thigh_mult(), "legs read frame")
-	assert_true(heavy.forearm_bulk_mult() > lean.forearm_bulk_mult(), "arms read frame")
-	assert_true(heavy.torso_bulk_mult() > lean.torso_bulk_mult(), "torso reads frame")
-	assert_true(_body(H_MAX, 235).torso_bulk_mult() > _body(H_MIN, 174).torso_bulk_mult(),
-			"torso reads height too")
+func test_girth_reads_height_too() -> void:
+	# At a fixed frame a taller body is absolutely broader.
+	assert_true(_body(H_MAX, 235).girth_mult() > _body(H_MIN, 174).girth_mult())
 
 
 func test_labels() -> void:
 	assert_eq(PlayerAttributes.inches_label(73), "6'1\"")
-	assert_eq(_body(H_MED, 201).weight_label(), "201 lbs")
 
 
-# ── Stick length: the first live gear slot ────────────────────────────────────
+# ── Stick length ──────────────────────────────────────────────────────────────
 func test_stick_length_lean() -> void:
 	# A lean on the height's cut (never an absolute pick): ±4% around the
 	# height band center, so max-height + LONG can't stack absolute reach
 	# beyond the tuned corner.
-	var std := PlayerAttributes.all_average()
+	var std := PlayerAttributes.neutral()
 	var short := PlayerAttributes.new(73, 201, 1, 1, 1, PlayerAttributes.LENGTH_SHORT)
 	var long := PlayerAttributes.new(73, 201, 1, 1, 1, PlayerAttributes.LENGTH_LONG)
 	assert_almost_eq(std.stick_len_mult(), 1.028, 0.0001, "STANDARD = the height's cut")
 	assert_almost_eq(short.stick_len_mult(), 1.028 * 0.96, 0.0001)
 	assert_almost_eq(long.stick_len_mult(), 1.028 * 1.04, 0.0001)
 	# All four slots are live — a balanced loadout is the only zero-lean one.
-	assert_true(PlayerAttributes.new(73, 201).equals(PlayerAttributes.all_average()))
+	assert_true(PlayerAttributes.new(73, 201).equals(PlayerAttributes.neutral()))
 
 
 # ── Skate profile: top-end ↔ burst ───────────────────────────────────────────
@@ -466,16 +381,26 @@ func test_stacked_agility_corners_budgeted() -> void:
 
 
 # ── Flex + curve: the shot gear slots ────────────────────────────────────────
-func test_flex_is_a_power_release_seesaw() -> void:
-	# Stiff loads a bigger shot but pays a slower load — the charge lean goes
-	# WITH the power lean (a lateral trade), unlike the height coupling where
-	# a harder shot also threatens sooner.
+func test_flex_is_slapper_stick_vs_wrister_stick() -> void:
+	# Stiff: a bigger slapper that needs a longer wind-up (the charge lean goes
+	# WITH the power lean, unlike the height coupling). Whippy: more of a
+	# wrister without body load. The wrister ceiling is flex-free.
 	var whippy := PlayerAttributes.new(73, 201, 1, 1, PlayerAttributes.FLEX_LOW, 1)
 	var stiff := PlayerAttributes.new(73, 201, 1, 1, PlayerAttributes.FLEX_HIGH, 1)
-	assert_lt(whippy.shot_power_mult(), stiff.shot_power_mult(), "stiff shoots harder")
+	assert_lt(whippy.slapper_power_mult(), stiff.slapper_power_mult(), "stiff slaps harder")
 	assert_lt(whippy.shot_charge_mult(), stiff.shot_charge_mult(), "stiff loads slower")
-	assert_lt(whippy.wrister_runway_mult(), stiff.wrister_runway_mult(),
-			"whippy needs less runway for max power")
+	assert_almost_eq(whippy.shot_power_mult(), stiff.shot_power_mult(), 0.0001,
+			"same wrister ceiling")
+	assert_gt(whippy.wrister_unloaded_mult(), stiff.wrister_unloaded_mult(),
+			"whippy carries more of an unloaded wrister")
+	assert_almost_eq(0.6 * whippy.wrister_unloaded_mult(), 0.70, 0.0001)
+	assert_almost_eq(0.6 * stiff.wrister_unloaded_mult(), 0.50, 0.0001)
+	# So whippy never loses a wrister: ahead on a partial load, level on a full one.
+	for load: float in [0.0, 0.5, 1.0]:
+		var w: float = WristerLoad.power_share(load, false, 0.6 * whippy.wrister_unloaded_mult(), 1.0)
+		var s: float = WristerLoad.power_share(load, false, 0.6 * stiff.wrister_unloaded_mult(), 1.0)
+		assert_gte(w, s, "whippy wrister at load %.1f" % load)
+	assert_gt(whippy.stick_bend_mult(), stiff.stick_bend_mult(), "whippy visibly bows more")
 	# Height keeps its inherited inverse coupling underneath.
 	var tall := PlayerAttributes.new(79, 235)
 	assert_lt(tall.shot_charge_mult(), 1.0, "big frame still threatens sooner at medium flex")
@@ -485,7 +410,7 @@ func test_flex_number_is_fitted_to_the_body() -> void:
 	# The DISPLAYED stiffness is a real retail number fitted to weight: the
 	# neutral 201 lb build's medium is the most-shipped 85, and the gear pick
 	# shifts one rung either way.
-	assert_eq(PlayerAttributes.all_average().flex_number(), 85, "neutral shoots an 85")
+	assert_eq(PlayerAttributes.neutral().flex_number(), 85, "neutral shoots an 85")
 	assert_eq(PlayerAttributes.new(73, 201, 1, 1, PlayerAttributes.FLEX_LOW, 1).flex_number(), 75)
 	assert_eq(PlayerAttributes.new(73, 201, 1, 1, PlayerAttributes.FLEX_HIGH, 1).flex_number(), 100)
 	# Both ends of the ladder are reachable, and only by an extreme body on the
@@ -526,15 +451,15 @@ func test_flex_number_never_reaches_the_gameplay_leans() -> void:
 	var light_stiff := PlayerAttributes.new(68, 168, 1, 1, PlayerAttributes.FLEX_HIGH, 1)
 	var heavy_whippy := PlayerAttributes.new(78, 245, 1, 1, PlayerAttributes.FLEX_LOW, 1)
 	assert_eq(light_stiff.flex_number(), heavy_whippy.flex_number(), "same nominal stick")
-	assert_gt(light_stiff.shot_power_mult(), PlayerAttributes.new(68, 168).shot_power_mult(),
-			"the stiff pick shoots harder than its own medium")
-	assert_lt(heavy_whippy.shot_power_mult(), PlayerAttributes.new(78, 245).shot_power_mult(),
-			"the whippy pick shoots softer than its own — same 85 on the sticker")
+	assert_gt(light_stiff.slapper_power_mult(), PlayerAttributes.new(68, 168).slapper_power_mult(),
+			"the stiff pick slaps harder than its own medium")
+	assert_lt(heavy_whippy.slapper_power_mult(), PlayerAttributes.new(78, 245).slapper_power_mult(),
+			"the whippy pick slaps softer than its own — same 85 on the sticker")
 
 
-func test_curve_trades_loft_ladder_and_release_for_backhand() -> void:
+func test_curve_trades_loft_ladder_for_backhand() -> void:
 	var m88 := PlayerAttributes.new(73, 201, 1, PlayerAttributes.CURVE_CLOSED, 1, 1)
-	var m92 := PlayerAttributes.all_average()
+	var m92 := PlayerAttributes.neutral()
 	var m28 := PlayerAttributes.new(73, 201, 1, PlayerAttributes.CURVE_OPEN, 1, 1)
 	# The angle ladder is the elevation lever: every rung steeper on the M28,
 	# flatter on the M88, all rungs under the universal launch-angle guard.
@@ -546,7 +471,6 @@ func test_curve_trades_loft_ladder_and_release_for_backhand() -> void:
 	assert_lt(m88.curve_loft_tan_mid(), m28.curve_loft_tan_mid())
 	assert_lt(m28.curve_loft_tan_high(), ShotMechanics.MAX_LOFT_RATIO,
 			"the whole ladder sits under the universal guard")
-	assert_lt(m28.wrister_runway_mult(), 1.0, "M28 is the quick release (banked)")
 	assert_gt(m88.curve_backhand_mult(), m28.curve_backhand_mult())
 	# Backhand relief approaches but never reaches forehand parity: the
 	# controller's 0.75 base coefficient stays below 1.0 under the M88.
@@ -558,11 +482,11 @@ func test_curve_slap_and_reception_lean_with_the_pattern() -> void:
 	# squarer slapper contact and cradles a harder feed; the toe hook pays
 	# both. M92 is the neutral row on every axis.
 	var m88 := PlayerAttributes.new(73, 201, 1, PlayerAttributes.CURVE_CLOSED, 1, 1)
-	var m92 := PlayerAttributes.all_average()
+	var m92 := PlayerAttributes.neutral()
 	var m28 := PlayerAttributes.new(73, 201, 1, PlayerAttributes.CURVE_OPEN, 1, 1)
-	assert_gt(m88.curve_slap_mult(), 1.0, "M88 is the slapper blade")
-	assert_almost_eq(m92.curve_slap_mult(), 1.0, 0.0001, "M92 slap-neutral")
-	assert_lt(m28.curve_slap_mult(), 1.0, "the toe hook pays the point shot")
+	assert_gt(m88.slapper_power_mult(), 1.0, "M88 is the slapper blade")
+	assert_almost_eq(m92.slapper_power_mult(), 1.0, 0.0001, "M92 slap-neutral")
+	assert_lt(m28.slapper_power_mult(), 1.0, "the toe hook pays the point shot")
 	assert_gt(m88.reception_ceiling_mult(), 1.0, "M88 catches the hardest feeds")
 	assert_almost_eq(m92.reception_ceiling_mult(), 1.0, 0.0001, "M92 reception-neutral")
 	assert_lt(m28.reception_ceiling_mult(), 1.0, "hard feeds bounce off the toe hook")
@@ -570,13 +494,3 @@ func test_curve_slap_and_reception_lean_with_the_pattern() -> void:
 	# most of the league ceiling (soft/medium passes are unaffected entirely —
 	# pickup_max_speed never scales with curve).
 	assert_gt(m28.reception_ceiling_mult(), 0.85, "reception lean stays gentle")
-
-
-func test_stacked_runway_floor() -> void:
-	# The runway-floor constraint: the fastest-release loadout (whippy + open)
-	# still consumes ≥75% of the neutral runway — a max-power release always
-	# emits a readable wind-up tell inside the goalie's calibrated read band.
-	var quickest := PlayerAttributes.new(73, 201, 1,
-			PlayerAttributes.CURVE_OPEN, PlayerAttributes.FLEX_LOW, 1)
-	assert_gte(quickest.wrister_runway_mult(), 0.75, "runway floor holds")
-	assert_almost_eq(PlayerAttributes.all_average().wrister_runway_mult(), 1.0, 0.0001)
