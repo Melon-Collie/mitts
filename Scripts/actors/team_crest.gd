@@ -8,9 +8,9 @@ extends RefCounted
 # highlights, cleft, pith), ACCENT (leaves, stems, rind, the coconut's hollow)
 # and MARK (seeds, calyx).
 
-enum Style { FLAT, ROUNDEL, SHIELD, NATURAL }
+enum Style { FLAT, ROUNDEL, SHIELD, NATURAL, OUTLINED }
 
-const STYLE_NAMES: PackedStringArray = ["flat", "roundel", "shield", "natural"]
+const STYLE_NAMES: PackedStringArray = ["flat", "roundel", "shield", "natural", "outlined"]
 
 const BODY: int = 0
 const DETAIL: int = 1
@@ -20,6 +20,13 @@ const MARK: int = 3
 # Inside a frame, the fruit is scaled to clear the ring.
 const FRAMED_FRUIT_SCALE: float = 0.6
 const RING_INNER: float = 0.84
+# The OUTLINED keyline, in unit-space units (about 8 mm on a 28 cm crest).
+const OUTLINE_WIDTH: float = 0.06
+
+# While > 0, every shape is drawn grown by this much in `_grow_color` — the
+# silhouette pass under an outlined fruit.
+static var _grow: float = 0.0
+static var _grow_color: Color = Color.WHITE
 
 const _LEAF_GREEN: Color = Color("#3E7D3A")
 # Natural colors, as [BODY, DETAIL, ACCENT, MARK].
@@ -46,7 +53,12 @@ static func draw(canvas: CanvasItem, fruit: String, style: int, xform: Transform
 	var colors: Array = _palette(fruit, style, preset, kit)
 	canvas.draw_set_transform_matrix(xform)
 	var fruit_xform: Transform2D = xform
-	if style != Style.FLAT:
+	if style == Style.OUTLINED:
+		_grow = OUTLINE_WIDTH
+		_grow_color = colors[4]
+		_draw_fruit(canvas, fruit, colors)
+		_grow = 0.0
+	elif style != Style.FLAT:
 		var ring: Color = colors[4]
 		var field: Color = colors[5]
 		if style == Style.SHIELD:
@@ -74,9 +86,13 @@ static func _palette(fruit: String, style: int, preset: Dictionary, kit: Diction
 			return [ink, cut, ink, cut, ink, cut]
 		Style.ROUNDEL, Style.SHIELD:
 			return [light, primary, secondary, primary, secondary, primary]
+	var natural: Array = _NATURAL.get(fruit, _NATURAL.cherry)
+	if style == Style.OUTLINED:
+		# The keyline is the light, which the away jersey is based on: it rims
+		# the fruit on the home sweater and vanishes into the away one.
+		return [natural[BODY], natural[DETAIL], natural[ACCENT], natural[MARK], light, light]
 	# The ring is the secondary, which neither jersey is based on, so the badge
 	# stands off both kits; the field is whichever base the fruit reads on.
-	var natural: Array = _NATURAL.get(fruit, _NATURAL.cherry)
 	var body: Color = natural[BODY]
 	var field: Color = primary if _contrast(primary, body) > _contrast(light, body) else light
 	return [body, natural[DETAIL], natural[ACCENT], natural[MARK], secondary, field]
@@ -100,7 +116,7 @@ static func _draw_fruit(c: CanvasItem, fruit: String, k: Array) -> void:
 		"plum": _plum(c, k)
 		"pomegranate": _pomegranate(c, k)
 		"watermelon": _watermelon(c, k)
-		_: c.draw_circle(Vector2.ZERO, 0.9, k[BODY])
+		_: _circle(c,Vector2.ZERO, 0.9, k[BODY])
 
 
 # ── Fruits ───────────────────────────────────────────────────────────────────
@@ -109,27 +125,27 @@ static func _draw_fruit(c: CanvasItem, fruit: String, k: Array) -> void:
 static func _blackberry(c: CanvasItem, k: Array) -> void:
 	_leaf(c, Vector2(0.0, -0.62), Vector2(-0.55, -0.98), 0.2, k[ACCENT])
 	_leaf(c, Vector2(0.0, -0.62), Vector2(0.55, -0.98), 0.2, k[ACCENT])
-	c.draw_line(Vector2(0.0, -0.6), Vector2(0.05, -1.0), k[ACCENT], 0.09)
+	_line(c,Vector2(0.0, -0.6), Vector2(0.05, -1.0), k[ACCENT], 0.09)
 	# Drupelet rows down an egg, widest a little above the middle.
 	# Packed tight enough to overlap, so it reads as one berry, not a bunch.
-	c.draw_colored_polygon(_ellipse(Vector2(0.0, 0.08), Vector2(0.5, 0.68)), k[BODY])
+	_poly(c,_ellipse(Vector2(0.0, 0.08), Vector2(0.5, 0.68)), k[BODY])
 	var rows: Array = [[-0.42, 3], [-0.17, 4], [0.08, 4], [0.33, 3], [0.56, 2]]
 	for row: Array in rows:
 		var y: float = row[0]
 		var n: int = row[1]
 		for i: int in n:
 			var x: float = (float(i) - float(n - 1) * 0.5) * 0.27
-			c.draw_circle(Vector2(x, y), 0.17, k[DETAIL])
-			c.draw_circle(Vector2(x, y), 0.145, k[BODY])
-			c.draw_circle(Vector2(x - 0.045, y - 0.045), 0.04, k[DETAIL])
+			_circle(c,Vector2(x, y), 0.17, k[DETAIL])
+			_circle(c,Vector2(x, y), 0.145, k[BODY])
+			_circle(c,Vector2(x - 0.045, y - 0.045), 0.04, k[DETAIL])
 
 
 static func _blueberry(c: CanvasItem, k: Array) -> void:
 	_leaf(c, Vector2(0.25, -0.6), Vector2(0.9, -0.95), 0.22, k[ACCENT])
-	c.draw_circle(Vector2(0.0, 0.1), 0.82, k[BODY])
-	c.draw_colored_polygon(_star(Vector2(0.0, -0.36), 0.3, 0.12, 5), k[MARK])
-	c.draw_circle(Vector2(0.0, -0.36), 0.07, k[BODY])
-	c.draw_arc(Vector2(0.0, 0.1), 0.62, PI * 0.95, PI * 1.25, 12, k[DETAIL], 0.08)
+	_circle(c,Vector2(0.0, 0.1), 0.82, k[BODY])
+	_poly(c,_star(Vector2(0.0, -0.36), 0.3, 0.12, 5), k[MARK])
+	_circle(c,Vector2(0.0, -0.36), 0.07, k[BODY])
+	_arc(c,Vector2(0.0, 0.1), 0.62, PI * 0.95, PI * 1.25, 12, k[DETAIL], 0.08)
 
 
 static func _cherry(c: CanvasItem, k: Array) -> void:
@@ -139,8 +155,8 @@ static func _cherry(c: CanvasItem, k: Array) -> void:
 	_leaf(c, apex, Vector2(0.8, -0.82), 0.22, k[ACCENT])
 	for cherry: Vector3 in [Vector3(-0.45, 0.45, 0.42), Vector3(0.45, 0.5, 0.4)]:
 		var at := Vector2(cherry.x, cherry.y)
-		c.draw_circle(at, cherry.z, k[BODY])
-		c.draw_circle(at + Vector2(-0.14, -0.14), 0.08, k[DETAIL])
+		_circle(c,at, cherry.z, k[BODY])
+		_circle(c,at + Vector2(-0.14, -0.14), 0.08, k[DETAIL])
 
 
 static func _coconut(c: CanvasItem, k: Array) -> void:
@@ -151,20 +167,20 @@ static func _coconut(c: CanvasItem, k: Array) -> void:
 	for i: int in 25:
 		var t: float = PI * float(i) / 24.0
 		bowl.append(tilt * Vector2(cos(t) * 0.9, sin(t) * 0.8))
-	c.draw_colored_polygon(bowl, k[BODY])
+	_poly(c,bowl, k[BODY])
 	var rim := PackedVector2Array()
 	var hollow := PackedVector2Array()
 	for p: Vector2 in _ellipse(Vector2.ZERO, Vector2(0.9, 0.48)):
 		rim.append(tilt * p)
 	for p: Vector2 in _ellipse(Vector2(0.0, 0.02), Vector2(0.7, 0.33)):
 		hollow.append(tilt * p)
-	c.draw_colored_polygon(rim, k[DETAIL])
-	c.draw_colored_polygon(hollow, k[ACCENT])
+	_poly(c,rim, k[DETAIL])
+	_poly(c,hollow, k[ACCENT])
 
 
 static func _dragonfruit(c: CanvasItem, k: Array) -> void:
 	var body := _ellipse(Vector2(0.0, 0.12), Vector2(0.6, 0.82))
-	c.draw_colored_polygon(body, k[BODY])
+	_poly(c,body, k[BODY])
 	# Bracts: flaps rooted on the skin, tips flaring up and out past it.
 	var bracts: Array = [
 		[Vector2(0.0, -0.55), Vector2(0.0, -1.0)],
@@ -190,13 +206,13 @@ static func _lemon(c: CanvasItem, k: Array) -> void:
 		# A nub at each end of the long axis.
 		var tip: float = 0.18 * pow(absf(cos(t)), 12.0)
 		pts.append(tilt * Vector2(cos(t) * (0.82 + tip), sin(t) * 0.6))
-	c.draw_colored_polygon(pts, k[BODY])
-	c.draw_arc(tilt * Vector2(0.0, 0.0), 0.42, PI * 1.1, PI * 1.45, 10, k[DETAIL], 0.08)
+	_poly(c,pts, k[BODY])
+	_arc(c,tilt * Vector2(0.0, 0.0), 0.42, PI * 1.1, PI * 1.45, 10, k[DETAIL], 0.08)
 
 
 static func _lime(c: CanvasItem, k: Array) -> void:
-	c.draw_circle(Vector2.ZERO, 0.95, k[ACCENT])
-	c.draw_circle(Vector2.ZERO, 0.82, k[DETAIL])
+	_circle(c,Vector2.ZERO, 0.95, k[ACCENT])
+	_circle(c,Vector2.ZERO, 0.82, k[DETAIL])
 	var segments: int = 8
 	for i: int in segments:
 		var a0: float = TAU * float(i) / segments + 0.07
@@ -205,15 +221,15 @@ static func _lime(c: CanvasItem, k: Array) -> void:
 		var wedge := PackedVector2Array([Vector2.from_angle(mid) * 0.1])
 		for j: int in 7:
 			wedge.append(Vector2.from_angle(lerpf(a0, a1, float(j) / 6.0)) * 0.72)
-		c.draw_colored_polygon(wedge, k[BODY])
+		_poly(c,wedge, k[BODY])
 
 
 static func _peach(c: CanvasItem, k: Array) -> void:
-	c.draw_line(Vector2(0.0, -0.62), Vector2(0.05, -0.9), k[ACCENT], 0.09)
+	_line(c,Vector2(0.0, -0.62), Vector2(0.05, -0.9), k[ACCENT], 0.09)
 	_leaf(c, Vector2(0.05, -0.85), Vector2(0.75, -0.95), 0.22, k[ACCENT])
 	_leaf(c, Vector2(0.05, -0.85), Vector2(-0.55, -1.0), 0.16, k[ACCENT])
-	c.draw_circle(Vector2(-0.17, 0.12), 0.76, k[BODY])
-	c.draw_circle(Vector2(0.17, 0.12), 0.76, k[BODY])
+	_circle(c,Vector2(-0.17, 0.12), 0.76, k[BODY])
+	_circle(c,Vector2(0.17, 0.12), 0.76, k[BODY])
 	_curve(c, Vector2(0.0, -0.58), Vector2(-0.32, 0.05), Vector2(-0.1, 0.72), 0.07, k[DETAIL])
 
 
@@ -223,7 +239,7 @@ static func _pineapple(c: CanvasItem, k: Array) -> void:
 		_leaf(c, Vector2(0.0, -0.3), Vector2(spike.x, spike.y), spike.z, k[ACCENT])
 	var center := Vector2(0.0, 0.32)
 	var radii := Vector2(0.55, 0.66)
-	c.draw_colored_polygon(_ellipse(center, radii), k[BODY])
+	_poly(c,_ellipse(center, radii), k[BODY])
 	# Diamond lattice, each line clipped to the body.
 	for slope: float in [1.0, -1.0]:
 		for i: int in range(-5, 6):
@@ -231,40 +247,70 @@ static func _pineapple(c: CanvasItem, k: Array) -> void:
 			var d := Vector2(slope, 1.0).normalized()
 			var span: Vector2 = _clip_to_ellipse(p - center, d, radii * 0.94)
 			if span.y > span.x:
-				c.draw_line(p + d * span.x, p + d * span.y, k[DETAIL], 0.05)
+				_line(c,p + d * span.x, p + d * span.y, k[DETAIL], 0.05)
 
 
 static func _plum(c: CanvasItem, k: Array) -> void:
 	var tilt := Transform2D(0.25, Vector2(0.0, 0.12))
-	c.draw_line(Vector2(0.15, -0.62), Vector2(0.3, -0.98), k[ACCENT], 0.1)
+	_line(c,Vector2(0.15, -0.62), Vector2(0.3, -0.98), k[ACCENT], 0.1)
 	var body := PackedVector2Array()
 	for p: Vector2 in _ellipse(Vector2.ZERO, Vector2(0.66, 0.8)):
 		body.append(tilt * p)
-	c.draw_colored_polygon(body, k[BODY])
+	_poly(c,body, k[BODY])
 	_curve(c, tilt * Vector2(0.0, -0.72), tilt * Vector2(0.3, 0.0),
 			tilt * Vector2(0.08, 0.7), 0.06, k[DETAIL])
-	c.draw_colored_polygon(_ellipse(tilt * Vector2(-0.32, -0.28), Vector2(0.09, 0.2)), k[DETAIL])
+	_poly(c,_ellipse(tilt * Vector2(-0.32, -0.28), Vector2(0.09, 0.2)), k[DETAIL])
 
 
 static func _pomegranate(c: CanvasItem, k: Array) -> void:
 	var crown := PackedVector2Array([
 		Vector2(-0.3, -0.5), Vector2(-0.38, -0.98), Vector2(-0.18, -0.78),
 		Vector2(0.0, -1.02), Vector2(0.18, -0.78), Vector2(0.38, -0.98), Vector2(0.3, -0.5)])
-	c.draw_colored_polygon(crown, k[ACCENT])
-	c.draw_polyline(crown, k[DETAIL], 0.05)
-	c.draw_circle(Vector2(0.0, 0.18), 0.8, k[BODY])
-	c.draw_arc(Vector2(0.0, 0.18), 0.6, PI * 1.05, PI * 1.35, 12, k[DETAIL], 0.08)
+	_poly(c,crown, k[ACCENT])
+	_polyline(c,crown, k[DETAIL], 0.05)
+	_circle(c,Vector2(0.0, 0.18), 0.8, k[BODY])
+	_arc(c,Vector2(0.0, 0.18), 0.6, PI * 1.05, PI * 1.35, 12, k[DETAIL], 0.08)
 
 
 static func _watermelon(c: CanvasItem, k: Array) -> void:
 	var top: float = -0.38
-	c.draw_colored_polygon(_half_disc(Vector2(0.0, top), 1.0), k[ACCENT])
-	c.draw_colored_polygon(_half_disc(Vector2(0.0, top), 0.9), k[DETAIL])
-	c.draw_colored_polygon(_half_disc(Vector2(0.0, top), 0.8), k[BODY])
+	_poly(c,_half_disc(Vector2(0.0, top), 1.0), k[ACCENT])
+	_poly(c,_half_disc(Vector2(0.0, top), 0.9), k[DETAIL])
+	_poly(c,_half_disc(Vector2(0.0, top), 0.8), k[BODY])
 	for seed: Vector2 in [Vector2(-0.45, 0.0), Vector2(0.0, 0.08), Vector2(0.45, 0.0),
 			Vector2(-0.22, 0.3), Vector2(0.22, 0.3)]:
-		c.draw_colored_polygon(_ellipse(Vector2(seed.x, top + 0.18 + seed.y),
+		_poly(c,_ellipse(Vector2(seed.x, top + 0.18 + seed.y),
 				Vector2(0.06, 0.1)), k[MARK])
+
+
+# ── Primitives (grown in the silhouette pass) ────────────────────────────────
+
+
+static func _poly(c: CanvasItem, pts: PackedVector2Array, color: Color) -> void:
+	if _grow <= 0.0:
+		c.draw_colored_polygon(pts, color)
+		return
+	for grown: PackedVector2Array in Geometry2D.offset_polygon(pts, _grow,
+			Geometry2D.JOIN_ROUND):
+		c.draw_colored_polygon(grown, _grow_color)
+
+
+static func _circle(c: CanvasItem, at: Vector2, r: float, color: Color) -> void:
+	c.draw_circle(at, r + _grow, _grow_color if _grow > 0.0 else color)
+
+
+static func _line(c: CanvasItem, a: Vector2, b: Vector2, color: Color, width: float) -> void:
+	c.draw_line(a, b, _grow_color if _grow > 0.0 else color, width + 2.0 * _grow)
+
+
+static func _polyline(c: CanvasItem, pts: PackedVector2Array, color: Color, width: float) -> void:
+	c.draw_polyline(pts, _grow_color if _grow > 0.0 else color, width + 2.0 * _grow)
+
+
+static func _arc(c: CanvasItem, center: Vector2, r: float, from: float, to: float, points: int,
+		color: Color, width: float) -> void:
+	c.draw_arc(center, r, from, to, points, _grow_color if _grow > 0.0 else color,
+			width + 2.0 * _grow)
 
 
 # ── Shapes ───────────────────────────────────────────────────────────────────
@@ -304,7 +350,7 @@ static func _leaf(c: CanvasItem, base: Vector2, tip: Vector2, width: float, colo
 	for i: int in range(9, 0, -1):
 		var t: float = float(i) / 10.0
 		pts.append(base + along * t - side * sin(PI * t))
-	c.draw_colored_polygon(pts, color)
+	_poly(c,pts, color)
 
 
 # A quadratic stroke from `a` through control `ctrl` to `b`.
@@ -314,7 +360,7 @@ static func _curve(c: CanvasItem, a: Vector2, ctrl: Vector2, b: Vector2, width: 
 	for i: int in 13:
 		var t: float = float(i) / 12.0
 		pts.append(a.lerp(ctrl, t).lerp(ctrl.lerp(b, t), t))
-	c.draw_polyline(pts, color, width)
+	_polyline(c,pts, color, width)
 
 
 # A heater shield `scale` times the frame's size, pointed at the bottom.
@@ -330,7 +376,7 @@ static func _shield(c: CanvasItem, scale: float, color: Color) -> void:
 				Vector2(-0.85, 0.55).lerp(Vector2(0.0, 1.0), t), t))
 	for i: int in pts.size():
 		pts[i] *= scale
-	c.draw_colored_polygon(pts, color)
+	_poly(c,pts, color)
 
 
 # The [enter, exit] distances along `dir` from `origin` (relative to the ellipse
