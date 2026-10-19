@@ -618,7 +618,7 @@ func _assert_menu_at_home(attrs: PlayerAttributes, home: float, gear: String) ->
 
 func test_every_gear_delivers_the_full_menu_at_its_home_range() -> void:
 	_assert_menu_at_home(_m88(), _HOME_M88, "M88")
-	_assert_menu_at_home(PlayerAttributes.all_average(), _HOME_M92, "M92")
+	_assert_menu_at_home(PlayerAttributes.neutral(), _HOME_M92, "M92")
 	_assert_menu_at_home(_m28(), _HOME_M28, "M28")
 
 
@@ -628,7 +628,7 @@ func test_gears_own_different_zones() -> void:
 	# M28's home the closed blade is still down at pad height on its top rung.
 	var h88: float = _arrive(_HOME_M28, _FULL_PACE, _m88().curve_loft_tan_high())
 	var h92: float = _arrive(_HOME_M28, _FULL_PACE,
-			PlayerAttributes.all_average().curve_loft_tan_high())
+			PlayerAttributes.neutral().curve_loft_tan_high())
 	var h28: float = _arrive(_HOME_M28, _FULL_PACE, _m28().curve_loft_tan_high())
 	assert_lt(h88, h92, "the range blade sits lowest in tight")
 	assert_lt(h92, h28, "the close blade sits highest in tight")
@@ -681,7 +681,7 @@ func test_no_low_rung_sails_on_any_gear_at_any_pace() -> void:
 	# invariant did we break." Do not treat it as a ceiling on LOW.
 	var max_slap: float = GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S
 	for attrs: PlayerAttributes in [
-			_m88(), PlayerAttributes.all_average(), _m28()]:
+			_m88(), PlayerAttributes.neutral(), _m28()]:
 		var t: float = attrs.curve_loft_tan_low()
 		var sin_a: float = t / sqrt(1.0 + t * t)
 		assert_lt(pow(max_slap * sin_a, 2.0) / (2.0 * 9.8), GameRules.NET_HEIGHT,

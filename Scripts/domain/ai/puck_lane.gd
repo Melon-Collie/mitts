@@ -668,7 +668,7 @@ const PASS_MISS_OVERSHOOT_M: float = 3.0
 # the passer's release-direction error — 0 for the perfect baseline and the
 # cross-player threat model (we don't know another player's hand), collapsing to
 # the base floor. `catch_radius` is how far off the tape the receiver can still
-# corral the feed (its Hands handle reach). Uniform-error model: the base floor
+# corral the feed (its handle reach). Uniform-error model: the base floor
 # compounded with the fraction of the ±(aim_error × distance) lateral spread that
 # lands outside the catch envelope.
 static func pass_miss_prob(distance: float, aim_error_rad: float,

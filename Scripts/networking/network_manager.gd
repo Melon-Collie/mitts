@@ -1288,7 +1288,7 @@ func take_session_end_reason() -> String:
 func get_peer_attributes(peer_id: int) -> PlayerAttributes:
 	var attrs: PlayerAttributes = _peer_attributes.get(peer_id, null)
 	if attrs == null:
-		return PlayerAttributes.all_average()
+		return PlayerAttributes.neutral()
 	return attrs
 
 # A peer's replicated Shot Power Sensitivity (host-side). Defaults to 1.0 for a
@@ -2236,7 +2236,7 @@ func send_spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey
 	# fan-out so connected clients see the bot.
 	if is_offline_mode:
 		return
-	var attrs: PlayerAttributes = attributes if attributes != null else PlayerAttributes.all_average()
+	var attrs: PlayerAttributes = attributes if attributes != null else PlayerAttributes.neutral()
 	spawn_remote_skater.rpc(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color, is_left_handed, player_name, jersey_number,
 			attrs.height, attrs.weight, attrs.profile, attrs.curve, attrs.flex, attrs.length,
 			get_peer_tape_code(peer_id), get_peer_skin_tone(peer_id),

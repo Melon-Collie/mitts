@@ -22,10 +22,10 @@ var reverse_skid_fraction: float = GameRules.DEFAULT_SKATER_REVERSE_SKID_FRACTIO
 var shuffle_step_distance: float = 0.4  # m a press steps (ShuffleStepShaper), one step-together
 var turn_accel: float = GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2
 var max_turn_rate: float = GameRules.DEFAULT_SKATER_MAX_TURN_RATE_RAD_S
-# Edge grip; per-build value = base × agility_mult in apply_attributes, and the
-# skate-profile gear slot leans it later. Turn radius at speed rides this.
+# Edge grip; per-build value = base × agility_mult in apply_attributes (the
+# skate profile is part of agility_mult). Turn radius at speed rides this.
 var lateral_grip: float = 1.0
-var puck_carry_speed_multiplier: float = 0.92  # pre-apply default; per-build value is set by apply_attributes (PlayerAttributes.carry_speed_mult, Speed-eased)
+var puck_carry_speed_multiplier: float = 0.92  # pre-apply default; per-build value is PlayerAttributes.carry_speed_mult
 var backward_thrust_multiplier: float = 0.80
 var crossover_thrust_multiplier: float = 0.90
 var backward_max_speed_multiplier: float = 0.80
@@ -319,11 +319,10 @@ var board_shield_max_deg: float = 55.0
 # Cap on how fast the aim target can move in world XZ per second. The IK consumes
 # the smoothed target, so the blade visibly inherits the cap. Sits in the
 # dangle-speed range (~8-14 m/s): a medium player's full ROM span is ~1.18 m, so
-# 10 m/s crosses it in ~118 ms. Under attributes v4 the blade tracks every build's
-# cursor at the same fidelity (hands_blade_mult() is 1.0 by constitution — no hands
-# stat), so this cap is uniform. Tune UP if deliberate aim feels laggy, DOWN if
-# fast dangling feels the same at L1 and L5 — a live-feel call that cannot be
-# measured headless.
+# 10 m/s crosses it in ~118 ms. This is the neutral build's cap; apply_attributes
+# scales it by the build's blade lever (see max_blade_accel). Tune UP if
+# deliberate aim feels laggy, DOWN if fast dangling feels too easy — a live-feel
+# call that cannot be measured headless.
 var max_blade_speed: float = 10.0
 # Second-order blade: acceleration cap (m/s²) on the dangle velocity — the
 # stick's INERTIA. Direction REVERSALS pay the cost, traverse speed doesn't.
@@ -661,7 +660,7 @@ var wrister_away_reach_deg: float = 30.0
 # Power is a feel-curve over the release speed signal (cursor speed for humans,
 # a committed target for bots — see _wrister_sweep_speed). power_curve shapes
 # where an ordinary flick lands in the band. Feel tunable, NOT attribute-scaled
-# (Shot scales the ceiling).
+# (shot_power_mult scales the ceiling).
 var wrister_power_curve: float = GameRules.DEFAULT_WRISTER_POWER_CURVE
 # ── Pure mouse-speed wrister ──
 # Wrister power is a curve over the raw SCREEN-space cursor speed (px/s) — flick
@@ -1193,15 +1192,12 @@ var _base_facing_drag_speed_braking:    float = 0.0
 var _base_stop_decel:                   float = 0.0
 var _base_friction_drag:                float = 0.0
 var _base_lateral_grip:                 float = 0.0
-var _base_min_wrister_power:            float = 0.0
 var _base_max_wrister_power:            float = 0.0
-var _base_quick_pass_power:             float = 0.0
 var _base_min_slapper_power:            float = 0.0
 var _base_max_slapper_power:            float = 0.0
 var _base_max_slapper_charge_time:      float = 0.0
 var _base_max_blade_speed:              float = 0.0
 var _base_max_blade_accel:              float = 0.0
-var _base_puck_carry_speed_multiplier:  float = 0.0
 var _base_stick_length:                 float = 0.0
 var _base_skater_upper_arm_length:      float = 0.0
 var _base_skater_forearm_length:        float = 0.0
@@ -1209,8 +1205,6 @@ var _base_skater_shoulder_reach_m:      float = 0.0
 var _base_skater_shoulder_offset:       float = 0.0
 var _base_skater_shoulder_height:       float = 0.0
 var _base_skater_weight:                float = 0.0
-var _base_skater_body_check_brace_resistance: float = 0.0
-var _base_skater_body_check_transfer:   float = 0.0
 var _base_skater_collision_radius:      float = 0.0
 var _base_backhand_power_coefficient:   float = 0.0
 # The blade curve's angle ladder (tan per elevated loft level) for the
@@ -1291,14 +1285,8 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	if not _attr_base_captured:
 		_capture_attribute_bases()
 	var m_height:  float = attrs.height_mult()
-	# Skating splits into THREE height-routed sub-levers: Speed owns top-end velocity
-	# (max_speed), Acceleration owns thrust
-	# (forward burst — small-favored, floored above agility so a big weak-skater can
-	# still drive straight), and Agility owns the turn/brake/edge handling.
 	var m_agility: float = attrs.agility_mult()
-	# Top speed is Speed-attributed and grounded to the 20–25 mph NHL burst band,
-	# so a real burner opens a gear a plodder does not have.
-	max_speed = _base_max_speed * attrs.speed_mult() * attrs.top_speed_mult()
+	max_speed = _base_max_speed * attrs.top_speed_mult()
 	thrust    = _base_thrust    * attrs.accel_mult()
 	facing_drag_speed           = _base_facing_drag_speed           * m_agility
 	facing_drag_speed_braking   = _base_facing_drag_speed_braking   * m_agility
@@ -1309,20 +1297,15 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	# lean/small one. The facing/stop terms above are the feel of quickness; this is
 	# the arc itself.
 	lateral_grip                = _base_lateral_grip                * m_agility
-	# friction_drag is velocity-proportional drag — scaling it inversely with Agility
-	# gives agile players the "good edges" feel: less momentum leaks through the
-	# blades during a cut, so they carry more speed out of turns. The lateral /
-	# backward thrust multipliers stay universal; what makes an agile build agile is
-	# how cleanly it transitions between those directions.
+	# friction_drag is velocity-proportional drag, scaled inversely with the
+	# height-only agility term (see agility_glide_mult): less momentum leaks
+	# through the blades during a cut.
 	friction_drag               = _base_friction_drag               * attrs.agility_glide_mult()
-	# Carry speed retention is a small, Speed-eased tax on the top-speed cap. A
-	# computed value, not a base × mult.
+	# A computed value, not a base × mult.
 	puck_carry_speed_multiplier = attrs.carry_speed_mult()
-	# Hands has no lever by constitution ("your hands are you"): the blade caps derive
-	# from LEVER GEOMETRY below, after the reach/stick rescale computes this build's
-	# actual sweep radius. What leans the backhand coefficient is the BLADE's shape —
-	# the curve gear slot (closed relaxes toward, never past, forehand parity; open
-	# deepens the penalty).
+	# The blade caps derive from LEVER GEOMETRY below, after the reach/stick
+	# rescale computes this build's sweep radius. The backhand coefficient leans
+	# with the blade curve (closed relaxes toward, never past, forehand parity).
 	backhand_power_coefficient  = _base_backhand_power_coefficient * attrs.curve_backhand_mult()
 	# Curve elevation is the blade's ANGLE LADDER: the set launch angle per
 	# loft level (ShotMechanics.shot_loft_y). The whole elevation identity of
@@ -1335,33 +1318,21 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	# (PuckController contact scan + the lag-comp pickup resolver) scale the
 	# puck's league deflect thresholds by the RECEIVER's blade shape.
 	skater.reception_ceiling_mult = attrs.reception_ceiling_mult()
-	# Shot scales the CHARGED-shot ceiling (wrister max + both slapper pools) and the
-	# wrister charge EFFORT, but NOT the quick/uncharged snap. quick_pass doubles as
-	# pass speed so it stays baseline for everyone (reliable passing), and min_wrister
-	# is the soft-touch floor — a slow sweep is a touch pass, deliberately BELOW the
-	# snap speed, and everyone's touch should be equally soft.
+	# Shot power scales the CHARGED-shot ceiling (wrister max + both slapper
+	# pools), never min_wrister_power (the soft-touch floor) or quick_pass_power
+	# (also the pass speed) — every build's touch and passes are the same.
 	var m_shot_ceil: float = attrs.shot_power_mult()
-	min_wrister_power = _base_min_wrister_power              # baseline floor (= snap)
 	max_wrister_power = _base_max_wrister_power * m_shot_ceil
-	quick_pass_power  = _base_quick_pass_power               # baseline — also the pass speed
 	# Slapper carries the curve's contact lean on top of the flex/height
 	# ceiling — the one shot where the pattern shape meets the ice.
 	min_slapper_power = _base_min_slapper_power * m_shot_ceil * attrs.curve_slap_mult()
 	max_slapper_power = _base_max_slapper_power * m_shot_ceil * attrs.curve_slap_mult()
-	# Slapper wind-up time keeps the gentler shot_charge curve. (Wrister power is
-	# pure mouse speed — no charge distance — so Shot only scales its ceiling.)
 	max_slapper_charge_time     = _base_max_slapper_charge_time     * attrs.shot_charge_mult()
-	# Physical battles are Checking-decided; height is only a MINOR mass edge.
-	# `weight` (the weight_ratio — hard to MOVE) is a small height lever; Checking
-	# sets delivery (how hard you DELIVER a check, tall-favored) and brace (how hard
-	# to PUT DOWN, tier-dominant, so a big weak-Checking build is genuinely hittable).
-	# Brace is inverse: lower = better resistance.
-	skater.weight                      = _base_skater_weight                  * attrs.mass_mult()
-	skater.body_check_transfer         = _base_skater_body_check_transfer     * attrs.check_delivery_mult()
-	skater.body_check_brace_resistance = _base_skater_body_check_brace_resistance * attrs.brace_mult()
-	# Arms scale with actual height (the dedicated height_mult, tighter than the
-	# gameplay size_mult) so proportions stay realistic. The stick is equipment, not
-	# anatomy, so it rides a GENTLER curve (stick_len_mult, ~0.65x the height
+	# Mass is the whole physical system: delivery and brace emerge from the
+	# collision resolver's reduced-mass math, so no check term scales here.
+	skater.weight = _base_skater_weight * attrs.mass_mult()
+	# Arms scale with height_mult. The stick is equipment, not anatomy, so it
+	# rides a GENTLER curve (stick_len_mult, ~0.65x the height
 	# deviation): real played stick lengths track height only loosely, so a small
 	# player keeps a near-full-size stick. Total blade reach is still arm-driven ROM +
 	# stick (top_hand_ik FAR regime), so the eased stick is not a proportionally eased
@@ -1380,11 +1351,11 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	skater.shoulder_reach_m   = _base_skater_shoulder_reach_m   * m_height
 	# Shoulder anchors track the visual shoulder balls, which the appearance
 	# pass repositions from the same multipliers (y rides height, x rides
-	# torso bulk) — the drawn arm and the IK stay rooted at the same point on
+	# girth) — the drawn arm and the IK stay rooted at the same point on
 	# every build. Must run BEFORE the hand/ROM derivation below reads
 	# shoulder_height.
 	skater.set_shoulder_anchor(
-			_base_skater_shoulder_offset * attrs.torso_bulk_mult(),
+			_base_skater_shoulder_offset * attrs.girth_mult(),
 			_base_skater_shoulder_height * m_height)
 	# Hand heights scale with the skeleton: the appearance pass scales the whole mesh
 	# rig about the ice plane (the upper body rides at height_mult × 1.0 m world), so
@@ -1422,7 +1393,7 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	# mesh-native base geometry (the reach-1.0 anchor is 5'10", below the
 	# gameplay neutral): neutral identity demands the neutral build's caps equal
 	# the shipped exports exactly.
-	var neutral_attrs := PlayerAttributes.all_average()
+	var neutral_attrs := PlayerAttributes.neutral()
 	var neutral_sweep: float = _base_stick_length * neutral_attrs.stick_len_mult() \
 			+ (_base_skater_upper_arm_length + _base_skater_forearm_length) \
 			* neutral_attrs.height_mult() * _ROM_FOREHAND_OF_ARM
@@ -1430,12 +1401,10 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	max_blade_speed = _base_max_blade_speed * lever_ratio
 	max_blade_accel = _base_max_blade_accel / pow(lever_ratio, blade_inertia_exponent) \
 			if _base_max_blade_accel > 0.0 else 0.0
-	# Hitbox: the contact disc scales with height (frame width — a taller player is
-	# a bit wider). There is no vertical extent to scale: every contact path the
-	# radius feeds is a flat XZ test (skater-vs-skater, the rink / net / goalie
-	# clamps). The visual mesh still scales on Y (appearance coordinator), so big
-	# players look tall without reaching further.
-	skater.body_collision_radius = _base_skater_collision_radius * attrs.radius_mult()
+	# Hitbox: the contact disc wears the same girth the silhouette does. There is
+	# no vertical extent to scale: every contact path the radius feeds is a flat
+	# XZ test (skater-vs-skater, the rink / net / goalie clamps).
+	skater.body_collision_radius = _base_skater_collision_radius * attrs.girth_mult()
 	# Attribute scaling rewrote the exports the cached configs were built
 	# from — drop them so the next tick rebuilds with the new values.
 	_ik.invalidate_configs()
@@ -1456,16 +1425,13 @@ func _capture_attribute_bases() -> void:
 	_base_stop_decel                   = stop_decel
 	_base_friction_drag                = friction_drag
 	_base_lateral_grip                 = lateral_grip
-	_base_min_wrister_power            = min_wrister_power
 	_base_max_wrister_power            = max_wrister_power
-	_base_quick_pass_power             = quick_pass_power
 	_base_min_slapper_power            = min_slapper_power
 	_base_max_slapper_power            = max_slapper_power
 	_base_max_slapper_charge_time      = max_slapper_charge_time
 	_base_max_blade_speed              = max_blade_speed
 	_base_max_blade_accel              = max_blade_accel
 	_base_backhand_power_coefficient   = backhand_power_coefficient
-	_base_puck_carry_speed_multiplier  = puck_carry_speed_multiplier
 	_base_stick_length                 = stick_length
 	_base_hand_rest_y                  = hand_rest_y
 	_base_hand_y_max                   = hand_y_max
@@ -1475,8 +1441,6 @@ func _capture_attribute_bases() -> void:
 	_base_skater_shoulder_offset       = skater.shoulder_offset
 	_base_skater_shoulder_height       = skater.shoulder_height
 	_base_skater_weight                       = skater.weight
-	_base_skater_body_check_transfer          = skater.body_check_transfer
-	_base_skater_body_check_brace_resistance  = skater.body_check_brace_resistance
 	_base_skater_collision_radius = skater.body_collision_radius
 	_attr_base_captured = true
 

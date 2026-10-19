@@ -119,7 +119,7 @@ func _spawn_builds() -> void:
 		var h: float = attrs.height_mult()
 		s.set("upper_arm_length", s.get("upper_arm_length") * h)
 		s.set("forearm_length", s.get("forearm_length") * h)
-		s.call("set_shoulder_anchor", 0.22 * attrs.torso_bulk_mult(), 0.40 * h)
+		s.call("set_shoulder_anchor", 0.22 * attrs.girth_mult(), 0.40 * h)
 		# Bare rig: the stick mesh rides the blade anchor, so seat it in a
 		# stance spot on the ice (the scene default floats it at chest height
 		# 1.5 m ahead). The HANDS stay at their rest markers regardless —

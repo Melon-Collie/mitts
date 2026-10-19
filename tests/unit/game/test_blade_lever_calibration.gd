@@ -52,7 +52,7 @@ func _builds() -> Array[PlayerAttributes]:
 	return [
 		PlayerAttributes.new(68, 158, 1, 1, 1, PlayerAttributes.LENGTH_SHORT),
 		PlayerAttributes.new(68, 158),
-		PlayerAttributes.all_average(),
+		PlayerAttributes.neutral(),
 		PlayerAttributes.new(79, 257),
 		PlayerAttributes.new(79, 257, 1, 1, 1, PlayerAttributes.LENGTH_LONG),
 	]
@@ -62,7 +62,7 @@ func test_neutral_build_caps_equal_shipped_exports() -> void:
 	var c := _make_controller()
 	var base_speed: float = c.max_blade_speed
 	var base_accel: float = c.max_blade_accel
-	c.apply_attributes(PlayerAttributes.all_average())
+	c.apply_attributes(PlayerAttributes.neutral())
 	assert_almost_eq(c.max_blade_speed, base_speed, 0.0001,
 			"neutral tip speed == shipped export")
 	assert_almost_eq(c.max_blade_accel, base_accel, 0.0001,
@@ -120,7 +120,7 @@ func test_stick_length_gear_leans_the_stick() -> void:
 	var c := _make_controller()
 	c.apply_attributes(PlayerAttributes.new(73, 201, 1, 1, 1, PlayerAttributes.LENGTH_SHORT))
 	var short_len: float = c.stick_length
-	c.apply_attributes(PlayerAttributes.all_average())
+	c.apply_attributes(PlayerAttributes.neutral())
 	var std_len: float = c.stick_length
 	c.apply_attributes(PlayerAttributes.new(73, 201, 1, 1, 1, PlayerAttributes.LENGTH_LONG))
 	var long_len: float = c.stick_length
@@ -151,7 +151,7 @@ func test_ladder_is_the_loft_lever_per_curve() -> void:
 	# LADDER is the elevation lever — every rung steeper on the open blade,
 	# all rungs under the universal guard.
 	var c := _make_controller()
-	c.apply_attributes(PlayerAttributes.all_average())
+	c.apply_attributes(PlayerAttributes.neutral())
 	var neutral_high: float = c.loft_vertical_speed_high
 	var neutral_low: float = c.loft_vertical_speed_low
 	var m92_tans := Vector3(c.loft_tan_low, c.loft_tan_mid, c.loft_tan_high)

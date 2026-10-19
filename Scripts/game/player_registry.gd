@@ -131,7 +131,7 @@ func spawn(
 	record.is_left_handed = is_left_handed
 	record.player_name = player_name
 	record.jersey_number = jersey_number
-	record.attributes = attributes if attributes != null else PlayerAttributes.all_average()
+	record.attributes = attributes if attributes != null else PlayerAttributes.neutral()
 	var faceoff_pos: Vector3 = PlayerRules.faceoff_position(team.team_id, team_slot)
 
 	var puck: Puck = _puck_getter.call() as Puck
@@ -233,7 +233,7 @@ func spawn_bot(
 		record.is_left_handed = (team_slot % 2 == 1)
 		record.player_name = "Bot %d" % (bot_id + 1)
 		record.jersey_number = 80 + bot_id
-		record.attributes = PlayerAttributes.all_average()
+		record.attributes = PlayerAttributes.neutral()
 	else:
 		record.is_left_handed = identity.get("is_left_handed", team_slot % 2 == 1)
 		record.player_name = identity.get("name", "Bot %d" % (bot_id + 1))

@@ -52,8 +52,9 @@ const BOT_WRISTER_LOOKAHEAD_S: float = (
 		float(BOT_WRISTER_CHARGE_TICKS) / _PhysicsConstants.PHYSICS_TICK + BOT_PRE_AIM_BUFFER_S)
 
 # Base puck-protect reach: how far a carrier holds the puck off his body while
-# handling. Hands scales it (a better handler protects it further out / threads a
-# tighter seam) — callers pass the scaled value; this is the league default.
+# handling. The blade lever scales it (a longer reach protects it further out /
+# threads a tighter seam) — callers pass the scaled value; this is the league
+# default.
 const EVADE_CARRY_HANDLE_M: float = 0.9
 
 # The league wrister's release speed (m/s; Puck.release consumes `direction ×
