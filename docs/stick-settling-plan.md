@@ -22,6 +22,12 @@ Phase 1 is playtested.
   Catch/deflect stays exactly where it is today.
 - **Bot passes get softer** (Phase 2), priced rather than retuned: the settle a
   hard feed costs the receiver goes into the passer's valuation.
+- **A press during the settle is queued**, not dropped. It fires on the first
+  unlocked input.
+- **The pickup sound scales with arrival speed**, so a hard catch is heard as
+  well as seen.
+- **The human quick pass is left alone.** It is due to be removed, so it keeps
+  its flat 14 m/s until then.
 
 ## Why — the data
 
@@ -147,11 +153,17 @@ through `_process_input`, so one gate covers all of them:
   quick pass, wrister, and slap entries are skipped.
 - The nudge in `_process_input` (`skater_controller.gd:1681`) is skipped.
 
-**Held through the unlock.** Every entry fires on a rising edge, so a press held
-across the deadline would otherwise never fire. On the first unlocked input, a
-still-held wrister, slap, or pass button counts as pressed. A tap released
-inside the window is dropped. Both sides read the same input stream, so this
-stays deterministic.
+**A press inside the window is queued.** Every entry fires on a rising edge, so
+without a queue a press made during the settle would never fire, even if held.
+The gate records the latest wrister, slap, quick pass, or nudge press seen while
+settling, and the first unlocked input dispatches it as if pressed on that
+input. From there the button's real state takes over: still held, the wind-up
+proceeds normally; already released, a wrister or slapper releases at once at
+its minimum charge (a queued tap is a quick touch, not a full shot). A later
+press replaces an earlier one. Both sides read the same input stream, so the
+queue is deterministic — but unlike the deadline it is state the replay
+evolves, so it joins the shot-state fields `LocalController` saves and restores
+around a reconcile.
 
 ### The tell
 
@@ -161,6 +173,17 @@ ceiling), and its return to the seat is timed to land on the deadline. The blade
 visibly comes home at the moment the receiver can act — a diegetic tell, like
 the loft seat, that a defender can read. Observers fire the cushion from their
 own estimate of the arrival, as they do today, so theirs is approximate.
+
+The pickup sound (`Sound.PUCK_PICKUP`, played at a fixed 0 dB from
+`GameManager._on_local_pickup_sound` and `_on_remote_carrier_sound`) takes the
+same arrival speed — receiver-relative, the number the cushion reads — as
+situational gain. `SoundManager.reception_volume_db(speed)` mirrors
+`shot_volume_db`: amplitude linear in speed, 0 dB at the 22 m/s ceiling, with a
+floor so a walking-pace pickup is still audible. A hard catch plays at today's
+level and a soft one plays quieter; if the cue then sits too low in the mix
+overall, its `_MIX_DB` level comes up, never the call site. The speed is
+recorded on the host's `puck_pickup` replay event, and `ReplayEventReplayer`
+plays it back through the same helper.
 
 ### Bots obey (in Phase 1)
 
@@ -182,8 +205,11 @@ controller's deadline directly; nothing is replicated for them.
   shorter than a poorly angled one at the same speed; `reception_ceiling_mult`
   scales the load.
 - Controller: while settling, quick pass, wrister, slap, and nudge don't fire and
-  the blade holds; a held button fires on the first unlocked input; a pickup
-  into a held slap charge is unaffected.
+  the blade holds; a press inside the window fires on the first unlocked input
+  (held → normal wind-up, released → minimum-charge release); a later press
+  replaces an earlier one; a pickup into a held slap charge is unaffected.
+- Reconcile: a queued press survives a replay across the deadline.
+- `reception_volume_db`: 0 dB at the ceiling, monotonic, clamped to its floor.
 - Determinism: the same input stream against the same deadline gives the same
   actions on a host-side `RemoteController` and a `LocalController`.
 - Wire: `PICKED_UP.arg` round-trips through both the snapshot block and the
@@ -199,6 +225,8 @@ controller's deadline directly; nothing is replicated for them.
 - The same feed, received with the blade squared or skating with the pass:
   shorter or no settle.
 - Hold LMB through the settle: the wrister starts as the blade comes home.
+- Tap pass during the settle: the pass goes as the blade comes home.
+- A soft pickup sounds quieter than a hard catch.
 - One-timer a hard feed: no settle.
 - Online against a remote host: no shot fires that wasn't pressed, and none
   gets eaten.
@@ -253,11 +281,7 @@ Phase 1.
 
 ## Open questions
 
-- **Human quick pass.** It is a flat 14 m/s over the ice
-  (`GameRules.DEFAULT_QUICK_PASS_POWER_M_S`), so a receiver skating into it
-  settles. Leave it fixed, or scale it with distance like the bots?
-- **Dropped taps.** A pass tapped and released inside the window is lost. If
-  that feels like eaten input rather than a felt lock, buffer the last press
-  instead.
-- **An audio cue** (a heavier reception thud scaled by load) would make the lock
-  more obvious, beside the blade tell.
+- **Queued charged shots.** A wrister or slapper tapped and released during the
+  settle fires at minimum charge on unlock. If that reads as a misfire, a
+  released charged-shot press could cancel instead of firing (the quick pass
+  and nudge still queue).
