@@ -19,7 +19,7 @@ class_name GamepadAimRules
 ##     from motion and from camera zoom — and what makes the stick's bearing the
 ##     shot line's bearing, so the load's forehand/backhand read needs no
 ##     gamepad branch. Power rides the TRIGGER's analog travel (below), not the
-##     stick, so shooting needs no flick, drag timing, or travel gate.
+##     stick, so shooting needs no flick or drag timing.
 ##
 ## ONE THUMB, ONE JOB. A thumb cannot hold a bearing to a corner while metering a
 ## magnitude at the same time, so aim and power must never share the right stick:

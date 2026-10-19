@@ -198,7 +198,7 @@ const LOAD_READY_SHARE_SLACK: float = 0.05
 #
 # MOUSE_MAX_SPEED_M_S is the perfect-bot default: at 100 m/s the cursor reaches
 # any normal target inside one tick. The per-agent cap (_mouse_max_speed_m_s) is
-# the bot's real Hands blade speed, set in apply_capabilities.
+# the bot's real blade speed, set in apply_capabilities.
 const MOUSE_MAX_SPEED_M_S: float = 100.0
 var _mouse_max_speed_m_s: float = MOUSE_MAX_SPEED_M_S
 # ── Per-release execution error ──────────────────────────────────────────────
@@ -818,9 +818,9 @@ func apply_profile(profile: BotSkillProfile) -> void:
 
 
 # Set the aim-cursor slew (and the arc rate + pre-aim timeout derived from it) to
-# `slew` m/s — the bot's real Hands blade speed, so the cursor tracks the blade.
+# `slew` m/s — the bot's real blade speed, so the cursor tracks the blade.
 # `orbit_radius_m` is the blade's real orbit radius (stick + blade span): the
-# angular swing the linear Hands cap physically allows is slew / THAT radius, not
+# angular swing the linear blade-speed cap physically allows is slew / THAT radius, not
 # slew / the virtual cursor ring. Defaults to the ring radius; every live caller
 # passes the real span.
 func _apply_aim_slew(slew: float,
@@ -1277,6 +1277,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	ctx.self_forehand_perp_sign = _handedness_perp_sign
 	_holds.configure_from(ctx)
 	ctx.self_stagger_timer = self_state.stagger_timer if self_state != null else 0.0
+	ctx.self_settle_s = self_state.settle_left_s if self_state != null else 0.0
 	ctx.pursuit_standoff_m = _pursuit_standoff_m
 	ctx.pass_speed_scale = _pass_speed_scale
 	ctx.check_aggression = _check_aggression

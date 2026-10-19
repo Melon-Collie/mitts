@@ -100,6 +100,9 @@ var blade_contact_world: Vector3 = Vector3.ZERO  # host-only, not serialized
 # resolution. The wire `top_hand_position` is upper-body-local, so it can't be
 # used for host-side world-space geometry.
 var top_hand_world: Vector3 = Vector3.ZERO  # host-only, not serialized
+# Seconds of the catch's settle lock left (SkaterSettleGate), for the host's
+# bots. host-only, not serialized — a client's own lock rides the pickup grant.
+var settle_left_s: float = 0.0
 
 func to_array() -> Array:
 	return [
@@ -186,6 +189,7 @@ func copy_from(s: SkaterNetworkState) -> void:
 	host_timestamp = s.host_timestamp
 	blade_contact_world = s.blade_contact_world
 	top_hand_world = s.top_hand_world
+	settle_left_s = s.settle_left_s
 
 static func from_array(data: Array) -> SkaterNetworkState:
 	var state := SkaterNetworkState.new()

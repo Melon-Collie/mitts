@@ -34,6 +34,9 @@ const SHAFT_BUTT_EXTEND_M: float = 0.13
 const _KNOB_PROUD_M: float = 0.01
 # Shaft subdivisions the bend shader needs along the length.
 const FLEX_SEGMENTS: int = 12
+# How far off the straight shaft a hand still counts as holding it, for the bow
+# the drawn glove rides: the glove's own radius plus the bow's own reach.
+const _GRIP_HOLD_RADIUS_M: float = 0.2
 
 # ── Flex ─────────────────────────────────────────────────────────────────────
 const _SLAP_SPIKE_SECONDS: float = 0.1  # contact load time before the whip
@@ -52,6 +55,13 @@ var _flex_axis: float = 0.0
 var _prev_state: int = 0
 var _flex_sent: float = 0.0       # last uniform written (dirty guard)
 var _shaft_len_sent: float = 0.0  # last shaft_len_m uniform written (dirty guard)
+var _tip_t_sent: float = -1.0     # last tip_t / hand_t uniforms written (dirty guards)
+var _hand_t_sent: float = -1.0
+# The live shaft's length and bow anchors (0..1 from the blade end), as
+# update_mesh last posed it — what bow_offset reads.
+var _shaft_len: float = 0.0
+var _tip_t: float = 0.0
+var _hand_t: float = 1.0
 
 
 func setup(skater: Skater) -> void:
@@ -72,6 +82,8 @@ func setup(skater: Skater) -> void:
 func notify_material_rebuilt() -> void:
 	_shaft_len_sent = 0.0
 	_flex_sent = 0.0
+	_tip_t_sent = -1.0
+	_hand_t_sent = -1.0
 
 
 # ── Shaft ────────────────────────────────────────────────────────────────────
@@ -113,12 +125,52 @@ func update_mesh(blade_mesh: MeshInstance3D) -> void:
 	# The handle-wrap paint (grip/candy-cane) measures real metres down the
 	# shaft, so the shader needs the live rendered length — node scale never
 	# reaches object space. Dirty-guarded like flex_m.
-	if not is_equal_approx(shaft_len, _shaft_len_sent):
-		_shaft_len_sent = shaft_len
-		var shaft_mat: ShaderMaterial = stick_mesh.material_override as ShaderMaterial
-		if shaft_mat != null:
+	# The bow is anchored at the hosel tip and the top hand, both as fractions
+	# of the box from its blade end.
+	var tip_t: float = _SHAFT_TIP_OVERRUN_M / shaft_len
+	var hand_t: float = 1.0 - butt_extend / shaft_len
+	_shaft_len = shaft_len
+	_tip_t = tip_t
+	_hand_t = hand_t
+	var shaft_mat: ShaderMaterial = stick_mesh.material_override as ShaderMaterial
+	if shaft_mat != null:
+		if not is_equal_approx(shaft_len, _shaft_len_sent):
+			_shaft_len_sent = shaft_len
 			shaft_mat.set_shader_parameter(&"shaft_len_m", _shaft_len_sent)
+		if not is_equal_approx(tip_t, _tip_t_sent):
+			_tip_t_sent = tip_t
+			shaft_mat.set_shader_parameter(&"tip_t", tip_t)
+		if not is_equal_approx(hand_t, _hand_t_sent):
+			_hand_t_sent = hand_t
+			shaft_mat.set_shader_parameter(&"hand_t", hand_t)
 	_update_knob(stick_origin, to_tip, butt_extend)
+
+
+# The bow's shape between its anchors, 0 at both (u = 0 hosel tip, u = 1 top
+# hand) with zero slope there and 1 at the middle — Shaders/stick_flex.gdshader
+# draws the same curve.
+static func bow_profile(u: float) -> float:
+	var c: float = clampf(u, 0.0, 1.0)
+	var w: float = c * (1.0 - c)
+	return 16.0 * w * w
+
+
+# How far the drawn shaft sits off its straight line at the point of it nearest
+# `point` (upper-body space), as an upper-body-space offset. Zero for a point
+# further than a grip from the shaft, so a hand let go of the stick (the
+# celebration's fist) never rides the bow.
+func bow_offset(point: Vector3) -> Vector3:
+	if is_zero_approx(_flex_sent) or _shaft_len <= 0.0:
+		return Vector3.ZERO
+	var xf: Transform3D = _skater.stick_mesh.transform
+	var along: Vector3 = xf.basis.z.normalized()
+	var rel: Vector3 = point - xf.origin
+	var z: float = rel.dot(along)
+	if (rel - along * z).length_squared() > _GRIP_HOLD_RADIUS_M * _GRIP_HOLD_RADIUS_M:
+		return Vector3.ZERO
+	var t: float = z / _shaft_len + 0.5
+	var u: float = (t - _tip_t) / maxf(_hand_t - _tip_t, 0.001)
+	return xf.basis.x.normalized() * (_flex_sent * bow_profile(u))
 
 
 # Which way "toward the target" points on the shaft's ONE available bow axis,
@@ -212,7 +264,9 @@ func _update_knob(stick_origin: Vector3, to_shaft_end: Vector3,
 #
 # A one-timer's retention hold IS the contact beat — same crossing, but it HOLDS
 # at the apex until the shot actually leaves, straining against the caught puck.
-func update_flex(delta: float) -> void:
+# Returns whether the drawn bow moved this frame, so the knob and the bottom
+# glove can be re-posed onto it.
+func update_flex(delta: float) -> bool:
 	var state: int = _skater.current_shot_state
 	var axis: float = _flex_axis
 	if state != _prev_state:
@@ -283,11 +337,12 @@ func update_flex(delta: float) -> void:
 		display = _flex
 
 	if is_equal_approx(display, _flex_sent):
-		return
+		return false
 	_flex_sent = display
 	var mat: ShaderMaterial = _skater.stick_mesh.material_override as ShaderMaterial
 	if mat != null:
 		mat.set_shader_parameter(&"flex_m", display)
+	return true
 
 
 # Begins the contact crossing FROM the live bow rather than from straight, so a

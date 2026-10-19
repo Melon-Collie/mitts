@@ -352,3 +352,9 @@ here whenever you bump, in the same format.
 #      stock haircut, so mixed builds must be refused. The replay format is
 #      unchanged: the header already carries the whole code, and an older file
 #      decodes to the stock look.
+# v77: stick settling — notify_puck_picked_up gains settle_until_ms (the
+#      catch's settle-lock deadline, host time in ms, 0 = none), and the
+#      snapshot event block's PICKED_UP record carries it in its previously
+#      unused arg. A v76 peer drops the deadline and never settles, so its
+#      inputs would act where the host's replay of them is locked; mixed
+#      builds must be refused. Replay format unchanged.

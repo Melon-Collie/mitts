@@ -508,19 +508,23 @@ landmark rather than a tuning number.
 
 ## SkaterController
 
-`SkaterController` delegates to five `RefCounted` collaborators —
+`SkaterController` delegates to seven `RefCounted` collaborators —
 `SkaterAimingBehavior`, `SkaterIKCoordinator`, `SkaterPoseCoordinator`,
-`SkaterShotPoseCoordinator`, `SkaterSkatingCoordinator`. `GameManager` calls
+`SkaterShotPoseCoordinator`, `SkaterSkatingCoordinator`, `SkaterStickCheck`,
+and `SkaterSettleGate` (the settle lock a hard catch leaves; its deadline
+contract is in `Scripts/networking/CLAUDE.md`). `GameManager` calls
 methods on the controller and never pokes collaborator internals.
 
-**Attributes v4, one line each.** Skating splits into three height-routed
-sub-levers, so a small player can be explosive and shifty without owning the top
-gear and a big weak skater feels bad in the TURN rather than glued to the ice.
-Hands has no lever by constitution — "your hands are you" — so the blade caps
-derive from lever geometry rather than a fidelity table: the long lever sweeps
-but cannot cut back, the short lever is the scalpel. Shot means "what a charge
-buys you, and how fast you can charge it", never the uncharged snap. Full detail
-lives in `Scripts/domain/state/CLAUDE.md`.
+**Attributes, one line each.** Skating splits three ways: top speed rides the
+skate profile alone (size never buys it), first-step burst and agility ride
+height and weight, so a small player is explosive and shifty without owning the
+top gear, and a heavy build feels it in the TURN rather than being glued to the
+ice. No build
+tracks the cursor more precisely ("your hands are you"). The blade caps derive
+from lever geometry instead: the long lever sweeps but cannot cut back, the
+short lever is the scalpel. Shot power means "what a charge buys you, and how
+fast you can charge it", never the uncharged snap. Full detail lives in
+`Scripts/domain/state/CLAUDE.md`.
 
 `apply_attributes` is **idempotent**: it captures baseline values on first call
 and recomputes from those baselines every time, so repeated applies (the
@@ -564,7 +568,10 @@ the measured turn — all derived from replicated state). Two quantities decide
 it: whether the skater is **driving** (the stick's component along travel,
 which is what the physics thrusts by; against travel it is a skid) and how much
 of the edge's grip the travel's curve is **using** (centripetal acceleration
-over `turn_accel · lateral_grip`). Driving straight is a stride, driving
+over the league's `turn_accel`, not the build's own grip, so the same curve at
+the same speed reads the same on every build). How hard the legs stride is the
+speed over the BODY's full pace (`gait_full_speed` × leg length), never the
+build's top speed: the picture comes from height and weight, not from stats. Driving straight is a stride, driving
 through a turn a crossover, coasting straight a glide, coasting round a turn a
 carve. A stick held straight across travel turns the skater with no thrust, so
 it is carved, never crossed over. Each state owns its legs outright while it

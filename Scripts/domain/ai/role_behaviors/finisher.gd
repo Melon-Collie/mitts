@@ -28,9 +28,9 @@ const RUSH_SPEED_LO_M_S: float = 2.5
 const RUSH_SPEED_HI_M_S: float = 6.5
 
 # Cap on the feed flight time the goalie-motion prediction uses, so a far
-# cross-ice candidate doesn't model an unrealistically settled goalie. Same
-# horizon as AICarrierPassSearch.PASS_LEAD_MAX_S.
-const FEED_FLIGHT_MAX_S: float = 0.6
+# cross-ice candidate doesn't model an unrealistically settled goalie. The pass
+# lead's own horizon (test_bot_mirrors.gd).
+const FEED_FLIGHT_MAX_S: float = 1.0
 
 # TIP/SCREEN STATION depth off the goal mouth along the carrier→net line: just
 # outside the crease arc (GameRules.CREASE_ARC_RADIUS) plus a body, where the

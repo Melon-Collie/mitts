@@ -195,6 +195,11 @@ const NO_DISTANCE_CUTOFF: float = 0.0
 const _SHOT_VOLUME_FLOOR_DB: float = -18.0
 # The launch speed a shot cue is loudest at: the league's hardest shot.
 const _SHOT_FULL_POWER_M_S: float = GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S
+# Where a walking-pace pickup bottoms out — a touch, still heard.
+const _RECEPTION_VOLUME_FLOOR_DB: float = -15.0
+# The arrival speed (receiver frame) a catch is loudest at: the any-angle catch
+# ceiling, past which a poorly angled blade deflects instead.
+const RECEPTION_FULL_SPEED_M_S: float = 22.0
 
 var _streams: Dictionary = {}
 var _takes: Dictionary = {}       # Sound -> Array[AudioStream], multi-take cues only
@@ -361,6 +366,13 @@ static func board_contact_sound(contact: Vector3) -> Sound:
 # it (a one-timer's bonus) holds at full.
 static func shot_volume_db(power: float) -> float:
 	return clampf(linear_to_db(maxf(power, 0.0) / _SHOT_FULL_POWER_M_S), _SHOT_VOLUME_FLOOR_DB, 0.0)
+
+
+# A catch's amplitude scales with the puck's arrival speed in the receiver's
+# frame, so a hard feed is heard landing and a soft pickup barely is.
+static func reception_volume_db(arrival_speed: float) -> float:
+	return clampf(linear_to_db(maxf(arrival_speed, 0.0) / RECEPTION_FULL_SPEED_M_S),
+			_RECEPTION_VOLUME_FLOOR_DB, 0.0)
 
 
 # Connects hover and click sounds to a button. Call after creating each Button node.

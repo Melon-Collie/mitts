@@ -66,8 +66,10 @@ func setup(skater: Skater, sm: SkaterStateMachine, aiming: SkaterAimingBehavior,
 
 # ── Per-Tick Application ──────────────────────────────────────────────────────
 func apply_velocity_lean(delta: float) -> void:
+	var leg_scale: float = _skating.leg_scale if _skating != null else 1.0
 	var target: float = compute_velocity_lean_target(
-			_skater.velocity, _skater.global_transform.basis, _controller.max_speed,
+			_skater.velocity, _skater.global_transform.basis,
+			_controller.gait_full_speed * leg_scale,
 			_controller.velocity_lean_forward_max_deg,
 			_controller.velocity_lean_back_max_deg)
 	velocity_lean_x = lerpf(velocity_lean_x, target, _controller.velocity_lean_speed * delta)
@@ -80,13 +82,13 @@ func apply_velocity_lean(delta: float) -> void:
 # through a carve, so a roll toward body-frame lateral velocity would lean OUT
 # of the turn. The turn's bank is the balance lean's (SkaterSpineRig).
 static func compute_velocity_lean_target(
-		world_velocity: Vector3, body_basis: Basis, max_speed: float,
+		world_velocity: Vector3, body_basis: Basis, full_speed: float,
 		fwd_lean_max_deg: float, back_lean_max_deg: float) -> float:
-	if max_speed <= 0.0:
+	if full_speed <= 0.0:
 		return 0.0
 	var local_vel: Vector3 = body_basis.inverse() * world_velocity
 	# −Z is the body's forward axis, so negate for a "how forward" fraction.
-	var fwd_t: float = clampf(-local_vel.z / max_speed, -1.0, 1.0)
+	var fwd_t: float = clampf(-local_vel.z / full_speed, -1.0, 1.0)
 	var pitch_max_deg: float = fwd_lean_max_deg if fwd_t >= 0.0 else back_lean_max_deg
 	return -fwd_t * deg_to_rad(pitch_max_deg)
 

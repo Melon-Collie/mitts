@@ -347,11 +347,11 @@ void NativeSkaterGait::sense(double delta, const Vector3 &vel, const Vector2 &in
 		const Basis &basis, bool brake, bool stance_active, bool planted, double hold) {
 	const Config &c = cfg;
 	ground_speed = Vector2(vel.x, vel.z).length();
-	speed_t = clampd(ground_speed / maxd(c.max_speed, 0.001), 0.0, 1.0);
+	speed_t = clampd(ground_speed / maxd(c.gait_full_speed * leg_scale, 0.001), 0.0, 1.0);
 	sample_velocity(delta, vel);
 	effort = lerpd(effort, fd_effort_target, c.stride_effort_speed * delta);
 	turn_rate = lerpd(turn_rate, fd_turn, c.carve_engage_speed * delta);
-	turning = clampd(ground_speed * turn_rate / maxd(c.turn_accel * c.lateral_grip, 0.001), -1.0, 1.0);
+	turning = clampd(ground_speed * turn_rate / maxd(c.turn_accel, 0.001), -1.0, 1.0);
 	loaded = lerpd(loaded, (stance_active && !planted) ? 1.0 : 0.0,
 			c.locomotion_blend_speed * delta);
 

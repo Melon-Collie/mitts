@@ -42,10 +42,10 @@ var intensity: float = 0.0
 var effort: float = 0.0
 # Signed turn rate of the travel direction, rad/s, smoothed.
 var turn_rate: float = 0.0
-# Share of the edge's lateral grip the travel's curve is using, signed by the
-# way it curves (CarveRules' sign), −1..1: the centripetal acceleration
-# speed·turn_rate over the most the movement model's edges give
-# (turn_accel · lateral_grip). What LocomotionRules calls turning.
+# How hard the travel is curving, signed by the way it curves (CarveRules'
+# sign), −1..1: the centripetal acceleration speed·turn_rate over the league's
+# edge authority (turn_accel). Not the build's own grip, so the same curve reads
+# the same on every build. What LocomotionRules calls turning.
 var turning: float = 0.0
 # The loaded stance's engagement 0..1, eased from the controller's stance_active.
 var loaded: float = 0.0
@@ -170,12 +170,12 @@ func sense(delta: float, planted: bool, hold: float) -> void:
 	var c: SkaterController = _controller
 	var vel: Vector3 = _skater.velocity
 	_ground_speed = Vector2(vel.x, vel.z).length()
-	_speed_t = clampf(_ground_speed / maxf(c.max_speed, 0.001), 0.0, 1.0)
+	_speed_t = clampf(_ground_speed / maxf(c.gait_full_speed * leg_scale, 0.001), 0.0, 1.0)
 	_sample_velocity(delta, vel)
 	effort = lerpf(effort, _fd_effort_target, c.stride_effort_speed * delta)
 	turn_rate = lerpf(turn_rate, _fd_turn, c.carve_engage_speed * delta)
 	turning = clampf(_ground_speed * turn_rate
-			/ maxf(c.turn_accel * c.lateral_grip, 0.001), -1.0, 1.0)
+			/ maxf(c.turn_accel, 0.001), -1.0, 1.0)
 	loaded = lerpf(loaded, 1.0 if (c.stance_active and not planted) else 0.0,
 			c.locomotion_blend_speed * delta)
 

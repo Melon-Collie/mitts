@@ -10,9 +10,8 @@ extends RefCounted
 # rise by (m_height − 1) × their ice height (Skater.set_skeleton_root_offset)
 # and every Y offset below them — leg pivots, leg mesh centers, and the
 # upper-body part positions — scales by m_height, so any point at world Y
-# maps to Y × m_height and the skate contact at y = 0 stays planted. That whole-
-# skeleton scale is what realizes the documented 5'7"–6'5" Size heights: raising
-# the torso alone yields about half the height spread on a long-torso/short-leg
+# maps to Y × m_height and the skate contact at y = 0 stays planted. Raising the
+# torso alone would yield about half the height spread on a long-torso/short-leg
 # body. The physics origin, spawn height, and hitbox
 # never move. Leg PIVOTS get their positions written here while the gait
 # (Skater.set_leg_swing) writes their rotations — different properties, no
@@ -22,8 +21,8 @@ extends RefCounted
 # own origin, so a tall build's torso grows upward while its shoulder balls and
 # helmet stay at baseline height (sunken shoulders, low head):
 # shoulder balls and helmet ride m_height on Y, and the shoulder balls ride
-# the torso-bulk multiplier on X so a thick torso doesn't swallow them. The
-# logical arm anchors mirror the same ball positions gameplay-side —
+# girth on X so a thick torso doesn't swallow them. The logical arm anchors
+# mirror the same ball positions gameplay-side —
 # SkaterController.apply_attributes calls Skater.set_shoulder_anchor with
 # the identical multipliers, keeping the drawn arm and the IK rooted at the
 # same point (keep the two in sync).
@@ -40,15 +39,19 @@ extends RefCounted
 # so the local-axis mapping doesn't match the simple rule. The feet are
 # small and mostly hidden under the skates, so dropping them from the
 # rig doesn't read.
-# Every lateral group reads the one grounded girth multiplier (PlayerAttributes
-# .girth_mult — sqrt(mass/height)); body parts additionally take the height
-# multiplier on Y. The helmet/head unit is the exception: it scales uniformly
-# by its own mild table and never stretches with height — real adult heads are
-# nearly constant across statures, and the constancy is what sells a tall
-# build as big rather than zoomed.
+# Every lateral group reads the one girth multiplier (PlayerAttributes
+# .girth_mult); body parts additionally take the height multiplier on Y. The
+# helmet/head unit is the exception: it scales uniformly by its own mild table
+# and never stretches with height — real adult heads are nearly constant across
+# statures, and the constancy is what sells a tall build as big rather than
+# zoomed.
 # The upper-body parts are bones of the upper rig, not nodes.
 const _SHOULDER_BONES: Array[int] = [
 	SkaterMeshBuilder.UpperBone.SHOULDER_L, SkaterMeshBuilder.UpperBone.SHOULDER_R,
+]
+const _ARM_BONES: Array[int] = [
+	SkaterMeshBuilder.UpperBone.TOP_UPPER_ARM, SkaterMeshBuilder.UpperBone.BOTTOM_UPPER_ARM,
+	SkaterMeshBuilder.UpperBone.TOP_FOREARM, SkaterMeshBuilder.UpperBone.BOTTOM_FOREARM,
 ]
 # The leg parts are bones of the leg rig, not nodes, so they are addressed by
 # LegBone index (see SkaterMeshBuilder).
@@ -91,32 +94,26 @@ func apply(attrs: PlayerAttributes) -> void:
 		return
 	if not _captured:
 		_capture_baselines()
-	var m_height:   float = attrs.height_mult()
-	var m_torso:    float = attrs.torso_bulk_mult()
-	var m_shoulder: float = attrs.shoulder_bulk_mult()
-	var m_head:     float = attrs.head_bulk_mult()
-	var m_thigh:    float = attrs.thigh_mult()
-	var m_calf:     float = attrs.calf_mult()
-	_apply_upper_scale(SkaterMeshBuilder.UpperBone.TORSO, m_torso, m_height, m_torso)
+	var m_height: float = attrs.height_mult()
+	var m_girth:  float = attrs.girth_mult()
+	var m_head:   float = attrs.head_bulk_mult()
+	_apply_upper_scale(SkaterMeshBuilder.UpperBone.TORSO, m_girth, m_height, m_girth)
 	for bone: int in _SHOULDER_BONES:
-		_apply_upper_scale(bone, m_shoulder, m_height, m_shoulder)
+		_apply_upper_scale(bone, m_girth, m_height, m_girth)
 	_apply_upper_scale(SkaterMeshBuilder.UpperBone.HELMET, m_head, m_head, m_head)
-	# The seat is the torso's own bulk carried below the waist — a heavier build
-	# fills the pants the same way it fills the jersey.
-	_apply_upper_scale(SkaterMeshBuilder.UpperBone.PELVIS, m_torso, m_height, m_torso)
+	_apply_upper_scale(SkaterMeshBuilder.UpperBone.PELVIS, m_girth, m_height, m_girth)
 	for bone: int in _THIGH_BONES:
-		_apply_leg_scale(bone, m_thigh, m_height, m_thigh)
+		_apply_leg_scale(bone, m_girth, m_height, m_girth)
 	for bone: int in _CALF_BONES:
-		_apply_leg_scale(bone, m_calf, m_height, m_calf)
+		_apply_leg_scale(bone, m_girth, m_height, m_girth)
 	# Positions: keep the upper-body parts assembled across builds. Y rides
 	# height for everything (the torso cylinder's center rises with its
 	# stretch, the shoulder balls sit at its top, the helmet above them).
-	# Shoulder-ball X rides TORSO bulk — the deltoid sits on the torso
-	# surface, so it's the torso's width that pushes it out, while
-	# the ball's own size keeps reading Physical via _apply_scale above.
+	# Shoulder-ball X rides girth — the deltoid sits on the torso surface, so
+	# the torso's width pushes it out.
 	_apply_upper_position(SkaterMeshBuilder.UpperBone.TORSO, 1.0, m_height)
 	for bone: int in _SHOULDER_BONES:
-		_apply_upper_position(bone, m_torso, m_height)
+		_apply_upper_position(bone, m_girth, m_height)
 	_apply_upper_position(SkaterMeshBuilder.UpperBone.HELMET, 1.0, m_height)
 	# Skeleton height: raise the body roots and scale every leg-chain Y offset
 	# so the whole rig scales about the ice plane (see the class doc block).
@@ -132,7 +129,7 @@ func apply(attrs: PlayerAttributes) -> void:
 		_apply_leg_position(bone, m_height)
 	for bone: int in _FOOT_BONES:
 		_apply_leg_position(bone, m_height)
-	_apply_arm_thickness(attrs.forearm_bulk_mult(), attrs.upper_arm_bulk_mult())
+	_apply_arm_thickness(m_girth)
 
 
 func _capture_baselines() -> void:
@@ -174,34 +171,21 @@ func _apply_leg_position(bone: int, y_mult: float) -> void:
 	_skater.set_leg_bone_position(bone, Vector3(base.x, base.y * y_mult, base.z))
 
 
-# Arm bulk is split at the elbow so two stats read off one limb: Hands drives the
-# forearms (+ the hand spheres and glove cuffs on that side), Shot drives the
-# upper arms (+ the elbow joints on that side). A thick-forearm / normal-bicep
-# reads as "hands"; the reverse reads as "shot".
-func _apply_arm_thickness(forearm_mult: float, upper_mult: float) -> void:
-	var fore_radius:  float = _base_arm_radius * forearm_mult
-	var upper_radius: float = _base_arm_radius * upper_mult
-	_skater.set_arm_bone_radius(SkaterMeshBuilder.UpperBone.TOP_UPPER_ARM, upper_radius)
-	_skater.set_arm_bone_radius(SkaterMeshBuilder.UpperBone.BOTTOM_UPPER_ARM, upper_radius)
-	_skater.set_arm_bone_radius(SkaterMeshBuilder.UpperBone.TOP_FOREARM, fore_radius)
-	_skater.set_arm_bone_radius(SkaterMeshBuilder.UpperBone.BOTTOM_FOREARM, fore_radius)
-	# The elbow ball is Shot's joint, but it must stay proud of BOTH adjoining
-	# cylinders — a thick-forearm / thin-bicep build (high Hands, low Shot)
-	# otherwise leaves the forearm cylinder's flat end cap poking out around a
-	# smaller sphere. maxf keeps the joint reading as a bulge on every combo.
-	var elbow_mult: float = maxf(upper_mult, forearm_mult)
-	var elbow_radius: float = _base_elbow_sphere_radius * elbow_mult
-	var hand_radius: float = _base_hand_sphere_radius * forearm_mult
+func _apply_arm_thickness(girth: float) -> void:
+	var arm_radius: float = _base_arm_radius * girth
+	for bone: int in _ARM_BONES:
+		_skater.set_arm_bone_radius(bone, arm_radius)
+	var elbow_radius: float = _base_elbow_sphere_radius * girth
+	var hand_radius: float = _base_hand_sphere_radius * girth
 	_skater.set_arm_ball_radius(SkaterMeshBuilder.UpperBone.TOP_ELBOW, elbow_radius)
 	_skater.set_arm_ball_radius(SkaterMeshBuilder.UpperBone.BOTTOM_ELBOW, elbow_radius)
 	_skater.set_arm_ball_radius(SkaterMeshBuilder.UpperBone.TOP_HAND, hand_radius)
 	_skater.set_arm_ball_radius(SkaterMeshBuilder.UpperBone.BOTTOM_HAND, hand_radius)
 	# Glove cuffs ride the forearm coaxially, so their radius must scale with it:
-	# a fixed cuff radius meets the scaled forearm radius around Hands 4, and
 	# coaxial cylinders of identical radius z-fight at the wrist.
 	# Stamp the mult on the skater so the uniform pass sizes the cuff the same
 	# way whichever of the two runs last.
-	_skater.forearm_visual_mult = forearm_mult
-	var cuff_radius: float = _skater.arm_mesh_thickness * 0.6 * forearm_mult
+	_skater.forearm_visual_mult = girth
+	var cuff_radius: float = _skater.arm_mesh_thickness * 0.6 * girth
 	_skater.set_arm_cuff_radius(SkaterMeshBuilder.UpperBone.TOP_CUFF, cuff_radius)
 	_skater.set_arm_cuff_radius(SkaterMeshBuilder.UpperBone.BOTTOM_CUFF, cuff_radius)
