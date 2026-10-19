@@ -60,7 +60,7 @@ signal world_state_received(data: PackedByteArray)
 signal slot_assigned(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color)
 signal remote_skater_spawn_requested(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String, jersey_number: int, attributes: PlayerAttributes)
 signal existing_players_synced(player_data: Array)
-signal local_puck_pickup_confirmed
+signal local_puck_pickup_confirmed(settle_until_ms: int)  # settle lock deadline, 0 = none
 signal local_puck_stolen(forced_lift_s: float)
 signal carrier_puck_dropped
 signal remote_carrier_changed(new_carrier_peer_id: int)
@@ -1290,7 +1290,7 @@ func take_session_end_reason() -> String:
 func get_peer_attributes(peer_id: int) -> PlayerAttributes:
 	var attrs: PlayerAttributes = _peer_attributes.get(peer_id, null)
 	if attrs == null:
-		return PlayerAttributes.all_average()
+		return PlayerAttributes.neutral()
 	return attrs
 
 # A peer's replicated Shot Power Sensitivity (host-side). Defaults to 1.0 for a
@@ -2007,23 +2007,23 @@ func sync_existing_players(player_data: Array) -> void:
 		return
 	existing_players_synced.emit(player_data)
 
-func send_puck_picked_up(peer_id: int) -> void:
+func send_puck_picked_up(peer_id: int, settle_until_ms: int = 0) -> void:
 	# AI bots have no ENet connection — rpc_id would fail. Bots are driven
 	# directly by the host's AIController, so no client-side notification
 	# is needed.
 	if not is_real_peer(peer_id):
 		return
 	var seq: int = _event_log.record(
-			SnapshotEventLog.EventType.PICKED_UP, peer_id, 0, local_time())
-	notify_puck_picked_up.rpc_id(peer_id, seq)
+			SnapshotEventLog.EventType.PICKED_UP, peer_id, settle_until_ms, local_time())
+	notify_puck_picked_up.rpc_id(peer_id, seq, settle_until_ms)
 
 @rpc("authority", "reliable")
-func notify_puck_picked_up(event_seq: int) -> void:
+func notify_puck_picked_up(event_seq: int, settle_until_ms: int) -> void:
 	NetworkSimManager.send(
-		func(seq: int) -> void:
+		func(seq: int, ms: int) -> void:
 			if _event_log.try_apply_reliable(seq):
-				local_puck_pickup_confirmed.emit(),
-		[event_seq], true)
+				local_puck_pickup_confirmed.emit(ms),
+		[event_seq, settle_until_ms], true)
 
 func send_ghost_state_to_all(peer_id: int, is_ghost: bool) -> void:
 	for remote_id: int in connected_peer_ids():
@@ -2109,7 +2109,7 @@ func _dispatch_snapshot_event(type: int, arg: int) -> void:
 		SnapshotEventLog.EventType.CARRIER_CHANGED:
 			remote_carrier_changed.emit(arg)
 		SnapshotEventLog.EventType.PICKED_UP:
-			local_puck_pickup_confirmed.emit()
+			local_puck_pickup_confirmed.emit(arg)
 		SnapshotEventLog.EventType.STOLEN:
 			local_puck_stolen.emit(arg / 1000.0)
 		SnapshotEventLog.EventType.DROPPED:
@@ -2257,7 +2257,7 @@ func send_spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey
 	# fan-out so connected clients see the bot.
 	if is_offline_mode:
 		return
-	var attrs: PlayerAttributes = attributes if attributes != null else PlayerAttributes.all_average()
+	var attrs: PlayerAttributes = attributes if attributes != null else PlayerAttributes.neutral()
 	spawn_remote_skater.rpc(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color, is_left_handed, player_name, jersey_number,
 			attrs.height, attrs.weight, attrs.profile, attrs.curve, attrs.flex, attrs.length,
 			get_peer_tape_code(peer_id), get_peer_skin_tone(peer_id),

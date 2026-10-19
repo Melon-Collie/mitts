@@ -8,11 +8,10 @@ using namespace godot;
 namespace mitts {
 
 Vector3 NativeBottomHandIK::solve(
-		const Vector3 &shoulder,
+		const Vector3 &rest,
 		const Vector2 &grip_target_xz,
 		double backhand_angle) const {
 	const Vector3 target(grip_target_xz.x, hand_y, grip_target_xz.y);
-	const Vector3 rest(shoulder.x, hand_y, shoulder.z);
 
 	const double t = Math::smoothstep(
 			release_angle_max, release_angle_max + release_angle_band, backhand_angle);
@@ -20,7 +19,7 @@ Vector3 NativeBottomHandIK::solve(
 }
 
 void NativeBottomHandIK::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("solve", "shoulder", "grip_target_xz", "backhand_angle"),
+	ClassDB::bind_method(D_METHOD("solve", "rest", "grip_target_xz", "backhand_angle"),
 			&NativeBottomHandIK::solve);
 
 	ClassDB::bind_method(D_METHOD("set_hand_y", "v"), &NativeBottomHandIK::set_hand_y);

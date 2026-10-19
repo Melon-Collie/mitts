@@ -67,7 +67,7 @@ anticipation concede **space** (positioning); check aggression concedes
 **threat** (physicality).
 
 Two things deliberately outside the table. **Aim slew is not a tier knob** — a
-bot slews its cursor at its real Hands blade speed (`AISkaterCaps.blade_speed`),
+bot slews its cursor at its build's lever-derived blade speed (`AISkaterCaps.blade_speed`),
 so execution difficulty rides the bot's attribute build. And
 **`dispatch_period_ticks` is the one knob that is not tick-independent**: every
 other one is denominated in seconds, so it is the one to rescale if the sim rate

@@ -66,7 +66,6 @@ class Callbacks:
 	# Blade / IK
 	var apply_blade_from_mouse: Callable          # (input: InputState, delta: float)
 	var apply_wrister_aim_blade: Callable         # (input: InputState, delta: float) — holds the blade at the shot origin while the torso coils
-	var wrister_swing_seed: Callable              # (input: InputState, origin_world: Vector3) -> Vector3 — bearing the stroke tracker seeds from; MUST match the vector _update_wrister_charge feeds (origin→cursor, the shot line)
 	var apply_slapper_blade_position: Callable    # ()
 	var apply_block_blade_position: Callable      # ()
 	var apply_wrister_follow_through: Callable    # ()
@@ -292,31 +291,19 @@ func _state_shot_blocking(skater: Skater, input: InputState, delta: float, _has_
 func _enter_wrister_aim(skater: Skater, input: InputState) -> void:
 	_state = State.WRISTER_AIM
 	shot_dir = Vector3.ZERO
-	# Seed both the cursor (screen-space) and the blade (skater-translation-
-	# subtracted world) baselines the charge tracker reads each tick — first
-	# tick after press produces a delta of zero against these, so a spurious
-	# wide-angle direction-variance reset can't fire on the first frame.
+	# Seed the cursor (screen-space) baseline the speed EMA differences against,
+	# so the first tick after press reads zero speed rather than a jump.
 	var intent_pos := Vector3(input.mouse_screen_pos.x, 0.0, input.mouse_screen_pos.y)
 	# Pin the aim ORIGIN at stroke start (the puck's on-blade contact point, where
 	# the shot will fire from) for the positional-aim wrister — see
 	# SkaterAimingBehavior.wrister_origin_world. Anchoring here, before the blade
 	# sweeps, is what keeps origin→cursor stable through the stroke.
 	var origin_world: Vector3 = skater.get_blade_contact_global()
-	# Skater position at the pin (XZ): what the frozen puck and the stroke's
-	# anchor both ride along from (ChargeTracking.swing_anchor, WristerLoad).
+	# Skater position at the pin (XZ): what the frozen puck rides along from
+	# (WristerLoad).
 	var origin_skater_pos: Vector3 = skater.global_position
 	origin_skater_pos.y = 0.0
-	# Stroke baseline: seed from the SAME vector the charge tick will feed —
-	# origin→cursor, the shot line itself — so the first step banks no spurious
-	# travel from a bearing jump. Computed off the origin captured just above, so
-	# the seed and the per-tick reads share one anchor exactly.
-	var swing_bearing: Vector3
-	if _cb.wrister_swing_seed.is_valid():
-		swing_bearing = _cb.wrister_swing_seed.call(input, origin_world)
-	else:
-		swing_bearing = input.mouse_world_pos - origin_world
-	swing_bearing.y = 0.0
-	_aiming.reset_wrister(intent_pos, swing_bearing, origin_world, origin_skater_pos)
+	_aiming.reset_wrister(intent_pos, origin_world, origin_skater_pos)
 
 
 func _cancel_slapper_internal() -> void:

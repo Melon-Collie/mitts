@@ -34,14 +34,14 @@ var blade_span: float = GameRules.DEFAULT_STICK_LENGTH_M + GameRules.DEFAULT_BLA
 # lane-interception model reaches into a pass/shot lane with.
 var stick_reach: float = GameRules.DEFAULT_STICK_LENGTH_M
 
-# Maximum distance from the body origin to a legal blade-contact point (arm ROM
-# displacement + stick + blade). The host's anti-cheat ceiling on client-
+# Maximum distance from the body origin to a legal blade-contact point
+# (TopHandIK.full_reach: the trunk at its deepest fold, the arm out ahead, the
+# stick down to the ice). The host's anti-cheat ceiling on client-
 # authoritative blade claims (pickup / poke / stick-lift), pinning the claimed
 # blade to within this reach of the server-authoritative body; and where a lane
 # read lets a defender hold the stick he is reaching with (AIPuckLane
-# ._blade_block). Default = league stick + blade + baseline backhand ROM reach.
-const LEAGUE_MAX_BLADE_REACH_M: float = GameRules.DEFAULT_STICK_LENGTH_M \
-		+ GameRules.DEFAULT_BLADE_LENGTH_M + 0.46
+# ._blade_block). Default = the neutral build's (test_top_hand_reaches_its_rim).
+const LEAGUE_MAX_BLADE_REACH_M: float = 2.43
 var max_blade_reach: float = LEAGUE_MAX_BLADE_REACH_M
 # The furthest the balance lean can carry the shoulders off the body, metres
 # (Skater.max_lean_shift). The claim reach bound adds it; the bots' own reach
@@ -53,8 +53,8 @@ var max_lean_shift: float = 0.0
 # time), and it caps the hardest pass (AIPuckLane.pass_launch_speed).
 var wrister_shot_speed: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 
-# How fast the blade traverses its ROM to chase the aim cursor (Hands, =
-# SkaterController.max_blade_speed). A bot slews its aim cursor at exactly this
+# How fast the blade traverses its ROM to chase the aim cursor (=
+# SkaterController.max_blade_speed, lever-scaled per build). A bot slews its aim cursor at exactly this
 # rate.
 const LEAGUE_BLADE_SPEED_M_S: float = 10.0
 var blade_speed: float = LEAGUE_BLADE_SPEED_M_S
@@ -81,6 +81,9 @@ var backhand_power_coefficient: float = 0.75
 # rules its body fires it with.
 var wrister_load: WristerLoad.Config = WristerLoad.Config.new()
 var facing_rules: FacingRules.Config = FacingRules.Config.new()
+# The pivot a carrier's hips make (SkaterController.carry_facing_rules): its
+# blade stops at the backhand angle, so its backhand edge is that angle.
+var carry_facing_rules: FacingRules.Config = FacingRules.Config.new()
 var wrister_unloaded_share: float = 0.6
 # Which side the forehand is on, for the facing rule's per-side reach edges.
 var is_left_handed: bool = true
@@ -114,7 +117,7 @@ var movement: SkaterMovementRules.MovementConfig = SkaterMovementRules.league_co
 # The pose coordinator's facing lerp rates, per second (Agility-scaled).
 var facing_drag_speed: float = 5.0
 var facing_drag_speed_braking: float = 10.0
-# The body's contact disc (Size-scaled): how close to the boards and the cage its
+# The body's contact disc (girth-scaled): how close to the boards and the cage its
 # centre can get.
 var body_radius: float = 0.35
 # A carrier on the boards squares up along them (BoardPlayRules

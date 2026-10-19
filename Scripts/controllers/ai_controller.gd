@@ -47,8 +47,8 @@ var _faceoff_input: InputState = InputState.new()
 # Bot draw swing. A center bot loads its blade on the dot through the countdown,
 # then in the final bot_draw_swing_time before the drop yanks the blade-aim target
 # back toward its own zone by bot_draw_pull_distance. The blade IK saturates at
-# max_blade_speed chasing that yank, so the crest is a real draw sweep (Hands sets
-# how hard) that the draw buffer retains into the live contest, rather than the
+# max_blade_speed chasing that yank, so the crest is a real draw sweep (the blade
+# lever sets how hard) that the draw buffer retains into the live contest, rather than the
 # zero-momentum coin-flip a blade merely held on the puck produces. Timed
 # to crest just before the drop (bots are movement-locked until then and can't
 # react on the drop like a human), so a well-timed human still out-draws a bot.

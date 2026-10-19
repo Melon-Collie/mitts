@@ -41,17 +41,44 @@ static func should_receive(
 		pickup_max_speed: float,
 		deflect_min_speed: float,
 		alignment_bonus: float) -> bool:
+	if (puck_velocity - receiver_velocity).length() <= pickup_max_speed:
+		return true
+	return reception_load(puck_velocity, receiver_velocity, blade_normal,
+			deflect_min_speed, alignment_bonus) < 1.0
+
+
+# Pure: the share of the blade's catch capacity this contact uses —
+# (relative speed / catch ceiling)², squared because the hands soak the puck's
+# energy (the model should_receive is calibrated on). Below 1 the blade holds
+# it; 1 is the ceiling. The ceiling is should_receive's: the any-angle floor
+# plus the alignment bonus for a blade squared to the relative incoming line.
+static func reception_load(
+		puck_velocity: Vector3,
+		receiver_velocity: Vector3,
+		blade_normal: Vector3,
+		deflect_min_speed: float,
+		alignment_bonus: float) -> float:
 	var relative_velocity: Vector3 = puck_velocity - receiver_velocity
 	var relative_speed: float = relative_velocity.length()
-	if relative_speed <= pickup_max_speed:
-		return true
-	# How head-on the approach is, in the receiver's frame: -relative_dir points
-	# from puck toward the blade; dot with the face normal = squareness. Negative
-	# (puck moving away from the face) clamps to 0, no bonus. relative_speed >
-	# pickup_max_speed here, so the normalize is safe.
-	var alignment: float = maxf(0.0, -relative_velocity.normalized().dot(blade_normal))
+	if relative_speed < 0.001:
+		return 0.0
+	# -relative_dir points from puck toward the blade; dot with the face normal =
+	# squareness. Negative (puck moving away from the face) clamps to 0, no bonus.
+	var alignment: float = maxf(0.0, -(relative_velocity / relative_speed).dot(blade_normal))
 	var threshold: float = deflect_min_speed + alignment_bonus * alignment
-	return relative_speed < threshold
+	if threshold <= 0.0:
+		return INF
+	var ratio: float = relative_speed / threshold
+	return ratio * ratio
+
+
+# Pure: seconds a catch at `catch_load` leaves the receiver settling — unable to act
+# with the puck. Zero up to `clean_load`, then linear in load (energy) to `max_s`
+# at the ceiling. Grounding and calibration: docs/stick-settling-plan.md.
+static func settle_time(catch_load: float, clean_load: float, max_s: float) -> float:
+	if catch_load <= clean_load or clean_load >= 1.0:
+		return 0.0
+	return max_s * clampf((catch_load - clean_load) / (1.0 - clean_load), 0.0, 1.0)
 
 
 # Pure: horizontal unit vector perpendicular to the stick shaft (top_hand →
@@ -67,15 +94,70 @@ static func blade_face_normal(
 		top_hand: Vector3,
 		reference_velocity: Vector3,
 		fallback_stick_dir: Vector3) -> Vector3:
-	var stick_horiz: Vector3 = blade_contact - top_hand
-	stick_horiz.y = 0.0
-	if stick_horiz.length() < 0.001:
-		stick_horiz = fallback_stick_dir
-	stick_horiz = stick_horiz.normalized()
+	var stick_horiz: Vector3 = blade_axis(blade_contact, top_hand, fallback_stick_dir)
 	var face_normal := Vector3(-stick_horiz.z, 0.0, stick_horiz.x)
 	if face_normal.dot(reference_velocity) > 0.0:
 		face_normal = -face_normal
 	return face_normal
+
+
+# Pure: the blade's heel→toe direction on the ice — the shaft's horizontal
+# run (top_hand → blade_contact), which the blade continues. The face normal
+# above is its perpendicular. `fallback_stick_dir` stands in when hand and
+# blade are coincident.
+static func blade_axis(blade_contact: Vector3, top_hand: Vector3,
+		fallback_stick_dir: Vector3) -> Vector3:
+	var stick_horiz: Vector3 = blade_contact - top_hand
+	stick_horiz.y = 0.0
+	if stick_horiz.length() < 0.001:
+		stick_horiz = fallback_stick_dir
+		stick_horiz.y = 0.0
+	return stick_horiz.normalized()
+
+
+# A path within this sine of the blade's own line comes in end-on, onto the
+# toe or heel, however near the middle its line passes (~11.5°).
+const END_ON_SIN: float = 0.2
+
+
+# Pure: where along the blade the puck's path meets it, as a share of the half
+# blade from its middle — 0 dead centre, 1 at (or past) the toe or heel. Read
+# off where the path's line crosses the blade's line in the receiver's frame,
+# never off the contact point: the pickup sweep registers at the rim of its
+# radius, which is twice the blade's length across.
+static func blade_contact_offset(puck_pos: Vector3, relative_velocity: Vector3,
+		blade_mid: Vector3, axis: Vector3, half_length: float) -> float:
+	var speed: float = Vector2(relative_velocity.x, relative_velocity.z).length()
+	if speed < 0.001 or half_length <= 0.0:
+		return 0.0
+	var dx: float = relative_velocity.x / speed
+	var dz: float = relative_velocity.z / speed
+	var sin_cross: float = axis.x * dz - axis.z * dx
+	if absf(sin_cross) < END_ON_SIN:
+		return 1.0
+	var wx: float = puck_pos.x - blade_mid.x
+	var wz: float = puck_pos.z - blade_mid.z
+	var along: float = (wx * dz - wz * dx) / sin_cross
+	return clampf(absf(along) / half_length, 0.0, 1.0)
+
+
+# Pure: the reception load past which a catch whose path meets the blade at
+# `contact_offset` bobbles instead of holding. Off centre the impact twists the
+# blade in the hands (the puck "slides off the toe"), so the edge holds less:
+# `bobble_load` at the middle, less `edge_share` of it at the toe or heel.
+static func bobble_load_at(contact_offset: float, bobble_load: float,
+		edge_share: float) -> float:
+	return bobble_load * (1.0 - edge_share * contact_offset * contact_offset)
+
+
+# Pure: the speed a bobbled catch leaves the blade at, in the receiver's frame:
+# what the hands didn't soak, from `exit_min` just over the bobble line to
+# `exit_max` at the catch ceiling — slow enough to die by his stick.
+static func bobble_exit_speed(catch_load: float, bobble_at: float,
+		exit_min: float, exit_max: float) -> float:
+	var over: float = 1.0 if bobble_at >= 1.0 \
+			else clampf((catch_load - bobble_at) / (1.0 - bobble_at), 0.0, 1.0)
+	return lerpf(exit_min, exit_max, over)
 
 
 # Pure on-ice/off-ice gate: a blade only interacts with pucks on its own

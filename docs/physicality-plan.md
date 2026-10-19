@@ -273,7 +273,7 @@ Read `Scripts/networking/CLAUDE.md` first; this follows the stick lift's shape.
 - `test_no_god_class_growth.gd`: `skater_controller.gd` is grandfathered, so the
   phase machine and its glue live in a collaborator, not the controller.
 
-### As built (v77)
+### As built (v78)
 
 - **The press is its own input bit.** The input record's flags were full, so it
   grew a byte (`InputState.hit_pressed`, latched between ticks by the gatherer
@@ -350,7 +350,7 @@ Grounded per `Scripts/domain/ai/CLAUDE.md`; the checklist is
 | Phase | Field | Protocol |
 |---|---|---|
 | A | none: onset and hold read inputs on the host; `pin_role` unchanged | none: no wire, RPC or range change (`build_info.gd`'s rules); mixed builds are refused by the Steam BuildID check |
-| B | `cross_check_phase` (u8: phase + elapsed ticks); the input's `hit_pressed` (a 25th byte); the claim RPC and the landed broadcast | v77; replay format 17 |
+| B | `cross_check_phase` (u8: phase + elapsed ticks); the input's `hit_pressed` (a 25th byte); the claim RPC and the landed broadcast | v78 (main took v77 for stick settling); replay format 17 |
 | C | none | — |
 
 ## Where the code goes

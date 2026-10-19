@@ -12,28 +12,20 @@ var is_left_handed: bool = true:
 		_position_hand_markers()
 
 # ── Blade Tuning ──────────────────────────────────────────────────────────────
-# Resting blade tilt, applied to the blade *mesh* only — never the Blade marker
-# the puck-contact math reads (set_blade_position / get_blade_contact_global).
-# Toe-lift (about X, the lie angle) is handedness-neutral and kept small; the
-# face-open loft (axial twist about the hosel line) is a tiny resting cup and
-# flips sign with handedness, since the forehand face is on opposite sides for
-# L/R shots.
-const _BLADE_TOE_LIFT_DEG: float = 4.0
+# Resting blade dressing, applied to the blade *mesh* only — never the Blade
+# marker the puck-contact math reads (set_blade_position /
+# get_blade_contact_global). The face-open loft (axial twist about the hosel
+# line) is a tiny resting cup and flips sign with handedness, since the forehand
+# face is on opposite sides for L/R shots.
 const _BLADE_FACE_OPEN_DEG: float = 4.0
-# Rigid shaft-follow pitch (see _apply_blade_tilt): the blade mesh pitches by
-# (blade_lie_deg − live shaft angle), so it stays rigidly attached to the shaft
-# through every pose — toe-up through the slapshot wind-up and stick lifts,
-# a slight toe-drag dig when the cursor pulls the blade in close. The clamps
-# bound the read: the dig floor keeps the toe from visibly stabbing through
-# the ice, the ceiling caps the wind-up apex just past shaft-aligned.
-const _BLADE_FOLLOW_PITCH_MIN_DEG: float = -18.0
-const _BLADE_FOLLOW_PITCH_MAX_DEG: float = 100.0
 # Blended in with the scroll-wheel loft level (a third per rung, full at HIGH):
-# the loft opens the face upward to "scoop" the puck, so elevation keys off the
-# axial twist far more than the X toe-lift. Eased via _blade_elevation_blend in
-# _physics_process so it doesn't snap.
+# the loft opens the face upward to "scoop" the puck. Eased via
+# _blade_elevation_blend in _physics_process so it doesn't snap.
 const _BLADE_ELEVATED_EXTRA_LOFT_DEG: float = 16.0   # axial twist (handedness-signed)
-const _BLADE_ELEVATED_EXTRA_LIFT_DEG: float = 4.0    # about X (small touch of toe-lift)
+# Raising the heel to stand a steep shaft's toe on the ice re-aims the shaft,
+# which moves the toe again — a little, since the heel moves far less than the
+# shaft is long. Two passes leave it within a millimetre.
+const _TOE_ICE_PASSES: int = 2
 const _BLADE_ELEVATION_BLEND_SPEED: float = 6.0      # blend units/sec (full swing in ~0.17 s)
 # How fast a tied blade's drawn slide (StickTieDraw) eases on and off.
 const _TIE_DRAW_EASE_M_S: float = 2.0
@@ -41,13 +33,13 @@ const _TIE_DRAW_EASE_M_S: float = 2.0
 # regime (the hand rising to shorten the stick's horizontal run) — in the FAR
 # regime the hand rides at rest height and the shaft holds the lie exactly, so
 # the factor is identically 0 there. Onset is ~6° past the lie (blade ≈ 0.87 m
-# from the shoulder); full at the dig clamp (≈ 0.65 m), holding full from there
+# from the shoulder); full at 18° past it (≈ 0.65 m), holding full from there
 # down to the hand_y_max floor (≈ 0.28 m). Carry-only: the wrists roll the
 # face CLOSED over the puck (signed against the elevation scoop, so a drag
 # visibly cups where a loft opens) and curl the toe in around it (the
 # axial-twist sweep).
 const _BLADE_TOE_DRAG_ONSET_DEG: float = -6.0
-const _BLADE_TOE_DRAG_FULL_DEG: float = _BLADE_FOLLOW_PITCH_MIN_DEG
+const _BLADE_TOE_DRAG_FULL_DEG: float = -18.0
 const _BLADE_TOE_DRAG_ROLL_DEG: float = 20.0         # axial twist (handedness-signed)
 # Mild face close at full backhand cradle — a backhand can't roll to a
 # forehand hook, so the cradle cups instead of rolling (grammar table in the
@@ -67,7 +59,7 @@ var shoulder_offset: float = 0.22
 # shoulder rather than a point 5 cm below it. Vertical drop from shoulder to
 # hand at rest = shoulder_height − hand_rest_y (mesh-native 0.40 − (−0.10) =
 # 0.50 m; both scale with build height in apply_attributes, so the drop is
-# 0.50 m × height_mult). That drop is subtracted inside the derived backhand ROM
+# 0.50 m × height_mult). That drop is subtracted inside the derived ROM
 # (SkaterController.apply_attributes: reach = sqrt(arm_eff² − drop²)), so the
 # hand can never be placed beyond the arm's length — raising this shrinks
 # flat-footed reach; the directional reach lean (SkaterPoseCoordinator) buys
@@ -93,15 +85,16 @@ var blade_curve_power: float = 3.0
 var blade_toe_round_m: float = 0.028
 var blade_face_twist_deg: float = 7.0
 # Length of the hosel — the tapered throat carrying the heel cross-section up
-# the shaft line (the shaft-follow tilt keeps the blade rigidly at
-# blade_lie_deg to the shaft, so fixed blade-local hosel geometry stays glued
-# to the rendered shaft in every pose). Blade mesh only; the tape band keeps
+# the shaft line (_apply_blade_tilt lays the hosel along the shaft, so fixed
+# blade-local hosel geometry is the rendered shaft's continuation in every
+# pose). Blade mesh only; the tape band keeps
 # its flat heel cap.
 var blade_hosel_length: float = 0.085
 # The stick's built-in lie: the shaft↔ice angle at which the blade sits flat.
 # Derived from the rest pose (hand ~0.87 m above the heel over a
 # sqrt(1.30² − 0.87²) ≈ 0.97 m horizontal run → atan ≈ 42°, i.e. about a
-# real lie 5.5). The shaft-follow pitch reads deviation from this angle.
+# real lie 5.5). A shaft off this angle pitches the rigid blade by the
+# difference (_apply_blade_tilt).
 var blade_lie_deg: float = 42.0
 # Reception ceiling lean from the blade-curve gear (attributes v4): the
 # reception decision sites scale the puck's league deflect ceiling + squared
@@ -197,21 +190,18 @@ var carry_catch_decay: float = 7.0
 # ── Pass-reception cushion (mesh-only, same channel as the catch above) ───────
 # A caught feed knocks the blade back along its own arrival line before the
 # hands re-seat it — the visible momentum absorb of the catch. Fired by each
-# machine's own attach path (trigger_reception_cushion) with the puck's
-# velocity relative to the receiver; the give scales with the SQUARE of that
-# closing speed (stopping distance under a constant absorb force ∝ v², the
-# same hands-soak model PuckReceptionRules is calibrated on), so a
-# walking-pace pickup gives essentially nothing and a full-pace feed reads as
-# a real corral. One continuous model — there is deliberately no separate
-# slow-pickup animation. Blade-mesh slide plus a wrist cup closing over the
-# puck; the marker, pin, and cursor binding are untouched.
-var reception_give_max: float = 0.12       # m of give at a ceiling-speed catch
-var reception_give_decay: float = 5.0      # blend/s back to the seat
+# machine's own attach path (trigger_reception_cushion) with the catch's
+# reception load (PuckReceptionRules.reception_load: closing speed over the
+# receiver's own ceiling, squared — the hands-soak model), so a walking-pace
+# pickup gives essentially nothing and a ceiling feed reads as a real corral.
+# A catch that settles re-seats exactly as the settle ends: the blade coming
+# home is the tell that the receiver can act. One continuous model — there is
+# deliberately no separate slow-pickup animation. Blade-mesh slide plus a
+# wrist cup closing over the puck; the marker, pin, and cursor binding are
+# untouched.
+var reception_give_max: float = 0.12       # m of give at a ceiling-load catch
+var reception_give_decay: float = 5.0      # blend/s back to the seat, at the fastest
 var reception_cup_deg: float = 7.0         # extra face close-over at full give
-# Closing speed (m/s, receiver frame) at which the give saturates. Mirrors the
-# any-angle deflect ceiling (Puck.deflect_min_speed) — a hotter arrival
-# deflects instead of catching, so the visual maxes out there.
-var reception_give_full_speed: float = 22.0
 # Commit threshold on |aim_dir · face_normal| (both unit) for the wrister
 # address flip — the aim line must sit at least ~asin(this) (~14°) off the
 # stick line before the addressed side changes, so a near-parallel aim holds
@@ -304,7 +294,7 @@ var stick_whip_damping: float = 14.0     # release-whip decay rate
 # Radius (m) of the disc every analytic contact path treats as this skater's
 # body: skater-vs-skater in _resolve_player_collisions and the rink / net /
 # goalie containment clamps. Scaled per-build by SkaterController.apply_attributes
-# (radius_mult), so read it through collision_radius() rather than caching it.
+# (girth_mult), so read it through collision_radius() rather than caching it.
 var body_collision_radius: float = 0.35
 
 # ── Body Check Tuning ─────────────────────────────────────────────────────────
@@ -315,8 +305,8 @@ var weight: float = 1.0
 # master "how hard does a check hit" dial: raising it strips/staggers/knocks-down
 # at lower closing speeds AND deepens the attacker's own inelastic decel (the
 # symmetric exchange — a real check costs the checker some speed too). Scaled
-# per-build by PlayerAttributes.check_delivery_mult (flat 1.0 in v4 — mass is the
-# only differentiator), so the same 0.65 lands for every build.
+# per-build by nothing — mass is the only differentiator — so the same 0.65
+# lands for every build.
 var body_check_transfer: float = 0.65
 var body_check_brace_resistance: float = 0.4
 # Fraction of body_check_transfer that lands WITHOUT the hit button committed.
@@ -396,7 +386,7 @@ var bottom_shoulder: Marker3D = null
 # Bottom hand: the reactive IK output for the bottom grip on the stick shaft.
 var bottom_hand: Marker3D = null
 
-# Visual forearm-bulk multiplier (the Hands attribute's arm tell), stamped by
+# Visual forearm-bulk multiplier (the build's girth), stamped by
 # SkaterAppearanceCoordinator.apply. The glove cuff radius must scale with this,
 # not stay fixed: a thick-forearm build otherwise meets a fixed cuff's radius —
 # coaxial cylinders of equal radius, z-fighting the whole wrist — and then pokes
@@ -569,7 +559,7 @@ func is_touching_boundary() -> bool:
 	return _touched_boundary
 
 
-# The (Size-scaled) disc radius every analytic contact path shares — skater-vs-
+# The (girth-scaled) disc radius every analytic contact path shares — skater-vs-
 # skater and the three containment clamps read the same number, so the hitbox and
 # the contact geometry cannot drift apart.
 func collision_radius() -> float:
@@ -588,7 +578,7 @@ var _facing: Vector2 = Vector2.DOWN
 # from the input frame; replicated so remotes/AI read it directly.
 var elevation_level: int = 0
 # Eased 0→1 toward elevation_level/3 (a third per rung, full at HIGH); drives
-# the extra blade toe-lift (see _update_blade_elevation / _apply_blade_tilt).
+# the loft's face scoop (see _update_blade_elevation / _apply_blade_tilt).
 var _blade_elevation_blend: float = 0.0
 # Set when an elevation blend step changes the blade tilt, consumed by the
 # render-rate rig pass in _process. See _update_blade_elevation.
@@ -757,6 +747,7 @@ var _catch_heel_blend: float = 0.0
 # _apply_blade_tilt only.
 var _reception_give_dir: Vector3 = Vector3.ZERO
 var _reception_give_blend: float = 0.0
+var _reception_give_rate: float = 0.0
 # Eased 0→1 gate for the wind-up elevation seat (_aim_seat_offset_u) — 1 while
 # in WRISTER_AIM, so the seat tell slides in with the commit and back out with
 # the release instead of snapping on the state edge.
@@ -899,6 +890,9 @@ func _process(delta: float) -> void:
 	# it once per replayed input. Stick flex is time/state-driven, so it runs
 	# every frame regardless (own shader-write guard).
 	#
+	# The bow runs first: a bow that moved re-poses the knob and the bottom glove,
+	# which ride it.
+	var flexed: bool = _stick.update_flex(delta)
 	# render_pose_update's pose is time-driven, so physics interpolation draws it
 	# a tick late. Do NOT opt these nodes out to win that back — an opted-out
 	# child renders against the body's post-tick position while the body renders
@@ -917,14 +911,13 @@ func _process(delta: float) -> void:
 			_spine.update()
 		_arms.update_hem(delta, _on_camera)
 		if _on_camera and (_rig_pose_changed() or _spine.take_moved() or _arms.take_retextured() \
-				or _blade_tilt_dirty):
+				or _blade_tilt_dirty or flexed):
 			_blade_tilt_dirty = false
 			update_stick_mesh()
 			update_arm_mesh()
 			update_bottom_arm_mesh()
 		if _on_camera or not seen:
 			_anim_lod.consumed()
-	_stick.update_flex(delta)
 	# World HUD (ring, name, chevrons, beacon) at RENDER rate: ~10 top_level node
 	# transforms per skater that nothing reads back, aligned with the pose drawn.
 	if not CosmeticFreeze.hud:
@@ -1145,7 +1138,7 @@ func _backstopped(victim: Skater, delta_v: Vector3, n: Vector3, transfer: float)
 # integration step and re-used by LocalController's reconcile replay so both paths
 # agree.
 func clamp_body_to_rink() -> void:
-	# Inset the boundary by the (Size-scaled) body radius so the body's EDGE stops
+	# Inset the boundary by the (girth-scaled) body radius so the body's EDGE stops
 	# at the boards — otherwise the center reaches the surface and the body clips in
 	# by its radius (worse for bigger players).
 	var radius: float = collision_radius()
@@ -1269,27 +1262,22 @@ func _position_hand_markers() -> void:
 	_apply_blade_tilt()
 
 
-# How far the blade has pitched off its built-in lie, in degrees, clamped to the
-# render bounds. The blade is rigidly attached to the shaft, so it pitches by
-# (blade_lie_deg − live shaft angle): ~0 at the rest lie (blade flat on the ice),
-# POSITIVE toe-up when the stick rises (slapshot wind-up, stick lift, high
-# follow-through finish) so the blade stays on the shaft line instead of floating
-# ice-parallel at the tip of a steep shaft, NEGATIVE toe-down when the cursor
-# pulls the blade in close and the shaft steepens past its lie.
+# How far the shaft sits off its built-in lie in the upper body's frame, in
+# degrees: ~0 at rest, NEGATIVE as the cursor pulls the blade in close and the
+# shaft steepens past its lie. The toe-drag read; the blade's own pitch is
+# _apply_blade_tilt's, solved in the blade's frame.
 #
 # A pure function of the current hand/blade markers, which are replicated (and
-# interpolated) on remotes — so every peer derives the same pitch, and anything
+# interpolated) on remotes — so every peer derives the same value, and anything
 # keyed to it agrees across the lobby without its own wire field.
-func _shaft_follow_pitch_deg() -> float:
+func _shaft_past_lie_deg() -> float:
 	if top_hand == null or blade == null:
 		return 0.0
 	var shaft: Vector3 = blade.position - top_hand.position
 	var horiz: float = Vector2(shaft.x, shaft.z).length()
 	if horiz <= 0.001 and absf(shaft.y) <= 0.001:
 		return 0.0
-	var shaft_pitch_deg: float = rad_to_deg(atan2(-shaft.y, horiz))
-	return clampf(blade_lie_deg - shaft_pitch_deg,
-			_BLADE_FOLLOW_PITCH_MIN_DEG, _BLADE_FOLLOW_PITCH_MAX_DEG)
+	return blade_lie_deg - rad_to_deg(atan2(-shaft.y, horiz))
 
 
 # 0→1 "the puck has come in under the body" factor. Two reads merged by max,
@@ -1309,64 +1297,46 @@ func get_toe_drag_factor() -> float:
 		return 0.0
 	var positional: float = clampf(
 			inverse_lerp(_BLADE_TOE_DRAG_ONSET_DEG, _BLADE_TOE_DRAG_FULL_DEG,
-					_shaft_follow_pitch_deg()),
+					_shaft_past_lie_deg()),
 			0.0, 1.0)
 	return maxf(positional, _toe_drag_gesture)
 
 
-# Sets the cosmetic blade-mesh orientation — never the Blade marker the
-# puck-contact math reads (set_blade_position / get_blade_contact_global).
-# Three composed reads:
-#   1. Shaft-follow pitch (_shaft_follow_pitch_deg) — the rigid shaft attachment.
-#   2. Resting toe-lift + the scroll-loft elevation extras (about X).
-#   3. Axial twist about the hosel axis (handedness-signed): every face-angle
-#      dressing composed into one wrist rotation — the resting cup, the loft
-#      level's scoop, the toe-drag roll, and the backhand-cradle cup, the last
-#      two closing against the first two on purpose (a lofted blade cups under
-#      the puck, a dragged one rolls over the top of it).
-# The twist axis is the one a real wrist roll has: a blade has no degrees of
-# freedom relative to the shaft, so every face rotation is the whole stick
-# twisting about its own line. Structurally load-bearing, not flavor — the
-# hosel tip (the point update_stick_mesh aims the shaft at) LIES ON that axis,
-# so it is invariant under any twist angle: the shaft→blade junction cannot
-# kink and the shaft never swings when a dressing engages. Do not rotate these
-# angles about a heel-local axis instead — that drags the tip off the shaft line
-# by up to a few cm at full toe drag. The
-# twist also sweeps the toe horizontally (~7 cm at 20°) — the drag curl the
-# overhead camera reads. The one remaining junction bend is the follow-pitch
-# clamp at its floor/ceiling, which is deliberate (the dig floor keeps the toe
-# out of the ice).
-# The mesh is heel-origin (StickBladeMeshBuilder), so the rotation pivots
-# about the heel and the shaft→blade junction stays pinned at any pitch.
-# Idempotent (recomputed from identity each call, scale preserved — the
-# tape-band child rides along); safe before _ready(). Runs at render rate
-# from update_stick_mesh (value-type math only, no allocation).
+# Sets the cosmetic blade-mesh pose — never the Blade marker the puck-contact
+# math reads (set_blade_position / get_blade_contact_global).
+#
+# The stick is one rigid piece: the blade has no degrees of freedom relative to
+# the shaft. So the blade is ORIENTED FROM the shaft rather than dressed on its
+# own and joined to it afterwards — its hosel is laid along the heel→hand line
+# (_rigid_blade_basis), and update_stick_mesh, which aims the shaft from the
+# hand at the hosel tip, then runs the shaft exactly along the hosel. Two things
+# follow, and both are what a rigid stick does:
+#   - The blade's pitch is the shaft's: flat at the lie, toe-up as the stick
+#     rises (wind-up, stick lift, a high finish), toe-down as the shaft
+#     steepens past its lie. Where toe-down would put the toe through the ice,
+#     the blade rises onto its toe instead (_TOE_ICE_PASSES).
+#   - Every face dressing is a wrist roll: the axial twist about the hosel line
+#     (handedness-signed) composes the resting cup, the loft level's scoop, the
+#     toe-drag roll, the backhand-cradle cup and the reception cup. The hosel
+#     tip lies on that axis, so no twist moves the junction. Never dress the
+#     blade about a heel-local axis — that is a bend at the joint.
+# The mesh slides (below) move the heel; the orientation is solved after them,
+# from where the heel ended up, so they cannot kink the joint either.
+# test_stick_is_rigid.gd holds it. Idempotent (recomputed each call, scale
+# preserved — the tape-band child rides along); safe before _ready(). Runs at
+# render rate from update_stick_mesh (value-type math only, no allocation).
 func _apply_blade_tilt() -> void:
 	if _blade_mesh_instance == null or not is_instance_valid(_blade_mesh_instance):
 		return
-	var follow_pitch_deg: float = _shaft_follow_pitch_deg()
 	# Twist sign: opens the forehand face upward. Flipped from the usual
 	# blade_side_sign convention so the cup tilts the right way for each hand.
 	var blade_side_sign: float = 1.0 if is_left_handed else -1.0
-	var drag: float = get_toe_drag_factor()
-	var toe_lift: float = _BLADE_TOE_LIFT_DEG + follow_pitch_deg \
-			+ _blade_elevation_blend * _BLADE_ELEVATED_EXTRA_LIFT_DEG
-	var twist: float = (_BLADE_FACE_OPEN_DEG \
+	var twist: float = deg_to_rad((_BLADE_FACE_OPEN_DEG \
 			+ _blade_elevation_blend * _BLADE_ELEVATED_EXTRA_LOFT_DEG \
-			- drag * _BLADE_TOE_DRAG_ROLL_DEG \
+			- get_toe_drag_factor() * _BLADE_TOE_DRAG_ROLL_DEG \
 			- _heel_cradle * _BLADE_CRADLE_CUP_DEG \
-			- _reception_give_blend * reception_cup_deg) * blade_side_sign
-	var pitch_basis: Basis = Basis.IDENTITY.rotated(Vector3.RIGHT, deg_to_rad(toe_lift))
-	# Hosel axis (StickBladeMeshBuilder._add_hosel: (0, sin lie, cos lie) in
-	# blade-local space), carried through the pitch so the twist stays about
-	# the pitched shaft line.
-	var lie_rad: float = deg_to_rad(blade_lie_deg)
-	var hosel_axis: Vector3 = pitch_basis * Vector3(0.0, sin(lie_rad), cos(lie_rad))
-	var rot: Basis = pitch_basis.rotated(hosel_axis, deg_to_rad(twist))
-	var keep_scale: Vector3 = _blade_mesh_instance.transform.basis.get_scale()
-	_blade_mesh_instance.transform.basis = rot.scaled(keep_scale)
-	# Mesh-only slides (never the marker; the shaft follows for free, since
-	# update_stick_mesh aims it at the hosel tip through this transform):
+			- _reception_give_blend * reception_cup_deg) * blade_side_sign)
+	# Mesh-only slides (never the marker):
 	#   X — wrister-address slide along the face-normal axis, addressing the
 	#   hand the release will fire as. Marker local +X IS the face normal
 	#   (set_blade_position aims marker −Z along the shaft, so +X is its 90°
@@ -1381,7 +1351,7 @@ func _apply_blade_tilt() -> void:
 	# The reception cushion is the one full-vector slide on top of both axes:
 	# the blade gives along the caught puck's own arrival line (captured
 	# blade-local, so the give rides the wrists as the body keeps turning).
-	_blade_mesh_instance.position = Vector3(
+	var heel: Vector3 = Vector3(
 			(_address_factor - get_carry_forehand_factor()) * carry_blade_offset,
 			0.0,
 			(_stroke_toe_blend * carry_stroke_toe_u
@@ -1389,6 +1359,35 @@ func _apply_blade_tilt() -> void:
 					+ _aim_seat_offset_u()) * blade_length) \
 			+ _reception_give_dir * (_reception_give_blend * reception_give_max) \
 			+ _tie_draw_local()
+	# In the marker's frame: the hand, world up, and the ice's height.
+	var marker: Transform3D = blade.transform
+	var hand: Vector3 = marker.affine_inverse() * top_hand.position
+	var marker_global: Transform3D = blade.global_transform if blade.is_inside_tree() \
+			else marker
+	var up: Vector3 = (marker_global.basis.inverse() * Vector3.UP).normalized()
+	var rot: Basis = _rigid_blade_basis(hand - heel, twist)
+	for _i: int in _TOE_ICE_PASSES:
+		var toe_height: float = marker_global.origin.y \
+				+ (heel + rot * Vector3(0.0, 0.0, -blade_length)).dot(up)
+		if toe_height >= 0.0:
+			break
+		heel -= up * toe_height
+		rot = _rigid_blade_basis(hand - heel, twist)
+	var keep_scale: Vector3 = _blade_mesh_instance.transform.basis.get_scale()
+	_blade_mesh_instance.transform = Transform3D(rot.scaled(keep_scale), heel)
+
+
+# The blade's orientation with its hosel laid along `to_hand` (heel → top hand,
+# blade-marker frame), then rolled `twist` radians about that line. The hosel
+# is (0, sin lie, cos lie) blade-local (StickBladeMeshBuilder): pitch it about X
+# until its elevation is the shaft's, then yaw it onto the shaft's bearing.
+func _rigid_blade_basis(to_hand: Vector3, twist: float) -> Basis:
+	var lie: float = deg_to_rad(blade_lie_deg)
+	var horiz: float = Vector2(to_hand.x, to_hand.z).length()
+	var yaw: float = atan2(to_hand.x, to_hand.z) if horiz > 0.0001 else 0.0
+	var aligned: Basis = Basis(Vector3.UP, yaw) \
+			* Basis(Vector3.RIGHT, lie - atan2(to_hand.y, horiz))
+	return aligned.rotated(aligned * Vector3(0.0, sin(lie), cos(lie)), twist)
 
 
 func set_tie_draw_offset(world_offset: Vector3) -> void:
@@ -2069,7 +2068,7 @@ func _update_carry_contact(delta: float) -> void:
 			_stroke_toe_blend, stroke_toe_target, carry_gesture_ease * delta)
 	var new_catch: float = move_toward(_catch_heel_blend, 0.0, carry_catch_decay * delta)
 	var new_give: float = move_toward(
-			_reception_give_blend, 0.0, reception_give_decay * delta)
+			_reception_give_blend, 0.0, _reception_give_rate * delta)
 	var aim_seat_target: float = 1.0 \
 			if current_shot_state == SkaterStateMachine.State.WRISTER_AIM else 0.0
 	var new_aim_seat: float = move_toward(
@@ -2090,24 +2089,24 @@ func _update_carry_contact(delta: float) -> void:
 	_update_wrister_address(delta)
 
 
-# The attach-instant cushion: the puck's arrival momentum visibly knocks the
-# blade back along its line of travel, then the hands re-seat it (the decay in
-# _update_carry_contact). `relative_velocity` is puck − receiver at contact —
-# the same frame the receive decision judges. Cosmetic and per-machine: every
-# peer fires it from its own attach event (host detection / lag-comp grant,
-# client pickup notifies), so it needs no wire field and never replays.
+# The attach-instant cushion: the puck's arrival knocks the blade back along its
+# line, then the hands re-seat it (_update_carry_contact) over `hold_s`, the
+# catch's settle, or faster for a clean one. `relative_velocity` is puck −
+# receiver at contact, the frame the receive decision judges. Cosmetic and per-machine: every peer fires it
+# from its own attach event (host detection / lag-comp grant, client pickup
+# notifies), so it needs no wire field and never replays.
 # Skipped while slapshot-pinning: a one-timer feed lands under a raised,
 # wound-up stick, and pins to the slapper zone rather than the blade — there
 # is no blade-on-puck catch to cushion.
-func trigger_reception_cushion(relative_velocity: Vector3) -> void:
-	if blade == null or is_slapshot_pinning() or reception_give_full_speed <= 0.0:
+func trigger_reception_cushion(relative_velocity: Vector3, catch_load: float,
+		hold_s: float) -> void:
+	if blade == null or is_slapshot_pinning():
 		return
 	var horiz := Vector3(relative_velocity.x, 0.0, relative_velocity.z)
 	var speed: float = horiz.length()
 	if speed < 0.001:
 		return
-	var t: float = clampf(speed / reception_give_full_speed, 0.0, 1.0)
-	var amp: float = t * t
+	var amp: float = clampf(catch_load, 0.0, 1.0)
 	if amp <= _reception_give_blend:
 		return  # a live, larger cushion is still playing out
 	var local_dir: Vector3 = blade.global_transform.basis.inverse() * (horiz / speed)
@@ -2116,6 +2115,8 @@ func trigger_reception_cushion(relative_velocity: Vector3) -> void:
 		return
 	_reception_give_dir = local_dir.normalized()
 	_reception_give_blend = amp
+	_reception_give_rate = reception_give_decay if hold_s <= 0.0 \
+			else minf(reception_give_decay, amp / hold_s)
 	_blade_tilt_dirty = true
 
 
@@ -2544,6 +2545,12 @@ func set_leg_surface_material(surface: int, mat: Material) -> void:
 func update_arm_mesh() -> void:
 	_spine.update()
 	_arms.update_top_arm()
+
+
+# Where the drawn shaft has bowed away from its straight line near `point`
+# (upper-body space) — the offset a hand on the stick rides.
+func stick_bow_offset(point: Vector3) -> Vector3:
+	return _stick.bow_offset(point)
 
 
 func update_bottom_arm_mesh() -> void:

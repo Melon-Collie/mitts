@@ -21,7 +21,7 @@ protected:
 
 public:
 	godot::Vector3 solve(
-			const godot::Vector3 &shoulder,
+			const godot::Vector3 &rest,
 			const godot::Vector2 &grip_target_xz,
 			double backhand_angle) const;
 

@@ -214,7 +214,8 @@ var _skater_getter: Callable = Callable()
 var _team_id_by_skater: Dictionary = {}
 
 # ── Signals (server-side puck events, GameManager listens) ───────────────────
-signal puck_picked_up_by(peer_id: int)
+# `settle_s`: how long the catch leaves the carrier settling (0 = clean).
+signal puck_picked_up_by(peer_id: int, settle_s: float)
 signal puck_released_by_carrier(peer_id: int)
 # `peer_id` is the dispossessed carrier; `stripper_peer_id` is the defender who
 # took the puck (poke / stick-lift / body-check), or -1 when a goalie stripped
@@ -362,6 +363,9 @@ func _physics_process(delta: float) -> void:
 # puck doing. Client-only (the host reads the live analytic velocity).
 var _loose_vel_prev_pos: Vector3 = Vector3.INF
 var _rendered_loose_velocity: Vector3 = Vector3.ZERO
+# Host: who caught last and the receiver-relative speed it arrived at (sound).
+var _granted_arrival_skater: Skater = null
+var _granted_arrival_speed: float = 0.0
 
 
 func _track_loose_velocity(delta: float) -> void:
@@ -374,12 +378,52 @@ func _track_loose_velocity(delta: float) -> void:
 # Called by GameManager after validating a client pickup claim against the
 # state buffer. Re-checks carrier == null so a concurrent _check_interactions
 # detection (which needs no validation) is never double-applied.
-func apply_lag_comp_pickup(skater: Skater) -> void:
+# `catch_load` is the claim's reception load, judged on the rewound contact like its
+# catch verdict; scripted grants pass 0 (no settle).
+func apply_lag_comp_pickup(skater: Skater, catch_load: float = 0.0) -> void:
 	if not is_instance_valid(skater) or puck.carrier != null:
 		return
-	skater.trigger_reception_cushion(puck.get_puck_velocity() - skater.velocity)
+	_grant_catch(skater, puck.get_puck_velocity() - skater.velocity, catch_load)
+
+
+# Every host catch lands here. The settle a catch at `catch_load` costs rides the
+# pickup signal; the cushion's give returns to the seat as the settle ends.
+func _grant_catch(skater: Skater, relative_velocity: Vector3, catch_load: float) -> void:
+	var settle_s: float = PuckReceptionRules.settle_time(
+			catch_load, puck.settle_clean_load, puck.settle_max_s)
+	_granted_arrival_skater = skater
+	_granted_arrival_speed = relative_velocity.length()
+	skater.trigger_reception_cushion(relative_velocity, catch_load, settle_s)
 	puck.set_carrier(skater)
-	_on_puck_picked_up(skater)
+	_on_puck_picked_up(skater, settle_s)
+
+
+# Client-side cushion for a carrier this machine just learned of, from its own
+# view of the arrival. `hold_s` < 0 estimates the settle from that view (an
+# observer); the carrier's own client passes the time its lock has left.
+func _cushion_from_rendered(skater: Skater, hold_s: float) -> void:
+	# The host cushioned the catch at its grant, and tracks no rendered flight.
+	if NetworkManager.is_host:
+		return
+	var relative_vel: Vector3 = _rendered_loose_velocity - skater.velocity
+	var catch_load: float = PuckReceptionRules.reception_load(_rendered_loose_velocity,
+			skater.velocity, skater.get_blade_face_normal(relative_vel),
+			puck.deflect_min_speed * skater.reception_ceiling_mult,
+			puck.alignment_receive_bonus * skater.reception_ceiling_mult)
+	if hold_s < 0.0:
+		hold_s = PuckReceptionRules.settle_time(catch_load, puck.settle_clean_load, puck.settle_max_s)
+	skater.trigger_reception_cushion(relative_vel, catch_load, hold_s)
+
+
+# Receiver-relative speed the puck arrived at for `carrier`'s latest catch, as
+# this machine saw it — the host from the grant, a client from its rendered
+# flight (which holds the pre-catch velocity once the puck pins).
+func arrival_speed_for(carrier: Skater) -> float:
+	if not is_instance_valid(carrier):
+		return 0.0
+	if NetworkManager.is_host:
+		return _granted_arrival_speed if carrier == _granted_arrival_skater else 0.0
+	return (_rendered_loose_velocity - carrier.velocity).length()
 
 
 # Host-only scripted teleports (tutorial staging). Each restarts next tick's
@@ -401,6 +445,30 @@ func apply_scripted_grant(skater: Skater) -> void:
 func stage_scripted(pos: Vector3) -> void:
 	puck.stage_at(pos)
 	_prev_puck_pos = puck.get_puck_position()
+
+
+# The reception load past which `skater`'s catch of a puck at `puck_pos`, coming
+# at `relative_velocity` in his frame, bobbles: by where its path meets the
+# blade between `blade_mid` and the shaft's `top_hand`. The claim resolver
+# passes the claim's own blade, so both verdicts read one blade.
+func bobble_load_for(skater: Skater, puck_pos: Vector3, relative_velocity: Vector3,
+		blade_mid: Vector3, top_hand: Vector3) -> float:
+	var axis: Vector3 = PuckReceptionRules.blade_axis(blade_mid, top_hand,
+			-skater.global_transform.basis.z)
+	return PuckReceptionRules.bobble_load_at(
+			PuckReceptionRules.blade_contact_offset(puck_pos, relative_velocity,
+					blade_mid, axis, skater.blade_length * 0.5),
+			puck.bobble_load, puck.bobble_edge_share)
+
+
+# Lag-comp counterpart for the bobble verdict: idempotent as the deflect's
+# below, and the exit is recomputed from the present puck like every deflect.
+func apply_lag_comp_bobble(skater: Skater, catch_load: float, bobble_at: float) -> void:
+	if not is_instance_valid(skater) or puck.carrier != null or puck.pickup_locked:
+		return
+	if puck.is_on_cooldown(skater):
+		return
+	puck.apply_reception_bobble(skater, catch_load, bobble_at)
 
 
 # Lag-comp counterpart to apply_lag_comp_pickup for the deflect verdict: the
@@ -717,6 +785,16 @@ func _check_interactions() -> void:
 						puck.pickup_max_speed,
 						puck.deflect_min_speed * skater.reception_ceiling_mult,
 						puck.alignment_receive_bonus * skater.reception_ceiling_mult):
+					var catch_load: float = PuckReceptionRules.reception_load(
+							puck_vel, skater.velocity, blade_face_normal,
+							puck.deflect_min_speed * skater.reception_ceiling_mult,
+							puck.alignment_receive_bonus * skater.reception_ceiling_mult)
+					# Nearly held: it bobbles by his stick, nobody's yet.
+					var bobble_at: float = bobble_load_for(skater, puck_curr, relative_vel,
+							skater.get_blade_contact_global(), skater.top_hand.global_position)
+					if catch_load >= bobble_at:
+						puck.apply_reception_bobble(skater, catch_load, bobble_at)
+						break
 					# If a second blade would ALSO corral this same tick (a faceoff
 					# draw or a board scramble), it's a contest - nobody gets it, the
 					# puck squirts free biased toward the stronger blade. Otherwise this
@@ -739,9 +817,7 @@ func _check_interactions() -> void:
 						# stamp — the resolver applied the outcome; no carrier here.
 						pass
 					else:
-						skater.trigger_reception_cushion(puck_vel - skater.velocity)
-						puck.set_carrier(skater)
-						_on_puck_picked_up(skater)
+						_grant_catch(skater, relative_vel, catch_load)
 				else:
 					puck.apply_blade_deflect(skater)
 				break
@@ -777,7 +853,8 @@ func _check_body_blocks(skaters: Array, puck_curr: Vector3, now: float) -> bool:
 
 
 # ── Local Prediction ──────────────────────────────────────────────────────────
-func notify_local_pickup(local_skater: Skater) -> void:
+# `settle_until_ms`: the deadline of the lock the host granted with the pickup.
+func notify_local_pickup(local_skater: Skater, settle_until_ms: int = 0) -> void:
 	# Fresh attach re-arms the slapshot-pin snap (see _pin_puck_to_carrier):
 	# a one-timer is picked up straight INTO the charge, with no ordinary carry
 	# tick in between to clear the latch.
@@ -792,8 +869,8 @@ func notify_local_pickup(local_skater: Skater) -> void:
 	if _provisional_carrier_skater != null:
 		NetworkTelemetry.record_provisional_confirmed()
 	elif is_instance_valid(local_skater):
-		local_skater.trigger_reception_cushion(
-				_rendered_loose_velocity - local_skater.velocity)
+		_cushion_from_rendered(local_skater, maxf(0.0,
+				settle_until_ms / 1000.0 - NetworkManager.estimated_input_stamp_time()))
 	_clear_provisional()
 	_release_seed_active = false
 	_state_buffer.clear()
@@ -812,8 +889,7 @@ func notify_remote_pickup(remote_skater: Skater, carrier_peer_id: int) -> void:
 	_local_carrier_skater = null
 	_client_carrier_peer_id = carrier_peer_id
 	if is_instance_valid(remote_skater):
-		remote_skater.trigger_reception_cushion(
-				_rendered_loose_velocity - remote_skater.velocity)
+		_cushion_from_rendered(remote_skater, -1.0)
 	if _provisional_carrier_skater != null:
 		NetworkTelemetry.record_provisional_stolen()  # legit loss of a 50/50, not the felt bug
 	_clear_provisional()  # a different player won the puck — roll back our optimistic pin
@@ -957,8 +1033,7 @@ func try_provisional_pickup(local_skater: Skater) -> void:
 	# (the confirming notify_local_pickup skips it on promotion). The gate above
 	# bounds this path to slow pucks, so the quadratic give is near-nothing — a
 	# settle, not a corral — by construction.
-	local_skater.trigger_reception_cushion(
-			_rendered_loose_velocity - local_skater.velocity)
+	_cushion_from_rendered(local_skater, 0.0)
 	# Grant travels ~1 RTT (claim out, confirm back) plus host processing; scale
 	# the rollback deadline off RTT so a slow link doesn't pop the pin before the
 	# confirm arrives.
@@ -1055,12 +1130,12 @@ func _pin_puck_to_carrier(carrier: Skater, delta: float) -> void:
 # three variants below differ only in how peer_id is sourced (resolve from
 # the skater argument vs. read the cached carrier) and which signal fires.
 # GameManager listens and does the player-registry / RPC work.
-func _on_puck_picked_up(carrier: Skater) -> void:
+func _on_puck_picked_up(carrier: Skater, settle_s: float) -> void:
 	var peer_id: int = _resolve_peer_id(carrier)
 	if peer_id == -1:
 		return
 	_carrier_peer_id = peer_id
-	puck_picked_up_by.emit(peer_id)
+	puck_picked_up_by.emit(peer_id, settle_s)
 
 func _on_puck_released() -> void:
 	var peer_id: int = _carrier_peer_id

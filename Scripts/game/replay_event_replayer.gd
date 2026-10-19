@@ -72,7 +72,8 @@ static func dispatch_with_records(event: Dictionary, records: Dictionary) -> voi
 		"puck_post":
 			SoundManager.play_world(SoundManager.Sound.PUCK_POST, pos, volume_db + _POST_SAVE_VOLUME_BUMP_DB, 0.04, _post_pitch(speed))
 		"puck_pickup":
-			SoundManager.play_world(SoundManager.Sound.PUCK_PICKUP, pos, 0.0, 0.05)
+			SoundManager.play_world(SoundManager.Sound.PUCK_PICKUP, pos,
+					SoundManager.reception_volume_db(speed), 0.05)
 		"shot":
 			var is_slapper: bool = bool(event.get("is_slapper", false))
 			var sound: SoundManager.Sound = SoundManager.Sound.SHOT_SLAPPER if is_slapper else SoundManager.Sound.SHOT_WRISTER

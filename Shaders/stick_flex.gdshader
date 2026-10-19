@@ -1,17 +1,21 @@
 shader_type spatial;
 
-// Stick shaft flex — bows the shaft between its pinned endpoints.
+// Stick shaft flex — bows the shaft between the two places it is held.
 //
-// The shaft is a unit-length BoxMesh that update_stick_mesh() stretches
-// between the top hand and the blade heel (node scale.z = live length), so
-// VERTEX.z runs [-0.5, +0.5] in object space with the BLADE end at -0.5
-// (look_at points -Z at the blade). Object-space X is perpendicular to the
-// shaft and unaffected by the Z stretch, so a bow displaced here survives
-// the per-frame resize untouched. sin(PI * t^kick) is zero at both ends —
-// the hand and blade anchors (gameplay) never move; only the material
-// between them curves. kick_point < 1 shifts the bulge toward the blade
-// end (a low-kick stick); the mesh needs subdivide_depth > 0 to have
-// vertices along the length to bend (set in Skater._ready).
+// The shaft is a unit-length BoxMesh that SkaterStickRig.update_mesh stretches
+// from the butt (past the top hand) to just past the hosel tip (node scale.z =
+// live length), so VERTEX.z runs [-0.5, +0.5] in object space with the BLADE
+// end at -0.5 (look_at points -Z at the blade). Object-space X is
+// perpendicular to the shaft and unaffected by the Z stretch, so a bow
+// displaced here survives the per-frame resize untouched.
+//
+// The bow is a clamped beam between the hosel tip (tip_t) and the top hand
+// (hand_t): 16·u²(1−u)², zero offset AND zero slope at both, peaking at
+// flex_m midway. The rigid hosel and the gripping hand both hold their end's
+// angle, so the shaft leaves the blade and the glove straight, and the butt
+// above the hand stays unbent under the knob. SkaterStickRig.bow_profile is
+// the same curve on the CPU (the drawn bottom glove rides it). The mesh needs
+// subdivide_depth > 0 to have vertices along the length to bend.
 //
 // A positive flex_m displaces toward object +X, which Basis.looking_at builds
 // as up x -dir: the horizontal normal of the blade's face. That axis rotates
@@ -34,8 +38,9 @@ shader_type spatial;
 
 uniform vec4 albedo : source_color = vec4(0.06, 0.06, 0.07, 1.0);
 uniform float roughness : hint_range(0.0, 1.0) = 0.4;
-uniform float flex_m = 0.0;                              // signed mid-shaft bow, metres
-uniform float kick_point : hint_range(0.3, 2.0) = 0.75;  // <1 = bulge toward the blade
+uniform float flex_m = 0.0;                              // signed mid-span bow, metres
+uniform float tip_t = 0.02;                              // hosel tip, 0..1 from the blade end
+uniform float hand_t = 0.91;                             // top hand, 0..1 from the blade end
 uniform int grip_mode = 0;                               // StickTapeConfig.KnobStyle
 uniform vec4 grip_color : source_color = vec4(1.0);
 uniform float grip_len_m = 0.5;                          // wrap reach down from the butt
@@ -76,8 +81,13 @@ varying vec3 obj_pos;                                    // pre-flex object-spac
 
 void vertex() {
 	obj_pos = VERTEX;
-	float t = clamp(VERTEX.z + 0.5, 0.0, 1.0);
-	VERTEX.x += flex_m * sin(PI * pow(t, kick_point));
+	float span = max(hand_t - tip_t, 0.001);
+	float u = clamp((VERTEX.z + 0.5 - tip_t) / span, 0.0, 1.0);
+	float w = u * (1.0 - u);
+	VERTEX.x += flex_m * 16.0 * w * w;
+	// x += g(z) is a shear, so normals take its inverse transpose: n.z −= n.x·g'.
+	float slope = flex_m * 32.0 * w * (1.0 - 2.0 * u) / span;
+	NORMAL = normalize(vec3(NORMAL.x, NORMAL.y, NORMAL.z - NORMAL.x * slope));
 }
 
 void fragment() {

@@ -65,10 +65,9 @@ var stick_check_pressed: bool = false
 # fires a floater while the client predicted a full shot.
 var bot_wrister_power_t: float = 1.0
 # True when the wrister POWER is COMMITTED rather than measured from cursor
-# motion: power comes from bot_wrister_power_t (with the travel gate bypassed)
-# instead of the real cursor speed. Set by the gamepad gatherer while RT is held —
-# the pad has no meaningful cursor speed, so the right-stick push magnitude is the
-# whole power signal (aim still flows through the positional origin→cursor model,
+# motion: power comes from bot_wrister_power_t instead of the real cursor speed.
+# Set by the gamepad gatherer while RT is held — the pad has no meaningful cursor
+# speed, so the trigger's committed magnitude is the whole power signal (aim still flows through the positional origin→cursor model,
 # since the gamepad parks the cursor in the stick direction). Rides as flag bit
 # [13] so a pad CLIENT's committed power reaches the host.
 var commit_wrister_power: bool = false

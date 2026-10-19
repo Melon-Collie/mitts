@@ -297,7 +297,7 @@ static func continuity_clamp(point: Vector3, reconstructed: Vector3, max_offset:
 # Max legitimate distance between the client's exact-view-time blade and the
 # host's buffer-reconstructed blade (continuity_clamp's `max_offset`). The
 # reconstruction lags the true blade by the buffer interpolation window: the blade
-# (Hands-scaled `blade_speed`, a real cap) traverses this far over that window,
+# (the lever-scaled `blade_speed`, a real cap) traverses this far over that window,
 # plus slack for IK smoothing, body translation, and NTP error. CONSERVATIVE by
 # design — sized to clear fast-dangle / packet-loss reconstruction lag, because
 # pulling a legitimate claim shows up as grab-then-lose on the claimant's

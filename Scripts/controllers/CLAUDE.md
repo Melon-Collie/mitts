@@ -508,19 +508,23 @@ landmark rather than a tuning number.
 
 ## SkaterController
 
-`SkaterController` delegates to five `RefCounted` collaborators —
+`SkaterController` delegates to seven `RefCounted` collaborators —
 `SkaterAimingBehavior`, `SkaterIKCoordinator`, `SkaterPoseCoordinator`,
-`SkaterShotPoseCoordinator`, `SkaterSkatingCoordinator`. `GameManager` calls
+`SkaterShotPoseCoordinator`, `SkaterSkatingCoordinator`, `SkaterStickCheck`,
+and `SkaterSettleGate` (the settle lock a hard catch leaves; its deadline
+contract is in `Scripts/networking/CLAUDE.md`). `GameManager` calls
 methods on the controller and never pokes collaborator internals.
 
-**Attributes v4, one line each.** Skating splits into three height-routed
-sub-levers, so a small player can be explosive and shifty without owning the top
-gear and a big weak skater feels bad in the TURN rather than glued to the ice.
-Hands has no lever by constitution — "your hands are you" — so the blade caps
-derive from lever geometry rather than a fidelity table: the long lever sweeps
-but cannot cut back, the short lever is the scalpel. Shot means "what a charge
-buys you, and how fast you can charge it", never the uncharged snap. Full detail
-lives in `Scripts/domain/state/CLAUDE.md`.
+**Attributes, one line each.** Skating splits three ways: top speed rides the
+skate profile alone (size never buys it), first-step burst and agility ride
+height and weight, so a small player is explosive and shifty without owning the
+top gear, and a heavy build feels it in the TURN rather than being glued to the
+ice. No build
+tracks the cursor more precisely ("your hands are you"). The blade caps derive
+from lever geometry instead: the long lever sweeps but cannot cut back, the
+short lever is the scalpel. Shot power means "what a charge buys you, and how
+fast you can charge it", never the uncharged snap. Full detail lives in
+`Scripts/domain/state/CLAUDE.md`.
 
 `apply_attributes` is **idempotent**: it captures baseline values on first call
 and recomputes from those baselines every time, so repeated applies (the
@@ -564,7 +568,10 @@ the measured turn — all derived from replicated state). Two quantities decide
 it: whether the skater is **driving** (the stick's component along travel,
 which is what the physics thrusts by; against travel it is a skid) and how much
 of the edge's grip the travel's curve is **using** (centripetal acceleration
-over `turn_accel · lateral_grip`). Driving straight is a stride, driving
+over the league's `turn_accel`, not the build's own grip, so the same curve at
+the same speed reads the same on every build). How hard the legs stride is the
+speed over the BODY's full pace (`gait_full_speed` × leg length), never the
+build's top speed: the picture comes from height and weight, not from stats. Driving straight is a stride, driving
 through a turn a crossover, coasting straight a glide, coasting round a turn a
 carve. A stick held straight across travel turns the skater with no thrust, so
 it is carved, never crossed over. Each state owns its legs outright while it
@@ -732,6 +739,58 @@ So a held pose authors the **hand** — where the player actually holds the stic
 Authoring both ends over-constrains a rigid stick, and `enforce_rigid_stick`
 only shortens an over-long span; an under-long pair draws a visibly short stick.
 `test_commit_grip_choke.gd` holds all of it, including the fold direction.
+
+### The top hand is solved where the arm is
+
+The tracked path's ROM (`TopHandIK`) is a disc about the shoulder with the hand
+a fixed drop below it, and `SkaterIKCoordinator._solve_top_hand` solves it
+where the drawn arm actually is. Three things decide "where", each found as a
+hand the drawn arm could not reach or barely extended toward:
+
+- **The shoulder is the trunk's** (`arm_shoulder`). The skeleton folds the
+  trunk before it twists (`Scripts/actors/CLAUDE.md`, *One skeleton, one
+  chain*) and `UpperBody` twists first, so a skating fold with a backhand twist
+  carries the drawn shoulder ~5 cm off the frame's marker, and a hand solved
+  off the marker stretched the arm to 1.03 of itself.
+  `SkaterSpineRig.shoulder_in_frame` copies the rig's order from tick state
+  alone, because the blade it places is gameplay: the hips are taken square to
+  the facing (their yaw carries the render-rate gait); where it matters the
+  twist is pinned at the spine's limit anyway.
+- **The frame is level** (`_level_tilt`): `UpperBody`'s yaw without its pitch
+  and roll. A shoulder flexes the arm forward as the trunk leans; solved in the
+  leaned frame the disc tipped with the chest, and reaching ahead at a 36°
+  skating lean the fully extended arm hung 82° below horizontal. Level, it
+  reaches out at the upright angle (~46°) and the lean buys reach by carrying
+  the shoulder forward and down. The hand heights hang off the trunk's shoulder
+  before the faceoff address folds it (`_level_config`).
+- **The cursor's target is projected by that same solve.** Projected at the
+  upright blade height while the solve ran at the leaned one, the target sat
+  inside the rim and the hand was drawn back to it: 0.24 m of a 0.39 m rim in
+  every direction.
+
+The reach lean measures the hand the same way, and the host's claim clamp
+bounds the result (`TopHandIK.full_reach`, the trunk at its deepest fold).
+
+**A carrier keeps both hands on the stick.** An empty stick reaches one-handed
+to the rim; with the puck the blade stops where the bottom hand could no longer
+hold the shaft (`TopHandIK.two_hand_reach`, from the bottom shoulder read the
+way `arm_shoulder` reads the top one) and, on the backhand, at the angle past
+which it lets go (`bh_release_angle_deg`, `_carry_backhand_stop`) — the puck
+magnetises to the blade, so a one-handed carry was reach no defender could
+answer. Both are tick state; the drawn bottom hand reads the render-rate trunk
+and is what the limit is measured to keep on the shaft.
+`test_top_hand_reaches_its_rim.gd` holds all of it.
+
+Because the blade stops there, a skating carrier's hips pivot there too: its
+`FacingRules` config (`carry_facing_rules`, also the bots' `AISkaterCaps` copy)
+has the backhand stop as its backhand edge, so sweeping the puck round the
+backhand turns the skater onto the other line with it on the forehand, about
+113° off the new line and far inside its edge. A pivot under way commits
+(`FacingRules.Config.pivot_commit_rad`): the hips' turn toward the cursor, past
+where the line would hold them, eases the edge a few degrees, or a cursor held
+on the stop flips the pivot on noise and the hips sit between the lines. Capped,
+because a body still turning onto the line from a cursor squared beside it
+reads the same way. `test_facing_follows_travel.gd` holds all of it.
 
 **A pose the trunk texture cannot express does not belong in the gait.** The
 texture is one pitch and one roll for the whole shell, so it is symmetric by

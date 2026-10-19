@@ -198,7 +198,7 @@ const LOAD_READY_SHARE_SLACK: float = 0.05
 #
 # MOUSE_MAX_SPEED_M_S is the perfect-bot default: at 100 m/s the cursor reaches
 # any normal target inside one tick. The per-agent cap (_mouse_max_speed_m_s) is
-# the bot's real Hands blade speed, set in apply_capabilities.
+# the bot's real blade speed, set in apply_capabilities.
 const MOUSE_MAX_SPEED_M_S: float = 100.0
 var _mouse_max_speed_m_s: float = MOUSE_MAX_SPEED_M_S
 # ── Per-release execution error ──────────────────────────────────────────────
@@ -731,8 +731,8 @@ func apply_capabilities(caps: AISkaterCaps) -> void:
 	_role_ctx.self_wrister_unloaded_share = caps.wrister_unloaded_share
 	_role_ctx.self_wrister_load = caps.wrister_load
 	_role_ctx.self_facing_rules = caps.facing_rules
-	# The cursor slews at the bot's real blade speed, so "aimed" in pre-aim means
-	# the blade is actually there.
+	_role_ctx.self_carry_facing_rules = caps.carry_facing_rules
+	# The cursor slews at the bot's real blade speed: "aimed" means the blade is there.
 	_apply_aim_slew(caps.blade_speed, caps.blade_span)
 
 
@@ -820,9 +820,9 @@ func apply_profile(profile: BotSkillProfile) -> void:
 
 
 # Set the aim-cursor slew (and the arc rate + pre-aim timeout derived from it) to
-# `slew` m/s — the bot's real Hands blade speed, so the cursor tracks the blade.
+# `slew` m/s — the bot's real blade speed, so the cursor tracks the blade.
 # `orbit_radius_m` is the blade's real orbit radius (stick + blade span): the
-# angular swing the linear Hands cap physically allows is slew / THAT radius, not
+# angular swing the linear blade-speed cap physically allows is slew / THAT radius, not
 # slew / the virtual cursor ring. Defaults to the ring radius; every live caller
 # passes the real span.
 func _apply_aim_slew(slew: float,
@@ -1279,6 +1279,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	ctx.self_forehand_perp_sign = _handedness_perp_sign
 	_holds.configure_from(ctx)
 	ctx.self_stagger_timer = self_state.stagger_timer if self_state != null else 0.0
+	ctx.self_settle_s = self_state.settle_left_s if self_state != null else 0.0
 	ctx.pursuit_standoff_m = _pursuit_standoff_m
 	ctx.pass_speed_scale = _pass_speed_scale
 	ctx.check_aggression = _check_aggression
@@ -1982,7 +1983,7 @@ func _arc_step_mouse_target(self_pos: Vector3, final_target: Vector3,
 	var rules: FacingRules.Config = _role_ctx.self_facing_rules
 	var to_dir := Vector2(desired_dir.x, desired_dir.z)
 	var moving: bool = vel.length() > rules.hold_min_speed and facing.length_squared() > 0.0001
-	var turning_round: bool = moving and absf(facing.angle_to(to_dir)) \
+	var turning_round: bool = facing.length_squared() > 0.0001 and absf(facing.angle_to(to_dir)) \
 			>= FacingRules.reach_edge(rules, facing, to_dir, _is_left_handed)
 	if moving and not turning_round:
 		diff = -BladeRoute.swing_angle(Vector2(seed_dir.x, seed_dir.z), to_dir, facing, vel,
@@ -2015,31 +2016,13 @@ func _arc_step_mouse_target(self_pos: Vector3, final_target: Vector3,
 	return self_pos + Vector3(sin(stepped_angle), 0.0, cos(stepped_angle)) * ring_radius
 
 
-# FACE-mode cursor placement: a point on the body ring in the direction the bot
-# wants to point. Moving, it points straight at the target: past the reach edge
-# that is what pivots the hips round to it (FacingRules), turning toward the
-# cursor's side. Standing still the back wedge freezes facing, so there it is
-# CLAMPED into the reachable cone (_self_reach_cone_half_angle −
-# FACE_GATE_MARGIN_RAD) of the current facing, on the target's side: facing
-# rotates to that edge, the target's relative angle shrinks as the body turns,
-# and the clamp releases — the bot walks all the way around.
-func _clamp_aim_to_reach_cone(self_pos: Vector3, target: Vector3,
-		self_state: SkaterNetworkState) -> Vector3:
+# FACE-mode cursor placement: a point on the body ring straight at the target.
+# Behind the body that turns it round, on the cursor's side, standing or moving.
+func _face_ring_point(self_pos: Vector3, target: Vector3) -> Vector3:
 	var to_target := Vector2(target.x - self_pos.x, target.z - self_pos.z)
 	if to_target.length_squared() < 0.0001:
 		return target
-	var target_dir: Vector2 = to_target.normalized()
-	var facing := Vector2(0.0, 1.0)
-	var free_to_turn_round: bool = false
-	if self_state != null:
-		if self_state.facing.length_squared() > 0.0001:
-			facing = self_state.facing.normalized()
-		free_to_turn_round = Vector2(self_state.velocity.x, self_state.velocity.z).length() \
-				> _role_ctx.self_facing_rules.hold_min_speed
-	var ang: float = facing.angle_to(target_dir)
-	var gate: float = maxf(_self_reach_cone_half_angle - FACE_GATE_MARGIN_RAD, 0.0)
-	var out_dir: Vector2 = target_dir if free_to_turn_round or absf(ang) <= gate \
-			else facing.rotated(signf(ang) * gate)
+	var out_dir: Vector2 = to_target.normalized()
 	return self_pos + Vector3(out_dir.x, 0.0, out_dir.y) * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
 
 
@@ -3015,20 +2998,13 @@ const _STEP_FACE: int = 2
 const _STEP_FRONT: int = 3
 const _STEP_HOLD_ARC: int = 4
 
-# Headroom below the pose IK gate (_self_reach_cone_half_angle) that a standing
-# bot's FACE-mode cursor is clamped to, so it never sits exactly on the freeze
-# boundary. Only affects a target in the back wedge; the body still walks all the
-# way around to it as facing rotates and the clamp releases.
-const FACE_GATE_MARGIN_RAD: float = deg_to_rad(6.0)
-
-
 func _step_mouse_aim(target: Vector3) -> Vector3:
 	return _step_mouse_internal(target, _STEP_ARC, _mouse_max_speed_m_s, _mouse_arc_rate_rad_s)
 
 
 # Body-FACING aim (off-puck ready stance, tag-up, one-timer/jab/tie aims): the
 # cursor goes DIRECTLY where the bot wants to point, like a human flicking the
-# mouse, clamped to the reachable cone (_clamp_aim_to_reach_cone); facing_drag_speed
+# mouse (_face_ring_point); facing_drag_speed
 # is the one rotation limit, as for a human. Any implied blade motion stays
 # clamped to the real max_blade_speed downstream.
 func _step_mouse_face(target: Vector3) -> Vector3:
@@ -3101,8 +3077,7 @@ func _step_mouse_internal(target: Vector3, mode: int,
 	elif mode == _STEP_FACE:
 		# Snap the cursor to the clamped point (facing_drag_speed does all the
 		# smoothing), so return straight out without the linear slew below.
-		step_target = _clamp_aim_to_reach_cone(
-				_current_self_pos, target, _current_self_state)
+		step_target = _face_ring_point(_current_self_pos, target)
 		_mouse_pos = Vector3(step_target.x, 0.0, step_target.z)
 		_mouse_pos_initialized = true
 		return Vector3(_mouse_pos.x, 0.0, _mouse_pos.z)

@@ -36,7 +36,7 @@ extends RefCounted
 #                      stick_check u8 (phase[2:0] + ticks elapsed[7:3]) (v70),
 #                      body lock u8 (pin_role[1:0] BoardPinRules.Role (v74) + diving[2] (v75)),
 #                      pin_strength u8@1/255 (v74),
-#                      cross_check u8 (phase[1:0] + ticks elapsed[7:2]) (v77)
+#                      cross_check u8 (phase[1:0] + ticks elapsed[7:2]) (v78)
 #      Puck    (13 B): pos s16/s16/s16@1cm, vel 3×s16@0.02m/s, carrier_idx u8 (0xFF=none)
 #      Goalie  (43 B): root (12 B) + pose (31 B). Root:
 #                      pos_x/z s16@1cm, rot_y s16@π/32767, state u8, fho u8,

@@ -39,6 +39,7 @@ func _random_top_cfg() -> TopHandIK.Config:
 	cfg.hand_y_max = cfg.hand_rest_y + _rng.randf_range(0.05, 0.6)
 	cfg.rom_forehand_angle_max = _rng.randf_range(0.1, 1.2)
 	cfg.rom_backhand_angle_max = _rng.randf_range(0.1, 2.5)
+	cfg.rom_forward_reach_max = _rng.randf_range(0.05, 1.0)
 	cfg.rom_forehand_reach_max = _rng.randf_range(0.05, 0.5)
 	cfg.rom_backhand_reach_max = _rng.randf_range(0.05, 1.0)
 	# The boards' reach cap. Mostly unconstrained (open ice), but a third of the
@@ -56,6 +57,7 @@ func _native_top_from(cfg: TopHandIK.Config) -> RefCounted:
 	native.hand_y_max = cfg.hand_y_max
 	native.rom_forehand_angle_max = cfg.rom_forehand_angle_max
 	native.rom_backhand_angle_max = cfg.rom_backhand_angle_max
+	native.rom_forward_reach_max = cfg.rom_forward_reach_max
 	native.rom_forehand_reach_max = cfg.rom_forehand_reach_max
 	native.rom_backhand_reach_max = cfg.rom_backhand_reach_max
 	native.max_blade_reach = cfg.max_blade_reach
@@ -128,14 +130,14 @@ func test_bottom_hand_solve_matches_native() -> void:
 		cfg.backhand_angle = _rng.randf_range(0.0, PI)
 		cfg.release_angle_max = _rng.randf_range(0.2, 2.0)
 		cfg.release_angle_band = _rng.randf_range(0.01, 1.0)
-		var shoulder: Vector3 = _random_shoulder()
+		var rest: Vector3 = _random_shoulder() + Vector3(0.0, _rng.randf_range(-0.6, 0.2), 0.0)
 		var grip := Vector2(_rng.randf_range(-1.5, 1.5), _rng.randf_range(-1.5, 1.5))
 
-		var gd: Vector3 = BottomHandIK.solve(shoulder, grip, cfg)
+		var gd: Vector3 = BottomHandIK.solve(rest, grip, cfg)
 		native.hand_y = cfg.hand_y
 		native.release_angle_max = cfg.release_angle_max
 		native.release_angle_band = cfg.release_angle_band
-		var cpp: Vector3 = native.solve(shoulder, grip, cfg.backhand_angle)
+		var cpp: Vector3 = native.solve(rest, grip, cfg.backhand_angle)
 		var err: float = gd.distance_to(cpp)
 		if err > TOLERANCE:
 			fail_test("bottom-hand diverged at iter %d: gd=%s cpp=%s err=%f angle=%f" % [

@@ -178,8 +178,12 @@ func update_top_arm() -> void:
 			SkaterMeshBuilder.UpperBone.TOP_HAND)
 
 
+# The bottom glove rides the drawn shaft's bow: the marker stays on the straight
+# gameplay stick, the hand goes where the bent shaft actually is.
 func update_bottom_arm() -> void:
-	_update_arm(1, _skater.bottom_shoulder.position, _skater.bottom_hand.position,
+	var hand: Vector3 = _skater.bottom_hand.position
+	hand += _skater.stick_bow_offset(hand)
+	_update_arm(1, _skater.bottom_shoulder.position, hand,
 			-1.0 if _skater.is_left_handed else 1.0,
 			SkaterMeshBuilder.UpperBone.BOTTOM_UPPER_ARM,
 			SkaterMeshBuilder.UpperBone.BOTTOM_FOREARM,

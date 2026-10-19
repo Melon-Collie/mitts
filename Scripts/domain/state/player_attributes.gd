@@ -1,338 +1,216 @@
 class_name PlayerAttributes
 extends RefCounted
 
-# PlayerAttributes
-# ----------------
-# Per-skater build on the v4 BODY + GEAR model: two continuous body dials
-# (HEIGHT in inches, WEIGHT in pounds) plus four discrete gear slots (skate
-# profile, blade curve, stick flex, stick length — 0/1/2, 1 = balanced). Every
-# axis is lateral, so there is no legality beyond range coercion: validation
-# clamps (coerce_height / coerce_weight / _clamp_gear) and never rejects.
-# Neutral is 6'1" / 201 lbs / all-balanced, where every multiplier is 1.0 and
-# the build behaves exactly as the shipped @export defaults do.
+# A skater's build: two continuous body dials (HEIGHT in inches, WEIGHT in
+# pounds) plus four discrete gear slots (skate profile, blade curve, stick flex,
+# stick length — 0/1/2, 1 = the default). Every axis is lateral, so validation only
+# coerces into range and never rejects. Neutral is 6'1" / 201 lbs / all-balanced,
+# where every multiplier is 1.0 and the build plays the controller's defaults.
 #
-# What each dial routes to, and why, is Scripts/domain/state/CLAUDE.md; the
-# design of record is docs/attributes-v4-plan.md.
+# What each dial routes to, and why: Scripts/domain/state/CLAUDE.md.
 #
-# All tuning tables live in this file as private consts, consumed via the
-# named accessors below — never index a `_*` table outside this file.
-#
-# To add a new "height/weight X scales Y" rule:
-#   1. Add a table: `_FOO_H: Array[float]` (5-vec, height anchors) or
-#      `_FOO_F: Array[float]` (5-vec, frame anchors lean→heavy).
-#   2. Add an accessor `func foo_mult() -> float` returning `_h(...)`/`_f(...)`.
-#   3. Multiply a captured base in SkaterController.apply_attributes /
-#      SkaterAppearanceCoordinator.apply.
-#
-# Persistence: PlayerPrefs (attr_scale_version 5; older saves migrate via
-# migrate_tiers / migrate_legacy), BotIdentityRegistry (bot picks),
-# NetworkManager peer table (6 ints replicated at join).
+# Tuning tables are private consts read through the named accessors — never
+# index a `_*` table outside this file. To add a "height/weight X scales Y"
+# rule: a 5-vec table (`_FOO_H` at ANCHOR_INCHES, or `_FOO_F` at the frame
+# anchors lean→heavy), an accessor returning `_h(...)` / `_f(...)`, and a
+# captured base multiplied in SkaterController.apply_attributes or
+# SkaterAppearanceCoordinator.apply.
 
-# Height is stored in INCHES and is a free CONTINUOUS dial: every inch from
-# 5'7" (67) to 6'8" (80) is playable. Tables are authored at 5 anchor heights
-# (ANCHOR_INCHES); heights in between linearly interpolate the adjacent rows.
+# Every inch from 5'7" to 6'8" is playable; tables interpolate between the
+# anchor rows.
 const HEIGHT_MIN: int = 67     # 5'7"
 const HEIGHT_MEDIUM: int = 73  # 6'1"  (neutral)
 const HEIGHT_MAX: int = 80     # 6'8"
 
-# The 5 height table rows sit at these heights (inches). 5'10" (row 1) is the
-# mesh-native anchor where the reach/height multiplier is exactly 1.0.
-#
-# The two OUTER rows are extensions of the curve, not free anchors: each end
-# segment's per-inch slope simply continues to the end height —
+# Height table rows. 5'10" (row 1) is the mesh-native anchor where the
+# reach/height multiplier is exactly 1.0. The two OUTER rows continue their end
+# segment's per-inch slope rather than being free anchors —
 #
 #     V80 = V79 + (V79 − V76)/3        V67 = V68 − (V70 − V68)/2
 #
-# — so every height from 5'8" to 6'7" reads the value a table anchored at
-# 5'8"/6'7" would give it, and the two outer inches genuinely extend each curve
-# instead of copying their neighbours. Rebalance both end rows by that rule if
-# the range ever moves again. The 4-decimal constants in the tables below are
-# the bottom-row halvings, carried to 4 places precisely so 5'8" and 5'9" stay
-# bit-exact.
+# — so 5'8"–6'7" read exactly what a table anchored at 5'8"/6'7" gives. Rebalance
+# both end rows by that rule if the range moves. The 4-decimal constants are
+# those halvings carried to 4 places so 5'8" and 5'9" stay bit-exact.
 const ANCHOR_INCHES: Array[int] = [67, 70, 73, 76, 80]  # 5'7"..6'8"
 
-# The legacy 1..5 height STEP mapping is frozen at the v3 height set, which
-# ran 5'8"–6'7". It deliberately does NOT track ANCHOR_INCHES: a saved tier-era
-# build should keep the body it had, not gain or lose an inch because the range
-# was extended later.
-const LEGACY_HEIGHT_STEPS: Array[int] = [68, 70, 73, 76, 79]
-
-# ── Weight band (BMI interval + absolute floor — see plan doc §3.2) ───────────
-# One authored band generates the per-height pounds range: lbs = BMI·in²/703.
+# ── Weight band ───────────────────────────────────────────────────────────────
+# lbs = BMI·in²/703, bounded by a BMI interval and an absolute floor; fitted to
+# a 46-player sample of listed NHL heights and weights.
 #
-# CALIBRATION (2026-07, against a 46-player listed-height/weight sample of the
-# current NHL). Two things the sample settles:
+#   • BMI is the right normalizer: ln(weight) on ln(height) regresses at an
+#     exponent of 2.01, and BMI has no usable drift with height. Mean 26.05,
+#     SD 1.61.
+#   • The lean edge is two floors. A RATIO floor (23.0) governs 5'11" and up,
+#     set just under the leanest real bodies there (Reichel 6'0"/170 = 23.05,
+#     then a 23.6–23.9 cluster; 6'4" lands at 189, clearing Dobson 195 and
+#     Rinzel 194). An ABSOLUTE floor (MIN_PLAYABLE_LBS) governs 5'7"–5'10",
+#     where the ratio would allow 147–160 lb.
+#   • The heavy edge (29.0) lands on Kaprizov (5'10"/202). Each edge excludes
+#     ~2 tail bodies rather than stretching to an outlier.
 #
-#   • BMI IS the right normalizer. Regressing ln(weight) on ln(height) over the
-#     sample gives an exponent of 2.01 — h² on the nose — and BMI itself has no
-#     usable drift with height (+0.007 BMI/inch). So the band is a horizontal
-#     interval, NOT a height-tilted one: mean BMI 26.05, SD 1.61.
-#
-#   • The LEAN edge cannot be one ratio. A single BMI floor gets set by what
-#     SHORT players can get away with, because their lower tail is truncated by
-#     an ABSOLUTE mass floor (Lane Hutson at 5'9"/162 is the lightest body in
-#     the league) rather than by a ratio: you have to survive contact against
-#     200-lb bodies, and that bound is in pounds, not in BMI. Tall players are
-#     nowhere near that floor, so their real lower tail runs much leaner — a
-#     flat 24.0 puts 6'4" at 197 lb and forbids two actual 6'4" NHL defensemen
-#     (Noah Dobson 195, Sam Rinzel 194). So the model says what the bodies say:
-#     a RATIO ceiling (carrying fat costs skating) and an ABSOLUTE floor (you
-#     cannot be too light to play), and the band is their overlap.
-#
-# WHERE THE TWO FLOORS SIT. They are independent levers covering different
-# heights, and each is fitted to the tail it actually governs:
-#
-#   • The RATIO floor (23.0) governs 5'11" and up, and is set just under the
-#     leanest real bodies there — Reichel (6'0"/170 = 23.05) and Ehlers
-#     (6'0"/172 = 23.32) at the low end, then a dense 23.6–23.9 cluster
-#     (Rinzel, Dobson, K. Johnson, Pettersson, Edvinsson). It puts 6'4" at
-#     189, clearing Dobson 195 / Rinzel 194.
-#   • The ABSOLUTE floor (162) governs 5'7"–5'10", where the ratio floor falls
-#     to 147–160 and stops meaning anything. 162 IS the lightest player in the
-#     NHL (Lane Hutson, 5'9"), i.e. "you cannot be lighter than the lightest
-#     man who has ever held the job." The lightest bodies at the neighbouring
-#     short heights — Stankoven 5'8"/165, Garland 5'10"/165 — clear it by 3.
-#
-# The band edge landing exactly on one player is the shape of a fitted edge,
-# not a defect: the 29.0 ceiling lands exactly on Kaprizov (5'10"/202) the
-# same way.
-#
-# The band is deliberately ASYMMETRIC about MEDIUM (3.0 BMI lean-side vs 2.5
-# heavy-side): the empirical center sits at 26.05, but MEDIUM is pinned to the
-# canonical 6'1"/201 NHL-average frame because that is the game's neutral
-# identity — every @export default is authored there. frame_t() is piecewise
-# about MEDIUM so the neutral still lands on exactly 0.5 and the frame anchors
-# stay evenly spaced in frame-t (which is the axis the _f() tables index).
-#
-# Calibration namechecks: neutral = 6'1"/201 (NHL-average build); McDavid
-# (6'1"/194) lean-mid; Dobson/Rinzel (6'4"/195, 194) ≈ 6'4"-LEAN; DeBrincat
-# (5'8"/180) ≈ SOLID; Kaprizov (5'10"/202) = 5'10"-HEAVY exactly; Tage Thompson
-# (6'6"/218) lean-mid; Oleksiak (6'7"/252) ≈ 6'7"-HEAVY.
+# The band is ASYMMETRIC about BMI_MEDIUM (3.0 lean-side, 2.5 heavy-side): the
+# empirical centre is 26.05, but the neutral is pinned to the 6'1"/201
+# NHL-average frame every default is authored at. frame_t() is piecewise about
+# it so the neutral still lands on exactly 0.5.
 const BMI_LEAN: float = 23.0
 const BMI_MEDIUM: float = 26.5   # neutral frame
 const BMI_HEAVY: float = 29.0
 
-# Absolute lower bound on a playable body, in pounds — the floor that the BMI
-# ratio cannot express. Binds at 5'7"–5'10", where the 23.0 ratio floor falls
-# to 147–160 and would allow bodies lighter than anyone who has ever held an
-# NHL job; from 5'11" up the ratio floor is the higher of the two. See the
-# band block above for why 162 and not 160.
+# The lightest player in the NHL (Lane Hutson, 5'9"/162). The lightest bodies
+# at the neighbouring short heights (Stankoven 5'8"/165, Garland 5'10"/165)
+# clear it.
 const MIN_PLAYABLE_LBS: int = 162
 
-# Neutral mass reference (lbs): BMI 26.5 at 73" → round(26.5·73²/703) = 201.
-# mass_mult is LINEAR in displayed weight — deliberately wider than v3's
-# minor height edge (0.79..1.28, a 1.63× spread): with no Checking stat, mass
-# is the physical system, feeding delivery and brace through the collision
-# resolver's reduced-mass math. Escape hatch if too swingy: compress with an
-# exponent ((lbs/201)^p, p ≤ 1) — physics gives the shape, playtest the
-# magnitude.
+# BMI 26.5 at 73" → round(26.5·73²/703) = 201. mass_mult is linear in it, a
+# 0.79..1.28 spread across the band: mass is the physical system, feeding
+# delivery and brace through the collision resolver's reduced-mass math. If
+# that proves too swingy, compress with an exponent ((lbs/201)^p, p ≤ 1).
 const NEUTRAL_WEIGHT_LBS: float = 201.0
 
 # ── Gear slots ───────────────────────────────────────────────────────────────
-# Every slot is 0/1/2 with 1 = the balanced/neutral option. Options are
-# discrete and chunky by design (the loft-level pattern) — never sliders.
+# Every slot is 0/1/2 with 1 = the default option. Discrete and chunky by
+# design — never sliders.
 const GEAR_BALANCED: int = 1
 
-const PROFILE_AGILITY: int = 0   # +accel / first step / cornering, −top speed
-const PROFILE_BALANCED: int = 1
-const PROFILE_POWER: int = 2     # +top speed / glide, −agility
+# Skate profile: three skates, no plain one. Stability is the default and the
+# league base, so its leans are all 1.0.
+const PROFILE_SHIFTY: int = 0     # tight space: edges, first step, the stance
+const PROFILE_STABILITY: int = 1  # backward: the gap-control skate
+const PROFILE_POWER: int = 2      # open ice: top end, glide, crossovers
 
-const CURVE_CLOSED: int = 0      # hardest to elevate, best backhand
+const CURVE_CLOSED: int = 0      # flattest ladder, best backhand
 const CURVE_BALANCED: int = 1
-const CURVE_OPEN: int = 2        # easier elevation (FLAT/LOW), quick release, worst backhand
+const CURVE_OPEN: int = 2        # steepest ladder, worst backhand
 
-const FLEX_LOW: int = 0          # whippy: −power ceiling, shortest runway/wind-up
+const FLEX_LOW: int = 0          # whippy: the wrist-shot stick — more shot without body load
 const FLEX_MEDIUM: int = 1
-const FLEX_HIGH: int = 2         # stiff: +power ceiling, longest runway/wind-up
+const FLEX_HIGH: int = 2         # stiff: the slapshot stick — bigger slapper, longer wind-up
 
-# The retail stiffness ladder — the flex numbers sticks actually ship in. The
-# workbench shows the build's real number (see flex_number); the gameplay leans
-# never read it, they stay on the relative pick.
+# The retail stiffness ladder — the flex numbers sticks actually ship in.
 const FLEX_LADDER: Array[int] = [65, 75, 85, 100, 110]
 
 # Shaft stiffness per pound of body at a matched fit. The half-bodyweight rule
-# of thumb overshoots what players actually shoot (big NHL forwards routinely
-# sit well under it — release beats ceiling); 0.42 puts the 201 lb neutral on
-# an 85, the most-shipped number, and leaves exactly one rung of headroom at
-# both ends of the ladder for the gear pick to shift into.
+# of thumb overshoots what players actually shoot; 0.42 puts the 201 lb neutral
+# on an 85, the most-shipped number, and leaves one rung of headroom at both
+# ends of the ladder for the gear pick to shift into.
 const _MATCHED_FLEX_PER_LB: float = 0.42
 
 const LENGTH_SHORT: int = 0      # −reach, snappiest reversal, finest close control
 const LENGTH_STANDARD: int = 1
 const LENGTH_LONG: int = 2       # +reach / tip speed / contest momentum, +inertia
 
-# ── Gameplay tables — height-indexed (5 rows at ANCHOR_INCHES) ────────────────
-# The body plane is deliberately narrow — height alone moves a multiplier by a
-# few percent. The gear leans below are what re-widen the spread laterally.
+# ── Height tables (rows at ANCHOR_INCHES) ─────────────────────────────────────
+# Height trades the long frame (reach, shot power) against the short one
+# (burst, turns, a quicker wind-up). Top speed is NOT a height lever: if size
+# bought speed, every build would be the tallest one. It is the skates' alone.
 
-# Speed baseline (max_speed). The hump: top speed peaks at medium height.
-const _SPEED_H: Array[float] = [0.9875, 0.995, 1.000, 0.995, 0.988]
+# First-step burst: a shorter leg cycles its stride faster. Linear at 1.2% an
+# inch about the neutral height.
+const _ACCEL_H: Array[float] = [1.072, 1.036, 1.000, 0.964, 0.916]
 
-# Agility baseline (turn rate / brake / facing / lateral). Small-favored.
+# Turn rate / brake / facing / lateral grip. Small-favored.
 const _AGILITY_H: Array[float] = [1.065, 1.020, 1.000, 0.960, 0.920]
 
-# Shot-power baseline (charged wrister/slapper ceiling). Big-favored — the
-# leverage a long frame loads into a shot. Wind-up derives inversely.
+# Charged-shot ceiling. Big-favored — the leverage a long frame loads into a
+# shot — and the slapper wind-up with it: the long lever takes longer to load.
 const _SHOT_H: Array[float] = [0.880, 0.940, 1.000, 1.050, 1.103]
 
-# Hitbox cylinder radius — girth_mult(), the same grounded lateral width the
-# silhouette wears (hitbox tracks the visual body exactly): bigger poke
-# target and net-front screen for the wide build, slimmer profile for the
-# lean one. See girth_mult() for the model.
-
-# Body height (mesh Y-scale, arm/ROM length, hand heights). Mesh-native 5'10"
-# is row 1, so the 1.0 identity sits there (NOT the 6'1" gameplay neutral).
+# Mesh Y-scale, arm length, hand heights. Mesh-native 5'10" (row 1) is 1.0,
+# not the 6'1" gameplay neutral.
 const _HEIGHT: Array[float] = [0.9565, 1.000, 1.043, 1.086, 1.143]
 
-# Stick length — equipment, ~0.65× the height deviation from mesh-native 5'10".
-# Height sets the BAND CENTER (real sticks are cut to the body)…
+# Stick cut to the body at ~0.65× the height deviation from 5'10" — real sticks
+# track height only loosely…
 const _STICK_LEN: Array[float] = [0.9715, 1.000, 1.028, 1.056, 1.093]
-# …and the LENGTH gear slot leans it: a lean on your height's stick, not an
-# absolute pick, so max-height + LONG can't stack reach beyond the tuned
-# corner. Symmetric ±4% (whether LONG should
-# lean more conservatively than SHORT is an open tuning call — reach is the
-# closest thing the game has to raw power, but the lever-derived inertia and
-# tip-speed tradeoffs are what price it honestly). Everything downstream of
-# stick_len_mult follows automatically: stick/blade mesh, poke + claim reach,
-# blade-cap lever derivation, wrister full-stroke rescale.
+# …and the LENGTH slot leans that cut ±4% rather than picking an absolute
+# length, so max height + LONG can't stack reach past the tuned corner.
 const _LENGTH_LEAN: Array[float] = [0.960, 1.000, 1.040]  # SHORT / STANDARD / LONG
 
-# ── Gear-lean tables — 3-vec, indexed by the slot option (0/1/2) ─────────────
-# SKATE PROFILE — top-end ↔ burst. POWER (long flat
-# grind) = +top speed and +glide, −agility (turn/brake/grip — it multiplies
-# the full agility lever, lateral_grip included); AGILITY (rockered) = +first
-# step and +cornering, −top speed. The speed lean is what re-widens the
-# top-speed band the body plane deliberately compressed (~20.5–24 mph across
-# profiles). STACKED AGILITY CORNERS
-# (body × gear, pinned by test): best 5'7"-lean-agility ≈ 1.15, worst
-# 6'8"-heavy-power ≈ 0.84 — a self-chosen extreme, deliberately outside the
-# involuntary body floor/ceiling (~0.88 / ~1.10).
-const _PROFILE_SPEED_LEAN: Array[float] = [0.96, 1.00, 1.04]    # agility / balanced / power
-const _PROFILE_AGILITY_LEAN: Array[float] = [1.05, 1.00, 0.95]
-const _PROFILE_ACCEL_LEAN: Array[float] = [1.04, 1.00, 0.98]
+# Adult heads are nearly constant across statures, so the helmet moves a few
+# percent rather than with the body — what sells a tall build as big, not
+# zoomed.
+const _HEAD_BULK: Array[float] = [0.935, 0.98, 1.00, 1.03, 1.07]
+
+# ── Gear leans (indexed by the slot, 0/1/2) ───────────────────────────────────
+# SKATE PROFILE — where a skater's skating lives. Each wins one kind of ice and
+# pays in another, about the Stability base:
+#   SHIFTY     tight space: agility (turn, stop, grip), first step, the Shift
+#              stance's grip and side-step. Pays the top end and the coast.
+#   STABILITY  backward: thrust and top speed skating backward (gap control).
+#              Pays the crossover push across its facing.
+#   POWER      open ice: top speed, glide, and the crossover push across its
+#              facing (building speed wide with the shoulders squared to the
+#              play). Pays the corners, the stance, and backward skating.
+# Top speed is the profiles' alone (~21.5–23.3 mph). Stacked with the body,
+# agility runs ~0.83 (6'8" heavy power) to ~1.16 (5'7" lean shifty).
+const _PROFILE_SPEED_LEAN: Array[float] = [0.96, 1.00, 1.04]    # shifty / stability / power
+const _PROFILE_AGILITY_LEAN: Array[float] = [1.06, 1.00, 0.94]
+const _PROFILE_ACCEL_LEAN: Array[float] = [1.04, 1.00, 1.00]
 const _PROFILE_GLIDE_LEAN: Array[float] = [1.03, 1.00, 0.96]    # drag mult: lower = coasts better
+# On the controller's Stability base (crossover 0.84, backward 0.90, stance
+# grip 2.0, side-step 1.2): shifty 0.90 / 0.80 / 2.4 / 1.4, power 1.00 / 0.74 /
+# 1.8 / 1.1.
+const _PROFILE_CROSSOVER_LEAN: Array[float] = [1.07, 1.00, 1.19]
+const _PROFILE_BACKWARD_LEAN: Array[float] = [0.89, 1.00, 0.82]
+const _PROFILE_STANCE_GRIP_LEAN: Array[float] = [1.20, 1.00, 0.90]
+const _PROFILE_SIDESTEP_LEAN: Array[float] = [1.17, 1.00, 0.92]
 
-# STICK FLEX — power ↔ release, a true seesaw: stiff loads a bigger shot but
-# pays a slower load (longer slapper wind-up AND longer wrister runway);
-# whippy is the snap release at a softer ceiling. NOTE the charge lean goes
-# WITH the power lean, deliberately breaking from the height coupling
-# (2 − power, where a harder shooter also threatens sooner): a lateral slot
-# must trade, never stack. Real-hockey sign convention: high flex number = stiffer.
-const _FLEX_SHOT_LEAN: Array[float] = [0.94, 1.00, 1.06]    # whippy / medium / stiff
-const _FLEX_CHARGE_LEAN: Array[float] = [0.92, 1.00, 1.10]  # wind-up time, with power
-const _FLEX_RUNWAY_LEAN: Array[float] = [0.90, 1.00, 1.12]  # wrister full-stroke travel
+# STICK FLEX — a stiff shaft pays off only when a big swing bends it; a whippy
+# one bends under less. So stiff is the slapshot stick: a bigger slapper that
+# needs a longer wind-up to load (the charge lean goes WITH the power lean, as
+# height's does — a lateral slot trades, never stacks).
+# Whippy is the wrist-shot stick: the shaft carries more of a wrister the torso
+# can't load (wrister_unloaded_share 0.70 / 0.60 / 0.50 at the controller's 0.6
+# base). The wrister ceiling is flex-free, so the two break even on a fully
+# loaded wrister.
+const _FLEX_SLAP_LEAN: Array[float] = [0.94, 1.00, 1.06]    # whippy / medium / stiff
+const _FLEX_CHARGE_LEAN: Array[float] = [0.92, 1.00, 1.10]  # slapper wind-up time
+const _FLEX_UNLOADED_LEAN: Array[float] = [7.0 / 6.0, 1.00, 5.0 / 6.0]
+# How far the shaft visibly bows under the same shot — cosmetic, and
+# exaggerated past the stiffness ratio so the stick reads from the game camera.
+const _FLEX_BEND_LEAN: Array[float] = [1.40, 1.00, 0.65]
 
-# BLADE CURVE — three house patterns modeled on hockey's most-played real
-# blades: M88 (closed slot — the P88-like mid curve), M92 (balanced — the
-# P92-like mid-toe all-rounder, the neutral row), M28 (open — the P28-like
-# open toe hook). The ANGLE LADDER is the elevation lever (the manual
-# contact-point model — docs/elevation-rework-plan.md v3): each loft level is
-# a set launch angle from this pattern's ladder, steeper on the open blade at
-# every rung.
-#
-# THE LEVEL NAMES THE SHOT; THE GEAR NAMES THE RANGE. Each level targets a
-# GOALIE-POSTURE landmark — absolute heights off the ice, not fractions of the
-# net — and each gear places those same three shots at its own HOME RANGE:
-#
-#   level        target        what it beats
-#   LOW  (35%)   0.41 m        over the butterfly pad (0.28), UNDER his hands
-#   MID  (60%)   0.70 m        the armpit — OVER his committed hands (0.49)
-#   HIGH (85%)   0.99 m        upstairs — over the standing pad seam (0.86)
-#
-#   gear   home    ladder
-#   M88    8.5 m   the range blade — peaks in the high slot / long range
-#   M92    6.0 m   the all-rounder — 3 shots from the slot out to long range
-#   M28    4.5 m   the close blade — peaks in the slot, owns the crease
-#
-# (Percentages are of the 1.17 m scoring cavity, a naming convenience only —
-# what the rungs actually clear is the goalie's equipment, whose heights are
-# absolute. See GoalieAnatomy for the pad/hand/torso boxes those come from.)
-#
-# Away from home the menu slides rather than breaking: one zone out a gear
-# keeps two shots, two zones out one. Nobody gets the full menu at the point,
-# which is deliberate — a point shot only has to reach the net, not pick a
-# corner (the whole net is a 3.4° window at 19 m, so no ladder could).
-#
-# Two properties fall out of anchoring the fans close in rather than at range,
-# and both are load-bearing:
-#   · BUILD TOLERANCE. Build variance lives entirely in the gravity drop
-#     (~d²/v²), so the ±17% shot-power spread moves arrival by only ±3–12 cm
-#     at these home ranges — a fan anchored at 15–22 m instead would spread it
-#     ±60 cm and need normalizing. Every build keeps its full menu at home; the
-#     lone casualty is a weak build's M88 LOW, which lands under the pad.
-#   · THE SLAPPER NEEDS NO SEPARATE LADDER. Its extra pace costs ~5 cm of drop
-#     at home range, so the same rungs ride about one notch higher. Real, and
-#     small enough that the level still means what it means.
-# NO rung sails on a wrister, and no LOW rung sails even off a max slapper
-# (apexes 0.62 / 0.75 / 1.01 m by gear) — the flat bottom of every ladder is
-# the universally safe shot.
-#
-# The rest of the identity triangle, all lateral trades about the M92:
-#   M88 — the playmaker/point blade: best backhand, +3% slapper (a flatter
-#         face stays square through the heel-contact sweep), and catches the
-#         hardest feeds (+7% reception ceiling — the flat blade cradles).
-#   M28 — the in-tight blade: the open toe is its whole (large) upside;
-#         it pays the deepest backhand penalty, −3% slapper, and hard feeds
-#         bounce off (−7% reception). Its stored quick-release runway lean
-#         goes live when the wrister travel gate unfreezes.
-# Backhand relief approaches but never reaches forehand parity
-# (0.75 base × 1.08 = 0.81). Reception lean scales the deflect ceiling +
-# alignment bonus at the decision sites (PuckReceptionRules callers) — never
-# pickup_max_speed, so soft passes settle on every blade and the client's
-# provisional-pickup gate stays build-independent.
+# BLADE CURVE — M88 / M92 / M28, modelled on the P88 / P92 / P28 patterns. Each
+# loft level is a set launch angle from the pattern's ladder, steeper on the
+# open blade at every rung; the level names the shot (a goalie-posture height)
+# and the gear names the range it lands it at (M88 8.5 m, M92 6.0 m, M28
+# 4.5 m). Design of record: docs/elevation-rework-plan.md §1. No LOW rung sails
+# even off a max slapper.
 const _CURVE_LOFT_LOW_DEG: Array[float] = [5.0, 5.5, 6.4]      # M88 / M92 / M28
 const _CURVE_LOFT_MID_DEG: Array[float] = [6.9, 8.2, 10.0]
 const _CURVE_LOFT_HIGH_DEG: Array[float] = [8.9, 11.0, 13.6]
-const _CURVE_RUNWAY_LEAN: Array[float] = [1.00, 1.00, 0.90]
+# The rest of the trade, about the M92: the M88's flatter face has the best
+# backhand (0.75 base × 1.08 stays under forehand parity), stays square through
+# a slapper's heel contact (slapper power only), and cradles harder feeds; the
+# M28 pays all three.
+# The reception lean scales the deflect ceiling, never pickup_max_speed, so soft
+# passes settle on every blade.
 const _CURVE_BACKHAND_LEAN: Array[float] = [1.08, 1.00, 0.90]
 const _CURVE_SLAP_LEAN: Array[float] = [1.03, 1.00, 0.97]
 const _CURVE_RECEPTION_LEAN: Array[float] = [1.07, 1.00, 0.93]
 
-# ── Gameplay tables — frame-indexed (5 rows lean→heavy at the BMI anchors) ────
-
-# Acceleration (thrust / forward burst). Lean = first-step quickness; heavy
-# trades the first step for mass-emergent momentum (no separate table — the
-# collision/inertia math already carries it).
+# ── Frame tables (rows lean→heavy at frame_t 0/.25/.5/.75/1) ──────────────────
+# First-step burst. Lean = quicker; heavy trades it for momentum, which the
+# collision math carries through mass and the glide through girth. Multiplies
+# the height baseline.
 const _ACCEL_F: Array[float] = [1.080, 1.040, 1.000, 0.980, 0.970]
 
-# Agility (turn / brake / facing) frame term — multiplies the height baseline.
-# Grounded in F = mv²/r: at fixed leg strength more mass means a wider arc and
-# a longer stop. This is the counterweight that makes the weight dial a real
-# seesaw (mass 1.28 is a big buy; without this its only tax was mild accel).
-# CORNER BUDGET (body-only): best 5'7"-lean 1.065·1.03 ≈ 1.10, worst 6'8"-heavy
-# 0.92·0.96 ≈ 0.88 — the involuntary floor a body alone can reach; the
-# skate-profile lean stacks on top of it (stacked corners pinned by test).
-# Deliberately NOT applied to edge glide — see
-# agility_glide_mult.
+# F = mv²/r: at fixed leg strength more mass is a wider arc and a longer stop —
+# the counterweight that makes weight a seesaw rather than a free mass buy.
+# Multiplies the height baseline.
 const _AGILITY_F: Array[float] = [1.030, 1.015, 1.000, 0.980, 0.960]
 
-# ── Visual tables ─────────────────────────────────────────────────────────────
-# Silhouette = body (v4): height drives overall Y scale; every LATERAL body
-# multiplier (torso, shoulders, limbs — and the hitbox radius, which tracks
-# the silhouette) is the single grounded girth_mult() below, so there are no
-# authored width curves left to drift. The head is the one part that keeps a
-# (mild) authored table — real adult heads are nearly constant across
-# statures, so it moves a few percent, not with the body.
-const _HEAD_BULK: Array[float] = [0.935, 0.98, 1.00, 1.03, 1.07]   # height
-
-# ── Top-speed / carry constants ───────────────────────────────────────────────
-# The normalization span is wider than the body plane's own speed range, so
-# body-only builds sit in the middle of the top-speed band and the skate-profile
-# lean is what reaches either end of it.
+# ── Top speed / carry ─────────────────────────────────────────────────────────
+# The normalization span the skate profile's speed lean sits in.
 const _SPEED_MULT_MIN: float = 0.955
 const _SPEED_MULT_MAX: float = 1.060
-# Top-speed multiplier, interpolated across the speed span — grounded to the
-# NHL EDGE 20–25 mph burst band.
+# Burst-band ceilings across the span — the NHL EDGE 20–25 mph band.
 const TOP_SPEED_MIN: float = 1.07
 const TOP_SPEED_MAX: float = 1.164
-# Carry speed = how much of your speed survives carrying (higher = less
-# penalty). Speed is the only easing term — there is no hands lever, by
-# constitution — and the base is written as the sum it derives from so the
-# neutral value stays exact.
+# Carry retention = base + band position × gain (~0.947–0.972). The base is
+# written as the sum it derives from so the neutral value stays exact.
 const CARRY_BASE: float = 0.92 + 0.07 * (0.15 / 0.39)
 const CARRY_SPEED_GAIN: float = 0.025
-const CARRY_FLOOR: float = 0.85
-const CARRY_CEIL: float = 0.99
 
 # ── State ─────────────────────────────────────────────────────────────────────
 var height: int = HEIGHT_MEDIUM
@@ -354,18 +232,9 @@ func _init(p_height: int = HEIGHT_MEDIUM, p_weight: int = 0,
 	length = _clamp_gear(p_length)
 
 
-# The neutral build (6'1"/201, all-balanced) — what every "give me a default
-# build" call site reads.
-static func all_average() -> PlayerAttributes:
+# The neutral build (6'1"/201, all-balanced).
+static func neutral() -> PlayerAttributes:
 	return PlayerAttributes.new()
-
-
-# Direct construction from raw levels in canonical wire order:
-# [height_in, weight_lbs, profile, curve, flex, length].
-static func from_levels(p_height: int, p_weight: int,
-		p_profile: int = GEAR_BALANCED, p_curve: int = GEAR_BALANCED,
-		p_flex: int = GEAR_BALANCED, p_length: int = GEAR_BALANCED) -> PlayerAttributes:
-	return PlayerAttributes.new(p_height, p_weight, p_profile, p_curve, p_flex, p_length)
 
 
 # ── Weight band helpers ───────────────────────────────────────────────────────
@@ -392,8 +261,8 @@ static func weight_neutral(inches: int) -> int:
 
 
 # Clamp a pounds value into the height's band. Zero/negative means "no stored
-# weight" (a pre-v5 save or a defaulted wire arg) and coerces to the height's
-# neutral frame, so legacy identities keep their silhouette.
+# weight" (a defaulted wire arg or a roster card that omits it) and coerces to
+# the height's neutral frame.
 static func coerce_weight(inches: int, lbs: int) -> int:
 	if lbs <= 0:
 		return weight_neutral(inches)
@@ -439,124 +308,130 @@ static func weight_for_frame_t(inches: int, t: float) -> int:
 	return int(roundf(lerpf(mid, float(weight_max(inches)), (f - 0.5) / 0.5)))
 
 
-func weight_label() -> String:
-	return "%d lbs" % weight
-
-
 # Format an inches value as feet'inches" (e.g. 73 → 6'1").
 static func inches_label(inches: int) -> String:
 	return "%d'%d\"" % [inches / 12, inches % 12]
 
 
-# ── Named multiplier accessors ────────────────────────────────────────────────
-# Body — height (× the skate-profile gear lean where the profile owns a share)
+# ── Body: skating and shooting ────────────────────────────────────────────────
+# The skate profile's top-speed lean — body-free by design. Not applied
+# directly; top_speed_mult and carry_speed_mult are read off it.
 func speed_mult() -> float:
-	return _h(_SPEED_H, height) * _PROFILE_SPEED_LEAN[profile]
-# Agility = height baseline × frame term (F = mv²/r — mass widens the arc and
-# lengthens the stop) × profile lean. Feeds turn / brake / facing / grip.
+	return _PROFILE_SPEED_LEAN[profile]
+
+
+# max_speed multiplier. The speed lean counts twice: once raw, and again
+# through its position in the 20–25 mph burst band, so the profile spread
+# reaches either end of that band. Neutral build = 1.0.
+func top_speed_mult() -> float:
+	var s: float = speed_mult()
+	return s * _top_speed_ceiling(s) / _top_speed_ceiling(1.0)
+
+
+# How much of top speed survives carrying the puck (higher = less penalty).
+func carry_speed_mult() -> float:
+	return CARRY_BASE + _speed_band_t(speed_mult()) * CARRY_SPEED_GAIN
+
+
+# Height baseline × frame term (F = mv²/r — mass widens the arc and lengthens
+# the stop) × profile lean. Feeds turn / brake / facing / lateral grip.
 func agility_mult() -> float:
 	return _h(_AGILITY_H, height) * _f(_AGILITY_F) * _PROFILE_AGILITY_LEAN[profile]
-# Edge glide is the inverse of the HEIGHT-ONLY agility component — deliberately
-# NOT the full agility_mult: routing the frame term in would make a heavy build
-# bleed speed while coasting, the opposite of the momentum identity the
-# accel↔momentum fork promises (the tank turns wide but coasts like his mass
-# says he should). The PROFILE lean does apply — blade contact length is
-# literally the glide surface (the long flat coasts, the rocker scrubs).
-func agility_glide_mult() -> float:
-	return (2.0 - _h(_AGILITY_H, height)) * _PROFILE_GLIDE_LEAN[profile]
-# Shot ceiling = height baseline × flex lean (stiff loads more).
-func shot_power_mult() -> float:    return _h(_SHOT_H, height) * _FLEX_SHOT_LEAN[flex]
-# Slapper wind-up: the HEIGHT part keeps the inherited inverse coupling
-# (2 − power — a big frame's harder shot also threatens sooner); the FLEX
-# part goes WITH the power lean (stiff = slower load) so the gear slot is a
-# lateral trade, not a stacked buff. See the _FLEX_CHARGE_LEAN doc.
+
+
+# Glide drag (the velocity-proportional term): drag over mass, with frontal
+# area ∝ sqrt(mass·height), is sqrt(height/mass) — exactly 1 / girth. So a
+# heavy-for-his-height body coasts and a tall lean one scrubs speed. The profile
+# lean applies too, since blade contact length is the glide surface.
+func glide_drag_mult() -> float:
+	return _PROFILE_GLIDE_LEAN[profile] / girth_mult()
+
+
+func accel_mult() -> float:
+	return _h(_ACCEL_H, height) * _f(_ACCEL_F) * _PROFILE_ACCEL_LEAN[profile]
+
+
+# The skate profile's leans on the push across the facing (crossover strides),
+# on backward thrust and top speed, and on the Shift stance's grip and side-step.
+func crossover_mult() -> float:
+	return _PROFILE_CROSSOVER_LEAN[profile]
+
+
+func backward_mult() -> float:
+	return _PROFILE_BACKWARD_LEAN[profile]
+
+
+func stance_grip_mult() -> float:
+	return _PROFILE_STANCE_GRIP_LEAN[profile]
+
+
+func sidestep_mult() -> float:
+	return _PROFILE_SIDESTEP_LEAN[profile]
+
+
+# Linear in displayed weight — see NEUTRAL_WEIGHT_LBS.
+func mass_mult() -> float:
+	return float(weight) / NEUTRAL_WEIGHT_LBS
+
+
+# Charged-wrister ceiling — the height baseline. Slappers read slapper_power_mult.
+func shot_power_mult() -> float:
+	return _h(_SHOT_H, height)
+
+
+# Slapper ceiling: the height baseline × the flex and blade-curve leans.
+func slapper_power_mult() -> float:
+	return shot_power_mult() * _FLEX_SLAP_LEAN[flex] * _CURVE_SLAP_LEAN[curve]
+
+
+# Scales wrister_unloaded_share — the share of a wrister the shaft carries with
+# no torso load behind it.
+func wrister_unloaded_mult() -> float:
+	return _FLEX_UNLOADED_LEAN[flex]
+
+
+# Slapper wind-up time, WITH power on both axes: the big frame's harder shot
+# takes longer to load, and so does the stiff stick's. Small builds get the
+# quicker release.
 func shot_charge_mult() -> float:
-	return (2.0 - _h(_SHOT_H, height)) * _FLEX_CHARGE_LEAN[flex]
+	return _h(_SHOT_H, height) * _FLEX_CHARGE_LEAN[flex]
 
-# Body — frame (× the profile's first-step lean)
-func accel_mult() -> float:         return _f(_ACCEL_F) * _PROFILE_ACCEL_LEAN[profile]
-# Mass is linear in displayed weight — see NEUTRAL_WEIGHT_LBS.
-func mass_mult() -> float:          return float(weight) / NEUTRAL_WEIGHT_LBS
 
-# Hands — CONSTITUTION: no fidelity scaling, ever. The blade tracks every
-# player's cursor identically; hands differentiation is lever GEOMETRY instead
-# (stick length → blade tip speed vs the inertia cap, derived in
-# SkaterController.apply_attributes). Accessors kept at 1.0 so apply_attributes
-# stays table-agnostic.
-func hands_blade_mult() -> float:    return 1.0
-func hands_backhand_mult() -> float: return 1.0
-
-# Checking — body-emergent: mass (above) feeds delivery and brace through the
-# collision resolver's reduced-mass math; there is no attribute term. Accessors
-# kept at neutral so apply_attributes stays table-agnostic.
-func check_delivery_mult() -> float: return 1.0
-func brace_mult() -> float:          return 1.0
-
-# Geometry
-# Lateral body girth — a grounded model, not an authored curve: body density
-# is ~constant, so cross-section area is mass/height and lateral girth is
-# sqrt(mass / height), normalized to the 6'1"/201 neutral. What falls out for
-# free: at a fixed BMI mass rides height², so a taller body is absolutely
-# broader yet RELATIVELY narrower than its height (the elongated tall
-# silhouette); a short max-frame build carries near-neutral absolute width on
-# a shorter body (the hydrant). BMI band + mass floor bound it to ~[0.93, 1.10].
+# ── Body: geometry ────────────────────────────────────────────────────────────
+# Lateral girth from constant body density: cross-section ∝ mass/height, so
+# girth = sqrt(mass/height), normalized to 6'1"/201. A taller body at a fixed
+# BMI is absolutely broader yet relatively narrower; a short heavy one keeps
+# near-neutral width on a shorter frame. Every lateral body part and the hitbox
+# radius wear it. The band bounds it to ~[0.93, 1.10].
 func girth_mult() -> float:
 	return sqrt(mass_mult() / (float(height) / float(HEIGHT_MEDIUM)))
 
 
-# Hitbox radius = the same girth the silhouette wears (hitbox tracks the
-# visual body exactly).
-func radius_mult() -> float:    return girth_mult()
-func height_mult() -> float:    return _h(_HEIGHT, height)
-# Height band center × the length gear lean (see _LENGTH_LEAN; `length` is
-# constructor-clamped to 0..2, so the direct index is safe).
-func stick_len_mult() -> float: return _h(_STICK_LEN, height) * _LENGTH_LEAN[length]
-
-# ── Gear-lean accessors (flex + curve) ───────────────────────────────────────
-# Wrister runway: fraction of the full-stroke travel this loadout needs for a
-# max-power release ("max power with less real estate consumed"). Flex and
-# curve stack; the floor across the stacked extremes (0.90 × 0.90 = 0.81) is
-# the runway-floor constraint — a max-power release must still emit a
-# readable wind-up tell (pinned by the calibration test).
-func wrister_runway_mult() -> float:
-	return _FLEX_RUNWAY_LEAN[flex] * _CURVE_RUNWAY_LEAN[curve]
-
-# Backhand coefficient lean — the one place backhand varies (technique is the
-# human; hands_backhand_mult stays 1.0 by constitution — this is the BLADE's
-# shape, not the player's skill).
-func curve_backhand_mult() -> float: return _CURVE_BACKHAND_LEAN[curve]
-
-# Slapper-only power lean — how square the pattern keeps the blade through
-# the heel-contact sweep (see the _CURVE_* doc). Multiplies with the flex
-# shot lean on the slapper min/max; wristers deliberately stay flex-only.
-func curve_slap_mult() -> float: return _CURVE_SLAP_LEAN[curve]
-
-# The stick's real stiffness number, for display. Weight picks the matched
-# rung of the retail ladder; the FLEX slot shifts it one rung either way. The
-# numbers OVERLAP across bodies by construction — an 85 is the plank a 165 lb
-# winger picks stiff and the noodle a 240 lb defenseman picks whippy — which is
-# how stick fitting actually works, and is why the leans above ride the
-# relative pick instead of this number: a number-driven lean would route weight
-# into the shot-power axis, which is height's by design.
-func flex_number() -> int:
-	return flex_number_for(weight, flex)
+func height_mult() -> float:
+	return _h(_HEIGHT, height)
 
 
-static func flex_number_for(lbs: int, p_flex: int) -> int:
-	# The matched rung is clamped off both ends of the ladder, so the gear
-	# shift always lands on a real rung instead of saturating.
-	var matched: int = clampi(_nearest_flex_rung(float(lbs) * _MATCHED_FLEX_PER_LB),
-			1, FLEX_LADDER.size() - 2)
-	return FLEX_LADDER[matched + _clamp_gear(p_flex) - GEAR_BALANCED]
+func head_bulk_mult() -> float:
+	return _h(_HEAD_BULK, height)
 
 
-# Reception ceiling lean — scales the deflect ceiling + squared-up bonus a
-# receiver's blade can soak (PuckReceptionRules decision sites). Physical
-# framing: the blown-open force limit of the blade shape, not a hands stat.
-func reception_ceiling_mult() -> float: return _CURVE_RECEPTION_LEAN[curve]
+func stick_len_mult() -> float:
+	return _h(_STICK_LEN, height) * _LENGTH_LEAN[length]
 
-# tan(launch angle) per loft level — this pattern's angle ladder (see the
-# _CURVE_LOFT_*_DEG doc). Every rung sits under ShotMechanics.MAX_LOFT_RATIO.
+
+# ── Gear: blade curve and flex ────────────────────────────────────────────────
+func curve_backhand_mult() -> float:
+	return _CURVE_BACKHAND_LEAN[curve]
+
+
+# Scales the deflect ceiling + squared-up bonus a receiver's blade can soak —
+# the blade shape's force limit, read at the reception decision sites.
+func reception_ceiling_mult() -> float:
+	return _CURVE_RECEPTION_LEAN[curve]
+
+
+# tan(launch angle) per loft level from this pattern's ladder. Every rung sits
+# under ShotMechanics.MAX_LOFT_RATIO.
 func curve_loft_tan_low() -> float:
 	return tan(deg_to_rad(_CURVE_LOFT_LOW_DEG[curve]))
 
@@ -569,35 +444,25 @@ func curve_loft_tan_high() -> float:
 	return tan(deg_to_rad(_CURVE_LOFT_HIGH_DEG[curve]))
 
 
-# Top speed relative to the neutral build — speed-normalized, grounded to the
-# 20–25 mph burst band.
-func top_speed_mult() -> float:
-	return _top_speed_ceiling(speed_mult()) / _top_speed_ceiling(1.0)
+# Cosmetic shaft bow, so the pick reads on the ice.
+func stick_bend_mult() -> float:
+	return _FLEX_BEND_LEAN[flex]
 
 
-static func _top_speed_ceiling(speed: float) -> float:
-	var n: float = clampf((speed - _SPEED_MULT_MIN)
-			/ (_SPEED_MULT_MAX - _SPEED_MULT_MIN), 0.0, 1.0)
-	return lerpf(TOP_SPEED_MIN, TOP_SPEED_MAX, n)
+# The stick's real stiffness number, for display only. Weight picks the matched
+# rung of the retail ladder and the FLEX slot shifts it one rung either way, so
+# the numbers overlap across bodies the way stick fitting does. No multiplier
+# reads it: a number-driven lean would route weight into shot power.
+func flex_number() -> int:
+	return flex_number_for(weight, flex)
 
 
-# Carry speed retention — speed-eased (see CARRY_BASE). Higher = less penalty.
-func carry_speed_mult() -> float:
-	var sn: float = clampf((speed_mult() - _SPEED_MULT_MIN)
-			/ (_SPEED_MULT_MAX - _SPEED_MULT_MIN), 0.0, 1.0)
-	return clampf(CARRY_BASE + sn * CARRY_SPEED_GAIN, CARRY_FLOOR, CARRY_CEIL)
-
-
-# Visual
-# Every lateral body part wears the one grounded girth (see girth_mult) —
-# the accessor seams stay so the appearance rig remains table-agnostic.
-func torso_bulk_mult() -> float: return girth_mult()
-func head_bulk_mult() -> float:  return _h(_HEAD_BULK, height)
-func shoulder_bulk_mult() -> float:  return girth_mult()
-func thigh_mult() -> float:          return girth_mult()
-func calf_mult() -> float:           return girth_mult()
-func forearm_bulk_mult() -> float:   return girth_mult()
-func upper_arm_bulk_mult() -> float: return girth_mult()
+static func flex_number_for(lbs: int, p_flex: int) -> int:
+	# The matched rung is clamped off both ends of the ladder, so the gear
+	# shift always lands on a real rung instead of saturating.
+	var matched: int = clampi(_nearest_flex_rung(float(lbs) * _MATCHED_FLEX_PER_LB),
+			1, FLEX_LADDER.size() - 2)
+	return FLEX_LADDER[matched + _clamp_gear(p_flex) - GEAR_BALANCED]
 
 
 # ── Serialization ─────────────────────────────────────────────────────────────
@@ -608,91 +473,16 @@ func to_dict() -> Dictionary:
 	}
 
 
-# Rebuilds from a dict. Native v5 keys win; a v4 three-tier dict
-# (height/skating/skill/checking) migrates via migrate_tiers; the oldest
-# six-attribute dicts (speed/agility/hands/size/physical/shot, or the earlier
-# skill/strength variants) migrate via migrate_legacy. Missing native keys
-# default to neutral.
+# Rebuilds from a dict; missing keys default to neutral (weight to the height's
+# neutral frame), and the constructor coerces every axis.
 static func from_dict(d: Dictionary) -> PlayerAttributes:
-	if d.has("weight") or d.has("profile"):
-		return PlayerAttributes.new(
-				int(d.get("height", HEIGHT_MEDIUM)),
-				int(d.get("weight", 0)),
-				int(d.get("profile", GEAR_BALANCED)),
-				int(d.get("curve", GEAR_BALANCED)),
-				int(d.get("flex", GEAR_BALANCED)),
-				int(d.get("length", GEAR_BALANCED)))
-	if d.has("skating") or d.has("checking"):
-		return migrate_tiers(
-				int(d.get("height", HEIGHT_MEDIUM)),
-				int(d.get("skating", 2)), int(d.get("skill", 2)),
-				int(d.get("checking", 2)))
-	if d.has("speed") or d.has("agility") or d.has("size") or d.has("physical") \
-			or d.has("shot") or d.has("strength"):
-		# Legacy six-attribute (or four-attribute) dict.
-		var legacy_skill: int = int(d.get("skill", d.get("strength", 3)))
-		return migrate_legacy(
-				int(d.get("speed", 3)), int(d.get("agility", 3)),
-				int(d.get("hands", legacy_skill)), int(d.get("size", 3)),
-				int(d.get("physical", 3)), int(d.get("shot", legacy_skill)))
-	# No attribute keys at all (a name-only or height-only entry): neutral
-	# frame at the given height — never the legacy migration's default shape.
-	return PlayerAttributes.new(int(d.get("height", HEIGHT_MEDIUM)))
-
-
-# Maps a v4 height + three-tier build (tiers 1=weak/2=average/3=strong) onto
-# the body+gear model. Deterministic and documented (plan doc §9):
-#   height   — carries over (coerce_height accepts 1..5 steps or inches).
-#   weight   — frame anchor by the Checking tier: weak→LIGHT, avg→MEDIUM,
-#              strong→SOLID (the physical identity lives in mass now).
-#   profile  — strong Skating leans the skate profile the way height leaned
-#              the tier: POWER at/above 6'1", AGILITY below.
-#   curve    — strong Skill on a big frame was the bomber → OPEN.
-#   length   — strong Checking ran the defenseman's stick → LONG; strong
-#              Skill on a small frame was the dangler → SHORT.
-#   flex     — always MEDIUM (no tier expressed release speed).
-# The result is a starting build, not a promise: every slot is re-pickable in
-# the locker.
-static func migrate_tiers(p_height: int, skating: int, skill: int,
-		checking: int) -> PlayerAttributes:
-	var h: int = coerce_height(p_height)
-	var frame: float = 0.5
-	if checking >= 3:
-		frame = 0.75
-	elif checking <= 1:
-		frame = 0.25
-	var p_profile: int = GEAR_BALANCED
-	if skating >= 3:
-		p_profile = PROFILE_POWER if h >= HEIGHT_MEDIUM else PROFILE_AGILITY
-	var p_curve: int = CURVE_OPEN if skill >= 3 and h >= HEIGHT_MEDIUM else GEAR_BALANCED
-	var p_length: int = GEAR_BALANCED
-	if checking >= 3:
-		p_length = LENGTH_LONG
-	elif skill >= 3 and h < HEIGHT_MEDIUM:
-		p_length = LENGTH_SHORT
-	return PlayerAttributes.new(h, weight_for_frame_t(h, frame),
-			p_profile, p_curve, GEAR_BALANCED, p_length)
-
-
-# Maps a legacy 1..5 six-attribute build to the body+gear model, through the
-# same tier composite the v3→v4 migration used (Skating←speed+agility,
-# Skill←hands+shot, Checking←physical; highest→strong, lowest→weak, stable
-# ties by that order), then migrate_tiers. Height comes from the old Size axis.
-static func migrate_legacy(speed: int, agility: int, hands: int, size: int,
-		physical: int, shot: int) -> PlayerAttributes:
-	var scores: Array = [
-		{"idx": 0, "score": speed + agility},   # Skating
-		{"idx": 1, "score": hands + shot},      # Skill
-		{"idx": 2, "score": physical * 2},      # Checking
-	]
-	scores.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		if a["score"] != b["score"]:
-			return a["score"] > b["score"]
-		return a["idx"] < b["idx"])
-	var tiers: Array[int] = [2, 2, 2]
-	tiers[scores[0]["idx"]] = 3
-	tiers[scores[2]["idx"]] = 1
-	return migrate_tiers(coerce_height(size), tiers[0], tiers[1], tiers[2])
+	return PlayerAttributes.new(
+			int(d.get("height", HEIGHT_MEDIUM)),
+			int(d.get("weight", 0)),
+			int(d.get("profile", GEAR_BALANCED)),
+			int(d.get("curve", GEAR_BALANCED)),
+			int(d.get("flex", GEAR_BALANCED)),
+			int(d.get("length", GEAR_BALANCED)))
 
 
 func equals(other: PlayerAttributes) -> bool:
@@ -704,6 +494,15 @@ func equals(other: PlayerAttributes) -> bool:
 
 
 # ── Internal ──────────────────────────────────────────────────────────────────
+# Position of a speed lean across the normalization span, 0..1.
+static func _speed_band_t(speed: float) -> float:
+	return clampf((speed - _SPEED_MULT_MIN) / (_SPEED_MULT_MAX - _SPEED_MULT_MIN), 0.0, 1.0)
+
+
+static func _top_speed_ceiling(speed: float) -> float:
+	return lerpf(TOP_SPEED_MIN, TOP_SPEED_MAX, _speed_band_t(speed))
+
+
 # Bracketing anchor rows for a height in inches: [lo_row, hi_row, t] where the
 # interpolated value is lerp(row[lo], row[hi], t).
 static func _anchor(inches: int) -> Array:
@@ -732,12 +531,7 @@ func _f(table: Array[float]) -> float:
 	return lerpf(table[lo], table[lo + 1], pos - float(lo))
 
 
-# Accept a legacy 1..5 step (maps onto LEGACY_HEIGHT_STEPS, frozen at the v3
-# heights so a migrated build keeps its body) OR a raw inches value. No real
-# hockey height falls in 6..67, so the split is unambiguous.
 static func coerce_height(v: int) -> int:
-	if v <= LEGACY_HEIGHT_STEPS.size():
-		return LEGACY_HEIGHT_STEPS[clampi(v, 1, LEGACY_HEIGHT_STEPS.size()) - 1]
 	return clampi(v, HEIGHT_MIN, HEIGHT_MAX)
 
 

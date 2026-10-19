@@ -22,13 +22,14 @@ var reverse_skid_fraction: float = GameRules.DEFAULT_SKATER_REVERSE_SKID_FRACTIO
 var shuffle_step_distance: float = 0.4  # m a press steps (ShuffleStepShaper), one step-together
 var turn_accel: float = GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2
 var max_turn_rate: float = GameRules.DEFAULT_SKATER_MAX_TURN_RATE_RAD_S
-# Edge grip; per-build value = base × agility_mult in apply_attributes, and the
-# skate-profile gear slot leans it later. Turn radius at speed rides this.
+# Edge grip; per-build value = base × agility_mult in apply_attributes (the
+# skate profile is part of agility_mult). Turn radius at speed rides this.
 var lateral_grip: float = 1.0
-var puck_carry_speed_multiplier: float = 0.92  # pre-apply default; per-build value is set by apply_attributes (PlayerAttributes.carry_speed_mult, Speed-eased)
-var backward_thrust_multiplier: float = 0.80
-var crossover_thrust_multiplier: float = 0.90
-var backward_max_speed_multiplier: float = 0.80
+var puck_carry_speed_multiplier: float = 0.92  # pre-apply default; per-build value is PlayerAttributes.carry_speed_mult
+# The Stability skate's (the default profile); the others lean them.
+var backward_thrust_multiplier: float = 0.90
+var crossover_thrust_multiplier: float = 0.84
+var backward_max_speed_multiplier: float = 0.90
 # Ceiling on the velocity fed to the gait during the faceoff / intro skate-in
 # (see begin_approach / apply_approach). The glide always completes in a fixed
 # duration, so a far start implies a high velocity — clamp it here so the stride
@@ -211,9 +212,10 @@ var knockdown_sprawl_splay_deg: float = 18.0
 # Good range: 1.0 (very lazy) – 3.0 (snappy).
 var facing_drag_speed: float = 5.0
 var facing_drag_speed_braking: float = 10.0
-# Where a skating skater's body heads (FacingRules); its tunables are the
-# config's defaults, but for the reach edges setup() derives from the ROM below.
+# Where a skating skater's body heads (FacingRules); setup() derives the reach
+# edges from the ROM below, a carrier's backhand edge from its carry stop.
 var facing_rules: FacingRules.Config = FacingRules.Config.new()
+var carry_facing_rules: FacingRules.Config = FacingRules.Config.new()
 # Facing RECOVERY rate during the shot follow-through. The coil freezes facing at
 # the wind-up cursor position (it must — the coil is the torso twisting relative
 # to the planted lower body), so at release the body is squared to where the aim
@@ -290,20 +292,14 @@ var hand_rest_y: float = -0.10
 var hand_y_max: float = 0.30
 # Asymmetric ROM for the top hand (measured from shoulder in upper-body-local
 # horizontal plane, expressed in "forehand side = positive angle" convention).
-# Forehand cross-body reach is anatomically limited; backhand same-side reach
-# allows full arm extension, supporting one-handed backhand plays.
-# Note: the upper body twists toward the blade (upper_body_twist_ratio = 1.0),
-# which effectively reduces how far the hand must reach in upper-body-local space
-# — these values assume that twist is active.
+# The rim is a half-ellipse (TopHandIK.rim_reach): longest straight ahead,
+# limited across the body, full extension out to the backhand side.
 var rom_forehand_angle_max_deg: float = 90.0
 var rom_backhand_angle_max_deg: float = 90.0
-# Reach caps are DERIVED in apply_attributes — forehand from the anatomical
-# cross-body ratio, backhand from the arm chain (sqrt(arm_eff² − drop²), the
-# farthest a rest-height hand can sit without out-reaching the arm). These
-# defaults just mirror the baseline-size derivation for any skater that has
-# not had attributes applied yet.
+# Reach caps are DERIVED in apply_attributes (see _ROM_FOREHAND_OF_ARM).
+var rom_forward_reach_max: float = 0.51
 var rom_forehand_reach_max: float = 0.39
-var rom_backhand_reach_max: float = 0.46
+var rom_backhand_reach_max: float = 0.42
 # Fraction of full arm extension the backhand ROM rim uses. 1.0 solves the
 # reach with a ramrod-straight arm; slightly under keeps a hint of elbow bend
 # at max extension so the rim pose stays organic.
@@ -319,11 +315,10 @@ var board_shield_max_deg: float = 55.0
 # Cap on how fast the aim target can move in world XZ per second. The IK consumes
 # the smoothed target, so the blade visibly inherits the cap. Sits in the
 # dangle-speed range (~8-14 m/s): a medium player's full ROM span is ~1.18 m, so
-# 10 m/s crosses it in ~118 ms. Under attributes v4 the blade tracks every build's
-# cursor at the same fidelity (hands_blade_mult() is 1.0 by constitution — no hands
-# stat), so this cap is uniform. Tune UP if deliberate aim feels laggy, DOWN if
-# fast dangling feels the same at L1 and L5 — a live-feel call that cannot be
-# measured headless.
+# 10 m/s crosses it in ~118 ms. This is the neutral build's cap; apply_attributes
+# scales it by the build's blade lever (see max_blade_accel). Tune UP if
+# deliberate aim feels laggy, DOWN if fast dangling feels too easy — a live-feel
+# call that cannot be measured headless.
 var max_blade_speed: float = 10.0
 # Second-order blade: acceleration cap (m/s²) on the dangle velocity — the
 # stick's INERTIA. Direction REVERSALS pay the cost, traverse speed doesn't.
@@ -360,7 +355,7 @@ var nudge_velocity_retain: float = 0.85
 # ── Bottom-Hand IK Tuning ─────────────────────────────────────────────────────
 # The bottom hand is purely reactive: each tick it targets a point a short way
 # down the stick shaft (from the top hand toward the blade). It releases toward
-# a shoulder rest only when the blade's world angle exceeds the upper body's
+# a free-hand rest only when the blade's world angle exceeds the upper body's
 # rotation limit — ensuring the hand stays connected during any normal swing.
 # Never influences blade placement. See domain/rules/bottom_hand_ik.gd.
 # Fraction along the shaft (0 = top hand, 1 = blade heel) that the bottom hand
@@ -371,7 +366,7 @@ var bottom_hand_grip_fraction: float = 0.25
 # the grip fraction, then adds this). 0.0 = grip sits exactly on the shaft.
 var bh_hand_y: float = 0.0
 # Blade world angle (from skater forward, toward backhand) at which the bottom
-# hand starts releasing toward the shoulder rest. Match upper_body_max_twist_deg
+# hand starts releasing toward its rest. Match upper_body_max_twist_deg
 # so the hand releases exactly when the body can no longer rotate to follow.
 var bh_release_angle_deg: float = 67.0
 # Degrees past bh_release_angle_deg over which the hand blends to full rest.
@@ -380,6 +375,8 @@ var bh_release_angle_band_deg: float = 15.0
 # before that hand has fully let go of the stick (m). The hand slides up the
 # shaft first (BottomHandIK.reachable_grip); this band is the letting go.
 var bh_reach_release_band_m: float = 0.08
+# A let-go hand's rest off its shoulder, arm lengths (x out, y up, z back).
+var bh_free_hand_rest_arm: Vector3 = Vector3(0.2, -0.52, -0.35)
 
 # ── Upper Body Tuning ─────────────────────────────────────────────────────────
 var upper_body_twist_ratio: float = 0.8
@@ -392,14 +389,14 @@ var upper_body_return_speed: float = 6.0
 var upper_body_follow_gain: float = 0.4        # how far the shoulders overshoot the whip
 var upper_body_follow_stiffness: float = 110.0  # spring constant (higher = quicker catch-up)
 var upper_body_follow_damping: float = 18.0     # damping (near-critical — a clean settle)
-# Reach lean — the torso tips TOWARD the blade's reach direction (pitch +
-# roll, see SkaterPoseCoordinator.compute_upper_body_lean_target). Because
-# the blade IK solves in the leaned frame, this lean genuinely extends world
-# reach at the ROM rim (~sin(lean) × shoulder height of shoulder travel plus
-# the longer stick footprint from the dropped hands) — the honest way a real
-# player buys reach. engage_power > 1 keeps the torso quiet through mid-ROM
-# stickhandling and commits the lean near full extension.
-var upper_body_lean_max_deg: float = 18.0
+# Reach lean — the torso tips TOWARD the blade (SkaterPoseCoordinator
+# .compute_upper_body_lean_target), to the side cap out either side and the
+# forward cap straight ahead (_reach_lean_max_deg). It extends reach at the rim
+# by only a few cm (the blade IK solves in the leaned frame); mostly it is how
+# far the skater visibly lunges. engage_power > 1 keeps the torso quiet mid-ROM
+# and commits the lean near full extension.
+var upper_body_lean_max_deg: float = 15.0
+var upper_body_lean_forward_max_deg: float = 25.0
 var upper_body_lean_engage_power: float = 1.6
 var upper_body_lean_return_speed: float = 8.0
 
@@ -422,6 +419,13 @@ var lower_body_lag_speed: float = 5.0
 
 # ── Skating Stride Tuning ─────────────────────────────────────────────────────
 # Procedural leg gait — see SkaterSkatingCoordinator. All cosmetic.
+# The pace the gait and the skating posture read as full speed, per unit of leg
+# length (the reader multiplies by the skater's leg_scale). It is the body's,
+# never the build's own top speed: a skater looks the way his body skates at a
+# speed, whatever skates he wears. Pinned so the neutral build reads its
+# league-default top speed as full pace.
+var gait_full_speed: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S \
+		/ PlayerAttributes.neutral().height_mult()
 var stride_cadence: float = 1.4          # low-speed slope: radians of stride phase per metre skated
 var stride_cadence_max_rate: float = 6.5  # rad/s ceiling the cadence saturates toward (caps top-speed leg turnover)
 var accel_cadence_rate: float = 18.0      # rad/s stride rate at full effort (stride_effort_ref_accel), any speed
@@ -485,7 +489,7 @@ var stride_push_ceiling: float = 1.5      # max amplitude scale when driving har
 # matching knee flex and body drop from the leg geometry so one export drives
 # an anatomically consistent crouch that keeps the skates planted on the ice.
 var stance_hip_deg: float = 22.0            # static hip flex at full stance
-var stance_full_speed_fraction: float = 0.45  # fraction of max_speed at which the crouch fully engages
+var stance_full_speed_fraction: float = 0.45  # fraction of full gait pace at which the crouch fully engages
 var stance_push_gain: float = 0.35          # effort deepens (push) / shallows (glide) the stance
 # Faceoff ready stance — during the FACEOFF_PREP countdown the speed-driven
 # crouch is floored at faceoff_stance (players are at a standstill, so the
@@ -650,10 +654,10 @@ var weight_spring_damping: float = 14.0     # damping (near-critical — a clean
 var min_wrister_power: float = GameRules.DEFAULT_WRISTER_POWER_MIN_M_S
 var max_wrister_power: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 var backhand_power_coefficient: float = 0.75
-var max_charge_direction_variance: float = 35.0
 # ── Wrister load (WristerLoad): what the torso can put into a human's shot ──
 # Release cap: max_wrister_power × lerp(this, 1, load). With no turn behind it,
-# the arms, wrists and stick flex still carry a real snap.
+# the arms, wrists and stick flex still carry a real snap. Per-build: the flex
+# pick scales it (PlayerAttributes.wrister_unloaded_mult).
 var wrister_unloaded_share: float = 0.6
 var wrister_full_load_arc_deg: float = 45.0
 var wrister_home_reach_deg: float = 120.0
@@ -662,7 +666,7 @@ var wrister_away_reach_deg: float = 30.0
 # Power is a feel-curve over the release speed signal (cursor speed for humans,
 # a committed target for bots — see _wrister_sweep_speed). power_curve shapes
 # where an ordinary flick lands in the band. Feel tunable, NOT attribute-scaled
-# (Shot scales the ceiling).
+# (shot_power_mult scales the ceiling).
 var wrister_power_curve: float = GameRules.DEFAULT_WRISTER_POWER_CURVE
 # ── Pure mouse-speed wrister ──
 # Wrister power is a curve over the raw SCREEN-space cursor speed (px/s) — flick
@@ -673,31 +677,10 @@ var wrister_power_curve: float = GameRules.DEFAULT_WRISTER_POWER_CURVE
 # Shot Power Sensitivity setting rather than this raw reference.
 var wrister_mouse_speed_full: float = 2500.0
 var wrister_mouse_speed_smoothing: float = 14.0
-# ── Travel-gated ceiling (ShotMechanics.wrister_travel_cap_t) — CURRENTLY OFF ──
-# The blade is FROZEN during the wrister charge, so it sweeps no blade path and
-# this gate has nothing to read: `_wrister_stroke_travel` returns INF and the
-# fields below are inert. They and the domain mechanism are kept as the hook for a
-# future cursor-sweep anti-degeneracy gate.
-#
-# The dormant model: the power CEILING must be earned with real blade travel, so
-# cursor speed alone (a wiggle, a short jerk, a cranked Shot Power Sensitivity)
-# caps at the floor tier. Measured in WORLD meters of blade path, so it cannot be
-# bought with DPI. apply_attributes rescales the full-travel reference by the
-# build's own blade sweep radius (stick + arm ROM) so "a full stroke" means the
-# same fraction of each build's reachable arc — Size must not leak into the
-# wrister ceiling.
-#   wrister_full_stroke_travel: blade path (m) that unlocks the full band.
-#     <= 0 disables the gate.
-#   wrister_travel_cap_floor: fraction of the power band reachable with zero
-#     travel — the instant flick-pass / snap tier (0.4 of the 10..33 base band
-#     ≈ 19 m/s, a crisp pass; %-based, so Shot scales it with the ceiling).
-var wrister_full_stroke_travel: float = 1.0
-var wrister_travel_cap_floor: float = 0.4
 # Blade-speed budget ALONG the shot axis during a wrister aim (m/s of blade
-# travel, applied relative to the skater like max_blade_speed). High and FLAT
-# (not Hands-scaled) so the wind-back-and-snap of a wrister tracks responsively
-# for every player — Hands still gates the off-axis (lateral/dangle) component,
-# which stays capped at max_blade_speed. See SkaterIKCoordinator.apply_blade_from_mouse.
+# travel, applied relative to the skater like max_blade_speed). High so the
+# wind-back-and-snap of a wrister tracks responsively; the off-axis
+# (lateral/dangle) component stays capped at max_blade_speed. See SkaterIKCoordinator.apply_blade_from_mouse.
 var wrister_on_axis_blade_speed: float = 60.0
 # Fixed power of the quick pass (blade→cursor snap fired by the dedicated
 # quick_pass button). Doubles as the pass speed, so it stays flat for everyone.
@@ -1005,6 +988,7 @@ var _skating: SkaterSkatingCoordinator = SkaterSkatingCoordinator.new()
 var _ik: SkaterIKCoordinator = SkaterIKCoordinator.new()
 var _stick_check: SkaterStickCheck = SkaterStickCheck.new()
 var _cross_check: SkaterCrossCheck = SkaterCrossCheck.new()
+var _settle: SkaterSettleGate = SkaterSettleGate.new()
 var last_processed_host_timestamp: float = 0.0
 var has_puck: bool = false
 var is_replaying: bool = false
@@ -1155,6 +1139,8 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	process_physics_priority = -1  # Run before Skater's integration step
 	facing_rules.forehand_edge_rad = deg_to_rad(rom_forehand_angle_max_deg + upper_body_max_twist_deg)
 	facing_rules.backhand_edge_rad = deg_to_rad(rom_backhand_angle_max_deg + upper_body_max_twist_deg)
+	carry_facing_rules.forehand_edge_rad = facing_rules.forehand_edge_rad
+	carry_facing_rules.backhand_edge_rad = deg_to_rad(bh_release_angle_deg)
 	skater.body_checked_player.connect(_on_body_checked_player)
 	skater.body_check_received.connect(_on_body_check_received)
 	if game_state.has_method("is_movement_locked"):
@@ -1164,7 +1150,6 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	var _cb := SkaterStateMachine.Callbacks.new()
 	_cb.apply_blade_from_mouse = _ik.apply_blade_from_mouse
 	_cb.apply_wrister_aim_blade = _apply_wrister_aim_blade
-	_cb.wrister_swing_seed = _wrister_swing_seed
 	_cb.apply_slapper_blade_position = _shot_pose.apply_slapper_blade_position
 	_cb.apply_block_blade_position = _shot_pose.apply_block_blade_position
 	_cb.apply_wrister_follow_through = _shot_pose.apply_wrister_follow_through
@@ -1192,13 +1177,12 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 
 # Reach ROM is derived from arm length, not an independent tunable. The
 # forehand side is shoulder-joint-limited (about 56% of arm length — the top
-# hand can't cross the body very far), a simple anatomical ratio. The
-# backhand side is arm-EXTENSION-limited and solved from the chain geometry
-# in apply_attributes: the hand rides at hand_rest_y (a fixed drop below the
-# shoulder), so the farthest it can sit is sqrt(arm_eff² − drop²) with
-# arm_eff = arm × rom_arm_extension. Deriving it this way guarantees no
-# reachable pose out-reaches the arm (the forearm never draws stretched) and
-# gives tall players disproportionately more reach than short ones — long
+# hand can't cross the body very far). The backhand side and straight ahead
+# are arm-EXTENSION-limited: the hand rides at hand_rest_y, a fixed drop below
+# the shoulder, so it sits at most sqrt(reach² − drop²) out — reach being
+# arm × rom_arm_extension to the side, plus Skater.shoulder_reach_m ahead,
+# where the shoulder blade protracts (the girdle give the arm rig roots with,
+# so the drawn arm spans it). No reachable pose out-reaches the arm, and long
 # arms matter most at full extension, which is the realistic shape.
 const _ROM_FOREHAND_OF_ARM: float = 0.5625
 
@@ -1211,31 +1195,34 @@ const _ROM_FOREHAND_OF_ARM: float = 0.5625
 # overview and how to add new scalings.
 var _attr_base_captured: bool = false
 var _base_thrust:                       float = 0.0
+var _base_crossover_thrust_multiplier:  float = 0.0
+var _base_backward_thrust_multiplier:   float = 0.0
+var _base_backward_max_speed_multiplier: float = 0.0
+var _base_stance_grip_mult:             float = 0.0
+var _base_stance_shuffle_mult:          float = 0.0
 var _base_max_speed:                    float = 0.0
 var _base_facing_drag_speed:            float = 0.0
 var _base_facing_drag_speed_braking:    float = 0.0
 var _base_stop_decel:                   float = 0.0
 var _base_friction_drag:                float = 0.0
 var _base_lateral_grip:                 float = 0.0
-var _base_min_wrister_power:            float = 0.0
 var _base_max_wrister_power:            float = 0.0
-var _base_quick_pass_power:             float = 0.0
 var _base_min_slapper_power:            float = 0.0
 var _base_max_slapper_power:            float = 0.0
 var _base_max_slapper_charge_time:      float = 0.0
+var _base_wrister_unloaded_share:       float = 0.0
+var _base_skater_stick_flex_max_m:      float = 0.0
+var _base_skater_stick_flex_slap_m:     float = 0.0
+var _base_skater_stick_flex_windup_m:   float = 0.0
 var _base_max_blade_speed:              float = 0.0
 var _base_max_blade_accel:              float = 0.0
-var _base_puck_carry_speed_multiplier:  float = 0.0
 var _base_stick_length:                 float = 0.0
-var _base_wrister_full_stroke_travel:   float = 0.0
 var _base_skater_upper_arm_length:      float = 0.0
 var _base_skater_forearm_length:        float = 0.0
 var _base_skater_shoulder_reach_m:      float = 0.0
 var _base_skater_shoulder_offset:       float = 0.0
 var _base_skater_shoulder_height:       float = 0.0
 var _base_skater_weight:                float = 0.0
-var _base_skater_body_check_brace_resistance: float = 0.0
-var _base_skater_body_check_transfer:   float = 0.0
 var _base_skater_collision_radius:      float = 0.0
 var _base_backhand_power_coefficient:   float = 0.0
 # The blade curve's angle ladder (tan per elevated loft level) for the
@@ -1260,11 +1247,12 @@ func build_ai_caps() -> AISkaterCaps:
 	caps.max_accel = thrust
 	caps.blade_span = stick_length + GameRules.DEFAULT_BLADE_LENGTH_M
 	caps.stick_reach = stick_length
-	# Fully-extended body→blade reach (arm ROM displacement + stick + blade). Read
-	# off the same scaled geometry the body uses, so the host's client-blade
-	# anti-cheat clamp bounds against this build's real reach, not the league
-	# default. See AISkaterCaps.max_blade_reach / the claim resolvers.
-	caps.max_blade_reach = stick_length + GameRules.DEFAULT_BLADE_LENGTH_M + rom_backhand_reach_max
+	# This build's real full reach (AISkaterCaps.max_blade_reach, the claim clamp).
+	caps.max_blade_reach = TopHandIK.full_reach(skater.shoulder.position,
+			deg_to_rad(velocity_lean_forward_max_deg + upper_body_lean_forward_max_deg),
+			GameRules.FACEOFF_SPAWN_HEIGHT + skater.upper_body.position.y,
+			skater.shoulder.position.y - hand_rest_y, rom_forward_reach_max, stick_length,
+			blade_height, skater.blade_length * 0.5, GameRules.FACEOFF_SPAWN_HEIGHT)
 	caps.max_lean_shift = skater.max_lean_shift()
 	caps.wrister_shot_speed = max_wrister_power
 	caps.blade_speed = max_blade_speed
@@ -1272,6 +1260,7 @@ func build_ai_caps() -> AISkaterCaps:
 	caps.backhand_power_coefficient = backhand_power_coefficient
 	caps.wrister_load = _wrister_load_config()
 	caps.facing_rules = facing_rules
+	caps.carry_facing_rules = carry_facing_rules
 	if skater != null:
 		caps.is_left_handed = skater.is_left_handed
 	caps.wrister_unloaded_share = wrister_unloaded_share
@@ -1316,15 +1305,14 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	if not _attr_base_captured:
 		_capture_attribute_bases()
 	var m_height:  float = attrs.height_mult()
-	# Skating splits into THREE height-routed sub-levers: Speed owns top-end velocity
-	# (max_speed), Acceleration owns thrust
-	# (forward burst — small-favored, floored above agility so a big weak-skater can
-	# still drive straight), and Agility owns the turn/brake/edge handling.
 	var m_agility: float = attrs.agility_mult()
-	# Top speed is Speed-attributed and grounded to the 20–25 mph NHL burst band,
-	# so a real burner opens a gear a plodder does not have.
-	max_speed = _base_max_speed * attrs.speed_mult() * attrs.top_speed_mult()
+	max_speed = _base_max_speed * attrs.top_speed_mult()
 	thrust    = _base_thrust    * attrs.accel_mult()
+	crossover_thrust_multiplier = _base_crossover_thrust_multiplier * attrs.crossover_mult()
+	backward_thrust_multiplier = _base_backward_thrust_multiplier * attrs.backward_mult()
+	backward_max_speed_multiplier = _base_backward_max_speed_multiplier * attrs.backward_mult()
+	stance_grip_mult = _base_stance_grip_mult * attrs.stance_grip_mult()
+	stance_shuffle_mult = _base_stance_shuffle_mult * attrs.sidestep_mult()
 	facing_drag_speed           = _base_facing_drag_speed           * m_agility
 	facing_drag_speed_braking   = _base_facing_drag_speed_braking   * m_agility
 	stop_decel                  = _base_stop_decel                  * m_agility
@@ -1334,20 +1322,14 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	# lean/small one. The facing/stop terms above are the feel of quickness; this is
 	# the arc itself.
 	lateral_grip                = _base_lateral_grip                * m_agility
-	# friction_drag is velocity-proportional drag — scaling it inversely with Agility
-	# gives agile players the "good edges" feel: less momentum leaks through the
-	# blades during a cut, so they carry more speed out of turns. The lateral /
-	# backward thrust multipliers stay universal; what makes an agile build agile is
-	# how cleanly it transitions between those directions.
-	friction_drag               = _base_friction_drag               * attrs.agility_glide_mult()
-	# Carry speed retention is a small, Speed-eased tax on the top-speed cap. A
-	# computed value, not a base × mult.
+	# friction_drag is the velocity-proportional (air) drag: girth-scaled, so
+	# a heavy body coasts (see glide_drag_mult).
+	friction_drag               = _base_friction_drag               * attrs.glide_drag_mult()
+	# A computed value, not a base × mult.
 	puck_carry_speed_multiplier = attrs.carry_speed_mult()
-	# Hands has no lever by constitution ("your hands are you"): the blade caps derive
-	# from LEVER GEOMETRY below, after the reach/stick rescale computes this build's
-	# actual sweep radius. What leans the backhand coefficient is the BLADE's shape —
-	# the curve gear slot (closed relaxes toward, never past, forehand parity; open
-	# deepens the penalty).
+	# The blade caps derive from LEVER GEOMETRY below, after the reach/stick
+	# rescale computes this build's sweep radius. The backhand coefficient leans
+	# with the blade curve (closed relaxes toward, never past, forehand parity).
 	backhand_power_coefficient  = _base_backhand_power_coefficient * attrs.curve_backhand_mult()
 	# Curve elevation is the blade's ANGLE LADDER: the set launch angle per
 	# loft level (ShotMechanics.shot_loft_y). The whole elevation identity of
@@ -1360,33 +1342,25 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	# (PuckController contact scan + the lag-comp pickup resolver) scale the
 	# puck's league deflect thresholds by the RECEIVER's blade shape.
 	skater.reception_ceiling_mult = attrs.reception_ceiling_mult()
-	# Shot scales the CHARGED-shot ceiling (wrister max + both slapper pools) and the
-	# wrister charge EFFORT, but NOT the quick/uncharged snap. quick_pass doubles as
-	# pass speed so it stays baseline for everyone (reliable passing), and min_wrister
-	# is the soft-touch floor — a slow sweep is a touch pass, deliberately BELOW the
-	# snap speed, and everyone's touch should be equally soft.
-	var m_shot_ceil: float = attrs.shot_power_mult()
-	min_wrister_power = _base_min_wrister_power              # baseline floor (= snap)
-	max_wrister_power = _base_max_wrister_power * m_shot_ceil
-	quick_pass_power  = _base_quick_pass_power               # baseline — also the pass speed
-	# Slapper carries the curve's contact lean on top of the flex/height
-	# ceiling — the one shot where the pattern shape meets the ice.
-	min_slapper_power = _base_min_slapper_power * m_shot_ceil * attrs.curve_slap_mult()
-	max_slapper_power = _base_max_slapper_power * m_shot_ceil * attrs.curve_slap_mult()
-	# Slapper wind-up time keeps the gentler shot_charge curve. (Wrister power is
-	# pure mouse speed — no charge distance — so Shot only scales its ceiling.)
-	max_slapper_charge_time     = _base_max_slapper_charge_time     * attrs.shot_charge_mult()
-	# Physical battles are Checking-decided; height is only a MINOR mass edge.
-	# `weight` (the weight_ratio — hard to MOVE) is a small height lever; Checking
-	# sets delivery (how hard you DELIVER a check, tall-favored) and brace (how hard
-	# to PUT DOWN, tier-dominant, so a big weak-Checking build is genuinely hittable).
-	# Brace is inverse: lower = better resistance.
-	skater.weight                      = _base_skater_weight                  * attrs.mass_mult()
-	skater.body_check_transfer         = _base_skater_body_check_transfer     * attrs.check_delivery_mult()
-	skater.body_check_brace_resistance = _base_skater_body_check_brace_resistance * attrs.brace_mult()
-	# Arms scale with actual height (the dedicated height_mult, tighter than the
-	# gameplay size_mult) so proportions stay realistic. The stick is equipment, not
-	# anatomy, so it rides a GENTLER curve (stick_len_mult, ~0.65x the height
+	# Shot power scales the CHARGED-shot ceilings (wrister max + both slapper
+	# pools), never min_wrister_power (the soft-touch floor) or quick_pass_power
+	# (also the pass speed) — every build's touch and passes are the same.
+	max_wrister_power = _base_max_wrister_power * attrs.shot_power_mult()
+	wrister_unloaded_share = _base_wrister_unloaded_share * attrs.wrister_unloaded_mult()
+	var m_slap: float = attrs.slapper_power_mult()
+	min_slapper_power = _base_min_slapper_power * m_slap
+	max_slapper_power = _base_max_slapper_power * m_slap
+	max_slapper_charge_time = _base_max_slapper_charge_time * attrs.shot_charge_mult()
+	# The flex pick's visual tell: how far the shaft bows on every shot.
+	var m_bend: float = attrs.stick_bend_mult()
+	skater.stick_flex_max_m = _base_skater_stick_flex_max_m * m_bend
+	skater.stick_flex_slap_m = _base_skater_stick_flex_slap_m * m_bend
+	skater.stick_flex_windup_m = _base_skater_stick_flex_windup_m * m_bend
+	# Mass is the whole physical system: delivery and brace emerge from the
+	# collision resolver's reduced-mass math, so no check term scales here.
+	skater.weight = _base_skater_weight * attrs.mass_mult()
+	# Arms scale with height_mult. The stick is equipment, not anatomy, so it
+	# rides a GENTLER curve (stick_len_mult, ~0.65x the height
 	# deviation): real played stick lengths track height only loosely, so a small
 	# player keeps a near-full-size stick. Total blade reach is still arm-driven ROM +
 	# stick (top_hand_ik FAR regime), so the eased stick is not a proportionally eased
@@ -1405,11 +1379,11 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	skater.shoulder_reach_m   = _base_skater_shoulder_reach_m   * m_height
 	# Shoulder anchors track the visual shoulder balls, which the appearance
 	# pass repositions from the same multipliers (y rides height, x rides
-	# torso bulk) — the drawn arm and the IK stay rooted at the same point on
+	# girth) — the drawn arm and the IK stay rooted at the same point on
 	# every build. Must run BEFORE the hand/ROM derivation below reads
 	# shoulder_height.
 	skater.set_shoulder_anchor(
-			_base_skater_shoulder_offset * attrs.torso_bulk_mult(),
+			_base_skater_shoulder_offset * attrs.girth_mult(),
 			_base_skater_shoulder_height * m_height)
 	# Hand heights scale with the skeleton: the appearance pass scales the whole mesh
 	# rig about the ice plane (the upper body rides at height_mult × 1.0 m world), so
@@ -1433,23 +1407,12 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	var arm_eff: float = arm_total * rom_arm_extension
 	var reach_drop: float = skater.shoulder_height - hand_rest_y
 	rom_backhand_reach_max    = sqrt(maxf(arm_eff * arm_eff - reach_drop * reach_drop, 0.0))
-	# The wrister travel gate's full-stroke reference scales with the blade's
-	# actual sweep radius (stick + arm-driven ROM, both just rescaled above), so
-	# "a full stroke" is the same fraction of each build's own reachable arc —
-	# otherwise a flat meters constant would leak reach (a height tell) into the
-	# wrister ceiling (short builds sweep less absolute path for the same honest
-	# stroke).
-	var base_sweep_radius: float = _base_stick_length + \
-			(_base_skater_upper_arm_length + _base_skater_forearm_length) * _ROM_FOREHAND_OF_ARM
+	var arm_protracted: float = arm_eff + skater.shoulder_reach_m
+	rom_forward_reach_max     = sqrt(maxf(
+			arm_protracted * arm_protracted - reach_drop * reach_drop, 0.0))
+	# The blade's sweep radius: stick + arm-driven ROM, both just rescaled above.
 	var sweep_radius: float = stick_length + rom_forehand_reach_max
-	# The runway = sweep-normalized full stroke × the gear lean (whippy flex /
-	# open curve compress it — "max power with less real estate consumed";
-	# stiff flex extends it). Quick-release gear beats the goalie by emitting
-	# LESS WIND-UP EVIDENCE, not by a stat the goalie is told about.
-	wrister_full_stroke_travel = _base_wrister_full_stroke_travel \
-			* sweep_radius / maxf(base_sweep_radius, 0.001) \
-			* attrs.wrister_runway_mult()
-	# Blade caps derive from the same LEVER (constitution: geometry, never a
+	# Blade caps derive from this LEVER (constitution: geometry, never a
 	# fidelity table). Tip speed rides the lever linearly — v = ω·L, the same
 	# angular gesture sweeps a longer blade faster in m/s, so every build's
 	# wrists are heard at the same ANGULAR fidelity (traverse time across your
@@ -1461,7 +1424,7 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	# mesh-native base geometry (the reach-1.0 anchor is 5'10", below the
 	# gameplay neutral): neutral identity demands the neutral build's caps equal
 	# the shipped exports exactly.
-	var neutral_attrs := PlayerAttributes.all_average()
+	var neutral_attrs := PlayerAttributes.neutral()
 	var neutral_sweep: float = _base_stick_length * neutral_attrs.stick_len_mult() \
 			+ (_base_skater_upper_arm_length + _base_skater_forearm_length) \
 			* neutral_attrs.height_mult() * _ROM_FOREHAND_OF_ARM
@@ -1469,12 +1432,10 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	max_blade_speed = _base_max_blade_speed * lever_ratio
 	max_blade_accel = _base_max_blade_accel / pow(lever_ratio, blade_inertia_exponent) \
 			if _base_max_blade_accel > 0.0 else 0.0
-	# Hitbox: the contact disc scales with height (frame width — a taller player is
-	# a bit wider). There is no vertical extent to scale: every contact path the
-	# radius feeds is a flat XZ test (skater-vs-skater, the rink / net / goalie
-	# clamps). The visual mesh still scales on Y (appearance coordinator), so big
-	# players look tall without reaching further.
-	skater.body_collision_radius = _base_skater_collision_radius * attrs.radius_mult()
+	# Hitbox: the contact disc wears the same girth the silhouette does. There is
+	# no vertical extent to scale: every contact path the radius feeds is a flat
+	# XZ test (skater-vs-skater, the rink / net / goalie clamps).
+	skater.body_collision_radius = _base_skater_collision_radius * attrs.girth_mult()
 	# Attribute scaling rewrote the exports the cached configs were built
 	# from — drop them so the next tick rebuilds with the new values.
 	_ik.invalidate_configs()
@@ -1489,24 +1450,29 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 
 func _capture_attribute_bases() -> void:
 	_base_thrust                       = thrust
+	_base_crossover_thrust_multiplier  = crossover_thrust_multiplier
+	_base_backward_thrust_multiplier   = backward_thrust_multiplier
+	_base_backward_max_speed_multiplier = backward_max_speed_multiplier
+	_base_stance_grip_mult             = stance_grip_mult
+	_base_stance_shuffle_mult          = stance_shuffle_mult
 	_base_max_speed                    = max_speed
 	_base_facing_drag_speed            = facing_drag_speed
 	_base_facing_drag_speed_braking    = facing_drag_speed_braking
 	_base_stop_decel                   = stop_decel
 	_base_friction_drag                = friction_drag
 	_base_lateral_grip                 = lateral_grip
-	_base_min_wrister_power            = min_wrister_power
 	_base_max_wrister_power            = max_wrister_power
-	_base_quick_pass_power             = quick_pass_power
 	_base_min_slapper_power            = min_slapper_power
 	_base_max_slapper_power            = max_slapper_power
 	_base_max_slapper_charge_time      = max_slapper_charge_time
+	_base_wrister_unloaded_share       = wrister_unloaded_share
+	_base_skater_stick_flex_max_m      = skater.stick_flex_max_m
+	_base_skater_stick_flex_slap_m     = skater.stick_flex_slap_m
+	_base_skater_stick_flex_windup_m   = skater.stick_flex_windup_m
 	_base_max_blade_speed              = max_blade_speed
 	_base_max_blade_accel              = max_blade_accel
 	_base_backhand_power_coefficient   = backhand_power_coefficient
-	_base_puck_carry_speed_multiplier  = puck_carry_speed_multiplier
 	_base_stick_length                 = stick_length
-	_base_wrister_full_stroke_travel   = wrister_full_stroke_travel
 	_base_hand_rest_y                  = hand_rest_y
 	_base_hand_y_max                   = hand_y_max
 	_base_skater_upper_arm_length      = skater.upper_arm_length
@@ -1515,8 +1481,6 @@ func _capture_attribute_bases() -> void:
 	_base_skater_shoulder_offset       = skater.shoulder_offset
 	_base_skater_shoulder_height       = skater.shoulder_height
 	_base_skater_weight                       = skater.weight
-	_base_skater_body_check_transfer          = skater.body_check_transfer
-	_base_skater_body_check_brace_resistance  = skater.body_check_brace_resistance
 	_base_skater_collision_radius = skater.body_collision_radius
 	_attr_base_captured = true
 
@@ -1701,6 +1665,7 @@ func _process_input(input: InputState, delta: float) -> void:
 	_elevation_level = input.elevation_level
 	skater.elevation_level = _elevation_level
 	_current_aim_world = input.mouse_world_pos
+	_settle.read(input, has_puck and _sm.get_state() == State.SKATING_WITH_PUCK)
 
 	# Deliberate-deflect intent (see Skater.deflect_intent). Holding the deflect
 	# button (Q) without the puck commits to redirecting a loose puck off the
@@ -1724,7 +1689,8 @@ func _process_input(input: InputState, delta: float) -> void:
 	# soft self-pass (nutmeg setup). Edge-triggered and gated to plain carry so
 	# it never fires mid-charge; the is_replaying guard inside keeps it from
 	# re-emitting during reconcile (same discipline as _do_release).
-	if input.stick_lift_pressed and has_puck and _sm.get_state() == State.SKATING_WITH_PUCK:
+	if (input.stick_lift_pressed or _settle.unqueued == SkaterSettleGate.Press.NUDGE) \
+			and not _settle.settling and has_puck and _sm.get_state() == State.SKATING_WITH_PUCK:
 		_nudge()
 
 	var tick_start_velocity: Vector3 = skater.velocity
@@ -2131,6 +2097,8 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.velocity = skater.velocity
 	state.blade_position = skater.get_blade_position()
 	state.blade_contact_world = skater.get_blade_contact_global()
+	state.settle_left_s = _settle.time_left(NetworkManager.estimated_input_stamp_time()) \
+			if has_puck else 0.0
 	state.top_hand_position = skater.get_top_hand_position()
 	state.upper_body_rotation_y = skater.get_upper_body_rotation()
 	state.facing = skater.get_facing()
@@ -2291,11 +2259,6 @@ signal puck_release_requested(direction: Vector3, power: float, is_slapper: bool
 # no backhand slapper). Set just before puck_release_requested fires; the
 # shot-speed toast reads it alongside the signal.
 var last_release_hand: String = ""
-# Stroke travel (m) behind the most recent wrister release — the value the
-# travel-gated ceiling read. -1.0 for quick shots and slappers (no stroke).
-# Debug/HUD only: the shot-speed toast surfaces it so the full-stroke-travel
-# tunable can be calibrated against real sweeps vs twitches.
-var last_release_stroke_travel: float = -1.0
 # Whether the most recent release was a deliberate SHOT ATTEMPT rather than a pass
 # or a forced knock-loose. Set just before puck_release_requested fires; GameManager
 # reads it at _start_pending_shot_from_carrier and hands it to ShotOnGoalTracker,
@@ -2437,8 +2400,10 @@ func _nudge() -> void:
 	nudge_requested.emit(skater_vel * nudge_velocity_retain + push)
 
 # ── Puck Signals ──────────────────────────────────────────────────────────────
-func on_puck_picked_up_network() -> void:
+# `settle_until_ms`: the catch's settle deadline (settle_deadline_ms), 0 = clean.
+func on_puck_picked_up_network(settle_until_ms: int = 0) -> void:
 	has_puck = true
+	_settle.arm(settle_until_ms)
 	if _sm.get_state() == State.ONE_TIMER_RETENTION:
 		# The feed landed during the committed hold — the swing caught it. Pin it
 		# to the slapper spot (same setup as the wind-up entry, or the puck snaps
@@ -2480,6 +2445,7 @@ func on_puck_released_network() -> void:
 	if not has_puck:
 		return
 	has_puck = false
+	_settle.clear()
 	if _sm.get_state() == State.ONE_TIMER_RETENTION:
 		# Poked/lifted off the blade mid-hold. The swing is already committed, so
 		# don't snap out of it — let the hold run down and whiff through the full
@@ -2505,6 +2471,7 @@ func teleport_to(pos: Vector3, facing: Vector2 = Vector2.ZERO) -> void:
 	skater.stick_check_phase = _stick_check.phase
 	_cross_check.reset()
 	_stamp_cross_check()
+	_settle.clear()
 	stagger_timer = 0.0
 	balance_tilt_vel = Vector2.ZERO
 	skater.set_balance_tilt(Vector2.ZERO)
@@ -2706,8 +2673,27 @@ func _reset_to_skating_state() -> void:
 	skater.current_shot_state = _sm.get_state() as int
 
 # ── State Machine ─────────────────────────────────────────────────────────────
+# The settle lock (SkaterSettleGate): a plain carry inside the deadline holds the
+# blade at its seat and dispatches nothing; the first input past it dispatches
+# the queued press as its own.
 func _apply_state(input: InputState, delta: float) -> void:
+	if _settle.settling:
+		_ik.apply_blade_from_mouse(input, delta, false, true)
+		return
+	var press: SkaterSettleGate.Press = _settle.unqueued
+	if press == SkaterSettleGate.Press.NONE or press == SkaterSettleGate.Press.NUDGE \
+			or not has_puck or _sm.get_state() != State.SKATING_WITH_PUCK:
+		_sm.dispatch(skater, input, delta, has_puck, _game_state.is_movement_locked())
+		return
+	var was: bool = SkaterSettleGate.set_edge(input, press, true)
 	_sm.dispatch(skater, input, delta, has_puck, _game_state.is_movement_locked())
+	SkaterSettleGate.set_edge(input, press, was)
+
+
+# Host: this carrier's settle deadline for a catch settling `settle_s`, armed by
+# the on_puck_picked_up_network that follows (SkaterSettleGate.deadline_ms).
+func settle_deadline_ms(settle_s: float) -> int:
+	return _settle.deadline_ms(settle_s, one_timer_window_lag_grace())
 
 # ── State Helpers ─────────────────────────────────────────────────────────────
 func _transition_to_skating() -> void:
@@ -2876,18 +2862,6 @@ func _apply_wrister_aim_blade(input: InputState, delta: float) -> void:
 	skater.set_wrister_address(_wrister_aim_dir(input))
 	_ik.apply_blade_from_mouse(input, delta, true)
 
-# Bearing the stroke-travel tracker seeds from at charge start: origin→cursor,
-# the SHOT LINE. MUST mirror _update_wrister_charge's bearing so the first step
-# banks no spurious travel from a bearing jump. (At the pin the swing_anchor
-# translation is zero, so raw origin→cursor IS that bearing for both anchor
-# frames.) The origin is passed in (rather than read off _aiming) because the
-# state machine captures it on this same edge, a line before reset_wrister
-# stores it.
-func _wrister_swing_seed(input: InputState, origin_world: Vector3) -> Vector3:
-	var bearing: Vector3 = input.mouse_world_pos - origin_world
-	bearing.y = 0.0
-	return bearing
-
 # Solves wrister_load for this tick's aim, for humans and bots alike. Call before
 # _wrister_load_cap and before reading wrister_load.is_backhand (the hand).
 func _solve_wrister_load(input: InputState) -> void:
@@ -2912,7 +2886,6 @@ func _release_wrister(input: InputState) -> void:
 		# LMB is always a charged wrister now — the quick pass lives on its own
 		# button (_fire_quick_pass). A bare tap here fires a min-charge wrister.
 		last_release_hand = "BH" if is_backhand else "FH"
-		last_release_stroke_travel = _wrister_stroke_travel()
 		last_release_was_shot = true
 		var result := ShotMechanics.release_wrister(
 				skater.global_position,
@@ -2923,8 +2896,7 @@ func _release_wrister(input: InputState) -> void:
 				_wrister_config(),
 				aim_dir,
 				false,
-				_wrister_sweep_speed(input),
-				_wrister_stroke_travel())
+				_wrister_sweep_speed(input))
 		result.power = minf(result.power, _wrister_load_cap(is_backhand))
 		_sm.shot_dir = result.direction
 		_do_release(result.direction, result.power)
@@ -2936,7 +2908,7 @@ func _release_wrister(input: InputState) -> void:
 	# `result`) so a whiff still animates. Capped like the real release, so a
 	# shot the torso couldn't load finishes small — the finish IS the power readout.
 	var release_power_t: float = ShotMechanics.wrister_power_t(
-			_wrister_sweep_speed(input), _wrister_config(), _wrister_stroke_travel())
+			_wrister_sweep_speed(input), _wrister_config())
 	release_power_t = minf(release_power_t, wrister_load.load)
 	_sm.follow_through_power = lerpf(wrister_follow_through_min_power, 1.0, release_power_t)
 	_sm.set_state(State.FOLLOW_THROUGH)
@@ -2952,7 +2924,6 @@ func _fire_quick_pass(input: InputState) -> void:
 	if has_puck:
 		var blade_world: Vector3 = _ik.last_target_blade_world
 		last_release_hand = ""
-		last_release_stroke_travel = -1.0
 		last_release_was_shot = false  # the dedicated pass button
 		var result := ShotMechanics.release_wrister(
 				skater.global_position,
@@ -2981,7 +2952,6 @@ func _fire_slapper_shot(input: InputState) -> bool:
 		return false
 	# Direction is locked at the moment slap was pressed — no mid-swing steering.
 	last_release_hand = ""
-	last_release_stroke_travel = -1.0
 	last_release_was_shot = true  # slappers are shots; bots only slapper on one-timers
 	var locked_dir_3d := Vector3(_sm.locked_slapper_dir.x, 0.0, _sm.locked_slapper_dir.y)
 	var cfg: ShotMechanics.SlapperConfig = _slapper_config()
@@ -3036,39 +3006,14 @@ func _hide_slapshot_hud() -> void:
 func _update_wrister_charge(input: InputState) -> void:
 	if not has_puck:
 		return
-	# Direction signal: cursor SCREEN position, packed (x, 0, y) for the
-	# tracker's Vector3 interface. Screen space is the camera-immune
-	# frame — pixel motion captures the player's mouse drag intent
+	# Cursor SCREEN position, packed (x, 0, y). Screen space is the
+	# camera-immune frame — pixel motion captures the player's mouse drag intent
 	# independent of camera lag, body rotation, or skater locomotion.
 	var intent_pos := Vector3(input.mouse_screen_pos.x, 0.0, input.mouse_screen_pos.y)
-	# Magnitude signal: the ROM-clamped blade TARGET (closed-form project_blade,
-	# computed in apply_blade_from_mouse this tick), skater translation subtracted.
-	# Reading the target rather than the speed-capped smoothed blade keeps charge
-	# gated by reachable space (a cursor past the reach limit pins the target →
-	# zero delta) while staying deterministic, so host and client agree on charge.
+	_aiming.tick_wrister_charge(intent_pos, input.delta, wrister_mouse_speed_smoothing)
+	# The ROM-clamped blade TARGET (closed-form project_blade, computed in
+	# apply_blade_from_mouse this tick) — deterministic, so host and client agree.
 	var blade_world: Vector3 = _ik.last_target_blade_world
-	# The stroke's bearing is the SHOT LINE — origin→cursor, the vector the shot
-	# fires along (_wrister_aim_dir) — measured about the pinned origin rather
-	# than the body, whose ~1 m blade parallax would bank travel nobody swept.
-	# For a mouse the anchor also rides the skater's translation since the pin
-	# (ChargeTracking.swing_anchor), because the cursor's world point rides the
-	# skater-following camera; commit_wrister_power picks the frame, so host
-	# replay of a remote shooter reads identically.
-	var swing_anchor: Vector3 = ChargeTracking.swing_anchor(
-			_aiming.wrister_origin_world, skater.global_position,
-			_aiming.wrister_origin_skater_pos, input.commit_wrister_power)
-	var swing_bearing: Vector3 = input.mouse_world_pos - swing_anchor
-	swing_bearing.y = 0.0
-	# The stroke-travel accumulator's per-tick step is bounded by the on-axis
-	# blade-speed budget × delta: the target is a closed-form ROM clamp (not
-	# the speed-capped smoothed blade), so a forged/teleporting cursor could
-	# otherwise bank a whole arc of travel in one tick.
-	_aiming.tick_wrister_charge(
-			intent_pos, swing_bearing,
-			max_charge_direction_variance,
-			input.delta,
-			wrister_mouse_speed_smoothing,
-			wrister_on_axis_blade_speed * input.delta)
 	# Publish where this charge would go if released NOW, so the host-side goalie AI
 	# can pre-lean toward a charging shot's predicted impact. Mirrors the release
 	# math in _release_wrister exactly — same inputs, same direction and backhand —
@@ -3088,10 +3033,10 @@ func _update_wrister_charge(input: InputState) -> void:
 			skater.global_position, input.mouse_world_pos, blade_world,
 			is_backhand, _elevation_level,
 			_wrister_config(), charge_aim_dir, false,
-			_wrister_sweep_speed(input), _wrister_stroke_travel(), _wrister_pred_scratch)
+			_wrister_sweep_speed(input), _wrister_pred_scratch)
 	pred.power = minf(pred.power, _wrister_load_cap(is_backhand))
 	wrister_coil = minf(wrister_load.load, ShotMechanics.wrister_power_t(
-			_wrister_sweep_speed(input), _wrister_config(), _wrister_stroke_travel()))
+			_wrister_sweep_speed(input), _wrister_config()))
 	skater.predicted_shot_velocity = pred.direction * pred.power
 	# shot_charge carries the release-now SPEED (normalized predicted power over
 	# the min→max band) — the pure mouse-speed model, so it always matches the
@@ -3560,10 +3505,6 @@ func _wrister_config() -> ShotMechanics.WristerConfig:
 		# sweep_speed by _wrister_sweep_speed). full_sweep_speed is the cursor
 		# speed (px/s) that reads as full power.
 		_cached_wrister_cfg.full_sweep_speed = wrister_mouse_speed_full
-		# Travel-gated ceiling: the top of the band must be earned with real
-		# blade travel (fed as stroke_travel by _wrister_stroke_travel).
-		_cached_wrister_cfg.full_stroke_travel = wrister_full_stroke_travel
-		_cached_wrister_cfg.travel_cap_floor = wrister_travel_cap_floor
 	return _cached_wrister_cfg
 
 var _cached_wrister_load_cfg: WristerLoad.Config = null
@@ -3617,20 +3558,6 @@ func _wrister_sweep_speed(input: InputState) -> float:
 	if is_ai_controlled() or input.commit_wrister_power:
 		return ShotMechanics.wrister_speed_for_power_t(input.bot_wrister_power_t, _wrister_config())
 	return _aiming.cursor_speed_ema * shot_power_sensitivity()
-
-# Stroke travel fed to the travel-gated power ceiling
-# (ShotMechanics.wrister_travel_cap_t). Bots bypass the gate (INF): they have
-# no measured stroke — the committed bot_wrister_power_t IS their whole
-# gesture, and their wind-up geometry is cosmetic. Humans read the accumulated
-# blade-path length of the live stroke (world meters, so the ceiling can't be
-# bought with DPI or Shot Power Sensitivity).
-func _wrister_stroke_travel() -> float:
-	# The blade is frozen during the wrister charge, so it sweeps no world-space path
-	# — the blade-travel gate has nothing to read and would pin every shot at the
-	# floor tier. Power is earned by the cursor sweep instead, so the gate is
-	# permanently OFF (INF); see the travel-gated-ceiling export block for the dormant
-	# mechanism it is kept as a hook for.
-	return INF
 
 # Cached like the wrister config: _update_slapper_charge now re-solves the release
 # every windup tick (120 Hz × actors, replayed on reconcile) to publish
