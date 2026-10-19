@@ -41,17 +41,44 @@ static func should_receive(
 		pickup_max_speed: float,
 		deflect_min_speed: float,
 		alignment_bonus: float) -> bool:
+	if (puck_velocity - receiver_velocity).length() <= pickup_max_speed:
+		return true
+	return reception_load(puck_velocity, receiver_velocity, blade_normal,
+			deflect_min_speed, alignment_bonus) < 1.0
+
+
+# Pure: the share of the blade's catch capacity this contact uses —
+# (relative speed / catch ceiling)², squared because the hands soak the puck's
+# energy (the model should_receive is calibrated on). Below 1 the blade holds
+# it; 1 is the ceiling. The ceiling is should_receive's: the any-angle floor
+# plus the alignment bonus for a blade squared to the relative incoming line.
+static func reception_load(
+		puck_velocity: Vector3,
+		receiver_velocity: Vector3,
+		blade_normal: Vector3,
+		deflect_min_speed: float,
+		alignment_bonus: float) -> float:
 	var relative_velocity: Vector3 = puck_velocity - receiver_velocity
 	var relative_speed: float = relative_velocity.length()
-	if relative_speed <= pickup_max_speed:
-		return true
-	# How head-on the approach is, in the receiver's frame: -relative_dir points
-	# from puck toward the blade; dot with the face normal = squareness. Negative
-	# (puck moving away from the face) clamps to 0, no bonus. relative_speed >
-	# pickup_max_speed here, so the normalize is safe.
-	var alignment: float = maxf(0.0, -relative_velocity.normalized().dot(blade_normal))
+	if relative_speed < 0.001:
+		return 0.0
+	# -relative_dir points from puck toward the blade; dot with the face normal =
+	# squareness. Negative (puck moving away from the face) clamps to 0, no bonus.
+	var alignment: float = maxf(0.0, -(relative_velocity / relative_speed).dot(blade_normal))
 	var threshold: float = deflect_min_speed + alignment_bonus * alignment
-	return relative_speed < threshold
+	if threshold <= 0.0:
+		return INF
+	var ratio: float = relative_speed / threshold
+	return ratio * ratio
+
+
+# Pure: seconds a catch at `catch_load` leaves the receiver settling — unable to act
+# with the puck. Zero up to `clean_load`, then linear in load (energy) to `max_s`
+# at the ceiling. Grounding and calibration: docs/stick-settling-plan.md.
+static func settle_time(catch_load: float, clean_load: float, max_s: float) -> float:
+	if catch_load <= clean_load or clean_load >= 1.0:
+		return 0.0
+	return max_s * clampf((catch_load - clean_load) / (1.0 - clean_load), 0.0, 1.0)
 
 
 # Pure: horizontal unit vector perpendicular to the stick shaft (top_hand →

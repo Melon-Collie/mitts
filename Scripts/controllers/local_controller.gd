@@ -560,6 +560,9 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# tick recomputes it — otherwise the local player's stick-flex pose reads a
 	# stale charge for one frame after a reconcile (cosmetic; completes the set).
 	var pre_shot_charge: float = skater.shot_charge
+	# The settle queue notes and releases presses as the replay walks the
+	# deadline, the live inputs having already done so.
+	var pre_settle_queued: SkaterSettleGate.Press = _settle.queued
 	skater.global_position = server_state.position
 	skater.velocity = server_state.velocity
 	# Body-check stagger is deterministic from the host baseline + tick decay,
@@ -681,6 +684,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	_aiming.wrister_origin_world = pre_charge_origin_world
 	_aiming.wrister_origin_skater_pos = pre_charge_origin_skater_pos
 	skater.shot_charge = pre_shot_charge
+	_settle.queued = pre_settle_queued
 	# Server authority on shot state — but never revert past a release transition.
 	# If the client is in FOLLOW_THROUGH and the server is still in an aim state,
 	# the host just hasn't processed the release input yet; the reliable RPC already
@@ -874,8 +878,8 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_held: bool) -> void:
 			skater.global_position += _replay_collision_result.sep_b
 
 
-func on_puck_picked_up_network() -> void:
-	super.on_puck_picked_up_network()
+func on_puck_picked_up_network(settle_until_ms: int = 0) -> void:
+	super.on_puck_picked_up_network(settle_until_ms)
 	_claim_cooldown = 0.0
 	_poke_cooldown = 0.0
 	# Reset claim edge state so a drop-then-regrab (or an immediate poke after

@@ -690,9 +690,9 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 
 	# Fire vs carry: FIRE WINS TIES (stand-still's shot branch is the shoot-now
 	# score itself), so carry wins only on a STRICTLY better future-action value.
-	# A staggered bot does not START a fire — winding up through a body check's
-	# stagger flails the release — but carry still computes normally.
-	var staggered: bool = ctx.self_stagger_timer > 0.0
+	# A staggered or still-settling bot does not START a fire — a stagger flails
+	# the release, a settle only queues the press — but carry computes normally.
+	var staggered: bool = ctx.self_stagger_timer > 0.0 or ctx.self_settle_s > 0.0
 
 	# Opportunity cost of firing NOW: the value of keeping the puck for a feed a
 	# teammate is still creating (AICarrierPassSearch.developing_feed_value), × the odds we keep the

@@ -906,6 +906,15 @@ func test_staggered_carrier_holds_instead_of_firing() -> void:
 			"staggered carrier holds instead of committing the fire")
 
 
+func test_settling_carrier_holds_instead_of_firing() -> void:
+	# A carrier still settling a hard catch can't release (the settle lock would
+	# only queue the press), so the same breakout holds until the settle ends.
+	var ctx: RoleContext = _strong_outlet_ctx()
+	ctx.self_settle_s = 0.2
+	assert_eq(_decided(ctx).intended_action, AIRoleCarrier.INTENT_CARRY,
+			"settling carrier holds instead of committing the fire")
+
+
 # ─── settle doubt: a fresh carrier's bar for giving the puck up ──────────────
 
 # The same pressured breakout, with the outlet in two different situations. Both

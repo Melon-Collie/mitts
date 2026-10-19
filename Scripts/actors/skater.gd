@@ -197,21 +197,18 @@ var carry_catch_decay: float = 7.0
 # ── Pass-reception cushion (mesh-only, same channel as the catch above) ───────
 # A caught feed knocks the blade back along its own arrival line before the
 # hands re-seat it — the visible momentum absorb of the catch. Fired by each
-# machine's own attach path (trigger_reception_cushion) with the puck's
-# velocity relative to the receiver; the give scales with the SQUARE of that
-# closing speed (stopping distance under a constant absorb force ∝ v², the
-# same hands-soak model PuckReceptionRules is calibrated on), so a
-# walking-pace pickup gives essentially nothing and a full-pace feed reads as
-# a real corral. One continuous model — there is deliberately no separate
-# slow-pickup animation. Blade-mesh slide plus a wrist cup closing over the
-# puck; the marker, pin, and cursor binding are untouched.
-var reception_give_max: float = 0.12       # m of give at a ceiling-speed catch
-var reception_give_decay: float = 5.0      # blend/s back to the seat
+# machine's own attach path (trigger_reception_cushion) with the catch's
+# reception load (PuckReceptionRules.reception_load: closing speed over the
+# receiver's own ceiling, squared — the hands-soak model), so a walking-pace
+# pickup gives essentially nothing and a ceiling feed reads as a real corral.
+# A catch that settles re-seats exactly as the settle ends: the blade coming
+# home is the tell that the receiver can act. One continuous model — there is
+# deliberately no separate slow-pickup animation. Blade-mesh slide plus a
+# wrist cup closing over the puck; the marker, pin, and cursor binding are
+# untouched.
+var reception_give_max: float = 0.12       # m of give at a ceiling-load catch
+var reception_give_decay: float = 5.0      # blend/s back to the seat, at the fastest
 var reception_cup_deg: float = 7.0         # extra face close-over at full give
-# Closing speed (m/s, receiver frame) at which the give saturates. Mirrors the
-# any-angle deflect ceiling (Puck.deflect_min_speed) — a hotter arrival
-# deflects instead of catching, so the visual maxes out there.
-var reception_give_full_speed: float = 22.0
 # Commit threshold on |aim_dir · face_normal| (both unit) for the wrister
 # address flip — the aim line must sit at least ~asin(this) (~14°) off the
 # stick line before the addressed side changes, so a near-parallel aim holds
@@ -750,6 +747,7 @@ var _catch_heel_blend: float = 0.0
 # _apply_blade_tilt only.
 var _reception_give_dir: Vector3 = Vector3.ZERO
 var _reception_give_blend: float = 0.0
+var _reception_give_rate: float = 0.0
 # Eased 0→1 gate for the wind-up elevation seat (_aim_seat_offset_u) — 1 while
 # in WRISTER_AIM, so the seat tell slides in with the commit and back out with
 # the release instead of snapping on the state edge.
@@ -2058,7 +2056,7 @@ func _update_carry_contact(delta: float) -> void:
 			_stroke_toe_blend, stroke_toe_target, carry_gesture_ease * delta)
 	var new_catch: float = move_toward(_catch_heel_blend, 0.0, carry_catch_decay * delta)
 	var new_give: float = move_toward(
-			_reception_give_blend, 0.0, reception_give_decay * delta)
+			_reception_give_blend, 0.0, _reception_give_rate * delta)
 	var aim_seat_target: float = 1.0 \
 			if current_shot_state == SkaterStateMachine.State.WRISTER_AIM else 0.0
 	var new_aim_seat: float = move_toward(
@@ -2081,22 +2079,23 @@ func _update_carry_contact(delta: float) -> void:
 
 # The attach-instant cushion: the puck's arrival momentum visibly knocks the
 # blade back along its line of travel, then the hands re-seat it (the decay in
-# _update_carry_contact). `relative_velocity` is puck − receiver at contact —
-# the same frame the receive decision judges. Cosmetic and per-machine: every
-# peer fires it from its own attach event (host detection / lag-comp grant,
-# client pickup notifies), so it needs no wire field and never replays.
+# _update_carry_contact) over `hold_s` — the catch's settle — or faster for a
+# clean one. `relative_velocity` is puck − receiver at contact, the same frame
+# the receive decision judges. Cosmetic and per-machine: every peer fires it
+# from its own attach event (host detection / lag-comp grant, client pickup
+# notifies), so it needs no wire field and never replays.
 # Skipped while slapshot-pinning: a one-timer feed lands under a raised,
 # wound-up stick, and pins to the slapper zone rather than the blade — there
 # is no blade-on-puck catch to cushion.
-func trigger_reception_cushion(relative_velocity: Vector3) -> void:
-	if blade == null or is_slapshot_pinning() or reception_give_full_speed <= 0.0:
+func trigger_reception_cushion(relative_velocity: Vector3, catch_load: float,
+		hold_s: float) -> void:
+	if blade == null or is_slapshot_pinning():
 		return
 	var horiz := Vector3(relative_velocity.x, 0.0, relative_velocity.z)
 	var speed: float = horiz.length()
 	if speed < 0.001:
 		return
-	var t: float = clampf(speed / reception_give_full_speed, 0.0, 1.0)
-	var amp: float = t * t
+	var amp: float = clampf(catch_load, 0.0, 1.0)
 	if amp <= _reception_give_blend:
 		return  # a live, larger cushion is still playing out
 	var local_dir: Vector3 = blade.global_transform.basis.inverse() * (horiz / speed)
@@ -2105,6 +2104,8 @@ func trigger_reception_cushion(relative_velocity: Vector3) -> void:
 		return
 	_reception_give_dir = local_dir.normalized()
 	_reception_give_blend = amp
+	_reception_give_rate = reception_give_decay if hold_s <= 0.0 \
+			else minf(reception_give_decay, amp / hold_s)
 	_blade_tilt_dirty = true
 
 

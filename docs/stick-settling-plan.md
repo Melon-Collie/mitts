@@ -1,8 +1,12 @@
 # Stick settling — the range between a clean catch and a deflect
 
-Status: **Designed, not built.** Phase 1 (the settle lock) and Phase 2 (bots pass
-softer) are agreed. The near-miss bobble is Phase 3 and is to be discussed after
+Status: **Phase 1 built, awaiting playtest.** Phase 2 (bots pass softer) is
+agreed and not started. The near-miss bobble is Phase 3, to be discussed after
 Phase 1 is playtested.
+
+As built, Phase 1 differs from the design below in one place: the settle's held
+blade holds its reach *target* in the skater's frame (`hold_seat`), not the
+wrister freeze's re-read of the solved blade, which walks outward in tight.
 
 ## Decisions banked
 

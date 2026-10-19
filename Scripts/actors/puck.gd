@@ -20,19 +20,16 @@ signal puck_hit_goal_body  # uncarried puck struck net panel or skirt (non-pipe 
 @export var nudge_cooldown: float = 0.30  # short re-grab denial after a self nudge tap
 @export var ice_height: float = 0.0175  # = GameRules.PUCK_COLLISION_HALF_HEIGHT; disc bottom rests on y=0
 @export var pickup_max_speed: float = 8.0
-# RELATIVE puck-speed threshold for catch-vs-deflect: the puck's speed in the
-# RECEIVER'S frame (puck velocity − skater velocity), so a stretch pass to a
-# streaking receiver arrives soft while charging into the same pass steepens
-# it, and retreating with a hard shot cushions it under the ceiling. Calibrated
-# to real reception, not backwards from game pass speeds (rationale + force
-# math on PuckReceptionRules.should_receive): 22 ≈ 49 mph closing catches at
-# ANY blade angle — every pass-shaped launch (snap 14, AI arrival target 21.5,
-# soft-sweep wristers) catches for a static or retreating receiver, and only
-# sprinting head-on INTO a hard feed pushes past it. The alignment bonus
-# extends the ceiling to 30 m/s (~67 mph closing) for a perfectly squared
-# blade — reaching into the shot bands (wrister max 33 base / slapper 40),
-# which otherwise always deflect.
+# Catch ceiling in the RECEIVER'S frame (puck velocity − skater velocity): 22 ≈
+# 49 mph closing catches at any blade angle, and alignment_receive_bonus lifts
+# it to 30 for a squared blade. Calibrated to real reception, not to game pass
+# speeds — force math on PuckReceptionRules.should_receive.
 @export var deflect_min_speed: float = 22.0
+# A catch whose reception load is above settle_clean_load leaves the receiver
+# settling — no on-puck action — for up to settle_max_s at the ceiling. 0.30 is
+# clean to ~12 m/s on a poorly angled blade (docs/stick-settling-plan.md).
+var settle_clean_load: float = 0.30
+var settle_max_s: float = 0.40
 @export var alignment_receive_bonus: float = 8.0
 # Passive-blade deflection via a normal/tangential decomposition (see
 # PuckCollisionRules.deflect_velocity). The component INTO the blade face rebounds
