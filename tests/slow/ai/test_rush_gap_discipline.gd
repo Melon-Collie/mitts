@@ -165,10 +165,11 @@ func test_gap_defender_does_not_charge_a_neutral_zone_rush() -> void:
 func test_gap_defender_still_closes_on_a_stalled_carrier() -> void:
 	# The bound must not turn into passivity: a carrier with no speed to beat
 	# anyone with is the gap-up case, and the defender is supposed to take the
-	# ice. Same geometry, carrier barely moving.
+	# ice. Same geometry, carrier scripted to drift at 0.5 m/s: a bot carrier
+	# builds to ~7 m/s inside the window, and the defender rightly contains that.
 	var duel := Duel.new()
-	duel.add_skater(1, 0, Vector3(0.0, 0.0, 2.0), BotSkillProfile.hard(),
-			Vector3(0.0, 0.0, -0.5))
+	var drift: Array[Vector3] = [Vector3(0.0, 0.0, 2.0), Vector3(0.0, 0.0, -30.0)]
+	duel.add_scripted_attacker(1, 0, drift, 0.5)
 	duel.add_skater(2, 1, Vector3(0.0, 0.0, -18.0), BotSkillProfile.hard())
 	duel.start(1)
 	var closest: float = INF
