@@ -1046,13 +1046,18 @@ func _resolve_player_collisions() -> void:
 		# Center-to-center axis on XZ, n pointing self -> other (the hit direction).
 		# Fallback for coincident centers matches SkaterCollisionRules so the emit
 		# direction and the resolved geometry agree.
+		# A locked pin pair touches flat, along the boards' normal instead.
 		var d: Vector3 = other.global_position - global_position
 		d.y = 0.0
-		var dist: float = d.length()
+		var axis: Vector3 = BoardPinRules.locked_contact_axis(global_position, pin_role,
+				my_radius, other.global_position, other.pin_role, other.collision_radius())
+		var dist: float = d.length() if axis == Vector3.ZERO else d.dot(axis)
 		# Exactly the resolver's own no-overlap test, so a skip changes nothing.
 		if dist >= my_radius + other.collision_radius():
 			continue
-		var n: Vector3 = Vector3(1.0, 0.0, 0.0) if dist < 0.0001 else d / dist
+		var n: Vector3 = axis
+		if axis == Vector3.ZERO:
+			n = Vector3(1.0, 0.0, 0.0) if dist < 0.0001 else d / dist
 		# Aggressor gate — resolve each pair EXACTLY once, from the side moving toward
 		# the other more. agg_metric = (v_self + v_other)·n: > 0 → self is
 		# the aggressor and resolves this pair; < 0 → the other side does; ~0 (head-on
@@ -1083,7 +1088,7 @@ func _resolve_player_collisions() -> void:
 		SkaterCollisionRules.resolve(_collision_result,
 				global_position, velocity, weight, my_radius,
 				other.global_position, other.velocity, other.weight, other.collision_radius(),
-				atk_transfer * brace)
+				atk_transfer * brace, axis)
 		if not _collision_result.overlapping:
 			continue
 		# Self (attacker): separation + inelastic decel / drive-through, applied

@@ -1,11 +1,12 @@
 extends GutTest
 
-# The board pin on the host (BoardPinTracker): a committed checker driving an
-# unbraced opponent square into the boards locks them both; the lock ends when the
-# victim's body gets past the pinner's along the wall, when the pinner lets go,
-# when the bodies part, at the cap, at a stoppage, or on a release — and then the
-# victim is immune for a moment. A pinned carrier loses the puck at once.
-# Real Skater scenes, never ticked; positions, velocities and commits by hand.
+# The board pin on the host (BoardPinTracker): a checker holding his stick out on
+# the stick button, driving an unbraced opponent square into the boards, locks
+# them both; the lock ends when the victim's body gets past the pinner's along the
+# wall, when the pinner lets go of the button, when the bodies part, at the cap,
+# at a stoppage, or on a release — and then the victim is immune for a moment and
+# the pinner's stick cools down. A pinned carrier loses the puck at once.
+# Real Skater scenes, never ticked; positions, velocities and buttons by hand.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
@@ -30,7 +31,7 @@ func before_each() -> void:
 	_pins.setup(_registry, func() -> float: return _now,
 			func(victim: Skater, _p: Skater) -> void: _stripped.append(victim))
 	_place(0.0)
-	_pinner.hit_committed = true
+	_hold_stick(_pinner, true)
 	_pinner.current_shot_state = SkaterStateMachine.State.SKATING_WITHOUT_PUCK
 	_pinner.velocity = Vector3(1.5, 0.0, 0.0)
 
@@ -41,6 +42,12 @@ func _spawn_skater() -> Skater:
 	s.set_physics_process(false)
 	s.set_process(false)
 	return s
+
+
+# The stick button held past the hook (StickCheckRules' TIE phase), or let go.
+func _hold_stick(skater: Skater, held: bool) -> void:
+	skater.stick_check_held = held
+	skater.stick_check_phase = StickCheckRules.Phase.TIE if held else StickCheckRules.Phase.IDLE
 
 
 # The victim against the +x side boards, the pinner touching him from the ice
@@ -54,7 +61,7 @@ func _place(along: float) -> void:
 			GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
 
 
-func test_a_committed_drive_into_the_boards_locks_both() -> void:
+func test_a_stick_held_out_driving_into_the_boards_locks_both() -> void:
 	_pins.tick(true)
 	assert_eq(_pinner.pin_role, Role.PINNER)
 	assert_eq(_victim.pin_role, Role.PINNED)
@@ -70,14 +77,30 @@ func test_a_braced_victim_is_not_pinned() -> void:
 	assert_eq(_victim.pin_role, Role.NONE)
 
 
-func test_an_uncommitted_or_puck_carrying_checker_pins_nobody() -> void:
-	_pinner.hit_committed = false
-	_pins.tick(true)
-	assert_eq(_victim.pin_role, Role.NONE, "not committed")
+func test_the_commit_or_a_stick_still_in_the_hook_pins_nobody() -> void:
+	_hold_stick(_pinner, false)
 	_pinner.hit_committed = true
+	_pins.tick(true)
+	assert_eq(_victim.pin_role, Role.NONE, "a check is not a pin")
+	_pinner.hit_committed = false
+	_pinner.stick_check_held = true
+	_pinner.stick_check_phase = StickCheckRules.Phase.HOOK
+	_pins.tick(true)
+	assert_eq(_victim.pin_role, Role.NONE, "a tap at the wall stays a lift")
+
+
+func test_a_carrier_a_tied_stick_or_a_cooling_one_pins_nobody() -> void:
 	_pinner.current_shot_state = SkaterStateMachine.State.SKATING_WITH_PUCK
 	_pins.tick(true)
-	assert_eq(_victim.pin_role, Role.NONE, "a carrier only braces")
+	assert_eq(_victim.pin_role, Role.NONE, "a carrier")
+	_pinner.current_shot_state = SkaterStateMachine.State.SKATING_WITHOUT_PUCK
+	_pinner.stick_tied = true
+	_pins.tick(true)
+	assert_eq(_victim.pin_role, Role.NONE, "a tied stick")
+	_pinner.stick_tied = false
+	_pinner.start_stick_check_cooldown()
+	_pins.tick(true)
+	assert_eq(_victim.pin_role, Role.NONE, "a cooling stick")
 
 
 func test_a_teammate_or_a_body_off_the_wall_is_not_pinned() -> void:
@@ -104,12 +127,14 @@ func test_getting_past_the_pinner_along_the_wall_frees_him_either_way() -> void:
 		assert_eq(_pinner.pin_role, Role.NONE)
 
 
-func test_letting_go_of_the_commit_ends_it_and_the_victim_is_immune() -> void:
+func test_letting_go_of_the_button_ends_it_and_the_victim_is_immune() -> void:
 	_pins.tick(true)
-	_pinner.hit_committed = false
+	_pinner.stick_check_held = false
 	_pins.tick(true)
 	assert_eq(_victim.pin_role, Role.NONE)
-	_pinner.hit_committed = true
+	assert_true(_pinner.is_stick_check_cooling(), "the pinner's stick cools down")
+	_pinner._stick_check_cooldown = 0.0
+	_hold_stick(_pinner, true)
 	_pins.tick(true)
 	assert_eq(_victim.pin_role, Role.NONE, "immune for a moment")
 	_now += BoardPinRules.PIN_IMMUNITY_S + 0.01
@@ -139,6 +164,8 @@ func test_a_release_or_a_stoppage_lets_go() -> void:
 	_pins.release(_victim)
 	assert_eq(_victim.pin_role, Role.NONE, "the frozen-puck squirt")
 	assert_eq(_pinner.pin_role, Role.NONE)
+	assert_true(_pinner.is_stick_check_cooling())
+	_pinner._stick_check_cooldown = 0.0
 	_now += BoardPinRules.PIN_IMMUNITY_S + 0.01
 	_pins.tick(true)
 	_pins.tick(false)

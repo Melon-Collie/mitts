@@ -157,6 +157,24 @@ func test_a_break_puts_both_on_the_shared_cooldown() -> void:
 	assert_false(_receiver.stick_tied, "the same pair cannot re-tie straight away")
 
 
+func test_nobody_in_a_board_pin_ties_or_is_tied() -> void:
+	_defender.pin_role = BoardPinRules.Role.PINNER
+	_latch()
+	assert_false(_receiver.stick_tied, "a pinner's stick is on the pin")
+	_defender.pin_role = BoardPinRules.Role.NONE
+	_receiver.pin_role = BoardPinRules.Role.PINNED
+	_ties.tick(true)
+	assert_false(_receiver.stick_tied, "a pinned man's stick is held")
+
+
+func test_a_pin_breaks_a_tie() -> void:
+	_latch()
+	_receiver.pin_role = BoardPinRules.Role.PINNED
+	_ties.tick(true)
+	assert_false(_defender.stick_tied)
+	assert_false(_receiver.stick_tied)
+
+
 func test_a_knockdown_breaks_it() -> void:
 	_latch()
 	_receiver.is_knocked_down = true

@@ -58,3 +58,22 @@ func test_a_check_into_the_boards_lands_harder_than_in_open_ice() -> void:
 	_check_at(_wall_x(), 6.0)
 	assert_eq(_received.size(), 1)
 	assert_gt(_received[0].length(), open_ice * 1.2, "the boards take the recoil")
+
+
+func test_a_pinner_driving_in_presses_his_man_into_the_wall_not_along_it() -> void:
+	var y: float = GameRules.FACEOFF_SPAWN_HEIGHT
+	_victim.global_position = Vector3(_wall_x(), y, 0.0)
+	_victim.velocity = Vector3.ZERO
+	_victim.pin_role = BoardPinRules.Role.PINNED
+	_checker.pin_role = BoardPinRules.Role.PINNER
+	_checker.hit_committed = false
+	var touching: float = _victim.collision_radius() + _checker.collision_radius()
+	# Off his line by half the escape: two discs would squeeze him along the wall.
+	_checker.global_position = Vector3(_wall_x() - touching + 0.03, y,
+			-0.5 * BoardPinRules.PIN_ESCAPE_OFFSET_M)
+	_checker.velocity = Vector3(1.5, 0.0, 0.0)
+	var z_before: float = _victim.global_position.z
+	_checker._resolve_player_collisions()
+	assert_gt(_victim.velocity.x, 0.0, "pressed into the boards")
+	assert_eq(_victim.velocity.z, 0.0, "not along them")
+	assert_eq(_victim.global_position.z, z_before)

@@ -1,8 +1,8 @@
 # Physicality — the pin on the stick button, and the cross-check
 
-Status: **design, not built.** Amends `docs/defensive-play-plan.md` (the pin
-revision, v74) and adds a new verb. Three phases, each its own PR, protocol bump
-and playtest.
+Status: **Phase A built**, playtest pending; B and C are design. Amends
+`docs/defensive-play-plan.md` (the pin revision, v74) and adds a new verb. Three
+phases, each its own PR and playtest.
 
 ## Decisions banked
 
@@ -73,23 +73,57 @@ today is positioning plus the stick tie; moving a man out of position is missing
 - **The pinner skates upright**, at the ordinary stride and grip. That is the
   point of the move.
 
-### The escape, re-derived
+### The locked pair touches flat (found while building)
 
-`PIN_ESCAPE_OFFSET_M` stops being a picked number. It becomes the offset a
-reversal opens over `PIN_LAG_BUDGET_S` when the pinner answers it at the
-ordinary stride, computed from `SkaterMovementRules`' league config (reverse
-skid, the free push under `GRIP_MIN_SPEED`, the drive above it) and the two slide
-caps. A test fails if the movement model moves and the offset doesn't. The
-design property it must satisfy, asserted on the real controllers:
+With the pinner upright he still lost every reversal, even read with no lag, and
+the harder he drove into the boards the sooner the victim got out (a one-way
+slide escaped in 0.83 s at full drive, and was held at none). Two discs touching
+off-centre turn "press him into the wall" into "squeeze him along it": the
+contact normal tilts with the along-wall offset, and the separation and the
+impulse carry an along-wall share. A locked pair now touch along the boards'
+normal (`BoardPinRules.locked_contact_axis`, passed to
+`SkaterCollisionRules.resolve` by the live resolver and the reconcile replay),
+two bodies pressed flat into the glass, and the pin's "bodies part" test
+measures the gap along the same normal (`locked_gap`).
+
+### The escape, held by a test
+
+`PIN_ESCAPE_OFFSET_M` stays 0.5 m. Measured on the real controllers once the
+pinner is upright and the contact is flat (neutral builds, the pinner driving
+into the wall at 0.7 against full along-wall input):
+
+| Pinner reads the reversal | Peak offset | Result |
+|---|---|---|
+| instantly | 0.27 m | held |
+| 0.1 s late | 0.37 m | held |
+| 0.2 s late (`PIN_LAG_BUDGET_S`) | 0.47 m | held |
+| 0.3 s late | — | escaped |
+| one-way slide, no juke | 0.09 m | held to the cap |
+
+Weight moves it the right way: 260 lb pinning 170 lb holds a 0.4 s read; 170 lb
+pinning 260 lb loses at 0.2 s.
+
+Deriving the offset from the movement model, as first planned, would mean
+picking how much of his stick the pinner spends driving into the wall, so it
+would be a picked number in another form. The slow test holds the property
+instead, and fails if a movement change breaks it:
 
 - a reversal the pinner answers within `PIN_LAG_BUDGET_S` is **held**;
 - one he answers `PIN_LAG_BUDGET_S` + a human reaction (0.2 s) late is **lost**;
-- a one-way slide against a pinner who matches it is **held** to the cap.
+- a one-way slide against a pinner who matches it is **held** to the cap,
+  however hard he drives into the boards.
 
 ### Bots
 
 - `SkaterAgentBoardPlay` holds `stick_check_held` for a pin instead of
-  `hit_held`. `_answer_pin_threat` (the brace) is unchanged.
+  `hit_held`.
+- **Reaching for a pin** (`_reach_for_pin`): a bot whose dispatch is driving a
+  check into an unbraced man on the wall, within `PIN_REACH_S` of contact
+  (`RISE_S` + `HOOK_MAX_S`, so the stick is past the hook when the bodies meet),
+  swaps the check for the stick button where the hit will not knock him down
+  and the pin is worth holding. A hit that knocks him down stays a hit.
+- **The brace answers a stick held out** (`StickCheckRules.is_stick_busy` on the
+  checker), not his commit, since that is now what pins.
 - **The mirror matches velocity, not just offset.** Feed the man's along-wall
   velocity forward (read through the same `PIN_LAG_BUDGET_S`) and correct the
   offset on top. The pure proportional law has a steady-state trail by
@@ -264,7 +298,7 @@ Grounded per `Scripts/domain/ai/CLAUDE.md`; the checklist is
 
 | Phase | Field | Protocol |
 |---|---|---|
-| A | none: onset and hold read inputs on the host; `pin_role` unchanged | bump anyway, so mixed builds don't share a lobby |
+| A | none: onset and hold read inputs on the host; `pin_role` unchanged | none: no wire, RPC or range change (`build_info.gd`'s rules); mixed builds are refused by the Steam BuildID check |
 | B | `cross_check_phase` (u8: phase + elapsed ticks); cross-check claim RPC | bump |
 | C | none | — |
 
@@ -274,7 +308,8 @@ Grounded per `Scripts/domain/ai/CLAUDE.md`; the checklist is
 |---|---|
 | Pin onset and hold on the stick button | `Scripts/game/board_pin_tracker.gd` |
 | Locked pair has no Ctrl; pinner upright | `SkaterController._apply_movement` |
-| Derived escape offset | `Scripts/domain/rules/board_pin_rules.gd` |
+| Flat contact, locked gap | `Scripts/domain/rules/board_pin_rules.gd`, `skater_collision_rules.gd`; `Skater._resolve_player_collisions`, `LocalController`'s replay |
+| The escape race | `tests/harness/pin_race_harness.gd` |
 | Bot pin button, velocity-matched mirror | `Scripts/ai/skater_agent_board_play.gd` |
 | Cross-check phases, reach, Δv model | new `Scripts/domain/rules/cross_check_rules.gd` |
 | Phase stepping and pose seam | a new `SkaterController` collaborator |
@@ -327,4 +362,4 @@ From the same investigation, separate decisions:
 | `REARM_S` | 0.40 s | ~0.7 s press to press |
 | `REACH_M` | 0.55 m | arm extension, body edge to body edge |
 | `CONE_DEG` | 50° | in front of the chest, where the shaft is |
-| `PIN_ESCAPE_OFFSET_M` | derived | Phase A |
+| `PIN_ESCAPE_OFFSET_M` | 0.5 m (unchanged) | held by `tests/slow/game/test_pin_escape_race.gd` |

@@ -1,21 +1,25 @@
 class_name BoardPinTracker
 extends RefCounted
 
-# Host-only owner of every board pin: which committed checker has driven which
-# unbraced opponent into the boards (BoardPinRules), and the only writer of
-# Skater.pin_role / pin_strength, which replicate. The caps those fields drive
-# are each controller's own, so this decides only when a lock starts and ends.
+# Host-only owner of every board pin: which checker holding the stick button has
+# driven which unbraced opponent into the boards (BoardPinRules), and the only
+# writer of Skater.pin_role / pin_strength, which replicate. The caps those fields
+# drive are each controller's own, so this decides only when a lock starts and
+# ends.
 #
-# Onset: a committed, puckless checker in body contact with an opponent, driving
-# him square into the boards he is against, who is not braced (holding his own
-# commit), not already locked, not down or ghosted, and not inside his immunity.
-# A pinned carrier loses the puck at once (it squirts loose at his feet).
+# Onset: a puckless checker whose stick is held out past the hook (the stick
+# button's TIE phase, so a tap at the wall stays a lift), in body contact with an
+# opponent, driving him square into the boards he is against, who is not braced
+# (holding his own commit), not already locked, not down or ghosted, and not
+# inside his immunity. A pinned carrier loses the puck at once (it squirts loose
+# at his feet). Ticked before StickTieTracker, which ties no one in a pin.
 #
 # The lock ends when the victim's body is no longer lined up with the pinner's
-# (BoardPinRules.escaped), when the pinner lets go of the commit, when the bodies
-# part, when the victim is off the wall, on a knockdown or a ghost, at the cap, at
-# a stoppage, or when the frozen-puck rule squirts the puck (release). Every end
-# starts the victim's immunity.
+# (BoardPinRules.escaped), when the pinner lets go of the stick button, when the
+# bodies part, when the victim is off the wall, on a knockdown or a ghost, at the
+# cap, at a stoppage, or when the frozen-puck rule squirts the puck (release).
+# Every end starts the victim's immunity and puts the pinner on the stick-check
+# cooldown, so a broken pin cannot turn straight into a tie.
 
 var _registry: PlayerRegistry = null
 var _now_getter: Callable = Callable()        # () -> float, host seconds
@@ -70,7 +74,8 @@ func victim_of(pinner: Skater) -> Skater:
 
 
 func _can_pin(pinner: Skater) -> bool:
-	return pinner.hit_committed and pinner.pin_role == BoardPinRules.Role.NONE \
+	return pinner.stick_check_phase == StickCheckRules.Phase.TIE and not pinner.stick_tied \
+			and not pinner.is_stick_check_cooling() and pinner.pin_role == BoardPinRules.Role.NONE \
 			and not SkaterStateMachine.state_has_puck(pinner.current_shot_state) \
 			and not pinner.is_knocked_down and not pinner.is_ghost
 
@@ -126,7 +131,7 @@ func _hold_or_end() -> void:
 
 
 func _holds(pinner: Skater, victim: Skater, now: float) -> bool:
-	if not pinner.hit_committed or pinner.is_knocked_down or victim.is_knocked_down \
+	if not pinner.stick_check_held or pinner.is_knocked_down or victim.is_knocked_down \
 			or pinner.is_ghost or victim.is_ghost:
 		return false
 	if now - float(_started_at.get(pinner, now)) >= BoardPinRules.PIN_MAX_S:
@@ -135,9 +140,8 @@ func _holds(pinner: Skater, victim: Skater, now: float) -> bool:
 			victim.collision_radius(), BoardPinRules.PIN_WALL_RELEASE_M)
 	if wall_out == Vector2.ZERO:
 		return false
-	var gap: float = Vector2(victim.global_position.x - pinner.global_position.x,
-			victim.global_position.z - pinner.global_position.z).length() \
-			- pinner.collision_radius() - victim.collision_radius()
+	var gap: float = BoardPinRules.locked_gap(victim.global_position, victim.collision_radius(),
+			pinner.global_position, pinner.collision_radius(), wall_out)
 	if gap > BoardPinRules.PIN_SEPARATION_M:
 		return false
 	return not BoardPinRules.escaped(BoardPinRules.along_wall_offset(
@@ -149,6 +153,8 @@ func _end(pinner: Skater) -> void:
 	_victim_by_pinner.erase(pinner)
 	_started_at.erase(pinner)
 	_unlock(pinner, victim)
+	if is_instance_valid(pinner):
+		pinner.start_stick_check_cooldown()
 	if victim != null and is_instance_valid(victim):
 		_immune_until[victim] = _now() + BoardPinRules.PIN_IMMUNITY_S
 

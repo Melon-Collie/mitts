@@ -681,8 +681,8 @@ func _physics_process(delta: float) -> void:
 	_apply_ghost_state(delta)
 	_shot_tracker.tick(delta)
 	_hit_tracker.tick(delta)
-	_stick_ties.tick(not _state_machine.is_movement_locked())
 	_board_pins.tick(not _state_machine.is_movement_locked())
+	_stick_ties.tick(not _state_machine.is_movement_locked())
 	_possession_tracker.tick(delta)
 	# Release before _pickup_claim.tick so a claim coming due this frame can still
 	# arm the contest window on the frame it lands.

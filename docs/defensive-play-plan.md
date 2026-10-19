@@ -30,7 +30,8 @@ bump and playtest.
 - **Ties are pure geometry in v1** (no Weight term until playtested), and **a
   pinning defender's stick stays off the ice** (the pin is a one-for-one trade).
 - **The pin is a locked position contest, not a stun** (decided after Phase 3; see
-  *Pin revision*):
+  *Pin revision*). **It is held on the stick button, not Ctrl** (since
+  `docs/physicality-plan.md` Phase A), and the locked pair touch flat:
   - a victim holding Ctrl is braced and cannot be pinned;
   - once a pin connects, neither player's stick plays the puck;
   - both slide along the wall on the direction keys, and the victim is free once

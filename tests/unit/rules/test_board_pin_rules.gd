@@ -37,20 +37,42 @@ func test_a_hit_square_into_the_boards_lands_its_whole_closing_speed() -> void:
 			5.0, "never weaker than the open-ice hit")
 
 
-func test_a_pin_needs_a_committed_drive_into_the_wall() -> void:
+func test_a_pin_needs_a_reaching_drive_into_the_wall() -> void:
 	var out := Vector2(1.0, 0.0)
 	var into := Vector2(1.0, 0.0)
 	assert_true(BoardPinRules.pin_holds(true, false, into, Vector3(1.5, 0, 0), Vector2.ZERO, out))
 	assert_true(BoardPinRules.pin_holds(true, false, into, Vector3.ZERO, Vector2(1.0, 0.0), out),
 			"pressed flat against him, the stick held into the wall still drives")
 	assert_false(BoardPinRules.pin_holds(false, false, into, Vector3(1.5, 0, 0), Vector2.ZERO, out),
-			"not committed")
+			"not reaching")
 	assert_false(BoardPinRules.pin_holds(true, false, into, Vector3.ZERO, Vector2.ZERO, out),
 			"not driving")
 	assert_false(BoardPinRules.pin_holds(true, false, Vector2(0.0, 1.0), Vector3(1.5, 0, 0),
 			Vector2.ZERO, out), "pushing along the wall is not pinning")
 	assert_false(BoardPinRules.pin_holds(true, false, into, Vector3(1.5, 0, 0), Vector2.ZERO,
 			Vector2.ZERO), "no wall")
+
+
+func test_a_locked_pair_touches_along_the_boards_normal() -> void:
+	var victim: Vector3 = _at_the_wall(0.0)
+	var pinner: Vector3 = victim + Vector3(-2.0 * R, 0.0, 0.3)
+	assert_eq(BoardPinRules.locked_contact_axis(pinner, BoardPinRules.Role.PINNER, R, victim, BoardPinRules.Role.PINNED, R),
+			Vector3(1.0, 0.0, 0.0), "pinner to victim: into the wall, whatever the offset")
+	assert_eq(BoardPinRules.locked_contact_axis(victim, BoardPinRules.Role.PINNED, R, pinner, BoardPinRules.Role.PINNER, R),
+			Vector3(-1.0, 0.0, 0.0), "victim to pinner: out of it")
+	assert_eq(BoardPinRules.locked_contact_axis(pinner, BoardPinRules.Role.NONE, R, victim, BoardPinRules.Role.PINNED, R),
+			Vector3.ZERO, "a third body touches him as a disc")
+	assert_eq(BoardPinRules.locked_contact_axis(pinner, BoardPinRules.Role.PINNER, R, victim, BoardPinRules.Role.PINNER, R),
+			Vector3.ZERO, "two pinners are not a pair")
+
+
+func test_the_locked_gap_ignores_the_along_wall_offset() -> void:
+	var victim: Vector3 = _at_the_wall(0.0)
+	var out := Vector2(1.0, 0.0)
+	assert_almost_eq(BoardPinRules.locked_gap(victim, R, victim + Vector3(-2.0 * R, 0.0, 0.4),
+			R, out), 0.0, 1e-6)
+	assert_almost_eq(BoardPinRules.locked_gap(victim, R, victim + Vector3(-2.0 * R - 0.1, 0.0, 0.0),
+			R, out), 0.1, 1e-6)
 
 
 func test_a_braced_victim_cannot_be_pinned() -> void:

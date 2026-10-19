@@ -1615,12 +1615,12 @@ func _wants_deflect(input: InputState) -> bool:
 
 
 # A lift starts only from plain puckless skating: a puck on the blade, a shot, a
-# block or a check owns the stick. Any of those arriving mid-lift ends it, as
-# does an opponent's lift on this stick, or a tie, which holds the stick itself.
+# block or a check owns the stick. Any of those arriving mid-lift ends it, as does
+# an opponent's lift, a tie, or being pinned; a pinner's stick stays in its hold.
 func _advance_stick_check(input: InputState, delta: float) -> void:
 	var stick_taken: bool = has_puck or skater.hit_committed or skater.is_knocked_down \
 			or skater.is_forced_lift_active() or skater.stick_tied \
-			or skater.pin_role != BoardPinRules.Role.NONE \
+			or skater.pin_role == BoardPinRules.Role.PINNED \
 			or _sm.get_state() != State.SKATING_WITHOUT_PUCK
 	_stick_check.advance(input.stick_check_pressed, input.stick_check_held,
 			not stick_taken, stick_taken, delta)
@@ -3284,13 +3284,13 @@ func _apply_movement(input: InputState, delta: float) -> void:
 	# The commit wins over the stance: being caught upright is its whole cost.
 	# Mirrored to the skater so the collision resolver reads full-vs-passive
 	# transfer. Deterministic from the input, so reconcile replay reproduces both.
-	# A pinned skater has neither: he is pressed into the glass. (His pinner keeps
-	# the commit — letting go of it is how a pin is let go.)
-	var pinned: bool = skater.pin_role == BoardPinRules.Role.PINNED
-	hit_active = not locomotion_suppressed and input.hit_held and not pinned
+	# Neither side of a pin commits (it is held on the stick button, and nothing
+	# stacks on it); the pinned one, pressed into the glass, has no stance either.
+	var locked: bool = skater.pin_role != BoardPinRules.Role.NONE
+	hit_active = not locomotion_suppressed and input.hit_held and not locked
 	skater.hit_committed = hit_active
 	stance_active = not locomotion_suppressed and input.stance_held and not hit_active \
-			and not pinned
+			and skater.pin_role != BoardPinRules.Role.PINNED
 	# Body-check stagger decays deterministically every tick (including during a
 	# planted charge/block and through reconcile replay), so the penalties ease
 	# back on their own. Decayed before the suppression early-out so a player

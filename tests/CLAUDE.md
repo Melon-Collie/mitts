@@ -107,8 +107,11 @@ rather than invisible.
 
 ## Netcode harnesses
 
-Three deterministic simulations under `tests/harness/`. None is a physics
-harness — nothing in any of them skates. They exist because every netcode defect found so far has lived in the
+Three deterministic netcode simulations under `tests/harness/`. None is a
+physics harness — nothing in any of them skates. (The fourth file there,
+`pin_race_harness.gd`, is not netcode: it ticks two real `SkaterController`s and
+a `BoardPinTracker` against the boards for the pin's escape race, read by
+`tests/slow/game/test_pin_escape_race.gd` and the instrument beside it.) They exist because every netcode defect found so far has lived in the
 plumbing (clocks, queues, buffers, ordering), and every one was found by reading
 code or post-hoc telemetry rather than by a failing test.
 
