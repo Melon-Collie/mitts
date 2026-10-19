@@ -1391,7 +1391,7 @@ func sync_existing_players(player_data: Array) -> void:
 func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int,
 		jersey_color: Color, helmet_color: Color, pants_color: Color,
 		is_left_handed: bool, player_name: String, jersey_number: int = 10,
-		attributes: PlayerAttributes = null) -> void:
+		attributes: PlayerAttributes = null, from_spectator: bool = false) -> void:
 	if peer_id == NetworkManager.local_peer_id():
 		return
 	if _state_machine == null:
@@ -1399,7 +1399,7 @@ func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int,
 		# on_slot_assigned flushes once _spawn_world has run.
 		_pending_remote_spawns.append([peer_id, team_slot, team_id,
 				jersey_color, helmet_color, pants_color,
-				is_left_handed, player_name, jersey_number, attributes])
+				is_left_handed, player_name, jersey_number, attributes, from_spectator])
 		return
 	# Idempotency guard. The game-start fan-out routes each peer through a single
 	# channel (see _push_lobby_assignments_to_clients), so this should not fire
@@ -1411,6 +1411,7 @@ func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int,
 		return
 	var colors: Dictionary = TeamColorRegistry.get_colors(teams[team_id].color_slot, team_id)
 	_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
+	if from_spectator: _spectator_peers[peer_id] = true
 	_registry.spawn(peer_id, team_slot, teams[team_id],
 			jersey_color, helmet_color, pants_color,
 			colors.jersey_stripe, colors.gloves, colors.pants_stripe, colors.socks, colors.socks_stripe,
@@ -2472,7 +2473,7 @@ func _promote_spectator_to_player(peer_id: int, new_team_id: int, new_slot: int)
 			NetworkManager.get_peer_handedness(peer_id),
 			NetworkManager.get_peer_name(peer_id),
 			NetworkManager.get_peer_number(peer_id),
-			is_local)
+			is_local, true, true)
 	# Cleared after the spawn so RosterAnnouncer reads it as a return, not a join.
 	_spectator_peers.erase(peer_id)
 
@@ -2816,7 +2817,7 @@ func _on_replay_player_left_event(record: PlayerRecord) -> void:
 # the caller — this helper owns only the shared shape.
 func _spawn_player_and_broadcast(peer_id: int, team_id: int, team_slot: int,
 		is_left: bool, p_name: String, p_number: int, is_local: bool,
-		broadcast: bool = true) -> Dictionary:
+		broadcast: bool = true, from_spectator: bool = false) -> Dictionary:
 	var team: Team = teams[team_id]
 	var colors: Dictionary = TeamColorRegistry.get_colors(team.color_slot, team_id)
 	var attrs: PlayerAttributes = NetworkManager.get_peer_attributes(peer_id)
@@ -2826,7 +2827,7 @@ func _spawn_player_and_broadcast(peer_id: int, team_id: int, team_slot: int,
 				colors.jersey, colors.helmet, colors.pants)
 	if broadcast:
 		NetworkManager.send_spawn_remote_skater(peer_id, team_slot, team_id,
-				colors.jersey, colors.helmet, colors.pants, is_left, p_name, p_number, attrs)
+				colors.jersey, colors.helmet, colors.pants, is_left, p_name, p_number, attrs, from_spectator)
 	_registry.spawn(peer_id, team_slot, team,
 			colors.jersey, colors.helmet, colors.pants,
 			colors.jersey_stripe, colors.gloves, colors.pants_stripe,

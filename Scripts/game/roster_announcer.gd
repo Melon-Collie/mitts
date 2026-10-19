@@ -1,16 +1,15 @@
 class_name RosterAnnouncer
 extends RefCounted
 
-# Turns roster changes into HUD ticker lines ("JONES joined", "JONES now
-# spectating") in the team's UI palette. Runs on every peer off the same
+# Turns roster changes into HUD ticker lines ("JONES joined", "JONES moved to
+# spectators") in the team's UI palette. Runs on every peer off the same
 # registry events, so host and clients toast the same moments.
 #
 # A move between the ice and the spectator gallery reaches the registry as an
 # ordinary despawn / spawn; `is_spectator` is what tells it apart from a leave
 # or a join. The owner therefore marks a peer a spectator BEFORE despawning them
-# and clears the mark only AFTER spawning them. A client learns of a spectator
-# only from a demotion broadcast, so one who chose the gallery in the lobby
-# reads as "joined" there when promoted.
+# and clears the mark only AFTER spawning them; on clients, a promotion's spawn
+# RPC carries `from_spectator` to set that mark.
 
 signal announced(player_name: String, detail_key: StringName, team_colors: Dictionary)
 

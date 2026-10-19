@@ -51,9 +51,9 @@ const _SIZE_SLACK: int = 40
 const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/ai/skater_agent_state_machine.gd": 3694,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
-	# +3: the spectator set is marked before a demotion's despawn and cleared
-	# after a promotion's spawn, which RosterAnnouncer reads to label the move.
-	"res://Scripts/game/game_manager.gd": 5791,
+	# +4: the spectator set is marked before a demotion's despawn and around a
+	# promotion's spawn, which RosterAnnouncer reads to label the move.
+	"res://Scripts/game/game_manager.gd": 5792,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
 	# Scripts/controllers/CLAUDE.md rather than inline, and the tunable
