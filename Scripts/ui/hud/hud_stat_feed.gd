@@ -7,7 +7,7 @@ extends RefCounted
 # with no extra RPC. Goals/assists are excluded (the goal banner + chyron own
 # that moment); see StatFeedRules for the full exclusion rationale.
 
-signal feed_event(subject: String, detail: String, color: Color)
+signal feed_event(subject: String, detail: String, team_colors: Dictionary)
 
 # Translation keys, tr()'d at the emit seam; copy lives in
 # locale/translations.csv.
@@ -35,16 +35,17 @@ func poll() -> void:
 		if prev != null:
 			for event: StringName in StatFeedRules.feed_events(prev, snapshot):
 				feed_event.emit(record.display_name(),
-						"· %s" % tr(_LABEL_KEYS[event]), _color_for(record))
+						"· %s" % tr(_LABEL_KEYS[event]), _colors_for(record))
 		_baseline[pid] = snapshot
 	# Drop baselines for departed players so a reused peer id starts fresh.
 	for pid: int in _baseline.keys():
 		if not players.has(pid):
 			_baseline.erase(pid)
 
-# Same color the join/leave toasts use for this player's team.
-func _color_for(record: PlayerRecord) -> Color:
+# Same palette the join/leave toasts use for this player's team; a teamless
+# player gets the broadcast panel's own colors.
+func _colors_for(record: PlayerRecord) -> Dictionary:
 	if record.team == null:
-		return MenuStyle.BROADCAST_CREAM
-	return TeamColorRegistry.get_colors(
-			record.team.color_slot, record.team.team_id).primary
+		return {"base": MenuStyle.BROADCAST_BG, "stripe": MenuStyle.BROADCAST_BORDER_T,
+				"text": MenuStyle.BROADCAST_CREAM}
+	return TeamColorRegistry.get_ui_colors(record.team.color_slot, record.team.team_id)
