@@ -198,6 +198,10 @@ func test_the_reach_edges_are_the_rigs() -> void:
 			0.000001)
 	assert_almost_eq(c.carry_facing_rules.backhand_edge_rad, deg_to_rad(c.bh_release_angle_deg),
 			0.000001, "a carrier's blade stops on the backhand where the bottom hand lets go")
+	# Only the edges differ: the native rollout reads the rest off facing_rules.
+	for knob: String in ["engage_min_speed", "engage_full_speed", "hold_min_speed",
+			"hold_full_speed", "stance_square_max_speed", "pivot_commit_rad"]:
+		assert_eq(c.carry_facing_rules.get(knob), c.facing_rules.get(knob), knob)
 	# The top hand's shoulder is on the backhand side, so the forehand is the other.
 	for lefty: bool in [true, false]:
 		_skater.is_left_handed = lefty
@@ -207,10 +211,49 @@ func test_the_reach_edges_are_the_rigs() -> void:
 				"a %s shot's shoulder" % ("left" if lefty else "right"))
 
 
-func test_a_cursor_behind_a_standing_skater_still_freezes_facing() -> void:
+func test_a_standing_skater_turns_round_to_a_cursor_behind() -> void:
+	var behind_left := BEHIND.rotated(Vector3.UP, deg_to_rad(-10.0))
 	_skate(AHEAD, 0.0, AHEAD, 30)
-	_skate(AHEAD, 0.0, BEHIND, 120)
-	assert_lt(_facing_off(AHEAD), 5.0, "the unreachable-wedge freeze still holds at rest")
+	var widest_left: float = INF
+	var widest_right: float = -INF
+	for _i: int in 240:
+		_skate(AHEAD, 0.0, behind_left, 1)
+		widest_left = minf(widest_left, _skater.get_facing().x)
+		widest_right = maxf(widest_right, _skater.get_facing().x)
+	assert_lt(_facing_off(behind_left), 5.0, "the body comes round to it")
+	assert_lt(widest_left, -0.9, "round the cursor's side")
+	assert_lt(widest_right, 0.2, "and never the other way")
+
+
+# A cursor held on the carry stop flipped the pivot on float noise, and the hips
+# sat between the two lines; a pivot under way now carries through.
+func test_a_cursor_held_on_the_stop_puts_the_hips_on_a_line() -> void:
+	_puck.set_carrier(_skater)
+	_controller.on_puck_picked_up_network()
+	var edge: float = _controller.bh_release_angle_deg
+	for jitter: float in [0.0, 2.0]:
+		_controller._pose.facing = Vector2(0.0, -1.0)
+		_skater.set_facing(Vector2(0.0, -1.0))
+		_skate(AHEAD, 6.0, AHEAD, 30, Vector2(0.0, -1.0))
+		var widest: float = 0.0
+		for i: int in 240:
+			var cursor := AHEAD.rotated(Vector3.UP, deg_to_rad(-edge + jitter * sin(i * 0.9)))
+			_skate(AHEAD, 6.0, cursor, 1, Vector2(0.0, -1.0))
+			if i >= 120:
+				var off: float = _facing_off(AHEAD)
+				widest = maxf(widest, minf(off, 180.0 - off))
+		assert_lt(widest, 5.0, "jitter %.0f°: the hips sit on a line, %.1f° off one" % [jitter, widest])
+
+
+func test_pushing_off_squared_to_the_backhand_skates_forward() -> void:
+	_puck.set_carrier(_skater)
+	_controller.on_puck_picked_up_network()
+	var stop: float = _controller.bh_release_angle_deg
+	var cursor := AHEAD.rotated(Vector3.UP, deg_to_rad(-(stop - 6.0)))
+	_skate(AHEAD, 0.0, cursor, 120)
+	for i: int in 120:
+		_skate(AHEAD, minf(i * 0.08, 6.0), cursor, 1, Vector2(0.0, -1.0))
+	assert_lt(_facing_off(AHEAD), 5.0, "the hips take the line up, not the pivot")
 
 
 func test_the_stance_squares_only_when_slow() -> void:

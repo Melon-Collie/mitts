@@ -26,7 +26,7 @@ namespace mitts {
 
 #define MITTS_FACING_TUNABLES(X) \
 	X(engage_min_speed) X(engage_full_speed) X(hold_min_speed) X(hold_full_speed) \
-	X(forehand_edge_rad) X(backhand_edge_rad) X(stance_square_max_speed)
+	X(forehand_edge_rad) X(backhand_edge_rad) X(stance_square_max_speed) X(pivot_commit_rad)
 
 #define MITTS_ROLLOUT_BODY_TUNABLES(X) \
 	X(facing_drag_speed) X(facing_drag_speed_braking) X(body_radius) \
@@ -90,6 +90,8 @@ class NativeCarryRollout : public godot::RefCounted {
 	godot::Vector2 push_out_of_net(const godot::Vector2 &world_xz, double radius) const;
 	double reach_edge(const godot::Vector2 &facing, const godot::Vector2 &dir,
 			double forehand_edge, double backhand_edge) const;
+	double line_share(const godot::Vector2 &f, const godot::Vector2 &line,
+			const godot::Vector2 &cur, double speed, bool stance) const;
 	godot::Vector2 face(const godot::Vector2 &f, const godot::Vector2 &cur,
 			const godot::Vector3 &v, const godot::Vector3 &p, bool braking, bool stance,
 			double step, bool has_puck, bool shield) const;

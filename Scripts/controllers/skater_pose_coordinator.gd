@@ -244,57 +244,44 @@ func apply_facing(input: InputState, delta: float) -> void:
 			mouse_world.z - _skater.global_position.z
 		)
 		if to_mouse.length() > _controller.move_deadzone:
-			# Gate: while the mouse is in the unreachable wedge behind the skater
-			# (past the blade's reach edge on its side, FacingRules.reach_edge),
-			# freeze facing so the body doesn't chase a target it can't reach. Resume tracking as soon as the mouse returns to the reachable
-			# cone, regardless of side: an unlock tied to the side it left from
-			# strands facing when the mouse wraps round. Snap-prevention on wraps
-			# lives in the blade speed cap (SkaterIKCoordinator), not in this lock.
-			# Only a standing skater is held: a moving one turns round instead
-			# (FacingRules.Result.free_to_turn_round).
 			var cursor_dir: Vector2 = to_mouse.normalized()
 			var lefty: bool = _skater.is_left_handed
 			var rules: FacingRules.Config = _controller.facing_rules
-			# A carrier's hips pivot where its blade stops on the backhand
-			# (carry_facing_rules); the standing freeze keeps the empty stick's
-			# edge, or a standing carrier would stop turning to a cursor beside him.
+			# A carrier's hips pivot where its blade stops on the backhand.
 			FacingRules.solve(_facing_rule, facing, cursor_dir,
 					Vector2(_skater.velocity.x, _skater.velocity.z), input.brake,
 					_controller.stance_active, lefty,
 					_controller.carry_facing_rules if _controller.has_puck else rules)
 			var facing_target: Vector2 = _facing_rule.target
-			var mouse_body_angle: float = facing.angle_to(cursor_dir)
-			var behind_gate: bool = absf(mouse_body_angle) \
+			var behind: bool = absf(facing.angle_to(cursor_dir)) \
 					>= FacingRules.reach_edge(rules, facing, cursor_dir, lefty)
-			var turns_round: bool = _facing_rule.free_to_turn_round
-			if turns_round or not behind_gate:
-				var drag: float = _controller.facing_drag_speed_braking if input.brake else _controller.facing_drag_speed
-				# Re-square hard through the follow-through: the coil left facing stale
-				# at the wind-up cursor, and a lazy drag can't catch up in ~0.22 s, so
-				# the blade handoff snaps to the wrong side (ROM-clamped to the stale
-				# facing) before reaching the cursor. See follow_through_facing_recover_speed.
-				if s == State.FOLLOW_THROUGH:
-					drag = maxf(drag, _controller.follow_through_facing_recover_speed)
-				# Board shield: a carrier working the wall squares up ALONG it and
-				# protects the puck rather than facing into it. Gated to carrying —
-				# digging a loose puck out of the corner keeps full facing freedom,
-				# because there's nothing to shield. Pure in the skater's position and
-				# the cursor, so it re-derives identically through reconcile replay.
-				if _controller.has_puck:
-					facing_target = BoardPlayRules.board_shield_facing(
-							facing_target,
-							BoardPlayRules.board_proximity(
-									Vector2(_skater.global_position.x, _skater.global_position.z),
-									_controller.board_shield_probe),
-							deg_to_rad(_controller.board_shield_max_deg))
-				if turns_round and (behind_gate or absf(facing.angle_to(facing_target))
-						>= FacingRules.reach_edge(rules, facing, facing_target, lefty)):
-					# Turning round to a cursor or a target in the wedge: a chord lerp
-					# toward a near-opposed vector barely moves, so turn by angle.
-					facing = facing.rotated(FacingRules.turn_round_angle(
-							facing, facing_target, cursor_dir) * minf(drag * delta, 1.0))
-				else:
-					facing = facing.lerp(facing_target, drag * delta).normalized()
+			var drag: float = _controller.facing_drag_speed_braking if input.brake else _controller.facing_drag_speed
+			# Re-square hard through the follow-through: the coil left facing stale
+			# at the wind-up cursor, and a lazy drag can't catch up in ~0.22 s, so
+			# the blade handoff snaps to the wrong side (ROM-clamped to the stale
+			# facing) before reaching the cursor. See follow_through_facing_recover_speed.
+			if s == State.FOLLOW_THROUGH:
+				drag = maxf(drag, _controller.follow_through_facing_recover_speed)
+			# Board shield: a carrier working the wall squares up ALONG it and
+			# protects the puck rather than facing into it. Gated to carrying —
+			# digging a loose puck out of the corner keeps full facing freedom,
+			# because there's nothing to shield. Pure in the skater's position and
+			# the cursor, so it re-derives identically through reconcile replay.
+			if _controller.has_puck:
+				facing_target = BoardPlayRules.board_shield_facing(
+						facing_target,
+						BoardPlayRules.board_proximity(
+								Vector2(_skater.global_position.x, _skater.global_position.z),
+								_controller.board_shield_probe),
+						deg_to_rad(_controller.board_shield_max_deg))
+			if behind or absf(facing.angle_to(facing_target)) \
+					>= FacingRules.reach_edge(rules, facing, facing_target, lefty):
+				# Turning round to a cursor or a target behind, standing or moving: a
+				# chord lerp toward a near-opposed vector barely moves, so turn by angle.
+				facing = facing.rotated(FacingRules.turn_round_angle(
+						facing, facing_target, cursor_dir) * minf(drag * delta, 1.0))
+			else:
+				facing = facing.lerp(facing_target, drag * delta).normalized()
 		_skater.set_facing(facing)
 		var turn_delta: float = angle_difference(prev_angle, _skater.rotation.y)
 		lower_body_lag = clampf(

@@ -215,6 +215,19 @@ double NativeCarryRollout::reach_edge(const Vector2 &facing, const Vector2 &dir,
 	return backhand_edge;
 }
 
+// FacingRules._line_share.
+double NativeCarryRollout::line_share(const Vector2 &f, const Vector2 &line, const Vector2 &cur,
+		double speed, bool stance) const {
+	double share = Math::abs((double)f.angle_to(line)) <= Math::abs((double)f.angle_to(cur))
+			? smoothstep(facing_cfg.hold_min_speed, facing_cfg.hold_full_speed, speed)
+			: smoothstep(facing_cfg.engage_min_speed, facing_cfg.engage_full_speed, speed);
+	if (stance) {
+		share = MIN(share, smoothstep(facing_cfg.stance_square_max_speed - stance_square_blend,
+				facing_cfg.stance_square_max_speed, speed));
+	}
+	return share;
+}
+
 // AICarryRollout._face over FacingRules.solve / reach_edge / turn_round_angle and
 // BoardPlayRules.board_proximity / board_shield_facing.
 Vector2 NativeCarryRollout::face(const Vector2 &f, const Vector2 &cur, const Vector3 &v,
@@ -225,33 +238,25 @@ Vector2 NativeCarryRollout::face(const Vector2 &f, const Vector2 &cur, const Vec
 	Vector2 target = cur;
 	const Vector2 velocity(v.x, v.z);
 	const double speed = velocity.length();
-	const bool turns_round = speed > facing_cfg.hold_min_speed;
 	if (!braking && speed >= 0.001) {
 		const Vector2 travel = velocity / (real_t)speed;
 		Vector2 line = f.dot(travel) >= 0.0 ? travel : -travel;
-		const double pivot = has_puck
+		double share = line_share(f, line, cur, speed, stance);
+		const double off_line = line.angle_to(cur);
+		const double turned = MAX((double)line.angle_to(f) * signd(off_line)
+				- (1.0 - share) * Math::abs(off_line), 0.0);
+		const double edge = has_puck
 				? reach_edge(line, cur, carry_forehand_edge_rad, carry_backhand_edge_rad)
 				: reach_edge(line, cur, fore, back);
-		if (Math::abs((double)line.angle_to(cur)) > pivot) {
+		if (Math::abs(off_line) + MIN(turned, facing_cfg.pivot_commit_rad) > edge) {
 			line = -line;
-		}
-		const bool on_line = Math::abs((double)f.angle_to(line))
-				<= Math::abs((double)f.angle_to(cur));
-		double share = on_line
-				? smoothstep(facing_cfg.hold_min_speed, facing_cfg.hold_full_speed, speed)
-				: smoothstep(facing_cfg.engage_min_speed, facing_cfg.engage_full_speed, speed);
-		if (stance) {
-			share = MIN(share, smoothstep(facing_cfg.stance_square_max_speed
-					- stance_square_blend, facing_cfg.stance_square_max_speed, speed));
+			share = line_share(f, line, cur, speed, stance);
 		}
 		if (share > 0.0) {
 			target = cur.slerp(line, (real_t)share);
 		}
 	}
 	const bool behind = Math::abs((double)f.angle_to(cur)) >= reach_edge(f, cur, fore, back);
-	if (behind && !turns_round) {
-		return f;
-	}
 	if (shield) {
 		Vector2 proximity;
 		const double probe = body.board_shield_probe;
@@ -278,7 +283,7 @@ Vector2 NativeCarryRollout::face(const Vector2 &f, const Vector2 &cur, const Vec
 			}
 		}
 	}
-	if (turns_round && (behind || Math::abs((double)f.angle_to(target)) >= reach_edge(f, target, fore, back))) {
+	if (behind || Math::abs((double)f.angle_to(target)) >= reach_edge(f, target, fore, back)) {
 		// FacingRules.turn_round_angle.
 		double turn = f.angle_to(target);
 		if (turn * (double)f.angle_to(cur) < 0.0) {

@@ -157,6 +157,7 @@ var _airborne_keep: float = LANDING_SPEED_KEEP
 var ticks: int = 0
 var move_cfg: SkaterMovementRules.MovementConfig
 var _facing_cfg: FacingRules.Config
+var _carry_facing_cfg := FacingRules.Config.new()
 var _facing_rule := FacingRules.Result.new()
 # Rolling puck positions for the puppets' reaction-delayed read.
 var _puck_history: Array[Vector3] = []
@@ -190,6 +191,9 @@ func _init() -> void:
 	var ctrl := SkaterController.new()
 	move_cfg = ctrl.get_movement_config()
 	_facing_cfg = ctrl.facing_rules
+	# As SkaterController.setup derives the carry edge, which needs a body.
+	_carry_facing_cfg.forehand_edge_rad = _facing_cfg.forehand_edge_rad
+	_carry_facing_cfg.backhand_edge_rad = deg_to_rad(ctrl.bh_release_angle_deg)
 	ctrl.free()
 	move_cfg.puck_carry_speed_multiplier = 0.86
 
@@ -363,15 +367,24 @@ func step() -> void:
 		var to_mouse := Vector2(s.input.mouse_world_pos.x - s.pos.x,
 				s.input.mouse_world_pos.z - s.pos.z)
 		if to_mouse.length() > move_cfg.move_deadzone:
-			# The game's own facing rule (FacingRules), so a bot here faces where
-			# it would in a match: its skating line once skating, its cursor otherwise.
-			FacingRules.solve(_facing_rule, s.facing, to_mouse.normalized(),
-					Vector2(s.vel.x, s.vel.z), s.input.brake, s.input.stance_held,
-					s.agent._is_left_handed, _facing_cfg)
-			if _facing_rule.pivoting:
-				s.facing = s.facing.slerp(_facing_rule.target, minf(FACING_DRAG * DT, 1.0))
+			# The game's own facing rule (FacingRules) and step
+			# (SkaterPoseCoordinator.apply_facing), so a bot here faces where it
+			# would in a match: its skating line once skating, its cursor otherwise,
+			# turned round by angle to anything behind it.
+			var cursor_dir: Vector2 = to_mouse.normalized()
+			var lefty: bool = s.agent._is_left_handed
+			FacingRules.solve(_facing_rule, s.facing, cursor_dir,
+					Vector2(s.vel.x, s.vel.z), s.input.brake, s.input.stance_held, lefty,
+					_carry_facing_cfg if carrier_id == s.peer_id else _facing_cfg)
+			var target: Vector2 = _facing_rule.target
+			if absf(s.facing.angle_to(cursor_dir)) >= FacingRules.reach_edge(
+					_facing_cfg, s.facing, cursor_dir, lefty) \
+					or absf(s.facing.angle_to(target)) >= FacingRules.reach_edge(
+							_facing_cfg, s.facing, target, lefty):
+				s.facing = s.facing.rotated(FacingRules.turn_round_angle(s.facing, target,
+						cursor_dir) * minf(FACING_DRAG * DT, 1.0))
 			else:
-				s.facing = s.facing.lerp(_facing_rule.target, FACING_DRAG * DT).normalized()
+				s.facing = s.facing.lerp(target, FACING_DRAG * DT).normalized()
 		var rot_y: float = atan2(-s.facing.x, -s.facing.y)
 		s.vel = SkaterMovementRules.apply_movement(
 				s.vel, s.input.move_vector, rot_y, carrier_id == s.peer_id,
