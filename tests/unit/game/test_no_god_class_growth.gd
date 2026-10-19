@@ -92,7 +92,9 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# shoulder, and a carrier's reach stops where the bottom hand lets go
 	# (_two_hand_reach, _carry_backhand_stop).
 	# +39: the cross-check pose — the shaft across the chest, the wide grip.
-	"res://Scripts/controllers/skater_ik_coordinator.gd": 1051,
+	# +8: _glove_spacing, the shaft the top glove takes up, which the drawn
+	# bottom grip and the carry's two-handed reach both keep clear of.
+	"res://Scripts/controllers/skater_ik_coordinator.gd": 1059,
 	# +21: apply_scripted_grant / stage_scripted — the tutorial's teleports
 	# restart the swept interaction tests where the puck lands instead of
 	# sweeping the jump. +6: the pinch hop composed onto the contest exit.
@@ -102,7 +104,10 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/game/player_prefs.gd": 1342,
 	# +20: helmet_rim_y, the rim's height as built, which the hair reads to hide
 	# its top edge under the shell — the one source of the rim profile.
-	"res://Scripts/actors/skater_mesh_builder.gd": 1482,
+	# +41: the glove's stations (knuckle and finger rolls) and the forearm's
+	# wrist neck, the mesh that keeps the sleeve inside the glove. +2:
+	# GLOVE_FIST_SPAN, the fist's width the bottom grip keeps clear of.
+	"res://Scripts/actors/skater_mesh_builder.gd": 1525,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1304,
 	"res://Scripts/ui/career_stats_screen.gd": 1271,
 	"res://Scripts/ui/lobby_manager.gd": 1247,
@@ -145,7 +150,8 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/domain/state/game_state_machine.gd": 39,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 36,
 	# +1: helmet_rim_y (see the size entry).
-	"res://Scripts/actors/skater_mesh_builder.gd": 31,
+	# +1: shared_forearm_bone, which the locker mannequin and lobby dummies wear.
+	"res://Scripts/actors/skater_mesh_builder.gd": 32,
 	"res://Scripts/controllers/puck_controller.gd": 32,
 	"res://Scripts/game/shot_on_goal_tracker.gd": 26,
 	"res://Scripts/actors/goalie.gd": 26,

@@ -301,17 +301,18 @@ static func _arm_angle_to_forehand(
 # The farthest along the aim to `desired_blade_xz` the blade may sit, as a
 # max_blade_reach (horizontal distance from `shoulder`), with the other hand
 # still able to hold the shaft: some point of it within `bottom_reach` of
-# `bottom_shoulder` (BottomHandIK.reachable_grip). INF when the target itself is
+# `bottom_shoulder` and `spacing` clear of the top hand
+# (BottomHandIK.reachable_grip). INF when the target itself is
 # held. Along one aim the solve only carries the shaft farther from the body as
 # the cap grows, so the answer is bisected; the target pose is tried first, and
 # carrying inside the two-handed rim costs that one solve. Leaves
 # cfg.max_blade_reach as it found it; `scratch` is overwritten.
 static func two_hand_reach(shoulder: Vector3, desired_blade_xz: Vector2,
 		blade_side_sign: float, cfg: Config, bottom_shoulder: Vector3, grip: float,
-		bottom_reach: float, scratch: Result) -> float:
+		bottom_reach: float, spacing: float, scratch: Result) -> float:
 	solve(shoulder, desired_blade_xz, blade_side_sign, cfg, scratch)
 	if BottomHandIK.reachable_grip(bottom_shoulder, scratch.hand, scratch.blade,
-			grip, bottom_reach).y <= 0.0:
+			grip, bottom_reach, spacing).y <= 0.0:
 		return INF
 	var cap: float = cfg.max_blade_reach
 	var lo: float = 0.0
@@ -321,7 +322,7 @@ static func two_hand_reach(shoulder: Vector3, desired_blade_xz: Vector2,
 		cfg.max_blade_reach = mid
 		solve(shoulder, desired_blade_xz, blade_side_sign, cfg, scratch)
 		if BottomHandIK.reachable_grip(bottom_shoulder, scratch.hand, scratch.blade,
-				grip, bottom_reach).y <= 0.0:
+				grip, bottom_reach, spacing).y <= 0.0:
 			lo = mid
 		else:
 			hi = mid

@@ -26,7 +26,7 @@ extends RefCounted
 const _SHAFT_TIP_OVERRUN_M: float = 0.03
 # The butt end extends past the TOP HAND so the knob rides visibly above the
 # fist — a real grip holds the shaft just below the knob, not on top of it.
-# Sized so the whole knob clears the glove sphere (hand_sphere_radius 0.06)
+# Sized so the whole knob clears the fist (~7 cm half-width at the knuckle roll)
 # with a finger's width of wrapped shaft showing between fist and knob.
 # Public: the workbench preview extends its shaft to match.
 const SHAFT_BUTT_EXTEND_M: float = 0.13

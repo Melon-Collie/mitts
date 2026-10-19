@@ -108,3 +108,36 @@ func test_righty_mirrors_lefty_in_x() -> void:
 	assert_almost_eq(lefty_hand.x, -righty_hand.x, 0.001, "hand X mirrors")
 	assert_almost_eq(lefty_hand.y, righty_hand.y, 0.001, "hand Y matches")
 	assert_almost_eq(lefty_hand.z, righty_hand.z, 0.001, "hand Z matches")
+
+
+# ── Where on the shaft it can hold ────────────────────────────────────────────
+
+# A shaft running straight down from a top hand level with the shoulder and 0.6 m
+# out: the arm reaches 0.6 m of it and no further.
+const _SHAFT_TOP := Vector3(0.0, 0.0, -0.6)
+const _SHAFT_BLADE := Vector3(0.0, -1.2, -0.6)
+
+
+func test_the_grip_slides_up_to_where_the_arm_reaches() -> void:
+	var held: Vector2 = BottomHandIK.reachable_grip(Vector3.ZERO, _SHAFT_TOP, _SHAFT_BLADE,
+			0.5, 0.75)
+	assert_almost_eq(held.x, 0.375, 0.001, "0.45 m down the shaft is 0.75 m from the shoulder")
+	assert_eq(held.y, 0.0, "and it still holds")
+
+
+func test_the_grip_never_comes_up_into_the_top_glove() -> void:
+	var held: Vector2 = BottomHandIK.reachable_grip(Vector3.ZERO, _SHAFT_TOP, _SHAFT_BLADE,
+			0.0, 0.75, 0.14)
+	assert_almost_eq(held.x * 1.2, 0.14, 0.001, "a grip wanted at the top hand stops a glove below it")
+	assert_eq(held.y, 0.0, "which the arm reaches")
+
+
+func test_an_arm_that_cannot_reach_past_the_top_glove_lets_go() -> void:
+	var held: Vector2 = BottomHandIK.reachable_grip(Vector3.ZERO, _SHAFT_TOP, _SHAFT_BLADE,
+			0.25, 0.61, 0.14)
+	assert_almost_eq(held.x * 1.2, 0.14, 0.001, "the nearest it may hold is a glove down")
+	assert_almost_eq(held.y, Vector2(0.6, 0.14).length() - 0.61, 0.001,
+			"and it is that far past the arm's reach")
+	var bare: Vector2 = BottomHandIK.reachable_grip(Vector3.ZERO, _SHAFT_TOP, _SHAFT_BLADE,
+			0.25, 0.61)
+	assert_eq(bare.y, 0.0, "without the glove's room it would hold on top of the other hand")

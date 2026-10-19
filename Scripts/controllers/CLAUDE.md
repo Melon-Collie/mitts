@@ -781,6 +781,15 @@ answer. Both are tick state; the drawn bottom hand reads the render-rate trunk
 and is what the limit is measured to keep on the shaft.
 `test_top_hand_reaches_its_rim.gd` holds all of it.
 
+"Hold the shaft" means a glove's width below the top hand
+(`SkaterIKCoordinator._glove_spacing`, the drawn fist's width), never on it.
+The bottom arm only just reaches the top hand once the stick is held out, so
+never let that floor go to zero: the grip slides up until one fist is drawn
+inside the other, and the reach it buys a carrier (out to ~1.85 m) is reach
+no two hands have. With it the stick comes in until both hands fit (a carry
+reaches ~1.3 m ahead, ~0.95 m wide), and an empty stick past that lets the
+bottom hand go. `test_gloves_never_stack.gd` measures the drawn fists.
+
 Because the blade stops there, a skating carrier's hips pivot there too: its
 `FacingRules` config (`carry_facing_rules`, also the bots' `AISkaterCaps` copy)
 has the backhand stop as its backhand edge, so sweeping the puck round the

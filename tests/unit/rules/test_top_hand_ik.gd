@@ -652,7 +652,7 @@ func test_two_hand_reach_is_the_last_cap_the_other_hand_holds() -> void:
 		var a: float = deg_to_rad(deg)
 		var target := Vector2(shoulder.x + sin(a) * 5.0, shoulder.z - cos(a) * 5.0)
 		var limit: float = TopHandIK.two_hand_reach(shoulder, target, -1.0, cfg, bottom,
-				0.25, reach, scratch)
+				0.25, reach, 0.0, scratch)
 		assert_true(is_finite(limit), "%.0f°: a target 5 m out is past the two-handed rim" % deg)
 		assert_eq(cfg.max_blade_reach, INF, "the search leaves the cap as it found it")
 		cfg.max_blade_reach = limit
@@ -663,9 +663,29 @@ func test_two_hand_reach_is_the_last_cap_the_other_hand_holds() -> void:
 		cfg.max_blade_reach = INF
 
 
+# The other glove takes up the top of the shaft, so the hand that has to hold
+# below it reaches less of it: the limit comes in, and is held exactly.
+func test_the_top_glove_brings_the_two_hand_limit_in() -> void:
+	var shoulder: Vector3 = _lefty_shoulder()
+	var bottom := Vector3(-SHOULDER_OFFSET, 0.0, 0.0)
+	var reach: float = 0.65
+	var cfg: TopHandIK.Config = _cfg()
+	var scratch := TopHandIK.Result.new()
+	var target := Vector2(shoulder.x, shoulder.z - 5.0)
+	var bare: float = TopHandIK.two_hand_reach(shoulder, target, -1.0, cfg, bottom,
+			0.25, reach, 0.0, scratch)
+	var gloved: float = TopHandIK.two_hand_reach(shoulder, target, -1.0, cfg, bottom,
+			0.25, reach, 0.14, scratch)
+	assert_lt(gloved, bare - 0.01, "a glove's width of shaft costs reach")
+	cfg.max_blade_reach = gloved
+	var r: TopHandIK.Result = TopHandIK.solve(shoulder, target, -1.0, cfg)
+	assert_eq(BottomHandIK.reachable_grip(bottom, r.hand, r.blade, 0.25, reach, 0.14).y, 0.0,
+			"held a glove below the top hand at the limit")
+
+
 func test_a_held_target_sets_no_two_hand_limit() -> void:
 	var shoulder: Vector3 = _lefty_shoulder()
 	var target := Vector2(shoulder.x, shoulder.z - 1.0)
 	var limit: float = TopHandIK.two_hand_reach(shoulder, target, -1.0, _cfg(),
-			Vector3(-SHOULDER_OFFSET, 0.0, 0.0), 0.25, 0.65, TopHandIK.Result.new())
+			Vector3(-SHOULDER_OFFSET, 0.0, 0.0), 0.25, 0.65, 0.0, TopHandIK.Result.new())
 	assert_eq(limit, INF, "a blade the other hand already reaches is not limited")

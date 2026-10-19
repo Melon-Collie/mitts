@@ -64,6 +64,7 @@ const BUILD_WEIGHT_LB: int = 201
 const CAM_OFFSET: Vector3 = Vector3(1.9, 0.6, 2.9)
 const CAM_FOV: float = 45.0
 const CAM_AIM: Vector3 = Vector3(0.0, -0.05, 0.0)
+const CAM_HAND_FOV: float = 22.0
 
 # Each pose: a name, whether it starts with the puck, and a list of
 # [tick_count, input_spec] segments run in order. Edge fields (shoot_pressed,
@@ -76,7 +77,8 @@ const CAM_AIM: Vector3 = Vector3(0.0, -0.05, 0.0)
 # with Ctrl held, the cross-check), brake (bool), loft (int elevation level), face (Vector3, a
 # facing set on the segment's first tick). Pose keys beyond name/puck/steps:
 # cam (offset), cam_aim (the point it looks at, relative to the skater like
-# cam), cam_ahead (metres down the travel line),
+# cam), cam_ahead (metres down the travel line), cam_hand ("top" / "bottom":
+# cam is then an offset from that hand, looked at through a narrow lens),
 # game_cam, readout, faceoff, knockdown (a world-space impulse absorbed as a
 # check before the first tick). "readout": true also prints the pose's speed
 # and body lean, which a tile can't be read for.
@@ -200,6 +202,12 @@ const POSES: Array = [
 		[120, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}],
 		[40, {"move": Vector2(0.0, -1.0), "hit": true, "aim": Vector3(0.0, 0.0, -3.0)}],
 	]},
+	# The gloves up close: the cuff over the wrist, the sleeve stopping inside
+	# it, and the two fists on the shaft.
+	{"name": "gloves_carry", "puck": true, "cam_hand": "bottom", "cam": Vector3(0.9, 0.5, 0.8),
+		"steps": [[40, {"aim": Vector3(0.6, 0.0, -2.2)}]]},
+	{"name": "gloves_front", "puck": false, "cam_hand": "top", "cam": Vector3(0.3, 0.9, -1.4),
+		"steps": [[40, {}]]},
 	{"name": "shot_block", "puck": false, "steps": [
 		[30, {"block": true, "aim": Vector3(0.0, 0.0, -3.0)}],
 	]},
@@ -569,6 +577,13 @@ func _run_pose() -> void:
 	var v_flat: Vector3 = Vector3(_skater.velocity.x, 0.0, _skater.velocity.z)
 	if pose.has("cam_ahead") and v_flat.length() > 0.1:
 		offset = v_flat.normalized() * float(pose["cam_ahead"]) + Vector3(0.0, 0.3, 0.0)
+	if pose.has("cam_hand"):
+		var hand_node: Node3D = _skater.top_hand if pose["cam_hand"] == "top" else _skater.bottom_hand
+		var hand_world: Vector3 = hand_node.global_position
+		_camera.fov = CAM_HAND_FOV
+		_camera.global_position = hand_world + offset
+		_camera.look_at(hand_world, Vector3.UP)
+		return
 	_camera.global_position = _skater.global_position + offset
 	_camera.look_at(_skater.global_position + pose.get("cam_aim", CAM_AIM), Vector3.UP)
 

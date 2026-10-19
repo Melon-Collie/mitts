@@ -92,11 +92,13 @@ func test_the_blade_holds_its_seat_while_settling() -> void:
 	# blade stops reaching for the cursor. Height is the carry's own hop. The seat
 	# is the carry's, a tick in: the catch itself moves the blade beside the puck
 	# and in to where both hands hold the stick. The lag grows with how far out
-	# the blade sits (here ~1.45 m, through a 46° turn); chasing is ~0.8 m.
+	# the blade sits (here ~1.1 m, through a 46° turn), and the turn also tightens
+	# the two-handed reach along the seat, which brings it in another few cm;
+	# chasing is ~0.8 m.
 	_tick()
 	var seat: Vector3 = _blade_in_body()
 	_tick(19, Vector3(-1.2, 0.0, -0.4))
-	assert_lt(_flat(_blade_in_body() - seat), 0.10,
+	assert_lt(_flat(_blade_in_body() - seat), 0.15,
 			"the blade does not chase the cursor while settling")
 	_tick_to_deadline()
 	_tick(12, Vector3(-1.2, 0.0, -0.4))

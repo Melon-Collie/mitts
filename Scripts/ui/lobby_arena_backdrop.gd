@@ -169,25 +169,32 @@ func _build_dummy(meshes: Dictionary, mats: Dictionary) -> Node3D:
 
 
 # Static two-segment arm from the skater's shared meshes: tapered bone prisms
-# shoulder→elbow→hand, an elbow-pad ball, and a gloved fist gripping toward
-# the stick. The sleeve and elbow radii are the live rig's own (SkaterMeshBuilder);
-# the glove is its 0.064. Upper and lower segments wear their own kit
-# materials and the elbow its own (SkaterUniformCoordinator.elbow_color).
+# shoulder→elbow→hand, an elbow-pad ball, and a gloved fist and cuff gripping
+# toward the stick. Every radius and the cuff's place are the live rig's own
+# (SkaterMeshBuilder). Upper and lower segments wear their own kit materials
+# and the elbow its own (SkaterUniformCoordinator.elbow_color).
 func _add_dummy_arm(d: Node3D, mats: Dictionary,
 		shoulder: Vector3, elbow: Vector3, hand: Vector3) -> void:
-	_add_bone(d, mats.arm_upper, shoulder, elbow)
-	_add_bone(d, mats.arm_lower, elbow, hand)
+	_add_bone(d, mats.arm_upper, SkaterMeshBuilder.shared_arm_bone(), shoulder, elbow)
+	_add_bone(d, mats.arm_lower, SkaterMeshBuilder.shared_forearm_bone(), elbow, hand)
 	_add_part(d, SkaterMeshBuilder.shared_joint_ball(), mats.elbow, elbow,
 			Basis.from_scale(Vector3.ONE * SkaterMeshBuilder.ELBOW_PAD_RADIUS_M))
-	# Glove fist: local +Y points back toward the elbow, same convention the
-	# live rig orients it with.
-	var grip: Basis = _basis_along((elbow - hand).normalized()).scaled(Vector3.ONE * 0.064)
-	_add_part(d, SkaterMeshBuilder.shared_glove_fist(), mats.gloves, hand, grip)
+	# Local +Y points back toward the elbow, the convention the live rig
+	# orients the fist and cuff with.
+	var up_arm: Vector3 = (elbow - hand).normalized()
+	var grip: Basis = _basis_along(up_arm)
+	_add_part(d, SkaterMeshBuilder.shared_glove_fist(), mats.gloves, hand,
+			grip.scaled_local(Vector3.ONE * SkaterMeshBuilder.GLOVE_FIST_RADIUS_M))
+	var cuff_r: float = SkaterMeshBuilder.GLOVE_CUFF_RADIUS_M
+	_add_part(d, SkaterMeshBuilder.shared_cuff(), mats.gloves,
+			hand + up_arm * SkaterMeshBuilder.GLOVE_CUFF_BACK_M,
+			grip.scaled_local(Vector3(cuff_r, 1.0, cuff_r)))
 
 
 # Unit bone prism stretched between two joints; +Y (the wide end) lands on
 # the proximal joint to match the mesh's distal taper.
-func _add_bone(d: Node3D, mat: StandardMaterial3D, proximal: Vector3, distal: Vector3) -> void:
+func _add_bone(d: Node3D, mat: StandardMaterial3D, mesh: ArrayMesh,
+		proximal: Vector3, distal: Vector3) -> void:
 	var dir: Vector3 = proximal - distal
 	var length: float = dir.length()
 	if length < 0.001:
@@ -196,7 +203,7 @@ func _add_bone(d: Node3D, mat: StandardMaterial3D, proximal: Vector3, distal: Ve
 	b = Basis(b.x * SkaterMeshBuilder.SLEEVE_RADIUS_M, b.y * length,
 			b.z * SkaterMeshBuilder.SLEEVE_RADIUS_M)
 	var mi := MeshInstance3D.new()
-	mi.mesh = SkaterMeshBuilder.shared_arm_bone()
+	mi.mesh = mesh
 	mi.material_override = mat
 	mi.transform = Transform3D(b, (proximal + distal) * 0.5)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
