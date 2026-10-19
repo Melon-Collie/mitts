@@ -26,9 +26,10 @@ var max_turn_rate: float = GameRules.DEFAULT_SKATER_MAX_TURN_RATE_RAD_S
 # skate profile is part of agility_mult). Turn radius at speed rides this.
 var lateral_grip: float = 1.0
 var puck_carry_speed_multiplier: float = 0.92  # pre-apply default; per-build value is PlayerAttributes.carry_speed_mult
-var backward_thrust_multiplier: float = 0.80
-var crossover_thrust_multiplier: float = 0.90
-var backward_max_speed_multiplier: float = 0.80
+# The Stability skate's (the default profile); the others lean them.
+var backward_thrust_multiplier: float = 0.90
+var crossover_thrust_multiplier: float = 0.84
+var backward_max_speed_multiplier: float = 0.90
 # Ceiling on the velocity fed to the gait during the faceoff / intro skate-in
 # (see begin_approach / apply_approach). The glide always completes in a fixed
 # duration, so a far start implies a high velocity — clamp it here so the stride
@@ -421,6 +422,13 @@ var lower_body_lag_speed: float = 5.0
 
 # ── Skating Stride Tuning ─────────────────────────────────────────────────────
 # Procedural leg gait — see SkaterSkatingCoordinator. All cosmetic.
+# The pace the gait and the skating posture read as full speed, per unit of leg
+# length (the reader multiplies by the skater's leg_scale). It is the body's,
+# never the build's own top speed: a skater looks the way his body skates at a
+# speed, whatever skates he wears. Pinned so the neutral build reads its
+# league-default top speed as full pace.
+var gait_full_speed: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S \
+		/ PlayerAttributes.neutral().height_mult()
 var stride_cadence: float = 1.4          # low-speed slope: radians of stride phase per metre skated
 var stride_cadence_max_rate: float = 6.5  # rad/s ceiling the cadence saturates toward (caps top-speed leg turnover)
 var accel_cadence_rate: float = 18.0      # rad/s stride rate at full effort (stride_effort_ref_accel), any speed
@@ -484,7 +492,7 @@ var stride_push_ceiling: float = 1.5      # max amplitude scale when driving har
 # matching knee flex and body drop from the leg geometry so one export drives
 # an anatomically consistent crouch that keeps the skates planted on the ice.
 var stance_hip_deg: float = 22.0            # static hip flex at full stance
-var stance_full_speed_fraction: float = 0.45  # fraction of max_speed at which the crouch fully engages
+var stance_full_speed_fraction: float = 0.45  # fraction of full gait pace at which the crouch fully engages
 var stance_push_gain: float = 0.35          # effort deepens (push) / shallows (glide) the stance
 # Faceoff ready stance — during the FACEOFF_PREP countdown the speed-driven
 # crouch is floored at faceoff_stance (players are at a standstill, so the
@@ -1188,6 +1196,11 @@ const _ROM_FOREHAND_OF_ARM: float = 0.5625
 # overview and how to add new scalings.
 var _attr_base_captured: bool = false
 var _base_thrust:                       float = 0.0
+var _base_crossover_thrust_multiplier:  float = 0.0
+var _base_backward_thrust_multiplier:   float = 0.0
+var _base_backward_max_speed_multiplier: float = 0.0
+var _base_stance_grip_mult:             float = 0.0
+var _base_stance_shuffle_mult:          float = 0.0
 var _base_max_speed:                    float = 0.0
 var _base_facing_drag_speed:            float = 0.0
 var _base_facing_drag_speed_braking:    float = 0.0
@@ -1294,6 +1307,11 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	var m_agility: float = attrs.agility_mult()
 	max_speed = _base_max_speed * attrs.top_speed_mult()
 	thrust    = _base_thrust    * attrs.accel_mult()
+	crossover_thrust_multiplier = _base_crossover_thrust_multiplier * attrs.crossover_mult()
+	backward_thrust_multiplier = _base_backward_thrust_multiplier * attrs.backward_mult()
+	backward_max_speed_multiplier = _base_backward_max_speed_multiplier * attrs.backward_mult()
+	stance_grip_mult = _base_stance_grip_mult * attrs.stance_grip_mult()
+	stance_shuffle_mult = _base_stance_shuffle_mult * attrs.sidestep_mult()
 	facing_drag_speed           = _base_facing_drag_speed           * m_agility
 	facing_drag_speed_braking   = _base_facing_drag_speed_braking   * m_agility
 	stop_decel                  = _base_stop_decel                  * m_agility
@@ -1303,10 +1321,9 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	# lean/small one. The facing/stop terms above are the feel of quickness; this is
 	# the arc itself.
 	lateral_grip                = _base_lateral_grip                * m_agility
-	# friction_drag is velocity-proportional drag, scaled inversely with the
-	# height-only agility term (see agility_glide_mult): less momentum leaks
-	# through the blades during a cut.
-	friction_drag               = _base_friction_drag               * attrs.agility_glide_mult()
+	# friction_drag is the velocity-proportional (air) drag: girth-scaled, so
+	# a heavy body coasts (see glide_drag_mult).
+	friction_drag               = _base_friction_drag               * attrs.glide_drag_mult()
 	# A computed value, not a base × mult.
 	puck_carry_speed_multiplier = attrs.carry_speed_mult()
 	# The blade caps derive from LEVER GEOMETRY below, after the reach/stick
@@ -1429,6 +1446,11 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 
 func _capture_attribute_bases() -> void:
 	_base_thrust                       = thrust
+	_base_crossover_thrust_multiplier  = crossover_thrust_multiplier
+	_base_backward_thrust_multiplier   = backward_thrust_multiplier
+	_base_backward_max_speed_multiplier = backward_max_speed_multiplier
+	_base_stance_grip_mult             = stance_grip_mult
+	_base_stance_shuffle_mult          = stance_shuffle_mult
 	_base_max_speed                    = max_speed
 	_base_facing_drag_speed            = facing_drag_speed
 	_base_facing_drag_speed_braking    = facing_drag_speed_braking
