@@ -9,6 +9,12 @@ into. Designed in chat 2026-07-21; this document is the agreed plan per the
 CLAUDE.md workflow — implementation sessions should treat it as the design of
 record and ask before deviating.
 
+> **Since v4 completed:** the wrister blade-travel gate (§6) and the
+> flex/curve runway leans that keyed into it are removed: a frozen blade sweeps
+> no path, so the gate never fired. The v5 prefs migration (§9) is dropped, so
+> tier-era saves load the neutral build. `Scripts/domain/state/CLAUDE.md`
+> describes the current model.
+
 Status: **steps 1–2 (§9 landing order) IMPLEMENTED** — step 1: the
 height+weight body plane (plus the weight agility bite via the new
 `lateral_grip` movement term, and frame-scaled hitbox width), gear slots
@@ -446,7 +452,7 @@ slowly-swept cursor could walk the blade fully behind the body).
 
 ---
 
-## 6. Wrister release model — ROM-distance power gating
+## 6. Wrister release model — ROM-distance power gating (REMOVED)
 
 **IMPLEMENTED** (main, "Travel-gated wrister ceiling", 2026-07 — designed
 separately; recorded here because the gear release levers cash out in it).

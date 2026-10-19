@@ -1,15 +1,9 @@
 extends GutTest
 
-# PlayerAttributes — v4 BODY + GEAR model (docs/attributes-v4-plan.md). A build
-# is two continuous body dials — HEIGHT (inches, 5'7"..6'8") and WEIGHT (lbs,
-# bounded per height by a BMI band 22.5..29.0 floored at an absolute 160 lb) —
-# plus four lateral gear slots (stored, zero gameplay effect in step 1).
-# Neutral is 6'1" / 201 lbs / all-balanced, where every canonical multiplier
-# is 1.0.
-#
-# This test is the executable spec for the tables authored in
-# player_attributes.gd, including the constitution guarantee: no build scales
-# blade fidelity (hands) and no attribute term feeds checking (mass-emergent).
+# The executable spec for the tables in player_attributes.gd: two body dials
+# (HEIGHT in inches, WEIGHT in lbs inside the height's band) plus four lateral
+# gear slots, neutral at 6'1" / 201 lbs / all-balanced where every multiplier
+# is 1.0. Scripts/domain/state/CLAUDE.md has the model.
 
 const H_MIN: int = PlayerAttributes.HEIGHT_MIN     # 5'7" (67")
 const H_MED: int = PlayerAttributes.HEIGHT_MEDIUM  # 6'1" (73")
@@ -61,9 +55,8 @@ func test_weight_band_pounds_table() -> void:
 
 
 func test_weight_band_covers_real_tall_lean_bodies() -> void:
-	# The 2026-07 recalibration's reason for existing: the old flat BMI 24.0
-	# floor put the 6'4" minimum at 197 lb, which forbids real 6'4" NHL
-	# defensemen. These are listed cards, not invented bodies.
+	# A single flat lean ratio set by short players would forbid real tall-lean
+	# NHL bodies. These are listed cards, not invented bodies.
 	assert_true(PlayerAttributes.weight_min(76) <= 194,
 			"6'4 floor (%d lb) must reach Rinzel/Dobson" % PlayerAttributes.weight_min(76))
 	for card: Array in [[76, 195], [76, 194], [78, 207], [69, 162], [70, 165], [72, 175],
