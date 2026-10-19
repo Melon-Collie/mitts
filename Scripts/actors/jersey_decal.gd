@@ -50,6 +50,17 @@ const NUMBER_GAP_M: float = 0.012
 const NUMBER_EM_M: float = 0.25
 const YOKE_BOTTOM_PX: int = roundi(SkaterMeshBuilder.TORSO_YOKE_SIDE_FRACTION * SIDE_V_MAX_PX)
 
+# The chest wordmark, half a turn from the back. It rises left to right and
+# shrinks from WORDMARK_MAX_EM_M until its horizontal extent fits
+# WORDMARK_SPAN_M — about the chest's flat width, so long names stay off the sides.
+const FRONT_CENTER_X: int = BACK_CENTER_X + IMG_W / 2
+const WORDMARK_ANGLE_RAD: float = -0.28
+const WORDMARK_MAX_EM_M: float = 0.13
+const WORDMARK_SPAN_M: float = 0.40
+const WORDMARK_CENTER_DROP_M: float = 0.21
+# Cap height over em, for the glyph box's vertical half.
+const _CAP_HEIGHT_EM: float = 0.7
+
 var jersey_color: Color = Color.WHITE
 var yoke_color: Color = Color.WHITE
 var collar_color: Color = Color.WHITE
@@ -57,6 +68,7 @@ var stripes: Array[Dictionary] = []       # [{pos, width, color}]
 var player_name: String = ""
 var jersey_number: int = 0
 var text_color: Color = Color.BLACK
+var wordmark: String = ""
 
 
 func _draw() -> void:
@@ -72,6 +84,31 @@ func _draw() -> void:
 
 	draw_back_lettering(self, player_name, jersey_number, text_color, float(BACK_CENTER_X),
 			PX_PER_M, float(YOKE_BOTTOM_PX) / PX_PER_M.y)
+	if not wordmark.is_empty():
+		_draw_wordmark(self, wordmark.to_upper(), text_color)
+
+
+# Set in metres (at the vertical texel density), rotated there, then stretched to
+# the horizontal one — so the slant, like the letters, is the shape it has on the body.
+static func _draw_wordmark(canvas: CanvasItem, s: String, color: Color) -> void:
+	var ref_size: int = roundi(WORDMARK_MAX_EM_M * PX_PER_M.y)
+	var width_m: float = FONT.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1,
+			ref_size).x / PX_PER_M.y
+	var cos_a: float = absf(cos(WORDMARK_ANGLE_RAD))
+	var sin_a: float = absf(sin(WORDMARK_ANGLE_RAD))
+	var extent_m: float = width_m * cos_a + WORDMARK_MAX_EM_M * _CAP_HEIGHT_EM * sin_a
+	var em_m: float = WORDMARK_MAX_EM_M * minf(1.0, WORDMARK_SPAN_M / extent_m)
+	var size: int = roundi(em_m * PX_PER_M.y)
+	var width: float = FONT.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	var stretch: float = PX_PER_M.x / PX_PER_M.y
+	var rot := Transform2D(WORDMARK_ANGLE_RAD, Vector2.ZERO)
+	var xform := Transform2D(Vector2(stretch * rot.x.x, rot.x.y),
+			Vector2(stretch * rot.y.x, rot.y.y),
+			Vector2(FRONT_CENTER_X, WORDMARK_CENTER_DROP_M * PX_PER_M.y))
+	canvas.draw_set_transform_matrix(xform)
+	canvas.draw_string(FONT, Vector2(-width * 0.5, size * _CAP_HEIGHT_EM * 0.5), s,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
+	canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
 # A back's name and number, laid out in metres down from the top of the back
