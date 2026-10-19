@@ -375,6 +375,15 @@ func receive_claim(peer_id: int, host_timestamp: float, _interp_delay_ms: float,
 		return
 	var catch_load: float = PuckReceptionRules.reception_load(
 			puck_vel, skater_snap.velocity, face_normal, deflect_min, align_bonus)
+	# Nearly held: the bobble verdict, read off the claim's own blade like the
+	# catch's, fires at once like the deflect's (no possession to contest).
+	var bobble_at: float = pc.bobble_load_for(record.skater, puck_pos, relative_vel,
+			blade_curr, top_hand)
+	if catch_load >= bobble_at:
+		NetworkTelemetry.record_pickup_claim_deflect()
+		pc.apply_lag_comp_bobble(record.skater, catch_load, bobble_at)
+		NetworkManager.send_pickup_claim_nack(peer_id)
+		return
 	if _pending_peer_id != -1:
 		# Gate the contest decision on when each claimant actually REACHED, not on
 		# RPC arrival order. Two RPCs can arrive within the 50ms host-arrival window

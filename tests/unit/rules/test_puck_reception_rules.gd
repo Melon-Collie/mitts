@@ -239,6 +239,76 @@ func test_disabled_settle_never_locks() -> void:
 	assert_eq(PuckReceptionRules.settle_time(0.99, CLEAN_LOAD, 0.0), 0.0)
 
 
+# ── the bobble: where on the blade, and how hard ────────────────────────────
+
+const AXIS := Vector3(1, 0, 0)       # heel → toe along +X
+const MID := Vector3.ZERO
+const HALF: float = 0.15
+
+
+func test_a_path_across_the_middle_meets_it_dead_centre() -> void:
+	assert_almost_eq(PuckReceptionRules.blade_contact_offset(
+			Vector3(0, 0, 2), Vector3(0, 0, -20), MID, AXIS, HALF), 0.0, 0.0001)
+
+
+func test_the_offset_runs_out_to_the_toe_and_heel() -> void:
+	assert_almost_eq(PuckReceptionRules.blade_contact_offset(
+			Vector3(0.075, 0, 2), Vector3(0, 0, -20), MID, AXIS, HALF), 0.5, 0.0001)
+	assert_almost_eq(PuckReceptionRules.blade_contact_offset(
+			Vector3(-0.15, 0, 2), Vector3(0, 0, -20), MID, AXIS, HALF), 1.0, 0.0001,
+			"the heel")
+	assert_eq(PuckReceptionRules.blade_contact_offset(
+			Vector3(0.4, 0, 2), Vector3(0, 0, -20), MID, AXIS, HALF), 1.0,
+			"past the toe, inside the pickup radius, reads as the toe")
+
+
+func test_an_angled_path_is_read_where_its_line_crosses_the_blade() -> void:
+	# From (−1, 2) heading (+1, −2): its line crosses z = 0 at x = 0.
+	assert_almost_eq(PuckReceptionRules.blade_contact_offset(
+			Vector3(-1, 0, 2), Vector3(5, 0, -10), MID, AXIS, HALF), 0.0, 0.0001)
+
+
+func test_an_end_on_path_meets_the_toe_or_heel() -> void:
+	assert_eq(PuckReceptionRules.blade_contact_offset(
+			Vector3(-2, 0, 0.01), Vector3(20, 0, 0), MID, AXIS, HALF), 1.0)
+
+
+func test_the_crossing_is_read_in_the_receivers_frame() -> void:
+	# World path straight down onto the middle; the receiver skating along the
+	# blade sees it come in angled, crossing his blade off centre.
+	var still: float = PuckReceptionRules.blade_contact_offset(
+			Vector3(0, 0, 1), Vector3(0, 0, -10) - Vector3.ZERO, MID, AXIS, HALF)
+	var skating: float = PuckReceptionRules.blade_contact_offset(
+			Vector3(0, 0, 1), Vector3(0, 0, -10) - Vector3(1.0, 0, 0), MID, AXIS, HALF)
+	assert_almost_eq(still, 0.0, 0.0001)
+	assert_gt(skating, 0.5)
+
+
+func test_the_edge_bobbles_sooner_than_the_middle() -> void:
+	assert_almost_eq(PuckReceptionRules.bobble_load_at(0.0, 0.67, 0.4), 0.67, 0.0001)
+	assert_almost_eq(PuckReceptionRules.bobble_load_at(1.0, 0.67, 0.4), 0.402, 0.0001)
+	assert_lt(PuckReceptionRules.bobble_load_at(0.6, 0.67, 0.4),
+			PuckReceptionRules.bobble_load_at(0.3, 0.67, 0.4))
+
+
+func test_a_harder_bobble_leaves_faster_within_its_band() -> void:
+	assert_almost_eq(PuckReceptionRules.bobble_exit_speed(0.67, 0.67, 0.6, 2.0), 0.6, 0.0001)
+	assert_almost_eq(PuckReceptionRules.bobble_exit_speed(1.0, 0.67, 0.6, 2.0), 2.0, 0.0001)
+	var mid_band: float = PuckReceptionRules.bobble_exit_speed(0.835, 0.67, 0.6, 2.0)
+	assert_gt(mid_band, 0.6)
+	assert_lt(mid_band, 2.0)
+
+
+func test_the_blade_axis_is_the_face_normals_perpendicular() -> void:
+	var blade := Vector3(1.2, 0, -0.3)
+	var hand := Vector3(0.2, 0.9, 0.4)
+	var axis: Vector3 = PuckReceptionRules.blade_axis(blade, hand, Vector3.FORWARD)
+	var normal: Vector3 = PuckReceptionRules.blade_face_normal(blade, hand,
+			Vector3(0, 0, 1), Vector3.FORWARD)
+	assert_almost_eq(axis.dot(normal), 0.0, 0.0001)
+	assert_almost_eq(axis.y, 0.0, 0.0001)
+
+
 # ── blade_can_interact — on-ice/off-ice gate ─────────────────────────────────
 
 func test_grounded_blade_interacts_with_grounded_puck() -> void:

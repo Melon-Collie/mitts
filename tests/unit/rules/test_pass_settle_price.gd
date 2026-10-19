@@ -30,3 +30,19 @@ func test_arrival_closing_speed_sheds_friction_and_the_receivers_motion() -> voi
 			"a receiver skating with the pass catches it softer")
 	assert_gt(AIPuckLane.arrival_closing_speed(origin, meet, 15.0, Vector3(-6, 0, 0)), still,
 			"one skating into it catches it harder")
+
+
+func test_bobble_odds_rise_from_none_through_the_edge_to_all() -> void:
+	assert_eq(AIPuckLane.receiver_bobble_prob(12.0), 0.0, "soft: holds anywhere")
+	assert_eq(AIPuckLane.receiver_bobble_prob(16.0), AIPuckLane.RECEIVE_EDGE_CONTACT_SHARE,
+			"past the edge's line only")
+	assert_eq(AIPuckLane.receiver_bobble_prob(20.0), 1.0, "past the middle's line too")
+
+
+func test_the_hold_is_the_settle_or_the_regather_by_their_odds() -> void:
+	assert_eq(AIPuckLane.reception_hold_s(10.0), 0.0, "a clean catch ties him up for nothing")
+	var p: float = AIPuckLane.receiver_bobble_prob(16.0)
+	assert_almost_eq(AIPuckLane.reception_hold_s(16.0),
+			(1.0 - p) * AIPuckLane.receiver_settle_s(16.0) + p * AIPuckLane.BOBBLE_REGATHER_S,
+			0.0001)
+	assert_almost_eq(AIPuckLane.reception_hold_s(20.0), AIPuckLane.BOBBLE_REGATHER_S, 0.0001)

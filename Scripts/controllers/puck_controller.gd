@@ -447,6 +447,30 @@ func stage_scripted(pos: Vector3) -> void:
 	_prev_puck_pos = puck.get_puck_position()
 
 
+# The reception load past which `skater`'s catch of a puck at `puck_pos`, coming
+# at `relative_velocity` in his frame, bobbles: by where its path meets the
+# blade between `blade_mid` and the shaft's `top_hand`. The claim resolver
+# passes the claim's own blade, so both verdicts read one blade.
+func bobble_load_for(skater: Skater, puck_pos: Vector3, relative_velocity: Vector3,
+		blade_mid: Vector3, top_hand: Vector3) -> float:
+	var axis: Vector3 = PuckReceptionRules.blade_axis(blade_mid, top_hand,
+			-skater.global_transform.basis.z)
+	return PuckReceptionRules.bobble_load_at(
+			PuckReceptionRules.blade_contact_offset(puck_pos, relative_velocity,
+					blade_mid, axis, skater.blade_length * 0.5),
+			puck.bobble_load, puck.bobble_edge_share)
+
+
+# Lag-comp counterpart for the bobble verdict: idempotent as the deflect's
+# below, and the exit is recomputed from the present puck like every deflect.
+func apply_lag_comp_bobble(skater: Skater, catch_load: float, bobble_at: float) -> void:
+	if not is_instance_valid(skater) or puck.carrier != null or puck.pickup_locked:
+		return
+	if puck.is_on_cooldown(skater):
+		return
+	puck.apply_reception_bobble(skater, catch_load, bobble_at)
+
+
 # Lag-comp counterpart to apply_lag_comp_pickup for the deflect verdict: the
 # claim's rewound state ran PuckReceptionRules.should_receive and decided the
 # contact should redirect the puck, not corral it. Same idempotency philosophy —
@@ -758,6 +782,16 @@ func _check_interactions() -> void:
 						puck.pickup_max_speed,
 						puck.deflect_min_speed * skater.reception_ceiling_mult,
 						puck.alignment_receive_bonus * skater.reception_ceiling_mult):
+					var catch_load: float = PuckReceptionRules.reception_load(
+							puck_vel, skater.velocity, blade_face_normal,
+							puck.deflect_min_speed * skater.reception_ceiling_mult,
+							puck.alignment_receive_bonus * skater.reception_ceiling_mult)
+					# Nearly held: it bobbles by his stick, nobody's yet.
+					var bobble_at: float = bobble_load_for(skater, puck_curr, relative_vel,
+							skater.get_blade_contact_global(), skater.top_hand.global_position)
+					if catch_load >= bobble_at:
+						puck.apply_reception_bobble(skater, catch_load, bobble_at)
+						break
 					# If a second blade would ALSO corral this same tick (a faceoff
 					# draw or a board scramble), it's a contest - nobody gets it, the
 					# puck squirts free biased toward the stronger blade. Otherwise this
@@ -780,10 +814,7 @@ func _check_interactions() -> void:
 						# stamp — the resolver applied the outcome; no carrier here.
 						pass
 					else:
-						_grant_catch(skater, relative_vel, PuckReceptionRules.reception_load(
-								puck_vel, skater.velocity, blade_face_normal,
-								puck.deflect_min_speed * skater.reception_ceiling_mult,
-								puck.alignment_receive_bonus * skater.reception_ceiling_mult))
+						_grant_catch(skater, relative_vel, catch_load)
 				else:
 					puck.apply_blade_deflect(skater)
 				break

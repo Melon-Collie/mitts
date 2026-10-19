@@ -76,7 +76,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +21: apply_scripted_grant / stage_scripted — the tutorial's teleports
 	# restart the swept interaction tests where the puck lands instead of
 	# sweeping the jump. +6: the pinch hop composed onto the contest exit.
-	"res://Scripts/controllers/puck_controller.gd": 1633,
+	"res://Scripts/controllers/puck_controller.gd": 1664,
 	"res://Scripts/actors/hockey_rink.gd": 1469,
 	"res://Scripts/game/player_prefs.gd": 1409,
 	# +20: helmet_rim_y, the rim's height as built, which the hair reads to hide
@@ -85,7 +85,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1304,
 	"res://Scripts/ui/career_stats_screen.gd": 1271,
 	"res://Scripts/ui/lobby_manager.gd": 1247,
-	"res://Scripts/actors/puck.gd": 1099,
+	"res://Scripts/actors/puck.gd": 1129,
 	"res://Scripts/ui/side_menu.gd": 995,
 	"res://Scripts/controllers/goalie_body_config_builder.gd": 1131,
 	"res://Scripts/ui/network_debug_overlay.gd": 956,
@@ -115,12 +115,12 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	# +1: knockdown_drop_m, which the gait's crumple and the sprawl's buckle share.
 	# +1: knockdown_getup_left, the get-up clock the gait and the torso fold read.
 	"res://Scripts/controllers/skater_controller.gd": 43,
-	"res://Scripts/actors/puck.gd": 43,
+	"res://Scripts/actors/puck.gd": 44,
 	"res://Scripts/domain/state/game_state_machine.gd": 39,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 36,
 	# +1: helmet_rim_y (see the size entry).
 	"res://Scripts/actors/skater_mesh_builder.gd": 31,
-	"res://Scripts/controllers/puck_controller.gd": 30,
+	"res://Scripts/controllers/puck_controller.gd": 32,
 	"res://Scripts/game/shot_on_goal_tracker.gd": 26,
 	"res://Scripts/actors/goalie.gd": 26,
 }

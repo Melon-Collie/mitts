@@ -30,6 +30,15 @@ signal puck_hit_goal_body  # uncarried puck struck net panel or skirt (non-pipe 
 # clean to ~12 m/s on a poorly angled blade (docs/stick-settling-plan.md).
 var settle_clean_load: float = 0.30
 var settle_max_s: float = 0.40
+# Past bobble_load (less bobble_edge_share of it at the toe or heel —
+# PuckReceptionRules.bobble_load_at) the catch fails softly instead: the puck
+# leaves the blade at bobble_exit_min..max m/s in the receiver's frame. 0.67 is
+# ~18 m/s on a poorly angled blade at the middle, ~14 at the toe — the spread
+# of the NHL failed-reception means (docs/stick-settling-plan.md).
+var bobble_load: float = 0.67
+var bobble_edge_share: float = 0.4
+var bobble_exit_min: float = 0.6
+var bobble_exit_max: float = 2.0
 @export var alignment_receive_bonus: float = 8.0
 # Passive-blade deflection via a normal/tangential decomposition (see
 # PuckCollisionRules.deflect_velocity). The component INTO the blade face rebounds
@@ -526,6 +535,27 @@ func apply_blade_deflect(skater: Skater) -> void:
 	linear_velocity = new_vel
 	var is_bobble: bool = new_vel.length() < bobble_speed_threshold
 	_set_cooldown(skater, bobble_cooldown if is_bobble else deflect_cooldown)
+	_queue_contact_event(ContactEvent.LOOSE_TOUCH, skater)
+
+# A catch the hands nearly held (PuckReceptionRules.bobble_load_at): the face
+# takes the impact as a deflect does, in the RECEIVER'S frame, and the puck
+# leaves at what the hands didn't soak, flat on the ice and moving with him, so
+# it dies by his stick. The impact blew his hands open as a ceiling catch does,
+# so he can't play it again for the full settle_max_s — never a shorter wait
+# than holding the catch would have cost him. Anyone else can.
+func apply_reception_bobble(skater: Skater, catch_load: float, bobble_at: float) -> void:
+	var rel: Vector3 = linear_velocity - skater.velocity
+	var out: Vector3 = PuckCollisionRules.deflect_velocity(
+			rel, skater.get_blade_face_normal(rel),
+			deflect_normal_restitution, deflect_normal_restitution_min,
+			deflect_tangential_retain, deflect_speed_ref)
+	out.y = 0.0
+	if out.length() < 0.001:
+		out = skater.get_blade_face_normal(rel)
+	out = out.normalized() * PuckReceptionRules.bobble_exit_speed(
+			catch_load, bobble_at, bobble_exit_min, bobble_exit_max)
+	linear_velocity = Vector3(skater.velocity.x, 0.0, skater.velocity.z) + out
+	_set_cooldown(skater, settle_max_s)
 	_queue_contact_event(ContactEvent.LOOSE_TOUCH, skater)
 
 # A tied blade's touch: the same deflect off the face, laid flat and cut to

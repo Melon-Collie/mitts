@@ -12,8 +12,9 @@ extends RefCounted
 const PING_PASS_EV_MULT: float = 3.0
 
 # Cap on a pass's solved lead time (s); longer leads rest on stale opponent
-# projections.
-const PASS_LEAD_MAX_S: float = 0.6
+# projections. 1.0 s leads a soft feed (12 m/s closing) ~12 m and a full-pace
+# one ~20 m, so a pass softens across the distances the NHL ones do.
+const PASS_LEAD_MAX_S: float = 1.0
 
 # A rim is fired as soft as the race allows: any launch reaching the receiver at
 # least this share as surely as the best one may be picked, and the softest of
@@ -149,38 +150,53 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		var prune_floor: float = best_pass_score
 		if peer_id == ctx.ping_pass_target_peer:
 			prune_floor /= PING_PASS_EV_MULT
-		# Flat feed, at each pace; the saucer gate reads the winning pace's lane.
+		# Flat feed, at each pace from full down; the saucer gate reads the winning
+		# pace's lane, or full pace's when none scores.
 		var s: float = 0.0
 		var pass_speed: float = 0.0
 		var pass_frac: float = 1.0
 		var flat_lane: float = 0.0
+		var full_speed: float = 0.0
+		var full_lane: float = 0.0
 		var prev_speed: float = -1.0
-		for frac: float in AIPuckLane.PASS_PACE_FRACS:
+		var prev_hold: float = INF
+		var fracs: Array[float] = AIPuckLane.PASS_PACE_FRACS
+		for i: int in range(fracs.size() - 1, -1, -1):
+			var frac: float = fracs[i]
 			var speed: float = AIPuckLane.pass_launch_speed(dist, launch_cap,
 					ctx.pass_speed_scale * frac, receiver_state.velocity, scored_pass_dir)
 			if speed == prev_speed:
 				continue   # clamped onto the last pace's launch: the same pass
-			# A softer pace whose flight cannot fit the lead horizon even with
-			# him skating flat out at the passer is skipped before its solve.
-			if frac < 1.0 and dist > (speed + receiver_top_speed) * PASS_LEAD_MAX_S:
+			# A softer pace only flies longer, so it can win only by tying the
+			# receiver up for less than the harder one did (read on the straight
+			# line, before the lead solve) — and only if its flight fits the lead
+			# horizon even with him skating flat out at the passer.
+			var hold: float = 0.0 if receiver_is_one_timer else AIPuckLane.reception_hold_s(
+					AIPuckLane.arrival_closing_speed(pass_origin, receiver_state.position,
+							speed, receiver_state.velocity))
+			if frac < 1.0 and (hold >= prev_hold
+					or dist > (speed + receiver_top_speed) * PASS_LEAD_MAX_S):
 				continue
 			prev_speed = speed
+			prev_hold = hold
 			_last_flat_variant_lane = 0.0
 			var s_pace: float = _pass_variant_ev(
 					ctx, receiver_state, receiver_accel, receiver_omega, receiver_caps,
 					pass_origin, speed, false, receiver_is_one_timer,
 					self_facing_xz, our_goalie, carrier_in_oz, maxf(prune_floor, s),
 					frac < 1.0)
+			if frac == 1.0:
+				full_speed = speed
+				full_lane = _last_flat_variant_lane
 			if s_pace > s:
 				s = s_pace
 				pass_speed = speed
 				pass_frac = frac
 				flat_lane = _last_flat_variant_lane
 		if s <= 0.0:
-			# No pace scored: the saucer and the rim look past the full-pace feed.
-			pass_speed = prev_speed
+			pass_speed = full_speed
 			pass_frac = 1.0
-			flat_lane = _last_flat_variant_lane
+			flat_lane = full_lane
 		_last_flat_variant_lane = flat_lane
 		var use_saucer: bool = false
 		# Saucer variant: the fastest RECEIVABLE flip. Below the soft-touch
@@ -425,10 +441,10 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 				_field.opponent_blades_release)
 		_last_flat_variant_lane = lane
 	var receiver_release_t: float = flight_t
-	var settle_s: float = 0.0
+	var hold_s: float = 0.0
 	if not receiver_is_one_timer:
 		receiver_release_t += AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
-		settle_s = AIPuckLane.receiver_settle_s(AIPuckLane.arrival_closing_speed(
+		hold_s = AIPuckLane.reception_hold_s(AIPuckLane.arrival_closing_speed(
 				pass_origin, receiver, pass_speed, receiver_state.velocity))
 	var rotation_time: float = _facing_rotation_time(
 			self_facing_xz, ctx.self_pos, receiver,
@@ -436,7 +452,7 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 	return _pass_ev(ctx, receiver, pass_speed, flight_t,
 			receiver_release_t, flight_t + rotation_time, our_goalie,
 			receiver_caps, lane, miss_prob, receiver_state.velocity, useless_below,
-			Vector3.ZERO, Vector3.INF, settle_s)
+			Vector3.ZERO, Vector3.INF, hold_s)
 
 
 # Expected value of firing a pass from our current position to
@@ -457,9 +473,10 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 # the caller decides), so a cross-seam feed is scored against a keeper caught
 # mid-slide. The receiver shoots at his own build's speed and loft when
 # `receiver_caps` is given, the league default otherwise. A rim passes
-# `rim_dir` and the point its path is lost at (`rim_loss_point`). `settle_s` is
-# how long the receiver settles the catch (AIPuckLane.receiver_settle_s): his
-# next action waits on it, and he stands in the defence's reach for it.
+# `rim_dir` and the point its path is lost at (`rim_loss_point`). `hold_s` is
+# how long taking the feed ties the receiver up (AIPuckLane.reception_hold_s,
+# settling the catch or regathering a bobble): his next action waits on it,
+# and the puck sits in the defence's reach for it.
 func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 		flight_t: float, receiver_release_t: float, delay_s: float,
 		our_goalie: Vector3, receiver_caps: AISkaterCaps = null,
@@ -469,7 +486,7 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 		useless_below: float = -INF,
 		rim_dir: Vector3 = Vector3.ZERO,
 		rim_loss_point: Vector3 = Vector3.INF,
-		settle_s: float = 0.0) -> float:
+		hold_s: float = 0.0) -> float:
 	var self_pos: Vector3 = ctx.self_pos
 	# The pass flies from the PUCK, not the body: behind the net the two differ
 	# by up to a stick's reach. The lane and its loss points are the puck's;
@@ -512,16 +529,16 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# the instant value above has already consumed.)
 	receiver_value = maxf(receiver_value, _field.receiver_drive_in_value(
 			ctx, receiver_spot, receiver_caps, receiver_vel))
-	var time_decay: float = AIActionScoring.delay_discount(delay_s + settle_s)
+	var time_decay: float = AIActionScoring.delay_discount(delay_s + hold_s)
 	# Reception pressure: the reachable-set clearance at the reception spot when
 	# the puck arrives — defenders momentum-projected from their RELEASE-TIME
 	# spots over the flight, sticks maneuvering over the short reception window.
 	# It prices a defender draped on the receiver's back, who is off both the
 	# lane and the receiver's forward shot cone.
 	var reception_safety: float = AICarrySpace.clearance_to_safety(
-			AICarrySpace.reach_clearance(receiver_spot, flight_t + settle_s,
+			AICarrySpace.reach_clearance(receiver_spot, flight_t + hold_s,
 					_field.opponents_release, _field.opponent_vels,
-					_field.opponent_caps, AICarrySpace.EVADE_HORIZON_S + settle_s))
+					_field.opponent_caps, AICarrySpace.EVADE_HORIZON_S + hold_s))
 	# Four completion loss modes, mutually exclusive and summing to 1 with the
 	# retained case: poked at the release (1 − release_clean), lane interception
 	# (release_clean × (1 − lane)), execution miss (release_clean × lane × miss),
@@ -693,12 +710,12 @@ func _developing_outlet_feed(ctx: RoleContext, tm: SkaterNetworkState,
 			continue
 		flight_t = minf(flight_t, PASS_LEAD_MAX_S)
 		# Breakout receivers carry on reception (no one-timer): flight + wrister
-		# charge and the settle, as the live pass scoring bills a non-ready one.
+		# charge and the hold, as the live pass scoring bills a non-ready one.
 		var release_t: float = flight_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
-		var settle_s: float = AIPuckLane.receiver_settle_s(
+		var hold_s: float = AIPuckLane.reception_hold_s(
 				AIPuckLane.arrival_closing_speed(ctx.self_pos, spot, pass_speed, vel))
 		best = maxf(best, _pass_ev(ctx, spot, pass_speed, flight_t, release_t,
 				flight_t + rotation_time, our_goalie, receiver_caps, -1.0,
 				AIPuckLane.PASS_MISS_BASE_PROB, Vector3.ZERO, best,
-				Vector3.ZERO, Vector3.INF, settle_s))
+				Vector3.ZERO, Vector3.INF, hold_s))
 	return best

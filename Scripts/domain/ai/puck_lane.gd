@@ -84,10 +84,44 @@ const SETTLE_CLEAN_LOAD: float = 0.30
 const SETTLE_MAX_S: float = 0.40
 
 
+# Past the bobble line (PuckReceptionRules.bobble_load_at) a catch bobbles
+# instead; at the toe or heel the line is lower. test_bot_mirrors.gd holds the
+# two to Puck. Measured on bot catches in the duel harness's reception sweep:
+# the share whose path meets the blade end-on or past its end (the rest cross
+# near the middle, where the blade parks on the line). A bobbler can't play the
+# puck for the full settle (Puck.apply_reception_bobble), and in the same sweep
+# he has it back the moment that ends: it is still in reach.
+const BOBBLE_LOAD: float = 0.67
+const BOBBLE_EDGE_SHARE: float = 0.4
+const RECEIVE_EDGE_CONTACT_SHARE: float = 0.35
+const BOBBLE_REGATHER_S: float = SETTLE_MAX_S
+
+
 # Seconds a receiver settles a catch closing at `closing` m/s in his frame.
 static func receiver_settle_s(closing: float) -> float:
 	var ratio: float = closing / RECEIVE_ANY_ANGLE_CEILING_M_S
 	return PuckReceptionRules.settle_time(ratio * ratio, SETTLE_CLEAN_LOAD, SETTLE_MAX_S)
+
+
+# Odds a catch closing at `closing` m/s bobbles: a middle contact past the bobble
+# line, or an edge one past its lower line.
+static func receiver_bobble_prob(closing: float) -> float:
+	var ratio: float = closing / RECEIVE_ANY_ANGLE_CEILING_M_S
+	var catch_load: float = ratio * ratio
+	if catch_load >= BOBBLE_LOAD:
+		return 1.0
+	if catch_load >= PuckReceptionRules.bobble_load_at(1.0, BOBBLE_LOAD, BOBBLE_EDGE_SHARE):
+		return RECEIVE_EDGE_CONTACT_SHARE
+	return 0.0
+
+
+# Seconds a receiver is tied up taking a feed closing at `closing` m/s, before he
+# can act or protect it: the settle of a catch, or the regather of a bobble, by
+# the odds of each.
+static func reception_hold_s(closing: float) -> float:
+	var p_bobble: float = receiver_bobble_prob(closing)
+	var settle_s: float = receiver_settle_s(closing)
+	return (1.0 - p_bobble) * settle_s + p_bobble * BOBBLE_REGATHER_S
 
 
 # Receiver-frame closing speed of a pass launched at `launch` from `origin` and

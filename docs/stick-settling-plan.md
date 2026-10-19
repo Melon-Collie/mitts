@@ -1,17 +1,21 @@
 # Stick settling — the range between a clean catch and a deflect
 
-Status: **Phases 1 and 2 built, awaiting playtest.** The near-miss bobble is
-Phase 3, to be discussed after playtesting.
+Status: **Phases 1–3 built, awaiting playtest.**
 
-As built, two things differ from the design below:
+As built, these differ from the design below:
 - Phase 1: the settle's held blade holds its reach *target* in the skater's
   frame (`hold_seat`), not the wrister freeze's re-read of the solved blade,
   which walks outward in tight.
-- Phase 2: a softer pace is only priced where its flight fits inside
-  `PASS_LEAD_MAX_S` (raising the horizon would move the reception side, which
-  shares it), so soft feeds are the short ones and long feeds stay at full pace.
-  The settle is priced at the any-angle ceiling: in the duel harness's reception
-  sweep, bot catches arrive with a mean blade alignment of 0.2–0.4.
+- Phase 2: the settle is priced at the any-angle ceiling: in the duel
+  harness's reception sweep, bot catches arrive with a mean blade alignment of
+  0.2–0.4. A softer pace is only priced where its flight fits `PASS_LEAD_MAX_S`,
+  which Phase 3 raised to 1.0 s (with the finisher's feed horizon).
+- Phase 3: the bobble is decided by load and by where on the blade the puck
+  lands — read off where its path crosses the blade's line, end-on counting as
+  the edge (decided: the blade position, not a probability). The bobbler is
+  locked out for the full `settle_max_s`, not the 0.12 s deflect-bobble
+  cooldown: measured, a 0.12 s bobble was regathered in ~0.13 s, cheaper than
+  holding the catch, and bots priced it that way and fired hard on purpose.
 
 ## Decisions banked
 
@@ -280,13 +284,26 @@ Changes that must come with it:
 The full checklist for where bot perception and decisions plug in is
 `Scripts/domain/ai/DECISIONS.md`. The settle entries are added there.
 
-## Phase 3 — near-miss bobble (to discuss)
+## Phase 3 — near-miss bobble (as built)
 
-In the top of the load range (roughly 0.67–1.0), the catch fails softly: the
-puck pops off the blade back along its arrival line, slow enough to die within
-reach, with the short `bobble_cooldown` so the receiver can regather it. It adds
-a new loose-puck exit and needs its own tuning; it is deliberately not part of
-Phase 1.
+Past the bobble line the catch fails softly. The line is `bobble_load` (0.67)
+at the middle of the blade, less `bobble_edge_share` (0.4) of it at the toe or
+heel, quadratic between (`PuckReceptionRules.bobble_load_at`): ~18 m/s on a
+poorly angled blade at the middle, ~14 at the edge — the spread of the NHL
+failed-reception means. Where on the blade is read off where the puck's path
+crosses the blade's line in the receiver's frame (`blade_contact_offset`); a
+path within ~11.5° of the blade's own line comes in end-on, at the edge. The
+contact point at pickup is useless for this: the sweep registers at the rim of
+the 0.5 m pickup radius, twice the blade's length across.
+
+The face takes the impact as a deflect does, in the receiver's frame, and the
+puck leaves at `bobble_exit_min`..`max` (0.6–2.0 m/s) relative to him, flat,
+so it dies by his stick. He is locked out of it for `settle_max_s`; anyone else
+can take it. All three host verdict paths run it. Bots price it as the
+receiver's expected hold (`AIPuckLane.reception_hold_s`: the settle by the odds
+of a catch, the lockout by the odds of a bobble, from the measured split of
+middle and edge contacts) in the reception read and the time discount, and the
+duel harness mirrors it.
 
 ## Open questions
 
