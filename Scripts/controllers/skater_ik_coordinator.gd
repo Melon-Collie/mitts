@@ -574,7 +574,15 @@ func _two_hand_reach(tilt: Basis, shoulder: Vector3, target_xz: Vector2,
 	var reach: float = (_skater.upper_arm_length + _skater.forearm_length) \
 			* _skater.arm_working_extension + _skater.shoulder_reach_m
 	return TopHandIK.two_hand_reach(shoulder, target_xz, blade_side_sign, cfg,
-			bottom, _grip_fraction(), reach, _two_hand_scratch)
+			bottom, _grip_fraction(), reach, _glove_spacing(), _two_hand_scratch)
+
+
+# How far down the shaft the bottom hand must hold to clear the top glove: the
+# drawn fist's width across its knuckle roll, so the gloves meet and never
+# overlap.
+func _glove_spacing() -> float:
+	return _skater.arm_ball_radius(SkaterMeshBuilder.UpperBone.TOP_HAND) \
+			* SkaterMeshBuilder.GLOVE_FIST_SPAN
 
 
 # The backhand angle past which the bottom hand lets go (bh_release_angle_deg,
@@ -630,7 +638,7 @@ func update_bottom_hand() -> void:
 	var arm: float = _skater.upper_arm_length + _skater.forearm_length
 	var reach: float = arm * _skater.arm_working_extension + _skater.shoulder_reach_m
 	var held: Vector2 = BottomHandIK.reachable_grip(
-			shoulder, hand_local, blade_local, _grip_fraction(), reach)
+			shoulder, hand_local, blade_local, _grip_fraction(), reach, _glove_spacing())
 	var grip: float = held.x
 	var grip_target_xz := Vector2(
 			lerpf(hand_local.x, blade_local.x, grip),

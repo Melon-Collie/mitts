@@ -190,13 +190,15 @@ const _KNEE_RADIUS: float = 0.095
 # Its roll about the forearm comes from world up, not the stick, so the section
 # stays near-square: no face of it can be the back of the hand or carry a thumb.
 const _GLOVE_FINGER_STATION: int = 3
+# The fist's width across the knuckle roll, in hand radii.
+const GLOVE_FIST_SPAN: float = 2.2
 # The fist's and cuff's chamfered box section (_octagon_loop's face/side fracs).
 const _GLOVE_FACE_FRAC: float = 0.6
 const _GLOVE_SIDE_FRAC: float = 0.55
 const _GLOVE_FIST_STATIONS: Array[Vector3] = [
 	Vector3(0.95, 0.94, 0.86),    # wrist end, inside the cuff
 	Vector3(0.55, 1.08, 0.98),    # back of the hand
-	Vector3(0.12, 1.10, 1.00),    # knuckle roll
+	Vector3(0.12, GLOVE_FIST_SPAN * 0.5, 1.00),    # knuckle roll
 	Vector3(-0.05, 1.00, 0.92),   # seam — the back / fingers split
 	Vector3(-0.38, 1.06, 0.98),   # finger roll
 	Vector3(-0.78, 0.96, 0.90),

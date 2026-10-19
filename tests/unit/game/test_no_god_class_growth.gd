@@ -76,7 +76,9 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +54: the top hand is solved in the arm's level frame from the drawn
 	# shoulder, and a carrier's reach stops where the bottom hand lets go
 	# (_two_hand_reach, _carry_backhand_stop).
-	"res://Scripts/controllers/skater_ik_coordinator.gd": 1012,
+	# +8: _glove_spacing, the shaft the top glove takes up, which the drawn
+	# bottom grip and the carry's two-handed reach both keep clear of.
+	"res://Scripts/controllers/skater_ik_coordinator.gd": 1020,
 	# +21: apply_scripted_grant / stage_scripted — the tutorial's teleports
 	# restart the swept interaction tests where the puck lands instead of
 	# sweeping the jump. +6: the pinch hop composed onto the contest exit.
@@ -86,8 +88,9 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +20: helmet_rim_y, the rim's height as built, which the hair reads to hide
 	# its top edge under the shell — the one source of the rim profile.
 	# +41: the glove's stations (knuckle and finger rolls) and the forearm's
-	# wrist neck, the mesh that keeps the sleeve inside the glove.
-	"res://Scripts/actors/skater_mesh_builder.gd": 1523,
+	# wrist neck, the mesh that keeps the sleeve inside the glove. +2:
+	# GLOVE_FIST_SPAN, the fist's width the bottom grip keeps clear of.
+	"res://Scripts/actors/skater_mesh_builder.gd": 1525,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1304,
 	"res://Scripts/ui/career_stats_screen.gd": 1271,
 	"res://Scripts/ui/lobby_manager.gd": 1247,
