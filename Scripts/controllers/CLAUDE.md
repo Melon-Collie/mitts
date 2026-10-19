@@ -565,7 +565,10 @@ the measured turn — all derived from replicated state). Two quantities decide
 it: whether the skater is **driving** (the stick's component along travel,
 which is what the physics thrusts by; against travel it is a skid) and how much
 of the edge's grip the travel's curve is **using** (centripetal acceleration
-over `turn_accel · lateral_grip`). Driving straight is a stride, driving
+over the league's `turn_accel`, not the build's own grip, so the same curve at
+the same speed reads the same on every build). How hard the legs stride is the
+speed over the BODY's full pace (`gait_full_speed` × leg length), never the
+build's top speed: the picture comes from height and weight, not from stats. Driving straight is a stride, driving
 through a turn a crossover, coasting straight a glide, coasting round a turn a
 carve. A stick held straight across travel turns the skater with no thrust, so
 it is carved, never crossed over. Each state owns its legs outright while it

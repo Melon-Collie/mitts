@@ -421,6 +421,13 @@ var lower_body_lag_speed: float = 5.0
 
 # ── Skating Stride Tuning ─────────────────────────────────────────────────────
 # Procedural leg gait — see SkaterSkatingCoordinator. All cosmetic.
+# The pace the gait and the skating posture read as full speed, per unit of leg
+# length (the reader multiplies by the skater's leg_scale). It is the body's,
+# never the build's own top speed: a skater looks the way his body skates at a
+# speed, whatever skates he wears. Pinned so the neutral build reads its
+# league-default top speed as full pace.
+var gait_full_speed: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S \
+		/ PlayerAttributes.neutral().height_mult()
 var stride_cadence: float = 1.4          # low-speed slope: radians of stride phase per metre skated
 var stride_cadence_max_rate: float = 6.5  # rad/s ceiling the cadence saturates toward (caps top-speed leg turnover)
 var accel_cadence_rate: float = 18.0      # rad/s stride rate at full effort (stride_effort_ref_accel), any speed
@@ -484,7 +491,7 @@ var stride_push_ceiling: float = 1.5      # max amplitude scale when driving har
 # matching knee flex and body drop from the leg geometry so one export drives
 # an anatomically consistent crouch that keeps the skates planted on the ice.
 var stance_hip_deg: float = 22.0            # static hip flex at full stance
-var stance_full_speed_fraction: float = 0.45  # fraction of max_speed at which the crouch fully engages
+var stance_full_speed_fraction: float = 0.45  # fraction of full gait pace at which the crouch fully engages
 var stance_push_gain: float = 0.35          # effort deepens (push) / shallows (glide) the stance
 # Faceoff ready stance — during the FACEOFF_PREP countdown the speed-driven
 # crouch is floored at faceoff_stance (players are at a standstill, so the

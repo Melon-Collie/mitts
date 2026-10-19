@@ -38,11 +38,11 @@ namespace mitts {
 	X(crossover_land_fwd_m) X(crossover_lift_m) X(crossover_out_m) X(crossover_pass_m) \
 	X(crossover_phase_per_turn) X(crossover_side_m) X(crossover_under_m) \
 	X(dig_in_cadence_rate) X(dig_in_chop) X(dig_in_fade_speed) X(dig_in_intensity) \
-	X(dig_in_stance) X(glide_hold_skew) X(glide_inside_tuck_deg) X(glide_stance) \
+	X(dig_in_stance) X(gait_full_speed) X(glide_hold_skew) X(glide_inside_tuck_deg) X(glide_stance) \
 	X(glide_sway_deg) X(glide_sway_hz) X(hip_align_max_deg) X(hip_align_speed) \
 	X(hockey_stop_lead_m) X(hockey_stop_max_yaw_deg) X(hockey_stop_min_speed) \
 	X(hockey_stop_spread_m) X(hockey_stop_stagger_m) X(hockey_stop_stance) \
-	X(lateral_grip) X(locomotion_blend_speed) X(max_speed) X(pivot_band_hi_deg) \
+	X(locomotion_blend_speed) X(pivot_band_hi_deg) \
 	X(pivot_band_lo_deg) X(pivot_blend_speed) X(pivot_commit_time) \
 	X(pivot_depth_ramp_deg) X(pivot_min_speed) X(pivot_mohawk_deg) X(pivot_rate_min) \
 	X(pivot_stance) X(pivot_step_begin) X(pivot_yaw_speed) X(reversal_lead_m) \
