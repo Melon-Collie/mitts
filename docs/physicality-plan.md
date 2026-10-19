@@ -12,8 +12,10 @@ phases, each its own PR and playtest.
   both sticks out) and plays like one, not like a hit.
 - **The pin moves to the stick button.** Onset needs the stick button held, not
   the commit. Holding the pin is holding the stick button.
-- **The cross-check is a Ctrl press.** It fires on the press edge; keep holding
-  and it becomes the ordinary commit. No tap-versus-hold, which would add latency.
+- **The cross-check is a chord: Ctrl held, the stick button pressed** (L3 held,
+  X pressed). Ctrl alone stays the commit and the brace and never shoves by
+  accident; F with Ctrl down was dead input, because the commit already has the
+  stick. No tap-versus-hold, which would add latency.
 - **The cross-check works anywhere on the ice**: net front, board scrambles,
   open ice.
 - **Brace still blocks the pin** — *recommended, awaiting confirmation* (Open
@@ -201,18 +203,18 @@ upright the edges take 0.9 m/s of it; in the stance 1.8.
 ### Input and phases
 
 `CrossCheckRules` is a pure phase machine like `StickCheckRules`, stepped from the
-shover's own Ctrl press, so host and predicting client agree and nothing rolls
+shover's own chord, so host and predicting client agree and nothing rolls
 back:
 
 | Phase | Entered | Duration | Stick |
 |---|---|---|---|
-| `EXTEND` | Ctrl press edge, eligible | `PUSH_S` 0.10 | off the ice; **the only phase that can land** |
+| `EXTEND` | stick-button press with Ctrl held, eligible | `PUSH_S` 0.10 | off the ice; **the only phase that can land** |
 | `RECOVER` | end of EXTEND | `RECOVER_S` 0.20 | off the ice |
 | `REARM` | end of RECOVER | `REARM_S` 0.40 | normal (or the commit's, if still held) |
 
 - **Eligible:** puckless (a carrier's Ctrl is the brace, as today), not knocked
-  down, not ghosted, not in a pin, off the rearm. A press while ineligible is
-  just the commit.
+  down, not ghosted, not in a pin, off the rearm. A chord while ineligible is
+  just the commit; the stick-button press with Ctrl down never starts a lift.
 - **A whiff is real.** The press always throws; with nobody in reach the stick
   is out for `EXTEND + RECOVER` for nothing.
 - **A shove breaks a tie the shover is in.** Both hands are on the shaft. It ends
@@ -276,10 +278,13 @@ Read `Scripts/networking/CLAUDE.md` first; this follows the stick lift's shape.
 
 ### As built (v78)
 
-- **The press is its own input bit.** The input record's flags were full, so it
-  grew a byte (`InputState.hit_pressed`, latched between ticks by the gatherer
-  like the other presses and carried across a dropped frame by the host's
-  drain). A press while ineligible is just the commit.
+- **The chord needs no new input.** It is `hit_held` and `stick_check_pressed`
+  in one input, both already on the record, so the input stays 24 B. Bots press
+  it the same way.
+- **The pad holds its aim while L3 is down.** X takes the right thumb off the
+  aim stick, and a released stick otherwise eases the cursor back to its rest
+  in about 0.1 s; with L3 held the stick is off the ice, so there is nothing to
+  rest for (`LocalInputGatherer._update_pad_cursor`, after RT's hold).
 - **Facings are vectors.** `in_reach` and `victim_dv` take `Skater.get_facing()`
   (and the snapshot's `facing`), not a yaw.
 - **The feedback broadcast carries the victim, the Δv and the direction**, not
@@ -359,8 +364,8 @@ Grounded per `Scripts/domain/ai/CLAUDE.md`; the checklist is
 
 - `AICrossCheckRead` (domain) and `SkaterAgentCrossCheck` (the last post-dispatch
   pass, after the stick lift, board play and shot block, so a stick or a body
-  they took throws nothing). Bots press only from an idle phase and never hold
-  on: a tap, not the commit.
+  they took throws nothing). Bots press the chord only from an idle phase, Ctrl
+  for that one tick, and let go after it.
 - **How far a shove moves him** is the drift over the read-and-redirect delay
   (`AICarrySpace.EVADE_REACTION_S`) plus the stop his own stride makes against
   it, at the thrust the shove's stagger leaves him. A neutral shove along the
@@ -381,7 +386,7 @@ Grounded per `Scripts/domain/ai/CLAUDE.md`; the checklist is
 | Phase | Field | Protocol |
 |---|---|---|
 | A | none: onset and hold read inputs on the host; `pin_role` unchanged | none: no wire, RPC or range change (`build_info.gd`'s rules); mixed builds are refused by the Steam BuildID check |
-| B | `cross_check_phase` (u8: phase + elapsed ticks); the input's `hit_pressed` (a 25th byte); the claim RPC and the landed broadcast | v78 (main took v77 for stick settling); replay format 17 |
+| B | `cross_check_phase` (u8: phase + elapsed ticks); the claim RPC and the landed broadcast | v78 (main took v77 for stick settling); replay format 17 |
 | C | none | — |
 
 ## Where the code goes

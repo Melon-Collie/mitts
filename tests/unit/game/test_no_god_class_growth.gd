@@ -72,7 +72,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# he finds his legs through once it ends. +36: the get-up's stick hold. +5:
 	# the down flags in one place, a diver's stick dead from the get-up.
 	# +3: rom_forward_reach_max, the half-ellipse rim's straight-ahead reach.
-	# +50: the cross-check — its phase stepped from the Ctrl press and adopted on
+	# +50: the cross-check — its phase stepped from the Ctrl+F chord and adopted on
 	# reconcile, and the victim's answer to it (take_cross_check).
 	# +3: the stagger reads how hard a hit landed, apart from the knockdown.
 	# +6: the press latches the cursor's aim, as far round as the chest turns.

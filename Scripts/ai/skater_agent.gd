@@ -128,7 +128,6 @@ static func zero_input(input: InputState, delta: float, host_timestamp: float) -
 	input.quick_pass_pressed = false
 	input.stick_check_held = false
 	input.stick_check_pressed = false
-	input.hit_pressed = false
 	input.stick_lift_pressed = false
 	# The committed charge power and its flag are re-set by every press tick
 	# that reads them; between presses they hold their defaults.

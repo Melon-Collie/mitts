@@ -72,8 +72,8 @@ const CAM_AIM: Vector3 = Vector3(0.0, -0.05, 0.0)
 #
 # Spec keys: move (Vector2, world), aim (Vector3, RELATIVE to the skater —
 # absolute would swing as the body translates), stance, shoot, slap, block,
-# deflect, hit, stick (the stick-check button), shove (a Ctrl press, the
-# cross-check), brake (bool), loft (int elevation level), face (Vector3, a
+# deflect, hit, stick (the stick-check button), shove (the stick button pressed
+# with Ctrl held, the cross-check), brake (bool), loft (int elevation level), face (Vector3, a
 # facing set on the segment's first tick). Pose keys beyond name/puck/steps:
 # cam (offset), cam_aim (the point it looks at, relative to the skater like
 # cam), cam_ahead (metres down the travel line),
@@ -234,7 +234,7 @@ const POSES: Array = [
 		"cam": Vector3(-0.8, 0.6, 3.2),
 		"steps": [[60, {"stick": true, "aim": Vector3(3.0, 0.0, 0.0)}]]},
 	# ── Cross-check ─────────────────────────────────────────────────────────
-	# The Ctrl press at a standstill: the shaft level across the chest, punched
+	# The Ctrl+F chord at a standstill: the shaft level across the chest, punched
 	# out. Mid-push, then at full extension, aimed and framed from the front like
 	# the commit (a skater at rest faces +Z).
 	{"name": "cross_check_mid", "puck": false, "readout": true, "cam": Vector3(2.4, 0.5, 2.4), "steps": [
@@ -730,7 +730,8 @@ func _fill_input(input: InputState, spec: Dictionary, first: bool) -> void:
 	input.move_vector = move
 	input.mouse_world_pos = _skater.global_position + aim
 	input.stance_held = spec.get("stance", false)
-	input.hit_held = spec.get("hit", false)
+	var shove: bool = spec.get("shove", false)
+	input.hit_held = spec.get("hit", false) or shove
 	input.brake = spec.get("brake", false)
 	input.block_held = spec.get("block", false)
 	input.elevation_level = spec.get("loft", 0)
@@ -742,8 +743,7 @@ func _fill_input(input: InputState, spec: Dictionary, first: bool) -> void:
 	input.stick_lift_pressed = deflect and first
 	var stick: bool = spec.get("stick", false)
 	input.stick_check_held = stick
-	input.stick_check_pressed = stick and first
-	input.hit_pressed = bool(spec.get("shove", false)) and first
+	input.stick_check_pressed = (stick or shove) and first
 
 
 func _finish() -> void:

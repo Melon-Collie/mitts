@@ -306,7 +306,6 @@ func _drain_backlog(now: float) -> void:
 			next.stick_lift_pressed = next.stick_lift_pressed or stale.stick_lift_pressed
 			next.quick_pass_pressed = next.quick_pass_pressed or stale.quick_pass_pressed
 			next.stick_check_pressed = next.stick_check_pressed or stale.stick_check_pressed
-			next.hit_pressed = next.hit_pressed or stale.hit_pressed
 		if overdue <= _DRAIN_TELEMETRY_MAX_S:
 			NetworkTelemetry.record_input_drain()
 

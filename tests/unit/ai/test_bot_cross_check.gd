@@ -58,8 +58,7 @@ func _screen_snap() -> WorldSnapshot:
 func test_a_coverer_shoves_a_screen_off_the_sightline() -> void:
 	var input := InputState.new()
 	sm.apply_cross_check(input, _screen_snap())
-	assert_true(input.hit_pressed)
-	assert_false(input.hit_held, "a tap, not the commit")
+	assert_true(input.hit_held and input.stick_check_pressed, "the chord: Ctrl held, F pressed")
 
 
 func test_the_shove_is_aimed_off_the_sightline_not_along_the_line_to_him() -> void:
@@ -70,7 +69,7 @@ func test_the_shove_is_aimed_off_the_sightline_not_along_the_line_to_him() -> vo
 	me.facing = Vector2(0.65, -0.4).normalized()
 	var input := InputState.new()
 	sm.apply_cross_check(input, s)
-	assert_true(input.hit_pressed)
+	assert_true(input.stick_check_pressed)
 	var aim := Vector2(input.mouse_world_pos.x - me.position.x,
 			input.mouse_world_pos.z - me.position.z).normalized()
 	assert_almost_eq(aim.angle_to(Vector2(1.0, 0.0)), 0.0, 1e-3,
@@ -82,23 +81,23 @@ func test_no_shove_that_leaves_him_screening() -> void:
 	s.skater_states[OPP_ID].facing = Vector2(0.0, -1.0)   # side-on: the push meets his edges
 	var input := InputState.new()
 	sm.apply_cross_check(input, s)
-	assert_false(input.hit_pressed)
+	assert_false(input.stick_check_pressed)
 
 
 func test_no_shove_with_the_stick_busy_rearming_or_on_the_beginner_tier() -> void:
 	var input := InputState.new()
 	input.stick_check_held = true
 	sm.apply_cross_check(input, _screen_snap())
-	assert_false(input.hit_pressed, "the stick is on a lift or a tie")
+	assert_false(input.stick_check_pressed, "the stick is on a lift or a tie")
 	input = InputState.new()
 	var s: WorldSnapshot = _screen_snap()
 	s.skater_states[SELF_ID].cross_check_phase = CrossCheckRules.Phase.REARM
 	sm.apply_cross_check(input, s)
-	assert_false(input.hit_pressed, "still rearming")
+	assert_false(input.stick_check_pressed, "still rearming")
 	sm._check_aggression = 0.0
 	input = InputState.new()
 	sm.apply_cross_check(input, _screen_snap())
-	assert_false(input.hit_pressed, "no physicality on the beginner tier")
+	assert_false(input.stick_check_pressed, "no physicality on the beginner tier")
 
 
 func test_a_loose_puck_race_the_shove_turns() -> void:
@@ -111,11 +110,11 @@ func test_a_loose_puck_race_the_shove_turns() -> void:
 	s.skater_states[SELF_ID] = _state(Vector3(1.2, 0.85, -0.75), Vector2(0.0, 1.0))
 	var input := InputState.new()
 	sm.apply_cross_check(input, s)
-	assert_true(input.hit_pressed)
+	assert_true(input.stick_check_pressed)
 	s.puck_state.position = Vector3(1.2, 0.02, -6.0)   # behind us: we are there first
 	input = InputState.new()
 	sm.apply_cross_check(input, s)
-	assert_false(input.hit_pressed)
+	assert_false(input.stick_check_pressed)
 
 
 func test_a_screener_loads_up_against_a_shove() -> void:

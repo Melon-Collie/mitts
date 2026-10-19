@@ -1614,8 +1614,8 @@ func _advance_stick_check(input: InputState, delta: float) -> void:
 			or CrossCheckRules.is_stick_busy(skater.cross_check_phase) \
 			or skater.pin_role == BoardPinRules.Role.PINNED \
 			or _sm.get_state() != State.SKATING_WITHOUT_PUCK
-	_stick_check.advance(input.stick_check_pressed, input.stick_check_held,
-			not stick_taken, stick_taken, delta)
+	_stick_check.advance(input.stick_check_pressed and not input.hit_held,
+			input.stick_check_held, not stick_taken, stick_taken, delta)
 	skater.stick_check_phase = _stick_check.phase
 	skater.stick_check_held = input.stick_check_held
 
@@ -1629,14 +1629,14 @@ func _adopt_stick_check(state: SkaterNetworkState) -> void:
 	_stamp_cross_check()
 
 
-# A cross-check is thrown from puckless skating, not from a pin or the ice, and a
-# puck on the blade, a pin or going down ends it.
+# The stick button pressed with Ctrl held throws it (never a lift), from puckless
+# skating, not a pin or the ice; a puck on the blade, a pin or going down ends it.
 func _advance_cross_check(input: InputState, delta: float) -> void:
 	var free: bool = not has_puck and not skater.is_knocked_down \
 			and skater.pin_role == BoardPinRules.Role.NONE
 	var to_cursor := Vector2(input.mouse_world_pos.x - skater.global_position.x,
 			input.mouse_world_pos.z - skater.global_position.z)
-	_cross_check.advance(input.hit_pressed,
+	_cross_check.advance(input.hit_held and input.stick_check_pressed,
 			free and _sm.get_state() == State.SKATING_WITHOUT_PUCK, not free,
 			CrossCheckRules.aim_dir(skater.get_facing(), to_cursor,
 					deg_to_rad(upper_body_max_twist_deg)), delta)

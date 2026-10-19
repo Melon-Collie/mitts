@@ -135,18 +135,52 @@ func test_a_set_man_across_his_blades_gives_less_than_one_pushed_along_them() ->
 	assert_lt(_landed[0][2], along)
 
 
-func test_the_ctrl_press_throws_only_from_puckless_skating_and_holding_is_the_commit() -> void:
+func _chord() -> InputState:
 	var input := InputState.new()
-	input.hit_pressed = true
 	input.hit_held = true
+	input.stick_check_pressed = true
+	return input
+
+
+func test_the_chord_throws_only_from_puckless_skating_and_holding_is_the_commit() -> void:
+	var input: InputState = _chord()
 	_shover._advance_cross_check(input, DT)
 	assert_eq(_shover.skater.cross_check_phase, Phase.EXTEND)
 	_shover._apply_movement(input, DT)
-	assert_true(_shover.skater.hit_committed, "still held: the commit")
+	assert_true(_shover.skater.hit_committed, "Ctrl still held: the commit")
 	var carrier: SkaterController = _victim
 	carrier.has_puck = true
 	carrier._advance_cross_check(input, DT)
 	assert_eq(carrier.skater.cross_check_phase, Phase.IDLE, "a carrier's Ctrl is the brace")
+
+
+func test_ctrl_alone_braces_and_f_alone_lifts() -> void:
+	var brace := InputState.new()
+	brace.hit_held = true
+	_shover._advance_cross_check(brace, DT)
+	assert_eq(_shover.skater.cross_check_phase, Phase.IDLE, "holding Ctrl throws nothing")
+	var lift := InputState.new()
+	lift.stick_check_pressed = true
+	lift.stick_check_held = true
+	_victim._advance_cross_check(lift, DT)
+	_victim._advance_stick_check(lift, DT)
+	assert_eq(_victim.skater.cross_check_phase, Phase.IDLE, "F alone is no cross-check")
+	assert_ne(_victim.skater.stick_check_phase, StickCheckRules.Phase.IDLE, "it is the lift")
+
+
+func test_the_chord_starts_no_lift() -> void:
+	var input: InputState = _chord()
+	input.stick_check_held = true
+	_shover._advance_cross_check(input, DT)
+	_shover._advance_stick_check(input, DT)
+	assert_eq(_shover.skater.cross_check_phase, Phase.EXTEND)
+	assert_eq(_shover.skater.stick_check_phase, StickCheckRules.Phase.IDLE)
+	_shover.skater.cross_check_phase = Phase.REARM
+	_shover._cross_check.phase = Phase.REARM
+	_shover._advance_cross_check(input, DT)
+	_shover._advance_stick_check(input, DT)
+	assert_eq(_shover.skater.stick_check_phase, StickCheckRules.Phase.IDLE,
+			"nor while it rearms: F with Ctrl down is the cross-check's")
 
 
 func test_the_push_goes_where_it_was_aimed() -> void:
@@ -166,21 +200,20 @@ func test_the_push_goes_where_it_was_aimed() -> void:
 
 
 func test_the_press_latches_the_cursors_aim_for_the_throw() -> void:
-	var input := InputState.new()
-	input.hit_pressed = true
+	var input: InputState = _chord()
 	var at := Vector3(1.0, 0.0, 1.0)
 	input.mouse_world_pos = _shover.skater.global_position + at
 	_shover._advance_cross_check(input, DT)
 	var latched: Vector2 = _shover.skater.cross_check_aim
 	assert_almost_eq(latched.angle_to(Vector2(at.x, at.z)), 0.0, 1e-4, "where the cursor was")
-	input.hit_pressed = false
+	input.stick_check_pressed = false
 	input.mouse_world_pos = _shover.skater.global_position + Vector3(0.0, 0.0, -1.0)
 	_shover._advance_cross_check(input, DT)
 	assert_eq(_shover.skater.cross_check_aim, latched, "wherever the cursor goes after")
 	input.mouse_world_pos = _shover.skater.global_position + Vector3(-1.0, 0.0, 0.1)
 	_shover.skater.cross_check_phase = Phase.IDLE
 	_shover._cross_check.reset()
-	input.hit_pressed = true
+	input.stick_check_pressed = true
 	_shover._advance_cross_check(input, DT)
 	assert_almost_eq(absf(Vector2(1.0, 0.0).angle_to(_shover.skater.cross_check_aim)),
 			deg_to_rad(_shover.upper_body_max_twist_deg), 1e-4,

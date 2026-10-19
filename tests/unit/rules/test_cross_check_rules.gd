@@ -1,6 +1,6 @@
 extends GutTest
 
-# CrossCheckRules: the phase machine on the Ctrl press, the reach and the cone,
+# CrossCheckRules: the phase machine on the chord's press, the reach and the cone,
 # and the push model — a stride delivered through the arms, answered by the
 # victim's edges across his blades and his own stride pushing back.
 

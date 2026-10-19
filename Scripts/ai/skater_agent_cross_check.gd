@@ -9,7 +9,8 @@ extends RefCounted
 #   when an aim turns the race;
 # - screening their goalie, set against a defender who could shove us (the
 #   stance: across the blades the edges hold twice as hard).
-# The press carries its aim on the cursor, as a human's does. A stick already
+# The press is a human's chord, Ctrl held and the stick button pressed, with its
+# aim on the cursor. A stick already
 # busy — a lift, a tie, a pin reach, a block — throws nothing, and neither does a
 # carrier (his Ctrl is the brace). Owns nothing between ticks; a press only
 # throws from an idle phase, so it is sent only then.
@@ -47,7 +48,8 @@ func apply(input: InputState, snapshot: WorldSnapshot, own_goal_dir: float,
 		if aim == Vector2.ZERO:
 			aim = _race_aim(snapshot, me)
 	if aim != Vector2.ZERO:
-		input.hit_pressed = true
+		input.hit_held = true
+		input.stick_check_pressed = true
 		input.mouse_world_pos = me.position \
 				+ Vector3(aim.x, 0.0, aim.y) * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
 		return

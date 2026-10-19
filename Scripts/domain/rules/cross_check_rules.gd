@@ -1,9 +1,10 @@
 class_name CrossCheckRules
 extends RefCounted
 
-# The cross-check on the Ctrl press: the shaft across the opponent in both hands,
-# driven by the legs. The press throws it (EXTEND, the only phase that can land),
-# the stick comes back (RECOVER), and the next one waits a rearm. Every
+# The cross-check on the chord, the stick button pressed with Ctrl held: the
+# shaft across the opponent in both hands, driven by the legs. The press throws
+# it (EXTEND, the only phase that can land), the stick comes back (RECOVER), and
+# the next one waits a rearm. Every
 # transition is a function of the shover's own inputs, so the host and the
 # predicting client step the same phases; whether one lands is the host's
 # (CrossCheckTracker, CrossCheckClaimResolver).
