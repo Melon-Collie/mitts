@@ -156,6 +156,35 @@ func test_a_skating_backhand_reach_never_outreaches_the_drawn_arm() -> void:
 		assert_lt(worst, 1.0, "%s: the drawn arm spans %.3f of its length" % [what, worst])
 
 
+# In close the hand sits over the shoulder, and skating folds that shoulder out
+# ahead of the hips; the chest still turns to the blade, or a cursor beside the
+# hips lies past the arm's backhand angle and the blade stops ahead of it.
+func test_a_close_skating_reach_still_twists_to_the_blade() -> void:
+	for deg: float in [45.0, -90.0]:
+		var c: SkaterController = _make_controller()
+		var sk: Skater = c.skater
+		var a: float = deg_to_rad(deg)
+		var dir := Vector3(sin(a), 0.0, cos(a))
+		var input := InputState.new()
+		for i: int in 200:
+			if i == 120:
+				sk.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
+			input.delta = DT
+			input.move_vector = Vector2(0.0, 1.0)
+			var aim: Vector3 = Vector3(0.0, 0.0, 3.0) if i < 40 else dir * 1.0
+			input.mouse_world_pos = sk.global_position + aim
+			input.mouse_world_pos.y = 0.0
+			c._process_input(input, DT)
+			sk._physics_process(DT)
+			sk._process(DT)
+		assert_gt(-sk.trunk_fold(), deg_to_rad(5.0), "skating folds the trunk, or this means nothing")
+		assert_gt(absf(sk.upper_body.rotation.y), deg_to_rad(20.0),
+				"cursor %.0f°: the chest turns to a blade in close" % deg)
+		var blade: Vector3 = sk.get_blade_contact_global() - sk.global_position
+		var off: float = rad_to_deg(absf(Vector2(blade.x, blade.z).angle_to(Vector2(dir.x, dir.z))))
+		assert_lt(off, 6.0, "cursor %.0f°: the blade sits %.1f° off it" % [deg, off])
+
+
 # The copy of the rig's build order the hand solve uses, held against the rig.
 func test_the_arm_shoulder_is_where_the_rig_puts_it() -> void:
 	var c: SkaterController = _make_controller()

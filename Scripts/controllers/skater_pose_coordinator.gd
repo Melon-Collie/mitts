@@ -478,30 +478,33 @@ func apply_upper_body(delta: float) -> void:
 	var hand_vec := Vector2(hand.x - shoulder.x, hand.z - shoulder.z)
 	var hand_reach: float = hand_vec.length()
 
+	# Drive twist from the blade's world direction in the skater body frame.
+	# Using skater-local (not upper-body-local) gives a stable target that
+	# doesn't shrink as the body rotates: driving it from the HAND angle closes
+	# a dampening feedback loop that caps steady-state rotation at ~43% of the
+	# world angle. This way the body tracks 1:1 up to upper_body_max_twist_deg.
+	# It never reads the hand: in close the hand sits over the shoulder, and a
+	# twist gated on its reach squared the chest to a blade beside the hips.
+	# FREEZE: the coil normally faces the blade (which tracks the cursor), but a
+	# FROZEN blade can't lead the wind-up — so face the CURSOR directly, keeping
+	# the shoulders rotating toward the aim while the puck sits still.
+	var twist_source: Vector3 = _skater.upper_body_to_global(_skater.get_blade_position())
+	if _sm.get_state() == State.WRISTER_AIM:
+		twist_source = _controller._current_aim_world
+	var to_blade: Vector3 = twist_source - _skater.global_position
+	to_blade.y = 0.0
+	if to_blade.length() > 0.01:
+		var local_dir: Vector3 = _skater.global_transform.basis.inverse() * to_blade.normalized()
+		var blade_angle: float = atan2(local_dir.x, -local_dir.z)
+		var max_twist: float = deg_to_rad(_controller.upper_body_max_twist_deg)
+		target_angle = clampf(-blade_angle * _controller.upper_body_twist_ratio, -max_twist, max_twist)
+	# A wrist shot winds the torso up by the power it would release
+	# with, from squared on the aim (nothing behind it) to the full wind-up.
+	if _sm.get_state() == State.WRISTER_AIM and _controller.has_puck:
+		target_angle = lerp_angle(target_angle, _controller.wrister_load.wound_yaw,
+				_controller.wrister_coil)
+
 	if hand_reach > 0.01:
-		# Drive twist from the blade's world direction in the skater body frame.
-		# Using skater-local (not upper-body-local) gives a stable target that
-		# doesn't shrink as the body rotates: driving it from the HAND angle closes
-		# a dampening feedback loop that caps steady-state rotation at ~43% of the
-		# world angle. This way the body tracks 1:1 up to upper_body_max_twist_deg.
-		# FREEZE: the coil normally faces the blade (which tracks the cursor), but a
-		# FROZEN blade can't lead the wind-up — so face the CURSOR directly, keeping
-		# the shoulders rotating toward the aim while the puck sits still.
-		var twist_source: Vector3 = _skater.upper_body_to_global(_skater.get_blade_position())
-		if _sm.get_state() == State.WRISTER_AIM:
-			twist_source = _controller._current_aim_world
-		var to_blade: Vector3 = twist_source - _skater.global_position
-		to_blade.y = 0.0
-		if to_blade.length() > 0.01:
-			var local_dir: Vector3 = _skater.global_transform.basis.inverse() * to_blade.normalized()
-			var blade_angle: float = atan2(local_dir.x, -local_dir.z)
-			var max_twist: float = deg_to_rad(_controller.upper_body_max_twist_deg)
-			target_angle = clampf(-blade_angle * _controller.upper_body_twist_ratio, -max_twist, max_twist)
-		# A wrist shot winds the torso up by the power it would release
-		# with, from squared on the aim (nothing behind it) to the full wind-up.
-		if _sm.get_state() == State.WRISTER_AIM and _controller.has_puck:
-			target_angle = lerp_angle(target_angle, _controller.wrister_load.wound_yaw,
-					_controller.wrister_coil)
 		# Measured against the rim in the hand's own direction, so the lean commits
 		# at full reach whichever way the arm is extending.
 		var rim_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
