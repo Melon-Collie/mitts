@@ -76,6 +76,8 @@ const _OUT_ENV: String = "KIT_PREVIEW_OUT"
 const _TEAMS_ENV: String = "KIT_PREVIEW_TEAMS"
 const _NAME_ENV: String = "KIT_PREVIEW_NAME"
 const _NUMBER_ENV: String = "KIT_PREVIEW_NUMBER"
+# The chest: a TeamCrest style name, or anything else for the wordmark.
+const _FRONT_ENV: String = "KIT_PREVIEW_FRONT"
 const _DEFAULT_NAME: String = "Player"
 const _DEFAULT_NUMBER: int = 19
 const _USER_JSON: String = "user://team_colors.json"
@@ -145,6 +147,12 @@ func _render() -> void:
 		for side: int in 2:
 			var kit: Dictionary = _kit(side)
 			_jersey_decals[side].wordmark = String(_preset.name)
+			var crest_style: int = TeamCrest.STYLE_NAMES.find(OS.get_environment(_FRONT_ENV))
+			_jersey_decals[side].crest_fruit = (String(_preset.name).to_lower()
+					if crest_style >= 0 else "")
+			_jersey_decals[side].crest_style = maxi(crest_style, 0)
+			_jersey_decals[side].crest_preset = _preset
+			_jersey_decals[side].crest_kit = kit
 			_jersey_decals[side].update_jersey(kit.jersey.base,
 					UniformPaint.yoke_color(kit.jersey), UniformPaint.collar_color(kit.jersey),
 					kit.jersey.stripes, _player_name, _number, kit.text.color)

@@ -58,6 +58,8 @@ const WORDMARK_ANGLE_RAD: float = -0.28
 const WORDMARK_MAX_EM_M: float = 0.13
 const WORDMARK_SPAN_M: float = 0.40
 const WORDMARK_CENTER_DROP_M: float = 0.21
+const CREST_RADIUS_M: float = 0.14
+const CREST_CENTER_DROP_M: float = 0.2
 # Cap height over em, for the glyph box's vertical half.
 const _CAP_HEIGHT_EM: float = 0.7
 
@@ -69,6 +71,11 @@ var player_name: String = ""
 var jersey_number: int = 0
 var text_color: Color = Color.BLACK
 var wordmark: String = ""
+# A chest crest instead of the wordmark when `crest_fruit` is set.
+var crest_fruit: String = ""
+var crest_style: int = TeamCrest.Style.FLAT
+var crest_preset: Dictionary = {}
+var crest_kit: Dictionary = {}
 
 
 func _draw() -> void:
@@ -84,7 +91,12 @@ func _draw() -> void:
 
 	draw_back_lettering(self, player_name, jersey_number, text_color, float(BACK_CENTER_X),
 			PX_PER_M, float(YOKE_BOTTOM_PX) / PX_PER_M.y)
-	if not wordmark.is_empty():
+	if not crest_fruit.is_empty():
+		var r: Vector2 = PX_PER_M * CREST_RADIUS_M
+		TeamCrest.draw(self, crest_fruit, crest_style, Transform2D(Vector2(r.x, 0.0),
+				Vector2(0.0, r.y), Vector2(FRONT_CENTER_X, CREST_CENTER_DROP_M * PX_PER_M.y)),
+				crest_preset, crest_kit)
+	elif not wordmark.is_empty():
 		_draw_wordmark(self, wordmark.to_upper(), text_color)
 
 
