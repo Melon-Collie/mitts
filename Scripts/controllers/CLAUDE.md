@@ -733,6 +733,38 @@ Authoring both ends over-constrains a rigid stick, and `enforce_rigid_stick`
 only shortens an over-long span; an under-long pair draws a visibly short stick.
 `test_commit_grip_choke.gd` holds all of it, including the fold direction.
 
+### The top hand is solved where the arm is
+
+The tracked path's ROM (`TopHandIK`) is a disc about the shoulder with the hand
+a fixed drop below it, and `SkaterIKCoordinator._solve_top_hand` solves it
+where the drawn arm actually is. Three things decide "where", each found as a
+hand the drawn arm could not reach or barely extended toward:
+
+- **The shoulder is the trunk's** (`arm_shoulder`). The skeleton folds the
+  trunk before it twists (`Scripts/actors/CLAUDE.md`, *One skeleton, one
+  chain*) and `UpperBody` twists first, so a skating fold with a backhand twist
+  carries the drawn shoulder ~5 cm off the frame's marker, and a hand solved
+  off the marker stretched the arm to 1.03 of itself.
+  `SkaterSpineRig.shoulder_in_frame` copies the rig's order from tick state
+  alone, because the blade it places is gameplay: the hips are taken square to
+  the facing (their yaw carries the render-rate gait); where it matters the
+  twist is pinned at the spine's limit anyway.
+- **The frame is level** (`_level_tilt`): `UpperBody`'s yaw without its pitch
+  and roll. A shoulder flexes the arm forward as the trunk leans; solved in the
+  leaned frame the disc tipped with the chest, and reaching ahead at a 36°
+  skating lean the fully extended arm hung 82° below horizontal. Level, it
+  reaches out at the upright angle (~46°) and the lean buys reach by carrying
+  the shoulder forward and down. The hand heights hang off the trunk's shoulder
+  before the faceoff address folds it (`_level_config`).
+- **The cursor's target is projected by that same solve.** Projected at the
+  upright blade height while the solve ran at the leaned one, the target sat
+  inside the rim and the hand was drawn back to it: 0.24 m of a 0.39 m rim in
+  every direction.
+
+The reach lean measures the hand the same way, and the host's claim clamp
+bounds the result (`TopHandIK.full_reach`, the trunk at its deepest fold).
+`test_top_hand_reaches_its_rim.gd` holds all of it.
+
 **A pose the trunk texture cannot express does not belong in the gait.** The
 texture is one pitch and one roll for the whole shell, so it is symmetric by
 construction: any "drop a shoulder" written as roll raises the other shoulder by

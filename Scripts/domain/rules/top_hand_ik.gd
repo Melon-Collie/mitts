@@ -295,6 +295,26 @@ static func _arm_angle_to_forehand(
 	return atan2(bearing.x, -bearing.y) * blade_side_sign
 
 
+# The farthest a blade's contact point can be from the body origin, the way the
+# solve places it (SkaterIKCoordinator._solve_top_hand): the trunk pitched its
+# furthest forward (`pitch`), carrying the shoulder forward and down; the hand at
+# the forward reach, `hand_drop` straight below that shoulder; the stick down to
+# the blade on the ice; the contact `contact_offset` along the blade. Pitching
+# further only lowers the hand and flattens the stick, so the deepest pitch is
+# the farthest reach. The shoulder's lateral offset is added whole rather than
+# across the reach, which is the margin. Heights are above the ice; `shoulder`
+# is the marker in the trunk's frame, about its origin at `frame_height`.
+static func full_reach(shoulder: Vector3, pitch: float, frame_height: float,
+		hand_drop: float, forward_reach: float, stick_length: float,
+		blade_height: float, contact_offset: float, body_height: float) -> float:
+	var hand_height: float = frame_height + shoulder.y * cos(pitch) - hand_drop
+	var rise: float = hand_height - blade_height
+	var stick_horiz: float = sqrt(maxf(stick_length * stick_length - rise * rise, 0.0))
+	var horiz: float = absf(shoulder.x) + shoulder.y * sin(pitch) + forward_reach \
+			+ stick_horiz + contact_offset
+	return Vector2(horiz, body_height - blade_height).length()
+
+
 # Max hand displacement from the shoulder at a forehand-signed arm angle.
 static func max_reach_for_angle(angle_to_forehand: float, cfg: Config) -> float:
 	return rim_reach(angle_to_forehand, cfg.rom_forward_reach_max,

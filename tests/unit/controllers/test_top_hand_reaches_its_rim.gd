@@ -8,6 +8,10 @@ extends GutTest
 # solve drew the hand back in to land on a target short of the rim. Measured: the
 # arm settled at 0.24 m of a 0.39 m rim in every direction, the lean at 7° of 18°.
 #
+# The rim is a disc about gravity, not about the chest: solved in the leaned
+# frame, a lean tipped "out in front" down toward the skates, and reaching ahead
+# while skating the fully extended arm hung 82° below horizontal.
+#
 # The blade that results must also stay inside the reach the host's anti-cheat
 # clamp allows (AISkaterCaps.max_blade_reach), or it would pull honest claims in.
 
@@ -42,6 +46,9 @@ func _make_controller() -> SkaterController:
 	add_child_autofree(controller)
 	controller.setup(skater, puck, gs)
 	controller.apply_attributes(PlayerAttributes.all_average())
+	# Standing on the ice as in a game: the claim clamp's lean allowance is read
+	# off the body's height.
+	skater.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
 	return controller
 
 
@@ -68,9 +75,13 @@ func _reach(c: SkaterController, deg: float) -> void:
 		sk._process(DT)
 
 
+# The hand off the shoulder its arm is drawn from, in the arm's level frame —
+# where the ROM is a horizontal disc.
 func _hand_off_shoulder(c: SkaterController) -> Vector2:
-	var hand: Vector3 = c.skater.get_top_hand_position()
-	var shoulder: Vector3 = c.skater.shoulder.position
+	var rot: Vector3 = c.skater.upper_body.rotation
+	var tilt: Basis = Basis.from_euler(Vector3(rot.x, 0.0, rot.z))
+	var hand: Vector3 = tilt * c.skater.get_top_hand_position()
+	var shoulder: Vector3 = tilt * c._ik.arm_shoulder()
 	return Vector2(hand.x - shoulder.x, hand.z - shoulder.z)
 
 
@@ -164,6 +175,16 @@ func test_straight_ahead_is_the_arms_longest_reach() -> void:
 			"and the chest stops a reach across the body first")
 
 
+func test_reaching_ahead_extends_the_arm_out_in_front() -> void:
+	var c: SkaterController = _make_controller()
+	_reach(c, 0.0)
+	var sk: Skater = c.skater
+	var arm: Vector3 = sk.upper_body.to_global(sk.get_top_hand_position()) \
+			- sk.upper_body.to_global(c._ik.arm_shoulder())
+	var below: float = rad_to_deg(atan2(-arm.y, Vector2(arm.x, arm.z).length()))
+	assert_lt(below, 55.0, "the arm reaches out at %.0f° below horizontal" % below)
+
+
 func test_the_full_reach_stays_inside_the_hosts_reach_clamp() -> void:
 	var c: SkaterController = _make_controller()
 	var caps: AISkaterCaps = c.build_ai_caps()
@@ -174,6 +195,24 @@ func test_the_full_reach_stays_inside_the_hosts_reach_clamp() -> void:
 		var reach: float = c.skater.get_blade_contact_global().distance_to(body)
 		assert_lt(reach, allowed,
 				"cursor %.0f°: an honest blade at %.2f m is inside the %.2f m clamp" % [
+						deg, reach, allowed])
+	# Skating folds the trunk on top of the reach lean, the deepest reach there is.
+	for deg: float in [0.0, 30.0, -30.0]:
+		c = _make_controller()
+		var sk: Skater = c.skater
+		sk.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
+		var a: float = deg_to_rad(deg)
+		var input := InputState.new()
+		for i: int in 160:
+			input.delta = DT
+			input.move_vector = Vector2.ZERO if i < 40 else Vector2(0.0, 1.0)
+			input.mouse_world_pos = sk.global_position + Vector3(sin(a), 0.0, cos(a)) * CURSOR_M
+			input.mouse_world_pos.y = 0.0
+			c._process_input(input, DT)
+			sk._physics_process(DT)
+		var reach: float = sk.get_blade_contact_global().distance_to(sk.global_position)
+		assert_lt(reach, allowed,
+				"skating, cursor %.0f°: an honest blade at %.2f m is inside the %.2f m clamp" % [
 						deg, reach, allowed])
 
 
@@ -187,3 +226,9 @@ func test_a_released_bottom_hand_tucks_ahead_of_the_body() -> void:
 	assert_lt(bh.y, shoulder.y - 0.2, "down at the belly, not up at the chest")
 	var arm: float = sk.upper_arm_length + sk.forearm_length
 	assert_lt(bh.distance_to(shoulder), arm * 0.9, "on a bent elbow, not hung straight")
+
+
+func test_the_league_default_reach_is_the_neutral_builds() -> void:
+	var c: SkaterController = _make_controller()
+	assert_almost_eq(c.build_ai_caps().max_blade_reach, AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M, 0.01,
+			"bots price an unknown defender's reach as the neutral build's")

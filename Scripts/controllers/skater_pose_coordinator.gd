@@ -463,14 +463,15 @@ func apply_upper_body(delta: float) -> void:
 
 	var target_angle: float = 0.0
 	var target_lean: Vector2 = Vector2.ZERO
-	# Off the shoulder the arm is drawn from, which is where its reach is measured
-	# (SkaterIKCoordinator.arm_shoulder, less the faceoff fold the address share
-	# zeroes this lean through anyway).
-	var shoulder: Vector3 = SkaterSpineRig.shoulder_in_frame(_skater.shoulder.position,
-			_skater.upper_body.rotation, 0.0, _skater.trunk_fold())
-	var hand_vec := Vector2(
-		_skater.top_hand.position.x - shoulder.x,
-		_skater.top_hand.position.z - shoulder.z)
+	# Measured as the solve measures it (SkaterIKCoordinator._solve_top_hand): off
+	# the shoulder the arm is drawn from, in the arm's level frame — less the
+	# faceoff fold, which the address share zeroes this lean through anyway.
+	var rot: Vector3 = _skater.upper_body.rotation
+	var tilt: Basis = Basis.from_euler(Vector3(rot.x, 0.0, rot.z))
+	var shoulder: Vector3 = tilt * SkaterSpineRig.shoulder_in_frame(
+			_skater.shoulder.position, rot, 0.0, _skater.trunk_fold())
+	var hand: Vector3 = tilt * _skater.top_hand.position
+	var hand_vec := Vector2(hand.x - shoulder.x, hand.z - shoulder.z)
 	var hand_reach: float = hand_vec.length()
 
 	if hand_reach > 0.01:
@@ -501,7 +502,7 @@ func apply_upper_body(delta: float) -> void:
 		# at full reach whichever way the arm is extending.
 		var rim_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
 		target_lean = compute_upper_body_lean_target(
-				Vector2(_skater.top_hand.position.x, _skater.top_hand.position.z),
+				Vector2(hand.x, hand.z),
 				Vector2(shoulder.x, shoulder.z),
 				TopHandIK.rim_reach(atan2(hand_vec.x, -hand_vec.y) * rim_side_sign,
 						_controller.rom_forward_reach_max, _controller.rom_forehand_reach_max,

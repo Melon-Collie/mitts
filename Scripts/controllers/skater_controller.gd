@@ -378,8 +378,7 @@ var bh_release_angle_band_deg: float = 15.0
 # before that hand has fully let go of the stick (m). The hand slides up the
 # shaft first (BottomHandIK.reachable_grip); this band is the letting go.
 var bh_reach_release_band_m: float = 0.08
-# Where the hand rests once it has let go, from its shoulder in arm lengths (x
-# out on its own side, y up, z back): tucked ahead of the belly, elbow bent.
+# A let-go hand's rest off its shoulder, arm lengths (x out, y up, z back).
 var bh_free_hand_rest_arm: Vector3 = Vector3(0.2, -0.52, -0.35)
 
 # ── Upper Body Tuning ─────────────────────────────────────────────────────────
@@ -1259,11 +1258,12 @@ func build_ai_caps() -> AISkaterCaps:
 	caps.max_accel = thrust
 	caps.blade_span = stick_length + GameRules.DEFAULT_BLADE_LENGTH_M
 	caps.stick_reach = stick_length
-	# Fully-extended body→blade reach (arm ROM displacement + stick + blade). Read
-	# off the same scaled geometry the body uses, so the host's client-blade
-	# anti-cheat clamp bounds against this build's real reach, not the league
-	# default. See AISkaterCaps.max_blade_reach / the claim resolvers.
-	caps.max_blade_reach = stick_length + GameRules.DEFAULT_BLADE_LENGTH_M + rom_forward_reach_max
+	# This build's real full reach (AISkaterCaps.max_blade_reach, the claim clamp).
+	caps.max_blade_reach = TopHandIK.full_reach(skater.shoulder.position,
+			deg_to_rad(velocity_lean_forward_max_deg + upper_body_lean_forward_max_deg),
+			GameRules.FACEOFF_SPAWN_HEIGHT + skater.upper_body.position.y,
+			skater.shoulder.position.y - hand_rest_y, rom_forward_reach_max, stick_length,
+			blade_height, skater.blade_length * 0.5, GameRules.FACEOFF_SPAWN_HEIGHT)
 	caps.max_lean_shift = skater.max_lean_shift()
 	caps.wrister_shot_speed = max_wrister_power
 	caps.blade_speed = max_blade_speed
