@@ -65,11 +65,13 @@ class Result:
 # Resolve one skater pair on the XZ plane, filling `out`. Y is ignored (skaters are
 # axis-locked in Y). `transfer` (clamped 0..1) scales the inelastic impulse — the
 # caller builds it from the attacker's delivery × hit-commit and the victim's brace.
+# A non-zero `axis` (unit, A -> B) replaces the disc axis and measures the overlap
+# along it: a flat contact (BoardPinRules.locked_contact_axis).
 static func resolve(
 		out: Result,
 		pos_a: Vector3, vel_a: Vector3, mass_a: float, radius_a: float,
 		pos_b: Vector3, vel_b: Vector3, mass_b: float, radius_b: float,
-		transfer: float) -> void:
+		transfer: float, axis: Vector3 = Vector3.ZERO) -> void:
 	out.clear()
 
 	# Center-to-center axis on XZ, n pointing A -> B.
@@ -77,7 +79,10 @@ static func resolve(
 	d.y = 0.0
 	var dist: float = d.length()
 	var n: Vector3
-	if dist < _EPS:
+	if axis != Vector3.ZERO:
+		n = axis
+		dist = d.dot(axis)
+	elif dist < _EPS:
 		# Coincident centers (spawn overlap, teleport): pick a deterministic axis
 		# so the pair still separates instead of producing a NaN normal. +X is
 		# arbitrary but identical on every machine, preserving replay determinism.

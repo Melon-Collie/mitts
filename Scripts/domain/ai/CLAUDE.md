@@ -249,17 +249,18 @@ gate, closed on Easy. The tie reads the covered man from
 transition, where the stick belongs in the passing lane, so they publish no lock
 and never tie.
 
-**On the boards, the checker's extra is holding the pin** (`apply_board_play`,
-every tick after dispatch), and the hold follows what is coached: keep the commit
-while our support beats theirs to the puck (the same momentum-blind top-speed
+**On the boards, the checker's extra is the pin** (`apply_board_play`, every
+tick after dispatch). A check driven into a man on the wall that will not knock
+him down reaches for the pin on the stick button instead, and the hold follows
+what is coached: keep the stick on him while our support beats theirs to the puck (the same momentum-blind top-speed
 bound for both sides), or in our own end to kill the play; never as the last man
-back outside it. Locked, the pinner drives into the wall and mirrors the victim's
-slide through a lag of `BoardPinRules.PIN_LAG_BUDGET_S`, so a bot is beaten by
-the same reversals a human would be. It rides the PACE physicality knob
+back outside it. Locked, the pinner drives into the wall and matches the victim's
+slide, read through a lag of `BoardPinRules.PIN_LAG_BUDGET_S`, so a bot is
+beaten by the same reversals a human would be. It rides the PACE physicality knob
 (`check_aggression`, zero on Easy), not a cognition gate. A pinned bot slides
 along the wall and reverses when its pinner commits to following (his along-wall
 speed our way past half our cap), no sooner than a reversal can land. A carrier
-at the wall with a committed checker coming square answers him as coached,
+at the wall with a checker coming square, stick out, answers him as coached,
 bracing last (`AIPinThreatRead`): he skates out of the checker's line along the
 wall if he gets past the offset where the hit stops being square before contact,
 and holds the commit only when he can't. Bracing costs the commit's grip and
@@ -278,6 +279,25 @@ standing reach: his stick, plus what he skates toward the lane while the pass
 travels to it from rest across it. The dive must still reach the lane, and no
 teammate may be nearer it. Both are the `blocks_shots` cognition gate, closed on
 Easy.
+
+**The coverer's other extra is the cross-check** (`AICrossCheckRead`, applied by
+`SkaterAgentCrossCheck` after every other stick pass, so a stick they took throws
+nothing). He prices the push the host would land (`predicted_dv` is
+`CrossCheckRules.victim_dv` on the man's replicated facing, posture, stagger and
+intent) and how far it moves a man who pushes back once he has read it. At our
+net he shoves the man he covers when that man hides the release from our goalie
+by the goalie's own body test and would not once moved; anywhere, he shoves the
+man in reach who beats him to a loose puck when the push and the stagger it
+lands turn the race, his own stick out through the push charged to him. The
+push goes where it is aimed, and he aims it as a human would, on the cursor: off
+the sightline the shortest way, or away from the puck, and turned off that by
+30° and 60° either side (`aim_turn`). A push across a man's blades meets his
+edges (doubled if he is loaded low) and one along them moves him furthest, so
+the best aim trades the two and the tries sample it. When no try clears the
+screen, he does not throw it. It rides `check_aggression` (zero on Easy). A
+screener in their end answers it: with a defender who could reach him at any aim
+the defender can turn to, he loads up (the stance), the
+`protects_the_puck` gate.
 
 ### The three facts a station reads, and the one that stays unread
 

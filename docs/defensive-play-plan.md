@@ -30,7 +30,8 @@ bump and playtest.
 - **Ties are pure geometry in v1** (no Weight term until playtested), and **a
   pinning defender's stick stays off the ice** (the pin is a one-for-one trade).
 - **The pin is a locked position contest, not a stun** (decided after Phase 3; see
-  *Pin revision*):
+  *Pin revision*). **It is held on the stick button, not Ctrl** (since
+  `docs/physicality-plan.md` Phase A), and the locked pair touch flat:
   - a victim holding Ctrl is braced and cannot be pinned;
   - once a pin connects, neither player's stick plays the puck;
   - both slide along the wall on the direction keys, and the victim is free once
@@ -230,13 +231,15 @@ PRESSURE chooses between the poke jab and a lift by what the bot can actually se
   to a hit.
 - **The change.** When the victim is within `BACKSTOP_MARGIN` of the boards and the
   contact normal points into them (more than 45° into the wall), the boards take the
-  recoil. The impulse used for stagger, knockdown and VFX intensity is the full
-  closing speed along the normal, as if the victim were immovable.
-- **Where it lives.** `BodyCheckRules.backstop_impulse` is a pure function.
-- **Three-party invariant.** The host's contact step, the client's live step and
-  replay, and `HitClaimResolver` must all call it with the same inputs
-  (`Scripts/networking/CLAUDE.md`, body-check contact geometry). The knockback
-  velocity itself doesn't change; the wall already clamps it.
+  recoil. *Revised since (`docs/physicality-plan.md`):* the strength the stagger and
+  the puck strip read is the checker's whole delivered impulse on the victim's mass
+  alone (closing × transfer × the checker's mass ÷ the victim's), and the knockdown
+  reads only the victim's own Δv, as in open ice — the wall stops him being moved.
+- **Where it lives.** `BoardPinRules.backstop_hit_strength` is a pure function.
+- **Who calls it.** `Skater._resolve_player_collisions` (the host's contact step, and
+  a client's live prediction of itself as the victim) for the stagger, and
+  `Puck.on_body_check` on the host for the strip. The knockback velocity itself
+  doesn't change; the wall already clamps it.
 
 ### 3b. The pin (as built in v72 — replaced by the *Pin revision* in v74)
 - **Onset (host-authoritative, `Skater._check_board_pin`).**

@@ -67,18 +67,20 @@ func test_receive_claim_with_null_puck_getter_is_noop() -> void:
 func test_arm_pending_stores_peer_and_client_blade() -> void:
 	var curr := Vector3(1.0, 0.0, 2.0)
 	var prev := Vector3(0.9, 0.0, 2.0)
-	resolver._arm_pending(7, 3.0, curr, prev)
+	resolver._arm_pending(7, 3.0, curr, prev, 0.6)
 	assert_eq(resolver._pending_peer_id, 7)
 	assert_eq(resolver._pending_view_time, 3.0)
 	assert_eq(resolver._pending_blade_curr, curr)
 	assert_eq(resolver._pending_blade_prev, prev)
+	assert_eq(resolver._pending_load, 0.6, "and the catch's load, for the grant it settles")
 
 
 func test_clear_resets_pending_client_blade() -> void:
-	resolver._arm_pending(7, 3.0, Vector3(1.0, 0.0, 2.0), Vector3(0.9, 0.0, 2.0))
+	resolver._arm_pending(7, 3.0, Vector3(1.0, 0.0, 2.0), Vector3(0.9, 0.0, 2.0), 0.6)
 	resolver.clear()
 	assert_eq(resolver._pending_blade_curr, Vector3.ZERO)
 	assert_eq(resolver._pending_blade_prev, Vector3.ZERO)
+	assert_eq(resolver._pending_load, 0.0)
 
 
 # ── Claim-vs-present-time arbitration (v40) ──────────────────────────────────
@@ -116,7 +118,7 @@ func test_arbitrate_self_grab_lets_grant_proceed() -> void:
 	# The pending claimant's own replayed blade reached the puck present-time —
 	# the normal grant path (which clears pending) must handle it, not a
 	# self-contest.
-	resolver._arm_pending(7, 9.99, Vector3.ONE, Vector3.ONE)
+	resolver._arm_pending(7, 9.99, Vector3.ONE, Vector3.ONE, 0.0)
 	# grabber Skater is irrelevant for this branch; peer id match short-circuits
 	# before any skater dereference.
 	assert_false(resolver.arbitrate_present_grab(null, 7, Vector3.ZERO, Vector3.ZERO, 10.0),
@@ -127,7 +129,7 @@ func test_arbitrate_self_grab_lets_grant_proceed() -> void:
 func test_arbitrate_despawned_claimant_clears_and_proceeds() -> void:
 	# Pending peer 42 is not in the registry (disconnect/demote mid-window):
 	# the grab proceeds and the stale pending is dropped, mirroring tick().
-	resolver._arm_pending(42, 9.99, Vector3.ONE, Vector3.ONE)
+	resolver._arm_pending(42, 9.99, Vector3.ONE, Vector3.ONE, 0.0)
 	assert_false(resolver.arbitrate_present_grab(null, 5, Vector3.ZERO, Vector3.ZERO, 10.0),
 			"despawned claimant -> grab proceeds")
 	assert_eq(resolver._pending_peer_id, -1, "stale pending cleared")

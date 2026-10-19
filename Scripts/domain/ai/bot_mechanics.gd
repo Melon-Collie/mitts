@@ -69,3 +69,7 @@ const WRISTER_SHOT_SPEED_M_S: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 # one blade length keeps the whole blade off the wall while still working the
 # puck tight along the boards.
 const CARRY_BLADE_WALL_MARGIN_M: float = GameRules.DEFAULT_BLADE_LENGTH_M
+
+# How far the league chest turns off the hips (SkaterController
+# .upper_body_max_twist_deg): the most a bot can aim a cross-check off its facing.
+const UPPER_BODY_MAX_TWIST_RAD: float = 67.0 * PI / 180.0

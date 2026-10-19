@@ -625,6 +625,7 @@ var _ties_sticks: bool = true
 var _blocks_shots: bool = true
 var _shot_block := SkaterAgentShotBlock.new()
 var _board_play := SkaterAgentBoardPlay.new()
+var _cross_check := SkaterAgentCrossCheck.new()
 var _stick_play := SkaterAgentStickPlay.new()
 var _steering := SkaterAgentSteering.new()
 var _reception := SkaterAgentReception.new()
@@ -762,6 +763,7 @@ func setup(peer_id: int, team_id: int, brain: TeamBrain, team_id_by_peer: Dictio
 	_caps_by_peer = caps_by_peer
 	_shot_block.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_board_play.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
+	_cross_check.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_stick_play.setup(peer_id, team_id, team_id_by_peer)
 	_steering.setup(peer_id, team_id, team_id_by_peer)
 	_reception.setup(peer_id, team_id, team_id_by_peer, caps_by_peer, is_left_handed)
@@ -2866,6 +2868,15 @@ func apply_shot_block(input: InputState, snapshot: WorldSnapshot) -> void:
 	var rush: AIRushRead = _current_strategy.get_rush_read() if _current_strategy != null \
 			else _inert_rush_read
 	_shot_block.apply(input, snapshot, _own_goal_dir, rush, _blade_reach, _chase_max_accel)
+
+
+# The cross-check (SkaterAgentCrossCheck), every physics tick after the other
+# stick passes, which it yields to. The screener's set against one rides the
+# protects_the_puck gate: answering a physical threat to what we hold.
+func apply_cross_check(input: InputState, snapshot: WorldSnapshot) -> void:
+	_cross_check.apply(input, snapshot, _own_goal_dir,
+			_cached_role_decision.locked_man_pid if _cached_role_decision != null else -1,
+			_check_aggression, _protects_the_puck)
 
 
 # Holds the stick-check button for a lift or a tie the dispatch started, every

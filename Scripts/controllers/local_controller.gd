@@ -299,7 +299,9 @@ func _physics_process(delta: float) -> void:
 			if in_range and not skater.deflect_intent and _sm.get_state() != State.SLAPPER_CHARGE_WITHOUT_PUCK \
 					and not skater.stick_tied and skater.pin_role == BoardPinRules.Role.NONE \
 					and not skater.is_knocked_down \
-					and not StickCheckRules.is_stick_busy(skater.stick_check_phase) and _pickup_claim_floor <= 0.0 and (rising_edge or _claim_cooldown <= 0.0):
+					and not StickCheckRules.is_stick_busy(skater.stick_check_phase) \
+					and not CrossCheckRules.is_stick_busy(skater.cross_check_phase) \
+					and _pickup_claim_floor <= 0.0 and (rising_edge or _claim_cooldown <= 0.0):
 				_pickup_claim_floor = _PICKUP_CLAIM_FLOOR_S
 				_claim_cooldown = _CLAIM_COOLDOWN_S
 				# Report the ADAPTED interp delay (get_interpolation_delay) — the value
@@ -352,7 +354,8 @@ func _physics_process(delta: float) -> void:
 							PuckController.STICK_LIFT_RADIUS, PuckController.STICK_LIFT_UNDER_MARGIN)
 				elif not skater.blade_up and not skater.stick_tied \
 						and skater.pin_role == BoardPinRules.Role.NONE \
-						and not StickCheckRules.is_stick_busy(skater.stick_check_phase):
+						and not StickCheckRules.is_stick_busy(skater.stick_check_phase) \
+						and not CrossCheckRules.is_stick_busy(skater.cross_check_phase):
 					in_poke_range = puck.global_position.distance_to(blade_pos_for_claim) <= PuckController.POKE_RADIUS \
 							and not PuckInteractionRules.net_between(blade_pos_for_claim, puck.global_position)
 			var rising_poke_edge: bool = in_poke_range and not _was_in_poke_range
@@ -569,8 +572,8 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# charge timers).
 	stagger_timer = server_state.stagger_timer
 	stagger_recoil_dir = server_state.recoil_dir
-	# The lift phase rides the same rail: the host's at the ack, stepped on by the
-	# replayed inputs.
+	# The lift and cross-check phases ride the same rail: the host's at the ack,
+	# stepped on by the replayed inputs.
 	_adopt_stick_check(server_state)
 	# The balance and torso leans ride the same rail: the host's values at the
 	# ack, then the replay steps them forward through the unacked inputs.
@@ -833,11 +836,17 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_held: bool) -> void:
 		var ohit: bool = rec["hit"]   # the other's replicated hit-commit (brace / delivery)
 		var d: Vector3 = opos - skater.global_position
 		d.y = 0.0
-		var dist: float = d.length()
+		# The live resolver's flat contact for a locked pin pair (Skater).
+		var axis: Vector3 = BoardPinRules.locked_contact_axis(skater.global_position,
+				skater.pin_role, skater.collision_radius(), opos, other.pin_role,
+				other.collision_radius())
+		var dist: float = d.length() if axis == Vector3.ZERO else d.dot(axis)
 		# Exactly the resolver's own no-overlap test, so a skip changes nothing.
 		if dist >= skater.collision_radius() + other.collision_radius():
 			continue
-		var n: Vector3 = Vector3(1.0, 0.0, 0.0) if dist < 0.0001 else d / dist
+		var n: Vector3 = axis
+		if axis == Vector3.ZERO:
+			n = Vector3(1.0, 0.0, 0.0) if dist < 0.0001 else d / dist
 		# Aggressor gate from the local player's perspective — identical rule to the
 		# live resolver (sum of velocities along the axis, tie-broken by the stable id).
 		var agg: float = (skater.velocity + ovel).dot(n)
@@ -855,7 +864,7 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_held: bool) -> void:
 					* (other.body_check_brace_resistance if ohit else 1.0)
 			SkaterCollisionRules.resolve(_replay_collision_result,
 					skater.global_position, skater.velocity, skater.weight, skater.collision_radius(),
-					opos, ovel, other.weight, other.collision_radius(), transfer)
+					opos, ovel, other.weight, other.collision_radius(), transfer, axis)
 			skater.velocity += _replay_collision_result.dvel_a
 			skater.global_position += _replay_collision_result.sep_a
 		else:
@@ -867,7 +876,8 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_held: bool) -> void:
 					* (skater.body_check_brace_resistance if local_hit_held else 1.0)
 			SkaterCollisionRules.resolve(_replay_collision_result,
 					opos, ovel, other.weight, other.collision_radius(),
-					skater.global_position, skater.velocity, skater.weight, skater.collision_radius(), transfer)
+					skater.global_position, skater.velocity, skater.weight, skater.collision_radius(),
+					transfer, -axis)
 			skater.velocity += _replay_collision_result.dvel_b
 			skater.global_position += _replay_collision_result.sep_b
 
